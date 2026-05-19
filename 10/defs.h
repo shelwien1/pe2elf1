@@ -353,7 +353,7 @@ template<class T, class U> int8 __CFSUB__(T x, U y, int8 cf)
 #if SUB_WITH_CARRY
   cf = !cf;
 #endif
-  return __CFADD__(y, cf) ^ __CFSUB(x, y + cf);
+  return __CFADD__(y, cf) ^ __CFSUB__(x, y + cf);
 }
 
 // overflow flag of subtraction with carry
@@ -362,7 +362,7 @@ template<class T, class U> int8 __OFSUB__(T x, U y, int8 cf)
 #if SUB_WITH_CARRY
   cf = !cf;
 #endif
-  return __OFADD__(y, cf) ^ __OFSUB(x, y + cf);
+  return __OFADD__(y, cf) ^ __OFSUB__(x, y + cf);
 }
 
 inline uint8   abs8(int8     x) { return x >= 0 ? x : -x; }

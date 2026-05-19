@@ -11,10 +11,12 @@
 #ifdef _MSC_VER
 #include <intrin.h>
 #include <process.h>   // _exit
+#include <io.h>        // _chsize, _fileno
 #else
-#include <unistd.h>    // _exit
+#include <unistd.h>    // _exit, ftruncate
 #include <x86intrin.h>
 #include <xmmintrin.h>
+#define _chsize(fd, sz) ftruncate(fd, sz)
 #endif
 
 #define _WINDOWS_

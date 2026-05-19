@@ -114,7 +114,8 @@ int __main(int argc, const char** argv) {
       exit(-1);
     }
 
-    const char* strippedName = strrchr(inputName, '\\');
+    const char* strippedName = strrchr(inputName, '/');
+    if (!strippedName) strippedName = strrchr(inputName, '\\');
     strippedName = strippedName ? strippedName+1 : inputName;
     ::__Buffer = (void*)strippedName;
 
@@ -156,7 +157,7 @@ int __main(int argc, const char** argv) {
 
         int headerOffset = __arch_hdr[6]-((unsigned short)(HIWORD(__arch_hdr[2])&0xFF80)>>7)-16;
         fseek(outFile, headerOffset, SEEK_SET);
-//        _chsize(_fileno(outFile), headerOffset);
+        _chsize(_fileno(outFile), headerOffset);
 
         BYTE2(__arch_hdr[2]) |= 0x40; // Set uncompressed flag
 
