@@ -152,7 +152,7 @@ int __main(int argc, const char** argv) {
     if( ftell(inFile)>=0 ) {
       int outSize = ftell(outFile);
       if( (unsigned int)(outSize-__arch_hdr[6])>(unsigned long long)(ftell(inFile)+4LL) ) {
-        int rawSize = ftell(inFile);
+        unsigned int rawSize = (unsigned int)ftell(inFile);
         fseek(inFile, 0, SEEK_SET);
 
         int headerOffset = __arch_hdr[6]-((unsigned short)(HIWORD(__arch_hdr[2])&0xFF80)>>7)-16;
