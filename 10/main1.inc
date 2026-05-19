@@ -81,7 +81,7 @@ int __main(int argc, const char** argv) {
 
       if( (__arch_hdr[2]&0x400000)!=0 ) {
         // Stored without compression
-        int rawBytesCount;
+        unsigned int rawBytesCount;
         fread(&rawBytesCount, 4, 1, inFile);
         for(; rawBytesCount; --rawBytesCount ) {
           putc(getc(inFile), outFile);
