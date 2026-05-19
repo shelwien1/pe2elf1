@@ -98,7 +98,7 @@ int main( int argc, const char **argv ) {
   (int&)__algn_141136BC4[1084+4] = 0x03030201;
   (int&)__algn_141136BC4[1084+8] = 0x00000004;
 
-  __main( argc, argv );
+  return __main( argc, argv );
 
 //  my_ExitProcess(0);
 }
