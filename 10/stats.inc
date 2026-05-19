@@ -48,7 +48,7 @@ __int64 __PrintStats(FILE* outFile, FILE* inFile, __int64 isFinal) {
   }
 
   char printBuffer[568];
-  sprintf(printBuffer, "%15s:%7u >%7u, %1d.%03d bpb, used:%3u.%1u MB, speed: %u KB/sec.", (const char*)::__Buffer, displayLeft, displayRight, bpbInt, bpbFrac, memUsedMBInt, memUsedMBFrac, speedKBs);
+  snprintf(printBuffer, sizeof(printBuffer), "%15s:%7u >%7u, %1d.%03d bpb, used:%3u.%1u MB, speed: %u KB/sec.", (const char*)::__Buffer, displayLeft, displayRight, bpbInt, bpbFrac, memUsedMBInt, memUsedMBFrac, speedKBs);
 
   // '\r' (13) continuously overwrites the line during progress.
   // '\n' (10) finalizes the line when the file finishes.
