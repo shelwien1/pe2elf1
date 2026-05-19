@@ -3,14 +3,18 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
 #include <stddef.h>
 //#include <conio.h>
 #include <ctype.h>
 
-//#include <sys/mman.h>
+#ifdef _MSC_VER
+#include <intrin.h>
+#include <process.h>   // _exit
+#else
+#include <unistd.h>    // _exit
 #include <x86intrin.h>
 #include <xmmintrin.h>
+#endif
 
 #define _WINDOWS_
 #include "defs.h"
