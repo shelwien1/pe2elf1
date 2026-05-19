@@ -1,5 +1,5 @@
 
-__int64 __PrintStats(FILE* outFile, FILE* inFile, int isFinal) {
+__int64 __PrintStats(FILE* outFile, FILE* inFile, __int64 isFinal) {
   clock_t currentTime = clock();
 
   // Throttle UI updates to every 500ms, unless this is the final flush

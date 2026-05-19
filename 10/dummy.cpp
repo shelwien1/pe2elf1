@@ -4,6 +4,7 @@
 #include <string.h>
 #include <time.h>
 #include <stddef.h>
+#include <stdint.h>
 //#include <conio.h>
 #include <ctype.h>
 
