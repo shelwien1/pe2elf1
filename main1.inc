@@ -10,6 +10,10 @@ int __main(int argc, const char** argv) {
   int modelOrder = 12;
   int memoryMB = 256;
 
+  // Map modelOrder values >12 to internal codes [13,16], matching original logic:
+  // 13-16->13, 17-32->14, 33-64->15, 65-128->16
+  if( modelOrder>12 ) modelOrder = (modelOrder>32)+(modelOrder>16)+(modelOrder>64)+13;
+
   if( argc != 4 ) {
     printf("Usage: coder c input archive | coder d archive input\n");
     return -1;
