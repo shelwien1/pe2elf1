@@ -153,8 +153,9 @@ int __main(int argc, const char** argv) {
 
     // Re-packing uncompressible data if size exploded
     long inPos = ftell(inFile);
-    if( inPos != -1L ) {
-      unsigned int outSize = (unsigned int)ftell(outFile);
+    long outPos = ftell(outFile);
+    if( inPos != -1L && outPos != -1L ) {
+      unsigned int outSize = (unsigned int)outPos;
       if( (unsigned int)(outSize-__arch_hdr[6])>(unsigned long long)(inPos+4LL) ) {
         unsigned int rawSize = (unsigned int)inPos;
         fseek(inFile, 0, SEEK_SET);
