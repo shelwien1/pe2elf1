@@ -20,7 +20,7 @@ typedef unsigned long long qword;
 
 #define LOBYTE(x)  BYTEn(x,LOW_IND(x,byte))
 #define LOWORD(x)  WORDn(x,LOW_IND(x,word))
-#define LODWORD(x) (*(unsigned int*)&(x))
+#define LODWORD(x) ((qword&)x)
 #define HIBYTE(x)  BYTEn(x,HIGH_IND(x,byte))
 #define HIWORD(x)  WORDn(x,HIGH_IND(x,word))
 #define BYTE1(x)   BYTEn(x,  1)         // byte 1 (counting from 0)
