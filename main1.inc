@@ -53,7 +53,7 @@ int __main(int argc, const char** argv) {
         exit(-1);
       }
 
-      char decodedFileName[260];
+      char decodedFileName[512];
       size_t nameLen = (unsigned short)(HIWORD(__arch_hdr[2])&0xFF80)>>7;
       fread(decodedFileName, nameLen, 1, inFile);
       decodedFileName[nameLen] = '\0';
@@ -149,10 +149,11 @@ int __main(int argc, const char** argv) {
     sub_140003530(outFile, inFile, __PrintStats, 0);
 
     // Re-packing uncompressible data if size exploded
-    if( ftell(inFile)>=0 ) {
+    long inPos = ftell(inFile);
+    if( inPos != -1L ) {
       unsigned int outSize = (unsigned int)ftell(outFile);
-      if( (unsigned int)(outSize-__arch_hdr[6])>(unsigned long long)(ftell(inFile)+4LL) ) {
-        unsigned int rawSize = (unsigned int)ftell(inFile);
+      if( (unsigned int)(outSize-__arch_hdr[6])>(unsigned long long)(inPos+4LL) ) {
+        unsigned int rawSize = (unsigned int)inPos;
         fseek(inFile, 0, SEEK_SET);
 
         int headerOffset = __arch_hdr[6]-((unsigned short)(HIWORD(__arch_hdr[2])&0xFF80)>>7)-16;

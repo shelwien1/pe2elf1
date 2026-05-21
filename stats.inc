@@ -7,7 +7,7 @@ __int64 __PrintStats(FILE* outFile, FILE* inFile, __int64 isFinal) {
 
   int outSize = ftell(outFile);
   unsigned int outSizeSafe = (outSize==0) ? 1 : outSize;   // Prevent division by zero
-  unsigned int inSize = ftell(inFile)-__arch_hdr[6];
+  unsigned int inSize = __f_ENC ? (unsigned int)ftell(inFile) : (unsigned int)(ftell(inFile)-__arch_hdr[6]);
 
   __arch_hdr[7] = currentTime;
 
