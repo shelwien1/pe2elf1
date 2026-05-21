@@ -82,7 +82,10 @@ int __main(int argc, const char** argv) {
       if( (__arch_hdr[2]&0x400000)!=0 ) {
         // Stored without compression
         unsigned int rawBytesCount;
-        fread(&rawBytesCount, 4, 1, inFile);
+        if( fread(&rawBytesCount, 4, 1, inFile) != 1 ) {
+          printf("Unexpected end of archive\n");
+          exit(-1);
+        }
         for(; rawBytesCount; --rawBytesCount ) {
           putc(getc(inFile), outFile);
         }

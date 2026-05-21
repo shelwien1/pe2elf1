@@ -5,8 +5,8 @@ __int64 __PrintStats(FILE* outFile, FILE* inFile, __int64 isFinal) {
   // Throttle UI updates to every 500ms, unless this is the final flush
   if( (currentTime<__arch_hdr[7]+500) && !isFinal ) return 0x10000;
 
-  int outSize = ftell(outFile);
-  unsigned int outSizeSafe = (outSize==0) ? 1 : outSize;   // Prevent division by zero
+  long outSize = ftell(outFile);
+  unsigned int outSizeSafe = (outSize<=0) ? 1 : (unsigned int)outSize;   // Prevent division by zero
   unsigned int inSize = __f_ENC ? (unsigned int)ftell(inFile) : (unsigned int)(ftell(inFile)-__arch_hdr[6]);
 
   __arch_hdr[7] = currentTime;
