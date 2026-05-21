@@ -12,8 +12,12 @@ __int64 __PrintStats(FILE* outFile, FILE* inFile, __int64 isFinal) {
   __arch_hdr[7] = currentTime;
 
   // Calculate compression ratio in Bits Per Byte (BPB) with rounding
-  int bpbInt = (8*inSize)/outSizeSafe;
-  int bpbFrac = (1000*(8*inSize-bpbInt*outSizeSafe)+(outSizeSafe>>1))/outSizeSafe;
+  // BPB = 8 * compressed_bytes / raw_bytes (same direction in both modes)
+  unsigned int bpbNumer = __f_ENC ? outSizeSafe : inSize;
+  unsigned int bpbDenom = __f_ENC ? inSize       : outSizeSafe;
+  unsigned int bpbDenomSafe = (bpbDenom == 0) ? 1 : bpbDenom;
+  int bpbInt = (8*bpbNumer)/bpbDenomSafe;
+  int bpbFrac = (1000*(8*bpbNumer-bpbInt*bpbDenomSafe)+(bpbDenomSafe>>1))/bpbDenomSafe;
 
   if( bpbFrac==1000 ) {
     ++bpbInt;
