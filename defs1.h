@@ -4,6 +4,13 @@ typedef unsigned int uint;
 typedef unsigned short word;
 typedef unsigned long long qword;
 
+#ifndef _MSC_VER
+#define __int64 long long
+#define __int32 int
+#define __int16 short
+#define __int8  char
+#endif
+
 // Some convenience macros to make partial accesses nicer
 #define LAST_IND(x,part_type)    (sizeof(x)/sizeof(part_type) - 1)
 #if defined(__BYTE_ORDER) && __BYTE_ORDER == __BIG_ENDIAN

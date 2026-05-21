@@ -4256,7 +4256,7 @@ static void __PPMContextWalk(int v2, int v221, uint* outV246, uint* outV250, int
   __int64 v220 = q8;
   byte* v3 = (byte*)q10;
   byte* v222;
-  __int64 v223;
+  __int64* v223;
   byte* v224;
   __int64 v225;
   __int64 v226;
@@ -4274,7 +4274,7 @@ static void __PPMContextWalk(int v2, int v221, uint* outV246, uint* outV250, int
   int v238;
   uint v240;
   int v241;
-  uint v242;
+  short v242;
   uint v243;
   uint v244;
   uint v245;

@@ -7,17 +7,13 @@ __int64 __PrintStats(FILE* outFile, FILE* inFile, __int64 isFinal) {
 
   long outSize = ftell(outFile);
   unsigned int outSizeSafe = (outSize<=0) ? 1 : (unsigned int)outSize;   // Prevent division by zero
-  unsigned int inSize = __f_ENC ? (unsigned int)ftell(inFile) : (unsigned int)(ftell(inFile)-__arch_hdr[6]);
+  unsigned int inSize = ftell(inFile)-__arch_hdr[6];
 
   __arch_hdr[7] = currentTime;
 
   // Calculate compression ratio in Bits Per Byte (BPB) with rounding
-  // BPB = 8 * compressed_bytes / raw_bytes (same direction in both modes)
-  unsigned int bpbNumer = __f_ENC ? outSizeSafe : inSize;
-  unsigned int bpbDenom = __f_ENC ? inSize       : outSizeSafe;
-  unsigned int bpbDenomSafe = (bpbDenom == 0) ? 1 : bpbDenom;
-  int bpbInt = (8*bpbNumer)/bpbDenomSafe;
-  int bpbFrac = (1000*(8*bpbNumer-bpbInt*bpbDenomSafe)+(bpbDenomSafe>>1))/bpbDenomSafe;
+  int bpbInt = (8*inSize)/outSizeSafe;
+  int bpbFrac = (1000*(8*inSize-bpbInt*outSizeSafe)+(outSizeSafe>>1))/outSizeSafe;
 
   if( bpbFrac==1000 ) {
     ++bpbInt;
