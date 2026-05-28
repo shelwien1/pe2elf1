@@ -1,0 +1,7 @@
+build/
+pngdump
+png2bmp
+preflate_raw
+pngtool
+*.o
+*.a
