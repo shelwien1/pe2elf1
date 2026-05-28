@@ -32,4 +32,4 @@ preflate/support/huffman_encoder.cpp
 preflate/support/huffman_helper.cpp
 preflate/support/memstream.cpp
 preflate/support/outputcachestream.cpp
-preflate/support/task_pool.cpp
+task_pool_stub.cpp
