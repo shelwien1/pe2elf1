@@ -870,8 +870,11 @@ static bool bmp_to_png_raw(uint8_t ct, uint8_t bd, uint32_t W, uint32_t H,
     }
 }
 
-static bool check_supported(uint8_t ct, uint8_t bd) {
+static bool check_supported(const Ihdr& h) {
+    uint8_t ct = h.color_type, bd = h.bit_depth;
     if (samples_per_pixel(ct) == 0) return err("unknown color type %u", ct);
+    if (h.width == 0 || h.height == 0)
+        return err("zero-sized PNG (%ux%u)", h.width, h.height);
     bool ok = (ct == 0 && (bd == 4 || bd == 8))
            || (ct == 3 && (bd == 4 || bd == 8))
            || ((ct == 2 || ct == 4 || ct == 6) && bd == 8);
@@ -926,7 +929,7 @@ static bool encode(const std::string& png_path,
     std::vector<uint8_t> trailer;
     Ihdr ihdr{};
     if (!dissect_png(png, entries, streams, trailer, ihdr)) return false;
-    if (!check_supported(ihdr.color_type, ihdr.bit_depth)) return false;
+    if (!check_supported(ihdr)) return false;
 
     std::vector<uint8_t> plte;
     find_plte(entries, plte);
@@ -954,9 +957,11 @@ static bool encode(const std::string& png_path,
         hifs[i] = std::move(recon);
         std::vector<uint8_t> unp(unpacked.begin(), unpacked.end());
 
-        // unp → raw_full + filters
+        // unp → raw_full + filters. fdAT streams (i>=1) are non-interlaced
+        // per the APNG spec, even when IHDR declares Adam7.
+        uint8_t stream_interlace = (i == 0) ? ihdr.interlace : 0;
         std::vector<uint8_t> raw_full, filters;
-        if (!unp_to_raw(W, H, ihdr.color_type, ihdr.bit_depth, ihdr.interlace,
+        if (!unp_to_raw(W, H, ihdr.color_type, ihdr.bit_depth, stream_interlace,
                         unp, raw_full, filters))
             return false;
         filters_all[i] = std::move(filters);
@@ -1029,7 +1034,7 @@ static bool decode(const std::string& bmp_template,
     Ihdr ihdr{};
     if (!parse_pngdump_blob(blob, entries, n2, hdrs, adls, trailer, ihdr)) return false;
     if (n != n2) return err("meta stream count mismatch (%u vs blob %u)", n, n2);
-    if (!check_supported(ihdr.color_type, ihdr.bit_depth)) return false;
+    if (!check_supported(ihdr)) return false;
 
     std::vector<uint8_t> plte;
     find_plte(entries, plte);
@@ -1067,7 +1072,8 @@ static bool decode(const std::string& bmp_template,
                             bmp_pixels, raw_full)) return false;
 
         std::vector<uint8_t> unp;
-        if (!raw_to_unp(W, H, ihdr.color_type, ihdr.bit_depth, ihdr.interlace,
+        uint8_t stream_interlace = (i == 0) ? ihdr.interlace : 0;
+        if (!raw_to_unp(W, H, ihdr.color_type, ihdr.bit_depth, stream_interlace,
                         raw_full, filters, unp)) return false;
 
         std::vector<unsigned char> deflate_raw;
