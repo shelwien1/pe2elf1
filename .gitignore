@@ -1,0 +1,22 @@
+# Verilator build trees
+obj_xp10/
+obj_xp10enc/
+obj_dec/
+obj_enc/
+
+# Generated flag files
+cce.f
+cddip.f
+huf.f
+lz77.f
+xp10_decomp.f
+
+# Wave traces
+*.vcd
+
+# Built binaries
+/xp10
+/xp10-enc
+
+# External upstream RTL clone (not part of this repo)
+project-zipline/
