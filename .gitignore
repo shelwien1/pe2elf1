@@ -20,3 +20,7 @@ xp10_decomp.f
 
 # External upstream RTL clone (not part of this repo)
 project-zipline/
+
+# Portable build artifacts (sources tracked, objects not)
+portable_decoder/**/*.o
+portable_decoder/xp10
