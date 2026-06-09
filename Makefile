@@ -74,8 +74,10 @@ xp10-enc: cce.f xp10.cpp
 	@cp obj_xp10enc/xp10-enc ./xp10-enc
 
 # Run the full decoder regression against the repo's golden vectors.
+# Defaults to the in-tree test_vectors/cdd64/ snapshot so this works without
+# the upstream project-zipline clone; override TDIR= to point elsewhere.
 TESTS = smoke xp10 gzip zlib xp9 cfh_4k cfh_8k xp10_prefix xp10_prefix_w_huffman xp10_user_prefix
-TDIR  = $(RTL_ROOT)/../dv/CDD_64/tests
+TDIR ?= $(CURDIR)/test_vectors/cdd64
 check: xp10
 	@for t in $(TESTS); do \
 	  iconv -f ISO-8859-1 -t UTF-8 $(TDIR)/$$t.inbound | tr -d '\r' > /tmp/$$t.in; \
