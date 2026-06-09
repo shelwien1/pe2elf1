@@ -24,3 +24,6 @@ project-zipline/
 # Portable build artifacts (sources tracked, objects not)
 portable_decoder/**/*.o
 portable_decoder/xp10
+portable_encoder/**/*.o
+portable_encoder/xp10-enc
+portable_encoder/generated/
