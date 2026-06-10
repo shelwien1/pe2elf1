@@ -333,6 +333,27 @@ solver choice — not micro-optimization.
 `solve_zipcrypt.sh` takes a `SOLVER=` override (any DIMACS solver), so use
 `SOLVER=/path/to/cadical` for forward models, kissat_inc for reverse.
 
+### Does *which* 24 bits matter?
+
+You might hope a different 24-bit selection is easier — e.g. 8 unknown bits in the
+low byte of *each* of k0/k1/k2 (`models/model24_spread.cpp`), since k2's low byte
+feeds the very first keystream byte while k0's bits must propagate through the
+schedule. It doesn't crack the wall: spread-24 still timed out at 60 min on both
+cadical and ParKissat-RS. At sizes that do finish, the two layouts are comparable
+*within the (large) run-to-run variance*:
+
+| N | contiguous (low N of k0) | spread (N/3 bits per key) |
+|---|---|---|
+| 12 | 15.7 s | 15.5 s |
+| 15 | 134 s | 47 s |
+| 18 | 1094 s | 946 s |
+
+Spread is occasionally faster (15-bit) but not systematically — variance dominates
+(on separate runs contiguous-15 took 134 s yet contiguous-16 only 21 s). The
+difficulty is set by the **24 bits of entropy flowing through the nonlinear
+schedule, not by which register holds them**; bit-selection — like solver and seed
+— is a lottery worth a few tries, not a fix.
+
 ## 10. Reproducing
 
 ```sh
