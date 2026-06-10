@@ -273,26 +273,29 @@ Measured kissat times (`solve_zipcrypt.sh`):
 | 20 | ~4 min (fit) | 17 min |
 | 24 | needs 3 files → explodes | _hours_ — see below |
 
-Each fit `time ≈ A·2^(c·N)` gives **c ≈ 0.78–0.87**, i.e. **~80–130× per +8
-bits**. Extrapolating the **fastest** combination (forward + cadical, see "Solver
-choice" below; [`scaling.py`](scaling.py)):
+Each low-`N` fit `time ≈ A·2^(c·N)` gives `c ≈ 0.78–0.87` (~80–130× per +8 bits)
+— but the exponent **accelerates**, so those fits are *optimistic lower bounds*.
+The 24-bit point proves it: the forward+cadical fit predicts ~27 min, yet the
+actual run **did not finish in 90 min** (20→24 bits cost >29×, not the fit's ~9×).
+So the table below is a floor; reality is worse:
 
-| N | est. time (forward + cadical) | files |
+| N | fit (forward+cadical), optimistic | measured |
 |---|---|---|
-| 24 | ~27 min | 3 |
-| 32 | ~1.5 days | 3 |
-| 40 | ~4 months | 4 |
-| 48 | ~25 years | 5 |
-| 64 | ~10⁵ years | 6 |
-| 96 | ~10¹² years | 9 |
+| 16 | 21 s | 21 s |
+| 20 | ~3 min | 185 s |
+| 24 | ~27 min | **>90 min — did not finish** |
+| 32 | ≥ days | — |
+| 48 | ≥ decades | — |
+| 96 | ≥ 10¹² years | — |
 
-So with the best solver the practical ceiling is **~24–32 unknown bits** (24 is
-now ~½ hour, not interactive but doable; ~32 would take days). The full 96-bit
-ZipCrypto state stays astronomically out of reach — which is why real attacks use
-the *structured* Biham–Kocher method (it recovers the whole state from ~13 known
-plaintext bytes by exploiting the schedule's algebra) rather than brute-forcing
-bits. SAT is a great demonstrator and a fine tool for *partial*-key / few-unknown
-situations, not full recovery.
+So the practical ceiling for brute SAT recovery is **~20–22 unknown bits**
+(seconds to a few minutes); 24 bits is already an overnight job at best, and
+anything past ~32 is hopeless. The full 96-bit ZipCrypto state stays
+astronomically out of reach — which is why real attacks use the *structured*
+Biham–Kocher method (it recovers the whole state from ~13 known plaintext bytes
+by exploiting the schedule's algebra) rather than brute-forcing bits. SAT is a
+great demonstrator and a fine tool for *partial*-key / few-unknown situations,
+not full recovery.
 
 ### Solver choice (kissat_inc vs kissat 4.0.4 vs cadical)
 
@@ -309,7 +312,8 @@ it can't distinguish them; 16-bit does):
   20-bit forward it took **185 s vs kissat_inc's 1042 s**, a *better exponent*
   too (×8.8 vs ×16 per +4 bits). cadical+forward overtakes the old best
   (reverse+kissat_inc) and, since forward avoids the reverse model's file
-  explosion, it's the best choice as `N` grows — it's what makes 24 bits ~½ hour.
+  explosion, it's the best choice as `N` grows — though even it doesn't crack
+  24 bits within 90 min (the exponent accelerates; see above).
 - **kissat_inc is fastest on the reverse model**; cadical is worst there (the
   reverse model's 96-free-bits-per-file structure doesn't suit it).
 - **Upstream kissat 4.0.4 is the slowest on both** — its competition-tuned

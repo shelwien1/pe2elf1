@@ -36,6 +36,7 @@ for tag, pts in (("reverse + kissat_inc (best for N<=16)", REVERSE_2F),
     for N in (24, 32, 40, 48, 56, 64, 80, 96):
         print(f"   {N:>3} {fmt(A * 2**(c*N)):>18}  {max(1, -(-N//11))}")
 
-print("\nNote: forward's measured ratios accelerate (4.7x ->12.5x ->16x per +4 bits),")
-print("so the extrapolations are optimistic lower bounds. The exponential wall makes")
-print("~32 bits the practical ceiling and full 96-bit recovery astronomically infeasible.")
+print("\nNote: the per-bit ratios ACCELERATE, so these log-linear fits are optimistic")
+print("LOWER BOUNDS. Reality check: forward+cadical fit predicts 24b ~27 min, but the")
+print("actual 24-bit run did NOT finish in 90 min (20->24 cost >29x, not the fit's ~9x).")
+print("Practical ceiling is ~20-22 bits; 24 is already an overnight job; 96 is hopeless.")
