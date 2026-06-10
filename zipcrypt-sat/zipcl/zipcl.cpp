@@ -29,6 +29,7 @@ int main( int argc, char** argv ) {
     M.gmax       = (argc>8) ? atoi(argv[8]) : 8;
     M.g_usecheck = (argc>9) ? atoi(argv[9]) : 1;
     M.g_reverse  = (argc>10) ? atoi(argv[10]) : 0;
+    M.g_defl     = (argc>11) ? atoi(argv[11]) : 0;
     M.password[0]=0;
     PF = fopen("/dev/null","wb"); if( PF==0 ) return 3;
     FILE* dn = fopen("/dev/null","wb"); if( dn==0 ) return 3;

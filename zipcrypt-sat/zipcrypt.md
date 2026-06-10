@@ -209,34 +209,79 @@ constraint structure, not formula size. Both still climb steeply with `nunk`
 (the multiply carries stay nonlinear in either direction), so this remains a
 "recover a handful of bits" demonstration rather than full 96-bit state recovery.
 
-## 8. Reproducing
+## 8. More deflate-header constraints
+
+After `BFINAL`/`BTYPE`, a dynamic block (`BTYPE=10`) has three fixed-size
+fields — `HLIT` (5 bits, `nlen=HLIT+257`), `HDIST` (5 bits, `ndist=HDIST+1`),
+`HCLEN` (4 bits, `ncode=HCLEN+4`) — then `ncode` 3-bit code-length-code lengths.
+These give extra *key-independent* constraints (the `g` mode's `deflevel` arg,
+1 or 2). Two are sound for any decodable stream:
+
+- **Validity ranges:** `nlen ≤ 286`, `ndist ≤ 30` (`ncode` is always valid).
+- **Completeness:** the code-length code must be a *complete* Huffman code, so
+  `Σ 2^(7-len_i) == 128` over the `ncode` lengths (Kraft equality; zlib rejects
+  an incomplete one). All 50 files in `basis.pak` satisfy both (verified).
+
+How much does each actually help? Brute-forcing all 256 low-bytes of `k0`
+against **one** file ([`deflate_constraints.py`](deflate_constraints.py)):
+
+| constraint added | candidates left (of 256) |
+|---|---|
+| `BFINAL=1 \| BTYPE=10` (3 bits) | 39 |
+| + `nlen ≤ 286`, `ndist ≤ 30` | 37 |
+| + code-length **Kraft == 128** | **1** (`0x92`) |
+
+The validity *ranges are almost worthless* (39 → 37: each only forbids 2 of 32
+values). The *completeness check is strong* — it collapses 39 → 1, uniquely
+fixing all 8 unknown bits from a **single** file. So with Kraft, deflate-only
+recovery (no CRC byte) needs far fewer files:
+
+| model | known plaintext | files | kissat | recovered |
+|---|---|---|---|---|
+| `model8_deflate.cpp` | deflate `BFINAL\|BTYPE` only | 6 | 2.2 s | `0x92` |
+| `model8_deflate_kraft.cpp` | + ranges + Kraft | **1** | 5.5 s | `0x92` |
+
+The catch: Kraft needs the first ~12 body bytes modelled (vs 1), so each file's
+CNF is bigger; for harder targets it can cost more than it saves (16-bit
+deflate-only+Kraft, 2 files: 144 s). Its sweet spot is **minimising the number
+of files** when the CRC check byte isn't usable. (The observed fields cluster
+tighter still — `nlen∈[267,286]`, `ndist∈[16,30]`, `ncode∈[12,18]` — but those
+are compressor-specific heuristics, not guarantees, so they're not encoded.)
+Past these fixed fields the stream is variable-length Huffman data, so there's
+little more to pin without actually decoding.
+
+## 9. Reproducing
 
 ```sh
 # build kissat (see ../sudoku-cbmc-linux/kissat.md), have cbmc on PATH, then:
-KISSAT=/path/to/kissat ./solve_zipcrypt.sh models/model8.cpp         8 92
-KISSAT=/path/to/kissat ./solve_zipcrypt.sh models/model16.cpp        16 0892
-KISSAT=/path/to/kissat ./solve_zipcrypt.sh models/model8_deflate.cpp 8 92
-KISSAT=/path/to/kissat ./solve_zipcrypt.sh models/rev8.cpp           8 92     # reverse
-KISSAT=/path/to/kissat ./solve_zipcrypt.sh models/rev16.cpp          16 0892  # reverse
+KISSAT=/path/to/kissat ./solve_zipcrypt.sh models/model8.cpp               8 92
+KISSAT=/path/to/kissat ./solve_zipcrypt.sh models/model16.cpp             16 0892
+KISSAT=/path/to/kissat ./solve_zipcrypt.sh models/model8_deflate.cpp       8 92
+KISSAT=/path/to/kissat ./solve_zipcrypt.sh models/model8_deflate_kraft.cpp 8 92   # §8
+KISSAT=/path/to/kissat ./solve_zipcrypt.sh models/rev8.cpp                 8 92    # reverse
+KISSAT=/path/to/kissat ./solve_zipcrypt.sh models/rev16.cpp               16 0892  # reverse
+python3 deflate_constraints.py                                                     # §8 analysis
 ```
 
 To regenerate the models, build the vendored tool (`zipcl/build.sh`) and run e.g.
-`zipcl/zipcl g zipcl/basis.pak model8.cpp 8 a3e30892 f9185194 eb474b09 2 1 0`
+`zipcl/zipcl g zipcl/basis.pak model8.cpp 8 a3e30892 f9185194 eb474b09 2 1 0 0`
 (see [`zipcl/README.md`](zipcl/README.md) for all arguments).
 
-## 9. Files
+## 10. Files
 
 - `zipcrypt.md` — this document.
 - `solve_zipcrypt.sh` — cbmc → kissat → decode `UNK`, with optional verification
-  (works for both forward and reverse models).
+  (works for forward, reverse and Kraft models).
+- `deflate_constraints.py` — brute-force quantification of §8's constraint power.
 - `models/model8.cpp`, `models/model16.cpp` — forward: recover low 8 / 16 bits of
   `k0` from CRC-byte + deflate constraints.
-- `models/model8_deflate.cpp` — forward, deflate bits only.
+- `models/model8_deflate.cpp` — forward, deflate `BFINAL|BTYPE` only.
+- `models/model8_deflate_kraft.cpp` — forward, deflate ranges + Kraft, 1 file (§8).
 - `models/rev8.cpp`, `models/rev16.cpp` — reverse models (§7).
 - `zipcl/` — the vendored, buildable `zipcl` with the `g` mode (`build.sh`,
   `basis.pak`, and `CHANGES.patch` showing the diff vs the upstream branch).
 
-## 10. References
+## 11. References
 
 - PKWARE APPNOTE, ZipCrypto / Traditional Encryption (decryption header, check
   byte = `crc >> 24`).

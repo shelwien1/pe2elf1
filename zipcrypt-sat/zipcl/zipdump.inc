@@ -45,7 +45,10 @@ struct zipdump : Coroutine {
   uint  genk0,genk1,genk2;  // the real key: known bits + the answer to verify
   int   g_usecheck;   // also constrain the crc-derived header check byte
   int   g_reverse;    // emit the reverse model (run cipher backward to the init)
+  int   g_defl;       // deflate-header constraint level: 0=BFINAL|BTYPE only,
+                      // 1=+nlen/ndist validity ranges, 2=+code-length code Kraft==128
   byte  g_ctsalt[12]; // captured ciphertext header of the current file
+  byte  g_ctbody[16]; // captured first body ciphertext bytes
 
   void gen_header( void ) {
     uint mask = (nunk>=32) ? 0xFFFFFFFFu : ((1u<<nunk)-1u);
@@ -63,37 +66,69 @@ struct zipdump : Coroutine {
 "uint k0,k1,k2;\n"
 "void update_keys(byte c){k0=CRC32(k0,c);k1=(k1+(k0&0xffu))*134775813u+1u;k2=CRC32(k2,(byte)(k1>>24));}\n"
 "byte decrypt_byte(){uint t=(k2&0xffffu)|2u;return (byte)((t*(t^1u))>>8);}\n"
-"extern uint UNK;          // nondeterministic: the SAT solver fills this in\n"
+"extern uint UNK;          // nondeterministic: the SAT solver fills this in\n",
+      nunk, genk0,genk1,genk2, genk0&mask, mask );
+    if( g_defl>=2 )
+      fprintf( gf,
+"uint CL(byte*b,uint p){ uint q=p>>3,r=p&7; return ((b[q]>>r)|(b[q+1]<<(8-r)))&7u; } // 3-bit field @ bit p\n" );
+    fprintf( gf,
 "int main(){\n"
-"  __CPROVER_assume((UNK & ~MASK)==0u);   // only the low %u bit(s) are free\n",
-      nunk, genk0,genk1,genk2, genk0&mask, mask, nunk );
+"  __CPROVER_assume((UNK & ~MASK)==0u);   // only the low %u bit(s) are free\n", nunk );
   }
 
   // Emit one file's constraint block. cts[0..11]=ciphertext header, ctb=first
   // ciphertext body byte, crc/usize/csize from the local header.
-  void gen_emit_file( byte* cts, byte ctb, uint crc, qword usize, qword csize ) {
-    if( g_reverse ) { gen_emit_file_rev( cts, ctb, crc, usize, csize ); return; }
+  void gen_emit_file( byte* cts, byte* body, uint nbody, uint crc, qword usize, qword csize ) {
+    if( g_reverse ) { gen_emit_file_rev( cts, body[0], crc, usize, csize ); return; }
     if( gcount>=gmax ) return;
     if( csize==0 ) return;                 // empty body: no deflate byte to use
     uint btype = (csize>=usize) ? 0u : 2u; // stored(00) if not smaller, else dynamic(10)
     uint defl3 = 1u | (btype<<1);          // BFINAL=1 (single block) | BTYPE
     uint check = (crc>>24)&0xFFu;          // last header byte == crc>>24
+
+    // how many body bytes the chosen constraint level needs
+    uint NB = (g_defl>=2) ? 12u : (g_defl>=1) ? 2u : 1u;
+    if( btype!=2u ) NB = 1u;               // ranges/Kraft are dynamic-block (BTYPE=10) only
+    if( nbody < NB ) return;               // not enough body to constrain at this level
+
     fprintf( gf,
 "  // file %u: uSize=%llu cSize=%llu crc=%08X  -> BFINAL=1 BTYPE=%s\n"
 "  k0=(0x%08Xu&~MASK)|(UNK&MASK); k1=0x%08Xu; k2=0x%08Xu;\n"
-"  { static const byte ct[13]={",
+"  { static const byte ct[%u]={",
       gcount,(unsigned long long)usize,(unsigned long long)csize,crc,
-      btype?"10":"00", genk0,genk1,genk2 );
-    for( int i=0;i<12;i++ ) fprintf( gf,"0x%02X,",cts[i] );
-    fprintf( gf,"0x%02X}; byte pt=0;\n",ctb );
-    fprintf( gf,
+      btype?"10":"00", genk0,genk1,genk2, 12u+NB );
+    for( uint i=0;i<12;i++ ) fprintf( gf,"0x%02X,",cts[i] );
+    for( uint i=0;i<NB;i++ ) fprintf( gf,"0x%02X%s",body[i], (i+1<NB)?",":"" );
+
+    if( g_defl==0 ) {                       // level 0: byte-identical to the original
+      fprintf( gf,"}; byte pt=0;\n"
 "    for(int i=0;i<12;i++){ pt=ct[i]^decrypt_byte(); update_keys(pt); }\n" );
-    if( g_usecheck )
-      fprintf( gf,"    __CPROVER_assume(pt==0x%02Xu);              // crc check byte\n",check );
-    fprintf( gf,
+      if( g_usecheck )
+        fprintf( gf,"    __CPROVER_assume(pt==0x%02Xu);              // crc check byte\n",check );
+      fprintf( gf,
 "    byte b0=ct[12]^decrypt_byte();\n"
 "    __CPROVER_assume((b0&7u)==%uu);             // deflate BFINAL|BTYPE\n"
 "  }\n", defl3 );
+      gcount++; return;
+    }
+
+    // levels 1-2: decrypt NB body bytes and add deflate-structure constraints
+    fprintf( gf,"}; byte b[%u]; byte pt=0;\n"
+"    for(int i=0;i<12;i++){ pt=ct[i]^decrypt_byte(); update_keys(pt); }\n", NB );
+    if( g_usecheck )
+      fprintf( gf,"    __CPROVER_assume(pt==0x%02Xu);                 // crc check byte\n",check );
+    fprintf( gf,
+"    for(int i=0;i<%u;i++){ b[i]=ct[12+i]^decrypt_byte(); update_keys(b[i]); }\n"
+"    __CPROVER_assume((b[0]&7u)==%uu);                // deflate BFINAL|BTYPE\n"
+"    __CPROVER_assume(((b[0]>>3)&0x1Fu)<=29u);        // nlen = HLIT+257 <= 286\n"
+"    __CPROVER_assume((b[1]&0x1Fu)<=29u);             // ndist = HDIST+1 <= 30\n", NB, defl3 );
+    if( g_defl>=2 )
+      fprintf( gf,
+"    uint ncode=(((b[1]>>5)&7u)|((b[2]&1u)<<3))+4u;   // HCLEN+4\n"
+"    uint kraft=0;\n"
+"    for(int j=0;j<19;j++){ uint cl=CL(b,17u+3u*(uint)j); if((uint)j<ncode && cl>0u) kraft+=(128u>>cl); }\n"
+"    __CPROVER_assume(kraft==128u);                   // code-length code is complete\n" );
+    fprintf( gf,"  }\n" );
     gcount++;
   }
 
@@ -342,12 +377,13 @@ printf( "%08X %08X %08X %8llu %8llu !", (uint&)zcr.pad[8], hdr.crc32, (uint(hdr.
           qword jj = (f_cr==2) ? hdr.cSize64 : hdr.cSize64-12;
           for( qword ii=0; ii<jj; ii++ ) {
             uint c = get();
-            if( gen && ii==0 ) gen_emit_file( g_ctsalt, byte(c), hdr.crc32, hdr.uSize64, hdr.cSize64 ); // ct body[0]
+            if( gen && ii<16 ) g_ctbody[ii] = byte(c);   // capture ciphertext body prefix
             d = c ^ zcr.decrypt_byte();
             zcr.update_keys( mode ? d : c );
             put( d );
 if( ii<12 ) p_bits(d);
           }
+          if( gen ) gen_emit_file( g_ctsalt, g_ctbody, (jj<16?(uint)jj:16u), hdr.crc32, hdr.uSize64, hdr.cSize64 );
 printf( "\n" );
 
         } else {
