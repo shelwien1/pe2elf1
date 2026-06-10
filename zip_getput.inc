@@ -36,6 +36,18 @@ void put_Lword( uint a ) {
   put( byte(a>>8) );
 }
 
+qword get_Lqword( void ) {
+  qword a = 0;
+  uint i;
+  for( i=0; i<8; i++ ) a |= qword(get()) << (8*i);
+  return a;
+}
+
+void put_Lqword( qword a ) {
+  uint i;
+  for( i=0; i<8; i++ ) put( byte(a>>(8*i)) );
+}
+
 uint get_byte( void ) { return get(); }
 
 void put_byte( uint c ) { put(c); }

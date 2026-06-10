@@ -21,37 +21,46 @@ struct ZIPFILERECORD {
   // when cSize/uSize are 0xFFFFFFFF, otherwise just copies of cSize/uSize).
   qword cSize64;
   qword uSize64;
+  int   cSize64_pos; // byte offset of the 8-byte cSize inside extra[], or -1
+
+  qword rd8( uint p ) {
+    qword v = 0;
+    for( uint k=0; k<8; k++ ) v |= qword(extra[p+k]) << (8*k);
+    return v;
+  }
+  void wr8( uint p, qword v ) {
+    for( uint k=0; k<8; k++ ) extra[p+k] = byte(v>>(8*k));
+  }
 
   // Locate the ZIP64 extended-info field (header id 0x0001) inside extra[]
-  // and lift the real 64-bit sizes out of it.
+  // and lift the real 64-bit sizes out of it. A field is only present in the
+  // record when its 32-bit slot holds the 0xFFFFFFFF overflow marker; they
+  // appear in the fixed order uSize, cSize.
   void parse_zip64( void ) {
     cSize64 = cSize;
     uSize64 = uSize;
+    cSize64_pos = -1;
     uint i = 0;
     while( i+4 <= l_extra ) {
       uint id  = extra[i] | (extra[i+1]<<8);
       uint len = extra[i+2] | (extra[i+3]<<8);
-      i += 4;
-      if( i+len > l_extra ) break;
+      uint body = i+4;
+      if( body+len > l_extra ) break;
       if( id == 0x0001 ) {
-        uint p = i;
-        // The ZIP64 record only stores fields that overflowed the 32-bit
-        // slots: uSize, cSize, then (in central-dir entries) HeaderOffs and
-        // DiskStart. We only need the first two here.
-        if( uSize == 0xFFFFFFFFu && p+8 <= i+len ) {
-          qword v = 0;
-          for( uint k=0; k<8; k++ ) v |= qword(extra[p+k]) << (8*k);
-          uSize64 = v; p += 8;
-        }
-        if( cSize == 0xFFFFFFFFu && p+8 <= i+len ) {
-          qword v = 0;
-          for( uint k=0; k<8; k++ ) v |= qword(extra[p+k]) << (8*k);
-          cSize64 = v;
-        }
+        uint p = body;
+        if( uSize == 0xFFFFFFFFu && p+8 <= body+len ) { uSize64 = rd8(p); p += 8; }
+        if( cSize == 0xFFFFFFFFu && p+8 <= body+len ) { cSize64 = rd8(p); cSize64_pos = p; p += 8; }
         break;
       }
-      i += len;
+      i = body + len;
     }
+  }
+
+  // Write cSize64 back into the extra field when the size is stored there
+  // (force_zip64 entry); otherwise keep the 32-bit cSize slot in sync.
+  void sync_zip64( void ) {
+    if( cSize64_pos>=0 ) wr8( cSize64_pos, cSize64 );
+    else cSize = (uint)cSize64;
   }
 
   template< class zipdump >

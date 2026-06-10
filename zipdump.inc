@@ -23,6 +23,7 @@ struct zipdump : Coroutine {
   #include "zip_filerec.inc"
   #include "zip_direntry.inc"
   #include "zip_endloc.inc"
+  #include "zip_end64.inc"
   #include "zip_descr.inc"
 
   #include "zip_getput.inc"
@@ -38,10 +39,15 @@ struct zipdump : Coroutine {
     ZIPFILERECORD hdr;
     ZIPDIRENTRY idx;
     ZIPENDLOCATOR end;
+    ZIP64ENDLOCATOR end64;
+    ZIP64LOCATOR loc64;
     ZIPDATADESCR dsc;
   };
 
-  enum { max_cells = 1<<16 };
+  // Large enough for archives with up to ~1M members (ZIP64's main use case
+  // beyond 4 GiB is >65535 files). Writes are bounds-checked below so an even
+  // bigger archive degrades gracefully instead of corrupting memory.
+  enum { max_cells = 1<<20 };
 
   struct cell {
     uint Offs0; // source offset
@@ -66,6 +72,7 @@ struct zipdump : Coroutine {
     uint out_ofs=0;
     uint dir_ofs=-1;
     uint n_cells=0;
+    qword z64_ofs=-1; // output offset of the ZIP64 EOCD record (for the locator)
 
     zcr.InitCRC();
 
@@ -96,10 +103,10 @@ struct zipdump : Coroutine {
           else hdr.flags|=0x80; // decrypt mode, but wasn't encrypted
         }
 
-        // Mirror the patched cSize64 back into the 32-bit header field when
-        // the entry isn't ZIP64; the ZIP64 case keeps cSize at 0xFFFFFFFF so
-        // the output stays a valid ZIP64 stream.
-        if( hdr.cSize != 0xFFFFFFFFu ) hdr.cSize = (uint)hdr.cSize64;
+        // Push the patched size back where it actually lives: the 32-bit cSize
+        // slot for plain entries, or the ZIP64 extra field for force_zip64
+        // entries (whose cSize slot stays 0xFFFFFFFF).
+        hdr.sync_zip64();
 
 //printf( "mode=%i flags=%i f_cr=%i cSize=%llu\n", mode, hdr.flags, f_cr, (unsigned long long)hdr.cSize64 );
 
@@ -148,7 +155,8 @@ printf( "\n" );
 
         {
           int dSize = (f_cr==1) ? +12 : (f_cr==2) ? -12 : 0;
-          ofstbl[n_cells++].Init( inp_ofs, out_ofs, hdr.cSize, hdr.flags, dSize );
+          if( n_cells<max_cells ) ofstbl[n_cells].Init( inp_ofs, out_ofs, hdr.cSize, hdr.flags, dSize );
+          n_cells++;
         }
 
         inp_ofs+=l;
@@ -160,19 +168,21 @@ printf( "\n" );
 
         if( dir_ofs==-1 ) dir_ofs = out_ofs;
 
-        l=idx.Parse(this,0); 
+        l=idx.Parse(this,0);
 
-        for( i=0,d=(1<<log2i(n_cells)); d>0; d>>=1 ) 
-          if( (i+d<n_cells) && (idx.HeaderOffs>=ofstbl[i+d].Offs0) ) i+=d;
+        // Look up by the real (possibly ZIP64) local-header offset.
+        uint key = (idx.realOffs() <= 0xFFFFFFFFu) ? uint(idx.realOffs()) : 0xFFFFFFFFu;
+        uint nc = (n_cells<max_cells) ? n_cells : max_cells; // clamp to stored entries
+        for( i=0,d=(1<<log2i(nc)); d>0; d>>=1 )
+          if( (i+d<nc) && (key>=ofstbl[i+d].Offs0) ) i+=d;
 
-        if( ofstbl[i].Offs0!=idx.HeaderOffs ) {
-//printf( "!!! %2i %2i %08X %08X\n", i, n_cells, ofstbl[i].Offs0, idx.HeaderOffs );
+        if( nc==0 || ofstbl[i].Offs0!=key ) {
+//printf( "!!! %2i %2i %08X %08X\n", i, n_cells, ofstbl[i].Offs0, key );
         } else {
-          idx.HeaderOffs = ofstbl[i].Offs1;
-          // Apply the encryption-induced cSize delta directly; this preserves
-          // 32-bit central-dir cSize for ZIP64 entries (where the file record
-          // uses the 0xFFFFFFFF marker but the central dir holds the real value).
-          if( ofstbl[i].dSize && idx.cSize != 0xFFFFFFFFu ) idx.cSize += ofstbl[i].dSize;
+          // Patch offset, encryption-induced cSize delta, and flags in place,
+          // writing to the 32-bit slot or the ZIP64 extra field as appropriate.
+          idx.setOffs( ofstbl[i].Offs1 );
+          if( ofstbl[i].dSize ) idx.addSize( ofstbl[i].dSize );
           idx.flags = ofstbl[i].flags1;
         }
 
@@ -180,11 +190,38 @@ printf( "\n" );
         inp_ofs += l;
         out_ofs += l;
 
+      } else if( tag==L<'P','K',6,6>::n ) {
+
+        // ZIP64 end of central directory record
+        l=end64.Parse(this,0);
+
+        z64_ofs = out_ofs; // remember where it lands for the locator
+        // Only patch the offset when it isn't the (rare) self-referential
+        // 0xFFFFFFFF marker; the real CD start in the output is dir_ofs.
+        if( dir_ofs!=uint(-1) ) end64.DirOffs = dir_ofs;
+
+        end64.Store(this);
+        inp_ofs += l;
+        out_ofs += l;
+
+      } else if( tag==L<'P','K',6,7>::n ) {
+
+        // ZIP64 end of central directory locator
+        l=loc64.Parse(this,0);
+
+        if( z64_ofs!=qword(-1) ) loc64.Z64EOCDOffs = z64_ofs;
+
+        loc64.Store(this);
+        inp_ofs += l;
+        out_ofs += l;
+
       } else if( tag==L<'P','K',5,6>::n ) {
 
-        l=end.Parse(this,0); 
+        l=end.Parse(this,0);
 
-        end.DirOffs = dir_ofs;
+        // Leave the 0xFFFFFFFF marker in place for true ZIP64 archives (real
+        // offset lives in the PK\6\6 record); otherwise point at the output CD.
+        if( end.DirOffs!=0xFFFFFFFFu && dir_ofs!=uint(-1) ) end.DirOffs = dir_ofs;
 
         end.Store(this);
         inp_ofs += l;

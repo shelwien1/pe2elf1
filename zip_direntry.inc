@@ -26,6 +26,58 @@ struct ZIPDIRENTRY {
   byte extra[l_extra_max]; // frExtraFieldLength
   byte comment[l_comm_max];
 
+  // ZIP64 extended-info handling. In a central-directory entry the fields
+  // present in id 0x0001 are, in order, those whose 32-bit slot holds the
+  // overflow marker: uSize, cSize (0xFFFFFFFF), HeaderOffs (0xFFFFFFFF),
+  // DiskStart (0xFFFF). We remember the byte positions of the cSize and
+  // HeaderOffs fields so they can be patched in place.
+  qword cSize64, uSize64, HeaderOffs64;
+  int   cSize64_pos, offs64_pos;
+
+  qword rd8( uint p ) {
+    qword v = 0;
+    for( uint k=0; k<8; k++ ) v |= qword(extra[p+k]) << (8*k);
+    return v;
+  }
+  void wr8( uint p, qword v ) {
+    for( uint k=0; k<8; k++ ) extra[p+k] = byte(v>>(8*k));
+  }
+
+  void parse_zip64( void ) {
+    cSize64 = cSize; uSize64 = uSize; HeaderOffs64 = HeaderOffs;
+    cSize64_pos = -1; offs64_pos = -1;
+    uint i = 0;
+    while( i+4 <= l_extra ) {
+      uint id  = extra[i] | (extra[i+1]<<8);
+      uint len = extra[i+2] | (extra[i+3]<<8);
+      uint body = i+4;
+      if( body+len > l_extra ) break;
+      if( id == 0x0001 ) {
+        uint p = body, e = body+len;
+        if( uSize      == 0xFFFFFFFFu && p+8 <= e ) { uSize64 = rd8(p); p += 8; }
+        if( cSize      == 0xFFFFFFFFu && p+8 <= e ) { cSize64 = rd8(p); cSize64_pos = p; p += 8; }
+        if( HeaderOffs == 0xFFFFFFFFu && p+8 <= e ) { HeaderOffs64 = rd8(p); offs64_pos = p; p += 8; }
+        break;
+      }
+      i = body + len;
+    }
+  }
+
+  // Real (64-bit) local-header offset used as the lookup key into the offset
+  // table, transparently whether it lives in the 32-bit slot or the extra.
+  qword realOffs( void ) { return HeaderOffs64; }
+
+  // Apply an output local-header offset, writing it to whichever slot holds it.
+  void setOffs( qword v ) {
+    HeaderOffs64 = v;
+    if( offs64_pos>=0 ) wr8( offs64_pos, v ); else HeaderOffs = (uint)v;
+  }
+
+  // Apply a signed size delta (encryption header ±12) to cSize, in place.
+  void addSize( int delta ) {
+    cSize64 += delta;
+    if( cSize64_pos>=0 ) wr8( cSize64_pos, cSize64 ); else cSize = (uint)cSize64;
+  }
 
   template< class zipdump >
   uint Parse( zipdump* _z, uint flag=1 ) {
@@ -52,6 +104,8 @@ struct ZIPDIRENTRY {
     z.get_string( name,    sizeof(name),    l_name  );
     z.get_string( extra,   sizeof(extra),   l_extra );
     z.get_string( comment, sizeof(comment), l_comment );
+
+    parse_zip64();
 
     return 11*2+6*4+l_name+l_extra+l_comment;
   };
