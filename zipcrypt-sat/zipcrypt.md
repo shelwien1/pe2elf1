@@ -316,6 +316,16 @@ it can't distinguish them; 16-bit does):
   inprocessing is counter-productive on these small, highly structured crypto
   instances. Newer ≠ faster here.
 
+**Build-level tuning doesn't move the needle.** Rebuilding cadical with
+`clang -Ofast -march=haswell` and swapping in **mimalloc** (with 2 MB huge pages —
+verified consumed, `HugePages_Free` dropped during the run) changed the 16-bit
+forward solve by <1 % (20.2→20.0 s) and 20-bit by ~0 % (185→194 s, i.e. noise).
+These solves are *algorithm-bound* — branchy propagation / conflict-analysis over
+preallocated structures — not allocator- or codegen-bound, so a faster allocator
+and vectorization flags have nothing to grab. Every real speedup here was
+algorithmic (bitwise CRC §5, the reverse model §7, deflate constraints §8) or
+solver choice — not micro-optimization.
+
 `solve_zipcrypt.sh` takes a `SOLVER=` override (any DIMACS solver), so use
 `SOLVER=/path/to/cadical` for forward models, kissat_inc for reverse.
 
