@@ -32,6 +32,7 @@ struct zipdump : Coroutine {
 
   uint k0,k1,k2, pad0,pad1,pad2;
   uint mode; // 0=enc 1=dec
+  uint last_zip64; // ZIP64 status of the most recent local file header
   zipcrypt zcr;
   char password[256];
 
@@ -66,13 +67,67 @@ struct zipdump : Coroutine {
     for( i=0; i<l; i++ ) printf( "%i", (x>>i)&1 );
   }
 
+  // --- streaming (bit-3 / data-descriptor) support -------------------------
+  // A small lookahead ring so a streamed entry's data descriptor can be found
+  // by its 0x08074b50 signature + a compressed-size field equal to the bytes
+  // consumed, without over-reading past it (the coroutine has no unget).
+  byte la[64]; uint la_head, la_cnt;
+  uint la_peek( uint i ) { return la[(la_head+i)&63]; }
+  void la_push( uint b ) { la[(la_head+la_cnt)&63]=byte(b); la_cnt++; }
+  uint la_pop( void ) { uint b=la[la_head]; la_head=(la_head+1)&63; la_cnt--; return b; }
+  qword la_rd( uint off, uint n ) { qword v=0; for( uint k=0; k<n; k++ ) v|=qword(la_peek(off+k))<<(8*k); return v; }
+
+  // Process a streaming entry's [file data][data descriptor].
+  //   f_cr : 0=copy, 1=encrypt, 2=decrypt    zip64 : 8-byte descriptor sizes
+  // Returns input bytes consumed / output bytes emitted (data + descriptor).
+  void do_stream_entry( uint f_cr, uint zip64, qword& in_bytes, qword& out_bytes ) {
+    uint N    = zip64 ? 8 : 4;
+    uint want = 8 + N;     // sig(4)+crc(4)+csize(N): enough to recognise the descriptor
+    uint ddlen= 8 + 2*N;   // full signed descriptor
+    qword raw_cnt = 0;     // raw input data bytes == the input descriptor's cSize
+    in_bytes = 0; out_bytes = 0;
+    la_head = la_cnt = 0;
+
+    if( f_cr ) { zcr.init_keys( password ); zcr.k0=k0; zcr.k1=k1; zcr.k2=k2; }
+
+    if( f_cr==2 ) {                                    // decrypt: 12-byte header is input
+      for( uint i=0; i<12; i++ ) { zcr.pad[i]=get(); in_bytes++; raw_cnt++; }
+      zcr.crypt( zcr.pad, 12, mode );
+      fwrite( zcr.pad, 1,12, PF );
+    } else if( f_cr==1 ) {                             // encrypt: emit a 12-byte header
+      fread( zcr.pad, 1,12, PF );
+      zcr.crypt( zcr.pad, 12, mode );
+      for( uint i=0; i<12; i++ ) { put( zcr.pad[i] ); out_bytes++; }
+    }
+
+    while(1) {
+      while( la_cnt<want && !f_quit ) { uint b=get(); if( f_quit ) break; la_push(b); in_bytes++; }
+      if( la_cnt>=want
+          && la_peek(0)==0x50 && la_peek(1)==0x4b && la_peek(2)==7 && la_peek(3)==8
+          && la_rd(8,N)==raw_cnt ) break;             // data descriptor reached
+      if( la_cnt==0 ) break;                          // EOF safety
+      uint in_b = la_pop();
+      raw_cnt++;
+      uint out_b = (f_cr==0) ? in_b : (in_b ^ zcr.decrypt_byte());
+      if( f_cr ) zcr.update_keys( (f_cr==2) ? out_b : in_b );
+      put( out_b ); out_bytes++;
+    }
+
+    while( la_cnt<ddlen && !f_quit ) { uint b=get(); if( f_quit ) break; la_push(b); in_bytes++; }
+    byte dd[24];
+    for( uint i=0; i<ddlen; i++ ) dd[i] = byte( la_cnt ? la_pop() : 0 );
+    qword csz = 0; for( uint k=0; k<N; k++ ) csz |= qword(dd[8+k]) << (8*k);
+    csz += (f_cr==1) ? +12 : (f_cr==2) ? -12 : 0;     // rewrite compressed size
+    for( uint i=0; i<8; i++ )  { put( dd[i] );             out_bytes++; } // sig + crc
+    for( uint k=0; k<N; k++ )  { put( byte(csz>>(8*k)) );  out_bytes++; } // cSize'
+    for( uint k=0; k<N; k++ )  { put( dd[8+N+k] );         out_bytes++; } // uSize
+  }
+
   void do_process( void ) {
 
     uint inp_ofs=0;
     uint out_ofs=0;
-    uint dir_ofs=-1;
     uint n_cells=0;
-    qword z64_ofs=-1; // output offset of the ZIP64 EOCD record (for the locator)
 
     zcr.InitCRC();
 
@@ -85,7 +140,10 @@ struct zipdump : Coroutine {
 
       if( tag==L<'P','K',3,4>::n ) {
 
-        l=hdr.Parse(this,0); l+=hdr.cSize64;
+        uint hdrlen = hdr.Parse(this,0);
+        uint f_dd = (hdr.flags>>3)&1;       // bit 3: a data descriptor trails the data
+        last_zip64 = hdr.has_zip64;         // for a standalone PK\7\8 fallback
+        l = hdrlen + hdr.cSize64;
 
         f_cr=0;
 
@@ -103,14 +161,28 @@ struct zipdump : Coroutine {
           else hdr.flags|=0x80; // decrypt mode, but wasn't encrypted
         }
 
-        // Push the patched size back where it actually lives: the 32-bit cSize
-        // slot for plain entries, or the ZIP64 extra field for force_zip64
-        // entries (whose cSize slot stays 0xFFFFFFFF).
-        hdr.sync_zip64();
+        // For a streamed entry the local-header sizes are placeholders (the
+        // real size is in the trailing descriptor), so don't touch them.
+        if( !f_dd ) hdr.sync_zip64();
 
 //printf( "mode=%i flags=%i f_cr=%i cSize=%llu\n", mode, hdr.flags, f_cr, (unsigned long long)hdr.cSize64 );
 
         hdr.Store(this);
+
+        int dSize = (f_cr==1) ? +12 : (f_cr==2) ? -12 : 0;
+
+        if( f_dd ) {
+
+          // Streamed entry: scan for the data descriptor instead of trusting
+          // the (zero) local-header size.
+          qword sin, sout;
+          do_stream_entry( f_cr, hdr.has_zip64, sin, sout );
+          if( n_cells<max_cells ) ofstbl[n_cells].Init( inp_ofs, out_ofs, hdr.cSize, hdr.flags, dSize );
+          n_cells++;
+          inp_ofs += hdrlen + sin;
+          out_ofs += hdrlen + sout;
+
+        } else {
 
         if( f_cr ) {
 
@@ -153,20 +225,17 @@ printf( "\n" );
 
         }
 
-        {
-          int dSize = (f_cr==1) ? +12 : (f_cr==2) ? -12 : 0;
-          if( n_cells<max_cells ) ofstbl[n_cells].Init( inp_ofs, out_ofs, hdr.cSize, hdr.flags, dSize );
-          n_cells++;
-        }
+        if( n_cells<max_cells ) ofstbl[n_cells].Init( inp_ofs, out_ofs, hdr.cSize, hdr.flags, dSize );
+        n_cells++;
 
         inp_ofs+=l;
         out_ofs+=l;
         if( f_cr==2 ) out_ofs -= 12; else
         if( f_cr==1 ) out_ofs += 12;
 
-      } else if( tag==L<'P','K',1,2>::n ) {
+        }
 
-        if( dir_ofs==-1 ) dir_ofs = out_ofs;
+      } else if( tag==L<'P','K',1,2>::n ) {
 
         l=idx.Parse(this,0);
 
@@ -186,55 +255,68 @@ printf( "\n" );
           idx.flags = ofstbl[i].flags1;
         }
 
-        idx.Store(this); 
+        idx.Store(this);
         inp_ofs += l;
         out_ofs += l;
 
+      } else if( tag==L<'P','K',5,5>::n ) {
+
+        // Central directory digital signature record: copy through unchanged.
+        put_Luint( B<'P','K',5,5>::n );
+        uint sz = get_Lword(); put_Lword( sz );
+        for( uint q=0; q<sz; q++ ) put( get() );
+        l = 4+2+sz;
+        inp_ofs += l; out_ofs += l;
+
+      } else if( tag==L<'P','K',6,8>::n ) {
+
+        // Archive extra data record (precedes the central directory): copy through.
+        put_Luint( B<'P','K',6,8>::n );
+        uint xl = get_Luint(); put_Luint( xl );
+        for( uint q=0; q<xl; q++ ) put( get() );
+        l = 4+4+xl;
+        inp_ofs += l; out_ofs += l;
+
       } else if( tag==L<'P','K',6,6>::n ) {
 
-        // ZIP64 end of central directory record
+        // ZIP64 end of central directory record. Its CD offset shifts by the
+        // net size change accumulated in the local-header region.
+        int delta = (int)(out_ofs - inp_ofs);
         l=end64.Parse(this,0);
-
-        z64_ofs = out_ofs; // remember where it lands for the locator
-        // Only patch the offset when it isn't the (rare) self-referential
-        // 0xFFFFFFFF marker; the real CD start in the output is dir_ofs.
-        if( dir_ofs!=uint(-1) ) end64.DirOffs = dir_ofs;
-
+        end64.DirOffs += delta;
         end64.Store(this);
         inp_ofs += l;
         out_ofs += l;
 
       } else if( tag==L<'P','K',6,7>::n ) {
 
-        // ZIP64 end of central directory locator
+        // ZIP64 end of central directory locator: its record offset shifts too.
+        int delta = (int)(out_ofs - inp_ofs);
         l=loc64.Parse(this,0);
-
-        if( z64_ofs!=qword(-1) ) loc64.Z64EOCDOffs = z64_ofs;
-
+        loc64.Z64EOCDOffs += delta;
         loc64.Store(this);
         inp_ofs += l;
         out_ofs += l;
 
       } else if( tag==L<'P','K',5,6>::n ) {
 
+        int delta = (int)(out_ofs - inp_ofs);
         l=end.Parse(this,0);
-
         // Leave the 0xFFFFFFFF marker in place for true ZIP64 archives (real
-        // offset lives in the PK\6\6 record); otherwise point at the output CD.
-        if( end.DirOffs!=0xFFFFFFFFu && dir_ofs!=uint(-1) ) end.DirOffs = dir_ofs;
-
+        // offset lives in the PK\6\6 record); otherwise shift by the net delta.
+        if( end.DirOffs!=0xFFFFFFFFu ) end.DirOffs += delta;
         end.Store(this);
         inp_ofs += l;
         out_ofs += l;
 
       } else if( tag==L<'P','K',7,8>::n ) {
 
-        l=dsc.Parse(this); 
-//        if( mode==0 ) {
+        // Standalone data descriptor (entry that wasn't routed through the
+        // streaming path); copy through, honoring 8-byte ZIP64 sizes.
+        l=dsc.Parse(this,0,last_zip64);
           dsc.Dump();
           dsc.Store(this);
           out_ofs += l;
-//        }
         inp_ofs += l;
 
       } else break;

@@ -22,6 +22,7 @@ struct ZIPFILERECORD {
   qword cSize64;
   qword uSize64;
   int   cSize64_pos; // byte offset of the 8-byte cSize inside extra[], or -1
+  int   has_zip64;   // a ZIP64 (0x0001) extra field is present -> 8-byte data descriptor
 
   qword rd8( uint p ) {
     qword v = 0;
@@ -40,6 +41,7 @@ struct ZIPFILERECORD {
     cSize64 = cSize;
     uSize64 = uSize;
     cSize64_pos = -1;
+    has_zip64 = 0;
     uint i = 0;
     while( i+4 <= l_extra ) {
       uint id  = extra[i] | (extra[i+1]<<8);
@@ -47,6 +49,7 @@ struct ZIPFILERECORD {
       uint body = i+4;
       if( body+len > l_extra ) break;
       if( id == 0x0001 ) {
+        has_zip64 = 1;
         uint p = body;
         if( uSize == 0xFFFFFFFFu && p+8 <= body+len ) { uSize64 = rd8(p); p += 8; }
         if( cSize == 0xFFFFFFFFu && p+8 <= body+len ) { cSize64 = rd8(p); cSize64_pos = p; p += 8; }

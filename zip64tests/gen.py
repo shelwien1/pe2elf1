@@ -101,4 +101,59 @@ with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as z:
     with z.open("comp.txt", "w", force_zip64=True) as fp: fp.write(b"\x00"*200000)
 w("t12_highcompress_zip64.zip", buf.getvalue())
 
+
+# --- streaming (bit-3 data descriptor) and exotic central-dir records --------
+
+class Unseekable(io.RawIOBase):
+    """Non-seekable sink: forces zipfile to emit trailing data descriptors."""
+    def __init__(self): self.b = bytearray()
+    def writable(self): return True
+    def seekable(self): return False
+    def write(self, x): self.b += x; return len(x)
+
+# 13) streamed entries -> 4-byte (non-zip64) data descriptors, bit 3 set.
+u = Unseekable()
+with zipfile.ZipFile(u, "w", zipfile.ZIP_DEFLATED, allowZip64=False) as z:
+    z.writestr("s1.txt", b"streamed one "*20)
+    z.writestr("s2.txt", b"streamed two "*30)
+w("t13_datadesc_stream.zip", bytes(u.b))
+
+# 14) streamed force_zip64 entries -> 8-byte ZIP64 data descriptors.
+u = Unseekable()
+with zipfile.ZipFile(u, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as z:
+    with z.open(zipfile.ZipInfo("big1.txt"), "w", force_zip64=True) as fp: fp.write(b"zip64 streamed "*40)
+    with z.open(zipfile.ZipInfo("big2.txt"), "w", force_zip64=True) as fp: fp.write(b"second zip64 "*25)
+w("t14_datadesc_zip64_stream.zip", bytes(u.b))
+
+def _stored(entries):
+    """Hand-build STORED local headers + central headers; returns (pre, [cd...])."""
+    pre = b""; offs = []
+    for name, data in entries:
+        offs.append(len(pre))
+        crc = zipfile.crc32(data) & 0xffffffff
+        pre += struct.pack("<IHHHHHIIIHH", 0x04034b50, 20, 0, 0, 0, 0, crc,
+                           len(data), len(data), len(name), 0) + name.encode() + data
+    cd = []
+    for i, (name, data) in enumerate(entries):
+        crc = zipfile.crc32(data) & 0xffffffff
+        cd.append(struct.pack("<IHHHHHHIIIHHHHHII", 0x02014b50, 20, 20, 0, 0, 0, 0, crc,
+                              len(data), len(data), len(name), 0, 0, 0, 0, 0, offs[i]) + name.encode())
+    return pre, cd
+
+# 15) central directory carrying a Digital Signature record (PK\5\5).
+pre, cd = _stored([("a.txt", b"alpha\n"), ("b.txt", b"beta\n")])
+sig = b"PSEUDO-SIGNATURE-BYTES"
+digsig = struct.pack("<IH", 0x05054b50, len(sig)) + sig
+cddata = b"".join(cd) + digsig
+eocd = struct.pack("<IHHHHIIH", 0x06054b50, 0, 0, len(cd), len(cd), len(cddata), len(pre), 0)
+w("t15_digital_signature.zip", pre + cddata + eocd)
+
+# 16) Archive Extra Data record (PK\6\8) preceding the central directory.
+pre, cd = _stored([("x.txt", b"xray\n"), ("y.txt", b"yankee\n")])
+aed = struct.pack("<II", 0x08064b50, 26) + b"ARCHIVE-EXTRA-DATA-PAYLOAD"
+cddata = b"".join(cd)
+eocd = struct.pack("<IHHHHIIH", 0x06054b50, 0, 0, len(cd), len(cd),
+                   len(cddata) + len(aed), len(pre) + len(aed), 0)
+w("t16_archive_extra.zip", pre + aed + cddata + eocd)
+
 print("done")
