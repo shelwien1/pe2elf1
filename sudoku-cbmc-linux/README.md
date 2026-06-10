@@ -105,8 +105,10 @@ the line number in `solve.sh`.
 
 ## Solving with kissat instead of CBMC
 
-`solve_kissat.sh` keeps the exact same C model but lets **kissat** do the
-solving; CBMC is reduced to a CNF compiler:
+See **[kissat.md](kissat.md)** for the full write-up (both the
+`--external-sat-solver` and `--dimacs` approaches, plus the model-decoding
+reference). In short, `solve_kissat.sh` keeps the exact same C model but lets
+**kissat** do the solving; CBMC is reduced to a CNF compiler:
 
 ```sh
 # kissat on PATH, or point at your build:
@@ -141,6 +143,7 @@ later `stream#N` instead.
 
 - `solve.sh` — CBMC solves directly (Linux port of `solve.bat`).
 - `solve_kissat.sh` — CBMC emits CNF, kissat solves, awk decodes the model.
+- `kissat.md` — guide to using kissat as the SAT backend for CBMC.
 - `sudoku.cpp` — the CBMC model; holds the puzzle and the constraints.
 - `sudoku_chk.cpp` — includes the extracted `solution.inc` and prints the grid.
 - generated / git-ignored: `solution.inc`, `sudoku_chk` (both scripts),
