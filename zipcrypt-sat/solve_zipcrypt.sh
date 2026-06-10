@@ -8,9 +8,11 @@
 # `UNK`); kissat solves it; we decode UNK's low <nunk> bits from kissat's model
 # via the `c UNK#1 ...` variable-mapping comment CBMC embeds in the CNF.
 #
-# Override the solver with e.g. KISSAT=../../kissat_inc/bin/kissat
+# Override the solver with any DIMACS (s/v output) solver, e.g.
+#   SOLVER=/path/to/cadical   or   SOLVER=/path/to/kissat   (KISSAT= still works)
+# cadical is fastest on the forward models, kissat_inc on the reverse ones (§9).
 MODEL=$1; NUNK=$2; EXPECT=$3
-KISSAT=${KISSAT:-kissat}
+SOLVER=${SOLVER:-${KISSAT:-kissat}}
 CBMC=${CBMC:-cbmc}
 [ -n "$MODEL" ] && [ -n "$NUNK" ] || { echo "usage: $0 <model.cpp> <nunk> [expected_hex]"; exit 2; }
 base=${MODEL%.cpp}
@@ -19,8 +21,8 @@ base=${MODEL%.cpp}
 #    consistent with every file's known plaintext).
 "$CBMC" "$MODEL" --error-label match --dimacs --outfile "$base.cnf" >/dev/null 2>&1
 
-# 2. kissat: solve (exit 10 = SAT, 20 = UNSAT).
-"$KISSAT" "$base.cnf" > "$base.model" 2>/dev/null
+# 2. solve (exit 10 = SAT, 20 = UNSAT).
+"$SOLVER" "$base.cnf" > "$base.model" 2>/dev/null
 grep -q '^s SATISFIABLE' "$base.model" \
   || { echo "UNSAT / no model: these constraints don't pin the key bits"; exit 1; }
 

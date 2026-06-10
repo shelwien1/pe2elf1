@@ -250,29 +250,99 @@ are compressor-specific heuristics, not guarantees, so they're not encoded.)
 Past these fixed fields the stream is variable-length Huffman data, so there's
 little more to pin without actually decoding.
 
-## 9. Reproducing
+## 9. Scaling and limits
+
+How far does SAT recovery go? The fastest configuration depends on the number of
+unknown bits `N`, because of a crossover between the two models:
+
+- The **reverse** model is ~2–3× faster at equal `N` — but it makes each file's
+  whole 96-bit body-start state a free variable, so adding files is expensive
+  (16 bits: **26 s at 2 files → 195 s at 3**). It needs `⌈N/11⌉` files for a
+  unique answer (each file pins ~11 bits: 8 CRC + 3 deflate), so it's the method
+  up to `N=22` (2 files).
+- The **forward** model has only `N` free bits regardless of file count, so from
+  `N=23` (where a 3rd file is forced and reverse blows up) it takes over.
+
+Measured kissat times (`solve_zipcrypt.sh`):
+
+| N | reverse, 2 files | forward, 3 files |
+|---|---|---|
+| 8 | 0.3 s | 1.1 s |
+| 12 | 2.8 s | 5.2 s |
+| 16 | 26 s | 65 s |
+| 20 | ~4 min (fit) | 17 min |
+| 24 | needs 3 files → explodes | _hours_ — see below |
+
+Each fit `time ≈ A·2^(c·N)` gives **c ≈ 0.78–0.87**, i.e. **~80–130× per +8
+bits**. Extrapolating the **fastest** combination (forward + cadical, see "Solver
+choice" below; [`scaling.py`](scaling.py)):
+
+| N | est. time (forward + cadical) | files |
+|---|---|---|
+| 24 | ~27 min | 3 |
+| 32 | ~1.5 days | 3 |
+| 40 | ~4 months | 4 |
+| 48 | ~25 years | 5 |
+| 64 | ~10⁵ years | 6 |
+| 96 | ~10¹² years | 9 |
+
+So with the best solver the practical ceiling is **~24–32 unknown bits** (24 is
+now ~½ hour, not interactive but doable; ~32 would take days). The full 96-bit
+ZipCrypto state stays astronomically out of reach — which is why real attacks use
+the *structured* Biham–Kocher method (it recovers the whole state from ~13 known
+plaintext bytes by exploiting the schedule's algebra) rather than brute-forcing
+bits. SAT is a great demonstrator and a fine tool for *partial*-key / few-unknown
+situations, not full recovery.
+
+### Solver choice (kissat_inc vs kissat 4.0.4 vs cadical)
+
+We started with kissat_inc 1.0.3, but the solver matters a lot — and the best one
+depends on the model. Same CNFs, three solvers (8-bit is sub-second for all, so
+it can't distinguish them; 16-bit does):
+
+| 16-bit instance | kissat_inc 1.0.3 | kissat 4.0.4 | cadical 3.0.0 |
+|---|---|---|---|
+| forward (235k clauses) | 60 s | 137 s | **21 s** |
+| reverse (231k clauses) | **28 s** | 129 s | 254 s |
+
+- **cadical is fastest on the forward model**, and not just by a constant: on
+  20-bit forward it took **185 s vs kissat_inc's 1042 s**, a *better exponent*
+  too (×8.8 vs ×16 per +4 bits). cadical+forward overtakes the old best
+  (reverse+kissat_inc) and, since forward avoids the reverse model's file
+  explosion, it's the best choice as `N` grows — it's what makes 24 bits ~½ hour.
+- **kissat_inc is fastest on the reverse model**; cadical is worst there (the
+  reverse model's 96-free-bits-per-file structure doesn't suit it).
+- **Upstream kissat 4.0.4 is the slowest on both** — its competition-tuned
+  inprocessing is counter-productive on these small, highly structured crypto
+  instances. Newer ≠ faster here.
+
+`solve_zipcrypt.sh` takes a `SOLVER=` override (any DIMACS solver), so use
+`SOLVER=/path/to/cadical` for forward models, kissat_inc for reverse.
+
+## 10. Reproducing
 
 ```sh
-# build kissat (see ../sudoku-cbmc-linux/kissat.md), have cbmc on PATH, then:
-KISSAT=/path/to/kissat ./solve_zipcrypt.sh models/model8.cpp               8 92
-KISSAT=/path/to/kissat ./solve_zipcrypt.sh models/model16.cpp             16 0892
-KISSAT=/path/to/kissat ./solve_zipcrypt.sh models/model8_deflate.cpp       8 92
-KISSAT=/path/to/kissat ./solve_zipcrypt.sh models/model8_deflate_kraft.cpp 8 92   # §8
-KISSAT=/path/to/kissat ./solve_zipcrypt.sh models/rev8.cpp                 8 92    # reverse
-KISSAT=/path/to/kissat ./solve_zipcrypt.sh models/rev16.cpp               16 0892  # reverse
-python3 deflate_constraints.py                                                     # §8 analysis
+# have cbmc on PATH and a SAT solver built (kissat: ../sudoku-cbmc-linux/kissat.md;
+# or git clone + build github.com/arminbiere/{kissat,cadical}). Then e.g.:
+SOLVER=/path/to/cadical ./solve_zipcrypt.sh models/model16.cpp            16 0892  # forward: cadical
+SOLVER=/path/to/cadical ./solve_zipcrypt.sh models/model8_deflate_kraft.cpp 8 92   # §8
+SOLVER=/path/to/kissat  ./solve_zipcrypt.sh models/rev8.cpp                8 92    # reverse: kissat_inc
+SOLVER=/path/to/kissat  ./solve_zipcrypt.sh models/rev16.cpp              16 0892  # reverse
+python3 deflate_constraints.py   # §8 constraint-strength analysis
+python3 scaling.py               # §9 timing model / extrapolation
 ```
 
 To regenerate the models, build the vendored tool (`zipcl/build.sh`) and run e.g.
 `zipcl/zipcl g zipcl/basis.pak model8.cpp 8 a3e30892 f9185194 eb474b09 2 1 0 0`
 (see [`zipcl/README.md`](zipcl/README.md) for all arguments).
 
-## 10. Files
+## 11. Files
 
 - `zipcrypt.md` — this document.
-- `solve_zipcrypt.sh` — cbmc → kissat → decode `UNK`, with optional verification
-  (works for forward, reverse and Kraft models).
+- `solve_zipcrypt.sh` — cbmc → SAT solver → decode `UNK` (`SOLVER=` selects any
+  DIMACS solver), with optional verification.
 - `deflate_constraints.py` — brute-force quantification of §8's constraint power.
+- `scaling.py` — §9 timing fit + extrapolation across solvers/models.
 - `models/model8.cpp`, `models/model16.cpp` — forward: recover low 8 / 16 bits of
   `k0` from CRC-byte + deflate constraints.
 - `models/model8_deflate.cpp` — forward, deflate `BFINAL|BTYPE` only.
@@ -281,7 +351,7 @@ To regenerate the models, build the vendored tool (`zipcl/build.sh`) and run e.g
 - `zipcl/` — the vendored, buildable `zipcl` with the `g` mode (`build.sh`,
   `basis.pak`, and `CHANGES.patch` showing the diff vs the upstream branch).
 
-## 11. References
+## 12. References
 
 - PKWARE APPNOTE, ZipCrypto / Traditional Encryption (decryption header, check
   byte = `crc >> 24`).
