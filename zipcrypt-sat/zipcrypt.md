@@ -362,8 +362,9 @@ To regenerate the models, build the vendored tool (`zipcl/build.sh`) and run e.g
 - `models/model8_deflate.cpp` — forward, deflate `BFINAL|BTYPE` only.
 - `models/model8_deflate_kraft.cpp` — forward, deflate ranges + Kraft, 1 file (§8).
 - `models/rev8.cpp`, `models/rev16.cpp` — reverse models (§7).
-- `cnf/model8.cnf`, `cnf/model16.cnf` — the forward 8/16-bit problems pre-compiled
-  to DIMACS, ready to hand straight to any SAT solver (see `cnf/README.md`).
+- `cnf/model8.cnf`, `cnf/model16.cnf`, `cnf/model24.cnf` — the forward 8/16/24-bit
+  problems pre-compiled to DIMACS, ready to hand straight to any SAT solver
+  (`model24.cnf` is the unsolved-in-90-min one; see `cnf/README.md`).
 - `zipcl/` — the vendored, buildable `zipcl` with the `g` mode (`build.sh`,
   `basis.pak`, and `CHANGES.patch` showing the diff vs the upstream branch).
 

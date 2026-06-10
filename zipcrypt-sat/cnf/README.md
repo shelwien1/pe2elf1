@@ -8,6 +8,10 @@ solver can be run directly without CBMC.
 |---|---|---|---|
 | `model8.cnf`  | low 8 bits of k0  | 33,671 / 156,826 | `0x92` |
 | `model16.cnf` | low 16 bits of k0 | 50,514 / 235,338 | `0x0892` |
+| `model24.cnf` | low 24 bits of k0 | 50,538 / 235,450 | `0xE30892` |
+
+`model24.cnf` is the hard one — no solver tried (kissat_inc, kissat 4.0.4,
+cadical, ParKissat-RS) cracked it within 90 min (see `../zipcrypt.md` §9).
 
 The instance is satisfiable iff the blanked key bits are consistent with every
 file's known plaintext. Solve with any DIMACS solver:
