@@ -47,8 +47,8 @@ struct ZIPENDLOCATOR {
 //    printf( "sign=%08X; ", sign );
     printf( " DiskNumber=%i; ", DiskNumber );
     printf( "StartDiskNumber=%i; ", StartDiskNumber );
-    printf( "EntriesOnDisk=%i; ", StartDiskNumber );
-    printf( "EntriesInDirectory=%i\n", StartDiskNumber );
+    printf( "EntriesOnDisk=%i; ", EntriesOnDisk );
+    printf( "EntriesInDirectory=%i\n", EntriesInDirectory );
     printf( " DirSize=%i; ", DirSize );
     printf( "DirOffs=%X..%X\n", DirOffs,DirOffs+DirSize );
   }

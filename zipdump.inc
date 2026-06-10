@@ -211,6 +211,7 @@ printf( "%08X %08X %08X %8llu %8llu !", (uint&)zcr.pad[8], hdr.crc32, (uint(hdr.
 
           qword jj = (f_cr==2) ? hdr.cSize64 : hdr.cSize64-12;
           for( qword ii=0; ii<jj; ii++ ) {
+            if( f_quit ) break;            // stop at EOF (corrupt/huge cSize)
             uint c = get();
             d = c ^ zcr.decrypt_byte();
             zcr.update_keys( mode ? d : c );
@@ -221,7 +222,7 @@ printf( "\n" );
 
         } else {
 
-          for( qword ii=0; ii<hdr.cSize64; ii++ ) put( get() );
+          for( qword ii=0; ii<hdr.cSize64; ii++ ) { if( f_quit ) break; put( get() ); }
 
         }
 
@@ -264,7 +265,7 @@ printf( "\n" );
         // Central directory digital signature record: copy through unchanged.
         put_Luint( B<'P','K',5,5>::n );
         uint sz = get_Lword(); put_Lword( sz );
-        for( uint q=0; q<sz; q++ ) put( get() );
+        for( uint q=0; q<sz; q++ ) { if( f_quit ) break; put( get() ); }
         l = 4+2+sz;
         inp_ofs += l; out_ofs += l;
 
@@ -273,7 +274,7 @@ printf( "\n" );
         // Archive extra data record (precedes the central directory): copy through.
         put_Luint( B<'P','K',6,8>::n );
         uint xl = get_Luint(); put_Luint( xl );
-        for( uint q=0; q<xl; q++ ) put( get() );
+        for( uint q=0; q<xl; q++ ) { if( f_quit ) break; put( get() ); }
         l = 4+4+xl;
         inp_ofs += l; out_ofs += l;
 

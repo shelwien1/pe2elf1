@@ -40,6 +40,7 @@ struct ZIP64ENDLOCATOR {
     DirSize           = z.get_Lqword();
     DirOffs           = z.get_Lqword();
     l_data = (recsize>=fixed) ? uint(recsize-fixed) : 0;
+    if( l_data > l_data_max ) l_data = l_data_max; // guard against a corrupt recsize
     z.get_string( data, sizeof(data), l_data );
     return 4 + 8 + uint(recsize); // sign + recsize field + record body
   };

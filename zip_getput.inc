@@ -54,21 +54,21 @@ void put_byte( uint c ) { put(c); }
 
 void skip_string( uint size ) {
   uint i;
-  for( i=0; i<size; i++ ) get_byte();
+  for( i=0; i<size; i++ ) { if( f_quit ) break; get_byte(); }
 }
 
 void copy_string( uint size ) {
   uint i;
-  for( i=0; i<size; i++ ) put( get() );
+  for( i=0; i<size; i++ ) { if( f_quit ) break; put( get() ); }
 }
 
 void get_string( byte* buf, uint size, uint toread ) {
   uint i;
   if( size<=toread ) {
-    for( i=0; i<size; i++ ) buf[i]=get_byte();
+    for( i=0; i<size; i++ ) { if( f_quit ) break; buf[i]=get_byte(); }
     skip_string( toread-size );
   } else {
-    for( i=0; i<toread; i++ ) buf[i]=get_byte();
+    for( i=0; i<toread; i++ ) { if( f_quit ) break; buf[i]=get_byte(); }
     for( i=i; i<size; i++ ) buf[i]=0; // clear unread bytes
   }
 }

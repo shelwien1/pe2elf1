@@ -13,7 +13,11 @@ CoroFileProc< zipdump > M;
 
 int main( int argc, char** argv ) {
 
-  if( argc<4 ) return 1;
+  // Need: <d|c><password> <infile> <outfile> <padfile> <k0> <k1> <k2>
+  if( argc<8 ) {
+    printf( "Usage: zipcl <d|c><password> <infile> <outfile> <padfile> <k0> <k1> <k2>\n" );
+    return 1;
+  }
 
   FILE* f = fopen(argv[2],"rb"); if( f==0 ) return 2;
   FILE* g = fopen(argv[3],"wb"); if( g==0 ) return 3;
