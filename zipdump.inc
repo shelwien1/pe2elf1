@@ -51,12 +51,11 @@ struct zipdump : Coroutine {
   enum { max_cells = 1<<20 };
 
   struct cell {
-    uint Offs0; // source offset
-    uint Offs1; // output offset
-    uint cSize1; // output cSize (32-bit slot value as stored in the local header)
+    qword Offs0; // source offset (64-bit for >4GiB archives)
+    qword Offs1; // output offset
     uint flags1; // output flags
     int  dSize;  // signed delta added to the real cSize by encryption (+12 in c mode, -12 in d mode)
-    void Init( uint x, uint y, uint z, uint t, int d ) { Offs0=x; Offs1=y; cSize1=z; flags1=t; dSize=d; }
+    void Init( qword x, qword y, uint t, int d ) { Offs0=x; Offs1=y; flags1=t; dSize=d; }
   };
 
   cell ofstbl[max_cells]; // table for offset recalc after recompression
@@ -125,13 +124,14 @@ struct zipdump : Coroutine {
 
   void do_process( void ) {
 
-    uint inp_ofs=0;
-    uint out_ofs=0;
+    qword inp_ofs=0;   // running input position  (64-bit)
+    qword out_ofs=0;   // running output position (64-bit)
     uint n_cells=0;
 
     zcr.InitCRC();
 
-    uint tag,c,d,i,j,l,f_cr;
+    uint tag,d,i,f_cr;
+    qword l;           // current record length (a single entry can exceed 4GiB)
 
     while(1) {
       tag = get_uint(); 
@@ -177,7 +177,7 @@ struct zipdump : Coroutine {
           // the (zero) local-header size.
           qword sin, sout;
           do_stream_entry( f_cr, hdr.has_zip64, sin, sout );
-          if( n_cells<max_cells ) ofstbl[n_cells].Init( inp_ofs, out_ofs, hdr.cSize, hdr.flags, dSize );
+          if( n_cells<max_cells ) ofstbl[n_cells].Init( inp_ofs, out_ofs, hdr.flags, dSize );
           n_cells++;
           inp_ofs += hdrlen + sin;
           out_ofs += hdrlen + sout;
@@ -226,7 +226,7 @@ printf( "\n" );
 
         }
 
-        if( n_cells<max_cells ) ofstbl[n_cells].Init( inp_ofs, out_ofs, hdr.cSize, hdr.flags, dSize );
+        if( n_cells<max_cells ) ofstbl[n_cells].Init( inp_ofs, out_ofs, hdr.flags, dSize );
         n_cells++;
 
         inp_ofs+=l;
@@ -240,8 +240,8 @@ printf( "\n" );
 
         l=idx.Parse(this,0);
 
-        // Look up by the real (possibly ZIP64) local-header offset.
-        uint key = (idx.realOffs() <= 0xFFFFFFFFu) ? uint(idx.realOffs()) : 0xFFFFFFFFu;
+        // Look up by the real (possibly ZIP64, 64-bit) local-header offset.
+        qword key = idx.realOffs();
         uint nc = (n_cells<max_cells) ? n_cells : max_cells; // clamp to stored entries
         for( i=0,d=(1<<log2i(nc)); d>0; d>>=1 )
           if( (i+d<nc) && (key>=ofstbl[i+d].Offs0) ) i+=d;
@@ -275,14 +275,14 @@ printf( "\n" );
         put_Luint( B<'P','K',6,8>::n );
         uint xl = get_Luint(); put_Luint( xl );
         for( uint q=0; q<xl; q++ ) { if( f_quit ) break; put( get() ); }
-        l = 4+4+xl;
+        l = qword(8) + xl;
         inp_ofs += l; out_ofs += l;
 
       } else if( tag==L<'P','K',6,6>::n ) {
 
         // ZIP64 end of central directory record. Its CD offset shifts by the
         // net size change accumulated in the local-header region.
-        int delta = (int)(out_ofs - inp_ofs);
+        sqword delta = (sqword)(out_ofs - inp_ofs);
         l=end64.Parse(this,0);
         end64.DirOffs += delta;
         end64.Store(this);
@@ -292,7 +292,7 @@ printf( "\n" );
       } else if( tag==L<'P','K',6,7>::n ) {
 
         // ZIP64 end of central directory locator: its record offset shifts too.
-        int delta = (int)(out_ofs - inp_ofs);
+        sqword delta = (sqword)(out_ofs - inp_ofs);
         l=loc64.Parse(this,0);
         loc64.Z64EOCDOffs += delta;
         loc64.Store(this);
@@ -301,7 +301,7 @@ printf( "\n" );
 
       } else if( tag==L<'P','K',5,6>::n ) {
 
-        int delta = (int)(out_ofs - inp_ofs);
+        sqword delta = (sqword)(out_ofs - inp_ofs);
         l=end.Parse(this,0);
         // Leave the 0xFFFFFFFF marker in place for true ZIP64 archives (real
         // offset lives in the PK\6\6 record); otherwise shift by the net delta.
