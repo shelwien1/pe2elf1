@@ -109,13 +109,15 @@ the index scale are normalized. Each dumped line is prefixed with the opcode
 bytes of one concrete instance of that form — the **shortest** encoding seen
 (ties broken by smallest value), i.e. no redundant prefixes and base registers —
 and `|` marks where the structural bytes end and the wildcard disp/immediate
-bytes begin. For example opcode `0x00` (`add r/m8, r8`) has 4008 raw forms but
-collapses to 3:
+bytes begin. For example opcode `0x00` (`add r/m8, r8`) collapses to 5 forms
+(the last two need more than 5 bytes and decode against the zero padding):
 
 ```
-00 c0       add al, al
-00 00       add [eax], al
-00 04 00    add [eax+eax*1], al
+00 c0                  add al, al
+00 00                  add [eax], al
+00 04 00               add [eax+eax*1], al
+00 05|00 00 00 00      add [0x00000000], al
+00 04 05|00 00 00 00   add [eax*1], al
 ```
 
 (and e.g. `05|00 00 00 00   add eax, 0x0` — the `|` shows the `imm32` is wild.)
@@ -131,17 +133,17 @@ threads.
 ## How the sweep is made fast
 
 The 40-bit value is laid out big-endian: byte 0 (the first instruction byte) is
-the most significant. For each candidate Zydis is asked to decode the window,
-and the result tells us how far we can jump:
+the most significant. Each candidate is the first 5 bytes of an instruction
+followed by zero padding — Zydis is handed a 15-byte zero-filled buffer, so an
+instruction longer than the window decodes against that padding (its tail
+disp/immediate bytes read as 0) rather than being rejected. The decode result
+tells us how far we can jump:
 
-* **Success** (length `L`): bytes after `L` aren't part of the instruction, so
-  they're wildcards. With the default `--skip-imm`, the displacement/immediate
-  bytes are wildcards too. We record the form once and skip every value of the
-  trailing wildcard bytes.
-* **Truncated** (`NO_MORE_DATA`, instruction needs more than the window): we
-  re-probe with a full 15-byte buffer to learn the structural length, then skip
-  the trailing value bytes (these encodings don't fit in 40 bits, so they're
-  out of scope and not counted).
+* **Success**: the bytes after the opcode/modrm/sib aren't part of the
+  instruction's shape, so they're wildcards. With the default `--skip-imm`, the
+  displacement/immediate bytes are wildcards too. We record the form once and
+  skip every value of the trailing wildcard bytes within the window. (Structural
+  bytes beyond the 5-byte window are pinned to the zero padding.)
 * **Invalid**: we probe with increasing buffer lengths to find the shortest
   prefix that already fails. Once a prefix is rejected, appending bytes can
   never make that same prefix valid, so the rest is skippable.

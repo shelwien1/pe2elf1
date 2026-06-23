@@ -2,23 +2,25 @@
  * mine32 - exhaustively mine the 40-bit (5-byte) opcode space for every
  *          decodable x86-32 instruction, using the Zydis decoder.
  *
- * The "40-bit space" is the set of all 2^40 distinct 5-byte sequences.  A naive
- * sweep would need 1.1 trillion decode calls, so this tool instead walks the
- * space while skipping over "don't-care" bytes:
+ * The "40-bit space" is the set of all 2^40 distinct 5-byte sequences.  Each
+ * value is treated as the first 5 bytes of an instruction followed by zero
+ * padding (the decoder is given a 15-byte zero-filled buffer), so instructions
+ * longer than the window still decode against that padding instead of being
+ * rejected as truncated -- e.g. "add [disp32], al" (00 05 + 4 zero bytes).
  *
- *   - On a SUCCESSFUL decode of length L, the bytes after L are not part of the
- *     instruction and can be skipped.  By default we additionally treat the
+ * A naive sweep would need 1.1 trillion decode calls, so this tool instead
+ * walks the space while skipping over "don't-care" bytes:
+ *
+ *   - On a SUCCESSFUL decode, the bytes after the opcode/modrm/sib are not part
+ *     of the instruction's "shape" and can be skipped.  By default we treat the
  *     displacement and immediate bytes as wildcards (see --no-skip-imm), which
  *     collapses e.g. all 2^32 encodings of "mov eax, imm32" into a single form.
+ *     (Structural bytes past the 5-byte window are pinned to the zero padding.)
  *
  *   - On an INVALID decode we probe with increasing buffer lengths to find the
  *     shortest prefix that already determines the failure; once a buffer is
  *     rejected, appending more bytes can never make that same prefix valid, so
  *     the trailing bytes are skippable too.
- *
- *   - On a TRUNCATED decode (NO_MORE_DATA: the instruction needs more than the
- *     window) we re-probe with a full 15-byte buffer to learn the structural
- *     length and skip the trailing displacement/immediate bytes.
  *
  * What remains is enumerated exactly once per distinct instruction "form".
  *
@@ -39,8 +41,8 @@
 #include <string.h>
 #include <time.h>
 
-#define MAX_BYTES   8       /* window must fit in a 64-bit counter           */
-#define PROBE_LEN   15      /* full x86 instruction length for re-probing    */
+#define MAX_BYTES   8       /* enumeration window must fit in a 64-bit counter*/
+#define PROBE_LEN   15      /* full x86 instruction length (also max ins len) */
 #define BUF_LEN     16
 
 /* ---- configuration (set once in main, read-only afterwards) ------------- */
@@ -119,7 +121,7 @@ typedef struct {
     uint16_t  mnemonic;
     uint8_t   oplen;      /* length of the representative (shortest) encoding*/
     uint8_t   opcut;      /* where structural bytes end (the | marker)      */
-    uint8_t   opbytes[MAX_BYTES];  /* first-instance opcode bytes           */
+    uint8_t   opbytes[PROBE_LEN];  /* representative encoding (up to 15 B)   */
 } Slot;
 
 typedef struct { Slot *s; size_t cap, cnt; } HMap;
@@ -213,7 +215,7 @@ typedef struct {
     uint64_t   forms;                  /* distinct decodable forms found     */
     uint64_t   raw;                    /* every decodable form (pre-dedup)   */
     uint64_t   decodes;                /* Zydis decode calls issued          */
-    uint64_t   len_hist[MAX_BYTES + 1];/* forms by instruction length        */
+    uint64_t   len_hist[PROBE_LEN + 1];/* forms by instruction length (1..15)*/
     uint64_t  *mnem;                   /* forms by mnemonic (heap, NMNEM)    */
     HMap       map;                    /* canonical-form set (--canon)       */
     FILE      *dump;                   /* per-thread dump file or NULL       */
@@ -326,30 +328,25 @@ static void process_chunk(unsigned b0, ThreadStats *ts)
         for (int i = 1; i < N; i++)
             buf[i] = (uint8_t)(lo >> ((N - 1 - i) * 8));
 
-        /* canon mode needs operands, so decode fully; otherwise stay lean */
+        /* Decode against the zero-padded buffer: the enumerated value occupies
+         * bytes [0..N-1] and the rest of the buffer is zero, so an instruction
+         * longer than the window decodes against that zero padding instead of
+         * being rejected as truncated (e.g. "add [disp32], al" = 00 05 + 0000). */
         ZyanStatus st;
         if (g_canon) {
             ts->decodes++;
-            st = ZydisDecoderDecodeFull(&g_decoder, buf, N, &insn, ops);
+            st = ZydisDecoderDecodeFull(&g_decoder, buf, PROBE_LEN, &insn, ops);
         } else {
-            st = decode_n(ts, buf, N, &insn);
+            st = decode_n(ts, buf, PROBE_LEN, &insn);
         }
 
         int keep;
         if (ZYAN_SUCCESS(st)) {
             keep = g_skip_imm ? structural_len(&insn) : insn.length;
+            if (keep > N) keep = N;   /* structural bytes past the window are
+                                       * pinned to the zero padding            */
             uint64_t v = ((uint64_t)b0 << inner_bits) | lo;
             record_form(ts, &insn, ops, buf, v);
-        } else if (st == ZYDIS_STATUS_NO_MORE_DATA) {
-            /* Needs more than the window: probe full length to find where the
-             * structural part ends, then skip the trailing value bytes. */
-            ZydisDecodedInstruction p;
-            if (ZYAN_SUCCESS(decode_n(ts, buf, PROBE_LEN, &p))) {
-                keep = structural_len(&p);
-                if (keep > N) keep = N;
-            } else {
-                keep = N;                       /* cannot prove a skip       */
-            }
         } else {
             /* Hard decode error: find the shortest prefix that already fails.
              * Once rejected, longer completions of that prefix stay invalid. */
@@ -508,7 +505,7 @@ int main(int argc, char **argv)
 
     /* merge */
     uint64_t total_forms = 0, total_raw = 0, total_decodes = 0;
-    uint64_t len_hist[MAX_BYTES + 1] = {0};
+    uint64_t len_hist[PROBE_LEN + 1] = {0};
     uint64_t *mnem = calloc(NMNEM, sizeof(uint64_t));
     for (int i = 0; i < threads; i++) {
         total_raw     += stats[i].raw;
@@ -565,7 +562,7 @@ int main(int argc, char **argv)
     } else {
         for (int i = 0; i < threads; i++) {
             total_forms += stats[i].forms;
-            for (int l = 0; l <= MAX_BYTES; l++) len_hist[l] += stats[i].len_hist[l];
+            for (int l = 0; l <= PROBE_LEN; l++) len_hist[l] += stats[i].len_hist[l];
             for (int m = 0; m < NMNEM; m++)      mnem[m]     += stats[i].mnem[m];
         }
     }
@@ -585,8 +582,9 @@ int main(int argc, char **argv)
            dt, total_decodes / dt / 1e6);
 
     printf("\nforms by length (bytes)%s:\n", g_canon ? ", shortest encoding" : "");
-    for (int l = 1; l <= g_nbytes; l++)
-        printf("  %d : %" PRIu64 "\n", l, len_hist[l]);
+    for (int l = 1; l <= PROBE_LEN; l++)
+        if (len_hist[l])
+            printf("  %2d : %" PRIu64 "\n", l, len_hist[l]);
 
     /* count distinct mnemonics and list them sorted by frequency */
     int distinct = 0;
