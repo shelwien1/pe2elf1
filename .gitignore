@@ -5,6 +5,7 @@
 /mine32
 *.o
 
-# miner dump files
-dump*
+# miner dump files / generated corpus (not dump2asm.py)
 *.dump
+*.bin
+*.s

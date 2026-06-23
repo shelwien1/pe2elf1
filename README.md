@@ -132,6 +132,23 @@ count, but it shrinks the output by orders of magnitude. The scan still visits
 every register encoding — duplicates are skipped at *output* time, across all
 threads.
 
+## Assemblable corpus (`dump2asm.py`)
+
+`dump2asm.py` turns a `--canon` dump into a GAS `.byte` corpus (grouped by
+encoding: legacy / vex / evex / xop / 3dnow, with the Zydis disasm as comments),
+assembles it with `as --32`, and extracts a raw `.bin`:
+
+```sh
+./mine32 -t4 --canon --dump forms.txt
+python3 dump2asm.py forms.txt -o x8632all   # -> x8632all.s/.o/.bin
+```
+
+The `.bin` is the concatenation of every form's bytes (each line decodes as one
+complete instruction). Because 16-bit addressing can't use the normalized base
+`ax`, the comments rewrite `[ax]`→`[bx]` and `[ax+ax*1]`→`[bx+si]` (valid 16-bit
+forms; the comment is a canonical label, so the actual bytes may encode a
+different register of the same class). Use `--no-build` to emit only the `.s`.
+
 ## How the sweep is made fast
 
 The 40-bit value is laid out big-endian: byte 0 (the first instruction byte) is
