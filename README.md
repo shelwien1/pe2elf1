@@ -104,17 +104,22 @@ of distinct lines you see.
 
 What is kept distinct: mnemonic, operand types/sizes, addressing mode, SIB
 scale, and any explicit prefix (`lock`, `rep`, segment override, …) — only the
-register *identities* are normalized. For example opcode `0x00` (`add r/m8, r8`)
-has 4008 raw forms but collapses to 6:
+register *identities* are normalized. Each dumped line is prefixed with the
+opcode bytes of that form's **first instance** (the smallest-valued encoding
+seen, which is the base-register one), and `|` marks where the structural bytes
+end and the wildcard disp/immediate bytes begin. For example opcode `0x00`
+(`add r/m8, r8`) has 4008 raw forms but collapses to 6:
 
 ```
-add al, al
-add [eax], al
-add [eax+eax*1], al
-add [eax+eax*2], al
-add [eax+eax*4], al
-add [eax+eax*8], al
+00 c0       add al, al
+00 00       add [eax], al
+00 04 00    add [eax+eax*1], al
+00 04 40    add [eax+eax*2], al
+00 04 80    add [eax+eax*4], al
+00 04 c0    add [eax+eax*8], al
 ```
+
+(and e.g. `05|00 00 00 00   add eax, 0x0` — the `|` shows the `imm32` is wild.)
 
 Note `--canon` decodes operands for every candidate (it uses
 `ZydisDecoderDecodeFull` and formats each form), so it is slower than the plain

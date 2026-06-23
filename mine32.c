@@ -70,10 +70,6 @@ static char *dupstr(const char *s)
     return p;
 }
 
-static int cmp_str(const void *a, const void *b)
-{
-    return strcmp(*(char *const *)a, *(char *const *)b);
-}
 
 /* register -> base register of its class (eax, ax, al, xmm0, ymm0, ...) */
 static inline ZydisRegister reg_base(ZydisRegister r)
@@ -109,14 +105,25 @@ static int format_canonical(const ZydisDecodedInstruction *insn,
 /* ---- open-addressing hash set of canonical keys (power-of-two capacity) -- */
 typedef struct {
     uint64_t  hash;
-    uint8_t  *key;
+    uint8_t  *key;        /* canonical disassembly string (the dedup key)   */
+    uint64_t  minv;       /* smallest window value seen => "first instance" */
     uint16_t  klen;
     uint16_t  mnemonic;
-    uint8_t   minlen;     /* shortest encoding length seen for this form  */
-    char     *text;       /* canonical disassembly (NULL unless dumping)  */
+    uint8_t   minlen;     /* shortest encoding length seen for this form    */
+    uint8_t   oplen;      /* length of the first-instance encoding          */
+    uint8_t   opcut;      /* where structural bytes end (the | marker)      */
+    uint8_t   opbytes[MAX_BYTES];  /* first-instance opcode bytes           */
 } Slot;
 
 typedef struct { Slot *s; size_t cap, cnt; } HMap;
+
+/* order canonical-form slots by their disassembly text (for the dump) */
+static int cmp_slot(const void *a, const void *b)
+{
+    const Slot *x = *(const Slot *const *)a;
+    const Slot *y = *(const Slot *const *)b;
+    return strcmp((const char *)x->key, (const char *)y->key);
+}
 
 static uint64_t fnv1a(const uint8_t *p, int n)
 {
@@ -158,29 +165,33 @@ static void hmap_grow(HMap *m)
     m->s = ns; m->cap = ncap;
 }
 
-/* Insert a copy of the key if new (returns 1); otherwise keep the shortest
- * length and return 0. `text` (if any) is duplicated and owned by the map. */
-static int hmap_put(HMap *m, const uint8_t *key, int klen, uint64_t h,
-                    uint16_t mnem, uint8_t len, const char *text)
+/* Merge a source slot into `m`: insert a copy if new, otherwise keep the
+ * shortest length and the smallest-value (first-instance) opcode bytes. */
+static void hmap_merge_slot(HMap *m, const Slot *src)
 {
     if ((m->cnt + 1) * 10 >= m->cap * 7) hmap_grow(m);
-    Slot *sl = hmap_slot(m, key, klen, h);
-    if (sl->key) {
-        if (len < sl->minlen) sl->minlen = len;
-        return 0;
+    Slot *d = hmap_slot(m, src->key, src->klen, src->hash);
+    if (!d->key) {
+        *d = *src;
+        d->key = malloc(src->klen + 1);
+        memcpy(d->key, src->key, src->klen);
+        d->key[src->klen] = 0;
+        m->cnt++;
+        return;
     }
-    sl->key = malloc(klen + 1); memcpy(sl->key, key, klen); sl->key[klen] = 0;
-    sl->klen = (uint16_t)klen; sl->hash = h;
-    sl->mnemonic = mnem; sl->minlen = len;
-    sl->text = text ? dupstr(text) : NULL;
-    m->cnt++;
-    return 1;
+    if (src->minlen < d->minlen) d->minlen = src->minlen;
+    if (src->minv < d->minv) {          /* a smaller encoding came first */
+        d->minv = src->minv;
+        d->oplen = src->oplen;
+        d->opcut = src->opcut;
+        memcpy(d->opbytes, src->opbytes, sizeof(d->opbytes));
+    }
 }
 
 static void hmap_free(HMap *m)
 {
     if (!m->s) return;
-    for (size_t i = 0; i < m->cap; i++) { free(m->s[i].key); free(m->s[i].text); }
+    for (size_t i = 0; i < m->cap; i++) free(m->s[i].key);
     free(m->s); m->s = NULL; m->cap = m->cnt = 0;
 }
 
@@ -218,14 +229,17 @@ static int structural_len(const ZydisDecodedInstruction *insn)
 }
 
 static void record_form(ThreadStats *ts, const ZydisDecodedInstruction *insn,
-                        const ZydisDecodedOperand *ops, const uint8_t *buf)
+                        const ZydisDecodedOperand *ops, const uint8_t *buf,
+                        uint64_t v)
 {
     ts->raw++;
 
     if (g_canon) {
         /* `ops` is valid here (process_chunk used DecodeFull). The dedup key is
          * the register-normalised disassembly string itself, so two forms that
-         * differ only in registers (and thus print identically) collapse. */
+         * differ only in registers (and thus print identically) collapse. The
+         * opcode bytes of the smallest-valued instance (`v`) are kept so the
+         * dump can show a concrete "first instance" of each form. */
         char text[256];
         int klen = format_canonical(insn, ops, text, sizeof(text));
         if (klen < 0) return;
@@ -234,13 +248,22 @@ static void record_form(ThreadStats *ts, const ZydisDecodedInstruction *insn,
         Slot *sl = hmap_slot(&ts->map, (const uint8_t *)text, klen, h);
         if (sl->key) {                       /* seen this form already       */
             if (insn->length < sl->minlen) sl->minlen = (uint8_t)insn->length;
+            if (v < sl->minv) {              /* a smaller encoding came first */
+                sl->minv = v;
+                sl->oplen = (uint8_t)insn->length;
+                sl->opcut = (uint8_t)structural_len(insn);
+                memcpy(sl->opbytes, buf, insn->length);
+            }
             return;
         }
-        sl->key = (uint8_t *)dupstr(text);   /* the string is the key & text */
+        sl->key = (uint8_t *)dupstr(text);   /* the string is the key        */
         sl->klen = (uint16_t)klen; sl->hash = h;
         sl->mnemonic = (uint16_t)insn->mnemonic;
         sl->minlen = (uint8_t)insn->length;
-        sl->text = NULL;
+        sl->minv = v;
+        sl->oplen = (uint8_t)insn->length;
+        sl->opcut = (uint8_t)structural_len(insn);
+        memcpy(sl->opbytes, buf, insn->length);
         ts->map.cnt++;
         return;
     }
@@ -308,7 +331,8 @@ static void process_chunk(unsigned b0, ThreadStats *ts)
         int keep;
         if (ZYAN_SUCCESS(st)) {
             keep = g_skip_imm ? structural_len(&insn) : insn.length;
-            record_form(ts, &insn, ops, buf);
+            uint64_t v = ((uint64_t)b0 << inner_bits) | lo;
+            record_form(ts, &insn, ops, buf, v);
         } else if (st == ZYDIS_STATUS_NO_MORE_DATA) {
             /* Needs more than the window: probe full length to find where the
              * structural part ends, then skip the trailing value bytes. */
@@ -494,8 +518,7 @@ int main(int argc, char **argv)
             HMap *lm = &stats[i].map;
             for (size_t j = 0; j < lm->cap; j++)
                 if (lm->s[j].key)
-                    hmap_put(&g, lm->s[j].key, lm->s[j].klen, lm->s[j].hash,
-                             lm->s[j].mnemonic, lm->s[j].minlen, lm->s[j].text);
+                    hmap_merge_slot(&g, &lm->s[j]);
             hmap_free(lm);
         }
         total_forms = g.cnt;
@@ -505,23 +528,31 @@ int main(int argc, char **argv)
                 mnem[g.s[j].mnemonic]++;
             }
 
-        /* dump the merged, sorted, unique canonical disassembly */
+        /* dump the merged forms, sorted by disassembly, each with the opcode
+         * bytes of its first (smallest-valued) instance; "|" marks where the
+         * structural bytes end and wildcard disp/imm bytes begin. */
         if (g_dump) {
-            char **lines = malloc(g.cnt * sizeof(char *));
+            Slot **arr = malloc(g.cnt * sizeof(Slot *));
             size_t nl = 0;
             for (size_t j = 0; j < g.cap; j++)
-                if (g.s[j].key) lines[nl++] = (char *)g.s[j].key;
-            qsort(lines, nl, sizeof(char *), cmp_str);
+                if (g.s[j].key) arr[nl++] = &g.s[j];
+            qsort(arr, nl, sizeof(Slot *), cmp_slot);
             FILE *f = fopen(g_dump, "w");
             if (f) {
-                for (size_t j = 0; j < nl; j++)
-                    fprintf(f, "%s\n", lines[j]);
+                for (size_t j = 0; j < nl; j++) {
+                    const Slot *sl = arr[j];
+                    for (int b = 0; b < sl->oplen; b++)
+                        fprintf(f, "%s%02x",
+                                b == sl->opcut ? "|" : (b ? " " : ""),
+                                sl->opbytes[b]);
+                    fprintf(f, "\t%s\n", (char *)sl->key);
+                }
                 fclose(f);
                 fprintf(stderr, "wrote canonical forms to %s\n", g_dump);
             } else {
                 fprintf(stderr, "warning: cannot open dump file %s\n", g_dump);
             }
-            free(lines);
+            free(arr);
         }
         hmap_free(&g);
     } else {
