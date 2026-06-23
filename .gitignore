@@ -9,3 +9,6 @@
 *.dump
 *.bin
 *.s
+# ...except the committed reference corpus
+!x8632all.s
+!x8632all.bin
