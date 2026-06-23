@@ -93,6 +93,8 @@ static int format_canonical(const ZydisDecodedInstruction *insn,
         else if (norm[i].type == ZYDIS_OPERAND_TYPE_MEMORY) {
             norm[i].mem.base  = reg_base(norm[i].mem.base);
             norm[i].mem.index = reg_base(norm[i].mem.index);
+            if (norm[i].mem.index != ZYDIS_REGISTER_NONE)
+                norm[i].mem.scale = 1;   /* fold scale 2, 4, 8 into 1 */
         }
     }
     /* A relative branch's printed target is runtime_address + length + rel.

@@ -94,33 +94,33 @@ instruction with different register operands (all 64 `add r/m32, r32`
 register-direct encodings, every base/index register in a memory operand, etc.).
 `--canon` factors these out: each operand register is rewritten to the **base
 register of its class** (GPR → `eax`/`ax`/`al` by width, XMM → `xmm0`, YMM →
-`ymm0`, mask → `k0`, …) and the resulting disassembly string is de-duplicated.
-The dedup key *is* the normalized text, so the reported count equals the number
-of distinct lines you see.
+`ymm0`, mask → `k0`, …), the SIB **scale** (`*2`/`*4`/`*8`) is folded to `*1`,
+and the resulting disassembly string is de-duplicated. The dedup key *is* the
+normalized text, so the reported count equals the number of distinct lines you
+see.
 
 ```sh
 ./mine32 -t 4 --canon --dump forms.txt   # forms.txt = sorted unique forms
 ```
 
-What is kept distinct: mnemonic, operand types/sizes, addressing mode, SIB
-scale, and any explicit prefix (`lock`, `rep`, segment override, …) — only the
-register *identities* are normalized. Each dumped line is prefixed with the
-opcode bytes of one concrete instance of that form — the **shortest** encoding
-seen (ties broken by smallest value), i.e. no redundant prefixes and base
-registers — and `|` marks where the structural bytes end and the wildcard
-disp/immediate bytes begin. For example opcode `0x00`
-(`add r/m8, r8`) has 4008 raw forms but collapses to 6:
+What is kept distinct: mnemonic, operand types/sizes, addressing mode, and any
+explicit prefix (`lock`, `rep`, segment override, …) — register *identities* and
+the index scale are normalized. Each dumped line is prefixed with the opcode
+bytes of one concrete instance of that form — the **shortest** encoding seen
+(ties broken by smallest value), i.e. no redundant prefixes and base registers —
+and `|` marks where the structural bytes end and the wildcard disp/immediate
+bytes begin. For example opcode `0x00` (`add r/m8, r8`) has 4008 raw forms but
+collapses to 3:
 
 ```
 00 c0       add al, al
 00 00       add [eax], al
 00 04 00    add [eax+eax*1], al
-00 04 40    add [eax+eax*2], al
-00 04 80    add [eax+eax*4], al
-00 04 c0    add [eax+eax*8], al
 ```
 
 (and e.g. `05|00 00 00 00   add eax, 0x0` — the `|` shows the `imm32` is wild.)
+Relative branch targets are normalized too, so `jb` (rel8 and rel32, with any
+prefix padding) collapses to a single `jb 0x0` form.
 
 Note `--canon` decodes operands for every candidate (it uses
 `ZydisDecoderDecodeFull` and formats each form), so it is slower than the plain
