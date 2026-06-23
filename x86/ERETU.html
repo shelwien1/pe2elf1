@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>ERETU—Event Return to User </title></head>
+<body>
+<h1>ERETU—Event Return to User</h1>
+<p><strong>Opcode</strong></p>
+<p><strong>Instruction</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64-Bit</strong></p>
+<p><strong>Compat/</strong></p>
+<p><strong>Description</strong></p>
+<table>
+<tr>
+<td></td>
+<td></td>
+<th>En</th>
+<th>Mode</th>
+<th>Leg Mode</th>
+<td></td></tr>
+<tr>
+<td>F3 0F 01 CA</td>
+<td>ERETU</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>Valid</td>
+<td>Event return for events occurring in ring 3.</td></tr></table>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>ZO</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
+<h2>Description</h2>
+<p>ERETU returns from an event handler, establishing the state based on the contents of the stack (typically, that which was in effect before FRED event delivery). ERETU can be executed only if CPL = 0, and it changes CPL to 3. For this reason, ERETU is used to return from handling events that occurred while CPL = 3.</p>
+<p>ERETU takes no explicit arguments; its operation depends on the contents of the regular stack.</p>
+<p>Execution of ERETU causes an invalid-opcode exception (#UD) if FRED transitions are not enabled or if CPL &gt; 0. For this reason, ERETU can be executed only in 64-bit mode.</p>
+<p>ERETU establishes new values of CS and SS in one of three different ways:</p>
+<p>For further details see the Operation section below and Section 8.4.2, “ERETU (Event Return to User),” in the Intel® 64 and IA-32 Architectures Software Developer’s Manual, Volume 3.</p>
+<p><strong>Instruction ordering.</strong> Instructions following execution of ERETU may be fetched from memory before earlier instructions complete execution, but they will not execute (even speculatively) until all instructions prior to ERETU have completed execution (the later instructions may execute before data stored by the earlier instructions have become globally visible).</p>
+<h2>Operation</h2>
+<pre>IF CR4.FRED = 0 OR CS.L = 0 OR CPL &gt; 0
+    THEN #UD;
+FI;
+IF CSL &gt; 0
+    THEN #GP(0);
+FI;
+// pop old state from regular stack and check it
+RSP := RSP + 8;
+                              // skip over error code so that RSP references the return state
+pop8B newRIP;
+pop8B tempCS;
+pop8B newRFLAGS;
+pop8B newRSP;
+pop8B tempSS;
+IF tempCS &amp; FFFFFFFF_FFFF0003H ≠ 3 OR
+                                                         // enforce return to ring 3
+    newRFLAGS &amp; FFFFFFFF_FFC2B02AH ≠ 2 OR
+                                                         // enforce bit 1 set; IOPL, VM, reserved bits clear
+    tempSS &amp; FFF80003H ≠ 3
+                                                         // do not check bits 63:32
+         THEN #GP(0);
+FI;
+pend_DB := tempSS[17];
+NMI_unblock := tempSS[18];
+IF tempCS[15:0] = IA32_STAR[63:48] + 16 AND tempSS[15:0] = IA32_STAR[63:48] + 8
+    THEN
+                                                    // Return to ring 3 in standard 64-bit configuration
+         // set newCS to standard values used ring 3 in 64-bit mode
+              newCS.selector := tempCS[15:0];
+              newCS.base := 0;
+              newCS.limit := FFFFFH;
+              newCS.type := 11;
+              newCS.S := 1;
+              newCS.DPL := 3;
+              newCS.P := 1;
+              newCS.L := 1;
+              newCS.D := 0;
+              newCS.G := 1;
+              newCS.unusable := 0;
+         // set newSS to standard values for ring 3
+              newSS.selector := tempSS[15:0];
+              newSS.base := 0;
+              newSS.limit := FFFFFH;
+              newSS.type := 3;
+              newSS.S := 1;
+              newSS.DPL := 3;
+              newSS.P := 1;
+              newSS.B := 1;
+              newSS.G := 1;
+              newSS.unusable := 0;
+ELSIF tempCS[15:0] = IA32_STAR[63:48] AND tempSS[15:0] = IA32_STAR[63:48] + 8
+    THEN
+         // set newCS to standard values used ring 3 in compatibility mode
+              newCS.selector := tempCS[15:0];
+              newCS.base := 0;
+              newCS.limit := FFFFFH;
+              newCS.type := 11;
+              newCS.S := 1;
+              newCS.DPL := 3;
+              newCS.P := 1;
+              newCS.L := 0;
+              newCS.D := 1;
+              newCS.G := 1;
+              newCS.unusable := 0;
+         // set newSS to standard values for ring 3
+              newSS.selector := tempSS[15:0];
+              newSS.base := 0;
+              newSS.limit := FFFFFH;
+              newSS.type := 3;
+              newSS.S := 1;
+              newSS.DPL := 3;
+              newSS.P := 1;
+              newSS.B := 1;
+              newSS.G := 1;
+              newSS.unusable := 0;
+    ELSE
+         load newCS using tempCS[15:0];
+                                                              // load each as is done by IRET, including
+         load newSS using tempSS[15:0];
+                                                              // checks that may lead to a fault
+FI;
+IF newCS.L = 1
+    THEN
+              // return to 64-bit mode
+         IF newRIP is not paging canonical
+              THEN #GP(0);
+         FI;
+    ELSE
+              // return to compatibility mode
+         newRIP[63:32] := 0;
+         IF newRIP is not within newCS’s limit (based on limit field and G bit)
+              // newRIP is always within the limit with standard values for ring 3 in compatibility mode
+              THEN #GP(0);
+         FI;
+         newRSP[63:32] := 0;
+FI;
+// If user shadow stacks are enabled, check new SSP value on return to compatibility mode
+IF CR4.CET = 1 AND IA32_U_CET.SH_STK_EN = 1 AND newCS.L = 0 AND IA32_PL3_SSP[63:32] ≠ 0
+    THEN #GP(0);
+FI;
+// If supervisor shadow stacks are enabled, compare SSP to the FRED SSP MSR for stack level 0
+IF CR4.CET = 1 AND IA32_S_CET.SH_STK_EN = 1 AND IA32_FRED_SSP0 ≠ SSP
+    THEN #CP(FAR-RET/IRET);
+FI;
+// update registers for return state
+RIP := newRIP;
+RFLAGS := newRFLAGS;
+                                                    // ERETU can set RFLAGS.RF to 1
+RSP := newRSP;
+                                                    // load all 64 bits regardless of new mode
+CS := newCS;
+                                                    // selector and descriptor
+SS := newSS;
+                                                    // selector and descriptor
+CPL := 3;
+// swap GS.base and IA32_KERNEL_GS_BASE
+tempGSB := GS.base;
+GS.base := IA32_KERNEL_GS_BASE;
+IA32_KERNEL_GS_BASE := tempGSB;
+IF CR4.CET = 1 AND IA32_U_CET.SH_STK_EN = 1
+    THEN SSP := IA32_PL3_SSP;
+FI;
+// update event-related state
+IF NMI_unblock = 1
+    THEN unblock NMIs;
+FI;
+IF pend_DB = 1 AND RFLAGS.TF =1
+    THEN pend a single-step debug exception (#DB) to be delivered after ERETU;
+FI;</pre>
+<h2>Flags Affected</h2>
+<p>All defined flags and fields in the RFLAGS register are potentially modified except for the VM flag.</p>
+<h2>Protected Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The ERETU instruction is not recognized in protected mode.</td></tr></table>
+<h2>Real-Address Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The ERETU instruction is not recognized in real-address mode.</td></tr></table>
+<h2>Virtual-8086 Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The ERETU instruction is not recognized in virtual-8086 mode.</td></tr></table>
+<h2>Compatibility Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The ERETU instruction is not recognized in compatibility mode.</td></tr></table>
+<h2>64-Bit Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>
+<p>If CR4.FRED = 0.</p>
+<p>If CPL &gt; 0.</p>
+<p>If the LOCK prefix is used.</p></td></tr>
+<tr>
+<td>#GP(0)</td>
+<td>
+<p>If CSL &gt; 0.</p>
+<p>If the return is to 64-bit mode and the RIP image on the stack is not paging canonical.</p>
+<p>If the return is to compatibility mode and the low 32 bits of the RIP image on the stack is not within the CS.limit being established.</p>
+<p>If the RFLAGS image on the stack sets reserved bits or the VM bit (or fails to set bit 1).</p>
+<p>If bits 13:12 of the RFLAGS image on the stack (corresponding to IOPL) are not zero.</p>
+<p>If the value of bits 1:0 of the CS image on the stack (the target CPL) is not 3.</p>
+<p>If the value of bits 63:16 of the CS image on the stack is not zero.</p>
+<p>If the value of bits 1:0 of the SS image on the stack (the target CPL) is not 3.</p>
+<p>If the SS image on the stack sets undefined bits (bits 31:19).</p>
+<p>If the return is to compatibility mode and would load SSP with a value that sets any of bits 63:32.</p>
+<p>If ERETU is loading CS and SS from descriptor tables (see Operation section) and either of the following apply:</p>
+<p>If the value of bits 15:2 of the CS image on the stack is 0.</p>
+<p>If the value of bits 15:2 of the SS image on the stack is 0.</p></td></tr>
+<tr>
+<td>#GP(selector)</td>
+<td>
+<p>If ERETU is loading CS and SS from descriptor tables (see Operation section) and any of the following apply:</p>
+<p>A segment selector index is outside its descriptor table limits.</p>
+<p>A segment descriptor memory address is not paging canonical.</p>
+<p>The segment descriptor for CS does not indicate that it is a code segment.</p>
+<p>The segment descriptor for CS has both the D-bit and L-bit set.</p>
+<p>The segment descriptor for CS is non-conforming and its DPL is not 3.</p>
+<p>The segment descriptor for SS does not indicate that it is a writable data segment.</p>
+<p>The DPL of the segment descriptor for SS is not 3.</p></td></tr>
+<tr>
+<td>
+<p>#SS(0)</p>
+<p>#CP(FAR-RET/IRET) If the value in SSP differs from that in IA32_FRED_SSP0.</p></td>
+<td>If an ordinary stack access would use an address that is not paging canonical or would cause a LASS violation.</td></tr></table></body></html>
