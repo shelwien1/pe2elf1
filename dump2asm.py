@@ -31,10 +31,10 @@ LEGACY_PREFIXES = {0x26, 0x2e, 0x36, 0x3e, 0x64, 0x65, 0x66, 0x67,
 # "ax"; rewrite to the first legal 16-bit base / base+index pair.
 DISASM_FIXUPS = [("[ax+ax*1]", "[bx+si]"), ("[ax]", "[bx]")]
 
-ENCODING_ORDER = ["legacy", "vex", "evex", "xop", "3dnow"]
+ENCODING_ORDER = ["legacy", "rex2", "vex", "evex", "xop", "3dnow"]
 
 
-def classify(bs):
+def classify(bs, bits=32):
     """Best-effort encoding bucket from the raw bytes (cosmetic grouping only;
     the assembled bytes are identical regardless of the bucket)."""
     i = 0
@@ -47,6 +47,9 @@ def classify(bs):
     nxt = bs[i + 1] if i + 1 < n else -1
     if op == 0x0f and nxt == 0x0f:
         return "3dnow"
+    # 0xD5 is the APX REX2 prefix in 64-bit mode (it is legacy AAD in 32-bit).
+    if bits == 64 and op == 0xd5:
+        return "rex2"
     # C4/C5/62/8F are VEX/EVEX/XOP only when the following byte is in the
     # mod=11 region (>= 0xC0); otherwise they are legacy LES/LDS/BOUND/POP.
     if op in (0xc4, 0xc5) and nxt >= 0xc0:
@@ -92,6 +95,10 @@ def main():
                     "(default: derived from dump); writes .s/.o/.bin")
     ap.add_argument("--no-build", action="store_true",
                     help="only emit the .s file (skip as/objcopy)")
+    ap.add_argument("--bits", type=int, choices=(32, 64), default=32,
+                    help="target width for 'as --32/--64' and REX2 detection")
+    ap.add_argument("--title", default="x86-32 instruction-encoding corpus",
+                    help="header title line")
     ap.add_argument("--as", dest="gas", default="as", help="assembler (default: as)")
     ap.add_argument("--objcopy", default="objcopy", help="objcopy (default: objcopy)")
     args = ap.parse_args()
@@ -106,17 +113,17 @@ def main():
     total_bytes = 0
     total = 0
     for bs, dis in parse_dump(args.dump):
-        buckets[classify(bs)].append((bs, dis))
+        buckets[classify(bs, args.bits)].append((bs, dis))
         total_bytes += len(bs)
         total += 1
 
     with open(s_path, "w", encoding="utf-8") as f:
-        f.write("# x86-32 instruction-encoding corpus\n")
+        f.write("# %s\n" % args.title)
         f.write("# Generated from a mine32 --canon dump by dump2asm.py.\n")
         f.write("# One representative encoding per canonical form; "
                 "comments are Zydis Intel disasm.\n")
-        f.write("# %d encodings, %d bytes.  Assemble: as --32 %s\n\n"
-                % (total, total_bytes, s_path))
+        f.write("# %d encodings, %d bytes.  Assemble: as --%d %s\n\n"
+                % (total, total_bytes, args.bits, s_path))
         f.write("\t.text\n")
         for enc in ENCODING_ORDER:
             rows = buckets[enc]
@@ -138,7 +145,7 @@ def main():
     if args.no_build:
         return
 
-    subprocess.run([args.gas, "--32", "-o", o_path, s_path], check=True)
+    subprocess.run([args.gas, "--%d" % args.bits, "-o", o_path, s_path], check=True)
     subprocess.run([args.objcopy, "-O", "binary", "-j", ".text", o_path, bin_path],
                    check=True)
     sz = os.path.getsize(bin_path)

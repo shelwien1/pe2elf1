@@ -25,15 +25,14 @@ if [ ! -f "$ZYDIS_DIR/build/libZydis.a" ]; then
     cmake --build "$ZYDIS_DIR/build" -j"$(nproc)"
 fi
 
+INCS="-I $ZYDIS_DIR/include -I $ZYDIS_DIR/dependencies/zycore/include \
+      -I $ZYDIS_DIR/build -I $ZYDIS_DIR/build/zycore"
+LIBS="$ZYDIS_DIR/build/libZydis.a $ZYDIS_DIR/build/zycore/libZycore.a"
+
 echo ">> compiling mine32"
-cc -O3 -pthread \
-    -I "$ZYDIS_DIR/include" \
-    -I "$ZYDIS_DIR/dependencies/zycore/include" \
-    -I "$ZYDIS_DIR/build" \
-    -I "$ZYDIS_DIR/build/zycore" \
-    mine32.c \
-    "$ZYDIS_DIR/build/libZydis.a" \
-    "$ZYDIS_DIR/build/zycore/libZycore.a" \
-    -o mine32
+cc -O3 -pthread $INCS mine32.c $LIBS -o mine32
+
+echo ">> compiling apxdis"
+cc -O2 $INCS apxdis.c $LIBS -o apxdis
 
 echo ">> done: ./mine32 --help"

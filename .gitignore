@@ -3,6 +3,7 @@
 
 # build output
 /mine32
+/apxdis
 *.o
 
 # miner dump files / generated corpus (not dump2asm.py)
