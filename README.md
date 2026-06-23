@@ -21,6 +21,24 @@ Requires `gcc`/`clang`, `cmake`, `make`, `git` and `pthreads`.
 `build.sh` clones Zydis into `./zydis/` (git-ignored) and builds it as a static
 library, then links `mine32.c` against it.
 
+### Windows build (MinGW cross-compile)
+
+A prebuilt **`mine32.exe`** (64-bit, statically linked) is committed in the repo.
+It depends only on `KERNEL32.dll` and `msvcrt.dll`, so it runs on a stock
+Windows machine with no extra DLLs. To rebuild it:
+
+```sh
+sudo apt-get install mingw-w64     # one-time: the cross toolchain
+./build-win.sh                     # -> mine32.exe (x86_64)
+ARCH=i686 ./build-win.sh           # optional 32-bit build
+```
+
+`build-win.sh` uses the POSIX-threads MinGW variant (`*-gcc-posix`) so the
+pthreads/`<stdatomic.h>` code links, and passes `-static` plus
+`-DZYDIS_STATIC_BUILD -DZYCORE_STATIC_BUILD` so the result is a single
+self-contained executable. The same `mine32.c` source builds for both Linux and
+Windows.
+
 ## Usage
 
 ```
