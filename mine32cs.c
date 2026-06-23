@@ -248,10 +248,23 @@ typedef struct {
 
 static int structural_len(const cs_insn *in)
 {
-    const cs_x86_encoding *e = &in->detail->x86.encoding;
+    const cs_x86          *x = &in->detail->x86;
+    const cs_x86_encoding *e = &x->encoding;
     int keep = in->size;
     if (e->disp_offset && e->disp_offset < keep) keep = e->disp_offset;
     if (e->imm_offset  && e->imm_offset  < keep) keep = e->imm_offset;
+    if (e->modrm_offset == 0) {
+        /* No ModRM byte: every operand is an immediate that trails the
+         * opcode.  Capstone's encoding.imm_offset only marks the *last*
+         * immediate, so for instructions with more than one immediate
+         * (enter imm16,imm8; ljmp/lcall ptr16:16/32) it leaves the earlier
+         * ones un-skipped and the sweep explodes.  The structural part is
+         * just the prefixes + opcode bytes; everything after is wildcard. */
+        int oe = 0;
+        for (int i = 0; i < 4; i++) if (x->prefix[i]) oe++;
+        for (int i = 0; i < 4; i++) if (x->opcode[i]) oe++;
+        if (oe && oe < keep) keep = oe;
+    }
     if (keep < 1) keep = 1;
     return keep;
 }
