@@ -64,3 +64,30 @@ echo ">> compiling mine32.exe with $CC"
 
 echo ">> done: mine32.exe"
 file mine32.exe || true
+
+# ---- Capstone variant (mine32cs.exe) ------------------------------------
+CS_DIR="capstone"
+CXX="${TRIPLE}-g++-posix"
+command -v "$CXX" >/dev/null 2>&1 || CXX="${TRIPLE}-g++"
+if [ ! -d "$CS_DIR" ]; then
+    echo ">> cloning Capstone"
+    git clone --depth 1 https://github.com/capstone-engine/capstone.git "$CS_DIR"
+fi
+CSBUILD="build-win-${ARCH}"
+if [ ! -f "$CS_DIR/$CSBUILD/libcapstone.a" ]; then
+    echo ">> cross-building Capstone for Windows ($TRIPLE)"
+    cmake -S "$CS_DIR" -B "$CS_DIR/$CSBUILD" \
+        -DCMAKE_SYSTEM_NAME=Windows \
+        -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" \
+        -DCMAKE_RC_COMPILER="$WINDRES" -DCMAKE_BUILD_TYPE=Release \
+        -DCAPSTONE_ARCHITECTURE_DEFAULT=OFF -DCAPSTONE_X86_SUPPORT=ON \
+        -DCAPSTONE_BUILD_SHARED_LIBS=OFF -DCAPSTONE_BUILD_CSTOOL=OFF \
+        -DCAPSTONE_BUILD_TESTS=OFF -DCAPSTONE_BUILD_CSTEST=OFF
+    cmake --build "$CS_DIR/$CSBUILD" -j"$(nproc)"
+fi
+echo ">> compiling mine32cs.exe with $CC"
+"$CC" -O3 -pthread -static -I "$CS_DIR/include" \
+    mine32cs.c "$CS_DIR/$CSBUILD/libcapstone.a" -o mine32cs.exe
+
+echo ">> done: mine32.exe / mine32cs.exe"
+file mine32cs.exe || true

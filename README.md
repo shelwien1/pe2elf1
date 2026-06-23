@@ -179,7 +179,9 @@ builds Capstone (x86, static) and compiles it. It decodes with
 `cs_disasm_iter`, gets the structural skip offsets from `cs_x86.encoding`
 (`disp_offset`/`imm_offset`), and `--canon` normalises the textual disassembly
 (register names → class base, index scale dropped, segment overrides dropped,
-writemask `{k1..k7}`→`{k1}`, relative-branch targets zeroed).
+writemask `{k1..k7}`→`{k1}`, relative-branch targets zeroed). A prebuilt
+standalone `mine32cs.exe` (64-bit MinGW, static) is committed; rebuild it with
+`./build-win.sh` (cross-builds Capstone for Windows too).
 
 Two differences from the Zydis build:
 
