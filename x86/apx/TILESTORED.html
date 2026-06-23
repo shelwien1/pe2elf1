@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" type="text/css" href="style.css">
+<title>TILESTORED (Intel APX)</title>
+</head>
+<body>
+<h1>TILESTORED</h1>
+<table>
+<tr><th>Encoding</th><th>Instruction</th><th>Op/En</th><th>64/32-bit Mode</th><th>CPUID Feature Flag</th></tr>
+<tr><td>EVEX.128.F3.0F38.W0 4B !(11):rrr:100</td><td>TILESTORED {NF=0} sibmem, tmm1</td><td>A</td><td>V/N.E.</td><td>APX_F and AMX-TILE</td></tr>
+</table>
+<h2>Instruction Operand Encoding</h2>
+<table>
+<tr><th>Op/En Tuple</th><th>Operand 1</th><th>Operand 2</th><th>Operand 3 Operand 4</th></tr>
+<tr><td>A NO-SCALE MODRM.R/M(w) MODRM.REG(r) N/A</td><td></td><td></td><td>N/A</td></tr>
+</table>
+<h2>Description</h2>
+<p>Note:</p>
+<p>These instructions are promoted to EVEX to provide Intel® APX functionality. These instructions may have existing, inherited CPUID- and XCR0-sensitivity, independent of APX_F.</p>
+<p>Note:</p>
+<p>Intel® AMX forms of this instruction are not considered TSX-friendly. Any attempt to execute an AMX instruction inside a TSX transaction will result in a transaction abort.</p>
+<p>This instruction’s description remains substantially the same as that found in the Intel®Architecture Instruction Set Extensions Programming Reference, except being suitably modified by Intel® APX prefix payload functionalities as explained in Section 3.1 of this document.</p>
+<h2>Exceptions</h2>
+<p>TILESTORED sibmem, AMX-E3-EVEX N/A APX_F, AMX-TILE tmm1</p>
+</body>
+</html>

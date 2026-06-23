@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" type="text/css" href="style.css">
+<title>CTESTSCC (Intel APX)</title>
+</head>
+<body>
+<h1>CTESTSCC</h1>
+<table>
+<tr><th>Encoding</th><th>Instruction</th><th>Op/En</th><th>64/32-bit Mode</th><th>CPUID Feature Flag</th></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED 84 /r</td><td>CTESTB {ND=0} {SCC=0x2} r8/m8, r8, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 85 /r</td><td>CTESTB {ND=0} {SCC=0x2} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 85 /r</td><td>CTESTB {ND=0} {SCC=0x2} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /0 ib</td><td>CTESTB {ND=0} {SCC=0x2} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /1 ib</td><td>CTESTB {ND=0} {SCC=0x2} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /0 id</td><td>CTESTB {ND=0} {SCC=0x2} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /0 iw/id</td><td>CTESTB {ND=0} {SCC=0x2} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /1 id</td><td>CTESTB {ND=0} {SCC=0x2} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /1 iw/id</td><td>CTESTB {ND=0} {SCC=0x2} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED 84 /r</td><td>CTESTBE {ND=0} {SCC=0x6} r8/m8, r8, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 85 /r</td><td>CTESTBE {ND=0} {SCC=0x6} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 85 /r</td><td>CTESTBE {ND=0} {SCC=0x6} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /0 ib</td><td>CTESTBE {ND=0} {SCC=0x6} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /1 ib</td><td>CTESTBE {ND=0} {SCC=0x6} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /0 id</td><td>CTESTBE {ND=0} {SCC=0x6} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /0 iw/id</td><td>CTESTBE {ND=0} {SCC=0x6} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF Continued on next page…</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /1 iw/id</td><td>CTESTBE {ND=0} {SCC=0x6} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED 84 /r</td><td>CTESTF {ND=0} {SCC=0xb} r8/m8, r8, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 85 /r</td><td>CTESTF {ND=0} {SCC=0xb} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 85 /r</td><td>CTESTF {ND=0} {SCC=0xb} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /0 ib</td><td>CTESTF {ND=0} {SCC=0xb} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /1 ib</td><td>CTESTF {ND=0} {SCC=0xb} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /0 id</td><td>CTESTF {ND=0} {SCC=0xb} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /0 iw/id</td><td>CTESTF {ND=0} {SCC=0xb} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /1 id</td><td>CTESTF {ND=0} {SCC=0xb} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /1 iw/id</td><td>CTESTF {ND=0} {SCC=0xb} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED 84 /r</td><td>CTESTL {ND=0} {SCC=0xc} r8/m8, r8, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 85 /r</td><td>CTESTL {ND=0} {SCC=0xc} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 85 /r</td><td>CTESTL {ND=0} {SCC=0xc} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /0 ib</td><td>CTESTL {ND=0} {SCC=0xc} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /1 ib</td><td>CTESTL {ND=0} {SCC=0xc} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /0 id</td><td>CTESTL {ND=0} {SCC=0xc} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF Continued on next page…</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /1 id</td><td>CTESTL {ND=0} {SCC=0xc} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /1 iw/id</td><td>CTESTL {ND=0} {SCC=0xc} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED 84 /r</td><td>CTESTLE {ND=0} {SCC=0xe} r8/m8, r8, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 85 /r</td><td>CTESTLE {ND=0} {SCC=0xe} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 85 /r</td><td>CTESTLE {ND=0} {SCC=0xe} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /0 ib</td><td>CTESTLE {ND=0} {SCC=0xe} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /1 ib</td><td>CTESTLE {ND=0} {SCC=0xe} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /0 id</td><td>CTESTLE {ND=0} {SCC=0xe} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /0 iw/id</td><td>CTESTLE {ND=0} {SCC=0xe} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /1 id</td><td>CTESTLE {ND=0} {SCC=0xe} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /1 iw/id</td><td>CTESTLE {ND=0} {SCC=0xe} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED 84 /r</td><td>CTESTNB {ND=0} {SCC=0x3} r8/m8, r8, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 85 /r</td><td>CTESTNB {ND=0} {SCC=0x3} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 85 /r</td><td>CTESTNB {ND=0} {SCC=0x3} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /0 ib</td><td>CTESTNB {ND=0} {SCC=0x3} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /1 ib</td><td>CTESTNB {ND=0} {SCC=0x3} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF Continued on next page…</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /0 iw/id</td><td>CTESTNB {ND=0} {SCC=0x3} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /1 id</td><td>CTESTNB {ND=0} {SCC=0x3} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /1 iw/id</td><td>CTESTNB {ND=0} {SCC=0x3} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED 84 /r</td><td>CTESTNBE {ND=0} {SCC=0x7} r8/m8, r8, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 85 /r</td><td>CTESTNBE {ND=0} {SCC=0x7} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 85 /r</td><td>CTESTNBE {ND=0} {SCC=0x7} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /0 ib</td><td>CTESTNBE {ND=0} {SCC=0x7} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /1 ib</td><td>CTESTNBE {ND=0} {SCC=0x7} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /0 id</td><td>CTESTNBE {ND=0} {SCC=0x7} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /0 iw/id</td><td>CTESTNBE {ND=0} {SCC=0x7} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /1 id</td><td>CTESTNBE {ND=0} {SCC=0x7} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /1 iw/id</td><td>CTESTNBE {ND=0} {SCC=0x7} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED 84 /r</td><td>CTESTNL {ND=0} {SCC=0xd} r8/m8, r8, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 85 /r</td><td>CTESTNL {ND=0} {SCC=0xd} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 85 /r</td><td>CTESTNL {ND=0} {SCC=0xd} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /0 ib</td><td>CTESTNL {ND=0} {SCC=0xd} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF Continued on next page…</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /0 id</td><td>CTESTNL {ND=0} {SCC=0xd} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /0 iw/id</td><td>CTESTNL {ND=0} {SCC=0xd} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /1 id</td><td>CTESTNL {ND=0} {SCC=0xd} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /1 iw/id</td><td>CTESTNL {ND=0} {SCC=0xd} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED 84 /r</td><td>CTESTNLE {ND=0} {SCC=0xf} r8/m8, r8, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 85 /r</td><td>CTESTNLE {ND=0} {SCC=0xf} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 85 /r</td><td>CTESTNLE {ND=0} {SCC=0xf} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /0 ib</td><td>CTESTNLE {ND=0} {SCC=0xf} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /1 ib</td><td>CTESTNLE {ND=0} {SCC=0xf} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /0 id</td><td>CTESTNLE {ND=0} {SCC=0xf} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /0 iw/id</td><td>CTESTNLE {ND=0} {SCC=0xf} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /1 id</td><td>CTESTNLE {ND=0} {SCC=0xf} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /1 iw/id</td><td>CTESTNLE {ND=0} {SCC=0xf} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED 84 /r</td><td>CTESTNO {ND=0} {SCC=0x1} r8/m8, r8, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 85 /r</td><td>CTESTNO {ND=0} {SCC=0x1} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 85 /r</td><td>CTESTNO {ND=0} {SCC=0x1} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF Continued on next page…</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /1 ib</td><td>CTESTNO {ND=0} {SCC=0x1} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /0 id</td><td>CTESTNO {ND=0} {SCC=0x1} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /0 iw/id</td><td>CTESTNO {ND=0} {SCC=0x1} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /1 id</td><td>CTESTNO {ND=0} {SCC=0x1} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /1 iw/id</td><td>CTESTNO {ND=0} {SCC=0x1} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED 84 /r</td><td>CTESTNS {ND=0} {SCC=0x9} r8/m8, r8, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 85 /r</td><td>CTESTNS {ND=0} {SCC=0x9} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 85 /r</td><td>CTESTNS {ND=0} {SCC=0x9} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /0 ib</td><td>CTESTNS {ND=0} {SCC=0x9} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /1 ib</td><td>CTESTNS {ND=0} {SCC=0x9} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /0 id</td><td>CTESTNS {ND=0} {SCC=0x9} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /0 iw/id</td><td>CTESTNS {ND=0} {SCC=0x9} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /1 id</td><td>CTESTNS {ND=0} {SCC=0x9} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /1 iw/id</td><td>CTESTNS {ND=0} {SCC=0x9} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED 84 /r</td><td>CTESTNZ {ND=0} {SCC=0x5} r8/m8, r8, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 85 /r</td><td>CTESTNZ {ND=0} {SCC=0x5} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF Continued on next page…</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /0 ib</td><td>CTESTNZ {ND=0} {SCC=0x5} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /1 ib</td><td>CTESTNZ {ND=0} {SCC=0x5} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /0 id</td><td>CTESTNZ {ND=0} {SCC=0x5} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /0 iw/id</td><td>CTESTNZ {ND=0} {SCC=0x5} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /1 id</td><td>CTESTNZ {ND=0} {SCC=0x5} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /1 iw/id</td><td>CTESTNZ {ND=0} {SCC=0x5} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED 84 /r</td><td>CTESTO {ND=0} {SCC=0x0} r8/m8, r8, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 85 /r</td><td>CTESTO {ND=0} {SCC=0x0} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 85 /r</td><td>CTESTO {ND=0} {SCC=0x0} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /0 ib</td><td>CTESTO {ND=0} {SCC=0x0} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /1 ib</td><td>CTESTO {ND=0} {SCC=0x0} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /0 id</td><td>CTESTO {ND=0} {SCC=0x0} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /0 iw/id</td><td>CTESTO {ND=0} {SCC=0x0} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /1 id</td><td>CTESTO {ND=0} {SCC=0x0} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /1 iw/id</td><td>CTESTO {ND=0} {SCC=0x0} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED 84 /r</td><td>CTESTS {ND=0} {SCC=0x8} r8/m8, r8, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF Continued on next page…</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 85 /r</td><td>CTESTS {ND=0} {SCC=0x8} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /0 ib</td><td>CTESTS {ND=0} {SCC=0x8} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /1 ib</td><td>CTESTS {ND=0} {SCC=0x8} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /0 id</td><td>CTESTS {ND=0} {SCC=0x8} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /0 iw/id</td><td>CTESTS {ND=0} {SCC=0x8} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /1 id</td><td>CTESTS {ND=0} {SCC=0x8} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /1 iw/id</td><td>CTESTS {ND=0} {SCC=0x8} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED 84 /r</td><td>CTESTT {ND=0} {SCC=0xa} r8/m8, r8, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 85 /r</td><td>CTESTT {ND=0} {SCC=0xa} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 85 /r</td><td>CTESTT {ND=0} {SCC=0xa} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /0 ib</td><td>CTESTT {ND=0} {SCC=0xa} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /1 ib</td><td>CTESTT {ND=0} {SCC=0xa} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /0 id</td><td>CTESTT {ND=0} {SCC=0xa} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /0 iw/id</td><td>CTESTT {ND=0} {SCC=0xa} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /1 id</td><td>CTESTT {ND=0} {SCC=0xa} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /1 iw/id</td><td>CTESTT {ND=0} {SCC=0xa} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF Continued on next page…</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 85 /r</td><td>CTESTZ {ND=0} {SCC=0x4} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 85 /r</td><td>CTESTZ {ND=0} {SCC=0x4} rv/mv, rv, dfv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /0 ib</td><td>CTESTZ {ND=0} {SCC=0x4} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED F6 /1 ib</td><td>CTESTZ {ND=0} {SCC=0x4} r8/m8, imm8, dfv</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /0 id</td><td>CTESTZ {ND=0} {SCC=0x4} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /0 iw/id</td><td>CTESTZ {ND=0} {SCC=0x4} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE F7 /1 id</td><td>CTESTZ {ND=0} {SCC=0x4} rv/mv, imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE F7 /1 iw/id</td><td>CTESTZ {ND=0} {SCC=0x4} rv/mv, imm16/imm32, dfv</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+</table>
+<h2>Instruction Operand Encoding</h2>
+<table>
+<tr><th>Op/En Tuple</th><th>Operand 1</th><th>Operand 2</th><th>Operand 3 Operand 4</th></tr>
+<tr><td>A NO-SCALE MODRM.R/M(r) MODRM.REG(r)</td><td></td><td></td><td>N/A N/A</td></tr>
+<tr><td>B NO-SCALE MODRM.R/M(r)</td><td></td><td>IMM8(r)</td><td>N/A N/A</td></tr>
+<tr><td>C NO-SCALE MODRM.R/M(r)</td><td></td><td>IMM16/IMM32(r) N/A</td><td>N/A</td></tr>
+</table>
+<h2>Description</h2>
+<p>Note:</p>
+<p>These instructions are promoted to EVEX to provide Intel® APX functionality. These instructions may have existing, inherited CPUID- and XCR0-sensitivity, independent of APX_F.</p>
+<p>CCMPscc and CTESTscc are two new sets of instructions for conditional CMP and TEST, respectively. They</p>
+<p>are encoded by promoting all opcodes of CMP and TEST, except for those forms which have no explicit GPR or memory operands, into the EVEX space and re-interpreting the EVEX payload bits as shown in the figure titled “EVEX prefix for conditional CMP and TEST” below. Note that the V and NF bits and two of the zero bits are repurposed. The ND bit is required to be set to 0. There are no EVEX versions of CMP and TEST with EVEX.ND = 1.</p>
+<p>EVEX Payload byte 1 (0x62) R3 X3 B3 R4 B4 1 0 0</p>
+<p>Payload byte 2 W X4 p p</p>
+<p>Payload byte 3 0 0 0 ND=0</p>
+<p>Figure 8.4: EVEX prefix for conditional CMP and TEST</p>
+<p>The four SC* bits form a source condition code SCC = EVEX.[SC3,SC2,SC1,SC0], the encoding of which is the same as that of the existing x86 condition codes (SDM volume 1 appendix B), with two exceptions:</p>
+<p class="bullet">If SCC = 0b1010, then SCC evaluates to true regardless of the status flags value.</p>
+<p class="bullet">If SCC = 0b1011, then SCC evaluates to false regardless of the status flags value.</p>
+<p>Consequently, the SCC cannot test the parity flag PF. In the instruction mnemonics, the SCC appears as a suffix of the mnemonic, with T and F denoting the always true/false codes described above.</p>
+<p>The SCC is used as a predicate for controlling the conditional execution of the CCMPscc or CTESTscc instruction:</p>
+<p class="bullet">If SCC evaluates to true on the status flags, then the CMP or TEST is executed and it updates the</p>
+<p>status flags normally. Note that the SCC = 0b1010 exception case (namely, CCMPT and CTESTT) can be used to encode unconditional CMP or TEST as a special case of CCMP or CTEST.</p>
+<p class="bullet">If SCC evaluates to false on the status flags, then the CMP or TEST is not executed and instead the</p>
+<p>status flags are updated using DFV (Default Flags Value) as follows:</p>
+<p>Note that the SCC = 0b1011 exception case (namely, CCMPF and CTESTF) can be used to force any desired truth assignment to the flags [OF,SF,ZF,CF] unconditionally. Unlike the CMOVcc extensions discussed below, SCC evaluating to false does not suppress memory faults from a memory operand.</p>
+<p>Note that many condition codes have synonyms (see SDM volume 1 appendix B) and only one synonym per condition code is used in this specification. Assemblers and similar tools are free to support other synonyms.</p>
+<h2>Operation</h2>
+<pre>// CTEST
+IF (src_flags satisfies scc):
+    dst_flags = test(src1,src2)
+ELSE:
+    dst_flags = flags(evex.[of,sf,zf,cf]);
+                                              // DFV</pre>
+<h2>Exceptions</h2>
+<p>CTESTB r8/m8, r8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTB rv/mv, rv, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTB r8/m8, imm8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF rv/mv, CTESTB APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm16/imm32, dfv CTESTBE r8/m8, r8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTBE rv/mv, rv, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm8, CTESTBE r8/m8, APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF dfv rv/mv, CTESTBE APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm16/imm32, dfv CTESTF r8/m8, r8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTF rv/mv, rv, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTF r8/m8, imm8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTF rv/mv, APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm16/imm32, dfv CTESTL r8/m8, r8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTL rv/mv, rv, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTL r8/m8, imm8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTL rv/mv, APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm16/imm32, dfv CTESTLE r8/m8, r8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTLE rv/mv, rv, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF Continued on next page…</p>
+<p>imm8, CTESTLE r8/m8, APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF dfv rv/mv, CTESTLE APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm16/imm32, dfv CTESTNB r8/m8, r8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTNB rv/mv, rv, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm8, CTESTNB r8/m8, APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF dfv rv/mv, CTESTNB APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm16/imm32, dfv CTESTNBE r8/m8, r8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTNBE rv/mv, rv, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm8, CTESTNBE r8/m8, APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF dfv rv/mv, CTESTNBE APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm16/imm32, dfv CTESTNL r8/m8, r8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTNL rv/mv, rv, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm8, CTESTNL r8/m8, APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF dfv rv/mv, CTESTNL APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm16/imm32, dfv CTESTNLE r8/m8, r8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTNLE rv/mv, rv, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTNLE r8/m8, imm8, APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF dfv CTESTNLE rv/mv, APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm16/imm32, dfv CTESTNO r8/m8, r8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTNO rv/mv, rv, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTNO r8/m8, imm8, APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF dfv CTESTNO rv/mv, APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm16/imm32, dfv CTESTNS r8/m8, r8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTNS rv/mv, rv, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTNS r8/m8, imm8, APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF dfv CTESTNS rv/mv, APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm16/imm32, dfv CTESTNZ r8/m8, r8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTNZ rv/mv, rv, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTNZ r8/m8, imm8, APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF dfv CTESTNZ rv/mv, APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm16/imm32, dfv CTESTO r8/m8, r8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTO rv/mv, rv, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTO r8/m8, imm8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF Continued on next page…</p>
+<p>rv/mv, CTESTO APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm16/imm32, dfv CTESTS r8/m8, r8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTS rv/mv, rv, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTS r8/m8, imm8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTS rv/mv, APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm16/imm32, dfv CTESTT r8/m8, r8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTT rv/mv, rv, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTT r8/m8, imm8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTT rv/mv, APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm16/imm32, dfv CTESTZ r8/m8, r8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTZ rv/mv, rv, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF CTESTZ r8/m8, imm8, dfv APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF rv/mv, CTESTZ APX-EVEX-CCMP N/A APX_F, APX_NCI_NDD_NF imm16/imm32, dfv</p>
+</body>
+</html>

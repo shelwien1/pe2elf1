@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" type="text/css" href="style.css">
+<title>RDMSR (Intel APX)</title>
+</head>
+<body>
+<h1>RDMSR</h1>
+<table>
+<tr><th>Encoding</th><th>Instruction</th><th>Op/En</th><th>64/32-bit Mode</th><th>CPUID Feature Flag</th></tr>
+<tr><td>EVEX.128.F2.MAP7.N/A F6 11:000:bbb</td><td>RDMSR {NF=0} r64, imm32</td><td>A</td><td>V/N.E.</td><td>APX_F and MSR_IMM</td></tr>
+</table>
+<h2>Instruction Operand Encoding</h2>
+<table>
+<tr><th>Op/En Tuple Operand 1</th><th>Operand 2 Operand 3 Operand 4</th></tr>
+<tr><td>A N/A MODRM.R/M(w)</td><td>IMM32(r) N/A N/A</td></tr>
+</table>
+<h2>Description</h2>
+<p>Note:</p>
+<p>These instructions are promoted to EVEX to provide Intel® APX functionality. These instructions may have existing, inherited CPUID- and XCR0-sensitivity, independent of APX_F.</p>
+<p>Reads the contents of a 64-bit model specific register (MSR). RDMSR has an implicit form and an immediate form.</p>
+<p>The implicit (non-immediate) form reads the contents of the MSR specified in the ECX register into registers EDX:EAX. (On processors that support the Intel 64 architecture, the high-order 32 bits of RCX are ignored.) The EDX register is loaded with the high-order 32 bits of the MSR and the EAX register is loaded with the low-order 32 bits. (On processors that support the Intel 64 architecture, the high-order 32 bits of each of RAX and RDX are cleared.) If fewer than 64 bits are implemented in the MSR being read, the values returned to EDX:EAX in unimplemented bit locations are undefined.</p>
+<p>The immediate form reads the contents of the MSR specified by operand 2 into operand 1. Operand 2 is an immediate, while operand 1 is a general-purpose register. The immediate form can be used only in 64-bit mode; otherwise, a invalid-opcode exception (#UD) will be generated. The immediate form may provide better performance than the implicit form.</p>
+<p>This instruction must be executed at privilege level 0 or in real-address mode; otherwise, a general protection exception #GP(0) will be generated. Specifying a reserved or unimplemented MSR address in ECX will also cause a general protection exception.</p>
+<p>The MSRs control functions for testability, execution tracing, performance-monitoring, and machine check errors. Chapter 2, “Model-Specific Registers (MSRs)” of the Intel® 64 and IA-32 Architectures Software</p>
+<p>Developer’s Manual, Volume 4, lists all the MSRs that can be read with this instruction and their addresses. Note that each processor family has its own set of MSRs.</p>
+<p>The CPUID instruction should be used to determine whether MSRs are supported (CPUID.01H:EDX[5] = 1) before using this instruction. The immediate form is supported only if CPUID.(EAX=0x07,ECX=0x01):ECX.MSR_IMM[bit 5] = 1.</p>
+<p>Just like RDMSR and WRMSR/WRMSRNS, the RDMSR-with-immediate and WRMSRNS-with-immediate instructions causes a VM exit if any of the following are true:</p>
+<p class="bullet">The “use MSR bitmaps” VM-execution control is 0.</p>
+<p class="bullet">The value of MSR address is not in the ranges 00000000H–00001FFFH or C000000H-C0001FFFH.</p>
+<p class="bullet">For RDMSR-with-immediate: The value of MSR address is in the range 00000000H–00001FFFH and</p>
+<p>bit n in read bitmap for low MSRs is 1, where n is the value of the MSR address.</p>
+<p class="bullet">For RDMSR-with-immediate: The value of MSR address is in the range C000000H-C0001FFFH and</p>
+<p>bit n in read bitmap for high MSRs is 1, where n is the value of the MSR address.</p>
+<p class="bullet">For WRMSRNS-with-immediate: The value of MSR address is in the range 00000000H–00001FFFH</p>
+<p>and bit n in write bitmap for low MSRs is 1, where n is the value of the MSR address.</p>
+<p class="bullet">For WRMSRNS-with-immediate: The value of MSR address is in the range C000000H-C0001FFFH</p>
+<p>and bit n in write bitmap for high MSRs is 1, where n is the value of the MSR address.</p>
+<p>A VM exit for the above reasons for RDMSR-with-immediate will specify exit reason 84 (decimal). A VM exit for the above reasons for WRMSRNS-with-immediate will specify exit reason 85 (decimal). For both, the exit qualification is set to the MSR address causing the VM exit. The VM-exit instruction length and VM-exit instruction information fields will be populated for these VM exits. VM-exit extended instruction information field is also populated.</p>
+<p>Format of the VM-Exit Instruction-Information Field as Used for RDMSR-with-immediate and WRMSRNS-with-immediate</p>
+<p class="bullet">2:0 Undefined</p>
+<p class="bullet">6:3 Reg1: (Modrm R/M field, source / dest data operand), where 0 = RAX / 1 = RCX / 2 = RDX / 3 =</p>
+<p>RBX / 4 = RSP / 5 = RBP / 6 = RSI / 7 = RDI. 8-15 represent R8-R15, respectively.</p>
+<p class="bullet">31:7 Undefined</p>
+<p>Format of the VM-Exit Extended Instruction-Information Field as Used for RDMSR-with-immediate and WRMSRNS-with-immediate</p>
+<p class="bullet">15:0 Undefined</p>
+<p class="bullet">20:16 Reg1: (Modrm R/M field, source / dest data operand), where 0 = RAX / 1 = RCX / 2 = RDX / 3 =</p>
+<p>RBX / 4 = RSP / 5 = RBP / 6 = RSI / 7 = RDI. 8–31 represent R8–R31, respectively</p>
+<p class="bullet">63:21 Undefined</p>
+<p>Just like a RDMSR or WRMSR in a VMX guest, VM exit due to #GP due to setting reserved bits or page faults/EPT violations on the MSR bitmap load do not log the MSR address and will not have the RDMSR-with-immediate/WRMSRNS-with-immediate VM-exit reason.</p>
+<p>RDMSR-with-immediate and WRMSRNS-with-immediate do not add new VM execution controls, but instead use the existing VM execution controls for existing MSR instructions (e.g., RDMSR and WRMSR). Thus, VMMs that are not enabled to support RDMSR-with-immediate and WRMSRNS-with-immediate may still receive VM exits with the VM exit reasons of RDMSR-with-immediate or WRMSRNS-with-immediate if guests use these instructions. VMMs that respond to unknown VM exit reasons by using VM entry vector on entry to inject #UD to the guest would virtualize these instructions as not existing – which may be appropriate when the VMM is not enumerating RDMSR-with-immediate or WRMSRNS-with-immediate support to the guest.</p>
+<h2>Operation</h2>
+<pre>IF (implicit form):
+    EDX:EAX := MSR[ECX]
+ELSE: #* immediate form *
+    DEST := MSR[SRC]</pre>
+<h2>Exceptions</h2>
+<p>RDMSR r64, imm32 MSR-IMM-EVEX N/A APX_F, MSR_IMM</p>
+</body>
+</html>

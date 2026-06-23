@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" type="text/css" href="style.css">
+<title>INVVPID (Intel APX)</title>
+</head>
+<body>
+<h1>INVVPID</h1>
+<table>
+<tr><th>Encoding</th><th>Instruction</th><th>Op/En</th><th>64/32-bit Mode</th><th>CPUID Feature Flag</th></tr>
+<tr><td>EVEX.LLZ.F3.MAP4.IGNORED F1 !(11):rrr:bbb</td><td>INVVPID {NF=0} {ND=0} r64, m128</td><td>A</td><td>V/N.E.</td><td>APX_F and VMX</td></tr>
+</table>
+<h2>Instruction Operand Encoding</h2>
+<table>
+<tr><th>Op/En Tuple</th><th>Operand 1</th><th>Operand 2</th><th>Operand 3 Operand 4</th></tr>
+<tr><td>A NO-SCALE MODRM.REG(r) MODRM.R/M(r) N/A</td><td></td><td></td><td>N/A</td></tr>
+</table>
+<h2>Description</h2>
+<p>Note:</p>
+<p>These instructions are promoted to EVEX to provide Intel® APX functionality. These instructions may have existing, inherited CPUID- and XCR0-sensitivity, independent of APX_F.</p>
+<p>This instruction’s description remains substantially the same as that found in Volume 2A of the Intel® 64 and IA-32 Architectures Software Developer’s Manual, except being suitably modified by NDD, ZU and/or NF functionalities as explained in Section 3.1 of this document.</p>
+<h2>Exceptions</h2>
+<p>INVVPID r64, m128 APX-EVEX-INVVPID N/A APX_F, VMX</p>
+</body>
+</html>

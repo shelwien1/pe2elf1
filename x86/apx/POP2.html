@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" type="text/css" href="style.css">
+<title>POP2 (Intel APX)</title>
+</head>
+<body>
+<h1>POP2</h1>
+<table>
+<tr><th>Encoding</th><th>Instruction</th><th>Op/En</th><th>64/32-bit Mode</th><th>CPUID Feature Flag</th></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.W0 8F 11:000:bbb</td><td>POP2 {NF=0} {ND=1} r64, r64</td><td>A</td><td>V/N.E.</td><td>APX_F</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.W1 8F 11:000:bbb</td><td>POP2P {NF=0} {ND=1} r64, r64</td><td>A</td><td>V/N.E.</td><td>APX_F</td></tr>
+</table>
+<h2>Instruction Operand Encoding</h2>
+<table>
+<tr><th>Op/En Tuple</th><th>Operand 1 Operand 2</th><th>Operand 3 Operand 4</th></tr>
+<tr><td>A NO-SCALE VVVVV(w) MODRM.R/M(w) N/A</td><td></td><td>N/A</td></tr>
+</table>
+<h2>Description</h2>
+<p>Note:</p>
+<p>These instructions are promoted to EVEX to provide Intel® APX functionality. These instructions may have existing, inherited CPUID- and XCR0-sensitivity, independent of APX_F.</p>
+<p>PUSH2 and POP2 are two new instructions for (respectively) pushing/popping 2 GPRs at a time to/from the stack.</p>
+<p>The opcodes of PUSH2 and POP2 are those of “PUSH r/m” and “POP r/m” from legacy map 0, but we require ModRM.Mod = 3 in order to disallow memory operand. (A PUSH2 or POP2 with ModRM.Mod ̸= 3 triggers #UD.) In addition, we require that EVEX.ND = 1, so that the V register identifier is valid and specifies the second register operand. We require that EVEX.pp = 0 in PUSH2 and POP2 and their OSIZE always be 64b.</p>
+<p>The encoding and semantics of PUSH2 and POP2 are summarized in the table below, where b64 and v64 are the 64b GPRs encoded by the B and V register identifiers respectively. (The osize of PUSH2 and POP2 is always 64b.) The semantics is given in terms of an equivalent sequence of simpler instructions. We require further that neither b64 nor v64 be RSP and, for POP2, b64 and v64 be two different GPRs. Any violation of these conditions triggers #UD. The two register values being pushed are either both written to memory or neither one is written, but the two writes are not necessarily atomic.</p>
+<p>The data being pushed/popped by PUSH2/POP2 must be 16B-aligned on the stack. Violating this requirement triggers #GP.</p>
+<p>EVEX map=4 pp=0 ND=1 0xFF/6 Mod=3 PUSH2 v64, b64 PUSH v64</p>
+<p>PUSH b64</p>
+<p>EVEX map=4 pp=0 ND=1 0x8F/0 Mod=3 POP2 v64, b64 POP v64</p>
+<p>POP b64</p>
+<p>Table 9.1: Encoding and semantics of PUSH2 and POP2</p>
+<p>Setting EVEX.W = 1 bit indicates a push-pop acceleration (PPX) hint (see the section on “Balanced PUSH/POP Hint” in the APX introduction). The PPX hint is purely a performance hint. Instructions with this hint have the same functional semantics as those without. PPX hints set by the compiler that violate the balancing rule may turn off the PPX optimization, but they will not affect program semantics.</p>
+<h2>Operation</h2>
+<pre>// Alignment check
+if (RSP % 16 != 0):
+        #GP // RSP must be 16-byte aligned
+// Pop 1
+v64 = MEMORY[SS:RSP]
+RSP = RSP + 8
+// Pop 2
+b64 = MEMORY[SS:RSP]
+RSP = RSP + 8</pre>
+<h2>Exceptions</h2>
+<p>POP2 r64, r64 APX-EVEX-PP2 N/A APX_F POP2P r64, r64 APX-EVEX-PP2 N/A APX_F</p>
+</body>
+</html>

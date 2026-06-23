@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" type="text/css" href="style.css">
+<title>CMPCCXADD (Intel APX)</title>
+</head>
+<body>
+<h1>CMPCCXADD</h1>
+<table>
+<tr><th>Encoding</th><th>Instruction</th><th>Op/En</th><th>64/32-bit Mode</th><th>CPUID Feature Flag</th></tr>
+<tr><td>EVEX.128.66.0F38.W0 E6 !(11):rrr:bbb</td><td>CMPBEXADD {NF=0} m32, r32, r32</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W1 E6 !(11):rrr:bbb</td><td>CMPBEXADD {NF=0} m64, r64, r64</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W0 E2 !(11):rrr:bbb</td><td>CMPBXADD {NF=0} m32, r32, r32</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W1 E2 !(11):rrr:bbb</td><td>CMPBXADD {NF=0} m64, r64, r64</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W0 EE !(11):rrr:bbb</td><td>CMPLEXADD {NF=0} m32, r32, r32</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W1 EE !(11):rrr:bbb</td><td>CMPLEXADD {NF=0} m64, r64, r64</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W0 EC !(11):rrr:bbb</td><td>CMPLXADD {NF=0} m32, r32, r32</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W1 EC !(11):rrr:bbb</td><td>CMPLXADD {NF=0} m64, r64, r64</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W0 E7 !(11):rrr:bbb</td><td>CMPNBEXADD {NF=0} m32, r32, r32</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W1 E7 !(11):rrr:bbb</td><td>CMPNBEXADD {NF=0} m64, r64, r64</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W0 E3 !(11):rrr:bbb</td><td>CMPNBXADD {NF=0} m32, r32, r32</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W1 E3 !(11):rrr:bbb</td><td>CMPNBXADD {NF=0} m64, r64, r64</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W0 EF !(11):rrr:bbb</td><td>CMPNLEXADD {NF=0} m32, r32, r32</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W1 EF !(11):rrr:bbb</td><td>CMPNLEXADD {NF=0} m64, r64, r64</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W0 ED !(11):rrr:bbb</td><td>CMPNLXADD {NF=0} m32, r32, r32</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W1 ED !(11):rrr:bbb</td><td>CMPNLXADD {NF=0} m64, r64, r64</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD Continued on next page…</td></tr>
+<tr><td>EVEX.128.66.0F38.W1 E1 !(11):rrr:bbb</td><td>CMPNOXADD {NF=0} m64, r64, r64</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W0 EB !(11):rrr:bbb</td><td>CMPNPXADD {NF=0} m32, r32, r32</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W1 EB !(11):rrr:bbb</td><td>CMPNPXADD {NF=0} m64, r64, r64</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W0 E9 !(11):rrr:bbb</td><td>CMPNSXADD {NF=0} m32, r32, r32</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W1 E9 !(11):rrr:bbb</td><td>CMPNSXADD {NF=0} m64, r64, r64</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W0 E5 !(11):rrr:bbb</td><td>CMPNZXADD {NF=0} m32, r32, r32</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W1 E5 !(11):rrr:bbb</td><td>CMPNZXADD {NF=0} m64, r64, r64</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W0 E0 !(11):rrr:bbb</td><td>CMPOXADD {NF=0} m32, r32, r32</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W1 E0 !(11):rrr:bbb</td><td>CMPOXADD {NF=0} m64, r64, r64</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W0 EA !(11):rrr:bbb</td><td>CMPPXADD {NF=0} m32, r32, r32</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W1 EA !(11):rrr:bbb</td><td>CMPPXADD {NF=0} m64, r64, r64</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W0 E8 !(11):rrr:bbb</td><td>CMPSXADD {NF=0} m32, r32, r32</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W1 E8 !(11):rrr:bbb</td><td>CMPSXADD {NF=0} m64, r64, r64</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W0 E4 !(11):rrr:bbb</td><td>CMPZXADD {NF=0} m32, r32, r32</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+<tr><td>EVEX.128.66.0F38.W1 E4 !(11):rrr:bbb</td><td>CMPZXADD {NF=0} m64, r64, r64</td><td>A</td><td>V/N.E.</td><td>APX_F and CMPCCXADD</td></tr>
+</table>
+<h2>Instruction Operand Encoding</h2>
+<table>
+<tr><th>Op/En Tuple</th><th>Operand 1</th><th>Operand 2</th><th>Operand 3 Operand 4</th></tr>
+<tr><td>A NO-SCALE MODRM.R/M(rw) MODRM.REG(rw) VVVVV(r)</td><td></td><td></td><td>N/A</td></tr>
+</table>
+<h2>Description</h2>
+<p>Note:</p>
+<p>These instructions are promoted to EVEX to provide Intel® APX functionality. These instructions may have existing, inherited CPUID- and XCR0-sensitivity, independent of APX_F.</p>
+<p>This instruction’s description remains substantially the same as that found in Volume 2A of the Intel® 64 and IA-32 Architectures Software Developer’s Manual, except being suitably modified by NDD, ZU and/or NF functionalities as explained in Section 3.1 of this document.</p>
+<h2>Exceptions</h2>
+<p>r32, CMPBEXADD m32, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r32 r64, CMPBEXADD m64, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r64 CMPBXADD m32, r32, r32 APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD CMPBXADD m64, r64, r64 APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD CMPLEXADD m32, r32, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r32 r64, CMPLEXADD m64, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r64 CMPLXADD m32, r32, r32 APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD CMPLXADD m64, r64, r64 APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD CMPNBEXADD m32, r32, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r32 CMPNBEXADD m64, r64, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r64 CMPNBXADD m32, r32, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r32 CMPNBXADD m64, r64, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r64 CMPNLEXADD m32, r32, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r32 CMPNLEXADD m64, r64, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r64 CMPNLXADD m32, r32, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r32 Continued on next page…</p>
+<p>r64, CMPNLXADD m64, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r64 r32, CMPNOXADD m32, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r32 r64, CMPNOXADD m64, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r64 r32, CMPNPXADD m32, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r32 r64, CMPNPXADD m64, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r64 r32, CMPNSXADD m32, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r32 CMPNSXADD m64, r64, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r64 CMPNZXADD m32, r32, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r32 CMPNZXADD m64, r64, APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD r64 CMPOXADD m32, r32, r32 APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD CMPOXADD m64, r64, r64 APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD CMPPXADD m32, r32, r32 APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD CMPPXADD m64, r64, r64 APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD CMPSXADD m32, r32, r32 APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD CMPSXADD m64, r64, r64 APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD CMPZXADD m32, r32, r32 APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD CMPZXADD m64, r64, r64 APX-EVEX-CMPCCXADD N/A APX_F, CMPCCXADD</p>
+</body>
+</html>

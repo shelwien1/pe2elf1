@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" type="text/css" href="style.css">
+<title>MOVRS (Intel APX)</title>
+</head>
+<body>
+<h1>MOVRS</h1>
+<table>
+<tr><th>Encoding</th><th>Instruction</th><th>Op/En</th><th>64/32-bit Mode</th><th>CPUID Feature Flag</th></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.W0 8A !(11):rrr:bbb</td><td>MOVRS {NF=0} {ND=0} r8, m8</td><td>A</td><td>V/N.E.</td><td>APX_F and MOVRS</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 8B !(11):rrr:bbb</td><td>MOVRS {NF=0} {ND=0} rv, mv</td><td>A</td><td>V/N.E.</td><td>APX_F and MOVRS</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 8B !(11):rrr:bbb</td><td>MOVRS {NF=0} {ND=0} rv, mv</td><td>A</td><td>V/N.E.</td><td>APX_F and MOVRS</td></tr>
+</table>
+<h2>Instruction Operand Encoding</h2>
+<table>
+<tr><th>Op/En Tuple Operand 1</th><th>Operand 2</th><th>Operand 3 Operand 4</th></tr>
+<tr><td>A N/A MODRM.REG(w) MODRM.R/M(r) N/A</td><td></td><td>N/A</td></tr>
+</table>
+<h2>Description</h2>
+<p>Note:</p>
+<p>These instructions are promoted to EVEX to provide Intel® APX functionality. These instructions may have existing, inherited CPUID- and XCR0-sensitivity, independent of APX_F.</p>
+<p>This instruction’s description remains substantially the same as that found in the Intel®Architecture Instruction Set Extensions Programming Reference, except being suitably modified by Intel® APX prefix payload functionalities as explained in Section 3.1 of this document.</p>
+<h2>Exceptions</h2>
+<p>MOVRS r8, m8 APX-EVEX-MOVRS N/A APX_F, MOVRS MOVRS rv, mv APX-EVEX-MOVRS N/A APX_F, MOVRS</p>
+</body>
+</html>

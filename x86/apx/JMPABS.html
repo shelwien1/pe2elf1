@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" type="text/css" href="style.css">
+<title>JMPABS (Intel APX)</title>
+</head>
+<body>
+<h1>JMPABS</h1>
+<table>
+<tr><th>Encoding</th><th>Instruction</th><th>Op/En</th><th>64/32-bit Mode</th><th>CPUID Feature Flag</th></tr>
+<tr><td>REX2,NO66,NO67,NOREP W0 MAP0 A1 target64</td><td>JMPABS target64</td><td>A</td><td>V/N.E.</td><td>APX_F</td></tr>
+</table>
+<h2>Instruction Operand Encoding</h2>
+<table>
+<tr><th>Op/En Tuple</th><th>Operand 1 Operand 2 Operand 3 Operand 4</th></tr>
+<tr><td>A N/Anon-EVEX N/A</td><td>N/A N/A N/A</td></tr>
+</table>
+<h2>Description</h2>
+<p>JMPABS is a 64-bit only ISA extension, and acts as a near-direct branch with an absolute target.</p>
+<p>The 64-bit immediate operand is treated an as absolute effective address, which is subject to canonicality checks.</p>
+<p>JMPABS is a direct, un-conditional jump, and will be treated as such from the perspective of both Intel® Perfmon and Last Branch Record (LBR) facilities. JMPABS does have unique treatment from an Intel® Processor Trace perspective in that it is designed to emit an Intel® Processor Trace TIP packet by default (unlike other direct, un-conditional jumps).</p>
+<h2>Operation</h2>
+<pre>tempRIP = &lt;target64 from instruction&gt;;
+IF tempRIP is not canonical:
+    THEN #GP(0);
+ELSE
+    RIP = tempRIP;
+(No flags affected)</pre>
+<h2>Exceptions</h2>
+<p>JMPABS target64 APX-LEGACY-JMPABS N/A APX_F</p>
+</body>
+</html>

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" type="text/css" href="style.css">
+<title>SHLD (Intel APX)</title>
+</head>
+<body>
+<h1>SHLD</h1>
+<table>
+<tr><th>Encoding</th><th>Instruction</th><th>Op/En</th><th>64/32-bit Mode</th><th>CPUID Feature Flag</th></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 24 /r ib</td><td>SHLD {NF} {ND=0} rv/mv, rv, imm8</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 24 /r ib</td><td>SHLD {NF} {ND=0} rv/mv, rv, imm8</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 24 /r ib</td><td>SHLD {NF} {ND=1} rv, rv/mv, rv, imm8</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 24 /r ib</td><td>SHLD {NF} {ND=1} rv, rv/mv, rv, imm8</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE A5 /r</td><td>SHLD {NF} {ND=0} rv/mv, rv, cl</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE A5 /r</td><td>SHLD {NF} {ND=0} rv/mv, rv, cl</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE A5 /r</td><td>SHLD {NF} {ND=1} rv, rv/mv, rv, cl</td><td>D</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE A5 /r</td><td>SHLD {NF} {ND=1} rv, rv/mv, rv, cl</td><td>D</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+</table>
+<h2>Instruction Operand Encoding</h2>
+<table>
+<tr><th>Op/En Tuple</th><th>Operand 1</th><th>Operand 2</th><th>Operand 3</th><th>Operand 4</th></tr>
+<tr><td>A NO-SCALE MODRM.R/M(rcw) MODRM.REG(r)</td><td></td><td></td><td>IMM8(r)</td><td>N/A</td></tr>
+<tr><td>B NO-SCALE VVVVV(w)</td><td></td><td>MODRM.R/M(r) MODRM.REG(r)</td><td></td><td>IMM8(r)</td></tr>
+<tr><td>C NO-SCALE MODRM.R/M(rcw) MODRM.REG(r) N/A</td><td></td><td></td><td></td><td>N/A</td></tr>
+<tr><td>D NO-SCALE VVVVV(w)</td><td></td><td>MODRM.R/M(r) MODRM.REG(r) N/A</td><td></td><td></td></tr>
+</table>
+<h2>Description</h2>
+<p>Note:</p>
+<p>These instructions are promoted to EVEX to provide Intel® APX functionality. These instructions may have existing, inherited CPUID- and XCR0-sensitivity, independent of APX_F.</p>
+<p>This instruction’s description remains substantially the same as that found in Volume 2A of the Intel® 64 and IA-32 Architectures Software Developer’s Manual, except being suitably modified by NDD, ZU and/or NF functionalities as explained in Section 3.1 of this document.</p>
+<h2>Exceptions</h2>
+<p>SHLD rv/mv, rv, imm8 APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF SHLD rv, rv/mv, rv, imm8 APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF SHLD rv/mv, rv, cl APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF SHLD rv, rv/mv, rv, cl APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF</p>
+</body>
+</html>

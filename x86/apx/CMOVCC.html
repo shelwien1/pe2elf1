@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" type="text/css" href="style.css">
+<title>CMOVCC (Intel APX)</title>
+</head>
+<body>
+<h1>CMOVCC</h1>
+<table>
+<tr><th>Encoding</th><th>Instruction</th><th>Op/En</th><th>64/32-bit Mode</th><th>CPUID Feature Flag</th></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 42 /r</td><td>CMOVB {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 42 /r</td><td>CMOVB {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 46 /r</td><td>CMOVBE {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 46 /r</td><td>CMOVBE {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 4C /r</td><td>CMOVL {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 4C /r</td><td>CMOVL {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 4E /r</td><td>CMOVLE {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 4E /r</td><td>CMOVLE {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 43 /r</td><td>CMOVNB {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 43 /r</td><td>CMOVNB {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 47 /r</td><td>CMOVNBE {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 47 /r</td><td>CMOVNBE {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 4D /r</td><td>CMOVNL {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 4D /r</td><td>CMOVNL {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 4F /r</td><td>CMOVNLE {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 4F /r</td><td>CMOVNLE {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF Continued on next page…</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 41 /r</td><td>CMOVNO {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 4B /r</td><td>CMOVNP {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 4B /r</td><td>CMOVNP {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 49 /r</td><td>CMOVNS {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 49 /r</td><td>CMOVNS {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 45 /r</td><td>CMOVNZ {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 45 /r</td><td>CMOVNZ {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 40 /r</td><td>CMOVO {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 40 /r</td><td>CMOVO {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 4A /r</td><td>CMOVP {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 4A /r</td><td>CMOVP {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 48 /r</td><td>CMOVS {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 48 /r</td><td>CMOVS {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE 44 /r</td><td>CMOVZ {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE 44 /r</td><td>CMOVZ {NF=0} {ND=1} rv, rv, rv/mv</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+</table>
+<h2>Instruction Operand Encoding</h2>
+<table>
+<tr><th>Op/En Tuple</th><th>Operand 1 Operand 2</th><th>Operand 3</th><th>Operand 4</th></tr>
+<tr><td>A NO-SCALE VVVVV(w) MODRM.REG(r) MODRM.R/M(r) N/A</td><td></td><td></td><td></td></tr>
+</table>
+<h2>Description</h2>
+<p>Note:</p>
+<p>These instructions are promoted to EVEX to provide Intel® APX functionality. These instructions may have existing, inherited CPUID- and XCR0-sensitivity, independent of APX_F.</p>
+<p>This instruction’s description remains substantially the same as that found in Volume 2A of the Intel® 64 and IA-32 Architectures Software Developer’s Manual, except being suitably modified by NDD, ZU and/or NF functionalities as explained in Section 3.1 of this document.</p>
+<h2>Exceptions</h2>
+<p>CMOVB rv, rv, rv/mv APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF CMOVBE rv, rv, rv/mv APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF CMOVL rv, rv, rv/mv APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF CMOVLE rv, rv, rv/mv APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF CMOVNB rv, rv, rv/mv APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF CMOVNBE rv, rv, rv/mv APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF CMOVNL rv, rv, rv/mv APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF CMOVNLE rv, rv, rv/mv APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF CMOVNO rv, rv, rv/mv APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF CMOVNP rv, rv, rv/mv APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF CMOVNS rv, rv, rv/mv APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF CMOVNZ rv, rv, rv/mv APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF CMOVO rv, rv, rv/mv APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF CMOVP rv, rv, rv/mv APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF CMOVS rv, rv, rv/mv APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF CMOVZ rv, rv, rv/mv APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF</p>
+</body>
+</html>

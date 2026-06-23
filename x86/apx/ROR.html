@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" type="text/css" href="style.css">
+<title>ROR (Intel APX)</title>
+</head>
+<body>
+<h1>ROR</h1>
+<table>
+<tr><th>Encoding</th><th>Instruction</th><th>Op/En</th><th>64/32-bit Mode</th><th>CPUID Feature Flag</th></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED C0 /1 ib</td><td>ROR {NF} {ND=0} r8/m8, imm8</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED C0 /1 ib</td><td>ROR {NF} {ND=1} r8, r8/m8, imm8</td><td>D</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE C1 /1 ib</td><td>ROR {NF} {ND=0} rv/mv, imm8</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE C1 /1 ib</td><td>ROR {NF} {ND=0} rv/mv, imm8</td><td>A</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE C1 /1 ib</td><td>ROR {NF} {ND=1} rv, rv/mv, imm8</td><td>D</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE C1 /1 ib</td><td>ROR {NF} {ND=1} rv, rv/mv, imm8</td><td>D</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED D0 /1</td><td>ROR {NF} {ND=0} r8/m8, 1</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED D0 /1</td><td>ROR {NF} {ND=1} r8, r8/m8, 1</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE D1 /1</td><td>ROR {NF} {ND=0} rv/mv, 1</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE D1 /1</td><td>ROR {NF} {ND=0} rv/mv, 1</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE D1 /1</td><td>ROR {NF} {ND=1} rv, rv/mv, 1</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE D1 /1</td><td>ROR {NF} {ND=1} rv, rv/mv, 1</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED D2 /1</td><td>ROR {NF} {ND=0} r8/m8, cl</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.IGNORED D2 /1</td><td>ROR {NF} {ND=1} r8, r8/m8, cl</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.NP.MAP4.SCALABLE D3 /1</td><td>ROR {NF} {ND=0} rv/mv, cl</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE D3 /1</td><td>ROR {NF} {ND=0} rv/mv, cl</td><td>C</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF Continued on next page…</td></tr>
+<tr><td>EVEX.LLZ.66.MAP4.SCALABLE D3 /1</td><td>ROR {NF} {ND=1} rv, rv/mv, cl</td><td>B</td><td>V/N.E.</td><td>APX_F and APX_NCI_NDD_NF</td></tr>
+</table>
+<h2>Instruction Operand Encoding</h2>
+<table>
+<tr><th>Op/En Tuple</th><th>Operand 1</th><th>Operand 2</th><th>Operand 3 Operand 4</th></tr>
+<tr><td>A NO-SCALE MODRM.R/M(rw)</td><td></td><td>IMM8(r)</td><td>N/A N/A</td></tr>
+<tr><td>B NO-SCALE VVVVV(w)</td><td></td><td>MODRM.R/M(r) N/A</td><td>N/A</td></tr>
+<tr><td>C NO-SCALE MODRM.R/M(rw) N/A</td><td></td><td></td><td>N/A N/A</td></tr>
+<tr><td>D NO-SCALE VVVVV(w)</td><td></td><td>MODRM.R/M(r)</td><td>IMM8(r) N/A</td></tr>
+</table>
+<h2>Description</h2>
+<p>Note:</p>
+<p>These instructions are promoted to EVEX to provide Intel® APX functionality. These instructions may have existing, inherited CPUID- and XCR0-sensitivity, independent of APX_F.</p>
+<p>This instruction’s description remains substantially the same as that found in Volume 2A of the Intel® 64 and IA-32 Architectures Software Developer’s Manual, except being suitably modified by NDD, ZU and/or NF functionalities as explained in Section 3.1 of this document.</p>
+<h2>Exceptions</h2>
+<p>ROR r8/m8, imm8 APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF ROR r8, r8/m8, imm8 APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF ROR rv/mv, imm8 APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF ROR rv, rv/mv, imm8 APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF ROR r8/m8, 1 APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF ROR r8, r8/m8, 1 APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF ROR rv/mv, 1 APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF ROR rv, rv/mv, 1 APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF Continued on next page…</p>
+<p>ROR r8/m8, cl APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF ROR r8, r8/m8, cl APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF ROR rv/mv, cl APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF ROR rv, rv/mv, cl APX-EVEX-INT N/A APX_F, APX_NCI_NDD_NF</p>
+</body>
+</html>

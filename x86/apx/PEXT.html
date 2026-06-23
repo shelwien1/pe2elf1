@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" type="text/css" href="style.css">
+<title>PEXT (Intel APX)</title>
+</head>
+<body>
+<h1>PEXT</h1>
+<table>
+<tr><th>Encoding</th><th>Instruction</th><th>Op/En</th><th>64/32-bit Mode</th><th>CPUID Feature Flag</th></tr>
+<tr><td>EVEX.128.F3.0F38.W0 F5 /r</td><td>PEXT {NF=0} r32, r32, r32/m32</td><td>A</td><td>V/N.E.</td><td>APX_F and BMI2</td></tr>
+<tr><td>EVEX.128.F3.0F38.W1 F5 /r</td><td>PEXT {NF=0} r64, r64, r64/m64</td><td>A</td><td>V/N.E.</td><td>APX_F and BMI2</td></tr>
+</table>
+<h2>Instruction Operand Encoding</h2>
+<table>
+<tr><th>Op/En Tuple</th><th>Operand 1</th><th>Operand 2 Operand 3</th><th>Operand 4</th></tr>
+<tr><td>A NO-SCALE MODRM.REG(w) VVVVV(r)</td><td></td><td>MODRM.R/M(r) N/A</td><td></td></tr>
+</table>
+<h2>Description</h2>
+<p>Note:</p>
+<p>These instructions are promoted to EVEX to provide Intel® APX functionality. These instructions may have existing, inherited CPUID- and XCR0-sensitivity, independent of APX_F.</p>
+<p>This instruction’s description remains substantially the same as that found in Volume 2A of the Intel® 64 and IA-32 Architectures Software Developer’s Manual, except being suitably modified by NDD, ZU and/or NF functionalities as explained in Section 3.1 of this document.</p>
+<h2>Exceptions</h2>
+<p>PEXT r32, r32, r32/m32 APX-EVEX-BMI N/A APX_F, BMI2 PEXT r64, r64, r64/m64 APX-EVEX-BMI N/A APX_F, BMI2</p>
+</body>
+</html>

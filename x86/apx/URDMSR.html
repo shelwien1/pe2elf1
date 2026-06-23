@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" type="text/css" href="style.css">
+<title>URDMSR (Intel APX)</title>
+</head>
+<body>
+<h1>URDMSR</h1>
+<table>
+<tr><th>Encoding</th><th>Instruction</th><th>Op/En</th><th>64/32-bit Mode</th><th>CPUID Feature Flag</th></tr>
+<tr><td>EVEX.128.F2.MAP7.W0 F8 11:000:bbb</td><td>URDMSR {NF=0} r64, imm32</td><td>B</td><td>V/N.E.</td><td>APX_F and USER_MSR</td></tr>
+<tr><td>EVEX.LLZ.F2.MAP4.W0 F8 11:rrr:bbb</td><td>URDMSR {NF=0} {ND=0} r64, r64</td><td>A</td><td>V/N.E.</td><td>APX_F and USER_MSR</td></tr>
+</table>
+<h2>Instruction Operand Encoding</h2>
+<table>
+<tr><th>Op/En Tuple</th><th>Operand 1</th><th>Operand 2</th><th>Operand 3 Operand 4</th></tr>
+<tr><td>A NO-SCALE MODRM.R/M(w) MODRM.REG(r) N/A</td><td></td><td></td><td>N/A</td></tr>
+<tr><td>B NO-SCALE MODRM.R/M(w)</td><td></td><td>IMM32(r)</td><td>N/A N/A</td></tr>
+</table>
+<h2>Description</h2>
+<p>Note:</p>
+<p>These instructions are promoted to EVEX to provide Intel® APX functionality. These instructions may have existing, inherited CPUID- and XCR0-sensitivity, independent of APX_F.</p>
+<p>URDMSR reads the contents of a 64-bit MSR specified in operand 2 into operand 1. Operand 1 is a general-purpose register, while operand 2 may be either a general-purpose register or an immediate. URDMSR reads the indicated MSR in the same manner as RDMSR.</p>
+<p>MSRs readable by RDMSR with CPL = 0 can be read by URDMSR at any privilege level but under OS control. The OS controls what MSRs can be read by the URDMSR and UWRMSR instructions with a 4-KByte bitmap located at an aligned linear address in the IA32_USER_MSR_CTL (MSR address 1CH). The URDMSR instruction is enabled only if bit 0 of this MSR is 1.</p>
+<p>The low 2 KBytes of the bitmap control URDMSR (they compose the URDMSR bitmap); the 2 KBytes includes one bit for each MSR address in the range 0H–3FFFH. URDMSR may read an MSR only if the bit corresponding to the MSR has value 1; otherwise (or if the MSR address is outside that range) URDMSR causes a general-protection exception (#GP).</p>
+<p>The URDMSR accesses to these bitmaps are implicit supervisor-mode accesses, which means they use supervisor privilege regardless of CPL. The OS can create an alias to the bitmap in the user address space if it wants the application to know which MSRs are permitted. Still, the alias should be mapped read-only to prevent the application from overwriting the bitmap.</p>
+<p>Just like RDMSR and WRMSR/WRMSRNS, the URDMSR and UWRMSR instructions causes a VM exit if any of the following are true:</p>
+<p class="bullet">The “use MSR bitmaps” VM-execution control is 0.</p>
+<p class="bullet">The value of MSR address is not in the ranges 00000000H–00001FFFH</p>
+<p class="bullet">The value of MSR address is in the range 00000000H–00001FFFH and bit n in read bitmap for low</p>
+<p>MSRs is 1, where n is the value of the MSR address.</p>
+<p class="bullet">The value of MSR address is in the range 00000000H–00001FFFH and bit n in write bitmap for low</p>
+<p>MSRs is 1, where n is the value of the MSR address.</p>
+<p>Note that URDMSR/UMWRSR to addresses which would use the read bitmap for high MSRs (C000000HC0001FFH) are not supported and will cause a #GP(0) exception. A VM exit for the above reasons for URDMSR will specify exit reason 80 (decimal). A VM exit for the above reasons for UWRMSR will specify exit reason 81 (decimal). For both, the exit qualification is set to the MSR address causing the VM exit. The VM-exit instruction length and VM-exit instruction information fields will be populated for these VM exits. VM-exit extended instruction information field is also populated.</p>
+<p>Format of the VM-Exit Instruction-Information Field as Used for URDMSR and UWRMSR</p>
+<p class="bullet">2:0 Undefined</p>
+<p class="bullet">6:3 Reg1: (Modrm R/M field, source / dest data operand), where 0 = RAX / 1 = RCX / 2 = RDX / 3 =</p>
+<p>RBX / 4 = RSP / 5 = RBP / 6 = RSI / 7 = RDI. 8-15 represent R8-R15, respectively.</p>
+<p class="bullet">31:7 Undefined</p>
+<p>Format of the VM-Exit Extended Instruction-Information Field as Used for URDMSR and UWRMSR</p>
+<p class="bullet">15:0 Undefined</p>
+<p class="bullet">20:16 Reg1: (Modrm R/M field, source / dest data operand), where 0 = RAX / 1 = RCX / 2 = RDX / 3 =</p>
+<p>RBX / 4 = RSP / 5 = RBP / 6 = RSI / 7 = RDI. 8–31 represent R8–R31, respectively</p>
+<p class="bullet">63:21 Undefined</p>
+<p>Just like a RDMSR or WRMSR in a VMX guest, VM exit due to #GP due to setting reserved bits or page faults / EPT violations on the MSR bitmap load do not log the MSR address and will not have the URDMSR / UWRMSR VM-exit reason.</p>
+<p>No new VMX execution controls are added for URDMSR and UWRMSR – legacy MSR controls suffice. Legacy VMMs should not allow guests to set IA32_USER_MSR_CTL.ENABLE and thus should not receive these VM exits.</p>
+<h2>Operation</h2>
+<pre>DEST := MSR[SRC]</pre>
+<h2>Exceptions</h2>
+<p>URDMSR r64, imm32 USER-MSR-EVEX N/A APX_F, USER_MSR URDMSR r64, r64 USER-MSR-EVEX N/A APX_F, USER_MSR</p>
+</body>
+</html>

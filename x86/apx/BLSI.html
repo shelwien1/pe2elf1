@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" type="text/css" href="style.css">
+<title>BLSI (Intel APX)</title>
+</head>
+<body>
+<h1>BLSI</h1>
+<table>
+<tr><th>Encoding</th><th>Instruction</th><th>Op/En</th><th>64/32-bit Mode</th><th>CPUID Feature Flag</th></tr>
+<tr><td>EVEX.128.NP.0F38.W0 F3 /3</td><td>BLSI {NF} r32, r32/m32</td><td>A</td><td>V/N.E.</td><td>APX_F and BMI1 and APX_NCI_NDD_NF**</td></tr>
+<tr><td>EVEX.128.NP.0F38.W1 F3 /3</td><td>BLSI {NF} r64, r64/m64</td><td>A</td><td>V/N.E.</td><td>APX_F and BMI1 and APX_NCI_NDD_NF**</td></tr>
+</table>
+<h2>Instruction Operand Encoding</h2>
+<table>
+<tr><th>Op/En Tuple</th><th>Operand 1 Operand 2</th><th>Operand 3 Operand 4</th></tr>
+<tr><td>A NO-SCALE VVVVV(w) MODRM.R/M(r) N/A</td><td></td><td>N/A</td></tr>
+</table>
+<h2>Description</h2>
+<p>Note:</p>
+<p>These instructions are promoted to EVEX to provide Intel® APX functionality. These instructions may have existing, inherited CPUID- and XCR0-sensitivity, independent of APX_F.</p>
+<p>Note:</p>
+<p>Instructions with CPUID sensitivity with the specially flagged APX_NCI_NDD_NF** do not necessitate enumerating APX_NCI_NDD_NF under certain conditions. Specifically, If software is using the ND=0 + NF=0 form of this instruction, then APX_NCI_NDD_NF does not need to be enumerated as present. Conversely, if SW is using the NF=1 form, then APX_NCI_NDD_NF does need to be enumerated as present.</p>
+<p>This instruction’s description remains substantially the same as that found in Volume 2A of the Intel® 64 and IA-32 Architectures Software Developer’s Manual, except being suitably modified by NDD, ZU and/or NF functionalities as explained in Section 3.1 of this document.</p>
+<h2>Exceptions</h2>
+<p>BLSI r32, r32/m32 APX-EVEX-BMI N/A APX_F, BMI1, APX_NCI_NDD_NF** BLSI r64, r64/m64 APX-EVEX-BMI N/A APX_F, BMI1, APX_NCI_NDD_NF**</p>
+</body>
+</html>

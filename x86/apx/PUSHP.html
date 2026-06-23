@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" type="text/css" href="style.css">
+<title>PUSHP (Intel APX)</title>
+</head>
+<body>
+<h1>PUSHP</h1>
+<table>
+<tr><th>Encoding</th><th>Instruction</th><th>Op/En</th><th>64/32-bit Mode</th><th>CPUID Feature Flag</th></tr>
+<tr><td>REX2 W1 MAP0 50 +r</td><td>PUSHP r64</td><td>A</td><td>V/N.E.</td><td>APX_F</td></tr>
+</table>
+<h2>Instruction Operand Encoding</h2>
+<table>
+<tr><th>Op/En Tuple</th><th>Operand 1 Operand 2 Operand 3 Operand 4</th></tr>
+<tr><td>A N/Anon-EVEX</td><td>SRM(r) N/A N/A N/A</td></tr>
+</table>
+<h2>Description</h2>
+<p>PUSHP is the legacy “PUSH reg” instruction with opcodes 0x50-0x57 with a REX2 prefix in which REX2.W = 1. Similarly, POPP is the legacy “POP reg” instruction with opcodes 0x58-0x5F with a REX2 prefix in which REX2.W = 1. These instructions do not have a ModRM byte and the register id is encoded using the lowest three bits of the opcode byte plus REX2.{B3,B4}. This is indicated by the “+r” and “SRM” notations in the encoding tables above.</p>
+<p>The REX2.W = 1 bit is a Push-Pop Acceleration (PPX) hint (see the section on “Balanced PUSH/POP Hint” in the APX introduction). The PPX hint is purely a performance hint and PUSHP and POPP have the same functional semantics as PUSH with opcode 0x50+r and POP with opcode 0x58+r without this hint. PPX hints set in a way that violate the balancing rule may turn off the PPX optimization, but they will not affect program semantics.</p>
+<p>The PPX hint in PUSHP and POPP requires the use of the REX2 prefix, even when the functional semantics can be encoded using the REX prefix or no prefix at all. As a side-effect, note that the PPX hint implies OSIZE = 64b and that it is not possible to encode PPX with OSIZE = 16b, because REX2.W takes precedence over the legacy 0x66 prefix.</p>
+<h2>Operation</h2>
+<pre>RSP = RSP - 8
+MEMORY[SS:RSP] = r64</pre>
+<h2>Exceptions</h2>
+<p>PUSHP r64 APX-LEGACY-PUSH-POP N/A APX_F</p>
+</body>
+</html>
