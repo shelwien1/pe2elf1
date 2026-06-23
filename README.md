@@ -105,9 +105,10 @@ of distinct lines you see.
 What is kept distinct: mnemonic, operand types/sizes, addressing mode, SIB
 scale, and any explicit prefix (`lock`, `rep`, segment override, …) — only the
 register *identities* are normalized. Each dumped line is prefixed with the
-opcode bytes of that form's **first instance** (the smallest-valued encoding
-seen, which is the base-register one), and `|` marks where the structural bytes
-end and the wildcard disp/immediate bytes begin. For example opcode `0x00`
+opcode bytes of one concrete instance of that form — the **shortest** encoding
+seen (ties broken by smallest value), i.e. no redundant prefixes and base
+registers — and `|` marks where the structural bytes end and the wildcard
+disp/immediate bytes begin. For example opcode `0x00`
 (`add r/m8, r8`) has 4008 raw forms but collapses to 6:
 
 ```

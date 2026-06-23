@@ -109,8 +109,7 @@ typedef struct {
     uint64_t  minv;       /* smallest window value seen => "first instance" */
     uint16_t  klen;
     uint16_t  mnemonic;
-    uint8_t   minlen;     /* shortest encoding length seen for this form    */
-    uint8_t   oplen;      /* length of the first-instance encoding          */
+    uint8_t   oplen;      /* length of the representative (shortest) encoding*/
     uint8_t   opcut;      /* where structural bytes end (the | marker)      */
     uint8_t   opbytes[MAX_BYTES];  /* first-instance opcode bytes           */
 } Slot;
@@ -179,8 +178,8 @@ static void hmap_merge_slot(HMap *m, const Slot *src)
         m->cnt++;
         return;
     }
-    if (src->minlen < d->minlen) d->minlen = src->minlen;
-    if (src->minv < d->minv) {          /* a smaller encoding came first */
+    if (src->oplen < d->oplen ||
+        (src->oplen == d->oplen && src->minv < d->minv)) {
         d->minv = src->minv;
         d->oplen = src->oplen;
         d->opcut = src->opcut;
@@ -237,9 +236,10 @@ static void record_form(ThreadStats *ts, const ZydisDecodedInstruction *insn,
     if (g_canon) {
         /* `ops` is valid here (process_chunk used DecodeFull). The dedup key is
          * the register-normalised disassembly string itself, so two forms that
-         * differ only in registers (and thus print identically) collapse. The
-         * opcode bytes of the smallest-valued instance (`v`) are kept so the
-         * dump can show a concrete "first instance" of each form. */
+         * differ only in registers (and thus print identically) collapse. We
+         * keep the opcode bytes of the *shortest* encoding seen (ties broken by
+         * smallest value), which is the cleanest concrete instance of the form
+         * (no redundant prefixes, base registers). */
         char text[256];
         int klen = format_canonical(insn, ops, text, sizeof(text));
         if (klen < 0) return;
@@ -247,8 +247,8 @@ static void record_form(ThreadStats *ts, const ZydisDecodedInstruction *insn,
         if ((ts->map.cnt + 1) * 10 >= ts->map.cap * 7) hmap_grow(&ts->map);
         Slot *sl = hmap_slot(&ts->map, (const uint8_t *)text, klen, h);
         if (sl->key) {                       /* seen this form already       */
-            if (insn->length < sl->minlen) sl->minlen = (uint8_t)insn->length;
-            if (v < sl->minv) {              /* a smaller encoding came first */
+            if (insn->length < sl->oplen ||
+                (insn->length == sl->oplen && v < sl->minv)) {
                 sl->minv = v;
                 sl->oplen = (uint8_t)insn->length;
                 sl->opcut = (uint8_t)structural_len(insn);
@@ -259,7 +259,6 @@ static void record_form(ThreadStats *ts, const ZydisDecodedInstruction *insn,
         sl->key = (uint8_t *)dupstr(text);   /* the string is the key        */
         sl->klen = (uint16_t)klen; sl->hash = h;
         sl->mnemonic = (uint16_t)insn->mnemonic;
-        sl->minlen = (uint8_t)insn->length;
         sl->minv = v;
         sl->oplen = (uint8_t)insn->length;
         sl->opcut = (uint8_t)structural_len(insn);
@@ -524,7 +523,7 @@ int main(int argc, char **argv)
         total_forms = g.cnt;
         for (size_t j = 0; j < g.cap; j++)
             if (g.s[j].key) {
-                len_hist[g.s[j].minlen]++;
+                len_hist[g.s[j].oplen]++;
                 mnem[g.s[j].mnemonic]++;
             }
 
