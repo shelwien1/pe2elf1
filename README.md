@@ -47,7 +47,9 @@ usage: ./mine32 [options]
   -b, --bytes N       window size in bytes, 1..8 (default: 5 = 40 bit)
   -m, --mode M        16 | 32 | 64 (default: 32)
       --no-skip-imm   count every disp/imm value as a distinct form
-      --dump PREFIX   write found forms to PREFIX.<tid> files
+      --canon         merge instructions that differ only in registers
+                      (every register -> class base: eax, xmm0, ...)
+      --dump PREFIX   write found forms to PREFIX.<tid> (PREFIX in --canon)
       --range A B     only first-bytes [A,B) (for testing; default 0 256)
   -q, --quiet         no progress output
 ```
@@ -84,6 +86,41 @@ contribute all 2³² immediate values as 2³² separate "instructions".
   `--no-skip-imm`.
 
 Pass `--no-skip-imm` to instead count every concrete byte sequence.
+
+## Collapsing register variants (`--canon`)
+
+Even with immediates wildcarded, most of the 34.6M forms are the *same*
+instruction with different register operands (all 64 `add r/m32, r32`
+register-direct encodings, every base/index register in a memory operand, etc.).
+`--canon` factors these out: each operand register is rewritten to the **base
+register of its class** (GPR → `eax`/`ax`/`al` by width, XMM → `xmm0`, YMM →
+`ymm0`, mask → `k0`, …) and the resulting disassembly string is de-duplicated.
+The dedup key *is* the normalized text, so the reported count equals the number
+of distinct lines you see.
+
+```sh
+./mine32 -t 4 --canon --dump forms.txt   # forms.txt = sorted unique forms
+```
+
+What is kept distinct: mnemonic, operand types/sizes, addressing mode, SIB
+scale, and any explicit prefix (`lock`, `rep`, segment override, …) — only the
+register *identities* are normalized. For example opcode `0x00` (`add r/m8, r8`)
+has 4008 raw forms but collapses to 6:
+
+```
+add al, al
+add [eax], al
+add [eax+eax*1], al
+add [eax+eax*2], al
+add [eax+eax*4], al
+add [eax+eax*8], al
+```
+
+Note `--canon` decodes operands for every candidate (it uses
+`ZydisDecoderDecodeFull` and formats each form), so it is slower than the plain
+count, but it shrinks the output by orders of magnitude. The scan still visits
+every register encoding — duplicates are skipped at *output* time, across all
+threads.
 
 ## How the sweep is made fast
 

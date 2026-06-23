@@ -48,10 +48,141 @@ static ZydisDecoder    g_decoder;
 static ZydisFormatter  g_fmt;                   /* read-only, shared         */
 static int          g_nbytes    = 5;            /* window size (40 bit = 5)  */
 static int          g_skip_imm  = 1;            /* treat disp/imm as wildcard*/
+static int          g_canon     = 0;            /* collapse register variants*/
 static int          g_quiet     = 0;
 static const char  *g_dump      = NULL;         /* dump file prefix or NULL  */
 static unsigned     g_b0_start  = 0;
 static unsigned     g_b0_end    = 256;
+
+/* ===================== canonical-form de-duplication ======================
+ * In --canon mode we collapse instructions that differ only in their register
+ * operands: every register is mapped to the base register of its class (GPR ->
+ * eax/ax/al, XMM -> xmm0, YMM -> ymm0, ...), so e.g. "add ecx, edx" and
+ * "add esi, edi" become the single form "add eax, eax".  Displacement/immediate
+ * *sizes*, the SIB scale, the addressing structure and a few semantic prefixes
+ * are kept, so genuinely different encodings/addressing modes stay distinct. */
+
+static char *dupstr(const char *s)
+{
+    size_t n = strlen(s) + 1;
+    char *p = malloc(n);
+    if (p) memcpy(p, s, n);
+    return p;
+}
+
+static int cmp_str(const void *a, const void *b)
+{
+    return strcmp(*(char *const *)a, *(char *const *)b);
+}
+
+/* register -> base register of its class (eax, ax, al, xmm0, ymm0, ...) */
+static inline ZydisRegister reg_base(ZydisRegister r)
+{
+    if (r == ZYDIS_REGISTER_NONE) return r;
+    ZydisRegister b = ZydisRegisterEncode(ZydisRegisterGetClass(r), 0);
+    return (b == ZYDIS_REGISTER_NONE) ? r : b;
+}
+
+/* Format the instruction with every register replaced by its class base, into
+ * `out`. The resulting text is the dedup key, so what you see is what is
+ * counted. Returns the string length, or -1 on failure. */
+static int format_canonical(const ZydisDecodedInstruction *insn,
+                            const ZydisDecodedOperand *ops, char *out, size_t outsz)
+{
+    ZydisDecodedOperand norm[ZYDIS_MAX_OPERAND_COUNT];
+    memcpy(norm, ops, sizeof(norm));
+    for (int i = 0; i < insn->operand_count_visible; i++) {
+        if (norm[i].type == ZYDIS_OPERAND_TYPE_REGISTER)
+            norm[i].reg.value = reg_base(norm[i].reg.value);
+        else if (norm[i].type == ZYDIS_OPERAND_TYPE_MEMORY) {
+            norm[i].mem.base  = reg_base(norm[i].mem.base);
+            norm[i].mem.index = reg_base(norm[i].mem.index);
+        }
+    }
+    if (!ZYAN_SUCCESS(ZydisFormatterFormatInstruction(
+            &g_fmt, insn, norm, insn->operand_count_visible,
+            out, outsz, 0, ZYAN_NULL)))
+        return -1;
+    return (int)strlen(out);
+}
+
+/* ---- open-addressing hash set of canonical keys (power-of-two capacity) -- */
+typedef struct {
+    uint64_t  hash;
+    uint8_t  *key;
+    uint16_t  klen;
+    uint16_t  mnemonic;
+    uint8_t   minlen;     /* shortest encoding length seen for this form  */
+    char     *text;       /* canonical disassembly (NULL unless dumping)  */
+} Slot;
+
+typedef struct { Slot *s; size_t cap, cnt; } HMap;
+
+static uint64_t fnv1a(const uint8_t *p, int n)
+{
+    uint64_t h = 1469598103934665603ULL;
+    for (int i = 0; i < n; i++) { h ^= p[i]; h *= 1099511628211ULL; }
+    return h;
+}
+
+static void hmap_init(HMap *m, size_t cap)
+{
+    m->cap = cap; m->cnt = 0;
+    m->s = calloc(cap, sizeof(Slot));
+}
+
+static Slot *hmap_slot(HMap *m, const uint8_t *key, int klen, uint64_t h)
+{
+    size_t mask = m->cap - 1, i = h & mask;
+    for (;;) {
+        Slot *sl = &m->s[i];
+        if (!sl->key) return sl;                            /* empty */
+        if (sl->hash == h && sl->klen == klen &&
+            memcmp(sl->key, key, klen) == 0) return sl;     /* match */
+        i = (i + 1) & mask;
+    }
+}
+
+static void hmap_grow(HMap *m)
+{
+    size_t ncap = m->cap * 2, nmask = ncap - 1;
+    Slot *ns = calloc(ncap, sizeof(Slot));
+    for (size_t i = 0; i < m->cap; i++) {
+        Slot *o = &m->s[i];
+        if (!o->key) continue;
+        size_t j = o->hash & nmask;
+        while (ns[j].key) j = (j + 1) & nmask;
+        ns[j] = *o;
+    }
+    free(m->s);
+    m->s = ns; m->cap = ncap;
+}
+
+/* Insert a copy of the key if new (returns 1); otherwise keep the shortest
+ * length and return 0. `text` (if any) is duplicated and owned by the map. */
+static int hmap_put(HMap *m, const uint8_t *key, int klen, uint64_t h,
+                    uint16_t mnem, uint8_t len, const char *text)
+{
+    if ((m->cnt + 1) * 10 >= m->cap * 7) hmap_grow(m);
+    Slot *sl = hmap_slot(m, key, klen, h);
+    if (sl->key) {
+        if (len < sl->minlen) sl->minlen = len;
+        return 0;
+    }
+    sl->key = malloc(klen + 1); memcpy(sl->key, key, klen); sl->key[klen] = 0;
+    sl->klen = (uint16_t)klen; sl->hash = h;
+    sl->mnemonic = mnem; sl->minlen = len;
+    sl->text = text ? dupstr(text) : NULL;
+    m->cnt++;
+    return 1;
+}
+
+static void hmap_free(HMap *m)
+{
+    if (!m->s) return;
+    for (size_t i = 0; i < m->cap; i++) { free(m->s[i].key); free(m->s[i].text); }
+    free(m->s); m->s = NULL; m->cap = m->cnt = 0;
+}
 
 /* ---- work distribution -------------------------------------------------- */
 static atomic_uint  g_next_chunk;               /* next first-byte to claim  */
@@ -62,9 +193,11 @@ static atomic_uint  g_done_chunks;
 typedef struct {
     int        tid;
     uint64_t   forms;                  /* distinct decodable forms found     */
+    uint64_t   raw;                    /* every decodable form (pre-dedup)   */
     uint64_t   decodes;                /* Zydis decode calls issued          */
     uint64_t   len_hist[MAX_BYTES + 1];/* forms by instruction length        */
     uint64_t  *mnem;                   /* forms by mnemonic (heap, NMNEM)    */
+    HMap       map;                    /* canonical-form set (--canon)       */
     FILE      *dump;                   /* per-thread dump file or NULL       */
 } ThreadStats;
 
@@ -85,8 +218,34 @@ static int structural_len(const ZydisDecodedInstruction *insn)
 }
 
 static void record_form(ThreadStats *ts, const ZydisDecodedInstruction *insn,
-                        const uint8_t *buf)
+                        const ZydisDecodedOperand *ops, const uint8_t *buf)
 {
+    ts->raw++;
+
+    if (g_canon) {
+        /* `ops` is valid here (process_chunk used DecodeFull). The dedup key is
+         * the register-normalised disassembly string itself, so two forms that
+         * differ only in registers (and thus print identically) collapse. */
+        char text[256];
+        int klen = format_canonical(insn, ops, text, sizeof(text));
+        if (klen < 0) return;
+        uint64_t h = fnv1a((const uint8_t *)text, klen);
+        if ((ts->map.cnt + 1) * 10 >= ts->map.cap * 7) hmap_grow(&ts->map);
+        Slot *sl = hmap_slot(&ts->map, (const uint8_t *)text, klen, h);
+        if (sl->key) {                       /* seen this form already       */
+            if (insn->length < sl->minlen) sl->minlen = (uint8_t)insn->length;
+            return;
+        }
+        sl->key = (uint8_t *)dupstr(text);   /* the string is the key & text */
+        sl->klen = (uint16_t)klen; sl->hash = h;
+        sl->mnemonic = (uint16_t)insn->mnemonic;
+        sl->minlen = (uint8_t)insn->length;
+        sl->text = NULL;
+        ts->map.cnt++;
+        return;
+    }
+
+    /* default mode: count every structural form */
     ts->forms++;
     ts->len_hist[insn->length]++;
     ts->mnem[insn->mnemonic]++;
@@ -97,12 +256,12 @@ static void record_form(ThreadStats *ts, const ZydisDecodedInstruction *insn,
     /* Re-decode with operands so the formatter can print a readable form.
      * Wildcard (disp/imm) bytes appear as their current value (usually 0). */
     ZydisDecodedInstruction full;
-    ZydisDecodedOperand     ops[ZYDIS_MAX_OPERAND_COUNT];
+    ZydisDecodedOperand     fops[ZYDIS_MAX_OPERAND_COUNT];
     char text[256];
     if (ZYAN_SUCCESS(ZydisDecoderDecodeFull(&g_decoder, buf, g_nbytes,
-                                            &full, ops)) &&
+                                            &full, fops)) &&
         ZYAN_SUCCESS(ZydisFormatterFormatInstruction(
-            &g_fmt, &full, ops, full.operand_count_visible,
+            &g_fmt, &full, fops, full.operand_count_visible,
             text, sizeof(text), 0, ZYAN_NULL)))
     {
         int sk = structural_len(insn);
@@ -129,18 +288,27 @@ static void process_chunk(unsigned b0, ThreadStats *ts)
     memset(buf, 0, sizeof(buf));
     buf[0] = (uint8_t)b0;
 
+    ZydisDecodedInstruction insn;
+    ZydisDecodedOperand     ops[ZYDIS_MAX_OPERAND_COUNT];
+
     uint64_t lo = 0;
     while (lo < inner_end) {
         for (int i = 1; i < N; i++)
             buf[i] = (uint8_t)(lo >> ((N - 1 - i) * 8));
 
-        ZydisDecodedInstruction insn;
-        ZyanStatus st = decode_n(ts, buf, N, &insn);
+        /* canon mode needs operands, so decode fully; otherwise stay lean */
+        ZyanStatus st;
+        if (g_canon) {
+            ts->decodes++;
+            st = ZydisDecoderDecodeFull(&g_decoder, buf, N, &insn, ops);
+        } else {
+            st = decode_n(ts, buf, N, &insn);
+        }
 
         int keep;
         if (ZYAN_SUCCESS(st)) {
             keep = g_skip_imm ? structural_len(&insn) : insn.length;
-            record_form(ts, &insn, buf);
+            record_form(ts, &insn, ops, buf);
         } else if (st == ZYDIS_STATUS_NO_MORE_DATA) {
             /* Needs more than the window: probe full length to find where the
              * structural part ends, then skip the trailing value bytes. */
@@ -178,7 +346,7 @@ static void process_chunk(unsigned b0, ThreadStats *ts)
 static void *worker(void *arg)
 {
     ThreadStats *ts = (ThreadStats *)arg;
-    if (g_dump) {
+    if (g_dump && !g_canon) {           /* canon writes one merged file later */
         char name[512];
         snprintf(name, sizeof(name), "%s.%d", g_dump, ts->tid);
         ts->dump = fopen(name, "w");
@@ -217,7 +385,9 @@ static void usage(const char *p)
         "  -b, --bytes N       window size in bytes, 1..8 (default: 5 = 40 bit)\n"
         "  -m, --mode M        16 | 32 | 64 (default: 32)\n"
         "      --no-skip-imm   count every disp/imm value as a distinct form\n"
-        "      --dump PREFIX   write found forms to PREFIX.<tid> files\n"
+        "      --canon         merge instructions that differ only in registers\n"
+        "                      (every register -> class base: eax, xmm0, ...)\n"
+        "      --dump PREFIX   write found forms to PREFIX.<tid> (PREFIX in --canon)\n"
         "      --range A B     only first-bytes [A,B) (for testing; default 0 256)\n"
         "  -q, --quiet         no progress output\n"
         "  -h, --help          this help\n", p);
@@ -238,6 +408,8 @@ int main(int argc, char **argv)
             mode = atoi(argv[++i]);
         else if (!strcmp(a, "--no-skip-imm"))
             g_skip_imm = 0;
+        else if (!strcmp(a, "--canon"))
+            g_canon = 1;
         else if (!strcmp(a, "--dump") && i + 1 < argc)
             g_dump = argv[++i];
         else if (!strcmp(a, "--range") && i + 2 < argc) {
@@ -279,8 +451,8 @@ int main(int argc, char **argv)
 
     fprintf(stderr,
         "mining %d-bit space (mode=%d, window=%d bytes, threads=%d, "
-        "skip-imm=%d, first-bytes=[%u,%u))\n",
-        g_nbytes * 8, mode, g_nbytes, threads, g_skip_imm,
+        "skip-imm=%d, canon=%d, first-bytes=[%u,%u))\n",
+        g_nbytes * 8, mode, g_nbytes, threads, g_skip_imm, g_canon,
         g_b0_start, g_b0_end);
 
     atomic_store(&g_next_chunk, g_b0_start);
@@ -291,6 +463,8 @@ int main(int argc, char **argv)
     for (int i = 0; i < threads; i++) {
         stats[i].tid  = i;
         stats[i].mnem = calloc(NMNEM, sizeof(uint64_t));
+        if (g_canon)
+            hmap_init(&stats[i].map, 4096);
     }
 
     double t0 = now_sec();
@@ -302,24 +476,77 @@ int main(int argc, char **argv)
     if (!g_quiet) fputc('\n', stderr);
 
     /* merge */
-    uint64_t total_forms = 0, total_decodes = 0;
+    uint64_t total_forms = 0, total_raw = 0, total_decodes = 0;
     uint64_t len_hist[MAX_BYTES + 1] = {0};
     uint64_t *mnem = calloc(NMNEM, sizeof(uint64_t));
     for (int i = 0; i < threads; i++) {
-        total_forms   += stats[i].forms;
+        total_raw     += stats[i].raw;
         total_decodes += stats[i].decodes;
-        for (int l = 0; l <= MAX_BYTES; l++) len_hist[l] += stats[i].len_hist[l];
-        for (int m = 0; m < NMNEM; m++)      mnem[m]     += stats[i].mnem[m];
-        free(stats[i].mnem);
     }
 
+    if (g_canon) {
+        /* Union the per-thread canonical sets: the same form (e.g. "push eax")
+         * can be produced from different first-byte chunks owned by different
+         * threads, so cross-thread de-duplication is required for a true count. */
+        HMap g;
+        hmap_init(&g, 1u << 16);
+        for (int i = 0; i < threads; i++) {
+            HMap *lm = &stats[i].map;
+            for (size_t j = 0; j < lm->cap; j++)
+                if (lm->s[j].key)
+                    hmap_put(&g, lm->s[j].key, lm->s[j].klen, lm->s[j].hash,
+                             lm->s[j].mnemonic, lm->s[j].minlen, lm->s[j].text);
+            hmap_free(lm);
+        }
+        total_forms = g.cnt;
+        for (size_t j = 0; j < g.cap; j++)
+            if (g.s[j].key) {
+                len_hist[g.s[j].minlen]++;
+                mnem[g.s[j].mnemonic]++;
+            }
+
+        /* dump the merged, sorted, unique canonical disassembly */
+        if (g_dump) {
+            char **lines = malloc(g.cnt * sizeof(char *));
+            size_t nl = 0;
+            for (size_t j = 0; j < g.cap; j++)
+                if (g.s[j].key) lines[nl++] = (char *)g.s[j].key;
+            qsort(lines, nl, sizeof(char *), cmp_str);
+            FILE *f = fopen(g_dump, "w");
+            if (f) {
+                for (size_t j = 0; j < nl; j++)
+                    fprintf(f, "%s\n", lines[j]);
+                fclose(f);
+                fprintf(stderr, "wrote canonical forms to %s\n", g_dump);
+            } else {
+                fprintf(stderr, "warning: cannot open dump file %s\n", g_dump);
+            }
+            free(lines);
+        }
+        hmap_free(&g);
+    } else {
+        for (int i = 0; i < threads; i++) {
+            total_forms += stats[i].forms;
+            for (int l = 0; l <= MAX_BYTES; l++) len_hist[l] += stats[i].len_hist[l];
+            for (int m = 0; m < NMNEM; m++)      mnem[m]     += stats[i].mnem[m];
+        }
+    }
+    for (int i = 0; i < threads; i++) free(stats[i].mnem);
+
     printf("\n===== results =====\n");
-    printf("decodable forms : %" PRIu64 "\n", total_forms);
+    if (g_canon) {
+        printf("canonical forms : %" PRIu64 "   (register variants merged)\n",
+               total_forms);
+        printf("raw forms       : %" PRIu64 "   (before register merge)\n",
+               total_raw);
+    } else {
+        printf("decodable forms : %" PRIu64 "\n", total_forms);
+    }
     printf("decode calls    : %" PRIu64 "\n", total_decodes);
     printf("elapsed         : %.2f s  (%.2f M decodes/s)\n",
            dt, total_decodes / dt / 1e6);
 
-    printf("\nforms by length (bytes):\n");
+    printf("\nforms by length (bytes)%s:\n", g_canon ? ", shortest encoding" : "");
     for (int l = 1; l <= g_nbytes; l++)
         printf("  %d : %" PRIu64 "\n", l, len_hist[l]);
 
