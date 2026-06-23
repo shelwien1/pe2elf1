@@ -94,18 +94,20 @@ instruction with different register operands (all 64 `add r/m32, r32`
 register-direct encodings, every base/index register in a memory operand, etc.).
 `--canon` factors these out: each operand register is rewritten to the **base
 register of its class** (GPR → `eax`/`ax`/`al` by width, XMM → `xmm0`, YMM →
-`ymm0`, mask → `k0`, …), the SIB **scale** (`*2`/`*4`/`*8`) is folded to `*1`,
-and the resulting disassembly string is de-duplicated. The dedup key *is* the
-normalized text, so the reported count equals the number of distinct lines you
-see.
+`ymm0`, mask operand → `k0`, …), the EVEX writemask `{k1}`…`{k7}` is folded to
+`{k1}` (`k0` = "no mask" is left as is), the SIB **scale** (`*2`/`*4`/`*8`) is
+folded to `*1`, and the resulting disassembly string is de-duplicated. The dedup
+key *is* the normalized text, so the reported count equals the number of
+distinct lines you see.
 
 ```sh
 ./mine32 -t 4 --canon --dump forms.txt   # forms.txt = sorted unique forms
 ```
 
-What is kept distinct: mnemonic, operand types/sizes, addressing mode, and any
-explicit prefix (`lock`, `rep`, segment override, …) — register *identities* and
-the index scale are normalized. Each dumped line is prefixed with the opcode
+What is kept distinct: mnemonic, operand types/sizes, addressing mode, and
+prefixes like `lock`/`rep` — register *identities*, the index scale, and the
+memory **segment override** (`fs:`/`gs:`/… are dropped) are normalized. Each
+dumped line is prefixed with the opcode
 bytes of one concrete instance of that form — the **shortest** encoding seen
 (ties broken by smallest value), i.e. no redundant prefixes and base registers —
 and `|` marks where the structural bytes end and the wildcard disp/immediate

@@ -81,6 +81,16 @@ static inline ZydisRegister reg_base(ZydisRegister r)
     return (b == ZYDIS_REGISTER_NONE) ? r : b;
 }
 
+/* Formatter hook (canon only): print nothing for the memory segment, so that
+ * fs:[x], gs:[x], es:[x] ... and the plain [x] all collapse to one form. */
+static ZyanStatus drop_segment(const ZydisFormatter *fmt,
+                               ZydisFormatterBuffer *buf,
+                               ZydisFormatterContext *ctx)
+{
+    (void)fmt; (void)buf; (void)ctx;
+    return ZYAN_STATUS_SUCCESS;
+}
+
 /* Format the instruction with every register replaced by its class base, into
  * `out`. The resulting text is the dedup key, so what you see is what is
  * counted. Returns the string length, or -1 on failure. */
@@ -99,14 +109,26 @@ static int format_canonical(const ZydisDecodedInstruction *insn,
                 norm[i].mem.scale = 1;   /* fold scale 2, 4, 8 into 1 */
         }
     }
+    /* The EVEX writemask {k1..k7} lives in insn->avx.mask.reg, not in the
+     * operand list, so normalize it here: collapse k1..k7 to k1 (k0 means "no
+     * mask" and must stay). The instruction is only copied when a change is
+     * needed. */
+    const ZydisDecodedInstruction *ins = insn;
+    ZydisDecodedInstruction tmp;
+    if (insn->avx.mask.reg >= ZYDIS_REGISTER_K1 &&
+        insn->avx.mask.reg <= ZYDIS_REGISTER_K7) {
+        tmp = *insn;
+        tmp.avx.mask.reg = ZYDIS_REGISTER_K1;
+        ins = &tmp;
+    }
     /* A relative branch's printed target is runtime_address + length + rel.
      * The rel is wildcarded (0), but the length varies with prefix padding, so
      * the same branch would otherwise print different targets and fail to
      * merge. Setting runtime_address = -length makes the target compute to the
      * (wildcarded) rel = 0 for every encoding, independent of length. */
-    ZyanU64 runtime = (ZyanU64)0 - (ZyanU64)insn->length;
+    ZyanU64 runtime = (ZyanU64)0 - (ZyanU64)ins->length;
     if (!ZYAN_SUCCESS(ZydisFormatterFormatInstruction(
-            &g_fmt, insn, norm, insn->operand_count_visible,
+            &g_fmt, ins, norm, ins->operand_count_visible,
             out, outsz, runtime, ZYAN_NULL)))
         return -1;
     return (int)strlen(out);
@@ -476,6 +498,11 @@ int main(int argc, char **argv)
         return 1;
     }
     ZydisFormatterInit(&g_fmt, ZYDIS_FORMATTER_STYLE_INTEL);
+    if (g_canon) {
+        /* drop segment overrides so fs:[x]/gs:[x]/... merge with [x] */
+        const void *hook = (const void *)&drop_segment;
+        ZydisFormatterSetHook(&g_fmt, ZYDIS_FORMATTER_FUNC_PRINT_SEGMENT, &hook);
+    }
 
     fprintf(stderr,
         "mining %d-bit space (mode=%d, window=%d bytes, threads=%d, "
