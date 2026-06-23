@@ -1,0 +1,10 @@
+# external dependency (fetched by build.sh)
+/zydis/
+
+# build output
+/mine32
+*.o
+
+# miner dump files
+dump*
+*.dump
