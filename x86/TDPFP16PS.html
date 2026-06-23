@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>TDPFP16PS—Dot Product of FP16 Tiles Accumulated into Packed Single Precision Tile </title></head>
+<body>
+<h1>TDPFP16PS—Dot Product of FP16 Tiles Accumulated into Packed Single Precision Tile</h1>
+<p><strong>Opcode/</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64/32</strong></p>
+<p><strong>CPUID Feature</strong></p>
+<p><strong>Description</strong></p>
+<table>
+<tr>
+<th>Instruction</th>
+<th>En</th>
+<th>bit Mode Support</th>
+<th>Flag</th>
+<td></td></tr>
+<tr>
+<td>VEX.128.F2.0F38.W0 5C 11:rrr:bbb TDPFP16PS tmm1, tmm2, tmm3</td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>AMX_FP16</td>
+<td>Matrix multiply FP16 elements from tmm2 and tmm3, and accumulate the packed single precision elements in tmm1.</td></tr></table>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Tuple</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>A</td>
+<td>N/A</td>
+<td>ModRM:reg (r, w)</td>
+<td>ModRM:r/m (r)</td>
+<td>VEX.vvvv (r)</td>
+<td>N/A</td></tr></table>
+<p><strong>Description</strong></p>
+<p>This instruction performs a set of SIMD dot-products of two FP16 elements and accumulates the results into a packed single precision tile. Each dword element in input tiles tmm2 and tmm3 is interpreted as a FP16 pair. For each possible combination of (row of tmm2, column of tmm3), the instruction performs a set of SIMD dot-products on all corresponding FP16 pairs (one pair from tmm2 and one pair from tmm3), adds the results of those dot-prod-ucts, and then accumulates the result into the corresponding row and column of tmm1.</p>
+<p>“Round to nearest even” rounding mode is used when doing each accumulation of the Fused Multiply-Add (FMA). Output FP32 denormals are always flushed to zero. Input FP16 denormals are always handled and not treated as zero.</p>
+<p>MXCSR is not consulted nor updated.</p>
+<p>Any attempt to execute the TDPFP16PS instruction inside an Intel TSX transaction will result in a transaction abort.</p>
+<p><strong>Operation</strong></p>
+<p><strong>TDPFP16PS tsrcdest, tsrc1, tsrc2</strong></p>
+<p>// C = m x n (tsrcdest), A = m x k (tsrc1), B = k x n (tsrc2)</p>
+<p># src1 and src2 elements are pairs of fp16</p>
+<p>elements_src1 := tsrc1.colsb / 4</p>
+<p>elements_src2 := tsrc2.colsb / 4</p>
+<p>elements_dest := tsrcdest.colsb / 4</p>
+<p>elements_temp := tsrcdest.colsb / 2 // Count is in fp16 prior to horizontal</p>
+<p>for m in 0 ... tsrcdest.rows-1:</p>
+<p>temp1[ 0 ... elements_temp-1 ] := 0</p>
+<p>for k in 0 ... elements_src1-1:</p>
+<p>for n in 0 ... elements_dest-1:</p>
+<p>// For this operation:</p>
+<p>// Handle FP16 denorms. Not forcing input FP16 denorms to 0.</p>
+<p>// FP32 FMA with DAZ=FTZ=1, RNE rounding.</p>
+<p>// MXCSR is neither consulted nor updated.</p>
+<p>// No exceptions raised or denoted.</p>
+<p>temp1.fp32[2*n+0] += cvt_fp16_to_fp32(tsrc1.row[m].fp16[2*k+0]) *cvt_fp16_to_fp32(tsrc2.row[k].fp16[2*n+0])</p>
+<p>temp1.fp32[2*n+1] += cvt_fp16_to_fp32(tsrc1.row[m].fp16[2*k+1]) *cvt_fp16_to_fp32(tsrc2.row[k].fp16[2*n+1])</p>
+<p>for n in 0 ... elements_dest-1:</p>
+<p>// DAZ=FTZ=1, RNE rounding.</p>
+<p>// MXCSR is neither consulted nor updated.</p>
+<p>// No exceptions raised or denoted.</p>
+<p>tmpf32 := temp1.fp32[2*n] + temp1.fp32[2*n+1]</p>
+<p>srcdest.row[m].fp32[n] := srcdest.row[m].fp32[n] + tmpf32</p>
+<p>write_row_and_zero(tsrcdest, m, tmp, tsrcdest.colsb)</p>
+<p>zero_upper_rows(tsrcdest, tsrcdest.rows)</p>
+<p>zero_tileconfig_start()</p>
+<p><strong>Flags Affected</strong></p>
+<p>None.</p>
+<p><strong>Exceptions</strong></p>
+<p>AMX-E4; see Section 2.10, “Intel® AMX Instruction Exception Classes,” for details.</p></body></html>

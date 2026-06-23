@@ -23,32 +23,32 @@
 <td></td></tr>
 <tr>
 <td>0F 00 /1</td>
-<td>STR <em>r/m16</em></td>
+<td>STR r/m16</td>
 <td>M</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Stores segment selector from TR in <em>r/m16</em>.</td></tr></table>
+<td>Stores segment selector from TR in r/m16.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
 <td>M</td>
 <td>ModRM:r/m (w)</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Stores the segment selector from the task register (TR) in the destination operand. The destination operand can be a general-purpose register or a memory location. The segment selector stored with this instruction points to the task state segment (TSS) for the currently running task.</p>
 <p>When the destination operand is a 32-bit register, the 16-bit segment selector is copied into the lower 16 bits of the register and the upper 16 bits of the register are cleared. When the destination operand is a memory location, the segment selector is written to memory as a 16-bit quantity, regardless of operand size.</p>
 <p>In 64-bit mode, operation is the same. The size of the memory operand is fixed at 16 bits. In register stores, the 2-byte TR is zero extended if stored to a 64-bit register.</p>
 <p>The STR instruction is useful only in operating-system software. It can only be executed in protected mode.</p>
 <h2>Operation</h2>
-<pre>DEST ← TR(SegmentSelector);</pre>
+<pre>DEST := TR(SegmentSelector);</pre>
 <h2>Flags Affected</h2>
 <p>None.</p>
 <h2>Protected Mode Exceptions</h2>

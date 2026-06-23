@@ -4,9 +4,9 @@
 <head>
 <meta charset="UTF-8">
 <link href="style.css" type="text/css" rel="stylesheet">
-<title>CLI — Clear Interrupt Flag </title></head>
+<title>CLI—Clear Interrupt Flag </title></head>
 <body>
-<h1>CLI — Clear Interrupt Flag</h1>
+<h1>CLI—Clear Interrupt Flag</h1>
 <p><strong>Opcode</strong></p>
 <p><strong>Instruction</strong></p>
 <p><strong>Op/</strong></p>
@@ -24,153 +24,100 @@
 <tr>
 <td>FA</td>
 <td>CLI</td>
-<td>NP</td>
+<td>ZO</td>
 <td>Valid</td>
 <td>Valid</td>
 <td>Clear interrupt flag; interrupts disabled when interrupt flag cleared.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
-<td>NP</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>ZO</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
-<p>If protected-mode virtual interrupts are not enabled, CLI clears the IF flag in the EFLAGS register. No other flags are affected. Clearing the IF flag causes the processor to ignore maskable external interrupts. The IF flag and the CLI and STI instruction have no affect on the generation of exceptions and NMI interrupts.</p>
-<p>When protected-mode virtual interrupts are enabled, CPL is 3, and IOPL is less than 3; CLI clears the VIF flag in the EFLAGS register, leaving IF unaffected. Table 3-7 indicates the action of the CLI instruction depending on the processor operating mode and the CPL/IOPL of the running program or procedure.</p>
-<p>Operation is the same in all modes.</p>
+<p>In most cases, CLI clears the IF flag in the EFLAGS register and no other flags are affected. Clearing the IF flag causes the processor to ignore maskable external interrupts. The IF flag and the CLI and STI instruction have no effect on the generation of exceptions and NMI interrupts.</p>
+<p>Operation is different in two modes defined as follows:</p>
+<p>If IOPL &lt; 3 and either VME mode or PVI mode is active, CLI clears the VIF flag in the EFLAGS register, leaving IF unaffected.</p>
+<p>Table 3-7 indicates the action of the CLI instruction depending on the processor operating mode, IOPL, and CPL.</p>
 <h3>Table 3-7.  Decision Table for CLI Results</h3>
+<p><strong>Mode</strong></p>
+<p><strong>IOPL</strong></p>
+<p><strong>CLI Result</strong></p>
 <table>
 <tr>
-<th>PE</th>
-<th>VM</th>
-<th>IOPL</th>
-<th>CPL</th>
-<th>PVI</th>
-<th>VIP</th>
-<th>VME</th>
-<th>CLI Result</th></tr>
+<td></td>
+<td></td>
+<td></td></tr>
 <tr>
-<td>0</td>
-<td>X</td>
-<td>X</td>
-<td>X</td>
-<td>X</td>
-<td>X</td>
-<td>X</td>
-<th>IF = 0</th></tr>
+<td>Real-address</td>
+<td>X<sup>1</sup></td>
+<td>IF = 0</td></tr>
 <tr>
-<td>1</td>
-<td>0</td>
+<td>Protected, not PVI<sup>2</sup></td>
 <td>≥ CPL</td>
-<td>X</td>
-<td>X</td>
-<td>X</td>
-<td>X</td>
-<th>IF = 0</th></tr>
+<td>IF = 0</td></tr>
 <tr>
-<td>1</td>
-<td>0</td>
+<td></td>
 <td>&lt; CPL</td>
+<td>#GP fault</td></tr>
+<tr>
+<td>Protected, PVI<sup>3</sup></td>
 <td>3</td>
-<td>1</td>
-<td>X</td>
-<td>X</td>
-<th>VIF = 0</th></tr>
+<td>IF = 0</td></tr>
 <tr>
-<td>1</td>
-<td>0</td>
-<td>&lt; CPL</td>
-<td>&lt; 3</td>
-<td>X</td>
-<td>X</td>
-<td>X</td>
-<th>GP Fault</th></tr>
+<td></td>
+<td>0–2</td>
+<td>VIF = 0</td></tr>
 <tr>
-<td>1</td>
-<td>0</td>
-<td>&lt; CPL</td>
-<td>X</td>
-<td>0</td>
-<td>X</td>
-<td>X</td>
-<th>GP Fault</th></tr>
-<tr>
-<td>1</td>
-<td>1</td>
+<td>Virtual-8086, not VME<sup>3</sup></td>
 <td>3</td>
-<td>X</td>
-<td>X</td>
-<td>X</td>
-<td>X</td>
-<th>IF = 0</th></tr>
+<td>IF = 0</td></tr>
 <tr>
-<td>1</td>
-<td>1</td>
-<td>&lt; 3</td>
-<td>X</td>
-<td>X</td>
-<td>X</td>
-<td>1</td>
-<th>VIF = 0</th></tr>
+<td></td>
+<td>0–2</td>
+<td>#GP fault</td></tr>
 <tr>
-<td>1</td>
-<td>1</td>
-<td>&lt; 3</td>
-<td>X</td>
-<td>X</td>
-<td>X</td>
-<td>0</td>
-<th>GP Fault</th></tr></table>
+<td>Virtual-8086, VME<sup>3</sup></td>
+<td>3</td>
+<td>IF = 0</td></tr>
+<tr>
+<td></td>
+<td>0–2</td>
+<td>VIF = 0</td></tr></table>
 <p><strong>NOTES:</strong></p>
-<p>* X = This setting has no impact.</p>
+<p>1. X = This setting has no effect on instruction operation.</p>
+<p>2. For this table, “protected mode” applies whenever CR0.PE = 1 and EFLAGS.VM = 0; it includes compatibility mode and 64-bit mode.</p>
+<p>3. PVI mode and virtual-8086 mode each imply CPL = 3.</p>
 <h2>Operation</h2>
-<pre>IF PE = 0
-    THEN
-         IF ← 0; (* Reset Interrupt Flag *)
+<pre>IF CR0.PE = 0
+    THEN IF := 0; (* Reset Interrupt Flag *)
     ELSE
-         IF VM = 0;
-              THEN
-                    IF IOPL ≥ CPL
-                         THEN
-                              IF ← 0; (* Reset Interrupt Flag *)
-                    ELSE
-                         IF ((IOPL &lt; CPL) and (CPL = 3) and (PVI = 1))
-                              THEN
-                                    VIF ← 0; (* Reset Virtual Interrupt Flag *)
-                              ELSE
-                                    #GP(0);
-                         FI;
-                    FI;
-              ELSE (* VM = 1 *)
-                    IF IOPL = 3
-                         THEN
-                              IF ← 0; (* Reset Interrupt Flag *)
-                         ELSE
-                              IF (IOPL &lt; 3) AND (VME = 1)
-                                    THEN
-                                         VIF ← 0; (* Reset Virtual Interrupt Flag *)
-                                    ELSE
-                                         #GP(0);
-                              FI;
+         IF IOPL ≥ CPL (* CPL = 3 if EFLAGS.VM = 1 *)
+              THEN IF := 0; (* Reset Interrupt Flag *)
+              ELSE
+                    IF VME mode OR PVI mode
+                         THEN VIF := 0; (* Reset Virtual Interrupt Flag *)
+                         ELSE #GP(0);
                     FI;
          FI;
 FI;</pre>
 <h2>Flags Affected</h2>
-<p>If protected-mode virtual interrupts are not enabled, IF is set to 0 if the CPL is equal to or less than the IOPL; other-wise, it is not affected. Other flags are unaffected.</p>
-<p>When protected-mode virtual interrupts are enabled, CPL is 3, and IOPL is less than 3; CLI clears the VIF flag in the EFLAGS register, leaving IF unaffected. Other flags are unaffected.</p>
+<p>Either the IF flag or the VIF flag is cleared to 0. Other flags are unaffected.</p>
 <h2>Protected Mode Exceptions</h2>
 <table class="exception-table">
 <tr>
 <td>#GP(0)</td>
-<td>If the CPL is greater (has less privilege) than the IOPL of the current program or procedure.</td></tr>
+<td>
+<p>If CPL is greater than IOPL and PVI mode is not active.</p>
+<p>If CPL is greater than IOPL and less than 3.</p></td></tr>
 <tr>
 <td>#UD</td>
 <td>If the LOCK prefix is used.</td></tr></table>
@@ -183,17 +130,11 @@ FI;</pre>
 <table class="exception-table">
 <tr>
 <td>#GP(0)</td>
-<td>If the CPL is greater (has less privilege) than the IOPL of the current program or procedure.</td></tr>
+<td>If IOPL is less than 3 and VME mode is not active.</td></tr>
 <tr>
 <td>#UD</td>
 <td>If the LOCK prefix is used.</td></tr></table>
 <h2>Compatibility Mode Exceptions</h2>
 <p>Same exceptions as in protected mode.</p>
 <h2>64-Bit Mode Exceptions</h2>
-<table class="exception-table">
-<tr>
-<td>#GP(0)</td>
-<td>If the CPL is greater (has less privilege) than the IOPL of the current program or procedure.</td></tr>
-<tr>
-<td>#UD</td>
-<td>If the LOCK prefix is used.</td></tr></table></body></html>
+<p>Same exceptions as in protected mode.</p></body></html>

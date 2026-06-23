@@ -12,71 +12,127 @@
 <p><strong>64/32-bit</strong></p>
 <p><strong>CPUID</strong></p>
 <p><strong>Description</strong></p>
-<table>
-<tr>
-<th>Instruction</th>
-<th>En</th>
-<th>Mode</th>
-<th>Feature Flag</th>
-<td></td></tr>
-<tr>
-<td>66 0F 38 DE /r AESDEC xmm1, xmm2/m128</td>
-<td>RM</td>
-<td>V/V</td>
-<td>AES</td>
-<td>Perform one round of an AES decryption flow, using the Equivalent Inverse Cipher, operating on a 128-bit data (state) from xmm1 with a 128-bit round key from xmm2/m128.</td></tr>
-<tr>
-<td>VEX.NDS.128.66.0F38.WIG DE /r VAESDEC xmm1, xmm2, xmm3/m128</td>
-<td>RVM</td>
-<td>V/V</td>
-<td>Both AES and AVX flags</td>
-<td>Perform one round of an AES decryption flow, using the Equivalent Inverse Cipher, operating on a 128-bit data (state) from xmm2 with a 128-bit round key from xmm3/m128; store the result in xmm1.</td></tr></table>
+<p><strong>Instruction</strong></p>
+<p><strong>En</strong></p>
+<p><strong>Mode</strong></p>
+<p><strong>Feature Flag</strong></p>
+<p>66 0F 38 DE /r</p>
+<p>A</p>
+<p>V/V</p>
+<p>AES</p>
+<p>Perform one round of an AES decryption flow, using</p>
+<p>AESDEC xmm1, xmm2/m128</p>
+<p>the Equivalent Inverse Cipher, using one 128-bit data (state) from xmm1 with one 128-bit round key from xmm2/m128.</p>
+<p>VEX.128.66.0F38.WIG DE /r</p>
+<p>B</p>
+<p>V/V</p>
+<p>AES</p>
+<p>Perform one round of an AES decryption flow, using</p>
+<p>VAESDEC xmm1, xmm2, xmm3/m128</p>
+<p>AVX</p>
+<p>the Equivalent Inverse Cipher, using one 128-bit data (state) from xmm2 with one 128-bit round key from xmm3/m128; store the result in xmm1.</p>
+<p>VEX.256.66.0F38.WIG DE /r</p>
+<p>B</p>
+<p>V/V</p>
+<p>VAES</p>
+<p>Perform one round of an AES decryption flow, using</p>
+<p>VAESDEC ymm1, ymm2, ymm3/m256</p>
+<p>the Equivalent Inverse Cipher, using two 128-bit data (state) from ymm2 with two 128-bit round keys from ymm3/m256; store the result in ymm1.</p>
+<p>EVEX.128.66.0F38.WIG DE /r</p>
+<p>C</p>
+<p>V/V</p>
+<p>VAES</p>
+<p>Perform one round of an AES decryption flow, using</p>
+<p>VAESDEC xmm1, xmm2, xmm3/m128</p>
+<p>(AVX512VL</p>
+<p>the Equivalent Inverse Cipher, using one 128-bit data</p>
+<p>OR AVX10.1)</p>
+<p>(state) from xmm2 with one 128-bit round key from xmm3/m128; store the result in xmm1.</p>
+<p>EVEX.256.66.0F38.WIG DE /r</p>
+<p>C</p>
+<p>V/V</p>
+<p>VAES</p>
+<p>Perform one round of an AES decryption flow, using</p>
+<p>VAESDEC ymm1, ymm2, ymm3/m256</p>
+<p>(AVX512VL</p>
+<p>the Equivalent Inverse Cipher, using two 128-bit data</p>
+<p>OR AVX10.1)</p>
+<p>(state) from ymm2 with two 128-bit round keys from ymm3/m256; store the result in ymm1.</p>
+<p>EVEX.512.66.0F38.WIG DE /r</p>
+<p>C</p>
+<p>V/V</p>
+<p>VAES</p>
+<p>Perform one round of an AES decryption flow, using</p>
+<p>VAESDEC zmm1, zmm2, zmm3/m512</p>
+<p>(AVX512F OR</p>
+<p>the Equivalent Inverse Cipher, using four 128-bit data</p>
+<p>AVX10.1)</p>
+<p>(state) from zmm2 with four 128-bit round keys from zmm3/m512; store the result in zmm1.</p>
 <h3>Instruction Operand Encoding</h3>
-<table>
-<tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand2</td>
-<td>Operand3</td>
-<td>Operand4</td></tr>
-<tr>
-<td>RM</td>
-<td>ModRM:reg (r, w)</td>
-<td>ModRM:r/m (r)</td>
-<td>NA</td>
-<td>NA</td></tr>
-<tr>
-<td>RVM</td>
-<td>ModRM:reg (w)</td>
-<td>VEX.vvvv (r)</td>
-<td>ModRM:r/m (r)</td>
-<td>NA</td></tr></table>
+<p><strong>Op/En</strong></p>
+<p><strong>Tuple</strong></p>
+<p><strong>Operand 1</strong></p>
+<p><strong>Operand 2</strong></p>
+<p><strong>Operand 3</strong></p>
+<p><strong>Operand 4</strong></p>
+<p>A</p>
+<p>N/A</p>
+<p>ModRM:reg (r, w)</p>
+<p>ModRM:r/m (r)</p>
+<p>N/A</p>
+<p>N/A</p>
+<p>B</p>
+<p>N/A</p>
+<p>ModRM:reg (w)</p>
+<p>VEX.vvvv (r)</p>
+<p>ModRM:r/m (r)</p>
+<p>N/A</p>
+<p>C</p>
+<p>Full Mem</p>
+<p>ModRM:reg (w)</p>
+<p>EVEX.vvvv (r)</p>
+<p>ModRM:r/m (r)</p>
+<p>N/A</p>
 <h2>Description</h2>
-<p>This instruction performs a single round of the AES decryption flow using the Equivalent Inverse Cipher, with the round key from the second source operand, operating on a 128-bit data (state) from the first source operand, and store the result in the destination operand.</p>
+<p>This instruction performs a single round of the AES decryption flow using the Equivalent Inverse Cipher, using one/two/four (depending on vector length) 128-bit data (state) from the first source operand with one/two/four (depending on vector length) round key(s) from the second source operand, and stores the result in the destina-tion operand.</p>
 <p>Use the AESDEC instruction for all but the last decryption round. For the last decryption round, use the AESDE-CLAST instruction.</p>
-<p>128-bit Legacy SSE version: The first source operand and the destination operand are the same and must be an XMM register. The second source operand can be an XMM register or a 128-bit memory location. Bits (VLMAX-1:128) of the corresponding YMM destination register remain unchanged.</p>
-<p>VEX.128 encoded version: The first source operand and the destination operand are XMM registers. The second source operand can be an XMM register or a 128-bit memory location. Bits (VLMAX-1:128) of the destination YMM register are zeroed.</p>
+<p>VEX and EVEX encoded versions of the instruction allow 3-operand (non-destructive) operation. The legacy encoded versions of the instruction require that the first source operand and the destination operand are the same and must be an XMM register.</p>
+<p>The EVEX encoded form of this instruction does not support memory fault suppression.</p>
 <h2>Operation</h2>
 <p><strong>AESDEC</strong></p>
-<pre>STATE ← SRC1;
-RoundKey ← SRC2;
-STATE ← InvShiftRows( STATE );
-STATE ← InvSubBytes( STATE );
-STATE ← InvMixColumns( STATE );
-DEST[127:0] ← STATE XOR RoundKey;
-DEST[VLMAX-1:128] (Unmodified)</pre>
-<p><strong>VAESDEC</strong></p>
-<pre>STATE ← SRC1;
-RoundKey ← SRC2;
-STATE ← InvShiftRows( STATE );
-STATE ← InvSubBytes( STATE );
-STATE ← InvMixColumns( STATE );
-DEST[127:0] ← STATE XOR RoundKey;
-DEST[VLMAX-1:128] ← 0</pre>
+<pre>STATE := SRC1;
+RoundKey := SRC2;
+STATE := InvShiftRows( STATE );
+STATE := InvSubBytes( STATE );
+STATE := InvMixColumns( STATE );
+DEST[127:0] := STATE XOR RoundKey;
+DEST[MAXVL-1:128] (Unmodified)</pre>
+<p><strong>VAESDEC (128b and 256b VEX Encoded Versions)</strong></p>
+<pre>(KL,VL) = (1,128), (2,256)
+FOR i = 0 to KL-1:
+    STATE := SRC1.xmm[i]
+    RoundKey := SRC2.xmm[i]
+    STATE := InvShiftRows( STATE )
+    STATE := InvSubBytes( STATE )
+    STATE := InvMixColumns( STATE )
+    DEST.xmm[i] := STATE XOR RoundKey
+DEST[MAXVL-1:VL] := 0</pre>
+<p><strong>VAESDEC (EVEX Encoded Version)</strong></p>
+<pre>(KL,VL) = (1,128), (2,256), (4,512)
+FOR i = 0 to KL-1:
+    STATE := SRC1.xmm[i]
+    RoundKey := SRC2.xmm[i]
+    STATE := InvShiftRows( STATE )
+    STATE := InvSubBytes( STATE )
+    STATE := InvMixColumns( STATE )
+    DEST.xmm[i] := STATE XOR RoundKey
+DEST[MAXVL-1:VL] :=0</pre>
 <h2>Intel C/C++ Compiler Intrinsic Equivalent</h2>
-<p>(V)AESDEC:</p>
-<p>__m128i _mm_aesdec (__m128i, __m128i)</p>
+<p>(V)AESDEC __m128i _mm_aesdec (__m128i, __m128i)</p>
+<p>VAESDEC __m256i _mm256_aesdec_epi128(__m256i, __m256i);</p>
+<p>VAESDEC __m512i _mm512_aesdec_epi128(__m512i, __m512i);</p>
 <h2>SIMD Floating-Point Exceptions</h2>
-<p>None</p>
+<p>None.</p>
 <h2>Other Exceptions</h2>
-<p>See Exceptions Type 4.</p></body></html>
+<p>See Table 2-21, “Type 4 Class Exception Conditions.”</p>
+<p>EVEX-encoded: See Table 2-52, “Type E4NF Class Exception Conditions.”</p></body></html>

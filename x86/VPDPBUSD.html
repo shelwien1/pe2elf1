@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>VPDPBUSD—Multiply and Add Unsigned and Signed Bytes </title></head>
+<body>
+<h1>VPDPBUSD—Multiply and Add Unsigned and Signed Bytes</h1>
+<p><strong>Opcode/</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64/32</strong></p>
+<p><strong>CPUID Feature</strong></p>
+<p><strong>Description</strong></p>
+<p><strong>Instruction</strong></p>
+<p><strong>En</strong></p>
+<p><strong>bit Mode</strong></p>
+<p><strong>Flag</strong></p>
+<p><strong>Support</strong></p>
+<p>VEX.128.66.0F38.W0 50 /r</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX_VNNI</p>
+<p>Multiply groups of 4 pairs of signed bytes in</p>
+<p>VPDPBUSD xmm1, xmm2,</p>
+<p>xmm3/m128 with corresponding unsigned bytes of</p>
+<p>xmm3/m128</p>
+<p>xmm2, summing those products and adding them to doubleword result in xmm1.</p>
+<p>VEX.256.66.0F38.W0 50 /r</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX_VNNI</p>
+<p>Multiply groups of 4 pairs of signed bytes in</p>
+<p>VPDPBUSD ymm1, ymm2,</p>
+<p>ymm3/m256 with corresponding unsigned bytes of</p>
+<p>ymm3/m256</p>
+<p>ymm2, summing those products and adding them to doubleword result in ymm1.</p>
+<p>EVEX.128.66.0F38.W0 50 /r</p>
+<p>B</p>
+<p>V/V</p>
+<p>(AVX512_VNNI</p>
+<p>Multiply groups of 4 pairs of signed bytes in</p>
+<p>VPDPBUSD xmm1{k1}{z}, xmm2,</p>
+<p>AND AVX512VL)</p>
+<p>xmm3/m128/m32bcst with corresponding</p>
+<p>xmm3/m128/m32bcst</p>
+<p>OR AVX10.1</p>
+<p>unsigned bytes of xmm2, summing those products and adding them to doubleword result in xmm1 under writemask k1.</p>
+<p>EVEX.256.66.0F38.W0 50 /r</p>
+<p>B</p>
+<p>V/V</p>
+<p>(AVX512_VNNI</p>
+<p>Multiply groups of 4 pairs of signed bytes in</p>
+<p>VPDPBUSD ymm1{k1}{z}, ymm2,</p>
+<p>AND AVX512VL)</p>
+<p>ymm3/m256/m32bcst with corresponding</p>
+<p>ymm3/m256/m32bcst</p>
+<p>OR AVX10.1</p>
+<p>unsigned bytes of ymm2, summing those products and adding them to doubleword result in ymm1 under writemask k1.</p>
+<p>EVEX.512.66.0F38.W0 50 /r</p>
+<p>B</p>
+<p>V/V</p>
+<p>AVX512_VNNI</p>
+<p>Multiply groups of 4 pairs of signed bytes in</p>
+<p>VPDPBUSD zmm1{k1}{z}, zmm2,</p>
+<p>OR AVX10.1</p>
+<p>zmm3/m512/m32bcst with corresponding</p>
+<p>zmm3/m512/m32bcst</p>
+<p>unsigned bytes of zmm2, summing those products and adding them to doubleword result in zmm1 under writemask k1.</p>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Tuple</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>A</td>
+<td>N/A</td>
+<td>ModRM:reg (r, w)</td>
+<td>VEX.vvvv (r)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td></tr>
+<tr>
+<td>B</td>
+<td>Full</td>
+<td>ModRM:reg (r, w)</td>
+<td>EVEX.vvvv (r)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td></tr></table>
+<p><strong>Description</strong></p>
+<p>Multiplies the individual unsigned bytes of the first source operand by the corresponding signed bytes of the second source operand, producing intermediate signed word results. The word results are then summed and accumulated in the destination dword element size operand.</p>
+<p>This instruction supports memory fault suppression.</p>
+<p><strong>Operation</strong></p>
+<p><strong>VPDPBUSD dest, src1, src2 (VEX encoded versions)</strong></p>
+<p>VL=(128, 256)</p>
+<p>KL=VL/32</p>
+<p>ORIGDEST := DEST</p>
+<p>FOR i := 0 TO KL-1:</p>
+<p>// Extending to 16b</p>
+<p>// src1extend := ZERO_EXTEND</p>
+<p>// src2extend := SIGN_EXTEND</p>
+<p>p1word := src1extend(SRC1.byte[4*i+0]) * src2extend(SRC2.byte[4*i+0])</p>
+<p>p2word := src1extend(SRC1.byte[4*i+1]) * src2extend(SRC2.byte[4*i+1])</p>
+<p>p3word := src1extend(SRC1.byte[4*i+2]) * src2extend(SRC2.byte[4*i+2])</p>
+<p>p4word := src1extend(SRC1.byte[4*i+3]) * src2extend(SRC2.byte[4*i+3])</p>
+<p>DEST.dword[i] := ORIGDEST.dword[i] + p1word + p2word + p3word + p4word</p>
+<p>DEST[MAX_VL-1:VL] := 0</p>
+<p><strong>VPDPBUSD dest, src1, src2 (EVEX encoded versions)</strong></p>
+<p>(KL,VL)=(4,128), (8,256), (16,512)</p>
+<p>ORIGDEST := DEST</p>
+<p>FOR i := 0 TO KL-1:</p>
+<p>IF k1[i] or *no writemask*:</p>
+<p>// Byte elements of SRC1 are zero-extended to 16b and</p>
+<p>// byte elements of SRC2 are sign extended to 16b before multiplication.</p>
+<p>IF SRC2 is memory and EVEX.b == 1:</p>
+<p>t := SRC2.dword[0]</p>
+<p>ELSE:</p>
+<p>t := SRC2.dword[i]</p>
+<p>p1word := ZERO_EXTEND(SRC1.byte[4*i]) * SIGN_EXTEND(t.byte[0])</p>
+<p>p2word := ZERO_EXTEND(SRC1.byte[4*i+1]) * SIGN_EXTEND(t.byte[1])</p>
+<p>p3word := ZERO_EXTEND(SRC1.byte[4*i+2]) * SIGN_EXTEND(t.byte[2])</p>
+<p>p4word := ZERO_EXTEND(SRC1.byte[4*i+3]) * SIGN_EXTEND(t.byte[3])</p>
+<p>DEST.dword[i] := ORIGDEST.dword[i] + p1word + p2word + p3word + p4word</p>
+<p>ELSE IF *zeroing*:</p>
+<p>DEST.dword[i] := 0</p>
+<p>ELSE:</p>
+<p>// Merge masking, dest element unchanged</p>
+<p>DEST.dword[i] := ORIGDEST.dword[i]</p>
+<p>DEST[MAX_VL-1:VL] := 0</p>
+<p><strong>Intel C/C++ Compiler Intrinsic Equivalent</strong></p>
+<p>VPDPBUSD __m128i _mm_dpbusd_avx_epi32(__m128i, __m128i, __m128i);</p>
+<p>VPDPBUSD __m128i _mm_dpbusd_epi32(__m128i, __m128i, __m128i);</p>
+<p>VPDPBUSD __m128i _mm_mask_dpbusd_epi32(__m128i, __mmask8, __m128i, __m128i);</p>
+<p>VPDPBUSD __m128i _mm_maskz_dpbusd_epi32(__mmask8, __m128i, __m128i, __m128i);</p>
+<p>VPDPBUSD __m256i _mm256_dpbusd_avx_epi32(__m256i, __m256i, __m256i);</p>
+<p>VPDPBUSD __m256i _mm256_dpbusd_epi32(__m256i, __m256i, __m256i);</p>
+<p>VPDPBUSD __m256i _mm256_mask_dpbusd_epi32(__m256i, __mmask8, __m256i, __m256i);</p>
+<p>VPDPBUSD __m256i _mm256_maskz_dpbusd_epi32(__mmask8, __m256i, __m256i, __m256i);</p>
+<p>VPDPBUSD __m512i _mm512_dpbusd_epi32(__m512i, __m512i, __m512i);</p>
+<p>VPDPBUSD __m512i _mm512_mask_dpbusd_epi32(__m512i, __mmask16, __m512i, __m512i);</p>
+<p>VPDPBUSD __m512i _mm512_maskz_dpbusd_epi32(__mmask16, __m512i, __m512i, __m512i);</p>
+<p><strong>SIMD Floating-Point Exceptions</strong></p>
+<p>None.</p>
+<p><strong>Other Exceptions</strong></p>
+<p>Non-EVEX-encoded instruction, see Table 2-21, “Type 4 Class Exception Conditions.”</p>
+<p>EVEX-encoded instruction, see Table 2-51, “Type E4 Class Exception Conditions.”</p></body></html>

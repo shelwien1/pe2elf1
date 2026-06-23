@@ -7,99 +7,85 @@
 <title>DEC—Decrement by 1 </title></head>
 <body>
 <h1>DEC—Decrement by 1</h1>
-<p><strong>Opcode</strong></p>
-<p><strong>Instruction</strong></p>
-<p><strong>Op/</strong></p>
-<p><strong>64-Bit</strong></p>
-<p><strong>Compat/</strong></p>
-<p><strong>Description</strong></p>
 <table>
 <tr>
-<td></td>
-<td></td>
-<th>En</th>
-<th>Mode</th>
-<th>Leg Mode</th>
-<td></td></tr>
+<th>Opcode</th>
+<th>Instruction</th>
+<th>Op/En</th>
+<th>64-Bit Mode</th>
+<th>Compat/Leg Mode</th>
+<th>Description</th></tr>
 <tr>
 <td>FE /1</td>
-<td>DEC <em>r/m8</em></td>
+<td>DEC r/m8<sup>1</sup></td>
 <td>M</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Decrement <em>r/m8</em> by 1.</td></tr>
-<tr>
-<td>REX + FE /1</td>
-<td>DEC <em>r/m8</em><sup>*</sup></td>
-<td>M</td>
-<td>Valid</td>
-<td>N.E.</td>
 <td>Decrement <em>r/m8</em> by 1.</td></tr>
 <tr>
 <td>FF /1</td>
-<td>DEC <em>r/m16</em></td>
+<td>DEC r/m16</td>
 <td>M</td>
 <td>Valid</td>
 <td>Valid</td>
 <td>Decrement <em>r/m16</em> by 1.</td></tr>
 <tr>
 <td>FF /1</td>
-<td>DEC <em>r/m32</em></td>
+<td>DEC r/m32</td>
 <td>M</td>
 <td>Valid</td>
 <td>Valid</td>
 <td>Decrement <em>r/m32</em> by 1.</td></tr>
 <tr>
 <td>REX.W + FF /1</td>
-<td>DEC <em>r/m64</em></td>
+<td>DEC r/m64</td>
 <td>M</td>
 <td>Valid</td>
 <td>N.E.</td>
 <td>Decrement <em>r/m64</em> by 1.</td></tr>
 <tr>
 <td>48+rw</td>
-<td>DEC <em>r16</em></td>
+<td>DEC r16</td>
 <td>O</td>
 <td>N.E.</td>
 <td>Valid</td>
 <td>Decrement <em>r16</em> by 1.</td></tr>
 <tr>
 <td>48+rd</td>
-<td>DEC <em>r32</em></td>
+<td>DEC r32</td>
 <td>O</td>
 <td>N.E.</td>
 <td>Valid</td>
 <td>Decrement <em>r32</em> by 1.</td></tr></table>
 <p><strong>NOTES:</strong></p>
-<p>*</p>
-<p>In 64-bit mode, r/m8 can not be encoded to access the following byte registers if a REX prefix is used: AH, BH, CH, DH.</p>
+<p>1. With a REX prefix in 64-bit mode, attempts to access AH, BH, CH, or DH will instead access SPL, DIL, BPL, or SIL, respectively.</p>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
 <td>M</td>
 <td>ModRM:r/m (r, w)</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr>
 <tr>
 <td>O</td>
 <td>opcode + rd (r, w)</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Subtracts 1 from the destination operand, while preserving the state of the CF flag. The destination operand can be a register or a memory location. This instruction allows a loop counter to be updated without disturbing the CF flag. (To perform a decrement operation that updates the CF flag, use a SUB instruction with an immediate operand of 1.)</p>
 <p>This instruction can be used with a LOCK prefix to allow the instruction to be executed atomically.</p>
 <p>In 64-bit mode, DEC r16 and DEC r32 are not encodable (because opcodes 48H through 4FH are REX prefixes). Otherwise, the instruction’s 64-bit mode default operation size is 32 bits. Use of the REX.R prefix permits access to additional registers (R8-R15). Use of the REX.W prefix promotes operation to 64 bits.</p>
 <p>See the summary chart at the beginning of this section for encoding data and limits.</p>
 <h2>Operation</h2>
-<pre>DEST ← DEST – 1;</pre>
+<pre>DEST := DEST – 1;</pre>
 <h2>Flags Affected</h2>
 <p>The CF flag is not affected. The OF, SF, ZF, AF, and PF flags are set according to the result.</p>
 <h2>Protected Mode Exceptions</h2>

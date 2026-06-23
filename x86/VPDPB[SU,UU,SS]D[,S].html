@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>VPDPB[SU,UU,SS]D[,S]—Multiply and Add Unsigned and Signed Bytes With and Without Saturation </title></head>
+<body>
+<h1>VPDPB[SU,UU,SS]D[,S]—Multiply and Add Unsigned and Signed Bytes With and Without Saturation</h1>
+<p><strong>Opcode/</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64/32</strong></p>
+<p><strong>CPUID Feature</strong></p>
+<p><strong>Description</strong></p>
+<p><strong>Instruction</strong></p>
+<p><strong>En</strong></p>
+<p><strong>bit Mode</strong></p>
+<p><strong>Flag</strong></p>
+<p><strong>Support</strong></p>
+<p>VEX.128.F2.0F38.W0 50 /r</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX_VNNI_INT8</p>
+<p>Multiply groups of 4 pairs of signed bytes in xmm3/m128 with corresponding signed bytes</p>
+<p>VPDPBSSD xmm1, xmm2,</p>
+<p>of xmm2, summing those products and adding</p>
+<p>xmm3/m128</p>
+<p>them to the doubleword result in xmm1.</p>
+<p>VEX.256.F2.0F38.W0 50 /r</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX_VNNI_INT8</p>
+<p>Multiply groups of 4 pairs of signed bytes in ymm3/m256 with corresponding signed bytes</p>
+<p>VPDPBSSD ymm1, ymm2,</p>
+<p>of ymm2, summing those products and adding</p>
+<p>ymm3/m256</p>
+<p>them to the doubleword result in ymm1.</p>
+<p>VEX.128.F2.0F38.W0 51 /r</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX_VNNI_INT8</p>
+<p>Multiply groups of 4 pairs of signed bytes in xmm3/m128 with corresponding signed bytes</p>
+<p>VPDPBSSDS xmm1, xmm2,</p>
+<p>of xmm2, summing those products and adding</p>
+<p>xmm3/m128</p>
+<p>them to the doubleword result, with signed saturation in xmm1.</p>
+<p>VEX.256.F2.0F38.W0 51 /r</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX_VNNI_INT8</p>
+<p>Multiply groups of 4 pairs of signed bytes in ymm3/m256 with corresponding signed bytes</p>
+<p>VPDPBSSDS ymm1, ymm2,</p>
+<p>of ymm2, summing those products and adding</p>
+<p>ymm3/m256</p>
+<p>them to the doubleword result, with signed saturation in ymm1.</p>
+<p>VEX.128.F3.0F38.W0 50 /r</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX_VNNI_INT8</p>
+<p>Multiply groups of 4 pairs of unsigned bytes in xmm3/m128 with corresponding signed bytes</p>
+<p>VPDPBSUD xmm1, xmm2,</p>
+<p>of xmm2, summing those products and adding</p>
+<p>xmm3/m128</p>
+<p>them to doubleword result in xmm1.</p>
+<p>VEX.256.F3.0F38.W0 50 /r</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX_VNNI_INT8</p>
+<p>Multiply groups of 4 pairs of unsigned bytes in ymm3/m256 with corresponding signed bytes</p>
+<p>VPDPBSUD ymm1, ymm2,</p>
+<p>of ymm2, summing those products and adding</p>
+<p>ymm3/m256</p>
+<p>them to doubleword result in ymm1.</p>
+<p>VEX.128.F3.0F38.W0 51 /r</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX_VNNI_INT8</p>
+<p>Multiply groups of 4 pairs of unsigned bytes in xmm3/m128 with corresponding signed bytes</p>
+<p>VPDPBSUDS xmm1, xmm2,</p>
+<p>of xmm2, summing those products and adding</p>
+<p>xmm3/m128</p>
+<p>them to doubleword result, with signed saturation in xmm1.</p>
+<p>VEX.256.F3.0F38.W0 51 /r</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX_VNNI_INT8</p>
+<p>Multiply groups of 4 pairs of unsigned bytes in ymm3/m256 with corresponding signed bytes</p>
+<p>VPDPBSUDS ymm1, ymm2,</p>
+<p>of ymm2, summing those products and adding</p>
+<p>ymm3/m256</p>
+<p>them to doubleword result, with signed saturation in ymm1.</p>
+<p>VEX.128.NP.0F38.W0 50 /r</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX_VNNI_INT8</p>
+<p>Multiply groups of 4 pairs of unsigned bytes in xmm3/m128 with corresponding unsigned</p>
+<p>VPDPBUUD xmm1, xmm2,</p>
+<p>bytes of xmm2, summing those products and</p>
+<p>xmm3/m128</p>
+<p>adding them to doubleword result in xmm1.</p>
+<p>VEX.256.NP.0F38.W0 50 /r</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX_VNNI_INT8</p>
+<p>Multiply groups of 4 pairs of unsigned bytes in ymm3/m256 with corresponding unsigned</p>
+<p>VPDPBUUD ymm1, ymm2,</p>
+<p>bytes of ymm2, summing those products and</p>
+<p>ymm3/m256</p>
+<p>adding them to doubleword result in ymm1.</p>
+<p><strong>Opcode/</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64/32</strong></p>
+<p><strong>CPUID Feature</strong></p>
+<p><strong>Description</strong></p>
+<p><strong>Instruction</strong></p>
+<p><strong>En</strong></p>
+<p><strong>bit Mode</strong></p>
+<p><strong>Flag</strong></p>
+<p><strong>Support</strong></p>
+<p>VEX.128.NP.0F38.W0 51 /r</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX_VNNI_INT8</p>
+<p>Multiply groups of 4 pairs of unsigned bytes in xmm3/m128 with corresponding unsigned</p>
+<p>VPDPBUUDS xmm1, xmm2,</p>
+<p>bytes of xmm2, summing those products and</p>
+<p>xmm3/m128</p>
+<p>adding them to the doubleword result, with unsigned saturation in xmm1.</p>
+<p>VEX.256.NP.0F38.W0 51 /r</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX_VNNI_INT8</p>
+<p>Multiply groups of 4 pairs of unsigned bytes in ymm3/m256 with corresponding unsigned</p>
+<p>VPDPBUUDS ymm1, ymm2,</p>
+<p>bytes of ymm2, summing those products and</p>
+<p>ymm3/m256</p>
+<p>adding them to the doubleword result, with unsigned saturation in ymm1.</p>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Tuple Type</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>A</td>
+<td>N/A</td>
+<td>ModRM:reg (r, w)</td>
+<td>VEX.vvvv (r)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td></tr></table>
+<h2>Description</h2>
+<p>Multiplies the individual bytes of the first source operand by the corresponding bytes of the second source operand, producing intermediate word results. The word results are then summed and accumulated in the destination dword element size operand.</p>
+<p>For unsigned saturation, when an individual result value is beyond the range of an unsigned doubleword (that is, greater than FFFFF_FFFFH), the saturated unsigned doubleword integer value of FFFF_FFFFH is stored in the doubleword destination.</p>
+<p>For signed saturation, when an individual result is beyond the range of a signed doubleword integer (that is, greater than 7FFF_FFFFH or less than 8000_0000H), the saturated value of 7FFF_FFFFH or 8000_0000H, respec-tively, is written to the destination operand.</p>
+<h2>Operation</h2>
+<p><strong>VPDPB[SU,UU,SS]D[,S] dest, src1, src2 (VEX encoded version)</strong></p>
+<pre>VL = (128, 256)
+KL = VL/32
+ORIGDEST := DEST
+FOR i := 0 TO KL-1:
+    IF *src1 is signed*:
+         src1extend := SIGN_EXTEND // SU, SS
+    ELSE:
+         src1extend := ZERO_EXTEND // UU
+    IF *src2 is signed*:
+         src2extend := SIGN_EXTEND // SS
+    ELSE:
+         src2extend := ZERO_EXTEND // UU, SU
+    p1word := src1extend(SRC1.byte[4*i+0]) * src2extend(SRC2.byte[4*i+0])
+    p2word := src1extend(SRC1.byte[4*i+1]) * src2extend(SRC2.byte[4*i+1])
+    p3word := src1extend(SRC1.byte[4*i+2]) * src2extend(SRC2.byte[4*i+2])
+    p4word := src1extend(SRC1.byte[4*i+3]) * src2extend(SRC2.byte[4*i+3])
+    IF *saturating*:
+         IF *UU instruction version*:
+              DEST.dword[i] := UNSIGNED_DWORD_SATURATE(ORIGDEST.dword[i] + p1word + p2word + p3word + p4word)
+         ELSE:
+              DEST.dword[i] := SIGNED_DWORD_SATURATE(ORIGDEST.dword[i] + p1word + p2word + p3word + p4word)
+    ELSE:
+         DEST.dword[i] := ORIGDEST.dword[i] + p1word + p2word + p3word + p4word
+DEST[MAXVL-1:VL] := 0</pre>
+<h2>Flags Affected</h2>
+<p>None.</p>
+<h2>Intel C/C++ Compiler Intrinsic Equivalent</h2>
+<p>VPDPBSSD __m128i _mm_dpbssd_epi32 (__m128i __W, __m128i __A, __m128i __B);</p>
+<p>VPDPBSSD __m256i _mm256_dpbssd_epi32 (__m256i __W, __m256i __A, __m256i __B);</p>
+<p>VPDPBSSDS __m128i _mm_dpbssds_epi32 (__m128i __W, __m128i __A, __m128i __B);</p>
+<p>VPDPBSSDS __m256i _mm256_dpbssds_epi32 (__m256i __W, __m256i __A, __m256i __B);</p>
+<p>VPDPBSUD __m128i _mm_dpbsud_epi32 (__m128i __W, __m128i __A, __m128i __B);</p>
+<p>VPDPBSUD __m256i _mm256_dpbsud_epi32 (__m256i __W, __m256i __A, __m256i __B);</p>
+<p>VPDPBSUDS __m128i _mm_dpbsuds_epi32 (__m128i __W, __m128i __A, __m128i __B);</p>
+<p>VPDPBSUDS __m256i _mm256_dpbsuds_epi32 (__m256i __W, __m256i __A, __m256i __B);</p>
+<p>VPDPBUUD __m128i _mm_dpbuud_epi32 (__m128i __W, __m128i __A, __m128i __B);</p>
+<p>VPDPBUUD __m256i _mm256_dpbuud_epi32 (__m256i __W, __m256i __A, __m256i __B);</p>
+<p>VPDPBUUDS __m128i _mm_dpbuuds_epi32 (__m128i __W, __m128i __A, __m128i __B);</p>
+<p>VPDPBUUDS __m256i _mm256_dpbuuds_epi32 (__m256i __W, __m256i __A, __m256i __B);</p>
+<h2>SIMD Floating-Point Exceptions</h2>
+<p>None.</p>
+<h2>Other Exceptions</h2>
+<p>See Table 2-21, “Type 4 Class Exception Conditions.”</p></body></html>

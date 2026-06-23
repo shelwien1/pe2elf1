@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>VP4DPWSSD—Dot Product of Signed Words With Dword Accumulation (4-Iterations) </title></head>
+<body>
+<h1>VP4DPWSSD—Dot Product of Signed Words With Dword Accumulation (4-Iterations)</h1>
+<table>
+<tr>
+<th>Opcode/Instruction</th>
+<th>Op/En</th>
+<th>64/32 bit Mode Support</th>
+<th>CPUID Feature Flag</th>
+<th>Description</th></tr>
+<tr>
+<td>EVEX.512.F2.0F38.W0 52 /r VP4DPWSSD zmm1{k1}{z}, zmm2+3, m128</td>
+<td>A</td>
+<td>V/V</td>
+<td>AVX512_4VNNIW</td>
+<td>Multiply signed words from source register block indicated by zmm2 by signed words from m128 and accumulate resulting signed dwords in zmm1.</td></tr></table>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Tuple</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>A</td>
+<td>Tuple1_4X</td>
+<td>ModRM:reg (r, w)</td>
+<td>EVEX.vvvv (r)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td></tr></table>
+<p><strong>Description</strong></p>
+<p>This instruction computes 4 sequential register source-block dot-products of two signed word operands with doubleword accumulation; see Figure 8-1 below. The memory operand is sequentially selected in each of the four steps.</p>
+<p>In the above box, the notation of “+3”' is used to denote that the instruction accesses 4 source registers based on that operand; sources are consecutive, start in a multiple of 4 boundary, and contain the encoded register operand.</p>
+<p>This instruction supports memory fault suppression. The entire memory operand is loaded if any bit of the lowest 16-bits of the mask is set to 1 or if a “no masking” encoding is used.</p>
+<p>The tuple type Tuple1_4X implies that four 32-bit elements (16 bytes) are referenced by the memory operation portion of this instruction.</p>
+<svg width="568.799985" viewBox="112.380000 105700.019995 379.199990 182.040005" height="273.0600075">
+<text y="105724.29368" x="230.34" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="12.59827852">16b</text>
+<text y="105724.29368" x="276.5991755" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="12.59827852">16b</text>
+<text y="105724.29368" x="341.15816024" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="12.59827852">16b</text>
+<text y="105724.29368" x="387.29732082" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="12.71829344">16b</text>
+<text y="105804.332946" x="253.37957656" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="12.7783009">32b</text>
+<text y="105804.332946" x="364.19938084" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="12.65828598">32b</text>
+<text y="105872.012318" x="253.37957656" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="12.7783009">32b</text>
+<text y="105872.012318" x="364.19855882" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="12.65828598">32b</text>
+<rect y="105771.3" x="370.56" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="18.36" width="46.14"></rect>
+<rect y="105734.28" x="213.66" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="18.48" width="46.08"></rect>
+<rect y="105771.18" x="213.66" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="18.48" width="46.08"></rect>
+<rect y="105734.28" x="259.74" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="18.48" width="46.14"></rect>
+<rect y="105734.28" x="324.42" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="18.48" width="46.14"></rect>
+<rect y="105734.28" x="370.56" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="18.48" width="46.14"></rect>
+<rect y="105771.18" x="259.74" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="18.48" width="46.14"></rect>
+<rect y="105771.18" x="324.42" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="18.48" width="46.14"></rect>
+<rect y="105808.14" x="213.66" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="22.2" width="92.22"></rect>
+<rect y="105841.38" x="213.66" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="22.2" width="92.22"></rect>
+<rect y="105808.14" x="324.42" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="22.2" width="92.28"></rect>
+<rect y="105841.38" x="324.42" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="22.2" width="92.28"></rect>
+<path style="stroke:black" d="M213.660000,105734.280000 L213.660000,105735.960000 L259.860000,105735.960000 L259.860000,105734.280000 "></path>
+<path style="stroke:black" d="M259.860000,105734.280000 L259.860000,105735.960000 L306.000000,105735.960000 L306.000000,105734.280000 "></path>
+<path style="stroke:black" d="M324.420000,105734.280000 L324.420000,105735.960000 L370.560000,105735.960000 L370.560000,105734.280000 "></path>
+<path style="stroke:black" d="M370.560000,105734.280000 L370.560000,105735.960000 L416.820000,105735.960000 L416.820000,105734.280000 "></path>
+<path style="stroke:black" d="M213.660000,105735.960000 L213.660000,105738.300000 L259.860000,105738.300000 L259.860000,105735.960000 "></path>
+<path style="stroke:black" d="M259.860000,105735.960000 L259.860000,105738.300000 L306.000000,105738.300000 L306.000000,105735.960000 "></path>
+<path style="stroke:black" d="M324.420000,105735.960000 L324.420000,105738.300000 L370.560000,105738.300000 L370.560000,105735.960000 "></path>
+<path style="stroke:black" d="M370.560000,105735.960000 L370.560000,105738.300000 L416.820000,105738.300000 L416.820000,105735.960000 "></path>
+<path style="stroke:black" d="M213.660000,105738.300000 L213.660000,105740.640000 L259.860000,105740.640000 L259.860000,105738.300000 "></path>
+<path style="stroke:black" d="M259.860000,105738.300000 L259.860000,105740.640000 L306.000000,105740.640000 L306.000000,105738.300000 "></path>
+<path style="stroke:black" d="M324.420000,105738.300000 L324.420000,105740.640000 L370.560000,105740.640000 L370.560000,105738.300000 "></path>
+<path style="stroke:black" d="M370.560000,105738.300000 L370.560000,105740.640000 L416.820000,105740.640000 L416.820000,105738.300000 "></path>
+<path style="stroke:black" d="M213.660000,105740.640000 L213.660000,105744.180000 L259.860000,105744.180000 L259.860000,105740.640000 "></path>
+<path style="stroke:black" d="M259.860000,105740.640000 L259.860000,105744.180000 L306.000000,105744.180000 L306.000000,105740.640000 "></path>
+<path style="stroke:black" d="M324.420000,105740.640000 L324.420000,105744.180000 L370.560000,105744.180000 L370.560000,105740.640000 "></path>
+<path style="stroke:black" d="M370.560000,105740.640000 L370.560000,105744.180000 L416.820000,105744.180000 L416.820000,105740.640000 "></path>
+<path style="stroke:black" d="M213.660000,105744.180000 L213.660000,105746.520000 L259.860000,105746.520000 L259.860000,105744.180000 "></path>
+<path style="stroke:black" d="M259.860000,105744.180000 L259.860000,105746.520000 L306.000000,105746.520000 L306.000000,105744.180000 "></path>
+<path style="stroke:black" d="M324.420000,105744.180000 L324.420000,105746.520000 L370.560000,105746.520000 L370.560000,105744.180000 "></path>
+<path style="stroke:black" d="M370.560000,105744.180000 L370.560000,105746.520000 L416.820000,105746.520000 L416.820000,105744.180000 "></path>
+<path style="stroke:black" d="M213.660000,105746.520000 L213.660000,105748.800000 L259.860000,105748.800000 L259.860000,105746.520000 "></path>
+<path style="stroke:black" d="M259.860000,105746.520000 L259.860000,105748.800000 L306.000000,105748.800000 L306.000000,105746.520000 "></path>
+<path style="stroke:black" d="M324.420000,105746.520000 L324.420000,105748.800000 L370.560000,105748.800000 L370.560000,105746.520000 "></path>
+<path style="stroke:black" d="M370.560000,105746.520000 L370.560000,105748.800000 L416.820000,105748.800000 L416.820000,105746.520000 "></path>
+<path style="stroke:black" d="M213.660000,105748.800000 L213.660000,105751.140000 L259.860000,105751.140000 L259.860000,105748.800000 "></path>
+<path style="stroke:black" d="M259.860000,105748.800000 L259.860000,105751.140000 L306.000000,105751.140000 L306.000000,105748.800000 "></path>
+<path style="stroke:black" d="M324.420000,105748.800000 L324.420000,105751.140000 L370.560000,105751.140000 L370.560000,105748.800000 "></path>
+<path style="stroke:black" d="M370.560000,105748.800000 L370.560000,105751.140000 L416.820000,105751.140000 L416.820000,105748.800000 "></path>
+<path style="stroke:black" d="M213.660000,105751.140000 L213.660000,105752.760000 L259.860000,105752.760000 L259.860000,105751.140000 "></path>
+<path style="stroke:black" d="M259.860000,105751.140000 L259.860000,105752.760000 L306.000000,105752.760000 L306.000000,105751.140000 "></path>
+<path style="stroke:black" d="M324.420000,105751.140000 L324.420000,105752.760000 L370.560000,105752.760000 L370.560000,105751.140000 "></path>
+<path style="stroke:black" d="M370.560000,105751.140000 L370.560000,105752.760000 L416.820000,105752.760000 L416.820000,105751.140000 "></path>
+<path style="stroke:black" d="M213.660000,105771.300000 L213.660000,105772.920000 L259.860000,105772.920000 L259.860000,105771.300000 "></path>
+<path style="stroke:black" d="M259.860000,105771.300000 L259.860000,105772.920000 L306.000000,105772.920000 L306.000000,105771.300000 "></path>
+<path style="stroke:black" d="M324.420000,105771.300000 L324.420000,105772.920000 L370.560000,105772.920000 L370.560000,105771.300000 "></path>
+<path style="stroke:black" d="M370.560000,105771.300000 L370.560000,105772.920000 L416.820000,105772.920000 L416.820000,105771.300000 "></path>
+<path style="stroke:black" d="M213.660000,105772.920000 L213.660000,105775.260000 L259.860000,105775.260000 L259.860000,105772.920000 "></path>
+<path style="stroke:black" d="M259.860000,105772.920000 L259.860000,105775.260000 L306.000000,105775.260000 L306.000000,105772.920000 "></path>
+<path style="stroke:black" d="M324.420000,105772.920000 L324.420000,105775.260000 L370.560000,105775.260000 L370.560000,105772.920000 "></path>
+<path style="stroke:black" d="M370.560000,105772.920000 L370.560000,105775.260000 L416.820000,105775.260000 L416.820000,105772.920000 "></path>
+<path style="stroke:black" d="M213.660000,105775.260000 L213.660000,105777.540000 L259.860000,105777.540000 L259.860000,105775.260000 "></path>
+<path style="stroke:black" d="M259.860000,105775.260000 L259.860000,105777.540000 L306.000000,105777.540000 L306.000000,105775.260000 "></path>
+<path style="stroke:black" d="M324.420000,105775.260000 L324.420000,105777.540000 L370.560000,105777.540000 L370.560000,105775.260000 "></path>
+<path style="stroke:black" d="M370.560000,105775.260000 L370.560000,105777.540000 L416.820000,105777.540000 L416.820000,105775.260000 "></path>
+<path style="stroke:black" d="M213.660000,105777.540000 L213.660000,105781.020000 L259.860000,105781.020000 L259.860000,105777.540000 "></path>
+<path style="stroke:black" d="M259.860000,105777.540000 L259.860000,105781.020000 L306.000000,105781.020000 L306.000000,105777.540000 "></path>
+<path style="stroke:black" d="M324.420000,105777.540000 L324.420000,105781.020000 L370.560000,105781.020000 L370.560000,105777.540000 "></path>
+<path style="stroke:black" d="M370.560000,105777.540000 L370.560000,105781.020000 L416.820000,105781.020000 L416.820000,105777.540000 "></path>
+<path style="stroke:black" d="M213.660000,105781.020000 L213.660000,105783.420000 L259.860000,105783.420000 L259.860000,105781.020000 "></path>
+<path style="stroke:black" d="M259.860000,105781.020000 L259.860000,105783.420000 L306.000000,105783.420000 L306.000000,105781.020000 "></path>
+<path style="stroke:black" d="M324.420000,105781.020000 L324.420000,105783.420000 L370.560000,105783.420000 L370.560000,105781.020000 "></path>
+<path style="stroke:black" d="M370.560000,105781.020000 L370.560000,105783.420000 L416.820000,105783.420000 L416.820000,105781.020000 "></path>
+<path style="stroke:black" d="M213.660000,105783.420000 L213.660000,105785.760000 L259.860000,105785.760000 L259.860000,105783.420000 "></path>
+<path style="stroke:black" d="M259.860000,105783.420000 L259.860000,105785.760000 L306.000000,105785.760000 L306.000000,105783.420000 "></path>
+<path style="stroke:black" d="M324.420000,105783.420000 L324.420000,105785.760000 L370.560000,105785.760000 L370.560000,105783.420000 "></path>
+<path style="stroke:black" d="M370.560000,105783.420000 L370.560000,105785.760000 L416.820000,105785.760000 L416.820000,105783.420000 "></path>
+<path style="stroke:black" d="M213.660000,105785.760000 L213.660000,105788.160000 L259.860000,105788.160000 L259.860000,105785.760000 "></path>
+<path style="stroke:black" d="M259.860000,105785.760000 L259.860000,105788.160000 L306.000000,105788.160000 L306.000000,105785.760000 "></path>
+<path style="stroke:black" d="M324.420000,105785.760000 L324.420000,105788.160000 L370.560000,105788.160000 L370.560000,105785.760000 "></path>
+<path style="stroke:black" d="M370.560000,105785.760000 L370.560000,105788.160000 L416.820000,105788.160000 L416.820000,105785.760000 "></path>
+<path style="stroke:black" d="M213.660000,105788.160000 L213.660000,105789.780000 L259.860000,105789.780000 L259.860000,105788.160000 "></path>
+<path style="stroke:black" d="M259.860000,105788.160000 L259.860000,105789.780000 L306.000000,105789.780000 L306.000000,105788.160000 "></path>
+<path style="stroke:black" d="M324.420000,105788.160000 L324.420000,105789.780000 L370.560000,105789.780000 L370.560000,105788.160000 "></path>
+<path style="stroke:black" d="M370.560000,105788.160000 L370.560000,105789.780000 L416.820000,105789.780000 L416.820000,105788.160000 "></path>
+<path style="stroke:black" d="M213.660000,105808.140000 L213.660000,105810.240000 L306.000000,105810.240000 L306.000000,105808.140000 "></path>
+<path style="stroke:black" d="M324.420000,105808.140000 L324.420000,105810.240000 L416.820000,105810.240000 L416.820000,105808.140000 "></path>
+<path style="stroke:black" d="M213.660000,105810.240000 L213.660000,105814.440000 L306.000000,105814.440000 L306.000000,105810.240000 "></path>
+<path style="stroke:black" d="M324.420000,105810.240000 L324.420000,105814.440000 L416.820000,105814.440000 L416.820000,105810.240000 "></path>
+<path style="stroke:black" d="M213.660000,105814.440000 L213.660000,105817.200000 L306.000000,105817.200000 L306.000000,105814.440000 "></path>
+<path style="stroke:black" d="M324.420000,105814.440000 L324.420000,105817.200000 L416.820000,105817.200000 L416.820000,105814.440000 "></path>
+<path style="stroke:black" d="M213.660000,105817.200000 L213.660000,105819.960000 L306.000000,105819.960000 L306.000000,105817.200000 "></path>
+<path style="stroke:black" d="M324.420000,105817.200000 L324.420000,105819.960000 L416.820000,105819.960000 L416.820000,105817.200000 "></path>
+<path style="stroke:black" d="M213.660000,105819.960000 L213.660000,105822.780000 L306.000000,105822.780000 L306.000000,105819.960000 "></path>
+<path style="stroke:black" d="M324.420000,105819.960000 L324.420000,105822.780000 L416.820000,105822.780000 L416.820000,105819.960000 "></path>
+<path style="stroke:black" d="M213.660000,105822.780000 L213.660000,105826.980000 L306.000000,105826.980000 L306.000000,105822.780000 "></path>
+<path style="stroke:black" d="M324.420000,105822.780000 L324.420000,105826.980000 L416.820000,105826.980000 L416.820000,105822.780000 "></path>
+<path style="stroke:black" d="M213.660000,105826.980000 L213.660000,105829.740000 L306.000000,105829.740000 L306.000000,105826.980000 "></path>
+<path style="stroke:black" d="M324.420000,105826.980000 L324.420000,105829.740000 L416.820000,105829.740000 L416.820000,105826.980000 "></path>
+<path style="stroke:black" d="M213.660000,105829.740020 L213.660000,105830.340000 L306.000000,105830.340000 L306.000000,105829.740020 "></path>
+<path style="stroke:black" d="M324.420000,105829.740020 L324.420000,105830.340000 L416.820000,105830.340000 L416.820000,105829.740020 "></path>
+<path style="stroke:black" d="M213.660000,105841.440000 L213.660000,105843.420000 L306.000000,105843.420000 L306.000000,105841.440000 "></path>
+<path style="stroke:black" d="M324.420000,105841.440000 L324.420000,105843.420000 L416.820000,105843.420000 L416.820000,105841.440000 "></path>
+<path style="stroke:black" d="M213.660000,105843.420000 L213.660000,105847.620000 L306.000000,105847.620000 L306.000000,105843.420000 "></path>
+<path style="stroke:black" d="M324.420000,105843.420000 L324.420000,105847.620000 L416.820000,105847.620000 L416.820000,105843.420000 "></path>
+<path style="stroke:black" d="M213.660000,105847.620000 L213.660000,105850.380000 L306.000000,105850.380000 L306.000000,105847.620000 "></path>
+<path style="stroke:black" d="M324.420000,105847.620000 L324.420000,105850.380000 L416.820000,105850.380000 L416.820000,105847.620000 "></path>
+<path style="stroke:black" d="M213.660000,105850.380000 L213.660000,105853.200000 L306.000000,105853.200000 L306.000000,105850.380000 "></path>
+<path style="stroke:black" d="M324.420000,105850.380000 L324.420000,105853.200000 L416.820000,105853.200000 L416.820000,105850.380000 "></path>
+<path style="stroke:black" d="M213.660000,105853.200000 L213.660000,105856.080000 L306.000000,105856.080000 L306.000000,105853.200000 "></path>
+<path style="stroke:black" d="M324.420000,105853.200000 L324.420000,105856.080000 L416.820000,105856.080000 L416.820000,105853.200000 "></path>
+<path style="stroke:black" d="M213.660000,105856.080000 L213.660000,105860.160000 L306.000000,105860.160000 L306.000000,105856.080000 "></path>
+<path style="stroke:black" d="M324.420000,105856.080000 L324.420000,105860.160000 L416.820000,105860.160000 L416.820000,105856.080000 "></path>
+<path style="stroke:black" d="M213.660000,105860.160000 L213.660000,105863.040000 L306.000000,105863.040000 L306.000000,105860.160000 "></path>
+<path style="stroke:black" d="M324.420000,105860.160000 L324.420000,105863.040000 L416.820000,105863.040000 L416.820000,105860.160000 "></path>
+<path style="stroke:black" d="M213.660000,105863.040020 L213.660000,105863.580000 L306.000000,105863.580000 L306.000000,105863.040020 "></path>
+<path style="stroke:black" d="M324.420000,105863.040020 L324.420000,105863.580000 L416.820000,105863.580000 L416.820000,105863.040020 "></path>
+<text y="105782.73368" x="389.46" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="8.42406096">b0</text>
+<text y="105745.83368" x="232.62" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="8.12731174">a3</text>
+<text y="105782.73368" x="232.5" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="8.48406842">b1</text>
+<text y="105745.83368" x="278.82" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="8.06730428">a2</text>
+<text y="105745.83368" x="343.44" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="8.12731174">a1</text>
+<text y="105745.83368" x="389.64" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="8.06730428">a0</text>
+<text y="105782.73368" x="278.64" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="8.42406096">b0</text>
+<text y="105782.73368" x="343.2" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="8.48406842">b1</text>
+<text y="105821.61368" x="255.96" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="7.6488961">c1</text>
+<text y="105854.79368" x="225.3" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="68.84664106">c1=c1+a2*b0+a3*b1</text>
+<text y="105821.61368" x="366.78" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="7.6488961">c0</text>
+<text y="105854.79368" x="336.12" style="font-size:8.220200pt" lengthAdjust="spacingAndGlyphs" textLength="68.8482851">c0=c0+a0*b0+a1*b1</text></svg>
+<h3>Figure 8-1.  Register Source-Block Dot Product of Two Signed Word Operands With Doubleword Accumulation<sup>1</sup></h3>
+<p><strong>NOTES:</strong></p>
+<p>1. For illustration purposes, one source-block dot product instance is shown out of the four.</p>
+<p><strong>Operation</strong></p>
+<p>src_reg_id is the 5 bit index of the vector register specified in the instruction as the src1 register.</p>
+<p>VP4DPWSSD dest, src1, src2</p>
+<p>(KL,VL) = (16,512)</p>
+<p>N := 4</p>
+<p>ORIGDEST := DEST</p>
+<p>src_base := src_reg_id &amp; ~ (N-1) // for src1 operand</p>
+<p>FOR i := 0 to KL-1:</p>
+<p>IF k1[i] or *no writemask*:</p>
+<p>FOR m := 0 to N-1:</p>
+<p>t := SRC2.dword[m]</p>
+<p>p1dword := reg[src_base+m].word[2*i] * t.word[0]</p>
+<p>p2dword := reg[src_base+m].word[2*i+1] * t.word[1]</p>
+<p>DEST.dword[i] := DEST.dword[i] + p1dword + p2dword</p>
+<p>ELSE IF *zeroing*:</p>
+<p>DEST.dword[i] := 0</p>
+<p>ELSE</p>
+<p>DEST.dword[i] := ORIGDEST.dword[i]</p>
+<p>DEST[MAX_VL-1:VL] := 0</p>
+<p><strong>Intel C/C++ Compiler Intrinsic Equivalent</strong></p>
+<p>VP4DPWSSD __m512i _mm512_4dpwssd_epi32(__m512i, __m512ix4, __m128i *);</p>
+<p>VP4DPWSSD __m512i _mm512_mask_4dpwssd_epi32(__m512i, __mmask16, __m512ix4, __m128i *);</p>
+<p>VP4DPWSSD __m512i _mm512_maskz_4dpwssd_epi32(__mmask16, __m512i, __m512ix4, __m128i *);</p>
+<p><strong>SIMD Floating-Point Exceptions</strong></p>
+<p>None.</p>
+<p><strong>Other Exceptions</strong></p>
+<p>See Type E4; additionally:</p>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>If the EVEX broadcast bit is set to 1.</td></tr>
+<tr>
+<td>#UD</td>
+<td>If the MODRM.mod = 0b11.</td></tr></table></body></html>

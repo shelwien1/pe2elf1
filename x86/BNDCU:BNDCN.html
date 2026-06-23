@@ -9,52 +9,52 @@
 <h1>BNDCU/BNDCN—Check Upper Bound</h1>
 <p><strong>Opcode/</strong></p>
 <p><strong>Op/En</strong></p>
-<p><strong>64/32</strong></p>
+<p><strong>64/32 bit</strong></p>
 <p><strong>CPUID</strong></p>
 <p><strong>Description</strong></p>
 <table>
 <tr>
 <th>Instruction</th>
 <td></td>
-<th>bit Mode Support</th>
+<th>Mode Support</th>
 <th>Feature Flag</th>
 <td></td></tr>
 <tr>
 <td>F2 0F 1A /r BNDCU bnd, r/m32</td>
 <td>RM</td>
-<td>NE/V</td>
+<td>N.E./V</td>
 <td>MPX</td>
 <td>Generate a #BR if the address in r/m32 is higher than the upper bound in bnd.UB (bnb.UB in 1's complement form).</td></tr>
 <tr>
 <td>F2 0F 1A /r BNDCU bnd, r/m64</td>
 <td>RM</td>
-<td>V/NE</td>
+<td>V/N.E.</td>
 <td>MPX</td>
 <td>Generate a #BR if the address in r/m64 is higher than the upper bound in bnd.UB (bnb.UB in 1's complement form).</td></tr>
 <tr>
 <td>F2 0F 1B /r BNDCN bnd, r/m32</td>
 <td>RM</td>
-<td>NE/V</td>
+<td>N.E./V</td>
 <td>MPX</td>
 <td>Generate a #BR if the address in r/m32 is higher than the upper bound in bnd.UB (bnb.UB not in 1's complement form).</td></tr>
 <tr>
 <td>F2 0F 1B /r BNDCN bnd, r/m64</td>
 <td>RM</td>
-<td>V/NE</td>
+<td>V/N.E.</td>
 <td>MPX</td>
 <td>Generate a #BR if the address in r/m64 is higher than the upper bound in bnd.UB (bnb.UB not in 1's complement form).</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th></tr>
 <tr>
 <td>RM</td>
 <td>ModRM:reg (w)</td>
 <td>ModRM:r/m (r)</td>
-<td>NA</td></tr></table>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Compare the address in the second operand with the upper bound in bnd. The second operand can be either a register or a memory operand. If the address is higher than the upper bound in bnd.UB, it will set BNDSTATUS to 01H and signal a #BR exception.</p>
 <p>BNDCU perform 1’s complement operation on the upper bound of bnd first before proceeding with address compar-ison. BNDCN perform address comparison directly using the upper bound in bnd that is already reverted out of 1’s complement form.</p>
@@ -63,24 +63,24 @@
 <h2>Operation</h2>
 <p><strong>BNDCU BND, reg</strong></p>
 <pre>IF reg &gt; NOT(BND.UB) Then
-    BNDSTATUS  01H;
+    BNDSTATUS := 01H;
     #BR;
 FI;</pre>
 <p><strong>BNDCU BND, mem</strong></p>
-<pre>TEMP  LEA(mem);
+<pre>TEMP := LEA(mem);
 IF TEMP &gt; NOT(BND.UB) Then
-    BNDSTATUS  01H;
+    BNDSTATUS := 01H;
     #BR;
 FI;</pre>
 <p><strong>BNDCN BND, reg</strong></p>
 <pre>IF reg &gt; BND.UB Then
-    BNDSTATUS  01H;
+    BNDSTATUS := 01H;
     #BR;
 FI;</pre>
 <p><strong>BNDCN BND, mem</strong></p>
-<pre>TEMP  LEA(mem);
+<pre>TEMP := LEA(mem);
 IF TEMP &gt; BND.UB Then
-    BNDSTATUS  01H;
+    BNDSTATUS := 01H;
     #BR;
 FI;</pre>
 <h2>Intel C/C++ Compiler Intrinsic Equivalent</h2>

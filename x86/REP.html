@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>REP—Repeat String Operation (Prefix) </title></head>
+<body>
+<h1>REP—Repeat String Operation (Prefix)</h1>
+<table>
+<tr>
+<th>Opcode</th>
+<th>Instruction</th>
+<th>Op/En</th>
+<th>64-Bit Mode</th>
+<th>Compat/Leg Mode</th>
+<th>Description<sup>1</sup></th></tr>
+<tr>
+<td>F3 6C</td>
+<td>REP INS m8, DX</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>Valid</td>
+<td>Input (count) bytes from port DX to (dest).</td></tr>
+<tr>
+<td>F3 6D</td>
+<td>REP INS m16, DX</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>Valid</td>
+<td>Input (count) words from port DX to (dest).</td></tr>
+<tr>
+<td>F3 6D</td>
+<td>REP INS m32, DX</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>Valid</td>
+<td>Input (count) doublewords from port DX to (dest).</td></tr>
+<tr>
+<td>F3 AC</td>
+<td>REP LODS AL</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>Valid</td>
+<td>Load (count) bytes from (src) to AL.</td></tr>
+<tr>
+<td>F3 AD</td>
+<td>REP LODS AX</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>Valid</td>
+<td>Load (count) words from (src) to AX.</td></tr>
+<tr>
+<td>F3 AD</td>
+<td>REP LODS EAX</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>Valid</td>
+<td>Load (count) doublewords from (src) to EAX.</td></tr>
+<tr>
+<td>F3 REX.W AD</td>
+<td>REP LODS RAX</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>N.E.</td>
+<td>Load (count) quadwords from (src) to RAX.</td></tr>
+<tr>
+<td>F3 A4</td>
+<td>REP MOVS m8, m8</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>Valid</td>
+<td>Move (count) bytes from (src) to (dest).</td></tr>
+<tr>
+<td>F3 A5</td>
+<td>REP MOVS m16, m16</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>Valid</td>
+<td>Move (count) words from (src) to (dest).</td></tr>
+<tr>
+<td>F3 A5</td>
+<td>REP MOVS m32, m32</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>Valid</td>
+<td>Move (count) doublewords from (src) to (dest).</td></tr>
+<tr>
+<td>F3 REX.W A5</td>
+<td>REP MOVS m64, m64</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>N.E.</td>
+<td>Move (count) quadwords from (src) to (dest).</td></tr>
+<tr>
+<td>F3 6E</td>
+<td>REP OUTS DX, m8</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>Valid</td>
+<td>Output (count) bytes from (src) to port DX.</td></tr>
+<tr>
+<td>F3 6F</td>
+<td>REP OUTS DX, m16</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>Valid</td>
+<td>Output (count) words from (src) to port DX.</td></tr>
+<tr>
+<td>F3 6F</td>
+<td>REP OUTS DX, m32</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>Valid</td>
+<td>Output (count) doublewords from (src) to port DX.</td></tr>
+<tr>
+<td>F3 AA</td>
+<td>REP STOS m8</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>Valid</td>
+<td>Fill (count) bytes at (dest) with AL.</td></tr>
+<tr>
+<td>F3 AB</td>
+<td>REP STOS m16</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>Valid</td>
+<td>Fill (count) words at (dest) with AX.</td></tr>
+<tr>
+<td>F3 AB</td>
+<td>REP STOS m32</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>Valid</td>
+<td>Fill (count) doublewords at (dest) with EAX.</td></tr>
+<tr>
+<td>F3 REX.W AB</td>
+<td>REP STOS m64</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>N.E.</td>
+<td>Fill (count) quadwords at (dest) with RAX.</td></tr></table>
+<p><strong>NOTES:</strong></p>
+<p>1. See Description section for details on (count), (src), and (dest).</p>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>ZO</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
+<h2>Description</h2>
+<p>Repeats a string instruction the number of times specified in the count register. The count register is CX, ECX, or RCX, depending on the instruction’s address size. The REP (repeat) mnemonic is a prefix that can be added to the INS, OUTS, MOVS, LODS, and STOS instructions.</p>
+<p>The REP prefixes apply only to one string instruction at a time. To repeat a block of instructions, use the LOOP instruction or another looping construct. The REP prefixes causes the associated instruction to be repeated until the count in register is decremented to 0.</p>
+<p>Each of the string instructions uses a source address, a destination address, or both. The source address is DS:SI, DS:ESI, or DS:RSI, depending on the instruction’s address size; the DS segment may be overridden by an instruc-tion prefix. The destination address is ES:DI, ES:EDI, or ES:RDI, depending on the instruction's address size; the ES segment may not be overridden. (Note that, in 64-bit mode, the base addresses of the CS, DS, ES, and SS segments are treated as zero.)</p>
+<p>Similarly, the size of the count register is the instruction’s address size. Thus, the default count register in 64-bit mode is RCX; REX.W has no effect on the address size and the count register. If 67H is used to override the default address size, the size of the count register is also overridden.</p>
+<p>A repeating string operation can be suspended by an exception or interrupt. When this happens, the state of the registers is preserved to allow the string operation to be resumed upon a return from the exception or interrupt handler. The source and destination registers point to the next string elements to be operated on, the EIP register points to the string instruction, and the ECX register has the value it held following the last successful iteration of the instruction. This mechanism allows long string operations to proceed without affecting the interrupt response time of the system.</p>
+<p>Use the REP INS and REP OUTS instructions with caution. Not all I/O ports can handle the rate at which these instructions execute. Note that a REP STOS instruction is the fastest way to initialize a large block of memory.</p>
+<p>REP INS may read from the I/O port without writing to the memory location if an exception or VM exit occurs due to the write (e.g., #PF). If this would be problematic, for example because the I/O port read has side-effects, soft-ware should ensure the write to the memory location does not cause an exception or VM exit.</p>
+<h2>Operation</h2>
+<pre>IF AddressSize = 16
+    THEN
+        Use CX for CountReg;
+        Implicit Source/Dest operand for memory use of SI/DI;
+    ELSE IF AddressSize = 64
+        THEN Use RCX for CountReg;
+        Implicit Source/Dest operand for memory use of RSI/RDI;
+    ELSE
+        Use ECX for CountReg;
+        Implicit Source/Dest operand for memory use of ESI/EDI;
+FI;
+WHILE CountReg ≠ 0
+    DO
+         Service pending interrupts (if any);
+         Execute associated string instruction;
+         CountReg := (CountReg – 1);
+    OD;</pre>
+<h2>Flags Affected</h2>
+<p>None.</p>
+<h2>Exceptions (All Operating Modes)</h2>
+<p>Exceptions may be generated by an instruction associated with the prefix.</p></body></html>

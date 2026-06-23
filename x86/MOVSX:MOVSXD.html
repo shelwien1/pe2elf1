@@ -4,9 +4,9 @@
 <head>
 <meta charset="UTF-8">
 <link href="style.css" type="text/css" rel="stylesheet">
-<title>MOVSX/MOVSXD—Move with Sign-Extension </title></head>
+<title>MOVSX/MOVSXD—Move With Sign-Extension </title></head>
 <body>
-<h1>MOVSX/MOVSXD—Move with Sign-Extension</h1>
+<h1>MOVSX/MOVSXD—Move With Sign-Extension</h1>
 <p><strong>Opcode</strong></p>
 <p><strong>Instruction</strong></p>
 <p><strong>Op/</strong></p>
@@ -22,71 +22,84 @@
 <th>Leg Mode</th>
 <td></td></tr>
 <tr>
-<td>0F BE /<em>r</em></td>
-<td>MOVSX <em>r16, r/m8</em></td>
+<td>0F BE /r</td>
+<td>MOVSX r16, r/m8<sup>1</sup></td>
 <td>RM</td>
 <td>Valid</td>
 <td>Valid</td>
 <td>Move byte to word with sign-extension.</td></tr>
 <tr>
-<td>0F BE /<em>r</em></td>
-<td>MOVSX <em>r32, r/m8</em></td>
+<td>0F BE /r</td>
+<td>MOVSX r32, r/m8<sup>1</sup></td>
 <td>RM</td>
 <td>Valid</td>
 <td>Valid</td>
 <td>Move byte to doubleword with sign-extension.</td></tr>
 <tr>
-<td>REX + 0F BE /<em>r</em></td>
-<td>MOVSX <em>r64, r/m8*</em></td>
+<td>REX.W + 0F BE /r</td>
+<td>MOVSX r64, r/m8<sup>1</sup></td>
 <td>RM</td>
 <td>Valid</td>
 <td>N.E.</td>
 <td>Move byte to quadword with sign-extension.</td></tr>
 <tr>
-<td>0F BF /<em>r</em></td>
-<td>MOVSX <em>r32, r/m16</em></td>
+<td>0F BF /r</td>
+<td>MOVSX r32, r/m16</td>
 <td>RM</td>
 <td>Valid</td>
 <td>Valid</td>
 <td>Move word to doubleword, with sign-extension.</td></tr>
 <tr>
-<td>REX.W + 0F BF /<em>r</em></td>
-<td>MOVSX <em>r64, r/m16</em></td>
+<td>REX.W + 0F BF /r</td>
+<td>MOVSX r64, r/m16</td>
 <td>RM</td>
 <td>Valid</td>
 <td>N.E.</td>
 <td>Move word to quadword with sign-extension.</td></tr>
 <tr>
-<td>REX.W** + 63 /<em>r</em></td>
-<td>MOVSXD <em>r64, r/m32</em></td>
+<td>63 /r<sup>2</sup></td>
+<td>MOVSXD r16, r/m16</td>
+<td>RM</td>
+<td>Valid</td>
+<td>N.E.</td>
+<td>Move word to word with sign-extension.</td></tr>
+<tr>
+<td>63 /r<sup>2</sup></td>
+<td>MOVSXD r32, r/m32</td>
+<td>RM</td>
+<td>Valid</td>
+<td>N.E.</td>
+<td>Move doubleword to doubleword with sign-extension.</td></tr>
+<tr>
+<td>REX.W + 63 /r</td>
+<td>MOVSXD r64, r/m32</td>
 <td>RM</td>
 <td>Valid</td>
 <td>N.E.</td>
 <td>Move doubleword to quadword with sign-extension.</td></tr></table>
 <p><strong>NOTES:</strong></p>
-<p>*</p>
-<p>In 64-bit mode, r/m8 can not be encoded to access the following byte registers if a REX prefix is used: AH, BH, CH, DH.</p>
-<p>** The use of MOVSXD without REX.W in 64-bit mode is discouraged, Regular MOV should be used instead of using MOVSXD without</p>
+<p>1. With a REX prefix in 64-bit mode, attempts to access AH, BH, CH, or DH will instead access SPL, DIL, BPL, or SIL, respectively.</p>
+<p>2. The use of MOVSXD without REX.W in 64-bit mode is discouraged. Regular MOV should be used instead of using MOVSXD without</p>
 <p>REX.W.</p>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
 <td>RM</td>
 <td>ModRM:reg (w)</td>
 <td>ModRM:r/m (r)</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
-<p>Copies the contents of the source operand (register or memory location) to the destination operand (register) and sign extends the value to 16 or 32 bits (see Figure 7-6 in the <em>Intel® 64 and IA-32 Architectures Software Devel-oper’s Manual, Volume 1</em>). The size of the converted value depends on the operand-size attribute.</p>
+<p>Copies the contents of the source operand (register or memory location) to the destination operand (register) and sign extends the value to 16 or 32 bits (see Figure 7-6 in the Intel<sup>®</sup> 64 and IA-32 Architectures Software Devel-oper’s Manual, Volume 1). The size of the converted value depends on the operand-size attribute.</p>
 <p>In 64-bit mode, the instruction’s default operation size is 32 bits. Use of the REX.R prefix permits access to addi-tional registers (R8-R15). Use of the REX.W prefix promotes operation to 64 bits. See the summary chart at the beginning of this section for encoding data and limits.</p>
 <h2>Operation</h2>
-<pre>DEST ← SignExtend(SRC);</pre>
+<pre>DEST := SignExtend(SRC);</pre>
 <h2>Flags Affected</h2>
 <p>None.</p>
 <h2>Protected Mode Exceptions</h2>

@@ -9,18 +9,18 @@
 <h1>SHA256MSG2—Perform a Final Calculation for the Next Four SHA256 Message Dwords</h1>
 <p><strong>Opcode/</strong></p>
 <p><strong>Op/En</strong></p>
-<p><strong>64/32</strong></p>
+<p><strong>64/32 bit</strong></p>
 <p><strong>CPUID</strong></p>
 <p><strong>Description</strong></p>
 <table>
 <tr>
 <th>Instruction</th>
 <td></td>
-<th>bit Mode Support</th>
+<th>Mode Support</th>
 <th>Feature Flag</th>
 <td></td></tr>
 <tr>
-<td>0F 38 CD /r SHA256MSG2 xmm1, xmm2/m128</td>
+<td>NP 0F 38 CD /r SHA256MSG2 xmm1, xmm2/m128</td>
 <td>RM</td>
 <td>V/V</td>
 <td>SHA</td>
@@ -28,34 +28,34 @@
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th></tr>
 <tr>
 <td>RM</td>
 <td>ModRM:reg (r, w)</td>
 <td>ModRM:r/m (r)</td>
-<td>NA</td></tr></table>
-<p><strong>Description</strong></p>
+<td>N/A</td></tr></table>
+<h2>Description</h2>
 <p>The SHA256MSG2 instruction is one of two SHA2 message scheduling instructions. The instruction performs the final calculation for the next four SHA256 message dwords.</p>
-<p><strong>Operation</strong></p>
+<h2>Operation</h2>
 <p><strong>SHA256MSG2</strong></p>
-<p>W14  SRC2[95:64] ;</p>
-<p>W15  SRC2[127:96] ;</p>
-<p>W16  SRC1[31: 0] + σ<sub>1</sub>( W14) ;</p>
-<p>W17  SRC1[63: 32] + σ<sub>1</sub>( W15) ;</p>
-<p>W18  SRC1[95: 64] + σ<sub>1</sub>( W16) ;</p>
-<p>W19  SRC1[127: 96] + σ<sub>1</sub>( W17) ;</p>
-<p>DEST[127:96]  W19 ;</p>
-<p>DEST[95:64]  W18 ;</p>
-<p>DEST[63:32]  W17 ;</p>
-<p>DEST[31:0]  W16;</p>
-<p><strong>Intel C/C++ Compiler Intrinsic Equivalent</strong></p>
-<p>SHA256MSG2 : __m128i _mm_sha256msg2_epu32(__m128i, __m128i);</p>
-<p><strong>Flags Affected</strong></p>
-<p>None</p>
-<p><strong>SIMD Floating-Point Exceptions</strong></p>
-<p>None</p>
-<p><strong>Other Exceptions</strong></p>
-<p>See Exceptions Type 4.</p></body></html>
+<pre>W14 := SRC2[95:64] ;
+W15 := SRC2[127:96] ;
+W16 := SRC1[31: 0] + σ<sub>1</sub>( W14) ;
+W17 := SRC1[63: 32] + σ<sub>1</sub>( W15) ;
+W18 := SRC1[95: 64] + σ<sub>1</sub>( W16) ;
+W19 := SRC1[127: 96] + σ<sub>1</sub>( W17) ;
+DEST[127:96] := W19 ;
+DEST[95:64] := W18 ;
+DEST[63:32] := W17 ;
+DEST[31:0] := W16;</pre>
+<h2>Intel C/C++ Compiler Intrinsic Equivalent</h2>
+<p>SHA256MSG2 __m128i _mm_sha256msg2_epu32(__m128i, __m128i);</p>
+<h2>Flags Affected</h2>
+<p>None.</p>
+<h2>SIMD Floating-Point Exceptions</h2>
+<p>None.</p>
+<h2>Other Exceptions</h2>
+<p>See Table 2-21, “Type 4 Class Exception Conditions.”</p></body></html>

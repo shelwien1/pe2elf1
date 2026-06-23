@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>LKGS—Load Kernel GS Base </title></head>
+<body>
+<h1>LKGS—Load Kernel GS Base</h1>
+<table>
+<tr>
+<th>Opcode</th>
+<th>Instruction</th>
+<th>Op/En</th>
+<th>64-Bit Mode</th>
+<th>Compat/Leg Mode</th>
+<th>Description</th></tr>
+<tr>
+<td>F2 0F 00 /6</td>
+<td>LKGS r/m16</td>
+<td>A</td>
+<td>Valid</td>
+<td>N.E.</td>
+<td>Load GS using r/m16, placing the base address instead in the IA32_KERNEL_GS_BASE MSR.</td></tr></table>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>A</td>
+<td>16-bit selector</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
+<h2>Description</h2>
+<p>LKGS operates in the same way as MOV to GS except that the descriptor’s base address is loaded into the IA32_KERNEL_GS_BASE MSR instead of the GS segment’s descriptor cache.</p>
+<p>LKGS takes a single (source) operand, which can be a general-purpose register or a memory location. The operand must be a valid segment selector. The instruction loads the segment descriptor referenced by that segment selector into the GS descriptor cache, with the exception of the base address. The base address in the GS descriptor cache is not modified; the base address from the segment descriptor is loaded into the IA32_KERNEL_GS_BASE MSR. (Since the base address in the descriptor is only 32 bits, the upper 32 bits of the MSR are cleared.)</p>
+<p>A null segment selector (values 0000-0003) can be loaded without causing an exception. However, any subsequent attempt to reference GS outside 64-bit mode causes a general protection exception (#GP) and no memory refer-ence occurs. LKGS with a null segment selector loads zero into IA32_KERNEL_GS_BASE.</p>
+<h2>Operation</h2>
+<pre>IF CPL &gt; 0 OR logical processor not in 64-bit mode
+    THEN #UD; FI;
+IF SRC is null
+    THEN
+         GS.selector := SRC;
+         mark GS as null;
+         IA32_KERNEL_GS_BASE := 0;
+    ELSE
+         IF SRC.index is outside descriptor table limits
+              THEN #GP(selector); FI;
+         read referenced descriptor for descriptor table;
+         IF the descriptor is not for a data or readable code segment OR SRC.RPL &gt; descriptor.DPL
+              THEN #GP(selector); FI;
+         IF the descriptor is not marked present
+              THEN #NP(selector);
+              ELSE
+                    GS.selector := SRC;
+                    GS.attributes := descriptor.attributes;
+                    IA32_KERNEL_GS_BASE := descriptor.base; // bits 63:32 cleared
+         FI;
+FI;</pre>
+<h2>Flags Affected</h2>
+<p>None.</p>
+<h2>Protected Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The LKGS instruction is not recognized in protected mode.</td></tr></table>
+<h2>Real-Address Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The LKGS instruction is not recognized in real-address mode.</td></tr></table>
+<h2>Virtual-8086 Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The LKGS instruction is not recognized in virtual-8086 mode.</td></tr></table>
+<h2>Compatibility Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The LKGS instruction is not recognized in compatibility mode.</td></tr></table>
+<h2>64-Bit Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>
+<p>If CPL &gt; 0.</p>
+<p>If CPUID.07H.01H:EAX.LKGS[18] is not 1.</p>
+<p>If the LOCK prefix is used.</p></td></tr>
+<tr>
+<td>#GP(0)</td>
+<td>If the memory address is in a non-canonical form.</td></tr>
+<tr>
+<td>#GP(selector)</td>
+<td>
+<p>If segment selector index is outside descriptor table limits.</p>
+<p>If the memory access to the descriptor table is non-canonical.</p>
+<p>If the referenced descriptor is not for a data or readable code segment or the selector RPL is greater than the descriptor DPL.</p></td></tr>
+<tr>
+<td>#SS(0)</td>
+<td>If the memory address is in a non-canonical form.</td></tr>
+<tr>
+<td>#PF(fault-code)</td>
+<td>If a page fault occurs.</td></tr></table></body></html>

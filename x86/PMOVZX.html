@@ -4,526 +4,540 @@
 <head>
 <meta charset="UTF-8">
 <link href="style.css" type="text/css" rel="stylesheet">
-<title>PMOVZX—Packed Move with Zero Extend </title></head>
+<title>PMOVZX—Packed Move With Zero Extend </title></head>
 <body>
-<h1>PMOVZX—Packed Move with Zero Extend</h1>
+<h1>PMOVZX—Packed Move With Zero Extend</h1>
 <p><strong>Opcode/</strong></p>
 <p><strong>Op /</strong></p>
-<p><strong>64/32</strong></p>
-<p><strong>CPUID</strong></p>
+<p><strong>64/32 bit</strong></p>
+<p><strong>CPUID Feature</strong></p>
 <p><strong>Description</strong></p>
 <table>
 <tr>
 <th>Instruction</th>
 <th>En</th>
-<th>bit Mode Support</th>
-<th>Feature Flag</th>
+<th>Mode Support</th>
+<th>Flag</th>
 <td></td></tr>
 <tr>
 <td>66 0f 38 30 /r PMOVZXBW xmm1, xmm2/m64</td>
-<td>RM</td>
+<td>A</td>
 <td>V/V</td>
 <td>SSE4_1</td>
 <td>Zero extend 8 packed 8-bit integers in the low 8 bytes of xmm2/m64 to 8 packed 16-bit integers in xmm1.</td></tr>
 <tr>
 <td>66 0f 38 31 /r PMOVZXBD xmm1, xmm2/m32</td>
-<td>RM</td>
+<td>A</td>
 <td>V/V</td>
 <td>SSE4_1</td>
 <td>Zero extend 4 packed 8-bit integers in the low 4 bytes of xmm2/m32 to 4 packed 32-bit integers in xmm1.</td></tr>
 <tr>
 <td>66 0f 38 32 /r PMOVZXBQ xmm1, xmm2/m16</td>
-<td>RM</td>
+<td>A</td>
 <td>V/V</td>
 <td>SSE4_1</td>
 <td>Zero extend 2 packed 8-bit integers in the low 2 bytes of xmm2/m16 to 2 packed 64-bit integers in xmm1.</td></tr>
 <tr>
 <td>66 0f 38 33 /r PMOVZXWD xmm1, xmm2/m64</td>
-<td>RM</td>
+<td>A</td>
 <td>V/V</td>
 <td>SSE4_1</td>
 <td>Zero extend 4 packed 16-bit integers in the low 8 bytes of xmm2/m64 to 4 packed 32-bit integers in xmm1.</td></tr>
 <tr>
 <td>66 0f 38 34 /r PMOVZXWQ xmm1, xmm2/m32</td>
-<td>RM</td>
+<td>A</td>
 <td>V/V</td>
 <td>SSE4_1</td>
 <td>Zero extend 2 packed 16-bit integers in the low 4 bytes of xmm2/m32 to 2 packed 64-bit integers in xmm1.</td></tr>
 <tr>
 <td>66 0f 38 35 /r PMOVZXDQ xmm1, xmm2/m64</td>
-<td>RM</td>
+<td>A</td>
 <td>V/V</td>
 <td>SSE4_1</td>
 <td>Zero extend 2 packed 32-bit integers in the low 8 bytes of xmm2/m64 to 2 packed 64-bit integers in xmm1.</td></tr>
 <tr>
 <td>VEX.128.66.0F38.WIG 30 /r VPMOVZXBW xmm1, xmm2/m64</td>
-<td>RM</td>
+<td>A</td>
 <td>V/V</td>
 <td>AVX</td>
 <td>Zero extend 8 packed 8-bit integers in the low 8 bytes of xmm2/m64 to 8 packed 16-bit integers in xmm1.</td></tr>
 <tr>
 <td>VEX.128.66.0F38.WIG 31 /r VPMOVZXBD xmm1, xmm2/m32</td>
-<td>RM</td>
+<td>A</td>
 <td>V/V</td>
 <td>AVX</td>
 <td>Zero extend 4 packed 8-bit integers in the low 4 bytes of xmm2/m32 to 4 packed 32-bit integers in xmm1.</td></tr>
 <tr>
 <td>VEX.128.66.0F38.WIG 32 /r VPMOVZXBQ xmm1, xmm2/m16</td>
-<td>RM</td>
+<td>A</td>
 <td>V/V</td>
 <td>AVX</td>
 <td>Zero extend 2 packed 8-bit integers in the low 2 bytes of xmm2/m16 to 2 packed 64-bit integers in xmm1.</td></tr>
 <tr>
 <td>VEX.128.66.0F38.WIG 33 /r VPMOVZXWD xmm1, xmm2/m64</td>
-<td>RM</td>
+<td>A</td>
 <td>V/V</td>
 <td>AVX</td>
 <td>Zero extend 4 packed 16-bit integers in the low 8 bytes of xmm2/m64 to 4 packed 32-bit integers in xmm1.</td></tr>
 <tr>
 <td>VEX.128.66.0F38.WIG 34 /r VPMOVZXWQ xmm1, xmm2/m32</td>
-<td>RM</td>
+<td>A</td>
 <td>V/V</td>
 <td>AVX</td>
 <td>Zero extend 2 packed 16-bit integers in the low 4 bytes of xmm2/m32 to 2 packed 64-bit integers in xmm1.</td></tr>
 <tr>
 <td>VEX.128.66.0F 38.WIG 35 /r VPMOVZXDQ xmm1, xmm2/m64</td>
-<td>RM</td>
+<td>A</td>
 <td>V/V</td>
 <td>AVX</td>
 <td>Zero extend 2 packed 32-bit integers in the low 8 bytes of xmm2/m64 to 2 packed 64-bit integers in xmm1.</td></tr>
 <tr>
 <td>VEX.256.66.0F38.WIG 30 /r VPMOVZXBW ymm1, xmm2/m128</td>
-<td>RM</td>
+<td>A</td>
 <td>V/V</td>
 <td>AVX2</td>
 <td>Zero extend 16 packed 8-bit integers in xmm2/m128 to 16 packed 16-bit integers in ymm1.</td></tr>
 <tr>
 <td>VEX.256.66.0F38.WIG 31 /r VPMOVZXBD ymm1, xmm2/m64</td>
-<td>RM</td>
+<td>A</td>
 <td>V/V</td>
 <td>AVX2</td>
 <td>Zero extend 8 packed 8-bit integers in the low 8 bytes of xmm2/m64 to 8 packed 32-bit integers in ymm1.</td></tr>
 <tr>
 <td>VEX.256.66.0F38.WIG 32 /r VPMOVZXBQ ymm1, xmm2/m32</td>
-<td>RM</td>
+<td>A</td>
 <td>V/V</td>
 <td>AVX2</td>
 <td>Zero extend 4 packed 8-bit integers in the low 4 bytes of xmm2/m32 to 4 packed 64-bit integers in ymm1.</td></tr>
 <tr>
 <td>VEX.256.66.0F38.WIG 33 /r VPMOVZXWD ymm1, xmm2/m128</td>
-<td>RM</td>
+<td>A</td>
 <td>V/V</td>
 <td>AVX2</td>
-<td>Zero extend 8 packed 16-bit integers xmm2/m128 to 8 packed 32-bit integers in ymm1.</td></tr>
-<tr>
-<td>VEX.256.66.0F38.WIG 34 /r VPMOVZXWQ ymm1, xmm2/m64</td>
-<td>RM</td>
-<td>V/V</td>
-<td>AVX2</td>
-<td>Zero extend 4 packed 16-bit integers in the low 8 bytes of xmm2/m64 to 4 packed 64-bit integers in xmm1.</td></tr>
-<tr>
-<td>VEX.256.66.0F38.WIG 35 /r VPMOVZXDQ ymm1, xmm2/m128</td>
-<td>RM</td>
-<td>V/V</td>
-<td>AVX2</td>
-<td>Zero extend 4 packed 32-bit integers in xmm2/m128 to 4 packed 64-bit integers in ymm1.</td></tr></table>
-<p><strong>64/32</strong></p>
-<p><strong>CPUID</strong></p>
-<p><strong>Description</strong></p>
+<td>Zero extend 8 packed 16-bit integers xmm2/m128 to 8 packed 32-bit integers in ymm1.</td></tr></table>
 <table>
 <tr>
 <th>Opcode/Instruction</th>
 <th>Op /En</th>
-<th>bit Mode Support</th>
-<th>Feature Flag</th>
-<td></td></tr>
+<th>64/32 bit Mode Support</th>
+<th>CPUID Feature Flag</th>
+<th>Description</th></tr>
+<tr>
+<td>VEX.256.66.0F38.WIG 34 /r VPMOVZXWQ ymm1, xmm2/m64</td>
+<td>A</td>
+<td>V/V</td>
+<td>AVX2</td>
+<td>Zero extend 4 packed 16-bit integers in the low 8 bytes of xmm2/m64 to 4 packed 64-bit integers in ymm1.</td></tr>
+<tr>
+<td>VEX.256.66.0F38.WIG 35 /r VPMOVZXDQ ymm1, xmm2/m128</td>
+<td>A</td>
+<td>V/V</td>
+<td>AVX2</td>
+<td>Zero extend 4 packed 32-bit integers in xmm2/m128 to 4 packed 64-bit integers in ymm1.</td></tr>
 <tr>
 <td>EVEX.128.66.0F38 30.WIG /r VPMOVZXBW xmm1 {k1}{z}, xmm2/m64</td>
-<td>HVM</td>
+<td>B</td>
 <td>V/V</td>
-<td>AVX512VL AVX512BW</td>
-<td>Zero extend 8 packed 8-bit integers in the low 8 bytes of xmm2/m64 to 8 packed 16-bit integers in xmm1.</td></tr>
+<td>(AVX512VL AND AVX512BW) OR AVX10.1</td>
+<td>Zero extend 8 packed 8-bit integers in the low 8 bytes of xmm2/m64 to 8 packed 16-bit integers in xmm1 subject to writemask k1.</td></tr>
 <tr>
 <td>EVEX.256.66.0F38.WIG 30 /r VPMOVZXBW ymm1 {k1}{z}, xmm2/m128</td>
-<td>HVM</td>
+<td>B</td>
 <td>V/V</td>
-<td>AVX512VL AVX512BW</td>
-<td>Zero extend 16 packed 8-bit integers in xmm2/m128 to 16 packed 16-bit integers in ymm1.</td></tr>
+<td>(AVX512VL AND AVX512BW) OR AVX10.1</td>
+<td>Zero extend 16 packed 8-bit integers in xmm2/m128 to 16 packed 16-bit integers in ymm1 subject to writemask k1.</td></tr>
 <tr>
 <td>EVEX.512.66.0F38.WIG 30 /r VPMOVZXBW zmm1 {k1}{z}, ymm2/m256</td>
-<td>HVM</td>
+<td>B</td>
 <td>V/V</td>
-<td>AVX512BW</td>
-<td>Zero extend 32 packed 8-bit integers in ymm2/m256 to 32 packed 16-bit integers in zmm1.</td></tr>
+<td>AVX512BW OR AVX10.1</td>
+<td>Zero extend 32 packed 8-bit integers in ymm2/m256 to 32 packed 16-bit integers in zmm1 subject to writemask k1.</td></tr>
 <tr>
 <td>EVEX.128.66.0F38.WIG 31 /r VPMOVZXBD xmm1 {k1}{z}, xmm2/m32</td>
-<td>QVM</td>
+<td>C</td>
 <td>V/V</td>
-<td>AVX512VL AVX512F</td>
+<td>(AVX512VL AND AVX512F) OR AVX10.1</td>
 <td>Zero extend 4 packed 8-bit integers in the low 4 bytes of xmm2/m32 to 4 packed 32-bit integers in xmm1 subject to writemask k1.</td></tr>
 <tr>
 <td>EVEX.256.66.0F38.WIG 31 /r VPMOVZXBD ymm1 {k1}{z}, xmm2/m64</td>
-<td>QVM</td>
+<td>C</td>
 <td>V/V</td>
-<td>AVX512VL AVX512F</td>
+<td>(AVX512VL AND AVX512F) OR AVX10.1</td>
 <td>Zero extend 8 packed 8-bit integers in the low 8 bytes of xmm2/m64 to 8 packed 32-bit integers in ymm1 subject to writemask k1.</td></tr>
 <tr>
 <td>EVEX.512.66.0F38.WIG 31 /r VPMOVZXBD zmm1 {k1}{z}, xmm2/m128</td>
-<td>QVM</td>
+<td>C</td>
 <td>V/V</td>
-<td>AVX512F</td>
+<td>AVX512F OR AVX10.1</td>
 <td>Zero extend 16 packed 8-bit integers in xmm2/m128 to 16 packed 32-bit integers in zmm1 subject to writemask k1.</td></tr>
 <tr>
 <td>EVEX.128.66.0F38.WIG 32 /r VPMOVZXBQ xmm1 {k1}{z}, xmm2/m16</td>
-<td>OVM</td>
+<td>D</td>
 <td>V/V</td>
-<td>AVX512VL AVX512F</td>
+<td>(AVX512VL AND AVX512F) OR AVX10.1</td>
 <td>Zero extend 2 packed 8-bit integers in the low 2 bytes of xmm2/m16 to 2 packed 64-bit integers in xmm1 subject to writemask k1.</td></tr>
 <tr>
 <td>EVEX.256.66.0F38.WIG 32 /r VPMOVZXBQ ymm1 {k1}{z}, xmm2/m32</td>
-<td>OVM</td>
+<td>D</td>
 <td>V/V</td>
-<td>AVX512VL AVX512F</td>
+<td>(AVX512VL AND AVX512F) OR AVX10.1</td>
 <td>Zero extend 4 packed 8-bit integers in the low 4 bytes of xmm2/m32 to 4 packed 64-bit integers in ymm1 subject to writemask k1.</td></tr>
 <tr>
 <td>EVEX.512.66.0F38.WIG 32 /r VPMOVZXBQ zmm1 {k1}{z}, xmm2/m64</td>
-<td>OVM</td>
+<td>D</td>
 <td>V/V</td>
-<td>AVX512F</td>
+<td>AVX512F OR AVX10.1</td>
 <td>Zero extend 8 packed 8-bit integers in the low 8 bytes of xmm2/m64 to 8 packed 64-bit integers in zmm1 subject to writemask k1.</td></tr>
 <tr>
 <td>EVEX.128.66.0F38.WIG 33 /r VPMOVZXWD xmm1 {k1}{z}, xmm2/m64</td>
-<td>HVM</td>
+<td>B</td>
 <td>V/V</td>
-<td>AVX512VL AVX512F</td>
+<td>(AVX512VL AND AVX512F) OR AVX10.1</td>
 <td>Zero extend 4 packed 16-bit integers in the low 8 bytes of xmm2/m64 to 4 packed 32-bit integers in xmm1 subject to writemask k1.</td></tr>
 <tr>
 <td>EVEX.256.66.0F38.WIG 33 /r VPMOVZXWD ymm1 {k1}{z}, xmm2/m128</td>
-<td>HVM</td>
+<td>B</td>
 <td>V/V</td>
-<td>AVX512VL AVX512F</td>
-<td>Zero extend 8 packed 16-bit integers in xmm2/m128 to 8 packed 32-bit integers in zmm1 subject to writemask k1.</td></tr>
+<td>(AVX512VL AND AVX512F) OR AVX10.1</td>
+<td>Zero extend 8 packed 16-bit integers in xmm2/m128 to 8 packed 32-bit integers in ymm1 subject to writemask k1.</td></tr>
 <tr>
 <td>EVEX.512.66.0F38.WIG 33 /r VPMOVZXWD zmm1 {k1}{z}, ymm2/m256</td>
-<td>HVM</td>
+<td>B</td>
 <td>V/V</td>
-<td>AVX512F</td>
+<td>AVX512F OR AVX10.1</td>
 <td>Zero extend 16 packed 16-bit integers in ymm2/m256 to 16 packed 32-bit integers in zmm1 subject to writemask k1.</td></tr>
 <tr>
 <td>EVEX.128.66.0F38.WIG 34 /r VPMOVZXWQ xmm1 {k1}{z}, xmm2/m32</td>
-<td>QVM</td>
+<td>C</td>
 <td>V/V</td>
-<td>AVX512VL AVX512F</td>
+<td>(AVX512VL AND AVX512F) OR AVX10.1</td>
 <td>Zero extend 2 packed 16-bit integers in the low 4 bytes of xmm2/m32 to 2 packed 64-bit integers in xmm1 subject to writemask k1.</td></tr>
 <tr>
 <td>EVEX.256.66.0F38.WIG 34 /r VPMOVZXWQ ymm1 {k1}{z}, xmm2/m64</td>
-<td>QVM</td>
+<td>C</td>
 <td>V/V</td>
-<td>AVX512VL AVX512F</td>
-<td>Zero extend 4 packed 16-bit integers in the low 8 bytes of xmm2/m64 to 4 packed 64-bit integers in ymm1 subject to writemask k1.</td></tr>
-<tr>
-<td>EVEX.512.66.0F38.WIG 34 /r VPMOVZXWQ zmm1 {k1}{z}, xmm2/m128</td>
-<td>QVM</td>
-<td>V/V</td>
-<td>AVX512F</td>
-<td>Zero extend 8 packed 16-bit integers in xmm2/m128 to 8 packed 64-bit integers in zmm1 subject to writemask k1.</td></tr></table>
+<td>(AVX512VL AND AVX512F) OR AVX10.1</td>
+<td>Zero extend 4 packed 16-bit integers in the low 8 bytes of xmm2/m64 to 4 packed 64-bit integers in ymm1 subject to writemask k1.</td></tr></table>
 <p><strong>Opcode/</strong></p>
 <p><strong>Op /</strong></p>
-<p><strong>64/32</strong></p>
-<p><strong>CPUID</strong></p>
+<p><strong>64/32 bit</strong></p>
+<p><strong>CPUID Feature</strong></p>
 <p><strong>Description</strong></p>
 <table>
 <tr>
 <th>Instruction</th>
 <th>En</th>
-<th>bit Mode Support</th>
-<th>Feature Flag</th>
+<th>Mode Support</th>
+<th>Flag</th>
 <td></td></tr>
 <tr>
-<td>EVEX.128.66.0F38.W0 35 /r VPMOVZXDQ xmm1 {k1}{z}, xmm2/m64</td>
-<td>HVM</td>
+<td>EVEX.512.66.0F38.WIG 34 /r VPMOVZXWQ zmm1 {k1}{z}, xmm2/m128</td>
+<td>C</td>
 <td>V/V</td>
-<td>AVX512VL AVX512F</td>
-<td>Zero extend 2 packed 32-bit integers in the low 8 bytes of xmm2/m64 to 2 packed 64-bit integers in zmm1 using writemask k1.</td></tr>
+<td>AVX512F OR AVX10.1</td>
+<td>Zero extend 8 packed 16-bit integers in xmm2/m128 to 8 packed 64-bit integers in zmm1 subject to writemask k1.</td></tr>
+<tr>
+<td>EVEX.128.66.0F38.W0 35 /r VPMOVZXDQ xmm1 {k1}{z}, xmm2/m64</td>
+<td>B</td>
+<td>V/V</td>
+<td>(AVX512VL AND AVX512F) OR AVX10.1</td>
+<td>Zero extend 2 packed 32-bit integers in the low 8 bytes of xmm2/m64 to 2 packed 64-bit integers in xmm1 using writemask k1.</td></tr>
 <tr>
 <td>EVEX.256.66.0F38.W0 35 /r VPMOVZXDQ ymm1 {k1}{z}, xmm2/m128</td>
-<td>HVM</td>
+<td>B</td>
 <td>V/V</td>
-<td>AVX512VL AVX512F</td>
-<td>Zero extend 4 packed 32-bit integers in xmm2/m128 to 4 packed 64-bit integers in zmm1 using writemask k1.</td></tr>
+<td>(AVX512VL AND AVX512F) OR AVX10.1</td>
+<td>Zero extend 4 packed 32-bit integers in xmm2/m128 to 4 packed 64-bit integers in ymm1 using writemask k1.</td></tr>
 <tr>
 <td>EVEX.512.66.0F38.W0 35 /r VPMOVZXDQ zmm1 {k1}{z}, ymm2/m256</td>
-<td>HVM</td>
+<td>B</td>
 <td>V/V</td>
-<td>AVX512F</td>
+<td>AVX512F OR AVX10.1</td>
 <td>Zero extend 8 packed 32-bit integers in ymm2/m256 to 8 packed 64-bit integers in zmm1 using writemask k1.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Tuple Type</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
-<td>RM</td>
+<td>A</td>
+<td>N/A</td>
 <td>ModRM:reg (w)</td>
 <td>ModRM:r/m (r)</td>
-<td>NA</td>
-<td>NA</td></tr>
+<td>N/A</td>
+<td>N/A</td></tr>
 <tr>
-<td>HVM, QVM, OVM</td>
+<td>B</td>
+<td>Half Mem</td>
 <td>ModRM:reg (w)</td>
 <td>ModRM:r/m (r)</td>
-<td>NA</td>
-<td>NA</td></tr></table>
-<p><strong>Description</strong></p>
-<p>Legacy, VEX and EVEX encoded versions: Packed byte, word, or dword integers starting from the low bytes of the source operand (second operand) are zero extended to word, dword, or quadword integers and stored in packed signed bytes the destination operand.</p>
-<p>128-bit Legacy SSE version: Bits (MAX_VL-1:128) of the corresponding destination register remain unchanged.</p>
-<p>VEX.128 encoded version: Bits (MAX_VL-1:128) of the corresponding destination register are zeroed.</p>
-<p>VEX.256 encoded version: Bits (MAX_VL-1:256) of the corresponding destination register are zeroed.</p>
+<td>N/A</td>
+<td>N/A</td></tr>
+<tr>
+<td>C</td>
+<td>Quarter Mem</td>
+<td>ModRM:reg (w)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td>
+<td>N/A</td></tr>
+<tr>
+<td>D</td>
+<td>Eighth Mem</td>
+<td>ModRM:reg (w)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
+<h2>Description</h2>
+<p>Legacy, VEX, and EVEX encoded versions: Packed byte, word, or dword integers starting from the low bytes of the source operand (second operand) are zero extended to word, dword, or quadword integers and stored in packed signed bytes the destination operand.</p>
+<p>128-bit Legacy SSE version: Bits (MAXVL-1:128) of the corresponding destination register remain unchanged.</p>
+<p>VEX.128 encoded version: Bits (MAXVL-1:128) of the corresponding destination register are zeroed.</p>
+<p>VEX.256 encoded version: Bits (MAXVL-1:256) of the corresponding destination register are zeroed.</p>
 <p>EVEX encoded versions: Packed dword integers starting from the low bytes of the source operand (second operand) are zero extended to quadword integers and stored to the destination operand under the writemask.The destination register is XMM, YMM or ZMM Register.</p>
 <p>Note: VEX.vvvv and EVEX.vvvv are reserved and must be 1111b otherwise instructions will #UD.</p>
-<p><strong>Operation</strong></p>
+<h2>Operation</h2>
 <p><strong>Packed_Zero_Extend_BYTE_to_WORD(DEST, SRC)</strong></p>
-<p>DEST[15:0] ZeroExtend(SRC[7:0]);</p>
-<p>DEST[31:16] ZeroExtend(SRC[15:8]);</p>
-<p>DEST[47:32] ZeroExtend(SRC[23:16]);</p>
-<p>DEST[63:48] ZeroExtend(SRC[31:24]);</p>
-<p>DEST[79:64] ZeroExtend(SRC[39:32]);</p>
-<p>DEST[95:80] ZeroExtend(SRC[47:40]);</p>
-<p>DEST[111:96] ZeroExtend(SRC[55:48]);</p>
-<p>DEST[127:112] ZeroExtend(SRC[63:56]);</p>
-<p>Packed_Zero_Extend_BYTE_to_DWORD(DEST, SRC)</p>
-<p>DEST[31:0] ZeroExtend(SRC[7:0]);</p>
-<p>DEST[63:32] ZeroExtend(SRC[15:8]);</p>
-<p>DEST[95:64] ZeroExtend(SRC[23:16]);</p>
-<p>DEST[127:96] ZeroExtend(SRC[31:24]);</p>
+<pre>DEST[15:0] := ZeroExtend(SRC[7:0]);
+DEST[31:16] := ZeroExtend(SRC[15:8]);
+DEST[47:32] := ZeroExtend(SRC[23:16]);
+DEST[63:48] := ZeroExtend(SRC[31:24]);
+DEST[79:64] := ZeroExtend(SRC[39:32]);
+DEST[95:80] := ZeroExtend(SRC[47:40]);
+DEST[111:96] := ZeroExtend(SRC[55:48]);
+DEST[127:112] := ZeroExtend(SRC[63:56]);</pre>
+<p><strong>Packed_Zero_Extend_BYTE_to_DWORD(DEST, SRC)</strong></p>
+<pre>DEST[31:0] := ZeroExtend(SRC[7:0]);
+DEST[63:32] := ZeroExtend(SRC[15:8]);
+DEST[95:64] := ZeroExtend(SRC[23:16]);
+DEST[127:96] := ZeroExtend(SRC[31:24]);</pre>
 <p><strong>Packed_Zero_Extend_BYTE_to_QWORD(DEST, SRC)</strong></p>
-<p>DEST[63:0] ZeroExtend(SRC[7:0]);</p>
-<p>DEST[127:64] ZeroExtend(SRC[15:8]);</p>
+<pre>DEST[63:0] := ZeroExtend(SRC[7:0]);
+DEST[127:64] := ZeroExtend(SRC[15:8]);</pre>
 <p><strong>Packed_Zero_Extend_WORD_to_DWORD(DEST, SRC)</strong></p>
-<p>DEST[31:0] ZeroExtend(SRC[15:0]);</p>
-<p>DEST[63:32] ZeroExtend(SRC[31:16]);</p>
-<p>DEST[95:64] ZeroExtend(SRC[47:32]);</p>
-<p>DEST[127:96] ZeroExtend(SRC[63:48]);</p>
+<pre>DEST[31:0] := ZeroExtend(SRC[15:0]);
+DEST[63:32] := ZeroExtend(SRC[31:16]);
+DEST[95:64] := ZeroExtend(SRC[47:32]);
+DEST[127:96] := ZeroExtend(SRC[63:48]);</pre>
 <p><strong>Packed_Zero_Extend_WORD_to_QWORD(DEST, SRC)</strong></p>
-<p>DEST[63:0] ZeroExtend(SRC[15:0]);</p>
-<p>DEST[127:64] ZeroExtend(SRC[31:16]);</p>
+<pre>DEST[63:0] := ZeroExtend(SRC[15:0]);
+DEST[127:64] := ZeroExtend(SRC[31:16]);</pre>
 <p><strong>Packed_Zero_Extend_DWORD_to_QWORD(DEST, SRC)</strong></p>
-<p>DEST[63:0] ZeroExtend(SRC[31:0]);</p>
-<p>DEST[127:64] ZeroExtend(SRC[63:32]);</p>
-<p><strong>VPMOVZXBW (EVEX encoded versions)</strong></p>
-<p>(KL, VL) = (8, 128), (16, 256), (32, 512)</p>
-<p>Packed_Zero_Extend_BYTE_to_WORD(TMP_DEST[127:0], SRC[63:0])</p>
-<p>IF VL &gt;= 256</p>
-<p>Packed_Zero_Extend_BYTE_to_WORD(TMP_DEST[255:128], SRC[127:64])</p>
-<p>FI;</p>
-<p>IF VL &gt;= 512</p>
-<p>Packed_Zero_Extend_BYTE_to_WORD(TMP_DEST[383:256], SRC[191:128])</p>
-<p>Packed_Zero_Extend_BYTE_to_WORD(TMP_DEST[511:384], SRC[255:192])</p>
-<p>FI;</p>
-<p>FOR j  0 TO KL-1</p>
-<p>i  j * 16</p>
-<p>IF k1[j] OR *no writemask*</p>
-<p>THEN DEST[i+15:i]  TEMP_DEST[i+15:i]</p>
-<p>ELSE</p>
-<p>IF *merging-masking*</p>
-<p>; merging-masking</p>
-<p>THEN *DEST[i+15:i] remains unchanged*</p>
-<p>ELSE *zeroing-masking*</p>
-<p>; zeroing-masking</p>
-<p>DEST[i+15:i]  0</p>
-<p>FI</p>
-<p>FI;</p>
-<p>ENDFOR</p>
-<p>DEST[MAX_VL-1:VL]  0</p>
-<p><strong>VPMOVZXBD (EVEX encoded versions)</strong></p>
-<p>(KL, VL) = (4, 128), (8, 256), (16, 512)</p>
-<p>Packed_Zero_Extend_BYTE_to_DWORD(TMP_DEST[127:0], SRC[31:0])</p>
-<p>IF VL &gt;= 256</p>
-<p>Packed_Zero_Extend_BYTE_to_DWORD(TMP_DEST[255:128], SRC[63:32])</p>
-<p>FI;</p>
-<p>IF VL &gt;= 512</p>
-<p>Packed_Zero_Extend_BYTE_to_DWORD(TMP_DEST[383:256], SRC[95:64])</p>
-<p>Packed_Zero_Extend_BYTE_to_DWORD(TMP_DEST[511:384], SRC[127:96])</p>
-<p>FI;</p>
-<p>FOR j  0 TO KL-1</p>
-<p>i  j * 32</p>
-<p>IF k1[j] OR *no writemask*</p>
-<p>THEN DEST[i+31:i]  TEMP_DEST[i+31:i]</p>
-<p>ELSE</p>
-<p>IF *merging-masking*</p>
-<p>; merging-masking</p>
-<p>THEN *DEST[i+31:i] remains unchanged*</p>
-<p>ELSE *zeroing-masking*</p>
-<p>; zeroing-masking</p>
-<p>DEST[i+31:i]  0</p>
-<p>FI</p>
-<p>FI;</p>
-<p>ENDFOR</p>
-<p>DEST[MAX_VL-1:VL]  0</p>
-<p><strong>VPMOVZXBQ (EVEX encoded versions)</strong></p>
-<p>(KL, VL) = (2, 128), (4, 256), (8, 512)</p>
-<p>Packed_Zero_Extend_BYTE_to_QWORD(TMP_DEST[127:0], SRC[15:0])</p>
-<p>IF VL &gt;= 256</p>
-<p>Packed_Zero_Extend_BYTE_to_QWORD(TMP_DEST[255:128], SRC[31:16])</p>
-<p>FI;</p>
-<p>IF VL &gt;= 512</p>
-<p>Packed_Zero_Extend_BYTE_to_QWORD(TMP_DEST[383:256], SRC[47:32])</p>
-<p>Packed_Zero_Extend_BYTE_to_QWORD(TMP_DEST[511:384], SRC[63:48])</p>
-<p>FI;</p>
-<p>FOR j  0 TO KL-1</p>
-<p>i  j * 64</p>
-<p>IF k1[j] OR *no writemask*</p>
-<p>THEN DEST[i+63:i]  TEMP_DEST[i+63:i]</p>
-<p>ELSE</p>
-<p>IF *merging-masking*</p>
-<p>; merging-masking</p>
-<p>THEN *DEST[i+63:i] remains unchanged*</p>
-<p>ELSE *zeroing-masking*</p>
-<p>; zeroing-masking</p>
-<p>DEST[i+63:i]  0</p>
-<p>FI</p>
-<p>FI;</p>
-<p>ENDFOR</p>
-<p>DEST[MAX_VL-1:VL]  0</p>
-<p><strong>VPMOVZXWD (EVEX encoded versions)</strong></p>
-<p>(KL, VL) = (4, 128), (8, 256), (16, 512)</p>
-<p>Packed_Zero_Extend_WORD_to_DWORD(TMP_DEST[127:0], SRC[63:0])</p>
-<p>IF VL &gt;= 256</p>
-<p>Packed_Zero_Extend_WORD_to_DWORD(TMP_DEST[255:128], SRC[127:64])</p>
-<p>FI;</p>
-<p>IF VL &gt;= 512</p>
-<p>Packed_Zero_Extend_WORD_to_DWORD(TMP_DEST[383:256], SRC[191:128])</p>
-<p>Packed_Zero_Extend_WORD_to_DWORD(TMP_DEST[511:384], SRC[256:192])</p>
-<p>FI;</p>
-<p>FOR j  0 TO KL-1</p>
-<p>i  j * 32</p>
-<p>IF k1[j] OR *no writemask*</p>
-<p>THEN DEST[i+31:i]  TEMP_DEST[i+31:i]</p>
-<p>ELSE</p>
-<p>IF *merging-masking*</p>
-<p>; merging-masking</p>
-<p>THEN *DEST[i+31:i] remains unchanged*</p>
-<p>ELSE *zeroing-masking*</p>
-<p>; zeroing-masking</p>
-<p>DEST[i+31:i]  0</p>
-<p>FI</p>
-<p>FI;</p>
-<p>ENDFOR</p>
-<p>DEST[MAX_VL-1:VL]  0</p>
-<p><strong>VPMOVZXWQ (EVEX encoded versions)</strong></p>
-<p>(KL, VL) = (2, 128), (4, 256), (8, 512)</p>
-<p>Packed_Zero_Extend_WORD_to_QWORD(TMP_DEST[127:0], SRC[31:0])</p>
-<p>IF VL &gt;= 256</p>
-<p>Packed_Zero_Extend_WORD_to_QWORD(TMP_DEST[255:128], SRC[63:32])</p>
-<p>FI;</p>
-<p>IF VL &gt;= 512</p>
-<p>Packed_Zero_Extend_WORD_to_QWORD(TMP_DEST[383:256], SRC[95:64])</p>
-<p>Packed_Zero_Extend_WORD_to_QWORD(TMP_DEST[511:384], SRC[127:96])</p>
-<p>FI;</p>
-<p>FOR j  0 TO KL-1</p>
-<p>i  j * 64</p>
-<p>IF k1[j] OR *no writemask*</p>
-<p>THEN DEST[i+63:i]  TEMP_DEST[i+63:i]</p>
-<p>ELSE</p>
-<p>IF *merging-masking*</p>
-<p>; merging-masking</p>
-<p>THEN *DEST[i+63:i] remains unchanged*</p>
-<p>ELSE *zeroing-masking*</p>
-<p>; zeroing-masking</p>
-<p>DEST[i+63:i]  0</p>
-<p>FI</p>
-<p>FI;</p>
-<p>ENDFOR</p>
-<p>DEST[MAX_VL-1:VL]  0</p>
-<p><strong>VPMOVZXDQ (EVEX encoded versions)</strong></p>
-<p>(KL, VL) = (2, 128), (4, 256), (8, 512)</p>
-<p>Packed_Zero_Extend_DWORD_to_QWORD(TEMP_DEST[127:0], SRC[63:0])</p>
-<p>IF VL &gt;= 256</p>
-<p>Packed_Zero_Extend_DWORD_to_QWORD(TEMP_DEST[255:128], SRC[127:64])</p>
-<p>FI;</p>
-<p>IF VL &gt;= 512</p>
-<p>Packed_Zero_Extend_DWORD_to_QWORD(TEMP_DEST[383:256], SRC[191:128])</p>
-<p>Packed_Zero_Extend_DWORD_to_QWORD(TEMP_DEST[511:384], SRC[255:192])</p>
-<p>FI;</p>
-<p>FOR j  0 TO KL-1</p>
-<p>i  j * 64</p>
-<p>IF k1[j] OR *no writemask*</p>
-<p>THEN DEST[i+63:i]  TEMP_DEST[i+63:i]</p>
-<p>ELSE</p>
-<p>IF *merging-masking*</p>
-<p>; merging-masking</p>
-<p>THEN *DEST[i+63:i] remains unchanged*</p>
-<p>ELSE *zeroing-masking*</p>
-<p>; zeroing-masking</p>
-<p>DEST[i+63:i]  0</p>
-<p>FI</p>
-<p>FI;</p>
-<p>ENDFOR</p>
-<p>DEST[MAX_VL-1:VL]  0</p>
-<p><strong>VPMOVZXBW (VEX.256 encoded version)</strong></p>
-<p>Packed_Zero_Extend_BYTE_to_WORD(DEST[127:0], SRC[63:0])</p>
-<p>Packed_Zero_Extend_BYTE_to_WORD(DEST[255:128], SRC[127:64])</p>
-<p>DEST[MAX_VL-1:256]  0</p>
-<p><strong>VPMOVZXBD (VEX.256 encoded version)</strong></p>
-<p>Packed_Zero_Extend_BYTE_to_DWORD(DEST[127:0], SRC[31:0])</p>
-<p>Packed_Zero_Extend_BYTE_to_DWORD(DEST[255:128], SRC[63:32])</p>
-<p>DEST[MAX_VL-1:256]  0</p>
-<p><strong>VPMOVZXBQ (VEX.256 encoded version)</strong></p>
-<p>Packed_Zero_Extend_BYTE_to_QWORD(DEST[127:0], SRC[15:0])</p>
-<p>Packed_Zero_Extend_BYTE_to_QWORD(DEST[255:128], SRC[31:16])</p>
-<p>DEST[MAX_VL-1:256]  0</p>
-<p><strong>VPMOVZXWD (VEX.256 encoded version)</strong></p>
-<p>Packed_Zero_Extend_WORD_to_DWORD(DEST[127:0], SRC[63:0])</p>
-<p>Packed_Zero_Extend_WORD_to_DWORD(DEST[255:128], SRC[127:64])</p>
-<p>DEST[MAX_VL-1:256]  0</p>
-<p><strong>VPMOVZXWQ (VEX.256 encoded version)</strong></p>
-<p>Packed_Zero_Extend_WORD_to_QWORD(DEST[127:0], SRC[31:0])</p>
-<p>Packed_Zero_Extend_WORD_to_QWORD(DEST[255:128], SRC[63:32])</p>
-<p>DEST[MAX_VL-1:256]  0</p>
-<p><strong>VPMOVZXDQ (VEX.256 encoded version)</strong></p>
-<p>Packed_Zero_Extend_DWORD_to_QWORD(DEST[127:0], SRC[63:0])</p>
-<p>Packed_Zero_Extend_DWORD_to_QWORD(DEST[255:128], SRC[127:64])</p>
-<p>DEST[MAX_VL-1:256]  0</p>
-<p><strong>VPMOVZXBW (VEX.128 encoded version)</strong></p>
-<p>Packed_Zero_Extend_BYTE_to_WORD()</p>
-<p>DEST[MAX_VL-1:128] 0</p>
-<p><strong>VPMOVZXBD (VEX.128 encoded version)</strong></p>
-<p>Packed_Zero_Extend_BYTE_to_DWORD()</p>
-<p>DEST[MAX_VL-1:128] 0</p>
-<p><strong>VPMOVZXBQ (VEX.128 encoded version)</strong></p>
-<p>Packed_Zero_Extend_BYTE_to_QWORD()</p>
-<p>DEST[MAX_VL-1:128] 0</p>
-<p><strong>VPMOVZXWD (VEX.128 encoded version)</strong></p>
-<p>Packed_Zero_Extend_WORD_to_DWORD()</p>
-<p>DEST[MAX_VL-1:128] 0</p>
-<p><strong>VPMOVZXWQ (VEX.128 encoded version)</strong></p>
-<p>Packed_Zero_Extend_WORD_to_QWORD()</p>
-<p>DEST[MAX_VL-1:128] 0</p>
-<p><strong>VPMOVZXDQ (VEX.128 encoded version)</strong></p>
-<p>Packed_Zero_Extend_DWORD_to_QWORD()</p>
-<p>DEST[MAX_VL-1:128] 0</p>
+<pre>DEST[63:0] := ZeroExtend(SRC[31:0]);
+DEST[127:64] := ZeroExtend(SRC[63:32]);</pre>
+<p><strong>VPMOVZXBW (EVEX Encoded Versions)</strong></p>
+<pre>(KL, VL) = (8, 128), (16, 256), (32, 512)
+Packed_Zero_Extend_BYTE_to_WORD(TMP_DEST[127:0], SRC[63:0])
+IF VL &gt;= 256
+    Packed_Zero_Extend_BYTE_to_WORD(TMP_DEST[255:128], SRC[127:64])
+FI;
+IF VL &gt;= 512
+    Packed_Zero_Extend_BYTE_to_WORD(TMP_DEST[383:256], SRC[191:128])
+    Packed_Zero_Extend_BYTE_to_WORD(TMP_DEST[511:384], SRC[255:192])
+FI;
+FOR j := 0 TO KL-1
+    i := j * 16
+    IF k1[j] OR *no writemask*
+         THEN DEST[i+15:i] := TEMP_DEST[i+15:i]
+         ELSE
+              IF *merging-masking*
+                                                         ; merging-masking
+                    THEN *DEST[i+15:i] remains unchanged*
+                    ELSE *zeroing-masking*
+                                                              ; zeroing-masking
+                         DEST[i+15:i] := 0
+              FI
+    FI;
+ENDFOR
+DEST[MAXVL-1:VL] := 0</pre>
+<p><strong>VPMOVZXBD (EVEX Encoded Versions)</strong></p>
+<pre>(KL, VL) = (4, 128), (8, 256), (16, 512)
+Packed_Zero_Extend_BYTE_to_DWORD(TMP_DEST[127:0], SRC[31:0])
+IF VL &gt;= 256
+    Packed_Zero_Extend_BYTE_to_DWORD(TMP_DEST[255:128], SRC[63:32])
+FI;
+IF VL &gt;= 512
+    Packed_Zero_Extend_BYTE_to_DWORD(TMP_DEST[383:256], SRC[95:64])
+    Packed_Zero_Extend_BYTE_to_DWORD(TMP_DEST[511:384], SRC[127:96])
+FI;
+FOR j := 0 TO KL-1
+    i := j * 32
+    IF k1[j] OR *no writemask*
+         THEN DEST[i+31:i] := TEMP_DEST[i+31:i]
+         ELSE
+              IF *merging-masking*
+                                                         ; merging-masking
+                    THEN *DEST[i+31:i] remains unchanged*
+                    ELSE *zeroing-masking*
+                                                              ; zeroing-masking
+                         DEST[i+31:i] := 0
+              FI
+    FI;
+ENDFOR
+DEST[MAXVL-1:VL] := 0</pre>
+<p><strong>VPMOVZXBQ (EVEX Encoded Versions)</strong></p>
+<pre>(KL, VL) = (2, 128), (4, 256), (8, 512)
+Packed_Zero_Extend_BYTE_to_QWORD(TMP_DEST[127:0], SRC[15:0])
+IF VL &gt;= 256
+    Packed_Zero_Extend_BYTE_to_QWORD(TMP_DEST[255:128], SRC[31:16])
+FI;
+IF VL &gt;= 512
+    Packed_Zero_Extend_BYTE_to_QWORD(TMP_DEST[383:256], SRC[47:32])
+    Packed_Zero_Extend_BYTE_to_QWORD(TMP_DEST[511:384], SRC[63:48])
+FI;
+FOR j := 0 TO KL-1
+    i := j * 64
+    IF k1[j] OR *no writemask*
+         THEN DEST[i+63:i] := TEMP_DEST[i+63:i]
+         ELSE
+              IF *merging-masking*
+                                                         ; merging-masking
+                    THEN *DEST[i+63:i] remains unchanged*
+                    ELSE *zeroing-masking*
+                                                              ; zeroing-masking
+                         DEST[i+63:i] := 0
+              FI
+    FI;
+ENDFOR
+DEST[MAXVL-1:VL] := 0</pre>
+<p><strong>VPMOVZXWD (EVEX Encoded Versions)</strong></p>
+<pre>(KL, VL) = (4, 128), (8, 256), (16, 512)
+Packed_Zero_Extend_WORD_to_DWORD(TMP_DEST[127:0], SRC[63:0])
+IF VL &gt;= 256
+    Packed_Zero_Extend_WORD_to_DWORD(TMP_DEST[255:128], SRC[127:64])
+FI;
+IF VL &gt;= 512
+    Packed_Zero_Extend_WORD_to_DWORD(TMP_DEST[383:256], SRC[191:128])
+    Packed_Zero_Extend_WORD_to_DWORD(TMP_DEST[511:384], SRC[256:192])
+FI;
+FOR j := 0 TO KL-1
+    i := j * 32
+    IF k1[j] OR *no writemask*
+         THEN DEST[i+31:i] := TEMP_DEST[i+31:i]
+         ELSE
+              IF *merging-masking*
+                                                         ; merging-masking
+                    THEN *DEST[i+31:i] remains unchanged*
+                    ELSE *zeroing-masking*
+                                                              ; zeroing-masking
+                         DEST[i+31:i] := 0
+              FI
+    FI;
+ENDFOR
+DEST[MAXVL-1:VL] := 0</pre>
+<p><strong>VPMOVZXWQ (EVEX Encoded Versions)</strong></p>
+<pre>(KL, VL) = (2, 128), (4, 256), (8, 512)
+Packed_Zero_Extend_WORD_to_QWORD(TMP_DEST[127:0], SRC[31:0])
+IF VL &gt;= 256
+    Packed_Zero_Extend_WORD_to_QWORD(TMP_DEST[255:128], SRC[63:32])
+FI;
+IF VL &gt;= 512
+    Packed_Zero_Extend_WORD_to_QWORD(TMP_DEST[383:256], SRC[95:64])
+    Packed_Zero_Extend_WORD_to_QWORD(TMP_DEST[511:384], SRC[127:96])
+FI;
+FOR j := 0 TO KL-1
+    i := j * 64
+    IF k1[j] OR *no writemask*
+         THEN DEST[i+63:i] := TEMP_DEST[i+63:i]
+         ELSE
+              IF *merging-masking*
+                                                         ; merging-masking
+                    THEN *DEST[i+63:i] remains unchanged*
+                    ELSE *zeroing-masking*
+                                                              ; zeroing-masking
+                         DEST[i+63:i] := 0
+              FI
+    FI;
+ENDFOR
+DEST[MAXVL-1:VL] := 0</pre>
+<p><strong>VPMOVZXDQ (EVEX Encoded Versions)</strong></p>
+<pre>(KL, VL) = (2, 128), (4, 256), (8, 512)
+Packed_Zero_Extend_DWORD_to_QWORD(TEMP_DEST[127:0], SRC[63:0])
+IF VL &gt;= 256
+    Packed_Zero_Extend_DWORD_to_QWORD(TEMP_DEST[255:128], SRC[127:64])
+FI;
+IF VL &gt;= 512
+    Packed_Zero_Extend_DWORD_to_QWORD(TEMP_DEST[383:256], SRC[191:128])
+    Packed_Zero_Extend_DWORD_to_QWORD(TEMP_DEST[511:384], SRC[255:192])
+FI;
+FOR j := 0 TO KL-1
+    i := j * 64
+    IF k1[j] OR *no writemask*
+         THEN DEST[i+63:i] := TEMP_DEST[i+63:i]
+         ELSE
+              IF *merging-masking*
+                                                         ; merging-masking
+                    THEN *DEST[i+63:i] remains unchanged*
+                    ELSE *zeroing-masking*
+                                                              ; zeroing-masking
+                         DEST[i+63:i] := 0
+              FI
+    FI;
+ENDFOR
+DEST[MAXVL-1:VL] := 0</pre>
+<p><strong>VPMOVZXBW (VEX.256 Encoded Version)</strong></p>
+<pre>Packed_Zero_Extend_BYTE_to_WORD(DEST[127:0], SRC[63:0])
+Packed_Zero_Extend_BYTE_to_WORD(DEST[255:128], SRC[127:64])
+DEST[MAXVL-1:256] := 0</pre>
+<p><strong>VPMOVZXBD (VEX.256 Encoded Version)</strong></p>
+<pre>Packed_Zero_Extend_BYTE_to_DWORD(DEST[127:0], SRC[31:0])
+Packed_Zero_Extend_BYTE_to_DWORD(DEST[255:128], SRC[63:32])
+DEST[MAXVL-1:256] := 0</pre>
+<p><strong>VPMOVZXBQ (VEX.256 Encoded Version)</strong></p>
+<pre>Packed_Zero_Extend_BYTE_to_QWORD(DEST[127:0], SRC[15:0])
+Packed_Zero_Extend_BYTE_to_QWORD(DEST[255:128], SRC[31:16])
+DEST[MAXVL-1:256] := 0</pre>
+<p><strong>VPMOVZXWD (VEX.256 Encoded Version)</strong></p>
+<pre>Packed_Zero_Extend_WORD_to_DWORD(DEST[127:0], SRC[63:0])
+Packed_Zero_Extend_WORD_to_DWORD(DEST[255:128], SRC[127:64])
+DEST[MAXVL-1:256] := 0</pre>
+<p><strong>VPMOVZXWQ (VEX.256 Encoded Version)</strong></p>
+<pre>Packed_Zero_Extend_WORD_to_QWORD(DEST[127:0], SRC[31:0])
+Packed_Zero_Extend_WORD_to_QWORD(DEST[255:128], SRC[63:32])
+DEST[MAXVL-1:256] := 0</pre>
+<p><strong>VPMOVZXDQ (VEX.256 Encoded Version)</strong></p>
+<pre>Packed_Zero_Extend_DWORD_to_QWORD(DEST[127:0], SRC[63:0])
+Packed_Zero_Extend_DWORD_to_QWORD(DEST[255:128], SRC[127:64])
+DEST[MAXVL-1:256] := 0</pre>
+<p><strong>VPMOVZXBW (VEX.128 Encoded Version)</strong></p>
+<pre>Packed_Zero_Extend_BYTE_to_WORD()
+DEST[MAXVL-1:128] := 0</pre>
+<p><strong>VPMOVZXBD (VEX.128 Encoded Version)</strong></p>
+<pre>Packed_Zero_Extend_BYTE_to_DWORD()
+DEST[MAXVL-1:128] := 0</pre>
+<p><strong>VPMOVZXBQ (VEX.128 Encoded Version)</strong></p>
+<pre>Packed_Zero_Extend_BYTE_to_QWORD()
+DEST[MAXVL-1:128] := 0</pre>
+<p><strong>VPMOVZXWD (VEX.128 Encoded Version)</strong></p>
+<pre>Packed_Zero_Extend_WORD_to_DWORD()
+DEST[MAXVL-1:128] := 0</pre>
+<p><strong>VPMOVZXWQ (VEX.128 Encoded Version)</strong></p>
+<pre>Packed_Zero_Extend_WORD_to_QWORD()
+DEST[MAXVL-1:128] := 0</pre>
+<p><strong>VPMOVZXDQ (VEX.128 Encoded Version)</strong></p>
+<pre>Packed_Zero_Extend_DWORD_to_QWORD()
+DEST[MAXVL-1:128] := 0</pre>
 <p><strong>PMOVZXBW</strong></p>
-<p>Packed_Zero_Extend_BYTE_to_WORD()</p>
-<p>DEST[MAX_VL-1:128] (Unmodified)</p>
+<pre>Packed_Zero_Extend_BYTE_to_WORD()
+DEST[MAXVL-1:128] (Unmodified)</pre>
 <p><strong>PMOVZXBD</strong></p>
-<p>Packed_Zero_Extend_BYTE_to_DWORD()</p>
-<p>DEST[MAX_VL-1:128] (Unmodified)</p>
+<pre>Packed_Zero_Extend_BYTE_to_DWORD()
+DEST[MAXVL-1:128] (Unmodified)</pre>
 <p><strong>PMOVZXBQ</strong></p>
-<p>Packed_Zero_Extend_BYTE_to_QWORD()</p>
-<p>DEST[MAX_VL-1:128] (Unmodified)</p>
+<pre>Packed_Zero_Extend_BYTE_to_QWORD()
+DEST[MAXVL-1:128] (Unmodified)</pre>
 <p><strong>PMOVZXWD</strong></p>
-<p>Packed_Zero_Extend_WORD_to_DWORD()</p>
-<p>DEST[MAX_VL-1:128] (Unmodified)</p>
+<pre>Packed_Zero_Extend_WORD_to_DWORD()
+DEST[MAXVL-1:128] (Unmodified)</pre>
 <p><strong>PMOVZXWQ</strong></p>
-<p>Packed_Zero_Extend_WORD_to_QWORD()</p>
-<p>DEST[MAX_VL-1:128] (Unmodified)</p>
+<pre>Packed_Zero_Extend_WORD_to_QWORD()
+DEST[MAXVL-1:128] (Unmodified)</pre>
 <p><strong>PMOVZXDQ</strong></p>
-<p>Packed_Zero_Extend_DWORD_to_QWORD()</p>
-<p>DEST[MAX_VL-1:128] (Unmodified)</p>
-<p><strong>Intel C/C++ Compiler Intrinsic Equivalent</strong></p>
+<pre>Packed_Zero_Extend_DWORD_to_QWORD()
+DEST[MAXVL-1:128] (Unmodified)</pre>
+<h2>Intel C/C++ Compiler Intrinsic Equivalent</h2>
 <p>VPMOVZXBW __m512i _mm512_cvtepu8_epi16(__m256i a);</p>
 <p>VPMOVZXBW __m512i _mm512_mask_cvtepu8_epi16(__m512i a, __mmask32 k, __m256i b);</p>
 <p>VPMOVZXBW __m512i _mm512_maskz_cvtepu8_epi16( __mmask32 k, __m256i b);</p>
@@ -578,12 +592,13 @@
 <p>PMOVZXWD __m128i _mm_ cvtepu16_epi32 ( __m128i a);</p>
 <p>PMOVZXWQ __m128i _mm_ cvtepu16_epi64 ( __m128i a);</p>
 <p>PMOVZXDQ __m128i _mm_ cvtepu32_epi64 ( __m128i a);</p>
-<p><strong>SIMD Floating-Point Exceptions</strong></p>
-<p>None</p>
-<p><strong>Other Exceptions</strong></p>
-<p>Non-EVEX-encoded instruction, see Exceptions Type 5.</p>
-<table>
+<h2>SIMD Floating-Point Exceptions</h2>
+<p>None.</p>
+<h2>Other Exceptions</h2>
+<p>Non-EVEX-encoded instruction, see Table 2-22, “Type 5 Class Exception Conditions.”</p>
+<p>EVEX-encoded instruction, see Table 2-53, “Type E5 Class Exception Conditions.”</p>
+<p>Additionally:</p>
+<table class="exception-table">
 <tr>
-<td>EVEX-encoded instruction, see Exceptions Type E5.</td></tr>
-<tr>
+<td>#UD</td>
 <td>If VEX.vvvv != 1111B, or EVEX.vvvv != 1111B.</td></tr></table></body></html>

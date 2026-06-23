@@ -7,18 +7,13 @@
 <title>FLD1/FLDL2T/FLDL2E/FLDPI/FLDLG2/FLDLN2/FLDZ—Load Constant </title></head>
 <body>
 <h1>FLD1/FLDL2T/FLDL2E/FLDPI/FLDLG2/FLDLN2/FLDZ—Load Constant</h1>
-<p><strong>Opcode*</strong></p>
-<p><strong>Instruction</strong></p>
-<p><strong>64-Bit</strong></p>
-<p><strong>Compat/</strong></p>
-<p><strong>Description</strong></p>
 <table>
 <tr>
-<td></td>
-<td></td>
-<th>Mode</th>
-<th>Leg Mode</th>
-<td></td></tr>
+<th>Opcode*</th>
+<th>Instruction</th>
+<th>64-Bit Mode</th>
+<th>Compat/Leg Mode</th>
+<th>Description</th></tr>
 <tr>
 <td>D9 E8</td>
 <td>FLD1</td>
@@ -66,13 +61,13 @@
 <p>See IA-32 Architecture Compatibility section below.</p>
 <h2>Description</h2>
 <p>Push one of seven commonly used constants (in double extended-precision floating-point format) onto the FPU register stack. The constants that can be loaded with these instructions include +1.0, +0.0, log<sub>2</sub>10, log<sub>2</sub>e, π, log<sub>10</sub>2, and log<sub>e</sub>2. For each constant, an internal 66-bit constant is rounded (as specified by the RC field in the FPU control word) to double extended-precision floating-point format. The inexact-result exception (#P) is not generated as a result of the rounding, nor is the C1 flag set in the x87 FPU status word if the value is rounded up.</p>
-<p>See the section titled “Approximation of Pi” in Chapter 8 of the <em>Intel® 64 and IA-32 Architectures Software Devel-oper’s Manual, Volume 1</em>, for a description of the π constant.</p>
+<p>See the section titled “Approximation of Pi” in Chapter 8 of the Intel<sup>®</sup> 64 and IA-32 Architectures Software Devel-oper’s Manual, Volume 1, for a description of the π constant.</p>
 <p>This instruction’s operation is the same in non-64-bit modes and 64-bit mode.</p>
 <h2>IA-32 Architecture Compatibility</h2>
 <p>When the RC field is set to round-to-nearest, the FPU produces the same constants that is produced by the Intel 8087 and Intel 287 math coprocessors.</p>
 <h2>Operation</h2>
-<pre>TOP ← TOP − 1;
-ST(0) ← CONSTANT;</pre>
+<pre>TOP := TOP − 1;
+ST(0) := CONSTANT;</pre>
 <h2>FPU Flags Affected</h2>
 <table class="exception-table">
 <tr>

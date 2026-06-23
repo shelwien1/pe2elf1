@@ -16,39 +16,39 @@
 <th>Description</th></tr>
 <tr>
 <td>DF /2</td>
-<td>FIST <em>m16int</em></td>
+<td>FIST m16int</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Store ST(0) in <em>m16int.</em></td></tr>
+<td>Store ST(0) in m16int.</td></tr>
 <tr>
 <td>DB /2</td>
-<td>FIST <em>m32int</em></td>
+<td>FIST m32int</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Store ST(0) in <em>m32int.</em></td></tr>
+<td>Store ST(0) in m32int.</td></tr>
 <tr>
 <td>DF /3</td>
-<td>FISTP <em>m16int</em></td>
+<td>FISTP m16int</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Store ST(0) in <em>m16int</em> and pop register stack.</td></tr>
+<td>Store ST(0) in m16int and pop register stack.</td></tr>
 <tr>
 <td>DB /3</td>
-<td>FISTP <em>m32int</em></td>
+<td>FISTP m32int</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Store ST(0) in <em>m32int</em> and pop register stack.</td></tr>
+<td>Store ST(0) in m32int and pop register stack.</td></tr>
 <tr>
 <td>DF /7</td>
-<td>FISTP <em>m64int</em></td>
+<td>FISTP m64int</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Store ST(0) in <em>m64int</em> and pop register stack.</td></tr></table>
+<td>Store ST(0) in m64int and pop register stack.</td></tr></table>
 <h2>Description</h2>
 <p>The FIST instruction converts the value in the ST(0) register to a signed integer and stores the result in the desti-nation operand. Values can be stored in word or doubleword integer format. The destination operand specifies the address where the first byte of the destination value is to be stored.</p>
 <p>The FISTP instruction performs the same operation as the FIST instruction and then pops the register stack. To pop the register stack, the processor marks the ST(0) register as empty and increments the stack pointer (TOP) by 1. The FISTP instruction also stores values in quadword integer format.</p>
 <p>The following table shows the results obtained when storing various classes of numbers in integer format.</p>
-<h3>Table 3-27.  FIST/FISTP Results</h3>
+<h3>Table 3-29.  FIST/FISTP Results</h3>
 <p><strong>ST(0)</strong></p>
 <p><strong>DEST</strong></p>
 <table>
@@ -96,7 +96,7 @@
 <p>If the converted value is too large for the destination format, or if the source operand is an ∞, SNaN, QNAN, or is in an unsupported format, an invalid-arithmetic-operand condition is signaled. If the invalid-operation exception is not masked, an invalid-arithmetic-operand exception (#IA) is generated and no value is stored in the destination operand. If the invalid-operation exception is masked, the integer indefinite value is stored in memory.</p>
 <p>This instruction’s operation is the same in non-64-bit modes and 64-bit mode.</p>
 <h2>Operation</h2>
-<pre>DEST ← Integer(ST(0));
+<pre>DEST := Integer(ST(0));
 IF Instruction = FISTP
     THEN
          PopRegisterStack;
@@ -107,7 +107,7 @@ FI;</pre>
 <td>C1</td>
 <td>
 <p>Set to 0 if stack underflow occurred.</p>
-<p>Indicates rounding direction of if the inexact exception (#P) is generated: 0 ← not roundup; 1 ← roundup.</p>
+<p>Indicates rounding direction of if the inexact exception (#P) is generated: 0 := not roundup; 1 := roundup.</p>
 <p>Set to 0 otherwise.</p></td></tr>
 <tr>
 <td>C0, C2, C3</td>

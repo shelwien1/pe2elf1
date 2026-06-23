@@ -23,42 +23,42 @@
 <td></td></tr>
 <tr>
 <td>0F B3 /r</td>
-<td>BTR <em>r/m16, r16</em></td>
+<td>BTR r/m16, r16</td>
 <td>MR</td>
 <td>Valid</td>
 <td>Valid</td>
 <td>Store selected bit in CF flag and clear.</td></tr>
 <tr>
 <td>0F B3 /r</td>
-<td>BTR <em>r/m32, r32</em></td>
+<td>BTR r/m32, r32</td>
 <td>MR</td>
 <td>Valid</td>
 <td>Valid</td>
 <td>Store selected bit in CF flag and clear.</td></tr>
 <tr>
 <td>REX.W + 0F B3 /r</td>
-<td>BTR <em>r/m64, r64</em></td>
+<td>BTR r/m64, r64</td>
 <td>MR</td>
 <td>Valid</td>
 <td>N.E.</td>
 <td>Store selected bit in CF flag and clear.</td></tr>
 <tr>
-<td>0F BA /6 <em>ib</em></td>
-<td>BTR <em>r/m16, imm8</em></td>
+<td>0F BA /6 ib</td>
+<td>BTR r/m16, imm8</td>
 <td>MI</td>
 <td>Valid</td>
 <td>Valid</td>
 <td>Store selected bit in CF flag and clear.</td></tr>
 <tr>
-<td>0F BA /6 <em>ib</em></td>
-<td>BTR <em>r/m32, imm8</em></td>
+<td>0F BA /6 ib</td>
+<td>BTR r/m32, imm8</td>
 <td>MI</td>
 <td>Valid</td>
 <td>Valid</td>
 <td>Store selected bit in CF flag and clear.</td></tr>
 <tr>
-<td>REX.W + 0F BA /6 <em>ib</em></td>
-<td>BTR <em>r/m64, imm8</em></td>
+<td>REX.W + 0F BA /6 ib</td>
+<td>BTR r/m64, imm8</td>
 <td>MI</td>
 <td>Valid</td>
 <td>N.E.</td>
@@ -66,23 +66,23 @@
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
 <td>MR</td>
 <td>ModRM:r/m (r, w)</td>
 <td>ModRM:reg (r)</td>
-<td>NA</td>
-<td>NA</td></tr>
+<td>N/A</td>
+<td>N/A</td></tr>
 <tr>
 <td>MI</td>
 <td>ModRM:r/m (r, w)</td>
 <td>imm8</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Selects the bit in a bit string (specified with the first operand, called the bit base) at the bit-position designated by the bit offset operand (second operand), stores the value of the bit in the CF flag, and clears the selected bit in the bit string to 0. The bit base operand can be a register or a memory location; the bit offset operand can be a register or an immediate value:</p>
 <p>See also: <strong>Bit(BitBase, BitOffset) </strong>on page 3-11.</p>
@@ -90,8 +90,8 @@
 <p>This instruction can be used with a LOCK prefix to allow the instruction to be executed atomically.</p>
 <p>In 64-bit mode, the instruction’s default operation size is 32 bits. Using a REX prefix in the form of REX.R permits access to additional registers (R8-R15). Using a REX prefix in the form of REX.W promotes operation to 64 bits. See the summary chart at the beginning of this section for encoding data and limits.</p>
 <h2>Operation</h2>
-<pre>CF ← Bit(BitBase, BitOffset);
-Bit(BitBase, BitOffset) ← 0;</pre>
+<pre>CF := Bit(BitBase, BitOffset);
+Bit(BitBase, BitOffset) := 0;</pre>
 <h2>Flags Affected</h2>
 <p>The CF flag contains the value of the selected bit before it is cleared. The ZF flag is unaffected. The OF, SF, AF, and PF flags are undefined.</p>
 <h2>Protected Mode Exceptions</h2>

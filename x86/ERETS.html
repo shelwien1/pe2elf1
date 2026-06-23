@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>ERETS—Event Return to Supervisor </title></head>
+<body>
+<h1>ERETS—Event Return to Supervisor</h1>
+<p><strong>Opcode</strong></p>
+<p><strong>Instruction</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64-Bit</strong></p>
+<p><strong>Compat/</strong></p>
+<p><strong>Description</strong></p>
+<table>
+<tr>
+<td></td>
+<td></td>
+<th>En</th>
+<th>Mode</th>
+<th>Leg Mode</th>
+<td></td></tr>
+<tr>
+<td>F2 0F 01 CA</td>
+<td>ERETS</td>
+<td>ZO</td>
+<td>Valid</td>
+<td>Invalid</td>
+<td>Event return for events occurring in ring 0.</td></tr></table>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>ZO</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
+<h2>Description</h2>
+<p>ERETS returns from an event handler, establishing the state based on the contents of the stack (typically, that which was in effect before FRED event delivery). ERETS can be executed only if CPL = 0, and it does not change CPL. For this reason, ERETS is used to return from handling events that occurred while CPL = 0.</p>
+<p>ERETS takes no explicit arguments; its operation depends on the contents of the regular stack and (when enabled) the shadow stack.</p>
+<p>Execution of ERETS causes an invalid-opcode exception (#UD) if FRED transitions are not enabled or if CPL &gt; 0. For this reason, ERETS can be executed only in 64-bit mode.</p>
+<p>Section 8.4.1, “ERETS (Event Return to Supervisor),” of the Intel® 64 and IA-32 Architectures software devel-oper’s Manual, Volume 3 includes a detailed discussion of ERETS.</p>
+<p><strong>Instruction ordering.</strong> Instructions following execution of ERETS may be fetched from memory before earlier instructions complete execution, but they will not execute (even speculatively) until all instructions prior to ERETS have completed execution (the later instructions may execute before data stored by the earlier instructions have become globally visible).</p>
+<h2>Operation</h2>
+<pre>IF CR4.FRED = 0 OR CPL &gt; 0
+    THEN #UD;
+FI;
+// CR4.FRED = 1 and CPL = 0 implies IA32_EFER.LMA = CS.L = 1
+// pop old state from regular stack and check it
+RSP := RSP + 8;
+                              // skip over error code so that RSP references the return state
+pop8B newRIP;
+pop8B tempCS;
+                              // not used to load CS
+pop8B newRFLAGS;
+pop8B newRSP;
+pop8B tempSS;
+                              // not used to load SS
+IF newRIP is not paging canonical OR
+    tempCS &amp; FFFFFFFF_FFF8FFFFH ≠ current CS selector OR
+    newRFLAGS &amp; FFFFFFFF_FFC2802AH ≠ 2 OR
+                                                                    // enforce bit 1 set; VM, reserved bits clear
+    tempSS &amp; FFF8FFFFH ≠ current SS selector OR
+                                                                    // do not check bits 63:32
+         THEN #GP(0);
+FI;
+// ERETS will not numerically increase stack level
+newCSL := min{CSL,tempCS[17:16]};
+IBT_restore := tempCS[18];
+STI_block := tempSS[16];
+pend_DB := tempSS[17];
+NMI_unblock := tempSS[18];
+// If supervisor shadow stacks are enabled, pop and check values from the shadow stack
+IF CR4.CET = 1 AND IA32_S_CET.SH_STK_EN = 1
+    THEN
+         IF SSP &amp; 7 ≠ 0
+                                                                    // require 8-byte alignment
+              THEN #CP(FAR-RET/IRET);
+         FI;
+         popSS_8B newSSP;
+         popSS_8B checkSSLIP;
+         popSS_8B checkSSCS;
+         IF checkSSCS ≠ tempCS
+                                                                    // 64-bit compare
+              OR checkSSLIP ≠ newRIP
+              OR newSSP &amp; 3H ≠ 0
+              THEN #CP(FAR-RET/IRET);
+         FI;
+         IF newSSP not CPU canonical
+              THEN #GP(0);
+         FI;
+         // If the stack level is changing, compare SSP to the FRED SSP MSR for the old stack level
+         IF newCSL &lt; CSL AND IA32_FRED_SSPi ≠ SSP
+                                                              // where <em>i</em> = CSL
+              THEN #CP(FAR-RET/IRET);
+         FI;
+FI;
+// update registers for return state
+RIP := newRIP;
+RFLAGS := newRFLAGS;
+                                                                    // ERETS can set RFLAGS.RF to 1
+RSP := newRSP;
+CSL := newCSL;
+                                                                    // reflect in IA32_FRED_CONFIG[1:0]
+IF CR4.CET = 1 AND IA32_S_CET.SH_STK_EN = 1
+    THEN SSP := newSSP;
+FI;
+IF CR4.CET = 1 AND IA32_S_CET.ENDBR_EN = 1 AND IA32_S_CET.SUPPRESS = 0 AND IBT_restore = 1
+    THEN IA32_S_CET.TRACKER := 1;
+FI;
+// update event-related state
+IF STI_block = 1 AND RFLAGS.IF = 1 AND STI blocking was not in effect prior to ERETS
+    THEN establish STI blocking after ERETS;
+FI;
+IF pend_DB = 1 AND RFLAGS.TF =1
+    THEN pend a single-step debug exception (#DB) to be delivered after ERETS;
+FI;
+IF NMI_unblock = 1
+    THEN unblock NMIs;
+FI;</pre>
+<h2>Flags Affected</h2>
+<p>All defined flags and fields in the RFLAGS register are potentially modified except for the VM flag.</p>
+<h2>Protected Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The ERETS instruction is not recognized in protected mode.</td></tr></table>
+<h2>Real-Address Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The ERETS instruction is not recognized in real-address mode.</td></tr></table>
+<h2>Virtual-8086 Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The ERETS instruction is not recognized in virtual-8086 mode.</td></tr></table>
+<h2>Compatibility Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The ERETS instruction is not recognized in compatibility mode.</td></tr></table>
+<h2>64-Bit Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>
+<p>If CR4.FRED = 0.</p>
+<p>If CPL &gt; 0.</p>
+<p>If the LOCK prefix is used.</p></td></tr>
+<tr>
+<td>#GP(0)</td>
+<td>
+<p>If the RIP image on the stack is a not paging canonical.</p>
+<p>If the RFLAGS image on the stack sets reserved bits or the VM bit (or fails to set bit 1).</p>
+<p>If bits 15:0 of the CS image on the stack differs from the value of the current CS selector.</p>
+<p>If the CS image on the stack sets undefined bits (bits 63:19).</p>
+<p>If bits 15:0 of the SS image on the stack differs from the value of the current SS selector.</p>
+<p>If the SS image on the stack sets undefined bits (bits 31:19).</p>
+<p>If the SSP image on the shadow stack is not CPU canonical.</p>
+<p>If a shadow-stack access would use an address that is not paging canonical or would cause a LASS violation.</p></td></tr>
+<tr>
+<td>
+<p>#SS(0)</p>
+<p>#CP(FAR-RET/IRET) If the address in SSP is not 8-byte aligned.</p></td>
+<td>
+<p>If an ordinary stack access would use an address that is not paging canonical or would cause a LASS violation.</p>
+<p>If the 64-bit CS image on the shadow stack differs from that on the regular stack.</p>
+<p>If the SSLIP image on the shadow stack differs from the RIP image on the regular stack.</p>
+<p>If the SSP image on the shadow stack is not 4-byte aligned.</p>
+<p>If the CSL is i, the stack level is changing, and SSP differs from the value of IA32_FRED_SSPi.</p></td></tr></table></body></html>

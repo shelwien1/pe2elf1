@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>UWRMSR—User Write to Model-Specific Register </title></head>
+<body>
+<h1>UWRMSR—User Write to Model-Specific Register</h1>
+<p><strong>Opcode /</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64/32 bit</strong></p>
+<p><strong>CPUID</strong></p>
+<p><strong>Description</strong></p>
+<table>
+<tr>
+<th>Instruction</th>
+<th>En</th>
+<th>Mode Support</th>
+<th>Feature Flag</th>
+<td></td></tr>
+<tr>
+<td>
+<p>F3 0F 38 F8 11:rrr:bbb</p>
+<p>UWRMSR r64, r64</p></td>
+<td>RM</td>
+<td>V/N.E.</td>
+<td>USER_MSR</td>
+<td>Write the value of register bbb to the MSR with address in rrr.</td></tr>
+<tr>
+<td>
+<p>VEX.128.F3.MAP7:W0.F8 11:000:bbb</p>
+<p>UWRMSR imm32, r64</p></td>
+<td>IM</td>
+<td>V/N.E.</td>
+<td>USER_MSR</td>
+<td>Write the value of register bbb to the MSR specified in the 32-bit immediate.</td></tr></table>
+<h3>Instruction Operand Encoding</h3>
+<p><strong>Op/En</strong></p>
+<p><strong>Operand 1</strong></p>
+<p><strong>Operand 2</strong></p>
+<p><strong>Operand 3</strong></p>
+<p><strong>Operand 4</strong></p>
+<p>RM</p>
+<p>ModRM:reg (r, w)</p>
+<p>ModRM:r/m (r)</p>
+<p>N/A</p>
+<p>N/A</p>
+<p>IM</p>
+<p>imm32</p>
+<p>ModRM:r/m (r)</p>
+<p>N/A</p>
+<p>N/A</p>
+<h2>Description</h2>
+<p>UWRMSR writes the contents of operand 2 into the 64-bit MSR specified in operand 1. Operand 2 is a general-purpose register, while operand 1 may be either a general-purpose register or an immediate. UWRMSR writes the indicated MSR in the same manner as WRMSR, but it is limited to a specific set of MSRs. Currently, the only such MSR is the IA32_UARCH_MISC_CTL MSR (address 1B01H).</p>
+<p>The indicated MSRs can be written by UWRMSR at any privilege level but under OS control. The OS controls what MSRs can be read by the URDMSR and UWRMSR instructions with a 4-KByte <strong>user-MSR bitmap</strong> located at an aligned linear address in the IA32_USER_MSR_CTL MSR (address 1CH). The UWRMSR instruction is enabled only if bit 0 of this MSR is 1.</p>
+<p>The high 2 KBytes of the bitmap control UWRMSR (they compose the UWRMSR bitmap); these 2 KBytes include one bit for each MSR address in the range 0H–3FFFH. UWRMSR may write to an MSR only if the bit corresponding to the MSR has value 1; otherwise (or if the MSR address is outside that range) UWRMSR causes a general-protec-tion exception (#GP).</p>
+<p>UWRMSR accesses to these bitmaps are implicit supervisor-mode accesses, which means they use supervisor priv-ilege regardless of CPL. UWRMSR behaves like WRMSRNS and is not defined as a serializing instruction (see “Serializing Instructions” in Chapter 11 of the Intel<sup>®</sup> 64 and IA-32 Architectures Software Developer's Manual, Volume 3A). Refer to the WRMSRNS instruction for a thorough explanation of what this implies.</p>
+<h2>Operation</h2>
+<pre>MSR[DEST] := SRC</pre>
+<h2>Flags Affected</h2>
+<p>None.</p>
+<h2>Protected Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The UWRMSR instruction is not recognized outside 64-bit mode.</td></tr></table>
+<h2>Real-Address Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The UWRMSR instruction is not recognized outside 64-bit mode.</td></tr></table>
+<h2>Virtual-8086 Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The UWRMSR instruction is not recognized outside 64-bit mode.</td></tr></table>
+<h2>Compatibility Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The UWRMSR instruction is not recognized outside 64-bit mode.</td></tr></table>
+<h2>64-Bit Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#GP(0)</td>
+<td>
+<p>If MSR_address[63:14] is not all zero.</p>
+<p>If the MSR address is in the range 0−3FFH and bit n in UWRMSR bitmap is 0, where n is the MSR address.</p>
+<p>If an MSR other than IA32_UARCH_MISC_CTL is specified.</p>
+<p>If WRMSR to the specified MSR would result in a #GP(0) exception due to the MSR not being accessible or attempting to set bits that are reserved.</p></td></tr>
+<tr>
+<td>#UD</td>
+<td>
+<p>If the LOCK prefix is used.</p>
+<p>If CPUID.07H.01H:EDX.USER_MSR[15] = 0.</p>
+<p>If IA32_USER_MSR_CTL.ENABLE = 0.</p></td></tr></table></body></html>

@@ -7,35 +7,41 @@
 <title>LTR—Load Task Register </title></head>
 <body>
 <h1>LTR—Load Task Register</h1>
+<p><strong>Opcode</strong></p>
+<p><strong>Instruction</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64-Bit</strong></p>
+<p><strong>Compat/</strong></p>
+<p><strong>Description</strong></p>
 <table>
 <tr>
-<th>Opcode</th>
-<th>Instruction</th>
-<th>Op/En</th>
-<th>64-Bit Mode</th>
-<th>Compat/Leg Mode</th>
-<th>Description</th></tr>
+<td></td>
+<td></td>
+<th>En</th>
+<th>Mode</th>
+<th>Leg Mode</th>
+<td></td></tr>
 <tr>
 <td>0F 00 /3</td>
-<td>LTR <em>r/m</em>16</td>
+<td>LTR r/m16</td>
 <td>M</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Load <em>r/m</em>16 into task register.</td></tr></table>
+<td>Load r/m16 into task register.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
 <td>M</td>
 <td>ModRM:r/m (r)</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Loads the source operand into the segment selector field of the task register. The source operand (a general-purpose register or a memory location) contains a segment selector that points to a task state segment (TSS). After the segment selector is loaded in the task register, the processor uses the segment selector to locate the segment descriptor for the TSS in the global descriptor table (GDT). It then loads the segment limit and base address for the TSS from the segment descriptor into the task register. The task pointed to by the task register is marked busy, but a switch to the task does not occur.</p>
 <p>The LTR instruction is provided for use in operating-system software; it should not be used in application programs. It can only be executed in protected mode when the CPL is 0. It is commonly used in initialization code to establish the first task to be executed.</p>
@@ -51,12 +57,12 @@ IF segment descriptor is not for an available TSS
     THEN #GP(segment selector); FI;
 IF segment descriptor is not present
     THEN #NP(segment selector); FI;
-TSSsegmentDescriptor(busy) ← 1;
+TSSsegmentDescriptor(busy) := 1;
 (* Locked read-modify-write operation on the entire descriptor when setting busy flag *)
-TaskRegister(SegmentSelector) ← SRC;
-TaskRegister(SegmentDescriptor) ← TSSSegmentDescriptor;</pre>
+TaskRegister(SegmentSelector) := SRC;
+TaskRegister(SegmentDescriptor) := TSSSegmentDescriptor;</pre>
 <h2>Flags Affected</h2>
-<p>None</p>
+<p>None.</p>
 <h2>Protected Mode Exceptions</h2>
 <table class="exception-table">
 <tr>
@@ -73,7 +79,7 @@ TaskRegister(SegmentDescriptor) ← TSSSegmentDescriptor;</pre>
 <p>If the selector points to LDT or is beyond the GDT limit.</p></td></tr>
 <tr>
 <td>#NP(selector)</td>
-<td>If the TSS is marked not present.</td></tr>
+<td>If the TSS descriptor is marked not present.</td></tr>
 <tr>
 <td>#SS(0)</td>
 <td>If a memory operand effective address is outside the SS segment limit.</td></tr>
@@ -94,7 +100,11 @@ TaskRegister(SegmentDescriptor) ← TSSSegmentDescriptor;</pre>
 <td>#UD</td>
 <td> The LTR instruction is not recognized in virtual-8086 mode.</td></tr></table>
 <h2>Compatibility Mode Exceptions</h2>
-<p>Same exceptions as in protected mode.</p>
+<p>Same exceptions as in protected mode, as well as the following:</p>
+<table class="exception-table">
+<tr>
+<td>#GP(selector)</td>
+<td>If the source selector points to a 16-bit TSS.</td></tr></table>
 <h2>64-Bit Mode Exceptions</h2>
 <table class="exception-table">
 <tr>
@@ -109,12 +119,12 @@ TaskRegister(SegmentDescriptor) ← TSSSegmentDescriptor;</pre>
 <tr>
 <td>#GP(selector)</td>
 <td>
-<p>If the source selector points to a segment that is not a TSS or to one for a task that is already busy.</p>
+<p>If the source selector points to a segment that is not a TSS, to a 16-bit TSS, or to a TSS for a task that is already busy.</p>
 <p>If the selector points to LDT or is beyond the GDT limit.</p>
 <p>If the descriptor type of the upper 8-byte of the 16-byte descriptor is non-zero.</p></td></tr>
 <tr>
 <td>#NP(selector)</td>
-<td>If the TSS is marked not present.</td></tr>
+<td>If the TSS descriptor is marked not present.</td></tr>
 <tr>
 <td>#PF(fault-code)</td>
 <td>If a page fault occurs.</td></tr>

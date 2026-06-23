@@ -18,28 +18,28 @@
 <tr>
 <td>FC</td>
 <td>CLD</td>
-<td>NP</td>
+<td>ZO</td>
 <td>Valid</td>
 <td>Valid</td>
 <td>Clear DF flag.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
-<td>NP</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>ZO</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Clears the DF flag in the EFLAGS register. When the DF flag is set to 0, string operations increment the index regis-ters (ESI and/or EDI). Operation is the same in all modes.</p>
 <h2>Operation</h2>
-<pre>DF ← 0;</pre>
+<pre>DF := 0;</pre>
 <h2>Flags Affected</h2>
 <p>The DF flag is set to 0. The CF, OF, ZF, SF, AF, and PF flags are unaffected.</p>
 <h2>Exceptions (All Operating Modes)</h2>

@@ -21,28 +21,28 @@
 <td></td></tr>
 <tr>
 <td>DF /0</td>
-<td>FILD <em>m16int</em></td>
+<td>FILD m16int</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Push <em>m16int</em> onto the FPU register stack.</td></tr>
+<td>Push m16int onto the FPU register stack.</td></tr>
 <tr>
 <td>DB /0</td>
-<td>FILD <em>m32int</em></td>
+<td>FILD m32int</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Push <em>m32int</em> onto the FPU register stack.</td></tr>
+<td>Push m32int onto the FPU register stack.</td></tr>
 <tr>
 <td>DF /5</td>
-<td>FILD <em>m64int</em></td>
+<td>FILD m64int</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Push <em>m64int</em> onto the FPU register stack.</td></tr></table>
+<td>Push m64int onto the FPU register stack.</td></tr></table>
 <h2>Description</h2>
 <p>Converts the signed-integer source operand into double extended-precision floating-point format and pushes the value onto the FPU register stack. The source operand can be a word, doubleword, or quadword integer. It is loaded without rounding errors. The sign of the source operand is preserved.</p>
 <p>This instruction’s operation is the same in non-64-bit modes and 64-bit mode.</p>
 <h2>Operation</h2>
-<pre>TOP ← TOP − 1;
-ST(0) ← ConvertToDoubleExtendedPrecisionFP(SRC);</pre>
+<pre>TOP := TOP − 1;
+ST(0) := ConvertToDoubleExtendedPrecisionFP(SRC);</pre>
 <h2>FPU Flags Affected</h2>
 <table class="exception-table">
 <tr>

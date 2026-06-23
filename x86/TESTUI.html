@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>TESTUI—Determine User Interrupt Flag </title></head>
+<body>
+<h1>TESTUI—Determine User Interrupt Flag</h1>
+<p><strong>Opcode/</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64/32 bit</strong></p>
+<p><strong>CPUID Feature</strong></p>
+<p><strong>Description</strong></p>
+<table>
+<tr>
+<th>Instruction</th>
+<th>En</th>
+<th>Mode Support</th>
+<th>Flag</th>
+<td></td></tr>
+<tr>
+<td>F3 0F 01 ED TESTUI</td>
+<td>ZO</td>
+<td>V/I</td>
+<td>UINTR</td>
+<td>Copies the current value of UIF into EFLAGS.CF.</td></tr></table>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Tuple</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>ZO</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
+<p>TESTUI copies the current value of the user interrupt flag (UIF) into EFLAGS.CF. This instruction can be executed regardless of CPL.</p>
+<p>TESTUI may be executed normally inside a transactional region.</p>
+<h2>Operation</h2>
+<pre>CF := UIF;
+ZF := AF := OF := PF := SF := 0;</pre>
+<h2>Flags Affected</h2>
+<p>The ZF, OF, AF, PF, SF flags are cleared and the CF flags to the value of the user interrupt flag.</p>
+<h2>Protected Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The TESTUI instruction is not recognized in protected mode.</td></tr></table>
+<h2>Real-Address Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The TESTUI instruction is not recognized in real-address mode.</td></tr></table>
+<h2>Virtual-8086 Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The TESTUI instruction is not recognized in virtual-8086 mode.</td></tr></table>
+<h2>Compatibility Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>The TESTUI instruction is not recognized in compatibility mode.</td></tr></table>
+<h2>64-Bit Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>
+<p>If the LOCK prefix is used.</p>
+<p>If executed inside an enclave.</p>
+<p>If CR4.UINTR = 0.</p>
+<p>If CPUID.07H.00H:EDX.UINTR[5] = 0.</p></td></tr></table></body></html>

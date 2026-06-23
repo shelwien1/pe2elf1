@@ -41,7 +41,7 @@
 <p>2⁄</p>
 <p>The source operand in ST(1) can range from −∞ to +∞. If the ST(0) operand is outside of its acceptable range, the result is undefined and software should not rely on an exception being generated. Under some circumstances exceptions may be generated when ST(0) is out of range, but this behavior is implementation specific and not guaranteed.</p>
 <p>The following table shows the results obtained when taking the log epsilon of various classes of numbers, assuming that underflow does not occur.</p>
-<h3>Table 3-49.  FYL2XP1 Results</h3>
+<h3>Table 3-51.  FYL2XP1 Results</h3>
 <table>
 <tr>
 <td colspan="2"></td>
@@ -128,10 +128,10 @@
 <p>*</p>
 <p>Indicates floating-point invalid-operation (#IA) exception.</p>
 <p>This instruction provides optimal accuracy for values of epsilon [the value in register ST(0)] that are close to 0. For small epsilon (ε) values, more significant digits can be retained by using the FYL2XP1 instruction than by using (ε+1) as an argument to the FYL2X instruction. The (ε+1) expression is commonly found in compound interest and annuity calculations. The result can be simply converted into a value in another logarithm base by including a scale factor in the ST(1) source operand. The following equation is used to calculate the scale factor for a particular loga-rithm base, where n is the logarithm base desired for the result of the FYL2XP1 instruction:</p>
-<p>scale factor ← log<sub>n</sub> 2</p>
+<p>scale factor := log<sub>n</sub> 2</p>
 <p>This instruction’s operation is the same in non-64-bit modes and 64-bit mode.</p>
 <h2>Operation</h2>
-<pre>ST(1) ← ST(1) ∗ log<sub>2</sub>(ST(0) + 1.0);
+<pre>ST(1) := ST(1) ∗ log<sub>2</sub>(ST(0) + 1.0);
 PopRegisterStack;</pre>
 <h2>FPU Flags Affected</h2>
 <table class="exception-table">

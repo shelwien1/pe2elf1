@@ -4,39 +4,34 @@
 <head>
 <meta charset="UTF-8">
 <link href="style.css" type="text/css" rel="stylesheet">
-<title>FLD—Load Floating Point Value </title></head>
+<title>FLD—Load Floating-Point Value </title></head>
 <body>
-<h1>FLD—Load Floating Point Value</h1>
-<p><strong>Opcode</strong></p>
-<p><strong>Instruction</strong></p>
-<p><strong>64-Bit</strong></p>
-<p><strong>Compat/</strong></p>
-<p><strong>Description</strong></p>
+<h1>FLD—Load Floating-Point Value</h1>
 <table>
 <tr>
-<td></td>
-<td></td>
-<th>Mode</th>
-<th>Leg Mode</th>
-<td></td></tr>
+<th>Opcode</th>
+<th>Instruction</th>
+<th>64-Bit Mode</th>
+<th>Compat/Leg Mode</th>
+<th>Description</th></tr>
 <tr>
 <td>D9 /0</td>
-<td>FLD <em>m32fp</em></td>
+<td>FLD m32fp</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Push <em>m32fp</em> onto the FPU register stack.</td></tr>
+<td>Push m32fp onto the FPU register stack.</td></tr>
 <tr>
 <td>DD /0</td>
-<td>FLD <em>m64fp</em></td>
+<td>FLD m64fp</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Push <em>m64fp</em> onto the FPU register stack.</td></tr>
+<td>Push m64fp onto the FPU register stack.</td></tr>
 <tr>
 <td>DB /5</td>
-<td>FLD <em>m80fp</em></td>
+<td>FLD m80fp</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Push <em>m80fp</em> onto the FPU register stack.</td></tr>
+<td>Push m80fp onto the FPU register stack.</td></tr>
 <tr>
 <td>D9 C0+i</td>
 <td>FLD ST(i)</td>
@@ -44,20 +39,22 @@
 <td>Valid</td>
 <td>Push ST(i) onto the FPU register stack.</td></tr></table>
 <h2>Description</h2>
-<p>Pushes the source operand onto the FPU register stack. The source operand can be in single-precision, double-precision, or double extended-precision floating-point format. If the source operand is in single-precision or double-precision floating-point format, it is automatically converted to the double extended-precision floating-point format before being pushed on the stack.</p>
+<p>Pushes the source operand onto the FPU register stack. The source operand can be in single precision, double precision, or double extended-precision floating-point format. If the source operand is in single precision or double precision floating-point format, it is automatically converted to the double extended-precision floating-point format before being pushed on the stack.</p>
 <p>The FLD instruction can also push the value in a selected FPU register [ST(i)] onto the stack. Here, pushing register ST(0) duplicates the stack top.</p>
+<h3>NOTE</h3>
+<p>When the FLD instruction loads a denormal value and the DM bit in the CW is not masked, an exception is flagged but the value is still pushed onto the x87 stack.</p>
 <p>This instruction’s operation is the same in non-64-bit modes and 64-bit mode.</p>
 <h2>Operation</h2>
 <pre>IF SRC is ST(i)
     THEN
-         temp ← ST(i);
+         temp := ST(i);
 FI;
-TOP ← TOP − 1;
+TOP := TOP − 1;
 IF SRC is memory-operand
     THEN
-         ST(0) ← ConvertToDoubleExtendedPrecisionFP(SRC);
+         ST(0) := ConvertToDoubleExtendedPrecisionFP(SRC);
     ELSE (* SRC is ST(i) *)
-         ST(0) ← temp;
+         ST(0) := temp;
 FI;</pre>
 <h2>FPU Flags Affected</h2>
 <table class="exception-table">

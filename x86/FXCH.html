@@ -41,13 +41,13 @@
 <h2>Operation</h2>
 <pre>IF (Number-of-operands) is 1
     THEN
-         temp ← ST(0);
-         ST(0) ← SRC;
-         SRC ← temp;
+         temp := ST(0);
+         ST(0) := SRC;
+         SRC := temp;
     ELSE
-         temp ← ST(0);
-         ST(0) ← ST(1);
-         ST(1) ← temp;
+         temp := ST(0);
+         ST(0) := ST(1);
+         ST(1) := temp;
 FI;</pre>
 <h2>FPU Flags Affected</h2>
 <table class="exception-table">

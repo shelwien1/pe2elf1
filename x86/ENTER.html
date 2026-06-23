@@ -22,22 +22,22 @@
 <th>Leg Mode</th>
 <td></td></tr>
 <tr>
-<td>C8 <em>iw</em> 00</td>
-<td>ENTER <em>imm16</em>, 0</td>
+<td>C8 iw 00</td>
+<td>ENTER imm16, 0</td>
 <td>II</td>
 <td>Valid</td>
 <td>Valid</td>
 <td>Create a stack frame for a procedure.</td></tr>
 <tr>
-<td>C8 <em>iw </em>01</td>
-<td>ENTER <em>imm16</em>,1</td>
+<td>C8 iw 01</td>
+<td>ENTER imm16,1</td>
 <td>II</td>
 <td>Valid</td>
 <td>Valid</td>
 <td>Create a stack frame with a nested pointer for a procedure.</td></tr>
 <tr>
-<td>C8 <em>iw </em>ib</td>
-<td>ENTER <em>imm16, imm8</em></td>
+<td>C8 iw ib</td>
+<td>ENTER imm16, imm8</td>
 <td>II</td>
 <td>Valid</td>
 <td>Valid</td>
@@ -45,67 +45,71 @@
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
 <td>II</td>
 <td>iw</td>
 <td>imm8</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Creates a stack frame (comprising of space for dynamic storage and 1-32 frame pointer storage) for a procedure. The first operand (imm16) specifies the size of the dynamic storage in the stack frame (that is, the number of bytes of dynamically allocated on the stack for the procedure). The second operand (imm8) gives the lexical nesting level (0 to 31) of the procedure. The nesting level (imm8 mod 32) and the OperandSize attribute determine the size in bytes of the storage space for frame pointers.</p>
 <p>The nesting level determines the number of frame pointers that are copied into the “display area” of the new stack frame from the preceding frame. The default size of the frame pointer is the StackAddrSize attribute, but can be overridden using the 66H prefix. Thus, the OperandSize attribute determines the size of each frame pointer that will be copied into the stack frame and the data being transferred from SP/ESP/RSP register into the BP/EBP/RBP register.</p>
 <p>The ENTER and companion LEAVE instructions are provided to support block structured languages. The ENTER instruction (when used) is typically the first instruction in a procedure and is used to set up a new stack frame for a procedure. The LEAVE instruction is then used at the end of the procedure (just before the RET instruction) to release the stack frame.</p>
-<p>If the nesting level is 0, the processor pushes the frame pointer from the BP/EBP/RBP register onto the stack, copies the current stack pointer from the SP/ESP/RSP register into the BP/EBP/RBP register, and loads the SP/ESP/RSP register with the current stack-pointer value minus the value in the size operand. For nesting levels of 1 or greater, the processor pushes additional frame pointers on the stack before adjusting the stack pointer. These additional frame pointers provide the called procedure with access points to other nested frames on the stack. See “Procedure Calls for Block-Structured Languages” in Chapter 6 of the <em>Intel® 64 and IA-32 Architectures Software Developer’s Manual, Volume 1</em>, for more information about the actions of the ENTER instruction.</p>
+<p>If the nesting level is 0, the processor pushes the frame pointer from the BP/EBP/RBP register onto the stack, copies the current stack pointer from the SP/ESP/RSP register into the BP/EBP/RBP register, and loads the SP/ESP/RSP register with the current stack-pointer value minus the value in the size operand. For nesting levels of 1 or greater, the processor pushes additional frame pointers on the stack before adjusting the stack pointer. These additional frame pointers provide the called procedure with access points to other nested frames on the stack. See “Procedure Calls for Block-Structured Languages” in Chapter 6 of the Intel<sup>®</sup> 64 and IA-32 Architectures Software Developer’s Manual, Volume 1, for more information about the actions of the ENTER instruction.</p>
 <p>The ENTER instruction causes a page fault whenever a write using the final value of the stack pointer (within the current stack segment) would do so.</p>
 <p>In 64-bit mode, default operation size is 64 bits; 32-bit operation size cannot be encoded. Use of 66H prefix changes frame pointer operand size to 16 bits.</p>
 <p>When the 66H prefix is used and causing the OperandSize attribute to be less than the StackAddrSize, software is responsible for the following:</p>
 <h2>Operation</h2>
-<pre>AllocSize ← imm16;
-NestingLevel ← imm8 MOD 32;
+<pre>AllocSize := imm16;
+NestingLevel := imm8 MOD 32;
 IF (OperandSize = 64)
     THEN
          Push(RBP); (* RSP decrements by 8 *)
-         FrameTemp ← RSP;
+         FrameTemp := RSP;
     ELSE IF OperandSize = 32
          THEN
               Push(EBP); (* (E)SP decrements by 4 *)
-              FrameTemp ← ESP; FI;
+              FrameTemp := ESP; FI;
     ELSE (* OperandSize = 16 *)
               Push(BP); (* RSP or (E)SP decrements by 2 *)
-              FrameTemp ← SP;
+              FrameTemp := SP;
 FI;
 IF NestingLevel = 0
     THEN GOTO CONTINUE;
 FI;
 IF (NestingLevel &gt; 1)
-    THEN FOR i ← 1 to (NestingLevel - 1)
+    THEN FOR i := 1 to (NestingLevel - 1)
          DO
               IF (OperandSize = 64)
                     THEN
-                         RBP ← RBP - 8;
+                         RBP := RBP - 8;
                          Push([RBP]); (* Quadword push *)
                     ELSE IF OperandSize = 32
                          THEN
                               IF StackSize = 32
-                                    EBP ← EBP - 4;
+                                    EBP := EBP - 4;
                                     Push([EBP]); (* Doubleword push *)
                               ELSE (* StackSize = 16 *)
-                                    BP ← BP - 4;
+                                    BP := BP - 4;
                                     Push([BP]); (* Doubleword push *)
                               FI;
                          FI;
                     ELSE (* OperandSize = 16 *)
-                         IF StackSize = 32
+                         IF StackSize = 64
                               THEN
-                                    EBP ← EBP - 2;
+                                    RBP := RBP - 2;
+                                    Push([RBP]); (* Word push *)
+                         ELSE IF StackSize = 32
+                              THEN
+                                    EBP := EBP - 2;
                                     Push([EBP]); (* Word push *)
                               ELSE (* StackSize = 16 *)
-                                    BP ← BP - 2;
+                                    BP := BP - 2;
                                     Push([BP]); (* Word push *)
                          FI;
                     FI;
@@ -123,15 +127,15 @@ FI;
 CONTINUE:
 IF 64-Bit Mode (StackSize = 64)
     THEN
-              RBP ← FrameTemp;
-              RSP ← RSP − AllocSize;
+              RBP := FrameTemp;
+              RSP := RSP − AllocSize;
     ELSE IF OperandSize = 32
          THEN
-              EBP ← FrameTemp;
-              ESP ← ESP − AllocSize; FI;
+              EBP := FrameTemp;
+              ESP := ESP − AllocSize; FI;
     ELSE (* OperandSize = 16 *)
-              BP ← FrameTemp[15:1]; (* Bits 16 and above of applicable RBP/EBP are unmodified *)
-              SP ← SP − AllocSize;
+              BP := FrameTemp[15:1]; (* Bits 16 and above of applicable RBP/EBP are unmodified *)
+              SP := SP − AllocSize;
 FI;
 END;</pre>
 <h2>Flags Affected</h2>

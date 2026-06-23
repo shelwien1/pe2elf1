@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>CVTPS2PD—Convert Packed Single Precision Floating-Point Values to Packed Double Precision Floating-Point Values </title></head>
+<body>
+<h1>CVTPS2PD—Convert Packed Single Precision Floating-Point Values to Packed Double Precision Floating-Point Values</h1>
+<table>
+<tr>
+<th>Opcode/Instruction</th>
+<th>Op /En</th>
+<th>64/32 bit Mode Support</th>
+<th>CPUID Feature Flag</th>
+<th>Description</th></tr>
+<tr>
+<td>NP 0F 5A /r CVTPS2PD xmm1, xmm2/m64</td>
+<td>A</td>
+<td>V/V</td>
+<td>SSE2</td>
+<td>Convert two packed single precision floating-point values in xmm2/m64 to two packed double precision floating-point values in xmm1.</td></tr>
+<tr>
+<td>VEX.128.0F.WIG 5A /r VCVTPS2PD xmm1, xmm2/m64</td>
+<td>A</td>
+<td>V/V</td>
+<td>AVX</td>
+<td>Convert two packed single precision floating-point values in xmm2/m64 to two packed double precision floating-point values in xmm1.</td></tr>
+<tr>
+<td>VEX.256.0F.WIG 5A /r VCVTPS2PD ymm1, xmm2/m128</td>
+<td>A</td>
+<td>V/V</td>
+<td>AVX</td>
+<td>Convert four packed single precision floating-point values in xmm2/m128 to four packed double precision floating-point values in ymm1.</td></tr>
+<tr>
+<td>EVEX.128.0F.W0 5A /r VCVTPS2PD xmm1 {k1}{z}, xmm2/m64/m32bcst</td>
+<td>B</td>
+<td>V/V</td>
+<td>(AVX512VL AND AVX512F) OR AVX10.1</td>
+<td>Convert two packed single precision floating-point values in xmm2/m64/m32bcst to packed double precision floating-point values in xmm1 with writemask k1.</td></tr>
+<tr>
+<td>EVEX.256.0F.W0 5A /r VCVTPS2PD ymm1 {k1}{z}, xmm2/m128/m32bcst</td>
+<td>B</td>
+<td>V/V</td>
+<td>(AVX512VL AND AVX512F) OR AVX10.1</td>
+<td>Convert four packed single precision floating-point values in xmm2/m128/m32bcst to packed double precision floating-point values in ymm1 with writemask k1.</td></tr>
+<tr>
+<td>EVEX.512.0F.W0 5A /r VCVTPS2PD zmm1 {k1}{z}, ymm2/m256/m32bcst {sae}</td>
+<td>B</td>
+<td>V/V</td>
+<td>AVX512F OR AVX10.1</td>
+<td>Convert eight packed single precision floating-point values in ymm2/m256/b32bcst to eight packed double precision floating-point values in zmm1 with writemask k1.</td></tr></table>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Tuple Type</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>A</td>
+<td>N/A</td>
+<td>ModRM:reg (w)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td>
+<td>N/A</td></tr>
+<tr>
+<td>B</td>
+<td>Half</td>
+<td>ModRM:reg (w)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
+<h2>Description</h2>
+<p>Converts two, four or eight packed single precision floating-point values in the source operand (second operand) to two, four or eight packed double precision floating-point values in the destination operand (first operand).</p>
+<p>EVEX encoded versions: The source operand is a YMM/XMM/XMM (low 64-bits) register, a 256/128/64-bit memory location or a 256/128/64-bit vector broadcasted from a 32-bit memory location. The destination operand is a ZMM/YMM/XMM register conditionally updated with writemask k1.</p>
+<p>VEX.256 encoded version: The source operand is an XMM register or 128- bit memory location. The destination operand is a YMM register. Bits (MAXVL-1:256) of the corresponding destination ZMM register are zeroed.</p>
+<p>VEX.128 encoded version: The source operand is an XMM register or 64- bit memory location. The destination operand is a XMM register. The upper Bits (MAXVL-1:128) of the corresponding ZMM register destination are zeroed.</p>
+<p>128-bit Legacy SSE version: The source operand is an XMM register or 64- bit memory location. The destination operand is an XMM register. The upper Bits (MAXVL-1:128) of the corresponding ZMM register destination are unmodified.</p>
+<p>Note: VEX.vvvv and EVEX.vvvv are reserved and must be 1111b otherwise instructions will #UD.</p>
+<svg width="594.00003" viewBox="103.980000 180657.000010 396.000020 160.140000" height="240.21">
+<text y="180705.075" x="293.82" style="font-size:7.500000pt" lengthAdjust="spacingAndGlyphs" textLength="9.15">X3</text>
+<text y="180705.075" x="330.96" style="font-size:7.500000pt" lengthAdjust="spacingAndGlyphs" textLength="9.15">X2</text>
+<text y="180705.075" x="368.04" style="font-size:7.500000pt" lengthAdjust="spacingAndGlyphs" textLength="9.15">X1</text>
+<text y="180705.075" x="405.18" style="font-size:7.500000pt" lengthAdjust="spacingAndGlyphs" textLength="9.21">X0</text>
+<text y="180706.695" x="114.24" style="font-size:7.500000pt" lengthAdjust="spacingAndGlyphs" textLength="15.8535">SRC</text>
+<text y="180772.575" x="157.32" style="font-size:7.500000pt" lengthAdjust="spacingAndGlyphs" textLength="9.15">X3</text>
+<text y="180772.575" x="241.68" style="font-size:7.500000pt" lengthAdjust="spacingAndGlyphs" textLength="9.15">X2</text>
+<text y="180772.575" x="315.96" style="font-size:8.291500pt" lengthAdjust="spacingAndGlyphs" textLength="10.07002675">X1</text>
+<text y="180772.575" x="390.1788748" style="font-size:8.291500pt" lengthAdjust="spacingAndGlyphs" textLength="10.12972555">X0</text>
+<text y="180775.935" x="114.0" style="font-size:7.500000pt" lengthAdjust="spacingAndGlyphs" textLength="20.001">DEST</text>
+<rect y="180697.02" x="394.14" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="13.5" width="37.08"></rect>
+<rect y="180697.02" x="357.0" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="13.5" width="37.14"></rect>
+<rect y="180697.02" x="319.86" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="13.5" width="37.14"></rect>
+<rect y="180697.02" x="282.72" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="13.5" width="37.14"></rect>
+<rect y="180764.52" x="282.18" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="13.5" width="74.22"></rect>
+<rect y="180764.52" x="133.68" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="13.5" width="74.22"></rect>
+<rect y="180764.52" x="356.4" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="13.5" width="74.28"></rect>
+<rect y="180764.52" x="207.9" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="13.5" width="74.28"></rect>
+<path style="stroke:black" d="M300.000000,180711.480000 L299.220000,180709.620000 L183.600000,180757.020000 L184.380000,180758.880000 "></path>
+<path style="stroke:black" d="M337.260000,180711.360000 L336.240000,180709.680000 L260.040000,180754.860000 L261.060000,180756.540000 "></path>
+<path style="stroke:black" d="M374.580000,180711.240000 L373.200000,180709.860000 L331.440000,180751.620000 L332.820000,180753.000000 "></path>
+<path style="stroke:black" d="M411.960000,180710.880000 L410.100000,180710.160000 L395.940000,180747.960000 L397.800000,180748.680000 "></path>
+<path style="stroke:black" d="M396.840000,180748.380000 L400.860000,180749.880000 L401.460000,180750.120000 L401.040000,180750.660000 L391.740000,180763.140000 L390.720000,180764.520000 L390.840000,180762.780000 L392.100000,180747.240000 L392.220000,180746.580000 L392.820000,180746.820000 L393.120000,180747.300000 L391.860000,180762.840000 L390.840000,180762.780000 L390.960000,180762.480000 L400.260000,180750.000000 L401.040000,180750.660000 L400.500000,180750.780000 L396.480000,180749.280000 "></path>
+<path style="stroke:black" d="M396.840000,180748.380000 L400.860000,180749.880000 L401.460000,180750.120000 L401.040000,180750.660000 L391.740000,180763.140000 L390.720000,180764.520000 L390.840000,180762.780000 L392.100000,180747.240000 L392.220000,180746.580000 L392.820000,180746.820000 L393.120000,180747.300000 L391.860000,180762.840000 L390.840000,180762.780000 L390.960000,180762.480000 L400.260000,180750.000000 L401.040000,180750.660000 L400.500000,180750.780000 L396.480000,180749.280000 "></path>
+<path style="stroke:black" d="M392.820000,180746.820000 L396.840000,180748.380000 L396.480000,180749.280000 L392.460000,180747.720000 "></path>
+<path style="stroke:black" d="M392.820000,180746.820000 L396.840000,180748.380000 L396.480000,180749.280000 L392.460000,180747.720000 "></path>
+<path style="stroke:black" d="M396.660000,180748.800000 L400.680000,180750.300000 L391.380000,180762.780000 L392.640000,180747.240000 "></path>
+<path style="stroke:black" d="M396.480000,180749.220000 L396.660000,180749.280000 L396.840000,180749.280000 L397.867000,180749.290000 L398.176000,180747.911000 L397.320000,180747.480000 L397.140000,180747.360000 L396.960000,180747.300000 L396.780000,180747.300000 L396.240000,180747.480000 L396.060000,180747.600000 L395.940000,180747.780000 L395.820000,180748.140000 L395.820000,180748.560000 L395.880000,180748.740000 L396.000000,180748.860000 L396.120000,180749.040000 L396.300000,180749.160000 L396.480000,180749.220000 "></path>
+<path style="stroke:black" d="M332.100000,180752.280000 L335.160000,180755.280000 L335.580000,180755.820000 L335.040000,180756.120000 L321.360000,180763.680000 L319.800000,180764.520000 L320.640000,180762.960000 L328.200000,180749.340000 L328.560000,180748.800000 L329.040000,180749.220000 L329.100000,180749.820000 L321.540000,180763.440000 L320.640000,180762.960000 L320.880000,180762.780000 L334.560000,180755.220000 L335.040000,180756.120000 L334.440000,180756.000000 L331.380000,180753.000000 "></path>
+<path style="stroke:black" d="M332.100000,180752.280000 L335.160000,180755.280000 L335.580000,180755.820000 L335.040000,180756.120000 L321.360000,180763.680000 L319.800000,180764.520000 L320.640000,180762.960000 L328.200000,180749.340000 L328.560000,180748.800000 L329.040000,180749.220000 L329.100000,180749.820000 L321.540000,180763.440000 L320.640000,180762.960000 L320.880000,180762.780000 L334.560000,180755.220000 L335.040000,180756.120000 L334.440000,180756.000000 L331.380000,180753.000000 "></path>
+<path style="stroke:black" d="M329.040000,180749.220000 L332.100000,180752.280000 L331.380000,180753.000000 L328.320000,180749.940000 "></path>
+<path style="stroke:black" d="M329.040000,180749.220000 L332.100000,180752.280000 L331.380000,180753.000000 L328.320000,180749.940000 "></path>
+<path style="stroke:black" d="M331.740000,180752.640000 L334.800000,180755.640000 L321.120000,180763.200000 L328.680000,180749.580000 "></path>
+<path style="stroke:black" d="M331.380000,180753.000000 L331.560000,180753.120000 L332.100000,180753.300000 L332.640000,180753.120000 L332.820000,180753.000000 L332.940000,180752.820000 L333.088000,180752.243000 L333.215000,180752.483000 L333.000000,180751.920000 L332.940000,180751.740000 L332.820000,180751.560000 L332.460000,180751.320000 L332.280000,180751.320000 L332.100000,180751.260000 L331.920000,180751.320000 L331.740000,180751.320000 L331.380000,180751.560000 L331.260000,180751.740000 L331.140000,180751.920000 L331.140000,180752.100000 L331.080000,180752.280000 L331.140000,180752.460000 L331.140000,180752.640000 L331.380000,180753.000000 "></path>
+<path style="stroke:black" d="M260.460000,180755.700000 L262.680000,180759.420000 L262.980000,180760.020000 L262.320000,180760.140000 L247.260000,180764.040000 L245.520000,180764.520000 L246.720000,180763.260000 L257.460000,180751.920000 L257.940000,180751.380000 L258.300000,180751.980000 L258.240000,180752.580000 L247.500000,180763.920000 L246.720000,180763.260000 L247.020000,180763.080000 L262.140000,180759.180000 L262.320000,180760.140000 L261.780000,180759.960000 L259.560000,180756.240000 "></path>
+<path style="stroke:black" d="M260.460000,180755.700000 L262.680000,180759.420000 L262.980000,180760.020000 L262.320000,180760.140000 L247.260000,180764.040000 L245.520000,180764.520000 L246.720000,180763.260000 L257.460000,180751.920000 L257.940000,180751.380000 L258.300000,180751.980000 L258.240000,180752.580000 L247.500000,180763.920000 L246.720000,180763.260000 L247.020000,180763.080000 L262.140000,180759.180000 L262.320000,180760.140000 L261.780000,180759.960000 L259.560000,180756.240000 "></path>
+<path style="stroke:black" d="M258.300000,180751.980000 L260.460000,180755.700000 L259.560000,180756.240000 L257.400000,180752.520000 "></path>
+<path style="stroke:black" d="M258.300000,180751.980000 L260.460000,180755.700000 L259.560000,180756.240000 L257.400000,180752.520000 "></path>
+<path style="stroke:black" d="M260.040000,180755.940000 L262.260000,180759.660000 L247.140000,180763.560000 L257.880000,180752.220000 "></path>
+<path style="stroke:black" d="M183.960000,180757.920000 L185.580000,180761.940000 L185.820000,180762.600000 L185.160000,180762.660000 L169.680000,180764.340000 L167.940000,180764.520000 L169.320000,180763.440000 L181.560000,180753.780000 L182.100000,180753.360000 L182.340000,180753.960000 L182.220000,180754.560000 L169.980000,180764.220000 L169.320000,180763.440000 L169.620000,180763.320000 L185.100000,180761.640000 L185.160000,180762.660000 L184.680000,180762.300000 L183.060000,180758.280000 "></path>
+<path style="stroke:black" d="M183.960000,180757.920000 L185.580000,180761.940000 L185.820000,180762.600000 L185.160000,180762.660000 L169.680000,180764.340000 L167.940000,180764.520000 L169.320000,180763.440000 L181.560000,180753.780000 L182.100000,180753.360000 L182.340000,180753.960000 L182.220000,180754.560000 L169.980000,180764.220000 L169.320000,180763.440000 L169.620000,180763.320000 L185.100000,180761.640000 L185.160000,180762.660000 L184.680000,180762.300000 L183.060000,180758.280000 "></path>
+<path style="stroke:black" d="M182.340000,180753.960000 L183.960000,180757.920000 L183.060000,180758.280000 L181.440000,180754.320000 "></path>
+<path style="stroke:black" d="M182.340000,180753.960000 L183.960000,180757.920000 L183.060000,180758.280000 L181.440000,180754.320000 "></path>
+<path style="stroke:black" d="M183.540000,180758.100000 L185.160000,180762.120000 L169.680000,180763.800000 L181.920000,180754.140000 "></path>
+<path style="stroke:black" d="M259.620000,180756.180000 L259.740000,180756.360000 L259.920000,180756.480000 L260.647000,180757.085000 L261.828000,180756.269000 L261.420000,180755.340000 L261.360000,180755.160000 L261.240000,180755.040000 L260.569000,180754.288000 L259.370000,180754.790000 L259.500000,180755.820000 L259.620000,180756.180000 "></path>
+<path style="stroke:black" d="M183.060000,180758.340000 L183.180000,180758.520000 L183.420000,180758.760000 L183.600000,180758.880000 L183.780000,180758.940000 L184.200000,180758.940000 L184.380000,180758.880000 L184.560000,180758.760000 L184.820000,180758.504000 L185.034000,180758.335000 L184.980000,180757.920000 L184.980000,180757.740000 L184.920000,180757.560000 L184.800000,180757.380000 L184.390000,180756.604000 L182.999000,180756.902000 L183.000000,180757.920000 L183.000000,180758.100000 L183.060000,180758.340000 "></path></svg>
+<h3>Figure 3-9.  CVTPS2PD (VEX.256 encoded version)</h3>
+<h2>Operation</h2>
+<p><strong>VCVTPS2PD (EVEX Encoded Versions) When SRC Operand is a Register</strong></p>
+<pre>(KL, VL) = (2, 128), (4, 256), (8, 512)
+FOR j := 0 TO KL-1
+    i := j * 64
+    k := j * 32
+    IF k1[j] OR *no writemask*
+         THEN DEST[i+63:i] :=
+              Convert_Single_Precision_To_Double_Precision_Floating_Point(SRC[k+31:k])
+         ELSE
+              IF *merging-masking*
+                                                         ; merging-masking
+                    THEN *DEST[i+63:i] remains unchanged*
+                    ELSE
+                                                         ; zeroing-masking
+                         DEST[i+63:i] := 0
+              FI
+    FI;
+ENDFOR
+DEST[MAXVL-1:VL] := 0</pre>
+<p><strong>VCVTPS2PD (EVEX Encoded Versions) When SRC Operand is a Memory Source</strong></p>
+<pre>(KL, VL) = (2, 128), (4, 256), (8, 512)
+FOR j := 0 TO KL-1
+    i := j * 64
+    k := j * 32
+    IF k1[j] OR *no writemask*
+         THEN
+              IF (EVEX.b = 1)
+                    THEN
+                         DEST[i+63:i] :=
+              Convert_Single_Precision_To_Double_Precision_Floating_Point(SRC[31:0])
+                    ELSE
+                         DEST[i+63:i] :=
+              Convert_Single_Precision_To_Double_Precision_Floating_Point(SRC[k+31:k])
+              FI;
+         ELSE
+              IF *merging-masking*
+                                                         ; merging-masking
+                    THEN *DEST[i+63:i] remains unchanged*
+                    ELSE
+                                                         ; zeroing-masking
+                         DEST[i+63:i] := 0
+              FI
+    FI;
+ENDFOR
+DEST[MAXVL-1:VL] := 0</pre>
+<p><strong>VCVTPS2PD (VEX.256 Encoded Version)</strong></p>
+<pre>DEST[63:0] := Convert_Single_Precision_To_Double_Precision_Floating_Point(SRC[31:0])
+DEST[127:64] := Convert_Single_Precision_To_Double_Precision_Floating_Point(SRC[63:32])
+DEST[191:128] := Convert_Single_Precision_To_Double_Precision_Floating_Point(SRC[95:64])
+DEST[255:192] := Convert_Single_Precision_To_Double_Precision_Floating_Point(SRC[127:96)
+DEST[MAXVL-1:256] := 0</pre>
+<p><strong>VCVTPS2PD (VEX.128 Encoded Version)</strong></p>
+<pre>DEST[63:0] := Convert_Single_Precision_To_Double_Precision_Floating_Point(SRC[31:0])
+DEST[127:64] := Convert_Single_Precision_To_Double_Precision_Floating_Point(SRC[63:32])
+DEST[MAXVL-1:128] := 0</pre>
+<p><strong>CVTPS2PD (128-bit Legacy SSE Version)</strong></p>
+<pre>DEST[63:0] := Convert_Single_Precision_To_Double_Precision_Floating_Point(SRC[31:0])
+DEST[127:64] := Convert_Single_Precision_To_Double_Precision_Floating_Point(SRC[63:32])
+DEST[MAXVL-1:128] (unmodified)</pre>
+<h2>Intel C/C++ Compiler Intrinsic Equivalent</h2>
+<p>VCVTPS2PD __m512d _mm512_cvtps_pd( __m256 a);</p>
+<p>VCVTPS2PD __m512d _mm512_mask_cvtps_pd( __m512d s, __mmask8 k, __m256 a);</p>
+<p>VCVTPS2PD __m512d _mm512_maskz_cvtps_pd( __mmask8 k, __m256 a);</p>
+<p>VCVTPS2PD __m512d _mm512_cvt_roundps_pd( __m256 a, int sae);</p>
+<p>VCVTPS2PD __m512d _mm512_mask_cvt_roundps_pd( __m512d s, __mmask8 k, __m256 a, int sae);</p>
+<p>VCVTPS2PD __m512d _mm512_maskz_cvt_roundps_pd( __mmask8 k, __m256 a, int sae);</p>
+<p>VCVTPS2PD __m256d _mm256_mask_cvtps_pd( __m256d s, __mmask8 k, __m128 a);</p>
+<p>VCVTPS2PD __m256d _mm256_maskz_cvtps_pd( __mmask8 k, __m128a);</p>
+<p>VCVTPS2PD __m128d _mm_mask_cvtps_pd( __m128d s, __mmask8 k, __m128 a);</p>
+<p>VCVTPS2PD __m128d _mm_maskz_cvtps_pd( __mmask8 k, __m128 a);</p>
+<p>VCVTPS2PD __m256d _mm256_cvtps_pd (__m128 a)</p>
+<p>CVTPS2PD __m128d _mm_cvtps_pd (__m128 a)</p>
+<h2>SIMD Floating-Point Exceptions</h2>
+<p>Invalid, Denormal.</p>
+<h2>Other Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>VEX-encoded instructions, see Table 2-20, “Type 3 Class Exception Conditions.”</td></tr>
+<tr>
+<td>EVEX-encoded instructions, see Table 2-48, “Type E2 Class Exception Conditions.”</td></tr></table>
+<p>Additionally:</p>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>If VEX.vvvv != 1111B or EVEX.vvvv != 1111B.</td></tr></table></body></html>

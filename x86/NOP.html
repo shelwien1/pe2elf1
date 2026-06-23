@@ -22,21 +22,21 @@
 <th>Leg Mode</th>
 <td></td></tr>
 <tr>
-<td>90</td>
+<td>NP 90</td>
 <td>NOP</td>
-<td>NP</td>
+<td>ZO</td>
 <td>Valid</td>
 <td>Valid</td>
 <td>One byte no-operation instruction.</td></tr>
 <tr>
-<td>0F 1F /0</td>
+<td>NP 0F 1F /0</td>
 <td>NOP r/m16</td>
 <td>M</td>
 <td>Valid</td>
 <td>Valid</td>
 <td>Multi-byte no-operation instruction.</td></tr>
 <tr>
-<td>0F 1F /0</td>
+<td>NP 0F 1F /0</td>
 <td>NOP r/m32</td>
 <td>M</td>
 <td>Valid</td>
@@ -45,23 +45,23 @@
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
-<td>NP</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr>
+<td>ZO</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr>
 <tr>
 <td>M</td>
 <td>ModRM:r/m (r)</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>This instruction performs no operation. It is a one-byte or multi-byte NOP that takes up space in the instruction stream but does not impact machine context, except for the EIP register.</p>
 <p>The multi-byte form of NOP is available on processors with model encoding:</p>
@@ -108,7 +108,7 @@
 <p>0F 1F 84 00 00 00 00 00H</p>
 <p>66 0F 1F 84 00 00 00 00 00H</p></td></tr></table>
 <h2>Flags Affected</h2>
-<p>None</p>
+<p>None.</p>
 <h2>Exceptions (All Operating Modes)</h2>
 <p>#UD</p>
 <p>If the LOCK prefix is used.</p></body></html>

@@ -4,21 +4,16 @@
 <head>
 <meta charset="UTF-8">
 <link href="style.css" type="text/css" rel="stylesheet">
-<title>FCOMI/FCOMIP/ FUCOMI/FUCOMIP—Compare Floating Point Values and Set EFLAGS </title></head>
+<title>FCOMI/FCOMIP/ FUCOMI/FUCOMIP—Compare Floating-Point Values and Set EFLAGS </title></head>
 <body>
-<h1>FCOMI/FCOMIP/ FUCOMI/FUCOMIP—Compare Floating Point Values and Set EFLAGS</h1>
-<p><strong>Opcode</strong></p>
-<p><strong>Instruction</strong></p>
-<p><strong>64-Bit</strong></p>
-<p><strong>Compat/</strong></p>
-<p><strong>Description</strong></p>
+<h1>FCOMI/FCOMIP/ FUCOMI/FUCOMIP—Compare Floating-Point Values and Set EFLAGS</h1>
 <table>
 <tr>
-<td></td>
-<td></td>
-<th>Mode</th>
-<th>Leg Mode</th>
-<td></td></tr>
+<th>Opcode</th>
+<th>Instruction</th>
+<th>64-Bit Mode</th>
+<th>Compat/Leg Mode</th>
+<th>Description</th></tr>
 <tr>
 <td>DB F0+i</td>
 <td>FCOMI ST, ST(i)</td>
@@ -45,7 +40,7 @@
 <td>Compare ST(0) with ST(i), check for ordered values, set status flags accordingly, and pop register stack.</td></tr></table>
 <h2>Description</h2>
 <p>Performs an unordered comparison of the contents of registers ST(0) and ST(i) and sets the status flags ZF, PF, and CF in the EFLAGS register according to the results (see the table below). The sign of zero is ignored for compari-sons, so that –0.0 is equal to +0.0.</p>
-<h3>Table 3-22.  FCOMI/FCOMIP/ FUCOMI/FUCOMIP Results</h3>
+<h3>Table 3-24.  FCOMI/FCOMIP/ FUCOMI/FUCOMIP Results</h3>
 <table>
 <tr>
 <th>Comparison Results*</th>
@@ -78,7 +73,7 @@
 <p>** Flags not set if unmasked invalid-arithmetic-operand (#IA) exception is generated.</p>
 <p>An unordered comparison checks the class of the numbers being compared (see “FXAM—Examine Floating-Point” in this chapter). The FUCOMI/FUCOMIP instructions perform the same operations as the FCOMI/FCOMIP instruc-tions. The only difference is that the FUCOMI/FUCOMIP instructions raise the invalid-arithmetic-operand exception (#IA) only when either or both operands are an SNaN or are in an unsupported format; QNaNs cause the condition code flags to be set to unordered, but do not cause an exception to be generated. The FCOMI/FCOMIP instructions raise an invalid-operation exception when either or both of the operands are a NaN value of any kind or are in an unsupported format.</p>
 <p>If the operation results in an invalid-arithmetic-operand exception being raised, the status flags in the EFLAGS register are set only if the exception is masked.</p>
-<p>The FCOMI/FCOMIP and FUCOMI/FUCOMIP instructions set the OF, SF and AF flags to zero in the EFLAGS register (regardless of whether an invalid-operation exception is detected).</p>
+<p>The FCOMI/FCOMIP and FUCOMI/FUCOMIP instructions set the OF, SF, and AF flags to zero in the EFLAGS register (regardless of whether an invalid-operation exception is detected).</p>
 <p>The FCOMIP and FUCOMIP instructions also pop the register stack following the comparison operation. To pop the register stack, the processor marks the ST(0) register as empty and increments the stack pointer (TOP) by 1.</p>
 <p>This instruction’s operation is the same in non-64-bit modes and 64-bit mode.</p>
 <h2>IA-32 Architecture Compatibility</h2>
@@ -86,11 +81,11 @@
 <h2>Operation</h2>
 <pre>CASE (relation of operands) OF
     ST(0) &gt; ST(i):
-                         ZF, PF, CF ← 000;
+                         ZF, PF, CF := 000;
     ST(0) &lt; ST(i):
-                         ZF, PF, CF ← 001;
+                         ZF, PF, CF := 001;
     ST(0) = ST(i):
-                         ZF, PF, CF ← 100;
+                         ZF, PF, CF := 100;
 ESAC;
 IF Instruction is FCOMI or FCOMIP
     THEN
@@ -99,7 +94,7 @@ IF Instruction is FCOMI or FCOMIP
                     #IA
                     IF FPUControlWord.IM = 1
                          THEN
-                              ZF, PF, CF ← 111;
+                              ZF, PF, CF := 111;
                     FI;
          FI;
 FI;
@@ -107,12 +102,12 @@ IF Instruction is FUCOMI or FUCOMIP
     THEN
          IF ST(0) or ST(i) = QNaN, but not SNaN or unsupported format
               THEN
-                    ZF, PF, CF ← 111;
+                    ZF, PF, CF := 111;
               ELSE (* ST(0) or ST(i) is SNaN or unsupported format *)
                      #IA;
                     IF FPUControlWord.IM = 1
                          THEN
-                              ZF, PF, CF ← 111;
+                              ZF, PF, CF := 111;
                     FI;
          FI;
 FI;

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>VP4DPWSSDS—Dot Product of Signed Words With Dword Accumulation and Saturation (4-Iterations) </title></head>
+<body>
+<h1>VP4DPWSSDS—Dot Product of Signed Words With Dword Accumulation and Saturation (4-Iterations)</h1>
+<table>
+<tr>
+<th>Opcode/Instruction</th>
+<th>Op/En</th>
+<th>64/32 bit Mode Support</th>
+<th>CPUID Feature Flag</th>
+<th>Description</th></tr>
+<tr>
+<td>EVEX.512.F2.0F38.W0 53 /r VP4DPWSSDS zmm1{k1}{z}, zmm2+3, m128</td>
+<td>A</td>
+<td>V/V</td>
+<td>AVX512_4VNNIW</td>
+<td>Multiply signed words from source register block indicated by zmm2 by signed words from m128 and accumulate the resulting dword results with signed saturation in zmm1.</td></tr></table>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Tuple</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>A</td>
+<td>Tuple1_4X</td>
+<td>ModRM:reg (r, w)</td>
+<td>EVEX.vvvv (r)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td></tr></table>
+<p><strong>Description</strong></p>
+<p>This instruction computes 4 sequential register source-block dot-products of two signed word operands with doubleword accumulation and signed saturation. The memory operand is sequentially selected in each of the four steps.</p>
+<p>In the above box, the notation of “+3” is used to denote that the instruction accesses 4 source registers based on that operand; sources are consecutive, start in a multiple of 4 boundary, and contain the encoded register operand.</p>
+<p>This instruction supports memory fault suppression. The entire memory operand is loaded if any bit of the lowest 16-bits of the mask is set to 1 or if a “no masking” encoding is used.</p>
+<p>The tuple type Tuple1_4X implies that four 32-bit elements (16 bytes) are referenced by the memory operation portion of this instruction.</p>
+<p><strong>Operation</strong></p>
+<p>src_reg_id is the 5 bit index of the vector register specified in the instruction as the src1 register.</p>
+<p><strong>VP4DPWSSDS dest, src1, src2</strong></p>
+<p>(KL,VL) = (16,512)</p>
+<p>N := 4</p>
+<p>ORIGDEST := DEST</p>
+<p>src_base := src_reg_id &amp; ~ (N-1) // for src1 operand</p>
+<p>FOR i := 0 to KL-1:</p>
+<p>IF k1[i] or *no writemask*:</p>
+<p>FOR m := 0 to N-1:</p>
+<p>t := SRC2.dword[m]</p>
+<p>p1dword := reg[src_base+m].word[2*i] * t.word[0]</p>
+<p>p2dword := reg[src_base+m].word[2*i+1] * t.word[1]</p>
+<p>DEST.dword[i] := SIGNED_DWORD_SATURATE(DEST.dword[i] + p1dword + p2dword)</p>
+<p>ELSE IF *zeroing*:</p>
+<p>DEST.dword[i] := 0</p>
+<p>ELSE</p>
+<p>DEST.dword[i] := ORIGDEST.dword[i]</p>
+<p>DEST[MAX_VL-1:VL] := 0</p>
+<p><strong>Intel C/C++ Compiler Intrinsic Equivalent</strong></p>
+<p>VP4DPWSSDS __m512i _mm512_4dpwssds_epi32(__m512i, __m512ix4, __m128i *);</p>
+<p>VP4DPWSSDS __m512i _mm512_mask_4dpwssds_epi32(__m512i, __mmask16, __m512ix4, __m128i *);</p>
+<p>VP4DPWSSDS __m512i _mm512_maskz_4dpwssds_epi32(__mmask16, __m512i, __m512ix4, __m128i *);</p>
+<p><strong>SIMD Floating-Point Exceptions</strong></p>
+<p>None.</p>
+<p><strong>Other Exceptions</strong></p>
+<p>See Type E4; additionally:</p>
+<table>
+<tr>
+<td>#UD</td>
+<td>If the EVEX broadcast bit is set to 1.</td></tr>
+<tr>
+<td>#UD</td>
+<td>If the MODRM.mod = 0b11.</td></tr></table></body></html>

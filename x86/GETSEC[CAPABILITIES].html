@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>GETSEC[CAPABILITIES]—Report the SMX Capabilities </title></head>
+<body>
+<h1>GETSEC[CAPABILITIES]—Report the SMX Capabilities</h1>
+<table>
+<tr>
+<th>Opcode</th>
+<th>Instruction</th>
+<th>Description</th></tr>
+<tr>
+<td>
+<p>NP 0F 37</p>
+<p>(EAX = 0)</p></td>
+<td>GETSEC[CAPABILITIES]</td>
+<td>
+<p>Report the SMX capabilities.</p>
+<p>The capabilities index is input in EBX with the result returned in EAX.</p></td></tr></table>
+<h2>Description</h2>
+<p>The GETSEC[CAPABILITIES] function returns a bit vector of supported GETSEC leaf functions. The CAPABILITIES leaf of GETSEC is selected with EAX set to 0 at entry. EBX is used as the selector for returning the bit vector field in EAX. GETSEC[CAPABILITIES] may be executed at all privilege levels, but the CR4.SMXE bit must be set or an unde-fined opcode exception (#UD) is returned.</p>
+<p>With EBX = 0 upon execution of GETSEC[CAPABILITIES], EAX returns the a bit vector representing status on the presence of a Intel<sup>®</sup> TXT-capable chipset and the first 30 available GETSEC leaf functions. The format of the returned bit vector is provided in Table 7-3.</p>
+<p>If bit 0 is set to 1, then an Intel<sup>®</sup> TXT-capable chipset has been sampled present by the processor. If bits in the range of 1-30 are set, then the corresponding GETSEC leaf function is available. If the bit value at a given bit index is 0, then the GETSEC leaf function corresponding to that index is unsupported and attempted execution results in a #UD.</p>
+<p>Bit 31 of EAX indicates if further leaf indexes are supported. If the Extended Leafs bit 31 is set, then additional leaf functions are accessed by repeating GETSEC[CAPABILITIES] with EBX incremented by one. When the most signifi-cant bit of EAX is not set, then additional GETSEC leaf functions are not supported; indexing EBX to a higher value results in EAX returning zero.</p>
+<h3>Table 7-3.  GETSEC Capability Result Encoding (EBX = 0)</h3>
+<table>
+<tr>
+<th>Field</th>
+<th>Bit position</th>
+<th>Description</th></tr>
+<tr>
+<td>Chipset Present</td>
+<td>0</td>
+<td>Intel® TXT-capable chipset is present.</td></tr>
+<tr>
+<td>Undefined</td>
+<td>1</td>
+<td>Reserved</td></tr>
+<tr>
+<td>ENTERACCS</td>
+<td>2</td>
+<td>GETSEC[ENTERACCS] is available.</td></tr>
+<tr>
+<td>EXITAC</td>
+<td>3</td>
+<td>GETSEC[EXITAC] is available.</td></tr>
+<tr>
+<td>SENTER</td>
+<td>4</td>
+<td>GETSEC[SENTER] is available.</td></tr>
+<tr>
+<td>SEXIT</td>
+<td>5</td>
+<td>GETSEC[SEXIT] is available.</td></tr>
+<tr>
+<td>PARAMETERS</td>
+<td>6</td>
+<td>GETSEC[PARAMETERS] is available.</td></tr>
+<tr>
+<td>SMCTRL</td>
+<td>7</td>
+<td>GETSEC[SMCTRL] is available.</td></tr>
+<tr>
+<td>WAKEUP</td>
+<td>8</td>
+<td>GETSEC[WAKEUP] is available.</td></tr>
+<tr>
+<td>Undefined</td>
+<td>30:9</td>
+<td>Reserved</td></tr>
+<tr>
+<td>Extended Leafs</td>
+<td>31</td>
+<td>Reserved for extended information reporting of GETSEC capabilities.</td></tr></table>
+<h2>Operation</h2>
+<pre>IF (CR4.SMXE=0)
+    THEN #UD;
+ELSIF (in VMX non-root operation)
+    THEN VM Exit (reason=”GETSEC instruction”);
+IF (EBX=0) THEN
+         BitVector := 0;
+         IF (TXT chipset present)
+              BitVector[Chipset present] := 1;
+         IF (ENTERACCS Available)
+              THEN BitVector[ENTERACCS] := 1;
+         IF (EXITAC Available)
+              THEN BitVector[EXITAC] := 1;
+         IF (SENTER Available)
+              THEN BitVector[SENTER] := 1;
+         IF (SEXIT Available)
+              THEN BitVector[SEXIT] := 1;
+         IF (PARAMETERS Available)
+              THEN BitVector[PARAMETERS] := 1;
+         IF (SMCTRL Available)
+              THEN BitVector[SMCTRL] := 1;
+         IF (WAKEUP Available)
+              THEN BitVector[WAKEUP] := 1;
+         EAX := BitVector;
+ELSE
+    EAX := 0;
+END;;</pre>
+<h2>Flags Affected</h2>
+<p>None.</p>
+<h2>Use of Prefixes</h2>
+<p>LOCK</p>
+<p>Causes #UD.</p>
+<p>REP*</p>
+<p>Cause #UD (includes REPNE/REPNZ and REP/REPE/REPZ).</p>
+<p>Operand size</p>
+<p>Causes #UD.</p>
+<p>NP</p>
+<p>66/F2/F3 prefixes are not allowed.</p>
+<p>Segment overrides</p>
+<p>Ignored.</p>
+<p>Address size</p>
+<p>Ignored.</p>
+<p>REX</p>
+<p>Ignored.</p>
+<h2>Protected Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>If CR4.SMXE = 0.</td></tr></table>
+<h2>Real-Address Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>If CR4.SMXE = 0.</td></tr></table>
+<h2>Virtual-8086 Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>If CR4.SMXE = 0.</td></tr></table>
+<h2>Compatibility Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>If CR4.SMXE = 0.</td></tr></table>
+<h2>64-Bit Mode Exceptions</h2>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>If CR4.SMXE = 0.</td></tr></table>
+<h2>VM-exit Condition</h2>
+<p>Reason (GETSEC)</p>
+<p>If in VMX non-root operation.</p></body></html>

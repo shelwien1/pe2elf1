@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>V4FMADDSS/V4FNMADDSS—Scalar Single Precision Floating-Point Fused Multiply-Add (4-Iterations) </title></head>
+<body>
+<h1>V4FMADDSS/V4FNMADDSS—Scalar Single Precision Floating-Point Fused Multiply-Add (4-Iterations)</h1>
+<table>
+<tr>
+<th>Opcode/Instruction</th>
+<th>Op/En</th>
+<th>64/32 bit Mode Support</th>
+<th>CPUID Feature Flag</th>
+<th>Description</th></tr>
+<tr>
+<td>EVEX.LLIG.F2.0F38.W0 9B /r V4FMADDSS xmm1{k1}{z}, xmm2+3, m128</td>
+<td>A</td>
+<td>V/V</td>
+<td>AVX512_4FMAPS</td>
+<td>Multiply scalar single precision floating-point values from source register block indicated by xmm2 by values from m128 and accumulate the result in xmm1.</td></tr>
+<tr>
+<td>EVEX.LLIG.F2.0F38.W0 AB /r V4FNMADDSS xmm1{k1}{z}, xmm2+3, m128</td>
+<td>A</td>
+<td>V/V</td>
+<td>AVX512_4FMAPS</td>
+<td>Multiply and negate scalar single precision floating-point values from source register block indicated by xmm2 by values from m128 and accumulate the result in xmm1.</td></tr></table>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Tuple</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>A</td>
+<td>Tuple1_4X</td>
+<td>ModRM:reg (r, w)</td>
+<td>EVEX.vvvv (r)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td></tr></table>
+<p><strong>Description</strong></p>
+<p>This instruction computes 4 sequential scalar fused single precision floating-point multiply-add instructions with a sequentially selected memory operand in each of the four steps.</p>
+<p>In the above box, the notation of “+3” is used to denote that the instruction accesses 4 source registers based that operand; sources are consecutive, start in a multiple of 4 boundary, and contain the encoded register operand.</p>
+<p>This instruction supports memory fault suppression. The entire memory operand is loaded if the least significant mask bit is set to 1 or if a “no masking” encoding is used.</p>
+<p>The tuple type Tuple1_4X implies that four 32-bit elements (16 bytes) are referenced by the memory operation portion of this instruction.</p>
+<p>Rounding is performed at every FMA boundary. Exceptions are also taken sequentially. Pre- and post-computa-tional exceptions of the first FMA take priority over the pre- and post-computational exceptions of the second FMA, etc.</p>
+<p><strong>Operation</strong></p>
+<p>src_reg_id is the 5 bit index of the vector register specified in the instruction as the src1 register.</p>
+<p>define NFMA_SS(vl, dest, k1, msrc, regs_loaded, src_base, posneg):</p>
+<p>tmpdest := dest</p>
+<p>// reg[] is an array representing the SIMD register file.</p>
+<p>IF k1[0] or *no writemask*:</p>
+<p>FOR j := 0 to regs_loaded - 1:</p>
+<p>IF posneg = 0:</p>
+<p>tmpdest.single[0] := RoundFPControl_MXCSR(tmpdest.single[0] - reg[src_base + j ].single[0] * msrc.single[j])</p>
+<p>ELSE:</p>
+<p>tmpdest.single[0] := RoundFPControl_MXCSR(tmpdest.single[0] + reg[src_base + j ].single[0] * msrc.single[j])</p>
+<p>ELSE IF *zeroing*:</p>
+<p>tmpdest.single[0] := 0</p>
+<p>dest := tmpdst</p>
+<p>dest[MAX_VL-1:VL] := 0</p>
+<p><strong>V4FMADDSS and V4FNMADDSS dest{k1}, src1, msrc (AVX512)</strong></p>
+<p>VL = 128</p>
+<p>regs_loaded := 4</p>
+<p>src_base := src_reg_id &amp; ~3 // for src1 operand</p>
+<p>posneg := 0 if negative form, 1 otherwise</p>
+<p>NFMA_SS(vl, dest, k1, msrc, regs_loaded, src_base, posneg)</p>
+<p><strong>Intel C/C++ Compiler Intrinsic Equivalent</strong></p>
+<p>V4FMADDSS __m128 _mm_4fmadd_ss(__m128, __m128x4, __m128 *);</p>
+<p>V4FMADDSS __m128 _mm_mask_4fmadd_ss(__m128, __mmask8, __m128x4, __m128 *);</p>
+<p>V4FMADDSS __m128 _mm_maskz_4fmadd_ss(__mmask8, __m128, __m128x4, __m128 *);</p>
+<p>V4FNMADDSS __m128 _mm_4fnmadd_ss(__m128, __m128x4, __m128 *);</p>
+<p>V4FNMADDSS __m128 _mm_mask_4fnmadd_ss(__m128, __mmask8, __m128x4, __m128 *);</p>
+<p>V4FNMADDSS __m128 _mm_maskz_4fnmadd_ss(__mmask8, __m128, __m128x4, __m128 *);</p>
+<p><strong>SIMD Floating-Point Exceptions</strong></p>
+<p>Overflow, Underflow, Invalid, Precision, Denormal.</p>
+<p><strong>Other Exceptions</strong></p>
+<p>See Type E2; additionally:</p>
+<table>
+<tr>
+<td>#UD</td>
+<td>If the EVEX broadcast bit is set to 1.</td></tr>
+<tr>
+<td>#UD</td>
+<td>If the MODRM.mod = 0b11.</td></tr></table></body></html>

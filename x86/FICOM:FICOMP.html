@@ -21,41 +21,37 @@
 <td></td></tr>
 <tr>
 <td>DE /2</td>
-<td>FICOM <em>m16int</em></td>
+<td>FICOM m16int</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Compare ST(0) with <em>m16int.</em></td></tr>
+<td>Compare ST(0) with m16int.</td></tr>
 <tr>
 <td>DA /2</td>
-<td>FICOM <em>m32int</em></td>
+<td>FICOM m32int</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Compare ST(0) with <em>m32int.</em></td></tr>
+<td>Compare ST(0) with m32int.</td></tr>
 <tr>
 <td>DE /3</td>
-<td>FICOMP <em>m16int</em></td>
+<td>FICOMP m16int</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Compare ST(0) with <em>m16int</em> and pop stack register.</td></tr>
+<td>Compare ST(0) with m16int and pop stack register.</td></tr>
 <tr>
 <td>DA /3</td>
-<td>FICOMP <em>m32int</em></td>
+<td>FICOMP m32int</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Compare ST(0) with <em>m32int</em> and pop stack register.</td></tr></table>
+<td>Compare ST(0) with m32int and pop stack register.</td></tr></table>
 <h2>Description</h2>
 <p>Compares the value in ST(0) with an integer source operand and sets the condition code flags C0, C2, and C3 in the FPU status word according to the results (see table below). The integer value is converted to double extended-precision floating-point format before the comparison is made.</p>
-<h3>Table 3-26.  FICOM/FICOMP Results</h3>
-<p><strong>Condition</strong></p>
-<p><strong>C3</strong></p>
-<p><strong>C2</strong></p>
-<p><strong>C0</strong></p>
+<h3>Table 3-28.  FICOM/FICOMP Results</h3>
 <table>
 <tr>
-<td></td>
-<td></td>
-<td></td>
-<td></td></tr>
+<th>Condition</th>
+<th>C3</th>
+<th>C2</th>
+<th>C0</th></tr>
 <tr>
 <td>ST(0) &gt; SRC</td>
 <td>0</td>
@@ -77,19 +73,19 @@
 <td>1</td>
 <td>1</td></tr></table>
 <p>These instructions perform an “unordered comparison.” An unordered comparison also checks the class of the numbers being compared (see “FXAM—Examine Floating-Point” in this chapter). If either operand is a NaN or is in an undefined format, the condition flags are set to “unordered.”</p>
-<p>The sign of zero is ignored, so that –0.0 ← +0.0.</p>
+<p>The sign of zero is ignored, so that –0.0 := +0.0.</p>
 <p>The FICOMP instructions pop the register stack following the comparison. To pop the register stack, the processor marks the ST(0) register empty and increments the stack pointer (TOP) by 1.</p>
 <p>This instruction’s operation is the same in non-64-bit modes and 64-bit mode.</p>
 <h2>Operation</h2>
 <pre>CASE (relation of operands) OF
     ST(0) &gt; SRC:
-                         C3, C2, C0 ← 000;
+                         C3, C2, C0 := 000;
     ST(0) &lt; SRC:
-                         C3, C2, C0 ← 001;
+                         C3, C2, C0 := 001;
     ST(0) = SRC:
-                         C3, C2, C0 ← 100;
+                         C3, C2, C0 := 100;
     Unordered:
-                         C3, C2, C0 ← 111;
+                         C3, C2, C0 := 111;
 ESAC;
 IF Instruction = FICOMP
     THEN

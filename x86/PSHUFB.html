@@ -4,228 +4,181 @@
 <head>
 <meta charset="UTF-8">
 <link href="style.css" type="text/css" rel="stylesheet">
-<title>PSHUFB — Packed Shuffle Bytes </title></head>
+<title>PSHUFB—Packed Shuffle Bytes </title></head>
 <body>
-<h1>PSHUFB — Packed Shuffle Bytes</h1>
+<h1>PSHUFB—Packed Shuffle Bytes</h1>
+<p><strong>Opcode/</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64/32 bit</strong></p>
+<p><strong>CPUID Feature</strong></p>
+<p><strong>Description</strong></p>
 <table>
 <tr>
-<th>Opcode/Instruction</th>
-<th>Op/En</th>
-<th>64/32 bit Mode Support</th>
-<th>CPUID Feature Flag</th>
-<th>Description</th></tr>
+<th>Instruction</th>
+<th>En</th>
+<th>Mode Support</th>
+<th>Flag</th>
+<td></td></tr>
 <tr>
 <td>
-<p>0F 38 00 /r<sup>1</sup></p>
-<p>PSHUFB <em>mm1, mm2/m64</em></p></td>
-<td>RM</td>
+<p>NP 0F 38 00 /r<sup>1</sup></p>
+<p>PSHUFB mm1, mm2/m64</p></td>
+<td>A</td>
 <td>V/V</td>
 <td>SSSE3</td>
-<td>Shuffle bytes in<em> mm1</em> according to contents of <em>mm2/m64</em>.</td></tr>
+<td>Shuffle bytes in mm1 according to contents of mm2/m64.</td></tr>
 <tr>
 <td>
 <p>66 0F 38 00 /r</p>
-<p>PSHUFB <em>xmm1, xmm2/m128</em></p></td>
-<td>RM</td>
+<p>PSHUFB xmm1, xmm2/m128</p></td>
+<td>A</td>
 <td>V/V</td>
 <td>SSSE3</td>
-<td>Shuffle bytes in <em>xmm1</em> according to contents of <em>xmm2/m128</em>.</td></tr>
+<td>Shuffle bytes in xmm1 according to contents of xmm2/m128.</td></tr>
 <tr>
 <td>
-<p>VEX.NDS.128.66.0F38.WIG 00 /r</p>
-<p>VPSHUFB <em>xmm1, xmm2, xmm3/m128</em></p></td>
-<td>RVM</td>
+<p>VEX.128.66.0F38.WIG 00 /r</p>
+<p>VPSHUFB xmm1, xmm2, xmm3/m128</p></td>
+<td>B</td>
 <td>V/V</td>
 <td>AVX</td>
-<td>Shuffle bytes in <em>xmm2 </em>according to contents of <em>xmm3/m128</em>.</td></tr>
+<td>Shuffle bytes from xmm2 into xmm1 according to contents of xmm3/m128.</td></tr>
 <tr>
 <td>
-<p>VEX.NDS.256.66.0F38.WIG 00 /r</p>
-<p>VPSHUFB <em>ymm1, ymm2, ymm3/m256</em></p></td>
-<td>RVM</td>
+<p>VEX.256.66.0F38.WIG 00 /r</p>
+<p>VPSHUFB ymm1, ymm2, ymm3/m256</p></td>
+<td>B</td>
 <td>V/V</td>
 <td>AVX2</td>
-<td>Shuffle bytes in <em>ymm2</em> according to contents of <em>ymm3/m256</em>.</td></tr>
+<td>Shuffle bytes from ymm2 into ymm1 according to contents of ymm3/m256.</td></tr>
 <tr>
-<td>EVEX.NDS.128.66.0F38.WIG 00 /r VPSHUFB xmm1 {k1}{z}, xmm2, xmm3/m128</td>
-<td>FVM</td>
+<td>EVEX.128.66.0F38.WIG 00 /r VPSHUFB xmm1 {k1}{z}, xmm2, xmm3/m128</td>
+<td>C</td>
 <td>V/V</td>
-<td>AVX512VL AVX512BW</td>
-<td>Shuffle bytes in xmm2 according to contents of xmm3/m128 under write mask k1.</td></tr>
+<td>(AVX512VL AND AVX512BW) OR AVX10.1</td>
+<td>Shuffle bytes from xmm2 into xmm1 according to contents of xmm3/m128 under write mask k1.</td></tr>
 <tr>
-<td>EVEX.NDS.256.66.0F38.WIG 00 /r VPSHUFB ymm1 {k1}{z}, ymm2, ymm3/m256</td>
-<td>FVM</td>
+<td>EVEX.256.66.0F38.WIG 00 /r VPSHUFB ymm1 {k1}{z}, ymm2, ymm3/m256</td>
+<td>C</td>
 <td>V/V</td>
-<td>AVX512VL AVX512BW</td>
-<td>Shuffle bytes in ymm2 according to contents of ymm3/m256 under write mask k1.</td></tr>
+<td>(AVX512VL AND AVX512BW) OR AVX10.1</td>
+<td>Shuffle bytes from ymm2 into ymm1 according to contents of ymm3/m256 under write mask k1.</td></tr>
 <tr>
-<td>EVEX.NDS.512.66.0F38.WIG 00 /r VPSHUFB zmm1 {k1}{z}, zmm2, zmm3/m512</td>
-<td>FVM</td>
+<td>EVEX.512.66.0F38.WIG 00 /r VPSHUFB zmm1 {k1}{z}, zmm2, zmm3/m512</td>
+<td>C</td>
 <td>V/V</td>
-<td></td>
-<td>
-<p>AVX512BW Shuffle bytes in zmm2 according to contents of</p>
-<p>zmm3/m512 under write mask k1.</p></td></tr></table>
-<p>NOTES:</p>
-<p>1. See note in Section 2.4, “AVX and SSE Instruction Exception Specification” in the <em>Intel® 64 and IA-32 Architectures Software Developer’s Manual, Volume 2A</em> and Section 22.25.3, “Exception Conditions of Legacy SIMD Instructions Operating on MMX Registers” in the <em>Intel® 64 and IA-32 Architectures Software Developer’s Manual, Volume 3A</em>.</p>
+<td>AVX512BW OR AVX10.1</td>
+<td>Shuffle bytes from zmm2 into zmm1 according to contents of zmm3/m512 under write mask k1.</td></tr></table>
+<p><strong>NOTES:</strong></p>
+<p>1. See note in Section 2.5, “Intel® AVX and Intel® SSE Instruction Exception Classification,” in the Intel<sup>®</sup> 64 and IA-32 Architectures Soft-</p>
+<p>ware Developer’s Manual, Volume 2A, and Section 25.25.3, “Exception Conditions of Legacy SIMD Instructions Operating on MMX Registers,” in the Intel<sup>®</sup> 64 and IA-32 Architectures Software Developer’s Manual, Volume 3B.</p>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Tuple Type</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
-<td>RM</td>
+<td>A</td>
+<td>N/A</td>
 <td>ModRM:reg (r, w)</td>
 <td>ModRM:r/m (r)</td>
-<td>NA</td>
-<td>NA</td></tr>
+<td>N/A</td>
+<td>N/A</td></tr>
 <tr>
-<td>RVM</td>
+<td>B</td>
+<td>N/A</td>
 <td>ModRM:reg (w)</td>
 <td>VEX.vvvv (r)</td>
 <td>ModRM:r/m (r)</td>
-<td>NA</td></tr>
+<td>N/A</td></tr>
 <tr>
-<td>FVM</td>
+<td>C</td>
+<td>Full Mem</td>
 <td>ModRM:reg (w)</td>
 <td>EVEX.vvvv (r)</td>
 <td>ModRM:r/m (r)</td>
-<td>NA</td></tr></table>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
-<p>PSHUFB performs in-place shuffles of bytes in the destination operand (the first operand) according to the shuffle control mask in the source operand (the second operand). The instruction permutes the data in the destination operand, leaving the shuffle mask unaffected. If the most significant bit (bit[7]) of each byte of the shuffle control mask is set, then constant zero is written in the result byte. Each byte in the shuffle control mask forms an index to permute the corresponding byte in the destination operand. The value of each index is the least significant 4 bits (128-bit operation) or 3 bits (64-bit operation) of the shuffle control byte. When the source operand is a 128-bit memory operand, the operand must be aligned on a 16-byte boundary or a general-protection exception (#GP) will be generated.</p>
-<p>In 64-bit mode and not encoded with VEX/EVEX, use the REX prefix to access XMM8-XMM15 registers.</p>
-<p>Legacy SSE version 64-bit operand: Both operands can be MMX registers.</p>
-<p>128-bit Legacy SSE version: The first source operand and the destination operand are the same. Bits (VLMAX-1:128) of the corresponding YMM destination register remain unchanged.</p>
-<p>VEX.128 encoded version: The destination operand is the first operand, the first source operand is the second operand, the second source operand is the third operand. Bits (VLMAX-1:128) of the destination YMM register are zeroed.</p>
-<p>VEX.256 encoded version: Bits (255:128) of the destination YMM register stores the 16-byte shuffle result of the upper 16 bytes of the first source operand, using the upper 16-bytes of the second source operand as control mask.</p>
-<p>The value of each index is for the high 128-bit lane is the least significant 4 bits of the respective shuffle control byte. The index value selects a source data element within each 128-bit lane.</p>
-<p>EVEX encoded version: The second source operand is an ZMM/YMM/XMM register or an 512/256/128-bit memory location. The first source operand and destination operands are ZMM/YMM/XMM registers. The destination is condi-tionally updated with writemask k1.</p>
-<p>EVEX and VEX encoded version: Four/two in-lane 128-bit shuffles.</p>
+<p>PSHUFB (with no VEX or EVEX prefix) performs an in-place shuffle of bytes in the destination operand (the first operand) according to the shuffle control mask in the source operand (the second operand). The instruction permutes the data in the destination operand, leaving the shuffle mask unaffected. If the most significant bit (bit[7]) of each byte of the shuffle control mask is set, then constant zero is written in the result byte. Each byte in the shuffle control mask forms an index to permute the corresponding byte in the destination operand. The value of each index is the least significant 3 bits (64-bit operation) or 4 bits (128-bit operation) of the shuffle control byte. See Figure 4-15 for an example for 64-bit operation.</p>
+<p>The 128-bit forms of PSHUFB leave bits MAXVL–1:128 of the destination register unchanged. A 128-bit memory operand must be aligned on a 16-byte boundary or a general-protection exception (#GP) will be generated. In 64-bit mode, the REX prefix can be used to access XMM8-XMM15.</p>
+<p>The following items apply to VPSHUFB, encoded with a VEX or EVEX prefix:</p>
 <h2>Operation</h2>
-<p><strong>PSHUFB (with 64 bit operands)</strong></p>
-<pre>TEMP ← DEST
-for i = 0 to 7 {
-    if (SRC[(i * 8)+7] = 1 ) then
-         DEST[(i*8)+7...(i*8)+0] ← 0;
-    else
-         index[2..0] ← SRC[(i*8)+2 .. (i*8)+0];
-         DEST[(i*8)+7...(i*8)+0] ← TEMP[(index*8+7)..(index*8+0)];
-    endif;
-}</pre>
-<p><strong>PSHUFB (with 128 bit operands)</strong></p>
-<pre>TEMP ← DEST
-for i = 0 to 15 {
-    if (SRC[(i * 8)+7] = 1 ) then
-         DEST[(i*8)+7..(i*8)+0] ← 0;
-     else
-         index[3..0] ← SRC[(i*8)+3 .. (i*8)+0]; DEST[(i*8)+7..(i*8)+0] ← TEMP[(index*8+7)..(index*8+0)];
-    endif
-}</pre>
-<p><strong>VPSHUFB (VEX.128 encoded version)</strong></p>
-<pre>for i = 0 to 15 {
-    if (SRC2[(i * 8)+7] = 1) then
-         DEST[(i*8)+7..(i*8)+0]  0;
-         else
-         index[3..0]  SRC2[(i*8)+3 .. (i*8)+0];
-         DEST[(i*8)+7..(i*8)+0]  SRC1[(index*8+7)..(index*8+0)];
-    endif
-}
-DEST[VLMAX-1:128]  0</pre>
-<p><strong>VPSHUFB (VEX.256 encoded version)</strong></p>
-<pre>for i = 0 to 15 {
-    if (SRC2[(i * 8)+7] == 1 ) then
-         DEST[(i*8)+7..(i*8)+0]  0;
-         else
-         index[3..0]  SRC2[(i*8)+3 .. (i*8)+0];
-         DEST[(i*8)+7..(i*8)+0]  SRC1[(index*8+7)..(index*8+0)];
-    endif
-    if (SRC2[128 + (i * 8)+7] == 1 ) then
-         DEST[128 + (i*8)+7..(i*8)+0]  0;
-         else
-         index[3..0]  SRC2[128 + (i*8)+3 .. (i*8)+0];
-         DEST[128 + (i*8)+7..(i*8)+0]  SRC1[128 + (index*8+7)..(index*8+0)];
-    endif
-} VPSHUFB (EVEX encoded versions)
-(KL, VL) = (16, 128), (32, 256), (64, 512)
-jmask  (KL-1) &amp; ~0xF
-                                                                    // 0x00, 0x10, 0x30 depending on the VL
-FOR j = 0 TO KL-1
-                                                                    // dest
-    IF kl[ i ] or no_masking
-         index  src.byte[ j ];
-         IF index &amp; 0x80
-              Dest.byte[ j ]  0;
+<p><strong>PSHUFB (with 64-bit MMX operands)</strong></p>
+<pre>TEMP := DEST
+FOR destpos := 0 TO 7
+    shufbyte := SRC.byte[destpos];
+    IF shufbyte &amp; 80H = 80H
+         THEN DEST.byte[destpos] := 0;
          ELSE
-              index  (index &amp; 0xF) + (j &amp; jmask);
-                                                                    // 16-element in-lane lookup
-              Dest.byte[ j ]  src.byte[ index ];
-    ELSE if zeroing
-         Dest.byte[ j ]  0;
-DEST[MAX_VL-1:VL]  0;</pre>
-<svg width="574.919985" viewBox="109.800000 321854.039995 383.279990 168.600000" height="252.9">
-<rect y="321867.24" x="115.38" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="151.56" width="369.12"></rect>
-<path style="stroke:black" d="M120.736000,321875.121000 L118.528000,321877.329000 L120.736000,321879.537000 "></path>
-<path style="stroke:black" d="M118.528000,321877.329000 L121.928000,321877.329000 "></path>
-<path style="stroke:black" d="M481.372000,321885.264000 L118.531000,321885.264000 "></path>
-<path style="stroke:black" d="M118.529000,321885.265000 L118.529000,321910.210000 "></path>
-<path style="stroke:black" d="M163.883000,321885.265000 L163.883000,321910.210000 "></path>
-<path style="stroke:black" d="M209.238000,321885.265000 L209.238000,321910.210000 "></path>
-<path style="stroke:black" d="M254.594000,321885.265000 L254.594000,321910.210000 "></path>
-<path style="stroke:black" d="M299.950000,321885.265000 L299.950000,321910.210000 "></path>
-<path style="stroke:black" d="M345.305000,321885.265000 L345.305000,321910.210000 "></path>
-<path style="stroke:black" d="M390.661000,321885.265000 L390.661000,321910.210000 "></path>
-<path style="stroke:black" d="M436.015000,321885.265000 L436.015000,321910.210000 "></path>
-<path style="stroke:black" d="M481.371000,321885.265000 L481.371000,321910.210000 "></path>
-<path style="stroke:black" d="M481.372000,321910.209000 L118.531000,321910.209000 "></path>
-<path style="stroke:black" d="M481.374000,321924.950000 L118.533000,321924.950000 "></path>
-<path style="stroke:black" d="M118.531000,321924.951000 L118.531000,321949.896000 "></path>
-<path style="stroke:black" d="M163.885000,321924.951000 L163.885000,321949.896000 "></path>
-<path style="stroke:black" d="M209.240000,321924.951000 L209.240000,321949.896000 "></path>
-<path style="stroke:black" d="M254.596000,321924.951000 L254.596000,321949.896000 "></path>
-<path style="stroke:black" d="M299.952000,321924.951000 L299.952000,321949.896000 "></path>
-<path style="stroke:black" d="M345.307000,321924.951000 L345.307000,321949.896000 "></path>
-<path style="stroke:black" d="M390.663000,321924.951000 L390.663000,321949.896000 "></path>
-<path style="stroke:black" d="M436.017000,321924.951000 L436.017000,321949.896000 "></path>
-<path style="stroke:black" d="M481.373000,321924.951000 L481.373000,321949.896000 "></path>
-<path style="stroke:black" d="M413.339000,321949.894000 L335.647000,321975.450000 "></path>
-<path style="stroke:black" d="M481.374000,321949.895000 L118.533000,321949.895000 "></path>
-<path style="stroke:black" d="M182.023000,321978.245000 L141.206000,321949.900000 L141.206000,321969.317000 "></path>
-<path style="stroke:black" d="M431.315000,321972.709000 L431.539000,321972.525000 L458.692000,321949.900000 L374.786000,321978.245000 "></path>
-<path style="stroke:black" d="M458.695000,321978.244000 L457.413000,321950.969000 "></path>
-<path style="stroke:black" d="M458.053000,321964.640000 L458.450000,321975.424000 "></path>
-<path style="stroke:black" d="M404.169000,321968.317000 L385.115000,321974.754000 "></path>
-<path style="stroke:black" d="M169.093000,321969.266000 L178.584000,321974.873000 "></path>
-<path style="stroke:black" d="M144.182000,321969.317000 L141.206000,321978.245000 L138.230000,321969.317000 L144.182000,321969.317000 "></path>
-<path style="stroke:black" d="M433.427000,321974.826000 L424.639000,321978.193000 L429.648000,321970.227000 L433.427000,321974.826000 "></path>
-<path style="stroke:black" d="M386.068000,321977.574000 L376.657000,321977.612000 L384.162000,321971.935000 L386.068000,321977.574000 "></path>
-<path style="stroke:black" d="M336.578000,321978.277000 L327.167000,321978.239000 L334.718000,321972.622000 L336.578000,321978.277000 "></path>
-<path style="stroke:black" d="M179.708000,321972.973000 L184.288000,321978.244000 L177.462000,321976.775000 L179.708000,321972.973000 "></path>
-<path style="stroke:black" d="M460.656000,321975.344000 L458.692000,321982.045000 L456.242000,321975.506000 L460.656000,321975.344000 "></path>
-<path style="stroke:black" d="M481.376000,321978.242000 L118.535000,321978.242000 "></path>
-<path style="stroke:black" d="M118.533000,321978.243000 L118.533000,322003.188000 "></path>
-<path style="stroke:black" d="M163.887000,321978.243000 L163.887000,322003.188000 "></path>
-<path style="stroke:black" d="M209.242000,321978.243000 L209.242000,322003.188000 "></path>
-<path style="stroke:black" d="M254.598000,321978.243000 L254.598000,322003.188000 "></path>
-<path style="stroke:black" d="M299.954000,321978.243000 L299.954000,322003.188000 "></path>
-<path style="stroke:black" d="M345.309000,321978.243000 L345.309000,322003.188000 "></path>
-<path style="stroke:black" d="M390.665000,321978.243000 L390.665000,322003.188000 "></path>
-<path style="stroke:black" d="M436.019000,321978.243000 L436.019000,322003.188000 "></path>
-<path style="stroke:black" d="M481.375000,321978.243000 L481.375000,322003.188000 "></path>
-<path style="stroke:black" d="M118.527000,321979.378000 L119.658000,321980.510000 "></path>
-<path style="stroke:black" d="M481.376000,322003.188000 L118.535000,322003.188000 "></path>
-<path style="stroke:black" d="M120.736000,322011.187000 L118.528000,322013.395000 L120.736000,322015.603000 "></path>
-<path style="stroke:black" d="M118.528000,322013.395000 L121.928000,322013.395000 "></path>
-<path style="stroke:black" d="M479.164000,322017.869000 L481.372000,322015.661000 L479.164000,322013.453000 "></path>
-<path style="stroke:black" d="M481.372000,322015.661000 L478.540000,322015.661000 "></path>
-<text y="321878.559271" x="268.3832" style="font-size:8.000200pt" lengthAdjust="spacingAndGlyphs" textLength="17.7764444">MM2</text>
-<text y="321896.802971" x="139.8721" style="font-size:8.000200pt" lengthAdjust="spacingAndGlyphs" textLength="320.648016">07H         07H              FFH               80H               01H           00H               00H            00H</text>
-<text y="321918.976281" x="268.3832" style="font-size:8.000200pt" lengthAdjust="spacingAndGlyphs" textLength="17.7764444">MM1</text>
-<text y="321937.523989" x="139.8721" style="font-size:8.000200pt" lengthAdjust="spacingAndGlyphs" textLength="320.648016">04H         01H              07H               03H               02H           02H               FFH            01H</text>
-<text y="321974.209662" x="267.5991804" style="font-size:8.000200pt" lengthAdjust="spacingAndGlyphs" textLength="17.7764444">MM1</text>
-<text y="321989.685293" x="142.1361566" style="font-size:8.000200pt" lengthAdjust="spacingAndGlyphs" textLength="320.648016">04H         04H              00H               00H               FFH           01H               01H            01H</text></svg>
+              srcpos := shufbyte &amp; 07H;
+              DEST.byte[destpos] := TEMP.byte[srcpos];
+    FI;
+PSHUFB (with 128-bit SSE operands)
+TEMP := DEST;
+FOR destpos := 0 TO 15
+    shufbyte := SRC.byte[destpos];
+    IF shufbyte &amp; 80H = 80H
+         THEN DEST.byte[destpos] := 0;
+         ELSE
+              srcpos := shufbyte &amp; 0FH;
+              DEST.byte[destpos] := TEMP.byte[srcpos];
+    FI;</pre>
+<p><strong>VPSHUFB (VEX.128 encoded version)</strong></p>
+<pre>FOR destpos := 0 TO 15
+    shufbyte := SRC2.byte[destpos];
+    IF shufbyte &amp; 80H = 80H
+         THEN DEST.byte[destpos] := 0;
+         ELSE
+              srcpos := shufbyte &amp; 0FH;
+              DEST.byte[destpos] := SRC1.byte[srcpos];
+    FI;
+DEST[MAXVL–1:128] := 0;</pre>
+<p><strong>VPSHUFB (VEX.256 encoded version)</strong></p>
+<pre>FOR lane := 0 to 1
+    FOR lanepos := 0 TO 15
+         destpos := 16 * lane + lanepos;
+         shufbyte := SRC2.byte[destpos];
+         IF shufbyte &amp; 80H = 80H
+              THEN DEST.byte[destpos] := 0;
+              ELSE
+                    srcpos := 16 * lane + (shufbyte &amp; 0FH);
+                    DEST.byte[destpos] := SRC1.byte[srcpos];
+         FI;
+DEST[MAXVL–1:256] := 0;</pre>
+<p><strong>VPSHUFB (EVEX encoded versions)</strong></p>
+<pre>// VL is 128, 256, or 512, depending on instruction encoding
+// no masking if EVEX.aaa = 0; zeroing if EVEX.z = 1
+FOR lane := 0 to VL/128 – 1
+    FOR lanepos := 0 TO 15
+         destpos := 16 * lane + lanepos;
+         IF no masking OR k[destpos] = 1
+                                                    // using selected bit from k register
+              THEN
+                    shufbyte := SRC2.byte[destpos];
+                    IF shufbyte &amp; 80H = 80H
+                         THEN DEST.byte[destpos] := 0;
+                         ELSE
+                              srcpos := 16 * lane + (shufbyte &amp; 0FH);
+                              DEST.byte[destpos] := SRC1.byte[srcpos];
+                    FI;
+               ELSE IF zeroing
+                                                    // if not zeroing, DEST.byte[destpos] is unchanged
+                    THEN DEST.byte[destpos] := 0;
+         FI;
+DEST[MAXVL–1:VL] := 0;</pre>
+<table>
+<tr>
+<td>
+<p>MM2</p>
+<p>07H         07H              FFH               80H               01H           00H               00H            00H</p>
+<p>MM1</p>
+<p>04H         01H              07H               03H               02H           02H               FFH            01H</p>
+<p>MM1</p>
+<p>04H         04H              00H               00H               FFH           01H               01H            01H</p></td></tr></table>
 <h3>Figure 4-15.  PSHUFB with 64-Bit Operands</h3>
 <h2>Intel C/C++ Compiler Intrinsic Equivalent</h2>
 <p>VPSHUFB __m512i _mm512_shuffle_epi8(__m512i a, __m512i b);</p>
@@ -241,5 +194,5 @@ DEST[MAX_VL-1:VL]  0;</pre>
 <h2>SIMD Floating-Point Exceptions</h2>
 <p>None.</p>
 <h2>Other Exceptions</h2>
-<p>Non-EVEX-encoded instruction, see Exceptions Type 4.</p>
-<p>EVEX-encoded instruction, see Exceptions Type E4NF.nb.</p></body></html>
+<p>Non-EVEX-encoded instruction, see Table 2-21, “Type 4 Class Exception Conditions.”</p>
+<p>EVEX-encoded instruction, see Exceptions Type E4NF.nb in Table 2-52, “Type E4NF Class Exception Conditions.”</p></body></html>

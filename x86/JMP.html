@@ -22,137 +22,147 @@
 <th>Leg Mode</th>
 <td></td></tr>
 <tr>
-<td>EB <em>cb</em></td>
-<td>JMP <em>rel8</em></td>
+<td>EB cb</td>
+<td>JMP rel8</td>
 <td>D</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Jump short, RIP = RIP + 8-bit displacement sign extended to 64-bits</td></tr>
+<td>Jump short, RIP = RIP + 8-bit displacement sign extended to 64-bits.</td></tr>
 <tr>
-<td>E9 <em>cw</em></td>
-<td>JMP <em>rel16</em></td>
+<td>E9 cw</td>
+<td>JMP rel16</td>
 <td>D</td>
 <td>N.S.</td>
 <td>Valid</td>
 <td>Jump near, relative, displacement relative to next instruction. Not supported in 64-bit mode.</td></tr>
 <tr>
-<td>E9 <em>cd</em></td>
-<td>JMP <em>rel32</em></td>
+<td>E9 cd</td>
+<td>JMP rel32</td>
 <td>D</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Jump near, relative, RIP = RIP + 32-bit displacement sign extended to 64-bits</td></tr>
+<td>Jump near, relative, RIP = RIP + 32-bit displacement sign extended to 64-bits.</td></tr>
 <tr>
 <td>FF /4</td>
-<td>JMP <em>r/m16</em></td>
+<td>JMP r/m16</td>
 <td>M</td>
 <td>N.S.</td>
 <td>Valid</td>
-<td>Jump near, absolute indirect, address = zero-extended <em>r/m16. </em>Not supported in 64-bit mode.</td></tr>
+<td>Jump near, absolute indirect, address = zero-extended r/m16. Not supported in 64-bit mode.</td></tr>
 <tr>
 <td>FF /4</td>
-<td>JMP <em>r/m32</em></td>
+<td>JMP r/m32</td>
 <td>M</td>
 <td>N.S.</td>
 <td>Valid</td>
-<td>Jump near, absolute indirect, address given in <em>r/m32. </em>Not supported in 64-bit mode.</td></tr>
+<td>Jump near, absolute indirect, address given in r/m32. Not supported in 64-bit mode.</td></tr>
 <tr>
 <td>FF /4</td>
-<td>JMP <em>r/m64</em></td>
+<td>JMP r/m64</td>
 <td>M</td>
 <td>Valid</td>
 <td>N.E.</td>
-<td>Jump near, absolute indirect, RIP = 64-Bit offset from register or memory</td></tr>
+<td>Jump near, absolute indirect, RIP = 64-Bit offset from register or memory.</td></tr>
 <tr>
-<td>EA <em>cd</em></td>
-<td>JMP <em>ptr16:16</em></td>
-<td>D</td>
+<td>EA cd</td>
+<td>JMP ptr16:16</td>
+<td>S</td>
 <td>Inv.</td>
 <td>Valid</td>
-<td>Jump far, absolute, address given in operand</td></tr>
+<td>Jump far, absolute, address given in operand.</td></tr>
 <tr>
-<td>EA <em>cp</em></td>
-<td>JMP <em>ptr16:32</em></td>
-<td>D</td>
+<td>EA cp</td>
+<td>JMP ptr16:32</td>
+<td>S</td>
 <td>Inv.</td>
 <td>Valid</td>
-<td>Jump far, absolute, address given in operand</td></tr>
+<td>Jump far, absolute, address given in operand.</td></tr>
 <tr>
 <td>FF /5</td>
-<td>JMP <em>m16:16</em></td>
-<td>D</td>
+<td>JMP m16:16</td>
+<td>M</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Jump far, absolute indirect, address given in <em>m16:16</em></td></tr>
+<td>Jump far, absolute indirect, address given in m16:16.</td></tr>
 <tr>
-<td>FF<em> </em>/5</td>
-<td>JMP <em>m16:32</em></td>
-<td>D</td>
+<td>FF /5</td>
+<td>JMP m16:32</td>
+<td>M</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Jump far, absolute indirect, address given in <em>m16:32.</em></td></tr>
+<td>Jump far, absolute indirect, address given in m16:32.</td></tr>
 <tr>
-<td>REX.W + FF<em> </em>/5</td>
-<td>JMP <em>m16:64</em></td>
-<td>D</td>
+<td>REX.W FF /5</td>
+<td>JMP m16:64</td>
+<td>M</td>
 <td>Valid</td>
 <td>N.E.</td>
-<td>Jump far, absolute indirect, address given in <em>m16:64</em>.</td></tr></table>
+<td>Jump far, absolute indirect, address given in m16:64.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>S</td>
+<td>Segment + Absolute Address</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr>
 <tr>
 <td>D</td>
 <td>Offset</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr>
 <tr>
 <td>M</td>
 <td>ModRM:r/m (r)</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Transfers program control to a different point in the instruction stream without recording return information. The destination (target) operand specifies the address of the instruction being jumped to. This operand can be an immediate value, a general-purpose register, or a memory location.</p>
 <p>This instruction can be used to execute four different types of jumps:</p>
-<p>A task switch can only be executed in protected mode (see Chapter 7, in the <em>Intel® 64 and IA-32 Architectures Software Developer’s Manual, Volume 3A</em>, for information on performing task switches with the JMP instruction).</p>
-<p>Near and Short Jumps. When executing a near jump, the processor jumps to the address (within the current code segment) that is specified with the target operand. The target operand specifies either an absolute offset (that is an offset from the base of the code segment) or a relative offset (a signed displacement relative to the current</p>
+<p>A task switch can only be executed in protected mode (see Chapter 10, in the Intel<sup>® </sup>64 and IA-32 Architectures Software Developer’s Manual, Volume 3A, for information on performing task switches with the JMP instruction).</p>
+<p><strong>Near and Short Jumps. </strong>When executing a near jump, the processor jumps to the address (within the current code segment) that is specified with the target operand. The target operand specifies either an absolute offset (that is an offset from the base of the code segment) or a relative offset (a signed displacement relative to the current</p>
 <p>value of the instruction pointer in the EIP register). A near jump to a relative offset of 8-bits (<em>rel8</em>) is referred to as a short jump. The CS register is not changed on near and short jumps.</p>
 <p>An absolute offset is specified indirectly in a general-purpose register or a memory location (<em>r/m16</em> or <em>r/m32</em>). The operand-size attribute determines the size of the target operand (16 or 32 bits). Absolute offsets are loaded directly into the EIP register. If the operand-size attribute is 16, the upper two bytes of the EIP register are cleared, resulting in a maximum instruction pointer size of 16 bits.</p>
 <p>A relative offset (<em>rel8, rel16</em>, or <em>rel32</em>) is generally specified as a label in assembly code, but at the machine code level, it is encoded as a signed 8-, 16-, or 32-bit immediate value. This value is added to the value in the EIP register. (Here, the EIP register contains the address of the instruction following the JMP instruction). When using relative offsets, the opcode (for short vs. near jumps) and the operand-size attribute (for near relative jumps) determines the size of the target operand (8, 16, or 32 bits).</p>
-<p>Far Jumps in Real-Address or Virtual-8086 Mode. When executing a far jump in real-address or virtual-8086 mode, the processor jumps to the code segment and offset specified with the target operand. Here the target operand specifies an absolute far address either directly with a pointer (<em>ptr16:16</em> or <em>ptr16:32</em>) or indirectly with a memory location (<em>m16:16</em> or <em>m16:32</em>). With the pointer method, the segment and address of the called procedure is encoded in the instruction, using a 4-byte (16-bit operand size) or 6-byte (32-bit operand size) far address imme-diate. With the indirect method, the target operand specifies a memory location that contains a 4-byte (16-bit operand size) or 6-byte (32-bit operand size) far address. The far address is loaded directly into the CS and EIP registers. If the operand-size attribute is 16, the upper two bytes of the EIP register are cleared.</p>
-<p>Far Jumps in Protected Mode. When the processor is operating in protected mode, the JMP instruction can be used to perform the following three types of far jumps:</p>
+<p><strong>Far Jumps in Real-Address or Virtual-8086 Mode.</strong> When executing a far jump in real-address or virtual-8086 mode, the processor jumps to the code segment and offset specified with the target operand. Here the target operand specifies an absolute far address either directly with a pointer (<em>ptr16:16</em> or <em>ptr16:32</em>) or indirectly with a memory location (<em>m16:16</em> or <em>m16:32</em>). With the pointer method, the segment and address of the called procedure is encoded in the instruction, using a 4-byte (16-bit operand size) or 6-byte (32-bit operand size) far address imme-diate. With the indirect method, the target operand specifies a memory location that contains a 4-byte (16-bit operand size) or 6-byte (32-bit operand size) far address. The far address is loaded directly into the CS and EIP registers. If the operand-size attribute is 16, the upper two bytes of the EIP register are cleared.</p>
+<p><strong>Far Jumps in Protected Mode.</strong> When the processor is operating in protected mode, the JMP instruction can be used to perform the following three types of far jumps:</p>
 <p>(The JMP instruction cannot be used to perform inter-privilege-level far jumps.)</p>
 <p>In protected mode, the processor always uses the segment selector part of the far address to access the corre-sponding descriptor in the GDT or LDT. The descriptor type (code segment, call gate, task gate, or TSS) and access rights determine the type of jump to be performed.</p>
 <p>If the selected descriptor is for a code segment, a far jump to a code segment at the same privilege level is performed. (If the selected code segment is at a different privilege level and the code segment is non-conforming, a general-protection exception is generated.) A far jump to the same privilege level in protected mode is very similar to one carried out in real-address or virtual-8086 mode. The target operand specifies an absolute far address either directly with a pointer (<em>ptr16:16</em> or <em>ptr16:32</em>) or indirectly with a memory location (<em>m16:16</em> or <em>m16:32</em>). The operand-size attribute determines the size of the offset (16 or 32 bits) in the far address. The new code segment selector and its descriptor are loaded into CS register, and the offset from the instruction is loaded into the EIP register. Note that a call gate (described in the next paragraph) can also be used to perform far call to a code segment at the same privilege level. Using this mechanism provides an extra level of indirection and is the preferred method of making jumps between 16-bit and 32-bit code segments.</p>
 <p>When executing a far jump through a call gate, the segment selector specified by the target operand identifies the call gate. (The offset part of the target operand is ignored.) The processor then jumps to the code segment speci-fied in the call gate descriptor and begins executing the instruction at the offset specified in the call gate. No stack switch occurs. Here again, the target operand can specify the far address of the call gate either directly with a pointer (<em>ptr16:16</em> or <em>ptr16:32</em>) or indirectly with a memory location (<em>m16:16</em> or <em>m16:32</em>).</p>
 <p>Executing a task switch with the JMP instruction is somewhat similar to executing a jump through a call gate. Here the target operand specifies the segment selector of the task gate for the task being switched to (and the offset part of the target operand is ignored). The task gate in turn points to the TSS for the task, which contains the segment selectors for the task’s code and stack segments. The TSS also contains the EIP value for the next instruc-tion that was to be executed before the task was suspended. This instruction pointer value is loaded into the EIP register so that the task begins executing again at this next instruction.</p>
-<p>The JMP instruction can also specify the segment selector of the TSS directly, which eliminates the indirection of the task gate. See Chapter 7 in <em>Intel® 64 and IA-32 Architectures Software Developer’s Manual, Volume 3A</em>, for detailed information on the mechanics of a task switch.</p>
-<p>Note that when you execute at task switch with a JMP instruction, the nested task flag (NT) is not set in the EFLAGS register and the new TSS’s previous task link field is not loaded with the old task’s TSS selector. A return to the previous task can thus not be carried out by executing the IRET instruction. Switching tasks with the JMP instruc-tion differs in this regard from the CALL instruction which does set the NT flag and save the previous task link infor-mation, allowing a return to the calling task with an IRET instruction.</p>
-<p><strong>In 64-Bit Mode </strong>— The instruction’s operation size is fixed at 64 bits. If a selector points to a gate, then RIP equals the 64-bit displacement taken from gate; else RIP equals the zero-extended offset from the far pointer referenced in the instruction.</p>
+<p>The JMP instruction can also specify the segment selector of the TSS directly, which eliminates the indirection of the task gate. See Chapter 10 in Intel<sup>® </sup>64 and IA-32 Architectures Software Developer’s Manual, Volume 3A, for detailed information on the mechanics of a task switch.</p>
+<p>When execution of a JMP instruction effects a task switch, the nested task flag (NT) is not set in the EFLAGS register and the new TSS’s previous task link field is not loaded with the old task’s TSS selector. A return to the previous task can thus not be carried out by executing the IRET instruction. Switching tasks with the JMP instruc-tion differs in this regard from the CALL instruction which does set the NT flag and save the previous task link infor-mation, allowing a return to the calling task with an IRET instruction.</p>
+<p>Refer to Chapter 6, “Procedure Calls, Interrupts, and Exceptions” and Chapter 18, “Control-flow Enforcement Tech-nology (CET)” in the Intel<sup>®</sup> 64 and IA-32 Architectures Software Developer’s Manual, Volume 1, for CET details.</p>
+<p><strong>In 64-Bit Mode.</strong> The instruction’s operation size is fixed at 64 bits. If a selector points to a gate, then RIP equals the 64-bit displacement taken from gate; else RIP equals the zero-extended offset from the far pointer referenced in the instruction.</p>
+<p>When FRED transitions are enabled, an execution of far JMP that references a call gate causes a general-protection exception, as does an execution of far JMP that would enter compatibility mode when CPL is 0.</p>
 <p>See the summary chart at the beginning of this section for encoding data and limits.</p>
+<p><strong>Instruction ordering. </strong>Instructions following a far jump may be fetched from memory before earlier instructions complete execution, but they will not execute (even speculatively) until all instructions prior to the far jump have completed execution (the later instructions may execute before data stored by the earlier instructions have become globally visible).</p>
+<p>Instructions sequentially following a near indirect JMP instruction (i.e., those not at the target) may be executed speculatively. If software needs to prevent this (e.g., in order to prevent a speculative execution side channel), then an INT3 or LFENCE instruction opcode can be placed after the near indirect JMP in order to block speculative execution.</p>
 <h2>Operation</h2>
 <pre>IF near jump
     IF 64-bit Mode
          THEN
               IF near relative jump
                THEN
-                    tempRIP ← RIP + DEST; (* RIP is instruction following JMP instruction*)
+                    tempRIP := RIP + DEST; (* RIP is instruction following JMP instruction*)
                ELSE (* Near absolute jump *)
-                    tempRIP ← DEST;
+                    tempRIP := DEST;
               FI;
          ELSE
               IF near relative jump
                THEN
-                    tempEIP ← EIP + DEST; (* EIP is instruction following JMP instruction*)
+                    tempEIP := EIP + DEST; (* EIP is instruction following JMP instruction*)
                ELSE (* Near absolute jump *)
-                    tempEIP ← DEST;
+                    tempEIP := DEST;
               FI;
     FI;
     IF (IA32_EFER.LMA = 0 or target mode = Compatibility mode) and tempEIP outside code segment limit
@@ -162,44 +172,59 @@
     FI;
     IF OperandSize = 32
           THEN
-              EIP ← tempEIP;
+              EIP := tempEIP;
           ELSE
               IF OperandSize = 16
                     THEN (* OperandSize = 16 *)
-                         EIP ← tempEIP AND 0000FFFFH;
+                         EIP := tempEIP AND 0000FFFFH;
                      ELSE (* OperandSize = 64)
-                         RIP ← tempRIP;
+                         RIP := tempRIP;
               FI;
      FI;
+    IF (JMP near indirect, absolute indirect)
+         IF EndbranchEnabledAndNotSuppressed(CPL)
+              IF CPL = 3
+                    THEN
+                         IF ( no 3EH prefix OR IA32_U_CET.NO_TRACK_EN == 0 )
+                              THEN
+                                    IA32_U_CET.TRACKER = WAIT_FOR_ENDBRANCH
+                         FI;
+                    ELSE
+                         IF ( no 3EH prefix OR IA32_S_CET.NO_TRACK_EN == 0 )
+                              THEN
+                                    IA32_S_CET.TRACKER = WAIT_FOR_ENDBRANCH
+                         FI;
+              FI;
+         FI;
+    FI;
 FI;
 IF far jump and (PE = 0 or (PE = 1 AND VM = 1)) (* Real-address or virtual-8086 mode *)
      THEN
-          tempEIP ← DEST(Offset); (* DEST is <em>ptr16:32</em> or [<em>m16:32</em>] *)
+          tempEIP := DEST(Offset); (* DEST is <em>ptr16:32</em> or [<em>m16:32</em>] *)
           IF tempEIP is beyond code segment limit
               THEN #GP(0); FI;
-          CS ← DEST(segment selector); (* DEST is <em>ptr16:32</em> or [<em>m16:32</em>] *)
+          CS := DEST(segment selector); (* DEST is <em>ptr16:32</em> or [<em>m16:32</em>] *)
           IF OperandSize = 32
                THEN
-                    EIP ← tempEIP; (* DEST is <em>ptr16:32</em> or [<em>m16:32</em>] *)
+                    EIP := tempEIP; (* DEST is <em>ptr16:32</em> or [<em>m16:32</em>] *)
                ELSE (* OperandSize = 16 *)
-                    EIP ← tempEIP AND 0000FFFFH; (* Clear upper 16 bits *)
+                    EIP := tempEIP AND 0000FFFFH; (* Clear upper 16 bits *)
           FI;
 FI;
 IF far jump and (PE = 1 and VM = 0)
 (* IA-32e mode or protected mode, not virtual-8086 mode *)
      THEN
-          IF effective address in the CS, DS, ES, FS, GS, or SS segment is illegal
-         or segment selector in target operand NULL
+          IF effective address in the CS, DS, ES, FS, GS, or SS segment is illegal or segment selector in target operand NULL
                     THEN #GP(0); FI;
           IF segment selector index not within descriptor table limits
               THEN #GP(new selector); FI;
          Read type and access rights of segment descriptor;
-         IF (EFER.LMA = 0)
+         IF (IA32_EFER.LMA = 0)
               THEN
                     IF segment type is not a conforming or nonconforming code segment, call gate, task gate, or TSS
                          THEN #GP(segment selector); FI;
               ELSE
-                    IF segment type is not a conforming or nonconforming code segment call gate
+                    IF segment type is not a conforming or nonconforming code segment or call gate
                          THEN #GP(segment selector); FI;
          FI;
          Depending on type and access rights:
@@ -216,41 +241,78 @@ CONFORMING-CODE-SEGMENT:
          THEN GP(new code segment selector); FI;
      IF DPL &gt; CPL
          THEN #GP(segment selector); FI;
+    IF CR4.FRED = 1 and CPL = 0 and L-bit = 0
+         THEN GP(new code segment selector); FI;
      IF segment not present
          THEN #NP(segment selector); FI;
-    tempEIP ← DEST(Offset);
+    tempEIP := DEST(Offset);
     IF OperandSize = 16
-          THEN tempEIP ← tempEIP AND 0000FFFFH;
+          THEN tempEIP := tempEIP AND 0000FFFFH;
     FI;
     IF (IA32_EFER.LMA = 0 or target mode = Compatibility mode) and tempEIP outside code segment limit
          THEN #GP(0); FI
     IF tempEIP is non-canonical
          THEN #GP(0); FI;
-    CS ← DEST[segment selector]; (* Segment descriptor information also loaded *)
-    CS(RPL) ← CPL
-    EIP ← tempEIP;
+    IF ShadowStackEnabled(CPL)
+         IF (IA32_EFER.LMA and DEST(segment selector).L) = 0
+              (* If target is legacy or compatibility mode then the SSP must be in low 4GB *)
+              IF (SSP &amp; 0xFFFFFFFF00000000 != 0)
+                    THEN #GP(0); FI;
+         FI;
+    FI;
+    CS := DEST[segment selector]; (* Segment descriptor information also loaded *)
+    CS(RPL) := CPL
+    EIP := tempEIP;
+    IF EndbranchEnabled(CPL)
+         IF CPL = 3
+              THEN
+                    IA32_U_CET.TRACKER = WAIT_FOR_ENDBRANCH
+                    IA32_U_CET.SUPPRESS = 0
+              ELSE
+                    IA32_S_CET.TRACKER = WAIT_FOR_ENDBRANCH
+                    IA32_S_CET.SUPPRESS = 0
+         FI;
+    FI;
 END;
 NONCONFORMING-CODE-SEGMENT:
     IF L-Bit = 1 and D-BIT = 1 and IA32_EFER.LMA = 1
          THEN GP(new code segment selector); FI;
     IF (RPL &gt; CPL) OR (DPL ≠ CPL)
          THEN #GP(code segment selector); FI;
+    IF CR4.FRED = 1 and CPL = 0 and L-bit = 0
+         THEN GP(new code segment selector); FI;
     IF segment not present
          THEN #NP(segment selector); FI;
-    tempEIP ← DEST(Offset);
+    tempEIP := DEST(Offset);
     IF OperandSize = 16
-          THEN tempEIP ← tempEIP AND 0000FFFFH; FI;
+          THEN tempEIP := tempEIP AND 0000FFFFH; FI;
     IF (IA32_EFER.LMA = 0 OR target mode = Compatibility mode)
     and tempEIP outside code segment limit
          THEN #GP(0); FI
     IF tempEIP is non-canonical THEN #GP(0); FI;
-    CS ← DEST[segment selector]; (* Segment descriptor information also loaded *)
-    CS(RPL) ← CPL;
-    EIP ← tempEIP;
+    IF ShadowStackEnabled(CPL)
+         IF (IA32_EFER.LMA and DEST(segment selector).L) = 0
+              (* If target is legacy or compatibility mode then the SSP must be in low 4GB *)
+              IF (SSP &amp; 0xFFFFFFFF00000000 != 0)
+                    THEN #GP(0); FI;
+         FI;
+    FI;
+    CS := DEST[segment selector]; (* Segment descriptor information also loaded *)
+    CS(RPL) := CPL;
+    EIP := tempEIP;
+    IF EndbranchEnabled(CPL)
+         IF CPL = 3
+              THEN
+                    IA32_U_CET.TRACKER = WAIT_FOR_ENDBRANCH
+                    IA32_U_CET.SUPPRESS = 0
+              ELSE
+                    IA32_S_CET.TRACKER = WAIT_FOR_ENDBRANCH
+                    IA32_S_CET.SUPPRESS = 0
+         FI;
+    FI;
 END;
 CALL-GATE:
-    IF call gate DPL &lt; CPL
-    or call gate DPL &lt; call gate segment-selector RPL
+    IF call gate DPL &lt; CPL or call gate DPL &lt; call gate segment-selector RPL or CR4.FRED = 1
               THEN #GP(call gate selector); FI;
     IF call gate not present
          THEN #NP(call gate selector); FI;
@@ -268,16 +330,24 @@ CALL-GATE:
               THEN #GP(code segment selector); FI;
     IF code segment is not present
          THEN #NP(code-segment selector); FI;
-     IF instruction pointer is not within code-segment limit
-         THEN #GP(0); FI;
-     tempEIP ← DEST(Offset);
+     tempEIP := DEST(Offset);
      IF GateSize = 16
-          THEN tempEIP ← tempEIP AND 0000FFFFH; FI;
+          THEN tempEIP := tempEIP AND 0000FFFFH; FI;
     IF (IA32_EFER.LMA = 0 OR target mode = Compatibility mode) AND tempEIP outside code segment limit
          THEN #GP(0); FI
-    CS ← DEST[SegmentSelector); (* Segment descriptor information also loaded *)
-    CS(RPL) ← CPL;
-    EIP ← tempEIP;
+    CS := DEST[SegmentSelector]; (* Segment descriptor information also loaded *)
+    CS(RPL) := CPL;
+    EIP := tempEIP;
+    IF EndbranchEnabled(CPL)
+         IF CPL = 3
+              THEN
+                    IA32_U_CET.TRACKER = WAIT_FOR_ENDBRANCH;
+                    IA32_U_CET.SUPPRESS = 0
+              ELSE
+                    IA32_S_CET.TRACKER = WAIT_FOR_ENDBRANCH;
+                    IA32_S_CET.SUPPRESS = 0
+         FI;
+    FI;
 END;
 TASK-GATE:
     IF task gate DPL &lt; CPL
@@ -288,6 +358,7 @@ TASK-GATE:
     Read the TSS segment selector in the task-gate descriptor;
     IF TSS segment selector local/global bit is set to local
     or index not within GDT limits
+    or descriptor is not a TSS segment
     or TSS descriptor specifies that the TSS is busy
          THEN #GP(TSS selector); FI;
      IF TSS not present
@@ -317,7 +388,8 @@ END;</pre>
 <p>If offset in target operand, call gate, or TSS is beyond the code segment limits.</p>
 <p>If the segment selector in the destination operand, call gate, task gate, or TSS is NULL.</p>
 <p>If a memory operand effective address is outside the CS, DS, ES, FS, or GS segment limit.</p>
-<p>If the DS, ES, FS, or GS register is used to access memory and it contains a NULL segment selector.</p></td></tr>
+<p>If the DS, ES, FS, or GS register is used to access memory and it contains a NULL segment selector.</p>
+<p>If target mode is compatibility mode and SSP is not in low 4GB.</p></td></tr>
 <tr>
 <td>#GP(selector)</td>
 <td>
@@ -382,6 +454,10 @@ END;</pre>
 <td>If the LOCK prefix is used.</td></tr></table>
 <h2>Compatibility Mode Exceptions</h2>
 <p>Same as 64-bit mode exceptions.</p>
+<table class="exception-table">
+<tr>
+<td>#GP(Selector)</td>
+<td>If FRED transitions are enabled and the selector references a call gate.</td></tr></table>
 <h2>64-Bit Mode Exceptions</h2>
 <table class="exception-table">
 <tr>
@@ -391,7 +467,8 @@ END;</pre>
 <p>If target offset in destination operand is non-canonical.</p>
 <p>If target offset in destination operand is beyond the new code segment limit.</p>
 <p>If the segment selector in the destination operand is NULL.</p>
-<p>If the code segment selector in the 64-bit gate is NULL.</p></td></tr>
+<p>If the code segment selector in the 64-bit gate is NULL.</p>
+<p>If transitioning to compatibility mode and the SSP is beyond 4GB.</p></td></tr>
 <tr>
 <td>#GP(selector)</td>
 <td>
@@ -408,7 +485,9 @@ END;</pre>
 <p>If the code segment descriptor pointed to by the selector in the 64-bit gate doesn't have the L-bit set and the D-bit clear.</p>
 <p>If the segment descriptor for a segment selector from the 64-bit call gate does not indicate it is a code segment.</p>
 <p>If the code segment is non-conforming and CPL ≠ DPL.</p>
-<p>If the code segment is confirming and CPL &lt; DPL.</p></td></tr>
+<p>If the code segment is confirming and CPL &lt; DPL.</p>
+<p>If FRED transitions are enabled and the selector references a call gate.</p>
+<p>If FRED transitions are enabled, CPL is 0, and the instruction would enter compatibility mode.</p></td></tr>
 <tr>
 <td>#NP(selector)</td>
 <td>If a code segment or 64-bit call gate is not present.</td></tr>

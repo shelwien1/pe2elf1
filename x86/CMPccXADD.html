@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>CMPccXADD—Compare and Add if Condition is Met </title></head>
+<body>
+<h1>CMP<em>cc</em>XADD—Compare and Add if Condition is Met</h1>
+<p><strong>Opcode/</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64/32 bit</strong></p>
+<p><strong>CPUID Feature</strong></p>
+<p><strong>Description</strong></p>
+<table>
+<tr>
+<th>Instruction</th>
+<th>En</th>
+<th>Mode Support</th>
+<th>Flag</th>
+<td></td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W0 E6 !(11):rrr:bbb</p>
+<p>CMPBEXADD m32, r32, r32</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r32 (second operand) with value in m32. If below or equal (CF=1 or ZF=1), add value from r32 (third operand) to m32 and write new value in m32. The second operand is always updated with the original value from m32.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W1 E6 !(11):rrr:bbb</p>
+<p>CMPBEXADD m64, r64, r64</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r64 (second operand) with value in m64. If below or equal (CF=1 or ZF=1), add value from r64 (third operand) to m64 and write new value in m64. The second operand is always updated with the original value from m64.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W0 E2 !(11):rrr:bbb</p>
+<p>CMPBXADD m32, r32, r32</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r32 (second operand) with value in m32. If below (CF=1), add value from r32 (third operand) to m32 and write new value in m32. The second operand is always updated with the original value from m32.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W1 E2 !(11):rrr:bbb</p>
+<p>CMPBXADD m64, r64, r64</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r64 (second operand) with value in m64. If below (CF=1), add value from r64 (third operand) to m64 and write new value in m64. The second operand is always updated with the original value from m64.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W0 EE !(11):rrr:bbb</p>
+<p>CMPLEXADD m32, r32, r32</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r32 (second operand) with value in m32. If less or equal (ZF=1 or SF≠OF), add value from r32 (third operand) to m32 and write new value in m32. The second operand is always updated with the original value from m32.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W1 EE !(11):rrr:bbb</p>
+<p>CMPLEXADD m64, r64, r64</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r64 (second operand) with value in m64. If less or equal (ZF=1 or SF≠OF), add value from r64 (third operand) to m64 and write new value in m64. The second operand is always updated with the original value from m64.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W0 EC !(11):rrr:bbb</p>
+<p>CMPLXADD m32, r32, r32</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r32 (second operand) with value in m32. If less (SF≠OF), add value from r32 (third operand) to m32 and write new value in m32. The second operand is always updated with the original value from m32.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W1 EC !(11):rrr:bbb</p>
+<p>CMPLXADD m64, r64, r64</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r64 (second operand) with value in m64. If less (SF≠OF), add value from r64 (third operand) to m64 and write new value in m64. The second operand is always updated with the original value from m64.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W0 E7 !(11):rrr:bbb</p>
+<p>CMPNBEXADD m32, r32, r32</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>
+<p>Compare value in r32 (second operand) with value in m32. If not below or equal (CF=0 and</p>
+<p>ZF=0), add value from r32 (third operand) to m32 and write new value in m32. The second operand is always updated with the original value from m32.</p></td></tr></table>
+<p><strong>Opcode/</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64/32 bit</strong></p>
+<p><strong>CPUID Feature</strong></p>
+<p><strong>Description</strong></p>
+<table>
+<tr>
+<th>Instruction</th>
+<th>En</th>
+<th>Mode Support</th>
+<th>Flag</th>
+<td></td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W1 E7 !(11):rrr:bbb</p>
+<p>CMPNBEXADD m64, r64, r64</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>
+<p>Compare value in r64 (second operand) with value in m64. If not below or equal (CF=0 and</p>
+<p>ZF=0), add value from r64 (third operand) to m64 and write new value in m64. The second operand is always updated with the original value from m64.</p></td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W0 E3 !(11):rrr:bbb</p>
+<p>CMPNBXADD m32, r32, r32</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r32 (second operand) with value in m32. If not below (CF=0), add value from r32 (third operand) to m32 and write new value in m32. The second operand is always updated with the original value from m32.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W1 E3 !(11):rrr:bbb</p>
+<p>CMPNBXADD m64, r64, r64</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r64 (second operand) with value in m64. If not below (CF=0), add value from r64 (third operand) to m64 and write new value in m64. The second operand is always updated with the original value from m64.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W0 EF !(11):rrr:bbb</p>
+<p>CMPNLEXADD m32, r32, r32</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>
+<p>Compare value in r32 (second operand) with value in m32. If not less or equal (ZF=0 and</p>
+<p>SF=OF), add value from r32 (third operand) to m32 and write new value in m32. The second operand is always updated with the original value from m32.</p></td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W1 EF !(11):rrr:bbb</p>
+<p>CMPNLEXADD m64, r64, r64</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>
+<p>Compare value in r64 (second operand) with value in m64. If not less or equal (ZF=0 and</p>
+<p>SF=OF), add value from r64 (third operand) to m64 and write new value in m64. The second operand is always updated with the original value from m64.</p></td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W0 ED !(11):rrr:bbb</p>
+<p>CMPNLXADD m32, r32, r32</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r32 (second operand) with value in m32. If not less (SF=OF), add value from r32 (third operand) to m32 and write new value in m32. The second operand is always updated with the original value from m32.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W1 ED !(11):rrr:bbb</p>
+<p>CMPNLXADD m64, r64, r64</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r64 (second operand) with value in m64. If not less (SF=OF), add value from r64 (third operand) to m64 and write new value in m64. The second operand is always updated with the original value from m64.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W0 E1 !(11):rrr:bbb</p>
+<p>CMPNOXADD m32, r32, r32</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r32 (second operand) with value in m32. If not overflow (OF=0), add value from r32 (third operand) to m32 and write new value in m32. The second operand is always updated with the original value from m32.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W1 E1 !(11):rrr:bbb</p>
+<p>CMPNOXADD m64, r64, r64</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r64 (second operand) with value in m64. If not overflow (OF=0), add value from r64 (third operand) to m64 and write new value in m64. The second operand is always updated with the original value from m64.</td></tr></table>
+<p><strong>Opcode/</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64/32 bit</strong></p>
+<p><strong>CPUID Feature</strong></p>
+<p><strong>Description</strong></p>
+<table>
+<tr>
+<th>Instruction</th>
+<th>En</th>
+<th>Mode Support</th>
+<th>Flag</th>
+<td></td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W0 EB !(11):rrr:bbb</p>
+<p>CMPNPXADD m32, r32, r32</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r32 (second operand) with value in m32. If not parity (PF=0), add value from r32 (third operand) to m32 and write new value in m32. The second operand is always updated with the original value from m32.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W1 EB !(11):rrr:bbb</p>
+<p>CMPNPXADD m64, r64, r64</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r64 (second operand) with value in m64. If not parity (PF=0), add value from r64 (third operand) to m64 and write new value in m64. The second operand is always updated with the original value from m64.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W0 E9 !(11):rrr:bbb</p>
+<p>CMPNSXADD m32, r32, r32</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r32 (second operand) with value in m32. If not sign (SF=0), add value from r32 (third operand) to m32 and write new value in m32. The second operand is always updated with the original value from m32.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W1 E9 !(11):rrr:bbb</p>
+<p>CMPNSXADD m64, r64, r64</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r64 (second operand) with value in m64. If not sign (SF=0), add value from r64 (third operand) to m64 and write new value in m64. The second operand is always updated with the original value from m64.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W0 E5 !(11):rrr:bbb</p>
+<p>CMPNZXADD m32, r32, r32</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r32 (second operand) with value in m32. If not zero (ZF=0), add value from r32 (third operand) to m32 and write new value in m32. The second operand is always updated with the original value from m32.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W1 E5 !(11):rrr:bbb</p>
+<p>CMPNZXADD m64, r64, r64</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r64 (second operand) with value in m64. If not zero (ZF=0), add value from r64 (third operand) to m64 and write new value in m64. The second operand is always updated with the original value from m64.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W0 E0 !(11):rrr:bbb</p>
+<p>CMPOXADD m32, r32, r32</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r32 (second operand) with value in m32. If overflow (OF=1), add value from r32 (third operand) to m32 and write new value in m32. The second operand is always updated with the original value from m32.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W1 E0 !(11):rrr:bbb</p>
+<p>CMPOXADD m64, r64, r64</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r64 (second operand) with value in m64. If overflow (OF=1), add value from r64 (third operand) to m64 and write new value in m64. The second operand is always updated with the original value from m64.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W0 EA !(11):rrr:bbb</p>
+<p>CMPPXADD m32, r32, r32</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r32 (second operand) with value in m32. If parity (PF=1), add value from r32 (third operand) to m32 and write new value in m32. The second operand is always updated with the original value from m32.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W1 EA !(11):rrr:bbb</p>
+<p>CMPPXADD m64, r64, r64</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r64 (second operand) with value in m64. If parity (PF=1), add value from r64 (third operand) to m64 and write new value in m64. The second operand is always updated with the original value from m64.</td></tr></table>
+<p><strong>Opcode/</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64/32 bit</strong></p>
+<p><strong>CPUID Feature</strong></p>
+<p><strong>Description</strong></p>
+<table>
+<tr>
+<th>Instruction</th>
+<th>En</th>
+<th>Mode Support</th>
+<th>Flag</th>
+<td></td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W0 E8 !(11):rrr:bbb</p>
+<p>CMPSXADD m32, r32, r32</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r32 (second operand) with value in m32. If sign (SF=1), add value from r32 (third operand) to m32 and write new value in m32. The second operand is always updated with the original value from m32.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W1 E8 !(11):rrr:bbb</p>
+<p>CMPSXADD m64, r64, r64</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r64 (second operand) with value in m64. If sign (SF=1), add value from r64 (third operand) to m64 and write new value in m64. The second operand is always updated with the original value from m64.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W0 E4 !(11):rrr:bbb</p>
+<p>CMPZXADD m32, r32, r32</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r32 (second operand) with value in m32. If zero (ZF=1), add value from r32 (third operand) to m32 and write new value in m32. The second operand is always updated with the original value from m32.</td></tr>
+<tr>
+<td>
+<p>VEX.128.66.0F38.W1 E4 !(11):rrr:bbb</p>
+<p>CMPZXADD m64, r64, r64</p></td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>CMPCCXADD</td>
+<td>Compare value in r64 (second operand) with value in m64. If zero (ZF=1), add value from r64 (third operand) to m64 and write new value in m64. The second operand is always updated with the original value from m64.</td></tr></table>
+<h3>Instruction Operand Encoding<sup>1</sup></h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Tuple Type</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>A</td>
+<td>N/A</td>
+<td>ModRM:r/m (r, w)</td>
+<td>ModRM:reg (r, w)</td>
+<td>VEX.vvvv (r)</td>
+<td>N/A</td></tr></table>
+<h2>Description</h2>
+<p>This instruction compares the value from memory with the value of the second operand. If the specified condition is met, then the processor will add the third operand to the memory operand and write it into memory, else the memory is unchanged by this instruction.</p>
+<p>This instruction must have MODRM.MOD equal to 0, 1, or 2. The value 3 for MODRM.MOD is reserved and will cause an invalid opcode exception (#UD).</p>
+<p>The second operand is always updated with the original value of the memory operand. The EFLAGS conditions are updated from the results of the comparison.The instruction uses an implicit lock. This instruction does not permit the use of an explicit lock prefix.</p>
+<h2>Operation</h2>
+<p><strong>CMPCCXADD srcdest1, srcdest2, src3</strong></p>
+<pre>tmp1 := load lock srcdest1
+tmp2 := tmp1 + src3
+EFLAGS.CS,OF,SF,ZF,AF,PF := CMP tmp1, srcdest2
+IF &lt;condition&gt;:
+    srcdest1 := store unlock tmp2
+ELSE
+    srcdest1 := store unlock tmp1
+srcdest2 :=tmp1
+1.
+    ModRM.MOD != 011B</pre>
+<h2>Flags Affected</h2>
+<p>The EFLAGS conditions are updated from the results of the comparison.</p>
+<h2>Intel C/C++ Compiler Intrinsic Equivalent</h2>
+<p>CMPCCXADD int _cmpccxadd_epi32 (void* __A, int __B, int __C, const int __D);</p>
+<p>CMPCCXADD __int64 _cmpccxadd_epi64 (void* __A, __int64 __B, __int64 __C, const int __D);</p>
+<h2>SIMD Floating-Point Exceptions</h2>
+<p>None.</p>
+<h2>Exceptions</h2>
+<p>Exceptions Type 14; see Table 2-31.</p></body></html>

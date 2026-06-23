@@ -16,43 +16,43 @@
 <th>Compat/Leg Mode</th>
 <th>Description</th></tr>
 <tr>
-<td>8D /<em>r</em></td>
-<td>LEA <em>r16,m</em></td>
+<td>8D /r</td>
+<td>LEA r16,m</td>
 <td>RM</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Store effective address for <em>m</em> in register <em>r16.</em></td></tr>
+<td>Store effective address for m in register r16.</td></tr>
 <tr>
-<td>8D /<em>r</em></td>
-<td>LEA <em>r32,m</em></td>
+<td>8D /r</td>
+<td>LEA r32,m</td>
 <td>RM</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Store effective address for <em>m</em> in register <em>r32.</em></td></tr>
+<td>Store effective address for m in register r32.</td></tr>
 <tr>
-<td>REX.W + 8D /<em>r</em></td>
-<td>LEA <em>r64,m</em></td>
+<td>REX.W + 8D /r</td>
+<td>LEA r64,m</td>
 <td>RM</td>
 <td>Valid</td>
 <td>N.E.</td>
-<td>Store effective address for <em>m</em> in register <em>r64.</em></td></tr></table>
+<td>Store effective address for m in register r64.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
 <td>RM</td>
 <td>ModRM:reg (w)</td>
 <td>ModRM:r/m (r)</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Computes the effective address of the second operand (the source operand) and stores it in the first operand (destination operand). The source operand is a memory address (offset part) specified with one of the processors addressing modes; the destination operand is a general-purpose register. The address-size and operand-size attri-butes affect the action performed by this instruction, as shown in the following table. The operand-size attribute of the instruction is determined by the chosen register; the address-size attribute is determined by the attribute of the code segment.</p>
-<h3>Table 3-53.  Non-64-bit Mode LEA Operation with Address and Operand Size Attributes</h3>
+<h3>Table 3-57.  Non-64-bit Mode LEA Operation with Address and Operand Size Attributes</h3>
 <table>
 <tr>
 <th>Operand Size</th>
@@ -75,8 +75,8 @@
 <td>32</td>
 <td>32-bit effective address is calculated and stored in the requested 32-bit register destination.</td></tr></table>
 <p>Different assemblers may use different algorithms based on the size attribute and symbolic reference of the source operand.</p>
-<p>In 64-bit mode, the instruction’s destination operand is governed by operand size attribute, the default operand size is 32 bits. Address calculation is governed by address size attribute, the default address size is 64-bits. In 64-bit mode, address size of 16 bits is not encodable. See Table 3-54.</p>
-<h3>Table 3-54.  64-bit Mode LEA Operation with Address and Operand Size Attributes</h3>
+<p>In 64-bit mode, the instruction’s destination operand is governed by operand size attribute, the default operand size is 32 bits. Address calculation is governed by address size attribute, the default address size is 64-bits. In 64-bit mode, address size of 16 bits is not encodable. See Table 3-58.</p>
+<h3>Table 3-58.  64-bit Mode LEA Operation with Address and Operand Size Attributes</h3>
 <table>
 <tr>
 <th>Operand Size</th>
@@ -109,38 +109,38 @@
 <h2>Operation</h2>
 <pre>IF OperandSize = 16 and AddressSize = 16
     THEN
-         DEST<em> </em>← EffectiveAddress(SRC); (* 16-bit address *)
+         DEST := EffectiveAddress(SRC); (* 16-bit address *)
     ELSE IF OperandSize = 16 and AddressSize = 32
          THEN
-              temp ← EffectiveAddress(SRC); (* 32-bit address *)
-              DEST ← temp[0:15]; (* 16-bit address *)
+              temp := EffectiveAddress(SRC); (* 32-bit address *)
+              DEST := temp[0:15]; (* 16-bit address *)
          FI;
     ELSE IF OperandSize = 32 and AddressSize = 16
          THEN
-              temp ← EffectiveAddress(SRC); (* 16-bit address *)
-              DEST ← ZeroExtend(temp); (* 32-bit address *)
+              temp := EffectiveAddress(SRC); (* 16-bit address *)
+              DEST := ZeroExtend(temp); (* 32-bit address *)
          FI;
     ELSE IF OperandSize = 32 and AddressSize = 32
          THEN
-              DEST<em> </em>← EffectiveAddress(SRC); (* 32-bit address *)
+              DEST := EffectiveAddress(SRC); (* 32-bit address *)
          FI;
     ELSE IF OperandSize = 16 and AddressSize = 64
          THEN
-              temp ← EffectiveAddress(SRC); (* 64-bit address *)
-              DEST ← temp[0:15]; (* 16-bit address *)
+              temp := EffectiveAddress(SRC); (* 64-bit address *)
+              DEST := temp[0:15]; (* 16-bit address *)
          FI;
     ELSE IF OperandSize = 32 and AddressSize = 64
          THEN
-              temp ← EffectiveAddress(SRC); (* 64-bit address *)
-              DEST ← temp[0:31]; (* 16-bit address *)
+              temp := EffectiveAddress(SRC); (* 64-bit address *)
+              DEST := temp[0:31]; (* 16-bit address *)
          FI;
     ELSE IF OperandSize = 64 and AddressSize = 64
          THEN
-              DEST<em> </em>← EffectiveAddress(SRC); (* 64-bit address *)
+              DEST := EffectiveAddress(SRC); (* 64-bit address *)
          FI;
 FI;</pre>
 <h2>Flags Affected</h2>
-<p>None</p>
+<p>None.</p>
 <h2>Protected Mode Exceptions</h2>
 <table class="exception-table">
 <tr>

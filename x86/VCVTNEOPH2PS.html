@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>VCVTNEOPH2PS—Convert Odd Elements of Packed FP16 Values to FP32 Values </title></head>
+<body>
+<h1>VCVTNEOPH2PS—Convert Odd Elements of Packed FP16 Values to FP32 Values</h1>
+<p><strong>Opcode/</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64/32</strong></p>
+<p><strong>CPUID Feature</strong></p>
+<p><strong>Description</strong></p>
+<p><strong>Instruction</strong></p>
+<p><strong>En</strong></p>
+<p><strong>bit Mode</strong></p>
+<p><strong>Flag</strong></p>
+<p><strong>Support</strong></p>
+<p>VEX.128.NP.0F38.W0 B0 !(11):rrr:bbb</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX_NE_</p>
+<p>Convert odd elements of packed FP16 values</p>
+<p>CONVERT</p>
+<p>from m128 to FP32 values and store in</p>
+<p>VCVTNEOPH2PS xmm1, m128</p>
+<p>xmm1.</p>
+<p>VEX.256.NP.0F38.W0 B0 !(11):rrr:bbb</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX_NE_</p>
+<p>Convert odd elements of packed FP16 values</p>
+<p>CONVERT</p>
+<p>from m256 to FP32 values and store in</p>
+<p>VCVTNEOPH2PS ymm1, m256</p>
+<p>ymm1.</p>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Tuple Type</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>A</td>
+<td>N/A</td>
+<td>ModRM:reg (w)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
+<h2>Description</h2>
+<p>This instruction loads packed FP16 elements from memory, converts the odd elements to FP32, and writes the result to the destination SIMD register.</p>
+<p>This instruction does not generate floating-point exceptions and does not consult or update MXCSR.</p>
+<p>Input FP16 denormals are converted to normal FP32 numbers and not treated as zero. Since any FP16 number can be represented in FP32, the conversion result is exact and no rounding is needed.</p>
+<h2>Operation</h2>
+<p><strong>VCVTNEOPH2PS dest, src (VEX encoded version)</strong></p>
+<pre>VL = (128, 256)
+KL = VL/32
+FOR i in range(0, KL):
+    dest.dword[i] = convert_fp16_to_fp32(src.dword[i].word[1]) //SAE
+DEST[MAXVL-1:VL] := 0</pre>
+<h2>Flags Affected</h2>
+<p>None.</p>
+<h2>Intel C/C++ Compiler Intrinsic Equivalent</h2>
+<p>VCVTNEOPH2PS __m128 _mm_cvtneoph_ps (const __m128h* __A);</p>
+<p>VCVTNEOPH2PS __m256 _mm256_cvtneoph_ps (const __m256h* __A);</p>
+<h2>SIMD Floating-Point Exceptions</h2>
+<p>None.</p>
+<h2>Other Exceptions</h2>
+<p>See Table 2-21, “Type 4 Class Exception Conditions.”</p></body></html>

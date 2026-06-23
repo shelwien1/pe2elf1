@@ -24,31 +24,31 @@
 <tr>
 <td>0F 35</td>
 <td>SYSEXIT</td>
-<td>NP</td>
+<td>ZO</td>
 <td>Valid</td>
 <td>Valid</td>
 <td>Fast return to privilege level 3 user code.</td></tr>
 <tr>
 <td>REX.W + 0F 35</td>
 <td>SYSEXIT</td>
-<td>NP</td>
+<td>ZO</td>
 <td>Valid</td>
 <td>Valid</td>
 <td>Fast return to 64-bit mode privilege level 3 user code.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
-<td>NP</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>ZO</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Executes a fast return to privilege level 3 user code. SYSEXIT is a companion instruction to the SYSENTER instruc-tion. The instruction is optimized to provide the maximum performance for returns from system procedures executing at protections levels 0 to user procedures executing at protection level 3. It must be executed from code executing at privilege level 0.</p>
 <p>With a 64-bit operand size, SYSEXIT remains in 64-bit mode; otherwise, it either enters compatibility mode (if the logical processor is in IA-32e mode) or remains in protected mode (if it is not).</p>
@@ -65,66 +65,74 @@
 <p>SYSENTER/SYSEXIT_Supported; FI;</p>
 <p>FI;</p>
 <p>When the CPUID instruction is executed on the Pentium Pro processor (model 1), the processor returns a the SEP flag as set, but does not support the SYSENTER/SYSEXIT instructions.</p>
+<p>When shadow stacks are enabled at privilege level 3 the instruction loads SSP with value from IA32_PL3_SSP MSR. Refer to Chapter 7, “Interrupt and Exception Handling‚” and Chapter 18, “Control-flow Enforcement Technology (CET)‚” in the Intel<sup>®</sup> 64 and IA-32 Architectures Software Developer’s Manual, Volume 1, for additional CET details.</p>
+<p>The instruction cannot be executed when FRED transitions are enabled. An operating system that has enabled FRED transitions should use ERETU instead.</p>
+<p><strong>Instruction ordering. </strong>Instructions following a SYSEXIT may be fetched from memory before earlier instructions complete execution, but they will not execute (even speculatively) until all instructions prior to the SYSEXIT have completed execution (the later instructions may execute before data stored by the earlier instructions have become globally visible).</p>
 <h2>Operation</h2>
-<pre>IF IA32_SYSENTER_CS[15:2] = 0 OR CR0.PE = 0 OR CPL ≠ 0 THEN #GP(0); FI;
+<pre>IF CR4.FRED = 1
+    THEN #UD; FI;
+IF IA32_SYSENTER_CS[15:2] = 0 OR CR0.PE = 0 OR CPL ≠ 0 THEN #GP(0); FI;
 IF operand size is 64-bit
     THEN
               (* Return to 64-bit mode *)
-         RSP ← RCX;
-         RIP ← RDX;
+         RSP := RCX;
+         RIP := RDX;
     ELSE
               (* Return to protected mode or compatibility mode *)
-         RSP ← ECX;
-         RIP ← EDX;
+         RSP := ECX;
+         RIP := EDX;
 FI;
 IF operand size is 64-bit
                                                     (* Operating system provides CS; RPL forced to 3 *)
-    THEN CS.Selector ← IA32_SYSENTER_CS[15:0] + 32;
-    ELSE CS.Selector ← IA32_SYSENTER_CS[15:0] + 16;
+    THEN CS.Selector := IA32_SYSENTER_CS[15:0] + 32;
+    ELSE CS.Selector := IA32_SYSENTER_CS[15:0] + 16;
 FI;
-CS.Selector ← CS.Selector OR 3;
+CS.Selector := CS.Selector OR 3;
                                                     (* RPL forced to 3 *)
 (* Set rest of CS to a fixed value *)
-CS.Base ← 0;
+CS.Base := 0;
                                                     (* Flat segment *)
-CS.Limit ← FFFFFH;
+CS.Limit := FFFFFH;
                                                     (* With 4-KByte granularity, implies a 4-GByte limit *)
-CS.Type ← 11;
+CS.Type := 11;
                                                     (* Execute/read code, accessed *)
-CS.S ← 1;
-CS.DPL ← 3;
-CS.P ← 1;
+CS.S := 1;
+CS.DPL := 3;
+CS.P := 1;
 IF operand size is 64-bit
     THEN
               (* return to 64-bit mode *)
-         CS.L ← 1;
+         CS.L := 1;
                                                     (* 64-bit code segment *)
-         CS.D ← 0;
+         CS.D := 0;
                                                     (* Required if CS.L = 1 *)
     ELSE
               (* return to protected mode or compatibility mode *)
-         CS.L ← 0;
-         CS.D ← 1;
+         CS.L := 0;
+         CS.D := 1;
                                                     (* 32-bit code segment*)
 FI;
-CS.G ← 1;
+CS.G := 1;
                                                     (* 4-KByte granularity *)
-CPL ← 3;
-SS.Selector ← CS.Selector + 8;
+CPL := 3;
+IF ShadowStackEnabled(CPL)
+    THEN SSP := IA32_PL3_SSP;
+FI;
+SS.Selector := CS.Selector + 8;
                                                     (* SS just above CS *)
 (* Set rest of SS to a fixed value *)
-SS.Base ← 0;
+SS.Base := 0;
                                                     (* Flat segment *)
-SS.Limit ← FFFFFH;
+SS.Limit := FFFFFH;
                                                     (* With 4-KByte granularity, implies a 4-GByte limit *)
-SS.Type ← 3;
+SS.Type := 3;
                                                     (* Read/write data, accessed *)
-SS.S ← 1;
-SS.DPL ← 3;
-SS.P ← 1;
-SS.B ← 1;
+SS.S := 1;
+SS.DPL := 3;
+SS.P := 1;
+SS.B := 1;
                                                     (* 32-bit stack segment*)
-SS.G ← 1;
+SS.G := 1;
                                                     (* 4-KByte granularity *)</pre>
 <h2>Flags Affected</h2>
 <p>None.</p>
@@ -152,7 +160,17 @@ SS.G ← 1;
 <td>#GP(0)</td>
 <td>The SYSEXIT instruction is not recognized in virtual-8086 mode.</td></tr></table>
 <h2>Compatibility Mode Exceptions</h2>
-<p>Same exceptions as in protected mode.</p>
+<table class="exception-table">
+<tr>
+<td>#GP(0)</td>
+<td>
+<p>If IA32_SYSENTER_CS[15:2] = 0.</p>
+<p>If CPL ≠ 0.</p></td></tr>
+<tr>
+<td>#UD</td>
+<td>
+<p>If the LOCK prefix is used.</p>
+<p>If CR4.FRED = 1.</p></td></tr></table>
 <h2>64-Bit Mode Exceptions</h2>
 <table class="exception-table">
 <tr>
@@ -163,4 +181,6 @@ SS.G ← 1;
 <p>If RCX or RDX contains a non-canonical address.</p></td></tr>
 <tr>
 <td>#UD</td>
-<td>If the LOCK prefix is used.</td></tr></table></body></html>
+<td>
+<p>If the LOCK prefix is used.</p>
+<p>If CR4.FRED = 1.</p></td></tr></table></body></html>

@@ -16,16 +16,16 @@
 <th>Description</th></tr>
 <tr>
 <td>D8 /6</td>
-<td>FDIV <em>m32fp</em></td>
+<td>FDIV m32fp</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Divide ST(0) by <em>m32fp</em> and store result in ST(0).</td></tr>
+<td>Divide ST(0) by m32fp and store result in ST(0).</td></tr>
 <tr>
 <td>DC /6</td>
-<td>FDIV <em>m64fp</em></td>
+<td>FDIV m64fp</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Divide ST(0) by <em>m64fp</em> and store result in ST(0).</td></tr>
+<td>Divide ST(0) by m64fp and store result in ST(0).</td></tr>
 <tr>
 <td>D8 F0+i</td>
 <td>FDIV ST(0), ST(i)</td>
@@ -52,24 +52,24 @@
 <td>Divide ST(1) by ST(0), store result in ST(1), and pop the register stack.</td></tr>
 <tr>
 <td>DA /6</td>
-<td>FIDIV <em>m32int</em></td>
+<td>FIDIV m32int</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Divide ST(0) by <em>m32int</em> and store result in ST(0).</td></tr>
+<td>Divide ST(0) by m32int and store result in ST(0).</td></tr>
 <tr>
 <td>DE /6</td>
-<td>FIDIV <em>m16int</em></td>
+<td>FIDIV m16int</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Divide ST(0) by <em>m16int</em> and store result in ST(0).</td></tr></table>
+<td>Divide ST(0) by m16int and store result in ST(0).</td></tr></table>
 <h2>Description</h2>
-<p>Divides the destination operand by the source operand and stores the result in the destination location. The desti-nation operand (dividend) is always in an FPU register; the source operand (divisor) can be a register or a memory location. Source operands in memory can be in single-precision or double-precision floating-point format, word or doubleword integer format.</p>
+<p>Divides the destination operand by the source operand and stores the result in the destination location. The desti-nation operand (dividend) is always in an FPU register; the source operand (divisor) can be a register or a memory location. Source operands in memory can be in single precision or double precision floating-point format, word or doubleword integer format.</p>
 <p>The no-operand version of the instruction divides the contents of the ST(1) register by the contents of the ST(0) register. The one-operand version divides the contents of the ST(0) register by the contents of a memory location (either a floating-point or an integer value). The two-operand version, divides the contents of the ST(0) register by the contents of the ST(i) register or vice versa.</p>
 <p>The FDIVP instructions perform the additional operation of popping the FPU register stack after storing the result. To pop the register stack, the processor marks the ST(0) register as empty and increments the stack pointer (TOP) by 1. The no-operand version of the floating-point divide instructions always results in the register stack being popped. In some assemblers, the mnemonic for this instruction is FDIV rather than FDIVP.</p>
 <p>The FIDIV instructions convert an integer source operand to double extended-precision floating-point format before performing the division. When the source operand is an integer 0, it is treated as a +0.</p>
 <p>If an unmasked divide-by-zero exception (#Z) is generated, no result is stored; if the exception is masked, an ∞ of the appropriate sign is stored in the destination operand.</p>
 <p>The following table shows the results obtained when dividing various classes of numbers, assuming that neither overflow nor underflow occurs.</p>
-<h3>Table 3-24.  FDIV/FDIVP/FIDIV Results</h3>
+<h3>Table 3-26.  FDIV/FDIVP/FIDIV Results</h3>
 <p><strong>DEST</strong></p>
 <p>− ∞</p>
 <p>− F</p>
@@ -166,9 +166,9 @@
     ELSE
          IF Instruction is FIDIV
               THEN
-                    DEST ← DEST / ConvertToDoubleExtendedPrecisionFP(SRC);
+                    DEST := DEST / ConvertToDoubleExtendedPrecisionFP(SRC);
               ELSE (* Source operand is floating-point value *)
-                    DEST ← DEST / SRC;
+                    DEST := DEST / SRC;
          FI;
 FI;
 IF Instruction = FDIVP

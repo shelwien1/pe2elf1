@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>VCVTPS2PH—Convert Single Precision FP Value to 16-bit FP Value </title></head>
+<body>
+<h1>VCVTPS2PH—Convert Single Precision FP Value to 16-bit FP Value</h1>
+<table>
+<tr>
+<th>Opcode/Instruction</th>
+<th>Op /En</th>
+<th>64/32 Bit Mode Support</th>
+<th>CPUID Feature Flag</th>
+<th>Description</th></tr>
+<tr>
+<td>VEX.128.66.0F3A.W0 1D /r ib VCVTPS2PH xmm1/m64, xmm2, imm8</td>
+<td>A</td>
+<td>V/V</td>
+<td>F16C</td>
+<td>Convert four packed single precision floating-point values in xmm2 to packed half-precision (16-bit) floating-point values in xmm1/m64. Imm8 provides rounding controls.</td></tr>
+<tr>
+<td>VEX.256.66.0F3A.W0 1D /r ib VCVTPS2PH xmm1/m128, ymm2, imm8</td>
+<td>A</td>
+<td>V/V</td>
+<td>F16C</td>
+<td>Convert eight packed single precision floating-point values in ymm2 to packed half-precision (16-bit) floating-point values in xmm1/m128. Imm8 provides rounding controls.</td></tr>
+<tr>
+<td>EVEX.128.66.0F3A.W0 1D /r ib VCVTPS2PH xmm1/m64 {k1}{z}, xmm2, imm8</td>
+<td>B</td>
+<td>V/V</td>
+<td>(AVX512VL AND AVX512F) OR AVX10.1</td>
+<td>Convert four packed single-precision floating-point values in xmm2 to packed half-precision (16-bit) floating-point values in xmm1/m64. Imm8 provides rounding controls.</td></tr>
+<tr>
+<td>EVEX.256.66.0F3A.W0 1D /r ib VCVTPS2PH xmm1/m128 {k1}{z}, ymm2, imm8</td>
+<td>B</td>
+<td>V/V</td>
+<td>(AVX512VL AND AVX512F) OR AVX10.1</td>
+<td>Convert eight packed single-precision floating-point values in ymm2 to packed half-precision (16-bit) floating-point values in xmm1/m128. Imm8 provides rounding controls.</td></tr>
+<tr>
+<td>EVEX.512.66.0F3A.W0 1D /r ib VCVTPS2PH ymm1/m256 {k1}{z}, zmm2 {sae}, imm8</td>
+<td>B</td>
+<td>V/V</td>
+<td>AVX512F OR AVX10.1</td>
+<td>Convert sixteen packed single-precision floating-point values in zmm2 to packed half-precision (16-bit) floating-point values in ymm1/m256. Imm8 provides rounding controls.</td></tr></table>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Tuple Type</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>A</td>
+<td>N/A</td>
+<td>ModRM:r/m (w)</td>
+<td>ModRM:reg (r)</td>
+<td>imm8</td>
+<td>N/A</td></tr>
+<tr>
+<td>B</td>
+<td>Half Mem</td>
+<td>ModRM:r/m (w)</td>
+<td>ModRM:reg (r)</td>
+<td>imm8</td>
+<td>N/A</td></tr></table>
+<p><strong>Description</strong></p>
+<p>Convert packed single precision floating values in the source operand to half-precision (16-bit) floating-point values and store to the destination operand. The rounding mode is specified using the immediate field (imm8).</p>
+<p>Underflow results (i.e., tiny results) are converted to denormals. MXCSR.FTZ is ignored. If a source element is denormal relative to the input format with DM masked and at least one of PM or UM unmasked; a SIMD exception will be raised with DE, UE and PE set.</p>
+<svg width="594.00003" viewBox="103.980000 53608.020000 396.000020 139.079995" height="208.6199925">
+<text y="53630.8127205" x="194.33943028" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="41.8276425">VCVTPS2PH xmm1/mem64, xmm2,  imm8</text>
+<text y="53641.1318347" x="114.35893045" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="68.74851795">127                              96</text>
+<text y="53641.1318347" x="194.33943028" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="68.33192135">95                                64</text>
+<text y="53641.1318347" x="274.31993011" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="68.33192135">63                                32</text>
+<text y="53641.1318347" x="354.30042994" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="67.91532475">31                                  0</text>
+<text y="53651.511735" x="145.56" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="12.91651039">VS3</text>
+<text y="53651.511735" x="225.54" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="12.91651039">VS2</text>
+<text y="53651.511735" x="305.52" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="12.91651039">VS1</text>
+<text y="53651.511735" x="385.5" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="12.91651039">VS0</text>
+<text y="53651.5124257" x="444.24027623" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="17.89483976">xmm2</text>
+<text y="53669.631735" x="300.12" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="21.84511623">convert</text>
+<text y="53672.271735" x="140.58" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="21.84578816">convert</text>
+<text y="53672.271735" x="220.14" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="21.84511623">convert</text>
+<text y="53674.851735" x="400.08" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="21.904918">convert</text>
+<text y="53724.051735" x="114.35815148" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="68.74851795">127                              96</text>
+<text y="53724.051735" x="194.33865131" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="68.33192135">95                                64</text>
+<text y="53724.051735" x="274.31915114" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="33.32638414">63           48</text>
+<text y="53724.051735" x="314.27950017" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="33.32638414">47           32</text>
+<text y="53724.051735" x="354.29965097" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="33.32638414">31           16</text>
+<text y="53724.051735" x="394.26" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="32.90978754">15             0</text>
+<text y="53734.431735" x="285.54" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="12.91516653">VH3</text>
+<text y="53734.431735" x="325.56" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="12.85536476">VH2</text>
+<text y="53734.431735" x="365.52" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="12.91516653">VH1</text>
+<text y="53734.431735" x="405.54" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="12.85536476">VH0</text>
+<text y="53734.432128" x="444.24027623" style="font-size:6.719300pt" lengthAdjust="spacingAndGlyphs" textLength="42.06684958">xmm1/mem64</text>
+<rect y="53665.5" x="217.74" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="28.44"></rect>
+<rect y="53662.92" x="297.72" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="28.44"></rect>
+<rect y="53668.08" x="397.68" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="28.5"></rect>
+<rect y="53665.5" x="138.24" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="28.5"></rect>
+<rect y="53727.66" x="351.96" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="39.96"></rect>
+<rect y="53727.66" x="271.98" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="39.96"></rect>
+<rect y="53727.66" x="391.92" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="40.02"></rect>
+<rect y="53727.66" x="311.94" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="40.02"></rect>
+<rect y="53727.66" x="112.02" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="79.98"></rect>
+<rect y="53644.8" x="112.02" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="79.98"></rect>
+<rect y="53727.66" x="192.0" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="79.98"></rect>
+<rect y="53644.8" x="351.96" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="79.98"></rect>
+<rect y="53644.8" x="271.98" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="79.98"></rect>
+<rect y="53644.8" x="192.0" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="79.98"></rect>
+<rect y="53727.66" x="351.96" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="39.96"></rect>
+<rect y="53727.66" x="271.98" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="39.96"></rect>
+<rect y="53727.66" x="391.92" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="40.02"></rect>
+<rect y="53727.66" x="311.94" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="40.02"></rect>
+<rect y="53727.66" x="112.02" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="79.98"></rect>
+<rect y="53644.8" x="112.02" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="79.98"></rect>
+<rect y="53727.66" x="192.0" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="79.98"></rect>
+<rect y="53644.8" x="351.96" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="79.98"></rect>
+<rect y="53644.8" x="271.98" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="79.98"></rect>
+<rect y="53644.8" x="192.0" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="10.38" width="79.98"></rect></svg>
+<h3>Figure 5-7.  VCVTPS2PH (128-bit Version)</h3>
+<p>The immediate byte defines several bit fields that control rounding operation. The effect and encoding of the RC field are listed in Table 5-3.</p>
+<h3>Table 5-3.  Immediate Byte Encoding for 16-bit Floating-Point Conversion Instructions</h3>
+<table>
+<tr>
+<th>Bits</th>
+<th>Field Name/value</th>
+<th>Description</th>
+<th>Comment</th></tr>
+<tr>
+<td>Imm[1:0]</td>
+<td>RC=00B</td>
+<td>Round to nearest even</td>
+<td>If Imm[2] = 0</td></tr>
+<tr>
+<td></td>
+<td>RC=01B</td>
+<td>Round down</td>
+<td></td></tr>
+<tr>
+<td></td>
+<td>RC=10B</td>
+<td>Round up</td>
+<td></td></tr>
+<tr>
+<td></td>
+<td>RC=11B</td>
+<td>Truncate</td>
+<td></td></tr>
+<tr>
+<td>Imm[2]</td>
+<td>MS1=0</td>
+<td>Use imm[1:0] for rounding</td>
+<td>Ignore MXCSR.RC</td></tr>
+<tr>
+<td></td>
+<td>MS1=1</td>
+<td>Use MXCSR.RC for rounding</td>
+<td></td></tr>
+<tr>
+<td>Imm[7:3]</td>
+<td>Ignored</td>
+<td>Ignored by processor</td>
+<td></td></tr></table>
+<p>VEX.128 version: The source operand is a XMM register. The destination operand is a XMM register or 64-bit memory location. If the destination operand is a register then the upper bits (MAXVL-1:64) of corresponding register are zeroed.</p>
+<p>VEX.256 version: The source operand is a YMM register. The destination operand is a XMM register or 128-bit memory location. If the destination operand is a register, the upper bits (MAXVL-1:128) of the corresponding desti-nation register are zeroed.</p>
+<p>Note: VEX.vvvv and EVEX.vvvv are reserved (must be 1111b).</p>
+<p>EVEX encoded versions: The source operand is a ZMM/YMM/XMM register. The destination operand is a YMM/XMM/XMM (low 64-bits) register or a 256/128/64-bit memory location, conditionally updated with writemask k1. Bits (MAXVL-1:256/128/64) of the corresponding destination register are zeroed.</p>
+<p><strong>Operation</strong></p>
+<p>vCvt_s2h(SRC1[31:0])</p>
+<p>{</p>
+<p>IF Imm[2] = 0</p>
+<p>THEN</p>
+<p>; using Imm[1:0] for rounding control, see Table 5-3</p>
+<p>RETURN Cvt_Single_Precision_To_Half_Precision_FP_Imm(SRC1[31:0]);</p>
+<p>ELSE</p>
+<p>; using MXCSR.RC for rounding control</p>
+<p>RETURN Cvt_Single_Precision_To_Half_Precision_FP_Mxcsr(SRC1[31:0]);</p>
+<p>FI;</p>
+<p>}</p>
+<p><strong>VCVTPS2PH (EVEX Encoded Versions) When DEST is a Register</strong></p>
+<p>(KL, VL) = (4, 128), (8, 256), (16, 512)</p>
+<p>FOR j := 0 TO KL-1</p>
+<p>i := j * 16</p>
+<p>k := j * 32</p>
+<p>IF k1[j] OR *no writemask*</p>
+<p>THEN DEST[i+15:i] :=</p>
+<p>vCvt_s2h(SRC[k+31:k])</p>
+<p>ELSE</p>
+<p>IF *merging-masking*</p>
+<p>; merging-masking</p>
+<p>THEN *DEST[i+15:i] remains unchanged*</p>
+<p>ELSE</p>
+<p>; zeroing-masking</p>
+<p>DEST[i+15:i] := 0</p>
+<p>FI</p>
+<p>FI;</p>
+<p>ENDFOR</p>
+<p>DEST[MAXVL-1:VL/2] := 0</p>
+<p><strong>VCVTPS2PH (EVEX Encoded Versions) When DEST is Memory</strong></p>
+<p>(KL, VL) = (4, 128), (8, 256), (16, 512)</p>
+<p>FOR j := 0 TO KL-1</p>
+<p>i := j * 16</p>
+<p>k := j * 32</p>
+<p>IF k1[j] OR *no writemask*</p>
+<p>THEN DEST[i+15:i] :=</p>
+<p>vCvt_s2h(SRC[k+31:k])</p>
+<p>ELSE</p>
+<p>*DEST[i+15:i] remains unchanged*</p>
+<p>; merging-masking</p>
+<p>FI;</p>
+<p>ENDFOR</p>
+<p><strong>VCVTPS2PH (VEX.256 Encoded Version)</strong></p>
+<p>DEST[15:0] := vCvt_s2h(SRC1[31:0]);</p>
+<p>DEST[31:16] := vCvt_s2h(SRC1[63:32]);</p>
+<p>DEST[47:32] := vCvt_s2h(SRC1[95:64]);</p>
+<p>DEST[63:48] := vCvt_s2h(SRC1[127:96]);</p>
+<p>DEST[79:64] := vCvt_s2h(SRC1[159:128]);</p>
+<p>DEST[95:80] := vCvt_s2h(SRC1[191:160]);</p>
+<p>DEST[111:96] := vCvt_s2h(SRC1[223:192]);</p>
+<p>DEST[127:112] := vCvt_s2h(SRC1[255:224]);</p>
+<p>DEST[MAXVL-1:128] := 0</p>
+<p><strong>VCVTPS2PH (VEX.128 Encoded Version)</strong></p>
+<p>DEST[15:0] := vCvt_s2h(SRC1[31:0]);</p>
+<p>DEST[31:16] := vCvt_s2h(SRC1[63:32]);</p>
+<p>DEST[47:32] := vCvt_s2h(SRC1[95:64]);</p>
+<p>DEST[63:48] := vCvt_s2h(SRC1[127:96]);</p>
+<p>DEST[MAXVL-1:64] := 0</p>
+<p><strong>Flags Affected</strong></p>
+<p>None.</p>
+<p><strong>Intel C/C++ Compiler Intrinsic Equivalent</strong></p>
+<p>VCVTPS2PH __m256i _mm512_cvtps_ph(__m512 a);</p>
+<p>VCVTPS2PH __m256i _mm512_mask_cvtps_ph(__m256i s, __mmask16 k,__m512 a);</p>
+<p>VCVTPS2PH __m256i _mm512_maskz_cvtps_ph(__mmask16 k,__m512 a);</p>
+<p>VCVTPS2PH __m256i _mm512_cvt_roundps_ph(__m512 a, const int imm);</p>
+<p>VCVTPS2PH __m256i _mm512_mask_cvt_roundps_ph(__m256i s, __mmask16 k,__m512 a, const int imm);</p>
+<p>VCVTPS2PH __m256i _mm512_maskz_cvt_roundps_ph(__mmask16 k,__m512 a, const int imm);</p>
+<p>VCVTPS2PH __m128i _mm256_mask_cvtps_ph(__m128i s, __mmask8 k,__m256 a);</p>
+<p>VCVTPS2PH __m128i _mm256_maskz_cvtps_ph(__mmask8 k,__m256 a);</p>
+<p>VCVTPS2PH __m128i _mm_mask_cvtps_ph(__m128i s, __mmask8 k,__m128 a);</p>
+<p>VCVTPS2PH __m128i _mm_maskz_cvtps_ph(__mmask8 k,__m128 a);</p>
+<p>VCVTPS2PH __m128i _mm_cvtps_ph ( __m128 m1, const int imm);</p>
+<p>VCVTPS2PH __m128i _mm256_cvtps_ph(__m256 m1, const int imm);</p>
+<p><strong>SIMD Floating-Point Exceptions</strong></p>
+<p>Invalid, Underflow, Overflow, Precision, Denormal (if MXCSR.DAZ=0).</p>
+<p><strong>Other Exceptions</strong></p>
+<table class="exception-table">
+<tr>
+<td>VEX-encoded instructions, see Table 2-26, “Type 11 Class Exception Conditions” (do not report #AC);</td></tr>
+<tr>
+<td>EVEX-encoded instructions, see Table 2-62, “Type E11 Class Exception Conditions.”</td></tr></table>
+<p>Additionally:</p>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>If VEX.W=1.</td></tr>
+<tr>
+<td>#UD</td>
+<td>If VEX.vvvv != 1111B or EVEX.vvvv != 1111B.</td></tr></table></body></html>

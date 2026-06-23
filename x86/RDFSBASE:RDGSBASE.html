@@ -7,78 +7,64 @@
 <title>RDFSBASE/RDGSBASE—Read FS/GS Segment Base </title></head>
 <body>
 <h1>RDFSBASE/RDGSBASE—Read FS/GS Segment Base</h1>
-<p><strong>Opcode/</strong></p>
-<p><strong>Op/</strong></p>
-<p><strong>64/32-</strong></p>
-<p><strong>CPUID Fea-</strong></p>
-<p><strong>Description</strong></p>
 <table>
 <tr>
-<th colspan="2">Instruction</th>
-<th colspan="2">Instruction</th>
-<th colspan="2">En</th>
-<th colspan="2">bit Mode</th>
-<th colspan="2">ture Flag</th>
-<td colspan="2"></td></tr>
+<th>Opcode/Instruction</th>
+<th>Op/En</th>
+<th>64/32-bit Mode</th>
+<th>CPUID Fea-ture Flag</th>
+<th>Description</th></tr>
 <tr>
-<td colspan="2">F3 0F AE /0 RDFSBASE r32</td>
-<td colspan="2">F3 0F AE /0 RDFSBASE r32 RDFSBASE r32</td>
-<td colspan="2">M</td>
-<td colspan="2">V/I</td>
-<td colspan="2">FSGSBASE</td>
-<td colspan="2">Load the 32-bit destination register with the FS base address.</td></tr>
+<td>F3 0F AE /0 RDFSBASE r32</td>
+<td>M</td>
+<td>V/I</td>
+<td>FSGSBASE</td>
+<td>Load the 32-bit destination register with the FS base address.</td></tr>
 <tr>
-<td colspan="2">F3 REX.W 0F AE /0 RDFSBASE r64</td>
-<td colspan="2">F3 REX.W 0F AE /0 RDFSBASE r64 RDFSBASE r64</td>
-<td colspan="2">M</td>
-<td colspan="2">V/I</td>
-<td colspan="2">FSGSBASE</td>
-<td colspan="2">Load the 64-bit destination register with the FS base address.</td></tr>
+<td>F3 REX.W 0F AE /0 RDFSBASE r64</td>
+<td>M</td>
+<td>V/I</td>
+<td>FSGSBASE</td>
+<td>Load the 64-bit destination register with the FS base address.</td></tr>
 <tr>
-<td colspan="2">F3 0F AE /1 RDGSBASE <em>r32</em></td>
-<td colspan="2"></td>
-<td colspan="2">M</td>
-<td colspan="2">V/I</td>
-<td colspan="2">FSGSBASE</td>
-<td colspan="2">Load the 32-bit destination register with the GS base address.</td></tr>
+<td>F3 0F AE /1 RDGSBASE r32</td>
+<td>M</td>
+<td>V/I</td>
+<td>FSGSBASE</td>
+<td>Load the 32-bit destination register with the GS base address.</td></tr>
 <tr>
-<td colspan="2">F3 REX.W 0F AE /1 RDGSBASE <em>r64</em></td>
-<td colspan="2"></td>
-<td colspan="2">M</td>
-<td colspan="2">V/I</td>
-<td colspan="2">FSGSBASE</td>
-<td colspan="2">Load the 64-bit destination register with the GS base address.</td></tr></table>
+<td>F3 REX.W 0F AE /1 RDGSBASE r64</td>
+<td>M</td>
+<td>V/I</td>
+<td>FSGSBASE</td>
+<td>Load the 64-bit destination register with the GS base address.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
 <td>M</td>
 <td>ModRM:r/m (w)</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
-<p>Loads the general-purpose register indicated by the modR/M:r/m field with the FS or GS segment base address.</p>
+<p>Loads the general-purpose register indicated by the ModR/M:r/m field with the FS or GS segment base address.</p>
 <p>The destination operand may be either a 32-bit or a 64-bit general-purpose register. The REX.W prefix indicates the operand size is 64 bits. If no REX.W prefix is used, the operand size is 32 bits; the upper 32 bits of the source base address (for FS or GS) are ignored and upper 32 bits of the destination register are cleared.</p>
 <p>This instruction is supported only in 64-bit mode.</p>
 <h2>Operation</h2>
-<pre>DEST ← FS/GS segment base address;</pre>
+<pre>DEST := FS/GS segment base address;</pre>
 <h2>Flags Affected</h2>
-<p>None</p>
+<p>None.</p>
 <h2>C/C++ Compiler Intrinsic Equivalent</h2>
-<p>RDFSBASE:</p>
-<p>unsigned int _readfsbase_u32(void );</p>
-<p>RDFSBASE:</p>
-<p>unsigned __int64 _readfsbase_u64(void );</p>
-<p>RDGSBASE:</p>
-<p>unsigned int _readgsbase_u32(void );</p>
-<p>RDGSBASE:</p>
-<p>unsigned __int64 _readgsbase_u64(void );</p>
+<p>RDFSBASE unsigned int _readfsbase_u32(void );</p>
+<p>RDFSBASE unsigned __int64 _readfsbase_u64(void );</p>
+<p>RDGSBASE unsigned int _readgsbase_u32(void );</p>
+<p>RDGSBASE unsigned __int64 _readgsbase_u64(void );</p>
 <h2>Protected Mode Exceptions</h2>
 <table class="exception-table">
 <tr>
@@ -106,4 +92,4 @@
 <td>
 <p>If the LOCK prefix is used.</p>
 <p>If CR4.FSGSBASE[bit 16] = 0.</p>
-<p>If CPUID.07H.0H:EBX.FSGSBASE[bit 0] = 0.</p></td></tr></table></body></html>
+<p>If CPUID.07H.00H:EBX.FSGSBASE[0] = 0.</p></td></tr></table></body></html>

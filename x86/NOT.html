@@ -23,64 +23,56 @@
 <td></td></tr>
 <tr>
 <td>F6 /2</td>
-<td>NOT <em>r/m8</em></td>
+<td>NOT r/m8<sup>1</sup></td>
 <td>M</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Reverse each bit of <em>r/m8.</em></td></tr>
-<tr>
-<td>REX + F6 /2</td>
-<td>NOT <em>r/m8*</em></td>
-<td>M</td>
-<td>Valid</td>
-<td>N.E.</td>
-<td>Reverse each bit of <em>r/m8.</em></td></tr>
+<td>Reverse each bit of r/m8.</td></tr>
 <tr>
 <td>F7 /2</td>
-<td>NOT <em>r/m16</em></td>
+<td>NOT r/m16</td>
 <td>M</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Reverse each bit of <em>r/m16.</em></td></tr>
+<td>Reverse each bit of r/m16.</td></tr>
 <tr>
 <td>F7 /2</td>
-<td>NOT <em>r/m32</em></td>
+<td>NOT r/m32</td>
 <td>M</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Reverse each bit of <em>r/m32.</em></td></tr>
+<td>Reverse each bit of r/m32.</td></tr>
 <tr>
 <td>REX.W + F7 /2</td>
-<td>NOT <em>r/m64</em></td>
+<td>NOT r/m64</td>
 <td>M</td>
 <td>Valid</td>
 <td>N.E.</td>
-<td>Reverse each bit of <em>r/m64.</em></td></tr></table>
+<td>Reverse each bit of r/m64.</td></tr></table>
 <p><strong>NOTES:</strong></p>
-<p>*</p>
-<p>In 64-bit mode, r/m8 can not be encoded to access the following byte registers if a REX prefix is used: AH, BH, CH, DH.</p>
+<p>1. With a REX prefix in 64-bit mode, attempts to access AH, BH, CH, or DH will instead access SPL, DIL, BPL, or SIL, respectively.</p>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
 <td>M</td>
 <td>ModRM:r/m (r, w)</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Performs a bitwise NOT operation (each 1 is set to 0, and each 0 is set to 1) on the destination operand and stores the result in the destination operand location. The destination operand can be a register or a memory location.</p>
 <p>This instruction can be used with a LOCK prefix to allow the instruction to be executed atomically.</p>
 <p>In 64-bit mode, the instruction’s default operation size is 32 bits. Using a REX prefix in the form of REX.R permits access to additional registers (R8-R15). Using a REX prefix in the form of REX.W promotes operation to 64 bits. See the summary chart at the beginning of this section for encoding data and limits.</p>
 <h2>Operation</h2>
-<pre>DEST ← NOT DEST;</pre>
+<pre>DEST := NOT DEST;</pre>
 <h2>Flags Affected</h2>
-<p>None</p>
+<p>None.</p>
 <h2>Protected Mode Exceptions</h2>
 <table class="exception-table">
 <tr>

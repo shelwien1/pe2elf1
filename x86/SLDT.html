@@ -27,35 +27,28 @@
 <td>M</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Stores segment selector from LDTR in <em>r/m16</em>.</td></tr>
-<tr>
-<td>REX.W + 0F 00 /0</td>
-<td>SLDT <em>r64/m16</em></td>
-<td>M</td>
-<td>Valid</td>
-<td>Valid</td>
-<td>Stores segment selector from LDTR in <em>r64/m16</em>.</td></tr></table>
+<td>Stores segment selector from LDTR in <em>r/m16</em>.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
 <td>M</td>
 <td>ModRM:r/m (w)</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Stores the segment selector from the local descriptor table register (LDTR) in the destination operand. The desti-nation operand can be a general-purpose register or a memory location. The segment selector stored with this instruction points to the segment descriptor (located in the GDT) for the current LDT. This instruction can only be executed in protected mode.</p>
 <p>Outside IA-32e mode, when the destination operand is a 32-bit register, the 16-bit segment selector is copied into the low-order 16 bits of the register. The high-order 16 bits of the register are cleared for the Pentium 4, Intel Xeon, and P6 family processors. They are undefined for Pentium, Intel486, and Intel386 processors. When the destina-tion operand is a memory location, the segment selector is written to memory as a 16-bit quantity, regardless of the operand size.</p>
 <p>In compatibility mode, when the destination operand is a 32-bit register, the 16-bit segment selector is copied into the low-order 16 bits of the register. The high-order 16 bits of the register are cleared. When the destination operand is a memory location, the segment selector is written to memory as a 16-bit quantity, regardless of the operand size.</p>
 <p>In 64-bit mode, using a REX prefix in the form of REX.R permits access to additional registers (R8-R15). The behavior of SLDT with a 64-bit register is to zero-extend the 16-bit selector and store it in the register. If the desti-nation is memory and operand size is 64, SLDT will write the 16-bit selector to memory as a 16-bit quantity, regardless of the operand size.</p>
 <h2>Operation</h2>
-<pre>DEST ← LDTR(SegmentSelector);</pre>
+<pre>DEST := LDTR(SegmentSelector);</pre>
 <h2>Flags Affected</h2>
 <p>None.</p>
 <h2>Protected Mode Exceptions</h2>

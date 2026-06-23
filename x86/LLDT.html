@@ -7,41 +7,35 @@
 <title>LLDT—Load Local Descriptor Table Register </title></head>
 <body>
 <h1>LLDT—Load Local Descriptor Table Register</h1>
-<p><strong>Opcode</strong></p>
-<p><strong>Instruction</strong></p>
-<p><strong>Op/</strong></p>
-<p><strong>64-Bit</strong></p>
-<p><strong>Compat/</strong></p>
-<p><strong>Description</strong></p>
 <table>
 <tr>
-<td></td>
-<td></td>
-<th>En</th>
-<th>Mode</th>
-<th>Leg Mode</th>
-<td></td></tr>
+<th>Opcode</th>
+<th>Instruction</th>
+<th>Op/En</th>
+<th>64-Bit Mode</th>
+<th>Compat/Leg Mode</th>
+<th>Description</th></tr>
 <tr>
 <td>0F 00 /2</td>
-<td>LLDT <em>r/m</em>16</td>
+<td>LLDT r/m16</td>
 <td>M</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Load segment selector <em>r/m</em>16 into LDTR.</td></tr></table>
+<td>Load segment selector r/m16 into LDTR.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
 <td>M</td>
 <td>ModRM:r/m (r)</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Loads the source operand into the segment selector field of the local descriptor table register (LDTR). The source operand (a general-purpose register or a memory location) contains a segment selector that points to a local descriptor table (LDT). After the segment selector is loaded in the LDTR, the processor uses the segment selector to locate the segment descriptor for the LDT in the global descriptor table (GDT). It then loads the segment limit and base address for the LDT from the segment descriptor into the LDTR. The segment registers DS, ES, SS, FS, GS, and CS are not affected by this instruction, nor is the LDTR field in the task state segment (TSS) for the current task.</p>
 <p>If bits 2-15 of the source operand are 0, LDTR is marked invalid and the LLDT instruction completes silently. However, all subsequent references to descriptors in the LDT (except by the LAR, VERR, VERW or LSL instructions) cause a general protection exception (#GP).</p>
@@ -57,12 +51,12 @@ IF segment selector is valid
          THEN #GP(segment selector); FI;
     IF segment descriptor is not present
          THEN #NP(segment selector); FI;
-    LDTR(SegmentSelector) ← SRC;
-    LDTR(SegmentDescriptor) ← GDTSegmentDescriptor;
-ELSE LDTR ← INVALID
+    LDTR(SegmentSelector) := SRC;
+    LDTR(SegmentDescriptor) := GDTSegmentDescriptor;
+ELSE LDTR := INVALID
 FI;</pre>
 <h2>Flags Affected</h2>
-<p>None</p>
+<p>None.</p>
 <h2>Protected Mode Exceptions</h2>
 <table class="exception-table">
 <tr>

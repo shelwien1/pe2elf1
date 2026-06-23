@@ -23,84 +23,76 @@
 <td></td></tr>
 <tr>
 <td>FE /0</td>
-<td>INC <em>r/m8</em></td>
+<td>INC r/m8<sup>1</sup></td>
 <td>M</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Increment <em>r/m</em> byte by 1.</td></tr>
-<tr>
-<td>REX + FE /0</td>
-<td>INC <em>r/m8</em><sup>*</sup></td>
-<td>M</td>
-<td>Valid</td>
-<td>N.E.</td>
-<td>Increment <em>r/m</em> byte by 1.</td></tr>
+<td>Increment r/m byte by 1.</td></tr>
 <tr>
 <td>FF /0</td>
-<td>INC <em>r/m16</em></td>
+<td>INC r/m16</td>
 <td>M</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Increment <em>r/m</em> word by 1.</td></tr>
+<td>Increment r/m word by 1.</td></tr>
 <tr>
 <td>FF /0</td>
-<td>INC <em>r/m32</em></td>
+<td>INC r/m32</td>
 <td>M</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Increment <em>r/m</em> doubleword by 1.</td></tr>
+<td>Increment r/m doubleword by 1.</td></tr>
 <tr>
 <td>REX.W + FF /0</td>
-<td>INC <em>r/m64</em></td>
+<td>INC r/m64</td>
 <td>M</td>
 <td>Valid</td>
 <td>N.E.</td>
-<td>Increment <em>r/m</em> quadword by 1.</td></tr>
+<td>Increment r/m quadword by 1.</td></tr>
 <tr>
-<td>40+ <em>rw<sup>**</sup></em></td>
-<td>INC <em>r16</em></td>
+<td>40+ rw<sup>2</sup></td>
+<td>INC r16</td>
 <td>O</td>
 <td>N.E.</td>
 <td>Valid</td>
 <td>Increment word register by 1.</td></tr>
 <tr>
-<td>40+ <em>rd</em></td>
-<td>INC <em>r32</em></td>
+<td>40+ rd</td>
+<td>INC r32</td>
 <td>O</td>
 <td>N.E.</td>
 <td>Valid</td>
 <td>Increment doubleword register by 1.</td></tr></table>
 <p><strong>NOTES:</strong></p>
-<p>*</p>
-<p>In 64-bit mode, r/m8 can not be encoded to access the following byte registers if a REX prefix is used: AH, BH, CH, DH.</p>
-<p>** 40H through 47H are REX prefixes in 64-bit mode.</p>
+<p>1. With a REX prefix in 64-bit mode, attempts to access AH, BH, CH, or DH will instead access SPL, DIL, BPL, or SIL, respectively.</p>
+<p>2. 40H through 47H are REX prefixes in 64-bit mode.</p>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
 <td>M</td>
 <td>ModRM:r/m (r, w)</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr>
 <tr>
 <td>O</td>
 <td>opcode + rd (r, w)</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Adds 1 to the destination operand, while preserving the state of the CF flag. The destination operand can be a register or a memory location. This instruction allows a loop counter to be updated without disturbing the CF flag. (Use a ADD instruction with an immediate operand of 1 to perform an increment operation that does updates the CF flag.)</p>
 <p>This instruction can be used with a LOCK prefix to allow the instruction to be executed atomically.</p>
 <p>In 64-bit mode, INC r16 and INC r32 are not encodable (because opcodes 40H through 47H are REX prefixes). Otherwise, the instruction’s 64-bit mode default operation size is 32 bits. Use of the REX.R prefix permits access to additional registers (R8-R15). Use of the REX.W prefix promotes operation to 64 bits.</p>
 <h2>Operation</h2>
-<pre>DEST ← DEST + 1;</pre>
-<h2>AFlags Affected</h2>
+<pre>DEST := DEST + 1;</pre>
+<h2>Flags Affected</h2>
 <p>The CF flag is not affected. The OF, SF, ZF, AF, and PF flags are set according to the result.</p>
 <h2>Protected Mode Exceptions</h2>
 <table class="exception-table">

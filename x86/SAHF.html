@@ -4,10 +4,10 @@
 <head>
 <meta charset="UTF-8">
 <link href="style.css" type="text/css" rel="stylesheet">
-<title>SAHF—Store AH into Flags </title></head>
+<title>SAHF—Store AH Into Flags </title></head>
 <body>
-<h1>SAHF—Store AH into Flags</h1>
-<p><strong>Opcode*</strong></p>
+<h1>SAHF—Store AH Into Flags</h1>
+<p><strong>Opcode</strong></p>
 <p><strong>Instruction</strong></p>
 <p><strong>Op/</strong></p>
 <p><strong>64-Bit</strong></p>
@@ -24,39 +24,40 @@
 <tr>
 <td>9E</td>
 <td>SAHF</td>
-<td>NP</td>
-<td>Invalid*</td>
+<td>ZO</td>
+<td>Valid<sup>1</sup></td>
 <td>Valid</td>
-<td>Loads SF, ZF, AF, PF, and CF from AH into EFLAGS register.</td></tr></table>
-<p><strong>NOTES: * Valid in specific steppings. See Description section.</strong></p>
+<td>Loads SF, ZF, AF, PF, and CF from AH into the EFLAGS register.</td></tr></table>
+<p><strong>NOTES:</strong></p>
+<p>1. Invalid if CPUID.80000001H:ECX.LAHF_SAHF_64 is enumerated as 0.</p>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
-<td>NP</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>ZO</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Loads the SF, ZF, AF, PF, and CF flags of the EFLAGS register with values from the corresponding bits in the AH register (bits 7, 6, 4, 2, and 0, respectively). Bits 1, 3, and 5 of register AH are ignored; the corresponding reserved bits (1, 3, and 5) in the EFLAGS register remain as shown in the “Operation” section below.</p>
-<p>This instruction executes as described above in compatibility mode and legacy mode. It is valid in 64-bit mode only if CPUID.80000001H:ECX.LAHF-SAHF[bit 0] = 1.</p>
+<p>This instruction executes as described above in compatibility mode and legacy mode. It is valid in 64-bit mode only if CPUID.80000001H:ECX.LAHF_SAHF_64[0] = 1.</p>
 <h2>Operation</h2>
 <pre>IF IA-64 Mode
     THEN
-         IF CPUID.80000001H.ECX[0] = 1;
+         IF CPUID.80000001H:ECX[0] = 1;
               THEN
-                    RFLAGS(SF:ZF:0:AF:0:PF:1:CF) ← AH;
+                    RFLAGS(SF:ZF:0:AF:0:PF:1:CF) := AH;
               ELSE
                     #UD;
          FI
     ELSE
-         EFLAGS(SF:ZF:0:AF:0:PF:1:CF) ← AH;
+         EFLAGS(SF:ZF:0:AF:0:PF:1:CF) := AH;
 FI;</pre>
 <h2>Flags Affected</h2>
 <p>The SF, ZF, AF, PF, and CF flags are loaded with values from the AH register. Bits 1, 3, and 5 of the EFLAGS register are unaffected, with the values remaining 1, 0, and 0, respectively.</p>
@@ -73,5 +74,5 @@ FI;</pre>
 <tr>
 <td>#UD</td>
 <td>
-<p>If CPUID.80000001H.ECX[0] = 0.</p>
+<p>If CPUID.80000001H:ECX.LAHF_SAHF_64[0] = 0.</p>
 <p>If the LOCK prefix is used.</p></td></tr></table></body></html>

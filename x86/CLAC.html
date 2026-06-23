@@ -21,31 +21,31 @@
 <td></td></tr>
 <tr>
 <td>
-<p>0F 01 CA</p>
+<p>NP 0F 01 CA</p>
 <p>CLAC</p></td>
-<td>NP</td>
+<td>ZO</td>
 <td>V/V</td>
 <td>SMAP</td>
 <td>Clear the AC flag in the EFLAGS register.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
-<td>NP</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>ZO</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Clears the AC flag bit in EFLAGS register. This disables any alignment checking of user-mode data accesses. If the SMAP bit is set in the CR4 register, this disallows explicit supervisor-mode data accesses to user-mode pages.</p>
 <p>This instruction's operation is the same in non-64-bit modes and 64-bit mode. Attempts to execute CLAC when CPL &gt; 0 cause #UD.</p>
 <h2>Operation</h2>
-<pre>EFLAGS.AC ← 0;</pre>
+<pre>EFLAGS.AC := 0;</pre>
 <h2>Flags Affected</h2>
 <p>AC cleared. Other flags are unaffected.</p>
 <h2>Protected Mode Exceptions</h2>
@@ -55,14 +55,14 @@
 <td>
 <p>If the LOCK prefix is used.</p>
 <p>If the CPL &gt; 0.</p>
-<p>If CPUID.(EAX=07H, ECX=0H):EBX.SMAP[bit 20] = 0.</p></td></tr></table>
+<p>If CPUID.07H.00H:EBX.SMAP[20] = 0.</p></td></tr></table>
 <h2>Real-Address Mode Exceptions</h2>
 <table class="exception-table">
 <tr>
 <td>#UD</td>
 <td>
 <p>If the LOCK prefix is used.</p>
-<p>If CPUID.(EAX=07H, ECX=0H):EBX.SMAP[bit 20] = 0.</p></td></tr></table>
+<p>If CPUID.07H.00H:EBX.SMAP[20] = 0.</p></td></tr></table>
 <h2>Virtual-8086 Mode Exceptions</h2>
 <table class="exception-table">
 <tr>
@@ -75,7 +75,7 @@
 <td>
 <p>If the LOCK prefix is used.</p>
 <p>If the CPL &gt; 0.</p>
-<p>If CPUID.(EAX=07H, ECX=0H):EBX.SMAP[bit 20] = 0.</p></td></tr></table>
+<p>If CPUID.07H.00H:EBX.SMAP[20] = 0.</p></td></tr></table>
 <h2>64-Bit Mode Exceptions</h2>
 <table class="exception-table">
 <tr>
@@ -83,4 +83,4 @@
 <td>
 <p>If the LOCK prefix is used.</p>
 <p>If the CPL &gt; 0.</p>
-<p>If CPUID.(EAX=07H, ECX=0H):EBX.SMAP[bit 20] = 0.</p></td></tr></table></body></html>
+<p>If CPUID.07H.00H:EBX.SMAP[20] = 0.</p></td></tr></table></body></html>

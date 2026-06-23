@@ -7,75 +7,85 @@
 <title>SWAPGS—Swap GS Base Register </title></head>
 <body>
 <h1>SWAPGS—Swap GS Base Register</h1>
+<p><strong>Opcode</strong></p>
+<p><strong>Instruction</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64-Bit</strong></p>
+<p><strong>Compat/</strong></p>
+<p><strong>Description</strong></p>
 <table>
 <tr>
-<th>Opcode</th>
-<th>Instruction</th>
-<th>Op/En</th>
-<th>64-Bit Mode</th>
-<th>Compat/Leg Mode</th>
-<th>Description</th></tr>
+<td></td>
+<td></td>
+<th>En</th>
+<th>Mode</th>
+<th>Leg Mode</th>
+<td></td></tr>
 <tr>
 <td>0F 01 F8</td>
 <td>SWAPGS</td>
-<td>NP</td>
+<td>ZO</td>
 <td>Valid</td>
 <td>Invalid</td>
-<td>Exchanges the current GS base register value with the value contained in MSR address C0000102H.</td></tr></table>
+<td>Exchanges the current GS base register value with the IA32_KERNEL_GS_BASE MSR.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
-<td>NP</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>ZO</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
-<p>SWAPGS exchanges the current GS base register value with the value contained in MSR address C0000102H (IA32_KERNEL_GS_BASE). The SWAPGS instruction is a privileged instruction intended for use by system soft-ware.</p>
+<p>SWAPGS exchanges the current GS base register value with the IA32_KERNEL_GS_BASE MSR (MSR address C0000102H). The SWAPGS instruction is a privileged instruction intended for use by system software.</p>
 <p>When using SYSCALL to implement system calls, there is no kernel stack at the OS entry point. Neither is there a straightforward method to obtain a pointer to kernel structures from which the kernel stack pointer could be read. Thus, the kernel cannot save general purpose registers or reference memory.</p>
 <p>By design, SWAPGS does not require any general purpose registers or memory operands. No registers need to be saved before using the instruction. SWAPGS exchanges the CPL 0 data pointer from the IA32_KERNEL_GS_BASE MSR with the GS base register. The kernel can then use the GS prefix on normal memory references to access kernel data structures. Similarly, when the OS kernel is entered using an interrupt or exception (where the kernel stack is already set up), SWAPGS can be used to quickly get a pointer to the kernel data structures.</p>
 <p>The IA32_KERNEL_GS_BASE MSR itself is only accessible using RDMSR/WRMSR instructions. Those instructions are only accessible at privilege level 0. The WRMSR instruction ensures that the IA32_KERNEL_GS_BASE MSR contains a canonical address.</p>
+<p>The instruction cannot be executed when FRED transitions are enabled. FRED transitions perform the same swap when changing the CPL.</p>
 <h2>Operation</h2>
-<pre>IF CS.L ≠ 1 (* Not in 64-Bit Mode *)
+<pre>IF CS.L ≠ 1 (* Not in 64-Bit Mode *) OR CR4.FRED = 1
     THEN
          #UD; FI;
 IF CPL ≠ 0
     THEN #GP(0); FI;
-tmp ← GS.base;
-GS.base ← IA32_KERNEL_GS_BASE;
-IA32_KERNEL_GS_BASE ← tmp;</pre>
+tmp := GS.base;
+GS.base := IA32_KERNEL_GS_BASE;
+IA32_KERNEL_GS_BASE := tmp;</pre>
 <h2>Flags Affected</h2>
-<p>None</p>
+<p>None.</p>
 <h2>Protected Mode Exceptions</h2>
 <table class="exception-table">
 <tr>
 <td>#UD</td>
-<td>If Mode ≠ 64-Bit.</td></tr></table>
+<td>The SWAPGS instruction is not recognized in protected mode.</td></tr></table>
 <h2>Real-Address Mode Exceptions</h2>
 <table class="exception-table">
 <tr>
 <td>#UD</td>
-<td>If Mode ≠ 64-Bit.</td></tr></table>
+<td>The SWAPGS instruction is not recognized in real-address mode.</td></tr></table>
 <h2>Virtual-8086 Mode Exceptions</h2>
 <table class="exception-table">
 <tr>
 <td>#UD</td>
-<td>If Mode ≠ 64-Bit.</td></tr></table>
+<td>The SWAPGS instruction is not recognized in virtual-8086 mode.</td></tr></table>
 <h2>Compatibility Mode Exceptions</h2>
 <table class="exception-table">
 <tr>
 <td>#UD</td>
-<td>If Mode ≠ 64-Bit.</td></tr></table>
+<td>The SWAPGS instruction is not recognized in compatibility mode.</td></tr></table>
 <h2>64-Bit Mode Exceptions</h2>
 <table class="exception-table">
 <tr>
 <td>#GP(0)</td>
+<td>If CPL ≠ 0.</td></tr>
+<tr>
+<td>#UD</td>
 <td>
-<p>If CPL ≠ 0.</p>
-<p>If the LOCK prefix is used.</p></td></tr></table></body></html>
+<p>If the LOCK prefix is used.</p>
+<p>If CR4.FRED = 1.</p></td></tr></table></body></html>

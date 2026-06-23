@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>VSM4RNDS4—Performs Four Rounds of SM4 Encryption </title></head>
+<body>
+<h1>VSM4RNDS4—Performs Four Rounds of SM4 Encryption</h1>
+<p><strong>Opcode/</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64/32</strong></p>
+<p><strong>CPUID Feature</strong></p>
+<p><strong>Description</strong></p>
+<p><strong>Instruction</strong></p>
+<p><strong>En</strong></p>
+<p><strong>bit Mode</strong></p>
+<p><strong>Flag</strong></p>
+<p><strong>Support</strong></p>
+<p>VEX.128.F2.0F38.W0 DA /r</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX</p>
+<p>Performs four rounds of SM4 encryption.</p>
+<p>VSM4RNDS4 xmm1, xmm2,</p>
+<p>SM4</p>
+<p>xmm3/m128</p>
+<p>VEX.256.F2.0F38.W0 DA /r</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX</p>
+<p>Performs four rounds of SM4 encryption.</p>
+<p>VSM4RNDS4 ymm1, ymm2,</p>
+<p>SM4</p>
+<p>ymm3/m256</p>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Tuple Type</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>A</td>
+<td>N/A</td>
+<td>ModRM:reg (w)</td>
+<td>VEX.vvvv (r)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td></tr></table>
+<h2>Description</h2>
+<p>The SM4RNDS4 instruction performs four rounds of SM4 encryption. The instruction operates on independent 128-bit lanes.</p>
+<p>Additional details can be found at: https://tools.ietf.org/html/draft-ribose-cfrg-sm4-10.</p>
+<p>See “VSM4KEY4—Perform Four Rounds of SM4 Key Expansion” for the sbox table.</p>
+<h2>Operation</h2>
+<pre>// see the VSM4KEY4 instruction for the definition of ROL32, lower_t
+define L_RND(dword):
+    tmp := dword
+    tmp := tmp ^ ROL32(dword, 2)
+    tmp := tmp ^ ROL32(dword, 10)
+    tmp := tmp ^ ROL32(dword, 18)
+    tmp := tmp ^ ROL32(dword, 24)
+    return tmp
+define T_RND(dword):
+    return L_RND(lower_t(dword))
+define F_RND(X0, X1, X2, X3, round_key):
+    return X0 ^ T_RND(X1 ^ X2 ^ X3 ^ round_key)</pre>
+<p><strong>VSM4RNDS4 DEST, SRC1, SRC2</strong></p>
+<pre>VL = (128, 256) // VEX versions
+KL := VL/128
+for i in 0..KL-1:
+    P[0] := SRC1.xmm[i].dword[0]
+    P[1] := SRC1.xmm[i].dword[1]
+    P[2] := SRC1.xmm[i].dword[2]
+    P[3] := SRC1.xmm[i].dword[3]
+    C[0] := F_RND(P[0], P[1], P[2], P[3], SRC2.xmm[i].dword[0])
+    C[1] := F_RND(P[1], P[2], P[3], C[0], SRC2.xmm[i].dword[1])
+    C[2] := F_RND(P[2], P[3], C[0], C[1], SRC2.xmm[i].dword[2])
+    C[3] := F_RND(P[3], C[0], C[1], C[2], SRC2.xmm[i].dword[3])
+    DEST.xmm[i].dword[0] := C[0]
+    DEST.xmm[i].dword[1] := C[1]
+    DEST.xmm[i].dword[2] := C[2]
+    DEST.xmm[i].dword[3] := C[3]
+DEST[MAXVL-1:VL] := 0</pre>
+<h2>Flags Affected</h2>
+<p>None.</p>
+<h2>Intel C/C++ Compiler Intrinsic Equivalent</h2>
+<p>VSM4RNDS4 __m128i _mm_sm4rnds4_epi32 (__m128i __A, __m128i __B);</p>
+<p>VSM4RNDS4 __m256i _mm256_sm4rnds4_epi32 (__m256i __A, __m256i __B);</p>
+<h2>SIMD Floating-Point Exceptions</h2>
+<p>None.</p>
+<h2>Other Exceptions</h2>
+<p>See Table 2-23, “Type 6 Class Exception Conditions.”</p></body></html>

@@ -9,106 +9,106 @@
 <h1>BNDMOV—Move Bounds</h1>
 <p><strong>Opcode/</strong></p>
 <p><strong>Op/En</strong></p>
-<p><strong>64/32</strong></p>
+<p><strong>64/32 bit</strong></p>
 <p><strong>CPUID</strong></p>
 <p><strong>Description</strong></p>
 <table>
 <tr>
 <th>Instruction</th>
 <td></td>
-<th>bit Mode Support</th>
+<th>Mode Support</th>
 <th>Feature Flag</th>
 <td></td></tr>
 <tr>
 <td>66 0F 1A /r BNDMOV bnd1, bnd2/m64</td>
 <td>RM</td>
-<td>NE/V</td>
+<td>N.E./V</td>
 <td>MPX</td>
 <td>Move lower and upper bound from bnd2/m64 to bound register bnd1.</td></tr>
 <tr>
 <td>66 0F 1A /r BNDMOV bnd1, bnd2/m128</td>
 <td>RM</td>
-<td>V/NE</td>
+<td>V/N.E.</td>
 <td>MPX</td>
 <td>Move lower and upper bound from bnd2/m128 to bound register bnd1.</td></tr>
 <tr>
 <td>66 0F 1B /r BNDMOV bnd1/m64, bnd2</td>
 <td>MR</td>
-<td>NE/V</td>
+<td>N.E./V</td>
 <td>MPX</td>
 <td>Move lower and upper bound from bnd2 to bnd1/m64.</td></tr>
 <tr>
 <td>66 0F 1B /r BNDMOV bnd1/m128, bnd2</td>
 <td>MR</td>
-<td>V/NE</td>
+<td>V/N.E.</td>
 <td>MPX</td>
 <td>Move lower and upper bound from bnd2 to bound register bnd1/m128.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th></tr>
 <tr>
 <td>RM</td>
 <td>ModRM:reg (w)</td>
 <td>ModRM:r/m (r)</td>
-<td>NA</td></tr>
+<td>N/A</td></tr>
 <tr>
 <td>MR</td>
 <td>ModRM:r/m (w)</td>
 <td>ModRM:reg (r)</td>
-<td>NA</td></tr></table>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>BNDMOV moves a pair of lower and upper bound values from the source operand (the second operand) to the destination (the first operand). Each operation is 128-bit move. The exceptions are same as the MOV instruction. The memory format for loading/store bounds in 64-bit mode is shown in Figure 3-5.</p>
-<svg width="745.289985" viewBox="53.040000 65318.039995 496.859990 182.460005" height="273.6900075">
-<text y="65346.606" x="395.39838172" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="110.22010385">BNDMOV to memory in 64-bit mode</text>
-<text y="65379.666" x="458.45901614" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="3.8543588">0</text>
-<text y="65380.146" x="131.58" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="7.69346654">16</text>
-<text y="65380.206" x="305.52" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="3.8543588">8</text>
-<text y="65380.506" x="470.03776259" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="32.40364989">Byte offset</text>
-<text y="65430.7859" x="387.77838172" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="110.13206364">BNDMOV to memory in 32-bit mode</text>
-<text y="65463.906" x="450.83901614" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="3.8543588">0</text>
-<text y="65464.3259" x="123.96" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="7.69346654">16</text>
-<text y="65464.386" x="297.9" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="3.8543588">8</text>
-<text y="65464.386" x="378.9" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="3.8543588">4</text>
-<text y="65464.6859" x="462.4780736" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="32.40919573">Byte offset</text>
-<rect y="65341.86" x="83.52" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="13.5" width="285.9"></rect>
-<rect y="65426.04" x="75.9" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="13.5" width="285.9"></rect>
-<rect y="65384.64" x="143.7" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="13.5" width="320.1"></rect>
-<rect y="65468.82" x="136.14" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="13.5" width="320.1"></rect>
-<text y="65350.446" x="132.9" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="56.6784848">Upper Bound (UB)</text>
-<text y="65350.506" x="258.59923652" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="55.46186615">Lower Bound (LB)</text>
-<text y="65434.686" x="125.28" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="56.60777534">Upper Bound (UB)</text>
-<text y="65434.686" x="250.97854329" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="55.49375473">Lower Bound (LB)</text></svg>
+<svg width="745.199985" viewBox="53.580000 78000.000010 496.799990 182.459985" height="273.6899775">
+<text y="78028.515" x="395.93869273" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="110.21941062">BNDMOV to memory in 64-bit mode</text>
+<text y="78061.635" x="458.99932715" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="3.8543588">0</text>
+<text y="78062.115" x="132.06" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="7.69346654">16</text>
+<text y="78062.175" x="306.0" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="3.8543588">8</text>
+<text y="78062.415" x="470.5780736" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="32.40364989">Byte offset</text>
+<text y="78112.755" x="388.31838172" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="110.13206364">BNDMOV to memory in 32-bit mode</text>
+<text y="78145.815" x="451.37901614" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="3.8543588">0</text>
+<text y="78146.295" x="124.5" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="7.69346654">16</text>
+<text y="78146.355" x="298.44" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="3.8543588">8</text>
+<text y="78146.355" x="379.44" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="3.8543588">4</text>
+<text y="78146.655" x="462.95776259" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="32.40919573">Byte offset</text>
+<rect y="78108.06" x="76.44" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="13.5" width="285.9"></rect>
+<rect y="78066.66" x="144.24" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="13.5" width="320.1"></rect>
+<rect y="78150.84" x="136.62" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="13.5" width="320.1"></rect>
+<text y="78116.595" x="125.82" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="56.61886702">Upper Bound (UB)</text>
+<text y="78116.655" x="251.51923652" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="55.47503752">Lower Bound (LB)</text></svg>
+<svg width="428.8500075" viewBox="84.060000 78023.579990 285.900005 13.740020" height="20.61003">
+<rect y="78023.82" x="84.06" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="13.5" width="285.9"></rect>
+<text y="78032.415" x="133.44" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="56.6784848">Upper Bound (UB)</text>
+<text y="78032.475" x="259.13923652" style="font-size:6.932300pt" lengthAdjust="spacingAndGlyphs" textLength="55.46186615">Lower Bound (LB)</text></svg>
 <h3>Figure 3-5.  Memory Layout of BNDMOV to/from Memory</h3>
 <p>This instruction does not change flags.</p>
 <h2>Operation</h2>
 <p><strong>BNDMOV register to register</strong></p>
-<pre>DEST.LB  SRC.LB;
-DEST.UB  SRC.UB;</pre>
+<pre>DEST.LB := SRC.LB;
+DEST.UB := SRC.UB;</pre>
 <p><strong>BNDMOV from memory</strong></p>
 <pre>IF 64-bit mode THEN
-         DEST.LB  LOAD_QWORD(SRC);
-         DEST.UB  LOAD_QWORD(SRC+8);
+         DEST.LB := LOAD_QWORD(SRC);
+         DEST.UB := LOAD_QWORD(SRC+8);
     ELSE
-         DEST.LB  LOAD_DWORD_ZERO_EXT(SRC);
-         DEST.UB  LOAD_DWORD_ZERO_EXT(SRC+4);
+         DEST.LB := LOAD_DWORD_ZERO_EXT(SRC);
+         DEST.UB := LOAD_DWORD_ZERO_EXT(SRC+4);
 FI;</pre>
 <p><strong>BNDMOV to memory</strong></p>
 <pre>IF 64-bit mode THEN
-         DEST[63:0]  SRC.LB;
-         DEST[127:64]  SRC.UB;
+         DEST[63:0] := SRC.LB;
+         DEST[127:64] := SRC.UB;
     ELSE
-         DEST[31:0]  SRC.LB;
-         DEST[63:32]  SRC.UB;
+         DEST[31:0] := SRC.LB;
+         DEST[63:32] := SRC.UB;
 FI;</pre>
 <h2>Intel C/C++ Compiler Intrinsic Equivalent</h2>
-<p>BNDMOV</p>
-<p>void * _bnd_copy_ptr_bounds(const void *q, const void *r)</p>
+<p>BNDMOV void * _bnd_copy_ptr_bounds(const void *q, const void *r)</p>
 <h2>Flags Affected</h2>
-<p>None</p>
+<p>None.</p>
 <h2>Protected Mode Exceptions</h2>
 <table class="exception-table">
 <tr>

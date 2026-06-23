@@ -7,76 +7,65 @@
 <title>CMPXCHG—Compare and Exchange </title></head>
 <body>
 <h1>CMPXCHG—Compare and Exchange</h1>
-<p><strong>Opcode/</strong></p>
+<p><strong>Opcode</strong></p>
+<p><strong>Instruction</strong></p>
 <p><strong>Op/</strong></p>
 <p><strong>64-Bit</strong></p>
 <p><strong>Compat/</strong></p>
 <p><strong>Description</strong></p>
 <table>
 <tr>
-<th>Instruction</th>
+<td></td>
+<td></td>
 <th>En</th>
 <th>Mode</th>
 <th>Leg Mode</th>
 <td></td></tr>
 <tr>
-<td>
-<p>0F B0/<em>r</em></p>
-<p>CMPXCHG <em>r/m8, r8</em></p></td>
+<td>0F B0/r</td>
+<td>CMPXCHG r/m8<sup>1</sup>, r8<sup>1</sup></td>
 <td>MR</td>
 <td>Valid</td>
-<td>Valid*</td>
-<td>Compare AL with <em>r/m8</em>. If equal, ZF is set and <em>r8</em> is loaded into <em>r/m8</em>. Else, clear ZF and load <em>r/m8</em> into AL.</td></tr>
+<td>Valid<sup>2</sup></td>
+<td>Compare AL with r/m8. If equal, ZF is set and r8 is loaded into r/m8. Else, clear ZF and load r/m8 into AL.</td></tr>
 <tr>
-<td>
-<p>REX + 0F B0/<em>r</em></p>
-<p>CMPXCHG <em>r/m8**,r8</em></p></td>
+<td>0F B1/r</td>
+<td>CMPXCHG r/m16, r16</td>
+<td>MR</td>
+<td>Valid</td>
+<td>Valid<sup>2</sup></td>
+<td>Compare AX with r/m16. If equal, ZF is set and r16 is loaded into r/m16. Else, clear ZF and load r/m16 into AX.</td></tr>
+<tr>
+<td>0F B1/r</td>
+<td>CMPXCHG r/m32, r32</td>
+<td>MR</td>
+<td>Valid</td>
+<td>Valid<sup>2</sup></td>
+<td>Compare EAX with r/m32. If equal, ZF is set and r32 is loaded into r/m32. Else, clear ZF and load r/m32 into EAX.</td></tr>
+<tr>
+<td>REX.W + 0F B1/r</td>
+<td>CMPXCHG r/m64, r64</td>
 <td>MR</td>
 <td>Valid</td>
 <td>N.E.</td>
-<td>Compare AL with <em>r/m8</em>. If equal, ZF is set and <em>r8</em> is loaded into <em>r/m8</em>. Else, clear ZF and load <em>r/m8</em> into AL.</td></tr>
-<tr>
-<td>
-<p>0F B1/<em>r</em></p>
-<p>CMPXCHG <em>r/m16, r16</em></p></td>
-<td>MR</td>
-<td>Valid</td>
-<td>Valid*</td>
-<td>Compare AX with <em>r/m16</em>. If equal, ZF is set and <em>r16</em> is loaded into <em>r/m16</em>. Else, clear ZF and load <em>r/m16</em> into AX.</td></tr>
-<tr>
-<td>
-<p>0F B1/<em>r</em></p>
-<p>CMPXCHG <em>r/m32, r32</em></p></td>
-<td>MR</td>
-<td>Valid</td>
-<td>Valid*</td>
-<td>Compare EAX with <em>r/m32</em>. If equal, ZF is set and <em>r32</em> is loaded into <em>r/m32</em>. Else, clear ZF and load <em>r/m32</em> into EAX.</td></tr>
-<tr>
-<td>
-<p>REX.W + 0F B1/<em>r</em></p>
-<p>CMPXCHG <em>r/m64, r64</em></p></td>
-<td>MR</td>
-<td>Valid</td>
-<td>N.E.</td>
-<td>Compare RAX with <em>r/m64</em>. If equal, ZF is set and <em>r64</em> is loaded into <em>r/m64</em>. Else, clear ZF and load <em>r/m64</em> into RAX.</td></tr></table>
+<td>Compare RAX with r/m64. If equal, ZF is set and r64 is loaded into r/m64. Else, clear ZF and load r/m64 into RAX.</td></tr></table>
 <p><strong>NOTES:</strong></p>
-<p>*</p>
-<p>See the IA-32 Architecture Compatibility section below.</p>
-<p>** In 64-bit mode,<em> r/m8</em> can not be encoded to access the following byte registers if a REX prefix is used: AH, BH, CH, DH.</p>
+<p>1. With a REX prefix in 64-bit mode, attempts to access AH, BH, CH, or DH will instead access SPL, DIL, BPL, or SIL, respectively.</p>
+<p>2. See the IA-32 Architecture Compatibility section below.</p>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
 <td>MR</td>
 <td>ModRM:r/m (r, w)</td>
 <td>ModRM:reg (r)</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Compares the value in the AL, AX, EAX, or RAX register with the first operand (destination operand). If the two values are equal, the second operand (source operand) is loaded into the destination operand. Otherwise, the destination operand is loaded into the AL, AX, EAX or RAX register. RAX register is available only in 64-bit mode.</p>
 <p>This instruction can be used with a LOCK prefix to allow the instruction to be executed atomically. To simplify the interface to the processor’s bus, the destination operand receives a write cycle without regard to the result of the comparison. The destination operand is written back if the comparison fails; otherwise, the source operand is written into the destination. (The processor never produces a locked read without also producing a locked write.)</p>
@@ -85,15 +74,15 @@
 <p>This instruction is not supported on Intel processors earlier than the Intel486 processors.</p>
 <h2>Operation</h2>
 <pre>(* Accumulator = AL, AX, EAX, or RAX depending on whether a byte, word, doubleword, or quadword comparison is being performed *)
-TEMP ← DEST
+TEMP := DEST
 IF accumulator = TEMP
     THEN
-         ZF ← 1;
-         DEST ← SRC;
+         ZF := 1;
+         DEST := SRC;
     ELSE
-         ZF ← 0;
-         accumulator ← TEMP;
-         DEST ← TEMP;
+         ZF := 0;
+         accumulator := TEMP;
+         DEST := TEMP;
 FI;</pre>
 <h2>Flags Affected</h2>
 <p>The ZF flag is set if the values in the destination operand and register AL, AX, or EAX are equal; otherwise it is cleared. The CF, PF, AF, SF, and OF flags are set according to the results of the comparison operation.</p>

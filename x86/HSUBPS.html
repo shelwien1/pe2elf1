@@ -4,9 +4,9 @@
 <head>
 <meta charset="UTF-8">
 <link href="style.css" type="text/css" rel="stylesheet">
-<title>HSUBPS—Packed Single-FP Horizontal Subtract </title></head>
+<title>HSUBPS—Packed Single Precision Floating-Point Horizontal Subtract </title></head>
 <body>
-<h1>HSUBPS—Packed Single-FP Horizontal Subtract</h1>
+<h1>HSUBPS—Packed Single Precision Floating-Point Horizontal Subtract</h1>
 <table>
 <tr>
 <th>Opcode/Instruction</th>
@@ -16,122 +16,121 @@
 <th>Description</th></tr>
 <tr>
 <td>
-<p>F2 0F 7D /<em>r</em></p>
-<p>HSUBPS <em>xmm1,</em> <em>xmm2/m128</em></p></td>
+<p>F2 0F 7D /r</p>
+<p>HSUBPS xmm1, xmm2/m128</p></td>
 <td>RM</td>
 <td>V/V</td>
 <td>SSE3</td>
-<td>Horizontal subtract packed single-precision floating-point values from <em>xmm2/m128</em> to <em>xmm1</em>.</td></tr>
+<td>Horizontal subtract packed single precision floating-point values from xmm2/m128 to xmm1.</td></tr>
 <tr>
 <td>
-<p>VEX.NDS.128.F2.0F.WIG 7D /r</p>
+<p>VEX.128.F2.0F.WIG 7D /r</p>
 <p>VHSUBPS xmm1, xmm2, xmm3/m128</p></td>
 <td>RVM</td>
 <td>V/V</td>
 <td>AVX</td>
-<td>Horizontal subtract packed single-precision floating-point values from xmm2 and xmm3/mem.</td></tr>
+<td>Horizontal subtract packed single precision floating-point values from xmm2 and xmm3/mem.</td></tr>
 <tr>
-<td>VEX.NDS.256.F2.0F.WIG 7D /r VHSUBPS ymm1, ymm2, ymm3/m256</td>
+<td>VEX.256.F2.0F.WIG 7D /r VHSUBPS ymm1, ymm2, ymm3/m256</td>
 <td>RVM</td>
 <td>V/V</td>
 <td>AVX</td>
-<td>Horizontal subtract packed single-precision floating-point values from ymm2 and ymm3/mem.</td></tr></table>
+<td>Horizontal subtract packed single precision floating-point values from ymm2 and ymm3/mem.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
 <td>RM</td>
 <td>ModRM:reg (r, w)</td>
 <td>ModRM:r/m (r)</td>
-<td>NA</td>
-<td>NA</td></tr>
+<td>N/A</td>
+<td>N/A</td></tr>
 <tr>
 <td>RVM</td>
 <td>ModRM:reg (w)</td>
 <td>VEX.vvvv (r)</td>
 <td>ModRM:r/m (r)</td>
-<td>NA</td></tr></table>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
-<p>Subtracts the single-precision floating-point value in the second dword of the destination operand from the first dword of the destination operand and stores the result in the first dword of the destination operand.</p>
-<p>Subtracts the single-precision floating-point value in the fourth dword of the destination operand from the third dword of the destination operand and stores the result in the second dword of the destination operand.</p>
-<p>Subtracts the single-precision floating-point value in the second dword of the source operand from the first dword of the source operand and stores the result in the third dword of the destination operand.</p>
-<p>Subtracts the single-precision floating-point value in the fourth dword of the source operand from the third dword of the source operand and stores the result in the fourth dword of the destination operand.</p>
+<p>Subtracts the single precision floating-point value in the second dword of the destination operand from the first dword of the destination operand and stores the result in the first dword of the destination operand.</p>
+<p>Subtracts the single precision floating-point value in the fourth dword of the destination operand from the third dword of the destination operand and stores the result in the second dword of the destination operand.</p>
+<p>Subtracts the single precision floating-point value in the second dword of the source operand from the first dword of the source operand and stores the result in the third dword of the destination operand.</p>
+<p>Subtracts the single precision floating-point value in the fourth dword of the source operand from the third dword of the source operand and stores the result in the fourth dword of the destination operand.</p>
 <p>In 64-bit mode, use of the REX.R prefix permits this instruction to access additional registers (XMM8-XMM15).</p>
-<p>See Figure 3-22 for HSUBPS; see Figure 3-23 for VHSUBPS.</p>
-<svg width="558.09" viewBox="115.440000 332739.000000 372.060000 239.700000" height="359.55">
-<text y="332757.490207" x="231.2468" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="105.3559507">HSUBPS xmm1, xmm2/m128</text>
-<text y="332778.003776" x="434.40481814" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="24.0009">xmm2/</text>
-<text y="332782.804307" x="176.6646" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="28.9130842">[127:96]</text>
-<text y="332782.804307" x="246.9424" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="24.4649174">[95:64]</text>
-<text y="332782.804307" x="314.4451" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="24.4649174">[63:32]</text>
-<text y="332782.804307" x="384.1678" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="20.0167506">[31:0]</text>
-<text y="332787.604136" x="434.40481814" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="20.0087503">m128</text>
-<text y="332842.200134" x="434.40479832" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="21.7768166">xmm1</text>
-<text y="332842.200507" x="176.6646" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="28.9130842">[127:96]</text>
-<text y="332842.200507" x="246.9424" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="24.4649174">[95:64]</text>
-<text y="332842.200507" x="314.4451" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="24.4649174">[63:32]</text>
-<text y="332842.200507" x="384.1678" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="20.0167506">[31:0]</text>
-<text y="332901.051907" x="171.7344" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="40.008773">xmm2/m128</text>
-<text y="332901.051907" x="239.8121" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="40.008773">xmm2/m128</text>
-<text y="332905.671763" x="434.40481814" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="32.3052114">RESULT:</text>
-<text y="332905.852207" x="304.1747" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="46.481743">xmm1[95:64] -</text>
-<text y="332905.852207" x="373.6374" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="42.437955">xmm1[31:0] -</text>
-<text y="332910.652267" x="166.6440273" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="50.525531">[95:64] - xmm2/</text>
-<text y="332910.652267" x="236.6818008" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="46.481743">[31:0] - xmm2/</text>
-<text y="332915.272123" x="434.40481814" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="21.7768166">xmm1</text>
-<text y="332915.452567" x="304.3747075" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="46.081728">xmm1[127:96]</text>
-<text y="332915.452567" x="373.8272253" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="42.03794">xmm1[63:32]</text>
-<text y="332920.252627" x="169.5641368" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="44.474395">m128[127:96]</text>
-<text y="332920.252627" x="239.6019103" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="40.430607">m128[63:32]</text>
-<text y="332944.860784" x="177.21982082" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="28.9130842">[127:96]</text>
-<text y="332944.860784" x="246.95283571" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="24.4649174">[95:64]</text>
-<text y="332944.860784" x="309.95453161" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="24.4649174">[63:32]</text>
-<text y="332944.860784" x="388.67748361" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="20.0167506">[31:0]</text>
-<text y="332969.917004" x="456.4347" style="font-size:6.000100pt" lengthAdjust="spacingAndGlyphs" textLength="26.3464391">OM15996</text>
-<rect y="332739.723" x="120.792" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="216.009" width="361.139"></rect>
-<path style="stroke:black" d="M259.173000,332793.725000 L259.173000,332804.975000 L135.418000,332804.975000 L135.418000,332874.728000 L191.670000,332874.728000 L191.670000,332880.548000 "></path>
-<path style="stroke:black" d="M394.179000,332793.725000 L394.179000,332815.096000 L146.669000,332815.096000 L146.669000,332870.228000 L259.174000,332870.228000 L259.174000,332880.548000 "></path>
-<path style="stroke:black" d="M191.107000,332793.725000 L191.107000,332804.975000 "></path>
-<path style="stroke:black" d="M326.676000,332793.725000 L326.676000,332815.106000 "></path>
-<path style="stroke:black" d="M259.173000,332865.728000 L259.173000,332853.118000 "></path>
-<path style="stroke:black" d="M191.670000,332853.122000 L191.670000,332865.733000 L326.675000,332865.733000 L326.675000,332880.413000 "></path>
-<path style="stroke:black" d="M326.676000,332853.122000 L326.676000,332861.232000 L394.179000,332861.232000 L394.179000,332880.413000 "></path>
-<path style="stroke:black" d="M394.178000,332863.347000 L394.178000,332853.127000 "></path>
-<path style="stroke:black" d="M328.716000,332880.413000 L326.676000,332884.493000 L324.636000,332880.413000 L328.716000,332880.413000 "></path>
-<path style="stroke:black" d="M396.218000,332880.413000 L394.178000,332884.493000 L392.138000,332880.413000 L396.218000,332880.413000 "></path>
-<path style="stroke:black" d="M193.710000,332880.549000 L191.670000,332884.629000 L189.630000,332880.549000 L193.710000,332880.549000 "></path>
-<path style="stroke:black" d="M261.213000,332880.549000 L259.173000,332884.629000 L257.133000,332880.549000 L261.213000,332880.549000 "></path>
-<rect y="332739.723" x="120.792" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="216.009" width="361.139"></rect>
-<rect y="332766.724" x="360.427" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
-<rect y="332766.724" x="292.924" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
-<rect y="332826.121" x="360.427" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
-<rect y="332826.121" x="292.924" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
-<rect y="332766.724" x="225.422" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
-<rect y="332826.121" x="225.422" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
-<rect y="332766.724" x="156.794" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="68.628"></rect>
-<rect y="332826.121" x="156.794" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="68.628"></rect>
-<rect y="332884.492" x="360.427" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="47.1519999999" width="67.503"></rect>
-<rect y="332884.492" x="292.924" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="47.1519999999" width="67.503"></rect>
-<rect y="332884.492" x="225.422" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="47.1519999999" width="67.503"></rect>
-<rect y="332884.492" x="156.794" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="47.1519999999" width="68.628"></rect>
-<rect y="332766.724" x="360.427" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
-<rect y="332766.724" x="292.924" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
-<rect y="332826.121" x="360.427" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
-<rect y="332826.121" x="292.924" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
-<rect y="332766.724" x="225.422" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
-<rect y="332826.121" x="225.422" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
-<rect y="332766.724" x="156.794" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="68.628"></rect>
-<rect y="332826.121" x="156.794" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="68.628"></rect>
-<rect y="332884.492" x="360.427" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="47.1519999999" width="67.503"></rect>
-<rect y="332884.492" x="292.924" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="47.1519999999" width="67.503"></rect>
-<rect y="332884.492" x="225.422" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="47.1519999999" width="67.503"></rect>
-<rect y="332884.492" x="156.794" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="47.1519999999" width="68.628"></rect></svg>
-<h3>Figure 3-22.  HSUBPS—Packed Single-FP Horizontal Subtract</h3>
+<p>See Figure 3-18 for HSUBPS; see Figure 3-19 for VHSUBPS.</p>
+<svg width="541.7085" viewBox="121.314000 352539.723000 361.139000 216.009000" height="324.0135">
+<rect y="352539.723" x="121.314" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="216.009" width="361.139"></rect>
+<path style="stroke:black" d="M259.694000,352593.725000 L259.694000,352604.975000 L135.939000,352604.975000 L135.939000,352674.728000 L192.191000,352674.728000 L192.191000,352680.548000 "></path>
+<path style="stroke:black" d="M394.700000,352593.725000 L394.700000,352615.096000 L147.190000,352615.096000 L147.190000,352670.228000 L259.695000,352670.228000 L259.695000,352680.548000 "></path>
+<path style="stroke:black" d="M191.629000,352593.725000 L191.629000,352604.975000 "></path>
+<path style="stroke:black" d="M327.197000,352593.725000 L327.197000,352615.106000 "></path>
+<path style="stroke:black" d="M259.694000,352665.728000 L259.694000,352653.118000 "></path>
+<path style="stroke:black" d="M192.192000,352653.122000 L192.192000,352665.733000 L327.197000,352665.733000 L327.197000,352680.413000 "></path>
+<path style="stroke:black" d="M327.197000,352653.122000 L327.197000,352661.232000 L394.700000,352661.232000 L394.700000,352680.413000 "></path>
+<path style="stroke:black" d="M394.700000,352663.347000 L394.700000,352653.127000 "></path>
+<path style="stroke:black" d="M329.237000,352680.413000 L327.197000,352684.493000 L325.157000,352680.413000 L329.237000,352680.413000 "></path>
+<path style="stroke:black" d="M396.740000,352680.413000 L394.700000,352684.493000 L392.660000,352680.413000 L396.740000,352680.413000 "></path>
+<path style="stroke:black" d="M194.232000,352680.549000 L192.192000,352684.629000 L190.152000,352680.549000 L194.232000,352680.549000 "></path>
+<path style="stroke:black" d="M261.734000,352680.549000 L259.694000,352684.629000 L257.654000,352680.549000 L261.734000,352680.549000 "></path>
+<text y="352557.490207" x="231.7682" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="105.3559507">HSUBPS xmm1, xmm2/m128</text>
+<text y="352578.003776" x="434.92621814" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="24.0009">xmm2/</text>
+<text y="352582.804307" x="177.186" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="28.9130842">[127:96]</text>
+<text y="352582.804307" x="247.4638" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="24.4649174">[95:64]</text>
+<text y="352582.804307" x="314.9665" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="24.4649174">[63:32]</text>
+<text y="352582.804307" x="384.6892" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="20.0167506">[31:0]</text>
+<text y="352587.604136" x="434.92621814" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="20.0087503">m128</text>
+<text y="352642.200134" x="434.92699835" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="21.7768166">xmm1</text>
+<text y="352642.200507" x="177.186" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="28.9130842">[127:96]</text>
+<text y="352642.200507" x="247.4638" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="24.4649174">[95:64]</text>
+<text y="352642.200507" x="314.9665" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="24.4649174">[63:32]</text>
+<text y="352642.200507" x="384.6892" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="20.0167506">[31:0]</text>
+<text y="352701.051907" x="172.2558" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="40.008773">xmm2/m128</text>
+<text y="352701.051907" x="240.3335" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="40.008773">xmm2/m128</text>
+<text y="352705.671763" x="434.92621814" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="32.3052114">RESULT:</text>
+<text y="352705.852207" x="304.6961" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="46.481743">xmm1[95:64] -</text>
+<text y="352705.852207" x="374.1588" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="42.437955">xmm1[31:0] -</text>
+<text y="352710.652267" x="167.1654273" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="50.525531">[95:64] - xmm2/</text>
+<text y="352710.652267" x="237.2032008" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="46.481743">[31:0] - xmm2/</text>
+<text y="352715.272123" x="434.92621814" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="21.7768166">xmm1</text>
+<text y="352715.452567" x="304.8961075" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="46.081728">xmm1[127:96]</text>
+<text y="352715.452567" x="374.3486253" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="42.03794">xmm1[63:32]</text>
+<text y="352720.252627" x="170.0855368" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="44.474395">m128[127:96]</text>
+<text y="352720.252627" x="240.1233103" style="font-size:7.273000pt" lengthAdjust="spacingAndGlyphs" textLength="40.430607">m128[63:32]</text>
+<text y="352744.860784" x="177.74122082" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="28.9130842">[127:96]</text>
+<text y="352744.860784" x="247.47423571" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="24.4649174">[95:64]</text>
+<text y="352744.860784" x="310.47673164" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="24.4649174">[63:32]</text>
+<text y="352744.860784" x="389.19968364" style="font-size:8.000300pt" lengthAdjust="spacingAndGlyphs" textLength="20.0167506">[31:0]</text>
+<rect y="352566.724" x="360.948" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
+<rect y="352566.724" x="293.446" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
+<rect y="352626.121" x="360.948" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
+<rect y="352626.121" x="293.446" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
+<rect y="352566.724" x="225.943" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
+<rect y="352626.121" x="225.943" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
+<rect y="352566.724" x="157.315" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="68.628"></rect>
+<rect y="352626.121" x="157.315" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="68.628"></rect>
+<rect y="352684.492" x="360.948" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="47.1519999999" width="67.503"></rect>
+<rect y="352684.492" x="293.446" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="47.1519999999" width="67.503"></rect>
+<rect y="352684.492" x="225.943" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="47.1519999999" width="67.503"></rect>
+<rect y="352684.492" x="157.315" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="47.1519999999" width="68.628"></rect>
+<rect y="352566.724" x="360.948" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
+<rect y="352566.724" x="293.446" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
+<rect y="352626.121" x="360.948" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
+<rect y="352626.121" x="293.446" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
+<rect y="352566.724" x="225.943" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
+<rect y="352626.121" x="225.943" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="67.503"></rect>
+<rect y="352566.724" x="157.315" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="68.628"></rect>
+<rect y="352626.121" x="157.315" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="27.001" width="68.628"></rect>
+<rect y="352684.492" x="360.948" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="47.1519999999" width="67.503"></rect>
+<rect y="352684.492" x="293.446" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="47.1519999999" width="67.503"></rect>
+<rect y="352684.492" x="225.943" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="47.1519999999" width="67.503"></rect>
+<rect y="352684.492" x="157.315" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="47.1519999999" width="68.628"></rect></svg>
+<p>OM15996</p>
+<h3>Figure 3-18.  HSUBPS—Packed Single Precision Floating-Point Horizontal Subtract</h3>
 <p>X7</p>
 <p>X6</p>
 <p>X5</p>
@@ -156,42 +155,41 @@
 <p>X6-X7</p>
 <p>X4-X5</p>
 <p>Y2-Y3</p>
+<p>Y0-Y1</p>
 <p>X2-X3</p>
 <p>X0-X1</p>
-<h3>Figure 3-23.  VHSUBPS operation</h3>
-<p>128-bit Legacy SSE version: The second source can be an XMM register or an 128-bit memory location. The desti-nation is not distinct from the first source XMM register and the upper bits (VLMAX-1:128) of the corresponding YMM register destination are unmodified.</p>
-<p>VEX.128 encoded version: the first source operand is an XMM register or 128-bit memory location. The destination operand is an XMM register. The upper bits (VLMAX-1:128) of the corresponding YMM register destination are zeroed.</p>
+<h3>Figure 3-19.  VHSUBPS Operation</h3>
+<p>128-bit Legacy SSE version: The second source can be an XMM register or an 128-bit memory location. The desti-nation is not distinct from the first source XMM register and the upper bits (MAXVL-1:128) of the corresponding YMM register destination are unmodified.</p>
+<p>VEX.128 encoded version: the first source operand is an XMM register or 128-bit memory location. The destination operand is an XMM register. The upper bits (MAXVL-1:128) of the corresponding YMM register destination are zeroed.</p>
 <p>VEX.256 encoded version: The first source operand is a YMM register. The second source operand can be a YMM register or a 256-bit memory location. The destination operand is a YMM register.</p>
 <h2>Operation</h2>
-<p><strong>HSUBPS (128-bit Legacy SSE version)</strong></p>
-<pre>DEST[31:0]  SRC1[31:0] - SRC1[63:32]
-DEST[63:32]  SRC1[95:64] - SRC1[127:96]
-DEST[95:64]  SRC2[31:0] - SRC2[63:32]
-DEST[127:96]  SRC2[95:64] - SRC2[127:96]
-DEST[VLMAX-1:128] (Unmodified)</pre>
-<p><strong>VHSUBPS (VEX.128 encoded version)</strong></p>
-<pre>DEST[31:0]  SRC1[31:0] - SRC1[63:32]
-DEST[63:32]  SRC1[95:64] - SRC1[127:96]
-DEST[95:64]  SRC2[31:0] - SRC2[63:32]
-DEST[127:96]  SRC2[95:64] - SRC2[127:96]
-DEST[VLMAX-1:128]  0</pre>
-<p><strong>VHSUBPS (VEX.256 encoded version)</strong></p>
-<pre>DEST[31:0]  SRC1[31:0] - SRC1[63:32]
-DEST[63:32]  SRC1[95:64] - SRC1[127:96]
-DEST[95:64]  SRC2[31:0] - SRC2[63:32]
-DEST[127:96]  SRC2[95:64] - SRC2[127:96]
-DEST[159:128]  SRC1[159:128] - SRC1[191:160]
-DEST[191:160]  SRC1[223:192] - SRC1[255:224]
-DEST[223:192]  SRC2[159:128] - SRC2[191:160]
-DEST[255:224]  SRC2[223:192] - SRC2[255:224]</pre>
+<p><strong>HSUBPS (128-bit Legacy SSE Version)</strong></p>
+<pre>DEST[31:0] := SRC1[31:0] - SRC1[63:32]
+DEST[63:32] := SRC1[95:64] - SRC1[127:96]
+DEST[95:64] := SRC2[31:0] - SRC2[63:32]
+DEST[127:96] := SRC2[95:64] - SRC2[127:96]
+DEST[MAXVL-1:128] (Unmodified)</pre>
+<p><strong>VHSUBPS (VEX.128 Encoded Version)</strong></p>
+<pre>DEST[31:0] := SRC1[31:0] - SRC1[63:32]
+DEST[63:32] := SRC1[95:64] - SRC1[127:96]
+DEST[95:64] := SRC2[31:0] - SRC2[63:32]
+DEST[127:96] := SRC2[95:64] - SRC2[127:96]
+DEST[MAXVL-1:128] := 0</pre>
+<p><strong>VHSUBPS (VEX.256 Encoded Version)</strong></p>
+<pre>DEST[31:0] := SRC1[31:0] - SRC1[63:32]
+DEST[63:32] := SRC1[95:64] - SRC1[127:96]
+DEST[95:64] := SRC2[31:0] - SRC2[63:32]
+DEST[127:96] := SRC2[95:64] - SRC2[127:96]
+DEST[159:128] := SRC1[159:128] - SRC1[191:160]
+DEST[191:160] := SRC1[223:192] - SRC1[255:224]
+DEST[223:192] := SRC2[159:128] - SRC2[191:160]
+DEST[255:224] := SRC2[223:192] - SRC2[255:224]</pre>
 <h2>Intel C/C++ Compiler Intrinsic Equivalent</h2>
-<p>HSUBPS:</p>
-<p>__m128 _mm_hsub_ps(__m128 a, __m128 b);</p>
-<p>VHSUBPS:</p>
-<p>__m256 _mm256_hsub_ps (__m256 a, __m256 b);</p>
+<p>HSUBPS __m128 _mm_hsub_ps(__m128 a, __m128 b);</p>
+<p>VHSUBPS __m256 _mm256_hsub_ps (__m256 a, __m256 b);</p>
 <h2>Exceptions</h2>
 <p>When the source operand is a memory operand, the operand must be aligned on a 16-byte boundary or a general-protection exception (#GP) will be generated.</p>
 <h2>Numeric Exceptions</h2>
-<p>Overflow, Underflow, Invalid, Precision, Denormal</p>
+<p>Overflow, Underflow, Invalid, Precision, Denormal.</p>
 <h2>Other Exceptions</h2>
-<p>See Exceptions Type 2.</p></body></html>
+<p>See Table 2-19, “Type 2 Class Exception Conditions.”</p></body></html>

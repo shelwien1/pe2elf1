@@ -24,31 +24,31 @@
 <tr>
 <td>61</td>
 <td>POPA</td>
-<td>NP</td>
+<td>ZO</td>
 <td>Invalid</td>
 <td>Valid</td>
 <td>Pop DI, SI, BP, BX, DX, CX, and AX.</td></tr>
 <tr>
 <td>61</td>
 <td>POPAD</td>
-<td>NP</td>
+<td>ZO</td>
 <td>Invalid</td>
 <td>Valid</td>
 <td>Pop EDI, ESI, EBP, EBX, EDX, ECX, and EAX.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
-<td>NP</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>ZO</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Pops doublewords (POPAD) or words (POPA) from the stack into the general-purpose registers. The registers are loaded in the following order: EDI, ESI, EBP, EBX, EDX, ECX, and EAX (if the operand-size attribute is 32) and DI, SI, BP, BX, DX, CX, and AX (if the operand-size attribute is 16). (These instructions reverse the operation of the PUSHA/PUSHAD instructions.) The value on the stack for the ESP or SP register is ignored. Instead, the ESP or SP register is incremented after each register is loaded.</p>
 <p>The POPA (pop all) and POPAD (pop all double) mnemonics reference the same opcode. The POPA instruction is intended for use when the operand-size attribute is 16 and the POPAD instruction for when the operand-size attri-bute is 32. Some assemblers may force the operand size to 16 when POPA is used and to 32 when POPAD is used (using the operand-size override prefix [66H] if necessary). Others may treat these mnemonics as synonyms (POPA/POPAD) and use the current setting of the operand-size attribute to determine the size of values to be popped from the stack, regardless of the mnemonic used. (The D flag in the current code segment’s segment descriptor determines the operand-size attribute.)</p>
@@ -60,23 +60,23 @@
 ELSE
     IF OperandSize = 32 (* Instruction = POPAD *)
     THEN
-         EDI ← Pop();
-         ESI ← Pop();
-         EBP ← Pop();
+         EDI := Pop();
+         ESI := Pop();
+         EBP := Pop();
          Increment ESP by 4; (* Skip next 4 bytes of stack *)
-         EBX ← Pop();
-         EDX ← Pop();
-         ECX ← Pop();
-         EAX ← Pop();
+         EBX := Pop();
+         EDX := Pop();
+         ECX := Pop();
+         EAX := Pop();
     ELSE (* OperandSize = 16, instruction = POPA *)
-         DI ← Pop();
-         SI ← Pop();
-         BP ← Pop();
+         DI := Pop();
+         SI := Pop();
+         BP := Pop();
          Increment ESP by 2; (* Skip next 2 bytes of stack *)
-         BX ← Pop();
-         DX ← Pop();
-         CX ← Pop();
-         AX ← Pop();
+         BX := Pop();
+         DX := Pop();
+         CX := Pop();
+         AX := Pop();
     FI;
 FI;</pre>
 <h2>Flags Affected</h2>

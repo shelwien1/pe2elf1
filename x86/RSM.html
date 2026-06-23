@@ -4,9 +4,9 @@
 <head>
 <meta charset="UTF-8">
 <link href="style.css" type="text/css" rel="stylesheet">
-<title>RSM—Resume from System Management Mode </title></head>
+<title>RSM—Resume From System Management Mode </title></head>
 <body>
-<h1>RSM—Resume from System Management Mode</h1>
+<h1>RSM—Resume From System Management Mode</h1>
 <p><strong>Opcode*</strong></p>
 <p><strong>Instruction</strong></p>
 <p><strong>Op/</strong></p>
@@ -24,36 +24,36 @@
 <tr>
 <td>0F AA</td>
 <td>RSM</td>
-<td>NP</td>
+<td>ZO</td>
 <td>Valid</td>
 <td>Valid</td>
 <td>Resume operation of interrupted program.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
-<td>NP</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>ZO</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
-<p>Returns program control from system management mode (SMM) to the application program or operating-system procedure that was interrupted when the processor received an SMM interrupt. The processor’s state is restored from the dump created upon entering SMM. If the processor detects invalid state information during state restora-tion, it enters the shutdown state. The following invalid information can cause a shutdown:</p>
+<p>Returns program control from system management mode (SMM) to the application program or operating-system procedure that was interrupted when the processor received an SMM interrupt. The processor’s state is restored from the dump created upon entering SMM. If the processor detects invalid state information during state resto-ration, it enters the shutdown state. The following invalid information can cause a shutdown:</p>
 <p>The contents of the model-specific registers are not affected by a return from SMM.</p>
 <p>The SMM state map used by RSM supports resuming processor context for non-64-bit modes and 64-bit mode.</p>
-<p>See Chapter 34, “System Management Mode,” in the <em>Intel® 64 and IA-32 Architectures Software Developer’s Manual, Volume 3C</em>, for more information about SMM and the behavior of the RSM instruction.</p>
+<p>See Chapter 34, “System Management Mode,” in the Intel<sup>®</sup> 64 and IA-32 Architectures Software Developer’s Manual, Volume 3C, for more information about SMM and the behavior of the RSM instruction.</p>
 <h2>Operation</h2>
 <pre>ReturnFromSMM;
 IF (IA-32e mode supported) or (CPUID DisplayFamily_DisplayModel = 06H_0CH )
     THEN
-         ProcessorState ← Restore(SMMDump(IA-32e SMM STATE MAP));
+         ProcessorState := Restore(SMMDump(IA-32e SMM STATE MAP));
     Else
-         ProcessorState ← Restore(SMMDump(Non-32-Bit-Mode SMM STATE MAP));
+         ProcessorState := Restore(SMMDump(Non-32-Bit-Mode SMM STATE MAP));
 FI</pre>
 <h2>Flags Affected</h2>
 <p>All.</p>
@@ -63,11 +63,27 @@ FI</pre>
 <td>#UD</td>
 <td>
 <p>If an attempt is made to execute this instruction when the processor is not in SMM.</p>
-<p>If the LOCK prefix is used.</p></td></tr></table>
+<p>If the LOCK prefix is used.</p></td></tr>
+<tr>
+<td>#GP(0)</td>
+<td>If CPL &gt; 0 and IA32_CORE_CAPABILITIES.RSM_IN_CPL0_ONLY[bit 3] = 1.</td></tr></table>
 <h2>Real-Address Mode Exceptions</h2>
-<p>Same exceptions as in protected mode.</p>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>
+<p>If an attempt is made to execute this instruction when the processor is not in SMM.</p>
+<p>If the LOCK prefix is used.</p></td></tr></table>
 <h2>Virtual-8086 Mode Exceptions</h2>
-<p>Same exceptions as in protected mode.</p>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>
+<p>If an attempt is made to execute this instruction when the processor is not in SMM.</p>
+<p>If the LOCK prefix is used.</p></td></tr>
+<tr>
+<td>#GP(0)</td>
+<td>If IA32_CORE_CAPABILITIES.RSM_IN_CPL0_ONLY[bit 3] = 1.</td></tr></table>
 <h2>Compatibility Mode Exceptions</h2>
 <p>Same exceptions as in protected mode.</p>
 <h2>64-Bit Mode Exceptions</h2>

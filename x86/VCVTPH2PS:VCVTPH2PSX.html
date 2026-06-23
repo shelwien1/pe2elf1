@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>VCVTPH2PS/VCVTPH2PSX—Convert Packed FP16 Values to Single Precision Floating-Point Values </title></head>
+<body>
+<h1>VCVTPH2PS/VCVTPH2PSX—Convert Packed FP16 Values to Single Precision Floating-Point Values</h1>
+<table>
+<tr>
+<th>Opcode/Instruction</th>
+<th>Op /En</th>
+<th>64/32 Bit Mode Support</th>
+<th>CPUID Feature Flag</th>
+<th>Description</th></tr>
+<tr>
+<td>VEX.128.66.0F38.W0 13 /r VCVTPH2PS xmm1, xmm2/m64</td>
+<td>A</td>
+<td>V/V</td>
+<td>F16C</td>
+<td>Convert four packed FP16 values in xmm2/m64 to packed single precision floating-point value in xmm1.</td></tr>
+<tr>
+<td>VEX.256.66.0F38.W0 13 /r VCVTPH2PS ymm1, xmm2/m128</td>
+<td>A</td>
+<td>V/V</td>
+<td>F16C</td>
+<td>Convert eight packed FP16 values in xmm2/m128 to packed single precision floating-point value in ymm1.</td></tr>
+<tr>
+<td>EVEX.128.66.0F38.W0 13 /r VCVTPH2PS xmm1 {k1}{z}, xmm2/m64</td>
+<td>B</td>
+<td>V/V</td>
+<td>(AVX512VL AND AVX512F) OR AVX10.1</td>
+<td>Convert four packed FP16 values in xmm2/m64 to packed single precision floating-point values in xmm1 subject to writemask k1.</td></tr>
+<tr>
+<td>EVEX.256.66.0F38.W0 13 /r VCVTPH2PS ymm1 {k1}{z}, xmm2/m128</td>
+<td>B</td>
+<td>V/V</td>
+<td>(AVX512VL AND AVX512F) OR AVX10.1</td>
+<td>Convert eight packed FP16 values in xmm2/m128 to packed single precision floating-point values in ymm1 subject to writemask k1.</td></tr>
+<tr>
+<td>EVEX.512.66.0F38.W0 13 /r VCVTPH2PS zmm1 {k1}{z}, ymm2/m256 {sae}</td>
+<td>B</td>
+<td>V/V</td>
+<td>AVX512F OR AVX10.1</td>
+<td>Convert sixteen packed FP16 values in ymm2/m256 to packed single precision floating-point values in zmm1 subject to writemask k1.</td></tr>
+<tr>
+<td>EVEX.128.66.MAP6.W0  13  /r VCVTPH2PSX  xmm1{k1}{z}, xmm2/m64/m16bcst</td>
+<td>C</td>
+<td>V/V</td>
+<td>(AVX512_FP16 AND AVX512VL) OR AVX10.1</td>
+<td>Convert four packed FP16 values in xmm2/m64/m16bcst to four packed single precision floating-point values, and store result in xmm1 subject to writemask k1.</td></tr>
+<tr>
+<td>EVEX.256.66.MAP6.W0  13  /r VCVTPH2PSX  ymm1{k1}{z}, xmm2/m128/m16bcst</td>
+<td>C</td>
+<td>V/V</td>
+<td>(AVX512_FP16 AND AVX512VL) OR AVX10.1</td>
+<td>Convert eight packed FP16 values in xmm2/m128/m16bcst to eight packed single precision floating-point values, and store result in ymm1 subject to writemask k1.</td></tr>
+<tr>
+<td>EVEX.512.66.MAP6.W0  13  /r VCVTPH2PSX  zmm1{k1}{z}, ymm2/m256/m16bcst  {sae}</td>
+<td>C</td>
+<td>V/V</td>
+<td>AVX512_FP16 OR AVX10.1</td>
+<td>Convert sixteen packed FP16 values in ymm2/m256/m16bcst to sixteen packed single precision floating-point values, and store result in zmm1 subject to writemask k1.</td></tr></table>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Tuple Type</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>A</td>
+<td>N/A</td>
+<td>ModRM:reg (w)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td>
+<td>N/A</td></tr>
+<tr>
+<td>B</td>
+<td>Half Mem</td>
+<td>ModRM:reg (w)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td>
+<td>N/A</td></tr>
+<tr>
+<td>C</td>
+<td>Half</td>
+<td>ModRM:reg (w)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
+<p><strong>Description</strong></p>
+<p>This instruction converts packed half precision (16-bits) floating-point values in the low-order bits of the source operand (the second operand) to packed single precision floating-point values and writes the converted values into the destination operand (the first operand).</p>
+<p>If case of a denormal operand, the correct normal result is returned. MXCSR.DAZ is ignored and is treated as if it 0. No denormal exception is reported on MXCSR.</p>
+<p>VEX.128 version: The source operand is a XMM register or 64-bit memory location. The destination operand is a XMM register. The upper bits (MAXVL-1:128) of the corresponding destination register are zeroed.</p>
+<p>VEX.256 version: The source operand is a XMM register or 128-bit memory location. The destination operand is a YMM register. Bits (MAXVL-1:256) of the corresponding destination register are zeroed.</p>
+<p>EVEX encoded versions: The source operand is a YMM/XMM/XMM (low 64-bits) register or a 256/128/64-bit memory location. The destination operand is a ZMM/YMM/XMM register conditionally updated with writemask k1.</p>
+<p>The diagram below illustrates how data is converted from four packed half precision (in 64 bits) to four single preci-sion (in 128 bits) floating-point values.</p>
+<p>Note: VEX.vvvv and EVEX.vvvv are reserved (must be 1111b).</p>
+<svg width="594.00003" viewBox="103.980000 42916.020010 396.000020 127.800000" height="191.7">
+<text y="42938.0130778" x="194.81971306" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="41.63708988">VCVTPH2PS xmm1, xmm2/mem64,  imm8</text>
+<text y="42947.373554" x="115.20078538" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="68.42815176">127                              96</text>
+<text y="42947.373554" x="194.82030104" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="68.01152674">95                                64</text>
+<text y="42947.373554" x="274.4398167" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="33.12737338">63           48</text>
+<text y="42947.373554" x="314.2198156" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="33.18755998">47           32</text>
+<text y="42947.373554" x="354.0600011" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="33.12737338">31           16</text>
+<text y="42947.373554" x="393.84" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="32.77093496">15             0</text>
+<text y="42956.73327" x="443.57895574" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="41.8764988">xmm2/mem64</text>
+<text y="42956.733554" x="285.6" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="12.83713304">VH3</text>
+<text y="42956.733554" x="325.44" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="12.83713304">VH2</text>
+<text y="42956.733554" x="365.22" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="12.83713304">VH1</text>
+<text y="42956.733554" x="405.0" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="12.89731964">VH0</text>
+<text y="42989.433554" x="359.82" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="21.7708307">convert</text>
+<text y="42989.433554" x="399.66" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="21.71331906">convert</text>
+<text y="42998.793554" x="140.94" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="21.71331906">convert</text>
+<text y="42998.793554" x="220.5" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="21.76815574">convert</text>
+<text y="43022.1934579" x="115.20079064" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="68.42815176">127                              96</text>
+<text y="43022.1934579" x="194.8203063" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="68.01152674">95                                64</text>
+<text y="43022.1934579" x="274.43982196" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="68.01152674">63                                32</text>
+<text y="43022.1934579" x="354.05933762" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="67.59490172">31                                  0</text>
+<text y="43031.553554" x="146.34" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="12.83847052">VS3</text>
+<text y="43031.553554" x="225.9" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="12.83847052">VS2</text>
+<text y="43031.553554" x="305.52" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="12.83847052">VS1</text>
+<text y="43031.553554" x="385.14" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="12.83847052">VS0</text>
+<text y="43031.5535787" x="443.57895574" style="font-size:6.687400pt" lengthAdjust="spacingAndGlyphs" textLength="17.8185773">xmm1</text>
+<rect y="42992.76" x="218.16" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.3" width="28.32"></rect>
+<rect y="42992.76" x="138.54" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.3" width="28.32"></rect>
+<rect y="42983.4" x="397.26" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.36" width="28.32"></rect>
+<rect y="42983.4" x="357.42" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.36" width="28.38"></rect>
+<rect y="42950.6423299" x="351.7065992" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.359881956" width="39.7784346"></rect>
+<rect y="42950.6423299" x="311.9281646" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.359881956" width="39.7784346"></rect>
+<rect y="42950.64" x="351.72" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.36" width="39.78"></rect>
+<rect y="42950.64" x="311.94" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.36" width="39.78"></rect>
+<rect y="42950.6423299" x="391.4850338" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.359881956" width="39.8384182"></rect>
+<rect y="42950.6423299" x="272.0897464" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.359881956" width="39.8384182"></rect>
+<rect y="42950.64" x="391.5" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.36" width="39.84"></rect>
+<rect y="42950.64" x="272.1" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.36" width="39.84"></rect>
+<rect y="42950.6423299" x="192.5328772" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.359881956" width="79.5568692"></rect>
+<rect y="43025.4621152" x="192.5328772" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.359978645" width="79.5568692"></rect>
+<rect y="42950.64" x="192.54" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.36" width="79.56"></rect>
+<rect y="43025.46" x="192.54" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.36" width="79.56"></rect>
+<rect y="42950.6423299" x="112.9160244" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.359881956" width="79.6168528"></rect>
+<rect y="43025.4621152" x="351.7065992" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.359978645" width="79.6168528"></rect>
+<rect y="43025.4621152" x="272.0897464" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.359978645" width="79.6168528"></rect>
+<rect y="43025.4621152" x="112.9160244" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.359978645" width="79.6168528"></rect>
+<rect y="43025.46" x="351.72" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.36" width="79.62"></rect>
+<rect y="43025.46" x="272.1" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.36" width="79.62"></rect>
+<rect y="42950.64" x="112.92" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.36" width="79.62"></rect>
+<rect y="43025.46" x="112.92" style="fill:rgba(0,0,0,0);stroke:rgb(0,0,0);stroke-width:1pt;" height="9.36" width="79.62"></rect>
+<path style="stroke:black" d="M292.008438,42960.002212 L292.008438,42978.722169 L152.693425,42978.722169 L152.693425,43025.461632 "></path>
+<path style="stroke:black" d="M331.786873,42960.002212 L331.786873,42988.082631 L232.310278,42988.082631 L232.310278,43025.461632 "></path>
+<path style="stroke:black" d="M371.625291,42960.002212 L371.625291,42997.442126 L311.927130,42997.442126 L311.927130,43025.461632 "></path>
+<path style="stroke:black" d="M411.403726,42960.002212 L411.403726,43006.741674 L391.484000,43006.741674 L391.484000,43025.461632 "></path></svg>
+<h3>Figure 5-6.  VCVTPH2PS (128-bit Version)</h3>
+<p>The VCVTPH2PSX instruction is a new form of the PH to PS conversion instruction, encoded in map 6. The previous version of the instruction, VCVTPH2PS, that is present in AVX512F (encoded in map 2, 0F38) does not support embedded broadcasting. The VCVTPH2PSX instruction has the embedded broadcasting option available.</p>
+<p>The instructions associated with AVX512_FP16 always handle FP16 denormal number inputs; denormal inputs are not treated as zero.</p>
+<p><strong>Operation</strong></p>
+<p>vCvt_h2s(SRC1[15:0])</p>
+<p>{</p>
+<p>RETURN Cvt_Half_Precision_To_Single_Precision(SRC1[15:0]);</p>
+<p>}</p>
+<p><strong>VCVTPH2PS (EVEX Encoded Versions)</strong></p>
+<p>(KL, VL) = (4, 128), (8, 256), (16, 512)</p>
+<p>FOR j := 0 TO KL-1</p>
+<p>i := j * 32</p>
+<p>k := j * 16</p>
+<p>IF k1[j] OR *no writemask*</p>
+<p>THEN DEST[i+31:i] :=</p>
+<p>vCvt_h2s(SRC[k+15:k])</p>
+<p>ELSE</p>
+<p>IF *merging-masking*</p>
+<p>; merging-masking</p>
+<p>THEN *DEST[i+31:i] remains unchanged*</p>
+<p>ELSE</p>
+<p>; zeroing-masking</p>
+<p>DEST[i+31:i] := 0</p>
+<p>FI</p>
+<p>FI;</p>
+<p>ENDFOR</p>
+<p>DEST[MAXVL-1:VL] := 0</p>
+<p><strong>VCVTPH2PS (VEX.256 Encoded Version)</strong></p>
+<p>DEST[31:0] := vCvt_h2s(SRC1[15:0]);</p>
+<p>DEST[63:32] := vCvt_h2s(SRC1[31:16]);</p>
+<p>DEST[95:64] := vCvt_h2s(SRC1[47:32]);</p>
+<p>DEST[127:96] := vCvt_h2s(SRC1[63:48]);</p>
+<p>DEST[159:128] := vCvt_h2s(SRC1[79:64]);</p>
+<p>DEST[191:160] := vCvt_h2s(SRC1[95:80]);</p>
+<p>DEST[223:192] := vCvt_h2s(SRC1[111:96]); DEST[255:224] := vCvt_h2s(SRC1[127:112]);</p>
+<p>DEST[MAXVL-1:256] := 0</p>
+<p><strong>VCVTPH2PS (VEX.128 Encoded Version)</strong></p>
+<p>DEST[31:0] := vCvt_h2s(SRC1[15:0]);</p>
+<p>DEST[63:32] := vCvt_h2s(SRC1[31:16]);</p>
+<p>DEST[95:64] := vCvt_h2s(SRC1[47:32]); DEST[127:96] := vCvt_h2s(SRC1[63:48]);</p>
+<p>DEST[MAXVL-1:128] := 0</p>
+<p><strong>VCVTPH2PSX DEST, SRC</strong></p>
+<p>VL = 128, 256, or 512</p>
+<p>KL := VL/32</p>
+<p>FOR j := 0 TO KL-1:</p>
+<p>IF k1[j] OR *no writemask*:</p>
+<p>IF *SRC is memory* and EVEX.b = 1:</p>
+<p>tsrc := SRC.fp16[0]</p>
+<p>ELSE</p>
+<p>tsrc := SRC.fp16[j]</p>
+<p>DEST.fp32[j] := Convert_fp16_to_fp32(tsrc)</p>
+<p>ELSE IF *zeroing*:</p>
+<p>DEST.fp32[j] := 0</p>
+<p>// else dest.fp32[j] remains unchanged</p>
+<p>DEST[MAXVL-1:VL] := 0</p>
+<p><strong>Flags Affected</strong></p>
+<p>None.</p>
+<p><strong>Intel C/C++ Compiler Intrinsic Equivalent</strong></p>
+<p>VCVTPH2PS __m512 _mm512_cvtph_ps( __m256i a);</p>
+<p>VCVTPH2PS __m512 _mm512_mask_cvtph_ps(__m512 s, __mmask16 k, __m256i a);</p>
+<p>VCVTPH2PS __m512 _mm512_maskz_cvtph_ps(__mmask16 k, __m256i a);</p>
+<p>VCVTPH2PS __m512 _mm512_cvt_roundph_ps( __m256i a, int sae);</p>
+<p>VCVTPH2PS __m512 _mm512_mask_cvt_roundph_ps(__m512 s, __mmask16 k, __m256i a, int sae);</p>
+<p>VCVTPH2PS __m512 _mm512_maskz_cvt_roundph_ps( __mmask16 k, __m256i a, int sae);</p>
+<p>VCVTPH2PS __m256 _mm256_mask_cvtph_ps(__m256 s, __mmask8 k, __m128i a);</p>
+<p>VCVTPH2PS __m256 _mm256_maskz_cvtph_ps(__mmask8 k, __m128i a);</p>
+<p>VCVTPH2PS __m128 _mm_mask_cvtph_ps(__m128 s, __mmask8 k, __m128i a);</p>
+<p>VCVTPH2PS __m128 _mm_maskz_cvtph_ps(__mmask8 k, __m128i a);</p>
+<p>VCVTPH2PS __m128 _mm_cvtph_ps ( __m128i m1);</p>
+<p>VCVTPH2PS __m256 _mm256_cvtph_ps ( __m128i m1)</p>
+<p>VCVTPH2PSX __m512 _mm512_cvtx_roundph_ps (__m256h a, int sae);</p>
+<p>VCVTPH2PSX __m512 _mm512_mask_cvtx_roundph_ps (__m512 src, __mmask16 k, __m256h a, int sae);</p>
+<p>VCVTPH2PSX __m512 _mm512_maskz_cvtx_roundph_ps (__mmask16 k, __m256h a, int sae);</p>
+<p>VCVTPH2PSX __m128 _mm_cvtxph_ps (__m128h a);</p>
+<p>VCVTPH2PSX __m128 _mm_mask_cvtxph_ps (__m128 src, __mmask8 k, __m128h a);</p>
+<p>VCVTPH2PSX __m128 _mm_maskz_cvtxph_ps (__mmask8 k, __m128h a);</p>
+<p>VCVTPH2PSX __m256 _mm256_cvtxph_ps (__m128h a);</p>
+<p>VCVTPH2PSX __m256 _mm256_mask_cvtxph_ps (__m256 src, __mmask8 k, __m128h a);</p>
+<p>VCVTPH2PSX __m256 _mm256_maskz_cvtxph_ps (__mmask8 k, __m128h a);</p>
+<p>VCVTPH2PSX __m512 _mm512_cvtxph_ps (__m256h a);</p>
+<p>VCVTPH2PSX __m512 _mm512_mask_cvtxph_ps (__m512 src, __mmask16 k, __m256h a);</p>
+<p>VCVTPH2PSX __m512 _mm512_maskz_cvtxph_ps (__mmask16 k, __m256h a);</p>
+<p><strong>SIMD Floating-Point Exceptions</strong></p>
+<table class="exception-table">
+<tr>
+<td>VEX-encoded instructions: Invalid.</td></tr>
+<tr>
+<td>EVEX-encoded instructions: Invalid.</td></tr>
+<tr>
+<td>EVEX-encoded instructions with broadcast (VCVTPH2PSX): Invalid, Denormal.</td></tr></table>
+<p><strong>Other Exceptions</strong></p>
+<table class="exception-table">
+<tr>
+<td>VEX-encoded instructions, see Table 2-26, “Type 11 Class Exception Conditions” (do not report #AC).</td></tr>
+<tr>
+<td>EVEX-encoded instructions, see Table 2-62, “Type E11 Class Exception Conditions.”</td></tr>
+<tr>
+<td>EVEX-encoded instructions with broadcast (VCVTPH2PSX), see Table 2-46, “Type E2 Class Exception Conditions.”</td></tr></table>
+<p>Additionally:</p>
+<table class="exception-table">
+<tr>
+<td>#UD</td>
+<td>If VEX.W=1.</td></tr>
+<tr>
+<td>#UD</td>
+<td>If VEX.vvvv != 1111B or EVEX.vvvv != 1111B.</td></tr></table></body></html>

@@ -4,9 +4,9 @@
 <head>
 <meta charset="UTF-8">
 <link href="style.css" type="text/css" rel="stylesheet">
-<title>DAA—Decimal Adjust AL after Addition </title></head>
+<title>DAA—Decimal Adjust AL After Addition </title></head>
 <body>
-<h1>DAA—Decimal Adjust AL after Addition</h1>
+<h1>DAA—Decimal Adjust AL After Addition</h1>
 <p><strong>Opcode</strong></p>
 <p><strong>Instruction</strong></p>
 <p><strong>Op/</strong></p>
@@ -24,24 +24,24 @@
 <tr>
 <td>27</td>
 <td>DAA</td>
-<td>NP</td>
+<td>ZO</td>
 <td>Invalid</td>
 <td>Valid</td>
 <td>Decimal adjust AL after addition.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
-<td>NP</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>ZO</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Adjusts the sum of two packed BCD values to create a packed BCD result. The AL register is the implied source and destination operand. The DAA instruction is only useful when it follows an ADD instruction that adds (binary addi-tion) two 2-digit, packed BCD values and stores a byte result in the AL register. The DAA instruction then adjusts the contents of the AL register to contain the correct 2-digit, packed BCD result. If a decimal carry is detected, the CF and AF flags are set accordingly.</p>
 <p>This instruction executes as described above in compatibility mode and legacy mode. It is not valid in 64-bit mode.</p>
@@ -50,23 +50,23 @@
     THEN
          #UD;
     ELSE
-         old_AL ← AL;
-         old_CF ← CF;
-         CF ← 0;
+         old_AL := AL;
+         old_CF := CF;
+         CF := 0;
          IF (((AL AND 0FH) &gt; 9) or AF = 1)
                THEN
-                     AL ← AL + 6;
-                     CF ← old_CF or (Carry from AL ← AL + 6);
-                     AF ← 1;
+                     AL := AL + 6;
+                     CF := old_CF or (Carry from AL := AL + 6);
+                     AF := 1;
                ELSE
-                     AF ← 0;
+                     AF := 0;
          FI;
          IF ((old_AL &gt; 99H) or (old_CF = 1))
               THEN
-                     AL ← AL + 60H;
-                     CF ← 1;
+                     AL := AL + 60H;
+                     CF := 1;
               ELSE
-                     CF ← 0;
+                     CF := 0;
          FI;
 FI;</pre>
 <h2>Example</h2>

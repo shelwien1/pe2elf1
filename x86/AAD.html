@@ -7,48 +7,42 @@
 <title>AAD—ASCII Adjust AX Before Division </title></head>
 <body>
 <h1>AAD—ASCII Adjust AX Before Division</h1>
-<p><strong>Opcode</strong></p>
-<p><strong>Instruction</strong></p>
-<p><strong>Op/</strong></p>
-<p><strong>64-bit</strong></p>
-<p><strong>Compat/</strong></p>
-<p><strong>Description</strong></p>
 <table>
 <tr>
-<td></td>
-<td></td>
-<th>En</th>
-<th>Mode</th>
-<th>Leg Mode</th>
-<td></td></tr>
+<th>Opcode</th>
+<th>Instruction</th>
+<th>Op/En</th>
+<th>64-bit Mode</th>
+<th>Compat/Leg Mode</th>
+<th>Description</th></tr>
 <tr>
 <td>D5 0A</td>
 <td>AAD</td>
-<td>NP</td>
+<td>ZO</td>
 <td>Invalid</td>
 <td>Valid</td>
 <td>ASCII adjust AX before division.</td></tr>
 <tr>
-<td>D5 <em>ib</em></td>
+<td>D5 ib</td>
 <td>AAD imm8</td>
-<td>NP</td>
+<td>ZO</td>
 <td>Invalid</td>
 <td>Valid</td>
-<td>Adjust AX before division to number base <em>imm8.</em></td></tr></table>
+<td>Adjust AX before division to number base imm8.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
-<td>NP</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>ZO</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Adjusts two unpacked BCD digits (the least-significant digit in the AL register and the most-significant digit in the AH register) so that a division operation performed on the result will yield a correct unpacked BCD value. The AAD instruction is only useful when it precedes a DIV instruction that divides (binary division) the adjusted value in the AX register by an unpacked BCD value.</p>
 <p>The AAD instruction sets the value in the AL register to (AL + (10 * AH)), and then clears the AH register to 00H. The value in the AX register is then equal to the binary equivalent of the original unpacked two-digit (base 10) number in registers AH and AL.</p>
@@ -59,12 +53,12 @@
     THEN
          #UD;
     ELSE
-         tempAL ← AL;
-         tempAH ← AH;
-         AL ← (tempAL + (tempAH ∗ <em>imm8</em>)) AND FFH; (* <em>imm8</em> is set to 0AH for the AAD mnemonic.*)
-         AH ← 0;
-FI;</pre>
-<p>The immediate value (<em>imm8</em>) is taken from the second byte of the instruction.</p>
+         tempAL := AL;
+         tempAH := AH;
+         AL := (tempAL + (tempAH ∗ <em>imm8</em>)) AND FFH; (* <em>imm8</em> is set to 0AH for the AAD mnemonic.*)
+         AH := 0;
+FI;
+The immediate value (<em>imm8</em>) is taken from the second byte of the instruction.</pre>
 <h2>Flags Affected</h2>
 <p>The SF, ZF, and PF flags are set according to the resulting binary value in the AL register; the OF, AF, and CF flags are undefined.</p>
 <h2>Protected Mode Exceptions</h2>

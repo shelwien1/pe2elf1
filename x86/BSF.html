@@ -23,58 +23,54 @@
 <td></td></tr>
 <tr>
 <td>0F BC /r</td>
-<td>BSF <em>r16, r/m16</em></td>
+<td>BSF r16, r/m16</td>
 <td>RM</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Bit scan forward on <em>r/m16.</em></td></tr>
+<td>Bit scan forward on r/m16.</td></tr>
 <tr>
 <td>0F BC /r</td>
-<td>BSF <em>r32, r/m32</em></td>
+<td>BSF r32, r/m32</td>
 <td>RM</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Bit scan forward on <em>r/m32.</em></td></tr>
+<td>Bit scan forward on r/m32.</td></tr>
 <tr>
 <td>REX.W + 0F BC /r</td>
-<td>BSF <em>r64, r/m64</em></td>
+<td>BSF r64, r/m64</td>
 <td>RM</td>
 <td>Valid</td>
 <td>N.E.</td>
-<td>Bit scan forward on <em>r/m64.</em></td></tr></table>
+<td>Bit scan forward on r/m64.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
 <td>RM</td>
 <td>ModRM:reg (w)</td>
 <td>ModRM:r/m (r)</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
-<p>Searches the source operand (second operand) for the least significant set bit (1 bit). If a least significant 1 bit is found, its bit index is stored in the destination operand (first operand). The source operand can be a register or a memory location; the destination operand is a register. The bit index is an unsigned offset from bit 0 of the source operand. If the content of the source operand is 0, the content of the destination operand is undefined.</p>
+<p>Searches the source operand (second operand) for the least significant set bit (1 bit). If a least significant 1 bit is found, its bit index is stored in the destination operand (first operand). The source operand can be a register or a memory location; the destination operand is a register. The bit index is an unsigned offset from bit 0 of the source operand. If the content of the source operand is zero, the destination operand is unmodified.<sup>1</sup></p>
 <p>In 64-bit mode, the instruction’s default operation size is 32 bits. Using a REX prefix in the form of REX.R permits access to additional registers (R8-R15). Using a REX prefix in the form of REX.W promotes operation to 64 bits. See the summary chart at the beginning of this section for encoding data and limits.</p>
 <h2>Operation</h2>
-<pre>IF SRC = 0
+<pre>IF SRC &lt;&gt; 0
     THEN
-         ZF ← 1;
-         DEST is undefined;
-    ELSE
-         ZF ← 0;
-         temp ← 0;
+         temp := 0;
          WHILE Bit(SRC, temp) = 0
          DO
-              temp ← temp + 1;
+              temp := temp + 1;
          OD;
-         DEST ← temp;
+         DEST := temp;
 FI;</pre>
 <h2>Flags Affected</h2>
-<p>The ZF flag is set to 1 if all the source operand is 0; otherwise, the ZF flag is cleared. The CF, OF, SF, AF, and PF, flags are undefined.</p>
+<p>The ZF flag is set to 1 if the source operand is 0; otherwise, the ZF flag is cleared. The PF flag is set to 1 if the number of bits set in the source operand is even; otherwise, it is cleared. The CF, OF, SF, and AF flags are all cleared.<sup>2</sup></p>
 <h2>Protected Mode Exceptions</h2>
 <table class="exception-table">
 <tr>
@@ -94,6 +90,14 @@ FI;</pre>
 <tr>
 <td>#UD</td>
 <td>If the LOCK prefix is used.</td></tr></table>
+<p>1.</p>
+<table class="exception-table">
+<tr>
+<td>With a zero source operand on some older processors, use of a 32-bit operand size may clear the upper 32 bits of a 64-bit destina-</td></tr>
+<tr>
+<td>tion while leaving the lower 32 bits unmodified.</td></tr></table>
+<p>2.</p>
+<p>On some older processors, the CF, OF, SF, AF, and PF flags are unmodified.</p>
 <h2>Real-Address Mode Exceptions</h2>
 <table class="exception-table">
 <tr>

@@ -4,9 +4,9 @@
 <head>
 <meta charset="UTF-8">
 <link href="style.css" type="text/css" rel="stylesheet">
-<title>LAHF—Load Status Flags into AH Register </title></head>
+<title>LAHF—Load Status Flags Into AH Register </title></head>
 <body>
-<h1>LAHF—Load Status Flags into AH Register</h1>
+<h1>LAHF—Load Status Flags Into AH Register</h1>
 <p><strong>Opcode</strong></p>
 <p><strong>Instruction</strong></p>
 <p><strong>Op/</strong></p>
@@ -24,35 +24,37 @@
 <tr>
 <td>9F</td>
 <td>LAHF</td>
-<td>NP</td>
-<td>Invalid*</td>
+<td>ZO</td>
+<td>Valid<sup>1</sup></td>
 <td>Valid</td>
-<td>Load: AH ← EFLAGS(SF:ZF:0:AF:0:PF:1:CF).</td></tr></table>
-<p><strong>NOTES: *Valid in specific steppings. See Description section.</strong></p>
+<td>Load: AH := EFLAGS(SF:ZF:0:AF:0:PF:1:CF).</td></tr></table>
+<p><strong>NOTES:</strong></p>
+<p>1. Invalid if CPUID.80000001H:ECX.LAHF_SAHF_64 is enumerated as 0.</p>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
-<td>NP</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>ZO</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
-<p>This instruction executes as described above in compatibility mode and legacy mode. It is valid in 64-bit mode only if CPUID.80000001H:ECX.LAHF-SAHF[bit 0] = 1.</p>
+<p>This instruction executes as described above in compatibility mode and legacy mode. It is valid in 64-bit mode only if CPUID.80000001H:ECX.LAHF_SAHF_64[0] = 1.</p>
 <h2>Operation</h2>
 <pre>IF 64-Bit Mode
     THEN
-         IF CPUID.80000001H:ECX.LAHF-SAHF[bit 0] = 1;
-              THEN AH ← RFLAGS(SF:ZF:0:AF:0:PF:1:CF); ELSE #UD;
+         IF CPUID.80000001H:ECX.LAHF_SAHF_64[0] = 1;
+              THEN AH := RFLAGS(SF:ZF:0:AF:0:PF:1:CF);
+              ELSE #UD;
          FI;
     ELSE
-         AH ← EFLAGS(SF:ZF:0:AF:0:PF:1:CF);
+         AH := EFLAGS(SF:ZF:0:AF:0:PF:1:CF);
 FI;</pre>
 <h2>Flags Affected</h2>
 <p>None. The state of the flags in the EFLAGS register is not affected.</p>
@@ -72,5 +74,5 @@ FI;</pre>
 <tr>
 <td>#UD</td>
 <td>
-<p>If CPUID.80000001H:ECX.LAHF-SAHF[bit 0] = 0.</p>
+<p>If CPUID.80000001H:ECX.LAHF_SAHF_64[0] = 0.</p>
 <p>If the LOCK prefix is used.</p></td></tr></table></body></html>

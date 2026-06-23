@@ -16,199 +16,178 @@
 <th>Compat/Leg Mode</th>
 <th>Description</th></tr>
 <tr>
-<td>24 <em>ib</em></td>
-<td>AND AL, <em>imm8</em></td>
+<td>24 ib</td>
+<td>AND AL, imm8</td>
 <td>I</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>AL AND <em>imm8.</em></td></tr>
+<td>AL AND imm8.</td></tr>
 <tr>
-<td>25 <em>iw</em></td>
-<td>AND AX, <em>imm16</em></td>
+<td>25 iw</td>
+<td>AND AX, imm16</td>
 <td>I</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>AX AND i<em>mm16.</em></td></tr>
+<td>AX AND imm16.</td></tr>
 <tr>
-<td>25 <em>id</em></td>
-<td>AND EAX, <em>imm32</em></td>
+<td>25 id</td>
+<td>AND EAX, imm32</td>
 <td>I</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>EAX AND <em>imm32.</em></td></tr>
+<td>EAX AND imm32.</td></tr>
 <tr>
-<td>REX.W + 25 <em>id</em></td>
-<td>AND RAX, <em>imm32</em></td>
+<td>REX.W + 25 id</td>
+<td>AND RAX, imm32</td>
 <td>I</td>
 <td>Valid</td>
 <td>N.E.</td>
-<td>RAX AND <em>imm32 sign-extended to 64-bits.</em></td></tr>
+<td>RAX AND imm32 sign-extended to 64-bits.</td></tr>
 <tr>
-<td>80 /4 <em>ib</em></td>
-<td>AND <em>r/m8, imm8</em></td>
+<td>80 /4 ib</td>
+<td>AND r/m8<sup>1</sup>, imm8<sup>1</sup></td>
 <td>MI</td>
 <td>Valid</td>
 <td>Valid</td>
-<td><em>r/m8 </em>AND <em>imm8.</em></td></tr>
+<td>r/m8 AND imm8.</td></tr>
 <tr>
-<td>REX + 80 /4 <em>ib</em></td>
-<td>AND <em>r/m8</em><sup>*</sup><em>, imm8</em></td>
-<td>MI</td>
-<td>Valid</td>
-<td>N.E.</td>
-<td><em>r/m8 </em>AND <em>imm8.</em></td></tr>
-<tr>
-<td>81 /4 <em>iw</em></td>
-<td>AND <em>r/m16, imm16</em></td>
+<td>81 /4 iw</td>
+<td>AND r/m16, imm16</td>
 <td>MI</td>
 <td>Valid</td>
 <td>Valid</td>
-<td><em>r/m16 </em>AND <em>imm16.</em></td></tr>
+<td>r/m16 AND imm16.</td></tr>
 <tr>
-<td>81 /4 <em>id</em></td>
-<td>AND <em>r/m32, imm32</em></td>
+<td>81 /4 id</td>
+<td>AND r/m32, imm32</td>
 <td>MI</td>
 <td>Valid</td>
 <td>Valid</td>
-<td><em>r/m32 </em>AND <em>imm32.</em></td></tr>
+<td>r/m32 AND imm32.</td></tr>
 <tr>
-<td>REX.W + 81 /4 <em>id</em></td>
-<td>AND <em>r/m64, imm32</em></td>
+<td>REX.W + 81 /4 id</td>
+<td>AND r/m64, imm32</td>
 <td>MI</td>
 <td>Valid</td>
 <td>N.E.</td>
-<td><em>r/m64 </em>AND <em>imm32 sign extended to 64-bits.</em></td></tr>
+<td>r/m64 AND imm32 sign extended to 64-bits.</td></tr>
 <tr>
-<td>83 /4 <em>ib</em></td>
-<td>AND <em>r/m16, imm8</em></td>
+<td>83 /4 ib</td>
+<td>AND r/m16, imm8</td>
 <td>MI</td>
 <td>Valid</td>
 <td>Valid</td>
-<td><em>r/m16 </em>AND <em>imm8 (sign-extended).</em></td></tr>
+<td>r/m16 AND imm8 (sign-extended).</td></tr>
 <tr>
-<td>83 /4 <em>ib</em></td>
-<td>AND <em>r/m32, imm8</em></td>
+<td>83 /4 ib</td>
+<td>AND r/m32, imm8</td>
 <td>MI</td>
 <td>Valid</td>
 <td>Valid</td>
-<td><em>r/m32 </em>AND <em>imm8 (sign-extended).</em></td></tr>
+<td>r/m32 AND imm8 (sign-extended).</td></tr>
 <tr>
-<td>REX.W + 83 /4 <em>ib</em></td>
-<td>AND <em>r/m64, imm8</em></td>
+<td>REX.W + 83 /4 ib</td>
+<td>AND r/m64, imm8</td>
 <td>MI</td>
 <td>Valid</td>
 <td>N.E.</td>
-<td><em>r/m64 </em>AND <em>imm8 (sign-extended).</em></td></tr>
+<td>r/m64 AND imm8 (sign-extended).</td></tr>
 <tr>
-<td>20 <em>/r</em></td>
-<td>AND <em>r/m8, r8</em></td>
+<td>20 /r</td>
+<td>AND r/m8<sup>1</sup>, r8<sup>1</sup></td>
 <td>MR</td>
 <td>Valid</td>
 <td>Valid</td>
-<td><em>r/m8 </em>AND <em>r8.</em></td></tr>
+<td>r/m8 AND r8.</td></tr>
 <tr>
-<td>REX + 20 <em>/r</em></td>
-<td>AND <em>r/m8</em><sup>*</sup><em>, r8</em><sup>*</sup></td>
-<td>MR</td>
-<td>Valid</td>
-<td>N.E.</td>
-<td><em>r/m64 </em>AND <em>r8 (sign-extended).</em></td></tr>
-<tr>
-<td>21 /<em>r</em></td>
-<td>AND <em>r/m16, r16</em></td>
+<td>21 /r</td>
+<td>AND r/m16, r16</td>
 <td>MR</td>
 <td>Valid</td>
 <td>Valid</td>
-<td><em>r/m16 </em>AND <em>r16.</em></td></tr>
+<td>r/m16 AND r16.</td></tr>
 <tr>
-<td>21 /<em>r</em></td>
-<td>AND <em>r/m32, r32</em></td>
+<td>21 /r</td>
+<td>AND r/m32, r32</td>
 <td>MR</td>
 <td>Valid</td>
 <td>Valid</td>
-<td><em>r/m32 </em>AND <em>r32.</em></td></tr>
+<td>r/m32 AND r32.</td></tr>
 <tr>
-<td>REX.W + 21 /<em>r</em></td>
-<td>AND <em>r/m64, r64</em></td>
+<td>REX.W + 21 /r</td>
+<td>AND r/m64, r64</td>
 <td>MR</td>
 <td>Valid</td>
 <td>N.E.</td>
-<td><em>r/m64 </em>AND <em>r32.</em></td></tr>
+<td>r/m64 AND r64.</td></tr>
 <tr>
-<td>22 /<em>r</em></td>
-<td>AND <em>r8, r/m8</em></td>
+<td>22 /r</td>
+<td>AND r8<sup>1</sup>, r/m8<sup>1</sup></td>
 <td>RM</td>
 <td>Valid</td>
 <td>Valid</td>
-<td><em>r8 </em>AND <em>r/m8.</em></td></tr>
+<td>r8 AND r/m8.</td></tr>
 <tr>
-<td>REX + 22 /<em>r</em></td>
-<td>AND <em>r8</em><sup>*</sup><em>, r/m8</em><sup>*</sup></td>
-<td>RM</td>
-<td>Valid</td>
-<td>N.E.</td>
-<td><em>r/m64 </em>AND <em>r8 (sign-extended).</em></td></tr>
-<tr>
-<td>23 /<em>r</em></td>
-<td>AND <em>r16, r/m16</em></td>
+<td>23 /r</td>
+<td>AND r16, r/m16</td>
 <td>RM</td>
 <td>Valid</td>
 <td>Valid</td>
-<td><em>r16 </em>AND <em>r/m16.</em></td></tr>
+<td>r16 AND r/m16.</td></tr>
 <tr>
-<td>23 /<em>r</em></td>
-<td>AND <em>r32, r/m32</em></td>
+<td>23 /r</td>
+<td>AND r32, r/m32</td>
 <td>RM</td>
 <td>Valid</td>
 <td>Valid</td>
-<td><em>r32 </em>AND <em>r/m32.</em></td></tr>
+<td>r32 AND r/m32.</td></tr>
 <tr>
-<td>REX.W + 23 /<em>r</em></td>
-<td>AND <em>r64, r/m64</em></td>
+<td>REX.W + 23 /r</td>
+<td>AND r64, r/m64</td>
 <td>RM</td>
 <td>Valid</td>
 <td>N.E.</td>
-<td><em>r64 </em>AND <em>r/m64.</em></td></tr></table>
+<td>r64 AND r/m64.</td></tr></table>
 <p><strong>NOTES:</strong></p>
-<p>*In 64-bit mode, r/m8 can not be encoded to access the following byte registers if a REX prefix is used: AH, BH, CH, DH.</p>
+<p>1. With a REX prefix in 64-bit mode, attempts to access AH, BH, CH, or DH will instead access SPL, DIL, BPL, or SIL, respectively.</p>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
 <td>RM</td>
 <td>ModRM:reg (r, w)</td>
 <td>ModRM:r/m (r)</td>
-<td>NA</td>
-<td>NA</td></tr>
+<td>N/A</td>
+<td>N/A</td></tr>
 <tr>
 <td>MR</td>
 <td>ModRM:r/m (r, w)</td>
 <td>ModRM:reg (r)</td>
-<td>NA</td>
-<td>NA</td></tr>
+<td>N/A</td>
+<td>N/A</td></tr>
 <tr>
 <td>MI</td>
 <td>ModRM:r/m (r, w)</td>
-<td>imm8</td>
-<td>NA</td>
-<td>NA</td></tr>
+<td>imm8/16/32</td>
+<td>N/A</td>
+<td>N/A</td></tr>
 <tr>
 <td>I</td>
 <td>AL/AX/EAX/RAX</td>
-<td>imm8</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>imm8/16/32</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Performs a bitwise AND operation on the destination (first) and source (second) operands and stores the result in the destination operand location. The source operand can be an immediate, a register, or a memory location; the destination operand can be a register or a memory location. (However, two memory operands cannot be used in one instruction.) Each bit of the result is set to 1 if both corresponding bits of the first and second operands are 1; otherwise, it is set to 0.</p>
 <p>This instruction can be used with a LOCK prefix to allow the it to be executed atomically.</p>
 <p>In 64-bit mode, the instruction’s default operation size is 32 bits. Using a REX prefix in the form of REX.R permits access to additional registers (R8-R15). Using a REX prefix in the form of REX.W promotes operation to 64 bits. See the summary chart at the beginning of this section for encoding data and limits.</p>
 <h2>Operation</h2>
-<pre>DEST ← DEST AND SRC;</pre>
+<pre>DEST := DEST AND SRC;</pre>
 <h2>Flags Affected</h2>
 <p>The OF and CF flags are cleared; the SF, ZF, and PF flags are set according to the result. The state of the AF flag is undefined.</p>
 <h2>Protected Mode Exceptions</h2>

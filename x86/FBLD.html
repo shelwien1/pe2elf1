@@ -21,7 +21,7 @@
 <td></td></tr>
 <tr>
 <td>DF /4</td>
-<td>FBLD <em>m80dec</em></td>
+<td>FBLD m80bcd</td>
 <td>Valid</td>
 <td>Valid</td>
 <td>Convert BCD value to floating-point and push onto the FPU stack.</td></tr></table>
@@ -30,8 +30,8 @@
 <p>The packed BCD digits are assumed to be in the range 0 through 9; the instruction does not check for invalid digits (AH through FH). Attempting to load an invalid encoding produces an undefined result.</p>
 <p>This instruction’s operation is the same in non-64-bit modes and 64-bit mode.</p>
 <h2>Operation</h2>
-<pre>TOP ← TOP − 1;
-ST(0) ← ConvertToDoubleExtendedPrecisionFP(SRC);</pre>
+<pre>TOP := TOP − 1;
+ST(0) := ConvertToDoubleExtendedPrecisionFP(SRC);</pre>
 <h2>FPU Flags Affected</h2>
 <table class="exception-table">
 <tr>

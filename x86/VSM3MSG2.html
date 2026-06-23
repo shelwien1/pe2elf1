@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>VSM3MSG2—Perform Final Calculation for the Next Four SM3 Message Words </title></head>
+<body>
+<h1>VSM3MSG2—Perform Final Calculation for the Next Four SM3 Message Words</h1>
+<p><strong>Opcode/</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64/32</strong></p>
+<p><strong>CPUID Feature</strong></p>
+<p><strong>Description</strong></p>
+<p><strong>Instruction</strong></p>
+<p><strong>En</strong></p>
+<p><strong>bit Mode</strong></p>
+<p><strong>Flag</strong></p>
+<p><strong>Support</strong></p>
+<p>VEX.128.66.0F38.W0 DA /r</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX</p>
+<p>Performs the final calculation for the next four SM3 message words using previous message</p>
+<p>VSM3MSG2 xmm1, xmm2,</p>
+<p>SM3</p>
+<p>words from xmm2 and xmm3/m128, storing</p>
+<p>xmm3/m128</p>
+<p>the result in xmm1.</p>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Tuple Type</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>A</td>
+<td>N/A</td>
+<td>ModRM:reg (r, w)</td>
+<td>VEX.vvvv (r)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td></tr></table>
+<h2>Description</h2>
+<p>The VSM3MSG2 instruction is one of the two SM3 message scheduling instructions. The instruction performs the final calculation for the next four SM3 message words.</p>
+<h2>Operation</h2>
+<pre>//see the VSM3MSG1 instruction for definition of ROL32()</pre>
+<p><strong>VSM3MSG2 SRCDEST, SRC1, SRC2</strong></p>
+<pre>WTMP[0] := SRCDEST.dword[0]
+WTMP[1] := SRCDEST.dword[1]
+WTMP[2] := SRCDEST.dword[2]
+WTMP[3] := SRCDEST.dword[3]
+// Dword array W[] has indices are based on the SM3 specification.
+W[3] := SRC1.dword[0]
+W[4] := SRC1.dword[1]
+W[5] := SRC1.dword[2]
+W[6] := SRC1.dword[3]
+W[10] := SRC2.dword[0]
+W[11] := SRC2.dword[1]
+W[12] := SRC2.dword[2]
+W[13] := SRC2.dword[3]
+W[16] := ROL32(W[3], 7) ^ W[10] ^ WTMP[0]
+W[17] := ROL32(W[4], 7) ^ W[11] ^ WTMP[1]
+W[18] := ROL32(W[5], 7) ^ W[12] ^ WTMP[2]
+W[19] := ROL32(W[6], 7) ^ W[13] ^ WTMP[3]
+W[19] := W[19] ^ ROL32(W[16], 6) ^ ROL32(W[16], 15) ^ ROL32(W[16], 30)
+SRCDEST.dword[0] := W[16]
+SRCDEST.dword[1] := W[17]
+SRCDEST.dword[2] := W[18]
+SRCDEST.dword[3] := W[19]</pre>
+<h2>Flags Affected</h2>
+<p>None.</p>
+<h2>Intel C/C++ Compiler Intrinsic Equivalent</h2>
+<p>VSM3MSG2 __m128i _mm_sm3msg2_epi32 (__m128i __A, __m128i __B, __m128i __C);</p>
+<h2>SIMD Floating-Point Exceptions</h2>
+<p>None.</p>
+<h2>Other Exceptions</h2>
+<p>See Table 2-21, “Type 4 Class Exception Conditions.”</p></body></html>

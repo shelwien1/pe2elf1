@@ -4,9 +4,9 @@
 <head>
 <meta charset="UTF-8">
 <link href="style.css" type="text/css" rel="stylesheet">
-<title>FUCOM/FUCOMP/FUCOMPP—Unordered Compare Floating Point Values </title></head>
+<title>FUCOM/FUCOMP/FUCOMPP—Unordered Compare Floating-Point Values </title></head>
 <body>
-<h1>FUCOM/FUCOMP/FUCOMPP—Unordered Compare Floating Point Values</h1>
+<h1>FUCOM/FUCOMP/FUCOMPP—Unordered Compare Floating-Point Values</h1>
 <table>
 <tr>
 <th>Opcode</th>
@@ -46,17 +46,13 @@
 <td>Compare ST(0) with ST(1) and pop register stack twice.</td></tr></table>
 <h2>Description</h2>
 <p>Performs an unordered comparison of the contents of register ST(0) and ST(i) and sets condition code flags C0, C2, and C3 in the FPU status word according to the results (see the table below). If no operand is specified, the contents of registers ST(0) and ST(1) are compared. The sign of zero is ignored, so that –0.0 is equal to +0.0.</p>
-<h3>Table 3-41.  FUCOM/FUCOMP/FUCOMPP Results</h3>
-<p><strong>Comparison Results*</strong></p>
-<p><strong>C3</strong></p>
-<p><strong>C2</strong></p>
-<p><strong>C0</strong></p>
+<h3>Table 3-43.  FUCOM/FUCOMP/FUCOMPP Results</h3>
 <table>
 <tr>
-<td></td>
-<td></td>
-<td></td>
-<td></td></tr>
+<th>Comparison Results*</th>
+<th>C3</th>
+<th>C2</th>
+<th>C0</th></tr>
 <tr>
 <td>ST0 &gt; ST(i)</td>
 <td>0</td>
@@ -87,20 +83,20 @@
 <h2>Operation</h2>
 <pre>CASE (relation of operands) OF
     ST &gt; SRC:
-                         C3, C2, C0 ← 000;
+                         C3, C2, C0 := 000;
     ST &lt; SRC:
-                         C3, C2, C0 ← 001;
+                         C3, C2, C0 := 001;
     ST = SRC:
-                         C3, C2, C0 ← 100;
+                         C3, C2, C0 := 100;
 ESAC;
 IF ST(0) or SRC = QNaN, but not SNaN or unsupported format
     THEN
-         C3, C2, C0 ← 111;
+         C3, C2, C0 := 111;
     ELSE (* ST(0) or SRC is SNaN or unsupported format *)
           #IA;
          IF FPUControlWord.IM = 1
               THEN
-                    C3, C2, C0 ← 111;
+                    C3, C2, C0 := 111;
          FI;
 FI;
 IF Instruction = FUCOMP
@@ -118,7 +114,7 @@ FI;</pre>
 <td>Set to 0 if stack underflow occurred.</td></tr>
 <tr>
 <td>C0, C2, C3</td>
-<td>See Table 3-41.</td></tr></table>
+<td>See Table 3-43.</td></tr></table>
 <h2>Floating-Point Exceptions</h2>
 <table class="exception-table">
 <tr>

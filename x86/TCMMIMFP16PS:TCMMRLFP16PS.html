@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>TCMMIMFP16PS/TCMMRLFP16PS—Matrix Multiplication of Complex Tiles Accumulated into Packed Single Precision Tile </title></head>
+<body>
+<h1>TCMMIMFP16PS/TCMMRLFP16PS—Matrix Multiplication of Complex Tiles Accumulated into Packed Single Precision Tile</h1>
+<table>
+<tr>
+<th>Opcode/Instruction</th>
+<th>Op/En</th>
+<th>64/32 bit Mode Support</th>
+<th>CPUID Feature Flag</th>
+<th>Description</th></tr>
+<tr>
+<td>VEX.128.66.0F38.W0 6C 11:rrr:bbb TCMMIMFP16PS tmm1, tmm2, tmm3</td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>AMX_COMPLEX</td>
+<td>Matrix multiply complex elements from tmm2 and tmm3, and accumulate the imaginary part into single precision elements in tmm1.</td></tr>
+<tr>
+<td>VEX.128.NP.0F38.W0 6C 11:rrr:bbb TCMMRLFP16PS tmm1, tmm2, tmm3</td>
+<td>A</td>
+<td>V/N.E.</td>
+<td>AMX_COMPLEX</td>
+<td>Matrix multiply complex elements from tmm2 and tmm3, and accumulate the real part into single precision elements in tmm1.</td></tr></table>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Tuple</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>A</td>
+<td>N/A</td>
+<td>ModRM:reg (r, w)</td>
+<td>ModRM:r/m (r)</td>
+<td>VEX.vvvv (r)</td>
+<td>N/A</td></tr></table>
+<p><strong>Description</strong></p>
+<p>These instructions perform matrix multiplication of two tiles containing complex elements and accumulate the results into a packed single precision tile. Each dword element in input tiles tmm2 and tmm3 is interpreted as a complex number with FP16 real part and FP16 imaginary part.</p>
+<p>TCMMRLFP16PS calculates the real part of the result. For each possible combination of (row of tmm2, column of tmm3), the instruction performs a set of multiplication and accumulations on all corresponding complex numbers (one from tmm2 and one from tmm3). The real part of the tmm2 element is multiplied with the real part of the corresponding tmm3 element, and the negated imaginary part of the tmm2 element is multiplied with the imagi-nary part of the corresponding tmm3 elements. The two accumulated results are added, and then accumulated into the corresponding row and column of tmm1.</p>
+<p>TCMMIMFP16PS calculates the imaginary part of the result. For each possible combination of (row of tmm2, column of tmm3), the instruction performs a set of multiplication and accumulations on all corresponding complex numbers (one from tmm2 and one from tmm3). The imaginary part of the tmm2 element is multiplied with the real part of the corresponding tmm3 element, and the real part of the tmm2 element is multiplied with the imaginary part of the corresponding tmm3 elements. The two accumulated results are added, and then accumulated into the corresponding row and column of tmm1.</p>
+<p>“Round to nearest even” rounding mode is used when doing each accumulation of the FMA. Output denormals are always flushed to zero but FP16 input denormals are not treated as zero.</p>
+<p>MXCSR is not consulted nor updated.</p>
+<p>Any attempt to execute these instructions inside an Intel TSX transaction will result in a transaction abort.</p>
+<p><strong>Operation</strong></p>
+<p><strong>TCMMIMFP16PS tsrcdest, tsrc1, tsrc2</strong></p>
+<p>// C = m x n (tsrcdest), A = m x k (tsrc1), B = k x n (tsrc2)</p>
+<p># src1 and src2 elements are pairs of fp16</p>
+<p>elements_src1 := tsrc1.colsb / 4</p>
+<p>elements_dest := tsrcdest.colsb / 4</p>
+<p>elements_temp := tsrcdest.colsb / 2  // Count is in fp16 prior to horizontal</p>
+<p>for m in 0 ... tsrcdest.rows-1:</p>
+<p>temp1[ 0 ... elements_temp-1] := 0</p>
+<p>for k in 0 ... elements_src1-1:</p>
+<p>for n in 0 ... elements_dest-1:</p>
+<p>s1e = cvt_fp16_to_fp32(tsrc1.row[m].fp16[2*k+0])</p>
+<p>// real</p>
+<p>s2e = cvt_fp16_to_fp32(tsrc2.row[k].fp16[2*n+0])</p>
+<p>// real</p>
+<p>s1o = cvt_fp16_to_fp32(tsrc1.row[m].fp16[2*k+1])</p>
+<p>// imaginary</p>
+<p>s2o = cvt_fp16_to_fp32(tsrc2.row[k].fp16[2*n+1])</p>
+<p>// imaginary</p>
+<p>// FP32 FMA with DAZ=FTZ=1, RNE rounding.</p>
+<p>// MXCSR is neither consulted nor updated.</p>
+<p>// No exceptions raised or denoted.</p>
+<p>temp1.fp32[2*n+0] = fma32(temp1.fp32[2*n+0], s1o, s2e, daz=1, ftz=1, sae=1, rc=RNE)</p>
+<p>temp1.fp32[2*n+1] = fma32(temp1.fp32[2*n+1], s1e, s2o, daz=1, ftz=1, sae=1, rc=RNE)</p>
+<p>for n in 0 ... elements_dest-1:</p>
+<p>// DAZ=FTZ=1, RNE rounding.</p>
+<p>// MXCSR is neither consulted nor updated.</p>
+<p>// No exceptions raised or denoted.</p>
+<p>tmpf32 := temp1.fp32[2*n] + temp1.fp32[2*n+1]</p>
+<p>srcdest.row[m].fp32[n] := srcdest.row[m].fp32[n] + tmpf32</p>
+<p>write_row_and_zero(tsrcdest, m, tmp, tsrcdest.colsb)</p>
+<p>zero_upper_rows(tsrcdest, tsrcdest.rows)</p>
+<p>zero_tileconfig_start()</p>
+<p><strong>TCMMRLFP16PS tsrcdest, tsrc1, tsrc2</strong></p>
+<p>// C = m x n (tsrcdest), A = m x k (tsrc1), B = k x n (tsrc2)</p>
+<p># src1 and src2 elements are pairs of fp16</p>
+<p>elements_src1 := tsrc1.colsb / 4</p>
+<p>elements_dest := tsrcdest.colsb / 4</p>
+<p>elements_temp := tsrcdest.colsb / 2 // Count is in fp16 prior to horizontal</p>
+<p>for m in 0 ... tsrcdest.rows-1:</p>
+<p>temp1[ 0 ... elements_temp-1 ] := 0</p>
+<p>for k in 0 ... elements_src1-1:</p>
+<p>for n in 0 ... elements_dest-1:</p>
+<p>s1e = cvt_fp16_to_fp32(tsrc1.row[m].fp16[2*k+0])</p>
+<p>// real</p>
+<p>s2e = cvt_fp16_to_fp32(tsrc2.row[k].fp16[2*n+0])</p>
+<p>// real</p>
+<p>s1o = cvt_fp16_to_fp32(-tsrc1.row[m].fp16[2*k+1])</p>
+<p>// imaginary: “-” is for imaginary*imaginary</p>
+<p>s2o = cvt_fp16_to_fp32(tsrc2.row[k].fp16[2*n+1])</p>
+<p>// imaginary</p>
+<p>//   FP32 FMA with DAZ=FTZ=1, RNE rounding.</p>
+<p>//   MXCSR is neither consulted nor updated.</p>
+<p>//   No exceptions raised or denoted.</p>
+<p>temp1.fp32[2*n+0] = fma32(temp1.fp32[2*n+0], s1e, s2e, daz=1, ftz=1, sae=1, rc=RNE)</p>
+<p>// real</p>
+<p>temp1.fp32[2*n+1] = fma32(temp1.fp32[2*n+1], s1o, s2o, daz=1, ftz=1, sae=1, rc=RNE)</p>
+<p>// imaginary</p>
+<p>for n in 0 ... elements_dest-1:</p>
+<p>// DAZ=FTZ=1, RNE rounding.</p>
+<p>// MXCSR is neither consulted nor updated.</p>
+<p>// No exceptions raised or denoted.</p>
+<p>tmpf32 := temp1.fp32[2*n] + temp1.fp32[2*n+1]</p>
+<p>srcdest.row[m].fp32[n] := srcdest.row[m].fp32[n] + tmpf32</p>
+<p>write_row_and_zero(tsrcdest, m, tmp, tsrcdest.colsb)</p>
+<p>zero_upper_rows(tsrcdest, tsrcdest.rows)</p>
+<p>zero_tileconfig_start()</p>
+<p><strong>Flags Affected</strong></p>
+<p>None.</p>
+<p><strong>Exceptions</strong></p>
+<p>AMX-E4; see Section 2.10, “Intel® AMX Instruction Exception Classes,” for details.</p></body></html>

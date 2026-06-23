@@ -16,51 +16,50 @@
 <th>Compat/Leg Mode</th>
 <th>Description</th></tr>
 <tr>
-<td>0F 03 /<em>r</em></td>
-<td>LSL <em>r16, r16/m16</em></td>
+<td>0F 03 /r</td>
+<td>LSL r16, r16/m16</td>
 <td>RM</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Load:<em> r16 </em>← segment limit, selector<em> r16/m16.</em></td></tr>
+<td>Load segment limit from specified descriptor.</td></tr>
 <tr>
-<td>0F 03 /<em>r</em></td>
-<td>LSL<em> r32, r32/m16</em><sup>*</sup></td>
+<td>0F 03 /r</td>
+<td>LSL r32, r32/m16<sup>1</sup></td>
 <td>RM</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Load: <em>r32 </em>←<em> </em>segment limit, selector <em>r32/m16.</em></td></tr>
+<td>Load segment limit from specified descriptor.</td></tr>
 <tr>
-<td>REX.W + 0F 03 /<em>r</em></td>
-<td>LSL<em> r64, r32/m16</em><sup>*</sup></td>
+<td>REX.W + 0F 03 /r</td>
+<td>LSL r64, r32/m16<sup>1</sup></td>
 <td>RM</td>
 <td>Valid</td>
 <td>Valid</td>
-<td>Load: <em>r64 </em>←<em> </em>segment limit, selector <em>r32/m16</em></td></tr></table>
+<td>Load segment limit from specified descriptor.</td></tr></table>
 <p><strong>NOTES:</strong></p>
-<p>*</p>
-<p>For all loads (regardless of destination sizing), only bits 16-0 are used. Other bits are ignored.</p>
+<p>1. Regardless of operand size, only bits 15:0 of a register operand are used. Other bits are ignored.</p>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
 <td>RM</td>
 <td>ModRM:reg (w)</td>
 <td>ModRM:r/m (r)</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
-<p>Loads the unscrambled segment limit from the segment descriptor specified with the second operand (source operand) into the first operand (destination operand) and sets the ZF flag in the EFLAGS register. The source operand (which can be a register or a memory location) contains the segment selector for the segment descriptor being accessed. The destination operand is a general-purpose register.</p>
+<p>Loads the segment limit from the segment descriptor (see below) specified with the second operand (source operand) into the first operand (destination operand) and sets the ZF flag in the EFLAGS register. The source operand (which can be a register or a memory location) contains the segment selector for the segment descriptor being accessed. If the source operand is a memory address, only 16 bits of data are accessed. The destination operand is a general-purpose register.</p>
 <p>The processor performs access checks as part of the loading process. Once loaded in the destination register, soft-ware can compare the segment limit with the offset of a pointer.</p>
-<p>The segment limit is a 20-bit value contained in bytes 0 and 1 and in the first 4 bits of byte 6 of the segment descriptor. If the descriptor has a byte granular segment limit (the granularity flag is set to 0), the destination operand is loaded with a byte granular value (byte limit). If the descriptor has a page granular segment limit (the granularity flag is set to 1), the LSL instruction will translate the page granular limit (page limit) into a byte limit before loading it into the destination operand. The translation is performed by shifting the 20-bit “raw” limit left 12 bits and filling the low-order 12 bits with 1s.</p>
-<p>When the operand size is 32 bits, the 32-bit byte limit is stored in the destination operand. When the operand size is 16 bits, a valid 32-bit limit is computed; however, the upper 16 bits are truncated and only the low-order 16 bits are loaded into the destination operand.</p>
+<p>The segment limit is a 20-bit value contained in bytes 0 and 1 and in the first 4 bits of byte 6 of the segment descriptor. If the descriptor has a byte granular segment limit (the granularity flag is set to 0), the destination operand is loaded with a byte granular value (byte limit) as read from the descriptor. If the descriptor has a page granular segment limit (the granularity flag is set to 1), the LSL instruction will translate the page granular limit (page limit) into a byte limit before loading it into the destination operand. The translation is performed by shifting the 20-bit “raw” limit left 12 bits and filling the low-order 12 bits with 1s.</p>
+<p>When the operand size is 16 bits, a valid 32-bit byte limit is computed; however, the upper 16 bits are truncated and only the low-order 16 bits are loaded into the destination operand; the upper bits of the destination are unmodified. When the operand size is 32 bits, the 32-bit byte limit is loaded into the destination operand; the upper bits of the destination are cleared. When the operand is 64 bits, the 32-bit byte limit is zero-extended to 64 bits and loaded into the destination operand. (The behavior with 32-bit and 64-bit operand sizes is identical.)</p>
 <p>This instruction performs the following checks before it loads the segment limit into the destination register:</p>
 <p>If the segment descriptor cannot be accessed or is an invalid type for the instruction, the ZF flag is cleared and no value is loaded in the destination operand.</p>
-<h3>Table 3-55.  Segment and Gate Descriptor Types</h3>
+<h3>Table 3-59.  Segment and Gate Descriptor Types</h3>
 <table>
 <tr>
 <th>Type</th>
@@ -127,24 +126,24 @@
 <p>No</p>
 <p>No</p></td>
 <td>
-<p>Upper 8 byte of a 16-Byte descriptor</p>
-<p>Reserved</p>
-<p>LDT</p>
 <p>Reserved</p>
 <p>Reserved</p>
+<p>LDT<sup>1</sup></p>
 <p>Reserved</p>
 <p>Reserved</p>
 <p>Reserved</p>
 <p>Reserved</p>
-<p>64-bit TSS</p>
 <p>Reserved</p>
-<p>Busy 64-bit TSS</p>
+<p>Reserved</p>
+<p>64-bit TSS<sup>1</sup></p>
+<p>Reserved</p>
+<p>Busy 64-bit TSS<sup>1</sup></p>
 <p>64-bit call gate</p>
 <p>Reserved</p>
 <p>64-bit interrupt gate</p>
 <p>64-bit trap gate</p></td>
 <td>
-<p>Yes</p>
+<p>No</p>
 <p>No</p>
 <p>Yes</p>
 <p>No</p>
@@ -160,29 +159,31 @@
 <p>No</p>
 <p>No</p>
 <p>No</p></td></tr></table>
+<p><strong>NOTES:</strong></p>
+<p>1. In this case, the descriptor comprises 16 bytes; bits 12:8 of the upper 4 bytes must be 0.</p>
 <h2>Operation</h2>
 <pre>IF SRC(Offset) &gt; descriptor table limit
-    THEN ZF ← 0; FI;
+    THEN ZF := 0; FI;
 Read segment descriptor;
 IF SegmentDescriptor(Type) ≠ conforming code segment
 and (CPL &gt; DPL) OR (RPL &gt; DPL)
 or Segment type is not valid for instruction
          THEN
-              ZF ← 0;
+              ZF := 0;
          ELSE
-              temp ← SegmentLimit([SRC]);
-              IF (G ← 1)
-                    THEN temp ← ShiftLeft(12, temp) OR 00000FFFH;
+              temp := SegmentLimit([SRC]);
+              IF (SegmentDescriptor(G) = 1)
+                    THEN temp := (temp &lt;&lt; 12) OR 00000FFFH;
               ELSE IF OperandSize = 32
-                    THEN DEST ← temp; FI;
+                    THEN DEST := temp; FI;
               ELSE IF OperandSize = 64 (* REX.W used *)
-                    THEN DEST (* Zero-extended *) ← temp; FI;
+                    THEN DEST := temp(* Zero-extended *); FI;
               ELSE (* OperandSize = 16 *)
-                    DEST ← temp AND FFFFH;
+                    DEST := temp AND FFFFH;
               FI;
 FI;</pre>
 <h2>Flags Affected</h2>
-<p>The ZF flag is set to 1 if the segment limit is loaded successfully; otherwise, it is set to 0.</p>
+<p>The ZF flag is set to 1 if the segment limit is loaded successfully; otherwise, it is set to 0. The CF, OF, SF, AF, and PF flags are not modified.</p>
 <h2>Protected Mode Exceptions</h2>
 <table class="exception-table">
 <tr>

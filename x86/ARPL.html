@@ -22,31 +22,31 @@
 <th>Leg Mode</th>
 <td></td></tr>
 <tr>
-<td>63 /<em>r</em></td>
-<td>ARPL <em>r/m16, r16</em></td>
-<td>NP</td>
+<td>63 /r</td>
+<td>ARPL r/m16, r16</td>
+<td>MR</td>
 <td>N. E.</td>
 <td>Valid</td>
-<td>Adjust RPL of <em>r/m16</em> to not less than RPL of <em>r16.</em></td></tr></table>
+<td>Adjust RPL of r/m16 to not less than RPL of r16.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
-<td>NP</td>
+<td>MR</td>
 <td>ModRM:r/m (w)</td>
 <td>ModRM:reg (r)</td>
-<td>NA</td>
-<td>NA</td></tr></table>
+<td>N/A</td>
+<td>N/A</td></tr></table>
 <h2>Description</h2>
 <p>Compares the RPL fields of two segment selectors. The first operand (the destination operand) contains one segment selector and the second operand (source operand) contains the other. (The RPL field is located in bits 0 and 1 of each operand.) If the RPL field of the destination operand is less than the RPL field of the source operand, the ZF flag is set and the RPL field of the destination operand is increased to match that of the source operand. Otherwise, the ZF flag is cleared and no change is made to the destination operand. (The destination operand can be a word register or a memory location; the source operand must be a word register.)</p>
 <p>The ARPL instruction is provided for use by operating-system procedures (however, it can also be used by applica-tions). It is generally used to adjust the RPL of a segment selector that has been passed to the operating system by an application program to match the privilege level of the application program. Here the segment selector passed to the operating system is placed in the destination operand and segment selector for the application program’s code segment is placed in the source operand. (The RPL field in the source operand represents the priv-ilege level of the application program.) Execution of the ARPL instruction then ensures that the RPL of the segment selector received by the operating system is no lower (does not have a higher privilege) than the privilege level of the application program (the segment selector for the application program’s code segment can be read from the stack following a procedure call).</p>
 <p>This instruction executes as described in compatibility mode and legacy mode. It is not encodable in 64-bit mode.</p>
-<p>See “Checking Caller Access Privileges” in Chapter 3, “Protected-Mode Memory Management,” of the <em>Intel® 64 and IA-32 Architectures Software Developer’s Manual, Volume 3A</em>, for more information about the use of this instruc-tion.</p>
+<p>See “Checking Caller Access Privileges” in Chapter 3, “Protected-Mode Memory Management,” of the Intel<sup>® </sup>64 and IA-32 Architectures Software Developer’s Manual, Volume 3A, for more information about the use of this instruc-tion.</p>
 <h2>Operation</h2>
 <pre>IF 64-BIT MODE
     THEN
@@ -54,10 +54,10 @@
     ELSE
          IF DEST[RPL] &lt; SRC[RPL]
               THEN
-                    ZF ← 1;
-                    DEST[RPL] ← SRC[RPL];
+                    ZF := 1;
+                    DEST[RPL] := SRC[RPL];
               ELSE
-                    ZF ← 0;
+                    ZF := 0;
          FI;
 FI;</pre>
 <h2>Flags Affected</h2>

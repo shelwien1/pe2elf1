@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>VSHA512MSG1—Perform an Intermediate Calculation for the Next Four SHA512 Message Qwords </title></head>
+<body>
+<h1>VSHA512MSG1—Perform an Intermediate Calculation for the Next Four SHA512 Message Qwords</h1>
+<p><strong>Opcode/</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64/32</strong></p>
+<p><strong>CPUID Feature</strong></p>
+<p><strong>Description</strong></p>
+<p><strong>Instruction</strong></p>
+<p><strong>En</strong></p>
+<p><strong>bit Mode</strong></p>
+<p><strong>Flag</strong></p>
+<p><strong>Support</strong></p>
+<p>VEX.256.F2.0F38.W0 CC 11:rrr:bbb</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX</p>
+<p>Performs an intermediate calculation for the next four SHA512 message qwords using</p>
+<p>VSHA512MSG1 ymm1, xmm2</p>
+<p>SHA512</p>
+<p>previous message qwords from ymm1 and xmm2, storing the result in ymm1.</p>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Tuple Type</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>A</td>
+<td>N/A</td>
+<td>ModRM:reg (r, w)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
+<h2>Description</h2>
+<p>The VSHA512MSG1 instruction is one of the two SHA512 message scheduling instructions. The instruction performs an intermediate calculation for the next four SHA512 message qwords.</p>
+<p>See https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf for more information on the SHA512 standard.</p>
+<h2>Operation</h2>
+<pre>define ROR64(qword, n):
+    count := n % 64
+    dest := (qword &gt;&gt; count) | (qword &lt;&lt; (64-count))
+    return dest
+define SHR64(qword, n):
+    return qword &gt;&gt; n
+define s0(qword):
+    return ROR64(qword,1) ^ ROR64(qword, 8) ^ SHR64(qword, 7)</pre>
+<p><strong>VSHA512MSG1 SRCDEST, SRC1</strong></p>
+<pre>W[4] := SRC1.qword[0]
+W[3] := SRCDEST.qword[3]
+W[2] := SRCDEST.qword[2]
+W[1] := SRCDEST.qword[1]
+W[0] := SRCDEST.qword[0]
+SRCDEST.qword[3] := W[3] + s0(W[4])
+SRCDEST.qword[2] := W[2] + s0(W[3])
+SRCDEST.qword[1] := W[1] + s0(W[2])
+SRCDEST.qword[0] := W[0] + s0(W[1])</pre>
+<h2>Flags Affected</h2>
+<p>None.</p>
+<h2>Intel C/C++ Compiler Intrinsic Equivalent</h2>
+<p>VSHA512MSG1 __m256i _mm256_sha512msg1_epi64 (__m256i __A, __m128i __B);</p>
+<h2>SIMD Floating-Point Exceptions</h2>
+<p>None.</p>
+<h2>Other Exceptions</h2>
+<p>See Table 2-23, “Type 6 Class Exception Conditions.”</p></body></html>

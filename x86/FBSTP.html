@@ -7,18 +7,13 @@
 <title>FBSTP—Store BCD Integer and Pop </title></head>
 <body>
 <h1>FBSTP—Store BCD Integer and Pop</h1>
-<p><strong>Opcode</strong></p>
-<p><strong>Instruction</strong></p>
-<p><strong>64-Bit</strong></p>
-<p><strong>Compat/</strong></p>
-<p><strong>Description</strong></p>
 <table>
 <tr>
-<td></td>
-<td></td>
-<th>Mode</th>
-<th>Leg Mode</th>
-<td></td></tr>
+<th>Opcode</th>
+<th>Instruction</th>
+<th>64-Bit Mode</th>
+<th>Compat/Leg Mode</th>
+<th>Description</th></tr>
 <tr>
 <td>DF /6</td>
 <td>FBSTP m80bcd</td>
@@ -29,13 +24,11 @@
 <p>Converts the value in the ST(0) register to an 18-digit packed BCD integer, stores the result in the destination operand, and pops the register stack. If the source value is a non-integral value, it is rounded to an integer value, according to rounding mode specified by the RC field of the FPU control word. To pop the register stack, the processor marks the ST(0) register as empty and increments the stack pointer (TOP) by 1.</p>
 <p>The destination operand specifies the address where the first byte destination value is to be stored. The BCD value (including its sign bit) requires 10 bytes of space in memory.</p>
 <p>The following table shows the results obtained when storing various classes of numbers in packed BCD format.</p>
-<h3>Table 3-19.  FBSTP Results</h3>
-<p><strong>ST(0)</strong></p>
-<p><strong>DEST</strong></p>
+<h3>Table 3-21.  FBSTP Results</h3>
 <table>
 <tr>
-<td></td>
-<td></td></tr>
+<th>ST(0)</th>
+<th>DEST</th></tr>
 <tr>
 <td>− ∞ or Value Too Large for DEST Format</td>
 <td>*</td></tr>
@@ -72,7 +65,7 @@
 <p>If the converted value is too large for the destination format, or if the source operand is an ∞, SNaN, QNAN, or is in an unsupported format, an invalid-arithmetic-operand condition is signaled. If the invalid-operation exception is not masked, an invalid-arithmetic-operand exception (#IA) is generated and no value is stored in the destination operand. If the invalid-operation exception is masked, the packed BCD indefinite value is stored in memory.</p>
 <p>This instruction’s operation is the same in non-64-bit modes and 64-bit mode.</p>
 <h2>Operation</h2>
-<pre>DEST ← BCD(ST(0));
+<pre>DEST := BCD(ST(0));
 PopRegisterStack;</pre>
 <h2>FPU Flags Affected</h2>
 <table class="exception-table">

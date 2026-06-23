@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>VSHA512RNDS2—Perform Two Rounds of SHA512 Operation </title></head>
+<body>
+<h1>VSHA512RNDS2—Perform Two Rounds of SHA512 Operation</h1>
+<p><strong>Opcode/</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64/32</strong></p>
+<p><strong>CPUID Feature</strong></p>
+<p><strong>Description</strong></p>
+<p><strong>Instruction</strong></p>
+<p><strong>En</strong></p>
+<p><strong>bit Mode</strong></p>
+<p><strong>Flag</strong></p>
+<p><strong>Support</strong></p>
+<p>VEX.256.F2.0F38.W0 CB 11:rrr:bbb</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX</p>
+<p>Perform 2 rounds of SHA512 operation using an initial SHA512 state (C,D,G,H) from ymm1,</p>
+<p>VSHA512RNDS2 ymm1, ymm2,</p>
+<p>SHA512</p>
+<p>an initial SHA512 state (A,B,E,F) from ymm2,</p>
+<p>xmm3</p>
+<p>and a pre-computed sum of the next 2 round message qwords and the corresponding round constants from xmm3, storing the updated SHA512 state (A,B,E,F) result in ymm1.</p>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Tuple Type</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>A</td>
+<td>N/A</td>
+<td>ModRM:reg (r, w)</td>
+<td>VEX.vvvv (r)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td></tr></table>
+<h2>Description</h2>
+<p>The VSHA512RNDS2 instruction performs two rounds of SHA512 operation using initial SHA512 state (C,D,G,H) from the first operand, an initial SHA512 state (A,B,E,F) from the second operand, and a pre-computed sum of the next two round message qwords and the corresponding round constants from the third operand (only the two lower qwords of the third operand). The updated SHA512 state (A,B,E,F) is written to the first operand, and the second operand can be used as the updated state (C,D,G,H) in later rounds.</p>
+<p>See https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf for more information on the SHA512 standard.</p>
+<h2>Operation</h2>
+<pre>define ROR64(qword, n):
+    count := n % 64
+    dest := (qword &gt;&gt; count) | (qword &lt;&lt; (64-count))
+    return dest
+define SHR64(qword, n):
+    return qword &gt;&gt; n
+define cap_sigma0(qword):
+    return ROR64(qword,28) ^ ROR64(qword, 34) ^ ROR64(qword, 39)
+define cap_sigma1(qword):
+    return ROR64(qword,14) ^ ROR64(qword, 18) ^ ROR64(qword, 41)
+define MAJ(a,b,c):
+    return (a &amp; b) ^ (a &amp; c) ^ (b &amp; c)
+define CH(e,f,g):
+    return (e &amp; f) ^ (g &amp; ~e)</pre>
+<p><strong>VSHA512RNDS2 SRCDEST, SRC1, SRC2</strong></p>
+<pre>A[0] := SRC1.qword[3]
+B[0] := SRC1.qword[2]
+C[0] := SRCDEST.qword[3]
+D[0] := SRCDEST.qword[2]
+E[0] := SRC1.qword[1]
+F[0] := SRC1.qword[0]
+G[0] := SRCDEST.qword[1]
+H[0] := SRCDEST.qword[0]
+WK[0]:= SRC2.qword[0]
+WK[1]:= SRC2.qword[1]
+FOR i in 0..1:
+    A[i+1] := CH(E[i], F[i], G[i]) +
+         cap_sigma1(E[i]) + WK[i] + H[i] +
+         MAJ(A[i], B[i], C[i]) +
+         cap_sigma0(A[i])
+    B[i+1] := A[i]
+    C[i+1] := B[i]
+    D[i+1] := C[i]
+    E[i+1] := CH(E[i], F[i], G[i]) +
+         cap_sigma1(E[i]) + WK[i] + H[i] + D[i]
+    F[i+1] := E[i]
+    G[i+1] := F[i]
+    H[i+1] := G[i]
+SRCDEST.qword[3] = A[2]
+SRCDEST.qword[2] = B[2]
+SRCDEST.qword[1] = E[2]
+SRCDEST.qword[0] = F[2]</pre>
+<h2>Flags Affected</h2>
+<p>None.</p>
+<h2>Intel C/C++ Compiler Intrinsic Equivalent</h2>
+<p>VSHA512RNDS2 __m256i _mm256_sha512rnds2_epi64 (__m256i __A, __m256i __B, __m128i __C);</p>
+<h2>SIMD Floating-Point Exceptions</h2>
+<p>None.</p>
+<h2>Other Exceptions</h2>
+<p>See Table 2-23, “Type 6 Class Exception Conditions.”</p></body></html>

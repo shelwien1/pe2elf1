@@ -4,41 +4,41 @@
 <head>
 <meta charset="UTF-8">
 <link href="style.css" type="text/css" rel="stylesheet">
-<title>MULX — Unsigned Multiply Without Affecting Flags </title></head>
+<title>MULX—Unsigned Multiply Without Affecting Flags </title></head>
 <body>
-<h1>MULX — Unsigned Multiply Without Affecting Flags</h1>
+<h1>MULX—Unsigned Multiply Without Affecting Flags</h1>
 <p><strong>Opcode/</strong></p>
-<p><strong>Op/</strong></p>
-<p><strong>64/32</strong></p>
+<p><strong>Op/ En</strong></p>
+<p><strong>64/32-</strong></p>
 <p><strong>CPUID</strong></p>
 <p><strong>Description</strong></p>
 <table>
 <tr>
 <th>Instruction</th>
-<th>En</th>
-<th>-bit Mode</th>
+<td></td>
+<th>bit Mode</th>
 <th>Feature Flag</th>
 <td></td></tr>
 <tr>
-<td>VEX.NDD.LZ.F2.0F38.W0 F6 /r MULX <em>r32a, r32b, r/m32</em></td>
+<td>VEX.LZ.F2.0F38.W0 F6 /r MULX r32a, r32b, r/m32</td>
 <td>RVM</td>
 <td>V/V</td>
 <td>BMI2</td>
-<td>Unsigned multiply of <em>r/m32</em> with EDX without affecting arithmetic flags.</td></tr>
+<td>Unsigned multiply of r/m32 with EDX without affecting arithmetic flags.</td></tr>
 <tr>
-<td>VEX.NDD.LZ.F2.0F38.W1 F6 /r MULX <em>r64a, r64b, r/m64</em></td>
+<td>VEX.LZ.F2.0F38.W1 F6 /r MULX r64a, r64b, r/m64</td>
 <td>RVM</td>
 <td>V/N.E.</td>
 <td>BMI2</td>
-<td>Unsigned multiply of <em>r/m64</em> with RDX without affecting arithmetic flags.</td></tr></table>
+<td>Unsigned multiply of r/m64 with RDX without affecting arithmetic flags.</td></tr></table>
 <h3>Instruction Operand Encoding</h3>
 <table>
 <tr>
-<td>Op/En</td>
-<td>Operand 1</td>
-<td>Operand 2</td>
-<td>Operand 3</td>
-<td>Operand 4</td></tr>
+<th>Op/En</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
 <tr>
 <td>RVM</td>
 <td>ModRM:reg (w)</td>
@@ -55,25 +55,21 @@
 <pre>// DEST1: ModRM:reg
 // DEST2: VEX.vvvv
 IF (OperandSize = 32)
-    SRC1 ← EDX;
-    DEST2 ← (SRC1*SRC2)[31:0];
-    DEST1 ← (SRC1*SRC2)[63:32];
+    SRC1 := EDX;
+    DEST2 := (SRC1*SRC2)[31:0];
+    DEST1 := (SRC1*SRC2)[63:32];
 ELSE IF (OperandSize = 64)
-    SRC1 ← RDX;
-         DEST2 ← (SRC1*SRC2)[63:0];
-         DEST1 ← (SRC1*SRC2)[127:64];
+    SRC1 := RDX;
+         DEST2 := (SRC1*SRC2)[63:0];
+         DEST1 := (SRC1*SRC2)[127:64];
 FI</pre>
-<h2>Flags Affected</h2>
-<p>None</p>
 <h2>Intel C/C++ Compiler Intrinsic Equivalent</h2>
 <p>Auto-generated from high-level language when possible.</p>
 <p>unsigned int mulx_u32(unsigned int a, unsigned int b, unsigned int * hi);</p>
 <p>unsigned __int64 mulx_u64(unsigned __int64 a, unsigned __int64 b, unsigned __int64 * hi);</p>
+<h2>Flags Affected</h2>
+<p>None.</p>
 <h2>SIMD Floating-Point Exceptions</h2>
-<p>None</p>
+<p>None.</p>
 <h2>Other Exceptions</h2>
-<p>See Section 2.5.1, “Exception Conditions for VEX-Encoded GPR Instructions”, Table 2-29; additionally</p>
-<table class="exception-table">
-<tr>
-<td>#UD</td>
-<td>If VEX.W = 1.</td></tr></table></body></html>
+<p>See Table 2-29, “Type 13 Class Exception Conditions.”</p></body></html>

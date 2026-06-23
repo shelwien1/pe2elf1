@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="style.css" type="text/css" rel="stylesheet">
+<title>VBCSTNEBF162PS—Load BF16 Element and Convert to FP32 Element With Broadcast </title></head>
+<body>
+<h1>VBCSTNEBF162PS—Load BF16 Element and Convert to FP32 Element With Broadcast</h1>
+<p><strong>Opcode/</strong></p>
+<p><strong>Op/</strong></p>
+<p><strong>64/32</strong></p>
+<p><strong>CPUID Feature</strong></p>
+<p><strong>Description</strong></p>
+<p><strong>Instruction</strong></p>
+<p><strong>En</strong></p>
+<p><strong>bit Mode</strong></p>
+<p><strong>Flag</strong></p>
+<p><strong>Support</strong></p>
+<p>VEX.128.F3.0F38.W0 B1</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX_NE_</p>
+<p>Load one BF16 floating-point element from</p>
+<p>!(11):rrr:bbb</p>
+<p>CONVERT</p>
+<p>m16, convert to FP32 and store result in xmm1.</p>
+<p>VBCSTNEBF162PS xmm1, m16</p>
+<p>VEX.256.F3.0F38.W0 B1</p>
+<p>A</p>
+<p>V/V</p>
+<p>AVX_NE_</p>
+<p>Load one BF16 floating-point element from</p>
+<p>!(11):rrr:bbb</p>
+<p>CONVERT</p>
+<p>m16, convert to FP32 and store result in ymm1.</p>
+<p>VBCSTNEBF162PS ymm1, m16</p>
+<h3>Instruction Operand Encoding</h3>
+<table>
+<tr>
+<th>Op/En</th>
+<th>Tuple Type</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th></tr>
+<tr>
+<td>A</td>
+<td>N/A</td>
+<td>ModRM:reg (w)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td>
+<td>N/A</td></tr></table>
+<h2>Description</h2>
+<p>This instruction loads one BF16 element from memory, converts it to FP32, and broadcasts it to a SIMD register.</p>
+<p>This instruction does not generate floating-point exceptions and does not consult or update MXCSR.</p>
+<p>Since any BF16 number can be represented in FP32, the conversion result is exact and no rounding is needed.</p>
+<h2>Operation</h2>
+<p><strong>VBCSTNEBF162PS dest, src (VEX encoded version)</strong></p>
+<pre>VL = (128, 256)
+KL = VL/32
+FOR i in range(0, KL):
+    tmp.dword[i].word[0] = src.word[0] // reads 16b from memory
+FOR i in range(0, KL):
+    dest.dword[i] = make_fp32(TMP.dword[i].word[0])
+DEST[MAXVL-1:VL] := 0</pre>
+<h2>Flags Affected</h2>
+<p>None.</p>
+<h2>Intel C/C++ Compiler Intrinsic Equivalent</h2>
+<p>VBCSTNEBF162PS __m128 _mm_bcstnebf16_ps (const __bf16* __A);</p>
+<p>VBCSTNEBF162PS __m256 _mm256_bcstnebf16_ps (const __bf16* __A);</p>
+<h2>SIMD Floating-Point Exceptions</h2>
+<p>None.</p>
+<h2>Other Exceptions</h2>
+<p>See Table 2-22, “Type 5 Class Exception Conditions.”</p></body></html>
