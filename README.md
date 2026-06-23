@@ -171,6 +171,28 @@ given as raw `=<hex>` lines (bytes from `llvm-mc-20`) with a hand-written
 comment. Every byte sequence was cross-checked with `llvm-mc --disassemble`.
 Result: 84 forms, 517 bytes (3 REX2, 81 EVEX). Requires `llvm-mc` (LLVM 19+).
 
+## Capstone variant (`mine32cs`)
+
+`mine32cs.c` is the same miner built on **Capstone** instead of Zydis (same
+flags: `-t/-b/-m/--canon/--no-skip-imm/--dump/--range`). `build.sh` fetches and
+builds Capstone (x86, static) and compiles it. It decodes with
+`cs_disasm_iter`, gets the structural skip offsets from `cs_x86.encoding`
+(`disp_offset`/`imm_offset`), and `--canon` normalises the textual disassembly
+(register names → class base, index scale dropped, segment overrides dropped,
+writemask `{k1..k7}`→`{k1}`, relative-branch targets zeroed).
+
+Two differences from the Zydis build:
+
+* **Slower on invalid regions.** Capstone can't report how many leading bytes
+  are decisively invalid, so invalid candidates are stepped one byte at a time
+  (Zydis skips them). A no-detail handle is used for the validity/length probe
+  to keep that as cheap as possible, but invalid-heavy chunks (e.g. the `0F`
+  two-byte-opcode space) take seconds rather than being skipped.
+* **Different coverage/among forms** — Capstone and Zydis don't accept exactly
+  the same byte sequences, and the canon text normalisation is string-based, so
+  counts differ from the Zydis build (e.g. Capstone folds `[r+r*1]` into `[r+r]`
+  since it omits `*1`).
+
 ## How the sweep is made fast
 
 The 40-bit value is laid out big-endian: byte 0 (the first instruction byte) is

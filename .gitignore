@@ -1,8 +1,10 @@
-# external dependency (fetched by build.sh)
+# external dependencies (fetched by build.sh)
 /zydis/
+/capstone/
 
 # build output
 /mine32
+/mine32cs
 /apxdis
 *.o
 
