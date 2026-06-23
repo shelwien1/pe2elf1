@@ -1,0 +1,4 @@
+# Local working directory used to regenerate x86/ — the fay59/x86doc tooling,
+# downloaded/decrypted Intel SDM PDFs, and run logs. Not committed; the
+# generated HTML output lives in x86/.
+/x86doc/
