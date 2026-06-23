@@ -149,6 +149,28 @@ complete instruction). Because 16-bit addressing can't use the normalized base
 forms; the comment is a canonical label, so the actual bytes may encode a
 different register of the same class). Use `--no-build` to emit only the `.s`.
 
+Committed corpus: **`x8632all.s`** / **`x8632all.bin`** (18,822 forms, 110,072 B).
+
+## APX corpus (`apxgen.py`)
+
+`x86apx.s` / `x86apx.bin` is a separate corpus with **one invented example per
+Intel APX instruction** (the 84 instruction pages of the Intel APX spec). APX is
+64-bit only, so this is built differently from the mined 32-bit corpus:
+
+```sh
+python3 apxgen.py apx_examples.txt -o apx_dump.txt          # bytes + disasm
+python3 dump2asm.py apx_dump.txt --bits 64 -o x86apx        # -> x86apx.s/.bin
+```
+
+`apx_examples.txt` holds one AT&T example per instruction; `apxgen.py` assembles
+each with `llvm-mc` (extended regs `r16`-`r31` / NDD / NF / `{dfv}` force the
+genuine APX **EVEX(MAP4)/REX2** encoding rather than the legacy fallback), then
+disassembles the bytes with `apxdis` (Zydis, APX mode) for the comment. Three
+forms this Zydis build predates (`MOVRS`, the APX-imm `RDMSR`/`WRMSRNS`) are
+given as raw `=<hex>` lines (bytes from `llvm-mc-20`) with a hand-written
+comment. Every byte sequence was cross-checked with `llvm-mc --disassemble`.
+Result: 84 forms, 517 bytes (3 REX2, 81 EVEX). Requires `llvm-mc` (LLVM 19+).
+
 ## How the sweep is made fast
 
 The 40-bit value is laid out big-endian: byte 0 (the first instruction byte) is

@@ -1,0 +1,89 @@
+# One invented example per Intel APX instruction (84 HTML pages).
+# Each line is either AT&T assembly (assembled with llvm-mc) or, for forms no
+# assembler here can build, a raw "=<hex bytes>\t<disasm comment>" line.
+# Extended regs (r16-r31) / NDD / NF / {dfv} force the genuine APX (EVEX/REX2)
+# encoding rather than the legacy fallback.
+aadd %r16d, (%rax)
+aand %r16d, (%rax)
+adc %eax, %ecx, %edx
+adcx %eax, %ecx, %edx
+add %eax, %ecx, %edx
+adox %eax, %ecx, %edx
+and %eax, %ecx, %edx
+andn %r18d, %r17d, %r16d
+aor %r16d, (%rax)
+axor %r16d, (%rax)
+bextr %r18d, %r17d, %r16d
+blsi %r17d, %r16d
+blsmsk %r17d, %r16d
+blsr %r17d, %r16d
+bzhi %r18d, %r17d, %r16d
+ccmpbl {dfv=of} %ecx, %eax
+cfcmovbl %ecx, %eax
+cmovbl %edx, %ecx, %eax
+cmpbxadd %r17d, %r18d, (%rax)
+crc32l %eax, %r16d
+ctestbl {dfv=of} %ecx, %eax
+dec %ecx, %eax
+{nf} div %ecx
+enqcmd (%rax), %r16
+enqcmds (%rax), %r16
+{nf} idiv %ecx
+imul %eax, %ecx, %edx
+inc %ecx, %eax
+invept (%rax), %r16
+invpcid (%rax), %r16
+invvpid (%rax), %r16
+jmpabs $0x123456789a
+kmovb %k1, %r16d
+kmovd %k1, %r16d
+kmovq %k1, %r16
+kmovw %k1, %r16d
+ldtilecfg (%r16)
+{nf} lzcnt %ecx, %eax
+movbe %r16d, (%rax)
+movdir64b (%rax), %r16
+movdiri %r16d, (%rax)
+=62 e4 7c 08 8b 00	movrs r16d, [rax]
+{nf} mul %ecx
+mulx %r18d, %r17d, %r16d
+neg %ecx, %eax
+not %ecx, %eax
+or %eax, %ecx, %edx
+pdep %r18d, %r17d, %r16d
+pext %r18d, %r17d, %r16d
+pop2 %rax, %rbx
+{nf} popcnt %ecx, %eax
+popp %rax
+push2 %rax, %rbx
+pushp %rax
+rcl $1, %ecx, %eax
+rcr $1, %ecx, %eax
+=62 ff 7f 08 f6 c0 10 00 00 00	rdmsr r16, 0x10
+rol $1, %ecx, %eax
+ror $1, %ecx, %eax
+rorx $1, %r17d, %r16d
+sar $1, %ecx, %eax
+sarx %r18d, %r17d, %r16d
+sbb %eax, %ecx, %edx
+setzub %r16b
+shl $1, %ecx, %eax
+shld $1, %ecx, %eax, %edx
+shlx %r18d, %r17d, %r16d
+shr $1, %ecx, %eax
+shrd $1, %ecx, %eax, %edx
+shrx %r18d, %r17d, %r16d
+sttilecfg (%r16)
+sub %eax, %ecx, %edx
+tileloadd (%rax,%r16), %tmm1
+tileloaddt1 (%rax,%r16), %tmm1
+tilestored %tmm1, (%rax,%r16)
+{nf} tzcnt %ecx, %eax
+urdmsr %r17, %r16
+uwrmsr %r16, %r17
+=62 ff 7e 08 f6 c0 10 00 00 00	wrmsrns 0x10, r16
+wrssd %r16d, (%rax)
+wrssq %r16, (%rax)
+wrussd %r16d, (%rax)
+wrussq %r16, (%rax)
+xor %eax, %ecx, %edx

@@ -10,6 +10,8 @@
 *.dump
 *.bin
 *.s
-# ...except the committed reference corpus
+# ...except the committed reference corpora
 !x8632all.s
 !x8632all.bin
+!x86apx.s
+!x86apx.bin
