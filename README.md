@@ -183,15 +183,19 @@ writemask `{k1..k7}`→`{k1}`, relative-branch targets zeroed).
 
 Two differences from the Zydis build:
 
-* **Slower on invalid regions.** Capstone can't report how many leading bytes
-  are decisively invalid, so invalid candidates are stepped one byte at a time
-  (Zydis skips them). A no-detail handle is used for the validity/length probe
-  to keep that as cheap as possible, but invalid-heavy chunks (e.g. the `0F`
-  two-byte-opcode space) take seconds rather than being skipped.
-* **Different coverage/among forms** — Capstone and Zydis don't accept exactly
-  the same byte sequences, and the canon text normalisation is string-based, so
-  counts differ from the Zydis build (e.g. Capstone folds `[r+r*1]` into `[r+r]`
-  since it omits `*1`).
+* **Much slower, so a full 40-bit sweep is impractical here.** Capstone can't
+  report how many leading bytes are decisively invalid, so invalid candidates
+  are stepped one byte at a time (Zydis skips them); it also decodes ~6× slower
+  and accepts more byte combinations. On the `0x26` (ES-prefix) chunk: Zydis
+  finds 8.76M forms in 2.8s, Capstone 44.5M in 42s. A whole-space `--canon` run
+  is tens of minutes (the prefix chunks each re-enumerate the space), versus
+  ~90s for the Zydis build — so prefer `--range`/smaller `-b` with `mine32cs`.
+  A no-detail Capstone handle is used for the validity/length probe to keep the
+  invalid stepping as cheap as possible.
+* **Different forms** — Capstone and Zydis don't accept exactly the same byte
+  sequences, and the canon normalisation is string-based, so counts differ from
+  the Zydis build (e.g. Capstone omits `*1`, so it folds `[r+r*2]` into `[r+r]`,
+  merging scaled and unscaled index forms).
 
 ## How the sweep is made fast
 
