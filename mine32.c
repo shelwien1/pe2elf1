@@ -95,9 +95,15 @@ static int format_canonical(const ZydisDecodedInstruction *insn,
             norm[i].mem.index = reg_base(norm[i].mem.index);
         }
     }
+    /* A relative branch's printed target is runtime_address + length + rel.
+     * The rel is wildcarded (0), but the length varies with prefix padding, so
+     * the same branch would otherwise print different targets and fail to
+     * merge. Setting runtime_address = -length makes the target compute to the
+     * (wildcarded) rel = 0 for every encoding, independent of length. */
+    ZyanU64 runtime = (ZyanU64)0 - (ZyanU64)insn->length;
     if (!ZYAN_SUCCESS(ZydisFormatterFormatInstruction(
             &g_fmt, insn, norm, insn->operand_count_visible,
-            out, outsz, 0, ZYAN_NULL)))
+            out, outsz, runtime, ZYAN_NULL)))
         return -1;
     return (int)strlen(out);
 }
