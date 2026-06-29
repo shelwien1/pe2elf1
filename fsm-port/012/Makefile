@@ -152,6 +152,15 @@ prog64e: asm32_64 prog64e.c
 	./asm32_64 c prog64e.dat prog64e.out
 	@cmp prog64e.bin prog64e.out && echo "prog64e: byte-identical"
 
+# long double math -> x87 (D8-DF): fldt/fstpt, fmul/fadd/fmulp, fxch, fucomi,
+# fildll/fistpll. Validates the x87 escape opcodes on real compiler output.
+prog64f: asm32_64 prog64f.c
+	gcc -O2 -fno-stack-protector -fcf-protection=full -c prog64f.c -o prog64f.o
+	objcopy -O binary --only-section=.text prog64f.o prog64f.bin
+	./asm32_64 d prog64f.bin prog64f.dat
+	./asm32_64 c prog64f.dat prog64f.out
+	@cmp prog64f.bin prog64f.out && echo "prog64f: byte-identical"
+
 clean:
 	rm -f parser test asm32 asm32_64 fuzz fuzz64 insns.dat out.bin corpus.head nc.dat nc_out.bin
 	rm -f insns64.dat out64.bin prog64.o prog64.bin prog64.out prog64.dat
@@ -159,10 +168,11 @@ clean:
 	rm -f prog64c.o prog64c.bin prog64c.out prog64c.dat
 	rm -f prog64d.o prog64d.bin prog64d.out prog64d.dat
 	rm -f prog64e.o prog64e.bin prog64e.out prog64e.dat
+	rm -f prog64f.o prog64f.bin prog64f.out prog64f.dat
 	rm -rf gen64
 
 .PHONY: all corpus regen check run runtest roundtrip noncanon fuzz clean \
-        asm64 check64 roundtrip64 prog64 prog64b prog64c prog64d prog64e fuzz64
+        asm64 check64 roundtrip64 prog64 prog64b prog64c prog64d prog64e prog64f fuzz64
 
 x8632all: asm32 x8632all.bin
 	@./asm32 d x8632all.bin /tmp/x8.dat >/dev/null 2>&1 && ./asm32 c /tmp/x8.dat /tmp/x8.out >/dev/null 2>&1 && \

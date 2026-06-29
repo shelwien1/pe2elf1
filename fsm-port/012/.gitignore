@@ -33,6 +33,10 @@ prog64e.o
 prog64e.bin
 prog64e.out
 prog64e.dat
+prog64f.o
+prog64f.bin
+prog64f.out
+prog64f.dat
 t64.bin
 t64.s
 big64.bin
