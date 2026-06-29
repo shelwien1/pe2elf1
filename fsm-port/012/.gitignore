@@ -4,6 +4,7 @@ test
 asm32
 asm32_64
 fuzz
+fuzz64
 *.o
 insns.dat
 out.bin

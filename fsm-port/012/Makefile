@@ -93,6 +93,19 @@ roundtrip64: asm32_64 corpus64.bin
 	./asm32_64 c insns64.dat out64.bin
 	@cmp out64.bin corpus64.bin && echo "roundtrip64: byte-identical"
 
+# bijection fuzz against the x86-64 tables. The corpus-driven legacy core must
+# report 0 legacy failures; VEX/EVEX/XOP go through the C++ structural path whose
+# tail layout is a heuristic (deferred), so those are counted and reported apart
+# and do not fail the run. Builds fuzz64 against 64-bit tables, then restores the
+# 32-bit default; the fuzz64 binary carries its tables compiled-in.
+fuzz64: fuzz.cpp $(DECHDRS) corpus64.p gen.py gasm.py
+	python3 gen.py corpus64.p x86_tables.h
+	python3 gasm.py corpus64.p x86_tables_enc.h
+	$(CXX) $(CXXFLAGS) -I. -o fuzz64 fuzz.cpp
+	python3 gen.py corpus.p x86_tables.h         # restore 32-bit tables (default)
+	python3 gasm.py corpus.p x86_tables_enc.h
+	./fuzz64 5000000
+
 # round-trip the .text of a gcc -O2 object (integer C: full coverage)
 prog64: asm32_64 prog64.c
 	gcc -O2 -fno-stack-protector -fcf-protection=none -c prog64.c -o prog64.o
@@ -102,12 +115,12 @@ prog64: asm32_64 prog64.c
 	@cmp prog64.bin prog64.out && echo "prog64: byte-identical"
 
 clean:
-	rm -f parser test asm32 asm32_64 fuzz insns.dat out.bin corpus.head nc.dat nc_out.bin
+	rm -f parser test asm32 asm32_64 fuzz fuzz64 insns.dat out.bin corpus.head nc.dat nc_out.bin
 	rm -f insns64.dat out64.bin prog64.o prog64.bin prog64.out prog64.dat
 	rm -rf gen64
 
 .PHONY: all corpus regen check run runtest roundtrip noncanon fuzz clean \
-        asm64 check64 roundtrip64 prog64
+        asm64 check64 roundtrip64 prog64 fuzz64
 
 x8632all: asm32 x8632all.bin
 	@./asm32 d x8632all.bin /tmp/x8.dat >/dev/null 2>&1 && ./asm32 c /tmp/x8.dat /tmp/x8.out >/dev/null 2>&1 && \
