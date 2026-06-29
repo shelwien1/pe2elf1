@@ -426,6 +426,45 @@ submatch insn {
   0x0f 0xbe @addr      => "movsx " greg[$g] "," $addr ;
   0x0f 0xbf 11 ggg rrr => "movsx " greg[$g] "," greg[$r] ;
   0x0f 0xbf @addr      => "movsx " greg[$g] "," $addr ;
+
+  # ===== 0F bit ops / scans / bswap / atomics / cpuid+rdtsc =====================
+  # F3-prefixed twins (popcnt = F3 0F B8, tzcnt = F3 0F BC, lzcnt = F3 0F BD) and
+  # cmpxchg16b (REX.W 0F C7 /1) round-trip via the replayed prefix; only the base
+  # opcode needs a rule. Bit-test reg/reg puts the r/m first (r/m,reg direction).
+  0x0f 0xa2 => "cpuid" ;
+  0x0f 0x31 => "rdtsc" ;
+  0x0f 0xa3 11 ggg rrr => "bt " greg[$r] "," greg[$g] ;
+  0x0f 0xa3 @addr      => "bt " $addr "," greg[$g] ;
+  0x0f 0xab 11 ggg rrr => "bts " greg[$r] "," greg[$g] ;
+  0x0f 0xab @addr      => "bts " $addr "," greg[$g] ;
+  0x0f 0xb3 11 ggg rrr => "btr " greg[$r] "," greg[$g] ;
+  0x0f 0xb3 @addr      => "btr " $addr "," greg[$g] ;
+  0x0f 0xbb 11 ggg rrr => "btc " greg[$r] "," greg[$g] ;
+  0x0f 0xbb @addr      => "btc " $addr "," greg[$g] ;
+  0x0f 0xba 11 100 rrr @imm8 => "bt " greg[$r] "," hex($imm8) ;
+  0x0f 0xba @addr(4)   @imm8 => "bt" sfx[4] " " $addr "," hex($imm8) ;
+  0x0f 0xba 11 101 rrr @imm8 => "bts " greg[$r] "," hex($imm8) ;
+  0x0f 0xba @addr(5)   @imm8 => "bts" sfx[4] " " $addr "," hex($imm8) ;
+  0x0f 0xba 11 110 rrr @imm8 => "btr " greg[$r] "," hex($imm8) ;
+  0x0f 0xba @addr(6)   @imm8 => "btr" sfx[4] " " $addr "," hex($imm8) ;
+  0x0f 0xba 11 111 rrr @imm8 => "btc " greg[$r] "," hex($imm8) ;
+  0x0f 0xba @addr(7)   @imm8 => "btc" sfx[4] " " $addr "," hex($imm8) ;
+  0x0f 0xbc 11 ggg rrr => "bsf " greg[$g] "," greg[$r] ;
+  0x0f 0xbc @addr      => "bsf " greg[$g] "," $addr ;
+  0x0f 0xbd 11 ggg rrr => "bsr " greg[$g] "," greg[$r] ;
+  0x0f 0xbd @addr      => "bsr " greg[$g] "," $addr ;
+  0x0f 0xb8 11 ggg rrr => "popcnt " greg[$g] "," greg[$r] ;
+  0x0f 0xb8 @addr      => "popcnt " greg[$g] "," $addr ;
+  0x0f 0xb0 11 ggg rrr => "cmpxchg " rgb[$r] "," rgb[$g] ;
+  0x0f 0xb0 @addr      => "cmpxchg" sfx[1] " " $addr "," rgb[$g] ;
+  0x0f 0xb1 11 ggg rrr => "cmpxchg " greg[$r] "," greg[$g] ;
+  0x0f 0xb1 @addr      => "cmpxchg " $addr "," greg[$g] ;
+  0x0f 0xc0 11 ggg rrr => "xadd " rgb[$r] "," rgb[$g] ;
+  0x0f 0xc0 @addr      => "xadd" sfx[1] " " $addr "," rgb[$g] ;
+  0x0f 0xc1 11 ggg rrr => "xadd " greg[$r] "," greg[$g] ;
+  0x0f 0xc1 @addr      => "xadd " $addr "," greg[$g] ;
+  0x0f 0xc7 @addr(1)   => "cmpxchg8b " $addr ;
+  0x0f 11001 bbb       => "bswap " greg[$b] ;
 }
 
 submatch main { @pfx(0) => $pfx }
