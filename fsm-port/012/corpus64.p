@@ -16,8 +16,15 @@
 #  * movsxd (0x63), movabs (B8+r REX.W -> imm64), default-64 stack/branch group.
 #
 # Coverage: the core integer ISA (ALU, mov/lea, push/pop, inc/dec, test/xchg,
-# shifts, imul, jmp/call/jcc, ret, movzx/movsx/movsxd, setcc/cmovcc, groups).
-# SSE/AVX legacy-encoded ops are deferred; VEX/EVEX round-trip C++-side already.
+# shifts, imul, jmp/call/jcc, ret, movzx/movsx/movsxd, setcc/cmovcc, groups,
+# string ops, bit ops/bsf/bsr/bswap, cmpxchg/xadd, cpuid/rdtsc, fences/prefetch,
+# CET endbr) plus the common legacy SSE/SSE2 (movaps/movups/movsd, add/mul/sub/
+# div/min/max/sqrt, and/or/xor, cmp/shuf/ucomis, movd/movq, movdqa/u, cvtsi2sd/
+# cvtt*2si, packed padd/psub/pand/por/pxor/pcmpeq). The mandatory 66/F3/F2 SSE
+# selector and rep/lock ride the prefix run (replayed verbatim), so prefix
+# variants round-trip byte-exact. Higher SSE/AVX (0F38/0F3A, shifts/shuffles)
+# and byte-exact VEX/EVEX tails remain future work; VEX/EVEX round-trip today via
+# the C++ structural path.
 
 arch  $mode=64 $endian=le $bitorder=msb $maxlen=15
 # REX is NOT a var: the capture index is only 5 bits (32 slots) and the legacy
