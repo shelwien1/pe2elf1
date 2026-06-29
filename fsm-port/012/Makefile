@@ -133,15 +133,26 @@ prog64c: asm32_64 prog64c.c
 	./asm32_64 c prog64c.dat prog64c.out
 	@cmp prog64c.bin prog64c.out && echo "prog64c: byte-identical"
 
+# integer array kernels auto-vectorized by gcc -O3 to baseline SSE2 packed ops
+# (movdqa/u, paddd/psubd, pmullw, pand/pxor, punpck, shifts, pshufd) -- exercises
+# the SSE2 packed-integer set on real vectorized output.
+prog64d: asm32_64 prog64d.c
+	gcc -O3 -fno-stack-protector -fcf-protection=full -c prog64d.c -o prog64d.o
+	objcopy -O binary --only-section=.text prog64d.o prog64d.bin
+	./asm32_64 d prog64d.bin prog64d.dat
+	./asm32_64 c prog64d.dat prog64d.out
+	@cmp prog64d.bin prog64d.out && echo "prog64d: byte-identical"
+
 clean:
 	rm -f parser test asm32 asm32_64 fuzz fuzz64 insns.dat out.bin corpus.head nc.dat nc_out.bin
 	rm -f insns64.dat out64.bin prog64.o prog64.bin prog64.out prog64.dat
 	rm -f prog64b.o prog64b.bin prog64b.out prog64b.dat
 	rm -f prog64c.o prog64c.bin prog64c.out prog64c.dat
+	rm -f prog64d.o prog64d.bin prog64d.out prog64d.dat
 	rm -rf gen64
 
 .PHONY: all corpus regen check run runtest roundtrip noncanon fuzz clean \
-        asm64 check64 roundtrip64 prog64 prog64b prog64c fuzz64
+        asm64 check64 roundtrip64 prog64 prog64b prog64c prog64d fuzz64
 
 x8632all: asm32 x8632all.bin
 	@./asm32 d x8632all.bin /tmp/x8.dat >/dev/null 2>&1 && ./asm32 c /tmp/x8.dat /tmp/x8.out >/dev/null 2>&1 && \
