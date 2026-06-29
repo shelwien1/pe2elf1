@@ -34,6 +34,7 @@ classic x86-64 integer/FP ISA plus AVX/AVX2 and a broad slice of AVX-512:
 | AVX-512 yet more | `vpternlogd/q` (3-input LUT, imm8), `vsqrtps/pd/ss/sd` (`{er}`), integer multiply (vpmuldq/muludq/mullq), round-to-scale (vrndscaleps/pd/ss/sd, imm8 + `{sae}`), `vscalefps/pd/ss/sd` (`{er}`), reciprocal/rsqrt approximations (vrcp14/vrsqrt14 ps/pd/ss/sd), `vgetexpps/pd` + `vgetmantps/pd` (imm8 + `{sae}`), mask-merge blends (vpblendmd/q, vblendmps/pd), and `vptestnmd/q` → k |
 | AVX-512 width converts | the EVEX cross-width converts whose operands differ in vector width: vcvtps2pd, vcvtpd2ps, vcvtdq2pd, vcvtudq2pd, vcvtpd2dq, vcvttpd2dq (with `{er}`/`{sae}` and qword-count broadcast) |
 | AVX-512 int width converts | zero/sign-extend widen `vpmov{z,s}x{bw,bd,bq,wd,wq,dq}` and narrow `vpmov{,s,us}{wb,db,qb,dw,qw,qd}` (truncate / signed- / unsigned-saturate, register or memory destination, masking) |
+| AVX-512 gather/scatter | VSIB (vector-index SIB): `vpgather{d,q}{d,q}` / `vgather{d,q}p{s,d}` and the matching scatters, `[base+vindex*scale(+disp)]` with the required write-mask — index xmm/ymm/zmm and dest width tracked per element-size kind |
 | AVX-512 masks (k) | `kmovw/b/d/q`, k-logic (`kand/kandn/kor/kxor/kxnor/knot/kortest/ktest/kadd/kunpck`), `kshiftl/rw`, and mask-producing compares `vpcmp{eq,gt}d`/`vcmpps/pd`/`vpcmp[u]d/q`/`vptestmd/q` → k (with optional `{k}` mask) |
 | XOP (8F, AMD) | `vpcmov`/`vpperm`/`vpmacsdd` (4-operand is4), `vprot{b,w,d,q}` (imm8 + variable), `vpsh{l,a}{b,w,d,q}`, `vphadd*`/`vphsub*` |
 
@@ -41,11 +42,11 @@ Validated against GNU `as`/`objdump`: every instruction in the test corpus
 assembles to the exact bytes `as` produces, and the entire `.text` of `/bin/ls`
 (~20 000 instructions) disassembles with **zero** undecodable bytes.
 
-**Not yet covered (future work):** AVX-512 VSIB gather/scatter (vector-index
-SIB — the one family that needs a new addressing mode rather than just more
-rules); and the long tail of rarer EVEX leaves. EVEX
+**Not yet covered (future work):** the long tail of rarer EVEX leaves
+(e.g. half-precision/`vcvtph2ps`, conflict-detect, byte/word permutes). EVEX
 `disp8` is shown as the raw encoded byte rather than the disp8×N effective
-displacement (the corpus.p convention — see below). The `vcmp`/`vpcmp`
+displacement (the corpus.p convention — see below), including in the VSIB
+gather/scatter memory operands. The `vcmp`/`vpcmp`
 predicate is kept as an explicit `imm8` operand rather than folded into the
 mnemonic (objdump folds it).
 
@@ -79,6 +80,12 @@ everything new lives in `corpus64.p`:
   applied); this keeps the round-trip byte-exact without per-instruction tuple
   tables. The assembler suppresses any REX byte before a VEX/EVEX/XOP lead and
   bridges memory-operand REX.B/X into the inverted prefix fields (`asm._vexfix`).
+* **VSIB gather/scatter** is expressed without any new addressing mode: the rule
+  writes the SIB out explicitly (`00 ggg 100 ss iii ddd`) and renders the memory
+  operand inline (`"[" areg[...] "+" ereg[...] "*" vscale "]"`), so the generic
+  table reverse-matcher assembles it. The base GPR extends through `B`, and the
+  vector index through `X` (bit 3) + `V'` (bit 4) via the inverted `ereg` table;
+  per element-size kind the dest and index width class tracks `L'L`.
 
 ## Engine changes (`asm.py`)
 
@@ -92,8 +99,12 @@ preserved):
    RIP-relative, absolute-via-SIB, REX.B/X into the env;
 3. **REX byte re-derivation** in `revealed_bytes` (emitted last, masked to one
    bit per field);
-4. a **VEX bridge** (`_vexfix`) mapping memory-operand REX.B/X into the inverted
-   VEX byte-1 fields, and suppression of any REX byte before a VEX/XOP/EVEX lead.
+4. a **VEX bridge** (`_vexfix`) mapping memory-operand REX.B/X/R into the
+   inverted VEX/EVEX byte-1 fields, and suppression of any REX byte before a
+   VEX/XOP/EVEX lead;
+5. one latent fix: the reverse-matcher's hex regex now accepts a leading `+`,
+   so an inline `sgn()` displacement (used by the VSIB memory operands) round-
+   trips for non-negative values, not just negative ones.
 
 ## Files
 

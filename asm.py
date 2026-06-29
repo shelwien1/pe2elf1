@@ -303,7 +303,7 @@ def _ev(e):
 # ============================================================================
 # generic template reverse-match  (returns remaining string or None)
 # ============================================================================
-HEXRE = re.compile(r"-?0x[0-9a-fA-F]+")
+HEXRE = re.compile(r"[+-]?0x[0-9a-fA-F]+")   # sgn() emits a leading + for non-negatives
 DECRE = re.compile(r"\d+")
 
 

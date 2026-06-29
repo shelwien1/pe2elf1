@@ -177,6 +177,31 @@ def pmovt(mn, op, narrow):
   E('%s %s z ll 0 1 aaa 0x%02x 11 ggg rrr => wit("evex") wit("alt") "%s " %s %s "," %s ;' % (P0("10"), P1F("0", "10"), op, mn, rm, KZ, RG))
   E('%s %s z ll 0 1 aaa 0x%02x @addr %s => wit("evex") "%s " $addr %s "," %s ;' % (P0("10"), P1F("0", "10"), op, ACT, mn, KZ, RG))
 
+# VSIB gather/scatter: explicit SIB (mod=00 rm=100), inline [base+vindex*scale].
+# base is a 64-bit GPR (B-bar extends, via $rexb); the vector index is extended
+# by X-bar(P0,$k) for bit3 and V-bar'(P2,$u) for bit4 through the inverted ereg
+# table; dest/data via R-bar/R-bar'.  Per element-size kind the dest and index
+# width class (xmm/ymm/zmm) varies with L'L.
+DEST_BLK = {"dd": [0, 1, 2], "dq": [0, 1, 2], "qd": [0, 0, 1], "qq": [0, 1, 2]}
+IDX_BLK = {"dd": [0, 1, 2], "dq": [0, 0, 1], "qd": [0, 1, 2], "qq": [0, 1, 2]}
+
+def vsib(mn, op, w, kind, width):
+  # mod=00 (no disp), 01 (disp8) and 10 (disp32); disp8 is the raw encoded byte
+  # (corpus.p convention -- disp8*N scaling not applied), rendered signed.
+  for ll in (0, 1, 2):
+    db, ib = 32 * DEST_BLK[width][ll], 32 * IDX_BLK[width][ll]
+    dst = "ereg[%d+16*$e+8*$h+$g]" % db
+    idx = "ereg[%d+16*$u+8*$k+$i]" % ib
+    for mod, dfield, dtail in [("00", "", ""), ("01", " @disp8", " sgn($disp8)"),
+                               ("10", " @disp32", " sgn($disp32)")]:
+      mem = '"[" areg[8*$rexb+$d] "+" %s "*" vscale[$s]%s "]"' % (idx, dtail)
+      if kind == "gather":
+        body = '"%s " %s kzdec[$z*8+$a] "," %s' % (mn, dst, mem)
+      else:
+        body = '"%s " %s kzdec[$z*8+$a] "," %s' % (mn, mem, dst)
+      E('h k b e 00 10 %s 1111 1 01 z %s 0 u aaa 0x%02x %s ggg 100 ss iii ddd%s {$rexb=1-$b} => wit("evex") %s ;'
+        % (w, format(ll, "02b"), op, mod, dfield, body))
+
 def scal_imm(mn, op, w, pp, mm="11"):
   # scalar 3-op + imm8 with optional {sae} (vrndscaless/sd): all xmm.
   E('%s %s z ll 0 u aaa 0x%02x 11 ggg rrr @imm8 => wit("evex") "%s " %s %s "," %s "," %s "," hex($imm8) ;' % (P0(mm), P1(w, pp), op, mn, XG, KZ, XV, XM))
@@ -326,5 +351,14 @@ for mn, op, nw in [("vpmovwb", 0x30, "h"), ("vpmovdb", 0x31, "x"), ("vpmovqb", 0
                    ("vpmovuswb", 0x10, "h"), ("vpmovusdb", 0x11, "x"), ("vpmovusqb", 0x12, "x"),
                    ("vpmovusdw", 0x13, "h"), ("vpmovusqw", 0x14, "x"), ("vpmovusqd", 0x15, "h")]:
   pmovt(mn, op, nw)
+# --- VSIB gather (90-93) / scatter (a0-a3): d/q index x d/q element ---
+for op, w0, w1 in [(0x90, "vpgatherdd", "vpgatherdq"), (0x91, "vpgatherqd", "vpgatherqq"),
+                   (0x92, "vgatherdps", "vgatherdpd"), (0x93, "vgatherqps", "vgatherqpd")]:
+  iq = "q" if op & 1 else "d"
+  vsib(w0, op, "0", "gather", iq + "d"); vsib(w1, op, "1", "gather", iq + "q")
+for op, w0, w1 in [(0xa0, "vpscatterdd", "vpscatterdq"), (0xa1, "vpscatterqd", "vpscatterqq"),
+                   (0xa2, "vscatterdps", "vscatterdpd"), (0xa3, "vscatterqps", "vscatterqpd")]:
+  iq = "q" if op & 1 else "d"
+  vsib(w0, op, "0", "scatter", iq + "d"); vsib(w1, op, "1", "scatter", iq + "q")
 v.append("}")
 print("\n".join(v))

@@ -329,3 +329,20 @@ vpmovsdb xmm0, zmm1
 vpmovusdb xmm0, zmm1
 vpmovsdw ymm0, zmm1
 vpmovdb xmm0{k1}, zmm1
+# ---- AVX-512 round 6: VSIB gather/scatter (vector index, explicit SIB) ----
+vgatherdps zmm0{k1}, [rax+zmm1*4]
+vgatherdpd zmm0{k2}, [rax+ymm1*8]
+vpgatherdd zmm0{k3}, [rax+zmm1*4]
+vpgatherqq zmm0{k4}, [rax+zmm1*8]
+vgatherqps ymm0{k5}, [rax+zmm1*4]
+vpgatherqd ymm0{k1}, [rax+zmm1*4]
+vpgatherdq zmm0{k1}, [rax+ymm1*8]
+vgatherqpd zmm0{k1}, [rax+zmm1*8]
+vscatterdps [rax+zmm1*4]{k1}, zmm0
+vpscatterdd [rax+zmm1*4]{k1}, zmm0
+vscatterqpd [rax+zmm1*8]{k1}, zmm0
+vpscatterqd [rax+zmm1*4]{k1}, ymm0
+vgatherdps ymm0{k1}, [rbx+ymm2*2-0x20]
+vgatherdps zmm8{k1}, [rax+zmm17*4]
+vpgatherdd zmm0{k1}, [rax+zmm31*8]
+vscatterdps [r12+zmm9*4]{k1}, zmm16

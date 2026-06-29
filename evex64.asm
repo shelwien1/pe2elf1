@@ -320,3 +320,19 @@ evex alt vpmovsdb xmm0,zmm1
 evex alt vpmovusdb xmm0,zmm1
 evex alt vpmovsdw ymm0,zmm1
 evex alt vpmovdb xmm0 {k1},zmm1
+evex vgatherdps zmm0 {k1},[rax+zmm1*4]
+evex vgatherdpd zmm0 {k2},[rax+ymm1*8]
+evex vpgatherdd zmm0 {k3},[rax+zmm1*4]
+evex vpgatherqq zmm0 {k4},[rax+zmm1*8]
+evex vgatherqps ymm0 {k5},[rax+zmm1*4]
+evex vpgatherqd ymm0 {k1},[rax+zmm1*4]
+evex vpgatherdq zmm0 {k1},[rax+ymm1*8]
+evex vgatherqpd zmm0 {k1},[rax+zmm1*8]
+evex vscatterdps [rax+zmm1*4] {k1},zmm0
+evex vpscatterdd [rax+zmm1*4] {k1},zmm0
+evex vscatterqpd [rax+zmm1*8] {k1},zmm0
+evex vpscatterqd [rax+zmm1*4] {k1},ymm0
+evex vgatherdps ymm0 {k1},[rbx+ymm2*2-0x8]
+evex vgatherdps zmm8 {k1},[rax+zmm17*4]
+evex vpgatherdd zmm0 {k1},[rax+zmm31*8]
+evex vscatterdps [r12+zmm9*4] {k1},zmm16
