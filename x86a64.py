@@ -2088,6 +2088,7 @@ table dcr    { fadd,fmul,fcom,fcomp,fsubr,fsub,fdivr,fdiv }
 table dar    { fcmovb,fcmove,fcmovbe,fcmovu }
 table dbr    { fcmovnb,fcmovne,fcmovnbe,fcmovnu }
 table der    { faddp,fmulp,fcompp,fcompp,fsubrp,fsubp,fdivrp,fdivp }
+table pause_t { "",pause,"" }          # F3 90 (pause absorbs the F3)
 table pcnt   { "",popcnt,"" }          # F3 0F B8
 table tzt    { "",tzcnt,"" }           # F3 0F BC
 table lzt    { "",lzcnt,"" }           # F3 0F BD
@@ -2329,7 +2330,7 @@ submatch insn {
   0x6b @addr @imm8      => "imul " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," $addr "," hex($imm8) ;
 
   # --- xchg / stack / nop ---------------------------------------------------
-  0x90 [$reptype==1] => "pause" ;
+  0x90 [$reptype==1] => pause_t[$reptype] ;
   0x90 [$rexb==0] => "nop" ;
   10010 bbb => "xchg " greg[32*$rexw+16*$opsiz+8*$rexb+$b] "," greg[32*$rexw+16*$opsiz+0] ;
   0x87 11 ggg rrr => "xchg " greg[32*$rexw+16*$opsiz+8*$rexb+$r] "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
