@@ -52,8 +52,8 @@ static size_t gen(uint8_t* buf) {
   } else if (kind < 13) {               // 3-byte VEX (C4): byte1 = R.X.B.mmmmm, map 1-3
     buf[p++] = 0xC4; buf[p++] = (uint8_t)((rn(8) << 5) | (1 + rn(3)));
     buf[p++] = (uint8_t)rn(256); buf[p++] = (uint8_t)rn(256);
-  } else if (kind < 15) {               // EVEX (62): P0 = R.X.B.R'.0.mmm, map 1-3
-    buf[p++] = 0x62; buf[p++] = (uint8_t)((rn(16) << 4) | (1 + rn(3)));
+  } else if (kind < 15) {               // EVEX (62): P0 = R.X.B.R'.0.mmm; maps 0-7
+    buf[p++] = 0x62; buf[p++] = (uint8_t)((rn(16) << 4) | rn(8));  // incl. APX map 4
     buf[p++] = (uint8_t)rn(256); buf[p++] = (uint8_t)rn(256); buf[p++] = (uint8_t)rn(256);
   } else if (kind < 16) {               // XOP (8F): byte1 = R.X.B.mmmmm, map 8-10
     buf[p++] = 0x8F; buf[p++] = (uint8_t)((rn(8) << 5) | (8 + rn(3)));

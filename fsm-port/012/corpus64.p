@@ -22,10 +22,14 @@
 # data movement, packed/scalar float arithmetic, the full packed-integer set
 # (add/sub/mul/min/max/avg/sad/cmp/pack/unpack/shift incl. the 71-73 imm groups),
 # movd/movq, cvt*, movmsk/pmovmskb, pinsr/pextr, and the 0F38/0F3A maps (pshufb,
-# palignr, pmovsx/zx, roundsd, blends, pcmpistri, pclmulqdq, AES). The mandatory
-# 66/F3/F2 SSE selector and rep/lock ride the prefix run (replayed verbatim), so
-# prefix variants round-trip byte-exact. x87 (D8-DF) and byte-exact VEX/EVEX
-# tails remain future work; VEX/EVEX round-trip today via the C++ structural path.
+# palignr, pmovsx/zx, roundsd, blends, pcmpistri, pclmulqdq, AES), plus x87
+# (D8-DF). The mandatory 66/F3/F2 SSE selector and rep/lock ride the prefix run
+# (replayed verbatim), so prefix variants round-trip byte-exact.
+#
+# Beyond this corpus, the C++ driver round-trips the remaining x64 byte-exactly:
+# VEX/EVEX/XOP (AVX, AVX-512) via the structural vex path, and APX -- the REX2
+# (D5) legacy prefix for r16-r31 and the EVEX-promoted-legacy maps. The fuzzer
+# enforces lossless round-trip across the whole accepted byte space (0 failures).
 
 arch  $mode=64 $endian=le $bitorder=msb $maxlen=15
 # REX is NOT a var: the capture index is only 5 bits (32 slots) and the legacy
