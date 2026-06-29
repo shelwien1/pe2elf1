@@ -123,3 +123,19 @@ vfmadd231pd zmm0{k1}, zmm1, zmm2
 vfmadd132ps zmm0, zmm1, zmm2, {rn-sae}
 vfmsub213pd zmm0, zmm1, zmm2
 vfnmadd213ps zmm0, zmm1, zmm2
+# ---- extended-register / memory edge cases ----
+vaddps zmm0, zmm1, [r8]
+vaddps zmm0, zmm1, [r15+r14*8+0x40]
+vaddpd zmm0, zmm16, zmm2
+vaddps zmm0, zmm31, zmm1
+vmulps zmm0{k7}, zmm17, zmm18
+vmovaps [r9], zmm0
+vmovaps zmm0, [r12+0x100]
+vmovdqu64 [r8+r9*1], zmm31
+vpaddd zmm0, zmm1, [r10]{1to16}
+vaddps zmm0{k1}{z}, zmm1, [rax]{1to16}
+vfmadd231pd zmm16{k2}, zmm17, [r8]{1to8}
+vaddss xmm16, xmm17, xmm18
+vmovaps ymm0, ymm1
+vmovaps xmm0, xmm1
+vaddps zmm0, zmm1, zmm2, {ru-sae}

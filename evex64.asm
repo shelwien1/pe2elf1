@@ -121,3 +121,18 @@ evex vfmadd231pd zmm0 {k1},zmm1,zmm2
 evex vfmadd132ps zmm0,zmm1,zmm2 {rn-sae}
 evex vfmsub213pd zmm0,zmm1,zmm2
 evex vfnmadd213ps zmm0,zmm1,zmm2
+evex vaddps zmm0,zmm1,[r8]
+evex vaddps zmm0,zmm1,[r15+r14*8+0x1]
+evex vaddpd zmm0,zmm16,zmm2
+evex vaddps zmm0,zmm31,zmm1
+evex vmulps zmm0 {k7},zmm17,zmm18
+evex vmovaps [r9],zmm0
+evex vmovaps zmm0,ss:[r12+0x4]
+evex vmovdqu64 [r8+r9*1],zmm31
+evex vpaddd zmm0,zmm1,[r10] {1to16}
+evex vaddps zmm0 {k1} {z},zmm1,[rax] {1to16}
+evex vfmadd231pd zmm16 {k2},zmm17,[r8] {1to8}
+evex vaddss xmm16,xmm17,xmm18
+vmovaps ymm0,ymm1
+vmovaps xmm0,xmm1
+evex vaddps zmm0,zmm1,zmm2 {ru-sae}
