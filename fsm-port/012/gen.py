@@ -388,11 +388,13 @@ class Interp:
 
   # ----- prefixes -----
   def prefix_rules(self):
-    # pfx frames that carry literal bits + an action: the simple one-byte prefixes
-    # (lit_mask 0xff) and the REX frame `0100 wrxb {...}` (lit_mask 0xf0, field-set).
+    # pfx frames that carry literal bits: the simple one-byte prefixes (each with a
+    # var-setting action) and the x86-64 REX frame `0100 w r x b` (no action -- it
+    # only consumes the byte into pfx[]; C++ extracts W/R/X/B from the raw byte, so
+    # no scarce capture slot is spent on REX).
     if not hasattr(self, '_pfx_rules'):
       self._pfx_rules = [r for r in parse_rules(self.subs['pfx'][1])
-                         if r['bp'] and r['action'] and r['bp'].lit_mask]
+                         if r['bp'] and r['bp'].lit_mask]
     return self._pfx_rules
 
   def prefix_match(self, byte):

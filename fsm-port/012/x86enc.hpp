@@ -202,6 +202,43 @@ static inline void enc_mem16(uint8_t* o, size_t* p, int reg_field, const x86insn
   else if (mod == 2) { o[(*p)++] = (uint8_t)disp; o[(*p)++] = (uint8_t)(disp >> 8); }
 }
 
+// 64-bit ModR/M/SIB/disp: like enc_mem32 but RIP-relative ([rip+disp32]),
+// absolute via the SIB no-base form, and base/index masked to 3 bits (the 4th
+// bit is in the REX byte, which the encoder replays from pfx[]). The esp/r12
+// (low 3 == 4) SIB-forcing and rbp/r13 (low 3 == 5) disp-forcing tests are on
+// the low 3 bits, matching the hardware.
+static inline void enc_mem64(uint8_t* o, size_t* p, int reg_field, const x86insn_t* in) {
+  int base = in->mem_base, index = in->mem_index, scale = in->mem_scale;
+  int32_t disp = in->disp;
+  reg_field &= 7;
+  if (in->rip) {                                         // [rip+disp32]: mod=00 rm=101
+    o[(*p)++] = (uint8_t)((reg_field << 3) | 5);
+    enc_put32(o, p, disp); return;
+  }
+  bool hb = base != GREG_NONE, hi = index != GREG_NONE;
+  if (!hb && !hi) {                                      // absolute [disp32]: SIB no-base
+    o[(*p)++] = (uint8_t)((reg_field << 3) | 4);
+    o[(*p)++] = (uint8_t)((in->sscale << 6) | (4 << 3) | 5);
+    enc_put32(o, p, disp); return;
+  }
+  bool need_sib = in->sib || hi || (hb && (base & 7) == 4) || !hb;
+  int dw = in->disp_w;                                   // 0=none 1=disp8 2=disp32
+  if (hb && (base & 7) == 5 && dw == 0) dw = 1;          // rbp/r13 base: no mod00 slot
+  int mod = hb ? dw : 0;                                 // no base -> mod00 + disp32
+  if (need_sib) {
+    int idx = hi ? (index & 7) : 4;                      // 4 = no index
+    int bse = hb ? (base & 7) : 5;                       // 5 + mod00 = no base
+    int sb  = hi ? scale : in->sscale;
+    o[(*p)++] = (uint8_t)((mod << 6) | (reg_field << 3) | 4);
+    o[(*p)++] = (uint8_t)((sb << 6) | (idx << 3) | bse);
+  } else {
+    o[(*p)++] = (uint8_t)((mod << 6) | (reg_field << 3) | (base & 7));
+  }
+  if (!hb)            enc_put32(o, p, disp);             // SIB no-base disp32
+  else if (mod == 1)  o[(*p)++] = (uint8_t)disp;
+  else if (mod == 2)  enc_put32(o, p, disp);
+}
+
 // ---- immediate ------------------------------------------------------------
 static inline void enc_imm(uint8_t* o, size_t* p, int imk, int opsize,
                            int32_t imm, int32_t sel) {
@@ -211,7 +248,7 @@ static inline void enc_imm(uint8_t* o, size_t* p, int imk, int opsize,
     case IMK_IMM8: case IMK_IMM8SX: case IMK_REL8: w = 1; break;
     case IMK_IMM16: w = 2; break;
     case IMK_IMM32: w = 4; break;
-    case IMK_IMMZ: case IMK_RELZ: w = opsize ? 2 : 4; break;
+    case IMK_IMMZ: case IMK_RELZ: w = (opsize == 1) ? 2 : 4; break;  // 16->2; 32/64->4
     case IMK_PTR:  enc_put32(o, p, imm);
                    o[(*p)++] = (uint8_t)sel; o[(*p)++] = (uint8_t)(sel >> 8); return;
     case IMK_ENTER: o[(*p)++] = (uint8_t)imm; o[(*p)++] = (uint8_t)(imm >> 8);
@@ -305,10 +342,14 @@ static inline size_t encode_insn(const x86insn_t* in, uint8_t* out) {
                   : in->op[reg_oi].index;
     const x86op_t* rm = &in->op[rm_oi >= 0 ? rm_oi : 0];
     if (rm->type == T_MEM) {
+#if ARCH_MODE == 64
+      enc_mem64(out, &p, reg_field, in);                 // RIP/abs-SIB; 32-bit (67) too
+#else
       if (in->addr) enc_mem16(out, &p, reg_field, in);
       else          enc_mem32(out, &p, reg_field, in);
-    } else {
-      out[p++] = (uint8_t)(0xC0 | (reg_field << 3) | (rm->index & 7));
+#endif
+    } else {                                             // reg-direct: low 3 bits (4th in REX)
+      out[p++] = (uint8_t)(0xC0 | ((reg_field & 7) << 3) | (rm->index & 7));
     }
   }
   enc_imm(out, &p, c->imk, in->opsize, in->imm, in->disp);

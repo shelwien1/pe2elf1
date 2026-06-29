@@ -71,10 +71,43 @@ fuzz: fuzz.cpp $(DECHDRS)
 	$(CXX) $(CXXFLAGS) -I. -o fuzz fuzz.cpp
 	./fuzz 5000000
 
-clean:
-	rm -f parser test asm32 fuzz insns.dat out.bin corpus.head nc.dat nc_out.bin
+# ---- x86-64 (long mode) -----------------------------------------------------
+# Same generators + same C++ (mode-gated via ARCH_MODE), driven by corpus64.p.
+# The C++ #includes "x86_tables.h" (resolved in its own directory first), so the
+# 64-bit build generates the 64-bit tables into ./x86_tables.h, compiles
+# asm32_64 against them, then restores the 32-bit tables so plain `make` is
+# unaffected. asm32_64 carries its tables compiled-in, so it stays 64-bit.
+asm64 asm32_64: corpus64.p gen.py gasm.py asm32.cpp x86insn.hpp x86dec.hpp x86enc.hpp
+	python3 gen.py corpus64.p x86_tables.h
+	python3 gasm.py corpus64.p x86_tables_enc.h
+	$(CXX) $(CXXFLAGS) -I. -o asm32_64 asm32.cpp
+	python3 gen.py corpus.p x86_tables.h         # restore 32-bit tables (default)
+	python3 gasm.py corpus.p x86_tables_enc.h
 
-.PHONY: all corpus regen check run runtest roundtrip noncanon fuzz clean
+check64: corpus64.p gen.py
+	python3 gen.py corpus64.p /dev/null
+
+# decode + re-encode the x86-64 corpus, assert byte-identical
+roundtrip64: asm32_64 corpus64.bin
+	./asm32_64 d corpus64.bin insns64.dat
+	./asm32_64 c insns64.dat out64.bin
+	@cmp out64.bin corpus64.bin && echo "roundtrip64: byte-identical"
+
+# round-trip the .text of a gcc -O2 object (integer C: full coverage)
+prog64: asm32_64 prog64.c
+	gcc -O2 -fno-stack-protector -fcf-protection=none -c prog64.c -o prog64.o
+	objcopy -O binary --only-section=.text prog64.o prog64.bin
+	./asm32_64 d prog64.bin prog64.dat
+	./asm32_64 c prog64.dat prog64.out
+	@cmp prog64.bin prog64.out && echo "prog64: byte-identical"
+
+clean:
+	rm -f parser test asm32 asm32_64 fuzz insns.dat out.bin corpus.head nc.dat nc_out.bin
+	rm -f insns64.dat out64.bin prog64.o prog64.bin prog64.out prog64.dat
+	rm -rf gen64
+
+.PHONY: all corpus regen check run runtest roundtrip noncanon fuzz clean \
+        asm64 check64 roundtrip64 prog64
 
 x8632all: asm32 x8632all.bin
 	@./asm32 d x8632all.bin /tmp/x8.dat >/dev/null 2>&1 && ./asm32 c /tmp/x8.dat /tmp/x8.out >/dev/null 2>&1 && \

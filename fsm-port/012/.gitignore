@@ -2,6 +2,7 @@
 parser
 test
 asm32
+asm32_64
 fuzz
 *.o
 insns.dat
@@ -9,3 +10,17 @@ out.bin
 nc.dat
 nc_out.bin
 corpus.head
+# x86-64 build / scratch
+insns64.dat
+out64.bin
+prog64.bin
+prog64.out
+prog64.dat
+t64.bin
+t64.s
+big64.bin
+b.dat
+b.out
+recs.dat
+p.dat
+p.out

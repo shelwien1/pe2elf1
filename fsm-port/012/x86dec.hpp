@@ -140,8 +140,11 @@ static inline void capture_addr_witness(x86insn_t* in, const byte* s, size_t op_
   size_t mrm_at = op_at + oplen + 1;
   uint8_t modrm = s[mrm_at];
   int mod = modrm >> 6, rm = modrm & 7;
-  if (in->addr == 0) {                                   // 32-bit addressing
-    if (mod == 0)      in->disp_w = (rm == 5) ? 2 : 0;   // rm=101 -> [disp32]
+  // 64-bit (and 32-bit) use SIB/disp32 addressing; only x86-32 has the 16-bit form.
+  // In 64-bit, mod=00 rm=101 is [rip+disp32] (still a 4-byte disp), so the same
+  // disp-width rules apply.
+  if (ARCH_MODE == 64 || in->addr == 0) {                // 32/64-bit addressing
+    if (mod == 0)      in->disp_w = (rm == 5) ? 2 : 0;   // rm=101 -> [disp32]/[rip+disp32]
     else if (mod == 1) in->disp_w = 1;
     else               in->disp_w = 2;
     if (rm == 4) {                                       // a SIB byte is present
@@ -170,14 +173,32 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t op_at, int t
   int rf = (int)c[CAP_RFILE], mf = (int)c[CAP_MFILE];
   int mode = (int)c[CAP_MODE], dir = (int)c[CAP_DIR];
 
+  // x86-64: REX adds a 4th register bit. REX.R extends a ModR/M.reg operand,
+  // REX.B an embedded (40+r/B8+r) reg or the rm/base, REX.X the SIB index. REX is
+  // replayed from pfx[] on encode, so only the operand *numbers* are widened here.
+  int xb = 0, reg_rex = 0;
+#if ARCH_MODE == 64
+  // REX is the last prefix byte (it must immediately precede the opcode), captured
+  // raw in pfx[] by the prefix run. Extract W/R/X/B here rather than spending five
+  // scarce capture slots on it. REX.R extends a ModR/M.reg operand, REX.B an
+  // embedded (40+r/B8+r) reg or rm/base, REX.X the SIB index.
+  int rexbyte = (in->n_pfx && (in->pfx[in->n_pfx - 1] & 0xF0) == 0x40)
+                  ? in->pfx[in->n_pfx - 1] : 0;
+  int xr = (rexbyte >> 2) & 1, xx = (rexbyte >> 1) & 1;
+  xb = rexbyte & 1;
+  in->rex = rexbyte ? 1 : 0;
+  if (rexbyte & 8) { in->opsize = 2; os = 2; }   // REX.W -> 64-bit operand
+  reg_rex = (form == FORM_REG || form == FORM_REG_IMM) ? xb : xr;
+#endif
+
   for (int i = 0; i < 5; ++i) { in->op[i].type = T_NONE; in->op[i].index = 0; }
   in->cc = c[CAP_CC] ? (uint8_t)(c[CAP_CC] - 1) : 0xFF;
 
   int n = 0;
   #define SETREG(slot, file, idx) do { in->op[slot].type = file_to_T(file, os); \
-                                       in->op[slot].index = (idx) & 7; } while (0)
+                                       in->op[slot].index = ((idx) & 7) + 8 * reg_rex; } while (0)
   #define SETRM(slot) do { if (mode == RM_REG) { in->op[slot].type = file_to_T(mf, os); \
-                                                 in->op[slot].index = (int)c[CAP_RM] & 7; } \
+                                                 in->op[slot].index = ((int)c[CAP_RM] & 7) + 8 * xb; } \
                            else { in->op[slot].type = T_MEM; in->op[slot].index = 0; } } while (0)
   switch (form) {
     case FORM_NONE: n = 0; break;
@@ -208,6 +229,18 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t op_at, int t
   in->n_ops = (uint8_t)n;
   #undef SETREG
   #undef SETRM
+
+  // x86-64 memory operand: widen base/index by REX.B/REX.X, flag RIP-relative.
+#if ARCH_MODE == 64
+  in->rip = 0;
+  bool fin_mem = false;
+  for (int i = 0; i < in->n_ops; ++i) if (in->op[i].type == T_MEM) fin_mem = true;
+  if (fin_mem) {
+    if (in->mem_base == GREG_RIP) in->rip = 1;
+    else if (in->mem_base < 8)    in->mem_base += 8 * xb;
+    if (in->mem_index < 8)        in->mem_index += 8 * xx;
+  }
+#endif
 
   capture_addr_witness(in, s, op_at, tb);
 
