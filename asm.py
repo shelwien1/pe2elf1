@@ -38,15 +38,24 @@ class NoAsm(Exception):
 
 # ---- value-producing leaf subs: byte width + how the value is sized ---------
 def vsub_width(name, env):
+  mode = env.get("__mode__", 32)
   if name in ("imm8", "imm8b", "disp8", "rel8"):
     return 1
   if name in ("imm16", "disp16"):
     return 2
   if name in ("imm32", "disp32"):
     return 4
-  if name in ("immz", "relz", "immz1", "relz1"):
+  if name == "imm64":
+    return 8
+  if name in ("immz", "immz1"):
+    # REX.W keeps the "z" immediate 32-bit (it overrides the 66 width).
+    return 2 if (env.get("opsiz", 0) and not env.get("rexw", 0)) else 4
+  if name in ("relz", "relz1"):
     return 2 if env.get("opsiz", 0) else 4
   if name in ("immadr", "immadr1"):
+    # moffs absolute address: 64/32-bit in long mode, 32/16-bit otherwise.
+    if mode == 64:
+      return 4 if env.get("adrsiz", 0) else 8
     return 2 if env.get("adrsiz", 0) else 4
   return None
 
@@ -186,6 +195,29 @@ def solve_to(e, target, env, g):
   try:
     const, coeffs = lin_coeffs(e2, freev)
     rem = target - const
+    # general clean-positional bit-pack: a register/operand index such as
+    # 32*$rexw + 16*$opsiz + 8*$rexr + $g (the x86-64 GP index) is a positional
+    # number whose digits are the unknown fields.  Decompose target greedily
+    # from the largest coefficient down, then verify -- this inverts any number
+    # of non-overlapping power-positioned fields in one shot.  (The 1-/2-var
+    # paths below remain for the offset/negative-coeff index exprs greedy skips.)
+    if len(coeffs) >= 2 and all(c > 0 for c in coeffs.values()):
+      items = sorted(coeffs.items(), key=lambda kv: -kv[1])
+      r = rem
+      trial = []
+      for v, c in items:
+        q = r // c
+        r -= q * c
+        trial.append((v, q))
+      if r == 0 and all(q >= 0 for _, q in trial):
+        save = dict(env)
+        if all(_bind(env, v, q) for v, q in trial):
+          try:
+            if eval_expr(subst_known(e2, env), {}, g) == target:
+              return True
+          except NoAsm:
+            pass
+        env.clear(); env.update(save)
     if len(coeffs) == 1:
       (v, c), = coeffs.items()
       if c != 0 and rem % c == 0:
@@ -486,10 +518,16 @@ class Asm:
   # -- addressing reverse-match ----------------------------------------------
   GREG32 = ["eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi"]
   RM16 = ["bx+si", "bx+di", "bp+si", "bp+di", "si", "di", "bp", "bx"]
+  # x86-64 addressing base/index files (16 regs; high 8 carry REX.B / REX.X).
+  AREG64 = ["rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi",
+            "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"]
+  AREG32E = ["eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi",
+             "r8d", "r9d", "r10d", "r11d", "r12d", "r13d", "r14d", "r15d"]
   SEG_TBL = ["", "es:", "cs:", "ss:", "", "fs:", "gs:",
              "ss:", "es:", "cs:", "ss:", "ds:", "fs:", "gs:"]
   SBO = [0, 0, 0, 0, 7, 7, 0, 0]
   SBO16 = [0, 0, 7, 7, 0, 0, 7, 0]
+  SBO64 = [0, 0, 0, 0, 7, 7, 0, 0, 0, 0, 0, 0, 7, 7, 0, 0]
 
   def _segidx(self, segstr, sbo):
     # smallest override that renders segstr at this base; prefer 0 (the default,
@@ -525,10 +563,104 @@ class Asm:
 
   def _enc_addr(self, inner, seg, env):
     wits = env.get("__wits__", [])
+    if self.g["arch"].get("mode", 32) == 64:
+      # default 64-bit addressing; the 0x67 form (eax..r15d / [eip+..]) is the
+      # fallback.  Snapshot env so a failed attempt leaves no partial REX state.
+      save = dict(env)
+      adr = env.get("adrsiz")
+      if not (isinstance(adr, int) and adr == 1):
+        plan = self._enc64(inner, seg, wits, env, self.AREG64, 0)
+        if plan is not None:
+          return plan
+        env.clear(); env.update(save)
+      plan = self._enc64(inner, seg, wits, env, self.AREG32E, 1)
+      if plan is None:
+        env.clear(); env.update(save)
+      return plan
     plan = self._enc32(inner, seg, wits, env)
     if plan is not None:
       return plan
     return self._enc16(inner, seg, wits, env)
+
+  def _setrex(self, env, key, val):
+    # bind a REX bit, honouring any value an earlier operand already pinned.
+    if key in env and not isinstance(env[key], str):
+      return int(env[key]) == val
+    env[key] = val
+    return True
+
+  def _enc64(self, inner, seg, wits, env, regs, adrval):
+    # Reverse-match an x86-64 memory operand.  `regs` is the 16-entry base/index
+    # file (64- or 32-bit), `adrval` the resulting $adrsiz.  Sets env REX.B/REX.X
+    # (base/index high bits) and $adrsiz; returns {mod,rm(low3),sib,disp,dw}.
+    Rx = "(" + "|".join(regs) + ")"
+    H = r"([+-]0x[0-9a-fA-F]+)"          # sgn()-style displacement
+    riptok = "rip" if adrval == 0 else "eip"
+    G = regs.index
+    # [rip+disp] / [eip+disp]: mod=00 rm=101, no base/index registers.
+    m = re.fullmatch(re.escape(riptok) + H, inner)
+    if m:
+      if not (self._set_seg(env, seg, 0) and self._setrex(env, "rexb", 0)
+              and self._setrex(env, "rexx", 0)):
+        return None
+      env["adrsiz"] = adrval
+      return {"mod": 0, "rm": 5, "sib": None, "disp": int(m.group(1), 16) & 0xffffffff, "dw": 4}
+    base = index = disp = None
+    scale = 1
+    if (g := re.fullmatch(Rx + r"\+" + Rx + r"\*(\d+)" + H, inner)):
+      base, index, scale, disp = G(g[1]), G(g[2]), int(g[3]), int(g[4], 16)
+    elif (g := re.fullmatch(Rx + r"\+" + Rx + r"\*(\d+)", inner)):
+      base, index, scale = G(g[1]), G(g[2]), int(g[3])
+    elif (g := re.fullmatch(Rx + r"\*(\d+)\+(0x[0-9a-fA-F]+)", inner)):
+      index, scale, disp = G(g[1]), int(g[2]), int(g[3], 16)
+    elif (g := re.fullmatch(Rx + H, inner)):
+      base, disp = G(g[1]), int(g[2], 16)
+    elif (g := re.fullmatch(Rx, inner)):
+      base = G(g[1])
+    elif re.fullmatch(r"0x[0-9a-fA-F]+", inner):
+      disp = int(inner, 16)
+    else:
+      return None
+    s = {1: 0, 2: 1, 4: 2, 8: 3}.get(scale)
+    if s is None:
+      return None
+    env["adrsiz"] = adrval
+    if base is None and index is None:
+      # absolute [disp32]: SIB base=101 index=100 mod=00 (mod=00 rm=101 is RIP).
+      if not (self._set_seg(env, seg, 0) and self._setrex(env, "rexb", 0)
+              and self._setrex(env, "rexx", 0)):
+        return None
+      return {"mod": 0, "rm": 4, "sib": (4 << 3) | 5, "disp": disp & 0xffffffff, "dw": 4}
+    if index is not None and base is None:
+      # [index*scale+disp32]: SIB base=101 mod=00.
+      if not (self._set_seg(env, seg, 0) and self._setrex(env, "rexx", index >> 3)
+              and self._setrex(env, "rexb", 0)):
+        return None
+      sib = (s << 6) | ((index & 7) << 3) | 5
+      return {"mod": 0, "rm": 4, "sib": sib, "disp": (disp or 0) & 0xffffffff, "dw": 4}
+    sbo = self.SBO64[base]
+    if not (self._set_seg(env, seg, sbo) and self._setrex(env, "rexb", base >> 3)):
+      return None
+    need_sib = (index is not None) or ((base & 7) == 4)   # rsp/r12 always need SIB
+    if not need_sib:
+      if not self._setrex(env, "rexx", 0):
+        return None
+      if disp is None:
+        if (base & 7) == 5:        # rbp/r13 can't be mod=00 -> disp8=0
+          return {"mod": 1, "rm": base & 7, "sib": None, "disp": 0, "dw": 1}
+        return {"mod": 0, "rm": base & 7, "sib": None, "disp": None, "dw": 0}
+      mod, dw = self._pick_disp(disp, wits)
+      return {"mod": mod, "rm": base & 7, "sib": None, "disp": disp & ((1 << (8 * dw)) - 1), "dw": dw}
+    ib = (index & 7) if index is not None else 4    # 100 = no index
+    if not self._setrex(env, "rexx", (index >> 3) if index is not None else 0):
+      return None
+    sib = (s << 6) | (ib << 3) | (base & 7)
+    if disp is None:
+      if (base & 7) == 5:          # rbp/r13 base in SIB needs a disp
+        return {"mod": 1, "rm": 4, "sib": sib, "disp": 0, "dw": 1}
+      return {"mod": 0, "rm": 4, "sib": sib, "disp": None, "dw": 0}
+    mod, dw = self._pick_disp(disp, wits)
+    return {"mod": mod, "rm": 4, "sib": sib, "disp": disp & ((1 << (8 * dw)) - 1), "dw": dw}
 
   def _set_seg(self, env, segstr, sbo):
     si = self._segidx(segstr, sbo)
@@ -756,12 +888,15 @@ def split_prefixes(line):
   return toks, wits, " ".join(ws[k:])
 
 
-def revealed_bytes(env, explicit):
+def revealed_bytes(env, explicit, mode=32):
+  def iv(k):
+    v = env.get(k, 0)
+    return int(v) if isinstance(v, int) else 0
   rev = bytearray()
   for var in REVEAL_ORDER:
     if var in explicit:
       continue
-    v = int(env.get(var, 0))
+    v = iv(var)
     if v == 0:
       continue
     if var == "segidx":
@@ -772,6 +907,14 @@ def revealed_bytes(env, explicit):
       rev.append(0x66)
     elif var == "reptype":
       rev.append(0xf3 if v == 1 else 0xf2)
+  # x86-64 REX (0100 WRXB): never an explicit token -- always re-derived from the
+  # operands (W from a 64-bit name, R/X/B from an r8..r15 / SIB extension, the
+  # bare 0x40 from an spl/bpl/sil/dil name).  Emitted last, right before the
+  # opcode, as long mode requires.
+  if mode == 64:
+    w, r, x, b = iv("rexw"), iv("rexr"), iv("rexx"), iv("rexb")
+    if w or r or x or b or iv("rex"):
+      rev.append(0x40 | (w << 3) | (r << 2) | (x << 1) | b)
   return bytes(rev)
 
 
@@ -788,6 +931,7 @@ def asm_line(asm, line, start):
   # free so the operand reverse-match can determine them.
   env0 = dict(explicit)
   env0["__wits__"] = list(wits)
+  env0["__mode__"] = asm.g["arch"].get("mode", 32)
   cands = asm.asm_core(core, env0, start + len(pfx))
   # Verify each structural candidate by disassembling it back; keep those that
   # reproduce the exact line, then take the shortest (the canonical encoding).
@@ -799,7 +943,7 @@ def asm_line(asm, line, start):
     # are simply not valid encodings -- skip them and let verification pick the
     # real one.
     try:
-      full = bytes(pfx) + revealed_bytes(env, explicit) + ibytes
+      full = bytes(pfx) + revealed_bytes(env, explicit, asm.g["arch"].get("mode", 32)) + ibytes
       txt, n = disasm_one(asm.g, full, start)
     except Exception:
       continue
