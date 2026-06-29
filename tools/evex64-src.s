@@ -139,3 +139,32 @@ vaddss xmm16, xmm17, xmm18
 vmovaps ymm0, ymm1
 vmovaps xmm0, xmm1
 vaddps zmm0, zmm1, zmm2, {ru-sae}
+# ---- AVX-512 mask-register (k) ops ----
+kmovw k1, k2
+kmovw k1, eax
+kmovw eax, k1
+kmovw k1, [rax]
+kmovw [rax], k1
+kmovb k1, k2
+kmovd k1, eax
+kmovq k1, rax
+kmovd eax, k1
+kmovq rax, k1
+kandw k1, k2, k3
+kandb k1, k2, k3
+korw k1, k2, k3
+kxorw k1, k2, k3
+kxnorw k1, k2, k3
+kandnw k1, k2, k3
+knotw k1, k2
+kortestw k1, k2
+ktestw k1, k2
+kshiftlw k1, k2, 0x3
+kshiftrw k1, k2, 0x3
+kunpckbw k1, k2, k3
+vpcmpeqd k1, zmm1, zmm2
+vpcmpgtd k1{k2}, zmm1, zmm2
+vcmpps k1, zmm1, zmm2, 0x0
+vpcmpd k1, zmm1, zmm2, 0x5
+vpcmpud k2, zmm1, zmm2, 0x2
+vptestmd k1, zmm1, zmm2

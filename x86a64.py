@@ -2150,6 +2150,9 @@ table vvv {
   ymm15,ymm14,ymm13,ymm12,ymm11,ymm10,ymm9,ymm8, ymm7,ymm6,ymm5,ymm4,ymm3,ymm2,ymm1,ymm0
 }
 table velt { ps,pd,ss,sd }            # VEX pp -> element suffix
+table kreg  { k0,k1,k2,k3,k4,k5,k6,k7 }   # AVX-512 mask registers
+table kmov_t { kmovw,kmovb,"",kmovd }      # k-move width by pp (VEX W0)
+table klog_t { kandw,kandb }               # placeholder (klog uses explicit mnemonics)
 
 # ===========================================================================
 # EVEX / AVX-512 register & decoration tables
@@ -3270,6 +3273,11 @@ submatch vex {
   h k b 00001 0 vvvv y pp 0xc2 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "vcmp" velt[$p] " " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr "," hex($imm8) ;
   h k b 00001 0 vvvv y pp 0xc6 11 ggg rrr @imm8 => "vshuf" velt[$p] " " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] "," hex($imm8) ;
   h k b 00001 0 vvvv y pp 0xc6 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "vshuf" velt[$p] " " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr "," hex($imm8) ;
+  1 1 1 00001 1 1111 0 11 0x92 11 ggg rrr => "kmovq " kreg[$g] "," greg[32+$r] ;
+  1 1 1 00001 1 1111 0 11 0x93 11 ggg rrr => "kmovq " greg[32+$g] "," kreg[$r] ;
+  1 1 1 00001 1 1111 0 11 0x90 11 ggg rrr => "kmovq " kreg[$g] "," kreg[$r] ;
+  1 1 1 00011 1 1111 0 01 0x32 11 ggg rrr @imm8 => "kshiftlw " kreg[$g] "," kreg[$r] "," hex($imm8) ;
+  1 1 1 00011 1 1111 0 01 0x30 11 ggg rrr @imm8 => "kshiftrw " kreg[$g] "," kreg[$r] "," hex($imm8) ;
 }
 submatch vex2 {
   h vvvv y pp 0x54 11 ggg rrr => "vand" velt[$p] " " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8+$r] ;
@@ -3373,13 +3381,32 @@ submatch vex2 {
   h vvvv y pp 0xc2 @addr @imm8 => "vcmp" velt[$p] " " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr "," hex($imm8) ;
   h vvvv y pp 0xc6 11 ggg rrr @imm8 => "vshuf" velt[$p] " " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8+$r] "," hex($imm8) ;
   h vvvv y pp 0xc6 @addr @imm8 => "vshuf" velt[$p] " " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr "," hex($imm8) ;
+  1 1111 0 pp 0x90 11 ggg rrr => kmov_t[$p] " " kreg[$g] "," kreg[$r] ;
+  1 1111 0 pp 0x90 @addr => kmov_t[$p] " " kreg[$g] "," $addr ;
+  1 1111 0 pp 0x91 @addr => kmov_t[$p] " " $addr "," kreg[$g] ;
+  1 1111 0 pp 0x92 11 ggg rrr => kmov_t[$p] " " kreg[$g] "," greg[$r] ;
+  1 1111 0 pp 0x93 11 ggg rrr => kmov_t[$p] " " greg[$g] "," kreg[$r] ;
+  1 vvvv 1 00 0x41 11 ggg rrr => "kandw " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 vvvv 1 01 0x41 11 ggg rrr => "kandb " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 vvvv 1 00 0x42 11 ggg rrr => "kandnw " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 vvvv 1 01 0x42 11 ggg rrr => "kandnb " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 vvvv 1 00 0x45 11 ggg rrr => "korw " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 vvvv 1 01 0x45 11 ggg rrr => "korb " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 vvvv 1 00 0x47 11 ggg rrr => "kxorw " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 vvvv 1 01 0x47 11 ggg rrr => "kxorb " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 vvvv 1 00 0x46 11 ggg rrr => "kxnorw " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 vvvv 1 01 0x46 11 ggg rrr => "kxnorb " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 vvvv 1 00 0x4a 11 ggg rrr => "kaddw " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 vvvv 1 01 0x4a 11 ggg rrr => "kaddb " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 vvvv 1 01 0x4b 11 ggg rrr => "kunpckbw " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 1111 0 00 0x44 11 ggg rrr => "knotw " kreg[$g] "," kreg[$r] ;
+  1 1111 0 01 0x44 11 ggg rrr => "knotb " kreg[$g] "," kreg[$r] ;
+  1 1111 0 00 0x98 11 ggg rrr => "kortestw " kreg[$g] "," kreg[$r] ;
+  1 1111 0 00 0x99 11 ggg rrr => "ktestw " kreg[$g] "," kreg[$r] ;
   1 1111 0 00 0x77 => "vzeroupper" ;
   1 1111 1 00 0x77 => "vzeroall" ;
 }
 
-# ============================ EVEX (0x62) ==================================
-# P0 = R-bar X-bar B-bar R-bar' 0 0 mm   P1 = W vvvv 1 pp   P2 = z L'L b V-bar' aaa
-# (h=R-bar k=X-bar b=B-bar e=R-bar' ; w=W v=vvvv p=pp ; z ll c=b-bit u=V-bar' a=aaa)
 submatch evex {
   h k b e 00 01 0 vvvv 1 00 z ll 0 u aaa 0x58 11 ggg rrr => wit("evex") "vaddps " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
   h k b e 00 01 0 vvvv 1 00 z ll 1 u aaa 0x58 11 ggg rrr => wit("evex") "vaddps " ereg[64+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[64+16*$u+$v] "," ereg[64+16*$k+8*$b+$r] rcdec[$l] ;
@@ -3602,6 +3629,26 @@ submatch evex {
   h k b e 00 10 1 vvvv 1 01 z ll 1 u aaa 0xac 11 ggg rrr => wit("evex") "vfnmadd213pd " ereg[64+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[64+16*$u+$v] "," ereg[64+16*$k+8*$b+$r] rcdec[$l] ;
   h k b e 00 10 1 vvvv 1 01 z ll 0 u aaa 0xac @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vfnmadd213pd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
   h k b e 00 10 1 vvvv 1 01 z ll 1 u aaa 0xac @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vfnmadd213pd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr bcst64[$l] ;
+  1 k b 1 00 01 0 vvvv 1 01 0 ll 0 u aaa 0x76 11 ggg rrr => wit("evex") "vpcmpeqd " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  1 k b 1 00 01 0 vvvv 1 01 0 ll 0 u aaa 0x76 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vpcmpeqd " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  1 k b 1 00 01 0 vvvv 1 01 0 ll 0 u aaa 0x66 11 ggg rrr => wit("evex") "vpcmpgtd " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  1 k b 1 00 01 0 vvvv 1 01 0 ll 0 u aaa 0x66 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vpcmpgtd " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  1 k b 1 00 01 0 vvvv 1 00 0 ll 0 u aaa 0xc2 11 ggg rrr @imm8 => wit("evex") "vcmpps " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  1 k b 1 00 01 0 vvvv 1 00 0 ll 0 u aaa 0xc2 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vcmpps " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," $addr "," hex($imm8) ;
+  1 k b 1 00 01 1 vvvv 1 01 0 ll 0 u aaa 0xc2 11 ggg rrr @imm8 => wit("evex") "vcmppd " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  1 k b 1 00 01 1 vvvv 1 01 0 ll 0 u aaa 0xc2 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vcmppd " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," $addr "," hex($imm8) ;
+  1 k b 1 00 11 0 vvvv 1 01 0 ll 0 u aaa 0x1f 11 ggg rrr @imm8 => wit("evex") "vpcmpd " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  1 k b 1 00 11 0 vvvv 1 01 0 ll 0 u aaa 0x1f @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vpcmpd " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," $addr "," hex($imm8) ;
+  1 k b 1 00 11 0 vvvv 1 01 0 ll 0 u aaa 0x1e 11 ggg rrr @imm8 => wit("evex") "vpcmpud " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  1 k b 1 00 11 0 vvvv 1 01 0 ll 0 u aaa 0x1e @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vpcmpud " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," $addr "," hex($imm8) ;
+  1 k b 1 00 11 1 vvvv 1 01 0 ll 0 u aaa 0x1f 11 ggg rrr @imm8 => wit("evex") "vpcmpq " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  1 k b 1 00 11 1 vvvv 1 01 0 ll 0 u aaa 0x1f @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vpcmpq " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," $addr "," hex($imm8) ;
+  1 k b 1 00 11 1 vvvv 1 01 0 ll 0 u aaa 0x1e 11 ggg rrr @imm8 => wit("evex") "vpcmpuq " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  1 k b 1 00 11 1 vvvv 1 01 0 ll 0 u aaa 0x1e @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vpcmpuq " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," $addr "," hex($imm8) ;
+  1 k b 1 00 10 0 vvvv 1 01 0 ll 0 u aaa 0x27 11 ggg rrr => wit("evex") "vptestmd " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  1 k b 1 00 10 0 vvvv 1 01 0 ll 0 u aaa 0x27 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vptestmd " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  1 k b 1 00 10 1 vvvv 1 01 0 ll 0 u aaa 0x27 11 ggg rrr => wit("evex") "vptestmq " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  1 k b 1 00 10 1 vvvv 1 01 0 ll 0 u aaa 0x27 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vptestmq " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
 }
 
 submatch main { @pfx(0) => $pfx }

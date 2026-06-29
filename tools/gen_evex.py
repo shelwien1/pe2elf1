@@ -53,6 +53,14 @@ def mov2(mn, op, w, pp, store=False, mm="01"):
     E('%s %s z ll 0 1 aaa 0x%02x 11 ggg rrr => wit("evex") "%s " %s %s "," %s ;' % (P0(mm), P1F(w, pp), op, mn, RG, KZ, RM))
     E('%s %s z ll 0 1 aaa 0x%02x @addr %s => wit("evex") "%s " %s %s "," $addr ;' % (P0(mm), P1F(w, pp), op, ACT, mn, RG, KZ))
 
+def kcmp(mn, op, w, pp, mm, imm=False):
+  # EVEX compare -> mask register: dest=k (reg field, no extension so R-bar/
+  # R-bar'=1), optional {k} mask via aaa, src1=vvvv, src2=rm[, imm8].  z=0.
+  ip = " @imm8" if imm else ""
+  it = ' "," hex($imm8)' if imm else ""
+  E('1 k b 1 00 %s %s 0 ll 0 u aaa 0x%02x 11 ggg rrr%s => wit("evex") "%s " kreg[$g] kdec[$a] "," %s "," %s%s ;' % (mm, P1(w, pp), op, ip, mn, VV, RM, it))
+  E('1 k b 1 00 %s %s 0 ll 0 u aaa 0x%02x @addr %s%s => wit("evex") "%s " kreg[$g] kdec[$a] "," %s "," $addr%s ;' % (mm, P1(w, pp), op, ACT, ip, mn, VV, it))
+
 v.append("submatch evex {")
 # --- FP packed arithmetic (W0.0F=ps / W1.66.0F=pd) with embedded rounding ---
 for mn, op in [("vadd", 0x58), ("vmul", 0x59), ("vsub", 0x5c), ("vdiv", 0x5e)]:
@@ -97,5 +105,16 @@ for mn, op in [("vfmadd213", 0xa8), ("vfmadd231", 0xb8), ("vfmadd132", 0x98),
                ("vfmsub213", 0xaa), ("vfnmadd213", 0xac)]:
   fp3(mn + "ps", op, "0", "01", "bcst32", er=True, mm="10")
   fp3(mn + "pd", op, "1", "01", "bcst64", er=True, mm="10")
+# --- compares / tests writing a mask register (k) ---
+kcmp("vpcmpeqd", 0x76, "0", "01", "01")
+kcmp("vpcmpgtd", 0x66, "0", "01", "01")
+kcmp("vcmpps", 0xc2, "0", "00", "01", imm=True)
+kcmp("vcmppd", 0xc2, "1", "01", "01", imm=True)
+kcmp("vpcmpd", 0x1f, "0", "01", "11", imm=True)
+kcmp("vpcmpud", 0x1e, "0", "01", "11", imm=True)
+kcmp("vpcmpq", 0x1f, "1", "01", "11", imm=True)
+kcmp("vpcmpuq", 0x1e, "1", "01", "11", imm=True)
+kcmp("vptestmd", 0x27, "0", "01", "10")
+kcmp("vptestmq", 0x27, "1", "01", "10")
 v.append("}")
 print("\n".join(v))
