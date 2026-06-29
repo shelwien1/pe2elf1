@@ -34,9 +34,9 @@ enum {
 };
 
 typedef struct {
-  uint8_t type : 5;  /* T_*                                          */
-  uint8_t index : 3; /* register number 0..7 (x86-32)                */
-} x86op_t;           /* 1 byte */
+  uint16_t type : 5;  /* T_*                                          */
+  uint16_t index : 5; /* register number 0..31 (GP/xmm 0..15, zmm 0..31) */
+} x86op_t;            /* 2 bytes */
 
 typedef struct {
   uint16_t mnem;   /* enum of mnemonics (ADD, MOV, VADDPS, ...)    */
@@ -48,14 +48,16 @@ typedef struct {
   uint8_t rc : 3;   /* rounding mode / SAE (0 = none)               */
 
   /* the single memory operand (target of an op[] of type T_MEM) */
-  int32_t disp;           /* mem displacement; OR imm2 / far selector     */
-  uint16_t mem_base : 4;  /* 0..7 or NONE                             */
-  uint16_t mem_index : 4; /* 0..7 or NONE                             */
-  uint16_t mem_scale : 2;
-  uint16_t mem_seg : 3;
-  uint16_t opsize : 1;  /* 66 effect - resolves T_GPR width, immz   */
-  uint16_t addr : 1;    /* 67 effect - address size                 */
-  uint16_t has_pfx : 1; /* preceding record is a raw-prefix sidecar */
+  int32_t disp;            /* mem displacement; OR imm2 / far selector     */
+  uint32_t mem_base : 5;   /* 0..15 or GREG_NONE (>=16)                */
+  uint32_t mem_index : 5;  /* 0..15 or GREG_NONE                       */
+  uint32_t mem_scale : 2;
+  uint32_t mem_seg : 3;
+  uint32_t opsize : 2;  /* operand size: 0=default(32) 1=16 (66) 2=64 (REX.W) */
+  uint32_t addr : 1;    /* address size: 0=native (64) 1=32 (67); x86-32: 0=32 1=16 */
+  uint32_t has_pfx : 1; /* preceding record is a raw-prefix sidecar */
+  uint32_t rip : 1;     /* RIP-relative memory operand: [rip+disp32]  */
+  uint32_t rex : 1;     /* a REX prefix byte was present (W via opsize, R/X/B re-derived) */
 
   /* encoding witness: the residual that makes  bytes <-> x86insn_t  a byte-exact
    * bijection. The semantic fields say WHAT the instruction is; these say WHICH of
@@ -67,7 +69,7 @@ typedef struct {
   uint8_t sib    : 1;  /* a redundant SIB byte was present (not the esp/index-forced one)     */
   uint8_t sscale : 2;  /* dead SIB scale bits when index == NONE                              */
   uint8_t enc    : 3;  /* opcode-choice deviation: 0=canonical, else dir/long-imm/acc/moffs   */
-  uint8_t reg_w  : 3;  /* dead ModR/M reg field for single-r/m forms (setcc): replayed exactly */
+  uint8_t reg_w  : 4;  /* dead ModR/M reg field for single-r/m forms (setcc), REX.R-extended  */
 
   /* the single full immediate (target of T_IMM / T_REL / T_PTR) */
   int32_t imm;
