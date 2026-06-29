@@ -465,6 +465,32 @@ submatch insn {
   0x0f 0xc1 @addr      => "xadd " $addr "," greg[$g] ;
   0x0f 0xc7 @addr(1)   => "cmpxchg8b " $addr ;
   0x0f 11001 bbb       => "bswap " greg[$b] ;
+
+  # ===== 0F AE fences / clflush / fxsave-xsave ; 0F 18 prefetch/nop ; 0F 1E endbr
+  # (the CET endbr64/endbr32 = F3 0F 1E FA/FB; the F3 rides in the prefix run, so
+  #  the base 0F 1E modrm rule round-trips them byte-exact). ====================
+  0x0f 0xae 11 101 rrr => "lfence" ;
+  0x0f 0xae 11 110 rrr => "mfence" ;
+  0x0f 0xae 11 111 rrr => "sfence" ;
+  0x0f 0xae @addr(0)   => "fxsave " $addr ;
+  0x0f 0xae @addr(1)   => "fxrstor " $addr ;
+  0x0f 0xae @addr(2)   => "ldmxcsr " $addr ;
+  0x0f 0xae @addr(3)   => "stmxcsr " $addr ;
+  0x0f 0xae @addr(4)   => "xsave " $addr ;
+  0x0f 0xae @addr(5)   => "xrstor " $addr ;
+  0x0f 0xae @addr(6)   => "xsaveopt " $addr ;
+  0x0f 0xae @addr(7)   => "clflush" sfx[1] " " $addr ;
+  0x0f 0x18 @addr(0)   => "prefetchnta" sfx[1] " " $addr ;
+  0x0f 0x18 @addr(1)   => "prefetcht0" sfx[1] " " $addr ;
+  0x0f 0x18 @addr(2)   => "prefetcht1" sfx[1] " " $addr ;
+  0x0f 0x18 @addr(3)   => "prefetcht2" sfx[1] " " $addr ;
+  0x0f 0x18 @addr(4)   => "nop18 " $addr ;
+  0x0f 0x18 @addr(5)   => "nop18 " $addr ;
+  0x0f 0x18 @addr(6)   => "nop18 " $addr ;
+  0x0f 0x18 @addr(7)   => "nop18 " $addr ;
+  # 0F 1E reg form: covers endbr64/endbr32 (F3 0F 1E FA/FB) and rdssp; the dead
+  # reg field rides the reg_w witness so the modrm round-trips exactly.
+  0x0f 0x1e 11 ggg rrr => "endbr " greg[$r] ;
 }
 
 submatch main { @pfx(0) => $pfx }
