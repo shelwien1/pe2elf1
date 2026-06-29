@@ -24,11 +24,18 @@ x86-64 adds, over x86-32:
   `D4/D5` aam/aad, single-byte `inc/dec 40..4F` are now REX).
 
 What does **not** change: the FSM driver (`run_fsm`), the capture model, the
-prefix→opcode→ModR/M→immediate routing, and the **VEX/EVEX/XOP path**, which is
-already decoded C++-side by raw-replaying the prefix bytes (`vex_decode`/
-`vex_encode` in `x86dec.hpp`/`x86enc.hpp`) and already extends to 16/32 registers
-and `L`→xmm/ymm/zmm. The 64-bit work is almost entirely the **legacy + 0F**
-path plus the REX prefix.
+prefix→opcode→ModR/M→immediate routing, and the byte-exact **round-trip of the
+VEX/EVEX/XOP path** — those prefix bytes are captured raw (`vex1/vex2/vex3`) and
+replayed verbatim by `vex_decode`/`vex_encode` (`x86dec.hpp`/`x86enc.hpp`), so
+all of `R/X/B/R'/V'/vvvv` already survive re-encoding regardless of mode, and the
+operand *type* is already set from `L` (xmm/ymm/zmm). What that path does **not**
+do yet is *lower* the high register bits into the semantic operand: `vex_decode`
+calls `fill_insn`, which stores only the low 3 ModR/M bits into `op[].index`
+(`x86dec.hpp:100,104`), and `vvvv` is not decoded into an operand at all — so
+*printing* `xmm8..31` or the `vvvv` source needs work in this port, but the
+**bytes already round-trip** because the raw prefix carries the high bits. The
+64-bit work is therefore almost entirely the **legacy + 0F** path plus the REX
+prefix (the VEX/EVEX tail layout is already mode-independent).
 
 A second, independent x86-64 description of the same instruction set already
 exists in this repo (`/corpus64.p`, driven by the sibling Python toolchain
@@ -52,7 +59,8 @@ x86dec.hpp / x86enc.hpp          generic FSM decode + data-driven encode (C++)
 asm32.cpp                        file-to-file tool;  parser.cpp/test.cpp/fuzz.cpp harnesses
 ```
 
-Where x86-32 is baked in today (from a read of the sources):
+Where x86-32 is baked into the baseline (line refs are the pre-port commit
+`758e147`; the `record` row is already addressed by Phase 1 below):
 
 | place | x86-32 assumption | file:where |
 |-------|-------------------|-----------|
@@ -101,12 +109,14 @@ Deferred refinement: a 4-bit `rex_wrxb` witness for genuinely non-canonical REX
 * `vars`: add the REX state — `$rexw=0 $rexr=0 $rexx=0 $rexb=0 $rex=0`.
 * **Register tables** widened, with the size bank selected by operand size:
   * `greg` → 64-bit bank (`rax..r15`) + 32-bit bank (`eax..r15d`) + 16-bit bank
-    (`ax..r15w`), indexed `greg[bank*16 + 8*REX.B + r]` where `bank` comes from
-    `$rexw`/`$opsiz`. (The sibling `corpus64.p` uses
-    `32*$rexw + 16*$opsiz + 8*hi + lo`; mirror that.)
+    (`ax..r15w`), indexed by `(size-bank, hi, lo)` where the high bit `hi` is
+    `REX.R` for a ModR/M.reg operand and `REX.B` for an rm/base operand (the bank
+    comes from `$rexw`/`$opsiz`). Mirror the sibling `corpus64.p` 64-entry layout
+    `greg[32*$rexw + 16*$opsiz + 8*hi + lo]`.
   * `rgb` → 8-bit registers; **REX-present** selects the `spl/bpl/sil/dil`
     naming for indices 4..7 and exposes `r8b..r15b` (so `rgb[16*$rex + 8*hi + lo]`).
-  * `ssereg`/xmm → 16 entries (the SSE legacy path); EVEX 32 stays C++-side.
+  * `ssereg`/xmm → extend the legacy SSE path to 16 xmm (`xmm0..xmm15`, high bit
+    from `REX.R`/`REX.B`); the 32 EVEX registers stay on the C++ VEX path.
 * **Addressing** (`addr1`/`sib0`/`sib1`): a 64-bit branch (`$adrsiz==0`):
   * `mod=00 rm=101` → `[rip+disp32]` (NOT `[disp32]`);
   * absolute `[disp32]` is the SIB `base=101,index=none` form;
@@ -197,8 +207,10 @@ Decode:
 * `capture_addr_witness`: replace the `addr==1`→16-bit branch with the 64-bit
   rules (RIP `mod=00 rm=101`; SIB no-base → disp32); `addr==1` is now 32-bit.
 * `finalize_insn`/`SETREG`/`SETRM`: mask to 5 bits, not 3.
-* `vex_decode`: already 64-bit-correct for register width via raw replay; verify
-  `rt` display and that `R'/V'/X` extensions show `xmm16..31`.
+* `vex_decode`: round-trips correctly today (raw replay), but for x86-64
+  *disassembly* it must lower the VEX/EVEX `R/X/B/R'/V'` bits into `op[].index`
+  (and decode `vvvv` into an operand) so `xmm8..31` and the NDS/NDD source print
+  correctly. Encode is unaffected — the raw `vex1/vex2/vex3` bytes are replayed.
 
 Encode:
 * `encode_insn`: after selecting the candidate, **derive and emit the REX byte**
@@ -207,8 +219,9 @@ Encode:
   it immediately before the opcode (after legacy prefixes).
 * `enc_mem32` → a 64-bit emitter: RIP-relative (`mod=00 rm=101 + disp32`),
   absolute via SIB, base/index low-3 bits in ModR/M/SIB with the high bits
-  having gone into REX. Retire `enc_mem16` for 64-bit (keep for the `67`/32-bit
-  address case if 32-bit address registers are supported).
+  having gone into REX. `enc_mem16` (16-bit addressing) is **unreachable in
+  64-bit mode** and is retired; the `67`/32-bit-address case reuses the **32-bit**
+  emitter (`enc_mem32` with 32-bit register names), not `enc_mem16`.
 * `(reg<<3)|(rm&7)` → use low 3 bits; high bits are already in REX.
 
 ---
