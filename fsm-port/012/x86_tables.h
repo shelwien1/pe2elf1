@@ -66,7 +66,8 @@ enum GPR {
     GREG_BP = 13,
     GREG_SI = 14,
     GREG_DI = 15,
-    GREG_NONE = 15
+    GREG_NONE = 15,
+    GREG_LAST_
 };
 
 enum SREG {

@@ -221,7 +221,8 @@ def parse_corpus(path):
 # 4. interpretation -> decode tables
 # --------------------------------------------------------------------------
 
-GREG_NONE = 15        # the 4-bit value stored in mem_base/mem_index for "none"
+GREG_NONE = 15        # value stored in mem_base/mem_index for "none" (16 in 64-bit mode)
+GREG_RIP = 17         # x86-64 RIP-relative base marker ([rip+disp32]); distinct from 0..15/NONE
 SREG_NONE = 7
 ABSENT = 0xFF         # internal "no register" sentinel during derivation;
                       # distinct from every greg index (incl. di=15) so the
@@ -234,15 +235,16 @@ class Interp:
     self.vars = c['vars']
     self.tables = c['tables']
     self.subs = c['subs']
+    self.mode = int(self.arch.get('mode', 32))
     if self.arch.get('bitorder', 'msb') != 'msb':
       raise NotImplementedError('only bitorder=msb is modelled')
 
     self.greg = self.tables['greg']
     self.sbo = self.tables['sbo']
-    self.sbo16 = self.tables['sbo16']
-    # rm16 decomposed into (base_idx, index_idx) by greg name
+    self.sbo16 = self.tables.get('sbo16', [])      # 16-bit addressing: x86-32 only
+    # rm16 decomposed into (base_idx, index_idx) by greg name (x86-32 only)
     self.rm16 = []
-    for ent in self.tables['rm16']:
+    for ent in self.tables.get('rm16', []):
       parts = ent.split('+')
       b = self.greg_idx(parts[0])
       x = self.greg_idx(parts[1]) if len(parts) > 1 else ABSENT
@@ -346,10 +348,13 @@ class Interp:
       seg = self.seg_row_from_tmpl(tmpl, rm)
       return dict(mode='MODE_MEM', reg=reg, base=base, index=index,
                   disp=disp, seg_row=seg, sib_mod=0)
-    if 'greg[$r]' in tmpl:
+    if 'greg[$r]' in tmpl or 'areg[$r]' in tmpl:
       seg = self.seg_row_from_tmpl(tmpl, rm)
       return dict(mode='MODE_MEM', reg=reg, base=rm, index=ABSENT,
                   disp=disp, seg_row=seg, sib_mod=0)
+    if '[rip' in tmpl or '[eip' in tmpl:                  # x86-64 RIP-relative
+      return dict(mode='MODE_MEM', reg=reg, base=GREG_RIP, index=ABSENT,
+                  disp=disp, seg_row=0, sib_mod=0)
     # direct / absolute (disp only, no base)
     return dict(mode='MODE_MEM', reg=reg, base=ABSENT, index=ABSENT,
                 disp=disp, seg_row=0, sib_mod=0)
@@ -382,19 +387,27 @@ class Interp:
     raise RuntimeError('unmatched sib byte 0x%02x mod=%d' % (sib, mod))
 
   # ----- prefixes -----
+  def prefix_rules(self):
+    # pfx frames that carry literal bits + an action: the simple one-byte prefixes
+    # (lit_mask 0xff) and the REX frame `0100 wrxb {...}` (lit_mask 0xf0, field-set).
+    if not hasattr(self, '_pfx_rules'):
+      self._pfx_rules = [r for r in parse_rules(self.subs['pfx'][1])
+                         if r['bp'] and r['action'] and r['bp'].lit_mask]
+    return self._pfx_rules
+
+  def prefix_match(self, byte):
+    for r in self.prefix_rules():
+      if r['bp'].match(byte):
+        return r
+    return None
+
   def prefix_table(self):
-    body = self.subs['pfx'][1]
-    var_enum = {v: 'VAR_' + v.upper() for v in self.vars}
-    out = [(0, 'VAR_' + self.vars[0].upper(), 0)] * 256
-    for r in parse_rules(body):
-      if not r['bp'] or not r['action']:
-        continue
-      # a prefix frame is "<0xNN> @pfx(...) {var=val}"
-      if r['bp'].lit_mask != 0xff:
-        continue
-      byte = r['bp'].lit_val
-      (var, (_, val)), = r['action'].items()
-      out[byte] = (1, var_enum[var], val)
+    # per-byte (is_prefix, rule|None) -- kept for the self-check's flag probe
+    out = [(0, None)] * 256
+    for b in range(256):
+      r = self.prefix_match(b)
+      if r is not None:
+        out[b] = (1, r)
     return out
 
   # ======================================================================
@@ -452,8 +465,12 @@ class Interp:
     return 'CAP_' + self.TAILCAPS[idx - nvar - ncaps - nvar]
 
   def greg_const(self, val):
-    # a stored register number (0..7) -> its canonical greg name; GREG_NONE for none
-    return 'GREG_NONE' if val == GREG_NONE else 'GREG_' + str(self.greg[val]).upper()
+    # a stored register number -> its canonical greg name; sentinels pass through
+    if val == GREG_NONE:
+      return 'GREG_NONE'
+    if val == GREG_RIP:
+      return 'GREG_RIP'
+    return 'GREG_' + str(self.greg[val]).upper()
 
   def field_pos(self, letter, rules):
     # (hi, lo) bit positions of `letter` taken from whichever rule defines it
@@ -476,7 +493,10 @@ class Interp:
     if e['mode'] == 'MODE_SIB':
       return acts, 'FSM_SIB + %d*256' % e['sib_mod']     # SIB byte resolves the rest
     # MODE_MEM
-    if adrsiz == 0:                                     # 32-bit: base is the rm field
+    if e['base'] == GREG_RIP:                           # x86-64 RIP-relative: rm=101 is fixed
+      acts.append(('CONST', self.cap('BASE'), GREG_RIP, 0))
+      acts.append(('CONST', self.cap('INDEX'), self.store_reg(ABSENT), 0))
+    elif adrsiz == 0 or self.mode == 64:                # 32/64-bit: base is the rm field (low 3)
       if e['base'] != ABSENT:
         acts.append(('FIELD', self.cap('BASE'), r_hi, r_lo))   # rm bits == reg number
       else:
@@ -515,13 +535,25 @@ class Interp:
 
   # ----- prefix state: prefix_fsm[byte] (loops back to itself) -----
   def prefix_state(self, byte):
-    isp, var, val = self.prefix_table()[byte]
-    if not isp:
+    r = self.prefix_match(byte)
+    if r is None:
       return [], 'FSM_HALT'                              # dead: opcode, not consumed
-    var_idx = self.var_id(var[len('VAR_'):].lower())     # 'VAR_OPSIZ' -> index of opsiz
-    # set the group's value, and record this byte's offset as that group's last
-    return [('CONST', var_idx, val, 0),
-            ('MARK', self.poff(var_idx), 0, 0)], 'FSM_PREFIX'
+    acts = []
+    primary = None                                       # group var whose offset MARK records
+    for var, spec in r['action'].items():                # 66->{opsiz=1}; REX->{rexw=$w;...;rex=1}
+      vidx = self.var_id(var)
+      if spec[0] == 'int':
+        acts.append(('CONST', vidx, spec[1], 0))
+        if spec[1]:
+          primary = vidx                                 # the presence flag ($opsiz=1 / $rex=1)
+      elif spec[0] == 'field':                           # REX bit: $rexw=$w etc.
+        pos, w = r['bp'].fields[spec[1]]
+        acts.append(('FIELD', vidx, pos + w - 1, pos))
+    if primary is None and acts:
+      primary = acts[0][1]
+    if primary is not None:
+      acts.append(('MARK', self.poff(primary), 0, 0))
+    return acts, 'FSM_PREFIX'
 
   # ======================================================================
   # single-byte instruction decoder: the op1[256] opcode map.
@@ -975,12 +1007,18 @@ def emit(c, interp, out_path):
   w("    CAP_RMREQ = CAP_TBL3 + 1,          // ModR/M mod constraint: 0 any, 1 reg-only, 2 mem-only\n")
   w("    NCAPS = CAP_RMREQ + 1              // == 32, the dst:5 ceiling (see Action.dst)\n};\n\n")
 
-  # GPR / SREG enums (from greg / sreg tables) -- used only by the renderer
+  # GPR / SREG enums (from greg / sreg tables) -- used only by the renderer.
+  # 64-bit register banks repeat names across size halves; emit each name once.
   w("enum GPR {\n")
+  seen = set()
   for i, n in enumerate(greg):
-    if isinstance(n, str):
+    if isinstance(n, str) and n.upper() not in seen:
+      seen.add(n.upper())
       w("    GREG_%s = %d,\n" % (n.upper(), i))
-  w("    GREG_NONE = %d\n};\n\n" % GREG_NONE)
+  w("    GREG_NONE = %d,\n" % GREG_NONE)
+  if mode == 64:
+    w("    GREG_RIP = %d,   // RIP-relative base marker ([rip+disp32])\n" % GREG_RIP)
+  w("    GREG_LAST_\n};\n\n")
 
   w("enum SREG {\n")
   for i, n in enumerate(interp.tables.get('sreg', [])):
@@ -1297,11 +1335,18 @@ def self_check(interp):
 # --------------------------------------------------------------------------
 
 def main():
-  c = parse_corpus("corpus.p")
+  global GREG_NONE
+  args = [a for a in sys.argv[1:] if not a.startswith('--')]
+  corpus = args[0] if args else "corpus.p"
+  outp = args[1] if len(args) > 1 else "x86_tables.h"
+  c = parse_corpus(corpus)
+  # x86-64 register numbers run 0..15, so the "no register" sentinel must clear
+  # them; x86-32 keeps the historical 15 (4-bit mem_base field, di == number 7).
+  GREG_NONE = 16 if int(c['arch'].get('mode', 32)) == 64 else 15
   interp = Interp(c)
   if "--check" in sys.argv:
     self_check(interp)
-  emit(c, interp, "x86_tables.h")
+  emit(c, interp, outp)
 
 
 if __name__ == "__main__":
