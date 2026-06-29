@@ -114,13 +114,24 @@ prog64: asm32_64 prog64.c
 	./asm32_64 c prog64.dat prog64.out
 	@cmp prog64.bin prog64.out && echo "prog64: byte-identical"
 
+# integer-only program exercising the extended ISA (cmpxchg/xadd atomics, bsf/bsr/
+# tzcnt/lzcnt/popcnt, bswap, endbr64 via CET). -mgeneral-regs-only keeps SSE/AVX
+# out of .text so every byte is in the integer subset the 64-bit corpus covers.
+prog64b: asm32_64 prog64b.c
+	gcc -O2 -mgeneral-regs-only -mpopcnt -mbmi -mlzcnt -fcf-protection=full -fno-stack-protector -c prog64b.c -o prog64b.o
+	objcopy -O binary --only-section=.text prog64b.o prog64b.bin
+	./asm32_64 d prog64b.bin prog64b.dat
+	./asm32_64 c prog64b.dat prog64b.out
+	@cmp prog64b.bin prog64b.out && echo "prog64b: byte-identical"
+
 clean:
 	rm -f parser test asm32 asm32_64 fuzz fuzz64 insns.dat out.bin corpus.head nc.dat nc_out.bin
 	rm -f insns64.dat out64.bin prog64.o prog64.bin prog64.out prog64.dat
+	rm -f prog64b.o prog64b.bin prog64b.out prog64b.dat
 	rm -rf gen64
 
 .PHONY: all corpus regen check run runtest roundtrip noncanon fuzz clean \
-        asm64 check64 roundtrip64 prog64 fuzz64
+        asm64 check64 roundtrip64 prog64 prog64b fuzz64
 
 x8632all: asm32 x8632all.bin
 	@./asm32 d x8632all.bin /tmp/x8.dat >/dev/null 2>&1 && ./asm32 c /tmp/x8.dat /tmp/x8.out >/dev/null 2>&1 && \
