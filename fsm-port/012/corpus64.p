@@ -81,12 +81,13 @@ submatch pfx($d) {
   0xf2 @pfx($d+1) {$reptype=2} => "repnz "  $pfx ;
   0xf0 @pfx($d+1) {$lock=1}    => "lock "   $pfx ;
   # REX (0x40..0x4F): consumed raw into pfx[]; W/R/X/B re-read in C++. REX.W is
-  # split out because it overrides the 66 prefix for operand size -- and hence for
-  # immz/relz immediate width: under REX.W the immediate is always 32-bit (sign-
-  # extended), never 16-bit, so reset $opsiz=0 even if a 66 set it. (Operand size
-  # 64 itself is applied in C++ from the REX byte; this only fixes FSM imm sizing.)
+  # split out because it overrides the 66 prefix for operand size: $opsiz becomes
+  # 3-valued (0=32, 1=16 via 66, 2=64 via REX.W). REX is the last prefix, so a
+  # REX.W after a 66 lands $opsiz at 2 (REX.W wins). The C++ keys immediate width
+  # on $opsiz==1 (-> 2 bytes) and reads the 64-bit operand/register bank for
+  # $opsiz==2, so movabs and SSE GPR/xmm-bank ops size correctly.
   0100 0 r x b @pfx($d+1)            => $pfx ;
-  0100 1 r x b @pfx($d+1) {$opsiz=0} => $pfx ;
+  0100 1 r x b @pfx($d+1) {$opsiz=2} => $pfx ;
        @insn => $insn ;
 }
 
