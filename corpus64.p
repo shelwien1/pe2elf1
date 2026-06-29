@@ -185,6 +185,10 @@ submatch insn {
   0x8b @addr      => "mov " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," $addr ;
   0x8a 11 ggg rrr => wit("alt") "mov " rgb[16*$rex+8*$rexr+$g] "," rgb[16*$rex+8*$rexb+$r] ;
   0x8a @addr      => "mov" sfx[1] " " rgb[16*$rex+8*$rexr+$g] "," $addr ;
+  0x8c 11 ggg rrr => "mov " greg[32*$rexw+16*$opsiz+8*$rexb+$r] "," sreg[$g] ;
+  0x8c @addr      => "mov " $addr "," sreg[$g] ;
+  0x8e 11 ggg rrr => "mov " sreg[$g] "," greg[16+8*$rexb+$r] ;
+  0x8e @addr      => "mov " sreg[$g] "," $addr ;
   0xa0 @immadr => "mov al," seg[$segidx] "[@" hex($immadr) "]" ;
   0xa1 @immadr => "mov " greg[32*$rexw+16*$opsiz+0] "," seg[$segidx] "[@" hex($immadr) "]" ;
   0xa2 @immadr => "mov " seg[$segidx] "[@" hex($immadr) "],al" ;
@@ -228,6 +232,8 @@ submatch insn {
   0xff @addr(2)   => "call" sfx[8] " " $addr ;
   0xff 11 100 rrr => "jmp " dreg[16*$opsiz+8*$rexb+$r] ;
   0xff @addr(4)   => "jmp" sfx[8] " " $addr ;
+  0xff @addr(3)   => "call far" sfx[$rexw? 8 : (4>>$opsiz)] " " $addr ;
+  0xff @addr(5)   => "jmp far" sfx[$rexw? 8 : (4>>$opsiz)] " " $addr ;
   0xff 11 110 rrr => "push " dreg[16*$opsiz+8*$rexb+$r] ;
   0xff @addr(6)   => "push" sfx[8] " " $addr ;
   0xfe 11 000 rrr => "inc " rgb[16*$rex+8*$rexb+$r] ;
@@ -440,6 +446,37 @@ submatch insn {
   0x0f 0xb9 11 ggg rrr => "ud1 " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
   0x0f 0xb9 @addr      => "ud1 " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," $addr ;
   0x0f 0xff 11 ggg rrr => "ud0 " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+
+  # --- 0F 00 (sldt/str/lldt/ltr/verr/verw) / 0F 01 descriptor + system ------
+  0x0f 0x00 11 000 rrr => "sldt " greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0x00 11 001 rrr => "str " greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0x00 11 010 rrr => "lldt " greg[16+8*$rexb+$r] ;
+  0x0f 0x00 11 011 rrr => "ltr " greg[16+8*$rexb+$r] ;
+  0x0f 0x00 11 100 rrr => "verr " greg[16+8*$rexb+$r] ;
+  0x0f 0x00 11 101 rrr => "verw " greg[16+8*$rexb+$r] ;
+  0x0f 0x00 @addr(0) => "sldt " $addr ;
+  0x0f 0x00 @addr(1) => "str " $addr ;
+  0x0f 0x00 @addr(2) => "lldt " $addr ;
+  0x0f 0x00 @addr(3) => "ltr " $addr ;
+  0x0f 0x00 @addr(4) => "verr " $addr ;
+  0x0f 0x00 @addr(5) => "verw " $addr ;
+  0x0f 0x01 @addr(0) => "sgdt " $addr ;
+  0x0f 0x01 @addr(1) => "sidt " $addr ;
+  0x0f 0x01 @addr(2) => "lgdt " $addr ;
+  0x0f 0x01 @addr(3) => "lidt " $addr ;
+  0x0f 0x01 @addr(4) => "smsw " $addr ;
+  0x0f 0x01 @addr(6) => "lmsw " $addr ;
+  0x0f 0x01 @addr(7) => "invlpg " $addr ;
+  0x0f 0x01 11 100 rrr => "smsw " greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0x01 11 110 rrr => "lmsw " greg[16+8*$rexb+$r] ;
+  0x0f 0x01 0xc8 => "monitor" ;
+  0x0f 0x01 0xc9 => "mwait" ;
+  0x0f 0x01 0xca => "clac" ;
+  0x0f 0x01 0xcb => "stac" ;
+  0x0f 0x01 0xd0 => "xgetbv" ;
+  0x0f 0x01 0xd1 => "xsetbv" ;
+  0x0f 0x01 0xf8 => "swapgs" ;
+  0x0f 0x01 0xf9 => "rdtscp" ;
 
   # --- lar / lsl / mov cr,dr ------------------------------------------------
   0x0f 0x02 11 ggg rrr => "lar " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
