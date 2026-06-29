@@ -503,3 +503,12 @@ vpshufb xmm0, xmm1, xmm2
 vpslld xmm0, xmm1, 0x4
 vpsrlq ymm0, ymm1, 0x8
 vpsraw xmm0, xmm1, 0x2
+# ---- width-changing converts ----
+vcvtps2pd xmm0, xmm1
+vcvtps2pd ymm0, xmm1
+vcvtpd2ps xmm0, xmm1
+vcvtpd2ps xmm0, ymm1
+vcvtdq2pd xmm0, xmm1
+vcvtdq2pd ymm0, xmm1
+vcvtpd2dq xmm0, ymm1
+vcvttpd2dq xmm0, ymm1

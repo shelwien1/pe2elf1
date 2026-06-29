@@ -3425,6 +3425,13 @@ submatch vex2 {
   h 1111 y 01 0x5b @addr => "vcvtps2dq " vreg[16*$y+8*$h+$g] "," $addr ;
   h 1111 y 10 0x5b 11 ggg rrr => "vcvttps2dq " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8+$r] ;
   h 1111 y 10 0x5b @addr => "vcvttps2dq " vreg[16*$y+8*$h+$g] "," $addr ;
+  h 1111 y 00 0x5a 11 ggg rrr => "vcvtps2pd " vreg[16*$y+8*$h+$g] "," vreg[8+$r] ;
+  h 1111 y 00 0x5a @addr => "vcvtps2pd " vreg[16*$y+8*$h+$g] "," $addr ;
+  h 1111 y 10 0xe6 11 ggg rrr => "vcvtdq2pd " vreg[16*$y+8*$h+$g] "," vreg[8+$r] ;
+  h 1111 y 10 0xe6 @addr => "vcvtdq2pd " vreg[16*$y+8*$h+$g] "," $addr ;
+  h 1111 y 01 0x5a 11 ggg rrr => "vcvtpd2ps " vreg[8*$h+$g] "," vreg[16*$y+8+$r] ;
+  h 1111 y 11 0xe6 11 ggg rrr => "vcvtpd2dq " vreg[8*$h+$g] "," vreg[16*$y+8+$r] ;
+  h 1111 y 01 0xe6 11 ggg rrr => "vcvttpd2dq " vreg[8*$h+$g] "," vreg[16*$y+8+$r] ;
   h 1111 y 00 0x10 11 ggg rrr => "vmovups " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8+$r] ;
   h 1111 y 00 0x10 @addr => "vmovups " vreg[16*$y+8*$h+$g] "," $addr ;
   h 1111 y 00 0x11 @addr => "vmovups " $addr "," vreg[16*$y+8*$h+$g] ;
