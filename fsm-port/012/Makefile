@@ -93,11 +93,10 @@ roundtrip64: asm32_64 corpus64.bin
 	./asm32_64 c insns64.dat out64.bin
 	@cmp out64.bin corpus64.bin && echo "roundtrip64: byte-identical"
 
-# bijection fuzz against the x86-64 tables. The corpus-driven legacy core must
-# report 0 legacy failures; VEX/EVEX/XOP go through the C++ structural path whose
-# tail layout is a heuristic (deferred), so those are counted and reported apart
-# and do not fail the run. Builds fuzz64 against 64-bit tables, then restores the
-# 32-bit default; the fuzz64 binary carries its tables compiled-in.
+# bijection fuzz against the x86-64 tables: every accepted decode (legacy and
+# VEX/EVEX/XOP alike) must re-encode to the same bytes -- both failure counts must
+# be 0. Builds fuzz64 against 64-bit tables, then restores the 32-bit default; the
+# fuzz64 binary carries its tables compiled-in.
 fuzz64: fuzz.cpp $(DECHDRS) corpus64.p gen.py gasm.py
 	python3 gen.py corpus64.p x86_tables.h
 	python3 gasm.py corpus64.p x86_tables_enc.h
@@ -143,16 +142,27 @@ prog64d: asm32_64 prog64d.c
 	./asm32_64 c prog64d.dat prog64d.out
 	@cmp prog64d.bin prog64d.out && echo "prog64d: byte-identical"
 
+# AVX-512 build: gcc emits VEX + EVEX (vmovup[sd]/vfmadd*/vpmulld/vbroadcast*/
+# masked forms/vzeroupper). Validates the VEX/EVEX path on real AVX compiler
+# output, not just random VEX bytes.
+prog64e: asm32_64 prog64e.c
+	gcc -O3 -mavx512f -mavx512vl -mavx512bw -mavx512dq -fno-stack-protector -fcf-protection=full -c prog64e.c -o prog64e.o
+	objcopy -O binary --only-section=.text prog64e.o prog64e.bin
+	./asm32_64 d prog64e.bin prog64e.dat
+	./asm32_64 c prog64e.dat prog64e.out
+	@cmp prog64e.bin prog64e.out && echo "prog64e: byte-identical"
+
 clean:
 	rm -f parser test asm32 asm32_64 fuzz fuzz64 insns.dat out.bin corpus.head nc.dat nc_out.bin
 	rm -f insns64.dat out64.bin prog64.o prog64.bin prog64.out prog64.dat
 	rm -f prog64b.o prog64b.bin prog64b.out prog64b.dat
 	rm -f prog64c.o prog64c.bin prog64c.out prog64c.dat
 	rm -f prog64d.o prog64d.bin prog64d.out prog64d.dat
+	rm -f prog64e.o prog64e.bin prog64e.out prog64e.dat
 	rm -rf gen64
 
 .PHONY: all corpus regen check run runtest roundtrip noncanon fuzz clean \
-        asm64 check64 roundtrip64 prog64 prog64b prog64c prog64d fuzz64
+        asm64 check64 roundtrip64 prog64 prog64b prog64c prog64d prog64e fuzz64
 
 x8632all: asm32 x8632all.bin
 	@./asm32 d x8632all.bin /tmp/x8.dat >/dev/null 2>&1 && ./asm32 c /tmp/x8.dat /tmp/x8.out >/dev/null 2>&1 && \

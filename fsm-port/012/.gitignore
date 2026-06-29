@@ -29,6 +29,10 @@ prog64d.o
 prog64d.bin
 prog64d.out
 prog64d.dat
+prog64e.o
+prog64e.bin
+prog64e.out
+prog64e.dat
 t64.bin
 t64.s
 big64.bin

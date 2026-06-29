@@ -359,6 +359,12 @@ static inline size_t vex_decode(x86dec_t* d, const byte* s, size_t n, size_t ip)
     in->op[0].type = rt;
     if (in->op[1].type == T_GPR) in->op[1].type = rt;
     capture_addr_witness(in, s, op_at, 0);         // modrm sits at op_at + 1
+#if ARCH_MODE == 64
+    // vex_decode does not run finalize_insn, so translate the RIP-relative marker
+    // (mod=00 rm=101) into the rip witness enc_mem64 keys on -- otherwise GREG_RIP
+    // re-encodes as [rcx+disp32] (GREG_RIP & 7 == 1).
+    if (in->mem_base == GREG_RIP) in->rip = 1;
+#endif
   }
   if (imm_len) {
     int32_t v = 0;
@@ -375,11 +381,20 @@ static inline size_t vex_decode(x86dec_t* d, const byte* s, size_t n, size_t ip)
 static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   size_t ip = parse_prefixes(s, n, d);             // vars + prefix bookkeeping
   d->insn.vex = 0;
-  // VEX/EVEX: C4/C5/62 followed by a byte with mod==11 (the 32-bit disambiguation
-  // from LES/LDS/BOUND, which all require a memory operand, freeing mod==11).
+#if ARCH_MODE == 64
+  // 64-bit: C4/C5 (formerly LES/LDS) and 62 (formerly BOUND) are unconditionally
+  // VEX/VEX/EVEX -- the legacy meanings are invalid in long mode, so there is no
+  // disambiguation to do. (The 32-bit mod==11 test wrongly rejects any VEX whose
+  // payload byte 1 has the X/B extension bits clear, e.g. an r8-r15 index.)
+  if (ip + 1 < n && (s[ip] == 0xC4 || s[ip] == 0xC5 || s[ip] == 0x62))
+    return vex_decode(d, s, n, ip);
+#else
+  // 32-bit: C4/C5/62 are VEX/EVEX only when the next byte has mod==11 (LES/LDS/
+  // BOUND require a memory operand, so mod==11 is free for the VEX disambiguation).
   if (ip < n && (s[ip] == 0xC4 || s[ip] == 0xC5 || s[ip] == 0x62) &&
       ip + 1 < n && (s[ip + 1] & 0xC0) == 0xC0)
     return vex_decode(d, s, n, ip);
+#endif
   // XOP (8F): map field (byte1[4:0]) >= 8 distinguishes it from legacy POP (/0).
   if (ip < n && s[ip] == 0x8F && ip + 1 < n && (s[ip + 1] & 0x1f) >= 8)
     return vex_decode(d, s, n, ip);

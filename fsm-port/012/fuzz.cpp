@@ -47,16 +47,16 @@ static size_t gen(uint8_t* buf) {
     buf[p++] = 0x0F; buf[p++] = (uint8_t)rn(256);
   } else if (kind < 10) {               // 0F 38 / 0F 3A three-byte
     buf[p++] = 0x0F; buf[p++] = (rn(2) ? 0x38 : 0x3A); buf[p++] = (uint8_t)rn(256);
-  } else if (kind == 10) {              // 2-byte VEX (C5)
-    buf[p++] = 0xC5; buf[p++] = (uint8_t)(0xC0 | rn(64)); buf[p++] = (uint8_t)rn(256);
-  } else if (kind < 13) {               // 3-byte VEX (C4)
-    buf[p++] = 0xC4; buf[p++] = (uint8_t)(0xC0 | (1 + rn(3)) | (rn(8) << 3));
+  } else if (kind == 10) {              // 2-byte VEX (C5): byte1 = R.vvvv.L.pp (map 0F)
+    buf[p++] = 0xC5; buf[p++] = (uint8_t)rn(256); buf[p++] = (uint8_t)rn(256);
+  } else if (kind < 13) {               // 3-byte VEX (C4): byte1 = R.X.B.mmmmm, map 1-3
+    buf[p++] = 0xC4; buf[p++] = (uint8_t)((rn(8) << 5) | (1 + rn(3)));
     buf[p++] = (uint8_t)rn(256); buf[p++] = (uint8_t)rn(256);
-  } else if (kind < 15) {               // EVEX (62)
-    buf[p++] = 0x62; buf[p++] = (uint8_t)(0xC0 | (1 + rn(3)) | (rn(8) << 3));
+  } else if (kind < 15) {               // EVEX (62): P0 = R.X.B.R'.0.mmm, map 1-3
+    buf[p++] = 0x62; buf[p++] = (uint8_t)((rn(16) << 4) | (1 + rn(3)));
     buf[p++] = (uint8_t)rn(256); buf[p++] = (uint8_t)rn(256); buf[p++] = (uint8_t)rn(256);
-  } else {                              // XOP (8F): map field 8..10
-    buf[p++] = 0x8F; buf[p++] = (uint8_t)(0xC0 | (8 + rn(3)) | (rn(4) << 5));
+  } else {                              // XOP (8F): byte1 = R.X.B.mmmmm, map 8-10
+    buf[p++] = 0x8F; buf[p++] = (uint8_t)((rn(8) << 5) | (8 + rn(3)));
     buf[p++] = (uint8_t)rn(256); buf[p++] = (uint8_t)rn(256);
   }
   // random tail: ModR/M + SIB + disp32 + imm32 worst case is 10 bytes; give extra
@@ -71,12 +71,10 @@ int main(int argc, char** argv) {
   RNG = (argc > 2) ? strtoull(argv[2], 0, 0) : 0x123456789ABCDEFULL;
   if (!RNG) RNG = 1;
 
-  // Failures are split two ways. A "legacy" failure (mnem != MNEM_VEX) is a real
-  // bijection bug in the corpus-driven core and must be zero. A "vex" failure
-  // (mnem == MNEM_VEX) is the C++ structural VEX/EVEX/XOP path, whose tail layout
-  // is a (map,opcode) heuristic (vex_structure) -- not byte-exact on arbitrary
-  // opcodes, so random VEX bytes routinely diverge. That path is deferred, so VEX
-  // failures are reported separately and do NOT fail the run.
+  // Every accepted decode must re-encode to the same bytes -- legacy AND
+  // VEX/EVEX/XOP. The counts are split only for diagnosis (a "vex" failure is on
+  // the C++ VEX/EVEX/XOP path, a "legacy" failure on the corpus-driven core); both
+  // are real bijection bugs and both fail the run.
   uint64_t accepted = 0, legacy_fails = 0, vex_fails = 0;
   uint8_t buf[48], out[48];
   for (uint64_t it = 0; it < iters; ++it) {
@@ -91,19 +89,21 @@ int main(int argc, char** argv) {
     size_t el = encode_insn(&d.insn, out);
     bool ok = (el == len) && (memcmp(buf, out, len) == 0);
     if (ok) continue;
-    if (d.insn.mnem == MNEM_VEX) { vex_fails++; continue; }   // deferred structural path
-    if (++legacy_fails <= 20) {
-      printf("ROUND-TRIP FAIL  in:");
+    bool is_vex = (d.insn.mnem == MNEM_VEX);
+    if (is_vex) vex_fails++; else legacy_fails++;
+    if (legacy_fails + vex_fails <= 20) {
+      printf("ROUND-TRIP FAIL%s in:", is_vex ? " (vex)" : "");
       for (size_t i = 0; i < len; ++i) printf(" %02x", buf[i]);
       printf("   out(%zu):", el);
       for (size_t i = 0; i < el; ++i) printf(" %02x", out[i]);
-      printf("   mnem=%u\n", d.insn.mnem);
+      if (is_vex) printf("   vex=%d op=%02x\n", d.insn.vex, d.insn.vex_op);
+      else        printf("   mnem=%u\n", d.insn.mnem);
     }
   }
   printf("fuzz: %llu iters, %llu accepted (%.1f%%), %llu legacy failures, "
-         "%llu vex/evex/xop failures (deferred structural path)\n",
+         "%llu vex/evex/xop failures\n",
          (unsigned long long)iters, (unsigned long long)accepted,
          100.0 * (double)accepted / (double)iters,
          (unsigned long long)legacy_fails, (unsigned long long)vex_fails);
-  return legacy_fails ? 1 : 0;
+  return (legacy_fails || vex_fails) ? 1 : 0;
 }

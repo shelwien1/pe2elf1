@@ -309,9 +309,16 @@ static inline size_t vex_encode(const x86insn_t* in, uint8_t* out) {
   if (has_modrm) {
     int reg = in->op[0].index;
     if (in->op[1].type == T_MEM) {
+      // VEX/EVEX addressing is the same byte layout as legacy; the modrm/SIB/disp
+      // witness was captured by vex_decode, and the reg/base/index high bits live
+      // in the (replayed) VEX prefix, so emit the low 3 bits via the 64-bit emitter.
+#if ARCH_MODE == 64
+      enc_mem64(out, &p, reg, in);
+#else
       if (in->addr) enc_mem16(out, &p, reg, in);
       else          enc_mem32(out, &p, reg, in);
-    } else out[p++] = (uint8_t)(0xC0 | (reg << 3) | (in->op[1].index & 7));
+#endif
+    } else out[p++] = (uint8_t)(0xC0 | ((reg & 7) << 3) | (in->op[1].index & 7));
   }
   for (int i = 0; i < imm_len; ++i) out[p++] = (uint8_t)(in->imm >> (8 * i));
   return p;
