@@ -302,6 +302,20 @@ submatch insn {
   0x98 => "cwde" ;
   0x99 => "cdq" ;
 
+  # ===== string ops (no operands; rep/repnz + 66/REX.W ride in the prefix run,
+  # so the byte stream round-trips for every operand size; the .w/.q sizes share
+  # the rendered .d mnemonic since size is carried by the replayed prefix) =======
+  0xa4 => "movsb" ;
+  0xa5 => "movsd" ;
+  0xa6 => "cmpsb" ;
+  0xa7 => "cmpsd" ;
+  0xaa => "stosb" ;
+  0xab => "stosd" ;
+  0xac => "lodsb" ;
+  0xad => "lodsd" ;
+  0xae => "scasb" ;
+  0xaf => "scasd" ;
+
   # ===== test al/eax,imm ; mov r,imm ; movabs ===================================
   0xa8 @imm8 => "test al," hex($imm8) ;
   0xa9 @immz => "test eax," hex($immz) ;
