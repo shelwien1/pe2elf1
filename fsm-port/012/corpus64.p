@@ -491,6 +491,68 @@ submatch insn {
   # 0F 1E reg form: covers endbr64/endbr32 (F3 0F 1E FA/FB) and rdssp; the dead
   # reg field rides the reg_w witness so the modrm round-trips exactly.
   0x0f 0x1e 11 ggg rrr => "endbr " greg[$r] ;
+
+  # ===== SSE/SSE2 (legacy-encoded, xmm-only). The mandatory 66/F3/F2 prefix
+  # selects the pd/ss/sd variant and rides in the prefix run (shown as a prefix
+  # token), so one base rule per opcode round-trips all four variants byte-exact.
+  # Operands draw from the fixed XMM bank (ssereg[8+..]); the reg<->mem direction
+  # rides the enc/dir witness, the mod field rides the modrm capture. ===========
+  0x0f 0x10 11 ggg rrr => "movups " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x10 @addr      => "movups " ssereg[8+$g] "," $addr ;
+  0x0f 0x11 11 ggg rrr => "movups " ssereg[8+$r] "," ssereg[8+$g] ;
+  0x0f 0x11 @addr      => "movups " $addr "," ssereg[8+$g] ;
+  0x0f 0x12 11 ggg rrr => "movlps " ssereg[8+$g] "," ssereg[8+$r] ;   # movhlps (reg form)
+  0x0f 0x12 @addr      => "movlps " ssereg[8+$g] "," $addr ;
+  0x0f 0x13 @addr      => "movlps " $addr "," ssereg[8+$g] ;
+  0x0f 0x14 11 ggg rrr => "unpcklps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x14 @addr      => "unpcklps " ssereg[8+$g] "," $addr ;
+  0x0f 0x15 11 ggg rrr => "unpckhps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x15 @addr      => "unpckhps " ssereg[8+$g] "," $addr ;
+  0x0f 0x16 11 ggg rrr => "movhps " ssereg[8+$g] "," ssereg[8+$r] ;   # movlhps (reg form)
+  0x0f 0x16 @addr      => "movhps " ssereg[8+$g] "," $addr ;
+  0x0f 0x17 @addr      => "movhps " $addr "," ssereg[8+$g] ;
+  0x0f 0x28 11 ggg rrr => "movaps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x28 @addr      => "movaps " ssereg[8+$g] "," $addr ;
+  0x0f 0x29 11 ggg rrr => "movaps " ssereg[8+$r] "," ssereg[8+$g] ;
+  0x0f 0x29 @addr      => "movaps " $addr "," ssereg[8+$g] ;
+  0x0f 0x2e 11 ggg rrr => "ucomiss " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x2e @addr      => "ucomiss " ssereg[8+$g] "," $addr ;
+  0x0f 0x2f 11 ggg rrr => "comiss " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x2f @addr      => "comiss " ssereg[8+$g] "," $addr ;
+  0x0f 0x51 11 ggg rrr => "sqrtps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x51 @addr      => "sqrtps " ssereg[8+$g] "," $addr ;
+  0x0f 0x52 11 ggg rrr => "rsqrtps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x52 @addr      => "rsqrtps " ssereg[8+$g] "," $addr ;
+  0x0f 0x53 11 ggg rrr => "rcpps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x53 @addr      => "rcpps " ssereg[8+$g] "," $addr ;
+  0x0f 0x54 11 ggg rrr => "andps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x54 @addr      => "andps " ssereg[8+$g] "," $addr ;
+  0x0f 0x55 11 ggg rrr => "andnps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x55 @addr      => "andnps " ssereg[8+$g] "," $addr ;
+  0x0f 0x56 11 ggg rrr => "orps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x56 @addr      => "orps " ssereg[8+$g] "," $addr ;
+  0x0f 0x57 11 ggg rrr => "xorps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x57 @addr      => "xorps " ssereg[8+$g] "," $addr ;
+  0x0f 0x58 11 ggg rrr => "addps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x58 @addr      => "addps " ssereg[8+$g] "," $addr ;
+  0x0f 0x59 11 ggg rrr => "mulps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x59 @addr      => "mulps " ssereg[8+$g] "," $addr ;
+  0x0f 0x5a 11 ggg rrr => "cvtps2pd " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x5a @addr      => "cvtps2pd " ssereg[8+$g] "," $addr ;
+  0x0f 0x5b 11 ggg rrr => "cvtdq2ps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x5b @addr      => "cvtdq2ps " ssereg[8+$g] "," $addr ;
+  0x0f 0x5c 11 ggg rrr => "subps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x5c @addr      => "subps " ssereg[8+$g] "," $addr ;
+  0x0f 0x5d 11 ggg rrr => "minps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x5d @addr      => "minps " ssereg[8+$g] "," $addr ;
+  0x0f 0x5e 11 ggg rrr => "divps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x5e @addr      => "divps " ssereg[8+$g] "," $addr ;
+  0x0f 0x5f 11 ggg rrr => "maxps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x5f @addr      => "maxps " ssereg[8+$g] "," $addr ;
+  0x0f 0xc2 11 ggg rrr @imm8 => "cmpps " ssereg[8+$g] "," ssereg[8+$r] "," hex($imm8) ;
+  0x0f 0xc2 @addr      @imm8 => "cmpps " ssereg[8+$g] "," $addr "," hex($imm8) ;
+  0x0f 0xc6 11 ggg rrr @imm8 => "shufps " ssereg[8+$g] "," ssereg[8+$r] "," hex($imm8) ;
+  0x0f 0xc6 @addr      @imm8 => "shufps " ssereg[8+$g] "," $addr "," hex($imm8) ;
 }
 
 submatch main { @pfx(0) => $pfx }
