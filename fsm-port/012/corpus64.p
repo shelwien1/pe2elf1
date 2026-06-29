@@ -554,6 +554,57 @@ submatch insn {
   0x0f 0xc2 @addr      @imm8 => "cmpps " ssereg[8+$g] "," $addr "," hex($imm8) ;
   0x0f 0xc6 11 ggg rrr @imm8 => "shufps " ssereg[8+$g] "," ssereg[8+$r] "," hex($imm8) ;
   0x0f 0xc6 @addr      @imm8 => "shufps " ssereg[8+$g] "," $addr "," hex($imm8) ;
+
+  # ===== SSE2 GPR<->xmm moves, movdq, packed integer. ssereg[$opsiz*8+..] =
+  # OPF_SSE_OS (mm at opsiz 0, xmm at 1/2); greg[$r] takes REX.W as a 64-bit GPR
+  # (movq / cvtsi2sd r64). The 66/F3/F2 selector rides the prefix run, so one base
+  # rule per opcode covers movd/movq, movdqa/movdqu, cvtsi2ss/sd etc. byte-exact. =
+  0x0f 0x6e 11 ggg rrr => "movd " ssereg[$opsiz*8+$g] "," greg[$r] ;
+  0x0f 0x6e @addr      => "movd " ssereg[$opsiz*8+$g] "," $addr ;
+  0x0f 0x7e 11 ggg rrr => "movd " greg[$r] "," ssereg[$opsiz*8+$g] ;
+  0x0f 0x7e @addr      => "movd " $addr "," ssereg[$opsiz*8+$g] ;
+  0x0f 0x6f 11 ggg rrr => "movdqa " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0x6f @addr      => "movdqa " ssereg[$opsiz*8+$g] "," $addr ;
+  0x0f 0x7f 11 ggg rrr => "movdqa " ssereg[$opsiz*8+$r] "," ssereg[$opsiz*8+$g] ;
+  0x0f 0x7f @addr      => "movdqa " $addr "," ssereg[$opsiz*8+$g] ;
+  0x0f 0xd6 11 ggg rrr => "movq " ssereg[8+$r] "," ssereg[8+$g] ;
+  0x0f 0xd6 @addr      => "movq " $addr "," ssereg[8+$g] ;
+  0x0f 0x2a 11 ggg rrr => "cvtsi2ss " ssereg[8+$g] "," greg[$r] ;
+  0x0f 0x2a @addr      => "cvtsi2ss " ssereg[8+$g] "," $addr ;
+  0x0f 0x2c 11 ggg rrr => "cvttss2si " greg[$g] "," ssereg[8+$r] ;
+  0x0f 0x2c @addr      => "cvttss2si " greg[$g] "," $addr ;
+  0x0f 0x2d 11 ggg rrr => "cvtss2si " greg[$g] "," ssereg[8+$r] ;
+  0x0f 0x2d @addr      => "cvtss2si " greg[$g] "," $addr ;
+  0x0f 0xfc 11 ggg rrr => "paddb " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0xfc @addr      => "paddb " ssereg[$opsiz*8+$g] "," $addr ;
+  0x0f 0xfd 11 ggg rrr => "paddw " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0xfd @addr      => "paddw " ssereg[$opsiz*8+$g] "," $addr ;
+  0x0f 0xfe 11 ggg rrr => "paddd " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0xfe @addr      => "paddd " ssereg[$opsiz*8+$g] "," $addr ;
+  0x0f 0xd4 11 ggg rrr => "paddq " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0xd4 @addr      => "paddq " ssereg[$opsiz*8+$g] "," $addr ;
+  0x0f 0xf8 11 ggg rrr => "psubb " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0xf8 @addr      => "psubb " ssereg[$opsiz*8+$g] "," $addr ;
+  0x0f 0xf9 11 ggg rrr => "psubw " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0xf9 @addr      => "psubw " ssereg[$opsiz*8+$g] "," $addr ;
+  0x0f 0xfa 11 ggg rrr => "psubd " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0xfa @addr      => "psubd " ssereg[$opsiz*8+$g] "," $addr ;
+  0x0f 0xfb 11 ggg rrr => "psubq " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0xfb @addr      => "psubq " ssereg[$opsiz*8+$g] "," $addr ;
+  0x0f 0xdb 11 ggg rrr => "pand " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0xdb @addr      => "pand " ssereg[$opsiz*8+$g] "," $addr ;
+  0x0f 0xdf 11 ggg rrr => "pandn " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0xdf @addr      => "pandn " ssereg[$opsiz*8+$g] "," $addr ;
+  0x0f 0xeb 11 ggg rrr => "por " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0xeb @addr      => "por " ssereg[$opsiz*8+$g] "," $addr ;
+  0x0f 0xef 11 ggg rrr => "pxor " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0xef @addr      => "pxor " ssereg[$opsiz*8+$g] "," $addr ;
+  0x0f 0x74 11 ggg rrr => "pcmpeqb " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0x74 @addr      => "pcmpeqb " ssereg[$opsiz*8+$g] "," $addr ;
+  0x0f 0x75 11 ggg rrr => "pcmpeqw " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0x75 @addr      => "pcmpeqw " ssereg[$opsiz*8+$g] "," $addr ;
+  0x0f 0x76 11 ggg rrr => "pcmpeqd " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0x76 @addr      => "pcmpeqd " ssereg[$opsiz*8+$g] "," $addr ;
 }
 
 submatch main { @pfx(0) => $pfx }
