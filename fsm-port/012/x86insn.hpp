@@ -60,6 +60,9 @@ typedef struct {
   uint32_t rex : 1;     /* a REX prefix byte was present (W via opsize, R/X/B re-derived) */
   uint32_t rex2 : 1;    /* APX REX2 (D5) prefix present; its payload (incl. map bit M0)
                          * is replayed from pfx[], so the encoder drops the implied 0F */
+  uint32_t moffs : 1;   /* mov accumulator<->[moffs] (A0-A3): no ModR/M, the operand is an
+                         * absolute address held in `imm` (64-bit, or 32 under a 67); the
+                         * opcode byte is in vex_op, width follows `addr` */
 
   /* encoding witness: the residual that makes  bytes <-> x86insn_t  a byte-exact
    * bijection. The semantic fields say WHAT the instruction is; these say WHICH of

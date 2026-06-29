@@ -27,9 +27,11 @@
 # (replayed verbatim), so prefix variants round-trip byte-exact.
 #
 # Beyond this corpus, the C++ driver round-trips the remaining x64 byte-exactly:
-# VEX/EVEX/XOP (AVX, AVX-512) via the structural vex path, and APX -- the REX2
-# (D5) legacy prefix for r16-r31 and the EVEX-promoted-legacy maps. The fuzzer
-# enforces lossless round-trip across the whole accepted byte space (0 failures).
+# VEX/EVEX/XOP (AVX, AVX-512) via the structural vex path; APX -- the REX2 (D5)
+# legacy prefix for r16-r31 and the EVEX-promoted-legacy maps; and the moffs
+# mov (A0-A3), whose absolute address (64-bit, or 32 under a 67) is carried in
+# the 64-bit imm field. The fuzzer enforces lossless round-trip across the whole
+# accepted byte space (0 failures) -- the bijection now holds for all of x64.
 
 arch  $mode=64 $endian=le $bitorder=msb $maxlen=15
 # REX is NOT a var: the capture index is only 5 bits (32 slots) and the legacy
