@@ -61,6 +61,10 @@ submatch relz1($opsiz) { <0> @imm32 => $E+sx32($imm32) ;  <1> @imm16 => $E+sx16(
 submatch immz { @immz1($opsiz) => $immz1 }
 submatch relz { @relz1($opsiz) => $relz1 }
 submatch immq { @imm64 => $imm64 }
+# mov r,imm operand-size immediate: imm16/imm32 here, and imm64 under REX.W
+# (movabs). REX.W is not an FSM var, so the imm64 case is sized C++-side
+# (append_imm/enc_imm key on IMK_IMMV); this body covers the non-REX.W widths.
+submatch immv { @immz1($opsiz) => $immz1 }
 
 # ---- prefix run : legacy prefixes + REX (REX last; a no-token frame) ----------
 submatch pfx($d) {
@@ -302,7 +306,7 @@ submatch insn {
   0xa8 @imm8 => "test al," hex($imm8) ;
   0xa9 @immz => "test eax," hex($immz) ;
   10110 bbb @imm8 => "mov " rgb[$b] "," hex($imm8) ;
-  10111 bbb @immz => "mov " greg[$b] "," hex($immz) ;
+  10111 bbb @immv => "mov " greg[$b] "," hex($immv) ;   # mov r,imm (imm64 under REX.W = movabs)
 
   # ===== group 2 shifts (C0/C1 imm8 ; D0-D3) ====================================
   0xc0 11 000 rrr @imm8 => "rol " rgb[$r] "," hex($imm8) ;

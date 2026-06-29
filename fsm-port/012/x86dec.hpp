@@ -176,7 +176,7 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t op_at, int t
   // x86-64: REX adds a 4th register bit. REX.R extends a ModR/M.reg operand,
   // REX.B an embedded (40+r/B8+r) reg or the rm/base, REX.X the SIB index. REX is
   // replayed from pfx[] on encode, so only the operand *numbers* are widened here.
-  int xb = 0, reg_rex = 0;
+  int xb = 0, reg_rex = 0, imm64_w = 0;
 #if ARCH_MODE == 64
   // REX is the last prefix byte (it must immediately precede the opcode), captured
   // raw in pfx[] by the prefix run. Extract W/R/X/B here rather than spending five
@@ -188,6 +188,8 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t op_at, int t
   xb = rexbyte & 1;
   in->rex = rexbyte ? 1 : 0;
   if (rexbyte & 8) { in->opsize = 2; os = 2; }   // REX.W -> 64-bit operand
+  // mov r64,imm64 (movabs): B8+r with REX.W carries a full 64-bit immediate.
+  imm64_w = (c[CAP_IMK] == IMK_IMMV && (rexbyte & 8)) ? 1 : 0;
   // embedded reg (40+r/B8+r) extends via REX.B; ModR/M.reg via REX.R; the
   // implicit accumulator (FORM_ACC) is not encoded, so it is never extended.
   reg_rex = (form == FORM_REG || form == FORM_REG_IMM) ? xb
@@ -219,7 +221,9 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t op_at, int t
     case FORM_REG:     SETREG(0, rf, (int)c[CAP_REG]); n = 1; break;
     case FORM_ACC:                                  // implicit eAX/al + imm (reg_rex==0)
     case FORM_REG_IMM: SETREG(0, rf, (int)c[CAP_REG]);
-                       in->op[1].type = T_IMM; in->imm = (int32_t)c[CAP_IMM]; n = 2; break;
+                       in->op[1].type = T_IMM;
+                       in->imm = imm64_w ? (int64_t)c[CAP_IMM] : (int32_t)c[CAP_IMM];
+                       n = 2; break;
     case FORM_IMM:     in->op[0].type = T_IMM; in->imm = (int32_t)c[CAP_IMM]; n = 1; break;
     case FORM_REL:     in->op[0].type = T_REL; in->imm = (int32_t)c[CAP_REL]; n = 1; break;
     case FORM_GROUP:
@@ -275,7 +279,7 @@ static inline size_t parse_addr(const byte* s, size_t len, size_t ip, x86dec_t* 
 
 // append a trailing immediate per CAP_IMK into CAP_IMM / CAP_REL (far-pointer
 // selector -> CAP_DISP). immz/relz width follows opsize.
-static inline size_t append_imm(uint64_t* cap, const byte* s, size_t len, size_t ip, int opsiz) {
+static inline size_t append_imm(uint64_t* cap, const byte* s, size_t len, size_t ip, int opsiz, int rexw) {
   int w = 0, dst = CAP_IMM, sext = 0;
   switch ((int)cap[CAP_IMK]) {
     case IMK_NONE:  return ip;
@@ -284,6 +288,7 @@ static inline size_t append_imm(uint64_t* cap, const byte* s, size_t len, size_t
     case IMK_IMM16: w = 2; break;
     case IMK_IMM32: w = 4; break;
     case IMK_IMMZ:  w = opsiz ? 2 : 4; break;
+    case IMK_IMMV:  w = (opsiz == 1) ? 2 : (rexw ? 8 : 4); break;  // mov r,imm: 64 under REX.W
     case IMK_REL8:  w = 1; dst = CAP_REL; sext = 1; break;
     case IMK_RELZ:  w = opsiz ? 2 : 4; dst = CAP_REL; sext = 1; break;
     case IMK_PTR:                                   // imm32 offset : imm16 selector
@@ -364,6 +369,12 @@ static inline size_t vex_decode(x86dec_t* d, const byte* s, size_t n, size_t ip)
 static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   size_t ip = parse_prefixes(s, n, d);             // vars + prefix bookkeeping
   d->insn.vex = 0;
+  // REX.W (only when REX is the effective last prefix) widens mov r,imm to imm64.
+#if ARCH_MODE == 64
+  int rexw = (d->insn.n_pfx && (d->insn.pfx[d->insn.n_pfx - 1] & 0xF8) == 0x48) ? 1 : 0;
+#else
+  int rexw = 0;
+#endif
   // VEX/EVEX: C4/C5/62 followed by a byte with mod==11 (the 32-bit disambiguation
   // from LES/LDS/BOUND, which all require a memory operand, freeing mod==11).
   if (ip < n && (s[ip] == 0xC4 || s[ip] == 0xC5 || s[ip] == 0x62) &&
@@ -420,7 +431,7 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
       d->insn.mnem = 0xFFFF; return ip;
     }
     fill_insn(d);
-    ip = append_imm(d->cap, s, n, ip, (int)d->cap[VAR_OPSIZ]);
+    ip = append_imm(d->cap, s, n, ip, (int)d->cap[VAR_OPSIZ], rexw);
   } else if (form == FORM_GROUP) {
     int gid = (int)d->cap[CAP_GRP];
     uint16_t gstart = (uint16_t)(FSM_GROUPS + (gid * 2 + (int)d->cap[VAR_ADRSIZ]) * 256);
@@ -428,9 +439,9 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     ip = run_fsm(gstart, s, n, ip, d->cap);               // reg field -> mnemonic + r/m operand
     if (ip == before) { d->insn.mnem = 0xFFFF; return ip; }   // undefined /digit extension
     fill_insn(d);
-    ip = append_imm(d->cap, s, n, ip, (int)d->cap[VAR_OPSIZ]);
+    ip = append_imm(d->cap, s, n, ip, (int)d->cap[VAR_OPSIZ], rexw);
   } else {
-    ip = append_imm(d->cap, s, n, ip, (int)d->cap[VAR_OPSIZ]);
+    ip = append_imm(d->cap, s, n, ip, (int)d->cap[VAR_OPSIZ], rexw);
   }
   if (d->cap[CAP_MNSEL]) d->cap[CAP_MNEM] += d->cap[VAR_OPSIZ];   // movs/cdqw by opsize
   d->insn.mnem   = (uint16_t)d->cap[CAP_MNEM];

@@ -242,7 +242,7 @@ static inline void enc_mem64(uint8_t* o, size_t* p, int reg_field, const x86insn
 
 // ---- immediate ------------------------------------------------------------
 static inline void enc_imm(uint8_t* o, size_t* p, int imk, int opsize,
-                           int32_t imm, int32_t sel) {
+                           int64_t imm, int32_t sel) {
   int w;
   switch (imk) {
     case IMK_NONE: return;
@@ -250,6 +250,7 @@ static inline void enc_imm(uint8_t* o, size_t* p, int imk, int opsize,
     case IMK_IMM16: w = 2; break;
     case IMK_IMM32: w = 4; break;
     case IMK_IMMZ: case IMK_RELZ: w = (opsize == 1) ? 2 : 4; break;  // 16->2; 32/64->4
+    case IMK_IMMV: w = (opsize == 1) ? 2 : (opsize == 2) ? 8 : 4; break;  // mov r,imm: 64 under REX.W
     case IMK_PTR:  enc_put32(o, p, imm);
                    o[(*p)++] = (uint8_t)sel; o[(*p)++] = (uint8_t)(sel >> 8); return;
     case IMK_ENTER: o[(*p)++] = (uint8_t)imm; o[(*p)++] = (uint8_t)(imm >> 8);

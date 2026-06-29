@@ -570,7 +570,10 @@ class Interp:
   # ACC = implicit-accumulator + imm (add eax,imm): like REG_IMM but the register
   # is NOT encoded, so REX.B must not extend it (distinguished from B8+r).
   INSN_FORM = ['NONE', 'MODRM', 'REG', 'REG_IMM', 'IMM', 'REL', 'PTR', 'GROUP', 'ESC', 'RM', 'ACC']
-  INSN_IMK = ['NONE', 'IMM8', 'IMM16', 'IMM32', 'IMMZ', 'REL8', 'RELZ', 'PTR', 'IMM8SX', 'ENTER']
+  # IMMV = operand-size immediate (imm16/imm32/imm64 by 66 / default / REX.W). Used
+  # only by mov r,imm (B8+r): under REX.W it is the full 64-bit movabs immediate. The
+  # width is resolved C++-side (append_imm/enc_imm) since REX.W is not an FSM var.
+  INSN_IMK = ['NONE', 'IMM8', 'IMM16', 'IMM32', 'IMMZ', 'REL8', 'RELZ', 'PTR', 'IMM8SX', 'ENTER', 'IMMV']
 
   def insn_rules_raw(self):
     out = []
@@ -639,7 +642,7 @@ class Interp:
           reg_fixed = int(arg)
         else:
           modrm = 'mem'
-      elif nm in ('imm8', 'imm16', 'imm32', 'immz', 'rel8', 'relz'):
+      elif nm in ('imm8', 'imm16', 'imm32', 'immz', 'immv', 'rel8', 'relz'):
         imm.append(nm)
     return dict(bp=bp, tb=tb, two_byte=two_byte, modrm=modrm,
                 reg_fixed=reg_fixed, imm=imm, embedded=embedded)
@@ -1034,7 +1037,7 @@ def emit(c, interp, out_path):
   w("enum RmMode { RM_MEM = 0, RM_REG = 1 };\n\n")
   # operand-shape + immediate-kind enums for the single-byte instruction decoder
   w("enum InsnForm { FORM_NONE=0, FORM_MODRM, FORM_REG, FORM_REG_IMM, FORM_IMM, FORM_REL, FORM_PTR, FORM_GROUP, FORM_ESC, FORM_RM, FORM_ACC };\n")
-  w("enum ImmKind  { IMK_NONE=0, IMK_IMM8, IMK_IMM16, IMK_IMM32, IMK_IMMZ, IMK_REL8, IMK_RELZ, IMK_PTR, IMK_IMM8SX, IMK_ENTER };\n")
+  w("enum ImmKind  { IMK_NONE=0, IMK_IMM8, IMK_IMM16, IMK_IMM32, IMK_IMMZ, IMK_REL8, IMK_RELZ, IMK_PTR, IMK_IMM8SX, IMK_ENTER, IMK_IMMV };\n")
   w("enum OperandFile { OPF_GREG=0, OPF_RGB, OPF_XMM, OPF_MM, OPF_SREG, OPF_SSE_OS };\n\n")
 
   # the one uniform FSM record (Action packed to 16 bits)

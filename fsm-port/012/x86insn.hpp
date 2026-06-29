@@ -71,8 +71,10 @@ typedef struct {
   uint8_t enc    : 3;  /* opcode-choice deviation: 0=canonical, else dir/long-imm/acc/moffs   */
   uint8_t reg_w  : 4;  /* dead ModR/M reg field for single-r/m forms (setcc), REX.R-extended  */
 
-  /* the single full immediate (target of T_IMM / T_REL / T_PTR) */
-  int32_t imm;
+  /* the single full immediate (target of T_IMM / T_REL / T_PTR). 64-bit so the
+   * REX.W mov r64,imm64 (movabs) immediate fits; narrower immediates occupy the
+   * low bytes (the encoder writes only as many bytes as the operand size needs). */
+  int64_t imm;
 
   uint8_t cc;          /* condition code 0..15 for jcc/setcc/cmovcc; 0xFF = none */
 
