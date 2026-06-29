@@ -771,6 +771,20 @@ class Asm:
       return {"mod": 1, "rm": base, "sib": None, "disp": disp & 0xff, "dw": 1}
     return {"mod": 2, "rm": base, "sib": None, "disp": disp & 0xffff, "dw": 2}
 
+  def _vexfix(self, sol):
+    # x86-64 VEX/XOP store the rm base/index extension as INVERTED bits (B-bar,
+    # X-bar) in byte1.  A register rm solves them through the inverted register
+    # tables; for a memory rm the addressing matcher leaves REX.B/REX.X in the
+    # env instead, so map those to byte1's `b`/`k` fields here, defaulting X-bar
+    # to 1 (no index).  Harmless for forms that have no such field.
+    if "rexb" in sol and not isinstance(sol["rexb"], str):
+      sol["b"] = 1 - int(sol["rexb"])
+    if "rexx" in sol and not isinstance(sol["rexx"], str):
+      sol["k"] = 1 - int(sol["rexx"])
+    elif "k" not in sol:
+      sol["k"] = 1
+    return sol
+
   # -- assemble one core string against insn rules -> list of (bytes, env) ----
   def asm_core(self, core, env0, start):
     cands = []
@@ -794,6 +808,7 @@ class Asm:
           for sol in rmatch(rule.template, core, dict(env0), self):
             if not self.guards_ok(rule, sol):
               continue
+            self._vexfix(sol)
             e = Emit()
             e.val(0xc4, 8)
             self.emit_pattern(rule.pattern, sol, e, start)
@@ -946,7 +961,14 @@ def asm_line(asm, line, start):
     # are simply not valid encodings -- skip them and let verification pick the
     # real one.
     try:
-      full = bytes(pfx) + revealed_bytes(env, explicit, asm.g["arch"].get("mode", 32)) + ibytes
+      # VEX/XOP/EVEX carry their register extensions in the prefix payload, never
+      # in a REX byte (a REX before them is illegal); drop any REX state the
+      # addressing matcher left in env so no stray 0x4x byte is emitted.
+      rb_env = env
+      if ibytes[:1] and ibytes[0] in (0xc4, 0xc5, 0x62, 0x8f):
+        rb_env = {k: v for k, v in env.items()
+                  if k not in ("rexw", "rexr", "rexx", "rexb", "rex")}
+      full = bytes(pfx) + revealed_bytes(rb_env, explicit, asm.g["arch"].get("mode", 32)) + ibytes
       txt, n = disasm_one(asm.g, full, start)
     except Exception:
       continue
