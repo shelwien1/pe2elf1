@@ -783,6 +783,9 @@ class Asm:
       sol["k"] = 1 - int(sol["rexx"])
     elif "k" not in sol:
       sol["k"] = 1
+    # EVEX V-bar' (vvvv high bit): solved by the vvvv table for 3-operand forms;
+    # default to 1 (V'=0, the canonical no-extension value) otherwise.
+    sol.setdefault("u", 1)
     return sol
 
   # -- assemble one core string against insn rules -> list of (bytes, env) ----
@@ -854,6 +857,7 @@ class Asm:
           for sol in rmatch(rule.template, core, dict(env0), self):
             if not self.guards_ok(rule, sol):
               continue
+            self._vexfix(sol)
             e = Emit()
             e.val(0x62, 8)
             self.emit_pattern(rule.pattern, sol, e, start)

@@ -29,15 +29,17 @@ classic x86-64 integer/FP ISA plus AVX/AVX2:
 | SSSE3/SSE4/AES/SHA | pshufb/phadd/pmovsx/zx/pmuldq/pcmpeqq/pcmpgtq/pmin/max, ptest, round/blend/palignr/dpps/pclmulqdq/pcmpestri/aeskeygen, aes*, sha*, crc32, movbe, adcx/adox, pextr/pinsr (b/w/d/q) |
 | x87 | full D8–DF (arith, fld/fst, fcmov, fucomi, transcendentals, control) |
 | AVX/AVX2 (VEX) | C4 & C5 forms: packed/scalar FP arith, vmovaps/upd/dqa/dqu (+stores), integer (vpadd/psub/pand/por/pxor/pcmpeq/gt/punpck/...), vcmp*/vshuf* (imm8), vzeroupper/all |
+| AVX-512 (EVEX) | zmm0–31 with `{k1-7}` masking, `{z}` zeroing, `{1toN}` broadcast and `{er}`/`{sae}` embedded rounding: FP arith ps/pd/ss/sd, min/max, logical, vmovaps/upd/dqa32/64/dqu8/16/32/64 (+stores), integer vpadd/sub/and/or/xor/mull (d/q/b/w), FMA (vfmadd/sub/nmadd 132/213/231 ps/pd) |
 
 Validated against GNU `as`/`objdump`: every instruction in the test corpus
 assembles to the exact bytes `as` produces, and the entire `.text` of `/bin/ls`
 (~20 000 instructions) disassembles with **zero** undecodable bytes.
 
-**Not yet covered (future work):** EVEX / AVX-512 (the `evex`/`vex2`-style
-4-byte form with masking, broadcast, rounding control and zmm0–31), the XOP
-(`8F`) maps, and the long tail of less-common AVX leaves (vsqrt/vcvt/vfma/
-vbroadcast/vgather and the scalar `vmovss/sd` merge forms).
+**Not yet covered (future work):** the XOP (`8F`) maps; AVX-512 mask-register
+ops (`vpcmp*`→k, `kmov*`, `kand*`) and VSIB gather/scatter; and the long tail of
+less-common VEX/EVEX leaves (vsqrt/vcvt/vbroadcast and the scalar `vmovss/sd`
+merge forms). EVEX `disp8` is shown as the raw encoded byte rather than the
+disp8×N effective displacement (the corpus.p convention — see below).
 
 ## How long mode is expressed
 
@@ -61,6 +63,14 @@ everything new lives in `corpus64.p`:
   tables (`vreg`, `vvv`) use an inverted-extension layout that keeps the
   assembler's solver coefficients positive. C5 (2-byte) and C4 (3-byte) forms
   are separate submatches; the assembler picks the shorter that re-disassembles.
+* **EVEX/AVX-512**: the 4-byte `0x62` prefix carries inverted `R/X/B/R'/V'`
+  extension bits selecting zmm0–31 — handled with the same inverted-layout-table
+  trick (`ereg`/`evvv`, 96 entries spanning xmm/ymm/zmm). `{k}`/`{z}` render via
+  `kzdec`, `{1toN}` via `bcst32/64`, `{er}` via `rcdec`. As in `corpus.p`, the
+  EVEX `disp8` is rendered as the raw encoded byte (disp8×N scaling is not
+  applied); this keeps the round-trip byte-exact without per-instruction tuple
+  tables. The assembler suppresses any REX byte before a VEX/EVEX/XOP lead and
+  bridges memory-operand REX.B/X into the inverted prefix fields (`asm._vexfix`).
 
 ## Engine changes (`asm.py`)
 
@@ -83,9 +93,10 @@ preserved):
 |------|------|
 | `corpus64.p` | the x86-64 description (deliverable) |
 | `corpus64.asm` / `corpus64.bin` | round-trip test: text ⇄ bytes (deliverable) |
+| `evex64.asm` / `evex64.bin` | AVX-512 EVEX round-trip test (built `.s`→GAS→`.text`) |
 | `tests/prog.c` / `prog.bin` / `prog.asm` | round-trip of real `gcc -O2` output |
 | `x86d64.py` / `x86a64.py` | standalone disassembler / assembler (`--emit`) |
-| `tools/rtcheck.py` | per-instruction cross-check against GNU `as`/`objdump` |
-| `tools/gen_sse.py`, `gen_38_3a.py`, `gen_vex.py` | rule generators for the regular maps |
-| `tools/corpus64-src.s` | Intel-syntax source the test corpus is built from |
+| `tools/rtcheck.py` | per-instruction cross-check against GNU `as`/`objdump` (`--bin` for a raw blob) |
+| `tools/gen_sse.py`, `gen_38_3a.py`, `gen_vex.py`, `gen_evex.py` | rule generators for the regular maps |
+| `tools/corpus64-src.s`, `tools/evex64-src.s` | Intel-syntax sources the test corpora are built from |
 | `tools/roundtrip.sh` | runs every round-trip check |
