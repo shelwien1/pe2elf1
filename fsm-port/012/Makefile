@@ -124,14 +124,24 @@ prog64b: asm32_64 prog64b.c
 	./asm32_64 c prog64b.dat prog64b.out
 	@cmp prog64b.bin prog64b.out && echo "prog64b: byte-identical"
 
+# floating-point program: gcc -O2 lowers it to SSE2 (movsd/addsd/mulsd/divsd/
+# sqrtsd/comisd/cvtsi2sd/cvttsd2si/pxor), validating the SSE subset on real code.
+prog64c: asm32_64 prog64c.c
+	gcc -O2 -fcf-protection=full -fno-stack-protector -c prog64c.c -o prog64c.o
+	objcopy -O binary --only-section=.text prog64c.o prog64c.bin
+	./asm32_64 d prog64c.bin prog64c.dat
+	./asm32_64 c prog64c.dat prog64c.out
+	@cmp prog64c.bin prog64c.out && echo "prog64c: byte-identical"
+
 clean:
 	rm -f parser test asm32 asm32_64 fuzz fuzz64 insns.dat out.bin corpus.head nc.dat nc_out.bin
 	rm -f insns64.dat out64.bin prog64.o prog64.bin prog64.out prog64.dat
 	rm -f prog64b.o prog64b.bin prog64b.out prog64b.dat
+	rm -f prog64c.o prog64c.bin prog64c.out prog64c.dat
 	rm -rf gen64
 
 .PHONY: all corpus regen check run runtest roundtrip noncanon fuzz clean \
-        asm64 check64 roundtrip64 prog64 prog64b fuzz64
+        asm64 check64 roundtrip64 prog64 prog64b prog64c fuzz64
 
 x8632all: asm32 x8632all.bin
 	@./asm32 d x8632all.bin /tmp/x8.dat >/dev/null 2>&1 && ./asm32 c /tmp/x8.dat /tmp/x8.out >/dev/null 2>&1 && \
