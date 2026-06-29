@@ -39,8 +39,8 @@ static size_t gen(uint8_t* buf) {
   uint32_t npfx = rn(8);
   if (npfx > 3) npfx = 0;
   for (uint32_t i = 0; i < npfx; ++i) buf[p++] = PFX[rn(sizeof PFX)];
-  // opcode: 1-byte, 0F, 0F38/3A, VEX (C5/C4), EVEX (62), or XOP (8F)
-  uint32_t kind = rn(16);
+  // opcode: 1-byte, 0F, 0F38/3A, VEX (C5/C4), EVEX (62), XOP (8F), or APX REX2 (D5)
+  uint32_t kind = rn(18);
   if (kind < 5) {                       // one-byte opcode
     buf[p++] = (uint8_t)rn(256);
   } else if (kind < 8) {                // 0F two-byte
@@ -55,9 +55,12 @@ static size_t gen(uint8_t* buf) {
   } else if (kind < 15) {               // EVEX (62): P0 = R.X.B.R'.0.mmm, map 1-3
     buf[p++] = 0x62; buf[p++] = (uint8_t)((rn(16) << 4) | (1 + rn(3)));
     buf[p++] = (uint8_t)rn(256); buf[p++] = (uint8_t)rn(256); buf[p++] = (uint8_t)rn(256);
-  } else {                              // XOP (8F): byte1 = R.X.B.mmmmm, map 8-10
+  } else if (kind < 16) {               // XOP (8F): byte1 = R.X.B.mmmmm, map 8-10
     buf[p++] = 0x8F; buf[p++] = (uint8_t)((rn(8) << 5) | (8 + rn(3)));
     buf[p++] = (uint8_t)rn(256); buf[p++] = (uint8_t)rn(256);
+  } else {                              // APX REX2 (D5): payload (M0.R4.X4.B4.W.R.X.B)
+    buf[p++] = 0xD5; buf[p++] = (uint8_t)rn(256);    // + opcode (M0 picks 1-byte/0F map)
+    buf[p++] = (uint8_t)rn(256);
   }
   // random tail: ModR/M + SIB + disp32 + imm32 worst case is 10 bytes; give extra
   // so no instruction is truncated (a short buffer makes the immediate read as 0,

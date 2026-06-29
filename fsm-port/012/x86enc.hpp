@@ -333,7 +333,10 @@ static inline size_t encode_insn(const x86insn_t* in, uint8_t* out) {
   const struct EncCand* c = enc_select(in, &reg_oi, &rm_oi, &imm_oi);
   if (!c) return 0;
 
-  if (c->tb) {                            // escape prefix: 0F, then 38/3A for three-byte maps
+  // escape prefix: 0F, then 38/3A for the three-byte maps. A REX2 (D5) instruction
+  // folds the 0F into its map bit M0 (replayed in the payload), so the 0F is not
+  // emitted separately -- REX2 only reaches the 1-byte and 0F maps.
+  if (c->tb && !in->rex2) {
     out[p++] = 0x0F;
     if (c->tb == 2)      out[p++] = 0x38;
     else if (c->tb == 3) out[p++] = 0x3A;

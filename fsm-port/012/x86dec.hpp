@@ -136,7 +136,9 @@ static inline void capture_addr_witness(x86insn_t* in, const byte* s, size_t op_
   for (int i = 0; i < in->n_ops; ++i) if (in->op[i].type == T_MEM) has_mem = true;
   if (!has_mem) return;
 
-  int oplen = tb < 2 ? tb : 2;                           // bytes before the final opcode
+  // bytes before the final opcode. REX2 folds the 0F into its map bit (no escape
+  // byte in the stream), so the opcode sits at op_at and the modrm at op_at+1.
+  int oplen = in->rex2 ? 0 : (tb < 2 ? tb : 2);
   size_t mrm_at = op_at + oplen + 1;
   uint8_t modrm = s[mrm_at];
   int mod = modrm >> 6, rm = modrm & 7;
@@ -182,7 +184,11 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t op_at, int t
   // raw in pfx[] by the prefix run. Extract W/R/X/B here rather than spending five
   // scarce capture slots on it. REX.R extends a ModR/M.reg operand, REX.B an
   // embedded (40+r/B8+r) reg or rm/base, REX.X the SIB index.
-  int rexbyte = (in->n_pfx && (in->pfx[in->n_pfx - 1] & 0xF0) == 0x40)
+  // For a REX2 (D5) instruction the last prefix byte is the REX2 payload, not a
+  // 0x4x REX -- its bits are replayed raw, so skip the REX extraction (operand
+  // size already came from VAR_OPSIZ via REX2.W; register extension is not needed
+  // for the byte-exact round-trip, the high bits ride in the replayed payload).
+  int rexbyte = (!in->rex2 && in->n_pfx && (in->pfx[in->n_pfx - 1] & 0xF0) == 0x40)
                   ? in->pfx[in->n_pfx - 1] : 0;
   int xr = (rexbyte >> 2) & 1, xx = (rexbyte >> 1) & 1;
   xb = rexbyte & 1;
@@ -259,12 +265,12 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t op_at, int t
   // present in the byte and must be replayed (e.g. non-canonical setcc reg bits).
   in->reg_w = 0;
   if (form == FORM_RM) {
-    int oplen2 = tb < 2 ? tb : 2;
+    int oplen2 = in->rex2 ? 0 : (tb < 2 ? tb : 2);
     in->reg_w = (s[op_at + oplen2 + 1] >> 3) & 7;
   }
 
   // stamp enc: which matching candidate the decoded opcode/digit corresponds to
-  int oplen = tb < 2 ? tb : 2;                            // 0F 38 / 0F 3A: opcode is byte 3
+  int oplen = in->rex2 ? 0 : (tb < 2 ? tb : 2);          // REX2: no 0F escape byte
   uint8_t opbyte = s[op_at + oplen];
   int digit = 0xFF;
   if (form == FORM_GROUP) digit = (s[op_at + oplen + 1] >> 3) & 7;
@@ -381,6 +387,7 @@ static inline size_t vex_decode(x86dec_t* d, const byte* s, size_t n, size_t ip)
 static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   size_t ip = parse_prefixes(s, n, d);             // vars + prefix bookkeeping
   d->insn.vex = 0;
+  d->insn.rex2 = 0;
 #if ARCH_MODE == 64
   // 64-bit: C4/C5 (formerly LES/LDS) and 62 (formerly BOUND) are unconditionally
   // VEX/VEX/EVEX -- the legacy meanings are invalid in long mode, so there is no
@@ -417,10 +424,49 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     }
     return ip + 3;
   }
+#if ARCH_MODE == 64
+  int rex2_0f = 0;
+  // APX REX2 (D5 + payload): a 2-byte prefix carrying R4/X4/B4 (the 4th register
+  // bit -> r16-r31) and W.R.X.B, plus a map bit M0 (payload bit 7: 0 = 1-byte
+  // opcode map, 1 = 0F map with NO 0F escape byte). Capture it raw in pfx[] and
+  // replay it; W drives operand size like REX.W; the high register bits ride in
+  // the replayed payload, so the modrm low 3 bits round-trip unchanged.
+  if (ip + 1 < n && s[ip] == 0xD5 && d->insn.n_pfx + 2 <= (int)sizeof(d->insn.pfx)) {
+    byte payload = s[ip + 1];
+    d->insn.rex2 = 1;
+    rex2_0f = (payload >> 7) & 1;                       // M0
+    if (payload & 8) d->cap[VAR_OPSIZ] = 2;             // REX2.W -> 64-bit operand
+    d->insn.pfx[d->insn.n_pfx++] = 0xD5;
+    d->insn.pfx[d->insn.n_pfx++] = payload;
+    d->insn.has_pfx = 1;
+    ip += 2;
+  }
+#endif
   size_t op_at = ip;
   int tb = 0;                                       // escape: 0 none, 1 0F, 2 0F 38, 3 0F 3A
+#if ARCH_MODE == 64
+  if (d->insn.rex2 && rex2_0f) {                    // REX2 M0=1: opcode is a 0F-map byte
+    tb = 1;
+    ip = run_fsm(FSM_OP2, s, n, ip, d->cap);
+    if (ip == op_at) { d->insn.mnem = 0xFFFF; return ip; }
+    // REX2 reaches only the 1-byte and 0F maps -- a further escape (0F 38/3A, or
+    // 0F 0F) is #UD under REX2 (the encoder would drop the implied 0F and lose
+    // the escape byte). And REX2 encodes only legacy GPR instructions; legacy
+    // SSE/vector ops in the 0F map are #UD too. Reject both.
+    int rf = (int)d->cap[CAP_RFILE], mf = (int)d->cap[CAP_MFILE];
+    if (d->cap[CAP_FORM] == FORM_ESC || d->cap[CAP_TBL3] ||
+        rf == OPF_XMM || rf == OPF_MM || rf == OPF_SSE_OS ||
+        mf == OPF_XMM || mf == OPF_MM || mf == OPF_SSE_OS) {
+      d->insn.mnem = 0xFFFF; return ip;
+    }
+  } else
+#endif
+  {
   ip = run_fsm(FSM_OP1, s, n, ip, d->cap);          // opcode: mnemonic, form, embedded reg
   if (ip == op_at) { d->insn.mnem = 0xFFFF; return ip; }   // undefined / unsupported opcode
+  // REX2 with M0=0 selects the 1-byte map; an explicit 0F escape byte is then #UD
+  // (a 0F-map op must use M0=1). Reject so the encoder never has to drop a 0F.
+  if (d->insn.rex2 && d->cap[CAP_FORM] == FORM_ESC) { d->insn.mnem = 0xFFFF; return ip; }
   if (d->cap[CAP_FORM] == FORM_ESC) {               // 0F escape: the real opcode is byte 2
     tb = 1;
     size_t o2 = ip;
@@ -435,6 +481,7 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
       if (ip == o3) { d->insn.mnem = 0xFFFF; return ip; }   // undefined three-byte opcode
       if (d->cap[CAP_FORM] == FORM_ESC) d->cap[CAP_FORM] = FORM_NONE;
     }
+  }
   }
   int form = (int)d->cap[CAP_FORM];
   if (form == FORM_MODRM || form == FORM_RM) {
