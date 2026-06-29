@@ -188,7 +188,10 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t op_at, int t
   xb = rexbyte & 1;
   in->rex = rexbyte ? 1 : 0;
   if (rexbyte & 8) { in->opsize = 2; os = 2; }   // REX.W -> 64-bit operand
-  reg_rex = (form == FORM_REG || form == FORM_REG_IMM) ? xb : xr;
+  // embedded reg (40+r/B8+r) extends via REX.B; ModR/M.reg via REX.R; the
+  // implicit accumulator (FORM_ACC) is not encoded, so it is never extended.
+  reg_rex = (form == FORM_REG || form == FORM_REG_IMM) ? xb
+          : (form == FORM_ACC) ? 0 : xr;
 #endif
 
   for (int i = 0; i < 5; ++i) { in->op[i].type = T_NONE; in->op[i].index = 0; }
@@ -214,6 +217,7 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t op_at, int t
       if (c[CAP_IMK] != IMK_NONE) { in->op[1].type = T_IMM; in->imm = (int32_t)c[CAP_IMM]; n = 2; }
       break;
     case FORM_REG:     SETREG(0, rf, (int)c[CAP_REG]); n = 1; break;
+    case FORM_ACC:                                  // implicit eAX/al + imm (reg_rex==0)
     case FORM_REG_IMM: SETREG(0, rf, (int)c[CAP_REG]);
                        in->op[1].type = T_IMM; in->imm = (int32_t)c[CAP_IMM]; n = 2; break;
     case FORM_IMM:     in->op[0].type = T_IMM; in->imm = (int32_t)c[CAP_IMM]; n = 1; break;

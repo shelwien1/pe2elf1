@@ -71,6 +71,7 @@ static inline bool enc_cand_roles(const struct EncCand* c, const x86insn_t* in,
     case FORM_REG:
       if (n != 1 || CLS(0) != enc_file_class(c->rfile, os)) return false;
       *reg_oi = 0; return true;
+    case FORM_ACC:                                       // implicit eAX/al + imm
     case FORM_REG_IMM:
       if (n != 2 || CLS(0) != enc_file_class(c->rfile, os) || CLS(1) != C_IMM)
         return false;

@@ -89,7 +89,7 @@ class EncBuilder:
     elif imml and imml[0] in ('rel8', 'relz'):
       form = F['REL']
     elif imml and two_ops:
-      form = F['REG_IMM']                              # implicit accumulator
+      form = F['ACC']                                  # implicit accumulator (eAX/al, imm)
     elif imml:
       form = F['IMM']
     else:
@@ -136,7 +136,7 @@ class EncBuilder:
         c['emb_pos'], c['emb_w'] = pos, w
       elif cc_emb:
         c['emb'] = 'cc'
-      if form == F['REG_IMM'] and emb != 'b':
+      if form == F['ACC']:
         c['reg0'] = 1                                  # implicit eAX / al
       if info['modrm'] == 'reg':
         c['rfile'] = OPF[ip.operand_file(rhs, 'g')]

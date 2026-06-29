@@ -567,7 +567,9 @@ class Interp:
   # opcodes (reg-fixed /digit dispatch, sec 9) and the 0F map are not built
   # here yet -- their opcode bytes stay dead (undefined) for now.
   # ----------------------------------------------------------------------
-  INSN_FORM = ['NONE', 'MODRM', 'REG', 'REG_IMM', 'IMM', 'REL', 'PTR', 'GROUP', 'ESC', 'RM']
+  # ACC = implicit-accumulator + imm (add eax,imm): like REG_IMM but the register
+  # is NOT encoded, so REX.B must not extend it (distinguished from B8+r).
+  INSN_FORM = ['NONE', 'MODRM', 'REG', 'REG_IMM', 'IMM', 'REL', 'PTR', 'GROUP', 'ESC', 'RM', 'ACC']
   INSN_IMK = ['NONE', 'IMM8', 'IMM16', 'IMM32', 'IMMZ', 'REL8', 'RELZ', 'PTR', 'IMM8SX', 'ENTER']
 
   def insn_rules_raw(self):
@@ -723,7 +725,7 @@ class Interp:
       elif imml and imml[0] in ('rel8', 'relz'):
         form = F['REL']
       elif imml and two_ops:
-        form = F['REG_IMM']                              # implicit accumulator
+        form = F['ACC']                                  # implicit accumulator (eAX/al, imm)
       elif imml:
         form = F['IMM']
       else:
@@ -771,7 +773,7 @@ class Interp:
         d['form'] = form
         d['imk'] = imk if imk != K['NONE'] else d['imk']
         d['emb'] = emb if emb in ('b',) else d['emb']
-        if form == F['REG_IMM'] and not emb:
+        if form == F['ACC']:
           d['reg0'] = True
         # files: reg-direct rule supplies both; mem rule supplies the suffix
         if info['modrm'] == 'reg':
@@ -1031,7 +1033,7 @@ def emit(c, interp, out_path):
   # CAP_MODE marker: register-direct vs memory r/m
   w("enum RmMode { RM_MEM = 0, RM_REG = 1 };\n\n")
   # operand-shape + immediate-kind enums for the single-byte instruction decoder
-  w("enum InsnForm { FORM_NONE=0, FORM_MODRM, FORM_REG, FORM_REG_IMM, FORM_IMM, FORM_REL, FORM_PTR, FORM_GROUP, FORM_ESC, FORM_RM };\n")
+  w("enum InsnForm { FORM_NONE=0, FORM_MODRM, FORM_REG, FORM_REG_IMM, FORM_IMM, FORM_REL, FORM_PTR, FORM_GROUP, FORM_ESC, FORM_RM, FORM_ACC };\n")
   w("enum ImmKind  { IMK_NONE=0, IMK_IMM8, IMK_IMM16, IMK_IMM32, IMK_IMMZ, IMK_REL8, IMK_RELZ, IMK_PTR, IMK_IMM8SX, IMK_ENTER };\n")
   w("enum OperandFile { OPF_GREG=0, OPF_RGB, OPF_XMM, OPF_MM, OPF_SREG, OPF_SSE_OS };\n\n")
 
