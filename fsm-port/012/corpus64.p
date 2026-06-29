@@ -866,6 +866,17 @@ submatch insn {
   0x0f 0x3a 0x62 @addr      @imm8 => "pcmpistrm " ssereg[$opsiz*8+$g] "," $addr "," hex($imm8) ;
   0x0f 0x3a 0x63 11 ggg rrr @imm8 => "pcmpistri " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] "," hex($imm8) ;
   0x0f 0x3a 0x63 @addr      @imm8 => "pcmpistri " ssereg[$opsiz*8+$g] "," $addr "," hex($imm8) ;
+
+  # ===== SSE3 horizontal add/sub, addsub, lddqu (xmm; 66/F2 ride the prefix run).
+  # movddup/movsldup/movshdup (F2/F3 0F 12/16) round-trip via the movlps/movhps
+  # rules + prefix replay, so only these distinct opcodes need rules. ============
+  0x0f 0x7c 11 ggg rrr => "haddps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x7c @addr      => "haddps " ssereg[8+$g] "," $addr ;
+  0x0f 0x7d 11 ggg rrr => "hsubps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x7d @addr      => "hsubps " ssereg[8+$g] "," $addr ;
+  0x0f 0xd0 11 ggg rrr => "addsubps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0xd0 @addr      => "addsubps " ssereg[8+$g] "," $addr ;
+  0x0f 0xf0 @addr      => "lddqu " ssereg[8+$g] "," $addr ;
 }
 
 submatch main { @pfx(0) => $pfx }
