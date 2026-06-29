@@ -168,3 +168,76 @@ vcmpps k1, zmm1, zmm2, 0x0
 vpcmpd k1, zmm1, zmm2, 0x5
 vpcmpud k2, zmm1, zmm2, 0x2
 vptestmd k1, zmm1, zmm2
+# ---- AVX-512 round 2: converts / broadcasts / min-max / shifts / permutes ----
+vcvtdq2ps zmm0, zmm1
+vcvtdq2ps zmm2{k1}{z}, zmm3
+vcvtdq2ps zmm0, zmm1, {rn-sae}
+vcvtdq2ps zmm5, zmm6, {rz-sae}
+vcvtdq2ps zmm0, [rax]{1to16}
+vcvtdq2ps zmm0{k2}, [r8]{1to16}
+vcvtps2dq zmm0, zmm1
+vcvtps2dq zmm0, zmm1, {ru-sae}
+vcvtps2dq zmm0, [rdx]
+vcvttps2dq zmm0, zmm1
+vcvttps2dq zmm0, zmm1, {sae}
+vcvttps2dq zmm10, [rax]{1to16}
+vcvtdq2ps zmm17, zmm28
+vcvtps2dq zmm31{k7}, zmm16
+vcvtss2sd xmm0{k1}, xmm1, xmm2
+vcvtss2sd xmm0, xmm1, xmm2, {sae}
+vcvtss2sd xmm16{k3}, xmm17, xmm18
+vcvtsd2ss xmm0{k1}, xmm1, xmm2
+vcvtsd2ss xmm0, xmm1, xmm2, {rn-sae}
+vcvtsi2sd xmm0, xmm1, rax, {rn-sae}
+vcvtsi2ss xmm0, xmm1, rax, {rz-sae}
+vcvtsi2sd xmm0, xmm1, r8, {rn-sae}
+vcvtsd2si rax, xmm1, {rn-sae}
+vcvtsd2si r9, xmm1, {rd-sae}
+vcvtss2si rax, xmm1, {ru-sae}
+vcvttsd2si rax, xmm1, {sae}
+vcvttss2si eax, xmm1, {sae}
+vbroadcastss zmm0, xmm1
+vbroadcastss zmm0{k1}, [rax]
+vbroadcastsd zmm0, xmm1
+vbroadcastsd zmm0, [rdx]
+vpbroadcastd zmm0, xmm1
+vpbroadcastd zmm0, eax
+vpbroadcastd zmm0{k1}{z}, r8d
+vpbroadcastq zmm0, rax
+vpbroadcastq zmm0, xmm1
+vpbroadcastq zmm5, r15
+vpmaxsd zmm0, zmm1, zmm2
+vpmaxsq zmm0, zmm1, zmm2
+vpminsd zmm0, zmm1, [rax]{1to16}
+vpmaxud zmm0, zmm1, zmm2
+vpminud zmm0{k1}, zmm1, zmm2
+vpmaxsb zmm0, zmm1, zmm2
+vpminsw zmm0, zmm1, zmm2
+vpmaxuw zmm0, zmm1, zmm2
+vpminub zmm0, zmm1, zmm2
+vpmaxsq zmm16, zmm17, zmm18
+vpabsd zmm0, zmm1
+vpabsq zmm0, [rax]{1to8}
+vpabsb zmm0, zmm1
+vpabsw zmm0, zmm1
+vpslld zmm0, zmm1, 5
+vpsrld zmm0{k1}, zmm1, 7
+vpsrad zmm0, zmm1, 1
+vpsllq zmm0, zmm1, 5
+vpsraq zmm0, zmm1, 9
+vpsrlq zmm0, zmm1, 3
+vpsllw zmm0, zmm1, 2
+vpsraw zmm0, zmm1, 4
+vpslld zmm0, [rax]{1to16}, 5
+vpslld zmm17, zmm28, 11
+vpsllvd zmm0, zmm1, zmm2
+vpsllvq zmm0, zmm1, zmm2
+vpsrlvd zmm0, zmm1, zmm2
+vpsrlvq zmm0, zmm1, zmm2
+vpsravd zmm0, zmm1, [rax]{1to16}
+vpsravq zmm0, zmm1, zmm2
+vpermd zmm0, zmm1, zmm2
+vpermps zmm0, zmm1, zmm2
+vpermq zmm0, zmm1, 0x1b
+vpermpd zmm0, zmm1, 0x1b
+vpermq zmm0{k1}, [rax]{1to8}, 0x4e

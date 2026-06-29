@@ -785,6 +785,11 @@ class Asm:
       sol["k"] = 1 - int(sol["rexx"])
     elif "k" not in sol:
       sol["k"] = 1
+    # A GP operand in the modrm.reg field (e.g. vcvtsd2si rax,xmm) extends through
+    # REX.R, which the register table solves as $rexr; map it to byte0's inverted
+    # R-bar like the rm bits above.
+    if "rexr" in sol and not isinstance(sol["rexr"], str):
+      sol["h"] = 1 - int(sol["rexr"])
     # The inverted extension bits default to 1 (= no extension) when no operand
     # pins them -- e.g. R-bar/R-bar' for a GP operand, or the /digit reg field of
     # a shift-by-imm.  Register/memory operands that DO use them set them first.

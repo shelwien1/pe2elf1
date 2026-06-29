@@ -164,3 +164,75 @@ evex vcmpps k1,zmm1,zmm2,0x0
 evex vpcmpd k1,zmm1,zmm2,0x5
 evex vpcmpud k2,zmm1,zmm2,0x2
 evex vptestmd k1,zmm1,zmm2
+evex vcvtdq2ps zmm0,zmm1
+evex vcvtdq2ps zmm2 {k1} {z},zmm3
+evex vcvtdq2ps zmm0,zmm1 {rn-sae}
+evex vcvtdq2ps zmm5,zmm6 {rz-sae}
+evex vcvtdq2ps zmm0,[rax] {1to16}
+evex vcvtdq2ps zmm0 {k2},[r8] {1to16}
+evex vcvtps2dq zmm0,zmm1
+evex vcvtps2dq zmm0,zmm1 {ru-sae}
+evex vcvtps2dq zmm0,[rdx]
+evex vcvttps2dq zmm0,zmm1
+evex vcvttps2dq zmm0,zmm1 {sae}
+evex vcvttps2dq zmm10,[rax] {1to16}
+evex vcvtdq2ps zmm17,zmm28
+evex vcvtps2dq zmm31 {k7},zmm16
+evex vcvtss2sd xmm0 {k1},xmm1,xmm2
+evex vcvtss2sd zmm0,zmm1,zmm2 {sae}
+evex vcvtss2sd xmm16 {k3},xmm17,xmm18
+evex vcvtsd2ss xmm0 {k1},xmm1,xmm2
+evex vcvtsd2ss zmm0,zmm1,zmm2 {rn-sae}
+evex vcvtsi2sd zmm0,zmm1,rax {rn-sae}
+evex vcvtsi2ss zmm0,zmm1,rax {rz-sae}
+evex vcvtsi2sd zmm0,zmm1,r8 {rn-sae}
+evex vcvtsd2si rax,zmm1 {rn-sae}
+evex vcvtsd2si r9,zmm1 {rd-sae}
+evex vcvtss2si rax,zmm1 {ru-sae}
+evex vcvttsd2si rax,zmm1 {sae}
+evex vcvttss2si eax,zmm1 {sae}
+evex vbroadcastss zmm0,xmm1
+evex vbroadcastss zmm0 {k1},[rax]
+evex vbroadcastsd zmm0,xmm1
+evex vbroadcastsd zmm0,[rdx]
+evex vpbroadcastd zmm0,xmm1
+evex vpbroadcastd zmm0,eax
+evex vpbroadcastd zmm0 {k1} {z},r8d
+evex vpbroadcastq zmm0,rax
+evex vpbroadcastq zmm0,xmm1
+evex vpbroadcastq zmm5,r15
+evex vpmaxsd zmm0,zmm1,zmm2
+evex vpmaxsq zmm0,zmm1,zmm2
+evex vpminsd zmm0,zmm1,[rax] {1to16}
+evex vpmaxud zmm0,zmm1,zmm2
+evex vpminud zmm0 {k1},zmm1,zmm2
+evex vpmaxsb zmm0,zmm1,zmm2
+evex vpminsw zmm0,zmm1,zmm2
+evex vpmaxuw zmm0,zmm1,zmm2
+evex vpminub zmm0,zmm1,zmm2
+evex vpmaxsq zmm16,zmm17,zmm18
+evex vpabsd zmm0,zmm1
+evex vpabsq zmm0,[rax] {1to8}
+evex vpabsb zmm0,zmm1
+evex vpabsw zmm0,zmm1
+evex vpslld zmm0,zmm1,0x5
+evex vpsrld zmm0 {k1},zmm1,0x7
+evex vpsrad zmm0,zmm1,0x1
+evex vpsllq zmm0,zmm1,0x5
+evex vpsraq zmm0,zmm1,0x9
+evex vpsrlq zmm0,zmm1,0x3
+evex vpsllw zmm0,zmm1,0x2
+evex vpsraw zmm0,zmm1,0x4
+evex vpslld zmm0,[rax] {1to16},0x5
+evex vpslld zmm17,zmm28,0xb
+evex vpsllvd zmm0,zmm1,zmm2
+evex vpsllvq zmm0,zmm1,zmm2
+evex vpsrlvd zmm0,zmm1,zmm2
+evex vpsrlvq zmm0,zmm1,zmm2
+evex vpsravd zmm0,zmm1,[rax] {1to16}
+evex vpsravq zmm0,zmm1,zmm2
+evex vpermd zmm0,zmm1,zmm2
+evex vpermps zmm0,zmm1,zmm2
+evex vpermq zmm0,zmm1,0x1b
+evex vpermpd zmm0,zmm1,0x1b
+evex vpermq zmm0 {k1},[rax] {1to8},0x4e

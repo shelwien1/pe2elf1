@@ -61,6 +61,71 @@ def kcmp(mn, op, w, pp, mm, imm=False):
   E('1 k b 1 00 %s %s 0 ll 0 u aaa 0x%02x 11 ggg rrr%s => wit("evex") "%s " kreg[$g] kdec[$a] "," %s "," %s%s ;' % (mm, P1(w, pp), op, ip, mn, VV, RM, it))
   E('1 k b 1 00 %s %s 0 ll 0 u aaa 0x%02x @addr %s%s => wit("evex") "%s " kreg[$g] kdec[$a] "," %s "," $addr%s ;' % (mm, P1(w, pp), op, ACT, ip, mn, VV, it))
 
+# --- additional operand shapes -------------------------------------------------
+XG = "ereg[16*$e+8*$h+$g]"     # scalar reg (xmm, LIG)
+XV = "evvv[16*$u+$v]"          # scalar vvvv (xmm)
+XM = "ereg[16*$k+8*$b+$r]"     # scalar/broadcast-source rm (xmm)
+GRm = "greg[32*$w+8*$rexb+$r]"  # GP in modrm.rm (W picks 32/64; $rexb=1-B-bar)
+GRg = "greg[32*$w+8*$rexr+$g]"  # GP in modrm.reg (W picks 32/64; $rexr=1-R-bar)
+
+def cvt2(mn, op, w, pp, bcst=None, rnd=None, mm="01"):
+  # 2-operand same-width convert / unary (vpabs): reg<-rm, vvvv unused(1111,V'=1),
+  # masking ok.  rnd in {None,'er','sae'} adds the reg-reg embedded-rounding form.
+  E('%s %s z ll 0 1 aaa 0x%02x 11 ggg rrr => wit("evex") "%s " %s %s "," %s ;' % (P0(mm), P1F(w, pp), op, mn, RG, KZ, RM))
+  if rnd == "er":
+    E('%s %s z ll 1 1 aaa 0x%02x 11 ggg rrr => wit("evex") "%s " %s %s "," %s rcdec[$l] ;' % (P0(mm), P1F(w, pp), op, mn, ZG, KZ, ZM))
+  elif rnd == "sae":
+    E('%s %s z 00 1 1 aaa 0x%02x 11 ggg rrr => wit("evex") "%s " %s %s "," %s " {sae}" ;' % (P0(mm), P1F(w, pp), op, mn, ZG, KZ, ZM))
+  E('%s %s z ll 0 1 aaa 0x%02x @addr %s => wit("evex") "%s " %s %s "," $addr ;' % (P0(mm), P1F(w, pp), op, ACT, mn, RG, KZ))
+  if bcst:
+    E('%s %s z ll 1 1 aaa 0x%02x @addr %s => wit("evex") "%s " %s %s "," $addr %s[$l] ;' % (P0(mm), P1F(w, pp), op, ACT, mn, RG, KZ, bcst))
+
+def scal_cvt(mn, op, w, pp, rnd, mm="01"):
+  # scalar convert (xmm), 3-operand reg/vvvv/rm.  EVEX form is selected only when
+  # masked or with {er}/{sae}; the plain form is shorter as VEX (asm picks that).
+  E('%s %s z ll 0 u aaa 0x%02x 11 ggg rrr => wit("evex") "%s " %s %s "," %s "," %s ;' % (P0(mm), P1(w, pp), op, mn, XG, KZ, XV, XM))
+  if rnd == "er":
+    E('%s %s z ll 1 u aaa 0x%02x 11 ggg rrr => wit("evex") "%s " %s %s "," %s "," %s rcdec[$l] ;' % (P0(mm), P1(w, pp), op, mn, ZG, KZ, ZV, ZM))
+  elif rnd == "sae":
+    E('%s %s z 00 1 u aaa 0x%02x 11 ggg rrr => wit("evex") "%s " %s %s "," %s "," %s " {sae}" ;' % (P0(mm), P1(w, pp), op, mn, ZG, KZ, ZV, ZM))
+  E('%s %s z ll 0 u aaa 0x%02x @addr %s => wit("evex") "%s " %s %s "," %s "," $addr ;' % (P0(mm), P1(w, pp), op, ACT, mn, XG, KZ, XV))
+
+def cvtsi(mn, op, pp, mm="01"):
+  # vcvtsi2sd/ss: dest=xmm vvvv=xmm src2=GP(W-driven).  EVEX form carries only the
+  # embedded rounding ({er}, reg-reg); plain/mem forms are emitted as VEX.
+  E('%s w vvvv 1 %s z ll 1 u aaa 0x%02x 11 ggg rrr {$rexb=1-$b} => wit("evex") "%s " %s %s "," %s "," %s rcdec[$l] ;' % (P0(mm), pp, op, mn, ZG, KZ, ZV, GRm))
+
+def cvt2si(mn, op, pp, rnd, mm="01"):
+  # vcvt[t]sd2si/ss2si: dest=GP(W-driven) src=xmm.  EVEX only for {er}/{sae}.
+  if rnd == "er":
+    E('%s w 1111 1 %s z ll 1 u aaa 0x%02x 11 ggg rrr {$rexr=1-$h} => wit("evex") "%s " %s "," %s rcdec[$l] ;' % (P0(mm), pp, op, mn, GRg, ZM))
+  else:
+    E('%s w 1111 1 %s z 00 1 u aaa 0x%02x 11 ggg rrr {$rexr=1-$h} => wit("evex") "%s " %s "," %s " {sae}" ;' % (P0(mm), pp, op, mn, GRg, ZM))
+
+def bcast(mn, op, w, pp, mm="10"):
+  # broadcast a low element (xmm) or m32/m64 across all lanes.  dest=full(reg).
+  E('%s %s z ll 0 1 aaa 0x%02x 11 ggg rrr => wit("evex") "%s " %s %s "," %s ;' % (P0(mm), P1F(w, pp), op, mn, RG, KZ, XM))
+  E('%s %s z ll 0 1 aaa 0x%02x @addr %s => wit("evex") "%s " %s %s "," $addr ;' % (P0(mm), P1F(w, pp), op, ACT, mn, RG, KZ))
+
+def bcast_gp(mn, op, w, pp, bank, mm="10"):
+  # vpbroadcastd/q from a GP register (W fixes element width and mnemonic).
+  E('%s %s z ll 0 1 aaa 0x%02x 11 ggg rrr {$rexb=1-$b} => wit("evex") "%s " %s %s "," greg[%d+8*$rexb+$r] ;' % (P0(mm), P1F(w, pp), op, mn, RG, KZ, bank))
+
+def shimm(mn, op, digit, w, pp, bcst, mm="01"):
+  # shift-by-imm8: dest=vvvv(NDD) src=rm, /digit in modrm.reg, masking on dest.
+  db = format(digit, "03b")
+  E('%s %s z ll 0 u aaa 0x%02x 11 %s rrr @imm8 => wit("evex") "%s " %s %s "," %s "," hex($imm8) ;' % (P0(mm), P1(w, pp), op, db, mn, VV, KZ, RM))
+  E('%s %s z ll 0 u aaa 0x%02x @addr(%d) %s @imm8 => wit("evex") "%s " %s %s "," $addr "," hex($imm8) ;' % (P0(mm), P1(w, pp), op, digit, ACT, mn, VV, KZ))
+  if bcst:
+    E('%s %s z ll 1 u aaa 0x%02x @addr(%d) %s @imm8 => wit("evex") "%s " %s %s "," $addr %s[$l] "," hex($imm8) ;' % (P0(mm), P1(w, pp), op, digit, ACT, mn, VV, KZ, bcst))
+
+def perm_imm(mn, op, w, pp, bcst, mm="11"):
+  # 2-op + imm8 (vpermq/vpermpd): dest=reg src=rm, vvvv unused, broadcast on mem.
+  E('%s %s z ll 0 1 aaa 0x%02x 11 ggg rrr @imm8 => wit("evex") "%s " %s %s "," %s "," hex($imm8) ;' % (P0(mm), P1F(w, pp), op, mn, RG, KZ, RM))
+  E('%s %s z ll 0 1 aaa 0x%02x @addr %s @imm8 => wit("evex") "%s " %s %s "," $addr "," hex($imm8) ;' % (P0(mm), P1F(w, pp), op, ACT, mn, RG, KZ))
+  if bcst:
+    E('%s %s z ll 1 1 aaa 0x%02x @addr %s @imm8 => wit("evex") "%s " %s %s "," $addr %s[$l] "," hex($imm8) ;' % (P0(mm), P1F(w, pp), op, ACT, mn, RG, KZ, bcst))
+
 v.append("submatch evex {")
 # --- FP packed arithmetic (W0.0F=ps / W1.66.0F=pd) with embedded rounding ---
 for mn, op in [("vadd", 0x58), ("vmul", 0x59), ("vsub", 0x5c), ("vdiv", 0x5e)]:
@@ -116,5 +181,45 @@ kcmp("vpcmpq", 0x1f, "1", "01", "11", imm=True)
 kcmp("vpcmpuq", 0x1e, "1", "01", "11", imm=True)
 kcmp("vptestmd", 0x27, "0", "01", "10")
 kcmp("vptestmq", 0x27, "1", "01", "10")
+# --- same-width converts (int<->fp, 32-bit elements): {er}/{sae}, broadcast ---
+cvt2("vcvtdq2ps", 0x5b, "0", "00", "bcst32", rnd="er")
+cvt2("vcvtps2dq", 0x5b, "0", "01", "bcst32", rnd="er")
+cvt2("vcvttps2dq", 0x5b, "0", "10", "bcst32", rnd="sae")
+# --- scalar converts (xmm), 3-operand: masked + {er}/{sae} forms ---
+scal_cvt("vcvtss2sd", 0x5a, "0", "10", "sae")
+scal_cvt("vcvtsd2ss", 0x5a, "1", "11", "er")
+# --- GP<->scalar converts: EVEX carries only embedded rounding ---
+cvtsi("vcvtsi2sd", 0x2a, "11"); cvtsi("vcvtsi2ss", 0x2a, "10")
+cvt2si("vcvtsd2si", 0x2d, "11", "er"); cvt2si("vcvtss2si", 0x2d, "10", "er")
+cvt2si("vcvttsd2si", 0x2c, "11", "sae"); cvt2si("vcvttss2si", 0x2c, "10", "sae")
+# --- broadcasts (0F38) ---
+bcast("vbroadcastss", 0x18, "0", "01"); bcast("vbroadcastsd", 0x19, "1", "01")
+bcast("vpbroadcastd", 0x58, "0", "01"); bcast("vpbroadcastq", 0x59, "1", "01")
+bcast_gp("vpbroadcastd", 0x7c, "0", "01", 0); bcast_gp("vpbroadcastq", 0x7c, "1", "01", 32)
+# --- integer min/max (0F38: d/q broadcast; 0F + b/w none) ---
+int3("vpmaxsd", 0x3d, "0", "01", "bcst32", mm="10"); int3("vpmaxsq", 0x3d, "1", "01", "bcst64", mm="10")
+int3("vpminsd", 0x39, "0", "01", "bcst32", mm="10"); int3("vpminsq", 0x39, "1", "01", "bcst64", mm="10")
+int3("vpmaxud", 0x3f, "0", "01", "bcst32", mm="10"); int3("vpmaxuq", 0x3f, "1", "01", "bcst64", mm="10")
+int3("vpminud", 0x3b, "0", "01", "bcst32", mm="10"); int3("vpminuq", 0x3b, "1", "01", "bcst64", mm="10")
+int3("vpmaxsb", 0x3c, "0", "01", mm="10"); int3("vpminsb", 0x38, "0", "01", mm="10")
+int3("vpmaxuw", 0x3e, "0", "01", mm="10"); int3("vpminuw", 0x3a, "0", "01", mm="10")
+int3("vpmaxsw", 0xee, "0", "01"); int3("vpminsw", 0xea, "0", "01")
+int3("vpmaxub", 0xde, "0", "01"); int3("vpminub", 0xda, "0", "01")
+# --- integer abs (0F38) : d/q broadcast, b/w none ---
+cvt2("vpabsd", 0x1e, "0", "01", "bcst32", mm="10"); cvt2("vpabsq", 0x1f, "1", "01", "bcst64", mm="10")
+cvt2("vpabsb", 0x1c, "0", "01", mm="10"); cvt2("vpabsw", 0x1d, "0", "01", mm="10")
+# --- variable (per-element) shifts (0F38) ---
+int3("vpsllvd", 0x47, "0", "01", "bcst32", mm="10"); int3("vpsllvq", 0x47, "1", "01", "bcst64", mm="10")
+int3("vpsrlvd", 0x45, "0", "01", "bcst32", mm="10"); int3("vpsrlvq", 0x45, "1", "01", "bcst64", mm="10")
+int3("vpsravd", 0x46, "0", "01", "bcst32", mm="10"); int3("vpsravq", 0x46, "1", "01", "bcst64", mm="10")
+# --- shifts by imm8 (0F 71/72/73 /digit) ---
+shimm("vpslld", 0x72, 6, "0", "01", "bcst32"); shimm("vpsrld", 0x72, 2, "0", "01", "bcst32")
+shimm("vpsrad", 0x72, 4, "0", "01", "bcst32"); shimm("vpsraq", 0x72, 4, "1", "01", "bcst64")
+shimm("vpsllq", 0x73, 6, "1", "01", "bcst64"); shimm("vpsrlq", 0x73, 2, "1", "01", "bcst64")
+shimm("vpsllw", 0x71, 6, "0", "01", None); shimm("vpsrlw", 0x71, 2, "0", "01", None)
+shimm("vpsraw", 0x71, 4, "0", "01", None)
+# --- permutes ---
+int3("vpermd", 0x36, "0", "01", "bcst32", mm="10"); int3("vpermps", 0x16, "0", "01", "bcst32", mm="10")
+perm_imm("vpermq", 0x00, "1", "01", "bcst64"); perm_imm("vpermpd", 0x01, "1", "01", "bcst64")
 v.append("}")
 print("\n".join(v))
