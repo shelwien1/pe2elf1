@@ -98,6 +98,11 @@ table insx   { insd,insw }
 table outsx  { outsd,outsw }
 table cbw_t  { cwde,cbw,cdqe }         # 0x98 by ($rexw?2:$opsiz): cwde/cbw/cdqe
 table cwd_t  { cdq,cwd,cqo }           # 0x99 by ($rexw?2:$opsiz): cdq/cwd/cqo
+table d8r    { fadd,fmul,fcom,fcomp,fsub,fsubr,fdiv,fdivr }
+table dcr    { fadd,fmul,fcom,fcomp,fsubr,fsub,fdivr,fdiv }
+table dar    { fcmovb,fcmove,fcmovbe,fcmovu }
+table dbr    { fcmovnb,fcmovne,fcmovnbe,fcmovnu }
+table der    { faddp,fmulp,fcompp,fcompp,fsubrp,fsubp,fdivrp,fdivp }
 table pcnt   { "",popcnt,"" }          # F3 0F B8
 table tzt    { "",tzcnt,"" }           # F3 0F BC
 table lzt    { "",lzcnt,"" }           # F3 0F BD
@@ -137,6 +142,8 @@ table h7d    { "",hsubpd,"","",hsubps,"" }      # 0F 7D
 table pshuf  { pshufw,pshufd,pshufhw,pshufhw,pshuflw,pshuflw } # 0F 70
 table m7e    { "",movq }               # 0F 7E F3 (reload)
 table ldqt   { "","",lddqu }           # F2 0F F0
+table pextrdq { pextrd, pextrq }       # 0F3A 16 by REX.W
+table pinsrdq { pinsrd, pinsrq }       # 0F3A 22 by REX.W
 
 # ===========================================================================
 # immediates / displacements
@@ -793,6 +800,314 @@ submatch insn {
   0x0f 0xe7 @addr      => me7[$opsiz] " " $addr "," simd[8*$opsiz+16*$rexr+$g] ;
   0x0f 0xf7 11 ggg rrr => mf7[$opsiz] " " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
   0x0f 0xf0 @addr [$reptype==2] => "lddqu " xreg[8*$rexr+$g] "," $addr ;
+
+  # ================= three-byte 0F38 / 0F3A : SSSE3 / SSE4 / AES / SHA =====
+  0x0f 0x38 0x00 11 ggg rrr => "pshufb " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x00 @addr      => "pshufb " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x01 11 ggg rrr => "phaddw " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x01 @addr      => "phaddw " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x02 11 ggg rrr => "phaddd " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x02 @addr      => "phaddd " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x03 11 ggg rrr => "phaddsw " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x03 @addr      => "phaddsw " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x04 11 ggg rrr => "pmaddubsw " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x04 @addr      => "pmaddubsw " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x05 11 ggg rrr => "phsubw " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x05 @addr      => "phsubw " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x06 11 ggg rrr => "phsubd " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x06 @addr      => "phsubd " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x07 11 ggg rrr => "phsubsw " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x07 @addr      => "phsubsw " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x08 11 ggg rrr => "psignb " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x08 @addr      => "psignb " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x09 11 ggg rrr => "psignw " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x09 @addr      => "psignw " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x0a 11 ggg rrr => "psignd " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x0a @addr      => "psignd " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x0b 11 ggg rrr => "pmulhrsw " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x0b @addr      => "pmulhrsw " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x10 11 ggg rrr => "pblendvb " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x10 @addr      => "pblendvb " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x14 11 ggg rrr => "blendvps " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x14 @addr      => "blendvps " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x15 11 ggg rrr => "blendvpd " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x15 @addr      => "blendvpd " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x17 11 ggg rrr => "ptest " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x17 @addr      => "ptest " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x1c 11 ggg rrr => "pabsb " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x1c @addr      => "pabsb " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x1d 11 ggg rrr => "pabsw " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x1d @addr      => "pabsw " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x1e 11 ggg rrr => "pabsd " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x1e @addr      => "pabsd " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x20 11 ggg rrr => "pmovsxbw " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x20 @addr      => "pmovsxbw " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x21 11 ggg rrr => "pmovsxbd " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x21 @addr      => "pmovsxbd " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x22 11 ggg rrr => "pmovsxbq " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x22 @addr      => "pmovsxbq " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x23 11 ggg rrr => "pmovsxwd " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x23 @addr      => "pmovsxwd " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x24 11 ggg rrr => "pmovsxwq " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x24 @addr      => "pmovsxwq " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x25 11 ggg rrr => "pmovsxdq " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x25 @addr      => "pmovsxdq " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x28 11 ggg rrr => "pmuldq " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x28 @addr      => "pmuldq " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x29 11 ggg rrr => "pcmpeqq " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x29 @addr      => "pcmpeqq " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x2b 11 ggg rrr => "packusdw " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x2b @addr      => "packusdw " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x30 11 ggg rrr => "pmovzxbw " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x30 @addr      => "pmovzxbw " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x31 11 ggg rrr => "pmovzxbd " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x31 @addr      => "pmovzxbd " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x32 11 ggg rrr => "pmovzxbq " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x32 @addr      => "pmovzxbq " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x33 11 ggg rrr => "pmovzxwd " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x33 @addr      => "pmovzxwd " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x34 11 ggg rrr => "pmovzxwq " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x34 @addr      => "pmovzxwq " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x35 11 ggg rrr => "pmovzxdq " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x35 @addr      => "pmovzxdq " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x37 11 ggg rrr => "pcmpgtq " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x37 @addr      => "pcmpgtq " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x38 11 ggg rrr => "pminsb " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x38 @addr      => "pminsb " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x39 11 ggg rrr => "pminsd " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x39 @addr      => "pminsd " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x3a 11 ggg rrr => "pminuw " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x3a @addr      => "pminuw " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x3b 11 ggg rrr => "pminud " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x3b @addr      => "pminud " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x3c 11 ggg rrr => "pmaxsb " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x3c @addr      => "pmaxsb " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x3d 11 ggg rrr => "pmaxsd " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x3d @addr      => "pmaxsd " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x3e 11 ggg rrr => "pmaxuw " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x3e @addr      => "pmaxuw " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x3f 11 ggg rrr => "pmaxud " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x3f @addr      => "pmaxud " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x40 11 ggg rrr => "pmulld " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x40 @addr      => "pmulld " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x41 11 ggg rrr => "phminposuw " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] ;
+  0x0f 0x38 0x41 @addr      => "phminposuw " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0x2a @addr      => "movntdqa " simd[8*$opsiz+16*$rexr+$g] "," $addr ;
+  0x0f 0x38 0xdb 11 ggg rrr => "aesimc " xreg[8*$rexr+$g] "," xreg[8*$rexb+$r] ;
+  0x0f 0x38 0xdb @addr      => "aesimc " xreg[8*$rexr+$g] "," $addr ;
+  0x0f 0x38 0xdc 11 ggg rrr => "aesenc " xreg[8*$rexr+$g] "," xreg[8*$rexb+$r] ;
+  0x0f 0x38 0xdc @addr      => "aesenc " xreg[8*$rexr+$g] "," $addr ;
+  0x0f 0x38 0xdd 11 ggg rrr => "aesenclast " xreg[8*$rexr+$g] "," xreg[8*$rexb+$r] ;
+  0x0f 0x38 0xdd @addr      => "aesenclast " xreg[8*$rexr+$g] "," $addr ;
+  0x0f 0x38 0xde 11 ggg rrr => "aesdec " xreg[8*$rexr+$g] "," xreg[8*$rexb+$r] ;
+  0x0f 0x38 0xde @addr      => "aesdec " xreg[8*$rexr+$g] "," $addr ;
+  0x0f 0x38 0xdf 11 ggg rrr => "aesdeclast " xreg[8*$rexr+$g] "," xreg[8*$rexb+$r] ;
+  0x0f 0x38 0xdf @addr      => "aesdeclast " xreg[8*$rexr+$g] "," $addr ;
+  0x0f 0x38 0xc8 11 ggg rrr => "sha1nexte " xreg[8*$rexr+$g] "," xreg[8*$rexb+$r] ;
+  0x0f 0x38 0xc8 @addr      => "sha1nexte " xreg[8*$rexr+$g] "," $addr ;
+  0x0f 0x38 0xc9 11 ggg rrr => "sha1msg1 " xreg[8*$rexr+$g] "," xreg[8*$rexb+$r] ;
+  0x0f 0x38 0xc9 @addr      => "sha1msg1 " xreg[8*$rexr+$g] "," $addr ;
+  0x0f 0x38 0xca 11 ggg rrr => "sha1msg2 " xreg[8*$rexr+$g] "," xreg[8*$rexb+$r] ;
+  0x0f 0x38 0xca @addr      => "sha1msg2 " xreg[8*$rexr+$g] "," $addr ;
+  0x0f 0x38 0xcb 11 ggg rrr => "sha256rnds2 " xreg[8*$rexr+$g] "," xreg[8*$rexb+$r] ;
+  0x0f 0x38 0xcb @addr      => "sha256rnds2 " xreg[8*$rexr+$g] "," $addr ;
+  0x0f 0x38 0xcc 11 ggg rrr => "sha256msg1 " xreg[8*$rexr+$g] "," xreg[8*$rexb+$r] ;
+  0x0f 0x38 0xcc @addr      => "sha256msg1 " xreg[8*$rexr+$g] "," $addr ;
+  0x0f 0x38 0xcd 11 ggg rrr => "sha256msg2 " xreg[8*$rexr+$g] "," xreg[8*$rexb+$r] ;
+  0x0f 0x38 0xcd @addr      => "sha256msg2 " xreg[8*$rexr+$g] "," $addr ;
+  0x0f 0x38 0xf0 11 ggg rrr [$reptype==2] => "crc32" sfx[1] " " greg[32*$rexw+8*$rexr+$g] "," rgb[16*$rex+8*$rexb+$r] ;
+  0x0f 0x38 0xf0 @addr      [$reptype==2] => "crc32" sfx[1] " " greg[32*$rexw+8*$rexr+$g] "," $addr ;
+  0x0f 0x38 0xf1 11 ggg rrr [$reptype==2] => "crc32 " greg[32*$rexw+8*$rexr+$g] "," greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0x38 0xf1 @addr      [$reptype==2] => "crc32" sfx[$rexw? 8 : (4>>$opsiz)] " " greg[32*$rexw+8*$rexr+$g] "," $addr ;
+  0x0f 0x38 0xf6 11 ggg rrr [$reptype==1] => "adox " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0x38 0xf6 11 ggg rrr [$opsiz] => "adcx " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0x38 0xf0 11 ggg rrr => "movbe " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0x38 0xf0 @addr      => "movbe " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," $addr ;
+  0x0f 0x38 0xf1 @addr      => "movbe " $addr "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0x3a 0x08 11 ggg rrr @imm8 => "roundps " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0x08 @addr      @imm8 => "roundps " simd[8*$opsiz+16*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0x09 11 ggg rrr @imm8 => "roundpd " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0x09 @addr      @imm8 => "roundpd " simd[8*$opsiz+16*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0x0a 11 ggg rrr @imm8 => "roundss " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0x0a @addr      @imm8 => "roundss " simd[8*$opsiz+16*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0x0b 11 ggg rrr @imm8 => "roundsd " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0x0b @addr      @imm8 => "roundsd " simd[8*$opsiz+16*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0x0c 11 ggg rrr @imm8 => "blendps " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0x0c @addr      @imm8 => "blendps " simd[8*$opsiz+16*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0x0d 11 ggg rrr @imm8 => "blendpd " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0x0d @addr      @imm8 => "blendpd " simd[8*$opsiz+16*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0x0e 11 ggg rrr @imm8 => "pblendw " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0x0e @addr      @imm8 => "pblendw " simd[8*$opsiz+16*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0x0f 11 ggg rrr @imm8 => "palignr " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0x0f @addr      @imm8 => "palignr " simd[8*$opsiz+16*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0x21 11 ggg rrr @imm8 => "insertps " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0x21 @addr      @imm8 => "insertps " simd[8*$opsiz+16*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0x40 11 ggg rrr @imm8 => "dpps " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0x40 @addr      @imm8 => "dpps " simd[8*$opsiz+16*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0x41 11 ggg rrr @imm8 => "dppd " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0x41 @addr      @imm8 => "dppd " simd[8*$opsiz+16*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0x42 11 ggg rrr @imm8 => "mpsadbw " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0x42 @addr      @imm8 => "mpsadbw " simd[8*$opsiz+16*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0x44 11 ggg rrr @imm8 => "pclmulqdq " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0x44 @addr      @imm8 => "pclmulqdq " simd[8*$opsiz+16*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0x60 11 ggg rrr @imm8 => "pcmpestrm " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0x60 @addr      @imm8 => "pcmpestrm " simd[8*$opsiz+16*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0x61 11 ggg rrr @imm8 => "pcmpestri " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0x61 @addr      @imm8 => "pcmpestri " simd[8*$opsiz+16*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0x62 11 ggg rrr @imm8 => "pcmpistrm " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0x62 @addr      @imm8 => "pcmpistrm " simd[8*$opsiz+16*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0x63 11 ggg rrr @imm8 => "pcmpistri " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0x63 @addr      @imm8 => "pcmpistri " simd[8*$opsiz+16*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0xdf 11 ggg rrr @imm8 => "aeskeygenassist " simd[8*$opsiz+16*$rexr+$g] "," simd[8*$opsiz+16*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0xdf @addr      @imm8 => "aeskeygenassist " simd[8*$opsiz+16*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0xcc 11 ggg rrr @imm8 => "sha1rnds4 " xreg[8*$rexr+$g] "," xreg[8*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0xcc @addr      @imm8 => "sha1rnds4 " xreg[8*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0x14 11 ggg rrr @imm8 => "pextrb " greg[32*$rexw+8*$rexb+$r] "," xreg[8*$rexr+$g] "," hex($imm8) ;
+  0x0f 0x3a 0x14 @addr      @imm8 => "pextrb" sfx[1] " " $addr "," xreg[8*$rexr+$g] "," hex($imm8) ;
+  0x0f 0x3a 0x15 11 ggg rrr @imm8 => "pextrw " greg[32*$rexw+8*$rexb+$r] "," xreg[8*$rexr+$g] "," hex($imm8) wit("long") ;
+  0x0f 0x3a 0x15 @addr      @imm8 => "pextrw" sfx[2] " " $addr "," xreg[8*$rexr+$g] "," hex($imm8) ;
+  0x0f 0x3a 0x16 11 ggg rrr @imm8 => pextrdq[$rexw] " " greg[32*$rexw+8*$rexb+$r] "," xreg[8*$rexr+$g] "," hex($imm8) ;
+  0x0f 0x3a 0x16 @addr      @imm8 => pextrdq[$rexw] " " $addr "," xreg[8*$rexr+$g] "," hex($imm8) ;
+  0x0f 0x3a 0x17 11 ggg rrr @imm8 => "extractps " greg[32*$rexw+8*$rexb+$r] "," xreg[8*$rexr+$g] "," hex($imm8) ;
+  0x0f 0x3a 0x17 @addr      @imm8 => "extractps " $addr "," xreg[8*$rexr+$g] "," hex($imm8) ;
+  0x0f 0x3a 0x20 11 ggg rrr @imm8 => "pinsrb " xreg[8*$rexr+$g] "," greg[32*$rexw+8*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0x20 @addr      @imm8 => "pinsrb " xreg[8*$rexr+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0x22 11 ggg rrr @imm8 => pinsrdq[$rexw] " " xreg[8*$rexr+$g] "," greg[32*$rexw+8*$rexb+$r] "," hex($imm8) ;
+  0x0f 0x3a 0x22 @addr      @imm8 => pinsrdq[$rexw] " " xreg[8*$rexr+$g] "," $addr "," hex($imm8) ;
+
+  # ============================ x87 FPU (D8-DF) =========================
+  # --- x87 FPU (D8-DF) ---
+  0xd8 @addr(0)   => "fadd.d " $addr ;
+  0xd8 @addr(1)   => "fmul.d " $addr ;
+  0xd8 @addr(2)   => "fcom.d " $addr ;
+  0xd8 @addr(3)   => "fcomp.d " $addr ;
+  0xd8 @addr(4)   => "fsub.d " $addr ;
+  0xd8 @addr(5)   => "fsubr.d " $addr ;
+  0xd8 @addr(6)   => "fdiv.d " $addr ;
+  0xd8 @addr(7)   => "fdivr.d " $addr ;
+  0xd9 @addr(0)   => "fld.d " $addr ;
+  0xd9 @addr(2)   => "fst.d " $addr ;
+  0xd9 @addr(3)   => "fstp.d " $addr ;
+  0xd9 @addr(4)   => "fldenv " $addr ;
+  0xd9 @addr(5)   => "fldcw.w " $addr ;
+  0xd9 @addr(6)   => "fnstenv " $addr ;
+  0xd9 @addr(7)   => "fnstcw.w " $addr ;
+  0xda @addr(0)   => "fiadd.d " $addr ;
+  0xda @addr(1)   => "fimul.d " $addr ;
+  0xda @addr(2)   => "ficom.d " $addr ;
+  0xda @addr(3)   => "ficomp.d " $addr ;
+  0xda @addr(4)   => "fisub.d " $addr ;
+  0xda @addr(5)   => "fisubr.d " $addr ;
+  0xda @addr(6)   => "fidiv.d " $addr ;
+  0xda @addr(7)   => "fidivr.d " $addr ;
+  0xdb @addr(0)   => "fild.d " $addr ;
+  0xdb @addr(1)   => "fisttp.d " $addr ;
+  0xdb @addr(2)   => "fist.d " $addr ;
+  0xdb @addr(3)   => "fistp.d " $addr ;
+  0xdb @addr(5)   => "fld.t " $addr ;
+  0xdb @addr(7)   => "fstp.t " $addr ;
+  0xdc @addr(0)   => "fadd.q " $addr ;
+  0xdc @addr(1)   => "fmul.q " $addr ;
+  0xdc @addr(2)   => "fcom.q " $addr ;
+  0xdc @addr(3)   => "fcomp.q " $addr ;
+  0xdc @addr(4)   => "fsub.q " $addr ;
+  0xdc @addr(5)   => "fsubr.q " $addr ;
+  0xdc @addr(6)   => "fdiv.q " $addr ;
+  0xdc @addr(7)   => "fdivr.q " $addr ;
+  0xdd @addr(0)   => "fld.q " $addr ;
+  0xdd @addr(1)   => "fisttp.q " $addr ;
+  0xdd @addr(2)   => "fst.q " $addr ;
+  0xdd @addr(3)   => "fstp.q " $addr ;
+  0xdd @addr(4)   => "frstor " $addr ;
+  0xdd @addr(6)   => "fnsave " $addr ;
+  0xdd @addr(7)   => "fnstsw " $addr ;
+  0xde @addr(0)   => "fiadd.w " $addr ;
+  0xde @addr(1)   => "fimul.w " $addr ;
+  0xde @addr(2)   => "ficom.w " $addr ;
+  0xde @addr(3)   => "ficomp.w " $addr ;
+  0xde @addr(4)   => "fisub.w " $addr ;
+  0xde @addr(5)   => "fisubr.w " $addr ;
+  0xde @addr(6)   => "fidiv.w " $addr ;
+  0xde @addr(7)   => "fidivr.w " $addr ;
+  0xdf @addr(0)   => "fild.w " $addr ;
+  0xdf @addr(1)   => "fisttp.w " $addr ;
+  0xdf @addr(2)   => "fist.w " $addr ;
+  0xdf @addr(3)   => "fistp.w " $addr ;
+  0xdf @addr(4)   => "fbld.t " $addr ;
+  0xdf @addr(5)   => "fild.q " $addr ;
+  0xdf @addr(6)   => "fbstp.t " $addr ;
+  0xdf @addr(7)   => "fistp.q " $addr ;
+  # D8 reg
+  0xd8 11 010 rrr => "fcom st(" dec($r) ")" ;
+  0xd8 11 011 rrr => "fcomp st(" dec($r) ")" ;
+  0xd8 11 ddd rrr => d8r[$d] " st(0),st(" dec($r) ")" ;
+  # D9 reg
+  0xd9 11 000 rrr => "fld st(" dec($r) ")" ;
+  0xd9 11 001 rrr => "fxch st(" dec($r) ")" ;
+  0xd9 11 011 rrr => "fstpnce st(" dec($r) ")" ;
+  0xd9 0xd0 => "fnop" ;
+  0xd9 0xe0 => "fchs" ;
+  0xd9 0xe1 => "fabs" ;
+  0xd9 0xe4 => "ftst" ;
+  0xd9 0xe5 => "fxam" ;
+  0xd9 0xe8 => "fld1" ;
+  0xd9 0xe9 => "fldl2t" ;
+  0xd9 0xea => "fldl2e" ;
+  0xd9 0xeb => "fldpi" ;
+  0xd9 0xec => "fldlg2" ;
+  0xd9 0xed => "fldln2" ;
+  0xd9 0xee => "fldz" ;
+  0xd9 0xf0 => "f2xm1" ;
+  0xd9 0xf1 => "fyl2x" ;
+  0xd9 0xf2 => "fptan" ;
+  0xd9 0xf3 => "fpatan" ;
+  0xd9 0xf4 => "fxtract" ;
+  0xd9 0xf5 => "fprem1" ;
+  0xd9 0xf6 => "fdecstp" ;
+  0xd9 0xf7 => "fincstp" ;
+  0xd9 0xf8 => "fprem" ;
+  0xd9 0xf9 => "fyl2xp1" ;
+  0xd9 0xfa => "fsqrt" ;
+  0xd9 0xfb => "fsincos" ;
+  0xd9 0xfc => "frndint" ;
+  0xd9 0xfd => "fscale" ;
+  0xd9 0xfe => "fsin" ;
+  0xd9 0xff => "fcos" ;
+  # DA reg
+  0xda 0xe9 => "fucompp" ;
+  0xda 11 0dd rrr => dar[$d] " st(0),st(" dec($r) ")" ;
+  # DB reg
+  0xdb 0xe0 => "feni8087_nop" ;
+  0xdb 0xe1 => "fdisi8087_nop" ;
+  0xdb 0xe2 => "fnclex" ;
+  0xdb 0xe3 => "fninit" ;
+  0xdb 0xe4 => "fsetpm287_nop" ;
+  0xdb 11 0dd rrr => dbr[$d] " st(0),st(" dec($r) ")" ;
+  0xdb 11 101 rrr => "fucomi st(0),st(" dec($r) ")" ;
+  0xdb 11 110 rrr => "fcomi st(0),st(" dec($r) ")" ;
+  # DC reg
+  0xdc 11 010 rrr => "fcom st(" dec($r) ")" wit("alt") ;
+  0xdc 11 011 rrr => "fcomp st(" dec($r) ")" wit("alt") ;
+  0xdc 11 ddd rrr => dcr[$d] " st(" dec($r) "),st(0)" wit($r==0 ? "alt" : "") ;
+  # DD reg
+  0xdd 11 000 rrr => "ffree st(" dec($r) ")" ;
+  0xdd 11 001 rrr => "fxch st(" dec($r) ")" wit("alt") ;
+  0xdd 11 010 rrr => "fst st(" dec($r) ")" ;
+  0xdd 11 011 rrr => "fstp st(" dec($r) ")" ;
+  0xdd 11 100 rrr => "fucom st(" dec($r) ")" ;
+  0xdd 11 101 rrr => "fucomp st(0),st(" dec($r) ")" ;
+  # DE reg
+  0xde 0xd9 => "fcompp" ;
+  0xde 11 010 rrr => "fcomp st(" dec($r) ")" wit("long") ;
+  0xde 11 ddd rrr => der[$d] " st(" dec($r) "),st(0)" ;
+  # DF reg
+  0xdf 0xe0 => "fnstsw" ;
+  0xdf 11 000 rrr => "ffreep st(" dec($r) ")" ;
+  0xdf 11 001 rrr => "fxch st(" dec($r) ")" wit("long") ;
+  0xdf 11 010 rrr => "fstp st(" dec($r) ")" wit("alt") ;
+  0xdf 11 011 rrr => "fstp st(" dec($r) ")" wit("long") ;
+  0xdf 11 101 rrr => "fucomip st(0),st(" dec($r) ")" ;
+  0xdf 11 110 rrr => "fcomip st(0),st(" dec($r) ")" ;
 }
 
 submatch main { @pfx(0) => $pfx }
