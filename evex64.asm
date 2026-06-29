@@ -296,3 +296,27 @@ evex vcvttpd2dq ymm0,zmm1
 evex vcvttpd2dq ymm0,zmm1 {sae}
 evex vcvttpd2dq ymm0,[rax] {1to8}
 evex vcvtudq2pd zmm0,ymm1
+evex vpmovzxbw zmm0,ymm1
+evex vpmovzxbd zmm0,xmm1
+evex vpmovzxbq zmm0,xmm1
+evex vpmovzxwd zmm0,ymm1
+evex vpmovzxwq zmm0,xmm1
+evex vpmovzxdq zmm0,ymm1
+evex vpmovsxbw zmm0,ymm1
+evex vpmovsxbd zmm0,xmm1
+evex vpmovsxwd zmm0,ymm1
+evex vpmovsxdq zmm0,ymm1
+evex vpmovzxbd zmm0 {k1},xmm1
+evex vpmovzxbd zmm0,[rax]
+evex vpmovzxwd zmm17,ymm28
+evex alt vpmovwb ymm0,zmm1
+evex alt vpmovdb xmm0,zmm1
+evex vpmovdb [rax],zmm1
+evex alt vpmovqb xmm0,zmm1
+evex alt vpmovqw xmm0,zmm1
+evex alt vpmovqd ymm0,zmm1
+evex alt vpmovdw ymm0,zmm1
+evex alt vpmovsdb xmm0,zmm1
+evex alt vpmovusdb xmm0,zmm1
+evex alt vpmovsdw ymm0,zmm1
+evex alt vpmovdb xmm0 {k1},zmm1

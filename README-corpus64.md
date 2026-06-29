@@ -33,6 +33,7 @@ classic x86-64 integer/FP ISA plus AVX/AVX2 and a broad slice of AVX-512:
 | AVX-512 more | same-width converts (vcvtdq2ps/ps2dq/ttps2dq + `{er}`/`{sae}`), scalar converts (vcvtss2sd/sd2ss, vcvtsi2sd/ss, vcvt[t]sd2si/ss2si with `{er}`/`{sae}`), broadcasts (vbroadcastss/sd, vpbroadcastd/q from xmm/mem **and GPR**), integer min/max (vpmin/max s/u b/w/d/q), abs (vpabs b/w/d/q), variable shifts (vpsll/srl/srav d/q), shift-by-imm (vpsll/srl/sra w/d/q), permutes (vpermd/ps, vpermq/pd imm8) |
 | AVX-512 yet more | `vpternlogd/q` (3-input LUT, imm8), `vsqrtps/pd/ss/sd` (`{er}`), integer multiply (vpmuldq/muludq/mullq), round-to-scale (vrndscaleps/pd/ss/sd, imm8 + `{sae}`), `vscalefps/pd/ss/sd` (`{er}`), reciprocal/rsqrt approximations (vrcp14/vrsqrt14 ps/pd/ss/sd), `vgetexpps/pd` + `vgetmantps/pd` (imm8 + `{sae}`), mask-merge blends (vpblendmd/q, vblendmps/pd), and `vptestnmd/q` → k |
 | AVX-512 width converts | the EVEX cross-width converts whose operands differ in vector width: vcvtps2pd, vcvtpd2ps, vcvtdq2pd, vcvtudq2pd, vcvtpd2dq, vcvttpd2dq (with `{er}`/`{sae}` and qword-count broadcast) |
+| AVX-512 int width converts | zero/sign-extend widen `vpmov{z,s}x{bw,bd,bq,wd,wq,dq}` and narrow `vpmov{,s,us}{wb,db,qb,dw,qw,qd}` (truncate / signed- / unsigned-saturate, register or memory destination, masking) |
 | AVX-512 masks (k) | `kmovw/b/d/q`, k-logic (`kand/kandn/kor/kxor/kxnor/knot/kortest/ktest/kadd/kunpck`), `kshiftl/rw`, and mask-producing compares `vpcmp{eq,gt}d`/`vcmpps/pd`/`vpcmp[u]d/q`/`vptestmd/q` → k (with optional `{k}` mask) |
 | XOP (8F, AMD) | `vpcmov`/`vpperm`/`vpmacsdd` (4-operand is4), `vprot{b,w,d,q}` (imm8 + variable), `vpsh{l,a}{b,w,d,q}`, `vphadd*`/`vphsub*` |
 
@@ -41,8 +42,8 @@ assembles to the exact bytes `as` produces, and the entire `.text` of `/bin/ls`
 (~20 000 instructions) disassembles with **zero** undecodable bytes.
 
 **Not yet covered (future work):** AVX-512 VSIB gather/scatter (vector-index
-SIB); EVEX integer width converts (vpmovzx/sx, vpmov{d,q,w}b/...); and the
-long tail of rarer EVEX leaves. EVEX
+SIB — the one family that needs a new addressing mode rather than just more
+rules); and the long tail of rarer EVEX leaves. EVEX
 `disp8` is shown as the raw encoded byte rather than the disp8×N effective
 displacement (the corpus.p convention — see below). The `vcmp`/`vpcmp`
 predicate is kept as an explicit `imm8` operand rather than folded into the

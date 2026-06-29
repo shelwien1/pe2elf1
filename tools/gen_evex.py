@@ -162,6 +162,21 @@ def wcvt(mn, op, w, pp, half, rnd=None, mm="01"):
   E('%s %s z ll 0 1 aaa 0x%02x @addr %s => wit("evex") "%s " %s %s "," $addr ;' % (P0(mm), P1F(w, pp), op, ACT, mn, rg, KZ))
   E('%s %s z ll 1 1 aaa 0x%02x @addr %s => wit("evex") "%s " %s %s "," $addr bcst64[$l] ;' % (P0(mm), P1F(w, pp), op, ACT, mn, rg, KZ))
 
+EXM = "eregx[32*$l+16*$k+8*$b+$r]"   # rm, quarter/eighth width (always xmm)
+
+def pmovx(mn, op, narrow):
+  # vpmovzx/sx widening: dest full(reg), src narrower(rm); 66.0F38.W0, masking.
+  rm = EXM if narrow == "x" else EMH
+  E('%s %s z ll 0 1 aaa 0x%02x 11 ggg rrr => wit("evex") "%s " %s %s "," %s ;' % (P0("10"), P1F("0", "01"), op, mn, RG, KZ, rm))
+  E('%s %s z ll 0 1 aaa 0x%02x @addr %s => wit("evex") "%s " %s %s "," $addr ;' % (P0("10"), P1F("0", "01"), op, ACT, mn, RG, KZ))
+
+def pmovt(mn, op, narrow):
+  # vpmov truncate/saturate: store-form, dest narrower(rm), src full(reg);
+  # F3.0F38.W0, masking on the destination.
+  rm = EXM if narrow == "x" else EMH
+  E('%s %s z ll 0 1 aaa 0x%02x 11 ggg rrr => wit("evex") wit("alt") "%s " %s %s "," %s ;' % (P0("10"), P1F("0", "10"), op, mn, rm, KZ, RG))
+  E('%s %s z ll 0 1 aaa 0x%02x @addr %s => wit("evex") "%s " $addr %s "," %s ;' % (P0("10"), P1F("0", "10"), op, ACT, mn, KZ, RG))
+
 def scal_imm(mn, op, w, pp, mm="11"):
   # scalar 3-op + imm8 with optional {sae} (vrndscaless/sd): all xmm.
   E('%s %s z ll 0 u aaa 0x%02x 11 ggg rrr @imm8 => wit("evex") "%s " %s %s "," %s "," %s "," hex($imm8) ;' % (P0(mm), P1(w, pp), op, mn, XG, KZ, XV, XM))
@@ -297,5 +312,19 @@ wcvt("vcvtdq2pd", 0xe6, "0", "10", "src")              # i32->DP, src half
 wcvt("vcvtudq2pd", 0x7a, "0", "10", "src")             # u32->DP, src half
 wcvt("vcvtpd2dq", 0xe6, "1", "11", "dst", rnd="er")    # DP->i32, dest half
 wcvt("vcvttpd2dq", 0xe6, "1", "01", "dst", rnd="sae")  # DP->i32 trunc, dest half
+# --- integer width converts: zero/sign-extend widen (66.0F38) ---
+for mn, op, nw in [("vpmovzxbw", 0x30, "h"), ("vpmovzxbd", 0x31, "x"), ("vpmovzxbq", 0x32, "x"),
+                   ("vpmovzxwd", 0x33, "h"), ("vpmovzxwq", 0x34, "x"), ("vpmovzxdq", 0x35, "h"),
+                   ("vpmovsxbw", 0x20, "h"), ("vpmovsxbd", 0x21, "x"), ("vpmovsxbq", 0x22, "x"),
+                   ("vpmovsxwd", 0x23, "h"), ("vpmovsxwq", 0x24, "x"), ("vpmovsxdq", 0x25, "h")]:
+  pmovx(mn, op, nw)
+# --- integer width converts: narrowing truncate / s-saturate / us-saturate (F3.0F38) ---
+for mn, op, nw in [("vpmovwb", 0x30, "h"), ("vpmovdb", 0x31, "x"), ("vpmovqb", 0x32, "x"),
+                   ("vpmovdw", 0x33, "h"), ("vpmovqw", 0x34, "x"), ("vpmovqd", 0x35, "h"),
+                   ("vpmovswb", 0x20, "h"), ("vpmovsdb", 0x21, "x"), ("vpmovsqb", 0x22, "x"),
+                   ("vpmovsdw", 0x23, "h"), ("vpmovsqw", 0x24, "x"), ("vpmovsqd", 0x25, "h"),
+                   ("vpmovuswb", 0x10, "h"), ("vpmovusdb", 0x11, "x"), ("vpmovusqb", 0x12, "x"),
+                   ("vpmovusdw", 0x13, "h"), ("vpmovusqw", 0x14, "x"), ("vpmovusqd", 0x15, "h")]:
+  pmovt(mn, op, nw)
 v.append("}")
 print("\n".join(v))
