@@ -128,6 +128,14 @@ def extras_c5():
   E('h 1111 y 01 0x6e @addr => "vmovd " %s "," $addr ;' % DST)
   E('h 1111 y 01 0x7e 11 ggg rrr => "vmovd " greg[$r] "," %s ;' % DST)
   E('h 1111 y 01 0x7e @addr => "vmovd " $addr "," %s ;' % DST)
+  # vmovq xmm<->xmm/m64 (F3.0F 7E load / 66.0F D6 store).  Emit 7E first so a
+  # reg-reg tie resolves to the load form (matches GAS); the D6 store wins only
+  # when strictly shorter -- i.e. the source register is xmm8-15 and so must take
+  # the reg field, which C5 can extend via R-bar while it cannot extend rm.
+  E('h 1111 y 10 0x7e 11 ggg rrr => "vmovq " %s "," %s ;' % (DST, RM_C5))
+  E('h 1111 y 10 0x7e @addr => "vmovq " %s "," $addr ;' % DST)
+  E('h 1111 y 01 0xd6 11 ggg rrr => "vmovq " %s "," %s ;' % (RM_C5, DST))
+  E('h 1111 y 01 0xd6 @addr => "vmovq " $addr "," %s ;' % DST)
   # vpshufd (imm), vpshufb (3-op)
   E('h 1111 y 01 0x70 11 ggg rrr @imm8 => "vpshufd " %s "," %s "," hex($imm8) ;' % (DST, RM_C5))
   E('h 1111 y 01 0x70 @addr @imm8 => "vpshufd " %s "," $addr "," hex($imm8) ;' % DST)
@@ -150,6 +158,11 @@ def extras_c4():
   E('h k b 00001 1 1111 y 10 0x2c 11 ggg rrr => "vcvttss2si " greg[32+$g] "," %s ;' % RM_C4)
   E('h k b 00001 1 1111 y 01 0x6e 11 ggg rrr => "vmovq " %s "," greg[32+$r] ;' % DST)
   E('h k b 00001 1 1111 y 01 0x7e 11 ggg rrr => "vmovq " greg[32+$g] "," %s ;' % RM_C4)
+  # vmovq xmm<->xmm/m64, C4 (extended regs / extended mem base; WIG -> W0)
+  E('h k b 00001 0 1111 y 10 0x7e 11 ggg rrr => "vmovq " %s "," %s ;' % (DST, RM_C4))
+  E('h k b 00001 0 1111 y 10 0x7e @addr %s => "vmovq " %s "," $addr ;' % (ACT, DST))
+  E('h k b 00001 0 1111 y 01 0xd6 11 ggg rrr => "vmovq " %s "," %s ;' % (RM_C4, DST))
+  E('h k b 00001 0 1111 y 01 0xd6 @addr %s => "vmovq " $addr "," %s ;' % (ACT, DST))
   # vbroadcastss/sd (0F38, 2-op mem)
   E('h k b 00010 0 1111 y 01 0x18 @addr %s => "vbroadcastss " %s "," $addr ;' % (ACT, DST))
   E('h k b 00010 0 1111 y 01 0x19 @addr %s => "vbroadcastsd " %s "," $addr ;' % (ACT, DST))

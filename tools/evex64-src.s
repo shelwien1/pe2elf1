@@ -241,3 +241,48 @@ vpermps zmm0, zmm1, zmm2
 vpermq zmm0, zmm1, 0x1b
 vpermpd zmm0, zmm1, 0x1b
 vpermq zmm0{k1}, [rax]{1to8}, 0x4e
+# ---- AVX-512 round 3: ternlog / sqrt / mul / rndscale / scalef / rcp / getexp / blend / testnm ----
+vpternlogd zmm0, zmm1, zmm2, 0xca
+vpternlogq zmm0{k1}, zmm1, zmm2, 0xfe
+vpternlogd zmm0, zmm1, [rax]{1to16}, 0x55
+vsqrtps zmm0, zmm1
+vsqrtps zmm0, zmm1, {rn-sae}
+vsqrtpd zmm0{k1}{z}, zmm1
+vsqrtps zmm0, [rax]{1to16}
+vsqrtss xmm0{k1}, xmm1, xmm2
+vsqrtss xmm0, xmm1, xmm2, {rn-sae}
+vsqrtsd xmm0, xmm1, xmm2, {rz-sae}
+vpmuldq zmm0, zmm1, zmm2
+vpmuludq zmm0, zmm1, [rax]{1to8}
+vpmullq zmm0, zmm1, zmm2
+vrndscaleps zmm0, zmm1, 0x1
+vrndscalepd zmm0{k1}, zmm1, 0x2
+vrndscaleps zmm0, zmm1{sae}, 0x3
+vrndscaless xmm0, xmm1, xmm2, 0x1
+vrndscalesd xmm0, xmm1, xmm2, 0x2
+vscalefps zmm0, zmm1, zmm2
+vscalefpd zmm0, zmm1, zmm2, {rn-sae}
+vscalefss xmm0, xmm1, xmm2
+vrcp14ps zmm0, zmm1
+vrcp14pd zmm0{k1}, zmm1
+vrsqrt14ps zmm0, zmm1
+vrcp14ss xmm0, xmm1, xmm2
+vrsqrt14sd xmm0, xmm1, xmm2
+vgetexpps zmm0, zmm1
+vgetexppd zmm0, zmm1{sae}
+vgetmantps zmm0, zmm1, 0x1
+vgetmantpd zmm0, zmm1{sae}, 0x2
+vpblendmd zmm0, zmm1, zmm2
+vpblendmq zmm0{k1}, zmm1, zmm2
+vblendmps zmm0, zmm1, zmm2
+vblendmpd zmm0, zmm1, [rax]{1to8}
+vptestnmd k1, zmm1, zmm2
+vptestnmq k2{k1}, zmm1, zmm2
+# ---- VEX vmovq xmm forms (load 7E / store D6, incl. extended-reg dual-encoding) ----
+vmovq xmm0, xmm1
+vmovq xmm0, [rax]
+vmovq [rax], xmm0
+vmovq xmm0, xmm9
+vmovq xmm9, xmm0
+vmovq xmm8, [r9]
+vmovq [r9], xmm8

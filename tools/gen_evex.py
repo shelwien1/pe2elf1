@@ -126,6 +126,27 @@ def perm_imm(mn, op, w, pp, bcst, mm="11"):
   if bcst:
     E('%s %s z ll 1 1 aaa 0x%02x @addr %s @imm8 => wit("evex") "%s " %s %s "," $addr %s[$l] "," hex($imm8) ;' % (P0(mm), P1F(w, pp), op, ACT, mn, RG, KZ, bcst))
 
+def int3i(mn, op, w, pp, bcst, mm="11"):
+  # 3-source + imm8 (vpternlog): dest=reg src1=vvvv src2=rm, masking, broadcast.
+  E('%s %s z ll 0 u aaa 0x%02x 11 ggg rrr @imm8 => wit("evex") "%s " %s %s "," %s "," %s "," hex($imm8) ;' % (P0(mm), P1(w, pp), op, mn, RG, KZ, VV, RM))
+  E('%s %s z ll 0 u aaa 0x%02x @addr %s @imm8 => wit("evex") "%s " %s %s "," %s "," $addr "," hex($imm8) ;' % (P0(mm), P1(w, pp), op, ACT, mn, RG, KZ, VV))
+  if bcst:
+    E('%s %s z ll 1 u aaa 0x%02x @addr %s @imm8 => wit("evex") "%s " %s %s "," %s "," $addr %s[$l] "," hex($imm8) ;' % (P0(mm), P1(w, pp), op, ACT, mn, RG, KZ, VV, bcst))
+
+def rndi(mn, op, w, pp, bcst, mm="11"):
+  # 2-op + imm8 with optional {sae} (vrndscale/vgetmant): dest=reg src=rm, vvvv unused.
+  E('%s %s z ll 0 1 aaa 0x%02x 11 ggg rrr @imm8 => wit("evex") "%s " %s %s "," %s "," hex($imm8) ;' % (P0(mm), P1F(w, pp), op, mn, RG, KZ, RM))
+  E('%s %s z 00 1 1 aaa 0x%02x 11 ggg rrr @imm8 => wit("evex") "%s " %s %s "," %s " {sae}" "," hex($imm8) ;' % (P0(mm), P1F(w, pp), op, mn, ZG, KZ, ZM))
+  E('%s %s z ll 0 1 aaa 0x%02x @addr %s @imm8 => wit("evex") "%s " %s %s "," $addr "," hex($imm8) ;' % (P0(mm), P1F(w, pp), op, ACT, mn, RG, KZ))
+  if bcst:
+    E('%s %s z ll 1 1 aaa 0x%02x @addr %s @imm8 => wit("evex") "%s " %s %s "," $addr %s[$l] "," hex($imm8) ;' % (P0(mm), P1F(w, pp), op, ACT, mn, RG, KZ, bcst))
+
+def scal_imm(mn, op, w, pp, mm="11"):
+  # scalar 3-op + imm8 with optional {sae} (vrndscaless/sd): all xmm.
+  E('%s %s z ll 0 u aaa 0x%02x 11 ggg rrr @imm8 => wit("evex") "%s " %s %s "," %s "," %s "," hex($imm8) ;' % (P0(mm), P1(w, pp), op, mn, XG, KZ, XV, XM))
+  E('%s %s z 00 1 u aaa 0x%02x 11 ggg rrr @imm8 => wit("evex") "%s " %s %s "," %s "," %s " {sae}" "," hex($imm8) ;' % (P0(mm), P1(w, pp), op, mn, ZG, KZ, ZV, ZM))
+  E('%s %s z ll 0 u aaa 0x%02x @addr %s @imm8 => wit("evex") "%s " %s %s "," %s "," $addr "," hex($imm8) ;' % (P0(mm), P1(w, pp), op, ACT, mn, XG, KZ, XV))
+
 v.append("submatch evex {")
 # --- FP packed arithmetic (W0.0F=ps / W1.66.0F=pd) with embedded rounding ---
 for mn, op in [("vadd", 0x58), ("vmul", 0x59), ("vsub", 0x5c), ("vdiv", 0x5e)]:
@@ -221,5 +242,32 @@ shimm("vpsraw", 0x71, 4, "0", "01", None)
 # --- permutes ---
 int3("vpermd", 0x36, "0", "01", "bcst32", mm="10"); int3("vpermps", 0x16, "0", "01", "bcst32", mm="10")
 perm_imm("vpermq", 0x00, "1", "01", "bcst64"); perm_imm("vpermpd", 0x01, "1", "01", "bcst64")
+# --- vpternlog (0F3A): 3-source bitwise LUT + imm8 ---
+int3i("vpternlogd", 0x25, "0", "01", "bcst32"); int3i("vpternlogq", 0x25, "1", "01", "bcst64")
+# --- sqrt (0F 51): packed {er} + scalar {er} ---
+cvt2("vsqrtps", 0x51, "0", "00", "bcst32", rnd="er"); cvt2("vsqrtpd", 0x51, "1", "01", "bcst64", rnd="er")
+scal_cvt("vsqrtss", 0x51, "0", "10", "er"); scal_cvt("vsqrtsd", 0x51, "1", "11", "er")
+# --- integer multiply (d/q) ---
+int3("vpmuldq", 0x28, "1", "01", "bcst64", mm="10"); int3("vpmuludq", 0xf4, "1", "01", "bcst64")
+int3("vpmullq", 0x40, "1", "01", "bcst64", mm="10")
+# --- round-to-scale (0F3A) : packed imm8+{sae} + scalar imm8 ---
+rndi("vrndscaleps", 0x08, "0", "01", "bcst32"); rndi("vrndscalepd", 0x09, "1", "01", "bcst64")
+scal_imm("vrndscaless", 0x0a, "0", "01"); scal_imm("vrndscalesd", 0x0b, "1", "01")
+# --- scale by 2^x (0F38) : packed {er} + scalar {er} ---
+fp3("vscalefps", 0x2c, "0", "01", "bcst32", er=True, mm="10"); fp3("vscalefpd", 0x2c, "1", "01", "bcst64", er=True, mm="10")
+scal_cvt("vscalefss", 0x2d, "0", "01", "er", mm="10"); scal_cvt("vscalefsd", 0x2d, "1", "01", "er", mm="10")
+# --- reciprocal / rsqrt approximations (0F38) : packed + scalar ---
+cvt2("vrcp14ps", 0x4c, "0", "01", "bcst32", mm="10"); cvt2("vrcp14pd", 0x4c, "1", "01", "bcst64", mm="10")
+cvt2("vrsqrt14ps", 0x4e, "0", "01", "bcst32", mm="10"); cvt2("vrsqrt14pd", 0x4e, "1", "01", "bcst64", mm="10")
+scal_cvt("vrcp14ss", 0x4d, "0", "01", None, mm="10"); scal_cvt("vrcp14sd", 0x4d, "1", "01", None, mm="10")
+scal_cvt("vrsqrt14ss", 0x4f, "0", "01", None, mm="10"); scal_cvt("vrsqrt14sd", 0x4f, "1", "01", None, mm="10")
+# --- exponent / mantissa extraction ---
+cvt2("vgetexpps", 0x42, "0", "01", "bcst32", rnd="sae", mm="10"); cvt2("vgetexppd", 0x42, "1", "01", "bcst64", rnd="sae", mm="10")
+rndi("vgetmantps", 0x26, "0", "01", "bcst32"); rndi("vgetmantpd", 0x26, "1", "01", "bcst64")
+# --- merge-blend by mask (0F38) ---
+int3("vpblendmd", 0x64, "0", "01", "bcst32", mm="10"); int3("vpblendmq", 0x64, "1", "01", "bcst64", mm="10")
+int3("vblendmps", 0x65, "0", "01", "bcst32", mm="10"); int3("vblendmpd", 0x65, "1", "01", "bcst64", mm="10")
+# --- test-not-mask -> k (F3.0F38) ---
+kcmp("vptestnmd", 0x27, "0", "10", "10"); kcmp("vptestnmq", 0x27, "1", "10", "10")
 v.append("}")
 print("\n".join(v))

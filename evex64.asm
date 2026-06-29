@@ -236,3 +236,46 @@ evex vpermps zmm0,zmm1,zmm2
 evex vpermq zmm0,zmm1,0x1b
 evex vpermpd zmm0,zmm1,0x1b
 evex vpermq zmm0 {k1},[rax] {1to8},0x4e
+evex vpternlogd zmm0,zmm1,zmm2,0xca
+evex vpternlogq zmm0 {k1},zmm1,zmm2,0xfe
+evex vpternlogd zmm0,zmm1,[rax] {1to16},0x55
+evex vsqrtps zmm0,zmm1
+evex vsqrtps zmm0,zmm1 {rn-sae}
+evex vsqrtpd zmm0 {k1} {z},zmm1
+evex vsqrtps zmm0,[rax] {1to16}
+evex vsqrtss xmm0 {k1},xmm1,xmm2
+evex vsqrtss zmm0,zmm1,zmm2 {rn-sae}
+evex vsqrtsd zmm0,zmm1,zmm2 {rz-sae}
+evex vpmuldq zmm0,zmm1,zmm2
+evex vpmuludq zmm0,zmm1,[rax] {1to8}
+evex vpmullq zmm0,zmm1,zmm2
+evex vrndscaleps zmm0,zmm1,0x1
+evex vrndscalepd zmm0 {k1},zmm1,0x2
+evex vrndscaleps zmm0,zmm1 {sae},0x3
+evex vrndscaless xmm0,xmm1,xmm2,0x1
+evex vrndscalesd xmm0,xmm1,xmm2,0x2
+evex vscalefps zmm0,zmm1,zmm2
+evex vscalefpd zmm0,zmm1,zmm2 {rn-sae}
+evex vscalefss xmm0,xmm1,xmm2
+evex vrcp14ps zmm0,zmm1
+evex vrcp14pd zmm0 {k1},zmm1
+evex vrsqrt14ps zmm0,zmm1
+evex vrcp14ss xmm0,xmm1,xmm2
+evex vrsqrt14sd xmm0,xmm1,xmm2
+evex vgetexpps zmm0,zmm1
+evex vgetexppd zmm0,zmm1 {sae}
+evex vgetmantps zmm0,zmm1,0x1
+evex vgetmantpd zmm0,zmm1 {sae},0x2
+evex vpblendmd zmm0,zmm1,zmm2
+evex vpblendmq zmm0 {k1},zmm1,zmm2
+evex vblendmps zmm0,zmm1,zmm2
+evex vblendmpd zmm0,zmm1,[rax] {1to8}
+evex vptestnmd k1,zmm1,zmm2
+evex vptestnmq k2 {k1},zmm1,zmm2
+vmovq xmm0,xmm1
+vmovq xmm0,[rax]
+vmovq [rax],xmm0
+vmovq xmm0,xmm9
+vmovq xmm9,xmm0
+vmovq xmm8,[r9]
+vmovq [r9],xmm8
