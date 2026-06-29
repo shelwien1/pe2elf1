@@ -2095,6 +2095,8 @@ table grpba  { "","","","",bt,bts,btr,btc }   # 0F BA /op
 table c7r7   { rdseed,rdpid,rdseed,rdseed }   # 0F C7 /7 by reptype
 table c7r6   { rdrand,rdrand,vmxon,rdrand }   # 0F C7 /6 reg by reptype
 table cx16   { cmpxchg8b, cmpxchg16b }        # 0F C7 /1 by REX.W (m64 / m128)
+table e1efa  { "",endbr64,"" }                 # F3 0F 1E FA
+table e1efb  { "",endbr32,"" }                 # F3 0F 1E FB
 
 # ---- SSE / MMX mnemonic tables (indexed by reptype*2+opsiz or opsiz) ----
 table elt    { ps,pd,ss,ss,sd,sd }     # packed/scalar element by reptype*2+opsiz
@@ -2345,7 +2347,7 @@ submatch insn {
 
   # --- branches / ret / int / enter / leave ---------------------------------
   0xeb @rel8 => "jmp " hex($rel8) ;
-  0xe9 @relz => "jmp " hex($relz) ;
+  0xe9 @relz => wit("long") "jmp " hex($relz) ;
   0xe8 @relz => "call " hex($relz) ;
   0111 cccc @rel8 => "j" cond[$c] " " hex($rel8) ;
   0xe3 @rel8 => "jrcxz " hex($rel8) ;
@@ -2541,6 +2543,18 @@ submatch insn {
   0x0f 0x21 11 ggg rrr => "mov " greg[32+8*$rexb+$r] "," drreg[8*$rexr+$g] ;
   0x0f 0x23 11 ggg rrr => "mov " drreg[8*$rexr+$g] "," greg[32+8*$rexb+$r] ;
 
+  # --- CET / reserved-nop space (0F 1E/1C/1D/19/1F) -------------------------
+  0x0f 0x1e 0xfa [$reptype==1] => e1efa[$reptype] ;
+  0x0f 0x1e 0xfb [$reptype==1] => e1efb[$reptype] ;
+  0x0f 0x1e 11 ggg rrr => "nop " greg[32*$rexw+16*$opsiz+8*$rexb+$r] "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0x1e @addr      => "nop " $addr "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0x1c @addr(0) => "cldemote " $addr ;
+  0x0f 0x1c 11 ggg rrr => "nop " greg[32*$rexw+16*$opsiz+8*$rexb+$r] "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0x1c @addr      => "nop " $addr "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0x1d 11 ggg rrr => "nop " greg[32*$rexw+16*$opsiz+8*$rexb+$r] "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0x1d @addr      => "nop " $addr "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0x19 11 ggg rrr => "nop " greg[32*$rexw+16*$opsiz+8*$rexb+$r] "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0x19 @addr      => "nop " $addr "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
   # --- nop / prefetch / fences / fxsave group / clflush ---------------------
   0x0f 0x1f 11 ggg rrr => "nop " greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
   0x0f 0x1f @addr      => "nop" sfx[$rexw? 8 : (4>>$opsiz)] " " $addr ;
