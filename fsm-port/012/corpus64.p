@@ -710,6 +710,20 @@ submatch insn {
   0x0f 0xf6 @addr      => "psadbw " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0xf7 11 ggg rrr => "maskmovdqu " ssereg[8+$g] "," ssereg[8+$r] ;
   0x0f 0x2b @addr      => "movntps " $addr "," ssereg[8+$g] ;
+
+  # shift packed by imm8 (0F 71/72/73 groups; the /digit picks the shift, the r/m
+  # is the shifted reg -- reg-direct only, no memory form). psrldq/pslldq (73 /3,
+  # /7) are the 128-bit byte shifts.
+  0x0f 0x71 11 010 rrr @imm8 => "psrlw " ssereg[$opsiz*8+$r] "," hex($imm8) ;
+  0x0f 0x71 11 100 rrr @imm8 => "psraw " ssereg[$opsiz*8+$r] "," hex($imm8) ;
+  0x0f 0x71 11 110 rrr @imm8 => "psllw " ssereg[$opsiz*8+$r] "," hex($imm8) ;
+  0x0f 0x72 11 010 rrr @imm8 => "psrld " ssereg[$opsiz*8+$r] "," hex($imm8) ;
+  0x0f 0x72 11 100 rrr @imm8 => "psrad " ssereg[$opsiz*8+$r] "," hex($imm8) ;
+  0x0f 0x72 11 110 rrr @imm8 => "pslld " ssereg[$opsiz*8+$r] "," hex($imm8) ;
+  0x0f 0x73 11 010 rrr @imm8 => "psrlq " ssereg[$opsiz*8+$r] "," hex($imm8) ;
+  0x0f 0x73 11 011 rrr @imm8 => "psrldq " ssereg[$opsiz*8+$r] "," hex($imm8) ;
+  0x0f 0x73 11 110 rrr @imm8 => "psllq " ssereg[$opsiz*8+$r] "," hex($imm8) ;
+  0x0f 0x73 11 111 rrr @imm8 => "pslldq " ssereg[$opsiz*8+$r] "," hex($imm8) ;
 }
 
 submatch main { @pfx(0) => $pfx }
