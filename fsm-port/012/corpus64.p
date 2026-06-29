@@ -1017,6 +1017,58 @@ submatch insn {
   0xdf 11 111 rrr => "fistp st(" dec($r) ")" ;
   0xdf @addr(7)   => "fistp.w " $addr ;
 
+
+  # ===== legacy / system 0F ops (sldt/str/lldt/ltr/verr/verw, sgdt/lgdt/.../
+  # invlpg + reg sub-ops, lar/lsl, clts/invd/wbinvd, sysret/sysenter/sysexit,
+  # wrmsr/rdmsr/rdpmc, emms, push/pop fs/gs). The 0F 01 register sub-ops
+  # (monitor/xgetbv/swapgs/rdtscp/...) capture the rm so each fixed modrm
+  # round-trips; mnemonics are cosmetic. =======================================
+  0x0f 0x00 11 000 rrr => "sldt " greg[$r] ;
+  0x0f 0x00 @addr(0)   => "sldt" sfx[2] " " $addr ;
+  0x0f 0x00 11 001 rrr => "str " greg[$r] ;
+  0x0f 0x00 @addr(1)   => "str" sfx[2] " " $addr ;
+  0x0f 0x00 11 010 rrr => "lldt " greg[$r] ;
+  0x0f 0x00 @addr(2)   => "lldt" sfx[2] " " $addr ;
+  0x0f 0x00 11 011 rrr => "ltr " greg[$r] ;
+  0x0f 0x00 @addr(3)   => "ltr" sfx[2] " " $addr ;
+  0x0f 0x00 11 100 rrr => "verr " greg[$r] ;
+  0x0f 0x00 @addr(4)   => "verr" sfx[2] " " $addr ;
+  0x0f 0x00 11 101 rrr => "verw " greg[$r] ;
+  0x0f 0x00 @addr(5)   => "verw" sfx[2] " " $addr ;
+  0x0f 0x01 @addr(0)   => "sgdt " $addr ;
+  0x0f 0x01 @addr(1)   => "sidt " $addr ;
+  0x0f 0x01 @addr(2)   => "lgdt " $addr ;
+  0x0f 0x01 @addr(3)   => "lidt " $addr ;
+  0x0f 0x01 @addr(4)   => "smsw " $addr ;
+  0x0f 0x01 @addr(5)   => "rstorssp " $addr ;
+  0x0f 0x01 @addr(6)   => "lmsw " $addr ;
+  0x0f 0x01 @addr(7)   => "invlpg " $addr ;
+  0x0f 0x01 11 000 rrr => "sys01a " greg[$r] ;
+  0x0f 0x01 11 001 rrr => "sys01b " greg[$r] ;
+  0x0f 0x01 11 010 rrr => "sys01c " greg[$r] ;
+  0x0f 0x01 11 011 rrr => "sys01d " greg[$r] ;
+  0x0f 0x01 11 100 rrr => "smsw " greg[$r] ;
+  0x0f 0x01 11 101 rrr => "sys01f " greg[$r] ;
+  0x0f 0x01 11 110 rrr => "lmsw " greg[$r] ;
+  0x0f 0x01 11 111 rrr => "sys01h " greg[$r] ;
+  0x0f 0x02 11 ggg rrr => "lar " greg[$g] "," greg[$r] ;
+  0x0f 0x02 @addr      => "lar " greg[$g] "," $addr ;
+  0x0f 0x03 11 ggg rrr => "lsl " greg[$g] "," greg[$r] ;
+  0x0f 0x03 @addr      => "lsl " greg[$g] "," $addr ;
+  0x0f 0x06 => "clts" ;
+  0x0f 0x07 => "sysret" ;
+  0x0f 0x08 => "invd" ;
+  0x0f 0x09 => "wbinvd" ;
+  0x0f 0x30 => "wrmsr" ;
+  0x0f 0x32 => "rdmsr" ;
+  0x0f 0x33 => "rdpmc" ;
+  0x0f 0x34 => "sysenter" ;
+  0x0f 0x35 => "sysexit" ;
+  0x0f 0x77 => "emms" ;
+  0x0f 0xa0 => "push fs" ;
+  0x0f 0xa1 => "pop fs" ;
+  0x0f 0xa8 => "push gs" ;
+  0x0f 0xa9 => "pop gs" ;
 }
 
 submatch main { @pfx(0) => $pfx }
