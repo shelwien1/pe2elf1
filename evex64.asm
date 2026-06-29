@@ -279,3 +279,20 @@ vmovq xmm0,xmm9
 vmovq xmm9,xmm0
 vmovq xmm8,[r9]
 vmovq [r9],xmm8
+evex vcvtps2pd zmm0,ymm1
+evex vcvtps2pd zmm0 {k1} {z},ymm1
+evex vcvtps2pd zmm0,ymm1 {sae}
+evex vcvtps2pd zmm0,[rax] {1to8}
+evex vcvtps2pd zmm17,ymm28
+evex vcvtpd2ps ymm0,zmm1
+evex vcvtpd2ps ymm0,zmm1 {rn-sae}
+evex vcvtpd2ps ymm0,[rax] {1to8}
+evex vcvtdq2pd zmm0,ymm1
+evex vcvtdq2pd zmm0,[rax] {1to8}
+evex vcvtpd2dq ymm0,zmm1
+evex vcvtpd2dq ymm0,zmm1 {rn-sae}
+evex vcvtpd2dq ymm0,[rax] {1to8}
+evex vcvttpd2dq ymm0,zmm1
+evex vcvttpd2dq ymm0,zmm1 {sae}
+evex vcvttpd2dq ymm0,[rax] {1to8}
+evex vcvtudq2pd zmm0,ymm1

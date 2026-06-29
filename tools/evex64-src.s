@@ -286,3 +286,21 @@ vmovq xmm0, xmm9
 vmovq xmm9, xmm0
 vmovq xmm8, [r9]
 vmovq [r9], xmm8
+# ---- AVX-512 round 4: width-changing converts (operands differ in width) ----
+vcvtps2pd zmm0, ymm1
+vcvtps2pd zmm0{k1}{z}, ymm1
+vcvtps2pd zmm0, ymm1{sae}
+vcvtps2pd zmm0, [rax]{1to8}
+vcvtps2pd zmm17, ymm28
+vcvtpd2ps ymm0, zmm1
+vcvtpd2ps ymm0, zmm1, {rn-sae}
+vcvtpd2ps ymm0, [rax]{1to8}
+vcvtdq2pd zmm0, ymm1
+vcvtdq2pd zmm0, [rax]{1to8}
+vcvtpd2dq ymm0, zmm1
+vcvtpd2dq ymm0, zmm1, {rn-sae}
+vcvtpd2dq ymm0, [rax]{1to8}
+vcvttpd2dq ymm0, zmm1
+vcvttpd2dq ymm0, zmm1{sae}
+vcvttpd2dq ymm0, [rax]{1to8}
+vcvtudq2pd zmm0, ymm1

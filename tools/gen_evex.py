@@ -141,6 +141,27 @@ def rndi(mn, op, w, pp, bcst, mm="11"):
   if bcst:
     E('%s %s z ll 1 1 aaa 0x%02x @addr %s @imm8 => wit("evex") "%s " %s %s "," $addr %s[$l] "," hex($imm8) ;' % (P0(mm), P1F(w, pp), op, ACT, mn, RG, KZ, bcst))
 
+EGH = "eregh[32*$l+16*$e+8*$h+$g]"   # reg, half width (L'L selects size)
+EMH = "eregh[32*$l+16*$k+8*$b+$r]"   # rm,  half width
+ZGH = "eregh[64+16*$e+8*$h+$g]"      # reg, half-at-512 (ymm), rounding form
+ZMH = "eregh[64+16*$k+8*$b+$r]"      # rm,  half-at-512 (ymm)
+
+def wcvt(mn, op, w, pp, half, rnd=None, mm="01"):
+  # width-changing convert: one operand is full-width, the other a size class
+  # smaller (eregh).  half='src': dest full(reg) / src half(rm).  half='dst':
+  # dest half(reg) / src full(rm).  Broadcast count is the qword count (bcst64).
+  if half == "src":
+    rg, rm, zrg, zrm = RG, EMH, ZG, ZMH
+  else:
+    rg, rm, zrg, zrm = EGH, RM, ZGH, ZM
+  E('%s %s z ll 0 1 aaa 0x%02x 11 ggg rrr => wit("evex") "%s " %s %s "," %s ;' % (P0(mm), P1F(w, pp), op, mn, rg, KZ, rm))
+  if rnd == "er":
+    E('%s %s z ll 1 1 aaa 0x%02x 11 ggg rrr => wit("evex") "%s " %s %s "," %s rcdec[$l] ;' % (P0(mm), P1F(w, pp), op, mn, zrg, KZ, zrm))
+  elif rnd == "sae":
+    E('%s %s z 00 1 1 aaa 0x%02x 11 ggg rrr => wit("evex") "%s " %s %s "," %s " {sae}" ;' % (P0(mm), P1F(w, pp), op, mn, zrg, KZ, zrm))
+  E('%s %s z ll 0 1 aaa 0x%02x @addr %s => wit("evex") "%s " %s %s "," $addr ;' % (P0(mm), P1F(w, pp), op, ACT, mn, rg, KZ))
+  E('%s %s z ll 1 1 aaa 0x%02x @addr %s => wit("evex") "%s " %s %s "," $addr bcst64[$l] ;' % (P0(mm), P1F(w, pp), op, ACT, mn, rg, KZ))
+
 def scal_imm(mn, op, w, pp, mm="11"):
   # scalar 3-op + imm8 with optional {sae} (vrndscaless/sd): all xmm.
   E('%s %s z ll 0 u aaa 0x%02x 11 ggg rrr @imm8 => wit("evex") "%s " %s %s "," %s "," %s "," hex($imm8) ;' % (P0(mm), P1(w, pp), op, mn, XG, KZ, XV, XM))
@@ -269,5 +290,12 @@ int3("vpblendmd", 0x64, "0", "01", "bcst32", mm="10"); int3("vpblendmq", 0x64, "
 int3("vblendmps", 0x65, "0", "01", "bcst32", mm="10"); int3("vblendmpd", 0x65, "1", "01", "bcst64", mm="10")
 # --- test-not-mask -> k (F3.0F38) ---
 kcmp("vptestnmd", 0x27, "0", "10", "10"); kcmp("vptestnmq", 0x27, "1", "10", "10")
+# --- width-changing converts (operands differ in vector width) ---
+wcvt("vcvtps2pd", 0x5a, "0", "00", "src", rnd="sae")   # SP->DP, src half
+wcvt("vcvtpd2ps", 0x5a, "1", "01", "dst", rnd="er")    # DP->SP, dest half
+wcvt("vcvtdq2pd", 0xe6, "0", "10", "src")              # i32->DP, src half
+wcvt("vcvtudq2pd", 0x7a, "0", "10", "src")             # u32->DP, src half
+wcvt("vcvtpd2dq", 0xe6, "1", "11", "dst", rnd="er")    # DP->i32, dest half
+wcvt("vcvttpd2dq", 0xe6, "1", "01", "dst", rnd="sae")  # DP->i32 trunc, dest half
 v.append("}")
 print("\n".join(v))
