@@ -1,0 +1,426 @@
+.intel_syntax noprefix
+.text
+mov rax, rcx
+mov eax, ebx
+mov al, bpl
+mov rcx, rdx
+mov ecx, esp
+mov cl, sil
+mov rdx, rbx
+mov edx, ebp
+mov dl, dil
+mov rbx, rsp
+mov ebx, esi
+mov bl, r8b
+mov rsp, rbp
+mov esp, edi
+mov spl, r9b
+mov rbp, rsi
+mov ebp, r8d
+mov bpl, r10b
+mov rsi, rdi
+mov esi, r9d
+mov sil, r11b
+mov rdi, r8
+mov edi, r10d
+mov dil, r12b
+mov r8, r9
+mov r8d, r11d
+mov r8b, r13b
+mov r9, r10
+mov r9d, r12d
+mov r9b, r14b
+mov r10, r11
+mov r10d, r13d
+mov r10b, r15b
+mov r11, r12
+mov r11d, r14d
+mov r11b, al
+mov r12, r13
+mov r12d, r15d
+mov r12b, cl
+mov r13, r14
+mov r13d, eax
+mov r13b, dl
+mov r14, r15
+mov r14d, ecx
+mov r14b, bl
+mov r15, rax
+mov r15d, edx
+mov r15b, spl
+mov rax, [rax]
+lea rcx, [rax+0x10]
+lea rcx, [rax+0x12345678]
+mov rax, [rbx]
+lea rcx, [rbx+0x10]
+lea rcx, [rbx+0x12345678]
+mov rax, [rsp]
+lea rcx, [rsp+0x10]
+lea rcx, [rsp+0x12345678]
+mov rax, [rbp]
+lea rcx, [rbp+0x10]
+lea rcx, [rbp+0x12345678]
+mov rax, [r12]
+lea rcx, [r12+0x10]
+lea rcx, [r12+0x12345678]
+mov rax, [r13]
+lea rcx, [r13+0x10]
+lea rcx, [r13+0x12345678]
+mov rax, [rdi]
+lea rcx, [rdi+0x10]
+lea rcx, [rdi+0x12345678]
+mov rax, [r9]
+lea rcx, [r9+0x10]
+lea rcx, [r9+0x12345678]
+mov rdx, [rax+rcx*1]
+mov rdx, [r8+rcx*1+0x40]
+mov rdx, [rax+rcx*2]
+mov rdx, [r8+rcx*2+0x40]
+mov rdx, [rax+rcx*4]
+mov rdx, [r8+rcx*4+0x40]
+mov rdx, [rax+rcx*8]
+mov rdx, [r8+rcx*8+0x40]
+mov rdx, [rax+r10*1]
+mov rdx, [r8+r10*1+0x40]
+mov rdx, [rax+r10*2]
+mov rdx, [r8+r10*2+0x40]
+mov rdx, [rax+r10*4]
+mov rdx, [r8+r10*4+0x40]
+mov rdx, [rax+r10*8]
+mov rdx, [r8+r10*8+0x40]
+mov rdx, [rax+r15*1]
+mov rdx, [r8+r15*1+0x40]
+mov rdx, [rax+r15*2]
+mov rdx, [r8+r15*2+0x40]
+mov rdx, [rax+r15*4]
+mov rdx, [r8+r15*4+0x40]
+mov rdx, [rax+r15*8]
+mov rdx, [r8+r15*8+0x40]
+mov rax, [rip+0x1000]
+mov rax, [0x12345678]
+lea rax, [rcx*4+0x100]
+add rax, rbx
+add ecx, r8d
+add al, r9b
+add rax, 0x10
+add rcx, 0x12345678
+add byte ptr [rdi], 0x5
+add qword ptr [r8+0x8], rax
+or rax, rbx
+or ecx, r8d
+or al, r9b
+or rax, 0x10
+or rcx, 0x12345678
+or byte ptr [rdi], 0x5
+or qword ptr [r8+0x8], rax
+adc rax, rbx
+adc ecx, r8d
+adc al, r9b
+adc rax, 0x10
+adc rcx, 0x12345678
+adc byte ptr [rdi], 0x5
+adc qword ptr [r8+0x8], rax
+sbb rax, rbx
+sbb ecx, r8d
+sbb al, r9b
+sbb rax, 0x10
+sbb rcx, 0x12345678
+sbb byte ptr [rdi], 0x5
+sbb qword ptr [r8+0x8], rax
+and rax, rbx
+and ecx, r8d
+and al, r9b
+and rax, 0x10
+and rcx, 0x12345678
+and byte ptr [rdi], 0x5
+and qword ptr [r8+0x8], rax
+sub rax, rbx
+sub ecx, r8d
+sub al, r9b
+sub rax, 0x10
+sub rcx, 0x12345678
+sub byte ptr [rdi], 0x5
+sub qword ptr [r8+0x8], rax
+xor rax, rbx
+xor ecx, r8d
+xor al, r9b
+xor rax, 0x10
+xor rcx, 0x12345678
+xor byte ptr [rdi], 0x5
+xor qword ptr [r8+0x8], rax
+cmp rax, rbx
+cmp ecx, r8d
+cmp al, r9b
+cmp rax, 0x10
+cmp rcx, 0x12345678
+cmp byte ptr [rdi], 0x5
+cmp qword ptr [r8+0x8], rax
+rol rax, 1
+rol ecx, cl
+rol qword ptr [rdi], 0x4
+ror rax, 1
+ror ecx, cl
+ror qword ptr [rdi], 0x4
+rcl rax, 1
+rcl ecx, cl
+rcl qword ptr [rdi], 0x4
+rcr rax, 1
+rcr ecx, cl
+rcr qword ptr [rdi], 0x4
+shl rax, 1
+shl ecx, cl
+shl qword ptr [rdi], 0x4
+shr rax, 1
+shr ecx, cl
+shr qword ptr [rdi], 0x4
+sar rax, 1
+sar ecx, cl
+sar qword ptr [rdi], 0x4
+not rax
+not dword ptr [rdi]
+neg rax
+neg dword ptr [rdi]
+mul rax
+mul dword ptr [rdi]
+imul rax
+imul dword ptr [rdi]
+div rax
+div dword ptr [rdi]
+idiv rax
+idiv dword ptr [rdi]
+inc rax
+inc dword ptr [rdi]
+dec rax
+dec dword ptr [rdi]
+jo 0x0
+seto al
+seto r9b
+cmovo rax, rcx
+cmovo ecx, r10d
+jno 0x0
+setno al
+setno r9b
+cmovno rax, rcx
+cmovno ecx, r10d
+jb 0x0
+setb al
+setb r9b
+cmovb rax, rcx
+cmovb ecx, r10d
+jae 0x0
+setae al
+setae r9b
+cmovae rax, rcx
+cmovae ecx, r10d
+je 0x0
+sete al
+sete r9b
+cmove rax, rcx
+cmove ecx, r10d
+jne 0x0
+setne al
+setne r9b
+cmovne rax, rcx
+cmovne ecx, r10d
+jbe 0x0
+setbe al
+setbe r9b
+cmovbe rax, rcx
+cmovbe ecx, r10d
+ja 0x0
+seta al
+seta r9b
+cmova rax, rcx
+cmova ecx, r10d
+js 0x0
+sets al
+sets r9b
+cmovs rax, rcx
+cmovs ecx, r10d
+jns 0x0
+setns al
+setns r9b
+cmovns rax, rcx
+cmovns ecx, r10d
+jp 0x0
+setp al
+setp r9b
+cmovp rax, rcx
+cmovp ecx, r10d
+jnp 0x0
+setnp al
+setnp r9b
+cmovnp rax, rcx
+cmovnp ecx, r10d
+jl 0x0
+setl al
+setl r9b
+cmovl rax, rcx
+cmovl ecx, r10d
+jge 0x0
+setge al
+setge r9b
+cmovge rax, rcx
+cmovge ecx, r10d
+jle 0x0
+setle al
+setle r9b
+cmovle rax, rcx
+cmovle ecx, r10d
+jg 0x0
+setg al
+setg r9b
+cmovg rax, rcx
+cmovg ecx, r10d
+movzx eax, bl
+movzx rax, r9b
+movzx eax, cx
+movzx rcx, dx
+movsx eax, bl
+movsx rax, byte ptr [rdi]
+movsx rcx, ax
+movsxd rax, ecx
+push rax
+push rcx
+push rdx
+push rbx
+push rsp
+push rbp
+push rsi
+push rdi
+push r8
+push r9
+push r10
+push r11
+push r12
+push r13
+push r14
+push r15
+pop rax
+pop rcx
+pop rdx
+pop rbx
+pop rsp
+pop rbp
+pop rsi
+pop rdi
+pop r8
+pop r9
+pop r10
+pop r11
+pop r12
+pop r13
+pop r14
+pop r15
+push 0x10
+push 0x12345678
+call rax
+call [rbx]
+jmp r11
+jmp [rcx]
+ret
+leave
+int3
+syscall
+cpuid
+rdtsc
+imul rax, rbx
+imul ecx, edx
+imul rax, rbx, 0x10
+imul rcx, [rdi], 0x100
+bt rax, rcx
+bts qword ptr [rdi], rax
+btr ebx, 0x4
+btc rdx, 0x20
+bsf rax, rbx
+bsr ecx, edx
+popcnt rax, rbx
+tzcnt ecx,edx
+lzcnt rax,rbx
+bswap rax
+bswap r12d
+xadd rcx, rdx
+cmpxchg rbx, rax
+cmpxchg16b xmmword ptr [rdi]
+movabs rax, 0x1122334455667788
+movabs r15, 0xfedcba9876543210
+movaps xmm0, xmm1
+movups xmm8, [rdi]
+movsd xmm0, xmm1
+movss xmm2, [rax]
+movdqa xmm1, xmm15
+movdqu xmm8, [rsi]
+addps xmm0, xmm1
+addss xmm2, xmm8
+addsd xmm3, [rdi]
+addpd xmm4, xmm5
+subps xmm0, xmm1
+subss xmm2, xmm8
+subsd xmm3, [rdi]
+subpd xmm4, xmm5
+mulps xmm0, xmm1
+mulss xmm2, xmm8
+mulsd xmm3, [rdi]
+mulpd xmm4, xmm5
+divps xmm0, xmm1
+divss xmm2, xmm8
+divsd xmm3, [rdi]
+divpd xmm4, xmm5
+minps xmm0, xmm1
+minss xmm2, xmm8
+minsd xmm3, [rdi]
+minpd xmm4, xmm5
+maxps xmm0, xmm1
+maxss xmm2, xmm8
+maxsd xmm3, [rdi]
+maxpd xmm4, xmm5
+sqrtss xmm0, xmm1
+andps xmm0,xmm1
+xorpd xmm2,xmm3
+ucomiss xmm0,xmm1
+comisd xmm2,xmm3
+cvtsi2sd xmm0, rax
+cvtsi2ss xmm1, ecx
+cvttsd2si rax, xmm0
+cvtsd2si ecx, xmm1
+movd xmm0, eax
+movd ecx, xmm1
+movq xmm0, rax
+movq rdx, xmm2
+paddd xmm0,xmm1
+pxor xmm8,xmm9
+pand xmm0,xmm1
+pcmpeqb xmm2,xmm3
+pslld xmm0, 0x4
+psrlq xmm1, 0x8
+pshufd xmm0, xmm1, 0x1b
+pshufb xmm0, xmm1
+pmuldq xmm2, xmm3
+pcmpgtq xmm8,xmm9
+aesenc xmm0,xmm1
+roundsd xmm0, xmm1, 0x2
+palignr xmm0,xmm1,0x4
+pextrd eax, xmm0, 0x1
+pinsrq xmm0, rax, 0x0
+crc32 rax, rbx
+movbe ecx, [rdi]
+adcx rax, rbx
+fadd st(0), st(1)
+fld qword ptr [rax]
+fstp qword ptr [rdi]
+fmulp st(1), st(0)
+fild dword ptr [rcx]
+fsqrt
+fldz
+fucomi st(0), st(2)
+movsb
+stosq
+lodsd
+cmpsb
+scasq
+cdqe
+cqo
+cwde
+rep movsb
+repnz scasb
+lock add qword ptr [rdi], rax

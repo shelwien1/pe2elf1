@@ -914,7 +914,10 @@ def revealed_bytes(env, explicit, mode=32):
   if mode == 64:
     w, r, x, b = iv("rexw"), iv("rexr"), iv("rexx"), iv("rexb")
     if w or r or x or b or iv("rex"):
-      rev.append(0x40 | (w << 3) | (r << 2) | (x << 1) | b)
+      # each is a single REX bit; the multi-field index solver may hand back an
+      # out-of-range value (e.g. rexr=3 when REX is pinned absent), so mask to 1
+      # bit -- the redisassembly check in asm_line still verifies the encoding.
+      rev.append(0x40 | ((w & 1) << 3) | ((r & 1) << 2) | ((x & 1) << 1) | (b & 1))
   return bytes(rev)
 
 
