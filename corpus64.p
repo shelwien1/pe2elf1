@@ -88,6 +88,13 @@ table insx   { insd,insw }
 table outsx  { outsd,outsw }
 table cbw_t  { cwde,cbw,cdqe }         # 0x98 by ($rexw?2:$opsiz): cwde/cbw/cdqe
 table cwd_t  { cdq,cwd,cqo }           # 0x99 by ($rexw?2:$opsiz): cdq/cwd/cqo
+table pcnt   { "",popcnt,"" }          # F3 0F B8
+table tzt    { "",tzcnt,"" }           # F3 0F BC
+table lzt    { "",lzcnt,"" }           # F3 0F BD
+table grpba  { "","","","",bt,bts,btr,btc }   # 0F BA /op
+table c7r7   { rdseed,rdpid,rdseed,rdseed }   # 0F C7 /7 by reptype
+table c7r6   { rdrand,rdrand,vmxon,rdrand }   # 0F C7 /6 reg by reptype
+table cx16   { cmpxchg8b, cmpxchg16b }        # 0F C7 /1 by REX.W (m64 / m128)
 
 # ===========================================================================
 # immediates / displacements
@@ -183,7 +190,7 @@ submatch insn {
   0xa2 @immadr => "mov " seg[$segidx] "[@" hex($immadr) "],al" ;
   0xa3 @immadr => "mov " seg[$segidx] "[@" hex($immadr) "]," greg[32*$rexw+16*$opsiz+0] ;
   10110 bbb @imm8 => "mov " rgb[16*$rex+8*$rexb+$b] "," hex($imm8) ;
-  10111 bbb @imm64 [$rexw==1] => "movabs " greg[32+8*$rexb+$b] "," hex($imm64) ;
+  10111 bbb @imm64 [$rexw==1] => "movabs " greg[32*$rexw+8*$rexb+$b] "," hex($imm64) ;
   10111 bbb @immz => "mov " greg[16*$opsiz+8*$rexb+$b] "," hex($immz) ;
   0xc6 11 000 rrr @imm8 => wit("long") "mov " rgb[16*$rex+8*$rexb+$r] "," hex($imm8) ;
   0xc6 @addr(0)   @imm8 => "mov" sfx[1] " " $addr "," hex($imm8) ;
@@ -338,6 +345,131 @@ submatch insn {
   0x6e => "outsb" ;
   0x6d => insx[$opsiz] ;
   0x6f => outsx[$opsiz] ;
+
+  # ====================== two-byte 0F : GP / system ========================
+  # --- jcc near (0F 80..8F, rel32) / setcc / cmovcc -------------------------
+  0x0f 1000 cccc @relz => wit("long") "j" cond[$c] " " hex($relz) ;
+  0x0f 1001 cccc 11 ggg rrr => "set" cond[$c] " " rgb[16*$rex+8*$rexb+$r] ;
+  0x0f 1001 cccc @addr      => "set" cond[$c] sfx[1] " " $addr ;
+  0x0f 0100 cccc 11 ggg rrr => "cmov" cond[$c] " " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0100 cccc @addr      => "cmov" cond[$c] " " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," $addr ;
+
+  # --- movzx / movsx --------------------------------------------------------
+  0x0f 0xb6 11 ggg rrr => "movzx " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," rgb[16*$rex+8*$rexb+$r] ;
+  0x0f 0xb6 @addr      => "movzx" sfx[1] " " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," $addr ;
+  0x0f 0xb7 11 ggg rrr => "movzx " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," greg[16+8*$rexb+$r] ;
+  0x0f 0xb7 @addr      => "movzx" sfx[2] " " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," $addr ;
+  0x0f 0xbe 11 ggg rrr => "movsx " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," rgb[16*$rex+8*$rexb+$r] ;
+  0x0f 0xbe @addr      => "movsx" sfx[1] " " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," $addr ;
+  0x0f 0xbf 11 ggg rrr => "movsx " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," greg[16+8*$rexb+$r] ;
+  0x0f 0xbf @addr      => "movsx" sfx[2] " " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," $addr ;
+
+  # --- imul / bit string / shld / shrd --------------------------------------
+  0x0f 0xaf 11 ggg rrr => "imul " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0xaf @addr      => "imul " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," $addr ;
+  0x0f 0xa3 11 ggg rrr => "bt " greg[32*$rexw+16*$opsiz+8*$rexb+$r] "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0xa3 @addr      => "bt " $addr "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0xab 11 ggg rrr => "bts " greg[32*$rexw+16*$opsiz+8*$rexb+$r] "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0xab @addr      => "bts " $addr "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0xb3 11 ggg rrr => "btr " greg[32*$rexw+16*$opsiz+8*$rexb+$r] "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0xb3 @addr      => "btr " $addr "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0xbb 11 ggg rrr => "btc " greg[32*$rexw+16*$opsiz+8*$rexb+$r] "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0xbb @addr      => "btc " $addr "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0xba 11 fff rrr @imm8 => grpba[$f] " " greg[32*$rexw+16*$opsiz+8*$rexb+$r] "," hex($imm8) ;
+  0x0f 0xba @addr(4) @imm8 => "bt" sfx[$rexw? 8 : (4>>$opsiz)] " " $addr "," hex($imm8) ;
+  0x0f 0xba @addr(5) @imm8 => "bts" sfx[$rexw? 8 : (4>>$opsiz)] " " $addr "," hex($imm8) ;
+  0x0f 0xba @addr(6) @imm8 => "btr" sfx[$rexw? 8 : (4>>$opsiz)] " " $addr "," hex($imm8) ;
+  0x0f 0xba @addr(7) @imm8 => "btc" sfx[$rexw? 8 : (4>>$opsiz)] " " $addr "," hex($imm8) ;
+  0x0f 0xa4 11 ggg rrr @imm8 => "shld " greg[32*$rexw+16*$opsiz+8*$rexb+$r] "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," hex($imm8) ;
+  0x0f 0xa4 @addr @imm8 => "shld " $addr "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," hex($imm8) ;
+  0x0f 0xa5 11 ggg rrr => "shld " greg[32*$rexw+16*$opsiz+8*$rexb+$r] "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ",cl" ;
+  0x0f 0xa5 @addr => "shld " $addr "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ",cl" ;
+  0x0f 0xac 11 ggg rrr @imm8 => "shrd " greg[32*$rexw+16*$opsiz+8*$rexb+$r] "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," hex($imm8) ;
+  0x0f 0xac @addr @imm8 => "shrd " $addr "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," hex($imm8) ;
+  0x0f 0xad 11 ggg rrr => "shrd " greg[32*$rexw+16*$opsiz+8*$rexb+$r] "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ",cl" ;
+  0x0f 0xad @addr => "shrd " $addr "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ",cl" ;
+
+  # --- bsf / bsr / tzcnt / lzcnt / popcnt -----------------------------------
+  0x0f 0xbc 11 ggg rrr [$reptype==1] => "tzcnt " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0xbc 11 ggg rrr => "bsf " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0xbc @addr      => "bsf " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," $addr ;
+  0x0f 0xbd 11 ggg rrr [$reptype==1] => "lzcnt " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0xbd 11 ggg rrr => "bsr " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0xbd @addr      => "bsr " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," $addr ;
+  0x0f 0xb8 11 ggg rrr [$reptype==1] => "popcnt " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0xb8 @addr [$reptype==1]      => "popcnt " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," $addr ;
+
+  # --- cmpxchg / xadd / cmpxchg8b16b / movnti / bswap -----------------------
+  0x0f 0xb0 11 ggg rrr => "cmpxchg " rgb[16*$rex+8*$rexb+$r] "," rgb[16*$rex+8*$rexr+$g] ;
+  0x0f 0xb0 @addr      => "cmpxchg" sfx[1] " " $addr "," rgb[16*$rex+8*$rexr+$g] ;
+  0x0f 0xb1 11 ggg rrr => "cmpxchg " greg[32*$rexw+16*$opsiz+8*$rexb+$r] "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0xb1 @addr      => "cmpxchg " $addr "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0xc0 11 ggg rrr => "xadd " rgb[16*$rex+8*$rexb+$r] "," rgb[16*$rex+8*$rexr+$g] ;
+  0x0f 0xc0 @addr      => "xadd" sfx[1] " " $addr "," rgb[16*$rex+8*$rexr+$g] ;
+  0x0f 0xc1 11 ggg rrr => "xadd " greg[32*$rexw+16*$opsiz+8*$rexb+$r] "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0xc1 @addr      => "xadd " $addr "," greg[32*$rexw+16*$opsiz+8*$rexr+$g] ;
+  0x0f 0xc7 @addr(1) => cx16[$rexw] " " $addr ;
+  0x0f 0xc7 @addr(6) => "vmptrld " $addr ;
+  0x0f 0xc7 @addr(7) => "vmptrst " $addr ;
+  0x0f 0xc7 11 110 rrr => c7r6[$reptype] " " greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0xc7 11 111 rrr => c7r7[$reptype] " " greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0xc3 @addr      => "movnti " $addr "," greg[32*$rexw+8*$rexr+$g] ;
+  0x0f 11001 bbb => "bswap " greg[32*$rexw+16*$opsiz+8*$rexb+$b] ;
+
+  # --- segment push/pop, cpuid, msr, sys ------------------------------------
+  0x0f 0xa0 => "push fs" ;
+  0x0f 0xa1 => "pop fs" ;
+  0x0f 0xa8 => "push gs" ;
+  0x0f 0xa9 => "pop gs" ;
+  0x0f 0xaa => "rsm" ;
+  0x0f 0xa2 => "cpuid" ;
+  0x0f 0x05 => "syscall" ;
+  0x0f 0x07 => "sysret" ;
+  0x0f 0x06 => "clts" ;
+  0x0f 0x08 => "invd" ;
+  0x0f 0x09 => "wbinvd" ;
+  0x0f 0x0b => "ud2" ;
+  0x0f 0x30 => "wrmsr" ;
+  0x0f 0x31 => "rdtsc" ;
+  0x0f 0x32 => "rdmsr" ;
+  0x0f 0x33 => "rdpmc" ;
+  0x0f 0x34 => "sysenter" ;
+  0x0f 0x35 => "sysexit" ;
+  0x0f 0x37 => "getsec" ;
+  0x0f 0x77 => "emms" ;
+  0x0f 0xb9 11 ggg rrr => "ud1 " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0xb9 @addr      => "ud1 " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," $addr ;
+  0x0f 0xff 11 ggg rrr => "ud0 " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+
+  # --- lar / lsl / mov cr,dr ------------------------------------------------
+  0x0f 0x02 11 ggg rrr => "lar " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0x02 @addr      => "lar " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," $addr ;
+  0x0f 0x03 11 ggg rrr => "lsl " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0x03 @addr      => "lsl " greg[32*$rexw+16*$opsiz+8*$rexr+$g] "," $addr ;
+  0x0f 0x20 11 ggg rrr => "mov " greg[32+8*$rexb+$r] "," crreg[8*$rexr+$g] ;
+  0x0f 0x22 11 ggg rrr => "mov " crreg[8*$rexr+$g] "," greg[32+8*$rexb+$r] ;
+  0x0f 0x21 11 ggg rrr => "mov " greg[32+8*$rexb+$r] "," drreg[8*$rexr+$g] ;
+  0x0f 0x23 11 ggg rrr => "mov " drreg[8*$rexr+$g] "," greg[32+8*$rexb+$r] ;
+
+  # --- nop / prefetch / fences / fxsave group / clflush ---------------------
+  0x0f 0x1f 11 ggg rrr => "nop " greg[32*$rexw+16*$opsiz+8*$rexb+$r] ;
+  0x0f 0x1f @addr      => "nop" sfx[$rexw? 8 : (4>>$opsiz)] " " $addr ;
+  0x0f 0x0d @addr(1) => "prefetchw" sfx[1] " " $addr ;
+  0x0f 0x18 @addr(0) => "prefetchnta" sfx[1] " " $addr ;
+  0x0f 0x18 @addr(1) => "prefetcht0" sfx[1] " " $addr ;
+  0x0f 0x18 @addr(2) => "prefetcht1" sfx[1] " " $addr ;
+  0x0f 0x18 @addr(3) => "prefetcht2" sfx[1] " " $addr ;
+  0x0f 0xae 0xe8 => "lfence" ;
+  0x0f 0xae 0xf0 => "mfence" ;
+  0x0f 0xae 0xf8 => "sfence" ;
+  0x0f 0xae @addr(0) => "fxsave " $addr ;
+  0x0f 0xae @addr(1) => "fxrstor " $addr ;
+  0x0f 0xae @addr(2) => "ldmxcsr " $addr ;
+  0x0f 0xae @addr(3) => "stmxcsr " $addr ;
+  0x0f 0xae @addr(4) => "xsave " $addr ;
+  0x0f 0xae @addr(5) => "xrstor " $addr ;
+  0x0f 0xae @addr(6) => "xsaveopt " $addr ;
+  0x0f 0xae @addr(7) => "clflush" sfx[1] " " $addr ;
 }
 
 submatch main { @pfx(0) => $pfx }
