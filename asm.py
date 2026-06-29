@@ -779,13 +779,18 @@ class Asm:
     # to 1 (no index).  Harmless for forms that have no such field.
     if "rexb" in sol and not isinstance(sol["rexb"], str):
       sol["b"] = 1 - int(sol["rexb"])
+    elif "b" not in sol:
+      sol["b"] = 1
     if "rexx" in sol and not isinstance(sol["rexx"], str):
       sol["k"] = 1 - int(sol["rexx"])
     elif "k" not in sol:
       sol["k"] = 1
-    # EVEX V-bar' (vvvv high bit): solved by the vvvv table for 3-operand forms;
-    # default to 1 (V'=0, the canonical no-extension value) otherwise.
-    sol.setdefault("u", 1)
+    # The inverted extension bits default to 1 (= no extension) when no operand
+    # pins them -- e.g. R-bar/R-bar' for a GP operand, or the /digit reg field of
+    # a shift-by-imm.  Register/memory operands that DO use them set them first.
+    sol.setdefault("h", 1)   # VEX/EVEX R-bar
+    sol.setdefault("e", 1)   # EVEX R-bar'
+    sol.setdefault("u", 1)   # EVEX V-bar'
     return sol
 
   # -- assemble one core string against insn rules -> list of (bytes, env) ----
@@ -842,6 +847,7 @@ class Asm:
           for sol in rmatch(rule.template, core, dict(env0), self):
             if not self.guards_ok(rule, sol):
               continue
+            self._vexfix(sol)
             e = Emit()
             e.val(0xc5, 8)
             self.emit_pattern(rule.pattern, sol, e, start)

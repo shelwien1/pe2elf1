@@ -472,3 +472,34 @@ vcmpsd xmm0, xmm1, xmm2, 0x2
 vshufps ymm0, ymm1, ymm2, 0x1b
 vzeroupper
 vzeroall
+
+# ---- AVX scalar converts / moves / sqrt / shifts ----
+vsqrtps ymm0, ymm1
+vsqrtpd ymm0, ymm1
+vsqrtss xmm0, xmm1, xmm2
+vsqrtsd xmm0, xmm1, [rax]
+vcvtsi2sd xmm0, xmm1, eax
+vcvtsi2sd xmm0, xmm1, rax
+vcvtsi2ss xmm0, xmm1, rcx
+vcvtsd2si eax, xmm1
+vcvtsd2si rax, xmm1
+vcvttsd2si rax, xmm1
+vcvtss2si eax, xmm1
+vcvtdq2ps ymm0, ymm1
+vcvtps2dq ymm0, ymm1
+vcvttps2dq xmm0, xmm1
+vmovss xmm0, xmm1, xmm2
+vmovss xmm0, [rax]
+vmovss [rdi], xmm0
+vmovsd xmm0, xmm1, xmm2
+vmovd xmm0, eax
+vmovd eax, xmm0
+vmovq xmm0, rax
+vmovq rax, xmm0
+vbroadcastss ymm0, [rax]
+vbroadcastsd ymm0, [rax]
+vpshufd ymm0, ymm1, 0x1b
+vpshufb xmm0, xmm1, xmm2
+vpslld xmm0, xmm1, 0x4
+vpsrlq ymm0, ymm1, 0x8
+vpsraw xmm0, xmm1, 0x2

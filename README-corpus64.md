@@ -28,7 +28,7 @@ classic x86-64 integer/FP ISA plus AVX/AVX2:
 | SSE/SSE2/SSE3 | mov-family, packed/scalar FP arith+cmp+cvt, MMX/SSE2 integer, movd/movq, pshuf, shifts-by-imm, pinsrw/pextrw, pmovmskb, lddqu/haddps/... |
 | SSSE3/SSE4/AES/SHA | pshufb/phadd/pmovsx/zx/pmuldq/pcmpeqq/pcmpgtq/pmin/max, ptest, round/blend/palignr/dpps/pclmulqdq/pcmpestri/aeskeygen, aes*, sha*, crc32, movbe, adcx/adox, pextr/pinsr (b/w/d/q) |
 | x87 | full D8–DF (arith, fld/fst, fcmov, fucomi, transcendentals, control) |
-| AVX/AVX2 (VEX) | C4 & C5 forms: packed/scalar FP arith, vmovaps/upd/dqa/dqu (+stores), integer (vpadd/psub/pand/por/pxor/pcmpeq/gt/punpck/...), vcmp*/vshuf* (imm8), vzeroupper/all |
+| AVX/AVX2 (VEX) | C4 & C5 forms: packed/scalar FP arith + vsqrt, vmovaps/ups/pd/dqa/dqu + scalar vmovss/sd (+stores), vmovd/q, integer (vpadd/psub/pand/por/pxor/pcmpeq/gt/punpck/...), vcmp*/vshuf*/vpshufd (imm8), vpshufb, shift-by-imm (vpsll/srl/sra), scalar converts (vcvtsi2sd/ss, vcvt[t]sd2si/ss2si) + same-width packed (vcvtdq2ps/ps2dq/ttps2dq), vbroadcastss/sd, vzeroupper/all |
 | AVX-512 (EVEX) | zmm0–31 with `{k1-7}` masking, `{z}` zeroing, `{1toN}` broadcast and `{er}`/`{sae}` embedded rounding: FP arith ps/pd/ss/sd, min/max, logical, vmovaps/upd/dqa32/64/dqu8/16/32/64 (+stores), integer vpadd/sub/and/or/xor/mull (d/q/b/w), FMA (vfmadd/sub/nmadd 132/213/231 ps/pd) |
 | AVX-512 masks (k) | `kmovw/b/d/q`, k-logic (`kand/kandn/kor/kxor/kxnor/knot/kortest/ktest/kadd/kunpck`), `kshiftl/rw`, and mask-producing compares `vpcmp{eq,gt}d`/`vcmpps/pd`/`vpcmp[u]d/q`/`vptestmd/q` → k (with optional `{k}` mask) |
 
@@ -37,11 +37,12 @@ assembles to the exact bytes `as` produces, and the entire `.text` of `/bin/ls`
 (~20 000 instructions) disassembles with **zero** undecodable bytes.
 
 **Not yet covered (future work):** the XOP (`8F`) maps; AVX-512 VSIB
-gather/scatter; and the long tail of less-common VEX/EVEX leaves (vsqrt/vcvt/
-vbroadcast and the scalar `vmovss/sd` merge forms). EVEX `disp8` is shown as the
-raw encoded byte rather than the disp8×N effective displacement (the corpus.p
-convention — see below). The `vcmp`/`vpcmp` predicate is kept as an explicit
-`imm8` operand rather than folded into the mnemonic (objdump folds it).
+gather/scatter; and width-changing converts (`vcvtps2pd`/`vcvtpd2ps`/
+`vcvtdq2pd`/`vcvtpd2dq`, where the two operands differ in vector width). EVEX
+`disp8` is shown as the raw encoded byte rather than the disp8×N effective
+displacement (the corpus.p convention — see below). The `vcmp`/`vpcmp`
+predicate is kept as an explicit `imm8` operand rather than folded into the
+mnemonic (objdump folds it).
 
 ## How long mode is expressed
 

@@ -71,6 +71,89 @@ INT = [(0xfc, "vpaddb"), (0xfd, "vpaddw"), (0xfe, "vpaddd"), (0xd4, "vpaddq"),
        (0xdc, "vpaddusb"), (0xde, "vpmaxub"), (0xda, "vpminub"),
        (0xe0, "vpavgb"), (0xe3, "vpavgw"), (0x63, "vpacksswb"), (0x67, "vpackuswb")]
 
+def extras_c5():
+  # vsqrt: ps/pd 2-operand (pp00/01), ss/sd 3-operand (pp10/11)
+  E('h 1111 y 00 0x51 11 ggg rrr => "vsqrtps " %s "," %s ;' % (DST, RM_C5))
+  E('h 1111 y 00 0x51 @addr => "vsqrtps " %s "," $addr ;' % DST)
+  E('h 1111 y 01 0x51 11 ggg rrr => "vsqrtpd " %s "," %s ;' % (DST, RM_C5))
+  E('h 1111 y 01 0x51 @addr => "vsqrtpd " %s "," $addr ;' % DST)
+  E('h vvvv y 10 0x51 11 ggg rrr => "vsqrtss " %s "," %s "," %s ;' % (DST, SRC1, RM_C5))
+  E('h vvvv y 10 0x51 @addr => "vsqrtss " %s "," %s "," $addr ;' % (DST, SRC1))
+  E('h vvvv y 11 0x51 11 ggg rrr => "vsqrtsd " %s "," %s "," %s ;' % (DST, SRC1, RM_C5))
+  E('h vvvv y 11 0x51 @addr => "vsqrtsd " %s "," %s "," $addr ;' % (DST, SRC1))
+  # scalar int<->fp converts, W0 (32-bit GP)
+  E('h vvvv y 11 0x2a 11 ggg rrr => "vcvtsi2sd " %s "," %s "," greg[$r] ;' % (DST, SRC1))
+  E('h vvvv y 10 0x2a 11 ggg rrr => "vcvtsi2ss " %s "," %s "," greg[$r] ;' % (DST, SRC1))
+  E('h 1111 y 11 0x2d 11 ggg rrr => "vcvtsd2si " greg[$g] "," %s ;' % RM_C5)
+  E('h 1111 y 11 0x2d @addr => "vcvtsd2si " greg[$g] "," $addr ;')
+  E('h 1111 y 10 0x2d 11 ggg rrr => "vcvtss2si " greg[$g] "," %s ;' % RM_C5)
+  E('h 1111 y 10 0x2d @addr => "vcvtss2si " greg[$g] "," $addr ;')
+  E('h 1111 y 11 0x2c 11 ggg rrr => "vcvttsd2si " greg[$g] "," %s ;' % RM_C5)
+  E('h 1111 y 11 0x2c @addr => "vcvttsd2si " greg[$g] "," $addr ;')
+  E('h 1111 y 10 0x2c 11 ggg rrr => "vcvttss2si " greg[$g] "," %s ;' % RM_C5)
+  E('h 1111 y 10 0x2c @addr => "vcvttss2si " greg[$g] "," $addr ;')
+  # same-width packed converts (5B): dq2ps/ps2dq/ttps2dq
+  E('h 1111 y 00 0x5b 11 ggg rrr => "vcvtdq2ps " %s "," %s ;' % (DST, RM_C5))
+  E('h 1111 y 00 0x5b @addr => "vcvtdq2ps " %s "," $addr ;' % DST)
+  E('h 1111 y 01 0x5b 11 ggg rrr => "vcvtps2dq " %s "," %s ;' % (DST, RM_C5))
+  E('h 1111 y 01 0x5b @addr => "vcvtps2dq " %s "," $addr ;' % DST)
+  E('h 1111 y 10 0x5b 11 ggg rrr => "vcvttps2dq " %s "," %s ;' % (DST, RM_C5))
+  E('h 1111 y 10 0x5b @addr => "vcvttps2dq " %s "," $addr ;' % DST)
+  # 0x10/0x11 by pp: vmovups/upd (2-op, pp00/01) and vmovss/sd (pp10/11)
+  E('h 1111 y 00 0x10 11 ggg rrr => "vmovups " %s "," %s ;' % (DST, RM_C5))
+  E('h 1111 y 00 0x10 @addr => "vmovups " %s "," $addr ;' % DST)
+  E('h 1111 y 00 0x11 @addr => "vmovups " $addr "," %s ;' % DST)
+  E('h 1111 y 01 0x10 11 ggg rrr => "vmovupd " %s "," %s ;' % (DST, RM_C5))
+  E('h 1111 y 01 0x10 @addr => "vmovupd " %s "," $addr ;' % DST)
+  E('h 1111 y 01 0x11 @addr => "vmovupd " $addr "," %s ;' % DST)
+  # scalar moves: reg-reg 3-operand, mem load/store 2-operand
+  E('h vvvv y 10 0x10 11 ggg rrr => "vmovss " %s "," %s "," %s ;' % (DST, SRC1, RM_C5))
+  E('h 1111 y 10 0x10 @addr => "vmovss " %s "," $addr ;' % DST)
+  E('h 1111 y 10 0x11 @addr => "vmovss " $addr "," %s ;' % DST)
+  E('h vvvv y 11 0x10 11 ggg rrr => "vmovsd " %s "," %s "," %s ;' % (DST, SRC1, RM_C5))
+  E('h 1111 y 11 0x10 @addr => "vmovsd " %s "," $addr ;' % DST)
+  E('h 1111 y 11 0x11 @addr => "vmovsd " $addr "," %s ;' % DST)
+  # vmovd (66.0F 6E/7E, W0): xmm<->r32
+  E('h 1111 y 01 0x6e 11 ggg rrr => "vmovd " %s "," greg[$r] ;' % DST)
+  E('h 1111 y 01 0x6e @addr => "vmovd " %s "," $addr ;' % DST)
+  E('h 1111 y 01 0x7e 11 ggg rrr => "vmovd " greg[$r] "," %s ;' % DST)
+  E('h 1111 y 01 0x7e @addr => "vmovd " $addr "," %s ;' % DST)
+  # vpshufd (imm), vpshufb (3-op)
+  E('h 1111 y 01 0x70 11 ggg rrr @imm8 => "vpshufd " %s "," %s "," hex($imm8) ;' % (DST, RM_C5))
+  E('h 1111 y 01 0x70 @addr @imm8 => "vpshufd " %s "," $addr "," hex($imm8) ;' % DST)
+  # shift-by-imm8 (/digit): dest=vvvv, src=rm
+  for op, dig, mn in [(0x72, 6, "vpslld"), (0x72, 2, "vpsrld"), (0x72, 4, "vpsrad"),
+                      (0x73, 6, "vpsllq"), (0x73, 2, "vpsrlq"),
+                      (0x71, 6, "vpsllw"), (0x71, 2, "vpsrlw"), (0x71, 4, "vpsraw")]:
+    d = format(dig, "03b")
+    E('h vvvv y 01 0x%02x 11 %s rrr @imm8 => "%s " %s "," %s "," hex($imm8) ;' % (op, d, mn, SRC1, RM_C5))
+
+def extras_c4():
+  # W1 (64-bit GP) scalar converts + vmovq  (C4, 0F map; h/k/b capture reg/rm ext)
+  E('h k b 00001 1 vvvv y 11 0x2a 11 ggg rrr => "vcvtsi2sd " %s "," %s "," greg[32+$r] ;' % (DST, SRC1))
+  E('h k b 00001 1 vvvv y 10 0x2a 11 ggg rrr => "vcvtsi2ss " %s "," %s "," greg[32+$r] ;' % (DST, SRC1))
+  E('h k b 00001 1 1111 y 11 0x2d 11 ggg rrr => "vcvtsd2si " greg[32+$g] "," %s ;' % RM_C4)
+  E('h k b 00001 1 1111 y 11 0x2d @addr %s => "vcvtsd2si " greg[32+$g] "," $addr ;' % ACT)
+  E('h k b 00001 1 1111 y 10 0x2d 11 ggg rrr => "vcvtss2si " greg[32+$g] "," %s ;' % RM_C4)
+  E('h k b 00001 1 1111 y 10 0x2d @addr %s => "vcvtss2si " greg[32+$g] "," $addr ;' % ACT)
+  E('h k b 00001 1 1111 y 11 0x2c 11 ggg rrr => "vcvttsd2si " greg[32+$g] "," %s ;' % RM_C4)
+  E('h k b 00001 1 1111 y 10 0x2c 11 ggg rrr => "vcvttss2si " greg[32+$g] "," %s ;' % RM_C4)
+  E('h k b 00001 1 1111 y 01 0x6e 11 ggg rrr => "vmovq " %s "," greg[32+$r] ;' % DST)
+  E('h k b 00001 1 1111 y 01 0x7e 11 ggg rrr => "vmovq " greg[32+$g] "," %s ;' % RM_C4)
+  # vbroadcastss/sd (0F38, 2-op mem)
+  E('h k b 00010 0 1111 y 01 0x18 @addr %s => "vbroadcastss " %s "," $addr ;' % (ACT, DST))
+  E('h k b 00010 0 1111 y 01 0x19 @addr %s => "vbroadcastsd " %s "," $addr ;' % (ACT, DST))
+  # vpshufb (0F38, 3-op)
+  E('h k b 00010 0 vvvv y 01 0x00 11 ggg rrr => "vpshufb " %s "," %s "," %s ;' % (DST, SRC1, RM_C4))
+  E('h k b 00010 0 vvvv y 01 0x00 @addr %s => "vpshufb " %s "," %s "," $addr ;' % (ACT, DST, SRC1))
+  # vmovups/upd C4 (extended regs / extended mem base)
+  E('h k b 00001 0 1111 y 00 0x10 11 ggg rrr => "vmovups " %s "," %s ;' % (DST, RM_C4))
+  E('h k b 00001 0 1111 y 00 0x10 @addr %s => "vmovups " %s "," $addr ;' % (ACT, DST))
+  E('h k b 00001 0 1111 y 00 0x11 @addr %s => "vmovups " $addr "," %s ;' % (ACT, DST))
+  E('h k b 00001 0 1111 y 01 0x10 11 ggg rrr => "vmovupd " %s "," %s ;' % (DST, RM_C4))
+  E('h k b 00001 0 1111 y 01 0x10 @addr %s => "vmovupd " %s "," $addr ;' % (ACT, DST))
+  E('h k b 00001 0 1111 y 01 0x11 @addr %s => "vmovupd " $addr "," %s ;' % (ACT, DST))
+
 def kops_c4():
   # AVX-512 mask ops needing C4: kmovq (W1.F2.0F) and kshift (W1.66.0F3A).
   E('1 1 1 00001 1 1111 0 11 0x92 11 ggg rrr => "kmovq " kreg[$g] "," greg[32+$r] ;')
@@ -100,12 +183,12 @@ v.append("submatch vex {")
 for op, mn in ARITH:
   velt3(op, mn)
 mov2(0x28, "vmova"); store2(0x29, "vmova")
-mov2(0x10, "vmovu"); store2(0x11, "vmovu")
 mov2(0x6f, "vmdq"); store2(0x7f, "vmdq")
 for op, mn in INT:
   int3(op, mn, "01")
 imm3(0xc2, '"vcmp" velt[$p]')
 imm3(0xc6, '"vshuf" velt[$p]')
+extras_c4()
 kops_c4()
 v.append("}")
 
@@ -114,12 +197,12 @@ v.append("submatch vex2 {")
 for op, mn in ARITH:
   velt3_c5(op, mn)
 mov2_c5(0x28, "vmova"); store2_c5(0x29, "vmova")
-mov2_c5(0x10, "vmovu"); store2_c5(0x11, "vmovu")
 mov2_c5(0x6f, "vmdq"); store2_c5(0x7f, "vmdq")
 for op, mn in INT:
   int3_c5(op, mn, "01")
 imm3_c5(0xc2, '"vcmp" velt[$p]')
 imm3_c5(0xc6, '"vshuf" velt[$p]')
+extras_c5()
 kops_c5()
 # vzeroupper / vzeroall : C5 only, no operands
 E('1 1111 0 00 0x77 => "vzeroupper" ;')
