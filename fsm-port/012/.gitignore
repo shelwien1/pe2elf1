@@ -1,0 +1,11 @@
+# build artifacts
+parser
+test
+asm32
+fuzz
+*.o
+insns.dat
+out.bin
+nc.dat
+nc_out.bin
+corpus.head
