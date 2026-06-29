@@ -832,6 +832,7 @@ class Asm:
           for sol in rmatch(rule.template, core, dict(env0), self):
             if not self.guards_ok(rule, sol):
               continue
+            self._vexfix(sol)
             e = Emit()
             e.val(0x8f, 8)
             self.emit_pattern(rule.pattern, sol, e, start)

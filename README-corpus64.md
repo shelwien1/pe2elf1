@@ -31,14 +31,15 @@ classic x86-64 integer/FP ISA plus AVX/AVX2:
 | AVX/AVX2 (VEX) | C4 & C5 forms: packed/scalar FP arith + vsqrt, vmovaps/ups/pd/dqa/dqu + scalar vmovss/sd (+stores), vmovd/q, integer (vpadd/psub/pand/por/pxor/pcmpeq/gt/punpck/...), vcmp*/vshuf*/vpshufd (imm8), vpshufb, shift-by-imm (vpsll/srl/sra), scalar converts (vcvtsi2sd/ss, vcvt[t]sd2si/ss2si) + same-width packed (vcvtdq2ps/ps2dq/ttps2dq), vbroadcastss/sd, vzeroupper/all |
 | AVX-512 (EVEX) | zmm0–31 with `{k1-7}` masking, `{z}` zeroing, `{1toN}` broadcast and `{er}`/`{sae}` embedded rounding: FP arith ps/pd/ss/sd, min/max, logical, vmovaps/upd/dqa32/64/dqu8/16/32/64 (+stores), integer vpadd/sub/and/or/xor/mull (d/q/b/w), FMA (vfmadd/sub/nmadd 132/213/231 ps/pd) |
 | AVX-512 masks (k) | `kmovw/b/d/q`, k-logic (`kand/kandn/kor/kxor/kxnor/knot/kortest/ktest/kadd/kunpck`), `kshiftl/rw`, and mask-producing compares `vpcmp{eq,gt}d`/`vcmpps/pd`/`vpcmp[u]d/q`/`vptestmd/q` → k (with optional `{k}` mask) |
+| XOP (8F, AMD) | `vpcmov`/`vpperm`/`vpmacsdd` (4-operand is4), `vprot{b,w,d,q}` (imm8 + variable), `vpsh{l,a}{b,w,d,q}`, `vphadd*`/`vphsub*` |
 
 Validated against GNU `as`/`objdump`: every instruction in the test corpus
 assembles to the exact bytes `as` produces, and the entire `.text` of `/bin/ls`
 (~20 000 instructions) disassembles with **zero** undecodable bytes.
 
-**Not yet covered (future work):** the XOP (`8F`) maps; AVX-512 VSIB
-gather/scatter; and width-changing converts (`vcvtps2pd`/`vcvtpd2ps`/
-`vcvtdq2pd`/`vcvtpd2dq`, where the two operands differ in vector width). EVEX
+**Not yet covered (future work):** AVX-512 VSIB gather/scatter (vector-index
+SIB); the EVEX forms of the width-changing converts; and the long tail of
+rarer EVEX leaves. EVEX
 `disp8` is shown as the raw encoded byte rather than the disp8×N effective
 displacement (the corpus.p convention — see below). The `vcmp`/`vpcmp`
 predicate is kept as an explicit `imm8` operand rather than folded into the
@@ -97,6 +98,7 @@ preserved):
 | `corpus64.p` | the x86-64 description (deliverable) |
 | `corpus64.asm` / `corpus64.bin` | round-trip test: text ⇄ bytes (deliverable) |
 | `evex64.asm` / `evex64.bin` | AVX-512 EVEX round-trip test (built `.s`→GAS→`.text`) |
+| `xop64.asm` / `xop64.bin` | XOP round-trip test (built `.s`→GAS→`.text`) |
 | `tests/prog.c` / `prog.bin` / `prog.asm` | round-trip of real `gcc -O2` output |
 | `x86d64.py` / `x86a64.py` | standalone disassembler / assembler (`--emit`) |
 | `tools/rtcheck.py` | per-instruction cross-check against GNU `as`/`objdump` (`--bin` for a raw blob) |

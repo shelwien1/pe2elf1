@@ -26,6 +26,7 @@ check corpus.p   /tmp/_corpus_strip.asm corpus.bin "corpus.p (x86-32)"
 check corpus64.p corpus64.asm          corpus64.bin "corpus64.p (x86-64)"
 check corpus64.p tests/prog.asm        tests/prog.bin "corpus64.p (compiled C)"
 check corpus64.p evex64.asm            evex64.bin   "corpus64.p (AVX-512 EVEX)"
+check corpus64.p xop64.asm             xop64.bin    "corpus64.p (XOP)"
 
 if [ "$fail" = 0 ]; then echo "ALL ROUND-TRIPS BYTE-EXACT"; else echo "FAILURES PRESENT"; fi
 exit $fail

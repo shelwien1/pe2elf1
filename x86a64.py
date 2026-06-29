@@ -1835,6 +1835,7 @@ class Asm:
           for sol in rmatch(rule.template, core, dict(env0), self):
             if not self.guards_ok(rule, sol):
               continue
+            self._vexfix(sol)
             e = Emit()
             e.val(0x8f, 8)
             self.emit_pattern(rule.pattern, sol, e, start)
@@ -2156,6 +2157,7 @@ table vvv {
   ymm15,ymm14,ymm13,ymm12,ymm11,ymm10,ymm9,ymm8, ymm7,ymm6,ymm5,ymm4,ymm3,ymm2,ymm1,ymm0
 }
 table velt { ps,pd,ss,sd }            # VEX pp -> element suffix
+table vregd { xmm0,xmm1,xmm2,xmm3,xmm4,xmm5,xmm6,xmm7,xmm8,xmm9,xmm10,xmm11,xmm12,xmm13,xmm14,xmm15, ymm0,ymm1,ymm2,ymm3,ymm4,ymm5,ymm6,ymm7,ymm8,ymm9,ymm10,ymm11,ymm12,ymm13,ymm14,ymm15 }   # XOP is4 4th operand (direct)
 table kreg  { k0,k1,k2,k3,k4,k5,k6,k7 }   # AVX-512 mask registers
 table kmov_t { kmovw,kmovb,"",kmovd }      # k-move width by pp (VEX W0)
 table klog_t { kandw,kandb }               # placeholder (klog uses explicit mnemonics)
@@ -2384,6 +2386,7 @@ submatch insn {
   0x6a @imm8 => "push " hex($imm8) ;
   01010 bbb => "push " dreg[16*$opsiz+8*$rexb+$b] ;
   01011 bbb => "pop " dreg[16*$opsiz+8*$rexb+$b] ;
+  0x8f @xop => $xop ;
   0x8f 11 000 rrr => wit("long") "pop " dreg[16*$opsiz+8*$rexb+$r] ;
   0x8f @addr(0) => "pop" sfx[8] " " $addr ;
   0x9c => "pushf" ;
@@ -3726,6 +3729,38 @@ submatch evex {
   1 k b 1 00 10 0 vvvv 1 01 0 ll 0 u aaa 0x27 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vptestmd " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
   1 k b 1 00 10 1 vvvv 1 01 0 ll 0 u aaa 0x27 11 ggg rrr => wit("evex") "vptestmq " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
   1 k b 1 00 10 1 vvvv 1 01 0 ll 0 u aaa 0x27 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vptestmq " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+}
+
+submatch xop {
+  h k b 01000 0 1111 y 00 0xc0 11 ggg rrr @imm8 => "vprotb " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] "," hex($imm8) ;
+  h k b 01000 0 1111 y 00 0xc1 11 ggg rrr @imm8 => "vprotw " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] "," hex($imm8) ;
+  h k b 01000 0 1111 y 00 0xc2 11 ggg rrr @imm8 => "vprotd " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] "," hex($imm8) ;
+  h k b 01000 0 1111 y 00 0xc3 11 ggg rrr @imm8 => "vprotq " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] "," hex($imm8) ;
+  h k b 01000 0 vvvv y 00 0xa2 11 ggg rrr qqqq 0000 => "vpcmov " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] "," vregd[16*$y+$q] ;
+  h k b 01000 0 vvvv y 00 0xa3 11 ggg rrr qqqq 0000 => "vpperm " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] "," vregd[16*$y+$q] ;
+  h k b 01000 0 vvvv y 00 0x9e 11 ggg rrr qqqq 0000 => "vpmacsdd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] "," vregd[16*$y+$q] ;
+  h k b 01000 0 vvvv y 00 0x9f 11 ggg rrr qqqq 0000 => "vpmacsdqh " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] "," vregd[16*$y+$q] ;
+  h k b 01000 0 vvvv y 00 0x86 11 ggg rrr qqqq 0000 => "vpmacssdd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] "," vregd[16*$y+$q] ;
+  h k b 01001 0 vvvv y 00 0x90 11 ggg rrr => "vprotb " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] "," vvv[16*$y+$v] ;
+  h k b 01001 0 vvvv y 00 0x91 11 ggg rrr => "vprotw " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] "," vvv[16*$y+$v] ;
+  h k b 01001 0 vvvv y 00 0x92 11 ggg rrr => "vprotd " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] "," vvv[16*$y+$v] ;
+  h k b 01001 0 vvvv y 00 0x93 11 ggg rrr => "vprotq " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] "," vvv[16*$y+$v] ;
+  h k b 01001 0 vvvv y 00 0x94 11 ggg rrr => "vpshlb " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] "," vvv[16*$y+$v] ;
+  h k b 01001 0 vvvv y 00 0x95 11 ggg rrr => "vpshlw " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] "," vvv[16*$y+$v] ;
+  h k b 01001 0 vvvv y 00 0x96 11 ggg rrr => "vpshld " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] "," vvv[16*$y+$v] ;
+  h k b 01001 0 vvvv y 00 0x97 11 ggg rrr => "vpshlq " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] "," vvv[16*$y+$v] ;
+  h k b 01001 0 vvvv y 00 0x98 11 ggg rrr => "vpshab " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] "," vvv[16*$y+$v] ;
+  h k b 01001 0 vvvv y 00 0x99 11 ggg rrr => "vpshaw " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] "," vvv[16*$y+$v] ;
+  h k b 01001 0 vvvv y 00 0x9a 11 ggg rrr => "vpshad " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] "," vvv[16*$y+$v] ;
+  h k b 01001 0 vvvv y 00 0x9b 11 ggg rrr => "vpshaq " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] "," vvv[16*$y+$v] ;
+  h k b 01001 0 1111 y 00 0xc1 11 ggg rrr => "vphaddbw " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
+  h k b 01001 0 1111 y 00 0xc2 11 ggg rrr => "vphaddbd " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
+  h k b 01001 0 1111 y 00 0xc3 11 ggg rrr => "vphaddbq " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
+  h k b 01001 0 1111 y 00 0xc6 11 ggg rrr => "vphaddwd " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
+  h k b 01001 0 1111 y 00 0xc7 11 ggg rrr => "vphaddwq " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
+  h k b 01001 0 1111 y 00 0xcb 11 ggg rrr => "vphadddq " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
+  h k b 01001 0 1111 y 00 0xd1 11 ggg rrr => "vphaddubw " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
+  h k b 01001 0 1111 y 00 0xe1 11 ggg rrr => "vphsubbw " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
 }
 
 submatch main { @pfx(0) => $pfx }
