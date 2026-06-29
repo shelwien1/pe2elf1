@@ -18,13 +18,14 @@
 # Coverage: the core integer ISA (ALU, mov/lea, push/pop, inc/dec, test/xchg,
 # shifts, imul, jmp/call/jcc, ret, movzx/movsx/movsxd, setcc/cmovcc, groups,
 # string ops, bit ops/bsf/bsr/bswap, cmpxchg/xadd, cpuid/rdtsc, fences/prefetch,
-# CET endbr) plus the common legacy SSE/SSE2 (movaps/movups/movsd, add/mul/sub/
-# div/min/max/sqrt, and/or/xor, cmp/shuf/ucomis, movd/movq, movdqa/u, cvtsi2sd/
-# cvtt*2si, packed padd/psub/pand/por/pxor/pcmpeq). The mandatory 66/F3/F2 SSE
-# selector and rep/lock ride the prefix run (replayed verbatim), so prefix
-# variants round-trip byte-exact. Higher SSE/AVX (0F38/0F3A, shifts/shuffles)
-# and byte-exact VEX/EVEX tails remain future work; VEX/EVEX round-trip today via
-# the C++ structural path.
+# CET endbr) plus the legacy SSE family -- SSE, SSE2, SSE3, SSSE3, SSE4.1/4.2:
+# data movement, packed/scalar float arithmetic, the full packed-integer set
+# (add/sub/mul/min/max/avg/sad/cmp/pack/unpack/shift incl. the 71-73 imm groups),
+# movd/movq, cvt*, movmsk/pmovmskb, pinsr/pextr, and the 0F38/0F3A maps (pshufb,
+# palignr, pmovsx/zx, roundsd, blends, pcmpistri, pclmulqdq, AES). The mandatory
+# 66/F3/F2 SSE selector and rep/lock ride the prefix run (replayed verbatim), so
+# prefix variants round-trip byte-exact. x87 (D8-DF) and byte-exact VEX/EVEX
+# tails remain future work; VEX/EVEX round-trip today via the C++ structural path.
 
 arch  $mode=64 $endian=le $bitorder=msb $maxlen=15
 # REX is NOT a var: the capture index is only 5 bits (32 slots) and the legacy
