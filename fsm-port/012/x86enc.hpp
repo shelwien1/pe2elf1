@@ -274,6 +274,7 @@ static inline void vex_structure(int map, uint8_t op, int opsize, int* has_modrm
     switch (op) {
       case 0x80: case 0x82: case 0x83:             // group1 imm8 / imm8sx
       case 0xc0: case 0xc1:                        // group2 shift by imm8
+      case 0x24: case 0x2c:                        // shld/shrd by imm8
       case 0x6a: case 0x6b: *imm_len = 1; break;   // push imm8 / imul imm8
       case 0x81: case 0x69: *imm_len = (opsize == 1) ? 2 : 4; break;  // immz (imul / group1)
       default: break;                              // most map-4 ops: ModR/M, no immediate

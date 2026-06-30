@@ -42,12 +42,19 @@
 # 100%. The XOP GPR families -- TBM (blc*/bls*/tzmsk/t1mskc on 09.01/02), LWP
 # (llwpcb/slwpcb/lwpins/lwpval) and the XOP-encoded bextr (0A.10) -- are AMD-only,
 # absent from all Zen+ (hence APX-capable) silicon, and orthogonal to the APX
-# mainline; they stay on the structural path. An opcode the corpus does not cover,
-# those XOP GPR forms, the APX REX2 (D5) prefix, and the moffs mov (A0-A3), still
-# round-trip via the C++ structural path (raw-byte replay). The fuzzer enforces
-# lossless round-trip across the whole accepted byte space (0 failures) -- the
-# bijection holds for all of x64, and the covered VEX/EVEX/XOP now lower to real
-# mnemonics + operands.
+# mainline; they stay on the structural path. APX EVEX-promoted legacy (62 with
+# the 3-bit map == 4) is decoded the same FSM-native way (evexp0 -> apxp1/apxp2/
+# apxop; the C++ apx_finalize folds the r0-31 extension + sizing + the ND new-data-
+# destination and NF no-flags modifiers). The full integer set is covered: the ALU
+# (add/or/adc/sbb/and/sub/xor/cmp, 8/16/32/64, MR/RM/MI), cmovcc, the shift/rotate
+# and inc/dec/not/neg groups, imul and shld/shrd -- all with NDD/NF and r0-31. The
+# new-instruction tail (push2/pop2, movbe, crc32, movdiri, aadd, wrssq, sha*) keeps
+# its idiosyncratic shapes and stays structural for now. An opcode the corpus does
+# not cover, those XOP GPR forms / APX tail, the APX REX2 (D5) prefix, and the moffs
+# mov (A0-A3), still round-trip via the C++ structural path (raw-byte replay). The
+# fuzzer enforces lossless round-trip across the whole accepted byte space (0
+# failures) -- the bijection holds for all of x64, and the covered VEX/EVEX/XOP/APX
+# now lower to real mnemonics + operands.
 
 arch  $mode=64 $endian=le $bitorder=msb $maxlen=15
 # REX is NOT a var: the capture index is only 5 bits (32 slots) and the legacy
@@ -2705,6 +2712,15 @@ submatch apx {
   r x b e f 100 w v j 00 c d n a 0xff 11 001 rrr => "dec " greg[$r] ;
   r x b e f 100 w v j 01 c d n a 0xff 11 000 rrr => "inc " greg[$r] ;
   r x b e f 100 w v j 01 c d n a 0xff 11 001 rrr => "dec " greg[$r] ;
+  # ===== Stage 3c: shld/shrd (NDD; r/m,reg,imm8 or ,cl) =====
+  r x b e f 100 w v j 00 c d n a 0x24 11 ggg rrr @imm8 => "shld " greg[$r] "," greg[$g] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0x2c 11 ggg rrr @imm8 => "shrd " greg[$r] "," greg[$g] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0xa5 11 ggg rrr => "shld " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 00 c d n a 0xad 11 ggg rrr => "shrd " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x24 11 ggg rrr @imm8 => "shld " greg[$r] "," greg[$g] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0x2c 11 ggg rrr @imm8 => "shrd " greg[$r] "," greg[$g] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0xa5 11 ggg rrr => "shld " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 01 c d n a 0xad 11 ggg rrr => "shrd " greg[$r] "," greg[$g] ;
 }
 
 submatch main { @pfx(0) => $pfx }

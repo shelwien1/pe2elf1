@@ -511,7 +511,12 @@ static inline void apx_finalize(x86dec_t* d, const byte* s, size_t op_at) {
   int nn = 0;
   if (ND) in->op[nn++] = nddop;                         // NDD prepends the destination
   switch (form) {
-    case FORM_APX_MR:  in->op[nn++] = rmop;  in->op[nn++] = regop; break;
+    case FORM_APX_MR:  in->op[nn++] = rmop;  in->op[nn++] = regop;
+                       // shld/shrd by cl (a5/ad): r/m, reg, cl
+                       if (in->vex_op == 0xa5 || in->vex_op == 0xad) {
+                         x86op_t o; o.type = T_GPR8; o.index = 1; in->op[nn++] = o;   // cl
+                       }
+                       break;
     case FORM_APX_RM:  in->op[nn++] = regop; in->op[nn++] = rmop;  break;
     case FORM_APX_RMI: in->op[nn++] = regop; in->op[nn++] = rmop; in->op[nn++] = immop; break;
     case FORM_APX_R:   in->op[nn++] = regop; break;

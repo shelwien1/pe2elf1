@@ -1442,9 +1442,12 @@ def emit(c, interp, out_path):
       return "{%s,%s,(%s)&0x1F,((%s)>>5)&7}" % (ACTOP[op], dn, av, av)
     elif dst == interp.cap('MODE'):
       av = 'RM_REG' if a0 == 1 else 'RM_MEM'
-    else:                                              # prefix value / seg row / group id
-      av = str(a0)
-    return "{%s,%s,%s,%d}" % (ACTOP[op], dn, av, a1)
+      return "{%s,%s,%s,%d}" % (ACTOP[op], dn, av, a1)
+    # prefix value / seg row / form id / group id: a numeric 8-bit value. Form and
+    # group ids now exceed 31, so split it across arg0 (lo5) | arg1 (hi3); the value
+    # may already be pre-split by the caller, so recombine first. ACT_CONST rejoins.
+    val = a0 | (a1 << 5)
+    return "{%s,%s,(%d)&0x1F,((%d)>>5)&7}" % (ACTOP[op], dn, val, val)
 
   def state_str(acts, nxt):
     if len(acts) > MAX_ACT:
