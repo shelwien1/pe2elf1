@@ -946,9 +946,14 @@ class Interp:
     name, expr = t[1], t[2]
     role = ('VVVV' if '$v' in expr else 'REG' if '$g' in expr else 'RM' if '$r' in expr else None)
     if name in ('vreg', 'vvv', 'ereg', 'evvv'):
-      file = 'VEC'
-    elif name == 'eregh' or name == 'eregx':
-      file = 'VECX'
+      # a length term ($y for VEX L, $l for EVEX L'L) => sized by the vector length;
+      # without it the operand is a fixed xmm (the narrow side of a VEX width-changer,
+      # e.g. vcvtps2pd's vreg[8+$r] source).
+      file = 'VEC' if ('$y' in expr or '$l' in expr) else 'VECX'
+    elif name == 'eregh':
+      file = 'VECH'                                 # one size class down (vcvt widen/narrow)
+    elif name == 'eregx':
+      file = 'VECX'                                 # always xmm (vpmovzx/sx, vextract)
     elif name == 'greg':
       c = self._vex_eval(re.sub(r'\$\w+', '0', expr), {}) or 0
       file = 'GPR64' if c >= 32 else 'GPR16' if c >= 16 else 'GPR32'
@@ -1008,7 +1013,8 @@ class Interp:
   VEX_FORMS = ['VEX_NONE', 'VEX_RVM', 'VEX_RVMI', 'VEX_RVMR', 'VEX_RM', 'VEX_RMI',
                'VEX_MR', 'VEX_MRI', 'VEX_VM', 'VEX_R', 'VEX_M', 'VEX_RVMV',
                'VEX_VMI', 'VEX_VMG']  # VMI: vvvv,r/m,imm8 ; VMG: same, mnem by /digit (shifts)
-  VEXFILE = {'VEC': 0, 'GPR32': 1, 'GPR64': 2, 'KREG': 3, 'VECX': 0, 'MEM': 0, 'GPR16': 1, 'NONE': 0}
+  VEXFILE = {'VEC': 0, 'GPR32': 1, 'GPR64': 2, 'KREG': 3, 'VECH': 4, 'VECX': 5,
+             'MEM': 0, 'GPR16': 1, 'NONE': 0}
   _VEX_PAT = {
     'REG,VVVV,RM': 'VEX_RVM', 'REG,VVVV,RM,IMM8': 'VEX_RVMI',
     'REG,VVVV,RM,IS4': 'VEX_RVMR', 'REG,RM': 'VEX_RM', 'REG,RM,IMM8': 'VEX_RMI',

@@ -331,13 +331,17 @@ static inline size_t append_imm(uint64_t* cap, const byte* s, size_t len, size_t
 static inline int vex_vec_type(int L) { return (L >= 2) ? T_ZMM : L ? T_YMM : T_XMM; }
 
 #if ARCH_MODE == 64
-// One VEX operand from a VEX file code (0=vec by L, 1=gpr32, 2=gpr64, 3=kreg).
-static inline x86op_t vex_mkop(x86insn_t* in, int fc, int idx, int vt) {
+// One VEX operand from a VEX file code: 0=vec(by vt), 1=gpr32, 2=gpr64, 3=kreg,
+// 4=vec one size class down (eregh: zmm->ymm else xmm), 5=xmm (eregx). LL is the
+// EVEX L'L (0/1/2) used to size the narrowed forms.
+static inline x86op_t vex_mkop(x86insn_t* in, int fc, int idx, int vt, int LL) {
   x86op_t o; o.index = 0; o.type = T_NONE;
   switch (fc) {
     case 1: o.type = T_GPR;  o.index = idx; break;              // 32-bit GPR
     case 2: o.type = T_GPR;  o.index = idx; in->opsize = 2; break;  // 64-bit GPR (W=1)
     case 3: o.type = T_KREG; o.index = idx & 7; break;          // mask register
+    case 4: o.type = (LL >= 2) ? T_YMM : T_XMM; o.index = idx; break;  // half width
+    case 5: o.type = T_XMM;  o.index = idx; break;              // quarter/eighth -> xmm
     default: o.type = vt;    o.index = idx; break;              // vector (xmm/ymm/zmm by L)
   }
   return o;
@@ -401,9 +405,9 @@ static inline void vex_finalize(x86dec_t* d, const byte* s, size_t op_at) {
     capture_addr_witness(in, s, opc_at, 0);
   }
 
-  x86op_t regop  = vex_mkop(in, rf, mreg + 8 * R + 16 * Rp, vt);
-  x86op_t vvvvop = vex_mkop(in, rf, vvvv, vt);
-  x86op_t rmreg  = vex_mkop(in, mf, mrm + 8 * B + 16 * X, vt);
+  x86op_t regop  = vex_mkop(in, rf, mreg + 8 * R + 16 * Rp, vt, LL);
+  x86op_t vvvvop = vex_mkop(in, rf, vvvv, vt, LL);
+  x86op_t rmreg  = vex_mkop(in, mf, mrm + 8 * B + 16 * X, vt, LL);
   x86op_t memop; memop.type = T_MEM; memop.index = 0;
   x86op_t rmop   = is_reg ? rmreg : memop;
   x86op_t immop; immop.type = T_IMM; immop.index = 0;
