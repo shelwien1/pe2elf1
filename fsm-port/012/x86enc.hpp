@@ -328,14 +328,16 @@ static inline size_t encode_insn(const x86insn_t* in, uint8_t* out) {
   size_t p = 0;
   for (int i = 0; i < in->n_pfx; ++i) out[p++] = in->pfx[i];   // replay prefix run
   if (in->vex) return p + vex_encode(in, out + p);             // VEX path
-#if ARCH_MODE == 64
   if (in->moffs) {                            // mov acc<->[moffs]: opcode + absolute addr
     out[p++] = in->vex_op;
-    int aw = in->addr ? 4 : 8;                // address size: 8 (64-bit) or 4 (67)
+#if ARCH_MODE == 64
+    int aw = in->addr ? 4 : 8;                // 64-bit address (8), or 32 under a 67
+#else
+    int aw = in->addr ? 2 : 4;                // 32-bit address (4), or 16 under a 67
+#endif
     for (int i = 0; i < aw; ++i) out[p++] = (uint8_t)((uint64_t)in->imm >> (8 * i));
     return p;
   }
-#endif
 
   int reg_oi, rm_oi, imm_oi;
   const struct EncCand* c = enc_select(in, &reg_oi, &rm_oi, &imm_oi);

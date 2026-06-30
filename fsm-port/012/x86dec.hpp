@@ -442,29 +442,34 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     d->insn.has_pfx = 1;
     ip += 2;
   }
-  // mov accumulator <-> [moffs] (A0-A3): no ModR/M -- the operand is an absolute
-  // address that follows the opcode directly, sized by the address size (8 bytes
-  // in 64-bit, 4 under a 67). Capture it into the 64-bit imm and round-trip from
-  // there (the opcode byte is kept in vex_op, the width in addr). No compiler
-  // emits these, but completeness and the bijection require them.
+#endif
+  // mov accumulator <-> [moffs] (A0-A3), both modes: no ModR/M -- the operand is an
+  // absolute address that follows the opcode directly, sized by the ADDRESS size
+  // (64-bit: 8 bytes, or 4 under a 67; 32-bit: 4 bytes, or 2 under a 67). It is held
+  // in the 64-bit imm for re-encode and mirrored into disp for the renderer; the
+  // opcode byte rides in vex_op. No compiler emits these, but completeness and the
+  // bijection require them, address-size-correct in both modes.
   if (ip < n && s[ip] >= 0xA0 && s[ip] <= 0xA3) {
     x86insn_t* in = &d->insn;
-    int aw = d->cap[VAR_ADRSIZ] ? 4 : 8;                 // moffs width = address size
+#if ARCH_MODE == 64
+    int aw = d->cap[VAR_ADRSIZ] ? 4 : 8;
+#else
+    int aw = d->cap[VAR_ADRSIZ] ? 2 : 4;
+#endif
     if (ip + 1 + (size_t)aw > n) { in->mnem = 0xFFFF; return ip; }   // truncated address
     uint64_t a = 0;
     for (int j = aw - 1; j >= 0; --j) a = (a << 8) | s[ip + 1 + j];
-    in->moffs = 1; in->vex_op = s[ip]; in->imm = (int64_t)a;
+    in->moffs = 1; in->vex_op = s[ip]; in->imm = (int64_t)a; in->disp = (int32_t)a;
     in->mnem = MNEM_MOV;
     in->opsize = (uint16_t)d->cap[VAR_OPSIZ];
     in->addr   = (uint16_t)d->cap[VAR_ADRSIZ];
     int store = (s[ip] >= 0xA2);                          // A2/A3: [moffs] <- accumulator
     int rs = store ? 1 : 0, ms = store ? 0 : 1;
     in->op[rs].type = T_GPR;  in->op[rs].index = 0;       // al / eAX / rAX
-    in->op[ms].type = T_MEM;  in->op[ms].index = 0;       // [abs] -> address in imm
-    in->mem_base = GREG_NONE; in->mem_index = GREG_NONE; in->n_ops = 2;
+    in->op[ms].type = T_MEM;  in->op[ms].index = 0;       // [abs]
+    in->mem_base = GREG_NONE; in->mem_index = GREG_NONE; in->mem_seg = 0; in->n_ops = 2;
     return ip + 1 + aw;
   }
-#endif
   size_t op_at = ip;
   int tb = 0;                                       // escape: 0 none, 1 0F, 2 0F 38, 3 0F 3A
 #if ARCH_MODE == 64

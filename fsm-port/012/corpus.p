@@ -450,10 +450,9 @@ submatch insn {
   0x8c @addr      => "mov " $addr "," sreg[$g] ;
   0x8e 11 ggg rrr => "mov " sreg[$g] "," greg[$opsiz*8+$r] ;
   0x8e @addr      => "mov " sreg[$g] "," $addr ;
-  0xa0 @imm32 => "mov al," seg[$segidx] "[@" hex($imm32) "]" ;
-  0xa1 @imm32 => "mov " greg[$opsiz*8+0] "," seg[$segidx] "[@" hex($imm32) "]" ;
-  0xa2 @imm32 => "mov " seg[$segidx] "[@" hex($imm32) "],al" ;
-  0xa3 @imm32 => "mov " seg[$segidx] "[@" hex($imm32) "]," greg[$opsiz*8+0] ;
+  # A0-A3 (mov accumulator <-> [moffs]) are handled C++-side in both modes (the
+  # absolute address is address-sized, which the FSM's fixed-width imm cannot
+  # express); see decode_insn / encode_insn.
   10110 bbb @imm8 => "mov " rgb[$b] "," hex($imm8) ;
   10111 bbb @immz => "mov " greg[$opsiz*8+$b] "," hex($immz) ;
   0xc6 11 000 rrr @imm8 => "mov " rgb[$r] "," hex($imm8) ;
