@@ -279,9 +279,12 @@ class Interp:
     self._vexgrp = []                 # vexgrp[gid][/digit] -> mnemonic (shift groups)
     self._vex_tab = self.build_vex(['vex', 'vex2'])
     self._evex_tab = self.build_vex(['evex'])
+    self._xop_tab = self.build_vex(['xop'])    # AMD XOP (8F); C++-intercepted, FSM-decoded
     # 64-bit: route the VEX/EVEX prefixes through the FSM (C4/C5/62 are not legacy
-    # here). The capture-based vexp*/evexp* tables decode them. XOP (8F) stays on
-    # the C++ structural path (the 8F/POP ambiguity + AMD-only scope).
+    # here). The capture-based vexp*/evexp* tables decode them. XOP (8F) is also
+    # FSM-decoded (xopp1/xopp2/xopop) but the C++ keeps intercepting it -- the FSM
+    # can't do the POP(/0)/XOP(map>=8) split on the 8F group byte, so x86dec.hpp
+    # runs FSM_XOPP1 only after confirming map>=8.
     if self.mode == 64:
       if self._vex_tab:
         self._op1[0xC4] = ([], 'FSM_VEXP1')
@@ -1019,7 +1022,9 @@ class Interp:
   # files are carried separately (CAP_RFILE = dst/reg file, CAP_MFILE = r/m file).
   VEX_FORMS = ['VEX_NONE', 'VEX_RVM', 'VEX_RVMI', 'VEX_RVMR', 'VEX_RM', 'VEX_RMI',
                'VEX_MR', 'VEX_MRI', 'VEX_VM', 'VEX_R', 'VEX_M', 'VEX_RVMV',
-               'VEX_VMI', 'VEX_VMG']  # VMI: vvvv,r/m,imm8 ; VMG: same, mnem by /digit (shifts)
+               'VEX_VMI', 'VEX_VMG',  # VMI: vvvv,r/m,imm8 ; VMG: same, mnem by /digit
+               'VEX_RMV', 'VEX_RVRM']  # RMV: reg,r/m,vvvv (XOP vprot/vpsh W0);
+                                       # RVRM: reg,vvvv,is4,r/m (XOP vpcmov/vpperm W1) (shifts)
   VEXFILE = {'VEC': 0, 'GPR32': 1, 'GPR64': 2, 'KREG': 3, 'VECH': 4, 'VECX': 5,
              'MEM': 0, 'GPR16': 1, 'NONE': 0}
   _VEX_PAT = {
@@ -1027,6 +1032,7 @@ class Interp:
     'REG,VVVV,RM,IS4': 'VEX_RVMR', 'REG,RM': 'VEX_RM', 'REG,RM,IMM8': 'VEX_RMI',
     'RM,REG': 'VEX_MR', 'RM,REG,IMM8': 'VEX_MRI', 'VVVV,RM': 'VEX_VM',
     'REG': 'VEX_R', 'RM': 'VEX_M', '': 'VEX_NONE', 'REG,VVVV,RM,VVVV': 'VEX_RVMV',
+    'REG,RM,VVVV': 'VEX_RMV', 'REG,VVVV,IS4,RM': 'VEX_RVRM',
   }
 
   def _vex_form(self, ops):
@@ -1200,6 +1206,27 @@ class Interp:
     e = self._vex_tab.get((mapidx, pp, W, op))
     if e is None:
       return [], 'FSM_HALT'                                  # undefined opcode (rejected)
+    return self._vexop_acts(e), 'FSM_HALT'
+
+  # ----- XOP FSM states (AMD, 8F prefix; same 2-payload-byte layout as VEX C4) --
+  # The C++ 8F interception (which disambiguates XOP from legacy POP via map>=8)
+  # runs these: xopp1 (byte1: R'X'B', route by map 8/9/10) -> xopp2 (byte2: vvvv/L,
+  # route by pp,W) -> xopop (opcode -> MNEM + form), then ModR/M + vex_finalize.
+  def xopp1_state(self, b):
+    mi = {8: 0, 9: 1, 10: 2}.get(b & 0x1f)
+    if mi is None:
+      return [], 'FSM_HALT'
+    return [('FIELD', self.tailcap('TBL3'), 7, 5)], 'FSM_XOPP2 + %d*256' % mi
+
+  def xopp2_state(self, mi, b):
+    pp, W = b & 3, (b >> 7) & 1
+    acts = [('FIELD', self.cap('REL'), 6, 3), ('FIELD', self.tailcap('CC'), 2, 2)]
+    return acts, 'FSM_XOPOP + %d*256' % ((mi * 4 + pp) * 2 + W)
+
+  def xopop_state(self, mi, pp, W, op):
+    e = self._xop_tab.get((mi, pp, W, op))
+    if e is None:
+      return [], 'FSM_HALT'
     return self._vexop_acts(e), 'FSM_HALT'
 
   # ----- EVEX FSM states (AVX-512; 3 payload bytes, capture-based) -------------
@@ -1496,6 +1523,10 @@ def emit(c, interp, out_path):
   w("    struct DState evexp1[3][256];      // [map-1] P1: FIELD vvvv, route by pp,W\n")
   w("    struct DState evexp2[3][4][2][256];// [map-1][pp][W] P2: FIELD whole byte (z.L'L.b.V''.aaa)\n")
   w("    struct DState evexop[3][4][2][256];// [map-1][pp][W] opcode -> MNEM + VEX form + files\n")
+  # XOP prefix stages (8F; maps 8/9/10) -- same shape as VEX C4
+  w("    struct DState xopp1[256];          // 8F byte1: FIELD R'X'B', route by map 8/9/10\n")
+  w("    struct DState xopp2[3][256];       // [map-8] byte2: FIELD vvvv/L, route by pp,W\n")
+  w("    struct DState xopop[3][4][2][256]; // [map-8][pp][W] opcode -> MNEM + VEX form + files\n")
   w("};\n")
   w("// base indices derived from the layout (single source of truth):\n")
   w("#define FSM_INDEX(member) ((uint16_t)(offsetof(struct Fsm, member) / sizeof(struct DState)))\n")
@@ -1515,6 +1546,9 @@ def emit(c, interp, out_path):
   w("#define FSM_EVEXP1  FSM_INDEX(evexp1)       // + (map-1)*256\n")
   w("#define FSM_EVEXP2  FSM_INDEX(evexp2)       // + ((map-1)*4 + pp)*2 + W) *256\n")
   w("#define FSM_EVEXOP  FSM_INDEX(evexop)       // + ((map-1)*4 + pp)*2 + W) *256\n")
+  w("#define FSM_XOPP1   FSM_INDEX(xopp1)\n")
+  w("#define FSM_XOPP2   FSM_INDEX(xopp2)        // + (map-8)*256\n")
+  w("#define FSM_XOPOP   FSM_INDEX(xopop)        // + ((map-8)*4 + pp)*2 + W) *256\n")
   w("#define FSM_NGROUP  %d\n" % interp.group_count())
   w("#define FSM_COUNT   (sizeof(struct Fsm) / sizeof(struct DState))\n")
   w("#define FSM_HALT    ((uint16_t)0xFFFF)     // `next` sentinel: stop\n")
@@ -1626,12 +1660,35 @@ def emit(c, interp, out_path):
         w("     }%s\n" % ("," if W == 0 else ""))
       w("    }%s\n" % ("," if pp < 3 else ""))
     w("   }%s\n" % ("," if mp < 2 else ""))
+  w("  },\n")
+  # ---- XOP stages ----
+  w("  { // xopp1[256]  (8F byte1)\n")
+  emit_states(interp.xopp1_state)
+  w("  },\n")
+  w("  { // xopp2[3][256]  (byte2, by map 8/9/10)\n")
+  for mp in range(3):
+    w("   { // map %d\n" % (mp + 8))
+    emit_states(lambda i, m=mp: interp.xopp2_state(m, i))
+    w("   }%s\n" % ("," if mp < 2 else ""))
+  w("  },\n")
+  w("  { // xopop[3][4][2][256]  ([map-8][pp][W] -> opcode)\n")
+  for mp in range(3):
+    w("   { // map %d\n" % (mp + 8))
+    for pp in range(4):
+      w("    { // pp %d\n" % pp)
+      for W in range(2):
+        w("     { // W %d\n" % W)
+        emit_states(lambda i, m=mp, p=pp, ww=W: interp.xopop_state(m, p, ww, i))
+        w("     }%s\n" % ("," if W == 0 else ""))
+      w("    }%s\n" % ("," if pp < 3 else ""))
+    w("   }%s\n" % ("," if mp < 2 else ""))
   w("  }\n")
   w("};\n")
   w("static_assert(sizeof(struct Fsm) == (256 + 256 + 256 + 256 + 256 + 2*256 + 3*256 + %d*2*256\n"
     % max(1, ng))
   w("              + 256 + 3*256 + 256 + 3*4*2*256\n")
-  w("              + 256 + 3*256 + 3*4*2*256 + 3*4*2*256) * sizeof(struct DState),\n")
+  w("              + 256 + 3*256 + 3*4*2*256 + 3*4*2*256\n")
+  w("              + 256 + 3*256 + 3*4*2*256) * sizeof(struct DState),\n")
   w('              "struct Fsm has padding; flat indexing would be wrong");\n')
   # two distinct size limits, the narrower one (group id) binds first:
   #   * group id rides a CONST action -> arg0(5) | arg1(3) = 8 bits  (<= 255 groups)
@@ -1682,7 +1739,8 @@ def emit(c, interp, out_path):
   # 65536 states. Each opcode/group sub-table is 256 states; track the trend.
   ndstate = (256 + 256 + 256 + 256 + 256 + 2 * 256 + 3 * 256 + max(1, ng) * 2 * 256
              + 256 + 3 * 256 + 256 + 3 * 4 * 2 * 256
-             + 256 + 3 * 256 + 3 * 4 * 2 * 256 + 3 * 4 * 2 * 256)
+             + 256 + 3 * 256 + 3 * 4 * 2 * 256 + 3 * 4 * 2 * 256
+             + 256 + 3 * 256 + 3 * 4 * 2 * 256)
   import sys as _sys
   _sys.stderr.write(
       "FSM: %d DStates (%.1f%% of uint16_t next), %d groups, sizeof(Fsm)=%d KiB\n"

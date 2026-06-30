@@ -366,7 +366,7 @@ static inline void vex_finalize(x86dec_t* d, const byte* s, size_t op_at) {
   const uint64_t* c = d->cap;
   int form = (int)c[CAP_FORM];
   byte p0 = s[op_at];
-  in->vex = (p0 == 0xC5) ? 1 : (p0 == 0xC4) ? 2 : 3;     // C5 / C4 / 62 (EVEX)
+  in->vex = (p0 == 0xC5) ? 1 : (p0 == 0xC4) ? 2 : (p0 == 0x8F) ? 4 : 3;  // C5/C4/XOP/EVEX
   in->rip = 0; in->rex = 0; in->zero = 0; in->bcst = 0; in->rc = 0;
   // snapshot the raw prefix bytes for the replay encoder; de-invert the
   // extension bits + vvvv + length, all from the captures the FSM wrote.
@@ -381,12 +381,13 @@ static inline void vex_finalize(x86dec_t* d, const byte* s, size_t op_at) {
     z = (p2 >> 7) & 1; LL = (p2 >> 5) & 3; bbit = (p2 >> 4) & 1;
     Vp = 1 - ((p2 >> 3) & 1); aaa = p2 & 7;
     vvvv = ((~(int)c[CAP_VVVV]) & 0xf) | (Vp << 4);      // 5-bit vvvv (V' high bit)
-  } else {                                               // VEX C4/C5
+  } else {                                               // VEX C4/C5 or XOP (8F)
     if (in->vex == 1) { in->vex1 = s[q]; in->vex2 = in->vex3 = 0; q += 1; }
     else              { in->vex1 = s[q]; in->vex2 = s[q + 1]; in->vex3 = 0; q += 2; }
     int rxb = (int)c[CAP_RXB];
-    if (in->vex == 2) { R = 1 - ((rxb >> 2) & 1); X = 1 - ((rxb >> 1) & 1); B = 1 - (rxb & 1); }
-    else              { R = 1 - (rxb & 1); X = 0; B = 0; }
+    if (in->vex == 2 || in->vex == 4) {                  // C4 / XOP: R'X'B' (3 bits)
+      R = 1 - ((rxb >> 2) & 1); X = 1 - ((rxb >> 1) & 1); B = 1 - (rxb & 1);
+    } else            { R = 1 - (rxb & 1); X = 0; B = 0; }  // C5: R' only
     LL = (int)c[CAP_VL]; vvvv = (~(int)c[CAP_VVVV]) & 0xf;
   }
   size_t opc_at = q; in->vex_op = s[q++];
@@ -434,6 +435,8 @@ static inline void vex_finalize(x86dec_t* d, const byte* s, size_t op_at) {
     case FORM_VEX_R:    in->op[nn++]=regop; break;
     case FORM_VEX_M:    in->op[nn++]=rmop; break;
     case FORM_VEX_RVMV: in->op[nn++]=regop; in->op[nn++]=vvvvop; in->op[nn++]=rmop; in->op[nn++]=vvvvop; break;
+    case FORM_VEX_RMV:  in->op[nn++]=regop; in->op[nn++]=rmop; in->op[nn++]=vvvvop; break;   // XOP vprot/vpsh W0
+    case FORM_VEX_RVRM: in->op[nn++]=regop; in->op[nn++]=vvvvop; in->op[nn++]=is4op; in->op[nn++]=rmop; break; // XOP vpcmov/vpperm W1
     case FORM_VEX_VMI:  in->op[nn++]=vvvvop; in->op[nn++]=rmop; in->op[nn++]=immop; break;
     case FORM_VEX_VMG:  // shift-by-imm group: dest=vvvv, src=r/m, imm8; mnem by /digit
       in->op[nn++]=vvvvop; in->op[nn++]=rmop; in->op[nn++]=immop;
@@ -527,8 +530,30 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     return vex_decode(d, s, n, ip);
 #endif
   // XOP (8F): map field (byte1[4:0]) >= 8 distinguishes it from legacy POP (/0).
-  if (ip < n && s[ip] == 0x8F && ip + 1 < n && (s[ip + 1] & 0x1f) >= 8)
-    return vex_decode(d, s, n, ip);
+  if (ip < n && s[ip] == 0x8F && ip + 1 < n && (s[ip + 1] & 0x1f) >= 8) {
+#if ARCH_MODE == 64
+    // The C++ does the POP/XOP split (the FSM can't, 8F being a legacy group), then
+    // the capture-based xop tables decode it -- same shape as the VEX FSM path.
+    size_t xop_at = ip;
+    ip = run_fsm(FSM_XOPP1, s, n, ip + 1, d->cap);   // consume byte1, byte2, opcode
+    int form = (int)d->cap[CAP_FORM];
+    if (form < FORM_VEX_NONE) return vex_decode(d, s, n, xop_at);  // uncovered -> structural
+    if (form != FORM_VEX_NONE) {
+      uint16_t mstart = (uint16_t)(FSM_MODRM + d->cap[VAR_ADRSIZ] * 256);
+      size_t before = ip;
+      ip = run_fsm(mstart, s, n, ip, d->cap);
+      if (ip == before) { d->insn.mnem = 0xFFFF; return ip; }
+      fill_insn(d);
+    }
+    d->insn.addr = (uint16_t)d->cap[VAR_ADRSIZ];
+    ip = append_imm(d->cap, s, n, ip, (int)d->cap[VAR_OPSIZ]);
+    d->insn.mnem = (uint16_t)d->cap[CAP_MNEM];
+    vex_finalize(d, s, xop_at);
+    return ip;
+#else
+    return vex_decode(d, s, n, ip);                  // 32-bit: structural placeholder
+#endif
+  }
   // mov to/from cr/dr (0F 20-23): the ModR/M mod field is ignored by hardware
   // (always register-direct, no SIB/disp), so capture the raw ModR/M byte and
   // replay it -- this round-trips the non-canonical mod != 11 encodings too.
