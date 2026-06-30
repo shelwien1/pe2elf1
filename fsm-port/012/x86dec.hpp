@@ -456,7 +456,8 @@ static inline void vex_finalize(x86dec_t* d, const byte* s, size_t op_at) {
 // One APX GPR operand: file 6 (rgb) -> 8-bit; otherwise an opsize-sized GPR.
 static inline x86op_t apx_gpr(int file, int idx) {
   x86op_t o; o.index = (uint16_t)(idx & 31);
-  o.type = (file == 6) ? T_GPR8 : T_GPR;
+  // file: 6=rgb (8-bit GPR), 0=ssereg (xmm, for the SHA/AES map-4 ops), else opsize GPR
+  o.type = (file == 6) ? T_GPR8 : (file == 0) ? T_XMM : T_GPR;
   return o;
 }
 
@@ -499,7 +500,10 @@ static inline void apx_finalize(x86dec_t* d, const byte* s, size_t op_at) {
     capture_addr_witness(in, s, opc_at, 0);
   }
   int reg = mreg + 8 * R3 + 16 * R4;                    // ModR/M.reg -> r0..31
-  int rmr = mrm + 8 * B3 + 16 * B4;                     // reg-direct r/m: B3(8s)+B4(16s)
+  // reg-direct r/m: 8s = B3 always; the 16s bit differs by file -- GPR uses B4 (P0.3);
+  // vector (SHA/AES xmm) accepts either X3 (AVX-512 reg-direct convention) or B4, matching
+  // binutils' loose APX decode (objdump 2.42 extends an xmm r/m on either bit).
+  int rmr = mrm + 8 * B3 + 16 * ((mf == 0) ? (X3 | B4) : B4);
   x86op_t regop = apx_gpr(rf, reg);
   x86op_t rmreg = apx_gpr(mf, rmr);
   x86op_t memop; memop.type = T_MEM; memop.index = 0;
@@ -511,9 +515,11 @@ static inline void apx_finalize(x86dec_t* d, const byte* s, size_t op_at) {
   // push2/pop2 (ff /6, 8f /0): a 64-bit register pair (vvvv, r/m). ND is a required
   // encoding marker here, not a new-data dest, so vvvv is a direct operand (not
   // prepended) and the pair is always 64-bit regardless of W (W picks the {,p} variant).
-  bool is_v2 = (in->vex_op == 0xff && mreg == 6) || (in->vex_op == 0x8f && mreg == 0);
+  bool is_v2 = is_reg && ((in->vex_op == 0xff && mreg == 6) || (in->vex_op == 0x8f && mreg == 0));
   int nn = 0;
-  if (ND && !is_v2) in->op[nn++] = nddop;               // NDD prepends the destination
+  // NDD prepends the vvvv dest -- but only for NDD-capable ops (CAP_MNSEL flags the
+  // non-NDD map-4 tail: movbe/crc32/atomics/MSR/CET/VMX/SHA/AES) and not the register pair.
+  if (ND && !is_v2 && !c[CAP_MNSEL]) in->op[nn++] = nddop;
   switch (form) {
     case FORM_APX_MR:  in->op[nn++] = rmop;  in->op[nn++] = regop;
                        // shld/shrd by cl (a5/ad): r/m, reg, cl
@@ -521,7 +527,11 @@ static inline void apx_finalize(x86dec_t* d, const byte* s, size_t op_at) {
                          x86op_t o; o.type = T_GPR8; o.index = 1; in->op[nn++] = o;   // cl
                        }
                        break;
-    case FORM_APX_RM:  in->op[nn++] = regop; in->op[nn++] = rmop;  break;
+    case FORM_APX_RM:  in->op[nn++] = regop; in->op[nn++] = rmop;
+                       if (in->vex_op == 0xdb && rf == 0) {  // sha256rnds2 (xmm): implicit <xmm0>
+                         x86op_t o; o.type = T_XMM; o.index = 0; in->op[nn++] = o;
+                       }
+                       break;
     case FORM_APX_RMI: in->op[nn++] = regop; in->op[nn++] = rmop; in->op[nn++] = immop; break;
     case FORM_APX_R:   in->op[nn++] = regop; break;
     case FORM_APX_MI:  in->op[nn++] = rmop; in->op[nn++] = immop;
@@ -544,6 +554,13 @@ static inline void apx_finalize(x86dec_t* d, const byte* s, size_t op_at) {
                        in->mnem = (uint16_t)vexgrp[(int)c[CAP_GRP]][mreg]; break;
     case FORM_APX_MRI: in->op[nn++] = rmop; in->op[nn++] = regop; in->op[nn++] = immop; break;
     default: break;
+  }
+  // f8 pp2/pp3 swap the mnemonic by mod: reg-direct is uwrmsr/urdmsr, a memory r/m is
+  // enqcmds/enqcmd (reg, m -- RM order regardless of the reg-direct form).
+  if (in->vex_op == 0xf8 && !is_reg &&
+      (in->mnem == MNEM_UWRMSR || in->mnem == MNEM_URDMSR)) {
+    in->mnem = (in->mnem == MNEM_UWRMSR) ? MNEM_ENQCMDS : MNEM_ENQCMD;
+    in->op[0] = regop; in->op[1] = memop; nn = 2;
   }
   in->n_ops = (uint8_t)nn;
 }

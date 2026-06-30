@@ -366,24 +366,82 @@ submatch insn {
   # ===== group 2 shifts (C0/C1 imm8 ; D0-D3) ====================================
   0xc0 11 000 rrr @imm8 => "rol " rgb[$r] "," hex($imm8) ;
   0xc0 @addr(0)   @imm8 => "rol" sfx[1] " " $addr "," hex($imm8) ;
+  0xc0 11 001 rrr @imm8 => "ror " rgb[$r] "," hex($imm8) ;
+  0xc0 @addr(1)   @imm8 => "ror" sfx[1] " " $addr "," hex($imm8) ;
+  0xc0 11 010 rrr @imm8 => "rcl " rgb[$r] "," hex($imm8) ;
+  0xc0 @addr(2)   @imm8 => "rcl" sfx[1] " " $addr "," hex($imm8) ;
+  0xc0 11 011 rrr @imm8 => "rcr " rgb[$r] "," hex($imm8) ;
+  0xc0 @addr(3)   @imm8 => "rcr" sfx[1] " " $addr "," hex($imm8) ;
   0xc0 11 100 rrr @imm8 => "shl " rgb[$r] "," hex($imm8) ;
   0xc0 @addr(4)   @imm8 => "shl" sfx[1] " " $addr "," hex($imm8) ;
   0xc0 11 101 rrr @imm8 => "shr " rgb[$r] "," hex($imm8) ;
   0xc0 @addr(5)   @imm8 => "shr" sfx[1] " " $addr "," hex($imm8) ;
   0xc0 11 111 rrr @imm8 => "sar " rgb[$r] "," hex($imm8) ;
   0xc0 @addr(7)   @imm8 => "sar" sfx[1] " " $addr "," hex($imm8) ;
+  0xc1 11 000 rrr @imm8 => "rol " greg[$r] "," hex($imm8) ;
+  0xc1 @addr(0)   @imm8 => "rol" sfx[4] " " $addr "," hex($imm8) ;
+  0xc1 11 001 rrr @imm8 => "ror " greg[$r] "," hex($imm8) ;
+  0xc1 @addr(1)   @imm8 => "ror" sfx[4] " " $addr "," hex($imm8) ;
+  0xc1 11 010 rrr @imm8 => "rcl " greg[$r] "," hex($imm8) ;
+  0xc1 @addr(2)   @imm8 => "rcl" sfx[4] " " $addr "," hex($imm8) ;
+  0xc1 11 011 rrr @imm8 => "rcr " greg[$r] "," hex($imm8) ;
+  0xc1 @addr(3)   @imm8 => "rcr" sfx[4] " " $addr "," hex($imm8) ;
   0xc1 11 100 rrr @imm8 => "shl " greg[$r] "," hex($imm8) ;
   0xc1 @addr(4)   @imm8 => "shl" sfx[4] " " $addr "," hex($imm8) ;
   0xc1 11 101 rrr @imm8 => "shr " greg[$r] "," hex($imm8) ;
   0xc1 @addr(5)   @imm8 => "shr" sfx[4] " " $addr "," hex($imm8) ;
   0xc1 11 111 rrr @imm8 => "sar " greg[$r] "," hex($imm8) ;
   0xc1 @addr(7)   @imm8 => "sar" sfx[4] " " $addr "," hex($imm8) ;
+  0xd0 11 000 rrr => "rol " rgb[$r] ",1" ;
+  0xd0 @addr(0)   => "rol" sfx[1] " " $addr ",1" ;
+  0xd0 11 001 rrr => "ror " rgb[$r] ",1" ;
+  0xd0 @addr(1)   => "ror" sfx[1] " " $addr ",1" ;
+  0xd0 11 010 rrr => "rcl " rgb[$r] ",1" ;
+  0xd0 @addr(2)   => "rcl" sfx[1] " " $addr ",1" ;
+  0xd0 11 011 rrr => "rcr " rgb[$r] ",1" ;
+  0xd0 @addr(3)   => "rcr" sfx[1] " " $addr ",1" ;
+  0xd0 11 100 rrr => "shl " rgb[$r] ",1" ;
+  0xd0 @addr(4)   => "shl" sfx[1] " " $addr ",1" ;
+  0xd0 11 101 rrr => "shr " rgb[$r] ",1" ;
+  0xd0 @addr(5)   => "shr" sfx[1] " " $addr ",1" ;
+  0xd0 11 111 rrr => "sar " rgb[$r] ",1" ;
+  0xd0 @addr(7)   => "sar" sfx[1] " " $addr ",1" ;
+  0xd1 11 000 rrr => "rol " greg[$r] ",1" ;
+  0xd1 @addr(0)   => "rol" sfx[4] " " $addr ",1" ;
+  0xd1 11 001 rrr => "ror " greg[$r] ",1" ;
+  0xd1 @addr(1)   => "ror" sfx[4] " " $addr ",1" ;
+  0xd1 11 010 rrr => "rcl " greg[$r] ",1" ;
+  0xd1 @addr(2)   => "rcl" sfx[4] " " $addr ",1" ;
+  0xd1 11 011 rrr => "rcr " greg[$r] ",1" ;
+  0xd1 @addr(3)   => "rcr" sfx[4] " " $addr ",1" ;
   0xd1 11 100 rrr => "shl " greg[$r] ",1" ;
   0xd1 @addr(4)   => "shl" sfx[4] " " $addr ",1" ;
   0xd1 11 101 rrr => "shr " greg[$r] ",1" ;
   0xd1 @addr(5)   => "shr" sfx[4] " " $addr ",1" ;
   0xd1 11 111 rrr => "sar " greg[$r] ",1" ;
   0xd1 @addr(7)   => "sar" sfx[4] " " $addr ",1" ;
+  0xd2 11 000 rrr => "rol " rgb[$r] ",cl" ;
+  0xd2 @addr(0)   => "rol" sfx[1] " " $addr ",cl" ;
+  0xd2 11 001 rrr => "ror " rgb[$r] ",cl" ;
+  0xd2 @addr(1)   => "ror" sfx[1] " " $addr ",cl" ;
+  0xd2 11 010 rrr => "rcl " rgb[$r] ",cl" ;
+  0xd2 @addr(2)   => "rcl" sfx[1] " " $addr ",cl" ;
+  0xd2 11 011 rrr => "rcr " rgb[$r] ",cl" ;
+  0xd2 @addr(3)   => "rcr" sfx[1] " " $addr ",cl" ;
+  0xd2 11 100 rrr => "shl " rgb[$r] ",cl" ;
+  0xd2 @addr(4)   => "shl" sfx[1] " " $addr ",cl" ;
+  0xd2 11 101 rrr => "shr " rgb[$r] ",cl" ;
+  0xd2 @addr(5)   => "shr" sfx[1] " " $addr ",cl" ;
+  0xd2 11 111 rrr => "sar " rgb[$r] ",cl" ;
+  0xd2 @addr(7)   => "sar" sfx[1] " " $addr ",cl" ;
+  0xd3 11 000 rrr => "rol " greg[$r] ",cl" ;
+  0xd3 @addr(0)   => "rol" sfx[4] " " $addr ",cl" ;
+  0xd3 11 001 rrr => "ror " greg[$r] ",cl" ;
+  0xd3 @addr(1)   => "ror" sfx[4] " " $addr ",cl" ;
+  0xd3 11 010 rrr => "rcl " greg[$r] ",cl" ;
+  0xd3 @addr(2)   => "rcl" sfx[4] " " $addr ",cl" ;
+  0xd3 11 011 rrr => "rcr " greg[$r] ",cl" ;
+  0xd3 @addr(3)   => "rcr" sfx[4] " " $addr ",cl" ;
   0xd3 11 100 rrr => "shl " greg[$r] ",cl" ;
   0xd3 @addr(4)   => "shl" sfx[4] " " $addr ",cl" ;
   0xd3 11 101 rrr => "shr " greg[$r] ",cl" ;
@@ -402,6 +460,53 @@ submatch insn {
   0xcc => "int3" ;
   0xcd @imm8 => "int " hex($imm8) ;
 
+  # ===== legacy 1-byte completeness: flags, system, far ret, enter =============
+  0x9b => "fwait" ;
+  0x9c => "pushf" ;
+  0x9d => "popf" ;
+  0x9e => "sahf" ;
+  0x9f => "lahf" ;
+  0xd7 => "xlat" ;
+  0xf1 => "int1" ;
+  0xf4 => "hlt" ;
+  0xf5 => "cmc" ;
+  0xf8 => "clc" ;
+  0xf9 => "stc" ;
+  0xfa => "cli" ;
+  0xfb => "sti" ;
+  0xfc => "cld" ;
+  0xfd => "std" ;
+  0xcf => "iret" ;
+  0xcb => "retf" ;
+  0xca @imm16 => "retf " hex($imm16) ;
+  0xc8 @imm16 @imm8 => "enter " hex($imm16) "," hex($imm8) ;
+
+  # ===== loop / jrcxz (rel8) ===================================================
+  0xe0 @rel8 => "loopne " hex($rel8) ;
+  0xe1 @rel8 => "loope " hex($rel8) ;
+  0xe2 @rel8 => "loop " hex($rel8) ;
+  0xe3 @rel8 => "jrcxz " hex($rel8) ;
+
+  # ===== port I/O (in/out, imm8 or dx) + string I/O (ins/outs) =================
+  0xe4 @imm8 => "in al," hex($imm8) ;
+  0xe5 @imm8 => "in " greg[0] "," hex($imm8) ;
+  0xe6 @imm8 => "out " hex($imm8) ",al" ;
+  0xe7 @imm8 => "out " hex($imm8) "," greg[0] ;
+  0xec => "in al,dx" ;
+  0xed => "in " greg[0] ",dx" ;
+  0xee => "out dx,al" ;
+  0xef => "out dx," greg[0] ;
+  0x6c => "insb" ;
+  0x6d => "ins" ;
+  0x6e => "outsb" ;
+  0x6f => "outs" ;
+
+  # ===== mov to/from segment register (8C / 8E) ================================
+  0x8c 11 ggg rrr => "mov " greg[$r] "," sreg[$g] ;
+  0x8c @addr      => "mov " $addr "," sreg[$g] ;
+  0x8e 11 ggg rrr => "mov " sreg[$g] "," greg[$r] ;
+  0x8e @addr      => "mov " sreg[$g] "," $addr ;
+
   # ===== call/jmp rel ; group 5 indirect ; group 3 F6/F7 =======================
   0xe8 @relz => "call " hex($relz) ;
   0xe9 @relz => "jmp " hex($relz) ;
@@ -412,6 +517,14 @@ submatch insn {
   0xf6 @addr(2)   => "not" sfx[1] " " $addr ;
   0xf6 11 011 rrr => "neg " rgb[$r] ;
   0xf6 @addr(3)   => "neg" sfx[1] " " $addr ;
+  0xf6 11 100 rrr => "mul " rgb[$r] ;
+  0xf6 @addr(4)   => "mul" sfx[1] " " $addr ;
+  0xf6 11 101 rrr => "imul " rgb[$r] ;
+  0xf6 @addr(5)   => "imul" sfx[1] " " $addr ;
+  0xf6 11 110 rrr => "div " rgb[$r] ;
+  0xf6 @addr(6)   => "div" sfx[1] " " $addr ;
+  0xf6 11 111 rrr => "idiv " rgb[$r] ;
+  0xf6 @addr(7)   => "idiv" sfx[1] " " $addr ;
   0xf7 11 000 rrr @immz => "test " greg[$r] "," hex($immz) ;
   0xf7 @addr(0)   @immz => "test" sfx[4] " " $addr "," hex($immz) ;
   0xf7 11 010 rrr => "not " greg[$r] ;
@@ -446,12 +559,30 @@ submatch insn {
   # ===== push/pop r64 (default-64; embedded register 50+r / 58+r) ==============
   01010 bbb => "push " greg[$b] ;
   01011 bbb => "pop " greg[$b] ;
+  # 8F /0: pop r/m64 (the non-XOP form; map<8 falls through to the FSM, the
+  # enc-stamp picks 8F vs the 58+r encoding so both round-trip).
+  0x8f 11 000 rrr => "pop " greg[$r] ;
+  0x8f @addr(0)   => "pop" sfx[4] " " $addr ;
 
   # ===== 0F two-byte map ========================================================
   0x0f 0x05 => "syscall" ;
   0x0f 0x0b => "ud2" ;
-  0x0f 0x1f 11 ggg rrr => "nop " greg[$r] ;
+  0x0f 0x1f 11 000 rrr => "nop " greg[$r] ;
+  0x0f 0x1f 11 001 rrr => "nop " greg[$r] ;
+  0x0f 0x1f 11 010 rrr => "nop " greg[$r] ;
+  0x0f 0x1f 11 011 rrr => "nop " greg[$r] ;
+  0x0f 0x1f 11 100 rrr => "nop " greg[$r] ;
+  0x0f 0x1f 11 101 rrr => "nop " greg[$r] ;
+  0x0f 0x1f 11 110 rrr => "nop " greg[$r] ;
+  0x0f 0x1f 11 111 rrr => "nop " greg[$r] ;
   0x0f 0x1f @addr(0)   => "nop" sfx[4] " " $addr ;
+  0x0f 0x1f @addr(1)   => "nop" sfx[4] " " $addr ;
+  0x0f 0x1f @addr(2)   => "nop" sfx[4] " " $addr ;
+  0x0f 0x1f @addr(3)   => "nop" sfx[4] " " $addr ;
+  0x0f 0x1f @addr(4)   => "nop" sfx[4] " " $addr ;
+  0x0f 0x1f @addr(5)   => "nop" sfx[4] " " $addr ;
+  0x0f 0x1f @addr(6)   => "nop" sfx[4] " " $addr ;
+  0x0f 0x1f @addr(7)   => "nop" sfx[4] " " $addr ;
   0x0f 1000 cccc @relz => "j" cond[$c] " " hex($relz) ;
   0x0f 1001 cccc 11 ggg rrr => "set" cond[$c] " " rgb[$r] ;
   0x0f 1001 cccc @addr      => "set" cond[$c] sfx[1] " " $addr ;
@@ -510,6 +641,10 @@ submatch insn {
   # ===== 0F AE fences / clflush / fxsave-xsave ; 0F 18 prefetch/nop ; 0F 1E endbr
   # (the CET endbr64/endbr32 = F3 0F 1E FA/FB; the F3 rides in the prefix run, so
   #  the base 0F 1E modrm rule round-trips them byte-exact). ====================
+  0x0f 0xae 11 000 rrr => "rdfsbase " greg[$r] ;
+  0x0f 0xae 11 001 rrr => "rdgsbase " greg[$r] ;
+  0x0f 0xae 11 010 rrr => "wrfsbase " greg[$r] ;
+  0x0f 0xae 11 011 rrr => "wrgsbase " greg[$r] ;
   0x0f 0xae 11 101 rrr => "lfence" ;
   0x0f 0xae 11 110 rrr => "mfence" ;
   0x0f 0xae 11 111 rrr => "sfence" ;
@@ -529,9 +664,102 @@ submatch insn {
   0x0f 0x18 @addr(5)   => "nop18 " $addr ;
   0x0f 0x18 @addr(6)   => "nop18 " $addr ;
   0x0f 0x18 @addr(7)   => "nop18 " $addr ;
+  0x0f 0x18 11 000 rrr => "nop18 " greg[$r] ;
+  0x0f 0x18 11 001 rrr => "nop18 " greg[$r] ;
+  0x0f 0x18 11 010 rrr => "nop18 " greg[$r] ;
+  0x0f 0x18 11 011 rrr => "nop18 " greg[$r] ;
+  0x0f 0x18 11 100 rrr => "nop18 " greg[$r] ;
+  0x0f 0x18 11 101 rrr => "nop18 " greg[$r] ;
+  0x0f 0x18 11 110 rrr => "nop18 " greg[$r] ;
+  0x0f 0x18 11 111 rrr => "nop18 " greg[$r] ;
+  # 0F 0D group: prefetchw + reserved hint-nops (reg-direct ride the dead digit)
+  0x0f 0x0d @addr(0)   => "prefetch " $addr ;
+  0x0f 0x0d @addr(1)   => "prefetchw " $addr ;
+  0x0f 0x0d @addr(2)   => "prefetchwt1 " $addr ;
+  0x0f 0x0d @addr(3)   => "nop0d " $addr ;
+  0x0f 0x0d @addr(4)   => "nop0d " $addr ;
+  0x0f 0x0d @addr(5)   => "nop0d " $addr ;
+  0x0f 0x0d @addr(6)   => "nop0d " $addr ;
+  0x0f 0x0d @addr(7)   => "nop0d " $addr ;
+  0x0f 0x0d 11 000 rrr => "nop0d " greg[$r] ;
+  0x0f 0x0d 11 001 rrr => "nop0d " greg[$r] ;
+  0x0f 0x0d 11 010 rrr => "nop0d " greg[$r] ;
+  0x0f 0x0d 11 011 rrr => "nop0d " greg[$r] ;
+  0x0f 0x0d 11 100 rrr => "nop0d " greg[$r] ;
+  0x0f 0x0d 11 101 rrr => "nop0d " greg[$r] ;
+  0x0f 0x0d 11 110 rrr => "nop0d " greg[$r] ;
+  0x0f 0x0d 11 111 rrr => "nop0d " greg[$r] ;
+  # 0F 1C cldemote (/0 mem) + reserved-nop; 0F 19/1D reserved multi-byte nop
+  0x0f 0x1c @addr(0)   => "cldemote " $addr ;
+  0x0f 0x1c @addr(1)   => "nop1c " $addr ;
+  0x0f 0x1c @addr(2)   => "nop1c " $addr ;
+  0x0f 0x1c @addr(3)   => "nop1c " $addr ;
+  0x0f 0x1c @addr(4)   => "nop1c " $addr ;
+  0x0f 0x1c @addr(5)   => "nop1c " $addr ;
+  0x0f 0x1c @addr(6)   => "nop1c " $addr ;
+  0x0f 0x1c @addr(7)   => "nop1c " $addr ;
+  0x0f 0x1c 11 000 rrr => "nop1c " greg[$r] ;
+  0x0f 0x1c 11 001 rrr => "nop1c " greg[$r] ;
+  0x0f 0x1c 11 010 rrr => "nop1c " greg[$r] ;
+  0x0f 0x1c 11 011 rrr => "nop1c " greg[$r] ;
+  0x0f 0x1c 11 100 rrr => "nop1c " greg[$r] ;
+  0x0f 0x1c 11 101 rrr => "nop1c " greg[$r] ;
+  0x0f 0x1c 11 110 rrr => "nop1c " greg[$r] ;
+  0x0f 0x1c 11 111 rrr => "nop1c " greg[$r] ;
+  0x0f 0x19 11 ggg rrr => "nop19 " greg[$r] "," greg[$g] ;
+  0x0f 0x19 @addr      => "nop19 " $addr ;
+  0x0f 0x1d 11 ggg rrr => "nop1d " greg[$r] "," greg[$g] ;
+  0x0f 0x1d @addr      => "nop1d " $addr ;
+  # 0F 1A/1B: MPX bnd* (prefix-selected). Punted as reserved-nop placeholders
+  # like the 32-bit corpus; the mandatory 66/F2/F3 rides the prefix run so all
+  # bndldx/bndstx/bndmov/bndmk/bndc* encodings round-trip byte-exact.
+  0x0f 0x1a 11 ggg rrr => "nop1a " greg[$r] "," greg[$g] ;
+  0x0f 0x1a @addr      => "nop1a " $addr ;
+  0x0f 0x1b 11 ggg rrr => "nop1b " greg[$r] "," greg[$g] ;
+  0x0f 0x1b @addr      => "nop1b " $addr ;
   # 0F 1E reg form: covers endbr64/endbr32 (F3 0F 1E FA/FB) and rdssp; the dead
   # reg field rides the reg_w witness so the modrm round-trips exactly.
-  0x0f 0x1e 11 ggg rrr => "endbr " greg[$r] ;
+  0x0f 0x1e 11 000 rrr => "endbr " greg[$r] ;
+  0x0f 0x1e 11 001 rrr => "endbr " greg[$r] ;
+  0x0f 0x1e 11 010 rrr => "endbr " greg[$r] ;
+  0x0f 0x1e 11 011 rrr => "endbr " greg[$r] ;
+  0x0f 0x1e 11 100 rrr => "endbr " greg[$r] ;
+  0x0f 0x1e 11 101 rrr => "endbr " greg[$r] ;
+  0x0f 0x1e 11 110 rrr => "endbr " greg[$r] ;
+  0x0f 0x1e 11 111 rrr => "endbr " greg[$r] ;
+  0x0f 0x1e @addr(0)   => "nop1e " $addr ;
+  0x0f 0x1e @addr(1)   => "nop1e " $addr ;
+  0x0f 0x1e @addr(2)   => "nop1e " $addr ;
+  0x0f 0x1e @addr(3)   => "nop1e " $addr ;
+  0x0f 0x1e @addr(4)   => "nop1e " $addr ;
+  0x0f 0x1e @addr(5)   => "nop1e " $addr ;
+  0x0f 0x1e @addr(6)   => "nop1e " $addr ;
+  0x0f 0x1e @addr(7)   => "nop1e " $addr ;
+
+  # ===== legacy system / misc 0F: double-shift, far-ptr load, vmx, ud, movnti ==
+  0x0f 0x0e => "femms" ;
+  0x0f 0x37 => "getsec" ;
+  0x0f 0xaa => "rsm" ;
+  0x0f 0xa4 11 ggg rrr @imm8 => "shld " greg[$r] "," greg[$g] "," hex($imm8) ;
+  0x0f 0xa4 @addr      @imm8 => "shld " $addr "," greg[$g] "," hex($imm8) ;
+  0x0f 0xa5 11 ggg rrr => "shld " greg[$r] "," greg[$g] ",cl" ;
+  0x0f 0xa5 @addr      => "shld " $addr "," greg[$g] ",cl" ;
+  0x0f 0xac 11 ggg rrr @imm8 => "shrd " greg[$r] "," greg[$g] "," hex($imm8) ;
+  0x0f 0xac @addr      @imm8 => "shrd " $addr "," greg[$g] "," hex($imm8) ;
+  0x0f 0xad 11 ggg rrr => "shrd " greg[$r] "," greg[$g] ",cl" ;
+  0x0f 0xad @addr      => "shrd " $addr "," greg[$g] ",cl" ;
+  0x0f 0xb2 @addr => "lss " greg[$g] "," $addr ;
+  0x0f 0xb4 @addr => "lfs " greg[$g] "," $addr ;
+  0x0f 0xb5 @addr => "lgs " greg[$g] "," $addr ;
+  0x0f 0x78 11 ggg rrr => "vmread " greg[$r] "," greg[$g] ;
+  0x0f 0x78 @addr      => "vmread " $addr "," greg[$g] ;
+  0x0f 0x79 11 ggg rrr => "vmwrite " greg[$g] "," greg[$r] ;
+  0x0f 0x79 @addr      => "vmwrite " greg[$g] "," $addr ;
+  0x0f 0xb9 11 ggg rrr => "ud1 " greg[$g] "," greg[$r] ;
+  0x0f 0xb9 @addr      => "ud1 " greg[$g] "," $addr ;
+  0x0f 0xff 11 ggg rrr => "ud0 " greg[$g] "," greg[$r] ;
+  0x0f 0xff @addr      => "ud0 " greg[$g] "," $addr ;
+  0x0f 0xc3 @addr => "movnti " $addr "," greg[$g] ;
 
   # ===== SSE/SSE2 (legacy-encoded, xmm-only). The mandatory 66/F3/F2 prefix
   # selects the pd/ss/sd variant and rides in the prefix run (shown as a prefix
@@ -582,6 +810,10 @@ submatch insn {
   0x0f 0x5a @addr      => "cvtps2pd " ssereg[8+$g] "," $addr ;
   0x0f 0x5b 11 ggg rrr => "cvtdq2ps " ssereg[8+$g] "," ssereg[8+$r] ;
   0x0f 0x5b @addr      => "cvtdq2ps " ssereg[8+$g] "," $addr ;
+  # 0F E6: cvt(t)pd2dq / cvtdq2pd -- mandatory 66/F2/F3 selects the variant and
+  # rides the prefix run (one base rule round-trips all three byte-exact).
+  0x0f 0xe6 11 ggg rrr => "cvtpd2dq " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0xe6 @addr      => "cvtpd2dq " ssereg[8+$g] "," $addr ;
   0x0f 0x5c 11 ggg rrr => "subps " ssereg[8+$g] "," ssereg[8+$r] ;
   0x0f 0x5c @addr      => "subps " ssereg[8+$g] "," $addr ;
   0x0f 0x5d 11 ggg rrr => "minps " ssereg[8+$g] "," ssereg[8+$r] ;
@@ -2734,6 +2966,50 @@ submatch apx {
   r x b e f 100 1 v j 01 c d n a 0xff 11 110 rrr => "push2p " greg[$v] "," greg[$r] ;
   r x b e f 100 0 v j 01 c d n a 0x8f 11 000 rrr => "pop2 "   greg[$v] "," greg[$r] ;
   r x b e f 100 1 v j 01 c d n a 0x8f 11 000 rrr => "pop2p "  greg[$v] "," greg[$r] ;
+  # ===== APX map-4 tail: adcx/adox, movbe, crc32, atomics, MSR/CET/VMX, SHA/AES =====
+  r x b e f 100 w v j 01 c d n a 0x66 11 ggg rrr => "adcx " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 10 c d n a 0x66 11 ggg rrr => "adox " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x60 11 ggg rrr => "movbe " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x60 11 ggg rrr => "movbe " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xf0 11 ggg rrr => "crc32 " greg[$g] "," rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xf1 11 ggg rrr => "crc32 " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xf1 11 ggg rrr => "crc32 " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 10 c d n a 0xf8 11 ggg rrr => "uwrmsr " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 10 c d n a 0xf8 @addr => "enqcmds " greg[$g] "," $addr ;
+  r x b e f 100 w v j 10 c d n a 0xda 11 ggg rrr => "encodekey128 " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 10 c d n a 0xdb 11 ggg rrr => "encodekey256 " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 10 c d n a 0xf0 11 ggg rrr => "invept " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 10 c d n a 0xf1 11 ggg rrr => "invvpid " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 10 c d n a 0xf2 11 ggg rrr => "invpcid " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xf8 11 ggg rrr => "movdir64b " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x61 11 ggg rrr => "movbe " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x61 11 ggg rrr => "movbe " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 00 c d n a 0xfc 11 ggg rrr => "aadd " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 01 c d n a 0xfc 11 ggg rrr => "aand " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 10 c d n a 0xfc 11 ggg rrr => "axor " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 11 c d n a 0xfc 11 ggg rrr => "aor " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 00 c d n a 0xf9 11 ggg rrr => "movdiri " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 11 c d n a 0xf8 11 ggg rrr => "urdmsr " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 11 c d n a 0xf8 @addr => "enqcmd " greg[$g] "," $addr ;
+  r x b e f 100 0 v j 00 c d n a 0x66 11 ggg rrr => "wrssd " greg[$r] "," greg[$g] ;
+  r x b e f 100 1 v j 00 c d n a 0x66 11 ggg rrr => "wrssq " greg[$r] "," greg[$g] ;
+  r x b e f 100 0 v j 01 c d n a 0x65 11 ggg rrr => "wrussd " greg[$r] "," greg[$g] ;
+  r x b e f 100 1 v j 01 c d n a 0x65 11 ggg rrr => "wrussq " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 00 c d n a 0xd8 11 ggg rrr => "sha1nexte " ssereg[$g] "," ssereg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd9 11 ggg rrr => "sha1msg1 " ssereg[$g] "," ssereg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xda 11 ggg rrr => "sha1msg2 " ssereg[$g] "," ssereg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xdc 11 ggg rrr => "sha256msg1 " ssereg[$g] "," ssereg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xdd 11 ggg rrr => "sha256msg2 " ssereg[$g] "," ssereg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xdb 11 ggg rrr => "sha256rnds2 " ssereg[$g] "," ssereg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd4 11 ggg rrr @imm8 => "sha1rnds4 " ssereg[$g] "," ssereg[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 10 c d n a 0xdc 11 ggg rrr => "aesenc128kl " ssereg[$g] "," ssereg[$r] ;
+  r x b e f 100 w v j 10 c d n a 0xdd 11 ggg rrr => "aesdec128kl " ssereg[$g] "," ssereg[$r] ;
+  r x b e f 100 w v j 10 c d n a 0xde 11 ggg rrr => "aesenc256kl " ssereg[$g] "," ssereg[$r] ;
+  r x b e f 100 w v j 10 c d n a 0xdf 11 ggg rrr => "aesdec256kl " ssereg[$g] "," ssereg[$r] ;
+  r x b e f 100 w v j 10 c d n a 0xd8 @addr(0) => "aesencwide128kl " $addr ;
+  r x b e f 100 w v j 10 c d n a 0xd8 @addr(1) => "aesdecwide128kl " $addr ;
+  r x b e f 100 w v j 10 c d n a 0xd8 @addr(2) => "aesencwide256kl " $addr ;
+  r x b e f 100 w v j 10 c d n a 0xd8 @addr(3) => "aesdecwide256kl " $addr ;
 }
 
 submatch main { @pfx(0) => $pfx }

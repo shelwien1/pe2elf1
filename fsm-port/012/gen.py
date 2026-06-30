@@ -1321,11 +1321,40 @@ class Interp:
   def apxp2_state(self, slot, b):
     return [('FIELD', self.tailcap('CC'), 7, 0)], 'FSM_APXOP + %d*256' % slot   # CAP_VL = P2
 
+  # map-4 (op,pp) where pp is a mandatory-prefix mnemonic SELECTOR, not the 16-bit
+  # size override -- the GPR operand size is W?64:32 regardless of pp. apxp1's
+  # pp-based opsize is wrong for these, so apxop overrides it. (Bijection-safe:
+  # opsize only picks the render bank; the encoder replays raw bytes.)
+  # selector-pp ops: GPR size W?64:32 regardless of pp (adcx/adox/wrss/wruss/movdiri/
+  # the aadd atomics/crc32 dest). FIX64: the operand is always 64-bit (VMX invept/...,
+  # the MSR ops, movdir64b's pointer).
+  APX_SEL_OPSIZE = {(0x66, 0), (0x66, 1), (0x66, 2), (0x65, 1), (0xf9, 0),
+                    (0xfc, 0), (0xfc, 1), (0xfc, 2), (0xfc, 3),
+                    (0xf0, 0), (0xf1, 0), (0xf1, 1)}
+  APX_FIX64 = {(0xf0, 2), (0xf1, 2), (0xf2, 2), (0xf8, 1), (0xf8, 2), (0xf8, 3)}
+  APX_FIX32 = {(0xda, 2), (0xdb, 2)}                       # encodekey128/256: always 32-bit GPR
+
   def apxop_state(self, pp, W, op):
     e = self._apx_tab.get((0, pp, W, op))
     if e is None:
       return [], 'FSM_HALT'
-    return self._vexop_acts(e), 'FSM_HALT'
+    acts = self._vexop_acts(e)
+    if (op, pp) in self.APX_SEL_OPSIZE:
+      acts = acts + [('CONST', self.var_id('opsiz'), 2 if W else 0, 0)]   # 64/32, ignore pp
+    elif (op, pp) in self.APX_FIX64:
+      acts = acts + [('CONST', self.var_id('opsiz'), 2, 0)]               # always 64-bit
+    elif (op, pp) in self.APX_FIX32:
+      acts = acts + [('CONST', self.var_id('opsiz'), 0, 0)]               # always 32-bit
+    # NDD applies only to the promoted ALU/cmov/shift/group ops + adcx/adox; the rest
+    # of the map-4 tail (movbe/crc32/atomics/MSR/CET/VMX/SHA/AES/...) is not NDD, so
+    # flag it (CAP_MNSEL) and the C++ apx_finalize won't prepend the vvvv dest.
+    ndd_ok = (op < 0x50
+              or op in (0x80, 0x81, 0x83, 0xc0, 0xc1, 0xd0, 0xd1, 0xd2, 0xd3,
+                        0xf6, 0xf7, 0xfe, 0xff, 0xaf, 0x24, 0x2c, 0xa5, 0xad)
+              or (op == 0x66 and pp in (1, 2)))
+    if not ndd_ok:
+      acts = acts + [('CONST', self.tailcap('MNSEL'), 1, 0)]   # non-NDD marker
+    return acts, 'FSM_HALT'
 
   def _collect_group(self, groups, info, rhs, midx, K):
     tb = info['tb']
@@ -1815,6 +1844,10 @@ def emit(c, interp, out_path):
     interp._mnem.append('vex')
   w("#define MNEM_VEX %d\n" % interp._mnem.index('vex'))
   w("#define MNEM_MOV %d\n" % (interp._mnem.index('mov') if 'mov' in interp._mnem else 0))
+  # APX f8 pp2/pp3 swaps the mnemonic by mod (reg=uwrmsr/urdmsr, mem=enqcmds/enqcmd);
+  # the C++ apx_finalize picks the memory variant by these indices.
+  for _m in ('uwrmsr', 'urdmsr', 'enqcmds', 'enqcmd'):
+    w("#define MNEM_%s %d\n" % (_m.upper(), interp._mnem.index(_m) if _m in interp._mnem else 0xFFFF))
   w("static const char* const mnem_tab[] = {\n    %s\n};\n" %
     (", ".join('"%s"' % m for m in interp._mnem) if interp._mnem else '""'))
   w("static const size_t mnem_tab_size = sizeof(mnem_tab) / sizeof(mnem_tab[0]);\n\n")
