@@ -101,7 +101,7 @@ static void fmt_insn(const x86dec_t* d, size_t end, char* out) {
       break;
     case FORM_GROUP: {                                 // mnemonic (with size suffix) already printed
       char rm[64];
-      if (c[CAP_MODE] == RM_REG) snprintf(rm, sizeof rm, "%s", reg_name((int)c[CAP_RM], os));
+      if (c[CAP_MODE] == RM_REG) snprintf(rm, sizeof rm, "%s", reg_operand((int)c[CAP_RM], mf, os));
       else                       fmt_mem(in, (int)c[VAR_SEGIDX], rm);
       p += sprintf(p, " %s", rm);
       if (c[CAP_IMK] != IMK_NONE) p += sprintf(p, ", 0x%X", (uint)(uint32_t)c[CAP_IMM]);

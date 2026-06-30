@@ -166,6 +166,7 @@ class EncBuilder:
           c['imk'] = m['imk']
           if which == 'reg':
             c['sup_reg'] = 1
+            c['mfile'] = m.get('rfile', 0)               # reg-direct r/m file (rgb -> 8-bit)
           else:
             c['sup_mem'] = 1
 

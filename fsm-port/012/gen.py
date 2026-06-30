@@ -1361,7 +1361,7 @@ class Interp:
     opcode = info['bp'].lit_val
     reg = info['reg_fixed']
     m = groups.setdefault((tb, opcode), {}).setdefault(
-        reg, {'mnem_reg': None, 'mnem_mem': None, 'imk': K['NONE']})
+        reg, {'mnem_reg': None, 'mnem_mem': None, 'imk': K['NONE'], 'rfile': 0})
     base = self.insn_mnem(rhs)[1]                        # leading-literal mnemonic
     if info['imm']:
       if 'sx8(' in rhs and info['imm'][0] == 'imm8':
@@ -1370,6 +1370,9 @@ class Interp:
         m['imk'] = K[info['imm'][0].upper()]
     if info['modrm'] == 'group_reg':
       m['mnem_reg'] = midx(base)
+      # the reg-direct r/m draws from the rule's register table (rgb -> 8-bit GPR,
+      # else the opsize GPR); carry it so the operand renders al/r8b, not eax.
+      m['rfile'] = self.OPF.index(self.operand_file(rhs, 'r'))
     else:                                                # group_mem: fold in size suffix
       sm = re.search(r'sfx\[(\d+)\]', rhs)
       sfx = self.tables['sfx'][int(sm.group(1))] if sm else ''
@@ -1390,6 +1393,8 @@ class Interp:
     pre = [('MNEM', mnem, 0, 0)]                         # reg field -> mnemonic (per byte)
     if m['imk'] != 0:
       pre.append(('CONST', self.tailcap('IMK'), m['imk'], 0))
+    if is_reg and m.get('rfile'):                        # reg-direct r/m register file (RGB etc.)
+      pre.append(('CONST', self.tailcap('MFILE'), m['rfile'], 0))
     return pre + acts[1:], nxt                           # drop modrm's FIELD CAP_REG
 
   def group_count(self):

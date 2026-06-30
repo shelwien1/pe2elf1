@@ -32,9 +32,9 @@ static const struct EncCand enc_cand[] = {
   {0,0,0x02,EMB_NONE,0,0,255,1,0,0,OPF_RGB,OPF_RGB,0,0,1,1},  //   2  add
   {0,0,0x03,EMB_NONE,0,0,255,1,0,0,OPF_GREG,OPF_GREG,0,0,1,1},  //   3  add
   {0,0,0x05,EMB_NONE,0,0,255,10,4,0,OPF_GREG,OPF_GREG,0,1,0,0},  //   4  add
-  {0,0,0x80,EMB_NONE,0,0,0,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  //   5  add
+  {0,0,0x80,EMB_NONE,0,0,0,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  //   5  add
   {0,0,0x81,EMB_NONE,0,0,0,7,4,0,OPF_GREG,OPF_GREG,0,0,1,0},  //   6  add
-  {0,0,0x82,EMB_NONE,0,0,0,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  //   7  add
+  {0,0,0x82,EMB_NONE,0,0,0,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  //   7  add
   {0,0,0x83,EMB_NONE,0,0,0,7,8,0,OPF_GREG,OPF_GREG,0,0,1,0},  //   8  add
   {1,0,0x04,EMB_NONE,0,0,255,10,1,0,OPF_GREG,OPF_GREG,0,1,0,0},  //   9  add al,
   {2,0,0x08,EMB_NONE,0,0,255,1,0,1,OPF_RGB,OPF_RGB,1,0,1,1},  //  10  or
@@ -42,9 +42,9 @@ static const struct EncCand enc_cand[] = {
   {2,0,0x0a,EMB_NONE,0,0,255,1,0,0,OPF_RGB,OPF_RGB,0,0,1,1},  //  12  or
   {2,0,0x0b,EMB_NONE,0,0,255,1,0,0,OPF_GREG,OPF_GREG,0,0,1,1},  //  13  or
   {2,0,0x0d,EMB_NONE,0,0,255,10,4,0,OPF_GREG,OPF_GREG,0,1,0,0},  //  14  or
-  {2,0,0x80,EMB_NONE,0,0,1,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  15  or
+  {2,0,0x80,EMB_NONE,0,0,1,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  //  15  or
   {2,0,0x81,EMB_NONE,0,0,1,7,4,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  16  or
-  {2,0,0x82,EMB_NONE,0,0,1,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  17  or
+  {2,0,0x82,EMB_NONE,0,0,1,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  //  17  or
   {2,0,0x83,EMB_NONE,0,0,1,7,8,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  18  or
   {3,0,0x0c,EMB_NONE,0,0,255,10,1,0,OPF_GREG,OPF_GREG,0,1,0,0},  //  19  or al,
   {4,0,0x10,EMB_NONE,0,0,255,1,0,1,OPF_RGB,OPF_RGB,1,0,1,1},  //  20  adc
@@ -52,9 +52,9 @@ static const struct EncCand enc_cand[] = {
   {4,0,0x12,EMB_NONE,0,0,255,1,0,0,OPF_RGB,OPF_RGB,0,0,1,1},  //  22  adc
   {4,0,0x13,EMB_NONE,0,0,255,1,0,0,OPF_GREG,OPF_GREG,0,0,1,1},  //  23  adc
   {4,0,0x15,EMB_NONE,0,0,255,10,4,0,OPF_GREG,OPF_GREG,0,1,0,0},  //  24  adc
-  {4,0,0x80,EMB_NONE,0,0,2,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  25  adc
+  {4,0,0x80,EMB_NONE,0,0,2,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  //  25  adc
   {4,0,0x81,EMB_NONE,0,0,2,7,4,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  26  adc
-  {4,0,0x82,EMB_NONE,0,0,2,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  27  adc
+  {4,0,0x82,EMB_NONE,0,0,2,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  //  27  adc
   {4,0,0x83,EMB_NONE,0,0,2,7,8,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  28  adc
   {5,0,0x14,EMB_NONE,0,0,255,10,1,0,OPF_GREG,OPF_GREG,0,1,0,0},  //  29  adc al,
   {6,0,0x18,EMB_NONE,0,0,255,1,0,1,OPF_RGB,OPF_RGB,1,0,1,1},  //  30  sbb
@@ -62,9 +62,9 @@ static const struct EncCand enc_cand[] = {
   {6,0,0x1a,EMB_NONE,0,0,255,1,0,0,OPF_RGB,OPF_RGB,0,0,1,1},  //  32  sbb
   {6,0,0x1b,EMB_NONE,0,0,255,1,0,0,OPF_GREG,OPF_GREG,0,0,1,1},  //  33  sbb
   {6,0,0x1d,EMB_NONE,0,0,255,10,4,0,OPF_GREG,OPF_GREG,0,1,0,0},  //  34  sbb
-  {6,0,0x80,EMB_NONE,0,0,3,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  35  sbb
+  {6,0,0x80,EMB_NONE,0,0,3,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  //  35  sbb
   {6,0,0x81,EMB_NONE,0,0,3,7,4,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  36  sbb
-  {6,0,0x82,EMB_NONE,0,0,3,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  37  sbb
+  {6,0,0x82,EMB_NONE,0,0,3,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  //  37  sbb
   {6,0,0x83,EMB_NONE,0,0,3,7,8,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  38  sbb
   {7,0,0x1c,EMB_NONE,0,0,255,10,1,0,OPF_GREG,OPF_GREG,0,1,0,0},  //  39  sbb al,
   {8,0,0x20,EMB_NONE,0,0,255,1,0,1,OPF_RGB,OPF_RGB,1,0,1,1},  //  40  and
@@ -72,9 +72,9 @@ static const struct EncCand enc_cand[] = {
   {8,0,0x22,EMB_NONE,0,0,255,1,0,0,OPF_RGB,OPF_RGB,0,0,1,1},  //  42  and
   {8,0,0x23,EMB_NONE,0,0,255,1,0,0,OPF_GREG,OPF_GREG,0,0,1,1},  //  43  and
   {8,0,0x25,EMB_NONE,0,0,255,10,4,0,OPF_GREG,OPF_GREG,0,1,0,0},  //  44  and
-  {8,0,0x80,EMB_NONE,0,0,4,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  45  and
+  {8,0,0x80,EMB_NONE,0,0,4,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  //  45  and
   {8,0,0x81,EMB_NONE,0,0,4,7,4,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  46  and
-  {8,0,0x82,EMB_NONE,0,0,4,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  47  and
+  {8,0,0x82,EMB_NONE,0,0,4,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  //  47  and
   {8,0,0x83,EMB_NONE,0,0,4,7,8,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  48  and
   {9,0,0x24,EMB_NONE,0,0,255,10,1,0,OPF_GREG,OPF_GREG,0,1,0,0},  //  49  and al,
   {10,0,0x28,EMB_NONE,0,0,255,1,0,1,OPF_RGB,OPF_RGB,1,0,1,1},  //  50  sub
@@ -82,9 +82,9 @@ static const struct EncCand enc_cand[] = {
   {10,0,0x2a,EMB_NONE,0,0,255,1,0,0,OPF_RGB,OPF_RGB,0,0,1,1},  //  52  sub
   {10,0,0x2b,EMB_NONE,0,0,255,1,0,0,OPF_GREG,OPF_GREG,0,0,1,1},  //  53  sub
   {10,0,0x2d,EMB_NONE,0,0,255,10,4,0,OPF_GREG,OPF_GREG,0,1,0,0},  //  54  sub
-  {10,0,0x80,EMB_NONE,0,0,5,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  55  sub
+  {10,0,0x80,EMB_NONE,0,0,5,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  //  55  sub
   {10,0,0x81,EMB_NONE,0,0,5,7,4,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  56  sub
-  {10,0,0x82,EMB_NONE,0,0,5,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  57  sub
+  {10,0,0x82,EMB_NONE,0,0,5,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  //  57  sub
   {10,0,0x83,EMB_NONE,0,0,5,7,8,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  58  sub
   {11,0,0x2c,EMB_NONE,0,0,255,10,1,0,OPF_GREG,OPF_GREG,0,1,0,0},  //  59  sub al,
   {12,0,0x30,EMB_NONE,0,0,255,1,0,1,OPF_RGB,OPF_RGB,1,0,1,1},  //  60  xor
@@ -92,9 +92,9 @@ static const struct EncCand enc_cand[] = {
   {12,0,0x32,EMB_NONE,0,0,255,1,0,0,OPF_RGB,OPF_RGB,0,0,1,1},  //  62  xor
   {12,0,0x33,EMB_NONE,0,0,255,1,0,0,OPF_GREG,OPF_GREG,0,0,1,1},  //  63  xor
   {12,0,0x35,EMB_NONE,0,0,255,10,4,0,OPF_GREG,OPF_GREG,0,1,0,0},  //  64  xor
-  {12,0,0x80,EMB_NONE,0,0,6,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  65  xor
+  {12,0,0x80,EMB_NONE,0,0,6,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  //  65  xor
   {12,0,0x81,EMB_NONE,0,0,6,7,4,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  66  xor
-  {12,0,0x82,EMB_NONE,0,0,6,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  67  xor
+  {12,0,0x82,EMB_NONE,0,0,6,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  //  67  xor
   {12,0,0x83,EMB_NONE,0,0,6,7,8,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  68  xor
   {13,0,0x34,EMB_NONE,0,0,255,10,1,0,OPF_GREG,OPF_GREG,0,1,0,0},  //  69  xor al,
   {14,0,0x38,EMB_NONE,0,0,255,1,0,1,OPF_RGB,OPF_RGB,1,0,1,1},  //  70  cmp
@@ -102,9 +102,9 @@ static const struct EncCand enc_cand[] = {
   {14,0,0x3a,EMB_NONE,0,0,255,1,0,0,OPF_RGB,OPF_RGB,0,0,1,1},  //  72  cmp
   {14,0,0x3b,EMB_NONE,0,0,255,1,0,0,OPF_GREG,OPF_GREG,0,0,1,1},  //  73  cmp
   {14,0,0x3d,EMB_NONE,0,0,255,10,4,0,OPF_GREG,OPF_GREG,0,1,0,0},  //  74  cmp
-  {14,0,0x80,EMB_NONE,0,0,7,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  75  cmp
+  {14,0,0x80,EMB_NONE,0,0,7,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  //  75  cmp
   {14,0,0x81,EMB_NONE,0,0,7,7,4,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  76  cmp
-  {14,0,0x82,EMB_NONE,0,0,7,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  77  cmp
+  {14,0,0x82,EMB_NONE,0,0,7,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  //  77  cmp
   {14,0,0x83,EMB_NONE,0,0,7,7,8,0,OPF_GREG,OPF_GREG,0,0,1,0},  //  78  cmp
   {15,0,0x3c,EMB_NONE,0,0,255,10,1,0,OPF_GREG,OPF_GREG,0,1,0,0},  //  79  cmp al,
   {16,0,0x80,EMB_NONE,0,0,0,7,1,0,OPF_GREG,OPF_GREG,0,0,0,1},  //  80  add.b
@@ -142,16 +142,16 @@ static const struct EncCand enc_cand[] = {
   {32,0,0x84,EMB_NONE,0,0,255,1,0,1,OPF_RGB,OPF_RGB,1,0,1,1},  // 112  test
   {32,0,0x85,EMB_NONE,0,0,255,1,0,1,OPF_GREG,OPF_GREG,0,0,1,1},  // 113  test
   {32,0,0xa9,EMB_NONE,0,0,255,10,4,0,OPF_GREG,OPF_GREG,0,1,0,0},  // 114  test
-  {32,0,0xf6,EMB_NONE,0,0,0,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 115  test
-  {32,0,0xf6,EMB_NONE,0,0,1,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 116  test
+  {32,0,0xf6,EMB_NONE,0,0,0,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 115  test
+  {32,0,0xf6,EMB_NONE,0,0,1,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 116  test
   {32,0,0xf7,EMB_NONE,0,0,0,7,4,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 117  test
   {32,0,0xf7,EMB_NONE,0,0,1,7,4,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 118  test
   {33,0,0xa8,EMB_NONE,0,0,255,10,1,0,OPF_GREG,OPF_GREG,0,1,0,0},  // 119  test al,
-  {34,0,0xc0,EMB_NONE,0,0,0,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 120  rol
+  {34,0,0xc0,EMB_NONE,0,0,0,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 120  rol
   {34,0,0xc1,EMB_NONE,0,0,0,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 121  rol
-  {34,0,0xd0,EMB_NONE,0,0,0,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 122  rol
+  {34,0,0xd0,EMB_NONE,0,0,0,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 122  rol
   {34,0,0xd1,EMB_NONE,0,0,0,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 123  rol
-  {34,0,0xd2,EMB_NONE,0,0,0,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 124  rol
+  {34,0,0xd2,EMB_NONE,0,0,0,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 124  rol
   {34,0,0xd3,EMB_NONE,0,0,0,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 125  rol
   {35,0,0xc0,EMB_NONE,0,0,0,7,1,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 126  rol.b
   {35,0,0xd0,EMB_NONE,0,0,0,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 127  rol.b
@@ -159,11 +159,11 @@ static const struct EncCand enc_cand[] = {
   {36,0,0xc1,EMB_NONE,0,0,0,7,1,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 129  rol.d
   {36,0,0xd1,EMB_NONE,0,0,0,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 130  rol.d
   {36,0,0xd3,EMB_NONE,0,0,0,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 131  rol.d
-  {37,0,0xc0,EMB_NONE,0,0,1,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 132  ror
+  {37,0,0xc0,EMB_NONE,0,0,1,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 132  ror
   {37,0,0xc1,EMB_NONE,0,0,1,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 133  ror
-  {37,0,0xd0,EMB_NONE,0,0,1,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 134  ror
+  {37,0,0xd0,EMB_NONE,0,0,1,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 134  ror
   {37,0,0xd1,EMB_NONE,0,0,1,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 135  ror
-  {37,0,0xd2,EMB_NONE,0,0,1,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 136  ror
+  {37,0,0xd2,EMB_NONE,0,0,1,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 136  ror
   {37,0,0xd3,EMB_NONE,0,0,1,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 137  ror
   {38,0,0xc0,EMB_NONE,0,0,1,7,1,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 138  ror.b
   {38,0,0xd0,EMB_NONE,0,0,1,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 139  ror.b
@@ -171,11 +171,11 @@ static const struct EncCand enc_cand[] = {
   {39,0,0xc1,EMB_NONE,0,0,1,7,1,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 141  ror.d
   {39,0,0xd1,EMB_NONE,0,0,1,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 142  ror.d
   {39,0,0xd3,EMB_NONE,0,0,1,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 143  ror.d
-  {40,0,0xc0,EMB_NONE,0,0,2,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 144  rcl
+  {40,0,0xc0,EMB_NONE,0,0,2,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 144  rcl
   {40,0,0xc1,EMB_NONE,0,0,2,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 145  rcl
-  {40,0,0xd0,EMB_NONE,0,0,2,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 146  rcl
+  {40,0,0xd0,EMB_NONE,0,0,2,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 146  rcl
   {40,0,0xd1,EMB_NONE,0,0,2,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 147  rcl
-  {40,0,0xd2,EMB_NONE,0,0,2,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 148  rcl
+  {40,0,0xd2,EMB_NONE,0,0,2,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 148  rcl
   {40,0,0xd3,EMB_NONE,0,0,2,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 149  rcl
   {41,0,0xc0,EMB_NONE,0,0,2,7,1,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 150  rcl.b
   {41,0,0xd0,EMB_NONE,0,0,2,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 151  rcl.b
@@ -183,11 +183,11 @@ static const struct EncCand enc_cand[] = {
   {42,0,0xc1,EMB_NONE,0,0,2,7,1,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 153  rcl.d
   {42,0,0xd1,EMB_NONE,0,0,2,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 154  rcl.d
   {42,0,0xd3,EMB_NONE,0,0,2,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 155  rcl.d
-  {43,0,0xc0,EMB_NONE,0,0,3,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 156  rcr
+  {43,0,0xc0,EMB_NONE,0,0,3,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 156  rcr
   {43,0,0xc1,EMB_NONE,0,0,3,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 157  rcr
-  {43,0,0xd0,EMB_NONE,0,0,3,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 158  rcr
+  {43,0,0xd0,EMB_NONE,0,0,3,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 158  rcr
   {43,0,0xd1,EMB_NONE,0,0,3,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 159  rcr
-  {43,0,0xd2,EMB_NONE,0,0,3,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 160  rcr
+  {43,0,0xd2,EMB_NONE,0,0,3,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 160  rcr
   {43,0,0xd3,EMB_NONE,0,0,3,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 161  rcr
   {44,0,0xc0,EMB_NONE,0,0,3,7,1,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 162  rcr.b
   {44,0,0xd0,EMB_NONE,0,0,3,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 163  rcr.b
@@ -195,11 +195,11 @@ static const struct EncCand enc_cand[] = {
   {45,0,0xc1,EMB_NONE,0,0,3,7,1,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 165  rcr.d
   {45,0,0xd1,EMB_NONE,0,0,3,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 166  rcr.d
   {45,0,0xd3,EMB_NONE,0,0,3,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 167  rcr.d
-  {46,0,0xc0,EMB_NONE,0,0,4,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 168  shl
+  {46,0,0xc0,EMB_NONE,0,0,4,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 168  shl
   {46,0,0xc1,EMB_NONE,0,0,4,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 169  shl
-  {46,0,0xd0,EMB_NONE,0,0,4,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 170  shl
+  {46,0,0xd0,EMB_NONE,0,0,4,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 170  shl
   {46,0,0xd1,EMB_NONE,0,0,4,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 171  shl
-  {46,0,0xd2,EMB_NONE,0,0,4,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 172  shl
+  {46,0,0xd2,EMB_NONE,0,0,4,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 172  shl
   {46,0,0xd3,EMB_NONE,0,0,4,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 173  shl
   {47,0,0xc0,EMB_NONE,0,0,4,7,1,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 174  shl.b
   {47,0,0xd0,EMB_NONE,0,0,4,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 175  shl.b
@@ -207,11 +207,11 @@ static const struct EncCand enc_cand[] = {
   {48,0,0xc1,EMB_NONE,0,0,4,7,1,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 177  shl.d
   {48,0,0xd1,EMB_NONE,0,0,4,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 178  shl.d
   {48,0,0xd3,EMB_NONE,0,0,4,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 179  shl.d
-  {49,0,0xc0,EMB_NONE,0,0,5,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 180  shr
+  {49,0,0xc0,EMB_NONE,0,0,5,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 180  shr
   {49,0,0xc1,EMB_NONE,0,0,5,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 181  shr
-  {49,0,0xd0,EMB_NONE,0,0,5,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 182  shr
+  {49,0,0xd0,EMB_NONE,0,0,5,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 182  shr
   {49,0,0xd1,EMB_NONE,0,0,5,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 183  shr
-  {49,0,0xd2,EMB_NONE,0,0,5,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 184  shr
+  {49,0,0xd2,EMB_NONE,0,0,5,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 184  shr
   {49,0,0xd3,EMB_NONE,0,0,5,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 185  shr
   {50,0,0xc0,EMB_NONE,0,0,5,7,1,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 186  shr.b
   {50,0,0xd0,EMB_NONE,0,0,5,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 187  shr.b
@@ -219,11 +219,11 @@ static const struct EncCand enc_cand[] = {
   {51,0,0xc1,EMB_NONE,0,0,5,7,1,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 189  shr.d
   {51,0,0xd1,EMB_NONE,0,0,5,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 190  shr.d
   {51,0,0xd3,EMB_NONE,0,0,5,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 191  shr.d
-  {52,0,0xc0,EMB_NONE,0,0,6,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 192  sal
+  {52,0,0xc0,EMB_NONE,0,0,6,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 192  sal
   {52,0,0xc1,EMB_NONE,0,0,6,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 193  sal
-  {52,0,0xd0,EMB_NONE,0,0,6,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 194  sal
+  {52,0,0xd0,EMB_NONE,0,0,6,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 194  sal
   {52,0,0xd1,EMB_NONE,0,0,6,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 195  sal
-  {52,0,0xd2,EMB_NONE,0,0,6,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 196  sal
+  {52,0,0xd2,EMB_NONE,0,0,6,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 196  sal
   {52,0,0xd3,EMB_NONE,0,0,6,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 197  sal
   {53,0,0xc0,EMB_NONE,0,0,6,7,1,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 198  sal.b
   {53,0,0xd0,EMB_NONE,0,0,6,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 199  sal.b
@@ -231,11 +231,11 @@ static const struct EncCand enc_cand[] = {
   {54,0,0xc1,EMB_NONE,0,0,6,7,1,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 201  sal.d
   {54,0,0xd1,EMB_NONE,0,0,6,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 202  sal.d
   {54,0,0xd3,EMB_NONE,0,0,6,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 203  sal.d
-  {55,0,0xc0,EMB_NONE,0,0,7,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 204  sar
+  {55,0,0xc0,EMB_NONE,0,0,7,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 204  sar
   {55,0,0xc1,EMB_NONE,0,0,7,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 205  sar
-  {55,0,0xd0,EMB_NONE,0,0,7,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 206  sar
+  {55,0,0xd0,EMB_NONE,0,0,7,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 206  sar
   {55,0,0xd1,EMB_NONE,0,0,7,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 207  sar
-  {55,0,0xd2,EMB_NONE,0,0,7,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 208  sar
+  {55,0,0xd2,EMB_NONE,0,0,7,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 208  sar
   {55,0,0xd3,EMB_NONE,0,0,7,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 209  sar
   {56,0,0xc0,EMB_NONE,0,0,7,7,1,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 210  sar.b
   {56,0,0xd0,EMB_NONE,0,0,7,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 211  sar.b
@@ -247,38 +247,38 @@ static const struct EncCand enc_cand[] = {
   {58,0,0xf6,EMB_NONE,0,0,1,7,1,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 217  test.b
   {59,0,0xf7,EMB_NONE,0,0,0,7,4,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 218  test.d
   {59,0,0xf7,EMB_NONE,0,0,1,7,4,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 219  test.d
-  {60,0,0xf6,EMB_NONE,0,0,2,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 220  not
+  {60,0,0xf6,EMB_NONE,0,0,2,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 220  not
   {60,0,0xf7,EMB_NONE,0,0,2,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 221  not
   {61,0,0xf6,EMB_NONE,0,0,2,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 222  not.b
   {62,0,0xf7,EMB_NONE,0,0,2,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 223  not.d
-  {63,0,0xf6,EMB_NONE,0,0,3,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 224  neg
+  {63,0,0xf6,EMB_NONE,0,0,3,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 224  neg
   {63,0,0xf7,EMB_NONE,0,0,3,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 225  neg
   {64,0,0xf6,EMB_NONE,0,0,3,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 226  neg.b
   {65,0,0xf7,EMB_NONE,0,0,3,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 227  neg.d
-  {66,0,0xf6,EMB_NONE,0,0,4,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 228  mul
+  {66,0,0xf6,EMB_NONE,0,0,4,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 228  mul
   {66,0,0xf7,EMB_NONE,0,0,4,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 229  mul
   {67,0,0xf6,EMB_NONE,0,0,4,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 230  mul.b
   {68,0,0xf7,EMB_NONE,0,0,4,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 231  mul.d
   {69,0,0x69,EMB_NONE,0,0,255,1,4,0,OPF_GREG,OPF_GREG,0,0,1,1},  // 232  imul
   {69,0,0x6b,EMB_NONE,0,0,255,1,8,0,OPF_GREG,OPF_GREG,0,0,1,1},  // 233  imul
-  {69,0,0xf6,EMB_NONE,0,0,5,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 234  imul
+  {69,0,0xf6,EMB_NONE,0,0,5,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 234  imul
   {69,0,0xf7,EMB_NONE,0,0,5,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 235  imul
   {69,1,0xaf,EMB_NONE,0,0,255,1,0,0,OPF_GREG,OPF_GREG,0,0,1,1},  // 236  imul
   {70,0,0xf6,EMB_NONE,0,0,5,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 237  imul.b
   {71,0,0xf7,EMB_NONE,0,0,5,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 238  imul.d
-  {72,0,0xf6,EMB_NONE,0,0,6,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 239  div
+  {72,0,0xf6,EMB_NONE,0,0,6,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 239  div
   {72,0,0xf7,EMB_NONE,0,0,6,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 240  div
   {73,0,0xf6,EMB_NONE,0,0,6,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 241  div.b
   {74,0,0xf7,EMB_NONE,0,0,6,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 242  div.d
-  {75,0,0xf6,EMB_NONE,0,0,7,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 243  idiv
+  {75,0,0xf6,EMB_NONE,0,0,7,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 243  idiv
   {75,0,0xf7,EMB_NONE,0,0,7,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 244  idiv
   {76,0,0xf6,EMB_NONE,0,0,7,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 245  idiv.b
   {77,0,0xf7,EMB_NONE,0,0,7,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 246  idiv.d
   {78,0,0x40,EMB_REG,0,3,255,2,0,0,OPF_GREG,OPF_GREG,0,0,0,0},  // 247  inc
-  {78,0,0xfe,EMB_NONE,0,0,0,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 248  inc
+  {78,0,0xfe,EMB_NONE,0,0,0,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 248  inc
   {78,0,0xff,EMB_NONE,0,0,0,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 249  inc
   {79,0,0x48,EMB_REG,0,3,255,2,0,0,OPF_GREG,OPF_GREG,0,0,0,0},  // 250  dec
-  {79,0,0xfe,EMB_NONE,0,0,1,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 251  dec
+  {79,0,0xfe,EMB_NONE,0,0,1,7,0,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 251  dec
   {79,0,0xff,EMB_NONE,0,0,1,7,0,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 252  dec
   {80,0,0xfe,EMB_NONE,0,0,0,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 253  inc.b
   {81,0,0xfe,EMB_NONE,0,0,1,7,0,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 254  dec.b
@@ -311,7 +311,7 @@ static const struct EncCand enc_cand[] = {
   {95,0,0x8e,EMB_NONE,0,0,255,1,0,0,OPF_SREG,OPF_GREG,0,0,1,1},  // 281  mov
   {95,0,0xb0,EMB_REG,0,3,255,3,1,0,OPF_RGB,OPF_GREG,0,0,0,0},  // 282  mov
   {95,0,0xb8,EMB_REG,0,3,255,3,4,0,OPF_GREG,OPF_GREG,0,0,0,0},  // 283  mov
-  {95,0,0xc6,EMB_NONE,0,0,0,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 284  mov
+  {95,0,0xc6,EMB_NONE,0,0,0,7,1,0,OPF_GREG,OPF_RGB,0,0,1,0},  // 284  mov
   {95,0,0xc7,EMB_NONE,0,0,0,7,4,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 285  mov
   {96,0,0xc6,EMB_NONE,0,0,7,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 286  xabort
   {97,0,0xc6,EMB_NONE,0,0,0,7,1,0,OPF_GREG,OPF_GREG,0,0,0,1},  // 287  mov.b
@@ -584,21 +584,21 @@ static const struct EncCand enc_cand[] = {
   {313,1,0x74,EMB_NONE,0,0,255,1,0,0,OPF_SSE_OS,OPF_SSE_OS,0,0,1,1},  // 554  pcmpeqb
   {314,1,0x63,EMB_NONE,0,0,255,1,0,0,OPF_SSE_OS,OPF_SSE_OS,0,0,1,1},  // 555  packsswb
   {315,1,0x60,EMB_NONE,0,0,255,1,0,0,OPF_SSE_OS,OPF_SSE_OS,0,0,1,1},  // 556  punpcklbw
-  {316,1,0x71,EMB_NONE,0,0,2,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 557  psrlw
+  {316,1,0x71,EMB_NONE,0,0,2,7,1,0,OPF_GREG,OPF_SSE_OS,0,0,1,0},  // 557  psrlw
   {316,1,0xd1,EMB_NONE,0,0,255,1,0,0,OPF_SSE_OS,OPF_SSE_OS,0,0,1,1},  // 558  psrlw
-  {317,1,0x72,EMB_NONE,0,0,2,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 559  psrld
+  {317,1,0x72,EMB_NONE,0,0,2,7,1,0,OPF_GREG,OPF_SSE_OS,0,0,1,0},  // 559  psrld
   {317,1,0xd2,EMB_NONE,0,0,255,1,0,0,OPF_SSE_OS,OPF_SSE_OS,0,0,1,1},  // 560  psrld
-  {318,1,0x73,EMB_NONE,0,0,2,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 561  psrlq
+  {318,1,0x73,EMB_NONE,0,0,2,7,1,0,OPF_GREG,OPF_SSE_OS,0,0,1,0},  // 561  psrlq
   {318,1,0xd3,EMB_NONE,0,0,255,1,0,0,OPF_SSE_OS,OPF_SSE_OS,0,0,1,1},  // 562  psrlq
-  {319,1,0x71,EMB_NONE,0,0,4,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 563  psraw
+  {319,1,0x71,EMB_NONE,0,0,4,7,1,0,OPF_GREG,OPF_SSE_OS,0,0,1,0},  // 563  psraw
   {319,1,0xe1,EMB_NONE,0,0,255,1,0,0,OPF_SSE_OS,OPF_SSE_OS,0,0,1,1},  // 564  psraw
-  {320,1,0x72,EMB_NONE,0,0,4,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 565  psrad
+  {320,1,0x72,EMB_NONE,0,0,4,7,1,0,OPF_GREG,OPF_SSE_OS,0,0,1,0},  // 565  psrad
   {320,1,0xe2,EMB_NONE,0,0,255,1,0,0,OPF_SSE_OS,OPF_SSE_OS,0,0,1,1},  // 566  psrad
-  {321,1,0x71,EMB_NONE,0,0,6,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 567  psllw
+  {321,1,0x71,EMB_NONE,0,0,6,7,1,0,OPF_GREG,OPF_SSE_OS,0,0,1,0},  // 567  psllw
   {321,1,0xf1,EMB_NONE,0,0,255,1,0,0,OPF_SSE_OS,OPF_SSE_OS,0,0,1,1},  // 568  psllw
-  {322,1,0x72,EMB_NONE,0,0,6,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 569  pslld
+  {322,1,0x72,EMB_NONE,0,0,6,7,1,0,OPF_GREG,OPF_SSE_OS,0,0,1,0},  // 569  pslld
   {322,1,0xf2,EMB_NONE,0,0,255,1,0,0,OPF_SSE_OS,OPF_SSE_OS,0,0,1,1},  // 570  pslld
-  {323,1,0x73,EMB_NONE,0,0,6,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 571  psllq
+  {323,1,0x73,EMB_NONE,0,0,6,7,1,0,OPF_GREG,OPF_SSE_OS,0,0,1,0},  // 571  psllq
   {323,1,0xf3,EMB_NONE,0,0,255,1,0,0,OPF_SSE_OS,OPF_SSE_OS,0,0,1,1},  // 572  psllq
   {324,1,0x28,EMB_NONE,0,0,255,1,0,0,OPF_XMM,OPF_XMM,0,0,1,1},  // 573  movaps
   {324,1,0x29,EMB_NONE,0,0,255,1,0,1,OPF_XMM,OPF_XMM,0,0,1,1},  // 574  movaps
@@ -721,8 +721,8 @@ static const struct EncCand enc_cand[] = {
   {426,1,0xc4,EMB_NONE,0,0,255,1,1,0,OPF_SSE_OS,OPF_GREG,0,0,1,1},  // 691  pinsrw
   {427,1,0xc5,EMB_NONE,0,0,255,1,1,0,OPF_GREG,OPF_SSE_OS,0,0,1,0},  // 692  pextrw
   {427,3,0x15,EMB_NONE,0,0,255,1,1,1,OPF_SSE_OS,OPF_GREG,0,0,1,1},  // 693  pextrw
-  {428,1,0x73,EMB_NONE,0,0,3,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 694  psrldq
-  {429,1,0x73,EMB_NONE,0,0,7,7,1,0,OPF_GREG,OPF_GREG,0,0,1,0},  // 695  pslldq
+  {428,1,0x73,EMB_NONE,0,0,3,7,1,0,OPF_GREG,OPF_SSE_OS,0,0,1,0},  // 694  psrldq
+  {429,1,0x73,EMB_NONE,0,0,7,7,1,0,OPF_GREG,OPF_SSE_OS,0,0,1,0},  // 695  pslldq
   {430,1,0x51,EMB_NONE,0,0,255,1,0,0,OPF_XMM,OPF_XMM,0,0,1,1},  // 696  sqrtps
   {431,1,0x52,EMB_NONE,0,0,255,1,0,0,OPF_XMM,OPF_XMM,0,0,1,1},  // 697  rsqrtps
   {432,1,0x53,EMB_NONE,0,0,255,1,0,0,OPF_XMM,OPF_XMM,0,0,1,1},  // 698  rcpps
