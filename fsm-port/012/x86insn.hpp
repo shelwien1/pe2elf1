@@ -63,6 +63,10 @@ typedef struct {
   uint32_t moffs : 1;   /* mov accumulator<->[moffs] (A0-A3): no ModR/M, the operand is an
                          * absolute address held in `imm` (64-bit, or 32 under a 67); the
                          * opcode byte is in vex_op, width follows `addr` */
+  uint32_t apx : 1;     /* APX EVEX-promoted legacy (62, map 4): GPR ops, r0-31, NDD/NF.
+                         * vex==3 (the EVEX prefix bytes are replayed); apx flags the
+                         * semantic GPR lowering so the renderer/encoder treat it as legacy */
+  uint32_t nf : 1;      /* APX no-flags ({nf}): the status-flag write is suppressed */
 
   /* encoding witness: the residual that makes  bytes <-> x86insn_t  a byte-exact
    * bijection. The semantic fields say WHAT the instruction is; these say WHICH of

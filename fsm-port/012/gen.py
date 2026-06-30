@@ -280,6 +280,7 @@ class Interp:
     self._vex_tab = self.build_vex(['vex', 'vex2'])
     self._evex_tab = self.build_vex(['evex'])
     self._xop_tab = self.build_vex(['xop'])    # AMD XOP (8F); C++-intercepted, FSM-decoded
+    self._apx_tab = self.build_vex(['apx'])    # APX EVEX-promoted legacy (62, map 4)
     # 64-bit: route the VEX/EVEX prefixes through the FSM (C4/C5/62 are not legacy
     # here). The capture-based vexp*/evexp* tables decode them. XOP (8F) is also
     # FSM-decoded (xopp1/xopp2/xopop) but the C++ keeps intercepting it -- the FSM
@@ -908,6 +909,12 @@ class Interp:
     'evex': [('R', 1), ('X', 1), ('B', 1), ('Rp', 1), ('rsv', 2), ('map', 2),
              ('W', 1), ('vvvv', 4), ('one', 1), ('pp', 2),
              ('z', 1), ('L', 2), ('bcst', 1), ('Vp', 1), ('aaa', 3)],
+    # APX EVEX-promoted legacy: P0 = R3 X3 B3 R4 B4 mmm(=100, 3-bit map); P1 = W vvvv X4 pp;
+    # P2 = p2hi(3) ND V4 aaa.  The C++ apx_finalize folds the r0-31 extension + sizing + the
+    # ND (new-data-dest in vvvv) / NF modifiers; the rule only conveys opcode/pp/W + legacy shape.
+    'apx':  [('R', 1), ('X', 1), ('B', 1), ('Rp', 1), ('B4', 1), ('map', 3),
+             ('W', 1), ('vvvv', 4), ('X4', 1), ('pp', 2),
+             ('p2hi', 3), ('nd', 1), ('V4', 1), ('aaa', 3)],
   }
   # decoration tables that ride after an operand (EVEX {k}/{z}/{1toN}/{er}); they
   # are runtime (the C++ reads them from the captured EVEX P2 byte), not operands.
@@ -939,12 +946,18 @@ class Interp:
 
   def _vex_operand(self, t, env):
     # map one operand atom -> (role, file). None role => unsupported (skip rule).
+    # an immediate atom carries its KIND in the file slot (imm8/immz/imm8sx) so the
+    # FSM can set the right CAP_IMK -- APX promotes immz/imm8sx forms, not just imm8.
+    def _imk(s):
+      if 'immz' in s or 'immv' in s: return 'IMMZ'
+      if 'sx8' in s:                 return 'IMM8SX'
+      return 'IMM8'
     if t[0] == 'bare':
       if t[1] == '$addr':            return ('RM', 'MEM')
-      if t[1].startswith('$imm'):    return ('IMM8', 'NONE')
+      if t[1].startswith('$imm'):    return ('IMM8', _imk(t[1]))
       return (None, None)
     if t[0] == 'call':
-      if 'imm' in t[2]:              return ('IMM8', 'NONE')
+      if 'imm' in t[2]:              return ('IMM8', _imk(t[2]))
       return (None, None)
     name, expr = t[1], t[2]
     role = ('VVVV' if '$v' in expr else 'REG' if '$g' in expr else 'RM' if '$r' in expr else None)
@@ -963,6 +976,8 @@ class Interp:
       file = 'GPR64' if c >= 32 else 'GPR16' if c >= 16 else 'GPR32'
     elif name == 'kreg':
       file = 'KREG'
+    elif name == 'rgb':
+      file = 'GPR8'                                 # APX 8-bit GPR (al..r31b, uniform set)
     elif name == 'vregd':
       role, file = 'IS4', 'VEC'
     elif name == 'ssereg':
@@ -998,6 +1013,8 @@ class Interp:
     # mapidx 0..2 within this submatch's own opcode-table block
     if kind == 'xop':
       mapidx = {8: 0, 9: 1, 10: 2}.get(mapval)
+    elif kind == 'apx':
+      mapidx = 0 if mapval == 4 else None     # APX uses the single legacy map (mmm=4)
     else:
       mapidx = {1: 0, 2: 1, 3: 2}.get(mapval)
     if mapidx is None:
@@ -1023,10 +1040,13 @@ class Interp:
   VEX_FORMS = ['VEX_NONE', 'VEX_RVM', 'VEX_RVMI', 'VEX_RVMR', 'VEX_RM', 'VEX_RMI',
                'VEX_MR', 'VEX_MRI', 'VEX_VM', 'VEX_R', 'VEX_M', 'VEX_RVMV',
                'VEX_VMI', 'VEX_VMG',  # VMI: vvvv,r/m,imm8 ; VMG: same, mnem by /digit
-               'VEX_RMV', 'VEX_RVRM']  # RMV: reg,r/m,vvvv (XOP vprot/vpsh W0);
-                                       # RVRM: reg,vvvv,is4,r/m (XOP vpcmov/vpperm W1) (shifts)
+               'VEX_RMV', 'VEX_RVRM',  # RMV: reg,r/m,vvvv (XOP vprot/vpsh W0);
+                                       # RVRM: reg,vvvv,is4,r/m (XOP vpcmov/vpperm W1)
+               # APX EVEX-promoted legacy (GPR; apx_finalize prepends NDD dest if ND=1)
+               'APX_MR', 'APX_RM', 'APX_RMI', 'APX_MI', 'APX_M', 'APX_R',
+               'APX_MRI', 'APX_MRC']
   VEXFILE = {'VEC': 0, 'GPR32': 1, 'GPR64': 2, 'KREG': 3, 'VECH': 4, 'VECX': 5,
-             'MEM': 0, 'GPR16': 1, 'NONE': 0}
+             'MEM': 0, 'GPR16': 1, 'NONE': 0, 'GPR8': 6}
   _VEX_PAT = {
     'REG,VVVV,RM': 'VEX_RVM', 'REG,VVVV,RM,IMM8': 'VEX_RVMI',
     'REG,VVVV,RM,IS4': 'VEX_RVMR', 'REG,RM': 'VEX_RM', 'REG,RM,IMM8': 'VEX_RMI',
@@ -1035,15 +1055,29 @@ class Interp:
     'REG,RM,VVVV': 'VEX_RMV', 'REG,VVVV,IS4,RM': 'VEX_RVRM',
   }
 
-  def _vex_form(self, ops):
+  # APX promoted-legacy operand shapes (GPR; the C++ apx_finalize prepends the NDD
+  # dest from vvvv when the EVEX P2.ND bit is set, so one cell serves 2-op and 3-op).
+  _APX_PAT = {
+    'RM,REG': 'APX_MR', 'REG,RM': 'APX_RM', 'REG,RM,IMM8': 'APX_RMI',
+    'RM,IMM8': 'APX_MI', 'RM': 'APX_M', 'REG': 'APX_R',
+    'RM,REG,IMM8': 'APX_MRI', 'RM,REG,REG': 'APX_MRC',   # shld/shrd imm / cl
+  }
+
+  def _vex_form(self, ops, kind='vex'):
     # ops: list of (role,file). -> (form_name, rfile_code, mfile_code, imm) or None.
     pat = ','.join(r for r, f in ops)
-    form = self._VEX_PAT.get(pat)
+    form = (self._APX_PAT if kind == 'apx' else self._VEX_PAT).get(pat)
     if form is None:
       return None
     rfile = next((f for r, f in ops if r in ('REG', 'IS4')), 'VEC')
     mfile = next((f for r, f in ops if r == 'RM'), 'VEC')
-    imm = 1 if any(r in ('IMM8', 'IS4') for r, f in ops) else 0
+    # imm carries the CAP_IMK value (so append_imm reads the right width): IS4 and a
+    # plain imm8 -> 1 (IMK_IMM8); APX immz -> 4 (IMK_IMMZ); imm8sx -> 8 (IMK_IMM8SX).
+    IMK = {'IMM8': 1, 'IMMZ': 4, 'IMM8SX': 8}
+    imm = 0
+    for r, f in ops:
+      if r == 'IS4':    imm = 1
+      elif r == 'IMM8': imm = IMK.get(f, 1)
     return (form, self.VEXFILE.get(rfile, 0), self.VEXFILE.get(mfile, 0), imm)
 
   def build_vex(self, kinds):
@@ -1152,7 +1186,7 @@ class Interp:
       mf = self.VEXFILE.get(next((f for r, f in groupmeta[key] if r == 'RM'), 'VEC'), 0)
       cells[key] = (-1, 'VEX_VMG', rf, mf, gid)      # mnem -1 => group; 5th slot = gid
     for key, (mi, ops) in raw.items():
-      f = self._vex_form(ops)
+      f = self._vex_form(ops, kinds[0] if kinds else 'vex')
       if f is None:
         continue                                     # unrecognised shape -> dead opcode
       form, rf, mf, imm = f
@@ -1197,7 +1231,7 @@ class Interp:
     else:
       acts = [('MNEM', mnem, 0, 0),
               ('CONST', self.tailcap('FORM'), self._form_idx(form), 0)]
-      if last: acts.append(('CONST', self.tailcap('IMK'), 1, 0))   # IMK_IMM8
+      if last: acts.append(('CONST', self.tailcap('IMK'), last, 0))  # last = CAP_IMK kind
     if rf: acts.append(('CONST', self.tailcap('RFILE'), rf, 0))
     if mf: acts.append(('CONST', self.tailcap('MFILE'), mf, 0))
     return acts
@@ -1236,7 +1270,10 @@ class Interp:
   # evexop    -> MNEM + FORM + files; the C++ evex_finalize reads P2 for mask/z/
   #              broadcast/rounding and applies the 32-register extension.
   def evexp0_state(self, b):
-    mp = b & 0x07                                  # EVEX map (P0 bits 2:0; bit2==0 here)
+    mp = b & 0x07                                  # EVEX map (P0 bits 2:0)
+    if self._apx_tab and mp == 4:                  # APX EVEX-promoted legacy (mmm=4)
+      # capture P0[7:3] = R3 X3 B3 R4 B4 (5 bits, incl. the APX B4 extension) into CAP_RXB
+      return [('FIELD', self.tailcap('TBL3'), 7, 3)], 'FSM_APXP1'
     mi = {1: 0, 2: 1, 3: 2}.get(mp)
     if mi is None:
       return [], 'FSM_HALT'                        # undefined map -> structural fallback
@@ -1251,6 +1288,28 @@ class Interp:
 
   def evexop_state(self, mi, pp, W, op):
     e = self._evex_tab.get((mi, pp, W, op))
+    if e is None:
+      return [], 'FSM_HALT'
+    return self._vexop_acts(e), 'FSM_HALT'
+
+  # ----- APX FSM states (EVEX-promoted legacy, map 4; capture-based) -----------
+  # evexp0 (mmm=4) -> apxp1 : P1 byte = W vvvv X4 pp.  Capture vvvv+X4 (P1[6:2]) into
+  #   CAP_VVVV and set VAR_OPSIZ from (pp,W); route by (pp,W) -> apxp2.
+  # apxp2 -> capture the whole P2 byte (p2hi.ND.V4.aaa) into CAP_VL; route -> apxop.
+  # apxop -> MNEM + (legacy) FORM + GPR files + IMK; the C++ apx_finalize folds the
+  #   r0-31 extension, the operand sizing, and the ND (NDD dest) / NF modifiers.
+  def apxp1_state(self, b):
+    pp, W = b & 3, (b >> 7) & 1
+    opsz = 2 if W else (1 if pp == 1 else 0)       # W (REX.W) -> 64 ; else pp=66 -> 16 ; else 32
+    acts = [('FIELD', self.cap('REL'), 6, 2),      # CAP_VVVV = P1[6:2] = vvvv<<1 | X4
+            ('CONST', self.var_id('opsiz'), opsz, 0)]
+    return acts, 'FSM_APXP2 + %d*256' % (pp * 2 + W)
+
+  def apxp2_state(self, slot, b):
+    return [('FIELD', self.tailcap('CC'), 7, 0)], 'FSM_APXOP + %d*256' % slot   # CAP_VL = P2
+
+  def apxop_state(self, pp, W, op):
+    e = self._apx_tab.get((0, pp, W, op))
     if e is None:
       return [], 'FSM_HALT'
     return self._vexop_acts(e), 'FSM_HALT'
@@ -1527,6 +1586,10 @@ def emit(c, interp, out_path):
   w("    struct DState xopp1[256];          // 8F byte1: FIELD R'X'B', route by map 8/9/10\n")
   w("    struct DState xopp2[3][256];       // [map-8] byte2: FIELD vvvv/L, route by pp,W\n")
   w("    struct DState xopop[3][4][2][256]; // [map-8][pp][W] opcode -> MNEM + VEX form + files\n")
+  # APX EVEX-promoted legacy (62, map 4): one P1/P2 stage pair + per-(pp,W) opcode map
+  w("    struct DState apxp1[256];          // P1: FIELD vvvv/X4, set opsize, route by pp,W\n")
+  w("    struct DState apxp2[8][256];       // [pp*2+W] P2: FIELD whole byte (p2hi.ND.V4.aaa)\n")
+  w("    struct DState apxop[8][256];       // [pp*2+W] opcode -> MNEM + legacy form + GPR files\n")
   w("};\n")
   w("// base indices derived from the layout (single source of truth):\n")
   w("#define FSM_INDEX(member) ((uint16_t)(offsetof(struct Fsm, member) / sizeof(struct DState)))\n")
@@ -1549,6 +1612,9 @@ def emit(c, interp, out_path):
   w("#define FSM_XOPP1   FSM_INDEX(xopp1)\n")
   w("#define FSM_XOPP2   FSM_INDEX(xopp2)        // + (map-8)*256\n")
   w("#define FSM_XOPOP   FSM_INDEX(xopop)        // + ((map-8)*4 + pp)*2 + W) *256\n")
+  w("#define FSM_APXP1   FSM_INDEX(apxp1)\n")
+  w("#define FSM_APXP2   FSM_INDEX(apxp2)        // + (pp*2 + W)*256\n")
+  w("#define FSM_APXOP   FSM_INDEX(apxop)        // + (pp*2 + W)*256\n")
   w("#define FSM_NGROUP  %d\n" % interp.group_count())
   w("#define FSM_COUNT   (sizeof(struct Fsm) / sizeof(struct DState))\n")
   w("#define FSM_HALT    ((uint16_t)0xFFFF)     // `next` sentinel: stop\n")
@@ -1682,13 +1748,31 @@ def emit(c, interp, out_path):
         w("     }%s\n" % ("," if W == 0 else ""))
       w("    }%s\n" % ("," if pp < 3 else ""))
     w("   }%s\n" % ("," if mp < 2 else ""))
+  w("  },\n")
+  # ---- APX stages (EVEX-promoted legacy, map 4) ----
+  w("  { // apxp1[256]  (P1 byte)\n")
+  emit_states(interp.apxp1_state)
+  w("  },\n")
+  w("  { // apxp2[8][256]  ([pp*2+W] P2 byte)\n")
+  for slot in range(8):
+    w("   { // pp*2+W = %d\n" % slot)
+    emit_states(lambda i, s=slot: interp.apxp2_state(s, i))
+    w("   }%s\n" % ("," if slot < 7 else ""))
+  w("  },\n")
+  w("  { // apxop[8][256]  ([pp*2+W] -> opcode)\n")
+  for slot in range(8):
+    pp, W = slot // 2, slot % 2
+    w("   { // pp=%d W=%d\n" % (pp, W))
+    emit_states(lambda i, p=pp, ww=W: interp.apxop_state(p, ww, i))
+    w("   }%s\n" % ("," if slot < 7 else ""))
   w("  }\n")
   w("};\n")
   w("static_assert(sizeof(struct Fsm) == (256 + 256 + 256 + 256 + 256 + 2*256 + 3*256 + %d*2*256\n"
     % max(1, ng))
   w("              + 256 + 3*256 + 256 + 3*4*2*256\n")
   w("              + 256 + 3*256 + 3*4*2*256 + 3*4*2*256\n")
-  w("              + 256 + 3*256 + 3*4*2*256) * sizeof(struct DState),\n")
+  w("              + 256 + 3*256 + 3*4*2*256\n")
+  w("              + 256 + 8*256 + 8*256) * sizeof(struct DState),\n")
   w('              "struct Fsm has padding; flat indexing would be wrong");\n')
   # two distinct size limits, the narrower one (group id) binds first:
   #   * group id rides a CONST action -> arg0(5) | arg1(3) = 8 bits  (<= 255 groups)
@@ -1740,7 +1824,8 @@ def emit(c, interp, out_path):
   ndstate = (256 + 256 + 256 + 256 + 256 + 2 * 256 + 3 * 256 + max(1, ng) * 2 * 256
              + 256 + 3 * 256 + 256 + 3 * 4 * 2 * 256
              + 256 + 3 * 256 + 3 * 4 * 2 * 256 + 3 * 4 * 2 * 256
-             + 256 + 3 * 256 + 3 * 4 * 2 * 256)
+             + 256 + 3 * 256 + 3 * 4 * 2 * 256
+             + 256 + 8 * 256 + 8 * 256)
   import sys as _sys
   _sys.stderr.write(
       "FSM: %d DStates (%.1f%% of uint16_t next), %d groups, sizeof(Fsm)=%d KiB\n"

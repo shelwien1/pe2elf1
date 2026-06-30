@@ -452,6 +452,76 @@ static inline void vex_finalize(x86dec_t* d, const byte* s, size_t op_at) {
   }
   in->n_ops = (uint8_t)nn;
 }
+
+// One APX GPR operand: file 6 (rgb) -> 8-bit; otherwise an opsize-sized GPR.
+static inline x86op_t apx_gpr(int file, int idx) {
+  x86op_t o; o.index = (uint16_t)(idx & 31);
+  o.type = (file == 6) ? T_GPR8 : T_GPR;
+  return o;
+}
+
+// Lower an APX EVEX-promoted-legacy insn (62, map 4) into GPR operands. The FSM
+// captured P0[7:3]=R3.X3.B3.R4.B4 (CAP_RXB), P1[6:2]=vvvv<<1|X4 (CAP_VVVV), the
+// whole P2 byte (CAP_VL), the legacy operand shape (CAP_FORM) + GPR files, and set
+// VAR_OPSIZ from (pp,W).  We fold the r0-31 extension, apply ND (the new-data dest
+// rides vvvv -> prepended) and NF.  The EVEX prefix bytes are snapshotted for the
+// byte-exact replay encoder (vex==3); apx==1 marks the GPR (legacy) lowering.
+static inline void apx_finalize(x86dec_t* d, const byte* s, size_t op_at) {
+  x86insn_t* in = &d->insn;
+  const uint64_t* c = d->cap;
+  int form = (int)c[CAP_FORM];
+  in->vex = 3; in->apx = 1; in->rip = 0; in->rex = 0;
+  in->zero = 0; in->bcst = 0; in->rc = 0; in->cc = 0xFF;
+  in->opsize = (uint16_t)c[VAR_OPSIZ];                 // 0=32 1=16 2=64, set by apxp1 (pp,W)
+  size_t q = op_at + 1;
+  in->vex1 = s[q]; in->vex2 = s[q + 1]; in->vex3 = s[q + 2]; q += 3;
+  int rxb = (int)c[CAP_RXB];                            // P0[7:3] = R3 X3 B3 R4 B4
+  int R3 = 1 - ((rxb >> 4) & 1), X3 = 1 - ((rxb >> 3) & 1), B3 = 1 - ((rxb >> 2) & 1);
+  int R4 = 1 - ((rxb >> 1) & 1);
+  int B4 = rxb & 1;                                     // B4 (P0.3) is NOT inverted (1 -> +16)
+  int vv = (int)c[CAP_VVVV];                            // P1[6:2] = vvvv<<1 | X4 (inverted)
+  int X4 = 1 - (vv & 1);
+  int p2 = (int)c[CAP_VL];                              // whole P2 byte
+  int ND = (p2 >> 4) & 1, V4 = 1 - ((p2 >> 3) & 1);
+  int ndd = ((~(vv >> 1)) & 0xf) | (V4 << 4);           // NDD dest register 0..31
+  in->nf = (uint8_t)((p2 >> 2) & 1);                    // NF (no-flags)
+  in->vex_op = s[q]; size_t opc_at = q; q++;
+  in->vex_modrm = s[q];
+  bool is_reg = (c[CAP_MODE] == RM_REG);
+  int mreg = (int)c[CAP_REG], mrm = (int)c[CAP_RM];
+  int rf = (int)c[CAP_RFILE], mf = (int)c[CAP_MFILE];
+  in->imm = (int64_t)(int32_t)c[CAP_IMM];
+  // memory r/m: base uses B3(8s)+B4(16s); index uses X3(8s)+X4(16s).
+  if (!is_reg) {
+    if (in->mem_base == GREG_RIP)      in->rip = 1;
+    else if (in->mem_base != GREG_NONE) in->mem_base += 8 * B3 + 16 * B4;
+    if (in->mem_index != GREG_NONE)     in->mem_index += 8 * X3 + 16 * X4;
+    capture_addr_witness(in, s, opc_at, 0);
+  }
+  int reg = mreg + 8 * R3 + 16 * R4;                    // ModR/M.reg -> r0..31
+  int rmr = mrm + 8 * B3 + 16 * B4;                     // reg-direct r/m: B3(8s)+B4(16s)
+  x86op_t regop = apx_gpr(rf, reg);
+  x86op_t rmreg = apx_gpr(mf, rmr);
+  x86op_t memop; memop.type = T_MEM; memop.index = 0;
+  x86op_t rmop = is_reg ? rmreg : memop;
+  x86op_t immop; immop.type = T_IMM; immop.index = 0;
+  x86op_t nddop = apx_gpr(rf ? rf : 1, ndd);            // NDD dest, sized like the reg side
+  int nn = 0;
+  if (ND) in->op[nn++] = nddop;                         // NDD prepends the destination
+  switch (form) {
+    case FORM_APX_MR:  in->op[nn++] = rmop;  in->op[nn++] = regop; break;
+    case FORM_APX_RM:  in->op[nn++] = regop; in->op[nn++] = rmop;  break;
+    case FORM_APX_RMI: in->op[nn++] = regop; in->op[nn++] = rmop; in->op[nn++] = immop; break;
+    case FORM_APX_R:   in->op[nn++] = regop; break;
+    case FORM_APX_MI:  in->op[nn++] = rmop; in->op[nn++] = immop;
+                       in->mnem = (uint16_t)vexgrp[(int)c[CAP_GRP]][mreg]; break;
+    case FORM_APX_M:   in->op[nn++] = rmop;
+                       in->mnem = (uint16_t)vexgrp[(int)c[CAP_GRP]][mreg]; break;
+    case FORM_APX_MRI: in->op[nn++] = rmop; in->op[nn++] = regop; in->op[nn++] = immop; break;
+    default: break;
+  }
+  in->n_ops = (uint8_t)nn;
+}
 #endif // ARCH_MODE == 64
 
 // Structural decode of EVEX (62) and XOP (8F): the prefix bytes are captured raw
@@ -677,13 +747,17 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
       // opcode-extension group with a /digit the corpus doesn't define: fall back
       // to the structural placeholder so the byte-exact round-trip still holds
       // (e.g. VEX 0F 73 /3 vpsrldq / /7 vpslldq if absent from the group).
-      if (form == FORM_VEX_VMG && vexgrp[d->cap[CAP_GRP]][d->cap[CAP_REG]] < 0)
+      if ((form == FORM_VEX_VMG || form == FORM_APX_MI || form == FORM_APX_M) &&
+          vexgrp[d->cap[CAP_GRP]][d->cap[CAP_REG]] < 0)
         return vex_decode(d, s, n, op_at);
     }
     d->insn.addr = (uint16_t)d->cap[VAR_ADRSIZ];
-    ip = append_imm(d->cap, s, n, ip, (int)d->cap[VAR_OPSIZ]);   // imm8 if CAP_IMK set
+    ip = append_imm(d->cap, s, n, ip, (int)d->cap[VAR_OPSIZ]);   // imm width per CAP_IMK
     d->insn.mnem = (uint16_t)d->cap[CAP_MNEM];
-    vex_finalize(d, s, op_at);                       // build operands from the captures
+    // map 4 is APX-promoted legacy: lower to GPR operands + r0-31 + NDD/NF; the rest
+    // of the EVEX prefixes (maps 1-3) are AVX-512 and lower via vex_finalize.
+    if (s[op_at] == 0x62 && (s[op_at + 1] & 7) == 4) apx_finalize(d, s, op_at);
+    else                                             vex_finalize(d, s, op_at);
     return ip;
   }
 #endif
