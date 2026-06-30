@@ -201,9 +201,22 @@ def parse_corpus(path):
     varnames = list(kv_pairs(m.group(1)).keys())
 
   tables = {}
-  for m in re.finditer(r'table\s+(\w+)\s*\{\s*([^}]*)\s*\}', text):
+  # scan to the matching close brace respecting string literals, so table values
+  # may themselves contain braces (the AVX-512 decoration tables hold "{k1}" etc.,
+  # which a naive \{[^}]*\} would truncate at the first inner '}').
+  for m in re.finditer(r'table\s+(\w+)\s*\{', text):
+    i = m.end()
+    depth, instr, start = 1, False, m.end()
+    while i < len(text) and depth:
+      c = text[i]
+      if instr:
+        if c == '"': instr = False
+      elif c == '"': instr = True
+      elif c == '{': depth += 1
+      elif c == '}': depth -= 1
+      i += 1
     items = []
-    for it in split_top(m.group(2), ','):
+    for it in split_top(text[start:i - 1], ','):
       it = it.strip()
       if it.startswith('"') and it.endswith('"'):
         items.append(it[1:-1])
@@ -258,6 +271,17 @@ class Interp:
     self.sib_outer = self.collect_sib_outer()
     # single-byte (op1) + two-byte 0F (op2) instruction maps + mnemonic table
     self._op1, self._op2, self._mnem = self.build_insn()
+    # the VEX operand-shape forms live past the legacy ones in the same enum
+    self.INSN_FORM = list(self.INSN_FORM) + list(self.VEX_FORMS)
+    # VEX descriptor cells (compiled from the vex/vex2 submatches into FSM-ready
+    # (map,pp,W,opcode) -> (mnem,form,files,imm); appends mnemonics to self._mnem).
+    self._vex_tab = self.build_vex()
+    # 64-bit: route the VEX prefixes through the FSM (C4/C5 are not legacy here).
+    # The capture-based vexp1/vexp2/vexop tables then decode them; EVEX (62) and
+    # XOP (8F) stay on the C++ structural path for now.
+    if self.mode == 64 and self._vex_tab:
+      self._op1[0xC4] = ([], 'FSM_VEXP1')
+      self._op1[0xC5] = ([], 'FSM_VEXP1C5')
 
   # ----- small helpers -----
   def greg_idx(self, name):
@@ -850,6 +874,249 @@ class Interp:
   def op3_3a_state(self, byte):
     return self._op3_3a.get(byte, ([], 'FSM_HALT'))
 
+  # ======================================================================
+  # VEX / EVEX / XOP: compile the vex/vex2/evex/xop submatches into a flat
+  # (mapidx, pp, W, opcode) -> descriptor table. The VEX prefix fields don't
+  # fit the FSM's 32 capture slots (REX has the same problem and is handled in
+  # C++), so the FSM never walks these rules. This builds the lookup the C++
+  # vex_decode indexes from the raw VEX bytes: the corpus supplies the mnemonic
+  # and the per-operand ROLE (reg / rm / vvvv / imm8 / is4) + FILE; the C++ then
+  # applies the standard R/X/B/R'/V' register extensions. The byte tail split
+  # (has_modrm / imm length) still comes from vex_structure, so the bijection is
+  # unaffected -- a table miss simply falls back to the structural placeholder.
+  # ----------------------------------------------------------------------
+  # register-name tables (an operand draws a register number from one of these);
+  # any other bracketed table before the first operand is a mnemonic suffix.
+  VEX_REGFILES = ('vreg', 'vvv', 'greg', 'rgb', 'ssereg', 'kreg', 'ereg',
+                  'evvv', 'eregh', 'eregx', 'vregd', 'xreg', 'mmreg', 'areg', 'sreg')
+  # leading bit-field layout per submatch (name,width). map/W/pp drive the table
+  # key; R/X/B/vvvv/L are runtime (the C++ reads them from the raw prefix bytes).
+  VEX_LAYOUT = {
+    'vex':  [('R', 1), ('X', 1), ('B', 1), ('map', 5), ('W', 1), ('vvvv', 4), ('L', 1), ('pp', 2)],
+    'vex2': [('R', 1), ('vvvv', 4), ('L', 1), ('pp', 2)],     # C5: map=1, W=0, X=B=0
+  }
+  # role / file enums shared with the C++ (keep in sync with x86dec.hpp)
+  VR = {'NONE': 0, 'REG': 1, 'RM': 2, 'VVVV': 3, 'IMM8': 4, 'IS4': 5}
+  VF = {'VEC': 0, 'GPR32': 1, 'GPR64': 2, 'KREG': 3, 'VECX': 4, 'MEM': 5, 'GPR16': 6}
+
+  def _vex_tokens(self, rhs):
+    # tokenize a template RHS: ('str',t) | ('ref',name,expr) | ('call',name,arg) | ('bare',t)
+    out = []
+    pat = re.compile(r'"([^"]*)"|(\w+)\[([^\]]*)\]|(\w+)\(([^)]*)\)|(\$?\w+)')
+    for m in pat.finditer(rhs):
+      if m.group(1) is not None:   out.append(('str', m.group(1)))
+      elif m.group(2) is not None: out.append(('ref', m.group(2), m.group(3)))
+      elif m.group(4) is not None: out.append(('call', m.group(4), m.group(5)))
+      else:                        out.append(('bare', m.group(6)))
+    return out
+
+  @staticmethod
+  def _vex_eval(expr, env):
+    s = re.sub(r'\$(\w+)', lambda m: str(env.get(m.group(1), 0)), expr)
+    if not re.fullmatch(r'[0-9+\-*/() ]*', s):
+      return None
+    try:
+      return int(eval(s)) if s.strip() else 0
+    except Exception:
+      return None
+
+  def _vex_operand(self, t, env):
+    # map one operand atom -> (role, file). None role => unsupported (skip rule).
+    if t[0] == 'bare':
+      if t[1] == '$addr':            return ('RM', 'MEM')
+      if t[1].startswith('$imm'):    return ('IMM8', 'NONE')
+      return (None, None)
+    if t[0] == 'call':
+      if 'imm' in t[2]:              return ('IMM8', 'NONE')
+      return (None, None)
+    name, expr = t[1], t[2]
+    role = ('VVVV' if '$v' in expr else 'REG' if '$g' in expr else 'RM' if '$r' in expr else None)
+    if name in ('vreg', 'vvv', 'ereg', 'evvv'):
+      file = 'VEC'
+    elif name == 'eregh' or name == 'eregx':
+      file = 'VECX'
+    elif name == 'greg':
+      c = self._vex_eval(re.sub(r'\$\w+', '0', expr), {}) or 0
+      file = 'GPR64' if c >= 32 else 'GPR16' if c >= 16 else 'GPR32'
+    elif name == 'kreg':
+      file = 'KREG'
+    elif name == 'vregd':
+      role, file = 'IS4', 'VEC'
+    elif name == 'ssereg':
+      file = 'VEC'
+    else:
+      return (None, None)
+    return (role, file)
+
+  def _vex_parse_rule(self, kind, lhs, rhs):
+    # -> (mapidx, [pp...], [W...], opcode, mnem_template_atoms, op_atoms) or None
+    toks = lhs.split()
+    layout = self.VEX_LAYOUT[kind]
+    nf = len(layout)
+    if len(toks) < nf + 1:
+      return None
+    kf = {}
+    for (fname, _fw), tok in zip(layout, toks[:nf]):
+      if re.fullmatch(r'[01]+', tok):
+        kf[fname] = ('lit', int(tok, 2))
+      else:
+        kf[fname] = ('var',)
+    rest = toks[nf:]
+    m = re.fullmatch(r'0x([0-9a-fA-F]{2})', rest[0])
+    if not m:
+      return None
+    opcode = int(m.group(1), 16)
+    mapval = kf['map'][1] if (kind == 'vex' and kf['map'][0] == 'lit') else (1 if kind == 'vex2' else None)
+    mapidx = {1: 0, 2: 1, 3: 2}.get(mapval)
+    if mapidx is None:
+      return None
+    wf = kf.get('W', ('lit', 0))
+    wvals = [wf[1]] if wf[0] == 'lit' else [0, 1]
+    ppf = kf['pp']
+    ppvals = [ppf[1]] if ppf[0] == 'lit' else [0, 1, 2, 3]
+    return (mapidx, ppvals, wvals, opcode)
+
+  # VEX operand-role order -> a compact form enum the C++ finalize switches on.
+  # files are carried separately (CAP_RFILE = dst/reg file, CAP_MFILE = r/m file).
+  VEX_FORMS = ['VEX_NONE', 'VEX_RVM', 'VEX_RVMI', 'VEX_RVMR', 'VEX_RM', 'VEX_RMI',
+               'VEX_MR', 'VEX_MRI', 'VEX_VM', 'VEX_R', 'VEX_M', 'VEX_RVMV']
+  VEXFILE = {'VEC': 0, 'GPR32': 1, 'GPR64': 2, 'KREG': 3, 'VECX': 0, 'MEM': 0, 'GPR16': 1, 'NONE': 0}
+  _VEX_PAT = {
+    'REG,VVVV,RM': 'VEX_RVM', 'REG,VVVV,RM,IMM8': 'VEX_RVMI',
+    'REG,VVVV,RM,IS4': 'VEX_RVMR', 'REG,RM': 'VEX_RM', 'REG,RM,IMM8': 'VEX_RMI',
+    'RM,REG': 'VEX_MR', 'RM,REG,IMM8': 'VEX_MRI', 'VVVV,RM': 'VEX_VM',
+    'REG': 'VEX_R', 'RM': 'VEX_M', '': 'VEX_NONE', 'REG,VVVV,RM,VVVV': 'VEX_RVMV',
+  }
+
+  def _vex_form(self, ops):
+    # ops: list of (role,file). -> (form_name, rfile_code, mfile_code, imm) or None.
+    pat = ','.join(r for r, f in ops)
+    form = self._VEX_PAT.get(pat)
+    if form is None:
+      return None
+    rfile = next((f for r, f in ops if r in ('REG', 'IS4')), 'VEC')
+    mfile = next((f for r, f in ops if r == 'RM'), 'VEC')
+    imm = 1 if any(r in ('IMM8', 'IS4') for r, f in ops) else 0
+    return (form, self.VEXFILE.get(rfile, 0), self.VEXFILE.get(mfile, 0), imm)
+
+  def build_vex(self):
+    # tab[(mapidx,pp,W,opcode)] = (mnem_index, form_name, rfile, mfile, imm).
+    # Keyed by (map,pp,W): pp and W are baked into the opcode-table coordinate, so
+    # the FSM needs no runtime pp/W mnemonic selection. The C++ vexop FSM states
+    # are generated straight from this; a missing key is a dead (rejected) opcode.
+    raw = {}
+
+    def midx(s):
+      if s not in self._mnem:
+        self._mnem.append(s)
+      return self._mnem.index(s)
+
+    for kind in ('vex', 'vex2'):
+      if kind not in self.subs:
+        continue
+      for chunk in split_top(self.subs[kind][1], ';'):
+        if '=>' not in chunk:
+          continue
+        lhs, rhs = chunk.split('=>', 1)
+        if not lhs.strip():
+          continue
+        parsed = self._vex_parse_rule(kind, lhs.strip(), rhs.strip())
+        if parsed is None:
+          continue
+        mapidx, ppvals, wvals, opcode = parsed
+        atoms = self._vex_tokens(rhs.strip())
+        for W in wvals:
+          for pp in ppvals:
+            env = {'p': pp, 'W': W, 'y': 0, 'l': 0}
+            # split atoms into the mnemonic and the operand list
+            mn, j, ok = '', 0, True
+            while j < len(atoms):
+              t = atoms[j]
+              if t[0] == 'str':
+                mn += t[1]; j += 1
+              elif t[0] == 'ref' and t[1] not in self.VEX_REGFILES:
+                tabnm = self.tables.get(t[1])
+                idx = self._vex_eval(t[2], env)
+                if tabnm is None or idx is None or idx >= len(tabnm) or tabnm[idx] == '':
+                  ok = False; break
+                mn += str(tabnm[idx]); j += 1
+              else:
+                break
+            mnem = mn.strip()
+            if not ok or not mnem:
+              continue
+            ops = []
+            for t in atoms[j:]:
+              if t[0] == 'str':
+                continue
+              role, file = self._vex_operand(t, env)
+              if role is None:
+                ok = False; break
+              ops.append((role, file))
+            if not ok:
+              continue
+            mi = midx(mnem)
+            key = (mapidx, pp, W, opcode)
+            if key in raw:
+              # merge the paired reg-direct / @addr rule: prefer the concrete
+              # register file over the MEM marker, slot by slot.
+              omi, oops = raw[key]
+              if len(oops) == len(ops):
+                merged = [(r1, f1 if f2 == 'MEM' else f2 if f1 == 'MEM' else f1)
+                          for (r1, f1), (r2, f2) in zip(oops, ops)]
+                raw[key] = (omi, merged)
+              continue
+            raw[key] = (mi, ops)
+
+    # lower each (map,pp,W,opcode) entry to a VEX FSM cell (mnem, form, files, imm)
+    cells = {}
+    for key, (mi, ops) in raw.items():
+      f = self._vex_form(ops)
+      if f is None:
+        continue                                     # unrecognised shape -> dead opcode
+      form, rf, mf, imm = f
+      cells[key] = (mi, form, rf, mf, imm)
+    return cells
+
+  # ----- VEX FSM states (capture-based; reuse REL/CC/TBL3 slots on the VEX path) --
+  # op1[C4]   -> vexp1   : FIELD CAP_RXB (R'X'B' bits 7:5), route by map -> vexp2[map-1]
+  # vexp2     -> capture vvvv (CAP_VVVV) + L (CAP_VL), route by (pp,W) -> vexop
+  # op1[C5]   -> vexp1c5 : 2-byte form (map=0F, W=0, X'=B'=1); FIELD R'(7), vvvv, L
+  # vexop     -> set MNEM + FORM (a VEX_* form) + RFILE/MFILE + IMK; modrm runs next
+  def _form_idx(self, name):
+    return self.INSN_FORM.index(name)
+
+  def vexp1_state(self, b):
+    mp = b & 0x1f
+    if mp not in (1, 2, 3):
+      return [], 'FSM_HALT'                                  # undefined VEX map
+    return [('FIELD', self.tailcap('TBL3'), 7, 5)], 'FSM_VEXP2 + %d*256' % (mp - 1)
+
+  def vexp2_state(self, mapidx, b):
+    pp, W = b & 3, (b >> 7) & 1
+    acts = [('FIELD', self.cap('REL'), 6, 3),                # CAP_VVVV = raw vvvv (inverted)
+            ('FIELD', self.tailcap('CC'), 2, 2)]             # CAP_VL = L
+    return acts, 'FSM_VEXOP + %d*256' % ((mapidx * 4 + pp) * 2 + W)
+
+  def vexp1c5_state(self, b):
+    pp = b & 3
+    acts = [('FIELD', self.tailcap('TBL3'), 7, 7),           # CAP_RXB = R' only (X'=B'=1)
+            ('FIELD', self.cap('REL'), 6, 3),                # CAP_VVVV
+            ('FIELD', self.tailcap('CC'), 2, 2)]             # CAP_VL = L
+    return acts, 'FSM_VEXOP + %d*256' % (pp * 2)             # map 0F (idx 0), W=0
+
+  def vexop_state(self, mapidx, pp, W, op):
+    e = self._vex_tab.get((mapidx, pp, W, op))
+    if e is None:
+      return [], 'FSM_HALT'                                  # undefined opcode (rejected)
+    mnem, form, rf, mf, imm = e
+    acts = [('MNEM', mnem, 0, 0),
+            ('CONST', self.tailcap('FORM'), self._form_idx(form), 0)]
+    if rf: acts.append(('CONST', self.tailcap('RFILE'), rf, 0))
+    if mf: acts.append(('CONST', self.tailcap('MFILE'), mf, 0))
+    if imm: acts.append(('CONST', self.tailcap('IMK'), 1, 0))    # IMK_IMM8
+    return acts, 'FSM_HALT'
+
   def _collect_group(self, groups, info, rhs, midx, K):
     tb = info['tb']
     opcode = info['bp'].lit_val
@@ -1012,7 +1279,14 @@ def emit(c, interp, out_path):
   w("    CAP_CC   = CAP_SFX + 1,            // condition code + 1 (0 = none); trailing imm operand\n")
   w("    CAP_TBL3 = CAP_CC + 1,             // three-byte map: 0 none, 1 = 0F 38, 2 = 0F 3A\n")
   w("    CAP_RMREQ = CAP_TBL3 + 1,          // ModR/M mod constraint: 0 any, 1 reg-only, 2 mem-only\n")
-  w("    NCAPS = CAP_RMREQ + 1              // == 32, the dst:5 ceiling (see Action.dst)\n};\n\n")
+  w("    NCAPS = CAP_RMREQ + 1              // == 32, the dst:5 ceiling (see Action.dst)\n};\n")
+  # VEX field captures: aliased onto slots no VEX decode path uses for their legacy
+  # purpose (no rel branch / condition code / 3-byte-escape on a VEX insn). This is
+  # the capture reuse that lets VEX/EVEX fit the 32-slot budget without new slots.
+  w("// ---- VEX field captures (reused slots; see corpus64.p) ----\n")
+  w("#define CAP_VVVV CAP_REL    // VEX.vvvv (raw/inverted); finalize de-inverts\n")
+  w("#define CAP_VL   CAP_CC     // VEX.L / EVEX.L'L : 0=xmm 1=ymm 2=zmm\n")
+  w("#define CAP_RXB  CAP_TBL3   // C4: R'X'B' (bits7:5); C5: R' only (bit7)\n\n")
 
   # GPR / SREG enums (from greg / sreg tables) -- used only by the renderer.
   # 64-bit register banks repeat names across size halves; emit each name once.
@@ -1036,7 +1310,8 @@ def emit(c, interp, out_path):
   # CAP_MODE marker: register-direct vs memory r/m
   w("enum RmMode { RM_MEM = 0, RM_REG = 1 };\n\n")
   # operand-shape + immediate-kind enums for the single-byte instruction decoder
-  w("enum InsnForm { FORM_NONE=0, FORM_MODRM, FORM_REG, FORM_REG_IMM, FORM_IMM, FORM_REL, FORM_PTR, FORM_GROUP, FORM_ESC, FORM_RM, FORM_ACC };\n")
+  w("enum InsnForm { %s };\n" %
+    ", ".join("FORM_%s%s" % (n, "=0" if i == 0 else "") for i, n in enumerate(interp.INSN_FORM)))
   w("enum ImmKind  { IMK_NONE=0, IMK_IMM8, IMK_IMM16, IMK_IMM32, IMK_IMMZ, IMK_REL8, IMK_RELZ, IMK_PTR, IMK_IMM8SX, IMK_ENTER, IMK_IMMV };\n")
   w("enum OperandFile { OPF_GREG=0, OPF_RGB, OPF_XMM, OPF_MM, OPF_SREG, OPF_SSE_OS };\n\n")
 
@@ -1097,6 +1372,11 @@ def emit(c, interp, out_path):
   w("    struct DState sib[3][256];         // [mod]\n")
   w("    struct DState groups[%d][2][256];   // [group id][adrsiz] -- reg-fixed extension stages\n"
     % max(1, interp.group_count()))
+  # VEX prefix-consuming stages + per-(map,pp,W) opcode maps (capture-based decode)
+  w("    struct DState vexp1[256];          // C4 byte1: FIELD R'X'B', route by map -> vexp2\n")
+  w("    struct DState vexp2[3][256];       // [map-1] C4 byte2: FIELD vvvv/L, route by pp,W\n")
+  w("    struct DState vexp1c5[256];        // C5 single byte: 2-byte VEX (map=0F, W=0)\n")
+  w("    struct DState vexop[3][4][2][256]; // [map-1][pp][W] opcode -> MNEM + VEX form + files\n")
   w("};\n")
   w("// base indices derived from the layout (single source of truth):\n")
   w("#define FSM_INDEX(member) ((uint16_t)(offsetof(struct Fsm, member) / sizeof(struct DState)))\n")
@@ -1108,6 +1388,10 @@ def emit(c, interp, out_path):
   w("#define FSM_MODRM   FSM_INDEX(modrm)       // + adrsiz*256\n")
   w("#define FSM_SIB     FSM_INDEX(sib)         // + mod*256\n")
   w("#define FSM_GROUPS  FSM_INDEX(groups)      // + (gid*2 + adrsiz)*256\n")
+  w("#define FSM_VEXP1   FSM_INDEX(vexp1)\n")
+  w("#define FSM_VEXP2   FSM_INDEX(vexp2)        // + (map-1)*256\n")
+  w("#define FSM_VEXP1C5 FSM_INDEX(vexp1c5)\n")
+  w("#define FSM_VEXOP   FSM_INDEX(vexop)        // + ((map-1)*4 + pp)*2 + W) *256\n")
   w("#define FSM_NGROUP  %d\n" % interp.group_count())
   w("#define FSM_COUNT   (sizeof(struct Fsm) / sizeof(struct DState))\n")
   w("#define FSM_HALT    ((uint16_t)0xFFFF)     // `next` sentinel: stop\n")
@@ -1158,12 +1442,38 @@ def emit(c, interp, out_path):
         emit_states(lambda i, g=gid, a=adr: interp.group_state(g, a, i))
         w("    }%s\n" % ("," if adr == 0 else ""))
       w("   }%s\n" % ("," if gid < ng - 1 else ""))
-    w("  }\n")
+    w("  }")
   else:
-    w("\n")
+    w("")
+  # VEX prefix + opcode maps (always emitted; in 32-bit mode they are unreachable)
+  w(",\n  { // vexp1[256]  (C4 byte1)\n")
+  emit_states(interp.vexp1_state)
+  w("  },\n")
+  w("  { // vexp2[3][256]  (C4 byte2, by map)\n")
+  for mp in range(3):
+    w("   { // map %d\n" % (mp + 1))
+    emit_states(lambda i, m=mp: interp.vexp2_state(m, i))
+    w("   }%s\n" % ("," if mp < 2 else ""))
+  w("  },\n")
+  w("  { // vexp1c5[256]  (C5 single payload byte)\n")
+  emit_states(interp.vexp1c5_state)
+  w("  },\n")
+  w("  { // vexop[3][4][2][256]  ([map-1][pp][W] -> opcode)\n")
+  for mp in range(3):
+    w("   { // map %d\n" % (mp + 1))
+    for pp in range(4):
+      w("    { // pp %d\n" % pp)
+      for W in range(2):
+        w("     { // W %d\n" % W)
+        emit_states(lambda i, m=mp, p=pp, ww=W: interp.vexop_state(m, p, ww, i))
+        w("     }%s\n" % ("," if W == 0 else ""))
+      w("    }%s\n" % ("," if pp < 3 else ""))
+    w("   }%s\n" % ("," if mp < 2 else ""))
+  w("  }\n")
   w("};\n")
-  w("static_assert(sizeof(struct Fsm) == (256 + 256 + 256 + 256 + 256 + 2*256 + 3*256 + %d*2*256) * sizeof(struct DState),\n"
+  w("static_assert(sizeof(struct Fsm) == (256 + 256 + 256 + 256 + 256 + 2*256 + 3*256 + %d*2*256\n"
     % max(1, ng))
+  w("              + 256 + 3*256 + 256 + 3*4*2*256) * sizeof(struct DState),\n")
   w('              "struct Fsm has padding; flat indexing would be wrong");\n')
   # two distinct size limits, the narrower one (group id) binds first:
   #   * group id rides a CONST action -> arg0(5) | arg1(3) = 8 bits  (<= 255 groups)
@@ -1199,7 +1509,8 @@ def emit(c, interp, out_path):
 
   # FSM size report: DState.next is uint16_t, so the flat table must stay under
   # 65536 states. Each opcode/group sub-table is 256 states; track the trend.
-  ndstate = (256 + 256 + 256 + 256 + 256 + 2 * 256 + 3 * 256 + max(1, ng) * 2 * 256)
+  ndstate = (256 + 256 + 256 + 256 + 256 + 2 * 256 + 3 * 256 + max(1, ng) * 2 * 256
+             + 256 + 3 * 256 + 256 + 3 * 4 * 2 * 256)
   import sys as _sys
   _sys.stderr.write(
       "FSM: %d DStates (%.1f%% of uint16_t next), %d groups, sizeof(Fsm)=%d KiB\n"

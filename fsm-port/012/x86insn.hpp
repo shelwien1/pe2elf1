@@ -92,6 +92,9 @@ typedef struct {
   uint8_t vex2;        /* VEX byte 2 / EVEX P1 (W.vvvv.1.pp)                        */
   uint8_t vex3;        /* EVEX P2 (z.L'L.b.V'.aaa); 0 for VEX                       */
   uint8_t vex_op;      /* the opcode byte following the VEX/EVEX prefix            */
+  uint8_t vex_modrm;   /* raw ModR/M byte of a VEX/EVEX insn (0 if none). Replayed
+                        * verbatim by the encoder so the byte-exact round-trip is
+                        * independent of how vex_decode reorders op[] for display. */
 
   /* prefix bookkeeping (filled by parse_prefixes) */
   uint8_t n_pfx;                 /* number of prefix bytes (prefix string len) */
