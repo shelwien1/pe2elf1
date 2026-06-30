@@ -505,7 +505,9 @@ static inline void apx_finalize(x86dec_t* d, const byte* s, size_t op_at) {
   x86op_t memop; memop.type = T_MEM; memop.index = 0;
   x86op_t rmop = is_reg ? rmreg : memop;
   x86op_t immop; immop.type = T_IMM; immop.index = 0;
-  x86op_t nddop = apx_gpr(rf ? rf : 1, ndd);            // NDD dest, sized like the reg side
+  // NDD dest size = the reg file when present, else the r/m file (group forms have
+  // no reg operand, so the dest follows the r/m width: 8-bit for 80/c0/f6/fe, etc.)
+  x86op_t nddop = apx_gpr(rf ? rf : (mf ? mf : 1), ndd);
   int nn = 0;
   if (ND) in->op[nn++] = nddop;                         // NDD prepends the destination
   switch (form) {
@@ -516,6 +518,13 @@ static inline void apx_finalize(x86dec_t* d, const byte* s, size_t op_at) {
     case FORM_APX_MI:  in->op[nn++] = rmop; in->op[nn++] = immop;
                        in->mnem = (uint16_t)vexgrp[(int)c[CAP_GRP]][mreg]; break;
     case FORM_APX_M:   in->op[nn++] = rmop;
+                       // shift groups d0/d1 (by 1) and d2/d3 (by cl) carry an implicit
+                       // count operand; not/neg/inc/dec (f6/f7/fe/ff) take only r/m.
+                       if (in->vex_op == 0xd0 || in->vex_op == 0xd1) {
+                         in->imm = 1; x86op_t o; o.type = T_IMM; o.index = 0; in->op[nn++] = o;
+                       } else if (in->vex_op == 0xd2 || in->vex_op == 0xd3) {
+                         x86op_t o; o.type = T_GPR8; o.index = 1; in->op[nn++] = o;   // cl
+                       }
                        in->mnem = (uint16_t)vexgrp[(int)c[CAP_GRP]][mreg]; break;
     case FORM_APX_MRI: in->op[nn++] = rmop; in->op[nn++] = regop; in->op[nn++] = immop; break;
     default: break;
@@ -550,7 +559,7 @@ static inline size_t vex_decode(x86dec_t* d, const byte* s, size_t n, size_t ip)
   if (ip >= n) { in->mnem = 0xFFFF; return ip; }
   byte op = s[ip]; in->vex_op = op; size_t op_at = ip; ip++;
   int has_modrm, imm_len;
-  vex_structure(map, op, &has_modrm, &imm_len);
+  vex_structure(map, op, (int)in->opsize, &has_modrm, &imm_len);
   in->n_ops = 0;
   in->opsize = 0;
   in->vex_modrm = 0;

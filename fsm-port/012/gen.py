@@ -1177,16 +1177,25 @@ class Interp:
     # opcode-extension groups (shifts 71/72/73): one vexgrp[gid][digit] row of
     # mnemonics; the cell carries the gid and the C++ picks the mnemonic by the
     # ModR/M reg digit. Shape is VVVV(dest), r/m(src), imm8 (VEX_VMG).
+    kind = kinds[0] if kinds else 'vex'
+    IMK = {'IMM8': 1, 'IMMZ': 4, 'IMM8SX': 8}
     for key, digmap in groups.items():
       if key in raw:
         continue                                     # a non-group rule already claimed it
       gid = len(self._vexgrp)
       self._vexgrp.append([digmap.get(d, -1) for d in range(8)])
-      rf = self.VEXFILE.get(next((f for r, f in groupmeta[key] if r in ('REG', 'IS4')), 'VEC'), 0)
-      mf = self.VEXFILE.get(next((f for r, f in groupmeta[key] if r == 'RM'), 'VEC'), 0)
-      cells[key] = (-1, 'VEX_VMG', rf, mf, gid)      # mnem -1 => group; 5th slot = gid
+      gops = groupmeta[key]
+      rf = self.VEXFILE.get(next((f for r, f in gops if r in ('REG', 'IS4')), 'VEC'), 0)
+      mf = self.VEXFILE.get(next((f for r, f in gops if r == 'RM'), 'VEC'), 0)
+      if kind == 'apx':                              # APX group: GPR, mnem by /digit, NDD via ND
+        has_imm = any(r == 'IMM8' for r, _ in gops)
+        form = 'APX_MI' if has_imm else 'APX_M'
+        imk = next((IMK.get(f, 1) for r, f in gops if r == 'IMM8'), 0)
+      else:
+        form, imk = 'VEX_VMG', 1                      # vector shift groups carry imm8
+      cells[key] = (-1, form, rf, mf, gid, imk)       # mnem -1 => group; 5th = gid, 6th = imk
     for key, (mi, ops) in raw.items():
-      f = self._vex_form(ops, kinds[0] if kinds else 'vex')
+      f = self._vex_form(ops, kind)
       if f is None:
         continue                                     # unrecognised shape -> dead opcode
       form, rf, mf, imm = f
@@ -1223,15 +1232,19 @@ class Interp:
   def _vexop_acts(self, e):
     # action list for one VEX/EVEX opcode cell -- normal (MNEM baked) or an
     # opcode-extension group (no MNEM; the C++ reads vexgrp[gid][/digit]).
-    mnem, form, rf, mf, last = e
-    if mnem == -1:                                          # group (VEX_VMG); last = gid
+    if len(e) == 6:
+      mnem, form, rf, mf, last, imk = e
+    else:
+      mnem, form, rf, mf, last = e; imk = last           # non-group: last IS the imm kind
+    if mnem == -1:                                          # group; last = gid, imk = imm kind
+      # split the gid across arg0(lo5)|arg1(hi3) -- VEX/APX group ids now exceed 31
       acts = [('CONST', self.tailcap('FORM'), self._form_idx(form), 0),
-              ('CONST', self.tailcap('GRP'), last, 0),
-              ('CONST', self.tailcap('IMK'), 1, 0)]         # shift groups carry imm8
+              ('CONST', self.tailcap('GRP'), last & 0x1f, last >> 5)]
+      if imk: acts.append(('CONST', self.tailcap('IMK'), imk, 0))
     else:
       acts = [('MNEM', mnem, 0, 0),
               ('CONST', self.tailcap('FORM'), self._form_idx(form), 0)]
-      if last: acts.append(('CONST', self.tailcap('IMK'), last, 0))  # last = CAP_IMK kind
+      if imk: acts.append(('CONST', self.tailcap('IMK'), imk, 0))   # imk = CAP_IMK kind
     if rf: acts.append(('CONST', self.tailcap('RFILE'), rf, 0))
     if mf: acts.append(('CONST', self.tailcap('MFILE'), mf, 0))
     return acts

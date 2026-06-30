@@ -268,8 +268,18 @@ static inline void enc_imm(uint8_t* o, size_t* p, int imk, int opsize,
 // opcodes carry an imm and a few 0F have none of the standard imm opcodes; the
 // common structure below is exact for the bulk and any deviation still yields a
 // deterministic, bijective split.)
-static inline void vex_structure(int map, uint8_t op, int* has_modrm, int* imm_len) {
+static inline void vex_structure(int map, uint8_t op, int opsize, int* has_modrm, int* imm_len) {
   *has_modrm = 1; *imm_len = 0;
+  if (map == 4) {                                  // APX EVEX-promoted legacy
+    switch (op) {
+      case 0x80: case 0x82: case 0x83:             // group1 imm8 / imm8sx
+      case 0xc0: case 0xc1:                        // group2 shift by imm8
+      case 0x6a: case 0x6b: *imm_len = 1; break;   // push imm8 / imul imm8
+      case 0x81: case 0x69: *imm_len = (opsize == 1) ? 2 : 4; break;  // immz (imul / group1)
+      default: break;                              // most map-4 ops: ModR/M, no immediate
+    }
+    return;
+  }
   if (map == 1) {                                  // 0F
     if (op == 0x77) { *has_modrm = 0; return; }    // vzeroupper / vzeroall
     switch (op) {
@@ -305,7 +315,7 @@ static inline size_t vex_encode(const x86insn_t* in, uint8_t* out) {
   }
   out[p++] = in->vex_op;
   int has_modrm, imm_len;
-  vex_structure(map, in->vex_op, &has_modrm, &imm_len);
+  vex_structure(map, in->vex_op, in->opsize, &has_modrm, &imm_len);
   if (has_modrm) {
     // Replay the raw ModR/M byte captured at decode. For a memory r/m the SIB/disp
     // are rebuilt from the addressing witness (reg/base/index high bits ride in the

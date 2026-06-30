@@ -1089,121 +1089,6 @@ submatch insn {
   0x0f 0xa9 => "pop gs" ;
 }
 
-submatch apx {
-  # ===== APX EVEX-promoted legacy, map 4 (Stage 3a: ALU/cmov/imul) =====
-  # add
-  r x b e f 100 w v j 00 c d n a 0x00 11 ggg rrr => "add " rgb[$r] "," rgb[$g] ;
-  r x b e f 100 w v j 00 c d n a 0x01 11 ggg rrr => "add " greg[$r] "," greg[$g] ;
-  r x b e f 100 w v j 00 c d n a 0x02 11 ggg rrr => "add " rgb[$g] "," rgb[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x03 11 ggg rrr => "add " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x00 11 ggg rrr => "add " rgb[$r] "," rgb[$g] ;
-  r x b e f 100 w v j 01 c d n a 0x01 11 ggg rrr => "add " greg[$r] "," greg[$g] ;
-  r x b e f 100 w v j 01 c d n a 0x02 11 ggg rrr => "add " rgb[$g] "," rgb[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x03 11 ggg rrr => "add " greg[$g] "," greg[$r] ;
-  # or
-  r x b e f 100 w v j 00 c d n a 0x08 11 ggg rrr => "or " rgb[$r] "," rgb[$g] ;
-  r x b e f 100 w v j 00 c d n a 0x09 11 ggg rrr => "or " greg[$r] "," greg[$g] ;
-  r x b e f 100 w v j 00 c d n a 0x0a 11 ggg rrr => "or " rgb[$g] "," rgb[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x0b 11 ggg rrr => "or " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x08 11 ggg rrr => "or " rgb[$r] "," rgb[$g] ;
-  r x b e f 100 w v j 01 c d n a 0x09 11 ggg rrr => "or " greg[$r] "," greg[$g] ;
-  r x b e f 100 w v j 01 c d n a 0x0a 11 ggg rrr => "or " rgb[$g] "," rgb[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x0b 11 ggg rrr => "or " greg[$g] "," greg[$r] ;
-  # adc
-  r x b e f 100 w v j 00 c d n a 0x10 11 ggg rrr => "adc " rgb[$r] "," rgb[$g] ;
-  r x b e f 100 w v j 00 c d n a 0x11 11 ggg rrr => "adc " greg[$r] "," greg[$g] ;
-  r x b e f 100 w v j 00 c d n a 0x12 11 ggg rrr => "adc " rgb[$g] "," rgb[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x13 11 ggg rrr => "adc " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x10 11 ggg rrr => "adc " rgb[$r] "," rgb[$g] ;
-  r x b e f 100 w v j 01 c d n a 0x11 11 ggg rrr => "adc " greg[$r] "," greg[$g] ;
-  r x b e f 100 w v j 01 c d n a 0x12 11 ggg rrr => "adc " rgb[$g] "," rgb[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x13 11 ggg rrr => "adc " greg[$g] "," greg[$r] ;
-  # sbb
-  r x b e f 100 w v j 00 c d n a 0x18 11 ggg rrr => "sbb " rgb[$r] "," rgb[$g] ;
-  r x b e f 100 w v j 00 c d n a 0x19 11 ggg rrr => "sbb " greg[$r] "," greg[$g] ;
-  r x b e f 100 w v j 00 c d n a 0x1a 11 ggg rrr => "sbb " rgb[$g] "," rgb[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x1b 11 ggg rrr => "sbb " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x18 11 ggg rrr => "sbb " rgb[$r] "," rgb[$g] ;
-  r x b e f 100 w v j 01 c d n a 0x19 11 ggg rrr => "sbb " greg[$r] "," greg[$g] ;
-  r x b e f 100 w v j 01 c d n a 0x1a 11 ggg rrr => "sbb " rgb[$g] "," rgb[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x1b 11 ggg rrr => "sbb " greg[$g] "," greg[$r] ;
-  # and
-  r x b e f 100 w v j 00 c d n a 0x20 11 ggg rrr => "and " rgb[$r] "," rgb[$g] ;
-  r x b e f 100 w v j 00 c d n a 0x21 11 ggg rrr => "and " greg[$r] "," greg[$g] ;
-  r x b e f 100 w v j 00 c d n a 0x22 11 ggg rrr => "and " rgb[$g] "," rgb[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x23 11 ggg rrr => "and " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x20 11 ggg rrr => "and " rgb[$r] "," rgb[$g] ;
-  r x b e f 100 w v j 01 c d n a 0x21 11 ggg rrr => "and " greg[$r] "," greg[$g] ;
-  r x b e f 100 w v j 01 c d n a 0x22 11 ggg rrr => "and " rgb[$g] "," rgb[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x23 11 ggg rrr => "and " greg[$g] "," greg[$r] ;
-  # sub
-  r x b e f 100 w v j 00 c d n a 0x28 11 ggg rrr => "sub " rgb[$r] "," rgb[$g] ;
-  r x b e f 100 w v j 00 c d n a 0x29 11 ggg rrr => "sub " greg[$r] "," greg[$g] ;
-  r x b e f 100 w v j 00 c d n a 0x2a 11 ggg rrr => "sub " rgb[$g] "," rgb[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x2b 11 ggg rrr => "sub " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x28 11 ggg rrr => "sub " rgb[$r] "," rgb[$g] ;
-  r x b e f 100 w v j 01 c d n a 0x29 11 ggg rrr => "sub " greg[$r] "," greg[$g] ;
-  r x b e f 100 w v j 01 c d n a 0x2a 11 ggg rrr => "sub " rgb[$g] "," rgb[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x2b 11 ggg rrr => "sub " greg[$g] "," greg[$r] ;
-  # xor
-  r x b e f 100 w v j 00 c d n a 0x30 11 ggg rrr => "xor " rgb[$r] "," rgb[$g] ;
-  r x b e f 100 w v j 00 c d n a 0x31 11 ggg rrr => "xor " greg[$r] "," greg[$g] ;
-  r x b e f 100 w v j 00 c d n a 0x32 11 ggg rrr => "xor " rgb[$g] "," rgb[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x33 11 ggg rrr => "xor " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x30 11 ggg rrr => "xor " rgb[$r] "," rgb[$g] ;
-  r x b e f 100 w v j 01 c d n a 0x31 11 ggg rrr => "xor " greg[$r] "," greg[$g] ;
-  r x b e f 100 w v j 01 c d n a 0x32 11 ggg rrr => "xor " rgb[$g] "," rgb[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x33 11 ggg rrr => "xor " greg[$g] "," greg[$r] ;
-  # cmp
-  r x b e f 100 w v j 00 c d n a 0x38 11 ggg rrr => "cmp " rgb[$r] "," rgb[$g] ;
-  r x b e f 100 w v j 00 c d n a 0x39 11 ggg rrr => "cmp " greg[$r] "," greg[$g] ;
-  r x b e f 100 w v j 00 c d n a 0x3a 11 ggg rrr => "cmp " rgb[$g] "," rgb[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x3b 11 ggg rrr => "cmp " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x38 11 ggg rrr => "cmp " rgb[$r] "," rgb[$g] ;
-  r x b e f 100 w v j 01 c d n a 0x39 11 ggg rrr => "cmp " greg[$r] "," greg[$g] ;
-  r x b e f 100 w v j 01 c d n a 0x3a 11 ggg rrr => "cmp " rgb[$g] "," rgb[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x3b 11 ggg rrr => "cmp " greg[$g] "," greg[$r] ;
-  # cmovcc (map4 40-4f), opsize only
-  r x b e f 100 w v j 00 c d n a 0x40 11 ggg rrr => "cmovo " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x40 11 ggg rrr => "cmovo " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x41 11 ggg rrr => "cmovno " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x41 11 ggg rrr => "cmovno " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x42 11 ggg rrr => "cmovb " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x42 11 ggg rrr => "cmovb " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x43 11 ggg rrr => "cmovae " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x43 11 ggg rrr => "cmovae " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x44 11 ggg rrr => "cmove " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x44 11 ggg rrr => "cmove " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x45 11 ggg rrr => "cmovne " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x45 11 ggg rrr => "cmovne " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x46 11 ggg rrr => "cmovbe " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x46 11 ggg rrr => "cmovbe " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x47 11 ggg rrr => "cmova " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x47 11 ggg rrr => "cmova " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x48 11 ggg rrr => "cmovs " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x48 11 ggg rrr => "cmovs " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x49 11 ggg rrr => "cmovns " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x49 11 ggg rrr => "cmovns " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x4a 11 ggg rrr => "cmovp " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x4a 11 ggg rrr => "cmovp " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x4b 11 ggg rrr => "cmovnp " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x4b 11 ggg rrr => "cmovnp " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x4c 11 ggg rrr => "cmovl " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x4c 11 ggg rrr => "cmovl " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x4d 11 ggg rrr => "cmovge " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x4d 11 ggg rrr => "cmovge " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x4e 11 ggg rrr => "cmovle " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x4e 11 ggg rrr => "cmovle " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 00 c d n a 0x4f 11 ggg rrr => "cmovg " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0x4f 11 ggg rrr => "cmovg " greg[$g] "," greg[$r] ;
-  # imul r,r/m (map4 af), opsize only
-  r x b e f 100 w v j 00 c d n a 0xaf 11 ggg rrr => "imul " greg[$g] "," greg[$r] ;
-  r x b e f 100 w v j 01 c d n a 0xaf 11 ggg rrr => "imul " greg[$g] "," greg[$r] ;
-}
-
-submatch main { @pfx(0) => $pfx }
-
-
 # ===========================================================================
 # VEX (AVX/AVX2) -- ported from the root corpus64.p. These submatches are NOT
 # walked by the decode FSM (the VEX prefix fields don't fit the 32 capture
@@ -2553,6 +2438,273 @@ submatch xop {
   h k b 01001 0 1111 y 00 0xe1 11 ggg rrr => "vphsubbw " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
   h k b 01001 0 1111 y 00 0xe2 11 ggg rrr => "vphsubwd " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
   h k b 01001 0 1111 y 00 0xe3 11 ggg rrr => "vphsubdq " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
+}
+
+submatch apx {
+  # ===== APX EVEX-promoted legacy, map 4 (Stage 3a: ALU/cmov/imul) =====
+  # add
+  r x b e f 100 w v j 00 c d n a 0x00 11 ggg rrr => "add " rgb[$r] "," rgb[$g] ;
+  r x b e f 100 w v j 00 c d n a 0x01 11 ggg rrr => "add " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 00 c d n a 0x02 11 ggg rrr => "add " rgb[$g] "," rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x03 11 ggg rrr => "add " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x00 11 ggg rrr => "add " rgb[$r] "," rgb[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x01 11 ggg rrr => "add " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x02 11 ggg rrr => "add " rgb[$g] "," rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x03 11 ggg rrr => "add " greg[$g] "," greg[$r] ;
+  # or
+  r x b e f 100 w v j 00 c d n a 0x08 11 ggg rrr => "or " rgb[$r] "," rgb[$g] ;
+  r x b e f 100 w v j 00 c d n a 0x09 11 ggg rrr => "or " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 00 c d n a 0x0a 11 ggg rrr => "or " rgb[$g] "," rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x0b 11 ggg rrr => "or " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x08 11 ggg rrr => "or " rgb[$r] "," rgb[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x09 11 ggg rrr => "or " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x0a 11 ggg rrr => "or " rgb[$g] "," rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x0b 11 ggg rrr => "or " greg[$g] "," greg[$r] ;
+  # adc
+  r x b e f 100 w v j 00 c d n a 0x10 11 ggg rrr => "adc " rgb[$r] "," rgb[$g] ;
+  r x b e f 100 w v j 00 c d n a 0x11 11 ggg rrr => "adc " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 00 c d n a 0x12 11 ggg rrr => "adc " rgb[$g] "," rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x13 11 ggg rrr => "adc " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x10 11 ggg rrr => "adc " rgb[$r] "," rgb[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x11 11 ggg rrr => "adc " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x12 11 ggg rrr => "adc " rgb[$g] "," rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x13 11 ggg rrr => "adc " greg[$g] "," greg[$r] ;
+  # sbb
+  r x b e f 100 w v j 00 c d n a 0x18 11 ggg rrr => "sbb " rgb[$r] "," rgb[$g] ;
+  r x b e f 100 w v j 00 c d n a 0x19 11 ggg rrr => "sbb " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 00 c d n a 0x1a 11 ggg rrr => "sbb " rgb[$g] "," rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x1b 11 ggg rrr => "sbb " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x18 11 ggg rrr => "sbb " rgb[$r] "," rgb[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x19 11 ggg rrr => "sbb " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x1a 11 ggg rrr => "sbb " rgb[$g] "," rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x1b 11 ggg rrr => "sbb " greg[$g] "," greg[$r] ;
+  # and
+  r x b e f 100 w v j 00 c d n a 0x20 11 ggg rrr => "and " rgb[$r] "," rgb[$g] ;
+  r x b e f 100 w v j 00 c d n a 0x21 11 ggg rrr => "and " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 00 c d n a 0x22 11 ggg rrr => "and " rgb[$g] "," rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x23 11 ggg rrr => "and " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x20 11 ggg rrr => "and " rgb[$r] "," rgb[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x21 11 ggg rrr => "and " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x22 11 ggg rrr => "and " rgb[$g] "," rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x23 11 ggg rrr => "and " greg[$g] "," greg[$r] ;
+  # sub
+  r x b e f 100 w v j 00 c d n a 0x28 11 ggg rrr => "sub " rgb[$r] "," rgb[$g] ;
+  r x b e f 100 w v j 00 c d n a 0x29 11 ggg rrr => "sub " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 00 c d n a 0x2a 11 ggg rrr => "sub " rgb[$g] "," rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x2b 11 ggg rrr => "sub " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x28 11 ggg rrr => "sub " rgb[$r] "," rgb[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x29 11 ggg rrr => "sub " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x2a 11 ggg rrr => "sub " rgb[$g] "," rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x2b 11 ggg rrr => "sub " greg[$g] "," greg[$r] ;
+  # xor
+  r x b e f 100 w v j 00 c d n a 0x30 11 ggg rrr => "xor " rgb[$r] "," rgb[$g] ;
+  r x b e f 100 w v j 00 c d n a 0x31 11 ggg rrr => "xor " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 00 c d n a 0x32 11 ggg rrr => "xor " rgb[$g] "," rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x33 11 ggg rrr => "xor " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x30 11 ggg rrr => "xor " rgb[$r] "," rgb[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x31 11 ggg rrr => "xor " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x32 11 ggg rrr => "xor " rgb[$g] "," rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x33 11 ggg rrr => "xor " greg[$g] "," greg[$r] ;
+  # cmp
+  r x b e f 100 w v j 00 c d n a 0x38 11 ggg rrr => "cmp " rgb[$r] "," rgb[$g] ;
+  r x b e f 100 w v j 00 c d n a 0x39 11 ggg rrr => "cmp " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 00 c d n a 0x3a 11 ggg rrr => "cmp " rgb[$g] "," rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x3b 11 ggg rrr => "cmp " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x38 11 ggg rrr => "cmp " rgb[$r] "," rgb[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x39 11 ggg rrr => "cmp " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x3a 11 ggg rrr => "cmp " rgb[$g] "," rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x3b 11 ggg rrr => "cmp " greg[$g] "," greg[$r] ;
+  # cmovcc (map4 40-4f), opsize only
+  r x b e f 100 w v j 00 c d n a 0x40 11 ggg rrr => "cmovo " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x40 11 ggg rrr => "cmovo " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x41 11 ggg rrr => "cmovno " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x41 11 ggg rrr => "cmovno " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x42 11 ggg rrr => "cmovb " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x42 11 ggg rrr => "cmovb " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x43 11 ggg rrr => "cmovae " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x43 11 ggg rrr => "cmovae " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x44 11 ggg rrr => "cmove " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x44 11 ggg rrr => "cmove " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x45 11 ggg rrr => "cmovne " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x45 11 ggg rrr => "cmovne " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x46 11 ggg rrr => "cmovbe " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x46 11 ggg rrr => "cmovbe " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x47 11 ggg rrr => "cmova " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x47 11 ggg rrr => "cmova " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x48 11 ggg rrr => "cmovs " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x48 11 ggg rrr => "cmovs " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x49 11 ggg rrr => "cmovns " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x49 11 ggg rrr => "cmovns " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x4a 11 ggg rrr => "cmovp " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x4a 11 ggg rrr => "cmovp " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x4b 11 ggg rrr => "cmovnp " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x4b 11 ggg rrr => "cmovnp " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x4c 11 ggg rrr => "cmovl " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x4c 11 ggg rrr => "cmovl " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x4d 11 ggg rrr => "cmovge " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x4d 11 ggg rrr => "cmovge " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x4e 11 ggg rrr => "cmovle " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x4e 11 ggg rrr => "cmovle " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0x4f 11 ggg rrr => "cmovg " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0x4f 11 ggg rrr => "cmovg " greg[$g] "," greg[$r] ;
+  # imul r,r/m (map4 af), opsize only
+  r x b e f 100 w v j 00 c d n a 0xaf 11 ggg rrr => "imul " greg[$g] "," greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xaf 11 ggg rrr => "imul " greg[$g] "," greg[$r] ;
+  # ===== Stage 3b: opcode-extension groups (NDD via ND; mnem by /digit) =====
+  r x b e f 100 w v j 00 c d n a 0x80 11 000 rrr @imm8 => "add " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0x80 11 001 rrr @imm8 => "or " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0x80 11 010 rrr @imm8 => "adc " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0x80 11 011 rrr @imm8 => "sbb " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0x80 11 100 rrr @imm8 => "and " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0x80 11 101 rrr @imm8 => "sub " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0x80 11 110 rrr @imm8 => "xor " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0x80 11 000 rrr @imm8 => "add " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0x80 11 001 rrr @imm8 => "or " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0x80 11 010 rrr @imm8 => "adc " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0x80 11 011 rrr @imm8 => "sbb " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0x80 11 100 rrr @imm8 => "and " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0x80 11 101 rrr @imm8 => "sub " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0x80 11 110 rrr @imm8 => "xor " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0x81 11 000 rrr @immz => "add " greg[$r] "," hex($immz) ;
+  r x b e f 100 w v j 00 c d n a 0x81 11 001 rrr @immz => "or " greg[$r] "," hex($immz) ;
+  r x b e f 100 w v j 00 c d n a 0x81 11 010 rrr @immz => "adc " greg[$r] "," hex($immz) ;
+  r x b e f 100 w v j 00 c d n a 0x81 11 011 rrr @immz => "sbb " greg[$r] "," hex($immz) ;
+  r x b e f 100 w v j 00 c d n a 0x81 11 100 rrr @immz => "and " greg[$r] "," hex($immz) ;
+  r x b e f 100 w v j 00 c d n a 0x81 11 101 rrr @immz => "sub " greg[$r] "," hex($immz) ;
+  r x b e f 100 w v j 00 c d n a 0x81 11 110 rrr @immz => "xor " greg[$r] "," hex($immz) ;
+  r x b e f 100 w v j 01 c d n a 0x81 11 000 rrr @immz => "add " greg[$r] "," hex($immz) ;
+  r x b e f 100 w v j 01 c d n a 0x81 11 001 rrr @immz => "or " greg[$r] "," hex($immz) ;
+  r x b e f 100 w v j 01 c d n a 0x81 11 010 rrr @immz => "adc " greg[$r] "," hex($immz) ;
+  r x b e f 100 w v j 01 c d n a 0x81 11 011 rrr @immz => "sbb " greg[$r] "," hex($immz) ;
+  r x b e f 100 w v j 01 c d n a 0x81 11 100 rrr @immz => "and " greg[$r] "," hex($immz) ;
+  r x b e f 100 w v j 01 c d n a 0x81 11 101 rrr @immz => "sub " greg[$r] "," hex($immz) ;
+  r x b e f 100 w v j 01 c d n a 0x81 11 110 rrr @immz => "xor " greg[$r] "," hex($immz) ;
+  r x b e f 100 w v j 00 c d n a 0x83 11 000 rrr @imm8 => "add " greg[$r] "," hex(sx8($imm8)) ;
+  r x b e f 100 w v j 00 c d n a 0x83 11 001 rrr @imm8 => "or " greg[$r] "," hex(sx8($imm8)) ;
+  r x b e f 100 w v j 00 c d n a 0x83 11 010 rrr @imm8 => "adc " greg[$r] "," hex(sx8($imm8)) ;
+  r x b e f 100 w v j 00 c d n a 0x83 11 011 rrr @imm8 => "sbb " greg[$r] "," hex(sx8($imm8)) ;
+  r x b e f 100 w v j 00 c d n a 0x83 11 100 rrr @imm8 => "and " greg[$r] "," hex(sx8($imm8)) ;
+  r x b e f 100 w v j 00 c d n a 0x83 11 101 rrr @imm8 => "sub " greg[$r] "," hex(sx8($imm8)) ;
+  r x b e f 100 w v j 00 c d n a 0x83 11 110 rrr @imm8 => "xor " greg[$r] "," hex(sx8($imm8)) ;
+  r x b e f 100 w v j 01 c d n a 0x83 11 000 rrr @imm8 => "add " greg[$r] "," hex(sx8($imm8)) ;
+  r x b e f 100 w v j 01 c d n a 0x83 11 001 rrr @imm8 => "or " greg[$r] "," hex(sx8($imm8)) ;
+  r x b e f 100 w v j 01 c d n a 0x83 11 010 rrr @imm8 => "adc " greg[$r] "," hex(sx8($imm8)) ;
+  r x b e f 100 w v j 01 c d n a 0x83 11 011 rrr @imm8 => "sbb " greg[$r] "," hex(sx8($imm8)) ;
+  r x b e f 100 w v j 01 c d n a 0x83 11 100 rrr @imm8 => "and " greg[$r] "," hex(sx8($imm8)) ;
+  r x b e f 100 w v j 01 c d n a 0x83 11 101 rrr @imm8 => "sub " greg[$r] "," hex(sx8($imm8)) ;
+  r x b e f 100 w v j 01 c d n a 0x83 11 110 rrr @imm8 => "xor " greg[$r] "," hex(sx8($imm8)) ;
+  r x b e f 100 w v j 00 c d n a 0xc0 11 000 rrr @imm8 => "rol " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0xc0 11 001 rrr @imm8 => "ror " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0xc0 11 010 rrr @imm8 => "rcl " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0xc0 11 011 rrr @imm8 => "rcr " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0xc0 11 100 rrr @imm8 => "shl " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0xc0 11 101 rrr @imm8 => "shr " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0xc0 11 110 rrr @imm8 => "shl " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0xc0 11 111 rrr @imm8 => "sar " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0xc0 11 000 rrr @imm8 => "rol " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0xc0 11 001 rrr @imm8 => "ror " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0xc0 11 010 rrr @imm8 => "rcl " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0xc0 11 011 rrr @imm8 => "rcr " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0xc0 11 100 rrr @imm8 => "shl " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0xc0 11 101 rrr @imm8 => "shr " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0xc0 11 110 rrr @imm8 => "shl " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0xc0 11 111 rrr @imm8 => "sar " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0xc1 11 000 rrr @imm8 => "rol " greg[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0xc1 11 001 rrr @imm8 => "ror " greg[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0xc1 11 010 rrr @imm8 => "rcl " greg[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0xc1 11 011 rrr @imm8 => "rcr " greg[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0xc1 11 100 rrr @imm8 => "shl " greg[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0xc1 11 101 rrr @imm8 => "shr " greg[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0xc1 11 110 rrr @imm8 => "shl " greg[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0xc1 11 111 rrr @imm8 => "sar " greg[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0xc1 11 000 rrr @imm8 => "rol " greg[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0xc1 11 001 rrr @imm8 => "ror " greg[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0xc1 11 010 rrr @imm8 => "rcl " greg[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0xc1 11 011 rrr @imm8 => "rcr " greg[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0xc1 11 100 rrr @imm8 => "shl " greg[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0xc1 11 101 rrr @imm8 => "shr " greg[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0xc1 11 110 rrr @imm8 => "shl " greg[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0xc1 11 111 rrr @imm8 => "sar " greg[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0xd0 11 000 rrr => "rol " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd0 11 001 rrr => "ror " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd0 11 010 rrr => "rcl " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd0 11 011 rrr => "rcr " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd0 11 100 rrr => "shl " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd0 11 101 rrr => "shr " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd0 11 110 rrr => "shl " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd0 11 111 rrr => "sar " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd0 11 000 rrr => "rol " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd0 11 001 rrr => "ror " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd0 11 010 rrr => "rcl " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd0 11 011 rrr => "rcr " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd0 11 100 rrr => "shl " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd0 11 101 rrr => "shr " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd0 11 110 rrr => "shl " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd0 11 111 rrr => "sar " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd1 11 000 rrr => "rol " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd1 11 001 rrr => "ror " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd1 11 010 rrr => "rcl " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd1 11 011 rrr => "rcr " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd1 11 100 rrr => "shl " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd1 11 101 rrr => "shr " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd1 11 110 rrr => "shl " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd1 11 111 rrr => "sar " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd1 11 000 rrr => "rol " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd1 11 001 rrr => "ror " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd1 11 010 rrr => "rcl " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd1 11 011 rrr => "rcr " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd1 11 100 rrr => "shl " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd1 11 101 rrr => "shr " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd1 11 110 rrr => "shl " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd1 11 111 rrr => "sar " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd2 11 000 rrr => "rol " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd2 11 001 rrr => "ror " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd2 11 010 rrr => "rcl " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd2 11 011 rrr => "rcr " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd2 11 100 rrr => "shl " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd2 11 101 rrr => "shr " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd2 11 110 rrr => "shl " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd2 11 111 rrr => "sar " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd2 11 000 rrr => "rol " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd2 11 001 rrr => "ror " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd2 11 010 rrr => "rcl " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd2 11 011 rrr => "rcr " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd2 11 100 rrr => "shl " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd2 11 101 rrr => "shr " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd2 11 110 rrr => "shl " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd2 11 111 rrr => "sar " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd3 11 000 rrr => "rol " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd3 11 001 rrr => "ror " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd3 11 010 rrr => "rcl " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd3 11 011 rrr => "rcr " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd3 11 100 rrr => "shl " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd3 11 101 rrr => "shr " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd3 11 110 rrr => "shl " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xd3 11 111 rrr => "sar " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd3 11 000 rrr => "rol " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd3 11 001 rrr => "ror " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd3 11 010 rrr => "rcl " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd3 11 011 rrr => "rcr " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd3 11 100 rrr => "shl " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd3 11 101 rrr => "shr " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd3 11 110 rrr => "shl " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xd3 11 111 rrr => "sar " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xf6 11 010 rrr => "not " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xf6 11 011 rrr => "neg " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xf6 11 010 rrr => "not " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xf6 11 011 rrr => "neg " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xf7 11 010 rrr => "not " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xf7 11 011 rrr => "neg " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xf7 11 010 rrr => "not " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xf7 11 011 rrr => "neg " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xfe 11 000 rrr => "inc " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xfe 11 001 rrr => "dec " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xfe 11 000 rrr => "inc " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xfe 11 001 rrr => "dec " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xff 11 000 rrr => "inc " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xff 11 001 rrr => "dec " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xff 11 000 rrr => "inc " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xff 11 001 rrr => "dec " greg[$r] ;
 }
 
 submatch main { @pfx(0) => $pfx }
