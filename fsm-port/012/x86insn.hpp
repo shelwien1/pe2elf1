@@ -49,8 +49,8 @@ typedef struct {
 
   /* the single memory operand (target of an op[] of type T_MEM) */
   int32_t disp;            /* mem displacement; OR imm2 / far selector     */
-  uint32_t mem_base : 5;   /* 0..15 or GREG_NONE (>=16)                */
-  uint32_t mem_index : 5;  /* 0..15 or GREG_NONE                       */
+  uint32_t mem_base : 7;   /* 0..31 (APX r16-31 via REX2) or GREG_NONE/GREG_RIP */
+  uint32_t mem_index : 7;  /* 0..31 or GREG_NONE                       */
   uint32_t mem_scale : 2;
   uint32_t mem_seg : 3;
   uint32_t opsize : 2;  /* operand size: 0=default(32) 1=16 (66) 2=64 (REX.W) */

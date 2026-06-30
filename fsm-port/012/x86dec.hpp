@@ -180,24 +180,32 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t op_at, int t
   // replayed from pfx[] on encode, so only the operand *numbers* are widened here.
   int xb = 0, reg_rex = 0, imm64_w = 0;
 #if ARCH_MODE == 64
-  // REX is the last prefix byte (it must immediately precede the opcode), captured
-  // raw in pfx[] by the prefix run. Extract W/R/X/B here rather than spending five
-  // scarce capture slots on it. REX.R extends a ModR/M.reg operand, REX.B an
-  // embedded (40+r/B8+r) reg or rm/base, REX.X the SIB index.
-  // For a REX2 (D5) instruction the last prefix byte is the REX2 payload, not a
-  // 0x4x REX -- its bits are replayed raw, so skip the REX extraction (operand
-  // size already came from VAR_OPSIZ via REX2.W; register extension is not needed
-  // for the byte-exact round-trip, the high bits ride in the replayed payload).
-  int rexbyte = (!in->rex2 && in->n_pfx && (in->pfx[in->n_pfx - 1] & 0xF0) == 0x40)
-                  ? in->pfx[in->n_pfx - 1] : 0;
-  int xr = (rexbyte >> 2) & 1, xx = (rexbyte >> 1) & 1;
-  xb = rexbyte & 1;
-  in->rex = rexbyte ? 1 : 0;
-  if (rexbyte & 8) { in->opsize = 2; os = 2; }   // REX.W -> 64-bit operand
+  int xr = 0, xx = 0;
+  // The register-extension prefix is the last prefix byte (it must immediately
+  // precede the opcode). Extract its bits here rather than spending scarce FSM
+  // capture slots. Two encodings:
+  //   * legacy REX (0x4x):  ....W R X B           -> reg/rm/index extend by 1 bit
+  //   * APX  REX2 (D5 + payload): M0 R4 X4 B4 W R X B -> 2 bits each (-> r16-r31)
+  // REX.R / R4 extend a ModR/M.reg operand; REX.B / B4 an embedded (40+r/B8+r) reg
+  // or the rm/base; REX.X / X4 the SIB index. The byte is replayed on encode, so
+  // only the operand register *numbers* are widened here.
+  if (in->rex2) {
+    int p = in->n_pfx ? in->pfx[in->n_pfx - 1] : 0;        // REX2 payload
+    xr = ((p >> 2) & 1) | (((p >> 6) & 1) << 1);           // R | R4<<1  -> 0..3
+    xx = ((p >> 1) & 1) | (((p >> 5) & 1) << 1);           // X | X4<<1
+    xb = ( p       & 1) | (((p >> 4) & 1) << 1);           // B | B4<<1
+    in->rex = 1;
+    if (p & 8) { in->opsize = 2; os = 2; }                 // REX2.W -> 64-bit operand
+  } else {
+    int rexbyte = (in->n_pfx && (in->pfx[in->n_pfx - 1] & 0xF0) == 0x40)
+                    ? in->pfx[in->n_pfx - 1] : 0;
+    xr = (rexbyte >> 2) & 1; xx = (rexbyte >> 1) & 1; xb = rexbyte & 1;
+    in->rex = rexbyte ? 1 : 0;
+    if (rexbyte & 8) { in->opsize = 2; os = 2; }   // REX.W -> 64-bit operand
+  }
   // mov r64,imm64 (movabs): B8+r at 64-bit operand size carries a full 64-bit
   // immediate. Key on os (== VAR_OPSIZ == 2), the same source append_imm/enc_imm
-  // size the immediate from, so they agree even on pathological multi-REX input
-  // where the last REX byte's W differs from the effective $opsiz.
+  // size the immediate from, so they agree even on pathological multi-REX input.
   imm64_w = (c[CAP_IMK] == IMK_IMMV && os == 2) ? 1 : 0;
   // embedded reg (40+r/B8+r) extends via REX.B; ModR/M.reg via REX.R; the
   // implicit accumulator (FORM_ACC) is not encoded, so it is never extended.

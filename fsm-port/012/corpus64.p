@@ -52,11 +52,11 @@ vars  $opsiz=0 $adrsiz=0 $reptype=0 $segidx=0 $lock=0
 # carry one name per number per size so the enum/renderer have names; the decode
 # captures only the low 3 bits and fill_insn adds 8*REX.{R,X,B}. ----------------
 table greg {
-  eax,ecx,edx,ebx,esp,ebp,esi,edi, r8d,r9d,r10d,r11d,r12d,r13d,r14d,r15d,
-  ax,cx,dx,bx,sp,bp,si,di, r8w,r9w,r10w,r11w,r12w,r13w,r14w,r15w,
-  rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi, r8,r9,r10,r11,r12,r13,r14,r15
+  eax,ecx,edx,ebx,esp,ebp,esi,edi,r8d,r9d,r10d,r11d,r12d,r13d,r14d,r15d,r16d,r17d,r18d,r19d,r20d,r21d,r22d,r23d,r24d,r25d,r26d,r27d,r28d,r29d,r30d,r31d,
+  ax,cx,dx,bx,sp,bp,si,di,r8w,r9w,r10w,r11w,r12w,r13w,r14w,r15w,r16w,r17w,r18w,r19w,r20w,r21w,r22w,r23w,r24w,r25w,r26w,r27w,r28w,r29w,r30w,r31w,
+  rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8,r9,r10,r11,r12,r13,r14,r15,r16,r17,r18,r19,r20,r21,r22,r23,r24,r25,r26,r27,r28,r29,r30,r31
 }
-table rgb { al,cl,dl,bl,spl,bpl,sil,dil, r8b,r9b,r10b,r11b,r12b,r13b,r14b,r15b }
+table rgb { al,cl,dl,bl,spl,bpl,sil,dil,r8b,r9b,r10b,r11b,r12b,r13b,r14b,r15b,r16b,r17b,r18b,r19b,r20b,r21b,r22b,r23b,r24b,r25b,r26b,r27b,r28b,r29b,r30b,r31b }
 table ssereg { mm0,mm1,mm2,mm3,mm4,mm5,mm6,mm7,
   xmm0,xmm1,xmm2,xmm3,xmm4,xmm5,xmm6,xmm7,xmm8,xmm9,xmm10,xmm11,xmm12,xmm13,xmm14,xmm15 }
 table sreg { es,cs,ss,ds,fs,gs }

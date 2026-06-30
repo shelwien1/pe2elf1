@@ -1337,7 +1337,10 @@ def emit(c, interp, out_path):
     # CONST: name the value when an enum applies (register / mode marker); the
     # value is 8 bits (arg0 lo5 | arg1 hi3) so group ids past 31 survive.
     if dst in (interp.cap('BASE'), interp.cap('INDEX')):
+      # base/index sentinels GREG_NONE/GREG_RIP exceed 31 now (APX r16-31 use the
+      # full 0..31 range), so split the value across arg0 (lo5) | arg1 (hi3).
       av = interp.greg_const(a0)
+      return "{%s,%s,(%s)&0x1F,((%s)>>5)&7}" % (ACTOP[op], dn, av, av)
     elif dst == interp.cap('MODE'):
       av = 'RM_REG' if a0 == 1 else 'RM_MEM'
     else:                                              # prefix value / seg row / group id
@@ -1822,14 +1825,16 @@ def self_check(interp):
 # --------------------------------------------------------------------------
 
 def main():
-  global GREG_NONE
+  global GREG_NONE, GREG_RIP
   args = [a for a in sys.argv[1:] if not a.startswith('--')]
   corpus = args[0] if args else "corpus.p"
   outp = args[1] if len(args) > 1 else "x86_tables.h"
   c = parse_corpus(corpus)
-  # x86-64 register numbers run 0..15, so the "no register" sentinel must clear
-  # them; x86-32 keeps the historical 15 (4-bit mem_base field, di == number 7).
-  GREG_NONE = 16 if int(c['arch'].get('mode', 32)) == 64 else 15
+  # x86-64 register numbers run 0..31 with APX (REX2 -> r16-r31), so the "no
+  # register" sentinel must clear all of them: it sits just past the 96-entry
+  # greg table (3 size banks x 32). x86-32 keeps the historical 15.
+  GREG_NONE = 96 if int(c['arch'].get('mode', 32)) == 64 else 15
+  GREG_RIP = GREG_NONE + 1
   interp = Interp(c)
   if "--check" in sys.argv:
     self_check(interp)
