@@ -1003,10 +1003,16 @@ class Interp:
     wvals = [wf[1]] if wf[0] == 'lit' else [0, 1]
     ppf = kf['pp']
     ppvals = [ppf[1]] if ppf[0] == 'lit' else [0, 1, 2, 3]
-    # opcode-extension group? reg-direct with a literal /digit (e.g. 0F 73 /6 vpsllq)
+    # opcode-extension group? reg-direct with a literal /digit (0F 73 /6 vpsllq),
+    # or a memory form whose /digit rides @addr(N) (the EVEX memory-source shifts).
     digit = None
     if len(rest) >= 4 and rest[1] == '11' and re.fullmatch(r'[01]{3}', rest[2]):
       digit = int(rest[2], 2)
+    else:
+      for tok in rest[1:]:
+        am = re.fullmatch(r'@addr\((\d+)\)', tok)
+        if am:
+          digit = int(am.group(1)); break
     return (mapidx, ppvals, wvals, opcode, digit)
 
   # VEX operand-role order -> a compact form enum the C++ finalize switches on.

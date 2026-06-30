@@ -26,12 +26,20 @@
 # (D8-DF). The mandatory 66/F3/F2 SSE selector and rep/lock ride the prefix run
 # (replayed verbatim), so prefix variants round-trip byte-exact.
 #
-# Beyond this corpus, the C++ driver round-trips the remaining x64 byte-exactly:
-# VEX/EVEX/XOP (AVX, AVX-512) via the structural vex path; APX -- the REX2 (D5)
-# legacy prefix for r16-r31 and the EVEX-promoted-legacy maps; and the moffs
-# mov (A0-A3), whose absolute address (64-bit, or 32 under a 67) is carried in
-# the 64-bit imm field. The fuzzer enforces lossless round-trip across the whole
-# accepted byte space (0 failures) -- the bijection now holds for all of x64.
+# VEX (AVX/AVX2) and EVEX (AVX-512) are now decoded SEMANTICALLY, not just byte-
+# round-tripped: the vex/vex2/evex submatches below are compiled by gen.py into
+# capture-based FSM stages (op1[C4/C5/62] -> vexp*/evexp* -> per-(map,pp,W)
+# opcode tables). The VEX/EVEX prefix fields ride the SAME 32 capture slots as
+# the legacy decode -- no slot is live on more than one path, so they alias onto
+# the unused ones (vvvv->REL, L/L'L->CC, R'X'B'->TBL3) -- and the C++ vex_finalize
+# folds in the R/X/B/R'/V' register extensions + the EVEX mask/zeroing/broadcast/
+# rounding decorations. Coverage: VEX 100% of the rules, EVEX ~98% (the rare
+# EVEX memory-source shift-by-imm and the 256-bit vextract* lane ops remain on
+# the structural path). An opcode the corpus does not cover, plus XOP (8F), the
+# APX REX2 (D5) prefix, and the moffs mov (A0-A3), still round-trip via the C++
+# structural path (raw-byte replay). The fuzzer enforces lossless round-trip
+# across the whole accepted byte space (0 failures) -- the bijection holds for
+# all of x64, and the covered VEX/EVEX now lower to real mnemonics + operands.
 
 arch  $mode=64 $endian=le $bitorder=msb $maxlen=15
 # REX is NOT a var: the capture index is only 5 bits (32 slots) and the legacy
