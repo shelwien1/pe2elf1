@@ -23,6 +23,11 @@
  * single DictDecoder instance decodes one whole stream; call reset() to
  * start decoding a fresh, independent stream with the same dictionary.
  *
+ * Stage 2 can be turned off (command line -r, or
+ * set_case_space_decode(false)): unpack() then emits the raw dictionary
+ * words unchanged, i.e. the still case/space-encoded byte stream the
+ * encoder produced, rather than the fully restored original.
+ *
  * Because case/space decoding only ever drops or 1:1-maps bytes, a single
  * symbol expands to at most the length of the longest dictionary word, so
  * one unpack() never produces more than OUT_MAX bytes (see the printed
@@ -32,17 +37,20 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 class DictDecoder {
 public:
     DictDecoder()
-        : buf_(0), word_(0), wlen_(0), nword_(0), max_wlen_(0) { reset(); }
+        : buf_(0), word_(0), wlen_(0), nword_(0), max_wlen_(0),
+          case_space_(true) { reset(); }
 
     /* Load the dictionary from the textual "dict" file produced by
        `preprocess c ...`.  Errors are fatal (perror + exit), as in the
        original tool. */
     explicit DictDecoder(const char *dict_filename)
-        : buf_(0), word_(0), wlen_(0), nword_(0), max_wlen_(0)
+        : buf_(0), word_(0), wlen_(0), nword_(0), max_wlen_(0),
+          case_space_(true)
     {
         reset();
         load_dict(dict_filename);
@@ -138,6 +146,15 @@ public:
         }
         const uint8_t *w = word_[sym];
         uint32_t n = wlen_[sym];
+
+        if (!case_space_) {
+            /* stage 2 disabled: emit the dictionary word verbatim, i.e. the
+               still case/space-encoded byte stream (control codes 1..4 and
+               the leading-space convention are left in place). */
+            memcpy(out, w, n);
+            return (int)n;
+        }
+
         int k = 0;
         for (uint32_t i = 0; i < n; i++) {
             /* dictionary bytes are unsigned (0..255); control codes 1..4
@@ -151,7 +168,7 @@ public:
     }
 
     /* Reset the case/space state machine so the same dictionary can decode
-       another independent stream. */
+       another independent stream.  Does not change the case/space option. */
     void reset()
     {
         ch_type_    = 0;
@@ -159,6 +176,12 @@ public:
         ch_type1_   = 0;
         has_escape_ = false;
     }
+
+    /* Select whether unpack() undoes the case/space preprocessing.
+       true  (default): restore the original bytes;
+       false          : emit the raw, still-preprocessed dictionary words. */
+    void set_case_space_decode(bool on) { case_space_ = on; }
+    bool case_space_decode() const      { return case_space_; }
 
     size_t   symbol_count()  const { return nword_; }     /* valid: 0..count-1 */
     uint32_t max_word_len()  const { return max_wlen_; }  /* upper bound of unpack() */
@@ -214,6 +237,7 @@ private:
     uint32_t *wlen_;    /* wlen_[sym] = number of bytes of that symbol       */
     size_t    nword_;   /* number of dictionary entries                      */
     uint32_t  max_wlen_;/* longest word, == upper bound on unpack() output   */
+    bool      case_space_; /* true: undo preprocessing; false: raw words     */
 
     /* case/space machine state (mirror of CaseSpaceDecodeState). */
     bool has_space_;
@@ -231,24 +255,53 @@ enum { OUT_MAX = 512 };
 
 static uint8_t out[OUT_MAX];   /* plain global output array (no vector) */
 
+static void usage(const char *prog)
+{
+    fprintf(stderr,
+        "usage: %s [-r] <dict> <book1p> <out>\n"
+        "  Rebuild the original file from the dictionary and the\n"
+        "  preprocessed 16-bit symbol stream.\n"
+        "  -r   raw: do not undo the case/space preprocessing; write the\n"
+        "       still-preprocessed byte stream instead of the original.\n",
+        prog);
+}
+
 int main(int argc, char **argv)
 {
-    if (argc != 4) {
-        fprintf(stderr, "usage: %s <dict> <book1p> <out>\n", argv[0]);
+    bool case_space = true;            /* default: undo the preprocessing */
+    int a = 1;
+    for (; a < argc && argv[a][0] == '-' && argv[a][1]; a++) {
+        if (!strcmp(argv[a], "-r") || !strcmp(argv[a], "--raw")) {
+            case_space = false;
+        } else if (!strcmp(argv[a], "-h") || !strcmp(argv[a], "--help")) {
+            usage(argv[0]);
+            return 0;
+        } else {
+            fprintf(stderr, "unknown option: %s\n", argv[a]);
+            usage(argv[0]);
+            return 1;
+        }
+    }
+    if (argc - a != 3) {
+        usage(argv[0]);
         return 1;
     }
+    const char *dict_file = argv[a++];
+    const char *in_file   = argv[a++];
+    const char *out_file  = argv[a++];
 
-    DictDecoder dec(argv[1]);
+    DictDecoder dec(dict_file);
+    dec.set_case_space_decode(case_space);
     if (dec.max_word_len() > OUT_MAX) {
         fprintf(stderr, "OUT_MAX too small: longest word is %u bytes\n",
                 (unsigned)dec.max_word_len());
         return 1;
     }
 
-    FILE *fi = fopen(argv[2], "rb");
-    if (!fi) { perror(argv[2]); return 1; }
-    FILE *fo = fopen(argv[3], "wb");
-    if (!fo) { perror(argv[3]); fclose(fi); return 1; }
+    FILE *fi = fopen(in_file, "rb");
+    if (!fi) { perror(in_file); return 1; }
+    FILE *fo = fopen(out_file, "wb");
+    if (!fo) { perror(out_file); fclose(fi); return 1; }
 
     size_t max_out = 0;          /* maximum out.size() over all unpack() calls */
     uint8_t hdr[2];

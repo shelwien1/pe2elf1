@@ -8,6 +8,11 @@ and a preprocessed symbol stream (`book1p`).
 It is a clean, bit-exact reimplementation of the decode (`d`) path of
 `preprocess.c`.
 
+```
+usage: decode [-r] <dict> <book1p> <out>
+  -r   raw: do not undo the case/space preprocessing (see "Raw mode").
+```
+
 ## Files
 
 | File         | Purpose                                                                          |
@@ -60,6 +65,10 @@ Key methods:
   returning the number of 8-bit bytes written. This is the requested
   method: 16-bit symbol in, 8-bit buffer out. `out` must hold at least
   `max_word_len()` bytes.
+- `void set_case_space_decode(bool on)` / `bool case_space_decode()` —
+  select whether `unpack()` undoes the case/space preprocessing (stage 2).
+  `true` (default) restores the original bytes; `false` emits the raw,
+  still-preprocessed dictionary words. See *Raw mode* below.
 - `void reset()` — reset the case/space state machine to decode a fresh
   stream with the same dictionary.
 - `size_t load_dict(const char*)` — (re)load the dictionary; returns the
@@ -101,6 +110,23 @@ dictionary word. The longest word in this sample is 20 bytes (symbol 592,
      - `2` (`CH_TO_UPPER`) — upper-case the following word.
      - `3` (`CH_FIRST_UPPER`) — upper-case only the first letter.
      - `4` (`CH_ESCAPE`) — the next byte is a literal reserved code.
+
+## Raw mode (`-r` / `set_case_space_decode(false)`)
+
+By default the decoder runs both stages and reproduces the original file.
+With `-r` (or `set_case_space_decode(false)`) it runs **stage 1 only**:
+`unpack()` emits each dictionary word verbatim, so the output is the
+**still case/space-encoded** byte stream the encoder produced — control
+codes `1..4` and the leading-space convention are left in place.
+
+```sh
+./decode    testdata/dict testdata/book1p out       # out == book1 (768771 bytes)
+./decode -r testdata/dict testdata/book1p out.raw   # intermediate stream (824154 bytes)
+```
+
+Feeding `out.raw` through the case/space state machine yields `book1`
+exactly, i.e. raw mode just stops one stage earlier. It is handy for
+inspecting what the dictionary stage alone produces.
 
 ## Reference
 
