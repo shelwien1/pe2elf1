@@ -945,11 +945,12 @@ class Interp:
       return (None, None)
     name, expr = t[1], t[2]
     role = ('VVVV' if '$v' in expr else 'REG' if '$g' in expr else 'RM' if '$r' in expr else None)
-    if name in ('vreg', 'vvv', 'ereg', 'evvv'):
-      # a length term ($y for VEX L, $l for EVEX L'L) => sized by the vector length;
-      # without it the operand is a fixed xmm (the narrow side of a VEX width-changer,
-      # e.g. vcvtps2pd's vreg[8+$r] source).
-      file = 'VEC' if ('$y' in expr or '$l' in expr) else 'VECX'
+    if name in ('ereg', 'evvv'):
+      file = 'VEC'                                   # EVEX: always sized by the captured L'L
+    elif name in ('vreg', 'vvv'):
+      # VEX: a length term ($y) => sized by L; without it the operand is a fixed
+      # xmm (the narrow side of a VEX width-changer, e.g. vcvtps2pd's vreg[8+$r]).
+      file = 'VEC' if '$y' in expr else 'VECX'
     elif name == 'eregh':
       file = 'VECH'                                 # one size class down (vcvt widen/narrow)
     elif name == 'eregx':
@@ -1071,6 +1072,8 @@ class Interp:
               if t[0] == 'call' and t[1] == 'wit':
                 j += 1                                       # witness marker (e.g. wit("evex"))
               elif t[0] == 'str':
+                if '[' in t[1]:
+                  break                                      # start of a memory operand (scatter dst)
                 mn += t[1]; j += 1
               elif t[0] == 'ref' and t[1] not in self.VEX_REGFILES and t[1] not in self.VEX_DECOR:
                 tabnm = self.tables.get(t[1])
@@ -1084,9 +1087,18 @@ class Interp:
             if not ok or not mnem:
               continue
             ops = []
+            in_mem = False                                   # inside a "[ ... ]" memory template
             for t in atoms[j:]:
               if t[0] == 'str':
+                # a hand-built memory operand (VSIB gather/scatter): "[" base "+"
+                # index "*" scale "]" -- collapse the whole bracket span into one
+                # r/m operand (the index is a vector reg, but for the byte-exact
+                # round-trip the SIB is replayed; it renders as a memory operand).
+                if '[' in t[1]: ops.append(('RM', 'MEM')); in_mem = True
+                if ']' in t[1]: in_mem = False
                 continue
+              if in_mem:
+                continue                                     # absorbed into the bracket operand
               if t[0] == 'call' and t[1] == 'wit':
                 continue                                     # witness marker
               if t[0] == 'ref' and t[1] in self.VEX_DECOR:
