@@ -48,8 +48,11 @@
 # destination and NF no-flags modifiers). The full integer set is covered: the ALU
 # (add/or/adc/sbb/and/sub/xor/cmp, 8/16/32/64, MR/RM/MI), cmovcc, the shift/rotate
 # and inc/dec/not/neg groups, imul, shld/shrd and the push2/pop2 register pair --
-# all with NDD/NF and r0-31. The promoted-special tail (movbe, crc32, movdiri, aadd,
-# wrssq, sha*) keeps its idiosyncratic shapes and stays structural. An opcode the corpus does
+# all with NDD/NF and r0-31. The remaining map-4 tail uses pp as a MANDATORY-PREFIX
+# mnemonic selector (not the size override the promoted ALU uses) and/or SSE-domain
+# operands -- adcx/adox, movbe, crc32, the aadd/aand/axor/aor atomics, movdiri/
+# movdir64b, sha*/aes*kl, invept/invvpid/invpcid, u{rd,wr}msr, wrssq/wrussq -- so it
+# does not fit the uniform model and stays structural. An opcode the corpus does
 # not cover, those XOP GPR forms / APX tail, the APX REX2 (D5) prefix, and the moffs
 # mov (A0-A3), still round-trip via the C++ structural path (raw-byte replay). The
 # fuzzer enforces lossless round-trip across the whole accepted byte space (0
