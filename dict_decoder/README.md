@@ -10,13 +10,15 @@ It is a clean, bit-exact reimplementation of the decode (`d`) path of
 
 ## Files
 
-| File              | Purpose                                                        |
-|-------------------|----------------------------------------------------------------|
-| `DictDecoder.h`   | The decoder class (declaration + format notes).                |
-| `DictDecoder.cpp` | Implementation.                                                |
-| `decode.cpp`      | Driver, equivalent to `preprocess d <dict> <book1p> <out>`.    |
-| `Makefile`        | `make` to build, `make test` to verify against `book1`.        |
-| `testdata/`       | Sample `dict`, `book1p`, and the expected `book1`.             |
+| File         | Purpose                                                                          |
+|--------------|----------------------------------------------------------------------------------|
+| `decode.cpp` | Self-contained: the `DictDecoder` class **and** the driver (= `preprocess d`).   |
+| `Makefile`   | `make` to build, `make test` to verify against `book1`.                          |
+| `testdata/`  | Sample `dict`, `book1p`, and the expected `book1`.                               |
+
+Everything is in the single translation unit `decode.cpp`: the
+`DictDecoder` class (all methods defined inline in the class body) followed
+by `main()`. There is no separate header or implementation file.
 
 ## Build & test
 
@@ -30,13 +32,15 @@ is byte-for-byte identical to the reference file.
 
 ## The class
 
-The core is `DictDecoder::unpack`, which turns **one 16-bit symbol** into
-the **8-bit bytes** that can be written to the output file:
+The `DictDecoder` class is defined at the top of `decode.cpp` (lift it into
+your own project as-is if you want to reuse it). The core is
+`DictDecoder::unpack`, which turns **one 16-bit symbol** into the **8-bit
+bytes** that can be written to the output file:
 
 ```cpp
-#include "DictDecoder.h"
 #include <vector>
 #include <cstdio>
+// ... DictDecoder class (as in decode.cpp) ...
 
 DictDecoder dec("dict");          // load the dictionary
 
