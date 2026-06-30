@@ -422,6 +422,11 @@ static inline void vex_finalize(x86dec_t* d, const byte* s, size_t op_at) {
     case FORM_VEX_R:    in->op[nn++]=regop; break;
     case FORM_VEX_M:    in->op[nn++]=rmop; break;
     case FORM_VEX_RVMV: in->op[nn++]=regop; in->op[nn++]=vvvvop; in->op[nn++]=rmop; in->op[nn++]=vvvvop; break;
+    case FORM_VEX_VMI:  in->op[nn++]=vvvvop; in->op[nn++]=rmop; in->op[nn++]=immop; break;
+    case FORM_VEX_VMG:  // shift-by-imm group: dest=vvvv, src=r/m, imm8; mnem by /digit
+      in->op[nn++]=vvvvop; in->op[nn++]=rmop; in->op[nn++]=immop;
+      in->mnem = (uint16_t)vexgrp[(int)c[CAP_GRP]][mreg];     // mreg == ModR/M reg = /digit
+      break;
     default: break;                                            // FORM_VEX_NONE
   }
   // EVEX writemask {kN}: a positional operand right after the destination.
@@ -632,6 +637,11 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
       ip = run_fsm(mstart, s, n, ip, d->cap);
       if (ip == before) { d->insn.mnem = 0xFFFF; return ip; }   // truncated ModR/M
       fill_insn(d);
+      // opcode-extension group with a /digit the corpus doesn't define: fall back
+      // to the structural placeholder so the byte-exact round-trip still holds
+      // (e.g. VEX 0F 73 /3 vpsrldq / /7 vpslldq if absent from the group).
+      if (form == FORM_VEX_VMG && vexgrp[d->cap[CAP_GRP]][d->cap[CAP_REG]] < 0)
+        return vex_decode(d, s, n, op_at);
     }
     d->insn.addr = (uint16_t)d->cap[VAR_ADRSIZ];
     ip = append_imm(d->cap, s, n, ip, (int)d->cap[VAR_OPSIZ]);   // imm8 if CAP_IMK set

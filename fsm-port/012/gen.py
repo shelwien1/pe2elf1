@@ -276,6 +276,7 @@ class Interp:
     # VEX/EVEX descriptor cells (compiled from the vex/vex2/evex submatches into
     # FSM-ready (map,pp,W,opcode) -> (mnem,form,files,imm); each appends mnemonics
     # to self._mnem). EVEX has its own opcode-table block (its maps/opcodes differ).
+    self._vexgrp = []                 # vexgrp[gid][/digit] -> mnemonic (shift groups)
     self._vex_tab = self.build_vex(['vex', 'vex2'])
     self._evex_tab = self.build_vex(['evex'])
     # 64-bit: route the VEX/EVEX prefixes through the FSM (C4/C5/62 are not legacy
@@ -996,12 +997,17 @@ class Interp:
     wvals = [wf[1]] if wf[0] == 'lit' else [0, 1]
     ppf = kf['pp']
     ppvals = [ppf[1]] if ppf[0] == 'lit' else [0, 1, 2, 3]
-    return (mapidx, ppvals, wvals, opcode)
+    # opcode-extension group? reg-direct with a literal /digit (e.g. 0F 73 /6 vpsllq)
+    digit = None
+    if len(rest) >= 4 and rest[1] == '11' and re.fullmatch(r'[01]{3}', rest[2]):
+      digit = int(rest[2], 2)
+    return (mapidx, ppvals, wvals, opcode, digit)
 
   # VEX operand-role order -> a compact form enum the C++ finalize switches on.
   # files are carried separately (CAP_RFILE = dst/reg file, CAP_MFILE = r/m file).
   VEX_FORMS = ['VEX_NONE', 'VEX_RVM', 'VEX_RVMI', 'VEX_RVMR', 'VEX_RM', 'VEX_RMI',
-               'VEX_MR', 'VEX_MRI', 'VEX_VM', 'VEX_R', 'VEX_M', 'VEX_RVMV']
+               'VEX_MR', 'VEX_MRI', 'VEX_VM', 'VEX_R', 'VEX_M', 'VEX_RVMV',
+               'VEX_VMI', 'VEX_VMG']  # VMI: vvvv,r/m,imm8 ; VMG: same, mnem by /digit (shifts)
   VEXFILE = {'VEC': 0, 'GPR32': 1, 'GPR64': 2, 'KREG': 3, 'VECX': 0, 'MEM': 0, 'GPR16': 1, 'NONE': 0}
   _VEX_PAT = {
     'REG,VVVV,RM': 'VEX_RVM', 'REG,VVVV,RM,IMM8': 'VEX_RVMI',
@@ -1028,6 +1034,7 @@ class Interp:
     # are generated straight from this; a missing key is a dead (rejected) opcode.
     # `kinds` selects which submatch(es) feed this block (vex+vex2 / evex / xop).
     raw = {}
+    groups, groupmeta = {}, {}        # opcode-extension groups (mnemonic by /digit)
 
     def midx(s):
       if s not in self._mnem:
@@ -1046,7 +1053,7 @@ class Interp:
         parsed = self._vex_parse_rule(kind, lhs.strip(), rhs.strip())
         if parsed is None:
           continue
-        mapidx, ppvals, wvals, opcode = parsed
+        mapidx, ppvals, wvals, opcode, digit = parsed
         atoms = self._vex_tokens(rhs.strip())
         for W in wvals:
           for pp in ppvals:
@@ -1086,6 +1093,10 @@ class Interp:
               continue
             mi = midx(mnem)
             key = (mapidx, pp, W, opcode)
+            if digit is not None:                    # opcode-extension group member
+              groups.setdefault(key, {})[digit] = mi
+              groupmeta[key] = ops                   # uniform shape across digits
+              continue
             if key in raw:
               # merge the paired reg-direct / @addr rule: prefer the concrete
               # register file over the MEM marker, slot by slot.
@@ -1099,6 +1110,17 @@ class Interp:
 
     # lower each (map,pp,W,opcode) entry to a VEX FSM cell (mnem, form, files, imm)
     cells = {}
+    # opcode-extension groups (shifts 71/72/73): one vexgrp[gid][digit] row of
+    # mnemonics; the cell carries the gid and the C++ picks the mnemonic by the
+    # ModR/M reg digit. Shape is VVVV(dest), r/m(src), imm8 (VEX_VMG).
+    for key, digmap in groups.items():
+      if key in raw:
+        continue                                     # a non-group rule already claimed it
+      gid = len(self._vexgrp)
+      self._vexgrp.append([digmap.get(d, -1) for d in range(8)])
+      rf = self.VEXFILE.get(next((f for r, f in groupmeta[key] if r in ('REG', 'IS4')), 'VEC'), 0)
+      mf = self.VEXFILE.get(next((f for r, f in groupmeta[key] if r == 'RM'), 'VEC'), 0)
+      cells[key] = (-1, 'VEX_VMG', rf, mf, gid)      # mnem -1 => group; 5th slot = gid
     for key, (mi, ops) in raw.items():
       f = self._vex_form(ops)
       if f is None:
@@ -1134,17 +1156,27 @@ class Interp:
             ('FIELD', self.tailcap('CC'), 2, 2)]             # CAP_VL = L
     return acts, 'FSM_VEXOP + %d*256' % (pp * 2)             # map 0F (idx 0), W=0
 
+  def _vexop_acts(self, e):
+    # action list for one VEX/EVEX opcode cell -- normal (MNEM baked) or an
+    # opcode-extension group (no MNEM; the C++ reads vexgrp[gid][/digit]).
+    mnem, form, rf, mf, last = e
+    if mnem == -1:                                          # group (VEX_VMG); last = gid
+      acts = [('CONST', self.tailcap('FORM'), self._form_idx(form), 0),
+              ('CONST', self.tailcap('GRP'), last, 0),
+              ('CONST', self.tailcap('IMK'), 1, 0)]         # shift groups carry imm8
+    else:
+      acts = [('MNEM', mnem, 0, 0),
+              ('CONST', self.tailcap('FORM'), self._form_idx(form), 0)]
+      if last: acts.append(('CONST', self.tailcap('IMK'), 1, 0))   # IMK_IMM8
+    if rf: acts.append(('CONST', self.tailcap('RFILE'), rf, 0))
+    if mf: acts.append(('CONST', self.tailcap('MFILE'), mf, 0))
+    return acts
+
   def vexop_state(self, mapidx, pp, W, op):
     e = self._vex_tab.get((mapidx, pp, W, op))
     if e is None:
       return [], 'FSM_HALT'                                  # undefined opcode (rejected)
-    mnem, form, rf, mf, imm = e
-    acts = [('MNEM', mnem, 0, 0),
-            ('CONST', self.tailcap('FORM'), self._form_idx(form), 0)]
-    if rf: acts.append(('CONST', self.tailcap('RFILE'), rf, 0))
-    if mf: acts.append(('CONST', self.tailcap('MFILE'), mf, 0))
-    if imm: acts.append(('CONST', self.tailcap('IMK'), 1, 0))    # IMK_IMM8
-    return acts, 'FSM_HALT'
+    return self._vexop_acts(e), 'FSM_HALT'
 
   # ----- EVEX FSM states (AVX-512; 3 payload bytes, capture-based) -------------
   # op1[0x62] -> evexp0 : FIELD CAP_RXB (P0 bits7:4 = R'X'B'R''), route by map
@@ -1170,13 +1202,7 @@ class Interp:
     e = self._evex_tab.get((mi, pp, W, op))
     if e is None:
       return [], 'FSM_HALT'
-    mnem, form, rf, mf, imm = e
-    acts = [('MNEM', mnem, 0, 0),
-            ('CONST', self.tailcap('FORM'), self._form_idx(form), 0)]
-    if rf: acts.append(('CONST', self.tailcap('RFILE'), rf, 0))
-    if mf: acts.append(('CONST', self.tailcap('MFILE'), mf, 0))
-    if imm: acts.append(('CONST', self.tailcap('IMK'), 1, 0))
-    return acts, 'FSM_HALT'
+    return self._vexop_acts(e), 'FSM_HALT'
 
   def _collect_group(self, groups, info, rhs, midx, K):
     tb = info['tb']
@@ -1608,6 +1634,19 @@ def emit(c, interp, out_path):
   w("static const char* const mnem_tab[] = {\n    %s\n};\n" %
     (", ".join('"%s"' % m for m in interp._mnem) if interp._mnem else '""'))
   w("static const size_t mnem_tab_size = sizeof(mnem_tab) / sizeof(mnem_tab[0]);\n\n")
+
+  # VEX/EVEX opcode-extension groups (shifts 71/72/73): vexgrp[gid][/digit] is the
+  # mnemonic (-1 = undefined digit). A VEX_VMG opcode state stores the gid in
+  # CAP_GRP; the C++ picks the mnemonic by the ModR/M reg digit at finalize.
+  ng_vex = max(1, len(interp._vexgrp))
+  w("#define VEX_NGRP %d\n" % len(interp._vexgrp))
+  w("static const int16_t vexgrp[%d][8] = {\n" % ng_vex)
+  if interp._vexgrp:
+    for row in interp._vexgrp:
+      w("    {%s},\n" % ", ".join(str(x) for x in row))
+  else:
+    w("    {-1,-1,-1,-1,-1,-1,-1,-1}\n")
+  w("};\n\n")
 
   w("#endif // X86_TABLES_H\n")
   open(out_path, 'w', encoding='utf-8').write(''.join(o))
