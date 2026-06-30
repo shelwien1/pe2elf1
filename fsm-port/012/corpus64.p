@@ -47,9 +47,9 @@
 # apxop; the C++ apx_finalize folds the r0-31 extension + sizing + the ND new-data-
 # destination and NF no-flags modifiers). The full integer set is covered: the ALU
 # (add/or/adc/sbb/and/sub/xor/cmp, 8/16/32/64, MR/RM/MI), cmovcc, the shift/rotate
-# and inc/dec/not/neg groups, imul and shld/shrd -- all with NDD/NF and r0-31. The
-# new-instruction tail (push2/pop2, movbe, crc32, movdiri, aadd, wrssq, sha*) keeps
-# its idiosyncratic shapes and stays structural for now. An opcode the corpus does
+# and inc/dec/not/neg groups, imul, shld/shrd and the push2/pop2 register pair --
+# all with NDD/NF and r0-31. The promoted-special tail (movbe, crc32, movdiri, aadd,
+# wrssq, sha*) keeps its idiosyncratic shapes and stays structural. An opcode the corpus does
 # not cover, those XOP GPR forms / APX tail, the APX REX2 (D5) prefix, and the moffs
 # mov (A0-A3), still round-trip via the C++ structural path (raw-byte replay). The
 # fuzzer enforces lossless round-trip across the whole accepted byte space (0
@@ -2721,6 +2721,16 @@ submatch apx {
   r x b e f 100 w v j 01 c d n a 0x2c 11 ggg rrr @imm8 => "shrd " greg[$r] "," greg[$g] "," hex($imm8) ;
   r x b e f 100 w v j 01 c d n a 0xa5 11 ggg rrr => "shld " greg[$r] "," greg[$g] ;
   r x b e f 100 w v j 01 c d n a 0xad 11 ggg rrr => "shrd " greg[$r] "," greg[$g] ;
+  # ===== push2/pop2 (ff/6, 8f/0): 64-bit register pair; W picks the {,p} variant =====
+  r x b e f 100 0 v j 00 c d n a 0xff 11 110 rrr => "push2 "  greg[$v] "," greg[$r] ;
+  r x b e f 100 1 v j 00 c d n a 0xff 11 110 rrr => "push2p " greg[$v] "," greg[$r] ;
+  r x b e f 100 0 v j 00 c d n a 0x8f 11 000 rrr => "pop2 "   greg[$v] "," greg[$r] ;
+  r x b e f 100 1 v j 00 c d n a 0x8f 11 000 rrr => "pop2p "  greg[$v] "," greg[$r] ;
+  # push2/pop2 with the 66 (pp=01) context
+  r x b e f 100 0 v j 01 c d n a 0xff 11 110 rrr => "push2 "  greg[$v] "," greg[$r] ;
+  r x b e f 100 1 v j 01 c d n a 0xff 11 110 rrr => "push2p " greg[$v] "," greg[$r] ;
+  r x b e f 100 0 v j 01 c d n a 0x8f 11 000 rrr => "pop2 "   greg[$v] "," greg[$r] ;
+  r x b e f 100 1 v j 01 c d n a 0x8f 11 000 rrr => "pop2p "  greg[$v] "," greg[$r] ;
 }
 
 submatch main { @pfx(0) => $pfx }

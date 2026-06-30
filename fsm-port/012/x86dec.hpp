@@ -508,8 +508,12 @@ static inline void apx_finalize(x86dec_t* d, const byte* s, size_t op_at) {
   // NDD dest size = the reg file when present, else the r/m file (group forms have
   // no reg operand, so the dest follows the r/m width: 8-bit for 80/c0/f6/fe, etc.)
   x86op_t nddop = apx_gpr(rf ? rf : (mf ? mf : 1), ndd);
+  // push2/pop2 (ff /6, 8f /0): a 64-bit register pair (vvvv, r/m). ND is a required
+  // encoding marker here, not a new-data dest, so vvvv is a direct operand (not
+  // prepended) and the pair is always 64-bit regardless of W (W picks the {,p} variant).
+  bool is_v2 = (in->vex_op == 0xff && mreg == 6) || (in->vex_op == 0x8f && mreg == 0);
   int nn = 0;
-  if (ND) in->op[nn++] = nddop;                         // NDD prepends the destination
+  if (ND && !is_v2) in->op[nn++] = nddop;               // NDD prepends the destination
   switch (form) {
     case FORM_APX_MR:  in->op[nn++] = rmop;  in->op[nn++] = regop;
                        // shld/shrd by cl (a5/ad): r/m, reg, cl
@@ -522,13 +526,20 @@ static inline void apx_finalize(x86dec_t* d, const byte* s, size_t op_at) {
     case FORM_APX_R:   in->op[nn++] = regop; break;
     case FORM_APX_MI:  in->op[nn++] = rmop; in->op[nn++] = immop;
                        in->mnem = (uint16_t)vexgrp[(int)c[CAP_GRP]][mreg]; break;
-    case FORM_APX_M:   in->op[nn++] = rmop;
-                       // shift groups d0/d1 (by 1) and d2/d3 (by cl) carry an implicit
-                       // count operand; not/neg/inc/dec (f6/f7/fe/ff) take only r/m.
-                       if (in->vex_op == 0xd0 || in->vex_op == 0xd1) {
-                         in->imm = 1; x86op_t o; o.type = T_IMM; o.index = 0; in->op[nn++] = o;
-                       } else if (in->vex_op == 0xd2 || in->vex_op == 0xd3) {
-                         x86op_t o; o.type = T_GPR8; o.index = 1; in->op[nn++] = o;   // cl
+    case FORM_APX_M:
+                       if (is_v2) {                       // push2/pop2: 64-bit reg pair
+                         in->opsize = 2;
+                         x86op_t v; v.type = T_GPR; v.index = (uint16_t)(ndd & 31); in->op[nn++] = v;
+                         x86op_t m; m.type = T_GPR; m.index = (uint16_t)(rmr & 31); in->op[nn++] = m;
+                       } else {
+                         in->op[nn++] = rmop;
+                         // shift groups d0/d1 (by 1) and d2/d3 (by cl) carry an implicit
+                         // count operand; not/neg/inc/dec (f6/f7/fe/ff) take only r/m.
+                         if (in->vex_op == 0xd0 || in->vex_op == 0xd1) {
+                           in->imm = 1; x86op_t o; o.type = T_IMM; o.index = 0; in->op[nn++] = o;
+                         } else if (in->vex_op == 0xd2 || in->vex_op == 0xd3) {
+                           x86op_t o; o.type = T_GPR8; o.index = 1; in->op[nn++] = o;   // cl
+                         }
                        }
                        in->mnem = (uint16_t)vexgrp[(int)c[CAP_GRP]][mreg]; break;
     case FORM_APX_MRI: in->op[nn++] = rmop; in->op[nn++] = regop; in->op[nn++] = immop; break;
