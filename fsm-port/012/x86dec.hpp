@@ -211,6 +211,19 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t op_at, int t
   // implicit accumulator (FORM_ACC) is not encoded, so it is never extended.
   reg_rex = (form == FORM_REG || form == FORM_REG_IMM) ? xb
           : (form == FORM_ACC) ? 0 : xr;
+  // Default operand size 64 in long mode: push/pop (r64 and r/m64), near
+  // indirect call/jmp, and pop r/m operate on 64-bit operands without REX.W.
+  // Reflect that in the rendered operand width; the encoder replays REX from
+  // pfx[], so widening opsize here does not perturb the round-tripped bytes.
+  {
+    int oplen_d = in->rex2 ? 0 : (tb < 2 ? tb : 2);
+    uint8_t opb = s[op_at + oplen_d];
+    int dig = (form == FORM_GROUP) ? ((s[op_at + oplen_d + 1] >> 3) & 7) : -1;
+    bool d64 = (opb >= 0x50 && opb <= 0x5f)                          // push/pop r64
+            || (opb == 0x8f && dig == 0)                             // pop r/m64
+            || (opb == 0xff && (dig == 2 || dig == 4 || dig == 6));  // call/jmp/push r/m64
+    if (d64 && in->opsize == 0) { in->opsize = 2; os = 2; }
+  }
 #endif
 
   for (int i = 0; i < 5; ++i) { in->op[i].type = T_NONE; in->op[i].index = 0; }
