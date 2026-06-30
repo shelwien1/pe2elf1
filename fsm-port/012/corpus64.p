@@ -1401,6 +1401,15 @@ submatch vex {
   h k b 00010 1 vvvv y 01 0xbf @addr {$rexb=1-$b;$rexx=1-$k} => "vfnmsub231sd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
   h k b 00010 0 vvvv y 01 0x40 11 ggg rrr => "vpmulld " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
   h k b 00010 0 vvvv y 01 0x40 @addr {$rexb=1-$b;$rexx=1-$k} => "vpmulld " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  # ---- VEX lane insert/extract (vinsert/vextract f128/i128) --------------------
+  h k b 00011 0 vvvv y 01 0x18 11 ggg rrr @imm8 => "vinsertf128 " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[8+$r] "," hex($imm8) ;
+  h k b 00011 0 vvvv y 01 0x18 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "vinsertf128 " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr "," hex($imm8) ;
+  h k b 00011 0 vvvv y 01 0x38 11 ggg rrr @imm8 => "vinserti128 " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[8+$r] "," hex($imm8) ;
+  h k b 00011 0 vvvv y 01 0x38 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "vinserti128 " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr "," hex($imm8) ;
+  h k b 00011 0 1111 y 01 0x19 11 ggg rrr @imm8 => "vextractf128 " vreg[8+$r] "," vreg[16*$y+8*$h+$g] "," hex($imm8) ;
+  h k b 00011 0 1111 y 01 0x19 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "vextractf128 " $addr "," vreg[16*$y+8*$h+$g] "," hex($imm8) ;
+  h k b 00011 0 1111 y 01 0x39 11 ggg rrr @imm8 => "vextracti128 " vreg[8+$r] "," vreg[16*$y+8*$h+$g] "," hex($imm8) ;
+  h k b 00011 0 1111 y 01 0x39 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "vextracti128 " $addr "," vreg[16*$y+8*$h+$g] "," hex($imm8) ;
 }
 
 submatch vex2 {
@@ -1560,6 +1569,8 @@ submatch vex2 {
   h vvvv y 01 0x72 11 100 rrr @imm8 => "vpsrad " vvv[16*$y+$v] "," vreg[16*$y+8+$r] "," hex($imm8) ;
   h vvvv y 01 0x73 11 110 rrr @imm8 => "vpsllq " vvv[16*$y+$v] "," vreg[16*$y+8+$r] "," hex($imm8) ;
   h vvvv y 01 0x73 11 010 rrr @imm8 => "vpsrlq " vvv[16*$y+$v] "," vreg[16*$y+8+$r] "," hex($imm8) ;
+  h vvvv y 01 0x73 11 111 rrr @imm8 => "vpslldq " vvv[16*$y+$v] "," vreg[16*$y+8+$r] "," hex($imm8) ;
+  h vvvv y 01 0x73 11 011 rrr @imm8 => "vpsrldq " vvv[16*$y+$v] "," vreg[16*$y+8+$r] "," hex($imm8) ;
   h vvvv y 01 0x71 11 110 rrr @imm8 => "vpsllw " vvv[16*$y+$v] "," vreg[16*$y+8+$r] "," hex($imm8) ;
   h vvvv y 01 0x71 11 010 rrr @imm8 => "vpsrlw " vvv[16*$y+$v] "," vreg[16*$y+8+$r] "," hex($imm8) ;
   h vvvv y 01 0x71 11 100 rrr @imm8 => "vpsraw " vvv[16*$y+$v] "," vreg[16*$y+8+$r] "," hex($imm8) ;
