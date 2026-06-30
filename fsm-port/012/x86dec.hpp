@@ -353,29 +353,47 @@ static inline void vex_finalize(x86dec_t* d, const byte* s, size_t op_at) {
   x86insn_t* in = &d->insn;
   const uint64_t* c = d->cap;
   int form = (int)c[CAP_FORM];
-  in->vex = (s[op_at] == 0xC5) ? 1 : 2;            // the FSM path handles C4/C5 only
-  in->rip = 0; in->rex = 0;
-  // snapshot the raw bytes for the replay encoder
+  byte p0 = s[op_at];
+  in->vex = (p0 == 0xC5) ? 1 : (p0 == 0xC4) ? 2 : 3;     // C5 / C4 / 62 (EVEX)
+  in->rip = 0; in->rex = 0; in->zero = 0; in->bcst = 0; in->rc = 0;
+  // snapshot the raw prefix bytes for the replay encoder; de-invert the
+  // extension bits + vvvv + length, all from the captures the FSM wrote.
+  int R, X, B, Rp = 0, Vp = 0, vvvv, LL, aaa = 0, z = 0, bbit = 0;
   size_t q = op_at + 1;
-  if (in->vex == 1) { in->vex1 = s[q]; in->vex2 = in->vex3 = 0; q += 1; }
-  else              { in->vex1 = s[q]; in->vex2 = s[q + 1]; in->vex3 = 0; q += 2; }
+  if (in->vex == 3) {                                    // EVEX: 62 P0 P1 P2 opcode
+    in->vex1 = s[q]; in->vex2 = s[q + 1]; in->vex3 = s[q + 2]; q += 3;
+    int rxb = (int)c[CAP_RXB];                           // P0 bits 7:4 = R'X'B'R''
+    R = 1 - ((rxb >> 3) & 1); X = 1 - ((rxb >> 2) & 1);
+    B = 1 - ((rxb >> 1) & 1); Rp = 1 - (rxb & 1);
+    int p2 = (int)c[CAP_VL];                             // whole EVEX P2 byte
+    z = (p2 >> 7) & 1; LL = (p2 >> 5) & 3; bbit = (p2 >> 4) & 1;
+    Vp = 1 - ((p2 >> 3) & 1); aaa = p2 & 7;
+    vvvv = ((~(int)c[CAP_VVVV]) & 0xf) | (Vp << 4);      // 5-bit vvvv (V' high bit)
+  } else {                                               // VEX C4/C5
+    if (in->vex == 1) { in->vex1 = s[q]; in->vex2 = in->vex3 = 0; q += 1; }
+    else              { in->vex1 = s[q]; in->vex2 = s[q + 1]; in->vex3 = 0; q += 2; }
+    int rxb = (int)c[CAP_RXB];
+    if (in->vex == 2) { R = 1 - ((rxb >> 2) & 1); X = 1 - ((rxb >> 1) & 1); B = 1 - (rxb & 1); }
+    else              { R = 1 - (rxb & 1); X = 0; B = 0; }
+    LL = (int)c[CAP_VL]; vvvv = (~(int)c[CAP_VVVV]) & 0xf;
+  }
   size_t opc_at = q; in->vex_op = s[q++];
   bool has_modrm = (form != FORM_VEX_NONE);
   in->vex_modrm = has_modrm ? s[q] : 0;
-  // de-invert the extension bits captured in CAP_RXB (C4: R'X'B'; C5: R' only)
-  int rxb = (int)c[CAP_RXB], R, X, B;
-  if (in->vex == 2) { R = 1 - ((rxb >> 2) & 1); X = 1 - ((rxb >> 1) & 1); B = 1 - (rxb & 1); }
-  else              { R = 1 - (rxb & 1); X = 0; B = 0; }
-  int vvvv = (~(int)c[CAP_VVVV]) & 0xf;
-  int vt = vex_vec_type((int)c[CAP_VL]);
-  int mreg = (int)c[CAP_REG], mrm = (int)c[CAP_RM];
   bool is_reg = (c[CAP_MODE] == RM_REG);
-  int rf = (int)c[CAP_RFILE], mf = (int)c[CAP_MFILE];
+  // EVEX decorations: b=1 on a reg-reg form is embedded rounding {er} (L'L picks
+  // the mode and the operands are zmm); on a memory form it is broadcast {1toN}.
+  int vt;
+  if (in->vex == 3 && bbit && is_reg) { in->rc = LL + 1; vt = T_ZMM; }
+  else                                 vt = vex_vec_type(LL);
+  if (in->vex == 3) { in->zero = z; if (bbit && !is_reg) in->bcst = 1; }
   in->opsize = 0;
-  in->imm = (int64_t)(int32_t)c[CAP_IMM];          // any imm8 was appended into CAP_IMM
+  in->imm = (int64_t)(int32_t)c[CAP_IMM];                // any imm8 appended into CAP_IMM
+  int mreg = (int)c[CAP_REG], mrm = (int)c[CAP_RM];
+  int rf = (int)c[CAP_RFILE], mf = (int)c[CAP_MFILE];
 
-  // memory r/m: fold VEX.X/B into base/index (the encoder masks to 3 bits, so this
-  // stays byte-exact) and capture the addressing witness (modrm sits at opc_at+1).
+  // memory r/m: fold the high extension bits into base/index (the encoder masks
+  // to 3 bits, so this stays byte-exact) + capture the addressing witness.
   if (has_modrm && !is_reg) {
     if (in->mem_base == GREG_RIP) in->rip = 1;
     else if (in->mem_base < 8)    in->mem_base += 8 * B;
@@ -383,9 +401,9 @@ static inline void vex_finalize(x86dec_t* d, const byte* s, size_t op_at) {
     capture_addr_witness(in, s, opc_at, 0);
   }
 
-  x86op_t regop  = vex_mkop(in, rf, mreg + 8 * R, vt);
+  x86op_t regop  = vex_mkop(in, rf, mreg + 8 * R + 16 * Rp, vt);
   x86op_t vvvvop = vex_mkop(in, rf, vvvv, vt);
-  x86op_t rmreg  = vex_mkop(in, mf, mrm + 8 * B, vt);
+  x86op_t rmreg  = vex_mkop(in, mf, mrm + 8 * B + 16 * X, vt);
   x86op_t memop; memop.type = T_MEM; memop.index = 0;
   x86op_t rmop   = is_reg ? rmreg : memop;
   x86op_t immop; immop.type = T_IMM; immop.index = 0;
@@ -405,6 +423,12 @@ static inline void vex_finalize(x86dec_t* d, const byte* s, size_t op_at) {
     case FORM_VEX_M:    in->op[nn++]=rmop; break;
     case FORM_VEX_RVMV: in->op[nn++]=regop; in->op[nn++]=vvvvop; in->op[nn++]=rmop; in->op[nn++]=vvvvop; break;
     default: break;                                            // FORM_VEX_NONE
+  }
+  // EVEX writemask {kN}: a positional operand right after the destination.
+  if (in->vex == 3 && aaa && nn < 5) {
+    for (int i = nn; i > 1; --i) in->op[i] = in->op[i - 1];
+    in->op[1].type = T_MASK; in->op[1].index = aaa;
+    nn++;
   }
   in->n_ops = (uint8_t)nn;
 }
@@ -473,12 +497,11 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   d->insn.rex2 = 0;
   d->insn.moffs = 0;
 #if ARCH_MODE == 64
-  // 64-bit: C4/C5 are VEX and are now decoded by the FSM (op1[C4/C5] route into
-  // the capture-based vexp1/vexp2/vexop stages -> vex_finalize), so they fall
-  // through to the opcode FSM below. 62 (EVEX) and 8F (XOP) still use the C++
-  // structural path until their FSM decode lands.
-  if (ip + 1 < n && s[ip] == 0x62)
-    return vex_decode(d, s, n, ip);
+  // 64-bit: C4/C5 (VEX) and 62 (EVEX) are decoded by the FSM -- op1[C4/C5/62]
+  // route into the capture-based vexp*/evexp* stages -> vex_finalize -- so they
+  // fall through to the opcode FSM below. An opcode the corpus doesn't cover (or
+  // a truncated prefix) falls back to the C++ structural path from there. Only
+  // XOP (8F) still starts on the structural path (the 8F/POP ambiguity).
 #else
   // 32-bit: C4/C5/62 are VEX/EVEX only when the next byte has mod==11 (LES/LDS/
   // BOUND require a memory operand, so mod==11 is free for the VEX disambiguation).
@@ -596,7 +619,7 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   }
   int form = (int)d->cap[CAP_FORM];
 #if ARCH_MODE == 64
-  if (s[op_at] == 0xC4 || s[op_at] == 0xC5) {        // VEX prefix routed through the FSM
+  if (s[op_at] == 0xC4 || s[op_at] == 0xC5 || s[op_at] == 0x62) {  // VEX/EVEX via the FSM
     // a complete VEX decode reaches a vexop state, which sets CAP_FORM to a VEX_*
     // form. If not -- the opcode is not (yet) in the corpus, or the prefix/opcode
     // was truncated -- fall back to the structural path (MNEM_VEX placeholder),

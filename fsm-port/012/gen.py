@@ -273,15 +273,20 @@ class Interp:
     self._op1, self._op2, self._mnem = self.build_insn()
     # the VEX operand-shape forms live past the legacy ones in the same enum
     self.INSN_FORM = list(self.INSN_FORM) + list(self.VEX_FORMS)
-    # VEX descriptor cells (compiled from the vex/vex2 submatches into FSM-ready
-    # (map,pp,W,opcode) -> (mnem,form,files,imm); appends mnemonics to self._mnem).
-    self._vex_tab = self.build_vex()
-    # 64-bit: route the VEX prefixes through the FSM (C4/C5 are not legacy here).
-    # The capture-based vexp1/vexp2/vexop tables then decode them; EVEX (62) and
-    # XOP (8F) stay on the C++ structural path for now.
-    if self.mode == 64 and self._vex_tab:
-      self._op1[0xC4] = ([], 'FSM_VEXP1')
-      self._op1[0xC5] = ([], 'FSM_VEXP1C5')
+    # VEX/EVEX descriptor cells (compiled from the vex/vex2/evex submatches into
+    # FSM-ready (map,pp,W,opcode) -> (mnem,form,files,imm); each appends mnemonics
+    # to self._mnem). EVEX has its own opcode-table block (its maps/opcodes differ).
+    self._vex_tab = self.build_vex(['vex', 'vex2'])
+    self._evex_tab = self.build_vex(['evex'])
+    # 64-bit: route the VEX/EVEX prefixes through the FSM (C4/C5/62 are not legacy
+    # here). The capture-based vexp*/evexp* tables decode them. XOP (8F) stays on
+    # the C++ structural path (the 8F/POP ambiguity + AMD-only scope).
+    if self.mode == 64:
+      if self._vex_tab:
+        self._op1[0xC4] = ([], 'FSM_VEXP1')
+        self._op1[0xC5] = ([], 'FSM_VEXP1C5')
+      if self._evex_tab:
+        self._op1[0x62] = ([], 'FSM_EVEXP0')
 
   # ----- small helpers -----
   def greg_idx(self, name):
@@ -894,7 +899,15 @@ class Interp:
   VEX_LAYOUT = {
     'vex':  [('R', 1), ('X', 1), ('B', 1), ('map', 5), ('W', 1), ('vvvv', 4), ('L', 1), ('pp', 2)],
     'vex2': [('R', 1), ('vvvv', 4), ('L', 1), ('pp', 2)],     # C5: map=1, W=0, X=B=0
+    'xop':  [('R', 1), ('X', 1), ('B', 1), ('map', 5), ('W', 1), ('vvvv', 4), ('L', 1), ('pp', 2)],
+    # EVEX: P0 = R'X'B'R'' .00. mm ; P1 = W vvvv 1 pp ; P2 = z L'L b V'' aaa
+    'evex': [('R', 1), ('X', 1), ('B', 1), ('Rp', 1), ('rsv', 2), ('map', 2),
+             ('W', 1), ('vvvv', 4), ('one', 1), ('pp', 2),
+             ('z', 1), ('L', 2), ('bcst', 1), ('Vp', 1), ('aaa', 3)],
   }
+  # decoration tables that ride after an operand (EVEX {k}/{z}/{1toN}/{er}); they
+  # are runtime (the C++ reads them from the captured EVEX P2 byte), not operands.
+  VEX_DECOR = ('kzdec', 'kdec', 'rcdec', 'bcst32', 'bcst64')
   # role / file enums shared with the C++ (keep in sync with x86dec.hpp)
   VR = {'NONE': 0, 'REG': 1, 'RM': 2, 'VVVV': 3, 'IMM8': 4, 'IS4': 5}
   VF = {'VEC': 0, 'GPR32': 1, 'GPR64': 2, 'KREG': 3, 'VECX': 4, 'MEM': 5, 'GPR16': 6}
@@ -966,8 +979,17 @@ class Interp:
     if not m:
       return None
     opcode = int(m.group(1), 16)
-    mapval = kf['map'][1] if (kind == 'vex' and kf['map'][0] == 'lit') else (1 if kind == 'vex2' else None)
-    mapidx = {1: 0, 2: 1, 3: 2}.get(mapval)
+    if kind == 'vex2':
+      mapval = 1
+    elif kf['map'][0] == 'lit':
+      mapval = kf['map'][1]
+    else:
+      return None
+    # mapidx 0..2 within this submatch's own opcode-table block
+    if kind == 'xop':
+      mapidx = {8: 0, 9: 1, 10: 2}.get(mapval)
+    else:
+      mapidx = {1: 0, 2: 1, 3: 2}.get(mapval)
     if mapidx is None:
       return None
     wf = kf.get('W', ('lit', 0))
@@ -999,11 +1021,12 @@ class Interp:
     imm = 1 if any(r in ('IMM8', 'IS4') for r, f in ops) else 0
     return (form, self.VEXFILE.get(rfile, 0), self.VEXFILE.get(mfile, 0), imm)
 
-  def build_vex(self):
+  def build_vex(self, kinds):
     # tab[(mapidx,pp,W,opcode)] = (mnem_index, form_name, rfile, mfile, imm).
     # Keyed by (map,pp,W): pp and W are baked into the opcode-table coordinate, so
     # the FSM needs no runtime pp/W mnemonic selection. The C++ vexop FSM states
     # are generated straight from this; a missing key is a dead (rejected) opcode.
+    # `kinds` selects which submatch(es) feed this block (vex+vex2 / evex / xop).
     raw = {}
 
     def midx(s):
@@ -1011,7 +1034,7 @@ class Interp:
         self._mnem.append(s)
       return self._mnem.index(s)
 
-    for kind in ('vex', 'vex2'):
+    for kind in kinds:
       if kind not in self.subs:
         continue
       for chunk in split_top(self.subs[kind][1], ';'):
@@ -1032,9 +1055,11 @@ class Interp:
             mn, j, ok = '', 0, True
             while j < len(atoms):
               t = atoms[j]
-              if t[0] == 'str':
+              if t[0] == 'call' and t[1] == 'wit':
+                j += 1                                       # witness marker (e.g. wit("evex"))
+              elif t[0] == 'str':
                 mn += t[1]; j += 1
-              elif t[0] == 'ref' and t[1] not in self.VEX_REGFILES:
+              elif t[0] == 'ref' and t[1] not in self.VEX_REGFILES and t[1] not in self.VEX_DECOR:
                 tabnm = self.tables.get(t[1])
                 idx = self._vex_eval(t[2], env)
                 if tabnm is None or idx is None or idx >= len(tabnm) or tabnm[idx] == '':
@@ -1049,6 +1074,10 @@ class Interp:
             for t in atoms[j:]:
               if t[0] == 'str':
                 continue
+              if t[0] == 'call' and t[1] == 'wit':
+                continue                                     # witness marker
+              if t[0] == 'ref' and t[1] in self.VEX_DECOR:
+                continue                                     # {k}/{z}/{1toN}/{er} decoration
               role, file = self._vex_operand(t, env)
               if role is None:
                 ok = False; break
@@ -1115,6 +1144,38 @@ class Interp:
     if rf: acts.append(('CONST', self.tailcap('RFILE'), rf, 0))
     if mf: acts.append(('CONST', self.tailcap('MFILE'), mf, 0))
     if imm: acts.append(('CONST', self.tailcap('IMK'), 1, 0))    # IMK_IMM8
+    return acts, 'FSM_HALT'
+
+  # ----- EVEX FSM states (AVX-512; 3 payload bytes, capture-based) -------------
+  # op1[0x62] -> evexp0 : FIELD CAP_RXB (P0 bits7:4 = R'X'B'R''), route by map
+  # evexp1    -> FIELD CAP_VVVV (P1 vvvv), route by (pp,W)
+  # evexp2    -> FIELD CAP_VL (the whole P2 byte: z L'L b V'' aaa), route to evexop
+  # evexop    -> MNEM + FORM + files; the C++ evex_finalize reads P2 for mask/z/
+  #              broadcast/rounding and applies the 32-register extension.
+  def evexp0_state(self, b):
+    mp = b & 0x07                                  # EVEX map (P0 bits 2:0; bit2==0 here)
+    mi = {1: 0, 2: 1, 3: 2}.get(mp)
+    if mi is None:
+      return [], 'FSM_HALT'                        # undefined map -> structural fallback
+    return [('FIELD', self.tailcap('TBL3'), 7, 4)], 'FSM_EVEXP1 + %d*256' % mi
+
+  def evexp1_state(self, mi, b):
+    pp, W = b & 3, (b >> 7) & 1
+    return [('FIELD', self.cap('REL'), 6, 3)], 'FSM_EVEXP2 + %d*256' % ((mi * 4 + pp) * 2 + W)
+
+  def evexp2_state(self, mi, pp, W, b):
+    return [('FIELD', self.tailcap('CC'), 7, 0)], 'FSM_EVEXOP + %d*256' % ((mi * 4 + pp) * 2 + W)
+
+  def evexop_state(self, mi, pp, W, op):
+    e = self._evex_tab.get((mi, pp, W, op))
+    if e is None:
+      return [], 'FSM_HALT'
+    mnem, form, rf, mf, imm = e
+    acts = [('MNEM', mnem, 0, 0),
+            ('CONST', self.tailcap('FORM'), self._form_idx(form), 0)]
+    if rf: acts.append(('CONST', self.tailcap('RFILE'), rf, 0))
+    if mf: acts.append(('CONST', self.tailcap('MFILE'), mf, 0))
+    if imm: acts.append(('CONST', self.tailcap('IMK'), 1, 0))
     return acts, 'FSM_HALT'
 
   def _collect_group(self, groups, info, rhs, midx, K):
@@ -1377,6 +1438,11 @@ def emit(c, interp, out_path):
   w("    struct DState vexp2[3][256];       // [map-1] C4 byte2: FIELD vvvv/L, route by pp,W\n")
   w("    struct DState vexp1c5[256];        // C5 single byte: 2-byte VEX (map=0F, W=0)\n")
   w("    struct DState vexop[3][4][2][256]; // [map-1][pp][W] opcode -> MNEM + VEX form + files\n")
+  # EVEX prefix stages (3 payload bytes) + per-(map,pp,W) opcode maps (AVX-512)
+  w("    struct DState evexp0[256];         // 62 P0: FIELD R'X'B'R'', route by map\n")
+  w("    struct DState evexp1[3][256];      // [map-1] P1: FIELD vvvv, route by pp,W\n")
+  w("    struct DState evexp2[3][4][2][256];// [map-1][pp][W] P2: FIELD whole byte (z.L'L.b.V''.aaa)\n")
+  w("    struct DState evexop[3][4][2][256];// [map-1][pp][W] opcode -> MNEM + VEX form + files\n")
   w("};\n")
   w("// base indices derived from the layout (single source of truth):\n")
   w("#define FSM_INDEX(member) ((uint16_t)(offsetof(struct Fsm, member) / sizeof(struct DState)))\n")
@@ -1392,6 +1458,10 @@ def emit(c, interp, out_path):
   w("#define FSM_VEXP2   FSM_INDEX(vexp2)        // + (map-1)*256\n")
   w("#define FSM_VEXP1C5 FSM_INDEX(vexp1c5)\n")
   w("#define FSM_VEXOP   FSM_INDEX(vexop)        // + ((map-1)*4 + pp)*2 + W) *256\n")
+  w("#define FSM_EVEXP0  FSM_INDEX(evexp0)\n")
+  w("#define FSM_EVEXP1  FSM_INDEX(evexp1)       // + (map-1)*256\n")
+  w("#define FSM_EVEXP2  FSM_INDEX(evexp2)       // + ((map-1)*4 + pp)*2 + W) *256\n")
+  w("#define FSM_EVEXOP  FSM_INDEX(evexop)       // + ((map-1)*4 + pp)*2 + W) *256\n")
   w("#define FSM_NGROUP  %d\n" % interp.group_count())
   w("#define FSM_COUNT   (sizeof(struct Fsm) / sizeof(struct DState))\n")
   w("#define FSM_HALT    ((uint16_t)0xFFFF)     // `next` sentinel: stop\n")
@@ -1469,11 +1539,46 @@ def emit(c, interp, out_path):
         w("     }%s\n" % ("," if W == 0 else ""))
       w("    }%s\n" % ("," if pp < 3 else ""))
     w("   }%s\n" % ("," if mp < 2 else ""))
+  w("  },\n")
+  # ---- EVEX stages ----
+  w("  { // evexp0[256]  (62 P0)\n")
+  emit_states(interp.evexp0_state)
+  w("  },\n")
+  w("  { // evexp1[3][256]  (P1, by map)\n")
+  for mp in range(3):
+    w("   { // map %d\n" % (mp + 1))
+    emit_states(lambda i, m=mp: interp.evexp1_state(m, i))
+    w("   }%s\n" % ("," if mp < 2 else ""))
+  w("  },\n")
+  w("  { // evexp2[3][4][2][256]  (P2, by map,pp,W)\n")
+  for mp in range(3):
+    w("   { // map %d\n" % (mp + 1))
+    for pp in range(4):
+      w("    { // pp %d\n" % pp)
+      for W in range(2):
+        w("     { // W %d\n" % W)
+        emit_states(lambda i, m=mp, p=pp, ww=W: interp.evexp2_state(m, p, ww, i))
+        w("     }%s\n" % ("," if W == 0 else ""))
+      w("    }%s\n" % ("," if pp < 3 else ""))
+    w("   }%s\n" % ("," if mp < 2 else ""))
+  w("  },\n")
+  w("  { // evexop[3][4][2][256]  ([map-1][pp][W] -> opcode)\n")
+  for mp in range(3):
+    w("   { // map %d\n" % (mp + 1))
+    for pp in range(4):
+      w("    { // pp %d\n" % pp)
+      for W in range(2):
+        w("     { // W %d\n" % W)
+        emit_states(lambda i, m=mp, p=pp, ww=W: interp.evexop_state(m, p, ww, i))
+        w("     }%s\n" % ("," if W == 0 else ""))
+      w("    }%s\n" % ("," if pp < 3 else ""))
+    w("   }%s\n" % ("," if mp < 2 else ""))
   w("  }\n")
   w("};\n")
   w("static_assert(sizeof(struct Fsm) == (256 + 256 + 256 + 256 + 256 + 2*256 + 3*256 + %d*2*256\n"
     % max(1, ng))
-  w("              + 256 + 3*256 + 256 + 3*4*2*256) * sizeof(struct DState),\n")
+  w("              + 256 + 3*256 + 256 + 3*4*2*256\n")
+  w("              + 256 + 3*256 + 3*4*2*256 + 3*4*2*256) * sizeof(struct DState),\n")
   w('              "struct Fsm has padding; flat indexing would be wrong");\n')
   # two distinct size limits, the narrower one (group id) binds first:
   #   * group id rides a CONST action -> arg0(5) | arg1(3) = 8 bits  (<= 255 groups)
@@ -1510,7 +1615,8 @@ def emit(c, interp, out_path):
   # FSM size report: DState.next is uint16_t, so the flat table must stay under
   # 65536 states. Each opcode/group sub-table is 256 states; track the trend.
   ndstate = (256 + 256 + 256 + 256 + 256 + 2 * 256 + 3 * 256 + max(1, ng) * 2 * 256
-             + 256 + 3 * 256 + 256 + 3 * 4 * 2 * 256)
+             + 256 + 3 * 256 + 256 + 3 * 4 * 2 * 256
+             + 256 + 3 * 256 + 3 * 4 * 2 * 256 + 3 * 4 * 2 * 256)
   import sys as _sys
   _sys.stderr.write(
       "FSM: %d DStates (%.1f%% of uint16_t next), %d groups, sizeof(Fsm)=%d KiB\n"
