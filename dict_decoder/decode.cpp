@@ -7,9 +7,9 @@
  *
  * Equivalent to:   preprocess d <dict> <book1p> <out>
  *
- * Everything lives in this one translation unit: the DictDecoder class
- * (all methods defined inline in the class body) and the main() driver.
- * It is a bit-exact reimplementation of the decode path of preprocess.c.
+ * No STL: like the original preprocessor this is plain C data (malloc'd
+ * tables, a fixed global output array), wrapped in one DictDecoder class
+ * with its methods defined inline.  It is bit-exact with preprocess.c.
  *
  * Two-stage decode:
  *   1. symbol (uint16) -> dictionary word: a short byte string that may
@@ -22,24 +22,37 @@
  * The case/space machine carries state from one symbol to the next, so a
  * single DictDecoder instance decodes one whole stream; call reset() to
  * start decoding a fresh, independent stream with the same dictionary.
+ *
+ * Because case/space decoding only ever drops or 1:1-maps bytes, a single
+ * symbol expands to at most the length of the longest dictionary word, so
+ * one unpack() never produces more than OUT_MAX bytes (see the printed
+ * "max out.size()"; it is 20 for this sample).
  */
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
-#include <stdexcept>
-#include <string>
-#include <vector>
+#include <cstdlib>
 
 class DictDecoder {
 public:
-    DictDecoder() { reset(); }
+    DictDecoder()
+        : buf_(0), word_(0), wlen_(0), nword_(0), max_wlen_(0) { reset(); }
 
     /* Load the dictionary from the textual "dict" file produced by
-       `preprocess c ...`.  Throws std::runtime_error on failure. */
+       `preprocess c ...`.  Errors are fatal (perror + exit), as in the
+       original tool. */
     explicit DictDecoder(const char *dict_filename)
+        : buf_(0), word_(0), wlen_(0), nword_(0), max_wlen_(0)
     {
         reset();
         load_dict(dict_filename);
+    }
+
+    ~DictDecoder()
+    {
+        free(buf_);
+        free(word_);
+        free(wlen_);
     }
 
     /* (Re)load the dictionary from a file.  Returns the number of entries
@@ -47,92 +60,98 @@ public:
     size_t load_dict(const char *dict_filename)
     {
         FILE *f = fopen(dict_filename, "rb");
-        if (!f)
-            throw std::runtime_error(std::string("cannot open dictionary: ") +
-                                     dict_filename);
+        if (!f) { perror(dict_filename); exit(1); }
         fseek(f, 0, SEEK_END);
         long n = ftell(f);
         fseek(f, 0, SEEK_SET);
-        std::vector<uint8_t> data(n > 0 ? (size_t)n : 0);
-        if (n > 0 && fread(data.data(), 1, (size_t)n, f) != (size_t)n) {
-            fclose(f);
-            throw std::runtime_error("short read on dictionary");
+        if (n < 0) { perror(dict_filename); exit(1); }
+
+        free(buf_); free(word_); free(wlen_);
+        buf_  = (uint8_t *)malloc((size_t)n > 0 ? (size_t)n : 1);
+        if (fread(buf_, 1, (size_t)n, f) != (size_t)n) {
+            fprintf(stderr, "short read on dictionary\n");
+            exit(1);
         }
         fclose(f);
-        return load_dict_mem(data.data(), data.size());
-    }
 
-    /* Same, but parse a "dict" file image already held in memory. */
-    size_t load_dict_mem(const uint8_t *data, size_t len)
-    {
+        /* number of '\n' bytes is an upper bound on the entry count */
+        size_t max_entries = 1;
+        for (long i = 0; i < n; i++)
+            if (buf_[i] == '\n')
+                max_entries++;
+        word_ = (uint8_t **)malloc(max_entries * sizeof(word_[0]));
+        wlen_ = (uint32_t *)malloc(max_entries * sizeof(wlen_[0]));
+
         /* Parse the textual dictionary exactly like word_load() in
-           preprocess.c:
+           preprocess.c, unescaping in place (unescaping only shrinks, so
+           the write cursor 'w' never passes the read cursor 'i'):
              - entries are separated by a raw '\n' (0x0a)
              - "\n"  (backslash + 'n')  decodes to a newline byte
              - "\\"  (backslash + '\\') decodes to a backslash byte
-             - empty entries are skipped (so symbol N maps to the N-th
-               non-empty line, matching the reference loader)
-           A trailing entry not terminated by '\n' is dropped, as in C. */
-        words_.clear();
-        std::string cur;
-        for (size_t i = 0; i < len; ++i) {
-            uint8_t c = data[i];
+             - empty entries are skipped (so symbol N is the N-th non-empty
+               line); a trailing entry with no '\n' is dropped, as in C. */
+        nword_    = 0;
+        max_wlen_ = 0;
+        size_t w = 0, start = 0;
+        long i = 0;
+        while (i < n) {
+            uint8_t c = buf_[i++];
             if (c == '\n') {
-                if (!cur.empty())
-                    words_.push_back(cur);
-                cur.clear();
+                uint32_t len = (uint32_t)(w - start);
+                if (len > 0) {
+                    word_[nword_] = buf_ + start;
+                    wlen_[nword_] = len;
+                    if (len > max_wlen_)
+                        max_wlen_ = len;
+                    nword_++;
+                }
+                start = w;
             } else if (c == '\\') {
-                if (++i >= len)
-                    break;              /* truncated escape: stop, as in C */
-                uint8_t e = data[i];
+                if (i >= n)
+                    break;                  /* truncated escape: stop, as in C */
+                uint8_t e = buf_[i++];
                 if (e == 'n')
-                    cur.push_back('\n');
+                    buf_[w++] = '\n';
                 else if (e == '\\')
-                    cur.push_back('\\');
-                else
-                    throw std::runtime_error("invalid escape in dictionary");
+                    buf_[w++] = '\\';
+                else {
+                    fprintf(stderr, "invalid escape in dictionary\n");
+                    exit(1);
+                }
             } else {
-                cur.push_back((char)c);
+                buf_[w++] = c;
             }
         }
-        return words_.size();
+        return nword_;
     }
 
-    /* Unpack one 16-bit symbol, appending the resulting 8-bit bytes to
-       'out' (out is grown, never shrunk).  This is the core method: it
-       turns one input symbol into the bytes that can be written to the
-       output file.  Throws std::out_of_range if 'sym' is not a valid
-       dictionary index. */
-    void unpack(uint16_t sym, std::vector<uint8_t> &out)
+    /* Unpack one 16-bit symbol into 'out', returning the number of 8-bit
+       bytes written (0 .. max_word_len()).  This is the core method: one
+       input symbol -> the bytes ready to be written to the output file.
+       'out' must have room for at least max_word_len() bytes.  An invalid
+       symbol is fatal, as in the reference tool. */
+    int unpack(uint16_t sym, uint8_t *out)
     {
-        if (sym >= words_.size())
-            throw std::out_of_range("invalid symbol index");
-        const std::string &w = words_[sym];
-        for (size_t i = 0; i < w.size(); ++i) {
+        if (sym >= nword_) {
+            fprintf(stderr, "invalid symbol %u\n", (unsigned)sym);
+            exit(1);
+        }
+        const uint8_t *w = word_[sym];
+        uint32_t n = wlen_[sym];
+        int k = 0;
+        for (uint32_t i = 0; i < n; i++) {
             /* dictionary bytes are unsigned (0..255); control codes 1..4
                are handled by the state machine, everything else may be
                uppercased or suppressed depending on the pending state. */
-            int b = case_space_decode((unsigned char)w[i]);
+            int b = case_space_decode(w[i]);
             if (b >= 0)
-                out.push_back((uint8_t)b);
+                out[k++] = (uint8_t)b;
         }
+        return k;
     }
 
-    /* Convenience: decode a whole big-endian 16-bit symbol stream
-       (e.g. the contents of "book1p") into 'out'.  A trailing odd byte,
-       if any, is ignored, exactly as the reference tool does. */
-    void decode_stream(const uint8_t *be16, size_t nbytes,
-                       std::vector<uint8_t> &out)
-    {
-        size_t n = nbytes & ~(size_t)1;     /* ignore a trailing odd byte */
-        for (size_t i = 0; i < n; i += 2) {
-            uint16_t sym = (uint16_t(be16[i]) << 8) | be16[i + 1];
-            unpack(sym, out);
-        }
-    }
-
-    /* Reset the case/space state machine to its initial value so the same
-       dictionary can decode another independent stream. */
+    /* Reset the case/space state machine so the same dictionary can decode
+       another independent stream. */
     void reset()
     {
         ch_type_    = 0;
@@ -141,8 +160,8 @@ public:
         has_escape_ = false;
     }
 
-    /* Number of dictionary entries; valid symbols are 0 .. symbol_count()-1. */
-    size_t symbol_count() const { return words_.size(); }
+    size_t   symbol_count()  const { return nword_; }     /* valid: 0..count-1 */
+    uint32_t max_word_len()  const { return max_wlen_; }  /* upper bound of unpack() */
 
 private:
     /* reserved control codes embedded in dictionary words (see preprocess.c) */
@@ -190,8 +209,11 @@ private:
         return c;
     }
 
-    /* words_[sym] = raw expansion bytes of that symbol (before case/space). */
-    std::vector<std::string> words_;
+    uint8_t  *buf_;     /* malloc'd backing store: all word bytes, unescaped */
+    uint8_t **word_;    /* word_[sym] -> first byte of that symbol in buf_   */
+    uint32_t *wlen_;    /* wlen_[sym] = number of bytes of that symbol       */
+    size_t    nword_;   /* number of dictionary entries                      */
+    uint32_t  max_wlen_;/* longest word, == upper bound on unpack() output   */
 
     /* case/space machine state (mirror of CaseSpaceDecodeState). */
     bool has_space_;
@@ -202,7 +224,12 @@ private:
 
 /****************************************************************/
 
-static const size_t FLUSH_AT = 1u << 20;   /* flush the buffer past 1 MiB */
+/* A single symbol expands to at most the longest dictionary word; 512
+   matches the encoder's own per-word limit (SORT_MAX_LEN in preprocess.c)
+   and is far above the 20 bytes this sample actually needs. */
+enum { OUT_MAX = 512 };
+
+static uint8_t out[OUT_MAX];   /* plain global output array (no vector) */
 
 int main(int argc, char **argv)
 {
@@ -210,33 +237,32 @@ int main(int argc, char **argv)
         fprintf(stderr, "usage: %s <dict> <book1p> <out>\n", argv[0]);
         return 1;
     }
-    const char *dict_file = argv[1];
-    const char *in_file   = argv[2];
-    const char *out_file  = argv[3];
 
-    DictDecoder dec(dict_file);
+    DictDecoder dec(argv[1]);
+    if (dec.max_word_len() > OUT_MAX) {
+        fprintf(stderr, "OUT_MAX too small: longest word is %u bytes\n",
+                (unsigned)dec.max_word_len());
+        return 1;
+    }
 
-    FILE *fi = fopen(in_file, "rb");
-    if (!fi) { perror(in_file); return 1; }
-    FILE *fo = fopen(out_file, "wb");
-    if (!fo) { perror(out_file); fclose(fi); return 1; }
+    FILE *fi = fopen(argv[2], "rb");
+    if (!fi) { perror(argv[2]); return 1; }
+    FILE *fo = fopen(argv[3], "wb");
+    if (!fo) { perror(argv[3]); fclose(fi); return 1; }
 
-    std::vector<uint8_t> out;
-    out.reserve(FLUSH_AT + 4096);
-
+    size_t max_out = 0;          /* maximum out.size() over all unpack() calls */
     uint8_t hdr[2];
     while (fread(hdr, 1, 2, fi) == 2) {
-        uint16_t sym = (uint16_t(hdr[0]) << 8) | hdr[1];   /* big-endian */
-        dec.unpack(sym, out);
-        if (out.size() >= FLUSH_AT) {
-            fwrite(out.data(), 1, out.size(), fo);
-            out.clear();
-        }
+        uint16_t sym = (uint16_t)((hdr[0] << 8) | hdr[1]);   /* big-endian */
+        int n = dec.unpack(sym, out);    /* one 16-bit symbol -> out[0..n) */
+        if ((size_t)n > max_out)
+            max_out = (size_t)n;
+        fwrite(out, 1, (size_t)n, fo);
     }
-    if (!out.empty())
-        fwrite(out.data(), 1, out.size(), fo);
 
     fclose(fi);
     fclose(fo);
+
+    printf("max out.size() = %zu\n", max_out);
     return 0;
 }
