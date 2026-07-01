@@ -899,6 +899,11 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     }
   } else if (form == FORM_GROUP) {
     int gid = (int)d->cap[CAP_GRP];
+    if (ppgroup[gid]) {                                   // pp-variant group (0F AE / 0F 1E):
+      int pp = d->cap[VAR_REPTYPE] ? (int)d->cap[VAR_REPTYPE] + 1  // pick the mandatory-prefix
+                                   : (d->cap[VAR_OPSIZ] == 1 ? 1 : 0);  // slot before ModR/M
+      gid += pp;                                          // (base gid + pp; 4 consecutive gids)
+    }
     uint16_t gstart = (uint16_t)(FSM_GROUPS + (gid * 2 + (int)d->cap[VAR_ADRSIZ]) * 256);
     size_t before = ip;
     ip = run_fsm(gstart, s, n, ip, d->cap);               // reg field -> mnemonic + r/m operand

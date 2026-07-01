@@ -944,7 +944,9 @@ class Interp:
         hr, hm = s['has_reg'], s['has_mem']
         rmreq = 1 if (hr and not hm) else (2 if (hm and not hr) else 0)
         mm, mr = s['mnem_mem'], s['mnem_reg']            # mnemonic may depend on mod
-        mn_base = mm if mm is not None else mr           # mem is the base; reg overrides below
+        # mem is the base; reg overrides below. FORM_NONE ops (no ModR/M, e.g. 0F09
+        # wbinvd/wbnoinvd) never set mnem_mem/mnem_reg, so fall back to the plain mnem.
+        mn_base = mm if mm is not None else (mr if mr is not None else s['mnem'])
         mreg = mr if (mr is not None and mr != mn_base) else 0xFFFF
         # reg-direct form/file override, when the reg form is structurally different
         # from the mem form (MPX 0F1A/1B NP: mem=bndldx/bndstx, reg=nop r/m)
@@ -957,13 +959,41 @@ class Interp:
       ppmap[tb][byte] = ([('MNEM', base, 0, 0),
                           ('CONST', self.tailcap('MNSEL'), 3, 0),
                           ('CONST', self.tailcap('GRP'), idx & 0x1f, idx >> 5)], 'FSM_HALT')
-    # group opcodes: assign ids, store members, route the owning map -> group stage
+    # group opcodes: assign ids, store members, route the owning map -> group stage.
+    # A group whose members/fixmodrm carry a [$pp==N] guard becomes a *pp-variant*
+    # group: it occupies 4 consecutive gids (one per mandatory-prefix slot) and the
+    # C++ offsets the baked base gid by pp before running the ModR/M stage. Unguarded
+    # (pp==None) rules seed every slot; a pp-guarded rule overrides its slot (0F AE
+    # rdfsbase/incssp/clwb/tpause..., 0F 1E endbr64/rdssp -- all mandatory-prefix).
     self._group_list = []
+    self._ppgroup = []                                     # gid -> 1 if pp-variant base
     group_map = {0: op1, 1: op2, 2: op3_38, 3: op3_3a}      # dispatch by escape (tb)
-    for gid, (tb, opcode) in enumerate(sorted(groups)):
-      self._group_list.append((tb, opcode, groups[(tb, opcode)]))
+    for (tb, opcode) in sorted(groups):
+      members = groups[(tb, opcode)]                       # {(pp,reg): m}
+      fixmap  = self._fixmodrm.get((tb, opcode), {})       # {(pp,modrm): mnem}
+      is_pp = any(pp is not None for (pp, _) in members) or \
+              any(pp is not None for (pp, _) in fixmap)
+      base_gid = len(self._group_list)
+      for slot in (range(4) if is_pp else (None,)):
+        mem_r, fix_r = {}, {}
+        # Combine the base (pp==None) and this slot's members FIELD BY FIELD, not by
+        # whole-dict replace: a reg's mem-form and reg-form can come from different
+        # rules/prefixes (F3 0F AE /0 has mem=fxsave [unguarded] AND reg=rdfsbase [F3]).
+        for want in (None, slot):                          # base first, pp-override second
+          for (pp, reg), mm in members.items():
+            if pp != want: continue
+            t = mem_r.setdefault(reg, {'mnem_reg': None, 'mnem_mem': None,
+                                       'imk': 0, 'rfile': 0, 'mnsel': 0})
+            for k in ('mnem_reg', 'mnem_mem'):
+              if mm[k] is not None: t[k] = mm[k]
+            for k in ('imk', 'rfile', 'mnsel'):
+              if mm.get(k): t[k] = mm[k]
+          for (pp, mod), mn in fixmap.items():
+            if pp == want: fix_r[mod] = mn
+        self._group_list.append((tb, opcode, mem_r, fix_r))
+        self._ppgroup.append(1 if (is_pp and slot == 0) else 0)
       group_map[tb][opcode] = ([('CONST', self.tailcap('FORM'), F['GROUP'], 0),
-                                ('CONST', self.tailcap('GRP'), gid & 0x1f, gid >> 5)], 'FSM_HALT')
+                                ('CONST', self.tailcap('GRP'), base_gid & 0x1f, base_gid >> 5)], 'FSM_HALT')
     # 0F escape: op1[0x0f] hands off to op2
     op1[0x0f] = ([('CONST', self.tailcap('FORM'), F['ESC'], 0)], 'FSM_HALT')
     # three-byte escapes: op2[0x38]/op2[0x3a] mark CAP_TBL3 so the driver runs op3
@@ -1455,22 +1485,34 @@ class Interp:
   def _collect_group(self, groups, info, rhs, midx, K):
     tb = info['tb']
     opcode = info['bp'].lit_val
+    pp = info['pp']                                      # None -> applies to every pp slot
     grp = groups.setdefault((tb, opcode), {})            # register the opcode as a group
     if info.get('fixmodrm') is not None:                 # fully-fixed ModR/M, no operand
       base = self.insn_mnem(rhs)[1]                       # (endbr64, monitor, rdtscp, ...)
-      self._fixmodrm.setdefault((tb, opcode), {})[info['fixmodrm']] = midx(base)
+      self._fixmodrm.setdefault((tb, opcode), {})[(pp, info['fixmodrm'])] = midx(base)
       return
     reg = info['reg_fixed']
     m = grp.setdefault(
-        reg, {'mnem_reg': None, 'mnem_mem': None, 'imk': K['NONE'], 'rfile': 0})
-    base = self.insn_mnem(rhs)[1]                        # leading-literal mnemonic
+        (pp, reg), {'mnem_reg': None, 'mnem_mem': None, 'imk': K['NONE'], 'rfile': 0, 'mnsel': 0})
+    mn = self.insn_mnem(rhs)                             # ('lit',name) or ('sel',tab,var)
+    if mn[0] == 'sel':                                   # opsize-select mnem: rdssp[$opsiz] (d/q)
+      seltab = self.tables[mn[1]]
+      sel_base = midx(seltab[0])
+      for k in range(1, len(seltab)):
+        midx(seltab[k])                                  # keep d/w/q variants contiguous
+      base = seltab[0]
+    else:
+      base = mn[1]                                        # leading-literal mnemonic
     if info['imm']:
       if 'sx8(' in rhs and info['imm'][0] == 'imm8':
         m['imk'] = K['IMM8SX']
       else:
         m['imk'] = K[info['imm'][0].upper()]
     if info['modrm'] == 'group_reg':
-      m['mnem_reg'] = midx(base)
+      if mn[0] == 'sel':
+        m['mnem_reg'] = sel_base; m['mnsel'] = 1          # C++ adds opsize (rdsspd/rdsspq)
+      else:
+        m['mnem_reg'] = midx(base)
       # the reg-direct r/m draws from the rule's register table (rgb -> 8-bit GPR,
       # else the opsize GPR); carry it so the operand renders al/r8b, not eax.
       m['rfile'] = self.OPF.index(self.operand_file(rhs, 'r'))
@@ -1482,8 +1524,8 @@ class Interp:
   def group_state(self, gid, adrsiz, modrm):
     # one byte of a dedicated reg-fixed ModR/M stage: the reg field is the opcode
     # extension (it picks the mnemonic, baked here), the r/m is the operand.
-    tb, opcode, members = self._group_list[gid]
-    fm = self._fixmodrm.get((tb, opcode), {}).get(modrm)
+    tb, opcode, members, fixmap = self._group_list[gid]
+    fm = fixmap.get(modrm)
     if fm is not None:                                   # fully-fixed ModR/M -> no-operand op
       acts, nxt = self.modrm_state(adrsiz, modrm)        # consume the modrm byte (mod==11)
       return [('MNEM', fm, 0, 0), ('CONST', self.tailcap('FORM'), 0, 0)] + acts[1:], nxt  # FORM_NONE
@@ -1496,6 +1538,8 @@ class Interp:
       return [], 'FSM_HALT'                              # this form not defined for /reg
     acts, nxt = self.modrm_state(adrsiz, modrm)
     pre = [('MNEM', mnem, 0, 0)]                         # reg field -> mnemonic (per byte)
+    if is_reg and m.get('mnsel'):                        # opsize-select reg mnem (rdsspd/rdsspq)
+      pre.append(('CONST', self.tailcap('MNSEL'), 1, 0))
     if m['imk'] != 0:
       pre.append(('CONST', self.tailcap('IMK'), m['imk'], 0))
     if is_reg and m.get('rfile'):                        # reg-direct r/m register file (RGB etc.)
@@ -1813,7 +1857,7 @@ def emit(c, interp, out_path):
   if ng:
     w(",\n  { // groups[%d][2][256]\n" % ng)
     for gid in range(ng):
-      tb, opcode, _ = interp._group_list[gid]
+      tb, opcode, _, _ = interp._group_list[gid]
       w("   { // group id %d  (%sopcode 0x%02x)\n" % (gid, "0F " if tb else "", opcode))
       for adr in (0, 1):
         w("    { // adrsiz=%d\n" % adr)
@@ -2016,6 +2060,14 @@ def emit(c, interp, out_path):
   else:
     w("    {%s,%s,%s,%s}\n" % (ud, ud, ud, ud))
   w("};\n\n")
+
+  # pp-variant groups: ppgroup[gid]==1 marks the base gid of a group whose ModR/M
+  # dispatch depends on the mandatory prefix (0F AE, 0F 1E). Such a group occupies 4
+  # consecutive gids (pp 0=NP,1=66,2=F3,3=F2); the C++ adds pp to the baked base gid
+  # before running the group ModR/M stage. All-zero for a corpus with no pp-groups.
+  ppg = getattr(interp, '_ppgroup', [])
+  w("static const uint8_t ppgroup[%d] = {" % max(1, len(ppg)))
+  w("%s};\n\n" % ", ".join(str(x) for x in (ppg if ppg else [0])))
 
   # 3DNow!: the mnemonic is a trailing opcode byte after ModR/M (0F 0F ... suffix).
   # tdnow_tab[suffix] is the mnemonic (0xFFFF = undefined suffix -> #UD).

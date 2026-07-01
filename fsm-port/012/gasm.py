@@ -156,28 +156,35 @@ class EncBuilder:
 
   # ---- opcode-extension groups, from gen's _group_list ----
   def add_groups(self):
+    # Members and fixmodrm come straight from gen's per-gid _group_list. A pp-variant
+    # group repeats the same (tb,opcode) across its 4 gids, and the SAME (reg,mod) can
+    # carry different mnemonics per prefix slot (NP lfence vs F3 incsspd at 0F AE /5),
+    # so the candidate key includes the mnemonic -- both survive, each in its own
+    # by_mnem bucket. The mandatory prefix itself is reproduced by pfx[] replay, so
+    # the encoder needs no pp awareness beyond emitting the right opcode/digit.
     F, K = self.F, self.K
-    for gid, (tb, opcode, members) in enumerate(self.ip._group_list):
+    for gid, (tb, opcode, members, fixmap) in enumerate(self.ip._group_list):
       for reg, m in members.items():
-        for which, mn in (('reg', m['mnem_reg']), ('mem', m['mnem_mem'])):
-          if mn is None:
-            continue
-          key = (tb, opcode, reg if which == 'reg' else 0x100 + reg)  # distinct keys reg/mem
-          c = self.cand(key)
-          c['digit'] = reg
-          c['mnem'] = mn
-          c['form'] = F['GROUP']
-          c['imk'] = m['imk']
-          if which == 'reg':
-            c['sup_reg'] = 1
-            c['mfile'] = m.get('rfile', 0)               # reg-direct r/m file (rgb -> 8-bit)
+        reg_mnems = []
+        if m['mnem_reg'] is not None:                    # opsize-select reg mnem (rdsspd/q):
+          if m.get('mnsel'):                             # one candidate per d/w/q variant
+            reg_mnems = [m['mnem_reg'], m['mnem_reg'] + 1, m['mnem_reg'] + 2]
           else:
-            c['sup_mem'] = 1
-    # fully-fixed ModR/M no-operand ops (endbr64/endbr32, monitor, rdtscp, ...): the
-    # encoder emits the opcode + the literal ModR/M byte; no operand, no digit.
-    for (tb, opcode), fm in self.ip._fixmodrm.items():
-      for modrm, mnem in fm.items():
-        c = self.cand((tb, opcode, 0x200 + modrm))
+            reg_mnems = [m['mnem_reg']]
+        for mn in reg_mnems:
+          c = self.cand((tb, opcode, reg, mn))
+          c['digit'] = reg; c['mnem'] = mn; c['form'] = F['GROUP']; c['imk'] = m['imk']
+          c['sup_reg'] = 1
+          c['mfile'] = m.get('rfile', 0)                 # reg-direct r/m file (rgb -> 8-bit)
+        if m['mnem_mem'] is not None:
+          mn = m['mnem_mem']
+          c = self.cand((tb, opcode, 0x100 + reg, mn))
+          c['digit'] = reg; c['mnem'] = mn; c['form'] = F['GROUP']; c['imk'] = m['imk']
+          c['sup_mem'] = 1
+      # fully-fixed ModR/M no-operand ops (endbr64/endbr32, monitor, rdtscp, ...): the
+      # encoder emits the opcode + the literal ModR/M byte; no operand, no digit.
+      for modrm, mnem in fixmap.items():
+        c = self.cand((tb, opcode, 0x200 + modrm, mnem))
         c['digit'] = 0xFF
         c['mnem'] = mnem
         c['form'] = F['NONE']

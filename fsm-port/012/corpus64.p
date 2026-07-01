@@ -93,6 +93,11 @@ table sbo { 0,0,0,0,7,7,0,0 }      # base reg number (low 3) -> seg row
 # A rule `=> sseNN[$pp] ...` picks the entry by the mandatory prefix; invalid
 # prefix slots repeat the NP mnemonic (lenient collapse, still round-trips).
 table sse58 { addps, addpd, addss, addsd }
+table sse2b { movntps, movntpd, movntss, movntsd }       # 0F 2B non-temporal store
+table sret  { sysretd, sysretd~w, sysretq }              # 0F 07: d at 32-bit/data16, q at REX.W
+table sxit  { sysexitd, sysexitd~w, sysexitq }           # 0F 35  (~w = distinct idx, "sysexitd" display)
+table rdssp { rdsspd, rdsspd~w, rdsspq }                 # F3 0F 1E /1: CET read shadow-stack ptr
+table incssp { incsspd, incsspd~w, incsspq }             # F3 0F AE /5: CET increment shadow-stack
 table ssebc { bsf, bsf, tzcnt, bsf }
 table ssebd { bsr, bsr, lzcnt, bsr }
 table ssee6 { cvtpd2dq, cvttpd2dq, cvtdq2pd, cvtpd2dq }
@@ -686,24 +691,35 @@ submatch insn {
   0x0f 0xc7 @addr(1)   => "cmpxchg8b " $addr ;
   0x0f 11001 bbb       => "bswap " greg[$b] ;
 
-  # ===== 0F AE fences / clflush / fxsave-xsave ; 0F 18 prefetch/nop ; 0F 1E endbr
-  # (the CET endbr64/endbr32 = F3 0F 1E FA/FB; the F3 rides in the prefix run, so
-  #  the base 0F 1E modrm rule round-trips them byte-exact). ====================
-  0x0f 0xae 11 000 rrr => "rdfsbase " greg[$r] ;
-  0x0f 0xae 11 001 rrr => "rdgsbase " greg[$r] ;
-  0x0f 0xae 11 010 rrr => "wrfsbase " greg[$r] ;
-  0x0f 0xae 11 011 rrr => "wrgsbase " greg[$r] ;
-  0x0f 0xae 11 101 rrr => "lfence" ;
-  0x0f 0xae 11 110 rrr => "mfence" ;
-  0x0f 0xae 11 111 rrr => "sfence" ;
-  0x0f 0xae @addr(0)   => "fxsave " $addr ;
+  # ===== 0F AE: fences / fxsave-xsave / clflush + CET/base-reg/wait (pp-variant grp)
+  # The reg (mod=11) forms are almost entirely mandatory-prefix-specific; the mem
+  # (mod!=11) fxsave/fxrstor/ldmxcsr/stmxcsr ignore F3/F2/66. This is a pp-variant
+  # group: unguarded rules seed all 4 prefix slots, [$pp==N] rules add/override a
+  # slot. (pp: 0=NP, 1=66, 2=F3, 3=F2.) ========================================
+  0x0f 0xae @addr(0)   => "fxsave " $addr ;             # /0-/3 mem: prefix-agnostic
   0x0f 0xae @addr(1)   => "fxrstor " $addr ;
   0x0f 0xae @addr(2)   => "ldmxcsr " $addr ;
   0x0f 0xae @addr(3)   => "stmxcsr " $addr ;
-  0x0f 0xae @addr(4)   => "xsave " $addr ;
-  0x0f 0xae @addr(5)   => "xrstor " $addr ;
-  0x0f 0xae @addr(6)   => "xsaveopt " $addr ;
-  0x0f 0xae @addr(7)   => "clflush" sfx[1] " " $addr ;
+  0x0f 0xae 11 111 000 => "sfence" ;                    # /7 reg: sfence (fixmodrm F8; no operand)
+  0x0f 0xae 11 101 000 [$pp==0] => "lfence" ;           # /5,/6 reg NP-only (fixmodrm E8/F0)
+  0x0f 0xae 11 110 000 [$pp==0] => "mfence" ;
+  0x0f 0xae @addr(5) [$pp==0] => "xrstor " $addr ;      # NP-only mem: xrstor/xsaveopt
+  0x0f 0xae @addr(6) [$pp==0] => "xsaveopt " $addr ;
+  0x0f 0xae @addr(7) [$pp==0] => "clflush" sfx[1] " " $addr ;
+  0x0f 0xae @addr(6) [$pp==1] => "clwb" sfx[1] " " $addr ;         # 66: clwb / clflushopt mem
+  0x0f 0xae @addr(7) [$pp==1] => "clflushopt" sfx[1] " " $addr ;
+  0x0f 0xae 11 110 rrr [$pp==1] => "tpause " gregd[$r] ;          # 66: tpause reg
+  0x0f 0xae 11 000 rrr [$pp==2] => "rdfsbase " gregd[$r] ;        # F3: rd/wr fs/gs base reg
+  0x0f 0xae 11 001 rrr [$pp==2] => "rdgsbase " gregd[$r] ;
+  0x0f 0xae 11 010 rrr [$pp==2] => "wrfsbase " gregd[$r] ;
+  0x0f 0xae 11 011 rrr [$pp==2] => "wrgsbase " gregd[$r] ;
+  0x0f 0xae @addr(4) [$pp==2] => "ptwrite " $addr ;               # F3: ptwrite mem/reg
+  0x0f 0xae 11 100 rrr [$pp==2] => "ptwrite " gregd[$r] ;
+  0x0f 0xae 11 101 rrr [$pp==2] => incssp[$opsiz] gregd[$r] ;      # F3: incsspd/incsspq
+  0x0f 0xae @addr(6) [$pp==2] => "clrssbsy" sfx[8] " " $addr ;     # F3: clrssbsy qword mem
+  0x0f 0xae 11 110 rrr [$pp==2] => "umonitor " gregq[$r] ;        # F3: umonitor (addr-size reg)
+  0x0f 0xae 11 110 rrr [$pp==3] => "umwait " gregd[$r] ;          # F2: umwait reg
+  0x0f 0xae @addr(4) [$pp==0] => "xsave " $addr ;
   0x0f 0x18 @addr(0)   => "prefetchnta" sfx[1] " " $addr ;
   0x0f 0x18 @addr(1)   => "prefetcht0" sfx[1] " " $addr ;
   0x0f 0x18 @addr(2)   => "prefetcht1" sfx[1] " " $addr ;
@@ -774,27 +790,28 @@ submatch insn {
   0x0f 0x1b @addr      [$pp==2] => "bndmk " bndreg[$g] "," $addr ;
   0x0f 0x1b 11 ggg rrr [$pp==3] => "bndcn " bndreg[$g] "," gregq[$r] ;
   0x0f 0x1b @addr      [$pp==3] => "bndcn " bndreg[$g] "," $addr ;
-  # 0F 1E: reserved multi-byte NOP r/m, EXCEPT the two fully-fixed ModR/M bytes
-  # FA/FB which are endbr64/endbr32 (their F3 rides the prefix run and replays, so
-  # NP vs F3 both round-trip; the common F3-prefixed forms render as endbr64/32).
-  0x0f 0x1e 11 111 010 => "endbr64" ;                  # F3 0F 1E FA (fixmodrm; F3 replays)
-  0x0f 0x1e 11 111 011 => "endbr32" ;                  # F3 0F 1E FB
-  0x0f 0x1e 11 000 rrr => "nop1e " greg[$r] ;
-  0x0f 0x1e 11 001 rrr => "nop1e " greg[$r] ;
-  0x0f 0x1e 11 010 rrr => "nop1e " greg[$r] ;
-  0x0f 0x1e 11 011 rrr => "nop1e " greg[$r] ;
-  0x0f 0x1e 11 100 rrr => "nop1e " greg[$r] ;
-  0x0f 0x1e 11 101 rrr => "nop1e " greg[$r] ;
-  0x0f 0x1e 11 110 rrr => "nop1e " greg[$r] ;
-  0x0f 0x1e 11 111 rrr => "nop1e " greg[$r] ;
-  0x0f 0x1e @addr(0)   => "nop1e " $addr ;
-  0x0f 0x1e @addr(1)   => "nop1e " $addr ;
-  0x0f 0x1e @addr(2)   => "nop1e " $addr ;
-  0x0f 0x1e @addr(3)   => "nop1e " $addr ;
-  0x0f 0x1e @addr(4)   => "nop1e " $addr ;
-  0x0f 0x1e @addr(5)   => "nop1e " $addr ;
-  0x0f 0x1e @addr(6)   => "nop1e " $addr ;
-  0x0f 0x1e @addr(7)   => "nop1e " $addr ;
+  # 0F 1E: reserved multi-byte NOP r/m (all mod), EXCEPT under F3, where reg=1 is
+  # rdsspd/rdsspq and ModR/M FA/FB are endbr64/endbr32 (pp-variant group). Without
+  # F3 those bytes are plain nop (nop edx / nop ebx / nop eax). pp: 0=NP ... 2=F3.
+  0x0f 0x1e 11 111 010 [$pp==2] => "endbr64" ;         # F3 0F 1E FA (fixmodrm)
+  0x0f 0x1e 11 111 011 [$pp==2] => "endbr32" ;         # F3 0F 1E FB
+  0x0f 0x1e 11 001 rrr [$pp==2] => rdssp[$opsiz] gregd[$r] ;   # F3 0F 1E /1: rdsspd/rdsspq
+  0x0f 0x1e 11 000 rrr => "nop~1e " greg[$r] ;
+  0x0f 0x1e 11 001 rrr => "nop~1e " greg[$r] ;
+  0x0f 0x1e 11 010 rrr => "nop~1e " greg[$r] ;
+  0x0f 0x1e 11 011 rrr => "nop~1e " greg[$r] ;
+  0x0f 0x1e 11 100 rrr => "nop~1e " greg[$r] ;
+  0x0f 0x1e 11 101 rrr => "nop~1e " greg[$r] ;
+  0x0f 0x1e 11 110 rrr => "nop~1e " greg[$r] ;
+  0x0f 0x1e 11 111 rrr => "nop~1e " greg[$r] ;
+  0x0f 0x1e @addr(0)   => "nop~1e " $addr ;
+  0x0f 0x1e @addr(1)   => "nop~1e " $addr ;
+  0x0f 0x1e @addr(2)   => "nop~1e " $addr ;
+  0x0f 0x1e @addr(3)   => "nop~1e " $addr ;
+  0x0f 0x1e @addr(4)   => "nop~1e " $addr ;
+  0x0f 0x1e @addr(5)   => "nop~1e " $addr ;
+  0x0f 0x1e @addr(6)   => "nop~1e " $addr ;
+  0x0f 0x1e @addr(7)   => "nop~1e " $addr ;
 
   # ===== legacy system / misc 0F: double-shift, far-ptr load, vmx, ud, movnti ==
   0x0f 0x0e => "femms" ;
@@ -1118,7 +1135,7 @@ submatch insn {
   0x0f 0xf6 11 ggg rrr => "psadbw " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0xf6 @addr      => "psadbw " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0xf7 11 ggg rrr => "maskmovdqu " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x2b @addr      => "movntps " $addr "," ssereg[8+$g] ;
+  0x0f 0x2b @addr      => sse2b[$pp] $addr "," ssereg[8+$g] ;
 
   # shift packed by imm8 (0F 71/72/73 groups; the /digit picks the shift, the r/m
   # is the shifted reg -- reg-direct only, no memory form). psrldq/pslldq (73 /3,
@@ -1494,14 +1511,26 @@ submatch insn {
   0x0f 0x03 11 ggg rrr => "lsl " greg[$g] "," greg[$r] ;
   0x0f 0x03 @addr      => "lsl " greg[$g] "," $addr ;
   0x0f 0x06 => "clts" ;
-  0x0f 0x07 => "sysret" ;
+  0x0f 0x07 => sret[$opsiz] ;
   0x0f 0x08 => "invd" ;
-  0x0f 0x09 => "wbinvd" ;
+  0x0f 0x09 [$pp==0] => "wbinvd" ;
+  0x0f 0x09 [$pp==2] => "wbnoinvd" ;
+  # VIA PadLock (0F A6/A7): fully-fixed ModR/M crypto ops; the rep (F3) prefix that
+  # accompanies them in practice rides the prefix run and replays.
+  0x0f 0xa6 11 000 000 => "montmul" ;
+  0x0f 0xa6 11 001 000 => "xsha1" ;
+  0x0f 0xa6 11 010 000 => "xsha256" ;
+  0x0f 0xa7 11 000 000 => "xstore-rng" ;
+  0x0f 0xa7 11 001 000 => "xcrypt-ecb" ;
+  0x0f 0xa7 11 010 000 => "xcrypt-cbc" ;
+  0x0f 0xa7 11 011 000 => "xcrypt-ctr" ;
+  0x0f 0xa7 11 100 000 => "xcrypt-cfb" ;
+  0x0f 0xa7 11 101 000 => "xcrypt-ofb" ;
   0x0f 0x30 => "wrmsr" ;
   0x0f 0x32 => "rdmsr" ;
   0x0f 0x33 => "rdpmc" ;
   0x0f 0x34 => "sysenter" ;
-  0x0f 0x35 => "sysexit" ;
+  0x0f 0x35 => sxit[$opsiz] ;
   0x0f 0x77 => "emms" ;
   0x0f 0xa0 => "push fs" ;
   0x0f 0xa1 => "pop fs" ;
