@@ -255,10 +255,17 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t slen, size_t
       n = 2;
       if (c[CAP_IMK] != IMK_NONE) {                    // imul r,r/m,imm ; shld r/m,r,imm
         in->op[2].type = T_IMM; in->imm = (int32_t)c[CAP_IMM]; n = 3;
+        if (c[CAP_IMK] == IMK_IMM8X2) {                // insertq xmm,xmm,imm8,imm8
+          in->op[3].type = T_IMM2; in->disp = (int32_t)c[CAP_DISP]; n = 4;
+        }
       }
       break;
     case FORM_RM:      SETRM(0); n = 1;
-      if (c[CAP_IMK] != IMK_NONE) { in->op[1].type = T_IMM; in->imm = (int32_t)c[CAP_IMM]; n = 2; }
+      if (c[CAP_IMK] != IMK_NONE) { in->op[1].type = T_IMM; in->imm = (int32_t)c[CAP_IMM]; n = 2;
+        if (c[CAP_IMK] == IMK_IMM8X2) {                // extrq xmm,imm8,imm8
+          in->op[2].type = T_IMM2; in->disp = (int32_t)c[CAP_DISP]; n = 3;
+        }
+      }
       break;
     case FORM_REG:     SETREG(0, rf, (int)c[CAP_REG]); n = 1; break;
     case FORM_ACC:                                  // implicit eAX/al + imm (reg_rex==0)
@@ -370,6 +377,9 @@ static inline size_t append_imm(uint64_t* cap, const byte* s, size_t len, size_t
         uint64_t a = s[ip] | (s[ip + 1] << 8);
         cap[CAP_IMM] = a; cap[CAP_DISP] = s[ip + 2]; ip += 3;
       }
+      return ip;
+    case IMK_IMM8X2:                                // extrq/insertq: imm8 : imm8
+      if (ip + 2 <= len) { cap[CAP_IMM] = s[ip]; cap[CAP_DISP] = s[ip + 1]; ip += 2; }
       return ip;
   }
   if (ip + w <= len) {

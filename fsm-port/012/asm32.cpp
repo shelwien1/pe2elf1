@@ -38,7 +38,7 @@ static char opclass_ch(const x86op_t* o) {
     case T_KREG: case T_MASK:             return 'k';
     case T_BND:                           return 'b';
     case T_MEM:                           return 'm';
-    case T_IMM: case T_PTR:               return 'i';
+    case T_IMM: case T_IMM2: case T_PTR:  return 'i';
     case T_REL:                           return 'l';
     default:                              return '-';
   }

@@ -32,6 +32,7 @@ static inline int enc_op_class(const x86op_t* o) {
     case T_SREG: return C_SREG;  case T_MEM:  return C_MEM;
     case T_BND:  return C_BND;
     case T_IMM:  return C_IMM;   case T_REL:  return C_REL;
+    case T_IMM2: return C_IMM;                            // extrq/insertq 2nd imm8
     default:     return C_NONE;
   }
 }
@@ -64,21 +65,25 @@ static inline bool enc_cand_roles(const struct EncCand* c, const x86insn_t* in,
   switch (c->form) {
     case FORM_NONE: return n == 0;
     case FORM_MODRM: {
-      int need = (c->imk != IMK_NONE) ? 3 : 2;
-      if (n != need) return false;
+      int nimm = (c->imk == IMK_IMM8X2) ? 2 : (c->imk != IMK_NONE ? 1 : 0);  // insertq: 2 imm8
+      if (n != 2 + nimm) return false;
       int ri = c->dir ? 1 : 0, mi = c->dir ? 0 : 1;     // dir: 0=reg,r/m  1=r/m,reg
       if (CLS(ri) != enc_file_class(c->rfile, os, rept)) return false;
       if (!RM_OK(mi)) return false;
       *reg_oi = ri; *rm_oi = mi;
-      if (need == 3) { if (CLS(2) != C_IMM) return false; *imm_oi = 2; }
+      if (nimm) { if (CLS(2) != C_IMM) return false; *imm_oi = 2;
+                  if (nimm == 2 && CLS(3) != C_IMM) return false; }
       return true;
     }
-    case FORM_RM:
+    case FORM_RM: {
+      int nimm = (c->imk == IMK_IMM8X2) ? 2 : (c->imk != IMK_NONE ? 1 : 0);   // extrq: 2 imm8
       if (!RM_OK(0)) return false;
       *rm_oi = 0;
-      if (n == 2) { if (CLS(1) != C_IMM) return false; *imm_oi = 1; }
-      else if (n != 1) return false;
+      if (n != 1 + nimm) return false;
+      if (nimm) { if (CLS(1) != C_IMM) return false; *imm_oi = 1;
+                  if (nimm == 2 && CLS(2) != C_IMM) return false; }
       return true;
+    }
     case FORM_REG:
       if (n != 1 || CLS(0) != enc_file_class(c->rfile, os, rept)) return false;
       *reg_oi = 0; return true;
@@ -267,6 +272,7 @@ static inline void enc_imm(uint8_t* o, size_t* p, int imk, int opsize,
                    o[(*p)++] = (uint8_t)sel; o[(*p)++] = (uint8_t)(sel >> 8); return;
     case IMK_ENTER: o[(*p)++] = (uint8_t)imm; o[(*p)++] = (uint8_t)(imm >> 8);
                     o[(*p)++] = (uint8_t)sel; return;     // imm16 frame : imm8 level
+    case IMK_IMM8X2: o[(*p)++] = (uint8_t)imm; o[(*p)++] = (uint8_t)sel; return;  // extrq/insertq
     default: return;
   }
   for (int i = 0; i < w; ++i) o[(*p)++] = (uint8_t)(imm >> (8 * i));

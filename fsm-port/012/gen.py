@@ -608,7 +608,7 @@ class Interp:
   # IMMV = operand-size immediate (imm16/imm32/imm64 by 66 / default / REX.W). Used
   # only by mov r,imm (B8+r): under REX.W it is the full 64-bit movabs immediate. The
   # width is resolved C++-side (append_imm/enc_imm) since REX.W is not an FSM var.
-  INSN_IMK = ['NONE', 'IMM8', 'IMM16', 'IMM32', 'IMMZ', 'REL8', 'RELZ', 'PTR', 'IMM8SX', 'ENTER', 'IMMV']
+  INSN_IMK = ['NONE', 'IMM8', 'IMM16', 'IMM32', 'IMMZ', 'REL8', 'RELZ', 'PTR', 'IMM8SX', 'ENTER', 'IMMV', 'IMM8X2']
 
   def insn_rules_raw(self):
     out = []
@@ -764,6 +764,8 @@ class Interp:
         imk = K['PTR']
       elif imml == ['imm16', 'imm8']:
         imk = K['ENTER']                                 # enter Iw,Ib
+      elif imml == ['imm8', 'imm8']:
+        imk = K['IMM8X2']                                # extrq/insertq Ib,Ib
       elif len(imml) == 1:
         imk = K['IMM8SX'] if (imml[0] == 'imm8' and 'sx8(' in rhs) else K[imml[0].upper()]
       elif not imml:
@@ -1647,7 +1649,7 @@ def emit(c, interp, out_path):
   # operand-shape + immediate-kind enums for the single-byte instruction decoder
   w("enum InsnForm { %s };\n" %
     ", ".join("FORM_%s%s" % (n, "=0" if i == 0 else "") for i, n in enumerate(interp.INSN_FORM)))
-  w("enum ImmKind  { IMK_NONE=0, IMK_IMM8, IMK_IMM16, IMK_IMM32, IMK_IMMZ, IMK_REL8, IMK_RELZ, IMK_PTR, IMK_IMM8SX, IMK_ENTER, IMK_IMMV };\n")
+  w("enum ImmKind  { IMK_NONE=0, IMK_IMM8, IMK_IMM16, IMK_IMM32, IMK_IMMZ, IMK_REL8, IMK_RELZ, IMK_PTR, IMK_IMM8SX, IMK_ENTER, IMK_IMMV, IMK_IMM8X2 };\n")
   w("enum OperandFile { OPF_GREG=0, OPF_RGB, OPF_XMM, OPF_MM, OPF_SREG, OPF_SSE_OS, OPF_MMG, OPF_GREGd, OPF_GREGq, OPF_GREGw, OPF_BND };\n\n")
 
   # the one uniform FSM record (Action packed to 16 bits)

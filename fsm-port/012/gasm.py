@@ -69,6 +69,8 @@ class EncBuilder:
       imk = K['PTR']
     elif imml == ['imm16', 'imm8']:
       imk = K['ENTER']
+    elif imml == ['imm8', 'imm8']:
+      imk = K['IMM8X2']
     elif len(imml) == 1:
       imk = K['IMM8SX'] if (imml[0] == 'imm8' and 'sx8(' in rhs) else K[imml[0].upper()]
     elif not imml:
