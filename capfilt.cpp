@@ -1,23 +1,32 @@
-// capfilt.cpp - model-driven, reversible case (bit5) filter.
+// capfilt.cpp - model-driven, reversible case (bit5) filter (two passes).
 //
 // Derived from coder0.cpp. Instead of range-coding the input, it uses the two
-// mixed PPMd models to predict, at each position, the probability that the
-// next symbol is a capital English letter 'A'..'Z'. When that probability
-// exceeds a threshold, bit5 (the ASCII case bit) of the current letter is
-// flipped in the output. No range coder is used and no side information is
-// stored: the output is a byte-for-byte transform of the input.
+// mixed PPMd models to predict, at each position, the conditional probability
+// that the letter there is a capital, P(caps | letter) = capMass/(capMass +
+// lowerMass) over the mixed next-symbol distribution. When that exceeds a
+// threshold, bit5 (the ASCII case bit) of the current letter is flipped. No
+// range coder is used and no side information is stored: the output is a
+// byte-for-byte transform of the input.
 //
-// The transform is its own inverse given the shared model:
-//   * encode ('c'): the input holds the ORIGINAL bytes; the models are
-//     updated with those originals and the flipped bytes are emitted.
-//   * decode ('d'): the input holds the transformed bytes; each letter is
-//     un-flipped to restore the original, and the models are updated with the
-//     restored (original) symbols.
-// Because both directions drive the models with identical (original) symbols,
-// the per-position cap probability - and hence the flip decision - is the same
-// on each side, so decode exactly reverses encode. Flipping bit5 of an English
-// letter always yields an English letter, so "is this byte a letter" is
-// invariant under the flip and matches on both sides too.
+// The filter runs TWO independent passes:
+//   * pass 1 - left-to-right  (each decision uses LEFT  context)
+//   * pass 2 - right-to-left  (each decision uses RIGHT context)
+// The passes are fully independent: each starts from fresh models/mixers and
+// nothing (no flip flags, no reversed buffers) is shared between them.
+//
+// Each pass is a self-inverting cap filter: it drives its model with the
+// "canonical" symbol - the original byte on encode, the restored byte on
+// decode - so the per-position probability, and hence the flip decision, is
+// identical on both sides. Flipping bit5 of an English letter yields an
+// English letter, so is_letter() matches on both sides too. Therefore a pass
+// run in decode mode exactly undoes the same pass run in encode mode.
+//
+// Composing the two: encode applies pass 1 then pass 2; decode undoes them in
+// the opposite order - pass 2 (right-to-left) first, then pass 1
+// (left-to-right) - so decode(encode(x)) == x with no stored state.
+//
+//   encode ('c'):  buf --pass1 L->R--> --pass2 R->L-->  output
+//   decode ('d'):  buf --pass2 R->L--> --pass1 L->R-->  output
 
 // C library headers
 #include <cmath>
@@ -84,8 +93,19 @@ struct UnifiedModel {
     for( uint i = 0, offset = 0; i<256; i++ ) {
       byte_map_[i] = offset;
     }
+    // Reset the prediction buffers so every pass starts from the same state
+    // (they are reused across passes; the first byte would otherwise inherit
+    // the previous pass's leftover probabilities and desync encode/decode).
+    memset( ppmd_probs_, 0, sizeof(ppmd_probs_) );
+    memset( ppmd_probs2_, 0, sizeof(ppmd_probs2_) );
     Renorm_probs(ppmd_probs_);
     Renorm_probs(ppmd_probs2_);
+  }
+  void Free() {
+    // Release both suballocators so a following pass re-Init's from scratch
+    // without doubling peak memory.
+    ppmd_model_.StopSubAllocator();
+    ppmd_model2_.StopSubAllocator();
   }
   void Renorm_probs(prfloat probs) {
     float inv_sum = 1.0f/(SumOfAbs(probs, 256)+1e-12f);
@@ -157,6 +177,60 @@ static inline int is_letter( uint c ) {
   return (c>='A' && c<='Z') || (c>='a' && c<='z');
 }
 
+// One cap-filter pass over buf[0..n-1].
+//   dir  : +1 = left-to-right (left context), -1 = right-to-left (right context)
+//   f_DEC: 0 = flip (encode), 1 = restore (decode)
+// Fresh models/mixers each call, so passes are independent. Returns the flip
+// count. The pass drives its models with the canonical (original) symbol - the
+// input byte when encoding, the restored byte when decoding - so a decode-mode
+// pass exactly undoes the matching encode-mode pass.
+static qword cap_pass( byte* buf, qword n, int dir, uint f_DEC, float thr ) {
+  M.Init(ppmd_order, ppmd_memory, ppmd_order2, ppmd_memory2, cmap);
+  for( uint m = 0; m<MIX_CTX; m++ ) mixer[m].Init();
+
+  uint history = 0;
+  qword n_flip = 0;
+  long long i = (dir>0) ? 0 : (long long)n-1;
+  for( qword k = 0; k<n; k++, i += dir ) {
+    uint in = buf[i];
+    uint ctx = history & (MIX_CTX-1);
+
+    // Mixed next-symbol prediction, then the conditional cap probability
+    // P(caps | letter) = capMass / (capMass + lowerMass).
+    mixer[ctx].Mix( M.ppmd_probs_, M.ppmd_probs2_, cmap );
+    float capm = 0.0f, lowm = 0.0f;
+    for( uint s = 'A'; s<='Z'; s++ ) capm += mixer[ctx].probs_[s];
+    for( uint s = 'a'; s<='z'; s++ ) lowm += mixer[ctx].probs_[s];
+    float denom = capm + lowm;
+    float pcap = (denom>0.0f) ? capm/denom : 0.0f;
+
+    // Flip the case bit of a letter when a capital is the likelier case. The
+    // decision uses only already-processed (canonical) context and is_letter()
+    // is invariant under the flip, so it matches on encode and decode.
+    uint flip = (is_letter(in) && (pcap>thr)) ? 0x20 : 0;
+
+    uint out, orig;
+    if( f_DEC==0 ) {
+      orig = in;            // encode sees the original byte...
+      out  = in ^ flip;     // ...and emits the flipped version
+    } else {
+      out  = in ^ flip;     // decode restores the original...
+      orig = out;           // ...which is what feeds the models
+    }
+
+    buf[i] = out;
+
+    // Advance models/mixer with the canonical (original) symbol.
+    mixer[ctx].Update(orig);
+    M.UpdatePPMD(orig);
+    history = (history<<1) | (orig>' ');
+    n_flip += (flip!=0);
+  }
+
+  M.Free();
+  return n_flip;
+}
+
 int main(int argc, char** argv) {
   _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
   _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
@@ -175,54 +249,34 @@ int main(int argc, char** argv) {
   if( !g )
     return 3;
 
+  // The two-pass filter needs the data in both directions, so load it whole.
+  fseek(f, 0, SEEK_END);
+  qword n = ftell(f);
+  fseek(f, 0, SEEK_SET);
+  byte* buf = (byte*)malloc( n ? n : 1 );
+  if( !buf ) { fclose(f); fclose(g); return 4; }
+  if( n && fread(buf, 1, n, f)!=n ) { fclose(f); fclose(g); free(buf); return 5; }
+  fclose(f);
+
   // No range coder and no side information: the whole alphabet is available.
   for( uint i = 0; i<CNUM; i++ ) cmap[i] = 1;
 
-  M.Init(ppmd_order, ppmd_memory, ppmd_order2, ppmd_memory2, cmap);
-  for( uint i = 0; i<MIX_CTX; i++ ) mixer[i].Init();
-
-  uint history = 0;
-  qword n_bytes = 0, n_flip = 0;
-  int ch;
-  while( (ch = getc(f)) != EOF ) {
-    uint in = ch & 0xFF;
-    uint ctx = history & (MIX_CTX-1);
-
-    // Mixed prediction of the next symbol, then P(symbol in 'A'..'Z').
-    mixer[ctx].Mix( M.ppmd_probs_, M.ppmd_probs2_, cmap );
-    float pcap = 0.0f;
-    for( uint s = 'A'; s<='Z'; s++ ) pcap += mixer[ctx].probs_[s];
-
-    // Flip the case bit of a letter when a capital is predicted likely. The
-    // decision depends only on past (original) context, so it matches on both
-    // sides; flipping a letter keeps it a letter, so is_letter() matches too.
-    uint flip = (is_letter(in) && (pcap>cap_thr)) ? 0x20 : 0;
-
-    uint out, orig;
-    if( f_DEC==0 ) {
-      orig = in;            // encoder sees the original byte...
-      out  = in ^ flip;     // ...and emits the flipped version
-    } else {
-      out  = in ^ flip;     // decoder restores the original...
-      orig = out;           // ...which is what feeds the model
-    }
-
-    putc(out, g);
-
-    // Both directions advance the models with the ORIGINAL symbol.
-    mixer[ctx].Update(orig);
-    M.UpdatePPMD(orig);
-    history = (history<<1) | (orig>' ');
-
-    n_bytes++;
-    n_flip += (flip!=0);
+  qword flips_LR, flips_RL;
+  if( f_DEC==0 ) {
+    // encode: pass 1 (left-to-right) then pass 2 (right-to-left)
+    flips_LR = cap_pass( buf, n, +1, 0, cap_thr );
+    flips_RL = cap_pass( buf, n, -1, 0, cap_thr );
+  } else {
+    // decode: undo pass 2 (right-to-left) first, then pass 1 (left-to-right)
+    flips_RL = cap_pass( buf, n, -1, 1, cap_thr );
+    flips_LR = cap_pass( buf, n, +1, 1, cap_thr );
   }
 
+  if( n ) fwrite(buf, 1, n, g);
   fclose(g);
-  fclose(f);
+  free(buf);
 
-  fprintf(stderr, "%s: %llu bytes, %llu case-flips (threshold %.4f)\n",
-          f_DEC ? "decode" : "encode",
-          (qword)n_bytes, (qword)n_flip, cap_thr);
+  fprintf(stderr, "%s: %llu bytes, L->R flips=%llu, R->L flips=%llu (threshold %.4f)\n",
+          f_DEC ? "decode" : "encode", n, flips_LR, flips_RL, cap_thr);
   return 0;
 }
