@@ -661,12 +661,16 @@ class Interp:
     reg_fixed = None
     imm = []
     embedded = next((f for f in ('b', 'c') if f in bp.fields), None)
+    fixmodrm = None
     j = 0
     if j < len(rest) and rest[j] == '11':
       mid = rest[j + 1]
       if re.fullmatch(r'[01]+', mid):
         reg_fixed = int(mid, 2)
         modrm = 'group_reg'
+        rmt = rest[j + 2] if j + 2 < len(rest) else 'rrr'
+        if re.fullmatch(r'[01]{3}', rmt):            # both reg AND rm literal: a fully-fixed
+          fixmodrm = 0xC0 | (reg_fixed << 3) | int(rmt, 2)   # ModR/M, no operand (endbr64, monitor..)
       else:
         modrm = 'reg'
       j += 3
@@ -685,7 +689,7 @@ class Interp:
       elif nm in ('imm8', 'imm16', 'imm32', 'immz', 'immv', 'rel8', 'relz'):
         imm.append(nm)
     return dict(bp=bp, tb=tb, two_byte=two_byte, modrm=modrm,
-                reg_fixed=reg_fixed, imm=imm, embedded=embedded, pp=pp)
+                reg_fixed=reg_fixed, imm=imm, embedded=embedded, pp=pp, fixmodrm=fixmodrm)
 
   def operand_file(self, tmpl, var):
     # which register-name table the $var operand draws from
@@ -740,6 +744,7 @@ class Interp:
                                                          #   0 one-byte, 1 0F, 2 0F 38, 3 0F 3A
     ppd = {}                                             # (tb,byte) -> [slot0..3] per-prefix desc
     groups = {}
+    self._fixmodrm = {}                                  # (tb,opcode) -> {modrm_byte: mnem} no-operand
     for lhs, rhs in self.insn_rules_raw():
       info = self.parse_insn_lhs(lhs)
       if info is None:
@@ -1420,8 +1425,13 @@ class Interp:
   def _collect_group(self, groups, info, rhs, midx, K):
     tb = info['tb']
     opcode = info['bp'].lit_val
+    grp = groups.setdefault((tb, opcode), {})            # register the opcode as a group
+    if info.get('fixmodrm') is not None:                 # fully-fixed ModR/M, no operand
+      base = self.insn_mnem(rhs)[1]                       # (endbr64, monitor, rdtscp, ...)
+      self._fixmodrm.setdefault((tb, opcode), {})[info['fixmodrm']] = midx(base)
+      return
     reg = info['reg_fixed']
-    m = groups.setdefault((tb, opcode), {}).setdefault(
+    m = grp.setdefault(
         reg, {'mnem_reg': None, 'mnem_mem': None, 'imk': K['NONE'], 'rfile': 0})
     base = self.insn_mnem(rhs)[1]                        # leading-literal mnemonic
     if info['imm']:
@@ -1442,7 +1452,11 @@ class Interp:
   def group_state(self, gid, adrsiz, modrm):
     # one byte of a dedicated reg-fixed ModR/M stage: the reg field is the opcode
     # extension (it picks the mnemonic, baked here), the r/m is the operand.
-    _, _, members = self._group_list[gid]
+    tb, opcode, members = self._group_list[gid]
+    fm = self._fixmodrm.get((tb, opcode), {}).get(modrm)
+    if fm is not None:                                   # fully-fixed ModR/M -> no-operand op
+      acts, nxt = self.modrm_state(adrsiz, modrm)        # consume the modrm byte (mod==11)
+      return [('MNEM', fm, 0, 0), ('CONST', self.tailcap('FORM'), 0, 0)] + acts[1:], nxt  # FORM_NONE
     m = members.get((modrm >> 3) & 7)
     if m is None:
       return [], 'FSM_HALT'                              # undefined extension: dead

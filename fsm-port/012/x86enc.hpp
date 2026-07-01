@@ -129,16 +129,17 @@ static inline const struct EncCand* enc_select(const x86insn_t* in,
 
 // Which matching candidate did these decoded opcode bytes use? -> in->enc.
 static inline bool enc_cand_is_opcode(const struct EncCand* c, int tb,
-                                      uint8_t opbyte, int digit) {
+                                      uint8_t opbyte, int digit, uint8_t modrm) {
   if (c->tb != tb) return false;
   uint8_t base = opbyte;
   if (c->emb == EMB_REG || c->emb == EMB_CC)
     base &= (uint8_t)~(((1u << c->emb_w) - 1u) << c->emb_pos);
   if (base != c->op) return false;
+  if (c->fixmodrm) return c->fixmodrm == modrm;          // no-operand fixed-ModR/M op
   if (c->digit != 0xFF && c->digit != digit) return false;
   return true;
 }
-static inline void enc_stamp(x86insn_t* in, int tb, uint8_t opbyte, int digit) {
+static inline void enc_stamp(x86insn_t* in, int tb, uint8_t opbyte, int digit, uint8_t modrm) {
   in->enc = 0;
   if (in->mnem >= enc_nmnem) return;
   int start = enc_bucket_start[in->mnem], cnt = enc_bucket_count[in->mnem];
@@ -147,7 +148,7 @@ static inline void enc_stamp(x86insn_t* in, int tb, uint8_t opbyte, int digit) {
     const struct EncCand* c = &enc_cand[start + i];
     int r, m, im;
     if (!enc_cand_roles(c, in, &r, &m, &im)) continue;
-    if (enc_cand_is_opcode(c, tb, opbyte, digit)) { in->enc = rank; return; }
+    if (enc_cand_is_opcode(c, tb, opbyte, digit, modrm)) { in->enc = rank; return; }
     ++rank;
   }
 }
@@ -380,6 +381,8 @@ static inline size_t encode_insn(const x86insn_t* in, uint8_t* out) {
   else if (c->emb == EMB_CC)
     op |= (uint8_t)((in->cc & ((1u << c->emb_w) - 1u)) << c->emb_pos);
   out[p++] = op;
+
+  if (c->fixmodrm) { out[p++] = c->fixmodrm; return p; }  // no-operand fixed-ModR/M op
 
   if (c->form == FORM_MODRM || c->form == FORM_RM || c->form == FORM_GROUP) {
     int reg_field = (c->form == FORM_GROUP) ? c->digit

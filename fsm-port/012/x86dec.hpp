@@ -177,7 +177,7 @@ static inline void capture_addr_witness(x86insn_t* in, const byte* s, size_t op_
 // written), the immediate/condition are hoisted, the addressing witness is read,
 // and `enc` is stamped with which encoding twin the bytes used. cap[] is
 // untouched, so the cap-based renderer (fmt_insn) is unaffected.
-static inline void finalize_insn(x86dec_t* d, const byte* s, size_t op_at, int tb) {
+static inline void finalize_insn(x86dec_t* d, const byte* s, size_t slen, size_t op_at, int tb) {
   const uint64_t* c = d->cap;
   x86insn_t* in = &d->insn;
   int os = (int)in->opsize, form = (int)c[CAP_FORM];
@@ -324,7 +324,10 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t op_at, int t
   uint8_t opbyte = s[op_at + oplen];
   int digit = 0xFF;
   if (form == FORM_GROUP) digit = (s[op_at + oplen + 1] >> 3) & 7;
-  enc_stamp(in, tb, opbyte, digit);
+  // the ModR/M byte (if any) distinguishes same-opcode fixed-ModR/M ops (endbr64 vs
+  // endbr32, monitor vs mwait); bounded so a no-ModR/M op at the buffer end can't OOB.
+  uint8_t modrm = (op_at + oplen + 1 < slen) ? s[op_at + oplen + 1] : 0;
+  enc_stamp(in, tb, opbyte, digit, modrm);
 }
 
 static inline size_t parse_addr(const byte* s, size_t len, size_t ip, x86dec_t* d) {
@@ -896,7 +899,7 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   d->insn.mnem   = (uint16_t)d->cap[CAP_MNEM];
   d->insn.opsize = (uint16_t)d->cap[VAR_OPSIZ];
   d->insn.addr   = (uint16_t)d->cap[VAR_ADRSIZ];
-  if (d->insn.mnem != 0xFFFF) finalize_insn(d, s, op_at, tb);   // faithful x86insn_t + enc
+  if (d->insn.mnem != 0xFFFF) finalize_insn(d, s, n, op_at, tb);   // faithful x86insn_t + enc
   return ip;
 }
 

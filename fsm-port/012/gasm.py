@@ -45,7 +45,7 @@ class EncBuilder:
         mnem=None, form=self.F['NONE'], imk=self.K['NONE'],
         dir=0, rfile=self.OPF['GREG'], mfile=self.OPF['GREG'],
         sfx=0, emb='none', emb_pos=0, emb_w=0,
-        reg0=0, sup_reg=0, sup_mem=0))
+        reg0=0, sup_reg=0, sup_mem=0, fixmodrm=0))
 
   # ---- mirror of gen.build_insn's per-rule attribute derivation ----
   def add_rule(self, lhs, rhs):
@@ -169,6 +169,15 @@ class EncBuilder:
             c['mfile'] = m.get('rfile', 0)               # reg-direct r/m file (rgb -> 8-bit)
           else:
             c['sup_mem'] = 1
+    # fully-fixed ModR/M no-operand ops (endbr64/endbr32, monitor, rdtscp, ...): the
+    # encoder emits the opcode + the literal ModR/M byte; no operand, no digit.
+    for (tb, opcode), fm in self.ip._fixmodrm.items():
+      for modrm, mnem in fm.items():
+        c = self.cand((tb, opcode, 0x200 + modrm))
+        c['digit'] = 0xFF
+        c['mnem'] = mnem
+        c['form'] = F['NONE']
+        c['fixmodrm'] = modrm
 
   def build(self):
     for lhs, rhs in self.ip.insn_rules_raw():
@@ -210,12 +219,12 @@ EMB = {'none': 'EMB_NONE', 'reg': 'EMB_REG', 'cc': 'EMB_CC'}
 
 
 def cand_str(c):
-  return ("{%d,%d,0x%02x,%s,%d,%d,%d,%d,%d,%d,%s,%s,%d,%d,%d,%d}" % (
+  return ("{%d,%d,0x%02x,%s,%d,%d,%d,%d,%d,%d,%s,%s,%d,%d,%d,%d,0x%02x}" % (
       c['mnem'], c['tb'], c['op'], EMB[c['emb']], c['emb_pos'], c['emb_w'],
       (c['digit'] if c['digit'] != 0xFF else 0xFF),
       c['form'], c['imk'], c['dir'],
       'OPF_' + Interp_OPF[c['rfile']], 'OPF_' + Interp_OPF[c['mfile']],
-      c['sfx'], c['reg0'], c['sup_reg'], c['sup_mem']))
+      c['sfx'], c['reg0'], c['sup_reg'], c['sup_mem'], c['fixmodrm']))
 
 
 Interp_OPF = gen.Interp.OPF
@@ -249,6 +258,7 @@ def emit(interp, by_mnem, out_path):
   w("  uint8_t  sfx;             // memory-form size suffix (unused by encoder, kept for parity)\n")
   w("  uint8_t  reg0;            // implicit accumulator (reg operand must be index 0)\n")
   w("  uint8_t  sup_reg, sup_mem;// r/m slot accepts register-direct / memory\n")
+  w("  uint8_t  fixmodrm;        // fully-fixed ModR/M byte for no-operand ops (0 = none)\n")
   w("};\n\n")
 
   flat = []
@@ -264,7 +274,7 @@ def emit(interp, by_mnem, out_path):
   for i, c in enumerate(flat):
     w("  %s,  // %3d  %s\n" % (cand_str(c), i, interp._mnem[c['mnem']]))
   if not flat:
-    w("  {0,0,0,EMB_NONE,0,0,0xFF,0,0,0,OPF_GREG,OPF_GREG,0,0,0,0}\n")
+    w("  {0,0,0,EMB_NONE,0,0,0xFF,0,0,0,OPF_GREG,OPF_GREG,0,0,0,0,0}\n")
   w("};\n")
   w("static const size_t enc_cand_count = sizeof(enc_cand)/sizeof(enc_cand[0]);\n\n")
 

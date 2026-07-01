@@ -764,16 +764,19 @@ submatch insn {
   0x0f 0x1a @addr      => "nop1a " $addr ;
   0x0f 0x1b 11 ggg rrr => "nop1b " greg[$r] "," greg[$g] ;
   0x0f 0x1b @addr      => "nop1b " $addr ;
-  # 0F 1E reg form: covers endbr64/endbr32 (F3 0F 1E FA/FB) and rdssp; the dead
-  # reg field rides the reg_w witness so the modrm round-trips exactly.
-  0x0f 0x1e 11 000 rrr => "endbr " greg[$r] ;
-  0x0f 0x1e 11 001 rrr => "endbr " greg[$r] ;
-  0x0f 0x1e 11 010 rrr => "endbr " greg[$r] ;
-  0x0f 0x1e 11 011 rrr => "endbr " greg[$r] ;
-  0x0f 0x1e 11 100 rrr => "endbr " greg[$r] ;
-  0x0f 0x1e 11 101 rrr => "endbr " greg[$r] ;
-  0x0f 0x1e 11 110 rrr => "endbr " greg[$r] ;
-  0x0f 0x1e 11 111 rrr => "endbr " greg[$r] ;
+  # 0F 1E: reserved multi-byte NOP r/m, EXCEPT the two fully-fixed ModR/M bytes
+  # FA/FB which are endbr64/endbr32 (their F3 rides the prefix run and replays, so
+  # NP vs F3 both round-trip; the common F3-prefixed forms render as endbr64/32).
+  0x0f 0x1e 11 111 010 => "endbr64" ;                  # F3 0F 1E FA (fixmodrm; F3 replays)
+  0x0f 0x1e 11 111 011 => "endbr32" ;                  # F3 0F 1E FB
+  0x0f 0x1e 11 000 rrr => "nop1e " greg[$r] ;
+  0x0f 0x1e 11 001 rrr => "nop1e " greg[$r] ;
+  0x0f 0x1e 11 010 rrr => "nop1e " greg[$r] ;
+  0x0f 0x1e 11 011 rrr => "nop1e " greg[$r] ;
+  0x0f 0x1e 11 100 rrr => "nop1e " greg[$r] ;
+  0x0f 0x1e 11 101 rrr => "nop1e " greg[$r] ;
+  0x0f 0x1e 11 110 rrr => "nop1e " greg[$r] ;
+  0x0f 0x1e 11 111 rrr => "nop1e " greg[$r] ;
   0x0f 0x1e @addr(0)   => "nop1e " $addr ;
   0x0f 0x1e @addr(1)   => "nop1e " $addr ;
   0x0f 0x1e @addr(2)   => "nop1e " $addr ;
