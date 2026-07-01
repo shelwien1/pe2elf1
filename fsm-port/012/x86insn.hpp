@@ -13,6 +13,8 @@ enum {
   /* register files - index is the register number */
   T_GPR,
   /* (e)ax..(e)di, 16/32 per opsize */ T_GPR8, /* al..bh           */
+  T_GPRdq, /* r32/r64, never 16: SSE-op GPR where 66 is a mandatory prefix, not an
+            * operand-size override (pmovmskb, pextrb/w/d, movd/movq r/m) */
   T_SREG,
   /* es,cs,ss,ds,fs,gs */ T_CREG, /* cr0..            */
   T_DREG,

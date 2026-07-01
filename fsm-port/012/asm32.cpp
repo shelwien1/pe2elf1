@@ -31,7 +31,7 @@ static byte* read_file(const char* path, size_t* len) {
 // short operand-shape tag for the listing, e.g. "r,m" or "r,i"
 static char opclass_ch(const x86op_t* o) {
   switch (o->type) {
-    case T_GPR: case T_GPR8: case T_SREG: return 'r';
+    case T_GPR: case T_GPR8: case T_GPRdq: case T_SREG: return 'r';
     case T_XMM: case T_MMX:               return 'x';
     case T_YMM:                           return 'y';
     case T_ZMM:                           return 'z';

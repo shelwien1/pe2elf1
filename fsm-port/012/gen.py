@@ -463,7 +463,7 @@ class Interp:
   # render/route captures, placed after the per-group prefix-offset block
   TAILCAPS = ['MNEM', 'FORM', 'IMK', 'MNSEL', 'DIR', 'GRP', 'RFILE', 'MFILE', 'SFX', 'CC', 'TBL3', 'RMREQ']
   # operand register files (which name table a captured register number indexes)
-  OPF = ['GREG', 'RGB', 'XMM', 'MM', 'SREG', 'SSE_OS', 'MMG']
+  OPF = ['GREG', 'RGB', 'XMM', 'MM', 'SREG', 'SSE_OS', 'MMG', 'GREGd']
 
   def tailcap(self, name):
     # MNEM/FORM/IMK/MNSEL live just past the CAP_POFF block (one slot per var)
@@ -684,7 +684,7 @@ class Interp:
 
   def operand_file(self, tmpl, var):
     # which register-name table the $var operand draws from
-    m = re.search(r'(greg|rgb|sreg|ssereg|mmxg)\[([^\]]*\$' + var + r'[^\]]*)\]', tmpl)
+    m = re.search(r'(greg|gregd|rgb|sreg|ssereg|mmxg)\[([^\]]*\$' + var + r'[^\]]*)\]', tmpl)
     if not m:
       return 'GREG'
     tab, idx = m.group(1), m.group(2)
@@ -692,6 +692,8 @@ class Interp:
       return 'RGB'
     if tab == 'sreg':
       return 'SREG'
+    if tab == 'gregd':                                   # r32/r64 GPR, never 16 (mandatory-66 SSE ops)
+      return 'GREGd'
     if tab == 'mmxg':                                    # mm (NP/66) or GPR (F3/F2), by reptype
       return 'MMG'
     if tab == 'greg':
@@ -751,7 +753,7 @@ class Interp:
         imk = K['NONE']
       else:
         continue
-      has_g = bool(re.search(r'(greg|rgb|sreg|ssereg|mmxg)\[[^\]]*\$g[^\]]*\]', rhs))
+      has_g = bool(re.search(r'(greg|gregd|rgb|sreg|ssereg|mmxg)\[[^\]]*\$g[^\]]*\]', rhs))
       # operand form
       two_ops = (',' in rhs)
       if info['modrm'] in ('reg', 'mem'):
@@ -1576,7 +1578,7 @@ def emit(c, interp, out_path):
   w("enum InsnForm { %s };\n" %
     ", ".join("FORM_%s%s" % (n, "=0" if i == 0 else "") for i, n in enumerate(interp.INSN_FORM)))
   w("enum ImmKind  { IMK_NONE=0, IMK_IMM8, IMK_IMM16, IMK_IMM32, IMK_IMMZ, IMK_REL8, IMK_RELZ, IMK_PTR, IMK_IMM8SX, IMK_ENTER, IMK_IMMV };\n")
-  w("enum OperandFile { OPF_GREG=0, OPF_RGB, OPF_XMM, OPF_MM, OPF_SREG, OPF_SSE_OS, OPF_MMG };\n\n")
+  w("enum OperandFile { OPF_GREG=0, OPF_RGB, OPF_XMM, OPF_MM, OPF_SREG, OPF_SSE_OS, OPF_MMG, OPF_GREGd };\n\n")
 
   # the one uniform FSM record (Action packed to 16 bits)
   w("// ---- uniform state-machine record ----\n")

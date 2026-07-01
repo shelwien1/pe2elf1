@@ -25,6 +25,7 @@
 static inline int enc_op_class(const x86op_t* o) {
   switch (o->type) {
     case T_GPR:  return C_GREG;  case T_GPR8: return C_RGB;
+    case T_GPRdq: return C_GREG;                          // r32/r64 GPR (mandatory-66 SSE ops)
     case T_XMM:  return C_XMM;   case T_MMX:  return C_MM;
     case T_SREG: return C_SREG;  case T_MEM:  return C_MEM;
     case T_IMM:  return C_IMM;   case T_REL:  return C_REL;

@@ -126,6 +126,7 @@ static inline int file_to_T(int opf, int opsize, int reptype) {
     // cvtpi2ps/cvttps2pi/...: mm at NP/66, GPR at F3/F2 (cvtsi2ss/cvttss2si).
     // The GPR width follows opsize (REX.W -> r64); mm is always 64-bit.
     case OPF_MMG:    return reptype ? T_GPR : T_MMX;
+    case OPF_GREGd:  return T_GPRdq;                      // r32/r64 (never 16 on mandatory 66)
     default:         return T_GPR;                       // OPF_GREG
   }
 }
@@ -225,9 +226,10 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t op_at, int t
     int oplen_d = in->rex2 ? 0 : (tb < 2 ? tb : 2);
     uint8_t opb = s[op_at + oplen_d];
     int dig = (form == FORM_GROUP) ? ((s[op_at + oplen_d + 1] >> 3) & 7) : -1;
-    bool d64 = (opb >= 0x50 && opb <= 0x5f)                          // push/pop r64
+    bool d64 = tb == 0 && (                                          // one-byte map only:
+               (opb >= 0x50 && opb <= 0x5f)                         // push/pop r64
             || (opb == 0x8f && dig == 0)                             // pop r/m64
-            || (opb == 0xff && (dig == 2 || dig == 4 || dig == 6));  // call/jmp/push r/m64
+            || (opb == 0xff && (dig == 2 || dig == 4 || dig == 6))); // call/jmp/push r/m64
     if (d64 && in->opsize == 0) { in->opsize = 2; os = 2; }
   }
 #endif
@@ -286,6 +288,24 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t op_at, int t
     if (in->mem_index < 8)        in->mem_index += 8 * xx;
   }
 #endif
+
+  // Mandatory-66 GPR width: on an SSE op the 66 is a mnemonic/bank selector, not an
+  // operand-size override, so a GPR operand stays 32-bit (64 under REX.W) -- movd,
+  // movmskpd, pmovmskb, pextrb/w/d. Detect "66 alongside a vector register" and drop
+  // opsize 1->0 so the GPR renders at 32-bit. Safe because: the vector operands are
+  // already resolved to concrete T_XMM/T_MMX (file_to_T ran with the original os), the
+  // 66 byte is replayed from pfx[] (not derived from opsize), and we exclude SSE_OS
+  // operands (whose mm/xmm class the encoder rebuilds from opsize) and opsize-width
+  // immediates (already consumed at the original size) so the bijection is untouched.
+  if (os == 1 && rf != OPF_SSE_OS && mf != OPF_SSE_OS &&
+      (c[CAP_IMK] == IMK_NONE || c[CAP_IMK] == IMK_IMM8 || c[CAP_IMK] == IMK_IMM8SX)) {
+    bool has_vec = false;
+    for (int i = 0; i < in->n_ops; ++i) {
+      int t = in->op[i].type;
+      if (t == T_XMM || t == T_MMX || t == T_YMM || t == T_ZMM) has_vec = true;
+    }
+    if (has_vec) { in->opsize = 0; os = 0; }
+  }
 
   capture_addr_witness(in, s, op_at, tb);
 
