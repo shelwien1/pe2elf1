@@ -1178,12 +1178,16 @@ submatch insn {
   0x0f 0x38 0x01 @addr      => "phaddw " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0x38 0x02 11 ggg rrr => "phaddd " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0x38 0x02 @addr      => "phaddd " ssereg[$opsiz*8+$g] "," $addr ;
+  0x0f 0x38 0x03 11 ggg rrr => "phaddsw " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0x38 0x03 @addr      => "phaddsw " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0x38 0x04 11 ggg rrr => "pmaddubsw " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0x38 0x04 @addr      => "pmaddubsw " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0x38 0x05 11 ggg rrr => "phsubw " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0x38 0x05 @addr      => "phsubw " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0x38 0x06 11 ggg rrr => "phsubd " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0x38 0x06 @addr      => "phsubd " ssereg[$opsiz*8+$g] "," $addr ;
+  0x0f 0x38 0x07 11 ggg rrr => "phsubsw " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0x38 0x07 @addr      => "phsubsw " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0x38 0x08 11 ggg rrr => "psignb " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0x38 0x08 @addr      => "psignb " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0x38 0x09 11 ggg rrr => "psignw " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
@@ -1192,6 +1196,13 @@ submatch insn {
   0x0f 0x38 0x0a @addr      => "psignd " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0x38 0x0b 11 ggg rrr => "pmulhrsw " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0x38 0x0b @addr      => "pmulhrsw " ssereg[$opsiz*8+$g] "," $addr ;
+  # SSE4.1 variable blend (66; implicit <xmm0> 3rd operand not shown)
+  0x0f 0x38 0x10 11 ggg rrr => "pblendvb " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x38 0x10 @addr      => "pblendvb " ssereg[8+$g] "," $addr ;
+  0x0f 0x38 0x14 11 ggg rrr => "blendvps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x38 0x14 @addr      => "blendvps " ssereg[8+$g] "," $addr ;
+  0x0f 0x38 0x15 11 ggg rrr => "blendvpd " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x38 0x15 @addr      => "blendvpd " ssereg[8+$g] "," $addr ;
   0x0f 0x38 0x1c 11 ggg rrr => "pabsb " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0x38 0x1c @addr      => "pabsb " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0x38 0x1d 11 ggg rrr => "pabsw " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
@@ -1257,6 +1268,40 @@ submatch insn {
   0x0f 0x38 0xde @addr      => "aesdec " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0x38 0xdf 11 ggg rrr => "aesdeclast " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0x38 0xdf @addr      => "aesdeclast " ssereg[$opsiz*8+$g] "," $addr ;
+  # SHA-NI (NP; sha256rnds2 has an implicit <xmm0> 3rd operand not shown)
+  0x0f 0x38 0xc8 11 ggg rrr => "sha1nexte " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x38 0xc8 @addr      => "sha1nexte " ssereg[8+$g] "," $addr ;
+  0x0f 0x38 0xc9 11 ggg rrr => "sha1msg1 " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x38 0xc9 @addr      => "sha1msg1 " ssereg[8+$g] "," $addr ;
+  0x0f 0x38 0xca 11 ggg rrr => "sha1msg2 " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x38 0xca @addr      => "sha1msg2 " ssereg[8+$g] "," $addr ;
+  0x0f 0x38 0xcb 11 ggg rrr => "sha256rnds2 " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x38 0xcb @addr      => "sha256rnds2 " ssereg[8+$g] "," $addr ;
+  0x0f 0x38 0xcc 11 ggg rrr => "sha256msg1 " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x38 0xcc @addr      => "sha256msg1 " ssereg[8+$g] "," $addr ;
+  0x0f 0x38 0xcd 11 ggg rrr => "sha256msg2 " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x38 0xcd @addr      => "sha256msg2 " ssereg[8+$g] "," $addr ;
+  # -- 0F 38 F0-FC: mnemonic flips with the mandatory prefix (per-prefix descriptor).
+  #    F0/F1 movbe (NP/66, mem<->GPR) vs crc32 (F2); F6 wrssd (NP) / adcx (66) /
+  #    adox (F3); F9 movdiri (NP); FC RAO-INT aadd/aand/axor/aor. pp: 0=NP..3=F2.
+  0x0f 0x38 0xf0 @addr      [$pp==0] => "movbe " greg[$g] "," $addr ;         # movbe r,m (load)
+  0x0f 0x38 0xf0 @addr      [$pp==1] => "movbe " greg[$g] "," $addr ;
+  0x0f 0x38 0xf0 11 ggg rrr [$pp==3] => "crc32 " gregd[$g] "," rgb[$r] ;      # crc32 r32/64,r/m8
+  0x0f 0x38 0xf0 @addr      [$pp==3] => "crc32 " gregd[$g] "," $addr ;
+  0x0f 0x38 0xf1 @addr      [$pp==0] => "movbe " $addr "," greg[$g] ;         # movbe m,r (store)
+  0x0f 0x38 0xf1 @addr      [$pp==1] => "movbe " $addr "," greg[$g] ;
+  0x0f 0x38 0xf1 11 ggg rrr [$pp==3] => "crc32 " gregd[$g] "," greg[$r] ;     # crc32 r32/64,r/m
+  0x0f 0x38 0xf1 @addr      [$pp==3] => "crc32 " gregd[$g] "," $addr ;
+  0x0f 0x38 0xf6 @addr      [$pp==0] => "wrssd " $addr "," gregd[$g] ;        # CET write shadow stk
+  0x0f 0x38 0xf6 11 ggg rrr [$pp==1] => "adcx " gregd[$g] "," gregd[$r] ;
+  0x0f 0x38 0xf6 @addr      [$pp==1] => "adcx " gregd[$g] "," $addr ;
+  0x0f 0x38 0xf6 11 ggg rrr [$pp==2] => "adox " gregd[$g] "," gregd[$r] ;
+  0x0f 0x38 0xf6 @addr      [$pp==2] => "adox " gregd[$g] "," $addr ;
+  0x0f 0x38 0xf9 @addr      [$pp==0] => "movdiri " $addr "," gregd[$g] ;      # movdiri m,r32/64
+  0x0f 0x38 0xfc @addr      [$pp==0] => "aadd " $addr "," gregd[$g] ;         # RAO-INT
+  0x0f 0x38 0xfc @addr      [$pp==1] => "aand " $addr "," gregd[$g] ;
+  0x0f 0x38 0xfc @addr      [$pp==2] => "axor " $addr "," gregd[$g] ;
+  0x0f 0x38 0xfc @addr      [$pp==3] => "aor " $addr "," gregd[$g] ;
   # -- 0F 3A (imm8): rounds, blends, pextr/pinsr (GPR + imm8), dp, mpsadbw,
   #    pclmulqdq, the SSE4.2 string compares.
   0x0f 0x3a 0x08 11 ggg rrr @imm8 => "roundps " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] "," hex($imm8) ;
@@ -1291,6 +1336,8 @@ submatch insn {
   0x0f 0x3a 0x42 @addr      @imm8 => "mpsadbw " ssereg[$opsiz*8+$g] "," $addr "," hex($imm8) ;
   0x0f 0x3a 0x44 11 ggg rrr @imm8 => "pclmulqdq " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] "," hex($imm8) ;
   0x0f 0x3a 0x44 @addr      @imm8 => "pclmulqdq " ssereg[$opsiz*8+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0xcc 11 ggg rrr @imm8 => "sha1rnds4 " ssereg[8+$g] "," ssereg[8+$r] "," hex($imm8) ;  # SHA-NI (NP)
+  0x0f 0x3a 0xcc @addr      @imm8 => "sha1rnds4 " ssereg[8+$g] "," $addr "," hex($imm8) ;
   0x0f 0x3a 0x60 11 ggg rrr @imm8 => "pcmpestrm " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] "," hex($imm8) ;
   0x0f 0x3a 0x60 @addr      @imm8 => "pcmpestrm " ssereg[$opsiz*8+$g] "," $addr "," hex($imm8) ;
   0x0f 0x3a 0x61 11 ggg rrr @imm8 => "pcmpestri " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] "," hex($imm8) ;
