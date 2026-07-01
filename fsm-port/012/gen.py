@@ -1928,8 +1928,12 @@ def emit(c, interp, out_path):
   # the C++ apx_finalize picks the memory variant by these indices.
   for _m in ('uwrmsr', 'urdmsr', 'enqcmds', 'enqcmd'):
     w("#define MNEM_%s %d\n" % (_m.upper(), interp._mnem.index(_m) if _m in interp._mnem else 0xFFFF))
+  # a mnemonic may carry a "~tag" disambiguator: distinct index (so per-opcode
+  # encodings each get their own enc-rank bucket) but a shared display string --
+  # e.g. the reserved multi-byte NOPs 0F 18-1E all render "nop" yet round-trip to
+  # their own opcode byte. Strip the tag for the emitted name.
   w("static const char* const mnem_tab[] = {\n    %s\n};\n" %
-    (", ".join('"%s"' % m for m in interp._mnem) if interp._mnem else '""'))
+    (", ".join('"%s"' % m.split('~')[0] for m in interp._mnem) if interp._mnem else '""'))
   w("static const size_t mnem_tab_size = sizeof(mnem_tab) / sizeof(mnem_tab[0]);\n\n")
 
   # VEX/EVEX opcode-extension groups (shifts 71/72/73): vexgrp[gid][/digit] is the
