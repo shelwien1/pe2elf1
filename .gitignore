@@ -1,0 +1,11 @@
+# build artifacts
+*.exe
+*.o
+*.obj
+coder0_lin
+coder0_mix
+
+# test outputs
+*.c.tmp
+book1.c
+book1.d
