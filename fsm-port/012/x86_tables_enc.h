@@ -7,7 +7,7 @@
 
 enum EmbKind { EMB_NONE = 0, EMB_REG, EMB_CC };
 // operand classes for candidate signature matching (derived from x86op_t.type)
-enum OpClass { C_NONE = 0, C_GREG, C_RGB, C_XMM, C_MM, C_SREG, C_MEM, C_IMM, C_REL };
+enum OpClass { C_NONE = 0, C_GREG, C_RGB, C_XMM, C_MM, C_SREG, C_MEM, C_IMM, C_REL, C_BND };
 
 // one encoding candidate: opcode byte(s) + embedded-field program + signature.
 struct EncCand {

@@ -36,6 +36,7 @@ static char opclass_ch(const x86op_t* o) {
     case T_YMM:                           return 'y';
     case T_ZMM:                           return 'z';
     case T_KREG: case T_MASK:             return 'k';
+    case T_BND:                           return 'b';
     case T_MEM:                           return 'm';
     case T_IMM: case T_PTR:               return 'i';
     case T_REL:                           return 'l';

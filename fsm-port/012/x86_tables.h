@@ -88,7 +88,7 @@ enum RmMode { RM_MEM = 0, RM_REG = 1 };
 
 enum InsnForm { FORM_NONE=0, FORM_MODRM, FORM_REG, FORM_REG_IMM, FORM_IMM, FORM_REL, FORM_PTR, FORM_GROUP, FORM_ESC, FORM_RM, FORM_ACC, FORM_VEX_NONE, FORM_VEX_RVM, FORM_VEX_RVMI, FORM_VEX_RVMR, FORM_VEX_RM, FORM_VEX_RMI, FORM_VEX_MR, FORM_VEX_MRI, FORM_VEX_VM, FORM_VEX_R, FORM_VEX_M, FORM_VEX_RVMV, FORM_VEX_VMI, FORM_VEX_VMG, FORM_VEX_RMV, FORM_VEX_RVRM, FORM_APX_MR, FORM_APX_RM, FORM_APX_RMI, FORM_APX_MI, FORM_APX_M, FORM_APX_R, FORM_APX_MRI, FORM_APX_MRC };
 enum ImmKind  { IMK_NONE=0, IMK_IMM8, IMK_IMM16, IMK_IMM32, IMK_IMMZ, IMK_REL8, IMK_RELZ, IMK_PTR, IMK_IMM8SX, IMK_ENTER, IMK_IMMV };
-enum OperandFile { OPF_GREG=0, OPF_RGB, OPF_XMM, OPF_MM, OPF_SREG, OPF_SSE_OS, OPF_MMG, OPF_GREGd, OPF_GREGq, OPF_GREGw };
+enum OperandFile { OPF_GREG=0, OPF_RGB, OPF_XMM, OPF_MM, OPF_SREG, OPF_SSE_OS, OPF_MMG, OPF_GREGd, OPF_GREGq, OPF_GREGw, OPF_BND };
 
 // ---- uniform state-machine record ----
 enum ActOp { ACT_NONE = 0, ACT_FIELD, ACT_CONST, ACT_APPEND, ACT_MARK, ACT_MNEM };
@@ -55764,10 +55764,10 @@ static const uint16_t ppvtab[1][4] = {
     {0,0,0,0}
 };
 
-struct PpDesc { uint16_t mnem, mreg; uint8_t form, dir, rfile, mfile, imk, rmreq; };
+struct PpDesc { uint16_t mnem, mreg; uint8_t form, dir, rfile, mfile, imk, rmreq, rform, rmf; };
 #define PPDESC_N 0
 static const struct PpDesc ppdesc[1][4] = {
-    {{0xFFFF,0xFFFF,0,0,0,0,0,0},{0xFFFF,0xFFFF,0,0,0,0,0,0},{0xFFFF,0xFFFF,0,0,0,0,0,0},{0xFFFF,0xFFFF,0,0,0,0,0,0}}
+    {{0xFFFF,0xFFFF,0,0,0,0,0,0,0xFF,0},{0xFFFF,0xFFFF,0,0,0,0,0,0,0xFF,0},{0xFFFF,0xFFFF,0,0,0,0,0,0,0xFF,0},{0xFFFF,0xFFFF,0,0,0,0,0,0,0xFF,0}}
 };
 
 #endif // X86_TABLES_H

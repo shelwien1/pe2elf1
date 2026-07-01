@@ -129,6 +129,7 @@ static inline int file_to_T(int opf, int opsize, int reptype) {
     case OPF_GREGd:  return T_GPRdq;                      // r32/r64 (never 16 on mandatory 66)
     case OPF_GREGq:  return T_GPRq;                       // r64 always (vmread/vmwrite)
     case OPF_GREGw:  return T_GPRw;                       // r16 always (movzx/movsx word src)
+    case OPF_BND:    return T_BND;                        // MPX bound register (bnd0-3)
     default:         return T_GPR;                       // OPF_GREG
   }
 }
@@ -870,6 +871,15 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     int is_reg = (d->cap[CAP_MODE] == RM_REG);
     if ((req == 1 && !is_reg) || (req == 2 && is_reg)) {   // illegal mod for this opcode
       d->insn.mnem = 0xFFFF; return ip;
+    }
+    // ppdesc reg-form structural override: MPX 0F 1A/1B NP have mem=bndldx/bndstx
+    // (bnd,mem) but reg=nop (r/m) -- a different form/file, resolved now that the
+    // ModR/M mod is known (the mnemonic swap rides the MNSEL==3 mreg pass below).
+    if (d->cap[CAP_MNSEL] == 3 && is_reg) {
+      int pp = d->cap[VAR_REPTYPE] ? (int)d->cap[VAR_REPTYPE] + 1
+                                   : (d->cap[VAR_OPSIZ] == 1 ? 1 : 0);
+      const struct PpDesc* pd = &ppdesc[d->cap[CAP_GRP]][pp];
+      if (pd->rform != 0xFF) { d->cap[CAP_FORM] = pd->rform; d->cap[CAP_MFILE] = pd->rmf; }
     }
     fill_insn(d);
     ip = append_imm(d->cap, s, n, ip, (int)d->cap[VAR_OPSIZ]);

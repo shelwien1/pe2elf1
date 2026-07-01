@@ -463,7 +463,7 @@ class Interp:
   # render/route captures, placed after the per-group prefix-offset block
   TAILCAPS = ['MNEM', 'FORM', 'IMK', 'MNSEL', 'DIR', 'GRP', 'RFILE', 'MFILE', 'SFX', 'CC', 'TBL3', 'RMREQ']
   # operand register files (which name table a captured register number indexes)
-  OPF = ['GREG', 'RGB', 'XMM', 'MM', 'SREG', 'SSE_OS', 'MMG', 'GREGd', 'GREGq', 'GREGw']
+  OPF = ['GREG', 'RGB', 'XMM', 'MM', 'SREG', 'SSE_OS', 'MMG', 'GREGd', 'GREGq', 'GREGw', 'BND']
 
   def tailcap(self, name):
     # MNEM/FORM/IMK/MNSEL live just past the CAP_POFF block (one slot per var)
@@ -693,7 +693,7 @@ class Interp:
 
   def operand_file(self, tmpl, var):
     # which register-name table the $var operand draws from
-    m = re.search(r'(greg|gregd|gregq|gregw|rgb|sreg|ssereg|mmxg)\[([^\]]*\$' + var + r'[^\]]*)\]', tmpl)
+    m = re.search(r'(greg|gregd|gregq|gregw|rgb|sreg|ssereg|mmxg|bndreg)\[([^\]]*\$' + var + r'[^\]]*)\]', tmpl)
     if not m:
       return 'GREG'
     tab, idx = m.group(1), m.group(2)
@@ -707,6 +707,8 @@ class Interp:
       return 'GREGq'
     if tab == 'gregw':                                   # r16 GPR always (movzx/movsx word src)
       return 'GREGw'
+    if tab == 'bndreg':                                  # MPX bound register (bnd0-3)
+      return 'BND'
     if tab == 'mmxg':                                    # mm (NP/66) or GPR (F3/F2), by reptype
       return 'MMG'
     if tab == 'greg':
@@ -768,7 +770,7 @@ class Interp:
         imk = K['NONE']
       else:
         continue
-      has_g = bool(re.search(r'(greg|gregd|gregq|gregw|rgb|sreg|ssereg|mmxg)\[[^\]]*\$g[^\]]*\]', rhs))
+      has_g = bool(re.search(r'(greg|gregd|gregq|gregw|rgb|sreg|ssereg|mmxg|bndreg)\[[^\]]*\$g[^\]]*\]', rhs))
       # operand form
       two_ops = (',' in rhs)
       if info['modrm'] in ('reg', 'mem'):
@@ -813,7 +815,8 @@ class Interp:
                  'sfx': 0, 'dir': 0, 'mnsel': 0, 'ppsel': 0,
                  'emb': None, 'mnem': None, 'reg0': False,
                  'cc': None, 'has_reg': False, 'has_mem': False,
-                 'mnem_reg': None, 'mnem_mem': None}      # pp slots: mod-dependent mnemonic
+                 'mnem_reg': None, 'mnem_mem': None,       # pp slots: mod-dependent mnemonic
+                 'form_reg': None, 'mfile_reg': None}      # ... and mod-dependent form/file
         if info['pp'] is not None:                       # per-prefix descriptor slot
           slots = ppd.setdefault((tb, byte), [None, None, None, None])
           if slots[info['pp']] is None:
@@ -855,6 +858,8 @@ class Interp:
           d['rfile'] = OPF[self.operand_file(rhs, 'g')]
           d['mfile'] = OPF[self.operand_file(rhs, 'r')]
           d['dir'] = dir_rm
+          if info['pp'] is not None:                     # reg-direct form/file (may differ from mem)
+            d['form_reg'] = form; d['mfile_reg'] = d['mfile']
         elif info['modrm'] == 'mem':
           d['rfile'] = OPF[self.operand_file(rhs, 'g')]
           d['dir'] = dir_rm
@@ -921,7 +926,12 @@ class Interp:
         mm, mr = s['mnem_mem'], s['mnem_reg']            # mnemonic may depend on mod
         mn_base = mm if mm is not None else mr           # mem is the base; reg overrides below
         mreg = mr if (mr is not None and mr != mn_base) else 0xFFFF
-        entry.append((mn_base, s['form'], s['dir'], s['rfile'], s['mfile'], s['imk'], rmreq, mreg))
+        # reg-direct form/file override, when the reg form is structurally different
+        # from the mem form (MPX 0F1A/1B NP: mem=bndldx/bndstx, reg=nop r/m)
+        rform, rmf = 0xFF, 0
+        if s['form_reg'] is not None and mm is not None and s['form_reg'] != s['form']:
+          rform, rmf = s['form_reg'], s['mfile_reg']
+        entry.append((mn_base, s['form'], s['dir'], s['rfile'], s['mfile'], s['imk'], rmreq, mreg, rform, rmf))
         base = base or mn_base
       self._ppdesc.append(entry)
       ppmap[tb][byte] = ([('MNEM', base, 0, 0),
@@ -1638,7 +1648,7 @@ def emit(c, interp, out_path):
   w("enum InsnForm { %s };\n" %
     ", ".join("FORM_%s%s" % (n, "=0" if i == 0 else "") for i, n in enumerate(interp.INSN_FORM)))
   w("enum ImmKind  { IMK_NONE=0, IMK_IMM8, IMK_IMM16, IMK_IMM32, IMK_IMMZ, IMK_REL8, IMK_RELZ, IMK_PTR, IMK_IMM8SX, IMK_ENTER, IMK_IMMV };\n")
-  w("enum OperandFile { OPF_GREG=0, OPF_RGB, OPF_XMM, OPF_MM, OPF_SREG, OPF_SSE_OS, OPF_MMG, OPF_GREGd, OPF_GREGq, OPF_GREGw };\n\n")
+  w("enum OperandFile { OPF_GREG=0, OPF_RGB, OPF_XMM, OPF_MM, OPF_SREG, OPF_SSE_OS, OPF_MMG, OPF_GREGd, OPF_GREGq, OPF_GREGw, OPF_BND };\n\n")
 
   # the one uniform FSM record (Action packed to 16 bits)
   w("// ---- uniform state-machine record ----\n")
@@ -1968,10 +1978,10 @@ def emit(c, interp, out_path):
   # prefix pp. mnem==0xFFFF marks an illegal prefix (#UD). The C++ reads this after
   # the prefix run (MNSEL mode 3) and overrides mnem/form/dir/rfile/mfile/imk/rmreq.
   ppd = getattr(interp, '_ppdesc', [])
-  w("struct PpDesc { uint16_t mnem, mreg; uint8_t form, dir, rfile, mfile, imk, rmreq; };\n")
+  w("struct PpDesc { uint16_t mnem, mreg; uint8_t form, dir, rfile, mfile, imk, rmreq, rform, rmf; };\n")
   w("#define PPDESC_N %d\n" % len(ppd))
   w("static const struct PpDesc ppdesc[%d][4] = {\n" % max(1, len(ppd)))
-  ud = "{0xFFFF,0xFFFF,0,0,0,0,0,0}"
+  ud = "{0xFFFF,0xFFFF,0,0,0,0,0,0,0xFF,0}"
   if ppd:
     for entry in ppd:
       cells = []
@@ -1979,8 +1989,9 @@ def emit(c, interp, out_path):
         if slot is None:
           cells.append(ud)
         else:
-          mnem, form_, dir_, rf, mf, imk_, rmreq, mreg = slot
-          cells.append("{%d,%d,%d,%d,%d,%d,%d,%d}" % (mnem, mreg, form_, dir_, rf, mf, imk_, rmreq))
+          mnem, form_, dir_, rf, mf, imk_, rmreq, mreg, rform, rmf = slot
+          cells.append("{%d,%d,%d,%d,%d,%d,%d,%d,%d,%d}" %
+                       (mnem, mreg, form_, dir_, rf, mf, imk_, rmreq, rform, rmf))
       w("    {%s},\n" % ", ".join(cells))
   else:
     w("    {%s,%s,%s,%s}\n" % (ud, ud, ud, ud))

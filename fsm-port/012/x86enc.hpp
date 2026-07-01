@@ -30,6 +30,7 @@ static inline int enc_op_class(const x86op_t* o) {
     case T_GPRw:  return C_GREG;                          // r16 GPR (movzx/movsx word src)
     case T_XMM:  return C_XMM;   case T_MMX:  return C_MM;
     case T_SREG: return C_SREG;  case T_MEM:  return C_MEM;
+    case T_BND:  return C_BND;
     case T_IMM:  return C_IMM;   case T_REL:  return C_REL;
     default:     return C_NONE;
   }
@@ -40,6 +41,7 @@ static inline int enc_file_class(int opf, int opsize, int reptype) {
     case OPF_MM:     return C_MM;   case OPF_SREG: return C_SREG;
     case OPF_SSE_OS: return (opsize || reptype) ? C_XMM : C_MM;   // F3/F2 forces xmm too
     case OPF_MMG:    return reptype ? C_GREG : C_MM;      // cvt*: GPR at F3/F2, mm at NP/66
+    case OPF_BND:    return C_BND;                        // MPX bound register
     default:         return C_GREG;                       // OPF_GREG
   }
 }

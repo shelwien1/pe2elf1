@@ -78,6 +78,7 @@ table rgb { al,cl,dl,bl,spl,bpl,sil,dil,r8b,r9b,r10b,r11b,r12b,r13b,r14b,r15b,r1
 table ssereg { mm0,mm1,mm2,mm3,mm4,mm5,mm6,mm7,
   xmm0,xmm1,xmm2,xmm3,xmm4,xmm5,xmm6,xmm7,xmm8,xmm9,xmm10,xmm11,xmm12,xmm13,xmm14,xmm15 }
 table sreg { es,cs,ss,ds,fs,gs }
+table bndreg { bnd0,bnd1,bnd2,bnd3 }                     # MPX bound registers (0F 1A/1B)
 table cond { o,no,b,ae,e,ne,be,a,s,ns,p,np,l,ge,le,g }
 
 # size suffix : the dot is part of the entry; index = operand size in bytes
@@ -753,10 +754,26 @@ submatch insn {
   # 0F 1A/1B: MPX bnd* (prefix-selected). Punted as reserved-nop placeholders
   # like the 32-bit corpus; the mandatory 66/F2/F3 rides the prefix run so all
   # bndldx/bndstx/bndmov/bndmk/bndc* encodings round-trip byte-exact.
-  0x0f 0x1a 11 ggg rrr => "nop1a " greg[$r] "," greg[$g] ;
-  0x0f 0x1a @addr      => "nop1a " $addr ;
-  0x0f 0x1b 11 ggg rrr => "nop1b " greg[$r] "," greg[$g] ;
-  0x0f 0x1b @addr      => "nop1b " $addr ;
+  # 0F 1A MPX: NP=bndldx (reg-form is a reserved nop); 66=bndmov bnd,bnd|[mem];
+  # F3=bndcl bnd,r/m64; F2=bndcu bnd,r/m64. The mandatory prefix picks the op (ppdesc).
+  0x0f 0x1a 11 ggg rrr [$pp==0] => "nop~1a " greg[$r] ;
+  0x0f 0x1a @addr      [$pp==0] => "bndldx " bndreg[$g] "," $addr ;
+  0x0f 0x1a 11 ggg rrr [$pp==1] => "bndmov " bndreg[$g] "," bndreg[$r] ;
+  0x0f 0x1a @addr      [$pp==1] => "bndmov " bndreg[$g] "," $addr ;
+  0x0f 0x1a 11 ggg rrr [$pp==2] => "bndcl " bndreg[$g] "," gregq[$r] ;
+  0x0f 0x1a @addr      [$pp==2] => "bndcl " bndreg[$g] "," $addr ;
+  0x0f 0x1a 11 ggg rrr [$pp==3] => "bndcu " bndreg[$g] "," gregq[$r] ;
+  0x0f 0x1a @addr      [$pp==3] => "bndcu " bndreg[$g] "," $addr ;
+  # 0F 1B MPX: NP=bndstx [mem],bnd (reg=nop); 66=bndmov [mem]|bnd,bnd; F3=bndmk bnd,[mem]
+  # (reg=nop); F2=bndcn bnd,r/m64.
+  0x0f 0x1b 11 ggg rrr [$pp==0] => "nop~1b " greg[$r] ;
+  0x0f 0x1b @addr      [$pp==0] => "bndstx " $addr "," bndreg[$g] ;
+  0x0f 0x1b 11 ggg rrr [$pp==1] => "bndmov " bndreg[$r] "," bndreg[$g] ;
+  0x0f 0x1b @addr      [$pp==1] => "bndmov " $addr "," bndreg[$g] ;
+  0x0f 0x1b 11 ggg rrr [$pp==2] => "nop~1b " greg[$r] ;
+  0x0f 0x1b @addr      [$pp==2] => "bndmk " bndreg[$g] "," $addr ;
+  0x0f 0x1b 11 ggg rrr [$pp==3] => "bndcn " bndreg[$g] "," gregq[$r] ;
+  0x0f 0x1b @addr      [$pp==3] => "bndcn " bndreg[$g] "," $addr ;
   # 0F 1E: reserved multi-byte NOP r/m, EXCEPT the two fully-fixed ModR/M bytes
   # FA/FB which are endbr64/endbr32 (their F3 rides the prefix run and replays, so
   # NP vs F3 both round-trip; the common F3-prefixed forms render as endbr64/32).

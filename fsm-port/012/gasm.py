@@ -76,7 +76,7 @@ class EncBuilder:
     else:
       return
 
-    has_g = bool(gen.re.search(r'(greg|gregd|gregq|gregw|rgb|sreg|ssereg|mmxg)\[[^\]]*\$g[^\]]*\]', rhs))
+    has_g = bool(gen.re.search(r'(greg|gregd|gregq|gregw|rgb|sreg|ssereg|mmxg|bndreg)\[[^\]]*\$g[^\]]*\]', rhs))
     two_ops = (',' in rhs)
     if info['modrm'] in ('reg', 'mem'):
       form = F['MODRM'] if has_g else F['RM']
@@ -241,7 +241,7 @@ def emit(interp, by_mnem, out_path):
 
   w("enum EmbKind { EMB_NONE = 0, EMB_REG, EMB_CC };\n")
   w("// operand classes for candidate signature matching (derived from x86op_t.type)\n")
-  w("enum OpClass { C_NONE = 0, C_GREG, C_RGB, C_XMM, C_MM, C_SREG, C_MEM, C_IMM, C_REL };\n\n")
+  w("enum OpClass { C_NONE = 0, C_GREG, C_RGB, C_XMM, C_MM, C_SREG, C_MEM, C_IMM, C_REL, C_BND };\n\n")
 
   w("// one encoding candidate: opcode byte(s) + embedded-field program + signature.\n")
   w("struct EncCand {\n")
