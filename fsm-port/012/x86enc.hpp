@@ -31,11 +31,11 @@ static inline int enc_op_class(const x86op_t* o) {
     default:     return C_NONE;
   }
 }
-static inline int enc_file_class(int opf, int opsize) {
+static inline int enc_file_class(int opf, int opsize, int reptype) {
   switch (opf) {
     case OPF_RGB:    return C_RGB;  case OPF_XMM: return C_XMM;
     case OPF_MM:     return C_MM;   case OPF_SREG: return C_SREG;
-    case OPF_SSE_OS: return opsize ? C_XMM : C_MM;
+    case OPF_SSE_OS: return (opsize || reptype) ? C_XMM : C_MM;   // F3/F2 forces xmm too
     default:         return C_GREG;                       // OPF_GREG
   }
 }
@@ -46,17 +46,22 @@ static inline bool enc_cand_roles(const struct EncCand* c, const x86insn_t* in,
                                   int* reg_oi, int* rm_oi, int* imm_oi) {
   *reg_oi = *rm_oi = *imm_oi = -1;
   int os = in->opsize, n = in->n_ops;
+  int rept = 0;                                          // F3/F2 selects the xmm bank for SSE_OS
+  for (int i = 0; i < in->n_pfx; ++i) {
+    if (in->pfx[i] == 0xd5) { ++i; continue; }           // REX2: skip its payload (may be f2/f3)
+    if (in->pfx[i] == 0xf3) rept = 1; else if (in->pfx[i] == 0xf2) rept = 2;
+  }
   #define CLS(i) enc_op_class(&in->op[i])
   // r/m slot i accepts memory (if sup_mem) or a register of mfile (if sup_reg)
   #define RM_OK(i) ( (CLS(i) == C_MEM) ? c->sup_mem \
-                     : (c->sup_reg && CLS(i) == enc_file_class(c->mfile, os)) )
+                     : (c->sup_reg && CLS(i) == enc_file_class(c->mfile, os, rept)) )
   switch (c->form) {
     case FORM_NONE: return n == 0;
     case FORM_MODRM: {
       int need = (c->imk != IMK_NONE) ? 3 : 2;
       if (n != need) return false;
       int ri = c->dir ? 1 : 0, mi = c->dir ? 0 : 1;     // dir: 0=reg,r/m  1=r/m,reg
-      if (CLS(ri) != enc_file_class(c->rfile, os)) return false;
+      if (CLS(ri) != enc_file_class(c->rfile, os, rept)) return false;
       if (!RM_OK(mi)) return false;
       *reg_oi = ri; *rm_oi = mi;
       if (need == 3) { if (CLS(2) != C_IMM) return false; *imm_oi = 2; }
@@ -69,11 +74,11 @@ static inline bool enc_cand_roles(const struct EncCand* c, const x86insn_t* in,
       else if (n != 1) return false;
       return true;
     case FORM_REG:
-      if (n != 1 || CLS(0) != enc_file_class(c->rfile, os)) return false;
+      if (n != 1 || CLS(0) != enc_file_class(c->rfile, os, rept)) return false;
       *reg_oi = 0; return true;
     case FORM_ACC:                                       // implicit eAX/al + imm
     case FORM_REG_IMM:
-      if (n != 2 || CLS(0) != enc_file_class(c->rfile, os) || CLS(1) != C_IMM)
+      if (n != 2 || CLS(0) != enc_file_class(c->rfile, os, rept) || CLS(1) != C_IMM)
         return false;
       if (c->reg0 && in->op[0].index != 0) return false; // implicit eAX/al
       *reg_oi = 0; *imm_oi = 1; return true;

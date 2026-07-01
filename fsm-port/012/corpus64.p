@@ -95,6 +95,12 @@ table sse58 { addps, addpd, addss, addsd }
 table ssebc { bsf, bsf, tzcnt, bsf }
 table ssebd { bsr, bsr, lzcnt, bsr }
 table ssee6 { cvtpd2dq, cvttpd2dq, cvtdq2pd, cvtpd2dq }
+# mm/xmm data-movement + shuffle: NP is the MMX form, 66/F3/F2 the xmm forms
+# (the SSE_OS operand picks mm/xmm; a rep prefix forces the xmm bank).
+table sse6f { movq, movdqa, movdqu, movdqa }
+table sse7f { movq, movdqa, movdqu, movdqa }
+table sse70 { pshufw, pshufd, pshufhw, pshuflw }
+table ssee7 { movntq, movntdq, movntq, movntq }
 table sse10 { movups, movupd, movss, movsd }
 table sse11 { movups, movupd, movss, movsd }
 table sse14 { unpcklps, unpcklpd, unpcklps, unpcklps }
@@ -871,10 +877,10 @@ submatch insn {
   0x0f 0x6e @addr      => "movd " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0x7e 11 ggg rrr => "movd " greg[$r] "," ssereg[$opsiz*8+$g] ;
   0x0f 0x7e @addr      => "movd " $addr "," ssereg[$opsiz*8+$g] ;
-  0x0f 0x6f 11 ggg rrr => "movdqa " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
-  0x0f 0x6f @addr      => "movdqa " ssereg[$opsiz*8+$g] "," $addr ;
-  0x0f 0x7f 11 ggg rrr => "movdqa " ssereg[$opsiz*8+$r] "," ssereg[$opsiz*8+$g] ;
-  0x0f 0x7f @addr      => "movdqa " $addr "," ssereg[$opsiz*8+$g] ;
+  0x0f 0x6f 11 ggg rrr => sse6f[$pp] ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0x6f @addr      => sse6f[$pp] ssereg[$opsiz*8+$g] "," $addr ;
+  0x0f 0x7f 11 ggg rrr => sse7f[$pp] ssereg[$opsiz*8+$r] "," ssereg[$opsiz*8+$g] ;
+  0x0f 0x7f @addr      => sse7f[$pp] $addr "," ssereg[$opsiz*8+$g] ;
   0x0f 0xd6 11 ggg rrr => "movq " ssereg[8+$r] "," ssereg[8+$g] ;
   0x0f 0xd6 @addr      => "movq " $addr "," ssereg[8+$g] ;
   0x0f 0x2a 11 ggg rrr => "cvtsi2ss " ssereg[8+$g] "," greg[$r] ;
@@ -945,8 +951,8 @@ submatch insn {
   0x0f 0x6c @addr      => "punpcklqdq " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0x6d 11 ggg rrr => "punpckhqdq " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0x6d @addr      => "punpckhqdq " ssereg[$opsiz*8+$g] "," $addr ;
-  0x0f 0x70 11 ggg rrr @imm8 => "pshufd " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] "," hex($imm8) ;
-  0x0f 0x70 @addr      @imm8 => "pshufd " ssereg[$opsiz*8+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x70 11 ggg rrr @imm8 => sse70[$pp] ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] "," hex($imm8) ;
+  0x0f 0x70 @addr      @imm8 => sse70[$pp] ssereg[$opsiz*8+$g] "," $addr "," hex($imm8) ;
   0x0f 0x50 11 ggg rrr => sse50[$pp] greg[$g] "," ssereg[8+$r] ;
   0x0f 0xc4 11 ggg rrr @imm8 => "pinsrw " ssereg[$opsiz*8+$g] "," greg[$r] "," hex($imm8) ;
   0x0f 0xc4 @addr      @imm8 => "pinsrw " ssereg[$opsiz*8+$g] "," $addr "," hex($imm8) ;
@@ -984,7 +990,7 @@ submatch insn {
   0x0f 0xe4 @addr      => "pmulhuw " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0xe5 11 ggg rrr => "pmulhw " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0xe5 @addr      => "pmulhw " ssereg[$opsiz*8+$g] "," $addr ;
-  0x0f 0xe7 @addr      => "movntdq " $addr "," ssereg[$opsiz*8+$g] ;
+  0x0f 0xe7 @addr      => ssee7[$pp] $addr "," ssereg[$opsiz*8+$g] ;
   0x0f 0xe8 11 ggg rrr => "psubsb " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0xe8 @addr      => "psubsb " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0xe9 11 ggg rrr => "psubsw " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;

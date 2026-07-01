@@ -113,13 +113,16 @@ static inline void fill_insn(x86dec_t* d) {
 }
 
 // register file (OperandFile) -> x86op_t.type, resolving SSE_OS by operand size.
-static inline int file_to_T(int opf, int opsize) {
+static inline int file_to_T(int opf, int opsize, int reptype) {
   switch (opf) {
     case OPF_RGB:    return T_GPR8;
     case OPF_XMM:    return T_XMM;
     case OPF_MM:     return T_MMX;
     case OPF_SREG:   return T_SREG;
-    case OPF_SSE_OS: return opsize ? T_XMM : T_MMX;
+    // mm/xmm by 66; F3/F2 (mandatory prefix on the xmm form: movdqu, pshufhw/lw,
+    // ...) also selects the xmm bank even though opsize stays 0. Kept symmetric
+    // with the encoder's enc_file_class so the bijection holds.
+    case OPF_SSE_OS: return (opsize || reptype) ? T_XMM : T_MMX;
     default:         return T_GPR;                       // OPF_GREG
   }
 }
@@ -230,9 +233,10 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t op_at, int t
   in->cc = c[CAP_CC] ? (uint8_t)(c[CAP_CC] - 1) : 0xFF;
 
   int n = 0;
-  #define SETREG(slot, file, idx) do { in->op[slot].type = file_to_T(file, os); \
+  int rept = (int)c[VAR_REPTYPE];
+  #define SETREG(slot, file, idx) do { in->op[slot].type = file_to_T(file, os, rept); \
                                        in->op[slot].index = ((idx) & 7) + 8 * reg_rex; } while (0)
-  #define SETRM(slot) do { if (mode == RM_REG) { in->op[slot].type = file_to_T(mf, os); \
+  #define SETRM(slot) do { if (mode == RM_REG) { in->op[slot].type = file_to_T(mf, os, rept); \
                                                  in->op[slot].index = ((int)c[CAP_RM] & 7) + 8 * xb; } \
                            else { in->op[slot].type = T_MEM; in->op[slot].index = 0; } } while (0)
   switch (form) {
