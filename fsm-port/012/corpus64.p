@@ -798,10 +798,14 @@ submatch insn {
   0x0f 0xb2 @addr => "lss " greg[$g] "," $addr ;
   0x0f 0xb4 @addr => "lfs " greg[$g] "," $addr ;
   0x0f 0xb5 @addr => "lgs " greg[$g] "," $addr ;
-  0x0f 0x78 11 ggg rrr => "vmread " greg[$r] "," greg[$g] ;
-  0x0f 0x78 @addr      => "vmread " $addr "," greg[$g] ;
-  0x0f 0x79 11 ggg rrr => "vmwrite " greg[$g] "," greg[$r] ;
-  0x0f 0x79 @addr      => "vmwrite " greg[$g] "," $addr ;
+  # vmread/vmwrite: operand size is fixed 64-bit in long mode (gregq = r64 always).
+  # The 66/F2 prefixes on 0F 78/79 select the AMD SSE4a extrq/insertq forms; those
+  # (esp. the 0F 78 imm8,imm8 encodings) round-trip byte-exact but render here as the
+  # NP mnemonic -- a deprecated, never-compiler-emitted corner left byte-lossless.
+  0x0f 0x78 11 ggg rrr => "vmread " gregq[$r] "," gregq[$g] ;
+  0x0f 0x78 @addr      => "vmread " $addr "," gregq[$g] ;
+  0x0f 0x79 11 ggg rrr => "vmwrite " gregq[$g] "," gregq[$r] ;
+  0x0f 0x79 @addr      => "vmwrite " gregq[$g] "," $addr ;
   0x0f 0xb9 11 ggg rrr => "ud1 " greg[$g] "," greg[$r] ;
   0x0f 0xb9 @addr      => "ud1 " greg[$g] "," $addr ;
   0x0f 0xff 11 ggg rrr => "ud0 " greg[$g] "," greg[$r] ;
