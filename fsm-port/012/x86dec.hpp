@@ -128,6 +128,7 @@ static inline int file_to_T(int opf, int opsize, int reptype) {
     case OPF_MMG:    return reptype ? T_GPR : T_MMX;
     case OPF_GREGd:  return T_GPRdq;                      // r32/r64 (never 16 on mandatory 66)
     case OPF_GREGq:  return T_GPRq;                       // r64 always (vmread/vmwrite)
+    case OPF_GREGw:  return T_GPRw;                       // r16 always (movzx/movsx word src)
     default:         return T_GPR;                       // OPF_GREG
   }
 }

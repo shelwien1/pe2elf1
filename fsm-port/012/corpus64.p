@@ -639,11 +639,11 @@ submatch insn {
   0x0f 0xaf @addr      => "imul " greg[$g] "," $addr ;
   0x0f 0xb6 11 ggg rrr => "movzx " greg[$g] "," rgb[$r] ;
   0x0f 0xb6 @addr      => "movzx " greg[$g] "," $addr ;
-  0x0f 0xb7 11 ggg rrr => "movzx " greg[$g] "," greg[$r] ;
+  0x0f 0xb7 11 ggg rrr => "movzx " greg[$g] "," gregw[$r] ;   # r/m16 source: always 16-bit
   0x0f 0xb7 @addr      => "movzx " greg[$g] "," $addr ;
   0x0f 0xbe 11 ggg rrr => "movsx " greg[$g] "," rgb[$r] ;
   0x0f 0xbe @addr      => "movsx " greg[$g] "," $addr ;
-  0x0f 0xbf 11 ggg rrr => "movsx " greg[$g] "," greg[$r] ;
+  0x0f 0xbf 11 ggg rrr => "movsx " greg[$g] "," gregw[$r] ;   # r/m16 source: always 16-bit
   0x0f 0xbf @addr      => "movsx " greg[$g] "," $addr ;
 
   # ===== 0F bit ops / scans / bswap / atomics / cpuid+rdtsc =====================
