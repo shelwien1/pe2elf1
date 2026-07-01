@@ -1743,8 +1743,6 @@ submatch vex {
   h k b 00001 0 vvvv y 01 0xf9 11 ggg rrr => "vpsubw " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
   h k b 00001 0 vvvv y 01 0xf9 @addr {$rexb=1-$b;$rexx=1-$k} => "vpsubw " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
   # ==== VEX map1 completion: NP/F3/F2 + 66-remainder (moves/compares/msk/scalar) ====
-  h k b 00001 0 vvvv y 00 0x12 11 ggg rrr => "vmovhlps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
-  h vvvv y 00 0x12 11 ggg rrr => "vmovhlps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8+$r] ;
   h k b 00001 0 vvvv y 00 0x14 11 ggg rrr => "vunpcklps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
   h vvvv y 00 0x14 11 ggg rrr => "vunpcklps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8+$r] ;
   h k b 00001 0 vvvv y 00 0x14 @addr {$rexb=1-$b;$rexx=1-$k} => "vunpcklps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
@@ -1753,8 +1751,6 @@ submatch vex {
   h vvvv y 00 0x15 11 ggg rrr => "vunpckhps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8+$r] ;
   h k b 00001 0 vvvv y 00 0x15 @addr {$rexb=1-$b;$rexx=1-$k} => "vunpckhps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
   h vvvv y 00 0x15 @addr => "vunpckhps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
-  h k b 00001 0 vvvv y 00 0x16 11 ggg rrr => "vmovlhps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
-  h vvvv y 00 0x16 11 ggg rrr => "vmovlhps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8+$r] ;
   h k b 00001 0 1111 y 00 0x2e 11 ggg rrr => "vucomiss " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
   h k b 00001 0 1111 y 00 0x2e @addr {$rexb=1-$b;$rexx=1-$k} => "vucomiss " vreg[16*$y+8*$h+$g] "," $addr ;
   h 1111 y 00 0x2e 11 ggg rrr => "vucomiss " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8+$r] ;
@@ -1833,6 +1829,35 @@ submatch vex {
   h vvvv y 11 0xd0 11 ggg rrr => "vaddsubps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8+$r] ;
   h k b 00001 0 vvvv y 11 0xd0 @addr {$rexb=1-$b;$rexx=1-$k} => "vaddsubps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
   h vvvv y 11 0xd0 @addr => "vaddsubps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  # ==== VEX map1 specials: movl/h loads+stores, movnt stores, vlddqu, vpinsrw/vpextrw, vmaskmovdqu ====
+  h k b 00001 0 vvvv y 01 0x12 @addr {$rexb=1-$b;$rexx=1-$k} => "vmovlpd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  h vvvv y 01 0x12 @addr => "vmovlpd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  h k b 00001 0 vvvv y 01 0x16 @addr {$rexb=1-$b;$rexx=1-$k} => "vmovhpd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  h vvvv y 01 0x16 @addr => "vmovhpd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  h k b 00001 0 1111 y 00 0x13 @addr {$rexb=1-$b;$rexx=1-$k} => "vmovlps " $addr "," vreg[16*$y+8*$h+$g] ;
+  h 1111 y 00 0x13 @addr => "vmovlps " $addr "," vreg[16*$y+8*$h+$g] ;
+  h k b 00001 0 1111 y 00 0x17 @addr {$rexb=1-$b;$rexx=1-$k} => "vmovhps " $addr "," vreg[16*$y+8*$h+$g] ;
+  h 1111 y 00 0x17 @addr => "vmovhps " $addr "," vreg[16*$y+8*$h+$g] ;
+  h k b 00001 0 1111 y 01 0x13 @addr {$rexb=1-$b;$rexx=1-$k} => "vmovlpd " $addr "," vreg[16*$y+8*$h+$g] ;
+  h 1111 y 01 0x13 @addr => "vmovlpd " $addr "," vreg[16*$y+8*$h+$g] ;
+  h k b 00001 0 1111 y 01 0x17 @addr {$rexb=1-$b;$rexx=1-$k} => "vmovhpd " $addr "," vreg[16*$y+8*$h+$g] ;
+  h 1111 y 01 0x17 @addr => "vmovhpd " $addr "," vreg[16*$y+8*$h+$g] ;
+  h k b 00001 0 1111 y 00 0x2b @addr {$rexb=1-$b;$rexx=1-$k} => "vmovntps " $addr "," vreg[16*$y+8*$h+$g] ;
+  h 1111 y 00 0x2b @addr => "vmovntps " $addr "," vreg[16*$y+8*$h+$g] ;
+  h k b 00001 0 1111 y 01 0x2b @addr {$rexb=1-$b;$rexx=1-$k} => "vmovntpd " $addr "," vreg[16*$y+8*$h+$g] ;
+  h 1111 y 01 0x2b @addr => "vmovntpd " $addr "," vreg[16*$y+8*$h+$g] ;
+  h k b 00001 0 1111 y 01 0xe7 @addr {$rexb=1-$b;$rexx=1-$k} => "vmovntdq " $addr "," vreg[16*$y+8*$h+$g] ;
+  h 1111 y 01 0xe7 @addr => "vmovntdq " $addr "," vreg[16*$y+8*$h+$g] ;
+  h k b 00001 0 1111 y 11 0xf0 @addr {$rexb=1-$b;$rexx=1-$k} => "vlddqu " vreg[16*$y+8*$h+$g] "," $addr ;
+  h 1111 y 11 0xf0 @addr => "vlddqu " vreg[16*$y+8*$h+$g] "," $addr ;
+  h k b 00001 0 vvvv y 01 0xc4 11 ggg rrr @imm8 => "vpinsrw " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," greg[$r] "," hex($imm8) ;
+  h vvvv y 01 0xc4 11 ggg rrr @imm8 => "vpinsrw " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," greg[$r] "," hex($imm8) ;
+  h k b 00001 0 vvvv y 01 0xc4 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "vpinsrw " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr "," hex($imm8) ;
+  h vvvv y 01 0xc4 @addr @imm8 => "vpinsrw " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr "," hex($imm8) ;
+  h k b 00001 0 1111 y 01 0xc5 11 ggg rrr @imm8 => "vpextrw " greg[$g] "," vreg[16*$y+8*$b+$r] "," hex($imm8) ;
+  h 1111 y 01 0xc5 11 ggg rrr @imm8 => "vpextrw " greg[$g] "," vreg[16*$y+8+$r] "," hex($imm8) ;
+  h k b 00001 0 1111 y 01 0xf7 11 ggg rrr => "vmaskmovdqu " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
+  h 1111 y 01 0xf7 11 ggg rrr => "vmaskmovdqu " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8+$r] ;
   # ==== VEX map1 66 AVX2 integer/FP (2-src) -- VEX forms of EVEX-covered ops ====
   h k b 00001 0 vvvv y 01 0x14 11 ggg rrr => "vunpcklpd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
   h k b 00001 0 vvvv y 01 0x14 @addr {$rexb=1-$b;$rexx=1-$k} => "vunpcklpd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
