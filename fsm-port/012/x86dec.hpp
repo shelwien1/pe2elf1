@@ -855,8 +855,9 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     d->cap[CAP_MNEM]  = pd->mnem;   d->cap[CAP_FORM] = pd->form;   form = pd->form;
     d->cap[CAP_DIR]   = pd->dir;    d->cap[CAP_RFILE] = pd->rfile;
     d->cap[CAP_MFILE] = pd->mfile;  d->cap[CAP_IMK] = pd->imk;
-    d->cap[CAP_RMREQ] = pd->rmreq;  d->cap[CAP_MNSEL] = 0;   // consumed
-  }
+    d->cap[CAP_RMREQ] = pd->rmreq;   // MNSEL stays 3: the reg-form mnemonic (mreg) is
+  }                                  // resolved after ModR/M, once reg-vs-mem is known
+
   if (form == FORM_MODRM || form == FORM_RM) {
     uint16_t mstart = (uint16_t)(FSM_MODRM + d->cap[VAR_ADRSIZ] * 256);
     ip = run_fsm(mstart, s, n, ip, d->cap);
@@ -883,6 +884,12 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     int pp = d->cap[VAR_REPTYPE] ? (int)d->cap[VAR_REPTYPE] + 1   // F3 -> 2, F2 -> 3
                                  : (d->cap[VAR_OPSIZ] == 1 ? 1 : 0);  // 66 -> 1, else NP -> 0
     d->cap[CAP_MNEM] = ppvtab[d->cap[CAP_GRP]][pp];              // CAP_GRP carries the vtab index
+  }
+  else if (d->cap[CAP_MNSEL] == 3) {                              // ppdesc: reg-form mnemonic
+    int pp = d->cap[VAR_REPTYPE] ? (int)d->cap[VAR_REPTYPE] + 1   // movhlps (reg) vs movlps (mem),
+                                 : (d->cap[VAR_OPSIZ] == 1 ? 1 : 0);  // movlhps vs movhps, ...
+    uint16_t mr = ppdesc[d->cap[CAP_GRP]][pp].mreg;              // 0xFFFF -> use CAP_MNEM for both
+    if (mr != 0xFFFF && d->cap[CAP_MODE] == RM_REG) d->cap[CAP_MNEM] = mr;
   }
   d->insn.mnem   = (uint16_t)d->cap[CAP_MNEM];
   d->insn.opsize = (uint16_t)d->cap[VAR_OPSIZ];

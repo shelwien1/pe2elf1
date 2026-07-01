@@ -803,7 +803,8 @@ class Interp:
                  'rfile': OPF['GREG'], 'mfile': OPF['GREG'],
                  'sfx': 0, 'dir': 0, 'mnsel': 0, 'ppsel': 0,
                  'emb': None, 'mnem': None, 'reg0': False,
-                 'cc': None, 'has_reg': False, 'has_mem': False}
+                 'cc': None, 'has_reg': False, 'has_mem': False,
+                 'mnem_reg': None, 'mnem_mem': None}      # pp slots: mod-dependent mnemonic
         if info['pp'] is not None:                       # per-prefix descriptor slot
           slots = ppd.setdefault((tb, byte), [None, None, None, None])
           if slots[info['pp']] is None:
@@ -832,6 +833,9 @@ class Interp:
           for k in range(1, len(tab)):
             midx(tab[k])                                 # variants contiguous
           d['mnsel'] = 1
+        if info['pp'] is not None and d['mnem'] is not None:  # movlps(mem)/movhlps(reg) split
+          if info['modrm'] == 'reg': d['mnem_reg'] = d['mnem']
+          elif info['modrm'] == 'mem': d['mnem_mem'] = d['mnem']
         d['form'] = form
         d['imk'] = imk if imk != K['NONE'] else d['imk']
         d['emb'] = emb if emb in ('b',) else d['emb']
@@ -905,8 +909,11 @@ class Interp:
           continue
         hr, hm = s['has_reg'], s['has_mem']
         rmreq = 1 if (hr and not hm) else (2 if (hm and not hr) else 0)
-        entry.append((s['mnem'], s['form'], s['dir'], s['rfile'], s['mfile'], s['imk'], rmreq))
-        base = base or s['mnem']
+        mm, mr = s['mnem_mem'], s['mnem_reg']            # mnemonic may depend on mod
+        mn_base = mm if mm is not None else mr           # mem is the base; reg overrides below
+        mreg = mr if (mr is not None and mr != mn_base) else 0xFFFF
+        entry.append((mn_base, s['form'], s['dir'], s['rfile'], s['mfile'], s['imk'], rmreq, mreg))
+        base = base or mn_base
       self._ppdesc.append(entry)
       ppmap[tb][byte] = ([('MNEM', base, 0, 0),
                           ('CONST', self.tailcap('MNSEL'), 3, 0),
@@ -1939,20 +1946,22 @@ def emit(c, interp, out_path):
   # prefix pp. mnem==0xFFFF marks an illegal prefix (#UD). The C++ reads this after
   # the prefix run (MNSEL mode 3) and overrides mnem/form/dir/rfile/mfile/imk/rmreq.
   ppd = getattr(interp, '_ppdesc', [])
-  w("struct PpDesc { uint16_t mnem; uint8_t form, dir, rfile, mfile, imk, rmreq; };\n")
+  w("struct PpDesc { uint16_t mnem, mreg; uint8_t form, dir, rfile, mfile, imk, rmreq; };\n")
   w("#define PPDESC_N %d\n" % len(ppd))
   w("static const struct PpDesc ppdesc[%d][4] = {\n" % max(1, len(ppd)))
+  ud = "{0xFFFF,0xFFFF,0,0,0,0,0,0}"
   if ppd:
     for entry in ppd:
       cells = []
       for slot in entry:
         if slot is None:
-          cells.append("{0xFFFF,0,0,0,0,0,0}")
+          cells.append(ud)
         else:
-          cells.append("{%d,%d,%d,%d,%d,%d,%d}" % slot)
+          mnem, form_, dir_, rf, mf, imk_, rmreq, mreg = slot
+          cells.append("{%d,%d,%d,%d,%d,%d,%d,%d}" % (mnem, mreg, form_, dir_, rf, mf, imk_, rmreq))
       w("    {%s},\n" % ", ".join(cells))
   else:
-    w("    {{0xFFFF,0,0,0,0,0,0},{0xFFFF,0,0,0,0,0,0},{0xFFFF,0,0,0,0,0,0},{0xFFFF,0,0,0,0,0,0}}\n")
+    w("    {%s,%s,%s,%s}\n" % (ud, ud, ud, ud))
   w("};\n\n")
 
   w("#endif // X86_TABLES_H\n")

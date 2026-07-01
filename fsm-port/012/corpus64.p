@@ -817,16 +817,31 @@ submatch insn {
   0x0f 0x10 @addr      => sse10[$pp] ssereg[8+$g] "," $addr ;
   0x0f 0x11 11 ggg rrr => sse11[$pp] ssereg[8+$r] "," ssereg[8+$g] ;
   0x0f 0x11 @addr      => sse11[$pp] $addr "," ssereg[8+$g] ;
-  0x0f 0x12 11 ggg rrr => "movlps " ssereg[8+$g] "," ssereg[8+$r] ;   # movhlps (reg form)
-  0x0f 0x12 @addr      => "movlps " ssereg[8+$g] "," $addr ;
-  0x0f 0x13 @addr      => "movlps " $addr "," ssereg[8+$g] ;
+  # 0F 12: NP reg=movhlps / mem=movlps; 66 mem=movlpd (reg #UD); F3 movsldup; F2 movddup.
+  # The mnemonic depends on the mandatory prefix AND (at NP) on mod (reg vs mem).
+  0x0f 0x12 11 ggg rrr [$pp==0] => "movhlps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x12 @addr      [$pp==0] => "movlps " ssereg[8+$g] "," $addr ;
+  0x0f 0x12 @addr      [$pp==1] => "movlpd " ssereg[8+$g] "," $addr ;
+  0x0f 0x12 11 ggg rrr [$pp==2] => "movsldup " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x12 @addr      [$pp==2] => "movsldup " ssereg[8+$g] "," $addr ;
+  0x0f 0x12 11 ggg rrr [$pp==3] => "movddup " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x12 @addr      [$pp==3] => "movddup " ssereg[8+$g] "," $addr ;
+  # 0F 13: movlps/movlpd store (mem-only; reg form and F3/F2 are #UD).
+  0x0f 0x13 @addr      [$pp==0] => "movlps " $addr "," ssereg[8+$g] ;
+  0x0f 0x13 @addr      [$pp==1] => "movlpd " $addr "," ssereg[8+$g] ;
   0x0f 0x14 11 ggg rrr => sse14[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
   0x0f 0x14 @addr      => sse14[$pp] ssereg[8+$g] "," $addr ;
   0x0f 0x15 11 ggg rrr => sse15[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
   0x0f 0x15 @addr      => sse15[$pp] ssereg[8+$g] "," $addr ;
-  0x0f 0x16 11 ggg rrr => "movhps " ssereg[8+$g] "," ssereg[8+$r] ;   # movlhps (reg form)
-  0x0f 0x16 @addr      => "movhps " ssereg[8+$g] "," $addr ;
-  0x0f 0x17 @addr      => "movhps " $addr "," ssereg[8+$g] ;
+  # 0F 16: NP reg=movlhps / mem=movhps; 66 mem=movhpd (reg #UD); F3 movshdup; F2 #UD.
+  0x0f 0x16 11 ggg rrr [$pp==0] => "movlhps " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x16 @addr      [$pp==0] => "movhps " ssereg[8+$g] "," $addr ;
+  0x0f 0x16 @addr      [$pp==1] => "movhpd " ssereg[8+$g] "," $addr ;
+  0x0f 0x16 11 ggg rrr [$pp==2] => "movshdup " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x16 @addr      [$pp==2] => "movshdup " ssereg[8+$g] "," $addr ;
+  # 0F 17: movhps/movhpd store (mem-only; reg form and F3/F2 are #UD).
+  0x0f 0x17 @addr      [$pp==0] => "movhps " $addr "," ssereg[8+$g] ;
+  0x0f 0x17 @addr      [$pp==1] => "movhpd " $addr "," ssereg[8+$g] ;
   0x0f 0x28 11 ggg rrr => sse28[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
   0x0f 0x28 @addr      => sse28[$pp] ssereg[8+$g] "," $addr ;
   0x0f 0x29 11 ggg rrr => sse29[$pp] ssereg[8+$r] "," ssereg[8+$g] ;
