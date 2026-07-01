@@ -2141,6 +2141,16 @@ submatch vex {
   h k b 00010 0 vvvv y 01 0x52 @addr {$rexb=1-$b;$rexx=1-$k} => "vpdpwssd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
   h k b 00010 0 vvvv y 01 0x53 11 ggg rrr => "vpdpwssds " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
   h k b 00010 0 vvvv y 01 0x53 @addr {$rexb=1-$b;$rexx=1-$k} => "vpdpwssds " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  # 0F 12/16 NP: mem = vmovlps/vmovhps (load, listed first = descriptor mnem); reg-direct
+  # form = vmovhlps/vmovlhps, swapped in vex_finalize (VEX descriptor is per-opcode).
+  h k b 00001 w vvvv y 00 0x12 @addr {$rexb=1-$b;$rexx=1-$k} => "vmovlps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  h k b 00001 w vvvv y 00 0x12 11 ggg rrr => "vmovhlps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
+  h vvvv y 00 0x12 @addr => "vmovlps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  h vvvv y 00 0x12 11 ggg rrr => "vmovhlps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8+$r] ;
+  h k b 00001 w vvvv y 00 0x16 @addr {$rexb=1-$b;$rexx=1-$k} => "vmovhps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  h k b 00001 w vvvv y 00 0x16 11 ggg rrr => "vmovlhps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
+  h vvvv y 00 0x16 @addr => "vmovhps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  h vvvv y 00 0x16 11 ggg rrr => "vmovlhps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8+$r] ;
   # ==== VEX map2 (0F38) 66 same-width AVX2/AVX-VNNI/GFNI/AES (2-src / 2-op), C4-only ====
   h k b 00010 0 vvvv y 01 0x01 11 ggg rrr => "vphaddw " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
   h k b 00010 0 vvvv y 01 0x01 @addr {$rexb=1-$b;$rexx=1-$k} => "vphaddw " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;

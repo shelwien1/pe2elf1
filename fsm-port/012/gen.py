@@ -2002,6 +2002,11 @@ def emit(c, interp, out_path):
   # the C++ apx_finalize picks the memory variant by these indices.
   for _m in ('uwrmsr', 'urdmsr', 'enqcmds', 'enqcmd'):
     w("#define MNEM_%s %d\n" % (_m.upper(), interp._mnem.index(_m) if _m in interp._mnem else 0xFFFF))
+  # VEX 0F 12/16 NP reg-vs-mem split: the mem form is vmovlps/vmovhps (a load), the
+  # reg-direct form is vmovhlps/vmovlhps. The VEX descriptor is per-opcode (no ModR/M
+  # branch), so vex_finalize swaps the mnemonic once reg-vs-mem is known.
+  for _m in ('vmovlps', 'vmovhlps', 'vmovhps', 'vmovlhps'):
+    w("#define MNEM_%s %d\n" % (_m.upper(), interp._mnem.index(_m) if _m in interp._mnem else 0xFFFF))
   # a mnemonic may carry a "~tag" disambiguator: distinct index (so per-opcode
   # encodings each get their own enc-rank bucket) but a shared display string --
   # e.g. the reserved multi-byte NOPs 0F 18-1E all render "nop" yet round-trip to

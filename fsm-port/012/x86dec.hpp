@@ -450,6 +450,13 @@ static inline void vex_finalize(x86dec_t* d, const byte* s, size_t op_at) {
   bool has_modrm = (form != FORM_VEX_NONE);
   in->vex_modrm = has_modrm ? s[q] : 0;
   bool is_reg = (c[CAP_MODE] == RM_REG);
+  // VEX 0F 12/16 NP: the mem form loads (vmovlps/vmovhps); the reg-direct form is
+  // vmovhlps/vmovlhps. One VEX descriptor per opcode, so swap here (encode replays
+  // raw vex bytes, not the mnemonic, so this is decode-display only).
+  if (in->vex != 3) {
+    if (in->mnem == MNEM_VMOVLPS && is_reg) in->mnem = MNEM_VMOVHLPS;
+    else if (in->mnem == MNEM_VMOVHPS && is_reg) in->mnem = MNEM_VMOVLHPS;
+  }
   // EVEX decorations: b=1 on a reg-reg form is embedded rounding {er} (L'L picks
   // the mode and the operands are zmm); on a memory form it is broadcast {1toN}.
   int vt;
