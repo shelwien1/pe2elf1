@@ -98,6 +98,11 @@ table sret  { sysretd, sysretd~w, sysretq }              # 0F 07: d at 32-bit/da
 table sxit  { sysexitd, sysexitd~w, sysexitq }           # 0F 35  (~w = distinct idx, "sysexitd" display)
 table rdssp { rdsspd, rdsspd~w, rdsspq }                 # F3 0F 1E /1: CET read shadow-stack ptr
 table incssp { incsspd, incsspd~w, incsspq }             # F3 0F AE /5: CET increment shadow-stack
+# push/pop fs/gs (0F A0/A1/A8/A9): 66 -> 16-bit (pushw/popw); REX.W ignored (~q = "push" display)
+table pushfs { "push fs", "pushw fs", "push fs~q" }
+table popfs  { "pop fs", "popw fs", "pop fs~q" }
+table pushgs { "push gs", "pushw gs", "push gs~q" }
+table popgs  { "pop gs", "popw gs", "pop gs~q" }
 table ssebc { bsf, bsf, tzcnt, bsf }
 table ssebd { bsr, bsr, lzcnt, bsr }
 table ssee6 { cvtpd2dq, cvttpd2dq, cvtdq2pd, cvtpd2dq }
@@ -112,6 +117,7 @@ table sse6f { movq, movdqa, movdqu, movdqa }
 table sse7f { movq, movdqa, movdqu, movdqa }
 table sse70 { pshufw, pshufd, pshufhw, pshuflw }
 table ssee7 { movntq, movntdq, movntq, movntq }
+table ssef7 { maskmovq, maskmovdqu, maskmovq, maskmovq }  # 0F F7: mm at NP, xmm at 66
 table sse10 { movups, movupd, movss, movsd }
 table sse11 { movups, movupd, movss, movsd }
 table sse14 { unpcklps, unpcklpd, unpcklps, unpcklps }
@@ -747,7 +753,8 @@ submatch insn {
   0x0f 0x0d @addr(6)   => "prefetch " $addr ;
   0x0f 0x0d @addr(7)   => "prefetch " $addr ;
   # 0F 1C cldemote (/0 mem) + reserved-nop; 0F 19/1D reserved multi-byte nop
-  0x0f 0x1c @addr(0)   => "cldemote " $addr ;
+  0x0f 0x1c @addr(0) [$pp==0] => "cldemote " $addr ;   # cldemote is NP-only; 66/F3/F2 -> nop
+  0x0f 0x1c @addr(0)   => "nop~1c " $addr ;
   0x0f 0x1c @addr(1)   => "nop~1c " $addr ;
   0x0f 0x1c @addr(2)   => "nop~1c " $addr ;
   0x0f 0x1c @addr(3)   => "nop~1c " $addr ;
@@ -1134,7 +1141,7 @@ submatch insn {
   0x0f 0xf5 @addr      => "pmaddwd " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0xf6 11 ggg rrr => "psadbw " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0xf6 @addr      => "psadbw " ssereg[$opsiz*8+$g] "," $addr ;
-  0x0f 0xf7 11 ggg rrr => "maskmovdqu " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0xf7 11 ggg rrr => ssef7[$pp] ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;   # maskmovq/maskmovdqu
   0x0f 0x2b @addr      => sse2b[$pp] $addr "," ssereg[8+$g] ;
 
   # shift packed by imm8 (0F 71/72/73 groups; the /digit picks the shift, the r/m
@@ -1532,10 +1539,10 @@ submatch insn {
   0x0f 0x34 => "sysenter" ;
   0x0f 0x35 => sxit[$opsiz] ;
   0x0f 0x77 => "emms" ;
-  0x0f 0xa0 => "push fs" ;
-  0x0f 0xa1 => "pop fs" ;
-  0x0f 0xa8 => "push gs" ;
-  0x0f 0xa9 => "pop gs" ;
+  0x0f 0xa0 => pushfs[$opsiz] ;                        # 66 -> pushw fs
+  0x0f 0xa1 => popfs[$opsiz] ;
+  0x0f 0xa8 => pushgs[$opsiz] ;
+  0x0f 0xa9 => popgs[$opsiz] ;
 }
 
 # ===========================================================================
