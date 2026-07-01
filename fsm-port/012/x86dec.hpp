@@ -843,6 +843,20 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     return ip;
   }
 #endif
+  // Per-prefix full descriptor (MNSEL mode 3): the mandatory prefix selects not just
+  // the mnemonic but the whole form (movd/movq 7E; movq/movq2dq/movdq2q D6). The
+  // prefix run is decoded by now, so resolve pp and override mnem/form/dir/files/imk/
+  // rmreq from ppdesc before the ModR/M + immediate stage. A 0xFFFF slot is #UD.
+  if (d->cap[CAP_MNSEL] == 3) {
+    int pp = d->cap[VAR_REPTYPE] ? (int)d->cap[VAR_REPTYPE] + 1
+                                 : (d->cap[VAR_OPSIZ] == 1 ? 1 : 0);
+    const struct PpDesc* pd = &ppdesc[d->cap[CAP_GRP]][pp];
+    if (pd->mnem == 0xFFFF) { d->insn.mnem = 0xFFFF; return ip; }
+    d->cap[CAP_MNEM]  = pd->mnem;   d->cap[CAP_FORM] = pd->form;   form = pd->form;
+    d->cap[CAP_DIR]   = pd->dir;    d->cap[CAP_RFILE] = pd->rfile;
+    d->cap[CAP_MFILE] = pd->mfile;  d->cap[CAP_IMK] = pd->imk;
+    d->cap[CAP_RMREQ] = pd->rmreq;  d->cap[CAP_MNSEL] = 0;   // consumed
+  }
   if (form == FORM_MODRM || form == FORM_RM) {
     uint16_t mstart = (uint16_t)(FSM_MODRM + d->cap[VAR_ADRSIZ] * 256);
     ip = run_fsm(mstart, s, n, ip, d->cap);

@@ -624,6 +624,11 @@ class Interp:
     # -> dict(bp, tb, two_byte, modrm, reg_fixed, imm[list], embedded) ; None to skip.
     # tb selects the opcode map: 0 one-byte, 1 = 0F, 2 = 0F 38, 3 = 0F 3A.
     toks = lhs.split()
+    pp = None                                            # [$pp==N] guard: per-prefix descriptor slot
+    for t in list(toks):
+      gm = re.fullmatch(r'\[\$pp==([0-3])\]', t)
+      if gm:
+        pp = int(gm.group(1)); toks.remove(t)
     i = 0
     tb = 0
     if toks and toks[0] == '0x0f':                       # 0F escape: opcode is byte 2+
@@ -680,7 +685,7 @@ class Interp:
       elif nm in ('imm8', 'imm16', 'imm32', 'immz', 'immv', 'rel8', 'relz'):
         imm.append(nm)
     return dict(bp=bp, tb=tb, two_byte=two_byte, modrm=modrm,
-                reg_fixed=reg_fixed, imm=imm, embedded=embedded)
+                reg_fixed=reg_fixed, imm=imm, embedded=embedded, pp=pp)
 
   def operand_file(self, tmpl, var):
     # which register-name table the $var operand draws from
@@ -729,6 +734,7 @@ class Interp:
     SKIP_MNEM_TABS = ('m10', 'elt')                      # reptype / "add"+elt: a later step
     desc = {0: {}, 1: {}, 2: {}, 3: {}}                  # [tb] -> {byte: descriptor}
                                                          #   0 one-byte, 1 0F, 2 0F 38, 3 0F 3A
+    ppd = {}                                             # (tb,byte) -> [slot0..3] per-prefix desc
     groups = {}
     for lhs, rhs in self.insn_rules_raw():
       info = self.parse_insn_lhs(lhs)
@@ -793,11 +799,18 @@ class Interp:
         pos, w, vals = 0, 0, [0]
       for v in vals:
         byte = bp.lit_val | (v << pos)
-        d = desc[tb].setdefault(byte, {'form': F['NONE'], 'imk': K['NONE'],
-                                       'rfile': OPF['GREG'], 'mfile': OPF['GREG'],
-                                       'sfx': 0, 'dir': 0, 'mnsel': 0, 'ppsel': 0,
-                                       'emb': None, 'mnem': None, 'reg0': False,
-                                       'cc': None, 'has_reg': False, 'has_mem': False})
+        fresh = {'form': F['NONE'], 'imk': K['NONE'],
+                 'rfile': OPF['GREG'], 'mfile': OPF['GREG'],
+                 'sfx': 0, 'dir': 0, 'mnsel': 0, 'ppsel': 0,
+                 'emb': None, 'mnem': None, 'reg0': False,
+                 'cc': None, 'has_reg': False, 'has_mem': False}
+        if info['pp'] is not None:                       # per-prefix descriptor slot
+          slots = ppd.setdefault((tb, byte), [None, None, None, None])
+          if slots[info['pp']] is None:
+            slots[info['pp']] = dict(fresh)
+          d = slots[info['pp']]
+        else:
+          d = desc[tb].setdefault(byte, fresh)
         if info['modrm'] == 'reg': d['has_reg'] = True     # which ModR/M mod forms
         if info['modrm'] == 'mem': d['has_mem'] = True     # this opcode actually defines
         # mnemonic
@@ -876,6 +889,28 @@ class Interp:
     op2 = {b: to_state(d) for b, d in desc[1].items()}
     op3_38 = {b: to_state(d) for b, d in desc[2].items()}   # 0F 38 xx
     op3_3a = {b: to_state(d) for b, d in desc[3].items()}   # 0F 3A xx
+    # per-prefix full descriptor: opcodes whose mnemonic AND operand form flip with the
+    # mandatory prefix (movd/movq 7E, movq/movq2dq/movdq2q D6). One opcode state carries
+    # MNSEL mode 3 + the ppdesc index; the C++ picks ppdesc[idx][pp] after the prefix run
+    # is known and overrides mnem/form/dir/files/imk. A missing slot decodes as #UD.
+    self._ppdesc = []                                       # [idx] -> [slot0..3]
+    ppmap = {0: op1, 1: op2, 2: op3_38, 3: op3_3a}
+    for (tb, byte), slots in sorted(ppd.items()):
+      idx = len(self._ppdesc)
+      entry, base = [], 0
+      for pp in range(4):
+        s = slots[pp]
+        if s is None:
+          entry.append(None)                               # 0xFFFF -> #UD for this prefix
+          continue
+        hr, hm = s['has_reg'], s['has_mem']
+        rmreq = 1 if (hr and not hm) else (2 if (hm and not hr) else 0)
+        entry.append((s['mnem'], s['form'], s['dir'], s['rfile'], s['mfile'], s['imk'], rmreq))
+        base = base or s['mnem']
+      self._ppdesc.append(entry)
+      ppmap[tb][byte] = ([('MNEM', base, 0, 0),
+                          ('CONST', self.tailcap('MNSEL'), 3, 0),
+                          ('CONST', self.tailcap('GRP'), idx & 0x1f, idx >> 5)], 'FSM_HALT')
     # group opcodes: assign ids, store members, route the owning map -> group stage
     self._group_list = []
     group_map = {0: op1, 1: op2, 2: op3_38, 3: op3_3a}      # dispatch by escape (tb)
@@ -1897,6 +1932,27 @@ def emit(c, interp, out_path):
       w("    {%s},\n" % ", ".join(str(x) for x in vt))
   else:
     w("    {0,0,0,0}\n")
+  w("};\n\n")
+
+  # Per-prefix full descriptor: for opcodes whose mnemonic AND operand form change
+  # with the mandatory prefix, ppdesc[CAP_GRP][pp] gives the whole descriptor for
+  # prefix pp. mnem==0xFFFF marks an illegal prefix (#UD). The C++ reads this after
+  # the prefix run (MNSEL mode 3) and overrides mnem/form/dir/rfile/mfile/imk/rmreq.
+  ppd = getattr(interp, '_ppdesc', [])
+  w("struct PpDesc { uint16_t mnem; uint8_t form, dir, rfile, mfile, imk, rmreq; };\n")
+  w("#define PPDESC_N %d\n" % len(ppd))
+  w("static const struct PpDesc ppdesc[%d][4] = {\n" % max(1, len(ppd)))
+  if ppd:
+    for entry in ppd:
+      cells = []
+      for slot in entry:
+        if slot is None:
+          cells.append("{0xFFFF,0,0,0,0,0,0}")
+        else:
+          cells.append("{%d,%d,%d,%d,%d,%d,%d}" % slot)
+      w("    {%s},\n" % ", ".join(cells))
+  else:
+    w("    {{0xFFFF,0,0,0,0,0,0},{0xFFFF,0,0,0,0,0,0},{0xFFFF,0,0,0,0,0,0},{0xFFFF,0,0,0,0,0,0}}\n")
   w("};\n\n")
 
   w("#endif // X86_TABLES_H\n")

@@ -55764,4 +55764,10 @@ static const uint16_t ppvtab[1][4] = {
     {0,0,0,0}
 };
 
+struct PpDesc { uint16_t mnem; uint8_t form, dir, rfile, mfile, imk, rmreq; };
+#define PPDESC_N 0
+static const struct PpDesc ppdesc[1][4] = {
+    {{0xFFFF,0,0,0,0,0,0},{0xFFFF,0,0,0,0,0,0},{0xFFFF,0,0,0,0,0,0},{0xFFFF,0,0,0,0,0,0}}
+};
+
 #endif // X86_TABLES_H

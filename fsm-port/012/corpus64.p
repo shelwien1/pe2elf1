@@ -880,14 +880,24 @@ submatch insn {
   # rule per opcode covers movd/movq, movdqa/movdqu, cvtsi2ss/sd etc. byte-exact. =
   0x0f 0x6e 11 ggg rrr => "movd " ssereg[$opsiz*8+$g] "," gregd[$r] ;
   0x0f 0x6e @addr      => "movd " ssereg[$opsiz*8+$g] "," $addr ;
-  0x0f 0x7e 11 ggg rrr => "movd " greg[$r] "," ssereg[$opsiz*8+$g] ;
-  0x0f 0x7e @addr      => "movd " $addr "," ssereg[$opsiz*8+$g] ;
+  # 0F 7E: NP/66 = movd/q r/m,mm-or-xmm (rm-first); F3 = movq xmm,xmm/m64 (reg-first,
+  # a different form); F2 = #UD. Per-prefix descriptor selects mnemonic + operand form.
+  0x0f 0x7e 11 ggg rrr [$pp==0] => "movd " gregd[$r] "," ssereg[$opsiz*8+$g] ;
+  0x0f 0x7e @addr      [$pp==0] => "movd " $addr "," ssereg[$opsiz*8+$g] ;
+  0x0f 0x7e 11 ggg rrr [$pp==1] => "movd " gregd[$r] "," ssereg[$opsiz*8+$g] ;
+  0x0f 0x7e @addr      [$pp==1] => "movd " $addr "," ssereg[$opsiz*8+$g] ;
+  0x0f 0x7e 11 ggg rrr [$pp==2] => "movq " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x7e @addr      [$pp==2] => "movq " ssereg[8+$g] "," $addr ;
   0x0f 0x6f 11 ggg rrr => sse6f[$pp] ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0x6f @addr      => sse6f[$pp] ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0x7f 11 ggg rrr => sse7f[$pp] ssereg[$opsiz*8+$r] "," ssereg[$opsiz*8+$g] ;
   0x0f 0x7f @addr      => sse7f[$pp] $addr "," ssereg[$opsiz*8+$g] ;
-  0x0f 0xd6 11 ggg rrr => "movq " ssereg[8+$r] "," ssereg[8+$g] ;
-  0x0f 0xd6 @addr      => "movq " $addr "," ssereg[8+$g] ;
+  # 0F D6: 66 = movq xmm/m64,xmm; F3 = movq2dq xmm,mm; F2 = movdq2q mm,xmm; NP = #UD.
+  # movq2dq/movdq2q bridge the MMX and XMM banks (reg-only) -- a per-prefix form change.
+  0x0f 0xd6 11 ggg rrr [$pp==1] => "movq " ssereg[8+$r] "," ssereg[8+$g] ;
+  0x0f 0xd6 @addr      [$pp==1] => "movq " $addr "," ssereg[8+$g] ;
+  0x0f 0xd6 11 ggg rrr [$pp==2] => "movq2dq " ssereg[8+$g] "," ssereg[$r] ;
+  0x0f 0xd6 11 ggg rrr [$pp==3] => "movdq2q " ssereg[$g] "," ssereg[8+$r] ;
   # cvt int<->float: reg is always xmm on 2A / GPR-or-mm on 2C/2D; the r/m operand
   # is the reciprocal. mmxg[..] = OPF_MMG (mm at NP/66, GPR at F3/F2). The mnemonic
   # rides the $pp selector; the prefix run reproduces the exact bytes on encode.
