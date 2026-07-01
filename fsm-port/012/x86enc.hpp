@@ -36,6 +36,7 @@ static inline int enc_file_class(int opf, int opsize, int reptype) {
     case OPF_RGB:    return C_RGB;  case OPF_XMM: return C_XMM;
     case OPF_MM:     return C_MM;   case OPF_SREG: return C_SREG;
     case OPF_SSE_OS: return (opsize || reptype) ? C_XMM : C_MM;   // F3/F2 forces xmm too
+    case OPF_MMG:    return reptype ? C_GREG : C_MM;      // cvt*: GPR at F3/F2, mm at NP/66
     default:         return C_GREG;                       // OPF_GREG
   }
 }

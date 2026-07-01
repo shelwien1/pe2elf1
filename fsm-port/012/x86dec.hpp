@@ -123,6 +123,9 @@ static inline int file_to_T(int opf, int opsize, int reptype) {
     // ...) also selects the xmm bank even though opsize stays 0. Kept symmetric
     // with the encoder's enc_file_class so the bijection holds.
     case OPF_SSE_OS: return (opsize || reptype) ? T_XMM : T_MMX;
+    // cvtpi2ps/cvttps2pi/...: mm at NP/66, GPR at F3/F2 (cvtsi2ss/cvttss2si).
+    // The GPR width follows opsize (REX.W -> r64); mm is always 64-bit.
+    case OPF_MMG:    return reptype ? T_GPR : T_MMX;
     default:         return T_GPR;                       // OPF_GREG
   }
 }
@@ -760,8 +763,8 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     // SSE/vector ops in the 0F map are #UD too. Reject both.
     int rf = (int)d->cap[CAP_RFILE], mf = (int)d->cap[CAP_MFILE];
     if (d->cap[CAP_FORM] == FORM_ESC || d->cap[CAP_TBL3] ||
-        rf == OPF_XMM || rf == OPF_MM || rf == OPF_SSE_OS ||
-        mf == OPF_XMM || mf == OPF_MM || mf == OPF_SSE_OS) {
+        rf == OPF_XMM || rf == OPF_MM || rf == OPF_SSE_OS || rf == OPF_MMG ||
+        mf == OPF_XMM || mf == OPF_MM || mf == OPF_SSE_OS || mf == OPF_MMG) {
       d->insn.mnem = 0xFFFF; return ip;
     }
   } else

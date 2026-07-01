@@ -95,6 +95,11 @@ table sse58 { addps, addpd, addss, addsd }
 table ssebc { bsf, bsf, tzcnt, bsf }
 table ssebd { bsr, bsr, lzcnt, bsr }
 table ssee6 { cvtpd2dq, cvttpd2dq, cvtdq2pd, cvtpd2dq }
+# int<->float converts: NP/66 use an mm operand, F3/F2 a GPR (the mmxg operand
+# file resolves mm-or-GPR by the mandatory prefix, mirroring cvtpi2ps vs cvtsi2ss).
+table sse2a { cvtpi2ps, cvtpi2pd, cvtsi2ss, cvtsi2sd }
+table sse2c { cvttps2pi, cvttpd2pi, cvttss2si, cvttsd2si }
+table sse2d { cvtps2pi, cvtpd2pi, cvtss2si, cvtsd2si }
 # mm/xmm data-movement + shuffle: NP is the MMX form, 66/F3/F2 the xmm forms
 # (the SSE_OS operand picks mm/xmm; a rep prefix forces the xmm bank).
 table sse6f { movq, movdqa, movdqu, movdqa }
@@ -883,12 +888,15 @@ submatch insn {
   0x0f 0x7f @addr      => sse7f[$pp] $addr "," ssereg[$opsiz*8+$g] ;
   0x0f 0xd6 11 ggg rrr => "movq " ssereg[8+$r] "," ssereg[8+$g] ;
   0x0f 0xd6 @addr      => "movq " $addr "," ssereg[8+$g] ;
-  0x0f 0x2a 11 ggg rrr => "cvtsi2ss " ssereg[8+$g] "," greg[$r] ;
-  0x0f 0x2a @addr      => "cvtsi2ss " ssereg[8+$g] "," $addr ;
-  0x0f 0x2c 11 ggg rrr => "cvttss2si " greg[$g] "," ssereg[8+$r] ;
-  0x0f 0x2c @addr      => "cvttss2si " greg[$g] "," $addr ;
-  0x0f 0x2d 11 ggg rrr => "cvtss2si " greg[$g] "," ssereg[8+$r] ;
-  0x0f 0x2d @addr      => "cvtss2si " greg[$g] "," $addr ;
+  # cvt int<->float: reg is always xmm on 2A / GPR-or-mm on 2C/2D; the r/m operand
+  # is the reciprocal. mmxg[..] = OPF_MMG (mm at NP/66, GPR at F3/F2). The mnemonic
+  # rides the $pp selector; the prefix run reproduces the exact bytes on encode.
+  0x0f 0x2a 11 ggg rrr => sse2a[$pp] ssereg[8+$g] "," mmxg[$r] ;
+  0x0f 0x2a @addr      => sse2a[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x2c 11 ggg rrr => sse2c[$pp] mmxg[$g] "," ssereg[8+$r] ;
+  0x0f 0x2c @addr      => sse2c[$pp] mmxg[$g] "," $addr ;
+  0x0f 0x2d 11 ggg rrr => sse2d[$pp] mmxg[$g] "," ssereg[8+$r] ;
+  0x0f 0x2d @addr      => sse2d[$pp] mmxg[$g] "," $addr ;
   0x0f 0xfc 11 ggg rrr => "paddb " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0xfc @addr      => "paddb " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0xfd 11 ggg rrr => "paddw " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
