@@ -1260,14 +1260,25 @@ submatch insn {
   0x0f 0x38 0x41 @addr      => "phminposuw " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0x38 0xdb 11 ggg rrr => "aesimc " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0x38 0xdb @addr      => "aesimc " ssereg[$opsiz*8+$g] "," $addr ;
-  0x0f 0x38 0xdc 11 ggg rrr => "aesenc " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
-  0x0f 0x38 0xdc @addr      => "aesenc " ssereg[$opsiz*8+$g] "," $addr ;
-  0x0f 0x38 0xdd 11 ggg rrr => "aesenclast " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
-  0x0f 0x38 0xdd @addr      => "aesenclast " ssereg[$opsiz*8+$g] "," $addr ;
-  0x0f 0x38 0xde 11 ggg rrr => "aesdec " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
-  0x0f 0x38 0xde @addr      => "aesdec " ssereg[$opsiz*8+$g] "," $addr ;
-  0x0f 0x38 0xdf 11 ggg rrr => "aesdeclast " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
-  0x0f 0x38 0xdf @addr      => "aesdeclast " ssereg[$opsiz*8+$g] "," $addr ;
+  # AES Key Locker wide (F3 0F 38 D8 /0-3 mem): a pp-variant group, F3 slot only.
+  0x0f 0x38 0xd8 @addr(0) [$pp==2] => "aesencwide128kl " $addr ;
+  0x0f 0x38 0xd8 @addr(1) [$pp==2] => "aesdecwide128kl " $addr ;
+  0x0f 0x38 0xd8 @addr(2) [$pp==2] => "aesencwide256kl " $addr ;
+  0x0f 0x38 0xd8 @addr(3) [$pp==2] => "aesdecwide256kl " $addr ;
+  # AES-NI (66) vs AES Key Locker (F3), per-prefix descriptor. NP/F2 -> #UD.
+  0x0f 0x38 0xdc 11 ggg rrr [$pp==1] => "aesenc " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x38 0xdc @addr      [$pp==1] => "aesenc " ssereg[8+$g] "," $addr ;
+  0x0f 0x38 0xdc 11 ggg rrr [$pp==2] => "loadiwkey " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x38 0xdc @addr      [$pp==2] => "aesenc128kl " ssereg[8+$g] "," $addr ;
+  0x0f 0x38 0xdd 11 ggg rrr [$pp==1] => "aesenclast " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x38 0xdd @addr      [$pp==1] => "aesenclast " ssereg[8+$g] "," $addr ;
+  0x0f 0x38 0xdd @addr      [$pp==2] => "aesdec128kl " ssereg[8+$g] "," $addr ;
+  0x0f 0x38 0xde 11 ggg rrr [$pp==1] => "aesdec " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x38 0xde @addr      [$pp==1] => "aesdec " ssereg[8+$g] "," $addr ;
+  0x0f 0x38 0xde @addr      [$pp==2] => "aesenc256kl " ssereg[8+$g] "," $addr ;
+  0x0f 0x38 0xdf 11 ggg rrr [$pp==1] => "aesdeclast " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x38 0xdf @addr      [$pp==1] => "aesdeclast " ssereg[8+$g] "," $addr ;
+  0x0f 0x38 0xdf @addr      [$pp==2] => "aesdec256kl " ssereg[8+$g] "," $addr ;
   # SHA-NI (NP; sha256rnds2 has an implicit <xmm0> 3rd operand not shown)
   0x0f 0x38 0xc8 11 ggg rrr => "sha1nexte " ssereg[8+$g] "," ssereg[8+$r] ;
   0x0f 0x38 0xc8 @addr      => "sha1nexte " ssereg[8+$g] "," $addr ;
@@ -1292,12 +1303,21 @@ submatch insn {
   0x0f 0x38 0xf1 @addr      [$pp==1] => "movbe " $addr "," greg[$g] ;
   0x0f 0x38 0xf1 11 ggg rrr [$pp==3] => "crc32 " gregd[$g] "," greg[$r] ;     # crc32 r32/64,r/m
   0x0f 0x38 0xf1 @addr      [$pp==3] => "crc32 " gregd[$g] "," $addr ;
+  0x0f 0x38 0xf5 @addr      [$pp==1] => "wrussd " $addr "," gregd[$g] ;       # CET write user shadow
   0x0f 0x38 0xf6 @addr      [$pp==0] => "wrssd " $addr "," gregd[$g] ;        # CET write shadow stk
   0x0f 0x38 0xf6 11 ggg rrr [$pp==1] => "adcx " gregd[$g] "," gregd[$r] ;
   0x0f 0x38 0xf6 @addr      [$pp==1] => "adcx " gregd[$g] "," $addr ;
   0x0f 0x38 0xf6 11 ggg rrr [$pp==2] => "adox " gregd[$g] "," gregd[$r] ;
   0x0f 0x38 0xf6 @addr      [$pp==2] => "adox " gregd[$g] "," $addr ;
+  0x0f 0x38 0xf8 @addr      [$pp==1] => "movdir64b " gregq[$g] "," $addr ;    # movdir64b/enqcmd(s)
+  0x0f 0x38 0xf8 @addr      [$pp==2] => "enqcmds " gregq[$g] "," $addr ;
+  0x0f 0x38 0xf8 11 ggg rrr [$pp==2] => "uwrmsr " gregq[$g] "," gregq[$r] ;   # USER_MSR (reg form)
+  0x0f 0x38 0xf8 @addr      [$pp==3] => "enqcmd " gregq[$g] "," $addr ;
+  # (F2 0F 38 F8 reg = urdmsr rm,reg: rm-first, conflicts with enqcmd's dir in the
+  #  single-direction per-prefix descriptor slot -- left as #UD for now.)
   0x0f 0x38 0xf9 @addr      [$pp==0] => "movdiri " $addr "," gregd[$g] ;      # movdiri m,r32/64
+  0x0f 0x38 0xfa 11 ggg rrr [$pp==2] => "encodekey128 " gregd[$g] "," gregd[$r] ;  # Key Locker
+  0x0f 0x38 0xfb 11 ggg rrr [$pp==2] => "encodekey256 " gregd[$g] "," gregd[$r] ;
   0x0f 0x38 0xfc @addr      [$pp==0] => "aadd " $addr "," gregd[$g] ;         # RAO-INT
   0x0f 0x38 0xfc @addr      [$pp==1] => "aand " $addr "," gregd[$g] ;
   0x0f 0x38 0xfc @addr      [$pp==2] => "axor " $addr "," gregd[$g] ;
