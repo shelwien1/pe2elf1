@@ -408,6 +408,7 @@ static inline size_t encode_insn(const x86insn_t* in, uint8_t* out) {
       out[p++] = (uint8_t)(0xC0 | ((reg_field & 7) << 3) | (rm->index & 7));
     }
   }
+  if (c->suffix3d) { out[p++] = c->suffix3d; return p; }  // 3DNow!: trailing opcode byte
   enc_imm(out, &p, c->imk, in->opsize, in->imm, in->disp);
   return p;
 }

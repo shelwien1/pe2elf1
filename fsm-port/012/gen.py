@@ -639,6 +639,7 @@ class Interp:
       elif i < len(toks) and toks[i] == '0x3a':          # 0F 3A: three-byte map
         tb = 3; i += 1
     two_byte = (tb == 1)
+    suffix = None                                        # 3DNow!: trailing opcode byte @suf(N)
     groups = []
     bits = 0
     while i < len(toks) and bits < 8:                     # the opcode byte
@@ -688,8 +689,11 @@ class Interp:
           modrm = 'mem'
       elif nm in ('imm8', 'imm16', 'imm32', 'immz', 'immv', 'rel8', 'relz'):
         imm.append(nm)
+      elif nm == 'suf':                                  # 3DNow! trailing opcode byte
+        suffix = int(arg, 0)
     return dict(bp=bp, tb=tb, two_byte=two_byte, modrm=modrm,
-                reg_fixed=reg_fixed, imm=imm, embedded=embedded, pp=pp, fixmodrm=fixmodrm)
+                reg_fixed=reg_fixed, imm=imm, embedded=embedded, pp=pp,
+                fixmodrm=fixmodrm, suffix=suffix)
 
   def operand_file(self, tmpl, var):
     # which register-name table the $var operand draws from
@@ -747,12 +751,24 @@ class Interp:
     ppd = {}                                             # (tb,byte) -> [slot0..3] per-prefix desc
     groups = {}
     self._fixmodrm = {}                                  # (tb,opcode) -> {modrm_byte: mnem} no-operand
+    self._tdnow = {}                                     # 3DNow!: suffix byte -> mnemonic (0F 0F)
     for lhs, rhs in self.insn_rules_raw():
       info = self.parse_insn_lhs(lhs)
       if info is None:
         continue
       if info['modrm'] in ('group_reg', 'group_mem'):    # opcode-extension group
         self._collect_group(groups, info, rhs, midx, K)  # one-byte AND two-byte (0F) groups
+        continue
+      if info['suffix'] is not None:                     # 3DNow!: mnemonic in a trailing byte
+        self._tdnow[info['suffix']] = midx(self.insn_mnem(rhs)[1])
+        d = desc[info['tb']].setdefault(info['bp'].lit_val, {
+            'form': F['MODRM'], 'imk': K['NONE'], 'rfile': OPF['MM'], 'mfile': OPF['MM'],
+            'sfx': 0, 'dir': 0, 'mnsel': 0, 'ppsel': 0, 'emb': None, 'mnem': 0, 'reg0': False,
+            'cc': None, 'has_reg': False, 'has_mem': False, 'mnem_reg': None, 'mnem_mem': None,
+            'form_reg': None, 'mfile_reg': None, 'tdnow': 1})
+        d['mnem'] = midx(self.insn_mnem(rhs)[1])         # placeholder (overwritten per suffix)
+        if info['modrm'] == 'reg': d['has_reg'] = True
+        if info['modrm'] == 'mem': d['has_mem'] = True
         continue
       mn = self.insn_mnem(rhs)
       if mn[0] == 'sel' and mn[1] in SKIP_MNEM_TABS:
@@ -887,6 +903,8 @@ class Interp:
       if d['ppsel']:                                              # mode 2: SSE prefix select
         acts.append(('CONST', self.tailcap('MNSEL'), 2, 0))       # (GRP is unused by MODRM ops,
         acts.append(('CONST', self.tailcap('GRP'), d['ppsel'] - 1, 0))  # so it carries the vtab idx)
+      if d.get('tdnow'):                                          # mode 4: 3DNow! trailing-suffix opcode
+        acts.append(('CONST', self.tailcap('MNSEL'), 4, 0))
       if d['rfile'] != OPF['GREG']:
         acts.append(('CONST', self.tailcap('RFILE'), d['rfile'], 0))
       if d['mfile'] != OPF['GREG']:
@@ -1998,6 +2016,13 @@ def emit(c, interp, out_path):
   else:
     w("    {%s,%s,%s,%s}\n" % (ud, ud, ud, ud))
   w("};\n\n")
+
+  # 3DNow!: the mnemonic is a trailing opcode byte after ModR/M (0F 0F ... suffix).
+  # tdnow_tab[suffix] is the mnemonic (0xFFFF = undefined suffix -> #UD).
+  tdn = getattr(interp, '_tdnow', {})
+  w("static const uint16_t tdnow_tab[256] = {\n    ")
+  w(", ".join(str(tdn.get(i, 0xFFFF)) for i in range(256)))
+  w("\n};\n\n")
 
   w("#endif // X86_TABLES_H\n")
   open(out_path, 'w', encoding='utf-8').write(''.join(o))

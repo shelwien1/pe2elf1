@@ -798,6 +798,55 @@ submatch insn {
 
   # ===== legacy system / misc 0F: double-shift, far-ptr load, vmx, ud, movnti ==
   0x0f 0x0e => "femms" ;
+  # 3DNow! (AMD): the mnemonic is a trailing opcode byte after ModR/M; operands mm, mm/m64.
+  0x0f 0x0f 11 ggg rrr @suf(0x0c) => "pi2fw " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0x0c) => "pi2fw " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0x0d) => "pi2fd " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0x0d) => "pi2fd " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0x1c) => "pf2iw " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0x1c) => "pf2iw " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0x1d) => "pf2id " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0x1d) => "pf2id " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0x8a) => "pfnacc " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0x8a) => "pfnacc " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0x8e) => "pfpnacc " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0x8e) => "pfpnacc " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0x90) => "pfcmpge " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0x90) => "pfcmpge " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0x94) => "pfmin " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0x94) => "pfmin " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0x96) => "pfrcp " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0x96) => "pfrcp " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0x97) => "pfrsqrt " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0x97) => "pfrsqrt " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0x9a) => "pfsub " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0x9a) => "pfsub " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0x9e) => "pfadd " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0x9e) => "pfadd " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0xa0) => "pfcmpgt " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0xa0) => "pfcmpgt " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0xa4) => "pfmax " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0xa4) => "pfmax " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0xa6) => "pfrcpit1 " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0xa6) => "pfrcpit1 " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0xa7) => "pfrsqit1 " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0xa7) => "pfrsqit1 " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0xaa) => "pfsubr " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0xaa) => "pfsubr " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0xae) => "pfacc " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0xae) => "pfacc " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0xb0) => "pfcmpeq " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0xb0) => "pfcmpeq " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0xb4) => "pfmul " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0xb4) => "pfmul " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0xb6) => "pfrcpit2 " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0xb6) => "pfrcpit2 " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0xb7) => "pmulhrw " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0xb7) => "pmulhrw " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0xbb) => "pswapd " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0xbb) => "pswapd " ssereg[$g] "," $addr ;
+  0x0f 0x0f 11 ggg rrr @suf(0xbf) => "pavgusb " ssereg[$g] "," ssereg[$r] ;
+  0x0f 0x0f @addr      @suf(0xbf) => "pavgusb " ssereg[$g] "," $addr ;
   0x0f 0x37 => "getsec" ;
   0x0f 0xaa => "rsm" ;
   0x0f 0xa4 11 ggg rrr @imm8 => "shld " greg[$r] "," greg[$g] "," hex($imm8) ;
@@ -3142,3 +3191,4 @@ submatch apx {
 }
 
 submatch main { @pfx(0) => $pfx }
+

@@ -893,6 +893,10 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     }
     fill_insn(d);
     ip = append_imm(d->cap, s, n, ip, (int)d->cap[VAR_OPSIZ]);
+    if (d->cap[CAP_MNSEL] == 4) {                    // 3DNow!: a trailing opcode byte after
+      if (ip >= n) { d->insn.mnem = 0xFFFF; return ip; }   // ModR/M selects the mnemonic
+      d->cap[CAP_MNEM] = tdnow_tab[s[ip++]];         // (pfadd/pfmul/...); 0xFFFF -> #UD
+    }
   } else if (form == FORM_GROUP) {
     int gid = (int)d->cap[CAP_GRP];
     uint16_t gstart = (uint16_t)(FSM_GROUPS + (gid * 2 + (int)d->cap[VAR_ADRSIZ]) * 256);

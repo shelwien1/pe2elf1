@@ -45,7 +45,7 @@ class EncBuilder:
         mnem=None, form=self.F['NONE'], imk=self.K['NONE'],
         dir=0, rfile=self.OPF['GREG'], mfile=self.OPF['GREG'],
         sfx=0, emb='none', emb_pos=0, emb_w=0,
-        reg0=0, sup_reg=0, sup_mem=0, fixmodrm=0))
+        reg0=0, sup_reg=0, sup_mem=0, fixmodrm=0, suffix3d=0))
 
   # ---- mirror of gen.build_insn's per-rule attribute derivation ----
   def add_rule(self, lhs, rhs):
@@ -151,6 +151,8 @@ class EncBuilder:
           c['sfx'] = sfx
       elif emb == 'b':
         c['rfile'] = OPF[ip.operand_file(rhs, 'b')]
+      if info.get('suffix') is not None:               # 3DNow!: trailing opcode byte
+        c['suffix3d'] = info['suffix']
 
   # ---- opcode-extension groups, from gen's _group_list ----
   def add_groups(self):
@@ -221,12 +223,12 @@ EMB = {'none': 'EMB_NONE', 'reg': 'EMB_REG', 'cc': 'EMB_CC'}
 
 
 def cand_str(c):
-  return ("{%d,%d,0x%02x,%s,%d,%d,%d,%d,%d,%d,%s,%s,%d,%d,%d,%d,0x%02x}" % (
+  return ("{%d,%d,0x%02x,%s,%d,%d,%d,%d,%d,%d,%s,%s,%d,%d,%d,%d,0x%02x,0x%02x}" % (
       c['mnem'], c['tb'], c['op'], EMB[c['emb']], c['emb_pos'], c['emb_w'],
       (c['digit'] if c['digit'] != 0xFF else 0xFF),
       c['form'], c['imk'], c['dir'],
       'OPF_' + Interp_OPF[c['rfile']], 'OPF_' + Interp_OPF[c['mfile']],
-      c['sfx'], c['reg0'], c['sup_reg'], c['sup_mem'], c['fixmodrm']))
+      c['sfx'], c['reg0'], c['sup_reg'], c['sup_mem'], c['fixmodrm'], c['suffix3d']))
 
 
 Interp_OPF = gen.Interp.OPF
@@ -261,6 +263,7 @@ def emit(interp, by_mnem, out_path):
   w("  uint8_t  reg0;            // implicit accumulator (reg operand must be index 0)\n")
   w("  uint8_t  sup_reg, sup_mem;// r/m slot accepts register-direct / memory\n")
   w("  uint8_t  fixmodrm;        // fully-fixed ModR/M byte for no-operand ops (0 = none)\n")
+  w("  uint8_t  suffix3d;        // 3DNow! trailing opcode byte, emitted after ModR/M (0 = none)\n")
   w("};\n\n")
 
   flat = []
@@ -276,7 +279,7 @@ def emit(interp, by_mnem, out_path):
   for i, c in enumerate(flat):
     w("  %s,  // %3d  %s\n" % (cand_str(c), i, interp._mnem[c['mnem']]))
   if not flat:
-    w("  {0,0,0,EMB_NONE,0,0,0xFF,0,0,0,OPF_GREG,OPF_GREG,0,0,0,0,0}\n")
+    w("  {0,0,0,EMB_NONE,0,0,0xFF,0,0,0,OPF_GREG,OPF_GREG,0,0,0,0,0,0}\n")
   w("};\n")
   w("static const size_t enc_cand_count = sizeof(enc_cand)/sizeof(enc_cand[0]);\n\n")
 
