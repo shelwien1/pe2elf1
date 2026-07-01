@@ -837,7 +837,12 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   } else {
     ip = append_imm(d->cap, s, n, ip, (int)d->cap[VAR_OPSIZ]);
   }
-  if (d->cap[CAP_MNSEL]) d->cap[CAP_MNEM] += d->cap[VAR_OPSIZ];   // movs/cdqw by opsize
+  if (d->cap[CAP_MNSEL] == 1) d->cap[CAP_MNEM] += d->cap[VAR_OPSIZ];   // movs/cdqw by opsize
+  else if (d->cap[CAP_MNSEL] == 2) {                              // legacy SSE: mnemonic by mandatory prefix
+    int pp = d->cap[VAR_REPTYPE] ? (int)d->cap[VAR_REPTYPE] + 1   // F3 -> 2, F2 -> 3
+                                 : (d->cap[VAR_OPSIZ] == 1 ? 1 : 0);  // 66 -> 1, else NP -> 0
+    d->cap[CAP_MNEM] = ppvtab[d->cap[CAP_GRP]][pp];              // CAP_GRP carries the vtab index
+  }
   d->insn.mnem   = (uint16_t)d->cap[CAP_MNEM];
   d->insn.opsize = (uint16_t)d->cap[VAR_OPSIZ];
   d->insn.addr   = (uint16_t)d->cap[VAR_ADRSIZ];

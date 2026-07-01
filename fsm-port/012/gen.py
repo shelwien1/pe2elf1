@@ -270,6 +270,7 @@ class Interp:
     # outer disp the addr1 SIB rules append, keyed by mod value
     self.sib_outer = self.collect_sib_outer()
     # single-byte (op1) + two-byte 0F (op2) instruction maps + mnemonic table
+    self._ppvtab = []                 # legacy-SSE mandatory-prefix -> mnemonic (4 per opcode)
     self._op1, self._op2, self._mnem = self.build_insn()
     # the VEX operand-shape forms live past the legacy ones in the same enum
     self.INSN_FORM = list(self.INSN_FORM) + list(self.VEX_FORMS)
@@ -790,7 +791,7 @@ class Interp:
         byte = bp.lit_val | (v << pos)
         d = desc[tb].setdefault(byte, {'form': F['NONE'], 'imk': K['NONE'],
                                        'rfile': OPF['GREG'], 'mfile': OPF['GREG'],
-                                       'sfx': 0, 'dir': 0, 'mnsel': 0,
+                                       'sfx': 0, 'dir': 0, 'mnsel': 0, 'ppsel': 0,
                                        'emb': None, 'mnem': None, 'reg0': False,
                                        'cc': None, 'has_reg': False, 'has_mem': False})
         if info['modrm'] == 'reg': d['has_reg'] = True     # which ModR/M mod forms
@@ -801,7 +802,14 @@ class Interp:
         elif mn[0] == 'cond':
           d['mnem'] = midx(mn[1] + 'cc')               # generic jcc / setcc / cmovcc
           d['cc'] = v                                  # condition code -> immediate operand
-        else:                                          # opsize-selected table
+        elif len(mn) > 2 and mn[2] == 'pp':            # legacy-SSE mandatory-prefix select
+          tab = self.tables[mn[1]]                      # 4 entries: NP, 66, F3, F2
+          vt = tuple(midx(x) for x in tab)             # mnemonic per prefix (repeats ok)
+          if vt not in self._ppvtab:
+            self._ppvtab.append(vt)
+          d['mnem'] = vt[0]                             # NP mnemonic is the base
+          d['ppsel'] = self._ppvtab.index(vt) + 1      # 1-based; 0 = not pp-selected
+        else:                                          # opsize-selected table (movs/cdqw)
           tab = self.tables[mn[1]]
           d['mnem'] = midx(tab[0])
           for k in range(1, len(tab)):
@@ -838,7 +846,10 @@ class Interp:
       if d['imk'] != K['NONE']:
         acts.append(('CONST', self.tailcap('IMK'), d['imk'], 0))
       if d['mnsel']:
-        acts.append(('CONST', self.tailcap('MNSEL'), 1, 0))
+        acts.append(('CONST', self.tailcap('MNSEL'), 1, 0))       # mode 1: += opsize
+      if d['ppsel']:                                              # mode 2: SSE prefix select
+        acts.append(('CONST', self.tailcap('MNSEL'), 2, 0))       # (GRP is unused by MODRM ops,
+        acts.append(('CONST', self.tailcap('GRP'), d['ppsel'] - 1, 0))  # so it carries the vtab idx)
       if d['rfile'] != OPF['GREG']:
         acts.append(('CONST', self.tailcap('RFILE'), d['rfile'], 0))
       if d['mfile'] != OPF['GREG']:
@@ -1868,6 +1879,20 @@ def emit(c, interp, out_path):
       w("    {%s},\n" % ", ".join(str(x) for x in row))
   else:
     w("    {-1,-1,-1,-1,-1,-1,-1,-1}\n")
+  w("};\n\n")
+
+  # Legacy-SSE mandatory-prefix mnemonic table: ppvtab[CAP_PPSEL-1][pp] is the
+  # mnemonic for prefix pp (0=NP, 1=66, 2=F3, 3=F2). Invalid prefix slots repeat
+  # the NP mnemonic (lenient collapse; objdump rejects them). The C++ derives pp
+  # from VAR_REPTYPE/VAR_OPSIZ at finalize and overwrites CAP_MNEM.
+  npp = max(1, len(interp._ppvtab))
+  w("#define PP_NVTAB %d\n" % len(interp._ppvtab))
+  w("static const uint16_t ppvtab[%d][4] = {\n" % npp)
+  if interp._ppvtab:
+    for vt in interp._ppvtab:
+      w("    {%s},\n" % ", ".join(str(x) for x in vt))
+  else:
+    w("    {0,0,0,0}\n")
   w("};\n\n")
 
   w("#endif // X86_TABLES_H\n")

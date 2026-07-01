@@ -55759,4 +55759,9 @@ static const int16_t vexgrp[1][8] = {
     {-1,-1,-1,-1,-1,-1,-1,-1}
 };
 
+#define PP_NVTAB 0
+static const uint16_t ppvtab[1][4] = {
+    {0,0,0,0}
+};
+
 #endif // X86_TABLES_H

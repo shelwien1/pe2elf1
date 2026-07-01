@@ -88,6 +88,42 @@ table sfx { "",".b",".w","",".d","","","",".q" }
 table seg { "","es:","cs:","ss:","","fs:","gs:",  "ss:","es:","cs:","ss:","ds:","fs:","gs:" }
 table sbo { 0,0,0,0,7,7,0,0 }      # base reg number (low 3) -> seg row
 
+# legacy-SSE mandatory-prefix mnemonic tables: entries are {NP, 66, F3, F2}.
+# A rule `=> sseNN[$pp] ...` picks the entry by the mandatory prefix; invalid
+# prefix slots repeat the NP mnemonic (lenient collapse, still round-trips).
+table sse58 { addps, addpd, addss, addsd }
+table ssebc { bsf, bsf, tzcnt, bsf }
+table ssebd { bsr, bsr, lzcnt, bsr }
+table ssee6 { cvtpd2dq, cvttpd2dq, cvtdq2pd, cvtpd2dq }
+table sse10 { movups, movupd, movss, movsd }
+table sse11 { movups, movupd, movss, movsd }
+table sse14 { unpcklps, unpcklpd, unpcklps, unpcklps }
+table sse15 { unpckhps, unpckhpd, unpckhps, unpckhps }
+table sse28 { movaps, movapd, movaps, movaps }
+table sse29 { movaps, movapd, movaps, movaps }
+table sse2e { ucomiss, ucomisd, ucomiss, ucomiss }
+table sse2f { comiss, comisd, comiss, comiss }
+table sse50 { movmskps, movmskpd, movmskps, movmskps }
+table sse51 { sqrtps, sqrtpd, sqrtss, sqrtsd }
+table sse52 { rsqrtps, rsqrtps, rsqrtss, rsqrtps }
+table sse53 { rcpps, rcpps, rcpss, rcpps }
+table sse54 { andps, andpd, andps, andps }
+table sse55 { andnps, andnpd, andnps, andnps }
+table sse56 { orps, orpd, orps, orps }
+table sse57 { xorps, xorpd, xorps, xorps }
+table sse59 { mulps, mulpd, mulss, mulsd }
+table sse5a { cvtps2pd, cvtpd2ps, cvtss2sd, cvtsd2ss }
+table sse5b { cvtdq2ps, cvtps2dq, cvttps2dq, cvtdq2ps }
+table sse5c { subps, subpd, subss, subsd }
+table sse5d { minps, minpd, minss, minsd }
+table sse5e { divps, divpd, divss, divsd }
+table sse5f { maxps, maxpd, maxss, maxsd }
+table sse7c { haddps, haddpd, haddps, haddps }
+table sse7d { hsubps, hsubpd, hsubps, hsubps }
+table ssec2 { cmpps, cmppd, cmpss, cmpsd }
+table ssec6 { shufps, shufpd, shufps, shufps }
+table ssed0 { addsubps, addsubpd, addsubps, addsubps }
+
 # ---- immediates / displacements ----------------------------------------------
 submatch imm8  { iiiiiiii                              => $i }
 submatch imm16 { iiiiiiii iiiiiiii                     => $i }
@@ -621,10 +657,10 @@ submatch insn {
   0x0f 0xba @addr(6)   @imm8 => "btr" sfx[4] " " $addr "," hex($imm8) ;
   0x0f 0xba 11 111 rrr @imm8 => "btc " greg[$r] "," hex($imm8) ;
   0x0f 0xba @addr(7)   @imm8 => "btc" sfx[4] " " $addr "," hex($imm8) ;
-  0x0f 0xbc 11 ggg rrr => "bsf " greg[$g] "," greg[$r] ;
-  0x0f 0xbc @addr      => "bsf " greg[$g] "," $addr ;
-  0x0f 0xbd 11 ggg rrr => "bsr " greg[$g] "," greg[$r] ;
-  0x0f 0xbd @addr      => "bsr " greg[$g] "," $addr ;
+  0x0f 0xbc 11 ggg rrr => ssebc[$pp] greg[$g] "," greg[$r] ;
+  0x0f 0xbc @addr      => ssebc[$pp] greg[$g] "," $addr ;
+  0x0f 0xbd 11 ggg rrr => ssebd[$pp] greg[$g] "," greg[$r] ;
+  0x0f 0xbd @addr      => ssebd[$pp] greg[$g] "," $addr ;
   0x0f 0xb8 11 ggg rrr => "popcnt " greg[$g] "," greg[$r] ;
   0x0f 0xb8 @addr      => "popcnt " greg[$g] "," $addr ;
   0x0f 0xb0 11 ggg rrr => "cmpxchg " rgb[$r] "," rgb[$g] ;
@@ -766,66 +802,66 @@ submatch insn {
   # token), so one base rule per opcode round-trips all four variants byte-exact.
   # Operands draw from the fixed XMM bank (ssereg[8+..]); the reg<->mem direction
   # rides the enc/dir witness, the mod field rides the modrm capture. ===========
-  0x0f 0x10 11 ggg rrr => "movups " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x10 @addr      => "movups " ssereg[8+$g] "," $addr ;
-  0x0f 0x11 11 ggg rrr => "movups " ssereg[8+$r] "," ssereg[8+$g] ;
-  0x0f 0x11 @addr      => "movups " $addr "," ssereg[8+$g] ;
+  0x0f 0x10 11 ggg rrr => sse10[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x10 @addr      => sse10[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x11 11 ggg rrr => sse11[$pp] ssereg[8+$r] "," ssereg[8+$g] ;
+  0x0f 0x11 @addr      => sse11[$pp] $addr "," ssereg[8+$g] ;
   0x0f 0x12 11 ggg rrr => "movlps " ssereg[8+$g] "," ssereg[8+$r] ;   # movhlps (reg form)
   0x0f 0x12 @addr      => "movlps " ssereg[8+$g] "," $addr ;
   0x0f 0x13 @addr      => "movlps " $addr "," ssereg[8+$g] ;
-  0x0f 0x14 11 ggg rrr => "unpcklps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x14 @addr      => "unpcklps " ssereg[8+$g] "," $addr ;
-  0x0f 0x15 11 ggg rrr => "unpckhps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x15 @addr      => "unpckhps " ssereg[8+$g] "," $addr ;
+  0x0f 0x14 11 ggg rrr => sse14[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x14 @addr      => sse14[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x15 11 ggg rrr => sse15[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x15 @addr      => sse15[$pp] ssereg[8+$g] "," $addr ;
   0x0f 0x16 11 ggg rrr => "movhps " ssereg[8+$g] "," ssereg[8+$r] ;   # movlhps (reg form)
   0x0f 0x16 @addr      => "movhps " ssereg[8+$g] "," $addr ;
   0x0f 0x17 @addr      => "movhps " $addr "," ssereg[8+$g] ;
-  0x0f 0x28 11 ggg rrr => "movaps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x28 @addr      => "movaps " ssereg[8+$g] "," $addr ;
-  0x0f 0x29 11 ggg rrr => "movaps " ssereg[8+$r] "," ssereg[8+$g] ;
-  0x0f 0x29 @addr      => "movaps " $addr "," ssereg[8+$g] ;
-  0x0f 0x2e 11 ggg rrr => "ucomiss " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x2e @addr      => "ucomiss " ssereg[8+$g] "," $addr ;
-  0x0f 0x2f 11 ggg rrr => "comiss " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x2f @addr      => "comiss " ssereg[8+$g] "," $addr ;
-  0x0f 0x51 11 ggg rrr => "sqrtps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x51 @addr      => "sqrtps " ssereg[8+$g] "," $addr ;
-  0x0f 0x52 11 ggg rrr => "rsqrtps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x52 @addr      => "rsqrtps " ssereg[8+$g] "," $addr ;
-  0x0f 0x53 11 ggg rrr => "rcpps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x53 @addr      => "rcpps " ssereg[8+$g] "," $addr ;
-  0x0f 0x54 11 ggg rrr => "andps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x54 @addr      => "andps " ssereg[8+$g] "," $addr ;
-  0x0f 0x55 11 ggg rrr => "andnps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x55 @addr      => "andnps " ssereg[8+$g] "," $addr ;
-  0x0f 0x56 11 ggg rrr => "orps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x56 @addr      => "orps " ssereg[8+$g] "," $addr ;
-  0x0f 0x57 11 ggg rrr => "xorps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x57 @addr      => "xorps " ssereg[8+$g] "," $addr ;
-  0x0f 0x58 11 ggg rrr => "addps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x58 @addr      => "addps " ssereg[8+$g] "," $addr ;
-  0x0f 0x59 11 ggg rrr => "mulps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x59 @addr      => "mulps " ssereg[8+$g] "," $addr ;
-  0x0f 0x5a 11 ggg rrr => "cvtps2pd " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x5a @addr      => "cvtps2pd " ssereg[8+$g] "," $addr ;
-  0x0f 0x5b 11 ggg rrr => "cvtdq2ps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x5b @addr      => "cvtdq2ps " ssereg[8+$g] "," $addr ;
+  0x0f 0x28 11 ggg rrr => sse28[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x28 @addr      => sse28[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x29 11 ggg rrr => sse29[$pp] ssereg[8+$r] "," ssereg[8+$g] ;
+  0x0f 0x29 @addr      => sse29[$pp] $addr "," ssereg[8+$g] ;
+  0x0f 0x2e 11 ggg rrr => sse2e[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x2e @addr      => sse2e[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x2f 11 ggg rrr => sse2f[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x2f @addr      => sse2f[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x51 11 ggg rrr => sse51[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x51 @addr      => sse51[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x52 11 ggg rrr => sse52[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x52 @addr      => sse52[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x53 11 ggg rrr => sse53[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x53 @addr      => sse53[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x54 11 ggg rrr => sse54[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x54 @addr      => sse54[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x55 11 ggg rrr => sse55[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x55 @addr      => sse55[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x56 11 ggg rrr => sse56[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x56 @addr      => sse56[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x57 11 ggg rrr => sse57[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x57 @addr      => sse57[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x58 11 ggg rrr => sse58[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x58 @addr      => sse58[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x59 11 ggg rrr => sse59[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x59 @addr      => sse59[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x5a 11 ggg rrr => sse5a[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x5a @addr      => sse5a[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x5b 11 ggg rrr => sse5b[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x5b @addr      => sse5b[$pp] ssereg[8+$g] "," $addr ;
   # 0F E6: cvt(t)pd2dq / cvtdq2pd -- mandatory 66/F2/F3 selects the variant and
   # rides the prefix run (one base rule round-trips all three byte-exact).
-  0x0f 0xe6 11 ggg rrr => "cvtpd2dq " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0xe6 @addr      => "cvtpd2dq " ssereg[8+$g] "," $addr ;
-  0x0f 0x5c 11 ggg rrr => "subps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x5c @addr      => "subps " ssereg[8+$g] "," $addr ;
-  0x0f 0x5d 11 ggg rrr => "minps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x5d @addr      => "minps " ssereg[8+$g] "," $addr ;
-  0x0f 0x5e 11 ggg rrr => "divps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x5e @addr      => "divps " ssereg[8+$g] "," $addr ;
-  0x0f 0x5f 11 ggg rrr => "maxps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x5f @addr      => "maxps " ssereg[8+$g] "," $addr ;
-  0x0f 0xc2 11 ggg rrr @imm8 => "cmpps " ssereg[8+$g] "," ssereg[8+$r] "," hex($imm8) ;
-  0x0f 0xc2 @addr      @imm8 => "cmpps " ssereg[8+$g] "," $addr "," hex($imm8) ;
-  0x0f 0xc6 11 ggg rrr @imm8 => "shufps " ssereg[8+$g] "," ssereg[8+$r] "," hex($imm8) ;
-  0x0f 0xc6 @addr      @imm8 => "shufps " ssereg[8+$g] "," $addr "," hex($imm8) ;
+  0x0f 0xe6 11 ggg rrr => ssee6[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0xe6 @addr      => ssee6[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x5c 11 ggg rrr => sse5c[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x5c @addr      => sse5c[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x5d 11 ggg rrr => sse5d[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x5d @addr      => sse5d[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x5e 11 ggg rrr => sse5e[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x5e @addr      => sse5e[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x5f 11 ggg rrr => sse5f[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x5f @addr      => sse5f[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0xc2 11 ggg rrr @imm8 => ssec2[$pp] ssereg[8+$g] "," ssereg[8+$r] "," hex($imm8) ;
+  0x0f 0xc2 @addr      @imm8 => ssec2[$pp] ssereg[8+$g] "," $addr "," hex($imm8) ;
+  0x0f 0xc6 11 ggg rrr @imm8 => ssec6[$pp] ssereg[8+$g] "," ssereg[8+$r] "," hex($imm8) ;
+  0x0f 0xc6 @addr      @imm8 => ssec6[$pp] ssereg[8+$g] "," $addr "," hex($imm8) ;
 
   # ===== SSE2 GPR<->xmm moves, movdq, packed integer. ssereg[$opsiz*8+..] =
   # OPF_SSE_OS (mm at opsiz 0, xmm at 1/2); greg[$r] takes REX.W as a 64-bit GPR
@@ -911,7 +947,7 @@ submatch insn {
   0x0f 0x6d @addr      => "punpckhqdq " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0x70 11 ggg rrr @imm8 => "pshufd " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] "," hex($imm8) ;
   0x0f 0x70 @addr      @imm8 => "pshufd " ssereg[$opsiz*8+$g] "," $addr "," hex($imm8) ;
-  0x0f 0x50 11 ggg rrr => "movmskps " greg[$g] "," ssereg[8+$r] ;
+  0x0f 0x50 11 ggg rrr => sse50[$pp] greg[$g] "," ssereg[8+$r] ;
   0x0f 0xc4 11 ggg rrr @imm8 => "pinsrw " ssereg[$opsiz*8+$g] "," greg[$r] "," hex($imm8) ;
   0x0f 0xc4 @addr      @imm8 => "pinsrw " ssereg[$opsiz*8+$g] "," $addr "," hex($imm8) ;
   0x0f 0xc5 11 ggg rrr @imm8 => "pextrw " greg[$g] "," ssereg[$opsiz*8+$r] "," hex($imm8) ;
@@ -1135,12 +1171,12 @@ submatch insn {
   # ===== SSE3 horizontal add/sub, addsub, lddqu (xmm; 66/F2 ride the prefix run).
   # movddup/movsldup/movshdup (F2/F3 0F 12/16) round-trip via the movlps/movhps
   # rules + prefix replay, so only these distinct opcodes need rules. ============
-  0x0f 0x7c 11 ggg rrr => "haddps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x7c @addr      => "haddps " ssereg[8+$g] "," $addr ;
-  0x0f 0x7d 11 ggg rrr => "hsubps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0x7d @addr      => "hsubps " ssereg[8+$g] "," $addr ;
-  0x0f 0xd0 11 ggg rrr => "addsubps " ssereg[8+$g] "," ssereg[8+$r] ;
-  0x0f 0xd0 @addr      => "addsubps " ssereg[8+$g] "," $addr ;
+  0x0f 0x7c 11 ggg rrr => sse7c[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x7c @addr      => sse7c[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x7d 11 ggg rrr => sse7d[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x7d @addr      => sse7d[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0xd0 11 ggg rrr => ssed0[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0xd0 @addr      => ssed0[$pp] ssereg[8+$g] "," $addr ;
   0x0f 0xf0 @addr      => "lddqu " ssereg[8+$g] "," $addr ;
 
   # ===== x87 FPU (D8-DF). Each opcode is a group: 8 memory forms (/digit) +
