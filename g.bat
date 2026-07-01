@@ -28,4 +28,6 @@ del *.exe *.o
 
 %gcc% -s -Ofast -std=gnu++17 %incs% %opts% -static coder0.cpp -o coder0.exe
 
-rem %gcc% -c -Ofast -std=gnu++17 %incs% %opts% -static zstd1/zstd.cpp 
+%gcc% -s -Ofast -std=gnu++17 %incs% %opts% -static capfilt.cpp -o capfilt.exe
+
+rem %gcc% -c -Ofast -std=gnu++17 %incs% %opts% -static zstd1/zstd.cpp

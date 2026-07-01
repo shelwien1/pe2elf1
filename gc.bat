@@ -69,7 +69,9 @@ for /D %%a in (.) do set DIRNAM=%%~na
 
 %gcc% -s -std=c++23 -Ofast -fpermissive -Wno-format %arch% %incs% %opts% -static coder0.cpp -o coder0.exe
 
-rem -mllvm -inline-threshold=0 -fno-inline-functions 
+%gcc% -s -std=c++23 -Ofast -fpermissive -Wno-format %arch% %incs% %opts% -static capfilt.cpp -o capfilt.exe
+
+rem -mllvm -inline-threshold=0 -fno-inline-functions
 rem %gcc% -s -std=c++23 -Ofast -fpermissive -Wno-format %arch% %incs% %opts% -static green.cpp -o green.exe
 
 rem -o coder.exe -fsanitize=bounds

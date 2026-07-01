@@ -2,10 +2,14 @@
 *.exe
 *.o
 *.obj
+coder0
 coder0_lin
 coder0_mix
+capfilt
 
 # test outputs
 *.c.tmp
 book1.c
 book1.d
+book1.cap*
+book1.rec*
