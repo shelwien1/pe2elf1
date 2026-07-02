@@ -612,8 +612,10 @@ submatch insn {
   0xff @addr(1)   => "dec" sfx[4] " " $addr ;
   0xff 11 010 rrr => "call " greg[$r] ;
   0xff @addr(2)   => "call " $addr ;
+  0xff @addr(3)   => "callf " $addr ;               # /3 call far m16:16/32/64 (memory only)
   0xff 11 100 rrr => "jmp " greg[$r] ;
   0xff @addr(4)   => "jmp " $addr ;
+  0xff @addr(5)   => "jmpf " $addr ;                # /5 jmp far m16:16/32/64 (memory only)
   0xff 11 110 rrr => "push " greg[$r] ;
   0xff @addr(6)   => "push " $addr ;
 
@@ -697,6 +699,20 @@ submatch insn {
   0x0f 0xc1 11 ggg rrr => "xadd " greg[$r] "," greg[$g] ;
   0x0f 0xc1 @addr      => "xadd " $addr "," greg[$g] ;
   0x0f 0xc7 @addr(1)   => "cmpxchg8b " $addr ;
+  # 0F C7 group tail (/3-/7): XSAVE-supervisor + VMX pointers + rdrand/rdseed/rdpid/
+  # senduipi. pp-variant: /6,/7 select by mandatory prefix (NP/66/F3). REX.W -> the
+  # *64 forms / r64 operand (rides the prefix witness; base mnemonic shown).
+  0x0f 0xc7 @addr(3)   => "xrstors " $addr ;            # /3 mem: xrstors/xrstors64
+  0x0f 0xc7 @addr(4)   => "xsavec " $addr ;             # /4 mem: xsavec/xsavec64
+  0x0f 0xc7 @addr(5)   => "xsaves " $addr ;             # /5 mem: xsaves/xsaves64
+  0x0f 0xc7 @addr(6) [$pp==0] => "vmptrld " $addr ;     # /6 mem: NP vmptrld
+  0x0f 0xc7 @addr(6) [$pp==1] => "vmclear " $addr ;     #         66 vmclear
+  0x0f 0xc7 @addr(6) [$pp==2] => "vmxon " $addr ;       #         F3 vmxon
+  0x0f 0xc7 @addr(7) [$pp==0] => "vmptrst " $addr ;     # /7 mem: NP vmptrst
+  0x0f 0xc7 11 110 rrr [$pp==0] => "rdrand " greg[$r] ;    # /6 reg: NP rdrand r32/r64
+  0x0f 0xc7 11 110 rrr [$pp==2] => "senduipi " gregq[$r] ; #          F3 senduipi r64
+  0x0f 0xc7 11 111 rrr [$pp==0] => "rdseed " greg[$r] ;    # /7 reg: NP rdseed r32/r64
+  0x0f 0xc7 11 111 rrr [$pp==2] => "rdpid " gregq[$r] ;    #          F3 rdpid r64
   0x0f 11001 bbb       => "bswap " greg[$b] ;
 
   # ===== 0F AE: fences / fxsave-xsave / clflush + CET/base-reg/wait (pp-variant grp)
@@ -1262,6 +1278,13 @@ submatch insn {
   0x0f 0x38 0x41 @addr      => "phminposuw " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0x38 0xdb 11 ggg rrr => "aesimc " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0x38 0xdb @addr      => "aesimc " ssereg[$opsiz*8+$g] "," $addr ;
+  # legacy GFNI multiply (66 0F38 CF) + VMX invept/invvpid/invpcid (66 0F38 80/81/82,
+  # r64,m128 -- memory only). All are 66-mandatory (pp==1).
+  0x0f 0x38 0xcf 11 ggg rrr [$pp==1] => "gf2p8mulb " ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x38 0xcf @addr      [$pp==1] => "gf2p8mulb " ssereg[8+$g] "," $addr ;
+  0x0f 0x38 0x80 @addr [$pp==1] => "invept " gregq[$g] "," $addr ;
+  0x0f 0x38 0x81 @addr [$pp==1] => "invvpid " gregq[$g] "," $addr ;
+  0x0f 0x38 0x82 @addr [$pp==1] => "invpcid " gregq[$g] "," $addr ;
   # AES Key Locker wide (F3 0F 38 D8 /0-3 mem): a pp-variant group, F3 slot only.
   0x0f 0x38 0xd8 @addr(0) [$pp==2] => "aesencwide128kl " $addr ;
   0x0f 0x38 0xd8 @addr(1) [$pp==2] => "aesdecwide128kl " $addr ;
@@ -1341,6 +1364,16 @@ submatch insn {
   0x0f 0x3a 0x14 @addr      @imm8 => "pextrb " $addr "," ssereg[$opsiz*8+$g] "," hex($imm8) ;
   0x0f 0x3a 0x16 11 ggg rrr @imm8 => "pextrd " gregd[$r] "," ssereg[$opsiz*8+$g] "," hex($imm8) ;
   0x0f 0x3a 0x16 @addr      @imm8 => "pextrd " $addr "," ssereg[$opsiz*8+$g] "," hex($imm8) ;
+  # SSE4.1 pextrw r/m16 form (0F3A 15) -- distinct from the 0F C5 pextrw r32,xmm form
+  0x0f 0x3a 0x15 11 ggg rrr @imm8 => "pextrw " gregd[$r] "," ssereg[$opsiz*8+$g] "," hex($imm8) ;
+  0x0f 0x3a 0x15 @addr      @imm8 => "pextrw " $addr "," ssereg[$opsiz*8+$g] "," hex($imm8) ;
+  # legacy AES key-assist + GFNI affine (66 0F3A DF/CE/CF ib); 66-mandatory (pp==1)
+  0x0f 0x3a 0xdf 11 ggg rrr @imm8 [$pp==1] => "aeskeygenassist " ssereg[8+$g] "," ssereg[8+$r] "," hex($imm8) ;
+  0x0f 0x3a 0xdf @addr      @imm8 [$pp==1] => "aeskeygenassist " ssereg[8+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0xce 11 ggg rrr @imm8 [$pp==1] => "gf2p8affineqb " ssereg[8+$g] "," ssereg[8+$r] "," hex($imm8) ;
+  0x0f 0x3a 0xce @addr      @imm8 [$pp==1] => "gf2p8affineqb " ssereg[8+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0xcf 11 ggg rrr @imm8 [$pp==1] => "gf2p8affineinvqb " ssereg[8+$g] "," ssereg[8+$r] "," hex($imm8) ;
+  0x0f 0x3a 0xcf @addr      @imm8 [$pp==1] => "gf2p8affineinvqb " ssereg[8+$g] "," $addr "," hex($imm8) ;
   0x0f 0x3a 0x17 11 ggg rrr @imm8 => "extractps " gregd[$r] "," ssereg[$opsiz*8+$g] "," hex($imm8) ;
   0x0f 0x3a 0x17 @addr      @imm8 => "extractps " $addr "," ssereg[$opsiz*8+$g] "," hex($imm8) ;
   0x0f 0x3a 0x20 11 ggg rrr @imm8 => "pinsrb " ssereg[$opsiz*8+$g] "," gregd[$r] "," hex($imm8) ;
@@ -1548,6 +1581,8 @@ submatch insn {
   0x0f 0x00 @addr(4)   => "verr" sfx[2] " " $addr ;
   0x0f 0x00 11 101 rrr => "verw " greg[$r] ;
   0x0f 0x00 @addr(5)   => "verw" sfx[2] " " $addr ;
+  0x0f 0x00 11 110 rrr [$pp==3] => "lkgs " greg[$r] ;   # /6 reg F2: FRED lkgs r/m16
+  0x0f 0x00 @addr(6)   [$pp==3] => "lkgs " $addr ;
   0x0f 0x01 @addr(0)   => "sgdt " $addr ;
   0x0f 0x01 @addr(1)   => "sidt " $addr ;
   0x0f 0x01 @addr(2)   => "lgdt " $addr ;
