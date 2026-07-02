@@ -4299,6 +4299,30 @@ submatch evex {
   h k b e 00 01 1 vvvv 1 11 z ll 0 u aaa 0x10 11 ggg rrr => wit("evex") "vmovsd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
   h k b e 00 01 1 1111 1 11 z ll 0 1 aaa 0x10 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovsd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr ;
   h k b e 00 01 1 1111 1 11 z ll 0 1 aaa 0x11 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovsd " $addr kzdec[$z*8+$a] "," ereg[32*$l+16*$e+8*$h+$g] ;
+  # ==== EVEX mask conversions + vdbpsadbw + vexp2 ====
+  1 k b 1 00 10 0 1111 1 10 0 ll 0 1 aaa 0x29 11 ggg rrr => wit("evex") "vpmovb2m " kreg[$g] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  1 k b 1 00 10 1 1111 1 10 0 ll 0 1 aaa 0x29 11 ggg rrr => wit("evex") "vpmovw2m " kreg[$g] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  1 k b 1 00 10 0 1111 1 10 0 ll 0 1 aaa 0x39 11 ggg rrr => wit("evex") "vpmovd2m " kreg[$g] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  1 k b 1 00 10 1 1111 1 10 0 ll 0 1 aaa 0x39 11 ggg rrr => wit("evex") "vpmovq2m " kreg[$g] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 10 0 1111 1 10 z ll 0 1 aaa 0x28 11 ggg rrr => wit("evex") "vpmovm2b " ereg[32*$l+16*$e+8*$h+$g] "," kreg[$r] ;
+  h k b e 00 10 1 1111 1 10 z ll 0 1 aaa 0x28 11 ggg rrr => wit("evex") "vpmovm2w " ereg[32*$l+16*$e+8*$h+$g] "," kreg[$r] ;
+  h k b e 00 10 0 1111 1 10 z ll 0 1 aaa 0x38 11 ggg rrr => wit("evex") "vpmovm2d " ereg[32*$l+16*$e+8*$h+$g] "," kreg[$r] ;
+  h k b e 00 10 1 1111 1 10 z ll 0 1 aaa 0x38 11 ggg rrr => wit("evex") "vpmovm2q " ereg[32*$l+16*$e+8*$h+$g] "," kreg[$r] ;
+  1 k b 1 00 10 0 vvvv 1 11 0 ll 0 u aaa 0x68 11 ggg rrr => wit("evex") "vp2intersectd " kreg[$g] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  1 k b 1 00 10 0 vvvv 1 11 0 ll 0 u aaa 0x68 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vp2intersectd " kreg[$g] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  1 k b 1 00 10 0 vvvv 1 11 1 u aaa 0x68 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vp2intersectd " kreg[$g] "," evvv[32*$l+16*$u+$v] "," $addr bcst32[$l] ;
+  1 k b 1 00 10 1 vvvv 1 11 0 ll 0 u aaa 0x68 11 ggg rrr => wit("evex") "vp2intersectq " kreg[$g] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  1 k b 1 00 10 1 vvvv 1 11 0 ll 0 u aaa 0x68 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vp2intersectq " kreg[$g] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  1 k b 1 00 10 0 vvvv 1 01 0 ll 0 u aaa 0x8f 11 ggg rrr => wit("evex") "vpshufbitqmb " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  1 k b 1 00 10 0 vvvv 1 01 0 ll 0 u aaa 0x8f @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vpshufbitqmb " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  h k b e 00 11 0 vvvv 1 01 z ll 0 u aaa 0x42 11 ggg rrr @imm8 => wit("evex") "vdbpsadbw " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  h k b e 00 11 0 vvvv 1 01 z ll 0 u aaa 0x42 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vdbpsadbw " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr "," hex($imm8) ;
+  h k b e 00 10 1 1111 1 01 z ll 0 1 aaa 0xc8 11 ggg rrr => wit("evex") "vexp2pd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 10 1 1111 1 01 z ll 0 1 aaa 0xc8 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vexp2pd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr ;
+  h k b e 00 10 1 1111 1 01 z ll 1 1 aaa 0xc8 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vexp2pd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr bcst64[$l] ;
+  h k b e 00 10 0 1111 1 01 z ll 0 1 aaa 0xc8 11 ggg rrr => wit("evex") "vexp2ps " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 10 0 1111 1 01 z ll 0 1 aaa 0xc8 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vexp2ps " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr ;
+  h k b e 00 10 0 1111 1 01 z ll 1 1 aaa 0xc8 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vexp2ps " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr bcst32[$l] ;
 }
 
 
@@ -4755,6 +4779,7 @@ submatch apx {
 }
 
 submatch main { @pfx(0) => $pfx }
+
 
 
 
