@@ -181,13 +181,15 @@ class EncBuilder:
           c = self.cand((tb, opcode, 0x100 + reg, mn))
           c['digit'] = reg; c['mnem'] = mn; c['form'] = F['GROUP']; c['imk'] = m['imk']
           c['sup_mem'] = 1
-      # fully-fixed ModR/M no-operand ops (endbr64/endbr32, monitor, rdtscp, ...): the
-      # encoder emits the opcode + the literal ModR/M byte; no operand, no digit.
-      for modrm, mnem in fixmap.items():
+      # fully-fixed ModR/M ops (endbr64/endbr32, monitor, rdtscp, ...): the encoder emits
+      # the opcode + the literal ModR/M byte. Usually no operand (form NONE), but xabort
+      # (C6 F8 ib) / xbegin (C7 F8 rel) carry a trailing imm/rel (form IMM/REL + imk).
+      for modrm, (mnem, form, imk) in fixmap.items():
         c = self.cand((tb, opcode, 0x200 + modrm, mnem))
         c['digit'] = 0xFF
         c['mnem'] = mnem
-        c['form'] = F['NONE']
+        c['form'] = form
+        c['imk'] = imk
         c['fixmodrm'] = modrm
 
   def build(self):

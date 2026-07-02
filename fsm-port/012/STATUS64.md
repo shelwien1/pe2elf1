@@ -296,6 +296,21 @@ After both, the legacy+REX+REX2 sweep is **GAP=0 vs Zydis** — the only residua
 are the 18 `66`-near-branch length picks (deliberate rel16, §7a) and intentional
 over-decoding of non-canonical forms Zydis rejects.
 
+A high-volume random sweep (300k buffers, VEX/EVEX/XOP-weighted) then found the last two:
+
+* **xabort (`C6 F8 ib`) / xbegin (`C7 F8 rel16/32`)** — TSX/RTM. These are the `C6`/`C7`
+  group `/7` with a *fully-fixed* ModR/M byte (`F8`) followed by an immediate/rel — a shape
+  the fixed-ModR/M path did not support (it assumed no operand and dropped the tail). The
+  machinery now carries a `(mnem, form, imk)` triple through `_fixmodrm` → `group_state` →
+  the encoder's `fixmodrm` candidate, so a fixed-ModR/M op can carry a trailing imm8/rel
+  (the encoder emits opcode + ModR/M + `enc_imm`). xbegin honours `66`→rel16 like the other
+  near branches. Existing no-operand fixed-ModR/M ops (endbr64/monitor/xgetbv/lfence/…) are
+  untouched (form NONE, imk NONE).
+
+With these, **both** the systematic legacy sweep and the 300k random VEX/EVEX/XOP sweep are
+**GAP=0 vs Zydis** (only the deliberate `66`-near-branch length picks and the discontinued
+KNC `jkzd`/`jknzd` remain, both documented).
+
 ## 8. Deliberate decode-display policy (not bugs)
 
 * Size suffixes (`.b/.w/.d/.q/.t`) instead of `BYTE/WORD/... PTR`; `[rax+0]`-style

@@ -532,6 +532,11 @@ submatch insn {
   0xc6 @addr(0)   @imm8 => "mov" sfx[1] " " $addr "," hex($imm8) ;
   0xc7 11 000 rrr @immz => "mov " greg[$r] "," hex($immz) ;
   0xc7 @addr(0)   @immz => "mov" sfx[4] " " $addr "," hex($immz) ;
+  # TSX/RTM: C6 /7 with ModR/M F8 is xabort imm8; C7 /7 with ModR/M F8 is xbegin rel16/32
+  # (the 66 form is rel16, matching the near-branch convention). Both are fully-fixed
+  # ModR/M (11 111 000), distinct from the C6/C7 /0 mov group above.
+  0xc6 11 111 000 @imm8 => "xabort " hex($imm8) ;
+  0xc7 11 111 000 @relz => "xbegin " hex($relz) ;
   0xc9 => "leave" ;
   0xcc => "int3" ;
   0xcd @imm8 => "int " hex($imm8) ;

@@ -1512,9 +1512,14 @@ class Interp:
     opcode = info['bp'].lit_val
     pp = info['pp']                                      # None -> applies to every pp slot
     grp = groups.setdefault((tb, opcode), {})            # register the opcode as a group
-    if info.get('fixmodrm') is not None:                 # fully-fixed ModR/M, no operand
-      base = self.insn_mnem(rhs)[1]                       # (endbr64, monitor, rdtscp, ...)
-      self._fixmodrm.setdefault((tb, opcode), {})[(pp, info['fixmodrm'])] = midx(base)
+    if info.get('fixmodrm') is not None:                 # fully-fixed ModR/M (endbr64/monitor/...)
+      base = self.insn_mnem(rhs)[1]                       # -- usually no operand, but xabort (C6 F8
+      imk = K['NONE']; form = self._form_idx('NONE')      # ib) / xbegin (C7 F8 rel) carry an imm/rel
+      if info['imm']:
+        nm = info['imm'][0]
+        imk = K['IMM8SX'] if ('sx8(' in rhs and nm == 'imm8') else K[nm.upper()]
+        form = self._form_idx('REL' if nm in ('rel8', 'relz') else 'IMM')
+      self._fixmodrm.setdefault((tb, opcode), {})[(pp, info['fixmodrm'])] = (midx(base), form, imk)
       return
     reg = info['reg_fixed']
     m = grp.setdefault(
@@ -1551,9 +1556,13 @@ class Interp:
     # extension (it picks the mnemonic, baked here), the r/m is the operand.
     tb, opcode, members, fixmap = self._group_list[gid]
     fm = fixmap.get(modrm)
-    if fm is not None:                                   # fully-fixed ModR/M -> no-operand op
+    if fm is not None:                                   # fully-fixed ModR/M op (FORM_NONE, or
+      mnem, form, imk = fm                               # FORM_IMM/REL for xabort/xbegin)
       acts, nxt = self.modrm_state(adrsiz, modrm)        # consume the modrm byte (mod==11)
-      return [('MNEM', fm, 0, 0), ('CONST', self.tailcap('FORM'), 0, 0)] + acts[1:], nxt  # FORM_NONE
+      pre = [('MNEM', mnem, 0, 0), ('CONST', self.tailcap('FORM'), form, 0)]
+      if imk != 0:
+        pre.append(('CONST', self.tailcap('IMK'), imk, 0))
+      return pre + acts[1:], nxt
     m = members.get((modrm >> 3) & 7)
     if m is None:
       return [], 'FSM_HALT'                              # undefined extension: dead

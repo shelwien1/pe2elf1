@@ -379,7 +379,11 @@ static inline size_t encode_insn(const x86insn_t* in, uint8_t* out) {
     op |= (uint8_t)((in->cc & ((1u << c->emb_w) - 1u)) << c->emb_pos);
   out[p++] = op;
 
-  if (c->fixmodrm) { out[p++] = c->fixmodrm; return p; }  // no-operand fixed-ModR/M op
+  if (c->fixmodrm) {                                       // fixed-ModR/M op: opcode + literal
+    out[p++] = c->fixmodrm;                                // ModR/M, then any trailing imm/rel
+    enc_imm(out, &p, c->imk, in->opsize, in->imm, in->disp);   // (xabort ib / xbegin rel; NONE=noop)
+    return p;
+  }
 
   if (c->form == FORM_MODRM || c->form == FORM_RM || c->form == FORM_GROUP) {
     int reg_field = (c->form == FORM_GROUP) ? c->digit
