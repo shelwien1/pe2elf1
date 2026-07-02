@@ -3772,6 +3772,25 @@ submatch evex {
   h k b e 00 10 1 vvvv 1 01 z ll 0 u aaa 0x11 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vpsravw " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
   h k b e 00 10 1 vvvv 1 01 z ll 0 u aaa 0x12 11 ggg rrr => wit("evex") "vpsllvw " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
   h k b e 00 10 1 vvvv 1 01 z ll 0 u aaa 0x12 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vpsllvw " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  # ==== EVEX crypto: VAES / GFNI / PCLMULQDQ ====
+  h k b e 00 10 0 vvvv 1 01 z ll 0 u aaa 0xdc 11 ggg rrr => wit("evex") "vaesenc " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 10 0 vvvv 1 01 z ll 0 u aaa 0xdc @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vaesenc " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  h k b e 00 10 0 vvvv 1 01 z ll 0 u aaa 0xdd 11 ggg rrr => wit("evex") "vaesenclast " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 10 0 vvvv 1 01 z ll 0 u aaa 0xdd @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vaesenclast " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  h k b e 00 10 0 vvvv 1 01 z ll 0 u aaa 0xde 11 ggg rrr => wit("evex") "vaesdec " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 10 0 vvvv 1 01 z ll 0 u aaa 0xde @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vaesdec " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  h k b e 00 10 0 vvvv 1 01 z ll 0 u aaa 0xdf 11 ggg rrr => wit("evex") "vaesdeclast " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 10 0 vvvv 1 01 z ll 0 u aaa 0xdf @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vaesdeclast " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  h k b e 00 10 0 vvvv 1 01 z ll 0 u aaa 0xcf 11 ggg rrr => wit("evex") "vgf2p8mulb " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 10 0 vvvv 1 01 z ll 0 u aaa 0xcf @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vgf2p8mulb " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  h k b e 00 11 1 vvvv 1 01 z ll 0 u aaa 0xce 11 ggg rrr @imm8 => wit("evex") "vgf2p8affineqb " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  h k b e 00 11 1 vvvv 1 01 z ll 0 u aaa 0xce @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vgf2p8affineqb " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr "," hex($imm8) ;
+  h k b e 00 11 1 vvvv 1 01 z ll 1 u aaa 0xce @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vgf2p8affineqb " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr bcst64[$l] "," hex($imm8) ;
+  h k b e 00 11 1 vvvv 1 01 z ll 0 u aaa 0xcf 11 ggg rrr @imm8 => wit("evex") "vgf2p8affineinvqb " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  h k b e 00 11 1 vvvv 1 01 z ll 0 u aaa 0xcf @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vgf2p8affineinvqb " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr "," hex($imm8) ;
+  h k b e 00 11 1 vvvv 1 01 z ll 1 u aaa 0xcf @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vgf2p8affineinvqb " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr bcst64[$l] "," hex($imm8) ;
+  h k b e 00 11 0 vvvv 1 01 z ll 0 u aaa 0x44 11 ggg rrr @imm8 => wit("evex") "vpclmulqdq " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  h k b e 00 11 0 vvvv 1 01 z ll 0 u aaa 0x44 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vpclmulqdq " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr "," hex($imm8) ;
 }
 
 
@@ -4228,6 +4247,7 @@ submatch apx {
 }
 
 submatch main { @pfx(0) => $pfx }
+
 
 
 
