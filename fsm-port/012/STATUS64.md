@@ -214,6 +214,36 @@ AVX512-FP16 with no known decodable-opcode gaps** (every differential sweep — 
 1–3 + 7, XOP 8–10, EVEX 1–3 + 5–6, APX map 4 — is drift-0 with 0 gaps, under the byte-exact
 bijection invariant).
 
+### 7a. Second differential oracle — iced-x86 1.21 (finds non-standard forms)
+
+objdump 2.42 is only a partial oracle; a cross-check against **iced-x86 1.21** (a
+comprehensive Intel-authored decoder that also knows AVX10.2/APX/undocumented forms)
+surfaced — and this iteration fixed — several forms objdump had flagged only partially:
+
+* **Dead-REX opsize (correctness bug, fixed).** A legacy REX followed by another legacy
+  prefix is ignored by the CPU; the FSM had latched `opsize=2` from a now-dead REX.W, so
+  `4A F2 B8 id` mis-decoded as `mov rax,imm64` (len 11) instead of `mov eax,imm32` (len 7).
+  `VAR_OPSIZ` is now recomputed from the *effective* REX after prefix parsing. This removed
+  every length mismatch from a 100k random-buffer iced differential (0 length bugs).
+* **Documented holes filled** (objdump + iced both decode; the earlier legacy sweep missed
+  them): 0F C7 group `/3–/7` (xrstors/xsavec/xsaves, vmptrld/vmclear/vmxon/vmptrst,
+  rdrand/rdseed/rdpid/senduipi), far `callf`/`jmpf` (FF /3,/5), legacy GFNI (gf2p8mulb,
+  gf2p8affineqb, gf2p8affineinvqb), legacy AES aeskeygenassist, VMX invept/invvpid/invpcid,
+  SSE4.1 pextrw (0F3A 15), FRED lkgs, TSXLDTRK xsusldtrk/xresldtrk, shift-group `/6`
+  (shl alias) and test-group `/1` alias, rdrand/rdseed 16-bit (66).
+* **Undocumented x87 reg-direct aliases added** (real on silicon; objdump `(bad)`): fcom
+  (DC/2), fcomp (DC/3, DE/2), fxch (DD/1, DF/1), fstp (DF/2, DF/3), fstpnce (D9/3).
+
+Remaining iced-only differences, deliberately left (all bijection-safe):
+
+* **66 on a near branch** (`66 E9`/`E8`/`0F 8x`): this decoder emits rel16 (`jmpw`),
+  matching **objdump** and the legacy/AMD reading; iced emits rel32 (66 ignored per the
+  Intel-64 near-branch note). A deterministic decoder must pick one; both round-trip.
+* **Non-canonical / vendor forms not added**: fence `rm≠0` (lfence/mfence/sfence E9–FF —
+  broadening the ModR/M would print a phantom GPR operand on the canonical rm=0 form),
+  the `0F 0D` reg-direct long-nop, `66`-prefixed `wbinvd` (objdump also `(bad)`), and VIA
+  PadLock `xsha1`/`xstore`/`xcrypt` (discontinued vendor; iced itself decodes only 2 of them).
+
 ## 8. Deliberate decode-display policy (not bugs)
 
 * Size suffixes (`.b/.w/.d/.q/.t`) instead of `BYTE/WORD/... PTR`; `[rax+0]`-style
