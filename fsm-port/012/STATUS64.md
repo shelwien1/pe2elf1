@@ -51,14 +51,14 @@ corpus64.p ──gasm.py─▶  x86_tables_enc.h  (encode: 1,055 candidates / 1,
 
 | component | lines | notes |
 |---|---:|---|
-| `corpus64.p` | 4,254 | **3,764 rules**: legacy+helpers 1,304 · vex 847 + vex2 185 · evex 1,016 · xop 101 · apx 311 |
-| `gen.py` | 2,265 | FSM compiler (decode) |
+| `corpus64.p` | 5,212 | **4,684 rules** across legacy/vex/vex2/evex/xop/apx submatches (incl. the 96 AVX512-FP16 map5/6 + the 2 VEX-map7 USER_MSR rules) |
+| `gen.py` | 2,324 | FSM compiler (decode) |
 | `gasm.py` | 317 | encode-table compiler |
-| `x86dec.hpp` | 950 | FSM driver + generic finalizers |
-| `x86enc.hpp` | 416 | encoder |
+| `x86dec.hpp` | 953 | FSM driver + generic finalizers |
+| `x86enc.hpp` | 401 | encoder |
 | `x86insn.hpp` / `asm32.cpp` / `fuzz.cpp` | 115 / 137 / 112 | record / tool / fuzzer |
-| 64-bit tables | 6.1 MB + 109 KB src | FSM 61,440 DStates (93.8 % of `uint16_t`), 52 groups, 960 KiB compiled |
-| 32-bit tables (committed) | 5.6 MB + 88 KB src | 54,784 DStates (83.6 %), 39 groups, 856 KiB |
+| 64-bit tables | FSM 61,440 DStates, 52 groups, 1,200 KiB compiled | `DState.next` is `uint32_t` — no state ceiling (was 65,535 under `uint16_t`) |
+| 32-bit tables (committed) | 54,784 DStates, 39 groups | 32-bit corpus unchanged this iteration |
 
 ## 3. Coverage status
 
@@ -76,9 +76,9 @@ here is from a drift-0 sweep).
 | SSE–SSE4.2, SSE4a, 3DNow!, MPX, SHA-NI, AES-NI, AES-KL, GFNI, CRC32/MOVBE/ADX, CET, RAO-INT, enqcmd/movdiri/movdir64b, VMX/SMX oddities | **complete** | full-map sweeps; per-prefix descriptors (`ppdesc`), pp-variant groups, fixed-ModR/M cells |
 | VEX maps 1–3 (AVX/AVX2, FMA3/FMA4, BMI1/2, VNNI/-INT8, NE-CONVERT, SM3/SM4, AMX, vector AES/GFNI) | **complete — 0 gaps** | 12,288-case sweep; last hole (vmovhlps/vmovlhps reg-form) closed via a decode-time mnemonic swap |
 | XOP maps 8–10 (vector SIMD **and** GPR: TBM, LWP, XOP-bextr) | **complete — 0 gaps** | 12,288-case sweep + 160-case all-`/digit` group sweep; GPR families added this iteration via two new group forms (`VEX_MG`, `VEX_VMG0`) + `IMK_IMM32` |
-| EVEX maps 1–3 (AVX-512 core) | **412 / 521 objdump mnemonics (~79 %)** | sweep both W, reg+mem; 123 genuinely missing (§6), 7 display aliases (vcmp/vpcmp/vpclmul imm-variants) |
-| EVEX maps 5–6 (AVX512-FP16) | **not routed — 0 / 88** | measured today; `evexp0` sends maps 5/6 to the structural path (§7 state-budget note) |
-| APX: EVEX-promoted legacy (map 4, incl. ND/NF, push2/pop2, groups) + REX2 | **complete — 0 missing** | 16,384-case sweep today (pp×W×ND×opcode×reg/mem): drift 0, missing 0 |
+| EVEX maps 1–3 (AVX-512 core) | **complete** | §6 batches all landed (transcendental/range/fpclass, insert/shuffle, fp move/scalar/unpack, mask conv, ph/bf16 converts, vpcmp, 4-op 4FMAPS/4VNNIW); the only sweep residue is 7 objdump imm-aliases (vcmpeqph, vpcmpequb, vpclmullqlqdq) that this decoder emits generically |
+| EVEX maps 5–6 (AVX512-FP16) | **complete — 96 / 96, 0 gaps** | 3-bit `mmm` routing added; full MAP5/MAP6 differential vs objdump: 96 distinct mnemonics, 270 match cases, 0 gaps, 0 length/mnemonic mismatches |
+| APX: EVEX-promoted legacy (map 4, incl. ND/NF, push2/pop2, groups) + REX2 + USER_MSR | **complete — 0 missing** | 16,384-case map-4 sweep (drift 0); USER_MSR reg-forms (`urdmsr`/`uwrmsr` 0F38 F8) via per-mod `ppdesc` direction, and the VEX-map7 `urdmsr`/`uwrmsr` r64,imm32 forms (the only decodable opcodes in a VEX maps 4–31 sweep) |
 
 Everything the sweeps flag as *not* covered decodes through the **structural fallback**:
 the prefix/opcode/ModR/M skeleton is captured raw, displayed as a `vex` placeholder, and
@@ -89,7 +89,7 @@ round-trip gaps.
 
 | check | result |
 |---|---|
-| `make fuzz64` — 5,000,000 random buffers, 64-bit | 4,072,160 accepted (81.4 %), **0 legacy failures, 0 vex/evex/xop failures** |
+| `make fuzz64` — 5,000,000 random buffers, 64-bit | 4,072,177 accepted (81.4 %), **0 legacy failures, 0 vex/evex/xop failures** |
 | `make fuzz` — 5,000,000, 32-bit regression | 4,436,652 accepted (88.7 %), **0 + 0 failures** |
 | `make roundtrip64` — corpus64.bin | byte-identical (279 insns / 1,115 B) |
 | `make roundtrip` — 32-bit corpus.bin | 858/858 byte-identical |
@@ -131,7 +131,9 @@ Nine localized cases, all operand-shape quirks that the descriptor model cannot 
 
 1. `vmovlps→vmovhlps` / `vmovhps→vmovlhps` reg-form swap (VEX 0F 12/16 NP; descriptor is
    per-opcode, reg-vs-mem known only after ModR/M).
-2. APX map-4 `F8`: `uwrmsr/urdmsr` (reg) ↔ `enqcmds/enqcmd` (mem) swap.
+2. APX map-4 `F8`: `uwrmsr/urdmsr` (reg) ↔ `enqcmds/enqcmd` (mem) swap. (The *legacy*
+   0F38 F8 path is now fully descriptor-driven — `ppdesc` `mnem_reg`/`mnem_mem` +
+   per-mod `dir_reg` — so only the APX map-4 twin still rides this C++ swap.)
 3. APX `shld/shrd` (A5/AD): implicit `cl` third operand.
 4. APX `sha256rnds2` (DB): implicit `<xmm0>`.
 5. APX `push2/pop2` (FF `/6`, 8F `/0`): 64-bit register pair, ND-bit-as-marker.
@@ -156,17 +158,21 @@ Nine localized cases, all operand-shape quirks that the descriptor model cannot 
   re-assembler of decoded records, not a from-mnemonic assembler for prefixed encodings —
   consistent with the project goal.
 
-## 6. Remaining work — EVEX maps 1–3 (123 mnemonics)
+## 6. EVEX maps 1–3 — complete (history)
 
-The generator-with-discovery/self-verification workflow — probe candidate encodings,
-confirm objdump's mnemonic *before* emitting each rule — is established and now drives
-every batch; the sweeps stay drift-0 and each batch commits only after fuzz64 + roundtrip64
-pass. **Done this iteration** (EVEX 216 → 412): FMA (50), BW-integer arith/pack/unpack (31),
-shifts (12), crypto/VAES/GFNI (8), VPMISC variable-rotate/funnel/lzcnt/popcnt/conflict (21),
-dot-product/bf16 vpdp* (11), integer-compare→mask fixed-cc + testm/nm (10), broadcasts (14),
-scalar↔GPR converts (6), packed converts unsigned/qq lattice (17), permute RVM (16).
+**All families below have landed** (EVEX maps 1–3 now decode 0-gap vs objdump; the only
+sweep residue is 7 objdump imm-aliases this decoder emits generically). The
+generator-with-discovery/self-verification workflow — probe candidate encodings, confirm
+objdump's mnemonic *before* emitting each rule — drove every batch; the sweeps stayed
+drift-0 and each batch committed only after fuzz64 + roundtrip64 passed. Landed across
+iterations: FMA (50), BW-integer arith/pack/unpack (31), shifts (12), crypto/VAES/GFNI (8),
+VPMISC variable-rotate/funnel/lzcnt/popcnt/conflict (21), dot-product/bf16 vpdp* (11),
+integer-compare→mask fixed-cc + testm/nm (10), broadcasts (14), scalar↔GPR converts (6),
+packed converts unsigned/qq lattice (17), permute RVM (16), then the families once tracked
+here as open (transcendental/range/fpclass, insert/shuffle, fp move/scalar/unpack, mask
+conversions, ph/bf16 converts, vpcmp→kreg, compress/expand/align, 4-op 4FMAPS/4VNNIW).
 
-Still open, grouped by family:
+Families completed (originally tracked as open):
 
 | family | count | examples / notes |
 |---|---:|---|
@@ -184,21 +190,29 @@ store form.
 
 ## 7. Remaining work — structural items
 
-1. **AVX512-FP16 (EVEX maps 5/6): 88 mnemonics, currently unrouted.** Needs `gen.py` to
-   route `evexp0` maps 5/6 into opcode blocks + the corpus rules. **State-budget constraint:
-   resolved (2026-07-02).** `DState.next` (and `FSM_INDEX`/`FSM_HALT`/`run_fsm`) were widened
-   from `uint16_t` to `uint32_t`, removing the 65,535-state ceiling permanently (sizeof(Fsm)
-   960 → 1,200 KiB). Adding the FP16 maps' ~34 blocks is now purely a matter of writing the
-   routing + rules; block allocation stays dense-arithmetic (sparse allocation remains a
-   future memory optimization, not a prerequisite).
-2. **`urdmsr` F2 0F38 F8 reg-form** (deferred): its operand order conflicts with the
-   single-direction `ppdesc` slot shared with `enqcmd` — needs a per-mod direction bit in
-   the descriptor (small mechanism extension).
+1. ~~**AVX512-FP16 (EVEX maps 5/6): 88 mnemonics, unrouted.**~~ — **done (2026-07-02).**
+   `VEX_LAYOUT['evex']` now carries a 3-bit `mmm` map field; `evexp0`/`_vex_parse_rule` route
+   maps 5/6 to opcode blocks (`evexp1/2/op` grown to `[5]`), a `bcst16` table was added, and
+   all 96 map5/6 mnemonics are in the corpus (arithmetic/sqrt/comis, FMA ph/sh, complex FMA,
+   scalef/getexp/rcp/rsqrt, width-changing converts, GPR converts, `vmovsh`/`vmovw`). Full
+   MAP5/MAP6 differential vs objdump: 0 gaps. The `uint16_t→uint32_t` state widening (no
+   65,535-state ceiling; sizeof(Fsm) now 1,200 KiB) made the block growth free.
+2. ~~**`urdmsr` F2 0F38 F8 reg-form** (deferred).~~ — **done (2026-07-02).** The `ppdesc`
+   slot gained a per-mod direction: `dir_mem` drives the pre-ModR/M `CAP_DIR` (the common
+   path) and `dir_reg` overrides once reg-vs-mem is known — so `urdmsr` (reg-direct `r/m,reg`)
+   coexists with `enqcmd` (mem `reg,mem`) at 0F38 F8 pp3. The VEX-map7 `urdmsr`/`uwrmsr`
+   `r64,imm32` forms were added too (new `VEX_MI`/`VEX_IM` forms + map7 FSM routing); a VEX
+   maps 4–31 sweep confirms those are the only decodable opcodes in the extended-map space.
 3. ~~**`vex_structure` generation**~~ — **done** (§5): the encoder tail table is generated
    from the corpus.
 4. Optional, out of scope for bijection: a strict-objdump display mode (PTR keywords,
    `movabs`, disp8*N shown pre-scaled, cc/imm alias expansion (`vcmpeqps`,
    `vpclmullqlqdq`), implicit `<xmm0>` rendering).
+
+**As of 2026-07-02 the decoder covers the complete x86-64 instruction set through APX +
+AVX512-FP16 with no known decodable-opcode gaps** (every differential sweep — legacy, VEX
+1–3 + 7, XOP 8–10, EVEX 1–3 + 5–6, APX map 4 — is drift-0 with 0 gaps, under the byte-exact
+bijection invariant).
 
 ## 8. Deliberate decode-display policy (not bugs)
 
@@ -224,15 +238,15 @@ python3 tools/vexsweep.py ; python3 tools/xopsweep.py ; python3 tools/evexsweep2
 python3 gen.py corpus.p x86_tables.h && python3 gasm.py corpus.p x86_tables_enc.h  # restore
 ```
 
-## 10. Suggested order of remaining work
+## 10. Status of the completion plan
 
-1. Finish EVEX maps 1–3 by family (§6) — pure corpus batches under the proven
-   generate→self-verify→fuzz→commit loop; largest coverage win per effort.
-2. FP16 maps 5/6 rules (88 mnemonics — the same shapes as existing float families); route
-   `evexp0` maps 5/6 in `gen.py` (the state ceiling is already lifted, §7.1).
-3. `urdmsr` reg-form descriptor-direction fix.
-4. Final full-ISA differential run (legacy + VEX + XOP + EVEX 1–6 + APX sweeps, drift-0)
-   and a fuzz soak (≥ 50 M iters) as the completion gate.
+1. ~~Finish EVEX maps 1–3 by family (§6).~~ **Done** — 0-gap vs objdump.
+2. ~~FP16 maps 5/6 rules + `evexp0` routing.~~ **Done** — 96/96, 0 gaps (§7.1).
+3. ~~`urdmsr` reg-form descriptor-direction fix.~~ **Done** — per-mod `ppdesc` direction,
+   plus the VEX-map7 `urdmsr`/`uwrmsr` imm forms (§7.2).
+4. Remaining optional polish: a strict-objdump display mode (§7.4) and a longer fuzz soak
+   (≥ 50 M iters) — neither changes decodable-opcode coverage, which is now complete under
+   the byte-exact bijection invariant (every differential sweep drift-0, 0 gaps).
 
 **Done since first draft:** the encoder's `vex_structure` tail table is now generated from
 the corpus (§5), and the FSM state ceiling is removed via a `uint32_t next` widening (§7.1).
