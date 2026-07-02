@@ -1075,6 +1075,7 @@ class Interp:
     # an immediate atom carries its KIND in the file slot (imm8/immz/imm8sx) so the
     # FSM can set the right CAP_IMK -- APX promotes immz/imm8sx forms, not just imm8.
     def _imk(s):
+      if 'imm32' in s:               return 'IMM32'   # XOP bextr/lwpins/lwpval control imm32
       if 'immz' in s or 'immv' in s: return 'IMMZ'
       if 'sx8' in s:                 return 'IMM8SX'
       return 'IMM8'
@@ -1166,6 +1167,8 @@ class Interp:
   VEX_FORMS = ['VEX_NONE', 'VEX_RVM', 'VEX_RVMI', 'VEX_RVMR', 'VEX_RM', 'VEX_RMI',
                'VEX_MR', 'VEX_MRI', 'VEX_VM', 'VEX_R', 'VEX_M', 'VEX_RVMV',
                'VEX_VMI', 'VEX_VMG',  # VMI: vvvv,r/m,imm8 ; VMG: same, mnem by /digit
+               'VEX_MG', 'VEX_VMG0',  # MG: r/m only, mnem by /digit (XOP LWP llwpcb/slwpcb);
+                                      # VMG0: vvvv,r/m, mnem by /digit (XOP TBM blc*/bls*/tzmsk/t1mskc)
                'VEX_RMV', 'VEX_RVRM',  # RMV: reg,r/m,vvvv (XOP vprot/vpsh W0);
                                        # RVRM: reg,vvvv,is4,r/m (XOP vpcmov/vpperm W1)
                # APX EVEX-promoted legacy (GPR; apx_finalize prepends NDD dest if ND=1)
@@ -1199,7 +1202,7 @@ class Interp:
     mfile = next((f for r, f in ops if r == 'RM'), 'VEC')
     # imm carries the CAP_IMK value (so append_imm reads the right width): IS4 and a
     # plain imm8 -> 1 (IMK_IMM8); APX immz -> 4 (IMK_IMMZ); imm8sx -> 8 (IMK_IMM8SX).
-    IMK = {'IMM8': 1, 'IMMZ': 4, 'IMM8SX': 8}
+    IMK = {'IMM8': 1, 'IMM32': 3, 'IMMZ': 4, 'IMM8SX': 8}
     imm = 0
     for r, f in ops:
       if r == 'IS4':    imm = 1
@@ -1304,21 +1307,30 @@ class Interp:
     # mnemonics; the cell carries the gid and the C++ picks the mnemonic by the
     # ModR/M reg digit. Shape is VVVV(dest), r/m(src), imm8 (VEX_VMG).
     kind = kinds[0] if kinds else 'vex'
-    IMK = {'IMM8': 1, 'IMMZ': 4, 'IMM8SX': 8}
+    IMK = {'IMM8': 1, 'IMM32': 3, 'IMMZ': 4, 'IMM8SX': 8}
     for key, digmap in groups.items():
       if key in raw:
         continue                                     # a non-group rule already claimed it
       gid = len(self._vexgrp)
       self._vexgrp.append([digmap.get(d, -1) for d in range(8)])
       gops = groupmeta[key]
-      rf = self.VEXFILE.get(next((f for r, f in gops if r in ('REG', 'IS4')), 'VEC'), 0)
+      # the dest file may ride REG, IS4 or VVVV (XOP TBM/LWP put the GPR dest in vvvv)
+      rf = self.VEXFILE.get(next((f for r, f in gops if r in ('REG', 'IS4', 'VVVV')), 'VEC'), 0)
       mf = self.VEXFILE.get(next((f for r, f in gops if r == 'RM'), 'VEC'), 0)
+      roles = [r for r, _ in gops]
       if kind == 'apx':                              # APX group: GPR, mnem by /digit, NDD via ND
         has_imm = any(r == 'IMM8' for r, _ in gops)
         form = 'APX_MI' if has_imm else 'APX_M'
         imk = next((IMK.get(f, 1) for r, f in gops if r == 'IMM8'), 0)
+      elif roles == ['RM']:                          # XOP LWP llwpcb/slwpcb: r/m only
+        form, imk = 'VEX_MG', 0
+      elif roles == ['VVVV', 'RM']:                  # XOP TBM blc*/bls*/tzmsk/t1mskc
+        form, imk = 'VEX_VMG0', 0
+      elif roles == ['VVVV', 'RM', 'IMM8']:          # shift-by-imm8 / XOP LWP lwpins/lwpval imm32
+        imf = next(f for r, f in gops if r == 'IMM8')
+        form, imk = 'VEX_VMG', IMK.get(imf, 1)
       else:
-        form, imk = 'VEX_VMG', 1                      # vector shift groups carry imm8
+        form, imk = 'VEX_VMG', 1                      # default: vector shift groups (imm8)
       cells[key] = (-1, form, rf, mf, gid, imk)       # mnem -1 => group; 5th = gid, 6th = imk
     for key, (mi, ops) in raw.items():
       f = self._vex_form(ops, kind)

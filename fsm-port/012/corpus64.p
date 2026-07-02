@@ -38,11 +38,13 @@
 # -- map 8 (vpmacs*/vpmadcs*/vpcmov/vpperm/vpcom*) and the vector map 9 (vfrcz*,
 # vprot/vpsh[al] register forms incl. the W=1 operand swap, vphadd*/vphsub*).
 # Coverage: VEX 100% of the rules, EVEX ~98% (the rare EVEX memory-source
-# shift-by-imm and the 256-bit vextract* lane ops remain structural), XOP SIMD
-# 100%. The XOP GPR families -- TBM (blc*/bls*/tzmsk/t1mskc on 09.01/02), LWP
-# (llwpcb/slwpcb/lwpins/lwpval) and the XOP-encoded bextr (0A.10) -- are AMD-only,
-# absent from all Zen+ (hence APX-capable) silicon, and orthogonal to the APX
-# mainline; they stay on the structural path. APX EVEX-promoted legacy (62 with
+# shift-by-imm and the 256-bit vextract* lane ops remain structural), XOP 100%.
+# The XOP GPR families -- TBM (blc*/bls*/tzmsk/t1mskc on 09.01/02), LWP
+# (llwpcb/slwpcb on 09.12, lwpins/lwpval on 0A.12) and the XOP-encoded bextr
+# (0A.10) -- are AMD-only (Bulldozer-family), but real silicon and objdump both
+# decode them, so they are lowered semantically too: the reg-fixed group cells
+# reuse the VEX /digit mechanism (VEX_MG / VEX_VMG0 for the no-imm and single-
+# operand shapes) with GPR dest riding vvvv/reg and a control imm32. APX EVEX-promoted legacy (62 with
 # the 3-bit map == 4) is decoded the same FSM-native way (evexp0 -> apxp1/apxp2/
 # apxop; the C++ apx_finalize folds the r0-31 extension + sizing + the ND new-data-
 # destination and NF no-flags modifiers). The full integer set is covered: the ALU
@@ -3583,6 +3585,45 @@ submatch xop {
   h k b 01001 0 1111 y 00 0xe1 11 ggg rrr => "vphsubbw " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
   h k b 01001 0 1111 y 00 0xe2 11 ggg rrr => "vphsubwd " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
   h k b 01001 0 1111 y 00 0xe3 11 ggg rrr => "vphsubdq " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
+  # ==== XOP GPR families: TBM / LWP / XOP-bextr (AMD Bulldozer-family, objdump-decodable) ====
+  # These decode on real AMD silicon, so they are lowered semantically (not the structural
+  # placeholder). GPR dest/src ride vvvv/reg/r-m; W selects r32 (W0) vs r64 (W1). The mem r/m
+  # form is handled by the C++ once the opcode/group cell exists (reg-direct rules suffice).
+  # TBM map 9 op 01 (dest=vvvv, src=r/m; mnem by ModR/M /digit): blcfill/blsfill/blcs/tzmsk/blcic/blsic/t1mskc
+  h k b 01001 0 vvvv y 00 0x01 11 001 rrr => "blcfill " greg[$v] "," greg[$r] ;
+  h k b 01001 0 vvvv y 00 0x01 11 010 rrr => "blsfill " greg[$v] "," greg[$r] ;
+  h k b 01001 0 vvvv y 00 0x01 11 011 rrr => "blcs " greg[$v] "," greg[$r] ;
+  h k b 01001 0 vvvv y 00 0x01 11 100 rrr => "tzmsk " greg[$v] "," greg[$r] ;
+  h k b 01001 0 vvvv y 00 0x01 11 101 rrr => "blcic " greg[$v] "," greg[$r] ;
+  h k b 01001 0 vvvv y 00 0x01 11 110 rrr => "blsic " greg[$v] "," greg[$r] ;
+  h k b 01001 0 vvvv y 00 0x01 11 111 rrr => "t1mskc " greg[$v] "," greg[$r] ;
+  h k b 01001 1 vvvv y 00 0x01 11 001 rrr => "blcfill " greg[32+$v] "," greg[32+$r] ;
+  h k b 01001 1 vvvv y 00 0x01 11 010 rrr => "blsfill " greg[32+$v] "," greg[32+$r] ;
+  h k b 01001 1 vvvv y 00 0x01 11 011 rrr => "blcs " greg[32+$v] "," greg[32+$r] ;
+  h k b 01001 1 vvvv y 00 0x01 11 100 rrr => "tzmsk " greg[32+$v] "," greg[32+$r] ;
+  h k b 01001 1 vvvv y 00 0x01 11 101 rrr => "blcic " greg[32+$v] "," greg[32+$r] ;
+  h k b 01001 1 vvvv y 00 0x01 11 110 rrr => "blsic " greg[32+$v] "," greg[32+$r] ;
+  h k b 01001 1 vvvv y 00 0x01 11 111 rrr => "t1mskc " greg[32+$v] "," greg[32+$r] ;
+  # TBM map 9 op 02 (/1 blcmsk, /6 blci)
+  h k b 01001 0 vvvv y 00 0x02 11 001 rrr => "blcmsk " greg[$v] "," greg[$r] ;
+  h k b 01001 0 vvvv y 00 0x02 11 110 rrr => "blci " greg[$v] "," greg[$r] ;
+  h k b 01001 1 vvvv y 00 0x02 11 001 rrr => "blcmsk " greg[32+$v] "," greg[32+$r] ;
+  h k b 01001 1 vvvv y 00 0x02 11 110 rrr => "blci " greg[32+$v] "," greg[32+$r] ;
+  # LWP map 9 op 12 (single r/m GPR, reg-only; mnem by /digit): /0 llwpcb, /1 slwpcb. vvvv=1111 reserved.
+  h k b 01001 0 1111 y 00 0x12 11 000 rrr => "llwpcb " greg[$r] ;
+  h k b 01001 0 1111 y 00 0x12 11 001 rrr => "slwpcb " greg[$r] ;
+  h k b 01001 1 1111 y 00 0x12 11 000 rrr => "llwpcb " greg[32+$r] ;
+  h k b 01001 1 1111 y 00 0x12 11 001 rrr => "slwpcb " greg[32+$r] ;
+  # XOP bextr map 10 op 10 (dest=reg, src=r/m, imm32; vvvv=1111 reserved; not a group)
+  h k b 01010 0 1111 y 00 0x10 11 ggg rrr @imm32 => "bextr " greg[$g] "," greg[$r] "," hex($imm32) ;
+  h k b 01010 0 1111 y 00 0x10 @addr {$rexb=1-$b;$rexx=1-$k} @imm32 => "bextr " greg[$g] "," $addr "," hex($imm32) ;
+  h k b 01010 1 1111 y 00 0x10 11 ggg rrr @imm32 => "bextr " greg[32+$g] "," greg[32+$r] "," hex($imm32) ;
+  h k b 01010 1 1111 y 00 0x10 @addr {$rexb=1-$b;$rexx=1-$k} @imm32 => "bextr " greg[32+$g] "," $addr "," hex($imm32) ;
+  # LWP map 10 op 12 (dest=vvvv, src=r/m, imm32; mnem by /digit): /0 lwpins, /1 lwpval
+  h k b 01010 0 vvvv y 00 0x12 11 000 rrr @imm32 => "lwpins " greg[$v] "," greg[$r] "," hex($imm32) ;
+  h k b 01010 0 vvvv y 00 0x12 11 001 rrr @imm32 => "lwpval " greg[$v] "," greg[$r] "," hex($imm32) ;
+  h k b 01010 1 vvvv y 00 0x12 11 000 rrr @imm32 => "lwpins " greg[32+$v] "," greg[32+$r] "," hex($imm32) ;
+  h k b 01010 1 vvvv y 00 0x12 11 001 rrr @imm32 => "lwpval " greg[32+$v] "," greg[32+$r] "," hex($imm32) ;
 }
 
 submatch apx {
