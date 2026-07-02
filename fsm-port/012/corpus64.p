@@ -434,7 +434,9 @@ submatch insn {
   0xc0 11 011 rrr @imm8 => "rcr " rgb[$r] "," hex($imm8) ;
   0xc0 @addr(3)   @imm8 => "rcr" sfx[1] " " $addr "," hex($imm8) ;
   0xc0 11 100 rrr @imm8 => "shl " rgb[$r] "," hex($imm8) ;
+  0xc0 11 110 rrr @imm8 => "shl " rgb[$r] "," hex($imm8) ;   # /6 = undocumented shl alias
   0xc0 @addr(4)   @imm8 => "shl" sfx[1] " " $addr "," hex($imm8) ;
+  0xc0 @addr(6)     @imm8 => "shl" sfx[1] " " $addr "," hex($imm8) ;   # /6 = undocumented shl alias
   0xc0 11 101 rrr @imm8 => "shr " rgb[$r] "," hex($imm8) ;
   0xc0 @addr(5)   @imm8 => "shr" sfx[1] " " $addr "," hex($imm8) ;
   0xc0 11 111 rrr @imm8 => "sar " rgb[$r] "," hex($imm8) ;
@@ -448,7 +450,9 @@ submatch insn {
   0xc1 11 011 rrr @imm8 => "rcr " greg[$r] "," hex($imm8) ;
   0xc1 @addr(3)   @imm8 => "rcr" sfx[4] " " $addr "," hex($imm8) ;
   0xc1 11 100 rrr @imm8 => "shl " greg[$r] "," hex($imm8) ;
+  0xc1 11 110 rrr @imm8 => "shl " greg[$r] "," hex($imm8) ;   # /6 = undocumented shl alias
   0xc1 @addr(4)   @imm8 => "shl" sfx[4] " " $addr "," hex($imm8) ;
+  0xc1 @addr(6)     @imm8 => "shl" sfx[4] " " $addr "," hex($imm8) ;   # /6 = undocumented shl alias
   0xc1 11 101 rrr @imm8 => "shr " greg[$r] "," hex($imm8) ;
   0xc1 @addr(5)   @imm8 => "shr" sfx[4] " " $addr "," hex($imm8) ;
   0xc1 11 111 rrr @imm8 => "sar " greg[$r] "," hex($imm8) ;
@@ -462,7 +466,9 @@ submatch insn {
   0xd0 11 011 rrr => "rcr " rgb[$r] ",1" ;
   0xd0 @addr(3)   => "rcr" sfx[1] " " $addr ",1" ;
   0xd0 11 100 rrr => "shl " rgb[$r] ",1" ;
+  0xd0 11 110 rrr => "shl " rgb[$r] ",1" ;   # /6 = undocumented shl alias
   0xd0 @addr(4)   => "shl" sfx[1] " " $addr ",1" ;
+  0xd0 @addr(6)     => "shl" sfx[1] " " $addr ",1" ;   # /6 = undocumented shl alias
   0xd0 11 101 rrr => "shr " rgb[$r] ",1" ;
   0xd0 @addr(5)   => "shr" sfx[1] " " $addr ",1" ;
   0xd0 11 111 rrr => "sar " rgb[$r] ",1" ;
@@ -476,7 +482,9 @@ submatch insn {
   0xd1 11 011 rrr => "rcr " greg[$r] ",1" ;
   0xd1 @addr(3)   => "rcr" sfx[4] " " $addr ",1" ;
   0xd1 11 100 rrr => "shl " greg[$r] ",1" ;
+  0xd1 11 110 rrr => "shl " greg[$r] ",1" ;   # /6 = undocumented shl alias
   0xd1 @addr(4)   => "shl" sfx[4] " " $addr ",1" ;
+  0xd1 @addr(6)     => "shl" sfx[4] " " $addr ",1" ;   # /6 = undocumented shl alias
   0xd1 11 101 rrr => "shr " greg[$r] ",1" ;
   0xd1 @addr(5)   => "shr" sfx[4] " " $addr ",1" ;
   0xd1 11 111 rrr => "sar " greg[$r] ",1" ;
@@ -490,7 +498,9 @@ submatch insn {
   0xd2 11 011 rrr => "rcr " rgb[$r] ",cl" ;
   0xd2 @addr(3)   => "rcr" sfx[1] " " $addr ",cl" ;
   0xd2 11 100 rrr => "shl " rgb[$r] ",cl" ;
+  0xd2 11 110 rrr => "shl " rgb[$r] ",cl" ;   # /6 = undocumented shl alias
   0xd2 @addr(4)   => "shl" sfx[1] " " $addr ",cl" ;
+  0xd2 @addr(6)     => "shl" sfx[1] " " $addr ",cl" ;   # /6 = undocumented shl alias
   0xd2 11 101 rrr => "shr " rgb[$r] ",cl" ;
   0xd2 @addr(5)   => "shr" sfx[1] " " $addr ",cl" ;
   0xd2 11 111 rrr => "sar " rgb[$r] ",cl" ;
@@ -504,7 +514,9 @@ submatch insn {
   0xd3 11 011 rrr => "rcr " greg[$r] ",cl" ;
   0xd3 @addr(3)   => "rcr" sfx[4] " " $addr ",cl" ;
   0xd3 11 100 rrr => "shl " greg[$r] ",cl" ;
+  0xd3 11 110 rrr => "shl " greg[$r] ",cl" ;   # /6 = undocumented shl alias
   0xd3 @addr(4)   => "shl" sfx[4] " " $addr ",cl" ;
+  0xd3 @addr(6)     => "shl" sfx[4] " " $addr ",cl" ;   # /6 = undocumented shl alias
   0xd3 11 101 rrr => "shr " greg[$r] ",cl" ;
   0xd3 @addr(5)   => "shr" sfx[4] " " $addr ",cl" ;
   0xd3 11 111 rrr => "sar " greg[$r] ",cl" ;
@@ -573,7 +585,9 @@ submatch insn {
   0xe9 @relz => "jmp " hex($relz) ;
   0xeb @rel8 => "jmp " hex($rel8) ;
   0xf6 11 000 rrr @imm8 => "test " rgb[$r] "," hex($imm8) ;
+  0xf6 11 001 rrr @imm8 => "test " rgb[$r] "," hex($imm8) ;   # /1 = undocumented test alias
   0xf6 @addr(0)   @imm8 => "test" sfx[1] " " $addr "," hex($imm8) ;
+  0xf6 @addr(1)     @imm8 => "test" sfx[1] " " $addr "," hex($imm8) ;   # /1 = undocumented test alias
   0xf6 11 010 rrr => "not " rgb[$r] ;
   0xf6 @addr(2)   => "not" sfx[1] " " $addr ;
   0xf6 11 011 rrr => "neg " rgb[$r] ;
@@ -587,7 +601,9 @@ submatch insn {
   0xf6 11 111 rrr => "idiv " rgb[$r] ;
   0xf6 @addr(7)   => "idiv" sfx[1] " " $addr ;
   0xf7 11 000 rrr @immz => "test " greg[$r] "," hex($immz) ;
+  0xf7 11 001 rrr @immz => "test " greg[$r] "," hex($immz) ;   # /1 = undocumented test alias
   0xf7 @addr(0)   @immz => "test" sfx[4] " " $addr "," hex($immz) ;
+  0xf7 @addr(1)     @immz => "test" sfx[4] " " $addr "," hex($immz) ;   # /1 = undocumented test alias
   0xf7 11 010 rrr => "not " greg[$r] ;
   0xf7 @addr(2)   => "not" sfx[4] " " $addr ;
   0xf7 11 011 rrr => "neg " greg[$r] ;
@@ -710,8 +726,10 @@ submatch insn {
   0x0f 0xc7 @addr(6) [$pp==2] => "vmxon " $addr ;       #         F3 vmxon
   0x0f 0xc7 @addr(7) [$pp==0] => "vmptrst " $addr ;     # /7 mem: NP vmptrst
   0x0f 0xc7 11 110 rrr [$pp==0] => "rdrand " greg[$r] ;    # /6 reg: NP rdrand r32/r64
+  0x0f 0xc7 11 110 rrr [$pp==1] => "rdrand " greg[$r] ;    #          66 rdrand r16
   0x0f 0xc7 11 110 rrr [$pp==2] => "senduipi " gregq[$r] ; #          F3 senduipi r64
   0x0f 0xc7 11 111 rrr [$pp==0] => "rdseed " greg[$r] ;    # /7 reg: NP rdseed r32/r64
+  0x0f 0xc7 11 111 rrr [$pp==1] => "rdseed " greg[$r] ;    #          66 rdseed r16
   0x0f 0xc7 11 111 rrr [$pp==2] => "rdpid " gregq[$r] ;    #          F3 rdpid r64
   0x0f 11001 bbb       => "bswap " greg[$b] ;
 
@@ -1512,6 +1530,16 @@ submatch insn {
   0xdc 11 101 rrr => "fsub st(" dec($r) ")" ;
   0xdc 11 110 rrr => "fdivr st(" dec($r) ")" ;
   0xdc 11 111 rrr => "fdiv st(" dec($r) ")" ;
+  # ---- undocumented x87 reg-direct aliases (real on silicon; objdump rejects, other
+  # decoders accept). Redundant encodings of fcom/fcomp/fxch/fstp/fstpnce. ----------
+  0xdc 11 010 rrr => "fcom st(" dec($r) ")" ;      # DC /2 = fcom st(i)  (alt of D8 /2)
+  0xdc 11 011 rrr => "fcomp st(" dec($r) ")" ;     # DC /3 = fcomp st(i) (alt of D8 /3)
+  0xde 11 010 rrr => "fcomp st(" dec($r) ")" ;     # DE /2 = fcomp st(i)
+  0xdd 11 001 rrr => "fxch st(" dec($r) ")" ;      # DD /1 = fxch st(i)  (alt of D9 /1)
+  0xdf 11 001 rrr => "fxch st(" dec($r) ")" ;      # DF /1 = fxch st(i)
+  0xdf 11 010 rrr => "fstp st(" dec($r) ")" ;      # DF /2 = fstp st(i)  (alt of DD /3)
+  0xdf 11 011 rrr => "fstp st(" dec($r) ")" ;      # DF /3 = fstp st(i)
+  0xd9 11 011 rrr => "fstpnce st(" dec($r) ")" ;   # D9 /3 = fstpnce st(i) (undocumented)
   0xdc @addr(0)   => "fadd.q " $addr ;
   0xdc @addr(1)   => "fmul.q " $addr ;
   0xdc @addr(2)   => "fcom.q " $addr ;
@@ -1622,6 +1650,8 @@ submatch insn {
   0x0f 0x01 11 011 111 => "invlpga" ;
   0x0f 0x01 11 100 rrr => "smsw " greg[$r] ;
   0x0f 0x01 11 101 000 => "serialize" ;
+  0x0f 0x01 11 101 000 [$pp==3] => "xsusldtrk" ;        # F2 0F01 E8: TSXLDTRK suspend
+  0x0f 0x01 11 101 001 [$pp==3] => "xresldtrk" ;        # F2 0F01 E9: TSXLDTRK resume
   0x0f 0x01 11 101 110 => "rdpkru" ;
   0x0f 0x01 11 101 111 => "wrpkru" ;
   0x0f 0x01 11 110 rrr => "lmsw " gregw[$r] ;
