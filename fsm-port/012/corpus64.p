@@ -781,8 +781,10 @@ submatch insn {
   0x0f 0x18 11 101 rrr => "nop~18 " greg[$r] ;
   0x0f 0x18 11 110 rrr => "nop~18 " greg[$r] ;
   0x0f 0x18 11 111 rrr => "nop~18 " greg[$r] ;
-  # 0F 0D: prefetch group -- /1 prefetchw, /2 prefetchwt1, all other digits prefetch;
-  # memory-only (the reg-direct forms are #UD, matching objdump).
+  # 0F 0D: prefetch group -- /1 prefetchw, /2 prefetchwt1, all other digits prefetch
+  # (memory forms). The reg-direct forms are the Intel reserved multi-byte NOP (Zydis
+  # decodes them; objdump calls them (bad)) -- rendered "nop" via the ~0d disambiguator
+  # so the encoder keeps them distinct from the 0F 1F / 0F 18-1E nop-space opcodes.
   0x0f 0x0d @addr(0)   => "prefetch " $addr ;
   0x0f 0x0d @addr(1)   => "prefetchw " $addr ;
   0x0f 0x0d @addr(2)   => "prefetchwt1 " $addr ;
@@ -791,6 +793,14 @@ submatch insn {
   0x0f 0x0d @addr(5)   => "prefetch " $addr ;
   0x0f 0x0d @addr(6)   => "prefetch " $addr ;
   0x0f 0x0d @addr(7)   => "prefetch " $addr ;
+  0x0f 0x0d 11 000 rrr => "nop~0d " greg[$r] ;
+  0x0f 0x0d 11 001 rrr => "nop~0d " greg[$r] ;
+  0x0f 0x0d 11 010 rrr => "nop~0d " greg[$r] ;
+  0x0f 0x0d 11 011 rrr => "nop~0d " greg[$r] ;
+  0x0f 0x0d 11 100 rrr => "nop~0d " greg[$r] ;
+  0x0f 0x0d 11 101 rrr => "nop~0d " greg[$r] ;
+  0x0f 0x0d 11 110 rrr => "nop~0d " greg[$r] ;
+  0x0f 0x0d 11 111 rrr => "nop~0d " greg[$r] ;
   # 0F 1C cldemote (/0 mem) + reserved-nop; 0F 19/1D reserved multi-byte nop
   0x0f 0x1c @addr(0) [$pp==0] => "cldemote " $addr ;   # cldemote is NP-only; 66/F3/F2 -> nop
   0x0f 0x1c @addr(0)   => "nop~1c " $addr ;
@@ -1674,7 +1684,9 @@ submatch insn {
   0x0f 0x07 => sret[$opsiz] ;
   0x0f 0x08 => "invd" ;
   0x0f 0x09 [$pp==0] => "wbinvd" ;
-  0x0f 0x09 [$pp==2] => "wbnoinvd" ;
+  0x0f 0x09 [$pp==2] => "wbnoinvd" ;                    # F3 selects wbnoinvd
+  0x0f 0x09 [$pp==1] => "wbinvd" ;                      # 66 has no meaning here -> ignored (wbinvd)
+  0x0f 0x09 [$pp==3] => "wbinvd" ;                      # F2 likewise ignored (real HW decodes wbinvd)
   # VIA PadLock (0F A6/A7): fully-fixed ModR/M crypto ops; the rep (F3) prefix that
   # accompanies them in practice rides the prefix run and replays.
   0x0f 0xa6 11 000 000 => "montmul" ;

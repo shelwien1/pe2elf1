@@ -241,9 +241,10 @@ Remaining iced-only differences, deliberately left (all bijection-safe):
   matching **objdump** and the legacy/AMD reading; iced emits rel32 (66 ignored per the
   Intel-64 near-branch note). A deterministic decoder must pick one; both round-trip.
 * **Non-canonical / vendor forms not added**: fence `rm≠0` (lfence/mfence/sfence E9–FF —
-  broadening the ModR/M would print a phantom GPR operand on the canonical rm=0 form),
-  the `0F 0D` reg-direct long-nop, `66`-prefixed `wbinvd` (objdump also `(bad)`), and VIA
-  PadLock `xsha1`/`xstore`/`xcrypt` (discontinued vendor; iced itself decodes only 2 of them).
+  broadening the ModR/M would print a phantom GPR operand on the canonical rm=0 form), and
+  VIA PadLock `xsha1`/`xstore`/`xcrypt` (discontinued vendor; iced itself decodes only 2 of
+  them). *(The `0F 0D` reg-direct long-nop and the `66`/`F2`-ignored `wbinvd` — both once
+  listed here — are now decoded; see §7b.)*
 
 ### 7b. Third differential oracle — Zydis (finds the REX2 0F-map gap)
 
@@ -276,9 +277,24 @@ Validated by a 16,384-case REX2 sweep (all `M0=1` payload/reg-bit combos × reg/
 256 opcodes): **0 length mismatches vs Zydis**, and the 5 M-buffer `fuzz64` stays at 0
 round-trip failures (bijection is preserved — the register extension only changes the
 *rendered* number; the encoder re-emits ModR/M from the low 3 bits with the high bits in
-the replayed REX2 payload). The one remaining Zydis-only gap is the `0F 0D` reg-direct
-long-nop, deliberately deferred (§7a): objdump also calls it `(bad)`, and adding it would
-introduce an encoder multi-candidate ambiguity with the `0F 1F` / `0F 18-1E` reserved-NOPs.
+the replayed REX2 payload).
+
+A follow-up comprehensive legacy+REX+REX2 sweep vs Zydis (14,848 cases: every prefix ×
+map × opcode × reg/mem) then closed the last two coverage gaps it found:
+
+* **`0F 0D` reg-direct long-nop** (Intel reserved multi-byte NOP; objdump `(bad)`, Zydis
+  `nop`). Added as `nop~0d` reg-forms — the `~0d` disambiguator gives it a distinct enum
+  from the `0F 1F` / `0F 18-1E` nop-space opcodes, so the encoder round-trips it byte-exact
+  (mnem 224 vs 48/220…) with no candidate ambiguity; it renders as `nop`.
+* **`66`/`F2` on `wbinvd`** (`0F 09`). The `[$pp==0]` guard (added to split off `wbnoinvd`
+  at F3) rejected the meaningless-prefix forms that real silicon ignores → wbinvd; added
+  `[$pp==1]`/`[$pp==3]` → `wbinvd` (F3 still → wbnoinvd, which is *more* correct than this
+  Zydis build, which mis-decodes F3 as wbinvd). This also removed an `invd`-vs-`wbinvd`
+  inconsistency (invd was already unguarded and accepted 66).
+
+After both, the legacy+REX+REX2 sweep is **GAP=0 vs Zydis** — the only residual differences
+are the 18 `66`-near-branch length picks (deliberate rel16, §7a) and intentional
+over-decoding of non-canonical forms Zydis rejects.
 
 ## 8. Deliberate decode-display policy (not bugs)
 
