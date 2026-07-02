@@ -4246,6 +4246,59 @@ submatch evex {
   h k b e 00 01 0 1111 1 11 z ll 0 1 aaa 0x70 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vpshuflw " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr "," hex($imm8) ;
   h k b e 00 10 0 vvvv 1 01 z ll 0 u aaa 0x00 11 ggg rrr => wit("evex") "vpshufb " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
   h k b e 00 10 0 vvvv 1 01 z ll 0 u aaa 0x00 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vpshufb " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  # ==== EVEX fp move/scalar/unpack: vcomis/vucomis, vmax/vmin s, vunpck, vmovdup, vmovnt* ====
+  h k b e 00 01 0 1111 1 01 z ll 0 1 aaa 0x2f 11 ggg rrr => wit("evex") "vcomisd " ereg[32*$l+16*$e+8*$h+$g] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 01 0 1111 1 01 z ll 0 1 aaa 0x2f @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vcomisd " ereg[32*$l+16*$e+8*$h+$g] "," $addr ;
+  h k b e 00 01 0 1111 1 01 z 00 1 1 aaa 0x2f 11 ggg rrr => wit("evex") "vcomisd " ereg[64+16*$e+8*$h+$g] "," ereg[64+16*$k+8*$b+$r] " {sae}" ;
+  h k b e 00 01 0 1111 1 00 z ll 0 1 aaa 0x2f 11 ggg rrr => wit("evex") "vcomiss " ereg[32*$l+16*$e+8*$h+$g] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 01 0 1111 1 00 z ll 0 1 aaa 0x2f @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vcomiss " ereg[32*$l+16*$e+8*$h+$g] "," $addr ;
+  h k b e 00 01 0 1111 1 00 z 00 1 1 aaa 0x2f 11 ggg rrr => wit("evex") "vcomiss " ereg[64+16*$e+8*$h+$g] "," ereg[64+16*$k+8*$b+$r] " {sae}" ;
+  h k b e 00 01 0 1111 1 01 z ll 0 1 aaa 0x2e 11 ggg rrr => wit("evex") "vucomisd " ereg[32*$l+16*$e+8*$h+$g] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 01 0 1111 1 01 z ll 0 1 aaa 0x2e @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vucomisd " ereg[32*$l+16*$e+8*$h+$g] "," $addr ;
+  h k b e 00 01 0 1111 1 01 z 00 1 1 aaa 0x2e 11 ggg rrr => wit("evex") "vucomisd " ereg[64+16*$e+8*$h+$g] "," ereg[64+16*$k+8*$b+$r] " {sae}" ;
+  h k b e 00 01 0 1111 1 00 z ll 0 1 aaa 0x2e 11 ggg rrr => wit("evex") "vucomiss " ereg[32*$l+16*$e+8*$h+$g] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 01 0 1111 1 00 z ll 0 1 aaa 0x2e @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vucomiss " ereg[32*$l+16*$e+8*$h+$g] "," $addr ;
+  h k b e 00 01 0 1111 1 00 z 00 1 1 aaa 0x2e 11 ggg rrr => wit("evex") "vucomiss " ereg[64+16*$e+8*$h+$g] "," ereg[64+16*$k+8*$b+$r] " {sae}" ;
+  h k b e 00 01 1 vvvv 1 11 z ll 0 u aaa 0x5f 11 ggg rrr => wit("evex") "vmaxsd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 01 1 vvvv 1 11 z ll 0 u aaa 0x5f @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmaxsd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  h k b e 00 01 1 vvvv 1 11 z 00 1 u aaa 0x5f 11 ggg rrr => wit("evex") "vmaxsd " ereg[64+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[64+16*$u+$v] "," ereg[64+16*$k+8*$b+$r] " {sae}" ;
+  h k b e 00 01 0 vvvv 1 10 z ll 0 u aaa 0x5f 11 ggg rrr => wit("evex") "vmaxss " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 01 0 vvvv 1 10 z ll 0 u aaa 0x5f @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmaxss " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  h k b e 00 01 0 vvvv 1 10 z 00 1 u aaa 0x5f 11 ggg rrr => wit("evex") "vmaxss " ereg[64+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[64+16*$u+$v] "," ereg[64+16*$k+8*$b+$r] " {sae}" ;
+  h k b e 00 01 1 vvvv 1 11 z ll 0 u aaa 0x5d 11 ggg rrr => wit("evex") "vminsd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 01 1 vvvv 1 11 z ll 0 u aaa 0x5d @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vminsd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  h k b e 00 01 1 vvvv 1 11 z 00 1 u aaa 0x5d 11 ggg rrr => wit("evex") "vminsd " ereg[64+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[64+16*$u+$v] "," ereg[64+16*$k+8*$b+$r] " {sae}" ;
+  h k b e 00 01 0 vvvv 1 10 z ll 0 u aaa 0x5d 11 ggg rrr => wit("evex") "vminss " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 01 0 vvvv 1 10 z ll 0 u aaa 0x5d @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vminss " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  h k b e 00 01 0 vvvv 1 10 z 00 1 u aaa 0x5d 11 ggg rrr => wit("evex") "vminss " ereg[64+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[64+16*$u+$v] "," ereg[64+16*$k+8*$b+$r] " {sae}" ;
+  h k b e 00 01 1 vvvv 1 01 z ll 0 u aaa 0x15 11 ggg rrr => wit("evex") "vunpckhpd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 01 1 vvvv 1 01 z ll 0 u aaa 0x15 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vunpckhpd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  h k b e 00 01 1 vvvv 1 01 z ll 1 u aaa 0x15 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vunpckhpd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr bcst64[$l] ;
+  h k b e 00 01 0 vvvv 1 00 z ll 0 u aaa 0x15 11 ggg rrr => wit("evex") "vunpckhps " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 01 0 vvvv 1 00 z ll 0 u aaa 0x15 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vunpckhps " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  h k b e 00 01 0 vvvv 1 00 z ll 1 u aaa 0x15 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vunpckhps " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr bcst32[$l] ;
+  h k b e 00 01 1 vvvv 1 01 z ll 0 u aaa 0x14 11 ggg rrr => wit("evex") "vunpcklpd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 01 1 vvvv 1 01 z ll 0 u aaa 0x14 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vunpcklpd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  h k b e 00 01 1 vvvv 1 01 z ll 1 u aaa 0x14 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vunpcklpd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr bcst64[$l] ;
+  h k b e 00 01 0 vvvv 1 00 z ll 0 u aaa 0x14 11 ggg rrr => wit("evex") "vunpcklps " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 01 0 vvvv 1 00 z ll 0 u aaa 0x14 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vunpcklps " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  h k b e 00 01 0 vvvv 1 00 z ll 1 u aaa 0x14 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vunpcklps " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr bcst32[$l] ;
+  h k b e 00 01 1 1111 1 11 z ll 0 1 aaa 0x12 11 ggg rrr => wit("evex") "vmovddup " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 01 1 1111 1 11 z ll 0 1 aaa 0x12 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovddup " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr ;
+  h k b e 00 01 0 1111 1 10 z ll 0 1 aaa 0x16 11 ggg rrr => wit("evex") "vmovshdup " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 01 0 1111 1 10 z ll 0 1 aaa 0x16 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovshdup " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr ;
+  h k b e 00 01 0 1111 1 10 z ll 0 1 aaa 0x12 11 ggg rrr => wit("evex") "vmovsldup " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 01 0 1111 1 10 z ll 0 1 aaa 0x12 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovsldup " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr ;
+  h k b e 00 01 0 1111 1 01 z ll 0 1 aaa 0xe7 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovntdq " $addr "," ereg[32*$l+16*$e+8*$h+$g] ;
+  h k b e 00 01 1 1111 1 01 z ll 0 1 aaa 0x2b @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovntpd " $addr "," ereg[32*$l+16*$e+8*$h+$g] ;
+  h k b e 00 01 0 1111 1 00 z ll 0 1 aaa 0x2b @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovntps " $addr "," ereg[32*$l+16*$e+8*$h+$g] ;
+  h k b e 00 10 0 1111 1 01 z ll 0 1 aaa 0x2a @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovntdqa " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr ;
+  h k b e 00 01 0 vvvv 1 10 z ll 0 u aaa 0x10 11 ggg rrr => wit("evex") "vmovss " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 01 0 1111 1 10 z ll 0 1 aaa 0x10 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovss " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr ;
+  h k b e 00 01 0 1111 1 10 z ll 0 1 aaa 0x11 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovss " $addr kzdec[$z*8+$a] "," ereg[32*$l+16*$e+8*$h+$g] ;
+  h k b e 00 01 1 vvvv 1 11 z ll 0 u aaa 0x10 11 ggg rrr => wit("evex") "vmovsd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 01 1 1111 1 11 z ll 0 1 aaa 0x10 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovsd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr ;
+  h k b e 00 01 1 1111 1 11 z ll 0 1 aaa 0x11 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovsd " $addr kzdec[$z*8+$a] "," ereg[32*$l+16*$e+8*$h+$g] ;
 }
 
 
@@ -4702,6 +4755,7 @@ submatch apx {
 }
 
 submatch main { @pfx(0) => $pfx }
+
 
 
 
