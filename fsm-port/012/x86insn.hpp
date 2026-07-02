@@ -34,7 +34,8 @@ enum {
   T_IMM,  /* the one full immediate  -> imm                            */
   T_IMM2, /* enter's 2nd immediate   -> disp (free; enter has no mem)   */
   T_REL,  /* branch displacement     -> imm                            */
-  T_PTR   /* far ptr16:32   off -> imm,  sel -> disp                    */
+  T_PTR,  /* far ptr16:32   off -> imm,  sel -> disp                    */
+  T_TMM   /* AMX tile register tmm0..tmm7 (VEX-encoded, not sized by L) */
 };
 
 typedef struct {

@@ -311,6 +311,25 @@ With these, **both** the systematic legacy sweep and the 300k random VEX/EVEX/XO
 **GAP=0 vs Zydis** (only the deliberate `66`-near-branch length picks and the discontinued
 KNC `jkzd`/`jknzd` remain, both documented).
 
+### 7c. AMX (Advanced Matrix Extensions) — tile ops now decoded semantically
+
+A *mnemonic*-comparing differential (not just length) found that the length-only sweeps had
+hidden a whole family: AMX (Sapphire Rapids+) decoded to the `vex` structural placeholder
+with a *matching length*, so `agree_len` counted it as agreement. All 13 AMX ops now decode
+semantically (verified against Zydis + objdump), via a new `T_TMM` tile-register file:
+
+* **Infra**: `T_TMM` operand type (tmm0-7); VEX file code 7 (`vex_mkop`); `tmmreg` table +
+  `VEXFILE['TMM']=7` and the `tmmreg`→`TMM` operand-file mapping in gen.py. `vvvv` is typed
+  by the reg file, so `rf=TMM` covers dst+src1+src2 for the 3-operand forms.
+* **Ops** (VEX.128.0F38.W0): LDTILECFG (NP 49 mem), STTILECFG (66 49 mem), TILERELEASE
+  (NP 49 C0 — reg-form swap in vex_finalize, like vmovlps→vmovhlps), TILEZERO (F2 49 reg),
+  TILELOADD/TILELOADDT1/TILESTORED (F2/66/F3 4B, sibmem), and the dot-products TDPB[uu/us/
+  su/ss]D (5E, RMV) + TDPBF16PS/TDPFP16PS (5C). `AMX-COMPLEX` (tcmm* at 6C) is post-dating
+  this Zydis build; not yet added.
+
+Bijection preserved (VEX byte-replay is mnemonic-independent): fuzz64 5 M = 0 failures,
+roundtrip64 byte-identical, plus a targeted AMX decode/re-encode check.
+
 ## 8. Deliberate decode-display policy (not bugs)
 
 * Size suffixes (`.b/.w/.d/.q/.t`) instead of `BYTE/WORD/... PTR`; `[rax+0]`-style

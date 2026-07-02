@@ -84,6 +84,7 @@ table ssereg { mm0,mm1,mm2,mm3,mm4,mm5,mm6,mm7,
   xmm0,xmm1,xmm2,xmm3,xmm4,xmm5,xmm6,xmm7,xmm8,xmm9,xmm10,xmm11,xmm12,xmm13,xmm14,xmm15 }
 table sreg { es,cs,ss,ds,fs,gs }
 table bndreg { bnd0,bnd1,bnd2,bnd3 }                     # MPX bound registers (0F 1A/1B)
+table tmmreg { tmm0,tmm1,tmm2,tmm3,tmm4,tmm5,tmm6,tmm7 } # AMX tile registers (VEX 0F38)
 table cond { o,no,b,ae,e,ne,be,a,s,ns,p,np,l,ge,le,g }
 
 # size suffix : the dot is part of the entry; index = operand size in bytes
@@ -2659,6 +2660,25 @@ submatch vex {
   h k b 00011 0 1111 y 01 0x19 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "vextractf128 " $addr "," vreg[16*$y+8*$h+$g] "," hex($imm8) ;
   h k b 00011 0 1111 y 01 0x39 11 ggg rrr @imm8 => "vextracti128 " vreg[8+$r] "," vreg[16*$y+8*$h+$g] "," hex($imm8) ;
   h k b 00011 0 1111 y 01 0x39 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "vextracti128 " $addr "," vreg[16*$y+8*$h+$g] "," hex($imm8) ;
+  # ---- AMX (Advanced Matrix Extensions): VEX.128.0F38.W0, tile registers tmm0..7 -----
+  # Tile config (m512 operand): LDTILECFG (NP), STTILECFG (66); TILERELEASE (NP, C0 fixed).
+  h k b 00010 0 1111 0 00 0x49 @addr {$rexb=1-$b;$rexx=1-$k} => "ldtilecfg " $addr ;
+  h k b 00010 0 1111 0 01 0x49 @addr {$rexb=1-$b;$rexx=1-$k} => "sttilecfg " $addr ;
+  h k b 00010 0 1111 0 00 0x49 11 000 000 => "tilerelease" ;
+  # TILEZERO (F2, reg=tmm); the r/m field is reserved (rendered from the reg tile only).
+  h k b 00010 0 1111 0 11 0x49 11 ggg rrr => "tilezero " tmmreg[$g] ;
+  # Tile load/store (sibmem): TILELOADD (F2), TILELOADDT1 (66), TILESTORED (F3).
+  h k b 00010 0 1111 0 11 0x4b @addr {$rexb=1-$b;$rexx=1-$k} => "tileloadd " tmmreg[$g] "," $addr ;
+  h k b 00010 0 1111 0 01 0x4b @addr {$rexb=1-$b;$rexx=1-$k} => "tileloaddt1 " tmmreg[$g] "," $addr ;
+  h k b 00010 0 1111 0 10 0x4b @addr {$rexb=1-$b;$rexx=1-$k} => "tilestored " $addr "," tmmreg[$g] ;
+  # Tile dot-product (RMV: dst=reg, src1=r/m, src2=vvvv), all tmm. 5E: TDPB[uu/us/su/ss]D
+  # by pp (NP/66/F3/F2); 5C: TDPBF16PS (F3), TDPFP16PS (F2).
+  h k b 00010 0 vvvv 0 00 0x5e 11 ggg rrr => "tdpbuud " tmmreg[$g] "," tmmreg[$r] "," tmmreg[$v] ;
+  h k b 00010 0 vvvv 0 01 0x5e 11 ggg rrr => "tdpbusd " tmmreg[$g] "," tmmreg[$r] "," tmmreg[$v] ;
+  h k b 00010 0 vvvv 0 10 0x5e 11 ggg rrr => "tdpbsud " tmmreg[$g] "," tmmreg[$r] "," tmmreg[$v] ;
+  h k b 00010 0 vvvv 0 11 0x5e 11 ggg rrr => "tdpbssd " tmmreg[$g] "," tmmreg[$r] "," tmmreg[$v] ;
+  h k b 00010 0 vvvv 0 10 0x5c 11 ggg rrr => "tdpbf16ps " tmmreg[$g] "," tmmreg[$r] "," tmmreg[$v] ;
+  h k b 00010 0 vvvv 0 11 0x5c 11 ggg rrr => "tdpfp16ps " tmmreg[$g] "," tmmreg[$r] "," tmmreg[$v] ;
 }
 
 submatch vex2 {

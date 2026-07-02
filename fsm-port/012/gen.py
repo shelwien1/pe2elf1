@@ -1030,7 +1030,7 @@ class Interp:
   # register-name tables (an operand draws a register number from one of these);
   # any other bracketed table before the first operand is a mnemonic suffix.
   VEX_REGFILES = ('vreg', 'vvv', 'greg', 'rgb', 'ssereg', 'kreg', 'ereg',
-                  'evvv', 'eregh', 'eregx', 'vregd', 'xreg', 'mmreg', 'areg', 'sreg')
+                  'evvv', 'eregh', 'eregx', 'vregd', 'xreg', 'mmreg', 'areg', 'sreg', 'tmmreg')
   # leading bit-field layout per submatch (name,width). map/W/pp drive the table
   # key; R/X/B/vvvv/L are runtime (the C++ reads them from the raw prefix bytes).
   VEX_LAYOUT = {
@@ -1111,6 +1111,8 @@ class Interp:
       file = 'GPR64' if c >= 32 else 'GPR16' if c >= 16 else 'GPR32'
     elif name == 'kreg':
       file = 'KREG'
+    elif name == 'tmmreg':
+      file = 'TMM'                                  # AMX tile register tmm0..tmm7
     elif name == 'rgb':
       file = 'GPR8'                                 # APX 8-bit GPR (al..r31b, uniform set)
     elif name == 'vregd':
@@ -1186,7 +1188,7 @@ class Interp:
                'APX_MR', 'APX_RM', 'APX_RMI', 'APX_MI', 'APX_M', 'APX_R',
                'APX_MRI', 'APX_MRC']
   VEXFILE = {'VEC': 0, 'GPR32': 1, 'GPR64': 2, 'KREG': 3, 'VECH': 4, 'VECX': 5,
-             'MEM': 0, 'GPR16': 1, 'NONE': 0, 'GPR8': 6}
+             'MEM': 0, 'GPR16': 1, 'NONE': 0, 'GPR8': 6, 'TMM': 7}
   _VEX_PAT = {
     'REG,VVVV,RM': 'VEX_RVM', 'REG,VVVV,RM,IMM8': 'VEX_RVMI',
     'REG,VVVV,RM,IS4': 'VEX_RVMR', 'REG,RM': 'VEX_RM', 'REG,RM,IMM8': 'VEX_RMI',
@@ -2040,6 +2042,11 @@ def emit(c, interp, out_path):
   # reg-direct form is vmovhlps/vmovlhps. The VEX descriptor is per-opcode (no ModR/M
   # branch), so vex_finalize swaps the mnemonic once reg-vs-mem is known.
   for _m in ('vmovlps', 'vmovhlps', 'vmovhps', 'vmovlhps'):
+    w("#define MNEM_%s %d\n" % (_m.upper(), interp._mnem.index(_m) if _m in interp._mnem else 0xFFFF))
+  # AMX: NP.0F38.W0 49 shares its opcode -- the mem form is ldtilecfg, the reg-direct C0
+  # form is tilerelease (no operands). The VEX descriptor is per-opcode, so vex_finalize
+  # swaps the mnemonic (and drops the operand) once the reg-direct form is seen.
+  for _m in ('ldtilecfg', 'tilerelease'):
     w("#define MNEM_%s %d\n" % (_m.upper(), interp._mnem.index(_m) if _m in interp._mnem else 0xFFFF))
   # a mnemonic may carry a "~tag" disambiguator: distinct index (so per-opcode
   # encodings each get their own enc-rank bucket) but a shared display string --

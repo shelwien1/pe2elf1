@@ -413,6 +413,7 @@ static inline x86op_t vex_mkop(x86insn_t* in, int fc, int idx, int vt, int LL) {
     case 3: o.type = T_KREG; o.index = idx & 7; break;          // mask register
     case 4: o.type = (LL >= 2) ? T_YMM : T_XMM; o.index = idx; break;  // half width
     case 5: o.type = T_XMM;  o.index = idx; break;              // quarter/eighth -> xmm
+    case 7: o.type = T_TMM;  o.index = idx & 7; break;          // AMX tile register tmm0..7
     default: o.type = vt;    o.index = idx; break;              // vector (xmm/ymm/zmm by L)
   }
   return o;
@@ -463,6 +464,9 @@ static inline void vex_finalize(x86dec_t* d, const byte* s, size_t op_at) {
   if (in->vex != 3) {
     if (in->mnem == MNEM_VMOVLPS && is_reg) in->mnem = MNEM_VMOVHLPS;
     else if (in->mnem == MNEM_VMOVHPS && is_reg) in->mnem = MNEM_VMOVLHPS;
+    // AMX: NP.0F38.W0 49 mem = ldtilecfg; the reg-direct (C0) form is tilerelease, no
+    // operands. Swap the mnemonic and drop the operand (form -> NONE) on the reg form.
+    else if (in->mnem == MNEM_LDTILECFG && is_reg) { in->mnem = MNEM_TILERELEASE; form = FORM_VEX_NONE; }
   }
   // EVEX decorations: b=1 on a reg-reg form is embedded rounding {er} (L'L picks
   // the mode and the operands are zmm); on a memory form it is broadcast {1toN}.
