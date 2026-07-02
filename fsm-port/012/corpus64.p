@@ -3935,6 +3935,13 @@ submatch evex {
   h k b e 00 10 0 1111 1 01 z ll 0 1 aaa 0x79 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vpbroadcastw " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr ;
   h k b e 00 10 1 1111 1 10 z ll 0 1 aaa 0x2a 11 ggg rrr => wit("evex") "vpbroadcastmb2q " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," kreg[$r] ;
   h k b e 00 10 0 1111 1 10 z ll 0 1 aaa 0x3a 11 ggg rrr => wit("evex") "vpbroadcastmw2d " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," kreg[$r] ;
+  # ==== EVEX scalar<->GPR unsigned converts (mirror vcvtsd2si/vcvtsi2sd templates) ====
+  h k b e 00 01 w 1111 1 11 z ll 1 u aaa 0x79 11 ggg rrr {$rexr=1-$h} => wit("evex") "vcvtsd2usi " greg[32*$w+8*$rexr+$g] "," ereg[64+16*$k+8*$b+$r] rcdec[$l] ;
+  h k b e 00 01 w 1111 1 10 z ll 1 u aaa 0x79 11 ggg rrr {$rexr=1-$h} => wit("evex") "vcvtss2usi " greg[32*$w+8*$rexr+$g] "," ereg[64+16*$k+8*$b+$r] rcdec[$l] ;
+  h k b e 00 01 w 1111 1 11 z 00 1 u aaa 0x78 11 ggg rrr {$rexr=1-$h} => wit("evex") "vcvttsd2usi " greg[32*$w+8*$rexr+$g] "," ereg[64+16*$k+8*$b+$r] " {sae}" ;
+  h k b e 00 01 w 1111 1 10 z 00 1 u aaa 0x78 11 ggg rrr {$rexr=1-$h} => wit("evex") "vcvttss2usi " greg[32*$w+8*$rexr+$g] "," ereg[64+16*$k+8*$b+$r] " {sae}" ;
+  h k b e 00 01 w vvvv 1 11 z ll 1 u aaa 0x7b 11 ggg rrr {$rexb=1-$b} => wit("evex") "vcvtusi2sd " ereg[64+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[64+16*$u+$v] "," greg[32*$w+8*$rexb+$r] rcdec[$l] ;
+  h k b e 00 01 w vvvv 1 10 z ll 1 u aaa 0x7b 11 ggg rrr {$rexb=1-$b} => wit("evex") "vcvtusi2ss " ereg[64+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[64+16*$u+$v] "," greg[32*$w+8*$rexb+$r] rcdec[$l] ;
 }
 
 
@@ -4391,6 +4398,7 @@ submatch apx {
 }
 
 submatch main { @pfx(0) => $pfx }
+
 
 
 
