@@ -1361,7 +1361,10 @@ class Interp:
     # decode to the real mnemonic. This never overwrites, so genuinely W-significant ops
     # (FMA vfmadd*ps/pd, vmovd/vmovq -- both W already present) are untouched. VEX only:
     # EVEX/XOP/APX use W as an element-size / operand selector and are left strict.
-    if 'vex' in kinds:
+    # Also applies to EVEX: the AVX-512 byte/word integer ops are WIG too (vpmullw,
+    # vpsubb, vpaddw, ...), so W1 is valid and identical. Element-size-significant ops
+    # (vpaddd/vpaddq, ps/pd) have BOTH W cells present, so they are never overwritten.
+    if 'vex' in kinds or 'evex' in kinds:
       for (mapidx, pp, W, opcode), cell in list(cells.items()):
         sib = (mapidx, pp, 1 - W, opcode)
         if sib not in cells:
