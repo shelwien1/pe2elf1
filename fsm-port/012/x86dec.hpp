@@ -905,6 +905,7 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
                                    : (d->cap[VAR_OPSIZ] == 1 ? 1 : 0);
       const struct PpDesc* pd = &ppdesc[d->cap[CAP_GRP]][pp];
       if (pd->rform != 0xFF) { d->cap[CAP_FORM] = pd->rform; d->cap[CAP_MFILE] = pd->rmf; }
+      d->cap[CAP_DIR] = pd->dir_reg;   // reg-form ModR/M order (urdmsr r/m,reg vs enqcmd reg,mem)
     }
     fill_insn(d);
     ip = append_imm(d->cap, s, n, ip, (int)d->cap[VAR_OPSIZ]);

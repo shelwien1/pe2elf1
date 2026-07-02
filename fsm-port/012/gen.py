@@ -834,7 +834,8 @@ class Interp:
                  'emb': None, 'mnem': None, 'reg0': False,
                  'cc': None, 'has_reg': False, 'has_mem': False,
                  'mnem_reg': None, 'mnem_mem': None,       # pp slots: mod-dependent mnemonic
-                 'form_reg': None, 'mfile_reg': None}      # ... and mod-dependent form/file
+                 'form_reg': None, 'mfile_reg': None,      # ... and mod-dependent form/file
+                 'dir_mem': 0, 'dir_reg': 0}               # ... and mod-dependent ModR/M order
         if info['pp'] is not None:                       # per-prefix descriptor slot
           slots = ppd.setdefault((tb, byte), [None, None, None, None])
           if slots[info['pp']] is None:
@@ -875,12 +876,12 @@ class Interp:
         if info['modrm'] == 'reg':
           d['rfile'] = OPF[self.operand_file(rhs, 'g')]
           d['mfile'] = OPF[self.operand_file(rhs, 'r')]
-          d['dir'] = dir_rm
+          d['dir'] = dir_rm; d['dir_reg'] = dir_rm       # dir_reg: pp-slot reg-form order
           if info['pp'] is not None:                     # reg-direct form/file (may differ from mem)
             d['form_reg'] = form; d['mfile_reg'] = d['mfile']
         elif info['modrm'] == 'mem':
           d['rfile'] = OPF[self.operand_file(rhs, 'g')]
-          d['dir'] = dir_rm
+          d['dir'] = dir_rm; d['dir_mem'] = dir_rm       # dir_mem: pp-slot mem-form order
           if sfx:
             d['sfx'] = sfx
         elif emb == 'b':
@@ -953,7 +954,12 @@ class Interp:
         rform, rmf = 0xFF, 0
         if s['form_reg'] is not None and mm is not None and s['form_reg'] != s['form']:
           rform, rmf = s['form_reg'], s['mfile_reg']
-        entry.append((mn_base, s['form'], s['dir'], s['rfile'], s['mfile'], s['imk'], rmreq, mreg, rform, rmf))
+        # per-mod ModR/M order: the pre-ModR/M CAP_DIR uses the mem form's order (the
+        # common path); once reg-vs-mem is known, a reg-direct form overrides to dir_reg.
+        # Lets urdmsr (reg: r/m,reg) coexist with enqcmd (mem: reg,mem) at 0F38 F8 pp3.
+        dir_emit = s['dir_mem'] if hm else s['dir_reg']
+        dirreg_emit = s['dir_reg'] if hr else dir_emit
+        entry.append((mn_base, s['form'], dir_emit, s['rfile'], s['mfile'], s['imk'], rmreq, mreg, rform, rmf, dirreg_emit))
         base = base or mn_base
       self._ppdesc.append(entry)
       ppmap[tb][byte] = ([('MNEM', base, 0, 0),
@@ -2107,10 +2113,10 @@ def emit(c, interp, out_path):
   # prefix pp. mnem==0xFFFF marks an illegal prefix (#UD). The C++ reads this after
   # the prefix run (MNSEL mode 3) and overrides mnem/form/dir/rfile/mfile/imk/rmreq.
   ppd = getattr(interp, '_ppdesc', [])
-  w("struct PpDesc { uint16_t mnem, mreg; uint8_t form, dir, rfile, mfile, imk, rmreq, rform, rmf; };\n")
+  w("struct PpDesc { uint16_t mnem, mreg; uint8_t form, dir, rfile, mfile, imk, rmreq, rform, rmf, dir_reg; };\n")
   w("#define PPDESC_N %d\n" % len(ppd))
   w("static const struct PpDesc ppdesc[%d][4] = {\n" % max(1, len(ppd)))
-  ud = "{0xFFFF,0xFFFF,0,0,0,0,0,0,0xFF,0}"
+  ud = "{0xFFFF,0xFFFF,0,0,0,0,0,0,0xFF,0,0}"
   if ppd:
     for entry in ppd:
       cells = []
@@ -2118,9 +2124,9 @@ def emit(c, interp, out_path):
         if slot is None:
           cells.append(ud)
         else:
-          mnem, form_, dir_, rf, mf, imk_, rmreq, mreg, rform, rmf = slot
-          cells.append("{%d,%d,%d,%d,%d,%d,%d,%d,%d,%d}" %
-                       (mnem, mreg, form_, dir_, rf, mf, imk_, rmreq, rform, rmf))
+          mnem, form_, dir_, rf, mf, imk_, rmreq, mreg, rform, rmf, dirreg = slot
+          cells.append("{%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d}" %
+                       (mnem, mreg, form_, dir_, rf, mf, imk_, rmreq, rform, rmf, dirreg))
       w("    {%s},\n" % ", ".join(cells))
   else:
     w("    {%s,%s,%s,%s}\n" % (ud, ud, ud, ud))

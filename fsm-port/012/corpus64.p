@@ -1315,8 +1315,7 @@ submatch insn {
   0x0f 0x38 0xf8 @addr      [$pp==2] => "enqcmds " gregq[$g] "," $addr ;
   0x0f 0x38 0xf8 11 ggg rrr [$pp==2] => "uwrmsr " gregq[$g] "," gregq[$r] ;   # USER_MSR (reg form)
   0x0f 0x38 0xf8 @addr      [$pp==3] => "enqcmd " gregq[$g] "," $addr ;
-  # (F2 0F 38 F8 reg = urdmsr rm,reg: rm-first, conflicts with enqcmd's dir in the
-  #  single-direction per-prefix descriptor slot -- left as #UD for now.)
+  0x0f 0x38 0xf8 11 ggg rrr [$pp==3] => "urdmsr " gregq[$r] "," gregq[$g] ;    # USER_MSR read (reg form: r/m,reg; ppdesc dir_reg keeps enqcmd's mem order intact)
   0x0f 0x38 0xf9 @addr      [$pp==0] => "movdiri " $addr "," gregd[$g] ;      # movdiri m,r32/64
   0x0f 0x38 0xfa 11 ggg rrr [$pp==2] => "encodekey128 " gregd[$g] "," gregd[$r] ;  # Key Locker
   0x0f 0x38 0xfb 11 ggg rrr [$pp==2] => "encodekey256 " gregd[$g] "," gregd[$r] ;

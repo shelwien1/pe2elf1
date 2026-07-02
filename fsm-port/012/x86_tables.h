@@ -64592,10 +64592,10 @@ static const uint16_t ppvtab[1][4] = {
     {0,0,0,0}
 };
 
-struct PpDesc { uint16_t mnem, mreg; uint8_t form, dir, rfile, mfile, imk, rmreq, rform, rmf; };
+struct PpDesc { uint16_t mnem, mreg; uint8_t form, dir, rfile, mfile, imk, rmreq, rform, rmf, dir_reg; };
 #define PPDESC_N 0
 static const struct PpDesc ppdesc[1][4] = {
-    {{0xFFFF,0xFFFF,0,0,0,0,0,0,0xFF,0},{0xFFFF,0xFFFF,0,0,0,0,0,0,0xFF,0},{0xFFFF,0xFFFF,0,0,0,0,0,0,0xFF,0},{0xFFFF,0xFFFF,0,0,0,0,0,0,0xFF,0}}
+    {{0xFFFF,0xFFFF,0,0,0,0,0,0,0xFF,0,0},{0xFFFF,0xFFFF,0,0,0,0,0,0,0xFF,0,0},{0xFFFF,0xFFFF,0,0,0,0,0,0,0xFF,0,0},{0xFFFF,0xFFFF,0,0,0,0,0,0,0xFF,0,0}}
 };
 
 static const uint8_t ppgroup[39] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
