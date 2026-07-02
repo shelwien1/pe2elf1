@@ -142,12 +142,14 @@ Nine localized cases, all operand-shape quirks that the descriptor model cannot 
 
 ### Deviation inventory — encode side
 
-* **`vex_structure()`** in `x86enc.hpp` is the one true opcode table in C++: a hardcoded
-  (map, opcode) → (has-ModR/M?, imm length) map for the byte-replay tail (map 1 imm8 ops,
-  map 3 ⇒ imm8, XOP map 8 ⇒ is4, XOP map 10 ⇒ imm32, APX map 4 imm cases). It duplicates
-  facts the corpus already states (`@imm8`/`@imm32`/IMK per cell). **Cleanup candidate:**
-  have `gasm.py` emit this table from the compiled cells — mechanical, would remove the
-  last hardcoded opcode knowledge.
+* **`vex_structure()`** in `x86enc.hpp` — **resolved (2026-07-02).** The byte-replay tail
+  layout (has-ModR/M? + imm length for VEX/EVEX/XOP/APX) is now a lookup into a generated
+  `vextail[7][256]` table (gen.py), compiled from the corpus cells: seeded with the per-map
+  defaults the structural fallback needs for uncovered opcodes, then overridden with the
+  cell-exact `(has_modrm, imm)` for every covered opcode, with a conflict detector. An
+  exhaustive new-vs-old check over every (map, opcode, opsize) confirmed 0 differences.
+  The encoder now has **no** hardcoded opcode table; adding an immediate-bearing VEX/EVEX
+  instruction to the corpus updates the tail automatically.
 * Byte-replay itself is a design choice, not a gap: the encoder never *synthesizes* a
   VEX/EVEX prefix, it replays the decoded one. That is exactly what a lossless round-trip
   wants (it preserves non-canonical prefix choices for free). It does mean the tool is a
@@ -181,19 +183,17 @@ file), and the `v4fmadd` mem-only shape.
 ## 7. Remaining work — structural items
 
 1. **AVX512-FP16 (EVEX maps 5/6): 88 mnemonics, currently unrouted.** Needs `gen.py` to
-   route `evexp0` maps 5/6 into opcode blocks. **State-budget constraint:** the FSM `next`
-   field is `uint16_t` with `FSM_HALT = 0xFFFF`, and the 64-bit FSM already sits at
-   61,440/65,535 states. Block allocation is arithmetic per (map,pp,W) — 24 blocks each
-   for VEX/EVEX/XOP opcodes + 8 for APX — so naively adding 2 maps ≈ +16 opcode blocks
-   + 2 routing blocks ≈ +4,608 states ⇒ **overflow**. Options, in preference order:
-   a) allocate opcode blocks **only for populated (map,pp,W) combos** via a small
-      generated base-index table (also reclaims today's empty blocks — XOP alone wastes
-      ~18 of its 24); b) widen `next` to `uint32_t` (+~240 KiB table, trivial code change);
-   c) a second FSM array for the FP16 maps.
+   route `evexp0` maps 5/6 into opcode blocks + the corpus rules. **State-budget constraint:
+   resolved (2026-07-02).** `DState.next` (and `FSM_INDEX`/`FSM_HALT`/`run_fsm`) were widened
+   from `uint16_t` to `uint32_t`, removing the 65,535-state ceiling permanently (sizeof(Fsm)
+   960 → 1,200 KiB). Adding the FP16 maps' ~34 blocks is now purely a matter of writing the
+   routing + rules; block allocation stays dense-arithmetic (sparse allocation remains a
+   future memory optimization, not a prerequisite).
 2. **`urdmsr` F2 0F38 F8 reg-form** (deferred): its operand order conflicts with the
    single-direction `ppdesc` slot shared with `enqcmd` — needs a per-mod direction bit in
    the descriptor (small mechanism extension).
-3. **`vex_structure` generation** (encode-side purity, §5).
+3. ~~**`vex_structure` generation**~~ — **done** (§5): the encoder tail table is generated
+   from the corpus.
 4. Optional, out of scope for bijection: a strict-objdump display mode (PTR keywords,
    `movabs`, disp8*N shown pre-scaled, cc/imm alias expansion (`vcmpeqps`,
    `vpclmullqlqdq`), implicit `<xmm0>` rendering).
@@ -226,10 +226,11 @@ python3 gen.py corpus.p x86_tables.h && python3 gasm.py corpus.p x86_tables_enc.
 
 1. Finish EVEX maps 1–3 by family (§6) — pure corpus batches under the proven
    generate→self-verify→fuzz→commit loop; largest coverage win per effort.
-2. FSM block-allocation fix (§7.1a) — unlocks FP16 and buys headroom for future maps.
-3. FP16 maps 5/6 rules (88 mnemonics — the same shapes as existing float families).
-4. `urdmsr` reg-form descriptor-direction fix.
-5. `vex_structure` table generation from the corpus (removes the last hardcoded opcode
-   table; encoder becomes fully corpus/byte-replay driven).
-6. Final full-ISA differential run (legacy + VEX + XOP + EVEX 1–6 + APX sweeps, drift-0)
+2. FP16 maps 5/6 rules (88 mnemonics — the same shapes as existing float families); route
+   `evexp0` maps 5/6 in `gen.py` (the state ceiling is already lifted, §7.1).
+3. `urdmsr` reg-form descriptor-direction fix.
+4. Final full-ISA differential run (legacy + VEX + XOP + EVEX 1–6 + APX sweeps, drift-0)
    and a fuzz soak (≥ 50 M iters) as the completion gate.
+
+**Done since first draft:** the encoder's `vex_structure` tail table is now generated from
+the corpus (§5), and the FSM state ceiling is removed via a `uint32_t next` widening (§7.1).
