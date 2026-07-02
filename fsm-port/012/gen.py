@@ -1352,6 +1352,18 @@ class Interp:
         continue                                     # unrecognised shape -> dead opcode
       form, rf, mf, imm = f
       cells[key] = (mi, form, rf, mf, imm)
+    # VEX (C4/C5) WIG fallback: the W bit is "ignored" for most VEX 0F/0F38/0F3A ops, so
+    # real silicon decodes W0 and W1 identically (e.g. VEX.W1 vaddps / vpminub). A rule
+    # that binds a single W would drop the other, sending the non-standard-W form to the
+    # structural placeholder; fill an EMPTY W-sibling cell from its defined partner so both
+    # decode to the real mnemonic. This never overwrites, so genuinely W-significant ops
+    # (FMA vfmadd*ps/pd, vmovd/vmovq -- both W already present) are untouched. VEX only:
+    # EVEX/XOP/APX use W as an element-size / operand selector and are left strict.
+    if 'vex' in kinds:
+      for (mapidx, pp, W, opcode), cell in list(cells.items()):
+        sib = (mapidx, pp, 1 - W, opcode)
+        if sib not in cells:
+          cells[sib] = cell
     return cells
 
   # ----- VEX FSM states (capture-based; reuse REL/CC/TBL3 slots on the VEX path) --
