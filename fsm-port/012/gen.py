@@ -1763,7 +1763,7 @@ def emit(c, interp, out_path):
   w("static_assert(sizeof(struct Action) == 2, \"Action must pack to 16 bits\");\n")
   w("static_assert(act_argx(ACT_MNEM, 0x1FFFu).op == ACT_MNEM, \"act_argx opx placement\");\n")
   w("struct DState {\n")
-  w("    uint16_t next;                     // table base index into FSM, or FSM_HALT\n")
+  w("    uint32_t next;                     // table base index into FSM, or FSM_HALT\n")
   w("    struct Action act[FSM_MAX_ACT];    // run until ACT_NONE or FSM_MAX_ACT\n")
   w("};\n")
   w("// a state is a dead-end (byte isn't ours) iff act[0].op==ACT_NONE && next==FSM_HALT.\n")
@@ -1803,7 +1803,7 @@ def emit(c, interp, out_path):
   w("    struct DState apxop[8][256];       // [pp*2+W] opcode -> MNEM + legacy form + GPR files\n")
   w("};\n")
   w("// base indices derived from the layout (single source of truth):\n")
-  w("#define FSM_INDEX(member) ((uint16_t)(offsetof(struct Fsm, member) / sizeof(struct DState)))\n")
+  w("#define FSM_INDEX(member) ((uint32_t)(offsetof(struct Fsm, member) / sizeof(struct DState)))\n")
   w("#define FSM_PREFIX  FSM_INDEX(prefix)\n")
   w("#define FSM_OP1     FSM_INDEX(op1)\n")
   w("#define FSM_OP2     FSM_INDEX(op2)\n")
@@ -1828,7 +1828,7 @@ def emit(c, interp, out_path):
   w("#define FSM_APXOP   FSM_INDEX(apxop)        // + (pp*2 + W)*256\n")
   w("#define FSM_NGROUP  %d\n" % interp.group_count())
   w("#define FSM_COUNT   (sizeof(struct Fsm) / sizeof(struct DState))\n")
-  w("#define FSM_HALT    ((uint16_t)0xFFFF)     // `next` sentinel: stop\n")
+  w("#define FSM_HALT    ((uint32_t)0xFFFFFFFF) // `next` sentinel: stop\n")
   w("// flat element access across the contiguous member arrays:\n")
   w("#define FSM_AT(i)   (((const struct DState*)&FSM)[i])\n\n")
 
@@ -1987,11 +1987,11 @@ def emit(c, interp, out_path):
   w('              "struct Fsm has padding; flat indexing would be wrong");\n')
   # two distinct size limits, the narrower one (group id) binds first:
   #   * group id rides a CONST action -> arg0(5) | arg1(3) = 8 bits  (<= 255 groups)
-  #   * DState.next indexes the flat Fsm in DStates -> uint16_t       (<= 65535 states)
+  #   * DState.next indexes the flat Fsm in DStates -> uint32_t       (effectively unbounded)
   w('static_assert(FSM_NGROUP <= 255, "group id no longer fits the 8-bit CONST action");\n')
   w("static_assert(NCAPS <= 32, \"capture index no longer fits Action.dst (5 bits)\");\n")
-  w("static_assert(sizeof(struct Fsm) / sizeof(struct DState) <= 65535,\n")
-  w('              "Fsm too large: DState.next (uint16_t) can no longer index every state");\n\n')
+  w("static_assert(sizeof(struct Fsm) / sizeof(struct DState) < 0xFFFFFFFFu,\n")
+  w('              "Fsm too large: DState.next (uint32_t) can no longer index every state");\n\n')
 
   # string / number tables (verbatim from corpus) -- for the renderer
   for name, items in interp.tables.items():
@@ -2151,8 +2151,8 @@ def emit(c, interp, out_path):
              + 256 + 8 * 256 + 8 * 256)
   import sys as _sys
   _sys.stderr.write(
-      "FSM: %d DStates (%.1f%% of uint16_t next), %d groups, sizeof(Fsm)=%d KiB\n"
-      % (ndstate, 100.0 * ndstate / 65536, ng, ndstate * 16 // 1024))
+      "FSM: %d DStates (uint32_t next, no state ceiling), %d groups, sizeof(Fsm)=%d KiB\n"
+      % (ndstate, ng, ndstate * 20 // 1024))
 
 
 # --------------------------------------------------------------------------

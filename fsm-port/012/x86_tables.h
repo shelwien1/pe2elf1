@@ -126,7 +126,7 @@ constexpr struct Action act_argx(uint16_t opx, uint16_t argx) {
 static_assert(sizeof(struct Action) == 2, "Action must pack to 16 bits");
 static_assert(act_argx(ACT_MNEM, 0x1FFFu).op == ACT_MNEM, "act_argx opx placement");
 struct DState {
-    uint16_t next;                     // table base index into FSM, or FSM_HALT
+    uint32_t next;                     // table base index into FSM, or FSM_HALT
     struct Action act[FSM_MAX_ACT];    // run until ACT_NONE or FSM_MAX_ACT
 };
 // a state is a dead-end (byte isn't ours) iff act[0].op==ACT_NONE && next==FSM_HALT.
@@ -157,7 +157,7 @@ struct Fsm {
     struct DState apxop[8][256];       // [pp*2+W] opcode -> MNEM + legacy form + GPR files
 };
 // base indices derived from the layout (single source of truth):
-#define FSM_INDEX(member) ((uint16_t)(offsetof(struct Fsm, member) / sizeof(struct DState)))
+#define FSM_INDEX(member) ((uint32_t)(offsetof(struct Fsm, member) / sizeof(struct DState)))
 #define FSM_PREFIX  FSM_INDEX(prefix)
 #define FSM_OP1     FSM_INDEX(op1)
 #define FSM_OP2     FSM_INDEX(op2)
@@ -182,7 +182,7 @@ struct Fsm {
 #define FSM_APXOP   FSM_INDEX(apxop)        // + (pp*2 + W)*256
 #define FSM_NGROUP  39
 #define FSM_COUNT   (sizeof(struct Fsm) / sizeof(struct DState))
-#define FSM_HALT    ((uint16_t)0xFFFF)     // `next` sentinel: stop
+#define FSM_HALT    ((uint32_t)0xFFFFFFFF) // `next` sentinel: stop
 // flat element access across the contiguous member arrays:
 #define FSM_AT(i)   (((const struct DState*)&FSM)[i])
 
@@ -55630,8 +55630,8 @@ static_assert(sizeof(struct Fsm) == (256 + 256 + 256 + 256 + 256 + 2*256 + 3*256
               "struct Fsm has padding; flat indexing would be wrong");
 static_assert(FSM_NGROUP <= 255, "group id no longer fits the 8-bit CONST action");
 static_assert(NCAPS <= 32, "capture index no longer fits Action.dst (5 bits)");
-static_assert(sizeof(struct Fsm) / sizeof(struct DState) <= 65535,
-              "Fsm too large: DState.next (uint16_t) can no longer index every state");
+static_assert(sizeof(struct Fsm) / sizeof(struct DState) < 0xFFFFFFFFu,
+              "Fsm too large: DState.next (uint32_t) can no longer index every state");
 
 static const char* const greg[] = {
     "eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi", "ax", "cx", "dx", "bx", "sp", "bp", "si", "di"

@@ -32,7 +32,7 @@ typedef struct {
 // ---------------------------------------------------------------------------
 // the entire decoder: a generic flat-table walker. zero architecture inside.
 // ---------------------------------------------------------------------------
-static inline size_t run_fsm(uint16_t base, const byte* s, size_t len,
+static inline size_t run_fsm(uint32_t base, const byte* s, size_t len,
                              size_t ip, uint64_t* cap) {
   while (base != FSM_HALT && ip < len) {
     byte b = s[ip];
@@ -339,7 +339,7 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t slen, size_t
 }
 
 static inline size_t parse_addr(const byte* s, size_t len, size_t ip, x86dec_t* d) {
-  uint16_t start = (uint16_t)(FSM_MODRM + d->cap[VAR_ADRSIZ] * 256);
+  uint32_t start = (uint32_t)(FSM_MODRM + d->cap[VAR_ADRSIZ] * 256);
   ip = run_fsm(start, s, len, ip, d->cap);
   fill_insn(d);
   d->insn.opsize = (uint16_t)d->cap[VAR_OPSIZ];   // 66 effect (operand width)
@@ -671,7 +671,7 @@ static inline size_t vex_decode(x86dec_t* d, const byte* s, size_t n, size_t ip)
   if (has_modrm) {
     if (ip >= n) { in->mnem = 0xFFFF; return ip; }
     in->vex_modrm = s[ip];                         // raw ModR/M (replayed by the encoder)
-    uint16_t mstart = (uint16_t)(FSM_MODRM + d->cap[VAR_ADRSIZ] * 256);
+    uint32_t mstart = (uint32_t)(FSM_MODRM + d->cap[VAR_ADRSIZ] * 256);
     ip = run_fsm(mstart, s, n, ip, d->cap);
     fill_insn(d);
     int rt = vex_vec_type(L);                            // L picks xmm/ymm/zmm (display)
@@ -722,7 +722,7 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     int form = (int)d->cap[CAP_FORM];
     if (form < FORM_VEX_NONE) return vex_decode(d, s, n, xop_at);  // uncovered -> structural
     if (form != FORM_VEX_NONE) {
-      uint16_t mstart = (uint16_t)(FSM_MODRM + d->cap[VAR_ADRSIZ] * 256);
+      uint32_t mstart = (uint32_t)(FSM_MODRM + d->cap[VAR_ADRSIZ] * 256);
       size_t before = ip;
       ip = run_fsm(mstart, s, n, ip, d->cap);
       if (ip == before) { d->insn.mnem = 0xFFFF; return ip; }
@@ -833,7 +833,7 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     if (ip == o2) { d->insn.mnem = 0xFFFF; return ip; }     // undefined 0F opcode
     if (d->cap[CAP_FORM] == FORM_ESC) d->cap[CAP_FORM] = FORM_NONE;   // op2 set no form
     if (d->cap[CAP_TBL3]) {                          // 0F 38 / 0F 3A: a third opcode byte
-      uint16_t b3 = (d->cap[CAP_TBL3] == 1) ? FSM_OP3_38 : FSM_OP3_3A;
+      uint32_t b3 = (d->cap[CAP_TBL3] == 1) ? FSM_OP3_38 : FSM_OP3_3A;
       tb = (d->cap[CAP_TBL3] == 1) ? 2 : 3;
       size_t o3 = ip;
       ip = run_fsm(b3, s, n, ip, d->cap);
@@ -852,7 +852,7 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     // opcodes still decode losslessly; covered ones get real mnemonics/operands.
     if (form < FORM_VEX_NONE) return vex_decode(d, s, n, op_at);
     if (form != FORM_VEX_NONE) {                     // run the ModR/M + SIB + disp stage
-      uint16_t mstart = (uint16_t)(FSM_MODRM + d->cap[VAR_ADRSIZ] * 256);
+      uint32_t mstart = (uint32_t)(FSM_MODRM + d->cap[VAR_ADRSIZ] * 256);
       size_t before = ip;
       ip = run_fsm(mstart, s, n, ip, d->cap);
       if (ip == before) { d->insn.mnem = 0xFFFF; return ip; }   // truncated ModR/M
@@ -890,7 +890,7 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   }                                  // resolved after ModR/M, once reg-vs-mem is known
 
   if (form == FORM_MODRM || form == FORM_RM) {
-    uint16_t mstart = (uint16_t)(FSM_MODRM + d->cap[VAR_ADRSIZ] * 256);
+    uint32_t mstart = (uint32_t)(FSM_MODRM + d->cap[VAR_ADRSIZ] * 256);
     ip = run_fsm(mstart, s, n, ip, d->cap);
     int req = (int)d->cap[CAP_RMREQ];                 // 0 any, 1 reg-only, 2 mem-only
     int is_reg = (d->cap[CAP_MODE] == RM_REG);
@@ -919,7 +919,7 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
                                    : (d->cap[VAR_OPSIZ] == 1 ? 1 : 0);  // slot before ModR/M
       gid += pp;                                          // (base gid + pp; 4 consecutive gids)
     }
-    uint16_t gstart = (uint16_t)(FSM_GROUPS + (gid * 2 + (int)d->cap[VAR_ADRSIZ]) * 256);
+    uint32_t gstart = (uint32_t)(FSM_GROUPS + (gid * 2 + (int)d->cap[VAR_ADRSIZ]) * 256);
     size_t before = ip;
     ip = run_fsm(gstart, s, n, ip, d->cap);               // reg field -> mnemonic + r/m operand
     if (ip == before) { d->insn.mnem = 0xFFFF; return ip; }   // undefined /digit extension
