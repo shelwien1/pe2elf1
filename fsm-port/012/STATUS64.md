@@ -330,6 +330,37 @@ semantically (verified against Zydis + objdump), via a new `T_TMM` tile-register
 Bijection preserved (VEX byte-replay is mnemonic-independent): fuzz64 5 M = 0 failures,
 roundtrip64 byte-identical, plus a targeted AMX decode/re-encode check.
 
+### 7d. Mnemonic-comparing differential — the WIG / VEX-completion campaign
+
+The length-only Zydis sweeps (§7a/§7b) have a blind spot: an uncovered VEX/EVEX opcode
+decodes to the `vex`/`evex` *structural placeholder* which, for most opcodes, consumes the
+*same length* as the real instruction — so `agree_len` counts it as agreement. A sweep that
+compares the **mnemonic** (400 k random VEX/EVEX/XOP buffers) exposed 378 such hidden
+placeholder cases (28 distinct mnemonics). Fixing them took placeholders 378 → 13:
+
+* **WIG W-fallback (biggest lever).** Most VEX 0F/0F38/0F3A and EVEX byte/word ops are
+  W-ignored (WIG), so `VEX.W1 vaddps`, `vpminub`, EVEX `vpmullw`, ... are valid and decode
+  like W0 — but the rules bind one W. `build_vex` now fills an empty W-sibling cell from its
+  partner (VEX + EVEX; never overwrites, so W-significant ops with both W present, and
+  XOP/APX, are untouched). Removed ~320 placeholders; 0 wrong fills (verified).
+* **FORM_VEX_MVR.** vmovss/vmovsd `0F 11` store reg-form uses operand order r/m,vvvv,reg,
+  which had no VEX form → the cell silently never compiled (latent bug). Added the form.
+* **Genuinely-missing AVX/AVX2/newer VEX ops** (were absent, not just non-canonical):
+  vperm2i128, vmovntdqa, vmaskmovps/pd, vpmaskmovd/q, vcvtps2ph store, vpmadd52luq/huq
+  (AVX-IFMA), vgf2p8affineqb/invqb (GFNI VEX), vprold/vprolq (EVEX 0F72 /1), vpdpwusd/s
+  (AVX-VNNI-INT16), blsr/blsmsk/blsi (BMI1) + rorx (BMI2). A build_vex group-typing fix
+  (prefer a concrete r/m file over the MEM marker) was needed for blsr's GPR source.
+
+Remaining placeholders (13 distinct, all bijection-safe via the structural fallback),
+deliberately deferred:
+
+* **KNC / Xeon Phi (discontinued)**: `kconcatl/h`, `kunpckwd`, `vprefetche2`, and Zydis's
+  VEX-`tzcnt` quirk — a dead ISA branch (same policy as `jkzd`/`jknzd`, §7a).
+* **APX CCMP/CTEST** (`ccmp`cc/`ctest`cc, and the APX-promoted `sarx`) — the new APX
+  conditional-compare family (EVEX map 4 with a DFV); a distinct sub-ISA not yet modelled.
+* **AMD FMA4 `vpermil2ps/pd`** (4-operand IS4) and the **VEX gather** VSIB forms
+  (`vpgatherqq` etc.; the EVEX gathers are covered) — niche, structurally involved.
+
 ## 8. Deliberate decode-display policy (not bugs)
 
 * Size suffixes (`.b/.w/.d/.q/.t`) instead of `BYTE/WORD/... PTR`; `[rax+0]`-style
