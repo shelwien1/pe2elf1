@@ -702,6 +702,21 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   d->insn.rex2 = 0;
   d->insn.moffs = 0;
 #if ARCH_MODE == 64
+  // A legacy REX (0x40-0x4F) is effective only as the LAST prefix, immediately before
+  // the opcode/0F. If any legacy prefix follows it, the REX is ignored -- so the FSM's
+  // prefix run may have latched opsize=2 from a REX.W that is actually dead. Recompute
+  // VAR_OPSIZ from the *effective* REX (the last prefix byte, if it is a REX) plus
+  // 66-presence, so length/operand size match the CPU. (REX2/D5 is always last and
+  // sizes itself in fill_insn, so skip when present.)
+  if (ip > 0) {
+    int has_rex2 = 0, has66 = 0;
+    for (size_t k = 0; k < ip; k++) { if (s[k] == 0xD5) has_rex2 = 1; if (s[k] == 0x66) has66 = 1; }
+    if (!has_rex2) {
+      int last = s[ip - 1];
+      int erexw = ((last & 0xF0) == 0x40) ? (last & 8) : 0;   // effective REX.W bit
+      d->cap[VAR_OPSIZ] = erexw ? 2 : (has66 ? 1 : 0);
+    }
+  }
   // 64-bit: C4/C5 (VEX) and 62 (EVEX) are decoded by the FSM -- op1[C4/C5/62]
   // route into the capture-based vexp*/evexp* stages -> vex_finalize -- so they
   // fall through to the opcode FSM below. An opcode the corpus doesn't cover (or
