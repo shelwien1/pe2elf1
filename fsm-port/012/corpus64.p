@@ -4351,6 +4351,33 @@ submatch evex {
   h k b e 00 10 0 1111 1 10 z ll 0 1 aaa 0x72 11 ggg rrr => wit("evex") "vcvtneps2bf16 " eregh[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," ereg[32*$l+16*$k+8*$b+$r] ;
   h k b e 00 10 0 1111 1 10 z ll 0 1 aaa 0x72 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vcvtneps2bf16 " eregh[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr ;
   h k b e 00 10 0 1111 1 10 z ll 1 1 aaa 0x72 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vcvtneps2bf16 " eregh[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr bcst32[$l] ;
+  # ==== EVEX AVX512-FP16 map3: vfpclass/vgetmant/vreduce/vrndscale ph/sh + vcmpph/sh ====
+  1 k b 1 00 11 0 1111 1 00 0 ll 0 1 aaa 0x66 11 ggg rrr @imm8 => wit("evex") "vfpclassph " kreg[$g] kdec[$a] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  1 k b 1 00 11 0 1111 1 00 0 ll 0 1 aaa 0x66 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vfpclassph " kreg[$g] kdec[$a] "," $addr "," hex($imm8) ;
+  1 k b 1 00 11 0 1111 1 00 0 ll 0 1 aaa 0x67 11 ggg rrr @imm8 => wit("evex") "vfpclasssh " kreg[$g] kdec[$a] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  1 k b 1 00 11 0 1111 1 00 0 ll 0 1 aaa 0x67 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vfpclasssh " kreg[$g] kdec[$a] "," $addr "," hex($imm8) ;
+  h k b e 00 11 0 1111 1 00 z ll 0 1 aaa 0x26 11 ggg rrr @imm8 => wit("evex") "vgetmantph " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  h k b e 00 11 0 1111 1 00 z 00 1 1 aaa 0x26 11 ggg rrr @imm8 => wit("evex") "vgetmantph " ereg[64+16*$e+8*$h+$g] kzdec[$z*8+$a] "," ereg[64+16*$k+8*$b+$r] " {sae}" "," hex($imm8) ;
+  h k b e 00 11 0 1111 1 00 z ll 0 1 aaa 0x26 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vgetmantph " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr "," hex($imm8) ;
+  h k b e 00 11 0 vvvv 1 00 z ll 0 u aaa 0x27 11 ggg rrr @imm8 => wit("evex") "vgetmantsh " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  h k b e 00 11 0 vvvv 1 00 z 00 1 u aaa 0x27 11 ggg rrr @imm8 => wit("evex") "vgetmantsh " ereg[64+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[64+16*$u+$v] "," ereg[64+16*$k+8*$b+$r] " {sae}" "," hex($imm8) ;
+  h k b e 00 11 0 vvvv 1 00 z ll 0 u aaa 0x27 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vgetmantsh " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr "," hex($imm8) ;
+  h k b e 00 11 0 1111 1 00 z ll 0 1 aaa 0x56 11 ggg rrr @imm8 => wit("evex") "vreduceph " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  h k b e 00 11 0 1111 1 00 z 00 1 1 aaa 0x56 11 ggg rrr @imm8 => wit("evex") "vreduceph " ereg[64+16*$e+8*$h+$g] kzdec[$z*8+$a] "," ereg[64+16*$k+8*$b+$r] " {sae}" "," hex($imm8) ;
+  h k b e 00 11 0 1111 1 00 z ll 0 1 aaa 0x56 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vreduceph " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr "," hex($imm8) ;
+  h k b e 00 11 0 vvvv 1 00 z ll 0 u aaa 0x57 11 ggg rrr @imm8 => wit("evex") "vreducesh " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  h k b e 00 11 0 vvvv 1 00 z 00 1 u aaa 0x57 11 ggg rrr @imm8 => wit("evex") "vreducesh " ereg[64+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[64+16*$u+$v] "," ereg[64+16*$k+8*$b+$r] " {sae}" "," hex($imm8) ;
+  h k b e 00 11 0 vvvv 1 00 z ll 0 u aaa 0x57 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vreducesh " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr "," hex($imm8) ;
+  h k b e 00 11 0 1111 1 00 z ll 0 1 aaa 0x08 11 ggg rrr @imm8 => wit("evex") "vrndscaleph " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  h k b e 00 11 0 1111 1 00 z 00 1 1 aaa 0x08 11 ggg rrr @imm8 => wit("evex") "vrndscaleph " ereg[64+16*$e+8*$h+$g] kzdec[$z*8+$a] "," ereg[64+16*$k+8*$b+$r] " {sae}" "," hex($imm8) ;
+  h k b e 00 11 0 1111 1 00 z ll 0 1 aaa 0x08 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vrndscaleph " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr "," hex($imm8) ;
+  h k b e 00 11 0 vvvv 1 00 z ll 0 u aaa 0x0a 11 ggg rrr @imm8 => wit("evex") "vrndscalesh " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  h k b e 00 11 0 vvvv 1 00 z 00 1 u aaa 0x0a 11 ggg rrr @imm8 => wit("evex") "vrndscalesh " ereg[64+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[64+16*$u+$v] "," ereg[64+16*$k+8*$b+$r] " {sae}" "," hex($imm8) ;
+  h k b e 00 11 0 vvvv 1 00 z ll 0 u aaa 0x0a @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vrndscalesh " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr "," hex($imm8) ;
+  1 k b 1 00 11 0 vvvv 1 00 0 ll 0 u aaa 0xc2 11 ggg rrr @imm8 => wit("evex") "vcmpph " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  1 k b 1 00 11 0 vvvv 1 00 0 ll 0 u aaa 0xc2 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vcmpph " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," $addr "," hex($imm8) ;
+  1 k b 1 00 11 0 vvvv 1 10 0 ll 0 u aaa 0xc2 11 ggg rrr @imm8 => wit("evex") "vcmpsh " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  1 k b 1 00 11 0 vvvv 1 10 0 ll 0 u aaa 0xc2 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vcmpsh " kreg[$g] kdec[$a] "," evvv[32*$l+16*$u+$v] "," $addr "," hex($imm8) ;
 }
 
 
@@ -4807,6 +4834,7 @@ submatch apx {
 }
 
 submatch main { @pfx(0) => $pfx }
+
 
 
 
