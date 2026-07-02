@@ -4724,10 +4724,10 @@ submatch evex {
   h k b e 00 101 0 vvvv 1 10 z ll 0 u aaa 0x10 11 ggg rrr => wit("evex") "vmovsh " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
   h k b e 00 101 0 1111 1 10 z ll 0 1 aaa 0x10 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovsh " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr ;
   h k b e 00 101 0 1111 1 10 z ll 0 1 aaa 0x11 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovsh " $addr kzdec[$z*8+$a] "," ereg[32*$l+16*$e+8*$h+$g] ;
-  h k b e 00 101 0 1111 1 01 z ll 0 1 aaa 0x6e 11 ggg rrr {$rexb=1-$b} => wit("evex") "vmovw " ereg[32*$l+16*$e+8*$h+$g] "," greg[32+8*$rexb+$r] ;
-  h k b e 00 101 0 1111 1 01 z ll 0 1 aaa 0x6e @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovw " ereg[32*$l+16*$e+8*$h+$g] "," $addr ;
-  h k b e 00 101 0 1111 1 01 z ll 0 1 aaa 0x7e 11 ggg rrr {$rexb=1-$b} => wit("evex") "vmovw " greg[32+8*$rexb+$r] "," ereg[32*$l+16*$e+8*$h+$g] ;
-  h k b e 00 101 0 1111 1 01 z ll 0 1 aaa 0x7e @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovw " $addr "," ereg[32*$l+16*$e+8*$h+$g] ;
+  h k b e 00 101 w 1111 1 01 z ll 0 1 aaa 0x6e 11 ggg rrr {$rexb=1-$b} => wit("evex") "vmovw " ereg[32*$l+16*$e+8*$h+$g] "," greg[32+8*$rexb+$r] ;
+  h k b e 00 101 w 1111 1 01 z ll 0 1 aaa 0x6e @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovw " ereg[32*$l+16*$e+8*$h+$g] "," $addr ;
+  h k b e 00 101 w 1111 1 01 z ll 0 1 aaa 0x7e 11 ggg rrr {$rexb=1-$b} => wit("evex") "vmovw " greg[32+8*$rexb+$r] "," ereg[32*$l+16*$e+8*$h+$g] ;
+  h k b e 00 101 w 1111 1 01 z ll 0 1 aaa 0x7e @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovw " $addr "," ereg[32*$l+16*$e+8*$h+$g] ;
 }
 
 
