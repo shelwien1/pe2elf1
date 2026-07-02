@@ -1304,7 +1304,12 @@ class Interp:
             key = (mapidx, pp, W, opcode)
             if digit is not None:                    # opcode-extension group member
               groups.setdefault(key, {})[digit] = mi
-              groupmeta[key] = ops                   # uniform shape across digits
+              # uniform shape across digits; prefer a concrete r/m file over the MEM
+              # marker so a group with both reg-direct and @addr rules (e.g. BMI blsr:
+              # r/m is a GPR, not the VEC default MEM maps to) types the reg r/m right.
+              prev = groupmeta.get(key)
+              if prev is None or any(r == 'RM' and f == 'MEM' for r, f in prev):
+                groupmeta[key] = ops
               continue
             if key in raw:
               # merge the paired reg-direct / @addr rule: prefer the concrete

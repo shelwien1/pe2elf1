@@ -2024,6 +2024,24 @@ submatch vex {
   h k b 00010 0 vvvv y 00 0xf7 @addr {$rexb=1-$b;$rexx=1-$k} => "bextr " greg[$g] "," $addr "," greg[$v] ;
   h k b 00010 1 vvvv y 00 0xf7 11 ggg rrr => "bextr " greg[32+$g] "," greg[32+$r] "," greg[32+$v] ;
   h k b 00010 1 vvvv y 00 0xf7 @addr {$rexb=1-$b;$rexx=1-$k} => "bextr " greg[32+$g] "," $addr "," greg[32+$v] ;
+  # BMI1 blsr/blsmsk/blsi (VEX NP.0F38 F3 group /1/2/3: dest=vvvv, src=r/m; W0=32, W1=64).
+  h k b 00010 0 vvvv y 00 0xf3 11 001 rrr => "blsr " greg[$v] "," greg[$r] ;
+  h k b 00010 0 vvvv y 00 0xf3 @addr(1) {$rexb=1-$b;$rexx=1-$k} => "blsr " greg[$v] "," $addr ;
+  h k b 00010 1 vvvv y 00 0xf3 11 001 rrr => "blsr " greg[32+$v] "," greg[32+$r] ;
+  h k b 00010 1 vvvv y 00 0xf3 @addr(1) {$rexb=1-$b;$rexx=1-$k} => "blsr " greg[32+$v] "," $addr ;
+  h k b 00010 0 vvvv y 00 0xf3 11 010 rrr => "blsmsk " greg[$v] "," greg[$r] ;
+  h k b 00010 0 vvvv y 00 0xf3 @addr(2) {$rexb=1-$b;$rexx=1-$k} => "blsmsk " greg[$v] "," $addr ;
+  h k b 00010 1 vvvv y 00 0xf3 11 010 rrr => "blsmsk " greg[32+$v] "," greg[32+$r] ;
+  h k b 00010 1 vvvv y 00 0xf3 @addr(2) {$rexb=1-$b;$rexx=1-$k} => "blsmsk " greg[32+$v] "," $addr ;
+  h k b 00010 0 vvvv y 00 0xf3 11 011 rrr => "blsi " greg[$v] "," greg[$r] ;
+  h k b 00010 0 vvvv y 00 0xf3 @addr(3) {$rexb=1-$b;$rexx=1-$k} => "blsi " greg[$v] "," $addr ;
+  h k b 00010 1 vvvv y 00 0xf3 11 011 rrr => "blsi " greg[32+$v] "," greg[32+$r] ;
+  h k b 00010 1 vvvv y 00 0xf3 @addr(3) {$rexb=1-$b;$rexx=1-$k} => "blsi " greg[32+$v] "," $addr ;
+  # BMI2 rorx (VEX F2.0F3A F0, RMI: dest=reg, src=r/m, imm8; W0=32, W1=64).
+  h k b 00011 0 1111 y 11 0xf0 11 ggg rrr @imm8 => "rorx " greg[$g] "," greg[$r] "," hex($imm8) ;
+  h k b 00011 0 1111 y 11 0xf0 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "rorx " greg[$g] "," $addr "," hex($imm8) ;
+  h k b 00011 1 1111 y 11 0xf0 11 ggg rrr @imm8 => "rorx " greg[32+$g] "," greg[32+$r] "," hex($imm8) ;
+  h k b 00011 1 1111 y 11 0xf0 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "rorx " greg[32+$g] "," $addr "," hex($imm8) ;
   # VEX map 7 (APX USER_MSR immediate forms): urdmsr r64,imm32 (F2 /0) ; uwrmsr imm32,r64 (F3 /0).
   # r64 is the ModR/M r/m (reg field = /0); imm32 follows. Register-only (no memory form).
   h k b 00111 0 1111 y 11 0xf8 11 ggg rrr @imm32 => "urdmsr " greg[32+$r] "," hex($imm32) ;
