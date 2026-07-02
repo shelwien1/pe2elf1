@@ -1031,8 +1031,10 @@ class Interp:
     'vex':  [('R', 1), ('X', 1), ('B', 1), ('map', 5), ('W', 1), ('vvvv', 4), ('L', 1), ('pp', 2)],
     'vex2': [('R', 1), ('vvvv', 4), ('L', 1), ('pp', 2)],     # C5: map=1, W=0, X=B=0
     'xop':  [('R', 1), ('X', 1), ('B', 1), ('map', 5), ('W', 1), ('vvvv', 4), ('L', 1), ('pp', 2)],
-    # EVEX: P0 = R'X'B'R'' .00. mm ; P1 = W vvvv 1 pp ; P2 = z L'L b V'' aaa
-    'evex': [('R', 1), ('X', 1), ('B', 1), ('Rp', 1), ('rsv', 2), ('map', 2),
+    # EVEX: P0 = R'X'B'R'' 0 mmm ; P1 = W vvvv 1 pp ; P2 = z L'L b V'' aaa. mmm is a 3-bit
+    # map (1/2/3 = 0F/0F38/0F3A ; 5/6 = the AVX512-FP16 MAP5/MAP6). Token-parsed, so the
+    # existing "00 01"-style rules still read map=1 (rsv token 0, map token 01).
+    'evex': [('R', 1), ('X', 1), ('B', 1), ('Rp', 1), ('rsv', 1), ('map', 3),
              ('W', 1), ('vvvv', 4), ('one', 1), ('pp', 2),
              ('z', 1), ('L', 2), ('bcst', 1), ('Vp', 1), ('aaa', 3)],
     # APX EVEX-promoted legacy: P0 = R3 X3 B3 R4 B4 mmm(=100, 3-bit map); P1 = W vvvv X4 pp;
@@ -1143,7 +1145,7 @@ class Interp:
     elif kind == 'apx':
       mapidx = 0 if mapval == 4 else None     # APX uses the single legacy map (mmm=4)
     else:
-      mapidx = {1: 0, 2: 1, 3: 2}.get(mapval)
+      mapidx = {1: 0, 2: 1, 3: 2, 5: 3, 6: 4}.get(mapval)
     if mapidx is None:
       return None
     wf = kf.get('W', ('lit', 0))
@@ -1425,7 +1427,7 @@ class Interp:
     if self._apx_tab and mp == 4:                  # APX EVEX-promoted legacy (mmm=4)
       # capture P0[7:3] = R3 X3 B3 R4 B4 (5 bits, incl. the APX B4 extension) into CAP_RXB
       return [('FIELD', self.tailcap('TBL3'), 7, 3)], 'FSM_APXP1'
-    mi = {1: 0, 2: 1, 3: 2}.get(mp)
+    mi = {1: 0, 2: 1, 3: 2, 5: 3, 6: 4}.get(mp)  # maps 5/6 = AVX512-FP16 MAP5/MAP6
     if mi is None:
       return [], 'FSM_HALT'                        # undefined map -> structural fallback
     return [('FIELD', self.tailcap('TBL3'), 7, 4)], 'FSM_EVEXP1 + %d*256' % mi
@@ -1790,9 +1792,9 @@ def emit(c, interp, out_path):
   w("    struct DState vexop[3][4][2][256]; // [map-1][pp][W] opcode -> MNEM + VEX form + files\n")
   # EVEX prefix stages (3 payload bytes) + per-(map,pp,W) opcode maps (AVX-512)
   w("    struct DState evexp0[256];         // 62 P0: FIELD R'X'B'R'', route by map\n")
-  w("    struct DState evexp1[3][256];      // [map-1] P1: FIELD vvvv, route by pp,W\n")
-  w("    struct DState evexp2[3][4][2][256];// [map-1][pp][W] P2: FIELD whole byte (z.L'L.b.V''.aaa)\n")
-  w("    struct DState evexop[3][4][2][256];// [map-1][pp][W] opcode -> MNEM + VEX form + files\n")
+  w("    struct DState evexp1[5][256];      // [mapidx] P1: FIELD vvvv, route by pp,W\n")
+  w("    struct DState evexp2[5][4][2][256];// [mapidx][pp][W] P2: FIELD whole byte (z.L'L.b.V''.aaa)\n")
+  w("    struct DState evexop[5][4][2][256];// [mapidx][pp][W] opcode -> MNEM + VEX form + files (mapidx 0..4 = maps 1/2/3/5/6)\n")
   # XOP prefix stages (8F; maps 8/9/10) -- same shape as VEX C4
   w("    struct DState xopp1[256];          // 8F byte1: FIELD R'X'B', route by map 8/9/10\n")
   w("    struct DState xopp2[3][256];       // [map-8] byte2: FIELD vvvv/L, route by pp,W\n")
@@ -1817,9 +1819,9 @@ def emit(c, interp, out_path):
   w("#define FSM_VEXP1C5 FSM_INDEX(vexp1c5)\n")
   w("#define FSM_VEXOP   FSM_INDEX(vexop)        // + ((map-1)*4 + pp)*2 + W) *256\n")
   w("#define FSM_EVEXP0  FSM_INDEX(evexp0)\n")
-  w("#define FSM_EVEXP1  FSM_INDEX(evexp1)       // + (map-1)*256\n")
-  w("#define FSM_EVEXP2  FSM_INDEX(evexp2)       // + ((map-1)*4 + pp)*2 + W) *256\n")
-  w("#define FSM_EVEXOP  FSM_INDEX(evexop)       // + ((map-1)*4 + pp)*2 + W) *256\n")
+  w("#define FSM_EVEXP1  FSM_INDEX(evexp1)       // + mapidx*256           (mapidx 0..4 = maps 1/2/3/5/6)\n")
+  w("#define FSM_EVEXP2  FSM_INDEX(evexp2)       // + (mapidx*4 + pp)*2 + W) *256\n")
+  w("#define FSM_EVEXOP  FSM_INDEX(evexop)       // + (mapidx*4 + pp)*2 + W) *256\n")
   w("#define FSM_XOPP1   FSM_INDEX(xopp1)\n")
   w("#define FSM_XOPP2   FSM_INDEX(xopp2)        // + (map-8)*256\n")
   w("#define FSM_XOPOP   FSM_INDEX(xopop)        // + ((map-8)*4 + pp)*2 + W) *256\n")
@@ -1908,15 +1910,15 @@ def emit(c, interp, out_path):
   w("  { // evexp0[256]  (62 P0)\n")
   emit_states(interp.evexp0_state)
   w("  },\n")
-  w("  { // evexp1[3][256]  (P1, by map)\n")
-  for mp in range(3):
-    w("   { // map %d\n" % (mp + 1))
+  w("  { // evexp1[5][256]  (P1, by mapidx 0..4 = maps 1/2/3/5/6)\n")
+  for mp in range(5):
+    w("   { // map %d\n" % [1, 2, 3, 5, 6][mp])
     emit_states(lambda i, m=mp: interp.evexp1_state(m, i))
-    w("   }%s\n" % ("," if mp < 2 else ""))
+    w("   }%s\n" % ("," if mp < 4 else ""))
   w("  },\n")
-  w("  { // evexp2[3][4][2][256]  (P2, by map,pp,W)\n")
-  for mp in range(3):
-    w("   { // map %d\n" % (mp + 1))
+  w("  { // evexp2[5][4][2][256]  (P2, by mapidx,pp,W)\n")
+  for mp in range(5):
+    w("   { // map %d\n" % [1, 2, 3, 5, 6][mp])
     for pp in range(4):
       w("    { // pp %d\n" % pp)
       for W in range(2):
@@ -1924,11 +1926,11 @@ def emit(c, interp, out_path):
         emit_states(lambda i, m=mp, p=pp, ww=W: interp.evexp2_state(m, p, ww, i))
         w("     }%s\n" % ("," if W == 0 else ""))
       w("    }%s\n" % ("," if pp < 3 else ""))
-    w("   }%s\n" % ("," if mp < 2 else ""))
+    w("   }%s\n" % ("," if mp < 4 else ""))
   w("  },\n")
-  w("  { // evexop[3][4][2][256]  ([map-1][pp][W] -> opcode)\n")
-  for mp in range(3):
-    w("   { // map %d\n" % (mp + 1))
+  w("  { // evexop[5][4][2][256]  ([mapidx][pp][W] -> opcode)\n")
+  for mp in range(5):
+    w("   { // map %d\n" % [1, 2, 3, 5, 6][mp])
     for pp in range(4):
       w("    { // pp %d\n" % pp)
       for W in range(2):
@@ -1936,7 +1938,7 @@ def emit(c, interp, out_path):
         emit_states(lambda i, m=mp, p=pp, ww=W: interp.evexop_state(m, p, ww, i))
         w("     }%s\n" % ("," if W == 0 else ""))
       w("    }%s\n" % ("," if pp < 3 else ""))
-    w("   }%s\n" % ("," if mp < 2 else ""))
+    w("   }%s\n" % ("," if mp < 4 else ""))
   w("  },\n")
   # ---- XOP stages ----
   w("  { // xopp1[256]  (8F byte1)\n")
@@ -1981,7 +1983,7 @@ def emit(c, interp, out_path):
   w("static_assert(sizeof(struct Fsm) == (256 + 256 + 256 + 256 + 256 + 2*256 + 3*256 + %d*2*256\n"
     % max(1, ng))
   w("              + 256 + 3*256 + 256 + 3*4*2*256\n")
-  w("              + 256 + 3*256 + 3*4*2*256 + 3*4*2*256\n")
+  w("              + 256 + 5*256 + 5*4*2*256 + 5*4*2*256\n")
   w("              + 256 + 3*256 + 3*4*2*256\n")
   w("              + 256 + 8*256 + 8*256) * sizeof(struct DState),\n")
   w('              "struct Fsm has padding; flat indexing would be wrong");\n')
