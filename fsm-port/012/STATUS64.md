@@ -76,7 +76,7 @@ here is from a drift-0 sweep).
 | SSE–SSE4.2, SSE4a, 3DNow!, MPX, SHA-NI, AES-NI, AES-KL, GFNI, CRC32/MOVBE/ADX, CET, RAO-INT, enqcmd/movdiri/movdir64b, VMX/SMX oddities | **complete** | full-map sweeps; per-prefix descriptors (`ppdesc`), pp-variant groups, fixed-ModR/M cells |
 | VEX maps 1–3 (AVX/AVX2, FMA3/FMA4, BMI1/2, VNNI/-INT8, NE-CONVERT, SM3/SM4, AMX, vector AES/GFNI) | **complete — 0 gaps** | 12,288-case sweep; last hole (vmovhlps/vmovlhps reg-form) closed via a decode-time mnemonic swap |
 | XOP maps 8–10 (vector SIMD **and** GPR: TBM, LWP, XOP-bextr) | **complete — 0 gaps** | 12,288-case sweep + 160-case all-`/digit` group sweep; GPR families added this iteration via two new group forms (`VEX_MG`, `VEX_VMG0`) + `IMK_IMM32` |
-| EVEX maps 1–3 (AVX-512 core) | **317 / 521 objdump mnemonics (~61 %)** | sweep both W, reg+mem; 222 genuinely missing (§6), ~1 display alias (vpclmul imm-variants) |
+| EVEX maps 1–3 (AVX-512 core) | **412 / 521 objdump mnemonics (~79 %)** | sweep both W, reg+mem; 123 genuinely missing (§6), 7 display aliases (vcmp/vpcmp/vpclmul imm-variants) |
 | EVEX maps 5–6 (AVX512-FP16) | **not routed — 0 / 88** | measured today; `evexp0` sends maps 5/6 to the structural path (§7 state-budget note) |
 | APX: EVEX-promoted legacy (map 4, incl. ND/NF, push2/pop2, groups) + REX2 | **complete — 0 missing** | 16,384-case sweep today (pp×W×ND×opcode×reg/mem): drift 0, missing 0 |
 
@@ -156,29 +156,31 @@ Nine localized cases, all operand-shape quirks that the descriptor model cannot 
   re-assembler of decoded records, not a from-mnemonic assembler for prefixed encodings —
   consistent with the project goal.
 
-## 6. Remaining work — EVEX maps 1–3 (222 mnemonics)
+## 6. Remaining work — EVEX maps 1–3 (123 mnemonics)
 
-Grouped by family, from today's sweep (each family is one or a few corpus-rule batches;
-the generator-with-self-verification workflow — build the EVEX bytes, confirm objdump's
-mnemonic *before* emitting the rule — is established and caught a real pp-assignment error
-in the FMA batch before it landed):
+The generator-with-discovery/self-verification workflow — probe candidate encodings,
+confirm objdump's mnemonic *before* emitting each rule — is established and now drives
+every batch; the sweeps stay drift-0 and each batch commits only after fuzz64 + roundtrip64
+pass. **Done this iteration** (EVEX 216 → 412): FMA (50), BW-integer arith/pack/unpack (31),
+shifts (12), crypto/VAES/GFNI (8), VPMISC variable-rotate/funnel/lzcnt/popcnt/conflict (21),
+dot-product/bf16 vpdp* (11), integer-compare→mask fixed-cc + testm/nm (10), broadcasts (14),
+scalar↔GPR converts (6), packed converts unsigned/qq lattice (17), permute RVM (16).
+
+Still open, grouped by family:
 
 | family | count | examples / notes |
 |---|---:|---|
-| transcendental / range / fpclass | 32 | `vgetexp*`, `vgetmant*`, `vreduce*`, `vrndscale*`, `vrange*`, `vrcp28/vrsqrt28`, `vfpclass*` (kreg dest, imm8, sae) |
-| insert / shuffle / mask-mov | 32 | `vinsert*x*` (eregx/eregh lanes), `vshuf*`, `vpshuf*`, `vpmov{b,d,q,w}2m` / `vpmovm2*` (kreg⇄vector), `vp2intersect*` (k-pair dest) |
-| perm / compress / expand | 30 | `vperm{b,w,i2*,t2*,ilpd/ps}`, `v(p)compress*` (mem-dest MR + elem tuple), `v(p)expand*`, `valign[dq]` |
-| vpmisc | 29 | `vprol/vpror(v)*`, `vpshld/vpshrd(v)*` (imm8 + variable), `vpmadd52*`, `vpopcnt*`, `vplzcnt*`, `vpconflict*`, `vpmultishiftqb` |
-| converts | 27 | the unsigned/qq lattice `vcvt(t)?{ps,pd}2{u,}{dq,qq}`, `vcvt{u,}{dq,qq}2{ps,pd}`, `vcvt(t)?s{s,d}2usi`, `vcvtusi2s{s,d}` (GPR W-sized), `vcvtph2ps/vcvtps2ph`, bf16 (`vcvtne*`) |
-| fp move / compare / misc | 20 | `vmovs{s,d}` (3-op reg + 2-op mem, MR stores), `vmov{ddup,shdup,sldup}`, `vmovnt*`, `vcomis*/vucomis*` (sae), `vmax/vmin s{s,d}`, `vunpck*`, `vexp2p{s,d}` |
-| integer compare → mask | 18 | `vpcmpeq/gt{b,w,q}`, `vpcmp(u){b,w,d,q}` imm forms, `vptestm/vptestnm{b,w}` — kreg-dest RVM (plumbing exists: the d/q forms are already covered) |
-| broadcast | 14 | `vbroadcast{f,i}{32,64}x{2,4,8}` (tuple mem/eregx src), `vpbroadcast{b,w}`, `vpbroadcastm{b2q,w2d}` (kreg src) |
-| dot products / bf16 | 11 | `vpdp{b,w}*` 8 variants, `vdpbf16ps` — plain RVM+bcst batches |
-| 4-op / misc tail | 9 | `v4fmadd*/v4fnmadd*` (mem-only multi-reg block), `vp4dpwssd(s)`, `vdbpsadbw`, `vcmps{s,d}` (generic-cc scalar) |
+| transcendental / range / fpclass | 32 | `vgetexp{sd,ss}`, `vgetmant*`, `vreduce*`, `vrndscale{ph,sh}`, `vrange*`, `vrcp28*`, `vrsqrt28*`, `vfpclass*` (kreg dest, imm8, sae) — RM/RMI + RVM; some ph/sh are the FP16 encodings |
+| insert / shuffle / mask-mov | 32 | `vinsert{f,i}*x*` (lane insert, imm8), `vshuf{f,i}*x*`/`vshuf{ps,pd}` (imm8), `vpshuf{b,d,hw,lw}`, `vpmov{b,d,q,w}2m` / `vpmovm2*` (kreg⇄vector), `vp2intersect*` (k-pair dest), `vmov{ddup,shdup,sldup}` |
+| fp move / compare / 4-op | 27 | `vmovs{s,d}` (MR stores), `vmovnt*`, `vcomis*/vucomis*` (sae), `vmax/vmin s{s,d}`, `vunpck{h,l}p{s,d}`, `vexp2p{s,d}`, `v4f{,n}madd*` (mem-only reg-block), `vp4dpwssd(s)`, `vdbpsadbw` |
+| compress / expand / align | 14 | `v(p)compress*` (mem-dest MR store), `v(p)expand*`, `valign[dq]` (imm8) |
+| misc / imm groups | 14 | `vfixupimm*` (RVMI), `vprord/vprorq` + `vpshld/vpshrd{d,q,w}` (imm8 rotate/funnel groups on 0F 72/73 & 0F3A), `vcmps{s,d}` (generic-cc scalar) |
+| ph/bf16 converts | 4 | `vcvtph2ps` (widen), `vcvtps2ph` (MRI store, imm8), `vcvtne2ps2bf16` (RVM), `vcvtneps2bf16` (narrow) |
 
-Estimated ~600–800 corpus rules total. No generator or C++ changes are expected except
-possibly: a `kreg`-destination form check (likely already handled via the existing KREG
-file), and the `v4fmadd` mem-only shape.
+Plus 7 cosmetic sweep flags (objdump's imm-variant aliases `vcmpeq*`/`vpcmpeq*u`/`vpclmul*`
+that the generic mnemonic + imm8 already round-trips). No generator/C++ changes expected
+except possibly the `v4fmadd` mem-only multi-register shape and the `vp*compress` mem-dest
+store form.
 
 ## 7. Remaining work — structural items
 
