@@ -2182,6 +2182,19 @@ submatch vex {
   h k b 00001 w 1111 y 11 0x11 @addr {$rexb=1-$b;$rexx=1-$k} => "vmovsd " $addr "," vreg[16*$y+8*$h+$g] ;
   h k b 00011 0 vvvv y 01 0x06 11 ggg rrr @imm8 => "vperm2f128 " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] "," hex($imm8) ;
   h k b 00011 0 vvvv y 01 0x06 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "vperm2f128 " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr "," hex($imm8) ;
+  # ---- AVX2/AVX: vperm2i128, conditional mask move (vmaskmov/vpmaskmov), vmovntdqa load.
+  # The store forms are mem,vvvv,reg (FORM_VEX_MVR); these ops have no reg-direct r/m.
+  h k b 00011 0 vvvv y 01 0x46 11 ggg rrr @imm8 => "vperm2i128 " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] "," hex($imm8) ;
+  h k b 00011 0 vvvv y 01 0x46 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "vperm2i128 " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr "," hex($imm8) ;
+  h k b 00010 w 1111 y 01 0x2a @addr {$rexb=1-$b;$rexx=1-$k} => "vmovntdqa " vreg[16*$y+8*$h+$g] "," $addr ;
+  h k b 00010 0 vvvv y 01 0x2c @addr {$rexb=1-$b;$rexx=1-$k} => "vmaskmovps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  h k b 00010 0 vvvv y 01 0x2d @addr {$rexb=1-$b;$rexx=1-$k} => "vmaskmovpd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  h k b 00010 0 vvvv y 01 0x2e @addr {$rexb=1-$b;$rexx=1-$k} => "vmaskmovps " $addr "," vvv[16*$y+$v] "," vreg[16*$y+8*$h+$g] ;
+  h k b 00010 0 vvvv y 01 0x2f @addr {$rexb=1-$b;$rexx=1-$k} => "vmaskmovpd " $addr "," vvv[16*$y+$v] "," vreg[16*$y+8*$h+$g] ;
+  h k b 00010 0 vvvv y 01 0x8c @addr {$rexb=1-$b;$rexx=1-$k} => "vpmaskmovd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  h k b 00010 1 vvvv y 01 0x8c @addr {$rexb=1-$b;$rexx=1-$k} => "vpmaskmovq " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  h k b 00010 0 vvvv y 01 0x8e @addr {$rexb=1-$b;$rexx=1-$k} => "vpmaskmovd " $addr "," vvv[16*$y+$v] "," vreg[16*$y+8*$h+$g] ;
+  h k b 00010 1 vvvv y 01 0x8e @addr {$rexb=1-$b;$rexx=1-$k} => "vpmaskmovq " $addr "," vvv[16*$y+$v] "," vreg[16*$y+8*$h+$g] ;
   h k b 00010 0 vvvv y 01 0x36 11 ggg rrr => "vpermd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
   h k b 00010 0 vvvv y 01 0x36 @addr {$rexb=1-$b;$rexx=1-$k} => "vpermd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
   h k b 00010 0 vvvv y 01 0x16 11 ggg rrr => "vpermps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
