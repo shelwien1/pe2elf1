@@ -280,40 +280,24 @@ static inline void enc_imm(uint8_t* o, size_t* p, int imk, int opsize,
 
 // ---- the encoder ----------------------------------------------------------
 // returns byte length, or 0 if the insn cannot be encoded (no candidate).
-// VEX tail structure: does (map, opcode) carry a ModR/M, and how many immediate
-// bytes follow. The VEX prefix bytes are replayed verbatim, so only the tail
-// layout matters here. map: 1 = 0F, 2 = 0F38, 3 = 0F3A. (A handful of 0F38
-// opcodes carry an imm and a few 0F have none of the standard imm opcodes; the
-// common structure below is exact for the bulk and any deviation still yields a
-// deterministic, bijective split.)
+// VEX/EVEX/XOP/APX tail structure: does (map, opcode) carry a ModR/M, and how many
+// immediate bytes follow. The prefix bytes are replayed verbatim, so only the tail
+// layout matters here. This reads the generated `vextail` table (x86_tables.h),
+// compiled from the corpus cells (has_modrm bit 7 | imm field: 0/1/2/4 bytes, 15 =
+// immz). Queried for covered opcodes (must match what the FSM consumed) and for the
+// structural fallback alike; a missing (map,opcode) keeps the table's seeded per-map
+// default so the split stays deterministic and bijective. map: 1/2/3 = 0F/0F38/0F3A,
+// 4 = APX, 8/9/10 = XOP.
 static inline void vex_structure(int map, uint8_t op, int opsize, int* has_modrm, int* imm_len) {
-  *has_modrm = 1; *imm_len = 0;
-  if (map == 4) {                                  // APX EVEX-promoted legacy
-    switch (op) {
-      case 0x80: case 0x82: case 0x83:             // group1 imm8 / imm8sx
-      case 0xc0: case 0xc1:                        // group2 shift by imm8
-      case 0x24: case 0x2c:                        // shld/shrd by imm8
-      case 0xd4:                                   // sha1rnds4 imm8
-      case 0x6a: case 0x6b: *imm_len = 1; break;   // push imm8 / imul imm8
-      case 0x81: case 0x69: *imm_len = (opsize == 1) ? 2 : 4; break;  // immz (imul / group1)
-      default: break;                              // most map-4 ops: ModR/M, no immediate
-    }
-    return;
-  }
-  if (map == 1) {                                  // 0F
-    if (op == 0x77) { *has_modrm = 0; return; }    // vzeroupper / vzeroall
-    switch (op) {
-      case 0x70: case 0x71: case 0x72: case 0x73:
-      case 0xC2: case 0xC4: case 0xC5: case 0xC6: *imm_len = 1; break;
-      default: break;
-    }
-  } else if (map == 3) {                           // 0F3A: the immediate map
-    *imm_len = 1;
-  } else if (map == 8) {                           // XOP map 8: is4 register selector
-    *imm_len = 1;
-  } else if (map == 10) {                          // XOP map 10: bextr/lwp control imm32
-    *imm_len = 4;
-  }                                                // map 2 (0F38) / 9 (XOP): modrm, no imm
+  int idx;
+  if      (map >= 1 && map <= 3)  idx = map - 1;     // 0F / 0F38 / 0F3A (VEX + EVEX)
+  else if (map == 4)              idx = 6;           // APX EVEX-promoted legacy
+  else if (map >= 8 && map <= 10) idx = map - 5;     // XOP 8 / 9 / 10
+  else { *has_modrm = 1; *imm_len = 0; return; }     // reserved EVEX maps (0/5/6/7): modrm, no imm
+  uint8_t e = vextail[idx][op];
+  *has_modrm = (e >> 7) & 1;
+  int imf = e & 0x7f;
+  *imm_len = (imf == 15) ? ((opsize == 1) ? 2 : 4) : imf;          // 15 = immz (opsize)
 }
 
 // Re-emit a VEX instruction: [C4|C5] <vex bytes> <opcode> <modrm/addr> <imm?>.

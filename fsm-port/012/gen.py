@@ -2040,6 +2040,52 @@ def emit(c, interp, out_path):
     w("    {-1,-1,-1,-1,-1,-1,-1,-1}\n")
   w("};\n\n")
 
+  # Encode-side prefix-tail structure, generated from the compiled VEX/EVEX/XOP/APX
+  # cells (replaces the hardcoded vex_structure switch in x86enc.hpp). Each byte packs
+  # has_modrm (bit 7) and an immediate field in bits 0-6: 0/1/2/4 = that many replayed
+  # bytes, 15 = immz (opsize-dependent, resolved by the C++). Index: 0/1/2 = map 1/2/3
+  # (VEX and EVEX share tail structure), 3/4/5 = XOP map 8/9/10, 6 = APX map 4.
+  #
+  # vex_structure is queried for BOTH covered opcodes (byte-replay must match what the
+  # FSM consumed) and opcodes with no corpus rule (the structural fallback decodes+
+  # re-encodes them through the same function, so the split just has to be self-
+  # consistent). So the table is SEEDED with the per-map default the structural path
+  # needs, then OVERRIDDEN with the cell-exact (has_modrm, imm) for every covered opcode.
+  _HM = 0x80
+  _imf = {0: 0, 1: 1, 2: 2, 3: 4, 4: 15, 8: 1}       # CAP_IMK -> replay width (15 = immz)
+  vextail = [[_HM | 0] * 256 for _ in range(7)]
+  for op in (0x70, 0x71, 0x72, 0x73, 0xC2, 0xC4, 0xC5, 0xC6):  # map1 imm8 opcodes
+    vextail[0][op] = _HM | 1
+  vextail[0][0x77] = 0                                 # vzeroupper/vzeroall: no ModR/M
+  vextail[2] = [_HM | 1] * 256                         # map3 (0F3A): imm8 map
+  vextail[3] = [_HM | 1] * 256                         # XOP map 8: is4 selector (imm8)
+  vextail[5] = [_HM | 4] * 256                         # XOP map 10: bextr/lwp imm32
+  for op in (0x80, 0x82, 0x83, 0xC0, 0xC1, 0x24, 0x2C, 0xD4, 0x6A, 0x6B):  # APX imm8
+    vextail[6][op] = _HM | 1
+  for op in (0x81, 0x69):                              # APX group1/imul immz
+    vextail[6][op] = _HM | 15
+  _seen = {}
+  def _seed_tail(tab, base):
+    for (m, pp, W, op), e in tab.items():
+      form = e[1]; imk = e[5] if len(e) == 6 else e[4]
+      val = (0 if form == 'VEX_NONE' else _HM) | _imf.get(imk, 0)
+      cur = base + m
+      if (cur, op) in _seen and _seen[(cur, op)] != val:
+        sys.stderr.write("gen.py: vextail conflict at tail-map %d opcode 0x%02x: %d vs %d\n"
+                         % (cur, op, _seen[(cur, op)], val))
+      _seen[(cur, op)] = val
+      vextail[cur][op] = val
+  _seed_tail(interp._vex_tab, 0)
+  _seed_tail(interp._evex_tab, 0)
+  _seed_tail(interp._xop_tab, 3)
+  _seed_tail(interp._apx_tab, 6)
+  w("// encode-side prefix tail: has_modrm<<7 | imm-field (0/1/2/4 bytes, 15=immz).\n")
+  w("// tail-map: 0/1/2 = map 1/2/3, 3/4/5 = XOP 8/9/10, 6 = APX map 4. Generated.\n")
+  w("static const uint8_t vextail[7][256] = {\n")
+  for i in range(7):
+    w("    {%s},\n" % ",".join(str(x) for x in vextail[i]))
+  w("};\n\n")
+
   # Legacy-SSE mandatory-prefix mnemonic table: ppvtab[CAP_PPSEL-1][pp] is the
   # mnemonic for prefix pp (0=NP, 1=66, 2=F3, 3=F2). Invalid prefix slots repeat
   # the NP mnemonic (lenient collapse; objdump rejects them). The C++ derives pp
