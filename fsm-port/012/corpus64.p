@@ -1949,6 +1949,19 @@ submatch vex {
   # ==== VEX map2 66 width-changers (vpmovsx/zx, vcvtph2ps, vpbroadcast*), C4-only ====
   h k b 00010 0 1111 y 01 0x13 11 ggg rrr => "vcvtph2ps " vreg[16*$y+8*$h+$g] "," vreg[8*$b+$r] ;
   h k b 00010 0 1111 y 01 0x13 @addr {$rexb=1-$b;$rexx=1-$k} => "vcvtph2ps " vreg[16*$y+8*$h+$g] "," $addr ;
+  # F16C vcvtps2ph (0F3A 1D, MRI store: dst=half-width r/m, src=full reg, imm8).
+  h k b 00011 0 1111 y 01 0x1d 11 ggg rrr @imm8 => "vcvtps2ph " vreg[8*$b+$r] "," vreg[16*$y+8*$h+$g] "," hex($imm8) ;
+  h k b 00011 0 1111 y 01 0x1d @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "vcvtps2ph " $addr "," vreg[16*$y+8*$h+$g] "," hex($imm8) ;
+  # AVX-IFMA (VEX): vpmadd52luq/huq (0F38 B4/B5 W1, RVM).
+  h k b 00010 1 vvvv y 01 0xb4 11 ggg rrr => "vpmadd52luq " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
+  h k b 00010 1 vvvv y 01 0xb4 @addr {$rexb=1-$b;$rexx=1-$k} => "vpmadd52luq " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  h k b 00010 1 vvvv y 01 0xb5 11 ggg rrr => "vpmadd52huq " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
+  h k b 00010 1 vvvv y 01 0xb5 @addr {$rexb=1-$b;$rexx=1-$k} => "vpmadd52huq " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  # GFNI (VEX): vgf2p8affineqb/invqb (0F3A CE/CF W1, RVMI).
+  h k b 00011 1 vvvv y 01 0xce 11 ggg rrr @imm8 => "vgf2p8affineqb " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] "," hex($imm8) ;
+  h k b 00011 1 vvvv y 01 0xce @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "vgf2p8affineqb " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr "," hex($imm8) ;
+  h k b 00011 1 vvvv y 01 0xcf 11 ggg rrr @imm8 => "vgf2p8affineinvqb " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] "," hex($imm8) ;
+  h k b 00011 1 vvvv y 01 0xcf @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "vgf2p8affineinvqb " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr "," hex($imm8) ;
   h k b 00010 0 1111 y 01 0x20 11 ggg rrr => "vpmovsxbw " vreg[16*$y+8*$h+$g] "," vreg[8*$b+$r] ;
   h k b 00010 0 1111 y 01 0x20 @addr {$rexb=1-$b;$rexx=1-$k} => "vpmovsxbw " vreg[16*$y+8*$h+$g] "," $addr ;
   h k b 00010 0 1111 y 01 0x21 11 ggg rrr => "vpmovsxbd " vreg[16*$y+8*$h+$g] "," vreg[8*$b+$r] ;
