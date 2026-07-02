@@ -79,6 +79,7 @@ here is from a drift-0 sweep).
 | EVEX maps 1–3 (AVX-512 core) | **complete** | §6 batches all landed (transcendental/range/fpclass, insert/shuffle, fp move/scalar/unpack, mask conv, ph/bf16 converts, vpcmp, 4-op 4FMAPS/4VNNIW); the only sweep residue is 7 objdump imm-aliases (vcmpeqph, vpcmpequb, vpclmullqlqdq) that this decoder emits generically |
 | EVEX maps 5–6 (AVX512-FP16) | **complete — 96 / 96, 0 gaps** | 3-bit `mmm` routing added; full MAP5/MAP6 differential vs objdump: 96 distinct mnemonics, 270 match cases, 0 gaps, 0 length/mnemonic mismatches |
 | APX: EVEX-promoted legacy (map 4, incl. ND/NF, push2/pop2, groups) + REX2 + USER_MSR | **complete — 0 missing** | 16,384-case map-4 sweep (drift 0); USER_MSR reg-forms (`urdmsr`/`uwrmsr` 0F38 F8) via per-mod `ppdesc` direction, and the VEX-map7 `urdmsr`/`uwrmsr` r64,imm32 forms (the only decodable opcodes in a VEX maps 4–31 sweep) |
+| APX: REX2 (D5) over the full 0F map — SSE/MMX, mov cr/dr, cpuid/bt/push-pop-seg, pinsrw/pextrw/punpckldq | **complete — semantic, 0 gaps** | now decoded as real 0F-map ops with r0-31 (was structural-only); 16,384-case REX2 sweep vs Zydis: 0 length mismatches (§7b). M0=1 routes to `FSM_OP2`; M0=0 + `C4/C5/62` (LES/LDS/BOUND) correctly `#UD` |
 
 Everything the sweeps flag as *not* covered decodes through the **structural fallback**:
 the prefix/opcode/ModR/M skeleton is captured raw, displayed as a `vex` placeholder, and
@@ -243,6 +244,41 @@ Remaining iced-only differences, deliberately left (all bijection-safe):
   broadening the ModR/M would print a phantom GPR operand on the canonical rm=0 form),
   the `0F 0D` reg-direct long-nop, `66`-prefixed `wbinvd` (objdump also `(bad)`), and VIA
   PadLock `xsha1`/`xstore`/`xcrypt` (discontinued vendor; iced itself decodes only 2 of them).
+
+### 7b. Third differential oracle — Zydis (finds the REX2 0F-map gap)
+
+A cross-check against **Zydis** (zyantific/zydis, built from source) revealed that the
+APX **REX2 (D5) prefix** was only *structurally* handled for most of the 0F map: the
+bytes round-tripped, but everything except a handful of ops decoded to a placeholder or
+`(bad)`. REX2 with `M0=1` is just "the 0F map with the 4th register bit", so `D5 <pl> op
+modrm` must decode exactly like `0F op modrm` with r0-31 registers. Three root causes,
+all fixed this iteration (objdump `{rex2 …}` and Zydis agree on every case):
+
+* **Vector ops mis-routed to VEX/EVEX (Category A).** The C++ VEX/EVEX/XOP detector keyed
+  on the *opcode byte* being `C4`/`C5`/`62` — but under REX2.M0=1 those are ordinary 0F
+  opcodes (`62` punpckldq, `C4` pinsrw, `C5` pextrw), already decoded by `FSM_OP2`. It
+  wrongly re-entered `vex_decode` (a length-10 phantom EVEX op). Fixed by excluding the
+  REX2 path from that detector; `D5 <pl> 62/C4/C5` now fall through to the legacy fill.
+* **1-byte-map special blocks eating 0F opcodes (Category B).** The `mov cr/dr` block keyed
+  on a literal `0F` (never present under REX2), and the `moffs` (A0–A3) block grabbed the
+  REX2 0F-map opcodes `A0/A1/A2/A3` (push/pop fs, cpuid, bt) and demanded an 8-byte address
+  → truncated → `(bad)`. Fixed: the `moffs` block is now guarded by `!rex2_0f`, and `mov
+  cr/dr` is a single unified handler placed after REX2 consumption that covers both the
+  literal-`0F` form (`vex=5`) and the REX2.M0 form (`vex=6`, the 0F implied by M0).
+* **`mov cr/dr` rendering (pre-existing, fixed).** The GPR is now r64 in long mode (was
+  wrongly r32: `mov rcx,cr0`), and the cr/dr number extends to 0–15 via REX.R / REX2.R3
+  while the GPR extends to r0–31 via REX.B / REX2.B3.B4 (`44 0F 20 c1` → `mov rcx,cr8`;
+  `41 0F 20 c1` → `mov r9,cr0`; `D5 84 20 d1` → `mov rcx,cr10`).
+
+REX2.M0=0 + `C4`/`C5`/`62` (1-byte-map LES/LDS/BOUND, all `#UD` in 64-bit) is rejected — a
+VEX/EVEX prefix cannot follow REX2, and `FSM_OP1`'s capture transitions must not apply.
+Validated by a 16,384-case REX2 sweep (all `M0=1` payload/reg-bit combos × reg/mem × all
+256 opcodes): **0 length mismatches vs Zydis**, and the 5 M-buffer `fuzz64` stays at 0
+round-trip failures (bijection is preserved — the register extension only changes the
+*rendered* number; the encoder re-emits ModR/M from the low 3 bits with the high bits in
+the replayed REX2 payload). The one remaining Zydis-only gap is the `0F 0D` reg-direct
+long-nop, deliberately deferred (§7a): objdump also calls it `(bad)`, and adding it would
+introduce an encoder multi-candidate ambiguity with the `0F 1F` / `0F 18-1E` reserved-NOPs.
 
 ## 8. Deliberate decode-display policy (not bugs)
 

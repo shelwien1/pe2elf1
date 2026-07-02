@@ -242,10 +242,17 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t slen, size_t
 
   int n = 0;
   int rept = (int)c[VAR_REPTYPE];
-  #define SETREG(slot, file, idx) do { in->op[slot].type = file_to_T(file, os, rept); \
-                                       in->op[slot].index = ((idx) & 7) + 8 * reg_rex; } while (0)
-  #define SETRM(slot) do { if (mode == RM_REG) { in->op[slot].type = file_to_T(mf, os, rept); \
-                                                 in->op[slot].index = ((int)c[CAP_RM] & 7) + 8 * xb; } \
+  // Legacy vector registers have no high bank: xmm/ymm live in 0..15 (REX.R/B extend,
+  // REX2.R4/B4 do not -> mask &15), mm in 0..7 (REX ignored for MMX -> mask &7). GPRs
+  // keep the full 0..31 range (REX2 reaches r16-r31). The masked-off high bits still
+  // ride in the replayed REX/REX2 prefix, and the encoder re-emits ModR/M from the low
+  // 3 bits alone, so clamping the *rendered* index is bijection-neutral.
+  #define VMASK(t, ix) ((t) == T_MMX ? ((ix) & 7) \
+                        : ((t) == T_XMM || (t) == T_YMM || (t) == T_ZMM) ? ((ix) & 15) : (ix))
+  #define SETREG(slot, file, idx) do { int _t = file_to_T(file, os, rept); in->op[slot].type = _t; \
+                                       in->op[slot].index = VMASK(_t, ((idx) & 7) + 8 * reg_rex); } while (0)
+  #define SETRM(slot) do { if (mode == RM_REG) { int _t = file_to_T(mf, os, rept); in->op[slot].type = _t; \
+                                                 in->op[slot].index = VMASK(_t, ((int)c[CAP_RM] & 7) + 8 * xb); } \
                            else { in->op[slot].type = T_MEM; in->op[slot].index = 0; } } while (0)
   switch (form) {
     case FORM_NONE: n = 0; break;
@@ -754,27 +761,8 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     return vex_decode(d, s, n, ip);                  // 32-bit: structural placeholder
 #endif
   }
-  // mov to/from cr/dr (0F 20-23): the ModR/M mod field is ignored by hardware
-  // (always register-direct, no SIB/disp), so capture the raw ModR/M byte and
-  // replay it -- this round-trips the non-canonical mod != 11 encodings too.
-  if (ip + 2 < n && s[ip] == 0x0F && s[ip + 1] >= 0x20 && s[ip + 1] <= 0x23) {
-    x86insn_t* in = &d->insn;
-    in->vex = 5; in->vex_op = s[ip + 1]; in->vex1 = s[ip + 2];
-    in->vex2 = in->vex3 = 0;
-    int reg = (in->vex1 >> 3) & 7, rm = in->vex1 & 7;
-    int crdr = (in->vex_op & 1) ? T_DREG : T_CREG;       // 20/22 = cr, 21/23 = dr
-    in->n_ops = 2; in->mnem = MNEM_MOV; in->opsize = 0;
-    if (in->vex_op >= 0x22) {                             // 22/23: mov cr/dr, r32
-      in->op[0].type = crdr;   in->op[0].index = reg;
-      in->op[1].type = T_GPR;  in->op[1].index = rm;
-    } else {                                              // 20/21: mov r32, cr/dr
-      in->op[0].type = T_GPR;  in->op[0].index = rm;
-      in->op[1].type = crdr;   in->op[1].index = reg;
-    }
-    return ip + 3;
-  }
+  int rex2_0f = 0;   // set when a REX2 prefix selects the 0F map (M0=1); 32-bit: stays 0
 #if ARCH_MODE == 64
-  int rex2_0f = 0;
   // APX REX2 (D5 + payload): a 2-byte prefix carrying R4/X4/B4 (the 4th register
   // bit -> r16-r31) and W.R.X.B, plus a map bit M0 (payload bit 7: 0 = 1-byte
   // opcode map, 1 = 0F map with NO 0F escape byte). Capture it raw in pfx[] and
@@ -791,14 +779,54 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     ip += 2;
   }
 #endif
+  // mov to/from cr/dr (0F 20-23): the ModR/M mod field is ignored by hardware (always
+  // register-direct, no SIB/disp), so capture the raw ModR/M byte and replay it -- this
+  // round-trips the non-canonical mod != 11 encodings too. The leading 0F is either a
+  // literal escape (vex=5 replays it) or implied by REX2.M0 (vex=6 emits opcode+modrm,
+  // the 0F rides in the replayed payload). The GPR is r64 in long mode (r32 in 32-bit)
+  // and extends to r0-31 via REX.B / REX2.B3.B4; the cr/dr number extends to 0-15 via
+  // REX.R / REX2.R3 (the 4th register bit is not a cr/dr operand bit).
+  {
+    int lit = (!d->insn.rex2 && ip + 2 < n && s[ip] == 0x0F && s[ip + 1] >= 0x20 && s[ip + 1] <= 0x23);
+    int r2  = (d->insn.rex2 && rex2_0f && ip + 1 < n && s[ip] >= 0x20 && s[ip] <= 0x23);
+    if (lit || r2) {
+      x86insn_t* in = &d->insn;
+      size_t oc = lit ? ip + 1 : ip;                       // opcode byte offset
+      byte opb = s[oc], modrm = s[oc + 1];
+      in->vex = lit ? 5 : 6; in->vex_op = opb; in->vex1 = modrm; in->vex2 = in->vex3 = 0;
+      int reg = (modrm >> 3) & 7, rm = modrm & 7;
+      int ext_r = 0, ext_b = 0;                            // reg (cr/dr) and rm (gpr) high bits
+      if (in->rex2) {
+        int p = in->pfx[in->n_pfx - 1];                    // REX2 payload
+        ext_r = (p >> 2) & 1;                              // R3 -> cr/dr 0-15 (R4 not an operand bit)
+        ext_b = (p & 1) | (((p >> 4) & 1) << 1);           // B3|B4 -> gpr r0-31
+      } else {
+        int rb = (in->n_pfx && (in->pfx[in->n_pfx - 1] & 0xF0) == 0x40) ? in->pfx[in->n_pfx - 1] : 0;
+        ext_r = (rb >> 2) & 1;                             // REX.R -> cr8-15
+        ext_b = rb & 1;                                    // REX.B -> r8-15
+      }
+      int crdr = (opb & 1) ? T_DREG : T_CREG;              // 20/22 = cr, 21/23 = dr
+      in->n_ops = 2; in->mnem = MNEM_MOV;
+      in->opsize = (ARCH_MODE == 64) ? 2 : 0;              // r64 in long mode, r32 in 32-bit
+      int gi = rm + 8 * ext_b, ci = reg + 8 * ext_r;
+      if (opb >= 0x22) {                                   // 22/23: mov cr/dr, r
+        in->op[0].type = crdr;   in->op[0].index = ci;
+        in->op[1].type = T_GPR;  in->op[1].index = gi;
+      } else {                                             // 20/21: mov r, cr/dr
+        in->op[0].type = T_GPR;  in->op[0].index = gi;
+        in->op[1].type = crdr;   in->op[1].index = ci;
+      }
+      return oc + 2;
+    }
+  }
   // mov accumulator <-> [moffs] (A0-A3), both modes: no ModR/M -- the operand is an
   // absolute address that follows the opcode directly, sized by the ADDRESS size
   // (64-bit: 8 bytes, or 4 under a 67; 32-bit: 4 bytes, or 2 under a 67). It is held
   // in the 64-bit imm for re-encode and mirrored into disp for the renderer; the
   // opcode byte rides in vex_op. No compiler emits these, but completeness and the
   // bijection require them, address-size-correct in both modes.
-  if (ip < n && s[ip] >= 0xA0 && s[ip] <= 0xA3) {
-    x86insn_t* in = &d->insn;
+  if (ip < n && s[ip] >= 0xA0 && s[ip] <= 0xA3 && !rex2_0f) {   // rex2_0f: A0-A3 are 0F-map
+    x86insn_t* in = &d->insn;                                    // opcodes (push/pop fs, cpuid, bt)
 #if ARCH_MODE == 64
     int aw = d->cap[VAR_ADRSIZ] ? 4 : 8;
 #else
@@ -826,13 +854,12 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     ip = run_fsm(FSM_OP2, s, n, ip, d->cap);
     if (ip == op_at) { d->insn.mnem = 0xFFFF; return ip; }
     // REX2 reaches only the 1-byte and 0F maps -- a further escape (0F 38/3A, or
-    // 0F 0F) is #UD under REX2 (the encoder would drop the implied 0F and lose
-    // the escape byte). And REX2 encodes only legacy GPR instructions; legacy
-    // SSE/vector ops in the 0F map are #UD too. Reject both.
-    int rf = (int)d->cap[CAP_RFILE], mf = (int)d->cap[CAP_MFILE];
-    if (d->cap[CAP_FORM] == FORM_ESC || d->cap[CAP_TBL3] ||
-        rf == OPF_XMM || rf == OPF_MM || rf == OPF_SSE_OS || rf == OPF_MMG ||
-        mf == OPF_XMM || mf == OPF_MM || mf == OPF_SSE_OS || mf == OPF_MMG) {
+    // 0F 0F) is #UD under REX2 (the encoder would drop the implied 0F and lose the
+    // escape byte). Legacy SSE/vector ops in the 0F map, however, ARE valid under
+    // REX2 (objdump + Zydis decode them -> xmm0-15 via R3/B3; the R4/B4 high bit is
+    // masked off in SETREG/SETRM since legacy SSE has no xmm16-31). So reject only a
+    // further escape, not the vector ops.
+    if (d->cap[CAP_FORM] == FORM_ESC || d->cap[CAP_TBL3]) {
       d->insn.mnem = 0xFFFF; return ip;
     }
   } else
@@ -843,6 +870,13 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   // REX2 with M0=0 selects the 1-byte map; an explicit 0F escape byte is then #UD
   // (a 0F-map op must use M0=1). Reject so the encoder never has to drop a 0F.
   if (d->insn.rex2 && d->cap[CAP_FORM] == FORM_ESC) { d->insn.mnem = 0xFFFF; return ip; }
+  // C4/C5/62 are VEX/EVEX introducers; in the 1-byte map they are LES/LDS/BOUND, all #UD
+  // in 64-bit mode. FSM_OP1 has capture transitions for them (the op1[C4/C5/62] VEX/EVEX
+  // dispatch), so under REX2.M0=0 they wrongly reach a VEX form here -- reject: a VEX/EVEX
+  // prefix cannot follow REX2, and there is no legacy 1-byte opcode to fall back to.
+  if (d->insn.rex2 && (s[op_at] == 0xC4 || s[op_at] == 0xC5 || s[op_at] == 0x62)) {
+    d->insn.mnem = 0xFFFF; return ip;
+  }
   if (d->cap[CAP_FORM] == FORM_ESC) {               // 0F escape: the real opcode is byte 2
     tb = 1;
     size_t o2 = ip;
@@ -861,7 +895,12 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   }
   int form = (int)d->cap[CAP_FORM];
 #if ARCH_MODE == 64
-  if (s[op_at] == 0xC4 || s[op_at] == 0xC5 || s[op_at] == 0x62) {  // VEX/EVEX via the FSM
+  // VEX/EVEX/XOP prefix introducers, but ONLY when they open the opcode area. Under a
+  // REX2 (D5) prefix the very same bytes are ordinary 0F-map opcodes -- 62 punpckldq,
+  // C4 pinsrw, C5 pextrw -- already decoded by FSM_OP2 above (and a VEX/EVEX/XOP prefix
+  // after REX2 is #UD on real silicon anyway), so exclude the REX2 path and let those
+  // fall through to the legacy ModR/M + immediate fill.
+  if (!d->insn.rex2 && (s[op_at] == 0xC4 || s[op_at] == 0xC5 || s[op_at] == 0x62)) {  // VEX/EVEX via the FSM
     // a complete VEX decode reaches a vexop state, which sets CAP_FORM to a VEX_*
     // form. If not -- the opcode is not (yet) in the corpus, or the prefix/opcode
     // was truncated -- fall back to the structural path (MNEM_VEX placeholder),

@@ -308,6 +308,10 @@ static inline size_t vex_encode(const x86insn_t* in, uint8_t* out) {
     out[p++] = 0x0F; out[p++] = in->vex_op; out[p++] = in->vex1;
     return p;
   }
+  if (in->vex == 6) {                              // REX2 mov cr/dr: opcode + raw modrm
+    out[p++] = in->vex_op; out[p++] = in->vex1;    // (the 0F is implied by REX2.M0, replayed)
+    return p;
+  }
   int map;
   if (in->vex == 3) {                              // EVEX: 62 P0 P1 P2
     out[p++] = 0x62; out[p++] = in->vex1; out[p++] = in->vex2; out[p++] = in->vex3;

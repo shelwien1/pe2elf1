@@ -54,9 +54,12 @@
 # mnemonic selector (not the size override the promoted ALU uses) and/or SSE-domain
 # operands -- adcx/adox, movbe, crc32, the aadd/aand/axor/aor atomics, movdiri/
 # movdir64b, sha*/aes*kl, invept/invvpid/invpcid, u{rd,wr}msr, wrssq/wrussq -- so it
-# does not fit the uniform model and stays structural. An opcode the corpus does
-# not cover, those XOP GPR forms / APX tail, the APX REX2 (D5) prefix, and the moffs
-# mov (A0-A3), still round-trip via the C++ structural path (raw-byte replay). The
+# does not fit the uniform model and stays structural. The APX REX2 (D5) prefix now
+# decodes SEMANTICALLY over the full 0F map (M0=1 routes to FSM_OP2): SSE/MMX, mov
+# cr/dr, cpuid/bt, push/pop fs/gs, pinsrw/pextrw/punpckldq -- all with r0-31 registers,
+# via a unified C++ mov-cr/dr handler and the R3.R4/B3.B4 extension in fill_insn. An
+# opcode the corpus does not cover and the moffs mov (A0-A3) still round-trip via the
+# C++ structural path (raw-byte replay). The
 # fuzzer enforces lossless round-trip across the whole accepted byte space (0
 # failures) -- the bijection holds for all of x64, and the covered VEX/EVEX/XOP/APX
 # now lower to real mnemonics + operands.
