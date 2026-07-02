@@ -1920,6 +1920,10 @@ submatch vex {
   h k b 00010 0 vvvv y 00 0xf7 @addr {$rexb=1-$b;$rexx=1-$k} => "bextr " greg[$g] "," $addr "," greg[$v] ;
   h k b 00010 1 vvvv y 00 0xf7 11 ggg rrr => "bextr " greg[32+$g] "," greg[32+$r] "," greg[32+$v] ;
   h k b 00010 1 vvvv y 00 0xf7 @addr {$rexb=1-$b;$rexx=1-$k} => "bextr " greg[32+$g] "," $addr "," greg[32+$v] ;
+  # VEX map 7 (APX USER_MSR immediate forms): urdmsr r64,imm32 (F2 /0) ; uwrmsr imm32,r64 (F3 /0).
+  # r64 is the ModR/M r/m (reg field = /0); imm32 follows. Register-only (no memory form).
+  h k b 00111 0 1111 y 11 0xf8 11 ggg rrr @imm32 => "urdmsr " greg[32+$r] "," hex($imm32) ;
+  h k b 00111 0 1111 y 10 0xf8 11 ggg rrr @imm32 => "uwrmsr " hex($imm32) "," greg[32+$r] ;
   h k b 00010 0 vvvv y 01 0xf7 11 ggg rrr => "shlx " greg[$g] "," greg[$r] "," greg[$v] ;
   h k b 00010 0 vvvv y 01 0xf7 @addr {$rexb=1-$b;$rexx=1-$k} => "shlx " greg[$g] "," $addr "," greg[$v] ;
   h k b 00010 1 vvvv y 01 0xf7 11 ggg rrr => "shlx " greg[32+$g] "," greg[32+$r] "," greg[32+$v] ;

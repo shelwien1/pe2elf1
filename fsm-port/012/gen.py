@@ -1150,7 +1150,9 @@ class Interp:
       mapidx = {8: 0, 9: 1, 10: 2}.get(mapval)
     elif kind == 'apx':
       mapidx = 0 if mapval == 4 else None     # APX uses the single legacy map (mmm=4)
-    else:
+    elif kind in ('vex', 'vex2'):
+      mapidx = {1: 0, 2: 1, 3: 2, 7: 3}.get(mapval)   # VEX maps 1/2/3 + 7 (USER_MSR imm)
+    else:                                             # evex
       mapidx = {1: 0, 2: 1, 3: 2, 5: 3, 6: 4}.get(mapval)
     if mapidx is None:
       return None
@@ -1179,6 +1181,7 @@ class Interp:
                                       # VMG0: vvvv,r/m, mnem by /digit (XOP TBM blc*/bls*/tzmsk/t1mskc)
                'VEX_RMV', 'VEX_RVRM',  # RMV: reg,r/m,vvvv (XOP vprot/vpsh W0);
                                        # RVRM: reg,vvvv,is4,r/m (XOP vpcmov/vpperm W1)
+               'VEX_MI', 'VEX_IM',    # MI: r/m,imm ; IM: imm,r/m  (VEX map7 urdmsr/uwrmsr)
                # APX EVEX-promoted legacy (GPR; apx_finalize prepends NDD dest if ND=1)
                'APX_MR', 'APX_RM', 'APX_RMI', 'APX_MI', 'APX_M', 'APX_R',
                'APX_MRI', 'APX_MRC']
@@ -1190,6 +1193,7 @@ class Interp:
     'RM,REG': 'VEX_MR', 'RM,REG,IMM8': 'VEX_MRI', 'VVVV,RM': 'VEX_VM',
     'REG': 'VEX_R', 'RM': 'VEX_M', '': 'VEX_NONE', 'REG,VVVV,RM,VVVV': 'VEX_RVMV',
     'REG,RM,VVVV': 'VEX_RMV', 'REG,VVVV,IS4,RM': 'VEX_RVRM',
+    'RM,IMM8': 'VEX_MI', 'IMM8,RM': 'VEX_IM',   # VEX map7 USER_MSR: urdmsr r/m,imm32 ; uwrmsr imm32,r/m
   }
 
   # APX promoted-legacy operand shapes (GPR; the C++ apx_finalize prepends the NDD
@@ -1358,9 +1362,10 @@ class Interp:
 
   def vexp1_state(self, b):
     mp = b & 0x1f
-    if mp not in (1, 2, 3):
+    mi = {1: 0, 2: 1, 3: 2, 7: 3}.get(mp)   # VEX maps 1/2/3 (0F/0F38/0F3A) + 7 (APX USER_MSR imm)
+    if mi is None:
       return [], 'FSM_HALT'                                  # undefined VEX map
-    return [('FIELD', self.tailcap('TBL3'), 7, 5)], 'FSM_VEXP2 + %d*256' % (mp - 1)
+    return [('FIELD', self.tailcap('TBL3'), 7, 5)], 'FSM_VEXP2 + %d*256' % mi
 
   def vexp2_state(self, mapidx, b):
     pp, W = b & 3, (b >> 7) & 1
@@ -1793,9 +1798,9 @@ def emit(c, interp, out_path):
     % max(1, interp.group_count()))
   # VEX prefix-consuming stages + per-(map,pp,W) opcode maps (capture-based decode)
   w("    struct DState vexp1[256];          // C4 byte1: FIELD R'X'B', route by map -> vexp2\n")
-  w("    struct DState vexp2[3][256];       // [map-1] C4 byte2: FIELD vvvv/L, route by pp,W\n")
+  w("    struct DState vexp2[4][256];       // [mapidx] C4 byte2: FIELD vvvv/L, route by pp,W (mapidx 0..3 = maps 1/2/3/7)\n")
   w("    struct DState vexp1c5[256];        // C5 single byte: 2-byte VEX (map=0F, W=0)\n")
-  w("    struct DState vexop[3][4][2][256]; // [map-1][pp][W] opcode -> MNEM + VEX form + files\n")
+  w("    struct DState vexop[4][4][2][256]; // [mapidx][pp][W] opcode -> MNEM + VEX form + files\n")
   # EVEX prefix stages (3 payload bytes) + per-(map,pp,W) opcode maps (AVX-512)
   w("    struct DState evexp0[256];         // 62 P0: FIELD R'X'B'R'', route by map\n")
   w("    struct DState evexp1[5][256];      // [mapidx] P1: FIELD vvvv, route by pp,W\n")
@@ -1891,18 +1896,18 @@ def emit(c, interp, out_path):
   w(",\n  { // vexp1[256]  (C4 byte1)\n")
   emit_states(interp.vexp1_state)
   w("  },\n")
-  w("  { // vexp2[3][256]  (C4 byte2, by map)\n")
-  for mp in range(3):
-    w("   { // map %d\n" % (mp + 1))
+  w("  { // vexp2[4][256]  (C4 byte2, by mapidx 0..3 = maps 1/2/3/7)\n")
+  for mp in range(4):
+    w("   { // map %d\n" % [1, 2, 3, 7][mp])
     emit_states(lambda i, m=mp: interp.vexp2_state(m, i))
-    w("   }%s\n" % ("," if mp < 2 else ""))
+    w("   }%s\n" % ("," if mp < 3 else ""))
   w("  },\n")
   w("  { // vexp1c5[256]  (C5 single payload byte)\n")
   emit_states(interp.vexp1c5_state)
   w("  },\n")
-  w("  { // vexop[3][4][2][256]  ([map-1][pp][W] -> opcode)\n")
-  for mp in range(3):
-    w("   { // map %d\n" % (mp + 1))
+  w("  { // vexop[4][4][2][256]  ([mapidx][pp][W] -> opcode)\n")
+  for mp in range(4):
+    w("   { // map %d\n" % [1, 2, 3, 7][mp])
     for pp in range(4):
       w("    { // pp %d\n" % pp)
       for W in range(2):
@@ -1910,7 +1915,7 @@ def emit(c, interp, out_path):
         emit_states(lambda i, m=mp, p=pp, ww=W: interp.vexop_state(m, p, ww, i))
         w("     }%s\n" % ("," if W == 0 else ""))
       w("    }%s\n" % ("," if pp < 3 else ""))
-    w("   }%s\n" % ("," if mp < 2 else ""))
+    w("   }%s\n" % ("," if mp < 3 else ""))
   w("  },\n")
   # ---- EVEX stages ----
   w("  { // evexp0[256]  (62 P0)\n")
@@ -1988,7 +1993,7 @@ def emit(c, interp, out_path):
   w("};\n")
   w("static_assert(sizeof(struct Fsm) == (256 + 256 + 256 + 256 + 256 + 2*256 + 3*256 + %d*2*256\n"
     % max(1, ng))
-  w("              + 256 + 3*256 + 256 + 3*4*2*256\n")
+  w("              + 256 + 4*256 + 256 + 4*4*2*256\n")
   w("              + 256 + 5*256 + 5*4*2*256 + 5*4*2*256\n")
   w("              + 256 + 3*256 + 3*4*2*256\n")
   w("              + 256 + 8*256 + 8*256) * sizeof(struct DState),\n")

@@ -501,6 +501,8 @@ static inline void vex_finalize(x86dec_t* d, const byte* s, size_t op_at) {
     case FORM_VEX_RMV:  in->op[nn++]=regop; in->op[nn++]=rmop; in->op[nn++]=vvvvop; break;   // XOP vprot/vpsh W0
     case FORM_VEX_RVRM: in->op[nn++]=regop; in->op[nn++]=vvvvop; in->op[nn++]=is4op; in->op[nn++]=rmop; break; // XOP vpcmov/vpperm W1
     case FORM_VEX_VMI:  in->op[nn++]=vvvvop; in->op[nn++]=rmop; in->op[nn++]=immop; break;
+    case FORM_VEX_MI:   in->op[nn++]=rmop;   in->op[nn++]=immop; break;   // VEX map7 urdmsr r/m,imm32
+    case FORM_VEX_IM:   in->op[nn++]=immop;  in->op[nn++]=rmop;  break;   // VEX map7 uwrmsr imm32,r/m
     case FORM_VEX_VMG:  // shift-by-imm group: dest=vvvv, src=r/m, imm; mnem by /digit
       in->op[nn++]=vvvvop; in->op[nn++]=rmop; in->op[nn++]=immop;
       in->mnem = (uint16_t)vexgrp[(int)c[CAP_GRP]][mreg];     // mreg == ModR/M reg = /digit

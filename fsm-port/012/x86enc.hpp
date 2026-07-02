@@ -293,7 +293,8 @@ static inline void vex_structure(int map, uint8_t op, int opsize, int* has_modrm
   if      (map >= 1 && map <= 3)  idx = map - 1;     // 0F / 0F38 / 0F3A (VEX + EVEX)
   else if (map == 4)              idx = 6;           // APX EVEX-promoted legacy
   else if (map >= 8 && map <= 10) idx = map - 5;     // XOP 8 / 9 / 10
-  else { *has_modrm = 1; *imm_len = 0; return; }     // reserved EVEX maps (0/5/6/7): modrm, no imm
+  else if (map == 7)            { *has_modrm = 1; *imm_len = 4; return; }  // VEX map7: urdmsr/uwrmsr r64,imm32
+  else { *has_modrm = 1; *imm_len = 0; return; }     // reserved EVEX maps (0/5/6): modrm, no imm
   uint8_t e = vextail[idx][op];
   *has_modrm = (e >> 7) & 1;
   int imf = e & 0x7f;
