@@ -781,6 +781,22 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
       d->cap[VAR_OPSIZ] = erexw ? 2 : (has66 ? 1 : 0);
     }
   }
+  // VEX (C4/C5), EVEX (62) and XOP (8F, map>=8) carry their own W/R/X/B and mandatory
+  // prefix (pp), so REX and the mandatory-prefix bytes may not precede them. Measured on
+  // Intel XED / SDE: 66, F2, F3 and LOCK (F0) *anywhere* in the prefix run -> #UD; a REX
+  // (0x40-0x4F) *immediately* before the introducer -> #UD (a REX separated from it by a
+  // segment/67 prefix is discarded per the REX rule, so that stays legal); segment and
+  // address-size (67) prefixes are allowed. REX2 (D5) is not consumed here -- s[ip] would
+  // be 0xD5 -- and a VEX/EVEX/XOP byte *after* a REX2 is rejected on the FSM path, so this
+  // only ever sees the plain introducer. (See REX_REX2_prefixes.md sec 7.)
+  if (ip < n && (s[ip] == 0xC4 || s[ip] == 0xC5 || s[ip] == 0x62 ||
+                 (s[ip] == 0x8F && ip + 1 < n && (s[ip + 1] & 0x1f) >= 8))) {
+    for (size_t k = 0; k < ip; k++)
+      if (s[k] == 0x66 || s[k] == 0xF2 || s[k] == 0xF3 || s[k] == 0xF0) {
+        d->insn.mnem = 0xFFFF; return ip;
+      }
+    if (ip > 0 && (s[ip - 1] & 0xF0) == 0x40) { d->insn.mnem = 0xFFFF; return ip; }
+  }
   // 64-bit: C4/C5 (VEX) and 62 (EVEX) are decoded by the FSM -- op1[C4/C5/62]
   // route into the capture-based vexp*/evexp* stages -> vex_finalize -- so they
   // fall through to the opcode FSM below. An opcode the corpus doesn't cover (or

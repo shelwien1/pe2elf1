@@ -455,6 +455,22 @@ decode errors): xchg operand order (accumulator-first vs XED's reg-first — a s
 the accumulator rendering `eax` under REX.W, both shared with the pre-existing `add eax,`/`cmp
 eax,` accumulator-string convention.
 
+**Follow-up — illegal prefixes before VEX/EVEX/XOP now `#UD`.** The REX2 differential's sibling
+question ("can a REX / mandatory prefix precede a VEX-class introducer?") turned up a third,
+broader deviation: the decoder had accepted *any* prefix before a `C4`/`C5`/`62`/`8F`(map≥8)
+introducer (e.g. `66 c5 f8 77`, `40 c5 f8 77` decoded instead of faulting). Measured on XED/SDE,
+the rule is: `66`/`F2`/`F3`/`LOCK` anywhere in the run → `#UD`; a REX (`40-4F`) *immediately*
+before the introducer → `#UD` (a REX a following segment/`67` prefix neutralizes stays legal,
+mirroring the plain-REX rule); segment and address-size (`67`) prefixes are allowed. `decode_insn`
+now enforces this in the 64-bit path (one guard, ahead of the VEX/XOP/REX2 dispatch). Verified
+0 mismatches over an exhaustive single/double-prefix × {VEX C5, VEX C4, EVEX, XOP} sweep vs XED;
+fuzz64 5 M = 0 (accept rate 83.9 %→76.7 % as the illegal combinations are now rejected),
+roundtrip64 byte-identical, 32-bit 858/858 + fuzz 5 M = 0. Rejecting illegal encodings cannot
+break the bijection (there is nothing to re-encode). The full REX/REX2/VEX prefix behavior — and
+this decoder's conformance — is written up in `REX_REX2_prefixes.md`. (One unrelated gap the sweep
+noted and left: `LOCK` on a register-destination op, e.g. `f0 01 c0`, is `#UD` on hardware but
+still accepted — a LOCK/ModR/M-validity issue, not a REX/REX2 one, and bijection-safe.)
+
 ## 8. Deliberate decode-display policy (not bugs)
 
 * Size suffixes (`.b/.w/.d/.q/.t`) instead of `BYTE/WORD/... PTR`; `[rax+0]`-style

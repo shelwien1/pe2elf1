@@ -204,10 +204,15 @@ The FSM disassembler in this directory was checked against every case above
   `66 40 d5…` → `#UD` vs `40 66 d5…` legal, `d5 08 66…`/`d5 08 48…`/double-`D5` → `#UD`, and
   the `66`-vs-`REX2.W` last-wins behavior. (The REX-immediately-before-REX2 `#UD` check was
   added while writing this document's REX2 test — see `STATUS64.md` §7h.)
-* **Known permissive case:** the decoder currently *accepts* an illegal legacy/REX prefix in
-  front of a VEX/EVEX introducer (e.g. `66 c5 f8 77`, `40 c5 f8 77`) instead of raising `#UD`.
-  This is bijection-safe (the stray prefix is replayed verbatim on re-encode), but it is a
-  decode-fidelity gap versus §7 and a candidate for the same treatment the REX2 case received.
+* **VEX / EVEX / XOP preceding-prefix rule (§7)** — matches XED. `decode_insn` rejects a
+  `66`/`F2`/`F3`/`LOCK` anywhere in the run before a `C4`/`C5`/`62`/`8F`(map≥8) introducer, and
+  a REX immediately before it, while still allowing segment + `67` (and a REX that a following
+  segment/`67` neutralizes). Verified 0 mismatches over an exhaustive single/double-prefix ×
+  {VEX C5, VEX C4, EVEX, XOP} differential vs XED.
+
+A separate, non-REX gap that this investigation surfaced (left as-is): a `LOCK` (`F0`) prefix on
+a *register*-destination instruction (e.g. `f0 01 c0`) is `#UD` on hardware but the decoder
+still accepts it — a LOCK/ModR/M-validity issue unrelated to REX/REX2, and bijection-safe.
 
 ---
 
