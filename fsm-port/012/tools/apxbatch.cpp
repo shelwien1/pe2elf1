@@ -12,7 +12,11 @@ static void pr(const x86op_t*o,const x86insn_t*in){
     case T_GPR8:printf("%s",rgb[o->index]);break;
     case T_MEM:{int b=in->mem_base,x=in->mem_index;printf("[");
       if(in->rip)printf("rip");else if(b<32)printf("%s",greg[64+b]);
-      if(x<32)printf("+%s*%d",greg[64+x],1<<in->mem_scale);
+      if(x<32){ // VSIB: a vector index (gather/scatter) renders as xmm/ymm/zmm
+        if(in->mem_ix_t){const char*vp=in->mem_ix_t==T_YMM?"ymm":in->mem_ix_t==T_ZMM?"zmm":"xmm";
+          printf("+%s%d*%d",vp,x,1<<in->mem_scale);}
+        else printf("+%s*%d",greg[64+x],1<<in->mem_scale);
+      }
       if(in->disp)printf("+0x%x",(unsigned)in->disp);
       printf("]");}break;
     case T_IMM:printf("0x%llx",(unsigned long long)in->imm);break;

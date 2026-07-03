@@ -479,18 +479,45 @@ static inline void vex_finalize(x86dec_t* d, const byte* s, size_t op_at) {
   int mreg = (int)c[CAP_REG], mrm = (int)c[CAP_RM];
   int rf = (int)c[CAP_RFILE], mf = (int)c[CAP_MFILE];
 
+  // VSIB gather (0F38 90-93) / scatter (0F38 A0-A3): the memory index is a VECTOR whose
+  // width, and the data-reg (dst/src + VEX mask) width, are set by the index-element size
+  // vs the vector length. q-index ops (91/93/a1/a3) with a d-element (W0) size the DATA reg
+  // one class down; d-index ops (90/92/a0/a2) with a q-element (W1) size the INDEX one class
+  // down (Intel VSIB element-count rule). Everything here is display-only -- the encoder
+  // replays the raw SIB, so the byte-exact round-trip is untouched.
+  int g_reg = 0, g_idx = 0;   // 0 = not a gather/scatter; else the T_ vector type
+  int gmap = (in->vex == 3) ? (in->vex1 & 7) : (in->vex >= 2 ? (in->vex1 & 0x1f) : 1);
+  if (gmap == 2 && ((in->vex_op >= 0x90 && in->vex_op <= 0x93) ||
+                    (in->vex_op >= 0xa0 && in->vex_op <= 0xa3))) {
+    int Wb = (in->vex2 >> 7) & 1;
+    int vfull = vex_vec_type(LL), vhalf = (LL >= 2) ? T_YMM : T_XMM;
+    bool q_idx = (in->vex_op & 1);                  // 91/93/a1/a3 use qword indices
+    g_reg = (q_idx && Wb == 0) ? vhalf : vfull;
+    g_idx = (!q_idx && Wb == 1) ? vhalf : vfull;
+  }
+
   // memory r/m: fold the high extension bits into base/index (the encoder masks
   // to 3 bits, so this stays byte-exact) + capture the addressing witness.
   if (has_modrm && !is_reg) {
     if (in->mem_base == GREG_RIP) in->rip = 1;
     else if (in->mem_base < 8)    in->mem_base += 8 * B;
     if (in->mem_index < 8)        in->mem_index += 8 * X;
+    // VSIB: re-derive the vector index from the raw SIB (fill_insn dropped index==4 via
+    // the GPR "no-index" rule) and record its width, BEFORE witnessing so the re-encoded
+    // SIB matches. base uses the GPR path above; only the index is a vector here.
+    if (g_idx && (in->vex_modrm & 7) == 4) {
+      byte sib = s[opc_at + 2];
+      in->mem_index = ((sib >> 3) & 7) + 8 * X + 16 * ((in->vex == 3) ? Vp : 0);
+      in->mem_scale = (sib >> 6) & 3;
+      in->mem_ix_t  = (uint8_t)g_idx;
+    }
     capture_addr_witness(in, s, opc_at, 0);
   }
 
   x86op_t regop  = vex_mkop(in, rf, mreg + 8 * R + 16 * Rp, vt, LL);
   x86op_t vvvvop = vex_mkop(in, rf, vvvv, vt, LL);
   x86op_t rmreg  = vex_mkop(in, mf, mrm + 8 * B + 16 * X, vt, LL);
+  if (g_reg) { regop.type = (uint16_t)g_reg; vvvvop.type = (uint16_t)g_reg; }  // VSIB data/mask width
   x86op_t memop; memop.type = T_MEM; memop.index = 0;
   x86op_t rmop   = is_reg ? rmreg : memop;
   x86op_t immop; immop.type = T_IMM; immop.index = 0;
@@ -736,6 +763,7 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   d->insn.rex2 = 0;
   d->insn.moffs = 0;
   d->insn.dfv = 0xFF;                               // APX CCMP/CTEST default-flags; 0xFF = not a ccmp
+  d->insn.mem_ix_t = 0;                             // VSIB vector index type; 0 = ordinary GPR index
 #if ARCH_MODE == 64
   // A legacy REX (0x40-0x4F) is effective only as the LAST prefix, immediately before
   // the opcode/0F. If any legacy prefix follows it, the REX is ignored -- so the FSM's

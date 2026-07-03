@@ -92,6 +92,8 @@ typedef struct {
 
   uint8_t cc;          /* condition code 0..15 for jcc/setcc/cmovcc; 0xFF = none */
   uint8_t dfv;         /* APX CCMP/CTEST default-flags value {OF,SF,ZF,CF}; 0xFF = not a ccmp */
+  uint8_t mem_ix_t;    /* VSIB (gather/scatter): T_XMM/T_YMM/T_ZMM type of the vector memory
+                        * index; 0 (T_NONE) = an ordinary GPR index. Display-only witness. */
 
   /* VEX witness: a VEX instruction is  [C4|C5] <vex bytes> <opcode> <modrm...>.
    * The prefix bytes are captured raw and replayed (they hold vvvv/L/W/pp/RXB,

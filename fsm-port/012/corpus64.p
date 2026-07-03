@@ -2240,6 +2240,17 @@ submatch vex {
   h k b 00010 1 vvvv y 01 0x8c @addr {$rexb=1-$b;$rexx=1-$k} => "vpmaskmovq " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
   h k b 00010 0 vvvv y 01 0x8e @addr {$rexb=1-$b;$rexx=1-$k} => "vpmaskmovd " $addr "," vvv[16*$y+$v] "," vreg[16*$y+8*$h+$g] ;
   h k b 00010 1 vvvv y 01 0x8e @addr {$rexb=1-$b;$rexx=1-$k} => "vpmaskmovq " $addr "," vvv[16*$y+$v] "," vreg[16*$y+8*$h+$g] ;
+  # AVX2 VEX gather (VEX.66.0F38.W0/W1 90-93): dst, [base+vindex*scale], mask(vvvv). The
+  # memory is VSIB; vex_finalize re-types the vector index and sizes dst/mask by the
+  # index-vs-element width (90/92 W1 & 91/93 W0 are the mixed-size forms). mem-only.
+  h k b 00010 0 vvvv y 01 0x90 @addr {$rexb=1-$b;$rexx=1-$k} => "vpgatherdd " vreg[16*$y+8*$h+$g] "," $addr "," vvv[16*$y+$v] ;
+  h k b 00010 1 vvvv y 01 0x90 @addr {$rexb=1-$b;$rexx=1-$k} => "vpgatherdq " vreg[16*$y+8*$h+$g] "," $addr "," vvv[16*$y+$v] ;
+  h k b 00010 0 vvvv y 01 0x91 @addr {$rexb=1-$b;$rexx=1-$k} => "vpgatherqd " vreg[16*$y+8*$h+$g] "," $addr "," vvv[16*$y+$v] ;
+  h k b 00010 1 vvvv y 01 0x91 @addr {$rexb=1-$b;$rexx=1-$k} => "vpgatherqq " vreg[16*$y+8*$h+$g] "," $addr "," vvv[16*$y+$v] ;
+  h k b 00010 0 vvvv y 01 0x92 @addr {$rexb=1-$b;$rexx=1-$k} => "vgatherdps " vreg[16*$y+8*$h+$g] "," $addr "," vvv[16*$y+$v] ;
+  h k b 00010 1 vvvv y 01 0x92 @addr {$rexb=1-$b;$rexx=1-$k} => "vgatherdpd " vreg[16*$y+8*$h+$g] "," $addr "," vvv[16*$y+$v] ;
+  h k b 00010 0 vvvv y 01 0x93 @addr {$rexb=1-$b;$rexx=1-$k} => "vgatherqps " vreg[16*$y+8*$h+$g] "," $addr "," vvv[16*$y+$v] ;
+  h k b 00010 1 vvvv y 01 0x93 @addr {$rexb=1-$b;$rexx=1-$k} => "vgatherqpd " vreg[16*$y+8*$h+$g] "," $addr "," vvv[16*$y+$v] ;
   h k b 00010 0 vvvv y 01 0x36 11 ggg rrr => "vpermd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
   h k b 00010 0 vvvv y 01 0x36 @addr {$rexb=1-$b;$rexx=1-$k} => "vpermd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
   h k b 00010 0 vvvv y 01 0x16 11 ggg rrr => "vpermps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
