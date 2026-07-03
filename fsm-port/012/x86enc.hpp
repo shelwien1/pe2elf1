@@ -325,6 +325,15 @@ static inline size_t vex_encode(const x86insn_t* in, uint8_t* out) {
   out[p++] = in->vex_op;
   int has_modrm, imm_len;
   vex_structure(map, in->vex_op, in->opsize, &has_modrm, &imm_len);
+  // APX map-4 f6/f7 /0,/1 (ctest r/m,imm) ride the no-imm not/neg group cell, so
+  // vex_structure reports no immediate; restore it by the replayed ModR/M /digit.
+  // Gate on in->apx so this fires ONLY for a covered ctest decode (where the decoder
+  // consumed the imm via the per-digit CAP_IMK override) and never for the structural
+  // placeholder path (uncovered pp=F3/F2 f6/f7, which carries no imm) -- keeping the
+  // decode-length and encode-length identical for a byte-exact round-trip.
+  if (in->apx && (in->vex_op == 0xf6 || in->vex_op == 0xf7) &&
+      ((in->vex_modrm >> 3) & 7) <= 1)
+    imm_len = (in->vex_op == 0xf6) ? 1 : ((in->opsize == 1) ? 2 : 4);
   if (has_modrm) {
     // Replay the raw ModR/M byte captured at decode. For a memory r/m the SIB/disp
     // are rebuilt from the addressing witness (reg/base/index high bits ride in the

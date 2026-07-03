@@ -351,13 +351,28 @@ placeholder cases (28 distinct mnemonics). Fixing them took placeholders 378 →
   (AVX-VNNI-INT16), blsr/blsmsk/blsi (BMI1) + rorx (BMI2). A build_vex group-typing fix
   (prefer a concrete r/m file over the MEM marker) was needed for blsr's GPR source.
 
-Remaining placeholders (13 distinct, all bijection-safe via the structural fallback),
-deliberately deferred:
+### 7e. APX CCMP/CTEST — the conditional compare/test family (done, 2026-07-03)
+
+Every map-4 CMP (38-3B, group 80/81/83 /7) and TEST (84/85, group F6/F7 /0,/1) is really
+the APX *conditional* form. `apx_finalize` now rewrites the mnemonic by the source condition
+code SCC = `P2[3:0]` — `o no b nb z nz be nbe s ns t f l nl le nle` — to `ccmp`cc / `ctest`cc,
+and records the default-flags value DFV = the raw (non-inverted) `vvvv` = {OF,SF,ZF,CF},
+rendered `{dfv=…}`. The 32 mnemonics (16 SCC × ccmp/ctest) are appended by gen.py
+(`MNEM_CCMP_BASE` / `MNEM_CTEST_BASE`); the NDD prepend is suppressed for the family (they
+only read flags). CCMP rides the existing reg cells (which serve the memory r/m forms too)
+plus the uniform-imm 80/81/83 groups; CTEST's F6/F7 is a *mixed-imm* group (only /0,/1 carry
+an immediate, /2,/3 = not/neg do not), which the per-opcode `vextail` can't express — so the
+imm width is set by the ModR/M /digit on both sides: a decode-time `CAP_IMK` override (before
+`append_imm`) and an `in->apx`-gated `vex_encode` override, keeping the round-trip exact.
+Validated GAP=0 vs Zydis over a 3200-case reg/mem/imm × 16-SCC × DFV sweep (only Zydis
+disassembles this family; objdump 2.42 rejects it). Bijection preserved: fuzz64 5 M = 0,
+roundtrip64 byte-identical.
+
+Remaining placeholders (all bijection-safe via the structural fallback), deliberately
+deferred:
 
 * **KNC / Xeon Phi (discontinued)**: `kconcatl/h`, `kunpckwd`, `vprefetche2`, and Zydis's
   VEX-`tzcnt` quirk — a dead ISA branch (same policy as `jkzd`/`jknzd`, §7a).
-* **APX CCMP/CTEST** (`ccmp`cc/`ctest`cc, and the APX-promoted `sarx`) — the new APX
-  conditional-compare family (EVEX map 4 with a DFV); a distinct sub-ISA not yet modelled.
 * **AMD FMA4 `vpermil2ps/pd`** (4-operand IS4) and the **VEX gather** VSIB forms
   (`vpgatherqq` etc.; the EVEX gathers are covered) — niche, structurally involved.
 

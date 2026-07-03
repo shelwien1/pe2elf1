@@ -2056,6 +2056,17 @@ def emit(c, interp, out_path):
     interp._mnem.append('vex')
   w("#define MNEM_VEX %d\n" % interp._mnem.index('vex'))
   w("#define MNEM_MOV %d\n" % (interp._mnem.index('mov') if 'mov' in interp._mnem else 0))
+  # APX CCMP/CTEST (EVEX map 4): every map-4 CMP (38-3D,80/81/83 /7) and TEST (84/85,
+  # F6/F7 /0) is the *conditional* form. apx_finalize rewrites the corpus "cmp"/"test"
+  # to ccmp<cc>/ctest<cc> by the source condition code (P2[3:0]). Append the 16 cc
+  # variants of each, contiguous & in SCC order, so the C++ indexes them as BASE+scc.
+  _SCC = ['o','no','b','nb','z','nz','be','nbe','s','ns','t','f','l','nl','le','nle']
+  w("#define MNEM_CMP %d\n"  % (interp._mnem.index('cmp')  if 'cmp'  in interp._mnem else 0xFFFF))
+  w("#define MNEM_TEST %d\n" % (interp._mnem.index('test') if 'test' in interp._mnem else 0xFFFF))
+  w("#define MNEM_CCMP_BASE %d\n" % len(interp._mnem))
+  for _c in _SCC: interp._mnem.append('ccmp' + _c)
+  w("#define MNEM_CTEST_BASE %d\n" % len(interp._mnem))
+  for _c in _SCC: interp._mnem.append('ctest' + _c)
   # APX f8 pp2/pp3 swaps the mnemonic by mod (reg=uwrmsr/urdmsr, mem=enqcmds/enqcmd);
   # the C++ apx_finalize picks the memory variant by these indices.
   for _m in ('uwrmsr', 'urdmsr', 'enqcmds', 'enqcmd'):

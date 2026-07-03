@@ -577,6 +577,17 @@ static inline void apx_finalize(x86dec_t* d, const byte* s, size_t op_at) {
   int mreg = (int)c[CAP_REG], mrm = (int)c[CAP_RM];
   int rf = (int)c[CAP_RFILE], mf = (int)c[CAP_MFILE];
   in->imm = (int64_t)(int32_t)c[CAP_IMM];
+  // APX map-4 CMP (38-3b, group 80/81/83 /7) and TEST (84/85, group f6/f7 /0) are the
+  // *conditional* forms CCMP/CTEST: the EVEX payload is reinterpreted -- SCC (source
+  // condition code) = P2[3:0]; DFV (default flags value) = raw vvvv = {OF,SF,ZF,CF}.
+  // They only read flags (no destination), so ND does NOT prepend an NDD operand here.
+  int cc_op = 0;                                        // 0 = normal, 1 = ccmp, 2 = ctest
+  switch (in->vex_op) {
+    case 0x38: case 0x39: case 0x3a: case 0x3b: cc_op = 1; break;
+    case 0x84: case 0x85:                       cc_op = 2; break;
+    case 0x80: case 0x81: case 0x83: if (mreg == 7)            cc_op = 1; break;
+    case 0xf6: case 0xf7:            if (mreg == 0 || mreg == 1) cc_op = 2; break;
+  }
   // memory r/m: base uses B3(8s)+B4(16s); index uses X3(8s)+X4(16s).
   if (!is_reg) {
     if (in->mem_base == GREG_RIP)      in->rip = 1;
@@ -604,7 +615,7 @@ static inline void apx_finalize(x86dec_t* d, const byte* s, size_t op_at) {
   int nn = 0;
   // NDD prepends the vvvv dest -- but only for NDD-capable ops (CAP_MNSEL flags the
   // non-NDD map-4 tail: movbe/crc32/atomics/MSR/CET/VMX/SHA/AES) and not the register pair.
-  if (ND && !is_v2 && !c[CAP_MNSEL]) in->op[nn++] = nddop;
+  if (ND && !is_v2 && !c[CAP_MNSEL] && !cc_op) in->op[nn++] = nddop;
   switch (form) {
     case FORM_APX_MR:  in->op[nn++] = rmop;  in->op[nn++] = regop;
                        // shld/shrd by cl (a5/ad): r/m, reg, cl
@@ -646,6 +657,17 @@ static inline void apx_finalize(x86dec_t* d, const byte* s, size_t op_at) {
       (in->mnem == MNEM_UWRMSR || in->mnem == MNEM_URDMSR)) {
     in->mnem = (in->mnem == MNEM_UWRMSR) ? MNEM_ENQCMDS : MNEM_ENQCMD;
     in->op[0] = regop; in->op[1] = memop; nn = 2;
+  }
+  // CCMP<scc>/CTEST<scc>: suffix the mnemonic by the source condition code (P2[3:0])
+  // and record the default-flags-value (raw vvvv) as a {dfv=...} decoration.
+  if (cc_op) {
+    int scc = p2 & 0x0f;                                // P2[3:0] source condition code
+    in->dfv = (uint8_t)((vv >> 1) & 0x0f);             // raw (non-inverted) vvvv = DFV
+    in->mnem = (uint16_t)((cc_op == 1 ? MNEM_CCMP_BASE : MNEM_CTEST_BASE) + scc);
+    // CTEST f6/f7 /0,/1 are (r/m, imm) but ride the no-imm not/neg group cell (APX_M),
+    // so append the imm operand here (its value was consumed by append_imm via the
+    // per-digit CAP_IMK override in decode_insn).
+    if ((in->vex_op == 0xf6 || in->vex_op == 0xf7) && nn == 1) in->op[nn++] = immop;
   }
   in->n_ops = (uint8_t)nn;
 }
@@ -713,6 +735,7 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   d->insn.vex = 0;
   d->insn.rex2 = 0;
   d->insn.moffs = 0;
+  d->insn.dfv = 0xFF;                               // APX CCMP/CTEST default-flags; 0xFF = not a ccmp
 #if ARCH_MODE == 64
   // A legacy REX (0x40-0x4F) is effective only as the LAST prefix, immediately before
   // the opcode/0F. If any legacy prefix follows it, the REX is ignored -- so the FSM's
@@ -926,6 +949,13 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
         return vex_decode(d, s, n, op_at);
     }
     d->insn.addr = (uint16_t)d->cap[VAR_ADRSIZ];
+    // APX map-4 f6/f7 is a mixed-immediate group: /0,/1 (ctest) carry an immediate,
+    // /2,/3 (not/neg) do not. The per-opcode CAP_IMK can't express that split, so set
+    // the imm width by the ModR/M /digit here (f6->imm8, f7->immz). vex_encode mirrors
+    // this from the replayed ModR/M so the byte-exact round-trip holds.
+    if (s[op_at] == 0x62 && (s[op_at + 1] & 7) == 4 &&
+        (s[op_at + 4] == 0xf6 || s[op_at + 4] == 0xf7) && (int)d->cap[CAP_REG] <= 1)
+      d->cap[CAP_IMK] = (s[op_at + 4] == 0xf6) ? IMK_IMM8 : IMK_IMMZ;
     ip = append_imm(d->cap, s, n, ip, (int)d->cap[VAR_OPSIZ]);   // imm width per CAP_IMK
     d->insn.mnem = (uint16_t)d->cap[CAP_MNEM];
     // map 4 is APX-promoted legacy: lower to GPR operands + r0-31 + NDD/NF; the rest

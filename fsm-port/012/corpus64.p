@@ -5091,6 +5091,22 @@ submatch apx {
   r x b e f 100 w v j 01 c d n a 0x39 11 ggg rrr => "cmp " greg[$r] "," greg[$g] ;
   r x b e f 100 w v j 01 c d n a 0x3a 11 ggg rrr => "cmp " rgb[$g] "," rgb[$r] ;
   r x b e f 100 w v j 01 c d n a 0x3b 11 ggg rrr => "cmp " greg[$g] "," greg[$r] ;
+  # ===== CCMPcc / CTESTcc (APX conditional cmp/test) ============================
+  # map-4 CMP (38-3b, group 80/81/83 /7) and TEST (84/85, group f6/f7 /0) are the
+  # *conditional* forms: apx_finalize suffixes the source condition code (SCC=P2[3:0])
+  # -> ccmp<cc>/ctest<cc> and records the default-flags value (DFV = vvvv) as {dfv=..}.
+  # The reg-direct cells also serve the memory r/m (mod!=11) forms. The group /7 (cmp)
+  # rides the uniform-imm 80/81/83 groups; CTEST's f6/f7 /0 imm is handled separately.
+  r x b e f 100 w v j 00 c d n a 0x80 11 111 rrr @imm8 => "cmp " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 01 c d n a 0x80 11 111 rrr @imm8 => "cmp " rgb[$r] "," hex($imm8) ;
+  r x b e f 100 w v j 00 c d n a 0x81 11 111 rrr @immz => "cmp " greg[$r] "," hex($immz) ;
+  r x b e f 100 w v j 01 c d n a 0x81 11 111 rrr @immz => "cmp " greg[$r] "," hex($immz) ;
+  r x b e f 100 w v j 00 c d n a 0x83 11 111 rrr @imm8 => "cmp " greg[$r] "," hex(sx8($imm8)) ;
+  r x b e f 100 w v j 01 c d n a 0x83 11 111 rrr @imm8 => "cmp " greg[$r] "," hex(sx8($imm8)) ;
+  r x b e f 100 w v j 00 c d n a 0x84 11 ggg rrr => "test " rgb[$r] "," rgb[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x84 11 ggg rrr => "test " rgb[$r] "," rgb[$g] ;
+  r x b e f 100 w v j 00 c d n a 0x85 11 ggg rrr => "test " greg[$r] "," greg[$g] ;
+  r x b e f 100 w v j 01 c d n a 0x85 11 ggg rrr => "test " greg[$r] "," greg[$g] ;
   # cmovcc (map4 40-4f), opsize only
   r x b e f 100 w v j 00 c d n a 0x40 11 ggg rrr => "cmovo " greg[$g] "," greg[$r] ;
   r x b e f 100 w v j 01 c d n a 0x40 11 ggg rrr => "cmovo " greg[$g] "," greg[$r] ;
@@ -5266,6 +5282,17 @@ submatch apx {
   r x b e f 100 w v j 01 c d n a 0xd3 11 101 rrr => "shr " greg[$r] ;
   r x b e f 100 w v j 01 c d n a 0xd3 11 110 rrr => "shl " greg[$r] ;
   r x b e f 100 w v j 01 c d n a 0xd3 11 111 rrr => "sar " greg[$r] ;
+  # CTEST (f6/f7 /0,/1): r/m,imm -- the *conditional* test. These ride the no-imm
+  # not/neg group cell (so the cell stays APX_M), and apx_finalize adds the imm operand
+  # while decode_insn/vex_encode set the imm width by the /digit (mixed-imm group).
+  r x b e f 100 w v j 00 c d n a 0xf6 11 000 rrr => "test " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xf6 11 001 rrr => "test " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xf6 11 000 rrr => "test " rgb[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xf6 11 001 rrr => "test " rgb[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xf7 11 000 rrr => "test " greg[$r] ;
+  r x b e f 100 w v j 00 c d n a 0xf7 11 001 rrr => "test " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xf7 11 000 rrr => "test " greg[$r] ;
+  r x b e f 100 w v j 01 c d n a 0xf7 11 001 rrr => "test " greg[$r] ;
   r x b e f 100 w v j 00 c d n a 0xf6 11 010 rrr => "not " rgb[$r] ;
   r x b e f 100 w v j 00 c d n a 0xf6 11 011 rrr => "neg " rgb[$r] ;
   r x b e f 100 w v j 01 c d n a 0xf6 11 010 rrr => "not " rgb[$r] ;
