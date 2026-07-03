@@ -66889,6 +66889,8 @@ static const size_t scas_size = sizeof(scas) / sizeof(scas[0]);
 
 #define MNEM_VEX 610
 #define MNEM_MOV 95
+#define MNEM_XCHG 102
+#define MNEM_NOP 169
 #define MNEM_CMP 14
 #define MNEM_TEST 32
 #define MNEM_CCMP_BASE 611

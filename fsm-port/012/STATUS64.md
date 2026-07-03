@@ -418,6 +418,43 @@ The only placeholders left are **KNC / Xeon Phi (discontinued)** — `jkzd`/`jkn
 whose encodings collide with modern semantics; deliberately out of scope (same policy as §7a),
 and bijection-safe via the structural fallback regardless.
 
+### 7h. REX2 execution differential vs Intel SDE — two decoder bugs found + fixed (2026-07-03)
+
+To test the APX **REX2** prefix (`D5` + payload `M0 R4 X4 B4 W R X B`) the same way the REX
+run was tested (run raw bytes, observe register effects), and since no shipping silicon has
+APX, the executing oracle is **Intel SDE 10.8.0** (`sde64 -dmr` = Diamond Rapids, the first
+APX chip). `/tmp/rex2exec.c` is the REX-harness extended to load/save r16-r19 via REX2 movabs
+/ stores, so EGPR effects are observable; `/tmp/rex2drive.py` compares **apxb** (this decoder)
+against **XED** (Intel's reference decoder, bundled with SDE) and **SDE execution** across
+REX2.W, EGPR access, the M0 map bit, and prefix-ordering edge cases. (QEMU is not an option —
+even 11.0.2 models only the APX CPUID/XSAVE state for KVM pass-through; its TCG decoder has no
+REX2/APX at all.) The differential exposed two real decode bugs, both now fixed:
+
+* **`0x90-0x97` (XCHG eAX,r) ignored the register extension.** The old per-byte rules
+  (`0x91 => "xchg eax," greg[1]` …) used a *literal* table index, which never materializes as
+  an operand — so `0x91-0x97` rendered an empty second operand, and none of the range saw
+  REX.B / REX2.B4. `41 90` (xchg r8d,eax) and `d5 18 90` (xchg r16,rax) both mis-decoded as
+  `nop`. Fixed with the embedded-reg idiom `10010 bbb => "xchg eax," greg[$b]` (extends to
+  r0-31 like push/pop/bswap), keeping `0x90 => nop` as the specific rule for the nop encode
+  candidate; C++ `decode_insn` maps the byte back to `nop` only when REX.B/REX2.B4 leave the
+  register at rAX. SDE confirms the semantics: `d5 18 90` with rax≠r16 **swaps** them (a real
+  xchg, not a nop). One operand + prefix-replay, so byte-exact.
+* **A legacy REX (`0x40-0x4F`) immediately before REX2 is `#UD`.** XED reports `BAD_REX_PREFIX`
+  and SDE faults `#UD`, but the decoder had dropped the REX and decoded the REX2 instruction.
+  Fixed in the REX2 branch: if `s[ip-1]` is a REX byte, reject (`mnem = 0xFFFF`). A *legacy*
+  prefix before REX2 stays legal (`66 d5…`), and a REX that a following legacy prefix already
+  neutralized stays legal (`40 66 d5…`) — only a REX byte adjacent to `D5` is illegal, matching
+  XED/SDE exactly.
+
+Everything else agreed on the first pass: REX2.W operand size, EGPR r16-r31 (reg/rm/base/index
+via B4/R4/X4), the M0=1 0F-map (`imul`/`bsf` with no `0F` byte), and the whole edge-case set
+(`D5` then a prefix/REX/`D5`, or M0=1 reaching the unreachable 0F38/0F0F maps → all `#UD`).
+After the fixes: apxb == XED == SDE across the battery, fuzz64 5 M = 0, roundtrip64 byte-
+identical, 32-bit 858/858 + noncanon + fuzz 5 M = 0. Residual cosmetic-only differences (not
+decode errors): xchg operand order (accumulator-first vs XED's reg-first — a symmetric op) and
+the accumulator rendering `eax` under REX.W, both shared with the pre-existing `add eax,`/`cmp
+eax,` accumulator-string convention.
+
 ## 8. Deliberate decode-display policy (not bugs)
 
 * Size suffixes (`.b/.w/.d/.q/.t`) instead of `BYTE/WORD/... PTR`; `[rax+0]`-style

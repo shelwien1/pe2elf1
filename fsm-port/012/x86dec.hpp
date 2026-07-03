@@ -826,6 +826,11 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   // replay it; W drives operand size like REX.W; the high register bits ride in
   // the replayed payload, so the modrm low 3 bits round-trip unchanged.
   if (ip + 1 < n && s[ip] == 0xD5 && d->insn.n_pfx + 2 <= (int)sizeof(d->insn.pfx)) {
+    // A legacy REX (0x40-0x4F) may NOT immediately precede REX2 -- it is #UD on real
+    // silicon (Intel XED: BAD_REX_PREFIX; Intel SDE -dmr: #UD). parse_prefixes already
+    // folded it into the prefix run, so it sits at s[ip-1]. (A legacy prefix such as 66/
+    // F2/F3/67/segment before REX2 is fine; only a REX byte adjacent to D5 is illegal.)
+    if (ip > 0 && (s[ip - 1] & 0xF0) == 0x40) { d->insn.mnem = 0xFFFF; return ip; }
     byte payload = s[ip + 1];
     d->insn.rex2 = 1;
     rex2_0f = (payload >> 7) & 1;                       // M0
@@ -1065,6 +1070,16 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   d->insn.opsize = (uint16_t)d->cap[VAR_OPSIZ];
   d->insn.addr   = (uint16_t)d->cap[VAR_ADRSIZ];
   if (d->insn.mnem != 0xFFFF) finalize_insn(d, s, n, op_at, tb);   // faithful x86insn_t + enc
+  // 0x90-0x97 (1-byte map) = XCHG eAX, r[0-7], the register embedded in the opcode and
+  // extended to r0-31 by REX.B / REX2.B4 (decoded by the 10010-bbb rule as a single extended
+  // operand). The bare 0x90 with the register resolving to rAX is the canonical NOP; reclassify
+  // it here (the 10010-bbb rule renders it "xchg eax,eax"). It re-encodes to opcode 0x90 with
+  // 66/REX.W/F3 replayed from pfx[], so the byte-exact bijection is unaffected. A register
+  // extension (REX.B/REX2.B4 -> r8..r31) keeps it a real xchg (e.g. 41 90 = xchg eax,r8d).
+  if (tb == 0 && !rex2_0f && s[op_at] >= 0x90 && s[op_at] <= 0x97 &&
+      d->insn.mnem != 0xFFFF && d->insn.n_ops == 1 && d->insn.op[0].index == 0) {
+    d->insn.mnem = MNEM_NOP; d->insn.n_ops = 0;             // xchg rAX,rAX == nop
+  }
   return ip;
 }
 

@@ -2058,6 +2058,12 @@ def emit(c, interp, out_path):
     interp._mnem.append('vex')
   w("#define MNEM_VEX %d\n" % interp._mnem.index('vex'))
   w("#define MNEM_MOV %d\n" % (interp._mnem.index('mov') if 'mov' in interp._mnem else 0))
+  # 0x90-0x97 (xchg rAX,r / nop): the 10010-bbb rule decodes the whole range and supplies
+  # the encode candidates, but renders only the embedded register. decode_insn rebuilds the
+  # two-operand xchg struct and maps the no-extension 0x90 (register == rAX) back to nop --
+  # it needs these mnemonic indices.
+  for _m in ('xchg', 'nop'):
+    w("#define MNEM_%s %d\n" % (_m.upper(), interp._mnem.index(_m) if _m in interp._mnem else 0xFFFF))
   # APX CCMP/CTEST (EVEX map 4): every map-4 CMP (38-3D,80/81/83 /7) and TEST (84/85,
   # F6/F7 /0) is the *conditional* form. apx_finalize rewrites the corpus "cmp"/"test"
   # to ccmp<cc>/ctest<cc> by the source condition code (P2[3:0]). Append the 16 cc

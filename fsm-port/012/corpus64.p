@@ -397,14 +397,17 @@ submatch insn {
   0x8d @addr      => "lea " greg[$g] "," $addr ;
 
   # ===== xchg eAX,r / nop / pause ; cwde/cdqe ; cdq/cqo =========================
+  # 0x90-0x97 = XCHG eAX, r[0-7] with the register embedded in the opcode and extended to
+  # r0-31 by REX.B / REX2.B4. The old per-byte greg[1..7] rules used a literal table index,
+  # which does not materialize as an operand -- so 0x91-0x97 rendered an empty second operand
+  # and ignored the register extension. Use the embedded-reg idiom (single captured operand,
+  # accumulator in the mnemonic text, same shape push/pop/bswap use) so the register extends
+  # correctly and the encoder keeps its one-operand embedded candidate (byte-exact round-trip).
+  # The bare 0x90 (register resolves to rAX, no extension) is the canonical NOP: the specific
+  # rule wins for that byte and supplies the nop encode candidate, and C++ decode_insn maps it
+  # back to nop whenever REX.B/REX2.B4 leave the register at rAX (and to xchg otherwise).
   0x90 => "nop" ;
-  0x91 => "xchg eax," greg[1] ;
-  0x92 => "xchg eax," greg[2] ;
-  0x93 => "xchg eax," greg[3] ;
-  0x94 => "xchg eax," greg[4] ;
-  0x95 => "xchg eax," greg[5] ;
-  0x96 => "xchg eax," greg[6] ;
-  0x97 => "xchg eax," greg[7] ;
+  10010 bbb => "xchg eax," greg[$b] ;
   0x98 => "cwde" ;
   0x99 => "cdq" ;
 
