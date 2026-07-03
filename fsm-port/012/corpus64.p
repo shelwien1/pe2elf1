@@ -2104,7 +2104,16 @@ submatch vex {
   h k b 00011 0 1111 y 01 0xdf 11 ggg rrr @imm8 => "vaeskeygenassist " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] "," hex($imm8) ;
   h k b 00011 0 1111 y 01 0xdf @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "vaeskeygenassist " vreg[16*$y+8*$h+$g] "," $addr "," hex($imm8) ;
   # ==== VEX map3 is4 4-operand: FMA4 (W0/W1 swap r/m<->is4) + vblendv* (W0) ====
-  h k b 00011 0 vvvv y 01 0x5c 11 ggg rrr qqqq 0000 => "vfmaddsubps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] "," vregd[16*$y+$q] ;
+  # AMD FMA4 vpermil2ps/pd (VEX.66.0F3A.W0/W1 48/49): reg,vvvv,r/m,is4 (the is4 byte's
+  # low nibble is a 2-bit selector, preserved in the replayed imm; shown 4-op like FMA4).
+  h k b 00011 0 vvvv y 01 0x48 11 ggg rrr qqqq 0000 => "vpermil2ps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] "," vregd[16*$y+$q] ;
+  h k b 00011 0 vvvv y 01 0x48 @addr {$rexb=1-$b;$rexx=1-$k} qqqq 0000 => "vpermil2ps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr "," vregd[16*$y+$q] ;
+  h k b 00011 1 vvvv y 01 0x48 11 ggg rrr qqqq 0000 => "vpermil2ps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vregd[16*$y+$q] "," vreg[16*$y+8*$b+$r] ;
+  h k b 00011 1 vvvv y 01 0x48 @addr {$rexb=1-$b;$rexx=1-$k} qqqq 0000 => "vpermil2ps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vregd[16*$y+$q] "," $addr ;
+  h k b 00011 0 vvvv y 01 0x49 11 ggg rrr qqqq 0000 => "vpermil2pd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] "," vregd[16*$y+$q] ;
+  h k b 00011 0 vvvv y 01 0x49 @addr {$rexb=1-$b;$rexx=1-$k} qqqq 0000 => "vpermil2pd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr "," vregd[16*$y+$q] ;
+  h k b 00011 1 vvvv y 01 0x49 11 ggg rrr qqqq 0000 => "vpermil2pd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vregd[16*$y+$q] "," vreg[16*$y+8*$b+$r] ;
+  h k b 00011 1 vvvv y 01 0x49 @addr {$rexb=1-$b;$rexx=1-$k} qqqq 0000 => "vpermil2pd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vregd[16*$y+$q] "," $addr ;
   h k b 00011 0 vvvv y 01 0x5c @addr {$rexb=1-$b;$rexx=1-$k} qqqq 0000 => "vfmaddsubps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr "," vregd[16*$y+$q] ;
   h k b 00011 1 vvvv y 01 0x5c 11 ggg rrr qqqq 0000 => "vfmaddsubps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vregd[16*$y+$q] "," vreg[16*$y+8*$b+$r] ;
   h k b 00011 1 vvvv y 01 0x5c @addr {$rexb=1-$b;$rexx=1-$k} qqqq 0000 => "vfmaddsubps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vregd[16*$y+$q] "," $addr ;
@@ -2283,6 +2292,15 @@ submatch vex {
   h k b 00010 0 1111 y 11 0xb0 11 ggg rrr => "vcvtneobf162ps " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
   h k b 00010 0 1111 y 11 0xb0 @addr {$rexb=1-$b;$rexx=1-$k} => "vcvtneobf162ps " vreg[16*$y+8*$h+$g] "," $addr ;
   h k b 00010 0 1111 y 10 0xb1 @addr {$rexb=1-$b;$rexx=1-$k} => "vbcstnebf162ps " vreg[16*$y+8*$h+$g] "," $addr ;
+  # 66-prefix VEX-form siblings (were EVEX-only / absent): SM3 msg2, NE-CONVERT even-fp16
+  # and the sh->ps broadcast; plus the VEX form of vcvtneps2bf16 (F3 72, narrowing dst).
+  h k b 00010 0 vvvv y 01 0xda 11 ggg rrr => "vsm3msg2 " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
+  h k b 00010 0 vvvv y 01 0xda @addr {$rexb=1-$b;$rexx=1-$k} => "vsm3msg2 " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  h k b 00010 0 1111 y 01 0xb0 11 ggg rrr => "vcvtneeph2ps " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
+  h k b 00010 0 1111 y 01 0xb0 @addr {$rexb=1-$b;$rexx=1-$k} => "vcvtneeph2ps " vreg[16*$y+8*$h+$g] "," $addr ;
+  h k b 00010 0 1111 y 01 0xb1 @addr {$rexb=1-$b;$rexx=1-$k} => "vbcstnesh2ps " vreg[16*$y+8*$h+$g] "," $addr ;
+  h k b 00010 0 1111 y 10 0x72 11 ggg rrr => "vcvtneps2bf16 " vreg[8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
+  h k b 00010 0 1111 y 10 0x72 @addr {$rexb=1-$b;$rexx=1-$k} => "vcvtneps2bf16 " vreg[8*$h+$g] "," $addr ;
   h k b 00010 0 1111 y 00 0x49 @addr {$rexb=1-$b;$rexx=1-$k} => "ldtilecfg " $addr ;
   # AVX-VNNI (66 0F38): vpdpbusd/vpdpbusds/vpdpwssd/vpdpwssds
   h k b 00010 0 vvvv y 01 0x50 11 ggg rrr => "vpdpbusd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
