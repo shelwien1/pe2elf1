@@ -4921,6 +4921,60 @@ submatch evex {
   h k b e 00 101 w 1111 1 01 z ll 0 1 aaa 0x6e @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovw " ereg[32*$l+16*$e+8*$h+$g] "," $addr ;
   h k b e 00 101 w 1111 1 01 z ll 0 1 aaa 0x7e 11 ggg rrr {$rexb=1-$b} => wit("evex") "vmovw " greg[32+8*$rexb+$r] "," ereg[32*$l+16*$e+8*$h+$g] ;
   h k b e 00 101 w 1111 1 01 z ll 0 1 aaa 0x7e @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovw " $addr "," ereg[32*$l+16*$e+8*$h+$g] ;
+  # ==== APX EVEX-promoted BMI (map2 f2-f7, map3 f0): the first EVEX GPR ops. ====
+  # vex_finalize lowers them like the VEX BMI, but reg/vvvv/r-m extend to r0-31 via the
+  # EVEX R'/V'/X bits (the memory base's high bits ride in the replayed prefix). W0=r32,
+  # W1=r64; pp selects the op (NP/66/F3/F2). z/L'L/aaa are 0 (no mask/broadcast/rounding).
+  # andn (NP f2, RVM: reg,vvvv,r/m)
+  h k b e 00 10 0 vvvv 1 00 0 00 0 u 000 0xf2 11 ggg rrr => "andn " greg[$g] "," greg[$v] "," greg[$r] ;
+  h k b e 00 10 0 vvvv 1 00 0 00 0 u 000 0xf2 @addr {$rexb=1-$b;$rexx=1-$k} => "andn " greg[$g] "," greg[$v] "," $addr ;
+  h k b e 00 10 1 vvvv 1 00 0 00 0 u 000 0xf2 11 ggg rrr => "andn " greg[32+$g] "," greg[32+$v] "," greg[32+$r] ;
+  h k b e 00 10 1 vvvv 1 00 0 00 0 u 000 0xf2 @addr {$rexb=1-$b;$rexx=1-$k} => "andn " greg[32+$g] "," greg[32+$v] "," $addr ;
+  # bextr (NP f7, RMV: reg,r/m,vvvv)
+  h k b e 00 10 0 vvvv 1 00 0 00 0 u 000 0xf7 11 ggg rrr => "bextr " greg[$g] "," greg[$r] "," greg[$v] ;
+  h k b e 00 10 0 vvvv 1 00 0 00 0 u 000 0xf7 @addr {$rexb=1-$b;$rexx=1-$k} => "bextr " greg[$g] "," $addr "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 00 0 00 0 u 000 0xf7 11 ggg rrr => "bextr " greg[32+$g] "," greg[32+$r] "," greg[32+$v] ;
+  h k b e 00 10 1 vvvv 1 00 0 00 0 u 000 0xf7 @addr {$rexb=1-$b;$rexx=1-$k} => "bextr " greg[32+$g] "," $addr "," greg[32+$v] ;
+  # bzhi (NP f5, RMV)
+  h k b e 00 10 0 vvvv 1 00 0 00 0 u 000 0xf5 11 ggg rrr => "bzhi " greg[$g] "," greg[$r] "," greg[$v] ;
+  h k b e 00 10 0 vvvv 1 00 0 00 0 u 000 0xf5 @addr {$rexb=1-$b;$rexx=1-$k} => "bzhi " greg[$g] "," $addr "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 00 0 00 0 u 000 0xf5 11 ggg rrr => "bzhi " greg[32+$g] "," greg[32+$r] "," greg[32+$v] ;
+  h k b e 00 10 1 vvvv 1 00 0 00 0 u 000 0xf5 @addr {$rexb=1-$b;$rexx=1-$k} => "bzhi " greg[32+$g] "," $addr "," greg[32+$v] ;
+  # shlx (66 f7, RMV)
+  h k b e 00 10 0 vvvv 1 01 0 00 0 u 000 0xf7 11 ggg rrr => "shlx " greg[$g] "," greg[$r] "," greg[$v] ;
+  h k b e 00 10 0 vvvv 1 01 0 00 0 u 000 0xf7 @addr {$rexb=1-$b;$rexx=1-$k} => "shlx " greg[$g] "," $addr "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 01 0 00 0 u 000 0xf7 11 ggg rrr => "shlx " greg[32+$g] "," greg[32+$r] "," greg[32+$v] ;
+  h k b e 00 10 1 vvvv 1 01 0 00 0 u 000 0xf7 @addr {$rexb=1-$b;$rexx=1-$k} => "shlx " greg[32+$g] "," $addr "," greg[32+$v] ;
+  # sarx (F3 f7, RMV)
+  h k b e 00 10 0 vvvv 1 10 0 00 0 u 000 0xf7 11 ggg rrr => "sarx " greg[$g] "," greg[$r] "," greg[$v] ;
+  h k b e 00 10 0 vvvv 1 10 0 00 0 u 000 0xf7 @addr {$rexb=1-$b;$rexx=1-$k} => "sarx " greg[$g] "," $addr "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 10 0 00 0 u 000 0xf7 11 ggg rrr => "sarx " greg[32+$g] "," greg[32+$r] "," greg[32+$v] ;
+  h k b e 00 10 1 vvvv 1 10 0 00 0 u 000 0xf7 @addr {$rexb=1-$b;$rexx=1-$k} => "sarx " greg[32+$g] "," $addr "," greg[32+$v] ;
+  # shrx (F2 f7, RMV)
+  h k b e 00 10 0 vvvv 1 11 0 00 0 u 000 0xf7 11 ggg rrr => "shrx " greg[$g] "," greg[$r] "," greg[$v] ;
+  h k b e 00 10 0 vvvv 1 11 0 00 0 u 000 0xf7 @addr {$rexb=1-$b;$rexx=1-$k} => "shrx " greg[$g] "," $addr "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 11 0 00 0 u 000 0xf7 11 ggg rrr => "shrx " greg[32+$g] "," greg[32+$r] "," greg[32+$v] ;
+  h k b e 00 10 1 vvvv 1 11 0 00 0 u 000 0xf7 @addr {$rexb=1-$b;$rexx=1-$k} => "shrx " greg[32+$g] "," $addr "," greg[32+$v] ;
+  # pext (F3 f5, RVM)
+  h k b e 00 10 0 vvvv 1 10 0 00 0 u 000 0xf5 11 ggg rrr => "pext " greg[$g] "," greg[$v] "," greg[$r] ;
+  h k b e 00 10 0 vvvv 1 10 0 00 0 u 000 0xf5 @addr {$rexb=1-$b;$rexx=1-$k} => "pext " greg[$g] "," greg[$v] "," $addr ;
+  h k b e 00 10 1 vvvv 1 10 0 00 0 u 000 0xf5 11 ggg rrr => "pext " greg[32+$g] "," greg[32+$v] "," greg[32+$r] ;
+  h k b e 00 10 1 vvvv 1 10 0 00 0 u 000 0xf5 @addr {$rexb=1-$b;$rexx=1-$k} => "pext " greg[32+$g] "," greg[32+$v] "," $addr ;
+  # pdep (F2 f5, RVM)
+  h k b e 00 10 0 vvvv 1 11 0 00 0 u 000 0xf5 11 ggg rrr => "pdep " greg[$g] "," greg[$v] "," greg[$r] ;
+  h k b e 00 10 0 vvvv 1 11 0 00 0 u 000 0xf5 @addr {$rexb=1-$b;$rexx=1-$k} => "pdep " greg[$g] "," greg[$v] "," $addr ;
+  h k b e 00 10 1 vvvv 1 11 0 00 0 u 000 0xf5 11 ggg rrr => "pdep " greg[32+$g] "," greg[32+$v] "," greg[32+$r] ;
+  h k b e 00 10 1 vvvv 1 11 0 00 0 u 000 0xf5 @addr {$rexb=1-$b;$rexx=1-$k} => "pdep " greg[32+$g] "," greg[32+$v] "," $addr ;
+  # mulx (F2 f6, RVM)
+  h k b e 00 10 0 vvvv 1 11 0 00 0 u 000 0xf6 11 ggg rrr => "mulx " greg[$g] "," greg[$v] "," greg[$r] ;
+  h k b e 00 10 0 vvvv 1 11 0 00 0 u 000 0xf6 @addr {$rexb=1-$b;$rexx=1-$k} => "mulx " greg[$g] "," greg[$v] "," $addr ;
+  h k b e 00 10 1 vvvv 1 11 0 00 0 u 000 0xf6 11 ggg rrr => "mulx " greg[32+$g] "," greg[32+$v] "," greg[32+$r] ;
+  h k b e 00 10 1 vvvv 1 11 0 00 0 u 000 0xf6 @addr {$rexb=1-$b;$rexx=1-$k} => "mulx " greg[32+$g] "," greg[32+$v] "," $addr ;
+  # rorx (F2 map3 f0, RMI: reg,r/m,imm8) -- no vvvv operand, so V' is fixed 1 (unused vvvv)
+  h k b e 00 11 0 1111 1 11 0 00 0 1 000 0xf0 11 ggg rrr @imm8 => "rorx " greg[$g] "," greg[$r] "," hex($imm8) ;
+  h k b e 00 11 0 1111 1 11 0 00 0 1 000 0xf0 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "rorx " greg[$g] "," $addr "," hex($imm8) ;
+  h k b e 00 11 1 1111 1 11 0 00 0 1 000 0xf0 11 ggg rrr @imm8 => "rorx " greg[32+$g] "," greg[32+$r] "," hex($imm8) ;
+  h k b e 00 11 1 1111 1 11 0 00 0 1 000 0xf0 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "rorx " greg[32+$g] "," $addr "," hex($imm8) ;
 }
 
 
