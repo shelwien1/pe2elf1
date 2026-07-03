@@ -2614,9 +2614,50 @@ submatch vex {
   h k b 00001 w 1111 y 01 0x11 @addr {$rexb=1-$b;$rexx=1-$k} => "vmovupd " $addr "," vreg[16*$y+8*$h+$g] ;
   1 1 1 00001 1 1111 0 11 0x92 11 ggg rrr => "kmovq " kreg[$g] "," greg[32+$r] ;
   1 1 1 00001 1 1111 0 11 0x93 11 ggg rrr => "kmovq " greg[32+$g] "," kreg[$r] ;
-  1 1 1 00001 1 1111 0 11 0x90 11 ggg rrr => "kmovq " kreg[$g] "," kreg[$r] ;
+  # kmov kreg<->kreg/mem, W1: NP = kmovq, 66 = kmovd (the W0 b/w forms are the C5 rules)
+  1 1 1 00001 1 1111 0 00 0x90 11 ggg rrr => "kmovq " kreg[$g] "," kreg[$r] ;
+  1 1 1 00001 1 1111 0 01 0x90 11 ggg rrr => "kmovd " kreg[$g] "," kreg[$r] ;
+  1 1 1 00001 1 1111 0 00 0x90 @addr => "kmovq " kreg[$g] "," $addr ;
+  1 1 1 00001 1 1111 0 01 0x90 @addr => "kmovd " kreg[$g] "," $addr ;
+  1 1 1 00001 1 1111 0 00 0x91 @addr => "kmovq " $addr "," kreg[$g] ;
+  1 1 1 00001 1 1111 0 01 0x91 @addr => "kmovd " $addr "," kreg[$g] ;
   1 1 1 00011 1 1111 0 01 0x32 11 ggg rrr @imm8 => "kshiftlw " kreg[$g] "," kreg[$r] "," hex($imm8) ;
   1 1 1 00011 1 1111 0 01 0x30 11 ggg rrr @imm8 => "kshiftrw " kreg[$g] "," kreg[$r] "," hex($imm8) ;
+  # ==== AVX-512 k-mask W1 (d/q) + kortest/ktest/kshift b/d/q completion ====
+  # W is significant for k-mask (b/w vs d/q); the C5 rules cover only the W0 b/w forms, so
+  # the W1 d/q forms need explicit C4 rules (which also override the generic WIG W-fill).
+  # L1 3-operand and/andn/or/xnor/xor/add (NP.W1 = q, 66.W1 = d):
+  1 1 1 00001 1 vvvv 1 00 0x41 11 ggg rrr => "kandq " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 1 1 00001 1 vvvv 1 01 0x41 11 ggg rrr => "kandd " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 1 1 00001 1 vvvv 1 00 0x42 11 ggg rrr => "kandnq " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 1 1 00001 1 vvvv 1 01 0x42 11 ggg rrr => "kandnd " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 1 1 00001 1 vvvv 1 00 0x45 11 ggg rrr => "korq " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 1 1 00001 1 vvvv 1 01 0x45 11 ggg rrr => "kord " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 1 1 00001 1 vvvv 1 00 0x46 11 ggg rrr => "kxnorq " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 1 1 00001 1 vvvv 1 01 0x46 11 ggg rrr => "kxnord " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 1 1 00001 1 vvvv 1 00 0x47 11 ggg rrr => "kxorq " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 1 1 00001 1 vvvv 1 01 0x47 11 ggg rrr => "kxord " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 1 1 00001 1 vvvv 1 00 0x4a 11 ggg rrr => "kaddq " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 1 1 00001 1 vvvv 1 01 0x4a 11 ggg rrr => "kaddd " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  # kunpck: NP.W0 = wd, NP.W1 = dq (66.W0 = bw is the C5 rule)
+  1 1 1 00001 0 vvvv 1 00 0x4b 11 ggg rrr => "kunpckwd " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  1 1 1 00001 1 vvvv 1 00 0x4b 11 ggg rrr => "kunpckdq " kreg[$g] "," kreg[15-$v] "," kreg[$r] ;
+  # L0 2-operand knot/kortest/ktest (NP.W1 = q, 66.W0 = b, 66.W1 = d):
+  1 1 1 00001 1 1111 0 00 0x44 11 ggg rrr => "knotq " kreg[$g] "," kreg[$r] ;
+  1 1 1 00001 1 1111 0 01 0x44 11 ggg rrr => "knotd " kreg[$g] "," kreg[$r] ;
+  1 1 1 00001 0 1111 0 01 0x98 11 ggg rrr => "kortestb " kreg[$g] "," kreg[$r] ;
+  1 1 1 00001 1 1111 0 00 0x98 11 ggg rrr => "kortestq " kreg[$g] "," kreg[$r] ;
+  1 1 1 00001 1 1111 0 01 0x98 11 ggg rrr => "kortestd " kreg[$g] "," kreg[$r] ;
+  1 1 1 00001 0 1111 0 01 0x99 11 ggg rrr => "ktestb " kreg[$g] "," kreg[$r] ;
+  1 1 1 00001 1 1111 0 00 0x99 11 ggg rrr => "ktestq " kreg[$g] "," kreg[$r] ;
+  1 1 1 00001 1 1111 0 01 0x99 11 ggg rrr => "ktestd " kreg[$g] "," kreg[$r] ;
+  # kshift (0F3A, 66, L0): 30 W0=rb, 31 W0=rd/W1=rq, 32 W0=lb, 33 W0=ld/W1=lq (w forms above)
+  1 1 1 00011 0 1111 0 01 0x30 11 ggg rrr @imm8 => "kshiftrb " kreg[$g] "," kreg[$r] "," hex($imm8) ;
+  1 1 1 00011 0 1111 0 01 0x31 11 ggg rrr @imm8 => "kshiftrd " kreg[$g] "," kreg[$r] "," hex($imm8) ;
+  1 1 1 00011 1 1111 0 01 0x31 11 ggg rrr @imm8 => "kshiftrq " kreg[$g] "," kreg[$r] "," hex($imm8) ;
+  1 1 1 00011 0 1111 0 01 0x32 11 ggg rrr @imm8 => "kshiftlb " kreg[$g] "," kreg[$r] "," hex($imm8) ;
+  1 1 1 00011 0 1111 0 01 0x33 11 ggg rrr @imm8 => "kshiftld " kreg[$g] "," kreg[$r] "," hex($imm8) ;
+  1 1 1 00011 1 1111 0 01 0x33 11 ggg rrr @imm8 => "kshiftlq " kreg[$g] "," kreg[$r] "," hex($imm8) ;
   # ---- VEX FMA (0F38, pp=66, W picks ps/pd or ss/sd) + vpmulld -- added for coverage
   h k b 00010 0 vvvv y 01 0x96 11 ggg rrr => "vfmaddsub132ps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
   h k b 00010 0 vvvv y 01 0x96 @addr {$rexb=1-$b;$rexx=1-$k} => "vfmaddsub132ps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
