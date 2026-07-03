@@ -4932,6 +4932,20 @@ submatch evex {
   h k b e 00 101 w 1111 1 01 z ll 0 1 aaa 0x6e @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovw " ereg[32*$l+16*$e+8*$h+$g] "," $addr ;
   h k b e 00 101 w 1111 1 01 z ll 0 1 aaa 0x7e 11 ggg rrr {$rexb=1-$b} => wit("evex") "vmovw " greg[32+8*$rexb+$r] "," ereg[32*$l+16*$e+8*$h+$g] ;
   h k b e 00 101 w 1111 1 01 z ll 0 1 aaa 0x7e @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovw " $addr "," ereg[32*$l+16*$e+8*$h+$g] ;
+  # ==== EVEX vpermilps/pd by imm8 (0F3A 04/05) -- reg, r/m, imm8, {k}{z}{1toN} ====
+  h k b e 00 11 0 1111 1 01 z ll 0 1 aaa 0x04 11 ggg rrr @imm8 => wit("evex") "vpermilps " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  h k b e 00 11 0 1111 1 01 z ll 0 1 aaa 0x04 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vpermilps " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr "," hex($imm8) ;
+  h k b e 00 11 0 1111 1 01 z ll 1 1 aaa 0x04 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vpermilps " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr bcst32[$l] "," hex($imm8) ;
+  h k b e 00 11 1 1111 1 01 z ll 0 1 aaa 0x05 11 ggg rrr @imm8 => wit("evex") "vpermilpd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
+  h k b e 00 11 1 1111 1 01 z ll 0 1 aaa 0x05 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vpermilpd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr "," hex($imm8) ;
+  h k b e 00 11 1 1111 1 01 z ll 1 1 aaa 0x05 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vpermilpd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr bcst64[$l] "," hex($imm8) ;
+  # ==== EVEX vpinsrb/d/q (0F3A 20 W0 / 22 W0/W1) -- xmm, vvvv, GPR-or-mem, imm8 (128-only) ====
+  h k b e 00 11 0 vvvv 1 01 z 00 0 u aaa 0x20 11 ggg rrr @imm8 => wit("evex") "vpinsrb " ereg[16*$e+8*$h+$g] "," evvv[16*$u+$v] "," greg[$r] "," hex($imm8) ;
+  h k b e 00 11 0 vvvv 1 01 z 00 0 u aaa 0x20 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vpinsrb " ereg[16*$e+8*$h+$g] "," evvv[16*$u+$v] "," $addr "," hex($imm8) ;
+  h k b e 00 11 0 vvvv 1 01 z 00 0 u aaa 0x22 11 ggg rrr @imm8 => wit("evex") "vpinsrd " ereg[16*$e+8*$h+$g] "," evvv[16*$u+$v] "," greg[$r] "," hex($imm8) ;
+  h k b e 00 11 0 vvvv 1 01 z 00 0 u aaa 0x22 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vpinsrd " ereg[16*$e+8*$h+$g] "," evvv[16*$u+$v] "," $addr "," hex($imm8) ;
+  h k b e 00 11 1 vvvv 1 01 z 00 0 u aaa 0x22 11 ggg rrr @imm8 => wit("evex") "vpinsrq " ereg[16*$e+8*$h+$g] "," evvv[16*$u+$v] "," greg[32+$r] "," hex($imm8) ;
+  h k b e 00 11 1 vvvv 1 01 z 00 0 u aaa 0x22 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vpinsrq " ereg[16*$e+8*$h+$g] "," evvv[16*$u+$v] "," $addr "," hex($imm8) ;
   # ==== APX EVEX-promoted BMI (map2 f2-f7, map3 f0): the first EVEX GPR ops. ====
   # vex_finalize lowers them like the VEX BMI, but reg/vvvv/r-m extend to r0-31 via the
   # EVEX R'/V'/X bits (the memory base's high bits ride in the replayed prefix). W0=r32,
