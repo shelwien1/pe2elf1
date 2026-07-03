@@ -853,7 +853,10 @@ class Interp:
           d['cc'] = v                                  # condition code -> immediate operand
         elif len(mn) > 2 and mn[2] == 'pp':            # legacy-SSE mandatory-prefix select
           tab = self.tables[mn[1]]                      # 4 entries: NP, 66, F3, F2
-          vt = tuple(midx(x) for x in tab)             # mnemonic per prefix (repeats ok)
+          # '-' marks a #UD prefix slot (opcode valid only under specific mandatory
+          # prefixes, e.g. haddpd is 66-only): 0xFFFF -> the MNSEL==2 C++ override
+          # yields mnem 0xFFFF -> #UD for that prefix. Valid slots are unchanged.
+          vt = tuple(0xFFFF if x == '-' else midx(x) for x in tab)
           if vt not in self._ppvtab:
             self._ppvtab.append(vt)
           d['mnem'] = vt[0]                             # NP mnemonic is the base

@@ -478,10 +478,22 @@ silicon: `M0=0` {`70-7F` Jcc8, `A0-AF` moffs/string/test-acc, `E0-EF` loop/jrcxz
 with a ModR/M, an embedded GPR, or opsize-sensitivity like `98/99` stay eligible — note the
 asymmetry with plain REX, which is a silent no-op on `48 EB 00` where `D5 08 EB 00` is `#UD`).
 Sweep now 0 REX2-eligibility mismatches vs XED; fuzz64 5 M = 0 (accept 76.7 %→75.1 %), roundtrip64
-byte-identical, 32-bit 858/858. Documented in `REX_REX2_prefixes.md` §6a. The 8 residual map-1
-sweep entries (`0F 6C/6D/7C/7D/A6/B8/D0/E6`) are a *separate, non-REX2* bug — the decoder accepts
-the NP (no-mandatory-prefix) form of `66`/`F2`/`F3`-only SSE opcodes even without REX2 (`0F 6C` bare
-also mis-decodes); left for a dedicated SSE-NP pass, bijection-safe meanwhile.
+byte-identical, 32-bit 858/858. Documented in `REX_REX2_prefixes.md` §6a.
+
+**Follow-up — NP-form mandatory-prefix SSE opcodes now `#UD`.** The REX2 sweep's map-1
+residue turned out to be a *separate, non-REX2* bug: the decoder accepted the NP (no-mandatory-
+prefix) form of `66`/`F2`/`F3`-only SSE opcodes (e.g. `0F 6C` bare decoded as `punpcklqdq mm`
+where hardware `#UD`s — punpcklqdq is 66-only). Seven opcodes: `0F 6C/6D` (punpcklqdq/punpckhqdq,
+66-only), `0F 7C/7D` (haddp/hsubp: 66=pd, F2=ps), `0F D0` (addsubp: 66=pd, F2=ps), `0F E6`
+(cvt: 66=cvttpd2dq, F3=cvtdq2pd, F2=cvtpd2dq), `0F B8` (popcnt, F3-only). Fixed in the corpus by
+marking the `#UD` prefix slots of the per-prefix mnemonic tables with a new `-` sentinel that
+`gen.py`/`gasm.py` compile to mnem `0xFFFF` (→ `#UD`); `0F 6C/6D` and `0F B8` were converted from
+their unguarded/opsize rules onto the same pp-select tables. Valid-form encodings are unchanged
+(only `#UD` slots removed), so bijection is intact: fuzz64 5 M = 0, roundtrip64 byte-identical,
+32-bit 858/858; the NP-0F over-acceptance sweep vs XED is now 0. The single remaining REX2 map-1
+sweep entry (`0F A6` montmul, VIA PadLock) is a *don't-care* corner — REX2 + VIA PadLock executes
+on no CPU (no chip has both APX and PadLock) and XED is itself inconsistent (it `#UD`s REX2+montmul
+but accepts REX2+xstore at `0F A7`), so the VIA ops are left decoding under REX2, bijection-safe.
 
 ## 8. Deliberate decode-display policy (not bugs)
 

@@ -241,8 +241,14 @@ The FSM disassembler in this directory was checked against every case above
   added while writing this document's REX2 test — see `STATUS64.md` §7h.)
 * **REX2 opcode eligibility (§6a)** — enforced. `decode_insn` rejects REX2 on the
   no-eGPR-operand opcodes (`M0=0` {`70-7F`,`A0-AF`,`E0-EF`}; `M0=1` {`30-37`,`80-8F`}).
-  Verified 0 mismatches vs XED over a full 256-opcode × {map0, map1} eligibility sweep (the
-  only residue is the general NP-SSE item below, not a REX2 matter).
+  Verified 0 mismatches vs XED over a full 256-opcode × {map0, map1} eligibility sweep — the
+  sole remaining entry, `0F A6` (VIA PadLock `montmul`) under REX2, is a don't-care combo (no
+  CPU has both APX and PadLock; XED itself accepts REX2+`xstore` at `0F A7` yet rejects
+  REX2+`montmul`), so the VIA ops are left decoding, bijection-safe.
+* **NP-form mandatory-prefix SSE opcodes** — the general (non-REX2) bug the sweep surfaced is
+  now fixed too: `0F 6C/6D/7C/7D/B8/D0/E6` no longer decode their `#UD` no-prefix (or
+  wrong-prefix) forms — e.g. bare `0F 6C` is `#UD`, not `punpcklqdq`. 0 NP-0F over-acceptances
+  vs XED; fuzz64 5 M = 0, roundtrip64 byte-identical (see `STATUS64.md` §7h).
 * **VEX / EVEX / XOP preceding-prefix rule (§7)** — matches XED. `decode_insn` rejects a
   `66`/`F2`/`F3`/`LOCK` anywhere in the run before a `C4`/`C5`/`62`/`8F`(map≥8) introducer, and
   a REX immediately before it, while still allowing segment + `67` (and a REX that a following

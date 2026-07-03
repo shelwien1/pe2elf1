@@ -111,7 +111,7 @@ table pushgs { "push gs", "pushw gs", "push gs~q" }
 table popgs  { "pop gs", "popw gs", "pop gs~q" }
 table ssebc { bsf, bsf, tzcnt, bsf }
 table ssebd { bsr, bsr, lzcnt, bsr }
-table ssee6 { cvtpd2dq, cvttpd2dq, cvtdq2pd, cvtpd2dq }
+table ssee6 { -, cvttpd2dq, cvtdq2pd, cvtpd2dq }        # NP #UD; 66/F3/F2 only
 # int<->float converts: NP/66 use an mm operand, F3/F2 a GPR (the mmxg operand
 # file resolves mm-or-GPR by the mandatory prefix, mirroring cvtpi2ps vs cvtsi2ss).
 table sse2a { cvtpi2ps, cvtpi2pd, cvtsi2ss, cvtsi2sd }
@@ -147,11 +147,14 @@ table sse5c { subps, subpd, subss, subsd }
 table sse5d { minps, minpd, minss, minsd }
 table sse5e { divps, divpd, divss, divsd }
 table sse5f { maxps, maxpd, maxss, maxsd }
-table sse7c { haddps, haddpd, haddps, haddps }
-table sse7d { hsubps, hsubpd, hsubps, hsubps }
+table sse7c { -, haddpd, -, haddps }                    # 66=haddpd, F2=haddps; NP/F3 #UD
+table sse7d { -, hsubpd, -, hsubps }                    # 66=hsubpd, F2=hsubps; NP/F3 #UD
 table ssec2 { cmpps, cmppd, cmpss, cmpsd }
 table ssec6 { shufps, shufpd, shufps, shufps }
-table ssed0 { addsubps, addsubpd, addsubps, addsubps }
+table ssed0 { -, addsubpd, -, addsubps }                # 66=addsubpd, F2=addsubps; NP/F3 #UD
+table sse6c { -, punpcklqdq, -, - }                     # 66-only (no NP/MMX form)
+table sse6d { -, punpckhqdq, -, - }                     # 66-only
+table sseb8 { -, -, popcnt, - }                         # F3-only (NP 0F B8 is #UD, not popcnt)
 
 # ---- immediates / displacements ----------------------------------------------
 submatch imm8  { iiiiiiii                              => $i }
@@ -716,8 +719,9 @@ submatch insn {
   0x0f 0xbc @addr      => ssebc[$pp] greg[$g] "," $addr ;
   0x0f 0xbd 11 ggg rrr => ssebd[$pp] greg[$g] "," greg[$r] ;
   0x0f 0xbd @addr      => ssebd[$pp] greg[$g] "," $addr ;
-  0x0f 0xb8 11 ggg rrr => "popcnt " greg[$g] "," greg[$r] ;
-  0x0f 0xb8 @addr      => "popcnt " greg[$g] "," $addr ;
+  # 0F B8: popcnt is F3-only; NP (was JMPE) and 66/F2 are #UD.
+  0x0f 0xb8 11 ggg rrr => sseb8[$pp] greg[$g] "," greg[$r] ;
+  0x0f 0xb8 @addr      => sseb8[$pp] greg[$g] "," $addr ;
   0x0f 0xb0 11 ggg rrr => "cmpxchg " rgb[$r] "," rgb[$g] ;
   0x0f 0xb0 @addr      => "cmpxchg" sfx[1] " " $addr "," rgb[$g] ;
   0x0f 0xb1 11 ggg rrr => "cmpxchg " greg[$r] "," greg[$g] ;
@@ -1131,10 +1135,11 @@ submatch insn {
   0x0f 0x6a @addr      => "punpckhdq " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0x6b 11 ggg rrr => "packssdw " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0x6b @addr      => "packssdw " ssereg[$opsiz*8+$g] "," $addr ;
-  0x0f 0x6c 11 ggg rrr => "punpcklqdq " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
-  0x0f 0x6c @addr      => "punpcklqdq " ssereg[$opsiz*8+$g] "," $addr ;
-  0x0f 0x6d 11 ggg rrr => "punpckhqdq " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
-  0x0f 0x6d @addr      => "punpckhqdq " ssereg[$opsiz*8+$g] "," $addr ;
+  # 0F 6C/6D: punpcklqdq/punpckhqdq are 66-only (SSE2, xmm); NP/F3/F2 are #UD (no MMX form).
+  0x0f 0x6c 11 ggg rrr => sse6c[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x6c @addr      => sse6c[$pp] ssereg[8+$g] "," $addr ;
+  0x0f 0x6d 11 ggg rrr => sse6d[$pp] ssereg[8+$g] "," ssereg[8+$r] ;
+  0x0f 0x6d @addr      => sse6d[$pp] ssereg[8+$g] "," $addr ;
   0x0f 0x70 11 ggg rrr @imm8 => sse70[$pp] ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] "," hex($imm8) ;
   0x0f 0x70 @addr      @imm8 => sse70[$pp] ssereg[$opsiz*8+$g] "," $addr "," hex($imm8) ;
   0x0f 0x50 11 ggg rrr => sse50[$pp] gregd[$g] "," ssereg[8+$r] ;

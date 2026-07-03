@@ -120,7 +120,7 @@ class EncBuilder:
       mnem_list = [self.midx(mn[1] + 'cc')]            # jcc / setcc / cmovcc
       cc_emb = True
     else:                                              # ('sel', table, var)
-      mnem_list = [self.midx(n) for n in ip.tables[mn[1]]]
+      mnem_list = [self.midx(n) for n in ip.tables[mn[1]] if n != '-']   # '-' = #UD slot: no candidate
 
     for mnem_idx in mnem_list:
       key = (tb, bp.lit_val, 0xFF, mnem_idx)
