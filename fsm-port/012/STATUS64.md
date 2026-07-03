@@ -388,17 +388,35 @@ placeholder mnemonics; all now decode:
   bits and the memory-base high bit rides in the replayed prefix. `rorx` (no vvvv) fixes
   V'=1. All match Zydis; fuzz64 5 M = 0, roundtrip64 byte-identical.
 
-Remaining placeholders (all bijection-safe via the structural fallback), deliberately
-deferred:
+### 7g. VSIB gather, EVEX vpermil/vpinsr, the k-mask matrix, CMPccXADD (done, 2026-07-03)
 
-* **KNC / Xeon Phi (discontinued)**: `kconcatl/h`, `kunpckwd`, `vprefetch*`, `clevict1`,
-  `tzcnti`, `jkzd`/`jknzd` — a dead ISA branch (same policy as §7a).
-* **VEX gather** VSIB forms (`vpgatherdd`/`qq`, `vgatherdps`/`qpd`, …; the EVEX gathers
-  are covered structurally). A *semantic* VEX gather needs a vector-typed memory index:
-  `x86insn_t.mem_index` is an untyped register number, so even the covered EVEX gathers
-  render their VSIB index as a GPR at run time. Adding the vector-index display (a typed
-  `mem_index`, benefiting EVEX gather too) is the real prerequisite; the bytes already
-  round-trip via the structural fallback. Deferred as the one genuinely structural gap.
+Closing the last non-KNC gaps. Two larger sweeps (300 k, then 1.5 M) drove the placeholder
+set down to KNC only:
+
+* **VSIB — vector-typed memory index** (`x86insn_t.mem_ix_t`): `vex_finalize` now recognizes
+  the gather (0F38 90-93) / scatter (A0-A3) opcodes and, for the memory form, re-derives the
+  index from the raw SIB (bypassing the GPR "no-index" rule that dropped index==4), tags its
+  vector width, and sizes the data reg + VEX mask by the index-vs-element rule. This adds the
+  **AVX2 VEX gathers** (`vpgatherd/q d/q`, `vgatherd/q ps/pd`) *and* fixes the already-covered
+  **EVEX gathers**, which had been rendering their VSIB index as a GPR and dropping index==4.
+  Display-only (the encoder replays the SIB), so byte-exact throughout.
+* **EVEX vpermilps/pd by imm8** (0F3A 04/05) and **EVEX vpinsrb/d/q** (0F3A 20/22) — only the
+  VEX / EVEX-variable siblings had been present.
+* **AVX-512 k-mask matrix completed.** The set only had the W0 b/w forms; W is significant
+  (b/w vs d/q) yet the generic WIG W-fill silently decoded every W1 as its W0 mnemonic. Added
+  explicit W1 rules for `kand/kandn/kor/kxnor/kxor/kadd` (d/q), `kunpckwd/dq`,
+  `knot/kortest/ktest` (b/d/q) and `kshift l/r` (b/d/q), and fixed `kmov` d/q (kmovq kreg,kreg
+  was at the wrong prefix).
+* **CMPccXADD** (EVEX.66.0F38 E0-EF) — the 2022 atomic compare-and-add family: `[mem],reg,vvvv`,
+  cc in the opcode nibble, W0=r32/W1=r64. Added `FORM_VEX_MRV` (r/m,reg,vvvv) + 32 rules.
+
+All match Zydis; fuzz64 5 M = 0, roundtrip64 byte-identical, 32-bit 858/858.
+
+The only placeholders left are **KNC / Xeon Phi (discontinued)** — `jkzd`/`jknzd`,
+`kconcatl/h`, `kmerge2l1*`, `kextract`, `vprefetch0/1/2/nta/enta/e2`, `clevict0/1`, and the
+*VEX-encoded* `tzcnt`/`lzcnt`/`popcnt` (the legacy F3.0F forms are covered). A dead ISA branch
+whose encodings collide with modern semantics; deliberately out of scope (same policy as §7a),
+and bijection-safe via the structural fallback regardless.
 
 ## 8. Deliberate decode-display policy (not bugs)
 
