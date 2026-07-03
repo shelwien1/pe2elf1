@@ -856,6 +856,22 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     d->insn.has_pfx = 1;
     ip += 2;
   }
+  // REX2 opcode eligibility: REX2 is defined only for legacy opcodes that carry an eGPR
+  // operand (ModR/M r/m or reg, opcode-embedded GPR, or SIB) or are operand-size sensitive.
+  // It is #UD (Intel XED / SDE -dmr) on the control-flow-relative, string, port-I/O,
+  // accumulator-implicit and system opcodes -- they have no register for R4/X4/B4 to extend.
+  // Reject them so a #UD byte stream is not presented as a valid instruction (the bare opcodes
+  // stay legal without REX2; only the REX2-prefixed forms are rejected here):
+  //   map 0 (M0=0): 70-7F Jcc rel8; A0-A3 mov acc,moffs; A4-A7/AA-AF movs/cmps/stos/lods/scas;
+  //                 A8-A9 test acc,imm; E0-E3 loop/jrcxz; E4-E7/EC-EF in/out; E8-E9/EB call/jmp rel
+  //   map 1 (M0=1): 30-37 wrmsr/rdtsc/rdmsr/rdpmc/sysenter/sysexit/getsec; 80-8F Jcc rel32
+  if (d->insn.rex2 && ip < n) {
+    byte oc = s[ip];
+    bool illegal = rex2_0f
+      ? ((oc >= 0x30 && oc <= 0x37) || (oc >= 0x80 && oc <= 0x8F))
+      : ((oc >= 0x70 && oc <= 0x7F) || (oc >= 0xA0 && oc <= 0xAF) || (oc >= 0xE0 && oc <= 0xEF));
+    if (illegal) { d->insn.mnem = 0xFFFF; return ip; }
+  }
 #endif
   // mov to/from cr/dr (0F 20-23): the ModR/M mod field is ignored by hardware (always
   // register-direct, no SIB/disp), so capture the raw ModR/M byte and replay it -- this

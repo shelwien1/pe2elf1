@@ -142,6 +142,38 @@ between the REX2 payload and the opcode.
 
 ---
 
+## 6a. REX2 — opcode eligibility (not every opcode accepts it)
+
+Unlike a plain REX (which is *silently ignored* on an opcode that has nothing to extend),
+**REX2 is `#UD` on opcodes that carry no eGPR-extendable operand** — i.e. anything with no
+ModR/M `r/m`/`reg`, no opcode-embedded GPR, and no SIB for `R4`/`X4`/`B4` to reach. Measured
+against Intel XED / SDE, the REX2-illegal opcodes are:
+
+| map | REX2-illegal opcodes | why |
+|---|---|---|
+| **M0=0** (1-byte) | `70-7F` | `Jcc rel8` — no register operand |
+| | `A0-A3` | `mov` accumulator ↔ `[moffs]` — implicit `AL/rAX` |
+| | `A4-A7`, `AA-AF` | `movs`/`cmps`/`stos`/`lods`/`scas` — implicit `rSI`/`rDI` |
+| | `A8-A9` | `test AL/eAX, imm` — implicit accumulator |
+| | `E0-E3` | `loopne`/`loope`/`loop`/`jrcxz` — rel8 |
+| | `E4-E7`, `EC-EF` | `in`/`out` (imm8 and `DX`) — port I/O |
+| | `E8-E9`, `EB` | `call`/`jmp` rel |
+| **M0=1** (0F) | `30-37` | `wrmsr`/`rdtsc`/`rdmsr`/`rdpmc`/`sysenter`/`sysexit`/`getsec` — system |
+| | `80-8F` | `Jcc rel32` — no register operand |
+
+Everything with a ModR/M or opcode-embedded GPR *is* eligible — including the no-ModR/M but
+operand-size-sensitive `98`/`99` (`cwde`↔`cdqe`, `cdq`↔`cqo`) and the embedded-register
+`50-5F`/`58-5F` (`push`/`pop`), `B8-BF` (`mov r,imm`), `90-97` (`xchg`), `0F C8-CF` (`bswap`).
+Note the asymmetry with plain REX: `48 EB 00` decodes as `jmp` (the REX is a no-op), but
+`D5 08 EB 00` is `#UD`.
+
+*Not to be confused with:* opcodes that are `#UD` **with or without** REX2 — legacy encodings
+removed in 64-bit (`06/07/0E/16/17/…`, `60-62`, `82`, `9A`, `C4/C5`, `D4-D6/CE`, far `EA`), the
+`0F 30-3F`/etc. system holes, or SSE opcodes valid only under a mandatory `66`/`F2`/`F3`
+prefix. Those are opcode-map facts, not a REX2 rule.
+
+---
+
 ## 7. REX / REX2 with VEX / EVEX / XOP
 
 VEX (`C4`/`C5`), EVEX (`62`) and XOP (`8F`) encode their own `W`/`R`/`X`/`B` (and more), so a
@@ -181,6 +213,9 @@ REX2 (0xD5 + payload)              [APX; must be immediately followed by the opc
   repeat        : no such thing; 2nd D5 is an opcode -> #UD (M0=0, =AAD) / real op (M0=1)
   before it     : legacy prefixes (66/F2/F3/seg/67) OK; 66 vs REX2.W -> last wins
   after it      : nothing allowed between payload and opcode -> #UD
+  eligible on   : only opcodes with an eGPR operand (ModRM/embedded-GPR/SIB) or opsize-
+                  sensitive (98/99). #UD on Jcc/call/jmp/loop/string/in-out/acc/system:
+                  M0=0 {70-7F, A0-AF, E0-EF} ; M0=1 {30-37, 80-8F}
   + REX         : #UD if adjacent (either order)
   + VEX/EVEX    : #UD
 
@@ -204,6 +239,10 @@ The FSM disassembler in this directory was checked against every case above
   `66 40 d5…` → `#UD` vs `40 66 d5…` legal, `d5 08 66…`/`d5 08 48…`/double-`D5` → `#UD`, and
   the `66`-vs-`REX2.W` last-wins behavior. (The REX-immediately-before-REX2 `#UD` check was
   added while writing this document's REX2 test — see `STATUS64.md` §7h.)
+* **REX2 opcode eligibility (§6a)** — enforced. `decode_insn` rejects REX2 on the
+  no-eGPR-operand opcodes (`M0=0` {`70-7F`,`A0-AF`,`E0-EF`}; `M0=1` {`30-37`,`80-8F`}).
+  Verified 0 mismatches vs XED over a full 256-opcode × {map0, map1} eligibility sweep (the
+  only residue is the general NP-SSE item below, not a REX2 matter).
 * **VEX / EVEX / XOP preceding-prefix rule (§7)** — matches XED. `decode_insn` rejects a
   `66`/`F2`/`F3`/`LOCK` anywhere in the run before a `C4`/`C5`/`62`/`8F`(map≥8) introducer, and
   a REX immediately before it, while still allowing segment + `67` (and a REX that a following

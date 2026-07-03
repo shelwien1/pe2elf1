@@ -471,6 +471,18 @@ this decoder's conformance — is written up in `REX_REX2_prefixes.md`. (One unr
 noted and left: `LOCK` on a register-destination op, e.g. `f0 01 c0`, is `#UD` on hardware but
 still accepted — a LOCK/ModR/M-validity issue, not a REX/REX2 one, and bijection-safe.)
 
+**Follow-up — REX2 opcode eligibility now `#UD`.** A 256-opcode × {map0, map1} sweep vs XED found
+the decoder was applying REX2 to opcodes that have no eGPR-extendable operand, which is `#UD` on
+silicon: `M0=0` {`70-7F` Jcc8, `A0-AF` moffs/string/test-acc, `E0-EF` loop/jrcxz/in-out/call/jmp};
+`M0=1` {`30-37` system, `80-8F` Jcc32}. `decode_insn` now rejects these in the REX2 block (opcodes
+with a ModR/M, an embedded GPR, or opsize-sensitivity like `98/99` stay eligible — note the
+asymmetry with plain REX, which is a silent no-op on `48 EB 00` where `D5 08 EB 00` is `#UD`).
+Sweep now 0 REX2-eligibility mismatches vs XED; fuzz64 5 M = 0 (accept 76.7 %→75.1 %), roundtrip64
+byte-identical, 32-bit 858/858. Documented in `REX_REX2_prefixes.md` §6a. The 8 residual map-1
+sweep entries (`0F 6C/6D/7C/7D/A6/B8/D0/E6`) are a *separate, non-REX2* bug — the decoder accepts
+the NP (no-mandatory-prefix) form of `66`/`F2`/`F3`-only SSE opcodes even without REX2 (`0F 6C` bare
+also mis-decodes); left for a dedicated SSE-NP pass, bijection-safe meanwhile.
+
 ## 8. Deliberate decode-display policy (not bugs)
 
 * Size suffixes (`.b/.w/.d/.q/.t`) instead of `BYTE/WORD/... PTR`; `[rax+0]`-style
