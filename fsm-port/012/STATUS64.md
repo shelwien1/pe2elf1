@@ -368,13 +368,37 @@ Validated GAP=0 vs Zydis over a 3200-case reg/mem/imm × 16-SCC × DFV sweep (on
 disassembles this family; objdump 2.42 rejects it). Bijection preserved: fuzz64 5 M = 0,
 roundtrip64 byte-identical.
 
+### 7f. Post-CCMP mnemonic-differential sweep — remaining VEX/EVEX gaps (done, 2026-07-03)
+
+A fresh 300 k-buffer mnemonic sweep vs Zydis (after CCMP/CTEST) surfaced ~15 non-KNC
+placeholder mnemonics; all now decode:
+
+* **AVX2 VEX forms** whose EVEX/legacy siblings were present but the VEX form absent:
+  `vpermq`/`vpermpd` (0F3A 00/01 W1), `vbroadcasti128`/`vbroadcastf128` (0F38 5A/1A),
+  `vldmxcsr`/`vstmxcsr` (0F AE /2,/3 — the first VEX `@addr(/digit)` group → VEX_MG).
+* **SM3 / AVX-NE-CONVERT 66-prefix siblings** (the NP/F3/F2 were present): `vsm3msg2`,
+  `vcvtneeph2ps`, `vbcstnesh2ps`, plus the VEX form of `vcvtneps2bf16` (F3 72).
+* **AMD FMA4 `vpermil2ps/pd`** (VEX.66.0F3A.W0/W1 48/49): 4-operand is4 with the W0/W1
+  r/m↔is4 swap, mirroring the FMA4 vfmaddsub is4 family. The is4 byte's low-nibble
+  selector is preserved in the replayed immediate; shown 4-op (the control nibble is a
+  §8 display simplification).
+* **APX EVEX-promoted BMI** — the *first EVEX GPR ops*: `andn` `bextr` `bzhi` `shlx`
+  `sarx` `shrx` `pext` `pdep` `mulx` (map 2 F2-F7) + `rorx` (map 3 F0), W0=r32/W1=r64.
+  `vex_finalize` already lowers them; reg/vvvv/r-m reach r0-31 via the EVEX R'/V'/X
+  bits and the memory-base high bit rides in the replayed prefix. `rorx` (no vvvv) fixes
+  V'=1. All match Zydis; fuzz64 5 M = 0, roundtrip64 byte-identical.
+
 Remaining placeholders (all bijection-safe via the structural fallback), deliberately
 deferred:
 
-* **KNC / Xeon Phi (discontinued)**: `kconcatl/h`, `kunpckwd`, `vprefetche2`, and Zydis's
-  VEX-`tzcnt` quirk — a dead ISA branch (same policy as `jkzd`/`jknzd`, §7a).
-* **AMD FMA4 `vpermil2ps/pd`** (4-operand IS4) and the **VEX gather** VSIB forms
-  (`vpgatherqq` etc.; the EVEX gathers are covered) — niche, structurally involved.
+* **KNC / Xeon Phi (discontinued)**: `kconcatl/h`, `kunpckwd`, `vprefetch*`, `clevict1`,
+  `tzcnti`, `jkzd`/`jknzd` — a dead ISA branch (same policy as §7a).
+* **VEX gather** VSIB forms (`vpgatherdd`/`qq`, `vgatherdps`/`qpd`, …; the EVEX gathers
+  are covered structurally). A *semantic* VEX gather needs a vector-typed memory index:
+  `x86insn_t.mem_index` is an untyped register number, so even the covered EVEX gathers
+  render their VSIB index as a GPR at run time. Adding the vector-index display (a typed
+  `mem_index`, benefiting EVEX gather too) is the real prerequisite; the bytes already
+  round-trip via the structural fallback. Deferred as the one genuinely structural gap.
 
 ## 8. Deliberate decode-display policy (not bugs)
 
