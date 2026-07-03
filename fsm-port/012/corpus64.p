@@ -5041,6 +5041,40 @@ submatch evex {
   h k b e 00 11 0 1111 1 11 0 00 0 1 000 0xf0 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "rorx " greg[$g] "," $addr "," hex($imm8) ;
   h k b e 00 11 1 1111 1 11 0 00 0 1 000 0xf0 11 ggg rrr @imm8 => "rorx " greg[32+$g] "," greg[32+$r] "," hex($imm8) ;
   h k b e 00 11 1 1111 1 11 0 00 0 1 000 0xf0 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "rorx " greg[32+$g] "," $addr "," hex($imm8) ;
+  # ==== CMPccXADD (EVEX.66.0F38.W0/W1 E0-EF): atomic compare-and-add [mem],reg,vvvv ====
+  # GPR op (r0-31 via EVEX bits), memory-only r/m; cc in the opcode low nibble (o..nle).
+  h k b e 00 10 0 vvvv 1 01 0 00 0 u 000 0xe0 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpoxadd " $addr "," greg[$g] "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 01 0 00 0 u 000 0xe0 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpoxadd " $addr "," greg[32+$g] "," greg[32+$v] ;
+  h k b e 00 10 0 vvvv 1 01 0 00 0 u 000 0xe1 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpnoxadd " $addr "," greg[$g] "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 01 0 00 0 u 000 0xe1 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpnoxadd " $addr "," greg[32+$g] "," greg[32+$v] ;
+  h k b e 00 10 0 vvvv 1 01 0 00 0 u 000 0xe2 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpbxadd " $addr "," greg[$g] "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 01 0 00 0 u 000 0xe2 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpbxadd " $addr "," greg[32+$g] "," greg[32+$v] ;
+  h k b e 00 10 0 vvvv 1 01 0 00 0 u 000 0xe3 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpnbxadd " $addr "," greg[$g] "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 01 0 00 0 u 000 0xe3 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpnbxadd " $addr "," greg[32+$g] "," greg[32+$v] ;
+  h k b e 00 10 0 vvvv 1 01 0 00 0 u 000 0xe4 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpzxadd " $addr "," greg[$g] "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 01 0 00 0 u 000 0xe4 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpzxadd " $addr "," greg[32+$g] "," greg[32+$v] ;
+  h k b e 00 10 0 vvvv 1 01 0 00 0 u 000 0xe5 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpnzxadd " $addr "," greg[$g] "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 01 0 00 0 u 000 0xe5 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpnzxadd " $addr "," greg[32+$g] "," greg[32+$v] ;
+  h k b e 00 10 0 vvvv 1 01 0 00 0 u 000 0xe6 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpbexadd " $addr "," greg[$g] "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 01 0 00 0 u 000 0xe6 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpbexadd " $addr "," greg[32+$g] "," greg[32+$v] ;
+  h k b e 00 10 0 vvvv 1 01 0 00 0 u 000 0xe7 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpnbexadd " $addr "," greg[$g] "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 01 0 00 0 u 000 0xe7 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpnbexadd " $addr "," greg[32+$g] "," greg[32+$v] ;
+  h k b e 00 10 0 vvvv 1 01 0 00 0 u 000 0xe8 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpsxadd " $addr "," greg[$g] "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 01 0 00 0 u 000 0xe8 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpsxadd " $addr "," greg[32+$g] "," greg[32+$v] ;
+  h k b e 00 10 0 vvvv 1 01 0 00 0 u 000 0xe9 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpnsxadd " $addr "," greg[$g] "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 01 0 00 0 u 000 0xe9 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpnsxadd " $addr "," greg[32+$g] "," greg[32+$v] ;
+  h k b e 00 10 0 vvvv 1 01 0 00 0 u 000 0xea @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmppxadd " $addr "," greg[$g] "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 01 0 00 0 u 000 0xea @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmppxadd " $addr "," greg[32+$g] "," greg[32+$v] ;
+  h k b e 00 10 0 vvvv 1 01 0 00 0 u 000 0xeb @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpnpxadd " $addr "," greg[$g] "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 01 0 00 0 u 000 0xeb @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpnpxadd " $addr "," greg[32+$g] "," greg[32+$v] ;
+  h k b e 00 10 0 vvvv 1 01 0 00 0 u 000 0xec @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmplxadd " $addr "," greg[$g] "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 01 0 00 0 u 000 0xec @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmplxadd " $addr "," greg[32+$g] "," greg[32+$v] ;
+  h k b e 00 10 0 vvvv 1 01 0 00 0 u 000 0xed @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpnlxadd " $addr "," greg[$g] "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 01 0 00 0 u 000 0xed @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpnlxadd " $addr "," greg[32+$g] "," greg[32+$v] ;
+  h k b e 00 10 0 vvvv 1 01 0 00 0 u 000 0xee @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmplexadd " $addr "," greg[$g] "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 01 0 00 0 u 000 0xee @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmplexadd " $addr "," greg[32+$g] "," greg[32+$v] ;
+  h k b e 00 10 0 vvvv 1 01 0 00 0 u 000 0xef @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpnlexadd " $addr "," greg[$g] "," greg[$v] ;
+  h k b e 00 10 1 vvvv 1 01 0 00 0 u 000 0xef @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "cmpnlexadd " $addr "," greg[32+$g] "," greg[32+$v] ;
 }
 
 

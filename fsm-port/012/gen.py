@@ -1185,6 +1185,7 @@ class Interp:
                                        # RVRM: reg,vvvv,is4,r/m (XOP vpcmov/vpperm W1)
                'VEX_MI', 'VEX_IM',    # MI: r/m,imm ; IM: imm,r/m  (VEX map7 urdmsr/uwrmsr)
                'VEX_MVR',             # MVR: r/m,vvvv,reg (vmovss/vmovsd 0F 11 store reg-form)
+               'VEX_MRV',             # MRV: r/m,reg,vvvv (CMPccXADD [mem],reg,vvvv)
                # APX EVEX-promoted legacy (GPR; apx_finalize prepends NDD dest if ND=1)
                'APX_MR', 'APX_RM', 'APX_RMI', 'APX_MI', 'APX_M', 'APX_R',
                'APX_MRI', 'APX_MRC']
@@ -1198,6 +1199,7 @@ class Interp:
     'REG,RM,VVVV': 'VEX_RMV', 'REG,VVVV,IS4,RM': 'VEX_RVRM',
     'RM,IMM8': 'VEX_MI', 'IMM8,RM': 'VEX_IM',   # VEX map7 USER_MSR: urdmsr r/m,imm32 ; uwrmsr imm32,r/m
     'RM,VVVV,REG': 'VEX_MVR',   # vmovss/vmovsd 0F 11 store reg-form (r/m, vvvv, reg)
+    'RM,REG,VVVV': 'VEX_MRV',   # CMPccXADD: [mem], reg, vvvv (mem dst, GPR compare, GPR add)
   }
 
   # APX promoted-legacy operand shapes (GPR; the C++ apx_finalize prepends the NDD
