@@ -2235,6 +2235,17 @@ submatch vex {
   h k b 00010 0 vvvv y 01 0x36 @addr {$rexb=1-$b;$rexx=1-$k} => "vpermd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
   h k b 00010 0 vvvv y 01 0x16 11 ggg rrr => "vpermps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
   h k b 00010 0 vvvv y 01 0x16 @addr {$rexb=1-$b;$rexx=1-$k} => "vpermps " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  # AVX2 lane permutes by imm8 (VEX.256.66.0F3A.W1 00/01): reg, r/m, imm8 (no vvvv).
+  h k b 00011 1 1111 y 01 0x00 11 ggg rrr @imm8 => "vpermq " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] "," hex($imm8) ;
+  h k b 00011 1 1111 y 01 0x00 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "vpermq " vreg[16*$y+8*$h+$g] "," $addr "," hex($imm8) ;
+  h k b 00011 1 1111 y 01 0x01 11 ggg rrr @imm8 => "vpermpd " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] "," hex($imm8) ;
+  h k b 00011 1 1111 y 01 0x01 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => "vpermpd " vreg[16*$y+8*$h+$g] "," $addr "," hex($imm8) ;
+  # AVX/AVX2 128-bit broadcast to a 256-bit reg (VEX.256.66.0F38.W0 1A/5A): mem-only.
+  h k b 00010 0 1111 y 01 0x1a @addr {$rexb=1-$b;$rexx=1-$k} => "vbroadcastf128 " vreg[16*$y+8*$h+$g] "," $addr ;
+  h k b 00010 0 1111 y 01 0x5a @addr {$rexb=1-$b;$rexx=1-$k} => "vbroadcasti128 " vreg[16*$y+8*$h+$g] "," $addr ;
+  # AVX vldmxcsr/vstmxcsr (VEX.LZ.NP.0F.WIG AE /2,/3): mem-only, mnem by /digit.
+  h k b 00001 0 1111 y 00 0xae @addr(2) {$rexb=1-$b;$rexx=1-$k} => "vldmxcsr " $addr ;
+  h k b 00001 0 1111 y 00 0xae @addr(3) {$rexb=1-$b;$rexx=1-$k} => "vstmxcsr " $addr ;
   # vsha512rnds2 (VEX.256.F2.0F38.W0 CB): dst/vvvv ymm, src xmm
   h k b 00010 0 vvvv y 11 0xcb 11 ggg rrr => "vsha512rnds2 " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[8*$b+$r] ;
   h k b 00010 0 vvvv y 11 0xcb @addr {$rexb=1-$b;$rexx=1-$k} => "vsha512rnds2 " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
