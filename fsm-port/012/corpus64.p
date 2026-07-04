@@ -2319,6 +2319,11 @@ submatch vex {
   h k b 00010 0 vvvv y 10 0xd3 @addr {$rexb=1-$b;$rexx=1-$k} => "vpdpwsuds " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
   h k b 00010 0 vvvv y 10 0xda 11 ggg rrr => "vsm4key4 " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
   h k b 00010 0 vvvv y 10 0xda @addr {$rexb=1-$b;$rexx=1-$k} => "vsm4key4 " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  # SHA512 (VEX.256.F2.0F38.W0 CC/CD, 2-operand): vsha512msg1 ymm,xmm ; vsha512msg2 ymm,ymm
+  h k b 00010 0 1111 y 11 0xcc 11 ggg rrr => "vsha512msg1 " vreg[16*$y+8*$h+$g] "," vreg[8*$b+$r] ;   # src is xmm (m128)
+  h k b 00010 0 1111 y 11 0xcc @addr {$rexb=1-$b;$rexx=1-$k} => "vsha512msg1 " vreg[16*$y+8*$h+$g] "," $addr ;
+  h k b 00010 0 1111 y 11 0xcd 11 ggg rrr => "vsha512msg2 " vreg[16*$y+8*$h+$g] "," vreg[16*$y+8*$b+$r] ;
+  h k b 00010 0 1111 y 11 0xcd @addr {$rexb=1-$b;$rexx=1-$k} => "vsha512msg2 " vreg[16*$y+8*$h+$g] "," $addr ;
   h k b 00010 0 vvvv y 11 0x50 11 ggg rrr => "vpdpbssd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
   h k b 00010 0 vvvv y 11 0x50 @addr {$rexb=1-$b;$rexx=1-$k} => "vpdpbssd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
   h k b 00010 0 vvvv y 11 0x51 11 ggg rrr => "vpdpbssds " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
