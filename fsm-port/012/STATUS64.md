@@ -615,10 +615,15 @@ Known remaining (byte-exact today via placeholder / base name — not yet semant
   `setzu<cc>`, `imulzu` (map-4, shown as the `vex` placeholder), EVEX `vmovd`/`vmovq` mem (`66.0F.W0/
   W1 7E @addr`, placeholder), VEX `vsha512msg1/2` (`F2.0F38.W0 CC/CD`, placeholder). These need
   per-instruction EVEX/APX/VEX rules with exact operand widths, each XED-verified.
-* **Legacy REX.W size mnemonics**: `movq` (`0F 6E/7E`), `cmpxchg16b` (`0F C7 /1`), `wrssq` (`0F38 F6`)
-  render the W0 name. The opsize-mnemonic table (MNSEL mode 1, `sret`/`incssp`-style) needs extending
-  to `/digit`-group and pp-guarded `@addr` rules in `gen.py` (it currently only fires on simple and
-  fixed-ModR/M-reg rules). All are byte-exact; only the displayed size suffix differs.
+* **Legacy REX.W size mnemonics**: `cmpxchg16b` (`0F C7 /1`) is **done** — the opsize-mnemonic table
+  (MNSEL mode 1) was extended to group *memory* forms in gen.py/gasm.py (see §7k commit). `movq`
+  (`0F 6E/7E`) and `wrssq` (`0F38 F6`) remain W0-named and are deferred: both are entangled with the
+  pp/opsize conflation, not just the mnemonic. `movq` is triply wrong under REX.W (mnemonic, the
+  shared `ssereg[$opsiz*8]` vector bank picks xmm where NP wants mm, and the GPR size) — fixing it
+  means reworking the SSE operand-bank mechanism that #19/§7h carefully established, high regression
+  risk. `wrssq` sits in a ppdesc (MNSEL=3, per-prefix full descriptor: movbe/adcx/crc32/wrss) slot,
+  where opsize-select (MNSEL=1) conflicts with pp-select (MNSEL=3). Both are byte-exact today; only
+  the displayed size differs. Best done as a dedicated pp/opsize-operand pass with the full gate.
 
 ## 8. Deliberate decode-display policy (not bugs)
 
