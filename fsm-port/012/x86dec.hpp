@@ -113,17 +113,19 @@ static inline void fill_insn(x86dec_t* d) {
   in->disp       = (int32_t)c[CAP_DISP];  // low 32 bits of the sign-extended value
 }
 
-// register file (OperandFile) -> x86op_t.type, resolving SSE_OS by operand size.
-static inline int file_to_T(int opf, int opsize, int reptype) {
+// register file (OperandFile) -> x86op_t.type. The SSE mm/xmm bank is selected by
+// the MANDATORY PREFIX (66/F3/F2), NOT by operand size: REX.W (opsize 2) sizes the
+// GPR / picks movq, but never changes the vector bank (e.g. NP+REX.W movq mm,r64 is
+// still MMX). So SSE_OS keys on has66/reptype, decoupled from REX.W's opsize=2.
+static inline int file_to_T(int opf, int has66, int reptype) {
   switch (opf) {
     case OPF_RGB:    return T_GPR8;
     case OPF_XMM:    return T_XMM;
     case OPF_MM:     return T_MMX;
     case OPF_SREG:   return T_SREG;
-    // mm/xmm by 66; F3/F2 (mandatory prefix on the xmm form: movdqu, pshufhw/lw,
-    // ...) also selects the xmm bank even though opsize stays 0. Kept symmetric
-    // with the encoder's enc_file_class so the bijection holds.
-    case OPF_SSE_OS: return (opsize || reptype) ? T_XMM : T_MMX;
+    // mm at NP; xmm at 66 (has66) or F3/F2 (reptype: movdqu, pshufhw/lw, ...). REX.W
+    // is deliberately excluded -- kept symmetric with the encoder's enc_file_class.
+    case OPF_SSE_OS: return (has66 || reptype) ? T_XMM : T_MMX;
     // cvtpi2ps/cvttps2pi/...: mm at NP/66, GPR at F3/F2 (cvtsi2ss/cvttss2si).
     // The GPR width follows opsize (REX.W -> r64); mm is always 64-bit.
     case OPF_MMG:    return reptype ? T_GPR : T_MMX;
@@ -243,6 +245,14 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t slen, size_t
 
   int n = 0;
   int rept = (int)c[VAR_REPTYPE];
+  // 66-present in the prefix run (skip the REX2 D5 payload byte). The SSE mm/xmm bank
+  // keys on this (a mandatory prefix), not on opsize -- so REX.W (opsize 2) does not
+  // flip an NP MMX operand to xmm. See file_to_T's OPF_SSE_OS case.
+  int has66 = 0;
+  for (int i = 0; i < in->n_pfx; ++i) {
+    if (in->pfx[i] == 0xD5) { ++i; continue; }
+    if (in->pfx[i] == 0x66) has66 = 1;
+  }
   // Legacy vector registers have no high bank: xmm/ymm live in 0..15 (REX.R/B extend,
   // REX2.R4/B4 do not -> mask &15), mm in 0..7 (REX ignored for MMX -> mask &7). GPRs
   // keep the full 0..31 range (REX2 reaches r16-r31). The masked-off high bits still
@@ -250,9 +260,9 @@ static inline void finalize_insn(x86dec_t* d, const byte* s, size_t slen, size_t
   // 3 bits alone, so clamping the *rendered* index is bijection-neutral.
   #define VMASK(t, ix) ((t) == T_MMX ? ((ix) & 7) \
                         : ((t) == T_XMM || (t) == T_YMM || (t) == T_ZMM) ? ((ix) & 15) : (ix))
-  #define SETREG(slot, file, idx) do { int _t = file_to_T(file, os, rept); in->op[slot].type = _t; \
+  #define SETREG(slot, file, idx) do { int _t = file_to_T(file, has66, rept); in->op[slot].type = _t; \
                                        in->op[slot].index = VMASK(_t, ((idx) & 7) + 8 * reg_rex); } while (0)
-  #define SETRM(slot) do { if (mode == RM_REG) { int _t = file_to_T(mf, os, rept); in->op[slot].type = _t; \
+  #define SETRM(slot) do { if (mode == RM_REG) { int _t = file_to_T(mf, has66, rept); in->op[slot].type = _t; \
                                                  in->op[slot].index = VMASK(_t, ((int)c[CAP_RM] & 7) + 8 * xb); } \
                            else { in->op[slot].type = T_MEM; in->op[slot].index = 0; } } while (0)
   switch (form) {
@@ -1210,6 +1220,14 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   // renders r64 via greg[] at opsize 2). enc_select aliases wrssq back to wrssd's candidate, and
   // the enc-rank witness was stamped against wrssd, so the byte-exact round-trip holds.
   if (d->insn.mnem == MNEM_WRSSD && d->insn.opsize == 2) d->insn.mnem = MNEM_WRSSQ;
+  // movd (0F 6E load / 0F 7E NP,66 store) -> movq under REX.W. 6E is a plain ModR/M rule and
+  // 7E rides a ppdesc slot (F3 7E is the different movq xmm,xmm/m64 form), so neither can use the
+  // opsize-mnemonic table; reclassify here on opsize 2 (== REX.W for these -- no default-64 and
+  // the mandatory-66 reset only touches opsize 1). The vector bank (mm/xmm) was set by has66 and
+  // the GPR renders r64 at opsize 2; enc_select aliases MOVQ_GPR straight back to movd. MOVQ_GPR
+  // is a distinct index that displays "movq" -- kept apart from 0F 6F's movq (mm,mm/m64), whose
+  // memory form would otherwise be indistinguishable from movq mm,[m64] on re-encode.
+  if (d->insn.mnem == MNEM_MOVD && d->insn.opsize == 2) d->insn.mnem = MNEM_MOVQ_GPR;
   // LOCK (F0): reject it on anything but an RMW-to-memory op (see lock_illegal above). lock mov /
   // lock shift / lock on a register destination / lock on a non-RMW op are all #UD on silicon (XED
   // agrees). Bijection-safe: rejecting only removes an illegal byte stream from the accepted set.

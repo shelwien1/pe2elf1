@@ -2064,6 +2064,15 @@ def emit(c, interp, out_path):
     interp._mnem.append('vex')
   w("#define MNEM_VEX %d\n" % interp._mnem.index('vex'))
   w("#define MNEM_MOV %d\n" % (interp._mnem.index('mov') if 'mov' in interp._mnem else 0))
+  # movd (0F 6E/7E) -> movq under REX.W. Named "movq", the reg form (movq mm/xmm<->r64) AND the
+  # memory form (movq mm/xmm,[m64]) both collide in disasm with 0F 6F's movq (mm,mm/m64) -- same
+  # operands, different opcode -- so a shared "movq" bucket + enc-rank can't tell them apart on
+  # re-encode. Reclassify MOVD -> a DISTINCT MNEM_MOVQ_GPR (displays "movq" via the ~tag); its
+  # bucket is empty, so enc_select aliases it back to MOVD (the byte form stays under movd; REX.W
+  # rides in pfx[]). 0F 6F's real "movq" is untouched, so the two never cross-fire.
+  w("#define MNEM_MOVD %d\n" % (interp._mnem.index('movd') if 'movd' in interp._mnem else 0xFFFF))
+  w("#define MNEM_MOVQ_GPR %d\n" % len(interp._mnem))
+  interp._mnem.append('movq~gpr')
   # 0x90-0x97 (xchg rAX,r / nop): the 10010-bbb rule decodes the whole range and supplies
   # the encode candidates, but renders only the embedded register. decode_insn rebuilds the
   # two-operand xchg struct and maps the no-extension 0x90 (register == rAX) back to nop --

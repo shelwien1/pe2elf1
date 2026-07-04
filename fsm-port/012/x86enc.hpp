@@ -36,11 +36,11 @@ static inline int enc_op_class(const x86op_t* o) {
     default:     return C_NONE;
   }
 }
-static inline int enc_file_class(int opf, int opsize, int reptype) {
+static inline int enc_file_class(int opf, int has66, int reptype) {
   switch (opf) {
     case OPF_RGB:    return C_RGB;  case OPF_XMM: return C_XMM;
     case OPF_MM:     return C_MM;   case OPF_SREG: return C_SREG;
-    case OPF_SSE_OS: return (opsize || reptype) ? C_XMM : C_MM;   // F3/F2 forces xmm too
+    case OPF_SSE_OS: return (has66 || reptype) ? C_XMM : C_MM;   // bank by 66/F3/F2, not REX.W
     case OPF_MMG:    return reptype ? C_GREG : C_MM;      // cvt*: GPR at F3/F2, mm at NP/66
     case OPF_BND:    return C_BND;                        // MPX bound register
     default:         return C_GREG;                       // OPF_GREG
@@ -52,23 +52,24 @@ static inline int enc_file_class(int opf, int opsize, int reptype) {
 static inline bool enc_cand_roles(const struct EncCand* c, const x86insn_t* in,
                                   int* reg_oi, int* rm_oi, int* imm_oi) {
   *reg_oi = *rm_oi = *imm_oi = -1;
-  int os = in->opsize, n = in->n_ops;
-  int rept = 0;                                          // F3/F2 selects the xmm bank for SSE_OS
+  int n = in->n_ops;
+  int rept = 0, has66 = 0;                               // 66/F3/F2 select the xmm bank for SSE_OS
   for (int i = 0; i < in->n_pfx; ++i) {
     if (in->pfx[i] == 0xd5) { ++i; continue; }           // REX2: skip its payload (may be f2/f3)
     if (in->pfx[i] == 0xf3) rept = 1; else if (in->pfx[i] == 0xf2) rept = 2;
+    else if (in->pfx[i] == 0x66) has66 = 1;
   }
   #define CLS(i) enc_op_class(&in->op[i])
   // r/m slot i accepts memory (if sup_mem) or a register of mfile (if sup_reg)
   #define RM_OK(i) ( (CLS(i) == C_MEM) ? c->sup_mem \
-                     : (c->sup_reg && CLS(i) == enc_file_class(c->mfile, os, rept)) )
+                     : (c->sup_reg && CLS(i) == enc_file_class(c->mfile, has66, rept)) )
   switch (c->form) {
     case FORM_NONE: return n == 0;
     case FORM_MODRM: {
       int nimm = (c->imk == IMK_IMM8X2) ? 2 : (c->imk != IMK_NONE ? 1 : 0);  // insertq: 2 imm8
       if (n != 2 + nimm) return false;
       int ri = c->dir ? 1 : 0, mi = c->dir ? 0 : 1;     // dir: 0=reg,r/m  1=r/m,reg
-      if (CLS(ri) != enc_file_class(c->rfile, os, rept)) return false;
+      if (CLS(ri) != enc_file_class(c->rfile, has66, rept)) return false;
       if (!RM_OK(mi)) return false;
       *reg_oi = ri; *rm_oi = mi;
       if (nimm) { if (CLS(2) != C_IMM) return false; *imm_oi = 2;
@@ -85,11 +86,11 @@ static inline bool enc_cand_roles(const struct EncCand* c, const x86insn_t* in,
       return true;
     }
     case FORM_REG:
-      if (n != 1 || CLS(0) != enc_file_class(c->rfile, os, rept)) return false;
+      if (n != 1 || CLS(0) != enc_file_class(c->rfile, has66, rept)) return false;
       *reg_oi = 0; return true;
     case FORM_ACC:                                       // implicit eAX/al + imm
     case FORM_REG_IMM:
-      if (n != 2 || CLS(0) != enc_file_class(c->rfile, os, rept) || CLS(1) != C_IMM)
+      if (n != 2 || CLS(0) != enc_file_class(c->rfile, has66, rept) || CLS(1) != C_IMM)
         return false;
       if (c->reg0 && in->op[0].index != 0) return false; // implicit eAX/al
       *reg_oi = 0; *imm_oi = 1; return true;
@@ -120,6 +121,10 @@ static inline const struct EncCand* enc_select(const x86insn_t* in,
                                                int* reg_oi, int* rm_oi, int* imm_oi) {
   uint16_t mnem = in->mnem;
   if (mnem == MNEM_WRSSQ) mnem = MNEM_WRSSD;   // wrssq shares wrssd's encoding (0F38 F6; REX.W in pfx)
+  // movq mm/xmm<->r64 and movq mm/xmm,[m64] (0F 6E/7E under REX.W) share movd's byte encoding
+  // (REX.W rides in pfx[]); decode reclassified movd -> the distinct MNEM_MOVQ_GPR, so this
+  // aliases straight back to movd without disturbing 0F 6F's real movq.
+  if (mnem == MNEM_MOVQ_GPR) mnem = MNEM_MOVD;
   if (mnem >= enc_nmnem) return 0;
   int start = enc_bucket_start[mnem], cnt = enc_bucket_count[mnem];
   const struct EncCand* first = 0; int fr = -1, fm = -1, fi = -1;

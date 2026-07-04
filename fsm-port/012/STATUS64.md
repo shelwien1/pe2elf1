@@ -614,16 +614,10 @@ APX new instructions (all **done**): EVEX `vmovd`/`vmovq` mem (`66.0F.W0/W1 7E @
 `vsha512msg1/2` (`F2.0F38.W0 CC/CD`) got per-instruction rules with XED-verified operand widths;
 the map-4 trio `cfcmov<cc>` / `set<cc>` + `setzu<cc>` / `imulzu` is finished in **§7l**.
 
-Known remaining (byte-exact today via placeholder / base name — not yet semantically named):
-* **Legacy REX.W size mnemonics**: `cmpxchg16b` (`0F C7 /1`) **done** — opsize-mnemonic table (MNSEL
-  mode 1) extended to group *memory* forms in gen.py/gasm.py. `wrssq` (`0F 38 F6`) **done** — it sits
-  in a ppdesc (MNSEL=3) slot so the table can't apply; instead the GPR is `greg[]` (opsize-sized,
-  safe since wrss is NP-only) and decode reclassifies `wrssd`->`wrssq` on REX.W with `enc_select`
-  aliasing back to `wrssd`'s candidate. `movq` (`0F 6E/7E`) **still deferred**: triply wrong under
-  REX.W (mnemonic, the shared `ssereg[$opsiz*8]` vector bank picks xmm where NP wants mm, and the GPR
-  size) — a mnemonic-only fix would leave inconsistent operands, and doing it right reworks the SSE
-  operand-bank mechanism #19/§7h established (high regression risk). Byte-exact today; best as a
-  dedicated pp/opsize-operand pass with the full gate.
+Legacy REX.W size mnemonics (all **done**): `cmpxchg16b` (`0F C7 /1`) — opsize-mnemonic table (MNSEL
+mode 1) extended to group *memory* forms in gen.py/gasm.py. `wrssq` (`0F 38 F6`) — ppdesc (MNSEL=3)
+slot, so decode reclassifies `wrssd`->`wrssq` on REX.W with `enc_select` aliasing to `wrssd`'s
+candidate. `movq` (`0F 6E/7E`) — finished in **§7m**.
 
 ### 7l. APX map-4 trio — CFCMOV / SET(ZU)cc / IMULZU (done, 2026-07-04)
 
@@ -664,6 +658,35 @@ pre-existing** permissive characteristic (the existing `add`/`cmov` behave ident
 is consistent with it, not a regression. Tightening it (require `vvvv=1111` on the non-NDD forms while
 the NDD-3op forms keep using it as the dest) is a separate, uniform APX-map-4 pass, best done with the
 full gate, and is left as a follow-up.
+
+### 7m. movd/movq REX.W — SSE mm/xmm-bank de-conflation (done, 2026-07-04)
+
+`0F 6E` (load GPR/mem -> mm/xmm) and `0F 7E` (store mm/xmm -> GPR/mem) were "triply wrong" under
+REX.W. Root cause: `$opsiz` conflates the **mandatory 66** (bank selector: NP=mm, 66=xmm) with
+**REX.W** (size). Since 66+REX.W and NP+REX.W both land at opsize 2, `file_to_T(OPF_SSE_OS, opsize)`
+couldn't tell the bank apart and picked xmm for the NP+REX.W `movq mm,r64`. Fixed decoder-side (no new
+corpus rule, no operand-bank rework):
+
+* **Bank** — `file_to_T` / `enc_file_class` now key OPF_SSE_OS on **has66 || reptype**, not opsize; the
+  vector bank is decoupled from REX.W (this also corrects every other bare-REX.W MMX op, e.g.
+  `48 0F FC` = `paddb mm,mm`, which XED renders MMX). `has66` is scanned from the prefix run (skipping
+  the REX2 D5 payload) on both sides so the bijection stays symmetric.
+* **Mnemonic** — decode reclassifies `movd`->`movq` on opsize 2 (== REX.W here: no default-64, and the
+  mandatory-66 GPR-width reset only touches opsize 1). Named "movq" the reg AND memory forms would
+  collide in disasm with `0F 6F`'s `movq mm,mm/m64` (same operands, different opcode), so it maps to a
+  DISTINCT `MNEM_MOVQ_GPR` (displays "movq" via the `~tag`); `enc_select` aliases it straight back to
+  `movd` (byte form under movd; REX.W in pfx[]), leaving `0F 6F`'s real movq untouched. Mirrors the
+  wrssd->wrssq pattern but with a private mnemonic to dodge the 6F collision.
+* **GPR width** — already correct: the GPR is `gregd` (`T_GPRdq`, r32/r64-never-16), sized by opsize.
+
+Validation vs XED (`xed64` v2026.02.17): every 6E/7E form × {NP,66,F3} × REX {W,R,B,X} × reg/mem is a
+mnemonic/bank/size match (0 real diffs, 336 cases), byte-exact roundtrip `MISMATCH=0` (120 cases), and
+the broad OPF_SSE_OS bank change is regression-free across the whole gate (Zydis corpus 25 305/25 397
+unchanged 0-mismatch, fuzz64 5M = 0, roundtrip64 byte-identical, 32-bit 858/858 + x8632all
+110 072/110 072). Two **pre-existing, out-of-scope** items surfaced by the differential (not touched):
+`pmovmskb`/`movmskps`/`movmskpd` render the r64 destination under REX.W where XED shows r32 (a display
+convention — both encodings are real and byte-exact); and `F3/F2 0F 6E` is accepted (should be `#UD`)
+because 6E carries no pp guard (adding one collides with the opsize-mnemonic path -- a separate fix).
 
 ## 8. Deliberate decode-display policy (not bugs)
 
