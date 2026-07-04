@@ -615,15 +615,15 @@ Known remaining (byte-exact today via placeholder / base name — not yet semant
   `setzu<cc>`, `imulzu` (map-4, shown as the `vex` placeholder), EVEX `vmovd`/`vmovq` mem (`66.0F.W0/
   W1 7E @addr`, placeholder), VEX `vsha512msg1/2` (`F2.0F38.W0 CC/CD`, placeholder). These need
   per-instruction EVEX/APX/VEX rules with exact operand widths, each XED-verified.
-* **Legacy REX.W size mnemonics**: `cmpxchg16b` (`0F C7 /1`) is **done** — the opsize-mnemonic table
-  (MNSEL mode 1) was extended to group *memory* forms in gen.py/gasm.py (see §7k commit). `movq`
-  (`0F 6E/7E`) and `wrssq` (`0F38 F6`) remain W0-named and are deferred: both are entangled with the
-  pp/opsize conflation, not just the mnemonic. `movq` is triply wrong under REX.W (mnemonic, the
-  shared `ssereg[$opsiz*8]` vector bank picks xmm where NP wants mm, and the GPR size) — fixing it
-  means reworking the SSE operand-bank mechanism that #19/§7h carefully established, high regression
-  risk. `wrssq` sits in a ppdesc (MNSEL=3, per-prefix full descriptor: movbe/adcx/crc32/wrss) slot,
-  where opsize-select (MNSEL=1) conflicts with pp-select (MNSEL=3). Both are byte-exact today; only
-  the displayed size differs. Best done as a dedicated pp/opsize-operand pass with the full gate.
+* **Legacy REX.W size mnemonics**: `cmpxchg16b` (`0F C7 /1`) **done** — opsize-mnemonic table (MNSEL
+  mode 1) extended to group *memory* forms in gen.py/gasm.py. `wrssq` (`0F 38 F6`) **done** — it sits
+  in a ppdesc (MNSEL=3) slot so the table can't apply; instead the GPR is `greg[]` (opsize-sized,
+  safe since wrss is NP-only) and decode reclassifies `wrssd`->`wrssq` on REX.W with `enc_select`
+  aliasing back to `wrssd`'s candidate. `movq` (`0F 6E/7E`) **still deferred**: triply wrong under
+  REX.W (mnemonic, the shared `ssereg[$opsiz*8]` vector bank picks xmm where NP wants mm, and the GPR
+  size) — a mnemonic-only fix would leave inconsistent operands, and doing it right reworks the SSE
+  operand-bank mechanism #19/§7h established (high regression risk). Byte-exact today; best as a
+  dedicated pp/opsize-operand pass with the full gate.
 
 ## 8. Deliberate decode-display policy (not bugs)
 
