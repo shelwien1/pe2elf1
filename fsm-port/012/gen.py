@@ -2078,6 +2078,11 @@ def emit(c, interp, out_path):
   for _c in _SCC: interp._mnem.append('ccmp' + _c)
   w("#define MNEM_CTEST_BASE %d\n" % len(interp._mnem))
   for _c in _SCC: interp._mnem.append('ctest' + _c)
+  # APX JMPABS (REX2 D5 <payload W=0> A1 io64): absolute near jump -- the one REX2 opcode
+  # that is not the legacy A1 (mov acc,moffs). C++-decoded/encoded (REX2 is not an FSM path);
+  # append the mnemonic so it has a stable index. Not in any rule, so append it explicitly.
+  if 'jmpabs' not in interp._mnem: interp._mnem.append('jmpabs')
+  w("#define MNEM_JMPABS %d\n" % interp._mnem.index('jmpabs'))
   # APX f8 pp2/pp3 swaps the mnemonic by mod (reg=uwrmsr/urdmsr, mem=enqcmds/enqcmd);
   # the C++ apx_finalize picks the memory variant by these indices.
   for _m in ('uwrmsr', 'urdmsr', 'enqcmds', 'enqcmd'):

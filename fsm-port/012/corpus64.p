@@ -1419,6 +1419,7 @@ submatch insn {
   0x0f 0x3a 0xce @addr      @imm8 [$pp==1] => "gf2p8affineqb " ssereg[8+$g] "," $addr "," hex($imm8) ;
   0x0f 0x3a 0xcf 11 ggg rrr @imm8 [$pp==1] => "gf2p8affineinvqb " ssereg[8+$g] "," ssereg[8+$r] "," hex($imm8) ;
   0x0f 0x3a 0xcf @addr      @imm8 [$pp==1] => "gf2p8affineinvqb " ssereg[8+$g] "," $addr "," hex($imm8) ;
+  0x0f 0x3a 0xf0 11 000 000 @imm8 [$pp==2] => "hreset " hex($imm8) ;   # F3 0F3A F0 /0 C0 ib: HRESET (fixed ModR/M)
   0x0f 0x3a 0x17 11 ggg rrr @imm8 [$pp==1] => "extractps " gregd[$r] "," ssereg[8+$g] "," hex($imm8) ;
   0x0f 0x3a 0x17 @addr      @imm8 [$pp==1] => "extractps " $addr "," ssereg[8+$g] "," hex($imm8) ;
   0x0f 0x3a 0x20 11 ggg rrr @imm8 [$pp==1] => "pinsrb " ssereg[8+$g] "," gregd[$r] "," hex($imm8) ;
@@ -1660,6 +1661,9 @@ submatch insn {
   0x0f 0x01 11 001 001 => "mwait" ;
   0x0f 0x01 11 001 010 => "clac" ;
   0x0f 0x01 11 001 011 => "stac" ;
+  0x0f 0x01 11 001 100 [$pp==1] => "tdcall" ;           # 66 0F01 CC: TDX
+  0x0f 0x01 11 001 101 [$pp==1] => "seamret" ;          # 66 0F01 CD: TDX
+  0x0f 0x01 11 001 110 [$pp==1] => "seamops" ;          # 66 0F01 CE: TDX
   0x0f 0x01 11 001 111 => "encls" ;
   0x0f 0x01 11 010 000 => "xgetbv" ;
   0x0f 0x01 11 010 001 => "xsetbv" ;
@@ -1677,10 +1681,16 @@ submatch insn {
   0x0f 0x01 11 011 111 => "invlpga" ;
   0x0f 0x01 11 100 rrr => "smsw " greg[$r] ;
   0x0f 0x01 11 101 000 => "serialize" ;
+  0x0f 0x01 11 101 000 [$pp==2] => "setssbsy" ;         # F3 0F01 E8: CET
   0x0f 0x01 11 101 000 [$pp==3] => "xsusldtrk" ;        # F2 0F01 E8: TSXLDTRK suspend
   0x0f 0x01 11 101 001 [$pp==3] => "xresldtrk" ;        # F2 0F01 E9: TSXLDTRK resume
+  0x0f 0x01 11 101 010 [$pp==2] => "saveprevssp" ;      # F3 0F01 EA: CET
+  0x0f 0x01 11 101 100 [$pp==2] => "uiret" ;            # F3 0F01 EC: UINTR
+  0x0f 0x01 11 101 101 [$pp==2] => "testui" ;           # F3 0F01 ED: UINTR
   0x0f 0x01 11 101 110 => "rdpkru" ;
+  0x0f 0x01 11 101 110 [$pp==2] => "clui" ;             # F3 0F01 EE: UINTR
   0x0f 0x01 11 101 111 => "wrpkru" ;
+  0x0f 0x01 11 101 111 [$pp==2] => "stui" ;             # F3 0F01 EF: UINTR
   0x0f 0x01 11 110 rrr => "lmsw " gregw[$r] ;
   0x0f 0x01 11 111 000 => "swapgs" ;
   0x0f 0x01 11 111 001 => "rdtscp" ;

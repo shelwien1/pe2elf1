@@ -916,6 +916,19 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   //   map 0 (M0=0): 70-7F Jcc rel8; A0-A3 mov acc,moffs; A4-A7/AA-AF movs/cmps/stos/lods/scas;
   //                 A8-A9 test acc,imm; E0-E3 loop/jrcxz; E4-E7/EC-EF in/out; E8-E9/EB call/jmp rel
   //   map 1 (M0=1): 30-37 wrmsr/rdtsc/rdmsr/rdpmc/sysenter/sysexit/getsec; 80-8F Jcc rel32
+  // APX JMPABS (REX2 D5, M0=0, payload W=0, opcode A1, io64): an absolute near jump -- the one
+  // REX2 A1 that is NOT the legacy `mov acc,[moffs]`, so it must be caught before both the moffs
+  // path and the A0-AF eligibility reject. Reuses the moffs encode shape (prefix replay + opcode
+  // + absolute imm64); addr is forced 0 so the width is always 8. W=1 is #UD (XED). imm64 absolute.
+  if (d->insn.rex2 && !rex2_0f && ip < n && s[ip] == 0xA1 &&
+      !((d->insn.n_pfx ? d->insn.pfx[d->insn.n_pfx - 1] : 0) & 8)) {
+    x86insn_t* in = &d->insn;
+    if (ip + 1 + 8 > n) { in->mnem = 0xFFFF; return ip; }        // truncated imm64
+    uint64_t a = 0; for (int j = 7; j >= 0; --j) a = (a << 8) | s[ip + 1 + j];
+    in->mnem = MNEM_JMPABS; in->vex_op = 0xA1; in->moffs = 1; in->addr = 0;
+    in->imm = (int64_t)a; in->disp = 0; in->n_ops = 1; in->op[0].type = T_IMM;
+    return ip + 1 + 8;
+  }
   if (d->insn.rex2 && ip < n) {
     byte oc = s[ip];
     bool illegal = rex2_0f
