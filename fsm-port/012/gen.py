@@ -2109,6 +2109,11 @@ def emit(c, interp, out_path):
   # the VEX descriptor key, so vex_finalize promotes vzeroupper -> vzeroall when L=1.
   for _m in ('vzeroupper', 'vzeroall'):
     w("#define MNEM_%s %d\n" % (_m.upper(), interp._mnem.index(_m) if _m in interp._mnem else 0xFFFF))
+  # wrssd/wrssq (0F 38 F6 NP): same opcode, REX.W picks q. It sits in a ppdesc slot (shared with
+  # movbe/adcx/crc32) so the opsize-mnemonic table can't apply; decode_insn reclassifies wrssd ->
+  # wrssq on REX.W and enc_select aliases wrssq back to wrssd's candidate (the W rides in pfx[]).
+  for _m in ('wrssd', 'wrssq'):
+    w("#define MNEM_%s %d\n" % (_m.upper(), interp._mnem.index(_m) if _m in interp._mnem else 0xFFFF))
   # a mnemonic may carry a "~tag" disambiguator: distinct index (so per-opcode
   # encodings each get their own enc-rank bucket) but a shared display string --
   # e.g. the reserved multi-byte NOPs 0F 18-1E all render "nop" yet round-trip to

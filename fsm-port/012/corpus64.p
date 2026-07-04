@@ -1375,7 +1375,7 @@ submatch insn {
   0x0f 0x38 0xf1 11 ggg rrr [$pp==3] => "crc32 " gregd[$g] "," greg[$r] ;     # crc32 r32/64,r/m
   0x0f 0x38 0xf1 @addr      [$pp==3] => "crc32 " gregd[$g] "," $addr ;
   0x0f 0x38 0xf5 @addr      [$pp==1] => "wrussd " $addr "," gregd[$g] ;       # CET write user shadow
-  0x0f 0x38 0xf6 @addr      [$pp==0] => "wrssd " $addr "," gregd[$g] ;        # CET write shadow stk
+  0x0f 0x38 0xf6 @addr      [$pp==0] => "wrssd " $addr "," greg[$g] ;         # CET write shadow stk (wrssd/wrssq: reclassified by REX.W in C++)
   0x0f 0x38 0xf6 11 ggg rrr [$pp==1] => "adcx " gregd[$g] "," gregd[$r] ;
   0x0f 0x38 0xf6 @addr      [$pp==1] => "adcx " gregd[$g] "," $addr ;
   0x0f 0x38 0xf6 11 ggg rrr [$pp==2] => "adox " gregd[$g] "," gregd[$r] ;

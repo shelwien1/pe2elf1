@@ -118,8 +118,10 @@ static inline bool enc_cand_roles(const struct EncCand* c, const x86insn_t* in,
 // Pick the matching candidate at rank `enc` (0 = first / canonical).
 static inline const struct EncCand* enc_select(const x86insn_t* in,
                                                int* reg_oi, int* rm_oi, int* imm_oi) {
-  if (in->mnem >= enc_nmnem) return 0;
-  int start = enc_bucket_start[in->mnem], cnt = enc_bucket_count[in->mnem];
+  uint16_t mnem = in->mnem;
+  if (mnem == MNEM_WRSSQ) mnem = MNEM_WRSSD;   // wrssq shares wrssd's encoding (0F38 F6; REX.W in pfx)
+  if (mnem >= enc_nmnem) return 0;
+  int start = enc_bucket_start[mnem], cnt = enc_bucket_count[mnem];
   const struct EncCand* first = 0; int fr = -1, fm = -1, fi = -1;
   int rank = 0;
   for (int i = 0; i < cnt; ++i) {

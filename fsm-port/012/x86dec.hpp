@@ -1182,6 +1182,11 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     d->insn.mnem = (s[op_at] == 0x90 && d->cap[VAR_REPTYPE] == 1) ? MNEM_PAUSE : MNEM_NOP;
     d->insn.n_ops = 0;
   }
+  // wrssd (0F 38 F6 NP) -> wrssq under REX.W. It shares a ppdesc slot (MNSEL=3, with movbe/adcx/
+  // crc32) so the opsize-mnemonic table can't apply; reclassify here (the GPR operand already
+  // renders r64 via greg[] at opsize 2). enc_select aliases wrssq back to wrssd's candidate, and
+  // the enc-rank witness was stamped against wrssd, so the byte-exact round-trip holds.
+  if (d->insn.mnem == MNEM_WRSSD && d->insn.opsize == 2) d->insn.mnem = MNEM_WRSSQ;
   // LOCK (F0): reject it on anything but an RMW-to-memory op (see lock_illegal above). lock mov /
   // lock shift / lock on a register destination / lock on a non-RMW op are all #UD on silicon (XED
   // agrees). Bijection-safe: rejecting only removes an illegal byte stream from the accepted set.
