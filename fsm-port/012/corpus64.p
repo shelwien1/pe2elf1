@@ -3047,6 +3047,9 @@ submatch vex2 {
 # ===========================================================================
 
 submatch evex {
+  # EVEX.66.0F.W0/W1 7E: vmovd/vmovq r/m, xmm (store). Mem forms (GPR reg-forms exist as VEX/legacy).
+  h k b e 00 01 0 1111 1 01 z ll 0 u aaa 0x7e @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovd " $addr "," ereg[16*$e+8*$h+$g] ;
+  h k b e 00 01 1 1111 1 01 z ll 0 u aaa 0x7e @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vmovq " $addr "," ereg[16*$e+8*$h+$g] ;
   h k b e 00 01 0 vvvv 1 00 z ll 0 u aaa 0x58 11 ggg rrr => wit("evex") "vaddps " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
   h k b e 00 01 0 vvvv 1 00 z ll 1 u aaa 0x58 11 ggg rrr => wit("evex") "vaddps " ereg[64+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[64+16*$u+$v] "," ereg[64+16*$k+8*$b+$r] rcdec[$l] ;
   h k b e 00 01 0 vvvv 1 00 z ll 0 u aaa 0x58 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vaddps " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
