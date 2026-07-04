@@ -2098,7 +2098,18 @@ def emit(c, interp, out_path):
   # their own opcode byte. Strip the tag for the emitted name.
   w("static const char* const mnem_tab[] = {\n    %s\n};\n" %
     (", ".join('"%s"' % m.split('~')[0] for m in interp._mnem) if interp._mnem else '""'))
-  w("static const size_t mnem_tab_size = sizeof(mnem_tab) / sizeof(mnem_tab[0]);\n\n")
+  w("static const size_t mnem_tab_size = sizeof(mnem_tab) / sizeof(mnem_tab[0]);\n")
+  # LOCK (F0) is architecturally legal only on these RMW mnemonics AND only with a memory
+  # destination (Intel SDM Vol.2, LOCK). decode_insn rejects LOCK on anything else (lock mov,
+  # lock shift, lock on a register destination, ...) as #UD. One flag per mnemonic index.
+  _LOCKABLE = {'add', 'adc', 'and', 'or', 'xor', 'sub', 'sbb', 'inc', 'dec', 'neg', 'not',
+               'xchg', 'xadd', 'btc', 'btr', 'bts', 'cmpxchg', 'cmpxchg8b', 'cmpxchg16b'}
+  def _lockbase(m):                                    # strip ~tag, trailing space, size suffix
+    b = m.split('~')[0].rstrip()                       # (group mem forms render "inc.b"/"bts.d"/..)
+    return b[:-2] if (len(b) >= 2 and b[-2] == '.' and b[-1] in 'bwdq') else b
+  w("static const unsigned char mnem_lockable[] = {\n    %s\n};\n\n" %
+    (", ".join('1' if _lockbase(m) in _LOCKABLE else '0' for m in interp._mnem)
+     if interp._mnem else '0'))
 
   # VEX/EVEX opcode-extension groups (shifts 71/72/73): vexgrp[gid][/digit] is the
   # mnemonic (-1 = undefined digit). A VEX_VMG opcode state stores the gid in

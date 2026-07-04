@@ -724,6 +724,17 @@ static inline size_t vex_decode(x86dec_t* d, const byte* s, size_t n, size_t ip)
     in->vex1 = s[ip]; in->vex2 = s[ip + 1]; in->vex3 = s[ip + 2]; ip += 3;
     map = in->vex1 & 0x07; L = (in->vex3 >> 5) & 3;       // L'L: 0=128 1=256 2=512
   }
+  // A structurally-invalid map field is #UD on every CPU (it is not a valid VEX/EVEX/XOP
+  // encoding at all), so it must NOT fall through to the MNEM_VEX placeholder -- that path is
+  // for VALID-but-uncovered opcodes (e.g. KNC). Valid maps: C4 VEX {1,2,3}; 8F XOP {8,9,10};
+  // 62 EVEX {1,2,3,4(APX),5,6}; C5 is always map 1.
+  {
+    int map_ok = (in->vex == 1) ? (map == 1)
+               : (in->vex == 2) ? (map >= 1 && map <= 3)
+               : (in->vex == 4) ? (map >= 8 && map <= 10)
+               :                  (map >= 1 && map <= 6);   // 62 EVEX
+    if (!map_ok) { in->mnem = 0xFFFF; return ip; }
+  }
   if (ip >= n) { in->mnem = 0xFFFF; return ip; }
   byte op = s[ip]; in->vex_op = op; size_t op_at = ip; ip++;
   int has_modrm, imm_len;
@@ -770,6 +781,19 @@ static inline bool insn_has_66(const x86insn_t* in) {
     if (in->pfx[i] == 0x66) return true;
   }
   return false;
+}
+
+// LOCK (F0): true if the prefix is illegal on this decoded insn (=> #UD). Legal only on an RMW
+// mnemonic (mnem_lockable[]) whose *destination* is memory. The destination is op[0] for every
+// lockable op except xchg (symmetric: its memory operand may sit in op[1]). Shared by the main
+// legacy exit and the moffs early-return so lock mov [abs],al is rejected the same as lock mov r,r.
+// (mov cr/dr keeps its own early return WITHOUT this check: LOCK MOV CR/DR is a documented AMD
+// CR8/DR8-access extension, so it stays decodable per "if some CPU decodes it, we decode it too".)
+static inline bool lock_illegal(const x86insn_t* in) {
+  if (in->mnem == 0xFFFF || in->mnem >= (uint16_t)mnem_tab_size) return false;   // already bad
+  bool memdst = (in->n_ops >= 1 && in->op[0].type == T_MEM)
+             || (in->mnem == MNEM_XCHG && in->n_ops >= 2 && in->op[1].type == T_MEM);
+  return !(mnem_lockable[in->mnem] && memdst);
 }
 
 // returns the byte length consumed; sets insn.mnem = 0xFFFF on an unknown opcode.
@@ -953,6 +977,7 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     in->op[rs].type = T_GPR;  in->op[rs].index = 0;       // al / eAX / rAX
     in->op[ms].type = T_MEM;  in->op[ms].index = 0;       // [abs]
     in->mem_base = GREG_NONE; in->mem_index = GREG_NONE; in->mem_seg = 0; in->n_ops = 2;
+    if (d->cap[VAR_LOCK] && lock_illegal(in)) { in->mnem = 0xFFFF; return ip; }  // lock mov moffs = #UD
     return ip + 1 + aw;
   }
   size_t op_at = ip;
@@ -1127,6 +1152,11 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
       d->insn.mnem != 0xFFFF && d->insn.n_ops == 1 && d->insn.op[0].index == 0) {
     d->insn.mnem = MNEM_NOP; d->insn.n_ops = 0;             // xchg rAX,rAX == nop
   }
+  // LOCK (F0): reject it on anything but an RMW-to-memory op (see lock_illegal above). lock mov /
+  // lock shift / lock on a register destination / lock on a non-RMW op are all #UD on silicon (XED
+  // agrees). Bijection-safe: rejecting only removes an illegal byte stream from the accepted set.
+  // F0 before VEX/EVEX/XOP was already rejected upstream; the moffs early-return checks separately.
+  if (d->cap[VAR_LOCK] && lock_illegal(&d->insn)) { d->insn.mnem = 0xFFFF; return ip; }
   return ip;
 }
 

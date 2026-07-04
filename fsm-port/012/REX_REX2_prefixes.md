@@ -259,10 +259,24 @@ The FSM disassembler in this directory was checked against every case above
   a REX immediately before it, while still allowing segment + `67` (and a REX that a following
   segment/`67` neutralizes). Verified 0 mismatches over an exhaustive single/double-prefix ×
   {VEX C5, VEX C4, EVEX, XOP} differential vs XED.
+* **VEX / EVEX / XOP map-range** — enforced. `vex_decode` faults a structurally-impossible map
+  field before the opcode lookup: `C4` map ∈ {1,2,3}, `C5` always map 1, `8F` map ∈ {8,9,10},
+  `62` map ∈ {1,2,3,4,5,6}. Every out-of-range map `#UD`s on both sides vs XED; every in-range
+  map with a valid opcode decodes on both.
+* **LOCK (`F0`) validity** — enforced, and this closes the register-destination gap the earlier
+  investigation had left open. `F0` is legal only on an RMW mnemonic (generated `mnem_lockable[]`)
+  whose destination is memory; `lock mov`, `lock` on a register destination (`f0 01 c0`), `lock`
+  on a non-RMW op, and `lock mov [abs],al` (moffs) are all `#UD`. Differenced vs XED across all
+  lockable opcodes × 256 ModR/M bytes and the full opcode space with **0 false rejections**. The
+  lone permissive divergence is `LOCK MOV CR/DR` (`0F 20-23`) — the documented **AMD** CR8/DR8
+  access extension — kept decodable per "if any CPU decodes it, we decode it too". (See
+  `STATUS64.md` §7i.)
 
-A separate, non-REX gap that this investigation surfaced (left as-is): a `LOCK` (`F0`) prefix on
-a *register*-destination instruction (e.g. `f0 01 c0`) is `#UD` on hardware but the decoder
-still accepts it — a LOCK/ModR/M-validity issue unrelated to REX/REX2, and bijection-safe.
+One gap this investigation surfaced and left open (separate and larger, not a REX/LOCK issue):
+undefined opcodes *inside* a valid VEX/EVEX/XOP map decode to the structural placeholder mnemonic
+`vex` rather than `#UD`, because the FSM's VEX table-miss falls back to a structural decode so any
+structurally-valid VEX encoding still round-trips. Tightening this to `#UD` needs an exact
+per-`(map,pp,W,opcode)` validity oracle built vs XED — tracked as its own follow-up.
 
 ---
 

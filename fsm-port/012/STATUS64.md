@@ -469,7 +469,8 @@ roundtrip64 byte-identical, 32-bit 858/858 + fuzz 5 M = 0. Rejecting illegal enc
 break the bijection (there is nothing to re-encode). The full REX/REX2/VEX prefix behavior — and
 this decoder's conformance — is written up in `REX_REX2_prefixes.md`. (One unrelated gap the sweep
 noted and left: `LOCK` on a register-destination op, e.g. `f0 01 c0`, is `#UD` on hardware but
-still accepted — a LOCK/ModR/M-validity issue, not a REX/REX2 one, and bijection-safe.)
+still accepted — a LOCK/ModR/M-validity issue, not a REX/REX2 one, and bijection-safe. **Fixed in
+§7i.**)
 
 **Follow-up — REX2 opcode eligibility now `#UD`.** A 256-opcode × {map0, map1} sweep vs XED found
 the decoder was applying REX2 to opcodes that have no eGPR-extendable operand, which is `#UD` on
@@ -510,6 +511,45 @@ under REX.W, etc.). Then the ~53 ops got `[$pp==1]` + an `ssereg[8+…]` (xmm) o
 5 M = 0, roundtrip64 byte-identical, 32-bit 858/858 + fuzz 5 M = 0 (32-bit is unaffected — with no
 REX.W, `has_66` ≡ the old `opsize==1`). The corpus32 baseline still carries the un-guarded NP forms
 (out of scope for the x64 port), bijection-safe there.
+
+### 7i. VEX/EVEX/XOP map-range validation + LOCK-prefix validity (2026-07-04)
+
+Two `#UD`-tightening fixes, both bijection-safe (rejecting an illegal byte stream only removes it
+from the accepted set — there is nothing to re-encode), verified against XED across the opcode space.
+
+**VEX/EVEX/XOP map-range.** `vex_decode` now rejects a structurally-impossible map field before the
+opcode lookup: `C4` (3-byte VEX) map ∈ {1,2,3}; `C5` (2-byte VEX) is always map 1; `8F` (XOP) map ∈
+{8,9,10}; `62` (EVEX) map ∈ {1,2,3,4,5,6} (4 = APX, 5/6 = the AVX512-FP16 MAP5/MAP6). Anything else →
+`#UD`. Confirmed vs XED: every out-of-range map faults on both sides (`C4` map 0/4-31, `8F` map 0-7/11-31,
+`62` map 0/7), every in-range map with a valid opcode decodes on both.
+
+**LOCK (`F0`) validity.** `F0` is now legal only on an RMW mnemonic whose *destination* is memory,
+matching silicon. The lockable set is a generated `mnem_lockable[]` bitmap (`gen.py`: add/adc/and/or/
+xor/sub/sbb/inc/dec/neg/not/xchg/xadd/btc/btr/bts/cmpxchg/cmpxchg8b/cmpxchg16b), keyed by a
+`_lockbase()` that strips the `~`-tag and the `.b/.w/.d/.q` size suffix so group memory forms
+(`inc.b`, `bts.d`, …) match. The C++ `lock_illegal()` helper checks `mnem_lockable[mnem] && op[0]`
+is `T_MEM` (with the xchg symmetry: its memory operand may sit in `op[1]`); it runs both on the main
+legacy exit **and** on the moffs (`A0-A3`) early-return, so `lock mov [abs],al` is rejected the same
+as `lock mov r,r`. This closes the register-destination LOCK gap that §7h had explicitly noted and
+left (`f0 01 c0` and friends now `#UD`). Exhaustively differenced vs XED — all lockable opcodes ×
+all 256 ModR/M bytes, plus the full 1-byte and 0F opcode space × a ModR/M sample — with **0 false
+rejections** (no legal LOCK is wrongly faulted). The only permissive divergence from XED is
+`LOCK MOV CR/DR` (`0F 20-23`), a documented **AMD** CR8/DR8-access extension: some x86 CPU decodes it,
+so per the "if any CPU decodes it, we decode it too" rule it keeps its own early return without the
+LOCK check (and round-trips losslessly — `F0` rides in `pfx[]`).
+
+Gate after both fixes: fuzz64 5 M = 0, roundtrip64 byte-identical, 32-bit 858/858 + noncanon + x8632all
+110072/110072 + fuzz 5 M = 0, prog64/b/c/d/e/f all byte-identical, and a 62-instruction lock-heavy
+binary (every lockable form + REX/REX2 widening + disp/SIB/RIP addressing + redundant-prefix runs +
+AMD lock-mov-cr) round-trips byte-identical.
+
+**Known gap left open (separate, larger).** Undefined opcodes *inside* a valid VEX/EVEX/XOP map still
+decode to the structural placeholder mnemonic `vex` instead of `#UD` (e.g. `8F` map9 opcode `A2`,
+`C4` map1 opcode `27`). This is by design in the current FSM (`gen.py` VEX table-miss → structural
+fallback, so *any* structurally-valid VEX encoding round-trips), and it is orthogonal to the
+map-range fix above. Making these `#UD` requires an exact per-`(map,pp,W,opcode)` validity oracle
+built vs XED, with real regression risk if the defined-set is under-counted — tracked as its own
+follow-up, not folded into this change.
 
 ## 8. Deliberate decode-display policy (not bugs)
 
