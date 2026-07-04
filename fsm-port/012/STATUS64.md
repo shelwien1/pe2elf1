@@ -582,6 +582,44 @@ finer per-/digit/L keying with more regression risk; left as-is. The KNC/MVEX `6
 not modelled (this decoder reads `62` as EVEX only); it is a non-issue since the placeholder never
 decoded MVEX semantics anyway.
 
+### 7k. Zydis 40-bit-mining roundtrip corpus (25 397 encodings, 2026-07-04)
+
+A canonical corpus mined by **Zydis** across the 40-bit opcode space (one representative per
+canonical form; `tools/rtbatch.cpp` decodes+re-encodes each and compares bytes): **0 byte-level
+roundtrip mismatches** over all 25 397 — the bijection holds on every form Zydis and this decoder
+both accept. 100 encodings decoded to `#UD` here that Zydis accepts; a differential vs XED split
+them into real gaps (fixed) and Knights Corner (left as `#UD`), and a *mnemonic* differential
+(names, beyond the byte roundtrip) found the rest.
+
+Fixed (committed):
+* **8 real-Intel coverage gaps** the byte roundtrip flagged as `#UD`: `0F 01` mandatory-prefix
+  reg-forms `tdcall`/`seamret`/`seamops` (66), `saveprevssp`/`uiret`/`testui` (F3); `hreset`
+  (`F3 0F3A F0 /0`); `jmpabs` (APX `D5 <W0> A1 io64`, a C++ REX2 one-off reusing the moffs shape).
+* **11 `0F 01` prefix-form mnemonics** the *mnemonic* differential caught (byte-exact but named as
+  the NP form): `seamcall`, `wrmsrlist`/`rdmsrlist`, `eretu`/`erets`, `mcommit`, `rmpadjust`/
+  `rmpupdate`, `psmash`/`pvalidate`, plus `setssbsy`/`clui`/`stui`.
+* **6 W/L/prefix mnemonic bugs**: VEX.W1 `vpsrlvq`/`vpsllvq` and EVEX.W1 `vpermq`/`vpermpd` (the W1
+  twins were missing, so W1 took the W0 descriptor); `vzeroall` (L not in the VEX key -> vex_finalize
+  promotes on L=1); `pause` (`F3 90`, C++ reclassify + encode one-off).
+
+Deliberate divergences (left as-is, matching XED):
+* **92 Knights Corner (KNC / Xeon Phi)** encodings Zydis decodes but XED rejects — `clevict0/1`,
+  `vprefetch*`, `delay`, `spflt`, `kconcat*`/`kextract`/`kandnr`/`kmerge2l1*`, VEX `lzcnt`/`popcnt`/
+  `tzcnt`/`tzcnti`, `jkzd`/`jknzd`. A discontinued CPU whose VEX opcodes sit in otherwise-`#UD`
+  slots; per the user's call these stay `#UD` (see §8). `prefetchit0/1` (`0F 18 /6,/7`) likewise stays
+  `nop` — XED itself renders them `nop` (forward-compatible hint), so it is not a divergence.
+* **`pcommit`** (`66 0F AE F8`): removed from the ISA; XED (and this decoder) render it `sfence`.
+
+Known remaining (byte-exact today via placeholder / base name — not yet semantically named):
+* **APX new instructions**: `cfcmov<cc>` (map-4 `40-4F`, currently shown as the promoted `cmov<cc>`),
+  `setzu<cc>`, `imulzu` (map-4, shown as the `vex` placeholder), EVEX `vmovd`/`vmovq` mem (`66.0F.W0/
+  W1 7E @addr`, placeholder), VEX `vsha512msg1/2` (`F2.0F38.W0 CC/CD`, placeholder). These need
+  per-instruction EVEX/APX/VEX rules with exact operand widths, each XED-verified.
+* **Legacy REX.W size mnemonics**: `movq` (`0F 6E/7E`), `cmpxchg16b` (`0F C7 /1`), `wrssq` (`0F38 F6`)
+  render the W0 name. The opsize-mnemonic table (MNSEL mode 1, `sret`/`incssp`-style) needs extending
+  to `/digit`-group and pp-guarded `@addr` rules in `gen.py` (it currently only fires on simple and
+  fixed-ModR/M-reg rules). All are byte-exact; only the displayed size suffix differs.
+
 ## 8. Deliberate decode-display policy (not bugs)
 
 * Size suffixes (`.b/.w/.d/.q/.t`) instead of `BYTE/WORD/... PTR`; `[rax+0]`-style
