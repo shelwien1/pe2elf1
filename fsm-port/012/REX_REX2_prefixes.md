@@ -272,11 +272,12 @@ The FSM disassembler in this directory was checked against every case above
   access extension — kept decodable per "if any CPU decodes it, we decode it too". (See
   `STATUS64.md` §7i.)
 
-One gap this investigation surfaced and left open (separate and larger, not a REX/LOCK issue):
-undefined opcodes *inside* a valid VEX/EVEX/XOP map decode to the structural placeholder mnemonic
-`vex` rather than `#UD`, because the FSM's VEX table-miss falls back to a structural decode so any
-structurally-valid VEX encoding still round-trips. Tightening this to `#UD` needs an exact
-per-`(map,pp,W,opcode)` validity oracle built vs XED — tracked as its own follow-up.
+* **VEX/EVEX/XOP undefined-opcode #UD** — closed. An undefined opcode *inside* a valid map used to
+  decode to the structural placeholder `vex` rather than `#UD`. An XED-derived per-`(kind,map,pp,W,
+  opcode)` validity bitmap (`x86_vexvalid.h`, built by `tools/vexvalid_oracle.py`) now makes
+  `vex_decode` fault a key XED rejects in every form, while covered and valid-but-uncovered opcodes
+  are untouched. 0 regressions over a 4.42 M-probe apxb-vs-XED differential; ~95 % of the VEX-space
+  over-acceptance removed. (See `STATUS64.md` §7j.)
 
 ---
 

@@ -35,7 +35,7 @@ regen:
 check: corpus.p gen.py
 	python3 gen.py --check
 
-DECHDRS = x86_tables.h x86_tables_enc.h x86insn.hpp x86enc.hpp x86dec.hpp
+DECHDRS = x86_tables.h x86_tables_enc.h x86insn.hpp x86enc.hpp x86dec.hpp x86_vexvalid.h
 
 parser: parser.cpp $(DECHDRS)
 	$(CXX) $(CXXFLAGS) -I. -o $@ parser.cpp

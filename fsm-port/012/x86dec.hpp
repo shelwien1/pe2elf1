@@ -14,6 +14,7 @@
 #define X86DEC_HPP
 
 #include "x86_tables.h"
+#include "x86_vexvalid.h"        // XED-derived VEX/EVEX/XOP opcode-validity bitmap (undefined -> #UD)
 #include "x86insn.hpp"
 #include "x86enc.hpp"
 #include <stdint.h>
@@ -737,6 +738,17 @@ static inline size_t vex_decode(x86dec_t* d, const byte* s, size_t n, size_t ip)
   }
   if (ip >= n) { in->mnem = 0xFFFF; return ip; }
   byte op = s[ip]; in->vex_op = op; size_t op_at = ip; ip++;
+  // This is the structural-placeholder path: reached only when the FSM-native VEX/EVEX/XOP
+  // decode did NOT name the opcode (uncovered or undefined). Keep the placeholder only for
+  // encodings XED actually decodes in some /digit + addressing form + vector length; a
+  // genuinely-undefined (kind,map,pp,W,opcode) is #UD, not a placeholder. Covered opcodes
+  // never arrive here, so this cannot regress a real decode. (in->vex: 1=C5 2=C4 3=62 4=8F.)
+  {
+    int kid2 = (in->vex == 4) ? 1 : (in->vex == 3) ? 2 : 0;   // 8F=XOP, 62=EVEX, C4/C5=VEX
+    int vpp  = (in->vex == 1) ? (in->vex1 & 3) : (in->vex2 & 3);
+    int vW   = (in->vex == 1) ? 0 : ((in->vex2 >> 7) & 1);
+    if (!vexvalid(kid2, map, vpp, vW, op)) { in->mnem = 0xFFFF; return ip; }
+  }
   int has_modrm, imm_len;
   vex_structure(map, op, (int)in->opsize, &has_modrm, &imm_len);
   in->n_ops = 0;

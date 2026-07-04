@@ -543,13 +543,44 @@ Gate after both fixes: fuzz64 5 M = 0, roundtrip64 byte-identical, 32-bit 858/85
 binary (every lockable form + REX/REX2 widening + disp/SIB/RIP addressing + redundant-prefix runs +
 AMD lock-mov-cr) round-trips byte-identical.
 
-**Known gap left open (separate, larger).** Undefined opcodes *inside* a valid VEX/EVEX/XOP map still
+**Follow-on (now closed in §7j).** Undefined opcodes *inside* a valid VEX/EVEX/XOP map used to
 decode to the structural placeholder mnemonic `vex` instead of `#UD` (e.g. `8F` map9 opcode `A2`,
-`C4` map1 opcode `27`). This is by design in the current FSM (`gen.py` VEX table-miss → structural
-fallback, so *any* structurally-valid VEX encoding round-trips), and it is orthogonal to the
-map-range fix above. Making these `#UD` requires an exact per-`(map,pp,W,opcode)` validity oracle
-built vs XED, with real regression risk if the defined-set is under-counted — tracked as its own
-follow-up, not folded into this change.
+`C4` map1 opcode `27`). That is now fixed with an XED-derived per-`(kind,map,pp,W,opcode)` validity
+oracle — see §7j.
+
+### 7j. VEX/EVEX/XOP opcode-validity oracle — undefined opcodes in valid maps now #UD (2026-07-04)
+
+§7i's map-range check rejects impossible *maps*; this closes the finer gap it noted — a genuinely
+undefined *opcode within* a valid map (e.g. `C4` VEX map1 `27`, `8F` XOP map9 `A2`, EVEX map1 `06`)
+used to fall through to the structural `vex` placeholder rather than `#UD`, so the decoder accepted a
+large swath of encodings no CPU decodes (~91% of the 24 576-key VEX space; the placeholder existed
+purely as a bijection safety-net that round-trips any structurally-valid VEX byte stream).
+
+`tools/vexvalid_oracle.py` builds a validity bitmap from **Intel XED** (SDE's reference decoder, fast
+`-F` filter mode): for every `(kind,map,pp,W,opcode)` key it probes XED across all 8 ModR/M.reg
+values × {reg-direct, `[rax]`, VSIB (rm=100+SIB, essential for gather/scatter), rm=101 disp32} ×
+{L=0,1,2} × (EVEX) mask {k0,k1}, and marks the key VALID iff XED decodes *any* probe. Keys XED
+rejects in **every** form are the undefined ones. The 12 KB bitmap + a `vexvalid()` accessor is
+emitted to the generated `x86_vexvalid.h`; `vex_decode` consults it on the placeholder path only, so
+a key XED never decodes becomes `#UD` while covered opcodes (named by the FSM-native path, which
+never reaches the placeholder) and valid-but-uncovered keys are untouched.
+
+This "reject only what XED rejects in every form" rule cannot `#UD` anything XED accepts. Validated:
+a 4.42 M-probe apxb-vs-XED differential shows **0 regressions** (no XED-accepted encoding is faulted);
+the change removed ~95 % of the VEX-space over-acceptance. Full gate stays green — fuzz64 5 M = 0,
+roundtrip64 byte-identical, 32-bit 858/858 + noncanon + x8632all 110072/110072 + fuzz 5 M = 0, and
+prog64/b/c/d/e/f (incl. real AVX-512 EVEX with masks/broadcasts in prog64e) byte-identical. Two
+addressing-form subtleties the validation surfaced and fixed in the oracle: gather/scatter are `#UD`
+except with a vector-index SIB (so the VSIB probe is required — a missing one first showed up as an
+x8632all `vgatherdpd` regression), and EVEX gather/scatter are `#UD` without a mask (so the k1
+probe is required). Regenerate with `python3 tools/vexvalid_oracle.py <xed64> x86_vexvalid.h`.
+
+Residual (accepted, conservative): validity is keyed at `(kind,map,pp,W,opcode)`, so a *defined*
+opcode's undefined sub-forms (a particular /digit, addressing form, or vector length XED rejects)
+still take the placeholder rather than `#UD` (~229 K such sub-key probes). Tightening those needs
+finer per-/digit/L keying with more regression risk; left as-is. The KNC/MVEX `62`-prefix variant is
+not modelled (this decoder reads `62` as EVEX only); it is a non-issue since the placeholder never
+decoded MVEX semantics anyway.
 
 ## 8. Deliberate decode-display policy (not bugs)
 
