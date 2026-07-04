@@ -1110,7 +1110,12 @@ class Interp:
     elif name == 'eregx':
       file = 'VECX'                                 # always xmm (vpmovzx/sx, vextract)
     elif name == 'greg':
-      c = self._vex_eval(re.sub(r'\$\w+', '0', expr), {}) or 0
+      # The GPR width is the index base: 0-15 -> r32, 16-31 -> r16, 32+ -> r64. For the
+      # EVEX cvt ops (vcvtsi2sd/vcvtsd2si/...) that base is `32*$w` -- W selects r32/r64 --
+      # so resolve $w from the per-cell env BEFORE zeroing the register-number vars, or the
+      # W1 cell would inherit the W0 (r32) file. Non-$w indices are unaffected.
+      e = re.sub(r'\$w\b', str(env.get('W', 0)), expr)
+      c = self._vex_eval(re.sub(r'\$\w+', '0', e), {}) or 0
       file = 'GPR64' if c >= 32 else 'GPR16' if c >= 16 else 'GPR32'
     elif name == 'kreg':
       file = 'KREG'

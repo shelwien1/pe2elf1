@@ -688,6 +688,27 @@ unchanged 0-mismatch, fuzz64 5M = 0, roundtrip64 byte-identical, 32-bit 858/858 
 convention — both encodings are real and byte-exact); and `F3/F2 0F 6E` is accepted (should be `#UD`)
 because 6E carries no pp guard (adding one collides with the opsize-mnemonic path -- a separate fix).
 
+### 7n. EVEX GPR-convert W-sizing — vcvtsi2sd/vcvtsd2si/… r64 under W1 (done, 2026-07-04)
+
+The 28 EVEX scalar-convert rules that touch a GPR (`vcvtsi2sd`/`ss`/`sh`, `vcvtusi2*`, `vcvt[t]sd2si`/
+`ss2si`/`sh2si`, and the `*2usi` twins — map 1 and map 5, opcodes 2A/2C/2D/78/79/7B) encode the GPR
+width as `greg[32*$w+…]` (W selects r32/r64, the same base-offset convention the VEX size-file uses:
+0→r32, 32→r64). But `operand_file` derived the file from the **constant** part of the index — it
+substitutes every `$var`→0, so `32*$w`→0 → **GPR32 for both W cells**. Result: W1 rendered the r32
+name (`vcvtsi2sd xmm0,xmm0,eax` where XED shows `rax`). The register *number* was right (it comes from
+the C++ `mrm/mreg` fold, not the index); only the displayed width was wrong.
+
+Fixed in one line in `gen.py`: `operand_file` now resolves `$w` from the per-cell `env` (which already
+carries W) before zeroing the register-number vars, so the W1 cell gets `GPR64` (→ `vex_mkop` file
+code 2 → opsize 2 → r64). Blast radius is exactly the 28 `greg[…$w…]` rules — all cases where W is
+meant to size the GPR; no other rule puts `$w` in a greg index. Decode-display only: EVEX re-encodes by
+raw byte-replay (W rides in the replayed P1), so the bijection is untouched.
+
+Validated vs XED: all 28 ops × W0/W1 × reg/mem render the correct r32/r64 (0 mismatches); full gate
+green (Zydis 25 305/25 397 unchanged 0-mismatch, fuzz64 5M = 0, roundtrip64 byte-identical, 32-bit
+858/858 + x8632all 110 072/110 072). (Surfaced but **pre-existing/out-of-scope**: `vcvttph2uqq` &
+friends accept `ll=0` where XED `#UD`s — a packed-fp16 length-validity matter, unrelated to GPR sizing.)
+
 ## 8. Deliberate decode-display policy (not bugs)
 
 * Size suffixes (`.b/.w/.d/.q/.t`) instead of `BYTE/WORD/... PTR`; `[rax+0]`-style
