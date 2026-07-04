@@ -357,6 +357,7 @@ static inline size_t vex_encode(const x86insn_t* in, uint8_t* out) {
 static inline size_t encode_insn(const x86insn_t* in, uint8_t* out) {
   size_t p = 0;
   for (int i = 0; i < in->n_pfx; ++i) out[p++] = in->pfx[i];   // replay prefix run
+  if (in->mnem == MNEM_PAUSE) { out[p++] = 0x90; return p; }   // PAUSE: F3 (in pfx[]) + 90
   if (in->vex) return p + vex_encode(in, out + p);             // VEX path
   if (in->moffs) {                            // mov acc<->[moffs]: opcode + absolute addr
     out[p++] = in->vex_op;

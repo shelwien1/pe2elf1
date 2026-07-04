@@ -2083,6 +2083,11 @@ def emit(c, interp, out_path):
   # append the mnemonic so it has a stable index. Not in any rule, so append it explicitly.
   if 'jmpabs' not in interp._mnem: interp._mnem.append('jmpabs')
   w("#define MNEM_JMPABS %d\n" % interp._mnem.index('jmpabs'))
+  # PAUSE (F3 90): the bare 90 is NOP; the F3-prefixed form is PAUSE. 0x90 overlaps the xchg/nop
+  # 10010-bbb range, so it is reclassified in decode_insn (like nop) and encoded via a one-off in
+  # encode_insn (F3 rides in pfx[]). Append the mnemonic so it has a stable index.
+  if 'pause' not in interp._mnem: interp._mnem.append('pause')
+  w("#define MNEM_PAUSE %d\n" % interp._mnem.index('pause'))
   # APX f8 pp2/pp3 swaps the mnemonic by mod (reg=uwrmsr/urdmsr, mem=enqcmds/enqcmd);
   # the C++ apx_finalize picks the memory variant by these indices.
   for _m in ('uwrmsr', 'urdmsr', 'enqcmds', 'enqcmd'):
@@ -2096,6 +2101,10 @@ def emit(c, interp, out_path):
   # form is tilerelease (no operands). The VEX descriptor is per-opcode, so vex_finalize
   # swaps the mnemonic (and drops the operand) once the reg-direct form is seen.
   for _m in ('ldtilecfg', 'tilerelease'):
+    w("#define MNEM_%s %d\n" % (_m.upper(), interp._mnem.index(_m) if _m in interp._mnem else 0xFFFF))
+  # vzeroupper (VEX.128.0F 77) / vzeroall (VEX.256.0F 77): same opcode, L selects. L is not in
+  # the VEX descriptor key, so vex_finalize promotes vzeroupper -> vzeroall when L=1.
+  for _m in ('vzeroupper', 'vzeroall'):
     w("#define MNEM_%s %d\n" % (_m.upper(), interp._mnem.index(_m) if _m in interp._mnem else 0xFFFF))
   # a mnemonic may carry a "~tag" disambiguator: distinct index (so per-opcode
   # encodings each get their own enc-rank bucket) but a shared display string --

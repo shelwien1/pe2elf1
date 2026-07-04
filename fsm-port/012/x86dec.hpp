@@ -468,6 +468,9 @@ static inline void vex_finalize(x86dec_t* d, const byte* s, size_t op_at) {
     // AMX: NP.0F38.W0 49 mem = ldtilecfg; the reg-direct (C0) form is tilerelease, no
     // operands. Swap the mnemonic and drop the operand (form -> NONE) on the reg form.
     else if (in->mnem == MNEM_LDTILECFG && is_reg) { in->mnem = MNEM_TILERELEASE; form = FORM_VEX_NONE; }
+    // vzeroupper/vzeroall (0F 77) share an opcode; L (not in the descriptor key) selects.
+    else if (in->mnem == MNEM_VZEROUPPER &&
+             ((in->vex == 1 ? (in->vex1 >> 2) : (in->vex2 >> 2)) & 1)) in->mnem = MNEM_VZEROALL;
   }
   // EVEX decorations: b=1 on a reg-reg form is embedded rounding {er} (L'L picks
   // the mode and the operands are zmm); on a memory form it is broadcast {1toN}.
@@ -1175,7 +1178,9 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   // extension (REX.B/REX2.B4 -> r8..r31) keeps it a real xchg (e.g. 41 90 = xchg eax,r8d).
   if (tb == 0 && !rex2_0f && s[op_at] >= 0x90 && s[op_at] <= 0x97 &&
       d->insn.mnem != 0xFFFF && d->insn.n_ops == 1 && d->insn.op[0].index == 0) {
-    d->insn.mnem = MNEM_NOP; d->insn.n_ops = 0;             // xchg rAX,rAX == nop
+    // F3 90 = PAUSE (a distinct instruction); bare 0x90 xchg rAX,rAX = NOP. (F3 91-97 stay xchg.)
+    d->insn.mnem = (s[op_at] == 0x90 && d->cap[VAR_REPTYPE] == 1) ? MNEM_PAUSE : MNEM_NOP;
+    d->insn.n_ops = 0;
   }
   // LOCK (F0): reject it on anything but an RMW-to-memory op (see lock_illegal above). lock mov /
   // lock shift / lock on a register destination / lock on a non-RMW op are all #UD on silicon (XED

@@ -2413,10 +2413,14 @@ submatch vex {
   h k b 00010 0 vvvv y 01 0x3f @addr {$rexb=1-$b;$rexx=1-$k} => "vpmaxud " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
   h k b 00010 0 vvvv y 01 0x45 11 ggg rrr => "vpsrlvd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
   h k b 00010 0 vvvv y 01 0x45 @addr {$rexb=1-$b;$rexx=1-$k} => "vpsrlvd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  h k b 00010 1 vvvv y 01 0x45 11 ggg rrr => "vpsrlvq " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;   # VEX.W1
+  h k b 00010 1 vvvv y 01 0x45 @addr {$rexb=1-$b;$rexx=1-$k} => "vpsrlvq " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
   h k b 00010 0 vvvv y 01 0x46 11 ggg rrr => "vpsravd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
   h k b 00010 0 vvvv y 01 0x46 @addr {$rexb=1-$b;$rexx=1-$k} => "vpsravd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
   h k b 00010 0 vvvv y 01 0x47 11 ggg rrr => "vpsllvd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
   h k b 00010 0 vvvv y 01 0x47 @addr {$rexb=1-$b;$rexx=1-$k} => "vpsllvd " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
+  h k b 00010 1 vvvv y 01 0x47 11 ggg rrr => "vpsllvq " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;   # VEX.W1
+  h k b 00010 1 vvvv y 01 0x47 @addr {$rexb=1-$b;$rexx=1-$k} => "vpsllvq " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
   h k b 00010 0 vvvv y 01 0xcf 11 ggg rrr => "vgf2p8mulb " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
   h k b 00010 0 vvvv y 01 0xcf @addr {$rexb=1-$b;$rexx=1-$k} => "vgf2p8mulb " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," $addr ;
   h k b 00010 0 vvvv y 01 0xdc 11 ggg rrr => "vaesenc " vreg[16*$y+8*$h+$g] "," vvv[16*$y+$v] "," vreg[16*$y+8*$b+$r] ;
@@ -3410,6 +3414,13 @@ submatch evex {
   h k b e 00 10 0 vvvv 1 01 z ll 0 u aaa 0x16 11 ggg rrr => wit("evex") "vpermps " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
   h k b e 00 10 0 vvvv 1 01 z ll 0 u aaa 0x16 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vpermps " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
   h k b e 00 10 0 vvvv 1 01 z ll 1 u aaa 0x16 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vpermps " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr bcst32[$l] ;
+  # EVEX.66.0F38.W1 36/16: vpermq / vpermpd (variable) -- the W1 twins of vpermd/vpermps
+  h k b e 00 10 1 vvvv 1 01 z ll 0 u aaa 0x36 11 ggg rrr => wit("evex") "vpermq " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 10 1 vvvv 1 01 z ll 0 u aaa 0x36 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vpermq " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  h k b e 00 10 1 vvvv 1 01 z ll 1 u aaa 0x36 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vpermq " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr bcst64[$l] ;
+  h k b e 00 10 1 vvvv 1 01 z ll 0 u aaa 0x16 11 ggg rrr => wit("evex") "vpermpd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," ereg[32*$l+16*$k+8*$b+$r] ;
+  h k b e 00 10 1 vvvv 1 01 z ll 0 u aaa 0x16 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vpermpd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr ;
+  h k b e 00 10 1 vvvv 1 01 z ll 1 u aaa 0x16 @addr {$rexb=1-$b;$rexx=1-$k} => wit("evex") "vpermpd " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," evvv[32*$l+16*$u+$v] "," $addr bcst64[$l] ;
   h k b e 00 11 1 1111 1 01 z ll 0 1 aaa 0x00 11 ggg rrr @imm8 => wit("evex") "vpermq " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," ereg[32*$l+16*$k+8*$b+$r] "," hex($imm8) ;
   h k b e 00 11 1 1111 1 01 z ll 0 1 aaa 0x00 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vpermq " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr "," hex($imm8) ;
   h k b e 00 11 1 1111 1 01 z ll 1 1 aaa 0x00 @addr {$rexb=1-$b;$rexx=1-$k} @imm8 => wit("evex") "vpermq " ereg[32*$l+16*$e+8*$h+$g] kzdec[$z*8+$a] "," $addr bcst64[$l] "," hex($imm8) ;
