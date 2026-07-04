@@ -709,6 +709,33 @@ green (Zydis 25 305/25 397 unchanged 0-mismatch, fuzz64 5M = 0, roundtrip64 byte
 858/858 + x8632all 110 072/110 072). (Surfaced but **pre-existing/out-of-scope**: `vcvttph2uqq` &
 friends accept `ll=0` where XED `#UD`s — a packed-fp16 length-validity matter, unrelated to GPR sizing.)
 
+### 7o. Legacy SSE F3/F2 mandatory-prefix strictness — undefined combos now #UD (done, 2026-07-04)
+
+Legacy MMX/SSE opcodes that exist only under NP/66 were **accepting an F3/F2 mandatory prefix** and
+rendering the NP/66 form (e.g. `F3 0F FC` → `paddb xmm`, `F3 0F 28` → `movaps`). An undefined
+mandatory-prefix combination is `#UD` on silicon (XED agrees), so this violated the "encodings no CPU
+decodes should be `#UD`" rule. A full 0F sweep vs XED (256 opcodes × {NP,66,F3,F2} × reg/mem) drove the
+fix in two parts, then re-verified **0 under-acceptance** (nothing valid rejected):
+
+* **Bare-`ssereg` ops** (packed-integer `60-6B`/`74-76`/`D1-FE`, `movd` `0F 6E`, …) use the SSE_OS
+  operand file with no per-prefix descriptor, so they silently accepted any prefix (rept→xmm). A C++
+  guard in `decode_insn` (x86-64 only) rejects F3/F2 when an operand is SSE_OS **and** the op carries no
+  pp-descriptor (`CAP_MNSEL` ∉ {2 = ppvtab, 3 = ppdesc} — those resolve/reject each prefix themselves).
+  This also closed the `F3/F2 0F 6E` gap noted in §7m. (32-bit is excluded: its corpus models SSE
+  prefixes differently — e.g. `F3 0F 7E movq xmm,xmm` is not a ppdesc there — and is a frozen baseline.)
+* **pp-select tables with lax slots** (`sse14/15/28/29/2e/2f/50/52/53/54-57/5b/6f/7f/c6`): their F3/F2
+  (and, for `rsqrt`/`rcp`, 66) slots held the NP mnemonic instead of `-`. Set the XED-verified invalid
+  slots to `-` (→ `#UD`), keeping the genuinely-valid ones (`cvttps2dq` at F3 5B, `movdqu` at F3 6F,
+  `rsqrtss`/`rcpss` at F3 52/53).
+
+Result: legacy 0F over-acceptance dropped 158 → 27, all clear-cut SSE cases fixed, **0 under-acceptance**.
+The 27 that remain are deliberately left: non-SSE **ignored-prefix** system ops (`0F 01` group, `getsec`,
+`emms`, `montmul`, `xstore`, `0F AE` group) where a redundant F3/F2 is ignored rather than `#UD` on real
+silicon (so permissive matches "if some CPU decodes it, decode it" better than XED's strictness), plus a
+few mem-only-op reg-form quirks (`movntq`/`maskmov*`/`movnti`). Full gate green (Zydis 25 305/25 397
+unchanged 0-mismatch, fuzz64 5M = 0 — accepted count drops ~35 k as the now-#UD combos are rejected,
+roundtrip64 byte-identical, 32-bit 858/858 + x8632all 110 072/110 072).
+
 ## 8. Deliberate decode-display policy (not bugs)
 
 * Size suffixes (`.b/.w/.d/.q/.t`) instead of `BYTE/WORD/... PTR`; `[rax+0]`-style

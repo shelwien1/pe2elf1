@@ -1228,6 +1228,21 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   // is a distinct index that displays "movq" -- kept apart from 0F 6F's movq (mm,mm/m64), whose
   // memory form would otherwise be indistinguishable from movq mm,[m64] on re-encode.
   if (d->insn.mnem == MNEM_MOVD && d->insn.opsize == 2) d->insn.mnem = MNEM_MOVQ_GPR;
+#if ARCH_MODE == 64
+  // Legacy SSE/MMX ops selected by NP/66 only (paddb, pxor, punpck*, movd 0F 6E, ...): they use
+  // the SSE_OS operand file via a *bare* rule (no per-prefix descriptor), so an F3/F2 mandatory
+  // prefix is an undefined opcode combination -> #UD on silicon (XED agrees). The ops that DO
+  // define an F3/F2 form carry a pp-descriptor -- MNSEL 2 (ppvtab: movdqu, cvtsi2ss, ...) or 3
+  // (ppdesc: movq 0F 7E) -- which resolves or rejects each prefix itself, so exclude those.
+  // VAR_REPTYPE = F3(1)/F2(2). Legacy only (VEX/EVEX carry pp in the payload, not a prefix byte).
+  // Scoped to the x86-64 corpus, whose SSE forms use these MNSEL conventions; the 32-bit corpus
+  // models SSE prefixes differently (e.g. F3 0F 7E movq xmm,xmm is not a ppdesc there).
+  if (d->insn.vex == 0 && d->cap[VAR_REPTYPE] &&
+      ((int)d->cap[CAP_RFILE] == OPF_SSE_OS || (int)d->cap[CAP_MFILE] == OPF_SSE_OS) &&
+      d->cap[CAP_MNSEL] != 2 && d->cap[CAP_MNSEL] != 3) {
+    d->insn.mnem = 0xFFFF; return ip;
+  }
+#endif
   // LOCK (F0): reject it on anything but an RMW-to-memory op (see lock_illegal above). lock mov /
   // lock shift / lock on a register destination / lock on a non-RMW op are all #UD on silicon (XED
   // agrees). Bijection-safe: rejecting only removes an illegal byte stream from the accepted set.

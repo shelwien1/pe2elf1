@@ -120,30 +120,30 @@ table sse2c { cvttps2pi, cvttpd2pi, cvttss2si, cvttsd2si }
 table sse2d { cvtps2pi, cvtpd2pi, cvtss2si, cvtsd2si }
 # mm/xmm data-movement + shuffle: NP is the MMX form, 66/F3/F2 the xmm forms
 # (the SSE_OS operand picks mm/xmm; a rep prefix forces the xmm bank).
-table sse6f { movq, movdqa, movdqu, movdqa }
-table sse7f { movq, movdqa, movdqu, movdqa }
+table sse6f { movq, movdqa, movdqu, - }
+table sse7f { movq, movdqa, movdqu, - }
 table sse70 { pshufw, pshufd, pshufhw, pshuflw }
 table ssee7 { movntq, movntdq, movntq, movntq }
 table ssef7 { maskmovq, maskmovdqu, maskmovq, maskmovq }  # 0F F7: mm at NP, xmm at 66
 table sse10 { movups, movupd, movss, movsd }
 table sse11 { movups, movupd, movss, movsd }
-table sse14 { unpcklps, unpcklpd, unpcklps, unpcklps }
-table sse15 { unpckhps, unpckhpd, unpckhps, unpckhps }
-table sse28 { movaps, movapd, movaps, movaps }
-table sse29 { movaps, movapd, movaps, movaps }
-table sse2e { ucomiss, ucomisd, ucomiss, ucomiss }
-table sse2f { comiss, comisd, comiss, comiss }
-table sse50 { movmskps, movmskpd, movmskps, movmskps }
+table sse14 { unpcklps, unpcklpd, -, - }
+table sse15 { unpckhps, unpckhpd, -, - }
+table sse28 { movaps, movapd, -, - }
+table sse29 { movaps, movapd, -, - }
+table sse2e { ucomiss, ucomisd, -, - }
+table sse2f { comiss, comisd, -, - }
+table sse50 { movmskps, movmskpd, -, - }
 table sse51 { sqrtps, sqrtpd, sqrtss, sqrtsd }
-table sse52 { rsqrtps, rsqrtps, rsqrtss, rsqrtps }
-table sse53 { rcpps, rcpps, rcpss, rcpps }
-table sse54 { andps, andpd, andps, andps }
-table sse55 { andnps, andnpd, andnps, andnps }
-table sse56 { orps, orpd, orps, orps }
-table sse57 { xorps, xorpd, xorps, xorps }
+table sse52 { rsqrtps, -, rsqrtss, - }
+table sse53 { rcpps, -, rcpss, - }
+table sse54 { andps, andpd, -, - }
+table sse55 { andnps, andnpd, -, - }
+table sse56 { orps, orpd, -, - }
+table sse57 { xorps, xorpd, -, - }
 table sse59 { mulps, mulpd, mulss, mulsd }
 table sse5a { cvtps2pd, cvtpd2ps, cvtss2sd, cvtsd2ss }
-table sse5b { cvtdq2ps, cvtps2dq, cvttps2dq, cvtdq2ps }
+table sse5b { cvtdq2ps, cvtps2dq, cvttps2dq, - }
 table sse5c { subps, subpd, subss, subsd }
 table sse5d { minps, minpd, minss, minsd }
 table sse5e { divps, divpd, divss, divsd }
@@ -151,7 +151,7 @@ table sse5f { maxps, maxpd, maxss, maxsd }
 table sse7c { -, haddpd, -, haddps }                    # 66=haddpd, F2=haddps; NP/F3 #UD
 table sse7d { -, hsubpd, -, hsubps }                    # 66=hsubpd, F2=hsubps; NP/F3 #UD
 table ssec2 { cmpps, cmppd, cmpss, cmpsd }
-table ssec6 { shufps, shufpd, shufps, shufps }
+table ssec6 { shufps, shufpd, -, - }
 table ssed0 { -, addsubpd, -, addsubps }                # 66=addsubpd, F2=addsubps; NP/F3 #UD
 table sse6c { -, punpcklqdq, -, - }                     # 66-only (no NP/MMX form)
 table sse6d { -, punpckhqdq, -, - }                     # 66-only
