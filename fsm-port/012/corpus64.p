@@ -1656,15 +1656,20 @@ submatch insn {
   0x0f 0x01 11 000 100 => "vmxoff" ;
   0x0f 0x01 11 000 101 => "pconfig" ;
   0x0f 0x01 11 000 110 => "wrmsrns" ;
+  0x0f 0x01 11 000 110 [$pp==2] => "wrmsrlist" ;        # F3 0F01 C6: MSRLIST
+  0x0f 0x01 11 000 110 [$pp==3] => "rdmsrlist" ;        # F2 0F01 C6: MSRLIST
   0x0f 0x01 11 000 111 => "pbndkb" ;
   0x0f 0x01 11 001 000 => "monitor" ;
   0x0f 0x01 11 001 001 => "mwait" ;
   0x0f 0x01 11 001 010 => "clac" ;
+  0x0f 0x01 11 001 010 [$pp==2] => "eretu" ;            # F3 0F01 CA: FRED
+  0x0f 0x01 11 001 010 [$pp==3] => "erets" ;            # F2 0F01 CA: FRED
   0x0f 0x01 11 001 011 => "stac" ;
   0x0f 0x01 11 001 100 [$pp==1] => "tdcall" ;           # 66 0F01 CC: TDX
   0x0f 0x01 11 001 101 [$pp==1] => "seamret" ;          # 66 0F01 CD: TDX
   0x0f 0x01 11 001 110 [$pp==1] => "seamops" ;          # 66 0F01 CE: TDX
   0x0f 0x01 11 001 111 => "encls" ;
+  0x0f 0x01 11 001 111 [$pp==1] => "seamcall" ;         # 66 0F01 CF: TDX
   0x0f 0x01 11 010 000 => "xgetbv" ;
   0x0f 0x01 11 010 001 => "xsetbv" ;
   0x0f 0x01 11 010 100 => "vmfunc" ;
@@ -1695,11 +1700,16 @@ submatch insn {
   0x0f 0x01 11 111 000 => "swapgs" ;
   0x0f 0x01 11 111 001 => "rdtscp" ;
   0x0f 0x01 11 111 010 => "monitorx" ;
+  0x0f 0x01 11 111 010 [$pp==2] => "mcommit" ;          # F3 0F01 FA: AMD MCOMMIT
   0x0f 0x01 11 111 011 => "mwaitx" ;
   0x0f 0x01 11 111 100 => "clzero" ;
   0x0f 0x01 11 111 101 => "rdpru" ;
   0x0f 0x01 11 111 110 => "invlpgb" ;
+  0x0f 0x01 11 111 110 [$pp==2] => "rmpadjust" ;        # F3 0F01 FE: AMD SEV-SNP
+  0x0f 0x01 11 111 110 [$pp==3] => "rmpupdate" ;        # F2 0F01 FE: AMD SEV-SNP
   0x0f 0x01 11 111 111 => "tlbsync" ;
+  0x0f 0x01 11 111 111 [$pp==2] => "psmash" ;           # F3 0F01 FF: AMD SEV-SNP
+  0x0f 0x01 11 111 111 [$pp==3] => "pvalidate" ;        # F2 0F01 FF: AMD SEV-SNP
   0x0f 0x02 11 ggg rrr => "lar " greg[$g] "," greg[$r] ;
   0x0f 0x02 @addr      => "lar " greg[$g] "," $addr ;
   0x0f 0x03 11 ggg rrr => "lsl " greg[$g] "," greg[$r] ;
