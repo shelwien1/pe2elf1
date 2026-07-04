@@ -246,9 +246,14 @@ The FSM disassembler in this directory was checked against every case above
   CPU has both APX and PadLock; XED itself accepts REX2+`xstore` at `0F A7` yet rejects
   REX2+`montmul`), so the VIA ops are left decoding, bijection-safe.
 * **NP-form mandatory-prefix SSE opcodes** — the general (non-REX2) bug the sweep surfaced is
-  now fixed too: `0F 6C/6D/7C/7D/B8/D0/E6` no longer decode their `#UD` no-prefix (or
-  wrong-prefix) forms — e.g. bare `0F 6C` is `#UD`, not `punpcklqdq`. 0 NP-0F over-acceptances
-  vs XED; fuzz64 5 M = 0, roundtrip64 byte-identical (see `STATUS64.md` §7h).
+  fixed across the 0F, 0F38 and 0F3A maps: `0F 6C/6D/7C/7D/B8/D0/E6` **and** the ~53 66-only
+  SSE4.1/4.2 0F38/0F3A ops (`pmovsx*`, `ptest`, `pmulld`, `round*`, `blend*`, `pinsr*`, `dpps`,
+  `pcmp*str*`, …) no longer decode their `#UD` no-prefix / wrong-prefix forms (bare `0F 6C` is
+  `#UD`, not `punpcklqdq`). Fixing this exposed and fixed a pp/opsize conflation: `pp` is now
+  derived from *"66 present in the prefix run"* (REX.W-independent), so `66`+`REX.W` SSE ops
+  (`66 48 0F38 DC` aesenc, `66 48 0F28` movapd, …) decode correctly instead of `#UD`. 0 NP-0F/38/3A
+  over-acceptances vs XED; fuzz64 5 M = 0, roundtrip64 byte-identical, 32-bit 858/858 (see
+  `STATUS64.md` §7h).
 * **VEX / EVEX / XOP preceding-prefix rule (§7)** — matches XED. `decode_insn` rejects a
   `66`/`F2`/`F3`/`LOCK` anywhere in the run before a `C4`/`C5`/`62`/`8F`(map≥8) introducer, and
   a REX immediately before it, while still allowing segment + `67` (and a REX that a following

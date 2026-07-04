@@ -495,6 +495,22 @@ sweep entry (`0F A6` montmul, VIA PadLock) is a *don't-care* corner — REX2 + V
 on no CPU (no chip has both APX and PadLock) and XED is itself inconsistent (it `#UD`s REX2+montmul
 but accepts REX2+xstore at `0F A7`), so the VIA ops are left decoding under REX2, bijection-safe.
 
+**Follow-up — NP-form 66-only SSE4 opcodes in 0F38/0F3A (~53), + the pp/opsize root fix.** The same
+NP-over-acceptance extended across the SSE4.1/4.2 0F38/0F3A ops (`pmovsx*`, `ptest`, `pmulld`,
+`round*`, `blend*`, `pinsr*`, `pextr*`, `dpps`, `pcmp*str*`, …): their NP (and F3/F2) forms decoded
+as a phantom MMX/xmm op where hardware `#UD`s. These use the `ssereg[$opsiz*8+…]` / `[$pp==1]`
+mechanism, not the pp-vtab, and the obvious `[$pp==1]` guard turned out to *conflate pp with
+operand size*: `[$pp==1]` compiles to "opsize==1" (66 **and no** REX.W), so `66`+`REX.W` (opsize=2)
+mis-read as NP — it would reject the valid `66 48 0F38 20` (pmovsxbw) and, indeed, already rejected
+`66 48 0F38 DC` (aesenc, a pre-existing bug). **Root fix:** `pp` is now derived from *"is 0x66 in
+the prefix run"* (`insn_has_66`, scanning `pfx[]`) instead of `$opsiz==1`, at all five C++ pp sites
+— REX.W-independent. That alone fixed the aesenc-family `66`+`REX.W` over-rejection (and `movapd`
+under REX.W, etc.). Then the ~53 ops got `[$pp==1]` + an `ssereg[8+…]` (xmm) operand, so NP/F3/F2
+→ `#UD` and `66`(±REX.W) decode correctly. NP-0F38/0F3A over-acceptance sweep vs XED now 0; fuzz64
+5 M = 0, roundtrip64 byte-identical, 32-bit 858/858 + fuzz 5 M = 0 (32-bit is unaffected — with no
+REX.W, `has_66` ≡ the old `opsize==1`). The corpus32 baseline still carries the un-guarded NP forms
+(out of scope for the x64 port), bijection-safe there.
+
 ## 8. Deliberate decode-display policy (not bugs)
 
 * Size suffixes (`.b/.w/.d/.q/.t`) instead of `BYTE/WORD/... PTR`; `[rax+0]`-style

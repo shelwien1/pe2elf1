@@ -757,6 +757,21 @@ static inline size_t vex_decode(x86dec_t* d, const byte* s, size_t n, size_t ip)
 }
 
 // decode one full instruction: prefixes -> opcode -> ModR/M | immediate.
+// Is the 0x66 prefix present in the run? This is the legacy-SSE *mandatory* prefix and is
+// independent of operand size: a REX.W after a 66 leaves $opsiz at 2 (REX.W wins for the
+// operand/immediate size), yet the 66 is still the SSE mandatory prefix. Deriving pp from
+// $opsiz==1 therefore mis-fires on 66+REX.W (e.g. 66 48 0F38 DC = aesenc, valid on silicon,
+// was rejected). pp is derived from this instead so 66-mandatory ops decode under 66+REX.W
+// and reject only when 66 is truly absent. (In 32-bit there is no REX.W, so this matches the
+// old $opsiz==1 test exactly.)
+static inline bool insn_has_66(const x86insn_t* in) {
+  for (int i = 0; i < in->n_pfx; ++i) {
+    if (in->pfx[i] == 0xD5) { ++i; continue; }             // skip the REX2 payload byte
+    if (in->pfx[i] == 0x66) return true;
+  }
+  return false;
+}
+
 // returns the byte length consumed; sets insn.mnem = 0xFFFF on an unknown opcode.
 static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   size_t ip = parse_prefixes(s, n, d);             // vars + prefix bookkeeping
@@ -1037,7 +1052,7 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   // rmreq from ppdesc before the ModR/M + immediate stage. A 0xFFFF slot is #UD.
   if (d->cap[CAP_MNSEL] == 3) {
     int pp = d->cap[VAR_REPTYPE] ? (int)d->cap[VAR_REPTYPE] + 1
-                                 : (d->cap[VAR_OPSIZ] == 1 ? 1 : 0);
+                                 : (insn_has_66(&d->insn) ? 1 : 0);
     const struct PpDesc* pd = &ppdesc[d->cap[CAP_GRP]][pp];
     if (pd->mnem == 0xFFFF) { d->insn.mnem = 0xFFFF; return ip; }
     d->cap[CAP_MNEM]  = pd->mnem;   d->cap[CAP_FORM] = pd->form;   form = pd->form;
@@ -1059,7 +1074,7 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     // ModR/M mod is known (the mnemonic swap rides the MNSEL==3 mreg pass below).
     if (d->cap[CAP_MNSEL] == 3 && is_reg) {
       int pp = d->cap[VAR_REPTYPE] ? (int)d->cap[VAR_REPTYPE] + 1
-                                   : (d->cap[VAR_OPSIZ] == 1 ? 1 : 0);
+                                   : (insn_has_66(&d->insn) ? 1 : 0);
       const struct PpDesc* pd = &ppdesc[d->cap[CAP_GRP]][pp];
       if (pd->rform != 0xFF) { d->cap[CAP_FORM] = pd->rform; d->cap[CAP_MFILE] = pd->rmf; }
       d->cap[CAP_DIR] = pd->dir_reg;   // reg-form ModR/M order (urdmsr r/m,reg vs enqcmd reg,mem)
@@ -1074,7 +1089,7 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
     int gid = (int)d->cap[CAP_GRP];
     if (ppgroup[gid]) {                                   // pp-variant group (0F AE / 0F 1E):
       int pp = d->cap[VAR_REPTYPE] ? (int)d->cap[VAR_REPTYPE] + 1  // pick the mandatory-prefix
-                                   : (d->cap[VAR_OPSIZ] == 1 ? 1 : 0);  // slot before ModR/M
+                                   : (insn_has_66(&d->insn) ? 1 : 0);  // slot before ModR/M
       gid += pp;                                          // (base gid + pp; 4 consecutive gids)
     }
     uint32_t gstart = (uint32_t)(FSM_GROUPS + (gid * 2 + (int)d->cap[VAR_ADRSIZ]) * 256);
@@ -1089,12 +1104,12 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   if (d->cap[CAP_MNSEL] == 1) d->cap[CAP_MNEM] += d->cap[VAR_OPSIZ];   // movs/cdqw by opsize
   else if (d->cap[CAP_MNSEL] == 2) {                              // legacy SSE: mnemonic by mandatory prefix
     int pp = d->cap[VAR_REPTYPE] ? (int)d->cap[VAR_REPTYPE] + 1   // F3 -> 2, F2 -> 3
-                                 : (d->cap[VAR_OPSIZ] == 1 ? 1 : 0);  // 66 -> 1, else NP -> 0
+                                 : (insn_has_66(&d->insn) ? 1 : 0);  // 66 -> 1, else NP -> 0
     d->cap[CAP_MNEM] = ppvtab[d->cap[CAP_GRP]][pp];              // CAP_GRP carries the vtab index
   }
   else if (d->cap[CAP_MNSEL] == 3) {                              // ppdesc: reg-form mnemonic
     int pp = d->cap[VAR_REPTYPE] ? (int)d->cap[VAR_REPTYPE] + 1   // movhlps (reg) vs movlps (mem),
-                                 : (d->cap[VAR_OPSIZ] == 1 ? 1 : 0);  // movlhps vs movhps, ...
+                                 : (insn_has_66(&d->insn) ? 1 : 0);  // movlhps vs movhps, ...
     uint16_t mr = ppdesc[d->cap[CAP_GRP]][pp].mreg;              // 0xFFFF -> use CAP_MNEM for both
     if (mr != 0xFFFF && d->cap[CAP_MODE] == RM_REG) d->cap[CAP_MNEM] = mr;
   }
