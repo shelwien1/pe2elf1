@@ -5374,6 +5374,38 @@ submatch apx {
   # imul r,r/m (map4 af), opsize only
   r x b e f 100 w v j 00 c d n a 0xaf 11 ggg rrr => "imul " greg[$g] "," greg[$r] ;
   r x b e f 100 w v j 01 c d n a 0xaf 11 ggg rrr => "imul " greg[$g] "," greg[$r] ;
+  # imul r,r/m,imm (map4 69 immz / 6b imm8): the promoted 3-operand imul-immediate.
+  # This slot is NOT NDD-capable (apxop marks it CAP_MNSEL) -- EVEX.ND is repurposed
+  # as ZU (zero-upper): ND=1 -> imulzu (C++ apx_finalize morphs the mnemonic; same
+  # reg,r/m,imm operands). The reg-direct rule also covers the r/m-memory form.
+  r x b e f 100 w v j 00 c d n a 0x69 11 ggg rrr @immz => "imul " greg[$g] "," greg[$r] "," hex($immz) ;
+  r x b e f 100 w v j 01 c d n a 0x69 11 ggg rrr @immz => "imul " greg[$g] "," greg[$r] "," hex($immz) ;
+  r x b e f 100 w v j 00 c d n a 0x6b 11 ggg rrr @imm8 => "imul " greg[$g] "," greg[$r] "," hex(sx8($imm8)) ;
+  r x b e f 100 w v j 01 c d n a 0x6b 11 ggg rrr @imm8 => "imul " greg[$g] "," greg[$r] "," hex(sx8($imm8)) ;
+  # SETcc / SETZUcc (map4 40-4f, F2 mandatory prefix pp=11): a *unary* r/m8 op -- the
+  # ModR/M.reg field is ignored (NOT a /digit), the r/m is the byte destination. EVEX.ND
+  # selects SETZU<cc> (zero-extend the byte result into the full GPR). Fully special-cased
+  # in C++ apx_finalize (byte r/m operand + mnemonic by cc+ZU); these are PURE FSM ROUTERS
+  # (both the "set<cc>" mnemonic and the greg[$g] operand are overridden). They ride the
+  # single-operand REG form (APX_R) rather than the r/m form (APX_M), because APX_M is the
+  # opcode-extension-group shape -- decode_insn would treat the ignored reg field as an
+  # undefined /digit and bail to the structural placeholder. The reg form covers memory too.
+  r x b e f 100 w v j 11 c d n a 0x40 11 ggg rrr => "seto " greg[$g] ;
+  r x b e f 100 w v j 11 c d n a 0x41 11 ggg rrr => "setno " greg[$g] ;
+  r x b e f 100 w v j 11 c d n a 0x42 11 ggg rrr => "setb " greg[$g] ;
+  r x b e f 100 w v j 11 c d n a 0x43 11 ggg rrr => "setae " greg[$g] ;
+  r x b e f 100 w v j 11 c d n a 0x44 11 ggg rrr => "sete " greg[$g] ;
+  r x b e f 100 w v j 11 c d n a 0x45 11 ggg rrr => "setne " greg[$g] ;
+  r x b e f 100 w v j 11 c d n a 0x46 11 ggg rrr => "setbe " greg[$g] ;
+  r x b e f 100 w v j 11 c d n a 0x47 11 ggg rrr => "seta " greg[$g] ;
+  r x b e f 100 w v j 11 c d n a 0x48 11 ggg rrr => "sets " greg[$g] ;
+  r x b e f 100 w v j 11 c d n a 0x49 11 ggg rrr => "setns " greg[$g] ;
+  r x b e f 100 w v j 11 c d n a 0x4a 11 ggg rrr => "setp " greg[$g] ;
+  r x b e f 100 w v j 11 c d n a 0x4b 11 ggg rrr => "setnp " greg[$g] ;
+  r x b e f 100 w v j 11 c d n a 0x4c 11 ggg rrr => "setl " greg[$g] ;
+  r x b e f 100 w v j 11 c d n a 0x4d 11 ggg rrr => "setge " greg[$g] ;
+  r x b e f 100 w v j 11 c d n a 0x4e 11 ggg rrr => "setle " greg[$g] ;
+  r x b e f 100 w v j 11 c d n a 0x4f 11 ggg rrr => "setg " greg[$g] ;
   # ===== Stage 3b: opcode-extension groups (NDD via ND; mnem by /digit) =====
   r x b e f 100 w v j 00 c d n a 0x80 11 000 rrr @imm8 => "add " rgb[$r] "," hex($imm8) ;
   r x b e f 100 w v j 00 c d n a 0x80 11 001 rrr @imm8 => "or " rgb[$r] "," hex($imm8) ;

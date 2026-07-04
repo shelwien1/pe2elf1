@@ -610,11 +610,11 @@ Deliberate divergences (left as-is, matching XED):
   `nop` — XED itself renders them `nop` (forward-compatible hint), so it is not a divergence.
 * **`pcommit`** (`66 0F AE F8`): removed from the ISA; XED (and this decoder) render it `sfence`.
 
+APX new instructions (all **done**): EVEX `vmovd`/`vmovq` mem (`66.0F.W0/W1 7E @addr`) and VEX
+`vsha512msg1/2` (`F2.0F38.W0 CC/CD`) got per-instruction rules with XED-verified operand widths;
+the map-4 trio `cfcmov<cc>` / `set<cc>` + `setzu<cc>` / `imulzu` is finished in **§7l**.
+
 Known remaining (byte-exact today via placeholder / base name — not yet semantically named):
-* **APX new instructions**: `cfcmov<cc>` (map-4 `40-4F`, currently shown as the promoted `cmov<cc>`),
-  `setzu<cc>`, `imulzu` (map-4, shown as the `vex` placeholder), EVEX `vmovd`/`vmovq` mem (`66.0F.W0/
-  W1 7E @addr`, placeholder), VEX `vsha512msg1/2` (`F2.0F38.W0 CC/CD`, placeholder). These need
-  per-instruction EVEX/APX/VEX rules with exact operand widths, each XED-verified.
 * **Legacy REX.W size mnemonics**: `cmpxchg16b` (`0F C7 /1`) **done** — opsize-mnemonic table (MNSEL
   mode 1) extended to group *memory* forms in gen.py/gasm.py. `wrssq` (`0F 38 F6`) **done** — it sits
   in a ppdesc (MNSEL=3) slot so the table can't apply; instead the GPR is `greg[]` (opsize-sized,
@@ -624,6 +624,46 @@ Known remaining (byte-exact today via placeholder / base name — not yet semant
   size) — a mnemonic-only fix would leave inconsistent operands, and doing it right reworks the SSE
   operand-bank mechanism #19/§7h established (high regression risk). Byte-exact today; best as a
   dedicated pp/opsize-operand pass with the full gate.
+
+### 7l. APX map-4 trio — CFCMOV / SET(ZU)cc / IMULZU (done, 2026-07-04)
+
+The last of the map-4 "same slot, different mnemonic by an EVEX payload bit" families. XED
+(`xed64` v2026.02.17) is the oracle throughout. Three opcode groups, all keyed on **EVEX.ND**
+(P2[4]) with **pp** as the mandatory-prefix selector:
+
+* **`40-4F`, pp = NP/66** — `ND=0` is **`CFCMOV<cc>`** (the 2-operand conditionally-faulting cmov);
+  `ND=1` is the promoted 3-operand NDD `CMOV<cc>` (already built — only the mnemonic differed, so
+  `apx_finalize` morphs `cmov<cc>`->`cfcmov<cc>` when `ND=0`).
+* **`40-4F`, pp = F2** — a *unary* r/m8 op: `ND=0` **`SET<cc>`**, `ND=1` **`SETZU<cc>`** (zero-extends
+  the byte result into the full GPR). The ModR/M.reg field is ignored (not a `/digit`), so it is fully
+  rebuilt in C++ (byte operand, mnemonic by cc+ZU). The corpus rules are pure FSM routers riding the
+  single-operand `APX_R` form — `APX_M` (the r/m form) is the group shape and `decode_insn` would treat
+  the ignored reg field as an undefined `/digit` and bail to the structural placeholder.
+* **`69` (immz) / `6B` (imm8), pp = NP/66** — the promoted 3-operand imul-immediate; `ND` is repurposed
+  as **ZU**, so `ND=1` -> **`IMULZU`** (same `reg,r/m,imm` operands). This slot is not NDD-capable
+  (`apxop` already marks it `CAP_MNSEL`), so no NDD prepend fires.
+
+`pp = F3` on `40-4F`, and `pp = F3/F2` on `69/6B/AF`, are `#UD` (XED agrees). `90-9F` is entirely `#UD`
+in map 4 (SETcc lives at `40-4F` + F2, **not** its legacy `90-9F` slot). New contiguous mnemonic
+blocks `MNEM_{CFCMOV,SETCC_APX,SETZU}_BASE` (+ `MNEM_IMULZU`) are appended in `gen.py` in the project
+`cond[]` order and indexed by the opcode low nibble. Encoding needs **no** `gasm.py`/`x86enc.hpp`
+change — APX (`vex==3`) is byte-replay, so the mnemonic is irrelevant to re-encode.
+
+Validation: a full XED differential over `40-4F`/`90-9F`/`69`/`6B`/`AF` × all pp × W × ND × reg/mem
+(1 120 cases) is **0 UD-disagreements, 0 mnemonic/operand mismatches**; a register-extension sweep
+(640 cases, all P0 `R/X/B/R4/B4` × ModR/M, canonical `vvvv`) and the NDD-dest extension (32 cases)
+are exact; byte-exact roundtrip over the trio is `MISMATCH=0`. Full gate green (fuzz64 5M = 0,
+roundtrip64 byte-identical, 32-bit 858/858 + x8632all 110 072/110 072, Zydis corpus 25 305/25 397
+unchanged with 0 mismatch).
+
+**Pre-existing, out-of-scope note (`vvvv` on non-NDD map-4).** For every non-NDD map-4 promoted op
+(`add`/`sub`/…/`cmov`/`cfcmov`/`setcc`/`imulzu`), XED requires the unused `vvvv` = `1111` and `#UD`s
+otherwise; this decoder captures `vvvv` for byte-exact replay but does **not** validate it, so it
+*accepts* `vvvv != 1111` (renders the same insn; the raw bytes round-trip). This is a **family-wide,
+pre-existing** permissive characteristic (the existing `add`/`cmov` behave identically) — the new trio
+is consistent with it, not a regression. Tightening it (require `vvvv=1111` on the non-NDD forms while
+the NDD-3op forms keep using it as the dest) is a separate, uniform APX-map-4 pass, best done with the
+full gate, and is left as a follow-up.
 
 ## 8. Deliberate decode-display policy (not bugs)
 

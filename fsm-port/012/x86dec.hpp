@@ -637,6 +637,21 @@ static inline void apx_finalize(x86dec_t* d, const byte* s, size_t op_at) {
   x86op_t memop; memop.type = T_MEM; memop.index = 0;
   x86op_t rmop = is_reg ? rmreg : memop;
   x86op_t immop; immop.type = T_IMM; immop.index = 0;
+  // APX map-4 40-4F with the F2 mandatory prefix (pp=3): SETcc r/m8 (ND=0) or SETZUcc
+  // r/m8 (ND=1, zero-extends the byte result into the full GPR). Unary -- the ModR/M.reg
+  // field is ignored (not a /digit) and the r/m is always a *byte* destination, so this
+  // is fully rebuilt here rather than routed through the opsize-GPR FORM machinery. The
+  // corpus rule only exists to give the FSM a live path for (pp=F2, 40-4F). SCC-style
+  // cc is the opcode low nibble (project cond[] order = MNEM_SET*_BASE order).
+  if ((in->vex2 & 3) == 3 && in->vex_op >= 0x40 && in->vex_op <= 0x4f) {
+    in->opsize = 0;                                       // always a byte operation
+    x86op_t o;
+    if (is_reg) { o.type = T_GPR8; o.index = (uint16_t)((mrm + 8 * B3 + 16 * B4) & 31); }
+    else        { o = memop; }
+    in->op[0] = o; in->n_ops = 1;
+    in->mnem = (uint16_t)((ND ? MNEM_SETZU_BASE : MNEM_SETCC_APX_BASE) + (in->vex_op & 0xf));
+    return;
+  }
   // NDD dest size = the reg file when present, else the r/m file (group forms have
   // no reg operand, so the dest follows the r/m width: 8-bit for 80/c0/f6/fe, etc.)
   x86op_t nddop = apx_gpr(rf ? rf : (mf ? mf : 1), ndd);
@@ -701,6 +716,14 @@ static inline void apx_finalize(x86dec_t* d, const byte* s, size_t op_at) {
     // per-digit CAP_IMK override in decode_insn).
     if ((in->vex_op == 0xf6 || in->vex_op == 0xf7) && nn == 1) in->op[nn++] = immop;
   }
+  // APX map-4 40-4F, NP/66 (pp<=1): EVEX.ND=0 is CFCMOV<cc> -- the 2-operand
+  // conditionally-faulting cmov. (ND=1 is the promoted 3-op NDD CMOV<cc>, already built
+  // above via the NDD prepend; only the mnemonic differs.) F2 was handled+returned above.
+  if (!ND && in->vex_op >= 0x40 && in->vex_op <= 0x4f && (in->vex2 & 3) <= 1)
+    in->mnem = (uint16_t)(MNEM_CFCMOV_BASE + (in->vex_op & 0xf));
+  // APX map-4 imul-immediate (69 immz / 6B imm8): EVEX.ND is repurposed as ZU. ND=1 ->
+  // IMULZU (identical reg,r/m,imm operands; the result zero-extends into the full GPR).
+  if (ND && (in->vex_op == 0x69 || in->vex_op == 0x6b)) in->mnem = MNEM_IMULZU;
   in->n_ops = (uint8_t)nn;
 }
 #endif // ARCH_MODE == 64

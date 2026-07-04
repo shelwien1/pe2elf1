@@ -2081,6 +2081,22 @@ def emit(c, interp, out_path):
   for _c in _SCC: interp._mnem.append('ccmp' + _c)
   w("#define MNEM_CTEST_BASE %d\n" % len(interp._mnem))
   for _c in _SCC: interp._mnem.append('ctest' + _c)
+  # APX map-4 40-4F cc-suffixed families (indexed by the opcode's low nibble, which is
+  # the project cond[] order -- NOT the ccmp SCC order above). All C++-morphed in
+  # apx_finalize, so append 16 contiguous names per family and export the base:
+  #   CFCMOV<cc> : NP/66, EVEX.ND=0 (the ND=1 form is the promoted 3-op NDD CMOV<cc>);
+  #   SET<cc>    : F2, ND=0 (r/m8; the ModR/M.reg field is ignored, not a /digit);
+  #   SETZU<cc>  : F2, ND=1 (SET<cc> that zero-extends the byte result into the GPR).
+  # IMULZU is the imul-immediate (69/6B) with ND repurposed as ZU (one mnemonic).
+  _COND = ['o','no','b','ae','e','ne','be','a','s','ns','p','np','l','ge','le','g']
+  w("#define MNEM_CFCMOV_BASE %d\n" % len(interp._mnem))
+  for _c in _COND: interp._mnem.append('cfcmov' + _c)
+  w("#define MNEM_SETCC_APX_BASE %d\n" % len(interp._mnem))
+  for _c in _COND: interp._mnem.append('set' + _c)
+  w("#define MNEM_SETZU_BASE %d\n" % len(interp._mnem))
+  for _c in _COND: interp._mnem.append('setzu' + _c)
+  w("#define MNEM_IMULZU %d\n" % len(interp._mnem))
+  interp._mnem.append('imulzu')
   # APX JMPABS (REX2 D5 <payload W=0> A1 io64): absolute near jump -- the one REX2 opcode
   # that is not the legacy A1 (mov acc,moffs). C++-decoded/encoded (REX2 is not an FSM path);
   # append the mnemonic so it has a stable index. Not in any rule, so append it explicitly.
