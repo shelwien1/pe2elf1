@@ -177,10 +177,14 @@ class EncBuilder:
           c['sup_reg'] = 1
           c['mfile'] = m.get('rfile', 0)                 # reg-direct r/m file (rgb -> 8-bit)
         if m['mnem_mem'] is not None:
-          mn = m['mnem_mem']
-          c = self.cand((tb, opcode, 0x100 + reg, mn))
-          c['digit'] = reg; c['mnem'] = mn; c['form'] = F['GROUP']; c['imk'] = m['imk']
-          c['sup_mem'] = 1
+          # opsize-select mem mnem (cmpxchg8b/16b): one candidate per d/w/q variant, mirroring
+          # the reg-form path above, so the ~w (66) and q (REX.W) forms re-encode.
+          mem_mnems = ([m['mnem_mem'], m['mnem_mem'] + 1, m['mnem_mem'] + 2]
+                       if m.get('mnsel') else [m['mnem_mem']])
+          for mn in mem_mnems:
+            c = self.cand((tb, opcode, 0x100 + reg, mn))
+            c['digit'] = reg; c['mnem'] = mn; c['form'] = F['GROUP']; c['imk'] = m['imk']
+            c['sup_mem'] = 1
       # fully-fixed ModR/M ops (endbr64/endbr32, monitor, rdtscp, ...): the encoder emits
       # the opcode + the literal ModR/M byte. Usually no operand (form NONE), but xabort
       # (C6 F8 ib) / xbegin (C7 F8 rel) carry a trailing imm/rel (form IMM/REL + imk).

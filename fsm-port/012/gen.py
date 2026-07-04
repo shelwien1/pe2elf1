@@ -1575,6 +1575,8 @@ class Interp:
       # the reg-direct r/m draws from the rule's register table (rgb -> 8-bit GPR,
       # else the opsize GPR); carry it so the operand renders al/r8b, not eax.
       m['rfile'] = self.OPF.index(self.operand_file(rhs, 'r'))
+    elif mn[0] == 'sel':                                 # group_mem opsize-select (cmpxchg8b/16b)
+      m['mnem_mem'] = sel_base; m['mnsel'] = 1           # C++ adds opsize -> the d/w/q variant
     else:                                                # group_mem: fold in size suffix
       sm = re.search(r'sfx\[(\d+)\]', rhs)
       sfx = self.tables['sfx'][int(sm.group(1))] if sm else ''
@@ -1601,8 +1603,9 @@ class Interp:
       return [], 'FSM_HALT'                              # this form not defined for /reg
     acts, nxt = self.modrm_state(adrsiz, modrm)
     pre = [('MNEM', mnem, 0, 0)]                         # reg field -> mnemonic (per byte)
-    if is_reg and m.get('mnsel'):                        # opsize-select reg mnem (rdsspd/rdsspq)
-      pre.append(('CONST', self.tailcap('MNSEL'), 1, 0))
+    if m.get('mnsel'):                                   # opsize-select mnem: reg (rdsspd/rdsspq)
+      pre.append(('CONST', self.tailcap('MNSEL'), 1, 0)) # or mem (cmpxchg8b/16b). The other form
+      # is #UD for these ops (mnem_*=None -> FSM_HALT above), so this never mis-fires cross-form.
     if m['imk'] != 0:
       pre.append(('CONST', self.tailcap('IMK'), m['imk'], 0))
     if is_reg and m.get('rfile'):                        # reg-direct r/m register file (RGB etc.)

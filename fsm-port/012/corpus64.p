@@ -104,6 +104,7 @@ table sret  { sysretd, sysretd~w, sysretq }              # 0F 07: d at 32-bit/da
 table sxit  { sysexitd, sysexitd~w, sysexitq }           # 0F 35  (~w = distinct idx, "sysexitd" display)
 table rdssp { rdsspd, rdsspd~w, rdsspq }                 # F3 0F 1E /1: CET read shadow-stack ptr
 table incssp { incsspd, incsspd~w, incsspq }             # F3 0F AE /5: CET increment shadow-stack
+table cx8b   { cmpxchg8b, cmpxchg8b~w, cmpxchg16b }      # 0F C7 /1: 8b at 32/data16, 16b at REX.W
 # push/pop fs/gs (0F A0/A1/A8/A9): 66 -> 16-bit (pushw/popw); REX.W ignored (~q = "push" display)
 table pushfs { "push fs", "pushw fs", "push fs~q" }
 table popfs  { "pop fs", "popw fs", "pop fs~q" }
@@ -730,7 +731,7 @@ submatch insn {
   0x0f 0xc0 @addr      => "xadd" sfx[1] " " $addr "," rgb[$g] ;
   0x0f 0xc1 11 ggg rrr => "xadd " greg[$r] "," greg[$g] ;
   0x0f 0xc1 @addr      => "xadd " $addr "," greg[$g] ;
-  0x0f 0xc7 @addr(1)   => "cmpxchg8b " $addr ;
+  0x0f 0xc7 @addr(1)   => cx8b[$opsiz] " " $addr ;      # cmpxchg8b / cmpxchg16b (REX.W)
   # 0F C7 group tail (/3-/7): XSAVE-supervisor + VMX pointers + rdrand/rdseed/rdpid/
   # senduipi. pp-variant: /6,/7 select by mandatory prefix (NP/66/F3). REX.W -> the
   # *64 forms / r64 operand (rides the prefix witness; base mnemonic shown).
