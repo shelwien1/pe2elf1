@@ -736,6 +736,32 @@ few mem-only-op reg-form quirks (`movntq`/`maskmov*`/`movnti`). Full gate green 
 unchanged 0-mismatch, fuzz64 5M = 0 — accepted count drops ~35 k as the now-#UD combos are rejected,
 roundtrip64 byte-identical, 32-bit 858/858 + x8632all 110 072/110 072).
 
+### 7p. SSE↔GPR REX.W: CPU-verified operand widths (done, 2026-07-05)
+
+Settled by **executing the instructions on the CPU** (Intel Xeon), not by trusting a disassembler
+(XED and binutils objdump *disagreed*). Test: xmm0 = all-ones, dest GPR pre-loaded with all-ones, run
+the form, read back the full 64-bit register; compare REX.W vs no-REX.W (`/tmp/mmexec2.c`).
+
+* **`pmovmskb` / `movmskps` / `movmskpd` / `pextrw` / `pextrb` / `pinsrw` / `pinsrb` / `extractps`:**
+  REX.W has **ZERO effect** — REX.W and non-REX.W give byte-identical results, and the value is
+  zero-extended into the full register (the all-ones upper bits are cleared). So the destination is a
+  **32-bit** operand (auto zero-extended, exactly r32 semantics); REX.W is decoded but ignored. XED and
+  binutils `as` agree (r32; `as` won't even emit REX.W); only binutils *objdump* loosely showed r64 —
+  which this decoder had been matching. **Fixed:** a new fixed-r32 operand file `gregr` → `T_GPRd`
+  (r32 regardless of REX.W/66), applied to these 8 ops; they now render r32 like the silicon.
+* **`pextrd`/`pextrq` (0F3A 16), `pinsrd`/`pinsrq` (0F3A 22):** REX.W **does** change the result
+  (extracts/inserts 32 vs 64 bits — CPU: `0x00000000ffffffff` vs `0xffffffffffffffff`). So here REX.W
+  is a real width selector. The r/m already widens to r64 via `gregd`; **fixed** the mnemonic only —
+  decode reclassifies `pextrd`→`pextrq` / `pinsrd`→`pinsrq` on opsize 2, `enc_select` aliases the q
+  form back to the d byte candidate (unique opcode, no collision). `movd`→`movq`, `cvt*2si`/`cvtsi2*`
+  keep genuine REX.W r64 promotion (unchanged).
+
+Mechanism note: `gasm.py` carries its own `has_g` operand-form regex — it needed `gregr` added too, or
+the encoder mis-shaped the candidate and these ops failed to re-encode. Validated: all 11 ops ×
+{NP/66, REX.W, reg-ext, reg/mem} match XED (0 mismatches) and now match the CPU; full gate green (Zydis
+25 305/25 397 unchanged 0-mismatch, fuzz64 5M = 0, roundtrip64 byte-identical, 32-bit 858/858 +
+x8632all 110 072/110 072).
+
 ## 8. Deliberate decode-display policy (not bugs)
 
 * Size suffixes (`.b/.w/.d/.q/.t`) instead of `BYTE/WORD/... PTR`; `[rax+0]`-style

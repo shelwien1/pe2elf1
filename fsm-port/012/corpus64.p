@@ -1143,10 +1143,10 @@ submatch insn {
   0x0f 0x6d @addr      => sse6d[$pp] ssereg[8+$g] "," $addr ;
   0x0f 0x70 11 ggg rrr @imm8 => sse70[$pp] ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] "," hex($imm8) ;
   0x0f 0x70 @addr      @imm8 => sse70[$pp] ssereg[$opsiz*8+$g] "," $addr "," hex($imm8) ;
-  0x0f 0x50 11 ggg rrr => sse50[$pp] gregd[$g] "," ssereg[8+$r] ;
-  0x0f 0xc4 11 ggg rrr @imm8 => "pinsrw " ssereg[$opsiz*8+$g] "," gregd[$r] "," hex($imm8) ;
+  0x0f 0x50 11 ggg rrr => sse50[$pp] gregr[$g] "," ssereg[8+$r] ;
+  0x0f 0xc4 11 ggg rrr @imm8 => "pinsrw " ssereg[$opsiz*8+$g] "," gregr[$r] "," hex($imm8) ;
   0x0f 0xc4 @addr      @imm8 => "pinsrw " ssereg[$opsiz*8+$g] "," $addr "," hex($imm8) ;
-  0x0f 0xc5 11 ggg rrr @imm8 => "pextrw " gregd[$g] "," ssereg[$opsiz*8+$r] "," hex($imm8) ;
+  0x0f 0xc5 11 ggg rrr @imm8 => "pextrw " gregr[$g] "," ssereg[$opsiz*8+$r] "," hex($imm8) ;
   0x0f 0xd1 11 ggg rrr => "psrlw " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0xd1 @addr      => "psrlw " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0xd2 11 ggg rrr => "psrld " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
@@ -1155,7 +1155,7 @@ submatch insn {
   0x0f 0xd3 @addr      => "psrlq " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0xd5 11 ggg rrr => "pmullw " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0xd5 @addr      => "pmullw " ssereg[$opsiz*8+$g] "," $addr ;
-  0x0f 0xd7 11 ggg rrr => "pmovmskb " gregd[$g] "," ssereg[$opsiz*8+$r] ;
+  0x0f 0xd7 11 ggg rrr => "pmovmskb " gregr[$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0xd8 11 ggg rrr => "psubusb " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
   0x0f 0xd8 @addr      => "psubusb " ssereg[$opsiz*8+$g] "," $addr ;
   0x0f 0xd9 11 ggg rrr => "psubusw " ssereg[$opsiz*8+$g] "," ssereg[$opsiz*8+$r] ;
@@ -1406,12 +1406,12 @@ submatch insn {
   0x0f 0x3a 0x0d @addr      @imm8 [$pp==1] => "blendpd " ssereg[8+$g] "," $addr "," hex($imm8) ;
   0x0f 0x3a 0x0e 11 ggg rrr @imm8 [$pp==1] => "pblendw " ssereg[8+$g] "," ssereg[8+$r] "," hex($imm8) ;
   0x0f 0x3a 0x0e @addr      @imm8 [$pp==1] => "pblendw " ssereg[8+$g] "," $addr "," hex($imm8) ;
-  0x0f 0x3a 0x14 11 ggg rrr @imm8 [$pp==1] => "pextrb " gregd[$r] "," ssereg[8+$g] "," hex($imm8) ;
+  0x0f 0x3a 0x14 11 ggg rrr @imm8 [$pp==1] => "pextrb " gregr[$r] "," ssereg[8+$g] "," hex($imm8) ;
   0x0f 0x3a 0x14 @addr      @imm8 [$pp==1] => "pextrb " $addr "," ssereg[8+$g] "," hex($imm8) ;
   0x0f 0x3a 0x16 11 ggg rrr @imm8 [$pp==1] => "pextrd " gregd[$r] "," ssereg[8+$g] "," hex($imm8) ;
   0x0f 0x3a 0x16 @addr      @imm8 [$pp==1] => "pextrd " $addr "," ssereg[8+$g] "," hex($imm8) ;
   # SSE4.1 pextrw r/m16 form (0F3A 15) -- distinct from the 0F C5 pextrw r32,xmm form
-  0x0f 0x3a 0x15 11 ggg rrr @imm8 [$pp==1] => "pextrw " gregd[$r] "," ssereg[8+$g] "," hex($imm8) ;
+  0x0f 0x3a 0x15 11 ggg rrr @imm8 [$pp==1] => "pextrw " gregr[$r] "," ssereg[8+$g] "," hex($imm8) ;
   0x0f 0x3a 0x15 @addr      @imm8 [$pp==1] => "pextrw " $addr "," ssereg[8+$g] "," hex($imm8) ;
   # legacy AES key-assist + GFNI affine (66 0F3A DF/CE/CF ib); 66-mandatory (pp==1)
   0x0f 0x3a 0xdf 11 ggg rrr @imm8 [$pp==1] => "aeskeygenassist " ssereg[8+$g] "," ssereg[8+$r] "," hex($imm8) ;
@@ -1421,9 +1421,9 @@ submatch insn {
   0x0f 0x3a 0xcf 11 ggg rrr @imm8 [$pp==1] => "gf2p8affineinvqb " ssereg[8+$g] "," ssereg[8+$r] "," hex($imm8) ;
   0x0f 0x3a 0xcf @addr      @imm8 [$pp==1] => "gf2p8affineinvqb " ssereg[8+$g] "," $addr "," hex($imm8) ;
   0x0f 0x3a 0xf0 11 000 000 @imm8 [$pp==2] => "hreset " hex($imm8) ;   # F3 0F3A F0 /0 C0 ib: HRESET (fixed ModR/M)
-  0x0f 0x3a 0x17 11 ggg rrr @imm8 [$pp==1] => "extractps " gregd[$r] "," ssereg[8+$g] "," hex($imm8) ;
+  0x0f 0x3a 0x17 11 ggg rrr @imm8 [$pp==1] => "extractps " gregr[$r] "," ssereg[8+$g] "," hex($imm8) ;
   0x0f 0x3a 0x17 @addr      @imm8 [$pp==1] => "extractps " $addr "," ssereg[8+$g] "," hex($imm8) ;
-  0x0f 0x3a 0x20 11 ggg rrr @imm8 [$pp==1] => "pinsrb " ssereg[8+$g] "," gregd[$r] "," hex($imm8) ;
+  0x0f 0x3a 0x20 11 ggg rrr @imm8 [$pp==1] => "pinsrb " ssereg[8+$g] "," gregr[$r] "," hex($imm8) ;
   0x0f 0x3a 0x20 @addr      @imm8 [$pp==1] => "pinsrb " ssereg[8+$g] "," $addr "," hex($imm8) ;
   0x0f 0x3a 0x21 11 ggg rrr @imm8 [$pp==1] => "insertps " ssereg[8+$g] "," ssereg[8+$r] "," hex($imm8) ;
   0x0f 0x3a 0x21 @addr      @imm8 [$pp==1] => "insertps " ssereg[8+$g] "," $addr "," hex($imm8) ;

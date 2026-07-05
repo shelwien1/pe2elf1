@@ -78,7 +78,7 @@ class EncBuilder:
     else:
       return
 
-    has_g = bool(gen.re.search(r'(greg|gregd|gregq|gregw|rgb|sreg|ssereg|mmxg|bndreg)\[[^\]]*\$g[^\]]*\]', rhs))
+    has_g = bool(gen.re.search(r'(greg|gregd|gregr|gregq|gregw|rgb|sreg|ssereg|mmxg|bndreg)\[[^\]]*\$g[^\]]*\]', rhs))
     two_ops = (',' in rhs)
     if info['modrm'] in ('reg', 'mem'):
       form = F['MODRM'] if has_g else F['RM']

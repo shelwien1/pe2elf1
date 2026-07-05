@@ -129,7 +129,8 @@ static inline int file_to_T(int opf, int has66, int reptype) {
     // cvtpi2ps/cvttps2pi/...: mm at NP/66, GPR at F3/F2 (cvtsi2ss/cvttss2si).
     // The GPR width follows opsize (REX.W -> r64); mm is always 64-bit.
     case OPF_MMG:    return reptype ? T_GPR : T_MMX;
-    case OPF_GREGd:  return T_GPRdq;                      // r32/r64 (never 16 on mandatory 66)
+    case OPF_GREGd:  return T_GPRdq;                      // r32/r64 (REX.W selects r64)
+    case OPF_GREGr:  return T_GPRd;                       // r32 always (REX.W a no-op: pmovmskb, ...)
     case OPF_GREGq:  return T_GPRq;                       // r64 always (vmread/vmwrite)
     case OPF_GREGw:  return T_GPRw;                       // r16 always (movzx/movsx word src)
     case OPF_BND:    return T_BND;                        // MPX bound register (bnd0-3)
@@ -1228,6 +1229,11 @@ static inline size_t decode_insn(const byte* s, size_t n, x86dec_t* d) {
   // is a distinct index that displays "movq" -- kept apart from 0F 6F's movq (mm,mm/m64), whose
   // memory form would otherwise be indistinguishable from movq mm,[m64] on re-encode.
   if (d->insn.mnem == MNEM_MOVD && d->insn.opsize == 2) d->insn.mnem = MNEM_MOVQ_GPR;
+  // pextrd (0F3A 16) / pinsrd (0F3A 22) -> pextrq/pinsrq under REX.W (CPU-verified: REX.W really
+  // widens the extract/insert 32->64 here). The r/m already renders r64 via gregd; only the
+  // mnemonic switches. enc_select aliases the q form back to the d byte candidate.
+  if (d->insn.mnem == MNEM_PEXTRD && d->insn.opsize == 2) d->insn.mnem = MNEM_PEXTRQ;
+  if (d->insn.mnem == MNEM_PINSRD && d->insn.opsize == 2) d->insn.mnem = MNEM_PINSRQ;
 #if ARCH_MODE == 64
   // Legacy SSE/MMX ops selected by NP/66 only (paddb, pxor, punpck*, movd 0F 6E, ...): they use
   // the SSE_OS operand file via a *bare* rule (no per-prefix descriptor), so an F3/F2 mandatory

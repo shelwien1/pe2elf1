@@ -26,6 +26,7 @@ static inline int enc_op_class(const x86op_t* o) {
   switch (o->type) {
     case T_GPR:  return C_GREG;  case T_GPR8: return C_RGB;
     case T_GPRdq: return C_GREG;                          // r32/r64 GPR (mandatory-66 SSE ops)
+    case T_GPRd:  return C_GREG;                          // r32 GPR (REX.W-no-op SSE ops)
     case T_GPRq:  return C_GREG;                          // r64 GPR (vmread/vmwrite)
     case T_GPRw:  return C_GREG;                          // r16 GPR (movzx/movsx word src)
     case T_XMM:  return C_XMM;   case T_MMX:  return C_MM;
@@ -125,6 +126,10 @@ static inline const struct EncCand* enc_select(const x86insn_t* in,
   // (REX.W rides in pfx[]); decode reclassified movd -> the distinct MNEM_MOVQ_GPR, so this
   // aliases straight back to movd without disturbing 0F 6F's real movq.
   if (mnem == MNEM_MOVQ_GPR) mnem = MNEM_MOVD;
+  // pextrq/pinsrq (0F3A 16/22 under REX.W) share pextrd/pinsrd's byte candidate (REX.W in pfx[]);
+  // decode reclassified d->q. Unique opcode, so alias unconditionally back to the d form.
+  if (mnem == MNEM_PEXTRQ) mnem = MNEM_PEXTRD;
+  if (mnem == MNEM_PINSRQ) mnem = MNEM_PINSRD;
   if (mnem >= enc_nmnem) return 0;
   int start = enc_bucket_start[mnem], cnt = enc_bucket_count[mnem];
   const struct EncCand* first = 0; int fr = -1, fm = -1, fi = -1;

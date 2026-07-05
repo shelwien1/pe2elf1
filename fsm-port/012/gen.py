@@ -463,7 +463,7 @@ class Interp:
   # render/route captures, placed after the per-group prefix-offset block
   TAILCAPS = ['MNEM', 'FORM', 'IMK', 'MNSEL', 'DIR', 'GRP', 'RFILE', 'MFILE', 'SFX', 'CC', 'TBL3', 'RMREQ']
   # operand register files (which name table a captured register number indexes)
-  OPF = ['GREG', 'RGB', 'XMM', 'MM', 'SREG', 'SSE_OS', 'MMG', 'GREGd', 'GREGq', 'GREGw', 'BND']
+  OPF = ['GREG', 'RGB', 'XMM', 'MM', 'SREG', 'SSE_OS', 'MMG', 'GREGd', 'GREGq', 'GREGw', 'BND', 'GREGr']
 
   def tailcap(self, name):
     # MNEM/FORM/IMK/MNSEL live just past the CAP_POFF block (one slot per var)
@@ -697,7 +697,7 @@ class Interp:
 
   def operand_file(self, tmpl, var):
     # which register-name table the $var operand draws from
-    m = re.search(r'(greg|gregd|gregq|gregw|rgb|sreg|ssereg|mmxg|bndreg)\[([^\]]*\$' + var + r'[^\]]*)\]', tmpl)
+    m = re.search(r'(greg|gregd|gregr|gregq|gregw|rgb|sreg|ssereg|mmxg|bndreg)\[([^\]]*\$' + var + r'[^\]]*)\]', tmpl)
     if not m:
       return 'GREG'
     tab, idx = m.group(1), m.group(2)
@@ -705,8 +705,10 @@ class Interp:
       return 'RGB'
     if tab == 'sreg':
       return 'SREG'
-    if tab == 'gregd':                                   # r32/r64 GPR, never 16 (mandatory-66 SSE ops)
+    if tab == 'gregd':                                   # r32/r64 GPR, never 16 (REX.W selects r64)
       return 'GREGd'
+    if tab == 'gregr':                                   # r32 GPR always -- REX.W is a NO-OP on silicon
+      return 'GREGr'                                     # (pmovmskb/movmsk*/pextrb-w/pinsrb-w/extractps)
     if tab == 'gregq':                                   # r64 GPR always (vmread/vmwrite)
       return 'GREGq'
     if tab == 'gregw':                                   # r16 GPR always (movzx/movsx word src)
@@ -788,7 +790,7 @@ class Interp:
         imk = K['NONE']
       else:
         continue
-      has_g = bool(re.search(r'(greg|gregd|gregq|gregw|rgb|sreg|ssereg|mmxg|bndreg)\[[^\]]*\$g[^\]]*\]', rhs))
+      has_g = bool(re.search(r'(greg|gregd|gregr|gregq|gregw|rgb|sreg|ssereg|mmxg|bndreg)\[[^\]]*\$g[^\]]*\]', rhs))
       # operand form
       two_ops = (',' in rhs)
       if info['modrm'] in ('reg', 'mem'):
@@ -1783,7 +1785,7 @@ def emit(c, interp, out_path):
   w("enum InsnForm { %s };\n" %
     ", ".join("FORM_%s%s" % (n, "=0" if i == 0 else "") for i, n in enumerate(interp.INSN_FORM)))
   w("enum ImmKind  { IMK_NONE=0, IMK_IMM8, IMK_IMM16, IMK_IMM32, IMK_IMMZ, IMK_REL8, IMK_RELZ, IMK_PTR, IMK_IMM8SX, IMK_ENTER, IMK_IMMV, IMK_IMM8X2 };\n")
-  w("enum OperandFile { OPF_GREG=0, OPF_RGB, OPF_XMM, OPF_MM, OPF_SREG, OPF_SSE_OS, OPF_MMG, OPF_GREGd, OPF_GREGq, OPF_GREGw, OPF_BND };\n\n")
+  w("enum OperandFile { OPF_GREG=0, OPF_RGB, OPF_XMM, OPF_MM, OPF_SREG, OPF_SSE_OS, OPF_MMG, OPF_GREGd, OPF_GREGq, OPF_GREGw, OPF_BND, OPF_GREGr };\n\n")
 
   # the one uniform FSM record (Action packed to 16 bits)
   w("// ---- uniform state-machine record ----\n")
@@ -2078,6 +2080,14 @@ def emit(c, interp, out_path):
   w("#define MNEM_MOVD %d\n" % (interp._mnem.index('movd') if 'movd' in interp._mnem else 0xFFFF))
   w("#define MNEM_MOVQ_GPR %d\n" % len(interp._mnem))
   interp._mnem.append('movq~gpr')
+  # pextrd (0F3A 16) / pinsrd (0F3A 22) -> pextrq/pinsrq under REX.W: here REX.W IS a real width
+  # selector (CPU-verified: pextrd extracts 32 bits, pextrq 64). The r/m already widens to r64 via
+  # gregd; only the mnemonic must change. decode reclassifies PEXTRD->PEXTRQ / PINSRD->PINSRQ on
+  # opsize 2; enc_select aliases the q form back to the d byte candidate (unique opcode, no collision).
+  for _m in ('pextrd', 'pinsrd'):
+    w("#define MNEM_%s %d\n" % (_m.upper(), interp._mnem.index(_m) if _m in interp._mnem else 0xFFFF))
+  w("#define MNEM_PEXTRQ %d\n" % len(interp._mnem)); interp._mnem.append('pextrq')
+  w("#define MNEM_PINSRQ %d\n" % len(interp._mnem)); interp._mnem.append('pinsrq')
   # 0x90-0x97 (xchg rAX,r / nop): the 10010-bbb rule decodes the whole range and supplies
   # the encode candidates, but renders only the embedded register. decode_insn rebuilds the
   # two-operand xchg struct and maps the no-extension 0x90 (register == rAX) back to nop --
