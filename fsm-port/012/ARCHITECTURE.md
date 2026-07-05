@@ -20,14 +20,15 @@ bytes ──run_fsm──► cap[]  ──finalize──► x86insn_t ──enco
 ```
 
 One declarative description (`corpus64.p`) is compiled **two ways** by two
-Python programs that share a parser, so decode and encode can never disagree
-about what a rule *means*. The C++ side is generic: it walks generated tables
-and never hardcodes an opcode map.
+Python programs that share the corpus parser, so both sides read the same
+rules. (The per-rule *interpretation* is mirrored between them rather than
+shared — see §7.4 L.) The C++ side is generic: it walks generated tables and
+never hardcodes an opcode map.
 
 ### 1.2 File map (what actually lives where)
 
-The request refers to "the FSM / decode / encode in `asm32.cpp`". Worth stating
-the real layout, because the algorithms are **not** in `asm32.cpp`:
+A note on naming first: the decode/encode algorithms are **not** in
+`asm32.cpp` — that file is only a thin driver. The real layout:
 
 | File | Lines | Role |
 |---|---:|---|
@@ -37,7 +38,7 @@ the real layout, because the algorithms are **not** in `asm32.cpp`:
 | `x86insn.hpp` | 121 | the `x86insn_t` bijection record |
 | `gen.py` | 2457 | corpus → decode FSM (`x86_tables.h`) |
 | `gasm.py` | 323 | corpus → encode candidates (`x86_tables_enc.h`) |
-| `corpus64.p` | 5589 | the instruction description (5027 rules) |
+| `corpus64.p` | 5663 | the instruction description (5027 rules) |
 
 `parser.cpp` is the renderer/demo; `asm32.cpp` is the bijection tool. Both
 `#include` the same `x86dec.hpp`/`x86enc.hpp`, so there is one decoder and one
@@ -68,10 +69,11 @@ The two pillars of the style:
    assembler's reverse solver can invert it.
 
 2. **Every ModR/M operand is two rules** — a `mod=11` register rule with an
-   inline table, and an `@addr` memory rule that always carries the size suffix.
-   `@addr` is memory-only; the register case is its paired rule. This removes any
-   "is it memory?" flag — but see §7.2, it is also the single biggest source of
-   rule duplication.
+   inline table, and an `@addr` memory rule that carries the size suffix
+   whenever no register operand reveals the width (e.g. `"mov" sfx[1]` on the
+   byte-store form). `@addr` is memory-only; the register case is its paired rule.
+   This removes any "is it memory?" flag — but see §7.2, it is also the single
+   biggest source of rule duplication.
 
 VEX/EVEX/XOP/APX rules spell the **whole prefix bit-layout** inline, e.g.
 
@@ -79,8 +81,10 @@ VEX/EVEX/XOP/APX rules spell the **whole prefix bit-layout** inline, e.g.
 h k b e 00 01 0 vvvv 1 00 z ll 0 u aaa  0x58  11 ggg rrr  => wit("evex") "vaddps" …
 ```
 
-The leading `h k b e 00 01 0 vvvv 1 00 z ll <b> u aaa` is the 3-byte EVEX prefix,
-and it is repeated on **every** EVEX rule (see §7.2 for why this matters).
+The leading `h k b e 00 01 0 vvvv 1 00 z ll 0 u aaa` is the 3-byte EVEX prefix
+spelled bit by bit (the `0` before `u` is the broadcast/rounding b-bit of this
+variant), and a copy of it opens **every** EVEX rule (see §7.2 for why this
+matters).
 
 ---
 
@@ -129,8 +133,9 @@ That is the whole architecture-free core. Everything else in `x86dec.hpp` is
 `cap[NCAPS]` with **NCAPS = 32** `uint64` slots. Vars and captures share one
 index space (`VAR_OPSIZ=0 … CAP_REG, CAP_RM, CAP_MNEM, CAP_FORM, …`). The
 VEX/EVEX path *aliases* onto slots the legacy path leaves unused (`vvvv→REL`,
-`L→CC`, `R'X'B'→TBL3`), because no slot is live on both paths. That aliasing is
-clever but it is also load-bearing tribal knowledge (see §7.4).
+`L→CC`, `R'X'B'→TBL3`), because no slot is live on both paths. The aliasing is
+economical, but the "no slot live on both paths" invariant is documented in
+comments rather than checked mechanically — worth an assertion in gen.py.
 
 ### 3.4 Lowering: three finalizers
 
@@ -139,15 +144,16 @@ clever but it is also load-bearing tribal knowledge (see §7.4).
   addressing witness, stamps `enc`.
 - `vex_finalize` — VEX/EVEX vector: de-inverts R/X/B/vvvv/V', applies the
   writemask/zeroing/broadcast/rounding decorations, places operands per a
-  `FORM_VEX_*` switch (~30 cases).
+  `FORM_VEX_*` switch (21 cases).
 - `apx_finalize` — APX map-4 EVEX-promoted-legacy: folds r0-31, applies NDD/NF,
   handles CCMP/CTEST/CFCMOV/SETcc/IMULZU.
 
-A handful of things the descriptor key can't carry are then fixed up by **8
-mnemonic-morph reclassify blocks** and **19 hardcoded opcode-byte tests** in C++
-(`movd→movq` under W, `pextrd→pextrq`, `wrssd→wrssq`, `vmovlps→vmovhlps` on the
-reg form, `ldtilecfg→tilerelease`, the APX ND-selected trio, …). These are
-correct but they are the manual residue (see §7.3).
+A handful of things the descriptor key can't carry are then fixed up by **about
+a dozen mnemonic-morph reclassify blocks** and roughly twenty hardcoded
+opcode-byte tests in C++ (`movd→movq` under W, `pextrd→pextrq`, `wrssd→wrssq`,
+`vmovlps→vmovhlps` on the reg form, `ldtilecfg→tilerelease`, the APX
+ND-selected trio, …). These are correct but they are the manual residue
+(see §7.3).
 
 ---
 
@@ -159,12 +165,16 @@ correct but they are the manual residue (see §7.3).
 `operand_file`) and rebuilds each rule as an **`EncCand`** — opcode byte(s),
 embedded-field program, operand-file signature, immediate kind — then buckets
 candidates by mnemonic (contiguous, stable order). 1133 candidates across the
-mnemonic space.
+mnemonic space — legacy rules only, since the vector families encode by
+byte-replay (§4.2) and need no candidates.
 
 A hard invariant: **enc is 3 bits**, so at most 8 same-shape encodings may share
-one mnemonic. gasm.py enforces this at build time and fails loudly; it has
-already forced distinct-mnemonic hacks (`MOVQ_GPR`, `PEXTRQ`) to stay under the
-cap (see §7.5).
+one mnemonic; gasm.py enforces this at build time and fails loudly. A related
+limitation has already forced distinct-mnemonic workarounds: the candidate
+*shape signature* does not include REX.W, so a W-morphing op (`movq` via
+`REX.W 0F 6E` vs `movq` via `0F 6F`) would be ambiguous on re-encode under one
+name — hence the `MOVQ_GPR`/`PEXTRQ`/`PINSRQ` indices plus `enc_select` aliases
+(see §7.4 K).
 
 ### 4.2 enc_select + the witness
 
@@ -175,7 +185,8 @@ emit opcode(+embedded reg/cc/digit), ModR/M-SIB-disp, immediate;
 ```
 
 `enc` records **which** of several equal-cost encodings the original bytes used
-(inc via `40+r` vs `FF /0`; `add eax,imm` via `05` vs `81 /0` vs `83 /0`), so a
+(`add eax,imm` via `05` vs `81 /0` vs `83 /0`; in 32-bit mode, inc via `40+r`
+vs `FF /0`), so a
 decoded insn re-encodes to the identical bytes. The ModR/M/SIB/disp emitter is
 otherwise canonical (shortest disp, SIB only when forced); non-canonical
 addressing is reproduced from the `disp_w`/`sib`/`sscale` witness.
@@ -202,7 +213,7 @@ an **encoding witness**:
 
 All-zero witness ⇒ canonical, so a synthesized/edited insn just re-encodes
 canonically. This is the right design; the only wrinkle is `enc` being a *rank*
-rather than an opcode delta (§7.5).
+rather than an opcode delta (§7.4 K).
 
 ---
 
@@ -219,9 +230,9 @@ rather than an opcode delta (§7.5).
 ### 6.2 Where the dead states are (64-bit)
 
 ```
-  groups      33280 states   33.0% dead   ← 44% of the whole table
+  groups      33280 states   33.0% dead   ← 42% of the whole table
   evexop      10240 states   89.6% dead
-  evexp2      10240 states    0.0% dead
+  evexp2      10240 states    0.0% dead   (fully live, but highly redundant — see §7.1 C)
   vexop        8192 states   88.9% dead
   xopop        6144 states   98.7% dead
   apxop        2048 states   81.1% dead
@@ -232,15 +243,18 @@ rather than an opcode delta (§7.5).
 
 Two structural facts jump out:
 
-1. **`groups` alone is 44% of the table** (65 groups × 2 adrsiz × 256 = 33 280
-   states, ≈ 666 KB). A group only branches on the 3-bit reg `/digit` (× reg-vs-
-   mem), yet each group re-materialises the *entire* ModR/M addressing decode —
-   which is byte-identical to the shared `modrm[]` table. This is pure
-   replication.
+1. **`groups` alone is 42% of the table** (65 groups × 2 adrsiz × 256 = 33 280
+   states, ≈ 650 KB). A group only branches on the 3-bit reg `/digit` (× reg-vs-
+   mem), yet each group page duplicates the shared `modrm[]` page's addressing
+   decode — gen.py's `group_state` literally calls `modrm_state` and prepends
+   the per-digit mnemonic/imk constants. The addressing structure is pure
+   replication; only those baked constants differ.
 
-2. **The VEX/EVEX/XOP/APX product arrays are 85–99% dead** (~37 000 states).
-   They are indexed by the full `(map, pp, W, opcode)` cross-product, but only a
-   sparse set of coordinates is live.
+2. **The four vector opcode arrays (`vexop`/`evexop`/`xopop`/`apxop`) are
+   81–99% dead**: 26 624 cells, only 2 451 live. They are indexed by the full
+   `(map, pp, W, opcode)` cross-product, but only a sparse set of coordinates
+   is live. (`evexp2`'s 10 240 states are the opposite pathology: fully live
+   but consisting of 40 pages of 256 identical capture-and-route states each.)
 
 ### 6.3 Where the manual code is
 
@@ -248,12 +262,12 @@ Two structural facts jump out:
 |---|---:|
 | corpus rules total | 5027 |
 | — legacy `insn`-body rules | 1337 |
-| — VEX/EVEX/XOP/APX rules | ~3731 |
-| — **EVEX submatch alone** | **2481** |
-| reg-direct (`11 ggg rrr`) rules | 1593 |
-| `@addr` sibling rules | 2130 |
-| C++ mnemonic-morph reclassify blocks | 8 |
-| C++ hardcoded `opcode == 0x..` tests | 19 |
+| — vector rules (vex 974 + vex2 185 + evex 2030 + xop 101 + apx 349) | 3639 |
+| — **EVEX submatch alone** | **2030** |
+| reg-direct (`11 ggg rrr`) rules (313 legacy + 1710 vector) | 2023 |
+| `@addr` sibling rules | 2129 |
+| C++ mnemonic-morph reclassify blocks | ~13 |
+| C++ hardcoded `opcode == 0x..` tests | ~19 |
 
 ---
 
@@ -265,17 +279,20 @@ item notes rough payoff and risk.
 
 ### 7.1 Smaller structures
 
-**(A) Collapse `groups` into shared-modrm + a `/digit` mnemonic table.**
-*Payoff: ~44% of the table (~666 KB → a few KB). Risk: medium.*
-Groups don't need their own addressing decode — it is identical to `modrm[]`.
-Route a group opcode through the **shared** `modrm[adrsiz]` stage (as ordinary
-ModR/M ops already do), and add a small `groupmnem[gid][8]` table the driver
-indexes by the captured reg field. The `groups[65][2][256]` array disappears.
-This is the single highest-value size change and it also *simplifies* the driver
-(one addressing path instead of two).
+**(A) Collapse `groups` into shared-modrm + per-digit descriptor rows.**
+*Payoff: ~42% of the table (~650 KB → a few KB). Risk: medium.*
+Groups don't need their own addressing decode — each group page is the shared
+`modrm[]` page with per-digit constants baked in. Route a group opcode through
+the **shared** `modrm[adrsiz]` stage (which already captures the digit as
+`CAP_REG`), and index a small per-digit descriptor table — mnemonic, imm kind,
+r/m file, reg/mem legality, fixed-ModR/M map — much like `ppdesc` does for
+prefixes. The VEX group path (`vexgrp[gid][digit]` after the shared modrm
+stage) already works exactly this way, so the pattern is proven in-tree. The
+`groups[65][2][256]` array disappears. This is the single highest-value size
+change and it also *simplifies* the driver (one addressing path instead of two).
 
 **(B) Sparsify the VEX/EVEX/XOP/APX opcode arrays.**
-*Payoff: ~37 000 → ~4 000 live states (~650 KB). Risk: medium.*
+*Payoff: 26 624 cells → 2 451 live entries (~480 KB saved). Risk: medium.*
 Replace the dense `[map][pp][W][256]` product with a compact keyed table: pack
 `(map,pp,W,opcode)` into a `uint32` key and use a sorted array + binary search,
 or a generated perfect hash. Vector decode is not hot relative to correctness, so
@@ -284,29 +301,32 @@ only the vector opcode dispatch changes.
 
 **(C) Dedup `DState` action-lists into a pool; shrink `DState` to 8 bytes.**
 *Payoff: ~2× on whatever survives (A)/(B). Risk: medium-high (touches run_fsm).*
-Most states carry 1–2 actions, but every `DState` reserves 7 slots (14 of its 20
-bytes). Thousands of states share identical action-lists (all the "capture
-reg/rm/mode" modrm cells, all the "append imm8" cells). Intern action-lists into
-a shared pool and make `DState = { uint32 next; uint16 act_off; uint16 act_len; }`
+Live states average ~2.6 of the 7 reserved action slots (37% carry just one),
+and every `DState` reserves all 7 (14 of its 20 bytes); dead states use none.
+Thousands of states also share identical action-lists — all the "capture
+reg/rm/mode" modrm cells, all the "append imm8" cells, and `evexp2`'s 40 pages
+of 256 identical capture-and-route states. Intern action-lists into a shared
+pool and make `DState = { uint32 next; uint16 act_off; uint16 act_len; }`
 (8 bytes) indexing the pool. Combined with (A)+(B) this could bring the whole
 table well under 500 KB.
 
 **(D) Share the fully-dead row.**
 *Payoff: small, but trivial. Risk: none.*
-`prefix` is 89% dead, `op3_3a` 89%, `xopop` 99% — all pointing at the same
-all-`NOACT`/`FSM_HALT` row. If any dense arrays remain after (A)/(B), emit one
-canonical dead row and point dead cells at it (needs an indirection or a
-generator that coalesces).
+`prefix` is 89% dead, `op3_3a` 89%, `xopop` 99% — thousands of repetitions of
+the identical all-`NOACT`/`FSM_HALT` cell. If any dense arrays remain after
+(A)/(B), add a page-level indirection so identical 256-entry pages (dead or
+otherwise) are stored once.
 
 ### 7.2 Less hand-written corpus
 
 **(E) Auto-pair reg/mem: one rule instead of two.** ⭐
-*Payoff: up to ~1593 rules removed. Risk: medium; the biggest ergonomics win.*
+*Payoff: ~2 000 rules removed (313 legacy + 1 710 vector reg-direct rules are
+the twin of an `@addr` sibling). Risk: medium; the biggest ergonomics win.*
 Today every ModR/M op is written twice — a `11 ggg rrr` register rule and an
 `@addr` memory rule — differing only in whether the r/m renders from a register
 table or from `$addr`. The engine already knows reg-vs-mem (`CAP_MODE`). Introduce
-an `@rm(table)` operand that matches **both** mod=11 and mod≠11 and renders the
-register from `table` in the reg case, `$addr` otherwise:
+an `@rm(reg-template)` operand that matches **both** mod=11 and mod≠11, rendering
+the given register template in the reg case and `$addr` otherwise:
 
 ```
 # today (two rules):
@@ -317,12 +337,14 @@ register from `table` in the reg case, `$addr` otherwise:
 ```
 
 The size-suffix-on-memory-only behaviour folds in (suffix emitted only in the
-`@addr` branch). This halves the legacy ModR/M rule count and — applied to the
-vector rules, which are almost all paired — is worth far more.
+`@addr` branch). The vector sections are where this bites hardest: vex is
+480 reg-direct / 487 `@addr` rules and evex 895 / 978 — almost perfectly
+paired.
 
 **(F) Factor the VEX/EVEX/XOP prefix preamble.** ⭐
-*Payoff: the readability/2481-rule problem. Risk: low-medium.*
-Every EVEX rule respells `h k b e 00 01 0 vvvv 1 00 z ll <b> u aaa`. gen.py's
+*Payoff: the readability/2030-rule problem. Risk: low-medium.*
+Every EVEX rule respells the prefix layout (`h k b e 00 01 … z ll … u aaa`,
+b-bit and all). gen.py's
 `_vex_parse_rule` already *extracts* `(map, pp, W, opcode)` from those bits — the
 raw layout is redundant with what the compiler recovers. Add a compact rule form
 that declares the coordinates as fields instead of spelled bits:
@@ -334,25 +356,27 @@ evex map=0F pp=66  W=1 0x58 rvm(ereg,evvv,ereg) => "vaddpd" … ;
 ```
 
 This does not shrink the *generated* table, but it removes the dominant source of
-hand-written, error-prone boilerplate (2481 EVEX rules) and makes the corpus
-diffable.
+hand-written, error-prone boilerplate (2030 EVEX rules, ~3 600 vector rules in
+all) and makes the corpus diffable.
 
 **(G) Bring element-suffix tables back to the vector side.**
 *Payoff: collapses the ps/pd/ss/sd and d/q W-variants. Risk: low.*
 The legacy side already selects the element suffix by table
-(`elt[$reptype*2+$opsiz]`); the vector side abandoned this and writes `vaddps`,
-`vaddpd`, `vaddss`, `vaddsd` as four separate rules. A `velt[pp,W]` table + one
-rule per opcode restores the legacy economy. `build_vex` already auto-fills WIG
-W-siblings — extend the same idea to *element-significant* W/pp instead of
-enumerating them by hand.
+(`elt[$reptype*2+$opsiz]`); the vector side abandoned this and enumerates each
+suffix variant as its own rule *set*. One EVEX add family today is ~16 rules:
+4 mnemonics (vaddps/pd/ss/sd, one per pp×W) × 4 rules each (b-bit off/on ×
+reg/mem). A `velt[pp,W]`-style suffix table plus (E)'s reg/mem folding brings
+that toward 1–2 rules per opcode. `build_vex` already auto-fills WIG
+W-siblings; a suffix table is the natural next step — selecting the mnemonic
+by pp/W instead of enumerating it by hand.
 
-Combining (E)+(F)+(G) plausibly takes the vector corpus from ~3700 rules to
+Combining (E)+(F)+(G) plausibly takes the vector corpus from ~3 600 rules to
 several hundred, with the generated table unchanged (or smaller via §7.1).
 
 ### 7.3 Move C++ special-cases into corpus data
 
 **(H) A "mnemonic selected by W / mod / ND" descriptor, like the pp selectors.**
-*Payoff: removes ~8 reclassify blocks + several of the 19 opcode tests. Risk: medium.*
+*Payoff: removes most of the ~13 reclassify blocks + several opcode tests. Risk: medium.*
 There are already three MNSEL mechanisms — mode 1 (opsize-add), mode 2 (ppvtab,
 mandatory-prefix select), mode 3 (ppdesc, full per-prefix descriptor). The
 remaining morphs (`movd→movq`/`pextrd→pextrq`/`wrssd→wrssq` on **W**;
@@ -377,16 +401,20 @@ from one source (the interp already owns `OPF`), so the two sides can't drift.
 `FORM_* → op[]` switch with overlapping logic. The form → (operand role
 sequence) mapping is conceptually a table (`RVM = [reg, vvvv, rm]`, `MR = [rm,
 reg]`, …). Drive all three from one role-sequence table plus per-family operand
-builders (`vex_mkop`, `apx_gpr`, legacy `SETREG/SETRM`). The ~30-case VEX switch
+builders (`vex_mkop`, `apx_gpr`, legacy `SETREG/SETRM`). The 21-case VEX switch
 and the APX switch collapse into data + a short loop.
 
-**(K) Make `enc` an opcode delta, not a bucket rank.**
-*Payoff: removes the 8-encoding cap and the distinct-mnemonic hacks. Risk: medium.*
-`enc:3` counts "which matching candidate," which couples the witness to how
-candidates bucket by mnemonic and caps same-shape encodings at 8. Storing a small
-**opcode/twin descriptor** (or widening to `enc:4/5` and keying on the actual
-opcode choice) lets `MOVQ_GPR`/`PEXTRQ` go back to being `movq`/`pextrq` selected
-by W (see (H)), instead of distinct indices invented to dodge the cap.
+**(K) Strengthen the encode-candidate signature; un-rank `enc`.**
+*Payoff: retires the distinct-mnemonic workarounds and the 8-twin cap. Risk: medium.*
+Two coupled limitations: (a) the candidate shape signature omits the effective
+operand width / REX.W, so two same-name candidates whose byte encodings differ
+only in W (`movq` via `REX.W 0F 6E` vs via `0F 6F`) are ambiguous on re-encode —
+which is why `MOVQ_GPR`/`PEXTRQ`/`PINSRQ` exist as distinct indices with
+`enc_select` aliases; (b) `enc:3` counts "which matching candidate," capping
+same-shape twins at 8 (gasm.py fails the build past that). Including the
+effective width (derivable from the replayed `pfx[]`) in the signature fixes
+(a) and lets the W-morphs of (H) share one mnemonic; keying the witness on the
+actual opcode choice — or just widening `enc` — removes the cap.
 
 **(L) Single rule-IR shared by both generators.**
 *Payoff: kills the parallel decode/encode derivation. Risk: medium-high.*
@@ -408,10 +436,10 @@ carry the effective-prefix state directly, shrinking the C++ prologue.
 
 | Proposal | Replaces | Removes |
 |---|---|---|
-| `@rm(regtable)` — reg+mem in one rule (E) | paired `11 ggg rrr` / `@addr` rules | ~1593 legacy + most vector pairs |
-| `evex map= pp= W= op rvm(...)` shorthand (F) | inline 3-byte prefix bit spelling | the 2481-rule EVEX boilerplate |
-| `velt[pp,W]` element-suffix tables (G) | 4× ps/pd/ss/sd rules per op | ~3× vector rule fan-out |
-| descriptor `select=W\|mod\|ND` axis (H) | C++ reclassify blocks | 8 morphs + several opcode tests |
+| `@rm(regtable)` — reg+mem in one rule (E) | paired `11 ggg rrr` / `@addr` rules | ~2 000 twin rules |
+| `evex map= pp= W= op rvm(...)` shorthand (F) | inline 3-byte prefix bit spelling | the 2030-rule EVEX boilerplate |
+| `velt[pp,W]` element-suffix tables (G) | one rule set per ps/pd/ss/sd variant | ~4× vector rule fan-out |
+| descriptor `select=W\|mod\|ND` axis (H) | C++ reclassify blocks | most of ~13 morphs + several opcode tests |
 
 None of these change the *generated* tables' semantics; they change how the
 description is written and (for §7.1) how it is stored.
@@ -424,15 +452,15 @@ Sequenced by payoff-to-risk, each independently shippable behind the existing
 gate (`fuzz64` 5M, `roundtrip64` byte-exact, Zydis differential, 32-bit
 858/858 + x8632all):
 
-1. **(A) collapse `groups`** — biggest size win (~44%), also simplifies the
+1. **(A) collapse `groups`** — biggest size win (~42%), also simplifies the
    driver. Self-contained: generator + one driver path.
-2. **(E) `@rm` auto-pairing** — biggest corpus-ergonomics win; halves the
-   hand-written ModR/M rules. Generator + a template feature.
-3. **(F)+(G) vector rule shorthand + element tables** — attacks the 2481-rule
+2. **(E) `@rm` auto-pairing** — biggest corpus-ergonomics win; folds ~2 000
+   twin rules. Generator + a template feature.
+3. **(F)+(G) vector rule shorthand + element tables** — attacks the 2030-rule
    EVEX mass; table-shape unchanged, so low validation risk.
 4. **(B) sparsify vector opcode arrays** — the second big size win.
-5. **(H)+(K) selector-axis descriptor + opcode-delta `enc`** — retires the C++
-   morphs and the distinct-mnemonic hacks together.
+5. **(H)+(K) selector-axis descriptor + stronger candidate signature** —
+   retires the C++ morphs and the distinct-mnemonic workarounds together.
 6. **(L) single rule-IR** — the durable fix for decode/encode drift.
 7. **(C)+(J)+(D)+(I)+(M)** — the remaining size/cleanliness polish.
 
