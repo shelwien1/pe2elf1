@@ -1,0 +1,6 @@
+GET 
+GET http:/
+HEAD 
+LINK 
+OPTIONS 
+PROPFIND 

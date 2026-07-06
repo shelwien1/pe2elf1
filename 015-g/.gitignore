@@ -1,0 +1,9 @@
+# build artifact (produced by `make`)
+/stegdict
+
+# test outputs (produced by `t.sh`)
+/payload
+/fp_mut/
+/fp_unp/
+/list1.unix
+/list2.unix
