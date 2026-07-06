@@ -1,5 +1,6 @@
-# build artifact (produced by `make`)
+# build artifacts (produced by `make`)
 /stegdict
+/usage.inc
 
 # test outputs (produced by `t.sh`)
 /payload

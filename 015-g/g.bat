@@ -9,4 +9,6 @@ set opts=-fstrict-aliasing -fomit-frame-pointer -ffast-math -fno-rtti -fno-stack
 set gcc=C:\MinGWG10x\bin\g++.exe -march=k8 -masm=att
 set path=%gcc%\..\
 
+perl txt2inc.pl usage.txt usage.inc
+
 %gcc% -s -Ofast -std=gnu++20 %incs% %opts% -static stegdict.cpp -o stegdict.exe

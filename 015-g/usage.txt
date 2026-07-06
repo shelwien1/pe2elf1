@@ -1,0 +1,48 @@
+;
+[[msg_logo]]
+stegdict: hide data in dictionary record order. Version 1 [$DATE].
+Written by Eugene Shelwien.
+
+;
+[[msg_usage]]
+Usage:
+
+  stegdict <op>[recsize] <in_dict> <out_dict> <payload>
+  stegdict <op>[recsize] @<listfile> <payload>
+
+  <op>       c = conceal: embed <payload> into the record order of <in_dict>,
+                 writing the reordered dictionary to <out_dict>.
+             d = decode : recover the hidden payload from <in_dict> into
+                 <payload>, writing the restored (sorted) dictionary to <out_dict>.
+  [recsize]  record size in bytes; omit or use 0 for newline-terminated records.
+  <payload>  file to embed (op c, opened for reading) or to receive the
+             recovered data (op d, opened for writing).
+
+  Batch form: @<listfile> runs many dictionaries against one shared payload
+  stream. Each non-empty line of <listfile> is:
+
+    [#recsize:]<in_dict> <out_dict>
+
+  where the optional #recsize: prefix overrides the record size for that line.
+
+Examples:
+
+  stegdict c4 dict.bin out.bin secret   embed "secret" into 4-byte records
+  stegdict d4 out.bin  got.bin got      recover it back into "got"
+  stegdict c  @list1   secret           batch-embed via a list file
+
+;
+[[msg_err_dict_in]]
+stegdict: can't open input dictionary "$DATA".
+;
+[[msg_err_dict_out]]
+stegdict: can't open output dictionary "$DATA".
+;
+[[msg_err_payload]]
+stegdict: can't open payload file "$DATA".
+;
+[[msg_err_list]]
+stegdict: can't open list file "$DATA".
+;
+[[msg_err_mem]]
+stegdict: out of memory.

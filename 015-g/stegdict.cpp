@@ -15,6 +15,8 @@
 
 #include "coro_fp2.inc"
 
+#include "usage.inc" // msg_logo / msg_usage / msg_err_* strings, generated from usage.txt
+
 static union {
 ALIGN(4096) CoroFileProc< Model<0> > C;
 ALIGN(4096) CoroFileProc< Model<1> > D;
@@ -29,11 +31,11 @@ uint recsize;
 
 NOINLINE
 int Process( char* fnam, char* gnam, FILE* h, uint f_cont=0 ) {
-  FILE* f = fopen(fnam,"rb"); if( f==0 ) return 2; // input dict
-  FILE* g = fopen(gnam,"wb"); if( g==0 ) return 3; // output dict
+  FILE* f = fopen(fnam,"rb"); if( f==0 ) { printf( msg_err_dict_in, fnam ); return 2; } // input dict
+  FILE* g = fopen(gnam,"wb"); if( g==0 ) { printf( msg_err_dict_out, gnam ); return 3; } // output dict
 
   uint f_len = flen(f);
-  byte* p = new byte[f_len]; if( p==0 ) return 5;
+  byte* p = new byte[f_len]; if( p==0 ) { printf( msg_err_mem ); return 5; }
   f_len = fread( p, 1,f_len, f );
   fclose(f);
 
@@ -57,7 +59,9 @@ int Process( char* fnam, char* gnam, FILE* h, uint f_cont=0 ) {
 
 int main( int argc, char** argv ) {
 
-  if( argc<4 ) return 1;
+  printf( msg_logo );
+
+  if( argc<4 ) { printf( msg_usage ); return 1; }
 
   recsize=0;
   f_DEC = (argv[1][0]=='d'); 
@@ -68,16 +72,16 @@ int main( int argc, char** argv ) {
   char* fnam = argv[2];
   if( fnam[0]=='@' ) {
 
-    h = fopen(argv[3],f_DEC?"wb":"rb"); if( h==0 ) return 4; // payload
+    h = fopen(argv[3],f_DEC?"wb":"rb"); if( h==0 ) { printf( msg_err_payload, argv[3] ); return 4; } // payload
 
-    lst = fopen(fnam+1,"rb"); if( lst==0 ) return 6; // list of inp/out dict files
+    lst = fopen(fnam+1,"rb"); if( lst==0 ) { printf( msg_err_list, fnam+1 ); return 6; } // list of inp/out dict files
     uint lstlen = flen(lst);
     char* plst = new char[lstlen+1];
     fread( plst, 1,lstlen, lst );
     fclose(lst);
 
-    char** lstnam = new char*[lstlen]; if( lstnam==0 ) return 7;
-    uint*  namlin = new uint[lstlen];  if( namlin==0 ) return 8;
+    char** lstnam = new char*[lstlen]; if( lstnam==0 ) { printf( msg_err_mem ); return 7; }
+    uint*  namlin = new uint[lstlen];  if( namlin==0 ) { printf( msg_err_mem ); return 8; }
 
     char* p=0;
     uint i,j,k,x,y, nlin=0, f_quote=0, f_file=1, f_inc=0;
@@ -101,9 +105,9 @@ int main( int argc, char** argv ) {
     //printf( "nlin=%i k=%i\n", nlin, k );
     //for( i=0; i<k; i++ ) printf( "<%s>:%i\n", lstnam[i], namlin[i] );
 
-    char** inam = new char*[nlin]; if( inam==0 ) return 9;
-    char** onam = new char*[nlin]; if( onam==0 ) return 10;
-    uint*  rsiz = new uint [nlin]; if( rsiz==0 ) return 11;
+    char** inam = new char*[nlin]; if( inam==0 ) { printf( msg_err_mem ); return 9; }
+    char** onam = new char*[nlin]; if( onam==0 ) { printf( msg_err_mem ); return 10; }
+    uint*  rsiz = new uint [nlin]; if( rsiz==0 ) { printf( msg_err_mem ); return 11; }
 
     // process names, sort into places
     for( i=0,j=0,x=-1,y=-1; i<k; i++ ) {
@@ -131,9 +135,9 @@ int main( int argc, char** argv ) {
     }
 
   } else {
-    if( argc<5 ) return 1;
+    if( argc<5 ) { printf( msg_usage ); return 1; }
     // single file
-    h = fopen(argv[4],f_DEC?"wb":"rb"); if( h==0 ) return 4; // payload
+    h = fopen(argv[4],f_DEC?"wb":"rb"); if( h==0 ) { printf( msg_err_payload, argv[4] ); return 4; } // payload
     r = Process( argv[2], argv[3], h );
   }
 
