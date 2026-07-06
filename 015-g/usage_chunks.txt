@@ -1,0 +1,49 @@
+;
+[[msg_logo]]
+stegchunks: hide data in per-chunk line order. Version 1 [$DATE].
+Written by Eugene Shelwien.
+
+;
+[[msg_usage]]
+Usage:
+
+  stegchunks c|d <input> <output> <list> <payload>
+
+  c   conceal: permute the lines within each chunk of <input> to embed
+      <payload>, writing the reordered file to <output>.
+  d   decode : recover the payload from <input> into <payload>, and write the
+      restored (canonical) file to <output>.
+
+  <list>     chunk map from sorted_chunks: one signed integer per line, where
+             +N is an ascending run of N lines, -N a descending run, and 1 a
+             singleton. The magnitudes must sum to <input>'s line count.
+  <payload>  file to embed (c, opened for reading) or to receive the recovered
+             data (d, opened for writing).
+
+  Each monotone chunk's lines are already sorted, so their order is a free
+  channel; stegchunks fills it the way stegdict fills a sorted dictionary.
+
+Example:
+
+  sorted_chunks english.dic english.txt
+  stegchunks c english.dic  mutated.dic  english.txt secret
+  stegchunks d mutated.dic  restored.dic english.txt got
+
+;
+[[msg_err_input]]
+stegchunks: can't open input file "$DATA".
+;
+[[msg_err_output]]
+stegchunks: can't open output file "$DATA".
+;
+[[msg_err_list]]
+stegchunks: can't open chunk list "$DATA".
+;
+[[msg_err_payload]]
+stegchunks: can't open payload file "$DATA".
+;
+[[msg_err_count]]
+stegchunks: chunk list "$DATA" does not cover the input file exactly.
+;
+[[msg_err_mem]]
+stegchunks: out of memory.

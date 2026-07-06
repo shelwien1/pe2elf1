@@ -32,8 +32,10 @@ struct Model : Rangecoder_SH1m128<1-ProcMode> {
       byte* restrict b_end = b + word_len[idx_map[y]];
       int dir=1; if( a>b ) SWAP(a,b),SWAP(a_end,b_end),dir=-1;
       for( ; (b<b_end) && (a[0]==b[0]); a++,b++ );
-      if( (a>=a_end) && (b<b_end) ) return -dir;
-      return ((b>=b_end)||(a[0]==b[0]))? (idx_map[x]<idx_map[y]?-1:1) : (a[0]<b[0]) ? -dir : dir;
+      int res = ( (a>=a_end) && (b<b_end) ) ? -dir
+              : ( (b>=b_end)||(a[0]==b[0]) ) ? (idx_map[x]<idx_map[y]?-1:1)
+              : (a[0]<b[0]) ? -dir : dir;
+      return A->f_desc ? -res : res; // f_desc reverses the order for descending chunks
     }
     static void s( TMP* A, uint x, uint y ) {
       if( idx_type==0 ) SWAP( A->idx_map[x], A->idx_map[y] );
@@ -65,9 +67,14 @@ struct Model : Rangecoder_SH1m128<1-ProcMode> {
   byte* inpptr_save;
   byte* inpend_save;
 
-  uint Init( byte* _f_ptr, uint _f_len, uint _rec_size=0 ) {
+  uint f_desc;  // 0 = ascending canonical order (default), 1 = descending
+  uint f_quiet; // 1 = suppress the "Sorting..." progress line
+
+  uint Init( byte* _f_ptr, uint _f_len, uint _rec_size=0, uint _f_desc=0, uint _f_quiet=0 ) {
     uint r=0;
     f_cont = 0;
+    f_desc = _f_desc;
+    f_quiet = _f_quiet;
 
     coro_init();
     f_len = _f_len; f_ptr = _f_ptr; f_end = &f_ptr[f_len];
@@ -117,6 +124,14 @@ struct Model : Rangecoder_SH1m128<1-ProcMode> {
     return r;
   }
 
+  // release the per-dictionary allocations from Init (used when processing many
+  // chunks in one run so they don't accumulate); safe to call once after use.
+  void Free( void ) {
+    delete[] word_ofs; word_ofs = 0; word_len = 0;
+    delete[] idx_map;  idx_map = 0;  f_dup = 0;
+    delete[] T.idx;    T.idx = 0;
+  }
+
   int word_cmp( uint x, uint y ) {
     byte* restrict a = &f_ptr[ word_ofs[idx_map[x]] ];
     byte* restrict b = &f_ptr[ word_ofs[idx_map[y]] ];
@@ -137,11 +152,11 @@ struct Model : Rangecoder_SH1m128<1-ProcMode> {
 
 //printf( "f_DEC=%i\n", f_DEC ); fflush(stdout);
 
-    printf( "Sorting %i words...", Nwords ); fflush(stdout);
+    if( !f_quiet ) { printf( "Sorting %i words...", Nwords ); fflush(stdout); }
     for( i=0; i<Nwords; i++ ) idx_map[i]=i;
     if( f_DEC==0 ) sh_qsort< CMP<Model,1> >( this, 0, Nwords-1 ); // restore word order; only for encoding;
     if( f_DEC==1 ) sh_qsort< CMP<Model,0> >( this, 0, Nwords-1 ); // normal sort, keeping the original permutation info
-    printf( "\b\b Done\n" ); fflush(stdout);
+    if( !f_quiet ) { printf( "\b\b Done\n" ); fflush(stdout); }
 
     for( i=1; i<Nwords; i++ ) f_dup[i]=(word_cmp(i-1,i)==0); f_dup[0]=0;
 

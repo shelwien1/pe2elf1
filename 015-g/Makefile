@@ -1,16 +1,21 @@
-# Makefile for stegdict — Linux port of g.bat
+# Makefile for stegdict / stegchunks / sorted_chunks — Linux port of g.bat
 #
-#   make        build ./stegdict (statically linked, mirrors g.bat)
-#   make test   build, then run the round-trip test (t.sh)
-#   make clean  remove the built binary and generated usage.inc
+#   make              build all three programs
+#   make stegdict     dictionary-permutation steganography (Linux port of g.bat)
+#   make stegchunks   the sorted_chunks variant (per-chunk line order)
+#   make sorted_chunks partition a file into monotone chunks
+#   make test         build stegdict, run its round-trip test (t.sh)
+#   make testchunks   build stegchunks + sorted_chunks, run t_chunks.sh
+#   make clean        remove built binaries and generated *.inc
 #
 # g.bat builds with MinGW g++ and -D_WIN32; that define is a Windows-target
 # artifact and is dropped here so the glibc headers see a real Linux target.
-# -static is kept: the binary is used as its own test payload and must be
-# larger than the ~96 KB dictionary capacity (see t.sh).
+# -static is kept: stegdict/stegchunks are used as their own test payloads and
+# must be larger than the dictionary capacity (see t.sh / t_chunks.sh).
 #
-# usage.inc holds the help/error strings; it is generated from usage.txt by
-# txt2inc.pl (which also stamps the build date) and #included by stegdict.cpp.
+# usage.inc / usage_chunks.inc hold the help/error strings; they are generated
+# from usage*.txt by txt2inc.pl (which also stamps the build date) and #included
+# by the respective .cpp.
 
 CXX      ?= g++
 
@@ -19,25 +24,37 @@ OPTS     := -fstrict-aliasing -fomit-frame-pointer -ffast-math \
             -fno-rtti -fno-stack-protector -fno-stack-check \
             -fno-check-new -fno-exceptions -fpermissive
 ARCH     := -march=k8 -masm=att
-# the help/error strings from usage.inc are printf() format strings (txt2inc
+# the help/error strings from usage*.inc are printf() format strings (txt2inc
 # escapes % -> %% and maps $DATA -> %s), so printing a no-argument one is safe;
 # silence Ubuntu g++'s default -Wformat-security on those calls.
 CXXFLAGS := -s -Ofast -std=gnu++20 -Wno-format-security $(ARCH) $(INCS) $(OPTS)
 LDFLAGS  := -static
 
-TARGET   := stegdict
-SRC      := stegdict.cpp
-GEN      := usage.inc
+.PHONY: all test testchunks clean
+all: stegdict stegchunks sorted_chunks
 
-$(TARGET): $(SRC) $(GEN)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(SRC) -o $(TARGET)
+stegdict: stegdict.cpp usage.inc
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) stegdict.cpp -o stegdict
 
-$(GEN): usage.txt txt2inc.pl
-	perl txt2inc.pl usage.txt $(GEN)
+stegchunks: stegchunks.cpp usage_chunks.inc
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) stegchunks.cpp -o stegchunks
 
-.PHONY: test clean
-test: $(TARGET)
+# sorted_chunks is a standalone STL utility; build it with plain flags
+# (it needs exceptions/rtti, unlike the steg codec).
+sorted_chunks: sorted_chunks.cpp
+	$(CXX) -O2 -std=c++17 sorted_chunks.cpp -o sorted_chunks
+
+usage.inc: usage.txt txt2inc.pl
+	perl txt2inc.pl usage.txt usage.inc
+
+usage_chunks.inc: usage_chunks.txt txt2inc.pl
+	perl txt2inc.pl usage_chunks.txt usage_chunks.inc
+
+test: stegdict
 	./t.sh
 
+testchunks: stegchunks sorted_chunks
+	./t_chunks.sh
+
 clean:
-	rm -f $(TARGET) $(GEN)
+	rm -f stegdict stegchunks sorted_chunks usage.inc usage_chunks.inc

@@ -1,6 +1,9 @@
 # build artifacts (produced by `make`)
 /stegdict
+/stegchunks
+/sorted_chunks
 /usage.inc
+/usage_chunks.inc
 
 # test outputs (produced by `t.sh`)
 /payload
@@ -8,3 +11,9 @@
 /fp_unp/
 /list1.unix
 /list2.unix
+
+# test outputs (produced by `t_chunks.sh`)
+/english.txt
+/mutated.dic
+/restored.dic
+/recovered
