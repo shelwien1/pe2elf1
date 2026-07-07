@@ -202,8 +202,9 @@ change makes almost every pointer in the binary differ — and a raw binary diff
 
 The reported effect was roughly an **order of magnitude** smaller updates than
 bsdiff-on-raw-bytes (which was already far better than shipping a compressed
-full binary). The lever is entirely §3.3: the diff no longer drowns in shifted
-pointers.
+full binary): Google's example update dropped from **704,512 bytes (bsdiff) to
+78,848 bytes (Courgette)**, ~9×. The lever is entirely §3.3: the diff no longer
+drowns in shifted pointers.
 
 ### 4.2 Zucchini (Google, Courgette's successor)
 
@@ -250,9 +251,12 @@ The realistic framing: disasm preprocessing yields a **solid, mechanism-justifie
 improvement on the code section** for single-file compression (materially more
 than BCJ, because it fixes interleaving and covers all reference types), and a
 **decisive** improvement for **delta updates** (because label stability attacks
-the dominant cost directly). If the goal is update delivery, this is the highest-
-leverage technique available; if the goal is shrinking one static binary, it is
-a worthwhile-but-bounded win concentrated where the code is.
+the dominant cost directly). One concrete single-file data point: kkrunchy's
+disassemble-and-split filter (§9), the most complete deployed instance of this
+transform, reports **~20%** reduction on x86 code over its context-mixing
+backend alone. If the goal is update delivery, this is the highest-leverage
+technique available; if the goal is shrinking one static binary, it is a
+worthwhile-but-bounded win concentrated where the code is.
 
 ---
 
@@ -429,16 +433,17 @@ bijection the repo already guarantees.
 | **Courgette** (Google) | delta update | symbolic labels + label table | assembly IR | full, reassembly-grade |
 | **Zucchini** (Google) | delta update | generalized reference abstraction | reference/target tables | reference-level, multi-arch |
 | **bsdiff** (Percival) | delta update | none (raw byte diff) | — | none |
-| **Crinkler** (demoscene) | tiny PE packer | — | reordered sections | x86-tuned context models |
-| **kkrunchy** (demoscene) | 64k PE packer | E8/E9-style filter | split/reorder | filter-level |
+| **Crinkler** (demoscene) | tiny PE packer | E8E9 filter | reordered sections | PAQ-style context models |
+| **kkrunchy** (demoscene) | 64k PE packer | rel→abs via function-address cache + jump-table detect | **per-field split streams** | **disassembles x86** (escape for unknowns) |
 | **PAQ/cmix `exe` model** | max-ratio archiver | E8E9 transform + model | model contexts | filter + CM |
-| **UPX** | self-extracting packer | BCJ-like CTO filter | — | filter-level |
+| **UPX** | self-extracting packer | BCJ-like E8/E9 call/jump filter (id 0x49) | — | filter-level |
 
 Two distinctions worth keeping straight:
 
 - **Packers (UPX, Crinkler, kkrunchy)** produce a *self-decompressing
   executable* — a different goal from improving a general archiver's ratio,
-  though they use the same filters internally.
+  though they use the same class of preprocessing internally (kkrunchy the most
+  thoroughly; see §10).
 - **Diff engines (Courgette, Zucchini, bsdiff)** compress *the change between two
   binaries*; disasm preprocessing helps them most because pointer instability is
   the dominant cost there.
@@ -447,21 +452,31 @@ Two distinctions worth keeping straight:
 
 ## 10. Where to push beyond the state of the art
 
-The production tools each stop short of the full transform:
+The production tools each stop short in a different place:
 
 - BCJ/BCJ2 have the right ideas (rel→abs, stream split) but only for a couple of
   opcodes, via pattern matching, with no operand-column demux.
 - Courgette/Zucchini symbolize references thoroughly but are aimed at *diffing*,
   not single-file ratio, and Zucchini deliberately avoids reassembly-grade
   disassembly for maintainability.
+- **kkrunchy is the closest prior art** and deserves the credit: it already
+  disassembles x86, demuxes per-field streams (§3.2), does rel→abs, and detects
+  jump tables — the §3/§6 design, shipping since the mid-2000s. What it does
+  *not* do is decode the **complete** ISA byte-exactly: it targets
+  compiler-generated 64k-intro code and **escapes** instructions it doesn't
+  model rather than round-tripping them, and it has no relocation-driven pointer
+  discovery (32-bit intros are position-dependent).
 
-A codec that combines **(a)** reassembly-grade bijective decode (this repo),
-**(b)** full label abstraction across *all* reference types (Courgette's depth),
-**(c)** per-field stream demux with per-stream models (beyond BCJ2's single
-split), and **(d)** relocation-driven pointer discovery — applied to both
-single-file and delta scenarios — is not present in any one shipping tool. The
-bijective (dis)assembler here supplies the piece everyone else approximates or
-omits; the remainder (§7.5) is plumbing.
+So the ideas are not new; the gap is **completeness and generality**. A codec
+that combines **(a)** reassembly-grade bijective decode over the *whole* x86-64
+ISA including non-canonical encodings (this repo — kkrunchy's escape hatch
+becomes an exact decode), **(b)** Courgette-depth label abstraction across all
+reference types, **(c)** kkrunchy-style per-field demux with per-stream models,
+and **(d)** relocation-driven pointer discovery — on arbitrary production
+binaries, for both single-file and delta scenarios — is what no single shipping
+tool offers. The bijective (dis)assembler here supplies exactly the piece the
+others approximate (kkrunchy's escapes, Zucchini's partial understanding); the
+remainder (§7.5) is plumbing.
 
 The honest expectation to set: on the **code section** this beats BCJ/BCJ2
 clearly (it fixes interleaving and covers every reference type); on **whole
