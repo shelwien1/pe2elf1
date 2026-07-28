@@ -4,7 +4,7 @@
 
 for %%a in (IDX\*.idx) do ( 
   if %%~pna.idx==%%~pnxa (
-    perl IDX/idx2inc.pl %%a 0 >nul
+    perl IDX/idx2inc.pl %%a 1 >nul
     move /y "%%~pna_*.inc" MOD/
   )
 )

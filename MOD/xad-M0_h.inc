@@ -14,16 +14,19 @@ static const int M0_Md_Volume = 1* M0_d0.Size; // 16
 
 struct M0_T { 
 #undef USE_NEW
-#define USE_NEW 0
+#define USE_NEW 1
 
 
   
-  /* Total bytes this module's Table() members occupy -- a constant here, since
-   * Const mode has already folded every count. */
-  static constexpr unsigned long long M0_Size = 0;
+  /* Total bytes this module's Table() members occupy.  Accumulated in _Init()
+   * because the counts are load-time values here. */
+  unsigned long long M0_Size = 0;
   void M0_Init( void ) {
+    M0_Size = 0;
+  
   
   }
   void M0_Quit( void ) {
+  
   }
 };

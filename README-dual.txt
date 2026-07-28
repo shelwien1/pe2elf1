@@ -125,6 +125,23 @@ landed on was noise that shipped as if it were tuned.  Freezing a whole file is
 now one edit -- put `!` on its Index line, or just leave that idx out of the
 build for that run.
 
+The two match models no longer share their storage sizes
+--------------------------------------------------------
+MATCH_HB and MATCH_TB -- the history-ring and hash-table sizes, as log2 -- used
+to be one pair feeding both models:
+
+  mmS.init(MATCH_ORDER,  MATCH_HB, MATCH_TB);   // 5-code window
+  mmL.init(MATCH_ORDER2, MATCH_HB, MATCH_TB);   // 63-code window
+
+Nothing about the storage was ever shared (each MatchModel owns its vectors),
+only the two numbers, so a high-order context model that fires on nearly every
+symbol and a repeat detector that fires rarely were forced onto the same ring
+and the same table.  MATCH_HB2 and MATCH_TB2 now give the long model its own,
+seeded identical to the short one's -- so the streams do not move -- and opt.pl
+can separate them.  That group has never been optimized, only seeded, which
+makes it the obvious first target alongside the B cascade.
+
+
 What is still SHARED but arguably should not be
 -----------------------------------------------
 Everything in G0 -- counter rate schedules, mixer, APM, both NLMS cascades --

@@ -29,7 +29,7 @@ for f in IDX/*.idx; do
     mv -f "IDX/$b-const_p.inc" "MOD/${b}_p.inc"
     rm -f "IDX/$b-const.idx" "IDX/$b-const.inc"
   else
-    ( cd IDX && perl idx2inc.pl "$b.idx" 0 >/dev/null )
+    ( cd IDX && perl idx2inc.pl "$b.idx" 1 >/dev/null )
     mv -f "IDX/${b}_h.inc" "IDX/${b}_p.inc" MOD/
   fi
 done

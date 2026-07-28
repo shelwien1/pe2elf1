@@ -168,6 +168,10 @@ pdesc( G0_MATCH_HB_, 0, "10001" );
 static const int G0_MATCH_HB = G0_MATCH_HB_.value * (1);
 pdesc( G0_MATCH_TB_, 0, "11110" );
 static const int G0_MATCH_TB = G0_MATCH_TB_.value * (1);
+pdesc( G0_MATCH_HB2_, 0, "10001" );
+static const int G0_MATCH_HB2 = G0_MATCH_HB2_.value * (1);
+pdesc( G0_MATCH_TB2_, 0, "11110" );
+static const int G0_MATCH_TB2 = G0_MATCH_TB2_.value * (1);
 pdesc( G0_MATCH_MIXSEL_, 0, "0" );
 static const int G0_MATCH_MIXSEL = G0_MATCH_MIXSEL_.value * (1);
 pdesc( G0_MW0_, 0, "0100000000000000" );
@@ -259,16 +263,19 @@ static const int G0_HJ_BITS = G0_HJ_BITS_.value * (1);
 
 struct G0_T { 
 #undef USE_NEW
-#define USE_NEW 0
+#define USE_NEW 1
 
 
   
-  /* Total bytes this module's Table() members occupy -- a constant here, since
-   * Const mode has already folded every count. */
-  static constexpr unsigned long long G0_Size = 0;
+  /* Total bytes this module's Table() members occupy.  Accumulated in _Init()
+   * because the counts are load-time values here. */
+  unsigned long long G0_Size = 0;
   void G0_Init( void ) {
+    G0_Size = 0;
+  
   
   }
   void G0_Quit( void ) {
+  
   }
 };

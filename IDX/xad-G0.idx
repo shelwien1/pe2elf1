@@ -204,6 +204,17 @@ Number MATCH_ORDER2, 1, 0!111111
 Number MATCH_HB,    1, 0!10001
 Number MATCH_TB,    1, 0!11110
 
+# ...and the long model's own, seeded identical to the short one's so the
+# archive does not move.  They were one shared pair until now, which forced a
+# 5-code window and a 63-code window to use the same ring and the same hash
+# table even though they do different jobs -- the short model is a high-order
+# context that fires on nearly every symbol, the long one a repeat detector
+# that fires rarely and wants reach rather than density.  Nothing about the
+# storage was shared (each MatchModel has always owned its vectors), only the
+# two numbers, so separating them costs nothing and gives opt.pl the knob.
+Number MATCH_HB2,   1, 0!10001
+Number MATCH_TB2,   1, 0!11110
+
 # Feed match-present into the mixer's weight-set selection as well as into the
 # counters (1), or leave the selection alone (0).  It doubles the weight table.
 Number MATCH_MIXSEL, 1, 0!0
