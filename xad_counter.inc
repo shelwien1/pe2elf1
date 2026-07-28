@@ -61,10 +61,24 @@ struct CtrS { // slow fixed-rate twin of the primary code counter
  * index spaces and row counts (tP: nsym, tP4: nsym^4, tHJ: 2^hj_bits), so no
  * shared row index exists.  Alignment plus one allocation is the achievable
  * form of that intent. */
+/* Blocks handed out are 64B-aligned and ZEROED.  The zeroing matters as much as
+   the alignment: the match model's hash tables are half a gigabyte and must
+   start at zero for the bounds test in MatchModel::update to be deterministic,
+   but they are also touched sparsely -- so they must be zeroed LAZILY, by the
+   kernel's demand-zero pages, not by a memset that walks all 512 MB up front.
+   `huge` is what separates the two users:
+
+     cta (counter tables, ~27 MB, densely touched, refilled per segment)
+        -> MADV_HUGEPAGE.  ~7000 4 KB pages become ~14 2 MB ones.
+     mta (match history + hash, ~512 MB, touched at random and sparsely)
+        -> NO madvise.  Under THP a first touch would fault in 2 MB where the
+           model wants 4 KB, which is 512x write amplification on a table most
+           runs never fill. */
 struct Arena {
   u8* base = nullptr;
   size_t cap = 0, used = 0;
-  int dry = 0;   // measuring pass: hand out nothing, just accumulate
+  int dry = 0;    // measuring pass: hand out nothing, just accumulate
+  int huge = 1;   // ask for huge pages (dense users only)
 
   INLINE void* take(size_t n) {
     used = (used+63)&~size_t(63);
@@ -74,23 +88,41 @@ struct Arena {
   }
   void rewind() { used = 0; }
 
+  /* Caught here rather than as a heap corruption: sizes are fixed after
+     Codec::init, so a second init with a wider geometry would lay a bigger
+     table set into the block sized for the first one. */
+  void check() const {
+    if( !dry&&used>cap ) {
+      fprintf(stderr, "xadpcm: model arena overrun (%zu > %zu) -- geometry changed after init\n", used, cap);
+      abort();
+    }
+  }
+
+  /* Fault the whole block in sequentially.  The pages are already zero -- this
+     writes zeros over zeros -- but it converts N random demand faults into one
+     streaming pass, which is the cheaper shape once the workload is going to
+     touch most of the block anyway.  See Codec::init for when it is worth it. */
+  void prefault() {
+    if( base )
+      memset(base, 0, used);
+  }
+
   void reserve(size_t n) {
     if( n<=cap )
       return;
 #ifdef __linux__
-    /* Huge pages are worth 5-15% on their own here, purely from the dTLB.
-       MADV_HUGEPAGE is a hint: if the kernel has THP disabled the mapping is
-       still valid, just backed by 4 KB pages, so there is nothing to fall back
-       from.  A failed mmap does fall back, below. */
     size_t sz = (n+(size_t(2)<<20)-1)&~((size_t(2)<<20)-1);
     void* p = mmap(nullptr, sz, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
     if( p!=MAP_FAILED ) {
-      madvise(p, sz, MADV_HUGEPAGE);
-      base = (u8*)p;
+      if( huge )
+        madvise(p, sz, MADV_HUGEPAGE);
+      base = (u8*)p;   // mmap gives zeroed pages, faulted in on first touch
       cap = sz;
       return;
     }
 #endif
+    /* Fallback: no demand-zero, so pay the memset once.  Correctness needs the
+       zero; only the laziness is lost. */
     size_t sz2 = (n+4095)&~size_t(4095);
     void* q = 0;
 #if defined(_WIN32)
@@ -102,6 +134,7 @@ struct Arena {
       fprintf(stderr, "xadpcm: out of memory allocating %zu bytes of model tables\n", sz2);
       exit(3);
     }
+    memset(q, 0, sz2);
     base = (u8*)q;
     cap = sz2;
   }

@@ -61,14 +61,20 @@ struct Mixer {
    parameters and the multiply folds. */
 template<IDXP(APN), IDXP(APR)>
 struct APM {
-  vector<u16> t;
+  /* Arena-allocated like everything else in the model: it was the last
+     std::vector on the coding path, and being a vector meant it was fully
+     allocated AND filled twice at startup -- once in the arena's dry sizing
+     pass, which hands out nothing but still ran this. */
+  u16* t = nullptr;
   int idx = 0, wt = 0;
   IDXC(int, N, PAPN(APN));
   IDXC(int, ncl, PAPN(APN)+1);
   IDXC(int, rt, PMUL(APR));
 
-  void init(int nctx) {
-    t.assign(size_t(nctx)*size_t(ncl), 0);
+  void init(Arena &a, int nctx) {
+    t = (u16*)a.take(size_t(nctx)*size_t(ncl)*sizeof(u16));
+    if( !t )
+      return;
     for( int c = 0; c<nctx; c++ )
       for( int j = 0; j<ncl; j++ )
         t[size_t(c)*size_t(ncl)+size_t(j)] = u16(squash(j*P_ONE/N-P_MID)<<CTR_SH);

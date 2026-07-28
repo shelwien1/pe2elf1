@@ -202,6 +202,21 @@
 #include "common.inc"
 #include "coro3b.inc"
 
+/* g++ -Os miscompiles the Lib3 coroutine: the second yield() receives a
+   corrupted `this` and the stack-copy memcpy walks off the end.  Bisected to
+   the coroutine port itself, so it is not a consequence of any later change,
+   and a bare twenty-line Lib3 coroutine survives -Os -- it takes a deeper call
+   chain to expose.  Every other level is correct AND byte-identical: g++
+   -O0/-O1/-O2/-O3/-Ofast and clang++ -O0..-O3/-Os/-Oz/-Ofast.
+   __builtin_setjmp/__builtin_longjmp are documented by GCC as a language-runtime
+   facility with strict constraints rather than a general mechanism, and
+   coro3b.inc already records one earlier -O2/-Ofast miscompile of a previous
+   implementation, so this is that hazard again rather than a new one.  Refuse
+   the build instead of shipping a binary that crashes on the second window. */
+#if defined(__GNUC__) && !defined(__clang__) && defined(__OPTIMIZE_SIZE__)
+#error "g++ -Os miscompiles the Lib3 coroutine (see STATUS-speed.md); build with -O2/-O3, or use clang++"
+#endif
+
 // #include "adpcm-lib.h"
 
 int adpcm_block_size_to_sample_count(int block_size, int num_chans, int bps) {

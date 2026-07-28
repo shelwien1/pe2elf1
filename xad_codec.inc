@@ -148,12 +148,26 @@ struct Codec {
      ones, so a 4-bit wav after a 5-bit one still lands on the rows it would
      have hit alone.  When every segment shares one geometry the maxima equal
      it and the layout is exactly what a single-file run produces. */
-  void init(const Params &p, int maxsym, int maxnib) {
+  /* Below this many payload bytes, leave the match arena demand-zero; above it,
+     fault it in with one sequential pass.
+     The tables are ~512 MB and probed at random, so which is cheaper depends
+     entirely on how much of them the run will touch.  Measured both ways: on a
+     20 KB input lazy wins by 39% (20 runs: 16.55 s -> 10.15 s), because most of
+     the half gigabyte is never looked at; on a 2.5 MB input eager wins by 8%
+     (8.66 s vs 9.34 s), because every page gets touched either way and one
+     streaming fill beats ~131k random demand faults.  The crossover is where
+     the symbol count approaches the table's page count (2^16 per model), which
+     is a few hundred KB of payload. */
+  enum { PREFAULT_MIN = 1<<18 };
+
+  void init(const Params &p, int maxsym, int maxnib, u64 workload) {
     amaxsym = maxsym;
     amaxnib = maxnib;
-    mmS.init();
+    reset_stats();     // binds both arenas, including the match tables
+    if( workload>=u64(PREFAULT_MIN) )
+      mta.prefault();
+    mmS.init();        // ...then the state, which needs those pointers valid
     mmL.init();
-    reset_stats();
     memset(stat, 0, sizeof(stat));
     begin_seg(p, true);
   }
@@ -168,19 +182,27 @@ struct Codec {
        sizes depend only on amaxsym / amaxnib / sgn_ncls, which are fixed for the
        life of the object, so every later reset re-binds the same layout. */
     if( !cta.base ) {
-      cta.dry = 1;
+      cta.dry = mta.dry = 1;
       bind_tables();
-      size_t need = cta.used;
-      cta.dry = 0;
+      size_t need = cta.used, needm = mta.used;
+      cta.dry = mta.dry = 0;
+      mta.huge = 0;
       cta.reserve(need);
+      mta.reserve(needm);
     }
     bind_tables();
+    cta.check();
+    mta.check();
   }
 
-  Arena cta;   // every CtrTab / CtrSTab lives in here
+  Arena cta;   // counter tables: dense, refilled per segment, huge pages
+  Arena mta;   // match history + hash: 512 MB, sparse, demand-zero, NO huge pages
 
   void bind_tables() {
     cta.rewind();
+    mta.rewind();
+    mmS.bind(mta);
+    mmL.bind(mta);
     nsym = amaxsym;
     nib_rows = amaxnib;
     sgn_ncls = pclamp(G0_SGN_NCLS, 2, sgn_maxnb+1);
@@ -212,8 +234,8 @@ struct Codec {
     mmS.barrier();
     mmL.barrier();
     mxC.init(cta, nsym*NCONF*(G0_MATCH_MIXSEL ? 2 : 1));
-    apA.init(nsym*nsym);
-    apB.init(nib_rows*nsym);
+    apA.init(cta, nsym*nsym);
+    apB.init(cta, nib_rows*nsym);
     tHnb.init(cta, SGN_NMODEL, SGN_NODES, RS_HDR);
     tHmn.init(cta, SGN_NMODEL*sgn_ncls, SGN_NODES, RS_HDR);
     tRsv.init(cta, 1, 2, RS_LIT); // one node, two branches

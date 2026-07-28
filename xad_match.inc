@@ -33,8 +33,8 @@
    and compiles into something else. */
 template<IDXP(MORD), IDXP(MHB), IDXP(MTB)>
 struct MatchModel {
-  vector<u8> hist; // coded symbols, in coding order
-  vector<u32> tab; // hash of the last `order` symbols -> position
+  u8* hist = nullptr;  // coded symbols, in coding order
+  u32* tab = nullptr;  // hash of the last `order` symbols -> position
   u32 pos = 0;                // where the next symbol lands
   u32 ptr = 0;                // history position the prediction reads
   u32 len = 0;                // symbols matched so far, 0 = no match
@@ -57,9 +57,20 @@ struct MatchModel {
   IDXC(u32, tmask, u32((size_t(1)<<pclamp(MTB, 8, 26))-1));
   IDXC(u32, bpow, bpow_of(pclamp(MORD, 2, 64)));
 
+  /* Storage comes from the Codec's match arena, NOT from a vector.  At the
+     shipped MATCH_TB the two hash tables are 2 x 2^26 x 4 B = 512 MB, and
+     vector::assign zero-fills every byte of that at startup: a 20 KB input
+     measured 0.14 s of user time against 0.8-3.8 s of SYSTEM time, almost all
+     of it the kernel faulting in half a gigabyte the run would never look at.
+     An mmap'd arena is zeroed by the kernel lazily, so only the pages actually
+     probed are ever materialised -- same values, same output, and the fixed
+     cost of a short file drops to nothing. */
+  void bind(Arena &a) {
+    hist = (u8*)a.take(size_t(1)<<hbits);
+    tab = (u32*)a.take((size_t(1)<<tbits)*sizeof(u32));
+  }
+
   void init() {
-    hist.assign(size_t(1)<<hbits, 0);
-    tab.assign(size_t(1)<<tbits, 0);
     pos = ptr = len = h = 0;
     floor_ = 0;
     expect = -1;

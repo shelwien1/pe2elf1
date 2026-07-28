@@ -1,7 +1,8 @@
 /* xad_simd.inc -- part of xadpcm.cpp; not standalone.
  *
- * The two NLMS kernels, and nothing else.  Included before xad_pred.inc, which
- * is their only caller.
+ * The three model kernels: the NLMS dot product and weight update, and the
+ * mixer's weight update.  Included before xad_pred.inc and xad_mix.inc, their
+ * only callers.
  *
  * WHY THESE ARE BIT-EXACT.  xad_dot64 accumulates into i64 and two's-complement
  * addition is associative and commutative even under overflow, so splitting the
@@ -51,15 +52,27 @@ static void xad_mixupd_c(i32* w, const i32* st, int n, i32 el, int sh, int cl) {
 
 #if XAD_X86
 
+/* On the compile-time path the kernels are always_inline, which is v4 §1.3:
+   Pred's stage lengths are IDXC constants in the Const build, so inlining puts a
+   COMPILE-TIME trip count in each loop -- no loop control, full unroll, and the
+   short stages (the B cascade's third is 17 taps) become straight-line code where
+   reduction latency rather than throughput was the binding constraint.
+   On the dispatched path they cannot be inlined -- their address is taken -- and
+   there they carry the target attribute instead. */
 #if defined(__AVX2__)
-#define XAD_T_AVX2
+#define XAD_T_AVX2 INLINE
 #else
 #define XAD_T_AVX2 __attribute__((target("avx2")))
 #endif
 #if defined(__SSE4_1__)
-#define XAD_T_SSE4
+#define XAD_T_SSE4 INLINE
 #else
 #define XAD_T_SSE4 __attribute__((target("sse4.1")))
+#endif
+#if defined(__AVX512F__)
+#define XAD_T_AVX512 INLINE
+#else
+#define XAD_T_AVX512 __attribute__((target("avx512f")))
 #endif
 
 /* AVX2 lacks a 64-bit ARITHMETIC right shift (srli_epi64 is logical and
@@ -70,7 +83,7 @@ static void xad_mixupd_c(i32* w, const i32* st, int n, i32 el, int sh, int cl) {
    forming it by shifting a SIGNED 1 would be undefined behaviour.
    Checked at both ends by ktest.cpp, which real audio never reaches: at s=0 the
    two 2^63 terms cancel modulo 2^64, at s=63 the result is 0 or -1. */
-XAD_T_AVX2 static INLINE __m256i xad_sra64_avx2(__m256i v, __m128i cnt, __m256i b) {
+XAD_T_AVX2 static __m256i xad_sra64_avx2(__m256i v, __m128i cnt, __m256i b) {
   return _mm256_sub_epi64(_mm256_xor_si256(_mm256_srl_epi64(v, cnt), b), b);
 }
 
@@ -173,11 +186,83 @@ XAD_T_SSE4 static void xad_mixupd_sse4(i32* __restrict w, const i32* __restrict 
   }
 }
 
+/* AVX-512F.  Worth its own set for one reason beyond width: _mm512_sra_epi64 is
+   a real 64-bit ARITHMETIC shift, so adapt drops the xor-sub identity entirely.
+   MEASURED 9-10% faster than the AVX2 set on the development machine (8.39 s vs
+   9.29 s on the encode pair), bit-identical output -- so it is the default where
+   the hardware has it.  512-bit code does downclock the core on several server
+   parts, and that is machine-specific rather than something this file can know,
+   so there is an opt-out: -DXAD_NO_AVX512 at compile time, or XAD_AVX512=0 in
+   the environment for the runtime-dispatched build.
+   The stage lengths are multiples of 8 but not of 16, so these carry a tail of
+   at most 8 taps, handled scalar.  Reassociating the dot across a different
+   lane count is still exact: i64 addition is associative under wraparound. */
+XAD_T_AVX512 static i64 xad_dot64_avx512(const i32* __restrict w, const i32* __restrict h, int n8) {
+  __m512i a0 = _mm512_setzero_si512(), a1 = _mm512_setzero_si512();
+  int i = 0;
+  for( ; i+16<=n8; i += 16 ) {
+    __m512i wv = _mm512_load_si512((const void*)(w+i));
+    __m512i hv = _mm512_loadu_si512((const void*)(h+i));
+    a0 = _mm512_add_epi64(a0, _mm512_mul_epi32(wv, hv));
+    a1 = _mm512_add_epi64(a1, _mm512_mul_epi32(_mm512_srli_epi64(wv, 32),
+                                               _mm512_srli_epi64(hv, 32)));
+  }
+  i64 s = _mm512_reduce_add_epi64(_mm512_add_epi64(a0, a1));
+  for( ; i<n8; i++ )
+    s += i64(w[i])*i64(h[i]);
+  return s;
+}
+
+XAD_T_AVX512 static void xad_adapt_avx512(i32* __restrict w, const i32* __restrict h, int n, i32 err, int sh) {
+  __m512i e = _mm512_set1_epi32(err);
+  __m128i cnt = _mm_cvtsi32_si128(sh);
+  int i = 0, nf = n&~15;
+  for( ; i<nf; i += 16 ) {
+    __m512i hv = _mm512_loadu_si512((const void*)(h+i));
+    __m512i pe = _mm512_sra_epi64(_mm512_mul_epi32(e, hv), cnt);
+    __m512i po = _mm512_sra_epi64(_mm512_mul_epi32(e, _mm512_srli_epi64(hv, 32)), cnt);
+    __m512i r = _mm512_mask_blend_epi32(0xAAAA, pe, _mm512_slli_epi64(po, 32));
+    _mm512_storeu_si512((void*)(w+i),
+                        _mm512_add_epi32(_mm512_loadu_si512((const void*)(w+i)), r));
+  }
+  for( ; i<n; i++ )
+    w[i] += i32((i64(err)*i64(h[i]))>>sh);
+}
+
+XAD_T_AVX512 static void xad_mixupd_avx512(i32* __restrict w, const i32* __restrict st,
+                                           int n, i32 el, int sh, int cl) {
+  __m512i e = _mm512_set1_epi32(el);
+  __m128i cnt = _mm_cvtsi32_si128(sh);
+  __m512i lo = _mm512_set1_epi32(-cl), hi = _mm512_set1_epi32(cl);
+  for( int i = 0; i<n; i += 16 ) {
+    __m512i sv = _mm512_load_si512((const void*)(st+i));
+    __m512i pe = _mm512_sra_epi64(_mm512_mul_epi32(e, sv), cnt);
+    __m512i po = _mm512_sra_epi64(_mm512_mul_epi32(e, _mm512_srli_epi64(sv, 32)), cnt);
+    __m512i r = _mm512_mask_blend_epi32(0xAAAA, pe, _mm512_slli_epi64(po, 32));
+    __m512i nw = _mm512_add_epi32(_mm512_load_si512((const void*)(w+i)), r);
+    _mm512_store_si512((void*)(w+i), _mm512_max_epi32(lo, _mm512_min_epi32(hi, nw)));
+  }
+}
+
 #endif // XAD_X86
 
 // ---------------------------------------------------------------- selection
 
-#if XAD_X86 && defined(__AVX2__)
+#if XAD_X86 && defined(__AVX512F__) && !defined(XAD_NO_AVX512)
+
+static INLINE i64 xad_dot(const i32* w, const i32* h, int n8) {
+  return xad_dot64_avx512(w, h, n8);
+}
+static INLINE void xad_adapt(i32* w, const i32* h, int n, i32 err, int sh) {
+  xad_adapt_avx512(w, h, n, err, sh);
+}
+static INLINE void xad_mixupd(i32* w, const i32* st, int n, i32 el, int sh, int cl) {
+  xad_mixupd_avx512(w, st, n, el, sh, cl);
+}
+static const char* xad_isa() { return "avx512f (compile-time)"; }
+static void xad_simd_init() {}
+
+#elif XAD_X86 && defined(__AVX2__)
 
 // built for AVX2: direct and inlinable, no indirection at all
 static INLINE i64 xad_dot(const i32* w, const i32* h, int n8) {
@@ -204,7 +289,16 @@ static const char* xad_isa_name = "scalar";
 
 static void xad_simd_init() {
   __builtin_cpu_init();
-  if( __builtin_cpu_supports("avx2") ) {
+  /* AVX-512 first where it exists -- measured 9-10% over AVX2 here.  XAD_AVX512=0
+     in the environment forces AVX2, for parts where 512-bit downclocking makes
+     that the wrong trade; the same A/B is how the default was chosen. */
+  const char* no512 = getenv("XAD_AVX512");
+  if( !(no512&&no512[0]=='0')&&__builtin_cpu_supports("avx512f") ) {
+    xad_dot_p = xad_dot64_avx512;
+    xad_adapt_p = xad_adapt_avx512;
+    xad_mixupd_p = xad_mixupd_avx512;
+    xad_isa_name = "avx512f (runtime)";
+  } else if( __builtin_cpu_supports("avx2") ) {
     xad_dot_p = xad_dot64_avx2;
     xad_adapt_p = xad_adapt_avx2;
     xad_mixupd_p = xad_mixupd_avx2;

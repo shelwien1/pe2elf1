@@ -47,6 +47,16 @@ struct Xad : RC<MD> {
   int hdr_eof = 0;
   u64 hdr_bytes = 0;       // container header, i.e. everything ahead of the rc stream
 
+  /* How much coded audio this run will actually push through the model.  Only
+     used to decide whether pre-faulting the match arena pays -- see
+     Codec::PREFAULT_MIN. */
+  size_t total_payload() const {
+    size_t n = 0;
+    for( size_t i = 0; i<ar.segs.size(); i++ )
+      n += ar.segs[i].pm.data_size;
+    return n;
+  }
+
   // ------------------------------------------------------------- pin helpers
 
   /* Block write straight into the output window.  chkout() after each chunk
@@ -261,7 +271,7 @@ struct Xad : RC<MD> {
     int maxsym, maxnib;
     arc_geometry(ar, maxsym, maxnib);
     Params p0;
-    cx.init(ar.segs.empty() ? p0 : ar.segs[0].pm, maxsym, maxnib);
+    cx.init(ar.segs.empty() ? p0 : ar.segs[0].pm, maxsym, maxnib, u64(total_payload()));
     this->init_enc();
     if( ar.lead )
       cx.code_bytes(LIT_GAP, d, ar.lead);
@@ -356,7 +366,7 @@ struct Xad : RC<MD> {
     int maxsym, maxnib;
     arc_geometry(ar, maxsym, maxnib);
     Params p0;
-    cx.init(ar.segs.empty() ? p0 : ar.segs[0].pm, maxsym, maxnib);
+    cx.init(ar.segs.empty() ? p0 : ar.segs[0].pm, maxsym, maxnib, u64(total_payload()));
     this->init_dec();
 
     u8* d = src.data();

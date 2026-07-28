@@ -200,6 +200,8 @@ static void report(const Codec<MD> &cx, const Arc &ar, size_t insz, u64 outsz, u
     fprintf(stderr, "  coroutine stack high-water %llu of %u bytes\n",
             (unsigned long long)stk_hi, unsigned(Coroutine::STKPAD));
     fprintf(stderr, "  nlms kernels: %s\n", xad_isa());
+    fprintf(stderr, "  model arenas: counters %.1f MB, match %.1f MB\n",
+            double(cx.cta.used)/1048576.0, double(cx.mta.used)/1048576.0);
   }
 }
 

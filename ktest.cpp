@@ -27,7 +27,7 @@ typedef int32_t i32; typedef int64_t i64;
 #include "xad_msq.inc"
 
 enum { NMAX = 520 };
-static ALIGN(64) i32 W0[NMAX], W1[NMAX], W2[NMAX], H[NMAX+8];
+static ALIGN(64) i32 W0[NMAX], W1[NMAX], W2[NMAX], W3[NMAX], WSAVE[NMAX], H[NMAX+8];
 
 static u64 rs = 0x243F6A8885A308D3ull;
 static u32 rnd() { rs ^= rs<<13; rs ^= rs>>7; rs ^= rs<<17; return u32(rs>>17); }
@@ -50,6 +50,7 @@ int main() {
 #if XAD_X86
   const int have_avx2 = __builtin_cpu_supports("avx2");
   const int have_sse4 = __builtin_cpu_supports("sse4.1");
+  const int have_512 = __builtin_cpu_supports("avx512f");
 #else
   const int have_avx2 = 0, have_sse4 = 0;
   fprintf(stderr, "ktest: no x86 kernels in this build; scalar only\n");
@@ -63,6 +64,7 @@ int main() {
 #if XAD_X86
     if( have_avx2 && xad_dot64_avx2(W0, H, n8)!=ref ) { printf("dot avx2 mismatch n8=%d\n", n8); fail++; }
     if( have_sse4 && xad_dot64_sse4(W0, H, n8)!=ref ) { printf("dot sse4 mismatch n8=%d\n", n8); fail++; }
+    if( have_512 && xad_dot64_avx512(W0, H, n8)!=ref ) { printf("dot avx512 mismatch n8=%d\n", n8); fail++; }
 #endif
     // dot from an UNALIGNED history cursor, which is how Pred always calls it
     if( n8>8 ) {
@@ -70,6 +72,7 @@ int main() {
 #if XAD_X86
       if( have_avx2 && xad_dot64_avx2(W0, H+1, n8-8)!=r2 ) { printf("dot avx2 unaligned mismatch\n"); fail++; }
       if( have_sse4 && xad_dot64_sse4(W0, H+1, n8-8)!=r2 ) { printf("dot sse4 unaligned mismatch\n"); fail++; }
+      if( have_512 && xad_dot64_avx512(W0, H+1, n8-8)!=r2 ) { printf("dot avx512 unaligned mismatch\n"); fail++; }
 #endif
     }
   }
@@ -82,7 +85,7 @@ int main() {
     i32 err = rnd32();
     if( (it&31)==0 ) err = 0;
     for( int i = 0; i<n+8; i++ ) H[i] = rnd32();
-    for( int i = 0; i<n; i++ ) { i32 v = rnd32(); W0[i] = W1[i] = W2[i] = v; }
+    for( int i = 0; i<n; i++ ) { i32 v = rnd32(); W0[i] = W1[i] = W2[i] = WSAVE[i] = v; }
     xad_adapt_c(W0, H, n, err, sh);
     nad++;
 #if XAD_X86
@@ -93,6 +96,11 @@ int main() {
     if( have_sse4 ) {
       xad_adapt_sse4(W2, H, n, err, sh);
       if( memcmp(W0, W2, size_t(n)*4) ) { printf("adapt sse4 mismatch n=%d sh=%d err=%d\n", n, sh, err); fail++; }
+    }
+    if( have_512 ) {
+      for( int i = 0; i<n; i++ ) W3[i] = WSAVE[i];
+      xad_adapt_avx512(W3, H, n, err, sh);
+      if( memcmp(W0, W3, size_t(n)*4) ) { printf("adapt avx512 mismatch n=%d sh=%d err=%d\n", n, sh, err); fail++; }
     }
 #endif
   }

@@ -45,8 +45,10 @@ alternating A/B on the path it touches — see below.
 | 8 | §1.15 RC carry loop; §2.2 tried and reverted | — | — | identical |
 | 9 | §2.1 size `Pred` from its actual stage lengths | — | — | identical |
 | 10 | §1.13 IMA state-transition tables | — | — | identical |
-| **final** | **clang++ `-O3 -march=native`** | **18.358** | **2.13×** | identical |
-| final | gcc `-O3`, portable (mk.sh default) | 22.123 | 1.77× | identical |
+| 11 | review pass: AVX-512, §1.3 specialisation, lazy match arena | — | — | identical |
+| **final** | **clang++ `-O3 -march=native`** | **16.877** | **2.31×** | identical |
+| final | gcc `-O3`, portable (mk.sh default) | 19.891 | 1.96× | identical |
+| final | 20 × 20 KB inputs (the directory case) | 9.25 | **1.79×** | identical |
 
 Runs 8–10 are individually below the ±2% whole-suite noise floor and were
 measured by alternating A/B on the paths they touch; see the log. Every binary
@@ -442,3 +444,219 @@ than by the optimization itself: the `(i64)1 << 63` UB in the AVX2 shift
 identity (§1.2), and an `STC` table built one iteration before its input
 existed (§1.10) — the latter grew every archive ~6% while still round-tripping
 perfectly, so only the md5 matrix caught it.
+
+---
+
+# Review pass
+
+A read-through of the result against the plan, after the fact. Three real
+defects, two of them pre-existing and neither caused by the optimization work;
+one plan premise that turns out to be wrong by an order of magnitude; and one
+plan item I had wrongly written off.
+
+## Defects found
+
+### R1 — `g++ -Os` produces a binary that segfaults
+
+Not from the speed work: bisected across every commit back to the coroutine
+port itself. Every other configuration is correct **and** byte-identical —
+g++ `-O0/-O1/-O2/-O3/-Ofast`, clang++ `-O0..-O3/-Os/-Oz/-Ofast`, with and
+without `-march=native`, AVX2 and AVX-512 paths, 18 configurations checked.
+
+The failure is inside Lib3's `yield()`: the **first** yield is correct
+(`p = &Menc`), the **second** receives `p =` the *value of* `Menc.stkptrH` — a
+stack address — and the stack-copy `memcpy` then walks off the end of the
+mapping. So `__builtin_setjmp`/`__builtin_longjmp` plus the manual
+save-and-restore of the coroutine's stack is not surviving GCC's `-Os` register
+allocation. That is the hazard GCC documents for those builtins (a
+language-runtime facility with constraints, not a general mechanism), and
+`coro3b.inc` already records one earlier `-O2/-Ofast` miscompile of a previous
+implementation of the same thing. A bare twenty-line Lib3 coroutine survives
+`-Os`; it takes a deeper call chain to expose.
+
+Not fixable from this side without rewriting the coroutine, so the build now
+**refuses** rather than shipping a crashing binary:
+
+```c
+#if defined(__GNUC__) && !defined(__clang__) && defined(__OPTIMIZE_SIZE__)
+#error "g++ -Os miscompiles the Lib3 coroutine ..."
+#endif
+```
+
+**This is in Lib3, so the 021/ddsdet tree has it too.**
+
+### R2 — half a gigabyte of hash table, zero-filled up front
+
+`vector<u32> tab` in each match model is `2^26 × 4 B` at the shipped
+`MATCH_TB`, so **512 MB across the two**, and `assign()` eagerly writes every
+byte of it at startup. On a 20 KB input that is 0.14 s of *user* time against
+**0.8–3.8 s of system time** — the run spent 85–95% of its wall clock having the
+kernel fault in half a gigabyte it would barely look at. This is exactly the
+directory-of-short-files case §2.3 was worried about, and it dwarfs what §2.3
+addressed.
+
+Fixed by giving the match models their own mmap'd arena: the kernel's
+demand-zero pages provide the same guaranteed zeros, but only for pages actually
+probed. Two details matter:
+
+* **No `MADV_HUGEPAGE` on this arena.** The counter arena wants huge pages
+  (dense, 27 MB); this one must not have them, because a first touch would fault
+  in 2 MB where a random probe needs 4 KB.
+* **Adaptive pre-fault.** Lazy is not always right: measured, a 20 KB input is
+  39% faster lazy (20 runs, 16.55 s → 10.15 s) while a 2.5 MB input is 8% faster
+  eager (8.66 s vs 9.34 s), because a long run touches every page anyway and one
+  streaming fill beats ~131 000 random demand faults. So `Codec::init` now takes
+  the payload size and pre-faults above `PREFAULT_MIN`. Both ends keep their
+  win.
+
+Net: **20 short files 16.55 s → 9.25 s (1.79×)**, long files unchanged, peak RSS
+on a short input 544 MB → 265 MB.
+
+### R3 — a silent-corruption path in the arena
+
+Table sizes are fixed after `Codec::init`, and the arena is sized by a dry pass
+on the first `reset_stats`. If `init` were ever called twice with a wider
+geometry the second `bind_tables` would lay a larger set into the block sized
+for the first — silent heap corruption. Not reachable today (one `init` per
+carrier per run), but it is one comparison to make it an abort with a message
+instead, so `Arena::check()` now runs after every bind.
+
+## A plan premise that is wrong
+
+§1.7 sizes the working set at "**~75 MB** of essentially random access: ~27 MB
+counters + ~48 MB match-model history and hash tables", and the whole dTLB
+argument rests on that. The counter figure is right; the match figure is off by
+more than 10×. Measured, reported by `-v`:
+
+```
+  model arenas: counters 27.4 MB, match 512.2 MB
+```
+
+So the real working set is **540 MB**, not 75 MB, and the match tables are 95%
+of it. That does not invalidate what §1.7 asked for — the counter arena still
+benefits from huge pages and 64B rows — but it does mean the *dominant* TLB
+pressure is somewhere §1.7 never looked, and that §3.3 (match model sizing) is a
+much bigger lever than the plan's ordering suggests. Note the shipped
+`MATCH_TB` pattern evaluates to 30 and is then `pclamp`ed to 26, so most of that
+parameter's search space saturates at the ceiling — worth knowing before the
+next tuning run.
+
+## A plan item I had wrongly written off
+
+### AVX-512 (§1.2, second half) — now implemented, 9–10%
+
+The plan calls for `_mm512_mul_epi32` + `_mm512_srai_epi64` +
+`_mm512_reduce_add_epi64`. I had not implemented it, and — worse — the header
+comment in `xad_simd.inc` claimed the dispatcher chose between AVX2 **and
+AVX-512F**, which was simply false. Implemented and measured:
+
+```
+  avx2    9.398 s      avx512  8.373 s
+  avx2    9.180 s      avx512  8.399 s
+```
+
+**9–10% faster, bit-identical.** `_mm512_sra_epi64` is a true 64-bit arithmetic
+shift, so `adapt` drops the xor–sub identity entirely. It is now the default
+where the hardware has it, with an opt-out (`-DXAD_NO_AVX512`, or `XAD_AVX512=0`
+for the dispatched build) because 512-bit downclocking is a real effect on some
+server parts and this file cannot know the target. `ktest.cpp` covers the new
+kernels.
+
+I had speculated in an earlier note that AVX-512 would lose to downclocking.
+That was a guess presented alongside measurements, which is the one thing this
+log is supposed not to do; it is corrected here and in the source.
+
+### §1.3 — kernel specialisation, now actually done
+
+`Pred`'s stage lengths were already compile-time constants, but the kernels took
+`n8` as a runtime argument and were not forced to inline, so the trip count did
+not fold. On the compile-time ISA paths the kernels are now `always_inline`,
+which is what §1.3 asks for: a constant bound, full unroll, no loop control.
+Worth **~1%** (8.094 → 8.018 s) — small, and consistent.
+
+## Also fixed
+
+* `xad_simd.inc`'s header described two kernels and an AVX-512 dispatch that did
+  not exist; `xad_pred.inc` still claimed storage was "sized for PRED_NMAX"
+  after §2.1 changed exactly that. Both corrected.
+* `APM` was the last `std::vector` on the coding path, so it was allocated **and
+  filled twice** at startup — once in the arena's dry sizing pass. Moved to the
+  arena.
+* Four build configurations (g++/clang++ × portable/native) now compile with
+  **zero warnings**; the clang-only ones were a duplicate `inline` specifier
+  introduced by the §1.3 change.
+
+---
+
+# Coverage audit: every numbered item in xadpcm_speed_v4.md
+
+Checked item by item against the source, not against memory.
+
+| item | state | where |
+|---|---|---|
+| §0 measure first | **adapted** — `perf` is not in this container, so min-of-N + alternating A/B | `bench.sh`, `md5s.sh` |
+| §1.1 linearize the NLMS history | **done** | `xad_pred.inc` `Hist` |
+| §1.2 SIMD dot/adapt, AVX2 | **done** | `xad_simd.inc` |
+| §1.2 …AVX-512F variant | **done** (review pass, R-section) | `xad_simd.inc` |
+| §1.2 CPUID dispatch, one binary | **done** | `xad_simd.inc` selection block |
+| §1.3 template kernels on stage length | **done** (review pass) | `XAD_T_*` = `INLINE` on compile-time paths |
+| §1.4 SIMD the mixer | **done**, with the operand split shown unnecessary | `xad_mix.inc`, `xad_mixupd` |
+| §1.4 stride 28→32, 64B-align | **done** | `MIX_STRIDE`, `Arena` |
+| §1.5 bit-scan loops → clz | **done** (3 sites) | `xad_pred.inc`, `xad_ms.inc` |
+| §1.6 reciprocal for `ms_quantize` | **done**, carried on `Ch` so the inner loop has none | `xad_msq.inc` |
+| §1.6 `ms_conf` comparison chain | **done** | `xad_ms.inc` |
+| §1.6 IMA 89×4 reciprocal table | **superseded** — threshold count is exact and cheaper at NCONF=2 | `ima_conf` |
+| §1.6 `ms_predict` `/256` branch-free | **done** | `xad_ms.inc` |
+| §1.7 64B-align every CtrTab | **done** | `Arena::take` |
+| §1.7 one arena | **done** | `Codec::cta` |
+| §1.7 huge pages | **done** (counters only — see R2 for why not the match arena) | `Arena::reserve` |
+| §1.7 do *not* merge tables into one slab | **respected** | — |
+| §1.8 prefetch schedule | **done**, both halves | `prefetch_early`, `code_symbol` |
+| §1.9 hoist `cs[]` out of the bit loop | **done** | `xad_codec_bits.inc` |
+| §1.9 three match rows per model | **done** | `msr[]`/`mlr[]` |
+| §1.9 delete dead `if(sl)` | **done** | `mbit` |
+| §1.10 fold `pr()` into the stretch table | **done** | `STC` |
+| §1.11 compile out the accounting | **done** | `XAD_STATS`, `XSTAT` |
+| §1.12 drop dead `q2`/`q3` leftovers | **done** | `ima_quantize_nl`, `ms_quantize_nq` |
+| §1.12 fuse the four quantizer loops | **declined**, measured reasoning: `BPS` is compile-time so they unroll and GCC already CSEs `step>>i` | — |
+| §1.13 IMA state-transition tables | **done** (~0.4%, the plan's own "small win") | `ima_mag`/`ima_nxt` |
+| §1.14 `template<bool ENC>` | **already done** by the earlier refactor (`MD`) | `Codec<MD>` |
+| §1.14 `template<int BPS>` | **already done** by the earlier refactor | `code_data_ima<BPS,XST>` |
+| §1.15 reserve the output vector | **moot** — the coroutine port removed the vector; the RC writes a pin cursor | `xad_rc.inc` |
+| §1.15 hoist `cachesz`, hint the carry | **done** | `shift_low` |
+| §1.15 decoder bounds check | **moot** — it is the pin's window test, i.e. the protocol | — |
+| §1.15 leave renorm a loop | **respected** | — |
+| §1.16 `-O3` | **done** (inside noise vs `-O2`, adopted anyway) | `mk.sh` |
+| §1.16 `-march=native` | **documented knob**, ~5% | `mk.sh` `ARCH` |
+| §1.16 PGO 10–20% | **rejected, measured** — small regression on top of `-O3` | `mk.sh` comment |
+| §1.16 no `-ffast-math` | **respected** | — |
+| §1.16 verify `INLINE` is applied | **checked** — the plan's `#ifdef 13` does not exist here; `nm` shows no out-of-line `mbit` | — |
+| §2.1 shrink `Pred` | **done**, 82 KB → 29 KB | `Hist::alloc`, `Pred::alloc` |
+| §2.2 interleave the two cascades | **tried, reverted**, numbers in-source (neutral clang, −1.8% gcc) | `xad_codec_ima.inc` note |
+| §2.3 `reset_stats` contiguous fill | **done** via the arena | `bind_tables` |
+| §3.1 drop `tHJ`/`tP4`/`tQPX` | **declined** — costs ~1.8 KB on wavs2, brief allows "a few bytes" | — |
+| §3.2 disable the B cascade | **declined** — −0.43%, thousands of bytes | — |
+| §3.3 halve the short model's `MATCH_TB` | **declined** — costs collisions; now reachable from IDX without a code change | — |
+| §3.4 do not touch the contract | **respected** | — |
+| §4.1 md5 before/after every commit | **done** | `md5s.sh`, 24 combinations |
+| §4.2 round-trip matrix | **done** | `verify.sh` |
+| §4.3 `-O0/-O2/-Ofast` identity | **done and extended** — 18 configurations, two compilers, both ISA paths |
+| §4.3 ASan/UBSan | **done**, with the caveat that ASan's stack instrumentation cannot coexist with a stack-copying coroutine (`--param asan-stack=0`) | — |
+| §4.3 geometry fuzz | **partial** — 14 synthetic geometries cover every walk instantiation, but it is a fixed corpus, not a fuzzer |
+| §4.4 kernel differential test | **done**, extended to AVX-512 | `ktest.cpp` |
+| §5 brute-force the reciprocal domain | **done**, 912 073 cases | `ktest.cpp` |
+
+**Two items are not fully closed**, both deliberately:
+
+* **§4.3 geometry fuzz.** `gen_testwavs.py` produces a fixed 14-file corpus that
+  reaches every payload-walk instantiation, plus odd block sizes and a
+  non-standard MS coefficient table. That is coverage, not fuzzing — nothing
+  generates *random* geometries or malformed headers looking for a crash. The
+  container parser does get malformed input in `verify.sh`, but only one case.
+* **§1.12's loop fusion**, declined with a reason rather than measured. If it
+  were to be revisited, the measurement is cheap; the argument against is that
+  the compiler already does it.
+
+Everything else in the document is either implemented, superseded by something
+measured to be better, or declined against the stated
+"no more than a few bytes" rule with its price recorded.
