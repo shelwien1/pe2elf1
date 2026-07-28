@@ -13,3 +13,12 @@ dir/
 *.xac
 *.base
 *.back
+
+# Reference trees extracted from the source archives, not part of this project:
+#   016/  the rev-016 xadpcm this branch was ported from -- kept locally while
+#         verifying byte-identical output, along with the baseline binaries and
+#         archives built from it
+#   021/  the ddsdet tree the coroutine architecture came from.  The only part
+#         of it this project uses is Lib3/, which is committed at the repo root.
+016/
+021/
