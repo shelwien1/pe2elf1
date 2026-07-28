@@ -1,0 +1,11 @@
+# C0: context quantizers shared by both formats.
+
+Prefix C0
+Debug 1
+Const 0
+
+# Match length -> context bucket.  A threshold map, so the optimizer decides
+# where extra length stops buying confidence.  The input is clamped to the
+# pattern length by the generated code.
+Index Ml
+ l0: mlen, 1!000000010101000000101111

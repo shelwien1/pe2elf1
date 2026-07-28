@@ -1,0 +1,15 @@
+# build artifacts
+xadpcm
+xadpcm.exe
+*.o
+*.exe
+*.su
+# test scratch
+_t.*
+_g.*
+_ga.*
+gen/
+dir/
+*.xac
+*.base
+*.back
