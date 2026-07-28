@@ -32,21 +32,35 @@ static_assert(PRED_NMAX%8==0, "the kernels round stage lengths up to a multiple 
  * PRED_NMAX+264 entries = 3.0 KB, which is *less* than the 4 KB ring it
  * replaces, so the working set went down as well. */
 enum { HSLACK = 256 };
-enum { PRED_HCAP = PRED_NMAX+HSLACK+8 };
 
+/* Sized from the stage it serves, not from PRED_NMAX (v4 §2.1).  The fixed
+   PRED_NMAX/HN sizing cost 20.6 KB per Pred against a live footprint of a
+   fraction of that, and there are four Preds (two cascades x two channels), so
+   the predictor alone was 82 KB -- comfortably out of L1 for no benefit.  Sized
+   per stage it is 29 KB, which fits alongside the counter rows.
+   PRED_NMAX stays the clamp bound on the IDX numbers; it is no longer the
+   allocation. */
 struct Hist {
-  i32* h;
-  ALIGN(64) i32 buf[PRED_HCAP];
+  i32* buf = nullptr;
+  i32* h = nullptr;
+  int n8 = 0;
 
+  size_t bytes() const {
+    return size_t(n8+HSLACK+8)*sizeof(i32);
+  }
+  void alloc(Arena &a, int n8_) {
+    n8 = n8_;
+    buf = (i32*)a.take(bytes());
+  }
   void reset() {
-    memset(buf, 0, sizeof(buf));
+    memset(buf, 0, bytes());
     h = buf+HSLACK;
   }
   // the value about to leave an n-wide window -- read BEFORE the push
   INLINE i32 oldest(int n) const {
     return h[n-1];
   }
-  INLINE void push(i32 v, int n8) {
+  INLINE void push(i32 v) {
     if( h==buf ) {
       memmove(buf+HSLACK, buf, size_t(n8)*sizeof(i32));
       h = buf+HSLACK;
@@ -78,11 +92,11 @@ struct Hist {
    unreadable for no gain. */
 template<int VAR>
 struct Pred {
-  /* 64B-aligned so the kernels can use aligned loads on the weights.  The
-     history is read unaligned by construction -- the cursor moves one element
-     per push -- which on every microarchitecture this targets costs nothing
-     unless the access straddles a page. */
-  ALIGN(64) i32 w1[PRED_NMAX], w2[PRED_NMAX], w3[PRED_NMAX], w4[PRED_NMAX];
+  /* Weights and histories both come from the Codec's arena, which hands out
+     64B-aligned blocks -- so the kernels' aligned loads on the weights are
+     valid.  The history is read unaligned by construction (the cursor moves one
+     element per push), which costs nothing unless an access straddles a page. */
+  i32 *w1 = nullptr, *w2 = nullptr, *w3 = nullptr, *w4 = nullptr;
   Hist H0, H1, H2, HX;
   u64 en0, en1, en2, enx;
   i32 last, p1, p2, p3, p4, d0last;
@@ -113,12 +127,23 @@ struct Pred {
   IDXC(int, n3p, (pclamp(VAR ? G0_N3B : G0_N3, 1, PRED_NMAX)+7)&~7);
   IDXC(int, n4p, (pclamp(VAR ? G0_N4B : G0_N4, 0, PRED_NMAX)+7)&~7);
 
+  void alloc(Arena &a) {
+    w1 = (i32*)a.take(size_t(n1p)*sizeof(i32));
+    w2 = (i32*)a.take(size_t(n2p)*sizeof(i32));
+    w3 = (i32*)a.take(size_t(n3p)*sizeof(i32));
+    w4 = (i32*)a.take(size_t(n4p ? n4p : 8)*sizeof(i32));
+    H0.alloc(a, n1p);
+    H1.alloc(a, n2p);
+    H2.alloc(a, n3p);
+    HX.alloc(a, n4p);
+  }
+
   void reset(int keepw) {
     if( !keepw ) {
-      memset(w1, 0, sizeof(w1));
-      memset(w2, 0, sizeof(w2));
-      memset(w3, 0, sizeof(w3));
-      memset(w4, 0, sizeof(w4)); // no prior on the other channel: start at silence
+      memset(w1, 0, size_t(n1p)*sizeof(i32));
+      memset(w2, 0, size_t(n2p)*sizeof(i32));
+      memset(w3, 0, size_t(n3p)*sizeof(i32));
+      memset(w4, 0, size_t(n4p ? n4p : 8)*sizeof(i32)); // no prior on the other channel: start at silence
       w1[0] = pw0;               // seeded at r[t-1] + (r[t-1]-r[t-2])
     }
     H0.reset();
@@ -182,14 +207,14 @@ struct Pred {
       return;
     i32 old = HX.oldest(n4);
     enx += u64(i64(v)*i64(v))-u64(i64(old)*i64(old));
-    HX.push(v, n4p);
+    HX.push(v);
     xset = 1;
   }
 
-  INLINE void push(Hist &H, u64 &en, int n, int n8, i32 v) {
+  INLINE void push(Hist &H, u64 &en, int n, i32 v) {
     i32 old = H.oldest(n);
     en += u64(i64(v)*i64(v))-u64(i64(old)*i64(old));
-    H.push(v, n8);
+    H.push(v);
   }
 
   // predicted next-sample delta (r^[t] - r[t-1])
@@ -217,9 +242,9 @@ struct Pred {
     adapt(w3, H2.h, n3, r3, en2, mu3, fl3);
     if( n4 )
       adapt(w4, HX.h, n4, r4, enx, mu4, fl4);
-    push(H0, en0, n1, n1p, d0);
-    push(H1, en1, n2, n2p, r1);
-    push(H2, en2, n3, n3p, r2);
+    push(H0, en0, n1, d0);
+    push(H1, en1, n2, r1);
+    push(H2, en2, n3, r2);
     d0last = d0;
     xset = 0;
     last = r;

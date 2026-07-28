@@ -111,6 +111,7 @@
             cross = (k||!G0_XPRED) ? ch[(k+nch-1)%nch].pd.d0last : ch[nch-1].pd.predict_own(G0_XPRED);
             crossB = ch[(k+nch-1)%nch].pdB.d0last;
           }
+          // original order -- see the §2.2 note in xad_codec_ima.inc
           c.pd.set_cross(cross);
           i32 d = c.pd.predict();
           int qhat = ms_quantize_r(i64(clip16(i64(c.pd.last)+d))-P, dl, rcp, e);

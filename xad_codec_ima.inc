@@ -43,6 +43,7 @@
   void code_data_ima(u8* data, size_t n) {
     enum { bps = BPS };
     const int nch = pm.chans, hdr = nch*4, ba = pm.block_align;
+    build_ima_tables<BPS>();
     vector<u8> cbuf[MAX_CHANS];
     vector<int> code[MAX_CHANS];
     for( int k = 0; k<nch; k++ ) {
@@ -121,6 +122,14 @@
             cross = (k||!G0_XPRED) ? ch[(k+nch-1)%nch].pd.d0last : ch[nch-1].pd.predict_own(G0_XPRED);
             crossB = ch[(k+nch-1)%nch].pdB.d0last;
           }
+          /* v4 §2.2 proposes interleaving the two cascades, which are genuinely
+             independent.  Hoisting both predicts adjacent so the scheduler can
+             overlap them was MEASURED: neutral under clang and ~1.8% worse
+             under gcc (register pressure -- both cascades' p1..p4 then live
+             across the whole pair).  Left in the original order.  A real
+             interleave would have to fuse the dot loops themselves, which is a
+             different change; after the SIMD work the NLMS block is no longer
+             where the time is, so it is not obviously worth it. */
           c.pd.set_cross(cross);
           i32 dhat = c.pd.predict();
           int qhat = ima_quantize<BPS>(dhat, step, leftover);
@@ -135,8 +144,10 @@
           int sym = code_symbol<0, BPS>(k, qhat, conf, ib, xch, q2, q3, enc ? code[k][i] : 0, xch2, qhatB, confB);
           if( !enc )
             code[k][i] = sym;
-          c.pcm = ima_apply<BPS>(c.pcm, sym, step);
-          c.index = index_update<BPS>(c.index, sym);
+          const int ix = c.index;
+          i32 np = c.pcm+ima_mag[ix][sym];
+          c.pcm = np<-32768 ? -32768 : np>32767 ? 32767 : np;
+          c.index = ima_nxt[ix][sym];
           c.prev4 = c.prev3;
           c.prev3 = c.prev2;
           c.prev2 = c.prev;

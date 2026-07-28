@@ -42,9 +42,15 @@ and reported below rather than assumed.
 ¹ within the noise band of run 4 on the whole-suite number; measured properly by
 alternating A/B on the path it touches — see below.
 
-Best configuration is `CXX=clang++ ARCH=-march=native ./mk.sh release`
-(18.562 s). The default portable gcc build is 22.069 s = 1.77×. Every one of
-those binaries produces the same 24 md5s.
+| 8 | §1.15 RC carry loop; §2.2 tried and reverted | — | — | identical |
+| 9 | §2.1 size `Pred` from its actual stage lengths | — | — | identical |
+| 10 | §1.13 IMA state-transition tables | — | — | identical |
+| **final** | **clang++ `-O3 -march=native`** | **18.358** | **2.13×** | identical |
+| final | gcc `-O3`, portable (mk.sh default) | 22.123 | 1.77× | identical |
+
+Runs 8–10 are individually below the ±2% whole-suite noise floor and were
+measured by alternating A/B on the paths they touch; see the log. Every binary
+in this table produces the same 24 md5s.
 
 ---
 
@@ -337,3 +343,102 @@ clang++ at `-O2`/`-O3`/`-O3 -march=native` all produce the same 24 md5s.
 **`INLINE` (plan's last bullet):** the `#ifdef 13` the plan flags does not exist
 in this tree — `INLINE` comes from `Lib3/common.inc`, correctly guarded on
 `__GNUC__`, and `nm` confirms `mbit` has no out-of-line copies.
+
+### 8 — §1.15 range coder I/O, §2.2 interleave the cascades
+
+**§1.15.** Two of its three items were already gone: the output vector and its
+per-byte `push_back` capacity check disappeared when the coder became a
+coroutine layer (`shift_low` writes through a pin cursor), and the decoder's
+"bounds check" is the pin's window test, which is the protocol rather than an
+overhead to pad away. What was left is the carry loop: `cachesz` now goes
+through a local so the loop does not reload the member, and the pending-carry
+case is marked unlikely (it is one output byte per 10+ coded bits). Effect is
+inside the noise; kept because it is strictly less work.
+
+**§2.2 — tried, measured, reverted.** `pd` and `pdB` really are independent, so
+hoisting both `predict()` calls adjacent lets the scheduler overlap two
+reduction chains. Measured: **neutral under clang, ~1.8% worse under gcc**
+(10.683/10.568 s → 10.856/10.762 s). Register pressure is the plausible reason —
+both cascades' `p1..p4` then live across the whole pair. Reverted, with the
+numbers recorded in the source so it is not re-tried blind. A real interleave
+would have to fuse the dot loops themselves, which is a different and much
+larger change; after §1.2 the NLMS block is no longer where the time is.
+
+### 9 — §2.1 shrink `Pred`
+
+`w1..w4` were `[PRED_NMAX]` and the histories `[PRED_NMAX+HSLACK+8]` regardless
+of the stage they serve: 20.6 KB per `Pred`, and there are four (two cascades ×
+two channels), so the predictor alone was **82 KB** — out of L1 for no benefit.
+They now come from the same arena as the counter tables, sized from the actual
+stage lengths: **29 KB**, which fits alongside the hot counter rows.
+`PRED_NMAX` remains the clamp bound on the IDX numbers; it is no longer the
+allocation. `reset()` also stops clearing 82 KB per segment.
+
+The allocation rides the existing dry/real binding pass, so it is sized by the
+same code that lays it out. **~3% under both compilers** (gcc 21.596 → 20.924 s,
+clang 9.197 → 8.862 s on the encode pair).
+
+### 10 — §1.13 IMA state-transition tables
+
+`ima_apply`'s magnitude and `index_update`'s next index depend only on
+`(index, code)` for a fixed `bps`, so both become a lookup and the
+`code_magnitude` loop plus the `index_update` switch leave the apply path. The
+sign is folded into the stored magnitude. `clip16` stays — `pcm + mag`
+genuinely leaves i16 range and the saturation is part of the reconstruction.
+
+Measured on the IMA path alone (it touches nothing else, and MS never builds or
+reads the tables): **3.829 → 3.815 s, ~0.4%** — which is the plan's own
+"a small win", and honestly is at the edge of what this box can resolve. Kept:
+non-negative, and it removes work rather than adding a trade.
+
+No MS equivalent exists, as the plan says: `ms_apply` and `ms_delta_update` are
+functions of iDelta, a runtime value over `[1, 2 796 202]`.
+
+---
+
+## Tier 2 — not taken, and why
+
+The brief was to take anything that does not cost more than a few bytes. Every
+Tier 2 item costs kilobytes, so all three are out on the stated criterion. They
+are listed with what they would cost so the decision is reviewable rather than
+implicit:
+
+* **§3.1 drop marginal context models.** `tHJ` is 16.8 MB for a measured
+  −1 771 B on the plan's corpus, `tP4` 4.2 MB for −981 B, `tQPX` 0.28 MB for
+  −1 868 B. Dropping `tHJ` alone would take the arena from ~27 MB to ~10 MB and
+  change the TLB picture qualitatively — by far the best speed-per-byte trade
+  available here — but it is ~1.8 KB on wavs2, not "a few bytes".
+* **§3.2 the second cascade.** `pdB` is ~34% of the NLMS taps for a measured
+  −0.43%, i.e. thousands of bytes on these files.
+* **§3.3 match model sizing.** Halving the short model's `MATCH_TB` costs
+  collisions, hence bytes. Note this one is now *reachable from IDX without a
+  code change*: the refactor split `MATCH_HB2`/`MATCH_TB2` out, so the two
+  models can be sized independently by `opt.pl`.
+
+The plan's own note applies to all three: re-measure on the full corpus before
+committing, which is a tuning run rather than a code change.
+
+## Summary against the plan's targets
+
+The plan predicted **1.8–2.4× bit-exact**, with the Amdahl cap at ~3.4×.
+Delivered **2.13×** (clang, `-march=native`) and **1.77×** portable gcc, with
+every one of the 24 output md5s unchanged from the pre-optimization baseline
+under seven different compiler/flag combinations.
+
+Where the results diverged from the plan, in both directions:
+
+| plan says | measured |
+|---|---|
+| §1.4 `err*lr` needs an exact hi/lo split, 4 mul/8 lanes | it fits `i32`; 1 mul/lane, with a `static_assert` on the bound |
+| §1.6 IMA wants an 89×4 reciprocal table | a threshold count is exact and cheaper at `NCONF = 2` |
+| §1.16 PGO worth 10–20% | small **regression** on top of `-O3` |
+| §2.2 interleaving the cascades helps | neutral (clang), 1.8% worse (gcc) |
+| §1.13 "a small win" | ~0.4%, at the edge of measurable |
+| — (not in plan) | **clang++ is 6–9% faster than g++** at equal flags |
+| §1.1 `HSLACK` costs footprint | it *reduced* it: 3.0 KB/history against a 4 KB ring |
+
+Two real bugs were found by writing the verification the plan asked for rather
+than by the optimization itself: the `(i64)1 << 63` UB in the AVX2 shift
+identity (§1.2), and an `STC` table built one iteration before its input
+existed (§1.10) — the latter grew every archive ~6% while still round-tripping
+perfectly, so only the md5 matrix caught it.

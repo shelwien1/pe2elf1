@@ -81,15 +81,25 @@ struct RC : Coroutine {
     return v>255 ? 0 : u8(v);
   }
 
+  /* The plan's other two RC items are already gone: the output vector and its
+     per-byte push_back capacity check were replaced by the pin cursor when the
+     coder became a coroutine layer, and the decoder's bounds check is the pin's
+     own window test, which is the protocol rather than an overhead to pad away.
+     What is left is the carry loop: cachesz through a local so the loop does not
+     reload the member, and a hint that the pending-carry case is the rare one
+     (it is one output byte per 10+ coded bits). */
   void shift_low() {
     stk_probe();
-    if( u32(low)<0xFF000000u||(low>>32)!=0 ) {
+    if_e0( u32(low)<0xFF000000u||(low>>32)!=0 ) {
       u8 c = cache;
+      u64 n = cachesz;
+      u8 carry = u8(low>>32);
       do {
-        rcio->put(u8(c+u8(low>>32)));
-        emitted++;
+        rcio->put(u8(c+carry));
         c = 0xFF;
-      } while( --cachesz );
+      } while( --n );
+      emitted += cachesz;
+      cachesz = n;
       cache = u8(low>>24);
     }
     cachesz++;

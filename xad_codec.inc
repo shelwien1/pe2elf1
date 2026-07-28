@@ -112,6 +112,27 @@ struct Codec {
     }
   } ch[MAX_CHANS];
 
+  /* v4 §1.13 -- IMA reconstruction as a table.  The magnitude a code adds and
+     the index it moves to depend only on (index, code) for a fixed bps, so both
+     collapse to a lookup: the code_magnitude loop and the index_update switch
+     leave the apply path entirely.  The sign is folded into the stored value.
+     clip16 cannot be folded in -- pcm+mag genuinely leaves i16 range and the
+     saturation is part of the reconstruction.
+     There is no MS equivalent: ms_apply and ms_delta_update are functions of
+     iDelta, a runtime value over [1, 2796202]. */
+  i32 ima_mag[89][32];
+  u8 ima_nxt[89][32];
+
+  template<int BPS>
+  void build_ima_tables() {
+    for( int i = 0; i<89; i++ )
+      for( int c = 0; c<(1<<BPS); c++ ) {
+        int m = code_magnitude<BPS>(c, step_table[i]);
+        ima_mag[i][c] = (c&(1<<(BPS-1))) ? -m : m;
+        ima_nxt[i][c] = u8(index_update<BPS>(i, c));
+      }
+  }
+
   u64 stat[ST_NCAT] = {};
   int scat = 0;
 
@@ -197,6 +218,15 @@ struct Codec {
     tHmn.init(cta, SGN_NMODEL*sgn_ncls, SGN_NODES, RS_HDR);
     tRsv.init(cta, 1, 2, RS_LIT); // one node, two branches
     tLit.init(cta, LIT_NSTREAM*LIT_W, LIT_W, RS_LIT);
+    /* The predictors' weights and histories share the arena (v4 §2.1): 64B
+       alignment for the kernels, and they land next to the tables instead of
+       inside this object.  Bound in the same pass, so the dry run sizes them
+       too; reset() -- which is what actually touches the memory -- runs later,
+       from begin_seg. */
+    for( int k = 0; k<MAX_CHANS; k++ ) {
+      ch[k].pd.alloc(cta);
+      ch[k].pdB.alloc(cta);
+    }
   }
 
   /* Enter a new wav.  Everything the counters, mixer and APM have learned
