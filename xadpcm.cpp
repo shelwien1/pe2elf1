@@ -262,6 +262,7 @@ typedef int64_t i64;
    ------------------------------------------------------------------------ */
 #include "xad_util.inc"      // crc32b, byte order, varints, bit packing
 #include "xad_logistic.inc"  // squash/stretch tables, counter rate schedules
+#include "xad_simd.inc"      // the two NLMS kernels (scalar / SSE4.1 / AVX2)
 #include "xad_rc.inc"        // RC<MD> : Coroutine -- the range coder
 #include "xad_counter.inc"   // Ctr / CtrS and their tables
 #include "xad_mix.inc"       // Mixer<MLR,WCL>, APM<APN,APR>
@@ -355,6 +356,7 @@ static int decompress(char* inp, const char* outp) {
 }
 
 int main(int argc, char** argv) {
+  xad_simd_init();
   init_tables();
   init_ms_map();
   bool test = false;

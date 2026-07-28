@@ -30,6 +30,8 @@ and reported below rather than assumed.
 |---|---|---|---|---|
 | — | baseline (rev after the refactor) | 39.067 | 1.00× | — |
 | 1 | §1.5 clz + §1.9 hoisting + §1.11 stats gate | 36.948 | 1.06× | identical |
+| 2 | §1.1 linearize history + §1.2 SIMD kernels + §1.3 | 26.533 | **1.47×** | identical |
+| 2b | …the same, built `ARCH=-march=haswell` | 25.492 | **1.53×** | identical |
 
 ---
 
@@ -64,3 +66,67 @@ alone. Now behind `XAD_STATS` (default 0), which also drops `CLT` itself and its
 and says to rebuild with `-DXAD_STATS=1` for the per-stream split.
 
 Result: **39.067 → 36.948 s, 1.06×**, all 24 md5s identical.
+
+### 2 — §1.1 linearize the NLMS history, §1.2 SIMD kernels, §1.3 specialise on length
+
+The big one. Three items that only make sense together.
+
+**§1.1.** The history was a 1024-entry ring read as `h[(t-1-i)&HM]`: a load, an
+AND and a wrapping index on each of ~1500 taps per sample-channel, and
+unvectorizable because consecutive `i` walk descending, wrapping addresses. It
+is now a **newest-first sliding window** — `h[0]` newest, `h[i]` *i* instants
+older — so the weights (lag-ascending) and the history are parallel and both
+loops are contiguous ascending runs. `push` writes downward (`*--h`); when the
+cursor reaches the bottom the live part is copied back to the top of the slack.
+
+Two things fell out that are worth recording:
+
+* `dot`/`dotx` and `adapt`/`adaptx` **collapse into one pair each**. The only
+  difference between them was `h[(t-1-i)]` versus `h[(t-i)]`, which was never
+  about the kernel — it was about whether the current instant's value had been
+  pushed yet. With a sliding window the push itself says that: `set_cross`
+  pushes before `predict` reads, the own-signal push happens after.
+* `HSLACK` = 256 makes a history `PRED_NMAX+264` entries = 3.0 KB, which is
+  *less* than the 4 KB ring it replaces. The copy costs `n8*4/HSLACK` ≈ 6
+  bytes/sample against several hundred taps. So the footprint went **down**
+  while the loops became vectorizable — this is most of what §2.1 was for.
+
+**§1.2.** `xad_simd.inc`: `xad_dot64` and `xad_adapt` in AVX2 and SSE4.1
+intrinsics, `_mm256_mul_epi32` throughout, every product kept at full 64 bits.
+Bit-exactness is structural, not empirical — the dot accumulates into `i64` and
+two's-complement addition is associative under overflow, so lane-splitting
+reproduces the scalar order exactly; adapt is elementwise. AVX2 has no 64-bit
+*arithmetic* right shift, so adapt uses the xor–sub identity
+`sra(x,s) = ((x >>ᵤ s) ^ b) - b`, `b = 1<<(63-s)`.
+
+**Dispatch.** Compiled for AVX2 (`ARCH=-march=haswell`, which is what `g.bat`
+has always used) the kernels are called directly and inline into `Pred`.
+Otherwise they carry `target` attributes and a one-time `__builtin_cpu_supports`
+check picks between them through a function pointer: one portable binary, full
+speed on hardware that has AVX2, at the cost of one indirect call per stage.
+That cost is measurable and small — **26.533 s dispatched vs 25.492 s
+inlined, 4%**.
+
+**§1.3.** Already in place from the refactor: `Pred<VAR>`'s stage lengths are
+`IDXC` constants, so in the Const build every kernel call has a compile-time
+`n`. Added here: `n1p..n4p`, the lengths rounded up to a whole vector. `dot`
+runs to `n#p` and relies on `w[n..n#p)` being zero — `adapt` writes only
+`[0,n)`, `reset` clears the array and the lengths never change, so those lanes
+are zero for the object's life and contribute exactly nothing. That removes
+dot's scalar tail without changing a bit. **adapt keeps its tail** (≤7 taps) on
+purpose: it *writes*, and letting it run into the padding would make those
+lanes nonzero, which `dot` would then pick up.
+
+**A real bug this found.** `b = (i64)1 << (63-sh)` is undefined behaviour at
+`sh = 0` — shifting a signed 1 into the sign bit. Corrected to
+`(i64)((u64)1 << (63-sh))`. Real audio never reaches `sh = 0` (the clamp is
+`PRED_SHMAX` = 47), so no test on actual data could have found it.
+
+**§4.4 kernel differential test.** `ktest.cpp` + `./ktest.sh`: 200k `dot` and
+200k `adapt` cases per ISA level, values drawn to include 0, `INT32_MIN`,
+`INT32_MAX` and full-range randoms, `sh` swept over the whole legal `[0,63]`
+with both ends forced often, `n` covering every tail length, and `dot` also
+called from an unaligned cursor (which is how `Pred` always calls it). Run at
+four build levels — portable/dispatched, `-msse4.1`, `-mavx2`, `-march=native`
+— because the inlined and the dispatched builds are different code generations
+of the same intrinsics. **0 failures, 1.6 M cases.**

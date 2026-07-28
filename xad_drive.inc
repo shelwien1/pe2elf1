@@ -199,6 +199,7 @@ static void report(const Codec<MD> &cx, const Arc &ar, size_t insz, u64 outsz, u
 #endif
     fprintf(stderr, "  coroutine stack high-water %llu of %u bytes\n",
             (unsigned long long)stk_hi, unsigned(Coroutine::STKPAD));
+    fprintf(stderr, "  nlms kernels: %s\n", xad_isa());
   }
 }
 
