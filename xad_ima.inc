@@ -48,6 +48,35 @@ static INLINE i32 ima_apply(i32 pcm, int code, int step) {
 
 // the standard IMA quantizer: greedy from the coarsest weight down.
 // leftover says how far into its cell the value sat.
+/* q2 and q3 want only the code: their `leftover` output was written twice into
+   the same dead variable and never read. */
+template<int BPS>
+static INLINE int ima_quantize_nl(i32 diff, int step) {
+  const int nb = BPS-1;
+  int code = 0;
+  i32 a = diff<0 ? -diff : diff;
+  for( int i = 0; i<nb; i++ ) {
+    i32 w = step>>i;
+    if( a>=w ) {
+      code |= 1<<(nb-1-i);
+      a -= w;
+    }
+  }
+  return code|(diff<0 ? 1<<nb : 0);
+}
+
+/* Same shape as ms_conf: floor(leftover*NCONF / (2*base+1)) capped at NCONF-1,
+   with leftover >= 0 by construction, so a threshold count replaces the divide.
+   The plan proposed an 89x4 reciprocal table instead; at NCONF = 2 that would
+   be a table lookup where one comparison does. */
+static INLINE int ima_conf(int leftover, int base) {
+  i64 num = i64(leftover)*NCONF, den = i64(2*base)+1;
+  int c = 0;
+  for( int k = 1; k<NCONF; k++ )
+    c += (num>=i64(k)*den);
+  return c;
+}
+
 template<int BPS>
 static INLINE int ima_quantize(i32 diff, int step, int &leftover) {
   const int nb = BPS-1;

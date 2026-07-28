@@ -96,8 +96,20 @@ struct Codec {
     // MS: the decoder state plus what the previous block header held and what
     // the previous block's last nibble left iDelta at
     i32 samp1 = 0, samp2 = 0, delta = 16, hdelta = 16, rdelta = 16, c1 = 256, c2 = 0;
+    /* delta clamped to >=1, and its reciprocal.  Kept next to delta and
+       refreshed by set_delta() wherever delta moves, so the four quantizer
+       calls per nibble cost no division at all -- one per nibble, where it used
+       to be six per sample-channel. */
+    i32 dl = 16;
+    u32 rcp = 0;
     u64 errR = 0, errH = 0;
     int bprev = 0;
+
+    INLINE void set_delta(i32 v) {
+      delta = v;
+      dl = v<1 ? 1 : v;
+      rcp = ms_rcp(dl);
+    }
   } ch[MAX_CHANS];
 
   u64 stat[ST_NCAT] = {};
@@ -209,6 +221,7 @@ struct Codec {
       ch[k].index = ch[k].prev = ch[k].prev2 = ch[k].prev3 = ch[k].prev4 = ch[k].cur = 0;
       ch[k].samp1 = ch[k].samp2 = 0;
       ch[k].delta = ch[k].hdelta = ch[k].rdelta = 16;
+      ch[k].set_delta(16);
       ch[k].errR = ch[k].errH = 0;
       ch[k].bprev = 0;
       ch[k].c1 = pm.ncoef ? pm.coef[0][0] : 256;

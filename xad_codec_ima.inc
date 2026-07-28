@@ -116,14 +116,11 @@
           c.pdB.set_cross(crossB);
           int loB = 0;
           int qhatB = ima_quantize<BPS>(c.pdB.predict(), step, loB);
-          int lo2 = 0;
-          int q2 = ima_quantize<BPS>(c.pd.p1+c.pd.p2, step, lo2);
-          int q3 = ima_quantize<BPS>(c.pd.p1, step, lo2);
+          int q2 = ima_quantize_nl<BPS>(c.pd.p1+c.pd.p2, step);
+          int q3 = ima_quantize_nl<BPS>(c.pd.p1, step);
           const int base = step>>(BPS-1);
-          int conf = int(u32(leftover)*u32(NCONF)/u32(2*base+1));
-          conf = conf>NCONF-1 ? NCONF-1 : conf;
-          int confB = int(u32(loB)*u32(NCONF)/u32(2*base+1));
-          confB = confB>NCONF-1 ? NCONF-1 : confB;
+          int conf = ima_conf(leftover, base);
+          int confB = ima_conf(loB, base);
           int ib = MakeIb(c.index);
           Ch &o = ch[k ? 0 : nch-1];
           enum { NSYM = 1<<BPS };

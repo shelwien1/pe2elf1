@@ -34,6 +34,10 @@ and reported below rather than assumed.
 | 2b | …the same, built `ARCH=-march=haswell` | 25.492 | **1.53×** | identical |
 | 3 | §1.7 counter arena, 64B rows, huge pages | 25.226 | 1.55× | identical |
 | 4 | §1.4 SIMD mixer + stride 32, §1.10 STC | 22.803 | **1.71×** | identical |
+| 5 | §1.6 no divisions, §1.12 dead leftovers | 22.4 ¹ | 1.74× | identical |
+
+¹ within the noise band of run 4 on the whole-suite number; measured properly by
+alternating A/B on the path it touches — see below.
 
 ---
 
@@ -196,3 +200,60 @@ comment says why. Worth recording as the case for the md5 matrix: the codec
 still round-tripped perfectly, so only the size check caught it.
 
 **22.803 s, 1.71×.**
+
+### 5 — §1.6 remove the integer divisions, §1.12 drop the dead leftovers
+
+Six 64-bit `idiv`s per sample-channel on the MS path (`ms_quantize` ×4,
+`ms_conf` ×2), all sharing one runtime divisor the compiler cannot
+strength-reduce.
+
+* **`ms_quantize`** takes a reciprocal. The reciprocal is `((1<<32)-1)/d`, not
+  `(1<<32)/d`: the domain starts at **1**, not 16 — `ms_delta_update` floors at
+  16 but the per-block header path clamps only at 1 — and the plain form
+  truncates to 0 exactly there. Better still, the reciprocal is now carried
+  *next to* iDelta (`Ch::dl` / `Ch::rcp`, refreshed by `set_delta()` wherever
+  delta moves), so the four calls share it and the inner loop has **no division
+  at all**: six per sample-channel become one per nibble.
+* **`ms_conf` and the IMA confidence** are `floor(num/den)` capped at
+  `NCONF-1`, and `c >= k` is exactly `num >= k*den`, so counting how many of the
+  `NCONF-1` thresholds the numerator clears gives the same answer with no
+  division. At the shipped `NCONF = 2` that is **one comparison**. The plan
+  proposed an 89×4 reciprocal table for the IMA side; a table lookup where one
+  comparison does is the wrong trade, so this went the other way.
+* **`ms_predict`'s `/256`** is a signed truncating division, not a shift.
+  Branch-free exact form: `(x + ((x>>63)&255)) >> 8`.
+* **§1.12 dead leftovers.** `q2`/`q3` never read their remainder: the IMA path
+  wrote `lo2` twice into a variable nobody reads, the MS path computed `e2`/`e3`
+  and dropped them. They now call leftover-free variants. The other half of
+  §1.12 — sharing `step>>i` across the four IMA quantizer calls — was left
+  alone: with `BPS` a compile-time constant those loops fully unroll and GCC
+  already CSEs the shifts, so hand-fusing would add a four-accumulator loop for
+  nothing.
+
+**Measurement note.** On the whole-suite number this looked like *zero* change
+(22.803 → 22.813 s). It is not: the box's noise band is ±2% (three consecutive
+runs of the same binary gave 22.085 / 22.924 / 22.592). Re-measured by building
+both revisions and **alternating** them, 7 reps each, on the MS encode path this
+actually touches:
+
+```
+  MS encode  prev  9.118 s      MS encode  prev  8.914 s
+  MS encode  new   8.607 s      MS encode  new   8.557 s
+```
+
+**≈4–5% on MS encode**, which is what the plan predicted for the divisions.
+Every later item is measured this way rather than off the suite total.
+
+**§5.5 exhaustive verification.** The quantizer primitives moved to
+`xad_msq.inc` — no IDX dependency — so `ktest.cpp` can include them, and the
+*reference* implementation is kept there rather than deleted, because "bit-exact"
+has to be bit-exact against something. The test brute-forces
+`ms_quantize_r`/`ms_quantize_nq` against it: **exhaustively for `d ∈ [1,64]`
+over every `|diff| ≤ 16d+8`** (every quotient cell and both sides of the ±8
+clamp), then for larger `d` every power of two and its neighbours plus a dense
+arithmetic sample, against diffs straddling `k·d` and `k·d ± d/2` — where an
+off-by-one in the reciprocal would show — plus the extreme magnitudes a
+**non-standard coefficient table** reaches. The plan bounds `|P| < 2^17`, which
+holds for the standard table; a wav may carry its own with `|c|` up to 32767,
+putting `|P|` near 8.4e6, so the sweep runs out to 2^24. **912 073 cases, 0
+failures.**

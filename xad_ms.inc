@@ -19,7 +19,11 @@ static INLINE i32 clip16(i64 v) {
 // ffmpeg's (s1*c1/4 + s2*c2/4)/64 comes to for any table with multiple-of-4
 // entries -- the standard one included.
 static INLINE i32 ms_predict(i32 s1, i32 s2, i32 c1, i32 c2) {
-  return i32((i64(s1)*i64(c1)+i64(s2)*i64(c2))/256);
+  /* /256 on a SIGNED i64 truncates toward zero, so it is not a shift.  Adding
+     255 first when the value is negative makes the arithmetic shift round the
+     same way, branchlessly. */
+  i64 x = i64(s1)*i64(c1)+i64(s2)*i64(c2);
+  return i32((x+((x>>63)&255))>>8);
 }
 
 static INLINE i32 ms_apply(i32 pred, int nib, i32 delta) {
@@ -34,13 +38,7 @@ static INLINE i32 ms_delta_update(i32 delta, int nib) {
 // the MS quantizer: round half away from zero into a 4-bit signed cell.  err
 // is the signed leftover, i.e. where inside its cell the value sat -- MS
 // rounds to nearest, so the sign of it says which neighbour is the near miss.
-static INLINE int ms_quantize(i64 diff, i32 delta, i64 &err) {
-  i32 d = delta<1 ? 1 : delta;
-  i64 q = (diff+(diff>=0 ? d/2 : -(d/2)))/d;
-  q = q<-8 ? -8 : q>7 ? 7 : q;
-  err = diff-q*i64(d);
-  return int(q&15);
-}
+#include "xad_msq.inc"   // the division-free quantizer, and the reference it is tested against
 
 /* iDelta has no small index the way the IMA step has, so it is read in the log
    domain -- the octave plus two bits below the leading one, four steps to the
@@ -72,16 +70,27 @@ static INLINE int ms_bucket(i32 delta) {
    prediction just below the upper edge misses upward.  MSCONF 1 keeps only the
    distance, for comparison. */
 
-static INLINE int ms_conf(i64 e, i32 delta) {
-  i32 d = delta<1 ? 1 : delta;
-  int c;
+/* The result is floor(num/den) clamped to [0, NCONF-1], and NCONF is small (2
+   at the shipped setting, 16 at the widest the clamp allows).  `c >= k` is
+   exactly `num >= k*den`, so counting how many of the NCONF-1 thresholds the
+   numerator clears gives the same answer with no division -- one comparison as
+   shipped, fifteen at the widest, against a 64-bit idiv either way.  A negative
+   numerator (reachable in the MSCONF==0 branch) truncated toward zero and then
+   clamped to 0 in the original, which the early return reproduces. */
+static INLINE int ms_conf(i64 e, i32 d) {
+  i64 den = i64(d)+1, num;
   if( !M0_MSCONF )
-    c = int(((e+i64(d/2))*NCONF)/(i64(d)+1));
+    num = (e+i64(d/2))*NCONF;
   else {
     i64 a = e<0 ? -e : e;
-    c = int((a*2*NCONF)/(i64(d)+1));
+    num = a*2*NCONF;
   }
-  return c<0 ? 0 : c>NCONF-1 ? NCONF-1 : c;
+  if( num<0 )
+    return 0;
+  int c = 0;
+  for( int k = 1; k<NCONF; k++ )
+    c += (num>=i64(k)*den);
+  return c;
 }
 
 /* Bit-tree order for the nibble.  The MS code is a two's-complement quantized

@@ -55,7 +55,8 @@
         int dsh = pclamp(M0_MSDSH, 1, 20);
         c.errR += u64(pr>v ? pr-v : v-pr)-(c.errR>>dsh);
         c.errH += u64(ph>v ? ph-v : v-ph)-(c.errH>>dsh);
-        c.hdelta = c.delta = v;
+        c.hdelta = v;
+        c.set_delta(v);
       }
       for( int k = 0; k<nch; k++ ) { // iSamp2 -- first in time
         Ch &c = ch[k];
@@ -94,8 +95,9 @@
           Ch &c = ch[k];
           size_t at = i*size_t(nch)+size_t(k);
           i32 P = ms_predict(c.samp1, c.samp2, c.c1, c.c2);
-          i32 dl = c.delta<1 ? 1 : c.delta;
-          i64 e = 0, e2 = 0, e3 = 0;
+          const i32 dl = c.dl;
+          const u32 rcp = c.rcp;
+          i64 e = 0;
           i32 cross = 0, crossB = 0;
           if constexpr( XST ) {
             cross = (k||!G0_XPRED) ? ch[(k+nch-1)%nch].pd.d0last : ch[nch-1].pd.predict_own(G0_XPRED);
@@ -103,12 +105,12 @@
           }
           c.pd.set_cross(cross);
           i32 d = c.pd.predict();
-          int qhat = ms_quantize(i64(clip16(i64(c.pd.last)+d))-P, dl, e);
+          int qhat = ms_quantize_r(i64(clip16(i64(c.pd.last)+d))-P, dl, rcp, e);
           c.pdB.set_cross(crossB);
           i64 eB = 0;
-          int qhatB = ms_quantize(i64(clip16(i64(c.pdB.last)+c.pdB.predict()))-P, dl, eB);
-          int q2 = ms_quantize(i64(clip16(i64(c.pd.last)+c.pd.p1+c.pd.p2))-P, dl, e2);
-          int q3 = ms_quantize(i64(clip16(i64(c.pd.last)+c.pd.p1))-P, dl, e3);
+          int qhatB = ms_quantize_r(i64(clip16(i64(c.pdB.last)+c.pdB.predict()))-P, dl, rcp, eB);
+          int q2 = ms_quantize_nq(i64(clip16(i64(c.pd.last)+c.pd.p1+c.pd.p2))-P, dl, rcp);
+          int q3 = ms_quantize_nq(i64(clip16(i64(c.pd.last)+c.pd.p1))-P, dl, rcp);
           int conf = ms_conf(e, dl);
           int confB = ms_conf(eB, dl);
           int ib = ms_bucket(dl);
@@ -124,7 +126,7 @@
           i32 s = ms_apply(P, nb, c.delta);
           c.samp2 = c.samp1;
           c.samp1 = s;
-          c.delta = ms_delta_update(c.delta, nb);
+          c.set_delta(ms_delta_update(c.delta, nb));
           c.prev4 = c.prev3;
           c.prev3 = c.prev2;
           c.prev2 = c.prev;

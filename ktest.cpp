@@ -24,6 +24,7 @@ typedef int32_t i32; typedef int64_t i64;
  #define ALIGN(n) __declspec(align(n))
 #endif
 #include "xad_simd.inc"
+#include "xad_msq.inc"
 
 enum { NMAX = 520 };
 static ALIGN(64) i32 W0[NMAX], W1[NMAX], W2[NMAX], H[NMAX+8];
@@ -96,7 +97,79 @@ int main() {
 #endif
   }
 
-  printf("ktest: %s | %ld dot cases, %ld adapt cases, %ld failures\n",
-         xad_isa(), ndot, nad, fail);
+  /* v4 §5.5 -- the MS reciprocal path, brute-forced against the reference over
+     the whole legal divisor domain.  d starts at 1, not 16: ms_delta_update
+     floors at 16 but the per-block header path clamps only at 1, and d = 1 is
+     exactly where the naive (1<<32)/d reciprocal would truncate to zero.
+
+     diff is bounded by clip16(...) - P.  The plan puts |P| < 2^17, which holds
+     for the standard coefficient table; a wav may carry its OWN table with
+     |c| up to 32767, and then |P| <= 2*32767*32767/256 ~= 8.4e6.  So the sweep
+     runs |diff| out to 2^24, well past either. */
+  long nq = 0;
+  {
+    /* Exhaustive over d in [1,64] x every diff that can distinguish a quotient:
+       |diff| out to 16*d+8 covers every cell and both sides of the +-8 clamp. */
+    for( i32 d = 1; d<=64; d++ ) {
+      u32 rcp = ms_rcp(d);
+      for( i64 x = -(16*i64(d)+8); x<=16*i64(d)+8; x++ ) {
+        i64 e1 = 0, e2 = 0;
+        int r1 = ms_quantize_ref(x, d, e1);
+        int r2 = ms_quantize_r(x, d, rcp, e2);
+        int r3 = ms_quantize_nq(x, d, rcp);
+        nq++;
+        if( r1!=r2||e1!=e2||r1!=r3 ) {
+          printf("ms_quantize mismatch d=%d diff=%lld\n", d, (long long)x);
+          if( ++fail>20 ) return 1;
+        }
+      }
+    }
+    /* Beyond 64 the interesting diffs are only the ones next to a cell edge --
+       that is the whole off-by-one risk in the reciprocal -- so sweep every
+       power of two and its neighbours, a dense arithmetic sample, and the top of
+       the domain, against diffs straddling k*d and k*d +- d/2. */
+    for( i64 di = 65; di<=2796202; di++ ) {
+      i32 d = i32(di);
+      int lg = 63-__builtin_clzll(u64(d));
+      i64 p2 = i64(1)<<lg;
+      bool interesting = (d==p2)||(d==p2+1)||(d==p2-1)||(d%1361==0)||
+                         (d>=2796200)||(d<=70);
+      if( !interesting ) continue;
+      u32 rcp = ms_rcp(d);
+      for( i64 k = -10; k<=10; k++ )
+        for( i64 o = -3; o<=3; o++ ) {
+          i64 cand[3] = {k*i64(d)+o, k*i64(d)+d/2+o, k*i64(d)-d/2+o};
+          for( int c = 0; c<3; c++ ) {
+            i64 x = cand[c];
+            if( x<-16777216||x>16777216 ) continue;
+            i64 e1 = 0, e2 = 0;
+            int r1 = ms_quantize_ref(x, d, e1);
+            int r2 = ms_quantize_r(x, d, rcp, e2);
+            int r3 = ms_quantize_nq(x, d, rcp);
+            nq++;
+            if( r1!=r2||e1!=e2||r1!=r3 ) {
+              printf("ms_quantize mismatch d=%d diff=%lld\n", d, (long long)x);
+              if( ++fail>20 ) return 1;
+            }
+          }
+        }
+      /* ...and the extreme magnitudes a non-standard coefficient table reaches */
+      for( int sg = 0; sg<2; sg++ )
+        for( i64 m = 8000000; m<=8400000; m += 97777 ) {
+          i64 x = sg ? -m : m;
+          i64 e1 = 0, e2 = 0;
+          int r1 = ms_quantize_ref(x, d, e1);
+          int r2 = ms_quantize_r(x, d, rcp, e2);
+          nq++;
+          if( r1!=r2||e1!=e2 ) {
+            printf("ms_quantize mismatch d=%d diff=%lld\n", d, (long long)x);
+            if( ++fail>20 ) return 1;
+          }
+        }
+    }
+  }
+
+  printf("ktest: %s | %ld dot, %ld adapt, %ld ms_quantize cases, %ld failures\n",
+         xad_isa(), ndot, nad, nq, fail);
   return fail ? 1 : 0;
 }
