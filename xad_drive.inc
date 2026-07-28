@@ -165,7 +165,7 @@ struct XadDrive : Carrier {
 };
 
 /* One carrier per direction, in BSS.  They are declared here, after the
-   MOD/*_h.inc includes, so the mapping objects those headers instantiate are
+   the generated MOD headers includes, so the mapping objects those headers instantiate are
    constructed first -- Codec's hj_bits / sgn_maxnb member initialisers read
    G0_* values that come from them. */
 static XadDrive< Xad<0> > Menc;

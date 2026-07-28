@@ -12,10 +12,21 @@
 #
 # -I./Lib3: the codec's RC derives from Coroutine, so common.inc / coro3b.inc /
 #   coro3_pin*.inc / coro3_setjmp_*.h must be reachable.
+#
+# Knobs, both measured -- see STATUS-speed.md:
+#   CXX=clang++   ~6-9% faster than g++ on this codec, bit-identical output.
+#   ARCH=-march=native (or -march=haswell, which g.bat has always used)
+#                 ~5%: it lets the AVX2 NLMS kernels inline instead of being
+#                 reached through the CPUID-dispatched function pointer.
+#   XAD_STATS=1   restores the -v per-stream byte accounting, which costs a
+#                 table lookup and an add on every coded bit.
+# Left OFF by default: PGO.  Measured a small REGRESSION on top of -O3, not the
+# 10-20% the plan expected -- the branchy scalar code it would have helped is
+# what the SIMD work replaced.
 set -e
 CXX=${CXX:-g++}
 ARCH=${ARCH:-}
-OPT="-std=gnu++20 -O2 -fstrict-aliasing -fomit-frame-pointer -fno-exceptions -fno-rtti $ARCH -I. -I./Lib3"
+OPT="-std=gnu++20 -O3 -fstrict-aliasing -fomit-frame-pointer -fno-exceptions -fno-rtti $ARCH -I. -I./Lib3"
 
 mkdir -p MOD
 for f in IDX/*.idx; do

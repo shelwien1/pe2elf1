@@ -1,7 +1,9 @@
 
 //#define CORO_NOASM 1
 
-#if defined(_MSC_VER) || defined(__clang__)
+/* clang-cl understands these; clang on a non-Windows target does not, and
+   warns about all three on every build. */
+#if defined(_MSC_VER) || (defined(__clang__) && defined(_WIN32))
 #pragma runtime_checks( "scu", off )
 #pragma check_stack(off)
 #pragma strict_gs_check(off)

@@ -102,6 +102,17 @@
         for( int k = 0; k<nch; k++ ) {
           Ch &c = ch[k];
           int step = step_table[c.index];
+          /* Hoisted above the cascades purely so the early rows can be
+             prefetched behind them.  These are pure functions of state that is
+             already final at this point -- no reordering of anything that
+             writes. */
+          const int ib = MakeIb(c.index);
+          Ch &o = ch[k ? 0 : nch-1];
+          enum { NSYM = 1<<BPS };
+          int xch = XST ? o.cur+1 : 0, xch2 = XST ? o.prev2+1 : 0;
+          xch = xch>NSYM ? NSYM : xch;
+          xch2 = xch2>NSYM ? NSYM : xch2;
+          prefetch_early<0, BPS>(c, ib, xch, xch2);
           int leftover = 0;
           /* XST folds the whole cross-channel apparatus away for mono, where
              ch[k-1] is ch[k] itself and every one of these reads back zero. */
@@ -121,12 +132,6 @@
           const int base = step>>(BPS-1);
           int conf = ima_conf(leftover, base);
           int confB = ima_conf(loB, base);
-          int ib = MakeIb(c.index);
-          Ch &o = ch[k ? 0 : nch-1];
-          enum { NSYM = 1<<BPS };
-          int xch = XST ? o.cur+1 : 0, xch2 = XST ? o.prev2+1 : 0;
-          xch = xch>NSYM ? NSYM : xch;
-          xch2 = xch2>NSYM ? NSYM : xch2;
           int sym = code_symbol<0, BPS>(k, qhat, conf, ib, xch, q2, q3, enc ? code[k][i] : 0, xch2, qhatB, confB);
           if( !enc )
             code[k][i] = sym;

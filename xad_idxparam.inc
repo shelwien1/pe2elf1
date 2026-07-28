@@ -1,7 +1,7 @@
 /* xad_idxparam.inc -- part of xadpcm.cpp; not standalone.
  *
  * the bridge between the generated IDX headers and the C++ that uses them.
- * Included AFTER MOD/*.inc, and it has to be -- it switches on USE_NEW, which
+ * Included AFTER the generated MOD headers, and it has to be -- it switches on USE_NEW, which
  * those headers are what define.  That is the cycle xad_prelude.inc exists
  * separately for: the generated headers need pclamp and the contract
  * constants, and this needs the generated headers.  Do not merge the two. */
@@ -43,8 +43,8 @@
  * translation unit by construction (xadpcm.cpp includes every part; there is
  * nothing to link against), so there is no second copy for this one to
  * disagree with and the diagnostic has nothing to catch. */
-#ifdef __GNUC__
-#pragma GCC diagnostic ignored "-Wsubobject-linkage"
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wsubobject-linkage"   // clang has no such warning
 #endif
 
 #if USE_NEW

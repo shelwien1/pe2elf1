@@ -36,8 +36,15 @@ and reported below rather than assumed.
 | 4 | §1.4 SIMD mixer + stride 32, §1.10 STC | 22.803 | **1.71×** | identical |
 | 5 | §1.6 no divisions, §1.12 dead leftovers | 22.4 ¹ | 1.74× | identical |
 
+| 6 | §1.8 prefetch schedule | 21.7 | 1.80× | identical |
+| 7 | §1.16 build: `-O3`; **clang++**; `ARCH=-march=native` | **18.562** | **2.10×** | identical |
+
 ¹ within the noise band of run 4 on the whole-suite number; measured properly by
 alternating A/B on the path it touches — see below.
+
+Best configuration is `CXX=clang++ ARCH=-march=native ./mk.sh release`
+(18.562 s). The default portable gcc build is 22.069 s = 1.77×. Every one of
+those binaries produces the same 24 md5s.
 
 ---
 
@@ -257,3 +264,76 @@ off-by-one in the reciprocal would show — plus the extreme magnitudes a
 holds for the standard table; a wav may carry its own with `|c|` up to 32767,
 putting `|P|` near 8.4e6, so the sweep runs out to 2^24. **912 073 cases, 0
 failures.**
+
+### 6 — §1.8 prefetch schedule
+
+The 24 context rows split by *when their index becomes known*. Twelve are
+functions of `c.prev*`, the scale bucket and the other channel — all final
+before the predictor runs, because channel *k−1* was coded earlier this instant
+(and for *k = 0*, the previous instant). `ib`, `xch` and `xch2` are now computed
+at the top of the per-channel body instead of after the quantizers (a pure
+reordering of pure functions — nothing that writes moved), and
+`prefetch_early()` issues the twelve there. The ~760 taps of the two NLMS
+cascades then sit between the prefetch and the use: several hundred cycles of
+cover for a working set that misses essentially every time.
+
+The eleven q-dependent rows have nothing left to hide behind — `q^` only exists
+once the cascades have run — but they are still prefetched at the head of
+`code_symbol` rather than at first use, which buys the whole mixer setup.
+
+The address arithmetic is deliberately repeated rather than threaded through
+`code_symbol`'s signature: a dozen integer multiply-adds against the memory
+latency they are hiding.
+
+Measured with both revisions at the *same* `-O3` (the first attempt compared an
+`-O2` build against an `-O3` one and conflated the two): **11.108 / 11.596 s
+without, 10.794 / 10.683 s with — 4–6%.**
+
+### 7 — §1.16 build
+
+Three of the four recommendations hold; one does not.
+
+**`-O3`:** adopted, though on its own it is inside the noise band against `-O2`.
+Harmless and the plan asks for it.
+
+**`-march=native` / `-march=haswell`:** ~5%, and the mechanism is specific —
+it is not autovectorization, it is that `__AVX2__` lets `xad_simd.inc` call the
+kernels directly instead of through the CPUID-dispatched function pointer, so
+they inline into `Pred`. `g.bat` has always used `-march=haswell`, so the
+Windows build already had this.
+
+**clang.** Not in the plan; worth it. **clang++ 18 is 6–9% faster than g++ 13**
+on this codec at the same flags, alternating A/B:
+
+```
+  g++   -O3                10.654 s      clang++ -O3                10.030 s
+  g++   -O3 -march=native   9.737 s      clang++ -O3 -march=native   8.883 s
+```
+
+`CXX=clang++` already worked — mk.sh honours it — and is now documented there.
+Two clang-only warnings were real and are fixed: a `/*` inside a block comment
+in three files, and `#pragma GCC diagnostic ignored "-Wsubobject-linkage"`,
+which clang does not have. A third was in `Lib3/coro3b.inc`, whose
+`#if defined(_MSC_VER) || defined(__clang__)` guard on three MSVC pragmas is
+wrong for clang on a non-Windows target; narrowed to `__clang__ && _WIN32`,
+which is what clang-cl is.
+
+**PGO: rejected, measured.** The plan expects 10–20%. On top of `-O3` it is a
+small **regression** (10.459 / 10.513 s against 10.179 / 10.309 s for plain
+`-O3 -march=native`). That is consistent rather than surprising: PGO's value
+here would have been in branchy scalar code, and the branchy scalar code is what
+§1.1/§1.2/§1.6 replaced. Not adopted; the reasoning is recorded in mk.sh so it
+is not re-tried blind.
+
+**`-ffast-math`: not used**, as the plan insists. The only floating point is
+`init_tables`, and that is exactly where it is dangerous — `SQT`/`STT` come from
+`exp`/`log` and a one-ULP shift at a rounding boundary changes a table entry and
+therefore the output.
+
+**The md5 identity test is now cross-compiler**, which is stronger than the
+plan's `-O0/-O2/-Ofast` version: g++ at `-O2`/`-O3`/`-O3 -march=native`/PGO and
+clang++ at `-O2`/`-O3`/`-O3 -march=native` all produce the same 24 md5s.
+
+**`INLINE` (plan's last bullet):** the `#ifdef 13` the plan flags does not exist
+in this tree — `INLINE` comes from `Lib3/common.inc`, correctly guarded on
+`__GNUC__`, and `nm` confirms `mbit` has no out-of-line copies.

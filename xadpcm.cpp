@@ -124,7 +124,7 @@
 // sweeping those does not produce a differently-tuned codec, it produces a
 // broken one.  That block is at the top of this file and says so.
 //
-// idx2inc.pl turns those into MOD/*.inc.  The Debug build leaves each value in
+// idx2inc.pl turns those into the generated MOD headers.  The Debug build leaves each value in
 // the binary as a pattern string, which IDX/opt.pl flips bit by bit against a
 // corpus; import.pl folds the winners back into the .idx sources.  The Const
 // build evaluates the patterns at preprocess time and is what ships.  Both
@@ -256,8 +256,9 @@ typedef int64_t i64;
                               pulls its own prerequisites makes the order
                               depend on who included whom first.
 
-     xad_prelude.inc          must precede sh_mapping.inc and MOD/*, which need
-                              pclamp and the contract constants for their
+     xad_prelude.inc          must precede sh_mapping.inc and the generated
+                              MOD headers, which need pclamp and the contract
+                              constants for their
                               sizes; and xad_idxparam.inc must FOLLOW them,
                               because it switches on USE_NEW, which they are
                               what define.  That cycle is the whole reason the

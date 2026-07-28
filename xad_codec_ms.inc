@@ -97,6 +97,14 @@
           i32 P = ms_predict(c.samp1, c.samp2, c.c1, c.c2);
           const i32 dl = c.dl;
           const u32 rcp = c.rcp;
+          // hoisted above the cascades so the early rows prefetch behind them
+          const int ib = ms_bucket(dl);
+          Ch &o = ch[k ? 0 : nch-1];
+          enum { NSYM = 16 };
+          int xch = XST ? o.cur+1 : 0, xch2 = XST ? o.prev2+1 : 0;
+          xch = xch>NSYM ? NSYM : xch;
+          xch2 = xch2>NSYM ? NSYM : xch2;
+          prefetch_early<1, 4>(c, ib, xch, xch2);
           i64 e = 0;
           i32 cross = 0, crossB = 0;
           if constexpr( XST ) {
@@ -113,12 +121,6 @@
           int q3 = ms_quantize_nq(i64(clip16(i64(c.pd.last)+c.pd.p1))-P, dl, rcp);
           int conf = ms_conf(e, dl);
           int confB = ms_conf(eB, dl);
-          int ib = ms_bucket(dl);
-          Ch &o = ch[k ? 0 : nch-1];
-          enum { NSYM = 16 };
-          int xch = XST ? o.cur+1 : 0, xch2 = XST ? o.prev2+1 : 0;
-          xch = xch>NSYM ? NSYM : xch;
-          xch2 = xch2>NSYM ? NSYM : xch2;
           int sym = code_symbol<1, 4>(k, MS_M[qhat], conf, ib, xch, MS_M[q2], MS_M[q3], enc ? int(MS_M[nib[at]]) : 0, xch2, MS_M[qhatB], confB);
           int nb = MS_U[sym];
           if( !enc )

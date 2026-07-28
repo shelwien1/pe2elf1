@@ -3,7 +3,7 @@
  * types are already in place from Lib3's common.inc; what is here is the
  * arithmetic contract -- the numbers that are NOT tunables -- and the clamp
  * helpers the generated IDX headers need for their sizes.  Included BEFORE
- * sh_mapping.inc and MOD/*.inc for that reason.  The half of the IDX bridge
+ * sh_mapping.inc and the generated MOD headers for that reason.  The half of the IDX bridge
  * that has to come AFTER them is in xad_idxparam.inc. */
 
 /* The arithmetic contract, and NOT tunables.  Every number below either sizes

@@ -44,6 +44,35 @@
      the values begin_seg() puts in them for this segment.  The ALLOCATION sites
      in reset_stats() keep using the runtime amaxsym / amaxnib, which are the
      maxima over every segment in a solid stream and are >= these. */
+  /* The 12 rows whose index is known BEFORE the predictor runs: everything
+     keyed on c.prev*, the scale bucket, and the other channel -- which is
+     available because channel k-1 was coded earlier this instant (and for
+     k = 0, from the previous instant).  Issued at the top of the per-channel
+     body so the ~760 taps of the two NLMS cascades sit between the prefetch and
+     the use, which is several hundred cycles of cover for a ~27 MB working set
+     that misses essentially every time.
+
+     The address arithmetic is repeated in code_symbol rather than threaded
+     through: it is a dozen integer multiply-adds against the memory latency it
+     is hiding. */
+  template<int FMT, int BPS>
+  INLINE void prefetch_early(const Ch &c, int ib, int xch, int xch2) const {
+    enum { nsym = 1<<BPS };
+    __builtin_prefetch(tI.row(ib));
+    __builtin_prefetch(tP.row(c.prev));
+    __builtin_prefetch(tP2.row(c.prev*nsym+c.prev2));
+    __builtin_prefetch(tP3.row((c.prev*nsym+c.prev2)*nsym+c.prev3));
+    __builtin_prefetch(tP4.row(((c.prev*nsym+c.prev2)*nsym+c.prev3)*nsym+c.prev4));
+    __builtin_prefetch(tX.row(xch));
+    __builtin_prefetch(tPX.row(c.prev*(nsym+1)+xch));
+    __builtin_prefetch(tXX.row(xch*(nsym+1)+xch2));
+    __builtin_prefetch(tPPX.row((c.prev*nsym+c.prev2)*(nsym+1)+xch));
+    __builtin_prefetch(tPX2.row((c.prev*(nsym+1)+xch)*(nsym+1)+xch2));
+    __builtin_prefetch(tPPXX.row(((c.prev*nsym+c.prev2)*(nsym+1)+xch)*(nsym+1)+xch2));
+    u32 hj = u32(((c.prev*nsym+c.prev2)*nsym+c.prev3)*(nsym+1)+xch)*u32(nsym+1)+u32(xch2);
+    __builtin_prefetch(tHJ.row(int((hj*0x9E3779B1u)>>(32-hj_bits))));
+  }
+
   template<int FMT, int BPS>
   int code_symbol(int k, int qhat, int conf, int ib, int xch, int q2, int q3, int sym, int xch2, int qhatB, int confB) {
     enum { nsym = 1<<BPS, nbit = BPS };
@@ -73,6 +102,20 @@
     Ctr* rHJ = tHJ.row(int((hj*0x9E3779B1u)>>(32-hj_bits)));
     Ctr* rQB = tQB.row(qhatB*NCONF+confB);
     Ctr* rQAB = tQAB.row(qhat*nsym+qhatB);
+    /* The q-dependent half.  Nothing is left to hide these behind -- q^ only
+       exists once the cascades have run -- but issuing them here still buys the
+       whole mixer setup before the first read. */
+    __builtin_prefetch(rQ);
+    __builtin_prefetch(rQs);
+    __builtin_prefetch(rQP);
+    __builtin_prefetch(rQI);
+    __builtin_prefetch(rQX);
+    __builtin_prefetch(rQ2);
+    __builtin_prefetch(rQ3);
+    __builtin_prefetch(rIP);
+    __builtin_prefetch(rQPX);
+    __builtin_prefetch(rQB);
+    __builtin_prefetch(rQAB);
     /* One row per (length bucket, expected bit) plus row 0 for "no useful
        prediction", which covers both no match at all and a match the bits
        already decoded have contradicted.  Keying on the expected BIT rather
