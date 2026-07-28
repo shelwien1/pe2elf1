@@ -85,6 +85,20 @@ enum {
   SM_DELTAH = 4, // MS iDelta against the previous header
 };
 
+/* -v byte accounting.  `stat[scat] += CLT[pf][b]` ran on every coded bit and
+   kept the 16 KB CLT table hot in L1 for the benefit of a report nobody asks
+   for in a normal run.  XAD_STATS=1 puts it back; the default build has neither
+   the adds nor the table.  Both builds code identically -- this is accounting,
+   not model state. */
+#ifndef XAD_STATS
+#define XAD_STATS 0
+#endif
+#if XAD_STATS
+#define XSTAT(cat, p, b) do { stat[cat] += CLT[p][b]; } while( 0 )
+#else
+#define XSTAT(cat, p, b) do { } while( 0 )
+#endif
+
 static constexpr int pclamp(int v, int lo, int hi) {
   return v<lo ? lo : v>hi ? hi : v;
 }

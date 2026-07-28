@@ -103,9 +103,11 @@ struct Pred {
   INLINE void adaptx(i32* w, const i32* h, int n, i32 err, u64 en, int g, int fl) {
     if( !err )
       return;
-    int sh = 0;
-    for( u64 e = en+u64(n)*u64(fl); e>1; e >>= 1 )
-      sh++;
+    /* was: for( u64 e = en+n*fl; e>1; e>>=1 ) sh++;  -- i.e. floor(log2(e)),
+       0 for e<=1.  The |1 guards clzll(0), which is undefined; the argument is
+       never 0 in practice (n and fl are both pclamped to >=1) but the guard is
+       free and survives a widened clamp. */
+    int sh = 63-__builtin_clzll((en+u64(n)*u64(fl))|1);
     sh += g-WSH;
     sh = sh<0 ? 0 : sh>PRED_SHMAX ? PRED_SHMAX : sh;
     for( int i = 0; i<n; i++ )
@@ -133,9 +135,7 @@ struct Pred {
   INLINE void adapt(i32* w, const i32* h, int n, i32 err, u64 en, int g, int fl) {
     if( !err )
       return;
-    int s = 0;
-    for( u64 e = en+u64(n)*u64(fl); e>1; e >>= 1 )
-      s++;
+    int s = 63-__builtin_clzll((en+u64(n)*u64(fl))|1);   // see adaptx
     int sh = s+g-WSH;
     if( sh<0 )
       sh = 0;

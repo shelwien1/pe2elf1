@@ -58,9 +58,7 @@ static const int MS_DLOG_MAX = ((MS_DLOG_EMAX-MS_DLOG_E0)<<MS_DLOG_SUB)+(1<<MS_D
 
 static INLINE int ms_dlog(i32 delta) {
   u32 d = delta<16 ? 16u : u32(delta);
-  int e = 0;
-  for( u32 x = d; x >>= 1; )
-    e++;
+  int e = 31-__builtin_clz(d);   // was a shift loop; d >= 16, so never 0
   int b = ((e-MS_DLOG_E0)<<MS_DLOG_SUB)+int((d>>(e-MS_DLOG_SUB))&((1<<MS_DLOG_SUB)-1));
   return b<0 ? 0 : b>MS_DLOG_MAX ? MS_DLOG_MAX : b;
 }

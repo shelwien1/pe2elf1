@@ -188,10 +188,15 @@ static void report(const Codec<MD> &cx, const Arc &ar, size_t insz, u64 outsz, u
     fprintf(stderr, ", %.3f bits/code", 8.0*double(outsz)/double(ncode));
   fprintf(stderr, "\n");
   if( verbose ) {
+#if XAD_STATS
     static const char* cat[ST_NCAT] = {"codes  ", "headers", "literal", "flags  "};
     for( int i = 0; i<ST_NCAT; i++ )
       if( cx.stat[i] )
         fprintf(stderr, "  %s %9.1f bytes\n", cat[i], double(cx.stat[i])/(8.0*double(ST_SCALE)));
+#else
+    (void)cx;
+    fprintf(stderr, "  per-stream accounting: rebuild with -DXAD_STATS=1\n");
+#endif
     fprintf(stderr, "  coroutine stack high-water %llu of %u bytes\n",
             (unsigned long long)stk_hi, unsigned(Coroutine::STKPAD));
   }

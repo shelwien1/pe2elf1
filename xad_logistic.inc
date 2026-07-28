@@ -7,7 +7,9 @@ static const int ST_SCALE = pclamp(G0_ST_SCALE, 16, 2048);
 
 static int SQT[P_ONE];    // squash: d+P_MID -> p12
 static short STT[P_ONE];  // stretch: p12 -> d
+#if XAD_STATS
 static u16 CLT[P_ONE][2]; // -log2 P(bit) in 1/ST_SCALE bit, accounting only
+#endif
 /* A counter's adaptation is three numbers -- the rate schedule by update
    count, where that schedule stops advancing, and the prior it starts from --
    and the three model roles want different ones.  The code tree sees a symbol
@@ -46,8 +48,10 @@ static void init_tables() {
     double q = p<P_MIN ? P_MIN : p>P_MAX ? P_MAX : p;
     int d = int(floor(double(ST_SCALE)*log(q/(double(P_ONE)-q))+0.5));
     STT[p] = short(d<ST_MIN ? ST_MIN : d>ST_MAX ? ST_MAX : d);
+#if XAD_STATS
     CLT[p][1] = u16(-double(ST_SCALE)*log2(q/double(P_ONE))+0.5);
     CLT[p][0] = u16(-double(ST_SCALE)*log2(1.0-q/double(P_ONE))+0.5);
+#endif
   }
 }
 

@@ -2,14 +2,16 @@
  *
  * part of Codec<MD>: one mixed bit, one ADPCM code, and the header /
  * literal coders.  Included inside the class body. */
-  // one mixed bit
-  INLINE int mbit(Ctr** cs, int ncs, CtrS* sl, int mctx, int actxA, int actxB, int b) {
+  /* One mixed bit.  `cs` is the per-SYMBOL row base array; the node offset nd
+     is applied here rather than by rebuilding 24 stack slots per bit.  The old
+     `if(sl)` test is gone: mbit has one call site and it always passes the slow
+     twin's row. */
+  INLINE int mbit(Ctr* const* cs, int ncs, CtrS* sl, int nd, int mctx, int actxA, int actxB, int b) {
     mxC.nx = 0;
     mxC.add(G0_BIAS);
     for( int i = 0; i<ncs; i++ )
-      mxC.add(STT[cs[i]->pr()]);
-    if( sl )
-      mxC.add(STT[sl->pr()]);
+      mxC.add(STT[cs[i][nd].pr()]);
+    mxC.add(STT[sl->pr()]);
     int p = mxC.mix(mctx);
     int pa = apA.pp(p, actxA);
     int a1 = pclamp(G0_AB1, 0, 4), a2 = pclamp(G0_AB2, 0, 4);
@@ -19,11 +21,10 @@
     pf = (a2*pb+(4-a2)*pf)>>2;
     pf = pf<P_MIN ? P_MIN : pf>P_MAX ? P_MAX : pf;
     b = rc.bit(pf, b);
-    stat[scat] += CLT[pf][b];
+    XSTAT(scat, pf, b);
     for( int i = 0; i<ncs; i++ )
-      cs[i]->upd(b, RS_CODE);
-    if( sl )
-      sl->upd(b);
+      cs[i][nd].upd(b, RS_CODE);
+    sl->upd(b);
     mxC.upd(b);
     apA.upd(b);
     apB.upd(b);
@@ -83,44 +84,35 @@
     int sok = sex>=0, lok = lex>=0;
     int msel = G0_MATCH_MIXSEL ? lok : 0;
     scat = ST_CODE;
+
+    /* Row bases, built ONCE per symbol.  These 22 were being rebuilt as 22
+       stack stores on every bit of the tree -- 88 stores per 4-bit symbol that
+       differ only by nd, which mbit can add itself. */
+    Ctr* cs[MIX_NIN];
+    cs[0] = 0;                 // the two match rows are per-bit; filled below
+    cs[1] = 0;
+    cs[2] = rQ;    cs[3] = rI;    cs[4] = rP;     cs[5] = rP2;
+    cs[6] = rX;    cs[7] = rQP;   cs[8] = rQI;    cs[9] = rQX;
+    cs[10] = rIP;  cs[11] = rQ2;  cs[12] = rQ3;   cs[13] = rPX;
+    cs[14] = rXX;  cs[15] = rPPX; cs[16] = rPX2;  cs[17] = rP3;
+    cs[18] = rPPXX; cs[19] = rP4; cs[20] = rQPX;  cs[21] = rHJ;
+    cs[22] = rQB;  cs[23] = rQAB;
+    const int ncs = 24;
+
+    /* The match rows genuinely change per bit -- the row index depends on the
+       expected bit and on whether the match is still alive -- but only three
+       rows per model are ever reachable within one symbol, so resolve those
+       three now and select between them in the loop. */
+    Ctr* msr[3] = {tMS.row(0), tMS.row(1+2*slb), tMS.row(2+2*slb)};
+    Ctr* mlr[3] = {tML.row(0), tML.row(1+2*llb), tML.row(2+2*llb)};
+
     int nd = 1;
     for( int j = nbit-1; j>=0; j-- ) {
-      int srow = 0, lrow = 0, sbit = 0, lbit = 0;
-      if( sok ) {
-        sbit = (sex>>j)&1;
-        srow = 1+2*slb+sbit;
-      }
-      if( lok ) {
-        lbit = (lex>>j)&1;
-        lrow = 1+2*llb+lbit;
-      }
-      Ctr* cs[MIX_NIN];
-      int n = 0;
-      cs[n++] = tMS.row(srow)+nd;
-      cs[n++] = tML.row(lrow)+nd;
-      cs[n++] = rQ+nd;
-      cs[n++] = rI+nd;
-      cs[n++] = rP+nd;
-      cs[n++] = rP2+nd;
-      cs[n++] = rX+nd;
-      cs[n++] = rQP+nd;
-      cs[n++] = rQI+nd;
-      cs[n++] = rQX+nd;
-      cs[n++] = rIP+nd;
-      cs[n++] = rQ2+nd;
-      cs[n++] = rQ3+nd;
-      cs[n++] = rPX+nd;
-      cs[n++] = rXX+nd;
-      cs[n++] = rPPX+nd;
-      cs[n++] = rPX2+nd;
-      cs[n++] = rP3+nd;
-      cs[n++] = rPPXX+nd;
-      cs[n++] = rP4+nd;
-      cs[n++] = rQPX+nd;
-      cs[n++] = rHJ+nd;
-      cs[n++] = rQB+nd;
-      cs[n++] = rQAB+nd;
-      int b = mbit(cs, n, rQs+nd, (nd*NCONF+conf)*(G0_MATCH_MIXSEL ? 2 : 1)+msel, qhat*nsym+nd, ib*nsym+nd, enc ? (sym>>j)&1 : -1);
+      int sbit = sok ? (sex>>j)&1 : 0;
+      int lbit = lok ? (lex>>j)&1 : 0;
+      cs[0] = sok ? msr[1+sbit] : msr[0];
+      cs[1] = lok ? mlr[1+lbit] : mlr[0];
+      int b = mbit(cs, ncs, rQs+nd, nd, (nd*NCONF+conf)*(G0_MATCH_MIXSEL ? 2 : 1)+msel, qhat*nsym+nd, ib*nsym+nd, enc ? (sym>>j)&1 : -1);
       // a match the decoded bits have contradicted says nothing about the rest
       if( sok&&b!=sbit )
         sok = 0;
@@ -148,7 +140,7 @@
       Ctr* c = r+nd;
       int p = c->pr();
       int b = rc.bit(p, enc ? (nb>>j)&1 : -1);
-      stat[scat] += CLT[p][b];
+      XSTAT(scat, p, b);
       c->upd(b, RS_HDR);
       nd = nd+nd+b;
     }
@@ -161,7 +153,7 @@
       Ctr* c = tHmn.row(model*sgn_ncls+(nb<sgn_ncls ? nb : sgn_ncls-1))+(j<SGN_NODES-1 ? j+1 : SGN_NODES-1);
       int p = c->pr();
       int b = rc.bit(p, enc ? int((u>>j)&1) : -1);
-      stat[scat] += CLT[p][b];
+      XSTAT(scat, p, b);
       c->upd(b, RS_HDR);
       if( !enc )
         u |= u64(u32(b))<<j;
@@ -177,7 +169,7 @@
       Ctr* c = r+nd;
       int p = c->pr();
       int b = rc.bit(p, enc ? (v>>j)&1 : -1);
-      stat[scat] += CLT[p][b];
+      XSTAT(scat, p, b);
       c->upd(b, RS_LIT);
       nd = nd+nd+b;
     }

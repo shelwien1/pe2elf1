@@ -71,7 +71,7 @@
         Ctr* rf = tRsv.row(0)+1;
         int p = rf->pr();
         rsv = rc.bit(p, enc ? rsv : -1);
-        stat[ST_FLAG] += CLT[p][rsv];
+        XSTAT(ST_FLAG, p, rsv);
         rf->upd(rsv, RS_LIT);
         int rb = rsv ? code_byte(LIT_MISC, 0, enc ? blk[k*4+3] : 0) : 0;
         if( !enc ) {
