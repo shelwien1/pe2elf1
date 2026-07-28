@@ -7,6 +7,11 @@ static const int ST_SCALE = pclamp(G0_ST_SCALE, 16, 2048);
 
 static int SQT[P_ONE];    // squash: d+P_MID -> p12
 static short STT[P_ONE];  // stretch: p12 -> d
+/* STT with Ctr::pr()'s clamp already applied.  p is u16 and CTR_SH is 4, so
+   p>>CTR_SH is in [0,4095]: the upper clamp in pr() is dead and the lower one
+   only ever maps 0 to 1.  Folding that into the table turns two compares and a
+   select into a load, 26 times per coded bit. */
+static short STC[P_ONE];
 #if XAD_STATS
 static u16 CLT[P_ONE][2]; // -log2 P(bit) in 1/ST_SCALE bit, accounting only
 #endif
@@ -53,6 +58,12 @@ static void init_tables() {
     CLT[p][0] = u16(-double(ST_SCALE)*log2(1.0-q/double(P_ONE))+0.5);
 #endif
   }
+
+  /* Second pass on purpose.  STC[0] reads STT[P_MIN], and P_MIN > 0, so folding
+     this into the loop above reads a table entry that has not been written yet
+     -- which is exactly the bug this line replaced. */
+  for( int p = 0; p<P_ONE; p++ )
+    STC[p] = STT[p<P_MIN ? P_MIN : p];
 }
 
 static INLINE int squash(int d) {

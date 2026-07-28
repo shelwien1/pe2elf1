@@ -32,6 +32,8 @@ and reported below rather than assumed.
 | 1 | §1.5 clz + §1.9 hoisting + §1.11 stats gate | 36.948 | 1.06× | identical |
 | 2 | §1.1 linearize history + §1.2 SIMD kernels + §1.3 | 26.533 | **1.47×** | identical |
 | 2b | …the same, built `ARCH=-march=haswell` | 25.492 | **1.53×** | identical |
+| 3 | §1.7 counter arena, 64B rows, huge pages | 25.226 | 1.55× | identical |
+| 4 | §1.4 SIMD mixer + stride 32, §1.10 STC | 22.803 | **1.71×** | identical |
 
 ---
 
@@ -130,3 +132,67 @@ called from an unaligned cursor (which is how `Pred` always calls it). Run at
 four build levels — portable/dispatched, `-msse4.1`, `-mavx2`, `-march=native`
 — because the inlined and the dispatched builds are different code generations
 of the same intrinsics. **0 failures, 1.6 M cases.**
+
+### 3 — §1.7 cache and TLB
+
+All 24 counter tables were separate `std::vector`s at 16-byte alignment. At
+`nsym = 16` a row is `sizeof(Ctr)*16` = 64 bytes — exactly one cache line — so
+three rows in four straddled two lines and cost two misses where one would do.
+Within a symbol the node index walks 1 → {2,3} → {4..7} → {8..15}, all inside
+one row, so an aligned table costs **one line per symbol, not one per bit**.
+
+They now sub-allocate from one `Arena` at 64-byte granularity, which also drops
+the page count over ~27 MB of essentially random access and lets the whole thing
+be backed by huge pages (`mmap` + `MADV_HUGEPAGE` on Linux, silent fallback to
+`aligned_alloc` elsewhere): ~7 000 4 KB pages become ~14 2 MB ones.
+
+Sizing it needed care. The layout is 26 expressions in `bind_tables()`, and
+duplicating them to compute a total would be two things to keep in step. Instead
+the arena has a **dry mode**: the first `reset_stats` runs the whole binding pass
+with `take()` handing out nothing and only accumulating, sizes the arena from
+that, and runs it again for real. The sizes depend only on `amaxsym`/`amaxnib`,
+fixed for the object's life, so every later reset re-binds the same layout —
+which is also §2.3, since the refill is now a walk over contiguous memory rather
+than 24 `vector::assign` calls with per-element construction.
+
+Not done, deliberately (the doc says so and it is right): the tables are *not*
+merged into one indexed slab. They have different index spaces and row counts —
+`tP` is `nsym` rows, `tP4` is `nsym⁴`, `tHJ` is `2^hj_bits` — so no shared row
+index exists.
+
+**25.226 s, 1.55×.**
+
+### 4 — §1.4 SIMD mixer, §1.10 fold the `pr()` clamp
+
+**§1.10.** `Ctr::pr()` clamps `p>>CTR_SH` to `[P_MIN,P_MAX]`, but `p` is `u16`
+and `CTR_SH` is 4, so the value is in `[0,4095]`: the upper clamp is dead and
+the lower one only maps 0 → 1. `STC[i] = STT[i ? i : 1]` folds both into the
+stretch lookup, and `mbit` reads `STC[cs[i][nd].p >> CTR_SH]` — two compares and
+a select gone, 26 times per coded bit.
+
+**§1.4.** Weight-row stride padded 28 → 32 and the array 64B-aligned out of the
+same arena: at stride 28 a row was 112 B straddling two or three lines, at 32
+it is exactly two. `nx` is 26 on every `mbit` call, so `st[26..32)` is zeroed
+once and both loops run to the constant 32 — a zero input contributes 0 to the
+sum and its weight update is `(0*el)>>20 = 0`, so the wider loop is bit-exact
+and unrolls with no remainder. `mix` reuses `xad_dot`; `upd` gets its own kernel
+(`xad_mixupd`), which is `xad_adapt` plus the symmetric clamp as
+`min_epi32`/`max_epi32`.
+
+**Where this departs from the plan.** §1.4 says `el = err*lr` "reaches ±2^28 and
+therefore cannot be a `mul_epi32` operand directly", and budgets four multiplies
+per 8 lanes for an exact hi/lo split. It fits: `|err| ≤ 4095` (because `pr_`
+comes from `squash()`, clamped to `[1,4095]`) and `lr ≤ 65535` (PMUL), so
+`|el| ≤ 268 364 025` — a factor of eight inside `i32`. And
+`i64(st)·i64(err)·i64(lr) == i64(st)·i64(err*lr)` exactly, since `err*lr` is
+itself exact. So **one** multiply per lane, not four. Both bounds come from the
+arithmetic contract, so the file carries a `static_assert` rather than a comment.
+
+**A real bug, caught by the md5 gate.** The first attempt folded
+`STC[p] = STT[p<P_MIN ? P_MIN : p]` into the loop that *builds* `STT` — so
+`STC[0]` read `STT[1]` one iteration before it was written, and every archive
+grew by ~6% (wavs2 1 248 335 → 1 323 176). It is a second pass now, and the
+comment says why. Worth recording as the case for the md5 matrix: the codec
+still round-tripped perfectly, so only the size check caught it.
+
+**22.803 s, 1.71×.**

@@ -129,43 +129,62 @@ struct Codec {
      the match model's storage is refilled -- a couple of megabytes, cheap enough
      to do per wav -- and the match model uses its barrier instead. */
   void reset_stats() {
+    /* First time through, run the whole binding pass DRY -- take() hands out
+       nothing and only accumulates -- so the arena can be sized from the same
+       expressions that lay it out, with no second copy of them to drift.  The
+       sizes depend only on amaxsym / amaxnib / sgn_ncls, which are fixed for the
+       life of the object, so every later reset re-binds the same layout. */
+    if( !cta.base ) {
+      cta.dry = 1;
+      bind_tables();
+      size_t need = cta.used;
+      cta.dry = 0;
+      cta.reserve(need);
+    }
+    bind_tables();
+  }
+
+  Arena cta;   // every CtrTab / CtrSTab lives in here
+
+  void bind_tables() {
+    cta.rewind();
     nsym = amaxsym;
     nib_rows = amaxnib;
     sgn_ncls = pclamp(G0_SGN_NCLS, 2, sgn_maxnb+1);
-    tQ.init(nsym*NCONF, nsym, RS_CODE);
-    tQs.init(nsym*NCONF, nsym);
-    tI.init(nib_rows, nsym, RS_CODE);
-    tP.init(nsym, nsym, RS_CODE);
-    tP2.init(nsym*nsym, nsym, RS_CODE);
-    tX.init(nsym+1, nsym, RS_CODE);
-    tQP.init(nsym*nsym, nsym, RS_CODE);
-    tQI.init(nsym*nib_rows, nsym, RS_CODE);
-    tQX.init(nsym*(nsym+1), nsym, RS_CODE);
-    tIP.init(nib_rows*nsym*NCONF, nsym, RS_CODE);
-    tQ2.init(nsym*nsym*NCONF, nsym, RS_CODE);
-    tQ3.init(nsym*nsym*nsym, nsym, RS_CODE);
-    tMS.init(1+2*C0_Ml_Volume, nsym, RS_MATCH);
-    tML.init(1+2*C0_Ml_Volume, nsym, RS_MATCH);
-    tPX.init(nsym*(nsym+1), nsym, RS_CODE);
-    tXX.init((nsym+1)*(nsym+1), nsym, RS_CODE);
-    tPPX.init(nsym*nsym*(nsym+1), nsym, RS_CODE);
-    tPX2.init(nsym*(nsym+1)*(nsym+1), nsym, RS_CODE);
-    tP3.init(nsym*nsym*nsym, nsym, RS_CODE);
-    tPPXX.init(nsym*nsym*(nsym+1)*(nsym+1), nsym, RS_CODE);
-    tP4.init(nsym*nsym*nsym*nsym, nsym, RS_CODE);
-    tQPX.init(nsym*nsym*(nsym+1), nsym, RS_CODE);
-    tHJ.init(1<<hj_bits, nsym, RS_CODE);
-    tQB.init(nsym*NCONF, nsym, RS_CODE);
-    tQAB.init(nsym*nsym, nsym, RS_CODE);
+    tQ.init(cta, nsym*NCONF, nsym, RS_CODE);
+    tQs.init(cta, nsym*NCONF, nsym);
+    tI.init(cta, nib_rows, nsym, RS_CODE);
+    tP.init(cta, nsym, nsym, RS_CODE);
+    tP2.init(cta, nsym*nsym, nsym, RS_CODE);
+    tX.init(cta, nsym+1, nsym, RS_CODE);
+    tQP.init(cta, nsym*nsym, nsym, RS_CODE);
+    tQI.init(cta, nsym*nib_rows, nsym, RS_CODE);
+    tQX.init(cta, nsym*(nsym+1), nsym, RS_CODE);
+    tIP.init(cta, nib_rows*nsym*NCONF, nsym, RS_CODE);
+    tQ2.init(cta, nsym*nsym*NCONF, nsym, RS_CODE);
+    tQ3.init(cta, nsym*nsym*nsym, nsym, RS_CODE);
+    tMS.init(cta, 1+2*C0_Ml_Volume, nsym, RS_MATCH);
+    tML.init(cta, 1+2*C0_Ml_Volume, nsym, RS_MATCH);
+    tPX.init(cta, nsym*(nsym+1), nsym, RS_CODE);
+    tXX.init(cta, (nsym+1)*(nsym+1), nsym, RS_CODE);
+    tPPX.init(cta, nsym*nsym*(nsym+1), nsym, RS_CODE);
+    tPX2.init(cta, nsym*(nsym+1)*(nsym+1), nsym, RS_CODE);
+    tP3.init(cta, nsym*nsym*nsym, nsym, RS_CODE);
+    tPPXX.init(cta, nsym*nsym*(nsym+1)*(nsym+1), nsym, RS_CODE);
+    tP4.init(cta, nsym*nsym*nsym*nsym, nsym, RS_CODE);
+    tQPX.init(cta, nsym*nsym*(nsym+1), nsym, RS_CODE);
+    tHJ.init(cta, 1<<hj_bits, nsym, RS_CODE);
+    tQB.init(cta, nsym*NCONF, nsym, RS_CODE);
+    tQAB.init(cta, nsym*nsym, nsym, RS_CODE);
     mmS.barrier();
     mmL.barrier();
-    mxC.init(MIX_NIN, nsym*NCONF*(G0_MATCH_MIXSEL ? 2 : 1));
+    mxC.init(cta, nsym*NCONF*(G0_MATCH_MIXSEL ? 2 : 1));
     apA.init(nsym*nsym);
     apB.init(nib_rows*nsym);
-    tHnb.init(SGN_NMODEL, SGN_NODES, RS_HDR);
-    tHmn.init(SGN_NMODEL*sgn_ncls, SGN_NODES, RS_HDR);
-    tRsv.init(1, 2, RS_LIT); // one node, two branches
-    tLit.init(LIT_NSTREAM*LIT_W, LIT_W, RS_LIT);
+    tHnb.init(cta, SGN_NMODEL, SGN_NODES, RS_HDR);
+    tHmn.init(cta, SGN_NMODEL*sgn_ncls, SGN_NODES, RS_HDR);
+    tRsv.init(cta, 1, 2, RS_LIT); // one node, two branches
+    tLit.init(cta, LIT_NSTREAM*LIT_W, LIT_W, RS_LIT);
   }
 
   /* Enter a new wav.  Everything the counters, mixer and APM have learned

@@ -7,18 +7,31 @@
    they earn a template parameter: in the Const build they fold to immediates,
    which is what turns the update loop into two multiplies and a clamp with no
    loads besides the weights themselves. */
+/* THE PRODUCT err*lr FITS IN i32, so the mixer update needs no operand split.
+   err = (bit<<P_BITS) - pr_ with pr_ from squash(), which is clamped to
+   [P_MIN,P_MAX] = [1,4095], so |err| <= 4095; lr is PMUL()-clamped to <= 65535.
+   4095*65535 = 268,364,025, a factor of eight inside i32.  And
+   i64(st)*i64(err)*i64(lr) == i64(st)*i64(err*lr) exactly, because err*lr is
+   itself exact.  So one mul_epi32 per lane does what the plan budgeted four
+   for.  Asserted rather than asserted-in-prose, since both bounds come from the
+   arithmetic contract and a widened PMUL clamp would break it: */
+static_assert(4095LL*65535LL<2147483647LL, "err*lr must fit i32 for the mixer kernel");
+
 template<IDXP(MLR), IDXP(WCL)>
 struct Mixer {
-  int nin = 0;
-  vector<int> w;
-  int st[MIX_MAXIN];
+  int* w = nullptr;
+  ALIGN(64) int st[MIX_MAXIN];
   int nx = 0, cx = 0, pr_ = P_MID;
   IDXC(int, lr, PMUL(MLR));
   IDXC(int, cl, 1<<pclamp(WCL, 8, 29));
 
-  void init(int ni, int nctx) {
-    nin = ni;
-    w.assign(size_t(ni)*size_t(nctx), G0_W_INIT);
+  void init(Arena &a, int nctx) {
+    memset(st, 0, sizeof(st));       // st[nx..MIX_STRIDE) must stay zero
+    size_t n = size_t(MIX_STRIDE)*size_t(nctx);
+    w = (int*)a.take(n*sizeof(int));
+    if( w )
+      for( size_t i = 0; i<n; i++ )
+        w[i] = G0_W_INIT;
   }
 
   INLINE void add(int s) {
@@ -27,21 +40,15 @@ struct Mixer {
 
   INLINE int mix(int ctx) {
     cx = ctx;
-    i64 s = 0;
-    int* W = &w[size_t(cx)*size_t(nin)];
-    for( int i = 0; i<nx; i++ )
-      s += i64(st[i])*W[i];
-    pr_ = squash(int(s>>MIX_SH));
+    int* W = w+size_t(cx)*size_t(MIX_STRIDE);
+    pr_ = squash(int(xad_dot(W, st, MIX_STRIDE)>>MIX_SH));
     return pr_;
   }
 
   INLINE void upd(int bit) {
     int err = (bit<<P_BITS)-pr_;
-    int* W = &w[size_t(cx)*size_t(nin)];
-    for( int i = 0; i<nx; i++ ) {
-      int nw = W[i]+int((i64(st[i])*i64(err)*i64(lr))>>MIX_LRSH);
-      W[i] = nw<-cl ? -cl : nw>cl ? cl : nw;
-    }
+    int* W = w+size_t(cx)*size_t(MIX_STRIDE);
+    xad_mixupd(W, st, MIX_STRIDE, err*lr, MIX_LRSH, cl);
     nx = 0;
   }
 };

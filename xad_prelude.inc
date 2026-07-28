@@ -47,6 +47,15 @@ enum {
      symptom is a wild weight-row index -- a segfault at -O0 and a live spin at
      -O2.  Keep real headroom over MIX_NIN. */
   MIX_MAXIN = 40,
+  /* Weight-row STRIDE, as opposed to MIX_NIN which is the contract's floor on
+     it.  Layout only: the loops run to this constant instead of to nx, which is
+     26 on every mbit call, and st[26..MIX_STRIDE) is zeroed once at init and
+     never written again.  A zero input contributes 0 to the dot product and its
+     weight update is (0*el)>>20 = 0, so the wider loop is bit-exact -- and with
+     a compile-time trip count it is four whole vectors with no remainder.  At
+     stride 28 a row was 112 B and straddled two or three cache lines; at 32,
+     64B-aligned, it is exactly two. */
+  MIX_STRIDE = 32,
   MIX_SH = 2*P_BITS-8,     // dot product -> stretch domain
   MIX_LRSH = 20,           // weight step: st*err*MW >> MIX_LRSH
 

@@ -10,8 +10,8 @@
     mxC.nx = 0;
     mxC.add(G0_BIAS);
     for( int i = 0; i<ncs; i++ )
-      mxC.add(STT[cs[i][nd].pr()]);
-    mxC.add(STT[sl->pr()]);
+      mxC.add(STC[cs[i][nd].p>>CTR_SH]);
+    mxC.add(STC[sl->p>>CTR_SH]);
     int p = mxC.mix(mctx);
     int pa = apA.pp(p, actxA);
     int a1 = pclamp(G0_AB1, 0, 4), a2 = pclamp(G0_AB2, 0, 4);

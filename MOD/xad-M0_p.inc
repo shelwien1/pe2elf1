@@ -4,5 +4,5 @@
 static inline int MakeMd( int dlog ) { int Md = 0;
 
   Md = 0;
-  M0_d0.inc( Md, dlog );
+  Md = Md*16 + M0_d0[__min(72,__max(0,dlog-(1-1)))];
   return Md; }

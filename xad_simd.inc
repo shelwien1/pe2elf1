@@ -40,6 +40,15 @@ static void xad_adapt_c(i32* w, const i32* h, int n, i32 err, int sh) {
     w[i] += i32((i64(err)*i64(h[i]))>>sh);
 }
 
+/* The mixer's weight update: like xad_adapt but with the symmetric clamp, and
+   with a trip count that is always MIX_STRIDE, so there is no tail. */
+static void xad_mixupd_c(i32* w, const i32* st, int n, i32 el, int sh, int cl) {
+  for( int i = 0; i<n; i++ ) {
+    i32 nw = w[i]+i32((i64(el)*i64(st[i]))>>sh);
+    w[i] = nw<-cl ? -cl : nw>cl ? cl : nw;
+  }
+}
+
 #if XAD_X86
 
 #if defined(__AVX2__)
@@ -132,6 +141,38 @@ XAD_T_SSE4 static void xad_adapt_sse4(i32* __restrict w, const i32* __restrict h
     w[i] += i32((i64(err)*i64(h[i]))>>sh);
 }
 
+XAD_T_AVX2 static void xad_mixupd_avx2(i32* __restrict w, const i32* __restrict st,
+                                       int n, i32 el, int sh, int cl) {
+  __m256i e = _mm256_set1_epi32(el);
+  __m128i cnt = _mm_cvtsi32_si128(sh);
+  __m256i b = _mm256_set1_epi64x((i64)((u64)1<<(63-sh)));
+  __m256i lo = _mm256_set1_epi32(-cl), hi = _mm256_set1_epi32(cl);
+  for( int i = 0; i<n; i += 8 ) {
+    __m256i sv = _mm256_load_si256((const __m256i*)(st+i));
+    __m256i pe = xad_sra64_avx2(_mm256_mul_epi32(e, sv), cnt, b);
+    __m256i po = xad_sra64_avx2(_mm256_mul_epi32(e, _mm256_srli_epi64(sv, 32)), cnt, b);
+    __m256i r = _mm256_blend_epi32(pe, _mm256_slli_epi64(po, 32), 0xAA);
+    __m256i nw = _mm256_add_epi32(_mm256_load_si256((const __m256i*)(w+i)), r);
+    _mm256_store_si256((__m256i*)(w+i), _mm256_max_epi32(lo, _mm256_min_epi32(hi, nw)));
+  }
+}
+
+XAD_T_SSE4 static void xad_mixupd_sse4(i32* __restrict w, const i32* __restrict st,
+                                       int n, i32 el, int sh, int cl) {
+  __m128i e = _mm_set1_epi32(el);
+  __m128i cnt = _mm_cvtsi32_si128(sh);
+  __m128i b = _mm_set1_epi64x((i64)((u64)1<<(63-sh)));
+  __m128i lo = _mm_set1_epi32(-cl), hi = _mm_set1_epi32(cl);
+  for( int i = 0; i<n; i += 4 ) {
+    __m128i sv = _mm_load_si128((const __m128i*)(st+i));
+    __m128i pe = _mm_sub_epi64(_mm_xor_si128(_mm_srl_epi64(_mm_mul_epi32(e, sv), cnt), b), b);
+    __m128i po = _mm_sub_epi64(_mm_xor_si128(_mm_srl_epi64(_mm_mul_epi32(e, _mm_srli_epi64(sv, 32)), cnt), b), b);
+    __m128i r = _mm_blend_epi16(pe, _mm_slli_epi64(po, 32), 0xCC);
+    __m128i nw = _mm_add_epi32(_mm_load_si128((const __m128i*)(w+i)), r);
+    _mm_store_si128((__m128i*)(w+i), _mm_max_epi32(lo, _mm_min_epi32(hi, nw)));
+  }
+}
+
 #endif // XAD_X86
 
 // ---------------------------------------------------------------- selection
@@ -145,6 +186,9 @@ static INLINE i64 xad_dot(const i32* w, const i32* h, int n8) {
 static INLINE void xad_adapt(i32* w, const i32* h, int n, i32 err, int sh) {
   xad_adapt_avx2(w, h, n, err, sh);
 }
+static INLINE void xad_mixupd(i32* w, const i32* st, int n, i32 el, int sh, int cl) {
+  xad_mixupd_avx2(w, st, n, el, sh, cl);
+}
 static const char* xad_isa() { return "avx2 (compile-time)"; }
 static void xad_simd_init() {}
 
@@ -152,8 +196,10 @@ static void xad_simd_init() {}
 
 typedef i64 (*xad_dot_fn)(const i32*, const i32*, int);
 typedef void (*xad_adapt_fn)(i32*, const i32*, int, i32, int);
+typedef void (*xad_mixupd_fn)(i32*, const i32*, int, i32, int, int);
 static xad_dot_fn xad_dot_p = xad_dot64_c;
 static xad_adapt_fn xad_adapt_p = xad_adapt_c;
+static xad_mixupd_fn xad_mixupd_p = xad_mixupd_c;
 static const char* xad_isa_name = "scalar";
 
 static void xad_simd_init() {
@@ -161,10 +207,12 @@ static void xad_simd_init() {
   if( __builtin_cpu_supports("avx2") ) {
     xad_dot_p = xad_dot64_avx2;
     xad_adapt_p = xad_adapt_avx2;
+    xad_mixupd_p = xad_mixupd_avx2;
     xad_isa_name = "avx2 (runtime)";
   } else if( __builtin_cpu_supports("sse4.1") ) {
     xad_dot_p = xad_dot64_sse4;
     xad_adapt_p = xad_adapt_sse4;
+    xad_mixupd_p = xad_mixupd_sse4;
     xad_isa_name = "sse4.1 (runtime)";
   }
 }
@@ -173,6 +221,9 @@ static INLINE i64 xad_dot(const i32* w, const i32* h, int n8) {
 }
 static INLINE void xad_adapt(i32* w, const i32* h, int n, i32 err, int sh) {
   xad_adapt_p(w, h, n, err, sh);
+}
+static INLINE void xad_mixupd(i32* w, const i32* st, int n, i32 el, int sh, int cl) {
+  xad_mixupd_p(w, st, n, el, sh, cl);
 }
 static const char* xad_isa() { return xad_isa_name; }
 
@@ -183,6 +234,9 @@ static INLINE i64 xad_dot(const i32* w, const i32* h, int n8) {
 }
 static INLINE void xad_adapt(i32* w, const i32* h, int n, i32 err, int sh) {
   xad_adapt_c(w, h, n, err, sh);
+}
+static INLINE void xad_mixupd(i32* w, const i32* st, int n, i32 el, int sh, int cl) {
+  xad_mixupd_c(w, st, n, el, sh, cl);
 }
 static const char* xad_isa() { return "scalar (portable)"; }
 static void xad_simd_init() {}

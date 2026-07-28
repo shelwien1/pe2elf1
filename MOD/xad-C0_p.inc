@@ -4,5 +4,5 @@
 static inline int MakeMl( int mlen ) { int Ml = 0;
 
   Ml = 0;
-  C0_l0.inc( Ml, mlen );
+  Ml = Ml*9 + C0_l0[__min(24,__max(0,mlen-(1-1)))];
   return Ml; }
