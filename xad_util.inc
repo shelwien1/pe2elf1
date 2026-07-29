@@ -8,7 +8,7 @@
    stdio left in the program is in XadDrive, which is the one place allowed to
    know what a FILE* is. */
 
-static u32 crc32b(const u8* d, size_t n) {
+static u32 crc32b(cu8P d, size_t n) {
   static u32 T[256];
   static bool init = false;
   if( !init ) {
@@ -26,20 +26,20 @@ static u32 crc32b(const u8* d, size_t n) {
   return c^0xFFFFFFFFu;
 }
 
-static INLINE u32 rd16(const u8* p) {
+static INLINE u32 rd16(cu8P p) {
   return u32(p[0])|(u32(p[1])<<8);
 }
 
-static INLINE u32 rd32(const u8* p) {
+static INLINE u32 rd32(cu8P p) {
   return rd16(p)|(rd16(p+2)<<16);
 }
 
-static INLINE void wr16(u8* p, u32 v) {
+static INLINE void wr16(u8P p, u32 v) {
   p[0] = u8(v);
   p[1] = u8(v>>8);
 }
 
-static INLINE void wr32(u8* p, u32 v) {
+static INLINE void wr32(u8P p, u32 v) {
   wr16(p, v&0xFFFF);
   wr16(p+2, v>>16);
 }
@@ -64,11 +64,11 @@ static string safe_name(const string &s) {
 
 
 static int verbose = 0;
-static INLINE int16_t i16_of(const u8* p) {
+static INLINE int16_t i16_of(cu8P p) {
   return int16_t(u16(p[0])|u16(u16(p[1])<<8));
 }
 
-static INLINE u32 get_bits(const u8* b, size_t bitpos, int nbits) {
+static INLINE u32 get_bits(cu8P b, size_t bitpos, int nbits) {
   u32 v = u32(b[bitpos>>3])>>(bitpos&7);
   int have = 8-int(bitpos&7);
   size_t i = (bitpos>>3)+1;
@@ -79,7 +79,7 @@ static INLINE u32 get_bits(const u8* b, size_t bitpos, int nbits) {
   return v&((1u<<nbits)-1);
 }
 
-static INLINE void put_bits(u8* b, size_t bitpos, int nbits, u32 v) {
+static INLINE void put_bits(u8P b, size_t bitpos, int nbits, u32 v) {
   b[bitpos>>3] |= u8(v<<(bitpos&7));
   int have = 8-int(bitpos&7);
   size_t i = (bitpos>>3)+1;

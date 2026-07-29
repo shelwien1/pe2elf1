@@ -95,9 +95,14 @@ struct MatchModel {
      the new one shifts in, so the hash names the last `order` symbols and
      nothing older -- unlike a decayed multiplicative hash, whose effective
      order drifts with the multiplier. */
-  INLINE void push(int sym) {
-    u32 old = pos>=u32(order) ? u32(hist[(pos-u32(order))&hmask])+1 : 0;
-    hist[pos&hmask] = u8(sym);
+  /* Takes the history pointer rather than reading the member, so update() can
+     establish ONE restrict pointer for the whole symbol.  Two restrict pointers
+     to the same object in one scope -- which is what a second local in here
+     would become after inlining -- is exactly the promise this is not allowed
+     to break. */
+  INLINE void push(u8P H, int sym) {
+    u32 old = pos>=u32(order) ? u32(H[(pos-u32(order))&hmask])+1 : 0;
+    H[pos&hmask] = u8(sym);
     h = (h-old*bpow)*B+u32(sym)+1;
     pos++;
   }
@@ -107,23 +112,30 @@ struct MatchModel {
   }
 
   // after the real symbol is known: extend the run, or look for a new one
+  /* The history and the hash table are two separate blocks of the match arena
+     and can never be the same one, so saying so lets the compiler keep the
+     `hist[ptr&hmask]` read at the end from being reloaded across the
+     `tab[sl] = pos` store -- one write that would otherwise clobber the whole
+     symbol's knowledge of the history. */
   INLINE void update(int sym) {
-    if( len&&int(hist[ptr&hmask])==sym ) {
+    u8P H = hist;
+    u32P T = tab;
+    if( len&&int(H[ptr&hmask])==sym ) {
       ptr++;
       if( len<0xFFFF )
         len++;
     } else
       len = 0;
-    push(sym);
+    push(H, sym);
     u32 sl = slot();
     if( !len&&pos>u32(order) ) {
-      u32 cand = tab[sl];
+      u32 cand = T[sl];
       if( cand>floor_&&pos-cand<=hmask ) {
         ptr = cand;
         len = u32(order); // the hash asserts this much; prediction proves it
       }
     }
-    tab[sl] = pos;
-    expect = len ? int(hist[ptr&hmask]) : -1;
+    T[sl] = pos;
+    expect = len ? int(H[ptr&hmask]) : -1;
   }
 };

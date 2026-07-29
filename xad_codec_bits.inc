@@ -6,7 +6,7 @@
      is applied here rather than by rebuilding 24 stack slots per bit.  The old
      `if(sl)` test is gone: mbit has one call site and it always passes the slow
      twin's row. */
-  INLINE int mbit(Ctr* const* cs, int ncs, CtrS* sl, int nd, int mctx, int actxA, int actxB, int b) {
+  INLINE int mbit(CtrPP cs, int ncs, CtrSP sl, int nd, int mctx, int actxA, int actxB, int b) {
     mxC.nx = 0;
     mxC.add(G0_BIAS);
     for( int i = 0; i<ncs; i++ )
@@ -78,30 +78,30 @@
     enum { nsym = 1<<BPS, nbit = BPS };
     const int nib_rows = FMT ? M0_Md_Volume : I0_Ib_Volume;
     Ch &c = ch[k];
-    Ctr* rQ = tQ.row(qhat*NCONF+conf);
-    CtrS* rQs = tQs.row(qhat*NCONF+conf);
-    Ctr* rI = tI.row(ib);
-    Ctr* rP = tP.row(c.prev);
-    Ctr* rP2 = tP2.row(c.prev*nsym+c.prev2);
-    Ctr* rX = tX.row(xch);
-    Ctr* rQP = tQP.row(qhat*nsym+c.prev);
-    Ctr* rQI = tQI.row(qhat*nib_rows+ib);
-    Ctr* rQX = tQX.row(qhat*(nsym+1)+xch);
-    Ctr* rQ2 = tQ2.row((qhat*nsym+q2)*NCONF+conf);
-    Ctr* rQ3 = tQ3.row((qhat*nsym+q2)*nsym+q3);
-    Ctr* rIP = tIP.row((ib*nsym+c.prev)*NCONF+conf);
-    Ctr* rPX = tPX.row(c.prev*(nsym+1)+xch);
-    Ctr* rXX = tXX.row(xch*(nsym+1)+xch2);
-    Ctr* rPPX = tPPX.row((c.prev*nsym+c.prev2)*(nsym+1)+xch);
-    Ctr* rPX2 = tPX2.row((c.prev*(nsym+1)+xch)*(nsym+1)+xch2);
-    Ctr* rP3 = tP3.row((c.prev*nsym+c.prev2)*nsym+c.prev3);
-    Ctr* rPPXX = tPPXX.row(((c.prev*nsym+c.prev2)*(nsym+1)+xch)*(nsym+1)+xch2);
-    Ctr* rP4 = tP4.row(((c.prev*nsym+c.prev2)*nsym+c.prev3)*nsym+c.prev4);
-    Ctr* rQPX = tQPX.row((qhat*nsym+c.prev)*(nsym+1)+xch);
+    CtrP rQ = tQ.row(qhat*NCONF+conf);
+    CtrSP rQs = tQs.row(qhat*NCONF+conf);
+    CtrP rI = tI.row(ib);
+    CtrP rP = tP.row(c.prev);
+    CtrP rP2 = tP2.row(c.prev*nsym+c.prev2);
+    CtrP rX = tX.row(xch);
+    CtrP rQP = tQP.row(qhat*nsym+c.prev);
+    CtrP rQI = tQI.row(qhat*nib_rows+ib);
+    CtrP rQX = tQX.row(qhat*(nsym+1)+xch);
+    CtrP rQ2 = tQ2.row((qhat*nsym+q2)*NCONF+conf);
+    CtrP rQ3 = tQ3.row((qhat*nsym+q2)*nsym+q3);
+    CtrP rIP = tIP.row((ib*nsym+c.prev)*NCONF+conf);
+    CtrP rPX = tPX.row(c.prev*(nsym+1)+xch);
+    CtrP rXX = tXX.row(xch*(nsym+1)+xch2);
+    CtrP rPPX = tPPX.row((c.prev*nsym+c.prev2)*(nsym+1)+xch);
+    CtrP rPX2 = tPX2.row((c.prev*(nsym+1)+xch)*(nsym+1)+xch2);
+    CtrP rP3 = tP3.row((c.prev*nsym+c.prev2)*nsym+c.prev3);
+    CtrP rPPXX = tPPXX.row(((c.prev*nsym+c.prev2)*(nsym+1)+xch)*(nsym+1)+xch2);
+    CtrP rP4 = tP4.row(((c.prev*nsym+c.prev2)*nsym+c.prev3)*nsym+c.prev4);
+    CtrP rQPX = tQPX.row((qhat*nsym+c.prev)*(nsym+1)+xch);
     u32 hj = u32(((c.prev*nsym+c.prev2)*nsym+c.prev3)*(nsym+1)+xch)*u32(nsym+1)+u32(xch2);
-    Ctr* rHJ = tHJ.row(int((hj*0x9E3779B1u)>>(32-hj_bits)));
-    Ctr* rQB = tQB.row(qhatB*NCONF+confB);
-    Ctr* rQAB = tQAB.row(qhat*nsym+qhatB);
+    CtrP rHJ = tHJ.row(int((hj*0x9E3779B1u)>>(32-hj_bits)));
+    CtrP rQB = tQB.row(qhatB*NCONF+confB);
+    CtrP rQAB = tQAB.row(qhat*nsym+qhatB);
     /* The q-dependent half.  Nothing is left to hide these behind -- q^ only
        exists once the cascades have run -- but issuing them here still buys the
        whole mixer setup before the first read. */
@@ -146,8 +146,8 @@
        expected bit and on whether the match is still alive -- but only three
        rows per model are ever reachable within one symbol, so resolve those
        three now and select between them in the loop. */
-    Ctr* msr[3] = {tMS.row(0), tMS.row(1+2*slb), tMS.row(2+2*slb)};
-    Ctr* mlr[3] = {tML.row(0), tML.row(1+2*llb), tML.row(2+2*llb)};
+    CtrP msr[3] = {tMS.row(0), tMS.row(1+2*slb), tMS.row(2+2*slb)};
+    CtrP mlr[3] = {tML.row(0), tML.row(1+2*llb), tML.row(2+2*llb)};
 
     int nd = 1;
     for( int j = nbit-1; j>=0; j-- ) {
@@ -177,10 +177,10 @@
       while( nb<sgn_maxnb&&(u>>nb) )
         nb++;
     scat = ST_HDR;
-    Ctr* r = tHnb.row(model);
+    CtrP r = tHnb.row(model);
     int nd = 1;
     for( int j = SGN_CBITS-1; j>=0; j-- ) {
-      Ctr* c = r+nd;
+      CtrP c = r+nd;
       int p = c->pr();
       int b = rc.bit(p, enc ? (nb>>j)&1 : -1);
       XSTAT(scat, p, b);
@@ -193,7 +193,7 @@
     if( !enc )
       u = nb ? (u64(1)<<(nb-1)) : 0;
     for( int j = nb-2; j>=0; j-- ) {   // mantissa below the leading one
-      Ctr* c = tHmn.row(model*sgn_ncls+(nb<sgn_ncls ? nb : sgn_ncls-1))+(j<SGN_NODES-1 ? j+1 : SGN_NODES-1);
+      CtrP c = tHmn.row(model*sgn_ncls+(nb<sgn_ncls ? nb : sgn_ncls-1))+(j<SGN_NODES-1 ? j+1 : SGN_NODES-1);
       int p = c->pr();
       int b = rc.bit(p, enc ? int((u>>j)&1) : -1);
       XSTAT(scat, p, b);
@@ -206,10 +206,10 @@
 
   int code_byte(int stream, int prev, int v) {
     scat = ST_LIT;
-    Ctr* r = tLit.row(stream*LIT_W+prev);
+    CtrP r = tLit.row(stream*LIT_W+prev);
     int nd = 1;
     for( int j = 7; j>=0; j-- ) {
-      Ctr* c = r+nd;
+      CtrP c = r+nd;
       int p = c->pr();
       int b = rc.bit(p, enc ? (v>>j)&1 : -1);
       XSTAT(scat, p, b);
@@ -219,7 +219,7 @@
     return nd-LIT_W;
   }
 
-  void code_bytes(int stream, u8* d, size_t n) {
+  void code_bytes(int stream, u8P d, size_t n) {
     int prev = 0;
     for( size_t i = 0; i<n; i++ ) {
       int v = code_byte(stream, prev, enc ? d[i] : 0);

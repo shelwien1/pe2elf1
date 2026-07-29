@@ -14,7 +14,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-typedef uint8_t u8; typedef uint32_t u32; typedef uint64_t u64;
+typedef uint8_t u8; typedef uint16_t u16; typedef uint32_t u32; typedef uint64_t u64;
 typedef int32_t i32; typedef int64_t i64;
 #ifdef __GNUC__
  #define INLINE __attribute__((always_inline)) inline
@@ -23,6 +23,18 @@ typedef int32_t i32; typedef int64_t i64;
  #define INLINE __forceinline
  #define ALIGN(n) __declspec(align(n))
 #endif
+/* The restrict pointer types the kernels are declared with.  Same spellings as
+   xad_prelude.inc -- this file compiles the kernels standalone, so it has to
+   provide them itself; if the two ever drift, the kernels stop compiling here,
+   which is the failure mode you want. */
+typedef u8* __restrict u8P;
+typedef const u8* __restrict cu8P;
+typedef u16* __restrict u16P;
+typedef u32* __restrict u32P;
+typedef i32* __restrict i32P;
+typedef const i32* __restrict ci32P;
+typedef int* __restrict intP;
+typedef const int* __restrict cintP;
 #include "xad_simd.inc"
 #include "xad_msq.inc"
 

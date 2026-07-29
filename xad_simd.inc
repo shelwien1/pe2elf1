@@ -29,21 +29,21 @@
 
 /* The scalar reference.  Also the portable fallback, and what the differential
    test in ktest.cpp checks the vector kernels against. */
-static i64 xad_dot64_c(const i32* w, const i32* h, int n8) {
+static i64 xad_dot64_c(ci32P w, ci32P h, int n8) {
   i64 s = 0;
   for( int i = 0; i<n8; i++ )
     s += i64(w[i])*i64(h[i]);
   return s;
 }
 
-static void xad_adapt_c(i32* w, const i32* h, int n, i32 err, int sh) {
+static void xad_adapt_c(i32P w, ci32P h, int n, i32 err, int sh) {
   for( int i = 0; i<n; i++ )
     w[i] += i32((i64(err)*i64(h[i]))>>sh);
 }
 
 /* The mixer's weight update: like xad_adapt but with the symmetric clamp, and
    with a trip count that is always MIX_STRIDE, so there is no tail. */
-static void xad_mixupd_c(i32* w, const i32* st, int n, i32 el, int sh, int cl) {
+static void xad_mixupd_c(i32P w, ci32P st, int n, i32 el, int sh, int cl) {
   for( int i = 0; i<n; i++ ) {
     i32 nw = w[i]+i32((i64(el)*i64(st[i]))>>sh);
     w[i] = nw<-cl ? -cl : nw>cl ? cl : nw;
@@ -87,7 +87,7 @@ XAD_T_AVX2 static __m256i xad_sra64_avx2(__m256i v, __m128i cnt, __m256i b) {
   return _mm256_sub_epi64(_mm256_xor_si256(_mm256_srl_epi64(v, cnt), b), b);
 }
 
-XAD_T_AVX2 static i64 xad_dot64_avx2(const i32* __restrict w, const i32* __restrict h, int n8) {
+XAD_T_AVX2 static i64 xad_dot64_avx2(ci32P w, ci32P h, int n8) {
   __m256i a0 = _mm256_setzero_si256(), a1 = _mm256_setzero_si256();
   for( int i = 0; i<n8; i += 8 ) {
     __m256i wv = _mm256_load_si256((const __m256i*)(w+i));   // 64B-aligned by Pred
@@ -104,7 +104,7 @@ XAD_T_AVX2 static i64 xad_dot64_avx2(const i32* __restrict w, const i32* __restr
   return (i64)_mm_cvtsi128_si64(s)+(i64)_mm_extract_epi64(s, 1);
 }
 
-XAD_T_AVX2 static void xad_adapt_avx2(i32* __restrict w, const i32* __restrict h, int n, i32 err, int sh) {
+XAD_T_AVX2 static void xad_adapt_avx2(i32P w, ci32P h, int n, i32 err, int sh) {
   __m256i e = _mm256_set1_epi32(err);
   __m128i cnt = _mm_cvtsi32_si128(sh);
   __m256i b = _mm256_set1_epi64x((i64)((u64)1<<(63-sh)));
@@ -126,7 +126,7 @@ XAD_T_AVX2 static void xad_adapt_avx2(i32* __restrict w, const i32* __restrict h
     w[i] += i32((i64(err)*i64(h[i]))>>sh);
 }
 
-XAD_T_SSE4 static i64 xad_dot64_sse4(const i32* __restrict w, const i32* __restrict h, int n8) {
+XAD_T_SSE4 static i64 xad_dot64_sse4(ci32P w, ci32P h, int n8) {
   __m128i a0 = _mm_setzero_si128(), a1 = _mm_setzero_si128();
   for( int i = 0; i<n8; i += 4 ) {
     __m128i wv = _mm_load_si128((const __m128i*)(w+i));
@@ -138,7 +138,7 @@ XAD_T_SSE4 static i64 xad_dot64_sse4(const i32* __restrict w, const i32* __restr
   return (i64)_mm_cvtsi128_si64(s)+(i64)_mm_extract_epi64(s, 1);
 }
 
-XAD_T_SSE4 static void xad_adapt_sse4(i32* __restrict w, const i32* __restrict h, int n, i32 err, int sh) {
+XAD_T_SSE4 static void xad_adapt_sse4(i32P w, ci32P h, int n, i32 err, int sh) {
   __m128i e = _mm_set1_epi32(err);
   __m128i cnt = _mm_cvtsi32_si128(sh);
   __m128i b = _mm_set1_epi64x((i64)((u64)1<<(63-sh)));
@@ -154,7 +154,7 @@ XAD_T_SSE4 static void xad_adapt_sse4(i32* __restrict w, const i32* __restrict h
     w[i] += i32((i64(err)*i64(h[i]))>>sh);
 }
 
-XAD_T_AVX2 static void xad_mixupd_avx2(i32* __restrict w, const i32* __restrict st,
+XAD_T_AVX2 static void xad_mixupd_avx2(i32P w, ci32P st,
                                        int n, i32 el, int sh, int cl) {
   __m256i e = _mm256_set1_epi32(el);
   __m128i cnt = _mm_cvtsi32_si128(sh);
@@ -170,7 +170,7 @@ XAD_T_AVX2 static void xad_mixupd_avx2(i32* __restrict w, const i32* __restrict 
   }
 }
 
-XAD_T_SSE4 static void xad_mixupd_sse4(i32* __restrict w, const i32* __restrict st,
+XAD_T_SSE4 static void xad_mixupd_sse4(i32P w, ci32P st,
                                        int n, i32 el, int sh, int cl) {
   __m128i e = _mm_set1_epi32(el);
   __m128i cnt = _mm_cvtsi32_si128(sh);
@@ -197,7 +197,7 @@ XAD_T_SSE4 static void xad_mixupd_sse4(i32* __restrict w, const i32* __restrict 
    The stage lengths are multiples of 8 but not of 16, so these carry a tail of
    at most 8 taps, handled scalar.  Reassociating the dot across a different
    lane count is still exact: i64 addition is associative under wraparound. */
-XAD_T_AVX512 static i64 xad_dot64_avx512(const i32* __restrict w, const i32* __restrict h, int n8) {
+XAD_T_AVX512 static i64 xad_dot64_avx512(ci32P w, ci32P h, int n8) {
   __m512i a0 = _mm512_setzero_si512(), a1 = _mm512_setzero_si512();
   int i = 0;
   for( ; i+16<=n8; i += 16 ) {
@@ -213,7 +213,7 @@ XAD_T_AVX512 static i64 xad_dot64_avx512(const i32* __restrict w, const i32* __r
   return s;
 }
 
-XAD_T_AVX512 static void xad_adapt_avx512(i32* __restrict w, const i32* __restrict h, int n, i32 err, int sh) {
+XAD_T_AVX512 static void xad_adapt_avx512(i32P w, ci32P h, int n, i32 err, int sh) {
   __m512i e = _mm512_set1_epi32(err);
   __m128i cnt = _mm_cvtsi32_si128(sh);
   int i = 0, nf = n&~15;
@@ -229,7 +229,7 @@ XAD_T_AVX512 static void xad_adapt_avx512(i32* __restrict w, const i32* __restri
     w[i] += i32((i64(err)*i64(h[i]))>>sh);
 }
 
-XAD_T_AVX512 static void xad_mixupd_avx512(i32* __restrict w, const i32* __restrict st,
+XAD_T_AVX512 static void xad_mixupd_avx512(i32P w, ci32P st,
                                            int n, i32 el, int sh, int cl) {
   __m512i e = _mm512_set1_epi32(el);
   __m128i cnt = _mm_cvtsi32_si128(sh);
@@ -250,13 +250,13 @@ XAD_T_AVX512 static void xad_mixupd_avx512(i32* __restrict w, const i32* __restr
 
 #if XAD_X86 && defined(__AVX512F__) && !defined(XAD_NO_AVX512)
 
-static INLINE i64 xad_dot(const i32* w, const i32* h, int n8) {
+static INLINE i64 xad_dot(ci32P w, ci32P h, int n8) {
   return xad_dot64_avx512(w, h, n8);
 }
-static INLINE void xad_adapt(i32* w, const i32* h, int n, i32 err, int sh) {
+static INLINE void xad_adapt(i32P w, ci32P h, int n, i32 err, int sh) {
   xad_adapt_avx512(w, h, n, err, sh);
 }
-static INLINE void xad_mixupd(i32* w, const i32* st, int n, i32 el, int sh, int cl) {
+static INLINE void xad_mixupd(i32P w, ci32P st, int n, i32 el, int sh, int cl) {
   xad_mixupd_avx512(w, st, n, el, sh, cl);
 }
 static const char* xad_isa() { return "avx512f (compile-time)"; }
@@ -265,13 +265,13 @@ static void xad_simd_init() {}
 #elif XAD_X86 && defined(__AVX2__)
 
 // built for AVX2: direct and inlinable, no indirection at all
-static INLINE i64 xad_dot(const i32* w, const i32* h, int n8) {
+static INLINE i64 xad_dot(ci32P w, ci32P h, int n8) {
   return xad_dot64_avx2(w, h, n8);
 }
-static INLINE void xad_adapt(i32* w, const i32* h, int n, i32 err, int sh) {
+static INLINE void xad_adapt(i32P w, ci32P h, int n, i32 err, int sh) {
   xad_adapt_avx2(w, h, n, err, sh);
 }
-static INLINE void xad_mixupd(i32* w, const i32* st, int n, i32 el, int sh, int cl) {
+static INLINE void xad_mixupd(i32P w, ci32P st, int n, i32 el, int sh, int cl) {
   xad_mixupd_avx2(w, st, n, el, sh, cl);
 }
 static const char* xad_isa() { return "avx2 (compile-time)"; }
@@ -279,9 +279,9 @@ static void xad_simd_init() {}
 
 #elif XAD_X86
 
-typedef i64 (*xad_dot_fn)(const i32*, const i32*, int);
-typedef void (*xad_adapt_fn)(i32*, const i32*, int, i32, int);
-typedef void (*xad_mixupd_fn)(i32*, const i32*, int, i32, int, int);
+typedef i64 (*xad_dot_fn)(ci32P, ci32P, int);
+typedef void (*xad_adapt_fn)(i32P, ci32P, int, i32, int);
+typedef void (*xad_mixupd_fn)(i32P, ci32P, int, i32, int, int);
 static xad_dot_fn xad_dot_p = xad_dot64_c;
 static xad_adapt_fn xad_adapt_p = xad_adapt_c;
 static xad_mixupd_fn xad_mixupd_p = xad_mixupd_c;
@@ -310,26 +310,26 @@ static void xad_simd_init() {
     xad_isa_name = "sse4.1 (runtime)";
   }
 }
-static INLINE i64 xad_dot(const i32* w, const i32* h, int n8) {
+static INLINE i64 xad_dot(ci32P w, ci32P h, int n8) {
   return xad_dot_p(w, h, n8);
 }
-static INLINE void xad_adapt(i32* w, const i32* h, int n, i32 err, int sh) {
+static INLINE void xad_adapt(i32P w, ci32P h, int n, i32 err, int sh) {
   xad_adapt_p(w, h, n, err, sh);
 }
-static INLINE void xad_mixupd(i32* w, const i32* st, int n, i32 el, int sh, int cl) {
+static INLINE void xad_mixupd(i32P w, ci32P st, int n, i32 el, int sh, int cl) {
   xad_mixupd_p(w, st, n, el, sh, cl);
 }
 static const char* xad_isa() { return xad_isa_name; }
 
 #else
 
-static INLINE i64 xad_dot(const i32* w, const i32* h, int n8) {
+static INLINE i64 xad_dot(ci32P w, ci32P h, int n8) {
   return xad_dot64_c(w, h, n8);
 }
-static INLINE void xad_adapt(i32* w, const i32* h, int n, i32 err, int sh) {
+static INLINE void xad_adapt(i32P w, ci32P h, int n, i32 err, int sh) {
   xad_adapt_c(w, h, n, err, sh);
 }
-static INLINE void xad_mixupd(i32* w, const i32* st, int n, i32 el, int sh, int cl) {
+static INLINE void xad_mixupd(i32P w, ci32P st, int n, i32 el, int sh, int cl) {
   xad_mixupd_c(w, st, n, el, sh, cl);
 }
 static const char* xad_isa() { return "scalar (portable)"; }

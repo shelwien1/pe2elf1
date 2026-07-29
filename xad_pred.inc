@@ -161,7 +161,7 @@ struct Pred {
      been pushed yet, and with a sliding window the push itself expresses it:
      set_cross pushes before predict reads, the own-signal push happens after.
      So the two pairs of kernels collapse into one pair. */
-  INLINE i32 dot(const i32* w, const i32* h, int n8) const {
+  INLINE i32 dot(ci32P w, ci32P h, int n8) const {
     return i32(xad_dot(w, h, n8)>>WSH);
   }
 
@@ -182,7 +182,7 @@ struct Pred {
 
   // NLMS: step normalised by the window energy, so adaptation does not depend
   // on how loud the passage is.  Power-of-two normalisation keeps it integer.
-  INLINE void adapt(i32* w, const i32* h, int n, i32 err, u64 en, int g, int fl) {
+  INLINE void adapt(i32P w, ci32P h, int n, i32 err, u64 en, int g, int fl) {
     if( !err )
       return;
     /* was: for( u64 e = en+n*fl; e>1; e>>=1 ) s++;  -- i.e. floor(log2(e)), 0

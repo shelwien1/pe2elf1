@@ -62,7 +62,7 @@ struct Xad : RC<MD> {
   /* Block write straight into the output window.  chkout() after each chunk
      keeps put()'s "ptr < end on entry" invariant, yielding r==2 to the driver
      exactly when the window fills. */
-  void putn(const u8* p, size_t n) {
+  void putn(cu8P p, size_t n) {
     for(;; ) {
       size_t room = size_t(pin[1].end-pin[1].ptr);
       size_t k = n<room ? n : room;

@@ -46,9 +46,24 @@ alternating A/B on the path it touches — see below.
 | 9 | §2.1 size `Pred` from its actual stage lengths | — | — | identical |
 | 10 | §1.13 IMA state-transition tables | — | — | identical |
 | 11 | review pass: AVX-512, §1.3 specialisation, lazy match arena | — | — | identical |
-| **final** | **clang++ `-O3 -march=native`** | **16.877** | **2.31×** | identical |
-| final | gcc `-O3`, portable (mk.sh default) | 19.891 | 1.96× | identical |
+| 12 | `__restrict` pointer types | — | — | identical |
+| **final** | **clang++ `-O3 -march=native`** | **2.21×** | see note | identical |
 | final | 20 × 20 KB inputs (the directory case) | 9.25 | **1.79×** | identical |
+
+**Note on the headline ratio.** The absolute seconds in this table were each
+taken at the time that step landed, and this box's load varies by ~30% over
+hours — the same binary measured 16.9 s one afternoon and 11.8 s the next. So
+the end-to-end figure is not a division of two rows; it is a direct
+**alternating** measurement of the pre-speed-work binary against the current one
+in a single session:
+
+```
+  baseline  25.832 s      now  11.712 s
+  baseline  25.859 s      now  11.884 s      -> 2.21x
+```
+
+Individual step rows remain useful for their own before/after, which is how they
+were taken; they are not comparable to each other across sessions.
 
 Runs 8–10 are individually below the ±2% whole-suite noise floor and were
 measured by alternating A/B on the paths they touch; see the log. Every binary
@@ -660,3 +675,99 @@ Checked item by item against the source, not against memory.
 Everything else in the document is either implemented, superseded by something
 measured to be better, or declined against the stated
 "no more than a few bytes" rule with its price recorded.
+
+---
+
+# `__restrict` pass
+
+Pointer types defined in `xad_prelude.inc` (`u8P`, `cu8P`, `u16P`, `u32P`,
+`i32P`, `ci32P`, `intP`, `cintP`) and `xad_counter.inc` (`CtrP`, `CtrSP`,
+`CtrPP`), following the shape `d5c_counter.inc` uses.
+
+`__restrict` is a promise the optimizer acts on **silently** — get it wrong and
+nothing warns, a stale value just stays in a register — so the rule applied here
+is: only where the non-aliasing is *structural*, meaning the two pointers come
+from allocations that cannot be the same one, never merely where they happen not
+to overlap today.
+
+**Applied to** function parameters and block-scope locals:
+
+* the three scalar kernels, matching the vector ones that already had it —
+  `(weights, history)` is two different arena blocks and can never be one;
+* `Pred::dot` / `Pred::adapt`, which forward to them;
+* `Mixer`'s weight-row local, against `st[]`;
+* `mbit`'s `(cs, sl)` and the 26 context-row locals in `code_symbol` — they come
+  from 26 *different* `CtrTab`/`CtrSTab` allocations, so no two can be the same
+  row;
+* `MatchModel::update`'s history and hash pointers. This is the one with real
+  teeth: without it the `tab[sl] = pos` store forces the `hist[ptr&hmask]` read
+  after it to reload, because the compiler must assume one may be the other;
+* the payload walks (`code_data*`, `blk`), the literal coder's `d`, and the
+  leaf helpers `crc32b` / `rd*` / `wr*` / `get_bits` / `put_bits` / `i16_of`.
+
+**Deliberately not applied**, because the promise would be false — this is the
+part worth reviewing:
+
+* **Struct members, none of them.** Every table, weight array and history is
+  sub-allocated from `Arena::base`, so `base` and the table pointers reach the
+  same bytes by construction, and `Arena::prefault()` writes through `base`
+  *after* those pointers exist. A member-level `restrict` would assert the
+  opposite. (`d5c_counter.inc` makes the same call for the same reason.)
+* **`Hist::buf` / `Hist::h`** — `h` points into `buf` and `push()` uses both.
+  They alias by design; that *is* the sliding window.
+* **`RC::rcio`** — it points at one of this coroutine's own pins, so it and
+  `this` reach the same object.
+* **`analyze`'s `base`** — `parse_wav` stores pointers into it (`w.fmt`,
+  `w.fact`) and `analyze` then reads *through those*. They are derived from
+  `base`, but across a function call the compiler cannot see that, so the
+  "based on" relationship `restrict` requires is not established. Harmless in
+  practice (everything there is a read) and still not a promise worth making.
+* **`Xad::do_decode`'s `d = src.data()`** — `crc32b(src.data(), ...)` later
+  reads the same bytes through a *second, independently obtained* pointer, which
+  is exactly the thing `restrict` forbids.
+* `MatchModel::push` takes the history pointer as a parameter rather than
+  reading the member, so that inlining it into `update` does not produce **two**
+  restrict pointers to the same object in one scope.
+
+**Effect: none measurable.** Alternating A/B, both compilers:
+
+```
+  clang -O3 -march=native   prev 11.991 / 11.735    new 11.963 / 12.029
+  gcc   -O3 portable        prev  6.870 /  6.874    new  6.857 /  6.961
+```
+
+That is the expected answer rather than a disappointment: the loops where
+aliasing was costing anything are the SIMD kernels, and those already carried
+`__restrict` from the day they were written. What the pass buys is that the
+aliasing contract is now *stated* rather than implied, and the exceptions above
+are written down where the next person will look.
+
+Output identity re-checked over the full matrix afterwards — 16 compiler/flag
+combinations, `-O0` through `-Ofast`, both compilers, both ISA paths — plus the
+round-trip suite and the kernel differential test. `ktest.cpp` had to grow the
+same typedefs, since it compiles the kernels standalone; if the two sets ever
+drift, it stops compiling, which is the right failure mode.
+
+# clang and `-Ofast`
+
+Alternating all four builds, encode+decode of both files, min of 5:
+
+```
+  gcc   -O3     13.515 / 13.513        clang -O3     11.745 / 11.935
+  gcc   -Ofast  13.446 / 13.646        clang -Ofast  11.864 / 11.927
+```
+
+**clang is ~13% faster than gcc** at `-march=native` — wider than the 6–9%
+measured before AVX-512 landed, which fits: the gap is in how the two schedule
+the vector kernels.
+
+**`-Ofast` buys nothing** — 0.5% on gcc, −1% on clang, both inside the noise
+band. And it is not free of risk: `-Ofast` implies `-ffast-math`, and §1.16
+singles that out precisely because `SQT`/`STT`/`CLT` are built from
+`exp`/`log`/`log2`, where a one-ULP shift at a rounding boundary changes a table
+entry and therefore every archive the build produces. It happens to be
+byte-identical on this glibc — all four builds above produce the same md5 — but
+that is a property of this libm, not of the code, and the plan's own estimate of
+the margin is only two or three orders of magnitude. **Not adopted:** no
+measurable gain, and a failure mode that would be silent and would only show up
+as archives an unaffected build cannot decode.

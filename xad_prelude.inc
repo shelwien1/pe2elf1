@@ -94,6 +94,45 @@ enum {
   SM_DELTAH = 4, // MS iDelta against the previous header
 };
 
+/* ------------------------------------------------------ restrict pointers
+ *
+ * __restrict is a PROMISE: for the lifetime of the declaration, the object
+ * pointed to is reached only through this pointer or one derived from it.
+ * Breaking it is undefined behaviour the optimizer acts on silently -- it will
+ * not warn, it will just keep a stale value in a register -- so these types are
+ * used ONLY where the non-aliasing is structural, i.e. where two pointers come
+ * from allocations that cannot be the same one, rather than merely where they
+ * happen not to overlap today.
+ *
+ * WHERE THEY ARE USED: function parameters and block-scope locals, and nowhere
+ * else.  The three cases that carry the weight are
+ *   - the NLMS kernels, whose (weights, history) pair is two different arena
+ *     blocks and can never be one;
+ *   - the mixer's (weight row, st[]) pair, likewise;
+ *   - the 26 context rows a coded symbol touches, which come from 26 DIFFERENT
+ *     CtrTab/CtrSTab allocations, so no two of them can be the same row.
+ *
+ * WHERE THEY ARE DELIBERATELY NOT USED, because the promise would be false:
+ *   - STRUCT MEMBERS, none of them.  Every model table, every weight array and
+ *     every history is sub-allocated from Arena::base, so `base` and the table
+ *     pointers reach the same bytes by construction, and Arena::prefault()
+ *     writes through base after those pointers exist.  A member-level restrict
+ *     would be asserting the opposite.
+ *   - Hist::buf and Hist::h.  h points INTO buf and push() uses both -- they
+ *     alias each other by design, which is the whole mechanism.
+ *   - RC::rcio.  It points at one of this coroutine's own pins, so it and
+ *     `this` reach the same object.
+ * Getting one of these wrong would not show up as a crash; it would show up as
+ * a changed archive, which is what the md5 matrix in md5s.sh is for. */
+typedef u8* __restrict u8P;
+typedef const u8* __restrict cu8P;
+typedef u16* __restrict u16P;
+typedef u32* __restrict u32P;
+typedef i32* __restrict i32P;
+typedef const i32* __restrict ci32P;
+typedef int* __restrict intP;
+typedef const int* __restrict cintP;
+
 /* -v byte accounting.  `stat[scat] += CLT[pf][b]` ran on every coded bit and
    kept the 16 KB CLT table hot in L1 for the benefit of a report nobody asks
    for in a normal run.  XAD_STATS=1 puts it back; the default build has neither

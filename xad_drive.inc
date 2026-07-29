@@ -70,7 +70,7 @@ struct XadDrive : Carrier {
     }
   }
 
-  void sink_split(const byte* p, size_t n) {
+  void sink_split(cu8P p, size_t n) {
     while( n ) {
       if( !out_f ) {
         if( sp_i>=this->ar.names.size() )
@@ -101,7 +101,7 @@ struct XadDrive : Carrier {
   /* Opened lazily, so a run that fails before producing an output byte (a bad
      magic, a crc mismatch) leaves no file behind -- the property the old
      "decode fully, then save_file" order had for free. */
-  void sink(const byte* p, size_t n) {
+  void sink(cu8P p, size_t n) {
     if( !n )
       return;
     if( out_mem ) {

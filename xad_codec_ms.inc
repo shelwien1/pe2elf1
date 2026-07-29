@@ -11,14 +11,14 @@
   /* MS is 4-bit by definition, so XST is the only compile-time parameter this
      walk needs; BPS is spelled 4 at every call into the shared bit tree. */
   template<int XST>
-  void code_data_ms(u8* data, size_t n) {
+  void code_data_ms(u8P data, size_t n) {
     const int nch = pm.chans;
     const size_t hdr = size_t(7*nch), ba = size_t(pm.block_align);
     vector<u8> nib(ba*2+8, 0);
 
     for( size_t pos = 0; pos<n; ) {
       size_t left = n-pos, len = left<ba ? left : ba;
-      u8* blk = data+pos;
+      u8P blk = data+pos;
 
       if( len<hdr ) { // runt tail
         code_bytes(LIT_MISC, blk, len);

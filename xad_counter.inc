@@ -42,6 +42,15 @@ struct CtrS { // slow fixed-rate twin of the primary code counter
   }
 };
 
+/* Restrict-qualified counter pointers.  See the doctrine in xad_prelude.inc:
+   these are for parameters and locals, never for the CtrTab/CtrSTab members
+   they are read out of.  CtrPP is the row-base ARRAY mbit receives -- the outer
+   pointer is restrict, the 26 inner ones are ordinary Ctr* because each is
+   separately established to be non-aliasing at its own declaration. */
+typedef Ctr* __restrict CtrP;
+typedef CtrS* __restrict CtrSP;
+typedef Ctr* const* __restrict CtrPP;
+
 /* ONE ARENA FOR EVERY COUNTER TABLE.
  *
  * The tables were 24 separate std::vectors, each 16-byte aligned.  At nsym = 16
@@ -144,7 +153,7 @@ struct Arena {
    does not apply.  The pattern is built from a real Ctr rather than assembled
    from shifts, so it is right on either endianness. */
 static INLINE void fill_ctr(void* dst, size_t n, u32 pat) {
-  u32* q = (u32*)dst;
+  u32P q = (u32P)dst;
   for( size_t i = 0; i<n; i++ )
     q[i] = pat;
 }

@@ -40,14 +40,14 @@ struct Mixer {
 
   INLINE int mix(int ctx) {
     cx = ctx;
-    int* W = w+size_t(cx)*size_t(MIX_STRIDE);
+    intP W = w+size_t(cx)*size_t(MIX_STRIDE);
     pr_ = squash(int(xad_dot(W, st, MIX_STRIDE)>>MIX_SH));
     return pr_;
   }
 
   INLINE void upd(int bit) {
     int err = (bit<<P_BITS)-pr_;
-    int* W = w+size_t(cx)*size_t(MIX_STRIDE);
+    intP W = w+size_t(cx)*size_t(MIX_STRIDE);
     xad_mixupd(W, st, MIX_STRIDE, err*lr, MIX_LRSH, cl);
     nx = 0;
   }

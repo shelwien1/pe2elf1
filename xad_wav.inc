@@ -17,7 +17,7 @@ struct Wav {
   size_t data_off = 0, data_size = 0;
 };
 
-static bool parse_wav(const u8* f, size_t n, Wav &w) {
+static bool parse_wav(cu8P f, size_t n, Wav &w) {
   if( n<12||memcmp(f, "RIFF", 4)||memcmp(f+8, "WAVE", 4) )
     return false;
   for( size_t pos = 12; pos+8<=n; ) {
@@ -42,7 +42,7 @@ static bool parse_wav(const u8* f, size_t n, Wav &w) {
 }
 
 // the header ADPCM-XQ writes; when it matches, it costs a flag instead of 60 bytes
-static void build_canon_head(u8* h, int chans, int bps, u32 rate, int ba, int spb, u32 nsamples, u32 dsize) {
+static void build_canon_head(u8P h, int chans, int bps, u32 rate, int ba, int spb, u32 nsamples, u32 dsize) {
   memcpy(h, "RIFF", 4);
   wr32(h+4, 52+dsize);
   memcpy(h+8, "WAVE", 4);
@@ -64,7 +64,7 @@ static void build_canon_head(u8* h, int chans, int bps, u32 rate, int ba, int sp
 }
 
 // the same for MS: fixed layout, only the coefficient table varies in length
-static void build_canon_head_ms(u8* h, int chans, u32 rate, int ba, int spb, u32 nsamples, u32 dsize, const i32 (*coef)[2], int ncoef) {
+static void build_canon_head_ms(u8P h, int chans, u32 rate, int ba, int spb, u32 nsamples, u32 dsize, const i32 (*coef)[2], int ncoef) {
   u32 fmtsz = 22+4*u32(ncoef);
   int at = 40;
   memcpy(h, "RIFF", 4);

@@ -37,7 +37,7 @@ static bool same_type(const Params &a, const Params &b) {
 }
 
 static void scan_segments(const vector<u8> &buf, Arc &ar) {
-  const u8* d = buf.data();
+  cu8P d = buf.data();
   size_t n = buf.size();
   vector<size_t> cand;
   for( size_t i = 0; i+12<=n; ) {
@@ -74,7 +74,7 @@ static void scan_segments(const vector<u8> &buf, Arc &ar) {
    coroutine pins rather than index arithmetic over a fully-loaded buffer.  The
    field order and encoding are unchanged, so the header bytes are identical. */
 
-static void write_canon(u8* dst, const Params &pm) {
+static void write_canon(u8P dst, const Params &pm) {
   int spb = block_samples(pm);
   u32 nblk = u32((pm.data_size+size_t(pm.block_align)-1)/size_t(pm.block_align));
   u32 fs = u32(i64(nblk)*i64(spb)-pm.factdiff);

@@ -14,7 +14,7 @@
      needs only the stereo split; IMA gets one instance per code width as well.
      The bps default arm is 4 -- it is unreachable, since both entry points
      validate bps to [2,5]. */
-  void code_data(u8* data, size_t n) {
+  void code_data(u8P data, size_t n) {
     const int xst = pm.chans>1;
     if( pm.format==FMT_MS ) {
       if( xst )
@@ -40,7 +40,7 @@
   }
 
   template<int BPS, int XST>
-  void code_data_ima(u8* data, size_t n) {
+  void code_data_ima(u8P data, size_t n) {
     enum { bps = BPS };
     const int nch = pm.chans, hdr = nch*4, ba = pm.block_align;
     build_ima_tables<BPS>();
@@ -53,7 +53,7 @@
 
     for( size_t pos = 0; pos<n; ) {
       size_t left = n-pos, len = left<size_t(ba) ? left : size_t(ba);
-      u8* blk = data+pos;
+      u8P blk = data+pos;
 
       if( len<size_t(hdr) ) { // runt tail
         code_bytes(LIT_MISC, blk, len);
@@ -69,7 +69,7 @@
         int ix = int(code_signed(SM_INDEX, enc ? i64(blk[k*4+2])-c.index : 0)+c.index)&0xFF;
         int rsv = enc ? (blk[k*4+3]!=0) : 0;
         scat = ST_FLAG;
-        Ctr* rf = tRsv.row(0)+1;
+        CtrP rf = tRsv.row(0)+1;
         int p = rf->pr();
         rsv = rc.bit(p, enc ? rsv : -1);
         XSTAT(ST_FLAG, p, rsv);
