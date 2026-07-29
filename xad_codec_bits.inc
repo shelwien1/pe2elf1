@@ -219,12 +219,22 @@
     return nd-LIT_W;
   }
 
-  void code_bytes(int stream, u8P d, size_t n) {
-    int prev = 0;
+  /* The order-1 context is the byte just coded, so a literal run split across
+     several calls has to carry `prev` between them -- otherwise the streaming
+     decoder, which produces a run a window at a time, would reset the context at
+     every window boundary and code a different stream from the encoder's single
+     call.  The three-argument form starts a fresh run and is what every
+     non-streaming caller wants. */
+  void code_bytes(int stream, u8P d, size_t n, int &prev) {
     for( size_t i = 0; i<n; i++ ) {
       int v = code_byte(stream, prev, enc ? d[i] : 0);
       if( !enc )
         d[i] = u8(v);
       prev = v;
     }
+  }
+
+  void code_bytes(int stream, u8P d, size_t n) {
+    int prev = 0;
+    code_bytes(stream, d, n, prev);
   }

@@ -23,6 +23,7 @@ struct XadDrive : Carrier {
   // input: either a list of paths, opened in turn, or one memory image
   char** in_paths = nullptr;
   int in_n = 0, in_i = 0;
+  const char* in_path = nullptr; // the one in_f came from, so it can be closed right
   FILE* in_f = nullptr;
   const u8* in_mem = nullptr;
   size_t in_memn = 0, in_mempos = 0;
@@ -48,7 +49,8 @@ struct XadDrive : Carrier {
         if( in_i>=in_n )
           return 0;
         const char* p = in_paths[in_i++];
-        in_f = fopen(p, "rb");
+        in_path = p;
+        in_f = xfopen(p, false);
         if( !in_f ) {
           fprintf(stderr, "error: can't read '%s'\n", p);
           this->rc_err = 1;
@@ -66,7 +68,7 @@ struct XadDrive : Carrier {
           this->in_sizes.back() += l;
         return l;
       }
-      fclose(in_f);
+      xfclose(in_path, in_f);
       in_f = nullptr;
     }
   }
@@ -105,9 +107,35 @@ struct XadDrive : Carrier {
     }
   }
 
+  /* Everything this run has written, removed.  The decoder verifies the crc
+     after the last byte rather than before the first, so "no bad output
+     survives" is now kept by taking the output back instead of by withholding
+     it.  Split output removes every member opened this run, not just the one in
+     progress -- an archive that fails at member three has already closed one and
+     two, and leaving them behind would be worse than leaving nothing.
+     A pipe cannot be taken back.  That is the one case where the property is
+     genuinely lost, the usage text says so, and -b is the way to keep it. */
+  void discard_output() {
+    if( out_f ) {
+      xfclose(out_path, out_f);
+      out_f = nullptr;
+    }
+    /* Nothing on disk to take back: a memory sink is the caller's to discard,
+       and bytes already down a pipe are gone.  The exit status is the only
+       signal in the second case, which is what -b exists for. */
+    if( out_mem||!out_path||is_std(out_path) )
+      return;
+    if( out_split&&!this->ar.names.empty() ) {
+      size_t last = sp_i<this->ar.names.size() ? sp_i : this->ar.names.size()-1;
+      for( size_t i = 0; i<=last; i++ )
+        if( path_join(sp_path, sizeof(sp_path), out_dir, safe_name(this->ar.names.at(i))) )
+          remove(sp_path);
+    } else
+      remove(out_path);
+  }
+
   /* Opened lazily, so a run that fails before producing an output byte (a bad
-     magic, a crc mismatch) leaves no file behind -- the property the old
-     "decode fully, then save_file" order had for free. */
+     magic, a truncated header) leaves no file behind. */
   void sink(cu8P p, size_t n) {
     if( !n )
       return;
@@ -120,7 +148,7 @@ struct XadDrive : Carrier {
       return;
     }
     if( !out_f ) {
-      out_f = fopen(out_path, "wb");
+      out_f = xfopen(out_path, true);
       if( !out_f ) {
         fprintf(stderr, "error: can't write '%s'\n", out_path);
         this->rc_err = 1;
@@ -160,11 +188,13 @@ struct XadDrive : Carrier {
       }
     }
     if( in_f ) {
-      fclose(in_f);
+      xfclose(in_path, in_f);
       in_f = nullptr;
     }
+    if( this->out_bad )
+      discard_output();
     if( out_f ) {
-      fclose(out_f);
+      xfclose(out_path, out_f);
       out_f = nullptr;
     }
     return r;

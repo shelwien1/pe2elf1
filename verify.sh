@@ -61,6 +61,32 @@ if [ -f wavs2 ] && [ -f Player_Death_Music_ima.wav ]; then
   rm -rf _v.dir
 fi
 
+# The streaming decoder: output written as it is decoded must equal output
+# written the old way (-b, whole image verified first), and a corrupted archive
+# must leave nothing behind even though the bytes were already going out.
+if [ -f wavs2 ]; then
+  $X c wavs2 _v.xac >/dev/null 2>&1
+  $X d    _v.xac _v.s  >/dev/null 2>&1
+  $X d -b _v.xac _v.b  >/dev/null 2>&1
+  if cmp -s wavs2 _v.s && cmp -s wavs2 _v.b
+  then printf "OK   %-28s %-4s streaming == -b == original\n" "streaming decode" ""
+  else printf "FAIL streaming decode differs from -b\n"; fail=1; fi
+  # decode to a pipe -- the reason the streaming decoder exists
+  if $X d _v.xac - 2>/dev/null | cmp -s - wavs2
+  then printf "OK   %-28s %-4s decoded to a pipe\n" "d archive -" ""
+  else printf "FAIL decode to pipe\n"; fail=1; fi
+  # a corrupted rc stream: crc must fail AND the partial output must be removed
+  python3 -c '
+d=bytearray(open("_v.xac","rb").read()); d[len(d)//2]^=0x40; open("_v.cor","wb").write(d)' 2>/dev/null
+  if [ -f _v.cor ]; then
+    rm -f _v.out
+    if $X d _v.cor _v.out >/dev/null 2>&1; then printf "FAIL corrupt archive accepted\n"; fail=1
+    elif [ -f _v.out ]; then printf "FAIL corrupt archive left a partial output file\n"; fail=1
+    else printf "OK   %-28s %-4s crc failed, output removed\n" "corrupt rc stream" ""; fi
+  fi
+  rm -f _v.s _v.b _v.cor
+fi
+
 # malformed input must fail cleanly and leave no output behind
 printf 'not an archive' > _v.bad
 rm -f _v.out

@@ -103,8 +103,16 @@
 // match is transmitted, and the history survives a wav boundary on purpose.
 //
 // container: "XAC1" u8 version, varint nseg, varint lead, per-segment
-// parameters, an optional file table, u32 crc32, rc stream.  decode rebuilds
-// the whole stream and verifies the crc before writing anything.
+// parameters, an optional file table, u32 crc32, rc stream.
+//
+// The decoder is STREAMING: it produces the output a window at a time and writes
+// as it goes, so its memory is flat in the size of the file.  The crc is
+// therefore checked after the last byte rather than before the first, and a
+// mismatch removes what was written -- see XadDrive::discard_output.  -b restores
+// the old order for the case where that is not good enough (a pipe).  The ENCODER
+// still needs the whole input, and that is the format's doing rather than the
+// codec's: nseg, the segment geometry and the crc all sit ahead of the first
+// coded byte.  PLAN-streaming.md §5 is what that would take.
 //
 // handles 2/3/4/5-bit ADPCM-XQ code widths, mono/multichannel IMA, mono/stereo
 // MS, non-standard MS coefficient tables, truncated and partial final blocks.
@@ -327,13 +335,13 @@ static int compress(char** inp, int nin, const char* outp, bool test, int solid)
       return fprintf(stderr, "error: self-test failed, output not written\n"), 1;
     if( back.size()!=Menc.src.size()||memcmp(back.data(), Menc.src.data(), back.size()) )
       return fprintf(stderr, "error: self-test mismatch, output not written\n"), 1;
-    FILE* f = fopen(outp, "wb");
+    FILE* f = xfopen(outp, true);
     if( !f||(!coded.empty()&&fwrite(coded.data(), 1, coded.size(), f)!=coded.size()) ) {
       if( f )
-        fclose(f);
+        xfclose(outp, f);
       return fprintf(stderr, "error: can't write '%s'\n", outp), 1;
     }
-    if( fclose(f) )
+    if( is_std(outp) ? fflush(f)!=0 : fclose(f)!=0 )
       return fprintf(stderr, "error: can't write '%s'\n", outp), 1;
   }
 
@@ -350,7 +358,7 @@ static int compress(char** inp, int nin, const char* outp, bool test, int solid)
   return 0;
 }
 
-static int decompress(char* inp, const char* outp) {
+static int decompress(char* inp, const char* outp, bool buffered) {
   /* One argument does for both `d archive restored.wav` and `d archive dir/`:
      the driver splits only when the archive actually carries a file table, and
      it learns that while the header is parsed -- which is before the decoder
@@ -358,6 +366,11 @@ static int decompress(char* inp, const char* outp) {
   /* Built straight into the driver's own buffer.  A path that does not fit is
      refused here rather than truncated -- the split sink would otherwise write
      every member into the wrong directory. */
+  /* A split archive needs somewhere to put its members, and a pipe is not it.
+     Refused here rather than by writing every member into one stream, which
+     would look like it worked. */
+  if( is_std(outp) )
+    Mdec.out_split = 0;
   size_t dl = strlen(outp);
   if( dl+2>sizeof(Mdec.out_dir) )
     return fprintf(stderr, "xadpcm: output path '%s' is too long\n", outp), 1;
@@ -365,11 +378,12 @@ static int decompress(char* inp, const char* outp) {
   if( dl&&Mdec.out_dir[dl-1]!='/'&&Mdec.out_dir[dl-1]!='\\' )
     Mdec.out_dir[dl++] = '/';
   Mdec.out_dir[dl] = 0;
+  Mdec.out_split = is_std(outp) ? 0 : 1;
   Mdec.in_paths = &inp;
   Mdec.in_n = 1;
   Mdec.name = inp;
   Mdec.out_path = outp;
-  Mdec.out_split = 1;
+  Mdec.buffered = buffered;
   Mdec.run();
   if( Mdec.rc_err )
     return 1;
@@ -378,9 +392,9 @@ static int decompress(char* inp, const char* outp) {
     fprintf(stderr, "  coroutine stack high-water %llu of %u bytes\n",
             (unsigned long long)Mdec.stk_hi, unsigned(Coroutine::STKPAD));
   if( ar.names.empty() )
-    fprintf(stderr, "%s -> %s: %zu bytes, crc ok\n", inp, outp, Mdec.src.size());
+    fprintf(stderr, "%s -> %s: %llu bytes, crc ok\n", inp, outp, (unsigned long long)Mdec.outn);
   else
-    fprintf(stderr, "%s -> %s: %zu file(s), %zu bytes, crc ok\n", inp, outp, ar.names.size(), Mdec.src.size());
+    fprintf(stderr, "%s -> %s: %zu file(s), %llu bytes, crc ok\n", inp, outp, ar.names.size(), (unsigned long long)Mdec.outn);
   return 0;
 }
 
@@ -388,7 +402,7 @@ int main(int argc, char** argv) {
   xad_simd_init();
   init_tables();
   init_ms_map();
-  bool test = false;
+  bool test = false, buffered = false;
   /* argv minus the mode word and the switches, compacted in place.  argv and
      the array itself are modifiable by the standard, and the write index can
      only trail the read index -- a[an] with an < i is a slot already consumed --
@@ -407,6 +421,9 @@ int main(int argc, char** argv) {
         case 't':
           test = true;
           break;
+        case 'b':
+          buffered = true;
+          break;
         case 's':
           solid = solid<SOLID_ALL ? solid+1 : SOLID_ALL;
           break;
@@ -421,7 +438,7 @@ int main(int argc, char** argv) {
   if( mode=='c'&&an>=2 )
     return compress(a, an-1, a[an-1], test, solid);
   if( mode=='d'&&an==2 )
-    return decompress(a[0], a[1]);
+    return decompress(a[0], a[1], buffered);
   fprintf(stderr, "\n xadpcm - lossless compressor for IMA-ADPCM and MS-ADPCM wav files\n\n"
           " usage: xadpcm c input.wav output              compress\n"
           "        xadpcm c a.wav b.wav ... output        compress several, solid\n"
@@ -436,6 +453,10 @@ int main(int argc, char** argv) {
           " options: -s  solid within a run of wavs of the same codec and code width\n"
           "          -ss solid across every wav, whatever the type\n"
           "          -t  verify by decoding in memory before writing (compress)\n"
+          "          -b  rebuild the whole stream and verify the crc BEFORE writing\n"
+          "              a byte of it (decompress).  Without it the output is written\n"
+          "              as it is decoded and a crc failure removes what was written,\n"
+          "              which cannot be done once the output is a pipe.\n"
           "          -v  per-stream byte accounting\n\n");
   return 1;
 }

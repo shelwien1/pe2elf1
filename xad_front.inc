@@ -31,13 +31,13 @@ struct Xad : RC<MD> {
   Xad() : cx(*this) {}
 
   Arc ar;
-  /* Encoding, this is the container as it arrived; decoding, it is the stream
-     being rebuilt.  Both directions need a whole image: the encoder because
-     nseg, the segment geometry and the crc32 all have to be in the header
-     before the first coded byte, and they come from a full scan; the decoder
-     because it verifies the crc before writing anything.  What no longer needs
-     a buffer -- and is the point of the port -- is the CODED side, which now
-     moves a window at a time through pin[1] (resp. pin[0]). */
+  /* ENCODING, this is the container as it arrived, and it still has to be whole:
+     nseg, the segment geometry and the crc32 all go in the header ahead of the
+     first coded byte, and they come from a full scan.  That is a property of the
+     format, not of the codec -- see PLAN-streaming.md §5.
+     DECODING it is unused unless -b is given.  The decoder produces its output a
+     window at a time through owin and pushes as it goes; -b restores the old
+     order, where the whole image is rebuilt, verified, and only then written. */
   Buf<u8> src;
   NameTab in_names; // encode: one per input file, when there is more than one
   Buf<u64> in_sizes;
@@ -51,8 +51,25 @@ struct Xad : RC<MD> {
      copied whole on every yield, and NAME_CAP is 4 KB of it.  Menc/Mdec are in
      BSS, so this costs address space and no page until a split archive uses it. */
   char nmbuf[NAME_CAP];
+
+  /* ---------------------------------------------------------- output window
+     Decoding used to materialise the whole output image in src, verify the crc
+     over it, and only then push it.  It now produces the image a window at a
+     time and pushes as it goes, so peak memory is flat in the size of the file
+     rather than proportional to it.
+     A MEMBER, like nmbuf and for the same reason: do_decode runs inside the
+     coroutine, whose 64 KB stack is copied whole on every yield().  OUTWIN must
+     be >= BA_MAX, because the payload is chunked in whole blocks (see dec_data)
+     and one block can be BA_MAX bytes. */
+  static const size_t OUTWIN = 1<<20;
+  static_assert(OUTWIN>=size_t(BA_MAX), "the payload window must hold a whole block");
+  u8 owin[OUTWIN];
+  u32 rcrc = 0;   // rolling crc register, pre/post complement not applied
+  u64 outn = 0;   // bytes produced, which src.size() used to report
+  int buffered = 0; // -b: rebuild the whole image first, as before
   int solid = SOLID_OFF;
   int rc_err = 0;
+  int out_bad = 0;   // decode failed after bytes were already pushed
   int hdr_eof = 0;
   u64 hdr_bytes = 0;       // container header, i.e. everything ahead of the rc stream
 
@@ -85,6 +102,50 @@ struct Xad : RC<MD> {
       pin[1].chkout();
       if( !n )
         return;
+    }
+  }
+
+  /* One window of decoded output: fold it into the rolling crc and push it.
+     Under -b it goes into src instead and the old order -- whole image, verify,
+     then write -- is restored exactly. */
+  void emit(cu8P p, size_t n) {
+    outn += n;
+    if( buffered ) {
+      src.append(p, n);
+      return;
+    }
+    rcrc = crc32b_up(rcrc, p, n);
+    putn(p, n);
+  }
+
+  /* A literal run of n bytes, produced a window at a time.  `prev` is carried
+     across the windows: the order-1 context is the byte just coded, so letting
+     it reset at a window boundary would decode a different stream from the one
+     the encoder's single call produced. */
+  void dec_lit(int stream, u64 n) {
+    int prev = 0;
+    while( n ) {
+      size_t k = n<u64(OUTWIN) ? size_t(n) : size_t(OUTWIN);
+      cx.code_bytes(stream, owin, k, prev);
+      emit(owin, k);
+      n -= k;
+    }
+  }
+
+  /* n bytes of payload, in WHOLE BLOCKS.  code_data decomposes its argument as
+     blocks of block_align with a possibly short last one, so chunking at a
+     multiple of ba gives byte-for-byte the same decomposition as one call: every
+     chunk but the last contains only full blocks, and the last chunk's remainder
+     is the same remainder.  Everything the walk carries between blocks -- the
+     ADPCM state, both NLMS cascades, the channel history -- lives in Codec and
+     survives the call boundary. */
+  void dec_data(u64 n, int ba) {
+    size_t chunk = (size_t(OUTWIN)/size_t(ba))*size_t(ba);
+    while( n ) {
+      size_t k = n<u64(chunk) ? size_t(n) : chunk;
+      cx.code_data(owin, k);
+      emit(owin, k);
+      n -= k;
     }
   }
 
@@ -396,38 +457,55 @@ struct Xad : RC<MD> {
       named += ar.sizes[i];
     if( named>u64(total) )
       return (void)fail("file table overruns the stream");
-    src.assign(total, 0);
-
     int maxsym, maxnib;
     arc_geometry(ar, maxsym, maxnib);
     Params p0;
     cx.init(ar.segs.empty() ? p0 : ar.segs[0].pm, maxsym, maxnib, u64(total_payload()));
     this->init_dec();
 
-    u8* d = src.data();
+    rcrc = crc32b_init();
+    outn = 0;
     if( ar.lead )
-      cx.code_bytes(LIT_GAP, d, ar.lead);
+      dec_lit(LIT_GAP, ar.lead);
     size_t at = ar.lead;
     for( size_t i = 0; i<ar.segs.size(); i++ ) {
       Params &pm = ar.segs[i].pm;
       ar.segs[i].off = at;
-      u8* q = d+at;
       bool keep = i&&(ar.solid==SOLID_ALL||(ar.solid==SOLID_SAME&&same_type(ar.segs[i-1].pm, pm)));
       if( i&&!keep )
         cx.reset_stats();
       cx.begin_seg(pm, !keep);
-      if( pm.canonical )
-        write_canon(q, pm);
-      else
-        cx.code_bytes(LIT_HEAD, q, pm.head_size);
-      cx.code_data(q+pm.head_size, pm.data_size);
-      cx.code_bytes(LIT_TAIL, q+pm.head_size+pm.data_size, pm.tail_size);
+      if( pm.canonical ) {
+        /* A regenerated header is a few dozen bytes -- CANON_HEAD, or
+           canon_head_ms(ncoef) with ncoef <= MS_MAXCOEF -- so it fits the window
+           with room to spare.  Checked rather than assumed, because head_size is
+           set from the archive for the non-canonical case just below. */
+        if( pm.head_size>size_t(OUTWIN) )
+          return (void)fail("canonical header too large");
+        write_canon(owin, pm);
+        emit(owin, pm.head_size);
+      } else
+        dec_lit(LIT_HEAD, pm.head_size);
+      dec_data(pm.data_size, pm.block_align);
+      dec_lit(LIT_TAIL, pm.tail_size);
       at += pm.orig_size;
     }
 
-    if( crc32b(src.data(), src.size())!=ar.crc )
+    /* Under -b nothing has been written yet, so the old order holds: verify,
+       then push.  Streaming, the bytes are already downstream, so a mismatch
+       sets out_bad and the driver removes what it wrote -- see
+       XadDrive::discard_output().  For a pipe there is nothing to remove and the
+       non-zero exit is all the caller gets; the usage text says so. */
+    if( buffered ) {
+      if( crc32b(src.data(), src.size())!=ar.crc )
+        return (void)fail("crc mismatch after decode");
+      putn(src.data(), src.size());
+      return;
+    }
+    if( crc32b_fin(rcrc)!=ar.crc ) {
+      out_bad = 1;
       return (void)fail("crc mismatch after decode");
-    putn(src.data(), src.size());
+    }
   }
 
   void do_process() {

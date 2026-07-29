@@ -8,22 +8,35 @@
    stdio left in the program is in XadDrive, which is the one place allowed to
    know what a FILE* is. */
 
-static u32 crc32b(cu8P d, size_t n) {
-  static u32 T[256];
-  static bool init = false;
-  if( !init ) {
-    for( u32 i = 0; i<256; i++ ) {
-      u32 c = i;
-      for( int k = 0; k<8; k++ )
-        c = c&1 ? 0xEDB88320u^(c>>1) : c>>1;
-      T[i] = c;
-    }
-    init = true;
+/* Split into init/update/final so the streaming decoder can fold each window in
+   as it is produced instead of being handed a whole image.  crc32b() is the same
+   function it always was, spelled in terms of the three; the register form is
+   what the container's u32 is NOT -- the pre/post complement lives in the
+   wrappers, so an intermediate value never escapes as if it were a checksum. */
+static u32 CRC_T[256];
+static bool crc_ready = false;
+static void crc32_tab() {
+  if( crc_ready )
+    return;
+  for( u32 i = 0; i<256; i++ ) {
+    u32 c = i;
+    for( int k = 0; k<8; k++ )
+      c = c&1 ? 0xEDB88320u^(c>>1) : c>>1;
+    CRC_T[i] = c;
   }
-  u32 c = 0xFFFFFFFFu;
+  crc_ready = true;
+}
+
+static INLINE u32 crc32b_init() { crc32_tab(); return 0xFFFFFFFFu; }
+static INLINE u32 crc32b_fin(u32 c) { return c^0xFFFFFFFFu; }
+static u32 crc32b_up(u32 c, cu8P d, size_t n) {
   for( size_t i = 0; i<n; i++ )
-    c = T[(c^d[i])&0xFF]^(c>>8);
-  return c^0xFFFFFFFFu;
+    c = CRC_T[(c^d[i])&0xFF]^(c>>8);
+  return c;
+}
+
+static u32 crc32b(cu8P d, size_t n) {
+  return crc32b_fin(crc32b_up(crc32b_init(), d, n));
 }
 
 static INLINE u32 rd16(cu8P p) {
@@ -193,6 +206,25 @@ static const char* safe_name(const char* s) {
   if( !b[0]||!strcmp(b, ".")||!strcmp(b, "..") )
     b = "member";
   return b;
+}
+
+/* "-" means stdin/stdout, which is what makes the streaming decoder worth
+   having: `xadpcm d big.xac - | player`.  The returned handle is NOT always
+   ours to close, hence is_std() -- fclose(stdout) in the middle of a run would
+   take the diagnostics with it. */
+static bool is_std(const char* p) { return p&&p[0]=='-'&&!p[1]; }
+static FILE* xfopen(const char* p, bool write) {
+  if( is_std(p) )
+    return write ? stdout : stdin;
+  return fopen(p, write ? "wb" : "rb");
+}
+static void xfclose(const char* p, FILE* f) {
+  if( !f )
+    return;
+  if( is_std(p) )
+    fflush(f);
+  else
+    fclose(f);
 }
 
 /* Join a directory prefix and a member name into dst, and say so if it did not
