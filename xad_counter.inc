@@ -88,7 +88,7 @@ struct Arena {
   size_t cap = 0, used = 0;
   int dry = 0;    // measuring pass: hand out nothing, just accumulate
   int huge = 1;   // ask for huge pages (dense users only)
-  enum { A_NONE = 0, A_MMAP, A_ALIGNED };
+  enum { A_NONE = 0, A_MMAP, A_VALLOC, A_ALIGNED };
   int akind = A_NONE; // which allocator produced `base`; see release()
 
   INLINE void* take(size_t n) {
@@ -120,6 +120,10 @@ struct Arena {
       if( akind==A_MMAP ) {
 #ifdef __linux__
         munmap(base, cap);
+#endif
+      } else if( akind==A_VALLOC ) {
+#if defined(_WIN32)
+        VirtualFree(base, 0, MEM_RELEASE);   // size must be 0 with MEM_RELEASE
 #endif
       } else {
 #if defined(_WIN32)
@@ -165,6 +169,25 @@ struct Arena {
       base = (u8*)p;   // mmap gives zeroed pages, faulted in on first touch
       cap = sz;
       akind = A_MMAP;
+      return;
+    }
+#endif
+#if defined(_WIN32)
+    /* Windows' mmap.  VirtualAlloc(MEM_COMMIT) hands back zeroed pages that are
+       faulted in on first touch, exactly like the mmap above -- which matters
+       here more than anywhere: without it the fallback below memsets both arenas
+       eagerly, so every run pays for ~540 MB it will mostly never look at, and
+       the whole point of Codec::PREFAULT_MIN (lazy for small inputs, one
+       streaming pass for large ones) is lost on the platform.
+       Reservation granularity is 64 KB, so round to it rather than to a page.
+       No large-page request: Windows needs SeLockMemoryPrivilege for that, which
+       is not something a compressor should be asking for. */
+    size_t szw = (n+65535)&~size_t(65535);
+    void* pw = VirtualAlloc(nullptr, szw, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
+    if( pw ) {
+      base = (u8*)pw;
+      cap = szw;
+      akind = A_VALLOC;
       return;
     }
 #endif

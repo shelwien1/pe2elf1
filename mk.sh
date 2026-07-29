@@ -23,6 +23,15 @@
 # Left OFF by default: PGO.  Measured a small REGRESSION on top of -O3, not the
 # 10-20% the plan expected -- the branchy scalar code it would have helped is
 # what the SIMD work replaced.
+# Cross-building for Windows, which is worth doing because two of this tree's
+# bugs were Windows-only and neither could be reached from linux:
+#   apt install g++-mingw-w64-x86-64 wine64
+#   x86_64-w64-mingw32-g++ -std=gnu++20 -O2 -fno-exceptions -fno-rtti -static \
+#       -I. -I./Lib3 xadpcm.cpp -o xadpcm.exe
+#   WINEDEBUG=warn+heap wine ./xadpcm.exe c wavs2 out
+# The heap warnings matter: wine TOLERATES a free() on an _aligned_malloc block
+# where real Windows crashes, but it prints "invalid block type" for it, so that
+# grep is the reproducer for a class of bug the linux build cannot show.
 set -e
 CXX=${CXX:-g++}
 ARCH=${ARCH:-}

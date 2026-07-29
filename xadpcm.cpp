@@ -209,7 +209,21 @@
 #include <sys/mman.h>   // the counter arena asks for huge pages
 #endif
 #ifdef _WIN32
-#include <malloc.h>     // _aligned_malloc / _aligned_free, the arena's allocator there
+/* Two functions, hand-declared, rather than <windows.h>.
+   That is not squeamishness: windows.h declares Arc() -- the GDI ellipse-arc
+   call -- which collides with this program's `struct Arc`, and it declares its
+   own global `byte` through rpcndr.h, which collides with Lib3's.  Both are
+   suppressible (NOGDI, WIN32_LEAN_AND_MEAN), but the suppressions are a list
+   that grows every time a name in here happens to match one of the thousands in
+   there, and a single-translation-unit program with no other dependency should
+   not acquire one for two calls.  The Win32 ABI for these is fixed: SIZE_T is
+   size_t, DWORD is unsigned long (32-bit on Win64 too), BOOL is int. */
+extern "C" {
+__declspec(dllimport) void* __stdcall VirtualAlloc(void*, size_t, unsigned long, unsigned long);
+__declspec(dllimport) int   __stdcall VirtualFree(void*, size_t, unsigned long);
+}
+enum { MEM_COMMIT = 0x1000, MEM_RESERVE = 0x2000, MEM_RELEASE = 0x8000, PAGE_READWRITE = 0x04 };
+#include <malloc.h>     // _aligned_malloc / _aligned_free, the fallback
 #endif
 
 /* Lib3.  common.inc supplies byte/word/uint/qword, INLINE/NOINLINE/ALIGN,
