@@ -213,6 +213,30 @@ struct Codec {
     begin_seg(p, true);
   }
 
+  /* A streaming coder cannot size its tables from the widest segment it will
+     ever see, because it has not seen them.  Sizing at the FORMAT maximum works
+     and costs nothing in output -- the row indices use the segment's own nsym,
+     set in begin_seg, so only the allocation changes -- but tP4 is nsym^5, so
+     going from a 4-bit alphabet to the 5-bit maximum takes the counter arena
+     from 27 MB to 321 MB.  Too much to pay for a possibility.
+     So it grows on demand instead.  Both directions call this at the same point
+     -- after the segment record, before begin_seg -- and the record is the same
+     on both sides, so they resize at exactly the same segments.  The counters do
+     not survive the resize, which is the same thing a non-solid boundary already
+     does; a solid stream that widens pays one extra reset there. */
+  bool grow_geom(const Params &p) {
+    int ns = 1<<p.bps, nb = p.format==FMT_MS ? M0_Md_Volume : I0_Ib_Volume;
+    if( ns<=amaxsym&&nb<=amaxnib )
+      return false;
+    if( ns>amaxsym )
+      amaxsym = ns;
+    if( nb>amaxnib )
+      amaxnib = nb;
+    cta.release();   // forces the dry measuring pass and a fresh reserve
+    reset_stats();
+    return true;
+  }
+
   /* Back to the state the model had before it saw anything.  Everything except
      the match model's storage is refilled -- a couple of megabytes, cheap enough
      to do per wav -- and the match model uses its barrier instead. */

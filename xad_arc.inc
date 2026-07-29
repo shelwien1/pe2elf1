@@ -3,7 +3,24 @@
  * the container: the segment table, the scan that finds every wav in a
  * stream, and the geometry the model tables are sized from. */
 static const char MAGIC[4] = {'X', 'A', 'C', '1'};
-static const u8 VERSION = 4;
+static const u8 VERSION = 5;
+
+/* Container records, coded INSIDE the rc stream rather than written ahead of it.
+   Version 4 put a table of contents first -- nseg, every segment's geometry, the
+   file table, the crc -- so the encoder could not emit a byte until it had
+   scanned the whole input.  The blocker was not the count or the crc but
+   tail_size: a segment's record spanned up to the NEXT wav's start, so it could
+   not be written until the next wav had been found, which is an unbounded
+   lookahead.  Making the bytes between two wavs their own T_LIT record removes
+   it, and the count, the file table and the crc then have somewhere natural to
+   go -- the end, where they are known.
+   Everything else is unchanged: put_seg/get_seg emit the same bytes in the same
+   order, they just go through the literal model now instead of raw. */
+enum {
+  T_END = 0, // varint nfile, the file table, u32 crc32 -- then the stream ends
+  T_LIT = 1, // varint n, then n literal bytes
+  T_SEG = 2, // Params, the head, then a chunk list: varint len (0 ends), bytes
+};
 
 
 struct Seg {

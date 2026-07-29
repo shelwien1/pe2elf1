@@ -38,6 +38,36 @@ struct XadDrive : Carrier {
   size_t sp_i = 0;
   u64 sp_left = 0;
 
+  /* The member table, built BEFORE the coroutine starts.  It used to accumulate
+     as the pump ran, which was fine when it was written into a trailer -- but the
+     split sink needs it before the first output byte, so it has to be known
+     before the first input byte.  Every name is argv and every size is a seek, so
+     it is; a pipe reports 0 and multi-input from pipes is not a thing anyway,
+     since several pipes cannot be told apart.
+     Also totals the inputs, which is what decides whether pre-faulting the match
+     arena pays -- see Codec::PREFAULT_MIN.  0 means "unknown", i.e. don't. */
+  void scan_inputs() {
+    for( int i = 0; i<in_n; i++ ) {
+      u64 sz = 0;
+      if( !is_std(in_paths[i]) ) {
+        FILE* f = fopen(in_paths[i], "rb");
+        if( f ) {
+          if( !fseek(f, 0, SEEK_END) ) {
+            long long t = ftell(f);
+            if( t>0 )
+              sz = u64(t);
+          }
+          fclose(f);
+        }
+      }
+      this->in_total += sz;
+      if( in_n>1 ) {
+        this->in_names.push_back(safe_name(in_paths[i]));
+        this->in_sizes.push_back(sz);
+      }
+    }
+  }
+
   /* Next window of input.  Advances through the path list, so a zero-length
      input cannot make the pump hand back 0 bytes forever: the loop only
      returns 0 once there is no path left.  An empty file still contributes its
@@ -57,17 +87,11 @@ struct XadDrive : Carrier {
           in_i = in_n;
           return 0;
         }
-        if( in_n>1 ) {
-          this->in_names.push_back(safe_name(p));
-          this->in_sizes.push_back(0);
-        }
+
       }
       uint l = uint(fread(inpbuf, 1, bufsize, in_f));
-      if( l ) {
-        if( in_n>1 )
-          this->in_sizes.back() += l;
+      if( l )
         return l;
-      }
       xfclose(in_path, in_f);
       in_f = nullptr;
     }

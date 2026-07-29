@@ -97,6 +97,20 @@ struct Arena {
   }
   void rewind() { used = 0; }
 
+  /* Hand the block back so the next reserve() sizes a fresh one.  Only the
+     counter arena ever does this, and only when a wider segment arrives -- see
+     Codec::grow_geom. */
+  void release() {
+#ifdef __linux__
+    if( base )
+      munmap(base, cap);
+#else
+    free(base);
+#endif
+    base = nullptr;
+    cap = used = 0;
+  }
+
   /* Caught here rather than as a heap corruption: sizes are fixed after
      Codec::init, so a second init with a wider geometry would lay a bigger
      table set into the block sized for the first one. */

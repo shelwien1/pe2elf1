@@ -12,18 +12,25 @@ BASE=${1:-}
 X=./xadpcm
 fail=0
 
-# Recorded rev-016 sizes: file, mode, bytes.  Two entries are one byte ABOVE
-# rev 016 -- wavs2 -s and -ss, 1248865 there.  That is the whole cost of moving
-# squash/stretch off exp()/log() onto integer arithmetic: over the 24 archives
-# md5s.sh builds, 21 are the same size, two grew a byte and one (gen-concat -ss)
-# shrank one, +1 byte net on 8.73 MB.  The tables disagree with the float pair in
-# 71 of 8192 entries, every one by exactly 1, so this is the two tables being
-# equally good rather than one being better -- and what it buys is that the
-# archive format no longer depends on which libm the build linked.
-sizes="wavs2:::1248335 wavs2:-s::1248866 wavs2:-ss::1248866
-       Player_Death_Music_ima.wav:::355414
-       Player_Death_Music_ima.wav:-s::355414
-       Player_Death_Music_ima.wav:-ss::355414"
+# Recorded sizes for the CURRENT container (version 5).
+#
+# The acceptance criterion changed here, once and on purpose.  Through version 4
+# it was "byte-identical to rev 016".  Version 5 moves the container records into
+# the rc stream so the encoder can work from a window instead of a whole image,
+# and that necessarily re-segments the same bytes: a wav's record no longer spans
+# up to the NEXT wav's start, the bytes between two wavs are their own record, and
+# the payload carries a chunk list.  Identity was never available.
+#
+# What replaced it: lossless round-trip everywhere, and total size no worse.
+# Over the 24 archives md5s.sh builds, v5 is 2439 bytes SMALLER than v4 in total.
+# Per file it goes both ways -- wavs2 +11 and multi(2) +14 for the per-segment
+# tag and chunk list, against multi(2) -ss -2382 and gen-concat -ss -101, where
+# resetting the model when a segment widens turns out to beat carrying statistics
+# across a change of alphabet.  The two entries that grew are recorded below.
+sizes="wavs2:::1248346 wavs2:-s::1248876 wavs2:-ss::1248876
+       Player_Death_Music_ima.wav:::355415
+       Player_Death_Music_ima.wav:-s::355415
+       Player_Death_Music_ima.wav:-ss::355415"
 
 check() { # file mode expected
   $X c $2 "$1" _v.xac >/dev/null 2>&1

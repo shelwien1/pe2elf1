@@ -269,3 +269,73 @@ The standing suite (`md5s.sh` in both build modes, `verify.sh`, `ktest.sh`,
 * Change the model, the tables, or any tunable.
 * Add a v4 reader alongside v5 (§5) unless asked.
 * Make `-t` streaming. It cannot be, and should not pretend to be.
+
+---
+
+# Implemented
+
+All three steps. `verify.sh`, `ktest.sh`, `sqtest.sh` green; Debug == Const; six
+compiler/flag configurations byte-identical; UBSan clean.
+
+**§3, slab fix — output-identical.** BSS 9.58 MB → 1.78 MB, all 24 md5s
+unchanged. It also exposed a hole the vectors had hidden: `get_seg` bounded
+`block_align` from below and never from above, so a hostile header memset a
+megabyte into a 64 KB slice. Reachable, verified with an 88-byte archive, and now
+a regression test. The per-call scratch clear turned out to be dead — poisoning
+the slab with 0xAA left every archive byte-identical, which corrects the claim
+Plan 4 attached to it.
+
+**§4, streaming decoder — output-identical, no format change.** Peak RSS drops by
+exactly the input size. The crc moves from before the first byte to after the
+last, so `discard_output()` takes the output back on failure (every member, for
+split output); `-b` restores the old order; `-` means stdin/stdout.
+
+**§5–§6, streaming encoder and format v5.** Encoder RSS is now flat in input size
+too. Against v4 over the 24 archives: **−2439 bytes total**.
+
+| | v4 | v5 | |
+|---|---|---|---|
+| total, 24 archives | 8,732,576 | 8,730,137 | **−2439** |
+| `wavs2` | 1,248,335 | 1,248,346 | +11 |
+| `multi(2) -ss` | 1,606,697 | 1,604,315 | **−2382** |
+| counter arena | 27.4 MB | 27.7 MB | |
+| peak RSS, `wavs2` | 559.5 MB | 556.5 MB | |
+
+## Three things the plan got wrong
+
+**The file table cannot live in the trailer.** §5 put it in `T_END` with the crc.
+It is the one piece of container metadata a reader needs *before* the first output
+byte — the split sink cuts the decoded stream on it — so a multi-member archive
+decoded into a directory failed outright. It is in the preamble, and the encoder
+knows it up front because the driver seeks each input before the coroutine starts.
+
+**Sizing at the format maximum is not free after all.** The measurement in §0 was
+right that it does not change the output, and wrong to conclude it was therefore
+free: `tP4` is `nsym^5`, so 4-bit → the 5-bit maximum takes the counter arena from
+27 MB to **321 MB**. It grows on demand instead (`Codec::grow_geom`), which both
+directions do at the same segments because both read the same record. The
+counters do not survive the resize — the same thing a non-solid boundary already
+does. That turned out to *help*: `multi(2) -ss` gained 2382 bytes, because
+resetting when the alphabet widens beats carrying statistics across the change.
+
+**`SEGMENT_SHORT` was not needed.** §6 proposed a marker for a truncated final
+wav. The chunk list subsumes it: the encoder commits to nothing it has not read,
+so a short file is just a short last chunk.
+
+## Two bugs worth recording
+
+The encoder emitted `T_SEG` *after* `reset_stats`/`begin_seg`; the decoder cannot
+reset anything until it has read the record telling it to. It decoded the first
+segment perfectly and fell over on the second. Records now go out before the
+model moves.
+
+`ew_eof()` was `f_quit && window empty`. At end of input the window still holds
+the 11 bytes held back for a straddling RIFF, so it read false, the bytes were
+held back again, and the loop exited with them unwritten — 11 bytes short, caught
+by round-trip and nothing else.
+
+## What is still buffered
+
+`-t` (it compares the archive against the input, so it holds both); one block; the
+1 MB scan window; the 1 MB output window; the model arenas, which are 540 MB and
+unrelated to input size. Peak RSS is flat in input size in both directions.

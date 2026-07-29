@@ -15,6 +15,13 @@ struct Wav {
   const u8* fmt = nullptr, * fact = nullptr;
   u32 fmt_size = 0, fact_size = 0;
   size_t data_off = 0, data_size = 0;
+  /* What the data chunk SAYS it holds, before clamping to what is present.  The
+     streaming encoder needs it: it has to write the segment record when it
+     recognises the wav, long before it knows whether the file is truncated, and
+     a regenerated canonical header has to carry the declared size to match the
+     original bytes.  How much data actually arrives is then whatever the chunk
+     list adds up to, which is why the chunk list exists. */
+  size_t data_decl = 0;
 };
 
 static bool parse_wav(cu8P f, size_t n, Wav &w) {
@@ -34,6 +41,7 @@ static bool parse_wav(cu8P f, size_t n, Wav &w) {
     } else if( !memcmp(id, "data", 4) ) {
       w.data_off = body;
       w.data_size = avail;
+      w.data_decl = size;
       return true;
     }
     pos = body+size+(size&1);

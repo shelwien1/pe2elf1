@@ -81,12 +81,13 @@ enum {
 
   /* Literal byte models.  Each stream is 256 rows of order-1 context. */
   LIT_W = 256,
-  LIT_NSTREAM = 5,
+  LIT_NSTREAM = 6,
   LIT_HEAD = 0,  // stored RIFF header
   LIT_TAIL = 1,  // trailing chunks
   LIT_MISC = 2,  // runt blocks, partial groups, odd bits
   LIT_BPRED = 3, // MS coefficient-set byte, order-1
   LIT_GAP = 4,   // bytes ahead of the first wav in a solid stream
+  LIT_DESC = 5,  // the container's own records, coded inside the rc stream
   /* Two MISC uses key on a synthetic previous byte rather than a real one, to
      get their own rows: they share a row with any literal whose predecessor
      happened to equal these, which costs a little dilution and no correctness. */

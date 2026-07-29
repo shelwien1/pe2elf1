@@ -310,16 +310,49 @@ typedef int64_t i64;
 // ------------------------------------------------------------------- top level
 // ------------------------------------------------------------------- top level
 
+/* -t used to compare the decoded image against the encoder's copy of the input.
+   The streaming encoder does not keep one, so the comparison is against the input
+   files themselves, read back a window at a time.  Same guarantee -- the decoded
+   bytes equal the concatenation of the inputs -- for one more pass over data that
+   is still in page cache.  A pipe input cannot be re-read, which is why -t says
+   so and refuses rather than silently verifying nothing. */
+static bool same_as_inputs(char** inp, int nin, cu8P got, size_t n) {
+  static u8 buf[1<<16];
+  size_t at = 0;
+  for( int i = 0; i<nin; i++ ) {
+    FILE* f = fopen(inp[i], "rb");
+    if( !f )
+      return false;
+    for(;; ) {
+      size_t k = fread(buf, 1, sizeof(buf), f);
+      if( !k )
+        break;
+      if( at+k>n||memcmp(buf, got+at, k) ) {
+        fclose(f);
+        return false;
+      }
+      at += k;
+    }
+    fclose(f);
+  }
+  return at==n;
+}
+
 static int compress(char** inp, int nin, const char* outp, bool test, int solid) {
   Buf<u8> coded; // -t only: the archive, kept back until it has been verified
   Menc.in_paths = inp;
   Menc.in_n = nin;
   Menc.solid = solid;
   Menc.name = inp[0];
-  if( test )
+  if( test ) {
+    for( int i = 0; i<nin; i++ )
+      if( is_std(inp[i]) )
+        return fprintf(stderr, "error: -t cannot re-read a pipe to verify against\n"), 1;
     Menc.out_mem = &coded;
+  }
   else
     Menc.out_path = outp;
+  Menc.scan_inputs();
   Menc.run();
   if( Menc.rc_err )
     return 1;
@@ -333,7 +366,10 @@ static int compress(char** inp, int nin, const char* outp, bool test, int solid)
     Mdec.run();
     if( Mdec.rc_err )
       return fprintf(stderr, "error: self-test failed, output not written\n"), 1;
-    if( back.size()!=Menc.src.size()||memcmp(back.data(), Menc.src.data(), back.size()) )
+    /* -t compares the decoded image against the input, and the streaming encoder
+       no longer keeps one -- so the comparison is against the file, read back.
+       Same guarantee, one more read of something already in page cache. */
+    if( u64(back.size())!=Menc.inn||!same_as_inputs(inp, nin, back.data(), back.size()) )
       return fprintf(stderr, "error: self-test mismatch, output not written\n"), 1;
     FILE* f = xfopen(outp, true);
     if( !f||(!coded.empty()&&fwrite(coded.data(), 1, coded.size(), f)!=coded.size()) ) {
@@ -354,7 +390,7 @@ static int compress(char** inp, int nin, const char* outp, bool test, int solid)
   if( verbose||ar.segs.size()<=4 )
     for( size_t i = 0; i<ar.segs.size(); i++ )
       describe(ar.segs[i].pm);
-  report(Menc.cx, ar, Menc.src.size(), Menc.hdr_bytes+Menc.emitted, Menc.stk_hi);
+  report(Menc.cx, ar, size_t(Menc.inn), Menc.hdr_bytes+Menc.emitted, Menc.stk_hi);
   return 0;
 }
 
@@ -381,6 +417,7 @@ static int decompress(char* inp, const char* outp, bool buffered) {
   Mdec.out_split = is_std(outp) ? 0 : 1;
   Mdec.in_paths = &inp;
   Mdec.in_n = 1;
+  Mdec.scan_inputs();
   Mdec.name = inp;
   Mdec.out_path = outp;
   Mdec.buffered = buffered;

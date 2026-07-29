@@ -166,7 +166,22 @@ struct Xad : RC<MD> {
     }
   }
 
+  /* Before the rc stream starts these write raw bytes to the pin, which is what
+     the five-byte preamble (magic, version, solid) needs.  Inside it they code
+     through the literal model on its own stream, so put_seg/get_seg -- and the
+     file table, and the crc -- emit exactly the bytes they always did without
+     knowing where they ended up.  `dprev` is the order-1 context and is carried
+     across records on purpose: descriptor bytes resemble each other far more
+     than they resemble the payload. */
+  int in_rc = 0;
+  int dprev = 0;
+
   void hput(u8 c) {
+    if( in_rc ) {
+      cx.code_byte(LIT_DESC, dprev, c);
+      dprev = c;
+      return;
+    }
     pin[1].put(c);
     hdr_bytes++;
   }
@@ -180,6 +195,11 @@ struct Xad : RC<MD> {
   }
 
   int hget() {
+    if( in_rc ) {
+      int v = cx.code_byte(LIT_DESC, dprev, 0);
+      dprev = v;
+      return v;
+    }
     uint c = pin[0].get();
     if( c>255 ) {
       hdr_eof = 1;
@@ -187,6 +207,12 @@ struct Xad : RC<MD> {
     }
     return int(c);
   }
+
+  /* A truncated v5 archive has no length to run out of -- the range decoder
+     happily produces bytes past the end of its input -- so the record loop needs
+     its own stop.  This is it: the driver has said there is no more input and
+     the window is drained. */
+  bool rc_starved() const { return f_quit&&pin[0].ptr>=pin[0].end; }
 
   u64 hget_varint() {
     u64 v = 0;
@@ -207,6 +233,13 @@ struct Xad : RC<MD> {
   int fail(const char* what) {
     fprintf(stderr, "error: '%s': %s\n", name, what);
     rc_err = 1;
+    /* A failed run leaves nothing behind, and after the streaming rewrite that
+       has to be said here rather than only at the crc check: a corrupted rc
+       stream can decode a garbage record tag hundreds of megabytes in, by which
+       point the output file exists and is wrong.  Every failure path now takes
+       the same cleanup as a crc mismatch.  Harmless when nothing was written --
+       discard_output removes a file that is not there and moves on. */
+    out_bad = 1;
     return 0;
   }
 
@@ -307,40 +340,108 @@ struct Xad : RC<MD> {
 
   // ------------------------------------------------------------------ encode
 
-  void do_encode() {
-    slurp();
-    if( rc_err ) // the driver could not open one of the inputs
+  /* ------------------------------------------------------- streaming encode
+   *
+   * The input arrives a window at a time and leaves as records.  Nothing is held
+   * beyond the window: the scan looks for a RIFF/WAVE that also parses as ADPCM,
+   * everything before one is a T_LIT run, a wav is a T_SEG followed by its head
+   * and a chunk list, and T_END carries the file table and the crc that has been
+   * rolling all along.
+   *
+   * What made this possible is the chunk list.  A segment's record used to have
+   * to state a tail_size measured to the NEXT wav's start; now the data is a
+   * sequence of (len, bytes) with a zero terminator, so the encoder commits to
+   * nothing it has not already read, and a truncated final wav -- fewer bytes
+   * present than the data chunk declares -- is just a short last chunk instead of
+   * a special case.
+   *
+   * EWIN must hold a whole block AND the largest RIFF header the scan will parse.
+   * A header longer than the window is treated as not-a-wav and rides along as
+   * literal data: a ratio loss on a pathological file, never a correctness one. */
+  static const size_t EWIN = 1<<20;
+  static_assert(EWIN>=size_t(BA_MAX)*2, "the scan window must hold a block and a header");
+  u8 ewin[EWIN];
+  size_t ew_n = 0, ew_pos = 0;
+  u64 in_total = 0;   // set by the driver when the inputs are seekable; 0 = unknown
+  u64 inn = 0;        // input bytes consumed, which src.size() used to report
+
+  /* Consume n bytes at the cursor: they are now the crc's, and they are input the
+     report can count.  Every path that advances ew_pos goes through here, so the
+     two cannot drift apart. */
+  void ew_take(size_t n) {
+    rcrc = crc32b_up(rcrc, ewin+ew_pos, n);
+    ew_pos += n;
+    inn += n;
+  }
+
+  /* Slide the window forward and top it up.  Returns what is readable at ew_pos.
+     `keep` is what must remain addressable behind the cursor -- nothing here, the
+     cursor only moves over bytes already coded. */
+  size_t ew_fill() {
+    if( ew_pos ) {
+      memmove(ewin, ewin+ew_pos, ew_n-ew_pos);
+      ew_n -= ew_pos;
+      ew_pos = 0;
+    }
+    while( ew_n<EWIN ) {
+      coro3_pin &I = pin[0];
+      if( I.ptr<I.end ) {
+        size_t k = size_t(I.end-I.ptr), room = EWIN-ew_n;
+        if( k>room )
+          k = room;
+        memcpy(ewin+ew_n, I.ptr, k);
+        I.ptr += k;
+        ew_n += k;
+        continue;
+      }
+      if( f_quit )
+        break;
+      this->stk_probe();
+      chkinp();
+    }
+    return ew_n-ew_pos;
+  }
+
+  /* "Nothing more will arrive."  ew_fill() only returns short of a full window
+     once the driver has said so, so this is exactly f_quit -- NOT
+     `f_quit && window empty`, which was the first version and silently dropped
+     the held-back tail: at end of input the window still holds those bytes, so
+     the predicate read false, the 11 were kept back a second time, and the loop
+     took its `nothing left` exit with them still unwritten. */
+  bool in_done() const { return f_quit!=0; }
+
+  // one T_LIT record of n bytes starting at ew_pos, consumed from the window
+  void enc_lit(int stream, size_t n) {
+    if( !n )
       return;
-    if( src.empty() ) {
+    hput(u8(T_LIT));
+    hput_varint(u64(n));
+    int prev = 0;
+    cx.code_bytes(stream, ewin+ew_pos, n, prev);
+    ew_take(n);
+  }
+
+  void do_encode() {
+    if( ew_fill()==0 ) {
+      if( rc_err ) // the driver could not open one of the inputs
+        return;
       fprintf(stderr, "error: nothing to compress\n");
       rc_err = 1;
       return;
     }
     ar.solid = solid;
-    /* Moved, not copied: the driver filled these while pumping and has no use
-       for them afterwards, and Buf is non-copyable so the intent has to be
-       spelled out rather than happening by accident. */
-    ar.names.steal(in_names);
-    ar.sizes.steal(in_sizes);
-    scan_segments(src, ar);
-    if( ar.segs.empty() ) {
-      // say why, using the first input's own diagnostics
-      Params pm;
-      Wav w;
-      analyze(src.data(), src.size(), name, pm, w, true);
-      rc_err = 1;
-      return;
-    }
-    ar.crc = crc32b(src.data(), src.size());
 
     for( int i = 0; i<4; i++ )
       hput(u8(MAGIC[i]));
     hput(VERSION);
-    hput(u8(ar.solid));
-    hput_varint(u64(ar.segs.size()));
-    hput_varint(u64(ar.lead));
-    for( size_t i = 0; i<ar.segs.size(); i++ )
-      put_seg(ar.segs[i].pm);
+    hput(u8(solid));
+    /* The member table rides in the PREAMBLE, outside the rc stream.  It is the
+       one piece of container metadata a reader needs before the first output
+       byte -- the split sink cuts the decoded stream on it -- so it cannot live
+       in the trailer with the crc.  It is known up front because the driver
+       seeks every input before the coroutine starts. */
+    ar.names.steal(in_names);
+    ar.sizes.steal(in_sizes);
     hput_varint(u64(ar.names.size())); // 0 = one unnamed stream
     for( size_t i = 0; i<ar.names.size(); i++ ) {
       u32 ln = ar.names.len_at(i);
@@ -350,79 +451,174 @@ struct Xad : RC<MD> {
         hput(u8(nm[j]));
       hput_varint(ar.sizes[i]);
     }
+
+    /* Sized at the format maximum, because a streaming encoder cannot know what
+       geometries are still coming.  That costs nothing: the row indices use the
+       SEGMENT's nsym and nib_rows, set in begin_seg, while these only size the
+       arena -- forcing the maximum on the v4 encoder left all 24 archives
+       byte-identical, measured before this was written. */
+    Params p0;
+    cx.init(p0, 16, 1, in_total);
+    this->init_enc();
+    in_rc = 1;
+    rcrc = crc32b_init();
+
+    size_t nseg = 0;
+    Params prev_pm;
+    for(;; ) {
+      size_t avail = ew_fill();
+      if( !avail )
+        break;
+
+      /* Find the next candidate.  A RIFF that straddles the end of a window
+         cannot be judged yet, so unless this is the last window we stop short of
+         it and let the next fill bring the rest -- the window slides, so the
+         candidate is whole next time round. */
+      size_t lit = 0;
+      Params pm;
+      Wav w;
+      bool got = false;
+      while( lit<avail ) {
+        const u8* base = ewin+ew_pos+lit;
+        size_t left = avail-lit;
+        const void* hit = memchr(base, 'R', left<11 ? left : left-11);
+        if( !hit )
+          break;
+        lit = size_t((const u8*)hit-(ewin+ew_pos));
+        base = ewin+ew_pos+lit;
+        left = avail-lit;
+        if( !memcmp(base, "RIFF", 4)&&!memcmp(base+8, "WAVE", 4) ) {
+          Params t;
+          Wav tw;
+          /* extent = head + the DECLARED data size, so tail_size comes out zero
+             and the bytes after the wav become their own T_LIT record.  That is
+             the change that removes the lookahead. */
+          if( parse_wav(base, left, tw)&&tw.data_off+tw.data_decl>=tw.data_off ) {
+            size_t ext = tw.data_off+tw.data_decl;
+            if( analyze(base, ext, "", t, tw, false)&&t.block_align<=BA_MAX
+                &&t.head_size<=left ) {
+              pm = t;
+              w = tw;
+              got = true;
+              break;
+            }
+          }
+        }
+        lit++;
+      }
+
+      if( !got ) {
+        /* Nothing in this window.  Keep the last 11 bytes back unless the input
+           is finished, so a RIFF split across the boundary is still seen. */
+        size_t keep = in_done() ? 0 : (avail<11 ? avail : 11);
+        if( !avail )
+          break;
+        if( avail==keep )
+          continue;  // wait for more input; ew_fill will slide the window
+        enc_lit(nseg ? LIT_TAIL : LIT_GAP, avail-keep);
+        continue;
+      }
+      if( lit ) {
+        enc_lit(nseg ? LIT_TAIL : LIT_GAP, lit);
+        continue;
+      }
+
+      /* ---- a wav starts here.  The record goes out BEFORE reset_stats and
+         begin_seg, and that order is load-bearing: the decoder cannot reset
+         anything until it has read the record that tells it to, so an encoder
+         that resets first codes the descriptor against fresh counters while the
+         decoder reads it against the previous segment's.  It decodes the first
+         segment perfectly and then falls over on the second, which is exactly
+         how this was found. */
+      hput(u8(T_SEG));
+      put_seg(pm);
+      bool wider = cx.grow_geom(pm);
+      bool keep = nseg&&!wider&&(solid==SOLID_ALL||(solid==SOLID_SAME&&same_type(prev_pm, pm)));
+      if( nseg&&!keep&&!wider )
+        cx.reset_stats();
+      cx.begin_seg(pm, !keep);
+      if( !nseg )
+        ar.lead = size_t(inn); // report only: bytes ahead of the first wav
+      if( !pm.canonical )
+        cx.code_bytes(LIT_HEAD, ewin+ew_pos, pm.head_size);
+      ew_take(pm.head_size);
+
+      /* The chunk list.  Whole blocks per chunk except the last, so the walk
+         decomposes exactly as one call over the same bytes would.  Stops at the
+         declared size, or at end of input if the file is short. */
+      size_t want = w.data_decl;
+      size_t chunk_cap = (EWIN/size_t(pm.block_align))*size_t(pm.block_align);
+      size_t coded = 0;
+      while( want ) {
+        size_t have = ew_fill();
+        if( !have )
+          break;
+        size_t k = want<have ? want : have;
+        if( k>chunk_cap )
+          k = chunk_cap;
+        /* Only the final chunk may be short of a block; otherwise trim back so
+           the block grid is preserved across the chunk boundary. */
+        if( k<want&&k>size_t(pm.block_align) )
+          k -= k%size_t(pm.block_align);
+        hput_varint(u64(k));
+        cx.code_data(ewin+ew_pos, k);
+        ew_take(k);
+        want -= k;
+        coded += k;
+      }
+      hput_varint(0); // end of chunk list
+      pm.data_size = coded;
+      pm.tail_size = 0;
+      pm.orig_size = pm.head_size+coded;
+      prev_pm = pm;
+      nseg++;
+      Seg sg;
+      sg.pm = pm;
+      ar.segs.push_back(sg); // for the -v report only; one Params per wav
+    }
+
+    hput(u8(T_END));
+    ar.crc = crc32b_fin(rcrc);
     u8 c4[4];
     wr32(c4, ar.crc);
     for( int i = 0; i<4; i++ )
       hput(c4[i]);
-
-    u8* d = src.data();
-    int maxsym, maxnib;
-    arc_geometry(ar, maxsym, maxnib);
-    Params p0;
-    cx.init(ar.segs.empty() ? p0 : ar.segs[0].pm, maxsym, maxnib, u64(total_payload()));
-    this->init_enc();
-    if( ar.lead )
-      cx.code_bytes(LIT_GAP, d, ar.lead);
-    for( size_t i = 0; i<ar.segs.size(); i++ ) {
-      const Params &pm = ar.segs[i].pm;
-      u8* q = d+ar.segs[i].off;
-      bool keep = i&&(ar.solid==SOLID_ALL||(ar.solid==SOLID_SAME&&same_type(ar.segs[i-1].pm, pm)));
-      if( i&&!keep )
-        cx.reset_stats();
-      cx.begin_seg(pm, !keep);
-      if( !pm.canonical )
-        cx.code_bytes(LIT_HEAD, q, pm.head_size);
-      cx.code_data(q+pm.head_size, pm.data_size);
-      cx.code_bytes(LIT_TAIL, q+pm.head_size+pm.data_size, pm.tail_size);
-    }
     this->flush();
   }
 
   // ------------------------------------------------------------------ decode
 
+  /* ------------------------------------------------------- streaming decode
+   *
+   * The mirror of do_encode: read records, produce the stream a window at a time,
+   * push as it goes.  Neither side ever holds more than a window.
+   *
+   * Because there is no table of contents any more, the geometry has to be sized
+   * at the format maximum here too -- and for the same measured reason it costs
+   * nothing.  It also means a truncated archive has no length to run out of: the
+   * range decoder will produce bytes forever, so the record loop stops on
+   * rc_starved() and on a record count that cannot be legitimate. */
   void do_decode() {
     u8 m[4];
     for( int i = 0; i<4; i++ ) {
       int c = hget();
-      if( c<0 ) {
-        fprintf(stderr, "error: '%s' is not an xadpcm file\n", name);
-        rc_err = 1;
-        return;
-      }
+      if( c<0 )
+        return (void)fail("not an xadpcm file");
       m[i] = u8(c);
     }
-    if( memcmp(m, MAGIC, 4) ) {
-      fprintf(stderr, "error: '%s' is not an xadpcm file\n", name);
-      rc_err = 1;
-      return;
-    }
-    if( hget()!=VERSION )
-      return (void)fail("made by a different xadpcm version");
+    if( memcmp(m, MAGIC, 4) )
+      return (void)fail("not an xadpcm file");
+    int ver = hget();
+    if( ver!=VERSION )
+      return (void)fail(ver==4 ? "made by xadpcm rev 4, whose container is not streamable"
+                               : "made by a different xadpcm version");
     int sl = hget();
-    if( sl<0||sl>SOLID_ALL )
-      return (void)fail("unknown solid mode");
-    ar.solid = sl;
-    u64 nseg = hget_varint();
-    ar.lead = size_t(hget_varint());
-    if( hdr_eof||nseg>(1u<<24) )
+    if( hdr_eof||sl<0||sl>SOLID_ALL )
       return (void)fail("truncated or implausible header");
-    /* One at a time rather than resize(nseg) then fill.  nseg is a varint out of
-       the header and the cap above only says 2^24, so the old shape asked for
-       5.4 GB (2^24 * sizeof(Seg)) before reading a single segment, from a header
-       forty bytes long -- and then failed on the first get_seg for want of input.
-       Growing as they parse costs one 1.5x realloc chain and bounds the request
-       by what the archive actually contains.  On a well-formed archive the two
-       are identical, including that a failure leaves rc_err set and every caller
-       returning before it looks at ar.segs. */
-    for( u64 i = 0; i<nseg; i++ ) {
-      Seg sg;
-      if( !get_seg(sg.pm) )
-        return;
-      ar.segs.push_back(sg);
-    }
+    ar.solid = sl;
     u64 nfile = hget_varint();
     if( hdr_eof||nfile>(1u<<20) )
-      return (void)fail("truncated header");
+      return (void)fail("truncated or implausible header");
     for( u64 i = 0; i<nfile; i++ ) {
       u64 ln = hget_varint();
       if( hdr_eof||ln>NAME_CAP )
@@ -436,43 +632,39 @@ struct Xad : RC<MD> {
       ar.names.push_back(nmbuf, size_t(ln));
       ar.sizes.push_back(hget_varint());
     }
-    u8 c4[4];
-    for( int i = 0; i<4; i++ ) {
-      int c = hget();
-      if( c<0 )
-        return (void)fail("truncated header");
-      c4[i] = u8(c);
-    }
-    ar.crc = rd32(c4);
+    if( hdr_eof )
+      return (void)fail("truncated header");
 
-    size_t total = ar.lead;
-    for( size_t i = 0; i<ar.segs.size(); i++ )
-      total += ar.segs[i].pm.orig_size;
-    ar.total = total;
-    /* The file table has to fit inside what the segment table says the stream
-       is.  Checked here, before a byte is decoded, rather than while writing
-       members out -- the driver's split sink is downstream of this. */
-    u64 named = 0;
-    for( size_t i = 0; i<ar.sizes.size(); i++ )
-      named += ar.sizes[i];
-    if( named>u64(total) )
-      return (void)fail("file table overruns the stream");
-    int maxsym, maxnib;
-    arc_geometry(ar, maxsym, maxnib);
     Params p0;
-    cx.init(ar.segs.empty() ? p0 : ar.segs[0].pm, maxsym, maxnib, u64(total_payload()));
+    cx.init(p0, 16, 1, in_total);
     this->init_dec();
+    in_rc = 1;
 
     rcrc = crc32b_init();
     outn = 0;
-    if( ar.lead )
-      dec_lit(LIT_GAP, ar.lead);
-    size_t at = ar.lead;
-    for( size_t i = 0; i<ar.segs.size(); i++ ) {
-      Params &pm = ar.segs[i].pm;
-      ar.segs[i].off = at;
-      bool keep = i&&(ar.solid==SOLID_ALL||(ar.solid==SOLID_SAME&&same_type(ar.segs[i-1].pm, pm)));
-      if( i&&!keep )
+    size_t nseg = 0;
+    Params prev_pm;
+    for(;; ) {
+      if( rc_starved() )
+        return (void)fail("truncated archive");
+      int tag = hget();
+      if( tag==T_END )
+        break;
+      if( tag==T_LIT ) {
+        u64 n = hget_varint();
+        dec_lit(nseg ? LIT_TAIL : LIT_GAP, n);
+        continue;
+      }
+      if( tag!=T_SEG )
+        return (void)fail("unknown container record");
+      if( nseg>(1u<<24) )
+        return (void)fail("implausible segment count");
+      Params pm;
+      if( !get_seg(pm) )
+        return;
+      bool wider = cx.grow_geom(pm);
+      bool keep = nseg&&!wider&&(ar.solid==SOLID_ALL||(ar.solid==SOLID_SAME&&same_type(prev_pm, pm)));
+      if( nseg&&!keep&&!wider )
         cx.reset_stats();
       cx.begin_seg(pm, !keep);
       if( pm.canonical ) {
@@ -480,15 +672,48 @@ struct Xad : RC<MD> {
            canon_head_ms(ncoef) with ncoef <= MS_MAXCOEF -- so it fits the window
            with room to spare.  Checked rather than assumed, because head_size is
            set from the archive for the non-canonical case just below. */
-        if( pm.head_size>size_t(OUTWIN) )
+        if( pm.head_size>OUTWIN )
           return (void)fail("canonical header too large");
         write_canon(owin, pm);
         emit(owin, pm.head_size);
       } else
         dec_lit(LIT_HEAD, pm.head_size);
-      dec_data(pm.data_size, pm.block_align);
-      dec_lit(LIT_TAIL, pm.tail_size);
-      at += pm.orig_size;
+      size_t coded = 0;
+      for(;; ) {
+        if( rc_starved() )
+          return (void)fail("truncated archive");
+        u64 k = hget_varint();
+        if( !k )
+          break;
+        if( k>u64(pm.data_size)-u64(coded) )
+          return (void)fail("chunk list overruns the declared data size");
+        dec_data(k, pm.block_align);
+        coded += size_t(k);
+      }
+      pm.data_size = coded;
+      pm.orig_size = pm.head_size+coded;
+      prev_pm = pm;
+      nseg++;
+      Seg sg;
+      sg.pm = pm;
+      ar.segs.push_back(sg); // report only
+    }
+
+    u8 c4[4];
+    for( int i = 0; i<4; i++ )
+      c4[i] = u8(hget());
+    ar.crc = rd32(c4);
+
+    /* The file table has to fit inside what was actually produced.  In v4 that
+       was checkable before a byte was decoded; the sizes are still in the
+       preamble, but `outn` is only final now, so the comparison happens here
+       alongside the crc and takes the same failure path. */
+    u64 named = 0;
+    for( size_t i = 0; i<ar.sizes.size(); i++ )
+      named += ar.sizes[i];
+    if( named>outn ) {
+      out_bad = 1;
+      return (void)fail("file table overruns the stream");
     }
 
     /* Under -b nothing has been written yet, so the old order holds: verify,
