@@ -6,6 +6,8 @@ static const byte C0_l0[24+1]={ 0,0,0,0,0,0,0,0,1,1,2,2,3,3,3,3,3,3,3,4,4,5,6,7,
 
 static const int C0_Ml_Volume = 1* 9; // 9
 
+static const int C0_USE_NEW = 0;
+
 struct C0_T { 
 #undef USE_NEW
 #define USE_NEW 0

@@ -47,6 +47,15 @@
 #pragma GCC diagnostic ignored "-Wsubobject-linkage"   // clang has no such warning
 #endif
 
+/* USE_NEW is #undef/#define'd by every generated _h.inc, so the value the rest
+   of this file sees is whichever module was included LAST -- xad-M0_h.inc today.
+   That makes a partially regenerated MOD/ invisible: the mixed build compiles,
+   runs, and is correct only by luck.  Each module now also emits an ordinary
+   named constant that nothing undefines, so they can be compared. */
+static_assert(C0_USE_NEW==G0_USE_NEW&&G0_USE_NEW==I0_USE_NEW&&I0_USE_NEW==M0_USE_NEW&&M0_USE_NEW==USE_NEW,
+              "MOD/ was generated in more than one mode -- regenerate all of it "
+              "with ./mk.sh (tuning) or ./mk.sh release (shipping)");
+
 #if USE_NEW
  #define IDXP(name)       const int& name
  #define IDXC(t, n, expr) const t n = (expr)

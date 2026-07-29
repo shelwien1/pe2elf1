@@ -132,6 +132,8 @@ static const int G0_HJ_BITS = (10+8) * (1);
 
 
 
+static const int G0_USE_NEW = 0;
+
 struct G0_T { 
 #undef USE_NEW
 #define USE_NEW 0

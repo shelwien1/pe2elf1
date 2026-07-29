@@ -344,6 +344,13 @@ $t_ptr =~ s/(^|\n)/$1  /g;
 $t_con =~ s/(^|\n)/$1  /g;
 $t_des =~ s/(^|\n)/$1  /g;
 
+# Per-module copy of the flag, OUTSIDE the struct and never #undef'd.  USE_NEW
+# itself is #undef/#define'd by every _h.inc, so whichever one is included LAST
+# silently decides it for everything downstream -- a partially regenerated MOD/
+# is not otherwise detectable, and the mixed build compiles and runs.  A named
+# constant per module lets the consumer assert they all agree.
+print O1 "static const int ${prefix}_USE_NEW = $UseNew;\n\n";
+
 if( $UseNew==1 ) {
 print O1 <<TEXT;
 struct ${prefix}_T { \n#undef USE_NEW\n#define USE_NEW 1\n

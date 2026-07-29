@@ -9,6 +9,8 @@ static const int M0_MSDSH = (5+0) * (1);
 
 static const int M0_Md_Volume = 1* 16; // 16
 
+static const int M0_USE_NEW = 0;
+
 struct M0_T { 
 #undef USE_NEW
 #define USE_NEW 0

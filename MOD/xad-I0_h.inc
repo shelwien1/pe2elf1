@@ -6,6 +6,8 @@ static const byte I0_s0[88+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,1
 
 static const int I0_Ib_Volume = 1* 89; // 89
 
+static const int I0_USE_NEW = 0;
+
 struct I0_T { 
 #undef USE_NEW
 #define USE_NEW 0
