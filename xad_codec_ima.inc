@@ -44,18 +44,31 @@
     enum { bps = BPS };
     const int nch = pm.chans, hdr = nch*4, ba = pm.block_align;
     build_ima_tables<BPS>();
-    /* The shared scratch slabs -- see the note above Codec in xad_codec.inc for
-       why they live at namespace scope and not here, and why not on the stack.
-       Cleared per channel and per call, exactly as assign(n, 0) did, and only
-       over the live prefix.  The clear is load-bearing rather than hygiene:
-       put_bits ORs into the nibble buffer, so a stale high nibble left in a
-       block's final partial byte by an earlier segment would reach the output. */
-    u8 (&cbuf)[MAX_CHANS][BA_MAX+8] = scr_nib;
-    int (&code)[MAX_CHANS][SCR_CODE_N] = scr_code;
+    /* Per-channel slices of the shared scratch -- see the note above Codec in
+       xad_codec.inc for why the slab lives at namespace scope, and why not on
+       the stack.  Sliced at the geometry's maximum -- cbytes for a full block -- rather than
+       per block, so the slice bases do not move when the last block is short.
+       Plain pointers, deliberately NOT the restrict typedefs: these slices all
+       derive from one slab, and xad_prelude.inc's doctrine is that restrict goes
+       only where two pointers come from allocations that cannot be the same. */
+    const size_t cbmax = (size_t(ba)-size_t(hdr))/size_t(hdr)*4;
+    const size_t ncmax = cbmax*8/size_t(bps);
+    u8* cbuf[MAX_CHANS];
+    int* code[MAX_CHANS];
     for( int k = 0; k<nch; k++ ) {
-      memset(cbuf[k], 0, size_t(ba)+8);
-      memset(code[k], 0, (size_t(ba)*8/size_t(bps)+8)*sizeof(int));
+      cbuf[k] = scr_nib+size_t(k)*(cbmax+8);
+      code[k] = scr_code+size_t(k)*(ncmax+8);
     }
+    /* No clear here, and the reason is measured rather than argued.  The vectors
+       these replaced were created zero-filled and the first version of this kept
+       that, on the theory that put_bits ORs into cbuf so a stale nibble could
+       leak.  It cannot: the encoder writes cbuf[0..cbytes) before reading any of
+       it, the decoder memsets exactly cbytes right before its put_bits run, and
+       the tail read is at ncode*bps + tailbits == cbytes*8, inside what was
+       written either way.  Filling the whole slab with 0xAA instead of 0 leaves
+       all 24 archives byte-identical, which is what says nothing reads it.
+       Worth up to 1 MB of memset per segment, and worth more as a correction:
+       the claim that the clear was load-bearing was wrong. */
 
     for( size_t pos = 0; pos<n; ) {
       size_t left = n-pos, len = left<size_t(ba) ? left : size_t(ba);

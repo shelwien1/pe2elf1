@@ -219,6 +219,19 @@ struct Xad : RC<MD> {
       return fail("unknown payload format"), false;
     if( pm.format==FMT_MS ? (pm.chans<1||pm.chans>2||pm.bps!=4||pm.block_align<7*pm.chans) : (pm.chans<1||pm.chans>MAX_CHANS||pm.bps<2||pm.bps>5||pm.block_align<pm.chans*4) )
       return fail("bad parameters"), false;
+    /* Upper bound on block_align, and it is load-bearing rather than tidy.  It
+       arrives as a varint from the archive while the payload walks size their
+       scratch at BA_MAX, so a header claiming block_align = 1000000 memsets a
+       megabyte into a 64 KB slice.  Verified reachable: an 88-byte hand-built
+       archive tripped _FORTIFY_SOURCE, and without fortify it is a silent BSS
+       overwrite.  BA_MAX is not a policy limit -- an encoder cannot produce a
+       larger one, because block_align comes out of the fmt chunk's u16 -- so
+       nothing legal is being rejected here.
+       This became reachable when the walks moved from vectors sized at `ba` to
+       fixed slabs; before that an absurd block_align was merely an absurd
+       allocation.  A bound the format always implied and never checked. */
+    if( pm.block_align>BA_MAX )
+      return fail("block size out of range"), false;
 
     int spb = block_samples(pm);
     if( pm.canonical ) {

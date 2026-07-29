@@ -68,6 +68,28 @@ if $X d _v.bad _v.out >/dev/null 2>&1; then printf "FAIL bad archive accepted\n"
 elif [ -f _v.out ]; then printf "FAIL bad archive left an output file\n"; fail=1
 else printf "OK   %-28s %-4s rejected, no output written\n" "malformed archive" ""; fi
 
+# A HOSTILE header, not merely a truncated one.  block_align arrives as a varint
+# while the payload walks size their scratch at BA_MAX, so a header claiming
+# 1000000 used to memset a megabyte into a 64 KB slice -- caught only by
+# _FORTIFY_SOURCE, and a silent BSS overwrite without it.  Regression test for
+# the bound in get_seg, and the place to add the next one of these.
+if python3 -c '
+import sys
+def v(x):
+    o=b""
+    while x>=0x80: o+=bytes([(x&0x7f)|0x80]); x>>=7
+    return o+bytes([x])
+h  = b"XAC1"+bytes([4,0])+v(1)+v(0)          # magic, ver, solid, nseg=1, lead=0
+h += bytes([0,0,1,4])+v(1000000)+v(4096)+v(0)+v(0)   # seg: block_align = 1000000
+h += v(0)+b"\x00"*4+b"\x00"*64               # no file table, crc, rc stream
+open("_v.bad2","wb").write(h)' 2>/dev/null; then
+  rm -f _v.out
+  if $X d _v.bad2 _v.out >/dev/null 2>&1; then printf "FAIL hostile block_align accepted\n"; fail=1
+  elif [ -f _v.out ]; then printf "FAIL hostile block_align left an output file\n"; fail=1
+  else printf "OK   %-28s %-4s rejected, no output written\n" "hostile block_align" ""; fi
+  rm -f _v.bad2
+fi
+
 rm -f _v.xac _v.out _v.bad
 [ $fail = 0 ] && echo "all checks passed" || echo "FAILURES"
 exit $fail

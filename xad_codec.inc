@@ -19,33 +19,43 @@
 
 /* ------------------------------------------------------- per-block scratch
  *
- * The two payload walks need a nibble buffer and (IMA) a code buffer, one per
- * channel, sized by the block geometry.  They were std::vectors reallocated once
- * per segment; they are now one slab at the largest geometry the FORMAT can
- * express -- block_align is the fmt chunk's u16, chans <= MAX_CHANS, and bps is
- * validated into [2,5], so BA_MAX*8/2 codes per channel bounds every legal file.
+ * The two payload walks need a nibble buffer and (IMA) a code buffer, sized by
+ * the block geometry.  They were std::vectors reallocated once per segment; they
+ * are now one slab at the largest geometry the FORMAT can express, since
+ * block_align is the fmt chunk's u16 and get_seg rejects anything above BA_MAX.
  *
  * ONE slab, at namespace scope, and that placement is the whole point.  Written
  * as function-local statics inside code_data_ima<BPS,XST> they were per
  * INSTANTIATION -- four code widths times two stereo modes times two directions
  * is sixteen copies, and BSS went from 497 KB to 143 MB before anything ran.
- * Hoisted out, it is 8.9 MB once.
  *
  * Sharing is safe because there is never more than one walk in flight: a run
  * codes one segment at a time, and the one place both directions exist at once
  * (-t) runs Menc.run() to completion before Mdec.run() starts.
  *
- * 8.9 MB of BSS is address space, not memory.  BSS is demand-zero, so a 2 KB
- * block stereo file touches a handful of pages and the rest never faults in --
- * measured, max RSS did not move.  And they must NOT be automatic arrays: the
- * walks run inside the coroutine, whose 64 KB stack is copied whole on every
- * yield() with no bound check, so 8.9 MB of locals would corrupt it silently.
- * The vectors these replaced put only their handles there, which is why the old
- * arrangement worked; static storage keeps that property. */
-enum { SCR_CODE_N = BA_MAX*8/2+8 }; // widest code count: bps = 2
-static u8 scr_nib[MAX_CHANS][BA_MAX+8];    // IMA: one block's nibbles per channel
-static int scr_code[MAX_CHANS][SCR_CODE_N];// IMA: the codes unpacked from them
-static u8 scr_msnib[BA_MAX*2+8];           // MS: one block's nibbles, interleaved
+ * BSS is demand-zero, so this is address space and not memory -- a 2 KB block
+ * stereo file touches a handful of pages and the rest never faults in, measured.
+ * That is not licence to be careless with the size: it was 9.04 MB until the
+ * channel-slice bound below, and it is 1.25 MB now.  And they must NOT be
+ * automatic arrays: the walks run inside the coroutine, whose 64 KB stack is
+ * copied whole on every yield() with no bound check.  The vectors these replaced
+ * put only their handles there, which is why the old arrangement worked; static
+ * storage keeps that property. */
+enum {
+  /* ONE block, not one per channel.  The IMA walk gives channel k a SLICE:
+     hdr = 4*nch, groups = body/hdr, cbytes = 4*groups, so nch*cbytes = hdr*groups
+     <= body <= ba, and likewise nch*ncode <= ba*8/bps with bps >= 2.  The
+     [MAX_CHANS][BA_MAX+8] shape this replaced paid MAX_CHANS times over for a
+     bound the channels were already sharing -- 9.04 MB against 1.25 MB.  The
+     MAX_CHANS*8 is per-slice slack: get_bits/put_bits touch up to a word past
+     the live prefix, which is what the old per-row +8 was for. */
+  SCR_NIB_N  = BA_MAX + MAX_CHANS*8,
+  SCR_CODE_N = BA_MAX*8/2 + MAX_CHANS*8,
+};
+static u8 scr_nib[SCR_NIB_N];    // IMA: one block's nibbles, sliced by channel
+static int scr_code[SCR_CODE_N]; // IMA: the codes unpacked from them, likewise
+static u8 scr_msnib[BA_MAX*2+8]; // MS: one block's nibbles, interleaved -- ba*2
+                                 // because each byte unpacks to two, no split
 
 template<int MD>
 struct Codec {

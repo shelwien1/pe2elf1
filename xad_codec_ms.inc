@@ -14,9 +14,11 @@
   void code_data_ms(u8P data, size_t n) {
     const int nch = pm.chans;
     const size_t hdr = size_t(7*nch), ba = size_t(pm.block_align);
-    // shared scratch; see the note above Codec in xad_codec.inc
+    /* Shared scratch; see the note above Codec in xad_codec.inc, and the note in
+       xad_codec_ima.inc for why there is no clear -- same poison test, same
+       answer.  The MS walk fills nib[0..ba*2) from the block before reading it
+       (encode) or writes every entry before packing it back (decode). */
     u8P nib = scr_msnib;
-    memset(nib, 0, ba*2+8);
 
     for( size_t pos = 0; pos<n; ) {
       size_t left = n-pos, len = left<ba ? left : ba;
