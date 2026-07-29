@@ -44,11 +44,17 @@
     enum { bps = BPS };
     const int nch = pm.chans, hdr = nch*4, ba = pm.block_align;
     build_ima_tables<BPS>();
-    vector<u8> cbuf[MAX_CHANS];
-    vector<int> code[MAX_CHANS];
+    /* The shared scratch slabs -- see the note above Codec in xad_codec.inc for
+       why they live at namespace scope and not here, and why not on the stack.
+       Cleared per channel and per call, exactly as assign(n, 0) did, and only
+       over the live prefix.  The clear is load-bearing rather than hygiene:
+       put_bits ORs into the nibble buffer, so a stale high nibble left in a
+       block's final partial byte by an earlier segment would reach the output. */
+    u8 (&cbuf)[MAX_CHANS][BA_MAX+8] = scr_nib;
+    int (&code)[MAX_CHANS][SCR_CODE_N] = scr_code;
     for( int k = 0; k<nch; k++ ) {
-      cbuf[k].assign(size_t(ba)+8, 0);
-      code[k].assign(size_t(ba)*8/size_t(bps)+8, 0);
+      memset(cbuf[k], 0, size_t(ba)+8);
+      memset(code[k], 0, (size_t(ba)*8/size_t(bps)+8)*sizeof(int));
     }
 
     for( size_t pos = 0; pos<n; ) {

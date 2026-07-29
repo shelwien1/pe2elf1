@@ -29,8 +29,9 @@ struct XadDrive : Carrier {
 
   // output: at most one of these is set
   const char* out_path = nullptr;
-  string out_dir;    // out_path plus a trailing separator, for the split sink
-  vector<u8>* out_mem = nullptr;
+  char out_dir[PATH_CAP] = {}; // out_path plus a trailing separator, for the split sink
+  char sp_path[PATH_CAP];      // out_dir + the current member name
+  Buf<u8>* out_mem = nullptr;
   int out_split = 0; // out_path names a directory when the file table is non-empty
   FILE* out_f = nullptr;
   size_t sp_i = 0;
@@ -55,7 +56,7 @@ struct XadDrive : Carrier {
           return 0;
         }
         if( in_n>1 ) {
-          this->in_names.push_back(safe_name(string(p)));
+          this->in_names.push_back(safe_name(p));
           this->in_sizes.push_back(0);
         }
       }
@@ -75,10 +76,16 @@ struct XadDrive : Carrier {
       if( !out_f ) {
         if( sp_i>=this->ar.names.size() )
           return; // the carrier already checked the table against the total
-        string path = out_dir+safe_name(this->ar.names[sp_i]);
-        out_f = fopen(path.c_str(), "wb");
+        /* Truncation is reported, not absorbed: a member silently written to a
+           shortened path is a wrong file, not a smaller one. */
+        if( !path_join(sp_path, sizeof(sp_path), out_dir, safe_name(this->ar.names.at(sp_i))) ) {
+          fprintf(stderr, "error: output path for member %zu is too long\n", sp_i);
+          this->rc_err = 1;
+          return;
+        }
+        out_f = fopen(sp_path, "wb");
         if( !out_f ) {
-          fprintf(stderr, "error: can't write '%s'\n", path.c_str());
+          fprintf(stderr, "error: can't write '%s'\n", sp_path);
           this->rc_err = 1;
           return;
         }
@@ -105,7 +112,7 @@ struct XadDrive : Carrier {
     if( !n )
       return;
     if( out_mem ) {
-      out_mem->insert(out_mem->end(), p, p+n);
+      out_mem->append(p, n);
       return;
     }
     if( out_split&&!this->ar.names.empty() ) {

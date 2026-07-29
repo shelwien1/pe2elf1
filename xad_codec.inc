@@ -16,6 +16,37 @@
 
    `rc` is a reference to the frontend, which IS the range coder (Xad<MD>
    derives from RC<MD>), so every rc.bit() call site reads as it always did. */
+
+/* ------------------------------------------------------- per-block scratch
+ *
+ * The two payload walks need a nibble buffer and (IMA) a code buffer, one per
+ * channel, sized by the block geometry.  They were std::vectors reallocated once
+ * per segment; they are now one slab at the largest geometry the FORMAT can
+ * express -- block_align is the fmt chunk's u16, chans <= MAX_CHANS, and bps is
+ * validated into [2,5], so BA_MAX*8/2 codes per channel bounds every legal file.
+ *
+ * ONE slab, at namespace scope, and that placement is the whole point.  Written
+ * as function-local statics inside code_data_ima<BPS,XST> they were per
+ * INSTANTIATION -- four code widths times two stereo modes times two directions
+ * is sixteen copies, and BSS went from 497 KB to 143 MB before anything ran.
+ * Hoisted out, it is 8.9 MB once.
+ *
+ * Sharing is safe because there is never more than one walk in flight: a run
+ * codes one segment at a time, and the one place both directions exist at once
+ * (-t) runs Menc.run() to completion before Mdec.run() starts.
+ *
+ * 8.9 MB of BSS is address space, not memory.  BSS is demand-zero, so a 2 KB
+ * block stereo file touches a handful of pages and the rest never faults in --
+ * measured, max RSS did not move.  And they must NOT be automatic arrays: the
+ * walks run inside the coroutine, whose 64 KB stack is copied whole on every
+ * yield() with no bound check, so 8.9 MB of locals would corrupt it silently.
+ * The vectors these replaced put only their handles there, which is why the old
+ * arrangement worked; static storage keeps that property. */
+enum { SCR_CODE_N = BA_MAX*8/2+8 }; // widest code count: bps = 2
+static u8 scr_nib[MAX_CHANS][BA_MAX+8];    // IMA: one block's nibbles per channel
+static int scr_code[MAX_CHANS][SCR_CODE_N];// IMA: the codes unpacked from them
+static u8 scr_msnib[BA_MAX*2+8];           // MS: one block's nibbles, interleaved
+
 template<int MD>
 struct Codec {
   enum { enc = (MD==0) };

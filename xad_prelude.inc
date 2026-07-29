@@ -35,6 +35,19 @@ enum {
   RC_TOP = 1<<24,   // range coder renormalisation threshold
   RC_PRIME = 5,     // bytes the decoder primes its window with
 
+  /* Container name limits.  NAME_CAP is a FORMAT number -- the header parser
+     rejects a longer member name, so it bounds what a decode can be asked to
+     hold, and the writer never produces one because every name it writes came
+     through safe_name() off argv.  PATH_CAP only has to hold out_dir + a name;
+     an overlong join is reported, never truncated. */
+  NAME_CAP = 4096,
+  PATH_CAP = NAME_CAP*2,
+
+  /* Largest block_align any legal file can have: the fmt chunk stores it in a
+     u16.  This is what sizes the per-block scratch slabs in the two payload
+     walks -- see xad_codec_ima.inc for why they are static and not locals. */
+  BA_MAX = 65535,
+
   /* Mixer geometry.  MIX_NIN is the weight-row stride, so it must be >= the
      number of add() calls per bit: the rows are strided by nin, and an extra
      input reads -- then upd() WRITES -- into the next context's row.  Silent,

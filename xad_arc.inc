@@ -13,12 +13,12 @@ struct Seg {
 
 struct Arc {
   int solid = SOLID_OFF;
-  vector<Seg> segs;
+  Buf<Seg> segs;
   size_t lead = 0; // bytes ahead of the first wav
   size_t total = 0;
   u32 crc = 0;
-  vector<string> names; // empty unless several inputs were given
-  vector<u64> sizes;
+  NameTab names; // empty unless several inputs were given
+  Buf<u64> sizes;
 };
 
 /* Find every wav in the stream.  A candidate is a RIFF/WAVE header that also
@@ -36,10 +36,10 @@ static bool same_type(const Params &a, const Params &b) {
   return a.format==b.format&&a.bps==b.bps;
 }
 
-static void scan_segments(const vector<u8> &buf, Arc &ar) {
+static void scan_segments(const Buf<u8> &buf, Arc &ar) {
   cu8P d = buf.data();
   size_t n = buf.size();
-  vector<size_t> cand;
+  Buf<size_t> cand;
   for( size_t i = 0; i+12<=n; ) {
     const void* hit = memchr(d+i, 'R', n-11-i);
     if( !hit )

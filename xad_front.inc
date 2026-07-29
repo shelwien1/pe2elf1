@@ -38,10 +38,19 @@ struct Xad : RC<MD> {
      because it verifies the crc before writing anything.  What no longer needs
      a buffer -- and is the point of the port -- is the CODED side, which now
      moves a window at a time through pin[1] (resp. pin[0]). */
-  vector<u8> src;
-  vector<string> in_names; // encode: one per input file, when there is more than one
-  vector<u64> in_sizes;
-  string name;             // the file whose name goes in a diagnostic
+  Buf<u8> src;
+  NameTab in_names; // encode: one per input file, when there is more than one
+  Buf<u64> in_sizes;
+  /* The file whose name goes in a diagnostic.  A borrowed pointer, never owned:
+     every assignment is an argv element, which outlives the whole run.  Starts
+     at "" rather than null so a diagnostic before it is set prints nothing
+     instead of stepping into printf's undefined behaviour. */
+  const char* name = "";
+  /* Scratch for one member name while the header is parsed.  A MEMBER, not a
+     local: parse_header runs inside the coroutine, whose stack is 64 KB and is
+     copied whole on every yield, and NAME_CAP is 4 KB of it.  Menc/Mdec are in
+     BSS, so this costs address space and no page until a split archive uses it. */
+  char nmbuf[NAME_CAP];
   int solid = SOLID_OFF;
   int rc_err = 0;
   int hdr_eof = 0;
@@ -85,7 +94,7 @@ struct Xad : RC<MD> {
     for(;; ) {
       coro3_pin &I = pin[0];
       if( I.ptr<I.end ) {
-        src.insert(src.end(), I.ptr, I.end);
+        src.append(I.ptr, size_t(I.end-I.ptr));
         I.ptr = I.end;
         continue;
       }
@@ -135,7 +144,7 @@ struct Xad : RC<MD> {
   }
 
   int fail(const char* what) {
-    fprintf(stderr, "error: '%s': %s\n", name.c_str(), what);
+    fprintf(stderr, "error: '%s': %s\n", name, what);
     rc_err = 1;
     return 0;
   }
@@ -234,14 +243,17 @@ struct Xad : RC<MD> {
       return;
     }
     ar.solid = solid;
-    ar.names = in_names;
-    ar.sizes = in_sizes;
+    /* Moved, not copied: the driver filled these while pumping and has no use
+       for them afterwards, and Buf is non-copyable so the intent has to be
+       spelled out rather than happening by accident. */
+    ar.names.steal(in_names);
+    ar.sizes.steal(in_sizes);
     scan_segments(src, ar);
     if( ar.segs.empty() ) {
       // say why, using the first input's own diagnostics
       Params pm;
       Wav w;
-      analyze(src.data(), src.size(), name.c_str(), pm, w, true);
+      analyze(src.data(), src.size(), name, pm, w, true);
       rc_err = 1;
       return;
     }
@@ -257,9 +269,11 @@ struct Xad : RC<MD> {
       put_seg(ar.segs[i].pm);
     hput_varint(u64(ar.names.size())); // 0 = one unnamed stream
     for( size_t i = 0; i<ar.names.size(); i++ ) {
-      hput_varint(u64(ar.names[i].size()));
-      for( size_t j = 0; j<ar.names[i].size(); j++ )
-        hput(u8(ar.names[i][j]));
+      u32 ln = ar.names.len_at(i);
+      const char* nm = ar.names.at(i);
+      hput_varint(u64(ln));
+      for( u32 j = 0; j<ln; j++ )
+        hput(u8(nm[j]));
       hput_varint(ar.sizes[i]);
     }
     u8 c4[4];
@@ -297,14 +311,14 @@ struct Xad : RC<MD> {
     for( int i = 0; i<4; i++ ) {
       int c = hget();
       if( c<0 ) {
-        fprintf(stderr, "error: '%s' is not an xadpcm file\n", name.c_str());
+        fprintf(stderr, "error: '%s' is not an xadpcm file\n", name);
         rc_err = 1;
         return;
       }
       m[i] = u8(c);
     }
     if( memcmp(m, MAGIC, 4) ) {
-      fprintf(stderr, "error: '%s' is not an xadpcm file\n", name.c_str());
+      fprintf(stderr, "error: '%s' is not an xadpcm file\n", name);
       rc_err = 1;
       return;
     }
@@ -318,26 +332,34 @@ struct Xad : RC<MD> {
     ar.lead = size_t(hget_varint());
     if( hdr_eof||nseg>(1u<<24) )
       return (void)fail("truncated or implausible header");
-    ar.segs.resize(size_t(nseg));
-    for( size_t i = 0; i<ar.segs.size(); i++ )
-      if( !get_seg(ar.segs[i].pm) )
+    /* One at a time rather than resize(nseg) then fill.  nseg is a varint out of
+       the header and the cap above only says 2^24, so the old shape asked for
+       5.4 GB (2^24 * sizeof(Seg)) before reading a single segment, from a header
+       forty bytes long -- and then failed on the first get_seg for want of input.
+       Growing as they parse costs one 1.5x realloc chain and bounds the request
+       by what the archive actually contains.  On a well-formed archive the two
+       are identical, including that a failure leaves rc_err set and every caller
+       returning before it looks at ar.segs. */
+    for( u64 i = 0; i<nseg; i++ ) {
+      Seg sg;
+      if( !get_seg(sg.pm) )
         return;
+      ar.segs.push_back(sg);
+    }
     u64 nfile = hget_varint();
     if( hdr_eof||nfile>(1u<<20) )
       return (void)fail("truncated header");
     for( u64 i = 0; i<nfile; i++ ) {
       u64 ln = hget_varint();
-      if( hdr_eof||ln>4096 )
+      if( hdr_eof||ln>NAME_CAP )
         return (void)fail("bad file table");
-      string s;
-      s.resize(size_t(ln));
       for( u64 j = 0; j<ln; j++ ) {
         int c = hget();
         if( c<0 )
           return (void)fail("bad file table");
-        s[size_t(j)] = char(c);
+        nmbuf[size_t(j)] = char(c);
       }
-      ar.names.push_back(s);
+      ar.names.push_back(nmbuf, size_t(ln));
       ar.sizes.push_back(hget_varint());
     }
     u8 c4[4];

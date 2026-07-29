@@ -243,3 +243,96 @@ allocation from a ~40-byte malicious header. `Buf` does not make that worse — 
 is there today — but the natural tightening is to bound `nseg` by
 `total/44` and `nfile` by `total`, both of which are known by then. Say the word
 and it becomes step 5a; otherwise this plan leaves the caps exactly as they are.
+
+---
+
+# Implemented
+
+All sixteen sites. `xadpcm.cpp` includes neither `<vector>` nor `<string>`.
+**All 24 md5s unchanged**, in both build modes and across 13 compiler/flag
+configurations (g++ and clang++, `-O2` through `-Ofast`, three ISA levels,
+plus `clang -Os`) — the archive format did not move by a bit, which was the
+acceptance criterion.
+
+## What each site became
+
+| site | became |
+|---|---|
+| V1 `cbuf`, V2 `code`, V3 `nib` | `scr_nib` / `scr_code` / `scr_msnib`, one shared slab at namespace scope in `xad_codec.inc` |
+| V4 `src`, V8 `cand`, V9 `coded`, V10 `back`, V5 `in_sizes`, V6 `segs`, `Arc::sizes` | `Buf<T>` |
+| V7 `Arc::names`, V5 `in_names` | `NameTab` — one blob plus (offset, length), not one allocation per name |
+| V11 argv | compacted in place into `argv` itself; no buffer, no cap to pick |
+| S1–S6 | `char[PATH_CAP]` with `path_join()`, which reports truncation instead of absorbing it; `safe_name()` now returns a pointer into its argument |
+
+`Buf<T>` is non-copyable, which caught the one place that genuinely moves
+(`in_names` → `ar.names`) and made it say `steal()`.
+
+## The mistake this made, and what caught it
+
+The plan said BSS is demand-zero and a maximal slab is nearly free. Both true,
+and it still went wrong: written as **function-local statics** the slabs were per
+*instantiation*, and `code_data_ima<BPS,XST>` inside `Codec<MD>` is four code
+widths × two stereo modes × two directions = **sixteen copies**. BSS went from
+497 KB to **143 MB**. Nothing failed — every md5 was already correct — so only
+`size(1)` on the binary showed it.
+
+Hoisted to namespace scope it is 9.08 MB once (497 KB → 9.58 MB), and max RSS
+did not move in either direction: 167.8 MB vs 169.9 MB on a 20 KB input, 557.5 MB
+vs 559.5 MB on `wavs2`, i.e. slightly *lower* after. That is the demand-zero
+claim actually measured rather than asserted.
+
+Sharing one slab is safe because no two walks are ever in flight: a run codes one
+segment at a time, and `-t` — the only place both directions exist — runs
+`Menc.run()` to completion before `Mdec.run()` starts.
+
+## The two gigabyte allocations, gone as a side effect
+
+Not by adding a cap, but by changing the shape:
+
+* `ar.segs.resize(nseg)` asked for `2^24 * 344` = **5.4 GB** from a forty-byte
+  header before reading a single segment, then failed on the first `get_seg` for
+  want of input. Segments are now pushed as they parse, so the request is bounded
+  by what the archive actually contains. Identical on a well-formed archive.
+* `vector<string>` names became one blob, so a claimed `2^20` members no longer
+  implies `2^20` allocations. The count is bounded by the bytes actually present.
+
+`src.assign(total, 0)` is **unchanged and still attacker-influenced** — `total` is
+the sum of the segment sizes from the header, and the decoder genuinely needs the
+whole image to verify the crc before writing anything. That one is inherent to the
+format, not to the container, so it stays exactly as it was.
+
+## The zero-fill was load-bearing
+
+Step 1 of §4 (arena/BSS storage, keep the `memset`) is what shipped. The clear is
+not hygiene: `put_bits` ORs into the nibble buffer, so a stale high nibble left in
+a block's final partial byte by an earlier segment would reach the output. Only
+the live prefix is cleared, which is what `assign(n, 0)` did too. Step 2 —
+narrowing or dropping it — was not attempted; it is worth one `memset` per
+segment and it is the one change here that could cost a byte.
+
+## Verification
+
+`md5s.sh` (24, both build modes), `verify.sh`, `ktest.sh`, `sqtest.sh`, the
+13-configuration matrix, a split multi-member decode, the `-t` self-test path, and
+three malformed archives (garbage, 40-byte truncation, 200-byte truncation).
+
+**Coroutine stack high-water: 1345 bytes encode, 1377 decode**, against 1345/1345
+before and `Coroutine::STKPAD` of 65560. The +32 is the decode-side `Seg` local
+that replaced `resize`. This was the plan's headline risk and it is a non-event —
+because the slabs went to static storage, exactly as §4 required.
+
+**UBSan is clean** over encode, decode, split output, `-t`, `wavs2`, and the three
+malformed archives.
+
+**ASan cannot be used on this program, and that is pre-existing.** It reports a
+`stack-buffer-underflow` inside `Coroutine::yield`'s `memcpy` at
+`Lib3/coro3b.inc:131` with a length of ~450 GB: the sanitizer relocates frames, so
+the coroutine's `stkptrH - stkptrL` extent arithmetic is meaningless under it.
+Confirmed by building the **pre-change** tree with ASan and getting the identical
+report. Same root cause as the `-Os` miscompile already recorded in `xadpcm.cpp`.
+
+**Speed: 21.77 s vs 21.47 s** (encode+decode of both files, alternating, min of 3,
+clang `-O3 -march=native`) — 1.4%, inside this box's ±2% band, and there is no
+structural reason for a change: the same bytes are zeroed, just in static storage
+instead of a fresh allocation. As predicted at the top of this plan, a flat
+benchmark is the expected outcome.

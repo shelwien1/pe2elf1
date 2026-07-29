@@ -192,8 +192,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <string>
-#include <vector>
+/* <string> and <vector> were here.  Both are gone: Buf<T> and NameTab in
+   xad_util.inc cover what they were being asked for (append, index, one-shot
+   fill), the per-block scratch is static storage sized by the format's own
+   u16 block_align, and paths are fixed char[] with a reported -- never silent --
+   truncation.  See PLAN-vectors.md. */
 #ifdef __linux__
 #include <sys/mman.h>   // the counter arena asks for huge pages
 #endif
@@ -225,12 +228,11 @@ int adpcm_block_size_to_sample_count(int block_size, int num_chans, int bps) {
   return (block_size-num_chans*4)/num_chans*8/bps+1;
 }
 
-/* Deliberately NOT `using namespace std`: the IDX generator emits Const-mode
+/* There is no `using namespace std` and now nothing to pull in from it either.
+   Keeping it out was always deliberate -- the IDX generator emits Const-mode
    tables typed `byte` and `word`, and a using-directive would make those names
-   ambiguous against std::byte rather than shadowing it.  common.inc declares
-   both at global scope, so they win over std's. */
-using std::string;
-using std::vector;
+   ambiguous against std::byte rather than shadowing it; common.inc declares both
+   at global scope, so they win over std's. */
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
@@ -301,7 +303,7 @@ typedef int64_t i64;
 // ------------------------------------------------------------------- top level
 
 static int compress(char** inp, int nin, const char* outp, bool test, int solid) {
-  vector<u8> coded; // -t only: the archive, kept back until it has been verified
+  Buf<u8> coded; // -t only: the archive, kept back until it has been verified
   Menc.in_paths = inp;
   Menc.in_n = nin;
   Menc.solid = solid;
@@ -317,7 +319,7 @@ static int compress(char** inp, int nin, const char* outp, bool test, int solid)
   if( test ) {
     Mdec.in_mem = coded.data();
     Mdec.in_memn = coded.size();
-    vector<u8> back;
+    Buf<u8> back;
     Mdec.out_mem = &back;
     Mdec.name = outp;
     Mdec.run();
@@ -353,14 +355,20 @@ static int decompress(char* inp, const char* outp) {
      the driver splits only when the archive actually carries a file table, and
      it learns that while the header is parsed -- which is before the decoder
      can have produced an output byte. */
-  string dir(outp);
-  if( !dir.empty()&&dir[dir.size()-1]!='/'&&dir[dir.size()-1]!='\\' )
-    dir += '/';
+  /* Built straight into the driver's own buffer.  A path that does not fit is
+     refused here rather than truncated -- the split sink would otherwise write
+     every member into the wrong directory. */
+  size_t dl = strlen(outp);
+  if( dl+2>sizeof(Mdec.out_dir) )
+    return fprintf(stderr, "xadpcm: output path '%s' is too long\n", outp), 1;
+  memcpy(Mdec.out_dir, outp, dl);
+  if( dl&&Mdec.out_dir[dl-1]!='/'&&Mdec.out_dir[dl-1]!='\\' )
+    Mdec.out_dir[dl++] = '/';
+  Mdec.out_dir[dl] = 0;
   Mdec.in_paths = &inp;
   Mdec.in_n = 1;
   Mdec.name = inp;
   Mdec.out_path = outp;
-  Mdec.out_dir = dir;
   Mdec.out_split = 1;
   Mdec.run();
   if( Mdec.rc_err )
@@ -381,7 +389,12 @@ int main(int argc, char** argv) {
   init_tables();
   init_ms_map();
   bool test = false;
-  vector<char*> a;
+  /* argv minus the mode word and the switches, compacted in place.  argv and
+     the array itself are modifiable by the standard, and the write index can
+     only trail the read index -- a[an] with an < i is a slot already consumed --
+     so no buffer is needed at all, and no bound to pick for one. */
+  char** a = argv;
+  int an = 0;
   int mode = 0, solid = SOLID_OFF;
   for( int i = 1; i<argc; i++ ) {
     char* s = argv[i];
@@ -403,11 +416,11 @@ int main(int argc, char** argv) {
     } else if( !mode&&(!strcmp(s, "c")||!strcmp(s, "d")) )
       mode = s[0];
     else
-      a.push_back(s);
+      a[an++] = s;
   }
-  if( mode=='c'&&a.size()>=2 )
-    return compress(&a[0], int(a.size())-1, a[a.size()-1], test, solid);
-  if( mode=='d'&&a.size()==2 )
+  if( mode=='c'&&an>=2 )
+    return compress(a, an-1, a[an-1], test, solid);
+  if( mode=='d'&&an==2 )
     return decompress(a[0], a[1]);
   fprintf(stderr, "\n xadpcm - lossless compressor for IMA-ADPCM and MS-ADPCM wav files\n\n"
           " usage: xadpcm c input.wav output              compress\n"
