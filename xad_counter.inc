@@ -88,7 +88,8 @@ struct Arena {
   size_t cap = 0, used = 0;
   int dry = 0;    // measuring pass: hand out nothing, just accumulate
   int huge = 1;   // ask for huge pages (dense users only)
-  int mapped = 0; // base came from mmap rather than the aligned_alloc fallback
+  enum { A_NONE = 0, A_MMAP, A_ALIGNED };
+  int akind = A_NONE; // which allocator produced `base`; see release()
 
   INLINE void* take(size_t n) {
     used = (used+63)&~size_t(63);
@@ -101,19 +102,34 @@ struct Arena {
   /* Hand the block back so the next reserve() sizes a fresh one.  Only the
      counter arena ever does this, and only when a wider segment arrives -- see
      Codec::grow_geom. */
-  /* Which allocator handed out `base`.  reserve() falls back to aligned_alloc
-     when mmap fails, and releasing with the wrong one is not a leak -- munmap on
-     a malloc'd pointer fails with EINVAL and the block stays live forever. */
+  /* Hand the block back, using the allocator that produced it.
+     `akind` exists because the first version of this had reserve() and
+     release() each pick an allocator from their OWN #ifdef ladder, and the two
+     ladders disagreed on Windows: reserve() takes _aligned_malloc, release()
+     took plain free().  On the MSVC CRT _aligned_malloc stores its bookkeeping
+     BEFORE the pointer it returns, so free() on that pointer is not a leak, it
+     is heap corruption -- it crashed inside free() on the first segment of any
+     input, under both gcc and clang, because grow_geom() fires on segment one
+     (init starts at amaxnib = 1 and any real segment needs more).  Linux never
+     saw it: there aligned_alloc/free is a correct pair, and the mmap path is
+     what actually runs.
+     Recording which allocator ran, rather than re-deriving it, is the point.
+     Two ladders can drift; one recorded fact cannot. */
   void release() {
+    if( base ) {
+      if( akind==A_MMAP ) {
 #ifdef __linux__
-    if( base&&mapped )
-      munmap(base, cap);
-    else if( base )
-      free(base);
-#else
-    free(base);
+        munmap(base, cap);
 #endif
-    mapped = 0;
+      } else {
+#if defined(_WIN32)
+        _aligned_free(base);
+#else
+        free(base);
+#endif
+      }
+    }
+    akind = A_NONE;
     base = nullptr;
     cap = used = 0;
   }
@@ -148,7 +164,7 @@ struct Arena {
         madvise(p, sz, MADV_HUGEPAGE);
       base = (u8*)p;   // mmap gives zeroed pages, faulted in on first touch
       cap = sz;
-      mapped = 1;
+      akind = A_MMAP;
       return;
     }
 #endif
@@ -168,6 +184,7 @@ struct Arena {
     memset(q, 0, sz2);
     base = (u8*)q;
     cap = sz2;
+    akind = A_ALIGNED;
   }
 };
 

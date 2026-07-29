@@ -208,6 +208,9 @@
 #ifdef __linux__
 #include <sys/mman.h>   // the counter arena asks for huge pages
 #endif
+#ifdef _WIN32
+#include <malloc.h>     // _aligned_malloc / _aligned_free, the arena's allocator there
+#endif
 
 /* Lib3.  common.inc supplies byte/word/uint/qword, INLINE/NOINLINE/ALIGN,
    if_e0/if_e1 and __assume, all of which coro3b.inc needs; coro3b.inc defines
