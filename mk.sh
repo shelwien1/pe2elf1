@@ -45,5 +45,10 @@ for f in IDX/*.idx; do
   fi
 done
 
-$CXX $OPT xadpcm.cpp -o xadpcm -lm
+# No -lm: the squash/stretch/code-length tables were the only libm callers and
+# they are integer arithmetic now, so the coding path has no floating point at
+# all.  That also makes -ffast-math/-Ofast harmless rather than dangerous --
+# still not adopted, because they were measured at 0.5% (gcc) / -1% (clang),
+# inside the noise band.  See xad_logistic.inc and STATUS-speed.md.
+$CXX $OPT xadpcm.cpp -o xadpcm
 if [ "$1" = "release" ]; then echo "built xadpcm (Const/release)"; else echo "built xadpcm (Debug/optimizable)"; fi

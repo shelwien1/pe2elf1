@@ -12,8 +12,15 @@ BASE=${1:-}
 X=./xadpcm
 fail=0
 
-# recorded rev-016 sizes: file, mode, bytes
-sizes="wavs2:::1248335 wavs2:-s::1248865 wavs2:-ss::1248865
+# Recorded rev-016 sizes: file, mode, bytes.  Two entries are one byte ABOVE
+# rev 016 -- wavs2 -s and -ss, 1248865 there.  That is the whole cost of moving
+# squash/stretch off exp()/log() onto integer arithmetic: over the 24 archives
+# md5s.sh builds, 21 are the same size, two grew a byte and one (gen-concat -ss)
+# shrank one, +1 byte net on 8.73 MB.  The tables disagree with the float pair in
+# 71 of 8192 entries, every one by exactly 1, so this is the two tables being
+# equally good rather than one being better -- and what it buys is that the
+# archive format no longer depends on which libm the build linked.
+sizes="wavs2:::1248335 wavs2:-s::1248866 wavs2:-ss::1248866
        Player_Death_Music_ima.wav:::355414
        Player_Death_Music_ima.wav:-s::355414
        Player_Death_Music_ima.wav:-ss::355414"

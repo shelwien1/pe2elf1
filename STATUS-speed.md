@@ -351,7 +351,9 @@ is not re-tried blind.
 **`-ffast-math`: not used**, as the plan insists. The only floating point is
 `init_tables`, and that is exactly where it is dangerous — `SQT`/`STT` come from
 `exp`/`log` and a one-ULP shift at a rounding boundary changes a table entry and
-therefore the output.
+therefore the output. *(Superseded: the tables are integer now and there is no
+floating point on the coding path at all. See "Integer squash/stretch tables" at
+the end. Still not used — it just is not dangerous any more.)*
 
 **The md5 identity test is now cross-compiler**, which is stronger than the
 plan's `-O0/-O2/-Ofast` version: g++ at `-O2`/`-O3`/`-O3 -march=native`/PGO and
@@ -644,7 +646,7 @@ Checked item by item against the source, not against memory.
 | §1.16 `-O3` | **done** (inside noise vs `-O2`, adopted anyway) | `mk.sh` |
 | §1.16 `-march=native` | **documented knob**, ~5% | `mk.sh` `ARCH` |
 | §1.16 PGO 10–20% | **rejected, measured** — small regression on top of `-O3` | `mk.sh` comment |
-| §1.16 no `-ffast-math` | **respected** | — |
+| §1.16 no `-ffast-math` | **respected** — and later made moot: the tables are integer, so there is no float to perturb | `xad_logistic.inc` |
 | §1.16 verify `INLINE` is applied | **checked** — the plan's `#ifdef 13` does not exist here; `nm` shows no out-of-line `mbit` | — |
 | §2.1 shrink `Pred` | **done**, 82 KB → 29 KB | `Hist::alloc`, `Pred::alloc` |
 | §2.2 interleave the two cascades | **tried, reverted**, numbers in-source (neutral clang, −1.8% gcc) | `xad_codec_ima.inc` note |
@@ -771,3 +773,85 @@ that is a property of this libm, not of the code, and the plan's own estimate of
 the margin is only two or three orders of magnitude. **Not adopted:** no
 measurable gain, and a failure mode that would be silent and would only show up
 as archives an unaffected build cannot decode.
+
+*Half of that is superseded. The tables are integer arithmetic now, so the
+failure mode is gone and `-Ofast` is byte-identical by construction rather than
+by luck of the libm — see the last section. The other half stands unchanged:
+`-Ofast` still buys nothing, so it is still not adopted.*
+
+# Integer squash/stretch tables
+
+*Later than the rest of this log, and not a speed change — `init_tables()` runs
+once. It closes the `-ffast-math` question two sections up.*
+
+`SQT`/`STT`/`CLT` were built from `exp`/`log`/`log2`. They are now built from
+integer arithmetic, ported from `d5c_logistic.inc`: a `LOG2[]` table of
+65536·log2(i) by repeated squaring, one multiply by `KST = ST_SCALE·ln2·2^16`
+for stretch, and a binary search with one linear interpolation for its inverse.
+`ln 2` survives as a single Q48 literal, `LN2_Q48 = 195103586505167`, which
+reproduces the correctly-rounded `KST` for **every** `ST_SCALE` in the legal
+[16, 2048] — checked against a 60-digit ln2 across the whole range, not sampled.
+
+**What it costs.** Over the 24 archives `md5s.sh` builds: 21 identical in size,
+`wavs2 -s` and `-ss` up one byte, `gen-concat -ss` down one. **+1 byte net on
+8.73 MB.** Both files named in the original acceptance criterion are unchanged —
+`wavs2` 1248335, `Player_Death_Music_ima.wav` 355414. Every md5 changes, which
+is the point: this is the first deliberate output change in the whole effort.
+`verify.sh`'s recorded sizes were updated for the two, with the reason in-file.
+
+**What it buys.** The archive format no longer depends on which libm the build
+linked. Nothing on the coding path is floating point any more — `-lm` is gone
+from `mk.sh` and `<cmath>` from `xadpcm.cpp`; the only `double`s left are in
+`xad_drive.inc`, formatting the report. **This retires the `-ffast-math` risk
+recorded above.** Measured, all 15 configurations byte-identical including
+`g++ -Ofast`, `clang++ -Ofast` and explicit `-ffast-math`: the tables have no
+float left to perturb. `-Ofast` is still **not adopted** — the 0.5%/−1%
+measurement stands, it was never worth anything, it just is not dangerous now.
+
+**How close the old hazard actually was.** The tightest entry is `STT[2050]`,
+where 256·ln(2050/2046) lands **1.6e-7** (3.2e-7 relative) from a rounding
+boundary; `SQT`'s tightest is 4.3e-8 relative. Against a correctly-rounded libm
+at 1 ulp that is nine orders of margin, and the float tables do in fact survive
+`-Ofast` on this glibc — measured, not assumed. Against an *approximated*
+`exp`/`log` at ~1e-7 relative it is two or three orders. So the hazard was
+portability, not this toolchain. Worth removing anyway; not worth having claimed
+otherwise, and the source comment says so.
+
+**`sqtest.cpp` + `./sqtest.sh`** — new, and the reason the port is trustworthy
+rather than merely reproducible. It includes the real `xad_logistic.inc` (no
+copy, so it cannot drift) and checks the tables against long-double references
+at eight `ST_SCALE` values including both ends of the clamp and two
+non-powers-of-two, because `opt.pl` is free to move the parameter:
+
+| | at every ST_SCALE tested |
+|---|---|
+| entries within 1 of correctly-rounded | **all of them**, `STT` and `SQT` |
+| mean rounding error, unsaturated domain | **0.23–0.25** (0.25 is the ideal) |
+| `STT[SQT[d]] == d` for reachable d | **100%** |
+| monotonicity violations | **0** |
+| `CLT` off by more than 1 | **0** |
+
+The last two rows are the ones that matter to the model: a dip in either table
+would make the mixer non-monotone in its own input, and the inverse property is
+what the integer build buys — `SQT` is constructed as the inverse of the `STT`
+the mixer actually sees, where the float pair were two independently rounded
+transcendentals that agreed only approximately.
+
+Writing it paid immediately: the first version asserted the inverse property
+unconditionally and **failed at ST_SCALE 512**. Not a table bug — at 512 the
+real stretch reaches 4258 while `STT` clamps at 2047, so 74 different p share
+d = 2047, `STT` stops being injective, and no inverse can hold there. The
+assertion now excludes saturated entries and says why in-file.
+
+**Two things measured and rejected.** A Q16 crossing search instead of d5c's Q8
+— finer, and *worse*: +2 bytes total, and it breaks `wavs2`'s exact match with
+the baseline. And matching the float tables entry-for-entry, which is reachable
+but would need a higher-precision `LOG2` for `STT` *and* a direct integer
+logistic for `SQT` (inverting a quantized stretch is a different function from
+rounding the exact squash, at any precision). Neither is worth one byte.
+
+**Guard.** `init_tables()` FNV-1a's `SQT`+`STT` and aborts if it does not match
+`XAD_SQSTT_HASH` (`0x7BCBA716`) — only at the shipped `ST_SCALE`, since `opt.pl`
+sweeps it and a sweep must be free to build different tables. `XAD_SQSTT=1` in
+the environment prints the checksum; `-DXAD_SQSTT_HASH=0` disables the guard,
+which is what you want while deliberately changing the tables.

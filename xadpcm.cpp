@@ -185,7 +185,9 @@
 // usage: xadpcm c input.wav output
 //        xadpcm d output restored.wav
 
-#include <cmath>
+// <cmath> was here for init_tables().  The logistic tables are integer now and
+// nothing else on the coding path is floating point, so the codec no longer
+// depends on libm; the doubles left in xad_drive.inc are report formatting.
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>

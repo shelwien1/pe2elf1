@@ -36,6 +36,24 @@ static void fill_rates(RateSet &r, const int* cw, int nmax, int init) {
   r.init = u16(pclamp(init, 1, CTR_MAX));
 }
 
+/* ln 2 in Q48, i.e. round(ln2 * 2^48).  The one irrational the tables need, and
+   the only place a transcendental enters the format -- as a literal, evaluated
+   once by a human, not by whatever libm the build happens to link.  Q48 is not
+   arbitrary: the derivation below multiplies it by ST_SCALE (<= 2048 = 2^11)
+   and the product must stay inside i64, which caps the format at Q52; Q48
+   leaves margin and still rounds KST correctly for every ST_SCALE in [16,2048]
+   -- checked against a 60-digit ln2 over the whole range, not sampled. */
+static const i64 LN2_Q48 = 195103586505167LL;
+
+/* FNV-1a over SQT and STT at the shipped ST_SCALE.  See the guard at the foot
+   of init_tables() for what it is for and why it only fires at ST_SCALE 256.
+   -DXAD_SQSTT_HASH=0 disables it, which is what you want while deliberately
+   changing the tables -- otherwise the first build of a change aborts before it
+   can be measured. */
+#ifndef XAD_SQSTT_HASH
+#define XAD_SQSTT_HASH 0x7BCBA716u
+#endif
+
 static void init_tables() {
   const int ccw[CTR_NRATE] = {G0_CW0, G0_CW1, G0_CW2, G0_CW3, G0_CW4, G0_CW5, G0_CW6, G0_CW7, G0_CW8, G0_CW9, G0_CW10, G0_CW11, G0_CW12, G0_CW13, G0_CW14, G0_CW15};
   const int hcw[CTR_NRATE] = {G0_HW0, G0_HW1, G0_HW2, G0_HW3, G0_HW4, G0_HW5, G0_HW6, G0_HW7, G0_HW8, G0_HW9, G0_HW10, G0_HW11, G0_HW12, G0_HW13, G0_HW14, G0_HW15};
@@ -45,18 +63,97 @@ static void init_tables() {
   fill_rates(RS_LIT, lcw, G0_LW_NMAX, G0_LP_INIT);
   const int mcw[CTR_NRATE] = {G0_MW0, G0_MW1, G0_MW2, G0_MW3, G0_MW4, G0_MW5, G0_MW6, G0_MW7, G0_MW8, G0_MW9, G0_MW10, G0_MW11, G0_MW12, G0_MW13, G0_MW14, G0_MW15};
   fill_rates(RS_MATCH, mcw, G0_MW_NMAX, G0_MP_INIT);
-  for( int d = -P_MID; d<P_MID; d++ ) {
-    int p = int(double(P_ONE)/(1.0+exp(-double(d)/double(ST_SCALE)))+0.5);
-    SQT[d+P_MID] = p<P_MIN ? P_MIN : p>P_MAX ? P_MAX : p;
-  }
-  for( int p = 0; p<P_ONE; p++ ) {
-    double q = p<P_MIN ? P_MIN : p>P_MAX ? P_MAX : p;
-    int d = int(floor(double(ST_SCALE)*log(q/(double(P_ONE)-q))+0.5));
-    STT[p] = short(d<ST_MIN ? ST_MIN : d>ST_MAX ? ST_MAX : d);
+
+  /* SQT and STT feed every mixed bit, so they must be bit-identical on every
+     build that has to interoperate.  They used to be built with exp()/log(),
+     which made that a property of the C LIBRARY rather than of this source: a
+     libm that rounds one entry differently produces archives the other side
+     cannot decode, and nothing in the build would say so.
+     How close that was: the tightest entry is STT[2050], where 256*ln(2050/2046)
+     lands 1.6e-7 (3.2e-7 relative) from a rounding boundary; SQT's tightest is
+     4.3e-8 relative.  Against a correctly-rounded libm at 1 ulp that is nine
+     orders of margin and the hazard is theoretical -- glibc here builds the same
+     tables under -O3, -Ofast and -ffast-math, measured, all three.  Against an
+     APPROXIMATED exp/log, the kind a vendor fast-math library ships at ~1e-7
+     relative, it is two or three orders and the hazard is real.  Not a property
+     worth resting an archive format on either way.
+     They are now pure integer arithmetic, which retires the question: this file
+     no longer contains a floating-point operation, and neither does anything
+     else on the coding path, so -ffast-math has nothing left to perturb.  That
+     does not make -Ofast worth adopting -- it was measured at 0.5% on gcc and
+     -1% on clang, inside the noise, and mk.sh still ships -O3 -- it just stops
+     it being a correctness question.  Speed was never the point here either;
+     init_tables() runs once per process.  LOG2[] is 65536*log2(i) built by
+     repeated squaring: square, renormalize below 2^32, count the shifts.  The
+     +31 corrects the truncation bias that renormalization accumulates.
+     stretch(p) = S*ln(p/(N-p)) = S*ln2 * (log2(p) - log2(N-p)), so one LUT
+     difference and one multiply give it; KST is S*ln2/2^16 in Q32, and the >>32
+     with a +2^31 bias reproduces floor(x+0.5) exactly, INCLUDING for negative x
+     -- which round-away-from-zero does NOT.  (>> on a negative i64 is arithmetic
+     in C++20, which this builds as.)
+     squash is the inverse, found by binary search on a Q8 stretch and one linear
+     interpolation between the bracketing pair, so it rounds the real crossing
+     rather than picking the nearest tabulated stretch.  That makes SQT the exact
+     inverse of the STT the mixer actually sees, which the float pair -- two
+     independently rounded transcendentals -- was only approximately.
+     Against the old float tables at the shipped ST_SCALE=256: STT differs in 6
+     of 4096 entries and SQT in 65, every one of them by exactly 1, and both stay
+     monotone.  Over the whole legal ST_SCALE range [16,2048] the largest
+     disagreement anywhere in either table is still 1, and monotonicity holds. */
+  {
+    /* 65536*log2(i).  Indexed by p and by P_ONE-p with p in [P_MIN,P_MAX], so
+       [1,P_ONE-1] is the whole live range and P_ONE entries are enough.  static
+       rather than automatic: 16 KB is a quarter of a coroutine stack, and while
+       init_tables() runs on the main stack today, nothing here says it must. */
+    static u32 LOG2[P_ONE];
+    for( u32 i = 0; i<P_ONE; i++ ) {
+      u64 w = i; u32 k = 0;
+      for( int j = 0; j<16; j++ ) {
+        w = w*w; k = k+k;
+        while( w >= (1ULL<<32) ) { w = (w+1)>>1; k++; }
+      }
+      LOG2[i] = k + (i>1 ? 31u : 0u);
+    }
+    // S*ln2*2^16 in Q32.  Q48 * 2^11 stays well inside i64; see LN2_Q48.
+    const i64 KST = (i64(ST_SCALE)*LN2_Q48 + (1LL<<31))>>32;
+    struct S {
+      const u32* L; i64 K;
+      i64 q8(int p) const {                     // stretch in 1/256 units
+        return (((i64)L[p] - (i64)L[P_ONE-p])*K + (1LL<<23))>>24;
+      }
+      int q0(int p) const {                     // stretch, floor(x+0.5)
+        return int((((i64)L[p] - (i64)L[P_ONE-p])*K + (1LL<<31))>>32);
+      }
+    } st = { LOG2, KST };
+
+    for( int p = 0; p<P_ONE; p++ ) {
+      int pi = pclamp(p, P_MIN, P_MAX);
+      int d = st.q0(pi);
+      STT[p] = short(pclamp(d, ST_MIN, ST_MAX));
 #if XAD_STATS
-    CLT[p][1] = u16(-double(ST_SCALE)*log2(q/double(P_ONE))+0.5);
-    CLT[p][0] = u16(-double(ST_SCALE)*log2(1.0-q/double(P_ONE))+0.5);
+      /* code length in 1/ST_SCALE bit: S*(P_BITS - log2 p).  Stats only, never
+         coded, so it does not have to agree with the float version -- but it is
+         the same arithmetic, so it does, to within the same 1 unit. */
+      i64 c1 = ((i64)ST_SCALE*P_BITS*65536 - (i64)LOG2[pi]*ST_SCALE + 32768)>>16;
+      i64 c0 = ((i64)ST_SCALE*P_BITS*65536 - (i64)LOG2[P_ONE-pi]*ST_SCALE + 32768)>>16;
+      CLT[p][1] = u16(c1<0 ? 0 : c1);
+      CLT[p][0] = u16(c0<0 ? 0 : c0);
 #endif
+    }
+    for( int d = -P_MID; d<P_MID; d++ ) {
+      i64 t = (i64)d<<8;
+      int lo = P_MIN, hi = P_MAX;
+      while( lo<hi ) { int m = (lo+hi)>>1; if( st.q8(m)<t ) lo = m+1; else hi = m; }
+      int best = lo;
+      if( lo>P_MIN ) {
+        i64 s1 = st.q8(lo), s0 = st.q8(lo-1);
+        if( s1>t && s1!=s0 ) {
+          i64 frac = ((t-s0)*256 + (s1-s0)/2)/(s1-s0);
+          best = (frac>=128) ? lo : lo-1;
+        }
+      }
+      SQT[d+P_MID] = pclamp(best, P_MIN, P_MAX);
+    }
   }
 
   /* Second pass on purpose.  STC[0] reads STT[P_MIN], and P_MIN > 0, so folding
@@ -64,6 +161,26 @@ static void init_tables() {
      -- which is exactly the bug this line replaced. */
   for( int p = 0; p<P_ONE; p++ )
     STC[p] = STT[p<P_MIN ? P_MIN : p];
+
+  /* The tables are the format.  Now that they are integer they are reproducible,
+     so a one-line checksum can say so out loud: a build whose SQT/STT differ
+     from the shipped pair cannot decode a shipped archive, and this catches that
+     at startup instead of as garbage audio.  Only asserted at the shipped
+     ST_SCALE -- opt.pl sweeps that parameter, and a sweep must be free to
+     produce different tables, which is the point of sweeping it. */
+  { u32 h = 2166136261u;                        // FNV-1a over the two tables
+    for( int i = 0; i<P_ONE; i++ ) {
+      h = (h ^ u32(SQT[i]))*16777619u;
+      h = (h ^ u32(u16(STT[i])))*16777619u;
+    }
+    if( XAD_SQSTT_HASH && ST_SCALE==256 && h!=XAD_SQSTT_HASH ) {
+      fprintf(stderr, "xadpcm: squash/stretch table checksum %08X, expected %08X -- "
+                      "the tables are pure integer arithmetic, so this means a corrupted "
+                      "or mismatched build\n", h, unsigned(XAD_SQSTT_HASH));
+      abort();
+    }
+    if( getenv("XAD_SQSTT") ) fprintf(stderr, "xadpcm: squash/stretch checksum %08X (ST_SCALE=%d)\n", h, ST_SCALE);
+  }
 }
 
 static INLINE int squash(int d) {
