@@ -17,11 +17,18 @@ Const 0
 
 # FREEZING GROUPS.  opt.pl's cost is proportional to the total pattern bits it
 # can see, and this file is now ~1050 of them.  A '!' at the start of a line
-# toggles Debug for that line, so a frozen line emits mdesc instead of pdesc and
-# opt.pl never finds it -- the value still compiles in unchanged.  Freeze what
-# has little leverage on the corpus at hand: the block-header (HW*) and literal
-# (LW*) schedules together govern under 1% of a typical output, so tuning the
-# code schedule and the predictor first is much better spent time.
+# toggles Debug for that line, so a frozen line emits mdesc instead of pdesc:
+# the same object, with a descriptor string that does not carry the "!MAP!"
+# marker opt.pl scans for, so the value compiles in unchanged and the knob is
+# simply not in the search space.  Freeze what has little leverage on the corpus
+# at hand: the block-header (HW*) and literal (LW*) schedules together govern
+# under 1% of a typical output, so tuning the code schedule and the predictor
+# first is much better spent time.
+#
+# This did not work until recently.  mdesc/mmask/mmask2 were never defined in
+# sh_mapping.inc -- only the p* forms were -- so a '!' line emitted a call to an
+# undeclared macro and the build failed, which is why no line here has ever
+# carried one.  They are defined now; see IDX-FORMAT.md section 10.
 
 #---------------------------------------------------------------- counters
 

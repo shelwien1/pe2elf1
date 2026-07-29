@@ -22,7 +22,7 @@ so:
 | flag | question it answers | `0` | `1` |
 |---|---|---|---|
 | `Const` | is the value a literal? | a `mapping` object plus `static const int N = N_.value * mult` — a **runtime** value | `static const int N = (pattern+base) * mult` — a **constant expression** |
-| `Debug` | can `opt.pl` see this knob? | `mdesc(...)` — frozen, still runtime | `pdesc(...)` — the pattern string is embedded in the binary and the optimizer flips its bits |
+| `Debug` | can `opt.pl` see this knob? | `mdesc(...)` / `mmask(...)` / `mmask2(...)` — the same object, but its descriptor string has no `!MAP!` marker, so the optimizer's scan never finds it | `pdesc(...)` / `pmask(...)` / `pmask2(...)` — the pattern string is embedded in the binary and the optimizer flips its bits |
 
 `Debug` only means anything when `Const 0`: once the value is folded there is no
 object to patch and nothing to find.
@@ -320,17 +320,45 @@ the size is a Volume.
 
 `opt.pl`'s cost is proportional to the total pattern bits it can see, and a
 mature `.idx` runs to a thousand of them. A `!` at the start of a line toggles
-`Debug` for that line, so it emits `mdesc` instead of `pdesc`: the value compiles
-in unchanged and the optimizer never finds it.
+`Debug` for that line:
+
+```perl
+$debug = s/^\!//;  $debug ^= $gdebug;     # idx2inc.pl
+```
+
+so with `Debug 1` in force a `!` line emits the `m`-prefixed macro instead of the
+`p`-prefixed one — `mdesc` for `Number`/`Rate`/`Rate1` and for a threshold
+mapping, `mmask` for `&`, `mmask2` for `b&`. The object built is identical; only
+the descriptor string differs, and only in that it does not begin with `!MAP!`.
+`opt.pl` scans the executable for that marker, so a frozen knob is simply not in
+the search space. The value compiles in exactly as it was.
 
 ```
 !Number HW0, 1, 0!1111111111111111     # frozen: block-header rate schedule
 ```
 
-Freeze what has little leverage on the corpus in front of you. `xadpcm` freezes
-the block-header and literal rate schedules, which together govern under 1% of a
-typical output, so the search spends its time on the code schedule and the
-predictor instead.
+Verified end to end: freezing `MLR` takes the marker count from 134 to 133,
+`!MAP!G0_MLR_` disappears from the binary, and the corpus codes byte-for-byte
+identically — which is the point, since the value has not moved.
+
+> **The three `m*` macros were missing.** `sh_mapping.inc` defined only `pdesc`,
+> `pmask` and `pmask2` — in this tree, in `dxt5comp`'s, and in the oldest copy of
+> the file available. A `!` line therefore emitted a call to an undeclared macro
+> and the build failed on the next line, which is why no `.idx` in either project
+> had ever carried one: the feature was described in the `.idx` comments and had
+> never been exercised. The three definitions are now in `sh_mapping.inc`.
+>
+> Their one subtlety: every constructor does `S += strlen(S) + 1` to step over
+> the descriptor and reach the pattern, so a frozen macro still has to supply
+> **two** NUL-separated strings — and the pattern must stay a separate literal
+> after the `"\x00"`, because `\x` escapes are greedy in hex digits and
+> `"...\x00" Map` written as one literal would swallow the pattern's leading
+> zeroes into the escape.
+
+Freeze what has little leverage on the corpus in front of you. `xadpcm`'s
+`.idx` recommends the block-header and literal rate schedules, which together
+govern under 1% of a typical output, so the search spends its time on the code
+schedule and the predictor instead.
 
 ---
 
@@ -398,9 +426,9 @@ From `sh_mapping.inc`:
 | macro | emits |
 |---|---|
 | `pdesc(name, base, pattern)` | a tunable mapping — pattern visible to `opt.pl` |
-| `mdesc(name, base, pattern)` | the same mapping, frozen |
-| `pmask(name, pattern)` | a bitmask |
-| `pmask2(name, pattern)` | a bit-grouped mask |
+| `pmask(name, pattern)` | a tunable bitmask |
+| `pmask2(name, pattern)` | a tunable bit-grouped mask |
+| `mdesc` / `mmask` / `mmask2` | the same three, frozen — no `!MAP!` marker, so invisible to `opt.pl` (§10) |
 
 ## 14. Output files
 

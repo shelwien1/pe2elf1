@@ -129,3 +129,26 @@ struct masking_b {
 
 #define pmask2(Desc, Map) masking_b Desc("!MAP!" #Desc "!0\x00" Map)
 
+/* FROZEN counterparts.  idx2inc.pl emits these -- mdesc / mmask / mmask2 -- for
+   any line whose Debug flag is off, which is what a leading '!' in the .idx does.
+   The object is identical; the only difference is that the descriptor string does
+   NOT start with the "!MAP!" marker, so opt.pl's scan over the executable never
+   finds it and the knob stays where the source put it.
+
+   The two-part layout is not decorative: every constructor does
+   `S += strlen(S) + 1` to step over the first part and reach the pattern, so a
+   frozen macro still has to supply two NUL-separated strings.  And the pattern
+   must stay a SEPARATE literal after the "\x00" -- \x escapes are greedy in hex
+   digits, so writing "...\x00" Map as one literal would swallow the pattern's
+   leading zeroes into the escape.
+
+   These were missing until now, in this tree and in dxt5comp's.  Freezing a line
+   therefore emitted a call to an undeclared macro and the build failed on the
+   next line, which is why nothing in either tree had a '!' on it -- the feature
+   was documented in the .idx comments and had never been used. */
+#define mdesc(Desc, Ofs, Map) mapping Desc(Ofs, "frozen " #Desc "\x00" Map)
+
+#define mmask(Desc, Map) masking Desc("frozen " #Desc "\x00" Map)
+
+#define mmask2(Desc, Map) masking_b Desc("frozen " #Desc "\x00" Map)
+
