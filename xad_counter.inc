@@ -88,6 +88,7 @@ struct Arena {
   size_t cap = 0, used = 0;
   int dry = 0;    // measuring pass: hand out nothing, just accumulate
   int huge = 1;   // ask for huge pages (dense users only)
+  int mapped = 0; // base came from mmap rather than the aligned_alloc fallback
 
   INLINE void* take(size_t n) {
     used = (used+63)&~size_t(63);
@@ -100,13 +101,19 @@ struct Arena {
   /* Hand the block back so the next reserve() sizes a fresh one.  Only the
      counter arena ever does this, and only when a wider segment arrives -- see
      Codec::grow_geom. */
+  /* Which allocator handed out `base`.  reserve() falls back to aligned_alloc
+     when mmap fails, and releasing with the wrong one is not a leak -- munmap on
+     a malloc'd pointer fails with EINVAL and the block stays live forever. */
   void release() {
 #ifdef __linux__
-    if( base )
+    if( base&&mapped )
       munmap(base, cap);
+    else if( base )
+      free(base);
 #else
     free(base);
 #endif
+    mapped = 0;
     base = nullptr;
     cap = used = 0;
   }
@@ -141,6 +148,7 @@ struct Arena {
         madvise(p, sz, MADV_HUGEPAGE);
       base = (u8*)p;   // mmap gives zeroed pages, faulted in on first touch
       cap = sz;
+      mapped = 1;
       return;
     }
 #endif

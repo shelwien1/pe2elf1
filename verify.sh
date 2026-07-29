@@ -94,6 +94,25 @@ d=bytearray(open("_v.xac","rb").read()); d[len(d)//2]^=0x40; open("_v.cor","wb")
   rm -f _v.s _v.b _v.cor
 fi
 
+# A wav that starts just before the encoder's 1 MB scan window ends.  It cannot
+# be judged from what has been read, and the first streaming encoder ran the
+# literal run straight over it and lost it -- still lossless, and 24% larger.
+# Nothing in the corpus is big enough to reach a window boundary, so it is built
+# here.
+if [ -f gen/ms_c1.wav ]; then
+  python3 -c '
+w=open("gen/ms_c1.wav","rb").read()
+open("_v.edge","wb").write(b"\0"*1048540+w)' 2>/dev/null
+  if [ -f _v.edge ]; then
+    n=`$X c _v.edge _v.xac 2>&1 | grep -c ADPCM`
+    $X d _v.xac _v.out >/dev/null 2>&1
+    if [ "$n" = 1 ] && cmp -s _v.edge _v.out
+    then printf "OK   %-28s %-4s found across the window edge\n" "wav at a window boundary" ""
+    else printf "FAIL wav at a window boundary: %s wav(s) found\n" "$n"; fail=1; fi
+    rm -f _v.edge
+  fi
+fi
+
 # malformed input must fail cleanly and leave no output behind
 printf 'not an archive' > _v.bad
 rm -f _v.out

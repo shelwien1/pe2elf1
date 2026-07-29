@@ -150,6 +150,8 @@ struct Buf {
   }
 
   void append(const T* s, size_t k) {
+    if( !k )
+      return;   // memcpy(nullptr, ..., 0) is still undefined, and p can be null
     if( n+k>c )
       reserve(n+k>c+c/2 ? n+k : c+c/2+16);
     memcpy(p+n, s, k*sizeof(T));

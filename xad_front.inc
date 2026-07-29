@@ -125,6 +125,11 @@ struct Xad : RC<MD> {
   void dec_lit(int stream, u64 n) {
     int prev = 0;
     while( n ) {
+      /* The length came out of the archive and the range decoder keeps producing
+         bytes after its input runs out, so a corrupted varint would otherwise
+         write until the disk filled.  One window of slop past the end. */
+      if( rc_starved() )
+        return (void)fail("truncated archive");
       size_t k = n<u64(OUTWIN) ? size_t(n) : size_t(OUTWIN);
       cx.code_bytes(stream, owin, k, prev);
       emit(owin, k);
@@ -142,6 +147,8 @@ struct Xad : RC<MD> {
   void dec_data(u64 n, int ba) {
     size_t chunk = (size_t(OUTWIN)/size_t(ba))*size_t(ba);
     while( n ) {
+      if( rc_starved() )
+        return (void)fail("truncated archive");
       size_t k = n<u64(chunk) ? size_t(n) : chunk;
       cx.code_data(owin, k);
       emit(owin, k);
@@ -474,14 +481,19 @@ struct Xad : RC<MD> {
          cannot be judged yet, so unless this is the last window we stop short of
          it and let the next fill bring the rest -- the window slides, so the
          candidate is whole next time round. */
-      size_t lit = 0;
+      size_t lit = 0, stop = avail;
       Params pm;
       Wav w;
       bool got = false;
-      while( lit<avail ) {
+      /* lit+12 <= avail, not lit < avail.  Judging a candidate reads bytes 0..3
+         and 8..11 of it, so anything in the last eleven cannot be looked at --
+         and the old bound let memchr find an 'R' there and then memcmp read past
+         the valid bytes.  Inside a 1 MB BSS array, so it never faulted; it read
+         indeterminate bytes and could in principle have invented a wav. */
+      while( lit+12<=avail ) {
         const u8* base = ewin+ew_pos+lit;
         size_t left = avail-lit;
-        const void* hit = memchr(base, 'R', left<11 ? left : left-11);
+        const void* hit = memchr(base, 'R', left-11);
         if( !hit )
           break;
         lit = size_t((const u8*)hit-(ewin+ew_pos));
@@ -503,19 +515,34 @@ struct Xad : RC<MD> {
               break;
             }
           }
+          /* A RIFF/WAVE that did not parse, with the window ending behind it.
+             It may be a real wav whose header simply runs past the end of what
+             has been read -- so stop the literal run HERE and refill; the window
+             slides, the candidate lands at offset 0, and next time round it gets
+             the whole window to be judged in.  Without this the literal run ran
+             straight over it and the wav was lost: measured, a wav placed 36
+             bytes before the window edge was missed entirely and its archive
+             came out 24% larger.  At lit == 0 a refill would change nothing, so
+             that case is judged on what is there and moves on. */
+          if( lit&&!in_done() ) {
+            stop = lit;
+            break;
+          }
         }
         lit++;
       }
 
       if( !got ) {
-        /* Nothing in this window.  Keep the last 11 bytes back unless the input
-           is finished, so a RIFF split across the boundary is still seen. */
-        size_t keep = in_done() ? 0 : (avail<11 ? avail : 11);
-        if( !avail )
-          break;
-        if( avail==keep )
-          continue;  // wait for more input; ew_fill will slide the window
-        enc_lit(nseg ? LIT_TAIL : LIT_GAP, avail-keep);
+        /* How much of this window is certainly literal.  Either up to a
+           candidate that could not be judged yet, or all of it bar the last
+           eleven bytes, which might be the front of a RIFF the next window
+           completes.  Zero means neither -- wait for more input; ew_fill only
+           returns short of a full window once the driver has said there is none,
+           so this cannot spin. */
+        size_t n = stop<avail ? stop : (in_done() ? avail : (avail>=11 ? avail-11 : 0));
+        if( !n )
+          continue;
+        enc_lit(nseg ? LIT_TAIL : LIT_GAP, n);
         continue;
       }
       if( lit ) {

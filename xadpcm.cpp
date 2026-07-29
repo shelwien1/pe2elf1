@@ -402,11 +402,6 @@ static int decompress(char* inp, const char* outp, bool buffered) {
   /* Built straight into the driver's own buffer.  A path that does not fit is
      refused here rather than truncated -- the split sink would otherwise write
      every member into the wrong directory. */
-  /* A split archive needs somewhere to put its members, and a pipe is not it.
-     Refused here rather than by writing every member into one stream, which
-     would look like it worked. */
-  if( is_std(outp) )
-    Mdec.out_split = 0;
   size_t dl = strlen(outp);
   if( dl+2>sizeof(Mdec.out_dir) )
     return fprintf(stderr, "xadpcm: output path '%s' is too long\n", outp), 1;
@@ -414,6 +409,9 @@ static int decompress(char* inp, const char* outp, bool buffered) {
   if( dl&&Mdec.out_dir[dl-1]!='/'&&Mdec.out_dir[dl-1]!='\\' )
     Mdec.out_dir[dl++] = '/';
   Mdec.out_dir[dl] = 0;
+  /* A split archive needs somewhere to put its members, and a pipe is not it:
+     splitting to stdout would write every member into one stream and look like
+     it worked. */
   Mdec.out_split = is_std(outp) ? 0 : 1;
   Mdec.in_paths = &inp;
   Mdec.in_n = 1;
