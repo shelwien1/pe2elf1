@@ -165,6 +165,12 @@ constexpr int PR_SHIFT = PR_BITS-P_BITS;  // 4, PR_BITS <-> P_BITS
 
 constexpr int N_STATES = 256;             // rows of State_table / StateMap::t
 
+// SmallStationaryContextMap's adaptation weight is 2^-rate, slowed once the
+// input is long enough for the counts to have settled.
+const int SCM_RATE_EARLY = 9;
+const int SCM_RATE_LATE  = 10;
+const int SCM_SWITCH_POS = 4000000;
+
 // ---- reinterpreting the fitted constants -------------------------------
 // Probability estimation here is fixed-point, so a constant like `*3/64` or a
 // threshold like `pr>=1820` is not an opaque weight: it is a coefficient that was
@@ -186,6 +192,47 @@ constexpr int N_STATES = 256;             // rows of State_table / StateMap::t
 constexpr int P_REF_BITS = 12;            // the precision every coefficient was fitted at
 constexpr int P_UP = 1<<(P_REF_BITS>P_BITS ? P_REF_BITS-P_BITS : 0);
 constexpr int P_DN = 1<<(P_BITS>P_REF_BITS ? P_BITS-P_REF_BITS : 0);
+
+// ---- uniform linear mixing in the probability domain --------------------
+// Every weighted average of probabilities is written the same way: weights in
+// P_SCALE units summing to P_SCALE, rounding +P_HALF.  So `(a+7*pr+4)>>3` becomes
+// pmix(APM1_w,a, P_SCALE-APM1_w,pr) with APM1_w = P_SCALE/8, and the weight reads
+// as a fraction instead of having to be decoded from a shift and a handful of
+// small integers.  Exactly equal to the shift forms at P_BITS==12 -- each old
+// numerator is the new one divided by P_SCALE/2^k -- and now the weights follow
+// P_SCALE instead of being welded to it.
+//
+// long long because one term reaches P_MAX*P_SCALE = 2^32 at P_BITS==16, past
+// int.  These run once per coded bit against ~5500 madds, so the width is free.
+inline int pmix( int w0, int v0, int w1, int v1 ) {
+  return int(( (long long)w0*v0 + (long long)w1*v1 + P_HALF )/P_SCALE);
+}
+
+inline int pmix( int w0, int v0, int w1, int v1, int w2, int v2, int w3, int v3 ) {
+  return int(( (long long)w0*v0 + (long long)w1*v1
+             + (long long)w2*v2 + (long long)w3*v3 + P_HALF )/P_SCALE);
+}
+
+// Mixing weights.  Plain const, not constexpr, so they can be retuned here
+// without the value being baked into unrelated constant expressions.
+// a1's correction against the raw model output, 1/8 : 7/8
+const int APM1_w = P_SCALE/8;
+// final blend of the four APM chains, used when fails&255 is set
+const int MIXA_pt_w =  6*P_SCALE/32;
+const int MIXA_pu_w =  1*P_SCALE/32;
+const int MIXA_pv_w = 11*P_SCALE/32;
+const int MIXA_pz_w = 14*P_SCALE/32;
+// and when it is clear
+const int MIXB_pt_w =  4*P_SCALE/32;
+const int MIXB_pu_w =  5*P_SCALE/32;
+const int MIXB_pv_w = 12*P_SCALE/32;
+const int MIXB_pz_w = 11*P_SCALE/32;
+
+static_assert( MIXA_pt_w+MIXA_pu_w+MIXA_pv_w+MIXA_pz_w == P_SCALE,
+  "blend A weights must sum to P_SCALE" );
+static_assert( MIXB_pt_w+MIXB_pu_w+MIXB_pv_w+MIXB_pz_w == P_SCALE,
+  "blend B weights must sum to P_SCALE" );
+static_assert( APM1_w>0 && APM1_w<P_SCALE, "APM1_w must be a proper fraction" );
 
 // a P-domain value at the current precision -> the same value at P_REF_BITS.
 // Truncates when P_BITS > P_REF_BITS; prefer the two forms below where possible.
@@ -1322,10 +1369,14 @@ void set(U32 cx) {
 }
 
 void mix(MainMixer &m) {
-  if( pos<4000000 )
-    *cp += ((y<<PR_BITS)-(*cp)+(1<<8))>>9;
-  else
-    *cp += ((y<<PR_BITS)-(*cp)+(1<<9))>>10;
+  // An exponential moving average is a linear mix of the stored probability and
+  // the target with weight 2^-rate, so the rate IS the weight and the rounding
+  // term is half a step -- derived from the rate rather than restated.  Left in
+  // shift form rather than pmix()'s P_SCALE weights because this runs ten times
+  // per bit and the PR-domain product would need 64-bit arithmetic to hold
+  // PR_MAX*PR_ONE.
+  const int r = (pos<SCM_SWITCH_POS) ? SCM_RATE_EARLY : SCM_RATE_LATE;
+  *cp += ((y<<PR_BITS)-(*cp)+(1<<(r-1)))>>r;
   cp = &t[cxt+c0];
   m.add(stretch(*cp>>PR_SHIFT)*mulc/32);
 }
@@ -2026,7 +2077,7 @@ void update() {
 
   pr = contextModel.p();
 
-  int pt, pu = (a1.p(pr, k1, 3)+7*pr+4)>>3, pv;
+  int pt, pv, pu = pmix( APM1_w, a1.p(pr, k1, 3), P_SCALE-APM1_w, pr );
   pu = a4.p(pu, k4, rate);
   pv = a2.p(pr, k2, rate+1);
   pv = a5.p(pv, k5, rate);
@@ -2036,7 +2087,8 @@ void update() {
   pr = contextModel.p();
 
   int rate = 6+(pos>14*256*1024)+(pos>28*512*1024);
-  int pt, pu = (a1.p(pr, c0, 3)+7*pr+4)>>3, pv, pz = failcount+1;
+  int pt, pv, pz = failcount+1;
+  int pu = pmix( APM1_w, a1.p(pr, c0, 3), P_SCALE-APM1_w, pr );
   pz += tri[(fails>>5)&3];
   pz += trj[(fails>>3)&3];
   pz += trj[(fails>>1)&3];
@@ -2052,9 +2104,9 @@ void update() {
 #endif
 
   if( fails&255 )
-    pr = (pt*6+pu+pv*11+pz*14+16)>>5;
+    pr = pmix( MIXA_pt_w,pt, MIXA_pu_w,pu, MIXA_pv_w,pv, MIXA_pz_w,pz );
   else
-    pr = (pt*4+pu*5+pv*12+pz*11+16)>>5;
+    pr = pmix( MIXB_pt_w,pt, MIXB_pu_w,pu, MIXB_pv_w,pv, MIXB_pz_w,pz );
 }
 };
 } // namespace paq8hp

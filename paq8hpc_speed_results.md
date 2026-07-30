@@ -798,7 +798,73 @@ shorter table so it cannot read out of range once the two sizes differ.
 down by `PR_SHIFT`. Within those, `P_SCALE` is now a genuine parameter rather than
 a number that happens to appear in 40 places.
 
-## 13. Reproducing
+## 13. Uniform linear mixing
+
+Every fixed-weight weighted average of probabilities is now written the same way:
+weights in `P_SCALE` units summing to `P_SCALE`, rounding `+P_HALF`.
+
+```c++
+inline int pmix(int w0,int v0, int w1,int v1);                          // 2 terms
+inline int pmix(int w0,int v0, int w1,int v1, int w2,int v2, int w3,int v3);
+
+const int APM1_w    = P_SCALE/8;      // 512   a1's correction, 1/8 : 7/8
+const int MIXA_pt_w =  6*P_SCALE/32;  // 768   final blend when fails&255
+const int MIXA_pu_w =  1*P_SCALE/32;  // 128
+const int MIXA_pv_w = 11*P_SCALE/32;  // 1408
+const int MIXA_pz_w = 14*P_SCALE/32;  // 1792
+const int MIXB_pt_w =  4*P_SCALE/32;  // 512   and when it is clear
+const int MIXB_pu_w =  5*P_SCALE/32;  // 640
+const int MIXB_pv_w = 12*P_SCALE/32;  // 1536
+const int MIXB_pz_w = 11*P_SCALE/32;  // 1408
+```
+
+Plain `const`, not `constexpr`, so a weight can be retuned here without the value
+being baked into unrelated constant expressions; `static_assert`s check that each
+set sums to `P_SCALE`. So
+
+```c++
+pu = (a1.p(pr,k1,3) + 7*pr + 4)>>3;          // was
+pu = pmix(APM1_w, a1.p(pr,k1,3), P_SCALE-APM1_w, pr);   // now
+```
+
+**Exactness** is not merely argued: each old numerator is the new one divided by
+`P_SCALE/2^k`, and a standalone check sweeps all four inputs densely across the
+whole probability range and reports **0 mismatches** against the original shift
+forms. Byte-identity holds for the no-defines, recommended, and all-gates builds.
+`long long` accumulation because one term reaches `P_MAX*P_SCALE = 2^32` at
+`P_BITS=16`; these run once per coded bit against ~5500 madds, so the width is
+free.
+
+### What the audit found, and what was deliberately left alone
+
+Searching for sum-of-products-then-shift across the whole model turned up exactly
+**three** fixed-weight probability mixes — the two-term `pu` blend (in both the
+`PAQ_APMPF` and baseline branches) and the two four-term final blends. Everything
+else falls into three categories that are *not* fixed-weight mixing:
+
+- **Dynamic-weight interpolation** — `squash()`'s and `APM::p`'s
+  `(t[i]*(SQ_STEP-w) + t[i+1]*w)`. The weight is data, not a constant, so there is
+  no constant to name.
+- **Exponential moving averages** — `v += (target-v)>>rate`, in `APM::p`,
+  `StateMap::p` and `SmallStationaryContextMap::mix`. These *are* linear mixes,
+  with weight `2^-rate`. Where the rate is constant (SSCM) the rate is now named
+  (`SCM_RATE_EARLY/LATE`, `SCM_SWITCH_POS`) and the rounding term is derived from
+  it rather than restated, but they stay in shift form: SSCM's `mix` runs ten
+  times per bit, and a `P_SCALE`-weighted form in the PR domain needs 64-bit
+  arithmetic to hold `PR_MAX*PR_ONE`. The rest have a runtime rate.
+- **Single-value scalings** — `st/4`, `st*9/32`, `(dp*9)>>9`, `z>>9`,
+  `(z*15)>>13`, `stretch(...)*mulc/32`, `b*c`. One operand, so nothing to
+  weight against.
+
+**The logistic domain contains no fixed-weight linear mixing at all** — every
+logistic-domain expression in the model is a scaling of a single stretch value.
+The mixing there is the `Mixer` dot product itself, whose weights are learned
+rather than constant.
+
+Because the weights are `P_SCALE`-derived they also follow `PAQ_P_BITS`:
+re-checked at P_BITS 10/12/14/16, still +0.105% / 0 / −0.003% / +0.005%.
+
+## 14. Reproducing
 
 ```
 ./build.sh FINAL -DPAQ_PREFETCH -DPAQ_AVX2 -DPAQ_DOT2 -DPAQ_GETSIMD -DPAQ_APMPF
