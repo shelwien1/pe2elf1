@@ -8,7 +8,9 @@ byte-identical, and measured. A build with no defines is byte-for-byte the
 uploaded baseline.
 
 **Result: 1.54x at L4, 1.66x at L8, 1.79x at L11 on full book1, byte-identical
-output.** The doc's own reference implementation reported 1.40x / 1.57x.
+output.** The doc's own reference implementation reported 1.40x / 1.57x. Also
+built with MinGW and verified under wine: Windows archives are byte-identical to
+Linux ones and each OS decodes the other's output (§6).
 
 ```
 g++ -O3 -march=native -DPAQ_PREFETCH -DPAQ_AVX2 -DPAQ_DOT2 \
@@ -95,6 +97,8 @@ Regression set for byte-identity (`verify.sh`), run on all 27 builds: 7
 each checked for encode md5, own round-trip, and **cross-decode of the pristine
 baseline's archive**. Plus full book1 at L4/L8/L11 encode-identity and
 cross-decode in both directions.
+
+Cross-OS byte-identity (`verify_win.sh`) is covered in §6.
 
 ## 2. Confirmed wins (all five in the recommended config)
 
@@ -206,9 +210,8 @@ measured a wash — there was nothing to measure. With the fix, at L11 on a
   **Off by default.** The doc's advice stands: verify `AnonHugePages` on the
   target before believing any number. The Windows `VirtualAlloc` +
   `MEM_LARGE_PAGES` path is implemented as §5 specifies (including the
-  `AdjustTokenPrivileges` return-value trap) but is compile-only here — no
-  MinGW in this container, so unlike the doc this work has **no cross-OS
-  verification**.
+  `AdjustTokenPrivileges` return-value trap) and is exercised under wine — see
+  §6.
 
 `PAQ_POISON_NEW` + `PAQ_LAZY_ZERO` is rejected at compile time with `#error`,
 per §6.
@@ -220,11 +223,75 @@ built; that section's analysis was spot-checked and holds — in particular (a)'
 ceil/floor error and (e)'s `squash()` returning 0 for `d < -2047`, which makes
 the `p<1` clamp load-bearing.
 
-## 6. Reproducing
+## 6. Cross-OS: MinGW build, verified under wine
+
+MinGW gcc 13.2 and wine 9.0 were installed in this container, so unlike the
+earlier revision of this file the Windows side is now built *and run*, not just
+reasoned about.
+
+```
+x86_64-w64-mingw32-g++ -O3 -mavx2 -static -DPAQ_PREFETCH -DPAQ_AVX2 \
+    -DPAQ_DOT2 -DPAQ_GETSIMD -DPAQ_APMPF paq8hpc_speed.cpp -o paq8hpc.exe
+```
+
+Four Windows binaries compile warning-clean and were verified with
+`verify_win.sh`, which checks the leg that per-platform testing cannot: an
+archive written on one OS decoding on the other.
+
+| build | flags | cross-OS result |
+|-------|-------|-----------------|
+| `w_base.exe`  | none                       | ok, 5 cases |
+| `w_final.exe` | the five recommended       | ok, 5 cases |
+| `w_hl.exe`    | + `HUGEPAGES` `LAZY_ZERO`  | ok, 5 cases |
+| `w_dec4.exe`  | + `DECFAST` `FIXED_LEVEL=4`| ok, 1 case  |
+
+"ok" means all four of these held for every case: Windows encode output is
+**byte-identical to the Linux baseline's archive**, Windows round-trips its own
+output, **Windows decodes the Linux archive**, and **Linux decodes the Windows
+archive**. The doc's published vector reproduces on Windows too: b64k L4 →
+20321 B, md5 `5b20ec75933c5f38b209d9948e432ed8`.
+
+**The Windows allocator path is genuinely taken, not silently falling back.**
+Traced with `-DPAQ_VERBOSE_ALLOC` under wine at L8:
+
+```
+no gates:            alloc 591.7MB -> 00007f5bcec40080 zeroed=0   (_aligned_malloc)
+HUGEPAGES+LAZY_ZERO: alloc 591.7MB -> 00007f199fa50000 zeroed=1   (VirtualAlloc)
+```
+
+The 64 KB-granular pointer and `zeroed=1` confirm `VirtualAlloc`. The
+`MEM_LARGE_PAGES` attempt fails under wine (no `SeLockMemoryPrivilege`, which is
+also the default on real Windows), so it exercises exactly the fallback §5
+specifies — and because plain `VirtualAlloc` still returns zeroed pages,
+`PAQ_LAZY_ZERO` stays valid on that fallback. That is the property worth
+checking, and `w_hl.exe` passing byte-identity is the proof.
+
+Windows measurements (under wine, so treat as order-of-magnitude — wine adds
+per-call overhead and this is not a native Windows run):
+
+| measurement | baseline | final |
+|-------------|---------:|------:|
+| b128k L8 throughput, best-of-3 | 20.58 KB/s | **35.96 KB/s** (1.75x) |
+| L9 startup, 300-byte input, min-of-3 | 3.689 s | **0.152 s** with `LAZY_ZERO` |
+
+Both effects reproduce on Windows with the same sign and rough magnitude as
+Linux, including the lazy-zero startup collapse.
+
+Caveat worth stating: `-mavx2` is the portable floor used here, not
+`-march=native`, and wine is not Windows. This establishes that the code
+compiles, runs, and is bit-exact across OSes — it is not a Windows performance
+benchmark.
+
+## 7. Reproducing
 
 ```
 ./build.sh FINAL -DPAQ_PREFETCH -DPAQ_AVX2 -DPAQ_DOT2 -DPAQ_GETSIMD -DPAQ_APMPF
 ./verify.sh /tmp/.../p_FINAL FINAL          # byte-identity, 7 cases x 3 checks
 ./ab.sh   vfy/b128k 8 15 p_FINAL p_CANDIDATE  # wall clock, in-block control
 ./icount.sh vfy/b16k 4 c_base c_CANDIDATE     # exact instruction counts
+./verify_win.sh w_final.exe win_final         # cross-OS, needs mingw + wine
 ```
+
+Cross-OS prerequisites, both installed from the distro:
+`apt-get install g++-mingw-w64-x86-64 wine64` (the wine binary lands at
+`/usr/lib/wine/wine64`, with no `wine` wrapper on the PATH).
