@@ -864,7 +864,55 @@ rather than constant.
 Because the weights are `P_SCALE`-derived they also follow `PAQ_P_BITS`:
 re-checked at P_BITS 10/12/14/16, still +0.105% / 0 / −0.003% / +0.005%.
 
-## 14. Reproducing
+## 14. Adaptation rates, given the same treatment
+
+Every adaptive counter in the model updates as `v += (target-v)>>rate`, which is
+a linear mix of the stored value and the target with weight `2^-rate`. So the
+rate *is* the weight, in log form — the same uniformity §13 gave the fixed-weight
+mixes, except a shift is the natural spelling when the weight is a power of two
+and the code is in the hot path. One shape now covers all three users:
+
+```c++
+inline int ema( int v, int target, int rate ) { return v + ((target-v)>>rate); }
+```
+
+Each caller folds its own rounding into `target`, which is what lets them share
+it — and makes an asymmetry explicit that was previously buried: **`StateMap` and
+`APM` round only the `y==1` target** (`sm_target(rate) = PR_MAX + (2^rate - 1)`,
+and APM's `g = (y<<PR_BITS)+(y<<rate)-y*2`), taking a plain `0` for `y==0`, while
+`SmallStationaryContextMap` rounds symmetrically. That is the baseline's
+behaviour, now visible rather than implied.
+
+The rates and their schedules, plain `const` like the mixing weights, each
+schedule named next to the rates it switches between:
+
+| | |
+|---|---|
+| `SM_RATE_0/1/2` = 7/8/9 | `SM_SWITCH_1` = 512K, `SM_SWITCH_2` = 1M |
+| `APM_RATE_BASE` = 6, `APM1_RATE` = 3, `APM2_RATE_ADD` = 1 | `APM_SWITCH_1` = 3,670,016, `APM_SWITCH_2` = 14,680,064 |
+| `SCM_RATE_EARLY/LATE` = 9/10 | `SCM_SWITCH_POS` = 4,000,000 |
+| `MIX_LR_NUM/DEN` = 7/1, `MIX2_LR_NUM/DEN` = 3/2 | `MIX_W_INIT` = 512, `MIX2_W_INIT` = 0x7fff |
+| `CM_DECAY_FROM/BIAS/SHIFT/STEP` = 204/452/3/4 | |
+| `RCM_RUN_MAX` = 255, `CM_RUN_MAX` = 254, `CM_RUN_STEP` = 2 | `SM_PRIOR_ADD` = 1 |
+
+Also named on the way: `PR_HALF` (SSCM's initial 32768) and the two mixer weight
+initialisers, which were template arguments spelled as bare numbers.
+
+**Checked, not assumed.** `ema()` is swept against all four original update forms
+across the PR range at every rate 3..10 — **0 mismatches** — and the three shipped
+configurations plus `PAQ_LOGISTIC` are byte-identical. Instruction count went
+*down* 0.36% (`U16(ema(...))` generates marginally better code than the `+=`
+form), so the uniformity is free. `PAQ_P_BITS` still works: 10/12/16 →
++0.105% / 0 / +0.005%.
+
+One method note: an assertion in the rewrite script caught me miscounting a
+call site — `p_scaled(...pr[i],7,1)` occurs three times, not two (train2, the
+odd-tail train, and the non-DOT2 path). The script writes only after every
+anchor matches, so the file was left untouched; the `verify.sh` run that followed
+was therefore testing the *old* binary and passed vacuously. Worth stating because
+it is exactly the failure mode a green check can hide.
+
+## 15. Reproducing
 
 ```
 ./build.sh FINAL -DPAQ_PREFETCH -DPAQ_AVX2 -DPAQ_DOT2 -DPAQ_GETSIMD -DPAQ_APMPF

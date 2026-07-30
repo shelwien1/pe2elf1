@@ -161,15 +161,77 @@ static_assert( SQ_BITS>=1, "ST_SCALE must be at least 4 for the squash grid" );
 constexpr int PR_BITS  = 16;              // StateMap/APM internal precision
 constexpr int PR_ONE   = 1<<PR_BITS;      // 65536
 constexpr int PR_MAX   = PR_ONE-1;        // 65535
+constexpr int PR_HALF  = PR_ONE/2;        // 32768, "no information" at PR_BITS
 constexpr int PR_SHIFT = PR_BITS-P_BITS;  // 4, PR_BITS <-> P_BITS
 
 constexpr int N_STATES = 256;             // rows of State_table / StateMap::t
 
-// SmallStationaryContextMap's adaptation weight is 2^-rate, slowed once the
-// input is long enough for the counts to have settled.
+// ---- adaptation rates and schedules -------------------------------------
+// Every adaptive counter here updates as `v += (target-v)>>rate`, which is a
+// linear mix of the stored value and the target with weight 2^-rate.  So the
+// rate IS the weight, written in log form -- the same uniformity pmix() gives
+// the fixed-weight mixes, except that a shift is the natural spelling when the
+// weight is a power of two and the code sits in the hot path.  ema() below is
+// that one shape; each caller supplies a target with its rounding already
+// folded in, which is what lets all three users share it.
+//
+// Rates are plain const, like the mixing weights, and each position schedule is
+// named next to the rates it switches between, so a rate and the point it
+// changes at are visible together.
+
+// StateMap: one shared rate, slowed twice as the counts settle.
+const int SM_RATE_0  = 7;                 // weight 1/128 up to SM_SWITCH_1
+const int SM_RATE_1  = 8;                 // 1/256
+const int SM_RATE_2  = 9;                 // 1/512 from SM_SWITCH_2 on
+const int SM_SWITCH_1 = 512*1024;
+const int SM_SWITCH_2 = 1024*1024;
+// StateMap's y==1 target: PR_MAX plus the rounding for the rate in force.  The
+// y==0 target is a plain 0, so the rounding is deliberately asymmetric -- that
+// is the baseline's behaviour, preserved.
+constexpr int sm_target(int rate) { return PR_MAX + ((1<<rate)-1); }
+
+// APM: a base rate slowed twice by position.  a1 is the fast correction applied
+// straight to the model output; a2 runs one step slower than the rest.
+const int APM_RATE_BASE = 6;
+const int APM_SWITCH_1  = 14*256*1024;
+const int APM_SWITCH_2  = 28*512*1024;
+const int APM1_RATE     = 3;
+const int APM2_RATE_ADD = 1;
+const int APM_RATE_DEF  = 8;              // APM::p's default; every call passes one
+
+// SmallStationaryContextMap: one step slower once the counts have settled.
 const int SCM_RATE_EARLY = 9;
 const int SCM_RATE_LATE  = 10;
 const int SCM_SWITCH_POS = 4000000;
+
+// Mixer: the prediction error is scaled by the learning rate before train()
+// applies it to the weights.
+const int MIX_LR_NUM  = 7, MIX_LR_DEN  = 1;    // outer mixer
+const int MIX2_LR_NUM = 3, MIX2_LR_DEN = 2;    // the nested submixer
+const int MIX_W_INIT  = 512;                   // 2.0 in the 8-bit weight fraction
+const int MIX2_W_INIT = 0x7fff;                // submixer starts saturated
+
+// ContextMap bit-history decay: a state at or above CM_DECAY_FROM steps back by
+// CM_DECAY_STEP with probability ~2^-((CM_DECAY_BIAS-ns)>>CM_DECAY_SHIFT), so
+// the closer to saturation the more often it decays.
+const int CM_DECAY_FROM  = 204;
+const int CM_DECAY_BIAS  = 452;
+const int CM_DECAY_SHIFT = 3;
+const int CM_DECAY_STEP  = 4;
+
+// run-length counters saturate rather than wrap
+const int RCM_RUN_MAX = 255;              // RunContextMap, steps by 1
+const int CM_RUN_MAX  = 254;              // ContextMap, steps by CM_RUN_STEP
+const int CM_RUN_STEP = 2;
+
+// StateMap's initial estimate is a Laplace prior over the state's (n0,n1)
+const int SM_PRIOR_ADD = 1;
+
+// v += (target-v)>>rate, i.e. mix v toward target with weight 2^-rate.  The
+// caller folds its rounding into target.
+inline int ema( int v, int target, int rate ) {
+  return v + ((target-v)>>rate);
+}
 
 // ---- reinterpreting the fitted constants -------------------------------
 // Probability estimation here is fixed-point, so a constant like `*3/64` or a
@@ -377,7 +439,7 @@ int y = 0;
 
 int c0 = 1;
 U32 b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, b7 = 0, b8 = 0, tt = 0, c4 = 0, x4 = 0, x5 = 0, w4 = 0, w5 = 0, f4 = 0;
-int order, bpos = 0, cxtfl = 3, sm_shft = 7, sm_add = PR_MAX+((1<<7)-1), sm_add_y = 0;
+int order, bpos = 0, cxtfl = 3, sm_shft = SM_RATE_0, sm_add = sm_target(SM_RATE_0), sm_add_y = 0;
 
 // level-independent, and read by every model, so it stays at file scope with
 // the rest of the shared scalar state rather than moving into Predictor<L>.
@@ -990,7 +1052,7 @@ static inline void train2(const short* t, short* w0, short* w1, int n, const int
 template <int n, int m, int s = 1, int w = 0> struct Mixer;
 
 template <int S> struct SubMixer {
-Mixer<S, 1, 1, 0x7fff> mp;
+Mixer<S, 1, 1, MIX2_W_INIT> mp;
 
 void update2() {
   mp.update2();
@@ -1054,12 +1116,12 @@ void update() {
   int i = 0;
   for(; i+1<ncxt; i += 2 )
     train2(&tx[0], &wx[cxt[i]*N], &wx[cxt[i+1]*N], nx,
-           p_scaled((y<<P_BITS)-pr[i],7,1), p_scaled((y<<P_BITS)-pr[i+1],7,1));
+           p_scaled((y<<P_BITS)-pr[i],MIX_LR_NUM,MIX_LR_DEN), p_scaled((y<<P_BITS)-pr[i+1],MIX_LR_NUM,MIX_LR_DEN));
   for(; i<ncxt; ++i )
-    train(&tx[0], &wx[cxt[i]*N], nx, p_scaled((y<<P_BITS)-pr[i],7,1));
+    train(&tx[0], &wx[cxt[i]*N], nx, p_scaled((y<<P_BITS)-pr[i],MIX_LR_NUM,MIX_LR_DEN));
 #else
   for( int i = 0; i<ncxt; ++i ) {
-    int err = p_scaled((y<<P_BITS)-pr[i],7,1);
+    int err = p_scaled((y<<P_BITS)-pr[i],MIX_LR_NUM,MIX_LR_DEN);
     train(&tx[0], &wx[cxt[i]*N], nx, err);
   }
 #endif
@@ -1067,7 +1129,7 @@ void update() {
 }
 
 void update2() {
-  train(&tx[0], &wx[0], nx, p_scaled((y<<P_BITS)-base,3,2));
+  train(&tx[0], &wx[0], nx, p_scaled((y<<P_BITS)-base,MIX2_LR_NUM,MIX2_LR_DEN));
   nx = 0;
 }
 
@@ -1136,7 +1198,7 @@ int p() {
 };
 
 // the one mixer the models are handed
-typedef Mixer<456, 128*(16+14+14+12+14+16), 6, 512> MainMixer;
+typedef Mixer<456, 128*(16+14+14+12+14+16), 6, MIX_W_INIT> MainMixer;
 
 template <int n> struct APM {
 int index;
@@ -1157,11 +1219,12 @@ void pf(int cxt) const {
   PAQ_PF(&t[cxt*APM_NODES+APM_NODES-1]);
 }
 
-int p(int pr = P_HALF, int cxt = 0, int rate = 8) {
+int p(int pr = P_HALF, int cxt = 0, int rate = APM_RATE_DEF) {
   pr = stretch(pr);
-  int g = (y<<PR_BITS)+(y<<rate)-y*2;
-  t[index] += (g-t[index])>>rate;
-  t[index+1] += (g-t[index+1])>>rate;
+  // target for y==1 is PR_ONE with this rate's rounding folded in; 0 for y==0
+  const int g = (y<<PR_BITS)+(y<<rate)-y*2;
+  t[index]   = U16(ema(t[index],   g, rate));
+  t[index+1] = U16(ema(t[index+1], g, rate));
   const int w = pr&SQ_MASK;
   index = ((pr+ST_LIMIT)>>SQ_BITS)+cxt*APM_NODES;
   // U16 entries times weights summing to SQ_STEP, brought back to P_BITS
@@ -1181,13 +1244,13 @@ StateMap() : cxt(0) {
       n1 *= 128;
     if( n1==0 )
       n0 *= 128;
-    t[i] = PR_ONE*(n1+1)/(n0+n1+2);
+    t[i] = PR_ONE*(n1+SM_PRIOR_ADD)/(n0+n1+2*SM_PRIOR_ADD);
   }
 }
 
 int p(int cx) {
   int q = t[cxt];
-  t[cxt] = q+((sm_add_y-q)>>sm_shft);
+  t[cxt] = U16(ema(q, sm_add_y, sm_shft));
   return t[cxt = cx]>>PR_SHIFT;
 }
 };
@@ -1316,7 +1379,7 @@ void prefetch(U32 cx) const {
 void set(U32 cx) {
   if( cp[0]==0||cp[1]!=b1 )
     cp[0] = 1, cp[1] = b1;
-  else if( cp[0]<255 )
+  else if( cp[0]<RCM_RUN_MAX )
     ++cp[0];
   cp = t[cx]+2;
 }
@@ -1360,7 +1423,7 @@ U16* cp;
 
 SmallStationaryContextMap() : cxt(0) {
   for( U32 i = 0; i<U32(MSZ/2); ++i )
-    t[i] = 32768;
+    t[i] = PR_HALF;
   cp = &t[0];
 }
 
@@ -1376,7 +1439,8 @@ void mix(MainMixer &m) {
   // per bit and the PR-domain product would need 64-bit arithmetic to hold
   // PR_MAX*PR_ONE.
   const int r = (pos<SCM_SWITCH_POS) ? SCM_RATE_EARLY : SCM_RATE_LATE;
-  *cp += ((y<<PR_BITS)-(*cp)+(1<<(r-1)))>>r;
+  // symmetric rounding here, unlike StateMap/APM: half a step folded into the target
+  *cp = U16(ema(*cp, (y<<PR_BITS)+(1<<(r-1)), r));
   cp = &t[cxt+c0];
   m.add(stretch(*cp>>PR_SHIFT)*mulc/32);
 }
@@ -1478,8 +1542,8 @@ template <int CF, int BP> PAQ_HOTFN int mix1t(MainMixer &m, int cc, int c1, int 
     U8* cpi = cp[i];
     if( cpi ) {
       int ns = nex(*cpi, y1);
-      if( ns>=204&&(rnd()<<((452-ns)>>3)) )
-        ns -= 4;
+      if( ns>=CM_DECAY_FROM&&(rnd()<<((CM_DECAY_BIAS-ns)>>CM_DECAY_SHIFT)) )
+        ns -= CM_DECAY_STEP;
       *cpi = ns;
     }
 
@@ -1512,8 +1576,8 @@ template <int CF, int BP> PAQ_HOTFN int mix1t(MainMixer &m, int cc, int c1, int 
           c0 = 2, runp[i][1] = c1;
         else if( runp[i][1]!=c1 )
           c0 = 1, runp[i][1] = c1;
-        else if( c0<254 )
-          c0 += 2;
+        else if( c0<CM_RUN_MAX )
+          c0 += CM_RUN_STEP;
         runp[i][0] = c0;
         runp[i] = cpi+3;
       }
@@ -2003,13 +2067,11 @@ void update() {
   if( c0>=256 ) {
     buf[pos++] = c0;
     c0 -= 256;
-    if( pos<=1024*1024 ) {
-      // sm_add is PR_MAX plus the rounding for the new shift, so StateMap's
-      // update keeps hitting the top of the PR_BITS range exactly.
-      if( pos==1024*1024 )
-        sm_shft = 9, sm_add = PR_MAX+((1<<9)-1);
-      if( pos==512*1024 )
-        sm_shft = 8, sm_add = PR_MAX+((1<<8)-1);
+    if( pos<=SM_SWITCH_2 ) {
+      if( pos==SM_SWITCH_2 )
+        sm_shft = SM_RATE_2, sm_add = sm_target(SM_RATE_2);
+      if( pos==SM_SWITCH_1 )
+        sm_shft = SM_RATE_1, sm_add = sm_target(SM_RATE_1);
       sm_add_y = sm_add&(-y);
     }
     int i = WRT_mpw[c0>>4];
@@ -2054,7 +2116,7 @@ void update() {
   // point (c0/b1/x5/w5/fails/failz/failcount are all updated above), so the six
   // hashes can be computed before contextModel.p() and their regions prefetched
   // under the whole model call.  Pure reordering of pure computation.
-  int rate = 6+(pos>14*256*1024)+(pos>28*512*1024);
+  int rate = APM_RATE_BASE+(pos>APM_SWITCH_1)+(pos>APM_SWITCH_2);
   int pz = failcount+1;
   pz += tri[(fails>>5)&3];
   pz += trj[(fails>>3)&3];
@@ -2077,18 +2139,18 @@ void update() {
 
   pr = contextModel.p();
 
-  int pt, pv, pu = pmix( APM1_w, a1.p(pr, k1, 3), P_SCALE-APM1_w, pr );
+  int pt, pv, pu = pmix( APM1_w, a1.p(pr, k1, APM1_RATE), P_SCALE-APM1_w, pr );
   pu = a4.p(pu, k4, rate);
-  pv = a2.p(pr, k2, rate+1);
+  pv = a2.p(pr, k2, rate+APM2_RATE_ADD);
   pv = a5.p(pv, k5, rate);
   pt = a3.p(pr, k3, rate);
   pz = a6.p(pu, k6, rate);
 #else
   pr = contextModel.p();
 
-  int rate = 6+(pos>14*256*1024)+(pos>28*512*1024);
+  int rate = APM_RATE_BASE+(pos>APM_SWITCH_1)+(pos>APM_SWITCH_2);
   int pt, pv, pz = failcount+1;
-  int pu = pmix( APM1_w, a1.p(pr, c0, 3), P_SCALE-APM1_w, pr );
+  int pu = pmix( APM1_w, a1.p(pr, c0, APM1_RATE), P_SCALE-APM1_w, pr );
   pz += tri[(fails>>5)&3];
   pz += trj[(fails>>3)&3];
   pz += trj[(fails>>1)&3];
@@ -2097,7 +2159,7 @@ void update() {
   pz = pz/2;
 
   pu = a4.p(pu, (c0*2)^(hash(b1, (x5>>8)&255, (x5>>16)&0x80ff)&0x1ffff), rate);
-  pv = a2.p(pr, (c0*8)^(hash(29, failz&2047)&0x7fff), rate+1);
+  pv = a2.p(pr, (c0*8)^(hash(29, failz&2047)&0x7fff), rate+APM2_RATE_ADD);
   pv = a5.p(pv, hash(c0, w5&0xfffff)&0xffff, rate);
   pt = a3.p(pr, (c0*32)^(hash(19, x5&0x80ffff)&0x7fff), rate);
   pz = a6.p(pu, (c0*4)^(hash(min(9, pz), x5&0x80ff)&0xffff), rate);
