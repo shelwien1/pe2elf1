@@ -217,6 +217,132 @@ static const U8 State_table[256][4] = {{1, 2, 0, 0}, {3, 5, 1, 0}, {4, 6, 0, 1},
 
 #define nex(state, sel) State_table[state][sel]
 
+// ---------------------------------------------------------------------------
+// PAQ_LOGISTIC -- the ONLY gate in this file that changes the bitstream.
+//
+// Ported from xad_logistic.inc.  The baseline squash() is a 33-node
+// piecewise-linear approximation of the logistic on a 128-wide grid, and
+// stretch() is built by inverting *that*, so it inherits the approximation
+// error.  Linear interpolation across a 128-wide step of a curve whose second
+// derivative peaks at 4096*0.0962/256^2 costs up to (128^2/8)*that ~ 12 units,
+// and measured it is 13.27 at d=318.
+//
+// The ported pair computes stretch exactly -- stretch(p) = S*ln(p/(N-p)) =
+// S*ln2*(log2 p - log2(N-p)), from an integer 65536*log2 table built by repeated
+// squaring -- and then finds squash as its inverse by binary search plus one
+// linear interpolation, so it rounds the real crossing.  Max deviation from the
+// true logistic drops 13.27 -> 0.58.
+//
+// paq8hp's constants (P_ONE 4096, ST_SCALE 256, stretch range +-2047) coincide
+// with xadpcm's shipped ones, so the arithmetic ports unchanged and the tables
+// come out bit-identical to xadpcm's -- see the FNV check below and
+// test_logistic.cpp, which asserts it against the published XAD_SQSTT_HASH.
+//
+// No floating point: the one irrational needed is ln2 as a Q48 literal, so the
+// tables are a property of this source rather than of whatever libm the build
+// links.  That matters here for the same reason it did there -- encoder and
+// decoder must agree on them exactly.
+//
+// The clamp shape is deliberately unchanged: squash still saturates to 0 below
+// -2047 and 4095 above +2047, so the coder's `if(p<1) p=1` guard stays live
+// rather than silently becoming dead code.
+// ---------------------------------------------------------------------------
+#if defined(PAQ_LOGISTIC)
+
+static const long long LN2_Q48 = 195103586505167LL;   // round(ln2 * 2^48)
+
+struct Logistic {
+  short sqt[4096];   // squash:  d+2048 -> p12
+  short stt[4096];   // stretch: p12    -> d
+
+  Logistic() {
+    // 65536*log2(i): square, renormalise below 2^32, count the shifts.  The +31
+    // corrects the truncation bias renormalisation accumulates, since
+    // i^(2^16) = w*2^k with w in [2^31,2^32) gives 2^16*log2(i) = k + log2(w).
+    static U32 L[4096];
+    for( U32 i = 0; i<4096; i++ ) {
+      unsigned long long w = i;
+      U32 k = 0;
+      for( int j = 0; j<16; j++ ) {
+        w = w*w;
+        k = k+k;
+        while( w >= (1ULL<<32) ) { w = (w+1)>>1; k++; }
+      }
+      L[i] = k + (i>1 ? 31u : 0u);
+    }
+    // S*ln2*2^16.  Q48 * 2^8 stays well inside i64.
+    const long long K = ((long long)256*LN2_Q48 + (1LL<<31))>>32;
+
+    // stretch, rounded: the +2^31 then >>32 is floor(x+0.5) and stays correct
+    // for negative x, which round-away-from-zero would not.
+    for( int p = 0; p<4096; p++ ) {
+      int pi = p<1 ? 1 : p>4095 ? 4095 : p;
+      long long v = (((long long)L[pi] - (long long)L[4096-pi])*K + (1LL<<31))>>32;
+      stt[p] = short(v<-2047 ? -2047 : v>2047 ? 2047 : v);
+    }
+
+    // squash = inverse of the above, via a Q8 stretch and one interpolation
+    for( int d = -2048; d<2048; d++ ) {
+      long long t = (long long)d<<8;
+      int lo = 1, hi = 4095;
+      while( lo<hi ) {
+        int m = (lo+hi)>>1;
+        long long q = (((long long)L[m] - (long long)L[4096-m])*K + (1LL<<23))>>24;
+        if( q<t ) lo = m+1; else hi = m;
+      }
+      int best = lo;
+      if( lo>1 ) {
+        long long s1 = (((long long)L[lo]   - (long long)L[4096-lo]  )*K + (1LL<<23))>>24;
+        long long s0 = (((long long)L[lo-1] - (long long)L[4096-lo+1])*K + (1LL<<23))>>24;
+        if( s1>t && s1!=s0 ) {
+          long long frac = ((t-s0)*256 + (s1-s0)/2)/(s1-s0);
+          best = (frac>=128) ? lo : lo-1;
+        }
+      }
+      sqt[d+2048] = short(best<1 ? 1 : best>4095 ? 4095 : best);
+    }
+
+    // The tables are the format: a build whose pair differs cannot decode
+    // another's archive, and this says so at startup instead of as garbage.
+    // -DPAQ_LOGISTIC_HASH=0 to silence while deliberately changing them.
+#if !defined(PAQ_LOGISTIC_HASH)
+  #define PAQ_LOGISTIC_HASH 0x7BCBA716u
+#endif
+    if( PAQ_LOGISTIC_HASH ) {
+      U32 h = 2166136261u;                        // FNV-1a over the two tables
+      for( int i = 0; i<4096; i++ ) {
+        h = (h ^ U32((U16)sqt[i]))*16777619u;
+        h = (h ^ U32((U16)stt[i]))*16777619u;
+      }
+      if( h!=U32(PAQ_LOGISTIC_HASH) ) {
+        printf( "paq8hpc: squash/stretch checksum %08X, expected %08X -- the tables are "
+                "pure integer arithmetic, so this means a corrupted or mismatched build\n",
+                h, U32(PAQ_LOGISTIC_HASH) );
+        exit(1);
+      }
+    }
+  }
+};
+
+// must precede `stretch` below: same TU, so declaration order is init order
+Logistic g_logistic;
+
+int squash(int d) {
+  if( d>2047 )
+    return 4095;
+  if( d<-2047 )
+    return 0;
+  return g_logistic.sqt[d+2048];
+}
+
+struct Stretch {
+int operator()(int p) const {
+  return g_logistic.stt[p];
+}
+} stretch;
+
+#else
+
 int squash(int d) {
   static const int t[33] = {1, 2, 3, 6, 10, 16, 27, 45, 73, 120, 194, 310, 488, 747, 1101, 1546, 2047, 2549, 2994, 3348, 3607, 3785, 3901, 3975, 4022, 4050, 4068, 4079, 4085, 4089, 4092, 4093, 4094};
   if( d>2047 )
@@ -246,6 +372,8 @@ int operator()(int p) const {
   return t[p];
 }
 } stretch;
+
+#endif
 
 #if !defined(__GNUC__)
 

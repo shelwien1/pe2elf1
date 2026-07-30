@@ -473,7 +473,110 @@ no-ops on this toolchain:
 `-static` remains untried: 126 `memmove@PLT`/`memset@PLT` call sites exist,
 though the hot ones (`E::get`'s constant-size `memset`) are already inlined.
 
-## 9. Reproducing
+## 9. `PAQ_LOGISTIC` — accurate squash/stretch tables ported from xad_logistic.inc
+
+**The only gate here that changes the bitstream.** Off by default, and the
+compression case for it did not survive measurement — but the port is exact and
+the tables are strictly better, so it is kept and documented.
+
+### What the baseline does wrong
+
+`squash()` is a 33-node piecewise-linear approximation of the logistic on a
+128-wide grid, and `stretch()` is built by inverting *that*, so it inherits the
+error. Linear interpolation across a 128-wide step of a curve whose second
+derivative peaks near `4096*0.0962/256^2` costs about `(128^2/8)*that ≈ 12`
+units; measured, the worst case is **13.27 at d=318**, out of 4096.
+
+The ported construction computes stretch exactly —
+`stretch(p) = S*ln(p/(N-p)) = S*ln2*(log2 p - log2(N-p))` from an integer
+`65536*log2` table built by repeated squaring — then finds squash as its inverse
+by binary search plus one linear interpolation, so it rounds the real crossing
+rather than snapping to a tabulated stretch. Max deviation from the true
+logistic: **13.27 → 0.58, a 22.8x improvement.** No floating point is involved;
+the one irrational needed is `ln2` as a Q48 literal, so the tables are a
+property of the source rather than of whichever libm the build links — which
+matters because encoder and decoder must agree on them exactly.
+
+The tables differ from the baseline's in **3539 of 4096 stretch entries (max 32)
+and 3162 of 4095 squash entries (max 13)**, so this is not a rounding tweak.
+
+### Validation (`test_logistic.cpp`, run before touching the model)
+
+The strongest check available: paq8hp's constants (`P_ONE` 4096, `ST_SCALE` 256,
+stretch range ±2047, p range 1..4095) coincide with xadpcm's shipped ones, so a
+faithful port must reproduce that file's published `XAD_SQSTT_HASH`. It does —
+**FNV-1a over (SQT,STT) = `7BCBA716`**, bit for bit, both standalone and inside
+paq8hpc, which pins all 8192 entries at once. Also checked: `LOG2` within 1 unit
+of `65536*log2(i)`; stretch within 1 of the float reference; both tables
+monotone; ranges safe at every use site including `squash(d)*16` fitting the u16
+in `APM`'s ctor (max 65520); rebuilds identical.
+
+**One assertion I got wrong, worth recording.** I first asserted that squash is
+an exact left inverse of stretch — `squash(stretch(p)) == p`. That is
+*mathematically impossible*, not a porting defect: `d(stretch)/dp = S*N/(p(N-p))`
+is **0.25 at the midpoint**, so up to 5 distinct `p` share each integer `d` and no
+left inverse can exist. The correct statement for a many-to-one map is the
+pseudo-inverse pair, and both hold with **zero violations**:
+
+```
+stretch(squash(stretch(p))) == stretch(p)      for all p
+squash(stretch(squash(d)))  == squash(d)       for all d
+```
+
+Round-trip error also improves: `stretch(squash(d))` mean 10.09 → 5.88 (max
+127 → 88, the residual being the saturated tail where consecutive `p` are ~95
+stretch units apart and no table can do better), and `squash(stretch(p))` mean
+0.885 → 0.625, max 3 → 2.
+
+### Compression: consistent, and negligible
+
+Round-trip verified on all 13 cases plus full book1 at L4/L8/L11, and the MinGW
+build is cross-OS byte-identical to the Linux one with the gate on.
+
+| input | level | baseline | ported | delta |
+|-------|------:|---------:|-------:|------:|
+| regression set (7 cases, total) | — | 132,458 | 132,438 | **−0.015%** |
+| book1[0:262144] | 6 | 71,701 | 71,694 | −0.010% |
+| book1[0:262144] | 9 | 71,699 | 71,694 | −0.007% |
+| 256K of ELF | 6 | 38,028 | 38,025 | −0.008% |
+| 256K of ELF | 9 | 38,022 | 38,021 | −0.003% |
+| 256K of C++ source | 6 | 23,437 | 23,435 | −0.009% |
+| 256K of C++ source | 9 | 23,437 | 23,435 | −0.009% |
+| **full book1** | 4 | 194,348 | 194,354 | **+0.003%** (+6 B) |
+| **full book1** | 8 | 193,109 | 193,107 | −0.001% (−2 B) |
+| **full book1** | 11 | 193,108 | 193,108 | 0.000% |
+
+Eight of eleven cases improve, one is exact, and **full book1 at L4 gets 6 bytes
+worse**. The effect is about −0.01% where it exists, i.e. single-digit bytes, and
+it shrinks toward zero as the input grows.
+
+**Why a 22.8x more accurate logistic buys essentially nothing:** the mixer's
+weights are trained against whatever `squash` they are given, and a smooth
+monotone distortion of it is almost entirely absorbed by the weight vector — and
+then by the six-stage APM chain, which is itself a learned correction of the
+final probability. Removing the distortion mostly relocates the weights rather
+than improving the prediction. That also explains the size trend: the shorter
+the input, the less adaptation has happened, and the more the raw table accuracy
+shows — which is exactly the direction the table above runs.
+
+### Speed: neutral, as expected
+
+Ir **−0.13%** (squash becomes a load instead of six arithmetic ops), wall clock
+ambiguous — −3.8% median but 5/15 wins against a control of +0.2%/8-of-15, and a
+*higher* best-of. The 8 KB `sqt` table replaces a 132-byte one, so it adds L1
+pressure that roughly cancels the arithmetic saved. Call it neutral.
+
+### Verdict
+
+Not enabled by default: it changes the bitstream — archives are mutually
+undecodable across the gate — and buys ~0.01%. That trade only makes sense for a
+new format, not for a drop-in. It is the right construction if the tables are
+ever revised for other reasons (a different `ST_SCALE`, or wanting the
+libm-independence guarantee), and `test_logistic.cpp` plus the built-in FNV
+checksum make it safe to change. `-DPAQ_LOGISTIC_HASH=0` disables the startup
+check while deliberately altering the tables.
+
+## 10. Reproducing
 
 ```
 ./build.sh FINAL -DPAQ_PREFETCH -DPAQ_AVX2 -DPAQ_DOT2 -DPAQ_GETSIMD -DPAQ_APMPF
@@ -481,6 +584,8 @@ though the hot ones (`E::get`'s constant-size `memset`) are already inlined.
 ./ab.sh   vfy/b128k 8 15 p_FINAL p_CANDIDATE  # wall clock, in-block control
 ./icount.sh vfy/b16k 4 c_base c_CANDIDATE     # exact instruction counts
 ./verify_win.sh w_final.exe win_final         # cross-OS, needs mingw + wine
+./verify_rt.sh  p_LOG LOGISTIC                # round-trip + size, for PAQ_LOGISTIC
+g++ -O2 -o t test_logistic.cpp -lm && ./t     # squash/stretch table checks
 ```
 
 Cross-OS prerequisites, both installed from the distro:
