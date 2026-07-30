@@ -32,6 +32,10 @@ clang -O3 -march=native -DPAQ_PREFETCH -DPAQ_AVX2 -DPAQ_DOT2 -DPAQ_GETSIMD \
       paq8hpc_speed.cpp -o paq8hpc
 ```
 
+Then try adding **`-DPAQ_BPOS_T`** (§8): it cuts 6.43% of all instructions —
+three times what `PAQ_CXTFL_T` saves — but like `CXTFL_T` it needs a quiet
+machine to show up in wall clock, and it did not on this host.
+
 ## 0. Headline
 
 Full book1 (768,771 B), min-of-3 end-to-end wall clock, pristine baseline vs the
@@ -378,7 +382,98 @@ on both hosts — enable unconditionally. `N16`+`WXPF`+`CXTFL_T` are worth
 A/B on your own target, together rather than individually. Never enable `PF2` or
 `RCMPF`.
 
-## 8. Reproducing
+## 8. Second-pass audit: what the first pass missed
+
+Re-reading `paq8hpc_speed.md` against the gate list turned up two items I had
+not actually tested, and re-reading the *source* turned up one idea the doc never
+raises. All are now implemented and verified byte-identical.
+
+### `PAQ_BPOS_T` — bit-position templating (not in the doc; biggest Ir win yet)
+
+`bpos` is constant for an entire `mix1` call, but the per-context loop re-tests it
+up to five times and feeds it to two *variable* shifts — and that loop runs `cn`
+times, up to 46 for WordModel's map, 58 contexts per bit across the four owners.
+Dispatching on `bpos` once, so the body sees it as a compile-time constant,
+collapses the four-way chain to the arm actually taken, turns `>>(8-bpos)` and
+`>>(7-bpos)` into constant shifts, and resolves the `bpos==7` reset and both
+prefetch guards at compile time. `RunContextMap::p` gets the same treatment
+(three calls per bit, two variable shifts each).
+
+**Exact instruction count: −6.43%** on top of the five recommended macros — more
+than three times what `PAQ_CXTFL_T` saves (−2.03%), and the largest reduction of
+any gate except the SIMD kernels themselves. Wall clock here: −0.6% (7/15)
+against a control of −3.2%, i.e. unresolvable, which is what a pure
+instruction-count win looks like on a latency-bound host.
+
+**This is the top candidate for the real hardware in §7.** `CXTFL_T` is the
+precedent: it also only reduced instructions, measured negative here, and
+converted to +2.5% under clang there. `BPOS_T` is the same shape and three times
+the size. It costs 8 instantiations of `mix1t` (16 combined with `CXTFL_T`), so
+the I-cache tradeoff is the thing to watch.
+
+### A gcc 13.3 `-O3` miscompile, found while building the above
+
+The first version of `PAQ_BPOS_T` cached the value in a local:
+`const int bp = (BP<0) ? bpos : BP;`. That **silently changed the archive in the
+no-macro build** — book1[0:65536] at L0 went 23173 → 32656 bytes, diverging from
+bit 16 on. The two forms are semantically identical, and the evidence says the
+compiler is at fault, not the code:
+
+- `-O0`, `-O1`, `-O2` all produce the correct 23173 from both forms.
+- `-O3 -fno-unswitch-loops` produces 23173. Eleven other `-O3`-only passes make
+  no difference; **loop unswitching alone** accounts for it.
+- **clang 18 `-O3` produces 23173 from both forms.**
+- `bpos` provably never changes inside the loop — checked with volatile reads at
+  loop entry and per iteration, zero hits.
+- `-Warray-bounds=2 -Wstringop-overflow=4` report nothing in the model.
+
+The mechanism: reading the global directly leaves it a potential alias of the
+`U8*` stores in the loop, so gcc cannot treat it as loop-invariant and cannot
+unswitch. Caching it in a local removes that barrier, unswitching fires, and the
+unswitched loop is wrong.
+
+The fix is to never introduce the variable — `PAQ_BP` is a macro expanding to a
+fresh read of the global when `BP<0`, textually what the baseline does, and to a
+literal when `BP>=0` (where the tests fold and there is nothing to unswitch). The
+warning is in the source at the macro definition, because this is a live trap for
+anyone touching that loop: **any edit that makes `bpos` provably loop-invariant
+in `mix1t` can silently change the output under gcc -O3.** Worth knowing that
+the shipped configuration is unaffected — no recommended gate caches `bpos`, and
+all of them verify byte-identical — but the next person to optimise this loop
+will walk straight into it.
+
+### The two doc items I had skipped
+
+- **`PAQ_HOT`** — `__attribute__((hot))` is listed in the doc's §10.4 next to
+  `__restrict`, and the first pass tested only `__restrict`. Measured:
+  **Ir +0.00%, exactly zero** (it only biases block layout), wall clock inside
+  the control band. Null, as the doc expected.
+- **`PAQ_IOUNLOCKED`** — the doc's §7 closes `fgetc_unlocked` *by argument*
+  ("nothing at the byte pipe is visible") rather than by measurement, so the gate
+  exists to check it. glibc's `getc`/`putc` do take the stream lock per byte, and
+  this program is single-threaded and owns both handles. Measured:
+  **Ir +0.13% — slightly more instructions, not fewer.** The doc's conclusion was
+  right, and now it is measured rather than argued.
+- **`PAQ_BHMOVE`** — mmax §7's `int`-switch replacement for BH's `memmove`, which
+  the doc calls the correct form but assigns to "measured class: noise" without a
+  number. Now numbered: **Ir −0.18%**, wall clock inside noise. Noise confirmed.
+
+### Build flags: four candidates eliminated by inspection, no measurement needed
+
+Worth recording because three of them are commonly recommended and all are
+no-ops on this toolchain:
+
+| flag | why it is pointless here |
+|------|--------------------------|
+| `-fomit-frame-pointer` | already enabled (`-Q --help=optimizers` confirms); Ubuntu 24.04's frame-pointer default does not apply to this compiler's `-O3` |
+| `-fno-stack-protector` | stack protector already off by default |
+| `-D_FORTIFY_SOURCE=0` | `_FORTIFY_SOURCE` is 3 by default, but gcc proves every `memmove`/`memset` size safe — **zero `__*_chk` calls in the generated code**, so there is nothing to switch off |
+| `-mprefer-vector-width=256` | only one `zmm` register appears in the whole `-march=native` output, so there is no 512-bit frequency-licensing exposure to avoid |
+
+`-static` remains untried: 126 `memmove@PLT`/`memset@PLT` call sites exist,
+though the hot ones (`E::get`'s constant-size `memset`) are already inlined.
+
+## 9. Reproducing
 
 ```
 ./build.sh FINAL -DPAQ_PREFETCH -DPAQ_AVX2 -DPAQ_DOT2 -DPAQ_GETSIMD -DPAQ_APMPF

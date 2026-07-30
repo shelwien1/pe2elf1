@@ -50,6 +50,32 @@
   #define PAQ_RS
 #endif
 
+// The doc's section 10 item 4 lists `hot` alongside __restrict; only __restrict
+// was tested there.  This marks the functions the instrumented counts in the
+// doc's section 2 identify as the hot tier, which biases block layout and lets
+// gcc/clang group them away from the cold ctor/table-init code.
+#if defined(PAQ_HOT) && (defined(__GNUC__)||defined(__clang__))
+  #define PAQ_HOTFN __attribute__((hot))
+#else
+  #define PAQ_HOTFN
+#endif
+
+//
+// !! Do NOT hoist PAQ_BP into a local variable. !!
+//
+// It expands to a fresh read of the global `bpos` when BP<0, which is exactly
+// what the baseline does, and that is load-bearing under gcc.  Caching it in a
+// `const int` makes it provably loop-invariant, which enables gcc's loop
+// unswitching on the four bpos tests in the loop below - and gcc 13.3 -O3
+// generates WRONG CODE for the unswitched loop: book1[0:65536] at L0 goes
+// 23173 -> 32656 bytes, diverging from bit 16 on.  It is a compiler bug, not a
+// latent bug here: -O0/-O1/-O2 all agree, -fno-unswitch-loops at -O3 agrees,
+// and clang 18 -O3 agrees on both forms.  Reading the global directly keeps the
+// U8* stores in the loop as potential aliases of it, so gcc cannot hoist it and
+// cannot unswitch.  With PAQ_BPOS_T the tests fold at compile time instead, so
+// there is nothing left to unswitch either way.
+#define PAQ_BP (BP<0 ? bpos : BP)
+
 #if defined(PAQ_GETSIMD)
   #include <emmintrin.h>
   #if defined(__GNUC__) || defined(__clang__)
@@ -823,7 +849,24 @@ U8*operator[](U32 i) {
   } else
     chk = *(int*)p;
   p = &t[i*4];
+#if defined(PAQ_BHMOVE)
+  // j is 0..6 and the whole move is <= 24 B inside one bucket; the switch drops
+  // the call and the variable-length machinery memmove carries.
+  {
+    int* q = (int*)p;
+    switch( j ) {
+      case 6: q[6] = q[5];
+      case 5: q[5] = q[4];
+      case 4: q[4] = q[3];
+      case 3: q[3] = q[2];
+      case 2: q[2] = q[1];
+      case 1: q[1] = q[0];
+      default: break;
+    }
+  }
+#else
   memmove(p+4, p, j*4);
+#endif
   *(int*)p = chk;
   return p;
 }
@@ -832,7 +875,7 @@ U8*operator[](U32 i) {
 // CF == -1 reads the global cxtfl (exactly the baseline); CF == 0 or 1 bakes it
 // in, which is what PAQ_CXTFL_T uses to turn the per-context branch into two
 // instantiations.  Same arithmetic either way.
-template <int CF> inline int mix2t(MainMixer &m, int s, StateMap &sm) {
+template <int CF> inline PAQ_HOTFN int mix2t(MainMixer &m, int s, StateMap &sm) {
   int p1 = sm.p(s);
   int n0 = -!nex(s, 2);
   int n1 = -!nex(s, 3);
@@ -878,15 +921,34 @@ void set(U32 cx) {
   cp = t[cx]+2;
 }
 
-int p() {
-  if( (cp[1]+256)>>(8-bpos)==c0 )
-    return (((cp[1]>>(7-bpos))&1)*2-1)*ilog(cp[0]+1)*mulc;
+// same bpos-constant-folding as ContextMap::mix1t, on a much smaller body:
+// three calls per bit, each with two variable shifts.
+template <int BP> int pt() {
+  if( (cp[1]+256)>>(8-PAQ_BP)==c0 )
+    return (((cp[1]>>(7-PAQ_BP))&1)*2-1)*ilog(cp[0]+1)*mulc;
   else
     return 0;
 }
 
+int p() {
+  return pt<-1>();
+}
+
 int mix(MainMixer &m) {
-  m.add(p());
+#if defined(PAQ_BPOS_T)
+  switch( bpos ) {
+    case 0:  m.add(pt<0>()); break;
+    case 1:  m.add(pt<1>()); break;
+    case 2:  m.add(pt<2>()); break;
+    case 3:  m.add(pt<3>()); break;
+    case 4:  m.add(pt<4>()); break;
+    case 5:  m.add(pt<5>()); break;
+    case 6:  m.add(pt<6>()); break;
+    default: m.add(pt<7>()); break;
+  }
+#else
+  m.add(pt<-1>());
+#endif
   return cp[0]!=0;
 }
 };
@@ -926,7 +988,7 @@ U8 last;
 
 U8 bh[7][7];
 
-U8*get(U16 ch, int j) {
+PAQ_HOTFN U8*get(U16 ch, int j) {
   ch += j;
   if( chk[last&15]==ch )
     return &bh[last&15][0];
@@ -988,14 +1050,22 @@ void pfprobe2(int cc) const {
   }
 }
 
-template <int CF> int mix1t(MainMixer &m, int cc, int c1, int y1) {
+// BP == -1 reads the global `bpos` (exactly the baseline); BP in 0..7 bakes it
+// in, which is what PAQ_BPOS_T uses.  `bpos` is constant for the whole call but
+// the loop below re-tests it up to five times per context and feeds it to two
+// *variable* shifts, and the loop runs cn times - up to 46 for WordModel's map,
+// 58 contexts per bit across the four owners.  Baking it in collapses the
+// four-way chain to the one arm actually taken, turns `>>(8-bpos)` and
+// `>>(7-bpos)` into constant shifts, and resolves the `bpos==7` reset and the
+// prefetch guards at compile time.  Costs 8 instantiations of this body.
+template <int CF, int BP> PAQ_HOTFN int mix1t(MainMixer &m, int cc, int c1, int y1) {
 
 #if defined(PAQ_PREFETCH)
-  if( bpos==0||bpos==2||bpos==5 )
+  if( PAQ_BP==0||PAQ_BP==2||PAQ_BP==5 )
     pfprobe(cc);
 #endif
 #if defined(PAQ_PF2)
-  if( bpos==1||bpos==4 )
+  if( PAQ_BP==1||PAQ_BP==4 )
     pfprobe2(cc);
 #endif
 
@@ -1009,16 +1079,16 @@ template <int CF> int mix1t(MainMixer &m, int cc, int c1, int y1) {
       *cpi = ns;
     }
 
-    if( bpos>1&&runp[i][0]==0 )
+    if( PAQ_BP>1&&runp[i][0]==0 )
       cpi = 0;
-    else if( bpos==1||bpos==3||bpos==6 )
+    else if( PAQ_BP==1||PAQ_BP==3||PAQ_BP==6 )
       cpi = cp0[i]+1+(cc&1);
-    else if( bpos==4||bpos==7 )
+    else if( PAQ_BP==4||PAQ_BP==7 )
       cpi = cp0[i]+3+(cc&3);
     else {
       cp0[i] = cpi = t[(cxt[i]+cc)&Sz].get(cxt[i]>>16, i);
 
-      if( bpos==0 ) {
+      if( PAQ_BP==0 ) {
         if( cpi[3]==2 ) {
           const int c = cpi[4]+256;
           U8* p = t[(cxt[i]+(c>>6))&Sz].get(cxt[i]>>16, i);
@@ -1046,8 +1116,8 @@ template <int CF> int mix1t(MainMixer &m, int cc, int c1, int y1) {
     }
 
     int rc = runp[i][0];
-    if( (runp[i][1]+256)>>(8-bpos)==cc ) {
-      int b = ((runp[i][1]>>(7-bpos))&1)*2-1;
+    if( (runp[i][1]+256)>>(8-PAQ_BP)==cc ) {
+      int b = ((runp[i][1]>>(7-PAQ_BP))&1)*2-1;
       int c = ilog(rc+1);
       if( rc&1 )
         c = (c*15)/4;
@@ -1060,13 +1130,13 @@ template <int CF> int mix1t(MainMixer &m, int cc, int c1, int y1) {
     result += mix2t<CF>(m, cpi ? *cpi : 0, sm[i]);
     cp[i] = cpi;
   }
-  if( bpos==7 )
+  if( PAQ_BP==7 )
     cn = 0;
   return result;
 }
 
 int mix1(MainMixer &m, int cc, int c1, int y1) {
-  return mix1t<-1>(m, cc, c1, y1);
+  return mix1t<-1,-1>(m, cc, c1, y1);
 }
 
 ContextMap() : cn(0) {
@@ -1090,22 +1160,40 @@ void set(U32 cx) {
   cxt[i] = cx*987654323+i;
 }
 
-int mix(MainMixer &m) {
 #if defined(PAQ_CXTFL_T)
-  return mix1t<1>(m, c0, b1, y);
+  enum { CF3 = 1, CF0 = 0 };   // cxtfl baked in per call site
 #else
-  return mix1t<-1>(m, c0, b1, y);
+  enum { CF3 = -1, CF0 = -1 }; // read the global, as the baseline does
 #endif
+
+// Dispatch on bpos once per call so the body below sees it as a constant.
+// Without PAQ_BPOS_T this is a single call with BP == -1 and the global is read,
+// bit for bit the baseline.
+template <int CF> int mixbp(MainMixer &m) {
+#if defined(PAQ_BPOS_T)
+  switch( bpos ) {
+    case 0:  return mix1t<CF,0>(m, c0, b1, y);
+    case 1:  return mix1t<CF,1>(m, c0, b1, y);
+    case 2:  return mix1t<CF,2>(m, c0, b1, y);
+    case 3:  return mix1t<CF,3>(m, c0, b1, y);
+    case 4:  return mix1t<CF,4>(m, c0, b1, y);
+    case 5:  return mix1t<CF,5>(m, c0, b1, y);
+    case 6:  return mix1t<CF,6>(m, c0, b1, y);
+    default: return mix1t<CF,7>(m, c0, b1, y);
+  }
+#else
+  return mix1t<CF,-1>(m, c0, b1, y);
+#endif
+}
+
+int mix(MainMixer &m) {
+  return mixbp<CF3>(m);
 }
 
 // RecordModel's cm/cn/cq run with cxtfl == 0; under PAQ_CXTFL_T that becomes a
 // second instantiation instead of a per-context branch.
 int mix0(MainMixer &m) {
-#if defined(PAQ_CXTFL_T)
-  return mix1t<0>(m, c0, b1, y);
-#else
-  return mix1t<-1>(m, c0, b1, y);
-#endif
+  return mixbp<CF0>(m);
 }
 
 // hoist the whole probe set above whatever the caller does next

@@ -33,11 +33,27 @@ struct Rangecoder {
 
   void rc_SetFiles( FILE* _f, FILE* _g ) { f=_f; g=_g; nget=0; nput=0; }
 
+  // PAQ_IOUNLOCKED: glibc's getc/putc take the stream lock on every byte.  This
+  // program is single-threaded and owns both handles, so the unlocked forms are
+  // equivalent.  The doc's section 7 closes this by argument rather than
+  // measurement ("nothing at the byte pipe is visible"); the gate exists to
+  // check that rather than assume it.
+#if defined(PAQ_IOUNLOCKED) && !defined(_WIN32)
+  #define PAQ_GETC(f)   getc_unlocked(f)
+  #define PAQ_PUTC(c,g) putc_unlocked((c),(g))
+#elif defined(PAQ_IOUNLOCKED)
+  #define PAQ_GETC(f)   _fgetc_nolock(f)
+  #define PAQ_PUTC(c,g) _fputc_nolock((c),(g))
+#else
+  #define PAQ_GETC(f)   getc(f)
+  #define PAQ_PUTC(c,g) putc((c),(g))
+#endif
+
   // EOF yields uint(-1), exactly like coro3_pin::get() did on f_quit
-  uint get( void ) { uint c = getc(f); nget += (c!=uint(-1)); return c; }
+  uint get( void ) { uint c = PAQ_GETC(f); nget += (c!=uint(-1)); return c; }
 
   // putc truncates to a byte, exactly like coro3_pin::put0()'s *ptr++ = c
-  void put( uint c ) { putc( c, g ); nput++; }
+  void put( uint c ) { PAQ_PUTC( c, g ); nput++; }
 
   uint muldivR( uint a, uint b ) { return (qword(a)*b)/range; }
 
