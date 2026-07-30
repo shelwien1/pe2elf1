@@ -180,8 +180,51 @@ U32 b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, b7 = 0, b8 = 0, tt = 0, c4 =
 int order, bpos = 0, cxtfl = 3, sm_shft = 7, sm_add = 65535+127, sm_add_y = 0;
 
 // level-independent, and read by every model, so it stays at file scope with
-// the rest of the shared scalar state rather than moving into Predictor<L>
-Buf<1u<<30> buf;
+// the rest of the shared scalar state rather than moving into Predictor<L>.
+//
+// SIZING: this is the history window every model back-references through -- the
+// order-N contexts via buf(i), WordModel's `above` via buf[nl1+col].  There is
+// no MatchModel in this build, so this buffer IS the whole match/history window.
+// It must hold the entire input, or references farther back than SZ silently
+// alias earlier bytes (operator[] masks with SZ-1) and the model sees wrapped
+// garbage rather than real history -- no crash, no warning, just worse
+// compression.  The target is enwik9 at 10^9 bytes, so the window is 1 GiB:
+// 2^30 = 1,073,741,824, which clears enwik9 by 73.7 MB.
+#ifndef PAQ_BUFBITS
+  #define PAQ_BUFBITS 30
+#endif
+Buf<1u<<PAQ_BUFBITS> buf;
+
+// Machine-checked so it cannot regress quietly.  This is not hypothetical: one
+// of the reviewed optimisation docs proposed shrinking this to 4 MiB and
+// labelled it bit-exact (see paq8hpc_speed.md section 9(g)), which would have
+// broken every reference past 4 MiB while still round-tripping.  Build with
+// -DPAQ_ALLOW_SMALL_BUF to deliberately use a smaller window (test_window.cpp
+// uses it to exercise the wrap path).
+//
+// MEASURED REACH, so whoever adds a match model knows what the window is
+// currently earning.  The only reads of buf in this build are buf(2), buf(3) in
+// ContextModel::p and buf[nl1+col] in WordModel -- the previous-but-one line at
+// the same column.  On book1[0:131072] the longest (prev line + current line)
+// span is 137 bytes, and empirically a **128-byte** window reproduces the 1 GiB
+// output byte for byte; it only diverges at 64 bytes.  So for text the current
+// model set uses ~10^2 bytes of this 2^30-byte window.
+//
+// The one case where the size genuinely matters today: with no newlines in the
+// input, nl1 stays at its -2 initial value, so buf[nl1+col] indexes the very TOP
+// of the buffer.  That slot is untouched (and therefore a stable zero) only while
+// the input has not wrapped -- measured on a 128 KB newline-free file, a 1 MiB
+// window matches 1 GiB but a 64 KiB one does not.  A 1 GiB window keeps that
+// context deterministic for any input up to 2^30, enwik9 included.
+enum { PAQ_ENWIK9 = 1000000000 };
+#if !defined(PAQ_ALLOW_SMALL_BUF)
+static_assert( (1ull<<PAQ_BUFBITS) >= (unsigned long long)PAQ_ENWIK9,
+  "history window (PAQ_BUFBITS) must hold enwik9 (10^9 bytes) whole -- "
+  "anything smaller makes back-references past the window alias earlier bytes" );
+#endif
+// SZ is a U32 template argument and operator[] masks with SZ-1, so 32 would wrap
+// the size itself to 0.
+static_assert( PAQ_BUFBITS>=1 && PAQ_BUFBITS<=31, "PAQ_BUFBITS must be in [1,31]" );
 
 struct Ilog {
 U8 t[65536];

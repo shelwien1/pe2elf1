@@ -576,7 +576,72 @@ libm-independence guarantee), and `test_logistic.cpp` plus the built-in FNV
 checksum make it safe to change. `-DPAQ_LOGISTIC_HASH=0` disables the startup
 check while deliberately altering the tables.
 
-## 10. Reproducing
+## 10. History window: 1 GiB, and there is no match model
+
+Asked to make sure the match-model window is 1 GB so enwik9 fits whole. Three
+findings, in order of importance.
+
+**1. There is no match model in this build.** The predictor runs
+`ContextMap` (order-N, 7 contexts), three `RunContextMap`s, `WordModel`,
+`SparseModel` and `RecordModel`. No `MatchModel`, no match hash table, no match
+pointer or length. So `Buf` *is* the whole match/history window — there is
+nothing else holding history — and if the intent is to exploit enwik9-scale
+repetition, that needs a match model added, not a bigger buffer.
+
+**2. The window already holds enwik9, and is now machine-checked.**
+`Buf<1u<<PAQ_BUFBITS>` with `PAQ_BUFBITS` defaulting to 30 is
+**1,073,741,824 bytes**, clearing enwik9's 10^9 by 73.7 MB (7.4%). It was already
+1 GiB; what was missing is that nothing enforced it. A `static_assert` now does:
+
+```
+static_assert( (1ull<<PAQ_BUFBITS) >= 1000000000ull, ... );
+```
+
+Verified to fire on `-DPAQ_BUFBITS=22` — the 4 MiB shrink one reviewed doc
+proposed and labelled bit-exact (§9(g)) — and a second assert bounds
+`PAQ_BUFBITS` to [1,31], since `SZ` is a `U32` template argument and 32 would
+wrap the size itself to zero. `-DPAQ_ALLOW_SMALL_BUF` is the deliberate escape
+hatch.
+
+`test_window.cpp` includes the real header and inspects the actual
+`paq8hp::buf`, so it cannot drift from what ships. It checks the size and
+headroom; that masking is the identity for **all 10^9 positions** (exhaustive,
+not sampled); that the first colliding position is exactly 2^30, i.e. past
+enwik9 rather than inside it; and then writes all 10^9 bytes and confirms
+`buf(i)` back-references resolve correctly at distances up to 999,999,999 —
+including that byte 0 is still live when `pos` sits at the end of enwik9. Also
+records the limit ordering: **window 1 GiB < `int pos` 2 GiB < 4-byte `f_len`
+header 4 GiB**, so the window is the binding constraint and enwik9 uses 46.6% of
+`int pos`.
+
+**3. What the window is actually earning today: ~128 bytes of it.** The only
+reads of `buf` in the whole model are `buf(2)`, `buf(3)` in `ContextModel::p` and
+`buf[nl1+col]` in `WordModel` — the previous-but-one line at the same column.
+Measured by shrinking the window and comparing archives:
+
+| window | book1[0:131072] L6 | vs 1 GiB |
+|--------|-------------------:|----------|
+| 1 GiB … 128 B | 37,970 | **byte-identical** |
+| 64 B | 37,970 | differs |
+
+A **128-byte** window reproduces the 1 GiB output exactly; it only diverges at
+64. That matches the structure: the longest (previous line + current line) span
+in that input is 137 bytes. So for text, the current model set uses ~10^2 bytes
+of a 2^30-byte window — the 1 GiB is ~8 million times more than any present
+model reads.
+
+There is one case where the size does matter today. With **no newlines** in the
+input, `nl1` never leaves its −2 initial value, so `buf[nl1+col]` indexes the top
+of the buffer, whose value depends on whether the input has wrapped around to
+overwrite it. Measured on a 128 KB newline-free file: a 1 MiB window matches
+1 GiB, a 64 KiB one does not. A 1 GiB window keeps that context a deterministic
+zero for any input up to 2^30 — enwik9 included.
+
+**Net:** the window requirement is satisfied and now enforced, but it is
+insurance for a match model that does not exist yet rather than something the
+current models are using.
+
+## 11. Reproducing
 
 ```
 ./build.sh FINAL -DPAQ_PREFETCH -DPAQ_AVX2 -DPAQ_DOT2 -DPAQ_GETSIMD -DPAQ_APMPF
@@ -586,6 +651,7 @@ check while deliberately altering the tables.
 ./verify_win.sh w_final.exe win_final         # cross-OS, needs mingw + wine
 ./verify_rt.sh  p_LOG LOGISTIC                # round-trip + size, for PAQ_LOGISTIC
 g++ -O2 -o t test_logistic.cpp -lm && ./t     # squash/stretch table checks
+g++ -O2 -o w test_window.cpp && ./w           # 1 GiB window holds enwik9
 ```
 
 Cross-OS prerequisites, both installed from the distro:
