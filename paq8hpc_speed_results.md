@@ -1287,9 +1287,16 @@ because the effect sits an order of magnitude below this container's ±4% noise
 floor — which is exactly why section 1's protocol measures this kind of change
 with Ir instead.
 
-Byte-identity holds across all five legs (release, tuning, both with the 14
-speed gates, MinGW under wine), and `PAQ_LOGISTIC` still builds at `P_BITS`
-8/12/16.
+Byte-identity holds across every leg, and `PAQ_LOGISTIC` still builds at
+`P_BITS` 8/12/16:
+
+| build | `verify.sh` |
+|---|---|
+| release (`Const 1`, `USE_NEW 0`) | ok |
+| tuning (`Debug 1, Const 0`, `USE_NEW 1`) | ok |
+| release + 14 speed gates | ok |
+| tuning + 14 speed gates | ok |
+| MinGW release under wine | ok — 5 cases, all four cross-OS checks |
 
 ## 18. Reproducing
 
