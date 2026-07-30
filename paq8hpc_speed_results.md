@@ -690,7 +690,94 @@ own pre-rename numbers exactly (−0.015% on the set); both standalone tests pas
 and the MinGW build still produces the published vector (20321 B, md5
 `5b20ec75…`).
 
-## 12. Reproducing
+## 12. Can `P_SCALE` be changed? Structurally yes, practically no
+
+Naming the scales invited the obvious follow-up: is `P_SCALE` now a free
+parameter? It is overridable — `-DPAQ_P_BITS=n`, `-DPAQ_ST_SCALE=n` — and the
+answer splits cleanly in two.
+
+### Structural dependencies: captured, and one was missing
+
+**P_BITS 9 through 16 all build and round-trip exactly** with `-DPAQ_LOGISTIC`
+(which computes the tables instead of using the literal ones): encoder and
+decoder agree bit for bit at every setting. Every table size, index, mask and
+derived shift follows `P_SCALE` correctly. The real constraints are now asserted
+rather than implied:
+
+| constraint | why |
+|---|---|
+| `P_BITS <= PR_BITS` (16) | `PR_SHIFT = PR_BITS-P_BITS` must be >= 0 |
+| `P_BITS >= 6` | `SQ_BITS = P_BITS-5` must stay >= 1 |
+| stretch fits `short` | `Stretch::t` and `Mixer::tx` are `short` |
+| `P_SCALE < 2^24` | must stay far below the coder's `sTOP` |
+| `P_BITS == 12` unless `PAQ_LOGISTIC` | the baseline `squash()` table holds 33 **literal 12-bit probabilities** — a hard weld, now rejected at compile time with that message |
+
+**The survey found one genuinely missed dependency: `SQ_BITS` was hardcoded 7.**
+It must be `P_BITS-5`, so that `SQ_NODES` stays 33 for every `P_BITS` — with 7
+fixed, the APM geometry silently changed with the scale (5 nodes at `P_BITS=9`,
+513 at 16) and APM's output shift `PR_BITS+SQ_BITS-P_BITS` drifted off 11. Now
+derived, with a `static_assert` tying it to `SQ_NODES`. `P_BITS=12` output is
+byte-identical before and after, since 12-5 == 7.
+
+It also turned up a **real defect in the `PAQ_LOGISTIC` port**: `(long long)d<<Q8_BITS`
+left-shifts a negative value for half the range, which is UB before C++20.
+xad_logistic.inc relies on being built as C++20 and says so; this file sets no
+`-std` and gcc 13 defaults to gnu++17. Found with `-fsanitize=undefined`, fixed
+by using `d*Q8_ONE` (well-defined, same codegen, tables still hash `7BCBA716`).
+The shipped non-`PAQ_LOGISTIC` path was and is UBSan-clean.
+
+### Scale-dependent tuning: not captured, and not nameable
+
+Compression collapses at every `P_BITS` except 12, and stays collapsed after both
+fixes above:
+
+| P_BITS | ST_SCALE 256 | ST_SCALE scaled with P_HALF |
+|-------:|-------------:|----------------------------:|
+| 9  | +95.3% | +86.6% |
+| 10 | +131.3% | +119.2% |
+| 11 | +220.3% | +217.2% |
+| **12** | **0.0%** | **0.0%** |
+| 13 | +29.5% | +29.1% |
+| 14 | +106.5% | +87.3% |
+| 15 | +16.9% | +70.9% |
+| 16 | +78.1% | — |
+
+(book1[0:131072] L6, all round-tripping correctly.) The result is
+**non-monotone** — 11 is worse than both 9 and 13 — which is the signature of
+mistuned weights, not of a structural bug: a broken index or overflow would
+degrade smoothly or fail.
+
+Two causes, and neither is fixable by naming:
+
+1. **`ST_MAX = P_HALF-1` couples the logistic *range* to the probability
+   *precision*.** It has to: `squash` indexes `sqt[d+P_HALF]` and APM indexes
+   `(pr+P_HALF)>>SQ_BITS`, so the stretch range must be exactly
+   `[-P_HALF,P_HALF)`. But the *natural* range is `ST_SCALE*ln(P_MAX)`, which does
+   not scale with `P_HALF`. Measured fraction of the p range that `stretch` clamps
+   away: **53.9% at P_BITS=9, 23.9% at 10, 3.6% at 11, 0.07% at 12, 0% above.**
+   P_BITS=12 sits almost exactly at the point where the clamp stops binding — the
+   original scales were chosen together, not independently.
+2. **About a dozen fitted constants assume (P_BITS=12, ST_SCALE=256)** and have no
+   derivation to give them: `Mixer::p`'s `squash((z*15)>>13)`, `squash(z>>9)` and
+   `(dp*9)>>9`; `update`'s `err*7` and `update2`'s `*3/2`; every weight in
+   `mix2t` (`st/4`, `(p1-p0)*3/64`, `st*(n1-n0)*3/16`, `/16`, `*7/64`, `st*9/32`);
+   `mix1`'s `(c*15)/4` and `c*13`; `RunContextMap`'s `mulc` arguments 14/18/20;
+   SSCM's `*mulc/32`; and `Predictor::update`'s final blends
+   `(pt*6+pu+pv*11+pz*14+16)>>5` / `(pt*4+pu*5+pv*12+pz*11+16)>>5`. These are
+   weights *in* the logistic domain; rescaling the domain invalidates all of them.
+
+### Answer
+
+`P_SCALE` is structurally free in `[2^6, 2^16]` and pinned to 4096 in practice.
+Changing it needs `-DPAQ_LOGISTIC` plus a full retune of the mixer weights — the
+naming makes that retune *possible to attempt* (nothing is hidden, nothing
+overflows, the stream stays self-consistent) but does not do it. If the goal is a
+different precision, the clean prerequisite is to decouple the logistic range from
+`P_HALF` — give the stretch clamp its own `ST_LIMIT` sized from
+`ST_SCALE*ln(P_MAX)` and index `sqt`/APM off that — so precision and range can be
+chosen independently. That is a design change, not a rename.
+
+## 13. Reproducing
 
 ```
 ./build.sh FINAL -DPAQ_PREFETCH -DPAQ_AVX2 -DPAQ_DOT2 -DPAQ_GETSIMD -DPAQ_APMPF

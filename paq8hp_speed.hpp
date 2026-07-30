@@ -110,24 +110,44 @@ typedef unsigned int U32;
 // internally and shift by PR_SHIFT to trade with the P_BITS world.
 // ---------------------------------------------------------------------------
 
-constexpr int P_BITS  = 12;               // precision of a prediction
+#ifndef PAQ_P_BITS
+  #define PAQ_P_BITS 12
+#endif
+#ifndef PAQ_ST_SCALE
+  #define PAQ_ST_SCALE 256
+#endif
+
+constexpr int P_BITS  = PAQ_P_BITS;       // precision of a prediction
 constexpr int P_SCALE = 1<<P_BITS;        // 4096, the coder's totFreq
 constexpr int P_MAX   = P_SCALE-1;        // 4095, largest codable p
 constexpr int P_MIN   = 1;                // smallest codable p; p==0 is undecodable
 constexpr int P_HALF  = P_SCALE/2;        // 2048, "no information"
 
-constexpr int ST_SCALE = 256;             // stretch's logistic scale
+constexpr int ST_SCALE = PAQ_ST_SCALE;    // stretch's logistic scale
 constexpr int ST_MAX   = P_HALF-1;        // 2047
 constexpr int ST_MIN   = -ST_MAX;         // -2047
 
 // squash interpolates the logistic on a SQ_STEP-wide grid of SQ_NODES points;
 // APM reuses the same grid over the same stretch range, hence APM_NODES.
-constexpr int SQ_BITS  = 7;
+//
+// SQ_BITS is DERIVED, not fixed at 7.  The grid has to cover the stretch range
+// [-P_HALF,P_HALF) in a fixed number of nodes, so the step must scale with
+// P_SCALE: SQ_BITS = P_BITS-5 keeps SQ_NODES at 33 for every P_BITS, which is
+// what the 33-entry baseline table and APM's per-context region both assume.
+// Hardcoding 7 silently changed the APM geometry with P_BITS (5 nodes at
+// P_BITS=9, 513 at 16) and was one of the two reasons a P_BITS sweep collapsed;
+// see paq8hpc_speed_results.md section 12.  It also keeps APM's output shift
+// PR_BITS+SQ_BITS-P_BITS pinned at 11 regardless of P_BITS.
+constexpr int SQ_NODES = 33;              // interpolation nodes over the range
+constexpr int SQ_BITS  = P_BITS-5;        // 7 at P_BITS==12
 constexpr int SQ_STEP  = 1<<SQ_BITS;      // 128
 constexpr int SQ_MASK  = SQ_STEP-1;       // 127
-constexpr int SQ_NODES = 2*P_HALF/SQ_STEP + 1;   // 33
 constexpr int SQ_MID   = SQ_NODES/2;      // 16, the node at d==0
 constexpr int APM_NODES = SQ_NODES;       // 33 entries per APM context
+
+static_assert( 2*P_HALF/SQ_STEP + 1 == SQ_NODES,
+  "SQ_BITS must satisfy P_SCALE>>SQ_BITS == SQ_NODES-1" );
+static_assert( SQ_BITS>=1, "P_BITS must be at least 6 for the squash grid" );
 
 constexpr int PR_BITS  = 16;              // StateMap/APM internal precision
 constexpr int PR_ONE   = 1<<PR_BITS;      // 65536
@@ -135,6 +155,37 @@ constexpr int PR_MAX   = PR_ONE-1;        // 65535
 constexpr int PR_SHIFT = PR_BITS-P_BITS;  // 4, PR_BITS <-> P_BITS
 
 constexpr int N_STATES = 256;             // rows of State_table / StateMap::t
+
+// ---- what P_BITS is actually allowed to be -------------------------------
+// These are the constraints the code really imposes, as opposed to the ones the
+// naming makes it look like it imposes.  See paq8hpc_speed_results.md section 12
+// for the measured survey.
+//
+// PR_SHIFT = PR_BITS-P_BITS must be >= 0: StateMap and APM hold probabilities at
+// PR_BITS and shift down to P_BITS, and a negative shift is nonsense.
+static_assert( P_BITS>=1 && P_BITS<=PR_BITS,
+  "P_BITS must be in [1,16]: StateMap/APM store probabilities at PR_BITS=16 and "
+  "shift down by PR_SHIFT=PR_BITS-P_BITS" );
+// stretch() values are held in `short` (Stretch::t, Mixer::tx), and ST_MAX is
+// P_HALF-1 because squash indexes sqt[d+P_HALF] and APM indexes
+// (pr+P_HALF)>>SQ_BITS -- both need the stretch range to be exactly [-P_HALF,P_HALF).
+static_assert( ST_MAX<=32767 && ST_MIN>=-32768,
+  "stretch values must fit in short" );
+// APM's per-context region has to cover the whole stretch range at SQ_STEP
+// granularity, with one spare for the index+1 read.
+static_assert( ((2*P_HALF-1)>>SQ_BITS) <= APM_NODES-2,
+  "APM_NODES too small for the stretch range at SQ_STEP granularity" );
+// The rangecoder needs totFreq well below the renormalisation floor (sTOP=2^24).
+static_assert( P_SCALE < (1<<24), "P_SCALE must stay far below the coder's sTOP" );
+
+// The baseline (non-PAQ_LOGISTIC) squash carries 33 table VALUES that are
+// literal 12-bit probabilities, so that path is welded to P_BITS==12.  With
+// PAQ_LOGISTIC the tables are computed instead and P_BITS is free.
+#if !defined(PAQ_LOGISTIC)
+static_assert( P_BITS==12,
+  "the baseline squash() table holds 33 hardcoded 12-bit probabilities, so "
+  "P_BITS != 12 needs -DPAQ_LOGISTIC (which computes the tables instead)" );
+#endif
 
 // ilog's domain is every U16 value.  Numerically equal to PR_ONE and completely
 // unrelated to it -- kept separate on purpose.
@@ -344,6 +395,12 @@ static const long long LN2_Q48 = 195103586505167LL;   // round(ln2 * 2^48)
 
 // Q8: the binary search runs on a stretch held at Q8_BITS fractional bits, so
 // the crossing can be interpolated between adjacent p.
+//
+// The >>24 / >>32 below are applied to values that can be negative.  That is
+// implementation-defined rather than undefined pre-C++20 (and arithmetic on every
+// compiler this targets), which is what makes the +(1<<n) bias reproduce
+// floor(x+0.5) for negative x too.  UBSan does not flag it; it flagged only the
+// left shift, which is now a multiply.
 constexpr int Q8_BITS = 8;
 constexpr int Q8_ONE  = 1<<Q8_BITS;       // 256
 constexpr int Q8_HALF = Q8_ONE/2;         // 128
@@ -380,7 +437,12 @@ struct Logistic {
 
     // squash = inverse of the above, via a Q8 stretch and one interpolation
     for( int d = -P_HALF; d<P_HALF; d++ ) {
-      long long t = (long long)d<<Q8_BITS;
+      // d*Q8_ONE, not d<<Q8_BITS: d is negative over half this range, and left
+      // shift of a negative value is UB before C++20 (xad_logistic.inc relies on
+      // being built as C++20; this file does not set -std, and gcc 13 defaults to
+      // gnu++17).  The multiply is well-defined and compiles to the same shift.
+      // Caught by -fsanitize=undefined; the non-PAQ_LOGISTIC path is clean.
+      long long t = (long long)d*Q8_ONE;
       int lo = P_MIN, hi = P_MAX;
       while( lo<hi ) {
         int m = (lo+hi)>>1;
@@ -405,7 +467,9 @@ struct Logistic {
 #if !defined(PAQ_LOGISTIC_HASH)
   #define PAQ_LOGISTIC_HASH 0x7BCBA716u
 #endif
-    if( PAQ_LOGISTIC_HASH ) {
+    // only meaningful at the shipped scales -- a sweep of P_BITS/ST_SCALE must be
+    // free to produce different tables, which is the point of sweeping them
+    if( PAQ_LOGISTIC_HASH && P_BITS==12 && ST_SCALE==256 ) {
       U32 h = 2166136261u;                        // FNV-1a over the two tables
       for( int i = 0; i<P_SCALE; i++ ) {
         h = (h ^ U32((U16)sqt[i]))*16777619u;
