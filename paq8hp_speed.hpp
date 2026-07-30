@@ -166,6 +166,90 @@ constexpr int PR_SHIFT = PR_BITS-P_BITS;  // 4, PR_BITS <-> P_BITS
 
 constexpr int N_STATES = 256;             // rows of State_table / StateMap::t
 
+// ---------------------------------------------------------------------------
+// The IDX bridge, part one: everything the generated headers need.
+//
+// IDX-FORMAT.md section 12 -- the include order is a cycle unless the prelude is
+// split in two.  MOD/paq8-G0_h.inc computes its values from P_SCALE and clamps
+// them with pclamp, so those have to exist above it; IDXP/IDXC are defined from
+// USE_NEW, which only the generated header defines, so they have to come below.
+// The two halves are not merge-able, which is the whole reason this comment is
+// here rather than one #include further down.
+//
+// Note what did NOT move into IDX: P_BITS/P_SCALE/PR_BITS/ST_SCALE and their
+// derivatives, above.  Those are the arithmetic's resolution -- fixed by the
+// rangecoder's totFreq and by the width the counters are stored at -- not a
+// tuning choice, and the static_asserts further down say what they may be.  IDX
+// holds what an optimizer is allowed to move; that is a different set.
+// ---------------------------------------------------------------------------
+
+// A pattern in the .idx is a search space and opt.pl WILL visit the ends of it,
+// so every value is range-checked at the point of use (section 5).  constexpr
+// because the shipping build folds the whole chain to a literal.
+constexpr int pclamp(int v, int lo, int hi) { return v<lo ? lo : v>hi ? hi : v; }
+
+#define PRATE(x)  pclamp((x), 1, 20)          // any >>rate on a 16-bit counter
+#define PPOS(x)   pclamp((x), 1, 0x7fffffff)  // an input position, in bytes
+#define PWGT(x)   pclamp((x), 1, P_SCALE-1)   // a P_SCALE-unit mixing weight
+#define PSMALL(x) pclamp((x), 1, 255)         // a small positive multiplier/cap
+
+// sh_mapping.inc is the IDX runtime: mapping/masking/masking_b plus the
+// pdesc/pmask/pmask2 macros that embed a pattern in the executable for opt.pl,
+// and the mdesc/mmask/mmask2 that deliberately do not.  It needs NOINLINE and
+// <string.h>; the driver includes <string.h> at global scope before this header,
+// so the copy inside sh_mapping.inc is a no-op against its own include guard and
+// nothing from libc lands in namespace paq8hp.
+#ifndef NOINLINE
+  #if defined(__GNUC__) || defined(__clang__)
+    #define NOINLINE __attribute__((noinline))
+  #else
+    #define NOINLINE __declspec(noinline)
+  #endif
+#endif
+#include "sh_mapping.inc"
+
+#include "MOD/paq8-G0_h.inc"
+#include "MOD/paq8-G0_p.inc"
+
+// ---------------------------------------------------------------------------
+// The IDX bridge, part two: now that USE_NEW exists.
+//
+// In the shipping build every G0_* is a literal and can be a template argument
+// like any other integer.  In the tuning build it is a read from a patchable
+// object, which is not a constant expression -- so a non-type template parameter
+// of REFERENCE type is what lets Mixer take its initial weight from IDX and
+// still be spelled identically in both builds (section 8).  const int at
+// namespace scope has internal linkage and static storage duration, which is
+// exactly what const int& binds to.
+// ---------------------------------------------------------------------------
+#if USE_NEW
+  #define IDXP(name)       const int& name
+  #define IDXC(t, n, expr) const t n = (expr)
+#else
+  #define IDXP(name)       int name
+  #define IDXC(t, n, expr) static constexpr t n = (expr)
+#endif
+
+// Instantiating on a static const int gives the instantiated type internal
+// linkage, and GCC warns when a class then has a member of such a type.  The
+// warning is right in general -- several translation units would each get a
+// different type under one name -- and vacuous here, because this program is
+// one translation unit.
+#if defined(__GNUC__) && !defined(__clang__)
+  #pragma GCC diagnostic ignored "-Wsubobject-linkage"
+#endif
+
+// The one-sided failure section 8 describes: if MOD/ says USE_NEW=0 while
+// actually holding tuning-mode mapping objects, IDXP declares plain int
+// parameters and the arguments below are not constant expressions.  The other
+// mistake (literals bound to reference parameters) compiles and runs correctly,
+// merely without folding, so one assertion catches the direction that matters.
+#if !USE_NEW
+static_assert( G0_MIX_W_INIT>=0 && G0_MIX2_W_INIT>=0 && G0_MX0_Volume>0,
+  "MOD/ declares USE_NEW=0 but its parameters are not constant expressions -- "
+  "regenerate it with ./mk.sh release" );
+#endif
+
 // ---- adaptation rates and schedules -------------------------------------
 // Every adaptive counter here updates as `v += (target-v)>>rate`, which is a
 // linear mix of the stored value and the target with weight 2^-rate.  So the
@@ -177,14 +261,15 @@ constexpr int N_STATES = 256;             // rows of State_table / StateMap::t
 //
 // Rates are plain const, like the mixing weights, and each position schedule is
 // named next to the rates it switches between, so a rate and the point it
-// changes at are visible together.
+// changes at are visible together.  Every one of them now comes from
+// IDX/paq8-G0.idx through a clamp; the names and the uses are unchanged.
 
 // StateMap: one shared rate, slowed twice as the counts settle.
-const int SM_RATE_0  = 7;                 // weight 1/128 up to SM_SWITCH_1
-const int SM_RATE_1  = 8;                 // 1/256
-const int SM_RATE_2  = 9;                 // 1/512 from SM_SWITCH_2 on
-const int SM_SWITCH_1 = 512*1024;
-const int SM_SWITCH_2 = 1024*1024;
+const int SM_RATE_0  = PRATE(G0_SM_RATE_0);   // weight 1/128 up to SM_SWITCH_1
+const int SM_RATE_1  = PRATE(G0_SM_RATE_1);   // 1/256
+const int SM_RATE_2  = PRATE(G0_SM_RATE_2);   // 1/512 from SM_SWITCH_2 on
+const int SM_SWITCH_1 = PPOS(G0_SM_SW1);
+const int SM_SWITCH_2 = PPOS(G0_SM_SW2);
 // StateMap's y==1 target: PR_MAX plus the rounding for the rate in force.  The
 // y==0 target is a plain 0, so the rounding is deliberately asymmetric -- that
 // is the baseline's behaviour, preserved.
@@ -192,40 +277,58 @@ constexpr int sm_target(int rate) { return PR_MAX + ((1<<rate)-1); }
 
 // APM: a base rate slowed twice by position.  a1 is the fast correction applied
 // straight to the model output; a2 runs one step slower than the rest.
-const int APM_RATE_BASE = 6;
-const int APM_SWITCH_1  = 14*256*1024;
-const int APM_SWITCH_2  = 28*512*1024;
-const int APM1_RATE     = 3;
-const int APM2_RATE_ADD = 1;
-const int APM_RATE_DEF  = 8;              // APM::p's default; every call passes one
+const int APM_RATE_BASE = PRATE(G0_APM_RATE_BASE);
+const int APM_SWITCH_1  = PPOS(G0_APM_SW1);
+const int APM_SWITCH_2  = PPOS(G0_APM_SW2);
+const int APM1_RATE     = PRATE(G0_APM1_RATE);
+const int APM2_RATE_ADD = pclamp(G0_APM2_RATE_ADD, 0, 8);
+const int APM_RATE_DEF  = PRATE(G0_APM_RATE_DEF);  // APM::p's default; every call passes one
 
 // SmallStationaryContextMap: one step slower once the counts have settled.
-const int SCM_RATE_EARLY = 9;
-const int SCM_RATE_LATE  = 10;
-const int SCM_SWITCH_POS = 4000000;
+const int SCM_RATE_EARLY = PRATE(G0_SCM_RATE_EARLY);
+const int SCM_RATE_LATE  = PRATE(G0_SCM_RATE_LATE);
+const int SCM_SWITCH_POS = PPOS(G0_SCM_SW);
 
 // Mixer: the prediction error is scaled by the learning rate before train()
-// applies it to the weights.
-const int MIX_LR_NUM  = 7, MIX_LR_DEN  = 1;    // outer mixer
-const int MIX2_LR_NUM = 3, MIX2_LR_DEN = 2;    // the nested submixer
-const int MIX_W_INIT  = 512;                   // 2.0 in the 8-bit weight fraction
-const int MIX2_W_INIT = 0x7fff;                // submixer starts saturated
+// applies it to the weights, and each context's dot product is scaled again on
+// the way into squash().
+const int MIX_LR_NUM  = PSMALL(G0_MIX_LR_NUM);   // outer mixer
+const int MIX_LR_DEN  = PSMALL(G0_MIX_LR_DEN);
+const int MIX2_LR_NUM = PSMALL(G0_MIX2_LR_NUM);  // the nested submixer
+const int MIX2_LR_DEN = PSMALL(G0_MIX2_LR_DEN);
+// initial weight.  These two are template arguments to Mixer, which is what
+// IDXP() above exists for.
+const int MIX_W_INIT  = pclamp(G0_MIX_W_INIT, -32768, 32767);   // 2.0 in the 8-bit weight fraction
+const int MIX2_W_INIT = pclamp(G0_MIX2_W_INIT, -32768, 32767);  // submixer starts saturated
+// logistic-domain output scalers: squash((dp*MUL)>>SHIFT) per mixer context,
+// and for the S==1 submixer squash(z>>Z_SHIFT) with squash((z*ZB_MUL)>>ZB_SHIFT)
+// as the value handed back up the chain.
+const int MIX_DP_MUL   = PSMALL(G0_MIX_DP_MUL);
+const int MIX_DP_SHIFT = pclamp(G0_MIX_DP_SHIFT, 0, 24);
+const int MIX_Z_SHIFT  = pclamp(G0_MIX_Z_SHIFT, 0, 24);
+const int MIX_ZB_MUL   = PSMALL(G0_MIX_ZB_MUL);
+const int MIX_ZB_SHIFT = pclamp(G0_MIX_ZB_SHIFT, 0, 24);
+// per-group rescaling of the ContextMap outputs on the way into the mixer
+const int MIX_MUL_0   = PSMALL(G0_MIX_MUL_0);
+const int MIX_MUL_1   = PSMALL(G0_MIX_MUL_1);
+const int MIX_MUL_2   = PSMALL(G0_MIX_MUL_2);
+const int MIX_MUL_DEN = PSMALL(G0_MIX_MUL_DEN);
 
 // ContextMap bit-history decay: a state at or above CM_DECAY_FROM steps back by
 // CM_DECAY_STEP with probability ~2^-((CM_DECAY_BIAS-ns)>>CM_DECAY_SHIFT), so
 // the closer to saturation the more often it decays.
-const int CM_DECAY_FROM  = 204;
-const int CM_DECAY_BIAS  = 452;
-const int CM_DECAY_SHIFT = 3;
-const int CM_DECAY_STEP  = 4;
+const int CM_DECAY_FROM  = pclamp(G0_CM_DECAY_FROM, 0, N_STATES-1);
+const int CM_DECAY_BIAS  = pclamp(G0_CM_DECAY_BIAS, 0, 511);
+const int CM_DECAY_SHIFT = pclamp(G0_CM_DECAY_SHIFT, 0, 8);
+const int CM_DECAY_STEP  = pclamp(G0_CM_DECAY_STEP, 0, 64);
 
 // run-length counters saturate rather than wrap
-const int RCM_RUN_MAX = 255;              // RunContextMap, steps by 1
-const int CM_RUN_MAX  = 254;              // ContextMap, steps by CM_RUN_STEP
-const int CM_RUN_STEP = 2;
+const int RCM_RUN_MAX = PSMALL(G0_RCM_RUN_MAX);   // RunContextMap, steps by 1
+const int CM_RUN_MAX  = PSMALL(G0_CM_RUN_MAX);    // ContextMap, steps by CM_RUN_STEP
+const int CM_RUN_STEP = PSMALL(G0_CM_RUN_STEP);
 
 // StateMap's initial estimate is a Laplace prior over the state's (n0,n1)
-const int SM_PRIOR_ADD = 1;
+const int SM_PRIOR_ADD = pclamp(G0_SM_PRIOR_ADD, 0, 255);
 
 // v += (target-v)>>rate, i.e. mix v toward target with weight 2^-rate.  The
 // caller folds its rounding into target.
@@ -246,10 +349,12 @@ inline int ema( int v, int target, int rate ) {
 // P_BITS == P_REF_BITS, so nothing changes at the shipped precision.
 //
 // This applies only to P-domain quantities.  Values already in the logistic
-// domain (`st/4`, `st*(n1-n0)*3/16`, `st*9/32`, and the mixer's `(dp*9)>>9` /
-// `z>>9` / `(z*15)>>13`) are functions of ST_SCALE, not of P_BITS, and are left
-// alone; the same treatment against an ST reference would make ST_SCALE a real
-// knob, but that is entangled with the ST_MAX == P_HALF-1 coupling described in
+// domain (`st/4`, `st*(n1-n0)*3/16`, `st*9/32`, and the mixer's MIX_DP_MUL /
+// MIX_DP_SHIFT / MIX_Z_SHIFT / MIX_ZB_MUL / MIX_ZB_SHIFT) are functions of
+// ST_SCALE, not of P_BITS, and are NOT rescaled here -- the mixer's five are in
+// IDX and the rest are still literals, but either way they follow ST_SCALE.
+// The same treatment against an ST reference would make ST_SCALE a real knob,
+// but that is entangled with the ST_MAX == P_HALF-1 coupling described in
 // paq8hpc_speed_results.md section 12.
 constexpr int P_REF_BITS = 12;            // the precision every coefficient was fitted at
 constexpr int P_UP = 1<<(P_REF_BITS>P_BITS ? P_REF_BITS-P_BITS : 0);
@@ -276,25 +381,30 @@ inline int pmix( int w0, int v0, int w1, int v1, int w2, int v2, int w3, int v3 
 }
 
 // Mixing weights.  Plain const, not constexpr, so they can be retuned here
-// without the value being baked into unrelated constant expressions.
+// without the value being baked into unrelated constant expressions -- and now
+// they come from IDX/paq8-G0.idx, declared in units of P_SCALE/256 so the
+// arithmetic stays exact at any P_BITS >= 8 and the optimizer gets 1/256
+// resolution instead of the 1/32 the original shifts had.
+//
+// Only three weights of each blend are declared; the fourth is the remainder.
+// pmix requires the four to sum to P_SCALE, and a sum constraint the optimizer
+// can violate is not a constraint -- nor can a static_assert even be written
+// for it in the tuning build, where these are runtime reads.  Making the last
+// weight the leftover makes the invariant structural, and it reproduces the
+// shipped 14/32 and 11/32 exactly.
+//
 // a1's correction against the raw model output, 1/8 : 7/8
-const int APM1_w = P_SCALE/8;
-// final blend of the four APM chains, used when fails&255 is set
-const int MIXA_pt_w =  6*P_SCALE/32;
-const int MIXA_pu_w =  1*P_SCALE/32;
-const int MIXA_pv_w = 11*P_SCALE/32;
-const int MIXA_pz_w = 14*P_SCALE/32;
-// and when it is clear
-const int MIXB_pt_w =  4*P_SCALE/32;
-const int MIXB_pu_w =  5*P_SCALE/32;
-const int MIXB_pv_w = 12*P_SCALE/32;
-const int MIXB_pz_w = 11*P_SCALE/32;
-
-static_assert( MIXA_pt_w+MIXA_pu_w+MIXA_pv_w+MIXA_pz_w == P_SCALE,
-  "blend A weights must sum to P_SCALE" );
-static_assert( MIXB_pt_w+MIXB_pu_w+MIXB_pv_w+MIXB_pz_w == P_SCALE,
-  "blend B weights must sum to P_SCALE" );
-static_assert( APM1_w>0 && APM1_w<P_SCALE, "APM1_w must be a proper fraction" );
+const int APM1_w = PWGT(G0_APM1_w);
+// final blend of the four APM chains, used when fails&255 is set (6:1:11:14 /32)
+const int MIXA_pt_w = PWGT(G0_MIXA_pt);
+const int MIXA_pu_w = PWGT(G0_MIXA_pu);
+const int MIXA_pv_w = PWGT(G0_MIXA_pv);
+const int MIXA_pz_w = P_SCALE - MIXA_pt_w - MIXA_pu_w - MIXA_pv_w;
+// and when it is clear (4:5:12:11 /32)
+const int MIXB_pt_w = PWGT(G0_MIXB_pt);
+const int MIXB_pu_w = PWGT(G0_MIXB_pu);
+const int MIXB_pv_w = PWGT(G0_MIXB_pv);
+const int MIXB_pz_w = P_SCALE - MIXB_pt_w - MIXB_pu_w - MIXB_pv_w;
 
 // a P-domain value at the current precision -> the same value at P_REF_BITS.
 // Truncates when P_BITS > P_REF_BITS; prefer the two forms below where possible.
@@ -317,6 +427,14 @@ inline int p_scaled(int v, int num, int den) {
   return v*num*P_UP/(den*P_DN);
 }
 
+// Predictor's two fail counters: `fails` counts predictions at or above
+// FAIL_TH, `failz` the weaker FAILZ_TH, and the pair selects between the two
+// APM blends above.  Both are P-domain thresholds fitted at P_REF_BITS, so they
+// come out of IDX at that scale and are brought to the current one here rather
+// than being declared pre-scaled.
+const int FAIL_TH  = p_from_ref(pclamp(G0_FAIL_TH,  1, (1<<P_REF_BITS)-1));
+const int FAILZ_TH = p_from_ref(pclamp(G0_FAILZ_TH, 1, (1<<P_REF_BITS)-1));
+
 // ---- what P_BITS is actually allowed to be -------------------------------
 // These are the constraints the code really imposes, as opposed to the ones the
 // naming makes it look like it imposes.  See paq8hpc_speed_results.md section 12
@@ -324,9 +442,13 @@ inline int p_scaled(int v, int num, int den) {
 //
 // PR_SHIFT = PR_BITS-P_BITS must be >= 0: StateMap and APM hold probabilities at
 // PR_BITS and shift down to P_BITS, and a negative shift is nonsense.
-static_assert( P_BITS>=1 && P_BITS<=PR_BITS,
-  "P_BITS must be in [1,16]: StateMap/APM store probabilities at PR_BITS=16 and "
-  "shift down by PR_SHIFT=PR_BITS-P_BITS" );
+// The lower bound is 8 rather than 1 because IDX/paq8-G0.idx declares the fixed
+// mixing weights in units of P_SCALE/256, which is where they stay exact -- the
+// whole measured survey runs 8..16 anyway.
+static_assert( P_BITS>=8 && P_BITS<=PR_BITS,
+  "P_BITS must be in [8,16]: StateMap/APM store probabilities at PR_BITS=16 and "
+  "shift down by PR_SHIFT=PR_BITS-P_BITS, and the IDX mixing weights are "
+  "declared in units of P_SCALE/256" );
 // stretch() values are held in `short` (Stretch::t, Mixer::tx), and ST_MAX is
 // P_HALF-1 because squash indexes sqt[d+P_HALF] and APM indexes
 // (pr+P_HALF)>>SQ_BITS -- both need the stretch range to be exactly [-P_HALF,P_HALF).
@@ -1049,7 +1171,11 @@ static inline void train2(const short* t, short* w0, short* w1, int n, const int
 // It has to be held by value now, but a Mixer with S==1 must not contain one or
 // the instantiation would never terminate, so the holder is specialised empty
 // for S==1 and forwards the three calls the outer p() makes.
-template <int n, int m, int s = 1, int w = 0> struct Mixer;
+// `w` is an IDX value, so its declared type differs between the two builds and
+// nothing else does -- see IDXP above.  The s and w defaults are gone with it:
+// a reference parameter cannot take one, and both instantiations below have
+// always passed all four arguments explicitly.
+template <int n, int m, int s, IDXP(w)> struct Mixer;
 
 template <int S> struct SubMixer {
 Mixer<S, 1, 1, MIX2_W_INIT> mp;
@@ -1079,7 +1205,7 @@ int p() {
 }
 };
 
-template <int n, int m, int s, int w> struct Mixer {
+template <int n, int m, int s, IDXP(w)> struct Mixer {
 #if defined(PAQ_N16)
 static constexpr int N = (n+15)& -16, M = m, S = s, NPAD = 15;
 #else
@@ -1139,7 +1265,7 @@ void add(int x) {
 
 void mul(int x) {
   int z = tx[nx];
-  z = z*x/4;
+  z = z*x/MIX_MUL_DEN;
   tx[nx++] = z;
 }
 
@@ -1149,6 +1275,17 @@ void mul(int x) {
 void set(int cx, int range) {
   cxt[ncxt++] = base+cx;
   base += range;
+#if USE_NEW
+  // The tuning build's IDX Volumes are runtime reads, so the static_assert that
+  // guards this in the shipping build cannot be written here (see MIXER_ROWS).
+  // Widen a mask in the .idx and the ranges stop fitting wx; say so instead of
+  // walking off the end of it.  Compiled out entirely once the Volumes fold.
+  if( base>M ) {
+    fprintf( stderr, "paq8hpc: mixer context ranges sum to %i, wx holds %i rows -- "
+                     "IDX/paq8-G0.idx declares more than MIXER_ROWS\n", base, M );
+    exit(1);
+  }
+#endif
 #if defined(PAQ_WXPF)
   // pull the selected weight row in before p() dots it and update() trains it
   const char* r = (const char*)&wx[cxt[ncxt-1]*N];
@@ -1167,23 +1304,23 @@ int p() {
     for(; i+1<ncxt; i += 2 ) {
       int d0, d1;
       dot_product2(&tx[0], &wx[cxt[i]*N], &wx[cxt[i+1]*N], nx, d0, d1);
-      d0 = (d0*9)>>9;
+      d0 = (d0*MIX_DP_MUL)>>MIX_DP_SHIFT;
       pr[i] = squash(d0);
       sub.add(d0);
-      d1 = (d1*9)>>9;
+      d1 = (d1*MIX_DP_MUL)>>MIX_DP_SHIFT;
       pr[i+1] = squash(d1);
       sub.add(d1);
     }
     for(; i<ncxt; ++i ) {
       int dp = dot_product(&tx[0], &wx[cxt[i]*N], nx);
-      dp = (dp*9)>>9;
+      dp = (dp*MIX_DP_MUL)>>MIX_DP_SHIFT;
       pr[i] = squash(dp);
       sub.add(dp);
     }
 #else
     for( int i = 0; i<ncxt; ++i ) {
       int dp = dot_product(&tx[0], &wx[cxt[i]*N], nx);
-      dp = (dp*9)>>9;
+      dp = (dp*MIX_DP_MUL)>>MIX_DP_SHIFT;
       pr[i] = squash(dp);
       sub.add(dp);
     }
@@ -1191,14 +1328,32 @@ int p() {
     return sub.p();
   } else {
     int z = dot_product(&tx[0], &wx[0], nx);
-    base = squash((z*15)>>13);
-    return squash(z>>9);
+    base = squash((z*MIX_ZB_MUL)>>MIX_ZB_SHIFT);
+    return squash(z>>MIX_Z_SHIFT);
   }
 }
 };
 
+// Mixer::wx is a fixed-size member, so its row count has to be a literal in
+// BOTH builds -- it cannot be the sum of the IDX Volumes, because in the tuning
+// build those are reads from mapping objects rather than constant expressions.
+// So it stays written out, and the two checks keep it honest: a static_assert
+// where the Volumes fold, and the bounds check in Mixer::set where they do not.
+constexpr int MIXER_ROWS = 128*(16+14+14+12+14+16);   // 11008
+
+// The two mixer context ranges that are not IDX Indexes -- see the comment at
+// the six m.set() calls in ContextModel::p.
+const int MIX_R3 = 1536;
+const int MIX_R5 = 2048;
+
+#if !USE_NEW
+static_assert( G0_MX0_Volume + G0_MX1_Volume + G0_MX2_Volume
+             + MIX_R3 + G0_MX4_Volume + MIX_R5 == MIXER_ROWS,
+  "the six mixer context ranges must exactly fill Mixer::wx" );
+#endif
+
 // the one mixer the models are handed
-typedef Mixer<456, 128*(16+14+14+12+14+16), 6, MIX_W_INIT> MainMixer;
+typedef Mixer<456, MIXER_ROWS, 6, MIX_W_INIT> MainMixer;
 
 template <int n> struct APM {
 int index;
@@ -1989,11 +2144,11 @@ int p() {  if( bpos==0 ) {
 
   m.nx = qq+zz*3;
   for( qq = zz*2; qq!=0; --qq )
-    m.mul(5);
+    m.mul(MIX_MUL_0);
   for( qq = zz; qq!=0; --qq )
-    m.mul(6);
+    m.mul(MIX_MUL_1);
   for( qq = zz; qq!=0; --qq )
-    m.mul(9);
+    m.mul(MIX_MUL_2);
 
   if( L>=4 ) {
     wordModel.mix(m);
@@ -2007,13 +2162,17 @@ int p() {  if( bpos==0 ) {
   if( c2==9||c2==10||c2==32 )
     c2 = 16;
 
-  m.set(256*order+(w4&240)+(c2>>4), 256*7);
+  // The six mixer context selectors.  Four of them are exact packings of a few
+  // small variables and are declared in IDX/paq8-G0.idx, so the packing and its
+  // row count come from one place instead of being an expression here and a
+  // literal range next to it.  MIX_R3 and MIX_R5 are the two that are not: one
+  // is a two-branch expression over bpos, the other adds two fields that can
+  // carry into each other, and an Index for either would misdescribe it.
+  m.set(G0_MakeMX0(order, w4, c2), G0_MX0_Volume);
 
-  c = (words>>1)&63;
-  m.set((w4&3)*64+c+order*256, 256*7);
+  m.set(G0_MakeMX1(order, w4, words>>1), G0_MX1_Volume);
 
-  c = (w4&255)+256*bpos;
-  m.set(c, 256*8);
+  m.set(G0_MakeMX2(bpos, w4), G0_MX2_Volume);
 
   if( bpos ) {
     c = c0<<(8-bpos);
@@ -2022,15 +2181,14 @@ int p() {  if( bpos==0 ) {
     c = (min(bpos, 5))*256+(tt&63)+(c&192);
   } else
     c = (words&12)*16+(tt&63);
-  m.set(c, 1536);
+  m.set(c, MIX_R3);
 
-  c = bpos;
   c2 = (c0<<(8-bpos))|(c1>>bpos);
-  m.set(order*256+c+(c2&248), 256*7);
+  m.set(G0_MakeMX4(order, c2, bpos), G0_MX4_Volume);
 
-  c = c*256+((c0<<(8-bpos))&255);
+  c = bpos*256+((c0<<(8-bpos))&255);
   c1 = (words<<bpos)&255;
-  m.set(c+(c1>>bpos), 2048);
+  m.set(c+(c1>>bpos), MIX_R5);
 
   return m.p();
 }
@@ -2106,9 +2264,9 @@ void update() {
   failz = failz*2;
   if( y )
     pr ^= P_MAX;
-  if( pr>=p_from_ref(1820) )
+  if( pr>=FAIL_TH )
     ++fails, ++failcount;
-  if( pr>=p_from_ref(848) )
+  if( pr>=FAILZ_TH )
     ++failz;
 
 #if defined(PAQ_APMPF)

@@ -1,0 +1,179 @@
+# paq8-G0.idx -- every number in paq8hp_speed.hpp that is a CHOICE.
+#
+# Two kinds of thing live here and nothing else does:
+#
+#   Number  -- a tunable scalar.  Fixed mixing weights, adaptation rates, the
+#              positions the rate schedules switch at, the mixer's learning
+#              rates and output scalers, the bit-history decay parameters.
+#   Index   -- the mixer's context selectors, i.e. the arithmetic that turns a
+#              handful of model variables into one row of Mixer::wx.
+#
+# What is deliberately NOT here: P_BITS/P_SCALE/PR_BITS/ST_SCALE and everything
+# derived from them.  Those are the arithmetic's resolution, not a tuning
+# choice -- they are fixed by the range coder's totFreq and by the width the
+# counters are stored at, and paq8hp_speed.hpp already carries the static_asserts
+# that say what they may be.  Handing them to opt.pl would be handing it the
+# format rather than the model.
+#
+# Rate/Rate1 are unused: they index a TTable[] of update-rate schedules and
+# divide eSCALE, neither of which this coder has.
+#
+# Every seeded pattern below spells the value the code shipped with, so a fresh
+# tuning build and a fresh release build both reproduce the baseline archives
+# byte for byte.  ../verify.sh checks exactly that, under both.
+
+Prefix G0
+Debug 1
+Const 0
+
+# ---------------------------------------------------------------------------
+# Probability-domain mixing weights.
+#
+# Every fixed-weight average of probabilities goes through pmix(), whose weights
+# are in P_SCALE units and must sum to P_SCALE.  Declaring them in units of
+# P_SCALE/256 keeps that arithmetic exact at any P_BITS >= 8 and gives the
+# optimizer 1/256 resolution rather than the 1/32 the original shifts had.
+#
+# Only the first three of each blend are declared: the fourth is the remainder,
+# so the sum is structural.  A sum constraint that opt.pl can violate is not a
+# constraint, and a static_assert on it cannot even be written in the tuning
+# build, where these are runtime reads.
+# ---------------------------------------------------------------------------
+
+# a1's correction against the raw model output: 1/8 : 7/8
+Number APM1_w,         P_SCALE/256, 0!00100000
+
+# final blend of the four APM chains, when fails&255 is set (6:1:11:14 /32)
+Number MIXA_pt,        P_SCALE/256, 0!00110000
+Number MIXA_pu,        P_SCALE/256, 0!00001000
+Number MIXA_pv,        P_SCALE/256, 0!01011000
+
+# and when it is clear (4:5:12:11 /32)
+Number MIXB_pt,        P_SCALE/256, 0!00100000
+Number MIXB_pu,        P_SCALE/256, 0!00101000
+Number MIXB_pv,        P_SCALE/256, 0!01100000
+
+# ---------------------------------------------------------------------------
+# Adaptation rates.  Every adaptive counter updates as v += (target-v)>>rate,
+# so the rate is a weight written in log form; the *_SW* numbers are the input
+# positions at which one rate is replaced by the next.
+# ---------------------------------------------------------------------------
+
+# StateMap: one shared rate, slowed twice as the counts settle
+Number SM_RATE_0,      1,           0!0111
+Number SM_RATE_1,      1,           0!1000
+Number SM_RATE_2,      1,           0!1001
+Number SM_SW1,         65536,       0!01000
+Number SM_SW2,         65536,       0!10000
+# the Laplace prior on a state's (n0,n1) that seeds StateMap::t
+Number SM_PRIOR_ADD,   1,           0!01
+
+# APM: a base rate slowed twice by position.  a1 is the fast correction applied
+# straight to the model output; a2 runs one step slower than the rest.
+Number APM_RATE_BASE,  1,           0!0110
+Number APM_SW1,        262144,      0!01110
+Number APM_SW2,        524288,      0!11100
+Number APM1_RATE,      1,           0!0011
+Number APM2_RATE_ADD,  1,           0!01
+Number APM_RATE_DEF,   1,           0!1000
+
+# SmallStationaryContextMap: one step slower once the counts have settled
+Number SCM_RATE_EARLY, 1,           0!1001
+Number SCM_RATE_LATE,  1,           0!1010
+Number SCM_SW,         1000,        0!111110100000
+
+# ---------------------------------------------------------------------------
+# Mixer.
+# ---------------------------------------------------------------------------
+
+# learning rates: the prediction error is scaled by NUM/DEN before train()
+Number MIX_LR_NUM,     1,           0!0111
+Number MIX_LR_DEN,     1,           1!00
+Number MIX2_LR_NUM,    1,           0!0011
+Number MIX2_LR_DEN,    1,           1!01
+
+# initial weight.  These two reach Mixer as template arguments, which is what
+# IDXP() in the consumer is for -- see IDX-FORMAT.md section 8.
+Number MIX_W_INIT,     1,           0!1000000000
+Number MIX2_W_INIT,    1,           0!111111111111111
+
+# output scalers, logistic domain: pr = squash((dp*MUL)>>SHIFT) per context,
+# and for the S==1 submixer squash(z>>Z_SHIFT) with squash((z*ZB_MUL)>>ZB_SHIFT)
+# as the value handed back up.
+Number MIX_DP_MUL,     1,           0!1001
+Number MIX_DP_SHIFT,   1,           0!1001
+Number MIX_Z_SHIFT,    1,           0!1001
+Number MIX_ZB_MUL,     1,           0!1111
+Number MIX_ZB_SHIFT,   1,           0!1101
+
+# per-group input rescaling in ContextModel::p: m.mul(x) is tx *= x/DEN.  The
+# three groups are the 2/1/1 split of the ContextMap outputs.
+Number MIX_MUL_0,      1,           0!0101
+Number MIX_MUL_1,      1,           0!0110
+Number MIX_MUL_2,      1,           0!1001
+Number MIX_MUL_DEN,    1,           1!011
+
+# ---------------------------------------------------------------------------
+# ContextMap bit histories.
+# ---------------------------------------------------------------------------
+
+# a state at or above CM_DECAY_FROM steps back by CM_DECAY_STEP with probability
+# ~2^-((CM_DECAY_BIAS-ns)>>CM_DECAY_SHIFT), so the closer to saturation the more
+# often it decays
+Number CM_DECAY_FROM,  1,           0!11001100
+Number CM_DECAY_BIAS,  1,           0!111000100
+Number CM_DECAY_SHIFT, 1,           0!011
+Number CM_DECAY_STEP,  1,           0!0100
+
+# run-length counters saturate rather than wrap
+Number RCM_RUN_MAX,    1,           0!11111111
+Number CM_RUN_MAX,     1,           0!11111110
+Number CM_RUN_STEP,    1,           0!010
+
+# ---------------------------------------------------------------------------
+# Predictor fail counters.  Both are P-domain thresholds fitted at P_REF_BITS,
+# so the consumer passes them through p_from_ref() rather than rescaling here.
+# ---------------------------------------------------------------------------
+Number FAIL_TH,        1,           0!11100011100
+Number FAILZ_TH,       1,           0!1101010000
+
+# ---------------------------------------------------------------------------
+# Mixer context selectors.
+#
+# Four of the six m.set() calls in ContextModel::p are exact packings of a few
+# small variables, so they are declarations rather than arithmetic.  The other
+# two are not: one is a two-branch expression over bpos, the other adds two
+# fields that can carry into each other, and writing either as an Index would
+# only be a lie about what it computes.
+#
+# Every mask line is FROZEN (leading `!`, section 10).  A mask here is a bit
+# SELECTOR: widening one multiplies the index Volume, and Mixer::wx is a
+# fixed-size member sized from the sum of all six ranges, so a wider mask would
+# silently index past it.  Freezing keeps the structure declared and reviewable
+# while leaving the search space to the parameters above.  The ADD factors are
+# order (7 values) and bpos (8), which are ranges of the variables themselves
+# and not tunable either.
+# ---------------------------------------------------------------------------
+
+# m.set( 256*order + (w4&240) + (c2>>4), 256*7 )
+Index MX0
+ ADD 7: order
+!mx0_w4:  w4,  &11110000
+!mx0_c2:  c2,  &11110000
+
+# m.set( order*256 + (w4&3)*64 + ((words>>1)&63), 256*7 )
+Index MX1
+ ADD 7: order
+!mx1_w4:  w4,     &00000011
+!mx1_wd:  words1, &00111111
+
+# m.set( (w4&255) + 256*bpos, 256*8 )
+Index MX2
+ ADD 8: bpos
+!mx2_w4:  w4,  &11111111
+
+# m.set( order*256 + bpos + (c2&248), 256*7 )
+Index MX4
+ ADD 7: order
+!mx4_c2:  c2,  &11111000
+ ADD 8: bpos

@@ -11,3 +11,8 @@ paq8hpc_fast
 paq8hpc_speed
 test_logistic
 test_window
+paq8hpc_idx
+opt.lst
+export.!!!
+opttimes.!!!
+opt_tmp.hpc

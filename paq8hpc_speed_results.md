@@ -912,7 +912,154 @@ anchor matches, so the file was left untouched; the `verify.sh` run that followe
 was therefore testing the *old* binary and passed vacuously. Worth stating because
 it is exactly the failure mode a green check can hide.
 
-## 15. Reproducing
+## 15. The IDX port
+
+`IDX-FORMAT.md` describes a small language for declaring the two things a
+context-mixing compressor is made of — context indices and tunable parameters —
+and `IDX/idx2inc.pl` turns a `.idx` declaration plus a `.inc` template into C++.
+Sections 11–14 above had already collected every choice-shaped number in the
+model behind a name; this section moves those names into IDX, which is what
+turns "named" into "reachable by an optimizer".
+
+### What went in, and what deliberately did not
+
+`IDX/paq8-G0.idx` declares **46 `Number` parameters** and **4 `Index`
+declarations**:
+
+| group | parameters |
+|---|---|
+| probability-domain mixing weights | `APM1_w`, `MIXA_pt/pu/pv`, `MIXB_pt/pu/pv` |
+| StateMap | 3 rates, 2 switch positions, the Laplace prior |
+| APM | base rate, 2 switch positions, `APM1_RATE`, `APM2_RATE_ADD`, the default |
+| SSCM | 2 rates, 1 switch position |
+| Mixer | 2 learning-rate pairs, 2 weight initialisers, 5 logistic output scalers, 4 input scalers |
+| ContextMap | 4 decay parameters, 3 run-length caps |
+| Predictor | `FAIL_TH`, `FAILZ_TH` |
+
+The line that is worth defending is what stayed **out**: `P_BITS`, `P_SCALE`,
+`PR_BITS`, `ST_SCALE` and everything derived from them. Those are the
+arithmetic's *resolution* — fixed by the rangecoder's `totFreq` and by the width
+the counters are stored at — not a tuning choice, and section 12 already carries
+the static_asserts that say what they may be. Handing them to `opt.pl` would be
+handing it the format rather than the model. IDX holds what an optimizer is
+allowed to move; that is a different set, and conflating the two is how a sweep
+ends up producing archives the decoder cannot read.
+
+### Three things the port had to solve
+
+**The four-weight blends could not keep their `static_assert`.** `pmix` requires
+its weights to sum to `P_SCALE`, and the previous code asserted exactly that. In
+the tuning build the weights are runtime reads, so the assertion cannot even be
+written — and in *any* build `opt.pl` moving one weight breaks the sum. So only
+three weights of each blend are declared and the fourth is the remainder:
+
+```c++
+const int MIXA_pv_w = PWGT(G0_MIXA_pv);
+const int MIXA_pz_w = P_SCALE - MIXA_pt_w - MIXA_pu_w - MIXA_pv_w;
+```
+
+The invariant is now structural rather than asserted, and it reproduces the
+shipped 14/32 and 11/32 exactly. Weights are declared in units of `P_SCALE/256`,
+which keeps the arithmetic exact at any `P_BITS >= 8` and gives the optimizer
+1/256 resolution instead of the 1/32 the original shifts had. (That is why the
+`P_BITS` lower bound in section 12 tightened from 1 to 8 — the measured survey
+only ever ran 8..16 anyway.)
+
+**Two parameters are template arguments.** `Mixer<n,m,s,w>` takes its initial
+weight as a non-type parameter, and in the tuning build `G0_MIX_W_INIT` is a read
+from a patchable object, not a constant expression. Section 8's `IDXP` trick — a
+non-type parameter of *reference* type — is what makes `Mixer<456, MIXER_ROWS, 6,
+MIX_W_INIT>` well-formed and identically spelled in both builds. The `s = 1, w =
+0` defaults went with it (a reference parameter cannot take one); both
+instantiations always passed all four arguments anyway.
+
+**`Mixer::wx` is a fixed-size member**, so its row count has to be a literal in
+both builds and cannot be the sum of the IDX `_Volume`s. It stays written out as
+`MIXER_ROWS`, guarded from both sides: a `static_assert` that the six context
+ranges sum to it where the Volumes fold, and a bounds check in `Mixer::set` where
+they do not. That is also why all six index mask lines are **frozen** (`!`,
+section 10) — a mask in `.idx` is a bit *selector*, so widening one multiplies
+the Volume, and there is no room in `wx` for that. The structure is declared and
+reviewable; the search space stays on the parameters.
+
+### The mixer context selectors
+
+Four of the six `m.set()` calls in `ContextModel::p` are exact packings of a few
+small variables, so they are declarations rather than arithmetic:
+
+```
+Index MX0                          # was: 256*order + (w4&240) + (c2>>4)
+ ADD 7: order
+!mx0_w4:  w4,  &11110000
+!mx0_c2:  c2,  &11110000
+```
+
+The other two are not, and were left as code: one is a two-branch expression over
+`bpos`, the other adds two fields that can carry into each other. An `Index` for
+either would misdescribe what it computes, which is worse than leaving it
+spelled out. The four that did port now get their `range` argument from
+`G0_MX*_Volume` instead of from a literal `256*7` sitting next to an expression
+that has to agree with it by inspection.
+
+### `sh_mapping.inc` was missing the freeze macros
+
+Exactly as `IDX-FORMAT.md` section 10 documents: `pdesc`/`pmask`/`pmask2` were
+there, `mdesc`/`mmask`/`mmask2` were not, so a `!` line emitted a call to an
+undeclared macro. Added, with the two properties every one of them needs — two
+NUL-separated strings, because the constructors do `S += strlen(S)+1` to reach
+the pattern, and the pattern as a separate literal after the `"\x00"`, because
+`\x` escapes are greedy in hex digits.
+
+### Verification
+
+`IDX-FORMAT.md` section 12 states the contract: *"the two builds must agree, and
+that is testable."* Here it is testable as `verify.sh`, which already checks
+byte-identity against the pristine baseline. Every seeded pattern spells the
+value the code shipped with, so both builds must reproduce the baseline archives
+exactly — and do:
+
+| build | `verify.sh` |
+|---|---|
+| `./mk.sh` (tuning: `Debug 1, Const 0`, `USE_NEW 1`) | ok — 7 cases × {encode, round-trip, cross-decode} + 2 doc vectors |
+| `./mk.sh release` (`Const 1`, `USE_NEW 0`) | ok — same |
+| tuning + the 14 speed gates | ok — same |
+| release + the 14 speed gates | ok — same |
+| MinGW release under wine | ok — 5 cases: win==linux bytes, win round-trip, win←linux, linux←win |
+
+The marker counts confirm the freeze worked: the tuning binary carries **46**
+`!MAP!` markers (one per `Number`, 260 pattern bits) and **6** `map.` markers
+(the frozen index masks, invisible to `opt.pl`); the release binary carries
+**zero** of either.
+
+And the loop itself runs. `IDX/opt.pl`, retargeted at `paq8hpc` (its `$level` is
+a memory level, not a tuning parameter — a run at one level does not transfer to
+another), finds all 46 maps and starts hill-climbing:
+
+```
+46 maps, 260 bits total
+=== start 26261
+!!! 0543D7: G0_APM1_RATE_ !!!    ->  26257
+!!! 054228: G0_APM1_w_ !!!       ->  26232
+```
+
+`import.pl` then folds `export.!!!` back onto the source, and the diff is
+**exactly the two lines opt.pl moved** — alignment, comments and the frozen mask
+lines all preserved. Those two values are not committed: a 2-file, 80 KB corpus
+is precisely the overfit `opt.pl`'s own header warns about, and this model has
+separate word/sparse/record submodels that such a corpus never exercises.
+
+### Files
+
+| file | what it is |
+|---|---|
+| `IDX/paq8-G0.idx` | the declaration — 46 parameters, 4 indices |
+| `IDX/paq8-G0.inc` | the template; no `MakeTables`, so the declarations stay in `_h.inc` |
+| `IDX/idx2inc.pl`, `opt.pl`, `import.pl` | generator, optimizer, fold-back (from the 028 tree; `opt.pl` retargeted) |
+| `sh_mapping.inc` | the IDX runtime, plus the three freeze macros |
+| `MOD/paq8-G0_h.inc`, `_p.inc` | **generated, and committed** — a build input, not an artefact, so the tree builds without perl (§12) |
+| `mk.sh` | the two builds, from one source, by one `sed` |
+
+## 16. Reproducing
 
 ```
 ./build.sh FINAL -DPAQ_PREFETCH -DPAQ_AVX2 -DPAQ_DOT2 -DPAQ_GETSIMD -DPAQ_APMPF
@@ -924,6 +1071,24 @@ it is exactly the failure mode a green check can hide.
 g++ -O2 -o t test_logistic.cpp -lm && ./t     # squash/stretch table checks
 g++ -O2 -o w test_window.cpp && ./w           # 1 GiB window holds enwik9
 ```
+
+The IDX builds, and the tuning loop:
+
+```
+./mk.sh                                       # tuning:  Debug 1, Const 0, USE_NEW 1
+./mk.sh release                               # shipping: Const 1, USE_NEW 0
+./verify.sh ./paq8hpc_idx idx                 # must pass under BOTH -- that is the contract
+OUT=./p OPT="-O3 -march=native -DPAQ_AVX2" ./mk.sh release   # OUT/OPT/CXX are overridable
+
+printf 'file1\nfile2\n' > opt.lst
+./mk.sh && perl IDX/opt.pl opt.lst             # hill-climb; writes export.!!!
+cd IDX && for f in *.idx; do perl import.pl $f ../export.!!! > t && mv t $f; done
+```
+
+`MOD/` is committed, generated in release mode, so the tree builds with a plain
+`g++ paq8hpc_speed.cpp` and no perl. It is a build *input*: a stale `MOD/`
+compiles fine and codes differently, which is why `mk.sh` regenerates it
+whenever perl is present.
 
 Cross-OS prerequisites, both installed from the distro:
 `apt-get install g++-mingw-w64-x86-64 wine64` (the wine binary lands at
