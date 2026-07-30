@@ -36,6 +36,10 @@ Then try adding **`-DPAQ_BPOS_T`** (§8): it cuts 6.43% of all instructions —
 three times what `PAQ_CXTFL_T` saves — but like `CXTFL_T` it needs a quiet
 machine to show up in wall clock, and it did not on this host.
 
+`P_SCALE` is a real parameter now: `-DPAQ_P_BITS=n` with `-DPAQ_LOGISTIC` works
+for n in 8..16, all within 1% of the 12-bit reference and 11..16 within 0.04%
+(§12).
+
 ## 0. Headline
 
 Full book1 (768,771 B), min-of-3 end-to-end wall clock, pristine baseline vs the
@@ -690,92 +694,109 @@ own pre-rename numbers exactly (−0.015% on the set); both standalone tests pas
 and the MinGW build still produces the published vector (20321 B, md5
 `5b20ec75…`).
 
-## 12. Can `P_SCALE` be changed? Structurally yes, practically no
+## 12. `P_SCALE` is a real parameter: P_BITS 8..16 all work
 
-Naming the scales invited the obvious follow-up: is `P_SCALE` now a free
-parameter? It is overridable — `-DPAQ_P_BITS=n`, `-DPAQ_ST_SCALE=n` — and the
-answer splits cleanly in two.
+The first pass at this concluded "structurally yes, practically no" and wrote off
+a dozen constants as un-derivable tuning. That was wrong, and the correction came
+from the right observation: **probability estimation here is fixed-point, so those
+constants are not opaque weights — each is a coefficient fitted against a value
+carrying a specific number of fractional bits.** Reinterpret the scale and they
+follow `P_BITS` after all.
 
-### Structural dependencies: captured, and one was missing
+`-DPAQ_P_BITS=n` (with `-DPAQ_LOGISTIC`, which computes the tables instead of
+using the literal ones) now works across the whole legal range:
 
-**P_BITS 9 through 16 all build and round-trip exactly** with `-DPAQ_LOGISTIC`
-(which computes the tables instead of using the literal ones): encoder and
-decoder agree bit for bit at every setting. Every table size, index, mask and
-derived shift follows `P_SCALE` correctly. The real constraints are now asserted
-rather than implied:
+| P_BITS | size | v1 as-found | v2 reinterpreted | v3 + decoupled |
+|-------:|-----:|------------:|-----------------:|---------------:|
+| 8  | 38,322 | — | — | **+0.94%** |
+| 9  | 38,068 | +95.3% | +5.2% | **+0.27%** |
+| 10 | 38,004 | +131.3% | +3.0% | **+0.11%** |
+| 11 | 37,977 | +220.3% | +0.79% | **+0.034%** |
+| **12** | **37,964** | 0% | 0% | **0%** |
+| 13 | 37,965 | +29.5% | +0.09% | **+0.003%** |
+| 14 | 37,963 | +106.5% | +2.65% | **−0.003%** |
+| 15 | 37,964 | +16.9% | +17.8% | **+0.000%** |
+| 16 | 37,966 | +78.1% | +52.7% | **+0.005%** |
 
-| constraint | why |
-|---|---|
-| `P_BITS <= PR_BITS` (16) | `PR_SHIFT = PR_BITS-P_BITS` must be >= 0 |
-| `P_BITS >= 6` | `SQ_BITS = P_BITS-5` must stay >= 1 |
-| stretch fits `short` | `Stretch::t` and `Mixer::tx` are `short` |
-| `P_SCALE < 2^24` | must stay far below the coder's `sTOP` |
-| `P_BITS == 12` unless `PAQ_LOGISTIC` | the baseline `squash()` table holds 33 **literal 12-bit probabilities** — a hard weld, now rejected at compile time with that message |
+(book1[0:131072] L6, every setting round-tripping.) P_BITS 11–16 land within
+0.04% of the 12-bit reference; 14 is marginally *better*. Three changes got it
+there.
 
-**The survey found one genuinely missed dependency: `SQ_BITS` was hardcoded 7.**
-It must be `P_BITS-5`, so that `SQ_NODES` stays 33 for every `P_BITS` — with 7
-fixed, the APM geometry silently changed with the scale (5 nodes at `P_BITS=9`,
-513 at 16) and APM's output shift `PR_BITS+SQ_BITS-P_BITS` drifted off 11. Now
-derived, with a `static_assert` tying it to `SQ_NODES`. `P_BITS=12` output is
-byte-identical before and after, since 12-5 == 7.
+### 1. Reinterpret the P-domain constants (the big one)
 
-It also turned up a **real defect in the `PAQ_LOGISTIC` port**: `(long long)d<<Q8_BITS`
-left-shifts a negative value for half the range, which is UB before C++20.
-xad_logistic.inc relies on being built as C++20 and says so; this file sets no
-`-std` and gcc 13 defaults to gnu++17. Found with `-fsanitize=undefined`, fixed
-by using `d*Q8_ONE` (well-defined, same codegen, tables still hash `7BCBA716`).
-The shipped non-`PAQ_LOGISTIC` path was and is UBSan-clean.
+Rather than rescale every literal, bring the **value** to the scale its
+coefficient was fitted at and leave the coefficient alone:
 
-### Scale-dependent tuning: not captured, and not nameable
+```c++
+constexpr int P_REF_BITS = 12;                 // what every coefficient was fitted at
+inline    int p_to_ref  (int v);               // value  -> reference scale
+constexpr int p_from_ref(int v);               // constant -> current scale (exact)
+inline    int p_scaled  (int v,int num,int den);  // v*num/den at the reference scale
+```
 
-Compression collapses at every `P_BITS` except 12, and stays collapsed after both
-fixes above:
+All three are the identity at `P_BITS == 12`, so the shipped output is unchanged.
+`p_scaled` folds the rescaling into the division the expression already had, so
+precision is lost once instead of twice — which matters because `train()`'s
+`_mm256_mulhi_epi16` hardcodes a `>>16`, so the mixer error must arrive
+pre-scaled and every dropped bit is lost learning signal. Sites fixed:
+`Mixer::update`/`update2`'s `(y<<12)-pr` error, `mix2t`'s three P-domain mixer
+inputs, `SmallStationaryContextMap`'s `*cp>>4` (a PR→P conversion, so `>>PR_SHIFT`)
+and `(y<<16)`, and `Predictor`'s `pr>=1820` / `pr>=848` fail thresholds (via
+`p_from_ref`, which scales the *threshold* and so stays exact).
 
-| P_BITS | ST_SCALE 256 | ST_SCALE scaled with P_HALF |
-|-------:|-------------:|----------------------------:|
-| 9  | +95.3% | +86.6% |
-| 10 | +131.3% | +119.2% |
-| 11 | +220.3% | +217.2% |
-| **12** | **0.0%** | **0.0%** |
-| 13 | +29.5% | +29.1% |
-| 14 | +106.5% | +87.3% |
-| 15 | +16.9% | +70.9% |
-| 16 | +78.1% | — |
+### 2. Decouple the logistic domain from `P_HALF`
 
-(book1[0:131072] L6, all round-tripping correctly.) The result is
-**non-monotone** — 11 is worse than both 9 and 13 — which is the signature of
-mistuned weights, not of a structural bug: a broken index or overflow would
-degrade smoothly or fail.
+`ST_MAX = P_HALF-1` tied the logistic range to the probability precision. It is a
+property of `ST_SCALE`: `stretch` reaches `±ST_SCALE*ln(P_MAX)` ≈ `±8*ST_SCALE`.
+Sizing it from `P_HALF` broke both ends of the sweep, and the measurements show
+exactly that — the loss tracks a geometric quantity, not a tuning error:
 
-Two causes, and neither is fixable by naming:
+| P_BITS | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|
+| % of p range the clamp ate | 53.9 | 23.9 | 3.6 | 0.07 | 0 | 0 | 0 | 0 |
+| APM nodes reachable of 33 | 33 | 33 | 33 | 33 | 19 | 10.7 | 6.2 | 3.8 |
+| loss at stage v2 | +5.2% | +3.0% | +0.8% | 0 | +0.09% | +2.6% | +17.8% | +52.7% |
 
-1. **`ST_MAX = P_HALF-1` couples the logistic *range* to the probability
-   *precision*.** It has to: `squash` indexes `sqt[d+P_HALF]` and APM indexes
-   `(pr+P_HALF)>>SQ_BITS`, so the stretch range must be exactly
-   `[-P_HALF,P_HALF)`. But the *natural* range is `ST_SCALE*ln(P_MAX)`, which does
-   not scale with `P_HALF`. Measured fraction of the p range that `stretch` clamps
-   away: **53.9% at P_BITS=9, 23.9% at 10, 3.6% at 11, 0.07% at 12, 0% above.**
-   P_BITS=12 sits almost exactly at the point where the clamp stops binding — the
-   original scales were chosen together, not independently.
-2. **About a dozen fitted constants assume (P_BITS=12, ST_SCALE=256)** and have no
-   derivation to give them: `Mixer::p`'s `squash((z*15)>>13)`, `squash(z>>9)` and
-   `(dp*9)>>9`; `update`'s `err*7` and `update2`'s `*3/2`; every weight in
-   `mix2t` (`st/4`, `(p1-p0)*3/64`, `st*(n1-n0)*3/16`, `/16`, `*7/64`, `st*9/32`);
-   `mix1`'s `(c*15)/4` and `c*13`; `RunContextMap`'s `mulc` arguments 14/18/20;
-   SSCM's `*mulc/32`; and `Predictor::update`'s final blends
-   `(pt*6+pu+pv*11+pz*14+16)>>5` / `(pt*4+pu*5+pv*12+pz*11+16)>>5`. These are
-   weights *in* the logistic domain; rescaling the domain invalidates all of them.
+Below 12 the clamp destroys resolution; above 12 the APM's 33-node grid spreads
+over `±P_HALF` while `stretch` still only reaches `±2839`, so at P_BITS=16 fewer
+than 4 nodes are ever visited. Now:
 
-### Answer
+```c++
+constexpr int ST_BITS  = ilog2c(ST_SCALE);   // 8
+constexpr int ST_LIMIT = 1<<(ST_BITS+3);     // 2048 = +-8 nats, independent of P_BITS
+constexpr int ST_MAX   = ST_LIMIT-1;
+constexpr int SQ_BITS  = ST_BITS-1;          // 7 -- the grid belongs to the logistic domain
+```
 
-`P_SCALE` is structurally free in `[2^6, 2^16]` and pinned to 4096 in practice.
-Changing it needs `-DPAQ_LOGISTIC` plus a full retune of the mixer weights — the
-naming makes that retune *possible to attempt* (nothing is hidden, nothing
-overflows, the stream stays self-consistent) but does not do it. If the goal is a
-different precision, the clean prerequisite is to decouple the logistic range from
-`P_HALF` — give the stretch clamp its own `ST_LIMIT` sized from
-`ST_SCALE*ln(P_MAX)` and index `sqt`/APM off that — so precision and range can be
-chosen independently. That is a design change, not a rename.
+`sqt` is indexed `d+ST_LIMIT` over `2*ST_LIMIT` entries and APM indexes
+`(pr+ST_LIMIT)>>SQ_BITS`. At `ST_SCALE=256` every one of these is the shipped
+value, so output is unchanged. This also supersedes the earlier `SQ_BITS = P_BITS-5`
+fix — deriving it was right, but from the wrong parameter: the squash grid is a
+property of the logistic domain, not the probability domain.
+
+### 3. Two type/precision bugs found on the way
+
+- **`sqt` must be unsigned.** It holds probabilities in `[0,P_MAX]`, and at
+  `P_BITS=16` `short(65535)` is `-1`. Now `U16`, with a `static_assert` that the
+  element type can hold `P_MAX`.
+- **The `PAQ_LOGISTIC` port had UB**: `(long long)d<<Q8_BITS` left-shifts a
+  negative value for half its range, undefined before C++20. xad_logistic.inc
+  relies on being built as C++20 and says so; this file sets no `-std` and gcc 13
+  defaults to gnu++17. Found with `-fsanitize=undefined`, fixed to `d*Q8_ONE`.
+  The non-`PAQ_LOGISTIC` path was and stays UBSan-clean.
+
+And the table checksum earned its keep: restructuring the FNV loop into two passes
+changed the hash, the guard fired at startup and aborted rather than silently
+shipping different tables. Restored to the interleaved order, bounded by the
+shorter table so it cannot read out of range once the two sizes differ.
+
+### What is still pinned
+
+`P_BITS == 12` remains **required without `-DPAQ_LOGISTIC`**, because the baseline
+`squash()` carries 33 literal 12-bit probabilities — asserted at compile time. And
+`PR_BITS = 16` caps `P_BITS`, since `StateMap`/`APM` store at `PR_BITS` and shift
+down by `PR_SHIFT`. Within those, `P_SCALE` is now a genuine parameter rather than
+a number that happens to appear in 40 places.
 
 ## 13. Reproducing
 

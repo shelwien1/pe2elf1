@@ -123,31 +123,40 @@ constexpr int P_MAX   = P_SCALE-1;        // 4095, largest codable p
 constexpr int P_MIN   = 1;                // smallest codable p; p==0 is undecodable
 constexpr int P_HALF  = P_SCALE/2;        // 2048, "no information"
 
+constexpr int ilog2c(int v) { return v<=1 ? 0 : 1+ilog2c(v>>1); }
+
+// The logistic domain belongs to ST_SCALE, NOT to P_BITS.  stretch(p) =
+// ST_SCALE*ln(p/(P_SCALE-p)) reaches +-ST_SCALE*ln(P_MAX) ~ +-8*ST_SCALE nats, so
+// the clamp and the squash table are sized from ST_SCALE.  Tying them to P_HALF
+// instead (which is what ST_MAX = P_HALF-1 did) couples two independent things and
+// breaks both ends of a P_BITS sweep: below 12 the clamp eats the range (54% of it
+// at P_BITS=9), above 12 the APM's 33-node grid spreads over +-P_HALF while
+// stretch still only reaches +-2839, leaving 4 of 33 nodes reachable at P_BITS=16.
+// Sized from ST_SCALE it is 2048 either way, identical to the shipped value.
 constexpr int ST_SCALE = PAQ_ST_SCALE;    // stretch's logistic scale
-constexpr int ST_MAX   = P_HALF-1;        // 2047
+constexpr int ST_BITS  = ilog2c(ST_SCALE);           // 8
+constexpr int ST_LIMIT = 1<<(ST_BITS+3);  // 2048, i.e. +-8 nats of log-odds
+constexpr int ST_MAX   = ST_LIMIT-1;      // 2047
 constexpr int ST_MIN   = -ST_MAX;         // -2047
+
+static_assert( (1<<ST_BITS)==ST_SCALE, "ST_SCALE must be a power of two" );
 
 // squash interpolates the logistic on a SQ_STEP-wide grid of SQ_NODES points;
 // APM reuses the same grid over the same stretch range, hence APM_NODES.
 //
-// SQ_BITS is DERIVED, not fixed at 7.  The grid has to cover the stretch range
-// [-P_HALF,P_HALF) in a fixed number of nodes, so the step must scale with
-// P_SCALE: SQ_BITS = P_BITS-5 keeps SQ_NODES at 33 for every P_BITS, which is
-// what the 33-entry baseline table and APM's per-context region both assume.
-// Hardcoding 7 silently changed the APM geometry with P_BITS (5 nodes at
-// P_BITS=9, 513 at 16) and was one of the two reasons a P_BITS sweep collapsed;
-// see paq8hpc_speed_results.md section 12.  It also keeps APM's output shift
-// PR_BITS+SQ_BITS-P_BITS pinned at 11 regardless of P_BITS.
+// SQ_BITS is DERIVED from ST_SCALE, not fixed at 7 and not from P_BITS: the grid
+// covers the LOGISTIC range [-ST_LIMIT,ST_LIMIT) in SQ_NODES points, so its step
+// is a property of the logistic domain.  SQ_STEP = ST_LIMIT/16 = ST_SCALE/2.
 constexpr int SQ_NODES = 33;              // interpolation nodes over the range
-constexpr int SQ_BITS  = P_BITS-5;        // 7 at P_BITS==12
+constexpr int SQ_BITS  = ST_BITS-1;       // 7 at ST_SCALE==256
 constexpr int SQ_STEP  = 1<<SQ_BITS;      // 128
 constexpr int SQ_MASK  = SQ_STEP-1;       // 127
 constexpr int SQ_MID   = SQ_NODES/2;      // 16, the node at d==0
 constexpr int APM_NODES = SQ_NODES;       // 33 entries per APM context
 
-static_assert( 2*P_HALF/SQ_STEP + 1 == SQ_NODES,
-  "SQ_BITS must satisfy P_SCALE>>SQ_BITS == SQ_NODES-1" );
-static_assert( SQ_BITS>=1, "P_BITS must be at least 6 for the squash grid" );
+static_assert( 2*ST_LIMIT/SQ_STEP + 1 == SQ_NODES,
+  "SQ_STEP must divide the logistic range into SQ_NODES-1 intervals" );
+static_assert( SQ_BITS>=1, "ST_SCALE must be at least 4 for the squash grid" );
 
 constexpr int PR_BITS  = 16;              // StateMap/APM internal precision
 constexpr int PR_ONE   = 1<<PR_BITS;      // 65536
@@ -155,6 +164,49 @@ constexpr int PR_MAX   = PR_ONE-1;        // 65535
 constexpr int PR_SHIFT = PR_BITS-P_BITS;  // 4, PR_BITS <-> P_BITS
 
 constexpr int N_STATES = 256;             // rows of State_table / StateMap::t
+
+// ---- reinterpreting the fitted constants -------------------------------
+// Probability estimation here is fixed-point, so a constant like `*3/64` or a
+// threshold like `pr>=1820` is not an opaque weight: it is a coefficient that was
+// fitted against a value carrying P_REF_BITS fractional bits.  Change P_BITS and
+// the same literal silently means something else -- `(p1-p0)*3/64` doubles its
+// mixer-input gain at P_BITS=13, and `pr>=1820` becomes a 0.11 threshold instead
+// of 0.44.
+//
+// So rather than rescaling every literal, bring the VALUE to the reference scale
+// and leave the fitted coefficient alone.  p_to_ref is the identity when
+// P_BITS == P_REF_BITS, so nothing changes at the shipped precision.
+//
+// This applies only to P-domain quantities.  Values already in the logistic
+// domain (`st/4`, `st*(n1-n0)*3/16`, `st*9/32`, and the mixer's `(dp*9)>>9` /
+// `z>>9` / `(z*15)>>13`) are functions of ST_SCALE, not of P_BITS, and are left
+// alone; the same treatment against an ST reference would make ST_SCALE a real
+// knob, but that is entangled with the ST_MAX == P_HALF-1 coupling described in
+// paq8hpc_speed_results.md section 12.
+constexpr int P_REF_BITS = 12;            // the precision every coefficient was fitted at
+constexpr int P_UP = 1<<(P_REF_BITS>P_BITS ? P_REF_BITS-P_BITS : 0);
+constexpr int P_DN = 1<<(P_BITS>P_REF_BITS ? P_BITS-P_REF_BITS : 0);
+
+// a P-domain value at the current precision -> the same value at P_REF_BITS.
+// Truncates when P_BITS > P_REF_BITS; prefer the two forms below where possible.
+inline int p_to_ref(int v) {
+  return v*P_UP/P_DN;
+}
+
+// a constant fitted at P_REF_BITS -> the current scale.  Exact, so a threshold
+// keeps its full precision instead of truncating the value being compared.
+constexpr int p_from_ref(int v) {
+  return v*P_DN/P_UP;
+}
+
+// v*num/den, evaluated as if v were at the reference scale.  The rescaling is
+// folded into the one division the expression already had, so precision is lost
+// once rather than twice -- which matters because train()'s _mm256_mulhi_epi16
+// hardcodes a >>16, so the mixer error has to arrive pre-scaled and every bit
+// dropped on the way is a bit of learning signal gone.
+inline int p_scaled(int v, int num, int den) {
+  return v*num*P_UP/(den*P_DN);
+}
 
 // ---- what P_BITS is actually allowed to be -------------------------------
 // These are the constraints the code really imposes, as opposed to the ones the
@@ -173,10 +225,12 @@ static_assert( ST_MAX<=32767 && ST_MIN>=-32768,
   "stretch values must fit in short" );
 // APM's per-context region has to cover the whole stretch range at SQ_STEP
 // granularity, with one spare for the index+1 read.
-static_assert( ((2*P_HALF-1)>>SQ_BITS) <= APM_NODES-2,
-  "APM_NODES too small for the stretch range at SQ_STEP granularity" );
+static_assert( ((2*ST_LIMIT-1)>>SQ_BITS) <= APM_NODES-2,
+  "APM_NODES too small for the logistic range at SQ_STEP granularity" );
 // The rangecoder needs totFreq well below the renormalisation floor (sTOP=2^24).
 static_assert( P_SCALE < (1<<24), "P_SCALE must stay far below the coder's sTOP" );
+// the computed squash table stores probabilities, so its element type must hold P_MAX
+static_assert( P_MAX <= 65535, "squash table element (U16) must hold P_MAX" );
 
 // The baseline (non-PAQ_LOGISTIC) squash carries 33 table VALUES that are
 // literal 12-bit probabilities, so that path is welded to P_BITS==12.  With
@@ -406,7 +460,10 @@ constexpr int Q8_ONE  = 1<<Q8_BITS;       // 256
 constexpr int Q8_HALF = Q8_ONE/2;         // 128
 
 struct Logistic {
-  short sqt[P_SCALE];   // squash:  d+P_HALF -> p at P_BITS
+  // sqt holds probabilities in [0,P_MAX] so it must be UNSIGNED: at P_BITS==16,
+  // P_MAX is 65535 and short(65535) is -1.  stt holds signed stretch values,
+  // bounded by ST_MAX <= 32767, so short is right for it.
+  U16   sqt[2*ST_LIMIT];// squash:  d+ST_LIMIT -> p at P_BITS
   short stt[P_SCALE];   // stretch: p        -> d
 
   Logistic() {
@@ -436,7 +493,7 @@ struct Logistic {
     }
 
     // squash = inverse of the above, via a Q8 stretch and one interpolation
-    for( int d = -P_HALF; d<P_HALF; d++ ) {
+    for( int d = -ST_LIMIT; d<ST_LIMIT; d++ ) {
       // d*Q8_ONE, not d<<Q8_BITS: d is negative over half this range, and left
       // shift of a negative value is UB before C++20 (xad_logistic.inc relies on
       // being built as C++20; this file does not set -std, and gcc 13 defaults to
@@ -458,7 +515,7 @@ struct Logistic {
           best = (frac>=Q8_HALF) ? lo : lo-1;
         }
       }
-      sqt[d+P_HALF] = short(best<P_MIN ? P_MIN : best>P_MAX ? P_MAX : best);
+      sqt[d+ST_LIMIT] = U16(best<P_MIN ? P_MIN : best>P_MAX ? P_MAX : best);
     }
 
     // The tables are the format: a build whose pair differs cannot decode
@@ -471,8 +528,13 @@ struct Logistic {
     // free to produce different tables, which is the point of sweeping them
     if( PAQ_LOGISTIC_HASH && P_BITS==12 && ST_SCALE==256 ) {
       U32 h = 2166136261u;                        // FNV-1a over the two tables
-      for( int i = 0; i<P_SCALE; i++ ) {
-        h = (h ^ U32((U16)sqt[i]))*16777619u;
+      // interleaved (sqt[i],stt[i]) exactly as xad_logistic.inc hashes them --
+      // splitting it into two loops changes the value, which is how the guard
+      // below caught the restructuring.  Bounded by the shorter table so it can
+      // never read out of range once the two sizes stop being equal.
+      constexpr int HN = (2*ST_LIMIT < P_SCALE) ? 2*ST_LIMIT : P_SCALE;
+      for( int i = 0; i<HN; i++ ) {
+        h = (h ^ U32(sqt[i]))*16777619u;
         h = (h ^ U32((U16)stt[i]))*16777619u;
       }
       if( h!=U32(PAQ_LOGISTIC_HASH) ) {
@@ -493,7 +555,7 @@ int squash(int d) {
     return P_MAX;
   if( d<ST_MIN )
     return 0;
-  return g_logistic.sqt[d+P_HALF];
+  return g_logistic.sqt[d+ST_LIMIT];
 }
 
 struct Stretch {
@@ -944,12 +1006,13 @@ void update() {
 #if defined(PAQ_DOT2)
   int i = 0;
   for(; i+1<ncxt; i += 2 )
-    train2(&tx[0], &wx[cxt[i]*N], &wx[cxt[i+1]*N], nx, ((y<<12)-pr[i])*7, ((y<<12)-pr[i+1])*7);
+    train2(&tx[0], &wx[cxt[i]*N], &wx[cxt[i+1]*N], nx,
+           p_scaled((y<<P_BITS)-pr[i],7,1), p_scaled((y<<P_BITS)-pr[i+1],7,1));
   for(; i<ncxt; ++i )
-    train(&tx[0], &wx[cxt[i]*N], nx, ((y<<12)-pr[i])*7);
+    train(&tx[0], &wx[cxt[i]*N], nx, p_scaled((y<<P_BITS)-pr[i],7,1));
 #else
   for( int i = 0; i<ncxt; ++i ) {
-    int err = ((y<<12)-pr[i])*7;
+    int err = p_scaled((y<<P_BITS)-pr[i],7,1);
     train(&tx[0], &wx[cxt[i]*N], nx, err);
   }
 #endif
@@ -957,7 +1020,7 @@ void update() {
 }
 
 void update2() {
-  train(&tx[0], &wx[0], nx, ((y<<12)-base)*3/2);
+  train(&tx[0], &wx[0], nx, p_scaled((y<<P_BITS)-base,3,2));
   nx = 0;
 }
 
@@ -1053,7 +1116,7 @@ int p(int pr = P_HALF, int cxt = 0, int rate = 8) {
   t[index] += (g-t[index])>>rate;
   t[index+1] += (g-t[index+1])>>rate;
   const int w = pr&SQ_MASK;
-  index = ((pr+P_HALF)>>SQ_BITS)+cxt*APM_NODES;
+  index = ((pr+ST_LIMIT)>>SQ_BITS)+cxt*APM_NODES;
   // U16 entries times weights summing to SQ_STEP, brought back to P_BITS
   return (t[index]*(SQ_STEP-w)+t[index+1]*w)>>(PR_BITS+SQ_BITS-P_BITS);
 }
@@ -1173,17 +1236,17 @@ template <int CF> inline PAQ_HOTFN int mix2t(MainMixer &m, int s, StateMap &sm) 
   if( CF<0 ? (cxtfl!=0) : (CF!=0) ) {
     m.add(st/4);
     int p0 = P_MAX-p1;
-    m.add((p1-p0)*3/64);
+    m.add(p_scaled(p1-p0,3,64));
     m.add(st*(n1-n0)*3/16);
-    m.add(((p1&n0)-(p0&n1))/16);
-    m.add(((p0&n0)-(p1&n1))*7/64);
+    m.add(p_scaled((p1&n0)-(p0&n1),1,16));
+    m.add(p_scaled((p0&n0)-(p1&n1),7,64));
     return s>0;
   }
   m.add(st*9/32);
   m.add(st*(n1-n0)*3/16);
   int p0 = P_MAX-p1;
-  m.add(((p1&n0)-(p0&n1))/16);
-  m.add(((p0&n0)-(p1&n1))*7/64);
+  m.add(p_scaled((p1&n0)-(p0&n1),1,16));
+  m.add(p_scaled((p0&n0)-(p1&n1),7,64));
   return s>0;
 }
 
@@ -1260,11 +1323,11 @@ void set(U32 cx) {
 
 void mix(MainMixer &m) {
   if( pos<4000000 )
-    *cp += ((y<<16)-(*cp)+(1<<8))>>9;
+    *cp += ((y<<PR_BITS)-(*cp)+(1<<8))>>9;
   else
-    *cp += ((y<<16)-(*cp)+(1<<9))>>10;
+    *cp += ((y<<PR_BITS)-(*cp)+(1<<9))>>10;
   cp = &t[cxt+c0];
-  m.add(stretch(*cp>>4)*mulc/32);
+  m.add(stretch(*cp>>PR_SHIFT)*mulc/32);
 }
 };
 
@@ -1930,9 +1993,9 @@ void update() {
   failz = failz*2;
   if( y )
     pr ^= P_MAX;
-  if( pr>=1820 )
+  if( pr>=p_from_ref(1820) )
     ++fails, ++failcount;
-  if( pr>=848 )
+  if( pr>=p_from_ref(848) )
     ++failz;
 
 #if defined(PAQ_APMPF)
