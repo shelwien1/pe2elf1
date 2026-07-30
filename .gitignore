@@ -1,0 +1,9 @@
+paq8hpc
+*.o
+*.exe
+book1
+b64k
+b128k
+*.paq
+*.p
+*.out
