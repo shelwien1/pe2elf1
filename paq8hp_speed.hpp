@@ -141,8 +141,8 @@ constexpr int ST_MIN   = -ST_MAX;         // -2047
 
 static_assert( (1<<ST_BITS)==ST_SCALE, "ST_SCALE must be a power of two" );
 
-// squash interpolates the logistic on a SQ_STEP-wide grid of SQ_NODES points;
-// APM reuses the same grid over the same stretch range, hence APM_NODES.
+// squash interpolates the logistic on a SQ_STEP-wide grid of SQ_NODES points.
+// APM used to reuse this grid; it has its own now, below.
 //
 // SQ_BITS is DERIVED from ST_SCALE, not fixed at 7 and not from P_BITS: the grid
 // covers the LOGISTIC range [-ST_LIMIT,ST_LIMIT) in SQ_NODES points, so its step
@@ -152,11 +152,27 @@ constexpr int SQ_BITS  = ST_BITS-1;       // 7 at ST_SCALE==256
 constexpr int SQ_STEP  = 1<<SQ_BITS;      // 128
 constexpr int SQ_MASK  = SQ_STEP-1;       // 127
 constexpr int SQ_MID   = SQ_NODES/2;      // 16, the node at d==0
-constexpr int APM_NODES = SQ_NODES;       // 33 entries per APM context
 
 static_assert( 2*ST_LIMIT/SQ_STEP + 1 == SQ_NODES,
   "SQ_STEP must divide the logistic range into SQ_NODES-1 intervals" );
 static_assert( SQ_BITS>=1, "ST_SCALE must be at least 4 for the squash grid" );
+
+// APM used to reuse the squash grid outright -- 33 nodes at SQ_STEP spacing --
+// which welded the shape of an adaptive table to the shape of a fixed function
+// approximation.  They are unrelated: squash's grid is fixed by how well 33
+// points approximate a logistic, APM's by how finely a correction table should
+// partition its input, and the second is a tuning question.
+//
+// So APM now carries its own per-instance node count and addresses the stretch
+// range as a fixed-point fraction of it, independent of the grid: the interval
+// is (s*NIV)>>ST_RANGE_BITS and the remainder is the interpolation weight.  At
+// NIV==32 that is exactly the old (s>>SQ_BITS, s&SQ_MASK) pair scaled by 32.
+constexpr int ST_RANGE      = 2*ST_LIMIT;         // 4096, the stretch span
+constexpr int ST_RANGE_BITS = ilog2c(ST_RANGE);   // 12
+constexpr int APM_NH_MAX    = 32;                 // ceiling on the half-node count
+constexpr int APM_CELLS_MAX = 2*APM_NH_MAX+1;     // 65
+
+static_assert( (1<<ST_RANGE_BITS)==ST_RANGE, "ST_RANGE must be a power of two" );
 
 constexpr int PR_BITS  = 16;              // StateMap/APM internal precision
 constexpr int PR_ONE   = 1<<PR_BITS;      // 65536
@@ -165,6 +181,12 @@ constexpr int PR_HALF  = PR_ONE/2;        // 32768, "no information" at PR_BITS
 constexpr int PR_SHIFT = PR_BITS-P_BITS;  // 4, PR_BITS <-> P_BITS
 
 constexpr int N_STATES = 256;             // rows of State_table / StateMap::t
+
+// APM's interpolation sums two U16 entries weighted to ST_RANGE, so the widest
+// product has to stay inside int.  Declared here rather than beside ST_RANGE
+// because it is the one constraint that ties the two precisions together.
+static_assert( PR_MAX*(long long)ST_RANGE*2 < 2147483647LL,
+  "APM interpolation would overflow int at this PR_BITS/ST_RANGE" );
 
 // ---------------------------------------------------------------------------
 // The IDX bridge, part one: everything the generated headers need.
@@ -275,14 +297,45 @@ const int SM_SWITCH_2 = PPOS(G0_SM_SW2);
 // is the baseline's behaviour, preserved.
 constexpr int sm_target(int rate) { return PR_MAX + ((1<<rate)-1); }
 
-// APM: a base rate slowed twice by position.  a1 is the fast correction applied
-// straight to the model output; a2 runs one step slower than the rest.
-const int APM_RATE_BASE = PRATE(G0_APM_RATE_BASE);
-const int APM_SWITCH_1  = PPOS(G0_APM_SW1);
-const int APM_SWITCH_2  = PPOS(G0_APM_SW2);
-const int APM1_RATE     = PRATE(G0_APM1_RATE);
-const int APM2_RATE_ADD = pclamp(G0_APM2_RATE_ADD, 0, 8);
-const int APM_RATE_DEF  = PRATE(G0_APM_RATE_DEF);  // APM::p's default; every call passes one
+// APM: six instances, six schedules.  These used to be one shared `rate`
+// computed once per bit and handed to five of the six, which meant opt.pl could
+// only ever move all five together -- and they are not one adaptive unit: they
+// sit at different points of the correction chain and index on contexts from
+// 256 to 131072 rows wide.  Seeds reproduce the shared arithmetic exactly
+// (A2_RATE is 7 because a2's rate was base+1).  a1 keeps a single fixed rate
+// because it never had a schedule to clone.
+//
+// PAPN clamps the half-node count: a pattern is a search space, and this one
+// multiplies a table that is 131072 rows wide in a4's case.
+#define PAPN(x) pclamp((x), 1, APM_NH_MAX)
+
+const int A1_RATE = PRATE(G0_A1_RATE);
+const int A1_NH   = PAPN(G0_A1_NH);
+
+const int A2_RATE = PRATE(G0_A2_RATE);
+const int A2_SW1  = PPOS(G0_A2_SW1);
+const int A2_SW2  = PPOS(G0_A2_SW2);
+const int A2_NH   = PAPN(G0_A2_NH);
+
+const int A3_RATE = PRATE(G0_A3_RATE);
+const int A3_SW1  = PPOS(G0_A3_SW1);
+const int A3_SW2  = PPOS(G0_A3_SW2);
+const int A3_NH   = PAPN(G0_A3_NH);
+
+const int A4_RATE = PRATE(G0_A4_RATE);
+const int A4_SW1  = PPOS(G0_A4_SW1);
+const int A4_SW2  = PPOS(G0_A4_SW2);
+const int A4_NH   = PAPN(G0_A4_NH);
+
+const int A5_RATE = PRATE(G0_A5_RATE);
+const int A5_SW1  = PPOS(G0_A5_SW1);
+const int A5_SW2  = PPOS(G0_A5_SW2);
+const int A5_NH   = PAPN(G0_A5_NH);
+
+const int A6_RATE = PRATE(G0_A6_RATE);
+const int A6_SW1  = PPOS(G0_A6_SW1);
+const int A6_SW2  = PPOS(G0_A6_SW2);
+const int A6_NH   = PAPN(G0_A6_NH);
 
 // SmallStationaryContextMap: one step slower once the counts have settled.
 const int SCM_RATE_EARLY = PRATE(G0_SCM_RATE_EARLY);
@@ -300,14 +353,16 @@ const int MIX2_LR_DEN = PSMALL(G0_MIX2_LR_DEN);
 // IDXP() above exists for.
 const int MIX_W_INIT  = pclamp(G0_MIX_W_INIT, -32768, 32767);   // 2.0 in the 8-bit weight fraction
 const int MIX2_W_INIT = pclamp(G0_MIX2_W_INIT, -32768, 32767);  // submixer starts saturated
-// logistic-domain output scalers: squash((dp*MUL)>>SHIFT) per mixer context,
-// and for the S==1 submixer squash(z>>Z_SHIFT) with squash((z*ZB_MUL)>>ZB_SHIFT)
-// as the value handed back up the chain.
-const int MIX_DP_MUL   = PSMALL(G0_MIX_DP_MUL);
-const int MIX_DP_SHIFT = pclamp(G0_MIX_DP_SHIFT, 0, 24);
-const int MIX_Z_SHIFT  = pclamp(G0_MIX_Z_SHIFT, 0, 24);
-const int MIX_ZB_MUL   = PSMALL(G0_MIX_ZB_MUL);
-const int MIX_ZB_SHIFT = pclamp(G0_MIX_ZB_SHIFT, 0, 24);
+// Logistic-domain output scalers.  Two mixers, two sets: MIX_DP_* is the main
+// mixer's per-context scaling in the S>1 path, MIX2_* the submixer's in the
+// S==1 path.  The MIX2_ prefix is load-bearing -- these three execute only
+// inside the submixer's p(), and the old MIX_ names read as if both mixers used
+// them.
+const int MIX_DP_MUL    = PSMALL(G0_MIX_DP_MUL);
+const int MIX_DP_SHIFT  = pclamp(G0_MIX_DP_SHIFT, 0, 24);
+const int MIX2_Z_SHIFT  = pclamp(G0_MIX2_Z_SHIFT, 0, 24);
+const int MIX2_ZB_MUL   = PSMALL(G0_MIX2_ZB_MUL);
+const int MIX2_ZB_SHIFT = pclamp(G0_MIX2_ZB_SHIFT, 0, 24);
 // per-group rescaling of the ContextMap outputs on the way into the mixer
 const int MIX_MUL_0   = PSMALL(G0_MIX_MUL_0);
 const int MIX_MUL_1   = PSMALL(G0_MIX_MUL_1);
@@ -363,7 +418,7 @@ constexpr int P_DN = 1<<(P_BITS>P_REF_BITS ? P_BITS-P_REF_BITS : 0);
 // ---- uniform linear mixing in the probability domain --------------------
 // Every weighted average of probabilities is written the same way: weights in
 // P_SCALE units summing to P_SCALE, rounding +P_HALF.  So `(a+7*pr+4)>>3` becomes
-// pmix(APM1_w,a, P_SCALE-APM1_w,pr) with APM1_w = P_SCALE/8, and the weight reads
+// pmix(A1_w,a, P_SCALE-A1_w,pr) with A1_w = P_SCALE/8, and the weight reads
 // as a fraction instead of having to be decoded from a shift and a handful of
 // small integers.  Exactly equal to the shift forms at P_BITS==12 -- each old
 // numerator is the new one divided by P_SCALE/2^k -- and now the weights follow
@@ -393,8 +448,9 @@ inline int pmix( int w0, int v0, int w1, int v1, int w2, int v2, int w3, int v3 
 // weight the leftover makes the invariant structural, and it reproduces the
 // shipped 14/32 and 11/32 exactly.
 //
-// a1's correction against the raw model output, 1/8 : 7/8
-const int APM1_w = PWGT(G0_APM1_w);
+// a1's correction against the raw model output, 1/8 : 7/8.  Named with the
+// instance it belongs to, like a1's rate and node count.
+const int A1_w = PWGT(G0_A1_w);
 // final blend of the four APM chains, used when fails&255 is set (6:1:11:14 /32)
 const int MIXA_pt_w = PWGT(G0_MIXA_pt);
 const int MIXA_pu_w = PWGT(G0_MIXA_pu);
@@ -454,10 +510,10 @@ static_assert( P_BITS>=8 && P_BITS<=PR_BITS,
 // (pr+P_HALF)>>SQ_BITS -- both need the stretch range to be exactly [-P_HALF,P_HALF).
 static_assert( ST_MAX<=32767 && ST_MIN>=-32768,
   "stretch values must fit in short" );
-// APM's per-context region has to cover the whole stretch range at SQ_STEP
-// granularity, with one spare for the index+1 read.
-static_assert( ((2*ST_LIMIT-1)>>SQ_BITS) <= APM_NODES-2,
-  "APM_NODES too small for the logistic range at SQ_STEP granularity" );
+// APM no longer needs one: the interval index is (s*NIV)>>ST_RANGE_BITS with
+// s < ST_RANGE, so it is at most NIV-1 and the index+1 read lands on node NIV,
+// the last of the NIV+1 the row holds.  That holds for every NIV by
+// construction, which is the point of moving off the shared squash grid.
 // The rangecoder needs totFreq well below the renormalisation floor (sTOP=2^24).
 static_assert( P_SCALE < (1<<24), "P_SCALE must stay far below the coder's sTOP" );
 // the computed squash table stores probabilities, so its element type must hold P_MAX
@@ -1328,8 +1384,8 @@ int p() {
     return sub.p();
   } else {
     int z = dot_product(&tx[0], &wx[0], nx);
-    base = squash((z*MIX_ZB_MUL)>>MIX_ZB_SHIFT);
-    return squash(z>>MIX_Z_SHIFT);
+    base = squash((z*MIX2_ZB_MUL)>>MIX2_ZB_SHIFT);
+    return squash(z>>MIX2_Z_SHIFT);
   }
 }
 };
@@ -1355,35 +1411,64 @@ static_assert( G0_MX0_Volume + G0_MX1_Volume + G0_MX2_Volume
 // the one mixer the models are handed
 typedef Mixer<456, MIXER_ROWS, 6, MIX_W_INIT> MainMixer;
 
-template <int n> struct APM {
+// n contexts, 2*NH intervals per context.  NH comes from IDX per instance, so
+// it is a template parameter of reference type in the tuning build and a plain
+// int in the shipping build -- see IDXP.
+template <int n, IDXP(NH)> struct APM {
+// intervals.  IDXC because NH is only a constant expression in the shipping
+// build; there this is `static constexpr`, in the tuning build a const member
+// initialised at construction.
+IDXC(int, NIV, 2*(NH));
+
+// Cells allocated per context.  The tuning build cannot size a member array
+// from an IDX value, so it reserves the widest grid the search space allows and
+// treats the live node count as the row's CONTENT rather than its extent; the
+// shipping build sizes it exactly.  Rows stay disjoint either way, so the two
+// builds differ in layout only and code identically -- which is what verify.sh
+// checks.
+#if USE_NEW
+static constexpr int CELLS = APM_CELLS_MAX;
+#else
+static constexpr int CELLS = NIV+1;
+#endif
+
 int index;
 
-U16 t[n*APM_NODES];
+U16 t[n*CELLS];
 
 APM() : index(0) {
-  for( int j = 0; j<APM_NODES; ++j )
-    t[j] = squash((j-SQ_MID)*SQ_STEP)<<PR_SHIFT;
-  for( int i = APM_NODES; i<n*APM_NODES; ++i )
-    t[i] = t[i-APM_NODES];
+  for( int j = 0; j<=NIV; ++j )
+    t[j] = squash(j*ST_RANGE/NIV - ST_LIMIT)<<PR_SHIFT;
+  // only reachable when CELLS > NIV+1, i.e. in the tuning build: the reserve
+  // beyond the live grid is never read, but replicating it below would be
+  // reading uninitialised storage.
+  for( int j = NIV+1; j<CELLS; ++j )
+    t[j] = 0;
+  for( int i = CELLS; i<n*CELLS; ++i )
+    t[i] = t[i-CELLS];
 }
 
-// p() will touch t[cxt*APM_NODES + k] and +1 for some k in [0,APM_NODES-2],
-// i.e. a 66-byte region spanning at most two lines.
+// p() will touch t[cxt*CELLS + k] and +1 for some k in [0,NIV-1], i.e. the
+// (NIV+1)*2 bytes at the head of the row.
 void pf(int cxt) const {
-  PAQ_PF(&t[cxt*APM_NODES]);
-  PAQ_PF(&t[cxt*APM_NODES+APM_NODES-1]);
+  PAQ_PF(&t[cxt*CELLS]);
+  PAQ_PF(&t[cxt*CELLS+NIV]);
 }
 
-int p(int pr = P_HALF, int cxt = 0, int rate = APM_RATE_DEF) {
+int p(int pr, int cxt, int rate) {
   pr = stretch(pr);
   // target for y==1 is PR_ONE with this rate's rounding folded in; 0 for y==0
   const int g = (y<<PR_BITS)+(y<<rate)-y*2;
   t[index]   = U16(ema(t[index],   g, rate));
   t[index+1] = U16(ema(t[index+1], g, rate));
-  const int w = pr&SQ_MASK;
-  index = ((pr+ST_LIMIT)>>SQ_BITS)+cxt*APM_NODES;
-  // U16 entries times weights summing to SQ_STEP, brought back to P_BITS
-  return (t[index]*(SQ_STEP-w)+t[index+1]*w)>>(PR_BITS+SQ_BITS-P_BITS);
+  // stretch lands in [-ST_MAX,ST_MAX], so s is in [1,ST_RANGE-1] and s*NIV
+  // splits into an interval index below NIV and an ST_RANGE-scale fraction --
+  // no dependence on the interval width, which is what makes NIV free.
+  const int sn = (pr+ST_LIMIT)*NIV;
+  const int w  = sn&(ST_RANGE-1);
+  index = (sn>>ST_RANGE_BITS)+cxt*CELLS;
+  // U16 entries times weights summing to ST_RANGE, brought back to P_BITS
+  return (t[index]*(ST_RANGE-w)+t[index+1]*w)>>(PR_BITS+ST_RANGE_BITS-P_BITS);
 }
 };
 
@@ -2199,12 +2284,12 @@ int pr;
 
 ContextModel<L> contextModel;
 
-APM<256> a1;
-APM<0x8000> a2;
-APM<0x8000> a3;
-APM<0x20000> a4;
-APM<0x10000> a5;
-APM<0x10000> a6;
+APM<256,     A1_NH> a1;
+APM<0x8000,  A2_NH> a2;
+APM<0x8000,  A3_NH> a3;
+APM<0x20000, A4_NH> a4;
+APM<0x10000, A5_NH> a5;
+APM<0x10000, A6_NH> a6;
 
 Predictor() : pr(P_HALF) {
 }
@@ -2274,7 +2359,12 @@ void update() {
   // point (c0/b1/x5/w5/fails/failz/failcount are all updated above), so the six
   // hashes can be computed before contextModel.p() and their regions prefetched
   // under the whole model call.  Pure reordering of pure computation.
-  int rate = APM_RATE_BASE+(pos>APM_SWITCH_1)+(pos>APM_SWITCH_2);
+  // one schedule per APM now, instead of one shared `rate` for five of them
+  const int r2 = A2_RATE+(pos>A2_SW1)+(pos>A2_SW2);
+  const int r3 = A3_RATE+(pos>A3_SW1)+(pos>A3_SW2);
+  const int r4 = A4_RATE+(pos>A4_SW1)+(pos>A4_SW2);
+  const int r5 = A5_RATE+(pos>A5_SW1)+(pos>A5_SW2);
+  const int r6 = A6_RATE+(pos>A6_SW1)+(pos>A6_SW2);
   int pz = failcount+1;
   pz += tri[(fails>>5)&3];
   pz += trj[(fails>>3)&3];
@@ -2297,18 +2387,22 @@ void update() {
 
   pr = contextModel.p();
 
-  int pt, pv, pu = pmix( APM1_w, a1.p(pr, k1, APM1_RATE), P_SCALE-APM1_w, pr );
-  pu = a4.p(pu, k4, rate);
-  pv = a2.p(pr, k2, rate+APM2_RATE_ADD);
-  pv = a5.p(pv, k5, rate);
-  pt = a3.p(pr, k3, rate);
-  pz = a6.p(pu, k6, rate);
+  int pt, pv, pu = pmix( A1_w, a1.p(pr, k1, A1_RATE), P_SCALE-A1_w, pr );
+  pu = a4.p(pu, k4, r4);
+  pv = a2.p(pr, k2, r2);
+  pv = a5.p(pv, k5, r5);
+  pt = a3.p(pr, k3, r3);
+  pz = a6.p(pu, k6, r6);
 #else
   pr = contextModel.p();
 
-  int rate = APM_RATE_BASE+(pos>APM_SWITCH_1)+(pos>APM_SWITCH_2);
+  const int r2 = A2_RATE+(pos>A2_SW1)+(pos>A2_SW2);
+  const int r3 = A3_RATE+(pos>A3_SW1)+(pos>A3_SW2);
+  const int r4 = A4_RATE+(pos>A4_SW1)+(pos>A4_SW2);
+  const int r5 = A5_RATE+(pos>A5_SW1)+(pos>A5_SW2);
+  const int r6 = A6_RATE+(pos>A6_SW1)+(pos>A6_SW2);
   int pt, pv, pz = failcount+1;
-  int pu = pmix( APM1_w, a1.p(pr, c0, APM1_RATE), P_SCALE-APM1_w, pr );
+  int pu = pmix( A1_w, a1.p(pr, c0, A1_RATE), P_SCALE-A1_w, pr );
   pz += tri[(fails>>5)&3];
   pz += trj[(fails>>3)&3];
   pz += trj[(fails>>1)&3];
@@ -2316,11 +2410,11 @@ void update() {
     pz += 8;
   pz = pz/2;
 
-  pu = a4.p(pu, (c0*2)^(hash(b1, (x5>>8)&255, (x5>>16)&0x80ff)&0x1ffff), rate);
-  pv = a2.p(pr, (c0*8)^(hash(29, failz&2047)&0x7fff), rate+APM2_RATE_ADD);
-  pv = a5.p(pv, hash(c0, w5&0xfffff)&0xffff, rate);
-  pt = a3.p(pr, (c0*32)^(hash(19, x5&0x80ffff)&0x7fff), rate);
-  pz = a6.p(pu, (c0*4)^(hash(min(9, pz), x5&0x80ff)&0xffff), rate);
+  pu = a4.p(pu, (c0*2)^(hash(b1, (x5>>8)&255, (x5>>16)&0x80ff)&0x1ffff), r4);
+  pv = a2.p(pr, (c0*8)^(hash(29, failz&2047)&0x7fff), r2);
+  pv = a5.p(pv, hash(c0, w5&0xfffff)&0xffff, r5);
+  pt = a3.p(pr, (c0*32)^(hash(19, x5&0x80ffff)&0x7fff), r3);
+  pz = a6.p(pu, (c0*4)^(hash(min(9, pz), x5&0x80ff)&0xffff), r6);
 #endif
 
   if( fails&255 )

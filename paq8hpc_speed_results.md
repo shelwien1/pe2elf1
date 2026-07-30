@@ -923,14 +923,15 @@ turns "named" into "reachable by an optimizer".
 
 ### What went in, and what deliberately did not
 
-`IDX/paq8-G0.idx` declares **46 `Number` parameters** and **4 `Index`
-declarations**:
+`IDX/paq8-G0.idx` declares **62 `Number` parameters** and **4 `Index`
+declarations** (46 in the first pass; section 16 replaced the six shared APM
+parameters with 22 per-instance ones):
 
 | group | parameters |
 |---|---|
-| probability-domain mixing weights | `APM1_w`, `MIXA_pt/pu/pv`, `MIXB_pt/pu/pv` |
+| probability-domain mixing weights | `A1_w`, `MIXA_pt/pu/pv`, `MIXB_pt/pu/pv` |
 | StateMap | 3 rates, 2 switch positions, the Laplace prior |
-| APM | base rate, 2 switch positions, `APM1_RATE`, `APM2_RATE_ADD`, the default |
+| APM (×6 instances) | per-instance rate, 2 switch positions, node count — see section 16 |
 | SSCM | 2 rates, 1 switch position |
 | Mixer | 2 learning-rate pairs, 2 weight initialisers, 5 logistic output scalers, 4 input scalers |
 | ContextMap | 4 decay parameters, 3 run-length caps |
@@ -1026,8 +1027,9 @@ exactly — and do:
 | release + the 14 speed gates | ok — same |
 | MinGW release under wine | ok — 5 cases: win==linux bytes, win round-trip, win←linux, linux←win |
 
-The marker counts confirm the freeze worked: the tuning binary carries **46**
-`!MAP!` markers (one per `Number`, 260 pattern bits) and **6** `map.` markers
+The marker counts confirm the freeze worked: the tuning binary carries one
+`!MAP!` marker per `Number` (**46** at this point, 62 after section 16) and **6**
+`map.` markers
 (the frozen index masks, invisible to `opt.pl`); the release binary carries
 **zero** of either.
 
@@ -1059,7 +1061,136 @@ separate word/sparse/record submodels that such a corpus never exercises.
 | `MOD/paq8-G0_h.inc`, `_p.inc` | **generated, and committed** — a build input, not an artefact, so the tree builds without perl (§12) |
 | `mk.sh` | the two builds, from one source, by one `sed` |
 
-## 16. Reproducing
+## 16. One instance, one set of parameters
+
+Two follow-ups to the port, both about the same thing: a parameter shared by
+things that are not the same thing is a parameter the optimizer cannot actually
+move.
+
+### The six APMs had one rate schedule between them
+
+`Predictor::update` computed `rate = APM_RATE_BASE + (pos>APM_SWITCH_1) +
+(pos>APM_SWITCH_2)` once per bit and handed it to five of the six APMs, with a2
+adding a constant on top. Written that way it looks like a property of the
+model. It is not — the six sit at different points of the correction chain and
+index on completely different contexts:
+
+| APM | contexts | corrects | old rate |
+|---|---|---|---|
+| a1 | 256 | the raw model output | fixed 3 |
+| a2 | 32768 | the raw model output | shared + 1 |
+| a3 | 32768 | the raw model output | shared |
+| a4 | 131072 | a1's output | shared |
+| a5 | 65536 | a2's output | shared |
+| a6 | 65536 | a4's output | shared |
+
+A 256-row table and a 131072-row table do not want the same adaptation rate, and
+they certainly do not want the same *switch positions* — the whole point of the
+schedule is "slow down once the counts have settled", and a 131072-row table
+settles 512× later than a 256-row one. So each now owns `A<i>_RATE`, `A<i>_SW1`,
+`A<i>_SW2`. Seeds reproduce the shared arithmetic exactly: `A2_RATE` is 7
+because a2's rate was base+1, the other four are 6, and every switch position is
+the value the shared pair held.
+
+a1 keeps a single fixed rate, because it never had a schedule. Cloning a knob is
+not the same as inventing one, and giving a1 a schedule seeded to never fire
+would be a behaviour change dressed up as a rename. `APM1_w` — how much of a1's
+output survives the blend with the raw prediction — is renamed `A1_w`, since it
+belongs to a1 as much as its rate does.
+
+`APM_RATE_DEF` is gone rather than cloned. It was `APM::p`'s default argument and
+every one of the six call sites passed a rate explicitly, so it was a knob
+nothing read: pure noise in `opt.pl`'s search space.
+
+The mixers turned out to be clean already — `m.update()` is only ever called on
+the main mixer and `update2()` only on the submixer, so `MIX_LR_*` and
+`MIX2_LR_*` were genuinely disjoint. Three names were lying, though:
+`MIX_Z_SHIFT`, `MIX_ZB_MUL` and `MIX_ZB_SHIFT` execute *only* in the `S==1`
+branch, which is the submixer's `p()`. Renamed `MIX2_*`.
+
+### The APM node count is now a parameter (§2 of the request)
+
+`APM` reused squash's grid outright — 33 nodes at `SQ_STEP` spacing, addressed
+with a shift pair — which welded the shape of an *adaptive table* to the shape of
+a *fixed function approximation*. They are unrelated questions: squash's grid is
+fixed by how well 33 points approximate a logistic, APM's by how finely a
+correction table should partition its input, and only the second is a tuning
+question.
+
+Following `d5c_mix.inc`'s `AP_N_*`, APM now carries its own count and addresses
+the range as a fixed-point fraction of it, independent of the grid:
+
+```c++
+const int sn = (pr+ST_LIMIT)*NIV;          // was: w = pr & SQ_MASK
+const int w  = sn&(ST_RANGE-1);            //      index = (pr+ST_LIMIT)>>SQ_BITS
+index = (sn>>ST_RANGE_BITS)+cxt*CELLS;
+return (t[index]*(ST_RANGE-w)+t[index+1]*w)>>(PR_BITS+ST_RANGE_BITS-P_BITS);
+```
+
+**Declared as the half-count, not the node count.** `A<i>_NH` gives `2*NH`
+intervals and `2*NH+1` nodes, so the grid is symmetric and there is always a node
+*exactly* at `p == P_HALF`. A free node count would let the optimizer pick an
+even one, which puts the midpoint — by far the most visited cell — on an
+interpolation boundary. 33 is `NH == 16`.
+
+**The tuning build cannot size a member array from an IDX value.** Same wall as
+`Mixer::wx`, different answer: rather than freezing the parameter, the tuning
+build reserves the widest grid the clamp admits (`APM_CELLS_MAX = 65`) and treats
+the live count as the row's *content* rather than its *extent*, while the
+shipping build sizes it exactly. Rows stay disjoint either way, so the two builds
+differ in layout only:
+
+| build | cells/context | all six APMs |
+|---|---|---|
+| shipping | 33 | 21,643,800 B |
+| tuning | 65 | 42,631,728 B |
+
+That +21 MB is a tuning-build cost only, and it buys a parameter that would
+otherwise have had to be frozen.
+
+### Checked, not assumed
+
+`test_apm.cpp` checks the byte-identity claim directly rather than inferring it
+from `verify.sh` passing — the two forms must be **exactly** equal at `NIV==32`,
+not approximately, not for typical inputs:
+
+- the interval index agrees for **all 4095** stretch values
+- the new fraction is exactly 32× the old one, which is what makes the wider
+  shift cancel
+- the interpolated result agrees over **14,743,040** `(t0,t1,w)` triples and
+  626,535 end-to-end evaluations
+- the midpoint lands on a node with zero weight for **every** `NH` in
+  `[1,32]` — and an odd interval count demonstrably does not, which is the
+  reason for halving
+- the interval stays in `[0,NIV-1]` for all **131,040** `(NH, stretch)` pairs,
+  so the `index+1` read is in bounds by construction at any node count
+- no `int` overflow at `APM_NH_MAX`: max `s*NIV` = 262,080, max weighted sum =
+  536,862,720
+
+All 13 checks pass. `verify.sh` then confirms byte-identity end to end for
+tuning, release, and both with the 14 speed gates; `PAQ_LOGISTIC` still builds at
+`P_BITS` 8/10/12/16. The tuning binary now carries **62** `!MAP!` markers, with
+all six APMs independently visible.
+
+### What still shares, and why it was left alone
+
+Stating the boundary rather than leaving it silent:
+
+- **`SM_RATE_*` / `SM_SWITCH_*`** are shared by every `StateMap` — hundreds of
+  them, inside every `ContextMap`. They are driven by the globals `sm_shft` /
+  `sm_add`, updated once per *byte* rather than per instance. That is a real
+  structure, not an accident of how the code was written, and unpicking it means
+  a per-instance rate read on the hottest path in the program.
+- **`SCM_RATE_*` / `SCM_SWITCH_POS`** are shared by the ten
+  `SmallStationaryContextMap`s. These *are* cloneable the same way the APMs
+  were — ten instances, a template already carrying a per-instance `mulc`. Not
+  done here because the request named mixers and APMs, and quietly widening it
+  is the kind of scope drift that makes a diff hard to review.
+- **`MIX_MUL_DEN`** is shared by the main mixer's three input groups, but that
+  is one mixer, not three instances, and a per-group denominator is redundant
+  with widening the per-group numerator (5/4 and 10/8 are the same number).
+
+## 17. Reproducing
 
 ```
 ./build.sh FINAL -DPAQ_PREFETCH -DPAQ_AVX2 -DPAQ_DOT2 -DPAQ_GETSIMD -DPAQ_APMPF
@@ -1070,6 +1201,7 @@ separate word/sparse/record submodels that such a corpus never exercises.
 ./verify_rt.sh  p_LOG LOGISTIC                # round-trip + size, for PAQ_LOGISTIC
 g++ -O2 -o t test_logistic.cpp -lm && ./t     # squash/stretch table checks
 g++ -O2 -o w test_window.cpp && ./w           # 1 GiB window holds enwik9
+g++ -O2 -o a test_apm.cpp && ./a              # APM grid: old shift pair == new form
 ```
 
 The IDX builds, and the tuning loop:

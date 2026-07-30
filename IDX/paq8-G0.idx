@@ -40,9 +40,6 @@ Const 0
 # build, where these are runtime reads.
 # ---------------------------------------------------------------------------
 
-# a1's correction against the raw model output: 1/8 : 7/8
-Number APM1_w,         P_SCALE/256, 0!00100000
-
 # final blend of the four APM chains, when fails&255 is set (6:1:11:14 /32)
 Number MIXA_pt,        P_SCALE/256, 0!00110000
 Number MIXA_pu,        P_SCALE/256, 0!00001000
@@ -68,14 +65,74 @@ Number SM_SW2,         65536,       0!10000
 # the Laplace prior on a state's (n0,n1) that seeds StateMap::t
 Number SM_PRIOR_ADD,   1,           0!01
 
-# APM: a base rate slowed twice by position.  a1 is the fast correction applied
-# straight to the model output; a2 runs one step slower than the rest.
-Number APM_RATE_BASE,  1,           0!0110
-Number APM_SW1,        262144,      0!01110
-Number APM_SW2,        524288,      0!11100
-Number APM1_RATE,      1,           0!0011
-Number APM2_RATE_ADD,  1,           0!01
-Number APM_RATE_DEF,   1,           0!1000
+# ---------------------------------------------------------------------------
+# APM chain -- SIX INSTANCES, SIX SETS OF PARAMETERS.
+#
+# The six APMs used to share one rate schedule: a single `rate = base +
+# (pos>SW1) + (pos>SW2)` computed once and handed to five of them, with a2
+# adding a constant on top.  They are not one adaptive unit, though -- they sit
+# at different points of the chain (a1 and a3 correct the raw model output, a4
+# and a6 correct what a1 already corrected, a5 corrects a2) and they index on
+# completely different contexts, from 256 rows to 131072.  Sharing a schedule
+# was an accident of how the code was written, not a property of the model, and
+# it meant opt.pl could only move all five together.
+#
+# So each instance now owns its schedule.  Seeds reproduce the old arithmetic
+# exactly: A2_RATE is 7 because a2's rate was base+1, the other four are 6, and
+# every switch position is the value the shared pair held.  a1 keeps a single
+# fixed rate because it never had a schedule -- cloning a knob is not the same
+# as inventing one.
+#
+# *_NH is the interpolation grid, and it is the parameter this table never had.
+# The grid is 2*NH intervals over the stretch range, i.e. 2*NH+1 nodes, so NH
+# half-intervals either side of the middle and always a node exactly at
+# p == P_HALF.  16 is the 33 the code shipped with.  Declaring the half-count
+# rather than the node count is what keeps the grid symmetric under tuning: a
+# free node count would let the optimizer pick an even one, which puts the
+# midpoint -- by far the most visited cell -- on an interpolation boundary.
+#
+# NOTE the cost model here, because it is not the usual one: *_NH multiplies
+# that APM's table, and a4 alone is 131072 contexts.  Nodes are cheap in
+# accuracy terms and expensive in cache terms; the ceiling is APM_NH_MAX in
+# paq8hp_speed.hpp, which the consumer clamps to.
+# ---------------------------------------------------------------------------
+
+# a1: fast correction on the raw model output, 256 contexts, no schedule.
+# A1_w is how much of a1's output survives the blend with the raw model
+# prediction -- 1/8 : 7/8 -- so it belongs to a1 as much as its rate does.
+Number A1_RATE,        1,           0!0011
+Number A1_NH,          1,           1!01111
+Number A1_w,           P_SCALE/256, 0!00100000
+
+# a2: 32768 contexts on failz.  Ran one step slower than the shared rate.
+Number A2_RATE,        1,           0!0111
+Number A2_SW1,         262144,      0!01110
+Number A2_SW2,         524288,      0!11100
+Number A2_NH,          1,           1!01111
+
+# a3: 32768 contexts on x5, corrects the raw model output
+Number A3_RATE,        1,           0!0110
+Number A3_SW1,         262144,      0!01110
+Number A3_SW2,         524288,      0!11100
+Number A3_NH,          1,           1!01111
+
+# a4: 131072 contexts on b1/x5, corrects a1's output
+Number A4_RATE,        1,           0!0110
+Number A4_SW1,         262144,      0!01110
+Number A4_SW2,         524288,      0!11100
+Number A4_NH,          1,           1!01111
+
+# a5: 65536 contexts on w5, corrects a2's output
+Number A5_RATE,        1,           0!0110
+Number A5_SW1,         262144,      0!01110
+Number A5_SW2,         524288,      0!11100
+Number A5_NH,          1,           1!01111
+
+# a6: 65536 contexts on the fail histogram, corrects a4's output
+Number A6_RATE,        1,           0!0110
+Number A6_SW1,         262144,      0!01110
+Number A6_SW2,         524288,      0!11100
+Number A6_NH,          1,           1!01111
 
 # SmallStationaryContextMap: one step slower once the counts have settled
 Number SCM_RATE_EARLY, 1,           0!1001
@@ -97,14 +154,17 @@ Number MIX2_LR_DEN,    1,           1!01
 Number MIX_W_INIT,     1,           0!1000000000
 Number MIX2_W_INIT,    1,           0!111111111111111
 
-# output scalers, logistic domain: pr = squash((dp*MUL)>>SHIFT) per context,
-# and for the S==1 submixer squash(z>>Z_SHIFT) with squash((z*ZB_MUL)>>ZB_SHIFT)
-# as the value handed back up.
+# output scalers, logistic domain.  Two mixers, two sets: the main mixer's S>1
+# path scales each context's dot product by MIX_DP_*, and the S==1 submixer
+# scales its own by MIX2_Z_SHIFT for the value it returns and MIX2_ZB_* for the
+# one it hands back up the chain.  The MIX2_ names are not cosmetic -- these
+# three only ever execute in the submixer's p(), and calling them MIX_* made it
+# read as if the two mixers shared them.
 Number MIX_DP_MUL,     1,           0!1001
 Number MIX_DP_SHIFT,   1,           0!1001
-Number MIX_Z_SHIFT,    1,           0!1001
-Number MIX_ZB_MUL,     1,           0!1111
-Number MIX_ZB_SHIFT,   1,           0!1101
+Number MIX2_Z_SHIFT,   1,           0!1001
+Number MIX2_ZB_MUL,    1,           0!1111
+Number MIX2_ZB_SHIFT,  1,           0!1101
 
 # per-group input rescaling in ContextModel::p: m.mul(x) is tx *= x/DEN.  The
 # three groups are the 2/1/1 split of the ContextMap outputs.
