@@ -92,6 +92,54 @@ typedef unsigned char U8;
 typedef unsigned short U16;
 typedef unsigned int U32;
 
+// ---------------------------------------------------------------------------
+// Named scales.  These were spelled as literals throughout, which hid the fact
+// that the same numeral means different things in different places: 256 is the
+// logistic scale in squash/stretch, the state count in StateMap, and the byte
+// alphabet in the partial-byte arithmetic; 4096 is the probability scale in the
+// coder but a page size in the allocator; 2048 is neutral probability in the
+// APM but a mixer context count in ContextModel::p.  Only the probability and
+// logistic families are named here -- the byte-alphabet and tuning literals are
+// deliberately left alone, since a name that conflated them would be worse than
+// the number.  constexpr rather than enum so each carries a real type.
+//
+// A prediction is a probability p in [0, P_SCALE) at P_BITS of precision; that
+// is the coder's totFreq.  The mixer works in the logistic domain, where
+// stretch(p) = ST_SCALE*ln(p/(P_SCALE-p)) clamped to [ST_MIN, ST_MAX], and
+// squash is its inverse.  StateMap and APM hold probabilities at PR_BITS (U16)
+// internally and shift by PR_SHIFT to trade with the P_BITS world.
+// ---------------------------------------------------------------------------
+
+constexpr int P_BITS  = 12;               // precision of a prediction
+constexpr int P_SCALE = 1<<P_BITS;        // 4096, the coder's totFreq
+constexpr int P_MAX   = P_SCALE-1;        // 4095, largest codable p
+constexpr int P_MIN   = 1;                // smallest codable p; p==0 is undecodable
+constexpr int P_HALF  = P_SCALE/2;        // 2048, "no information"
+
+constexpr int ST_SCALE = 256;             // stretch's logistic scale
+constexpr int ST_MAX   = P_HALF-1;        // 2047
+constexpr int ST_MIN   = -ST_MAX;         // -2047
+
+// squash interpolates the logistic on a SQ_STEP-wide grid of SQ_NODES points;
+// APM reuses the same grid over the same stretch range, hence APM_NODES.
+constexpr int SQ_BITS  = 7;
+constexpr int SQ_STEP  = 1<<SQ_BITS;      // 128
+constexpr int SQ_MASK  = SQ_STEP-1;       // 127
+constexpr int SQ_NODES = 2*P_HALF/SQ_STEP + 1;   // 33
+constexpr int SQ_MID   = SQ_NODES/2;      // 16, the node at d==0
+constexpr int APM_NODES = SQ_NODES;       // 33 entries per APM context
+
+constexpr int PR_BITS  = 16;              // StateMap/APM internal precision
+constexpr int PR_ONE   = 1<<PR_BITS;      // 65536
+constexpr int PR_MAX   = PR_ONE-1;        // 65535
+constexpr int PR_SHIFT = PR_BITS-P_BITS;  // 4, PR_BITS <-> P_BITS
+
+constexpr int N_STATES = 256;             // rows of State_table / StateMap::t
+
+// ilog's domain is every U16 value.  Numerically equal to PR_ONE and completely
+// unrelated to it -- kept separate on purpose.
+constexpr int ILOG_SIZE = 1<<16;          // 65536
+
 #ifndef min
 inline int min(int a, int b) {
   return a<b ? a : b;
@@ -177,7 +225,7 @@ int y = 0;
 
 int c0 = 1;
 U32 b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, b7 = 0, b8 = 0, tt = 0, c4 = 0, x4 = 0, x5 = 0, w4 = 0, w5 = 0, f4 = 0;
-int order, bpos = 0, cxtfl = 3, sm_shft = 7, sm_add = 65535+127, sm_add_y = 0;
+int order, bpos = 0, cxtfl = 3, sm_shft = 7, sm_add = PR_MAX+((1<<7)-1), sm_add_y = 0;
 
 // level-independent, and read by every model, so it stays at file scope with
 // the rest of the shared scalar state rather than moving into Predictor<L>.
@@ -216,9 +264,9 @@ Buf<1u<<PAQ_BUFBITS> buf;
 // the input has not wrapped -- measured on a 128 KB newline-free file, a 1 MiB
 // window matches 1 GiB but a 64 KiB one does not.  A 1 GiB window keeps that
 // context deterministic for any input up to 2^30, enwik9 included.
-enum { PAQ_ENWIK9 = 1000000000 };
+constexpr unsigned long long PAQ_ENWIK9 = 1000000000ull;
 #if !defined(PAQ_ALLOW_SMALL_BUF)
-static_assert( (1ull<<PAQ_BUFBITS) >= (unsigned long long)PAQ_ENWIK9,
+static_assert( (1ull<<PAQ_BUFBITS) >= PAQ_ENWIK9,
   "history window (PAQ_BUFBITS) must hold enwik9 (10^9 bytes) whole -- "
   "anything smaller makes back-references past the window alias earlier bytes" );
 #endif
@@ -227,7 +275,7 @@ static_assert( (1ull<<PAQ_BUFBITS) >= (unsigned long long)PAQ_ENWIK9,
 static_assert( PAQ_BUFBITS>=1 && PAQ_BUFBITS<=31, "PAQ_BUFBITS must be in [1,31]" );
 
 struct Ilog {
-U8 t[65536];
+U8 t[ILOG_SIZE];
 
 int operator()(U16 x) const {
   return t[x];
@@ -235,7 +283,7 @@ int operator()(U16 x) const {
 
 Ilog() {
   U32 x = 14155776;
-  for( int i = 2; i<65536; ++i ) {
+  for( int i = 2; i<ILOG_SIZE; ++i ) {
     x += 774541002/(i*2-1);
     t[i] = x>>24;
   }
@@ -294,16 +342,22 @@ static const U8 State_table[256][4] = {{1, 2, 0, 0}, {3, 5, 1, 0}, {4, 6, 0, 1},
 
 static const long long LN2_Q48 = 195103586505167LL;   // round(ln2 * 2^48)
 
+// Q8: the binary search runs on a stretch held at Q8_BITS fractional bits, so
+// the crossing can be interpolated between adjacent p.
+constexpr int Q8_BITS = 8;
+constexpr int Q8_ONE  = 1<<Q8_BITS;       // 256
+constexpr int Q8_HALF = Q8_ONE/2;         // 128
+
 struct Logistic {
-  short sqt[4096];   // squash:  d+2048 -> p12
-  short stt[4096];   // stretch: p12    -> d
+  short sqt[P_SCALE];   // squash:  d+P_HALF -> p at P_BITS
+  short stt[P_SCALE];   // stretch: p        -> d
 
   Logistic() {
     // 65536*log2(i): square, renormalise below 2^32, count the shifts.  The +31
     // corrects the truncation bias renormalisation accumulates, since
     // i^(2^16) = w*2^k with w in [2^31,2^32) gives 2^16*log2(i) = k + log2(w).
-    static U32 L[4096];
-    for( U32 i = 0; i<4096; i++ ) {
+    static U32 L[P_SCALE];
+    for( U32 i = 0; i<U32(P_SCALE); i++ ) {
       unsigned long long w = i;
       U32 k = 0;
       for( int j = 0; j<16; j++ ) {
@@ -314,35 +368,35 @@ struct Logistic {
       L[i] = k + (i>1 ? 31u : 0u);
     }
     // S*ln2*2^16.  Q48 * 2^8 stays well inside i64.
-    const long long K = ((long long)256*LN2_Q48 + (1LL<<31))>>32;
+    const long long K = ((long long)ST_SCALE*LN2_Q48 + (1LL<<31))>>32;
 
     // stretch, rounded: the +2^31 then >>32 is floor(x+0.5) and stays correct
     // for negative x, which round-away-from-zero would not.
-    for( int p = 0; p<4096; p++ ) {
-      int pi = p<1 ? 1 : p>4095 ? 4095 : p;
-      long long v = (((long long)L[pi] - (long long)L[4096-pi])*K + (1LL<<31))>>32;
-      stt[p] = short(v<-2047 ? -2047 : v>2047 ? 2047 : v);
+    for( int p = 0; p<P_SCALE; p++ ) {
+      int pi = p<P_MIN ? P_MIN : p>P_MAX ? P_MAX : p;
+      long long v = (((long long)L[pi] - (long long)L[P_SCALE-pi])*K + (1LL<<31))>>32;
+      stt[p] = short(v<ST_MIN ? ST_MIN : v>ST_MAX ? ST_MAX : v);
     }
 
     // squash = inverse of the above, via a Q8 stretch and one interpolation
-    for( int d = -2048; d<2048; d++ ) {
-      long long t = (long long)d<<8;
-      int lo = 1, hi = 4095;
+    for( int d = -P_HALF; d<P_HALF; d++ ) {
+      long long t = (long long)d<<Q8_BITS;
+      int lo = P_MIN, hi = P_MAX;
       while( lo<hi ) {
         int m = (lo+hi)>>1;
-        long long q = (((long long)L[m] - (long long)L[4096-m])*K + (1LL<<23))>>24;
+        long long q = (((long long)L[m] - (long long)L[P_SCALE-m])*K + (1LL<<23))>>24;
         if( q<t ) lo = m+1; else hi = m;
       }
       int best = lo;
-      if( lo>1 ) {
-        long long s1 = (((long long)L[lo]   - (long long)L[4096-lo]  )*K + (1LL<<23))>>24;
-        long long s0 = (((long long)L[lo-1] - (long long)L[4096-lo+1])*K + (1LL<<23))>>24;
+      if( lo>P_MIN ) {
+        long long s1 = (((long long)L[lo]   - (long long)L[P_SCALE-lo]  )*K + (1LL<<23))>>24;
+        long long s0 = (((long long)L[lo-1] - (long long)L[P_SCALE-lo+1])*K + (1LL<<23))>>24;
         if( s1>t && s1!=s0 ) {
-          long long frac = ((t-s0)*256 + (s1-s0)/2)/(s1-s0);
-          best = (frac>=128) ? lo : lo-1;
+          long long frac = ((t-s0)*Q8_ONE + (s1-s0)/2)/(s1-s0);
+          best = (frac>=Q8_HALF) ? lo : lo-1;
         }
       }
-      sqt[d+2048] = short(best<1 ? 1 : best>4095 ? 4095 : best);
+      sqt[d+P_HALF] = short(best<P_MIN ? P_MIN : best>P_MAX ? P_MAX : best);
     }
 
     // The tables are the format: a build whose pair differs cannot decode
@@ -353,7 +407,7 @@ struct Logistic {
 #endif
     if( PAQ_LOGISTIC_HASH ) {
       U32 h = 2166136261u;                        // FNV-1a over the two tables
-      for( int i = 0; i<4096; i++ ) {
+      for( int i = 0; i<P_SCALE; i++ ) {
         h = (h ^ U32((U16)sqt[i]))*16777619u;
         h = (h ^ U32((U16)stt[i]))*16777619u;
       }
@@ -371,11 +425,11 @@ struct Logistic {
 Logistic g_logistic;
 
 int squash(int d) {
-  if( d>2047 )
-    return 4095;
-  if( d<-2047 )
+  if( d>ST_MAX )
+    return P_MAX;
+  if( d<ST_MIN )
     return 0;
-  return g_logistic.sqt[d+2048];
+  return g_logistic.sqt[d+P_HALF];
 }
 
 struct Stretch {
@@ -387,28 +441,28 @@ int operator()(int p) const {
 #else
 
 int squash(int d) {
-  static const int t[33] = {1, 2, 3, 6, 10, 16, 27, 45, 73, 120, 194, 310, 488, 747, 1101, 1546, 2047, 2549, 2994, 3348, 3607, 3785, 3901, 3975, 4022, 4050, 4068, 4079, 4085, 4089, 4092, 4093, 4094};
-  if( d>2047 )
-    return 4095;
-  if( d<-2047 )
+  static const int t[SQ_NODES] = {1, 2, 3, 6, 10, 16, 27, 45, 73, 120, 194, 310, 488, 747, 1101, 1546, 2047, 2549, 2994, 3348, 3607, 3785, 3901, 3975, 4022, 4050, 4068, 4079, 4085, 4089, 4092, 4093, 4094};
+  if( d>ST_MAX )
+    return P_MAX;
+  if( d<ST_MIN )
     return 0;
-  int w = d&127;
-  d = (d>>7)+16;
-  return (t[d]*(128-w)+t[(d+1)]*w+64)>>7;
+  int w = d&SQ_MASK;
+  d = (d>>SQ_BITS)+SQ_MID;
+  return (t[d]*(SQ_STEP-w)+t[(d+1)]*w+SQ_STEP/2)>>SQ_BITS;
 }
 
 struct Stretch {
-short t[4096];
+short t[P_SCALE];
 
 Stretch() {
   int pi = 0;
-  for( int x = -2047; x<=2047; ++x ) {
+  for( int x = ST_MIN; x<=ST_MAX; ++x ) {
     int i = squash(x);
     for( int j = pi; j<=i; ++j )
       t[j] = x;
     pi = i+1;
   }
-  t[4095] = 2047;
+  t[P_MAX] = ST_MAX;
 }
 
 int operator()(int p) const {
@@ -792,9 +846,9 @@ int p() {
 
 template <int n, int m, int s, int w> struct Mixer {
 #if defined(PAQ_N16)
-enum { N = (n+15)& -16, M = m, S = s, NPAD = 15 };
+static constexpr int N = (n+15)& -16, M = m, S = s, NPAD = 15;
 #else
-enum { N = (n+7)& -8, M = m, S = s, NPAD = 7 };
+static constexpr int N = (n+7)& -8, M = m, S = s, NPAD = 7;
 #endif
 
 // 16-byte alignment is load-bearing: dot_product/train do aligned __m128i
@@ -813,7 +867,7 @@ int nx;
 Mixer() : ncxt(0), base(0), nx(0) {
   int i;
   for( i = 0; i<S; ++i )
-    pr[i] = 2048;
+    pr[i] = P_HALF;
   for( i = 0; i<N*M; ++i )
     wx[i] = w;
   for( i = 0; i<S; ++i )
@@ -913,53 +967,54 @@ typedef Mixer<456, 128*(16+14+14+12+14+16), 6, 512> MainMixer;
 template <int n> struct APM {
 int index;
 
-U16 t[n*33];
+U16 t[n*APM_NODES];
 
 APM() : index(0) {
-  for( int j = 0; j<33; ++j )
-    t[j] = squash((j-16)*128)*16;
-  for( int i = 33; i<n*33; ++i )
-    t[i] = t[i-33];
+  for( int j = 0; j<APM_NODES; ++j )
+    t[j] = squash((j-SQ_MID)*SQ_STEP)<<PR_SHIFT;
+  for( int i = APM_NODES; i<n*APM_NODES; ++i )
+    t[i] = t[i-APM_NODES];
 }
 
-// p() will touch t[cxt*33 + k] and +1 for some k in [0,31], i.e. a 66-byte
-// region spanning at most two lines.
+// p() will touch t[cxt*APM_NODES + k] and +1 for some k in [0,APM_NODES-2],
+// i.e. a 66-byte region spanning at most two lines.
 void pf(int cxt) const {
-  PAQ_PF(&t[cxt*33]);
-  PAQ_PF(&t[cxt*33+32]);
+  PAQ_PF(&t[cxt*APM_NODES]);
+  PAQ_PF(&t[cxt*APM_NODES+APM_NODES-1]);
 }
 
-int p(int pr = 2048, int cxt = 0, int rate = 8) {
+int p(int pr = P_HALF, int cxt = 0, int rate = 8) {
   pr = stretch(pr);
-  int g = (y<<16)+(y<<rate)-y*2;
+  int g = (y<<PR_BITS)+(y<<rate)-y*2;
   t[index] += (g-t[index])>>rate;
   t[index+1] += (g-t[index+1])>>rate;
-  const int w = pr&127;
-  index = ((pr+2048)>>7)+cxt*33;
-  return (t[index]*(128-w)+t[index+1]*w)>>11;
+  const int w = pr&SQ_MASK;
+  index = ((pr+P_HALF)>>SQ_BITS)+cxt*APM_NODES;
+  // U16 entries times weights summing to SQ_STEP, brought back to P_BITS
+  return (t[index]*(SQ_STEP-w)+t[index+1]*w)>>(PR_BITS+SQ_BITS-P_BITS);
 }
 };
 
 struct StateMap {
 int cxt;
-U16 t[256];
+U16 t[N_STATES];
 
 StateMap() : cxt(0) {
-  for( int i = 0; i<256; ++i ) {
+  for( int i = 0; i<N_STATES; ++i ) {
     int n0 = nex(i, 2);
     int n1 = nex(i, 3);
     if( n0==0 )
       n1 *= 128;
     if( n1==0 )
       n0 *= 128;
-    t[i] = 65536*(n1+1)/(n0+n1+2);
+    t[i] = PR_ONE*(n1+1)/(n0+n1+2);
   }
 }
 
 int p(int cx) {
   int q = t[cxt];
   t[cxt] = q+((sm_add_y-q)>>sm_shft);
-  return t[cxt = cx]>>4;
+  return t[cxt = cx]>>PR_SHIFT;
 }
 };
 
@@ -969,7 +1024,7 @@ inline U32 hash(U32 a, U32 b, U32 c = 0xffffffff) {
 }
 
 template <int B, int I> struct BH {
-enum { M = 7 };
+static constexpr U32 M = 7;
 
 // PAD is not slack for its own sake.  operator[] indexes buckets [0,I-1] but
 // then walks up to M-1 further slots from &t[i*B], so the last bucket reads
@@ -978,7 +1033,7 @@ enum { M = 7 };
 // table as a member it would land on the next member instead, so the same
 // amount of never-read zero space has to be here explicitly.  Measured: 31
 // such accesses on book1[0:131072] at level 4.
-enum { PAD = 64 };
+static constexpr int PAD = 64;
 alignas(64) U8 t[I*B+PAD];
 static const U32 n = I-1;
 
@@ -1053,7 +1108,7 @@ template <int CF> inline PAQ_HOTFN int mix2t(MainMixer &m, int s, StateMap &sm) 
   int st = stretch(p1);
   if( CF<0 ? (cxtfl!=0) : (CF!=0) ) {
     m.add(st/4);
-    int p0 = 4095-p1;
+    int p0 = P_MAX-p1;
     m.add((p1-p0)*3/64);
     m.add(st*(n1-n0)*3/16);
     m.add(((p1&n0)-(p0&n1))/16);
@@ -1062,7 +1117,7 @@ template <int CF> inline PAQ_HOTFN int mix2t(MainMixer &m, int s, StateMap &sm) 
   }
   m.add(st*9/32);
   m.add(st*(n1-n0)*3/16);
-  int p0 = 4095-p1;
+  int p0 = P_MAX-p1;
   m.add(((p1&n0)-(p0&n1))/16);
   m.add(((p0&n0)-(p1&n1))*7/64);
   return s>0;
@@ -1150,7 +1205,7 @@ void mix(MainMixer &m) {
 };
 
 template <U32 MSZ, int NC> struct ContextMap {
-enum { C = NC };
+static constexpr int C = NC;
 static const int Sz = int((MSZ>>6)-1);
 
 struct E {
@@ -1332,9 +1387,9 @@ void set(U32 cx) {
 }
 
 #if defined(PAQ_CXTFL_T)
-  enum { CF3 = 1, CF0 = 0 };   // cxtfl baked in per call site
+  static constexpr int CF3 = 1, CF0 = 0;   // cxtfl baked in per call site
 #else
-  enum { CF3 = -1, CF0 = -1 }; // read the global, as the baseline does
+  static constexpr int CF3 = -1, CF0 = -1; // read the global, as the baseline does
 #endif
 
 // Dispatch on bpos once per call so the body below sees it as a constant.
@@ -1751,7 +1806,7 @@ APM<0x20000> a4;
 APM<0x10000> a5;
 APM<0x10000> a6;
 
-Predictor() : pr(2048) {
+Predictor() : pr(P_HALF) {
 }
 
 int p() const {
@@ -1771,10 +1826,12 @@ void update() {
     buf[pos++] = c0;
     c0 -= 256;
     if( pos<=1024*1024 ) {
+      // sm_add is PR_MAX plus the rounding for the new shift, so StateMap's
+      // update keeps hitting the top of the PR_BITS range exactly.
       if( pos==1024*1024 )
-        sm_shft = 9, sm_add = 65535+511;
+        sm_shft = 9, sm_add = PR_MAX+((1<<9)-1);
       if( pos==512*1024 )
-        sm_shft = 8, sm_add = 65535+255;
+        sm_shft = 8, sm_add = PR_MAX+((1<<8)-1);
       sm_add_y = sm_add&(-y);
     }
     int i = WRT_mpw[c0>>4];
@@ -1808,7 +1865,7 @@ void update() {
   fails = fails*2;
   failz = failz*2;
   if( y )
-    pr ^= 4095;
+    pr ^= P_MAX;
   if( pr>=1820 )
     ++fails, ++failcount;
   if( pr>=848 )

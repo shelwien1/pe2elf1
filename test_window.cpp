@@ -29,7 +29,7 @@ static void ck(bool ok, const char* what, const char* detail = "") {
   else        printf("  ok    %s %s\n", what, detail);
 }
 
-enum { ENWIK9 = 1000000000 };
+constexpr int ENWIK9 = 1000000000;
 
 int main() {
   char b[256];

@@ -90,8 +90,11 @@ struct Rangecoder {
   // the same value.  So the comparison is exactly `code >= that boundary`, and
   // the boundary is a multiply-shift (totFreq is the literal 4096, so mulRdiv's
   // divide is a >>12).  Bit-identical, decode only.
-  uint rc_Decide( uint p ) {
-    return code >= (range - mulRdiv(p,4096));
+  // totFreq is passed rather than hardcoded so the rangecoder stays free of the
+  // model's probability scale.  It is always a compile-time constant at the call
+  // site and this inlines, so mulRdiv's divide still folds to a shift.
+  uint rc_Decide( uint p, uint totFreq ) {
+    return code >= (range - mulRdiv(p,totFreq));
   }
 
   void ShiftStuff( void ) {

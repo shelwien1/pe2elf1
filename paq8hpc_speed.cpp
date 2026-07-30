@@ -67,7 +67,8 @@ int g_zeroed = 0;
 // remember how a block was obtained.
 #if defined(PAQ_HUGEPAGES) || defined(PAQ_LAZY_ZERO)
   #define PAQ_OSALLOC 1
-  enum { PAQ_OSALLOC_MIN = 8u<<20 };
+  static constexpr size_t PAQ_PAGE_SIZE = 4096;
+  static constexpr size_t PAQ_OSALLOC_MIN = 8u<<20;
 
   #if defined(_WIN32)
     #include <windows.h>
@@ -111,7 +112,7 @@ int g_zeroed = 0;
 
     static void* paq_osalloc( size_t size ) {
       #if defined(PAQ_HUGEPAGES)
-      enum { HP = 2u<<20 };
+      constexpr size_t HP = 2u<<20;
       size_t over = size+HP;
       char* raw = (char*)mmap( 0, over, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0 );
       if( raw!=(char*)MAP_FAILED ) {
@@ -139,8 +140,9 @@ void* __cdecl malloc1( size_t size, size_t align = 0, char c='m' ) {
   void* p = 0;
 #if defined(PAQ_OSALLOC)
   // mmap/VirtualAlloc hand back page-granular storage, which satisfies every
-  // alignment this program asks for (64).
-  if( size>=size_t(PAQ_OSALLOC_MIN) && align<=4096 ) {
+  // alignment this program asks for (64).  NB this 4096 is a page size and has
+  // nothing to do with paq8hp::P_SCALE, which is also 4096.
+  if( size>=PAQ_OSALLOC_MIN && align<=PAQ_PAGE_SIZE ) {
     p = paq_osalloc(size);
     if( p ) g_zeroed = 1;
   }
@@ -193,6 +195,12 @@ void __cdecl operator delete[]( void* p, std::align_val_t ) { free1(p); }
 
 //---------------------------------------------------------------- coder
 
+// The coder's totFreq is the model's probability scale; naming it here keeps the
+// rangecoder itself free of any model constant.
+static constexpr uint PSCALE     = paq8hp::P_SCALE;   // 4096
+static constexpr uint PSCALE_MIN = paq8hp::P_MIN;     // 1, p==0 is undecodable
+static constexpr uint PSCALE_MAX = paq8hp::P_MAX;     // 4095
+
 template< int f_DEC, int LEVEL >
 struct Coder : Rangecoder<f_DEC> {
 
@@ -242,18 +250,18 @@ if_e0( (i&0xFFFF)==0 ) { printf( "%u -> %u\r", uint(nget), uint(nput) ); fflush(
         bit = (c>>k)&1;
 
         p = M->p();
-        if_e0( p<1 ) p=1;
-        if_e0( p>4095 ) p=4095;
+        if_e0( p<PSCALE_MIN ) p=PSCALE_MIN;
+        if_e0( p>PSCALE_MAX ) p=PSCALE_MAX;
 
-        px[0]=0; px[1]=4096-p; px[2]=4096;
+        px[0]=0; px[1]=PSCALE-p; px[2]=PSCALE;
 
 #if defined(PAQ_DECFAST)
-        if( f_DEC==1 ) bit = rc_Decide(p);
+        if( f_DEC==1 ) bit = rc_Decide(p,PSCALE);
 #else
-        if( f_DEC==1 ) bit = (rc_GetFreq(4096)>=px[1]);
+        if( f_DEC==1 ) bit = (rc_GetFreq(PSCALE)>=px[1]);
 #endif
 
-        rc_Process( px[bit], px[1+bit]-px[bit], 4096 );
+        rc_Process( px[bit], px[1+bit]-px[bit], PSCALE );
 
         M->Perceive(bit);
         z = z*2 + bit;
@@ -279,9 +287,9 @@ if_e0( (i&0xFFFF)==0 ) { printf( "%u -> %u\r", uint(nget), uint(nput) ); fflush(
 // a compile-time constant.  MAXLEVEL is 11 because at 12 the (U32)MEM()*16 the
 // two big ContextMaps are built from wraps to 0.
 #if defined(FIXED_LEVEL)
-enum{ MAXLEVEL = FIXED_LEVEL, MINLEVEL = FIXED_LEVEL };
+constexpr int MAXLEVEL = FIXED_LEVEL, MINLEVEL = FIXED_LEVEL;
 #else
-enum{ MAXLEVEL = 11, MINLEVEL = 0 };
+constexpr int MAXLEVEL = 11, MINLEVEL = 0;
 #endif
 
 template< int f_DEC, int LEVEL >
@@ -323,7 +331,7 @@ uint flen( FILE* f ) {
   return len;
 }
 
-enum{ IOBUFSIZE = 1<<16 };
+constexpr size_t IOBUFSIZE = 1<<16;
 static byte iobuf_f[IOBUFSIZE];
 static byte iobuf_g[IOBUFSIZE];
 

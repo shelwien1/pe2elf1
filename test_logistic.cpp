@@ -29,16 +29,17 @@ typedef long long      i64;
 
 static int pclamp(int v, int lo, int hi) { return v<lo ? lo : v>hi ? hi : v; }
 
-enum {
-  P_BITS   = 12,
-  P_ONE    = 1<<P_BITS,   // 4096
-  P_MID    = P_ONE/2,     // 2048
-  P_MIN    = 1,
-  P_MAX    = P_ONE-1,     // 4095
-  ST_SCALE = 256,
-  ST_MIN   = -2047,       // paq8hp's stretch range, and squash's clamp
-  ST_MAX   =  2047,
-};
+// xadpcm's names are kept here so this file can be diffed against
+// xad_logistic.inc.  The model calls the same quantities P_SCALE / P_HALF (see
+// the named-scales block in paq8hp_speed.hpp): P_ONE == P_SCALE, P_MID == P_HALF.
+constexpr int P_BITS   = 12;
+constexpr int P_ONE    = 1<<P_BITS;   // 4096, == paq8hp::P_SCALE
+constexpr int P_MID    = P_ONE/2;     // 2048, == paq8hp::P_HALF
+constexpr int P_MIN    = 1;
+constexpr int P_MAX    = P_ONE-1;     // 4095
+constexpr int ST_SCALE = 256;
+constexpr int ST_MIN   = -2047;       // paq8hp's stretch range, and squash's clamp
+constexpr int ST_MAX   =  2047;
 
 // ---------------------------------------------------------------- baseline pair
 // verbatim from paq8hp.hpp so the comparison is against what actually ships

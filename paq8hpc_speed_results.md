@@ -641,7 +641,56 @@ zero for any input up to 2^30 — enwik9 included.
 insurance for a match model that does not exist yet rather than something the
 current models are using.
 
-## 11. Reproducing
+## 11. Named scales (pure refactor, byte-identical)
+
+The probability and logistic scales were spelled as literals throughout. They
+are now `constexpr` constants (not enums — every remaining `enum` constant-holder
+in the model and driver was converted too, including the template-scope ones in
+`Mixer`, `BH` and `ContextMap`):
+
+```
+P_BITS 12   P_SCALE 4096   P_MAX 4095   P_MIN 1   P_HALF 2048
+ST_SCALE 256   ST_MAX 2047   ST_MIN -2047
+SQ_BITS 7   SQ_STEP 128   SQ_MASK 127   SQ_NODES 33   SQ_MID 16   APM_NODES 33
+PR_BITS 16   PR_ONE 65536   PR_MAX 65535   PR_SHIFT 4
+N_STATES 256   ILOG_SIZE 65536   Q8_BITS/Q8_ONE/Q8_HALF (logistic builder)
+```
+
+Each is derived from its parent rather than restated, so `P_SCALE` is the single
+knob: `P_MAX = P_SCALE-1`, `P_HALF = P_SCALE/2`, `ST_MAX = P_HALF-1`,
+`SQ_NODES = 2*P_HALF/SQ_STEP+1`, `PR_SHIFT = PR_BITS-P_BITS`. Derived shifts that
+were opaque now read as arithmetic: APM's `>>11` is
+`>>(PR_BITS+SQ_BITS-P_BITS)`, and its `*16` is `<<PR_SHIFT`.
+
+**The reason this needed care rather than sed: the same numeral means different
+things in different places.** Renaming by numeral would have been a silent
+stream change. The ones deliberately left as literals, with the reason:
+
+| site | literal | why it is *not* the probability scale |
+|------|--------:|----------------------------------------|
+| `malloc1`'s alignment guard | 4096 | a **page size**; now `PAQ_PAGE_SIZE`, with a comment saying so |
+| `ContextModel::p`'s last `m.set` | 2048 | a mixer **context count**, not a probability |
+| `hash(29, failz&2047)` | 2047 | a mask on the `failz` bit history |
+| `llog`'s tier offsets | 256, 128 | tier bases, unrelated to `ST_SCALE`/`SQ_STEP` |
+| `StateMap`'s `n0/n1 *= 128` | 128 | a determinism boost, a tuning constant |
+| partial-byte arithmetic | 256, 8 | the **byte alphabet**, left alone on purpose |
+| `Ilog::t` | 65536 | the **U16 domain**; named `ILOG_SIZE`, kept distinct from `PR_ONE` even though numerically equal |
+
+The rangecoder also stops carrying a model constant: `rc_Decide` takes `totFreq`
+as a parameter instead of hardcoding 4096, and the driver passes
+`PSCALE = paq8hp::P_SCALE`. The doc's §8 concern about the divide folding is
+checked directly rather than assumed — **the DECFAST build contains zero
+`divq`/`idivq`** (the non-DECFAST build has 12), so constant propagation through
+inlining keeps the shift and `PAQ_DECFAST` still removes the last division from
+the decode path.
+
+Verified byte-identical on the full regression set for the no-defines build, the
+recommended five, and an all-fourteen-gates build; `PAQ_LOGISTIC` reproduces its
+own pre-rename numbers exactly (−0.015% on the set); both standalone tests pass;
+and the MinGW build still produces the published vector (20321 B, md5
+`5b20ec75…`).
+
+## 12. Reproducing
 
 ```
 ./build.sh FINAL -DPAQ_PREFETCH -DPAQ_AVX2 -DPAQ_DOT2 -DPAQ_GETSIMD -DPAQ_APMPF
