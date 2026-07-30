@@ -1167,10 +1167,20 @@ not approximately, not for typical inputs:
 - no `int` overflow at `APM_NH_MAX`: max `s*NIV` = 262,080, max weighted sum =
   536,862,720
 
-All 13 checks pass. `verify.sh` then confirms byte-identity end to end for
-tuning, release, and both with the 14 speed gates; `PAQ_LOGISTIC` still builds at
-`P_BITS` 8/10/12/16. The tuning binary now carries **62** `!MAP!` markers, with
-all six APMs independently visible.
+All 13 checks pass. `verify.sh` then confirms byte-identity end to end:
+
+| build | `verify.sh` |
+|---|---|
+| release (`Const 1`, `USE_NEW 0`) | ok |
+| tuning (`Debug 1, Const 0`, `USE_NEW 1`) | ok |
+| release + 14 speed gates | ok |
+| tuning + 14 speed gates | ok |
+| MinGW release under wine | ok — 5 cases, all four cross-OS checks |
+
+`PAQ_LOGISTIC` still builds at `P_BITS` 8/10/12/16. The tuning binary now
+carries **62** `!MAP!` markers, with all six APMs independently visible, and
+`import.pl` round-trips the new base-1 `NH` lines — pattern replaced, base and
+alignment intact.
 
 ### What still shares, and why it was left alone
 
