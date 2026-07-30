@@ -51,15 +51,28 @@ Number MIXB_pu,        P_SCALE/256, 0!00101000
 Number MIXB_pv,        P_SCALE/256, 0!01100000
 
 # ---------------------------------------------------------------------------
-# Adaptation rates.  Every adaptive counter updates as v += (target-v)>>rate,
-# so the rate is a weight written in log form; the *_SW* numbers are the input
-# positions at which one rate is replaced by the next.
+# Adaptation rates -- 16-bit fixed-point MULTIPLIERS, not shifts.
+#
+# Every adaptive counter here updates as v += (target-v)*MUL/65536, where
+# 65536 is a full step.  These used to be shift amounts, which meant the only
+# rates an optimizer could ever reach were the powers of two: 1/128, 1/256,
+# 1/512 and nothing in between.  A shift cannot express 1/192.  Seeding
+# MUL = 65536>>shift reproduces every old shift exactly -- so this change is
+# byte-identical on its own -- and opens the space between the points.
+#
+# The *_SW* numbers are the input positions at which one rate gives way to the
+# next.  A schedule step is `MUL >> 1`, i.e. halve the step, which is exactly
+# what `rate + 1` used to mean.
+#
+# Multipliers are declared with base 1, so a swept value can never reach 0 and
+# freeze a counter, and with 14 bits, which caps MUL at 16384 -- see the
+# static_assert in paq8hp_speed.hpp that keeps (target-v)*MUL inside int.
 # ---------------------------------------------------------------------------
 
 # StateMap: one shared rate, slowed twice as the counts settle
-Number SM_RATE_0,      1,           0!0111
-Number SM_RATE_1,      1,           0!1000
-Number SM_RATE_2,      1,           0!1001
+Number SM_MUL_0,       1,           1!00000111111111
+Number SM_MUL_1,       1,           1!00000011111111
+Number SM_MUL_2,       1,           1!00000001111111
 Number SM_SW1,         65536,       0!01000
 Number SM_SW2,         65536,       0!10000
 # the Laplace prior on a state's (n0,n1) that seeds StateMap::t
@@ -78,8 +91,8 @@ Number SM_PRIOR_ADD,   1,           0!01
 # it meant opt.pl could only move all five together.
 #
 # So each instance now owns its schedule.  Seeds reproduce the old arithmetic
-# exactly: A2_RATE is 7 because a2's rate was base+1, the other four are 6, and
-# every switch position is the value the shared pair held.  a1 keeps a single
+# exactly: A2_MUL is half the others because a2's rate was base+1, and every
+# switch position is the value the shared pair held.  a1 keeps a single
 # fixed rate because it never had a schedule -- cloning a knob is not the same
 # as inventing one.
 #
@@ -100,43 +113,44 @@ Number SM_PRIOR_ADD,   1,           0!01
 # a1: fast correction on the raw model output, 256 contexts, no schedule.
 # A1_w is how much of a1's output survives the blend with the raw model
 # prediction -- 1/8 : 7/8 -- so it belongs to a1 as much as its rate does.
-Number A1_RATE,        1,           0!0011
+Number A1_MUL,         1,           1!01111111111111
 Number A1_NH,          1,           1!01111
 Number A1_w,           P_SCALE/256, 0!00100000
 
-# a2: 32768 contexts on failz.  Ran one step slower than the shared rate.
-Number A2_RATE,        1,           0!0111
+# a2: 32768 contexts on failz.  Ran one step slower than the shared rate,
+# so its multiplier is half theirs: 512/65536 against 1024/65536.
+Number A2_MUL,         1,           1!00000111111111
 Number A2_SW1,         262144,      0!01110
 Number A2_SW2,         524288,      0!11100
 Number A2_NH,          1,           1!01111
 
 # a3: 32768 contexts on x5, corrects the raw model output
-Number A3_RATE,        1,           0!0110
+Number A3_MUL,         1,           1!00001111111111
 Number A3_SW1,         262144,      0!01110
 Number A3_SW2,         524288,      0!11100
 Number A3_NH,          1,           1!01111
 
 # a4: 131072 contexts on b1/x5, corrects a1's output
-Number A4_RATE,        1,           0!0110
+Number A4_MUL,         1,           1!00001111111111
 Number A4_SW1,         262144,      0!01110
 Number A4_SW2,         524288,      0!11100
 Number A4_NH,          1,           1!01111
 
 # a5: 65536 contexts on w5, corrects a2's output
-Number A5_RATE,        1,           0!0110
+Number A5_MUL,         1,           1!00001111111111
 Number A5_SW1,         262144,      0!01110
 Number A5_SW2,         524288,      0!11100
 Number A5_NH,          1,           1!01111
 
 # a6: 65536 contexts on the fail histogram, corrects a4's output
-Number A6_RATE,        1,           0!0110
+Number A6_MUL,         1,           1!00001111111111
 Number A6_SW1,         262144,      0!01110
 Number A6_SW2,         524288,      0!11100
 Number A6_NH,          1,           1!01111
 
 # SmallStationaryContextMap: one step slower once the counts have settled
-Number SCM_RATE_EARLY, 1,           0!1001
-Number SCM_RATE_LATE,  1,           0!1010
+Number SCM_MUL_EARLY,  1,           1!00000001111111
+Number SCM_MUL_LATE,   1,           1!00000000111111
 Number SCM_SW,         1000,        0!111110100000
 
 # ---------------------------------------------------------------------------

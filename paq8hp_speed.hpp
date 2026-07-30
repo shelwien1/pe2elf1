@@ -182,6 +182,25 @@ constexpr int PR_SHIFT = PR_BITS-P_BITS;  // 4, PR_BITS <-> P_BITS
 
 constexpr int N_STATES = 256;             // rows of State_table / StateMap::t
 
+// ---- the adaptation-rate fixed point ------------------------------------
+// Every adaptive counter moves a fraction of the way to its target.  That
+// fraction used to be a shift, which meant the only rates expressible were the
+// powers of two -- 1/128, 1/256, 1/512 and nothing between them.  It is a
+// 16-bit multiplier now: step = (target-v)*mul/EMA_SCALE, with
+// mul = EMA_SCALE>>shift reproducing any old shift exactly.
+constexpr int EMA_BITS  = 16;             // fixed-point fraction of the rate
+constexpr int EMA_SCALE = 1<<EMA_BITS;    // 65536 == a full step to the target
+constexpr int EMA_MUL_MAX = EMA_SCALE/4;  // ceiling the .idx patterns can spell
+
+// The two rounding rules the callers use, as biases on the product rather than
+// as fudge terms folded into the target.  That is the change that makes the
+// multiplier form work: the old `+ (1<<rate)-1` and `+ (1<<(rate-1))` are
+// functions of the SHIFT, so keeping them would have meant an EMA_SCALE/mul
+// division per call -- six per bit in APM alone.  As product biases they are
+// constants, and they say what they mean.
+constexpr int EMA_CEIL = EMA_SCALE-1;     // round away from v: never stall short
+constexpr int EMA_HALF = EMA_SCALE/2;     // round to nearest, halves downward
+
 // APM's interpolation sums two U16 entries weighted to ST_RANGE, so the widest
 // product has to stay inside int.  Declared here rather than beside ST_RANGE
 // because it is the one constraint that ties the two precisions together.
@@ -210,7 +229,7 @@ static_assert( PR_MAX*(long long)ST_RANGE*2 < 2147483647LL,
 // because the shipping build folds the whole chain to a literal.
 constexpr int pclamp(int v, int lo, int hi) { return v<lo ? lo : v>hi ? hi : v; }
 
-#define PRATE(x)  pclamp((x), 1, 20)          // any >>rate on a 16-bit counter
+#define PEMA(x)   pclamp((x), 1, EMA_MUL_MAX) // an EMA_SCALE-unit adaptation rate
 #define PPOS(x)   pclamp((x), 1, 0x7fffffff)  // an input position, in bytes
 #define PWGT(x)   pclamp((x), 1, P_SCALE-1)   // a P_SCALE-unit mixing weight
 #define PSMALL(x) pclamp((x), 1, 255)         // a small positive multiplier/cap
@@ -287,59 +306,55 @@ static_assert( G0_MIX_W_INIT>=0 && G0_MIX2_W_INIT>=0 && G0_MX0_Volume>0,
 // IDX/paq8-G0.idx through a clamp; the names and the uses are unchanged.
 
 // StateMap: one shared rate, slowed twice as the counts settle.
-const int SM_RATE_0  = PRATE(G0_SM_RATE_0);   // weight 1/128 up to SM_SWITCH_1
-const int SM_RATE_1  = PRATE(G0_SM_RATE_1);   // 1/256
-const int SM_RATE_2  = PRATE(G0_SM_RATE_2);   // 1/512 from SM_SWITCH_2 on
+const int SM_MUL_0  = PEMA(G0_SM_MUL_0);   // 512/65536 == 1/128 up to SM_SWITCH_1
+const int SM_MUL_1  = PEMA(G0_SM_MUL_1);   // 256/65536 == 1/256
+const int SM_MUL_2  = PEMA(G0_SM_MUL_2);   // 128/65536 == 1/512 from SM_SWITCH_2 on
 const int SM_SWITCH_1 = PPOS(G0_SM_SW1);
 const int SM_SWITCH_2 = PPOS(G0_SM_SW2);
-// StateMap's y==1 target: PR_MAX plus the rounding for the rate in force.  The
-// y==0 target is a plain 0, so the rounding is deliberately asymmetric -- that
-// is the baseline's behaviour, preserved.
-constexpr int sm_target(int rate) { return PR_MAX + ((1<<rate)-1); }
 
 // APM: six instances, six schedules.  These used to be one shared `rate`
 // computed once per bit and handed to five of the six, which meant opt.pl could
 // only ever move all five together -- and they are not one adaptive unit: they
 // sit at different points of the correction chain and index on contexts from
 // 256 to 131072 rows wide.  Seeds reproduce the shared arithmetic exactly
-// (A2_RATE is 7 because a2's rate was base+1).  a1 keeps a single fixed rate
+// (A2_MUL is half the others because a2's rate was base+1).  a1 keeps one rate
 // because it never had a schedule to clone.
 //
 // PAPN clamps the half-node count: a pattern is a search space, and this one
 // multiplies a table that is 131072 rows wide in a4's case.
 #define PAPN(x) pclamp((x), 1, APM_NH_MAX)
 
-const int A1_RATE = PRATE(G0_A1_RATE);
+const int A1_MUL  = PEMA(G0_A1_MUL);
 const int A1_NH   = PAPN(G0_A1_NH);
 
-const int A2_RATE = PRATE(G0_A2_RATE);
+const int A2_MUL  = PEMA(G0_A2_MUL);
 const int A2_SW1  = PPOS(G0_A2_SW1);
 const int A2_SW2  = PPOS(G0_A2_SW2);
 const int A2_NH   = PAPN(G0_A2_NH);
 
-const int A3_RATE = PRATE(G0_A3_RATE);
+const int A3_MUL  = PEMA(G0_A3_MUL);
 const int A3_SW1  = PPOS(G0_A3_SW1);
 const int A3_SW2  = PPOS(G0_A3_SW2);
 const int A3_NH   = PAPN(G0_A3_NH);
 
-const int A4_RATE = PRATE(G0_A4_RATE);
+const int A4_MUL  = PEMA(G0_A4_MUL);
 const int A4_SW1  = PPOS(G0_A4_SW1);
 const int A4_SW2  = PPOS(G0_A4_SW2);
 const int A4_NH   = PAPN(G0_A4_NH);
 
-const int A5_RATE = PRATE(G0_A5_RATE);
+const int A5_MUL  = PEMA(G0_A5_MUL);
 const int A5_SW1  = PPOS(G0_A5_SW1);
 const int A5_SW2  = PPOS(G0_A5_SW2);
 const int A5_NH   = PAPN(G0_A5_NH);
 
-const int A6_RATE = PRATE(G0_A6_RATE);
+const int A6_MUL  = PEMA(G0_A6_MUL);
 const int A6_SW1  = PPOS(G0_A6_SW1);
 const int A6_SW2  = PPOS(G0_A6_SW2);
 const int A6_NH   = PAPN(G0_A6_NH);
 
 // SmallStationaryContextMap: one step slower once the counts have settled.
-const int SCM_RATE_EARLY = PRATE(G0_SCM_RATE_EARLY);
-const int SCM_RATE_LATE  = PRATE(G0_SCM_RATE_LATE);
+const int SCM_MUL_EARLY = PEMA(G0_SCM_MUL_EARLY);
+const int SCM_MUL_LATE  = PEMA(G0_SCM_MUL_LATE);
 const int SCM_SWITCH_POS = PPOS(G0_SCM_SW);
 
 // Mixer: the prediction error is scaled by the learning rate before train()
@@ -385,11 +400,24 @@ const int CM_RUN_STEP = PSMALL(G0_CM_RUN_STEP);
 // StateMap's initial estimate is a Laplace prior over the state's (n0,n1)
 const int SM_PRIOR_ADD = pclamp(G0_SM_PRIOR_ADD, 0, 255);
 
-// v += (target-v)>>rate, i.e. mix v toward target with weight 2^-rate.  The
-// caller folds its rounding into target.
-inline int ema( int v, int target, int rate ) {
-  return v + ((target-v)>>rate);
+// v += (target-v)*mul/EMA_SCALE: mix v toward target with weight mul/EMA_SCALE.
+// `bias` is the rounding, applied to the PRODUCT -- EMA_CEIL to round away from
+// v, EMA_HALF to round to nearest, 0 to floor.  The shift is the division: it
+// is arithmetic, so it floors, and floor((d*mul + bias)/EMA_SCALE) with
+// mul = EMA_SCALE>>r and bias = (1<<r)-1 scaled up is bit-for-bit the old
+// `(target-v)>>r` with its fudge term folded into target.  test_ema.cpp checks
+// that over the whole domain rather than asserting it here.
+//
+// int, not long long: PEMA caps mul at EMA_MUL_MAX and |target-v| cannot exceed
+// PR_ONE, so the product is bounded well inside int -- see the static_assert
+// below.  That matters because StateMap::p runs this a few hundred times a bit.
+inline int ema( int v, int target, int mul, int bias ) {
+  return v + (((target-v)*mul + bias)>>EMA_BITS);
 }
+
+static_assert( (long long)PR_ONE*EMA_MUL_MAX + EMA_CEIL < 2147483647LL,
+  "ema's product must stay inside int: raise EMA_BITS' clamp or widen the "
+  "multiply" );
 
 // ---- reinterpreting the fitted constants -------------------------------
 // Probability estimation here is fixed-point, so a constant like `*3/64` or a
@@ -617,7 +645,16 @@ int y = 0;
 
 int c0 = 1;
 U32 b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, b7 = 0, b8 = 0, tt = 0, c4 = 0, x4 = 0, x5 = 0, w4 = 0, w5 = 0, f4 = 0;
-int order, bpos = 0, cxtfl = 3, sm_shft = SM_RATE_0, sm_add = sm_target(SM_RATE_0), sm_add_y = 0;
+int order, bpos = 0, cxtfl = 3, sm_mul = SM_MUL_0;
+
+// The y-dependent target and rounding StateMap and APM share.  Both are
+// (constant & -y), set once per bit, because both use the same rule: round away
+// from the stored value, so a counter can actually reach PR_MAX rather than
+// stalling one step short of it.  These were `sm_add`/`sm_add_y`, and `sm_add`
+// had to be recomputed whenever the rate changed because the rounding was a
+// function of the shift.  It is not any more, so the pair is now genuinely
+// constant and APM can read it instead of rebuilding its own copy per call.
+int ema_tgt_y = 0, ema_bias_y = 0;
 
 // level-independent, and read by every model, so it stays at file scope with
 // the rest of the shared scalar state rather than moving into Predictor<L>.
@@ -1455,12 +1492,14 @@ void pf(int cxt) const {
   PAQ_PF(&t[cxt*CELLS+NIV]);
 }
 
-int p(int pr, int cxt, int rate) {
+int p(int pr, int cxt, int mul) {
   pr = stretch(pr);
-  // target for y==1 is PR_ONE with this rate's rounding folded in; 0 for y==0
-  const int g = (y<<PR_BITS)+(y<<rate)-y*2;
-  t[index]   = U16(ema(t[index],   g, rate));
-  t[index+1] = U16(ema(t[index+1], g, rate));
+  // same target and rounding as StateMap, hoisted to a per-bit global: both
+  // round away from the stored value so the counter can reach PR_MAX.  This was
+  // `(y<<PR_BITS)+(y<<rate)-y*2`, which spelled the same thing but as a function
+  // of the shift -- and a shift is exactly what there no longer is.
+  t[index]   = U16(ema(t[index],   ema_tgt_y, mul, ema_bias_y));
+  t[index+1] = U16(ema(t[index+1], ema_tgt_y, mul, ema_bias_y));
   // stretch lands in [-ST_MAX,ST_MAX], so s is in [1,ST_RANGE-1] and s*NIV
   // splits into an interval index below NIV and an ST_RANGE-scale fraction --
   // no dependence on the interval width, which is what makes NIV free.
@@ -1490,7 +1529,7 @@ StateMap() : cxt(0) {
 
 int p(int cx) {
   int q = t[cxt];
-  t[cxt] = U16(ema(q, sm_add_y, sm_shft));
+  t[cxt] = U16(ema(q, ema_tgt_y, sm_mul, ema_bias_y));
   return t[cxt = cx]>>PR_SHIFT;
 }
 };
@@ -1678,9 +1717,10 @@ void mix(MainMixer &m) {
   // shift form rather than pmix()'s P_SCALE weights because this runs ten times
   // per bit and the PR-domain product would need 64-bit arithmetic to hold
   // PR_MAX*PR_ONE.
-  const int r = (pos<SCM_SWITCH_POS) ? SCM_RATE_EARLY : SCM_RATE_LATE;
-  // symmetric rounding here, unlike StateMap/APM: half a step folded into the target
-  *cp = U16(ema(*cp, (y<<PR_BITS)+(1<<(r-1)), r));
+  const int mul = (pos<SCM_SWITCH_POS) ? SCM_MUL_EARLY : SCM_MUL_LATE;
+  // symmetric rounding here, unlike StateMap/APM: nearest rather than away-from-v,
+  // and the target is PR_ONE rather than PR_MAX
+  *cp = U16(ema(*cp, y<<PR_BITS, mul, EMA_HALF));
   cp = &t[cxt+c0];
   m.add(stretch(*cp>>PR_SHIFT)*mulc/32);
 }
@@ -2301,7 +2341,8 @@ int p() const {
 // was PAQ8HP::Perceive
 void Perceive(int bit) {
   y = bit;
-  sm_add_y = bit ? sm_add : 0;
+  ema_tgt_y  = PR_MAX   & (-bit);
+  ema_bias_y = EMA_CEIL & (-bit);
   update();
 }
 
@@ -2312,10 +2353,14 @@ void update() {
     c0 -= 256;
     if( pos<=SM_SWITCH_2 ) {
       if( pos==SM_SWITCH_2 )
-        sm_shft = SM_RATE_2, sm_add = sm_target(SM_RATE_2);
+        sm_mul = SM_MUL_2;
       if( pos==SM_SWITCH_1 )
-        sm_shft = SM_RATE_1, sm_add = sm_target(SM_RATE_1);
-      sm_add_y = sm_add&(-y);
+        sm_mul = SM_MUL_1;
+      // the `sm_add_y = sm_add&(-y)` that used to close this block is gone:
+      // it existed because sm_add carried the rate's rounding and so changed
+      // with the rate.  ema_tgt_y/ema_bias_y do not depend on the rate at all,
+      // and y has not moved since Perceive set them, so the recompute was a
+      // no-op the moment the rounding became a product bias.
     }
     int i = WRT_mpw[c0>>4];
     w4 = w4*4+i;
@@ -2360,11 +2405,11 @@ void update() {
   // hashes can be computed before contextModel.p() and their regions prefetched
   // under the whole model call.  Pure reordering of pure computation.
   // one schedule per APM now, instead of one shared `rate` for five of them
-  const int r2 = A2_RATE+(pos>A2_SW1)+(pos>A2_SW2);
-  const int r3 = A3_RATE+(pos>A3_SW1)+(pos>A3_SW2);
-  const int r4 = A4_RATE+(pos>A4_SW1)+(pos>A4_SW2);
-  const int r5 = A5_RATE+(pos>A5_SW1)+(pos>A5_SW2);
-  const int r6 = A6_RATE+(pos>A6_SW1)+(pos>A6_SW2);
+  const int m2 = A2_MUL>>((pos>A2_SW1)+(pos>A2_SW2));
+  const int m3 = A3_MUL>>((pos>A3_SW1)+(pos>A3_SW2));
+  const int m4 = A4_MUL>>((pos>A4_SW1)+(pos>A4_SW2));
+  const int m5 = A5_MUL>>((pos>A5_SW1)+(pos>A5_SW2));
+  const int m6 = A6_MUL>>((pos>A6_SW1)+(pos>A6_SW2));
   int pz = failcount+1;
   pz += tri[(fails>>5)&3];
   pz += trj[(fails>>3)&3];
@@ -2387,22 +2432,22 @@ void update() {
 
   pr = contextModel.p();
 
-  int pt, pv, pu = pmix( A1_w, a1.p(pr, k1, A1_RATE), P_SCALE-A1_w, pr );
-  pu = a4.p(pu, k4, r4);
-  pv = a2.p(pr, k2, r2);
-  pv = a5.p(pv, k5, r5);
-  pt = a3.p(pr, k3, r3);
-  pz = a6.p(pu, k6, r6);
+  int pt, pv, pu = pmix( A1_w, a1.p(pr, k1, A1_MUL), P_SCALE-A1_w, pr );
+  pu = a4.p(pu, k4, m4);
+  pv = a2.p(pr, k2, m2);
+  pv = a5.p(pv, k5, m5);
+  pt = a3.p(pr, k3, m3);
+  pz = a6.p(pu, k6, m6);
 #else
   pr = contextModel.p();
 
-  const int r2 = A2_RATE+(pos>A2_SW1)+(pos>A2_SW2);
-  const int r3 = A3_RATE+(pos>A3_SW1)+(pos>A3_SW2);
-  const int r4 = A4_RATE+(pos>A4_SW1)+(pos>A4_SW2);
-  const int r5 = A5_RATE+(pos>A5_SW1)+(pos>A5_SW2);
-  const int r6 = A6_RATE+(pos>A6_SW1)+(pos>A6_SW2);
+  const int m2 = A2_MUL>>((pos>A2_SW1)+(pos>A2_SW2));
+  const int m3 = A3_MUL>>((pos>A3_SW1)+(pos>A3_SW2));
+  const int m4 = A4_MUL>>((pos>A4_SW1)+(pos>A4_SW2));
+  const int m5 = A5_MUL>>((pos>A5_SW1)+(pos>A5_SW2));
+  const int m6 = A6_MUL>>((pos>A6_SW1)+(pos>A6_SW2));
   int pt, pv, pz = failcount+1;
-  int pu = pmix( A1_w, a1.p(pr, c0, A1_RATE), P_SCALE-A1_w, pr );
+  int pu = pmix( A1_w, a1.p(pr, c0, A1_MUL), P_SCALE-A1_w, pr );
   pz += tri[(fails>>5)&3];
   pz += trj[(fails>>3)&3];
   pz += trj[(fails>>1)&3];
@@ -2410,11 +2455,11 @@ void update() {
     pz += 8;
   pz = pz/2;
 
-  pu = a4.p(pu, (c0*2)^(hash(b1, (x5>>8)&255, (x5>>16)&0x80ff)&0x1ffff), r4);
-  pv = a2.p(pr, (c0*8)^(hash(29, failz&2047)&0x7fff), r2);
-  pv = a5.p(pv, hash(c0, w5&0xfffff)&0xffff, r5);
-  pt = a3.p(pr, (c0*32)^(hash(19, x5&0x80ffff)&0x7fff), r3);
-  pz = a6.p(pu, (c0*4)^(hash(min(9, pz), x5&0x80ff)&0xffff), r6);
+  pu = a4.p(pu, (c0*2)^(hash(b1, (x5>>8)&255, (x5>>16)&0x80ff)&0x1ffff), m4);
+  pv = a2.p(pr, (c0*8)^(hash(29, failz&2047)&0x7fff), m2);
+  pv = a5.p(pv, hash(c0, w5&0xfffff)&0xffff, m5);
+  pt = a3.p(pr, (c0*32)^(hash(19, x5&0x80ffff)&0x7fff), m3);
+  pz = a6.p(pu, (c0*4)^(hash(min(9, pz), x5&0x80ff)&0xffff), m6);
 #endif
 
   if( fails&255 )

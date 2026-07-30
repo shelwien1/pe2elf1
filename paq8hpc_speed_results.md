@@ -1200,7 +1200,98 @@ Stating the boundary rather than leaving it silent:
   is one mixer, not three instances, and a per-group denominator is redundant
   with widening the per-group numerator (5/4 and 10/8 are the same number).
 
-## 17. Reproducing
+## 17. Adaptation rates as multipliers, not shifts
+
+`ema` was the last place in the model where a rate could only be a power of two:
+
+```c++
+inline int ema( int v, int target, int rate ) { return v + ((target-v)>>rate); }
+```
+
+Section 14 made every rate a named constant and section 15 put them in IDX, but
+a shift is still a shift — the only rates `opt.pl` could ever reach were 1/128,
+1/256, 1/512 and nothing between them. There is no way to spell 1/192. So the
+step is a 16-bit fixed-point multiplier now, exactly as `dxt5comp`'s `.idx`
+header describes its own counter rates:
+
+```c++
+inline int ema( int v, int target, int mul, int bias ) {
+  return v + (((target-v)*mul + bias)>>EMA_BITS);
+}
+```
+
+Seeding `MUL = EMA_SCALE>>shift` reproduces every old shift exactly, so the
+change is byte-identical on its own and the tuning space is strictly wider.
+Eleven parameters converted: `SM_RATE_0/1/2` → `SM_MUL_0/1/2`, `A1..A6_RATE` →
+`A1..A6_MUL`, `SCM_RATE_EARLY/LATE` → `SCM_MUL_EARLY/LATE`. A schedule step is
+`MUL>>1`, which is exactly what `rate+1` meant.
+
+### The rounding had to move, and that is the interesting part
+
+The old signature took a *pre-rounded target* — "each caller supplies a target
+with its rounding already folded in, which is what lets all three users share
+it". Those fudge terms are functions of the **shift**:
+
+| caller | old target | what the fudge does |
+|---|---|---|
+| StateMap | `y ? PR_MAX + (1<<rate)-1 : 0` | turns floor into ceil, so a counter can reach `PR_MAX` instead of stalling one step short |
+| APM | `(y<<PR_BITS)+(y<<rate)-y*2` | the same thing, spelled differently |
+| SSCM | `(y<<PR_BITS)+(1<<(rate-1))` | round to nearest, halves downward |
+
+Keeping them would have meant computing `EMA_SCALE/mul` per call — a division,
+six per bit in APM alone, on the hot path. Moving the rounding to a **bias on
+the product** makes all three constants instead:
+
+| caller | new target | bias |
+|---|---|---|
+| StateMap, APM | `y ? PR_MAX : 0` | `y ? EMA_CEIL : 0` (`EMA_SCALE-1`) |
+| SSCM | `y<<PR_BITS` | `EMA_HALF` (`EMA_SCALE/2`) |
+
+That is not just cheaper, it is more honest: `EMA_CEIL` and `EMA_HALF` say
+*round away from v* and *round to nearest*, where `(1<<rate)-1` and
+`(1<<(rate-1))` said neither. And it removes state — `sm_add` existed only
+because the rounding tracked the rate, so `sm_shft`/`sm_add`/`sm_add_y` collapse
+to `sm_mul` plus the pair `ema_tgt_y`/`ema_bias_y` that StateMap and APM now
+share. The `sm_add_y = sm_add&(-y)` recompute inside the rate-switch block goes
+with it: rate-independent constants masked by a `y` that has not moved since
+`Perceive` set them, so it was a no-op the moment the rounding became a bias.
+
+### Where the clamp bites, stated rather than skipped
+
+`PEMA` caps `mul` at `EMA_SCALE/4`, which keeps `(target-v)*mul + bias` inside
+`int` — no 64-bit widening in a function `StateMap::p` calls a few hundred times
+per bit. The cost is real and worth naming: the fastest expressible rate is now
+1/4, where a shift could also spell 1/2 and a full step. Nothing in the model
+used either (a1's 1/8 is the fastest shipped) and a counter that jumps half way
+to its target every bit is not an adaptive counter — but it is a narrowing, and
+`test_ema.cpp` asserts it as a property of the clamp rather than letting the
+sweep quietly start at rate 2.
+
+### Checked, then measured
+
+`test_ema.cpp`, 13/13. The equivalence is checked **exhaustively**, not sampled:
+every stored value, every rate the clamp admits, both bit values —
+**1,966,080 cases per caller shape**, zero mismatches. It is not an obvious
+identity: the old form floors a sum, the new one floors a scaled product, and
+the fudge terms crossed the division on the way. Also checked: the 8 shipped
+rates individually, that `y==1` always advances toward `PR_MAX` and never past
+it, that SSCM's nearest-rounding still *can* stall (unchanged behaviour, so
+stated rather than "fixed"), that all 255 multipliers between 1/256 and 1/128
+land strictly between them and monotonically, and that the excluded rate really
+does overflow `int` — the clamp is load-bearing, not superstition.
+
+**The cost, measured rather than asserted: +0.49% instructions** (callgrind Ir,
+b16k L4: 2,889,456,755 → 2,903,703,247). That is a multiply-and-shift where
+there was a shift, in the model's most-called function. Wall clock is not quoted
+because the effect sits an order of magnitude below this container's ±4% noise
+floor — which is exactly why section 1's protocol measures this kind of change
+with Ir instead.
+
+Byte-identity holds across all five legs (release, tuning, both with the 14
+speed gates, MinGW under wine), and `PAQ_LOGISTIC` still builds at `P_BITS`
+8/12/16.
+
+## 18. Reproducing
 
 ```
 ./build.sh FINAL -DPAQ_PREFETCH -DPAQ_AVX2 -DPAQ_DOT2 -DPAQ_GETSIMD -DPAQ_APMPF
@@ -1212,6 +1303,7 @@ Stating the boundary rather than leaving it silent:
 g++ -O2 -o t test_logistic.cpp -lm && ./t     # squash/stretch table checks
 g++ -O2 -o w test_window.cpp && ./w           # 1 GiB window holds enwik9
 g++ -O2 -o a test_apm.cpp && ./a              # APM grid: old shift pair == new form
+g++ -O2 -o e test_ema.cpp && ./e              # ema: old shift == new multiplier
 ```
 
 The IDX builds, and the tuning loop:
