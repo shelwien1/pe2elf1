@@ -12,9 +12,24 @@ output.** The doc's own reference implementation reported 1.40x / 1.57x. Also
 built with MinGW and verified under wine: Windows archives are byte-identical to
 Linux ones and each OS decodes the other's output (§6).
 
+**Read §7 before choosing flags.** Measurements on real hardware with newer
+compilers reach **1.71x** with four more macros, and flip three of the verdicts
+in §3 — this container's ±4% noise floor (§1) cannot resolve effects that size,
+and where the two disagree, §7 wins.
+
+Portable set — wins on both hosts tested, enable unconditionally:
+
 ```
-g++ -O3 -march=native -DPAQ_PREFETCH -DPAQ_AVX2 -DPAQ_DOT2 \
-    -DPAQ_GETSIMD -DPAQ_APMPF paq8hpc_speed.cpp -o paq8hpc
+-DPAQ_PREFETCH -DPAQ_AVX2 -DPAQ_DOT2 -DPAQ_GETSIMD -DPAQ_APMPF
+```
+
+Best measured, on real hardware with clang (§7) — the extra four are
+target-dependent, A/B them together on your machine:
+
+```
+clang -O3 -march=native -DPAQ_PREFETCH -DPAQ_AVX2 -DPAQ_DOT2 -DPAQ_GETSIMD \
+      -DPAQ_APMPF -DPAQ_RESTRICT -DPAQ_N16 -DPAQ_WXPF -DPAQ_CXTFL_T \
+      paq8hpc_speed.cpp -o paq8hpc
 ```
 
 ## 0. Headline
@@ -149,17 +164,23 @@ It is a real win, not a wash — plausibly because the doc measured it as a
 the serial dependency chain at the *end* of the bit, with nothing after them to
 hide behind.
 
-## 3. Confirmed null or negative — measured, not inherited
+## 3. Null or negative *in this container* — but see §7
+
+Four rows below are overturned by the real-hardware measurements in §7:
+`PAQ_WXPF`, `PAQ_N16` and `PAQ_CXTFL_T` are wins there (the first two only in
+combination), and `PAQ_RESTRICT` is a tie rather than a zero. They are left as
+measured here, with the flip noted inline, because the *reason* each one differs
+is the useful part. Everything else in the table holds on both hosts.
 
 | item | doc's claim | measured here |
 |------|-------------|---------------|
-| `PAQ_WXPF` mixer row prefetch (§7) | null | **null**: −0.3%, 7/15 vs control 6/15 |
-| `PAQ_PF2` speculative bpos-1/4 probes (§3) | "small marginal gains" | **null**: −2.3%, 6/15 |
-| `PAQ_RCMPF` rcm/cm hoist (§3) | "small marginal gains" | **null**: +0.4%, 8/15 |
+| `PAQ_WXPF` mixer row prefetch (§7) | null | **null here**: −0.3%, 7/15 vs control 6/15. **Flipped in §7** — a win on a smaller-L3 CPU, exactly as the original doc predicted. |
+| `PAQ_PF2` speculative bpos-1/4 probes (§3) | "small marginal gains" | **null**: −2.3%, 6/15. Confirmed dead in §7 too. |
+| `PAQ_RCMPF` rcm/cm hoist (§3) | "small marginal gains" | **null**: +0.4%, 8/15. Confirmed dead in §7 too. |
 | `PAQ_AVX512` (§4/§7) | no gain, removed | **confirmed**: −0.7% vs baseline alone, and −6.5% when swapped for AVX2 inside the full stack. (Both on the pre-control harness, so read the sign, not the magnitude — but it never won.) No Ir figure: valgrind cannot decode AVX-512. |
-| `PAQ_N16` raise N to 464 (§4) | legal, unmeasured | **negative**: Ir −12.59% vs AVX2's −13.13%; −1.3% wall. Aligned loads do not pay for the wider `wx`. |
-| `PAQ_CXTFL_T` cxtfl templating (§10.3) | "expect ~0, clean and free" | **negative**: −0.7%, and Ir −2.03% — *fewer* instructions but slower, i.e. the second `mix1` instantiation costs more in I-cache than the branch cost |
-| `PAQ_RESTRICT` (§10.4) | hygiene, ~0 | **exactly zero**: Ir −0.00% (4 instructions in 2.9 G) |
+| `PAQ_N16` raise N to 464 (§4) | legal, unmeasured | **negative here**: Ir −12.59% vs AVX2's −13.13%; −1.3% wall. **Flipped in §7** when paired with `WXPF` rather than tested alone. |
+| `PAQ_CXTFL_T` cxtfl templating (§10.3) | "expect ~0, clean and free" | **negative under gcc 13.3**: −0.7%, though Ir is −2.03% — *fewer* instructions but slower. **Flipped in §7 under clang** (+2.5%): the win was always in the instruction count, gcc's layout was eating it. |
+| `PAQ_RESTRICT` (§10.4) | hygiene, ~0 | **exactly zero**: Ir −0.00% (4 instructions in 2.9 G). §7 agrees: 0.17%, i.e. free but idle. |
 | `-fno-exceptions -fno-rtti` (§10.4) | hygiene, ~0 | **null**: Ir −0.15% |
 | `-flto` (§10.4) | mostly moot, single TU | **null**: Ir −2.05%, wall inside noise |
 | `-Ofast` (§7) | pure no-op, no FP in hot path | **confirmed exactly**: Ir −0.00% |
@@ -282,7 +303,82 @@ Caveat worth stating: `-mavx2` is the portable floor used here, not
 compiles, runs, and is bit-exact across OSes — it is not a Windows performance
 benchmark.
 
-## 7. Reproducing
+## 7. Real hardware, newer compilers: three verdicts flip
+
+Everything above §7 was measured in the container described in §1, whose ±4%
+noise floor cannot resolve a 2–4% effect. The numbers below were contributed by
+the author on **real Windows hardware with gcc 16.1 and clang**, encoding and
+decoding full book1 (768,771 B), and they resolve exactly the band this
+container could not. **Where they disagree with §2/§3, they win** — a quiet
+machine measuring a 2% effect beats a noisy one calling it null.
+
+Reported as single runs, cumulative unless noted, seconds:
+
+| build | encode | decode |
+|-------|-------:|-------:|
+| gcc, no macros (baseline)                  | 29.043 | 28.531 |
+| gcc, the five of §0                        | 18.331 | 17.961 |
+| clang, the five of §0                      | 17.721 | 18.847 |
+| `+PAQ_RESTRICT`                            | 17.691 | 17.717 |
+| `+PAQ_PF2`                                 | 18.057 | 18.881 |
+| `+PAQ_RCMPF`                               | 17.821 | 18.432 |
+| `+PAQ_N16`                                 | 17.779 | 17.604 |
+| `+PAQ_N16 +PAQ_WXPF`                       | 17.458 | 17.403 |
+| `+PAQ_N16 +PAQ_WXPF +PAQ_CXTFL_T`          | **17.028** | **16.986** |
+| same, minus `PAQ_DOT2`                     | 17.425 | 17.972 |
+
+**1.71x over the no-macro baseline**, versus the 1.66x this container measured
+for the five-macro set at L8. The best configuration on that hardware is all
+nine:
+
+```
+clang -DPAQ_PREFETCH -DPAQ_AVX2 -DPAQ_DOT2 -DPAQ_GETSIMD -DPAQ_APMPF \
+      -DPAQ_RESTRICT -DPAQ_N16 -DPAQ_WXPF -DPAQ_CXTFL_T
+```
+
+Three §3 verdicts flip, and the reasons are mechanical rather than statistical:
+
+- **`PAQ_N16` + `PAQ_WXPF` is an interaction neither of them shows alone.**
+  `N16` by itself is a wash (17.779 vs 17.691) — matching this container's −1.3%
+  — and `WXPF` was null here. Together: 17.458. The mechanism is visible in the
+  source: `N16` makes the `wx` row stride 928 B, a 32-byte multiple, which is
+  what lets the AVX2 kernel use `_mm256_load_si256` and makes a row a
+  line-aligned span; prefetching *that* is worth more than prefetching a span
+  that straddles. §3 tested the two separately, and paired `N16` against `DOT2`
+  instead — the wrong pairing, and the reason the interaction was missed.
+- **`PAQ_WXPF` flipping is what the original `paq8hpc_speed.md` §7 predicted**:
+  "the verdict may flip on CPUs whose L3 is smaller than `wx` + the ContextMap
+  hot set; re-measure there." This container has a 33 MB L3 against a 9.6 MB
+  `wx`, so a row miss cost only an L3 hit. That prediction was right and the
+  gate was correctly kept.
+- **`PAQ_CXTFL_T` is compiler-dependent.** −0.7% under gcc 13.3 here, +2.5%
+  under clang there. §3 blamed I-cache pressure from the second `mix1`
+  instantiation, but instruction count *fell* 2.03% — so the win was always on
+  paper and only gcc's layout was eating it. Re-measure per compiler.
+
+`PAQ_DOT2` and `PAQ_N16` **do** stack on that hardware. The two overlap in
+mechanism — row reuse vs aligned loads — and did not stack under gcc 13.3 here,
+so it was worth checking directly: dropping `DOT2` from the winning nine gives
+17.425 encode / 17.972 decode, i.e. **+2.3% encode and +5.8% decode worse**.
+Keep both. `DOT2` remains the largest instruction-count lever either way
+(Ir −16.94% vs `AVX2`'s −13.13%), and the decode side is where it shows most.
+
+Two items stay null on both machines, which is now a much stronger statement
+than §3 alone could make: **`PAQ_PF2`** (18.057, worse than 17.691) and
+**`PAQ_RCMPF`** (17.821, worse). Both were "next in line" in the original doc's
+§3; both are measured dead on two very different hosts.
+
+`PAQ_RESTRICT` at 17.691 vs 17.721 is a 0.17% difference — still consistent with
+this container's Ir of −0.00% (4 instructions in 2.9 G), i.e. nothing. It is
+free, so the recommendation keeps it, but it is not doing work.
+
+**Practical guidance.** `PREFETCH`, `AVX2`, `DOT2`, `GETSIMD`, `APMPF` are wins
+on both hosts — enable unconditionally. `N16`+`WXPF`+`CXTFL_T` are worth
+3–4% on real hardware but were neutral-to-negative here, so they are the set to
+A/B on your own target, together rather than individually. Never enable `PF2` or
+`RCMPF`.
+
+## 8. Reproducing
 
 ```
 ./build.sh FINAL -DPAQ_PREFETCH -DPAQ_AVX2 -DPAQ_DOT2 -DPAQ_GETSIMD -DPAQ_APMPF
