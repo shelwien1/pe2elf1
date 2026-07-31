@@ -257,6 +257,18 @@ constexpr int pclamp(int v, int lo, int hi) { return v<lo ? lo : v>hi ? hi : v; 
 #define PWGT(x)   pclamp((x), 1, P_SCALE-1)   // a P_SCALE-unit mixing weight
 #define PSMALL(x) pclamp((x), 1, 255)         // a small positive multiplier/cap
 
+// A dimensionless ratio in P_SCALE units: PMUL(P_SCALE) is unity.  Where PWGT
+// above is a fraction OF P_SCALE and so cannot reach it, this one is a
+// multiplier BY it and is meant to pass it -- the seeded learning rate is 7.
+// These replace what used to be _NUM/_DEN parameter pairs.
+//
+// The ceiling is what the .idx's twelve-bit patterns can already spell, so it
+// is the contract of section 5 rather than a constraint that bites; what makes
+// the whole declared range safe is that both consumers form the product at 64
+// bits, which they must, because P_SCALE*PMUL_MAX is past int at every P_BITS.
+constexpr int PMUL_MAX = 16*P_SCALE;
+#define PMUL(x)   pclamp((x), 0, PMUL_MAX)   // a P_SCALE-unit ratio
+
 // sh_mapping.inc is the IDX runtime: mapping/masking/masking_b plus the
 // pdesc/pmask/pmask2 macros that embed a pattern in the executable for opt.pl,
 // and the mdesc/mmask/mmask2 that deliberately do not.  It needs NOINLINE and
@@ -383,10 +395,15 @@ const int SCM_SWITCH_POS = PPOS(G0_SCM_SW);
 // Mixer: the prediction error is scaled by the learning rate before train()
 // applies it to the weights, and each context's dot product is scaled again on
 // the way into squash().
-const int MIX_LR_NUM  = PSMALL(G0_MIX_LR_NUM);   // outer mixer
-const int MIX_LR_DEN  = PSMALL(G0_MIX_LR_DEN);
-const int MIX2_LR_NUM = PSMALL(G0_MIX2_LR_NUM);  // the nested submixer
-const int MIX2_LR_DEN = PSMALL(G0_MIX2_LR_DEN);
+//
+// One P_SCALE-unit multiplier each, not the _NUM/_DEN pair these were.  Two
+// integers spelling one ratio gave opt.pl a search space whose points were
+// mostly duplicates of each other -- 7/1, 14/2 and 28/4 are the same rate --
+// and a redundant coordinate is search time spent learning that it is
+// redundant.  P_SCALE is the fixed-point denominator, so MIX_LR_MUL==P_SCALE is
+// a rate of 1; the seeds spell the old 7/1 and 2/4 exactly.
+const int MIX_LR_MUL  = PMUL(G0_MIX_LR_MUL);   // outer mixer
+const int MIX2_LR_MUL = PMUL(G0_MIX2_LR_MUL);  // the nested submixer
 // initial weight.  These two are template arguments to Mixer, which is what
 // IDXP() above exists for.
 const int MIX_W_INIT  = pclamp(G0_MIX_W_INIT, -32768, 32767);   // 2.0 in the 8-bit weight fraction
@@ -401,11 +418,14 @@ const int MIX_DP_SHIFT  = pclamp(G0_MIX_DP_SHIFT, 0, 24);
 const int MIX2_Z_SHIFT  = pclamp(G0_MIX2_Z_SHIFT, 0, 24);
 const int MIX2_ZB_MUL   = PSMALL(G0_MIX2_ZB_MUL);
 const int MIX2_ZB_SHIFT = pclamp(G0_MIX2_ZB_SHIFT, 0, 24);
-// per-group rescaling of the ContextMap outputs on the way into the mixer
-const int MIX_MUL_0   = PSMALL(G0_MIX_MUL_0);
-const int MIX_MUL_1   = PSMALL(G0_MIX_MUL_1);
-const int MIX_MUL_2   = PSMALL(G0_MIX_MUL_2);
-const int MIX_MUL_DEN = PSMALL(G0_MIX_MUL_DEN);
+// Per-group rescaling of the ContextMap outputs on the way into the mixer.
+// These were three numerators over one shared MIX_MUL_DEN, which is worse than
+// redundant: the denominator coupled the three groups, so no group's gain could
+// be moved without moving the other two.  As P_SCALE-unit multipliers they are
+// three independent knobs, and 256/256 and 448/256 spell the old 4/4 and 7/4.
+const int MIX_MUL_0 = PMUL(G0_MIX_MUL_0);
+const int MIX_MUL_1 = PMUL(G0_MIX_MUL_1);
+const int MIX_MUL_2 = PMUL(G0_MIX_MUL_2);
 
 // ContextMap bit-history decay: a state at or above CM_DECAY_FROM steps back by
 // CM_DECAY_STEP with probability ~2^-((CM_DECAY_BIAS-ns)>>CM_DECAY_SHIFT), so
@@ -530,8 +550,36 @@ constexpr int p_from_ref(int v) {
 // once rather than twice -- which matters because train()'s _mm256_mulhi_epi16
 // hardcodes a >>16, so the mixer error has to arrive pre-scaled and every bit
 // dropped on the way is a bit of learning signal gone.
+//
+// This three-argument form is for the coefficients still spelled as literals in
+// the models below -- 3/64, 1/16, 7/64 and the like, which are fitted constants
+// rather than knobs.  Everything that comes from IDX uses the form under it.
 inline int p_scaled(int v, int num, int den) {
   return v*num*P_UP/(den*P_DN);
+}
+
+// The same thing with the ratio arriving as a single P_SCALE-unit multiplier,
+// which is what an IDX-declared ratio now is: mul==P_SCALE is unity.  Same
+// shape -- one division at the end, so the truncation still happens once -- and
+// exactly equal to the pair form wherever num*P_SCALE/den is exact, which is
+// what lets the _NUM/_DEN parameters be folded into one without moving a bit of
+// the output.
+//
+// long long because the product reaches P_SCALE*PMUL_MAX at the top of the
+// declared range, past int at every P_BITS.  This runs once per mixer context
+// per coded bit, against train()'s ~5500 madds, so the width is free -- the
+// same trade pmix() above makes for the same reason.
+inline int p_scaled(int v, int mul) {
+  return int( (long long)v*mul*P_UP / ((long long)P_SCALE*P_DN) );
+}
+
+// v*mul/P_SCALE with no reference rescaling, for the logistic-domain ratios.
+// Those follow ST_SCALE rather than P_BITS (see the P_REF_BITS note above), so
+// P_SCALE appears here only as the fixed-point denominator -- it cancels
+// against the P_SCALE/256 unit the .idx declares these in, and the ratio the
+// multiplier expresses does not move when P_BITS does.
+inline int st_scaled(int v, int mul) {
+  return int( (long long)v*mul / P_SCALE );
 }
 
 // Predictor's two fail counters: `fails` counts predictions at or above
@@ -1358,12 +1406,12 @@ void update() {
   int i = 0;
   for(; i+1<ncxt; i += 2 )
     train2(&tx[0], &wx[cxt[i]*N], &wx[cxt[i+1]*N], nx,
-           p_scaled((y<<P_BITS)-pr[i],MIX_LR_NUM,MIX_LR_DEN), p_scaled((y<<P_BITS)-pr[i+1],MIX_LR_NUM,MIX_LR_DEN));
+           p_scaled((y<<P_BITS)-pr[i],MIX_LR_MUL), p_scaled((y<<P_BITS)-pr[i+1],MIX_LR_MUL));
   for(; i<ncxt; ++i )
-    train(&tx[0], &wx[cxt[i]*N], nx, p_scaled((y<<P_BITS)-pr[i],MIX_LR_NUM,MIX_LR_DEN));
+    train(&tx[0], &wx[cxt[i]*N], nx, p_scaled((y<<P_BITS)-pr[i],MIX_LR_MUL));
 #else
   for( int i = 0; i<ncxt; ++i ) {
-    int err = p_scaled((y<<P_BITS)-pr[i],MIX_LR_NUM,MIX_LR_DEN);
+    int err = p_scaled((y<<P_BITS)-pr[i],MIX_LR_MUL);
     train(&tx[0], &wx[cxt[i]*N], nx, err);
   }
 #endif
@@ -1371,7 +1419,7 @@ void update() {
 }
 
 void update2() {
-  train(&tx[0], &wx[0], nx, p_scaled((y<<P_BITS)-base,MIX2_LR_NUM,MIX2_LR_DEN));
+  train(&tx[0], &wx[0], nx, p_scaled((y<<P_BITS)-base,MIX2_LR_MUL));
   nx = 0;
 }
 
@@ -1379,10 +1427,13 @@ void add(int x) {
   tx[nx++] = x;
 }
 
+// x is a P_SCALE-unit multiplier, so x==P_SCALE leaves the input alone.  It
+// used to be a numerator over the shared MIX_MUL_DEN; st_scaled is the same
+// arithmetic with the denominator folded in, and these are logistic-domain
+// values so no reference rescaling belongs here.
 void mul(int x) {
-  int z = tx[nx];
-  z = z*x/MIX_MUL_DEN;
-  tx[nx++] = z;
+  tx[nx] = st_scaled(tx[nx], x);
+  ++nx;
 }
 
 // The six m.set() calls in ContextModel::p() use disjoint base ranges, so

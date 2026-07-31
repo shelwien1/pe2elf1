@@ -157,11 +157,19 @@ Number SCM_SW,         1000,        0!111110100000
 # Mixer.
 # ---------------------------------------------------------------------------
 
-# learning rates: the prediction error is scaled by NUM/DEN before train()
-Number MIX_LR_NUM,     1,           0!0111
-Number MIX_LR_DEN,     1,           1!00
-Number MIX2_LR_NUM,    1,           0!0010
-Number MIX2_LR_DEN,    1,           1!11
+# learning rates: the prediction error is scaled by MUL/P_SCALE before train().
+#
+# One multiplier instead of the NUM/DEN pair these used to be.  A ratio spelled
+# as two independently patchable integers is not one knob: opt.pl could move the
+# numerator and the denominator to the same ratio by many different routes, most
+# of the search space was duplicate points, and 7/1 and 14/2 differ only in
+# where the single truncation lands.  Declared in units of P_SCALE/256, the same
+# unit the fixed mixing weights above use, so P_SCALE is the fixed-point
+# denominator and cancels -- the ratio does not move with P_BITS.
+#
+# 1792/256 == 7/1 and 128/256 == 2/4 reproduce the pair exactly.
+Number MIX_LR_MUL,     P_SCALE/256, 0!011100000000
+Number MIX2_LR_MUL,    P_SCALE/256, 0!000010000000
 
 # initial weight.  These two reach Mixer as template arguments, which is what
 # IDXP() in the consumer is for -- see IDX-FORMAT.md section 8.
@@ -180,12 +188,20 @@ Number MIX2_Z_SHIFT,   1,           0!1001
 Number MIX2_ZB_MUL,    1,           0!1111
 Number MIX2_ZB_SHIFT,  1,           0!1101
 
-# per-group input rescaling in ContextModel::p: m.mul(x) is tx *= x/DEN.  The
-# three groups are the 2/1/1 split of the ContextMap outputs.
-Number MIX_MUL_0,      1,           0!0100
-Number MIX_MUL_1,      1,           0!0100
-Number MIX_MUL_2,      1,           0!0111
-Number MIX_MUL_DEN,    1,           1!011
+# per-group input rescaling in ContextModel::p: m.mul(x) is tx = tx*x/P_SCALE.
+# The three groups are the 2/1/1 split of the ContextMap outputs.
+#
+# These were three numerators over one shared denominator, which coupled them:
+# opt.pl could not move one group's gain without moving all three, because
+# MIX_MUL_DEN sat under every one of them.  As P_SCALE-unit multipliers they are
+# three independent knobs.  256/256 == 4/4 and 448/256 == 7/4 reproduce the old
+# ratios exactly.
+#
+# Logistic-domain, so no P_REF rescaling: P_SCALE appears here only as the
+# fixed-point denominator, and it cancels against the P_SCALE/256 unit.
+Number MIX_MUL_0,      P_SCALE/256, 0!000100000000
+Number MIX_MUL_1,      P_SCALE/256, 0!000100000000
+Number MIX_MUL_2,      P_SCALE/256, 0!000111000000
 
 # ---------------------------------------------------------------------------
 # ContextMap bit histories.

@@ -1,5 +1,72 @@
 # Build + roundtrip notes (Linux / clang)
 
+## `_NUM`/`_DEN` pairs folded into single P_SCALE-unit multipliers
+
+Every ratio that IDX spelled as two parameters is now one.  A ratio held as a
+numerator and a denominator is not one knob: opt.pl can reach the same rate by
+many routes (7/1, 14/2 and 28/4 are one point visited three times), so most of
+the product space is duplicates, and a shared denominator is worse still — the
+three `MIX_MUL_*` gains could not move independently because `MIX_MUL_DEN` sat
+under all of them.
+
+| was | is | ratio |
+|---|---|---|
+| `MIX_LR_NUM` 7 / `MIX_LR_DEN` 1 | `MIX_LR_MUL` 1792 | 7 |
+| `MIX2_LR_NUM` 2 / `MIX2_LR_DEN` 4 | `MIX2_LR_MUL` 128 | 1/2 |
+| `MIX_MUL_0` 4 / `MIX_MUL_DEN` 4 | `MIX_MUL_0` 256 | 1 |
+| `MIX_MUL_1` 4 / `MIX_MUL_DEN` 4 | `MIX_MUL_1` 256 | 1 |
+| `MIX_MUL_2` 7 / `MIX_MUL_DEN` 4 | `MIX_MUL_2` 448 | 7/4 |
+
+The new values are in units of `P_SCALE/256` — the unit the fixed mixing
+weights already use — so the constant is `NUM1` and the use site is
+`NUM1/P_SCALE`, with `P_SCALE` serving as the fixed-point denominator.  It
+cancels against the declaration unit, so every ratio above is exactly what the
+pair evaluated to and none of them moves with `P_BITS`.
+
+Consumer side:
+
+* `p_scaled(v, mul)` — new two-argument overload, same shape as the three
+  argument one (single division at the end, so the truncation still happens
+  once) with the reference rescaling kept.  Used by `Mixer::update`/`update2`.
+* `st_scaled(v, mul)` — the same without `P_UP`/`P_DN`, because `Mixer::mul`'s
+  inputs are logistic-domain and follow `ST_SCALE` rather than `P_BITS`.  Both
+  form the product at 64 bits: `P_SCALE*PMUL_MAX` is past `int` at every
+  `P_BITS`, and the old pair form never got that large.
+* `PMUL(x)` clamps a `P_SCALE`-unit ratio, replacing `PSMALL` on these five.
+  `PSMALL`'s ceiling of 255 was for small numerators and would have truncated
+  every one of the new values.
+* The three-argument `p_scaled` stays — the models still use it for literal
+  fitted coefficients (`3/64`, `1/16`, `7/64`), which are not knobs.
+
+`IDX/export.!!!` was updated in the same commit and is not cosmetic: opt.pl's
+accumulated winners are matched back onto the `.idx` **by name**, and
+`MIX_MUL_0` still exists under that name.  Left alone, the next
+`perl import.pl` would have folded the stale four-bit `"0100"` into a line that
+now reads twelve bits of `P_SCALE/256`, quietly changing that gain from 1 to
+1/4.  The five entries for names that no longer exist were dropped.
+`import.pl paq8-G0.idx export.!!!` is now a no-op against the source, which is
+the check that says the two agree.
+
+Verified byte-identical, not just equivalent:
+
+| build | book1 | vs. pre-change |
+|---|---|---|
+| shipping (`Const 1`, `USE_NEW 0`) | 192014 | identical (`50ebbc27…`) |
+| tuning (`Const 0`, `USE_NEW 1`)   | 191984 | identical (`b2d99f27…`) |
+
+Both roundtrip.  The equality also holds off the reference scale, which is
+where the widened arithmetic could have shown: rebuilding the pre-change tree
+and this one at `-DPAQ_P_BITS=12`, `13` and `16` gives identical archives at
+all three.
+
+Cost, stated plainly: `opt.pl`'s search is proportional to total pattern bits,
+and these five lines went from 27 bits to 60 — eight knobs to five, but each at
+1/256 resolution over the same 0..16 range the pair form reached, instead of
+the coarse and largely duplicate `NUM/DEN` grid.  That is the same trade the
+`.idx` already makes for the fixed mixing weights.  `!MAP!` markers in the
+tuning binary: 62 -> 59.  If the finer grid is not worth the search time on a
+given corpus, section 10's `!` prefix freezes any of them individually.
+
 ## What was run
 
 `MOD/` arrived empty, so it was regenerated first.  IDX-FORMAT.md section 12
