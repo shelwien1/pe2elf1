@@ -1,92 +1,105 @@
 # Build + roundtrip notes (Linux / clang)
 
-## Compression: acting on the model analysis
+## Character set: WL() and PAQ_CHARSET_WRT
 
-Measured on book1 (768771 bytes) at level 7, shipping build, against 191984.
-Each candidate was applied and measured on its own.
+The model was fitted on WRT-preprocessed text, and WRT permutes the alphabet,
+so the byte literals in the model are not the characters they look like.  The
+permutation is its own inverse:
 
-| § | change | book1 | delta |
-|---|---|---|---|
-| 11.3 | word class folds A-Z into a-z | 190785 | **-1199** |
-| 11.3 | sentence-end set `{.!?}` instead of `{. O M ! ) R}` | 190719 | **-66** |
-| 11.4 | `scm9` table `0x1000` -> `0x4000` | 191980 | -4 |
-| 11.5 | orders 1 and 2 added to the core ContextMap | — | 0 |
-| 11.2 | count-adaptive StateMap | — | +1 (dropped) |
-| 11.8 | APM update weighted by interpolation fraction | — | +82 (dropped) |
+```c
+constexpr int wrt_remap( int c ) {
+  if( c>='{'&&c<127 )                             c += 'P'-'{';
+  else if( c>='P'&&c<'T' )                        c -= 'P'-'{';
+  else if( (c>=':'&&c<='?')||(c>='J'&&c<='O') )   c ^= 0x70;
+  if( c=='X'||c=='`' )                            c ^= 'X'^'`';
+  return c;
+}
+```
 
-**190719, -1265 bytes, -0.659%.**  Both builds agree on it and `verify.md5` is
-re-baselined.
+Run the sentence-end set through it and it stops being mysterious:
 
-### The two that paid are both §10.6
+| model spells | means | |
+|---|---|---|
+| `'.'` | `.` | period |
+| `'O'` | `?` | question mark |
+| `'M'` | `=` | the wiki heading marker |
+| `'!'` | `!` | bang |
+| `')'` | `)` | close paren |
+| `'R'` (`'}'-'{'+'P'`) | `}` | close brace |
 
-The document's ranking put the alphabet mismatch third, behind a match model
-and count-adaptive StateMaps.  On raw text it is first by an order of
-magnitude, and for the reason §10.6 gives: this binary has no WRT stage, but
-the model still reads WRT's alphabet.
+`. ? = ! ) }` is what a sentence ends with in enwik.  Reading `'O'` as the
+letter O is how one concludes the punctuation machinery is broken.
 
-`(c-'a')<=('z'-'a')` admits only lowercase, so **every capital is a word
-break** — in a novel, `The` is a break followed by a two-letter word, and no
-capitalised token ever shares a hash with its lowercase form.  Folding A-Z into
-a-z for the word class and the word hash is the whole of the first line above.
+Every character the model tests is now written in **ASCII** and wrapped in
+`WL()`.  `WL('?')` is `'O'` in a WRT build and `'?'` in an ASCII one: the source
+says which character is meant, the build says how that character is spelled.
+`wrt_remap` is `constexpr`, so `WL()` folds to a literal at every use and costs
+nothing.
 
-`'O'`, `'M'` and `'R'` (`'}'-'{'+'P'`) are not punctuation either; they are
-dictionary codes.  Every capital O, M and R in the file was ending a sentence:
-resetting the word stack, rewriting `b2` to `'.'`, and pushing a phantom symbol
-through the entire `cxt[]` chain.  `{.!?}` is what a sentence ends with.
+```c
+#define PAQ_EOS_WORD(c) ((c)==WL('.')||(c)==WL('?')||(c)==WL('}'))
+#define PAQ_EOS_BYTE(c) ((c)==WL('.')||(c)==WL('?')||(c)==WL('=')|| \
+                         (c)==WL('!')||(c)==WL(')')||(c)==WL('}'))
+```
 
-Both are behind `PAQ_WRT_ALPHABET`, which restores the shipped behaviour for a
-WRT-preprocessed pipeline.  It changes the bitstream, so encoder and decoder
-must be built alike — they are, being one binary.  The switch also preserves
-§10.7's two *different* sentence-end sets (WordModel's `{. O R}` against the
-byte update's `{. O M ! ) R}`); on raw text they collapse to one.
+The two sets still differ — three characters against six — because they
+differed in the shipped source (§10.7) and which is right is a measurement
+nobody has run.  What changed is that the difference is now legible.
 
-### Why the other four did not pay
+Two things follow the charset rather than the spelling, so they are macros of
+their own:
 
-**11.2, count-adaptive StateMap** — the premise does not hold here.  The
-document describes the lpaq/paq8px form, where a StateMap is indexed by
-*context* and entries are cold.  In this tree `StateMap::t[256]` is indexed by
-**state**, one map per context slot, 75 maps of 256 entries.  Every entry is hit
-thousands of times: a count capped at 1023 saturates inside the first 32 KiB, so
-the adaptive rate is the floor rate for 96% of the file.  Implemented and
-measured at +1 byte before being dropped.  The idea is sound where the tables
-are cold — the six APMs are the cold tables here, not the StateMaps.
+* `PAQ_WORDFOLD` — WRT carries capitalisation out of band, so an uppercase byte
+  in a WRT stream is a transform artefact and correctly ends a word.  In raw
+  text it is mid-sentence, and excluding it makes `The` a word break followed
+  by a two-letter word, with no capitalised token ever sharing a hash with its
+  lowercase form.  ASCII mode folds A-Z into a-z.
+* `PAQ_WORDEXTRA` — 6, 8, 12 and the `>127` range are WRT dictionary codes.  In
+  raw text 6 and 8 are control characters and `>127` is ordinary high-bit text,
+  so only the last stays a word character there.
 
-**11.8, APM update weighting** — textbook, and 82 bytes worse.  Weighting the
-two knots by the interpolation fractions leaves the *total* movement per bit
-unchanged but halves what each knot gets on average, and the APM rates were
-co-tuned against the full-rate double update.  It would need `A*_MUL` retuned
-around it before the comparison means anything, which is an `opt.pl` run, not
-a judgement call.
+### Results
 
-**11.5, orders 1 and 2** — exactly zero on book1 at level 7, because at `L>=4`
-RecordModel's five maps already carry order-1 and order-2 information through
-distinct hash streams.  Kept anyway: it is free at this level, it is not free
-at `L<4` where those models are gated off entirely, and the `order` estimate
-now reaches 8, which refines three of the six mixer selectors.  Carrying it
-meant moving the geometry with it — `MIXER_ROWS` 11008 -> 12544, mixer inputs
-454 -> 466 (N=480), and `ADD 7: order` -> `ADD 9: order` in three G0 indexes.
+`PAQ_CHARSET_WRT` defaults to **1**, the alphabet the model was tuned against.
 
-**11.4, scm9** — 4 bytes, kept for §10.2 rather than for the 4 bytes: at
-`0x1000` the table held 2048 entries and `set(col*(b1==32))` masked away
-everything above col 7, so col 8 trained as col 0.  `0x4000` holds col 0-31
-exactly.
+| build | book1 | |
+|---|---|---|
+| `PAQ_CHARSET_WRT=1` (default) | 191980 | `442b2735…` |
+| `PAQ_CHARSET_WRT=0` | 190743 | `106761c6…` |
 
-### One fragility fixed on the way
+The WRT number is the point of the exercise: 191980 is *exactly* what the tree
+produced before any of this, so the `WL()` rewrite is a faithful re-expression
+of the shipped literals and not a model change.  Tuning and shipping builds
+agree in both charsets.
 
-The `mul` rescale block divided by a literal 7 — the core ContextMap's context
-count — and relied on `3+2+1+1` summing to that same 7 to land `m.nx` back
-where `cm.mix` left it.  Both stopped being true at 9 contexts.  It now divides
-by `decltype(cm)::C` and restores a saved `nxend`, which is what §10.5 asks for.
+The 190743 is book1-specific and only means something because book1 is raw
+text, which is not what this tool is for.  It is 24 bytes worse than an earlier
+attempt that used `{.!?}` for the ASCII sentence-end set; that version is not
+kept, because a charset-conditional *set* is exactly the thing `WL()` exists to
+remove.  One set of ASCII literals, two spellings.
 
-### Caveat on all of it
+### Still in from the previous pass
 
-One file, 768 KB, of plain English.  `opt.pl`'s own header says to optimize on
-a corpus rather than a file, and that applies to these measurements too: the
-two alphabet changes are structural and will hold anywhere the input is raw
-text, but the three small ones are within the noise of a single sample.
-Nothing here was re-tuned afterwards — every IDX parameter still carries the
-seed that was fitted against the *old* word class, so an `opt.pl` run over a
-corpus is the obvious next step and should recover more than these deltas.
+| § | change | effect |
+|---|---|---|
+| 11.4 | `scm9` table `0x1000` -> `0x4000` | -4 bytes, and fixes §10.2's silent context folding |
+| 11.5 | orders 1 and 2 in the core ContextMap | 0 at L>=4, and moves `MIXER_ROWS` to 12544, inputs to 466 |
+| 10.5 | `mul` block divides by `decltype(cm)::C` and restores a saved `nxend` | none; removes the layout coupling |
+
+Dropped on measurement, with the reasons worth keeping:
+
+**11.2, count-adaptive StateMap** (+1 byte).  The analysis describes the lpaq
+form, where a StateMap is indexed by *context* and entries are cold.  Here
+`StateMap::t[256]` is indexed by **state**, 75 maps of 256 entries, every one
+hit thousands of times — a count capped at 1023 saturates inside the first
+32 KiB, so the adaptive rate is the floor rate for 96% of the file.  The cold
+tables in this design are the six APMs.
+
+**11.8, APM update weighting** (+82 bytes).  Textbook, and worse: weighting the
+knots by the interpolation fractions leaves total movement per bit unchanged
+but halves what each knot gets on average, and the APM rates were co-tuned
+against the full-rate double update.  Comparing it fairly needs an `opt.pl` run
+around it.
 
 ## One archive, both builds
 

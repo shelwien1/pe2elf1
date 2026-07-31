@@ -2069,23 +2069,70 @@ void pfset() const {
 }
 };
 
-// The sentence-end sets.  'O', 'M' and 'R' ('}'-'{'+'P') are not punctuation:
-// they are WRT dictionary codes, and the shipped tests are reading the output
-// of a transform that is not in this build.  On raw text they fire on every
-// capital O, M and R -- so a novel gets a spurious sentence end at each of
-// them, which resets the word stack, rewrites b2 to '.', and pushes a phantom
-// symbol through the whole cxt[] chain.
+// ---------------------------------------------------------------------------
+// Character set.
 //
-// Two sets rather than one, because the shipped code had two and they differed
-// (section 10.7): WordModel used {. O R}, the byte-state update {. O M ! ) R}.
-// That difference is preserved under PAQ_WRT_ALPHABET and collapses on raw
-// text, where {.!?} is simply what a sentence ends with.
-#if defined(PAQ_WRT_ALPHABET)
-  #define PAQ_EOS_WORD(c) ((c)=='.'||(c)=='O'||(c)==('}'-'{'+'P'))
-  #define PAQ_EOS_BYTE(c) ((c)=='.'||(c)=='O'||(c)=='M'||(c)=='!'||(c)==')'||(c)==('}'-'{'+'P'))
+// This model was fitted on WRT-preprocessed text, and WRT permutes the
+// alphabet.  So the byte literals in the model below are not the characters
+// they look like: the sentence-end set spelled {'.','O','M','!',')','R'} is
+// really {'.','?','=','!',')','}'} -- period, question mark, the wiki heading
+// marker, bang, close paren, close brace, which is what a sentence ends with in
+// enwik.  Reading 'O' as the letter O is how §10.6 of the analysis happens.
+//
+// So every character the model tests is written in ASCII and wrapped in WL().
+// WL('?') is 'O' in a WRT build and '?' in an ASCII one; the source says which
+// character is meant and the build says how that character is spelled.
+//
+// The permutation is its own inverse, which is why one function serves for
+// both directions and why WL(WL(c)) == c.
+// ---------------------------------------------------------------------------
+
+// PAQ_CHARSET_WRT=1 (default) -- the alphabet the model was tuned against, for
+// input that has been through WRT.  =0 -- raw bytes, for feeding the tool text
+// directly.  It changes the bitstream, so encoder and decoder must be built
+// alike; they are, being one binary.
+#ifndef PAQ_CHARSET_WRT
+  #define PAQ_CHARSET_WRT 1
+#endif
+
+// constexpr so WL() folds to a literal at every use.
+constexpr int wrt_remap( int c ) {
+  if( c>='{'&&c<127 )                             c += 'P'-'{';
+  else if( c>='P'&&c<'T' )                        c -= 'P'-'{';
+  else if( (c>=':'&&c<='?')||(c>='J'&&c<='O') )   c ^= 0x70;
+  if( c=='X'||c=='`' )                            c ^= 'X'^'`';
+  return c;
+}
+
+#if PAQ_CHARSET_WRT
+  #define WL(c) (wrt_remap(c))
 #else
-  #define PAQ_EOS_WORD(c) ((c)=='.'||(c)=='!'||(c)=='?')
-  #define PAQ_EOS_BYTE(c) ((c)=='.'||(c)=='!'||(c)=='?')
+  #define WL(c) (c)
+#endif
+
+// The two sentence-end sets, in ASCII.  They differ, and that is not a typo:
+// WordModel's word-stack reset uses three of them and the byte-state update
+// uses six (§10.7 of the analysis).  Preserved rather than unified, because
+// which is right is a measurement nobody has run.
+#define PAQ_EOS_WORD(c) ((c)==WL('.')||(c)==WL('?')||(c)==WL('}'))
+#define PAQ_EOS_BYTE(c) ((c)==WL('.')||(c)==WL('?')||(c)==WL('=')|| \
+                         (c)==WL('!')||(c)==WL(')')||(c)==WL('}'))
+
+// A byte's contribution to a word.  WRT carries capitalisation out of band, so
+// an uppercase byte in a WRT stream is a transform artefact and correctly ends
+// a word; in raw text it is the middle of a sentence, and leaving it out means
+// "The" is a word break followed by a two-letter word, with no capitalised
+// token ever sharing a hash with its lowercase form.
+//
+// The escapes are the same story.  6, 8, 12 and the >127 range are WRT
+// dictionary codes; in raw text 6 and 8 are control characters and >127 is
+// ordinary high-bit text, so only the last stays a word character there.
+#if PAQ_CHARSET_WRT
+  #define PAQ_WORDFOLD(c)      (c)
+  #define PAQ_WORDEXTRA(c, p)  ((c)==8||(c)==6||((c)>127&&(p)!=12))
+#else
+  #define PAQ_WORDFOLD(c)      ((U32((c))-'A')<=U32('Z'-'A') ? (c)+('a'-'A') : (c))
+  #define PAQ_WORDEXTRA(c, p)  ((c)>127)
 #endif
 
 static U32 col, frstchar = 0, spafdo = 0, spaces = 0, spacecount = 0, words = 0, wordcount = 0, fails = 0, failz = 0, failcount = 0;
@@ -2136,27 +2183,14 @@ void mix(MainMixer &m) {  if( bpos==0 ) {
     spaces = spaces*2;
     words = words*2;
 
-    // Case folding for the word class.  The shipped test admits only a-z, which
-    // is correct for WRT output -- the transform carries case out of band -- and
-    // badly wrong for raw text, where every capital ENDS a word: "The" is a
-    // word break followed by a two-letter word, and no capitalised token ever
-    // shares a hash with its lowercase form.  See section 10.6 of the analysis.
-    //
-    // PAQ_WRT_ALPHABET restores the shipped class for a WRT-preprocessed
-    // pipeline.  It changes the bitstream, so it has to match between encoder
-    // and decoder -- which it does, both being this one binary.
-#if defined(PAQ_WRT_ALPHABET)
-    U32 wc = c;
-#else
-    U32 wc = ((c-'A')<=U32('Z'-'A')) ? c+('a'-'A') : c;
-#endif
-    if( (wc-'a')<=U32('z'-'a')||c==8||c==6||(c>127&&b2!=12) ) {
+    U32 wc = PAQ_WORDFOLD(c);
+    if( (wc-U32(WL('a')))<=U32(WL('z')-WL('a'))||PAQ_WORDEXTRA(c, b2) ) {
       ++words, ++wordcount;
       word0 = word0*W0_WORD0_MUL+wc;
     } else {
-      if( c==32||c==10 ) {
+      if( c==WL(' ')||c==WL('\n') ) {
         ++spaces, ++spacecount;
-        if( c==10 )
+        if( c==WL('\n') )
           nl1 = nl, nl = pos-1;
       }
       if( word0 ) {
@@ -2203,8 +2237,8 @@ void mix(MainMixer &m) {  if( bpos==0 ) {
       else
         frstchar = 0;
     }
-    if( frstchar=='['&&c==32 ) {
-      if( b3==']'||b4==']' )
+    if( frstchar==U32(WL('['))&&c==WL(' ') ) {
+      if( b3==U32(WL(']'))||b4==U32(WL(']')) )
         frstchar = W0_FRST_CAP;
     }
     cm.set(frstchar<<PSH(W0_FRST_SH)|c);
@@ -2497,9 +2531,9 @@ int p() {  if( bpos==0 ) {
   }
 
   U32 c1 = b1, c2 = b2, c;
-  if( c1==9||c1==10||c1==32 )
+  if( c1==WL('\t')||c1==WL('\n')||c1==WL(' ') )
     c1 = 16;
-  if( c2==9||c2==10||c2==32 )
+  if( c2==WL('\t')||c2==WL('\n')||c2==WL(' ') )
     c2 = 16;
 
   // The six mixer context selectors.  Four of them are exact packings of a few
@@ -2588,14 +2622,14 @@ void update() {
     b1 = c0;
     if( PAQ_EOS_BYTE(c0) ) {
       w5 = (w5<<8)|0x3ff, x5 = (x5<<8)+c0, f4 = (f4&0xfffffff0)+2;
-      if( c0!='!'&&c0!='O' )
+      if( c0!=U32(WL('!'))&&c0!=U32(WL('?')) )
         w4 |= 12;
-      if( c0!='!' )
-        b2 = '.', tt = (tt&0xfffffff8)+1;
+      if( c0!=U32(WL('!')) )
+        b2 = WL('.'), tt = (tt&0xfffffff8)+1;
     }
     c4 = (c4<<8)+c0;
     x5 = (x5<<8)+c0;
-    if( c0==32 )
+    if( c0==U32(WL(' ')) )
       --c0;
     f4 = f4*16+(c0>>4);
     tt = tt*8+WRT_mtt[c0>>4];
