@@ -1,0 +1,111 @@
+# paq8-S0.idx -- SparseModel's context set.
+#
+# Every constant in SparseModel::mix was an arbitrary number sitting in an
+# expression: a mask saying which bits of a shift register the context keeps, a
+# multiplier spreading a narrow context across the hash, a tag separating two
+# contexts that would otherwise collide in the same ContextMap, or a byte a
+# predicate compares against.  All four kinds are choices, which is the test for
+# whether something belongs here, and none of them was reachable by opt.pl.
+#
+# WHAT IS AN Index AND WHAT IS A Number
+#
+# An Index is for a context that is a COMPOSITION -- several fields packed into
+# one row.  scm6 is the only one here, and it is a textbook case: its three
+# fields already sit at disjoint bit positions, so the packing MakeIndex emits
+# is the expression that was written out by hand, exactly.
+#
+# The rest are single masks over one variable, and for those a Number applied
+# with & is both simpler and, more to the point, EXACT.  A `&` mapping does not
+# just select bits, it packs the survivors contiguously -- which is right when
+# the result indexes a table directly, and wrong here, because these feed
+# ContextMap::set, which hashes.  Repacking would rehash and move the archive.
+# So: Index where the arithmetic already packs, Number where it does not.
+#
+# THE 32-BIT MASKS ARE DECLARED ONE LANE AT A TIME
+#
+# x4 is a byte-per-byte shift register (x4 = x4*256+b1), so a mask over it is
+# four independent byte masks and is declared that way.  That is the honest
+# decomposition -- opt.pl moves a byte of history rather than an arbitrary bit
+# soup -- and it is also the only one available: mapping::value accumulates a
+# pattern into a signed int, so a 32-bit pattern overflows it and IDX cannot
+# spell a full-width mask at all.  The consumer reassembles the four with
+# LANES4() and the call site still reads as one mask.
+#
+# Widths are exactly what the shipped constant spells, with no leading zeroes on
+# the masks.  A mask's top bit is how far back into the register the context
+# reaches, and moving THAT is a change of shape rather than a turn of a knob;
+# opt.pl gets to clear bits inside the window, not to widen it.  Tags and
+# multipliers do carry a little headroom, since those are ordinary small
+# integers with nothing structural about their current width.
+#
+# Every seeded pattern spells the shipped value, so both builds reproduce the
+# baseline archives byte for byte.
+
+Prefix S0
+Debug 1
+Const 0
+
+# ---------------------------------------------------------------------------
+# ContextMap contexts.  cn is ContextMap<MEM(L)*2, 5>, so all five of these are
+# hashed; the masks decide what goes into the hash and the tags keep two
+# contexts over the same register apart.
+# ---------------------------------------------------------------------------
+
+# words is one bit per byte, set for the byte-was-a-word-character bytes, so
+# this mask is a 17-byte window of word structure.
+Number CN0_MASK,  1, 0!11111111111111111
+
+# f4 is one NIBBLE per byte (f4 = f4*16+(c0>>4)), so 20 bits is the last five
+# high-nibbles.  The *7 is not a scale, it is a spread: cn hashes the value and
+# an odd multiplier decorrelates a narrow context from the other four.
+Number CN1_MASK,  1, 0!11111111111111111111
+Number CN1_MUL,   1, 0!111
+
+# x4, top five bits of each of the last four bytes, +3 to separate it from the
+# other x4 context below in cn's shared table.
+Number CN2_M3,    1, 0!11111000
+Number CN2_M2,    1, 0!11111000
+Number CN2_M1,    1, 0!11111000
+Number CN2_M0,    1, 0!11111000
+Number CN2_TAG,   1, 0!0011
+
+# tt is three bits per byte (tt = tt*8+WRT_mtt[c0>>4]), so 12 bits is the last
+# four character classes.
+Number CN3_MASK,  1, 0!111111111111
+Number CN3_MUL,   1, 0!1001
+
+# x4 again, this time 1/4/4/8 bits of the four bytes -- a much coarser view of
+# the older bytes and the whole of the newest.
+Number CN4_M3,    1, 0!10000000
+Number CN4_M2,    1, 0!11110000
+Number CN4_M1,    1, 0!11110000
+Number CN4_M0,    1, 0!11111111
+Number CN4_TAG,   1, 0!0110
+
+# ---------------------------------------------------------------------------
+# SmallStationaryContextMap contexts.  These index their tables directly rather
+# than through a hash, but set() masks the index to the table, so a widened mask
+# cannot walk off one.
+# ---------------------------------------------------------------------------
+
+Number SCM5_MASK, 1, 0!1111111
+
+# The one real Index: (words&12)*16 + (w4&12)*4 + (b1>>4) is three fields at
+# disjoint positions, i.e. a packing written out by hand.  As an Index the
+# widths ARE the parameters -- opt.pl can give a field a bit and take one from
+# another -- and the shifts that used to spell it become MakeIndex's business.
+# The seeds pack 2+2+4 bits, which is the shipped expression exactly.
+Index Scm6
+ s6_words: words, &00001100
+ s6_w4:    w4,    &00001100
+ s6_b1:    b1,    &11110000
+
+Number SCM7_MASK, 1, 0!1111
+
+# spafdo counts bytes since the last sentence end, gated on the two-bit w4 field
+# matching one particular class.
+Number SCM8_MASK, 1, 0!11
+Number SCM8_EQ,   1, 0!01
+
+# col, gated on the previous byte being a space
+Number SCM9_EQ,   1, 0!00100000

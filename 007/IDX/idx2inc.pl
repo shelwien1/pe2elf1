@@ -28,8 +28,18 @@ $xdesc = "";
 
 while( <I1> ) {
   s/\r//g;
-  s/\#(.*)$//g;
-  
+  # Take the whitespace in FRONT of the comment with it, and any left at the end
+  # of the line, before anything looks at the pattern.  A pattern is
+  # whitespace-sensitive in the worst possible way: mapping/masking read it a
+  # character at a time and use ($c & 1), so a space is a valid zero bit and a
+  # trailing one silently doubles the value.  Stripping only /#.*$/ -- which is
+  # what this did -- left "0!01000    # d<<8" spelling 2048 instead of 8, with
+  # no diagnostic anywhere, which is why no .idx in the tree had ever carried a
+  # comment after a pattern.  import.pl has always removed the leading
+  # whitespace too (s/(\s*#.*)$//); this is the same rule on the other side.
+  s/\s*\#(.*)$//g;
+  s/\s+$//;
+
   $const = s/^\-//; $const ^= $gconst;
   $debug = s/^\!//; $debug ^= $gdebug;
 

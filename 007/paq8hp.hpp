@@ -269,6 +269,22 @@ constexpr int pclamp(int v, int lo, int hi) { return v<lo ? lo : v>hi ? hi : v; 
 constexpr int PMUL_MAX = 16*P_SCALE;
 #define PMUL(x)   pclamp((x), 0, PMUL_MAX)   // a P_SCALE-unit ratio
 
+// Assemble a 32-bit mask over a byte-per-byte shift register (x4, c4) from the
+// four byte lanes IDX declares it as, most significant first.  IDX cannot spell
+// a full-width mask -- mapping::value accumulates the pattern into a signed int
+// and thirty-two bits overflow it -- and a lane is the better knob anyway,
+// since it is the register's own field: opt.pl moves a byte of history rather
+// than an arbitrary bit of one.  The & at the call site is unchanged.
+#define LANES4(m3, m2, m1, m0) \
+  ( (U32((m3)&255)<<24) | (U32((m2)&255)<<16) | (U32((m1)&255)<<8) | U32((m0)&255) )
+#define LANES2(m1, m0)  ( (int((m1)&255)<<8) | int((m0)&255) )
+
+// An IDX-declared shift amount.  Section 5's rule with no exceptions: a shift
+// is one of the three things a swept pattern can turn into undefined behaviour,
+// so every one of them is clamped where it is used rather than where it is
+// declared.  32 is the width of everything shifted here.
+#define PSH(x)    pclamp((x), 0, 31)
+
 // sh_mapping.inc is the IDX runtime: mapping/masking/masking_b plus the
 // pdesc/pmask/pmask2 macros that embed a pattern in the executable for opt.pl,
 // and the mdesc/mmask/mmask2 that deliberately do not.  It needs NOINLINE and
@@ -286,6 +302,21 @@ constexpr int PMUL_MAX = 16*P_SCALE;
 
 #include "MOD/paq8-G0_h.inc"
 #include "MOD/paq8-G0_p.inc"
+
+// The model context sets.  G0 above holds the coder's numbers -- rates, mixing
+// weights, mixer selectors; these hold the masks, multipliers, tags and
+// compared-against bytes that decide what each model's contexts SEE.  One
+// module per model, because the models are what a reader wants to look at one
+// at a time, and because opt.pl's search space is easier to reason about when a
+// module is a model.
+//
+// Each _h.inc restates USE_NEW; they agree because mk.sh generates every .idx
+// in the tree with the same mode, which is the same coupling section 7
+// describes for one module.
+#include "MOD/paq8-S0_h.inc"
+#include "MOD/paq8-S0_p.inc"
+#include "MOD/paq8-R0_h.inc"
+#include "MOD/paq8-R0_p.inc"
 
 // ---------------------------------------------------------------------------
 // The IDX bridge, part two: now that USE_NEW exists.
@@ -2164,6 +2195,13 @@ void mix(MainMixer &m) {  if( bpos==0 ) {
 }
 };
 
+// RecordModel's two wide masks, reassembled from the byte lanes
+// IDX/paq8-R0.idx declares them as.  d takes the whole previous byte and the
+// high nibble of the one before; e takes the last three bytes of c4, with the
+// fourth lane seeded to zero so opt.pl can bring it in a bit at a time.
+const int R0_D_MASK = LANES2(R0_D_M1, R0_D_M0);
+const U32 R0_E_MASK = LANES4(R0_E_M3, R0_E_M2, R0_E_M1, R0_E_M0);
+
 // every size here is a literal, so this one needs no level parameter
 struct RecordModel {
 int cpos1[256];
@@ -2181,27 +2219,31 @@ RecordModel() {
 
 void mix(MainMixer &m) {
   if( !bpos ) {
-    int c = b1, w = (b2<<8)+c, d = w&0xf0ff, e = c4&0xffffff;
-    cm.set(c<<8|(min(255, pos-cpos1[c])/4));
-    cm.set(w<<9|llog(pos-wpos1[w])>>2);
+    int c = b1, w = (b2<<8)+c, d = w&R0_D_MASK, e = c4&R0_E_MASK;
+    // The two gap buckets.  `/4` was a shift written as a division -- both
+    // operands are non-negative here, cpos1/wpos1 only ever hold a past pos --
+    // so it is spelled as the shift it is, and the shift is now the knob.
+    cm.set(R0_MakeCm0(c, min(R0_CM0_CAP, pos-cpos1[c])>>PSH(R0_CM0_SH)));
+    cm.set(R0_MakeCm1(w, llog(pos-wpos1[w])>>PSH(R0_CM1_SH)));
     cn.set(w);
-    cn.set(d<<8);
-    cn.set(c<<16);
-    cn.set((f4&0xffff)<<3);
-    int col = pos&3;
-    cn.set(col|2<<12);
+    cn.set(d<<PSH(R0_CN1_SH));
+    cn.set(c<<PSH(R0_CN2_SH));
+    cn.set((f4&R0_CN3_MASK)<<PSH(R0_CN3_SH));
+    // the record width the model is guessing at
+    int col = pos&R0_CN4_MASK;
+    cn.set(col|R0_CN4_TAG);
 
     co.set(c);
-    co.set(w<<8);
-    co.set(w5&0x3ffff);
-    co.set(e<<3);
+    co.set(w<<PSH(R0_CO1_SH));
+    co.set(w5&R0_CO2_MASK);
+    co.set(e<<PSH(R0_CO3_SH));
 
     cp.set(d);
-    cp.set(c<<8);
-    cp.set(w<<16);
+    cp.set(c<<PSH(R0_CP1_SH));
+    cp.set(w<<PSH(R0_CP2_SH));
 
-    cq.set(w<<3);
-    cq.set(c<<19);
+    cq.set(w<<PSH(R0_CQ0_SH));
+    cq.set(c<<PSH(R0_CQ1_SH));
     cq.set(e);
 
     cpos1[c] = pos;
@@ -2216,6 +2258,14 @@ void mix(MainMixer &m) {
   cxtfl = 3;
 }
 };
+
+// SparseModel's two 32-bit x4 masks, reassembled from the four byte lanes
+// IDX/paq8-S0.idx declares them as.  x4 is a byte-per-byte shift register, so a
+// lane IS the register's field and moving one moves a byte of history; a
+// full-width pattern is also not spellable, because mapping::value accumulates
+// into a signed int and thirty-two bits overflow it.
+const U32 S0_CN2_MASK = LANES4(S0_CN2_M3, S0_CN2_M2, S0_CN2_M1, S0_CN2_M0);
+const U32 S0_CN4_MASK = LANES4(S0_CN4_M3, S0_CN4_M2, S0_CN4_M1, S0_CN4_M0);
 
 template <int L> struct SparseModel {
 ContextMap<((U32)(MEM(L)*2)), 5> cn;
@@ -2232,20 +2282,20 @@ SmallStationaryContextMap<0x10000, 16> scma;
 
 void mix(MainMixer &m) {
   if( bpos==0 ) {
-    cn.set(words&0x1ffff);
-    cn.set((f4&0x000fffff)*7);
-    cn.set((x4&0xf8f8f8f8)+3);
-    cn.set((tt&0x00000fff)*9);
-    cn.set((x4&0x80f0f0ff)+6);
+    cn.set(words&S0_CN0_MASK);
+    cn.set((f4&S0_CN1_MASK)*S0_CN1_MUL);
+    cn.set((x4&S0_CN2_MASK)+S0_CN2_TAG);
+    cn.set((tt&S0_CN3_MASK)*S0_CN3_MUL);
+    cn.set((x4&S0_CN4_MASK)+S0_CN4_TAG);
     scm1.set(b1);
     scm2.set(b2);
     scm3.set(b3);
     scm4.set(b4);
-    scm5.set(words&127);
-    scm6.set((words&12)*16+(w4&12)*4+(b1>>4));
-    scm7.set(w4&15);
-    scm8.set(spafdo*((w4&3)==1));
-    scm9.set(col*(b1==32));
+    scm5.set(words&S0_SCM5_MASK);
+    scm6.set(S0_MakeScm6(words, w4, b1));
+    scm7.set(w4&S0_SCM7_MASK);
+    scm8.set(spafdo*((w4&S0_SCM8_MASK)==U32(S0_SCM8_EQ)));
+    scm9.set(col*(b1==U32(S0_SCM9_EQ)));
     scma.set(frstchar);
   }
   cn.mix(m);

@@ -1,0 +1,97 @@
+# paq8-R0.idx -- RecordModel's context set.
+#
+# RecordModel looks for fixed-width records, and almost every constant in it is
+# a statement about that guess: how wide a record is, how much of the two-byte
+# context survives, how coarsely a gap since the last occurrence is bucketed.
+# None of it was reachable by opt.pl and all of it is a choice.
+#
+# The same division as S0: an Index where the context composes two model
+# variables into one row, a Number where it is a single mask, shift or tag.
+# `&` packs its survivors contiguously, which is right inside a composition and
+# wrong for a lone mask feeding ContextMap::set, since a repack rehashes.
+#
+# THE SHIFTS ARE TAGS
+#
+# cn, co, cp and cq each hold several contexts in one table, and the shifts on
+# them -- d<<8, c<<16, e<<3, c<<19 -- are not scaling anything.  They are there
+# to move each context into its own region of the hash so two of them do not
+# collide, which makes them exactly as arbitrary as the tags in S0 and exactly
+# as much a choice.  Declared here, clamped at the point of use (section 5),
+# because a pattern is a search space and a shift is one of the three things
+# that must never take an unchecked value from one.
+
+Prefix R0
+Debug 1
+Const 0
+
+# ---------------------------------------------------------------------------
+# The two derived views the whole model is built on.
+# ---------------------------------------------------------------------------
+
+# d = w & 0xf0ff, where w is (b2<<8)+b1 -- the whole previous byte and the high
+# nibble of the one before it.  Declared one byte lane at a time, like S0's x4
+# masks: a lane is the field, and IDX cannot spell a wider pattern than this
+# anyway (mapping::value is a signed int).
+Number D_M1,     1, 0!11110000
+Number D_M0,     1, 0!11111111
+
+# e = c4 & 0xffffff -- the last three bytes.  The fourth lane is seeded to zero,
+# which is what makes this a knob rather than a restatement: opt.pl can bring
+# the fourth byte in a bit at a time instead of the mask being all-or-nothing.
+Number E_M3,     1, 0!00000000
+Number E_M2,     1, 0!11111111
+Number E_M1,     1, 0!11111111
+Number E_M0,     1, 0!11111111
+
+# ---------------------------------------------------------------------------
+# cm -- the two contexts that pair a byte with how long ago it last occurred.
+# Both are compositions, so both are Indexes: the field the gap gets and the
+# field the byte gets are declared together, which is the thing the shift used
+# to say implicitly.
+# ---------------------------------------------------------------------------
+
+# c<<8 | min(CM0_CAP, pos-cpos1[c])>>CM0_SH.  The cap and the shift are the
+# bucketing of the gap -- how far back the model still distinguishes, and how
+# finely -- and are the two numbers here worth moving.
+Number CM0_CAP,  1, 0!11111111
+Number CM0_SH,   1, 0!010
+Index Cm0
+ m0_c: c, &11111111
+ ADD 256: gap
+
+# w<<9 | llog(pos-wpos1[w])>>CM1_SH.  llog is already logarithmic, so the shift
+# is a second, coarser bucketing on top of it.
+Number CM1_SH,   1, 0!010
+Index Cm1
+ m1_w: w, &1111111111111111
+ ADD 512: age
+
+# ---------------------------------------------------------------------------
+# cn -- five contexts in one table, separated by the shifts and the tag.
+# ---------------------------------------------------------------------------
+
+Number CN1_SH,   1, 0!01000        # d<<8
+Number CN2_SH,   1, 0!10000        # c<<16
+Number CN3_MASK, 1, 0!1111111111111111
+Number CN3_SH,   1, 0!00011        # (f4&mask)<<3
+
+# col is the position within the guessed record.  This mask IS the record width
+# the model is looking for -- 3 means it expects records of four bytes -- so of
+# every constant in this file it is the one most worth handing to an optimizer.
+Number CN4_MASK, 1, 0!11
+Number CN4_TAG,  1, 0!0010000000000000
+
+# ---------------------------------------------------------------------------
+# co, cp, cq -- the same shape, one table each.
+# ---------------------------------------------------------------------------
+
+Number CO1_SH,   1, 0!01000        # w<<8
+Number CO2_MASK, 1, 0!111111111111111111  # w5 & 0x3ffff: w5 is two bits per
+                                          # byte, so this is a nine-byte window
+Number CO3_SH,   1, 0!00011        # e<<3
+
+Number CP1_SH,   1, 0!01000        # c<<8
+Number CP2_SH,   1, 0!10000        # w<<16
+
+Number CQ0_SH,   1, 0!00011        # w<<3
+Number CQ1_SH,   1, 0!10011        # c<<19
