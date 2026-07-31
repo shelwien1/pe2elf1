@@ -209,9 +209,23 @@ Number MIX_MUL_2,      P_SCALE/256, 0!000111000000
 
 # a state at or above CM_DECAY_FROM steps back by CM_DECAY_STEP with probability
 # ~2^-((CM_DECAY_BIAS-ns)>>CM_DECAY_SHIFT), so the closer to saturation the more
-# often it decays
+# often it decays.
+#
+# CM_DECAY_BIAS was seeded 010100101 == 165, which is below CM_DECAY_FROM and
+# therefore made that shift count negative for EVERY state the guard admits.
+# Negative shifts are undefined, and the two builds resolved it differently --
+# the shipping build deleted the decay as unreachable, the tuning build ran it
+# with x86's count masked to five bits -- which is why the two builds did not
+# produce the same archive.
+#
+# The seed is now 110100101 == 421, one bit away from what was there and the
+# value that states what the masked shift was doing: (421-ns)>>3 equals
+# ((165-ns)>>3)&31 for every ns in [CM_DECAY_FROM,255], because 256>>3 is
+# exactly 32.  So the schedule is unchanged from the one every opt.pl run
+# actually measured, and it is now a defined expression that both builds agree
+# on.  The clamp at the point of use is what keeps it defined as opt.pl sweeps.
 Number CM_DECAY_FROM,  1,           0!11100001
-Number CM_DECAY_BIAS,  1,           0!010100101
+Number CM_DECAY_BIAS,  1,           0!110100101
 Number CM_DECAY_SHIFT, 1,           0!011
 Number CM_DECAY_STEP,  1,           0!0100
 

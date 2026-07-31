@@ -1,5 +1,56 @@
 # Build + roundtrip notes (Linux / clang)
 
+## One archive, both builds
+
+Maintaining two results was the bug.  The point of the two modes is that
+`./mk.sh` measures and `./mk.sh release` ships *the thing that was measured*,
+faster; a release that codes differently from the build `opt.pl` hill-climbed
+is not a release of that model.  IDX-FORMAT.md sections 1 and 12 say so, and
+the tree was failing it.
+
+The entire divergence was one line — `paq8hp.hpp`'s ContextMap bit-history
+decay — and it was undefined behaviour, not a parameter difference.  The
+diagnosis is under "Why the two builds used to disagree" below; the short form
+is that `CM_DECAY_BIAS` was seeded 165, which is *below* `CM_DECAY_FROM`'s 225,
+so `(CM_DECAY_BIAS-ns)>>CM_DECAY_SHIFT` was negative for every state the guard
+admits.  The shipping build folded the constants, proved the branch undefined
+and **deleted the decay outright**; the tuning build could not prove it and ran
+the shift with x86's count masked to five bits.
+
+Two changes, and they are one fix:
+
+* **`PSH()` on the shift, at the point of use.**  `CM_DECAY_BIAS` is a live
+  nine-bit knob and `opt.pl` visits both ends of it, so the clamp is what keeps
+  the expression defined *as it is swept* — section 5's rule, which this line
+  had never obeyed.  It costs nothing in the shipping build: `ns` comes from a
+  `U8` state table and the guard bounds it to [225,255], so clang proves the
+  count lands in [20,24] and drops the clamp.  The same range deduction that
+  used to delete the decay now discharges its bounds check.
+
+* **`CM_DECAY_BIAS` reseeded 165 -> 421**, one bit away — `010100101` ->
+  `110100101`.  421 is not a new schedule, it is the *existing* one written
+  down: `(421-ns)>>3` equals `((165-ns)>>3)&31` for every reachable `ns`,
+  because 256>>3 is exactly 32.  So the decay keeps the behaviour every
+  `opt.pl` run actually measured, and now says it in an expression that is
+  defined.
+
+The result is one archive from both builds, and it is the tuning build's:
+
+```
+./mk.sh         && ./paq8hpc_idx c book1 -> 191984   b2d99f27581ffbc505e08e89a9d482c8
+./mk.sh release && ./paq8hpc_idx c book1 -> 191984   b2d99f27581ffbc505e08e89a9d482c8
+```
+
+That is the direction that had to win.  The shipping build's old 192014 was the
+output of a model with its bit-history decay silently missing — 30 bytes worse
+on book1 and not the model anyone tuned.  UBSan is clean on the decay line, the
+roundtrip is exact, and timing is unchanged (23.1s vs 24.9s over the same file;
+the branch the release build had been deleting costs nothing measurable).
+
+`IDX/export.!!!` carries the new seed too.  It had to: `import.pl` matches
+`opt.pl`'s winners back by name, so a stale `010100101` there would have walked
+the bug straight back into the `.idx` on the next fold-back.
+
 ## The models' context constants moved into IDX
 
 Every arbitrary number in the four models' context blocks is now a declared
@@ -89,6 +140,11 @@ own before the next:
 | shipping (`./mk.sh release`) | 192014 | identical (`50ebbc27…`) |
 | tuning (`./mk.sh`) | 191984 | identical (`b2d99f27…`) |
 
+Both numbers are pre-fix: at the time of this change the two builds still
+disagreed, for the reason under "One archive, both builds" above, and each was
+checked against its own predecessor.  Since that fix there is one number,
+191984.
+
 Both roundtrip to the original md5.  `import.pl <each>.idx export.!!!` is a
 no-op against all five sources, so `opt.pl`'s fold-back path still agrees with
 what is declared.
@@ -147,6 +203,11 @@ Verified byte-identical, not just equivalent:
 | shipping (`Const 1`, `USE_NEW 0`) | 192014 | identical (`50ebbc27…`) |
 | tuning (`Const 0`, `USE_NEW 1`)   | 191984 | identical (`b2d99f27…`) |
 
+Both numbers are pre-fix: at the time of this change the two builds still
+disagreed, for the reason under "One archive, both builds" above, and each was
+checked against its own predecessor.  Since that fix there is one number,
+191984.
+
 Both roundtrip.  The equality also holds off the reference scale, which is
 where the widened arithmetic could have shown: rebuilding the pre-change tree
 and this one at `-DPAQ_P_BITS=12`, `13` and `16` gives identical archives at
@@ -202,7 +263,7 @@ md5  0a0fdbaf0589c9713bde9120cbb20199  book1.unp
 
 Roundtrip is exact.
 
-## The tuning and shipping builds do NOT agree
+## Why the two builds used to disagree (fixed; kept for the diagnosis)
 
 IDX-FORMAT.md makes this the contract (section 1, section 12: "Both builds must
 produce the same stream").  They do not:
@@ -268,14 +329,4 @@ rather than proof of one, and the reference `paq8hpc.exe` in this tree carries
 165 too (it is a tuning build — 62 `!MAP!` markers), so the seed has been live
 for a while.
 
-Not changed here: reseeding it moves the model's output, which is a modelling
-decision, not a build fix.  Either fix closes the UB —
-
-* reseed `CM_DECAY_BIAS` to `111000101` in `IDX/paq8-G0.idx`, or
-* clamp the shift at the point of use, per IDX-FORMAT.md section 5's rule that
-  a pattern is a search space and the consumer owns the range check —
-  `pclamp((CM_DECAY_BIAS-ns)>>CM_DECAY_SHIFT, 0, 31)`.
-
-The second is needed regardless of the first: `CM_DECAY_BIAS` is a live knob
-and `opt.pl` will visit both ends of a nine-bit pattern, so any value below
-`CM_DECAY_FROM` re-enters the same UB.
+See "One archive, both builds" at the top for how this was resolved.

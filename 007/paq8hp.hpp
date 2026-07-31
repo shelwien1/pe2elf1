@@ -1931,7 +1931,16 @@ template <int CF, int BP> PAQ_HOTFN int mix1t(MainMixer &m, int cc, int c1, int 
     U8* cpi = cp[i];
     if( cpi ) {
       int ns = nex(*cpi, y1);
-      if( ns>=CM_DECAY_FROM&&(rnd()<<((CM_DECAY_BIAS-ns)>>CM_DECAY_SHIFT)) )
+      // PSH is not decoration.  CM_DECAY_BIAS is a live nine-bit knob and
+      // opt.pl visits both ends of it, so without a clamp any value below
+      // CM_DECAY_FROM makes this shift count negative -- which is undefined,
+      // and which the two builds resolved DIFFERENTLY: the shipping build
+      // folds the constants, proves the branch undefined and deletes the decay
+      // outright, while the tuning build cannot prove it and executes the shl
+      // with x86's count masked to five bits.  That single line was the whole
+      // reason the two builds did not agree.  Section 5, exactly: a pattern is
+      // the search space and the clamp is the contract.
+      if( ns>=CM_DECAY_FROM&&(rnd()<<PSH((CM_DECAY_BIAS-ns)>>CM_DECAY_SHIFT)) )
         ns -= CM_DECAY_STEP;
       *cpi = ns;
     }
