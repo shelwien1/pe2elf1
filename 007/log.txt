@@ -1,0 +1,20 @@
+35.128s: paq8hpc-gcc.exe c book1 1 
+34.720s: paq8hpc-cl.exe c book1 1a
+28.253s: paq8hpc.exe c book1 1
+28.053s: paq8hpc.exe c book1 1
+
+29.043s: paq8hpc.exe c book1 book1.hpc // gcc 16.1 no macros
+28.531s: paq8hpc.exe d book1.hpc book1.unp
+
+17.028s: paq8hpc.exe c book1 book1.hpc // PAQ_N16+PAQ_WXPF+PAQ_CXTFL_T
+16.986s: paq8hpc.exe d book1.hpc book1.unp
+
+28.447s: paq8hpc.exe c book1 book1.hpc
+28.633s: paq8hpc.exe d book1.hpc book1.unp
+
+17.168s: paq8hpc.exe c book1 book1.hpc // macros
+17.285s: paq8hpc.exe d book1.hpc book1.unp
+17.210s: paq8hpc.exe c book1 book1.hpc
+17.339s: paq8hpc.exe d book1.hpc book1.unp
+18.002s: paq8hpc.exe c book1 book1.hpc
+17.499s: paq8hpc.exe d book1.hpc book1.unp
