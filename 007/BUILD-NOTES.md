@@ -1,5 +1,98 @@
 # Build + roundtrip notes (Linux / clang)
 
+## The models' context constants moved into IDX
+
+Every arbitrary number in the four models' context blocks is now a declared
+parameter.  One module per model — `paq8-W0` (WordModel), `paq8-S0`
+(SparseModel), `paq8-R0` (RecordModel), `paq8-C0` (ContextModel) — because a
+model is what a reader looks at one at a time and what `opt.pl`'s search space
+is easiest to reason about a slice of.  `!MAP!` markers in the tuning binary go
+from 59 to 241.
+
+What was converted: the mask saying which bits of a shift register a context
+keeps; the multiplier spreading a narrow context across a hash; the tag
+separating two contexts that share a ContextMap; the byte a predicate compares
+against; the shift moving a context into its own region of a table; the word
+chain's nine multipliers and the four pairs that keep two-word contexts from
+aliasing; the thirteen order-hash primes; the caps on `col`, `frstchar` and
+`spafdo`.
+
+### Index or Number
+
+An **Index** where the packing is *tight* — where each field starts exactly
+where the one below it ends, so `MakeIndex` reproduces the hand-written shifts
+character for character while turning the field widths into the parameters.
+`scm6.set((words&12)*16+(w4&12)*4+(b1>>4))` is the textbook case and became
+
+```
+Index Scm6
+ s6_words: words, &00001100
+ s6_w4:    w4,    &00001100
+ s6_b1:    b1,    &11110000
+```
+
+which generates `((words>>2)&3)<<6 | ((w4>>2)&3)<<4 | ((b1>>4)&15)` — the same
+value, with the three widths now movable.  Eleven contexts across the four
+models are of this shape.
+
+A **Number** applied with `&` everywhere else, and the reason is not stylistic:
+a `&` mapping does not merely select bits, it *packs the survivors
+contiguously*.  That is right when the result indexes a table and wrong when it
+feeds `ContextMap::set`, which hashes — a repack rehashes and moves the
+archive.  Same for a *loose* packing: `frstchar<<11|c` leaves three bits spare
+above an eight-bit `c`, and an Index would close the gap.  There the shift is
+the knob and stays a Number.  Getting this choice wrong is silent — it
+compiles, it runs, and the output moves — which is why the rule is written down
+in each `.idx` rather than left to be inferred.
+
+### 32-bit masks are declared one byte lane at a time
+
+`x4`, `c4` and the `h = w4<<6` window are byte-per-byte registers, so a mask
+over one is four independent byte masks and is declared that way; `LANES4()`
+reassembles it and the call site still reads as one mask.  A lane is the
+register's own field, so `opt.pl` moves a byte of history rather than an
+arbitrary bit.  It is also the only form available: `mapping::value`
+accumulates a pattern into a **signed int**, so a 32-bit pattern overflows it —
+IDX cannot spell a full-width mask at all.
+
+### What was deliberately left alone
+
+* **Character identities** — `'a'`, `'z'`, `'.'`, 32, 10, and the tests for 8,
+  6, 127, 12.  Those say what a word character *is* and what a line ending
+  *is*.  They are the alphabet, the same category as `P_BITS` in `paq8-G0.idx`.
+* **`MIX_R3` and `MIX_R5`'s constants** in `ContextModel::p`.  Those are the
+  *range* of a mixer selector, and the six ranges must sum exactly to
+  `MIXER_ROWS`, a fixed array dimension of `Mixer::wx`.  Widen the `tt` mask by
+  one bit and the sum overruns `wx` — the tuning build would catch it in
+  `Mixer::set`, the shipping build would not, because `MIXER_ROWS` is a literal
+  there.  Handing those to `opt.pl` would be handing it the shape of the mixer.
+
+### A silent bug in idx2inc.pl, found by this
+
+The generator stripped `/#.*$/` but not the whitespace the comment left behind,
+and a pattern is whitespace-sensitive in the worst way: `mapping`/`masking`
+read it a character at a time as `(c & 1)`, so a trailing space is a valid zero
+bit.  `0!01000    # d<<8` therefore spelled **2048 instead of 8**, with no
+diagnostic anywhere — which is why no `.idx` in the tree had ever carried a
+comment after a pattern.  `import.pl` has always taken the leading whitespace
+with the comment (`s/(\s*#.*)$//`); `idx2inc.pl` now does the same and also
+drops any trailing whitespace.  Verified to leave `paq8-G0`'s and `paq8-S0`'s
+generated headers byte-identical.
+
+### Verification
+
+Byte-identical, not equivalent — each model was converted and checked on its
+own before the next:
+
+| build | book1 | vs. pre-change |
+|---|---|---|
+| shipping (`./mk.sh release`) | 192014 | identical (`50ebbc27…`) |
+| tuning (`./mk.sh`) | 191984 | identical (`b2d99f27…`) |
+
+Both roundtrip to the original md5.  `import.pl <each>.idx export.!!!` is a
+no-op against all five sources, so `opt.pl`'s fold-back path still agrees with
+what is declared.
+
 ## `_NUM`/`_DEN` pairs folded into single P_SCALE-unit multipliers
 
 Every ratio that IDX spelled as two parameters is now one.  A ratio held as a

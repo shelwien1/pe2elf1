@@ -1,0 +1,235 @@
+# paq8-W0.idx -- WordModel's context set.
+#
+# WordModel is the biggest model in the coder and had the most unreachable
+# numbers in it: nine prime multipliers building the word chain, four more
+# pairing words against each other, a dozen masks windowing the byte and
+# character-class registers, and the shifts and tags keeping forty-six contexts
+# apart inside one ContextMap.  None of it was in the search space.
+#
+# WHAT IS NOT HERE
+#
+# The character identities are not choices, so they stay literals in the code:
+# 'a', 'z', '.', 32, 10, 96 as a fold target, the tests for 8, 6, 127 and 12.
+# Those say what a word character IS and what a line ending IS -- they are the
+# alphabet, the same way P_BITS is the arithmetic in G0 and for the same reason.
+# What is here is everything that says how MUCH of something a context keeps and
+# how hard two of them are made to differ.
+#
+# INDEX VS NUMBER, AND WHY IT IS NOT UNIFORM
+#
+# An Index is used where the packing is TIGHT -- where each field starts exactly
+# where the one below it ends, so MakeIndex reproduces the hand-written shifts
+# character for character while turning the field widths into parameters.
+# col<<16|c<<8|above is the clearest case: three fields, 8 and 8 and the rest.
+#
+# Where the shift leaves a deliberate gap -- frstchar<<11 with a byte to put in
+# it, d<<9 with a seven-bit frstchar -- an Index would close the gap and change
+# the value, so the shift stays a Number and IS the knob.  That distinction is
+# the whole reason both forms exist, and it is worth stating that a wrong choice
+# here is silent: it compiles, it runs, and the archive moves.
+#
+# Every seeded pattern spells the shipped value, so both builds reproduce the
+# baseline archives byte for byte.
+
+Prefix W0
+Debug 1
+Const 0
+
+# ---------------------------------------------------------------------------
+# The word chain.  word0 accumulates the current word a byte at a time and the
+# older four shift down behind it, each scaled by its own multiplier.  Those
+# multipliers ARE the word model: they decide what two different word histories
+# have to have in common before they collide, and every one of the 46 contexts
+# below is built out of them.  They were nine unexplained primes.
+# ---------------------------------------------------------------------------
+Number WORD0_MUL,   1, 0!100000111000  # word0 = word0*W0_MUL + c, 263*8 as shipped
+Number WORD1_MUL,   1, 0!1010011
+Number WORD2_MUL,   1, 0!0110101
+Number WORD3_MUL,   1, 0!0101111
+Number WORD4_MUL,   1, 0!0101011
+
+# The same shift again on a sentence boundary, where word1 is replaced by '.'
+# rather than by the word that just ended.  Separate multipliers because this is
+# a different event, and nothing says the two shifts want the same scaling.
+Number FWORD2_MUL,  1, 0!0101001
+Number FWORD3_MUL,  1, 0!0100101
+Number FWORD4_MUL,  1, 0!0011111
+
+# h is the running hash the word contexts are built on, and the pair multipliers
+# below are what keep two-word and three-word contexts from aliasing each other.
+Number H_MUL,       1, 0!100001111  # h = word0*H_MUL + c
+Number P0_W0,       1, 0!1011011  # word0*91 + word1*89
+Number P0_W1,       1, 0!1011001
+Number P1_W1,       1, 0!1001111  # h + word1*79 + word2*71
+Number P1_W2,       1, 0!1000111
+Number P2_W1,       1, 0!1001001  # h + word1*73 + word3*61
+Number P2_W3,       1, 0!0111101
+Number P3_W2,       1, 0!1000011  # h + word2*67 + word3*59
+Number P3_W3,       1, 0!0111011
+
+# ---------------------------------------------------------------------------
+# Line geometry.  col is the offset into the current line and frstchar is the
+# line's first character folded to a small alphabet; both are caps, i.e. how
+# much of a long line the model still distinguishes.
+# ---------------------------------------------------------------------------
+Number COL_CAP,     1, 0!011111  # min(COL_CAP, pos-nl) -- one bit of headroom over the shipped 31
+Number COL_TH,      1, 0!010  # the first COL_TH columns are where frstchar is decided
+Number FRST_CAP,    1, 0!1100000
+Number SPAFDO_CAP,  1, 0!111111  # bytes since the last sentence end, capped
+
+# ---------------------------------------------------------------------------
+# Masks, shifts and tags of the 46 cm contexts.  Same division as S0 and R0:
+# an Index where the context packs several fields tightly, a Number where the
+# shift leaves a deliberate gap or the mask feeds a hash.
+# ---------------------------------------------------------------------------
+Number SPAFDO_W4M,  1, 0!11  # spafdo*SPAFDO_MUL*((w4&SPAFDO_W4M)==SPAFDO_EQ)
+Number SPAFDO_EQ,   1, 0!01
+Number SPAFDO_MUL,  1, 0!1000
+Number FRST_SH,     1, 0!01011  # frstchar<<11 | c -- a loose packing, c needs only 8 of the 11
+Number FRST_SH2,    1, 0!00111  # frstchar<<7, alone in its own context
+Number COLSP_EQ,    1, 0!00100000  # col*(c==' ')
+Number SPACES_M1,   1, 0!111111111111111
+Number SPACES_M0,   1, 0!11111111
+Number SC_SH,       1, 0!001  # spacecount>>1 -- `/2` on a count that cannot go negative
+Number C_SH13,      1, 0!01101  # (c<<13) + h
+
+# The w4 window.  h = w4<<H_SH is the two-bit-per-byte register brought up to
+# byte alignment, and each mask below takes a different number of bytes of it.
+# 32-bit masks are declared one byte lane at a time -- a lane is the register's
+# own field, and mapping::value cannot hold a wider pattern (see S0).
+Number H_SH,        1, 0!00110  # h = w4<<6, then h <<= 6 twice more
+Number HA_M3,       1, 0!11111111
+Number HA_M2,       1, 0!11111111
+Number HA_M1,       1, 0!11111111
+Number HA_M0,       1, 0!00000000
+Number HB_M3,       1, 0!00000000
+Number HB_M2,       1, 0!11111111
+Number HB_M1,       1, 0!11111111
+Number HB_M0,       1, 0!00000000
+Number HC_M3,       1, 0!00000000
+Number HC_M2,       1, 0!00000000
+Number HC_M1,       1, 0!11111111
+Number HC_M0,       1, 0!00000000
+Number HD_M3,       1, 0!11111111
+Number HD_M2,       1, 0!11111111
+Number HD_M1,       1, 0!00000000
+Number HD_M0,       1, 0!00000000
+Number HE_M3,       1, 0!00000000
+Number HE_M2,       1, 0!11111111
+Number HE_M1,       1, 0!00000000
+Number HE_M0,       1, 0!00000000
+Number HF_M3,       1, 0!11111111
+Number HF_M2,       1, 0!00000000
+Number HF_M1,       1, 0!00000000
+Number HF_M0,       1, 0!00000000
+
+# d is the last two bytes of c4, f the last three.
+Number D_M1,        1, 0!11111111
+Number D_M0,        1, 0!11111111
+Number F_M3,        1, 0!00000000
+Number F_M2,        1, 0!11111111
+Number F_M1,        1, 0!11111111
+Number F_M0,        1, 0!11111111
+
+# t1/t2 chain the last byte seen in each order-1 and order-2 context.
+Number T1_SH,       1, 0!01000  # t = c | t1[c]<<8
+Number T2_SH,       1, 0!10000  # t = d | t2[d]<<16
+Number TA_M3,       1, 0!00000000
+Number TA_M2,       1, 0!00000000
+Number TA_M1,       1, 0!11111111
+Number TA_M0,       1, 0!11111111
+Number TB_M3,       1, 0!00000000
+Number TB_M2,       1, 0!11111111
+Number TB_M1,       1, 0!11111111
+Number TB_M0,       1, 0!11111111
+Number TC_M3,       1, 0!00000000
+Number TC_M2,       1, 0!00000000
+Number TC_M1,       1, 0!11111111
+Number TC_M0,       1, 0!00000000
+Number TD_M3,       1, 0!00000000
+Number TD_M2,       1, 0!11111111
+Number TD_M1,       1, 0!11111111
+Number TD_M0,       1, 0!11111111
+
+# x4 and c4 are byte-per-byte registers; these four masks are the sparse views
+# of them -- alternate bytes, first-and-last, and so on.
+Number XA_M3,       1, 0!00000000
+Number XA_M2,       1, 0!11111111
+Number XA_M1,       1, 0!00000000
+Number XA_M0,       1, 0!11111111
+Number XB_M3,       1, 0!11111111
+Number XB_M2,       1, 0!00000000
+Number XB_M1,       1, 0!00000000
+Number XB_M0,       1, 0!11111111
+Number XC_M3,       1, 0!00000000
+Number XC_M2,       1, 0!11111111
+Number XC_M1,       1, 0!11111111
+Number XC_M0,       1, 0!00000000
+Number XD_M3,       1, 0!11111111
+Number XD_M2,       1, 0!00000000
+Number XD_M1,       1, 0!11111111
+Number XD_M0,       1, 0!00000000
+
+# Four contexts share cm's table with the byte-pair contexts, so each carries a
+# tag in a bit nothing else reaches.  The shift is shared, the index is not.
+Number TAG_SH,      1, 0!10001
+Number TAG_A,       1, 0!0001  # c + b5*256 + (1<<17)
+Number TAG_B,       1, 0!0010
+Number TAG_C,       1, 0!0100
+Number TAG_D,       1, 0!0101
+
+# The last few: two w4 windows and two frstchar packings with loose shifts.
+Number W4_M15,      1, 0!1111
+Number W4_M63,      1, 0!111111
+Number W4_MUL,      1, 0!10000000  # (w4&63)*128 + (5<<17)
+Number D_SH9,       1, 0!01001  # d<<9 | frstchar
+Number F4_M1,       1, 0!11111111
+Number F4_M0,       1, 0!11111111
+Number F4_SH11,     1, 0!01011  # (f4&0xffff)<<11 | frstchar
+
+# ---------------------------------------------------------------------------
+# The tight packings.  Each of these was a chain of shifts and ors whose field
+# widths were implicit in the shift amounts; as an Index the widths are the
+# declaration and the shifts are MakeIndex's business.
+# ---------------------------------------------------------------------------
+
+# b3 | b4<<8
+Index Bb34
+ b34_b4: b4, &11111111
+ b34_b3: b3, &11111111
+
+# col<<16 | c<<8 | above.  col is masked six bits, one more than the shipped cap
+# of 31 needs, so the mask and COL_CAP can move together.
+Index Cca
+ cca_col: col,   &00111111
+ cca_c:   c,     &11111111
+ cca_ab:  above, &11111111
+
+# col<<8 | c
+Index Cc
+ cc_col: col, &00111111
+ cc_c:   c,   &11111111
+
+# c*64 + spacecount>>SC_SH
+Index Csp
+ csp_c: c, &11111111
+ ADD 64: sc
+
+# wordcount*64 + spacecount
+Index Wsp
+ ADD 1: wordcount
+ ADD 64: spacecount
+
+# c + b5*256, c + b6*256, b4 + b8*256 -- byte pairs, each tagged separately at
+# the call site so the three cannot collide.
+Index Bp5
+ bp5_hi: b5, &11111111
+ bp5_lo: c,  &11111111
+
+Index Bp6
+ bp6_hi: b6, &11111111
+ bp6_lo: c,  &11111111
+
+Index Bp8
+ bp8_hi: b8, &11111111
+ bp8_lo: b4, &11111111

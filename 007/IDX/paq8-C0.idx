@@ -1,0 +1,43 @@
+# paq8-C0.idx -- ContextModel's order hashes.
+#
+# cxt[1..13] are the order-1..order-13 context hashes, each one the previous
+# order's hash times a multiplier plus the new byte.  Those thirteen
+# multipliers are the whole order model: they decide which two different
+# histories are allowed to land in the same ContextMap row, and they were a
+# bare array of primes with nothing saying why those primes.
+#
+# Nine bits each, which is one more than eight of them need.  A multiplier here
+# is not a mask -- its top bit is not a window edge -- so there is no reason to
+# pin the width to what the shipped value happens to spell, and 257 already
+# needs the ninth bit.
+#
+# WHAT IS DELIBERATELY NOT HERE
+#
+# The two mixer context selectors that ContextModel::p still spells out --
+# MIX_R3's min(bpos,5)*256+(tt&63)+(c&192) and MIX_R5's bpos*256+... -- keep
+# their constants.  Those numbers are not choices in the sense the rest of this
+# tree uses: they are the RANGE of a selector, and the six ranges must sum
+# exactly to MIXER_ROWS, which is a fixed array dimension of Mixer::wx.  Widen
+# the tt mask by one bit and the sum overruns wx; the tuning build would catch
+# it in Mixer::set and the shipping build would not, because MIXER_ROWS is a
+# literal there.  That makes them the same category as P_BITS in paq8-G0.idx --
+# the arithmetic rather than the model -- and handing them to opt.pl would be
+# handing it the shape of the mixer.
+
+Prefix C0
+Debug 1
+Const 0
+
+Number PRIME1,  1, 0!100000001
+Number PRIME2,  1, 0!011111011
+Number PRIME3,  1, 0!011110001
+Number PRIME4,  1, 0!011101111
+Number PRIME5,  1, 0!011101001
+Number PRIME6,  1, 0!011100101
+Number PRIME7,  1, 0!011100011
+Number PRIME8,  1, 0!011011111
+Number PRIME9,  1, 0!011010011
+Number PRIME10, 1, 0!011000111
+Number PRIME11, 1, 0!011000101
+Number PRIME12, 1, 0!011000001
+Number PRIME13, 1, 0!010111111
