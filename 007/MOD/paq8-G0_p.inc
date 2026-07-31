@@ -14,7 +14,7 @@ static inline int G0_MakeMX0( U32 order, U32 w4, U32 c2 ) {
   int MX0;
 
   MX0 = 0;
-  MX0 = MX0*(7) + (order);
+  MX0 = MX0*(9) + (order);
   MX0 = (MX0<<4) + ((((w4)>>4)&15)); // 11110000
   MX0 = (MX0<<4) + ((((c2)>>4)&15)); // 11110000
   return MX0;
@@ -24,7 +24,7 @@ static inline int G0_MakeMX1( U32 order, U32 w4, U32 words1 ) {
   int MX1;
 
   MX1 = 0;
-  MX1 = MX1*(7) + (order);
+  MX1 = MX1*(9) + (order);
   MX1 = (MX1<<2) + (((w4)&3)); // 00000011
   MX1 = (MX1<<6) + (((words1)&63)); // 00111111
   return MX1;
@@ -43,7 +43,7 @@ static inline int G0_MakeMX4( U32 order, U32 c2, U32 bpos ) {
   int MX4;
 
   MX4 = 0;
-  MX4 = MX4*(7) + (order);
+  MX4 = MX4*(9) + (order);
   MX4 = (MX4<<5) + ((((c2)>>3)&31)); // 11111000
   MX4 = MX4*(8) + (bpos);
   return MX4;

@@ -78,6 +78,7 @@ Number SM_SW2,         65536,       0!10000
 # the Laplace prior on a state's (n0,n1) that seeds StateMap::t
 Number SM_PRIOR_ADD,   1,           0!01
 
+
 # ---------------------------------------------------------------------------
 # APM chain -- SIX INSTANCES, SIX SETS OF PARAMETERS.
 #
@@ -261,13 +262,13 @@ Number FAILZ_TH,       1,           0!1000010100
 
 # m.set( 256*order + (w4&240) + (c2>>4), 256*7 )
 Index MX0
- ADD 7: order
+ ADD 9: order
 !mx0_w4:  w4,  &11110000
 !mx0_c2:  c2,  &11110000
 
 # m.set( order*256 + (w4&3)*64 + ((words>>1)&63), 256*7 )
 Index MX1
- ADD 7: order
+ ADD 9: order
 !mx1_w4:  w4,     &00000011
 !mx1_wd:  words1, &00111111
 
@@ -278,6 +279,6 @@ Index MX2
 
 # m.set( order*256 + bpos + (c2&248), 256*7 )
 Index MX4
- ADD 7: order
+ ADD 9: order
 !mx4_c2:  c2,  &11111000
  ADD 8: bpos

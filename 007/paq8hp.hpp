@@ -478,6 +478,7 @@ const int CM_RUN_STEP = PSMALL(G0_CM_RUN_STEP);
 // StateMap's initial estimate is a Laplace prior over the state's (n0,n1)
 const int SM_PRIOR_ADD = pclamp(G0_SM_PRIOR_ADD, 0, 255);
 
+
 // v += (target-v)*mul/EMA_SCALE: mix v toward target with weight mul/EMA_SCALE.
 // `bias` is the rounding, applied to the PRODUCT -- EMA_CEIL to round away from
 // v, EMA_HALF to round to nearest, 0 to floor.  The shift is the division: it
@@ -1541,7 +1542,7 @@ int p() {
 // build those are reads from mapping objects rather than constant expressions.
 // So it stays written out, and the two checks keep it honest: a static_assert
 // where the Volumes fold, and the bounds check in Mixer::set where they do not.
-constexpr int MIXER_ROWS = 128*(16+14+14+12+14+16);   // 11008
+constexpr int MIXER_ROWS = 128*(18+18+16+12+18+16);   // 12544
 
 // The two mixer context ranges that are not IDX Indexes -- see the comment at
 // the six m.set() calls in ContextModel::p.
@@ -1555,7 +1556,7 @@ static_assert( G0_MX0_Volume + G0_MX1_Volume + G0_MX2_Volume
 #endif
 
 // the one mixer the models are handed
-typedef Mixer<456, MIXER_ROWS, 6, MIX_W_INIT> MainMixer;
+typedef Mixer<466, MIXER_ROWS, 6, MIX_W_INIT> MainMixer;
 
 // n contexts, 2*NH intervals per context.  NH comes from IDX per instance, so
 // it is a template parameter of reference type in the tuning build and a plain
@@ -2068,6 +2069,25 @@ void pfset() const {
 }
 };
 
+// The sentence-end sets.  'O', 'M' and 'R' ('}'-'{'+'P') are not punctuation:
+// they are WRT dictionary codes, and the shipped tests are reading the output
+// of a transform that is not in this build.  On raw text they fire on every
+// capital O, M and R -- so a novel gets a spurious sentence end at each of
+// them, which resets the word stack, rewrites b2 to '.', and pushes a phantom
+// symbol through the whole cxt[] chain.
+//
+// Two sets rather than one, because the shipped code had two and they differed
+// (section 10.7): WordModel used {. O R}, the byte-state update {. O M ! ) R}.
+// That difference is preserved under PAQ_WRT_ALPHABET and collapses on raw
+// text, where {.!?} is simply what a sentence ends with.
+#if defined(PAQ_WRT_ALPHABET)
+  #define PAQ_EOS_WORD(c) ((c)=='.'||(c)=='O'||(c)==('}'-'{'+'P'))
+  #define PAQ_EOS_BYTE(c) ((c)=='.'||(c)=='O'||(c)=='M'||(c)=='!'||(c)==')'||(c)==('}'-'{'+'P'))
+#else
+  #define PAQ_EOS_WORD(c) ((c)=='.'||(c)=='!'||(c)=='?')
+  #define PAQ_EOS_BYTE(c) ((c)=='.'||(c)=='!'||(c)=='?')
+#endif
+
 static U32 col, frstchar = 0, spafdo = 0, spaces = 0, spacecount = 0, words = 0, wordcount = 0, fails = 0, failz = 0, failcount = 0;
 
 // WordModel's wide masks, reassembled from the byte lanes IDX/paq8-W0.idx
@@ -2116,9 +2136,23 @@ void mix(MainMixer &m) {  if( bpos==0 ) {
     spaces = spaces*2;
     words = words*2;
 
-    if( (c-'a')<=('z'-'a')||c==8||c==6||(c>127&&b2!=12) ) {
+    // Case folding for the word class.  The shipped test admits only a-z, which
+    // is correct for WRT output -- the transform carries case out of band -- and
+    // badly wrong for raw text, where every capital ENDS a word: "The" is a
+    // word break followed by a two-letter word, and no capitalised token ever
+    // shares a hash with its lowercase form.  See section 10.6 of the analysis.
+    //
+    // PAQ_WRT_ALPHABET restores the shipped class for a WRT-preprocessed
+    // pipeline.  It changes the bitstream, so it has to match between encoder
+    // and decoder -- which it does, both being this one binary.
+#if defined(PAQ_WRT_ALPHABET)
+    U32 wc = c;
+#else
+    U32 wc = ((c-'A')<=U32('Z'-'A')) ? c+('a'-'A') : c;
+#endif
+    if( (wc-'a')<=U32('z'-'a')||c==8||c==6||(c>127&&b2!=12) ) {
       ++words, ++wordcount;
-      word0 = word0*W0_WORD0_MUL+c;
+      word0 = word0*W0_WORD0_MUL+wc;
     } else {
       if( c==32||c==10 ) {
         ++spaces, ++spacecount;
@@ -2131,7 +2165,7 @@ void mix(MainMixer &m) {  if( bpos==0 ) {
         word2 = word1*W0_WORD2_MUL;
         word1 = word0*W0_WORD1_MUL;
         word0 = 0;
-        if( c=='.'||c=='O'||c==('}'-'{'+'P') )
+        if( PAQ_EOS_WORD(c) )
           f = 1, spafdo = 0;
         else {
           ++spafdo;
@@ -2314,7 +2348,7 @@ SmallStationaryContextMap<0x10000, 12> scm5;
 SmallStationaryContextMap<0x20000, 12> scm6;
 SmallStationaryContextMap<0x2000, 12> scm7;
 SmallStationaryContextMap<0x8000, 13> scm8;
-SmallStationaryContextMap<0x1000, 12> scm9;
+SmallStationaryContextMap<0x4000, 12> scm9;
 SmallStationaryContextMap<0x10000, 16> scma;
 
 void mix(MainMixer &m) {
@@ -2359,7 +2393,7 @@ static U32 WRT_mpw[16] = {3, 3, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0}, tri[4
 static U32 WRT_mtt[16] = {0, 0, 1, 2, 3, 4, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7};
 
 template <int L> struct ContextModel {
-ContextMap<((U32)MEM(L)*16), 7> cm;
+ContextMap<((U32)MEM(L)*16), 9> cm;
 RunContextMap<(int)(MEM(L)/4), 14> rcm7;
 RunContextMap<(int)(MEM(L)/4), 18> rcm9;
 RunContextMap<(int)(MEM(L)/2), 20> rcm10;
@@ -2388,7 +2422,7 @@ int p() {  if( bpos==0 ) {
   if( bpos==0 ) {
     int i = 0, f2 = buf(2);
 
-    if( f2=='.'||f2=='O'||f2=='M'||f2=='!'||f2==')'||f2==('}'-'{'+'P') ) {
+    if( PAQ_EOS_BYTE(f2) ) {
       if( b1!=(unsigned int)f2&&buf(3)!=f2 )
         i = 13, x4 = x4*256+f2;
     }
@@ -2406,6 +2440,13 @@ int p() {  if( bpos==0 ) {
     cm.set(cxt[8]);
     cm.set(cxt[13]);
     cm.set(0);
+    // Orders 1 and 2 had no bit-history context here at all -- RecordModel's
+    // small maps were the only ones covering them, and only at L>=4.  Appended
+    // rather than inserted: the mul block below addresses contexts by position,
+    // so anything put in front of cm.set(0) would silently rescale a different
+    // set of them.
+    cm.set(cxt[1]);
+    cm.set(cxt[2]);
 
 #if defined(PAQ_RCMPF)
     // the three RunContextMap::set() calls below are themselves hashed BH walks
@@ -2431,7 +2472,14 @@ int p() {  if( bpos==0 ) {
   order = cm.mix(m)-1;
   if( order<0 )
     order = 0;
-  int zz = (m.nx-qq)/7;
+  // Rewind and rescale the inputs of four of cm's contexts in place.  zz is the
+  // inputs-per-context, so the divisor is cm's context count and nothing else;
+  // it was spelled 7 when there were seven.  nxend is saved rather than assumed:
+  // the block used to land back where cm.mix left it only because 3+2+1+1 was
+  // exactly the context count, which stopped being true the moment orders 1 and
+  // 2 were added.  See IDX-FORMAT.md's note on layout-coupled blocks.
+  const int nxend = m.nx;
+  int zz = (nxend-qq)/decltype(cm)::C;
 
   m.nx = qq+zz*3;
   for( qq = zz*2; qq!=0; --qq )
@@ -2440,6 +2488,7 @@ int p() {  if( bpos==0 ) {
     m.mul(MIX_MUL_1);
   for( qq = zz; qq!=0; --qq )
     m.mul(MIX_MUL_2);
+  m.nx = nxend;
 
   if( L>=4 ) {
     wordModel.mix(m);
@@ -2537,7 +2586,7 @@ void update() {
     b3 = b2;
     b2 = b1;
     b1 = c0;
-    if( c0=='.'||c0=='O'||c0=='M'||c0=='!'||c0==')'||c0==('}'-'{'+'P') ) {
+    if( PAQ_EOS_BYTE(c0) ) {
       w5 = (w5<<8)|0x3ff, x5 = (x5<<8)+c0, f4 = (f4&0xfffffff0)+2;
       if( c0!='!'&&c0!='O' )
         w4 |= 12;

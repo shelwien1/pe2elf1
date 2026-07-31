@@ -65,10 +65,10 @@ static const int G0_FAIL_TH = (1530+0) * (1);
 static const int G0_FAILZ_TH = (532+0) * (1);
 
 
-static const int G0_MX0_Volume = 1* 7* (1<<4)* (1<<4); // 1792
-static const int G0_MX1_Volume = 1* 7* (1<<2)* (1<<6); // 1792
+static const int G0_MX0_Volume = 1* 9* (1<<4)* (1<<4); // 2304
+static const int G0_MX1_Volume = 1* 9* (1<<2)* (1<<6); // 2304
 static const int G0_MX2_Volume = 1* 8* (1<<8); // 2048
-static const int G0_MX4_Volume = 1* 7* (1<<5)* 8; // 1792
+static const int G0_MX4_Volume = 1* 9* (1<<5)* 8; // 2304
 
 struct G0_T { 
 #undef USE_NEW
