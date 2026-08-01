@@ -1384,8 +1384,14 @@ void update2() {
   mp.update2();
 }
 
-void add(int x) {
-  mp.add(x);
+// The submixer's layout is the six stage-1 selectors in order, so the slot is
+// the selector index -- no cursor here either.
+void put(int i, int x) {
+  mp.put(i, x);
+}
+
+void seek(int i) {
+  mp.seek(i);
 }
 
 int p() {
@@ -1397,7 +1403,10 @@ template <> struct SubMixer<1> {
 void update2() {
 }
 
-void add(int) {
+void seek(int) {
+}
+
+void put(int, int) {
 }
 
 int p() {
@@ -1459,22 +1468,23 @@ void update2() {
   nx = 0;
 }
 
-void add(int x) {
-  tx[nx++] = x;
-}
-
-// Direct write to a slot the caller owns, from mix_layout.inc.  This is how a
-// submodel migrates off add() one at a time: it writes its own span with put(),
-// then leaves nx at the next submodel's base with seek(), and everything behind
-// it that still uses add() carries on from there having noticed nothing.  The
-// two styles coexist for exactly as long as the migration takes.
+// Every input is written to the slot mix_layout.inc gives it.  There is no
+// append and no cursor: `nx` is set once, to the length of the vector, and is
+// only ever read as that length by p() and train().
 //
-// A converted span must be written in FULL every bit.  add() left no stale
-// slots because the cursor restarted at 0 each bit; put() overwrites in place,
-// so a slot that is skipped keeps the previous bit's value instead of being
-// absent.  Where a span can legitimately contribute nothing -- a ContextMap
-// during the first byte, before set() has given it any contexts -- the caller
-// must not seek past it either, which is what the guards below do.
+// Two properties this rests on, both checked rather than assumed:
+//
+//  * A span must be written in FULL every bit.  An append left no stale slots
+//    because the cursor restarted at 0; a slot write overwrites in place, so a
+//    slot that is skipped keeps the previous bit's value.  mix_ctxcheck() is
+//    the guard: a ContextMap handed fewer contexts than the layout reserved
+//    slots for would leave the tail of its span stale, silently and only for
+//    some contexts.
+//  * A span that has never been written holds zero -- tx is zeroed at
+//    construction -- and a zero input contributes zero to every dot product and
+//    moves no weight in train().  That is what makes the first byte free (no
+//    map has been given contexts yet) and what would make a submodel gated off
+//    by level, or switched off deliberately, cost nothing but its slots.
 void put(int i, int x) { tx[i] = x; }
 void seek(int i) { nx = i; }
 
@@ -1482,9 +1492,8 @@ void seek(int i) { nx = i; }
 // used to be a numerator over the shared MIX_MUL_DEN; st_scaled is the same
 // arithmetic with the denominator folded in, and these are logistic-domain
 // values so no reference rescaling belongs here.
-void mul(int x) {
-  tx[nx] = st_scaled(tx[nx], x);
-  ++nx;
+void mulat(int i, int x) {
+  tx[i] = st_scaled(tx[i], x);
 }
 
 // The six m.set() calls in ContextModel::p() use disjoint base ranges, so
@@ -1524,25 +1533,26 @@ int p() {
       dot_product2(&tx[0], &wx[cxt[i]*N], &wx[cxt[i+1]*N], nx, d0, d1);
       d0 = (d0*MIX_DP_MUL)>>MIX_DP_SHIFT;
       pr[i] = squash(d0);
-      sub.add(d0);
+      sub.put(i, d0);
       d1 = (d1*MIX_DP_MUL)>>MIX_DP_SHIFT;
       pr[i+1] = squash(d1);
-      sub.add(d1);
+      sub.put(i+1, d1);
     }
     for(; i<ncxt; ++i ) {
       int dp = dot_product(&tx[0], &wx[cxt[i]*N], nx);
       dp = (dp*MIX_DP_MUL)>>MIX_DP_SHIFT;
       pr[i] = squash(dp);
-      sub.add(dp);
+      sub.put(i, dp);
     }
 #else
     for( int i = 0; i<ncxt; ++i ) {
       int dp = dot_product(&tx[0], &wx[cxt[i]*N], nx);
       dp = (dp*MIX_DP_MUL)>>MIX_DP_SHIFT;
       pr[i] = squash(dp);
-      sub.add(dp);
+      sub.put(i, dp);
     }
 #endif
+    sub.seek(ncxt);
     return sub.p();
   } else {
     int z = dot_product(&tx[0], &wx[0], nx);
@@ -1580,30 +1590,18 @@ static_assert( G0_MX0_Volume + G0_MX1_Volume + G0_MX2_Volume
 // the one mixer the models are handed
 typedef Mixer<MIX_INPUTS, MIXER_ROWS, 6, MIX_W_INIT> MainMixer;
 
-// The invariant §10.5 says nothing checks: each submodel reports where it left
-// the write cursor and mix_layout.inc says where it should be.  Four integer
-// compares per bit against a ~3000 ns budget is not worth gating behind a flag,
-// and a layout that has silently drifted is not something to discover later as
-// a compression loss.
+// The invariant §10.5 says nothing checks, in the form it takes once every input
+// is placed by slot.  The cursor is no longer a cursor, so "where did the writes
+// end" is not the question any more; the question is whether a map was handed
+// exactly as many contexts as mix_layout.inc reserved slots for it.  Give it
+// fewer and the tail of its span keeps the previous bit's values -- silently,
+// and only for some contexts, which is the worst shape a bug can have here.
 //
-// The first byte is exempt, and finding out why is what this check was worth.
-// A ContextMap's `cn` counts the contexts set() has been given; it is filled at
-// bpos 0 and cleared at bpos 7.  Before the first bpos-0 call -- i.e. for the
-// seven model invocations inside the first byte -- every map has cn == 0 and
-// mixes nothing, so the vector is 4 slots long rather than 466 and no base
-// holds.  **The layout is static from the first byte boundary onward, not from
-// the first bit.**
-//
-// That ramp-up is stream-neutral, which is a separate fact and the one that
-// makes a fixed layout viable: Mixer::tx is zeroed at construction, nothing
-// writes those slots until the first set(), a zero input contributes zero to
-// every dot product, and train() moves a zero-input weight by zero.  So the
-// short vector and a fully-laid-out one holding zeros code identically.
-inline void mix_expect( const MainMixer& m, int base, int n, const char* who ) {
-  if_e0( pos==0 ) return;                       // still ramping up; see above
-  if_e0( m.nx != base+n ) {
-    fprintf( stderr, "paq8hpc: mixer layout: after %s the cursor is %i, "
-                     "mix_layout.inc says %i\n", who, m.nx, base+n );
+// cn == 0 is the first byte, before any set() has run: see ContextMap::mix1t.
+inline void mix_ctxcheck( int cn, int C ) {
+  if_e0( cn!=C && cn!=0 ) {
+    fprintf( stderr, "paq8hpc: mixer layout: a ContextMap was given %i contexts, "
+                     "mix_layout.inc reserves %i\n", cn, C );
     exit(1);
   }
 }
@@ -1777,30 +1775,30 @@ U8*operator[](U32 i) {
 // CF == -1 reads the global cxtfl (exactly the baseline); CF == 0 or 1 bakes it
 // in, which is what PAQ_CXTFL_T uses to turn the per-context branch into two
 // instantiations.  Same arithmetic either way.
-template <int CF> inline PAQ_HOTFN int mix2t(MainMixer &m, int s, StateMap &sm) {
+template <int CF> inline PAQ_HOTFN int mix2t(MainMixer &m, int slot, int s, StateMap &sm) {
   int p1 = sm.p(s);
   int n0 = -!nex(s, 2);
   int n1 = -!nex(s, 3);
   int st = stretch(p1);
   if( CF<0 ? (cxtfl!=0) : (CF!=0) ) {
-    m.add(st/4);
+    m.put(slot+0, st/4);
     int p0 = P_MAX-p1;
-    m.add(p_scaled(p1-p0,3,64));
-    m.add(st*(n1-n0)*3/16);
-    m.add(p_scaled((p1&n0)-(p0&n1),1,16));
-    m.add(p_scaled((p0&n0)-(p1&n1),7,64));
+    m.put(slot+1, p_scaled(p1-p0,3,64));
+    m.put(slot+2, st*(n1-n0)*3/16);
+    m.put(slot+3, p_scaled((p1&n0)-(p0&n1),1,16));
+    m.put(slot+4, p_scaled((p0&n0)-(p1&n1),7,64));
     return s>0;
   }
-  m.add(st*9/32);
-  m.add(st*(n1-n0)*3/16);
+  m.put(slot+0, st*9/32);
+  m.put(slot+1, st*(n1-n0)*3/16);
   int p0 = P_MAX-p1;
-  m.add(p_scaled((p1&n0)-(p0&n1),1,16));
-  m.add(p_scaled((p0&n0)-(p1&n1),7,64));
+  m.put(slot+2, p_scaled((p1&n0)-(p0&n1),1,16));
+  m.put(slot+3, p_scaled((p0&n0)-(p1&n1),7,64));
   return s>0;
 }
 
-inline int mix2(MainMixer &m, int s, StateMap &sm) {
-  return mix2t<-1>(m, s, sm);
+inline int mix2(MainMixer &m, int slot, int s, StateMap &sm) {
+  return mix2t<-1>(m, slot, s, sm);
 }
 
 template <int MSZ, int mulc> struct RunContextMap {
@@ -1970,7 +1968,13 @@ void pfprobe2(int cc) const {
 // four-way chain to the one arm actually taken, turns `>>(8-bpos)` and
 // `>>(7-bpos)` into constant shifts, and resolves the `bpos==7` reset and the
 // prefetch guards at compile time.  Costs 8 instantiations of this body.
-template <int CF, int BP> PAQ_HOTFN int mix1t(MainMixer &m, int cc, int c1, int y1) {
+// `base` is this map's first slot from mix_layout.inc.  Each context owns a
+// fixed stride from it -- the run input, then mix2t's terms -- so the write
+// positions are known before the loop runs instead of being wherever the cursor
+// happened to reach.  The stride follows cxtfl exactly as mix2t's branch does,
+// and with PAQ_CXTFL_T it is a compile-time constant like everything else here.
+template <int CF, int BP> PAQ_HOTFN int mix1t(MainMixer &m, int base, int cc, int c1, int y1) {
+  const int W = (CF<0 ? (cxtfl!=0) : (CF!=0)) ? MIXIN_CM : MIXIN_CM0;
 
 #if defined(PAQ_PREFETCH)
   if( PAQ_BP==0||PAQ_BP==2||PAQ_BP==5 )
@@ -2044,11 +2048,11 @@ template <int CF, int BP> PAQ_HOTFN int mix1t(MainMixer &m, int cc, int c1, int 
         c = (c*15)/4;
       else
         c *= 13;
-      m.add(b*c);
+      m.put(base+i*W, b*c);
     } else
-      m.add(0);
+      m.put(base+i*W, 0);
 
-    result += mix2t<CF>(m, cpi ? *cpi : 0, sm[i]);
+    result += mix2t<CF>(m, base+i*W+1, cpi ? *cpi : 0, sm[i]);
     cp[i] = cpi;
   }
   if( PAQ_BP==7 )
@@ -2056,8 +2060,8 @@ template <int CF, int BP> PAQ_HOTFN int mix1t(MainMixer &m, int cc, int c1, int 
   return result;
 }
 
-int mix1(MainMixer &m, int cc, int c1, int y1) {
-  return mix1t<-1,-1>(m, cc, c1, y1);
+int mix1(MainMixer &m, int base, int cc, int c1, int y1) {
+  return mix1t<-1,-1>(m, base, cc, c1, y1);
 }
 
 ContextMap() : cn(0) {
@@ -2090,31 +2094,32 @@ void set(U32 cx) {
 // Dispatch on bpos once per call so the body below sees it as a constant.
 // Without PAQ_BPOS_T this is a single call with BP == -1 and the global is read,
 // bit for bit the baseline.
-template <int CF> int mixbp(MainMixer &m) {
+template <int CF> int mixbp(MainMixer &m, int base) {
+  mix_ctxcheck(cn, C);
 #if defined(PAQ_BPOS_T)
   switch( bpos ) {
-    case 0:  return mix1t<CF,0>(m, c0, b1, y);
-    case 1:  return mix1t<CF,1>(m, c0, b1, y);
-    case 2:  return mix1t<CF,2>(m, c0, b1, y);
-    case 3:  return mix1t<CF,3>(m, c0, b1, y);
-    case 4:  return mix1t<CF,4>(m, c0, b1, y);
-    case 5:  return mix1t<CF,5>(m, c0, b1, y);
-    case 6:  return mix1t<CF,6>(m, c0, b1, y);
-    default: return mix1t<CF,7>(m, c0, b1, y);
+    case 0:  return mix1t<CF,0>(m, base, c0, b1, y);
+    case 1:  return mix1t<CF,1>(m, base, c0, b1, y);
+    case 2:  return mix1t<CF,2>(m, base, c0, b1, y);
+    case 3:  return mix1t<CF,3>(m, base, c0, b1, y);
+    case 4:  return mix1t<CF,4>(m, base, c0, b1, y);
+    case 5:  return mix1t<CF,5>(m, base, c0, b1, y);
+    case 6:  return mix1t<CF,6>(m, base, c0, b1, y);
+    default: return mix1t<CF,7>(m, base, c0, b1, y);
   }
 #else
-  return mix1t<CF,-1>(m, c0, b1, y);
+  return mix1t<CF,-1>(m, base, c0, b1, y);
 #endif
 }
 
-int mix(MainMixer &m) {
-  return mixbp<CF3>(m);
+int mix(MainMixer &m, int base) {
+  return mixbp<CF3>(m, base);
 }
 
 // RecordModel's cm/cn/cq run with cxtfl == 0; under PAQ_CXTFL_T that becomes a
 // second instantiation instead of a per-context branch.
-int mix0(MainMixer &m) {
-  return mixbp<CF0>(m);
+int mix0(MainMixer &m, int base) {
+  return mixbp<CF0>(m, base);
 }
 
 // hoist the whole probe set above whatever the caller does next
@@ -2350,7 +2355,7 @@ void mix(MainMixer &m) {  if( bpos==0 ) {
     cm.set(d<<PSH(W0_D_SH9)|frstchar);
     cm.set((f4&W0_F4_MASK)<<PSH(W0_F4_SH11)|frstchar);
   }
-  cm.mix(m);
+  cm.mix(m, MIXB_W + W_cm);
 }
 };
 
@@ -2408,12 +2413,12 @@ void mix(MainMixer &m) {
     cpos1[c] = pos;
     wpos1[w] = pos;
   }
-  co.mix(m);
-  cp.mix(m);
+  co.mix ( m, MIXB_R + R_co  );
+  cp.mix ( m, MIXB_R + R_cp  );
   cxtfl = 0;
-  cm.mix0(m);
-  cn.mix0(m);
-  cq.mix0(m);
+  cm.mix0( m, MIXB_R + R_cm0 );
+  cn.mix0( m, MIXB_R + R_cn0 );
+  cq.mix0( m, MIXB_R + R_cq0 );
   cxtfl = 3;
 }
 };
@@ -2457,18 +2462,12 @@ void mix(MainMixer &m) {
     scm9.set(col*(b1==U32(S0_SCM9_EQ)));
     scma.set(frstchar);
   }
-  cn.mix(m);
-  // ---- migrated to mix_layout.inc slots -------------------------------------
-  // These sit BEHIND cn, which is still on add(), and that is the point of the
-  // exercise: a converted span does not need what precedes it to be converted.
-  // See the note on mix_expect for why the first byte does not break this.
+  cn.mix(m, MIXB_S + S_cn);
   scm1.mix(m, MIXB_S+S_scm1);  scm2.mix(m, MIXB_S+S_scm2);
   scm3.mix(m, MIXB_S+S_scm3);  scm4.mix(m, MIXB_S+S_scm4);
   scm5.mix(m, MIXB_S+S_scm5);  scm6.mix(m, MIXB_S+S_scm6);
   scm7.mix(m, MIXB_S+S_scm7);  scm8.mix(m, MIXB_S+S_scm8);
   scm9.mix(m, MIXB_S+S_scm9);  scma.mix(m, MIXB_S+S_scma);
-  m.seek( MIXB_S + S_N );
-  // ---- end of the migrated span ---------------------------------------------
 }
 };
 
@@ -2506,12 +2505,8 @@ int p() {  if( bpos==0 ) {
   }
 
   m.update();
-  // ---- migrated to mix_layout.inc slots -------------------------------------
-  // The first four inputs are written by slot rather than appended.  They are
-  // unconditional -- the bias is a constant and a RunContextMap always emits
-  // exactly one input -- so this span has no ramp-up case and is always fully
-  // written.  seek() then hands the cursor to the core ContextMap, which is
-  // still on add() and continues from X_cm having noticed nothing.
+  // The bias, then the three RunContextMaps, then the core map -- each into the
+  // slot mix_layout.inc names for it.
   m.put( MIXB_X + X_bias, 64 );
 
   if( bpos==0 ) {
@@ -2563,10 +2558,7 @@ int p() {  if( bpos==0 ) {
   rcm7.mix ( m, MIXB_X + X_rcm7  );
   rcm9.mix ( m, MIXB_X + X_rcm9  );
   rcm10.mix( m, MIXB_X + X_rcm10 );
-  m.seek( MIXB_X + X_cm );
-  // ---- end of the migrated span ---------------------------------------------
-  mix_expect( m, MIXB_X, X_cm, "the bias and the three RunContextMaps" );
-  order = cm.mix(m)-1;
+  order = cm.mix(m, MIXB_X + X_cm)-1;
   if( order<0 )
     order = 0;
   // Rewind and rescale four of the core map's contexts in place: orders 6 and
@@ -2576,28 +2568,21 @@ int p() {  if( bpos==0 ) {
   // cursor back where cm.mix left it, both of which stopped being true when the
   // map went to nine contexts.  Now the start, the stride and the end are all
   // the layout's business and none of them is inferred.
-  // Guarded on the same ramp-up: with cn still 0 there is nothing in those
-  // slots to rescale, and forcing the cursor to X_N would claim slots the map
-  // has not written.  They are zero either way, so this is about the invariant
-  // holding rather than about the stream.
-  if( m.nx == MIXB_X + X_N ) {
-    m.nx = MIXB_X + X_cm + 3*MIXIN_CM;
-    for( int n = 2*MIXIN_CM; n; --n )
-      m.mul(MIX_MUL_0);
-    for( int n = 1*MIXIN_CM; n; --n )
-      m.mul(MIX_MUL_1);
-    for( int n = 1*MIXIN_CM; n; --n )
-      m.mul(MIX_MUL_2);
-    m.nx = MIXB_X + X_N;
+  // Rescale four of the core map's contexts in place: orders 6 and 8 by
+  // MIX_MUL_0, order 13 by MIX_MUL_1, order 0 by MIX_MUL_2.  Unconditional now
+  // -- during the first byte the map has written nothing and those slots are
+  // still the zeros tx was constructed with, and scaling zero gives zero.
+  {
+    int sl = MIXB_X + X_cm + 3*MIXIN_CM;
+    for( int n = 2*MIXIN_CM; n; --n ) m.mulat(sl++, MIX_MUL_0);
+    for( int n = 1*MIXIN_CM; n; --n ) m.mulat(sl++, MIX_MUL_1);
+    for( int n = 1*MIXIN_CM; n; --n ) m.mulat(sl++, MIX_MUL_2);
   }
 
   if( L>=4 ) {
     wordModel.mix(m);
-    mix_expect( m, MIXB_W, W_N, "WordModel" );
     sparseModel.mix(m);
-    mix_expect( m, MIXB_S, S_N, "SparseModel" );
     recordModel.mix(m);
-    mix_expect( m, MIXB_R, R_N, "RecordModel" );
   }
 
   U32 c1 = b1, c2 = b2, c;
@@ -2633,6 +2618,13 @@ int p() {  if( bpos==0 ) {
   c = bpos*256+((c0<<(8-bpos))&255);
   c1 = (words<<bpos)&255;
   m.set(c+(c1>>bpos), MIX_R5);
+
+  // Every input is placed by slot now, so nx is not a cursor any more -- it is
+  // just the length of the vector, and the vector is the whole layout.  Slots a
+  // submodel has not written yet (the first byte, or a model gated off by level)
+  // hold the zeros tx was constructed with, and a zero input contributes zero to
+  // every dot product and moves no weight, so their presence is free.
+  m.seek( MIX_INPUTS );
 
   return m.p();
 }

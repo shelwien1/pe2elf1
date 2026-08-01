@@ -710,67 +710,60 @@ rather than hopeful.
 
 ---
 
-## 13. Migrating `add()` to slots, incrementally
+## 13. Done: every input is a direct slot write
 
-The migration does not have to be one commit. `nx` is the handoff: a converted
-submodel writes its own span with `put(slot, x)` and then leaves the cursor at
-the next base with `seek()`, and everything behind it that still uses `add()`
-carries on from there having noticed nothing. Both styles coexist for exactly
-as long as the migration takes.
+`Mixer::add()` no longer exists. Every one of the 466 inputs is written to the
+slot `mix_layout.inc` names for it, and `nx` is set once per bit to
+`MIX_INPUTS` — it is the length of the vector, not a cursor.
 
-```c
-void put(int i, int x) { tx[i] = x; }   // write a slot the caller owns
-void seek(int i)       { nx = i; }      // hand the cursor to the add() users
-```
+The migration went in the incremental shape suggested, and that mattered: each
+step was verified byte-identical before the next.
 
-**Done and verified byte-identical** (book1 191980 `442b2735`, tuning and
-shipping, empty/1-byte/200 KB round trips):
+| step | converted |
+|---|---|
+| 1 | `RunContextMap::mix(m, slot)`, bias to `X_bias`, `seek` to `X_cm` |
+| 2 | `SmallStationaryContextMap::mix(m, slot)` — *behind* an unconverted `cn.mix()* |
+| 3 | `mix2t(m, slot, …)`, `mix1t(m, base, …)`, `mixbp(m, base)` — all four ContextMaps |
+| 4 | `Mixer::mul` → `mulat(slot, x)`; the submixer's `add` → `put(i, x)` |
 
-* `RunContextMap::mix(m, slot)` — the core's `X_rcm7/9/10`, plus the bias
-  written straight to `X_bias`. Then `seek(MIXB_X + X_cm)` hands over to the
-  core `ContextMap`, still on `add()`.
-* `SmallStationaryContextMap::mix(m, slot)` — SparseModel's ten, at
-  `MIXB_S + S_scm1 … S_scma`, then `seek(MIXB_S + S_N)`.
+Step 3 is the one with content. `mix1t` takes the map's base and each context
+owns a fixed stride from it — the run input at `base + i*W`, `mix2t`'s terms at
+`+1 …`, where `W` follows `cxtfl` exactly as `mix2t`'s own branch does and folds
+to a constant under `PAQ_CXTFL_T` like everything else in that loop.
 
-The second one is the interesting case, because **it sits behind `cn.mix()`,
-which is still on `add()`** — so a converted span does not require what precedes
-it to be converted.
+**Verified byte-identical at every step and at the end**: book1 191980
+`442b2735`, tuning and shipping builds, empty / 1-byte / 4 KB / 200 KB round
+trips, and `PAQ_CHARSET_WRT=0` still 190743.
 
-### Why the first byte does not break that
+**And it is faster: 16.7–17.1 s against 18.7–19.2 s**, about 11%. That is the
+serial `nx` dependency chain going away — 466 `tx[nx++]` writes per bit chained
+through one counter, replaced by 466 independent stores the scheduler can
+reorder freely.
 
-It could have. During the first byte every `ContextMap` has `cn == 0` and mixes
-nothing, so under `add()` the SSCM inputs land at slots 4…13, while under `put()`
-they land at 404…413 — different weight columns, which should be a different
-model.
+### What replaced the check
 
-It is not, and the reason is checkable rather than lucky: **a submodel's output
-is zero until its tables have been written.** A fresh `SmallStationaryContextMap`
-holds `PR_HALF` everywhere, and `stretch(PR_HALF)` is 0, so every one of those ten
-inputs is literally zero during the first byte. A zero input contributes zero to
-the dot product and moves no weight, so where it sits does not matter. The only
-non-zero inputs during the ramp-up are the bias and the three RunContextMaps —
-slots 0…3, which are the same under both schemes.
+`mix_expect()` measured where the cursor ended, and the cursor no longer moves.
+The question it should ask now is different: **was each map handed exactly as
+many contexts as the layout reserved slots for it?** Given fewer, the tail of
+its span keeps the previous bit's values — silently, and only for some
+contexts, which is the worst shape this bug can take. `mix_ctxcheck(cn, C)`
+runs once per map per bit and answers it. (`cn == 0` is the first byte, before
+any `set()` has run.)
 
-That is the same property that made the ramp-up stream-neutral in the first
-place, applied one level up. Verified on four inputs including a 1-byte file,
-where ramp-up effects are the whole file.
+### The two properties it rests on
 
-### The rule for the rest
+* **A span must be written in full every bit.** An append left no stale slots
+  because the cursor restarted at 0; a slot write overwrites in place.
+* **A span never written holds zero**, and a zero input contributes zero to
+  every dot product and moves no weight in `train()`. That is what makes the
+  first byte free — no map has contexts yet, so 462 of the 466 slots are
+  untouched zeros — and it is what would make a submodel switched off cost
+  nothing but its slots. §6 wanted a gate; the gate is now "don't call it".
 
-* A span whose inputs are **zero before its first `set()`** can be converted in
-  any order. The SSCMs qualify. So does anything else that starts at `PR_HALF`.
-* A span that can emit **non-zero on its first mix** must be converted
-  front-to-back, or its ramp-up positions move under it. The `ContextMap`s are
-  the open question here: during ramp-up they emit nothing at all, so converting
-  one means deciding whether it writes 54 (or 276, or …) zeros instead — which
-  shifts everything behind it during the first byte and is *not* stream-neutral
-  unless those downstream inputs are themselves zero then.
-* `mix_expect()` after each submodel is what makes any of this safe to attempt:
-  it caught the ramp-up the first time and it will catch a span that forgets to
-  write a slot or seeks to the wrong base.
+### What this unblocks
 
-Remaining, in the order they should go: the four `ContextMap`s (core, WordModel,
-SparseModel's `cn`, RecordModel's five), which is where the real work is —
-`mix1t`/`mix2` have to take a base and index by context, and that is also the
-step that removes the serial `nx` chain and gives §11.3's threads their disjoint
-slices.
+The disjoint slices §11.3 needs for threaded encode now exist: each submodel
+writes `tx[BASE_i .. BASE_i+N_i)` and touches nothing else in the vector. The
+remaining obstacles to that are the shared feature bank (§3.2) and WordModel
+being 60% of the line traffic on its own — not the mixer any more.
+
