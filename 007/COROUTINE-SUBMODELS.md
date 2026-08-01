@@ -466,12 +466,26 @@ control flow to change at all.
 
 ### 11.1 The mixer layout is static, and building it dynamically is the thing to fix
 
-**Confirmed against the source.** `m.add()` walks `tx[nx++]`, but the number and
-order of adds is not data-dependent. `mix2` emits five inputs or four, and which
-it is depends on `cxtfl` — a flag RecordModel sets around three of its own maps,
-i.e. a property of *which map is mixing*, not of the input. Every other add is
-unconditional. So the 466 slots are the same 466 slots, in the same order, on
-every bit of every file.
+**Confirmed against the source, with one correction that only showed up on
+implementing it.** `m.add()` walks `tx[nx++]`, but the number and order of adds
+is not data-dependent. `mix2` emits five inputs or four, and which it is depends
+on `cxtfl` — a flag RecordModel sets around three of its own maps, i.e. a
+property of *which map is mixing*, not of the input. Every other add is
+unconditional. So the 466 slots are the same 466 slots, in the same order.
+
+**But not from the first bit.** A `ContextMap`'s `cn` counts the contexts
+`set()` has been handed; it is filled at bpos 0 and cleared at bpos 7. For the
+seven model invocations inside the *first byte*, before any bpos-0 call has
+happened, every map has `cn == 0` and mixes nothing — the vector is 4 slots
+long, not 466. The layout is static **from the first byte boundary onward**.
+This was found by the layout check catching it, not by reading, which is a fair
+advertisement for adding the check.
+
+The ramp-up is stream-neutral, and that is what makes a fixed layout viable at
+all: `Mixer::tx` is zeroed at construction, nothing writes those slots until the
+first `set()`, a zero input contributes zero to every dot product, and `train()`
+moves a zero-input weight by zero. So a short vector and a fully-laid-out one
+holding zeros code identically — which is the same property gating relies on.
 
 That is a compile-time-known layout being reconstructed at runtime, and the
 instinct that it is not worth it is right. What it costs:
@@ -636,3 +650,60 @@ fixed mixer layout (11.1, bitstream-neutral)
 The first step is free and unlocks the other two. That is the order to do them
 in, and none of the three requires the control flow to become coroutines.
 
+
+---
+
+## 12. Implemented: `mix_layout.inc`
+
+§11.1 is done and verified byte-identical (book1 191980, `442b2735`, both
+builds, empty/1-byte/200 KB round trips, both charsets).
+
+`mix_layout.inc` holds one enum per submodel, each starting at 0 and naming the
+*start* of every block it contributes. A one-slot block needs no initialiser —
+auto-increment is exactly right for it, which is why SparseModel's ten
+`SmallStationaryContextMap`s are a bare list and the trailing `S_N` falls out of
+the same mechanism. A wider block spells `= prev + width`.
+
+```c
+enum {                                      // SparseModel
+  S_cn,                                     // auto: 0
+  S_scm1 = S_cn + S_CN_CTX*MIXIN_CM,        // 30
+  S_scm2, S_scm3, S_scm4, S_scm5,           // auto: 31..34
+  S_scm6, S_scm7, S_scm8, S_scm9, S_scma,   // auto: 35..39
+  S_N                                       // auto: 40
+};
+
+enum {                                      // the submodels, end to end
+  MIXB_X,                                   // auto: 0
+  MIXB_W = MIXB_X + X_N,                    // 58
+  MIXB_S = MIXB_W + W_N,                    // 334
+  MIXB_R = MIXB_S + S_N,                    // 374
+  MIX_INPUTS = MIXB_R + R_N                 // 466
+};
+```
+
+Three things follow from having it:
+
+* **The context counts live there and the maps are declared from them.**
+  `ContextMap<((U32)MEM(L)*16), W_CM_CTX> cm;`. One source of truth: change a
+  count and the map, the layout, the mixer width and the `mul` block's stride
+  all move together. Getting that backwards is what made the 7→9 change a
+  two-place edit with only one place checked.
+* **`MainMixer` is `Mixer<MIX_INPUTS, …>`** instead of a hand-maintained 466.
+* **The `mul` block is addressed, not measured.** It was dividing by a literal
+  context count and relying on `3+2+1+1` summing to the same number to land the
+  cursor back where `cm.mix` left it. Now the start, the stride and the end are
+  `MIXB_X + X_cm + 3*MIXIN_CM`, `MIXIN_CM` and `MIXB_X + X_N`, none of them
+  inferred.
+
+Plus a `static_assert` that the four submodels tile the vector with no gap and
+no overlap, and a per-bit `mix_expect()` after each submodel — four integer
+compares against a ~3000 ns budget, which is not worth gating behind a flag.
+
+**Not done, and deliberately:** the `add()` calls still walk `tx[nx++]` rather
+than writing `tx[BASE+i]` directly. That conversion has to reach into
+`ContextMap::mix1t`, `mix2`, `RunContextMap::mix` and `SmallStationaryContextMap::mix`
+to thread a slot index through, and it is the step that buys the serial-chain
+removal and the disjoint slices for §11.3. The layout above is its prerequisite
+and is worth having on its own — it is what makes that conversion checkable
+rather than hopeful.

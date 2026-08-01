@@ -1542,6 +1542,13 @@ int p() {
 // build those are reads from mapping objects rather than constant expressions.
 // So it stays written out, and the two checks keep it honest: a static_assert
 // where the Volumes fold, and the bounds check in Mixer::set where they do not.
+// The mixer's input vector, as compile-time constants: one enum per submodel
+// naming the start of every block it contributes, a second laying the
+// submodels end to end.  MIX_INPUTS is what MainMixer is instantiated on, and
+// the context counts the maps are declared from live there too, so a context
+// count and the layout that depends on it cannot drift apart.
+#include "mix_layout.inc"
+
 constexpr int MIXER_ROWS = 128*(18+18+16+12+18+16);   // 12544
 
 // The two mixer context ranges that are not IDX Indexes -- see the comment at
@@ -1556,7 +1563,35 @@ static_assert( G0_MX0_Volume + G0_MX1_Volume + G0_MX2_Volume
 #endif
 
 // the one mixer the models are handed
-typedef Mixer<466, MIXER_ROWS, 6, MIX_W_INIT> MainMixer;
+typedef Mixer<MIX_INPUTS, MIXER_ROWS, 6, MIX_W_INIT> MainMixer;
+
+// The invariant §10.5 says nothing checks: each submodel reports where it left
+// the write cursor and mix_layout.inc says where it should be.  Four integer
+// compares per bit against a ~3000 ns budget is not worth gating behind a flag,
+// and a layout that has silently drifted is not something to discover later as
+// a compression loss.
+//
+// The first byte is exempt, and finding out why is what this check was worth.
+// A ContextMap's `cn` counts the contexts set() has been given; it is filled at
+// bpos 0 and cleared at bpos 7.  Before the first bpos-0 call -- i.e. for the
+// seven model invocations inside the first byte -- every map has cn == 0 and
+// mixes nothing, so the vector is 4 slots long rather than 466 and no base
+// holds.  **The layout is static from the first byte boundary onward, not from
+// the first bit.**
+//
+// That ramp-up is stream-neutral, which is a separate fact and the one that
+// makes a fixed layout viable: Mixer::tx is zeroed at construction, nothing
+// writes those slots until the first set(), a zero input contributes zero to
+// every dot product, and train() moves a zero-input weight by zero.  So the
+// short vector and a fully-laid-out one holding zeros code identically.
+inline void mix_expect( const MainMixer& m, int base, int n, const char* who ) {
+  if_e0( pos==0 ) return;                       // still ramping up; see above
+  if_e0( m.nx != base+n ) {
+    fprintf( stderr, "paq8hpc: mixer layout: after %s the cursor is %i, "
+                     "mix_layout.inc says %i\n", who, m.nx, base+n );
+    exit(1);
+  }
+}
 
 // n contexts, 2*NH intervals per context.  NH comes from IDX per instance, so
 // it is a template parameter of reference type in the tuning build and a plain
@@ -2163,7 +2198,7 @@ const U32 W0_F4_MASK = U32(LANES2(W0_F4_M1, W0_F4_M0));
 
 template <int L> struct WordModel {
 U32 word0, word1, word2, word3, word4;
-ContextMap<((U32)MEM(L)*16), 46> cm;
+ContextMap<((U32)MEM(L)*16), W_CM_CTX> cm;
 int nl1, nl;
 U32 t1[256];
 U16 t2[0x10000];
@@ -2311,11 +2346,11 @@ const U32 R0_E_MASK = LANES4(R0_E_M3, R0_E_M2, R0_E_M1, R0_E_M0);
 struct RecordModel {
 int cpos1[256];
 int wpos1[0x10000];
-ContextMap<32768/4, 2> cm;
-ContextMap<32768/2, 5> cn;
-ContextMap<32768, 4> co;
-ContextMap<32768*2, 3> cp;
-ContextMap<32768*4, 3> cq;
+ContextMap<32768/4, R_CM_CTX> cm;
+ContextMap<32768/2, R_CN_CTX> cn;
+ContextMap<32768, R_CO_CTX> co;
+ContextMap<32768*2, R_CP_CTX> cp;
+ContextMap<32768*4, R_CQ_CTX> cq;
 
 RecordModel() {
   memset(cpos1, 0, sizeof(cpos1));
@@ -2373,7 +2408,7 @@ const U32 S0_CN2_MASK = LANES4(S0_CN2_M3, S0_CN2_M2, S0_CN2_M1, S0_CN2_M0);
 const U32 S0_CN4_MASK = LANES4(S0_CN4_M3, S0_CN4_M2, S0_CN4_M1, S0_CN4_M0);
 
 template <int L> struct SparseModel {
-ContextMap<((U32)(MEM(L)*2)), 5> cn;
+ContextMap<((U32)(MEM(L)*2)), S_CN_CTX> cn;
 SmallStationaryContextMap<0x20000, 17> scm1;
 SmallStationaryContextMap<0x20000, 12> scm2;
 SmallStationaryContextMap<0x20000, 12> scm3;
@@ -2427,7 +2462,7 @@ static U32 WRT_mpw[16] = {3, 3, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0}, tri[4
 static U32 WRT_mtt[16] = {0, 0, 1, 2, 3, 4, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7};
 
 template <int L> struct ContextModel {
-ContextMap<((U32)MEM(L)*16), 9> cm;
+ContextMap<((U32)MEM(L)*16), X_CM_CTX> cm;
 RunContextMap<(int)(MEM(L)/4), 14> rcm7;
 RunContextMap<(int)(MEM(L)/4), 18> rcm9;
 RunContextMap<(int)(MEM(L)/2), 20> rcm10;
@@ -2502,32 +2537,39 @@ int p() {  if( bpos==0 ) {
   rcm7.mix(m);
   rcm9.mix(m);
   rcm10.mix(m);
-  int qq = m.nx;
+  mix_expect( m, MIXB_X, X_cm, "the bias and the three RunContextMaps" );
   order = cm.mix(m)-1;
   if( order<0 )
     order = 0;
-  // Rewind and rescale the inputs of four of cm's contexts in place.  zz is the
-  // inputs-per-context, so the divisor is cm's context count and nothing else;
-  // it was spelled 7 when there were seven.  nxend is saved rather than assumed:
-  // the block used to land back where cm.mix left it only because 3+2+1+1 was
-  // exactly the context count, which stopped being true the moment orders 1 and
-  // 2 were added.  See IDX-FORMAT.md's note on layout-coupled blocks.
-  const int nxend = m.nx;
-  int zz = (nxend-qq)/decltype(cm)::C;
-
-  m.nx = qq+zz*3;
-  for( qq = zz*2; qq!=0; --qq )
-    m.mul(MIX_MUL_0);
-  for( qq = zz; qq!=0; --qq )
-    m.mul(MIX_MUL_1);
-  for( qq = zz; qq!=0; --qq )
-    m.mul(MIX_MUL_2);
-  m.nx = nxend;
+  // Rewind and rescale four of the core map's contexts in place: orders 6 and
+  // 8 by MIX_MUL_0, order 13 by MIX_MUL_1, order 0 by MIX_MUL_2.  Addressed
+  // through mix_layout.inc rather than by measuring m.nx -- the block used to
+  // divide by a literal 7 and rely on 3+2+1+1 summing to the same 7 to land the
+  // cursor back where cm.mix left it, both of which stopped being true when the
+  // map went to nine contexts.  Now the start, the stride and the end are all
+  // the layout's business and none of them is inferred.
+  // Guarded on the same ramp-up: with cn still 0 there is nothing in those
+  // slots to rescale, and forcing the cursor to X_N would claim slots the map
+  // has not written.  They are zero either way, so this is about the invariant
+  // holding rather than about the stream.
+  if( m.nx == MIXB_X + X_N ) {
+    m.nx = MIXB_X + X_cm + 3*MIXIN_CM;
+    for( int n = 2*MIXIN_CM; n; --n )
+      m.mul(MIX_MUL_0);
+    for( int n = 1*MIXIN_CM; n; --n )
+      m.mul(MIX_MUL_1);
+    for( int n = 1*MIXIN_CM; n; --n )
+      m.mul(MIX_MUL_2);
+    m.nx = MIXB_X + X_N;
+  }
 
   if( L>=4 ) {
     wordModel.mix(m);
+    mix_expect( m, MIXB_W, W_N, "WordModel" );
     sparseModel.mix(m);
+    mix_expect( m, MIXB_S, S_N, "SparseModel" );
     recordModel.mix(m);
+    mix_expect( m, MIXB_R, R_N, "RecordModel" );
   }
 
   U32 c1 = b1, c2 = b2, c;
