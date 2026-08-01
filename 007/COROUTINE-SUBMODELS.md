@@ -289,7 +289,164 @@ times per **bit** — 2 million times more often, on the codec's hottest path.
 
 ---
 
-## 8. Verdict
+## 9. Three objections, taken seriously
+
+The three points below were raised against the first draft. Two of them are
+right and change the analysis; the third rests on a premise the source does not
+support. Working through them is more useful than restating the verdict.
+
+### 9.1 "Update functions are functions, so they load/save their state each call"
+
+True, and I underweighted it. But for *this* proposal on *this* coroutine
+implementation it points the other way, and the reason is worth being precise
+about.
+
+**Lib3's Coroutine copies the stack.** `yield` does
+`memcpy(stk, stkptrL, stkptrH-stkptrL)` and the resume copies it back. So state
+kept alive across a yield is not "kept in registers" — it is memcpy'd out and
+memcpy'd back, twice per round trip. A member of the submodel object is copied
+**zero** times; it is loaded when read and stored when written, and it stays
+where it is.
+
+Order of magnitude, using the measured live-frame sizes from §2:
+
+```
+4 submodels x 2 memcpys x ~600 B live   = ~4 800 B/bit moved by the coroutine
+~7 live scalars per submodel x 4 x 4 B  =   ~112 B/bit of reloads it avoids
+                                          ~43x more traffic than it saves
+```
+
+That is the whole efficiency argument inverted: with a stack-copying coroutine,
+**the more state you keep on the coroutine's stack — which is the point of the
+idea — the more it copies per bit.**
+
+Two qualifications, because this is implementation-specific rather than
+fundamental:
+
+* **A different coroutine mechanism changes the answer.** A stack-*switching*
+  coroutine (separate stacks, swap `rsp` and the callee-saved registers; ucontext,
+  Boost.Context, or a hand-rolled switch) does not copy anything — the frame
+  stays put and only registers move. Under that mechanism the efficiency
+  intuition holds. Lib3 does not have one, and adding one is a different project
+  from this one.
+* **The state that would benefit is small anyway.** WordModel's live per-bit
+  scalars are `word0..word4`, `nl`, `nl1` — seven words. Its *real* per-bit
+  state is `ContextMap`'s `cp[46]`, `cp0[46]`, `runp[46]`, `cxt[46]`: 184
+  pointers and hashes walked every bit. Those are arrays under any scheme; no
+  coroutine puts them in registers. The register-residency win is bounded by
+  those seven scalars, not by the submodel's working set.
+
+So: the observation is correct in general, the arithmetic does not work out for
+Lib3's coroutine, and the ceiling on the win is low even for the right
+coroutine.
+
+### 9.2 "Their logic is somewhat inside-out"
+
+**This is the strongest argument for the proposal and the first draft did not
+give it enough weight.** It is also where the tension is sharpest.
+
+The inside-out shape is concentrated in `ContextMap::mix1t`, which selects a
+slot in a depth-3 bit tree by asking which bit position it is at:
+
+```c
+if( PAQ_BP>1 && runp[i][0]==0 )        cpi = 0;
+else if( PAQ_BP==1||PAQ_BP==3||PAQ_BP==6 ) cpi = cp0[i]+1+(cc&1);
+else if( PAQ_BP==4||PAQ_BP==7 )            cpi = cp0[i]+3+(cc&3);
+else { /* bpos 0, 2, 5: fetch a fresh line */ }
+```
+
+That is a hand-unrolled state machine. Written as a coroutine it is a walk:
+fetch a line, predict/yield/update, descend to `[1+b]`, predict/yield/update,
+descend to `[3+(bb)]`, … — the shape the data structure actually has. §4 of the
+analysis document has to draw an eight-row table to explain what the code does;
+the coroutine form would be the table.
+
+**But that shape is load-bearing for speed, in two documented ways.**
+
+`mix1t<CF,BP>` is *templated on the bit position*. `PAQ_BPOS_T` compiles eight
+instantiations so `>>(7-bpos)` becomes a constant shift, the `bpos==7` reset
+folds away, and the prefetch guards resolve at compile time — at the cost of
+eight copies of the hot loop. A coroutine with `for(i=0;i<8;i++)` gets none of
+that unless the loop is manually unrolled eight ways, at which point the
+"readable straight-line walk" is eight straight-line walks and the readability
+win is spent.
+
+Worse, the comment at `paq8hp.hpp:85` documents that the loop-with-a-bit-counter
+form is *actively hazardous* here:
+
+> `!! Do NOT hoist PAQ_BP into a local variable. !!` … Caching it in a
+> `const int` makes it provably loop-invariant, which enables gcc's loop
+> unswitching … and gcc 13.3 -O3 generates WRONG CODE for the unswitched loop:
+> book1[0:65536] at L0 goes 23173 → 32656 bytes.
+
+A coroutine's inner loop counter is exactly the provably-loop-invariant form
+that triggered that. Not a reason never to do it — clang is fine and the bug is
+gcc's — but it is a live landmine in the direction the proposal walks.
+
+So the honest statement is: **the readability win is real and is concentrated
+precisely where the current shape earns its speed.** That is a genuine trade,
+not a free improvement, and it should be made with a measurement rather than on
+principle.
+
+### 9.3 "Let submodels use their own hashtables instead of shared ones"
+
+**They already do.** Every table in the model is owned by exactly one submodel:
+
+| owner | tables |
+|---|---|
+| `ContextModel` | `cm` (`MEM*16`, 9 contexts), `rcm7`, `rcm9`, `rcm10` |
+| `WordModel` | `cm` (`MEM*16`, 46 contexts), `t1[256]`, `t2[65536]` |
+| `SparseModel` | `cn` (`MEM*2`, 5 contexts), ten SSCMs |
+| `RecordModel` | `cm`, `cn`, `co`, `cp`, `cq` (32 KiB…128 KiB), `cpos1`, `wpos1` |
+
+There is no cross-submodel table anywhere. So there are no cross-submodel
+collisions to remove — the premise does not hold.
+
+The collision pressure is real, but it is **inside** one submodel: WordModel's
+46 contexts share a map the same size as the core's 9. Per-context line pressure
+is ~5× higher there (the analysis document says 6.6× against the original 7),
+and §11.10 already identifies it as the thing to fix — by **resizing**, which is
+one template argument, not by restructuring anything.
+
+The instinct is right and lands one level down from where it was aimed:
+*within* WordModel, 46 contexts is a lot to put through one 16-bit checksum and
+one eviction policy, and §11.13 (indirect contexts) is the analysis document's
+answer to that specific pressure.
+
+**The mixer half of the sentence is a different matter and does hold** — that
+one *is* shared, and it is §5's hierarchical-mixing candidate. Nothing in §9
+changes that conclusion: giving each submodel its own mixer is worth measuring,
+and it does not need coroutines.
+
+---
+
+## 10. Revised verdict
+
+| | |
+|---|---|
+| Is `p()`/`update()` confusing? | **Yes**, and `Predictor::p()` being `{ return pr; }` is the proof. |
+| Is the logic inside-out? | **Yes**, in `ContextMap::mix1t` especially — and that is where a coroutine would read best. |
+| Would coroutines be faster? | **No, with Lib3's.** Its stack-copying yield moves ~43x more bytes than the member reloads it would save. With a stack-*switching* coroutine the argument holds, but Lib3 has none and the state that benefits is ~7 scalars per submodel. |
+| Would they cost much? | ~6–12% of the per-bit budget, plus losing the `PAQ_BPOS_T` specialization unless the bit loop is unrolled eight ways anyway. |
+| Own hashtables? | **Already the case** — every table has exactly one owner. The pressure is intra-WordModel and is a sizing question (§11.10/§11.13). |
+| Own mixers? | **The one shared resource, and a real candidate** — as hierarchical mixing, measured against §11.1, not as a control-flow change. |
+
+What survives from the proposal, in order of confidence:
+
+1. **Name the phases.** Free, bitstream-neutral, fixes the thing that prompted
+   all of this.
+2. **Account for mixer inputs** (each `mix()` returns its count, `assert`,
+   gate mask) — this is what actually delivers "work with just one submodel".
+3. **Resize WordModel's map** against the core's — the collision pressure the
+   third objection was reaching for.
+4. **Per-submodel mixers**, as an explicitly bitstream-changing experiment.
+5. **Coroutines**, only if 4 is adopted *and* someone adds a stack-switching
+   implementation — at which point 9.1's arithmetic reverses and the readability
+   win in `mix1t` can be bought without the memcpy.
+
+---
+
+## 8. Verdict (first draft — superseded by §10)
 
 | | |
 |---|---|
