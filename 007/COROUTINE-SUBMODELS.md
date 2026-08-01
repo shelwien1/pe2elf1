@@ -460,3 +460,179 @@ The single most useful thing to take from the proposal is not the coroutine: it
 is the observation that a submodel ought to be a thing you can name, count the
 inputs of, and switch off. That is reachable now, and it does not require the
 control flow to change at all.
+---
+
+## 11. Three follow-ups: static layout, per-submodel mixers, threads
+
+### 11.1 The mixer layout is static, and building it dynamically is the thing to fix
+
+**Confirmed against the source.** `m.add()` walks `tx[nx++]`, but the number and
+order of adds is not data-dependent. `mix2` emits five inputs or four, and which
+it is depends on `cxtfl` — a flag RecordModel sets around three of its own maps,
+i.e. a property of *which map is mixing*, not of the input. Every other add is
+unconditional. So the 466 slots are the same 466 slots, in the same order, on
+every bit of every file.
+
+That is a compile-time-known layout being reconstructed at runtime, and the
+instinct that it is not worth it is right. What it costs:
+
+* **A serial dependency.** Every `add()` is `tx[nx++] = x`. The increment chains
+  through all 466, and the `mul` rescale block then *rewinds* `nx` and does a
+  read-modify-write pass over 24 of them.
+* **§10.5, in full.** Positional addressing is the reason the `mul` block had to
+  be repaired when the core map went 7 → 9 contexts, the reason nothing can
+  assert the input budget, and the reason a `mix2` feature-count change walks off
+  `tx[]` silently.
+
+With fixed slices — each submodel owning `tx[BASE_i .. BASE_i+N_i)` as named
+constants — three things fall out, and they are the reason this matters more
+than the cycles:
+
+1. **Submodel gating becomes free and exact.** A disabled submodel leaves its
+   slice zero. A zero input contributes zero to every dot product, and `train`
+   computes `w += (0*err*2>>16 + 1)>>1` = 0, so its weights never move either.
+   The slice is *inert*, not merely ignored. That is exactly equivalent to the
+   submodel not existing, with no `N` resize, no assert, and no renumbering —
+   and it is the thing §6 wanted. Note this only works with a fixed layout:
+   under `nx++`, skipping a submodel shifts every later input into a different
+   weight column, which is a different model, not a smaller one.
+2. **The `mul` rescale folds into the store.** `tx[BASE+i] = st_scaled(x, MUL)`
+   at the point of production, instead of a rewind and a second pass.
+3. **Disjoint slices are what threads need** — see §11.3.
+
+This is bitstream-neutral if the slice assignment reproduces the current order,
+which it can, because the current order is static. It is the highest
+confidence-to-effort item in this whole discussion.
+
+### 11.2 Per-submodel mixers with their own rates and contexts
+
+This is §5's hierarchical mixing, and the added detail — *independent update
+parameters, possibly an independent mixer context* — is what makes it more
+interesting than "the same thing with more levels".
+
+Today there is one learning rate for all 466 weights (`MIX_LR_MUL`, seeded 7)
+and six selectors shared by every feature. But the feature families have very
+different statistics: WordModel's 276 inputs are sparse, slow-moving word
+statistics; RecordModel's 92 are fast recency signals over 32–128 KiB maps; the
+core's 54 are dense high-order bit histories. One rate for all three is a
+compromise nobody chose — it is what a flat mixer forces.
+
+Per-submodel mixers would let each carry its own rate *and its own selector*:
+WordModel's natural context is word-shaped (`spafdo`, word length, `frstchar`),
+RecordModel's is positional (`pos&3`, column). Right now every selector is
+global and every submodel sees the same six.
+
+The honest counter is **cross-family interaction**. A flat 466-wide mixer can
+learn "WordModel's order-2 word context is confident *and* RecordModel's column
+context agrees"; a two-level mixer collapses each family to one scalar first and
+can only recover that through the top mixer's context. Whether that matters here
+is unmeasured. Two things temper it: the flat mixer is already a
+six-way-context-selected mixture rather than one linear model, so some of the
+interaction is already being learned per selector rather than per feature pair;
+and paq8px/cmix run hierarchical mixing successfully at much larger feature
+counts.
+
+Capacity is the other thing to watch: 466 × 12 544 ≈ 5.8 M weights today. Split
+per submodel, the total falls unless each gets its own row budget, and every one
+of the six ranges is currently welded to `MIXER_ROWS` by this tree's
+`static_assert`. That is a re-division to design, not a detail.
+
+**Still the right way to run this: as a measured A/B, ranked against §11.1's
+match model.** But §11.1 above (fixed layout) is a prerequisite for doing it
+cleanly, which is a good reason to do that first regardless.
+
+### 11.3 Threads, and why the encoder really can run ahead
+
+**This is the strongest idea in the thread, and the source supports it.**
+
+The claim to check is that during encoding a submodel does not need the final
+prediction. Verified:
+
+* `order` is written once (`order = cm.mix(m)-1`) and read at exactly three
+  places — mixer selectors 1, 2 and 5. **No submodel reads it.**
+* `fails`/`failz`/`failcount` depend on `pr`, but they are read only by the APM
+  chain and the final blend — **post-mixer**.
+* Every submodel's state update is `nex(*cpi, y)` / `ema(..., y, ...)` / a byte
+  register shift. All functions of the coded bit and the byte history.
+
+So **each submodel is a pure function of the byte stream.** When encoding, the
+byte stream is known up front, so every submodel's entire trajectory —
+contexts, states, and its slice of the 466 mixer inputs, for every bit of the
+file — is computable without ever seeing a prediction. Only mixing, the APM
+chain and the coder are inherently sequential.
+
+The pipeline that follows: N submodel threads each fill a ring buffer with their
+own slice for bits *i…i+K*; the mixer thread consumes slices in order, mixes,
+runs the APM chain, codes. Synchronisation is a ring-buffer index, amortised
+over K bits, not a per-bit join — which is precisely the point about not needing
+to sync often. K = 1024 costs about 1 MB of buffers.
+
+Two properties make this safe rather than hopeful:
+
+* **The tables are already per-submodel** (§9.3). Threads partitioned on submodel
+  boundaries touch disjoint memory, so there is no race and no locking. This is
+  the payoff from that section — the partition that is safe is exactly the one
+  the ownership already draws.
+* **Determinism is preserved.** The mixer consumes slices in bit order, so the
+  computation is identical; only its schedule changes. The bitstream does not
+  move.
+
+Now the honest ceiling. Serial work is the six 480-wide dot products plus
+`train`, the APM chain and the coder: ~5 760 int16 madds/bit ≈ 60 ns of SIMD
+plus overheads, call it ~200 ns against the measured 3 089 ns/bit. That is a 94%
+parallel fraction, and Amdahl would say 3.35× on four threads.
+
+**It will not get that, because the submodels are wildly unequal:**
+
+| submodel | contexts | lines/byte | share |
+|---|---|---|---|
+| WordModel | 46 | 138 | **60%** |
+| RecordModel | 17 | 51 | 22% |
+| core cm | 9 | 27 | 12% |
+| SparseModel | 5 | 15 | 6% |
+
+The critical path is WordModel alone, so a per-submodel split ceilings at
+**1/0.60 ≈ 1.67×**, not 3.35×. To go past that WordModel's own 46 contexts have
+to split across threads — and that is *not* safe as-is, because they share one
+`ContextMap`: two contexts can hash to the same 64-byte line and both mutate it,
+which is a data race and therefore nondeterminism, which the decoder cannot
+reproduce. Splitting it safely means giving the halves separate maps, which is a
+bitstream change — but it is the same change §11.10 of the analysis document
+already recommends for a different reason (per-context line pressure). Those two
+arguments point the same way, which is worth noticing.
+
+Three caveats to record:
+
+* **Encode-only.** The decoder cannot run ahead; it has no bits until it decodes
+  them, and decoding needs the mixed prediction. Encoding gets ~1.7×, decoding
+  stays where it is. For a symmetric-by-tradition PAQ that is a design choice to
+  make deliberately, not a free win.
+* **The feature bank could be precomputed for the whole file when encoding** —
+  `words`, `col`, `frstchar`, `x4`, `w4`, `f4`, `tt` are all pure functions of
+  the bytes — which would dissolve §3.2's write-ordering problem entirely on the
+  encode side. But then the encoder and decoder maintain that bank by two
+  different code paths, and they must agree exactly. One implementation with two
+  drivers, or it is a desync waiting to happen.
+* **Coroutines are not needed for any of this.** Threads plus ring buffers is
+  the mechanism; a coroutine is a *scheduling* construct for a single thread and
+  would, if anything, get in the way of a real one. The two ideas have been
+  travelling together in this discussion but they are independent, and this one
+  is the one with a number attached.
+
+### 11.4 How the three chain
+
+They are not three options; they are a sequence, and each enables the next:
+
+```
+fixed mixer layout (11.1, bitstream-neutral)
+   ├─> free, exact submodel gating          -> "work with just one submodel"
+   ├─> mul folded into the store            -> removes the §10.5 coupling
+   └─> disjoint slices per submodel
+          ├─> per-submodel mixers (11.2, bitstream-changing, A/B)
+          └─> threaded encode (11.3, bitstream-neutral, ~1.7x)
+                 └─> split WordModel's map  -> past 1.7x, and §11.10 wants it anyway
+```
+
+The first step is free and unlocks the other two. That is the order to do them
+in, and none of the three requires the control flow to become coroutines.
+
