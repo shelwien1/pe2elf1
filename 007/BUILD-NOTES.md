@@ -1,5 +1,69 @@
 # Build + roundtrip notes (Linux / clang)
 
+## I/O: back on Lib3's coroutine layer
+
+The tool talked to stdio directly -- `getc`/`putc` on two `FILE*` handles set by
+`rc_SetFiles`.  It is now the shape `ddsdet` and `dxt5comp` use: the codec is a
+`Coroutine`, its byte streams are two of that coroutine's pins, and Lib3's
+`CoroFileProc` drives it.  When a window runs dry or fills up deep inside
+`rc_Process`, the pin's `yield` suspends the whole codec call stack and returns
+to the driver for a refill or a flush; the codec never sees a `FILE*`.
+
+* `Rangecoder<f_DEC>` derives from `Coroutine` and is a **base of the codec that
+  drives it**, not a separate coroutine instance -- one `Coroutine`, one stack,
+  the rangecoder as a layer in the chain, exactly as `d5c_rc.inc`'s `RC` sits
+  under `ddsdet<MD>` and `d5cM<MD>`.  `get()`/`put()` are `pin[0]`/`pin[1]`,
+  which is why one pair serves both the rangecoder and the byte loop above it,
+  the way it did over stdio.
+* `Coder::do_process()` is the entry point; `CoroFileProc::coro_call` lands
+  there once and never returns to it, and the closing `yield(this,0)` is what
+  tells the driver the run is over.
+* `Dispatch` wraps the level's `Coder` in `CoroFileProc< Coder<f_DEC,LEVEL> >`.
+  Still heap-allocated, for the reason it always was -- one instantiation per
+  level, only the requested one committed -- and now carrying the coroutine's
+  64 KB stack and the two 64 KB windows as well.
+* Build needs `-I./Lib3`: `coro3b.inc` reaches `coro3_pin.inc` and its setjmp
+  shim by bare name.  `gc.bat` already had it; `mk.sh` now does too.
+
+### The header was the one place this could go wrong
+
+The five-byte header (`f_len`, `level`) used to be an `fwrite`/`fread` on the
+`FILE*` **before** the coder ran.  Under coroutine I/O it has to travel the
+pins with everything else, or the ports differ by where those bytes enter the
+stream.  So `put_hdr`/`get_hdr` do it through `put()`/`get()`, little-endian by
+construction, which is what `fwrite` of a `uint` did on x86.
+
+That leaves one ordering problem worth naming: the decoder's level is *in* the
+stream, but the level selects the `Coder` instantiation, which has to exist
+before the coroutine can start.  The frontend therefore peeks the five bytes and
+rewinds; the coroutine still reads the whole header itself.  The alternative --
+having the frontend consume the header and hand the values over -- would have
+put part of the stream outside the pins, which is the thing being fixed.
+
+### Verified
+
+| | book1 | |
+|---|---|---|
+| stdio build (before) | 191980 | `442b2735…` |
+| coroutine build | 191980 | `442b2735…` |
+
+Byte-identical, both in tuning and shipping builds, against the *unchanged*
+`verify.md5` -- the port is I/O only and the archive did not move.  Round trip
+exact; `PAQ_CHARSET_WRT=0` still builds and round-trips (190743).  Compression
+of book1 runs 18.7-19.2s against the stdio build's 23-25s, which is the 64 KB
+windowed reads replacing per-byte `getc`.
+
+Edge cases, because deferred output changes them:
+
+* **Empty input round-trips.**  `LazyOut` creates the file on the first byte
+  written, which is what stops a run that dies early from leaving a zero-length
+  archive.  A run that *succeeds* with nothing to write is a different case and
+  must still produce the empty file -- the stdio build got that free by opening
+  the handle up front.  `Dispatch` calls `out.w()` on a clean exit so the two
+  agree.
+* **A failed run still leaves no file**, which is the property `LazyOut` is
+  there for.
+
 ## Character set: WL() and PAQ_CHARSET_WRT
 
 The model was fitted on WRT-preprocessed text, and WRT permutes the alphabet,

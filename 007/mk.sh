@@ -44,5 +44,6 @@ else
   echo "mk.sh: no perl, building against the committed MOD/ as-is" >&2
 fi
 
-$CXX $OPT "$@" -o "$OUT" paq8hpc.cpp
+# -I./Lib3: coro3b.inc reaches coro3_pin.inc and its setjmp shim by bare name.
+$CXX $OPT -I./Lib3 "$@" -o "$OUT" paq8hpc.cpp
 if [ "$MODE" = release ]; then echo "built $OUT (Const/release)"; else echo "built $OUT (Debug/optimizable)"; fi

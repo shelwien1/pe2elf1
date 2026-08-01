@@ -1,8 +1,14 @@
 // paq8hpc - the paq8hp model from cmix, driven by the sh_v1m rangecoder.
 //
-// This build has no Lib3 dependency: the Coroutine / coro3_pin / CoroFileProc
-// layer is gone and the coder talks to stdio directly (getc/putc).  Output is
-// bit-identical to the coroutine build.
+// I/O is Lib3's coroutine layer, the same shape ddsdet and dxt5comp use: the
+// codec is a Coroutine, its byte streams are two of that coroutine's pins, and
+// CoroFileProc drives it.  When a window runs dry or fills up deep inside
+// rc_Process, the pin's yield suspends the whole call stack and returns to the
+// driver for a refill or a flush; the codec never sees a FILE*.
+//
+// The stdio build this replaces (getc/putc straight onto two handles) produced
+// the same bytes, and so does this one -- the pins carry every byte of the
+// stream, header included.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,20 +17,14 @@
 #include <time.h>
 #include <new>
 
-//---------------------------------------------------------------- was common.inc
-
-typedef unsigned short     word;
-typedef unsigned int       uint;
-typedef unsigned char      byte;
-typedef unsigned long long qword;
-
-#ifdef __GNUC__
-  #define if_e0(x) if(__builtin_expect((x),0))
-  #define if_e1(x) if(__builtin_expect((x),1))
-#else
-  #define if_e0(x) if(x)
-  #define if_e1(x) if(x)
-#endif
+//---------------------------------------------------------------- Lib3
+// common.inc supplies the typedefs, if_e0/if_e1, INLINE/NOINLINE/ALIGN and the
+// X64 probe that coro3b.inc's setjmp shim selects on -- the same set this file
+// used to carry an inline copy of.  Include path: -I./Lib3, because coro3b.inc
+// reaches its own headers by bare name.
+#include "common.inc"
+#include "coro3b.inc"
+#include "coro_fp.inc"
 
 #if !defined(_MSC_VER) && !defined(__INTEL_COMPILER) && !defined(__MINGW32__)
   #define __cdecl
@@ -207,6 +207,7 @@ struct Coder : Rangecoder<f_DEC> {
   typedef Rangecoder<f_DEC> RC;
   using RC::get;
   using RC::put;
+  using RC::f_quit;
   using RC::nget;
   using RC::nput;
   using RC::rc_SetFiles;
@@ -218,14 +219,37 @@ struct Coder : Rangecoder<f_DEC> {
 
   typedef paq8hp::Predictor<LEVEL> Model;
 
+  // Set by the driver before the coroutine starts.  On the way in it is the
+  // plaintext length, which only the frontend can know (it stats the file); on
+  // the way out do_process reads it back off the stream.
   uint f_len;
+  uint level;
+  int  rcode;
 
   Model* M;
 
-  // returns 0 on success, 3 if the model could not be allocated
-  int process( FILE* f, FILE* g ) {
+  // The stream header, through the pins like everything else.  It used to be an
+  // fwrite/fread on the FILE* before the coder ran, which is the one place a
+  // coroutine port can silently change the output: the bytes have to keep going
+  // out in the same order, so they go out the same way.  Little-endian by
+  // construction, matching what fwrite of a uint did on x86.
+  void put_hdr( void ) {
+    put( f_len     &255 ); put( (f_len>> 8)&255 );
+    put( (f_len>>16)&255 ); put( (f_len>>24)&255 );
+    put( level&255 );
+  }
+  int get_hdr( void ) {
+    uint b, i; f_len = 0;
+    for( i=0; i<4; i++ ) { b=get(); if( b==uint(-1) ) return 4; f_len |= (b&255)<<(8*i); }
+    b = get(); if( b==uint(-1) ) return 4;
+    level = b&255;
+    return 0;
+  }
 
-    rc_SetFiles( f, g );
+  // returns 0 on success, 3 if the model could not be allocated
+  int process( void ) {
+
+    rc_SetFiles();
 
     // The model is one object with every table a fixed-size member, so this is
     // the only allocation in the program.  It is on the heap rather than static
@@ -234,6 +258,8 @@ struct Coder : Rangecoder<f_DEC> {
     // actually asked for is committed.  malloc1 zeroes it, but nothing relies
     // on that - see -DPAQ_POISON_NEW.
     M = new Model; if( M==0 ) return 3;
+
+    if( f_DEC==0 ) put_hdr();
 
     rc_Init();
 
@@ -279,6 +305,19 @@ if_e0( (i&0xFFFF)==0 ) { printf( "%u -> %u\r", uint(nget), uint(nput) ); fflush(
     return 0;
   }
 
+  // The coroutine entry point.  CoroFileProc::coro_call lands here on the first
+  // call and never returns to it: process() runs to completion, yielding out of
+  // get()/put() whenever a window needs servicing, and the final yield(0) is
+  // what tells the driver the run is over.
+  void do_process( void ) {
+    rcode = 0;
+    // The decoder's header is the first thing on its input, so it is read here
+    // rather than by the frontend -- the frontend has no stream to read from.
+    if( f_DEC==1 ) rcode = get_hdr();
+    if( rcode==0 ) rcode = process();
+    yield( this, 0 );
+  }
+
 };
 
 //---------------------------------------------------------------- level dispatch
@@ -292,38 +331,6 @@ constexpr int MAXLEVEL = FIXED_LEVEL, MINLEVEL = FIXED_LEVEL;
 constexpr int MAXLEVEL = 11, MINLEVEL = 0;
 #endif
 
-template< int f_DEC, int LEVEL >
-struct Dispatch {
-  static int run( uint level, FILE* f, FILE* g, uint f_len ) {
-    if( level==LEVEL ) {
-      //static Coder<f_DEC,LEVEL> C;
-      auto PC = new Coder<f_DEC,LEVEL>;
-      g_memory = sizeof(typename Coder<f_DEC,LEVEL>::Model);
-      if( PC==0 ) { printf( "Failed to allocate %iMB\n", int(g_memory>>20) ); exit(1); }
-      //printf( "Allocated %.0lfMB of memory\n", double(g_memory)/(1<<20) );
-      auto& C = *PC;
-      C.f_len = f_len;
-      printf( "level %i, model %.0lfMB\n", LEVEL, double(sizeof(typename Coder<f_DEC,LEVEL>::Model))/(1<<20) );
-      return C.process(f,g);
-    }
-    // -DFIXED_LEVEL=n compiles this one instantiation only; the recursion stops
-    // immediately instead of dragging the other eleven model bodies into the
-    // binary.
-    if( LEVEL>int(MINLEVEL) ) return Dispatch<f_DEC,(LEVEL>int(MINLEVEL) ? LEVEL-1 : -1)>::run( level, f, g, f_len );
-    printf( "level %u not supported (%i..%i)\n", level, int(MINLEVEL), int(MAXLEVEL) );
-    return 5;
-  }
-};
-
-template< int f_DEC >
-struct Dispatch<f_DEC,-1> {
-  static int run( uint level, FILE*, FILE*, uint ) {
-    printf( "level %u not supported (%i..%i)\n", level, int(MINLEVEL), int(MAXLEVEL) );
-    return 5;
-  }
-};
-
-
 uint flen( FILE* f ) {
   fseek( f, 0, SEEK_END );
   uint len = ftell(f);
@@ -331,9 +338,56 @@ uint flen( FILE* f ) {
   return len;
 }
 
-constexpr size_t IOBUFSIZE = 1<<16;
-static byte iobuf_f[IOBUFSIZE];
-static byte iobuf_g[IOBUFSIZE];
+// The carrier.  CoroFileProc is Lib3's two-pin driver, the same one dxt5comp
+// wraps its codec in: it owns the two 64 KB windows, pumps pin[0] from a FILE*
+// and drains pin[1] through LazyOut, and does not know or care what the model
+// between them is.
+template< int f_DEC, int LEVEL >
+using Carrier = CoroFileProc< Coder<f_DEC,LEVEL> >;
+
+template< int f_DEC, int LEVEL >
+struct Dispatch {
+  static int run( uint level, FILE* f, const char* outp, uint f_len ) {
+    if( level==LEVEL ) {
+      // The carrier is heap-allocated for the reason it always was -- one
+      // instantiation per level and only the requested one committed -- and it
+      // now also carries the coroutine's 64 KB stack and the two windows.
+      auto PC = new Carrier<f_DEC,LEVEL>;
+      g_memory = sizeof(typename Coder<f_DEC,LEVEL>::Model);
+      if( PC==0 ) { printf( "Failed to allocate %iMB\n", int(g_memory>>20) ); exit(1); }
+      auto& C = *PC;
+      C.f_len = f_len;
+      C.level = level;
+      C.rcode = 0;
+      C.out.path = outp;
+      printf( "level %i, model %.0lfMB\n", LEVEL, double(sizeof(typename Coder<f_DEC,LEVEL>::Model))/(1<<20) );
+      C.processfile( f, 0 );
+      int r = C.rcode;
+      // LazyOut creates the file on the first byte written, which is what keeps
+      // a run that dies early from leaving a zero-length archive behind.  A run
+      // that SUCCEEDS with nothing to write is a different case and has to
+      // produce the empty file: decoding an empty plaintext is a legitimate
+      // round trip, and the stdio build made it by opening the handle up front.
+      if( r==0 ) C.out.w();
+      if( !C.out.close() ) r = r ? r : 3;
+      return r;
+    }
+    // -DFIXED_LEVEL=n compiles this one instantiation only; the recursion stops
+    // immediately instead of dragging the other eleven model bodies into the
+    // binary.
+    if( LEVEL>int(MINLEVEL) ) return Dispatch<f_DEC,(LEVEL>int(MINLEVEL) ? LEVEL-1 : -1)>::run( level, f, outp, f_len );
+    printf( "level %u not supported (%i..%i)\n", level, int(MINLEVEL), int(MAXLEVEL) );
+    return 5;
+  }
+};
+
+template< int f_DEC >
+struct Dispatch<f_DEC,-1> {
+  static int run( uint level, FILE*, const char*, uint ) {
+    printf( "level %u not supported (%i..%i)\n", level, int(MINLEVEL), int(MAXLEVEL) );
+    return 5;
+  }
+};
 
 int main( int argc, char** argv ) {
   double cpu_time_used;
@@ -416,29 +470,35 @@ int main( int argc, char** argv ) {
 
   uint f_DEC = (argv[1][0]=='d');
   FILE* f = fopen(argv[2],"rb"); if( f==0 ) return 2;
-  FILE* g = fopen(argv[3],"wb"); if( g==0 ) return 3;
-
-  setvbuf( f, (char*)iobuf_f, _IOFBF, IOBUFSIZE );
-  setvbuf( g, (char*)iobuf_g, _IOFBF, IOBUFSIZE );
 
   uint level = 11;
   uint f_len = 0;
   if( f_DEC==0 ) {
+    // Only the encoder can know the plaintext length, and only from outside the
+    // stream; it is handed to the coroutine, which writes it into the header.
     if( argc>4 ) level = atoi(argv[4]);
     f_len = flen(f);
-    fwrite( &f_len,1,4,g );
-    fwrite( &level,1,1,g );
   } else {
-    if( fread( &f_len,1,4,f )!=4 ) return 4;
-    level=0; if( fread( &level,1,1,f )!=1 ) return 4;
+    // The decoder's header is the first five bytes of its input, so it is read
+    // through the pins by do_process rather than here.  The level therefore is
+    // not known until the coroutine has started -- but the level selects the
+    // Coder instantiation, which has to be chosen before it can start.  So the
+    // frontend peeks the one byte it needs and rewinds; the coroutine still
+    // reads the whole header itself, and the stream is unchanged.
+    byte hdr[5];
+    if( fread( hdr,1,5,f )!=5 ) return 4;
+    f_len = hdr[0]|(hdr[1]<<8)|(hdr[2]<<16)|(uint(hdr[3])<<24);  // for the speed line
+    level = hdr[4];
+    rewind( f );
   }
 
   st = clock();
 
+  const char* outp = argv[3];
   if( f_DEC==0 ) {
-    r = Dispatch<0,MAXLEVEL>::run( level, f, g, f_len );
+    r = Dispatch<0,MAXLEVEL>::run( level, f, outp, f_len );
   } else {
-    r = Dispatch<1,MAXLEVEL>::run( level, f, g, f_len );
+    r = Dispatch<1,MAXLEVEL>::run( level, f, outp, f_len );
   }
 
   ed = clock();
@@ -446,7 +506,6 @@ int main( int argc, char** argv ) {
   double speed = (double)(f_len)/cpu_time_used/(1<<10);
   printf("%.2f KB/s\n", speed);
 
-  fclose(g);
   fclose(f);
 
   if( r ) printf( "error %i\n", r );
