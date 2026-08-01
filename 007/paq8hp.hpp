@@ -1463,6 +1463,21 @@ void add(int x) {
   tx[nx++] = x;
 }
 
+// Direct write to a slot the caller owns, from mix_layout.inc.  This is how a
+// submodel migrates off add() one at a time: it writes its own span with put(),
+// then leaves nx at the next submodel's base with seek(), and everything behind
+// it that still uses add() carries on from there having noticed nothing.  The
+// two styles coexist for exactly as long as the migration takes.
+//
+// A converted span must be written in FULL every bit.  add() left no stale
+// slots because the cursor restarted at 0 each bit; put() overwrites in place,
+// so a slot that is skipped keeps the previous bit's value instead of being
+// absent.  Where a span can legitimately contribute nothing -- a ContextMap
+// during the first byte, before set() has given it any contexts -- the caller
+// must not seek past it either, which is what the guards below do.
+void put(int i, int x) { tx[i] = x; }
+void seek(int i) { nx = i; }
+
 // x is a P_SCALE-unit multiplier, so x==P_SCALE leaves the input alone.  It
 // used to be a numerator over the shared MIX_MUL_DEN; st_scaled is the same
 // arithmetic with the denominator folded in, and these are logistic-domain
@@ -1821,20 +1836,23 @@ int p() {
   return pt<-1>();
 }
 
-int mix(MainMixer &m) {
+// Slot-addressed: the caller passes the slot mix_layout.inc gives this map.
+// A RunContextMap always contributes exactly one input, so there is no ramp-up
+// case here -- unlike a ContextMap, it has no cn to be empty.
+int mix(MainMixer &m, int slot) {
 #if defined(PAQ_BPOS_T)
   switch( bpos ) {
-    case 0:  m.add(pt<0>()); break;
-    case 1:  m.add(pt<1>()); break;
-    case 2:  m.add(pt<2>()); break;
-    case 3:  m.add(pt<3>()); break;
-    case 4:  m.add(pt<4>()); break;
-    case 5:  m.add(pt<5>()); break;
-    case 6:  m.add(pt<6>()); break;
-    default: m.add(pt<7>()); break;
+    case 0:  m.put(slot, pt<0>()); break;
+    case 1:  m.put(slot, pt<1>()); break;
+    case 2:  m.put(slot, pt<2>()); break;
+    case 3:  m.put(slot, pt<3>()); break;
+    case 4:  m.put(slot, pt<4>()); break;
+    case 5:  m.put(slot, pt<5>()); break;
+    case 6:  m.put(slot, pt<6>()); break;
+    default: m.put(slot, pt<7>()); break;
   }
 #else
-  m.add(pt<-1>());
+  m.put(slot, pt<-1>());
 #endif
   return cp[0]!=0;
 }
@@ -1855,7 +1873,8 @@ void set(U32 cx) {
   cxt = (cx*256)&(U32(MSZ/2)-256);
 }
 
-void mix(MainMixer &m) {
+// Slot-addressed, like RunContextMap: one input, always written.
+void mix(MainMixer &m, int slot) {
   // An exponential moving average is a linear mix of the stored probability and
   // the target with weight 2^-rate, so the rate IS the weight and the rounding
   // term is half a step -- derived from the rate rather than restated.  Left in
@@ -1867,7 +1886,7 @@ void mix(MainMixer &m) {
   // and the target is PR_ONE rather than PR_MAX
   *cp = U16(ema(*cp, y<<PR_BITS, mul, EMA_HALF));
   cp = &t[cxt+c0];
-  m.add(stretch(*cp>>PR_SHIFT)*mulc/32);
+  m.put(slot, stretch(*cp>>PR_SHIFT)*mulc/32);
 }
 };
 
@@ -2439,16 +2458,17 @@ void mix(MainMixer &m) {
     scma.set(frstchar);
   }
   cn.mix(m);
-  scm1.mix(m);
-  scm2.mix(m);
-  scm3.mix(m);
-  scm4.mix(m);
-  scm5.mix(m);
-  scm6.mix(m);
-  scm7.mix(m);
-  scm8.mix(m);
-  scm9.mix(m);
-  scma.mix(m);
+  // ---- migrated to mix_layout.inc slots -------------------------------------
+  // These sit BEHIND cn, which is still on add(), and that is the point of the
+  // exercise: a converted span does not need what precedes it to be converted.
+  // See the note on mix_expect for why the first byte does not break this.
+  scm1.mix(m, MIXB_S+S_scm1);  scm2.mix(m, MIXB_S+S_scm2);
+  scm3.mix(m, MIXB_S+S_scm3);  scm4.mix(m, MIXB_S+S_scm4);
+  scm5.mix(m, MIXB_S+S_scm5);  scm6.mix(m, MIXB_S+S_scm6);
+  scm7.mix(m, MIXB_S+S_scm7);  scm8.mix(m, MIXB_S+S_scm8);
+  scm9.mix(m, MIXB_S+S_scm9);  scma.mix(m, MIXB_S+S_scma);
+  m.seek( MIXB_S + S_N );
+  // ---- end of the migrated span ---------------------------------------------
 }
 };
 
@@ -2486,7 +2506,13 @@ int p() {  if( bpos==0 ) {
   }
 
   m.update();
-  m.add(64);
+  // ---- migrated to mix_layout.inc slots -------------------------------------
+  // The first four inputs are written by slot rather than appended.  They are
+  // unconditional -- the bias is a constant and a RunContextMap always emits
+  // exactly one input -- so this span has no ramp-up case and is always fully
+  // written.  seek() then hands the cursor to the core ContextMap, which is
+  // still on add() and continues from X_cm having noticed nothing.
+  m.put( MIXB_X + X_bias, 64 );
 
   if( bpos==0 ) {
     int i = 0, f2 = buf(2);
@@ -2534,9 +2560,11 @@ int p() {  if( bpos==0 ) {
 
     x4 = x4*256+b1;
   }
-  rcm7.mix(m);
-  rcm9.mix(m);
-  rcm10.mix(m);
+  rcm7.mix ( m, MIXB_X + X_rcm7  );
+  rcm9.mix ( m, MIXB_X + X_rcm9  );
+  rcm10.mix( m, MIXB_X + X_rcm10 );
+  m.seek( MIXB_X + X_cm );
+  // ---- end of the migrated span ---------------------------------------------
   mix_expect( m, MIXB_X, X_cm, "the bias and the three RunContextMaps" );
   order = cm.mix(m)-1;
   if( order<0 )

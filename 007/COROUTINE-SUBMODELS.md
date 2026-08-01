@@ -707,3 +707,70 @@ to thread a slot index through, and it is the step that buys the serial-chain
 removal and the disjoint slices for §11.3. The layout above is its prerequisite
 and is worth having on its own — it is what makes that conversion checkable
 rather than hopeful.
+
+---
+
+## 13. Migrating `add()` to slots, incrementally
+
+The migration does not have to be one commit. `nx` is the handoff: a converted
+submodel writes its own span with `put(slot, x)` and then leaves the cursor at
+the next base with `seek()`, and everything behind it that still uses `add()`
+carries on from there having noticed nothing. Both styles coexist for exactly
+as long as the migration takes.
+
+```c
+void put(int i, int x) { tx[i] = x; }   // write a slot the caller owns
+void seek(int i)       { nx = i; }      // hand the cursor to the add() users
+```
+
+**Done and verified byte-identical** (book1 191980 `442b2735`, tuning and
+shipping, empty/1-byte/200 KB round trips):
+
+* `RunContextMap::mix(m, slot)` — the core's `X_rcm7/9/10`, plus the bias
+  written straight to `X_bias`. Then `seek(MIXB_X + X_cm)` hands over to the
+  core `ContextMap`, still on `add()`.
+* `SmallStationaryContextMap::mix(m, slot)` — SparseModel's ten, at
+  `MIXB_S + S_scm1 … S_scma`, then `seek(MIXB_S + S_N)`.
+
+The second one is the interesting case, because **it sits behind `cn.mix()`,
+which is still on `add()`** — so a converted span does not require what precedes
+it to be converted.
+
+### Why the first byte does not break that
+
+It could have. During the first byte every `ContextMap` has `cn == 0` and mixes
+nothing, so under `add()` the SSCM inputs land at slots 4…13, while under `put()`
+they land at 404…413 — different weight columns, which should be a different
+model.
+
+It is not, and the reason is checkable rather than lucky: **a submodel's output
+is zero until its tables have been written.** A fresh `SmallStationaryContextMap`
+holds `PR_HALF` everywhere, and `stretch(PR_HALF)` is 0, so every one of those ten
+inputs is literally zero during the first byte. A zero input contributes zero to
+the dot product and moves no weight, so where it sits does not matter. The only
+non-zero inputs during the ramp-up are the bias and the three RunContextMaps —
+slots 0…3, which are the same under both schemes.
+
+That is the same property that made the ramp-up stream-neutral in the first
+place, applied one level up. Verified on four inputs including a 1-byte file,
+where ramp-up effects are the whole file.
+
+### The rule for the rest
+
+* A span whose inputs are **zero before its first `set()`** can be converted in
+  any order. The SSCMs qualify. So does anything else that starts at `PR_HALF`.
+* A span that can emit **non-zero on its first mix** must be converted
+  front-to-back, or its ramp-up positions move under it. The `ContextMap`s are
+  the open question here: during ramp-up they emit nothing at all, so converting
+  one means deciding whether it writes 54 (or 276, or …) zeros instead — which
+  shifts everything behind it during the first byte and is *not* stream-neutral
+  unless those downstream inputs are themselves zero then.
+* `mix_expect()` after each submodel is what makes any of this safe to attempt:
+  it caught the ramp-up the first time and it will catch a span that forgets to
+  write a slot or seeks to the wrong base.
+
+Remaining, in the order they should go: the four `ContextMap`s (core, WordModel,
+SparseModel's `cn`, RecordModel's five), which is where the real work is —
+`mix1t`/`mix2` have to take a base and index by context, and that is also the
+step that removes the serial `nx` chain and gives §11.3's threads their disjoint
+slices.
