@@ -1,5 +1,54 @@
 # Build + roundtrip notes (Linux / clang)
 
+## State_table in IDX, split so only the counts are tunable
+
+`State_table[s] = { next0, next1, n0, n1 }` — 253 declared rows (254..255 were
+never written and stay implicitly zero, as in the literal it replaces). It is
+now two IDX modules, and the split is the point:
+
+| module | columns | `Const` | in a tuning build |
+|---|---|---|---|
+| `paq8-T0.idx` | `[0]`, `[1]` — transitions | **1**, in the source | 506 literals, **0** `!MAP!` markers |
+| `paq8-T1.idx` | `[2]`, `[3]` — counts | 0 | 506 live `pdesc` patterns |
+
+`mk.sh`'s release step rewrites `^Const 0` and leaves a file that already says
+`Const 1` alone. So a module declaring `Const 1` in its own source folds in
+**both** builds, which is how `./mk.sh` gives Const 0 for the counts only.
+Confirmed in the tuning binary: 747 `!MAP!` markers, 506 of them `T1_`, none
+`T0_`.
+
+### Why that is the right place to cut
+
+They are not the same kind of number. `n0`/`n1` are read in exactly two places,
+both about *evidence*: `StateMap`'s per-state prior, and `mix2t`'s `-!n0`/`-!n1`
+masks gating the two one-sided confidence terms. A swept value changes a prior
+or flips a state between "deterministic" and "mixed" — it cannot change which
+state follows which.
+
+`next0`/`next1` are the automaton's **shape**. Moving one rewires it: states
+can be orphaned, cycles made absorbing, the ~41-observation saturation the
+design rests on collapsed. That is a redesign, not a sweep, and it should not
+be reachable by an optimizer that is only flipping bits.
+
+Widths follow the data: 8 bits for a next-state (a full byte index), 6 for a
+count (they saturate at 41 and the pattern reaches 63).
+
+### Two things this needed
+
+* **`U8()` casts in the initialiser, and they are load-bearing.** In the tuning
+  build the counts are reads from mapping objects, not constant expressions, and
+  a narrowing conversion in a braced initialiser is ill-formed unless the value
+  is a constant expression that fits. Without the casts the file compiles in the
+  release build and fails in the one it exists to be tuned in — which is the
+  wrong way round for a mistake to happen.
+* **A clamp on the one division the counts feed** (§5, at the point of use).
+  `PR_ONE*(n1+SM_PRIOR_ADD)/(n0+n1+2*SM_PRIOR_ADD)` — with `n0`, `n1` *and*
+  `SM_PRIOR_ADD` all swept the denominator can reach 0, and three of the states
+  already have `n0==n1==0` today.
+
+Byte-identical: book1 191980 `442b2735`, both builds, empty/1-byte/4 KB/200 KB
+round trips, and `import.pl` is a no-op against all seven `.idx` modules.
+
 ## I/O: back on Lib3's coroutine layer
 
 The tool talked to stdio directly -- `getc`/`putc` on two `FILE*` handles set by
