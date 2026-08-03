@@ -23,7 +23,8 @@ template <int L> struct WordModel {
   U32 t1[256];                                 // successor table, byte    -> last 4 bytes after it
   U16 t2[0x10000];                             // successor table, bigram  -> last 2 bytes after it
 
-  WordModel();                 // words 0, nl1 = -3, nl = -2, t1/t2 zeroed
+  WordModel();                 // word0..word4 = 0, nl1 = -3, nl = -2, t1/t2 zeroed
+                               // (the file-scope words/spaces/counts are NOT touched here)
   void mix(MainMixer &m);      // called once per BIT
 };
 ```
@@ -31,9 +32,12 @@ template <int L> struct WordModel {
 * `L` is the memory level; the only thing it sizes is `cm`
   (16·2^(16+L) bytes — 512 MiB at L=5, 2 GiB at L=11).
 * `mix()` is called once per bit by `ContextModel::p()`, after the core
-  ContextMap and before SparseModel. All context selection happens inside the
+  ContextMap and before SparseModel — **but only at L >= 4**. Below that the
+  object is instantiated (its `cm` included) and never mixed; its 276 slots
+  stay zero, which is inert. A recreation that calls it unconditionally
+  changes the bitstream at L 0..3. All context selection happens inside the
   `if (bpos==0)` block, i.e. once per **byte**; on the other seven bits only
-  `cm.mix(m, MIXB_W + W_cm)` runs, serving the tree walk (§7).
+  `cm.mix(m, MIXB_W + W_cm)` runs, serving the bit-history tree walk (§5).
 * There is no separate update entry point: `cm.mix()` both trains on the bit
   that was just coded and emits the next bit's inputs (the codec-wide
   predict/update fusion).
@@ -48,8 +52,8 @@ template <int L> struct WordModel {
 | `b1..b8` | last 1..8 bytes (b1 most recent). **`b2` may have been rewritten to `WL('.')`** by `Predictor::update` after a sentence-end byte other than `!` |
 | `c4` | last 4 bytes packed big-to-little: `(b4<<24)\|(b3<<16)\|(b2<<8)\|b1` |
 | `x4` | like `c4` but maintained in `ContextModel::p` with phantom punctuation injection (an isolated sentence-end byte is pushed twice) |
-| `w4` | 2 bits per byte: word-class of each byte's high nibble via `WRT_mpw[]`; sentence-enders OR in 12 |
-| `f4` | 4 bits per byte: high nibble per byte (space remapped 32→31 first) |
+| `w4` | 2 bits per byte: word-class of each byte's high nibble via `WRT_mpw[]`; sentence-enders **other than `!` and `?`** OR in 12 |
+| `f4` | 4 bits per byte: high nibble per byte (space remapped 32→31 first); on a sentence-ender the **previous** byte's nibble is rewritten to 2 before the new one is appended |
 | `pos` | bytes coded so far; `buf[]` is the history ring (`buf[i]` wraps by power-of-two mask, so the negative `nl1+col` of the first bytes reads harmlessly from the end of the ring) |
 | `y` | the previous coded bit (consumed inside `cm.mix`) |
 
@@ -57,8 +61,10 @@ template <int L> struct WordModel {
 
 `words`, `spaces` (32-bit shift registers, 1 bit/byte), `wordcount`,
 `spacecount` (popcounts of those windows), `col`, `frstchar`, `spafdo`,
-`nl`, `nl1`. SparseModel and mixer selectors 2/4/6 read these **after**
-WordModel::mix has run in the same bit — call order is part of the contract.
+`nl`, `nl1`. SparseModel (scm8/scm9/scma and its `words`-masked contexts) and mixer
+selectors 2, 4 and 6 read these later **in the same bit**, so WordModel must
+run before SparseModel and before the six `m.set()` selector calls — the call
+order in `ContextModel::p` is part of the model, not a free choice.
 
 ### 2.3 Charset macros
 
@@ -163,10 +169,9 @@ happens **after** contexts 1–9 were set from the pre-restack values.
 `col = min(COL_CAP, pos-nl)`. If `col<=COL_TH`: `frstchar = (col==COL_TH) ?
 min(c,FRST_CAP) : 0`. Wiki-link special: if `frstchar==WL('[')` and
 `c==WL(' ')` and (`b3==WL(']')` or `b4==WL(']')`), `frstchar = FRST_CAP`.
-`above = buf[nl1+col]` (byte at the same column of the previous line).
-
-12: `frstchar<<FRST_SH | c` 13: `MakeCca(col,c,above)`
-14: `MakeCc(col,c)` 15: `col * (c==COLSP_EQ)`
+12: `frstchar<<FRST_SH | c`
+then `above = buf[nl1+col]` (the byte at the same column of the previous line):
+13: `MakeCca(col,c,above)` 14: `MakeCc(col,c)` 15: `col * (c==COLSP_EQ)`
 
 **Step 7 — whitespace statistics, contexts 16–21.**
 `h = MakeWsp(wordcount, spacecount)` (reusing `h`):
@@ -192,8 +197,8 @@ t2[f>>8] = t2[f>>8]<<8 | c;    // f>>8 = (b3,b2): bytes after that bigram
 t1[d>>8] = t1[d>>8]<<8 | c;    // d>>8 = b2:      bytes after that byte
 ```
 
-(If `b1==b2`, the subsequent `t1[c]` read sees the just-pushed byte; keep the
-write-then-read order.) Then `t = c | t1[c]<<T1_SH`:
+(The write-then-read order is observable: if `b1==b2`, the `t1[c]` read sees
+the just-pushed byte, and if `b1==b2==b3`, the `t2[d]` read does too.) Then `t = c | t1[c]<<T1_SH`:
 
 28: `t & TA_MASK` 29: `t & TB_MASK` 30: `t` 31: `t & TC_MASK`
 then `t = d | t2[d]<<T2_SH`:
