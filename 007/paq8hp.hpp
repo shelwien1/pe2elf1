@@ -468,13 +468,9 @@ const int MIX_MUL_0 = PMUL(G0_MIX_MUL_0);
 const int MIX_MUL_1 = PMUL(G0_MIX_MUL_1);
 const int MIX_MUL_2 = PMUL(G0_MIX_MUL_2);
 
-// ContextMap bit-history decay: a state at or above CM_DECAY_FROM steps back by
-// CM_DECAY_STEP with probability ~2^-((CM_DECAY_BIAS-ns)>>CM_DECAY_SHIFT), so
-// the closer to saturation the more often it decays.
-const int CM_DECAY_FROM  = pclamp(G0_CM_DECAY_FROM, 0, N_STATES-1);
-const int CM_DECAY_BIAS  = pclamp(G0_CM_DECAY_BIAS, 0, 511);
-const int CM_DECAY_SHIFT = pclamp(G0_CM_DECAY_SHIFT, 0, 8);
-const int CM_DECAY_STEP  = pclamp(G0_CM_DECAY_STEP, 0, 64);
+// The bit-history decay is per ContextMap instance now: CTR_DFROM/DBIAS/DSHIFT/
+// DSTEP in statetable.inc, from IDX/paq8-N0.idx, alongside the state machine
+// each one steps through.
 
 // run-length counters saturate rather than wrap
 const int RCM_RUN_MAX = PSMALL(G0_RCM_RUN_MAX);   // RunContextMap, steps by 1
@@ -841,16 +837,52 @@ inline int llog(U32 x) {
     return ilog(x);
 }
 
+// One counter per ContextMap instance.
+//
+// Every ContextMap used to share a single 256-state machine and a single decay
+// schedule.  They are not the same kind of map: the core map holds orders
+// 3..13 over 2 GiB, RecordModel's cq holds three low-order contexts in 128 KiB,
+// and what a "long run" means -- how far a count should saturate, how hard to
+// discount the majority when the other bit arrives, when to step a state back
+// -- is not obviously the same answer for both.  Each now has its own seven
+// numbers and its own decay, so it can be answered separately.
+//
+// The index is a template parameter of ContextMap, so in the shipping build
+// every one of these folds: the table address is a constant and the four decay
+// values are literals, exactly as they were when there was one set.
+//
+// This lives above the PAQ_STATE_TABLE_GEN switch because it is a fact about
+// the model rather than about how the machine is built -- the tabulated branch
+// has to name the same counters even though it cannot give them separate
+// tables.
+enum {
+  CTR_X,      // ContextModel::cm   orders 3,4,5,6,8,13,0,1,2 over MEM*16
+  CTR_W,      // WordModel::cm      46 contexts over MEM*16
+  CTR_S,      // SparseModel::cn    5 contexts over MEM*2
+  CTR_RM,     // RecordModel::cm    byte/bigram recency, 8 KiB
+  CTR_RN,     // RecordModel::cn    16 KiB
+  CTR_RO,     // RecordModel::co    32 KiB
+  CTR_RP,     // RecordModel::cp    64 KiB
+  CTR_RQ,     // RecordModel::cq    128 KiB
+  NCTR
+};
+
 // The bit-history state machine.  Two sources, one switch.
 //
 // PAQ_STATE_TABLE_GEN=1 (default) derives the 256-state automaton from the
 // seven numbers in IDX/paq8-N0.idx, using fxcmv1's generator -- the machine
-// described by its construction rule.  =0 uses the 1012 tabulated bytes of
-// IDX/paq8-T0.idx (transitions) and paq8-T1.idx (counts), which is the machine
-// paq8hpc was tuned against and still the better of the two on book1.
+// described by its construction rule -- and derives one PER COUNTER.  =0 uses
+// the 1012 tabulated bytes of IDX/paq8-T0.idx (transitions) and paq8-T1.idx
+// (counts), which is the machine paq8hpc was originally tuned against.
 //
-// Both produce a [256][4] of { next0, next1, n0, n1 }, which is what nex()
-// wants; nothing downstream can tell them apart.
+// The generated machine is now the better of the two on book1 (191336 against
+// 191980), and it is the only one of the two that cloning can reach: the
+// tabulated bytes are one table, so its NEX ignores the counter index and all
+// eight counters share it.  That branch is kept as the reference the generator
+// was checked against, not as a tuning target.
+//
+// Both produce a [256][4] of { next0, next1, n0, n1 } per counter, which is
+// what NEX() wants; nothing downstream can tell them apart.
 #ifndef PAQ_STATE_TABLE_GEN
   #define PAQ_STATE_TABLE_GEN 1
 #endif
@@ -858,7 +890,6 @@ inline int llog(U32 x) {
 #if PAQ_STATE_TABLE_GEN
 
 #include "statetable.inc"
-#define nex(state, sel) state_table.t[state][sel]
 
 #else
 
@@ -911,7 +942,18 @@ static const U8 State_table[256][4] = {
   ST(248), ST(249), ST(250), ST(251), ST(252),
 };
 #undef ST
-#define nex(state, sel) State_table[state][sel]
+
+// The tabulated machine predates cloning and is a single table, so NEX drops
+// the counter index and every counter sees the same automaton.  The decay
+// schedule has to come from somewhere; it comes from counter X's slot in
+// IDX/paq8-N0.idx, which is where the single shared schedule used to live
+// before it was cloned.  Tuning the other seven counters' parameters has no
+// effect in this build -- that is the point of the switch, not a bug in it.
+#define NEX(ST, state, sel) State_table[state][sel]
+#define CTR_DFROM(ST)  pclamp(N0_X_DFROM,  0, N_STATES-1)
+#define CTR_DBIAS(ST)  pclamp(N0_X_DBIAS,  0, 511)
+#define CTR_DSHIFT(ST) pclamp(N0_X_DSHIFT, 0, 8)
+#define CTR_DSTEP(ST)  pclamp(N0_X_DSTEP,  0, 64)
 
 #endif
 
@@ -1740,14 +1782,16 @@ int p(int pr, int cxt, int mul) {
 }
 };
 
-struct StateMap {
+// Templated on its counter, so the state machine it reads its prior from is
+// its owning ContextMap's rather than a single global one.
+template <int ST> struct StateMap {
 int cxt;
 U16 t[N_STATES];
 
 StateMap() : cxt(0) {
   for( int i = 0; i<N_STATES; ++i ) {
-    int n0 = nex(i, 2);
-    int n1 = nex(i, 3);
+    int n0 = NEX(ST, i, 2);
+    int n1 = NEX(ST, i, 3);
     if( n0==0 )
       n1 *= 128;
     if( n1==0 )
@@ -1851,10 +1895,10 @@ U8*operator[](U32 i) {
 // CF == -1 reads the global cxtfl (exactly the baseline); CF == 0 or 1 bakes it
 // in, which is what PAQ_CXTFL_T uses to turn the per-context branch into two
 // instantiations.  Same arithmetic either way.
-template <int CF> inline PAQ_HOTFN int mix2t(MainMixer &m, int slot, int s, StateMap &sm) {
+template <int CF, int ST> inline PAQ_HOTFN int mix2t(MainMixer &m, int slot, int s, StateMap<ST> &sm) {
   int p1 = sm.p(s);
-  int n0 = -!nex(s, 2);
-  int n1 = -!nex(s, 3);
+  int n0 = -!NEX(ST, s, 2);
+  int n1 = -!NEX(ST, s, 3);
   int st = stretch(p1);
   if( CF<0 ? (cxtfl!=0) : (CF!=0) ) {
     m.put(slot+0, st/4);
@@ -1873,8 +1917,8 @@ template <int CF> inline PAQ_HOTFN int mix2t(MainMixer &m, int slot, int s, Stat
   return s>0;
 }
 
-inline int mix2(MainMixer &m, int slot, int s, StateMap &sm) {
-  return mix2t<-1>(m, slot, s, sm);
+template <int ST> inline int mix2(MainMixer &m, int slot, int s, StateMap<ST> &sm) {
+  return mix2t<-1,ST>(m, slot, s, sm);
 }
 
 template <int MSZ, int mulc> struct RunContextMap {
@@ -1964,7 +2008,9 @@ void mix(MainMixer &m, int slot) {
 }
 };
 
-template <U32 MSZ, int NC> struct ContextMap {
+// ST names this map's counter in IDX/paq8-N0.idx: its own state machine and
+// its own decay schedule, folded to literals in the shipping build.
+template <U32 MSZ, int NC, int ST> struct ContextMap {
 static constexpr int C = NC;
 static const int Sz = int((MSZ>>6)-1);
 
@@ -2012,7 +2058,7 @@ U8* cp[NC];
 U8* cp0[NC];
 U32 cxt[NC];
 U8* runp[NC];
-StateMap sm[NC];
+StateMap<ST> sm[NC];
 int cn;
 
 // the probe address for every context is known before the walk starts, and E is
@@ -2065,7 +2111,7 @@ template <int CF, int BP> PAQ_HOTFN int mix1t(MainMixer &m, int base, int cc, in
   for( int i = 0; i<cn; ++i ) {
     U8* cpi = cp[i];
     if( cpi ) {
-      int ns = nex(*cpi, y1);
+      int ns = NEX(ST, *cpi, y1);
       // PSH is not decoration.  CM_DECAY_BIAS is a live nine-bit knob and
       // opt.pl visits both ends of it, so without a clamp any value below
       // CM_DECAY_FROM makes this shift count negative -- which is undefined,
@@ -2075,8 +2121,8 @@ template <int CF, int BP> PAQ_HOTFN int mix1t(MainMixer &m, int base, int cc, in
       // with x86's count masked to five bits.  That single line was the whole
       // reason the two builds did not agree.  Section 5, exactly: a pattern is
       // the search space and the clamp is the contract.
-      if( ns>=CM_DECAY_FROM&&(rnd()<<PSH((CM_DECAY_BIAS-ns)>>CM_DECAY_SHIFT)) )
-        ns -= CM_DECAY_STEP;
+      if( ns>=CTR_DFROM(ST)&&(rnd()<<PSH((CTR_DBIAS(ST)-ns)>>CTR_DSHIFT(ST))) )
+        ns -= CTR_DSTEP(ST);
       *cpi = ns;
     }
 
@@ -2128,7 +2174,7 @@ template <int CF, int BP> PAQ_HOTFN int mix1t(MainMixer &m, int base, int cc, in
     } else
       m.put(base+i*W, 0);
 
-    result += mix2t<CF>(m, base+i*W+1, cpi ? *cpi : 0, sm[i]);
+    result += mix2t<CF,ST>(m, base+i*W+1, cpi ? *cpi : 0, sm[i]);
     cp[i] = cpi;
   }
   if( PAQ_BP==7 )
@@ -2303,7 +2349,7 @@ const U32 W0_F4_MASK = U32(LANES2(W0_F4_M1, W0_F4_M0));
 
 template <int L> struct WordModel {
 U32 word0, word1, word2, word3, word4;
-ContextMap<((U32)MEM(L)*16), W_CM_CTX> cm;
+ContextMap<((U32)MEM(L)*16), W_CM_CTX, CTR_W> cm;
 int nl1, nl;
 U32 t1[256];
 U16 t2[0x10000];
@@ -2454,11 +2500,11 @@ const U32 R0_E_MASK = LANES4(R0_E_M3, R0_E_M2, R0_E_M1, R0_E_M0);
 struct RecordModel {
 int cpos1[256];
 int wpos1[0x10000];
-ContextMap<32768/4, R_CM_CTX> cm;
-ContextMap<32768/2, R_CN_CTX> cn;
-ContextMap<32768, R_CO_CTX> co;
-ContextMap<32768*2, R_CP_CTX> cp;
-ContextMap<32768*4, R_CQ_CTX> cq;
+ContextMap<32768/4, R_CM_CTX, CTR_RM> cm;
+ContextMap<32768/2, R_CN_CTX, CTR_RN> cn;
+ContextMap<32768, R_CO_CTX, CTR_RO> co;
+ContextMap<32768*2, R_CP_CTX, CTR_RP> cp;
+ContextMap<32768*4, R_CQ_CTX, CTR_RQ> cq;
 
 RecordModel() {
   memset(cpos1, 0, sizeof(cpos1));
@@ -2516,7 +2562,7 @@ const U32 S0_CN2_MASK = LANES4(S0_CN2_M3, S0_CN2_M2, S0_CN2_M1, S0_CN2_M0);
 const U32 S0_CN4_MASK = LANES4(S0_CN4_M3, S0_CN4_M2, S0_CN4_M1, S0_CN4_M0);
 
 template <int L> struct SparseModel {
-ContextMap<((U32)(MEM(L)*2)), S_CN_CTX> cn;
+ContextMap<((U32)(MEM(L)*2)), S_CN_CTX, CTR_S> cn;
 SmallStationaryContextMap<0x20000, 17> scm1;
 SmallStationaryContextMap<0x20000, 12> scm2;
 SmallStationaryContextMap<0x20000, 12> scm3;
@@ -2565,7 +2611,7 @@ static U32 WRT_mpw[16] = {3, 3, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0}, tri[4
 static U32 WRT_mtt[16] = {0, 0, 1, 2, 3, 4, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7};
 
 template <int L> struct ContextModel {
-ContextMap<((U32)MEM(L)*16), X_CM_CTX> cm;
+ContextMap<((U32)MEM(L)*16), X_CM_CTX, CTR_X> cm;
 RunContextMap<(int)(MEM(L)/4), 14> rcm7;
 RunContextMap<(int)(MEM(L)/4), 18> rcm9;
 RunContextMap<(int)(MEM(L)/2), 20> rcm10;

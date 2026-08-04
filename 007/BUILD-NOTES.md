@@ -1,5 +1,70 @@
 # Build + roundtrip notes (Linux / clang)
 
+## One counter per ContextMap, cloned
+
+Every `ContextMap` used to share one 256-state machine and one decay schedule.
+They are not the same kind of map — the core map holds orders 3..13 over 2 GiB,
+`RecordModel`'s `cq` holds three low-order contexts in 128 KiB — and "how far a
+count should saturate" is not obviously the same answer for both. Each now has
+its own seven numbers and its own four decay values.
+
+Eight instances consume the state table, and each is tagged with its counter:
+
+| `CTR_*` | instance | size |
+|---|---|---|
+| `CTR_X` | `ContextModel::cm`, orders 3,4,5,6,8,13,0,1,2 | MEM\*16 |
+| `CTR_W` | `WordModel::cm`, 46 contexts | MEM\*16 |
+| `CTR_S` | `SparseModel::cn`, 5 contexts | MEM\*2 |
+| `CTR_RM`..`CTR_RQ` | `RecordModel::cm/cn/co/cp/cq` | 8..128 KiB |
+
+`RunContextMap` and `SmallStationaryContextMap` do **not** use it, and are not
+in the registry.
+
+### How it is spelled
+
+`StateMap<ST>`, `mix2t<CF,ST>` and `ContextMap<MSZ,NC,ST>` take the counter as a
+template parameter, so `NEX(ST, state, sel)` and `CTR_DFROM/DBIAS/DSHIFT/DSTEP(ST)`
+resolve at compile time. In the shipping build the table address is a constant
+and the four decay values are literals — exactly what they were when there was
+one set, so cloning costs nothing at runtime.
+
+`IDX/paq8-N0.idx` went from 11 parameters to 88 (8 × B0..B5, MDC, DFROM, DBIAS,
+DSHIFT, DSTEP), confirmed as 88 `!MAP!N0_` markers in the tuning binary.
+`CM_DECAY_*` left `IDX/paq8-G0.idx` — the schedule now travels with the table it
+addresses, because a shared step stopped being meaningful the moment the tables
+could differ (see the `CM_DECAY_STEP` section below for why that coupling is
+real). `G0_CM_DECAY_*` was stripped from `IDX/export.!!!` at the same time,
+since `import.pl` matches by name.
+
+The `CTR_*` enum itself sits in `paq8hp.hpp` *above* the `PAQ_STATE_TABLE_GEN`
+switch, not in `statetable.inc`: which counters exist is a fact about the model,
+and the tabulated branch has to name the same eight even though it cannot give
+them separate tables. That branch defines `NEX(ST,...)` to drop the index and
+takes its decay from `CTR_X`'s slot, which is where the single shared schedule
+used to live. Tuning the other seven has no effect with
+`PAQ_STATE_TABLE_GEN=0`; that is the switch working, not a bug in it.
+
+### Result: nothing, yet — and that is the check
+
+All eight sets are seeded identically to the optimized parameters
+(B0..B5,MDC = 34,13,22,7,30,16,11; decay 225, 421, 3, 4), so book1 stays at
+**191336** with md5 `a54022dc0f492950081bad7f21e2d3e0`, byte-identical to the
+pre-clone baseline in both builds. A refactor that widens the search space
+without moving the stream is the only kind that can be verified, so that is how
+it landed.
+
+The 191336 itself came from those parameters, swept over `CM_DECAY_STEP` ∈
+{4,6,8} → 191336 / 196345 / 191348, i.e. step 4.
+
+### The follow-on, and one trap in it
+
+The clone buys nothing until the eight diverge; sweeping them is the next move.
+The trap: **any swept `B5` invalidates that counter's `D_STEP`.** `B5` is the
+doubling threshold, so it changes how many state numbers a level is worth, and
+`D_STEP` is denominated in exactly that. They are one knob in two halves and
+have to move together — which is the same finding as the `CM_DECAY_STEP` section
+below, now once per counter instead of once globally.
+
 ## The state machine, generated instead of tabulated
 
 `StateTable` is ported from fxcmv1 into `statetable.inc`. Instead of 1012

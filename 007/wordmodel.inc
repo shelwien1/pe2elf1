@@ -55,7 +55,7 @@ template <int L> struct WordModel {
 U32 word0, word1, word2, word3, word4;
 
 // 46 contexts into one hashed map; L sizes nothing else here.
-ContextMap<((U32)MEM(L)*16), W_CM_CTX> cm;
+ContextMap<((U32)MEM(L)*16), W_CM_CTX, CTR_W> cm;
 
 // positions of the last two newlines, for column geometry.  -2/-3 rather than
 // 0 so the first line has no phantom newline at position 0; buf[] wraps by

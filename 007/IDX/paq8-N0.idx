@@ -1,11 +1,14 @@
-# paq8-N0.idx -- the bit-history state machine, as a construction rule.
+# paq8-N0.idx -- the bit-history counters, one per ContextMap instance.
 #
-# paq8-T0/T1.idx hold the state machine as 1012 tabulated bytes.  This file
-# holds the same machine as the seven numbers it can be DERIVED from, using
-# fxcmv1's StateTable generator (see statetable.inc).  Which of the two the
-# build uses is PAQ_STATE_TABLE_GEN, defaulting to this one.
+# A "counter" here is a whole unit: the 256-state machine a ContextMap's bit
+# histories live in, plus the decay schedule that steps a saturated state back.
+# Both are cloned per instance, because both are meaningless without the other
+# -- see the DECAY note below.
 #
-# A state is a pair (x,y) = (zeros seen, ones seen), bounded and quantised:
+# THE STATE MACHINE, AS A CONSTRUCTION RULE
+#
+# statetable.inc derives the 256 states from seven numbers rather than reading
+# 1012 tabulated bytes.  A state is a pair (x,y) = (zeros seen, ones seen):
 #
 #   B0..B4  the largest x allowed at y = 0,1,2,3,4.  y is capped at 4, so the
 #           machine tracks a long run of one bit and at most four of the other
@@ -14,56 +17,149 @@
 #           state numbers instead of one, which is how the low-count region
 #           buys finer resolution than the tail.
 #   MDC     maximum discount: when the opposite bit arrives the majority count
-#           collapses to min(x, MDC-1).  This is what keeps a long run one step
-#           away from reachable states instead of stranding it.
+#           collapses to min(x, MDC-1), which keeps a long run one step away
+#           from reachable states instead of stranding it.
 #
-# Six sets ship in fxcmv1, one per context-map family.  Measured on book1 at
-# level 7, whole archive, each at the CM_DECAY_STEP that matches ITS OWN state
-# numbering (see below), against the tabulated table's 191980 at its own best
-# step:
+# PAQ_STATE_TABLE_GEN=0 swaps all of this for the tabulated machine in
+# paq8-T0/T1.idx, which is 408 bytes worse on book1 and still builds.
 #
-#     set   B0 B1 B2 B3 B4 B5 MDC   step   book1
-#     STA1  28 28 31 29 23  4  17     4    196385
-#     STA2  32 28 31 28 21  5   6     8    192825
-#     STA4  31 27 30 27 24  4  27    10    191729
-#     STA5  33 31 31 24 20  4  33     6    191572   <- seeded below
-#     STA6  28 29 30 30 23  3  22     6    196714
-#     STA7  28 29 33 23 23  6  14     2    196795
+# WHY EACH INSTANCE GETS ITS OWN
 #
-# STA5 is the best of the six and beats the tabulated table by 408 bytes
-# (-0.21%).  The tabulated table was checked at steps 4, 6 and 8 for the same
-# comparison and is best at its shipped 4, so this is not a matter of one side
-# being tuned and the other not.
+# The eight ContextMaps are not the same kind of map.  The core one holds
+# orders 3..13 over 2 GiB; RecordModel's cq holds three low-order contexts in
+# 128 KiB.  How far a count should saturate, how hard to discount the majority,
+# when to step a state back -- there is no reason those answers coincide, and
+# until now they were forced to.  Every set below is seeded IDENTICALLY, so the
+# clone is bitstream-neutral; what it buys is that they can now diverge.
 #
-# CM_DECAY_STEP HAS TO MOVE WITH THIS FILE
+# THE DECAY TRAVELS WITH THE TABLE -- THIS IS NOT OPTIONAL
 #
-# That is the whole reason the first measurements looked bad -- every set came
-# out 500 to 5000 bytes WORSE until the step was matched.  paq8hpc's decay does
-# `ns -= CM_DECAY_STEP` to step a saturated state back by one observation, and
-# how many state numbers "one observation" spans is a property of the state
-# NUMBERING: the tabulated machine puts 4 states on each x+y level, STA5 puts
-# 6, STA4 puts 10, STA7 puts 2.  A step of 4 against a 6-wide level lands
-# mid-level, on a state with a different x/y balance rather than one fewer
-# observation.  STA5 alone goes 195653 -> 191572 on that one change.
+# D_STEP is subtracted from a state index to step it back "one observation",
+# and how many state numbers one observation spans is a property of the state
+# NUMBERING: with B5=4 a level is 6 states wide, with B5=16 it is 4.  A step
+# that does not match lands mid-level, on a state with a different x/y balance
+# rather than one fewer observation, and it costs thousands of bytes -- one
+# earlier set went 195653 -> 191572 on that single number.  A shared D_STEP
+# stopped meaning anything the moment the tables could differ per instance,
+# which is why it is cloned here rather than left in paq8-G0.idx.
 #
-# So CM_DECAY_STEP in paq8-G0.idx is now 6, and anyone reseeding this file must
-# re-measure it.  B5 is the parameter that moves the level width most (it is
-# the doubling threshold), so a swept B5 silently invalidates the step.
+# So: move a B5 and re-measure that instance's D_STEP.  They are one knob in
+# two halves.
 #
-# Widths are six bits.  The b's live in 20..35 across all six sets and the
-# lattice is 64 wide, so six bits covers the range the design admits; MDC's
-# shipped values span 6..33.  Both are clamped at the point of use, which for
-# B is not decoration: next_state() walks down the lattice until it finds a
-# cell that exists, so a B admitting no states at all would walk x negative.
+# D_FROM is the state at or above which the decay fires, D_BIAS/D_SHIFT set its
+# probability (~2^-((D_BIAS-ns)>>D_SHIFT), with the shift clamped non-negative
+# at the point of use).  D_BIAS is seeded 421 for the reason paq8-G0.idx used
+# to record: below D_FROM it makes the shift count negative, which is undefined
+# and which the two builds resolved differently.
+#
+# Widths: six bits for the B's and MDC (the lattice is 64 wide and the shipped
+# values live in 7..34); eight for D_FROM, nine for D_BIAS, three for D_SHIFT,
+# four for D_STEP.  All clamped at the point of use.
 
 Prefix N0
 Debug 1
 Const 0
 
-Number B0, 1, 0!100001
-Number B1, 1, 0!011111
-Number B2, 1, 0!011111
-Number B3, 1, 0!011000
-Number B4, 1, 0!010100
-Number B5, 1, 0!000100
-Number MDC,1, 0!100001
+# --- X : ContextModel::cm  -- orders 3,4,5,6,8,13,0,1,2 over MEM*16
+Number X_B0,     1, 0!100010
+Number X_B1,     1, 0!001101
+Number X_B2,     1, 0!010110
+Number X_B3,     1, 0!000111
+Number X_B4,     1, 0!011110
+Number X_B5,     1, 0!010000
+Number X_MDC,    1, 0!001011
+Number X_DFROM,  1, 0!11100001
+Number X_DBIAS,  1, 0!110100101
+Number X_DSHIFT, 1, 0!011
+Number X_DSTEP,  1, 0!0100
+
+# --- W : WordModel::cm     -- 46 contexts over MEM*16
+Number W_B0,     1, 0!100010
+Number W_B1,     1, 0!001101
+Number W_B2,     1, 0!010110
+Number W_B3,     1, 0!000111
+Number W_B4,     1, 0!011110
+Number W_B5,     1, 0!010000
+Number W_MDC,    1, 0!001011
+Number W_DFROM,  1, 0!11100001
+Number W_DBIAS,  1, 0!110100101
+Number W_DSHIFT, 1, 0!011
+Number W_DSTEP,  1, 0!0100
+
+# --- S : SparseModel::cn   -- 5 contexts over MEM*2
+Number S_B0,     1, 0!100010
+Number S_B1,     1, 0!001101
+Number S_B2,     1, 0!010110
+Number S_B3,     1, 0!000111
+Number S_B4,     1, 0!011110
+Number S_B5,     1, 0!010000
+Number S_MDC,    1, 0!001011
+Number S_DFROM,  1, 0!11100001
+Number S_DBIAS,  1, 0!110100101
+Number S_DSHIFT, 1, 0!011
+Number S_DSTEP,  1, 0!0100
+
+# --- RM : RecordModel::cm   -- byte/bigram recency, 8 KiB
+Number RM_B0,    1, 0!100010
+Number RM_B1,    1, 0!001101
+Number RM_B2,    1, 0!010110
+Number RM_B3,    1, 0!000111
+Number RM_B4,    1, 0!011110
+Number RM_B5,    1, 0!010000
+Number RM_MDC,   1, 0!001011
+Number RM_DFROM, 1, 0!11100001
+Number RM_DBIAS, 1, 0!110100101
+Number RM_DSHIFT, 1, 0!011
+Number RM_DSTEP, 1, 0!0100
+
+# --- RN : RecordModel::cn   -- 16 KiB
+Number RN_B0,    1, 0!100010
+Number RN_B1,    1, 0!001101
+Number RN_B2,    1, 0!010110
+Number RN_B3,    1, 0!000111
+Number RN_B4,    1, 0!011110
+Number RN_B5,    1, 0!010000
+Number RN_MDC,   1, 0!001011
+Number RN_DFROM, 1, 0!11100001
+Number RN_DBIAS, 1, 0!110100101
+Number RN_DSHIFT, 1, 0!011
+Number RN_DSTEP, 1, 0!0100
+
+# --- RO : RecordModel::co   -- 32 KiB
+Number RO_B0,    1, 0!100010
+Number RO_B1,    1, 0!001101
+Number RO_B2,    1, 0!010110
+Number RO_B3,    1, 0!000111
+Number RO_B4,    1, 0!011110
+Number RO_B5,    1, 0!010000
+Number RO_MDC,   1, 0!001011
+Number RO_DFROM, 1, 0!11100001
+Number RO_DBIAS, 1, 0!110100101
+Number RO_DSHIFT, 1, 0!011
+Number RO_DSTEP, 1, 0!0100
+
+# --- RP : RecordModel::cp   -- 64 KiB
+Number RP_B0,    1, 0!100010
+Number RP_B1,    1, 0!001101
+Number RP_B2,    1, 0!010110
+Number RP_B3,    1, 0!000111
+Number RP_B4,    1, 0!011110
+Number RP_B5,    1, 0!010000
+Number RP_MDC,   1, 0!001011
+Number RP_DFROM, 1, 0!11100001
+Number RP_DBIAS, 1, 0!110100101
+Number RP_DSHIFT, 1, 0!011
+Number RP_DSTEP, 1, 0!0100
+
+# --- RQ : RecordModel::cq   -- 128 KiB
+Number RQ_B0,    1, 0!100010
+Number RQ_B1,    1, 0!001101
+Number RQ_B2,    1, 0!010110
+Number RQ_B3,    1, 0!000111
+Number RQ_B4,    1, 0!011110
+Number RQ_B5,    1, 0!010000
+Number RQ_MDC,   1, 0!001011
+Number RQ_DFROM, 1, 0!11100001
+Number RQ_DBIAS, 1, 0!110100101
+Number RQ_DSHIFT, 1, 0!011
+Number RQ_DSTEP, 1, 0!0100

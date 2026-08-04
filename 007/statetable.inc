@@ -122,20 +122,60 @@ struct StateTable {
   }
 };
 
-// The live table.  Built once at static-initialisation time from the IDX
-// parameters, which are declared by the generated headers at the top of this
-// file and are therefore constructed first.  Nothing reads it before main():
+// The per-counter parameters, in CTR_* enum order (declared in paq8hp.hpp,
+// above the PAQ_STATE_TABLE_GEN switch -- which counters exist is a fact about
+// the model, not about how the machine is built).  Seeded identically, so
+// cloning is
+// bitstream-neutral until somebody moves one of them.
+static const int ctr_b[NCTR][7] = {
+  { N0_X_B0,  N0_X_B1,  N0_X_B2,  N0_X_B3,  N0_X_B4,  N0_X_B5,  N0_X_MDC  },
+  { N0_W_B0,  N0_W_B1,  N0_W_B2,  N0_W_B3,  N0_W_B4,  N0_W_B5,  N0_W_MDC  },
+  { N0_S_B0,  N0_S_B1,  N0_S_B2,  N0_S_B3,  N0_S_B4,  N0_S_B5,  N0_S_MDC  },
+  { N0_RM_B0, N0_RM_B1, N0_RM_B2, N0_RM_B3, N0_RM_B4, N0_RM_B5, N0_RM_MDC },
+  { N0_RN_B0, N0_RN_B1, N0_RN_B2, N0_RN_B3, N0_RN_B4, N0_RN_B5, N0_RN_MDC },
+  { N0_RO_B0, N0_RO_B1, N0_RO_B2, N0_RO_B3, N0_RO_B4, N0_RO_B5, N0_RO_MDC },
+  { N0_RP_B0, N0_RP_B1, N0_RP_B2, N0_RP_B3, N0_RP_B4, N0_RP_B5, N0_RP_MDC },
+  { N0_RQ_B0, N0_RQ_B1, N0_RQ_B2, N0_RQ_B3, N0_RQ_B4, N0_RQ_B5, N0_RQ_MDC }
+};
+
+// The decay schedule travels with the table it addresses.  A step is "one
+// observation" only relative to a state NUMBERING, and each counter now has its
+// own -- a shared CM_DECAY_STEP stopped being meaningful the moment the tables
+// could differ.  Clamps as before: FROM into the state range, SHIFT into the
+// shift's, STEP into what a state index can absorb.
+static const int ctr_decay[NCTR][4] = {   // FROM, BIAS, SHIFT, STEP
+  { N0_X_DFROM,  N0_X_DBIAS,  N0_X_DSHIFT,  N0_X_DSTEP  },
+  { N0_W_DFROM,  N0_W_DBIAS,  N0_W_DSHIFT,  N0_W_DSTEP  },
+  { N0_S_DFROM,  N0_S_DBIAS,  N0_S_DSHIFT,  N0_S_DSTEP  },
+  { N0_RM_DFROM, N0_RM_DBIAS, N0_RM_DSHIFT, N0_RM_DSTEP },
+  { N0_RN_DFROM, N0_RN_DBIAS, N0_RN_DSHIFT, N0_RN_DSTEP },
+  { N0_RO_DFROM, N0_RO_DBIAS, N0_RO_DSHIFT, N0_RO_DSTEP },
+  { N0_RP_DFROM, N0_RP_DBIAS, N0_RP_DSHIFT, N0_RP_DSTEP },
+  { N0_RQ_DFROM, N0_RQ_DBIAS, N0_RQ_DSHIFT, N0_RQ_DSTEP }
+};
+
+// The live tables, one per counter.  Built once at static-initialisation time
+// from the IDX parameters, which the generated headers at the top of paq8hp.hpp
+// declare and therefore construct first.  Nothing reads them before main():
 // StateMap's constructor runs when the model is new'd.
 //
 // The generator is a local inside the constructor rather than a member -- it
-// carries an 8 KB (x,y) lattice that is scaffolding, not state, and keeping it
-// around would put it in every Predictor instantiation.
+// carries an 8 KB (x,y) lattice that is scaffolding, not state.
 static struct StateTableGen {
-  U8 t[256][4];
+  U8 t[NCTR][256][4];
   StateTableGen() {
     StateTable g;
-    g.Init( pclamp(N0_B0,  1, 63), pclamp(N0_B1, 1, 63), pclamp(N0_B2, 1, 63),
-            pclamp(N0_B3,  1, 63), pclamp(N0_B4, 1, 63), pclamp(N0_B5, 1, 63),
-            pclamp(N0_MDC, 1, 63), &t[0][0] );
+    for( int i = 0; i<NCTR; ++i )
+      g.Init( pclamp(ctr_b[i][0], 1, 63), pclamp(ctr_b[i][1], 1, 63),
+              pclamp(ctr_b[i][2], 1, 63), pclamp(ctr_b[i][3], 1, 63),
+              pclamp(ctr_b[i][4], 1, 63), pclamp(ctr_b[i][5], 1, 63),
+              pclamp(ctr_b[i][6], 1, 63), &t[i][0][0] );
   }
 } state_table;
+
+// Counter ST's view of its own machine and schedule.
+#define NEX(ST, state, sel) state_table.t[ST][state][sel]
+#define CTR_DFROM(ST)  pclamp(ctr_decay[ST][0], 0, N_STATES-1)
+#define CTR_DBIAS(ST)  pclamp(ctr_decay[ST][1], 0, 511)
+#define CTR_DSHIFT(ST) pclamp(ctr_decay[ST][2], 0, 8)
+#define CTR_DSTEP(ST)  pclamp(ctr_decay[ST][3], 0, 64)
