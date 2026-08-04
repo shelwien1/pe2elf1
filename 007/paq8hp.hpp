@@ -2254,6 +2254,11 @@ constexpr int wrt_remap( int c ) {
 
 static U32 col, frstchar = 0, spafdo = 0, spaces = 0, spacecount = 0, words = 0, wordcount = 0, fails = 0, failz = 0, failcount = 0;
 
+// The original WordModel, kept for reference under #if 0.  The live class is
+// in wordmodel.inc, rebuilt from WORDMODEL.md and verified to produce the same
+// archive; its tunables are the same IDX/paq8-W0.idx module.  The wide-mask
+// constants travel with the class, so they sit inside the #if 0 too.
+#if 0
 // WordModel's wide masks, reassembled from the byte lanes IDX/paq8-W0.idx
 // declares them as.  The HA..HF group windows h, which is w4 -- two bits per
 // byte -- brought up to byte alignment and then shifted twice more; TA..TD
@@ -2416,6 +2421,9 @@ void mix(MainMixer &m) {  if( bpos==0 ) {
   cm.mix(m, MIXB_W + W_cm);
 }
 };
+#endif
+
+#include "wordmodel.inc"
 
 // RecordModel's two wide masks, reassembled from the byte lanes
 // IDX/paq8-R0.idx declares them as.  d takes the whole previous byte and the
