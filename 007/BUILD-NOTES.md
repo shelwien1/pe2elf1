@@ -1,5 +1,68 @@
 # Build + roundtrip notes (Linux / clang)
 
+## The state machine, generated instead of tabulated
+
+`StateTable` is ported from fxcmv1 into `statetable.inc`. Instead of 1012
+tabulated bytes it derives the 256-state automaton from seven numbers, so the
+machine is described by its construction rule rather than by its output. The
+seven live in `IDX/paq8-N0.idx`:
+
+* **B0..B4** — the largest x (zeros seen) allowed at y (ones seen) = 0..4. y is
+  capped at 4, so the machine tracks a long run of one bit and at most four of
+  the other: the paq8 asymmetry, here as a parameter rather than a fact.
+* **B5** — the doubling threshold. A cell with y>0 and x+y < B5 is worth two
+  state numbers instead of one, which is how the low-count region buys finer
+  resolution than the tail.
+* **MDC** — maximum discount. When the opposite bit arrives the majority count
+  collapses to min(x, MDC-1), which keeps a long run one step from reachable
+  states instead of stranding it.
+
+`PAQ_STATE_TABLE_GEN` selects between this and the tabulated `T0`/`T1` machine;
+it defaults to the generated one and both still build.
+
+### Result
+
+| table | best `CM_DECAY_STEP` | book1 |
+|---|---|---|
+| tabulated (`T0`/`T1`) | 4 | 191980 |
+| **generated, STA5** | **6** | **191572** |
+
+**-408 bytes, -0.21%**, and ASCII mode moves 190743 -> 190341 with it. All six
+of fxcmv1's sets were measured, each at the step matching its own numbering:
+
+```
+STA1 4 -> 196385   STA2 8 -> 192825   STA4 10 -> 191729
+STA5 6 -> 191572   STA6 6 -> 196714   STA7  2 -> 196795
+```
+
+### `CM_DECAY_STEP` is part of the state table's contract
+
+This is the finding worth keeping. Every generated set first measured 500 to
+5000 bytes **worse** than the tabulated table, and the reason was not the
+machines — it was that `CM_DECAY_STEP` had not moved with them.
+
+The decay does `ns -= CM_DECAY_STEP` to step a saturated state back by one
+observation. How many state numbers "one observation" spans is a property of
+the *numbering*: the tabulated machine puts 4 states on each `x+y` level, STA5
+puts 6, STA4 puts 10, STA7 puts 2. A step of 4 against a 6-wide level lands
+mid-level — on a state with a different x/y balance, not one fewer observation.
+STA5 alone goes 195653 -> 191572 on that single change.
+
+The comparison is symmetric: the tabulated table was swept over steps 4, 6 and
+8 too, and is best at its shipped 4. Neither side is tuned against an untuned
+opponent.
+
+`IDX/export.!!!` carries the new step, for the same reason it had to carry the
+`CM_DECAY_BIAS` fix: `import.pl` matches by name and a stale `"0100"` would
+walk the mismatch straight back in.
+
+### What is still on the table
+
+The seven numbers have not been swept — STA5 is the best of six sets somebody
+else fitted for a different codec, not an optimum for this one. That is now a
+seven-knob search where the tabulated machine was a 1012-value one, which is
+the point of having the generator at all.
+
 ## State_table in IDX, split so only the counts are tunable
 
 `State_table[s] = { next0, next1, n0, n1 }` — 253 declared rows (254..255 were

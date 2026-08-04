@@ -1,0 +1,69 @@
+# paq8-N0.idx -- the bit-history state machine, as a construction rule.
+#
+# paq8-T0/T1.idx hold the state machine as 1012 tabulated bytes.  This file
+# holds the same machine as the seven numbers it can be DERIVED from, using
+# fxcmv1's StateTable generator (see statetable.inc).  Which of the two the
+# build uses is PAQ_STATE_TABLE_GEN, defaulting to this one.
+#
+# A state is a pair (x,y) = (zeros seen, ones seen), bounded and quantised:
+#
+#   B0..B4  the largest x allowed at y = 0,1,2,3,4.  y is capped at 4, so the
+#           machine tracks a long run of one bit and at most four of the other
+#           -- the paq8 asymmetry, here as a parameter rather than a fact.
+#   B5      the doubling threshold: a cell with y>0 and x+y < B5 is worth TWO
+#           state numbers instead of one, which is how the low-count region
+#           buys finer resolution than the tail.
+#   MDC     maximum discount: when the opposite bit arrives the majority count
+#           collapses to min(x, MDC-1).  This is what keeps a long run one step
+#           away from reachable states instead of stranding it.
+#
+# Six sets ship in fxcmv1, one per context-map family.  Measured on book1 at
+# level 7, whole archive, each at the CM_DECAY_STEP that matches ITS OWN state
+# numbering (see below), against the tabulated table's 191980 at its own best
+# step:
+#
+#     set   B0 B1 B2 B3 B4 B5 MDC   step   book1
+#     STA1  28 28 31 29 23  4  17     4    196385
+#     STA2  32 28 31 28 21  5   6     8    192825
+#     STA4  31 27 30 27 24  4  27    10    191729
+#     STA5  33 31 31 24 20  4  33     6    191572   <- seeded below
+#     STA6  28 29 30 30 23  3  22     6    196714
+#     STA7  28 29 33 23 23  6  14     2    196795
+#
+# STA5 is the best of the six and beats the tabulated table by 408 bytes
+# (-0.21%).  The tabulated table was checked at steps 4, 6 and 8 for the same
+# comparison and is best at its shipped 4, so this is not a matter of one side
+# being tuned and the other not.
+#
+# CM_DECAY_STEP HAS TO MOVE WITH THIS FILE
+#
+# That is the whole reason the first measurements looked bad -- every set came
+# out 500 to 5000 bytes WORSE until the step was matched.  paq8hpc's decay does
+# `ns -= CM_DECAY_STEP` to step a saturated state back by one observation, and
+# how many state numbers "one observation" spans is a property of the state
+# NUMBERING: the tabulated machine puts 4 states on each x+y level, STA5 puts
+# 6, STA4 puts 10, STA7 puts 2.  A step of 4 against a 6-wide level lands
+# mid-level, on a state with a different x/y balance rather than one fewer
+# observation.  STA5 alone goes 195653 -> 191572 on that one change.
+#
+# So CM_DECAY_STEP in paq8-G0.idx is now 6, and anyone reseeding this file must
+# re-measure it.  B5 is the parameter that moves the level width most (it is
+# the doubling threshold), so a swept B5 silently invalidates the step.
+#
+# Widths are six bits.  The b's live in 20..35 across all six sets and the
+# lattice is 64 wide, so six bits covers the range the design admits; MDC's
+# shipped values span 6..33.  Both are clamped at the point of use, which for
+# B is not decoration: next_state() walks down the lattice until it finds a
+# cell that exists, so a B admitting no states at all would walk x negative.
+
+Prefix N0
+Debug 1
+Const 0
+
+Number B0, 1, 0!100001
+Number B1, 1, 0!011111
+Number B2, 1, 0!011111
+Number B3, 1, 0!011000
+Number B4, 1, 0!010100
+Number B5, 1, 0!000100
+Number MDC,1, 0!100001

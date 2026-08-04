@@ -228,7 +228,7 @@ Number MIX_MUL_2,      P_SCALE/256, 0!000111000000
 Number CM_DECAY_FROM,  1,           0!11100001
 Number CM_DECAY_BIAS,  1,           0!110100101
 Number CM_DECAY_SHIFT, 1,           0!011
-Number CM_DECAY_STEP,  1,           0!0100
+Number CM_DECAY_STEP, 1,           0!0110
 
 # run-length counters saturate rather than wrap
 Number RCM_RUN_MAX,    1,           0!11111111

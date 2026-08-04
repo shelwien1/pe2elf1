@@ -325,6 +325,8 @@ constexpr int PMUL_MAX = 16*P_SCALE;
 #include "MOD/paq8-T0_p.inc"
 #include "MOD/paq8-T1_h.inc"
 #include "MOD/paq8-T1_p.inc"
+#include "MOD/paq8-N0_h.inc"
+#include "MOD/paq8-N0_p.inc"
 
 // ---------------------------------------------------------------------------
 // The IDX bridge, part two: now that USE_NEW exists.
@@ -839,25 +841,40 @@ inline int llog(U32 x) {
     return ilog(x);
 }
 
-// The bit-history state machine, from IDX/paq8-T0.idx (the transitions, columns
-// [0] and [1]) and IDX/paq8-T1.idx (the counts, [2] and [3]).  Two modules
-// because they are not the same kind of number: T0 says `Const 1` in its own
-// source so it folds to literals in BOTH builds and carries no !MAP! marker,
-// while T1 is a live pattern per value in the tuning build.  `./mk.sh`
-// therefore gives Const 0 for the counts only, which is what the split is for.
+// The bit-history state machine.  Two sources, one switch.
+//
+// PAQ_STATE_TABLE_GEN=1 (default) derives the 256-state automaton from the
+// seven numbers in IDX/paq8-N0.idx, using fxcmv1's generator -- the machine
+// described by its construction rule.  =0 uses the 1012 tabulated bytes of
+// IDX/paq8-T0.idx (transitions) and paq8-T1.idx (counts), which is the machine
+// paq8hpc was tuned against and still the better of the two on book1.
+//
+// Both produce a [256][4] of { next0, next1, n0, n1 }, which is what nex()
+// wants; nothing downstream can tell them apart.
+#ifndef PAQ_STATE_TABLE_GEN
+  #define PAQ_STATE_TABLE_GEN 1
+#endif
+
+#if PAQ_STATE_TABLE_GEN
+
+#include "statetable.inc"
+#define nex(state, sel) state_table.t[state][sel]
+
+#else
+
+// The tabulated machine, from IDX/paq8-T0.idx (the transitions, columns [0]
+// and [1]) and IDX/paq8-T1.idx (the counts, [2] and [3]).  Two modules because
+// they are not the same kind of number: T0 says `Const 1` in its own source so
+// it folds to literals in BOTH builds and carries no !MAP! marker, while T1 is
+// a live pattern per value in the tuning build.  `./mk.sh` therefore gives
+// Const 0 for the counts only, which is what the split is for.
 //
 // The U8 casts are load-bearing, not tidiness: in the tuning build the counts
 // are reads from mapping objects rather than constant expressions, and a
 // narrowing conversion in a braced initialiser is ill-formed unless the value
-// is a constant expression that fits.  Without them this file compiles in the
-// release build and fails in the one it is meant to be tuned in.  The patterns
-// are 8 and 6 bits wide, so nothing can arrive out of U8 range.
+// is a constant expression that fits.
 //
 // 253 rows, as the literal held; 253..255 were never written and stay zero.
-// Dynamically initialised in the tuning build, which is fine here: the mapping
-// objects are declared by the generated headers at the top of this file so they
-// are constructed first, and nothing reads State_table before main() --
-// StateMap's constructor runs when the model is new'd.
 #define ST(n) { U8(T0_s##n##_n0), U8(T0_s##n##_n1), U8(T1_s##n##_c0), U8(T1_s##n##_c1) }
 static const U8 State_table[256][4] = {
   ST(000), ST(001), ST(002), ST(003), ST(004), ST(005), ST(006), ST(007),
@@ -894,8 +911,9 @@ static const U8 State_table[256][4] = {
   ST(248), ST(249), ST(250), ST(251), ST(252),
 };
 #undef ST
-
 #define nex(state, sel) State_table[state][sel]
+
+#endif
 
 // ---------------------------------------------------------------------------
 // PAQ_LOGISTIC -- the ONLY gate in this file that changes the bitstream.

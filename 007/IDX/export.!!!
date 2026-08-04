@@ -24,7 +24,7 @@ mdesc( G0_A6_SW2_, 0, "11100" );
 mdesc( G0_CM_DECAY_BIAS_, 0, "110100101" );
 mdesc( G0_CM_DECAY_FROM_, 0, "11100001" );
 mdesc( G0_CM_DECAY_SHIFT_, 0, "011" );
-mdesc( G0_CM_DECAY_STEP_, 0, "0100" );
+mdesc( G0_CM_DECAY_STEP_, 0, "0110" );
 mdesc( G0_CM_RUN_MAX_, 0, "00001010" );
 mdesc( G0_CM_RUN_STEP_, 0, "010" );
 mdesc( G0_FAILZ_TH_, 0, "1000010100" );
