@@ -1,0 +1,7 @@
+# build outputs and the scratch files the test scripts leave behind
+xadpcm
+xadpcm.exe
+*.o
+_t.*
+_v.*
+gen/
