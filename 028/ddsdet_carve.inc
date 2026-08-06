@@ -44,6 +44,18 @@ struct ddsdet : d5c::RC<mode> {
   uint zero;          // zero-pad placeholders to original length
   char prefix[4096];
   uint zindex;        // running carve index / restore count
+  /* Sidecar file number.  Without --dedup it tracks zindex exactly; with it, a
+     texture that repeats writes no new file and its marker points back at the
+     first copy's number, so the two diverge and the .dds files stay densely
+     numbered.  Solid modes keep using zindex -- there the marker index is the
+     entry ordinal the archive decodes in, not a file name. */
+  uint uindex;
+  /* --dedup in the sidecar modes.  The solid modes carry their own table
+     inside Solid, because there the reference has to survive into the archive;
+     here it never leaves the encoder, so restore needs no changes at all --
+     a duplicate's marker simply names a file that is already on disk. */
+  d5c::Dedup dd;
+  uint cfg_dedup_hb = 0, cfg_dedup_mb = 0;
   qword src_pos;      // distinct source bytes pulled from the coroutine
   uint co_eof;        // 1 once the underlying coroutine is truly exhausted
   int  rc;            // nonzero -> fatal error
@@ -318,7 +330,8 @@ struct ddsdet : d5c::RC<mode> {
   // -------------------------------------------------------------- carve ----
   void carve( void ) {
     if constexpr( mode == 0 ) {
-      if( op==2 && sol ) sol->enc_begin(cfg_nonsolid, cfg_embed);
+      if( op==2 && sol ) sol->enc_begin(cfg_nonsolid, cfg_embed, cfg_dedup_hb, cfg_dedup_mb);
+      else if( cfg_dedup_hb ) dd.init(cfg_dedup_hb, cfg_dedup_mb);
     }
     while(1) {
       fast_skip();                              // bulk-skip to the next "DDS "
@@ -347,6 +360,7 @@ struct ddsdet : d5c::RC<mode> {
 
       if( ok ) {
         char name[4096];
+        uint mkidx = zindex;               // what the marker will point at
         if( sol ) {
           if( embed ) { sol->enc_gap(gapbuf.data(), gapbuf.size()); gapbuf.clear(); }
           d5c::ByteBuf ep;
@@ -364,8 +378,14 @@ struct ddsdet : d5c::RC<mode> {
            * endpoint pair at all, so they still code normally. */
           bool haveep = bmp && d5c::parse_dds(cbuf, cn, di, &e2)
                             && (d5c::fmt_color(di.fmt) || d5c::fmt_ach(di.fmt) > 0);
-          bool modelled = sol->enc_add(cbuf, cn, haveep ? &ep : 0);
-          if( modelled && haveep ) {
+          bool modelled = sol->enc_add(cbuf, cn, haveep ? &ep : 0, cand_off);
+          /* A deduplicated entry carries no pixel data, so there is no endpoint
+             plane to externalise and no bitmap to write -- the decoder serves
+             it from the table and never looks for one. */
+          if( sol->last_mode == 3 ) {
+            snprintf(name, sizeof name, "%s#%u [%zu B, copy of %08llX]", solpath, zindex,
+                     sol->last_coded, (unsigned long long)sol->last_dup_pos);
+          } else if( modelled && haveep ) {
             d5c::vector<byte> px; uint bw2 = 0, bh2 = 0;
             char bn[4096];
             const uint nsurf = di.faces;             // one bitmap per face; BC5's
@@ -380,14 +400,28 @@ struct ddsdet : d5c::RC<mode> {
           } else
             snprintf(name, sizeof name, "%s#%u [%zu B%s]", solpath, zindex, sol->last_coded, modelled ? "" : " stored");
         } else {
-          dds_name(name, sizeof name, prefix, zindex);
-          if( !write_file(name, cbuf, cn) ) { rc = 1; return; }
+          /* Sidecar dedup: a repeat writes no file, and its marker names the
+             first copy's.  Restore needs no notion of any of this -- it reads
+             whatever file the marker names, which is already there. */
+          uint fidx = uindex; bool dup = false;
+          if( dd.on ) {
+            const d5c::Hash128 hh = d5c::hash128(cbuf, cn);
+            const uint s = dd.find(hh, cbuf, cn);
+            if( s != (uint)d5c::DD_NIL ) {
+              fidx = dd.tab[s].ref; dup = true;
+              dd.touch(s); dd.hits++; dd.saved += cn;
+            } else dd.insert(hh, cbuf, cn, cand_off, uindex);
+          }
+          dds_name(name, sizeof name, prefix, fidx);
+          if( !dup ) { if( !write_file(name, cbuf, cn) ) { rc = 1; return; } uindex++; }
+          else strncat(name, " [dup]", sizeof(name)-strlen(name)-1);
+          mkidx = fidx;
         }
 
         qword orig_len    = cn;
         qword placeholder = (zero && orig_len>=MK_SIZE) ? orig_len : (qword)MK_SIZE;
         if( !embed ) {                       // with --all the interleaving locates
-          byte mk[MK_SIZE]; mk_build(mk, zindex, orig_len, placeholder, cand_off);
+          byte mk[MK_SIZE]; mk_build(mk, mkidx, orig_len, placeholder, cand_off);
           putn(mk, MK_SIZE);                 // each texture, so no marker is needed
           for( qword p=placeholder-MK_SIZE; p; ) { uint k = p>sizeof(zpad)?(uint)sizeof(zpad):(uint)p; putn(zpad,k); p-=k; }
         }
@@ -533,7 +567,7 @@ struct ddsdet : d5c::RC<mode> {
   const byte* arcp = 0; size_t arcn = 0;   // archive image (ds); header already parsed
 
   void do_process( void ) {
-    src_pos = 0; zindex = 0; rc = 0; co_eof = 0; whyrej = "";
+    src_pos = 0; zindex = 0; uindex = 0; rc = 0; co_eof = 0; whyrej = "";
     pbn = 0; cn = 0; cap_on = 0;
 
     if( op==0 || op==2 ) carve(); else if( op==4 ) restore_all(); else restore();

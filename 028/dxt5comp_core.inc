@@ -85,9 +85,11 @@ namespace d5c {
 #include "MOD/dxt5-P0_p.inc"
 
 #include "crc32b.inc"
+#include "d5c_sha256.inc"
 #include "d5c_dds.inc"
 #include "d5c_logistic.inc"
 #include "d5c_bytebuf.inc"
+#include "d5c_dedup.inc"      // needs ByteBuf and Hash128
 #include "d5c_rc.inc"
 #include "d5c_mix.inc"
 #include "d5c_codec.inc"

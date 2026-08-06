@@ -386,6 +386,7 @@ static void dds_name(char* dst, size_t cap, const char* prefix, uint index) {
 struct RunCfg {
   const char* outpath = 0;         // opened lazily by the driver
   uint op, why, bmp, zero, embed, nonsolid;
+  uint dedup_hb, dedup_mb;         // dedup table log2 sizes; hb 0 = off
   const char *bprefix, *solpath, *prefix;
   const char *arcout;            // cs: where the archive goes
 };
@@ -398,6 +399,7 @@ static int run_dir( Carrier& M, Sol* sol, const RunCfg& c, FILE* f, FILE* g ) {
   M.op = c.op; M.sol = sol; M.why = c.why; M.bmp = c.bmp;
   M.bprefix = c.bprefix; M.solpath = c.solpath;
   M.zero = c.zero; M.embed = c.embed;
+  M.cfg_dedup_hb = c.dedup_hb; M.cfg_dedup_mb = c.dedup_mb;
   strncpy(M.prefix, c.prefix, sizeof(M.prefix)-1);
   M.prefix[sizeof(M.prefix)-1] = 0;
 
@@ -419,6 +421,13 @@ static int run_dir( Carrier& M, Sol* sol, const RunCfg& c, FILE* f, FILE* g ) {
     }
   }
   if( M.rc==0 ) {
+    /* Dedup lives in Solid for the archive modes and in the carrier for the
+       sidecar ones, so the report has to look in whichever ran. */
+    const d5c::Dedup* dd = (sol && sol->dd.on) ? &sol->dd : (M.dd.on ? &M.dd : 0);
+    if( dd && dd->hits )
+      fprintf(stderr, "ddsdet: dedup: %llu duplicate DDS, %llu bytes not %s\n",
+              (unsigned long long)dd->hits, (unsigned long long)dd->saved,
+              mode==0 ? "coded" : "decoded");
     if( M.op==4 )
       fprintf(stderr, "ddsdet: restored %u DDS(es), %llu bytes\n",
               M.zindex, (unsigned long long)M.allbytes);
@@ -434,8 +443,8 @@ static int usage() {
     "usage: ddsdet c|d  [--z|--zero] inputfile outputfile [dds_prefix]\n"
     "       ddsdet cs   [--z|--zero] inputfile restfile ddsfile\n"
     "       ddsdet ds                restfile  ddsfile  outputfile\n"
-    "  shortcuts: append a=--all, b=--bmp, n=--ns to cs/ds, in any order and\n"
-    "             combination -- csa, csb, csn, csab, csabn, dsa ...\n"
+    "  shortcuts: append a=--all, b=--bmp, n=--ns, p=--dedup to c/d/cs/ds, in\n"
+    "             any order and combination -- cp, csa, csap, csabn, dsa ...\n"
     "  c  carve : extract embedded DDS to <prefix>%%08X.dds, replace with markers\n"
     "     --z/--zero : zero-pad markers to original DDS size (preserve offsets)\n"
     "  d  decode: restore original file from a carved file + its .dds parts\n"
@@ -454,6 +463,21 @@ static int usage() {
     "  --bmp : (cs/ds) endpoints go to <prefix>%%08X_ep.bmp instead of the coder,\n"
     "          dxt5 \"cv\" layout; with it the third file is a PREFIX, and the\n"
     "          archive itself is written to that prefix verbatim\n"
+    "  --dedup : detect textures byte-identical to one already seen and write a\n"
+    "          reference instead of coding them again. In c mode the repeat\n"
+    "          writes no .dds and its marker names the first copy's file; in cs\n"
+    "          mode the archive entry is a back-reference. Matches are keyed by\n"
+    "          SHA-256 and confirmed byte for byte, so a hash collision costs a\n"
+    "          dedup, never correctness. Decoding needs no flag -- the archive\n"
+    "          says so -- but the decoder does hold the same table, hence the\n"
+    "          memory bound below\n"
+    "  --dedup-mem N  bytes of texture the table keeps live -- the window a\n"
+    "          repeat has to fall inside to be caught. K/M/G suffixes, rounded\n"
+    "          up to a power of two, default 256M. BOTH directions hold this\n"
+    "          much, so the value rides in the archive and the decoder needs no\n"
+    "          matching command line\n"
+    "  --dedup-slots N  table slots, rounded up to a power of two; default 64K.\n"
+    "          One slot per bucket, so a collision costs a missed duplicate\n"
     "  dds_prefix defaults to \"dds_\"\n"
     "ddsdet " DDSDET_VERSION "\n");
   return 2;
@@ -466,15 +490,36 @@ int main( int argc, char** argv ) {
 
   // flags may appear anywhere, including before the mode
   bool zero = false, why = false, bmpx = false, nonsolid = false, embed = false;
+  bool dedup = false;
+  qword dedup_mem = (qword)1<<28;         // 256 MiB of retained textures
+  qword dedup_slots = 1<<16;
   const char* mode = 0;
   const char* pos[3] = {0,0,0};
   int np = 0;
+  /* Round a byte/count argument up to a power of two: the table masks with it
+     and the archive stores its log2, so nothing else is representable. */
+  auto p2 = []( const char* s, qword lo, qword hi ) {
+    char* e = 0;
+    qword v = strtoull(s, &e, 0);
+    if( e ) switch( *e ) { case 'k': case 'K': v <<= 10; break;    // 256M reads
+                           case 'm': case 'M': v <<= 20; break;    // better than
+                           case 'g': case 'G': v <<= 30; break; }  // 268435456
+    if( v<lo ) v = lo;
+    if( v>hi ) v = hi;
+    qword r = lo; while( r<v ) r <<= 1;
+    return r;
+  };
   for( int a=1; a<argc; a++ ) {
     if( strcmp(argv[a],"--z")==0 || strcmp(argv[a],"--zero")==0 ) zero = true;
     else if( strcmp(argv[a],"--why")==0 ) why = true;
     else if( strcmp(argv[a],"--bmp")==0 ) bmpx = true;
     else if( strcmp(argv[a],"--ns")==0 || strcmp(argv[a],"--nonsolid")==0 ) nonsolid = true;
     else if( strcmp(argv[a],"--all")==0 ) embed = true;
+    else if( strcmp(argv[a],"--dedup")==0 || strcmp(argv[a],"--p")==0 ) dedup = true;
+    else if( strcmp(argv[a],"--dedup-mem")==0 && a+1<argc )
+      { dedup_mem = p2(argv[++a], 1u<<20, (qword)1<<46); dedup = true; }
+    else if( strcmp(argv[a],"--dedup-slots")==0 && a+1<argc )
+      { dedup_slots = p2(argv[++a], 1u<<8, 1u<<26); dedup = true; }
     else if( !mode ) mode = argv[a];
     else if( np<3 ) pos[np++] = argv[a];
     else { fprintf(stderr, "ddsdet: too many arguments\n"); return usage(); }
@@ -490,17 +535,25 @@ int main( int argc, char** argv ) {
    * alone and falls through to the usual unknown-mode error rather than being
    * silently read as "cs". */
   char modebuf[8];
-  if( (mode[0]=='c' || mode[0]=='d') && mode[1]=='s' && mode[2] ) {
-    bool ok = true;
-    for( const char* q = mode+2; *q; q++ )
-      if( *q!='a' && *q!='b' && *q!='n' ) { ok = false; break; }
-    if( ok ) {
-      for( const char* q = mode+2; *q; q++ )
-        switch( *q ) { case 'a': embed = true; break;
-                       case 'b': bmpx  = true; break;
-                       case 'n': nonsolid = true; break; }
-      modebuf[0] = mode[0]; modebuf[1] = 's'; modebuf[2] = 0;
-      mode = modebuf;
+  if( mode[0]=='c' || mode[0]=='d' ) {
+    /* "cs"/"ds" take every letter; plain "c"/"d" take only p, because a/b/n
+     * describe the archive and there is no archive here -- so "cn" stays the
+     * unknown-mode error it always was rather than silently doing nothing. */
+    const int sfx = (mode[1]=='s') ? 2 : 1;
+    const char* legal = (sfx==2) ? "abnp" : "p";
+    if( mode[sfx] ) {
+      bool ok = true;
+      for( const char* q = mode+sfx; *q; q++ )
+        if( !strchr(legal, *q) ) { ok = false; break; }
+      if( ok ) {
+        for( const char* q = mode+sfx; *q; q++ )
+          switch( *q ) { case 'a': embed = true; break;
+                         case 'b': bmpx  = true; break;
+                         case 'n': nonsolid = true; break;
+                         case 'p': dedup = true; break; }
+        modebuf[0] = mode[0]; modebuf[1] = 's'; modebuf[sfx] = 0;
+        mode = modebuf;
+      }
     }
   }
 
@@ -566,6 +619,17 @@ int main( int argc, char** argv ) {
   c.zero = zero ? 1 : 0;
   c.embed = (embed && c.op==2) ? 1 : 0;
   c.nonsolid = nonsolid ? 1 : 0;
+  /* Only the carve directions decide about dedup.  ds reads the geometry out
+     of the archive, and d needs no table at all -- a duplicate's marker just
+     names a sidecar that is already on disk. */
+  c.dedup_hb = c.dedup_mb = 0;
+  if( dedup && !dec_dir ) {
+    uint hb = 0, mb = 0;
+    while( ((qword)1<<(hb+1)) <= dedup_slots ) hb++;
+    while( ((qword)1<<(mb+1)) <= dedup_mem  ) mb++;
+    c.dedup_hb = hb; c.dedup_mb = mb;
+  } else if( dedup )
+    fprintf(stderr, "ddsdet: note: --dedup is ignored when decoding (the archive carries it)\n");
   c.prefix = prefix;
   c.arcout = (solid && strcmp(mode,"cs")==0) ? (embed ? pos[1] : pos[2]) : "";
 

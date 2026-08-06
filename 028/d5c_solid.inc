@@ -66,6 +66,8 @@ struct SolidBase {
   u32  nents = 0;
   size_t meta_coded = 0;   // bytes the metadata records cost
   size_t last_coded = 0;   // coded size of the most recent entry
+  u8   last_mode = 0;      // mode of the entry enc_add just wrote (3 = a copy)
+  u64  last_dup_pos = 0;   // ...and where the original was, for the report
 };
 
 template<int MD>
@@ -76,7 +78,12 @@ struct Solid : SolidBase {
   coro3_pin* rcpin = 0;    // which pin carries the coded stream; 0 = default
   coro3_pin* rcpin_keep() const { return rcpin; }
   coro3_pin* rcp() { return rcpin ? rcpin : cx.rc.rc_defpin(); }
-  struct Ent { u8 mode; u32 crc; u64 len; };
+  struct Ent { u8 mode; u32 crc; u64 len; u32 slot; };
+  /* Mode 3 -- a texture byte-identical to one the dedup table still holds.  It
+     carries no pixel data at all, just the slot the copy comes from, so a
+     repeat costs the record instead of a second full coding pass.  See
+     d5c_dedup.inc for why both directions can agree on what that slot holds. */
+  Dedup dd;
   // raw_total / nents / last_coded / meta_coded live in SolidBase
   Ctr cmore;               // continuation bit: "another texture follows"
   bool started = false;
@@ -99,13 +106,15 @@ struct Solid : SolidBase {
     return false;
   }
 
-  // one metadata record: mode, varint length, crc32 -- through the tail model.
-  // 1 mode + at most 10 varint bytes + 4 crc = 15, and meta_dec caps at 16.
+  /* One metadata record: mode, varint length, [mode 3: varint slot,] crc32 --
+     through the tail model.  1 mode + at most 10 varint bytes + 4 crc = 15;
+     mode 3 adds a second varint, so 25, and meta_dec caps at 26. */
   void meta_enc( const Ent& e ) {
-    u8 m[16]; size_t k = 0;
+    u8 m[26]; size_t k = 0;
     m[k++] = e.mode;
     u64 x = e.len;
     do { u8 b = u8(x & 0x7F); x >>= 7; m[k++] = u8(b | (x ? 0x80 : 0)); } while(x);
+    if(e.mode == 3) { x = e.slot; do { u8 b = u8(x & 0x7F); x >>= 7; m[k++] = u8(b | (x ? 0x80 : 0)); } while(x); }
     for(int i = 0; i < 4; i++) m[k++] = u8(e.crc >> (8 * i));
     u8 n = u8(k);
     cx.code_tail(&n, 1);
@@ -114,14 +123,17 @@ struct Solid : SolidBase {
   bool meta_dec( Ent& e ) {
     u8 n = 0;
     cx.code_tail(&n, 1);
-    if(n < 6 || n > 16) return false;
-    u8 m[16] = {0};
+    if(n < 6 || n > 26) return false;
+    u8 m[26] = {0};
     cx.code_tail(m, n);
     e.mode = m[0];
-    size_t i = 1; u64 len = 0;
+    size_t i = 1; u64 len = 0, slot = 0;
     if(!get_varint(m, n, i, len)) return false;
+    if(e.mode == 3 && !get_varint(m, n, i, slot)) return false;
     if(i + 4 != n) return false;
     e.len = len;
+    e.slot = u32(slot);
+    if(slot != (u64)e.slot) return false;
     e.crc = 0;
     for(int k = 0; k < 4; k++) e.crc |= u32(m[i + k]) << (8 * k);
     return true;
@@ -175,37 +187,94 @@ struct Solid : SolidBase {
     }
   }
 
-  void enc_begin( bool nonsolid_ = false, bool embed_ = false ) {
+  /* Raw p=1/2 bits, LSB first -- the same trick the stream flags use, for the
+     dedup geometry that has to survive into the decoder. */
+  void raw_bits( u32& v, int nb ) {
+    if constexpr( enc ) { for(int i = 0; i < nb; i++) cx.rc.bit(2048, (v >> i) & 1); }
+    else { v = 0; for(int i = 0; i < nb; i++) v |= u32(cx.rc.bit(2048, -1) != 0) << i; }
+  }
+
+  void enc_begin( bool nonsolid_ = false, bool embed_ = false, u32 dedup_hb = 0, u32 dedup_mb = 0 ) {
     nonsolid = nonsolid_;
     embed = embed_;
     init_tables();
     cx.rc.init_enc(rcpin);
-    // magic straight onto the stream, ahead of any coded byte
-    { static const u8 m[4] = {'D','5','S','4'}; cx.rc.raw_put(m, 4); }
+    /* D5S5: D5S4 plus the dedup stream flag.  The flag has to be at stream
+       level rather than implied by the first mode-3 record, because the decoder
+       must start RETAINING entries before it ever sees a reference to one --
+       and a decoder that retained unconditionally would pay the memory budget
+       on every archive, deduped or not.  Bumping the magic buys a clean "or an
+       older revision" from dec_begin instead of a confusing "corrupt entry
+       record" the first time an old build meets a mode-3 entry. */
+    { static const u8 m[4] = {'D','5','S','5'}; cx.rc.raw_put(m, 4); }
     // Stream flag, bit 0 = non-solid.  Coded as a RAW range-coder bit at p=1/2,
     // not through the tail model: that way it needs no tables, so the one init
     // below leaves a pristine model that serves as file #1's own reset and
     // there is exactly one init per .dds file rather than one extra.
     cx.rc.bit(2048, nonsolid ? 1 : 0);
     cx.rc.bit(2048, embed ? 1 : 0);   // second stream flag, same raw-bit trick
+    cx.rc.bit(2048, dedup_hb ? 1 : 0);
+    if( dedup_hb ) {
+      /* Geometry in the stream, not as a build constant: the retained set is
+         shared state, so a decoder built with a different default would drift
+         from the encoder on the first eviction.  init() first, and write back
+         what it settled on rather than what was asked for, so the stream can
+         never carry a value the encoder did not actually use. */
+      dd.init(dedup_hb, dedup_mb);
+      u32 a = dd.hb, b = dd.mb;
+      raw_bits(a, 6); raw_bits(b, 6);
+    }
     cx.init(FMT_DXT5);            // allocates every table; fmt is per file
     first_entry = true;
     started = true;
   }
 
-  // add one texture; returns true if it was modelled, false if stored verbatim
-  bool enc_add( const u8* d, size_t n, ByteBuf* ep = 0 ) {
+  // add one texture; returns true if it was modelled, false if stored verbatim.
+  // `pos` is where it sat in the container -- report only, never coded.
+  bool enc_add( const u8* d, size_t n, ByteBuf* ep = 0, u64 pos = 0 ) {
     u64 rc0 = cx.rc.emitted;
-    Ent e; e.mode = 1; e.crc = crc_of(d, n); e.len = n;
+    Ent e; e.mode = 1; e.crc = crc_of(d, n); e.len = n; e.slot = 0;
+
+    /* Seen this exact texture recently?  The lookup verifies with a memcmp, so
+       a hash collision costs a dedup, not correctness -- and because a miss and
+       a rejected hit both leave the table untouched, the decoder (which sees
+       neither) stays in step. */
+    Hash128 hh;
+    const bool dedup = dd.on;
+    if( dedup ) {
+      hh = hash128(d, n);
+      const u32 s = dd.find(hh, d, n);
+      if( s != DD_NIL ) {
+        e.mode = 3; e.slot = s;
+        u64 m1 = cx.rc.emitted;
+        more_bit(1);
+        meta_enc(e);
+        meta_coded += size_t(cx.rc.emitted - m1);
+        raw_total += e.len; nents++;
+        dd.touch(s);                    // mirrored by dec_body's resolve
+        dd.hits++; dd.saved += n;
+        last_mode = 3; last_dup_pos = dd.tab[s].pos;
+        last_coded = size_t(cx.rc.emitted - rc0);
+        first_entry = false;
+        return true;
+      }
+    }
+
     dds_info di; const char* err = "";
     bool modelled = (n >= 128 && parse_dds(d, n, di, &err));
     e.mode = modelled ? (ep ? 2 : 0) : 1;   // 2 = coded with external endpoints
+    last_mode = e.mode;
 
     u64 m0 = cx.rc.emitted;
     more_bit(1);
     meta_enc(e);
     meta_coded += size_t(cx.rc.emitted - m0);
     raw_total += e.len; nents++;
+    /* Retain BEFORE coding: the decoder inserts the entry the moment it has the
+       bytes, which is after decoding, and neither side may reference an entry
+       from within its own record -- so the two orders agree on the table state
+       every reference is resolved against. */
+    if( dedup ) dd.insert(hh, d, n, pos, 0);
 
     if( modelled ) {
       // independent model per .dds FILE (once here, not per mip level below).
@@ -288,11 +357,16 @@ struct Solid : SolidBase {
     // read the magic BEFORE init_dec, which primes with 5 coded bytes
     { coro3_pin* q = rcp(); u8 m[4];
       for(int i = 0; i < 4; i++) { uint c = q->get(); if(c > 255) return *err = "d5s truncated", false; m[i] = u8(c); }
-      if( memcmp(m, "D5S4", 4) ) return *err = "not a d5s archive (or an older revision)", false; }
+      if( memcmp(m, "D5S5", 4) ) return *err = "not a d5s archive (or an older revision)", false; }
     init_tables();
     cx.rc.init_dec(rcpin);
     nonsolid = cx.rc.bit(2048, -1) != 0;   // raw bits, mirroring enc_begin
     embed    = cx.rc.bit(2048, -1) != 0;
+    if( cx.rc.bit(2048, -1) != 0 ) {       // dedup: geometry follows
+      u32 hb = 0, mb = 0;
+      raw_bits(hb, 6); raw_bits(mb, 6);
+      dd.init(hb, mb);
+    }
     cx.init(FMT_DXT5);                     // ...and, as there, serves file #1
     first_entry = true;
     ndec = 0; raw_total = 0; nents = 0; pending = false;
@@ -327,6 +401,14 @@ struct Solid : SolidBase {
      * allocation before that happens. */
     if( pend.len > (u64)1 << 40 ) return *err = "implausible entry length", -1;
     pend_nblk = 0;
+    /* Mode 3 is a reference: no header in the stream, nothing to model, and
+       nothing for the caller to supply -- so it announces itself as an ordinary
+       self-contained entry and dec_body serves it from the table. */
+    if( pend.mode == 3 ) {
+      if( !dd.valid(pend.slot, (size_t)pend.len) ) return *err = "dedup reference to an entry the table no longer holds", -1;
+      pending = true;
+      return 1;
+    }
     if( pend.mode != 1 ) {
       if( pend.len < 128 ) return *err = "coded entry too small", -1;
       // must mirror enc_add: the reset happens after the entry record and
@@ -361,10 +443,21 @@ struct Solid : SolidBase {
     if( !pending ) return *err = "dec_body without dec_peek", -1;
     pending = false;
     const Ent& e = pend;
+    if( e.mode==3 ) {
+      const Dedup::Slot& t = dd.tab[e.slot];
+      dst.assign_copy(t.data.data(), t.data.size());
+      dd.touch(e.slot);                    // mirrors enc_add's hit
+      dd.hits++; dd.saved += (size_t)e.len;
+      if( crc_of(dst.data(), dst.size()) != e.crc ) return *err = "crc mismatch on a dedup reference", -1;
+      first_entry = false;
+      raw_total += e.len; nents++; ndec++;
+      return 1;
+    }
     dst.assign_zero((size_t)e.len);
     if( e.mode==1 ) {
       cx.rc.raw_get(dst.data(), (size_t)e.len);
       cx.rc.init_dec(rcpin_keep());
+      dd_retain(dst);
       ndec++; raw_total += e.len; nents++;
       return 1;
     }
@@ -411,10 +504,22 @@ struct Solid : SolidBase {
       if( bad ) return *err = "external endpoint file too short", -1;
     }
     if( crc_of(dst.data(), dst.size()) != e.crc ) return *err = "crc mismatch", -1;
+    dd_retain(dst);
     first_entry = false;
     raw_total += e.len; nents++;
     ndec++;
     return 1;
+  }
+
+  /* The decoder's half of the dedup contract: every entry that was CODED gets
+     remembered, so a later reference has something to point at.  enc_add
+     inserts at the same point in the entry sequence -- before its body rather
+     than after, which is the only place it can, and which nothing in between
+     observes.  The slot's `pos` stays 0 here: it is only ever printed, never
+     compared, so the two sides are free to disagree about it. */
+  void dd_retain( const ByteBuf& b ) {
+    if( !dd.on ) return;
+    dd.insert(hash128(b.data(), b.size()), b.data(), b.size(), 0, 0);
   }
 
   // convenience for callers that never use external endpoints
