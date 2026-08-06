@@ -17,8 +17,16 @@ static inline void texture_init(Codec<MD>& cx) { cx.iw = 0; cx.ih = 0; cx.hasP =
  * re-pointing the rotating views is free.  Grows only. */
 template<int MD>
 static inline void texture_reserve(Codec<MD>& cx, const dds_info& di) {
+  /* FMT_RAW and FMT_MODE never reach level_init: code_raster and
+     code_mode_blocks work out of the fixed-size sRaster / sModeRow rows.
+     Their "block grid" is the pixel grid (bedge 1), so sizing the level slabs
+     from it would ask for 16*w*h plane bytes for a texture that does not use a
+     single one of them -- 1.2 GiB for a 2048x2048 raster. */
+  if(di.fmt == FMT_RAW || di.fmt == FMT_MODE) return;
   u32 w, h, bw, bh; level_dims(di, 0, w, h, bw, bh);
-  cx.reserve(bw * 4, bw > bh ? bw : bh);
+  /* What level_init(bw,bh) actually touches, and level 0 is the largest level
+     of the chain, so this covers the whole texture. */
+  cx.reserve(size_t(bw) * bh * 16, size_t(bw) * bh, bw);
 }
 
 /* Solid archive layout:

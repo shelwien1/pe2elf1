@@ -271,43 +271,45 @@ struct ddsdet : d5c::RC<mode> {
     hdr.Parse(this);
     if( f_quit || hdr.parse_err ) { whyrej = "header truncated"; return false; }
     if( !hdr.check() ) { whyrej = hdr.why; return false; }
-    /* Ambiguous block grid (see dds_header.inc): consume the shorter extent
-       first and look at the four bytes that follow.  A "DDS " there -- or the
-       end of the input -- means the partial edge blocks really were dropped,
-       so the shorter extent is the right one.  Anything else and we take the
-       normal rounded-up extent, which is what every other writer produces. */
-    if( hdr.alts ) {
-      qword at = 0;
-      for( uint i=0; i<hdr.alts; i++ ) {
-        if( !skipn( hdr.alt_len[i] - at ) ) { whyrej = "payload runs past end of input"; return false; }
-        at = hdr.alt_len[i];
-        uint p[4]; uint n = 0;
-        for( ; n<4; n++ ) { p[n] = get(); if( p[n]==(uint)-1 ) break; }
-        bool eof = n<4;
-        bool sig = n==4 && p[0]=='D' && p[1]=='D' && p[2]=='S' && p[3]==' ';
-        for( uint k=n; k--; ) unget(p[k]);
-        cn -= n;                                   // untee the peek
-        if( sig || eof ) {
-          hdr.data_len = at; hdr.total_len = hdr.hdr_len + at;
-          return true;
-        }
+    /* Ambiguous extent (see dds_header.inc: block grid, chain length).  Walk
+       the shorter candidates in order, and after each look at the four bytes
+       that follow.  A "DDS " there -- or the end of the input -- means that
+       candidate was where the texture really ended, so take it.  Anything else
+       and we go on, ending at the default extent.
+       Every segment goes through skipn_scan, so a VALIDATED header inside the
+       payload still ends the entry.  That matters more than it used to: the
+       default extent can now be LONGER than dwMipMapCount declares, and
+       without the scan an over-long extent would swallow its successor whole
+       -- the same failure plain skipn() had on a truncated texture. */
+    qword at = 0;
+    for( uint i=0; i<=hdr.alts; i++ ) {
+      const qword want = (i<hdr.alts) ? hdr.alt_len[i] : hdr.data_len;
+      qword got = 0;
+      const bool ok = skipn_scan( want - at, got );
+      at += got;
+      if( at < want ) {
+        /* Ran into a validated header, or into the end of the input, before
+         * this candidate's extent -- so the entry is truncated and `at` is its
+         * real length.  parse_dds accepts a short chain and the walk codes
+         * whole block rows of whatever fits, with the remainder going to the
+         * tail model.  Earlier this rejected instead, because back when
+         * parse_dds refused a short chain the entry was stored verbatim, and
+         * raw storage lost to leaving the bytes in the gap (30040 B against
+         * 28029 B).  Modelling them beats both. */
+        if( !ok && at == 0 ) { whyrej = "payload runs past end of input"; return false; }
+        hdr.data_len = at; hdr.total_len = hdr.hdr_len + at;
+        return true;
       }
-      if( !skipn( hdr.data_len - at ) ) { whyrej = "payload runs past end of input"; return false; }
-      return true;
-    }
-    { qword got = 0;
-      if( !skipn_scan( hdr.data_len, got ) && got == 0 ) {
-        whyrej = "payload runs past end of input"; return false;
-      }
-      if( got < hdr.data_len ) {
-        /* A validated header starts inside the declared payload, so this entry
-         * is truncated.  Carve it at its real extent: parse_dds now accepts a
-         * short chain and the walk codes whole block rows of whatever fits,
-         * with the remainder going to the tail model.  Earlier this rejected
-         * instead, because back when parse_dds refused a short chain the entry
-         * was stored verbatim, and raw storage lost to leaving the bytes in the
-         * gap (30040 B against 28029 B).  Modelling them beats both. */
-        hdr.data_len = got; hdr.total_len = hdr.hdr_len + got;
+      if( i==hdr.alts ) break;                     // the default extent: done
+      uint p[4]; uint n = 0;
+      for( ; n<4; n++ ) { p[n] = get(); if( p[n]==(uint)-1 ) break; }
+      bool eof = n<4;
+      bool sig = n==4 && p[0]=='D' && p[1]=='D' && p[2]=='S' && p[3]==' ';
+      for( uint k=n; k--; ) unget(p[k]);
+      cn -= n;                                     // untee the peek
+      if( sig || eof ) {
+        hdr.data_len = at; hdr.total_len = hdr.hdr_len + at;
+        return true;
       }
     }
     return true;

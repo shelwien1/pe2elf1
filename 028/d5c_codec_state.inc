@@ -83,14 +83,29 @@
   u8*  P(int i) { return sPlaneMem + size_t(i) * plane_n; }
   Blk* G(int i) { return sGridMem  + size_t(i) * grid_n; }
   Blk* R(int i) { return sRowMem   + size_t(i) * row_n;  }
-  void reserve(u32 need_iw, u32 need_b) {
-    if(size_t(need_iw) * need_iw <= plane_n && size_t(need_b) * need_b <= grid_n) return;
+  /* Grow the slabs so one level of the next texture fits.  Sizes are AREAS,
+     not the side of a square: level_init(bw,bh) clears iw*ih = 16*bw*bh plane
+     bytes, bw*bh grid entries and bw row entries, and a 64x512 texture
+     (bw=16, bh=128) needs 32768 plane bytes where the old square rule --
+     (4*bw)^2 = 4096 -- reserved an eighth of that.
+
+     Each family only ever GROWS.  Shrinking one while another grows is not a
+     saving, it is a buffer overflow: the caller has already sized the coding
+     state from the texture the caller is about to walk, so a slab that came
+     back smaller is written past its end on the first level_init.  The old
+     code did exactly that -- when only the grid needed growing it set the
+     plane side to 0 as a "keep the larger" shorthand, which made plane_n 0 and
+     turned the next memset into an unbounded heap write.  Keeping the maximum
+     per family, independently, is what that line meant to say. */
+  void reserve(size_t need_plane, size_t need_grid, size_t need_row) {
+    if(need_plane <= plane_n && need_grid <= grid_n && need_row <= row_n) return;
     // round up so a corpus of gently growing textures does not realloc each time
-    u32 iwc = 64; while(iwc < need_iw) iwc *= 2;
-    u32 bc  = 16; while(bc  < need_b ) bc  *= 2;
-    if(size_t(iwc) * iwc < plane_n) iwc = 0;          // keep the larger of old/new
+    size_t np = plane_n ? plane_n : size_t(64) * 64; while(np < need_plane) np *= 2;
+    size_t ng = grid_n  ? grid_n  : size_t(16) * 16; while(ng < need_grid ) ng *= 2;
+    size_t nr = row_n   ? row_n   : 16;              while(nr < need_row  ) nr *= 2;
     delete[] sPlaneMem; delete[] sGridMem; delete[] sRowMem;
-    plane_n = size_t(iwc) * iwc; grid_n = size_t(bc) * bc; row_n = bc;
+    sPlaneMem = nullptr; sGridMem = nullptr; sRowMem = nullptr;  // anew() may exit(3)
+    plane_n = np; grid_n = ng; row_n = nr;
     sPlaneMem = anew<u8 >(plane_n * N_PLANE, "geometry planes");
     sGridMem  = anew<Blk>(grid_n  * N_GRID , "block grids");
     sRowMem   = anew<Blk>(row_n   * N_ROW  , "block rows");
@@ -103,7 +118,7 @@
   u8*  P(int i) { return sPlane[i]; }
   Blk* G(int i) { return sGrid[i];  }
   Blk* R(int i) { return sRow[i];   }
-  void reserve(u32, u32) {}
+  void reserve(size_t, size_t, size_t) {}
 #endif
 
   Blk *rowP = nullptr, *rowC = nullptr;

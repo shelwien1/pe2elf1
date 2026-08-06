@@ -78,14 +78,25 @@ struct DDSHEADER {
   qword hdr_len;         /* 4 + 124 (+20 for DX10)                            */
   qword data_len;        /* payload bytes                                     */
   qword total_len;       /* hdr_len + data_len == the whole .dds file          */
-  /* Block formats whose width/height is not a multiple of 4 are ambiguous:
-     nearly every writer rounds the block grid up, but some drop the partial
-     edge row/column (the BTC files in the wild do).  Both extents are computed
-     -- alt_len is the shorter, floor-grid one, 0 when there is no ambiguity --
-     and the caller resolves it by looking at what actually follows.  Guessing
-     is what this file otherwise refuses to do, so alt_len is only ever taken
-     when the bytes at that offset are themselves a "DDS " signature or EOF. */
-  qword alt_len[2];      /* shorter candidates, ascending; alts says how many  */
+  /* Two independent header ambiguities put more than one plausible extent on
+     the table, so the length is a DEFAULT plus a list of shorter candidates:
+
+       - block grid.  Nearly every writer rounds a width/height that is not a
+         multiple of 4 up, but some drop the partial edge row/column (the BTC
+         files in the wild do), and some size the payload from the raw
+         dimensions as if the format were linear.
+       - chain length.  dwMipMapCount is supposed to count the levels actually
+         stored, and one writer family counts them off the SHORTER side -- it
+         stops as soon as one dimension reaches 1 -- while writing the chain
+         all the way down to 1x1.  A 512x128 DXT5 from it declares 8 levels and
+         carries 10, so the declared extent is 32 bytes short of the file.
+
+     The caller resolves by looking at what actually follows each candidate.
+     Guessing is what this file otherwise refuses to do, so a candidate is only
+     ever taken when the bytes at that offset are themselves a "DDS " signature
+     or EOF; otherwise the default stands. */
+  enum { MAX_ALTS = 4 };
+  qword alt_len[MAX_ALTS];  /* shorter candidates, ascending; alts says how many */
   uint  alts;
   int   floor_grid;      /* set while surface() is being asked for the alt size */
 
@@ -105,7 +116,8 @@ struct DDSHEADER {
     parse_err = 0; has_dx10 = 0; why = "";
     odd_reserved = odd_pitch = false;
     kind = KIND_NONE; unit = 0; mips = 0; slices = 0; depth = 0;
-    data_len = total_len = 0; alt_len[0] = alt_len[1] = 0; alts = 0; floor_grid = 0;
+    data_len = total_len = 0; alts = 0; floor_grid = 0;
+    for( uint i=0; i<(uint)MAX_ALTS; i++ ) alt_len[i] = 0;
     dxgiFormat = resourceDimension = miscFlag = arraySize = miscFlags2 = 0;
 
     sign                = rd32(M);
@@ -315,52 +327,69 @@ struct DDSHEADER {
     }
 
     /* payload ----------------------------------------------------------- */
-    qword one = 0;
-    uint w = dwWidth, h = dwHeight, d = depth;
-    for( uint m=0; m<mips; m++ ) {
-      one += surface(w, h) * d;
-      if( w>1 ) w >>= 1;
-      if( h>1 ) h >>= 1;
-      if( d>1 ) d >>= 1;
-    }
-    data_len = one * slices;
+    /* All of one slice's mip chain, `nlev` levels, under the floor_grid rule
+       currently in force.  `raw` sizes each level from the raw dimensions as
+       if the format were linear at unit*8/16 bits per texel, which is the
+       third writer behaviour below. */
+    auto chain = [&]( uint nlev, bool raw ) -> qword {
+      qword t = 0; uint w = dwWidth, h = dwHeight, d = depth;
+      for( uint m=0; m<nlev; m++ ) {
+        t += (raw ? ((qword)w*h*unit/16) : surface(w, h)) * d;
+        if( w>1 ) w >>= 1;
+        if( h>1 ) h >>= 1;
+        if( d>1 ) d >>= 1;
+      }
+      return t * slices;
+    };
+
+    /* Chain length.  dwMipMapCount normally counts every level that is
+       actually stored, and then mips == max_levels() and there is nothing to
+       decide.  But a writer family counts levels off the SHORTER side -- it
+       stops the moment one dimension reaches 1 -- and still writes the chain
+       down to 1x1: a 512x128 DXT5 declares 8 (128 -> 1) while carrying 10
+       (512 -> 1).  Recognise exactly that shape, take the full chain as the
+       default, and leave the declared chain as a shorter candidate for the
+       caller to fall back on. Anything else keeps the declared count.
+
+       Volume textures are left alone: depth halves alongside width and height,
+       so "the shorter side" is a three-way question with no example here to
+       check an answer against, and guessing is what this file refuses to do. */
+    const uint mn = dwWidth<dwHeight ? dwWidth : dwHeight;
+    const bool short_chain = depth==1
+                          && mips < max_levels(dwWidth, dwHeight, 1)
+                          && mips == max_levels(mn, mn, 1);
+    const uint nlev = short_chain ? max_levels(dwWidth, dwHeight, 1) : mips;
+
+    data_len = chain(nlev, false);
     if( data_len==0 ) return why = "computed payload is empty", false;
     total_len = hdr_len + data_len;
 
-    /* Shorter candidates for a block format whose dimensions are not a
-       multiple of 4.  Two writer behaviours are known:
-         - drop the partial edge row/column  -> floor block grid
-         - size the payload from the raw dimensions, as if the format were
-           linear at unit*8/16 bits per pixel (the BTC writers do this: a
-           4421x8632 file holds exactly W*H/4 bytes)
-       Both are computed, never guessed; the caller picks by looking at what
-       follows.  Sorted ascending so the caller can walk them in order. */
+    /* Shorter candidates.  Sorted ascending and deduplicated so the caller can
+       walk them in order, stopping at the first one the input agrees with. */
+    qword cand[MAX_ALTS]; uint nc = 0;
+    auto add = [&]( qword v ) {
+      if( !v || v >= data_len || nc >= (uint)MAX_ALTS ) return;
+      for( uint i=0; i<nc; i++ ) if( cand[i]==v ) return;
+      cand[nc++] = v;
+    };
+    if( short_chain ) add( chain(mips, false) );      // the declared, shorter chain
+    /* Block grid: a width/height that is not a multiple of 4 leaves the edge
+       row/column ambiguous.  Both readings of both chain lengths are on the
+       table -- dropping the partial edge is independent of how many levels
+       were written -- so the candidate set is their product, minus whatever
+       coincides with the default. */
     if( kind==KIND_BLOCK4 && (dwWidth&3 || dwHeight&3) && dwWidth>=4 && dwHeight>=4 ) {
-      qword cand[2]; uint nc = 0;
       floor_grid = 1;
-      qword two = 0; w = dwWidth; h = dwHeight; d = depth;
-      for( uint m=0; m<mips; m++ ) {
-        two += surface(w, h) * d;
-        if( w>1 ) w >>= 1;
-        if( h>1 ) h >>= 1;
-        if( d>1 ) d >>= 1;
-      }
+      add( chain(nlev, false) );
+      if( short_chain ) add( chain(mips, false) );
       floor_grid = 0;
-      two *= slices;
-      if( two && two < data_len ) cand[nc++] = two;
-      qword raw = 0; w = dwWidth; h = dwHeight; d = depth;
-      for( uint m=0; m<mips; m++ ) {
-        raw += ((qword)w*h*unit/16) * d;
-        if( w>1 ) w >>= 1;
-        if( h>1 ) h >>= 1;
-        if( d>1 ) d >>= 1;
-      }
-      raw *= slices;
-      if( raw && raw < data_len && (nc==0 || raw != cand[0]) ) cand[nc++] = raw;
-      if( nc==2 && cand[0] > cand[1] ) { qword t = cand[0]; cand[0] = cand[1]; cand[1] = t; }
-      for( uint i=0; i<nc; i++ ) alt_len[i] = cand[i];
-      alts = nc;
+      add( chain(nlev, true) );
+      if( short_chain ) add( chain(mips, true) );
     }
+    for( uint i=1; i<nc; i++ )                        // insertion sort, nc <= 4
+      for( uint j=i; j && cand[j-1]>cand[j]; j-- ) { qword t=cand[j-1]; cand[j-1]=cand[j]; cand[j]=t; }
+    for( uint i=0; i<nc; i++ ) alt_len[i] = cand[i];
+    alts = nc;
     return true;
   }
 
