@@ -1,0 +1,39 @@
+# P0: mode-based block formats (BC7 / BC6H).  These have no fixed field
+# layout -- the meaning of every bit after the mode depends on the mode --
+# so the block is coded byte-wise with the mode, the byte's position in the
+# block and the causal neighbour blocks as context.
+
+Prefix P0
+Debug 1
+Const 1
+
+# same byte position in the block to the west, with the mode
+Index P1
+ pw: pw, &11111111
+ pk: pk, &1111
+
+# same byte position to the north, with the mode
+Index P2
+ pn: pn, &11111111
+ qk: pk, &1111
+
+# the previous byte of this block and the position (within-block order-1)
+Index P3
+ pp: pp, &11111111
+ rk: pk, &1111
+
+# the 2D gradient of the same position, clamped
+Index P4
+ pg: pg, &00000001
+ gk: pk, &1111
+
+# mode alone x position: the shape of a block at this mode
+Index P5
+ sm: pm, &1111
+ sk: pk, &1111
+
+# west and north jointly, coarsely
+Index P6
+ jw: pw, &01111110
+ jn: pn, &11111100
+ jm: pm, &0111

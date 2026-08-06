@@ -1,0 +1,154 @@
+# C0: color index (2-bit texel) model
+# vars: pl,pu,pul,pur = palette-map of L/U/UL/UR pixels (0..3); Wci/Nci = same-position
+# index in W/N block; prev = previous raw index (scan order); t = texel position;
+# h1c/h2c = hash candidate texels + h1v/h2v valid flags; rawL/rawU/rawUL = raw index
+# plane neighbors; m3 = 3-color mode (dxt1 c0<=c1); d13 = dxt1 && 3-color;
+# plu = (pl==pu); nd4m = distinct palette entries - 1 (0..3)
+
+Prefix C0
+Debug 1
+Const 0
+
+Index CI1
+ c1l: pl,   &01
+ c1u: pu,   &01
+ c1w: Wci,  &11
+# dynamic W-agreement gate for the Wci key
+ c1g: agq,  1!00010
+
+Index CI2
+ c2p: prev, &11
+ c2t: t,    &0101
+
+Index CI3
+ c3w: Wci,  &10
+ c3l: pl,   &11
+
+Index CI4
+ c4n: Nci,  &11
+ c4u: pu,   &11
+
+Index CI0
+ c0m: m3,   &1
+
+Index CI5
+ c5a: pul,  &00
+ c5b: pur,  &01
+
+Index CI6
+ c6c: h1c,  &01
+ c6l: pl,   &10
+ c6v: h1v,  &1
+
+Index CI7
+ c7c: h2c,  &11
+ c7l: pl,   &10
+ c7v: h2v,  &1
+
+Index CI9
+ c9l: rawL, &10
+ c9u: rawU, &11
+
+Index CI8
+ c8l: pl,   &00
+ c8u: pu,   &00
+ c8a: pul,  &01
+
+Index CIb
+ cbl: pl,   &11
+ cbu: pu,   &00
+ cba: pul,  &00
+ cbb: pur,  &11
+
+Index CIc
+ ccl: pl,   &11
+ ccu: pu,   &11
+ cca: pul,  &11
+ ccb: pur,  &11
+ ccw: Wci,  &11
+
+Index CId
+ cdl: rawL,  &11
+ cdu: rawU,  &11
+ cda: rawUL, &11
+
+# v1 s2.1: p^ confidence -- cfl/cfu = 0 on exact palette hit, else 1+log2(dist^2)
+Index CIe
+ cel: pl,   &00
+ ceu: pu,   &10
+ cec: cfl,  1!0000001110010010000
+ ced: cfu,  1!0000001110000000000
+
+# A5: index-space gradient (gl = clamp(p^L - prev p^L,-3,3)+3) and
+# slope predictor (sp = clamp(2*p^L - Wci, 0, 3))
+Index CIf
+ cfg: gl,   &111
+ cfs: sp,   &11
+ cfp: prev, &11
+
+# s2.4/A10: a->c coupling -- avq = decoded alpha value bucket (0..3; 3 = opaque)
+Index CIg
+ cgl: pl,   &00
+ cgu: pu,   &00
+ cga: avq,  &11
+
+# A1: ppc = palette index of the parent-level co-located 2x2 average pixel
+# (4 = no parent level); pcf = its palette-fit confidence bucket
+Index CIp
+ cpp: ppc,  &111
+ cpl: pl,   &11
+ cpu: pu,   &11
+
+Index CIq
+ cqp: ppc,  &111
+ cqc: pcf,  1!1111101111110101000
+ cqv: prev, &00
+
+# A1: pci = parent raw index at the co-located texel (4 = none),
+# pcs = how many of the 4 parent indices agree with it (0..3)
+Index CIr
+ crp: pci,  &111
+ crs: pcs,  &111
+ crc: ppc,  &011
+
+# mixer set selection
+Index CIM
+ cmp: plu,  &0
+ cmd: d13,  &1
+ cmn: nd4m, &10
+# A4: endpoint span bucket (spq = 0 degenerate, else 1+log2(rgb dist^2))
+ cms: spq,  1!0000101110101000001
+# A11: texel quadrant (t bits 3,1 = row>=2, col>=2)
+ cmt: t,    &0000
+# A4: palette-identical-to-W flag
+ cmw: stq,  1!0
+# A4: min inter-entry palette distance
+ cmq: mdq,  1!0
+# s2.4/A10: alpha transparency bucket
+ cma: avq,  &01
+
+# SSE stage 1
+Index APC
+ apl: pl,   &11
+ apu: pu,   &11
+ apa: pul,  &11
+# A4: palette stability vs W (stq = 0 exact pair copy, else 1+log2(565 dist^2), 15 = no W)
+ aps: stq,  1!1010100000000000
+# s2.4/A10: alpha transparency bucket
+ apq: avq,  &11
+
+# SSE stage 2: texel position x p^L
+Index APC2
+ aqt: t,    &1111
+ aql: pl,   &11
+# A4: min inter-entry palette distance (mdq = 0 duplicate entries, else 1+log2(min dist^2))
+ aqm: mdq,  1!1011111000000000000
+# dynamic W-agreement: agq = 4*(matching texels so far)/t, 5 = no info yet
+ aqg: agq,  1!00000
+
+# slow twin counter context
+Index SLC
+ scl: pl,   &01
+ scu: pu,   &01
+ sca: pul,  &01
+ scb: pur,  &00

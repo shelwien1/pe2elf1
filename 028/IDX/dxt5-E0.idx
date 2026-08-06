@@ -1,0 +1,90 @@
+# E0: color endpoint literal contexts (per 5/6-bit channel MSB trees)
+# masks are over the 6-bit channel domain; 5-bit channels use the low 5 bits.
+# e0 channels: w=W same-channel, n=N, q=NE, p2=2D gradient, joint (w,n),
+#   cross-channel (e0r>>1) and (e0r>>1, e0g>>3)
+# e1 channels: ea=e0 same-channel, w=W, q=N, p2=2D gradient, joint (ea,w),
+#   cross-channel from e1r/e1g
+
+Prefix E0
+Debug 1
+Const 0
+
+Index E0W
+ ew: w,  &111111
+
+Index E0N
+ en: n,  &000001
+
+Index E0P
+ ep: p2, &111111
+
+Index E0Q
+ eq: q,  &111111
+
+Index E0J
+ ejw: w, &111111
+ ejn: n, &111111
+
+# A2: MED (LOCO-I) predictor context row
+# D6: decoded-pixel edge for this channel -- max of the eight texels touching
+# the block for the c0 endpoints, min for c1.  Every other extrapolation row
+# here predicts from neighbouring blocks' ENDPOINTS, which are block-wide
+# statistics; these are the texels actually adjacent.
+Index E0E
+ ee0: eex, &11111111
+
+Index E1E
+ ee1: een, &11111111
+
+Index E0M
+ em: med, &000000
+
+# A3c: + coarse luminance bucket of decoded c0 (lum = (r0+g0+b0)>>3, 565 domain)
+Index E1A
+ fa: ea,  &111111
+ fl: lum, 1!1111111110010100
+
+Index E1W
+ fw: w,  &011111
+
+Index E1P
+ fp: p2, &111110
+
+Index E1Q
+ fq: q,  &111111
+
+Index E1J
+ fja: ea, &111111
+ fjw: w,  &111111
+
+# A2: MED (LOCO-I) predictor context row
+Index E1M
+ fm: med, &000001
+
+# cross-channel contexts: g channel from r; b channel from (r,g)
+Index EX1
+ x1r: e0r, &11111
+
+Index EX2
+ x2r: e0r, &00111
+ x2g: e0g, &111111
+
+# hash-candidate salvage rows (pair-match miss: candidate channel as context)
+Index E0H
+ eh:  h,  &111111
+ ehv: hv, &1
+
+Index E1H
+ fh:  h,  &000000
+ fhv: hv, &0
+
+# A1: co-located parent-level (finer) block endpoint channel as context
+Index E0PP
+ ep0: px, &111111
+ ep0n: pn, &111110
+ epv: qv, &1
+
+Index E1PP
+ ep1: px, &111110
+ ep1n: pn, &111111
+ epw: qv, &1

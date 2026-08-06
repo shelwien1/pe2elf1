@@ -1,0 +1,82 @@
+# G0: global coder parameters -- counter rates, mixer, APM
+# all update rates are 16-bit fixed-point MULTIPLIERS (step = delta*mul/65536),
+# replacing the former shift parameters; mul = 65536>>shift reproduces any old
+# shift exactly, and the space between the power-of-two points is now reachable.
+
+Prefix G0
+Debug 1
+Const 0
+
+# adaptive counter rate schedule by update count n=0..15 (was shift 1..15)
+Number CW0,  1, 0!0011111111110100
+Number CW1,  1, 0!0011111111111101
+Number CW2,  1, 0!0011100010001110
+Number CW3,  1, 0!0010111111010000
+Number CW4,  1, 0!0011000001011001
+Number CW5,  1, 0!0010011111101000
+Number CW6,  1, 0!0011000000100000
+Number CW7,  1, 0!0010011000110101
+Number CW8,  1, 0!0010001111010011
+Number CW9,  1, 0!0010001001001000
+Number CW10, 1, 0!0010000000000100
+Number CW11, 1, 0!0001111110111000
+Number CW12, 1, 0!0001110111110111
+Number CW13, 1, 0!0001111010010011
+Number CW14, 1, 0!0001101111110000
+Number CW15, 1, 0!0000100011111011
+
+# slow twin counter rate (was fixed shift 2)
+# Counter rate-index cap.  n indexes CW[0..CTR_NRATE-1] and was capped at 15 in
+# code, i.e. every counter eventually reaches the slowest rate in the schedule.
+# Capping lower keeps mature counters more adaptive; it is a real knob and was
+# the last model constant outside the IDX.  Seeded at 15, so byte-identical.
+Number CW_NMAX, 1, 0!01111
+
+Number SLOW_MUL, 1, 0!0011111111100100
+
+# mixer learning-rate multipliers per group: dw = st*err*MW >> 20
+# (was shifts: MW = 2^(20-shift))
+# alpha endpoint literal mixers (mxA0, mxA1)
+Number MW_AEP,  1, 0!0000001001111111
+# color endpoint channel mixers
+Number MW_E,    1, 0!0000000111100010
+# endpoint pair-match bit mixers
+Number MW_PAIR, 1, 0!0000001000000000
+# index word-match bit mixers
+Number MW_WORD, 1, 0!0000001000010100
+# alpha texel mixer
+Number MW_AI,   1, 0!0000000101111011
+# color texel mixer
+Number MW_CI,   1, 0!0000000010110011
+# dxt3 nibble mixer
+Number MW_X,    1, 0!0000000111101001
+# BC6H/BC7 byte model: was sharing MW_X with the DXT3 nibble mixer, which is
+# an unrelated model on unrelated data.  Split so opt.pl can move them apart;
+# seeded with MW_X's current value so this change is byte-identical until tuned.
+Number MW_P,    1, 0!0000000101010010
+
+# mixer weight init / clamp (clamp as log2)
+Number W_INIT,   1, 0!0010101111100010
+Number W_CLAMPL, 1, 1!11100
+
+# mixer bias input (stretched-domain constant)
+Number BIAS, 1, 0!0100010100
+
+# APM blend numerators: pf = (AB*pa + (4-AB)*p) >> 2, one per stage instance
+Number AB_AI,  1, 0!01
+Number AB_AI2, 1, 0!10
+Number AB_CI,  1, 0!10
+Number AB_CI2, 1, 0!10
+
+# APM structure + update rate, one pair per instance:
+# AP_N_* = interpolation interval count, any integer (cells = N + 1; 32 -> the
+#          old 33). the fraction is fixed-point 12-bit independent of N.
+# AP_R_* = update rate multiplier (t += (g-t)*frac*R >> 28; 65536 = full step)
+Number AP_N_AI,  1, 0!00000001111
+Number AP_R_AI,  1, 0!0000011000011110
+Number AP_N_AI2, 1, 0!00001000001
+Number AP_R_AI2, 1, 0!0000001100000010
+Number AP_N_CI,  1, 0!00000010001
+Number AP_R_CI,  1, 0!0000001110010000
+Number AP_N_CI2, 1, 0!00000100000
+Number AP_R_CI2, 1, 0!0000010000000000

@@ -1,0 +1,44 @@
+# M0: pair/word match models -- history contexts + hash table sizes
+
+Prefix M0
+Debug 1
+Const 0
+
+# match-bit context 1: recent match history window x (W==N) flag
+# Match-history table size caps, log2 (see cap_ctx in dxt5comp.cpp). These are
+# the ONLY memory knobs for M1/M2: the h1/h2 masks below select WHICH history
+# events matter and no longer control table size, so depth can be explored
+# freely. M1 backs 15 tables, M2 backs 8, at 4 B/entry.
+Number M1_HB, 1, 1!01010
+Number M2_HB, 1, 1!10001
+
+Index M1
+ h1: hist, &00000100000011001110
+# A6: last-match-type register (0=none 1=W 2=N 3=H 4=H2)
+ h1t: mt,  &011
+ ADD 2: eq
+
+# match-bit context 2: longer history window (shared by W/H/H2 candidates)
+Index M2
+ h2: hist, &11111111111110111110
+
+# match-bit mixer selection: (W==N) x last-step outcome
+Index MM
+ me: eq,   &1
+ mh: hist, &1
+# A6: last-match-type register
+ mmt: mt,  &100
+
+# hash table sizes (bits): pair hashes and word hashes
+# (a0,a1) pair candidate
+Number HB_A,   1, 1!11111
+# (c0,c1) pair candidate
+Number HB_C,   1, 1!11111
+# ai word keyed by endpoint pair
+Number HB_AW,  1, 1!00000
+# ai word keyed by (W.aw,N.aw)
+Number HB_AW2, 1, 1!11110
+# ci word keyed by endpoint pair
+Number HB_CW,  1, 1!10110
+# ci word keyed by (W.cw,N.cw)
+Number HB_CW2, 1, 1!11111

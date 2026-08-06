@@ -1,0 +1,29 @@
+# X0: dxt3 nibble plane + trailing-bytes model
+
+Prefix X0
+Debug 1
+Const 0
+
+Index X1
+ xa: xl, &1111
+
+Index X2
+ xb: xu, &1111
+
+Index X3
+ xc: p2, &1111
+
+# A1: parent (finer level) co-located nibble average
+Index X4
+ xp: xp,  &1111
+ xr: xpr, 1!1111
+ xv: xv,  &1
+
+# A1: parent prediction jointly with the spatial neighbours
+Index X5
+ x5p: xp, &1110
+ x5l: xl, &0000
+ x5u: xu, &0000
+
+Index TL
+ tp: prev, &11111001

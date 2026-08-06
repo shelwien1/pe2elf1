@@ -1,0 +1,9 @@
+# build outputs
+028/ddsdet
+028/dxt5comp
+028/*.o
+028/MOD/*-const*
+# test data (fetch separately: https://nishi.dreamhosters.com/dds_det_fail.tar.xz)
+028/*.tar
+028/*.d5s
+028/*.d5c

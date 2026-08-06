@@ -1,0 +1,99 @@
+# A0: alpha endpoint literal contexts (a0, a1 as 8-bit MSB trees)
+
+Prefix A0
+Debug 1
+Const 0
+
+# D7: least-squares projection coefficients, Q8.  Declared as Numbers so
+# opt.pl can retune them -- they were fitted on one file, and the fit is
+# what makes the projection worth a row at all.  Base -256 with a 10-bit
+# pattern gives the optimizer [-256, 767] around each.
+Number L0K,   1, -256!0001011100
+Number L0Wa0, 1, -256!0100000000
+Number L0Na0, 1, -256!0100000011
+Number L0Xa0, 1, -256!0010101011
+Number L0Wa1, 1, -256!0011101110
+Number L0Na1, 1, -256!0100000100
+Number L0Xa1, 1, -256!0100000110
+Number L0Emn, 1, -256!1000000010
+Number L0Emx, 1, -256!0111001000
+
+Number L1K,   1, -256!0010001111
+Number L1A0,  1, -256!0110010111
+Number L1Wa1, 1, -256!0100001011
+Number L1Na1, 1, -256!0100010111
+Number L1Xa1, 1, -256!0011101110
+Number L1Wa0, 1, -256!0011101111
+Number L1Na0, 1, -256!0100000000
+Number L1Emn, 1, -256!0111010101
+Number L1Emx, 1, -256!0100011000
+
+
+Index AE0W
+ w0: Wa0, &11111111
+
+Index AE0N
+ n0: Na0, &11111111
+
+Index AE0P
+ p0: p2,  &11111100
+
+# A2: MED (LOCO-I) predictor context row
+Index AE0M
+ m0: med0, &00000011
+
+# D6: the decoded pixels physically touching this block.  Every other
+# extrapolation row here (AE0P planar, AE0M MED, AE0P2 parent range) predicts
+# from NEIGHBOURING BLOCKS' ENDPOINTS, which are coarse -- W.a0 is the maximum
+# over W's whole 4x4 and may come from a texel four away.  emx/emn are the max
+# and min of the eight texels actually adjacent (W's right column, N's bottom
+# row), which is what the endpoints of this block have to bracket.
+Index AE0E
+ e0: emx, &11111111
+
+Index AE1E
+ e1: emn, &11111111
+
+# D7: least-squares projection of the causal neighbourhood onto one 8-bit
+# value.  A row keyed on a single variable already represents any function of
+# it, so a fitted predictor from ONE input is worthless -- the value here is
+# dimensionality reduction: a 256-row table can key on one projection of nine
+# inputs, but not on nine inputs jointly.  Coefficients are Q8 from a least
+# squares fit; the dominant term is the decoded pixel edge (0.86), every
+# neighbouring ENDPOINT being under 0.16.
+Index AE0L
+ l0: lp0, &11111111
+
+Index AE1L
+ l1: lp1, &11111110
+
+Index AE1W
+ w1: Wa1, &01111111
+
+Index AE1A
+ a1: a0c, &11111111
+
+Index AE1P
+ p1: p3,  &11111111
+
+# A2: MED (LOCO-I) predictor context row
+Index AE1M
+ m1: med1, &00000011
+
+# hash-candidate salvage rows (pair-match miss: candidate values as context)
+Index AE0H
+ h0:  hh, &11111111
+ hv0: hv, &1
+
+Index AE1H
+ h1:  hh, &11111111
+ hv1: hv, &1
+
+# A1: parent-level alpha range over this block (brackets the a0/a1 pair)
+Index AE0P2
+ q0x: amx, &11111111
+ q0n: amn, &11000000
+
+Index AE1P2
+ q1x: amx, &11100000
+ q1n: amn, &11111111

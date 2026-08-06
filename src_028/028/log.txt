@@ -1,0 +1,24 @@
+
+1305704 1_shar_d5c   2.306s: ddsdet.exe cs --all ..\1_shar 1_shar_d5c                       
+7296325 2_shar_d5c   9.926s: ddsdet.exe cs --all ..\2_shar 2_shar_d5c                       
+6974170 Harpoon_d5c 14.798s: dxt5comp.exe c ..\Harpoon.DDS Harpoon_d5c
+
+1313708 1_shar_d5c   2.759s: ddsdet.exe cs --all ..\1_shar 1_shar_d5c                       
+7200398 2_shar_d5c  10.927s: ddsdet.exe cs --all ..\2_shar 2_shar_d5c                       
+6688814 Harpoon_d5c 15.982s: dxt5comp.exe c ..\Harpoon.DDS Harpoon_d5c
+
+
+1301827 1_shar_d5c   2.800s: ddsdet.exe cs --all ..\1_shar 1_shar_d5c // 027
+7165487 2_shar_d5c  11.177s: ddsdet.exe cs --all ..\2_shar 2_shar_d5c
+6614666 Harpoon_d5c 15.971s: dxt5comp.exe c ..\Harpoon.DDS Harpoon_d5c
+
+1302999 1_shar_d5c   2.292s: ddsdet.exe cs --all ..\1_shar 1_shar_d5c // 028
+7159734 2_shar_d5c  10.021s: ddsdet.exe cs --all ..\2_shar 2_shar_d5c 
+6586838 Harpoon_d5c 14.952s: dxt5comp.exe c ..\Harpoon.DDS Harpoon_d5c
+
+2.192s: ddsdet.exe cs --all ..\1_shar 1_shar_d5c
+9.176s: ddsdet.exe cs --all ..\2_shar 2_shar_d5c
+14.068s: dxt5comp.exe c ..\HarpoonGunBarrel_n.DDS HarpoonGunBarrel_n_d5c
+1302902 1_shar_d5c
+7158740 2_shar_d5c
+6586485 HarpoonGunBarrel_n_d5c

@@ -1,0 +1,121 @@
+# B0: alpha index (3-bit texel) model
+# vars: pl,pu,pql,pqr = palette-map of L/U/UL/UR pixels (0..7); mode = a0>a1;
+# d = |a0-a1| (thresholds -> buckets); Wai/Nai = same-position index in W/N block;
+# prev = previous texel raw index (scan order); t = texel position 0..15;
+# h1c/h2c = hash candidate word texel, h1v/h2v = candidate valid;
+# rawL/rawU = raw index plane neighbors; plu = (pl==pu); qeq = (pql==pl)
+
+Prefix B0
+Debug 1
+Const 0
+
+Index AI1
+ i1l: pl,   &111
+ i1u: pu,   &111
+ i1m: mode, &1
+ i1d: d,    1!0111111111111111111111111100100110100011000000001000000001100001
+
+Index AI2
+ i2p: prev, &101
+ i2t: t,    &1111
+
+Index AI3
+ i3w: Wai,  &111
+ i3l: pl,   &111
+
+Index AI4
+ i4n: Nai,  &000
+ i4u: pu,   &111
+
+Index AI0
+# D5c: a0==a1 means every palette entry is equal, the index is meaningless, and
+# this encoder emits an all-zero word for 100.00% of the 6.71% of block-channels
+# that hit it.  The `d` threshold maps cannot express it: masking_b clamps the
+# variable to a minimum of 1, so d==0 shares a bucket with d==1 everywhere.
+ i0z: dz,   &1
+ i0m: mode, &0
+ i0d: d,    1!0111110100110011111111011100001101110100100010000001001110011100
+
+Index AI5
+ i5c: h1c,  &000
+ i5l: pl,   &110
+ i5v: h1v,  &0
+
+Index AI6
+ i6c: h2c,  &000
+ i6l: pl,   &010
+ i6v: h2v,  &0
+
+Index AI9
+ i9l: rawL, &111
+ i9u: rawU, &111
+
+Index AI8
+ i8l: pl,   &010
+ i8u: pu,   &001
+ i8q: qeq,  &1
+
+Index AIb
+ ibl: pl,   &111
+ ibu: pu,   &111
+ ibq: pql,  &111
+ ibr: pqr,  &111
+
+# v1 s2.1: p^ confidence -- cfl/cfu = 0 on exact palette hit, else 1+log2(|dist|)
+Index AIe
+ iel: pl,   &000
+ ieu: pu,   &100
+ iec: cfl,  1!00111111
+ ied: cfu,  1!11110000
+
+# A5: index-space gradient (gl = clamp(p^L - prev p^L,-7,7)+7) and
+# slope predictor (sp = clamp(2*p^L - Wai, 0, 7))
+Index AIf
+ ifg: gl,   &1111
+ ifs: sp,   &111
+ ifp: prev, &111
+
+# mixer set selection
+# A1: ppa = alpha palette index of the parent-level co-located 2x2 average
+# (8 = no parent); paf = fit confidence; pai = parent raw alpha index
+Index AIp
+ ipp: ppa, &0111
+ ipl: pl,  &111
+ ipu: pu,  &111
+
+Index AIq
+ iqp: ppa, &1111
+ iqc: paf, 1!10101000
+ iqi: pai, &0111
+
+Index AIM
+ imp: plu,  &0
+ imm: mode, &1
+ imd: d,    1!0111111111101100001000000000000000000000000000000000000000000000
+# A4: endpoint stability vs W (sq = 0 exact pair copy, else 1+log2(|da0|+|da1|), 9 = no W)
+ ims: sq,   1!0000000000
+# A11: texel quadrant
+ imt: t,    &0011
+# p^ confidence bucket in mixer selection
+ imc: cfl,  1!000
+
+# SSE stage 1: p^-pair shape x mode
+Index APA
+ aap: plu,  &0
+ aal: pl,   &111
+ aam: mode, &1
+# A4: endpoint stability vs W
+ aas: sq,   1!1110101010
+
+# SSE stage 2: (p^L,p^U) x W same-position index
+Index APA2
+ a2l: pl,   &111
+ a2u: pu,   &111
+ a2w: Wai,  &000
+
+# slow twin counter context
+Index SLA
+ sll: pl,   &000
+ slu: pu,   &000
+ slm: mode, &1
+ sld: d,    1!0111111000000000000000000000000000000000000100011001001111001001
