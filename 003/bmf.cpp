@@ -749,6 +749,69 @@ typedef M128I _OWORD;
 // malloc returned is parked in the word ahead of the aligned block, which is
 // what bmf_page_free hands back.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// A heap the program's own 32-bit pointer fields can address -- 64-bit only.
+//
+// BMF's structures keep pointers in 32-bit fields.  At 32 bits that is merely
+// untyped; at 64 it is lossy.  The clean fix is to widen the fields, and
+// REFACTORING.md §4 records why that cannot be done here: every one of the 159
+// objects is walked with variable offsets as well as constant ones, so moving a
+// field moves the arrays after it.
+//
+// This is the other way, and it is the only one left: put every allocation the
+// program makes below 4 GB, so a 32-bit field holds a whole address.  It does
+// not make the code honest about its types and it is not a substitute for
+// doing that.
+//
+// Compiled only for a 64-bit target, so the 32-bit build -- the one the streams
+// are verified against -- allocates exactly as it did.
+// ---------------------------------------------------------------------------
+#if UINTPTR_MAX > 0xFFFFFFFFu
+#if defined(__linux__)
+#  include <sys/mman.h>
+#  define BMF_LOW_ARENA 1
+#endif
+#define BMF_ARENA_BYTES (768u << 20)
+static char  *bmf_arena;
+static size_t bmf_arena_used;
+static void bmf_arena_init(void) {
+#ifdef BMF_LOW_ARENA
+  void *p = mmap(nullptr, BMF_ARENA_BYTES, PROT_READ | PROT_WRITE,
+                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
+  bmf_arena = (p == MAP_FAILED) ? nullptr : (char *)p;
+#else
+  bmf_arena = (char *)malloc(BMF_ARENA_BYTES);
+#endif
+  if (!bmf_arena) { fprintf(stderr, "bmf: no arena\n"); exit(7); }
+  if (sizeof(void *) > 4 && (uintptr_t)bmf_arena + BMF_ARENA_BYTES > 0xFFFFFFFFu) {
+    fprintf(stderr, "bmf: arena above 4 GB\n"); exit(7);
+  }
+}
+#define BMF_BUCKETS 40
+static void *bmf_bucket[BMF_BUCKETS];
+static int bmf_bucket_of(size_t n) { int b=0; while ((size_t)1<<(b+5) < n && b<BMF_BUCKETS-1) b++; return b; }
+static void *bmf_malloc(size_t n) {
+  if (!bmf_arena) bmf_arena_init();
+  int b = bmf_bucket_of(n);
+  size_t need = (size_t)1 << (b + 5);
+  if (bmf_bucket[b]) { void *p=bmf_bucket[b]; bmf_bucket[b]=*(void**)p; ((size_t*)p)[-2]=(size_t)b; return p; }
+  if (bmf_arena_used + need + 16 > BMF_ARENA_BYTES) return nullptr;
+  char *p = bmf_arena + bmf_arena_used + 16;
+  ((size_t *)p)[-2] = (size_t)b;
+  bmf_arena_used += need + 16;
+  return p;
+}
+static void bmf_free(void *p) {
+  if (!p) return;
+  int b=(int)((size_t*)p)[-2];
+  if (b<0||b>=BMF_BUCKETS) return;
+  *(void**)p = bmf_bucket[b]; bmf_bucket[b]=p;
+}
+#define malloc bmf_malloc
+#define free   bmf_free
+
+#endif  // 64-bit only
+
 #define BMF_PAGE 4096u
 
 static void *bmf_page_alloc(size_t n) {

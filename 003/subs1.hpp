@@ -4101,21 +4101,33 @@ struct RangeCoder {
 
 static RangeCoder rc;
 
-FILE *__sub_402FB0(FILE **_this)
+// The archive handle: the eight bytes `bmf c` and `bmf d` allocate to hold the
+// stream they are working on and a count of the images seen in it.  Hex-Rays
+// had it as a bare `malloc(8)` addressed by offset -- `*(FILE **)(v5 + 4)` --
+// which stores a FILE * in four bytes.  Named, it is the same eight bytes at 32
+// bits and the right sixteen at 64.
+struct BmfArc {
+  uint32_t images;   // +0
+  FILE    *fp;       // +4
+};
+static_assert(sizeof(void *) != 4 || sizeof(BmfArc) == 8,
+              "BmfArc must still be the eight bytes the original allocated");
+
+FILE *__sub_402FB0(BmfArc *_this)
 {
   ;
   FILE *Stream_v;
-  Stream_v = *(_this + 1);
+  Stream_v = _this->fp;
   if ( Stream_v )
   {
     fseek(Stream_v, 0, 2);
-    return (FILE *)fclose(*(_this + 1));
+    return (FILE *)fclose(_this->fp);
   }
   return Stream_v;
 }
-static inline FILE * __fwd_sub_402DF0_sub_402FB0(void *a0) { return __sub_402FB0((FILE **)a0); }
+static inline FILE * __fwd_sub_402DF0_sub_402FB0(void *a0) { return __sub_402FB0((BmfArc *)a0); }
 
-FILE **__sub_402DF0(FILE **Block, char a2)
+BmfArc *__sub_402DF0(BmfArc *Block, char a2)
 {
   ;
   __fwd_sub_402DF0_sub_402FB0(Block);
@@ -9516,7 +9528,7 @@ BMF_SSE int32_t __sub_41A130(__m128 *a1, const __m128 &a2__ref, const __m128 &a3
       int32_t v315;
       uint8_t _pad0[32];
   } __frame;
-  static_assert(sizeof(__frame) == 208, "frame layout moved");
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 208, "frame layout moved");
   int32_t &v246 = *(int32_t *)((char *)__frame.slot0);
   int16_t *&v247 = *(int16_t **)((char *)__frame.slot0);
   int32_t &v248 = *(int32_t *)((char *)__frame.slot0);
@@ -10482,7 +10494,7 @@ void __reduce_alphabet(char *Blocka, char a2, uint8_t *a3)
       int32_t Blocka_1;
       uint8_t _pad3[28];
   } __frame;
-  static_assert(sizeof(__frame) == 66064, "frame layout moved");
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 66064, "frame layout moved");
   uint32_t (&v78)[15] = __frame.v78;
   void *&v79 = __frame.v79;
   int32_t &n0x2000_5 = __frame.n0x2000_5;
@@ -10957,7 +10969,7 @@ int32_t __sub_407460(uint8_t *a1, uint8_t *n2, int32_t a3, char a4, int32_t a5, 
       int32_t v101;
       uint8_t _pad1[28];
   } __frame;
-  static_assert(sizeof(__frame) == 26720, "frame layout moved");
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 26720, "frame layout moved");
   char (&buf)[4096] = __frame.buf;
   int32_t (&v72)[1024] = __frame.v72;
   int32_t (&v73)[1024] = __frame.v73;
@@ -11252,7 +11264,7 @@ BMF_SSE int32_t __sub_405CF0(char *a1, int32_t n3, char a3)
       int32_t v228;
       uint8_t _pad7[28];
   } __frame;
-  static_assert(sizeof(__frame) == 41456, "frame layout moved");
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 41456, "frame layout moved");
   int32_t &v174 = __frame.v174;
   int32_t &v175 = __frame.v175;
   int32_t &v176 = __frame.v176;
@@ -12078,7 +12090,7 @@ LABEL_19:
       uint8_t slot86[4];
       uint8_t _pad4[38];
   } __frame;
-  static_assert(sizeof(__frame) == 128, "frame layout moved");
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 128, "frame layout moved");
   uint32_t &Size_4 = *(uint32_t *)((char *)__frame.slot0);
   int32_t &v46 = *(int32_t *)((char *)__frame.slot0);
   int32_t &v47 = *(int32_t *)((char *)__frame.slot0);
@@ -12409,7 +12421,7 @@ LABEL_61:
       uint32_t *v68;
       uint8_t _pad1[32];
   } __frame;
-  static_assert(sizeof(__frame) == 32832, "frame layout moved");
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 32832, "frame layout moved");
   uint16_t *&v55 = __frame.v55;
   uint16_t *&v56 = __frame.v56;
   int32_t &v57 = __frame.v57;
@@ -12679,7 +12691,7 @@ int32_t __sub_418650(uint32_t *_this, int32_t a2)
       int32_t n15_24;
       uint8_t _pad0[32];
   } __frame;
-  static_assert(sizeof(__frame) == 176, "frame layout moved");
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 176, "frame layout moved");
   int32_t &n15_8 = __frame.n15_8;
   int32_t &n4_1 = __frame.n4_1;
   int32_t &__sub_418650_n4_4 = __frame.__sub_418650_n4_4;
@@ -13475,7 +13487,7 @@ int32_t __code_pixel(int32_t *_this, int32_t a2)
       int32_t n15_14;
       uint8_t _pad0[32];
   } __frame;
-  static_assert(sizeof(__frame) == 176, "frame layout moved");
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 176, "frame layout moved");
   int32_t &p_n15 = __frame.p_n15;
   int32_t &n2_1 = __frame.n2_1;
   uint16_t *&n2_4 = __frame.n2_4;
@@ -14234,7 +14246,7 @@ void __sub_419430(uint32_t *_this)
       uint32_t v31[5];
       uint8_t _pad0[16];
   } __frame;
-  static_assert(sizeof(__frame) == 432, "frame layout moved");
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 432, "frame layout moved");
   uint64_t (&v28)[2] = __frame.v28;
   int32_t &v29 = __frame.v29;
   uint32_t (&v30)[91] = __frame.v30;
@@ -15068,7 +15080,7 @@ static inline int32_t * __fwd_sub_424D90_sub_4256F0(void *a0, int32_t a1, int32_
       int32_t n5;
       uint8_t _pad2[32];
   } __frame;
-  static_assert(sizeof(__frame) == 144, "frame layout moved");
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 144, "frame layout moved");
   char &v90 = __frame.v90;
   uint32_t &v91 = *(uint32_t *)((char *)__frame.slot4);
   uint32_t &v92 = *(uint32_t *)((char *)__frame.slot4);
@@ -15563,7 +15575,7 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
       uint32_t *v581;
       uint8_t _pad12[28];
   } __frame;
-  static_assert(sizeof(__frame) == 416, "frame layout moved");
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 416, "frame layout moved");
   int32_t &n2 = __frame.n2;
   uint16_t *&n0xF0 = __frame.n0xF0;
   uint32_t &n0x10_2 = __frame.n0x10_2;
@@ -17849,7 +17861,7 @@ static inline int32_t __fwd_sub_423600_sub_41A130(void *a0, const __m128 &a1, co
       uint32_t v171;
       uint8_t _pad0[40];
   } __frame;
-  static_assert(sizeof(__frame) == 288, "frame layout moved");
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 288, "frame layout moved");
   uint32_t &Size_1 = __frame.Size_1;
   __m128i &v140 = *(__m128i *)((char *)__frame.slot4);
   __m128i &v141 = *(__m128i *)((char *)__frame.slot20);
@@ -18911,7 +18923,7 @@ static inline int32_t __fwd_sub_421930_sub_41A130(void *a0, const __m128 &a1, co
       uint32_t v185;
       uint8_t _pad1[40];
   } __frame;
-  static_assert(sizeof(__frame) == 336, "frame layout moved");
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 336, "frame layout moved");
   uint32_t &Size_1 = __frame.Size_1;
   __m128i &v144 = *(__m128i *)((char *)__frame.slot4);
   __m128i &v145 = *(__m128i *)((char *)__frame.slot20);
@@ -19938,7 +19950,7 @@ BMF_SSE void __sub_405840(char *Blockb, char *Srca_3, int32_t a3, char a4, const
       int32_t v53;
       uint8_t _pad0[32];
   } __frame;
-  static_assert(sizeof(__frame) == 80, "frame layout moved");
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 80, "frame layout moved");
   char *&Blockb_1 = *(char **)((char *)__frame.slot0);
   void **&Blocka = *(void ***)((char *)__frame.slot0);
   char *&Blockc = *(char **)((char *)__frame.slot0);
@@ -20154,7 +20166,7 @@ BMF_SSE char * __expand_image(char *a1, const __m128 &a2__ref, const __m128 &a3_
       uint32_t __expand_image_Buffer;
       uint8_t _pad0[32];
   } __frame;
-  static_assert(sizeof(__frame) == 112, "frame layout moved");
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 112, "frame layout moved");
   char *&Block = *(char **)((char *)__frame.slot0);
   char *&Blocka = *(char **)((char *)__frame.slot0);
   void **&Blockb = *(void ***)((char *)__frame.slot0);
@@ -20192,14 +20204,14 @@ BMF_SSE char * __expand_image(char *a1, const __m128 &a2__ref, const __m128 &a3_
   v5 = a1;
   if ( p_dwLowDateTime )
     *p_dwLowDateTime = 0;
-  Stream_1 = *(FILE **)(a1 + 4);
+  Stream_1 = ((BmfArc *)a1)->fp;
   if ( !Stream_1 )
     return nullptr;
   while ( 1 )
   {
     if ( fread(&__expand_image_Buffer, 4u, 1u, Stream_1) != 1 )
     {
-      Stream_v = *(FILE **)(v5 + 4);
+      Stream_v = ((BmfArc *)v5)->fp;
       if ( feof(Stream_v) )
         return nullptr;
       goto LABEL_15;
@@ -20208,26 +20220,26 @@ BMF_SSE char * __expand_image(char *a1, const __m128 &a2__ref, const __m128 &a3_
     if ( (uint16_t)__expand_image_Buffer != 0x9081 )
       break;
     __n512[0] = ((BYTE2(__expand_image_Buffer) << 8) - 12288) | (HIBYTE(__expand_image_Buffer) - 48);
-    if ( __n512[0] != 512 || fread(&Buffer_, 8u, 1u, *(FILE **)(v5 + 4)) != 1 )
+    if ( __n512[0] != 512 || fread(&Buffer_, 8u, 1u, ((BmfArc *)v5)->fp) != 1 )
       break;
-    fseek(*(FILE **)(v5 + 4), ElementSize, 1);
-    Stream_1 = *(FILE **)(v5 + 4);
+    fseek(((BmfArc *)v5)->fp, ElementSize, 1);
+    Stream_1 = ((BmfArc *)v5)->fp;
   }
   if ( (uint16_t)__expand_image_Buffer_1 != 0x8A81
     || (__n512[0] = ((BYTE2(__expand_image_Buffer_1) << 8) - 12288) | (HIBYTE(__expand_image_Buffer_1) - 48), __n512[0] != 512)
-    || fread(Buffer_2, 0x10u, 1u, *(FILE **)(v5 + 4)) != 1 )
+    || fread(Buffer_2, 0x10u, 1u, ((BmfArc *)v5)->fp) != 1 )
   {
-    Stream_v = *(FILE **)(v5 + 4);
+    Stream_v = ((BmfArc *)v5)->fp;
 LABEL_15:
     fclose(Stream_v);
-    *(uint32_t *)(v5 + 4) = 0;
+    ((BmfArc *)v5)->fp = 0;
     return nullptr;
   }
   v10 = v92;
   ++*(uint32_t *)v5;
   if ( v10 < 0 )
   {
-    fread(&Buffer_, 8u, 1u, *(FILE **)(v5 + 4));
+    fread(&Buffer_, 8u, 1u, ((BmfArc *)v5)->fp);
     if ( p_dwLowDateTime )
     {
       Buffer__1 = Buffer_;
@@ -20237,11 +20249,11 @@ LABEL_15:
       v13[1] = v12;
       *(uint32_t *)((char *)v13 + v12 + 4) = 0;
       *p_dwLowDateTime = (int32_t)v13;
-      fread(v13 + 2, ElementSize, 1u, *(FILE **)(v5 + 4));
+      fread(v13 + 2, ElementSize, 1u, ((BmfArc *)v5)->fp);
     }
     else
     {
-      fseek(*(FILE **)(v5 + 4), ElementSize, 1);
+      fseek(((BmfArc *)v5)->fp, ElementSize, 1);
     }
   }
   ElementCount_5 = 3 << (v91 & 31);
@@ -20250,7 +20262,7 @@ LABEL_15:
   ElementCount_3 = ElementCount_5;
   if ( a4 )
   {
-    fseek(*(FILE **)(v5 + 4), ElementCount_3 + ElementCount, 1);
+    fseek(((BmfArc *)v5)->fp, ElementCount_3 + ElementCount, 1);
     return nullptr;
   }
   p_i_1 = (char *)__sub_42B830(Buffer_2[0], Buffer_2[1], v91 & 0x3F, (uint8_t)(v91 & 0x80) >> 7, 1);
@@ -20273,7 +20285,7 @@ LABEL_15:
   if ( (v17 & 0x20) == 0 )
   {
     ElementCount_1 = ElementCount;
-    if ( fread(p_i_1 + 16, 1u, ElementCount, *(FILE **)(v5 + 4)) != ElementCount_1 )
+    if ( fread(p_i_1 + 16, 1u, ElementCount, ((BmfArc *)v5)->fp) != ElementCount_1 )
       goto LABEL_31;
     goto LABEL_109;
   }
@@ -20297,11 +20309,11 @@ LABEL_15:
   ::packer_word = (uint32_t *)::coded_buf;
   hist_scratch = ::coded_buf + coded_size - 4096;
   ElementCount_2 = ElementCount;
-  if ( fread(::coded_buf, 1u, ElementCount, *(FILE **)(v5 + 4)) != ElementCount_2 )
+  if ( fread(::coded_buf, 1u, ElementCount, ((BmfArc *)v5)->fp) != ElementCount_2 )
   {
 LABEL_31:
-    fclose(*(FILE **)(v5 + 4));
-    *(uint32_t *)(v5 + 4) = 0;
+    fclose(((BmfArc *)v5)->fp);
+    ((BmfArc *)v5)->fp = 0;
     return nullptr;
   }
   v20 = p_i_1[10];
@@ -20595,8 +20607,8 @@ LABEL_106:
   if ( ::coded_buf + ElementCount != out_cursor )
   {
 LABEL_107:
-    fclose(*(FILE **)(v5 + 4));
-    *(uint32_t *)(v5 + 4) = 0;
+    fclose(((BmfArc *)v5)->fp);
+    ((BmfArc *)v5)->fp = 0;
     return nullptr;
   }
   free(::coded_buf);
@@ -20605,7 +20617,7 @@ LABEL_109:
   if ( (v88 & 0x80) != 0 )
   {
     Buffer_3 = p_i_1[10] < 0 ? &p_i_1[*((uint32_t *)p_i_1 + 3) + 16] : nullptr;
-    ElementCount_4 = fread(Buffer_3, 1u, ElementCount_3, *(FILE **)(v5 + 4));
+    ElementCount_4 = fread(Buffer_3, 1u, ElementCount_3, ((BmfArc *)v5)->fp);
     if ( ElementCount_4 != ElementCount_3 )
       goto LABEL_107;
   }
@@ -20690,7 +20702,7 @@ BMF_SSE uint32_t __search_filter(uint16_t *p_i, char a2, const __m128 &a3__ref, 
       char *Blockb;
       uint8_t _pad1[36];
   } __frame;
-  static_assert(sizeof(__frame) == 176, "frame layout moved");
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 176, "frame layout moved");
   char *&v175 = *(char **)((char *)__frame.slot0);
   char *&v176 = *(char **)((char *)__frame.slot0);
   uint64_t (&v177)[2] = *(uint64_t (*)[2])((char *)__frame.slot4);
@@ -21505,15 +21517,15 @@ LABEL_63:
 
 static inline char * __fwd_sub_402EF0_expand_image(int32_t a0, const __m128 &a1, const __m128 &a2, int32_t a3, void *a4) { return __expand_image(a0, a1, a2, a3, (int32_t *)a4); }
 
-BMF_SSE int32_t __sub_402EF0(uint32_t *v2, char *FileName, int32_t a2)
+BMF_SSE BmfArc *__sub_402EF0(BmfArc *v2, char *FileName, int32_t a2)
 {
   ;
-  char *v5;   // was int32_t: these hold addresses
+  BmfArc *v5;
   FILE *Stream_v, *Stream_1;
   __m128 v3, v4;
   const char *a_b;
   int32_t v8, v9;
-  v5 = (int32_t)v2;
+  v5 = v2;
   // The original opened the output "a+b" so that it could append images to an
   // existing archive; this command line writes one image per run, so all that
   // bought was compressing twice to the same name growing the file instead of
@@ -21523,14 +21535,14 @@ BMF_SSE int32_t __sub_402EF0(uint32_t *v2, char *FileName, int32_t a2)
   a_b = "w+b";
   if ( a2 )
     a_b = "rb";
-  *v2 = 0;
+  v2->images = 0;
   Stream_v = fopen(FileName, a_b);
-  *(uint32_t *)(v5 + 4) = Stream_v;
+  v5->fp = Stream_v;
   if ( !Stream_v )
     __exit_402E40(6, FileName);
-  *(uint32_t *)v5 = 0;
+  v5->images = 0;
   v8 = fseek(Stream_v, 0, 0);
-  v9 = *(uint32_t *)(v5 + 4);
+  v9 = v5->fp != nullptr;
   if ( v8 )
   {
 LABEL_10:
@@ -21541,17 +21553,17 @@ LABEL_11:
   }
   if ( !v9 )
     goto LABEL_11;
-  if ( !feof(*(FILE **)(v5 + 4)) )
+  if ( !feof(v5->fp) )
   {
     __fwd_sub_402EF0_expand_image(v5, v3, v4, 1, nullptr);
-    Stream_1 = *(FILE **)(v5 + 4);
+    Stream_1 = v5->fp;
     if ( !Stream_1 )
       goto LABEL_11;
-    if ( !feof(*(FILE **)(v5 + 4)) )
+    if ( !feof(v5->fp) )
     {
-      *(uint32_t *)v5 = 0;
+      v5->images = 0;
       fseek(Stream_1, 0, 0);
-      v9 = *(uint32_t *)(v5 + 4);
+      v9 = v5->fp != nullptr;
       goto LABEL_10;
     }
   }
@@ -21579,7 +21591,7 @@ BMF_SSE int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &
       void *Buffer_2;
       uint8_t _pad1[32];
   } __frame;
-  static_assert(sizeof(__frame) == 80, "frame layout moved");
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 80, "frame layout moved");
   char *&Buffera_4 = __frame.Buffera_4;
   uint32_t &ElementCount = *(uint32_t *)((char *)__frame.slot16);
   int32_t &ElementCounta = *(int32_t *)((char *)__frame.slot16);
@@ -21605,14 +21617,14 @@ BMF_SSE int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &
   uint32_t ElementCount_1, n7, v25, v26, v28, v30, v31, v32, Size, v55;
   uint8_t v39, *v49, v54;
   v5 = a1;
-  if ( !*(uint32_t *)(a1 + 4) )
+  if ( !((BmfArc *)a1)->fp )
     return 0;
-  if ( !feof(*(FILE **)(a1 + 4)) )
+  if ( !feof(((BmfArc *)a1)->fp) )
   {
     __fwd_compress_image_expand_image(v5, a2, a3, 1, nullptr);
-    for ( i = *(FILE **)(v5 + 4); i; i = *(FILE **)(v5 + 4) )
+    for ( i = ((BmfArc *)v5)->fp; i; i = ((BmfArc *)v5)->fp )
     {
-      if ( feof(*(FILE **)(v5 + 4)) )
+      if ( feof(((BmfArc *)v5)->fp) )
         break;
       if ( feof(i) )
         break;
@@ -21635,7 +21647,7 @@ BMF_SSE int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &
   Buffera_1 = Buffera_5;
   v64 = v11;
   ::plane_count = ((v12 & 0x3Fu) + 7) >> 3;
-  if ( fwrite("\x81\x8A""20\x81\x90""20a+b", 4u, 1u, *(FILE **)(v5 + 4)) != 1 )
+  if ( fwrite("\x81\x8A""20\x81\x90""20a+b", 4u, 1u, ((BmfArc *)v5)->fp) != 1 )
     return 0;
   v15 = *((uint8_t *)p_i + 10);
   ++*(uint32_t *)v5;
@@ -21843,14 +21855,14 @@ LABEL_57:
   v64 = out_cursor - (uint32_t)::coded_buf;
   if ( v38 )
   {
-    v39 = fwrite(&Buffera, 1u, 0x10u, *(FILE **)(v5 + 4)) == 16;
+    v39 = fwrite(&Buffera, 1u, 0x10u, ((BmfArc *)v5)->fp) == 16;
     if ( coded_buf )
-      v39 &= fwrite(coded_buf, 1u, *((uint32_t *)coded_buf + 1) + 8, *(FILE **)(v5 + 4)) == *((uint32_t *)coded_buf + 1) + 8;
-    v40 = (fwrite(::coded_buf, 1u, ElementCounta, *(FILE **)(v5 + 4)) == ElementCounta) & v39;
+      v39 &= fwrite(coded_buf, 1u, *((uint32_t *)coded_buf + 1) + 8, ((BmfArc *)v5)->fp) == *((uint32_t *)coded_buf + 1) + 8;
+    v40 = (fwrite(::coded_buf, 1u, ElementCounta, ((BmfArc *)v5)->fp) == ElementCounta) & v39;
     free(::coded_buf);
     if ( v40 && (p_i[5] & 0x80) != 0 )
-      fwrite((char *)p_i + *((uint32_t *)p_i + 3) + 16, 1u, ElementCount_1, *(FILE **)(v5 + 4));
-    fflush(*(FILE **)(v5 + 4));
+      fwrite((char *)p_i + *((uint32_t *)p_i + 3) + 16, 1u, ElementCount_1, ((BmfArc *)v5)->fp);
+    fflush(((BmfArc *)v5)->fp);
     if ( v40 )
       return v64;
     return v40;
@@ -21916,21 +21928,21 @@ LABEL_57:
 LABEL_76:
   Buffer_2 = p_i + 8;
 LABEL_77:
-  v54 = fwrite(p_i_1, 1u, 0x10u, *(FILE **)(v5 + 4)) == 16;
+  v54 = fwrite(p_i_1, 1u, 0x10u, ((BmfArc *)v5)->fp) == 16;
   if ( coded_buf )
-    v54 &= fwrite(coded_buf, 1u, *((uint32_t *)coded_buf + 1) + 8, *(FILE **)(v5 + 4)) == *((uint32_t *)coded_buf + 1) + 8;
-  v55 = fwrite(Buffer_2, 1u, ElementCount_1 + *((uint32_t *)p_i_1 + 3), *(FILE **)(v5 + 4));
+    v54 &= fwrite(coded_buf, 1u, *((uint32_t *)coded_buf + 1) + 8, ((BmfArc *)v5)->fp) == *((uint32_t *)coded_buf + 1) + 8;
+  v55 = fwrite(Buffer_2, 1u, ElementCount_1 + *((uint32_t *)p_i_1 + 3), ((BmfArc *)v5)->fp);
   v56 = *((uint32_t *)p_i_1 + 3);
   if ( (v54 & (v55 == v56 + ElementCount_1)) == 0 )
     return 0;
   return v56;
 }
 static inline int32_t * __fwd_bmf_read_bmp(void *a0) { return __read_bmp((char *)a0); }
-static inline int32_t __fwd_bmf_sub_402EF0(void *a0, void *a1, int32_t a2) { return __sub_402EF0((uint32_t *)a0, (char *)a1, a2); }
+static inline BmfArc * __fwd_bmf_sub_402EF0(void *a0, void *a1, int32_t a2) { return __sub_402EF0((BmfArc *)a0, (char *)a1, a2); }
 static inline int32_t __fwd_bmf_compress_image(int32_t a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __compress_image(a0, a1, a2, (uint16_t *)a3, (void *)a4); }
 static inline char * __fwd_bmf_expand_image(int32_t a0, const __m128 &a1, const __m128 &a2, int32_t a3, void *a4) { return __expand_image(a0, a1, a2, a3, (int32_t *)a4); }
 static inline int32_t __fwd_bmf_write_bmp(int32_t a0, void *a1, int32_t a2) { return __write_bmp(a0, (char *)a1, a2); }
-static inline FILE ** __fwd_bmf_sub_402DF0(void *a0, char a1) { return __sub_402DF0((FILE **)a0, a1); }
+static inline BmfArc * __fwd_bmf_sub_402DF0(void *a0, char a1) { return __sub_402DF0((BmfArc *)a0, a1); }
 
 // ---------------------------------------------------------------------------
 // The two things this program does.
@@ -21979,8 +21991,8 @@ BMF_SSE void __bmf_compress(const __m128 &a1__ref, const __m128 &a2__ref,
     *((uint16_t *)p_i + 1),
     *((uint8_t *)p_i + 10) & 0x3F,
     p_i[3]);
-  if ( void *__nb = malloc(8u) )
-    Arc = __fwd_bmf_sub_402EF0((uint32_t *)__nb, (void *)OutName, 0);
+  if ( void *__nb = malloc(sizeof(BmfArc)) )
+    Arc = __fwd_bmf_sub_402EF0((BmfArc *)__nb, (void *)OutName, 0);
   else
     Arc = 0;
 
@@ -22031,8 +22043,8 @@ BMF_SSE void __bmf_decompress(const __m128 &a1__ref, const __m128 &a2__ref,
   uint32_t *p_i;
   void *Block;
 
-  if ( void *__nb = malloc(8u) )
-    Block = (void *)__fwd_bmf_sub_402EF0((uint32_t *)__nb, (void *)InName, 1);
+  if ( void *__nb = malloc(sizeof(BmfArc)) )
+    Block = (void *)__fwd_bmf_sub_402EF0((BmfArc *)__nb, (void *)InName, 1);
   else
     Block = nullptr;
   printf("File %16s,\r", InName);
