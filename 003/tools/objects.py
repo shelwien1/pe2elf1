@@ -20,6 +20,15 @@ Then every `*(T *)(name + N)` in the class contributes a field at N of width T,
 and the class's field map is the union.  Conflicts are reported rather than
 resolved: an offset read as both `uint8_t` and `uint32_t` is a union or a
 mistake, and which one it is is not this script's call.
+
+It stops at 159 classes, and that is the honest answer rather than a limitation
+to work around.  A field-sensitive pass -- treating values loaded from the same
+field of the same object as one object -- was tried and merges nothing, because
+the classes it would join are already joined by an assignment or a call.  What
+keeps the count at 159 is that the program really does hand around that many
+distinct allocations; the big ones are the model block and its tables, and
+telling which of an object's uint32_t fields point at which of the others is
+what reading ALGORITHM.md §9's open functions would settle.
 """
 import re
 import sys
