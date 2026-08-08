@@ -624,8 +624,6 @@ typedef int32_t t_dword_4458F4;
 static t_dword_4458F4& __dword_4458F4 = *(t_dword_4458F4*)(blob1 + 0x004458F4 - BMF_BLOB_BASE);
 typedef int32_t t_psub_402E30;
 static t_psub_402E30& __psub_402E30 = *(t_psub_402E30*)(blob1 + 0x00445930 - BMF_BLOB_BASE);
-typedef int32_t t_n1024;
-static t_n1024& __n1024 = *(t_n1024*)(blob1 + 0x00445B5C - BMF_BLOB_BASE);
 
 FILE *__sub_402FB0(FILE **_this)
 {
@@ -5882,140 +5880,27 @@ static inline int32_t * __fwd_sub_424500_sub_4256F0(void *a0, int32_t a1, int32_
   ::__psub_402E30 = __sub_402E30;
   return __sub_42CBB0_psub_402E30;
 }
-void __sub_434A30()
+// BMF ran its filters with the SSE unit in a particular mode: denormal
+// results flushed to zero, and denormal inputs treated as zero.  It got there
+// through Intel's dispatcher -- sub_4346D0, which read a CPU-feature level out
+// of a global that sub_434A30 had filled in from CPUID, took an FXSAVE to ask
+// whether the part could do DAZ at all, and printed an Intel runtime error and
+// exited on a machine without SSE2.
+//
+// SSE2 is a given here -- the bodies are full of it and would fault long
+// before this ran -- which settles all three questions: the level test is
+// always taken, DAZ has been available on every part that has SSE2, and the
+// no-SSE2 exit is unreachable.  What is left is the two mode bits, and
+// <xmmintrin.h> and <pmmintrin.h> already name them.
+//
+// main passed 3 -- flush-to-zero and denormals-are-zero, not the third bit --
+// so these two lines are the whole of what it did.
+static void bmf_set_denormal_mode()
 {
-  ;
-  uint32_t max_leaf = 0, feat_ecx = 0, feat_edx = 0, family = 0;
-  if (bmf_has_cpuid()) {
-    uint32_t a, b, c, d;
-    bmf_cpuid(0, &a, &b, &c, &d);
-    max_leaf = a;
-    bmf_cpuid(1, &a, &b, &c, &d);
-    family = (a >> 8) & 0xF;
-    feat_ecx = c;
-    feat_edx = d;
-  }
-  const uint32_t MMX = 0x00800000, FXSR = 0x01000000;
-  const uint32_t SSE = 0x02000000, SSE2 = 0x04000000;
-  const uint32_t SSE3 = 0x00000001, PCLMULQDQ = 0x00000002;
-  const uint32_t SSSE3 = 0x00000200, SSE41 = 0x00080000;
-  const uint32_t SSE42 = 0x00100000, MOVBE = 0x00400000;
-  const uint32_t POPCNT = 0x00800000, AES = 0x02000000;
-  const uint32_t OSXSAVE = 0x08000000, AVX = 0x10000000;
-  int32_t level;
-  if (max_leaf == 0) {
-    level = 1;
-  } else if (family == 5) {
-    level = (feat_edx & MMX) ? 8 : 2;
-  } else if (family == 6) {
-    level = (feat_edx & MMX) ? 16 : 4;
-    if (feat_edx & FXSR) {
-      level = (feat_edx & SSE) ? 128 : 32;
-      if (feat_edx & SSE2) level = 1024;
-      if (feat_ecx & SSE3) level = 2048;
-      if (feat_ecx & SSSE3) level = 4096;
-      if (feat_ecx & MOVBE) level = 0x4000;
-      if (feat_ecx & SSE41) level = 0x2000;
-      if ((feat_ecx & (SSE42 | POPCNT)) == (SSE42 | POPCNT)) level = 0x8000;
-      if ((feat_ecx & (PCLMULQDQ | AES)) == (PCLMULQDQ | AES)) level = 0x10000;
-    }
-    if (feat_ecx & OSXSAVE) {
-      uint32_t xcr0 = bmf_xgetbv0();
-      if ((feat_ecx & AVX) && (xcr0 & 6) == 6) level = 0x20000;
-    }
-  } else if (family == 15) {
-    level = (feat_edx & SSE2) ? 512 : 1;
-    if (feat_ecx & SSE3) level = 2048;
-  } else {
-    level = 1;
-  }
-  __n1024 = level;
+  _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
+  _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
 }
 
- BMF_SSE void __sub_4346D0(char n3)
-{
-  alignas(16) uint8_t __hexrays_frame[588];
-  char &ArgList_1 = *(char *)(__hexrays_frame + 0);
-  char &ArgList = *(char *)(__hexrays_frame + 36);
-  uint32_t (&v8)[128] = *(uint32_t (*)[128])(__hexrays_frame + 40);
-  uint32_t &v9 = *(uint32_t *)(__hexrays_frame + 552);
-  ;
-  int32_t v1;
-  int32_t v2;
-  int32_t v3;
-  int32_t v4;
-  const char *msg;
-  while ( (__n1024 & 0xFFFFF800) == 0 && (__n1024 & 0x400) == 0 )
-  {
-    if ( (__n1024 & 0xFFFFFE00) != 0 )
-    {
-      v3 = n3 & 2;
-      v4 = n3 & 4;
-      if ( (n3 & 2) != 0 || (n3 & 4) != 0 )
-      {
-        memset(v8, 0, sizeof(v8));
-        _fxsave(v8);
-        if ( (v8[7] & 0x40) == 0 )
-          v3 = 0;
-        if ( (v8[7] & 0x20000) == 0 )
-          v4 = 0;
-      }
-      if ( (n3 & 1) != 0 )
-      {
-        v9 = _mm_getcsr() | 0x8000;
-        _mm_setcsr(v9);
-      }
-      if ( v3 )
-      {
-        v9 = _mm_getcsr() | 0x40;
-        _mm_setcsr(v9);
-      }
-      if ( v4 )
-      {
-        v9 = _mm_getcsr() | 0x20000;
-        _mm_setcsr(v9);
-      }
-      return;
-    }
-    if ( __n1024 )
-    {
-      __irc__print(1, 0, 0, v8[5]);
-      __irc__print(1, 23, 0, v8[2]);
-      msg = (const char *)__irc__get_msg(45, 0, ArgList);
-      strncpy((char *)&v8[5], msg, 0x200u);
-      __irc__print(1, 24, 1, (char)&v8[5]);
-      __irc__print(1, 0, 0, ArgList_1);
-      exit(1);
-    }
-    __sub_434A30();
-  }
-  v1 = n3 & 2;
-  v2 = n3 & 4;
-  if ( (n3 & 4) != 0 )
-  {
-    memset(v8, 0, sizeof(v8));
-    _fxsave(v8);
-    if ( (v8[7] & 0x40) == 0 )
-      v1 = 0;
-    if ( (v8[7] & 0x20000) == 0 )
-      v2 = 0;
-  }
-  if ( (n3 & 1) != 0 )
-  {
-    v9 = _mm_getcsr() | 0x8000;
-    _mm_setcsr(v9);
-  }
-  if ( v1 )
-  {
-    v9 = _mm_getcsr() | 0x40;
-    _mm_setcsr(v9);
-  }
-  if ( v2 )
-  {
-    v9 = _mm_getcsr() | 0x20000;
-    _mm_setcsr(v9);
-  }
-}
 static inline uint32_t __fwd_sub_4229E0_sub_4118A0(void *a0, void *a1) { return __sub_4118A0((uint8_t *)a0, (char *)a1); }
 
 int32_t __sub_4229E0(int32_t _this, int32_t i, int32_t n4)
@@ -9952,13 +9837,6 @@ int32_t __sub_40AE10(uint32_t *_this, int32_t Src)
   return result;
 }
 
-BMF_SSE __gnu_m128d ____svml_log2_w(const __m128i &a1__ref)
-{
-  ;
-  __m128i a1 = a1__ref;
-  return __svml_log2(a1);
-}
-
 BMF_SSE __attribute__((visibility("hidden")))
 __gnu_m128d __sub_436E10(const __m128d &a0__ref, const __m128d &a1__ref)
 {
@@ -9967,7 +9845,16 @@ __gnu_m128d __sub_436E10(const __m128d &a0__ref, const __m128d &a1__ref)
   __m128d a1 = a1__ref;
   __m128d x = _mm_or_pd(_mm_and_pd(a0, a1), _mm_andnot_pd(a1, __bmf_half_half));
   if ( _mm_movemask_pd(a1) )
-    return ____svml_log2_w((__m128i)x);
+  {
+    // Intel's __svml_log2 was the natural log despite the name (see
+    // override/sub_436E10.inc).  Lane 1 is computed too: the caller only reads
+    // lane 0 through the mask, but leaving it undefined would let a signalling
+    // value through.
+    __m128d r;
+    r.m128d_f64[0] = log(x.m128d_f64[0]);
+    r.m128d_f64[1] = log(x.m128d_f64[1]);
+    return r;
+  }
   return x;
 }
 
@@ -10038,7 +9925,7 @@ __gnu_m128d __sub_436E10(const __m128d &a0__ref, const __m128d &a1__ref)
         if ( v11 )
         {
           v16 = v16 + (double)v11;
-          v14 = v14 + (double)v11 * __svml_log2((__m128i)_mm_set1_pd((double)v11)).m128d_f64[0];
+          v14 = v14 + (double)v11 * log((double)v11);
         }
         ++n2_3;
       }
@@ -10047,7 +9934,7 @@ __gnu_m128d __sub_436E10(const __m128d &a0__ref, const __m128d &a1__ref)
       v8 = v16;
     }
     if ( v8 != 0.0 )
-      v8 = v8 * __libm_sse2_log(v8);
+      v8 = v8 * log(v8);
   }
   return (int32_t)((v8 - v7) * 1.442695040888963);
 }
@@ -13804,7 +13691,7 @@ int32_t __sub_40A8A0(uint32_t *_this, int32_t Src, uint32_t *p_Src, int32_t n6, 
   if ( n6 == __n4_1 )
   {
     if ( *(uint32_t *)(__dword_442E3C[__n2] + 4) )
-      v9 = __libm_sse2_log((double)*(int32_t *)((char *)__buf_2 + 4 * __n2 + 0x342B8) / (double)*(uint32_t *)(__dword_442E3C[__n2] + 4)) * 1.442695040888963;
+      v9 = log((double)*(int32_t *)((char *)__buf_2 + 4 * __n2 + 0x342B8) / (double)*(uint32_t *)(__dword_442E3C[__n2] + 4)) * 1.442695040888963;
     else
       v9 = 0;
     v10 = v9;
@@ -13815,7 +13702,7 @@ int32_t __sub_40A8A0(uint32_t *_this, int32_t Src, uint32_t *p_Src, int32_t n6, 
     if ( v14 <= v11 )
       v13 = v12 + 0.08;
     if ( *(uint32_t *)(__dword_442E68 + 4 * n24) )
-      v15 = __libm_sse2_log((double)*(int32_t *)((char *)__buf_2 + 0x342E4) / (double)*(uint32_t *)(__dword_442E68 + 4 * n24)) * 1.442695040888963;
+      v15 = log((double)*(int32_t *)((char *)__buf_2 + 0x342E4) / (double)*(uint32_t *)(__dword_442E68 + 4 * n24)) * 1.442695040888963;
     else
       v15 = 0;
     v16 = v15;
@@ -13824,7 +13711,7 @@ int32_t __sub_40A8A0(uint32_t *_this, int32_t Src, uint32_t *p_Src, int32_t n6, 
   else if ( n24 < 0 )
   {
     if ( *(uint32_t *)(__dword_442E6C + 4 * *((uint8_t *)__buf_2 + n6 + 213056)) )
-      v32 = __libm_sse2_log((double)*(int32_t *)((char *)__buf_2 + 0x342E8) / (double)*(uint32_t *)(__dword_442E6C + 4 * *((uint8_t *)__buf_2 + n6 + 213056))) * 1.442695040888963;
+      v32 = log((double)*(int32_t *)((char *)__buf_2 + 0x342E8) / (double)*(uint32_t *)(__dword_442E6C + 4 * *((uint8_t *)__buf_2 + n6 + 213056))) * 1.442695040888963;
     else
       v32 = 0;
     v33 = v32;
@@ -13833,7 +13720,7 @@ int32_t __sub_40A8A0(uint32_t *_this, int32_t Src, uint32_t *p_Src, int32_t n6, 
   else
   {
     if ( *(uint32_t *)(__dword_442E54[0] + 4 * ((2 * n24) | (n6 - 5))) )
-      v6 = __libm_sse2_log((double)*(int32_t *)((char *)__buf_2 + 0x342D0) / (double)*(uint32_t *)(__dword_442E54[0] + 4 * ((2 * n24) | (n6 - 5)))) * 1.442695040888963;
+      v6 = log((double)*(int32_t *)((char *)__buf_2 + 0x342D0) / (double)*(uint32_t *)(__dword_442E54[0] + 4 * ((2 * n24) | (n6 - 5)))) * 1.442695040888963;
     else
       v6 = 0;
     v7 = v6;
@@ -13933,7 +13820,7 @@ int32_t __sub_40A8A0(uint32_t *_this, int32_t Src, uint32_t *p_Src, int32_t n6, 
       else
       {
         v36 = v22;
-        v25 = __libm_sse2_log((double)*(_this + v23 + 49664) / (double)v39);
+        v25 = log((double)*(_this + v23 + 49664) / (double)v39);
         v22 = v36;
         v24 = _this + 257 * v23;
         v26 = v25 * 1.442695040888963;
@@ -13947,7 +13834,7 @@ LABEL_35:
     v28 = v24[*((uint8_t *)v22 + *(uint8_t *)(v18 + Src_1) + 520) + 49729];
     if ( !v28 )
       return 1;
-    v29 = *(_this + v23 + 49664) <= 2 * v28 ? 1.0 : __libm_sse2_log((double)*(_this + v23 + 49664) / (double)v28) * 1.442695040888963;
+    v29 = *(_this + v23 + 49664) <= 2 * v28 ? 1.0 : log((double)*(_this + v23 + 49664) / (double)v28) * 1.442695040888963;
     v30 = v29;
     n6_1 = n6_1 - v30;
     if ( n6_1 <= 0.0 )
@@ -31161,16 +31048,12 @@ BMF_SSE void __bmf_decompress(const __m128 &a1__ref, const __m128 &a2__ref,
 
  BMF_SSE int32_t __main(int32_t argc, const char **argv)
 {
-  alignas(16) uint8_t __hexrays_frame[16];
-  uint32_t &Csr = *(uint32_t *)(__hexrays_frame + 0);
   ;
   __m128 v3;
   __m128 v4;
   int32_t Mode;
 
-  __sub_4346D0(3);
-  Csr = _mm_getcsr() | 0x8000;      // flush denormals to zero, as BMF did
-  _mm_setcsr(Csr);
+  bmf_set_denormal_mode();
   __sub_42CBB0((int32_t)__sub_402E30);
   printf("BMF lossless image compressor, v.2.01 (C) 1998-1999, 2009 by Dmitry Shkarin\n");
 

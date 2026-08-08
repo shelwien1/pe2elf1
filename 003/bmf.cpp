@@ -698,68 +698,6 @@ BMF_SSE static inline void _mm_stream_pi   (M64   *p, __gnu_m64   a) { _mm_strea
 typedef M128I _OWORD;
 #define __int128 M128I
 
-// The standalone build has no Intel runtime to call, so the two
-// register-convention entries below become ordinary C.  Both are `log`
-// underneath, whatever the names say; the trampolines existed only to reach
-// the PE's copies with their private register convention.  A third,
-// __intel_sse2_strlen, went with the command-line parser that called it.
-
-// Natural log, despite the name: see override/sub_436E10.inc.  Lane 1 is
-// computed too — the caller only ever reads lane 0 through the mask, but
-// leaving it undefined would let a signalling value through.
-BMF_SSE static inline M128D __svml_log2(const M128I &a) {
-  M128D x = a, r;
-  r.m128d_f64[0] = log(x.m128d_f64[0]);
-  r.m128d_f64[1] = log(x.m128d_f64[1]);
-  return r;
-}
-
-BMF_SSE static inline double __libm_sse2_log(double d) { return log(d); }
-
-// ---------------------------------------------------------------------------
-// CPUID, for the routines that override/ rewrites from their expected
-// results (Hex-Rays renders them as `__asm { cpuid }` plus reads of its
-// _EAX/_ECX/_EDX pseudo-registers, which have no C form).
-// ---------------------------------------------------------------------------
-// EFLAGS.ID (bit 21) is writable iff the CPU implements CPUID.
-static int bmf_has_cpuid()
-{
-  unsigned before, after;
-  __asm__ volatile("pushfl\n\t"
-                   "popl %0\n\t"
-                   "movl %0, %1\n\t"
-                   "xorl $0x200000, %1\n\t"
-                   "pushl %1\n\t"
-                   "popfl\n\t"
-                   "pushfl\n\t"
-                   "popl %1\n\t"
-                   : "=&r"(before), "=&r"(after) : : "cc");
-  if (before == after)
-    return 0;
-  __asm__ volatile("pushl %0\n\t popfl" : : "r"(before) : "cc");
-  return 1;
-}
-
-static void bmf_cpuid(unsigned leaf, unsigned *a, unsigned *b, unsigned *c, unsigned *d)
-{
-  // -fPIC on i386 reserves EBX, so it has to be saved around CPUID by hand.
-  __asm__ volatile("xchgl %%ebx, %1\n\t"
-                   "cpuid\n\t"
-                   "xchgl %%ebx, %1"
-                   : "=a"(*a), "=&r"(*b), "=c"(*c), "=d"(*d)
-                   : "0"(leaf), "2"(0));
-}
-
-// XGETBV encoded by hand: the mnemonic needs -mxsave, which the rest of this
-// translation unit is not built with.
-static unsigned bmf_xgetbv0()
-{
-  unsigned lo, hi;
-  __asm__ volatile(".byte 0x0f, 0x01, 0xd0" : "=a"(lo), "=d"(hi) : "c"(0));
-  (void)hi;
-  return lo;
-}
-
 //--- #include "crt.cpp"      // what is left of the runtime BMF got from the PE
 // crt.cpp — the runtime BMF used to get from the PE.
 //
@@ -782,27 +720,12 @@ static unsigned bmf_xgetbv0()
 // FILE* handed to BMF's fread would be read as a Win32 _iobuf -- ended when
 // BMF's fread did.
 //
-// Which leaves this file with three things: Intel's two error-reporting hooks,
-// the page allocator, and sub_402E30.  No Win32 remains on either host, so
-// there is no longer a Windows half and a POSIX half.
-
-// ---------------------------------------------------------------------------
-// Intel's runtime error reporter.
-//
-// Reached only from sub_4346D0's "this CPU has no SSE2" path — which cannot be
-// taken, since the moved bodies are full of SSE2 and would have faulted long
-// before.  Kept so that path still compiles and says something if it ever
-// runs, with Intel's own argument shape: a stream number, a message number, a
-// count, and one argument.
-// ---------------------------------------------------------------------------
-static char *__irc__get_msg(int cat, int num, void *) {
-  static char msg[64];
-  sprintf(msg, "Intel runtime message %d/%d", cat, num);
-  return msg;
-}
-static int __irc__print(int stream, int num, int count, ...) {
-  return fprintf(stderr, "Intel runtime error %d/%d/%d\n", stream, num, count);
-}
+// Which leaves this file with two things: the page allocator and sub_402E30.
+// Intel's runtime went the same way -- its two error-reporting hooks served
+// only the no-SSE2 exit, and its log entries were `log` -- and so did the
+// CPUID helpers that answered for its dispatcher.  No Win32 and no Intel
+// runtime remain on either host, so there is no longer a Windows half and a
+// POSIX half.
 
 // ---------------------------------------------------------------------------
 // The page allocator.
