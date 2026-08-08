@@ -258,22 +258,51 @@ their layout as a struct with explicit padding and lose only the casts, each
 carrying `static_assert(sizeof(__frame) == N)` so a layout that moves is a
 compile error rather than something ten images have to notice.
 
-### Phase 3 — the pointers are out, the blob is not
+### Phase 3 — the pointers are out; the blob cannot be split
 
 Done: the four false bases from §4.1 retired, so no global's position matters to
-another; five globals that held addresses in `int32_t` words are real pointers
-outside the blob (`coded_buf`, `out_cursor`, `packer_word`, `hist_scratch`,
-`model_tables`); the error message table decoded and inlined, which is what
-`__exit_402E40` used nine relocated pointers for.
+another *there*; five globals that held addresses in `int32_t` words are real
+pointers outside the blob (`coded_buf`, `out_cursor`, `packer_word`,
+`hist_scratch`, `model_tables`); the error message table decoded and inlined,
+which is what `__exit_402E40` used nine relocated pointers for.
 
-Not done: 164 globals are still slices of `blob.inc`. The blocker is extents.
-`tools/extents.py` says 120 of them are never subscripted and 44 are subscripted
-by an expression — and for those 44 the declared `[0x10000]` is a guess, so
-whether `__dword_4398C0[i]` is one dword or the first of thirteen consecutive
-ones that Hex-Rays split into thirteen names is not answerable from the source.
-It is answerable at run time: give every global its own definition with a guard
-gap and see what breaks. That is the next step and it is a day's work, not an
-open question.
+**Not done, and now known not to be doable as written.** This document said the
+extents were the blocker — that `tools/extents.py` finds 120 globals never
+subscripted and 44 subscripted by an expression, and that whether
+`__dword_4398C0[i]` is one dword or the first of thirteen "is answerable at run
+time: give every global its own definition with a guard gap and see what
+breaks."
+
+That run has been done. `tools/deblob.py` does exactly it: 163 definitions, each
+carrying its own bytes, each followed by a guard. **It segfaults on the first
+image.** Three variants, to find out what kind of failure it is:
+
+| guard | contents | result |
+| --- | --- | --- |
+| 64 bytes | zero | SIGSEGV in `sub_416860` |
+| 64 bytes | the bytes that followed in the data segment | SIGSEGV, same place |
+| 4096 bytes | the bytes that followed in the data segment | SIGSEGV, same place |
+
+A read running past a global's end would be fixed by the second variant, and
+certainly by the third. Neither fixes it, which leaves one explanation: the
+program **writes** across these boundaries. Some of what Hex-Rays presents as
+163 globals is a smaller number of larger tables that it split into one name per
+access site, and code that stores through one name expects the store to be
+visible through another.
+
+So "one definition per global" is the wrong target, and the guard-gap run is
+worth more as the thing that established that than it would have been as a
+migration. The right target is the same as Phase 4's: **recover the real
+objects**, which are bigger than the declared globals, and give each one
+definition. §4.1's descriptor table is the worked example — four "globals" and a
+table that is really one 96-byte structure — and the run above says that shape
+is not the exception.
+
+`tools/deblob.py` is kept for the bisection that comes next: split one global at
+a time rather than all of them, and the ones that survive are independent, while
+the ones that do not name the tables to recover. That is 163 build-and-test
+cycles, which is an afternoon of machine time and the cheapest way to turn this
+from one negative result into a map.
 
 ### Phase 4 — every local is typed; the fields are not
 
@@ -355,13 +384,14 @@ change.
 
 | | work | why it is not done |
 | --- | --- | --- |
-| 3 de-blob | 164 globals | 44 extents unknowable from the source; needs the guard-gap run |
+| 3 de-blob | 164 globals | **measured: they are not separable.** Needs the objects recovered, then a bisection to find which |
 | 4 structures | ~1211 warnings | the model block and the alternate model families have to be *read* first |
 | 5 casts | ~5680 | most fall out of 4; the rest is `LOBYTE`-family bit-packing |
 | 6 control flow | 123 gotos | irreducible; needs each function understood, and needs 4 |
 
-The order among these is forced. 3's guard-gap run is independent and can go
-next. 4 gates 5 and 6. 6 last, still.
+The order among these is forced, and tighter than it was: 3 and 4 turn out to be
+the same task seen from two ends — recover the objects — and 4 gates 5 and 6.
+6 last, still.
 
 Two of this document's own predictions were wrong, and both were wrong in the
 same direction — assuming a mechanical pass where the code had something real to
@@ -370,6 +400,9 @@ say:
 * Phase 2 expected 3–6 frames to resist splitting; 16 did, because the frames
   carry unnamed slack the code runs into.
 * Phase 6 expected the `goto`s to be four rewritable shapes; none of them is.
+* Phase 3 expected the guard-gap run to *migrate* the globals. It segfaulted,
+  and what it actually bought was the knowledge that they are not separable —
+  which is worth more, but is not what it was scheduled as.
 
 The gate caught the first before it shipped. The second was caught by measuring
 before starting, which is the cheaper of the two.
