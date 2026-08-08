@@ -97,6 +97,38 @@ def params_of(sig):
             for p in parts]
 
 
+# `x = nullptr;` is not an alias, it is an initialisation, and treating it as
+# one merges every object that was ever cleared into a single class.  Same for
+# the other literals that look like identifiers.
+LITERALS = {'nullptr', 'NULL', 'true', 'false', 'this'}
+
+
+def file_scope(lines, fns):
+    """Names declared outside every function body.
+
+    A global has one storage location for the whole program, so unioning it
+    with a local says those two names denote the same allocation everywhere --
+    which is how one global passed to two unrelated functions merges their
+    objects.  They are excluded, not resolved.
+    """
+    inside = [False] * len(lines)
+    for a, b, _, _ in fns:
+        for i in range(a, min(b + 1, len(lines))):
+            inside[i] = True
+    out = set(LITERALS)
+    for i, l in enumerate(lines):
+        if inside[i]:
+            continue
+        m = declaration(l.split('//')[0])
+        if m:
+            for p in split_commas(m.group(2)):
+                mm = re.search(r'([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[[^\]]*\])?\s*$',
+                               p.strip())
+                if mm:
+                    out.add(mm.group(1))
+    return out
+
+
 class UF:
     def __init__(self):
         self.p = {}
@@ -124,6 +156,7 @@ def classes(lines):
         if m:
             shim[m.group(1)] = m.group(2)
     uf = UF()
+    outer = file_scope(lines, fns)
     PLAIN = re.compile(r'^\s*([A-Za-z_][A-Za-z0-9_]*) = ([A-Za-z_][A-Za-z0-9_]*);\s*$')
     CAST = re.compile(r'^\s*([A-Za-z_][A-Za-z0-9_]*) = '
                       r'\(?(?:const )?[A-Za-z_][A-Za-z0-9_]*\s*\**\s*\)?\s*'
@@ -133,7 +166,7 @@ def classes(lines):
         for l in lines[a:b + 1]:
             c = l.split('//')[0]
             m = PLAIN.match(c) or CAST.match(c)
-            if m:
+            if m and not ({m.group(1), m.group(2)} & outer):
                 uf.union((fn, m.group(1)), (fn, m.group(2)))
             for cm in CALL.finditer(c):
                 callee = shim.get(cm.group(1), cm.group(1))
@@ -146,9 +179,109 @@ def classes(lines):
                     am = re.fullmatch(r'(?:\(\s*(?:const\s+)?[A-Za-z_][A-Za-z0-9_]*'
                                       r'\s*\**\s*\)\s*)?'
                                       r'([A-Za-z_][A-Za-z0-9_]*)', arg)
-                    if am and i < len(params[callee]) and params[callee][i]:
+                    if (am and i < len(params[callee]) and params[callee][i]
+                            and am.group(1) not in outer):
                         uf.union((fn, am.group(1)), (callee, params[callee][i]))
     return fns, uf
+
+
+def decl_types(sig, lines, a, b):
+    """Every name in a function, mapped to the type it was declared with.
+
+    This is not decoration.  `p + 3` steps three bytes when p is `char *` and
+    twelve when it is `void **`, so the same `+ 3` in the decompiled source
+    means a different offset depending on a declaration that may be two hundred
+    lines away.  Reading offsets as bytes regardless -- which is what this tool
+    did at first -- silently mislocates every field of an object held in a
+    typed pointer, and `free(*(Blocka + 269560))` becomes a free of the wrong
+    address that still compiles.
+    """
+    types = {}
+    m = re.search(r'\((.*)\)', sig)
+    if m:
+        for p in split_commas(m.group(1)):
+            mm = re.match(r'\s*((?:const\s+)?[A-Za-z_][A-Za-z0-9_]*(?:\s*\*)*)'
+                          r'\s*([A-Za-z_][A-Za-z0-9_]*)\s*$', p)
+            if mm:
+                types[mm.group(2)] = re.sub(r'\s+', '', mm.group(1))
+    i = a
+    while i <= b:
+        if not starts_declaration(lines[i]):
+            i += 1
+            continue
+        j = i
+        while ';' not in lines[j] and j < b:
+            j += 1
+        m = declaration(' '.join(l.strip() for l in lines[i:j + 1]))
+        if m:
+            base = m.group(1).strip()
+            for p in split_commas(m.group(2)):
+                nm = re.search(r'([A-Za-z_][A-Za-z0-9_]*)', p)
+                if nm and nm.group(1) not in types:
+                    types[nm.group(1)] = base + '*' * (p.count('*')
+                                                       + p.count('['))
+        i = j + 1
+    return types
+
+
+def code_start(lines, a, b):
+    """The first line of a body that is a statement rather than a declaration.
+
+    `int32_t *v4, *v5;` has the characters of a dereference in it and must not
+    be read as one, in either direction: the survey would record a phantom
+    field at offset zero, and the rewrite would turn the declaration into
+    `int32_t v5->f0`.
+    """
+    end = a + 1
+    for i in range(a + 1, b + 1):
+        if starts_declaration(lines[i]):
+            j = i
+            while ';' not in lines[j] and j < b:
+                j += 1
+            end = j + 1
+    return end
+
+
+# `*p`, with nothing to say what it reads -- the type comes from p's own
+# declaration.  This is how an object's first field usually appears.
+PLAIN_DEREF = re.compile(r'\*\s*([A-Za-z_][A-Za-z0-9_]*)\b(?![\w\[(.]|->)')
+
+
+def is_deref(text, pos):
+    """Whether the `*` at pos dereferences rather than multiplies.
+
+    `16 * v5` and `*v5` differ only in what comes before the star, so the
+    decision has to look there: an operand ends a value, and a value times a
+    pointer is a multiplication.  `return *v5` is the exception that makes the
+    plain character test insufficient.
+    """
+    j = pos - 1
+    while j >= 0 and text[j] in ' \t\n':
+        j -= 1
+    if j < 0:
+        return True
+    if text[j] in ')]':
+        return False
+    if text[j].isalnum() or text[j] == '_':
+        k = j
+        while k >= 0 and (text[k].isalnum() or text[k] == '_'):
+            k -= 1
+        return text[k + 1:j + 1] in ('return', 'case')
+    return True
+
+
+def elem_size(ty):
+    """How many bytes `p + 1` steps for a name of this type."""
+    if not ty or not ty.endswith('*'):
+        return 1                              # an integer holding an address
+    inner = ty[:-1].strip()
+    if inner in ('void', 'constvoid', 'const void'):
+        return 1                              # gcc's void * arithmetic
+    return width(inner) or 1
+
+
+def pointee(ty):
+    return ty[:-1].strip() if ty and ty.endswith('*') else 'char'
 
 
 # a dereference whose operand has no parentheses left in it, so the terms of
@@ -159,6 +292,7 @@ INNER = re.compile(r'\*\((?:const )?([A-Za-z_][A-Za-z0-9_]*\s*\**)\s*\*\)'
 BARE = re.compile(r'\*\((?:const )?([A-Za-z_][A-Za-z0-9_]*\s*\**)\s*\*\)'
                   r'(?:\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)|([A-Za-z_][A-Za-z0-9_]*))'
                   r'(?![\w\[])')
+SUBSCRIPT = re.compile(r'(?<![\w.>])([A-Za-z_][A-Za-z0-9_]*)\s*\[([^\[\]]*)\]')
 PTRFIELD = re.compile(r'\*\((?:const )?[A-Za-z_][A-Za-z0-9_]*\s*\**\s*\*\)\('
                       r'\*\((?:const )?[A-Za-z_][A-Za-z0-9_]*\s*\**\s*\*\)'
                       r'\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\+\s*(\d+)\s*\)')
@@ -228,7 +362,8 @@ def survey(lines, fns, uf):
     ptr = collections.defaultdict(set)
     hits = collections.Counter()
     name = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
-    for a, b, fn, _ in fns:
+    for a, b, fn, sig in fns:
+        types = decl_types(sig, lines, a, b)
         # a whole body at once, newlines and all: the decompiler wraps long
         # expressions, and a dereference split over two lines is still one
         # dereference
@@ -244,7 +379,8 @@ def survey(lines, fns, uf):
                 if off is None:
                     var[k] += 1
                 else:
-                    fld[k][off][m.group(1).strip()] += 1
+                    step = elem_size(types.get(got[0]))
+                    fld[k][off * step][m.group(1).strip()] += 1
                     hits[k] += 1
             c = c[:m.start()] + '_' + c[m.end():]
         c = '\n'.join(l.split('//')[0] for l in lines[a:b + 1])
@@ -252,17 +388,63 @@ def survey(lines, fns, uf):
             k = uf.find((fn, m.group(2) or m.group(3)))
             fld[k][0][m.group(1).strip()] += 1
             hits[k] += 1
+        for m in SUBSCRIPT.finditer(c):
+            nm, idx = m.group(1), m.group(2)
+            ty = types.get(nm)
+            k = uf.find((fn, nm))
+            off = constant(terms(idx))
+            if off is None:
+                var[k] += 1
+            else:
+                fld[k][off * elem_size(ty)][pointee(ty)] += 1
+                hits[k] += 1
         for m in PTRFIELD.finditer(c):
             ptr[uf.find((fn, m.group(1)))].add(int(m.group(2)))
+        stmts = '\n'.join(l.split('//')[0]
+                          for l in lines[code_start(lines, a, b):b + 1])
+        for m in PLAIN_DEREF.finditer(stmts):
+            ty = types.get(m.group(1))
+            if ty and ty.endswith('*') and is_deref(stmts, m.start()):
+                k = uf.find((fn, m.group(1)))
+                fld[k][0][pointee(ty)] += 1
+                hits[k] += 1
     return fld, var, ptr, hits
 
 
+# A declaration is any type name followed only by declarators and a semicolon.
+# Naming the types instead -- which this did at first -- misses every local
+# held in a `bool`, an `__m128`, a `BmfArc` or one of the structs recovered
+# earlier, and a name whose declaration is not found is a name that cannot be
+# retyped.
 TYPE = (r'(?:const\s+)?(?:unsigned\s+|signed\s+)?'
-        r'(?:char|short|int|long|float|double|void|size_t|uintptr_t|FILE'
-        r'|u?int(?:8|16|32|64)_t|__m128[id]?|Obj\d+)')
-DECL = re.compile(r'^\s*(%s)((?:[\s\*]+[A-Za-z_][A-Za-z0-9_]*'
+        r'(?:struct\s+)?[A-Za-z_][A-Za-z0-9_]*')
+NOT_A_TYPE = {'return', 'goto', 'break', 'continue', 'else', 'do', 'case',
+              'default', 'delete', 'typedef'}
+DECL = re.compile(r'^\s*(?:static\s+|extern\s+)?(%s)((?:[\s\*]+[A-Za-z_][A-Za-z0-9_]*'
                   r'(?:\[[^\]]*\])?\s*,)*[\s\*]+[A-Za-z_][A-Za-z0-9_]*'
                   r'(?:\[[^\]]*\])?)\s*;' % TYPE)
+
+
+DECL_HEAD = re.compile(r'^\s*(?:static\s+|extern\s+)?(%s)[\s\*]+[A-Za-z_]' % TYPE)
+
+
+def declaration(text):
+    """The DECL match for a declaration statement, or None."""
+    m = DECL.match(text)
+    if m and m.group(1).split()[-1] not in NOT_A_TYPE:
+        return m
+    return None
+
+
+def starts_declaration(line):
+    """Whether a line opens a declaration -- which may not close on it.
+
+    `int32_t *v4, *v5, v6,` continues onto the next line and has no semicolon,
+    so testing the whole pattern against the first line alone finds nothing and
+    every name in a wrapped list looks undeclared.
+    """
+    m = DECL_HEAD.match(line)
+    return bool(m) and m.group(1).split()[-1] not in NOT_A_TYPE
 
 
 def split_commas(text):
@@ -298,15 +480,14 @@ def retype_local(out, a, b, nm, tag):
     """
     i = a
     while i <= b:
-        m = DECL.match(out[i])
-        if not m:
+        if not starts_declaration(out[i]):
             i += 1
             continue
         j = i
         while ';' not in out[j] and j < b:
             j += 1
         text = ' '.join(l.strip() for l in out[i:j + 1])
-        m = DECL.match(text)
+        m = declaration(text)
         if not m or not re.search(r'[\s\*,]%s\b' % re.escape(nm), m.group(2)):
             i = j + 1
             continue
@@ -448,6 +629,7 @@ def main():
     for fn, nm in names:
         byfn[fn].add(nm)
     spans = {fn: (a, b) for a, b, fn, _ in fns}
+    sigof = {fn: sig for _, _, fn, sig in fns}
 
     out = list(lines)
     spanof = {}
@@ -491,6 +673,8 @@ def main():
         # crosses them -- which it has to, because an expression that runs over
         # three lines is still one expression.
         text = '\n'.join(out[s:b + 1])
+        types = decl_types(sigof[fn], out, a, b)
+        step = {nm: elem_size(types.get(nm)) for nm in nms}
         pos = 0
         while True:                           # innermost dereferences first
             m = INNER.search(text, pos)
@@ -502,18 +686,48 @@ def main():
                 nm, rest = got
                 off = constant(rest)
                 if off is None:
-                    # keep it byte arithmetic: the object is a struct now, and
-                    # every other term in the sum stays an offset
-                    new = '*(%s *)((char *)%s + (intptr_t)(%s))' % (
-                        m.group(1).strip(), nm, join(rest))
+                    scale = '' if step[nm] == 1 else ' * %d' % step[nm]
+                    new = '*(%s *)((char *)%s + (intptr_t)(%s)%s)' % (
+                        m.group(1).strip(), nm, join(rest), scale)
                 else:
-                    new = field(m.group(1).strip(), nm, off)
+                    new = field(m.group(1).strip(), nm, off * step[nm])
             if new is None:
                 pos = m.start() + 2
                 continue
             text = text[:m.start()] + new + text[m.end():]
             pos = 0                           # the outer dereference may match now
+        code = code_start(out, a, b) - s
         for nm in nms:
+            ty, k = types.get(nm, 'char*'), step[nm]
+
+            # nm[i] -- invisible to the dereference patterns, and scaled by the
+            # declared element, not by the byte
+            def sub_rep(m, nm=nm, ty=ty, k=k):
+                if m.group(1) != nm:
+                    return m.group(0)
+                off = constant(terms(m.group(2)))
+                if off is not None:
+                    got = field(pointee(ty), nm, off * k)
+                    if got:
+                        return got
+                return '((%s *)%s)[%s]' % (pointee(ty), nm, m.group(2))
+            while True:              # `v5[v5[5] + 6]` needs two passes
+                once = SUBSCRIPT.sub(sub_rep, text)
+                if once == text:
+                    break
+                text = once
+
+            # a plain `*nm`, with no cast to say what it reads
+            head = text.split('\n')
+            joined = '\n'.join(head[code:])
+
+            def deref_rep(m, nm=nm, ty=ty, src=None):
+                if m.group(1) != nm or not is_deref(m.string, m.start()):
+                    return m.group(0)
+                return field(pointee(ty), nm, 0) or m.group(0)
+            stmts = PLAIN_DEREF.sub(deref_rep, joined)
+            text = '\n'.join(head[:code] + [stmts])
+
             # *(T *)nm -> nm->f0
             if member.get(0):
                 mem, mty = member[0]
@@ -521,11 +735,20 @@ def main():
                               r'(?:\(\s*%s\s*\)|%s)(?![\w\[])'
                               % (re.escape(mty), re.escape(nm), re.escape(nm)),
                               '%s->%s' % (nm, mem), text)
-            # what is left of `nm + k` is byte arithmetic, and must stay byte
-            # arithmetic now that nm points at a struct
-            text = re.sub(r'(?<!\(char \*\))(?<![>\w.&])%s\b'
+            # whatever arithmetic is left keeps the type it was written for --
+            # `(char *)` is only right for a name that already stepped by bytes
+            cast = '(char *)' if k == 1 else '(%s)' % ty.replace('*', ' *')
+            text = re.sub(r'(?<![\)>\w.&])%s\b'
                           r'(?=\s*(?:\+(?!\+)|-(?![->])))' % re.escape(nm),
-                          '(char *)%s' % nm, text)
+                          cast + nm, text)
+
+            # `v5 = malloc(...)` was int-to-int or pointer-to-same-pointer
+            # before; now the left side is a struct pointer and C++ will not
+            # convert silently.  The cast wraps the whole right-hand side, so a
+            # conditional keeps its meaning.
+            text = re.sub(r'\b%s(\s*)=\s*(?!=)((?:[^;=]|=[^=])*?);' % re.escape(nm),
+                          lambda m: '%s%s= (%s *)(%s);'
+                          % (nm, m.group(1), tag, m.group(2).strip()), text)
         new_lines = text.split('\n')
         assert len(new_lines) == b + 1 - s, 'rewrite changed the line count'
         changed += sum(1 for x, y in zip(out[s:b + 1], new_lines) if x != y)
@@ -544,9 +767,15 @@ def main():
                 continue
             delta = retype_local(out, a, b, nm, tag)
             if delta is None:
-                print('%s: no declaration found for %s in %s' % (tag, nm, fn))
-            else:
-                b += delta
+                # a name left at its old type would take `nm->f8` with it, and
+                # the result would not compile.  Decline the whole object
+                # rather than hand the gate a file that cannot build.
+                with open(SKIP, 'a') as f:
+                    f.write(signature(uf, key) + '\n')
+                print('%s: declined -- no declaration found for %s in %s'
+                      % (tag, nm, fn))
+                sys.exit(3)
+            b += delta
 
     anchor = next(i for i, l in enumerate(out) if l.startswith('struct RangeCoder'))
     out = out[:anchor] + body.split('\n') + [''] + out[anchor:]
