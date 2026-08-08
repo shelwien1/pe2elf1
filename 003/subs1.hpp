@@ -2,18 +2,29 @@
 // BMF's globals.
 //
 // Every global the decompiled bodies touch is a reference bound to a fixed
-// offset inside blob.inc, BMF.exe's data segment (see bmf.cpp's BMF_BLOB).
-// Hex-Rays named each one after the function it was recovered in, so the same
-// object arrived under one name per user -- 904 declarations for 336 objects --
-// each sitting just above its function.  They are collected here instead,
-// sorted by address, one declaration per object, under the name IDA gave the
-// address with the function prefix dropped.  302 are left: the other 34 were
-// only ever touched by bodies the `c`/`d` command line cannot reach.
+// offset inside blob.inc, BMF.exe's data segment.  Hex-Rays named each one
+// after the function it was recovered in, so the same object arrived under one
+// name per user -- 904 declarations for 336 objects -- each sitting just above
+// its function.  They are collected here instead, sorted by address, one
+// declaration per object, under the name IDA gave the address with the
+// function prefix dropped.  303 are left: 34 of the 336 were only ever touched
+// by bodies the `c`/`d` command line cannot reach, and __byte_44337D is new --
+// see below.
 //
 // The typedefs carry the array shapes, which cannot be written inline in the
 // reference declaration.  Where one body reads an address as a bare scalar and
 // another indexes it, the array shape is the one declared and the scalar's
 // users say [0].
+//
+// Nothing below this block writes an address as a number any more.  Hex-Rays
+// left some baked into expressions rather than into named globals -- the
+// `*(_QWORD *)(n64 + 4469652)` shape, 4469652 being 0x00443394 -- and those now
+// take the address of the global that owns the byte they start at.  Where that
+// byte is inside an object rather than at its start, the offset is written out
+// (`(char *)__dword_445660 + v3 + 8`) rather than given a global of its own;
+// the exception is 0x0044337D, byte 1 of the dword array based at __Buffer,
+// which is indexed like an array and so got the byte global its neighbours
+// __byte_44339D and __byte_4433AD already had.
 //
 // A few functions declare a local with the same name as the global they use
 // and reach the global through `::`; those locals still carry their original
@@ -384,6 +395,8 @@ typedef int32_t t_Buffer_0;
 static t_Buffer_0& __Buffer_0 = *(t_Buffer_0*)(blob1 + 0x00443378 - BMF_BLOB_BASE);
 typedef int32_t t_Buffer;
 static t_Buffer& __Buffer = *(t_Buffer*)(blob1 + 0x0044337C - BMF_BLOB_BASE);
+typedef uint8_t t_byte_44337D[0x10000];
+static t_byte_44337D& __byte_44337D = *(t_byte_44337D*)(blob1 + 0x0044337D - BMF_BLOB_BASE);
 typedef int32_t t_buf[0x10000];
 static t_buf& __buf = *(t_buf*)(blob1 + 0x00443380 - BMF_BLOB_BASE);
 typedef int32_t t_dword_443384;
@@ -3911,21 +3924,21 @@ int32_t *__sub_4256F0(int32_t *_this, int32_t i, int32_t a3, int32_t n4)
     v2 = 2 * (uint8_t)__n2_1 + 4;
     __byte_445724 = 2 * __n2_1 + 4;
     __byte_445726 = 2 * __n2_1;
-    *(uint64_t *)(v2 + BMF_BLOB(0x00445660)) = 0x404040404040404LL;
+    *(uint64_t *)((char *)__dword_445660 + v2) = 0x404040404040404LL;
     __n8_2 = 8;
     v3 = v2 + 2 * (uint8_t)__n4_0;
     __byte_445728 = v3;
     __byte_44572A = v3 - 5;
-    *(uint64_t *)(v3 + BMF_BLOB(0x00445660)) = 0x505050505050505LL;
-    *(uint64_t *)(v3 + BMF_BLOB(0x00445668)) = 0x505050505050505LL;
+    *(uint64_t *)((char *)__dword_445660 + v3) = 0x505050505050505LL;
+    *(uint64_t *)((char *)__dword_445660 + v3 + 8) = 0x505050505050505LL;
     __n16 = 16;
     v4 = (uint64_t *)(v3 + 2 * (uint8_t)__n8_2);
     __byte_44572C = (char)v4;
     __byte_44572E = (uint8_t)v4 - 6;
-    *(uint64_t *)((char *)v4 + BMF_BLOB(0x00445660)) = 0x606060606060606LL;
-    *(uint64_t *)((char *)v4 + BMF_BLOB(0x00445668)) = 0x606060606060606LL;
-    *(uint64_t *)((char *)v4 + BMF_BLOB(0x00445670)) = 0x606060606060606LL;
-    *(uint64_t *)((char *)v4 + BMF_BLOB(0x00445678)) = 0x606060606060606LL;
+    *(uint64_t *)((char *)__dword_445660 + (uint32_t)v4) = 0x606060606060606LL;
+    *(uint64_t *)((char *)__dword_445660 + (uint32_t)v4 + 8) = 0x606060606060606LL;
+    *(uint64_t *)((char *)__dword_445660 + (uint32_t)v4 + 16) = 0x606060606060606LL;
+    *(uint64_t *)((char *)__dword_445660 + (uint32_t)v4 + 24) = 0x606060606060606LL;
     si128 = _mm_load_si128((const __m128i *)&__xmmword_439800);
     __n32 = 32;
     v6 = (char *)v4 + 2 * (uint8_t)__n16;
@@ -5261,21 +5274,21 @@ BMF_SSE int32_t __sub_4149C0(char ArgList_1)
     v7 = 2 * (uint8_t)__n2_1 + 4;
     __byte_445724 = 2 * __n2_1 + 4;
     __byte_445726 = 2 * __n2_1;
-    *(uint64_t *)(v7 + BMF_BLOB(0x00445660)) = 0x404040404040404LL;
+    *(uint64_t *)((char *)__dword_445660 + v7) = 0x404040404040404LL;
     __n8_2 = 8;
     v8 = v7 + 2 * (uint8_t)__n4_0;
     __byte_445728 = v8;
     __byte_44572A = v8 - 5;
-    *(uint64_t *)(v8 + BMF_BLOB(0x00445660)) = 0x505050505050505LL;
-    *(uint64_t *)(v8 + BMF_BLOB(0x00445668)) = 0x505050505050505LL;
+    *(uint64_t *)((char *)__dword_445660 + v8) = 0x505050505050505LL;
+    *(uint64_t *)((char *)__dword_445660 + v8 + 8) = 0x505050505050505LL;
     __n16 = 16;
     v9 = (uint64_t *)(v8 + 2 * (uint8_t)__n8_2);
     __byte_44572C = (char)v9;
     __byte_44572E = (uint8_t)v9 - 6;
-    *(uint64_t *)((char *)v9 + BMF_BLOB(0x00445660)) = 0x606060606060606LL;
-    *(uint64_t *)((char *)v9 + BMF_BLOB(0x00445668)) = 0x606060606060606LL;
-    *(uint64_t *)((char *)v9 + BMF_BLOB(0x00445670)) = 0x606060606060606LL;
-    *(uint64_t *)((char *)v9 + BMF_BLOB(0x00445678)) = 0x606060606060606LL;
+    *(uint64_t *)((char *)__dword_445660 + (uint32_t)v9) = 0x606060606060606LL;
+    *(uint64_t *)((char *)__dword_445660 + (uint32_t)v9 + 8) = 0x606060606060606LL;
+    *(uint64_t *)((char *)__dword_445660 + (uint32_t)v9 + 16) = 0x606060606060606LL;
+    *(uint64_t *)((char *)__dword_445660 + (uint32_t)v9 + 24) = 0x606060606060606LL;
     si128 = _mm_load_si128((const __m128i *)&__xmmword_4397F0);
     __n32 = 32;
     v11 = (char *)v9 + 2 * (uint8_t)__n16;
@@ -5918,7 +5931,7 @@ LABEL_27:
       *v21 = 1;
       v29 = 1 << (v27 & 31);
       v74 = 4 * v27;
-      v30 = (int32_t *)(4 * v27 + BMF_BLOB(0x00442EA0));
+      v30 = (int32_t *)&__xmmword_442EA0 + v27;
       __dword_443438 = (int32_t)&v21[2 * (1 << (v27 & 31)) + 2];
       v31 = &v21[2 * (1 << (v27 & 31))];
       k_1 = v29 - 1;
@@ -10464,7 +10477,7 @@ LABEL_49:
     {
       v49 = 1;
     }
-    v51 = (char *)(4 * v49 + BMF_BLOB(0x00442EA0));
+    v51 = (char *)&__xmmword_442EA0 + 4 * v49;
     v52 = 4 * v49;
     v53 = (1 << (v49 & 31)) - 1;
     if ( v53 < 0 )
@@ -10473,7 +10486,7 @@ LABEL_49:
     }
     else
     {
-      __dword_44342C = 4 * v49 + BMF_BLOB(0x00442EA0);
+      __dword_44342C = (int32_t)((char *)&__xmmword_442EA0 + 4 * v49);
       v119 = 4 * v49;
       v135 = v49;
       n11_1 = n11_3;
@@ -14743,10 +14756,10 @@ BMF_SSE int32_t __sub_405CF0(int32_t a1, int32_t n3, char a3)
       v25 = &v217[16 * n2];
       do
       {
-        *(uint64_t *)(n16 * 4 + BMF_BLOB(0x00443394)) = *(uint64_t *)&v25[n16 - 2];
-        *(uint64_t *)(n16 * 4 + BMF_BLOB(0x0044338C)) = *(uint64_t *)&v25[n16 - 4];
-        *(uint64_t *)(n16 * 4 + BMF_BLOB(0x00443384)) = *(uint64_t *)&v25[n16 - 6];
-        *(uint64_t *)(n16 * 4 + BMF_BLOB(0x0044337C)) = *(uint64_t *)&v25[n16 - 8];
+        *(uint64_t *)((char *)&__n4_5 + n16 * 4) = *(uint64_t *)&v25[n16 - 2];
+        *(uint64_t *)((char *)__n256_2 + n16 * 4) = *(uint64_t *)&v25[n16 - 4];
+        *(uint64_t *)((char *)&__dword_443384 + n16 * 4) = *(uint64_t *)&v25[n16 - 6];
+        *(uint64_t *)((char *)&__Buffer + n16 * 4) = *(uint64_t *)&v25[n16 - 8];
         n16 -= 8;
       }
       while ( n16 * 4 );
@@ -23961,7 +23974,7 @@ BMF_SSE uint32_t __sub_4043E0(uint16_t *p_i, char a2, const __m128 &a3__ref, con
           {
             ++v15;
             __byte_44339E[16 * BYTE1(__n256_2[v17 + v16])] = v14 & 0xF;
-            __byte_44339E[16 * *(uint8_t *)(v17 * 4 + v16 * 4 + BMF_BLOB(0x0044337D))] = (uint8_t)v14 >> 4;
+            __byte_44339E[16 * __byte_44337D[v17 * 4 + v16 * 4]] = (uint8_t)v14 >> 4;
             v14 >>= 8;
             v17 -= 8;
           }
@@ -24549,12 +24562,12 @@ LABEL_172:
         n64 = 64;
         do
         {
-          *(uint64_t *)(n64 + BMF_BLOB(0x00443394)) = *(uint64_t *)&v179[n64 / 4];
+          *(uint64_t *)((char *)&__n4_5 + n64) = *(uint64_t *)&v179[n64 / 4];
           a3 = (__m128)*(uint64_t *)&v178[n64 / 4];
-          *(uint64_t *)(n64 + BMF_BLOB(0x0044338C)) = a3.m128_u64[0];
-          *(uint64_t *)(n64 + BMF_BLOB(0x00443384)) = v177[n64 / 8 + 1];
+          *(uint64_t *)((char *)__n256_2 + n64) = a3.m128_u64[0];
+          *(uint64_t *)((char *)&__dword_443384 + n64) = v177[n64 / 8 + 1];
           a4 = (__m128)(uint64_t)v177[n64 / 8];
-          *(uint64_t *)(n64 + BMF_BLOB(0x0044337C)) = a4.m128_u64[0];
+          *(uint64_t *)((char *)&__Buffer + n64) = a4.m128_u64[0];
           n64 -= 32;
         }
         while ( n64 );
@@ -24663,12 +24676,12 @@ LABEL_172:
               n64_1 = 64;
               do
               {
-                *(uint64_t *)(n64_1 + BMF_BLOB(0x00443394)) = *(uint64_t *)&v179[n64_1 / 4];
+                *(uint64_t *)((char *)&__n4_5 + n64_1) = *(uint64_t *)&v179[n64_1 / 4];
                 a3 = (__m128)*(uint64_t *)&v178[n64_1 / 4];
-                *(uint64_t *)(n64_1 + BMF_BLOB(0x0044338C)) = a3.m128_u64[0];
-                *(uint64_t *)(n64_1 + BMF_BLOB(0x00443384)) = v177[n64_1 / 8 + 1];
+                *(uint64_t *)((char *)__n256_2 + n64_1) = a3.m128_u64[0];
+                *(uint64_t *)((char *)&__dword_443384 + n64_1) = v177[n64_1 / 8 + 1];
                 a4 = (__m128)(uint64_t)v177[n64_1 / 8];
-                *(uint64_t *)(n64_1 + BMF_BLOB(0x0044337C)) = a4.m128_u64[0];
+                *(uint64_t *)((char *)&__Buffer + n64_1) = a4.m128_u64[0];
                 n64_1 -= 32;
               }
               while ( n64_1 );
@@ -24681,12 +24694,12 @@ LABEL_172:
           n64_2 = 64;
           do
           {
-            *(uint64_t *)(n64_2 + BMF_BLOB(0x00443394)) = *(uint64_t *)&v179[n64_2 / 4];
+            *(uint64_t *)((char *)&__n4_5 + n64_2) = *(uint64_t *)&v179[n64_2 / 4];
             a3 = (__m128)*(uint64_t *)&v178[n64_2 / 4];
-            *(uint64_t *)(n64_2 + BMF_BLOB(0x0044338C)) = a3.m128_u64[0];
-            *(uint64_t *)(n64_2 + BMF_BLOB(0x00443384)) = v177[n64_2 / 8 + 1];
+            *(uint64_t *)((char *)__n256_2 + n64_2) = a3.m128_u64[0];
+            *(uint64_t *)((char *)&__dword_443384 + n64_2) = v177[n64_2 / 8 + 1];
             a4 = (__m128)(uint64_t)v177[n64_2 / 8];
-            *(uint64_t *)(n64_2 + BMF_BLOB(0x0044337C)) = a4.m128_u64[0];
+            *(uint64_t *)((char *)&__Buffer + n64_2) = a4.m128_u64[0];
             n64_2 -= 32;
           }
           while ( n64_2 );
@@ -24741,12 +24754,12 @@ LABEL_63:
       n64_3 = 64;
       do
       {
-        *(uint64_t *)(n64_3 + BMF_BLOB(0x00443394)) = *(uint64_t *)&v179[n64_3 / 4];
+        *(uint64_t *)((char *)&__n4_5 + n64_3) = *(uint64_t *)&v179[n64_3 / 4];
         a3 = (__m128)*(uint64_t *)&v178[n64_3 / 4];
-        *(uint64_t *)(n64_3 + BMF_BLOB(0x0044338C)) = a3.m128_u64[0];
-        *(uint64_t *)(n64_3 + BMF_BLOB(0x00443384)) = v177[n64_3 / 8 + 1];
+        *(uint64_t *)((char *)__n256_2 + n64_3) = a3.m128_u64[0];
+        *(uint64_t *)((char *)&__dword_443384 + n64_3) = v177[n64_3 / 8 + 1];
         a4 = (__m128)(uint64_t)v177[n64_3 / 8];
-        *(uint64_t *)(n64_3 + BMF_BLOB(0x0044337C)) = a4.m128_u64[0];
+        *(uint64_t *)((char *)&__Buffer + n64_3) = a4.m128_u64[0];
         n64_3 -= 32;
       }
       while ( n64_3 );
@@ -24796,10 +24809,10 @@ LABEL_63:
         n64_4 = 64;
         do
         {
-          *(uint64_t *)(n64_4 + BMF_BLOB(0x00443394)) = *(uint64_t *)&v179[n64_4 / 4];
-          *(uint64_t *)(n64_4 + BMF_BLOB(0x0044338C)) = *(uint64_t *)&v178[n64_4 / 4];
-          *(uint64_t *)(n64_4 + BMF_BLOB(0x00443384)) = v177[n64_4 / 8 + 1];
-          *(uint64_t *)(n64_4 + BMF_BLOB(0x0044337C)) = v177[n64_4 / 8];
+          *(uint64_t *)((char *)&__n4_5 + n64_4) = *(uint64_t *)&v179[n64_4 / 4];
+          *(uint64_t *)((char *)__n256_2 + n64_4) = *(uint64_t *)&v178[n64_4 / 4];
+          *(uint64_t *)((char *)&__dword_443384 + n64_4) = v177[n64_4 / 8 + 1];
+          *(uint64_t *)((char *)&__Buffer + n64_4) = v177[n64_4 / 8];
           n64_4 -= 32;
         }
         while ( n64_4 );

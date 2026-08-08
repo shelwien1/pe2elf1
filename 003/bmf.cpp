@@ -533,11 +533,14 @@ void __noreturn __break(uint16 code, uint16 subcode);
 #define BMF_BLOB_BASE 0x00438000u
 #endif
 
-// The same rebasing for an address Hex-Rays baked into an *expression* rather
-// than into a named global — `*(_QWORD *)(n64 + 4469652)`, where 4469652 is
-// 0x00443394.  extract.py rewrites those to BMF_BLOB(0x00443394); in the
-// hybrid build it is the identity, since blob1 is 0x00438000 there.
-#define BMF_BLOB(va) ((int)(blob1 + ((va) - BMF_BLOB_BASE)))
+// There is deliberately no BMF_BLOB(va) macro any more.  extract.py emits one
+// for each address Hex-Rays baked into an *expression* rather than into a named
+// global — `*(_QWORD *)(n64 + 4469652)`, where 4469652 is 0x00443394 — and
+// subs1.hpp had 42 of them.  They now take the address of the global that owns
+// the byte they start at, which is the same address written a way you can read.
+// A freshly extracted subs1.hpp will fail to compile here until
+// tools/name_raw_addrs.py has been run over it; that is the intended way to
+// find out, rather than the numbers quietly coming back.
 
 // defs.h stops at SLODWORD/SHIDWORD; the bodies also index DWORD lanes
 // directly.  Same DWORDn/SDWORDn machinery, just the names it left out.

@@ -12,13 +12,29 @@ nothing — and none touches `bmf.cpp` or `blob.inc`.
 | `unify_types.py` | rewrote the type vocabulary onto `<cstdint>`: `_DWORD`/`unsigned int`/`size_t` → `uint32_t`, `unsigned __int16`/`_WORD` → `uint16_t`, `__int128`/`_OWORD` → `__m128i`, and so on, leaving no multi-word type name in the file |
 | `collect_globals.py` | moved the per-function typedef + global declaration pairs to the top of the file, sorted them by their address in BMF.exe's data segment, and kept one declaration per object instead of one per using function |
 | `prune_unreachable.py` | deleted the function definitions nothing can reach from `main`, and then the globals-block entries no surviving body names |
+| `name_raw_addrs.py` | put the addresses Hex-Rays baked into expressions — `BMF_BLOB(0x00443394)` — back onto the globals that own them |
 | `compact_locals.py` | merged one function's one-per-line locals into comma lists — `int32_t v5; int32_t v8;` → `int32_t v5, v8;` |
 
     python3 tools/unify_types.py subs1.hpp
     python3 tools/collect_globals.py subs1.hpp
     python3 tools/prune_unreachable.py subs1.hpp          # report
     python3 tools/prune_unreachable.py subs1.hpp --apply  # rewrite
+    python3 tools/name_raw_addrs.py subs1.hpp
     python3 tools/compact_locals.py subs1.hpp out.hpp __sub_402EF0 2
+
+`name_raw_addrs.py` runs after `collect_globals.py`, since it needs the globals
+it rewrites onto to exist.  Its substitution is address-identical by
+construction — `BMF_BLOB(va)` expands to `(int)(blob1 + va - BMF_BLOB_BASE)` and
+the global declared at `va` is `*(T*)(blob1 + va - BMF_BLOB_BASE)`, so
+`&global == (T*)BMF_BLOB(va)` — and it refuses to write the file if any address
+is left over.  Where an address is the start of an object it takes that
+object's address; where it lands inside one (`0x00445668` is eight bytes into
+the table at `0x00445660`) the offset is written out instead of declaring an
+overlapping global.  `0x0044337D` is the one address that got a global of its
+own: it is byte 1 of the dword array based at `__Buffer`, indexed like an array,
+and `__byte_44339D` and `__byte_4433AD` next door are declared the same way.
+`bmf.cpp` no longer defines `BMF_BLOB`, so a freshly extracted `subs1.hpp` will
+fail to compile until this has been run over it.
 
 The first three assert loudly rather than guessing: `collect_globals.py`
 refuses to run if two functions disagree about an address's type, if two
