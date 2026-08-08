@@ -18,3 +18,7 @@ __sub_41CAB0:n0x10 __sub_41CAB0:n0x10_1 __sub_41CAB0:n0x10_2 __sub_41CAB0:n0x10_
 __sub_412E60:a1 __sub_412E60:v23 __sub_412E60:v32 __sub_412E60:v67 __sub_412E60:v68 __sub_412E60:v9 __sub_419430:v28
 __code_pixel:n15_31 __code_pixel:n15_33 __code_pixel:n15_35 __code_pixel:n15_36 __code_pixel:n15_38 __code_pixel:n15_39 __code_pixel:n15_40 __code_pixel:n15_41 __code_pixel:n15_42
 __sub_427740:Block __sub_427740:v51 __sub_427740:v84
+__colour_transform:Blockb __search_filter:Blockb __search_filter:Blockb_1 __search_filter:Blockb_2 __search_filter:Blockb_3 __search_filter:Blockb_4 __search_filter:Blockb_5 __search_filter:Blockb_6 __search_filter:Blockb_7 __search_filter:Blockb_8 __search_filter:Blockb_9 __sub_405840:Blockb __sub_407B30:p_ia __sub_407B30:p_ia_1 __sub_4081E0:p_i
+__sub_4118A0:near_lossless_max
+__sub_422DB0:v11 __sub_422DB0:v12
+__sub_4248D0:v3
