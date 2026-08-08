@@ -1,0 +1,43 @@
+#!/bin/sh
+# Give the largest remaining objects a struct, one at a time, keeping only the
+# ones the gate accepts.
+#
+#   tools/struct-sweep.sh [rounds]
+#
+# Each round takes the object with the most constant-offset dereferences that
+# is not already on the skip list, rewrites its accesses, and runs the build
+# and the roundtrip gate.  A round that fails is undone completely -- the file
+# is restored from the backup -- and the object is written to
+# tools/struct-skip.txt so the next round moves past it rather than retrying
+# it forever.
+#
+# The sweep is resumable: state lives in the file and the skip list, not in
+# this script, so stopping it and starting it again continues where it left
+# off.
+set -e
+cd "$(dirname "$0")/.."
+rounds=${1:-1}
+i=0
+while [ "$i" -lt "$rounds" ]; do
+  i=$((i + 1))
+  cp subs1.hpp /tmp/struct-backup.hpp
+  out=$(python3 tools/structs.py subs1.hpp --apply 0 2>&1) && rc=0 || rc=$?
+  echo "round $i: $out"
+  if [ "$rc" = 3 ]; then
+    # the tool declined and put the object on the skip list itself
+    cp /tmp/struct-backup.hpp subs1.hpp
+    continue
+  elif [ "$rc" != 0 ]; then
+    echo "round $i: nothing left to apply"
+    cp /tmp/struct-backup.hpp subs1.hpp
+    break
+  fi
+  if ./build.sh >/tmp/struct-build.log 2>&1 &&
+     ./test.sh ./bmf 2>/tmp/struct-test.log | tail -1 | grep -q PASS; then
+    echo "round $i: PASS"
+  else
+    echo "round $i: FAIL -- reverting and skipping"
+    cp /tmp/struct-backup.hpp subs1.hpp
+    python3 tools/structs.py subs1.hpp --skip 0
+  fi
+done
