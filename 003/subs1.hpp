@@ -214,14 +214,20 @@ typedef int32_t t_n256;
 static t_n256& packer_acc = *(t_n256*)(blob1 + 0x0044336C - BMF_BLOB_BASE);
 typedef int32_t t_ElementCount_0;
 static t_ElementCount_0& coded_size = *(t_ElementCount_0*)(blob1 + 0x00443370 - BMF_BLOB_BASE);
-typedef int32_t t_Buffer_1;
-static t_Buffer_1& packer_word = *(t_Buffer_1*)(blob1 + 0x00443374 - BMF_BLOB_BASE);
-typedef int32_t t_Buffer_0;
-static t_Buffer_0& out_cursor = *(t_Buffer_0*)(blob1 + 0x00443378 - BMF_BLOB_BASE);
-typedef int32_t t_Buffer;
-static t_Buffer& coded_buf = *(t_Buffer*)(blob1 + 0x0044337C - BMF_BLOB_BASE);
-typedef int32_t t_buf[0x10000];
-static t_buf& hist_scratch = *(t_buf*)(blob1 + 0x00443380 - BMF_BLOB_BASE);
+// The coded buffer and the two cursors into it, ALGORITHM.md §4.  These were
+// int32_t words in the data segment holding addresses; they are pointers now,
+// and out of the blob, because an address is not an int on a 64-bit target and
+// because nothing reads the bytes they used to occupy.  Their addresses in
+// BMF.exe were 0x00443374, 0x00443378 and 0x0044337C.
+static uint32_t *packer_word;   // the word the bit packer is filling
+static uint8_t  *out_cursor;    // the byte both the packer and rc advance
+static uint8_t  *coded_buf;     // base of the buffer, from malloc
+// The filter search's histogram scratch, ALGORITHM.md §8: a pointer parked at
+// the top of the coded buffer.  Hex-Rays typed it int32_t[0x10000] and the code
+// only ever touches element 0, where it keeps an address -- so it is one
+// pointer, and out of the blob for the same reason as the cursors above.
+// BMF.exe had it at 0x00443380.
+static char *hist_scratch;
 typedef int32_t t_dword_443384;
 static t_dword_443384& desc_slow_mode = *(t_dword_443384*)(blob1 + 0x00443384 - BMF_BLOB_BASE);
 typedef int32_t t_dword_443388;
@@ -274,8 +280,10 @@ typedef int32_t t_dword_445660[32];
 static t_dword_445660& model_geometry = *(t_dword_445660*)(blob1 + 0x00445660 - BMF_BLOB_BASE);
 typedef char t_byte_445700;
 static t_byte_445700& __byte_445700 = *(t_byte_445700*)(blob1 + 0x00445700 - BMF_BLOB_BASE);
-typedef int32_t t_n256_1;
-static t_n256_1& model_tables = *(t_n256_1*)(blob1 + 0x00445708 - BMF_BLOB_BASE);
+// The model's counter tables, ALGORITHM.md §8: one allocation, handed out in
+// 254-entry strips.  An int32_t in the data segment holding an address, so a
+// pointer here, and out of the blob.  BMF.exe had it at 0x00445708.
+static uint16_t *model_tables;
 typedef int32_t t_n8_1;
 static t_n8_1& __n8_1 = *(t_n8_1*)(blob1 + 0x0044570C - BMF_BLOB_BASE);
 typedef int32_t t_n8_0;
@@ -395,6 +403,23 @@ static t_dword_4458F4& __dword_4458F4 = *(t_dword_4458F4*)(blob1 + 0x004458F4 - 
 typedef int32_t t_psub_402E30;
 static t_psub_402E30& __psub_402E30 = *(t_psub_402E30*)(blob1 + 0x00445930 - BMF_BLOB_BASE);
 
+// The plane descriptor table, `ALGORITHM.md` §6.2: four 16-byte records at
+// 0x0044339C, whose fields the file also declares one at a time as
+// __byte_44339C .. __dword_4433A8.
+//
+// Six places copy all four records in or out with 64-bit moves, and Hex-Rays
+// wrote those as offsets from four *other* globals -- coded_buf,
+// desc_slow_mode, __n256_2, plane_count -- which sit 32, 24, 16 and 8 bytes
+// below the table.  That is the original compiler's strength reduction showing
+// through, not something the program means; those four are a buffer pointer, a
+// mode flag, a counter and a plane count, and none of them is a base for this.
+// Written against the table itself the arithmetic is the same and the
+// dependency on where four unrelated globals sit is gone.  REFACTORING.md §4.1.
+static inline char *bmf_plane_desc(int32_t off)
+{
+  return (char *)__byte_44339C + off;
+}
+
 // ---------------------------------------------------------------------------
 // The range coder.
 //
@@ -436,8 +461,8 @@ struct RangeCoder {
   uint32_t rdiv;       // decoding: the range/tot from the last get_freq
   uint32_t bytes;      // encoding: emitted so far; the flush writes it out
 
-  uint8_t *p()             { return (uint8_t *)out_cursor; }
-  void     set_p(uint8_t *q) { out_cursor = (int32_t)q; }
+  uint8_t *p()               { return out_cursor; }
+  void     set_p(uint8_t *q) { out_cursor = q; }
 
  public:
 
@@ -511,7 +536,7 @@ struct RangeCoder {
       *q++ = 0;
     *q++ = kMarker;
     set_p(q);
-    packer_free_bits = 0; packer_acc = 0; packer_word = out_cursor;
+    packer_free_bits = 0; packer_acc = 0; packer_word = (uint32_t *)out_cursor;
   }
 
   // ---- decoder ---------------------------------------------------------
@@ -572,7 +597,7 @@ struct RangeCoder {
     uint8_t *q = p();
     while (*q++ != kMarker) { }
     set_p(q);
-    packer_word = out_cursor;
+    packer_word = (uint32_t *)out_cursor;
     packer_free_bits = 0; packer_acc = 0;
   }
 };
@@ -1745,7 +1770,7 @@ static inline int32_t __fwd_sub_4135A0_sub_413900(void *a0, int32_t a1) { return
   *a1 = result;
   if ( n5a_2 >= 5 )
     return __fwd_sub_4135A0_sub_413900(
-             (uint16_t *)model_tables
+             model_tables
            + 32512 * (n5a_2 & 1)
            + 254 * (((a1[1] + (result & 0x7FFF) + 96 - 2 * (uint32_t)a1[n5a_2 + 1]) >> 25) & 0xFFFFFFC0)
            + 254 * a3,
@@ -1914,7 +1939,7 @@ static inline int32_t __fwd_sub_413E60_sub_414060(void *a0) { return __sub_41406
   if ( n5 >= 5 )
     n5 += 2
         * __fwd_sub_413E60_sub_414060(
-            (uint16_t *)model_tables
+            model_tables
           + 32512 * (n5 & 1)
           + 254
           * ((((uint16_t)a1[1] + (v16 & 0x7FFF) + 96 - 2 * (uint32_t)(uint16_t)a1[n5 + 1]) >> 25)
@@ -1992,7 +2017,7 @@ int32_t __sub_414390(uint16_t *_this, int32_t a2, int32_t a3)
   result = (int32_t)v25;
   *v25 = n32 + v18;
   if ( a3 > 0 )
-    return __fwd_sub_414390_sub_413900((uint16_t *)model_tables + 254 * *(uint32_t *)(a2 + 4 * (a3 & 1)), (a3 - 1) >> 1);
+    return __fwd_sub_414390_sub_413900(model_tables + 254 * *(uint32_t *)(a2 + 4 * (a3 & 1)), (a3 - 1) >> 1);
   return result;
 }
 static inline int32_t __fwd_sub_414620_sub_414060(void *a0) { return __sub_414060((uint16_t *)a0); }
@@ -2064,7 +2089,7 @@ int32_t __sub_414620(uint16_t *_this, int32_t a2)
   *v9 = n32 + n0x4000;
   v16 = v9 - v24;
   if ( v16 )
-    return v16 + 2 * __fwd_sub_414620_sub_414060((uint16_t *)model_tables + 254 * *(uint32_t *)(a2 + 4 * (v16 & 1)));
+    return v16 + 2 * __fwd_sub_414620_sub_414060(model_tables + 254 * *(uint32_t *)(a2 + 4 * (v16 & 1)));
   else
     return 0;
 }
@@ -2778,7 +2803,7 @@ int32_t __sub_4259F0(int32_t _this)
     *(uint16_t *)(v11 + 3816) = v12;
     if ( n5_2 >= 5 )
       __fwd_sub_4259F0_sub_413430(
-        (uint16_t *)model_tables
+        model_tables
       + 32512 * (n5_2 & 1)
       + 254 * v110
       + 254
@@ -2798,7 +2823,7 @@ int32_t __sub_4259F0(int32_t _this)
     *(uint16_t *)(v13 + 3784) = v15;
     if ( n5_2 >= 5 )
       __fwd_sub_4259F0_sub_413430(
-        (uint16_t *)model_tables
+        model_tables
       + 32512 * (n5_2 & 1)
       + 254 * v14
       + 254
@@ -2833,7 +2858,7 @@ int32_t __sub_4259F0(int32_t _this)
            + ((n5_2 & 1) << 7);
       if ( (v112 & 0x38) >= 0x38
         || (__fwd_sub_4259F0_sub_413430(
-              (uint16_t *)model_tables
+              model_tables
             + 32512 * (n5_2 & 1)
             + 254 * *(uint32_t *)(_this + 16)
             + 254
@@ -2845,7 +2870,7 @@ int32_t __sub_4259F0(int32_t _this)
               n2),
             (v112 & 0x38) != 0) )
       {
-        __fwd_sub_4259F0_sub_413430((uint16_t *)model_tables + 254 * v112 - 2032, n2);
+        __fwd_sub_4259F0_sub_413430(model_tables + 254 * v112 - 2032, n2);
       }
       result = *(uint32_t *)(_this + 12);
     }
@@ -3625,7 +3650,7 @@ int32_t *__sub_4256F0(int32_t *_this, int32_t i, int32_t a3, int32_t n4)
     {
       __rc_begin_encode_n256 = nullptr;
     }
-    ::model_tables = __rc_begin_encode_n256;
+    ::model_tables = (uint16_t *)__rc_begin_encode_n256;
   }
   rc.enc_init();
   return __rc_begin_encode_n256;
@@ -4865,7 +4890,7 @@ BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
   uint32_t v5, i;
   uint64_t *v9;
   uint8_t *v1, *v4;
-  v1 = (uint8_t *)out_cursor;
+  v1 = out_cursor;
   if ( out_cursor != packer_word )
   {
     __rc_begin_decode_n8 = ::packer_free_bits - 8;
@@ -4881,7 +4906,7 @@ BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
         __rc_begin_decode_n8 -= 8;
       }
       while ( __rc_begin_decode_n8 >= 0 );
-      out_cursor = (int32_t)v1;
+      out_cursor = v1;
       ::packer_free_bits = __rc_begin_decode_n8;
     }
   }
@@ -4976,7 +5001,7 @@ BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
       n256 = nullptr;
     }
     ::model_tables = n256;
-    v1 = (uint8_t *)out_cursor;
+    v1 = out_cursor;
   }
   rc.dec_init();
   return out_cursor;
@@ -7840,10 +7865,10 @@ BMF_SSE int32_t __sub_405CF0(int32_t a1, int32_t n3, char a3)
       v25 = &v217[16 * n2];
       do
       {
-        *(uint64_t *)((char *)&plane_count + n16 * 4) = *(uint64_t *)&v25[n16 - 2];
-        *(uint64_t *)((char *)__n256_2 + n16 * 4) = *(uint64_t *)&v25[n16 - 4];
-        *(uint64_t *)((char *)&desc_slow_mode + n16 * 4) = *(uint64_t *)&v25[n16 - 6];
-        *(uint64_t *)((char *)&coded_buf + n16 * 4) = *(uint64_t *)&v25[n16 - 8];
+        *(uint64_t *)(bmf_plane_desc(n16 * 4 - 8)) = *(uint64_t *)&v25[n16 - 2];
+        *(uint64_t *)(bmf_plane_desc(n16 * 4 - 16)) = *(uint64_t *)&v25[n16 - 4];
+        *(uint64_t *)(bmf_plane_desc(n16 * 4 - 24)) = *(uint64_t *)&v25[n16 - 6];
+        *(uint64_t *)(bmf_plane_desc(n16 * 4 - 32)) = *(uint64_t *)&v25[n16 - 8];
         n16 -= 8;
       }
       while ( n16 * 4 );
@@ -13212,7 +13237,7 @@ BMF_SSE uint32_t __sub_41CAB0(int32_t a1, const __m128 &a2__ref, int32_t a3, uin
       if ( a4 )
       {
         *(uint16_t *)(n2 - 2 * v511 + 6) += v393;
-        __fwd_sub_41CAB0_sub_413430((uint16_t *)model_tables + 254 * (uint32_t)v508 + 254, (a4 - 1) >> 1);
+        __fwd_sub_41CAB0_sub_413430(model_tables + 254 * (uint32_t)v508 + 254, (a4 - 1) >> 1);
       }
       else
       {
@@ -13277,12 +13302,12 @@ LABEL_48:
           n0xF0 = (uint16_t *)((uint8_t)v508 & 0xF0);
           if ( (uint32_t)n0xF0 >= 0xF0
             || (n0x10_1 = n0x10,
-                __fwd_sub_41CAB0_sub_413430((uint16_t *)model_tables + 254 * (uint32_t)v508 + 4064, n2),
+                __fwd_sub_41CAB0_sub_413430(model_tables + 254 * (uint32_t)v508 + 4064, n2),
                 n0x10 = n0x10_1,
                 (int32_t)n0xF0 > 0) )
           {
             n0x10_1 = n0x10;
-            __fwd_sub_41CAB0_sub_413430((uint16_t *)model_tables + 254 * (uint32_t)v508 - 4064, n2);
+            __fwd_sub_41CAB0_sub_413430(model_tables + 254 * (uint32_t)v508 - 4064, n2);
             n0x10 = n0x10_1;
           }
         }
@@ -13850,7 +13875,7 @@ LABEL_115:
     if ( a4 )
     {
       *(uint16_t *)(n2 - 2 * v511 + 6) += v396;
-      __fwd_sub_41CAB0_sub_413430((uint16_t *)model_tables + 254 * (uint32_t)v508 - 254, (a4 - 1) >> 1);
+      __fwd_sub_41CAB0_sub_413430(model_tables + 254 * (uint32_t)v508 - 254, (a4 - 1) >> 1);
     }
     else
     {
@@ -16403,9 +16428,9 @@ BMF_SSE void __sub_405840(char *Blockb, char *Srca_3, int32_t a3, char a4, const
   plane_alt_model = (uint8_t)(__byte_44339E[16 * a3] & 4) >> 2;
   Srca_2 = Srca_3;
   __fwd_sub_405840_colour_transform(Blockb, Srca_3, a3, a4);
-  __sub_405840_buf = ::hist_scratch[0];
-  v12 = (uint32_t)(::hist_scratch[0] + 15) & 0xFFFFFFF0;
-  *(uint64_t *)::hist_scratch[0] = 0;
+  __sub_405840_buf = ::hist_scratch;
+  v12 = (uint32_t)(::hist_scratch + 15) & 0xFFFFFFF0;
+  *(uint64_t *)::hist_scratch = 0;
   *((uint32_t *)__sub_405840_buf + 2) = 0;
   *((uint16_t *)__sub_405840_buf + 6) = 0;
   __sub_405840_buf[14] = 0;
@@ -16472,9 +16497,9 @@ BMF_SSE void __sub_407B30(uint16_t *p_i, int32_t a2, char a3, const __m128 &a4__
           Size_1, v30;
   uint32_t Srca_2;
   uint8_t *Srca_1;
-  memset(hist_scratch[0],0,4096);
-  __sub_407B30_Buffer = (char *)::coded_buf;
-  p_ia_1 = (char *)::coded_buf + 16;
+  memset(hist_scratch,0,4096);
+  __sub_407B30_Buffer = ::coded_buf;
+  p_ia_1 = ::coded_buf + 16;
   *((uint32_t *)::coded_buf + 4) = *(uint32_t *)p_i;
   *((uint32_t *)p_ia_1 + 1) = *((uint32_t *)p_i + 1);
   *((uint32_t *)p_ia_1 + 2) = *((uint32_t *)p_i + 2);
@@ -16720,11 +16745,11 @@ LABEL_15:
   desc_slow_mode = 1;
   coded_size = ElementCount;
   ::coded_buf = malloc(ElementCount);
-  out_cursor = (int32_t)::coded_buf;
+  out_cursor = ::coded_buf;
   packer_free_bits = 0;
   packer_acc = 0;
-  ::packer_word = (int32_t)::coded_buf;
-  hist_scratch[0] = (char *)::coded_buf + coded_size - 4096;
+  ::packer_word = (uint32_t *)::coded_buf;
+  hist_scratch = ::coded_buf + coded_size - 4096;
   ElementCount_2 = ElementCount;
   if ( fread(::coded_buf, 1u, ElementCount, *(FILE **)(v5 + 4)) != ElementCount_2 )
   {
@@ -17021,7 +17046,7 @@ LABEL_104:
 LABEL_105:
   free(Src_1);
 LABEL_106:
-  if ( (char *)::coded_buf + ElementCount != (void *)out_cursor )
+  if ( ::coded_buf + ElementCount != out_cursor )
   {
 LABEL_107:
     fclose(*(FILE **)(v5 + 4));
@@ -17186,12 +17211,12 @@ BMF_SSE uint32_t __search_filter(uint16_t *p_i, char a2, const __m128 &a3__ref, 
   Blockb = (char *)__sub_42B830(i, i_2, p_i_1[5] & 0x3F, 0, 0);
   coded_size = *((uint32_t *)Blockb + 3) + 0x20000;
   coded_buf = malloc(coded_size);
-  out_cursor = (int32_t)coded_buf;
+  out_cursor = coded_buf;
   packer_free_bits = 0;
   packer_acc = 0;
-  packer_word = (int32_t)coded_buf;
+  packer_word = (uint32_t *)coded_buf;
   v179[0] = i_2 * i;
-  hist_scratch[0] = (char *)coded_buf + coded_size - 4096;
+  hist_scratch = coded_buf + coded_size - 4096;
   Srca_7 = malloc(i_2 * i);
   n4_4 = ::plane_count;
   v21 = (p_i_1[1] - i_2) >> 1;
@@ -17246,7 +17271,7 @@ BMF_SSE uint32_t __search_filter(uint16_t *p_i, char a2, const __m128 &a3__ref, 
         v172 = v179[1];
         __byte_44339E[16 * v179[1]] = 0;
         __fwd_search_filter_sub_405840(Blockb_1, Srca, v172, v19, a3, a4);
-        n0x7FFFFFFF_1 = 8 * (out_cursor - (uint32_t)coded_buf);
+        n0x7FFFFFFF_1 = 8 * (out_cursor - coded_buf);
         n0x7FFFFFFF = __n256_2[0] - packer_free_bits + n0x7FFFFFFF_1 + 32;
         v35 = 0;                            // -S
         *(uint32_t *)packer_word = packer_acc;
@@ -17254,10 +17279,10 @@ BMF_SSE uint32_t __search_filter(uint16_t *p_i, char a2, const __m128 &a3__ref, 
           n0x7FFFFFFF = n0x7FFFFFFF_1;
         packer_free_bits = 0;
         packer_acc = 0;
-        out_cursor = (int32_t)coded_buf;
-        packer_word = (int32_t)coded_buf;
+        out_cursor = coded_buf;
+        packer_word = (uint32_t *)coded_buf;
         n5_6 = n5_1;
-        hist_scratch[0] = (char *)coded_buf + coded_size - 4096;
+        hist_scratch = coded_buf + coded_size - 4096;
         if ( n0x7FFFFFFF == 0x7FFFFFFF )
           n0x7FFFFFFF = 0x7FFFFFFF;
         else
@@ -17269,17 +17294,17 @@ BMF_SSE uint32_t __search_filter(uint16_t *p_i, char a2, const __m128 &a3__ref, 
       v32 = v179[1];
       __byte_44339E[v180] = 5;
       __fwd_search_filter_sub_405840(Blockb_2, Srca_1, v32, v19, a3, a4);
-      n0x7FFFFFFF_8 = 8 * (out_cursor - (uint32_t)coded_buf);
+      n0x7FFFFFFF_8 = 8 * (out_cursor - coded_buf);
       n0x7FFFFFFF_2 = __n256_2[0] - packer_free_bits + n0x7FFFFFFF_8 + 32;
       v35 = 0;                            // -S
       *(uint32_t *)packer_word = packer_acc;
-      out_cursor = (int32_t)coded_buf;
-      packer_word = (int32_t)coded_buf;
+      out_cursor = coded_buf;
+      packer_word = (uint32_t *)coded_buf;
       if ( !v35 )
         n0x7FFFFFFF_2 = n0x7FFFFFFF_8;
       packer_free_bits = 0;
       packer_acc = 0;
-      hist_scratch[0] = (char *)coded_buf + coded_size - 4096;
+      hist_scratch = coded_buf + coded_size - 4096;
       n5 = (int32_t)n5_1;
       if ( n0x7FFFFFFF_2 < n0x7FFFFFFF )
       {
@@ -17294,18 +17319,18 @@ BMF_SSE uint32_t __search_filter(uint16_t *p_i, char a2, const __m128 &a3__ref, 
         v166 = v179[1];
         __byte_44339E[v180] = 6;
         __fwd_search_filter_sub_405840(Blockb_3, Srca_2, v166, v19, a3, a4);
-        n0x7FFFFFFF_9 = 8 * (out_cursor - (uint32_t)coded_buf);
+        n0x7FFFFFFF_9 = 8 * (out_cursor - coded_buf);
         n0x7FFFFFFF_3 = __n256_2[0] - packer_free_bits + n0x7FFFFFFF_9 + 32;
         v35 = 0;                            // -S
         *(uint32_t *)packer_word = packer_acc;
-        out_cursor = (int32_t)coded_buf;
-        packer_word = (int32_t)coded_buf;
+        out_cursor = coded_buf;
+        packer_word = (uint32_t *)coded_buf;
         if ( !v35 )
           n0x7FFFFFFF_3 = n0x7FFFFFFF_9;
         packer_free_bits = 0;
         packer_acc = 0;
         n5_2 = (int32_t)n5_1;
-        hist_scratch[0] = (char *)coded_buf + coded_size - 4096;
+        hist_scratch = coded_buf + coded_size - 4096;
         if ( n0x7FFFFFFF_3 < n0x7FFFFFFF )
         {
           n0x7FFFFFFF = n0x7FFFFFFF_3;
@@ -17322,18 +17347,18 @@ LABEL_191:
             v149 = v179[1];
             __byte_44339E[v180] = 8;
             __fwd_search_filter_sub_405840(Blockb_4, Srca_3, v149, v19, a3, a4);
-            n0x7FFFFFFF_10 = 8 * (out_cursor - (uint32_t)coded_buf);
+            n0x7FFFFFFF_10 = 8 * (out_cursor - coded_buf);
             n0x7FFFFFFF_4 = __n256_2[0] - packer_free_bits + n0x7FFFFFFF_10 + 32;
             v35 = 0;                            // -S
             *(uint32_t *)packer_word = packer_acc;
-            out_cursor = (int32_t)coded_buf;
-            packer_word = (int32_t)coded_buf;
+            out_cursor = coded_buf;
+            packer_word = (uint32_t *)coded_buf;
             if ( !v35 )
               n0x7FFFFFFF_4 = n0x7FFFFFFF_10;
             packer_free_bits = 0;
             packer_acc = 0;
             n5_3 = (int32_t)n5_1;
-            hist_scratch[0] = (char *)coded_buf + coded_size - 4096;
+            hist_scratch = coded_buf + coded_size - 4096;
             if ( n0x7FFFFFFF_4 < n0x7FFFFFFF )
             {
               n0x7FFFFFFF = n0x7FFFFFFF_4;
@@ -17346,19 +17371,19 @@ LABEL_191:
           v155 = v179[1];
           __byte_44339E[v180] = 13;
           __fwd_search_filter_sub_405840(Blockb_5, Srca_4, v155, v19, a3, a4);
-          n0x7FFFFFFF_11 = 8 * (out_cursor - (uint32_t)coded_buf);
+          n0x7FFFFFFF_11 = 8 * (out_cursor - coded_buf);
           n0x7FFFFFFF_5 = (char *)(__n256_2[0] - packer_free_bits + n0x7FFFFFFF_11 + 32);
           v35 = 0;                            // -S
           *(uint32_t *)packer_word = packer_acc;
-          out_cursor = (int32_t)coded_buf;
-          packer_word = (int32_t)coded_buf;
+          out_cursor = coded_buf;
+          packer_word = (uint32_t *)coded_buf;
           if ( !v35 )
             n0x7FFFFFFF_5 = (char *)n0x7FFFFFFF_11;
           v178[0] = n0x7FFFFFFF_5;
           packer_free_bits = 0;
           packer_acc = 0;
           n5_4 = (int32_t)n5_1;
-          hist_scratch[0] = (char *)coded_buf + coded_size - 4096;
+          hist_scratch = coded_buf + coded_size - 4096;
           if ( (int32_t)n0x7FFFFFFF_5 < n0x7FFFFFFF )
           {
             n0x7FFFFFFF = (int32_t)n0x7FFFFFFF_5;
@@ -17372,18 +17397,18 @@ LABEL_191:
             v160 = v179[1];
             __byte_44339E[v180] = 14;
             __fwd_search_filter_sub_405840(Blockb, Srca_5, v160, v19, a3, a4);
-            n0x7FFFFFFF_6 = __n256_2[0] - packer_free_bits + 8 * (out_cursor - (uint32_t)coded_buf) + 32;
+            n0x7FFFFFFF_6 = __n256_2[0] - packer_free_bits + 8 * (out_cursor - coded_buf) + 32;
             // always taken: -S
-              n0x7FFFFFFF_6 = 8 * (out_cursor - (uint32_t)coded_buf);
+              n0x7FFFFFFF_6 = 8 * (out_cursor - coded_buf);
             v162 = n0x7FFFFFFF_6 < n0x7FFFFFFF;
             if ( n0x7FFFFFFF_6 < n0x7FFFFFFF )
               n0x7FFFFFFF = n0x7FFFFFFF_6;
             *(uint32_t *)packer_word = packer_acc;
             packer_free_bits = 0;
             packer_acc = 0;
-            out_cursor = (int32_t)coded_buf;
-            packer_word = (int32_t)coded_buf;
-            hist_scratch[0] = (char *)coded_buf + coded_size - 4096;
+            out_cursor = coded_buf;
+            packer_word = (uint32_t *)coded_buf;
+            hist_scratch = coded_buf + coded_size - 4096;
             n5_5 = (int32_t)n5_1;
             if ( v162 )
               n5_5 = 14;
@@ -17492,15 +17517,15 @@ LABEL_43:
         v119 = (uint8_t)__byte_44339D[16 * v118];
         v178[0] = (char *)v119;
         __fwd_search_filter_sub_405840(Blockb, (char *)Srca_7, v119, v116, a3, a4);
-        v120 = 8 * (out_cursor - (uint32_t)coded_buf);
+        v120 = 8 * (out_cursor - coded_buf);
         // never taken: -S
         *(uint32_t *)packer_word = packer_acc;
         packer_free_bits = 0;
         n4_19 += v120;
         packer_acc = 0;
-        out_cursor = (int32_t)coded_buf;
-        packer_word = (int32_t)coded_buf;
-        hist_scratch[0] = (char *)coded_buf + coded_size - 4096;
+        out_cursor = coded_buf;
+        packer_word = (uint32_t *)coded_buf;
+        hist_scratch = coded_buf + coded_size - 4096;
         if ( v120 - (v120 >> 8) > v181[(int32_t)v178[0]] )
           break;
         if ( ++v118 >= ::plane_count )
@@ -17650,15 +17675,15 @@ LABEL_172:
         while ( __search_filter_n4_5 < ::plane_count );
       }
       __fwd_search_filter_sub_407B30((uint16_t *)Blockb, (int32_t)v74, v44, a3, a4);
-      n4_20 = 8 * (out_cursor - (uint32_t)coded_buf);
+      n4_20 = 8 * (out_cursor - coded_buf);
       // never taken: -S
       v162 = n4_20 <= (int32_t)n4_15;
       *(uint32_t *)packer_word = packer_acc;
       packer_free_bits = 0;
       packer_acc = 0;
-      out_cursor = (int32_t)coded_buf;
-      packer_word = (int32_t)coded_buf;
-      hist_scratch[0] = (char *)coded_buf + coded_size - 4096;
+      out_cursor = coded_buf;
+      packer_word = (uint32_t *)coded_buf;
+      hist_scratch = coded_buf + coded_size - 4096;
       if ( v162 )
       {
         n4_15 = (char *)n4_20;
@@ -17670,12 +17695,12 @@ LABEL_172:
         n64 = 64;
         do
         {
-          *(uint64_t *)((char *)&plane_count + n64) = *(uint64_t *)&v179[n64 / 4];
+          *(uint64_t *)(bmf_plane_desc(n64 - 8)) = *(uint64_t *)&v179[n64 / 4];
           a3 = (__m128)*(uint64_t *)&v178[n64 / 4];
-          *(uint64_t *)((char *)__n256_2 + n64) = a3.m128_u64[0];
-          *(uint64_t *)((char *)&desc_slow_mode + n64) = v177[n64 / 8 + 1];
+          *(uint64_t *)(bmf_plane_desc(n64 - 16)) = a3.m128_u64[0];
+          *(uint64_t *)(bmf_plane_desc(n64 - 24)) = v177[n64 / 8 + 1];
           a4 = (__m128)(uint64_t)v177[n64 / 8];
-          *(uint64_t *)((char *)&coded_buf + n64) = a4.m128_u64[0];
+          *(uint64_t *)(bmf_plane_desc(n64 - 32)) = a4.m128_u64[0];
           n64 -= 32;
         }
         while ( n64 );
@@ -17721,16 +17746,16 @@ LABEL_172:
       else
       {
         __fwd_search_filter_sub_407B30((uint16_t *)Blockb, v45, v44, a3, a4);
-        n4_14 = (char *)(8 * (out_cursor - (uint32_t)coded_buf));
+        n4_14 = (char *)(8 * (out_cursor - coded_buf));
         // never taken: -S
         v162 = (int32_t)n4_14 <= (int32_t)n4_15;
         v178[0] = n4_14;
         *(uint32_t *)packer_word = packer_acc;
         packer_free_bits = 0;
         packer_acc = 0;
-        out_cursor = (int32_t)coded_buf;
-        packer_word = (int32_t)coded_buf;
-        hist_scratch[0] = (char *)coded_buf + coded_size - 4096;
+        out_cursor = coded_buf;
+        packer_word = (uint32_t *)coded_buf;
+        hist_scratch = coded_buf + coded_size - 4096;
         if ( v162 )
         {
           n4_15 = n4_14;
@@ -17764,15 +17789,15 @@ LABEL_172:
               while ( n4_9 < ::plane_count );
             }
             __fwd_search_filter_sub_407B30((uint16_t *)Blockb, (int32_t)v67, v63, a3, a4);
-            v71 = 8 * (out_cursor - (uint32_t)coded_buf);
+            v71 = 8 * (out_cursor - coded_buf);
             // never taken: -S
             v162 = v71 <= (int32_t)v178[0];
             *(uint32_t *)packer_word = packer_acc;
-            out_cursor = (int32_t)coded_buf;
-            packer_word = (int32_t)coded_buf;
+            out_cursor = coded_buf;
+            packer_word = (uint32_t *)coded_buf;
             packer_free_bits = 0;
             packer_acc = 0;
-            hist_scratch[0] = (char *)coded_buf + coded_size - 4096;
+            hist_scratch = coded_buf + coded_size - 4096;
             if ( v162 )
             {
               v45 = 0;
@@ -17782,12 +17807,12 @@ LABEL_172:
               n64_1 = 64;
               do
               {
-                *(uint64_t *)((char *)&plane_count + n64_1) = *(uint64_t *)&v179[n64_1 / 4];
+                *(uint64_t *)(bmf_plane_desc(n64_1 - 8)) = *(uint64_t *)&v179[n64_1 / 4];
                 a3 = (__m128)*(uint64_t *)&v178[n64_1 / 4];
-                *(uint64_t *)((char *)__n256_2 + n64_1) = a3.m128_u64[0];
-                *(uint64_t *)((char *)&desc_slow_mode + n64_1) = v177[n64_1 / 8 + 1];
+                *(uint64_t *)(bmf_plane_desc(n64_1 - 16)) = a3.m128_u64[0];
+                *(uint64_t *)(bmf_plane_desc(n64_1 - 24)) = v177[n64_1 / 8 + 1];
                 a4 = (__m128)(uint64_t)v177[n64_1 / 8];
-                *(uint64_t *)((char *)&coded_buf + n64_1) = a4.m128_u64[0];
+                *(uint64_t *)(bmf_plane_desc(n64_1 - 32)) = a4.m128_u64[0];
                 n64_1 -= 32;
               }
               while ( n64_1 );
@@ -17800,12 +17825,12 @@ LABEL_172:
           n64_2 = 64;
           do
           {
-            *(uint64_t *)((char *)&plane_count + n64_2) = *(uint64_t *)&v179[n64_2 / 4];
+            *(uint64_t *)(bmf_plane_desc(n64_2 - 8)) = *(uint64_t *)&v179[n64_2 / 4];
             a3 = (__m128)*(uint64_t *)&v178[n64_2 / 4];
-            *(uint64_t *)((char *)__n256_2 + n64_2) = a3.m128_u64[0];
-            *(uint64_t *)((char *)&desc_slow_mode + n64_2) = v177[n64_2 / 8 + 1];
+            *(uint64_t *)(bmf_plane_desc(n64_2 - 16)) = a3.m128_u64[0];
+            *(uint64_t *)(bmf_plane_desc(n64_2 - 24)) = v177[n64_2 / 8 + 1];
             a4 = (__m128)(uint64_t)v177[n64_2 / 8];
-            *(uint64_t *)((char *)&coded_buf + n64_2) = a4.m128_u64[0];
+            *(uint64_t *)(bmf_plane_desc(n64_2 - 32)) = a4.m128_u64[0];
             n64_2 -= 32;
           }
           while ( n64_2 );
@@ -17844,27 +17869,27 @@ LABEL_63:
       while ( n4_11 < ::plane_count );
     }
     __fwd_search_filter_sub_407B30((uint16_t *)Blockb, v45, v82, a3, a4);
-    n4_17 = (char *)(8 * (out_cursor - (uint32_t)coded_buf));
+    n4_17 = (char *)(8 * (out_cursor - coded_buf));
     // never taken: -S
     v178[1] = n4_17;
     *(uint32_t *)packer_word = packer_acc;
     packer_free_bits = 0;
     packer_acc = 0;
-    out_cursor = (int32_t)coded_buf;
-    packer_word = (int32_t)coded_buf;
+    out_cursor = coded_buf;
+    packer_word = (uint32_t *)coded_buf;
     n4_16 = (int32_t)n4_15;
-    hist_scratch[0] = (char *)coded_buf + coded_size - 4096;
+    hist_scratch = coded_buf + coded_size - 4096;
     if ( (int32_t)n4_17 > (int32_t)n4_15 )
     {
       n64_3 = 64;
       do
       {
-        *(uint64_t *)((char *)&plane_count + n64_3) = *(uint64_t *)&v179[n64_3 / 4];
+        *(uint64_t *)(bmf_plane_desc(n64_3 - 8)) = *(uint64_t *)&v179[n64_3 / 4];
         a3 = (__m128)*(uint64_t *)&v178[n64_3 / 4];
-        *(uint64_t *)((char *)__n256_2 + n64_3) = a3.m128_u64[0];
-        *(uint64_t *)((char *)&desc_slow_mode + n64_3) = v177[n64_3 / 8 + 1];
+        *(uint64_t *)(bmf_plane_desc(n64_3 - 16)) = a3.m128_u64[0];
+        *(uint64_t *)(bmf_plane_desc(n64_3 - 24)) = v177[n64_3 / 8 + 1];
         a4 = (__m128)(uint64_t)v177[n64_3 / 8];
-        *(uint64_t *)((char *)&coded_buf + n64_3) = a4.m128_u64[0];
+        *(uint64_t *)(bmf_plane_desc(n64_3 - 32)) = a4.m128_u64[0];
         n64_3 -= 32;
       }
       while ( n64_3 );
@@ -17895,15 +17920,15 @@ LABEL_63:
       }
       memcpy((char *)Src,v178[0],*((uint32_t *)Blockb + 3));
       __fwd_search_filter_sub_407B30((uint16_t *)Blockb, v45, v93, a3, a4);
-      n4_18 = 8 * (out_cursor - (uint32_t)coded_buf);
+      n4_18 = 8 * (out_cursor - coded_buf);
       // never taken: -S
       v162 = n4_18 <= (int32_t)n4_15;
       *(uint32_t *)packer_word = packer_acc;
       packer_free_bits = 0;
       packer_acc = 0;
-      out_cursor = (int32_t)coded_buf;
-      packer_word = (int32_t)coded_buf;
-      hist_scratch[0] = (char *)coded_buf + coded_size - 4096;
+      out_cursor = coded_buf;
+      packer_word = (uint32_t *)coded_buf;
+      hist_scratch = coded_buf + coded_size - 4096;
       if ( v162 )
       {
         v45 = 0;
@@ -17913,10 +17938,10 @@ LABEL_63:
         n64_4 = 64;
         do
         {
-          *(uint64_t *)((char *)&plane_count + n64_4) = *(uint64_t *)&v179[n64_4 / 4];
-          *(uint64_t *)((char *)__n256_2 + n64_4) = *(uint64_t *)&v178[n64_4 / 4];
-          *(uint64_t *)((char *)&desc_slow_mode + n64_4) = v177[n64_4 / 8 + 1];
-          *(uint64_t *)((char *)&coded_buf + n64_4) = v177[n64_4 / 8];
+          *(uint64_t *)(bmf_plane_desc(n64_4 - 8)) = *(uint64_t *)&v179[n64_4 / 4];
+          *(uint64_t *)(bmf_plane_desc(n64_4 - 16)) = *(uint64_t *)&v178[n64_4 / 4];
+          *(uint64_t *)(bmf_plane_desc(n64_4 - 24)) = v177[n64_4 / 8 + 1];
+          *(uint64_t *)(bmf_plane_desc(n64_4 - 32)) = v177[n64_4 / 8];
           n64_4 -= 32;
         }
         while ( n64_4 );
@@ -18080,9 +18105,9 @@ BMF_SSE int32_t __compress_image(int32_t a1, const __m128 &a2__ref, const __m128
     ::coded_buf = malloc(coded_size);
     ::packer_free_bits = 0;
     ::packer_acc = 0;
-    out_cursor = (int32_t)::coded_buf;
-    ::packer_word = (int32_t)::coded_buf;
-    hist_scratch[0] = (char *)::coded_buf + coded_size - 4096;
+    out_cursor = ::coded_buf;
+    ::packer_word = (uint32_t *)::coded_buf;
+    hist_scratch = ::coded_buf + coded_size - 4096;
     plane_predictor = 0;
     plane_alt_model = 0;
     __dword_443388 = 0;
@@ -18109,11 +18134,11 @@ BMF_SSE int32_t __compress_image(int32_t a1, const __m128 &a2__ref, const __m128
   }
   coded_size = v18 + 0x20000;
   ::coded_buf = malloc(v18 + 0x20000);
-  out_cursor = (int32_t)::coded_buf;
+  out_cursor = ::coded_buf;
   ::packer_free_bits = 0;
   ::packer_acc = 0;
-  ::packer_word = (int32_t)::coded_buf;
-  hist_scratch[0] = (char *)::coded_buf + coded_size - 4096;
+  ::packer_word = (uint32_t *)::coded_buf;
+  hist_scratch = ::coded_buf + coded_size - 4096;
   if ( ::plane_count == 1 )
   {
     if ( (p_i[5] & 0x40) != 0 )
@@ -18127,7 +18152,7 @@ LABEL_22:
       if ( ::packer_free_bits < 4 )
       {
         *(uint32_t *)::packer_word = ::packer_acc;
-        ::packer_word = out_cursor;
+        ::packer_word = (uint32_t *)out_cursor;
         ::packer_acc = 0;
         ::packer_free_bits += 28;
         out_cursor += 4;
@@ -18154,7 +18179,7 @@ LABEL_22:
       if ( __compress_image_n8 < 6 )
       {
         *(uint32_t *)::packer_word = ::packer_acc | (2 * (v25 << ((31 - __compress_image_n8) & 31)));
-        ::packer_word = out_cursor;
+        ::packer_word = (uint32_t *)out_cursor;
         out_cursor += 4;
         __compress_image_n8 = ::packer_free_bits + 26;
         ::packer_acc = v25 >> (::packer_free_bits & 31);
@@ -18171,7 +18196,7 @@ LABEL_22:
         if ( __compress_image_n8 < 8 )
         {
           *(uint32_t *)::packer_word = ::packer_acc | (2 * (v26 << ((31 - __compress_image_n8) & 31)));
-          ::packer_word = out_cursor;
+          ::packer_word = (uint32_t *)out_cursor;
           out_cursor += 4;
           __compress_image_n8 = ::packer_free_bits + 24;
           ::packer_acc = v26 >> (::packer_free_bits & 31);
@@ -18189,7 +18214,7 @@ LABEL_22:
           if ( __compress_image_n8 < 8 )
           {
             *(uint32_t *)::packer_word = ::packer_acc | (2 * (v28 << ((31 - __compress_image_n8) & 31)));
-            ::packer_word = out_cursor;
+            ::packer_word = (uint32_t *)out_cursor;
             out_cursor += 4;
             n8_1 = ::packer_free_bits + 24;
             ::packer_acc = v28 >> (::packer_free_bits & 31);
@@ -18204,7 +18229,7 @@ LABEL_22:
           if ( n8_1 < 8 )
           {
             *(uint32_t *)::packer_word = ::packer_acc | (2 * (v30 << ((31 - n8_1) & 31)));
-            ::packer_word = out_cursor;
+            ::packer_word = (uint32_t *)out_cursor;
             out_cursor += 4;
             __compress_image_n8 = ::packer_free_bits + 24;
             ::packer_acc = v30 >> (::packer_free_bits & 31);
@@ -18222,7 +18247,7 @@ LABEL_22:
             if ( __compress_image_n8 < 8 )
             {
               *(uint32_t *)::packer_word = ::packer_acc | (2 * (v32 << ((31 - __compress_image_n8) & 31)));
-              ::packer_word = out_cursor;
+              ::packer_word = (uint32_t *)out_cursor;
               out_cursor += 4;
               __compress_image_n256 = v32 >> (::packer_free_bits & 31);
               __compress_image_n8 = ::packer_free_bits + 24;
