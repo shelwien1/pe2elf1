@@ -48,25 +48,18 @@
 // decompiler assumed when it emitted them.
 //
 // BMF.cpp's other include, <windows.h>, is deliberately not used on any
-// target.  On a POSIX host there is no Win32 SDK to include; on a Windows host
-// there is, and pulling it in would put the current SDK's declarations up
-// against the layouts the decompilation was typed for, which is a collision
-// with nothing to gain.  The handful of types and constants the bodies name
-// are below, at the offsets IDA recovered.
+// target, and nothing here needs it any more: no body names a Win32 type, a
+// Win32 constant or a Win32 function.
 //
-// defs.h keys several typedefs off that header, though: `#ifndef _WINDOWS_` it
-// defines BYTE/WORD/DWORD/LONG/BOOL itself, and as *signed* types (`typedef
-// int8 BYTE`, int8 being plain char).  BMF was compiled against the real
-// windows.h, where they are unsigned.  So declare _WINDOWS_ and supply the
-// windows.h spellings ourselves; letting defs.h win would silently sign-extend
-// every BYTE the bodies touch.
+// defs.h does not know that, though: `#ifndef _WINDOWS_` it defines
+// BYTE/WORD/DWORD/LONG/BOOL itself, and as *signed* types (`typedef int8
+// BYTE`, int8 being plain char), which is the opposite of what windows.h
+// means by them.  Nothing spells those names now — the bodies say uint8_t and
+// uint32_t — so rather than supply a second wrong set, declare _WINDOWS_ and
+// let there be none: a body that grew a `BYTE` back would then fail to
+// compile instead of quietly sign-extending.
 // ---------------------------------------------------------------------------
 #define _WINDOWS_
-typedef unsigned char  BYTE;
-typedef unsigned short WORD;
-typedef unsigned long  DWORD;
-typedef long           LONG;
-typedef int            BOOL;
 
 //--- #include "bmfdefs.h"
 /*
@@ -546,29 +539,6 @@ void __noreturn __break(uint16 code, uint16 subcode);
 // hybrid build it is the identity, since blob1 is 0x00438000 there.
 #define BMF_BLOB(va) ((int)(blob1 + ((va) - BMF_BLOB_BASE)))
 
-// Win32 manifest constants the surviving bodies spell out.  windows.h is not
-// included (see above), and with the command line down to `c`/`d` on two named
-// files these three are all that is left: VirtualAlloc and VirtualFree are the
-// only kernel32 entries still reached, so the file, handle and find-data
-// constants and the types that went with them are gone.
-#define MEM_COMMIT      0x00001000
-#define MEM_RELEASE     0x00008000
-#define PAGE_READWRITE        0x04
-
-// The standalone build has no PE runtime to hand out _iobufs: every stdio
-// call goes to the host's C library, so `FILE1` is its FILE — glibc's on
-// POSIX, msvcrt's (which is this layout) on Windows.  No body reads a field of
-// one, verified across all 143, so nothing depends on the layout; only on
-// fopen's result reaching fread unchanged.  The name has to survive because
-// the bodies still say `#define FILE FILE1`.
-typedef FILE FILE1;
-
-// Hex-Rays invented a struct type named `Stream` for the thing fopen returns
-// (`Stream *Stream; ... Stream = fopen(...)`), so bodies use it as a type
-// name.  It is FILE.  extract.py renames any *variable* called Stream out of
-// the way, since a body that declares one would otherwise shadow this.
-typedef FILE1 Stream;
-
 // defs.h stops at SLODWORD/SHIDWORD; the bodies also index DWORD lanes
 // directly.  Same DWORDn/SDWORDn machinery, just the names it left out.
 #define DWORD1(x)  DWORDn(x, 1)
@@ -577,21 +547,6 @@ typedef FILE1 Stream;
 #define SDWORD1(x) SDWORDn(x, 1)
 #define SDWORD2(x) SDWORDn(x, 2)
 #define SDWORD3(x) SDWORDn(x, 3)
-
-// Calling-convention keywords survive inside *casts* — Hex-Rays writes
-// `(void (__cdecl *)(int, int))f` — where extract.py's signature rewriting
-// does not reach.  cdecl is gcc's i386 default, so it maps to nothing.
-#define __cdecl
-#define __stdcall  __attribute__((stdcall))
-#define __fastcall __attribute__((fastcall))
-#define __thiscall __attribute__((thiscall))
-
-// Every moved entry point carries BMF_REALIGN.  In the hybrid build a PE
-// caller can enter one with esp aligned to 4 — the Microsoft i386 ABI promises
-// no more — while g++ assumes 16 and spills SSE locals with `movaps`, so the
-// prologue has to realign (§8.2.3).  Standalone there is no such caller: every
-// call comes from g++, which has already done the work, and the macro is empty.
-#define BMF_REALIGN
 
 // ---------------------------------------------------------------------------
 // SSE register types.
@@ -805,210 +760,92 @@ static unsigned bmf_xgetbv0()
   return lo;
 }
 
-// Every body opens with PROBE_DECL/PROBE_HIT.  Those were the instrument that
-// answered "did this function actually run inside the original binary?" while
-// the decompilation was being migrated one function at a time; here there is
-// nothing to compare against and they compile away.  The calls stay in the
-// bodies so that those files remain byte-identical to the extractor's output.
-#define PROBE_DECL(sym)
-#define PROBE_HIT(sym)  ((void)0)
-
-
-//--- #include "crt.cpp"      // the C runtime and the two kernel32 imports
+//--- #include "crt.cpp"      // what is left of the runtime BMF got from the PE
 // crt.cpp — the runtime BMF used to get from the PE.
 //
-// Included between the head and the moved bodies, and only in the standalone
-// build.  Every symbol here fills in one of the `#ifndef __PE_DECL___x` slots
-// the generated .inc files open: each of those blocks is "declare `__x` at its
-// address inside BMF.exe *unless* someone already has", so defining the guard
-// plus a real `__x` before the includes replaces the PE entry point without
-// touching a single generated line.
+// Included between the head and the moved bodies.  Everything in it once had
+// to announce itself through a `__PE_DECL___x` guard, so that the generated
+// .inc files would not also declare `__x` at its address inside a loaded
+// BMF.exe.  There is no loaded BMF.exe here and the .inc files arrived as one
+// flattened header, so the guards went with the rest of that seam.
 //
-// Three groups:
+// This was thirty-one CRT entries and ten kernel32 imports.  Then the switch
+// parser, the wildcard walk, the .ini and five image formats went, and with
+// them everything that reached for a file handle, a timestamp or a directory.
+// What was left of the CRT half was fopen, fclose, fread, fwrite, fseek, feof,
+// ferror, fgetc, fflush, printf, vprintf, exit, malloc and free -- wrappers
+// whose whole content was to call the function of the same name, standing
+// between the bodies and the C library for no reason once BMF's own runtime
+// was out of the picture.  The bodies call the C library directly now, so
+// those are gone too, and so are FILE1 and Stream, the two typedefs that stood
+// in for FILE.  §6.5's reason for routing stdio into the PE -- that a glibc
+// FILE* handed to BMF's fread would be read as a Win32 _iobuf -- ended when
+// BMF's fread did.
 //
-//   * The statically-linked MSVC CRT (§6.5 routed these into the PE because a
-//     glibc FILE* handed to BMF's fread would be read as a Win32 _iobuf; with
-//     BMF's code gone there is no second runtime and they are just the host's).
-//   * The kernel32 imports, which were behind IAT slots and so are named
-//     directly rather than through a `#define`.
-//   * Three odds and ends: operator new/delete, the two Intel memcpy/memset
-//     dispatchers, and sub_402E30, the out-of-memory handler main installs.
-//
-// This was ten kernel32 imports and thirty-one CRT entries when the program
-// still had a switch parser, a wildcard walk, an .ini, five more image formats
-// and a temp-file rename.  With the command line down to `c`/`d` on two named
-// files, what the surviving bodies call is nine stdio entries, printf, vprintf,
-// exit, Intel's two error-reporting hooks, and VirtualAlloc/VirtualFree.  The
-// rest went with their callers; §6.5's reasoning still applies to what is left.
-//
-// Two hosts.  On Windows all of this is native — the CRT entries are msvcrt's
-// under their `_`-prefixed names, and the two kernel32 imports are the real
-// ones, so that half of the file is two declarations and no code.  On POSIX
-// VirtualAlloc and VirtualFree are written out against mmap.
-
-#include <stdarg.h>
-#ifndef _WIN32
-#include <sys/mman.h>
-#endif
-
-// gcc checks a wrapper's format string only if told which dialect it is, and
-// mingw defaults to the MS one, where %zu and friends are not accepted.
-#ifdef _WIN32
-#define BMF_FMT(kind, f, a) __attribute__((format(gnu_##kind, f, a)))
-#else
-#define BMF_FMT(kind, f, a) __attribute__((format(kind, f, a)))
-#endif
+// Which leaves this file with three things: Intel's two error-reporting hooks,
+// the page allocator, and sub_402E30.  No Win32 remains on either host, so
+// there is no longer a Windows half and a POSIX half.
 
 // ---------------------------------------------------------------------------
-// MSVC CRT
+// Intel's runtime error reporter.
 //
-// The bodies call these through `#define fopen __fopen`, so the names have to
-// be exactly `__` + what CRT_PROTO calls them, and the signatures have to be
-// the ones extract.py would have emitted — the call sites were type-checked
-// against those.
+// Reached only from sub_4346D0's "this CPU has no SSE2" path — which cannot be
+// taken, since the moved bodies are full of SSE2 and would have faulted long
+// before.  Kept so that path still compiles and says something if it ever
+// runs, with Intel's own argument shape: a stream number, a message number, a
+// count, and one argument.
 // ---------------------------------------------------------------------------
-#define __PE_DECL___fopen
-#define __PE_DECL___fclose
-#define __PE_DECL___fread
-#define __PE_DECL___fwrite
-#define __PE_DECL___fseek
-#define __PE_DECL___feof
-#define __PE_DECL___ferror
-#define __PE_DECL___fgetc
-#define __PE_DECL___fflush
-#define __PE_DECL___printf
-#define __PE_DECL___vprintf
-#define __PE_DECL___exit
-#define __PE_DECL___irc__get_msg
-#define __PE_DECL___irc__print
-
-static inline FILE1 *__fopen(const char *p, const char *m) { return fopen(p, m); }
-static inline int    __fclose(FILE1 *f)                    { return fclose(f); }
-static inline unsigned __fread(void *b, unsigned s, unsigned n, FILE1 *f)
-                                                           { return (unsigned)fread(b, s, n, f); }
-static inline unsigned __fwrite(const void *b, unsigned s, unsigned n, FILE1 *f)
-                                                           { return (unsigned)fwrite(b, s, n, f); }
-static inline int    __fseek(FILE1 *f, long o, int w)      { return fseek(f, o, w); }
-static inline int    __feof(FILE1 *f)                      { return feof(f); }
-static inline int    __ferror(FILE1 *f)                    { return ferror(f); }
-static inline int    __fgetc(FILE1 *f)                     { return fgetc(f); }
-static inline int    __fflush(FILE1 *f)                    { return fflush(f); }
-static inline void   __exit(int c)                         { exit(c); }
-
-// Not `#define printf ::printf`: the bodies say `printf(...)` and the .inc
-// says `#define printf __printf`, so the name that has to exist is __printf.
-// gcc will not check the format string through a wrapper, hence the attribute.
-BMF_FMT(printf, 1, 2)
-static int __printf(const char *f, ...) {
-  va_list a; va_start(a, f);
-  int r = vprintf(f, a);
-  va_end(a);
-  return r;
-}
-
-// exit_402E40 calls this as `vprintf(fmt, &ArgList)`, where ArgList is its own
-// last named parameter — so the pointer is into the incoming argument block and
-// the remaining arguments follow it.  On i386 SysV a va_list *is* that pointer
-// (`typedef char *__builtin_va_list`), which is why the void* form works.
-static int __vprintf(const char *f, void *ap) {
-  return vprintf(f, (va_list)ap);
-}
-
-// Intel's runtime error reporter, reached only from sub_4346D0's
-// "this CPU has no SSE2" path — which cannot be taken, since the moved bodies
-// are full of SSE2 and would have faulted long before.  Kept so that path
-// still compiles and says something if it ever runs.
-static char *__irc__get_msg(int a, int b, void *) {
+static char *__irc__get_msg(int cat, int num, void *) {
   static char msg[64];
-  sprintf(msg, "Intel runtime message %d/%d", a, b);
+  sprintf(msg, "Intel runtime message %d/%d", cat, num);
   return msg;
 }
-BMF_FMT(printf, 1, 2)
-static int __irc__print(const char *f, ...) {
-  va_list a; va_start(a, f);
-  int r = vfprintf(stderr, f, a);
-  va_end(a);
-  return r;
+static int __irc__print(int stream, int num, int count, ...) {
+  return fprintf(stderr, "Intel runtime error %d/%d/%d\n", stream, num, count);
 }
 
 // ---------------------------------------------------------------------------
-// operator new / delete
+// The page allocator.
 //
-// malloc/free rather than ::operator new: MSVC's returns null when it cannot
-// allocate and BMF tests for that (`if ( void *p = operator new(8u) )`), while
-// C++'s throws — and there is no handler here to catch it.
+// Four bodies asked kernel32 for a megabyte with
+//
+//     VirtualAlloc(0, 0x103E30, MEM_COMMIT, PAGE_READWRITE)
+//
+// and gave it back with VirtualFree(p, 0, MEM_RELEASE).  Two properties of
+// that block are load-bearing: it arrives zeroed, and it is page-aligned, so
+// the SSE stores the bodies make into it are aligned however far in they land.
+// malloc promises neither, so this supplies both over malloc.
+//
+// Not aligned_alloc: MSVC does not have it, and on mingw it is either absent
+// or a _aligned_malloc alias whose blocks must not go to free() — which is
+// exactly the portability the request was about.  Over-allocating and stepping
+// the pointer forward is plain C89 and behaves the same everywhere; the base
+// malloc returned is parked in the word ahead of the aligned block, which is
+// what bmf_page_free hands back.
 // ---------------------------------------------------------------------------
-#define __PE_DECL___op_new
-#define __PE_DECL___op_delete
-static inline void *__op_new(unsigned int n) { return malloc(n ? n : 1); }
-static inline void  __op_delete(void *p)     { free(p); }
+#define BMF_PAGE 4096u
 
-// ---------------------------------------------------------------------------
-// Intel's memcpy/memset dispatchers.
-//
-// __intel_fast_memcpy and __intel_fast_memset pick an implementation from the
-// CPU features they cached at startup.  glibc's do the same thing through an
-// IFUNC, so these are memcpy and memset — both return their destination, which
-// is what the call sites expect.
-// ---------------------------------------------------------------------------
-#define __PE_DECL___sub_434980
-#define __PE_DECL___sub_4349F0
-static inline void *__sub_434980(void *d, const void *s, unsigned int n) { return memcpy(d, s, n); }
-static inline void *__sub_4349F0(void *d, int c, unsigned int n)         { return memset(d, c, n); }
+static void *bmf_page_alloc(size_t n) {
+  void *base = malloc(n + BMF_PAGE + sizeof(void *));
+  if (!base)
+    return nullptr;
+  uintptr_t raw = (uintptr_t)base + sizeof(void *);
+  char *p = (char *)((raw + (BMF_PAGE - 1)) & ~(uintptr_t)(BMF_PAGE - 1));
+  ((void **)p)[-1] = base;
+  memset(p, 0, n);
+  return p;
+}
+
+static void bmf_page_free(void *p) {
+  if (p)
+    free(((void **)p)[-1]);
+}
 
 // sub_402E30 is `push 7; call exit_402E40` — the out-of-memory handler main
 // hands to sub_42CBB0.  IDA's call analysis failed on it (hence "no decompiled
 // body" in the generated declaration), but the two instructions are not in
 // doubt.  Defined after the bodies, since exit_402E40 is one of them.
-#define __PE_DECL___sub_402E30
 void __sub_402E30();
-
-// ---------------------------------------------------------------------------
-// kernel32
-//
-// Two entries left of the ten the IAT held.  The other eight were the file
-// handle, the timestamp and the wildcard walk, which the `c`/`d` command line
-// does not have: the images are opened by name through stdio, and nothing
-// copies a file's date onto its output any more.
-// ---------------------------------------------------------------------------
-#define __PE_DECL___VirtualAlloc
-#define __PE_DECL___VirtualFree
-#ifdef _WIN32
-// On Windows there is nothing to reimplement: these are two of the imports
-// BMF's IAT held, and the program is asking kernel32 for them again.  Declared
-// by hand rather than through <windows.h>, for the reason at the top of the
-// file, with the signatures extract.py's WINAPI_PROTO gave the call sites.
-#define BMF_WINAPI extern "C" __declspec(dllimport) __attribute__((stdcall))
-BMF_WINAPI void *VirtualAlloc(void *, unsigned int, unsigned int, unsigned int);
-BMF_WINAPI int   VirtualFree(void *, unsigned int, unsigned int);
-#else
-// VirtualAlloc's block is zero-filled and page-aligned, which malloc's is not,
-// and BMF asks for a megabyte at a time — so mmap, not calloc.  VirtualFree is
-// given only MEM_RELEASE (size 0), so the size has to be remembered; there are
-// never more than a couple of these alive at once.
-static struct { void *p; size_t n; } bmf_vm[16];
-
-static __attribute__((stdcall))
-void *VirtualAlloc(void *addr, unsigned int size, unsigned int type, unsigned int prot) {
-  (void)addr; (void)type; (void)prot;
-  void *p = mmap(nullptr, size, PROT_READ | PROT_WRITE,
-                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  if (p == MAP_FAILED)
-    return nullptr;
-  for (auto &s : bmf_vm)
-    if (!s.p) { s.p = p; s.n = size; return p; }
-  munmap(p, size);   // table full: fail the allocation rather than leak it
-  return nullptr;
-}
-
-static __attribute__((stdcall))
-int VirtualFree(void *p, unsigned int size, unsigned int type) {
-  (void)size; (void)type;
-  for (auto &s : bmf_vm)
-    if (s.p == p) { munmap(s.p, s.n); s.p = nullptr; return 1; }
-  return 0;
-}
-#endif   // !_WIN32
 
 #include "subs1.hpp"
 

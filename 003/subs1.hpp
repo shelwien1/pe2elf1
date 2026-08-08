@@ -627,26 +627,26 @@ static t_psub_402E30& __psub_402E30 = *(t_psub_402E30*)(blob1 + 0x00445930 - BMF
 typedef int32_t t_n1024;
 static t_n1024& __n1024 = *(t_n1024*)(blob1 + 0x00445B5C - BMF_BLOB_BASE);
 
-Stream *__sub_402FB0(FILE1 **_this)
+FILE *__sub_402FB0(FILE **_this)
 {
   ;
-  Stream *Stream_v;
+  FILE *Stream_v;
   Stream_v = *(_this + 1);
   if ( Stream_v )
   {
-    __fseek(Stream_v, 0, 2);
-    return (FILE1 *)__fclose(*(_this + 1));
+    fseek(Stream_v, 0, 2);
+    return (FILE *)fclose(*(_this + 1));
   }
   return Stream_v;
 }
-static inline FILE1 * __fwd_sub_402DF0_sub_402FB0(void *a0) { return __sub_402FB0((FILE1 **)a0); }
+static inline FILE * __fwd_sub_402DF0_sub_402FB0(void *a0) { return __sub_402FB0((FILE **)a0); }
 
-FILE1 **__sub_402DF0(FILE1 **Block, char a2)
+FILE **__sub_402DF0(FILE **Block, char a2)
 {
   ;
   __fwd_sub_402DF0_sub_402FB0(Block);
   if ( (a2 & 1) != 0 )
-    __op_delete(Block);
+    free(Block);
   return Block;
 }
 
@@ -3800,7 +3800,7 @@ int32_t __sub_4148F0(uint16_t *_this)
   __n8 = 0;
   __n256 = 0;
   if ( __dword_443364 )
-    __op_delete(__n256_1);
+    free(__n256_1);
 }
 
  void __sub_414CE0()
@@ -3933,7 +3933,7 @@ LABEL_15:
   __n256 = 0;
   __Buffer_1 = __Buffer_0;
   if ( __dword_443364 )
-    __op_delete(__n256_1);
+    free(__n256_1);
 }
 
 void **__sub_415270(void **Blocka, char a2)
@@ -3954,10 +3954,10 @@ void **__sub_415270(void **Blocka, char a2)
   void **v14;
   int32_t i;
   Blocka_1 = Blocka;
-  __op_delete(*(Blocka + 269560));
-  __op_delete(Blocka_1[269559]);
-  __op_delete(Blocka_1[269671]);
-  __op_delete(Blocka_1[269672]);
+  free(*(Blocka + 269560));
+  free(Blocka_1[269559]);
+  free(Blocka_1[269671]);
+  free(Blocka_1[269672]);
   v3 = Blocka_1[269552];
   if ( v3 )
   {
@@ -3971,14 +3971,14 @@ void **__sub_415270(void **Blocka, char a2)
       do
       {
         v8 -= 6;
-        __op_delete(v8[5]);
+        free(v8[5]);
         --v6;
       }
       while ( v6 );
       v3 = v7;
       Blocka_1 = Blocka_2;
     }
-    __op_delete(v3 - 1);
+    free(v3 - 1);
   }
   v9 = Blocka_1[269553];
   if ( v9 )
@@ -3993,20 +3993,20 @@ void **__sub_415270(void **Blocka, char a2)
       do
       {
         v14 -= 6;
-        __op_delete(v14[5]);
+        free(v14[5]);
         --v13;
       }
       while ( v13 );
       v9 = v12;
       Blocka_1 = Blocka_3;
     }
-    __op_delete(v9 - 1);
+    free(v9 - 1);
   }
   for ( i = 0; i < 5; ++i )
-    __op_delete(Blocka_1[i + 14]);
-  __op_delete(Blocka_1[269551]);
+    free(Blocka_1[i + 14]);
+  free(Blocka_1[269551]);
   if ( (a2 & 1) != 0 )
-    __op_delete(Blocka_1);
+    free(Blocka_1);
   return Blocka_1;
 }
 
@@ -4352,15 +4352,15 @@ LABEL_37:
 void **__sub_419610(void **lpAddress, char a2)
 {
   ;
-  __op_delete(*(lpAddress + 69689));
-  __op_delete(*(lpAddress + 69690));
-  __op_delete(*(lpAddress + 69691));
-  __op_delete(*(lpAddress + 69692));
-  __op_delete(*(lpAddress + 69693));
-  __op_delete(*(lpAddress + 69665));
-  __op_delete(*(lpAddress + 69666));
+  free(*(lpAddress + 69689));
+  free(*(lpAddress + 69690));
+  free(*(lpAddress + 69691));
+  free(*(lpAddress + 69692));
+  free(*(lpAddress + 69693));
+  free(*(lpAddress + 69665));
+  free(*(lpAddress + 69666));
   if ( (a2 & 1) != 0 )
-    VirtualFree(lpAddress, 0, MEM_RELEASE);
+    bmf_page_free(lpAddress);
   return lpAddress;
 }
 
@@ -4396,13 +4396,13 @@ void **__sub_419610(void **lpAddress, char a2)
 void **__sub_4244A0(void **Block, char a2)
 {
   ;
-  __op_delete(*(Block + 44));
-  __op_delete(*(Block + 45));
-  __op_delete(*(Block + 46));
-  __op_delete(*(Block + 47));
-  __op_delete(*(Block + 48));
+  free(*(Block + 44));
+  free(*(Block + 45));
+  free(*(Block + 46));
+  free(*(Block + 47));
+  free(*(Block + 48));
   if ( (a2 & 1) != 0 )
-    __op_delete(Block);
+    free(Block);
   return Block;
 }
 
@@ -5500,7 +5500,7 @@ int32_t *__sub_4256F0(int32_t *_this, int32_t i, int32_t a3, int32_t n4)
   *(_this + 42) = 209952;
   *(_this + 43) = 419904;
   do
-    *(_this + n5++ + 44) = (int32_t)__op_new(2 * *_this + 20);
+    *(_this + n5++ + 44) = (int32_t)malloc(2 * *_this + 20);
   while ( n5 < 5 );
   __fwd_sub_4256F0_sub_4118A0((uint8_t *)_this + 984, (char *)_this + 1496);
   v20 = *_this;
@@ -5630,7 +5630,7 @@ int32_t *__sub_4256F0(int32_t *_this, int32_t i, int32_t a3, int32_t n4)
     *v8 = si128;
     v8[1] = si128;
     v8[2] = si128;
-    __sub_414F60_n256 = (char *)__op_new(0x7F000u);
+    __sub_414F60_n256 = (char *)malloc(0x7F000u);
     if ( __sub_414F60_n256 )
     {
       v9 = 0;
@@ -5865,7 +5865,7 @@ static inline int32_t * __fwd_sub_424500_sub_4256F0(void *a0, int32_t a1, int32_
   ;
   int32_t *v4;
   void **v5;
-  v4 = (int32_t *)__op_new(0x99D4D8u);
+  v4 = (int32_t *)malloc(0x99D4D8u);
   if ( v4 )
     v5 = (void **)__fwd_sub_424500_sub_4256F0(v4, i, a3, 0);
   else
@@ -5985,7 +5985,7 @@ void __sub_434A30()
       strncpy((char *)&v8[5], msg, 0x200u);
       __irc__print(1, 24, 1, (char)&v8[5]);
       __irc__print(1, 0, 0, ArgList_1);
-      __exit(1);
+      exit(1);
     }
     __sub_434A30();
   }
@@ -6085,8 +6085,8 @@ int32_t __sub_4229E0(int32_t _this, int32_t i, int32_t n4)
   __dword_4458F4 = -v8;
   *(uint32_t *)(_this + 278720) = -v9 - 7;
   *(uint32_t *)(_this + 278724) = v9 + 8;
-  *(uint32_t *)(_this + 278660) = __op_new(4 * i + 16);
-  v10 = __op_new(4 * i + 16);
+  *(uint32_t *)(_this + 278660) = malloc(4 * i + 16);
+  v10 = malloc(4 * i + 16);
   *(uint32_t *)(_this + 232) = 1065353216;
   *(uint32_t *)(_this + 278664) = v10;
   *(uint32_t *)(_this + 278668) = *(uint32_t *)(_this + 278660) + 4 * i + 8;
@@ -6117,9 +6117,9 @@ int32_t __sub_4229E0(int32_t _this, int32_t i, int32_t n4)
   n5 = 0;
   Size = 18 * i + 234;
   do
-    *(uint32_t *)(_this + 4 * n5++ + 278756) = __op_new(Size);
+    *(uint32_t *)(_this + 4 * n5++ + 278756) = malloc(Size);
   while ( n5 < 5 );
-  __sub_4349F0(*(char **)(_this + 278756),0,Size);
+  memset(*(char **)(_this + 278756),0,Size);
   v17 = *(uint32_t *)(_this + 278756);
   __dword_4458EC = 0;
   v18 = 0;
@@ -6245,7 +6245,7 @@ LABEL_20:
   {
     Size = 0;
   }
-  result = (int32_t *)__op_new(v10 + Size + 19);
+  result = (int32_t *)malloc(v10 + Size + 19);
   if ( !result )
     return nullptr;
   *result = (a2 << 16) | (uint16_t)a1;
@@ -6259,7 +6259,7 @@ LABEL_20:
     else
       buf = nullptr;
     v15 = result;
-    __sub_4349F0(buf,0,Size);
+    memset(buf,0,Size);
     return v15;
   }
   return result;
@@ -6280,7 +6280,7 @@ LABEL_20:
   int32_t &v66 = *(int32_t *)(__hexrays_frame + 12);
   int32_t &v67 = *(int32_t *)(__hexrays_frame + 12);
   uint8_t * &v68 = *(uint8_t * *)(__hexrays_frame + 12);
-  FILE1 * &Stream_v = *(FILE1 * *)(__hexrays_frame + 16);
+  FILE * &Stream_v = *(FILE * *)(__hexrays_frame + 16);
   int32_t &Buffer_2 = *(int32_t *)(__hexrays_frame + 20);
   char * &buf = *(char * *)(__hexrays_frame + 24);
   uint8_t * &v72 = *(uint8_t * *)(__hexrays_frame + 28);
@@ -6291,7 +6291,7 @@ LABEL_20:
   uint32_t &v77 = *(uint32_t *)(__hexrays_frame + 60);
   ;
   int32_t v3;
-  Stream *Stream_1;
+  FILE *Stream_1;
   char *Bufferc_3;
   char v7;
   int32_t p_i_1;
@@ -6337,17 +6337,17 @@ LABEL_20:
   char *buf_3;
   int32_t v49;
   char *Bufferc_2;
-  Stream *Stream_2;
+  FILE *Stream_2;
   uint32_t ElementCount;
   uint32_t v53;
   int32_t Size_1;
   int32_t v55;
   char v56;
   v3 = a3;
-  Stream_1 = __fopen(FileName, "wb");
+  Stream_1 = fopen(FileName, "wb");
   if ( !Stream_1 )
     return 0;
-  Bufferc_3 = (char *)__op_new(*(uint32_t *)(p_i + 12)
+  Bufferc_3 = (char *)malloc(*(uint32_t *)(p_i + 12)
                                  + 8 * *(uint16_t *)(p_i + 2)
                                  + (*(uint32_t *)(p_i + 12) >> 5) + 2048);
   p_i_1 = p_i;
@@ -6464,7 +6464,7 @@ LABEL_20:
     else
     {
       v67 = 4 * v14;
-      __sub_4349F0(buf,0,4 * v14);
+      memset(buf,0,4 * v14);
       p_i_1 = p_i;
       Bufferb_1 = *(char **)(p_i + 12);
       Buffer_2 = *(uint16_t *)(p_i + 2);
@@ -6548,7 +6548,7 @@ LABEL_67:
                   *buf_2 = 0;
                   v72 = buf_2 + 2;
                   buf_2[1] = Size << (v75 & 31);
-                  __sub_434980(buf_2 + 2,&v31[-Size],Size);
+                  memcpy(buf_2 + 2,&v31[-Size],Size);
                   buf_2 += Size + 2;
                   if ( (Size & 1) != 0 )
                   {
@@ -6628,7 +6628,7 @@ LABEL_70:
             *buf_2 = 0;
             v68 = buf_2 + 2;
             buf_2[1] = Size << (v75 & 31);
-            __sub_434980(buf_2 + 2,&v39[-Size],Size);
+            memcpy(buf_2 + 2,&v39[-Size],Size);
             buf_2 += Size + 2;
             if ( (Size & 1) != 0 )
             {
@@ -6666,7 +6666,7 @@ LABEL_55:
 LABEL_97:
           *buf_2 = 0;
           buf_2[1] = Size << (v75 & 31);
-          __sub_434980(buf_2 + 2,&v39[-Size],Size);
+          memcpy(buf_2 + 2,&v39[-Size],Size);
           Buffer_4 = Buffer_5;
           buf_1 = &buf_2[Size + 2];
           if ( (Size & 1) != 0 )
@@ -6738,7 +6738,7 @@ LABEL_72:
     v55 = 0;
     do
     {
-      __sub_434980(buf_1,v31,Size_1);
+      memcpy(buf_1,v31,Size_1);
       Size_1 = *(uint16_t *)(p_i + 4);
       buf_1 += Size_1;
       v31 -= Size_1;
@@ -6758,10 +6758,10 @@ LABEL_76:
   *(uint32_t *)(Bufferc_2 + 34) = v49;
   ElementCount = buf_1 - Bufferc_2;
   *(uint32_t *)(Bufferc_2 + 2) = ElementCount;
-  if ( __fwrite(Bufferc_2, 1u, ElementCount, Stream_2) != *(uint32_t *)(Bufferc_2 + 2) )
+  if ( fwrite(Bufferc_2, 1u, ElementCount, Stream_2) != *(uint32_t *)(Bufferc_2 + 2) )
     return 0;
-  __op_delete(Bufferc_2);
-  __fclose(Stream_2);
+  free(Bufferc_2);
+  fclose(Stream_2);
   return 1;
 }
 uint32_t __sub_414860(int32_t *a1, int32_t a2, int32_t a3, int32_t a4)
@@ -6774,7 +6774,7 @@ uint32_t __sub_414860(int32_t *a1, int32_t a2, int32_t a3, int32_t a4)
   int32_t v9;
   int32_t v10;
   *a1 = a3;
-  buf = (char *)__op_new(3 * a3);
+  buf = (char *)malloc(3 * a3);
   a1[5] = (int32_t)buf;
   if ( a4 )
   {
@@ -6803,7 +6803,7 @@ uint32_t __sub_414860(int32_t *a1, int32_t a2, int32_t a3, int32_t a4)
     a1[4] = 20 * v10;
     a1[1] = 0;
     a1[3] = 18 * v10;
-    return (uint32_t)__sub_4349F0(buf,0,3 * v10);
+    return (uint32_t)memset(buf,0,3 * v10);
   }
   return result;
 }
@@ -6849,7 +6849,7 @@ char * __sub_4081E0(char *p_i, char *Src, int32_t a3, char a4)
     n4 = __n4_5;
     Src_1 = (uint32_t)&p_i[a3 + 16];
     if ( __n4_5 == 1 )
-      return __sub_434980(&p_i[a3 + 16],Src,Size);
+      return memcpy(&p_i[a3 + 16],Src,Size);
     p_i += a3;
     if ( Size <= 6
       || __n4_5 <= 0
@@ -7039,7 +7039,7 @@ char * __sub_407EF0(char *Blockb, char *Src, int32_t a3, char a4)
     n4 = __n4_5;
     Src_1 = (uint32_t)&Blockb[a3 + 16];
     if ( __n4_5 == 1 )
-      return __sub_434980(Src,&Blockb[a3 + 16],Size);
+      return memcpy(Src,&Blockb[a3 + 16],Size);
     Blockb += a3;
     if ( Size > 6 && __n4_5 > 0 )
     {
@@ -7174,10 +7174,10 @@ __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...)
   ;
   va_list ap;
   va_start(ap, Code);
-  __vprintf((&__off_441068)[Code], (void *)ap);
+  vprintf((&__off_441068)[Code], ap);
   va_end(ap);
-  __printf("\n");
-  __exit(Code);
+  printf("\n");
+  exit(Code);
   __builtin_unreachable();
 }
 BMF_SSE int32_t __sub_4149C0(char ArgList_1)
@@ -7278,7 +7278,7 @@ BMF_SSE int32_t __sub_4149C0(char ArgList_1)
     *v13 = si128;
     v13[1] = si128;
     v13[2] = si128;
-    n256 = __op_new(0x7F000u);
+    n256 = malloc(0x7F000u);
     if ( n256 )
     {
       ArgList = ArgList_1;
@@ -7332,11 +7332,11 @@ BMF_SSE int32_t __sub_4149C0(char ArgList_1)
 void **__sub_402E70(void **Blockb, char a2)
 {
   ;
-  __op_delete(*(Blockb + 24));
-  __op_delete(*(Blockb + 19));
-  __op_delete(*(Blockb + 20));
+  free(*(Blockb + 24));
+  free(*(Blockb + 19));
+  free(*(Blockb + 20));
   if ( (a2 & 1) != 0 )
-    __op_delete(Blockb);
+    free(Blockb);
   return Blockb;
 }
 
@@ -7727,7 +7727,7 @@ LABEL_27:
   int32_t n256_2;
   uint32_t v59;
   uint32_t v60;
-  v0 = (int32_t *)__op_new(0x8ED0u);
+  v0 = (int32_t *)malloc(0x8ED0u);
   if ( v0 )
   {
     __sub_40DEB0_n8 = ::__n8;
@@ -8306,8 +8306,8 @@ LABEL_12:
       goto LABEL_12;
     }
   }
-  buf_1 = (char *)__op_new(0x4000u);
-  __sub_4349F0(buf_1,0,0x4000);
+  buf_1 = (char *)malloc(0x4000u);
+  memset(buf_1,0,0x4000);
   n0x4000_1 = 0;
   for ( j = 0; j < 64; ++j )
   {
@@ -8322,9 +8322,9 @@ LABEL_12:
     }
     buf_1[n0x4000] = 1;
   }
-  __op_delete(buf_1);
+  free(buf_1);
   __fwd_sub_40CF80_sub_40AF40(v146, (int32_t)Src, i, n0x20000, 0);
-  v15 = (char *)__op_new(0x20800u);
+  v15 = (char *)malloc(0x20800u);
   if ( v15 )
   {
     __sub_40CF80_n256 = 256;
@@ -8422,7 +8422,7 @@ LABEL_12:
       v15[2 * v31 + 1027] = v30 + n15 - 1;
     }
     for ( __sub_40CF80_m = 1; __sub_40CF80_m < 256; ++__sub_40CF80_m )
-      __sub_434980(&v15[516 * __sub_40CF80_m + 1024],v15 + 1024,516);
+      memcpy(&v15[516 * __sub_40CF80_m + 1024],v15 + 1024,516);
   }
   else
   {
@@ -8691,7 +8691,7 @@ LABEL_12:
         ::__n256 = __sub_40CF80_n256_2;
         ::__n8 = n8_6;
       }
-      __sub_4349F0(buf_4,0,Size);
+      memset(buf_4,0,Size);
       buf_2 = &buf_4[Size];
     }
     else
@@ -8967,8 +8967,8 @@ LABEL_123:
   v142 = v145;
   ::__n256 = __sub_40CF80_n256_2;
   ::__n8 = n8_4;
-  __op_delete(Block);
-  __op_delete(v142);
+  free(Block);
+  free(v142);
 }
 
  BMF_SSE uint32_t *__sub_40E590(uint32_t *_this, int32_t i, char a3)
@@ -9034,7 +9034,7 @@ LABEL_123:
     v4 = v36 + 1;
   }
   while ( (uint32_t)(v36 + 1) < 4 );
-  v13 = __op_new(8 * i + 8);
+  v13 = malloc(8 * i + 8);
   this_1[24] = v13;
   v13 += 2;
   this_1[23] = v13;
@@ -9042,8 +9042,8 @@ LABEL_123:
   this_1[21] = 0;
   *(v13 - 2) = 0;
   *(v13 - 1) = this_1[22];
-  this_1[19] = __op_new(i + 2);
-  v14 = __op_new(i + 2);
+  this_1[19] = malloc(i + 2);
+  v14 = malloc(i + 2);
   v15 = this_1[19];
   this_1[20] = v14;
   this_1[17] = v15 + 2;
@@ -9443,7 +9443,7 @@ BMF_SSE char * __sub_40FAC0(int32_t *Blockb, char a2, int32_t Src, int32_t i, in
   Blockb[16] = v49;
   Blockb[21] = *(uint32_t *)(v50 - 8);
   Blockb[22] = *(uint32_t *)(v50 - 4);
-  result = __sub_434980((char *)Blockb[20],(char *)Blockb[19],i + 2);
+  result = memcpy((char *)Blockb[20],(char *)Blockb[19],i + 2);
   v52 = a5 - 1;
   if ( a5 != 1 )
   {
@@ -10104,8 +10104,8 @@ BMF_SSE int32_t __sub_40BBC0(int32_t n2, int32_t a2, int32_t a3, char a4, int32_
   v10 = v50 - 1;
   if ( v50 - 1 == v9 )
     return 0;
-  __sub_434980((char *)__Src,(&::__Src)[n2],1028);
-  __sub_434980(v39,(&__dword_442E74)[n2],1028);
+  memcpy((char *)__Src,(&::__Src)[n2],1028);
+  memcpy(v39,(&__dword_442E74)[n2],1028);
   v46 = *(uint32_t *)(v48 + 4 * n2 + 4) + *(uint32_t *)(v48 + 4 * n2);
   v47 = 0;
   if ( v10 > v9 )
@@ -10158,8 +10158,8 @@ BMF_SSE int32_t __sub_40BBC0(int32_t n2, int32_t a2, int32_t a3, char a4, int32_
           return v47;
         if ( v44 + v32 < v46 )
         {
-          __sub_434980((&::__Src)[n2_1],(char *)__Src,1028);
-          __sub_434980((&__dword_442E74)[n2_1],v39,1028);
+          memcpy((&::__Src)[n2_1],(char *)__Src,1028);
+          memcpy((&__dword_442E74)[n2_1],v39,1028);
           v35 = v48;
           n2_2 = n2_1;
           v47 = 1;
@@ -10481,8 +10481,8 @@ LABEL_16:
         v52 = 0;
         goto LABEL_62;
       }
-      __sub_434980((char *)&__sub_40B330_Src,(&::__Src)[n5_1],1028);
-      __sub_434980(v99,(&__dword_442E74)[n5_1],1028);
+      memcpy((char *)&__sub_40B330_Src,(&::__Src)[n5_1],1028);
+      memcpy(v99,(&__dword_442E74)[n5_1],1028);
       v52 = 0;
       v109 = v102[n5_1 + 1] + v102[n5_1];
       if ( v50 + 1 >= v111 )
@@ -10529,8 +10529,8 @@ LABEL_16:
           break;
         if ( v105 + v104 < v109 )
         {
-          __sub_434980((&::__Src)[n5_2],(char *)&__sub_40B330_Src,1028);
-          __sub_434980((&__dword_442E74)[n5_2],v99,1028);
+          memcpy((&::__Src)[n5_2],(char *)&__sub_40B330_Src,1028);
+          memcpy((&__dword_442E74)[n5_2],v99,1028);
           n5_3 = n5_2;
           v77 = v104;
           v102[n5_2] = v105;
@@ -10786,7 +10786,7 @@ int32_t __sub_40CC50(int32_t j, uint32_t *a2, char *buf, char a4)
   if ( v5 <= 1 )
   {
 LABEL_50:
-    result = (int32_t)__sub_4349F0(bufa,0,4 * j_1);
+    result = (int32_t)memset(bufa,0,4 * j_1);
     if ( v5 == 1 )
     {
       v41 = v6 - (uint32_t)__dword_443408;
@@ -11423,7 +11423,7 @@ LABEL_53:
   *(uint32_t *)(Blocka_1 + 64) = v65;
   *(uint32_t *)(Blocka_1 + 84) = *(uint32_t *)(v66 - 8);
   *(uint32_t *)(Blocka_1 + 88) = *(uint32_t *)(v66 - 4);
-  result = __sub_434980(*(char **)(Blocka_1 + 80),*(char **)(Blocka_1 + 76),a4 + 2);
+  result = memcpy(*(char **)(Blocka_1 + 80),*(char **)(Blocka_1 + 76),a4 + 2);
   if ( a5 != 1 )
   {
     v143 = a5 - 1;
@@ -12480,7 +12480,7 @@ void ** __sub_4273F0(char ArgList, uint8_t *Src, int32_t i, int32_t a4)
   int64_t v37;
   int32_t v39;
   int32_t v41;
-  v4 = (int32_t *)__op_new(0x99D4D8u);
+  v4 = (int32_t *)malloc(0x99D4D8u);
   if ( v4 )
     v5 = __fwd_sub_4273F0_sub_4256F0(v4, i, a4, 0);
   else
@@ -12729,7 +12729,7 @@ static inline int32_t * __fwd_sub_427740_sub_4256F0(void *a0, int32_t a1, int32_
     n4 = 0;
     do
     {
-      v6 = (int32_t *)__op_new(0x99D4D8u);
+      v6 = (int32_t *)malloc(0x99D4D8u);
       if ( v6 )
         v7 = __fwd_sub_427740_sub_4256F0(v6, i_2, v3, n4);
       else
@@ -14398,8 +14398,8 @@ LABEL_13:
       goto LABEL_13;
     }
   }
-  buf = (char *)__op_new(0x4000u);
-  __sub_4349F0(buf,0,0x4000);
+  buf = (char *)malloc(0x4000u);
+  memset(buf,0,0x4000);
   n0x4000_1 = 0;
   for ( j = 0; j < 64; ++j )
   {
@@ -14414,13 +14414,13 @@ LABEL_13:
     }
     buf[n0x4000] = 1;
   }
-  __op_delete(buf);
+  free(buf);
   __sub_408510_Src_1 = (uint8_t *)Src;
   n0x20000_1 = n0x20000;
   __fwd_sub_408510_sub_40AF40(&Src_15, Src, i, n0x20000, 1);
-  kk_2 = __op_new(2 * n0x20000_1 + 8);
+  kk_2 = malloc(2 * n0x20000_1 + 8);
   kk_1 = (int32_t)kk_2;
-  v18 = (char *)__op_new(0x40A00u);
+  v18 = (char *)malloc(0x40A00u);
   Block = v18;
   if ( v18 )
   {
@@ -14428,7 +14428,7 @@ LABEL_13:
     if ( __dword_443364 )
       __sub_408510_n256 = 4096;
     ::__n256_2[0] = __sub_408510_n256;
-    __sub_4349F0(v18 + 198912,0,65792);
+    memset(v18 + 198912,0,65792);
     v22 = Block;
     v23 = ((uint32_t)Block + 198671) & 0xFFFFFFF0;
     v314 = 0;
@@ -14527,7 +14527,7 @@ LABEL_13:
     v46 = (char *)Block;
     do
     {
-      __sub_434980(v45,v46,776);
+      memcpy(v45,v46,776);
       v45 += 776;
       ++n256_1;
     }
@@ -14539,10 +14539,10 @@ LABEL_13:
     Block = nullptr;
     v314 = 0;
   }
-  buf_1 = (char *)__op_new(0x342FCu);
+  buf_1 = (char *)malloc(0x342FCu);
   __sub_408510_buf_2 = (int32_t)buf_1;
   if ( buf_1 )
-    __sub_4349F0(buf_1,0,213756);
+    memset(buf_1,0,213756);
   else
     __sub_408510_buf_2 = 0;
   ::__buf_2 = (void *)__sub_408510_buf_2;
@@ -14581,7 +14581,7 @@ LABEL_13:
 LABEL_52:
   while ( n0x8000 < 0x8000 )
     *(uint32_t *)(__sub_408510_buf_2 + 4 * n0x8000++ + 0x10000) = __sub_408510_Src_1 - 0x4000;
-  __sub_4349F0((char *)(__sub_408510_buf_2 + 196608),255,0x4000);
+  memset((char *)(__sub_408510_buf_2 + 196608),255,0x4000);
   v57 = _mm_load_si128(&v314);
   *(uint64_t *)(__sub_408510_buf_2 + 213692) = v57.m128i_i64[0];
   v58 = (__m128i *)((__sub_408510_buf_2 + 213707) & 0xFFFFFFF0);
@@ -14674,11 +14674,11 @@ LABEL_52:
       ^ (8
        * ((uint8_t)__byte_438A00[Src_3[2]]
         ^ (8 * ((uint8_t)__byte_438A00[Src_3[1]] ^ (8 * (uint8_t)__byte_438A00[*Src_3])))));
-  __dword_443408 = __op_new(0x3048u);
-  __dword_442DE0 = __op_new(0x23B4u);
-  n633_1 = (int32_t)__op_new(0x23B4u);
+  __dword_443408 = malloc(0x3048u);
+  __dword_442DE0 = malloc(0x23B4u);
+  n633_1 = (int32_t)malloc(0x23B4u);
   ::__n633 = (void *)n633_1;
-  __sub_4349F0((char *)n633_1,0,9140);
+  memset((char *)n633_1,0,9140);
   v83 = __dword_442DE0;
   v314.m128i_i32[1] = v69;
   n633_2 = n633_1;
@@ -15801,12 +15801,12 @@ LABEL_271:
       }
     }
   }
-  __op_delete(Block);
-  __op_delete(kk_2);
-  __op_delete(__dword_443408);
-  __op_delete(__dword_442DE0);
-  __op_delete(::__n633);
-  __op_delete(::__buf_2);
+  free(Block);
+  free(kk_2);
+  free(__dword_443408);
+  free(__dword_442DE0);
+  free(::__n633);
+  free(::__buf_2);
 }
 
 BMF_SSE char * __sub_40F450(uint32_t *Blockb, char a2, int32_t a3, int32_t a4, int32_t a5)
@@ -15994,7 +15994,7 @@ BMF_SSE char * __sub_40F450(uint32_t *Blockb, char a2, int32_t a3, int32_t a4, i
   Blockb[16] = v22;
   Blockb[21] = *(uint32_t *)(v23 - 8);
   Blockb[22] = *(uint32_t *)(v23 - 4);
-  __sub_40F450_buf = __sub_434980((char *)Blockb[20],(char *)Blockb[19],a4 + 2);
+  __sub_40F450_buf = memcpy((char *)Blockb[20],(char *)Blockb[19],a4 + 2);
   v25 = a5 - 1;
   if ( a5 != 1 )
   {
@@ -17827,7 +17827,7 @@ void __sub_417200(int32_t Blocka, char a2, uint8_t *a3)
       do
       {
         p_n4_1 -= 6;
-        __op_delete((void *)p_n4_1[5]);
+        free((void *)p_n4_1[5]);
         --n16;
       }
       while ( n16 );
@@ -17839,7 +17839,7 @@ void __sub_417200(int32_t Blocka, char a2, uint8_t *a3)
       do
       {
         p_n4_2 -= 6;
-        __op_delete((void *)p_n4_2[5]);
+        free((void *)p_n4_2[5]);
         --n16_1;
       }
       while ( n16_1 );
@@ -17847,7 +17847,7 @@ void __sub_417200(int32_t Blocka, char a2, uint8_t *a3)
   }
   else
   {
-    __sub_4349F0(buf,0,0x10000);
+    memset(buf,0,0x10000);
     Blockaa_1[4] = 1;
     *(uint32_t *)buf = v93 & *(uint32_t *)a3;
     *(uint16_t *)Blockaa_1[269559] = 0;
@@ -17927,7 +17927,7 @@ LABEL_14:
     n0x2000_1 = Blockaa_1[4];
     if ( n0x2000_1 > 0x2000 )
     {
-      Block = __op_new(Blockaa_1[1] * k_2 * *Blockaa_1);
+      Block = malloc(Blockaa_1[1] * k_2 * *Blockaa_1);
       v26 = *Blockaa_1;
       n4_2 = Blockaa_1[1];
       n0x2000_5 = *Blockaa_1;
@@ -18022,12 +18022,12 @@ LABEL_71:
       v79 = (void *)Blockaa_1[269559];
       Blockaa_1[1] = k_2 * n4_1;
       Blockaa_1[2] = 8;
-      __op_delete(v79);
-      v34 = __op_new(2 * Blockaa_1[1] * *Blockaa_1);
+      free(v79);
+      v34 = malloc(2 * Blockaa_1[1] * *Blockaa_1);
       v79 = Block;
       Blockaa_1[269559] = (int32_t)v34;
       __sub_417200((int32_t)Blockaa_1, v35, (uint8_t *)v79);
-      __op_delete(Block);
+      free(Block);
     }
     else
     {
@@ -18081,7 +18081,7 @@ LABEL_71:
     do
     {
       p_n4 -= 6;
-      __op_delete((void *)p_n4[5]);
+      free((void *)p_n4[5]);
       --n16_2;
     }
     while ( n16_2 );
@@ -18199,7 +18199,7 @@ int32_t __sub_407460(uint8_t *a1, uint8_t *n2, int32_t a3, char a4, int32_t a5, 
   v78 = (uint32_t)&v99[*((uint32_t *)v99 + 3) + 16];
   v10 = v92;
   *(uint32_t *)buf_1 = v9;
-  __sub_4349F0(buf,0,24576);
+  memset(buf,0,24576);
   v12 = *(uint32_t *)buf_1;
   n2_3 = n2_2;
   v14 = v88;
@@ -18268,7 +18268,7 @@ int32_t __sub_407460(uint8_t *a1, uint8_t *n2, int32_t a3, char a4, int32_t a5, 
   if ( n191_3 < -64 )
     n191_3 = -64;
   n191_5 = n191_3;
-  __sub_4349F0(buf_1,0,2048);
+  memset(buf_1,0,2048);
   v37 = *((uint16_t *)v89 + 2);
   v38 = (*((uint16_t *)v89 + 1) - 1) * *(uint16_t *)v89;
   v92 = v10;
@@ -18608,7 +18608,7 @@ BMF_SSE int32_t __sub_405CF0(int32_t a1, int32_t n3, char a3)
   __dword_443388 = 1;
   LODWORD(v208) = v5;
   v227 = a1 + v6 + 16;
-  __sub_4349F0(buf,0,0x8000);
+  memset(buf,0,0x8000);
   n192 = 192;
   do
   {
@@ -18729,7 +18729,7 @@ BMF_SSE int32_t __sub_405CF0(int32_t a1, int32_t n3, char a3)
                 if ( n192_1 < 192 )
                 {
                   v202.m128i_i32[2] = n192_3;
-                  __sub_4349F0(buf_1,0,2048);
+                  memset(buf_1,0,2048);
                   v148 = *(uint16_t *)v226 * (*((uint16_t *)v226 + 1) - 1);
                   v149 = *((uint16_t *)v226 + 2);
                   v205.m128i_i32[3] = n192_2;
@@ -18791,7 +18791,7 @@ LABEL_109:
                   if ( n192_2 < 192 )
                   {
                     v202.m128i_i32[3] = n192_4;
-                    __sub_4349F0(buf_2,0,2048);
+                    memset(buf_2,0,2048);
                     v161 = *(uint16_t *)v226 * (*((uint16_t *)v226 + 1) - 1);
                     v162 = *((uint16_t *)v226 + 2);
                     v205.m128i_i32[3] = n192_2;
@@ -18858,7 +18858,7 @@ LABEL_109:
           if ( v57 >= -64 )
           {
             *(uint32_t *)buf_1 = v62;
-            __sub_4349F0(buf_3,0,2048);
+            memset(buf_3,0,2048);
             v118 = *(uint16_t *)v226 * (*((uint16_t *)v226 + 1) - 1);
             v119 = *((uint16_t *)v226 + 2);
             v192 = v59;
@@ -18916,7 +18916,7 @@ LABEL_55:
             if ( v59 >= -64 )
             {
               v183 = v61;
-              __sub_4349F0(buf_4,0,2048);
+              memset(buf_4,0,2048);
               v131 = *(uint16_t *)v226 * (*((uint16_t *)v226 + 1) - 1);
               v132 = *((uint16_t *)v226 + 2);
               v192 = v59;
@@ -19097,7 +19097,7 @@ LABEL_19:
         v205 = v21;
         v206 = v21;
         v207 = v21;
-        __sub_4349F0(buf,0,0x8000);
+        memset(buf,0,0x8000);
         v223 = &v226[v208];
         v63 = (int32_t)(v227 - 17 - (uint32_t)&v226[v208]) / 4;
         v64 = &v226[v208 + 20];
@@ -19351,7 +19351,7 @@ LABEL_19:
   int16_t (&Buffer)[5] = *(int16_t (*)[5])(__hexrays_frame + 76);
   int32_t &Offset = *(int32_t *)(__hexrays_frame + 86);
   ;
-  Stream *Stream_v;
+  FILE *Stream_v;
   int32_t *v3;
   uint32_t Size_2;
   int32_t Size_1;
@@ -19394,11 +19394,11 @@ LABEL_19:
   char *Buffer_4;
   char *Src_5;
   uint32_t v44;
-  Stream_v = __fopen(FileName, "rb");
+  Stream_v = fopen(FileName, "rb");
   if ( !Stream_v
-    || __fread(Buffer, 0xEu, 1u, Stream_v) != 1
+    || fread(Buffer, 0xEu, 1u, Stream_v) != 1
     || Buffer[0] != 19778
-    || __fread(Buffer_1, 0x28u, 1u, Stream_v) != 1
+    || fread(Buffer_1, 0x28u, 1u, Stream_v) != 1
     || Buffer_1[0] != 40
     || v60 != 1 )
   {
@@ -19417,7 +19417,7 @@ LABEL_19:
       Size = Size_1;
       for ( i = 0; i < Size; ++i )
       {
-        __fread(Buffer_2, 4u, 1u, Stream_v);
+        fread(Buffer_2, 4u, 1u, Stream_v);
         if ( (*((uint8_t *)v3 + 10) & 0x80) != 0 )
           v7 = (int32_t)v3 + v3[3] + 16;
         else
@@ -19437,24 +19437,24 @@ LABEL_19:
       Size_2 = Size_4;
     }
   }
-  Buffer_3 = __op_new(Size_2);
+  Buffer_3 = malloc(Size_2);
   Src = (char *)v3 + v3[3] - *((uint16_t *)v3 + 2) + 16;
-  __fseek(Stream_v, Offset, 0);
+  fseek(Stream_v, Offset, 0);
   if ( n2 )
   {
     if ( n2 == 1 )
     {
-      __sub_4349F0((char *)v3 + 16,0,v3[3]);
+      memset((char *)v3 + 16,0,v3[3]);
       Src_1 = (int32_t)Src;
       v52 = v3;
       v46 = *((uint16_t *)v3 + 1) - 1;
       while ( 1 )
       {
         Src_2 = Src_1;
-        if ( __ferror(Stream_v) )
+        if ( ferror(Stream_v) )
           return nullptr;
-        j_3 = __fgetc(Stream_v);
-        Sizea_1 = __fgetc(Stream_v);
+        j_3 = fgetc(Stream_v);
+        Sizea_1 = fgetc(Stream_v);
         Sizea = Sizea_1;
         if ( j_3 )
         {
@@ -19498,13 +19498,13 @@ LABEL_19:
             goto LABEL_61;
           if ( Sizea_1 == 2 )
           {
-            v38 = __fgetc(Stream_v);
-            Src_1 = v38 + Src_1 - __fgetc(Stream_v) * *((uint16_t *)v52 + 2);
+            v38 = fgetc(Stream_v);
+            Src_1 = v38 + Src_1 - fgetc(Stream_v) * *((uint16_t *)v52 + 2);
           }
           else
           {
-            __fread(Buffer_3, (Sizea_1 + 1) & 0xFFFFFFFE, 1u, Stream_v);
-            __sub_434980((char *)Src_1,(char *)Buffer_3,Sizea);
+            fread(Buffer_3, (Sizea_1 + 1) & 0xFFFFFFFE, 1u, Stream_v);
+            memcpy((char *)Src_1,(char *)Buffer_3,Sizea);
             Src_1 += Sizea;
           }
         }
@@ -19518,7 +19518,7 @@ LABEL_19:
     }
     if ( n2 != 2 )
       return nullptr;
-    __sub_4349F0((char *)v3 + 16,0,v3[3]);
+    memset((char *)v3 + 16,0,v3[3]);
     v52 = v3;
     v22 = 1;
     v47 = *((uint16_t *)v3 + 1) - 1;
@@ -19529,10 +19529,10 @@ LABEL_19:
         while ( 1 )
         {
 LABEL_44:
-          if ( __ferror(Stream_v) )
+          if ( ferror(Stream_v) )
             return nullptr;
-          v54 = __fgetc(Stream_v);
-          n2_1 = __fgetc(Stream_v);
+          v54 = fgetc(Stream_v);
+          n2_1 = fgetc(Stream_v);
           n2_2 = n2_1;
           if ( !v54 )
             break;
@@ -19592,8 +19592,8 @@ LABEL_44:
         goto LABEL_61;
       if ( n2_1 != 2 )
         break;
-      v40 = __fgetc(Stream_v);
-      v41 = (v40 >> 1) - __fgetc(Stream_v) * *((uint16_t *)v52 + 2);
+      v40 = fgetc(Stream_v);
+      v41 = (v40 >> 1) - fgetc(Stream_v) * *((uint16_t *)v52 + 2);
       if ( (v40 & 1) == 1 )
       {
         if ( !v22 )
@@ -19602,7 +19602,7 @@ LABEL_44:
       }
       Src += v41;
     }
-    __fread(Buffer_3, (((n2_1 + 1) >> 1) + 1) & 0xFFFFFFFE, 1u, Stream_v);
+    fread(Buffer_3, (((n2_1 + 1) >> 1) + 1) & 0xFFFFFFFE, 1u, Stream_v);
     Buffer_4 = (char *)Buffer_3;
     Src_5 = Src;
     while ( 1 )
@@ -19653,13 +19653,13 @@ LABEL_44:
     Src_6 = Src;
     while ( 1 )
     {
-      ElementCount_1 = __fread(Src_6, 1u, ElementCount, Stream_v);
+      ElementCount_1 = fread(Src_6, 1u, ElementCount, Stream_v);
       ElementCount = *((uint16_t *)v52 + 2);
       if ( ElementCount_1 != ElementCount )
         return nullptr;
       if ( Offset_1 )
       {
-        __fseek(Stream_v, Offset_1, 1);
+        fseek(Stream_v, Offset_1, 1);
         ElementCount = *((uint16_t *)v52 + 2);
       }
       Src_6 -= ElementCount;
@@ -19671,8 +19671,8 @@ LABEL_61:
       }
     }
   }
-  __fclose(Stream_v);
-  __op_delete(Buffer_3);
+  fclose(Stream_v);
+  free(Buffer_3);
   return v3;
 } int32_t __sub_412E60(uint32_t *a1)
 {
@@ -21858,7 +21858,7 @@ void __sub_419430(uint32_t *_this)
   *(_this + 4) = v8 + 1;
   if ( (int32_t)(v8 + 1) <= 0x2000 )
   {
-    v12 = __op_new(4 * v8 + 4);
+    v12 = malloc(4 * v8 + 4);
     j_1 = *(_this + 4);
     *(_this + 269560) = v12;
     if ( j_1 )
@@ -21932,7 +21932,7 @@ void __sub_419430(uint32_t *_this)
     do
     {
       v22 -= 6;
-      __op_delete((void *)v22[5]);
+      free((void *)v22[5]);
       --n16;
     }
     while ( n16 );
@@ -21948,7 +21948,7 @@ void __sub_419430(uint32_t *_this)
     do
     {
       v10 -= 6;
-      __op_delete((void *)v10[5]);
+      free((void *)v10[5]);
       --n16_1;
     }
     while ( n16_1 );
@@ -22001,7 +22001,7 @@ void __sub_419430(uint32_t *_this)
   *(uint32_t *)(a1 + 1078240) = 0;
   for ( j = 0; j < 5; ++j )
   {
-    v8 = (char *)__op_new(8 * i_1 + 128);
+    v8 = (char *)malloc(8 * i_1 + 128);
     *(uint32_t *)(a1 + 4 * j + 56) = v8;
     *(uint32_t *)(a1 + 4 * j + 76) = v8 + 64;
     i_1 = *(uint32_t *)a1;
@@ -22023,7 +22023,7 @@ void __sub_419430(uint32_t *_this)
       while ( v9 < *(uint32_t *)a1 + 16 );
     }
   }
-  v10 = __op_new(i_1 + 1);
+  v10 = malloc(i_1 + 1);
   *(uint32_t *)(a1 + 1078684) = v10;
   *v10 = 0;
   if ( *(int32_t *)a1 > 0 )
@@ -22108,14 +22108,14 @@ LABEL_15:
 LABEL_26:
   while ( n0x2000_1 < 0x2000 )
     *(uint16_t *)(a1 + 2 * n0x2000_1++ + 6059440) *= 8;
-  __sub_4349F0((char *)(a1 + 3104),0,0x100000);
+  memset((char *)(a1 + 3104),0,0x100000);
   *(uint32_t *)(a1 + 28) = 0;
   *(uint32_t *)(a1 + 24) = 0;
   *(uint32_t *)(a1 + 20) = 0;
-  __sub_4349F0((char *)(a1 + 6075824),255,385024);
-  __sub_4349F0((char *)(a1 + 6460848),255,217600);
-  __sub_4349F0((char *)(a1 + 6678448),255,1424000);
-  __sub_4349F0(__buf_0,0,8193);
+  memset((char *)(a1 + 6075824),255,385024);
+  memset((char *)(a1 + 6460848),255,217600);
+  memset((char *)(a1 + 6678448),255,1424000);
+  memset(__buf_0,0,8193);
   *(uint64_t *)(a1 + 1078216) = 0;
   *(uint64_t *)(a1 + 1078224) = 0;
   for ( n = 0; n < 0x40000; ++n )
@@ -22137,12 +22137,12 @@ LABEL_26:
   }
   while ( n8 < 8 );
   n0x18 = 0;
-  __sub_4349F0((char *)(a1 + 1051776),0,24576);
-  *(uint32_t *)(a1 + 1078236) = __op_new(2 * *(uint32_t *)(a1 + 4) * *(uint32_t *)a1);
+  memset((char *)(a1 + 1051776),0,24576);
+  *(uint32_t *)(a1 + 1078236) = malloc(2 * *(uint32_t *)(a1 + 4) * *(uint32_t *)a1);
   *(uint16_t *)(a1 + 1076352) = 4;
   *(uint16_t *)(a1 + 1076354) = 4;
   *(uint16_t *)(a1 + 1076356) = 72;
-  __sub_4349F0((char *)(a1 + 1076358),0,1536);
+  memset((char *)(a1 + 1076358),0,1536);
   do
   {
     v38 = 6 * n0x18;
@@ -22406,10 +22406,10 @@ void __sub_417E80(uint32_t *_this, char *Src)
   while ( v82 + 1 < 15 );
   ArgList_2 = ArgList_1;
   this_4 = (int32_t)this_1;
-  buf = (char *)__op_new(this_1[4]);
+  buf = (char *)malloc(this_1[4]);
   Size = this_1[4];
   this_1[269672] = buf;
-  __sub_4349F0(buf,1,Size);
+  memset(buf,1,Size);
   v27 = *(uint32_t *)(this_4 + 100);
   v28 = *(uint32_t *)(this_4 + 104);
   *(uint32_t *)(this_4 + 1051664) = *(uint32_t *)(this_4 + 96);
@@ -22421,7 +22421,7 @@ void __sub_417E80(uint32_t *_this, char *Src)
   __fwd_sub_417E80_sub_414860((int32_t *)(this_4 + 1078184), this_4, *(uint32_t *)(this_4 + 16), 1);
   *(uint32_t *)(this_4 + 1078232) = this_4 + 1078216;
   v30 = *(uint32_t *)(this_4 + 16);
-  v31 = __op_new(24 * v30 + 4);
+  v31 = malloc(24 * v30 + 4);
   if ( v31 )
   {
     *v31 = v30;
@@ -22438,7 +22438,7 @@ void __sub_417E80(uint32_t *_this, char *Src)
   }
   v34 = *(uint32_t *)(this_4 + 16);
   *(uint32_t *)(this_4 + 1078208) = i;
-  v35 = __op_new(24 * v34 + 4);
+  v35 = malloc(24 * v34 + 4);
   if ( v35 )
   {
     *v35 = v34;
@@ -22472,7 +22472,7 @@ void __sub_417E80(uint32_t *_this, char *Src)
   }
   else
   {
-    ArgList_2 = (char *)__op_new(*(uint32_t *)(this_4 + 4) * *(uint32_t *)this_4 + 3);
+    ArgList_2 = (char *)malloc(*(uint32_t *)(this_4 + 4) * *(uint32_t *)this_4 + 3);
     v40 = *(uint32_t *)(this_4 + 8);
     ArgList_3 = ArgList_2;
   }
@@ -22717,7 +22717,7 @@ LABEL_76:
       while ( v76 < v78 );
       ArgList_3 = (char *)ArgList_4;
     }
-    __op_delete(ArgList_3);
+    free(ArgList_3);
   }
 }
 static inline int32_t __fwd_sub_424D90_sub_4135A0(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __sub_4135A0((uint16_t *)a0, a1, a2, a3); }
@@ -22855,7 +22855,7 @@ static inline int32_t * __fwd_sub_424D90_sub_4256F0(void *a0, int32_t a1, int32_
     n4 = 0;
     do
     {
-      v6 = (int32_t *)__op_new(0x99D4D8u);
+      v6 = (int32_t *)malloc(0x99D4D8u);
       if ( v6 )
         v7 = __fwd_sub_424D90_sub_4256F0(v6, i_2, v3, n4);
       else
@@ -25784,9 +25784,9 @@ BMF_SSE void __sub_422DB0(int32_t lpAddress, char ArgList, const __m128 &a3__ref
   *(uint32_t *)(v44 + v37 - 136) = *(uint32_t *)(v44 - 18 * i_1 + 134);
   *(uint32_t *)(v44 + v37 - 132) = *(uint32_t *)(v44 - 18 * i_1 + 138);
   *(uint16_t *)(v44 + v37 - 128) = *(uint16_t *)(v44 - 18 * i_1 + 142);
-  __sub_434980(*(char **)(lpAddress + 278760),*(char **)(lpAddress + 278756),18 * i_1 + 234);
-  __sub_434980(*(char **)(lpAddress + 278764),*(char **)(lpAddress + 278756),18 * i_1 + 234);
-  __sub_434980(*(char **)(lpAddress + 278768),*(char **)(lpAddress + 278756),18 * i_1 + 234);
+  memcpy(*(char **)(lpAddress + 278760),*(char **)(lpAddress + 278756),18 * i_1 + 234);
+  memcpy(*(char **)(lpAddress + 278764),*(char **)(lpAddress + 278756),18 * i_1 + 234);
+  memcpy(*(char **)(lpAddress + 278768),*(char **)(lpAddress + 278756),18 * i_1 + 234);
   if ( a7 > 1 )
   {
     v96 = 0;
@@ -25974,7 +25974,7 @@ BMF_SSE void __sub_422D60(const __m128 &a1__ref, const __m128 &a2__ref, uint8_t 
   __m128 a2 = a2__ref;
   void * v5;
   void **lpAddress;
-  v5 = VirtualAlloc(nullptr, 0x103E30u, MEM_COMMIT, PAGE_READWRITE);
+  v5 = bmf_page_alloc(0x103E30u);
   if ( v5 )
     lpAddress = (void **)__sub_4229E0((int32_t)v5, i, 0);
   else
@@ -26187,7 +26187,7 @@ static inline int32_t __fwd_sub_423600_sub_41A130(void *a0, const __m128 &a1, co
     n4 = 0;
     do
     {
-      v7 = VirtualAlloc(nullptr, 0x103E30u, MEM_COMMIT, PAGE_READWRITE);
+      v7 = bmf_page_alloc(0x103E30u);
       if ( v7 )
         v8 = (void *)__sub_4229E0((int32_t)v7, i, n4);
       else
@@ -26326,9 +26326,9 @@ static inline int32_t __fwd_sub_423600_sub_41A130(void *a0, const __m128 &a1, co
               *(uint32_t *)(v46 + v53 - 136) = *(uint32_t *)(v46 + v53 + 134);
               *(uint32_t *)(v46 + v53 - 132) = *(uint32_t *)(v46 + v53 + 138);
               *(uint16_t *)(v46 + v53 - 128) = *(uint16_t *)(v46 + v53 + 142);
-              __sub_434980(*(char **)(v25 + 278760),*(char **)(v25 + 278756),Size_1);
-              __sub_434980(*(char **)(v25 + 278764),*(char **)(v25 + 278756),Size);
-              __sub_434980(*(char **)(v25 + 278768),*(char **)(v25 + 278756),Size);
+              memcpy(*(char **)(v25 + 278760),*(char **)(v25 + 278756),Size_1);
+              memcpy(*(char **)(v25 + 278764),*(char **)(v25 + 278756),Size);
+              memcpy(*(char **)(v25 + 278768),*(char **)(v25 + 278756),Size);
             }
           }
           else
@@ -26353,9 +26353,9 @@ static inline int32_t __fwd_sub_423600_sub_41A130(void *a0, const __m128 &a1, co
             }
             while ( v17 );
             v18 = (void * *)v159;
-            __sub_434980(*(char **)(v14 + 278760),*(char **)(v14 + 278756),Size);
-            __sub_434980(*(char **)(v14 + 278764),*(char **)(v14 + 278756),Size);
-            __sub_434980(*(char **)(v14 + 278768),*(char **)(v14 + 278756),Size);
+            memcpy(*(char **)(v14 + 278760),*(char **)(v14 + 278756),Size);
+            memcpy(*(char **)(v14 + 278764),*(char **)(v14 + 278756),Size);
+            memcpy(*(char **)(v14 + 278768),*(char **)(v14 + 278756),Size);
             v21 = *(uint32_t *)(v14 + 278760) + 2 * v149 + 144;
             *(uint32_t *)(v14 + 278736) = *(uint32_t *)(v14 + 278756) + 2 * v149 + 144;
             v22 = *(uint32_t *)(v14 + 278764);
@@ -26699,7 +26699,7 @@ BMF_SSE void __sub_417DB0(char ArgList, const __m128 &a2__ref, const __m128 &a3_
   }
   else
   {
-    v5 = __op_new(0x7BA230u);
+    v5 = malloc(0x7BA230u);
     if ( v5 )
       v6 = (void **)__sub_417980((int32_t)v5, p_i[1], *p_i, p_i[1], p_i[5] & 0x3F);
     else
@@ -26981,9 +26981,9 @@ BMF_SSE void __sub_419800(__m128 *lpAddress, const __m128 &a2__ref, const __m128
   *(uint32_t *)(v46 + v39 - 132) = *(uint32_t *)(v46 + v39 + 138);
   *(uint16_t *)(v46 + v39 - 128) = *(uint16_t *)(v46 + v39 + 142);
   Size = 18 * i + 234;
-  __sub_434980((char *)lpAddress[17422].m128_i32[2],(char *)lpAddress[17422].m128_i32[1],Size);
-  __sub_434980((char *)lpAddress[17422].m128_i32[3],(char *)lpAddress[17422].m128_i32[1],Size);
-  __sub_434980((char *)lpAddress[17423].m128_i32[0],(char *)lpAddress[17422].m128_i32[1],Size);
+  memcpy((char *)lpAddress[17422].m128_i32[2],(char *)lpAddress[17422].m128_i32[1],Size);
+  memcpy((char *)lpAddress[17422].m128_i32[3],(char *)lpAddress[17422].m128_i32[1],Size);
+  memcpy((char *)lpAddress[17423].m128_i32[0],(char *)lpAddress[17422].m128_i32[1],Size);
   if ( a6 > 1 )
   {
     v106 = &lpAddress[17419].m128_i8[4];
@@ -27188,7 +27188,7 @@ BMF_SSE void __sub_4197A0(const __m128 &a1__ref, const __m128 &a2__ref, uint8_t 
   __m128 a2 = a2__ref;
   void * v6;
   __m128 *lpAddress;
-  v6 = VirtualAlloc(nullptr, 0x103E30u, MEM_COMMIT, PAGE_READWRITE);
+  v6 = bmf_page_alloc(0x103E30u);
   if ( v6 )
     lpAddress = (__m128 *)__sub_4229E0((int32_t)v6, i, 0);
   else
@@ -27417,7 +27417,7 @@ static inline int32_t __fwd_sub_421930_sub_41A130(void *a0, const __m128 &a1, co
     n4 = 0;
     do
     {
-      v7 = VirtualAlloc(nullptr, 0x103E30u, MEM_COMMIT, PAGE_READWRITE);
+      v7 = bmf_page_alloc(0x103E30u);
       if ( v7 )
         v8 = (void *)__sub_4229E0((int32_t)v7, i_1, n4);
       else
@@ -27555,9 +27555,9 @@ static inline int32_t __fwd_sub_421930_sub_41A130(void *a0, const __m128 &a1, co
               *(uint32_t *)(v45 + v52 - 136) = *(uint32_t *)(v45 + v52 + 134);
               *(uint32_t *)(v45 + v52 - 132) = *(uint32_t *)(v45 + v52 + 138);
               *(uint16_t *)(v45 + v52 - 128) = *(uint16_t *)(v45 + v52 + 142);
-              __sub_434980(*(char **)(v24 + 278760),*(char **)(v24 + 278756),Size_1);
-              __sub_434980(*(char **)(v24 + 278764),*(char **)(v24 + 278756),Size);
-              __sub_434980(*(char **)(v24 + 278768),*(char **)(v24 + 278756),Size);
+              memcpy(*(char **)(v24 + 278760),*(char **)(v24 + 278756),Size_1);
+              memcpy(*(char **)(v24 + 278764),*(char **)(v24 + 278756),Size);
+              memcpy(*(char **)(v24 + 278768),*(char **)(v24 + 278756),Size);
             }
           }
           else
@@ -27582,9 +27582,9 @@ static inline int32_t __fwd_sub_421930_sub_41A130(void *a0, const __m128 &a1, co
             }
             while ( v16 );
             v17 = (void * *)v163;
-            __sub_434980(*(char **)(v13 + 278760),*(char **)(v13 + 278756),Size);
-            __sub_434980(*(char **)(v13 + 278764),*(char **)(v13 + 278756),Size);
-            __sub_434980(*(char **)(v13 + 278768),*(char **)(v13 + 278756),Size);
+            memcpy(*(char **)(v13 + 278760),*(char **)(v13 + 278756),Size);
+            memcpy(*(char **)(v13 + 278764),*(char **)(v13 + 278756),Size);
+            memcpy(*(char **)(v13 + 278768),*(char **)(v13 + 278756),Size);
             v20 = *(uint32_t *)(v13 + 278760) + 2 * v153 + 144;
             *(uint32_t *)(v13 + 278736) = *(uint32_t *)(v13 + 278756) + 2 * v153 + 144;
             v21 = *(uint32_t *)(v13 + 278764);
@@ -28054,7 +28054,7 @@ BMF_SSE void __sub_415380(const __m128 &a1__ref, const __m128 &a2__ref, uint16_t
   }
   else
   {
-    v5 = __op_new(0x7BA230u);
+    v5 = malloc(0x7BA230u);
     if ( v5 )
       Blocka_3 = __sub_417980((int32_t)v5, p_i[1], *p_i, p_i[1], p_i[5] & 0x3F);
     else
@@ -28195,10 +28195,10 @@ BMF_SSE void __sub_415380(const __m128 &a1__ref, const __m128 &a2__ref, uint16_t
     }
     while ( (uint32_t)(v58 + 1) < 0xF );
     Blocka_1 = (int32_t)Blocka_2;
-    buf = (char *)__op_new(Blocka_2[4]);
+    buf = (char *)malloc(Blocka_2[4]);
     Size = Blocka_2[4];
     Blocka_2[269672] = (uint32_t)buf;
-    __sub_4349F0(buf,1,Size);
+    memset(buf,1,Size);
     v28 = Blocka_2[25];
     v29 = Blocka_2[26];
     Blocka_2[262916] = Blocka_2[24];
@@ -28210,7 +28210,7 @@ BMF_SSE void __sub_415380(const __m128 &a1__ref, const __m128 &a2__ref, uint16_t
     __fwd_sub_415380_sub_414860((int32_t *)(Blocka_1 + 1078184), 0, *(uint32_t *)(Blocka_1 + 16), 1);
     Blocka_2[269558] = (uint32_t)(Blocka_2 + 269554);
     v31 = Blocka_2[4];
-    v32 = (uint32_t *)__op_new(24 * v31 + 4);
+    v32 = (uint32_t *)malloc(24 * v31 + 4);
     if ( v32 )
     {
       *v32 = v31;
@@ -28245,7 +28245,7 @@ BMF_SSE void __sub_415380(const __m128 &a1__ref, const __m128 &a2__ref, uint16_t
     }
     v37 = *(uint32_t *)(Blocka_1 + 16);
     *(uint32_t *)(Blocka_1 + 1078208) = v33;
-    v38 = (uint32_t *)__op_new(24 * v37 + 4);
+    v38 = (uint32_t *)malloc(24 * v37 + 4);
     if ( v38 )
     {
       *v38 = v37;
@@ -28480,13 +28480,13 @@ BMF_SSE void __sub_405840(char *Blockb, char *Srca_3, int32_t a3, char a4, const
     v51 = v19;
     if ( __n256_0[0] )
     {
-      Srca_2 = (char *)__op_new(p_i[1] * p_i[0]);
+      Srca_2 = (char *)malloc(p_i[1] * p_i[0]);
       Srca_4 = &Blockb[v53 + 16];
       Sizea = *(uint16_t *)Blockb * *((uint16_t *)Blockb + 1);
       n4 = __n4_5;
       if ( __n4_5 == 1 )
       {
-        __sub_434980(Srca_2,&Blockb[v53 + 16],Sizea);
+        memcpy(Srca_2,&Blockb[v53 + 16],Sizea);
       }
       else
       {
@@ -28534,7 +28534,7 @@ BMF_SSE void __sub_405840(char *Blockb, char *Srca_3, int32_t a3, char a4, const
     {
       if ( (uint8_t)__byte_44339C[v52] != __n4_5 - 1 )
         __fwd_sub_405840_sub_4081E0(Blockb, Srca_2, v53, v20);
-      __op_delete(Srca_2);
+      free(Srca_2);
     }
   }
   else
@@ -28547,7 +28547,7 @@ BMF_SSE void __sub_405840(char *Blockb, char *Srca_3, int32_t a3, char a4, const
       n4_1 = __n4_5;
       if ( __n4_5 == 1 )
       {
-        __sub_434980((char *)(__Buffer_0 + 32),&Blockb[v53 + 16],Size);
+        memcpy((char *)(__Buffer_0 + 32),&Blockb[v53 + 16],Size);
       }
       else
       {
@@ -28594,7 +28594,7 @@ BMF_SSE void __sub_405840(char *Blockb, char *Srca_3, int32_t a3, char a4, const
         }
         else
         {
-          v28 = __op_new(0x30ACu);
+          v28 = malloc(0x30ACu);
           if ( v28 )
           {
             Blocka = (void **)__fwd_sub_405840_sub_40E590(v28, *(uint16_t *)Blockb, *Srca_1);
@@ -28622,7 +28622,7 @@ BMF_SSE void __sub_405840(char *Blockb, char *Srca_3, int32_t a3, char a4, const
     }
     else if ( __n2 == 2 )
     {
-      v14 = __op_new(0x30ACu);
+      v14 = malloc(0x30ACu);
       if ( v14 )
         Blockb_2 = (void **)__fwd_sub_405840_sub_40E590(v14, *(uint16_t *)Blockb, *Srca_1);
       else
@@ -28688,7 +28688,7 @@ BMF_SSE void __sub_407B30(uint16_t *p_i, int32_t a2, char a3, const __m128 &a4__
   int32_t Size_1;
   int32_t v30;
   char v31;
-  __sub_4349F0(__buf[0],0,4096);
+  memset(__buf[0],0,4096);
   __sub_407B30_Buffer = (char *)::__Buffer;
   p_ia_1 = (char *)::__Buffer + 16;
   *((uint32_t *)::__Buffer + 4) = *(uint32_t *)p_i;
@@ -28696,8 +28696,8 @@ BMF_SSE void __sub_407B30(uint16_t *p_i, int32_t a2, char a3, const __m128 &a4__
   *((uint32_t *)p_ia_1 + 2) = *((uint32_t *)p_i + 2);
   *((uint32_t *)p_ia_1 + 3) = *((uint32_t *)p_i + 3);
   Srca_1 = (uint8_t *)(p_i + 8);
-  __sub_434980(__sub_407B30_Buffer + 32,(char *)p_i + 16,*((uint32_t *)p_i + 3));
-  Src_1 = (char *)__op_new(*p_i * p_i[1]);
+  memcpy(__sub_407B30_Buffer + 32,(char *)p_i + 16,*((uint32_t *)p_i + 3));
+  Src_1 = (char *)malloc(*p_i * p_i[1]);
   Src_3 = Src_1;
   if ( __n4_5 > 0 )
   {
@@ -28721,12 +28721,12 @@ BMF_SSE void __sub_407B30(uint16_t *p_i, int32_t a2, char a3, const __m128 &a4__
         {
           if ( __n256_0[0] )
           {
-            Srca = (char *)__op_new(p_i[1] * *p_i);
+            Srca = (char *)malloc(p_i[1] * *p_i);
             n4 = __n4_5;
             Size = *(uint16_t *)p_ia * *((uint16_t *)p_ia + 1);
             if ( __n4_5 == 1 )
             {
-              __sub_434980(Srca,&Buffer_1[v14 + 32],Size);
+              memcpy(Srca,&Buffer_1[v14 + 32],Size);
             }
             else
             {
@@ -28774,7 +28774,7 @@ BMF_SSE void __sub_407B30(uint16_t *p_i, int32_t a2, char a3, const __m128 &a4__
               __fwd_sub_407B30_sub_4111B0(Src, *p_i, p_i[1], Srca);
             if ( n4_1 != __n4_5 )
               __fwd_sub_407B30_sub_4081E0(p_ia, Srca, v14, v31);
-            __op_delete(Srca);
+            free(Srca);
           }
           else if ( ::__n2 == 1 )
           {
@@ -28786,7 +28786,7 @@ BMF_SSE void __sub_407B30(uint16_t *p_i, int32_t a2, char a3, const __m128 &a4__
         Src_2 = (char *)p_i + v14 + 16;
         if ( __n4_5 == 1 )
         {
-          __sub_434980((char *)p_i + v14 + 16,Src,Size_3);
+          memcpy((char *)p_i + v14 + 16,Src,Size_3);
         }
         else
         {
@@ -28824,7 +28824,7 @@ BMF_SSE void __sub_407B30(uint16_t *p_i, int32_t a2, char a3, const __m128 &a4__
     Src_3 = Src;
     Srca_1 = (uint8_t *)Srca_3;
   }
-  __op_delete(Src_3);
+  free(Src_3);
   if ( __dword_443384 )
   {
     __fwd_sub_407B30_sub_415380(a4, a5, p_i, Srca_1, Srca_1);
@@ -28871,8 +28871,8 @@ BMF_SSE char * __sub_403820(int32_t a1, const __m128 &a2__ref, const __m128 &a3_
   __m128 a2 = a2__ref;
   __m128 a3 = a3__ref;
   int32_t v5;
-  Stream *Stream_1;
-  Stream *Stream_v;
+  FILE *Stream_1;
+  FILE *Stream_v;
   uint32_t __sub_403820_Buffer_1;
   char v10;
   int32_t Buffer__1;
@@ -28944,15 +28944,15 @@ BMF_SSE char * __sub_403820(int32_t a1, const __m128 &a2__ref, const __m128 &a3_
   v5 = a1;
   if ( p_dwLowDateTime )
     *p_dwLowDateTime = 0;
-  Stream_1 = *(FILE1 **)(a1 + 4);
+  Stream_1 = *(FILE **)(a1 + 4);
   if ( !Stream_1 )
     return nullptr;
   while ( 1 )
   {
-    if ( __fread(&__sub_403820_Buffer, 4u, 1u, Stream_1) != 1 )
+    if ( fread(&__sub_403820_Buffer, 4u, 1u, Stream_1) != 1 )
     {
-      Stream_v = *(FILE1 **)(v5 + 4);
-      if ( __feof(Stream_v) )
+      Stream_v = *(FILE **)(v5 + 4);
+      if ( feof(Stream_v) )
         return nullptr;
       goto LABEL_15;
     }
@@ -28960,18 +28960,18 @@ BMF_SSE char * __sub_403820(int32_t a1, const __m128 &a2__ref, const __m128 &a3_
     if ( (uint16_t)__sub_403820_Buffer != 0x9081 )
       break;
     __n512[0] = ((BYTE2(__sub_403820_Buffer) << 8) - 12288) | (HIBYTE(__sub_403820_Buffer) - 48);
-    if ( __n512[0] != 512 || __fread(&Buffer_, 8u, 1u, *(FILE1 **)(v5 + 4)) != 1 )
+    if ( __n512[0] != 512 || fread(&Buffer_, 8u, 1u, *(FILE **)(v5 + 4)) != 1 )
       break;
-    __fseek(*(FILE1 **)(v5 + 4), ElementSize, 1);
-    Stream_1 = *(FILE1 **)(v5 + 4);
+    fseek(*(FILE **)(v5 + 4), ElementSize, 1);
+    Stream_1 = *(FILE **)(v5 + 4);
   }
   if ( (uint16_t)__sub_403820_Buffer_1 != 0x8A81
     || (__n512[0] = ((BYTE2(__sub_403820_Buffer_1) << 8) - 12288) | (HIBYTE(__sub_403820_Buffer_1) - 48), __n512[0] != 512)
-    || __fread(Buffer_2, 0x10u, 1u, *(FILE1 **)(v5 + 4)) != 1 )
+    || fread(Buffer_2, 0x10u, 1u, *(FILE **)(v5 + 4)) != 1 )
   {
-    Stream_v = *(FILE1 **)(v5 + 4);
+    Stream_v = *(FILE **)(v5 + 4);
 LABEL_15:
-    __fclose(Stream_v);
+    fclose(Stream_v);
     *(uint32_t *)(v5 + 4) = 0;
     return nullptr;
   }
@@ -28979,21 +28979,21 @@ LABEL_15:
   ++*(uint32_t *)v5;
   if ( v10 < 0 )
   {
-    __fread(&Buffer_, 8u, 1u, *(FILE1 **)(v5 + 4));
+    fread(&Buffer_, 8u, 1u, *(FILE **)(v5 + 4));
     if ( p_dwLowDateTime )
     {
       Buffer__1 = Buffer_;
       v12 = (ElementSize + (ElementSize == 0) + 3) & 0xFFFFFFFC;
-      v13 = __op_new(v12 + 8);
+      v13 = malloc(v12 + 8);
       *v13 = Buffer__1;
       v13[1] = v12;
       *(uint32_t *)((char *)v13 + v12 + 4) = 0;
       *p_dwLowDateTime = (int32_t)v13;
-      __fread(v13 + 2, ElementSize, 1u, *(FILE1 **)(v5 + 4));
+      fread(v13 + 2, ElementSize, 1u, *(FILE **)(v5 + 4));
     }
     else
     {
-      __fseek(*(FILE1 **)(v5 + 4), ElementSize, 1);
+      fseek(*(FILE **)(v5 + 4), ElementSize, 1);
     }
   }
   ElementCount_5 = 3 << (v91 & 31);
@@ -29002,7 +29002,7 @@ LABEL_15:
   ElementCount_3 = ElementCount_5;
   if ( a4 )
   {
-    __fseek(*(FILE1 **)(v5 + 4), ElementCount_3 + ElementCount, 1);
+    fseek(*(FILE **)(v5 + 4), ElementCount_3 + ElementCount, 1);
     return nullptr;
   }
   p_i_1 = (char *)__sub_42B830(Buffer_2[0], Buffer_2[1], v91 & 0x3F, (uint8_t)(v91 & 0x80) >> 7, 1);
@@ -29025,7 +29025,7 @@ LABEL_15:
   if ( (v17 & 0x20) == 0 )
   {
     ElementCount_1 = ElementCount;
-    if ( __fread(p_i_1 + 16, 1u, ElementCount, *(FILE1 **)(v5 + 4)) != ElementCount_1 )
+    if ( fread(p_i_1 + 16, 1u, ElementCount, *(FILE **)(v5 + 4)) != ElementCount_1 )
       goto LABEL_31;
     goto LABEL_109;
   }
@@ -29033,17 +29033,17 @@ LABEL_15:
   __dword_443388 = 0;
   __dword_443384 = (uint8_t)(v17 & 4) >> 2;
   __ElementCount_0 = ElementCount;
-  ::__Buffer = __op_new(ElementCount);
+  ::__Buffer = malloc(ElementCount);
   __Buffer_0 = (int32_t)::__Buffer;
   __n8 = 0;
   __n256 = 0;
   ::__Buffer_1 = (int32_t)::__Buffer;
   __buf[0] = (char *)::__Buffer + __ElementCount_0 - 4096;
   ElementCount_2 = ElementCount;
-  if ( __fread(::__Buffer, 1u, ElementCount, *(FILE1 **)(v5 + 4)) != ElementCount_2 )
+  if ( fread(::__Buffer, 1u, ElementCount, *(FILE **)(v5 + 4)) != ElementCount_2 )
   {
 LABEL_31:
-    __fclose(*(FILE1 **)(v5 + 4));
+    fclose(*(FILE **)(v5 + 4));
     *(uint32_t *)(v5 + 4) = 0;
     return nullptr;
   }
@@ -29189,7 +29189,7 @@ LABEL_42:
     p_i_1 = p_i_2;
     v5 = v86;
   }
-  Src_1 = (uint8_t *)__op_new(*(uint16_t *)p_i_1 * *((uint16_t *)p_i_1 + 1));
+  Src_1 = (uint8_t *)malloc(*(uint16_t *)p_i_1 * *((uint16_t *)p_i_1 + 1));
   if ( (v92 & 8) != 0 )
   {
     *(uint32_t *)p_i = *(uint32_t *)p_i_1;
@@ -29219,7 +29219,7 @@ LABEL_42:
           }
           else if ( !__dword_443384 && ::__n2 == 2 )
           {
-            v71 = __op_new(0x30ACu);
+            v71 = malloc(0x30ACu);
             Blockb_1 = v71 ? __fwd_sub_403820_sub_40E590(v71, *(uint16_t *)p_i_1, *Src_1) : nullptr;
             Blockb = (void **)Blockb_1;
             __fwd_sub_403820_sub_40FAC0(Blockb_1, v72, (int32_t)Src_1, *(uint16_t *)p_i_1, *((uint16_t *)p_i_1 + 1));
@@ -29274,7 +29274,7 @@ LABEL_104:
           Size = Size_1;
           if ( ::__n4_5 == 1 )
           {
-            __sub_434980((char *)Src_1,(char *)Src,Size);
+            memcpy((char *)Src_1,(char *)Src,Size);
             n2_2 = ::__n2;
           }
           else
@@ -29341,33 +29341,33 @@ LABEL_104:
     }
   }
 LABEL_105:
-  __op_delete(Src_1);
+  free(Src_1);
 LABEL_106:
   if ( (char *)::__Buffer + ElementCount != (void *)__Buffer_0 )
   {
 LABEL_107:
-    __fclose(*(FILE1 **)(v5 + 4));
+    fclose(*(FILE **)(v5 + 4));
     *(uint32_t *)(v5 + 4) = 0;
     return nullptr;
   }
-  __op_delete(::__Buffer);
+  free(::__Buffer);
   v88 = v91;
 LABEL_109:
   if ( (v88 & 0x80) != 0 )
   {
     Buffer_3 = p_i_1[10] < 0 ? &p_i_1[*((uint32_t *)p_i_1 + 3) + 16] : nullptr;
-    ElementCount_4 = __fread(Buffer_3, 1u, ElementCount_3, *(FILE1 **)(v5 + 4));
+    ElementCount_4 = fread(Buffer_3, 1u, ElementCount_3, *(FILE **)(v5 + 4));
     if ( ElementCount_4 != ElementCount_3 )
       goto LABEL_107;
   }
   if ( (p_i_1[11] & 2) != 0 )
   {
-    n4_6 = (char *)__op_new(*((uint32_t *)p_i_1 + 3));
+    n4_6 = (char *)malloc(*((uint32_t *)p_i_1 + 3));
     __sub_403820_n4_5 = ::__n4_5;
     v55 = *((uint16_t *)p_i_1 + 1);
     n4_1 = (int32_t)n4_6;
     Src_2 = ::__n4_5 * (v55 - 1);
-    __sub_434980(n4_6,p_i_1 + 16,*((uint32_t *)p_i_1 + 3));
+    memcpy(n4_6,p_i_1 + 16,*((uint32_t *)p_i_1 + 3));
     LOWORD(v58) = *((uint16_t *)p_i_1 + 1);
     if ( (uint16_t)v58 )
     {
@@ -29410,7 +29410,7 @@ LABEL_109:
     p_i_1[11] ^= 2u;
     *((uint16_t *)p_i_1 + 1) = i_2;
     *((uint16_t *)p_i_1 + 2) = v58 * __sub_403820_n4_5;
-    __op_delete(n4_6);
+    free(n4_6);
   }
   return p_i_1;
 }
@@ -29686,12 +29686,12 @@ BMF_SSE uint32_t __sub_4043E0(uint16_t *p_i, char a2, const __m128 &a3__ref, con
       }
       if ( (v13 & 0x200000) != 0 )
       {
-        v46 = (char *)__op_new(*((uint32_t *)p_i_1 + 3));
+        v46 = (char *)malloc(*((uint32_t *)p_i_1 + 3));
         n4_2 = ::__n4_5;
         v48 = p_i_1[1];
         v178[1] = v46;
         v180 = ::__n4_5 * (v48 - 1);
-        __sub_434980(v46,(char *)p_i_1 + 16,*((uint32_t *)p_i_1 + 3));
+        memcpy(v46,(char *)p_i_1 + 16,*((uint32_t *)p_i_1 + 3));
         LOWORD(v50) = p_i_1[1];
         if ( (uint16_t)v50 )
         {
@@ -29733,7 +29733,7 @@ BMF_SSE uint32_t __sub_4043E0(uint16_t *p_i, char a2, const __m128 &a3__ref, con
         *((uint8_t *)p_i_1 + 11) ^= 2u;
         p_i_1[1] = i_5;
         p_i_1[2] = v50 * n4_2;
-        __op_delete(v46);
+        free(v46);
         v13 = __dword_4410A4[0];
       }
       return (v13 & 0x100000) >> 20;
@@ -29741,14 +29741,14 @@ BMF_SSE uint32_t __sub_4043E0(uint16_t *p_i, char a2, const __m128 &a3__ref, con
   }
   Blockb = (char *)__sub_42B830(i, i_2, p_i_1[5] & 0x3F, 0, 0);
   __ElementCount_0 = *((uint32_t *)Blockb + 3) + 0x20000;
-  __Buffer = __op_new(__ElementCount_0);
+  __Buffer = malloc(__ElementCount_0);
   __Buffer_0 = (int32_t)__Buffer;
   __n8 = 0;
   __n256 = 0;
   __Buffer_1 = (int32_t)__Buffer;
   v179[0] = i_2 * i;
   __buf[0] = (char *)__Buffer + __ElementCount_0 - 4096;
-  Srca_7 = __op_new(i_2 * i);
+  Srca_7 = malloc(i_2 * i);
   n4_4 = ::__n4_5;
   v21 = (p_i_1[1] - i_2) >> 1;
   v22 = *p_i_1 - i;
@@ -29766,7 +29766,7 @@ BMF_SSE uint32_t __sub_4043E0(uint16_t *p_i, char a2, const __m128 &a3__ref, con
     v27 = v178[0];
     do
     {
-      __sub_434980(v27,v24,Size);
+      memcpy(v27,v24,Size);
       Size = *((uint16_t *)Blockb + 2);
       v27 += Size;
       v24 += p_i_2[2];
@@ -30012,12 +30012,12 @@ LABEL_43:
   }
   if ( (uint32_t)__n7_0 > 6 )
   {
-    v101 = (char *)__op_new(*((uint32_t *)Blockb + 3));
+    v101 = (char *)malloc(*((uint32_t *)Blockb + 3));
     v102 = *((uint16_t *)Blockb + 1);
     v178[1] = (char *)::__n4_5;
     v180 = (int32_t)v101;
     v182 = ::__n4_5 * (v102 - 1);
-    __sub_434980(v101,(char *)Src,*((uint32_t *)Blockb + 3));
+    memcpy(v101,(char *)Src,*((uint32_t *)Blockb + 3));
     LOWORD(v104) = *((uint16_t *)Blockb + 1);
     if ( (uint16_t)v104 )
     {
@@ -30064,7 +30064,7 @@ LABEL_43:
     *((uint16_t *)Blockb_7 + 1) = v114;
     Blockb_7[11] ^= 2u;
     *((uint16_t *)Blockb_7 + 2) = v115;
-    __op_delete(v101);
+    free(v101);
     n4_19 = 0;
     if ( ::__n4_5 > 0 )
     {
@@ -30099,11 +30099,11 @@ LABEL_43:
 LABEL_172:
     if ( n4_19 + (n4_19 >> 12) >= (int32_t)n4_15 )
     {
-      v178[0] = (char *)__op_new(*((uint32_t *)Blockb + 3));
+      v178[0] = (char *)malloc(*((uint32_t *)Blockb + 3));
       v133 = ::__n4_5 * (*((uint16_t *)Blockb + 1) - 1);
       v178[1] = (char *)::__n4_5;
       v180 = (int32_t)v178[0];
-      __sub_434980(v178[0],(char *)Src,*((uint32_t *)Blockb + 3));
+      memcpy(v178[0],(char *)Src,*((uint32_t *)Blockb + 3));
       LOWORD(v135) = *((uint16_t *)Blockb + 1);
       if ( (uint16_t)v135 )
       {
@@ -30150,17 +30150,17 @@ LABEL_172:
       *((uint16_t *)Blockb_9 + 1) = v145;
       Blockb_9[11] ^= 2u;
       *((uint16_t *)Blockb_9 + 2) = v146;
-      __op_delete(v176);
+      free(v176);
     }
     else
     {
       n4_15 = (char *)n4_19;
-      v178[0] = (char *)__op_new(*((uint32_t *)p_i_1 + 3));
+      v178[0] = (char *)malloc(*((uint32_t *)p_i_1 + 3));
       v121 = p_i_1[1];
       v178[1] = (char *)::__n4_5;
       v179[0] = (int32_t)v178[0];
       v181[0] = ::__n4_5 * (v121 - 1);
-      __sub_434980(v178[0],(char *)p_i_1 + 16,*((uint32_t *)p_i_1 + 3));
+      memcpy(v178[0],(char *)p_i_1 + 16,*((uint32_t *)p_i_1 + 3));
       LOWORD(v123) = p_i_1[1];
       if ( (uint16_t)v123 )
       {
@@ -30203,10 +30203,10 @@ LABEL_172:
       p_i_1[1] = i_7;
       *((uint8_t *)p_i_1 + 11) ^= 2u;
       p_i_1[2] = v132;
-      __op_delete(v175);
+      free(v175);
     }
   }
-  __op_delete(Srca_7);
+  free(Srca_7);
   if ( ::__n4_5 > 2 && __dword_443384 )
   {
     if ( v188 )
@@ -30407,8 +30407,8 @@ LABEL_172:
 LABEL_63:
   if ( !n4_10 && ::__n4_5 > 1 )
   {
-    v178[0] = (char *)__op_new(*((uint32_t *)Blockb + 3));
-    __sub_434980(v178[0],(char *)Src,*((uint32_t *)Blockb + 3));
+    v178[0] = (char *)malloc(*((uint32_t *)Blockb + 3));
+    memcpy(v178[0],(char *)Src,*((uint32_t *)Blockb + 3));
     n16_3 = 16;
     do
     {
@@ -30481,7 +30481,7 @@ LABEL_63:
           __byte_44339E[16 * n4_12++] = 0;
         while ( n4_12 < ::__n4_5 );
       }
-      __sub_434980((char *)Src,v178[0],*((uint32_t *)Blockb + 3));
+      memcpy((char *)Src,v178[0],*((uint32_t *)Blockb + 3));
       __fwd_sub_4043E0_sub_407B30((uint16_t *)Blockb, v45, v93, a3, a4);
       n4_18 = 8 * (__Buffer_0 - (uint32_t)__Buffer);
       if ( !__dword_443384 )
@@ -30511,10 +30511,10 @@ LABEL_63:
         while ( n64_4 );
       }
     }
-    __op_delete(v178[0]);
+    free(v178[0]);
   }
-  __op_delete(__Buffer);
-  __op_delete(Blockb);
+  free(__Buffer);
+  free(Blockb);
   if ( __n2_4 == 1 )
   {
     if ( ::__n4_5 <= 0 )
@@ -30565,21 +30565,21 @@ BMF_SSE int32_t __sub_402EF0(uint32_t *v2, char *FileName, int32_t a2)
   __m128 v4;
   int32_t v5;
   const char *a_b;
-  Stream *Stream_v;
+  FILE *Stream_v;
   int32_t v8;
   int32_t v9;
-  Stream *Stream_1;
+  FILE *Stream_1;
   v5 = (int32_t)v2;
   a_b = "a+b";
   if ( a2 )
     a_b = "rb";
   *v2 = 0;
-  Stream_v = __fopen(FileName, a_b);
+  Stream_v = fopen(FileName, a_b);
   *(uint32_t *)(v5 + 4) = Stream_v;
   if ( !Stream_v )
     __exit_402E40(6, FileName);
   *(uint32_t *)v5 = 0;
-  v8 = __fseek(Stream_v, 0, 0);
+  v8 = fseek(Stream_v, 0, 0);
   v9 = *(uint32_t *)(v5 + 4);
   if ( v8 )
   {
@@ -30591,16 +30591,16 @@ LABEL_11:
   }
   if ( !v9 )
     goto LABEL_11;
-  if ( !__feof(*(FILE1 **)(v5 + 4)) )
+  if ( !feof(*(FILE **)(v5 + 4)) )
   {
     __fwd_sub_402EF0_sub_403820(v5, v3, v4, 1, nullptr);
-    Stream_1 = *(FILE1 **)(v5 + 4);
+    Stream_1 = *(FILE **)(v5 + 4);
     if ( !Stream_1 )
       goto LABEL_11;
-    if ( !__feof(*(FILE1 **)(v5 + 4)) )
+    if ( !feof(*(FILE **)(v5 + 4)) )
     {
       *(uint32_t *)v5 = 0;
-      __fseek(Stream_1, 0, 0);
+      fseek(Stream_1, 0, 0);
       v9 = *(uint32_t *)(v5 + 4);
       goto LABEL_10;
     }
@@ -30632,7 +30632,7 @@ BMF_SSE int32_t __sub_402FE0(int32_t a1, const __m128 &a2__ref, const __m128 &a3
   __m128 a2 = a2__ref;
   __m128 a3 = a3__ref;
   int32_t v5;
-  FILE1 *i;
+  FILE *i;
   char __sub_402FE0_Buffer_1;
   uint16_t *p_i_1;
   int32_t __sub_402FE0_n4_5;
@@ -30685,14 +30685,14 @@ BMF_SSE int32_t __sub_402FE0(int32_t a1, const __m128 &a2__ref, const __m128 &a3
   v5 = a1;
   if ( !*(uint32_t *)(a1 + 4) )
     return 0;
-  if ( !__feof(*(FILE1 **)(a1 + 4)) )
+  if ( !feof(*(FILE **)(a1 + 4)) )
   {
     __fwd_sub_402FE0_sub_403820(v5, a2, a3, 1, nullptr);
-    for ( i = *(FILE1 **)(v5 + 4); i; i = *(FILE1 **)(v5 + 4) )
+    for ( i = *(FILE **)(v5 + 4); i; i = *(FILE **)(v5 + 4) )
     {
-      if ( __feof(*(FILE1 **)(v5 + 4)) )
+      if ( feof(*(FILE **)(v5 + 4)) )
         break;
-      if ( __feof(i) )
+      if ( feof(i) )
         break;
       __fwd_sub_402FE0_sub_403820(v5, a2, a3, 1, nullptr);
     }
@@ -30713,7 +30713,7 @@ BMF_SSE int32_t __sub_402FE0(int32_t a1, const __m128 &a2__ref, const __m128 &a3
   Buffera_1 = Buffera_5;
   v64 = v11;
   ::__n4_5 = ((v12 & 0x3Fu) + 7) >> 3;
-  if ( __fwrite("\x81\x8A""20\x81\x90""20a+b", 4u, 1u, *(FILE1 **)(v5 + 4)) != 1 )
+  if ( fwrite("\x81\x8A""20\x81\x90""20a+b", 4u, 1u, *(FILE **)(v5 + 4)) != 1 )
     return 0;
   v15 = *((uint8_t *)p_i + 10);
   ++*(uint32_t *)v5;
@@ -30728,7 +30728,7 @@ BMF_SSE int32_t __sub_402FE0(int32_t a1, const __m128 &a2__ref, const __m128 &a3
   if ( (v17 & 0x3Fu) <= 4 || !__dword_44108C )
   {
     __ElementCount_0 = *((uint32_t *)p_i + 3) + 0x20000;
-    ::__Buffer = __op_new(__ElementCount_0);
+    ::__Buffer = malloc(__ElementCount_0);
     ::__n8 = 0;
     ::__n256 = 0;
     __Buffer_0 = (int32_t)::__Buffer;
@@ -30761,7 +30761,7 @@ BMF_SSE int32_t __sub_402FE0(int32_t a1, const __m128 &a2__ref, const __m128 &a3
     v18 = *((uint32_t *)p_i + 3);
   }
   __ElementCount_0 = v18 + 0x20000;
-  ::__Buffer = __op_new(v18 + 0x20000);
+  ::__Buffer = malloc(v18 + 0x20000);
   __Buffer_0 = (int32_t)::__Buffer;
   ::__n8 = 0;
   ::__n256 = 0;
@@ -30898,7 +30898,7 @@ LABEL_22:
   {
     Size = *p_i * p_i[1];
     HIBYTE(Buffera_1) |= 8u;
-    Srca = (char *)__op_new(Size);
+    Srca = (char *)malloc(Size);
     if ( ::__n4_5 > 0 )
     {
       v66 = v5;
@@ -30908,7 +30908,7 @@ LABEL_22:
       while ( n4_1 < ::__n4_5 );
       v5 = v66;
     }
-    __op_delete(Srca);
+    free(Srca);
   }
   else
   {
@@ -30921,28 +30921,28 @@ LABEL_57:
   v64 = __Buffer_0 - (uint32_t)::__Buffer;
   if ( v38 )
   {
-    v39 = __fwrite(&Buffera, 1u, 0x10u, *(FILE1 **)(v5 + 4)) == 16;
+    v39 = fwrite(&Buffera, 1u, 0x10u, *(FILE **)(v5 + 4)) == 16;
     if ( __Buffer )
-      v39 &= __fwrite(__Buffer, 1u, *((uint32_t *)__Buffer + 1) + 8, *(FILE1 **)(v5 + 4)) == *((uint32_t *)__Buffer + 1) + 8;
-    v40 = (__fwrite(::__Buffer, 1u, ElementCounta, *(FILE1 **)(v5 + 4)) == ElementCounta) & v39;
-    __op_delete(::__Buffer);
+      v39 &= fwrite(__Buffer, 1u, *((uint32_t *)__Buffer + 1) + 8, *(FILE **)(v5 + 4)) == *((uint32_t *)__Buffer + 1) + 8;
+    v40 = (fwrite(::__Buffer, 1u, ElementCounta, *(FILE **)(v5 + 4)) == ElementCounta) & v39;
+    free(::__Buffer);
     if ( v40 && (p_i[5] & 0x80) != 0 )
-      __fwrite((char *)p_i + *((uint32_t *)p_i + 3) + 16, 1u, ElementCount_1, *(FILE1 **)(v5 + 4));
-    __fflush(*(FILE1 **)(v5 + 4));
+      fwrite((char *)p_i + *((uint32_t *)p_i + 3) + 16, 1u, ElementCount_1, *(FILE **)(v5 + 4));
+    fflush(*(FILE **)(v5 + 4));
     if ( v40 )
       return v64;
     return v40;
   }
-  __op_delete(::__Buffer);
+  free(::__Buffer);
   if ( (*((uint8_t *)p_i + 11) & 2) != 0 )
   {
-    Buffera = (char *)__op_new(*((uint32_t *)p_i + 3));
+    Buffera = (char *)malloc(*((uint32_t *)p_i + 3));
     v41 = p_i[1];
     n4_2 = ::__n4_5;
     Buffera_1 = Buffera;
     v64 = ::__n4_5 * (v41 - 1);
     Buffer_2 = p_i + 8;
-    __sub_434980(Buffera,(char *)p_i + 16,*((uint32_t *)p_i + 3));
+    memcpy(Buffera,(char *)p_i + 16,*((uint32_t *)p_i + 3));
     LOWORD(v43) = p_i[1];
     if ( (uint16_t)v43 )
     {
@@ -30988,16 +30988,16 @@ LABEL_57:
     p_i_1[1] = i_2;
     *((uint8_t *)p_i_1 + 11) ^= 2u;
     p_i_1[2] = v53;
-    __op_delete(Buffera_4);
+    free(Buffera_4);
     goto LABEL_77;
   }
 LABEL_76:
   Buffer_2 = p_i + 8;
 LABEL_77:
-  v54 = __fwrite(p_i_1, 1u, 0x10u, *(FILE1 **)(v5 + 4)) == 16;
+  v54 = fwrite(p_i_1, 1u, 0x10u, *(FILE **)(v5 + 4)) == 16;
   if ( __Buffer )
-    v54 &= __fwrite(__Buffer, 1u, *((uint32_t *)__Buffer + 1) + 8, *(FILE1 **)(v5 + 4)) == *((uint32_t *)__Buffer + 1) + 8;
-  v55 = __fwrite(Buffer_2, 1u, ElementCount_1 + *((uint32_t *)p_i_1 + 3), *(FILE1 **)(v5 + 4));
+    v54 &= fwrite(__Buffer, 1u, *((uint32_t *)__Buffer + 1) + 8, *(FILE **)(v5 + 4)) == *((uint32_t *)__Buffer + 1) + 8;
+  v55 = fwrite(Buffer_2, 1u, ElementCount_1 + *((uint32_t *)p_i_1 + 3), *(FILE **)(v5 + 4));
   v56 = *((uint32_t *)p_i_1 + 3);
   if ( (v54 & (v55 == v56 + ElementCount_1)) == 0 )
     return 0;
@@ -31008,7 +31008,7 @@ static inline int32_t __fwd_bmf_sub_402EF0(void *a0, void *a1, int32_t a2) { ret
 static inline int32_t __fwd_bmf_sub_402FE0(int32_t a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __sub_402FE0(a0, a1, a2, (uint16_t *)a3, (void *)a4); }
 static inline char * __fwd_bmf_sub_403820(int32_t a0, const __m128 &a1, const __m128 &a2, int32_t a3, void *a4) { return __sub_403820(a0, a1, a2, a3, (int32_t *)a4); }
 static inline int32_t __fwd_bmf_sub_42B0C0(int32_t a0, void *a1, int32_t a2) { return __sub_42B0C0(a0, (char *)a1, a2); }
-static inline FILE1 ** __fwd_bmf_sub_402DF0(void *a0, char a1) { return __sub_402DF0((FILE1 **)a0, a1); }
+static inline FILE ** __fwd_bmf_sub_402DF0(void *a0, char a1) { return __sub_402DF0((FILE **)a0, a1); }
 
 // ---------------------------------------------------------------------------
 // The two things this program does.
@@ -31035,7 +31035,7 @@ BMF_SSE void __bmf_compress(const __m128 &a1__ref, const __m128 &a2__ref,
   ;
   __m128 a1 = a1__ref;
   __m128 a2 = a2__ref;
-  Stream *Stream_v;
+  FILE *Stream_v;
   int32_t *p_i;
   int32_t Arc;
   int32_t Flags;
@@ -31049,21 +31049,21 @@ BMF_SSE void __bmf_compress(const __m128 &a1__ref, const __m128 &a2__ref,
   // The reader below answers "no" the same way whether the file is missing or
   // is not a BMP, and BMF told those apart -- so open it once first, as its
   // format sniffer used to, and keep the two messages.
-  Stream_v = __fopen(InName, "rb");
+  Stream_v = fopen(InName, "rb");
   if ( !Stream_v )
     __exit_402E40(6, InName);
-  __fclose(Stream_v);
+  fclose(Stream_v);
   p_i = __fwd_bmf_sub_42AB20((void *)InName);
   if ( !p_i )
     __exit_402E40(4);
-  __printf(
+  printf(
     "File %16s, image %dx%dx%d, size - %d:",
     InName,
     *(uint16_t *)p_i,
     *((uint16_t *)p_i + 1),
     *((uint8_t *)p_i + 10) & 0x3F,
     p_i[3]);
-  if ( void *__nb = __op_new(8u) )
+  if ( void *__nb = malloc(8u) )
     Arc = __fwd_bmf_sub_402EF0((uint32_t *)__nb, (void *)OutName, 0);
   else
     Arc = 0;
@@ -31098,10 +31098,10 @@ BMF_SSE void __bmf_compress(const __m128 &a1__ref, const __m128 &a2__ref,
   Size = __fwd_bmf_sub_402FE0(Arc, a1, a2, (uint16_t *)p_i, (void *)__dwLowDateTime);
   if ( !Size )
     __exit_402E40(5, OutName);
-  __printf(
+  printf(
     "%6.3f bpp\n",
     (double)Size * 8.0 / (double)(*((uint16_t *)p_i + 1) * *(uint16_t *)p_i));
-  __op_delete(p_i);
+  free(p_i);
 }
 
 // Expand the BMF stream InName into a BMP named OutName.
@@ -31116,25 +31116,25 @@ BMF_SSE void __bmf_decompress(const __m128 &a1__ref, const __m128 &a2__ref,
   int32_t Number;
   int32_t Depth;
 
-  if ( void *__nb = __op_new(8u) )
+  if ( void *__nb = malloc(8u) )
     Block = (void *)__fwd_bmf_sub_402EF0((uint32_t *)__nb, (void *)InName, 1);
   else
     Block = nullptr;
-  __printf("File %16s,\r", InName);
+  printf("File %16s,\r", InName);
   Number = 0;
   while ( 1 )
   {
     p_i = (uint32_t *)__fwd_bmf_sub_403820((int32_t)Block, a1, a2, 0, (void *)&__dwLowDateTime);
     if ( !p_i )
     {
-      __printf("\n");
+      printf("\n");
       if ( !*((uint32_t *)Block + 1) )
         __exit_402E40(3, InName);
-      __fwd_bmf_sub_402DF0((FILE1 **)Block, 1);
+      __fwd_bmf_sub_402DF0((FILE **)Block, 1);
       return;
     }
     ++Number;
-    __printf(
+    printf(
       "File %16s, image %dx%dx%d, size - %d, number: %d\r",
       InName,
       *(uint16_t *)p_i,
@@ -31148,14 +31148,14 @@ BMF_SSE void __bmf_decompress(const __m128 &a1__ref, const __m128 &a2__ref,
     Depth = *((uint8_t *)p_i + 10) & 0x3F;
     if ( Depth == 2 || Depth == 15 || Depth == 16 )
     {
-      __printf("\n%s: %d bits per pixel is not a BMP depth\n", OutName, Depth);
-      __exit(5);
+      printf("\n%s: %d bits per pixel is not a BMP depth\n", OutName, Depth);
+      exit(5);
     }
     if ( !__fwd_bmf_sub_42B0C0((int32_t)p_i, (void *)OutName, __dword_441098) )
       __exit_402E40(5, OutName);
-    __op_delete(__dwLowDateTime);
+    free(__dwLowDateTime);
     __dwLowDateTime = 0;
-    __op_delete(p_i);
+    free(p_i);
   }
 }
 
@@ -31172,12 +31172,12 @@ BMF_SSE void __bmf_decompress(const __m128 &a1__ref, const __m128 &a2__ref,
   Csr = _mm_getcsr() | 0x8000;      // flush denormals to zero, as BMF did
   _mm_setcsr(Csr);
   __sub_42CBB0((int32_t)__sub_402E30);
-  __printf("BMF lossless image compressor, v.2.01 (C) 1998-1999, 2009 by Dmitry Shkarin\n");
+  printf("BMF lossless image compressor, v.2.01 (C) 1998-1999, 2009 by Dmitry Shkarin\n");
 
   Mode = argc == 4 && !argv[1][1] ? toupper(argv[1][0]) : 0;
   if ( Mode != 'C' && Mode != 'D' )
   {
-    __printf(
+    printf(
       "e-mail: <dmitry.shkarin@mtu-net.ru>;  web: http://compression.graphicon.ru/ds/\n"
       "Usage: bmf c input.bmp output     compress, always with -S -Q9\n"
       "       bmf d input output.bmp     expand\n");
