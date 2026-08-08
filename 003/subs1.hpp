@@ -637,6 +637,9 @@ struct RangeCoder {
   static const uint32_t kMask   = 0x7FFFFFFF;   // low is 31 bits
   static const uint8_t  kMarker = 0x97;         // section marker == the initial cache
 
+  // Private, so that "does anything outside still touch the coder's state?"
+  // is a question the compiler answers rather than a grep.
+ private:
   uint32_t range;      // (0x00800000, 0x80000000]
   uint32_t low;        // encoding: low.  decoding: code.  One word, two jobs.
   uint8_t  cache;      // encoding: the byte a carry could still reach
@@ -645,13 +648,10 @@ struct RangeCoder {
   uint32_t rdiv;       // decoding: the range/tot from the last get_freq
   uint32_t bytes;      // encoding: emitted so far; the flush writes it out
 
-  // The arguments of the last coding step.  Kept because the model reads them
-  // back after a decode to update its counters.
-  uint32_t cum, high, tot;   // was __n0x2000_1 / __n0x2000_0 / __n0x2000
-  uint32_t bintot;           // was __n0x88 — f0 + f1 of the last bit
-
   uint8_t *p()             { return (uint8_t *)__Buffer_0; }
   void     set_p(uint8_t *q) { __Buffer_0 = (int32_t)q; }
+
+ public:
 
   // ---- encoder ---------------------------------------------------------
 
@@ -681,11 +681,8 @@ struct RangeCoder {
     }
   }
 
-  // Encode(cumFreq, cumFreq + freq, totFreq).  The no-argument form is for the
-  // callers that fill cum/high/tot in first, which is how the donor passed them.
-  uint32_t encode() { return encode(cum, high, tot); }
-  uint32_t encode(uint32_t cum_, uint32_t high_, uint32_t tot_) {
-    cum = cum_; high = high_; tot = tot_;
+  // Encode(cumFreq, cumFreq + freq, totFreq).
+  uint32_t encode(uint32_t cum, uint32_t high, uint32_t tot) {
     enc_normalise();
     uint32_t r = range / tot;
     uint32_t below = r * cum;
@@ -695,15 +692,15 @@ struct RangeCoder {
     return width;                        // freq * r; one caller reads it
   }
 
-  // One bit against two frequencies.  Returns the split point, which some
-  // callers use; `tot` is left holding f0 + f1 for the counter update.
+  // One bit against two frequencies.  Returns the width of the interval it
+  // chose -- which is the new `range`, and is what one caller passes on as its
+  // own result.
   uint32_t encode_bit(uint32_t f0, uint32_t f1, int32_t bit) {
     enc_normalise();
     uint32_t rt = f0 * (range / (f0 + f1));
-    bintot = f0 + f1;
     if (bit) { low += rt; range -= rt; }
     else     { range = rt; }
-    return rt;
+    return range;
   }
 
   // Close the section: the last emit, a rounded final byte, the section
@@ -759,18 +756,14 @@ struct RangeCoder {
 
   // Which slot of `tot` the code falls in.  decode() finishes the step once
   // the caller has turned that into a (cumFreq, cumFreq + freq) pair.
-  uint32_t get_freq() { return get_freq(tot); }
-  uint32_t get_freq(uint32_t tot_) {
-    tot = tot_;
+  uint32_t get_freq(uint32_t tot) {
     dec_normalise();
     rdiv = range / tot;
     uint32_t count = low / rdiv;
     return (count >= tot) ? tot - 1 : count;
   }
 
-  void decode() { decode(cum, high, tot); }
-  void decode(uint32_t cum_, uint32_t high_, uint32_t tot_) {
-    cum = cum_; high = high_; tot = tot_;
+  void decode(uint32_t cum, uint32_t high, uint32_t tot) {
     uint32_t below = cum * rdiv;
     low  -= below;
     range = (high < tot) ? (high - cum) * rdiv : range - below;
@@ -779,7 +772,6 @@ struct RangeCoder {
   int32_t decode_bit(uint32_t f0, uint32_t f1) {
     dec_normalise();
     uint32_t rt = f0 * (range / (f0 + f1));
-    bintot = f0 + f1;
     if (low >= rt) { range -= rt; low -= rt; return 1; }
     range = rt;
     return 0;
@@ -1553,7 +1545,7 @@ int32_t __sub_412490(uint16_t *_this, uint16_t *a2, int32_t n15)
     }
     result = *(_this + n15) + 8;
     *(_this + n15) = result;
-    a2[n15] += (uint32_t)rc.bintot < 0x88;
+    a2[n15] += (uint32_t)__sub_412490_n0x88 < 0x88;
     return result;
   }
   v18 = *a2;
@@ -1637,7 +1629,7 @@ int32_t __sub_412850(uint16_t *_this, uint16_t *a2)
         *(_this + 2) = n0x4000 + 64;
     }
     *(_this + result) += 8;
-    a2[result] += (uint32_t)rc.bintot < 0x88;
+    a2[result] += (uint32_t)__sub_412850_n0x88 < 0x88;
   }
   else
   {
@@ -1663,6 +1655,9 @@ int32_t __sub_412850(uint16_t *_this, uint16_t *a2)
 int32_t __sub_412B10(uint32_t *_this, int32_t a2)
 {
   ;
+  int32_t enc_cum;
+  int32_t enc_high;
+  int32_t enc_tot;
   char v2;
   int32_t v3;
   uint16_t *v4;
@@ -1734,9 +1729,9 @@ int32_t __sub_412B10(uint32_t *_this, int32_t a2)
     {
       if ( !v5 )
         return 0;
-      rc.cum = v5;
-      rc.tot = *(_this + 2) + v5;
-      rc.high = rc.tot;
+      enc_cum = v5;
+      enc_tot = *(_this + 2) + v5;
+      enc_high = enc_tot;
       do
       {
         __buf_0[*v4] = v2;
@@ -1747,9 +1742,9 @@ int32_t __sub_412B10(uint32_t *_this, int32_t a2)
       goto LABEL_9;
     }
   }
-  rc.high = v5;
+  enc_high = v5;
   i_1 = v3 - 1;
-  rc.cum = v5 - v7;
+  enc_cum = v5 - v7;
   if ( i_1 )
   {
     this_1 = _this;
@@ -1763,7 +1758,7 @@ int32_t __sub_412B10(uint32_t *_this, int32_t a2)
     }
     _this = this_1;
   }
-  rc.tot = *(_this + 2) + v5;
+  enc_tot = *(_this + 2) + v5;
   *((uint8_t *)v4 + 2) += 4;
   v25 = (uint16_t *)*(_this + 5);
   *(_this + 3) += 4;
@@ -1878,7 +1873,7 @@ LABEL_37:
     v8 = 1;
   }
 LABEL_9:
-  rc.encode();
+  rc.encode(enc_cum, enc_high, enc_tot);
   return v8;
 }
 
@@ -2172,7 +2167,6 @@ BMF_SSE int32_t __sub_413900(uint16_t *_this, int32_t n2) {
   n4 = *((uint8_t *)__dword_445660 + n2);
   n4_1 = n4;
   v3 = _this + 2;
-  rc.cum = 0;
   v51 = _this + 2;
   if ( n4 )
   {
@@ -2206,7 +2200,6 @@ BMF_SSE int32_t __sub_413900(uint16_t *_this, int32_t n2) {
       while ( n4_2 < n4_1 );
       v51 = (uint16_t *)v9;
     }
-    rc.cum = v8;
   }
   else
   {
@@ -2215,8 +2208,6 @@ BMF_SSE int32_t __sub_413900(uint16_t *_this, int32_t n2) {
   v52 = v8 + *v51;
   v48 = *_this;
   n0x800000_5 = rc.encode(v8, v52, v48);
-  n0x800000_6 = rc.range;
-  n0x7F800000_6 = rc.low;
   if ( *_this > 0x4000u )
   {
     n0x7F800000_7 = n0x7F800000_6;
@@ -2283,7 +2274,7 @@ BMF_SSE int32_t __sub_413900(uint16_t *_this, int32_t n2) {
       v65 = v26[1];
       v27 = (v66 & v56) != 0;
       v28 = *v26;
-      rc.encode_bit(v28, v65, v27);
+      n0x800000_5 = rc.encode_bit(v28, v65, v27);
       n0x4000 = v26[v27];
       if ( n0x4000 > 0x4000u )
       {
@@ -2296,7 +2287,7 @@ BMF_SSE int32_t __sub_413900(uint16_t *_this, int32_t n2) {
       v66 >>= 1;
       v59 = v27 + 2 * v59;
       if ( !v66 )
-        return rc.range;
+        return n0x800000_5;
     }
   }
   return n0x800000_5;
@@ -2346,7 +2337,6 @@ static inline int32_t __fwd_sub_4135A0_sub_413900(void *a0, int32_t a1) { return
   int32_t v42;
   int32_t n0x800000_1;
   v4 = *a1;
-  rc.cum = 0;
   n5a_1 = 6 - (n5a & 1);
   if ( n5a < 5 )
     n5a_1 = n5a;
@@ -2354,7 +2344,6 @@ static inline int32_t __fwd_sub_4135A0_sub_413900(void *a0, int32_t a1) { return
   v37 = a1 + 1;
   v35 = a1 + 1;
   __sub_4135A0_n0x2000 = v4 & 0x7FFF;
-  rc.tot = __sub_4135A0_n0x2000;
   if ( n5a_1 )
   {
     if ( n5a_1 < 4 )
@@ -2389,7 +2378,6 @@ static inline int32_t __fwd_sub_4135A0_sub_413900(void *a0, int32_t a1) { return
       v35 = v12;
       __sub_4135A0_n0x2000 = __sub_4135A0_n0x2000_1;
     }
-    rc.cum = n0x2000_2;
   }
   else
   {
@@ -2508,8 +2496,6 @@ int32_t __sub_414060(uint16_t *_this)
   v37 = v8;
   v11 = v9 - *v8;
   rc.decode(v11, v9, v39);
-  n0x800000_1 = rc.range;
-  n0x7F800000_1 = rc.low;
   if ( *_this > 0x4000u )
   {
     v28 = *(_this + 2) - (*(_this + 2) >> 1);
@@ -2551,11 +2537,7 @@ int32_t __sub_414060(uint16_t *_this)
   *v37 += v16;
   *_this += *(_this + 1);
   if ( n2 < 2 )
-  {
-    rc.range = n0x800000_1;
-    rc.low = n0x7F800000_1;
     return n2;
-  }
   else
   {
     v38 = (uint8_t)__byte_445715[4 * n2];
@@ -2702,26 +2684,22 @@ int32_t __sub_414390(uint16_t *_this, int32_t a2, int32_t a3)
   int32_t v30;
   v3 = *(_this + 2) + *(_this + 1);
   __sub_414390_n0x2000 = v3 + *(_this + 3);
-  rc.tot = __sub_414390_n0x2000;
   if ( a3 )
   {
     if ( (a3 & 1) != 0 )
     {
       v3 = *(_this + 1);
-      rc.cum = v3;
       v5 = _this + 2;
       v25 = _this + 2;
     }
     else
     {
-      rc.cum = v3;
       v5 = _this + 3;
       v25 = _this + 3;
     }
   }
   else
   {
-    rc.cum = 0;
     v5 = _this + 1;
     v3 = 0;
     v25 = _this + 1;
@@ -4638,11 +4616,7 @@ int32_t *__sub_4256F0(int32_t *_this, int32_t i, int32_t a3, int32_t n4)
     }
     ::__n256_1 = __sub_414F60_n256;
   }
-  rc.range = 0x80000000;
-  rc.low = 0;
-  rc.pending = 0;
-  rc.cache = -105;
-  rc.bytes = 0;
+  rc.enc_init();
   return __sub_414F60_n256;
 }
 static inline int32_t __fwd_sub_424550_sub_4135A0(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __sub_4135A0((uint16_t *)a0, a1, a2, a3); }
@@ -6175,18 +6149,8 @@ BMF_SSE int32_t __sub_4149C0(char ArgList_1)
     ::__n256_1 = n256;
     v1 = (uint8_t *)__Buffer_0;
   }
-  n151 = *v1;
-  v4 = v1 + 1;
-  __Buffer_0 = (int32_t)v4;
-  if ( n151 != 151 )
-    __exit_402E40(4);
-  v5 = *v4;
-  rc.range = 128;
-  result = (int32_t)(v4 + 1);
-  __Buffer_0 = result;
-  rc.cache = v5;
-  rc.low = v5 >> 1;
-  return result;
+  rc.dec_init();
+  return __Buffer_0;
 }
 void **__sub_402E70(void **Blockb, char a2)
 {
@@ -18553,6 +18517,8 @@ LABEL_61:
   uint32_t * &v67 = *(uint32_t * *)(__hexrays_frame + 32784);
   uint32_t * &v68 = *(uint32_t * *)(__hexrays_frame + 32788);
   ;
+  int32_t sym_cum;
+  int32_t sym_high;
   void *v1;
   int32_t v2;
   int32_t v3;
@@ -18638,7 +18604,6 @@ LABEL_61:
   v65 = v9[2];
   n0x2000_6 = v5 + v65;
   n0x2000_4 = rc.get_freq(n0x2000_6);
-  v17 = rc.rdiv;
   __sub_412E60_n0x2000 = v5 + v65;
   v67 = v9;
   n0x2000_5 = v5 + v65 - 1;
@@ -18655,9 +18620,9 @@ LABEL_61:
     if ( !v20 )
     {
       v23 = (char)v68;
-      rc.cum = n0x2000_2;
+      sym_cum = n0x2000_2;
       n0x2000_3 = __sub_412E60_n0x2000;
-      rc.high = __sub_412E60_n0x2000;
+      sym_high = __sub_412E60_n0x2000;
       v25 = v66;
       v26 = &v56;
       do
@@ -18672,8 +18637,8 @@ LABEL_61:
     }
   }
   v32 = v67;
-  rc.high = n0x2000_2;
-  rc.cum = n0x2000_2 - *((uint8_t *)v20 + 2);
+  sym_high = n0x2000_2;
+  sym_cum = n0x2000_2 - *((uint8_t *)v20 + 2);
   v62 = *v20;
   *((uint8_t *)v20 + 2) += 4;
   v33 = (uint16_t *)v32[5];
@@ -18685,13 +18650,11 @@ LABEL_61:
   else
   {
     v34 = *((uint8_t *)v20 + 2);
-    v61 = v17;
     v35 = *v20;
     v36 = (char *)v20 - 3;
     *v20 = *(uint16_t *)((char *)v20 - 3);
     *((uint8_t *)v20 + 2) = *((uint8_t *)v20 - 1);
     *(uint16_t *)v36 = v35;
-    v17 = v61;
     v36[2] = v34;
     v33 = (uint16_t *)v32[5];
     if ( (uint16_t *)((char *)v20 - 3) == v33 )
@@ -18731,7 +18694,6 @@ LABEL_30:
   {
     v55 = (uint16_t *)v32[1];
     v42 = 20 * *v32;
-    v61 = v17;
     v43 = v55;
     n0x800000_1 = __sub_412E60_n0x800000;
     v59 = v41 < v42;
@@ -18780,7 +18742,6 @@ LABEL_30:
     v50 = v32[2];
     v51 = *((uint8_t *)v44 + 2);
     v55 = nullptr;
-    v17 = v61;
     if ( !v51 )
     {
       v52 = v55;
@@ -18797,16 +18758,16 @@ LABEL_30:
     }
     v54 = v32[3];
     v32[2] = v50 - (v50 >> 1);
-    n0x2000_2 = rc.cum;
-    n0x2000_3 = rc.high;
-    __sub_412E60_n0x2000_1 = rc.tot;
+    n0x2000_2 = sym_cum;
+    n0x2000_3 = sym_high;
+    __sub_412E60_n0x2000_1 = n0x2000_6;
     v32[3] = v54 - (v54 >> 1);
   }
   else
   {
-    __sub_412E60_n0x2000_1 = rc.tot;
-    n0x2000_2 = rc.cum;
-    n0x2000_3 = rc.high;
+    __sub_412E60_n0x2000_1 = n0x2000_6;
+    n0x2000_2 = sym_cum;
+    n0x2000_3 = sym_high;
   }
 LABEL_19:
   rc.decode(n0x2000_2, n0x2000_3, __sub_412E60_n0x2000_1);
@@ -18854,6 +18815,10 @@ int32_t __sub_418650(uint32_t *_this, int32_t a2)
   int32_t &v211 = *(int32_t *)(__hexrays_frame + 124);
   int32_t &n15_24 = *(int32_t *)(__hexrays_frame + 128);
   ;
+  uint32_t bin_tot;
+  int32_t arg_cum;
+  int32_t arg_high;
+  int32_t arg_tot;
   uint16_t *n15_9;
   int32_t n4_8;
   uint16_t *v4;
@@ -19242,10 +19207,11 @@ LABEL_42:
           {
             v51 = *((uint16_t *)&this_1[24 * (v50 == 0) + 269473 + 24 * (n15_12 == n15_8)] + 3 * n15_12 + 1);
             __sub_418650_n4_4 = (int32_t)&this_1[24 * (v50 == 0) + 269473 + 24 * (n15_12 == n15_8)] + 6 * n15_12 + 2;
+            bin_tot = v51 + *((uint16_t *)&this_1[24 * (v50 == 0) + 269474 + 24 * (n15_12 == n15_8)] + 3 * n15_12);
             n4_1 = rc.decode_bit(
                      v51,
                      *((uint16_t *)&this_1[24 * (v50 == 0) + 269474 + 24 * (n15_12 == n15_8)] + 3 * n15_12));
-            if ( *((uint16_t *)&this_1[24 * (v50 == 0) + 269474 + 24 * (n15_12 == n15_8)] + 3 * n15_12 + 1) < (uint32_t)rc.bintot )
+            if ( *((uint16_t *)&this_1[24 * (v50 == 0) + 269474 + 24 * (n15_12 == n15_8)] + 3 * n15_12 + 1) < (uint32_t)bin_tot )
               __fwd_sub_418650_sub_4148F0((uint16_t *)__sub_418650_n4_4);
             n4_13 = n4_1;
             *(uint16_t *)(__sub_418650_n4_4 + 2 * n4_1) += 8;
@@ -19418,8 +19384,8 @@ LABEL_57:
       v83 = v162;
       __sub_418650_n4_3[5] = v162;
     }
-    rc.tot = v83;
-    v84 = rc.get_freq();
+    arg_tot = v83;
+    v84 = rc.get_freq(arg_tot);
     v85 = *__sub_418650_n4_3;
     if ( v85 <= v84 )
     {
@@ -19455,9 +19421,9 @@ LABEL_57:
       n4 = 0;
     }
     n256_2 = __sub_418650_n4_3[6];
-    rc.high = v85;
+    arg_high = v85;
     n15_1 = *((uint8_t *)__sub_418650_n4_3 + 15);
-    rc.cum = v85 - __sub_418650_n4_3[n4];
+    arg_cum = v85 - __sub_418650_n4_3[n4];
     n256_1 = __sub_418650_n4_3[5];
     if ( n256_1 > n256_2 && (__sub_418650_n4_3[n4] + n15_1 + 8 < n256_1 || __sub_418650_n4_3[5] > 0x4000u) )
     {
@@ -19502,7 +19468,7 @@ LABEL_57:
     }
     __sub_418650_n4_3[5] = n15_1 + n256_1;
     __sub_418650_n4_3[n4] += n15_1;
-    rc.decode();
+    rc.decode(arg_cum, arg_high, arg_tot);
     this_3[8] = n4;
     if ( *((uint8_t *)__sub_418650_n4_3 + 14) )
     {
@@ -19515,8 +19481,8 @@ LABEL_57:
   }
   else
   {
-    rc.tot = *(uint16_t *)(v80 + 10);
-    v163 = rc.get_freq();
+    arg_tot = *(uint16_t *)(v80 + 10);
+    v163 = rc.get_freq(arg_tot);
     v164 = *v184;
     if ( v164 <= v163 )
     {
@@ -19552,8 +19518,8 @@ LABEL_57:
       n4_2 = 0;
     }
     n15_22 = *((uint8_t *)v184 + 15);
-    rc.high = v164;
-    rc.cum = v164 - v184[n4_2];
+    arg_high = v164;
+    arg_cum = v164 - v184[n4_2];
     n256_4 = v184[5];
     n256_5 = v184[6];
     n15_3 = n15_22;
@@ -19603,7 +19569,7 @@ LABEL_57:
     v170 = v184;
     v184[5] = n15_3 + n256_4;
     v170[n4_2] += n15_4;
-    rc.decode();
+    rc.decode(arg_cum, arg_high, arg_tot);
     this_3[8] = n4_2;
     __sub_418650_n4_3[5] = __sub_418650_n4_3[n4_2]++ != 0;
     n4 = this_3[8];
@@ -19770,6 +19736,10 @@ int32_t __sub_4159E0(int32_t *_this, int32_t a2)
   int32_t &v207 = *(int32_t *)(__hexrays_frame + 124);
   int32_t &n15_14 = *(int32_t *)(__hexrays_frame + 128);
   ;
+  uint32_t bin_tot;
+  int32_t arg_cum;
+  int32_t arg_high;
+  int32_t arg_tot;
   uint16_t *n2_7;
   int32_t n4;
   uint16_t *n2_8;
@@ -20277,8 +20247,9 @@ LABEL_42:
           n2_14 = (uint16_t *)&this_1[24 * (n15_34 == 0) + 269473 + 24 * (n15_15 == p_n15)] + 3 * n15_15 + 1;
           n2_4 = n2_14;
           n2_1 = n15_14 & n15_35;
+          bin_tot = *n2_14 + n2_14[1];
           rc.encode_bit(*n2_14, n2_14[1], (n15_14 & n15_35) != 0);
-          if ( *((uint16_t *)&this_1[24 * (n15_34 == 0) + 269474 + 24 * (n15_15 == p_n15)] + 3 * n15_15 + 1) < (uint32_t)rc.bintot )
+          if ( *((uint16_t *)&this_1[24 * (n15_34 == 0) + 269474 + 24 * (n15_15 == p_n15)] + 3 * n15_15 + 1) < (uint32_t)bin_tot )
             __fwd_sub_4159E0_sub_4148F0(n2_4);
           n2_15 = n2_1;
           n15_31 = n15_35;
@@ -20346,7 +20317,7 @@ LABEL_42:
         v185 = (uint16_t *)this_3[19];
       }
       n15_16 = *v185;
-      rc.tot = __sub_4159E0_n0x2000;
+      arg_tot = __sub_4159E0_n0x2000;
       if ( n15_16 == n15_3 )
       {
         v87 = *(uint16_t *)n2_3;
@@ -20373,8 +20344,8 @@ LABEL_42:
         n2 = 0;
       }
       p_n15_5 = *((uint16_t *)n2_3 + 6);
-      rc.cum = v87;
-      rc.high = *((uint16_t *)n2_3 + n2) + v87;
+      arg_cum = v87;
+      arg_high = *((uint16_t *)n2_3 + n2) + v87;
       p_n15_7 = *((uint16_t *)n2_3 + 5);
       n15_17 = *((uint8_t *)n2_3 + 15);
       if ( p_n15_7 > p_n15_5
@@ -20421,7 +20392,7 @@ LABEL_42:
       }
       *((uint16_t *)n2_3 + 5) = n15_17 + p_n15_7;
       *((uint16_t *)n2_3 + n2) += n15_17;
-      rc.encode();
+      rc.encode(arg_cum, arg_high, arg_tot);
       this_3[8] = n2;
       if ( *((uint8_t *)n2_3 + 14) )
       {
@@ -20436,7 +20407,7 @@ LABEL_42:
     {
       v159 = (uint16_t *)&this_3[v82 + 24];
       n15_18 = *v185;
-      rc.tot = *(uint16_t *)(n15_36 + 10);
+      arg_tot = *(uint16_t *)(n15_36 + 10);
       if ( n15_18 == n15_3 )
       {
         v161 = *v159;
@@ -20462,8 +20433,8 @@ LABEL_42:
         v161 = 0;
         n2_2 = 0;
       }
-      rc.cum = v161;
-      rc.high = *(uint16_t *)(n15_31 + 2 * n2_2) + v161;
+      arg_cum = v161;
+      arg_high = *(uint16_t *)(n15_31 + 2 * n2_2) + v161;
       p_n15_10 = *(uint16_t *)(n15_31 + 10);
       p_n15_8 = *(uint16_t *)(n15_31 + 12);
       n15_20 = *(uint8_t *)(n15_31 + 15);
@@ -20513,7 +20484,7 @@ LABEL_42:
       n15_40 = n15_31;
       *(uint16_t *)(n15_31 + 10) = n15_20 + p_n15_10;
       *(uint16_t *)(n15_40 + 2 * n2_2) += n15_21;
-      rc.encode();
+      rc.encode(arg_cum, arg_high, arg_tot);
       this_3[8] = n2_2;
       *((uint16_t *)n2_3 + 5) = (*((uint16_t *)n2_3 + n2_2))++ != 0;
       n2 = this_3[8];

@@ -369,11 +369,17 @@ since encoding and decoding never run together.
 | `rc.flush()` | encode | tail, length, padding, terminator |
 | `rc.finish()` | decode | skip to the terminator |
 
-`encode`, `get_freq` and `decode` also have no-argument forms that read
-`rc.cum` / `rc.high` / `rc.tot`, because that is how several model sites pass
-them: they fill the members in over the course of a symbol search and then
-code. The donor had no choice about that — its entries took no parameters and
-the three globals *were* the argument list.
+Every argument is an argument. The donor had no choice about that — its
+entries took no parameters and three globals *were* the argument list, so a
+model function would assign `__n0x2000_1`, `__n0x2000_0` and `__n0x2000` over
+the course of a symbol search and then call. Those sites now carry their own
+locals and pass them, which matters because the assignments are not adjacent
+to the call: `sub_4159E0` computes its `high` from a counter that it then
+increments *before* coding, so moving the expression to the call site would
+have coded a different number.
+
+The state is `private`, so "does anything outside still touch the coder?" is a
+question the compiler answers.
 
 Two model functions still hold a coding step that is more than one call:
 `sub_412B10` encodes a symbol against a sorted frequency list (§7.3) and
