@@ -436,6 +436,12 @@ def declaration(text):
     return None
 
 
+# `__m128 *&v275 = __frame.v275;` -- a name that is a reference into one of the
+# frame structures, not a variable of its own.
+ALIAS = re.compile(r'^\s*(?:const\s+)?[A-Za-z_][A-Za-z0-9_]*[\s\*]*&\s*'
+                   r'([A-Za-z_][A-Za-z0-9_]*)\s*=')
+
+
 def starts_declaration(line):
     """Whether a line opens a declaration -- which may not close on it.
 
@@ -443,8 +449,23 @@ def starts_declaration(line):
     so testing the whole pattern against the first line alone finds nothing and
     every name in a wrapped list looks undeclared.
     """
+    if ALIAS.match(line):
+        return True
     m = DECL_HEAD.match(line)
     return bool(m) and m.group(1).split()[-1] not in NOT_A_TYPE
+
+
+def frame_bound(lines, s, b, nm):
+    """Lines where nm is a reference into a frame structure.
+
+    Those frames were laid out to match what the code overruns between named
+    members, and each carries a static_assert on its size saying so.  A name
+    that is one of their members cannot be given a different type without
+    moving that layout, so an object holding one is declined rather than
+    quietly relaid.
+    """
+    return [i for i in range(s, b + 1)
+            if (lambda m: m and m.group(1) == nm)(ALIAS.match(lines[i]))]
 
 
 def split_commas(text):
@@ -478,6 +499,16 @@ def retype_local(out, a, b, nm, tag):
     way to give one name a different type is to take it out.  The statement is
     re-emitted without it and a dedicated declaration goes in above.
     """
+    for i in range(a, b + 1):
+        m = ALIAS.match(out[i])
+        if m and m.group(1) == nm and out[i].rstrip().endswith(';'):
+            # a reference into a frame.  Retype the reference, not the member:
+            # the frame keeps its layout, and at 32 bits both are four bytes,
+            # so the reference still names the same storage.
+            rhs = out[i].split('=', 1)[1].rsplit(';', 1)[0].strip()
+            ind = re.match(r'^(\s*)', out[i]).group(1)
+            out[i] = '%s%s *&%s = (%s *&)%s;' % (ind, tag, nm, tag, rhs)
+            return 0
     i = a
     while i <= b:
         if not starts_declaration(out[i]):
@@ -526,7 +557,8 @@ def rescales(lines, s, b, nm):
     be too, but `nm += k` and `nm++` cannot -- a cast is not an lvalue.  An
     object with any of those is declined rather than quietly mis-stepped.
     """
-    pat = re.compile(r'(\+\+|--)\s*%s\b|\b%s\s*(\+\+|--|\+=|-=)'
+    pat = re.compile(r'(?:\+\+|--)\s*%s\b(?![\[.]|->)'
+                     r'|(?<![\w.>])%s\s*(?:\+\+|--|\+=|-=)'
                      % (re.escape(nm), re.escape(nm)))
     return [i for i in range(s, b + 1) if pat.search(lines[i].split('//')[0])]
 
@@ -643,13 +675,13 @@ def main():
             s -= 1
         spanof[fn] = (s, a, b)
         for nm in nms:
-            bad = rescales(out, s, b, nm)
-            if bad:
-                with open(SKIP, 'a') as f:
-                    f.write(signature(uf, key) + '\n')
-                print('%s: declined -- %s is stepped as a pointer at line %d'
-                      % (tag, nm, bad[0] + 1))
-                sys.exit(3)
+            for why, bad in (('is stepped as a pointer', rescales(out, s, b, nm)),):
+                if bad:
+                    with open(SKIP, 'a') as f:
+                        f.write(signature(uf, key) + '\n')
+                    print('%s: declined -- %s %s at line %d'
+                          % (tag, nm, why, bad[0] + 1))
+                    sys.exit(3)
 
     changed = 0
     for fn, nms in byfn.items():
@@ -672,7 +704,13 @@ def main():
         # decompiler chose survives with them, but `\s` in these patterns
         # crosses them -- which it has to, because an expression that runs over
         # three lines is still one expression.
-        text = '\n'.join(out[s:b + 1])
+        # only the statements: a declaration holds the characters of a
+        # dereference and of an assignment without being either, and rewriting
+        # one turns `__m128 *&v275 = __frame.v275;` into something that is not
+        # a declaration at all
+        code = code_start(out, a, b)
+        keep = out[s:code]
+        text = '\n'.join(out[code:b + 1])
         types = decl_types(sigof[fn], out, a, b)
         step = {nm: elem_size(types.get(nm)) for nm in nms}
         pos = 0
@@ -696,7 +734,6 @@ def main():
                 continue
             text = text[:m.start()] + new + text[m.end():]
             pos = 0                           # the outer dereference may match now
-        code = code_start(out, a, b) - s
         for nm in nms:
             ty, k = types.get(nm, 'char*'), step[nm]
 
@@ -718,15 +755,11 @@ def main():
                 text = once
 
             # a plain `*nm`, with no cast to say what it reads
-            head = text.split('\n')
-            joined = '\n'.join(head[code:])
-
-            def deref_rep(m, nm=nm, ty=ty, src=None):
+            def deref_rep(m, nm=nm, ty=ty):
                 if m.group(1) != nm or not is_deref(m.string, m.start()):
                     return m.group(0)
                 return field(pointee(ty), nm, 0) or m.group(0)
-            stmts = PLAIN_DEREF.sub(deref_rep, joined)
-            text = '\n'.join(head[:code] + [stmts])
+            text = PLAIN_DEREF.sub(deref_rep, text)
 
             # *(T *)nm -> nm->f0
             if member.get(0):
@@ -749,7 +782,7 @@ def main():
             text = re.sub(r'\b%s(\s*)=\s*(?!=)((?:[^;=]|=[^=])*?);' % re.escape(nm),
                           lambda m: '%s%s= (%s *)(%s);'
                           % (nm, m.group(1), tag, m.group(2).strip()), text)
-        new_lines = text.split('\n')
+        new_lines = keep + text.split('\n')
         assert len(new_lines) == b + 1 - s, 'rewrite changed the line count'
         changed += sum(1 for x, y in zip(out[s:b + 1], new_lines) if x != y)
         out[s:b + 1] = new_lines
