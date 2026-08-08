@@ -3940,6 +3940,33 @@ static inline char *bmf_plane_desc(int32_t off)
 // ---------------------------------------------------------------------------
 __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...);
 
+// Obj6 -- recovered from 118 dereferences over 14 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj6 {
+  uint32_t f0;
+  uint8_t _pad1[16];
+  uint32_t f20;
+  uint32_t f24;
+  uint32_t f28;
+  uint8_t _pad5[144];
+  uint32_t f176;
+  uint32_t f180;
+  uint32_t f184;
+  uint32_t f188;
+  uint32_t f192;
+  uint32_t f196;
+  uint32_t f200;
+  uint32_t f204;
+  uint32_t f208;
+  uint32_t f212;
+};
+static_assert(sizeof(void *) != 4 || sizeof(Obj6) == 216,
+              "Obj6: the layout moved");
+
+
 struct RangeCoder {
   static const uint32_t kTop    = 0x00800000;   // renormalise at or below this
   static const uint32_t kPend   = 0x7F800000;   // low here still has a live carry
@@ -8985,7 +9012,7 @@ static inline int32_t * __fwd_sub_427740_sub_4256F0(void *a0, int32_t a1, int32_
   int32_t v105;
   ;
   uintptr_t v59, v61;   // were int32_t: addresses, masked and tagged
-  char *v24, *v29, *v65;   // were int32_t: these hold addresses
+  Obj6 *v24, *v29, *v65;   // were int32_t: these hold addresses
   char v11, v12, v13, v58;
   int32_t i, v3, i_2, n4, *v6, *v7, v8, v9, v10, v14, v15, v16, ArgList, v18, i_3, n4_1, n4_2,
           v25, v26, v27, v28, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44,
@@ -9047,77 +9074,77 @@ static inline int32_t * __fwd_sub_427740_sub_4256F0(void *a0, int32_t a1, int32_
         {
           ++n4_2;
           v24 = *(&v92 + n4_2);
-          **(uint16_t **)(v24 + 196) = *(uint16_t *)(*(uint32_t *)(v24 + 196) - 2);
-          *(uint16_t *)(*(uint32_t *)(v24 + 196) + 2) = *(uint16_t *)(*(uint32_t *)(v24 + 196) - 4);
-          *(uint16_t *)(*(uint32_t *)(v24 + 196) + 4) = *(uint16_t *)(*(uint32_t *)(v24 + 196) - 6);
-          *(uint16_t *)(*(uint32_t *)(v24 + 196) + 6) = *(uint16_t *)(*(uint32_t *)(v24 + 196) - 8);
-          *(uint16_t *)(*(uint32_t *)(v24 + 196) + 8) = *(uint16_t *)(*(uint32_t *)(v24 + 196) - 10);
-          *(uint16_t *)(*(uint32_t *)(v24 + 196) + 10) = *(uint16_t *)(*(uint32_t *)(v24 + 196) - 12);
-          v25 = *(uint32_t *)(v24 + 192);
-          v26 = *(uint32_t *)(v24 + 188);
-          v27 = *(uint32_t *)(v24 + 184);
-          v28 = *(uint32_t *)(v24 + 180);
-          v29 = *(uint32_t *)(v24 + 176);
-          *(uint32_t *)(v24 + 192) = v26;
-          *(uint32_t *)(v24 + 188) = v27;
-          *(uint32_t *)(v24 + 184) = v28;
-          *(uint32_t *)(v24 + 180) = v29;
-          *(uint32_t *)(v24 + 176) = v25;
+          **(uint16_t * *)((char *)&v24->f196 + 0) = *(uint16_t *)(v24->f196 - 2);
+          *(uint16_t *)(v24->f196 + 2) = *(uint16_t *)(v24->f196 - 4);
+          *(uint16_t *)(v24->f196 + 4) = *(uint16_t *)(v24->f196 - 6);
+          *(uint16_t *)(v24->f196 + 6) = *(uint16_t *)(v24->f196 - 8);
+          *(uint16_t *)(v24->f196 + 8) = *(uint16_t *)(v24->f196 - 10);
+          *(uint16_t *)(v24->f196 + 10) = *(uint16_t *)(v24->f196 - 12);
+          v25 = v24->f192;
+          v26 = v24->f188;
+          v27 = v24->f184;
+          v28 = v24->f180;
+          v29 = v24->f176;
+          v24->f192 = v26;
+          v24->f188 = v27;
+          v24->f184 = v28;
+          v24->f180 = v29;
+          v24->f176 = v25;
           v25 += 8;
-          *(uint32_t *)(v24 + 196) = v25;
+          v24->f196 = v25;
           v29 += 8;
-          *(uint32_t *)(v24 + 200) = v29;
-          *(uint32_t *)(v24 + 204) = v28 + 8;
-          *(uint32_t *)(v24 + 208) = v27 + 8;
-          *(uint32_t *)(v24 + 212) = v26 + 8;
+          v24->f200 = v29;
+          v24->f204 = v28 + 8;
+          v24->f208 = v27 + 8;
+          v24->f212 = v26 + 8;
           *(uint16_t *)(v25 - 8) = *(uint16_t *)(v29 + 6);
-          *(uint16_t *)(*(uint32_t *)(v24 + 196) - 6) = *(uint16_t *)(*(uint32_t *)(v24 + 200) + 4);
-          *(uint16_t *)(*(uint32_t *)(v24 + 196) - 4) = *(uint16_t *)(*(uint32_t *)(v24 + 200) + 2);
-          *(uint16_t *)(*(uint32_t *)(v24 + 196) - 2) = **(uint16_t **)(v24 + 200);
-          v30 = *(uint8_t **)(v24 + 204);
-          v31 = *(uint8_t **)(v24 + 212);
-          *(uint32_t *)(v24 + 20) = 0;
-          *(uint32_t *)(v24 + 24) = 0;
-          *(uint32_t *)(v24 + 28) = 0;
+          *(uint16_t *)(v24->f196 - 6) = *(uint16_t *)(v24->f200 + 4);
+          *(uint16_t *)(v24->f196 - 4) = *(uint16_t *)(v24->f200 + 2);
+          *(uint16_t *)(v24->f196 - 2) = **(uint16_t * *)((char *)&v24->f200 + 0);
+          v30 = *(uint8_t * *)((char *)&v24->f204 + 0);
+          v31 = *(uint8_t * *)((char *)&v24->f212 + 0);
+          v24->f20 = 0;
+          v24->f24 = 0;
+          v24->f28 = 0;
           v32 = *(v30 - 3);
-          *(uint32_t *)(v24 + 24) = v32;
+          v24->f24 = v32;
           v33 = *(v30 - 1);
-          *(uint32_t *)(v24 + 28) = v33;
+          v24->f28 = v33;
           v34 = *(v31 - 3) + v32;
-          *(uint32_t *)(v24 + 24) = v34;
+          v24->f24 = v34;
           v35 = *(v31 - 1) + v33;
-          *(uint32_t *)(v24 + 28) = v35;
+          v24->f28 = v35;
           v36 = v30[1] + v34;
-          *(uint32_t *)(v24 + 24) = v36;
+          v24->f24 = v36;
           v37 = v30[3] + v35;
-          *(uint32_t *)(v24 + 28) = v37;
+          v24->f28 = v37;
           v38 = v31[1] + v36;
-          *(uint32_t *)(v24 + 24) = v38;
+          v24->f24 = v38;
           v39 = v31[3] + v37;
-          *(uint32_t *)(v24 + 28) = v39;
+          v24->f28 = v39;
           v40 = v30[5] + v38;
-          *(uint32_t *)(v24 + 24) = v40;
+          v24->f24 = v40;
           v41 = v30[7] + v39;
-          *(uint32_t *)(v24 + 28) = v41;
+          v24->f28 = v41;
           v42 = v31[5] + v40;
-          *(uint32_t *)(v24 + 24) = v42;
+          v24->f24 = v42;
           v43 = v31[7] + v41;
-          *(uint32_t *)(v24 + 28) = v43;
+          v24->f28 = v43;
           v44 = v30[9] + v42;
-          *(uint32_t *)(v24 + 24) = v44;
+          v24->f24 = v44;
           v45 = v30[11] + v43;
-          *(uint32_t *)(v24 + 28) = v45;
+          v24->f28 = v45;
           v46 = v31[9] + v44;
-          v47 = *(uint32_t *)(v24 + 196);
-          *(uint32_t *)(v24 + 24) = v46;
+          v47 = v24->f196;
+          v24->f24 = v46;
           v48 = v31[11] + v45;
-          *(uint32_t *)(v24 + 28) = v48;
+          v24->f28 = v48;
           v49 = *(uint8_t *)(v47 - 7) + v46;
-          *(uint32_t *)(v24 + 24) = v49;
+          v24->f24 = v49;
           v50 = *(uint8_t *)(v47 - 5) + v48;
-          *(uint32_t *)(v24 + 28) = v50;
-          *(uint32_t *)(v24 + 24) = *(uint8_t *)(v47 - 3) + v49;
-          *(uint32_t *)(v24 + 28) = *(uint8_t *)(v47 - 1) + v50;
+          v24->f28 = v50;
+          v24->f24 = *(uint8_t *)(v47 - 3) + v49;
+          v24->f28 = *(uint8_t *)(v47 - 1) + v50;
           n4_1 = plane_count;
         }
         while ( n4_2 < plane_count );
