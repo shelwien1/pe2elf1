@@ -33,7 +33,8 @@ while [ "$i" -lt "$rounds" ]; do
     break
   fi
   if ./build.sh >/tmp/struct-build.log 2>&1 &&
-     ./test.sh ./bmf 2>/tmp/struct-test.log | tail -1 | grep -q PASS; then
+     BMF_TIMEOUT=${BMF_TIMEOUT:-60} ./test.sh ./bmf 2>/tmp/struct-test.log |
+       tail -1 | grep -q PASS; then
     echo "round $i: PASS"
   else
     echo "round $i: FAIL -- reverting and skipping"

@@ -61,7 +61,7 @@ for img in $IMAGES; do
   ref="$TESTDIR/ref_$st.bmf"
   (
     cd "$WORK"
-    timeout 300 $RUN "$BIN" c "orig_$img" "$st.bmf" >"$st.compress.log" 2>&1
+    timeout "${BMF_TIMEOUT:-300}" $RUN "$BIN" c "orig_$img" "$st.bmf" >"$st.compress.log" 2>&1
     rc=$?; [ $rc -ne 0 ] && { echo "$st: COMPRESS FAILED (rc=$rc)"; cat "$st.compress.log"; exit 1; }
     [ -s "$st.bmf" ] || { echo "$st: NO STREAM PRODUCED"; exit 1; }
     if [ "${BMF_NOREF:-0}" != 1 ]; then
@@ -75,7 +75,7 @@ for img in $IMAGES; do
         exit 1
       fi
     fi
-    timeout 300 $RUN "$BIN" d "$st.bmf" "$img" >"$st.decompress.log" 2>&1
+    timeout "${BMF_TIMEOUT:-300}" $RUN "$BIN" d "$st.bmf" "$img" >"$st.decompress.log" 2>&1
     rc=$?; [ $rc -ne 0 ] && { echo "$st: DECOMPRESS FAILED (rc=$rc)"; cat "$st.decompress.log"; exit 1; }
     cmp -s "orig_$img" "$img" || { echo "$st: NOT LOSSLESS"; exit 1; }
     printf '%-12s ok  %8s -> %8s\n' "$st" \

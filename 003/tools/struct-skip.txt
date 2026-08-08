@@ -2,3 +2,12 @@ __model_plane:Blocka __model_plane:Blocka_1 __model_plane:Blocka_2 __model_plane
 __sub_41CAB0:a1 __sub_41CAB0:v385 __sub_41CAB0:v578 __sub_422DB0:lpAddress
 __sub_41A130:v109 __sub_41A130:v12 __sub_41A130:v130 __sub_41A130:v157 __sub_41A130:v172 __sub_41A130:v201 __sub_41A130:v292
 __sub_414800:_this __sub_41CAB0:n2 __sub_41CAB0:n2_1 __sub_41CAB0:n2_2 __sub_41CAB0:n2_3 __sub_41CAB0:n2_4 __sub_41CAB0:n2_5 __sub_41CAB0:n2_6 __sub_41CAB0:n2_7 __sub_41CAB0:v389 __sub_41CAB0:v411 __sub_41CAB0:v420 __sub_41CAB0:v428 __sub_41CAB0:v436 __sub_41CAB0:v444 __sub_41CAB0:v452 __sub_41CAB0:v456 __sub_41CAB0:v463 __sub_41CAB0:v474 __sub_41CAB0:v485 __sub_41CAB0:v491 __sub_41CAB0:v508
+__sub_416C90:_
+__sub_418650:__sub_418650_n4_3 __sub_418650:n4 __sub_418650:n4_1 __sub_418650:n4_12 __sub_418650:n4_13 __sub_418650:n4_14 __sub_418650:n4_17 __sub_418650:n4_5 __sub_418650:n4_7
+__sub_41A130:v274 __sub_41A130:v45
+__sub_4229E0:_this
+__search_filter:v178
+__sub_41A130:v110 __sub_41A130:v160 __sub_41A130:v173 __sub_41A130:v194 __sub_41A130:v204 __sub_41A130:v293 __sub_41A130:v59
+__write_bmp:buf __write_bmp:buf_1 __write_bmp:buf_2 __write_bmp:buf_3
+__search_filter:v179
+__write_bmp:p_i __write_bmp:p_i_1 __write_bmp:p_i_2
