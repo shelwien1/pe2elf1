@@ -43,8 +43,21 @@ opts=(-m32 "$ARCH" -msse2 -mfpmath=sse -std=c++17
 # unused=(-fomit-frame-pointer -fno-stack-protector -fno-stack-check
 #         -fno-check-new -flto -ffat-lto-objects)
 
+# Give every function its own section and let the linker drop the ones nothing
+# reaches.  The mode is a set of constants now (subs1.hpp, "The compression
+# mode"), so the branches that tested them fold and whole functions fall out
+# behind them; this is what stops those shipping in the binary whether or not
+# they have been deleted from the source yet.
+#
+# BMF_GC=0 turns it off, which is how to see what it was removing:
+#   BMF_GC=list ./build.sh          # print each discarded function
+opts+=(-ffunction-sections -fdata-sections)
+gc=(-Wl,--gc-sections)
+[ "${BMF_GC:-1}" = 0 ] && gc=()
+[ "${BMF_GC:-1}" = list ] && gc+=(-Wl,--print-gc-sections)
+
 # -static, as in g.bat.  Set BMF_STATIC=0 for a dynamically linked build.
-link=()
+link=("${gc[@]}")
 [ "${BMF_STATIC:-1}" = 0 ] || link+=(-static)
 
 if ! "$CXX" -m32 -E -x c++ /dev/null >/dev/null 2>&1; then

@@ -168,12 +168,12 @@ static t_off_441068& __off_441068 = *(t_off_441068*)(blob1 + 0x00441068 - BMF_BL
 // Their addresses in BMF.exe, for anyone comparing against a disassembly:
 // 0x0044108C, 0x00441090, 0x00441094, 0x00441098, 0x0044109C, 0x004410A0.
 // ---------------------------------------------------------------------------
-static const int32_t __dword_44108C = 1;   // -F  use filters
-static const int32_t __dword_441090 = 1;   // -S  slow but efficient
-static const int32_t __n2_4         = 0;   // -T  filter template
-static const int32_t __dword_441098 = 1;   // -N  pack the output
-static const int32_t __n7_0         = 9;   // -Q  filter search quality
-static const int32_t __n7_1         = 0;   // -E  max error, near-lossless
+static constexpr int32_t __dword_44108C = 1;   // -F  use filters
+static constexpr int32_t __dword_441090 = 1;   // -S  slow but efficient
+static constexpr int32_t __n2_4 = 0;   // -T  filter template
+static constexpr int32_t __dword_441098 = 1;   // -N  pack the output
+static constexpr int32_t __n7_0 = 9;   // -Q  filter search quality
+static constexpr int32_t __n7_1 = 0;   // -E  max error, near-lossless
 typedef __m128i t_xmmword_441120;
 static t_xmmword_441120& __xmmword_441120 = *(t_xmmword_441120*)(blob1 + 0x00441120 - BMF_BLOB_BASE);
 typedef __m128i t_xmmword_441130;
