@@ -28,6 +28,11 @@ import re
 import sys
 
 INT = r'(?:int32_t|uint32_t)'
+# `char *` where the variable is only ever an address; `uintptr_t` where the
+# code also does arithmetic on it that a pointer does not support -- masking it,
+# or-ing a tag into it -- which is common in this decompilation and is still
+# correct on a 64-bit target, unlike the int32_t it started as.
+TYPE = 'char *'
 
 
 def bodies(lines):
@@ -58,14 +63,17 @@ def bodies(lines):
 
 
 def pointer_bases(body):
-    """Locals used as `*(T *)(x + ...)` or `(T *)x`."""
+    """Locals *dereferenced* as `*(T *)(x + ...)`.
+
+    A bare `(T *)(x + n)` is not enough: Hex-Rays also builds fake pointers to
+    carry integers around -- `v4 = (uint64_t *)(v3 + 16)` where v3 is a byte
+    offset into a table and v4 is later read back as `(uint32_t)v4`.  Retyping
+    the offset there would be exactly backwards.
+    """
     text = '\n'.join(body)
     names = set()
     for m in re.finditer(r'\*\((?:const )?[A-Za-z_][A-Za-z0-9_]*\s*\**\s*\*\)'
                          r'\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*[+)]', text):
-        names.add(m.group(1))
-    for m in re.finditer(r'\((?:const )?[A-Za-z_][A-Za-z0-9_]*\s*\**\s*\*\)'
-                         r'\(?([A-Za-z_][A-Za-z0-9_]*)\s*\+', text):
         names.add(m.group(1))
     return names
 
@@ -167,7 +175,10 @@ def retype(body, names):
         return None, 0
 
     ind = re.match(r'^(\s*)', body[1]).group(1) if len(body) > 1 else '  '
-    line = '%schar *%s;' % (ind, ', *'.join(moved))
+    if TYPE == 'uintptr_t':
+        line = '%suintptr_t %s;' % (ind, ', '.join(moved))
+    else:
+        line = '%schar *%s;' % (ind, ', *'.join(moved))
     decl = []
     while len(line) > 96:
         cut = line.rfind(', ', 0, 96)
@@ -175,7 +186,9 @@ def retype(body, names):
             break
         decl.append(line[:cut + 1])
         line = ind + '       ' + line[cut + 2:]
-    decl.append(line + '   // were int32_t: these hold addresses')
+    decl.append(line + ('   // were int32_t: addresses, masked and tagged'
+                        if TYPE == 'uintptr_t'
+                        else '   // were int32_t: these hold addresses'))
     for i, l in enumerate(out):
         if l.strip() == ';':
             return out[:i + 1] + decl + out[i + 1:], len(moved)
@@ -204,11 +217,16 @@ def main():
         print('%d functions, %d locals' % (len(rows), sum(r[0] for r in rows)))
         return
 
+    global TYPE
+    argv = [a for a in sys.argv[3:] if a != '--uintptr']
+    if '--uintptr' in sys.argv:
+        TYPE = 'uintptr_t'
+    skip = set(argv[0].split(',')) if argv else set()
     for a, b, n in bodies(lines):
         if n != what:
             continue
         body = lines[a:b + 1]
-        bases = pointer_bases(body)
+        bases = pointer_bases(body) - skip
         pk = retype_params(lines, a, bases)
         names = bases & set(declared_ints(body))
         new, k = retype(body, names)
@@ -218,7 +236,7 @@ def main():
             new = lines[a:b + 1]
             k = 0
         open(path, 'w').write('\n'.join(lines[:a] + new + lines[b + 1:]))
-        print('%s: %d locals, %d parameters -> char *' % (n, k, len(pk)))
+        print('%s: %d locals, %d parameters -> %s' % (n, k, len(pk), TYPE))
         return
     sys.exit('%s: no such function' % what)
 
