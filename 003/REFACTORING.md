@@ -317,48 +317,39 @@ What remains is one shape, and it is the shape §4.2 warned about:
 *(uint8_t *)(*(uint32_t *)(_this + 76) + 6)
 ```
 
-The local is typed; the **field** at `+76` is not. It is a pointer kept in a
-`uint32_t` inside a structure this program allocates itself. Widening it to a
-real pointer makes it 8 bytes on a 64-bit target, which moves every offset after
-it, which means every access to that object — in every function — has to go
-through the struct at once. That is what "objects and pointers are one job"
-costs when you get to the object.
+The local is typed; the **field** at `+76` is not.
 
-**The offsets are not the obstacle.** They are mostly constant and can be read
-off:
+**The offsets are not the obstacle.** `tools/objects.py` does the alias analysis
+— two names are the same allocation if one is assigned from the other or passed
+where the other is the parameter, closed transitively through the `__fwd_*`
+shims — and the field maps come out clean: 159 objects, the largest with 174
+dereferences over 45 offsets, nearly all `uint32_t` at 4-byte-aligned offsets,
+and 2 to 7 offsets per object where a byte and a word overlap (`LOBYTE`-style,
+not a contradiction).
 
-| base | accesses | distinct constant offsets | variable-offset accesses |
-| --- | --- | --- | --- |
-| `_this` | 412 | 101 | 37 |
-| `a1` | 140 | 38 | 38 |
-| `this_4` | 82 | 34 | 0 |
-| `v23` | 68 | 25 | 1 |
+**The obstacle is that widening a field moves everything after it**, so an
+object has to convert in every function at once, and its allocation size has to
+move with it. `this_4` is the example: the cleanest map in the file, 34 constant
+offsets, no variable ones, used in exactly one function — and still not
+convertible alone, because two lines above its first use is
+`this_4 = (int32_t)this_1`, and `this_1` is the same allocation under another
+name somewhere else.
 
-**Object identity is.** Those are per-function local names, not objects. Before
-a struct can be declared, the names that denote the same allocation have to be
-grouped, and the code does not say so directly: there are 26 places where a base
-comes from `malloc` and 1673 where one base is assigned from another. Following
-that graph through parameters, `__fwd_*` shims and `int32_t` round-trips is
-exactly the reverse engineering `ALGORITHM.md` §9 has open.
+#### What was tried instead, and why it does not work
 
-`this_4` is the worked example of why this cannot be done one function at a
-time. It has the cleanest map in the file — 34 constant offsets, no variable
-ones, and it appears in exactly one function. It still cannot be converted
-alone, because two lines above its first use is
+If every allocation lived below 4 GB, a 32-bit field would hold a whole address
+and the loads would be exact without touching a single structure. That was built
+— an arena over `mmap(MAP_32BIT)` with a bucketed free list under `malloc` — and
+the 32-bit build passes the gate with it. **The 64-bit build still does not,**
+for a reason the arena cannot reach: the frame structs from Phase 2 contain
+pointer members, so at 64 bits their layout genuinely moves, and their own
+`static_assert(sizeof(__frame) == N)` refuses to compile. That assert is doing
+exactly what it was added for.
 
-```c
-this_4 = (int32_t)this_1;
-```
-
-and `this_1` is the same allocation under a different name in a different
-function. Change the layout for one view and the other view is silently wrong —
-the failure mode §4.1 describes, and the one ten test images are least likely to
-catch.
-
-So the remaining work is: **read the model block and the alternate model
-families, group the names, then apply the mechanical part.** The mechanical part
-is ready — `tools/retype.py` for the variables, `tools/blob-independence.txt`
-for which globals belong to the same tables — and it is not the expensive half.
+So a 64-bit build needs all three: the frames laid out per target, the fields
+widened, and the objects that hold them known. There is no shortcut that skips
+the middle one, and the arena was reverted rather than left in the tree as
+speculative machinery that buys nothing today.
 
 ### Phase 5 — partly, and smaller than it looked
 
@@ -429,7 +420,7 @@ finishes would introduce bugs the gate cannot tell apart from a layout change.
 | | work | blocked on |
 | --- | --- | --- |
 | 3 de-blob | 78 globals | the 77 in `tools/blob-independence.txt` are parts of larger tables — the same objects Phase 4 needs |
-| 4 structures | 1211 warnings | **object identity**: 26 allocations, 1673 assignments of one base to another, and no source-level statement of which names are the same object |
+| 4 structures | 1211 warnings | widening a field moves the ones after it, so each object converts everywhere at once — `tools/objects.py` gives the 159 objects and their field maps; what is missing is what the fields *mean* |
 | 5 casts | ~5680 | most fall out of 4; the rest is `LOBYTE`-family bit-packing |
 | 6 control flow | 123 gotos | needs each function understood, which is what 4 needs |
 
@@ -449,11 +440,16 @@ them is the expensive part. What is expensive is reading `sub_41CAB0` and the
 four alternate-model entry points, and that is a reverse-engineering job, not a
 refactoring one.
 
-**Do not attempt the rest mechanically.** §4.2's `this_4` is the reason: the
-cleanest offset map in the file, in a single function, and still not convertible
-alone, because the allocation it names is called something else two frames up.
-Getting that wrong produces a program that passes ten images and corrupts the
-eleventh, which is the one failure this document's gate cannot catch.
+**The alias analysis is done** — `tools/objects.py`, 159 objects with their
+names and field maps — so "which names are the same object" is no longer the
+open question it was. What is open is which of those `uint32_t` fields hold
+addresses and what the objects are for, and that comes from reading
+`sub_41CAB0` and the four alternate-model entry points.
+
+Do not convert an object without it. §4.2's `this_4` is why: the cleanest map in
+the file, in a single function, and still not convertible alone. Getting it
+wrong produces a program that passes ten images and corrupts the eleventh, which
+is the one failure this document's gate cannot catch.
 
 ### Two predictions this document got wrong
 
