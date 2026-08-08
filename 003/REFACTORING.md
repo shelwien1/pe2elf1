@@ -400,14 +400,17 @@ The 38 casts GCC calls useless went with the retyping. The 8-byte repeated-byte
 stores into the model geometry table were runs of consecutive `uint64_t` writes
 of one value; 12 of them are 4 `memset`s now, which says what they are.
 
-The other two items are deliberately not done, and the reasons are worth keeping
-because both look like work until you try them:
+The other two items are deliberately not done. Both were re-checked after Phase
+4 recovered its structs, since the first one's reason depended on Phase 4
+having recovered none:
 
 * **`LOBYTE`/`HIWORD` → shift and mask.** The plan proposed this for the uses
-  that turn out to be field access into a struct Phase 4 recovered. Phase 4
-  recovers no structs, so every one of the 265 uses is genuine bit-packing, and
-  `LOBYTE(x) = v` says more than `x = (x & ~0xFFu) | (v & 0xFF)`. Rewriting them
-  would trade a well-defined macro for arithmetic that carries less meaning.
+  that turn out to be field access into a struct Phase 4 recovered. Phase 4 now
+  recovers 44 structs, and **none of the 243 remaining uses applies to a field
+  of one** — measured, not assumed. Narrow access at a member's offset never
+  reached a macro in the first place: `structs.py` writes it as
+  `*(uint8_t *)&p->f8` directly. What is left is all genuine bit-packing on
+  locals, where `LOBYTE(x) = v` says more than `x = (x & ~0xFFu) | (v & 0xFF)`.
 * **The `M128I`/`M128F` unions → intrinsics.** Those unions *are* how MSVC's
   member syntax is spelled portably; GCC's `__m128` has no named members. There
   is no lvalue intrinsic for `x.m128_f32[2] = v`. The plan conditioned this on
