@@ -4247,6 +4247,48 @@ static_assert(sizeof(void *) != 4 || sizeof(Obj9) == 278776,
               "Obj9: the layout moved");
 
 
+// Obj10 -- recovered from 174 dereferences over 25 offsets, under 5
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj10 {
+  uint32_t f0;
+  uint8_t _pad1[12];
+  uint32_t f16;
+  uint32_t f20;
+  uint32_t f24;
+  uint32_t f28;
+  uint32_t f32;
+  uint32_t f36;
+  uint32_t f40;
+  uint32_t f44;
+  uint32_t f48;
+  uint32_t f52;
+  uint8_t _pad12[20];
+  uint32_t f76;
+  uint32_t f80;
+  uint32_t f84;
+  uint32_t f88;
+  uint32_t f92;
+  uint8_t _pad18[1078112];
+  uint32_t f1078208;
+  uint32_t f1078212;
+  uint32_t f1078216;
+  uint32_t f1078220;
+  uint8_t _pad23[8];
+  uint32_t f1078232;
+  uint8_t _pad25[448];
+  uint32_t f1078684;
+  uint32_t f1078688;
+  uint8_t _pad28[4980740];
+  uint32_t f6059432;
+  int32_t f6059436;
+};
+static_assert(sizeof(void *) != 4 || sizeof(Obj10) == 6059440,
+              "Obj10: the layout moved");
+
+
 struct RangeCoder {
   static const uint32_t kTop    = 0x00800000;   // renormalise at or below this
   static const uint32_t kPend   = 0x7F800000;   // low here still has a live carry
@@ -6026,14 +6068,14 @@ void **__sub_415270(void **Blocka, char a2)
   return Blocka_1;
 }
 
-int32_t __sub_416860(int32_t *_this, uint32_t *p_n15)
+int32_t __sub_416860(Obj10 *_this, uint32_t *p_n15)
 {
   ;
   char *v7, *v16;   // was int32_t: these hold addresses
   bool v5;
   int32_t result, v3, v4, v6, v9, v13, v14, n6;
   uint16_t *v8, *v10, *v11, *v12;
-  n6 = *(_this + 11);
+  n6 = *((int32_t *)_this + 11);
   result = p_n15[n6];
   if ( exclusion_mask[result] == __byte_445700 )
     return -1;
@@ -6059,10 +6101,10 @@ int32_t __sub_416860(int32_t *_this, uint32_t *p_n15)
      || result == p_n15[16]);
   v5 = v4 + v3 == 0;
   v6 = v4 + v3;
-  *(_this + 13) = v6;
+  *((int32_t *)_this + 13) = v6;
   if ( v5 && n6 > 6 )
     return -1;
-  v7 = *(_this + 269553);
+  v7 = *((int32_t *)_this + 269553);
   v16 = v7;
   v8 = *(uint16_t **)(v7 + 24 * __n4_4 + 20);
   v9 = v6
@@ -6077,7 +6119,7 @@ int32_t __sub_416860(int32_t *_this, uint32_t *p_n15)
      || result == v8[3]
      || result == *(uint16_t *)((char *)v8 + 3)
      || result == *v8);
-  *(_this + 13) = v9;
+  *((int32_t *)_this + 13) = v9;
   v10 = *(uint16_t **)(v7 + 24 * __n4_3 + 20);
   v11 = *(uint16_t **)(v7 + 24 * result + 20);
   v12 = *(uint16_t **)(v16 + 24 * __n15 + 20);
@@ -6106,12 +6148,12 @@ int32_t __sub_416860(int32_t *_this, uint32_t *p_n15)
   v14 = v13 + v9;
   if ( n6 <= 14 || (v14 & 0xB) != 0 )
   {
-    *(_this + 13) = (n6 << 7) + v14;
-    *(_this + 12) = v13 + 8 * (n6 > 9);
+    *((int32_t *)_this + 13) = (n6 << 7) + v14;
+    *((int32_t *)_this + 12) = v13 + 8 * (n6 > 9);
   }
   else
   {
-    *(_this + 12) = v13;
+    *((int32_t *)_this + 12) = v13;
     return -1;
   }
   return result;
@@ -12955,9 +12997,9 @@ LABEL_19:
 static inline int32_t __fwd_sub_418650_sub_412850(void *a0, void *a1) { return __sub_412850((uint16_t *)a0, (uint16_t *)a1); }
 static inline int32_t __fwd_sub_418650_sub_412E60(void *a0) { return __sub_412E60((uint32_t *)a0); }
 static inline int32_t __fwd_sub_418650_sub_4148F0(void *a0) { return __sub_4148F0((uint16_t *)a0); }
-static inline int32_t __fwd_sub_418650_sub_416860(void *a0, void *a1) { return __sub_416860((int32_t *)a0, (uint32_t *)a1); }
+static inline int32_t __fwd_sub_418650_sub_416860(void *a0, void *a1) { return __sub_416860((Obj10 *)a0, (uint32_t *)a1); }
 
-int32_t __sub_418650(uint32_t *_this, int32_t a2)
+int32_t __sub_418650(Obj10 *_this, int32_t a2)
 {
   struct alignas(16) {   // 164 bytes, the frame Hex-Rays could not name
       int32_t n15_8;
@@ -13001,7 +13043,7 @@ int32_t __sub_418650(uint32_t *_this, int32_t a2)
   int32_t &__sub_418650_n4_4 = __frame.__sub_418650_n4_4;
   int32_t &n15_3 = __frame.n15_3;
   uint16_t *&v184 = __frame.v184;
-  uint32_t *&this_1 = __frame.this_1;
+  Obj10 *&this_1 = (Obj10 *&)__frame.this_1;
   int32_t &v186 = __frame.v186;
   int32_t &v187 = __frame.v187;
   int32_t &v188 = __frame.v188;
@@ -13034,28 +13076,30 @@ int32_t __sub_418650(uint32_t *_this, int32_t a2)
   bool v19;
   char v70, v71, v72, v73, v74, v75, v91, *v157;
   int16_t v14, n4_14, v146, v160, n15_4;
+  Obj10 *this_4;
   int32_t arg_cum, arg_high, arg_tot, n4_8, n4_7, n15_6, n15_7, v8, v9, v10, v12, v13, v15,
           n4_9, __sub_418650_n15, v22, n4_11, v25, v26, v27, v29, v31, n0xFFFF, v33, n0xFFFF_1,
           n53248, n4_12, v40, n15_11, n8, n15_12, v44, n4_22, n15_14, n15_18, v49, v50, v51,
           n4_13, v53, v54, v55, v56, *v59, v60, v61, n15_13, v67, n15_15, n4_17, v81, v83, v84,
-          v85, n4, n256_2, n15_1, n256_1, n15_23, n4_19, n4_20, n4_5, n4_6, n15_5, this_4,
-          v102, v103, v104, v105, v107, v108, v109, v111, v112, v113, v114, v115, v116, v117,
-          v118, v119, v120, v122, v123, v124, v125, v126, v127, v128, n32, n15_25, n4_21, v132,
-          v133, v135, n256, v143, n4_18, n15_19, n15_20, v148, v149, v150, v151, v152, v153,
-          v155, n15_21, v158, v159, v161, v163, v164, n4_2, n15_22, n256_4, n256_5, n256_3,
-          n15_2;
+          v85, n4, n256_2, n15_1, n256_1, n15_23, n4_19, n4_20, n4_5, n4_6, n15_5, v102, v103,
+          v104, v105, v107, v108, v109, v111, v112, v113, v114, v115, v116, v117, v118, v119,
+          v120, v122, v123, v124, v125, v126, v127, v128, n32, n15_25, n4_21, v132, v133, v135,
+          n256, v143, n4_18, n15_19, n15_20, v148, v149, v150, v151, v152, v153, v155, n15_21,
+          v158, v159, v161, v163, v164, n4_2, n15_22, n256_4, n256_5, n256_3, n15_2;
   uint16_t *n15_9, *v4, *v16, *n4_10, *v58, *__sub_418650_n4_3, *v90, *v95, *v97, *v100, *v106,
            *v110, *v121, v154, v162, *v170, *v171, v174;
-  uint32_t bin_tot, *this_2, *this_3, n4_16, n4_15, **v134, v136, v137, v138, v139, v140, v172,
-          v173, v175, v176, v177;
+  Obj10 *this_3;
+  Obj10 *this_2;
+  uint32_t bin_tot, n4_16, n4_15, **v134, v136, v137, v138, v139, v140, v172, v173, v175, v176,
+           v177;
   uint64_t *v142;
   uint8_t *v38, *v39, *n15_16, *v76;
-  n15_9 = (uint16_t *)*(_this + 20);
+  n15_9 = (uint16_t *)*((uint32_t *)_this + 20);
   n4_8 = *n15_9;
-  v4 = (uint16_t *)*(_this + 19);
+  v4 = (uint16_t *)*((uint32_t *)_this + 19);
   n4_7 = *(v4 - 4);
   n15_6 = n15_9[4];
-  this_1 = _this;
+  this_1 = (Obj10 *)(_this);
   n15_7 = *(n15_9 - 4);
   n15_8 = n4_8;
   ::__n4_4 = n4_8;
@@ -13068,7 +13112,7 @@ int32_t __sub_418650(uint32_t *_this, int32_t a2)
   __sub_418650_n4_4 = n15_7;
   __n15_0 = n15_7;
   v10 = 2 * *((uint8_t *)v4 - 6) + 8 * v9 + v8;
-  this_2 = this_1;
+  this_2 = (Obj10 *)(this_1);
   v12 = 32 * *((uint8_t *)v4 - 4) + 16 * *((uint8_t *)v4 - 2) + v10;
   if ( n4_8 == n4_7 )
   {
@@ -13089,11 +13133,11 @@ int32_t __sub_418650(uint32_t *_this, int32_t a2)
   {
     v13 = (uint16_t)(*((uint16_t *)this_1 + n4_8 + 3029720) - n4_1);
   }
-  this_1[1514858] = &this_1[4 * v13 + 269674];
+  this_1->f6059432 = &((uint32_t *)this_1)[4 * v13 + 269674];
   v15 = *((uint8_t *)this_2 + v12 + 1078244);
-  this_2[9] = v15;
-  v16 = (uint16_t *)&this_2[0x10000 * v15 + 531818 + v13];
-  this_2[1514859] = v16;
+  this_2->f36 = v15;
+  v16 = (uint16_t *)&((uint32_t *)this_2)[0x10000 * v15 + 531818 + v13];
+  *(uint32_t *)&this_2->f6059436 = v16;
   n4_9 = *v16;
   if ( n4_9 == n15_8 )
   {
@@ -13131,20 +13175,20 @@ int32_t __sub_418650(uint32_t *_this, int32_t a2)
   {
     __sub_418650_n15 += 300;
   }
-  v21 = this_2[22];
+  v21 = this_2->f88;
   n15_3 = (int32_t)n15_9;
   v22 = *((uint8_t *)this_2 + v15 + __sub_418650_n15 + 1078308);
-  v23 = this_2[21];
-  this_2[10] = v22;
+  v23 = this_2->f84;
+  this_2->f40 = v22;
   n4_11 = *((uint8_t *)n15_9 + 2);
   v184 = v4;
-  this_1 = this_2;
+  this_1 = (Obj10 *)(this_2);
   __sub_418650_n4_4 = n4_11;
-  v25 = this_2[23];
+  v25 = this_2->f92;
   v26 = *((uint8_t *)v4 - 5);
   v186 = v25;
   v27 = 8 * *((uint8_t *)v4 - 12) + 4 * *((uint8_t *)v4 - 9) + v26 + 2 * *((uint8_t *)v4 - 10);
-  this_3 = this_1;
+  this_3 = (Obj10 *)(this_1);
   v29 = ((uint8_t)(*(uint8_t *)(v186 + 2) & *(uint8_t *)(v21 + 2) & __sub_418650_n4_4 & *(uint8_t *)(v23 + 2)) << 9)
       + ((uint8_t)(*(uint8_t *)(v186 + 3) & *(uint8_t *)(v21 + 3) & *(uint8_t *)(v23 + 3) & *((uint8_t *)n15_9 + 3)) << 8)
       + (v22 << 10)
@@ -13158,10 +13202,10 @@ int32_t __sub_418650(uint32_t *_this, int32_t a2)
   n0xFFFF = *((uint16_t *)this_1 + v31 + 3037912);
   if ( n0xFFFF == 0xFFFF )
   {
-    *((uint16_t *)this_1 + v31 + 3037912) = this_1[5];
-    n15_10 = this_3[20];
-    v4 = (uint16_t *)this_3[19];
-    ++this_3[5];
+    *((uint16_t *)this_1 + v31 + 3037912) = this_1->f20;
+    n15_10 = this_3->f80;
+    v4 = (uint16_t *)this_3->f76;
+    ++this_3->f20;
     n0xFFFF = *((uint16_t *)this_3 + v31 + 3037912);
     __sub_418650_n4_4 = *(uint8_t *)(n15_10 + 2);
   }
@@ -13169,12 +13213,12 @@ int32_t __sub_418650(uint32_t *_this, int32_t a2)
   n0xFFFF_1 = *((uint16_t *)this_3 + v33 + 3230424);
   if ( n0xFFFF_1 == 0xFFFF )
   {
-    *((uint16_t *)this_3 + v33 + 3230424) = this_3[6]++;
+    *((uint16_t *)this_3 + v33 + 3230424) = this_3->f24++;
     n0xFFFF_1 = *((uint16_t *)this_3 + v33 + 3230424);
   }
-  if ( (int32_t)this_3[4] < 32 )
+  if ( (int32_t)this_3->f16 < 32 )
   {
-    n53248 = this_3[7];
+    n53248 = this_3->f28;
     n4_1 = 16 * n0xFFFF_1 + (n4_1 & 0xF);
     v36 = (int32_t)this_3 + 2 * n4_1;
     n0xFFFF_1 = *(uint16_t *)(v36 + 6678448);
@@ -13189,27 +13233,27 @@ int32_t __sub_418650(uint32_t *_this, int32_t a2)
     if ( n0xFFFF_1 >= n53248 )
     {
       *(uint16_t *)(v36 + 6678448) = n53248;
-      ++this_3[7];
+      ++this_3->f28;
       n0xFFFF_1 = *(uint16_t *)(v36 + 6678448);
     }
   }
-  if ( (*(uint8_t *)(this_3[19] - 5) & *(uint8_t *)(this_3[19] - 6)) != 0 )
+  if ( (*(uint8_t *)(this_3->f76 - 5) & *(uint8_t *)(this_3->f76 - 6)) != 0 )
   {
-    v38 = (uint8_t *)this_3[20];
-    v39 = (uint8_t *)this_3[21];
+    v38 = (uint8_t *)this_3->f80;
+    v39 = (uint8_t *)this_3->f84;
     if ( ((uint8_t)(v39[19] & v39[11] & v39[3] & v38[27] & v38[19] & v38[11] & v38[3] & v38[2] & *(v38 - 5))
         & v39[27]) != 0 )
     {
       v40 = v39[2];
       n15_11 = 1;
-      if ( *this_3 - a2 <= 1 )
+      if ( this_3->f0 - a2 <= 1 )
       {
         n8 = 8;
       }
       else
       {
-        n4_1 = *this_3 - a2;
-        this_1 = this_3;
+        n4_1 = this_3->f0 - a2;
+        this_1 = (Obj10 *)(this_3);
         while ( 1 )
         {
           n8 = 8 * n15_11;
@@ -13218,28 +13262,28 @@ int32_t __sub_418650(uint32_t *_this, int32_t a2)
           v40 = (uint8_t)(v39[n8 + 2] & v40);
           if ( ++n15_11 >= n4_1 )
           {
-            this_3 = this_1;
+            this_3 = (Obj10 *)(this_1);
             n8 = 8 * n15_11;
             goto LABEL_42;
           }
         }
-        this_3 = this_1;
+        this_3 = (Obj10 *)(this_1);
       }
 LABEL_42:
-      n15_12 = *(uint8_t *)(this_3[269671] + n15_11);
+      n15_12 = *(uint8_t *)(this_3->f1078684 + n15_11);
       v44 = __fwd_sub_418650_sub_412850(
-              (uint16_t *)&this_3[12 * n15_12
+              (uint16_t *)&((uint32_t *)this_3)[12 * n15_12
                                         + 269089
                                         + 6 * (uint8_t)(v39[n8 + 27] & v39[n8 + 19])
                                         + 3 * v40]
-            + 3 * *(uint8_t *)(this_3[269672] + n15_8)
+            + 3 * *(uint8_t *)(this_3->f1078688 + n15_8)
             + 1,
               (uint16_t *)this_3 + 538176);
       n4_22 = ::__n4_4;
-      v46 = this_3[269672];
-      this_3[8] = v44;
+      v46 = this_3->f1078688;
+      this_3->f32 = v44;
       *(uint8_t *)(v46 + n4_22) = v44;
-      n15_14 = this_3[8];
+      n15_14 = this_3->f32;
       if ( n15_14 )
       {
         n15_18 = n15_11;
@@ -13251,7 +13295,7 @@ LABEL_42:
           goto LABEL_57;
         n15_3 = n15_11;
         n15_8 = n15_12;
-        this_1 = this_3;
+        this_1 = (Obj10 *)(this_3);
         n15_18 = 0;
         v49 = 1 << (n15_12 & 31);
         v50 = 0;
@@ -13259,13 +13303,13 @@ LABEL_42:
         {
           if ( (v49 | v50) < n15_3 )
           {
-            v51 = *((uint16_t *)&this_1[24 * (v50 == 0) + 269473 + 24 * (n15_12 == n15_8)] + 3 * n15_12 + 1);
-            __sub_418650_n4_4 = (int32_t)&this_1[24 * (v50 == 0) + 269473 + 24 * (n15_12 == n15_8)] + 6 * n15_12 + 2;
-            bin_tot = v51 + *((uint16_t *)&this_1[24 * (v50 == 0) + 269474 + 24 * (n15_12 == n15_8)] + 3 * n15_12);
+            v51 = *((uint16_t *)&((uint32_t *)this_1)[24 * (v50 == 0) + 269473 + 24 * (n15_12 == n15_8)] + 3 * n15_12 + 1);
+            __sub_418650_n4_4 = (int32_t)&((uint32_t *)this_1)[24 * (v50 == 0) + 269473 + 24 * (n15_12 == n15_8)] + 6 * n15_12 + 2;
+            bin_tot = v51 + *((uint16_t *)&((uint32_t *)this_1)[24 * (v50 == 0) + 269474 + 24 * (n15_12 == n15_8)] + 3 * n15_12);
             n4_1 = rc.decode_bit(
                      v51,
-                     *((uint16_t *)&this_1[24 * (v50 == 0) + 269474 + 24 * (n15_12 == n15_8)] + 3 * n15_12));
-            if ( *((uint16_t *)&this_1[24 * (v50 == 0) + 269474 + 24 * (n15_12 == n15_8)] + 3 * n15_12 + 1) < (uint32_t)bin_tot )
+                     *((uint16_t *)&((uint32_t *)this_1)[24 * (v50 == 0) + 269474 + 24 * (n15_12 == n15_8)] + 3 * n15_12));
+            if ( *((uint16_t *)&((uint32_t *)this_1)[24 * (v50 == 0) + 269474 + 24 * (n15_12 == n15_8)] + 3 * n15_12 + 1) < (uint32_t)bin_tot )
               __fwd_sub_418650_sub_4148F0((uint16_t *)__sub_418650_n4_4);
             n4_13 = n4_1;
             *(uint16_t *)(__sub_418650_n4_4 + 2 * n4_1) += 8;
@@ -13277,37 +13321,37 @@ LABEL_42:
           v49 >>= 1;
         }
         while ( v49 );
-        this_3 = this_1;
+        this_3 = (Obj10 *)(this_1);
       }
       if ( n15_18 )
-        *(uint16_t *)(this_3[19] + 8 * n15_18 - 8) = *(uint16_t *)(this_3[19] - 8);
-      n15_14 = this_3[8];
+        *(uint16_t *)(this_3->f76 + 8 * n15_18 - 8) = *(uint16_t *)(this_3->f76 - 8);
+      n15_14 = this_3->f32;
 LABEL_57:
       if ( n15_18 > n15_14 )
       {
-        v53 = this_3[21];
-        this_3[20] = this_3[20] + 8 * n15_18 - 8 * n15_14;
-        v54 = this_3[22];
+        v53 = this_3->f84;
+        this_3->f80 = this_3->f80 + 8 * n15_18 - 8 * n15_14;
+        v54 = this_3->f88;
         v55 = v53 + 8 * n15_18;
-        v56 = this_3[23];
-        this_3[21] = v55 - 8 * n15_14;
-        this_3[22] = v54 + 8 * n15_18 - 8 * n15_14;
-        v57 = this_3[19];
-        this_3[23] = v56 + 8 * n15_18 - 8 * n15_14;
+        v56 = this_3->f92;
+        this_3->f84 = v55 - 8 * n15_14;
+        this_3->f88 = v54 + 8 * n15_18 - 8 * n15_14;
+        v57 = this_3->f76;
+        this_3->f92 = v56 + 8 * n15_18 - 8 * n15_14;
         *(uint32_t *)(v57 + 4) = 0x01010101;
-        *(uint32_t *)this_3[19] = 0x01010101;
-        v58 = (uint16_t *)this_3[1514859];
+        *(uint32_t *)this_3->f76 = 0x01010101;
+        v58 = (uint16_t *)*(uint32_t *)&this_3->f6059436;
         LOWORD(v55) = ::__n4_4;
         LOWORD(v54) = *v58;
         n4_1 = ::__n4_4;
         v58[1] = v54;
-        *(uint16_t *)this_3[19] = v55;
-        *(uint16_t *)this_3[1514859] = v55;
-        v59 = (int32_t *)this_3[19];
+        *(uint16_t *)this_3->f76 = v55;
+        *(uint16_t *)*(uint32_t *)&this_3->f6059436 = v55;
+        v59 = (int32_t *)this_3->f76;
         v60 = v59[1];
         n15_3 = *v59;
         v61 = (int32_t)(v59 + 2);
-        this_3[19] = v61;
+        this_3->f76 = v61;
         if ( n15_18 - n15_14 != 1 )
         {
           __sub_418650_n4_4 = (n15_18 - n15_14 - 1) / 2;
@@ -13321,16 +13365,16 @@ LABEL_57:
             n4_15 = __sub_418650_n4_4;
             do
             {
-              *(uint16_t *)(this_3[1514859] + 2) = n4_14;
-              *(uint32_t *)this_3[19] = n15_13;
-              *(uint32_t *)(this_3[19] + 4) = v60;
-              v66 = this_3[1514859];
-              this_3[19] += 8;
+              *(uint16_t *)(*(uint32_t *)&this_3->f6059436 + 2) = n4_14;
+              *(uint32_t *)this_3->f76 = n15_13;
+              *(uint32_t *)(this_3->f76 + 4) = v60;
+              v66 = *(uint32_t *)&this_3->f6059436;
+              this_3->f76 += 8;
               *(uint16_t *)(v66 + 2) = n4_14;
-              *(uint32_t *)this_3[19] = n15_13;
-              *(uint32_t *)(this_3[19] + 4) = v60;
-              v61 = this_3[19] + 8;
-              this_3[19] = v61;
+              *(uint32_t *)this_3->f76 = n15_13;
+              *(uint32_t *)(this_3->f76 + 4) = v60;
+              v61 = this_3->f76 + 8;
+              this_3->f76 = v61;
               ++n4_16;
             }
             while ( n4_16 < n4_15 );
@@ -13345,15 +13389,15 @@ LABEL_57:
           if ( n15_18 - n15_14 - 1 > (uint32_t)(v67 - 1) )
           {
             n15_15 = n15_3;
-            *(uint16_t *)(this_3[1514859] + 2) = n4_1;
-            *(uint32_t *)this_3[19] = n15_15;
-            *(uint32_t *)(this_3[19] + 4) = v60;
-            v61 = this_3[19] + 8;
-            this_3[19] = v61;
+            *(uint16_t *)(*(uint32_t *)&this_3->f6059436 + 2) = n4_1;
+            *(uint32_t *)this_3->f76 = n15_15;
+            *(uint32_t *)(this_3->f76 + 4) = v60;
+            v61 = this_3->f76 + 8;
+            this_3->f76 = v61;
           }
         }
         n15_24 = n15_18;
-        n15_16 = (uint8_t *)this_3[20];
+        n15_16 = (uint8_t *)this_3->f80;
         v70 = *(n15_16 - 22);
         v71 = *(n15_16 - 14);
         v72 = n15_16[18];
@@ -13361,7 +13405,7 @@ LABEL_57:
         n15_8 = (int32_t)n15_16;
         v74 = v71 + v70;
         v75 = n15_16[34];
-        v76 = (uint8_t *)this_3[21];
+        v76 = (uint8_t *)this_3->f84;
         *((uint8_t *)this_3 + 1078692) = v73 + v72 + v74 + v75 - 5;
         *((uint8_t *)this_3 + 1078693) = v76[26]
                                      + v76[18]
@@ -13382,26 +13426,26 @@ LABEL_57:
                                      - 4;
         *(uint8_t *)(v61 - 2) = n4_17 == *(uint16_t *)(n15_17 + 8);
         n15_18 = n15_24;
-        *(uint8_t *)(this_3[19] - 1) = n4_17 == *(uint16_t *)(this_3[20] + 16);
-        n15_14 = this_3[8];
+        *(uint8_t *)(this_3->f76 - 1) = n4_17 == *(uint16_t *)(this_3->f80 + 16);
+        n15_14 = this_3->f32;
       }
       if ( n15_14 )
         return n15_18;
       goto LABEL_86;
     }
   }
-  v80 = (int32_t)&this_3[4 * this_3[10] + 24];
+  v80 = (int32_t)&((uint32_t *)this_3)[4 * this_3->f40 + 24];
   v184 = (uint16_t *)v80;
   v81 = 4 * n0xFFFF_1;
-  __sub_418650_n4_3 = (uint16_t *)&this_3[v81 + 776];
-  v83 = HIWORD(this_3[v81 + 778]);
-  if ( HIWORD(this_3[v81 + 778]) )
+  __sub_418650_n4_3 = (uint16_t *)&((uint32_t *)this_3)[v81 + 776];
+  v83 = HIWORD(((uint32_t *)this_3)[v81 + 778]);
+  if ( HIWORD(((uint32_t *)this_3)[v81 + 778]) )
   {
     if ( v83 == 1 )
     {
       v142 = (uint64_t *)v80;
       v143 = *(uint8_t *)(v80 + 15);
-      n4_18 = v143 * LOWORD(this_3[v81 + 777]);
+      n4_18 = v143 * LOWORD(((uint32_t *)this_3)[v81 + 777]);
       n15_19 = v143 * __sub_418650_n4_3[3];
       n4_1 = v143 * *__sub_418650_n4_3;
       v146 = v143 * __sub_418650_n4_3[1];
@@ -13414,7 +13458,7 @@ LABEL_57:
       v148 = __sub_418650_n4_3[5];
       v149 = *__sub_418650_n4_3;
       *((uint8_t *)__sub_418650_n4_3 + 14) *= 8;
-      this_1 = this_3;
+      this_1 = (Obj10 *)(this_3);
       v150 = 21 * __sub_418650_n4_3[1];
       n4_1 += (21 * v149 + v148 - 1) / v148;
       *__sub_418650_n4_3 = n4_1;
@@ -13431,7 +13475,7 @@ LABEL_57:
       v159 = 21 * __sub_418650_n4_3[4];
       __sub_418650_n4_3[3] = v158;
       v160 = v158 + (uint16_t)v157 + v154;
-      this_3 = this_1;
+      this_3 = (Obj10 *)(this_1);
       v161 = (v159 + v148 - 1) / v148 + n15_3;
       __sub_418650_n4_3[4] = v161;
       v162 = n4_1 + v161 + v160;
@@ -13484,7 +13528,7 @@ LABEL_57:
       v136 = __sub_418650_n4_3[2];
       n15_8 = n256_2;
       v137 = __sub_418650_n4_3[1];
-      this_1 = this_3;
+      this_1 = (Obj10 *)(this_3);
       v138 = *__sub_418650_n4_3;
       n4_1 = n4;
       __sub_418650_n4_4 = n15_1;
@@ -13503,7 +13547,7 @@ LABEL_57:
       LOWORD(v137) = v139 + v136 + v137;
       n15_1 = __sub_418650_n4_4;
       LOWORD(v140) = v138 + v140;
-      this_3 = this_1;
+      this_3 = (Obj10 *)(this_1);
       n256_1 = (uint16_t)(v140 + v137);
       n256 = n15_8;
       n4 = n4_1;
@@ -13523,14 +13567,14 @@ LABEL_57:
     __sub_418650_n4_3[5] = n15_1 + n256_1;
     __sub_418650_n4_3[n4] += n15_1;
     rc.decode(arg_cum, arg_high, arg_tot);
-    this_3[8] = n4;
+    this_3->f32 = n4;
     if ( *((uint8_t *)__sub_418650_n4_3 + 14) )
     {
       --*((uint8_t *)__sub_418650_n4_3 + 14);
       v90 = v184;
       ++v184[5];
       ++v90[n4];
-      n4 = this_3[8];
+      n4 = this_3->f32;
     }
   }
   else
@@ -13580,7 +13624,7 @@ LABEL_57:
     if ( n256_4 > n256_5 && (v184[n4_2] + n15_3 + 8 < n256_4 || n256_4 > 0x4000) )
     {
       n15_8 = n256_5;
-      this_1 = this_3;
+      this_1 = (Obj10 *)(this_3);
       n4_1 = (int32_t)__sub_418650_n4_3;
       __sub_418650_n4_4 = n4_2;
       v171 = v184;
@@ -13599,7 +13643,7 @@ LABEL_57:
       LOWORD(v177) = v177 - (v177 >> 1);
       v171[4] = v177;
       LOWORD(v177) = v174 + v177;
-      this_3 = this_1;
+      this_3 = (Obj10 *)(this_1);
       n256_4 = (uint16_t)(v177 + v176 + v175 + v172);
       n256_3 = n15_8;
       __sub_418650_n4_3 = (uint16_t *)n4_1;
@@ -13624,13 +13668,13 @@ LABEL_57:
     v184[5] = n15_3 + n256_4;
     v170[n4_2] += n15_4;
     rc.decode(arg_cum, arg_high, arg_tot);
-    this_3[8] = n4_2;
+    this_3->f32 = n4_2;
     __sub_418650_n4_3[5] = __sub_418650_n4_3[n4_2]++ != 0;
-    n4 = this_3[8];
+    n4 = this_3->f32;
   }
   if ( n4 )
   {
-    *(uint16_t *)this_3[19] = __dword_44573C[n4];
+    *(uint16_t *)this_3->f76 = __dword_44573C[n4];
     return 1;
   }
   n15_18 = 0;
@@ -13641,20 +13685,20 @@ LABEL_86:
   n15_24 = n15_18;
   n4_20 = ::__n4_3;
   exclusion_mask[__n15_0] = __byte_445700;
-  v95 = (uint16_t *)this_3[1514859];
+  v95 = (uint16_t *)*(uint32_t *)&this_3->f6059436;
   exclusion_mask[n15_23] = v91;
   exclusion_mask[n4_20] = v91;
   exclusion_mask[n4_19] = v91;
   __byte_445440[0] = v91;
-  this_3[269554] = 0;
+  this_3->f1078216 = 0;
   n4_5 = v95[1];
   n15_8 = *v95;
-  v97 = (uint16_t *)this_3[1514858];
+  v97 = (uint16_t *)this_3->f6059432;
   n4_6 = *v97;
   n15_5 = v97[1];
   v100 = (uint16_t *)v97[2];
   n4_1 = n4_5;
-  this_4 = v97[3];
+  this_4 = (Obj10 *)(v97[3]);
   __sub_418650_n4_4 = n4_6;
   v102 = v97[4];
   n15_3 = n15_5;
@@ -13662,17 +13706,17 @@ LABEL_86:
   v184 = v100;
   v104 = v97[6];
   v105 = v97[7];
-  this_1 = (uint32_t *)this_4;
-  v106 = (uint16_t *)this_3[20];
+  this_1 = (Obj10 *)((uint32_t *)this_4);
+  v106 = (uint16_t *)this_3->f80;
   v186 = v102;
   v107 = v106[8];
   v187 = v103;
-  v108 = this_3[19];
+  v108 = this_3->f76;
   v188 = v104;
   v109 = *(uint16_t *)(v108 - 16);
   v189 = v105;
   v190 = v109;
-  v110 = (uint16_t *)this_3[21];
+  v110 = (uint16_t *)this_3->f84;
   v111 = v110[4];
   v191 = v107;
   v112 = *v110;
@@ -13694,7 +13738,7 @@ LABEL_86:
   v120 = v110[8];
   v200 = v119;
   v201 = v120;
-  v121 = (uint16_t *)this_3[22];
+  v121 = (uint16_t *)this_3->f88;
   v202 = *v121;
   v203 = *(v110 - 8);
   v122 = *(uint16_t *)(v108 - 40);
@@ -13704,11 +13748,11 @@ LABEL_86:
   v124 = v106[20];
   v125 = v106[28];
   v206 = v124;
-  v207 = *(uint16_t *)this_3[23];
+  v207 = *(uint16_t *)this_3->f92;
   v208 = v123;
   v209 = *(v121 - 4);
   v126 = v110[12];
-  this_3[11] = 0;
+  this_3->f44 = 0;
   v210 = v125;
   v211 = v126;
   do
@@ -13717,43 +13761,43 @@ LABEL_86:
     if ( v127 >= 0 )
     {
       v128 = __fwd_sub_418650_sub_412850(
-               (uint16_t *)this_3 + 3 * this_3[13] + 525888,
-               (uint16_t *)this_3 + 3 * this_3[12] + 525840);
-      *(uint16_t *)this_3[19] = v127;
+               (uint16_t *)this_3 + 3 * this_3->f52 + 525888,
+               (uint16_t *)this_3 + 3 * this_3->f48 + 525840);
+      *(uint16_t *)this_3->f76 = v127;
       if ( v128 )
         return n15_24 + 1;
       exclusion_mask[v127] = __byte_445700;
     }
-    n32 = this_3[11] + 1;
-    this_3[11] = n32;
+    n32 = this_3->f44 + 1;
+    this_3->f44 = n32;
   }
   while ( n32 < 32 );
   n15_25 = n15_24;
   n4_21 = ::__n4_4;
-  v132 = this_3[269552];
-  this_3[269554] = this_3[269553] + 24 * ::__n4_3;
+  v132 = this_3->f1078208;
+  this_3->f1078216 = this_3->f1078212 + 24 * ::__n4_3;
   v133 = v132 + 24 * n4_21;
-  v134 = (uint32_t **)this_3[269558];
-  this_3[269555] = v133;
+  v134 = (uint32_t **)this_3->f1078232;
+  this_3->f1078220 = v133;
   while ( 1 )
   {
     if ( (*v134)[1] )
     {
       v135 = __fwd_sub_418650_sub_412E60(*v134);
-      *(uint16_t *)this_3[19] = v135;
+      *(uint16_t *)this_3->f76 = v135;
       if ( v135 >= 0 )
         return n15_25 + 1;
-      v134 = (uint32_t **)this_3[269558];
+      v134 = (uint32_t **)this_3->f1078232;
     }
-    this_3[269558] = ++v134;
+    this_3->f1078232 = ++v134;
   }
 }
 static inline int32_t __fwd_code_pixel_sub_412490(void *a0, void *a1, int32_t a2) { return __sub_412490((uint16_t *)a0, (uint16_t *)a1, a2); }
 static inline int32_t __fwd_code_pixel_symbol_list(void *a0, int32_t a1) { return __symbol_list((uint32_t *)a0, a1); }
 static inline int32_t __fwd_code_pixel_sub_4148F0(void *a0) { return __sub_4148F0((uint16_t *)a0); }
-static inline int32_t __fwd_code_pixel_sub_416860(void *a0, void *a1) { return __sub_416860((int32_t *)a0, (uint32_t *)a1); }
+static inline int32_t __fwd_code_pixel_sub_416860(void *a0, void *a1) { return __sub_416860((Obj10 *)a0, (uint32_t *)a1); }
 
-int32_t __code_pixel(int32_t *_this, int32_t a2)
+int32_t __code_pixel(Obj10 *_this, int32_t a2)
 {
   struct alignas(16) {   // 164 bytes, the frame Hex-Rays could not name
       int32_t p_n15;
@@ -13799,7 +13843,7 @@ int32_t __code_pixel(int32_t *_this, int32_t a2)
   int32_t &n15_31 = __frame.n15_31;
   int32_t &n15_2 = __frame.n15_2;
   int32_t &n15_4 = __frame.n15_4;
-  int32_t *&this_1 = __frame.this_1;
+  Obj10 *&this_1 = (Obj10 *&)__frame.this_1;
   int32_t &n15_3 = __frame.n15_3;
   uint16_t *&v185 = __frame.v185;
   int32_t &n15_7 = __frame.n15_7;
@@ -13830,28 +13874,30 @@ int32_t __code_pixel(int32_t *_this, int32_t a2)
   bool v11;
   char v24, *v36, v64, v65, v66, v67, v68, v93, *v156;
   int16_t v14, n15_10, v147, v158, n15_21, v170;
-  int32_t arg_cum, arg_high, arg_tot, n4, n4_1, __code_pixel_n15, n15_1, v8, v9, v10, *this_2,
-          v13, v15, *v16, n15_6, n15_5, n15_8, v21, p_n15_1, n15_30, v26, v27, *this_3, v29,
-          n0xFFFF, v32, n0xFFFF_1, n53248, v35, v38, v39, v42, p_n15_2, n15_42, n8, v46,
-          n15_32, n15_12, n15_9, v50, v53, p_n15_4, n2_10, v61, n15_11, n15_13, n4_2, n15_33,
-          n15_35, n15_34, n15_15, n2_15, v82, *n2_3, __code_pixel_n0x2000, n15_16, v87, n2,
-          p_n15_5, p_n15_7, n15_17, n15_22, __code_pixel_n4_3, __code_pixel_n4_4, p_n15_11,
-          n2_5, n15_41, n15_23, n15_24, n15_25, *this_4, n15_26, v109, n15_27, v112, v114,
-          v115, v116, v117, v118, v119, v120, v121, v122, v123, v125, v126, v127, v128, v129,
-          n15_28, n32, n15_29, n4_5, v134, v135, p_n15_6, *v143, v144, n2_16, n2_17, n15_37,
-          v149, v150, v151, v152, v154, v155, v157, n15_18, v161, n2_2, p_n15_10, p_n15_8,
-          p_n15_9, n15_19;
+  Obj10 *this_3;
+  Obj10 *this_4;
+  Obj10 *this_2;
+  int32_t arg_cum, arg_high, arg_tot, n4, n4_1, __code_pixel_n15, n15_1, v8, v9, v10, v13, v15,
+          *v16, n15_6, n15_5, n15_8, v21, p_n15_1, n15_30, v26, v27, v29, n0xFFFF, v32,
+          n0xFFFF_1, n53248, v35, v38, v39, v42, p_n15_2, n15_42, n8, v46, n15_32, n15_12,
+          n15_9, v50, v53, p_n15_4, n2_10, v61, n15_11, n15_13, n4_2, n15_33, n15_35, n15_34,
+          n15_15, n2_15, v82, *n2_3, __code_pixel_n0x2000, n15_16, v87, n2, p_n15_5, p_n15_7,
+          n15_17, n15_22, __code_pixel_n4_3, __code_pixel_n4_4, p_n15_11, n2_5, n15_41, n15_23,
+          n15_24, n15_25, n15_26, v109, n15_27, v112, v114, v115, v116, v117, v118, v119, v120,
+          v121, v122, v123, v125, v126, v127, v128, v129, n15_28, n32, n15_29, n4_5, v134, v135,
+          p_n15_6, *v143, v144, n2_16, n2_17, n15_37, v149, v150, v151, v152, v154, v155, v157,
+          n15_18, v161, n2_2, p_n15_10, p_n15_8, p_n15_9, n15_19;
   uint16_t *n2_7, *n2_8, *v37, *v51, *n2_11, *n2_12, *n2_13, *n2_14, *v97, *v98, *n2_6, *v108,
            *v111, *v113, *v124, v153, *v159, *n15_39;
   uint32_t bin_tot, v55, v57, **v136, v137, p_n15_12, v139, v140, v141, v168, v169, v171, v172,
           v173;
   uint8_t *p_n15_3, *v41, *v69;
-  n2_7 = (uint16_t *)*(_this + 20);
+  n2_7 = (uint16_t *)*((int32_t *)_this + 20);
   n4 = *n2_7;
-  n2_8 = (uint16_t *)*(_this + 19);
+  n2_8 = (uint16_t *)*((int32_t *)_this + 19);
   n4_1 = (uint16_t)*(n2_8 - 4);
   __code_pixel_n15 = n2_7[4];
-  this_1 = _this;
+  this_1 = (Obj10 *)(_this);
   n15_1 = *(n2_7 - 4);
   n15_3 = n4;
   ::__n4_4 = n4;
@@ -13869,7 +13915,7 @@ int32_t __code_pixel(int32_t *_this, int32_t a2)
       + 8 * v9
       + v8;
   v11 = n4 == n4_1;
-  this_2 = this_1;
+  this_2 = (Obj10 *)(this_1);
   if ( v11 )
   {
     if ( n15_3 == n15_4 )
@@ -13889,11 +13935,11 @@ int32_t __code_pixel(int32_t *_this, int32_t a2)
   {
     v13 = (uint16_t)(*((uint16_t *)this_1 + n15_3 + 3029720) - n15_7);
   }
-  this_1[1514858] = (int32_t)&this_1[4 * v13 + 269674];
+  *(int32_t *)&this_1->f6059432 = (int32_t)&((int32_t *)this_1)[4 * v13 + 269674];
   v15 = *((uint8_t *)this_2 + v10 + 1078244);
-  this_2[9] = v15;
-  v16 = &this_2[0x10000 * v15 + 531818 + v13];
-  this_2[1514859] = (int32_t)v16;
+  *(int32_t *)&this_2->f36 = v15;
+  v16 = &((int32_t *)this_2)[0x10000 * v15 + 531818 + v13];
+  this_2->f6059436 = (int32_t)v16;
   n15_6 = *(uint16_t *)v16;
   if ( n15_6 == n15_3 )
   {
@@ -13931,24 +13977,24 @@ int32_t __code_pixel(int32_t *_this, int32_t a2)
   {
     n15_5 += 300;
   }
-  v20 = this_2[22];
+  v20 = *(int32_t *)&this_2->f88;
   n2_1 = (int32_t)n2_7;
   v21 = *((uint8_t *)this_2 + v15 + n15_5 + 1078308);
-  v22 = this_2[21];
-  this_2[10] = v21;
+  v22 = *(int32_t *)&this_2->f84;
+  *(int32_t *)&this_2->f40 = v21;
   p_n15_1 = *((uint8_t *)n2_7 + 2);
   v24 = *((uint8_t *)n2_7 + 3);
   n2_4 = n2_8;
-  this_1 = this_2;
+  this_1 = (Obj10 *)(this_2);
   p_n15 = p_n15_1;
-  n15_30 = this_2[23];
+  n15_30 = *(int32_t *)&this_2->f92;
   v26 = *((uint8_t *)n2_8 - 5);
   n15_20 = n15_30;
   v27 = 8 * *((uint8_t *)n2_8 - 12)
       + 4 * *((uint8_t *)n2_8 - 9)
       + v26
       + 2 * *((uint8_t *)n2_8 - 10);
-  this_3 = this_1;
+  this_3 = (Obj10 *)(this_1);
   v29 = ((*((uint8_t *)this_1 + 1078695) == 0) << 7)
       + ((*((uint8_t *)this_1 + 1078694) == 0) << 6)
       + 32 * (*((uint8_t *)this_1 + 1078693) == 0)
@@ -13961,10 +14007,10 @@ int32_t __code_pixel(int32_t *_this, int32_t a2)
   n2_9 = n2_1;
   if ( n0xFFFF == 0xFFFF )
   {
-    *((uint16_t *)this_1 + v29 + 3037912) = this_1[5];
-    n2_9 = this_3[20];
-    n2_8 = (uint16_t *)this_3[19];
-    ++this_3[5];
+    *((uint16_t *)this_1 + v29 + 3037912) = *(int32_t *)&this_1->f20;
+    n2_9 = *(int32_t *)&this_3->f80;
+    n2_8 = (uint16_t *)*(int32_t *)&this_3->f76;
+    ++*(int32_t *)&this_3->f20;
     n0xFFFF = *((uint16_t *)this_3 + v29 + 3037912);
     p_n15 = *(uint8_t *)(n2_9 + 2);
   }
@@ -13972,12 +14018,12 @@ int32_t __code_pixel(int32_t *_this, int32_t a2)
   n0xFFFF_1 = *((uint16_t *)this_3 + v32 + 3230424);
   if ( n0xFFFF_1 == 0xFFFF )
   {
-    *((uint16_t *)this_3 + v32 + 3230424) = this_3[6]++;
+    *((uint16_t *)this_3 + v32 + 3230424) = (*(int32_t *)&this_3->f24)++;
     n0xFFFF_1 = *((uint16_t *)this_3 + v32 + 3230424);
   }
-  if ( this_3[4] < 32 )
+  if ( *(int32_t *)&this_3->f16 < 32 )
   {
-    n53248 = this_3[7];
+    n53248 = *(int32_t *)&this_3->f28;
     v35 = 16 * n0xFFFF_1 + (n15_7 & 0xF);
     v36 = (char *)this_3 + 2 * v35;
     n0xFFFF_1 = *((uint16_t *)v36 + 3339224);
@@ -13991,17 +14037,17 @@ int32_t __code_pixel(int32_t *_this, int32_t a2)
     if ( n0xFFFF_1 >= n53248 )
     {
       *((uint16_t *)v36 + 3339224) = n53248;
-      ++this_3[7];
+      ++*(int32_t *)&this_3->f28;
       n0xFFFF_1 = *((uint16_t *)v36 + 3339224);
     }
   }
-  v37 = (uint16_t *)this_3[19];
+  v37 = (uint16_t *)*(int32_t *)&this_3->f76;
   v38 = *((uint8_t *)v37 - 5);
   v39 = *((uint8_t *)v37 - 6);
   v185 = v37;
   if ( (v38 & v39) != 0
-    && (p_n15_3 = (uint8_t *)this_3[20],
-        v41 = (uint8_t *)this_3[21],
+    && (p_n15_3 = (uint8_t *)*(int32_t *)&this_3->f80,
+        v41 = (uint8_t *)*(int32_t *)&this_3->f84,
         ((uint8_t)(v41[19]
                          & v41[11]
                          & v41[3]
@@ -14014,7 +14060,7 @@ int32_t __code_pixel(int32_t *_this, int32_t a2)
        & v41[27]) != 0) )
   {
     v42 = v41[2];
-    p_n15_2 = *this_3 - a2;
+    p_n15_2 = *(int32_t *)&this_3->f0 - a2;
     n15_31 = 1;
     if ( p_n15_2 <= 1 )
     {
@@ -14024,7 +14070,7 @@ int32_t __code_pixel(int32_t *_this, int32_t a2)
     {
       p_n15 = p_n15_2;
       n15_42 = 1;
-      this_1 = this_3;
+      this_1 = (Obj10 *)(this_3);
       while ( 1 )
       {
         n8 = 8 * n15_42;
@@ -14033,51 +14079,51 @@ int32_t __code_pixel(int32_t *_this, int32_t a2)
         v42 = (uint8_t)(v41[n8 + 2] & v42);
         if ( ++n15_42 >= p_n15 )
         {
-          this_3 = this_1;
+          this_3 = (Obj10 *)(this_1);
           n15_31 = n15_42;
           n8 = 8 * n15_42;
           goto LABEL_42;
         }
       }
-      this_3 = this_1;
+      this_3 = (Obj10 *)(this_1);
       n15_31 = n15_42;
     }
 LABEL_42:
     v46 = (uint8_t)(v41[n8 + 27] & v41[n8 + 19]);
-    n15_2 = *(uint8_t *)(this_3[269671] + n15_31);
-    n15_32 = *(uint8_t *)(this_3[269672] + n15_3) + 8 * n15_2 + 4 * v46 + 2 * v42;
+    n15_2 = *(uint8_t *)(*(int32_t *)&this_3->f1078684 + n15_31);
+    n15_32 = *(uint8_t *)(*(int32_t *)&this_3->f1078688 + n15_3) + 8 * n15_2 + 4 * v46 + 2 * v42;
     n15_12 = 0;
     if ( *v185 == n15_3 )
     {
       p_n15 = (int32_t)p_n15_3;
-      this_1 = this_3;
+      this_1 = (Obj10 *)(this_3);
       do
         ++n15_12;
       while ( n15_12 < n15_31 && v185[4 * n15_12] == n15_3 );
-      this_3 = this_1;
+      this_3 = (Obj10 *)(this_1);
       p_n15_3 = (uint8_t *)p_n15;
     }
     n15_9 = n15_12 == n15_31;
     n15_4 = n15_9;
     if ( n15_12 > n15_9 )
     {
-      this_3[20] = (int32_t)&p_n15_3[8 * n15_12 + -8 * n15_9];
-      this_3[21] = (int32_t)&v41[8 * n15_12 + -8 * n15_9];
-      v50 = this_3[23];
-      this_3[22] = this_3[22] + 8 * n15_12 - 8 * n15_9;
+      *(int32_t *)&this_3->f80 = (int32_t)&p_n15_3[8 * n15_12 + -8 * n15_9];
+      *(int32_t *)&this_3->f84 = (int32_t)&v41[8 * n15_12 + -8 * n15_9];
+      v50 = *(int32_t *)&this_3->f92;
+      *(int32_t *)&this_3->f88 = *(int32_t *)&this_3->f88 + 8 * n15_12 - 8 * n15_9;
       v51 = v185;
-      this_3[23] = v50 + 8 * n15_12 - 8 * n15_9;
+      *(int32_t *)&this_3->f92 = v50 + 8 * n15_12 - 8 * n15_9;
       *((uint32_t *)v51 + 1) = 0x01010101;
-      *(uint32_t *)this_3[19] = 0x01010101;
-      *(uint16_t *)(this_3[1514859] + 2) = *(uint16_t *)this_3[1514859];
+      *(uint32_t *)*(int32_t *)&this_3->f76 = 0x01010101;
+      *(uint16_t *)(this_3->f6059436 + 2) = *(uint16_t *)this_3->f6059436;
       LOWORD(v51) = n15_3;
-      *(uint16_t *)this_3[19] = n15_3;
-      *(uint16_t *)this_3[1514859] = (uint16_t)v51;
-      v52 = this_3[19];
+      *(uint16_t *)*(int32_t *)&this_3->f76 = n15_3;
+      *(uint16_t *)this_3->f6059436 = (uint16_t)v51;
+      v52 = *(int32_t *)&this_3->f76;
       v53 = *(uint32_t *)v52;
       n2_1 = *(uint32_t *)(v52 + 4);
       n2_4 = (uint16_t *)(v52 + 8);
-      this_3[19] = v52 + 8;
+      *(int32_t *)&this_3->f76 = v52 + 8;
       if ( n15_12 - n15_9 != 1 )
       {
         p_n15_4 = n15_12 - n15_9 - 1;
@@ -14092,16 +14138,16 @@ LABEL_42:
           n15_10 = n15_3;
           do
           {
-            *(uint16_t *)(this_3[1514859] + 2) = n15_10;
-            *(uint32_t *)this_3[19] = v53;
-            *(uint32_t *)(this_3[19] + 4) = n2_10;
-            v59 = this_3[1514859];
-            this_3[19] += 8;
+            *(uint16_t *)(this_3->f6059436 + 2) = n15_10;
+            *(uint32_t *)*(int32_t *)&this_3->f76 = v53;
+            *(uint32_t *)(*(int32_t *)&this_3->f76 + 4) = n2_10;
+            v59 = this_3->f6059436;
+            *(int32_t *)&this_3->f76 += 8;
             *(uint16_t *)(v59 + 2) = n15_10;
-            *(uint32_t *)this_3[19] = v53;
-            *(uint32_t *)(this_3[19] + 4) = n2_10;
-            n2_11 = (uint16_t *)(this_3[19] + 8);
-            this_3[19] = (int32_t)n2_11;
+            *(uint32_t *)*(int32_t *)&this_3->f76 = v53;
+            *(uint32_t *)(*(int32_t *)&this_3->f76 + 4) = n2_10;
+            n2_11 = (uint16_t *)(*(int32_t *)&this_3->f76 + 8);
+            *(int32_t *)&this_3->f76 = (int32_t)n2_11;
             ++v57;
           }
           while ( v57 < v55 );
@@ -14117,15 +14163,15 @@ LABEL_42:
         }
         if ( p_n15_4 > (uint32_t)(v61 - 1) )
         {
-          *(uint16_t *)(this_3[1514859] + 2) = n15_3;
-          *(uint32_t *)this_3[19] = v53;
-          *(uint32_t *)(this_3[19] + 4) = n2_1;
-          n2_12 = (uint16_t *)(this_3[19] + 8);
-          this_3[19] = (int32_t)n2_12;
+          *(uint16_t *)(this_3->f6059436 + 2) = n15_3;
+          *(uint32_t *)*(int32_t *)&this_3->f76 = v53;
+          *(uint32_t *)(*(int32_t *)&this_3->f76 + 4) = n2_1;
+          n2_12 = (uint16_t *)(*(int32_t *)&this_3->f76 + 8);
+          *(int32_t *)&this_3->f76 = (int32_t)n2_12;
           n2_4 = n2_12;
         }
       }
-      v63 = this_3[20];
+      v63 = *(int32_t *)&this_3->f80;
       v64 = *(uint8_t *)(v63 - 14);
       v65 = *(uint8_t *)(v63 + 18);
       v66 = *(uint8_t *)(v63 + 34);
@@ -14133,7 +14179,7 @@ LABEL_42:
       v67 = *(uint8_t *)(v63 - 22);
       n15_14 = n15_12;
       v68 = *(uint8_t *)(v63 + 26) + v65 + v64 + v67 + v66 - 5;
-      v69 = (uint8_t *)this_3[21];
+      v69 = (uint8_t *)*(int32_t *)&this_3->f84;
       *((uint8_t *)this_3 + 1078692) = v68;
       n2_13 = n2_4;
       *((uint8_t *)this_3 + 1078693) = v69[26]
@@ -14154,20 +14200,20 @@ LABEL_42:
                                    - 4;
       *((uint8_t *)n2_13 - 2) = n15_11 == *(uint16_t *)(v63 + 8);
       n15_32 = n15_20;
-      *(uint8_t *)(this_3[19] - 1) = n15_11 == *(uint16_t *)(this_3[20] + 16);
+      *(uint8_t *)(*(int32_t *)&this_3->f76 - 1) = n15_11 == *(uint16_t *)(*(int32_t *)&this_3->f80 + 16);
       n15_12 = n15_14;
     }
     __fwd_code_pixel_sub_412490((uint16_t *)this_3 + 3 * n15_32 + 538179, (uint16_t *)this_3 + 538176, n15_4);
     n15_13 = n15_4;
     n4_2 = ::__n4_4;
-    v74 = this_3[269672];
-    this_3[8] = n15_4;
+    v74 = *(int32_t *)&this_3->f1078688;
+    *(int32_t *)&this_3->f32 = n15_4;
     *(uint8_t *)(v74 + n4_2) = n15_13;
     if ( !n15_13 && n15_31 != 1 )
     {
       n15_14 = n15_12;
       p_n15 = n15_2;
-      this_1 = this_3;
+      this_1 = (Obj10 *)(this_3);
       n15_33 = n15_31;
       n15_35 = 1 << (n15_2 & 31);
       n15_34 = 0;
@@ -14177,12 +14223,12 @@ LABEL_42:
         if ( n15_33 > (n15_35 | n15_34) )
         {
           n15_20 = n15_34;
-          n2_14 = (uint16_t *)&this_1[24 * (n15_34 == 0) + 269473 + 24 * (n15_15 == p_n15)] + 3 * n15_15 + 1;
+          n2_14 = (uint16_t *)&((int32_t *)this_1)[24 * (n15_34 == 0) + 269473 + 24 * (n15_15 == p_n15)] + 3 * n15_15 + 1;
           n2_4 = n2_14;
           n2_1 = n15_14 & n15_35;
           bin_tot = *n2_14 + n2_14[1];
           rc.encode_bit(*n2_14, n2_14[1], (n15_14 & n15_35) != 0);
-          if ( *((uint16_t *)&this_1[24 * (n15_34 == 0) + 269474 + 24 * (n15_15 == p_n15)] + 3 * n15_15 + 1) < (uint32_t)bin_tot )
+          if ( *((uint16_t *)&((int32_t *)this_1)[24 * (n15_34 == 0) + 269474 + 24 * (n15_15 == p_n15)] + 3 * n15_15 + 1) < (uint32_t)bin_tot )
             __fwd_code_pixel_sub_4148F0(n2_4);
           n2_15 = n2_1;
           n15_31 = n15_35;
@@ -14195,23 +14241,23 @@ LABEL_42:
       }
       while ( n15_35 );
       n15_12 = n15_14;
-      this_3 = this_1;
+      this_3 = (Obj10 *)(this_1);
     }
-    if ( this_3[8] )
+    if ( *(int32_t *)&this_3->f32 )
       return n15_12;
   }
   else
   {
-    v82 = 4 * this_3[10];
-    n15_36 = (int32_t)&this_3[v82 + 24];
+    v82 = 4 * *(int32_t *)&this_3->f40;
+    n15_36 = (int32_t)&((int32_t *)this_3)[v82 + 24];
     n15_31 = n15_36;
-    n2_3 = &this_3[4 * n0xFFFF_1 + 776];
-    __code_pixel_n0x2000 = HIWORD(this_3[4 * n0xFFFF_1 + 778]);
+    n2_3 = &((int32_t *)this_3)[4 * n0xFFFF_1 + 776];
+    __code_pixel_n0x2000 = HIWORD(((int32_t *)this_3)[4 * n0xFFFF_1 + 778]);
     if ( __code_pixel_n0x2000 )
     {
       if ( __code_pixel_n0x2000 == 1 )
       {
-        v143 = &this_3[v82 + 24];
+        v143 = &((int32_t *)this_3)[v82 + 24];
         v144 = *(uint8_t *)(n15_36 + 15);
         n2_16 = v144 * *((uint16_t *)n2_3 + 2);
         n2_17 = v144 * *((uint16_t *)n2_3 + 3);
@@ -14225,7 +14271,7 @@ LABEL_42:
         *((uint64_t *)n2_3 + 1) = *((uint64_t *)v143 + 1);
         v149 = *((uint16_t *)n2_3 + 5);
         *((uint8_t *)n2_3 + 14) *= 8;
-        this_1 = this_3;
+        this_1 = (Obj10 *)(this_3);
         v150 = 21 * *((uint16_t *)n2_3 + 1);
         p_n15 += (21 * *(uint16_t *)n2_3 + v149 - 1) / v149;
         *(uint16_t *)n2_3 = p_n15;
@@ -14242,12 +14288,12 @@ LABEL_42:
         v157 = 21 * *((uint16_t *)n2_3 + 4);
         *((uint16_t *)n2_3 + 3) = (uint16_t)v156;
         v158 = (uint16_t)v156 + v150 + v153;
-        this_3 = this_1;
+        this_3 = (Obj10 *)(this_1);
         LOWORD(v149) = (v157 + v149 - 1) / v149 + n15_20;
         *((uint16_t *)n2_3 + 4) = v149;
         __code_pixel_n0x2000 = (uint16_t)(p_n15 + v149 + v158);
         *((uint16_t *)n2_3 + 5) = __code_pixel_n0x2000;
-        v185 = (uint16_t *)this_3[19];
+        v185 = (uint16_t *)*(int32_t *)&this_3->f76;
       }
       n15_16 = *v185;
       arg_tot = __code_pixel_n0x2000;
@@ -14287,7 +14333,7 @@ LABEL_42:
         v137 = *((uint16_t *)n2_3 + 2);
         p_n15 = p_n15_5;
         p_n15_12 = *((uint16_t *)n2_3 + 1);
-        this_1 = this_3;
+        this_1 = (Obj10 *)(this_3);
         n2_1 = n2;
         v139 = *(uint16_t *)n2_3;
         n2_4 = (uint16_t *)n15_17;
@@ -14307,7 +14353,7 @@ LABEL_42:
         n15_17 = (int32_t)n2_4;
         LOWORD(p_n15_12) = v139 + v141 + p_n15_12;
         n2 = n2_1;
-        this_3 = this_1;
+        this_3 = (Obj10 *)(this_1);
         p_n15_7 = (uint16_t)p_n15_12;
         p_n15_6 = p_n15;
         *((uint16_t *)n2_3 + 5) = p_n15_7;
@@ -14326,19 +14372,19 @@ LABEL_42:
       *((uint16_t *)n2_3 + 5) = n15_17 + p_n15_7;
       *((uint16_t *)n2_3 + n2) += n15_17;
       rc.encode(arg_cum, arg_high, arg_tot);
-      this_3[8] = n2;
+      *(int32_t *)&this_3->f32 = n2;
       if ( *((uint8_t *)n2_3 + 14) )
       {
         --*((uint8_t *)n2_3 + 14);
         n15_38 = n15_31;
         ++*(uint16_t *)(n15_31 + 10);
         ++*(uint16_t *)(n15_38 + 2 * n2);
-        n2 = this_3[8];
+        n2 = *(int32_t *)&this_3->f32;
       }
     }
     else
     {
-      v159 = (uint16_t *)&this_3[v82 + 24];
+      v159 = (uint16_t *)&((int32_t *)this_3)[v82 + 24];
       n15_18 = *v185;
       arg_tot = *(uint16_t *)(n15_36 + 10);
       if ( n15_18 == n15_3 )
@@ -14374,7 +14420,7 @@ LABEL_42:
       if ( p_n15_10 > p_n15_8 && (*(uint16_t *)(n15_31 + 2 * n2_2) + n15_20 + 8 < p_n15_10 || p_n15_10 > 0x4000) )
       {
         p_n15 = p_n15_8;
-        this_1 = this_3;
+        this_1 = (Obj10 *)(this_3);
         n15_39 = (uint16_t *)n15_31;
         v168 = *(uint16_t *)(n15_31 + 2);
         v169 = *(uint16_t *)(n15_31 + 4);
@@ -14398,7 +14444,7 @@ LABEL_42:
         p_n15_9 = p_n15;
         n2_3 = (int32_t *)n2_1;
         n15_39[5] = p_n15_10;
-        this_3 = this_1;
+        this_3 = (Obj10 *)(this_1);
         if ( p_n15_9 < 256 && !*(uint8_t *)(n15_31 + 14) )
         {
           p_n15_9 = 256;
@@ -14418,9 +14464,9 @@ LABEL_42:
       *(uint16_t *)(n15_31 + 10) = n15_20 + p_n15_10;
       *(uint16_t *)(n15_40 + 2 * n2_2) += n15_21;
       rc.encode(arg_cum, arg_high, arg_tot);
-      this_3[8] = n2_2;
+      *(int32_t *)&this_3->f32 = n2_2;
       *((uint16_t *)n2_3 + 5) = (*((uint16_t *)n2_3 + n2_2))++ != 0;
-      n2 = this_3[8];
+      n2 = *(int32_t *)&this_3->f32;
     }
     if ( n2 )
       return 1;
@@ -14432,13 +14478,13 @@ LABEL_42:
   __code_pixel_n4_4 = ::__n4_4;
   exclusion_mask[__n15_0] = __byte_445700;
   exclusion_mask[n15_22] = v93;
-  v97 = (uint16_t *)this_3[1514859];
+  v97 = (uint16_t *)this_3->f6059436;
   exclusion_mask[__code_pixel_n4_3] = v93;
   exclusion_mask[__code_pixel_n4_4] = v93;
-  v98 = (uint16_t *)this_3[1514858];
+  v98 = (uint16_t *)*(int32_t *)&this_3->f6059432;
   __byte_445440[0] = v93;
   n15_14 = n15_12;
-  this_3[269554] = 0;
+  *(int32_t *)&this_3->f1078216 = 0;
   p_n15_11 = *v97;
   n2_5 = v97[1];
   n2_6 = (uint16_t *)*v98;
@@ -14450,21 +14496,21 @@ LABEL_42:
   n2_4 = n2_6;
   n15_25 = v98[4];
   n15_20 = n15_23;
-  this_4 = (int32_t *)v98[5];
+  this_4 = (Obj10 *)((int32_t *)v98[5]);
   n15_31 = n15_41;
   n15_26 = v98[6];
   v108 = (uint16_t *)v98[7];
   n15_2 = n15_24;
-  v109 = this_3[19];
+  v109 = *(int32_t *)&this_3->f76;
   n15_4 = n15_25;
   n15_27 = *(uint16_t *)(v109 - 16);
-  this_1 = this_4;
-  v111 = (uint16_t *)this_3[20];
+  this_1 = (Obj10 *)(this_4);
+  v111 = (uint16_t *)*(int32_t *)&this_3->f80;
   n15_3 = n15_26;
   v112 = v111[8];
   v185 = v108;
   n15_7 = n15_27;
-  v113 = (uint16_t *)this_3[21];
+  v113 = (uint16_t *)*(int32_t *)&this_3->f84;
   v114 = v113[4];
   v187 = v112;
   v115 = *v113;
@@ -14486,7 +14532,7 @@ LABEL_42:
   v123 = v113[8];
   v196 = v122;
   v197 = v123;
-  v124 = (uint16_t *)this_3[22];
+  v124 = (uint16_t *)*(int32_t *)&this_3->f88;
   v198 = *v124;
   v199 = *(v113 - 8);
   v125 = *(uint16_t *)(v109 - 40);
@@ -14496,46 +14542,46 @@ LABEL_42:
   v127 = v111[20];
   v128 = v111[28];
   v202 = v127;
-  v203 = *(uint16_t *)this_3[23];
+  v203 = *(uint16_t *)*(int32_t *)&this_3->f92;
   v204 = v126;
   v205 = *(v124 - 4);
   v206 = v128;
   v207 = v113[12];
-  this_3[11] = 0;
+  *(int32_t *)&this_3->f44 = 0;
   do
   {
     v129 = __fwd_code_pixel_sub_416860(this_3, &p_n15);
     if ( v129 >= 0 )
     {
-      n15_28 = v129 == *(uint16_t *)this_3[19];
+      n15_28 = v129 == *(uint16_t *)*(int32_t *)&this_3->f76;
       __fwd_code_pixel_sub_412490(
-        (uint16_t *)this_3 + 3 * this_3[13] + 525888,
-        (uint16_t *)this_3 + 3 * this_3[12] + 525840,
+        (uint16_t *)this_3 + 3 * *(int32_t *)&this_3->f52 + 525888,
+        (uint16_t *)this_3 + 3 * *(int32_t *)&this_3->f48 + 525840,
         n15_28);
       if ( n15_28 )
         return n15_14 + 1;
       exclusion_mask[v129] = __byte_445700;
     }
-    n32 = this_3[11] + 1;
-    this_3[11] = n32;
+    n32 = *(int32_t *)&this_3->f44 + 1;
+    *(int32_t *)&this_3->f44 = n32;
   }
   while ( n32 < 32 );
   n15_29 = n15_14;
   n4_5 = ::__n4_4;
-  v134 = this_3[269552];
-  this_3[269554] = this_3[269553] + 24 * ::__n4_3;
+  v134 = *(int32_t *)&this_3->f1078208;
+  *(int32_t *)&this_3->f1078216 = *(int32_t *)&this_3->f1078212 + 24 * ::__n4_3;
   v135 = v134 + 24 * n4_5;
-  v136 = (uint32_t **)this_3[269558];
-  this_3[269555] = v135;
+  v136 = (uint32_t **)*(int32_t *)&this_3->f1078232;
+  *(int32_t *)&this_3->f1078220 = v135;
   while ( 1 )
   {
     if ( (*v136)[1] )
     {
-      if ( __fwd_code_pixel_symbol_list(*v136, *(uint16_t *)this_3[19]) )
+      if ( __fwd_code_pixel_symbol_list(*v136, *(uint16_t *)*(int32_t *)&this_3->f76) )
         return n15_29 + 1;
-      v136 = (uint32_t **)this_3[269558];
+      v136 = (uint32_t **)*(int32_t *)&this_3->f1078232;
     }
-    this_3[269558] = (int32_t)++v136;
+    *(int32_t *)&this_3->f1078232 = (int32_t)++v136;
   }
 }
 static inline int32_t __fwd_sub_419430_sub_412E60(void *a0) { return __sub_412E60((uint32_t *)a0); }
@@ -14850,7 +14896,7 @@ LABEL_26:
   return a1;
 }
 static inline uint32_t __fwd_sub_417E80_sub_414860(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __sub_414860((int32_t *)a0, a1, a2, a3); }
-static inline int32_t __fwd_sub_417E80_sub_418650(void *a0, int32_t a1) { return __sub_418650((uint32_t *)a0, a1); }
+static inline int32_t __fwd_sub_417E80_sub_418650(void *a0, int32_t a1) { return __sub_418650((Obj10 *)a0, a1); }
 static inline void __fwd_sub_417E80_sub_419430(void *a0) { __sub_419430((uint32_t *)a0); }
 
 void __sub_417E80(uint32_t *_this, char *Src)
@@ -19863,7 +19909,7 @@ static inline int32_t __fwd_sub_421930_sub_41A130(void *a0, const __m128 &a1, co
 }
 static inline uint32_t __fwd_model_plane_sub_414860(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __sub_414860((int32_t *)a0, a1, a2, a3); }
 static inline void ** __fwd_model_plane_sub_415270(void *a0, char a1) { return __sub_415270((void **)a0, a1); }
-static inline int32_t __fwd_model_plane_code_pixel(void *a0, int32_t a1) { return __code_pixel((int32_t *)a0, a1); }
+static inline int32_t __fwd_model_plane_code_pixel(void *a0, int32_t a1) { return __code_pixel((Obj10 *)a0, a1); }
 static inline void __fwd_model_plane_reduce_alphabet(int32_t a0, char a1, void *a2) { __reduce_alphabet(a0, a1, (uint8_t *)a2); }
 static inline void __fwd_model_plane_sub_4197A0(const __m128 &a0, const __m128 &a1, void *a2, int32_t a3, int32_t a4, void *a5) { __sub_4197A0(a0, a1, (uint8_t *)a2, a3, a4, (uint8_t *)a5); }
 static inline int32_t __fwd_model_plane_sub_421930(void *a0, void *a1) { return __sub_421930((uint16_t *)a0, (uint8_t *)a1); }

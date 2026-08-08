@@ -284,6 +284,19 @@ def pointee(ty):
     return ty[:-1].strip() if ty and ty.endswith('*') else 'char'
 
 
+def bind(repl, after):
+    """Parenthesise a replacement a following operator would bind too tightly.
+
+    `this_3[6]++` becomes `*(int32_t *)&this_3->f24` plus the `++`, and C++
+    reads that as `&(this_3->f24++)` -- postfix binds tighter than the unary
+    `&`, so the address is taken of something that is no longer an lvalue.
+    """
+    if repl.startswith('*') and (after[:2] in ('++', '--', '->')
+                                 or after[:1] in '[.'):
+        return '(%s)' % repl
+    return repl
+
+
 # a dereference whose operand has no parentheses left in it, so the terms of
 # the address are plainly visible.  Rewriting these innermost-first exposes the
 # ones that wrapped them.
@@ -292,7 +305,29 @@ INNER = re.compile(r'\*\((?:const )?([A-Za-z_][A-Za-z0-9_]*\s*\**)\s*\*\)'
 BARE = re.compile(r'\*\((?:const )?([A-Za-z_][A-Za-z0-9_]*\s*\**)\s*\*\)'
                   r'(?:\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)|([A-Za-z_][A-Za-z0-9_]*))'
                   r'(?![\w\[])')
-SUBSCRIPT = re.compile(r'(?<![\w.>])([A-Za-z_][A-Za-z0-9_]*)\s*\[([^\[\]]*)\]')
+SUBSCRIPT = re.compile(r'(?<![\w.>\]])([A-Za-z_][A-Za-z0-9_]*)\s*\[')
+
+
+def subscripts(text, start=0):
+    """Every `name[...]` in the text, with brackets matched.
+
+    An index can hold a subscript of its own -- `this_3[12 * k + 6 *
+    (v39[n + 27] & v39[n + 19])]` -- and a pattern that stops at the first `]`
+    never sees the outer one at all.  Left unrewritten, that outer subscript
+    steps by the whole struct once the name becomes a struct pointer.
+    """
+    for m in SUBSCRIPT.finditer(text, start):
+        depth, i = 0, m.end() - 1
+        while i < len(text):
+            if text[i] == '[':
+                depth += 1
+            elif text[i] == ']':
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        if i < len(text):
+            yield m.start(), i + 1, m.group(1), text[m.end():i]
 PTRFIELD = re.compile(r'\*\((?:const )?[A-Za-z_][A-Za-z0-9_]*\s*\**\s*\*\)\('
                       r'\*\((?:const )?[A-Za-z_][A-Za-z0-9_]*\s*\**\s*\*\)'
                       r'\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\+\s*(\d+)\s*\)')
@@ -388,8 +423,7 @@ def survey(lines, fns, uf):
             k = uf.find((fn, m.group(2) or m.group(3)))
             fld[k][0][m.group(1).strip()] += 1
             hits[k] += 1
-        for m in SUBSCRIPT.finditer(c):
-            nm, idx = m.group(1), m.group(2)
+        for _, _, nm, idx in subscripts(c):
             ty = types.get(nm)
             k = uf.find((fn, nm))
             off = constant(terms(idx))
@@ -729,6 +763,8 @@ def main():
                         m.group(1).strip(), nm, join(rest), scale)
                 else:
                     new = field(m.group(1).strip(), nm, off * step[nm])
+                if new is not None:
+                    new = bind(new, text[m.end():m.end() + 2])
             if new is None:
                 pos = m.start() + 2
                 continue
@@ -739,33 +775,39 @@ def main():
 
             # nm[i] -- invisible to the dereference patterns, and scaled by the
             # declared element, not by the byte
-            def sub_rep(m, nm=nm, ty=ty, k=k):
-                if m.group(1) != nm:
-                    return m.group(0)
-                off = constant(terms(m.group(2)))
-                if off is not None:
-                    got = field(pointee(ty), nm, off * k)
-                    if got:
-                        return got
-                return '((%s *)%s)[%s]' % (pointee(ty), nm, m.group(2))
-            while True:              # `v5[v5[5] + 6]` needs two passes
-                once = SUBSCRIPT.sub(sub_rep, text)
-                if once == text:
+            at = 0
+            while True:     # one at a time: a replacement moves what follows
+                for lo, hi, got, idx in subscripts(text, at):
+                    if got != nm:
+                        continue
+                    off = constant(terms(idx))
+                    new = None
+                    if off is not None:
+                        new = field(pointee(ty), nm, off * k)
+                        if new:
+                            new = bind(new, text[hi:hi + 2])
+                    if new is None:
+                        new = '((%s *)%s)[%s]' % (pointee(ty), nm, idx)
+                    text = text[:lo] + new + text[hi:]
+                    at = lo
                     break
-                text = once
+                else:
+                    break
 
             # a plain `*nm`, with no cast to say what it reads
             def deref_rep(m, nm=nm, ty=ty):
                 if m.group(1) != nm or not is_deref(m.string, m.start()):
                     return m.group(0)
-                return field(pointee(ty), nm, 0) or m.group(0)
+                got = field(pointee(ty), nm, 0)
+                return bind(got, m.string[m.end():m.end() + 2]) if got \
+                    else m.group(0)
             text = PLAIN_DEREF.sub(deref_rep, text)
 
             # *(T *)nm -> nm->f0
             if member.get(0):
                 mem, mty = member[0]
                 text = re.sub(r'\*\((?:const )?%s\s*\*\)'
-                              r'(?:\(\s*%s\s*\)|%s)(?![\w\[])'
+                              r'(?:\(\s*%s\s*\)|%s)(?![\w\[.]|->)'
                               % (re.escape(mty), re.escape(nm), re.escape(nm)),
                               '%s->%s' % (nm, mem), text)
             # whatever arithmetic is left keeps the type it was written for --
@@ -793,13 +835,19 @@ def main():
         out[s:b + 1] = new_lines
 
     # retype the declarations, last, so the spans above are still valid
+    retyped = collections.defaultdict(set)
     for fn, nms in sorted(byfn.items(), key=lambda kv: -spanof.get(kv[0], (0,))[0]):
         if fn not in spanof:
             continue
         s, a, b = spanof[fn]
         for nm in nms:
             for i in range(s, a + 1):
+                before = out[i]
                 out[i] = retype_param(out[i], nm, tag)
+                if out[i] != before:
+                    ps = params_of(sigof[fn])
+                    if nm in ps:
+                        retyped[fn].add(ps.index(nm))
             if any(re.search(r'\b%s\s*\*+\s*%s\b' % (tag, re.escape(nm)), l)
                    for l in out[s:a + 1]):
                 continue
@@ -814,6 +862,25 @@ def main():
                       % (tag, nm, fn))
                 sys.exit(3)
             b += delta
+
+    # the one-line forwarding shims carry the cast the old parameter needed.
+    # C++ converts one pointer type to another for nobody, -fpermissive
+    # included, so a retyped parameter has to be matched at every call the
+    # shims make.
+    for fn, idxs in retyped.items():
+        call = re.compile(r'\b%s\s*\(([^;]*)\)\s*;?\s*\}' % re.escape(fn))
+        for i, l in enumerate(out):
+            if not l.lstrip().startswith('static inline'):
+                continue
+            m = call.search(l)
+            if not m:
+                continue
+            args = split_commas(m.group(1))
+            for k in idxs:
+                if k < len(args):
+                    bare = re.sub(r'^\s*\([^)]*\)\s*', '', args[k]).strip()
+                    args[k] = ' (%s *)%s' % (tag, bare)
+            out[i] = l[:m.start(1)] + ','.join(args).lstrip() + l[m.end(1):]
 
     anchor = next(i for i, l in enumerate(out) if l.startswith('struct RangeCoder'))
     out = out[:anchor] + body.split('\n') + [''] + out[anchor:]
