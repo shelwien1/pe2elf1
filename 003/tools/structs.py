@@ -680,17 +680,23 @@ def main():
         member[off] = (nm, best)
         at = off + w
 
+    # the guard is the last member's offset, not the struct's size: a struct
+    # whose members end at 90 is 92 bytes once it is aligned, and asserting the
+    # size would be asserting the padding rule rather than the layout.  Any
+    # member that moves or changes width moves this one.
+    last = max(o for o in member if member[o])
     body = ('// %s -- recovered from %d dereferences over %d offsets, under %d\n'
             '// name%s.  The layout is the one the code already assumed: at 32 bits a\n'
             '// pointer is four bytes, so naming these fields moves nothing, and the\n'
             '// static_assert is what says so.  Offsets the code only reaches with a\n'
             '// computed index are padding here -- their bounds are not visible.\n'
             'struct %s {\n%s\n};\n'
-            'static_assert(sizeof(void *) != 4 || sizeof(%s) == %d,\n'
+            'static_assert(sizeof(void *) != 4\n'
+            '              || __builtin_offsetof(%s, %s) == %d,\n'
             '              "%s: the layout moved");\n'
             % (tag, hits[key], len(offs), len({nm for _, nm in names}),
                '' if len({nm for _, nm in names}) == 1 else 's',
-               tag, '\n'.join(decl), tag, at, tag))
+               tag, '\n'.join(decl), tag, member[last][0], last, tag))
 
     if '--show' in sys.argv:
         print(body)

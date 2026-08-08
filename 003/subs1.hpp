@@ -4001,7 +4001,8 @@ struct Obj0 {
   uint32_t f208;
   uint32_t f212;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj0) == 216,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj0, f212) == 212,
               "Obj0: the layout moved");
 
 
@@ -4027,7 +4028,8 @@ struct Obj1 {
   uint32_t f208;
   uint32_t f212;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj1) == 216,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj1, f212) == 212,
               "Obj1: the layout moved");
 
 
@@ -4053,7 +4055,8 @@ struct Obj2 {
   uint32_t f208;
   uint32_t f212;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj2) == 216,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj2, f212) == 212,
               "Obj2: the layout moved");
 
 
@@ -4066,7 +4069,8 @@ struct Obj3 {
   uint8_t _pad0[2];
   int16_t f2;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj3) == 4,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj3, f2) == 2,
               "Obj3: the layout moved");
 
 
@@ -4096,7 +4100,8 @@ struct Obj4 {
   int32_t f208;
   int32_t f212;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj4) == 216,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj4, f212) == 212,
               "Obj4: the layout moved");
 
 
@@ -4120,7 +4125,8 @@ struct Obj5 {
   uint16_t f940084;
   uint16_t f940086;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj5) == 940088,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj5, f940086) == 940086,
               "Obj5: the layout moved");
 
 
@@ -4147,7 +4153,8 @@ struct Obj6 {
   __m128 f224;
   __m128 f240;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj6) == 256,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj6, f240) == 240,
               "Obj6: the layout moved");
 
 
@@ -4173,7 +4180,8 @@ struct Obj7 {
   __m128 f208;
   __m128 f224;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj7) == 240,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj7, f224) == 224,
               "Obj7: the layout moved");
 
 
@@ -4208,7 +4216,8 @@ struct Obj8 {
   uint32_t f278768;
   uint32_t f278772;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj8) == 278776,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj8, f278772) == 278772,
               "Obj8: the layout moved");
 
 
@@ -4243,7 +4252,8 @@ struct Obj9 {
   uint32_t f278768;
   uint32_t f278772;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj9) == 278776,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj9, f278772) == 278772,
               "Obj9: the layout moved");
 
 
@@ -4285,7 +4295,8 @@ struct Obj10 {
   uint32_t f6059432;
   int32_t f6059436;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj10) == 6059440,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj10, f6059436) == 6059436,
               "Obj10: the layout moved");
 
 
@@ -4346,7 +4357,8 @@ struct Obj11 {
   uint8_t _pad48[131056];
   __m128 f940064;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj11) == 940080,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj11, f940064) == 940064,
               "Obj11: the layout moved");
 
 
@@ -4363,7 +4375,8 @@ struct Obj12 {
   __m128*f16;
   __m128*f20;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj12) == 24,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj12, f20) == 20,
               "Obj12: the layout moved");
 
 
@@ -4389,7 +4402,8 @@ struct Obj13 {
   __m128 f208;
   __m128 f224;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj13) == 240,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj13, f224) == 224,
               "Obj13: the layout moved");
 
 
@@ -4404,7 +4418,8 @@ struct Obj14 {
   uint8_t _pad2[4];
   uint16_t f10;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj14) == 12,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj14, f10) == 10,
               "Obj14: the layout moved");
 
 
@@ -4421,7 +4436,8 @@ struct Obj15 {
   uint8_t _pad4[1];
   uint16_t f6;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj15) == 8,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj15, f6) == 6,
               "Obj15: the layout moved");
 
 
@@ -4438,7 +4454,8 @@ struct Obj16 {
   uint8_t _pad4[1];
   uint16_t f6;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj16) == 8,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj16, f6) == 6,
               "Obj16: the layout moved");
 
 
@@ -4455,7 +4472,8 @@ struct Obj17 {
   uint8_t _pad4[1];
   uint16_t f6;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj17) == 8,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj17, f6) == 6,
               "Obj17: the layout moved");
 
 
@@ -4468,7 +4486,8 @@ struct Obj18 {
   uint64_t f0;
   uint64_t f8;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj18) == 16,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj18, f8) == 8,
               "Obj18: the layout moved");
 
 
@@ -4490,7 +4509,8 @@ struct Obj19 {
   char *f278768;
   uint32_t f278772;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj19) == 278776,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj19, f278772) == 278772,
               "Obj19: the layout moved");
 
 
@@ -4512,7 +4532,8 @@ struct Obj20 {
   char *f278768;
   uint32_t f278772;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj20) == 278776,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj20, f278772) == 278772,
               "Obj20: the layout moved");
 
 
@@ -4531,7 +4552,8 @@ struct Obj21 {
   __m128 f96;
   __m128 f112;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj21) == 128,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj21, f112) == 112,
               "Obj21: the layout moved");
 
 
@@ -4544,7 +4566,8 @@ struct Obj22 {
   uint8_t _pad0[1];
   uint8_t f1;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj22) == 2,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj22, f1) == 1,
               "Obj22: the layout moved");
 
 
@@ -4561,7 +4584,8 @@ struct Obj23 {
   uint8_t _pad4[1];
   int16_t f6;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj23) == 8,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj23, f6) == 6,
               "Obj23: the layout moved");
 
 
@@ -4595,7 +4619,8 @@ struct Obj24 {
   uint32_t f120;
   uint32_t f124;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj24) == 128,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj24, f124) == 124,
               "Obj24: the layout moved");
 
 
@@ -4617,7 +4642,8 @@ struct Obj25 {
   uint8_t*f208;
   uint8_t*f212;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj25) == 216,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj25, f212) == 212,
               "Obj25: the layout moved");
 
 
@@ -4639,7 +4665,8 @@ struct Obj26 {
   uint8_t*f208;
   uint8_t*f212;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj26) == 216,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj26, f212) == 212,
               "Obj26: the layout moved");
 
 
@@ -4661,7 +4688,8 @@ struct Obj27 {
   uint8_t*f208;
   uint8_t*f212;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj27) == 216,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj27, f212) == 212,
               "Obj27: the layout moved");
 
 
@@ -4683,7 +4711,8 @@ struct Obj28 {
   uint8_t*f208;
   uint8_t*f212;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj28) == 216,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj28, f212) == 212,
               "Obj28: the layout moved");
 
 
@@ -4705,7 +4734,8 @@ struct Obj29 {
   uint8_t*f208;
   uint8_t*f212;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj29) == 216,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj29, f212) == 212,
               "Obj29: the layout moved");
 
 
@@ -4720,7 +4750,8 @@ struct Obj30 {
   int16_t f4;
   int16_t f6;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj30) == 8,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj30, f6) == 6,
               "Obj30: the layout moved");
 
 
@@ -4738,7 +4769,8 @@ struct Obj31 {
   char *f278764;
   char *f278768;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj31) == 278772,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj31, f278768) == 278768,
               "Obj31: the layout moved");
 
 
@@ -4756,7 +4788,8 @@ struct Obj32 {
   char *f278764;
   char *f278768;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj32) == 278772,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj32, f278768) == 278768,
               "Obj32: the layout moved");
 
 
@@ -4770,7 +4803,8 @@ struct Obj33 {
   uint8_t _pad1[6];
   uint16_t f10;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj33) == 12,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj33, f10) == 10,
               "Obj33: the layout moved");
 
 
@@ -4785,7 +4819,8 @@ struct Obj34 {
   int16_t f4;
   int16_t f6;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj34) == 8,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj34, f6) == 6,
               "Obj34: the layout moved");
 
 
@@ -4802,7 +4837,8 @@ struct Obj35 {
   int32_t f16;
   int32_t f20;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj35) == 24,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj35, f20) == 20,
               "Obj35: the layout moved");
 
 
@@ -4820,7 +4856,8 @@ struct Obj36 {
   int16_t f36;
   int16_t f38;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj36) == 40,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj36, f38) == 38,
               "Obj36: the layout moved");
 
 
@@ -4839,7 +4876,8 @@ struct Obj37 {
   uint16_t f12;
   uint16_t f14;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj37) == 16,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj37, f14) == 14,
               "Obj37: the layout moved");
 
 
@@ -4853,7 +4891,8 @@ struct Obj38 {
   uint8_t _pad1[1];
   int16_t f2;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj38) == 4,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj38, f2) == 2,
               "Obj38: the layout moved");
 
 
@@ -4867,7 +4906,8 @@ struct Obj39 {
   uint8_t _pad1[1];
   int16_t f2;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj39) == 4,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj39, f2) == 2,
               "Obj39: the layout moved");
 
 
@@ -4881,7 +4921,8 @@ struct Obj40 {
   uint8_t _pad1[1];
   int16_t f2;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj40) == 4,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj40, f2) == 2,
               "Obj40: the layout moved");
 
 
@@ -4895,7 +4936,8 @@ struct Obj41 {
   uint8_t _pad1[1];
   int16_t f2;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj41) == 4,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj41, f2) == 2,
               "Obj41: the layout moved");
 
 
@@ -4909,7 +4951,8 @@ struct Obj42 {
   uint8_t _pad1[1];
   int16_t f2;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj42) == 4,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj42, f2) == 2,
               "Obj42: the layout moved");
 
 
@@ -4933,7 +4976,8 @@ struct Obj43 {
   uint16_t f940084;
   uint16_t f940086;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj43) == 940088,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj43, f940086) == 940086,
               "Obj43: the layout moved");
 
 
@@ -4947,7 +4991,8 @@ struct Obj44 {
   uint8_t _pad1[1];
   int16_t f2;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj44) == 4,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj44, f2) == 2,
               "Obj44: the layout moved");
 
 
@@ -4964,7 +5009,8 @@ struct Obj45 {
   uint8_t _pad4[4];
   uint32_t f20;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj45) == 24,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj45, f20) == 20,
               "Obj45: the layout moved");
 
 
@@ -4978,7 +5024,8 @@ struct Obj46 {
   uint8_t _pad1[3];
   const char f4;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj46) == 5,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj46, f4) == 4,
               "Obj46: the layout moved");
 
 
@@ -4992,7 +5039,8 @@ struct Obj47 {
   uint8_t _pad1[3];
   const char f4;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj47) == 5,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj47, f4) == 4,
               "Obj47: the layout moved");
 
 
@@ -5006,7 +5054,8 @@ struct Obj48 {
   uint8_t _pad1[3];
   const char f4;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj48) == 5,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj48, f4) == 4,
               "Obj48: the layout moved");
 
 
@@ -5020,7 +5069,8 @@ struct Obj49 {
   uint8_t _pad1[3];
   const char f4;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj49) == 5,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj49, f4) == 4,
               "Obj49: the layout moved");
 
 
@@ -5034,7 +5084,8 @@ struct Obj50 {
   uint8_t _pad1[3];
   const char f4;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj50) == 5,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj50, f4) == 4,
               "Obj50: the layout moved");
 
 
@@ -5048,7 +5099,8 @@ struct Obj51 {
   uint8_t _pad1[3];
   const char f4;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj51) == 5,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj51, f4) == 4,
               "Obj51: the layout moved");
 
 
@@ -5062,7 +5114,8 @@ struct Obj52 {
   uint8_t _pad1[3];
   const char f4;
 };
-static_assert(sizeof(void *) != 4 || sizeof(Obj52) == 5,
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj52, f4) == 4,
               "Obj52: the layout moved");
 
 
