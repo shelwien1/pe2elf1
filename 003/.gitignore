@@ -4,3 +4,5 @@ bmf.dbg
 *.o
 run/
 .wine/
+__pycache__/
+*.pyc
