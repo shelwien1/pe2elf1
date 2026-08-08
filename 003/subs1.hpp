@@ -153,8 +153,6 @@ static t_byte_439BD0& __byte_439BD0 = *(t_byte_439BD0*)(blob1 + 0x00439BD0 - BMF
 typedef int32_t t_dword_439BD8[8];
 static t_dword_439BD8& __dword_439BD8 = *(t_dword_439BD8*)(blob1 + 0x00439BD8 - BMF_BLOB_BASE);
 static __m128d &__bmf_half_half = *(__m128d *)(blob1 + 0x0043B480 - BMF_BLOB_BASE);
-typedef const char * t_off_441068;
-static t_off_441068& __off_441068 = *(t_off_441068*)(blob1 + 0x00441068 - BMF_BLOB_BASE);
 // ---------------------------------------------------------------------------
 // The compression mode.
 //
@@ -4882,8 +4880,24 @@ __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...)
 {
   ;
   va_list ap;
+  // BMF kept these in a table of pointers at 0x00441068 and indexed it by the
+  // exit code, which is why the code is both the message and the status.  Codes
+  // 0 and 2 are the usage text and "Unknown option", and neither can be reached
+  // from this command line; they are here because the numbering is the
+  // original's and shifting it would make the exit statuses lie.
+  static const char *const message[] = {
+    "",                             // 0  usage -- BMF's, not reachable here
+    "File not found: %s",           // 1
+    "Unknown option: %s",           // 2  no switches to get wrong
+    "%s: bad file!",                // 3
+    "Read error!",                  // 4
+    "Write error for file %s",      // 5
+    "Can't open file: %s",          // 6
+    "Out of memory!",               // 7  the new-handler, via __sub_402E30
+    "User break!",                  // 8
+  };
   va_start(ap, Code);
-  vprintf((&__off_441068)[Code], ap);
+  vprintf(message[(uint32_t)Code < 9 ? Code : 4], ap);
   va_end(ap);
   printf("\n");
   exit(Code);
