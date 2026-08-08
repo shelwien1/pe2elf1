@@ -222,8 +222,8 @@ on the first renormalisation, **the first byte of every range-coded section is
 `0x97`** — the coder's own machinery emits the section marker, and the decoder
 checks for it.
 
-**Renormalise + encode — `sub_411E90`** (the general entry; `sub_411FD0`,
-`sub_412110` and others are the same loop with a different symbol interface)
+**Renormalise + encode — `rc.enc_normalise()` and `rc.encode()`** (the donor
+had this loop copied into a dozen bodies; §5.4)
 
 ```c
 while (range <= 0x800000) {
@@ -319,19 +319,19 @@ encoder's `low` does.
 The two decoding steps are split, matching the classic interface:
 
 ```c
-/* sub_412280 — GetFreq(totFreq) */
+/* rc.get_freq(tot) */
 r     = range / totFreq;              /* cached in __dword_4456E8 */
 count = code / r;
 return (count >= totFreq) ? totFreq - 1 : count;
 
-/* sub_412300 — Decode(cumFreq, freq, totFreq), after the caller has found
-                which symbol `count` fell in                            */
+/* rc.decode(cum, cum + freq, tot), after the caller has turned `count`
+   into the slot it landed in                                           */
 code  -= cumFreq * r;
 range  = (cumFreq + freq < totFreq) ? freq * r : range - cumFreq * r;
 ```
 
-`sub_412340(a, b)` is the binary shortcut — decode one bit whose two
-frequencies are `a` and `b`, without a `GetFreq`/`Decode` pair:
+`rc.decode_bit(f0, f1)` is the binary shortcut — decode one bit whose two
+frequencies are `f0` and `f1`, without a `get_freq`/`decode` pair:
 
 ```c
 rt = a * (range / (a + b));
@@ -339,27 +339,46 @@ if (code >= rt) { range -= rt; code -= rt; return 1; }
 else            { range  = rt;             return 0; }
 ```
 
-`sub_411FD0(a, b, bit)` is its encoder twin.
+`rc.encode_bit(f0, f1, bit)` is its encoder twin.
 
 **Finish — `sub_414920`** renormalises, then scans forward for the `0x97`
 terminator and resets the bit packer's cursor to just past it.
 
-### 5.4 The range coder entry points
+### 5.4 The RangeCoder class
 
-| function | direction | what |
+All of the above is a `RangeCoder` struct with one instance, `rc`, declared in
+subs1.hpp just after the globals block — it goes there rather than in bmf.cpp
+because it shares its output cursor with the bit packer, and `__Buffer_0` is a
+blob global.
+
+The state that §5.1 lists as nine words of `blob.inc` is nine members. The one
+that was a single word doing two jobs is two members, `pending` and `rdiv`,
+since encoding and decoding never run together.
+
+| method | direction | what |
 | --- | --- | --- |
-| `sub_414F60` | encode | init state, allocate the model tables |
-| `sub_4149C0` | decode | check the `0x97` marker, prime `code` |
-| `sub_411E90` | encode | `Encode(cumFreq, freq, totFreq)` via the three globals |
-| `sub_411FD0` | encode | `EncodeBit(freq0, freq1, bit)` |
-| `sub_412110` | encode | `EncodeUniform(value, total)` — one slot of width 1 out of `total` |
-| `sub_412280` | decode | `GetFreq(totFreq)` |
-| `sub_412300` | decode | `Decode(cumFreq, freq, totFreq)` |
-| `sub_412340` | decode | `DecodeBit(freq0, freq1)` |
-| `sub_412B10` | encode | encode a symbol against a sorted frequency list (§7.3) |
-| `sub_414620` | decode | decode a symbol from a 3-way counter node (§7.3) |
-| `sub_414CE0` | encode | flush: tail, length, padding, terminator |
-| `sub_414920` | decode | finish: skip to the terminator |
+| `rc.enc_init()` | encode | `range = 2^31`, `low = 0`, cache = the `0x97` marker |
+| `rc.dec_init()` | decode | check the marker, prime `code` with 31 bits |
+| `rc.enc_normalise()` | encode | the carry-counting byte loop |
+| `rc.dec_normalise()` | decode | eight more bits into the window |
+| `rc.encode(cum, high, tot)` | encode | one symbol; returns `freq * r` |
+| `rc.encode_bit(f0, f1, bit)` | encode | one bit against two frequencies |
+| `rc.get_freq(tot)` | decode | which slot of `tot` the code falls in |
+| `rc.decode(cum, high, tot)` | decode | finish the step `get_freq` started |
+| `rc.decode_bit(f0, f1)` | decode | one bit against two frequencies |
+| `rc.flush()` | encode | tail, length, padding, terminator |
+| `rc.finish()` | decode | skip to the terminator |
+
+`encode`, `get_freq` and `decode` also have no-argument forms that read
+`rc.cum` / `rc.high` / `rc.tot`, because that is how several model sites pass
+them: they fill the members in over the course of a symbol search and then
+code. The donor had no choice about that — its entries took no parameters and
+the three globals *were* the argument list.
+
+Two model functions still hold a coding step that is more than one call:
+`sub_412B10` encodes a symbol against a sorted frequency list (§7.3) and
+`sub_414620` decodes one from a 3-way counter node. Both now do their search
+and then call `rc`.
 
 ## 6. The modelling front end
 
@@ -534,7 +553,7 @@ coder of §5.
 2. `sub_414F60` — start the range coder (§5.2).
 3. `sub_417200` — **alphabet reduction**, and the first thing written. It scans
    the plane for the symbols actually used, encodes `distinct - 1` with
-   `sub_412110` (a flat slot out of the full alphabet size), encodes each used
+   `rc.encode` as a flat one-wide slot out of the full alphabet size, encodes each used
    symbol with `sub_412B10`, and then re-indexes the plane onto the dense
    alphabet that leaves. A plane using 40 of 256 values is coded over 40
    symbols from here on.
@@ -586,7 +605,7 @@ else              n15_5 = 0;
 
 so the state is `(match₁, match₂)` over a 5 × 5 grid — the same 5 × 5 the
 workspace allocated. That index selects the sub-state, which selects the counter
-pair, which is fed to `sub_411FD0` / `sub_412340` as `(freq0, freq1)`.
+pair, which is fed to `rc.encode_bit` / `rc.decode_bit` as `(f0, f1)`.
 
 ### 7.3 Counters
 
@@ -723,9 +742,7 @@ Stated plainly, so the rest can be trusted:
 | expand one image | `sub_403820` | `0x00403820` |
 | range coder init / flush (encode) | `sub_414F60` / `sub_414CE0` | `0x00414F60` / `0x00414CE0` |
 | range coder init / finish (decode) | `sub_4149C0` / `sub_414920` | `0x004149C0` / `0x00414920` |
-| range coder encode step | `sub_411E90` | `0x00411E90` |
-| range coder decode step | `sub_412280` + `sub_412300` | `0x00412280` |
-| binary encode / decode | `sub_411FD0` / `sub_412340` | `0x00411FD0` / `0x00412340` |
+| the coder itself | `struct RangeCoder`, instance `rc` | — |
 | colour transform | `sub_407EF0` | `0x00407EF0` |
 | MED prediction + folding | `sub_4108C0` | `0x004108C0` |
 | near-lossless encode / decode | `sub_4111B0` / `sub_410650` | `0x004111B0` / `0x00410650` |
