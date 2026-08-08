@@ -13,6 +13,7 @@ nothing — and none touches `bmf.cpp` or `blob.inc`.
 | `collect_globals.py` | moved the per-function typedef + global declaration pairs to the top of the file, sorted them by their address in BMF.exe's data segment, and kept one declaration per object instead of one per using function |
 | `prune_unreachable.py` | deleted the function definitions nothing can reach from `main`, and then the globals-block entries no surviving body names |
 | `name_raw_addrs.py` | put the addresses Hex-Rays baked into expressions — `BMF_BLOB(0x00443394)` — back onto the globals that own them |
+| `hex_constants.py` | wrote the pattern constants in hex — `117901063` → `0x07070707`, `1065353216` → `0x3F800000 /* 1.0f */` |
 | `compact_locals.py` | merged one function's one-per-line locals into comma lists — `int32_t v5; int32_t v8;` → `int32_t v5, v8;` |
 
     python3 tools/unify_types.py subs1.hpp
@@ -20,6 +21,7 @@ nothing — and none touches `bmf.cpp` or `blob.inc`.
     python3 tools/prune_unreachable.py subs1.hpp          # report
     python3 tools/prune_unreachable.py subs1.hpp --apply  # rewrite
     python3 tools/name_raw_addrs.py subs1.hpp
+    python3 tools/hex_constants.py subs1.hpp
     python3 tools/compact_locals.py subs1.hpp out.hpp __sub_402EF0 2
 
 `name_raw_addrs.py` runs after `collect_globals.py`, since it needs the globals
@@ -35,6 +37,20 @@ own: it is byte 1 of the dword array based at `__Buffer`, indexed like an array,
 and `__byte_44339D` and `__byte_4433AD` next door are declared the same way.
 `bmf.cpp` no longer defines `BMF_BLOB`, so a freshly extracted `subs1.hpp` will
 fail to compile until this has been run over it.
+
+`hex_constants.py` is the same idea for constants that are not addresses.
+Hex-Rays prints every literal in decimal, which hides a byte fill written next
+to `0x606060606060606LL` (`117901063`), a float stored through an int pointer
+(`1065353216`), a reciprocal multiplier (`715827883`), and the BMP signature
+(`19778`). 19 sites, rewritten as the same value in hex. It leaves the rest of
+the file's long decimals alone: they are byte offsets into heap structures
+(`_this + 278736`) and stack frames (`__hexrays_frame + 66000`), where hex would
+reveal that 278736 is 16 × 17421 and not much else.
+
+Worth recording, since it is the question that prompted the script: **none of
+those constants is an address.** Every literal in the file falls outside
+BMF.exe's image (`0x00400000`–`0x00450000`) — the decompilation reaches the data
+segment only through the globals block, and nothing sneaks in as a number.
 
 The first three assert loudly rather than guessing: `collect_globals.py`
 refuses to run if two functions disagree about an address's type, if two

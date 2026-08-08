@@ -3913,13 +3913,13 @@ int32_t *__sub_4256F0(int32_t *_this, int32_t i, int32_t a3, int32_t n4)
       __n8_0 = 64;
     }
     __n2_0 = 2;
-    __dword_445660[0] = 33685760;
+    __dword_445660[0] = 0x02020100;
     __byte_44571E = 0;
     __byte_44571D = 1;
     __n2_1 = 2;
     __n4 = 4;
     __byte_445722 = 1;
-    __dword_445660[1] = 50529027;
+    __dword_445660[1] = 0x03030303;
     __n4_0 = 4;
     v2 = 2 * (uint8_t)__n2_1 + 4;
     __byte_445724 = 2 * __n2_1 + 4;
@@ -3947,8 +3947,8 @@ int32_t *__sub_4256F0(int32_t *_this, int32_t i, int32_t a3, int32_t n4)
     v7 = (char *)__dword_445660 + (uint32_t)v6;
     *(uint64_t *)v7 = si128.m128i_i64[0];
     v8 = (__m128i *)(((int32_t)&__dword_445660[3] + (uint32_t)v6 + 3) & 0xFFFFFFF0);
-    *((uint32_t *)v7 + 2) = 117901063;
-    *((uint16_t *)v7 + 6) = 1799;
+    *((uint32_t *)v7 + 2) = 0x07070707;
+    *((uint16_t *)v7 + 6) = 0x0707;
     v7[14] = 7;
     *((uint64_t *)v7 + 6) = si128.m128i_i64[0];
     *((uint64_t *)v7 + 7) = si128.m128i_i64[0];
@@ -4241,7 +4241,7 @@ int32_t __sub_4229E0(int32_t _this, int32_t i, int32_t n4)
   *(uint32_t *)(_this + 278724) = v9 + 8;
   *(uint32_t *)(_this + 278660) = malloc(4 * i + 16);
   v10 = malloc(4 * i + 16);
-  *(uint32_t *)(_this + 232) = 1065353216;
+  *(uint32_t *)(_this + 232) = 0x3F800000 /* 1.0f */;
   *(uint32_t *)(_this + 278664) = v10;
   *(uint32_t *)(_this + 278668) = *(uint32_t *)(_this + 278660) + 4 * i + 8;
   if ( i > -4 )
@@ -4455,7 +4455,7 @@ LABEL_20:
   Bufferc_1 = Bufferc_3;
   i = *(uint16_t *)p_i;
   *(uint32_t *)(Bufferc_3 + 14) = 40;
-  *(uint16_t *)Bufferc_3 = 19778;
+  *(uint16_t *)Bufferc_3 = 0x4D42 /* 'BM' */;
   Buffer_1 = *(uint16_t *)(p_i + 2);
   Buffer_2 = Buffer_1;
   *((uint16_t *)Bufferc_3 + 4) = 0;
@@ -5263,13 +5263,13 @@ BMF_SSE int32_t __sub_4149C0(char ArgList_1)
       __n8_0 = 64;
     }
     __n2_0 = 2;
-    __dword_445660[0] = 33685760;
+    __dword_445660[0] = 0x02020100;
     __byte_44571E = 0;
     __byte_44571D = 1;
     __n2_1 = 2;
     __n4 = 4;
     __byte_445722 = 1;
-    __dword_445660[1] = 50529027;
+    __dword_445660[1] = 0x03030303;
     __n4_0 = 4;
     v7 = 2 * (uint8_t)__n2_1 + 4;
     __byte_445724 = 2 * __n2_1 + 4;
@@ -5297,8 +5297,8 @@ BMF_SSE int32_t __sub_4149C0(char ArgList_1)
     v12 = (char *)__dword_445660 + (uint32_t)v11;
     *(uint64_t *)v12 = si128.m128i_i64[0];
     v13 = (__m128i *)(((int32_t)&__dword_445660[3] + (uint32_t)v11 + 3) & 0xFFFFFFF0);
-    *((uint32_t *)v12 + 2) = 117901063;
-    *((uint16_t *)v12 + 6) = 1799;
+    *((uint32_t *)v12 + 2) = 0x07070707;
+    *((uint16_t *)v12 + 6) = 0x0707;
     v12[14] = 7;
     *((uint64_t *)v12 + 6) = si128.m128i_i64[0];
     *((uint64_t *)v12 + 7) = si128.m128i_i64[0];
@@ -8251,7 +8251,7 @@ LABEL_50:
       v43 = *a2 != 0;
       bufa[4 * (v41 / 24) + 2] = 1;
       bufa_1[4 * v43 + 2] = 1;
-      return 715827883 * v41;
+      return 0x2AAAAAAB * v41;
     }
   }
   else
@@ -12998,9 +12998,9 @@ BMF_SSE int32_t __sub_41C4B0(__m128 *_this, __m128 *a2, __m128 **a3, int32_t n2)
     *(_this + 6) = _mm_mul_ps(v19, (__m128)__xmmword_439B20);
     *(_this + 12) = v29;
     *(_this + 13) = _mm_mul_ps((__m128)__xmmword_439B30, (*a3)[13]);
-    *((uint32_t *)_this + 56) = 1111228416;
-    *((uint32_t *)_this + 57) = 1126773555;
-    *((uint32_t *)_this + 58) = 1065353216;
+    *((uint32_t *)_this + 56) = 0x423C0000 /* 47.0f */;
+    *((uint32_t *)_this + 57) = 0x43293333 /* 169.2f */;
+    *((uint32_t *)_this + 58) = 0x3F800000 /* 1.0f */;
     a2[7].m128_f32[1] = v22;
     return (int32_t)v22;
   }
@@ -15449,7 +15449,7 @@ LABEL_19:
   Stream_v = fopen(FileName, "rb");
   if ( !Stream_v
     || fread(Buffer, 0xEu, 1u, Stream_v) != 1
-    || Buffer[0] != 19778
+    || Buffer[0] != 0x4D42 /* 'BM' */
     || fread(Buffer_1, 0x28u, 1u, Stream_v) != 1
     || Buffer_1[0] != 40
     || v60 != 1 )
@@ -16260,8 +16260,8 @@ LABEL_57:
         this_3[22] = v54 + 8 * n15_18 - 8 * n15_14;
         v57 = this_3[19];
         this_3[23] = v56 + 8 * n15_18 - 8 * n15_14;
-        *(uint32_t *)(v57 + 4) = 16843009;
-        *(uint32_t *)this_3[19] = 16843009;
+        *(uint32_t *)(v57 + 4) = 0x01010101;
+        *(uint32_t *)this_3[19] = 0x01010101;
         v58 = (uint16_t *)this_3[1514859];
         LOWORD(v55) = ::__n4_4;
         LOWORD(v54) = *v58;
@@ -16996,8 +16996,8 @@ LABEL_42:
       this_3[22] = this_3[22] + 8 * n15_12 - 8 * n15_9;
       v51 = v185;
       this_3[23] = v50 + 8 * n15_12 - 8 * n15_9;
-      *((uint32_t *)v51 + 1) = 16843009;
-      *(uint32_t *)this_3[19] = 16843009;
+      *((uint32_t *)v51 + 1) = 0x01010101;
+      *(uint32_t *)this_3[19] = 0x01010101;
       *(uint16_t *)(this_3[1514859] + 2) = *(uint16_t *)this_3[1514859];
       LOWORD(v51) = n15_3;
       *(uint16_t *)this_3[19] = n15_3;
