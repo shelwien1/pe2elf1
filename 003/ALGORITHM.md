@@ -9,11 +9,12 @@ are the donor's addresses inside `BMF.exe` (`sub_402FE0` is the body at
 `0x00402FE0`); global names are IDA's, and each one is a reference into
 `blob.inc` — BMF.exe's data segment — at the address given in the tables.
 
-**Confidence.** Sections 1–6 are read off the code directly and I am confident
-in them; where a detail is inferred rather than read, it says so. Section 7
-describes the two entropy back ends: the range coder half (§7.2) is established,
-but the context model that drives it (`sub_415380` and below) is only mapped in
-outline — see §9 for exactly what is not settled.
+**Confidence.** Sections 1–6 and the range coder in §5 are read off the code
+directly; where a detail is inferred rather than read, it says so. §7 is where
+that stops being true: the range coder the `-S` path drives is settled, but the
+context model above it (`sub_415380` and below) is only mapped in outline, and
+the non-`-S` back end barely at all. §9 lists exactly what is not settled, so
+the rest can be relied on.
 
 ---
 
@@ -46,6 +47,7 @@ A member is:
 | --- | --- |
 | 4 | signature `81 8A 32 30` (`"\x81\x8A20"`) |
 | 16 | image descriptor (§3) |
+| — | a stored sub-member, when descriptor byte +11 bit `0x80` is set; `bmf c` never writes one |
 | n | coded data — the buffer described in §4 |
 | p | palette, if the descriptor says there is one |
 
@@ -55,10 +57,11 @@ The signature is written by
 fwrite("\x81\x8A""20\x81\x90""20a+b", 4u, 1u, out);
 ```
 
-which takes only the first four bytes; the string literal also carries the
-second accepted signature `81 90 32 30`, and `"a+b"`, the fopen mode — three
-constants folded into one literal by the original compiler. The reader that
-used to sniff input formats accepted either signature.
+Only the first four bytes are written. What looks like one long literal is
+three string constants that the original linker tail-merged into one another —
+the signature, the second accepted signature `81 90 32 30`, and `"a+b"`, the
+mode `sub_402EF0` opens the archive with. The reader that used to sniff input
+formats accepted either signature.
 
 When the data does not compress (`coded size >= raw size`) the member is
 rewritten with the descriptor's "compressed" flag clear and the raw pixels in
@@ -91,7 +94,8 @@ Byte +11:
 | `0x20` | `sub_402FE0` | the member is compressed at all |
 | `0x80` | | an appended, stored member follows |
 
-Palette size is `3 << bpp` bytes (three bytes per entry), for `bpp <= 8`.
+The palette is `3 << bpp` bytes — three bytes per entry, `2^bpp` entries — and
+exists only for `bpp <= 8`.
 
 ## 4. One buffer, two streams
 
@@ -120,24 +124,42 @@ that one buffer, alternating, and they share the write cursor:
 
 ### 4.1 The bit packer
 
-Bits are packed LSB-first into a 32-bit accumulator and flushed as little-endian
-words. `__n8` counts the bits still free. Writing a `K`-bit value `v`:
+Bits are packed LSB-first into a 32-bit accumulator and flushed as
+little-endian words. `__n8` is the number of bits still **free** in the
+accumulator, so the next value goes in at bit position `32 - __n8`. Writing a
+`K`-bit value `v`:
 
 ```c
-if (__n8 >= K) {                       /* fits in the current word */
+if (__n8 >= K) {                       /* fits in the word being filled */
     __n256 |= v << (32 - __n8);
     __n8   -= K;
-} else {                               /* close this word, start the next */
-    *(uint32_t *)__Buffer_1 = __n256 | (v << (32 - __n8));
-    __Buffer_1 = __Buffer_0;
+} else {                               /* close this word, open the next  */
+    *(uint32_t *)__Buffer_1 = __n256 | (v << (32 - __n8));   /* low __n8 bits of v */
+    __Buffer_1  = __Buffer_0;          /* the closed word's successor      */
     __Buffer_0 += 4;
-    __n8    = __n8 + (32 - K);
-    __n256  = v >> __n8;
+    __n256 = v >> __n8;                /* the rest of v, at bit 0          */
+    __n8   = __n8 + (32 - K);          /* — note: __n256 uses the OLD __n8 */
 }
 ```
 
-Hex-Rays writes `2 * (v << ((31 - __n8) & 31))` for `v << (32 - __n8)`; that is
-the same expression written so that the shift count stays below 32.
+Two details are easy to get wrong reading this:
+
+* **The shift in the flush is not `v << (32 - __n8)` as written above.** The
+  donor computes it as `2 * (v << ((31 - __n8) & 31))`, and that is not just a
+  way of keeping the shift count below 32: at `__n8 == 0` the donor's form is
+  `2 * (v << 31)`, which is **0**, whereas `v << 32` would be undefined and on
+  x86 evaluates to `v`. `__n8 == 0` is a state the packer really reaches, so
+  the `2 *` form is load-bearing, not cosmetic.
+* **`__n256 = v >> __n8` uses the value of `__n8` from before the update.**
+  Those are the `K - __n8` bits of `v` that did not fit in the word just
+  closed, and they become the bottom of the new accumulator.
+
+`__n8` starts at 0, which means "no word is open yet" rather than "the word is
+full". The first write therefore takes the flush branch and stores a throwaway
+word at `__Buffer`; because `__Buffer_1` is only then advanced to where
+`__Buffer_0` already was — the same address — the next flush overwrites it.
+From there on `__Buffer_1` trails `__Buffer_0` by one word: `__Buffer_1` is the
+word being filled, `__Buffer_0` is where the next one will go.
 
 The packer is not called through a function — the sequence above is inlined at
 every use site in `sub_402FE0`, which is why the compressor's body is full of
@@ -160,12 +182,15 @@ same family as the one in Shkarin's PPMd).
 | `__byte_4456F0` | `0x004456F0` | `uint8` | **cache** — the byte awaiting a possible carry | **previous input byte** |
 | `__Buffer_0` | `0x00443378` | `uint8 *` | output cursor | input cursor |
 
-The names are IDA's: it named each global after a constant it saw compared
-against nearby, so `__n0x800000` is `range` (compared with `0x800000`, the
-renormalisation floor) and `__n0x7F800000` is `low`/`code` (compared with
-`0x7F800000`, the pending-byte threshold). They are not two different variables
-despite the two names in the table — the same word is `low` when encoding and
-`code` when decoding, because the two directions never run at once.
+The names are IDA's, and they describe nothing: IDA named each global after a
+constant it saw compared against nearby. `__n0x800000` is `range`, named for
+`0x800000`, the renormalisation floor it is tested against; `__n0x7F800000` is
+`low`/`code`, named for `0x7F800000`, the pending-byte threshold.
+
+Each row of the table is **one** global with two jobs, not two variables: the
+word at `0x004456E4` holds `low` while encoding and `code` while decoding.
+Nothing switches between them, because a run of the program only ever does one
+of the two.
 
 Three more globals are the argument-passing convention for a coding step. The
 donor's `Encode`/`Decode` take no parameters; the caller fills these in first:
@@ -232,15 +257,30 @@ cache = low >> 23;                          /* next top 8 bits of low     */
 exactly what a carry rippling through a run of `0xFF`s produces.
 
 **Flush — `sub_414CE0`** runs the renormalisation loop once more, then writes
-the tail:
+the tail, in this order:
 
 ```
-[ rounded final byte ]  [ pending run ]  [ 3-byte big-endian length ]
-[ zero padding to (offset - __Buffer) % 4 == 3 ]  [ 0x97 ]
+[ cache + carry ]  [ pending run ]  [ rounding byte ]
+[ 3-byte big-endian length ]
+[ zero padding until (offset - __Buffer) % 4 == 3 ]  [ 0x97 ]
 ```
 
-The length written is `bytes_emitted + 5`. After the marker, `__n8`, `__n256`
-and `__Buffer_1` are reset so the bit packer resumes on a 4-byte boundary.
+The first two are the ordinary `emit` of §5.2 — the held cache byte and any
+`0xFF`s behind it — so the tail is not special-cased, it just runs the same
+machinery one last time. The rounding byte is
+
+```c
+rounded = ((low & 0x7FFFFF) >= ((length & 0xFFFFFF) >> 1)) + (low >> 23);
+```
+
+i.e. the next eight bits of `low`, rounded up when what remains below them is
+large enough to need it; the carry out of that rounding is what `cache + carry`
+above absorbed.
+
+`length` is `bytes_emitted + 5`, written big-endian in three bytes — so a
+section carries its own size, which is how a decoder can skip one. After the
+marker, `__n8`, `__n256` and `__Buffer_1` are reset, and the padding rule
+guarantees the bit packer resumes on a 4-byte boundary.
 
 ### 5.3 Decoder
 
@@ -268,12 +308,13 @@ while (range <= 0x800000) {
 }
 ```
 
-The one-bit shuffle looks odd and is worth stating plainly: it is a plain
-big-endian bit window. `code` was seeded with only 7 bits of the first byte
-(`b >> 1`), so it always ends one bit short of a byte boundary; each step
-re-inserts the bit that `>> 1` dropped from the previous byte and takes seven
-new ones. The result is the next 8 bits of the stream, and `code` is the same
-31-bit window the encoder's `low` is.
+The one-bit shuffle looks like the stream is stored at a bit offset. It is
+not. `code` was seeded with only seven bits of the first byte (`b >> 1`), so it
+permanently sits one bit short of a byte boundary; each step puts back the bit
+that `>> 1` discarded — which is why the *previous* byte has to be kept — and
+takes seven fresh ones. Eight new bits per step, in order, from a plainly
+byte-aligned stream. What `code` holds is the same 31-bit window of it that the
+encoder's `low` does.
 
 The two decoding steps are split, matching the classic interface:
 
@@ -342,7 +383,7 @@ A 16-byte record per plane at `0x0044339C`, indexed `[16 * k]`:
 | offset | global | meaning |
 | --- | --- | --- |
 | +0 | `__byte_44339C` | number of reference planes in the colour transform, 0–3 |
-| +1 | `__byte_44339D` | index of the plane this one is predicted from |
+| +1 | `__byte_44339D` | this plane's byte offset within an interleaved pixel |
 | +2 | `__byte_44339E` | flags: bits 0–1 = spatial predictor mode (→ `__n2`), bit 2 = alternate model (→ `__dword_443364`), bit 3 = colour transform present |
 | +3 | `__byte_44339F` | constant bias |
 | +4 | `__dword_4433A0` | coefficient 0 |
@@ -355,7 +396,12 @@ A 16-byte record per plane at `0x0044339C`, indexed `[16 * k]`:
 
 ### 6.3 Colour transform — `sub_407EF0`
 
-Coefficients are 7-bit fixed point. Per pixel, for a plane with `n` references:
+Coefficients are 7-bit fixed point, held biased by `+64` in the bit stream, so
+they run over roughly `[-0.5, +1.5]` once divided by 128. The references are
+other planes of the *same pixel*, reached by the byte offsets in the descriptors'
+`+1` fields: `R₁` and `R₂` are planes 0 and 1, and the three-reference form uses
+the three bytes preceding the current plane in the pixel. Per pixel, for a plane
+with `n` references:
 
 | `n` | transform |
 | --- | --- |
@@ -364,16 +410,28 @@ Coefficients are 7-bit fixed point. Per pixel, for a plane with `n` references:
 | 2 | `dst = (X - bias) - ((c₀·R₁ + c₁·R₂ + 40) >> 7)` |
 | 3 | `dst = (X - bias) - ((c₀·R₁ + c₁·R₂ + c₂·R₃ + 63) >> 7)` |
 
-Everything is byte arithmetic, so the subtraction wraps mod 256 and is exactly
-invertible. The `n == 1` case with the right reference is the familiar
-green-as-predictor RGB decorrelation; `n == 2` and `n == 3` let the search fit a
-linear combination instead.
+Two oddities that are in the code rather than in this description: the rounding
+constants differ (40 for two references, 63 for three, neither of them the 64
+that would round to nearest), and the two shifts are not the same kind — the
+two-reference sum is shifted as `int32_t`, the three-reference sum as `uint32_t`.
+Since the coefficients can be negative, that is a real difference in behaviour,
+not a decompiler artefact.
+
+`sub_407EF0` also short-circuits the two-reference form: when `c₀ + c₁ == 128`
+and one of them is zero, it drops to the `n == 1` path against whichever plane
+still has weight, skipping the multiply.
+
+Everything is byte arithmetic, so each subtraction wraps mod 256 and is exactly
+invertible. The `n == 1` case is the familiar green-as-predictor RGB
+decorrelation; `n == 2` and `n == 3` let the filter search fit a linear
+combination instead of assuming one.
 
 ### 6.4 Spatial prediction — `sub_4108C0`
 
-Each plane is then predicted in place, walking **backwards** from the last pixel
-so the source is never overwritten before use. The predictor is **MED**, the
-median edge detector from LOCO-I / JPEG-LS:
+In predictor mode 1 — the mode the filter search picks for most planes — each
+plane is predicted in place by `sub_4108C0`, walking **backwards** from the last
+pixel so that `N`, `W` and `NW` are all still originals when they are read. The
+predictor is **MED**, the median edge detector from LOCO-I / JPEG-LS:
 
 ```c
 if (NW >= max(N, W))      pred = min(N, W);
@@ -387,8 +445,18 @@ residual `X - pred` (mod 256) is then folded from signed to unsigned through a
 `-d → 2d - 1`. The folded byte replaces the pixel, and a histogram is
 accumulated in `__buf` for the filter search.
 
-`__byte_44339E & 3` (`__n2`, `0x00443360`) selects among predictor variants;
-mode 1 is the plain MED above.
+`__byte_44339E & 3` (`__n2`, `0x00443360`) chooses the mode, and it interacts
+with `E`. The dispatch, read off `sub_407B30`, is:
+
+| `__n2` | `E == 0` | `E != 0` |
+| --- | --- | --- |
+| 0 | no spatial prediction | `sub_4111B0` |
+| 1 | `sub_4108C0` — MED, above | `sub_410AC0` |
+| 2 | skipped entirely | skipped entirely |
+| 3 | no spatial prediction | `sub_410AC0` |
+
+So MED is mode 1, mode 2 turns the stage off, and what distinguishes 0 from 3 I
+did not establish (§9).
 
 ### 6.5 Near-lossless
 
@@ -420,8 +488,12 @@ bits** of a histogram of `n` counts summing to `N`:
 H = (N·log N  −  Σᵢ nᵢ·log nᵢ) · log₂(e)
 ```
 
-computed in `double`, two histogram entries at a time in SSE, with `sub_436E10`
-supplying a masked two-lane `log` so that zero counts contribute nothing. This
+computed in `double`, two histogram entries at a time in SSE. `sub_436E10`
+supplies the two-lane `log`, and takes a mask: where a lane's count is zero it
+substitutes `0.5` (`__bmf_half_half`, `0x0043B480`) so that `log` is never
+handed a zero, and the caller then masks those lanes back out of the running sum
+with `_mm_andnot_ps`. The substituted value is never used — it exists to keep a
+`-inf` out of the vector. This
 and the cost functions in `sub_405CF0`, `sub_407460`, `sub_40A8A0`, `sub_41A130`,
 `sub_41C4B0` and `sub_41CAB0` are the floating-point part of the compressor, and
 the reason the SSE denormal mode (`bmf_set_denormal_mode`, §5 of the build) is
@@ -443,9 +515,9 @@ in descriptor byte +11 bit `0x04` so the decoder follows.
 
 Without `-S`, the folded residuals go through `sub_408510` (encode) and
 `sub_40CF80` (decode). These write through the **bit packer**, not the range
-coder — they never touch `__n0x800000`. They build histograms, call
-`sub_411700` to measure them, and emit variable-length codes. I did not reverse
-this path fully; see §9.
+coder — they never touch `__n0x800000`. They build histograms and call
+`sub_411700` to measure them, which says a code is being *chosen* from the
+statistics rather than adapted; what kind of code, I did not establish. See §9.
 
 *(Note: this path crashes in the tree as it stands — `bmf` without `-S` faulted
 in the imported sources too, which is why the CLI pins `-S`. The observation is
@@ -456,9 +528,26 @@ about the decompilation, not necessarily about the original binary.)*
 This is the one `bmf c` uses. It is a binary context model driving the range
 coder of §5.
 
-`sub_415380` allocates an ~8 MB workspace (`malloc(0x7BA230)`), hands it to
-`sub_417980` to lay out, calls `sub_414F60` to start the range coder, and then
-runs `sub_417200` over the plane. What the layout code builds:
+`sub_415380` runs the plane through this pipeline, in this order:
+
+1. `malloc(0x7BA230)` — an ~8 MB workspace — laid out by `sub_417980`.
+2. `sub_414F60` — start the range coder (§5.2).
+3. `sub_417200` — **alphabet reduction**, and the first thing written. It scans
+   the plane for the symbols actually used, encodes `distinct - 1` with
+   `sub_412110` (a flat slot out of the full alphabet size), encodes each used
+   symbol with `sub_412B10`, and then re-indexes the plane onto the dense
+   alphabet that leaves. A plane using 40 of 256 values is coded over 40
+   symbols from here on.
+4. Model initialisation — the tables described below.
+5. `sub_4159E0` — the per-pixel coder, once per pixel.
+6. `sub_414CE0` — flush the range coder (§5.2).
+
+When `__dword_443364` (descriptor `+2` bit 2) is set, `sub_415380` instead
+dispatches to one of `sub_424500` / `sub_424D90` / `sub_4197A0` / `sub_421930`,
+picked by predictor mode and by whether the depth is exactly 8. Those are
+separate model families and are not described here.
+
+What the model initialisation builds:
 
 * **15 context groups.** The loop runs `v58` from 0 to 14, indexed by a 15-entry
   table of flag bytes at `__byte_439860` (`0x00439860`). Each flag bit selects
@@ -471,8 +560,10 @@ runs `sub_417200` over the plane. What the layout code builds:
   HIWORD (v24[n + 531818]) = 0x2000;
   ```
 
-  Two 8192s is p = ½ — a fresh binary counter. A 16-bit index means the context
-  is a 16-bit hash or packing of neighbourhood values.
+  Two 8192s is p = ½ — a fresh binary counter. The index is a 16-bit value
+  `sub_4159E0` derives from the neighbourhood, of the form
+  `table[N] - <one of N, W, NE, NW>`; exactly which table and which neighbour is
+  in §9's unread list.
 * **A 5×5 sub-state grid per group**, with mixing weights `1 << (5 - depth)` and
   a running total in `*((uint16 *)v12 + 53)`. `sub_415380` computes, for each
   cell, how many of the six inputs are active and derives the weight from that
@@ -521,17 +612,17 @@ if (freq > 0x4000) {                        /* rescale */
     node[1] -= node[1] >> 1;
     node[2] -= node[2] >> 1;
     node[3] -= node[3] >> 1;
-    if (node[0] <= 256) {                   /* and slow the increment down */
-        node[0] -= (node[0] <= 32) ? … : 32;
-    } else {
-        node[0] >>= 1;
-    }
+    if      (node[0] >  256) node[0] >>= 1;   /* and slow the increment down */
+    else if (node[0] >   32) node[0] -= 32;
+    else if (node[0] >   16) node[0] -=  2;
+    /* at or below 16 it stops shrinking */
 }
 node[chosen] += node[0];
 ```
 
-The increment `node[0]` starts large and shrinks as the node matures — fast
-adaptation early, stability later.
+The increment starts large and ratchets down each time the node rescales — fast
+adaptation early, stability later — with 16 as the floor, so the node never
+stops adapting entirely.
 
 **Sorted list — `sub_412B10`.** For alphabets rather than bits: a list of
 `(symbol, count)` triples kept in descending count order. Encoding sums counts
@@ -607,13 +698,16 @@ Stated plainly, so the rest can be trusted:
   established here.
 * **The `-S` context construction in detail.** §7.2 gives the shape — 15 groups,
   64K binary counters each, a 5 × 5 sub-state grid, neighbour-match state
-  indices — but not the exact hash that maps a pixel neighbourhood to the 16-bit
-  index, nor how the 15 groups' predictions are combined into the one
-  probability handed to the coder. `sub_4159E0` (901 lines), `sub_417200` (503)
-  and `sub_41CAB0` (2320) would each need a full reading.
-* **Predictor modes other than `__n2 == 1`.** Mode 1 is MED (§6.4). Modes 0, 2
-  and 3 select different bodies (`sub_410AC0`, `sub_4111B0`) that I read only far
-  enough to identify the near-lossless quantiser.
+  indices — but not the exact derivation of the 16-bit context index, nor how
+  the 15 groups' predictions are combined into the one probability handed to the
+  coder. `sub_4159E0` is 901 lines and would need a full reading.
+* **The alternate model families.** When descriptor `+2` bit 2 is set,
+  `sub_415380` hands the plane to `sub_424500` / `sub_424D90` / `sub_4197A0` /
+  `sub_421930` instead. I established only which one is picked, not what they
+  do; `sub_41CAB0` (2320 lines) sits under two of them.
+* **What predictor modes 0 and 3 mean.** The dispatch table in §6.4 is read off
+  the code, but 0 and 3 land in the same places and I did not work out what
+  distinguishes them, nor what mode 2 does instead of predicting.
 * **The `sub_4043E0` search order.** Which candidates are tried, and how `-Q`
   prunes them, is visible as loop bounds but I did not enumerate the candidate
   set.
@@ -638,4 +732,7 @@ Stated plainly, so the rest can be trusted:
 | filter search | `sub_4043E0` | `0x004043E0` |
 | entropy estimate | `sub_411700` | `0x00411700` |
 | `-S` model driver | `sub_415380` | `0x00415380` |
+| alphabet reduction | `sub_417200` | `0x00417200` |
+| `-S` per-pixel coder | `sub_4159E0` | `0x004159E0` |
+| adaptive symbol list | `sub_412B10` | `0x00412B10` |
 | BMP read / write | `sub_42AB20` / `sub_42B0C0` | `0x0042AB20` / `0x0042B0C0` |
