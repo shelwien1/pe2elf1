@@ -13,16 +13,16 @@ so they can be re-measured rather than trusted.
 
 ## 1. Where this is now
 
-| | |
-| --- | --- |
-| `subs1.hpp` | 17 968 lines, 178 bodies (86 real, 92 one-line `__fwd_*` shims) |
-| largest bodies | 1861, 984, 933, 801, 747 lines; 30 over 200 |
-| globals | 170, all references pinned to `blob.inc` |
-| pointer casts | 5967 |
-| `goto` / `LABEL_n:` | 123 / 89 |
-| `__hexrays_frame` buffers | 24, with 640 aliases bound into them |
-| x86-64 | compiles, links, **segfaults on the first image**; 3784 int↔pointer warnings across 3233 lines |
-| line coverage | 89.9 %, from ten images in one mode |
+| | | at the start |
+| --- | --- | --- |
+| `subs1.hpp` | 18 609 lines | 25 462 |
+| bodies | 179 (84 real, 95 `__fwd_*` shims) | 215 |
+| globals in `blob.inc` | 164 | 293 |
+| pointer casts | 5680 | 7336 |
+| `goto` / `LABEL_n:` | 123 / 90 | 174 / 127 |
+| `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
+| x86-64 int↔pointer | 1211 warnings, 1708 lines | 4371 / 3965 |
+| line coverage | **89.97 %** | 64.5 % |
 
 The previous rounds of work (see `tools/README.md`) fixed the vocabulary —
 stdint types, one declaration per global, no WinAPI, no Intel intrinsic
@@ -176,8 +176,9 @@ and a table.
 
 ### 4.2 Pointer typing and structure recovery are one job
 
-The x86-64 problem is 3784 `cast to pointer from integer of different size`
-warnings across 3233 lines, and they nearly all look like this:
+The x86-64 problem was 3784 `cast to pointer from integer of different size`
+warnings across 3233 lines (1211 across 1708 now — see Phase 4), and they look
+like this:
 
 ```c
 *(uint32_t *)(_this + 278736) = v17 + 144;
@@ -221,224 +222,102 @@ every global whether covered or not, that carries what exposure remains.
 
 ---
 
-## 5. Order of work
+## 5. Order of work — status
 
 Each phase ends green: build, ten images round-trip, every stream byte-identical
-to its reference. Nothing moves to the next phase with the gate red.
+to its reference. That held for every commit; the gate has never been red at a
+commit boundary.
 
 ```
-0  the gate, and one mode  ── done, §2 ──► everything depended on this
-1  names you already know
-2  frames → real locals
-3  un-pin the globals from the blob
-4  objects + pointers, per object  ──────► this is the x64 work
-5  casts and the Hex-Rays vocabulary
-6  control flow
+0  the gate, and one mode      done      §2
+1  names you already know      done      39 identifiers
+2  frames -> real locals       done      0 frames left
+3  un-pin the globals          part      the pointers are out; the blob is not
+4  objects + pointers          part      every local typed; the fields are not
+5  casts and the vocabulary    part      the useless ones are gone
+6  control flow                not done  and not for the reason the plan gave
 ```
 
-### Phase 0 — The gate, and one mode — **done**
+### Phase 0 — done
 
-Recorded in §2. Three things, in this order, and the order mattered:
+§2. Reference streams committed and the comparison made fatal; the mode made
+constant and everything the other modes reached deleted; `--gc-sections` so what
+is dead cannot ship. 25 462 → 17 968 lines, coverage 64.5 → 89.9 %.
 
-1. **Commit the reference streams** and make the comparison fatal. Until this
-   was done the gate was half a gate, and every "the streams did not move"
-   claim in this repository's history rested on a throwaway script.
-2. **Make the mode constants**, fold every branch that tested them, delete what
-   that leaves unreachable, and refuse the streams the deletions mean this
-   build can no longer expand. 25 462 → 17 968 lines; coverage 64.5 → 89.9 %.
-3. **Link with `--gc-sections`**, so what is dead cannot ship even when it is
-   still in the source.
+### Phase 1 — done
 
-What is left uncovered is §2.3: two bodies in the alternate model families,
-where the plan is to establish the entry condition rather than to guess.
+39 identifiers from `ALGORITHM.md` §8 and §10, 1042 occurrences, nothing
+speculative. `tools/rename.py` is scope-aware and refuses rather than guesses.
 
-### Phase 1 — Names you already know
+### Phase 2 — done
 
-**Why here.** It is free, it is zero-risk, and every later phase is read-heavy.
-Do not defer naming until "after the structure work" — the structure work is
-what naming makes possible.
+All 24 frames gone. **The plan said "expect 3–6 to resist" and 16 did.** Those
+frames have bytes no alias names — `sub_405CF0` names 29 220 of 41 456 — and the
+code reaches that slack by running off the end of the alias next door. They keep
+their layout as a struct with explicit padding and lose only the casts, each
+carrying `static_assert(sizeof(__frame) == N)` so a layout that moves is a
+compile error rather than something ten images have to notice.
 
-`ALGORITHM.md` §8 names 23 globals and §10 names 18 functions. Apply exactly
-those, nothing speculative — the table below is a sample, not the whole list:
+### Phase 3 — the pointers are out, the blob is not
 
-```
-__Buffer_0      -> out_cursor            sub_402FE0 -> compress_image
-__Buffer_1      -> packer_word           sub_403820 -> expand_image
-__n256          -> packer_acc            sub_407EF0 -> colour_transform
-__n8            -> packer_free_bits      sub_4108C0 -> predict_med
-__n4_5          -> plane_count           sub_4043E0 -> search_filter
-__n2            -> plane_predictor       sub_411700 -> estimate_cost
-__n256_0        -> near_lossless_max     sub_4159E0 -> code_pixel
-__buf           -> hist_scratch          sub_42AB20 -> read_bmp
-__buf_0         -> exclusion_mask        sub_42B0C0 -> write_bmp
-```
+Done: the four false bases from §4.1 retired, so no global's position matters to
+another; five globals that held addresses in `int32_t` words are real pointers
+outside the blob (`coded_buf`, `out_cursor`, `packer_word`, `hist_scratch`,
+`model_tables`); the error message table decoded and inlined, which is what
+`__exit_402E40` used nine relocated pointers for.
 
-The six mode switches are not on this list: Phase 0 turned them into constants
-and they carry their meaning in a comment already.
+Not done: 164 globals are still slices of `blob.inc`. The blocker is extents.
+`tools/extents.py` says 120 of them are never subscripted and 44 are subscripted
+by an expression — and for those 44 the declared `[0x10000]` is a guess, so
+whether `__dword_4398C0[i]` is one dword or the first of thirteen consecutive
+ones that Hex-Rays split into thirteen names is not answerable from the source.
+It is answerable at run time: give every global its own definition with a guard
+gap and see what breaks. That is the next step and it is a day's work, not an
+open question.
 
-Note what several of the IDA names are: `__n8`, `__n256`, `__n2` are the *value
-last assigned* to the variable, not its meaning. Treat every inherited name as a
-guess, and check it against every use before committing to a replacement — §4.1
-is what happens when you check only the first few.
+### Phase 4 — every local is typed; the fields are not
 
-**Tooling:** a scope-aware `rename.py`. 25 functions declare a local that
-shadows one of 28 globals and reach the global through `::`; a textual rename
-gets those wrong in both directions. `collect_globals.py` already contains the
-shadow detection to reuse.
+3784 → 1211 int↔pointer warnings. `tools/retype.py` converted every local and
+parameter used as a pointer base: 189 candidates, `char *` where the variable is
+only ever an address and `uintptr_t` where the code also masks or tags it. There
+are no candidates of that kind left.
 
-**Gate:** streams unmoved. A rename that changes a stream is a rename that hit
-something it should not have.
-**Size:** 39 identifiers, one commit per group.
-**Risk:** very low, and entirely caught by the gate.
-
-### Phase 2 — Frames → real locals
-
-**Why before the global work.** Self-contained per function, no cross-file
-consequences, and it removes 640 lines of alias boilerplate that otherwise sits
-between you and every body you are about to read. It is also the cheapest place
-to build confidence in the gate.
+What remains is one shape:
 
 ```c
-alignas(16) uint8_t __hexrays_frame[26712];              // sub_407460
-char     (&buf)[4096] = *(char (*)[4096])(__hexrays_frame + 0);
-int32_t  (&v72)[1024] = *(int32_t (*)[1024])(__hexrays_frame + 4096);
-int32_t  (&v73)[1024] = *(int32_t (*)[1024])(__hexrays_frame + 8192);
-int32_t  (&v74)[1024] = *(int32_t (*)[1024])(__hexrays_frame + 12288);
-...
-int32_t  &v83         = *(int32_t *)(__hexrays_frame + 24600);
+*(uint8_t *)(*(uint32_t *)(_this + 76) + 6)
 ```
 
-Each buffer is one function's reconstructed stack frame; each alias is a real
-local. Replace the alias with a declaration and delete the buffer.
+The local is typed; the **field** at `+76` is not. It is a pointer kept in a
+`uint32_t` inside a structure this program allocates itself, so fixing it means
+changing that structure's layout, which means knowing what the structure is.
+§4.2 said pointers and structures are one job and this is where that bites: the
+two biggest holders are the model block and the alternate model families
+`ALGORITHM.md` §9 lists as unread. **This part is reading, not rewriting**, and
+it is the largest single piece of work left in this document.
 
-**The one hazard, and it is real:** the aliases are the *only* thing keeping
-those locals adjacent, and the example above shows exactly why that matters —
-`buf[4096]` is followed immediately by `v72[1024]`, so a body that walks one
-element past `buf` reads `v72[0]` today and reads a compiler's choice of
-padding after the split. This code does index past array bounds in places. That
-is what the gate catches, per function, and why this phase is done one function
-at a time rather than in a sweep.
+### Phase 5 — partly, and smaller than it looked
 
-**Method:** one function at a time, build + gate after each, exactly as
-`compact_locals.py` was applied. Where a frame cannot be split, leave it and
-record why in a comment.
-**Size:** 24 functions. Expect a few to resist.
-**Risk:** medium per function, contained by doing them one at a time.
+The 38 casts GCC calls useless are gone with the retyping. The rest of the 5680
+are not redundant: they are the type punning the decompilation is made of, and
+most will fall out of Phase 4's structures rather than of a pass of their own.
+The `LOBYTE`/`HIWORD` family is down to 265 uses; those that are field access
+into a recovered struct should go with that struct, and only genuine bit-packing
+should be rewritten here.
 
-### Phase 3 — Un-pin the globals from the blob
+### Phase 6 — not done, and the plan was wrong about why
 
-**Goal.** Delete `blob.inc` and `BMF_BLOB_BASE`. Each global becomes a real
-definition:
+The plan said the 123 `goto`s are "most of them one of four shapes (loop
+`continue`, loop `break`, early `return`, shared error tail) and rewrite
+mechanically". Measured: **not one label in the file is followed by a `return`,
+a `break` or a `continue`.** 55 are followed by an assignment and 21 by an `if`.
+There are no unused labels and no `goto` whose label is the next line.
 
-```c
-static int32_t  plane_count;
-static uint8_t  ctx_group_flags[15] = { 0x01, 0x03, ... };
-static PlaneDesc planes[MAX_PLANES];
-```
-
-**Order inside the phase — this is the part to get right:**
-
-1. **Extents.** For every address, find what the code actually touches: the
-   largest offset reached from it and the element size used. The `[0x10000]`
-   bounds IDA emitted are fiction. Static analysis gets most of it; a debug
-   build with an access log over `blob1` gets the rest, and the 64.5 %→90 %
-   coverage from Phase 0 is what makes that log trustworthy.
-2. **Merge false neighbours.** Any set of addresses the code walks as one
-   region (§4.1) becomes one object. Expect this to *reduce* the count well
-   below 169 — the four `0x44337C`–`0x443394` bases collapse into one
-   `planes[]`, and the 36 overlaps are where to start looking.
-3. **Initialisers.** `blob.inc` holds `.rdata` and `.data`; a global that starts
-   non-zero needs its bytes lifted out of the array into a real initialiser.
-   Generate them — `blob.inc`'s header credits a `mkdata.py`, but **that script
-   is not in this repository**, so either recover it or write the emitter as a
-   `tools/` script that reads `blob.inc` itself. Do not hand-copy 343 KB.
-4. **The 39 relocations.** `blob1_relocs[]` lists slots holding absolute
-   pointers into the blob. Once objects are real, these become `&object` —
-   ordinary initialised pointers, no `bmf_blob_relocate()`, and no 4-byte
-   assumption. This is the first place Phase 3 and Phase 4 touch.
-5. **Delete the blob.**
-
-**A decision this forces.** `bmf.cpp` still documents a "hybrid" build where
-`blob1` *is* the loaded PE's data segment, shared with code still running in the
-original image. De-blobbing ends that permanently. If the hybrid build is still
-wanted as a cross-check, take the measurements it can give *before* this phase
-— afterwards it is not recoverable without reverting.
-
-**Gate:** streams unmoved — and this is the phase where that is most valuable,
-because the failure mode is silent corruption of adjacent state rather than a
-crash.
-**Size:** large. The tooling (extent analysis, emitter) is most of it; the
-mechanical rewrite is generated.
-**Risk:** high. Do it in address order, in batches, with a gate per batch.
-
-### Phase 4 — Objects and pointers, together
-
-**This is the x86-64 work.** Per §4.2, take one object at a time; for each:
-
-1. Declare the `struct` from the offset family.
-2. Retype every variable that points at it — parameters, locals, and the
-   globals that hold it — from `int32_t` to `T *`.
-3. Rewrite `*(uint32_t *)(p + 278736)` as `p->field`.
-4. Delete the `__fwd_*` shim for every call whose argument types now agree. All
-   92 exist only to launder `void *` through a wrong signature; they should
-   nearly all disappear here.
-
-**Order**, and the reasoning is in §4.2's table:
-
-1. **BMP header** — smallest, self-contained, and it is a layout you can look
-   up rather than infer. Do it first to establish the idioms on a case where
-   you cannot be wrong about the answer.
-2. **Plane descriptors** — 16 bytes, documented in `ALGORITHM.md` §6.2, and
-   fixing them is what retires the four false bases from §4.1.
-3. **Model block** — `_this`, `a1`, `v56`, `n0x10_2` and the header's 52 fields,
-   all in one change. Large, but every one of its users is already known.
-4. **`lpAddress` and `n5_2`** — last, and only after `ALGORITHM.md` §9's open
-   questions about the alternate model families are closed. Recovering a struct
-   you cannot name the fields of produces `field_0x11021`, which is not
-   progress.
-
-**Progress metric, and it is a good one:**
-
-```
-g++ -m64 ... -c bmf.cpp 2>&1 | grep -c 'cast to pointer from integer'
-```
-
-3784 today. It should fall monotonically, per object, to 0. When it reaches 0
-the `-m64` build should be tried on every gate image — expect it to work, and
-expect the first attempt not to.
-
-**Gate:** the `-m32` streams must stay unmoved throughout — the 32-bit build is
-the reference until the 64-bit one round-trips, and only then does `-m64` join
-the matrix.
-**Size:** the largest phase. The model block alone is ~400 references through
-four pointer names, on top of the 405 that reach its header.
-**Risk:** high, but the compiler is a strong assistant here: every site you miss
-is a warning.
-
-### Phase 5 — Casts and the Hex-Rays vocabulary
-
-Most of the 5967 casts are consequences of Phases 3 and 4 and will already be
-gone; this phase is what is left.
-
-- `LOBYTE(x) = v` → a named `uint8_t` field or a shift/mask with a comment. Many are field access into a struct Phase 4 recovered — do those
-  there, and leave only genuine bit-packing here.
-- `*(uint64_t *)p = 0x0606060606060606LL` → `memset(p, 0x06, 8)` where it is a
-  fill — Phase 4's structs are what make those visible.
-- The `M128I`/`M128F` wrapper unions in `bmf.cpp` exist so Hex-Rays' `.m128i_i32[]`
-  member syntax compiles. Once the SIMD code is readable, switch to intrinsics
-  and delete them.
-
-**Risk:** low. Almost all of it is local and gate-checked.
-
-### Phase 6 — Control flow
-
-123 `goto`s into 89 labels. Hex-Rays emits these where it could not recover a
-loop or an early exit; most are one of four shapes (loop `continue`, loop
-`break`, early `return`, shared error tail) and rewrite mechanically.
-
-Deliberately last: a `goto` is ugly but honest, and rewriting control flow before
-the types are right is how you introduce a bug the gate cannot distinguish from
-a layout change.
+This is irreducible control flow — the cases Hex-Rays could not structure — and
+restructuring it needs each function read and understood. It is correctly last,
+but it is not the mechanical pass the plan promised, and doing it before Phase 4
+finishes would be introducing bugs the gate cannot distinguish from a layout
+change.
 
 ## 6. Things that will bite
 
@@ -472,41 +351,46 @@ a layout change.
 
 ---
 
-## 7. Sequencing summary
+## 7. What is left
 
-| phase | changes | gate risk | blocked by |
-| --- | --- | --- | --- |
-| ~~0 gate + one mode~~ | ~~-7494 lines, -38 bodies~~ | — | **done** |
-| 1 known names | 39 identifiers | very low | — |
-| 2 frames | 24 functions, 640 aliases | medium | — |
-| 3 de-blob | 169 → fewer objects | **high** | 2 |
-| 4 objects + pointers | 3233 lines, 92 shims | **high** | 3 |
-| 5 casts | 5967 → a few hundred | low | 4 |
-| 6 control flow | 123 gotos | medium | 4 |
+| | work | why it is not done |
+| --- | --- | --- |
+| 3 de-blob | 164 globals | 44 extents unknowable from the source; needs the guard-gap run |
+| 4 structures | ~1211 warnings | the model block and the alternate model families have to be *read* first |
+| 5 casts | ~5680 | most fall out of 4; the rest is `LOBYTE`-family bit-packing |
+| 6 control flow | 123 gotos | irreducible; needs each function understood, and needs 4 |
 
-Phases 1 and 2 are independent of each other and of everything else, so either
-can start now. The rest cannot be reordered: 4 needs real objects to point at,
-and 5 and 6 need the types 4 establishes.
+The order among these is forced. 3's guard-gap run is independent and can go
+next. 4 gates 5 and 6. 6 last, still.
 
----
+Two of this document's own predictions were wrong, and both were wrong in the
+same direction — assuming a mechanical pass where the code had something real to
+say:
+
+* Phase 2 expected 3–6 frames to resist splitting; 16 did, because the frames
+  carry unnamed slack the code runs into.
+* Phase 6 expected the `goto`s to be four rewritable shapes; none of them is.
+
+The gate caught the first before it shipped. The second was caught by measuring
+before starting, which is the cheaper of the two.
 
 ## Appendix A — how the numbers were measured
 
 ```sh
 # sizes and vocabulary
-wc -l subs1.hpp                                       # 17968
-grep -o 'blob1 + 0x' subs1.hpp | wc -l                # 170 globals
-grep -c 'static inline .*__fwd_' subs1.hpp            # 92 shims
-grep -oE '\((const )?[A-Za-z_][A-Za-z0-9_]* *\*+\)' subs1.hpp | wc -l   # 5967
+wc -l subs1.hpp                                       # 18609
+grep -o 'blob1 + 0x' subs1.hpp | wc -l                # 164 globals
+grep -c 'static inline .*__fwd_' subs1.hpp            # 95 shims
+grep -oE '\((const )?[A-Za-z_][A-Za-z0-9_]* *\*+\)' subs1.hpp | wc -l   # 5680
 grep -c 'goto ' subs1.hpp                             # 123
-grep -c '__hexrays_frame + ' subs1.hpp                # 640
+grep -c '__hexrays_frame' subs1.hpp                   # 0
 
 # x86-64 work list
 g++ -m64 -march=x86-64 -msse2 -std=c++17 -fno-strict-aliasing -fpermissive \
     -fno-rtti -fno-exceptions -O0 -DNDEBUG -c bmf.cpp -o /dev/null 2>x64.log
-grep -c 'cast to pointer from integer' x64.log        # 3784
+grep -c 'cast to pointer from integer' x64.log        # 1211
 grep -E 'warning: (cast|invalid conversion)' x64.log | \
-    grep -oE '^[^:]+:[0-9]+' | sort -u | wc -l        # 3233 lines
+    grep -oE '^[^:]+:[0-9]+' | sort -u | wc -l        # 1708 lines
 
 # dead code, as the linker sees it
 BMF_GC=list ./build.sh 2>&1 | grep 'removing unused section'
@@ -519,18 +403,18 @@ for f in testfiles/*.bmp; do
   rm -f o.bmf o.bmp                       # bmf opens its output "w+b"
   ./bmfcov c "$f" o.bmf && ./bmfcov d o.bmf o.bmp
 done
-gcov -n    -o . bmfcov-bmf.gcno                       # 89.88 % of 13404 lines
+gcov -n    -o . bmfcov-bmf.gcno                       # 89.97 % of 13313 lines
 gcov -f -n -o . bmfcov-bmf.gcno                       # per function
 ```
 
 Body sizes, global extents and overlaps, and the `base + constant` families in
 §4.2 were all measured with throwaway brace-matching scripts, not with anything
-in `tools/` — `tools/foldif.py` and the mode fold were the exception, and both
-ran under the gate. Turning the last two into real scripts is the first task of
+in `tools/`.  What is in `tools/` is what got run repeatedly: `foldif.py`,
+`rename.py`, `unframe.py`, `retype.py`, `extents.py`, `mkrefs.sh`. Turning the last two into real scripts is the first task of
 Phase 3 and Phase 4 respectively; they are also what would keep the numbers in
 this document honest as the work proceeds.
 
-One caveat on the coverage figure: `gcov` counts *instrumented* lines (13 404
-of the file's 17 968) and counts inlined copies separately, so its per-function
+One caveat on the coverage figure: `gcov` counts *instrumented* lines (13 313
+of the file's 18 609) and counts inlined copies separately, so its per-function
 percentages do not sum the way source lines do. The line counts in §2 are source
 lines, measured separately by matching braces over the function list.
