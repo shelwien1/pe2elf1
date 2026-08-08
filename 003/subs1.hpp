@@ -5377,6 +5377,42 @@ static_assert(sizeof(void *) != 4
               "Obj66: the layout moved");
 
 
+// Obj67 -- recovered from 7 dereferences over 4 offsets, under 3
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj67 {
+  int16_t f0;
+  uint8_t _pad1[16];
+  int16_t f18;
+  uint8_t _pad3[16];
+  int16_t f36;
+  int16_t f38;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj67, f38) == 38,
+              "Obj67: the layout moved");
+
+
+// Obj68 -- recovered from 7 dereferences over 4 offsets, under 5
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj68 {
+  int16_t f0;
+  int16_t f2;
+  uint8_t _pad2[14];
+  int16_t f18;
+  uint8_t _pad4[16];
+  int16_t f36;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj68, f36) == 36,
+              "Obj68: the layout moved");
+
+
 struct RangeCoder {
   static const uint32_t kTop    = 0x00800000;   // renormalise at or below this
   static const uint32_t kPend   = 0x7F800000;   // low here still has a live carry
@@ -11003,10 +11039,10 @@ BMF_SSE int32_t __sub_41A130(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3_
   int32_t &v280 = __frame.v280;
   Obj36 *&v281 = (Obj36 *&)__frame.v281;
   Obj30 *&v282 = (Obj30 *&)__frame.v282;
-  int16_t *&v283 = __frame.v283;
+  Obj67 *&v283 = (Obj67 *&)__frame.v283;
   Obj34 *&v284 = (Obj34 *&)__frame.v284;
   int16_t *&v285 = __frame.v285;
-  int16_t *&v286 = __frame.v286;
+  Obj68 *&v286 = (Obj68 *&)__frame.v286;
   int32_t &n1840_2 = __frame.n1840_2;
   int32_t &n1840_1 = __frame.n1840_1;
   Obj11 *&v289 = (Obj11 *&)__frame.v289;
@@ -11071,19 +11107,25 @@ BMF_SSE int32_t __sub_41A130(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3_
   Obj36 *v223;
   Obj64 *v170;
   Obj64 *v115;
-  int16_t *v7, *v45, *v49, *v52, *v66, *v67, *v72, *v78, *v80, *v83, *v84, *v90, *v91, *v96,
-          *v99, *v100, *v129, *v143, v150, *v158, *v205, *v245;
-  int32_t v6, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23,
-          v24, v25, v27, v29, v30, v47, v48, v51, v54, v55, v56, v57, v65, v68, v74, v75, v85,
-          v88, *v103, *v104, v105, n2, v107, n3536_5, v109, v111, v112, v113, v114, v116, v117,
-          n3536_1, v121, v122, v123, v124, v125, v126, v127, v128, v130, n2256, v132, v134,
-          v137, v138, v140, v141, v144, n2576, n1840_13, v147, v148, v149, v151, v154, v155,
-          v156, n2896, v161, v162, v163, v164, v167, v168, v169, v171, n3536_2, v175, v176,
-          v177, v178, v179, v181, v182, n3536_3, v185, v186, v188, v189, v190, v191, v192,
-          v193, n1840_14, n1840_15, v198, n1840_16, v200, v201, n1840_17, v203, v206, v207,
-          v208, n960, n3536_4, v211, v212, v213, v214, v215, n1840_3, n1840_8, n1840_7,
-          n1840_10, n1840_9, v222, v224, n1840_11, n1840_12, n255, v228, n1840_5, n1840_4,
-          n1840_6, v234, v235, v236, v237, v238, v239, v240, v241, v242;
+  Obj67 *v80;
+  Obj67 *v83;
+  Obj68 *v91;
+  Obj68 *v72;
+  Obj68 *v96;
+  int16_t *v7, *v45, *v49, *v52, *v66, *v67, *v78, *v84, *v90, *v99, *v100, *v129, *v143, v150,
+          *v158, *v205, *v245;
+  Obj68 *v54;
+  int32_t v6, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24,
+          v25, v27, v29, v30, v47, v48, v51, v55, v56, v57, v65, v68, v74, v75, v85, v88, *v103,
+          *v104, v105, n2, v107, n3536_5, v109, v111, v112, v113, v114, v116, v117, n3536_1,
+          v121, v122, v123, v124, v125, v126, v127, v128, v130, n2256, v132, v134, v137, v138,
+          v140, v141, v144, n2576, n1840_13, v147, v148, v149, v151, v154, v155, v156, n2896,
+          v161, v162, v163, v164, v167, v168, v169, v171, n3536_2, v175, v176, v177, v178, v179,
+          v181, v182, n3536_3, v185, v186, v188, v189, v190, v191, v192, v193, n1840_14,
+          n1840_15, v198, n1840_16, v200, v201, n1840_17, v203, v206, v207, v208, n960, n3536_4,
+          v211, v212, v213, v214, v215, n1840_3, n1840_8, n1840_7, n1840_10, n1840_9, v222,
+          v224, n1840_11, n1840_12, n255, v228, n1840_5, n1840_4, n1840_6, v234, v235, v236,
+          v237, v238, v239, v240, v241, v242;
   int8_t v139;
   uint32_t v120, v133, v135, v136, v152, v153, v165, v180;
   uint8_t *v187;
@@ -11273,15 +11315,15 @@ BMF_SSE int32_t __sub_41A130(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3_
   if ( a4 )
   {
     v282 = (Obj30 *)((int16_t *)(*(uint32_t *)&a4->f278736 - 18));
-    v54 = *(uint32_t *)((char *)&a4->f278736 + 8) - 18;
+    v54 = (Obj68 *)(*(uint32_t *)((char *)&a4->f278736 + 8) - 18);
     v281 = (Obj36 *)((int16_t *)(*(uint32_t *)((char *)&a4->f278736 + 4) - 18));
     v55 = *(uint32_t *)&a5->f278736;
-    v286 = (int16_t *)v54;
+    v286 = (Obj68 *)((int16_t *)v54);
     v56 = *(uint32_t *)((char *)&a5->f278736 + 4);
     v57 = *(uint32_t *)((char *)&a5->f278736 + 8);
     v284 = (Obj34 *)((int16_t *)(v55 - 18));
     v58 = v28->f278720.m128_i32[3] == 0;
-    v283 = (int16_t *)(v56 - 18);
+    v283 = (Obj67 *)((int16_t *)(v56 - 18));
     v285 = (int16_t *)(v57 - 18);
     if ( !v58 )
     {
@@ -11309,15 +11351,15 @@ BMF_SSE int32_t __sub_41A130(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3_
         v82 = (Obj30 *)(v282);
         v28->f278592.m128_f32[1] = (float)(*(int16_t *)((char *)v46 - 36) + v81->f36 - v81->f0);
         v28->f278592.m128_f32[2] = (float)(v45[9] + *((int16_t *)v82 - 9) - v81->f0);
-        v83 = v283;
+        v83 = (Obj67 *)(v283);
         v84 = v285;
         v28->f278592.m128_f32[3] = (float)(*(int16_t *)((char *)v46 - 18) + v81->f0 - *((int16_t *)v81 - 9));
-        v85 = v83[18] - v84[27];
+        v85 = v83->f36 - v84[27];
         v86 = (Obj34 *)(v284);
         v28->f278608.m128_f32[0] = (float)(v45[9] + v85);
         v87 = (Obj30 *)(v282);
         v28->f278608.m128_f32[1] = (float)(*(int16_t *)((char *)v46 - 36) + v86->f0 - *((int16_t *)v86 - 18));
-        v28->f278608.m128_f32[2] = (float)(*v45 + v86->f0 - *v83);
+        v28->f278608.m128_f32[2] = (float)(*v45 + v86->f0 - v83->f0);
         v58 = v28->f278720.m128_i32[3] == 0;
         v28->f278608.m128_f32[3] = (float)(*(int16_t *)((char *)v46 - 36) + v87->f4);
         if ( v58 )
@@ -11325,11 +11367,11 @@ BMF_SSE int32_t __sub_41A130(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3_
           v259 = v46;
           v89 = (float)(*(int16_t *)((char *)v46 - 36) + v87->f0 - *((int16_t *)v87 - 18));
           v90 = (int16_t *)v28->f278736.m128_i32[2];
-          v91 = v286;
+          v91 = (Obj68 *)(v286);
           v28->f278624.m128_f32[0] = v89;
           v92 = (Obj36 *)(v281);
-          v28->f278624.m128_f32[1] = (float)(*v90 + v87->f0 - *v91);
-          v28->f278624.m128_f32[2] = (float)(*v286 + v87->f0 - *v90 + 2 * (*v45 - v92->f0));
+          v28->f278624.m128_f32[1] = (float)(*v90 + v87->f0 - v91->f0);
+          v28->f278624.m128_f32[2] = (float)(v286->f0 + v87->f0 - *v90 + 2 * (*v45 - v92->f0));
           v88 = *(int16_t *)((char *)v259 - 18) + *(v45 - 9) + *((int16_t *)v281 - 18) + v87->f0 - *((int16_t *)v87 - 9) - *((int16_t *)v281 - 9) - *(v45 - 18);
         }
         else
@@ -11347,9 +11389,9 @@ BMF_SSE int32_t __sub_41A130(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3_
         v28->f278592.m128_f32[0] = (float)(*(int16_t *)((char *)v46 - 54) + *(int16_t *)((char *)v46 - 18) - *(int16_t *)((char *)v46 - 72));
         v94 = (float)(*(int16_t *)((char *)v46 - 18) + *((int16_t *)v93 - 9) - *((int16_t *)v93 - 18));
         v95 = (Obj36 *)(v281);
-        v96 = v286;
+        v96 = (Obj68 *)(v286);
         v28->f278592.m128_f32[1] = v94;
-        v28->f278592.m128_f32[2] = (float)(v45[9] + v95->f0 - v96[9]);
+        v28->f278592.m128_f32[2] = (float)(v45[9] + v95->f0 - v96->f18);
         v97 = (Obj30 *)(v282);
         v28->f278592.m128_f32[3] = (float)(*(int16_t *)((char *)v46 - 36) + v95->f36 - v95->f0);
         v28->f278608.m128_f32[0] = (float)(*v45 + *((int16_t *)v97 - 18) - *((int16_t *)v95 - 18));
@@ -11384,11 +11426,11 @@ BMF_SSE int32_t __sub_41A130(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3_
       v70 = (float)(v68 - (((v45[18] - *v45 - (v66[18] - *v66)) >> 1) - v66[9]));
       v71 = (Obj30 *)(v282);
       v28->f278592.m128_f32[3] = v70;
-      v72 = v286;
+      v72 = (Obj68 *)(v286);
       v28->f278608.m128_f32[0] = (float)(*(int16_t *)((char *)v258 - 36) + v71->f0 - *((int16_t *)v71 - 18));
-      v28->f278608.m128_f32[1] = (float)(v45[9] + v69->f18 - v72[18]);
+      v28->f278608.m128_f32[1] = (float)(v45[9] + v69->f18 - v72->f36);
       v73 = (Obj30 *)(v282);
-      v28->f278608.m128_f32[2] = (float)(*(v45 - 18) + v69->f36 - *v72);
+      v28->f278608.m128_f32[2] = (float)(*(v45 - 18) + v69->f36 - v72->f0);
       v74 = *(int16_t *)((char *)v258 - 18) - *((int16_t *)v73 - 9);
       v75 = *((int16_t *)v73 - 18) + v73->f0 - *(int16_t *)((char *)v258 - 36);
       v76 = (Obj34 *)(v284);
@@ -11397,10 +11439,10 @@ BMF_SSE int32_t __sub_41A130(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3_
       v28->f278608.m128_f32[3] = v77;
       v28->f278624.m128_f32[0] = (float)(v247[9] + v76->f0 - v78[9]);
       v79 = (float)(*(int16_t *)((char *)v258 - 36) + v76->f0 - *((int16_t *)v76 - 18));
-      v80 = v283;
+      v80 = (Obj67 *)(v283);
       v28->f278624.m128_f32[1] = v79;
-      v28->f278624.m128_f32[2] = (float)(*(int16_t *)((char *)v258 - 18) + v80[9] - *v80);
-      v28->f278624.m128_f32[3] = (float)(v45[9] + v80[18] - v78[27]);
+      v28->f278624.m128_f32[2] = (float)(*(int16_t *)((char *)v258 - 18) + v80->f18 - v80->f0);
+      v28->f278624.m128_f32[3] = (float)(v45[9] + v80->f36 - v78[27]);
     }
   }
   else
@@ -11428,9 +11470,9 @@ BMF_SSE int32_t __sub_41A130(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3_
     v28->f278624.m128_f32[2] = (float)(*(int16_t *)((char *)v46 - 90) + *(int16_t *)((char *)v46 - 18) - *(int16_t *)((char *)v46 - 108));
     v28->f278624.m128_f32[3] = (float)*(v274 - 54);
     v285 = nullptr;
-    v283 = nullptr;
+    v283 = (Obj67 *)(nullptr);
     v284 = (Obj34 *)(nullptr);
-    v286 = nullptr;
+    v286 = (Obj68 *)(nullptr);
     v281 = (Obj36 *)(nullptr);
     v282 = (Obj30 *)(nullptr);
   }
@@ -11551,9 +11593,9 @@ BMF_SSE int32_t __sub_41A130(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3_
     v270 = v293[2].m128_i16[3];
     v135 = (v248 + *(int16_t *)(v292 - 52) - n2256 - (v270 - v293[5].m128_i16[6])) & 0x800000
          | (v248 + *(int16_t *)(v292 - 88) - n2256) & 0x400000
-         | (v248 + v293->m128_i16[1] + v283[19] - v285[19] - n2256) & 0x200000
+         | (v248 + v293->m128_i16[1] + v283->f38 - v285[19] - n2256) & 0x200000
          | (v248 + *(int16_t *)(v292 - 16) + v284->f2 - *((int16_t *)v284 - 8) - n2256) & 0x100000
-         | (*(v295 - 8) + v248 + v134 - *(v286 - 8) - n2256) & 0x80000
+         | (*(v295 - 8) + v248 + v134 - *((int16_t *)v286 - 8) - n2256) & 0x80000
          | (v248 + v270 + v134 - v281->f38 - n2256) & 0x40000
          | n1840_2 & 0x20000
          | n1840_1 & 0x10000
@@ -11563,7 +11605,7 @@ BMF_SSE int32_t __sub_41A130(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3_
     v118 = (Obj11 *)(v289);
     v136 = v298;
     v137 = (*(int16_t *)(v292 - 18) + v282->f0 - *((int16_t *)v282 - 9) - n2256) & 0x2000000
-         | (v286[1] + v281->f2 - 2 * v282->f2) & 0x1000000
+         | (v286->f2 + v281->f2 - 2 * v282->f2) & 0x1000000
          | v135;
   }
   else
@@ -11630,7 +11672,7 @@ BMF_SSE int32_t __sub_41A130(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3_
     v154 = (v249 + v293[-1].m128_i16[0] - n2576 - (v295[1] - n1840_2)) & 0x2000000
          | (v249 + v149 - n2576 - (v293->m128_i16[1] - n1840_2)) & 0x1000000
          | (v262 - n2576 + n1840 - *v285) & 0x800000
-         | (n1840_1 + n1840 - *v286) & 0x400000
+         | (n1840_1 + n1840 - v286->f0) & 0x400000
          | (n1840_1 + v293[-2].m128_i16[7] - *((int16_t *)v281 - 9)) & 0x200000
          | v152;
   }
@@ -11863,7 +11905,7 @@ BMF_SSE int32_t __sub_41A130(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3_
       n960_1 = n960;
       v265 = v215;
       n1840_7 = n1840_2;
-      n1840_8 = v284->f0 - *v283;
+      n1840_8 = v284->f0 - v283->f0;
       v289->f278816.m128_i32[2] = (n1840_8 <= n1840_2) + (n1840_8 < n1840_1);
       n1840_10 = v217->f0 - *((int16_t *)v217 - 9);
       n1840_9 = n1840_1;

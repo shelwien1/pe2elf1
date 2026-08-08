@@ -78,3 +78,4 @@ __symbol_list:v36 __symbol_list:v37 __symbol_list:v49
 __sub_413230:v16
 __sub_413230:v23 __sub_413230:v24 __sub_413230:v33
 __sub_413E60:a1
+__sub_412E60:v36
