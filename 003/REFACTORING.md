@@ -18,12 +18,12 @@ so they can be re-measured rather than trusted.
 
 | | | at the start |
 | --- | --- | --- |
-| `subs1.hpp` | 23 180 lines | 25 462 |
+| `subs1.hpp` | 23 683 lines | 25 462 |
 | bodies | 179 (84 real, 95 `__fwd_*` shims) | 215 |
 | globals in `blob.inc` | **78** | 293 |
-| recovered structs | **44**, 1921 named field accesses | 0 |
-| raw-offset dereferences | **991** | 1646 before Phase 4 |
-| pointer casts | 5735 | 7336 |
+| recovered structs | **69**, 2109 named field accesses | 0 |
+| raw-offset dereferences | **939** | 1646 before Phase 4 |
+| pointer casts | 5930 | 7336 |
 | `goto` / `LABEL_n:` | 121 / 88 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
 | line coverage | **89.97 %** | 64.5 % |
@@ -139,8 +139,12 @@ something the corpus does not exercise.
    64-bit build gets its addresses into 32 bits by confining the heap rather
    than by widening the fields.
 3. The recurring `base + constant` families are `struct`s, and the variables
-   that walk them are typed pointers to those structs.
+   that walk them are typed pointers to those structs. **Done for 69 objects**
+   — 2109 accesses name a field, 939 raw-offset dereferences remain, and the 81
+   that were declined are listed with their reasons in Phase 4.
 4. Names say what things are. No `__sub_41CAB0`, no `v187`, no `n0x800000`.
+   The recovered structs are the open part of this: their layouts are known,
+   their meanings mostly are not, and `ModelBlock` is the one that is.
 5. `casts`, `LOBYTE`-family macros, `goto`, and `__hexrays_frame` are gone or
    reduced to the handful of places where they are genuinely the clearest
    expression.
@@ -228,7 +232,7 @@ functions that never see each other's signatures. Its struct has to be declared
 once and applied everywhere at once, not discovered per-function. What actually
 happened is the safe half of that: the alias analysis connected the names it
 could see connected, and the model block came out as several structs of the same
-size rather than one. Six of them are 278 776 bytes. Merging those is a reading
+size rather than one. Six of them end at offset 278 772. Merging those is a reading
 job, not a tooling one — see §Phase 4.
 
 **The two families whose role is unknown** (`lpAddress`, `n5_2`) sit inside the
@@ -356,10 +360,10 @@ moves, the variable-offset walks keep indexing what they indexed, and each
 generated struct carries a `static_assert` on its size that says so and fails
 loudly if it ever stops being true.
 
-44 structs, gated one at a time — build, encode and decode ten images, compare
+69 structs, gated one at a time — build, encode and decode ten images, compare
 every stream against its committed reference, revert the ones that change
-anything. **991 raw-offset dereferences left, from 1646, and 1921 accesses now
-name a field.** 38 objects were tried and reverted or declined; the reasons are
+anything. **939 raw-offset dereferences left, from 1646, and 2109 accesses now
+name a field.** 81 objects were tried and reverted or declined; the reasons are
 in `tools/struct-skip.txt` and the categories are below.
 
 #### What is left, and why
@@ -371,9 +375,9 @@ in `tools/struct-skip.txt` and the categories are below.
 | the declaration cannot be found | the name has no declaration the tool recognises, and a name left at its old type takes `nm->f8` with it into a file that does not build |
 | the gate rejected it | the rewrite compiled and changed a stream. Recorded, reverted, and not retried |
 
-The same allocation can end up with more than one struct: `Obj8`, `Obj9`,
-`Obj19`, `Obj20`, `Obj31` and `Obj32` are all 278 776 bytes, which is one object
-seen in six functions the alias analysis could not connect to each other. That
+The same allocation can end up with more than one struct: six structs are all 278 772 bytes
+to their last member, which is one object seen in six functions the alias
+analysis could not connect to each other. That
 is under-merging, and it is the safe direction — each struct describes offsets
 actually observed under that name.
 
@@ -475,7 +479,7 @@ half of the record.
 | --- | --- | --- |
 | 2 | 3–6 frames will resist splitting | 16 did — they carry bytes no alias names and the code runs into them |
 | 3 | split every global; extents are the unknown | splitting all at once segfaults on *writes* crossing boundaries. One at a time: 86 move, 77 are parts of larger tables |
-| 4 | recover the objects and widen the pointer fields | 1683 constant-offset dereferences against 2184 variable-offset ones, and **no object has only the first kind**. Widening is not available — but recovering the structs is, once the target is 32-bit, because there the layout does not move. 44 of them |
+| 4 | recover the objects and widen the pointer fields | 1683 constant-offset dereferences against 2184 variable-offset ones, and **no object has only the first kind**. Widening is not available — but recovering the structs is, once the target is 32-bit, because there the layout does not move. 69 of them |
 | 6 | the `goto`s are four rewritable shapes | none of the 123 is any of them. One other shape exists; it fits 2 |
 
 Two of those were caught by measuring before starting, which cost nothing. One
@@ -509,8 +513,9 @@ byte for byte.
 
 Two things, and neither is a phase.
 
-**Naming.** The 44 structs are `Obj0`…`Obj43` with `f76`-style members. The
-layout is recovered; the meaning is not. `ALGORITHM.md` §9 still lists the
+**Naming.** 68 of the 69 structs are `ObjN` with `f76`-style members. The layout is
+recovered; the meaning is not. `ModelBlock` is the exception, and it is named
+only because §4.2 had already established what it is. `ALGORITHM.md` §9 still lists the
 alternate model families as unread, and that is what naming those fields waits
 on — not tooling.
 
@@ -524,19 +529,19 @@ whose fields are still `uint32_t`.
 
 ```sh
 # sizes and vocabulary
-wc -l subs1.hpp                                       # 23180
+wc -l subs1.hpp                                       # 23683
 grep -o 'blob1 + 0x' subs1.hpp | wc -l                # 164 globals
 grep -c 'static inline .*__fwd_' subs1.hpp            # 95 shims
-grep -oE '\((const )?[A-Za-z_][A-Za-z0-9_]* *\*+\)' subs1.hpp | wc -l   # 5735
+grep -oE '\((const )?[A-Za-z_][A-Za-z0-9_]* *\*+\)' subs1.hpp | wc -l   # 5930
 grep -c 'goto ' subs1.hpp                             # 123
 grep -c '__hexrays_frame' subs1.hpp                   # 0
 
 # structure recovery
-grep -c '^struct Obj' subs1.hpp                       # 44
-grep -oE '\->f[0-9]+' subs1.hpp | wc -l               # 1921 named accesses
+grep -c 'struct \(Obj[0-9]*\|ModelBlock\) {' subs1.hpp  # 69
+grep -oE '\->f[0-9]+' subs1.hpp | wc -l               # 2109 named accesses
 grep -oE '\*\((const )?[A-Za-z_][A-Za-z0-9_]*( )?\*+\)\([A-Za-z_][A-Za-z0-9_]* \+ [0-9]+\)' \
-     subs1.hpp | wc -l                                # 991 raw-offset, from 1646
-wc -l tools/struct-skip.txt                           # 38 objects declined
+     subs1.hpp | wc -l                                # 939 raw-offset, from 1646
+wc -l tools/struct-skip.txt                           # 81 objects declined
 python3 tools/structs.py subs1.hpp --list             # what is left, by traffic
 
 # dead code, as the linker sees it

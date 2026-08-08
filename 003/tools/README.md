@@ -159,5 +159,5 @@ It runs the gate with `BMF_TIMEOUT=60` rather than `test.sh`'s five minutes: a
 rewrite that loops forever should cost ten seconds to reject, not fifty minutes.
 Run the full gate before committing.
 
-44 objects converted; 38 are on the skip list. `REFACTORING.md` §Phase 4 has the
+69 objects converted; 81 are on the skip list. `REFACTORING.md` §Phase 4 has the
 categories and what each one means.
