@@ -58,6 +58,10 @@ def main():
     gs = globals_of(text)
     if not gs:
         sys.exit('no blob globals left')
+    only = next((a.split('=', 1)[1] for a in sys.argv if a.startswith('--only=')), None)
+    lst = next((a.split('=', 1)[1] for a in sys.argv if a.startswith('--list=')), None)
+    if lst:
+        only = set(x.strip() for x in open(lst) if x.strip())
 
     end = base + len(data)
     for i, g in enumerate(gs):
@@ -74,6 +78,14 @@ def main():
         print('\n(--apply to rewrite)')
         return
 
+    if only:
+        # Split just this one and leave the rest in the blob.  A pass means
+        # nothing reaches it through a neighbour and it reaches nothing;
+        # a failure names a table Hex-Rays split into several globals.
+        want = only if isinstance(only, set) else {only}
+        keep = [g for g in gs if g['name'] in want]
+        if not keep:
+            sys.exit('no such global(s)')
     GAP = int(next((a.split("=")[1] for a in sys.argv if a.startswith("--gap=")), 64))
     ZERO_GUARD = '--zero-guard' in sys.argv
     lines = ['// ---------------------------------------------------------------',
@@ -85,7 +97,7 @@ def main():
              '// the [0x10000] bounds Hex-Rays emitted are guesses and there is no',
              '// way to tell from the source which are real.  REFACTORING.md §4.1.',
              '// ---------------------------------------------------------------']
-    for g in gs:
+    for g in (keep if only else gs):
         off = g['va'] - base
         # The guard carries the bytes that followed this global in the data
         # segment, not zeros.  A global that reads past its own end then sees
@@ -112,17 +124,23 @@ def main():
         lines.append('static %s& %s = *(%s*)bmf_%s;'
                      % (g['typedef'], g['name'], g['typedef'], g['name'].lstrip('_')))
 
+    moved = [(g['va'], g['va'] + g['bytes']) for g in (keep if only else gs)]
+    mine = [base + r for r in relocs
+            if any(a <= base + r < b for a, b in moved)]
     lines += ['',
-              '// The absolute pointers BMF.exe baked into its data, rebased onto',
-              '// wherever the linker put the definitions above.',
-              'static const struct { unsigned va, slot_va; } bmf_relocs[] = {']
-    for r in relocs:
-        lines.append('  { 0, 0x%08X },' % (base + r))
+              '// The absolute pointers BMF.exe baked into its data.  These slots',
+              '// are inside definitions that moved, so blob.inc\'s own pass no',
+              '// longer reaches them and they are rebased here instead -- onto',
+              '// wherever the linker put the definitions above, or back into',
+              '// blob1 for a target that has not moved.',
+              'static const unsigned bmf_reloc_slots[] = {']
+    for r in mine:
+        lines.append('  0x%08X,' % r)
     lines += ['};',
               'static void bmf_data_relocate()',
               '{',
-              '  for (unsigned i = 0; i < sizeof bmf_relocs / sizeof *bmf_relocs; i++) {',
-              '    unsigned char *slot = bmf_addr(bmf_relocs[i].slot_va);',
+              '  for (unsigned i = 0; i < sizeof bmf_reloc_slots / sizeof *bmf_reloc_slots; i++) {',
+              '    unsigned char *slot = bmf_addr(bmf_reloc_slots[i]);',
               '    unsigned va;',
               '    __builtin_memcpy(&va, slot, 4);',
               '    unsigned char *p = bmf_addr(va);',
@@ -134,20 +152,22 @@ def main():
     addr = ['static unsigned char *bmf_addr(unsigned va)',
             '{',
             '  switch (0) { default: break; }']
-    for g in gs:
+    for g in (keep if only else gs):
         addr.append('  if (va >= 0x%06Xu && va < 0x%06Xu) return bmf_%s + (va - 0x%06Xu);'
                     % (g['va'], g['va'] + g['bytes'], g['name'].lstrip('_'), g['va']))
-    addr += ['  return nullptr;', '}']
+    # Anything not split out is still in blob1, at its original offset.
+    addr += ['  return blob1 + (va - BMF_BLOB_BASE);', '}']
 
     # bmf_addr has to come after the definitions it names.
     at = lines.index('')
     block = '\n'.join(lines[:at] + [''] + addr + lines[at:]) + '\n'
-    out = text[:gs[0]['span'][0]] + block + text[gs[0]['span'][0]:]
-    for g in reversed(gs):
+    tgt = keep if only else gs
+    out = text[:tgt[0]['span'][0]] + block + text[tgt[0]['span'][0]:]
+    for g in reversed(tgt):
         out_i = out.index(text[g['span'][0]:g['span'][1]])
         out = out[:out_i] + out[out_i + (g['span'][1] - g['span'][0]):]
     open(src, 'w').write(out)
-    print('rewritten: %d definitions' % len(gs))
+    print('rewritten: %d definitions' % len(keep if only else gs))
 
 
 if __name__ == '__main__':
