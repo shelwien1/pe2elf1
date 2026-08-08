@@ -173,48 +173,52 @@ same family as the one in Shkarin's PPMd).
 
 ### 5.1 State
 
-| global | address | type | encoder | decoder |
-| --- | --- | --- | --- | --- |
-| `__n0x800000` | `0x004456E0` | `uint32` | **`range`** | **`range`** |
-| `__n0x7F800000` | `0x004456E4` | `uint32` | **`low`** (31 bits + carry in bit 31) | **`code`** (31 bits) |
-| `__dword_4456E8` | `0x004456E8` | `uint32` | **pending count** — deferred `0xFF` bytes | **`r`** — the last `range / total` |
-| `__dword_4456EC` | `0x004456EC` | `uint32` | **bytes emitted**, written into the tail | — |
-| `__byte_4456F0` | `0x004456F0` | `uint8` | **cache** — the byte awaiting a possible carry | **previous input byte** |
-| `__Buffer_0` | `0x00443378` | `uint8 *` | output cursor | input cursor |
+The coder is a `RangeCoder` struct with one instance, `rc`. Its state is six
+private members, which in the donor were five words of `blob.inc` — two of the
+six shared a word. The `was` column is here because those names are what a
+disassembly of BMF.exe shows, and they describe nothing: IDA named each word
+after whatever constant it saw the word compared against, so `range` is
+`__n0x800000` after the renormalisation floor it is tested against, and `low`
+is `__n0x7F800000` after the pending-byte threshold.
 
-The names are IDA's, and they describe nothing: IDA named each global after a
-constant it saw compared against nearby. `__n0x800000` is `range`, named for
-`0x800000`, the renormalisation floor it is tested against; `__n0x7F800000` is
-`low`/`code`, named for `0x7F800000`, the pending-byte threshold.
+| member | was | encoder | decoder |
+| --- | --- | --- | --- |
+| `range` | `__n0x800000` @ `0x004456E0` | **`range`** | **`range`** |
+| `low` | `__n0x7F800000` @ `0x004456E4` | **`low`** (31 bits + carry in bit 31) | **`code`** (31 bits) |
+| `cache` | `__byte_4456F0` @ `0x004456F0` | the byte awaiting a possible carry | the previous input byte |
+| `pending` | `__dword_4456E8` @ `0x004456E8` | deferred `0xFF` bytes | — |
+| `rdiv` | *(the same word)* | — | `r`, the last `range / total` |
+| `bytes` | `__dword_4456EC` @ `0x004456EC` | emitted so far; the flush writes it out | — |
 
-Each row of the table is **one** global with two jobs, not two variables: the
-word at `0x004456E4` holds `low` while encoding and `code` while decoding.
-Nothing switches between them, because a run of the program only ever does one
-of the two.
+`low` is one member with two jobs, not two variables: it holds `low` while
+encoding and `code` while decoding, and nothing switches between them because
+a run of the program only ever does one of the two. `pending` and `rdiv` were
+likewise one word in the donor, for the same reason; they are two members here
+since nothing is gained by overlapping them.
 
-Three more globals are the argument-passing convention for a coding step. The
-donor's `Encode`/`Decode` take no parameters; the caller fills these in first:
+The output cursor is not the coder's: `__Buffer_0` (`0x00443378`) is shared
+with the bit packer (§4), which is why the class lives in subs1.hpp.
 
-| global | address | meaning |
-| --- | --- | --- |
-| `__n0x2000_1` | `0x004456F4` | `cumFreq` — cumulative frequency below the symbol |
-| `__n0x2000_0` | `0x004456F8` | `cumFreq + freq` — the top of the symbol's slot |
-| `__n0x2000` | `0x004456FC` | `totFreq` — the total |
-| `__n0x88` | `0x00445704` | `a + b`, set by the two-frequency binary entries |
+A coding step's arguments — `cumFreq`, `cumFreq + freq`, `totFreq` — are
+parameters. In the donor they were three more globals (`__n0x2000_1`,
+`__n0x2000_0`, `__n0x2000` at `0x004456F4`…`FC`), because its entries took no
+parameters at all, plus `__n0x88` at `0x00445704` for `f0 + f1` of a binary
+step. See §5.4.
 
 Invariant: `0x800000 < range <= 0x80000000`, i.e. `range` is always more than
 2²³ and at most 2³¹, so `low` and `code` are 31-bit quantities.
 
 ### 5.2 Encoder
 
-**Init — `sub_414F60`**
+**Init — `rc.enc_init()`**, called by `sub_414F60` once it has built the model
+tables
 
 ```c
-__n0x800000    = 0x80000000;   /* range = 2^31           */
-__n0x7F800000  = 0;            /* low   = 0              */
-__dword_4456E8 = 0;            /* no pending 0xFF bytes  */
-__dword_4456EC = 0;            /* no bytes emitted yet   */
-__byte_4456F0  = 0x97;         /* cache = the marker     */
+range = 0x80000000;   /* 2^31                  */
+low   = 0;
+pending = 0;          /* no deferred 0xFF bytes */
+bytes   = 0;
+cache = 0x97;         /* the marker             */
 ```
 
 The cache is seeded with `0x97` (151). Because the cache is what gets written
@@ -248,16 +252,18 @@ range = (cumFreq + freq < totFreq) ? r * freq : range - r * cumFreq;
 where `emit(c)` is
 
 ```c
-*__Buffer_0++ = cache + c;                  /* the carry lands here      */
-while (pending--) *__Buffer_0++ = c - 1;    /* 0xFF if c==0, 0x00 if c==1 */
-cache = low >> 23;                          /* next top 8 bits of low     */
+*__Buffer_0++ = cache + c;                     /* the carry lands here       */
+for (; pending; --pending)
+    *__Buffer_0++ = c - 1;                     /* 0xFF if c==0, 0x00 if c==1 */
+cache = low >> 23;                             /* next top 8 bits of low     */
 ```
 
 `c - 1` as a byte is `0xFF` for `c == 0` and `0x00` for `c == 1`, which is
 exactly what a carry rippling through a run of `0xFF`s produces.
 
-**Flush — `sub_414CE0`** runs the renormalisation loop once more, then writes
-the tail, in this order:
+**Flush — `rc.flush()`**, which `sub_414CE0` calls before freeing the model
+tables, runs the renormalisation loop once more and then writes the tail, in
+this order:
 
 ```
 [ cache + carry ]  [ pending run ]  [ rounding byte ]
@@ -284,14 +290,13 @@ guarantees the bit packer resumes on a 4-byte boundary.
 
 ### 5.3 Decoder
 
-**Init — `sub_4149C0`**
+**Init — `rc.dec_init()`**, called by `sub_4149C0`
 
 ```c
 if (*__Buffer_0++ != 0x97) exit_402E40(4);   /* "Read error!" */
-b = *__Buffer_0++;
-__n0x800000   = 128;                          /* range = 2^7  */
-__byte_4456F0 = b;                            /* previous byte */
-__n0x7F800000 = b >> 1;                       /* code, 7 bits */
+cache = *__Buffer_0++;                        /* the previous byte */
+range = 128;                                  /* 2^7               */
+low   = cache >> 1;                           /* code, 7 bits      */
 ```
 
 Setting `range = 2^7` forces the renormalisation loop to run three times
@@ -320,7 +325,7 @@ The two decoding steps are split, matching the classic interface:
 
 ```c
 /* rc.get_freq(tot) */
-r     = range / totFreq;              /* cached in __dword_4456E8 */
+r     = range / totFreq;              /* kept in `rdiv` for decode() */
 count = code / r;
 return (count >= totFreq) ? totFreq - 1 : count;
 
@@ -334,14 +339,17 @@ range  = (cumFreq + freq < totFreq) ? freq * r : range - cumFreq * r;
 frequencies are `f0` and `f1`, without a `get_freq`/`decode` pair:
 
 ```c
-rt = a * (range / (a + b));
+rt = f0 * (range / (f0 + f1));
 if (code >= rt) { range -= rt; code -= rt; return 1; }
 else            { range  = rt;             return 0; }
 ```
 
-`rc.encode_bit(f0, f1, bit)` is its encoder twin.
+`rc.encode_bit(f0, f1, bit)` is its encoder twin. It returns the width of the
+interval it chose — the new `range` — which is what `sub_413900` passes on as
+its own result.
 
-**Finish — `sub_414920`** renormalises, then scans forward for the `0x97`
+**Finish — `rc.finish()`**, called by `sub_414920`, renormalises, then scans
+forward for the `0x97`
 terminator and resets the bit packer's cursor to just past it.
 
 ### 5.4 The RangeCoder class
@@ -351,10 +359,6 @@ subs1.hpp just after the globals block — it goes there rather than in bmf.cpp
 because it shares its output cursor with the bit packer, and `__Buffer_0` is a
 blob global.
 
-The state that §5.1 lists as nine words of `blob.inc` is nine members. The one
-that was a single word doing two jobs is two members, `pending` and `rdiv`,
-since encoding and decoding never run together.
-
 | method | direction | what |
 | --- | --- | --- |
 | `rc.enc_init()` | encode | `range = 2^31`, `low = 0`, cache = the `0x97` marker |
@@ -362,10 +366,10 @@ since encoding and decoding never run together.
 | `rc.enc_normalise()` | encode | the carry-counting byte loop |
 | `rc.dec_normalise()` | decode | eight more bits into the window |
 | `rc.encode(cum, high, tot)` | encode | one symbol; returns `freq * r` |
-| `rc.encode_bit(f0, f1, bit)` | encode | one bit against two frequencies |
+| `rc.encode_bit(f0, f1, bit)` | encode | one bit; returns the width of the interval chosen |
 | `rc.get_freq(tot)` | decode | which slot of `tot` the code falls in |
 | `rc.decode(cum, high, tot)` | decode | finish the step `get_freq` started |
-| `rc.decode_bit(f0, f1)` | decode | one bit against two frequencies |
+| `rc.decode_bit(f0, f1)` | decode | one bit; returns it |
 | `rc.flush()` | encode | tail, length, padding, terminator |
 | `rc.finish()` | decode | skip to the terminator |
 
@@ -540,7 +544,7 @@ in descriptor byte +11 bit `0x04` so the decoder follows.
 
 Without `-S`, the folded residuals go through `sub_408510` (encode) and
 `sub_40CF80` (decode). These write through the **bit packer**, not the range
-coder — they never touch `__n0x800000`. They build histograms and call
+coder — they never call `rc`. They build histograms and call
 `sub_411700` to measure them, which says a code is being *chosen* from the
 statistics rather than adapted; what kind of code, I did not establish. See §9.
 
@@ -660,19 +664,10 @@ end of the list codes an escape — a PPM-style exclusion mechanism.
 
 Every address is an offset into `blob.inc`, BMF.exe's data segment.
 
-**Range coder** — §5.1 has the full table.
-
-| global | address | meaning |
-| --- | --- | --- |
-| `__n0x800000` | `0x004456E0` | `range` |
-| `__n0x7F800000` | `0x004456E4` | `low` (encode) / `code` (decode) |
-| `__dword_4456E8` | `0x004456E8` | pending count (encode) / `r` (decode) |
-| `__dword_4456EC` | `0x004456EC` | bytes emitted |
-| `__byte_4456F0` | `0x004456F0` | cache byte (encode) / previous byte (decode) |
-| `__n0x2000_1` | `0x004456F4` | `cumFreq` |
-| `__n0x2000_0` | `0x004456F8` | `cumFreq + freq` |
-| `__n0x2000` | `0x004456FC` | `totFreq` |
-| `__n0x88` | `0x00445704` | `freq0 + freq1` for the binary entries |
+**Range coder.** None: its state is `RangeCoder`'s private members, and the
+nine words it used to occupy (`0x004456E0`…`0x004456FC` and `0x00445704`) are
+no longer declared. §5.1 maps the members onto the addresses a disassembly of
+BMF.exe shows.
 
 **Streams and buffers**
 
