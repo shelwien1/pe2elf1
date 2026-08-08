@@ -1,0 +1,205 @@
+#!/usr/bin/env python3
+"""Retype the locals a function uses as pointers, from int32_t to char *.
+
+    python3 tools/retype.py subs1.hpp __sub_416C90
+    python3 tools/retype.py subs1.hpp --list
+
+Hex-Rays could not tell an address from an int, so a function that walks a
+structure does it like this:
+
+    *(uint32_t *)(_this + 278736) = v17 + 144;
+
+`_this` is an `int32_t` holding a pointer.  On a 32-bit target that works and
+the compiler says nothing; at `-m64` it is 3718 `cast to pointer from integer of
+different size` warnings, and a program that segfaults on the first image
+because half of every address was thrown away.
+
+This finds the locals a function uses that way -- declared `int32_t` (or
+`uint32_t`), and appearing as the base of a `*(T *)(x + ...)` -- and declares
+them `char *` instead.  Pointer arithmetic then means what the code already
+assumed, on either word size.
+
+It does not try to fix the fallout: assignments that now mix an int and a
+pointer are left for the compiler to point at, because each one needs a decision
+about which side was really the address.  Run it, build, and work through the
+errors; `--list` says which functions have work and how much.
+"""
+import re
+import sys
+
+INT = r'(?:int32_t|uint32_t)'
+
+
+def bodies(lines):
+    out, depth, start, name = [], 0, None, None
+    for i, l in enumerate(lines):
+        s = l.split('//')[0]
+        for k, ch in enumerate(s):
+            if ch == '{':
+                if depth == 0:
+                    buf, j = s[:k], i
+                    while True:
+                        if buf.count(')') - buf.count('(') <= 0 and '(' in buf:
+                            break
+                        j -= 1
+                        if j < 0:
+                            break
+                        buf = lines[j].split('//')[0] + ' ' + buf
+                    m = re.search(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(', buf)
+                    name = m.group(1) if m else '?'
+                    start = i
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0 and start is not None:
+                    out.append((start, i, name))
+                    start = None
+    return out
+
+
+def pointer_bases(body):
+    """Locals used as `*(T *)(x + ...)` or `(T *)x`."""
+    text = '\n'.join(body)
+    names = set()
+    for m in re.finditer(r'\*\((?:const )?[A-Za-z_][A-Za-z0-9_]*\s*\**\s*\*\)'
+                         r'\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*[+)]', text):
+        names.add(m.group(1))
+    for m in re.finditer(r'\((?:const )?[A-Za-z_][A-Za-z0-9_]*\s*\**\s*\*\)'
+                         r'\(?([A-Za-z_][A-Za-z0-9_]*)\s*\+', text):
+        names.add(m.group(1))
+    return names
+
+
+def retype_params(lines, a, names):
+    """Rewrite int32_t parameters of the signature at/above line a to char *."""
+    j = a
+    while j >= 0 and '(' not in lines[j]:
+        j -= 1
+    sig = lines[j]
+    hit = [n for n in names if n in declared_params(sig)]
+    for n in hit:
+        sig = re.sub(r'\b(%s) (%s)\b' % (INT, re.escape(n)), r'char *\2', sig)
+    lines[j] = sig
+    return hit
+
+
+def declared_params(sig):
+    """int32_t/uint32_t parameters of a signature line."""
+    out = {}
+    m = re.search(r'\((.*)\)\s*$', sig.split('//')[0].strip())
+    if not m:
+        return out
+    for i, part in enumerate(m.group(1).split(',')):
+        pm = re.fullmatch(r'\s*(%s) ([A-Za-z_][A-Za-z0-9_]*)\s*' % INT, part)
+        if pm:
+            out[pm.group(2)] = i
+    return out
+
+
+def declared_ints(body):
+    """{name: (line index, whole declaration line)} for int32_t/uint32_t locals."""
+    out = {}
+    in_frame = False
+    for i, l in enumerate(body):
+        # Skip the layout-preserving struct tools/unframe.py leaves behind: its
+        # members are the frame, and moving one out moves the layout with it.
+        if re.match(r'^\s*struct alignas\(\d+\) \{', l):
+            in_frame = True
+        elif in_frame and re.match(r'^\s*\} __frame;', l):
+            in_frame = False
+            continue
+        if in_frame:
+            continue
+        m = re.match(r'^(\s+)(%s) (.+);\s*$' % INT, l)
+        if not m:
+            continue
+        for part in m.group(3).split(','):
+            part = part.strip()
+            if part.startswith('*') or '[' in part or '=' in part:
+                continue
+            if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', part):
+                out[part] = i
+    return out
+
+
+def retype(body, names):
+    """Move `names` out of their int32_t declarations into `char *` ones."""
+    decls = declared_ints(body)
+    hit = sorted(n for n in names if n in decls)
+    if not hit:
+        return None, 0
+    out, moved, in_frame = [], [], False
+    for i, l in enumerate(body):
+        if re.match(r'^\s*struct alignas\(\d+\) \{', l):
+            in_frame = True
+        elif in_frame and re.match(r'^\s*\} __frame;', l):
+            in_frame = False
+        m = None if in_frame else re.match(r'^(\s+)(%s) (.+);\s*$' % INT, l)
+        if not m:
+            out.append(l)
+            continue
+        keep = []
+        for part in [p.strip() for p in m.group(3).split(',')]:
+            if part in hit:
+                moved.append(part)
+            else:
+                keep.append(part)
+        if keep:
+            out.append('%s%s %s;' % (m.group(1), m.group(2), ', '.join(keep)))
+        elif not moved:
+            out.append(l)
+    if not moved:
+        return None, 0
+    # one declaration, next to the body's opening `;`
+    ind = re.match(r'^(\s*)', body[1]).group(1) if len(body) > 1 else '  '
+    decl = '%schar *%s;   // was int32_t: these hold addresses' % (
+        ind, ', *'.join(moved))
+    for i, l in enumerate(out):
+        if l.strip() == ';':
+            return out[:i + 1] + [decl] + out[i + 1:], len(moved)
+    return [out[0], decl] + out[1:], len(moved)
+
+
+def main():
+    path = sys.argv[1]
+    lines = open(path).read().split('\n')
+    what = sys.argv[2]
+
+    if what == '--list':
+        rows = []
+        for a, b, n in bodies(lines):
+            body = lines[a:b + 1]
+            bases = pointer_bases(body)
+            j = a
+            while j >= 0 and '(' not in lines[j]:
+                j -= 1
+            names = (bases & set(declared_ints(body))) | \
+                    (bases & set(declared_params(lines[j])))
+            if names:
+                rows.append((len(names), n, sorted(names)))
+        for k, n, names in sorted(rows, reverse=True):
+            print('%3d  %-22s %s' % (k, n, ' '.join(names[:8])))
+        print('%d functions, %d locals' % (len(rows), sum(r[0] for r in rows)))
+        return
+
+    for a, b, n in bodies(lines):
+        if n != what:
+            continue
+        body = lines[a:b + 1]
+        bases = pointer_bases(body)
+        pk = retype_params(lines, a, bases)
+        names = bases & set(declared_ints(body))
+        new, k = retype(body, names)
+        if new is None and not pk:
+            sys.exit('%s: nothing to retype' % n)
+        if new is None:
+            new = lines[a:b + 1]
+            k = 0
+        open(path, 'w').write('\n'.join(lines[:a] + new + lines[b + 1:]))
+        print('%s: %d locals, %d parameters -> char *' % (n, k, len(pk)))
+        return
+    sys.exit('%s: no such function' % what)
+
+
+if __name__ == '__main__':
+    main()

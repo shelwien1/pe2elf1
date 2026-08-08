@@ -640,7 +640,7 @@ FILE **__sub_402DF0(FILE **Block, char a2)
   // never taken: -E is 0
 }
 
- BMF_SSE uint32_t __predict_med(int32_t Src, int32_t i, int32_t a3)
+ BMF_SSE uint32_t __predict_med(char *Src, int32_t i, int32_t a3)
 {
   ;
   __m128i si128, v7, v13, v14;
@@ -1344,10 +1344,11 @@ LABEL_9:
 int32_t __sub_413230(uint32_t *_this, int32_t a2, uint32_t a3)
 {
   ;
+  char *n251;   // was int32_t: these hold addresses
   bool v7;
   char v11, v12, v15, *v16, v17, v19, v20, *v23, *v24, *v26, *v27, *v33;
   int16_t v10, v34;
-  int32_t n251, v8, v9, v22, v25, v28, v30, v32, v35, v36;
+  int32_t v8, v9, v22, v25, v28, v30, v32, v35, v36;
   uint16_t *n251_1, *n251_2, v14, v18;
   uint32_t v4, v6, v21, v29, v31;
   n251 = *(_this + 5);
@@ -1949,7 +1950,7 @@ static inline int32_t __fwd_sub_413E60_sub_414060(void *a0) { return __sub_41406
 }
 static inline int32_t __fwd_sub_414390_sub_413900(void *a0, int32_t a1) { return __sub_413900((uint16_t *)a0, a1); }
 
-int32_t __sub_414390(uint16_t *_this, int32_t a2, int32_t a3)
+int32_t __sub_414390(uint16_t *_this, char *a2, int32_t a3)
 {
   ;
   char v29;
@@ -2022,7 +2023,7 @@ int32_t __sub_414390(uint16_t *_this, int32_t a2, int32_t a3)
 }
 static inline int32_t __fwd_sub_414620_sub_414060(void *a0) { return __sub_414060((uint16_t *)a0); }
 
-int32_t __sub_414620(uint16_t *_this, int32_t a2)
+int32_t __sub_414620(uint16_t *_this, char *a2)
 {
   ;
   int32_t v6, v7, v8, v10, v12, n0x800000_1, n0x4000, n32, v16, v21, v23, v25;
@@ -2211,8 +2212,9 @@ void **__sub_415270(void **Blocka, char a2)
 int32_t __sub_416860(int32_t *_this, uint32_t *p_n15)
 {
   ;
+  char *v7, *v16;   // was int32_t: these hold addresses
   bool v5;
-  int32_t result, v3, v4, v6, v7, v9, v13, v14, v16, n6;
+  int32_t result, v3, v4, v6, v9, v13, v14, n6;
   uint16_t *v8, *v10, *v11, *v12;
   n6 = *(_this + 11);
   result = p_n15[n6];
@@ -2299,7 +2301,7 @@ int32_t __sub_416860(int32_t *_this, uint32_t *p_n15)
 }
 static inline int32_t __fwd_sub_416C90_sub_413230(void *a0, int32_t a1, uint32_t a2) { return __sub_413230((uint32_t *)a0, a1, a2); }
 
-int32_t __sub_416C90(int32_t _this)
+int32_t __sub_416C90(char *_this)
 {
   ;
   char v13, v14, *buf;
@@ -2567,7 +2569,7 @@ void **__sub_4244A0(void **Block, char a2)
   return Block;
 }
 
-int32_t __sub_4248D0(uint8_t **_this, uint32_t *a2, int32_t a3)
+int32_t __sub_4248D0(uint8_t **_this, uint32_t *a2, char *a3)
 {
   ;
   bool v9, v19, v20;
@@ -2709,7 +2711,8 @@ int32_t __sub_4248D0(uint8_t **_this, uint32_t *a2, int32_t a3)
 int32_t __sub_413430(uint16_t *_this, int32_t plane_predictor)
 {
   ;
-  int32_t n0x8000, v3, v5, v6, v7, v11, v12, v13;
+  char *v12;   // was int32_t: these hold addresses
+  int32_t n0x8000, v3, v5, v6, v7, v11, v13;
   uint16_t *v8;
   uint32_t v4, n0x2000, v10;
   n0x8000 = *_this;
@@ -2754,7 +2757,7 @@ int32_t __sub_413430(uint16_t *_this, int32_t plane_predictor)
 }
 static inline int32_t __fwd_sub_4259F0_sub_413430(void *a0, int32_t a1) { return __sub_413430((uint16_t *)a0, a1); }
 
-int32_t __sub_4259F0(int32_t _this)
+int32_t __sub_4259F0(char *_this)
 {
   ;
   int16_t v12, v15;
@@ -3658,7 +3661,7 @@ int32_t *__sub_4256F0(int32_t *_this, int32_t i, int32_t a3, int32_t n4)
 static inline int32_t __fwd_sub_424550_sub_4135A0(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __sub_4135A0((uint16_t *)a0, a1, a2, a3); }
 static inline int32_t __fwd_sub_424550_sub_4248D0(void *a0, void *a1, int32_t a2) { return __sub_4248D0((uint8_t **)a0, (uint32_t *)a1, a2); }
 
-void __sub_424550(int32_t _this, uint8_t *a2, uint8_t *a3)
+void __sub_424550(char *_this, uint8_t *a2, uint8_t *a3)
 {
   ;
   bool v31;
@@ -3855,7 +3858,7 @@ static void bmf_set_denormal_mode()
 
 static inline uint32_t __fwd_sub_4229E0_sub_4118A0(void *a0, void *a1) { return __sub_4118A0((uint8_t *)a0, (char *)a1); }
 
-int32_t __sub_4229E0(int32_t _this, int32_t i, int32_t n4)
+int32_t __sub_4229E0(char *_this, int32_t i, int32_t n4)
 {
   ;
   char v16;
@@ -5005,7 +5008,7 @@ BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
   }
   rc.dec_init();
   return out_cursor;
-} BMF_SSE uint8_t *__sub_410310(int32_t Src, int32_t i, int32_t a3)
+} BMF_SSE uint8_t *__sub_410310(char *Src, int32_t i, int32_t a3)
 {
   ;
   __m128i si128, v8, v9, v10, v12, v13, v20, v21, v23, v24, v25, v26, v27, v28, v29;
@@ -5215,7 +5218,7 @@ __gnu_m128d __sub_436E10(const __m128d &a0__ref, const __m128d &a1__ref)
   return x;
 }
 
- BMF_SSE int32_t __estimate_cost(int32_t a1, int32_t n2)
+ BMF_SSE int32_t __estimate_cost(char *a1, int32_t n2)
 {
   ;
   __m128 v17, v18;
@@ -5431,7 +5434,7 @@ static inline void ** __fwd_sub_427740_sub_4244A0(void *a0, char a1) { return __
 static inline int32_t __fwd_sub_427740_sub_4248D0(void *a0, void *a1, int32_t a2) { return __sub_4248D0((uint8_t **)a0, (uint32_t *)a1, a2); }
 static inline int32_t * __fwd_sub_427740_sub_4256F0(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __sub_4256F0((int32_t *)a0, a1, a2, a3); }
 
- int32_t __sub_427740(uint16_t *p_i, int32_t Src)
+ int32_t __sub_427740(uint16_t *p_i, char *Src)
 {
   uint32_t *v83;
   void *v84;
@@ -6927,7 +6930,7 @@ BMF_SSE int32_t __sub_41A130(__m128 *a1, const __m128 &a2__ref, const __m128 &a3
 static inline int32_t __fwd_reduce_alphabet_symbol_list(void *a0, int32_t a1) { return __symbol_list((uint32_t *)a0, a1); }
 static inline uint32_t __fwd_reduce_alphabet_sub_414860(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __sub_414860((int32_t *)a0, a1, a2, a3); }
 
-void __reduce_alphabet(int32_t Blocka, char a2, uint8_t *a3)
+void __reduce_alphabet(char *Blocka, char a2, uint8_t *a3)
 {
   struct alignas(16) {   // 66064 bytes, the frame Hex-Rays could not name
       uint32_t v78[15];
@@ -7393,7 +7396,7 @@ LABEL_71:
   }
 }
 
-int32_t __sub_407460(uint8_t *a1, uint8_t *n2, int32_t a3, char a4, int32_t a5, int32_t a6, int32_t a7, int32_t a8)
+int32_t __sub_407460(uint8_t *a1, uint8_t *n2, int32_t a3, char a4, int32_t a5, int32_t a6, int32_t a7, char *a8)
 {
   struct alignas(16) {   // 26712 bytes, the frame Hex-Rays could not name
       char buf[4096];
@@ -7656,7 +7659,7 @@ int32_t __sub_407460(uint8_t *a1, uint8_t *n2, int32_t a3, char a4, int32_t a5, 
 
 static inline int32_t __fwd_sub_405CF0_sub_407460(void *a0, void *a1, int32_t a2, char a3, int32_t a4, int32_t a5, int32_t a6, int32_t a7) { return __sub_407460((uint8_t *)a0, (uint8_t *)a1, a2, a3, a4, a5, a6, a7); }
 
-BMF_SSE int32_t __sub_405CF0(int32_t a1, int32_t n3, char a3)
+BMF_SSE int32_t __sub_405CF0(char *a1, int32_t n3, char a3)
 {
   struct alignas(16) {   // 41456 bytes, the frame Hex-Rays could not name
       int32_t v174;
@@ -8572,12 +8575,13 @@ LABEL_19:
   int16_t (&Buffer)[5] = __frame.Buffer;
   int32_t &Offset = *(int32_t *)((char *)__frame.slot86);
   ;
+  char *j;   // was int32_t: these hold addresses
   FILE *Stream_v;
   __m128i v17, v18, v19, v20, v21;
   char v10, v25, *Src_4, v28, v30, *Src_3, *Src_6, v39, *Buffer_4, *Src_5;
   int32_t *v3, Size_1, i, v7, v8, v9, Src_1, j_3, Sizea_1, v22, n2_1, v26, v31, Offset_2, v35,
           v38, v40, v41;
-  uint32_t Size_2, j_1, j_2, j, n2_2, v29, ElementCount, ElementCount_1, v44;
+  uint32_t Size_2, j_1, j_2, n2_2, v29, ElementCount, ElementCount_1, v44;
   Stream_v = fopen(FileName, "rb");
   if ( !Stream_v
     || fread(Buffer, 0xEu, 1u, Stream_v) != 1
@@ -10707,8 +10711,9 @@ void __sub_419430(uint32_t *_this)
   uint32_t (&v30)[91] = __frame.v30;
   uint32_t (&v31)[5] = __frame.v31;
   ;
+  char *v16;   // was int32_t: these hold addresses
   bool v24;
-  int32_t n8, v4, v6, v9, n16_1, v16, n16, v25, v27;
+  int32_t n8, v4, v6, v9, n16_1, n16, v25, v27;
   uint32_t j_2, i, n8193, v8, *v10, j_1, j, v15, v17, v18, v19, v20, v21, *v22, v26;
   void *v12;
   n8 = *(_this + 2);
@@ -11497,7 +11502,7 @@ static inline void ** __fwd_sub_424D90_sub_4244A0(void *a0, char a1) { return __
 static inline int32_t __fwd_sub_424D90_sub_4248D0(void *a0, void *a1, int32_t a2) { return __sub_4248D0((uint8_t **)a0, (uint32_t *)a1, a2); }
 static inline int32_t * __fwd_sub_424D90_sub_4256F0(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __sub_4256F0((int32_t *)a0, a1, a2, a3); }
 
- int32_t __sub_424D90(uint16_t *p_i, int32_t a2)
+ int32_t __sub_424D90(uint16_t *p_i, char *a2)
 {
   struct alignas(16) {   // 144 bytes, the frame Hex-Rays could not name
       char v90;
@@ -11931,7 +11936,7 @@ static inline int32_t * __fwd_sub_424D90_sub_4256F0(void *a0, int32_t a1, int32_
 static inline int32_t __fwd_sub_41CAB0_sub_413430(void *a0, int32_t a1) { return __sub_413430((uint16_t *)a0, a1); }
 static inline uint32_t __fwd_sub_41CAB0_sub_414800(void *a0) { return __sub_414800((uint16_t *)a0); }
 
-BMF_SSE uint32_t __sub_41CAB0(int32_t a1, const __m128 &a2__ref, int32_t a3, uint8_t a4, int32_t a5)
+BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8_t a4, int32_t a5)
 {
   struct alignas(16) {   // 416 bytes, the frame Hex-Rays could not name
       int32_t n2;
@@ -16018,11 +16023,11 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, uint16_
   int32_t v68;
   int32_t v69;
   int32_t v70;
-  int32_t v71;
   int32_t v72;
   int32_t v73;
   uint32_t n5;
   ;
+  char *v71;   // was int32_t: these hold addresses
   __m128 a1 = a1__ref;
   __m128 a2 = a2__ref;
   bool v43;
@@ -16413,12 +16418,13 @@ BMF_SSE void __sub_405840(char *Blockb, char *Srca_3, int32_t a3, char a4, const
   int32_t &v52 = __frame.v52;
   int32_t &v53 = __frame.v53;
   ;
+  char *v12;   // was int32_t: these hold addresses
   __m128 a5 = a5__ref;
   __m128 a6 = a6__ref;
   char *Srca_1, v8, *Srca_2, v10, *__sub_405840_buf, v15, v20, *Srca_5, *Srca_6, v27, v29, v30,
        v31, *Srca_4;
   int32_t n1008, v17, v18, v19, Size_2, v24, Size_1, v26, Sizea_2, v34, Sizea_1, v36;
-  uint32_t v12, *v14, *v28;
+  uint32_t *v14, *v28;
   void **Blockb_2;
   v53 = a3;
   Srca_1 = Srca_3;
@@ -16586,7 +16592,7 @@ BMF_SSE void __sub_407B30(uint16_t *p_i, int32_t a2, char a3, const __m128 &a4__
 static inline char * __fwd_expand_image_sub_4081E0(void *a0, void *a1, int32_t a2, char a3) { return __sub_4081E0((char *)a0, (char *)a1, a2, a3); }
 static inline void __fwd_expand_image_sub_417DB0(char a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { __sub_417DB0(a0, a1, a2, (uint16_t *)a3, (uint8_t *)a4); }
 
-BMF_SSE char * __expand_image(int32_t a1, const __m128 &a2__ref, const __m128 &a3__ref, int32_t a4, int32_t *p_dwLowDateTime)
+BMF_SSE char * __expand_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref, int32_t a4, int32_t *p_dwLowDateTime)
 {
   struct alignas(16) {   // 104 bytes, the frame Hex-Rays could not name
       uint8_t slot0[4];
@@ -17962,10 +17968,11 @@ static inline char * __fwd_sub_402EF0_expand_image(int32_t a0, const __m128 &a1,
 BMF_SSE int32_t __sub_402EF0(uint32_t *v2, char *FileName, int32_t a2)
 {
   ;
+  char *v5;   // was int32_t: these hold addresses
   FILE *Stream_v, *Stream_1;
   __m128 v3, v4;
   const char *a_b;
-  int32_t v5, v8, v9;
+  int32_t v8, v9;
   v5 = (int32_t)v2;
   // The original opened the output "a+b" so that it could append images to an
   // existing archive; this command line writes one image per run, so all that
@@ -18017,7 +18024,7 @@ static inline void __fwd_compress_image_sub_405840(void *a0, void *a1, int32_t a
 static inline void __fwd_compress_image_sub_407B30(void *a0, int32_t a1, char a2, const __m128 &a3, const __m128 &a4) { __sub_407B30((uint16_t *)a0, a1, a2, a3, a4); }
 static inline void __fwd_compress_image_model_plane(const __m128 &a0, const __m128 &a1, void *a2, void *a3, void *a4) { __model_plane(a0, a1, (uint16_t *)a2, (uint8_t *)a3, (uint8_t *)a4); }
 
-BMF_SSE int32_t __compress_image(int32_t a1, const __m128 &a2__ref, const __m128 &a3__ref, uint16_t *p_i, void *coded_buf)
+BMF_SSE int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref, uint16_t *p_i, void *coded_buf)
 {
   struct alignas(16) {   // 80 bytes, the frame Hex-Rays could not name
       char *Buffera_4;
