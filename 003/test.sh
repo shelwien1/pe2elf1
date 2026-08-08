@@ -13,13 +13,17 @@
 # There is one compression mode now -- the binary always uses -S -Q9 -- so
 # there is nothing to sweep: this is the mode.
 #
-# If a reference stream is sitting next to an image — testfiles/ref_t24.bmf
-# for testfiles/t24.bmp, as produced by the original BMF.exe — the compressed
-# output is compared against it as well.  That is the stronger check, since it
-# says the bits are the donor's and not merely self-consistent; it is reported
-# but does not fail the run, because the corpus ships without those files.
+# Next to each image is its reference stream — testfiles/ref_t24.bmf for
+# testfiles/t24.bmp — and the compressed output has to match it byte for byte.
+# That is the check that makes this a refactoring gate rather than a smoke test:
+# a round-trip only says the code is self-consistent, while the reference says
+# the code still encodes the way it did before you touched it.  A change that
+# moves a stream is a change that altered behaviour, and has to be justified by
+# regenerating the references deliberately (tools/mkrefs.sh) rather than by
+# noticing later.
 #
-# BMF_TESTDIR and BMF_IMAGES override the corpus.
+# BMF_TESTDIR and BMF_IMAGES override the corpus.  BMF_NOREF=1 skips the
+# reference check, for the one case it is meant for: producing new references.
 set -u
 cd "$(dirname "$0")"
 
@@ -60,9 +64,16 @@ for img in $IMAGES; do
     timeout 300 $RUN "$BIN" c "orig_$img" "$st.bmf" >"$st.compress.log" 2>&1
     rc=$?; [ $rc -ne 0 ] && { echo "$st: COMPRESS FAILED (rc=$rc)"; cat "$st.compress.log"; exit 1; }
     [ -s "$st.bmf" ] || { echo "$st: NO STREAM PRODUCED"; exit 1; }
-    if [ -f "../$ref" ]; then
-      cmp -s "$st.bmf" "../$ref" \
-        || echo "$st: stream differs from the original's ($(stat -c%s "$st.bmf") vs $(stat -c%s "../$ref"))" >&2
+    if [ "${BMF_NOREF:-0}" != 1 ]; then
+      if [ -f "../$ref" ]; then
+        cmp -s "$st.bmf" "../$ref" || {
+          echo "$st: STREAM CHANGED ($(stat -c%s "$st.bmf") bytes, reference is $(stat -c%s "../$ref"))"
+          exit 1
+        }
+      else
+        echo "$st: NO REFERENCE STREAM ($ref) — run tools/mkrefs.sh"
+        exit 1
+      fi
     fi
     timeout 300 $RUN "$BIN" d "$st.bmf" "$img" >"$st.decompress.log" 2>&1
     rc=$?; [ $rc -ne 0 ] && { echo "$st: DECOMPRESS FAILED (rc=$rc)"; cat "$st.decompress.log"; exit 1; }
