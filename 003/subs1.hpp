@@ -1529,17 +1529,18 @@ uint16_t *__sub_413560(uint16_t *_this)
 
 BMF_SSE int32_t __sub_413900(uint16_t *_this, int32_t n2) {
   ;
+  char *v25;   // were int32_t: these hold addresses
   __m128i v6, v7;
   bool v47;
   char v55, v70;
   int16_t v24, v42;
   int32_t n4, v8, v9, __sub_413900_n0x7F800000, v12, v14, v15, v19, v20, n0x800000_6,
-          n0x7F800000_6, n0x800000_5, v25, v27, v28, v29, n0x7F800000_3, v32, v33, v46, v50, v53,
-          v56, n0x7F800000_1, n0x7F800000_2, v59, v60, i, v65, v66, n0x7F800000_5, n0x7F800000_4,
-          n0x7F800000_7, n0x800000_1, v73;
+          n0x7F800000_6, n0x800000_5, v27, v28, v29, n0x7F800000_3, v32, v33, v46, v50, v53,
+          v56, n0x7F800000_1, n0x7F800000_2, v59, v60, i, v65, v66, n0x7F800000_5,
+          n0x7F800000_4, n0x7F800000_7, n0x800000_1, v73;
   uint16_t *v3, *v26, n0x4000, v39, v41, *v49, *v51, *this_1, *this_2;
-  uint32_t n4_2, n4_3, __sub_413900_n0x800000, v13, v16, n0x800000_2, v31, v34, n0x800000_4, v38,
-           v40, v43, v44, v45, v48, v52, v54, n4_1, n0x800000_3;
+  uint32_t n4_2, n4_3, __sub_413900_n0x800000, v13, v16, n0x800000_2, v31, v34, n0x800000_4,
+          v38, v40, v43, v44, v45, v48, v52, v54, n4_1, n0x800000_3;
   uint8_t *v17, *v35;
   n4 = *((uint8_t *)model_geometry + n2);
   n4_1 = n4;
@@ -2304,10 +2305,11 @@ static inline int32_t __fwd_sub_416C90_sub_413230(void *a0, int32_t a1, uint32_t
 int32_t __sub_416C90(char *_this)
 {
   ;
+  char *v8, *v28, *v29, *v32;   // were int32_t: these hold addresses
   char v13, v14, *buf;
   int16_t v6, *v11, v12;
-  int32_t n2_1, v3, v7, v8, v9, v10, v15, v17, n2, v19, v21, v22, v23, v24, v25, v26, v27, v28,
-          v29, v30, result, v32;
+  int32_t n2_1, v3, v7, v9, v10, v15, v17, n2, v19, v21, v22, v23, v24, v25, v26, v27, v30,
+          result;
   uint16_t *v20;
   uint32_t **v4, *v5;
   n2_1 = *(uint32_t *)(_this + 32);
@@ -3664,10 +3666,11 @@ static inline int32_t __fwd_sub_424550_sub_4248D0(void *a0, void *a1, int32_t a2
 void __sub_424550(char *_this, uint8_t *a2, uint8_t *a3)
 {
   ;
+  char *v9;   // were int32_t: these hold addresses
   bool v31;
   char v33, v35;
-  int32_t v4, v5, v6, v7, v8, v9, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23,
-          v24, v25, v26, v27, v28, v29, v30, v34, n5, n16, v38, v40, v42;
+  int32_t v4, v5, v6, v7, v8, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24,
+          v25, v26, v27, v28, v29, v30, v34, n5, n16, v38, v40, v42;
   int64_t v39;
   uint8_t *v10, *v11, *v32;
   __rc_begin_encode();
@@ -5296,9 +5299,10 @@ static inline int32_t * __fwd_sub_4273F0_sub_4256F0(void *a0, int32_t a1, int32_
 void ** __sub_4273F0(char ArgList, uint8_t *Src, int32_t i, int32_t a4)
 {
   ;
+  char *v11;   // were int32_t: these hold addresses
   bool v33;
-  int32_t *v4, *v5, v6, v7, v8, v9, v10, v11, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23,
-          v24, v25, v26, v27, v28, v29, v30, v31, v32, v35, v36, v39, v41;
+  int32_t *v4, *v5, v6, v7, v8, v9, v10, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24,
+          v25, v26, v27, v28, v29, v30, v31, v32, v35, v36, v39, v41;
   int64_t v37;
   uint8_t *v12, *v13, *Src_1;
   v4 = (int32_t *)malloc(0x99D4D8u);
@@ -6066,6 +6070,7 @@ BMF_SSE int32_t __sub_41A130(__m128 *a1, const __m128 &a2__ref, const __m128 &a3
   int32_t &v314 = __frame.v314;
   int32_t &v315 = __frame.v315;
   ;
+  char *v46, *v157, *v172;   // were int32_t: these hold addresses
   __m128 a2 = a2__ref;
   __m128 a3 = a3__ref;
   __m128 *v28, *v31, v32, v33, n0x45F20000, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44,
@@ -6078,17 +6083,17 @@ BMF_SSE int32_t __sub_41A130(__m128 *a1, const __m128 &a2__ref, const __m128 &a3
           *v82, *v83, *v84, *v86, *v87, *v90, *v91, *v92, *v93, *v95, *v96, *v97, *v98, *v99,
           *v100, *v102, *v115, *v129, *v143, v150, *v158, *v170, *v205, *v217, *v223, *v230,
           *v245;
-  int32_t v6, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24,
-          v25, v27, v29, v30, v46, v47, v48, v51, v54, v55, v56, v57, v65, v68, v74, v75, v85,
+  int32_t v6, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23,
+          v24, v25, v27, v29, v30, v47, v48, v51, v54, v55, v56, v57, v65, v68, v74, v75, v85,
           v88, *v103, *v104, v105, n2, v107, n3536_5, v109, v111, v112, v113, v114, v116, v117,
-          n3536_1, v121, v122, v123, v124, v125, v126, v127, v128, v130, n2256, v132, v134, v137,
-          v138, v140, v141, v144, n2576, n1840_13, v147, v148, v149, v151, v154, v155, v156,
-          v157, n2896, v161, v162, v163, v164, v167, v168, v169, v171, v172, n3536_2, v175, v176,
-          v177, v178, v179, v181, v182, n3536_3, v185, v186, v188, v189, v190, v191, v192, v193,
-          n1840_14, n1840_15, v198, n1840_16, v200, v201, n1840_17, v203, v206, v207, v208, n960,
-          n3536_4, v211, v212, v213, v214, v215, n1840_3, n1840_8, n1840_7, n1840_10, n1840_9,
-          v222, v224, n1840_11, n1840_12, n255, v228, n1840_5, n1840_4, n1840_6, v234, v235,
-          v236, v237, v238, v239, v240, v241, v242;
+          n3536_1, v121, v122, v123, v124, v125, v126, v127, v128, v130, n2256, v132, v134,
+          v137, v138, v140, v141, v144, n2576, n1840_13, v147, v148, v149, v151, v154, v155,
+          v156, n2896, v161, v162, v163, v164, v167, v168, v169, v171, n3536_2, v175, v176,
+          v177, v178, v179, v181, v182, n3536_3, v185, v186, v188, v189, v190, v191, v192,
+          v193, n1840_14, n1840_15, v198, n1840_16, v200, v201, n1840_17, v203, v206, v207,
+          v208, n960, n3536_4, v211, v212, v213, v214, v215, n1840_3, n1840_8, n1840_7,
+          n1840_10, n1840_9, v222, v224, n1840_11, n1840_12, n255, v228, n1840_5, n1840_4,
+          n1840_6, v234, v235, v236, v237, v238, v239, v240, v241, v242;
   int8_t v139;
   uint32_t v120, v133, v135, v136, v152, v153, v165, v180;
   uint8_t *v187;
@@ -6982,13 +6987,14 @@ void __reduce_alphabet(char *Blocka, char a2, uint8_t *a3)
   uint32_t &k_1 = __frame.k_1;
   int32_t &Blocka_1 = __frame.Blocka_1;
   ;
+  char *v62, *Blockaa_2;   // were int32_t: these hold addresses
   bool v46, v48, v59;
   char *v28, v35;
-  int32_t n8, v8, *Blockaa_1, v11, n4, n0x2000_2, n0x2000_1, v20, Blockaa_4, v26, n4_2, v30, v31,
-          v32, *p_n4, n16_2, v39, v44, n256, v49, v50, v51, v52, v54, v55, v56, v57, v58, v62,
-          v63, *p_n4_2, n16_1, Blockaa_2, v68, n0x2000, v71, v72, v74, *p_n4_1, n16;
+  int32_t n8, v8, *Blockaa_1, v11, n4, n0x2000_2, n0x2000_1, v20, Blockaa_4, v26, n4_2, v30,
+          v31, v32, *p_n4, n16_2, v39, v44, n256, v49, v50, v51, v52, v54, v55, v56, v57, v58,
+          v63, *p_n4_2, n16_1, v68, n0x2000, v71, v72, v74, *p_n4_1, n16;
   uint32_t k_2, i, v12, *Blockaa_3, v19, n0x2000_4, n0x2000_3, v24, k, v29, k_3, j_1, j, v53,
-           v61, v64, v70, v73, v75;
+          v61, v64, v70, v73, v75;
   uint64_t *n0x2000_6;
   uint8_t *v4, *v10, *v33, *v42, *v43, *v45, *v60;
   void *v3, *v13, *v34;
@@ -8898,14 +8904,14 @@ LABEL_61:
   uint32_t *&v67 = __frame.v67;
   uint32_t *&v68 = __frame.v68;
   ;
+  char *v3, *v7;   // were int32_t: these hold addresses
   char v23, v34, *v36, *v38, v40;
   int16_t v39;
-  int32_t sym_cum, sym_high, v2, v3, v5, v6, v7, v8, __sub_412E60_n0x7F800000, n0x7F800000_2,
-          v16, v17, n0x2000_5, n0x2000_2, v28, n0x800000_3, n0x800000_2, n251, v46, v49, v51,
-          v53;
+  int32_t sym_cum, sym_high, v2, v5, v6, v8, __sub_412E60_n0x7F800000, n0x7F800000_2, v16, v17,
+          n0x2000_5, n0x2000_2, v28, n0x800000_3, n0x800000_2, n251, v46, v49, v51, v53;
   uint16_t **v4, *v20, **v21, *v25, **v26, *v33, v35, *v43, *v44, *v45, *v47, *v48, *v52;
   uint32_t *v9, __sub_412E60_n0x800000, n0x2000_6, v13, n0x2000_4, n0x2000_3,
-           __sub_412E60_n0x2000_1, *v32, v41, v42, v50, v54;
+          __sub_412E60_n0x2000_1, *v32, v41, v42, v50, v54;
   uint8_t *Buffer;
   void *v1;
   v68 = a1;
@@ -9187,23 +9193,24 @@ int32_t __sub_418650(uint32_t *_this, int32_t a2)
   int32_t &v211 = __frame.v211;
   int32_t &n15_24 = __frame.n15_24;
   ;
+  char *v21, *v23, *n15_10, *v36, *v46, *v57, *v66, *n15_17, *v80;   // were int32_t: these hold addresses
   bool v19;
   char v70, v71, v72, v73, v74, v75, v91, *v157;
   int16_t v14, n4_14, v146, v160, n15_4;
-  int32_t arg_cum, arg_high, arg_tot, n4_8, n4_7, n15_6, n15_7, v8, v9, v10, v12, v13, v15, n4_9,
-          __sub_418650_n15, v21, v22, v23, n4_11, v25, v26, v27, v29, n15_10, v31, n0xFFFF, v33,
-          n0xFFFF_1, n53248, v36, n4_12, v40, n15_11, n8, n15_12, v44, n4_22, v46, n15_14,
-          n15_18, v49, v50, v51, n4_13, v53, v54, v55, v56, v57, *v59, v60, v61, n15_13, v66,
-          v67, n15_15, n15_17, n4_17, v80, v81, v83, v84, v85, n4, n256_2, n15_1, n256_1, n15_23,
-          n4_19, n4_20, n4_5, n4_6, n15_5, this_4, v102, v103, v104, v105, v107, v108, v109,
-          v111, v112, v113, v114, v115, v116, v117, v118, v119, v120, v122, v123, v124, v125,
-          v126, v127, v128, n32, n15_25, n4_21, v132, v133, v135, n256, v143, n4_18, n15_19,
-          n15_20, v148, v149, v150, v151, v152, v153, v155, n15_21, v158, v159, v161, v163, v164,
-          n4_2, n15_22, n256_4, n256_5, n256_3, n15_2;
+  int32_t arg_cum, arg_high, arg_tot, n4_8, n4_7, n15_6, n15_7, v8, v9, v10, v12, v13, v15,
+          n4_9, __sub_418650_n15, v22, n4_11, v25, v26, v27, v29, v31, n0xFFFF, v33, n0xFFFF_1,
+          n53248, n4_12, v40, n15_11, n8, n15_12, v44, n4_22, n15_14, n15_18, v49, v50, v51,
+          n4_13, v53, v54, v55, v56, *v59, v60, v61, n15_13, v67, n15_15, n4_17, v81, v83, v84,
+          v85, n4, n256_2, n15_1, n256_1, n15_23, n4_19, n4_20, n4_5, n4_6, n15_5, this_4,
+          v102, v103, v104, v105, v107, v108, v109, v111, v112, v113, v114, v115, v116, v117,
+          v118, v119, v120, v122, v123, v124, v125, v126, v127, v128, n32, n15_25, n4_21, v132,
+          v133, v135, n256, v143, n4_18, n15_19, n15_20, v148, v149, v150, v151, v152, v153,
+          v155, n15_21, v158, v159, v161, v163, v164, n4_2, n15_22, n256_4, n256_5, n256_3,
+          n15_2;
   uint16_t *n15_9, *v4, *v16, *n4_10, *v58, *__sub_418650_n4_3, *v90, *v95, *v97, *v100, *v106,
            *v110, *v121, v154, v162, *v170, *v171, v174;
   uint32_t bin_tot, *this_2, *this_3, n4_16, n4_15, **v134, v136, v137, v138, v139, v140, v172,
-           v173, v175, v176, v177;
+          v173, v175, v176, v177;
   uint64_t *v142;
   uint8_t *v38, *v39, *n15_16, *v76;
   n15_9 = (uint16_t *)*(_this + 20);
@@ -9982,24 +9989,25 @@ int32_t __code_pixel(int32_t *_this, int32_t a2)
   int32_t &v207 = __frame.v207;
   int32_t &n15_14 = __frame.n15_14;
   ;
+  char *v20, *v22, *n2_9, *v52, *v59, *v63, *v74, *n15_36, *n15_38, *n15_40;   // were int32_t: these hold addresses
   bool v11;
   char v24, *v36, v64, v65, v66, v67, v68, v93, *v156;
   int16_t v14, n15_10, v147, v158, n15_21, v170;
   int32_t arg_cum, arg_high, arg_tot, n4, n4_1, __code_pixel_n15, n15_1, v8, v9, v10, *this_2,
-          v13, v15, *v16, n15_6, n15_5, n15_8, v20, v21, v22, p_n15_1, n15_30, v26, v27, *this_3,
-          v29, n0xFFFF, n2_9, v32, n0xFFFF_1, n53248, v35, v38, v39, v42, p_n15_2, n15_42, n8,
-          v46, n15_32, n15_12, n15_9, v50, v52, v53, p_n15_4, n2_10, v59, v61, v63, n15_11,
-          n15_13, n4_2, v74, n15_33, n15_35, n15_34, n15_15, n2_15, v82, n15_36, *n2_3,
-          __code_pixel_n0x2000, n15_16, v87, n2, p_n15_5, p_n15_7, n15_17, n15_38, n15_22,
-          __code_pixel_n4_3, __code_pixel_n4_4, p_n15_11, n2_5, n15_41, n15_23, n15_24, n15_25,
-          *this_4, n15_26, v109, n15_27, v112, v114, v115, v116, v117, v118, v119, v120, v121,
-          v122, v123, v125, v126, v127, v128, v129, n15_28, n32, n15_29, n4_5, v134, v135,
-          p_n15_6, *v143, v144, n2_16, n2_17, n15_37, v149, v150, v151, v152, v154, v155, v157,
-          n15_18, v161, n2_2, p_n15_10, p_n15_8, n15_40, p_n15_9, n15_19;
+          v13, v15, *v16, n15_6, n15_5, n15_8, v21, p_n15_1, n15_30, v26, v27, *this_3, v29,
+          n0xFFFF, v32, n0xFFFF_1, n53248, v35, v38, v39, v42, p_n15_2, n15_42, n8, v46,
+          n15_32, n15_12, n15_9, v50, v53, p_n15_4, n2_10, v61, n15_11, n15_13, n4_2, n15_33,
+          n15_35, n15_34, n15_15, n2_15, v82, *n2_3, __code_pixel_n0x2000, n15_16, v87, n2,
+          p_n15_5, p_n15_7, n15_17, n15_22, __code_pixel_n4_3, __code_pixel_n4_4, p_n15_11,
+          n2_5, n15_41, n15_23, n15_24, n15_25, *this_4, n15_26, v109, n15_27, v112, v114,
+          v115, v116, v117, v118, v119, v120, v121, v122, v123, v125, v126, v127, v128, v129,
+          n15_28, n32, n15_29, n4_5, v134, v135, p_n15_6, *v143, v144, n2_16, n2_17, n15_37,
+          v149, v150, v151, v152, v154, v155, v157, n15_18, v161, n2_2, p_n15_10, p_n15_8,
+          p_n15_9, n15_19;
   uint16_t *n2_7, *n2_8, *v37, *v51, *n2_11, *n2_12, *n2_13, *n2_14, *v97, *v98, *n2_6, *v108,
            *v111, *v113, *v124, v153, *v159, *n15_39;
   uint32_t bin_tot, v55, v57, **v136, v137, p_n15_12, v139, v140, v141, v168, v169, v171, v172,
-           v173;
+          v173;
   uint8_t *p_n15_3, *v41, *v69;
   n2_7 = (uint16_t *)*(_this + 20);
   n4 = *n2_7;
@@ -12109,6 +12117,7 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
   int32_t &v580 = __frame.v580;
   uint32_t *&v581 = __frame.v581;
   ;
+  char *v8, *n2_1;   // were int32_t: these hold addresses
   __m128 a2 = a2__ref;
   __m128 *v15, *v17, v19, n0x46D22000, v27, n0x459D8800, n0x3C54FDF4, v30, v31, v32, v33, v34,
          v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51,
@@ -12118,33 +12127,33 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
   char *v90, v114, v116, v312;
   const char *v91, *v93, *v94, *v107, *v110, *v111, *v112;
   float v16, v18, v20, v21, v22, v23, v24, v26;
-  int32_t v6, v8, v9, v75, v77, v79, v80, v81, v84, v85, v86, v88, v89, v95, v96, v98, n2_1,
-          v100, v101, v102, v106, v108, v113, v115, v117, v118, v119, v120, v121, v122, v123,
-          v124, v125, v126, v127, v128, v129, v130, v131, v132, v133, v134, v135, v136, v137,
-          v138, v139, v140, v141, v142, v143, v144, v145, v146, v147, v148, v149, v150, v151,
-          v152, v153, v154, v155, v156, v157, v158, v159, v160, v161, v162, v163, v164, v165,
-          v166, v167, v168, v169, v170, v171, v172, v173, v174, v175, v176, v177, v178, v179,
-          v180, v181, v182, v183, v184, v185, v186, v187, v188, v189, v190, v191, v192, v193,
-          v194, v195, v196, v197, v198, v199, v200, v201, v202, v203, v204, v205, v206, v207,
-          v208, v209, v210, v211, v212, v213, v214, v215, v216, v217, v218, v219, v220, v221,
-          v222, v223, v224, v225, v226, v227, v228, v229, v230, v231, v232, v233, v234, v235,
-          v236, v237, v238, v239, v240, v241, v242, v243, v244, v245, v246, v247, v248, v249,
-          v250, v251, v252, v253, v254, v255, v256, v257, v258, v259, v260, v261, v262, v263,
-          v264, v265, v266, v267, v268, v269, v270, v271, v272, v273, v274, v275, v276, v277,
-          v278, v279, v280, v281, v282, v283, v284, v285, v286, v287, v288, v289, v290, v291,
-          v292, v293, v294, v295, v296, v297, v298, v299, v300, v301, v302, v303, v304, v305,
-          v306, v307, v308, v309, v310, v311, v313, v314, v315, v316, v317, v318, v319, v320,
-          v321, v322, v323, v324, v325, v326, v327, v328, v329, v330, v331, v332, v333, v334,
-          v335, v336, v337, v338, v339, v340, v341, v342, v343, v344, v345, v346, v347, v348,
-          v349, v350, v351, v352, v353, v354, v355, v356, v357, v358, v359, v360, v361, v362,
-          v363, v364, v365, v366, v367, v368, v369, v370, v371, v372, v373, v374, v375, v376,
-          v377, v378, v379, v380, v381, v382, v383, v384, v386, n15, v391, v392, v394, v395,
-          v397, v398, v399, v400, v403, v404, v406, v407, v409, v410, v412, v413, v415, v416,
-          v417, v418, v419, v421, v422, v423, v424, v425, v426, v427, v429, v430, v431, v432,
-          v433, v434, v435, v437, v438, v439, v440, v441, v442, v443, v447, v448, v449, v450,
-          v453, v454, v459, v460, v461, v464, v465, v467, v468, v470, v471, v472, v475, v476,
-          v478, v479, v481, v482, v483, v486, v487, v489, v490, v492, v493, v494, v497, v498,
-          v500, v501, v503, v504;
+  int32_t v6, v9, v75, v77, v79, v80, v81, v84, v85, v86, v88, v89, v95, v96, v98, v100, v101,
+          v102, v106, v108, v113, v115, v117, v118, v119, v120, v121, v122, v123, v124, v125,
+          v126, v127, v128, v129, v130, v131, v132, v133, v134, v135, v136, v137, v138, v139,
+          v140, v141, v142, v143, v144, v145, v146, v147, v148, v149, v150, v151, v152, v153,
+          v154, v155, v156, v157, v158, v159, v160, v161, v162, v163, v164, v165, v166, v167,
+          v168, v169, v170, v171, v172, v173, v174, v175, v176, v177, v178, v179, v180, v181,
+          v182, v183, v184, v185, v186, v187, v188, v189, v190, v191, v192, v193, v194, v195,
+          v196, v197, v198, v199, v200, v201, v202, v203, v204, v205, v206, v207, v208, v209,
+          v210, v211, v212, v213, v214, v215, v216, v217, v218, v219, v220, v221, v222, v223,
+          v224, v225, v226, v227, v228, v229, v230, v231, v232, v233, v234, v235, v236, v237,
+          v238, v239, v240, v241, v242, v243, v244, v245, v246, v247, v248, v249, v250, v251,
+          v252, v253, v254, v255, v256, v257, v258, v259, v260, v261, v262, v263, v264, v265,
+          v266, v267, v268, v269, v270, v271, v272, v273, v274, v275, v276, v277, v278, v279,
+          v280, v281, v282, v283, v284, v285, v286, v287, v288, v289, v290, v291, v292, v293,
+          v294, v295, v296, v297, v298, v299, v300, v301, v302, v303, v304, v305, v306, v307,
+          v308, v309, v310, v311, v313, v314, v315, v316, v317, v318, v319, v320, v321, v322,
+          v323, v324, v325, v326, v327, v328, v329, v330, v331, v332, v333, v334, v335, v336,
+          v337, v338, v339, v340, v341, v342, v343, v344, v345, v346, v347, v348, v349, v350,
+          v351, v352, v353, v354, v355, v356, v357, v358, v359, v360, v361, v362, v363, v364,
+          v365, v366, v367, v368, v369, v370, v371, v372, v373, v374, v375, v376, v377, v378,
+          v379, v380, v381, v382, v383, v384, v386, n15, v391, v392, v394, v395, v397, v398,
+          v399, v400, v403, v404, v406, v407, v409, v410, v412, v413, v415, v416, v417, v418,
+          v419, v421, v422, v423, v424, v425, v426, v427, v429, v430, v431, v432, v433, v434,
+          v435, v437, v438, v439, v440, v441, v442, v443, v447, v448, v449, v450, v453, v454,
+          v459, v460, v461, v464, v465, v467, v468, v470, v471, v472, v475, v476, v478, v479,
+          v481, v482, v483, v486, v487, v489, v490, v492, v493, v494, v497, v498, v500, v501,
+          v503, v504;
   int64_t v10, v11, v12, v13, v14;
   uint16_t *v7, *v387, *v389, *n0x10_3, *n2_2, *v408, *v411, *v420, *v428, *v436, *v444, *v445,
            *n2_7, *n0x10_4, *v452, *n0xF0_5, *v456, *v457, *n2_6, *n0xF0_4, *v463, *v466, *n2_5,
@@ -14930,17 +14939,18 @@ BMF_SSE void __sub_419800(__m128 *lpAddress, const __m128 &a2__ref, const __m128
   uint8_t *v109;
   uint8_t v110;
   ;
+  char *v11, *v23, *v27, *v30, *v34, *v38, *v40, *v41, *v42, *v43, *v44, *v45, *v46, *v51,
+         *v57, *v61, *v65, *v69, *v72, *v79, *v81, *v83, *v85, *v87, *v89, *v91, *v93;   // were int32_t: these hold addresses
   __m128 a2 = a2__ref;
   __m128 a3 = a3__ref;
   __m128 v50;
   __m128i *v56;
   char v10, v14, v48, v49, v97;
   int16_t v26;
-  int32_t v11, v12, v13, n16, v16, v17, v20, v21, v22, v23, v24, v25, v27, v28, v29, v30, v31,
-          v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, Size, v51,
-          v52, *v53, v54, v55, v57, v58, v59, v60, v61, v62, v63, v64, v65, v66, v67, v68, v69,
-          v70, v71, v72, v73, v74, v75, v76, v77, v78, v79, v80, v81, v82, v83, v84, v85, v86,
-          v87, v88, v89, v90, v91, v92, v93, v95, v96, n16_1, v99, v100;
+  int32_t v12, v13, n16, v16, v17, v20, v21, v22, v24, v25, v28, v29, v31, v32, v33, v35, v36,
+          v37, v39, Size, v52, *v53, v54, v55, v58, v59, v60, v62, v63, v64, v66, v67, v68,
+          v70, v71, v73, v74, v75, v76, v77, v78, v80, v82, v84, v86, v88, v90, v92, v95, v96,
+          n16_1, v99, v100;
   int64_t v19;
   uint16_t *v18;
   uint32_t k;
@@ -16027,14 +16037,15 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, uint16_
   int32_t v73;
   uint32_t n5;
   ;
+  char *Blocka_1, *v46, *v50;   // were int32_t: these hold addresses
   char *v71;   // was int32_t: these hold addresses
   __m128 a1 = a1__ref;
   __m128 a2 = a2__ref;
   bool v43;
   char v7, *buf, v27;
   int16_t __model_plane_n2, v22;
-  int32_t Blocka_3, v8, Blocka_4, v10, v11, v14, n2_1, n2_2, v17, v18, v19, v20, v21, Blocka_1,
-          v35, v36, v41, v42, v44, v45, v46, v47, v48, v49, v50, v53, v54, v55, v56;
+  int32_t Blocka_3, v8, Blocka_4, v10, v11, v14, n2_1, n2_2, v17, v18, v19, v20, v21, v35, v36,
+          v41, v42, v44, v45, v47, v48, v49, v53, v54, v55, v56;
   uint32_t *v12, n0x10000, *v24, v28, v29, v30, v31, *v32, *v33, v34, v37, *v38, *v39, v40;
   uint8_t *v51, *v52;
   void *v5;
@@ -16637,16 +16648,17 @@ BMF_SSE char * __expand_image(char *a1, const __m128 &a2__ref, const __m128 &a3_
   uint32_t &ElementSize = __frame.ElementSize;
   uint32_t &__expand_image_Buffer = __frame.__expand_image_Buffer;
   ;
+  char *v5;   // were int32_t: these hold addresses
   __m128 a2 = a2__ref;
   __m128 a3 = a3__ref;
   FILE *Stream_1, *Stream_v;
   char v10, *p_i_1, v17, v18, v20, v34, v35, *Buffer_3, *n4_6, v57, *n4_7, *v64, v72;
-  int32_t v5, Buffer__1, dwLowDateTime, v21, n4, v24, __expand_image_n2, v27, v28, v29, v30,
-          ArgList, v33, n4_4, v37, n2_1, i, Size_4, Size_5, n4_3, v44, Size_2, Size_3, n4_2, v48,
-          n2_2, __expand_image_n4_5, v55, Src_2, v58, n4_8, v61, i_1, n4_9, *Blockb_1, v76;
+  int32_t Buffer__1, dwLowDateTime, v21, n4, v24, __expand_image_n2, v27, v28, v29, v30,
+          ArgList, v33, n4_4, v37, n2_1, i, Size_4, Size_5, n4_3, v44, Size_2, Size_3, n4_2,
+          v48, n2_2, __expand_image_n4_5, v55, Src_2, v58, n4_8, v61, i_1, n4_9, *Blockb_1, v76;
   uint16_t i_2;
-  uint32_t __expand_image_Buffer_1, v12, *v13, ElementCount_5, ElementCount_2, v23, v25, Size_1,
-           ElementCount_1, ElementCount_4, v67, v68, v69, v70, *v71, v74, v75;
+  uint32_t __expand_image_Buffer_1, v12, *v13, ElementCount_5, ElementCount_2, v23, v25,
+          Size_1, ElementCount_1, ElementCount_4, v67, v68, v69, v70, *v71, v74, v75;
   uint8_t *Src_1;
   void *Src_3;
   v5 = a1;
@@ -18052,13 +18064,14 @@ BMF_SSE int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &
   int32_t &v66 = __frame.v66;
   void *&Buffer_2 = __frame.Buffer_2;
   ;
+  char *v5;   // were int32_t: these hold addresses
   __m128 a2 = a2__ref;
   __m128 a3 = a3__ref;
   FILE *i;
   bool v38;
   char __compress_image_Buffer_1, *Buffera_5, v12, v13, v15, v17, *Buffera_6, v21, *Srca, v36, v42,
        *Buffera_2, *Buffera_3;
-  int32_t v5, __compress_image_n4_5, v11, v18, n4_6, __compress_image_n8, n4, v27, n8_1,
+  int32_t __compress_image_n4_5, v11, v18, n4_6, __compress_image_n8, n4, v27, n8_1,
           __compress_image_n256, n4_1, v40, v41, v43, n4_3, v47, i_1, v50, n4_4, v56;
   uint16_t *p_i_1, i_2, v53;
   uint32_t ElementCount_1, n7, v25, v26, v28, v30, v31, v32, Size, v55;

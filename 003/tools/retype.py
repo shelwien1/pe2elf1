@@ -96,68 +96,90 @@ def declared_params(sig):
     return out
 
 
-def declared_ints(body):
-    """{name: (line index, whole declaration line)} for int32_t/uint32_t locals."""
-    out = {}
-    in_frame = False
-    for i, l in enumerate(body):
-        # Skip the layout-preserving struct tools/unframe.py leaves behind: its
-        # members are the frame, and moving one out moves the layout with it.
+def int_decls(body):
+    """[(first line, last line, indent, type, [names])] for int32_t declarations.
+
+    Hex-Rays wraps a long declaration over several lines, so this joins them:
+    a declaration runs from a line that starts with the type to the line that
+    ends with the `;`.  Members of the Phase 2 frame structs are skipped -- they
+    are the layout, and moving one out moves it.
+    """
+    out, i, in_frame = [], 0, False
+    while i < len(body):
+        l = body[i]
         if re.match(r'^\s*struct alignas\(\d+\) \{', l):
             in_frame = True
         elif in_frame and re.match(r'^\s*\} __frame;', l):
             in_frame = False
+            i += 1
             continue
-        if in_frame:
-            continue
-        m = re.match(r'^(\s+)(%s) (.+);\s*$' % INT, l)
+        m = None if in_frame else re.match(r'^(\s+)(%s) (.*)$' % INT, l)
         if not m:
+            i += 1
             continue
-        for part in m.group(3).split(','):
-            part = part.strip()
-            if part.startswith('*') or '[' in part or '=' in part:
-                continue
-            if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', part):
-                out[part] = i
+        j, text = i, m.group(3)
+        while not text.rstrip().endswith(';') and j + 1 < len(body):
+            j += 1
+            text += ' ' + body[j].strip()
+        if not text.rstrip().endswith(';'):
+            i += 1
+            continue
+        names = [p.strip() for p in text.rstrip()[:-1].split(',')]
+        out.append((i, j, m.group(1), m.group(2), names))
+        i = j + 1
+    return out
+
+
+def declared_ints(body):
+    """{plain int32_t local: index of its declaration}."""
+    out = {}
+    for k, (i, j, ind, ty, names) in enumerate(int_decls(body)):
+        for n in names:
+            if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', n):
+                out[n] = k
     return out
 
 
 def retype(body, names):
-    """Move `names` out of their int32_t declarations into `char *` ones."""
-    decls = declared_ints(body)
-    hit = sorted(n for n in names if n in decls)
+    """Move `names` out of their int32_t declarations into a `char *` one."""
+    decls = int_decls(body)
+    hit = sorted(n for n in names
+                 if any(n in d[4] for d in decls))
     if not hit:
         return None, 0
-    out, moved, in_frame = [], [], False
-    for i, l in enumerate(body):
-        if re.match(r'^\s*struct alignas\(\d+\) \{', l):
-            in_frame = True
-        elif in_frame and re.match(r'^\s*\} __frame;', l):
-            in_frame = False
-        m = None if in_frame else re.match(r'^(\s+)(%s) (.+);\s*$' % INT, l)
-        if not m:
-            out.append(l)
-            continue
-        keep = []
-        for part in [p.strip() for p in m.group(3).split(',')]:
-            if part in hit:
-                moved.append(part)
-            else:
-                keep.append(part)
+    out, at, moved = [], 0, []
+    for i, j, ind, ty, ns in decls:
+        out.extend(body[at:i])
+        keep = [n for n in ns if n not in hit]
+        moved += [n for n in ns if n in hit]
         if keep:
-            out.append('%s%s %s;' % (m.group(1), m.group(2), ', '.join(keep)))
-        elif not moved:
-            out.append(l)
+            line = '%s%s %s;' % (ind, ty, ', '.join(keep))
+            while len(line) > 96:
+                cut = line.rfind(', ', 0, 96)
+                if cut < 0:
+                    break
+                out.append(line[:cut + 1])
+                line = ind + '        ' + line[cut + 2:]
+            out.append(line)
+        at = j + 1
+    out.extend(body[at:])
     if not moved:
         return None, 0
-    # one declaration, next to the body's opening `;`
+
     ind = re.match(r'^(\s*)', body[1]).group(1) if len(body) > 1 else '  '
-    decl = '%schar *%s;   // was int32_t: these hold addresses' % (
-        ind, ', *'.join(moved))
+    line = '%schar *%s;' % (ind, ', *'.join(moved))
+    decl = []
+    while len(line) > 96:
+        cut = line.rfind(', ', 0, 96)
+        if cut < 0:
+            break
+        decl.append(line[:cut + 1])
+        line = ind + '       ' + line[cut + 2:]
+    decl.append(line + '   // were int32_t: these hold addresses')
     for i, l in enumerate(out):
         if l.strip() == ';':
-            return out[:i + 1] + [decl] + out[i + 1:], len(moved)
-    return [out[0], decl] + out[1:], len(moved)
+            return out[:i + 1] + decl + out[i + 1:], len(moved)
+    return [out[0]] + decl + out[1:], len(moved)
 
 
 def main():
