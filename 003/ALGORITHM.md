@@ -5,14 +5,14 @@ two coded streams, the range coder and its state, the modelling front end, and
 the two entropy back ends.
 
 Everything below was derived by reading the decompiled bodies. Function names
-are the donor's addresses inside `BMF.exe` (`sub_402FE0` is the body at
+are the donor's addresses inside `BMF.exe` (`compress_image` is the body at
 `0x00402FE0`); global names are IDA's, and each one is a reference into
 `blob.inc` — BMF.exe's data segment — at the address given in the tables.
 
 **Confidence.** Sections 1–6 and the range coder in §5 are read off the code
 directly; where a detail is inferred rather than read, it says so. §7 is where
 that stops being true: the range coder the `-S` path drives is settled, but the
-context model above it (`sub_415380` and below) is only mapped in outline, and
+context model above it (`model_plane` and below) is only mapped in outline, and
 the non-`-S` back end barely at all. §9 lists exactly what is not settled, so
 the rest can be relied on.
 
@@ -24,22 +24,22 @@ the rest can be relied on.
 main
 └── __main                                 argv: "c in.bmp out" / "d in out.bmp"
     ├── __bmf_compress
-    │   ├── sub_42AB20                     read a BMP into the in-memory image
+    │   ├── read_bmp                     read a BMP into the in-memory image
     │   ├── sub_402EF0                     open the output archive
-    │   └── sub_402FE0                     compress one image      ← §2
+    │   └── compress_image                     compress one image      ← §2
     └── __bmf_decompress
         ├── sub_402EF0                     open the input archive
-        ├── sub_403820                     expand one image        ← §2
-        └── sub_42B0C0                     write a BMP
+        ├── expand_image                     expand one image        ← §2
+        └── write_bmp                     write a BMP
 ```
 
-`sub_402FE0` (compress) and `sub_403820` (expand) are the two halves that
+`compress_image` (compress) and `expand_image` (expand) are the two halves that
 matter. Everything else is container plumbing or file format I/O.
 
 ## 2. Container format
 
-An archive is a sequence of members. `sub_402FE0` writes one member per image
-and `sub_403820` reads one back; `bmf c` produces exactly one.
+An archive is a sequence of members. `compress_image` writes one member per image
+and `expand_image` reads one back; `bmf c` produces exactly one.
 
 A member is:
 
@@ -87,11 +87,11 @@ Byte +11:
 
 | bit | set by | meaning |
 | --- | --- | --- |
-| `0x02` | `sub_402FE0` | planes were transposed (rows ↔ columns) before coding |
+| `0x02` | `compress_image` | planes were transposed (rows ↔ columns) before coding |
 | `0x04` | `-S` | the slow, context-modelling back end was used |
-| `0x08` | `sub_402FE0` | per-plane filters are present |
-| `0x10` | `sub_4043E0` | the filter search ran |
-| `0x20` | `sub_402FE0` | the member is compressed at all |
+| `0x08` | `compress_image` | per-plane filters are present |
+| `0x10` | `search_filter` | the filter search ran |
+| `0x20` | `compress_image` | the member is compressed at all |
 | `0x80` | | an appended, stored member follows |
 
 The palette is `3 << bpp` bytes — three bytes per entry, `2^bpp` entries — and
@@ -99,11 +99,11 @@ exists only for `bpp <= 8`.
 
 ## 4. One buffer, two streams
 
-`sub_402FE0` allocates a single output buffer
+`compress_image` allocates a single output buffer
 
 ```c
-__ElementCount_0 = datasize + 0x20000;
-__Buffer = malloc(__ElementCount_0);
+coded_size = datasize + 0x20000;
+coded_buf = malloc(coded_size);
 ```
 
 and everything the coder emits goes into it. Two different coders write into
@@ -114,55 +114,55 @@ that one buffer, alternating, and they share the write cursor:
 
 | global | address | type | role |
 | --- | --- | --- | --- |
-| `__Buffer` | `0x0044337C` | `void *` | base of the coded buffer |
-| `__Buffer_0` | `0x00443378` | `uint8 *` | write/read cursor, **shared by both coders** |
-| `__Buffer_1` | `0x00443374` | `uint32 *` | the 32-bit word the bit packer is filling |
-| `__n256` | `0x0044336C` | `uint32` | bit packer accumulator |
-| `__n8` | `0x00443368` | `int32` | bits still free in that accumulator |
-| `__ElementCount_0` | `0x00443370` | `uint32` | buffer size |
-| `__buf` | `0x00443380` | `uint32 *` | scratch histogram / workspace, parked at `__Buffer + size - 4096` |
+| `coded_buf` | `0x0044337C` | `void *` | base of the coded buffer |
+| `out_cursor` | `0x00443378` | `uint8 *` | write/read cursor, **shared by both coders** |
+| `packer_word` | `0x00443374` | `uint32 *` | the 32-bit word the bit packer is filling |
+| `packer_acc` | `0x0044336C` | `uint32` | bit packer accumulator |
+| `packer_free_bits` | `0x00443368` | `int32` | bits still free in that accumulator |
+| `coded_size` | `0x00443370` | `uint32` | buffer size |
+| `hist_scratch` | `0x00443380` | `uint32 *` | scratch histogram / workspace, parked at `coded_buf + size - 4096` |
 
 ### 4.1 The bit packer
 
 Bits are packed LSB-first into a 32-bit accumulator and flushed as
-little-endian words. `__n8` is the number of bits still **free** in the
-accumulator, so the next value goes in at bit position `32 - __n8`. Writing a
+little-endian words. `packer_free_bits` is the number of bits still **free** in the
+accumulator, so the next value goes in at bit position `32 - packer_free_bits`. Writing a
 `K`-bit value `v`:
 
 ```c
-if (__n8 >= K) {                       /* fits in the word being filled */
-    __n256 |= v << (32 - __n8);
-    __n8   -= K;
+if (packer_free_bits >= K) {                       /* fits in the word being filled */
+    packer_acc |= v << (32 - packer_free_bits);
+    packer_free_bits   -= K;
 } else {                               /* close this word, open the next  */
-    *(uint32_t *)__Buffer_1 = __n256 | (v << (32 - __n8));   /* low __n8 bits of v */
-    __Buffer_1  = __Buffer_0;          /* the closed word's successor      */
-    __Buffer_0 += 4;
-    __n256 = v >> __n8;                /* the rest of v, at bit 0          */
-    __n8   = __n8 + (32 - K);          /* — note: __n256 uses the OLD __n8 */
+    *(uint32_t *)packer_word = packer_acc | (v << (32 - packer_free_bits));   /* low packer_free_bits bits of v */
+    packer_word  = out_cursor;          /* the closed word's successor      */
+    out_cursor += 4;
+    packer_acc = v >> packer_free_bits;                /* the rest of v, at bit 0          */
+    packer_free_bits   = packer_free_bits + (32 - K);          /* — note: packer_acc uses the OLD packer_free_bits */
 }
 ```
 
 Two details are easy to get wrong reading this:
 
-* **The shift in the flush is not `v << (32 - __n8)` as written above.** The
-  donor computes it as `2 * (v << ((31 - __n8) & 31))`, and that is not just a
-  way of keeping the shift count below 32: at `__n8 == 0` the donor's form is
+* **The shift in the flush is not `v << (32 - packer_free_bits)` as written above.** The
+  donor computes it as `2 * (v << ((31 - packer_free_bits) & 31))`, and that is not just a
+  way of keeping the shift count below 32: at `packer_free_bits == 0` the donor's form is
   `2 * (v << 31)`, which is **0**, whereas `v << 32` would be undefined and on
-  x86 evaluates to `v`. `__n8 == 0` is a state the packer really reaches, so
+  x86 evaluates to `v`. `packer_free_bits == 0` is a state the packer really reaches, so
   the `2 *` form is load-bearing, not cosmetic.
-* **`__n256 = v >> __n8` uses the value of `__n8` from before the update.**
-  Those are the `K - __n8` bits of `v` that did not fit in the word just
+* **`packer_acc = v >> packer_free_bits` uses the value of `packer_free_bits` from before the update.**
+  Those are the `K - packer_free_bits` bits of `v` that did not fit in the word just
   closed, and they become the bottom of the new accumulator.
 
-`__n8` starts at 0, which means "no word is open yet" rather than "the word is
+`packer_free_bits` starts at 0, which means "no word is open yet" rather than "the word is
 full". The first write therefore takes the flush branch and stores a throwaway
-word at `__Buffer`; because `__Buffer_1` is only then advanced to where
-`__Buffer_0` already was — the same address — the next flush overwrites it.
-From there on `__Buffer_1` trails `__Buffer_0` by one word: `__Buffer_1` is the
-word being filled, `__Buffer_0` is where the next one will go.
+word at `coded_buf`; because `packer_word` is only then advanced to where
+`out_cursor` already was — the same address — the next flush overwrites it.
+From there on `packer_word` trails `out_cursor` by one word: `packer_word` is the
+word being filled, `out_cursor` is where the next one will go.
 
 The packer is not called through a function — the sequence above is inlined at
-every use site in `sub_402FE0`, which is why the compressor's body is full of
+every use site in `compress_image`, which is why the compressor's body is full of
 near-identical blocks.
 
 ## 5. The range coder
@@ -196,7 +196,7 @@ a run of the program only ever does one of the two. `pending` and `rdiv` were
 likewise one word in the donor, for the same reason; they are two members here
 since nothing is gained by overlapping them.
 
-The output cursor is not the coder's: `__Buffer_0` (`0x00443378`) is shared
+The output cursor is not the coder's: `out_cursor` (`0x00443378`) is shared
 with the bit packer (§4), which is why the class lives in subs1.hpp.
 
 A coding step's arguments — `cumFreq`, `cumFreq + freq`, `totFreq` — are
@@ -210,7 +210,7 @@ Invariant: `0x800000 < range <= 0x80000000`, i.e. `range` is always more than
 
 ### 5.2 Encoder
 
-**Init — `rc.enc_init()`**, called by `sub_414F60` once it has built the model
+**Init — `rc.enc_init()`**, called by `rc_begin_encode` once it has built the model
 tables
 
 ```c
@@ -252,23 +252,23 @@ range = (cumFreq + freq < totFreq) ? r * freq : range - r * cumFreq;
 where `emit(c)` is
 
 ```c
-*__Buffer_0++ = cache + c;                     /* the carry lands here       */
+*out_cursor++ = cache + c;                     /* the carry lands here       */
 for (; pending; --pending)
-    *__Buffer_0++ = c - 1;                     /* 0xFF if c==0, 0x00 if c==1 */
+    *out_cursor++ = c - 1;                     /* 0xFF if c==0, 0x00 if c==1 */
 cache = low >> 23;                             /* next top 8 bits of low     */
 ```
 
 `c - 1` as a byte is `0xFF` for `c == 0` and `0x00` for `c == 1`, which is
 exactly what a carry rippling through a run of `0xFF`s produces.
 
-**Flush — `rc.flush()`**, which `sub_414CE0` calls before freeing the model
+**Flush — `rc.flush()`**, which `rc_end_encode` calls before freeing the model
 tables, runs the renormalisation loop once more and then writes the tail, in
 this order:
 
 ```
 [ cache + carry ]  [ pending run ]  [ rounding byte ]
 [ 3-byte big-endian length ]
-[ zero padding until (offset - __Buffer) % 4 == 3 ]  [ 0x97 ]
+[ zero padding until (offset - coded_buf) % 4 == 3 ]  [ 0x97 ]
 ```
 
 The first two are the ordinary `emit` of §5.2 — the held cache byte and any
@@ -285,16 +285,16 @@ above absorbed.
 
 `length` is `bytes_emitted + 5`, written big-endian in three bytes — so a
 section carries its own size, which is how a decoder can skip one. After the
-marker, `__n8`, `__n256` and `__Buffer_1` are reset, and the padding rule
+marker, `packer_free_bits`, `packer_acc` and `packer_word` are reset, and the padding rule
 guarantees the bit packer resumes on a 4-byte boundary.
 
 ### 5.3 Decoder
 
-**Init — `rc.dec_init()`**, called by `sub_4149C0`
+**Init — `rc.dec_init()`**, called by `rc_begin_decode`
 
 ```c
-if (*__Buffer_0++ != 0x97) exit_402E40(4);   /* "Read error!" */
-cache = *__Buffer_0++;                        /* the previous byte */
+if (*out_cursor++ != 0x97) exit_402E40(4);   /* "Read error!" */
+cache = *out_cursor++;                        /* the previous byte */
 range = 128;                                  /* 2^7               */
 low   = cache >> 1;                           /* code, 7 bits      */
 ```
@@ -307,7 +307,7 @@ holding exactly 31 bits and `range = 2³¹` — the encoder's initial state.
 
 ```c
 while (range <= 0x800000) {
-    code  = (code << 8) | ((prev & 1) << 7) | (cur >> 1);   /* cur = *__Buffer_0++ */
+    code  = (code << 8) | ((prev & 1) << 7) | (cur >> 1);   /* cur = *out_cursor++ */
     prev  = cur;
     range <<= 8;
 }
@@ -348,7 +348,7 @@ else            { range  = rt;             return 0; }
 interval it chose — the new `range` — which is what `sub_413900` passes on as
 its own result.
 
-**Finish — `rc.finish()`**, called by `sub_414920`, renormalises, then scans
+**Finish — `rc.finish()`**, called by `rc_end_decode`, renormalises, then scans
 forward for the `0x97`
 terminator and resets the bit packer's cursor to just past it.
 
@@ -356,7 +356,7 @@ terminator and resets the bit packer's cursor to just past it.
 
 All of the above is a `RangeCoder` struct with one instance, `rc`, declared in
 subs1.hpp just after the globals block — it goes there rather than in bmf.cpp
-because it shares its output cursor with the bit packer, and `__Buffer_0` is a
+because it shares its output cursor with the bit packer, and `out_cursor` is a
 blob global.
 
 | method | direction | what |
@@ -378,7 +378,7 @@ entries took no parameters and three globals *were* the argument list, so a
 model function would assign `__n0x2000_1`, `__n0x2000_0` and `__n0x2000` over
 the course of a symbol search and then call. Those sites now carry their own
 locals and pass them, which matters because the assignments are not adjacent
-to the call: `sub_4159E0` computes its `high` from a counter that it then
+to the call: `code_pixel` computes its `high` from a counter that it then
 increments *before* coding, so moving the expression to the call site would
 have coded a different number.
 
@@ -386,7 +386,7 @@ The state is `private`, so "does anything outside still touch the coder?" is a
 question the compiler answers.
 
 Two model functions still hold a coding step that is more than one call:
-`sub_412B10` encodes a symbol against a sorted frequency list (§7.3) and
+`symbol_list` encodes a symbol against a sorted frequency list (§7.3) and
 `sub_414620` decodes one from a 3-way counter node. Both now do their search
 and then call `rc`.
 
@@ -398,7 +398,7 @@ exactly by the decoder, so it is part of the format.
 ### 6.1 Plane split
 
 ```c
-__n4_5 = ((bpp & 0x3F) + 7) >> 3;      /* 0x00443394 — number of planes */
+plane_count = ((bpp & 0x3F) + 7) >> 3;      /* 0x00443394 — number of planes */
 ```
 
 Interleaved pixels are de-interleaved into planes with a strided copy: plane
@@ -413,17 +413,17 @@ A 16-byte record per plane at `0x0044339C`, indexed `[16 * k]`:
 | --- | --- | --- |
 | +0 | `__byte_44339C` | number of reference planes in the colour transform, 0–3 |
 | +1 | `__byte_44339D` | this plane's byte offset within an interleaved pixel |
-| +2 | `__byte_44339E` | flags: bits 0–1 = spatial predictor mode (→ `__n2`), bit 2 = alternate model (→ `__dword_443364`), bit 3 = colour transform present |
+| +2 | `__byte_44339E` | flags: bits 0–1 = spatial predictor mode (→ `plane_predictor`), bit 2 = alternate model (→ `plane_alt_model`), bit 3 = colour transform present |
 | +3 | `__byte_44339F` | constant bias |
 | +4 | `__dword_4433A0` | coefficient 0 |
 | +8 | `__dword_4433A4` | coefficient 1 |
 | +12 | `__dword_4433A8` | coefficient 2 |
 
-`sub_402FE0` writes these into the bit stream ahead of the coded data: 6 bits of
+`compress_image` writes these into the bit stream ahead of the coded data: 6 bits of
 `(flags << 2) | nrefs`, then — if the transform is present — 8 bits of bias, and
 8 bits per coefficient, each stored biased by `+64`.
 
-### 6.3 Colour transform — `sub_407EF0`
+### 6.3 Colour transform — `colour_transform`
 
 Coefficients are 7-bit fixed point, held biased by `+64` in the bit stream, so
 they run over roughly `[-0.5, +1.5]` once divided by 128. The references are
@@ -446,7 +446,7 @@ two-reference sum is shifted as `int32_t`, the three-reference sum as `uint32_t`
 Since the coefficients can be negative, that is a real difference in behaviour,
 not a decompiler artefact.
 
-`sub_407EF0` also short-circuits the two-reference form: when `c₀ + c₁ == 128`
+`colour_transform` also short-circuits the two-reference form: when `c₀ + c₁ == 128`
 and one of them is zero, it drops to the `n == 1` path against whichever plane
 still has weight, skipping the multiply.
 
@@ -455,10 +455,10 @@ invertible. The `n == 1` case is the familiar green-as-predictor RGB
 decorrelation; `n == 2` and `n == 3` let the filter search fit a linear
 combination instead of assuming one.
 
-### 6.4 Spatial prediction — `sub_4108C0`
+### 6.4 Spatial prediction — `predict_med`
 
 In predictor mode 1 — the mode the filter search picks for most planes — each
-plane is predicted in place by `sub_4108C0`, walking **backwards** from the last
+plane is predicted in place by `predict_med`, walking **backwards** from the last
 pixel so that `N`, `W` and `NW` are all still originals when they are read. The
 predictor is **MED**, the median edge detector from LOCO-I / JPEG-LS:
 
@@ -472,45 +472,54 @@ which the decompiled body writes as a nest of comparisons on `W < N`. The
 residual `X - pred` (mod 256) is then folded from signed to unsigned through a
 256-entry table built at the top of the function: `0 → 0`, `+d → 2d`,
 `-d → 2d - 1`. The folded byte replaces the pixel, and a histogram is
-accumulated in `__buf` for the filter search.
+accumulated in `hist_scratch` for the filter search.
 
-`__byte_44339E & 3` (`__n2`, `0x00443360`) chooses the mode, and it interacts
+`__byte_44339E & 3` (`plane_predictor`, `0x00443360`) chooses the mode, and it interacts
 with `E`. The dispatch, read off `sub_407B30`, is:
 
-| `__n2` | `E == 0` | `E != 0` |
+| `plane_predictor` | `E == 0` | `E != 0` |
 | --- | --- | --- |
-| 0 | no spatial prediction | `sub_4111B0` |
-| 1 | `sub_4108C0` — MED, above | `sub_410AC0` |
+| 0 | no spatial prediction | *(near-lossless)* |
+| 1 | `predict_med` — MED, above | *(near-lossless)* |
 | 2 | skipped entirely | skipped entirely |
-| 3 | no spatial prediction | `sub_410AC0` |
+| 3 | no spatial prediction | *(near-lossless)* |
 
 So MED is mode 1, mode 2 turns the stage off, and what distinguishes 0 from 3 I
 did not establish (§9).
 
+> The `E != 0` column is BMF's, not this source's. `-E` is a constant 0 here and
+> the bodies behind that column are deleted — see REFACTORING.md §2.1, and §6.5
+> below.
+
 ### 6.5 Near-lossless
 
-`-E<N>` (`__n7_1`, `0x004410A0`) is copied into `__n256_0` (`0x00443398`) and
+`-E<N>` (`__n7_1`, `0x004410A0`) is copied into `near_lossless_max` (`0x00443398`) and
 becomes the maximal allowed error `E`. When it is non-zero the residual is
 quantised with step `2E + 1`:
 
 ```c
-n128_1 = 2 * __n256_0[0] + 1;
+n128_1 = 2 * near_lossless_max[0] + 1;
 ```
 
-`sub_4111B0` (encode) and `sub_410650` (decode) build the quantisation and
-reconstruction tables with SSE, then run the same MED loop against the
-*reconstructed* neighbours so encoder and decoder stay in step. This is the one
-mode where the round trip is not bit-exact, by design.
+`sub_4111B0` (encode) and `sub_410650` (decode) built the quantisation and
+reconstruction tables with SSE, then ran the same MED loop against the
+*reconstructed* neighbours so encoder and decoder stayed in step. This is the
+one mode where the round trip is not bit-exact, by design.
 
-### 6.6 Filter search — `sub_4043E0`, cost by `sub_411700`
+> **Not in this source.** `-E` is a constant 0 (REFACTORING.md §2.1), so those
+> bodies are deleted and a stream whose 4-bit `E` field is non-zero is refused
+> at the point the field is read rather than expanded wrongly. The description
+> above is of BMF, kept because it is what the format's `E` field means.
+
+### 6.6 Filter search — `search_filter`, cost by `estimate_cost`
 
 `-F` (`__dword_44108C`) turns the search on; `-Q<N>` (`__n7_0`, `0x0044109C`)
 sets how hard it looks. It appears as a table-size multiplier
-(`(__n7_0 + 5) / 3`, `(__dword_443384 + __n7_0 + 1) << 6`) and as several
+(`(__n7_0 + 5) / 3`, `(desc_slow_mode + __n7_0 + 1) << 6`) and as several
 `__n7_0 > k` gates that enable extra candidate transforms, so raising it both
 widens the search and enlarges the structures it searches over.
 
-Candidates are scored with `sub_411700`, which is a plain **order-0 entropy in
+Candidates are scored with `estimate_cost`, which is a plain **order-0 entropy in
 bits** of a histogram of `n` counts summing to `N`:
 
 ```
@@ -536,42 +545,51 @@ run of similar images can skip the search.
 
 ## 7. Entropy coding
 
-Two back ends. `__dword_443384` (`0x00443384`), copied from `-S`
+Two back ends. `desc_slow_mode` (`0x00443384`), copied from `-S`
 (`__dword_441090`), chooses between them per image, and the choice is recorded
 in descriptor byte +11 bit `0x04` so the decoder follows.
 
-### 7.1 Fast path (default) — `sub_408510` / `sub_40CF80`
+### 7.1 Fast path (default in BMF) — **not in this source**
 
-Without `-S`, the folded residuals go through `sub_408510` (encode) and
-`sub_40CF80` (decode). These write through the **bit packer**, not the range
-coder — they never call `rc`. They build histograms and call
-`sub_411700` to measure them, which says a code is being *chosen* from the
-statistics rather than adapted; what kind of code, I did not establish. See §9.
+Without `-S`, BMF sent the folded residuals through `sub_408510` (encode) and
+`sub_40CF80` (decode). These wrote through the **bit packer**, not the range
+coder — they never called `rc`. They built histograms and called `estimate_cost`
+to measure them, which says a code was being *chosen* from the statistics rather
+than adapted; what kind of code, I did not establish.
 
-*(Note: this path crashes in the tree as it stands — `bmf` without `-S` faulted
-in the imported sources too, which is why the CLI pins `-S`. The observation is
-about the decompilation, not necessarily about the original binary.)*
+`-S` is a constant 1 here, so both bodies and the eight more they reached are
+deleted (REFACTORING.md §2.1), and a stream with descriptor bit 2 clear is
+refused rather than expanded. Two things are worth recording about them, since
+nobody will read them here again:
 
-### 7.2 Slow path (`-S`) — `sub_415380` and below
+* they crashed. `bmf` without `-S` faulted in the imported sources, in
+  `sub_40F450`, writing through an index read from one slot *before* a rank
+  table — which is the adjacent pointer field, so the store went to a heap
+  address. Whether the original binary had the same defect is not established;
+  the decompilation certainly did.
+* nothing was lost by deleting them, because nothing could reach them: the
+  command line has pinned `-S` since the day it was written.
+
+### 7.2 Slow path (`-S`) — `model_plane` and below
 
 This is the one `bmf c` uses. It is a binary context model driving the range
 coder of §5.
 
-`sub_415380` runs the plane through this pipeline, in this order:
+`model_plane` runs the plane through this pipeline, in this order:
 
 1. `malloc(0x7BA230)` — an ~8 MB workspace — laid out by `sub_417980`.
-2. `sub_414F60` — start the range coder (§5.2).
-3. `sub_417200` — **alphabet reduction**, and the first thing written. It scans
+2. `rc_begin_encode` — start the range coder (§5.2).
+3. `reduce_alphabet` — **alphabet reduction**, and the first thing written. It scans
    the plane for the symbols actually used, encodes `distinct - 1` with
    `rc.encode` as a flat one-wide slot out of the full alphabet size, encodes each used
-   symbol with `sub_412B10`, and then re-indexes the plane onto the dense
+   symbol with `symbol_list`, and then re-indexes the plane onto the dense
    alphabet that leaves. A plane using 40 of 256 values is coded over 40
    symbols from here on.
 4. Model initialisation — the tables described below.
-5. `sub_4159E0` — the per-pixel coder, once per pixel.
-6. `sub_414CE0` — flush the range coder (§5.2).
+5. `code_pixel` — the per-pixel coder, once per pixel.
+6. `rc_end_encode` — flush the range coder (§5.2).
 
-When `__dword_443364` (descriptor `+2` bit 2) is set, `sub_415380` instead
+When `plane_alt_model` (descriptor `+2` bit 2) is set, `model_plane` instead
 dispatches to one of `sub_424500` / `sub_424D90` / `sub_4197A0` / `sub_421930`,
 picked by predictor mode and by whether the depth is exactly 8. Those are
 separate model families and are not described here.
@@ -579,7 +597,7 @@ separate model families and are not described here.
 What the model initialisation builds:
 
 * **15 context groups.** The loop runs `v58` from 0 to 14, indexed by a 15-entry
-  table of flag bytes at `__byte_439860` (`0x00439860`). Each flag bit selects
+  table of flag bytes at `ctx_group_flags` (`0x00439860`). Each flag bit selects
   whether one of six inputs is folded into that group's context.
 * **A 64K counter table per group.** Each group gets `0x10000` entries of two
   `uint16` counters, both initialised to `0x2000`:
@@ -590,15 +608,15 @@ What the model initialisation builds:
   ```
 
   Two 8192s is p = ½ — a fresh binary counter. The index is a 16-bit value
-  `sub_4159E0` derives from the neighbourhood, of the form
+  `code_pixel` derives from the neighbourhood, of the form
   `table[N] - <one of N, W, NE, NW>`; exactly which table and which neighbour is
   in §9's unread list.
 * **A 5×5 sub-state grid per group**, with mixing weights `1 << (5 - depth)` and
-  a running total in `*((uint16 *)v12 + 53)`. `sub_415380` computes, for each
+  a running total in `*((uint16 *)v12 + 53)`. `model_plane` computes, for each
   cell, how many of the six inputs are active and derives the weight from that
   count — a static mixing table rather than a learned one.
 
-`sub_4159E0` is the per-symbol coder on this path. It forms a context by
+`code_pixel` is the per-symbol coder on this path. It forms a context by
 comparing the current pixel's neighbours (`N`, `W`, `NE`, `NW` — the locals
 Hex-Rays named `n15_3`, `n15_7`, `n15_4`, `n15_2`) against each other and
 against the two values cached in the counter entry, producing a state index in
@@ -629,7 +647,7 @@ if (counter > 0x2000) {            /* rescale before it saturates */
     c0 -= c0 >> 1;
     c1 -= c1 >> 1;
 }
-counter += (__n8_0 * ((__n2 == 2) + 5)) >> 3;   /* adaptive increment */
+counter += (__n8_0 * ((plane_predictor == 2) + 5)) >> 3;   /* adaptive increment */
 ```
 
 **Three-way node — `sub_414620`,** the decoder for a node holding three
@@ -653,11 +671,11 @@ The increment starts large and ratchets down each time the node rescales — fas
 adaptation early, stability later — with 16 as the floor, so the node never
 stops adapting entirely.
 
-**Sorted list — `sub_412B10`.** For alphabets rather than bits: a list of
+**Sorted list — `symbol_list`.** For alphabets rather than bits: a list of
 `(symbol, count)` triples kept in descending count order. Encoding sums counts
 until the symbol is found (that sum is `cumFreq`), calls the range coder, then
 adds 4 to the symbol's count and bubbles it toward the front by swapping with
-its neighbour. Symbols masked out by `__buf_0` are skipped, and running off the
+its neighbour. Symbols masked out by `exclusion_mask` are skipped, and running off the
 end of the list codes an escape — a PPM-style exclusion mechanism.
 
 ## 8. Global map
@@ -673,64 +691,72 @@ BMF.exe shows.
 
 | global | address | meaning |
 | --- | --- | --- |
-| `__Buffer` | `0x0044337C` | coded buffer base |
-| `__Buffer_0` | `0x00443378` | shared byte cursor |
-| `__Buffer_1` | `0x00443374` | bit packer's current word |
-| `__n256` | `0x0044336C` | bit packer accumulator |
-| `__n8` | `0x00443368` | free bits in it |
-| `__ElementCount_0` | `0x00443370` | buffer size |
-| `__buf` | `0x00443380` | scratch histogram at `__Buffer + size - 4096` |
-| `__buf_0` | `0x00443440` | symbol exclusion mask |
-| `__n256_1` | `0x00445708` | model table allocated by `sub_414F60` / `sub_4149C0` |
+| `coded_buf` | `0x0044337C` | coded buffer base |
+| `out_cursor` | `0x00443378` | shared byte cursor |
+| `packer_word` | `0x00443374` | bit packer's current word |
+| `packer_acc` | `0x0044336C` | bit packer accumulator |
+| `packer_free_bits` | `0x00443368` | free bits in it |
+| `coded_size` | `0x00443370` | buffer size |
+| `hist_scratch` | `0x00443380` | scratch histogram at `coded_buf + size - 4096` |
+| `exclusion_mask` | `0x00443440` | symbol exclusion mask |
+| `model_tables` | `0x00445708` | model table allocated by `rc_begin_encode` / `rc_begin_decode` |
 
-**Coding parameters**
+**Coding parameters.** Not globals any more: `constexpr` constants at the top of
+`subs1.hpp`, which is what lets the branches testing them fold and the other
+modes' code be deleted (REFACTORING.md §2.1). The addresses are BMF.exe's, for
+comparing against a disassembly.
 
-| global | address | set from | meaning |
-| --- | --- | --- | --- |
-| `__dword_44108C` | `0x0044108C` | `-F` | use filters (default 1) |
-| `__dword_441090` | `0x00441090` | `-S` | slow mode — **pinned to 1** |
-| `__n2_4` | `0x00441094` | `-T` | template usage |
-| `__dword_441098` | `0x00441098` | `-N` | pack output (default 1) |
-| `__n7_0` | `0x0044109C` | `-Q` | filter search quality — **pinned to 9** |
-| `__n7_1` | `0x004410A0` | `-E` | max error, near-lossless (default 0) |
-| `__dword_4410A4` | `0x004410A4` | | filter template |
+| constant | address | switch | value here | meaning |
+| --- | --- | --- | --- | --- |
+| `__dword_44108C` | `0x0044108C` | `-F` | 1 | use filters |
+| `__dword_441090` | `0x00441090` | `-S` | 1 | slow but efficient |
+| `__n2_4` | `0x00441094` | `-T` | 0 | filter template |
+| `__dword_441098` | `0x00441098` | `-N` | 1 | pack the output |
+| `__n7_0` | `0x0044109C` | `-Q` | 9 | filter search quality |
+| `__n7_1` | `0x004410A0` | `-E` | 0 | max error, near-lossless |
+| ~~`__dword_4410A4`~~ | `0x004410A4` | | — | the `-T` template; deleted with it |
 
 **Per-image working state**
 
 | global | address | meaning |
 | --- | --- | --- |
-| `__n4_5` | `0x00443394` | number of colour planes |
-| `__n2` | `0x00443360` | current plane's predictor mode |
-| `__dword_443364` | `0x00443364` | current plane's alternate-model flag |
-| `__dword_443384` | `0x00443384` | slow mode active for this image |
-| `__n256_0` | `0x00443398` | near-lossless max error `E` |
+| `plane_count` | `0x00443394` | number of colour planes |
+| `plane_predictor` | `0x00443360` | current plane's predictor mode |
+| `plane_alt_model` | `0x00443364` | current plane's alternate-model flag |
+| `desc_slow_mode` | `0x00443384` | slow mode for this image — always 1; a stream saying otherwise is refused |
+| `near_lossless_max` | `0x00443398` | near-lossless max error `E` — always 0, likewise |
 | `__byte_44339C…__dword_4433A8` | `0x0044339C` | per-plane descriptors, 16 bytes each |
-| `__byte_439860` | `0x00439860` | 15 context-group flag bytes |
-| `__dword_445660` | `0x00445660` | model geometry tables built by `sub_414F60` |
+| `ctx_group_flags` | `0x00439860` | 15 context-group flag bytes |
+| `model_geometry` | `0x00445660` | model geometry tables built by `rc_begin_encode` |
 
 ## 9. What is not settled
 
 Stated plainly, so the rest can be trusted:
 
-* **The fast (non-`-S`) back end.** `sub_408510` is 1847 lines and I only
-  established that it writes through the bit packer and uses `sub_411700` for
-  cost estimates. Whether it is Huffman, Golomb–Rice, or something else is not
-  established here.
+* ~~**The fast (non-`-S`) back end.**~~ Moot for this source: it is deleted
+  (§7.1). It remains unestablished about *BMF* — `sub_408510` was 1576 lines and
+  all that was established is that it wrote through the bit packer and used
+  `estimate_cost`. Whether it was Huffman, Golomb–Rice or something else would
+  now have to be read out of BMF.exe rather than out of this tree.
 * **The `-S` context construction in detail.** §7.2 gives the shape — 15 groups,
   64K binary counters each, a 5 × 5 sub-state grid, neighbour-match state
   indices — but not the exact derivation of the 16-bit context index, nor how
   the 15 groups' predictions are combined into the one probability handed to the
-  coder. `sub_4159E0` is 901 lines and would need a full reading.
+  coder. `code_pixel` is 901 lines and would need a full reading.
 * **The alternate model families.** When descriptor `+2` bit 2 is set,
-  `sub_415380` hands the plane to `sub_424500` / `sub_424D90` / `sub_4197A0` /
+  `model_plane` hands the plane to `sub_424500` / `sub_424D90` / `sub_4197A0` /
   `sub_421930` instead. I established only which one is picked, not what they
   do; `sub_41CAB0` (2320 lines) sits under two of them.
 * **What predictor modes 0 and 3 mean.** The dispatch table in §6.4 is read off
   the code, but 0 and 3 land in the same places and I did not work out what
-  distinguishes them, nor what mode 2 does instead of predicting.
-* **The `sub_4043E0` search order.** Which candidates are tried, and how `-Q`
-  prunes them, is visible as loop bounds but I did not enumerate the candidate
-  set.
+  distinguishes them, nor what mode 2 does instead of predicting. This is why
+  `sub_410650`, the mode-0 expander, is still in the source even though the
+  linker discards it: see REFACTORING.md §2.2.
+* **The `search_filter` search order.** Which candidates are tried is visible as
+  loop bounds but I did not enumerate the candidate set. How `-Q` pruned them is
+  no longer a question here: `-Q` is a constant 9, the branch that capped the
+  search for lower values is folded away, and the search always sees the whole
+  image.
 * **The first-byte carry.** The decoder demands exactly `0x97`, so a carry into
   the coder's initial cache would break it. Encoding is correct on every test
   image, so the design evidently precludes it, but I did not prove why.
@@ -739,18 +765,18 @@ Stated plainly, so the rest can be trusted:
 
 | topic | function | address |
 | --- | --- | --- |
-| compress one image | `sub_402FE0` | `0x00402FE0` |
-| expand one image | `sub_403820` | `0x00403820` |
-| range coder init / flush (encode) | `sub_414F60` / `sub_414CE0` | `0x00414F60` / `0x00414CE0` |
-| range coder init / finish (decode) | `sub_4149C0` / `sub_414920` | `0x004149C0` / `0x00414920` |
+| compress one image | `compress_image` | `0x00402FE0` |
+| expand one image | `expand_image` | `0x00403820` |
+| range coder init / flush (encode) | `rc_begin_encode` / `rc_end_encode` | `0x00414F60` / `0x00414CE0` |
+| range coder init / finish (decode) | `rc_begin_decode` / `rc_end_decode` | `0x004149C0` / `0x00414920` |
 | the coder itself | `struct RangeCoder`, instance `rc` | — |
-| colour transform | `sub_407EF0` | `0x00407EF0` |
-| MED prediction + folding | `sub_4108C0` | `0x004108C0` |
-| near-lossless encode / decode | `sub_4111B0` / `sub_410650` | `0x004111B0` / `0x00410650` |
-| filter search | `sub_4043E0` | `0x004043E0` |
-| entropy estimate | `sub_411700` | `0x00411700` |
-| `-S` model driver | `sub_415380` | `0x00415380` |
-| alphabet reduction | `sub_417200` | `0x00417200` |
-| `-S` per-pixel coder | `sub_4159E0` | `0x004159E0` |
-| adaptive symbol list | `sub_412B10` | `0x00412B10` |
-| BMP read / write | `sub_42AB20` / `sub_42B0C0` | `0x0042AB20` / `0x0042B0C0` |
+| colour transform | `colour_transform` | `0x00407EF0` |
+| MED prediction + folding | `predict_med` | `0x004108C0` |
+| ~~near-lossless encode / decode~~ | deleted; see §6.5 | `0x004111B0` / `0x00410650` |
+| filter search | `search_filter` | `0x004043E0` |
+| entropy estimate | `estimate_cost` | `0x00411700` |
+| `-S` model driver | `model_plane` | `0x00415380` |
+| alphabet reduction | `reduce_alphabet` | `0x00417200` |
+| `-S` per-pixel coder | `code_pixel` | `0x004159E0` |
+| adaptive symbol list | `symbol_list` | `0x00412B10` |
+| BMP read / write | `read_bmp` / `write_bmp` | `0x0042AB20` / `0x0042B0C0` |
