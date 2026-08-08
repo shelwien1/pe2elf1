@@ -35621,798 +35621,203 @@ LABEL_17:
   }
   return 0;
 }
-static inline int32_t * __fwd_sub_4015C0_sub_402590(void *a0) { return __sub_402590((char *)a0); }
-static inline int32_t __fwd_sub_4015C0_sub_4028B0(void *a0, int32_t a1, const __m128 &a2, const __m128 &a3) { return __sub_4028B0((char *)a0, a1, a2, a3); }
-static inline FILE1 ** __fwd_sub_4015C0_sub_402DF0(void *a0, char a1) { return __sub_402DF0((FILE1 **)a0, a1); }
-static inline int32_t __fwd_sub_4015C0_sub_402EF0(void *a0, void *a1, int32_t a2) { return __sub_402EF0((uint32_t *)a0, (char *)a1, a2); }
-static inline int32_t __fwd_sub_4015C0_sub_402FE0(int32_t a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __sub_402FE0(a0, a1, a2, (uint16_t *)a3, (void *)a4); }
-static inline char * __fwd_sub_4015C0_sub_403820(int32_t a0, const __m128 &a1, const __m128 &a2, int32_t a3, void *a4) { return __sub_403820(a0, a1, a2, a3, (int32_t *)a4); }
-static inline uint16_t * __fwd_sub_4015C0_sub_428C40(void *a0) { return __sub_428C40((char *)a0); }
-static inline int32_t __fwd_sub_4015C0_sub_429840(void *a0, void *a1, int32_t a2) { return __sub_429840((uint16_t *)a0, (char *)a1, a2); }
-static inline int32_t __fwd_sub_4015C0_sub_429C80(void *a0, int32_t a1, void *a2) { return __sub_429C80((char *)a0, a1, (char *)a2); }
-static inline uint16_t * __fwd_sub_4015C0_sub_429E80(void *a0) { return __sub_429E80((char *)a0); }
-static inline int32_t __fwd_sub_4015C0_sub_42A350(void *a0, void *a1) { return __sub_42A350((uint16_t *)a0, (char *)a1); }
-static inline int32_t * __fwd_sub_4015C0_sub_42A4E0(uint32_t a0, void *a1) { return __sub_42A4E0(a0, (char *)a1); }
-static inline int32_t * __fwd_sub_4015C0_sub_42AB20(void *a0) { return __sub_42AB20((char *)a0); }
-static inline int32_t __fwd_sub_4015C0_sub_42B0C0(int32_t a0, void *a1, int32_t a2) { return __sub_42B0C0(a0, (char *)a1, a2); }
+static inline int32_t * __fwd_bmf_sub_42AB20(void *a0) { return __sub_42AB20((char *)a0); }
+static inline int32_t __fwd_bmf_sub_402EF0(void *a0, void *a1, int32_t a2) { return __sub_402EF0((uint32_t *)a0, (char *)a1, a2); }
+static inline int32_t __fwd_bmf_sub_402FE0(int32_t a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __sub_402FE0(a0, a1, a2, (uint16_t *)a3, (void *)a4); }
+static inline char * __fwd_bmf_sub_403820(int32_t a0, const __m128 &a1, const __m128 &a2, int32_t a3, void *a4) { return __sub_403820(a0, a1, a2, a3, (int32_t *)a4); }
+static inline int32_t __fwd_bmf_sub_42B0C0(int32_t a0, void *a1, int32_t a2) { return __sub_42B0C0(a0, (char *)a1, a2); }
+static inline FILE1 ** __fwd_bmf_sub_402DF0(void *a0, char a1) { return __sub_402DF0((FILE1 **)a0, a1); }
 
-BMF_SSE void __sub_4015C0(const __m128 &a1__ref, const __m128 &a2__ref, const char *FileName, const char *cFileName)
+// ---------------------------------------------------------------------------
+// The two things this program does.
+//
+// BMF's own driver, sub_4015C0, sniffed the first four bytes of its argument
+// to choose between six readers, derived the output name from the input's by
+// swapping the extension, and picked the writer from a switch.  The command
+// line is now
+//
+//     bmf c input.bmp output      compress a BMP into a BMF stream
+//     bmf d input output.bmp      expand a BMF stream back into a BMP
+//
+// which names both files and fixes both formats, so what is left is one
+// reader and one writer.  Everything the other five readers and the other two
+// writers reached went with them; so did the wildcard walk, the .ini, the
+// switch parser, the -O output name, the -D delete, the unique-name counter
+// and the stored-file member handling.
+// ---------------------------------------------------------------------------
+
+// Compress InName, which must be a BMP, into a BMF stream named OutName.
+BMF_SSE void __bmf_compress(const __m128 &a1__ref, const __m128 &a2__ref,
+                            const char *InName, const char *OutName)
 {
-  alignas(16) uint8_t __hexrays_frame[1852];
-  int32_t * &p_i_17 = *(int32_t * *)(__hexrays_frame + 0);
-  char &Format = *(char *)(__hexrays_frame + 8);
-  char (&FileName_1)[4] = *(char (*)[4])(__hexrays_frame + 24);
-  int32_t * &p_i_5 = *(int32_t * *)(__hexrays_frame + 28);
-  int32_t * &p_i_12 = *(int32_t * *)(__hexrays_frame + 32);
-  uint32_t &_bmp_ = *(uint32_t *)(__hexrays_frame + 36);
   ;
   __m128 a1 = a1__ref;
   __m128 a2 = a2__ref;
   Stream *Stream_v;
-  Stream *Stream_1;
-  char *Buffer_1;
-  const char *GIF8;
-  int32_t n4;
-  bool v9;
-  bool v10;
-  uint16_t *p_i_14;
-  uint16_t *p_i_3;
-  char *Destination_3;
-  int32_t v14;
-  int32_t *p_i_15;
-  char *v16;
-  int32_t v17;
-  int32_t v18;
-  int32_t v19;
-  uint32_t v20;
-  uint16_t *p_i_10;
-  uint16_t *p_i_1;
-  char *Destination_1;
-  int32_t v24;
-  int32_t *p_i_19;
-  char *v26;
-  int32_t v27;
-  int32_t v28;
-  int32_t v29;
-  uint32_t v30;
-  int32_t *p_i_18;
-  int32_t *p_i_7;
-  char *Destination_5;
-  int32_t p_i_6;
-  int32_t v35;
-  int32_t v36;
-  char *v37;
-  int32_t v38;
-  int32_t v39;
-  int32_t v40;
-  uint32_t v41;
-  int32_t *p_i_11;
-  int32_t *p_i_2;
-  char *Destination_2;
-  int32_t p_i_13;
-  int32_t v46;
-  int32_t v47;
-  char *v48;
-  int32_t v49;
-  int32_t v50;
-  int32_t v51;
-  uint32_t v52;
-  int32_t *p_i_8;
   int32_t *p_i;
-  char *Destination;
-  int32_t v56;
-  int32_t v57;
-  int32_t v58;
-  char *v59;
-  int32_t v60;
-  int32_t v61;
-  int32_t v62;
-  uint32_t v63;
-  int32_t v64;
-  int32_t *p_i_4;
-  int32_t v66;
-  const char *p_SrcStr;
-  char v68;
-  char *Destination_4;
-  int32_t n2;
-  char *Buffer_2;
-  char *FileName_7;
-  int32_t *p_i_16;
-  int32_t (*__fwd_sub_4015C0_sub_42B0C0)(int32_t, char *, int32_t);
-  void *Block;
-  char FileName_3[4];
-  int32_t v83;
-  int32_t *p_i_9;
-  uint32_t v85;
-  char FileName_5[12];
-  char FileName_6[256];
-  char FileName_4[256];
-  char FileName_2[256];
-  char FileNamea[256];
-  char Buffer[20];
-  strcpy(FileNamea, FileName);
-  strcat(FileNamea, cFileName);
-  Stream_v = __fopen(FileNamea, "rb");
-  Stream_1 = Stream_v;
+  int32_t Arc;
+  int32_t Flags;
+  int32_t Colours;
+  int32_t Step;
+  int32_t Grey;
+  int32_t i;
+  const uint8_t *Palette;
+  uint32_t Size;
+
+  // The reader below answers "no" the same way whether the file is missing or
+  // is not a BMP, and BMF told those apart -- so open it once first, as its
+  // format sniffer used to, and keep the two messages.
+  Stream_v = __fopen(InName, "rb");
   if ( !Stream_v )
-    __exit_402E40(6, FileNamea);
-  Buffer_1 = Buffer;
-  if ( !__fread(Buffer, 4u, 1u, Stream_v) )
-    __exit_402E40(3, FileNamea);
-  __fclose(Stream_1);
-  if ( !__dword_442BAC )
-  {
-    GIF8 = "GIF8";
-    n4 = 4;
-    do
-    {
-      v9 = (uint8_t)*Buffer_1 < (uint32_t)*GIF8;
-      v10 = *Buffer_1 == *GIF8;
-      if ( *Buffer_1 != *GIF8 )
-        break;
-      ++Buffer_1;
-      ++GIF8;
-      v10 = --n4 == 0;
-    }
-    while ( n4 );
-    if ( (!v9 && !v10) == v9 )
-    {
-      __fwd_sub_4015C0_sub_4028B0(FileNamea, (int32_t)FileNamea, a1, a2);
-      goto LABEL_70;
-    }
-    if ( Buffer[0] != -127 )
-    {
-      if ( Buffer[0] == 66 && Buffer[1] == 77 )
-      {
-        p_i_8 = __fwd_sub_4015C0_sub_42AB20(FileNamea);
-        p_i = p_i_8;
-        if ( !p_i_8 )
-          __exit_402E40(4);
-        __printf(
-          "File %16s, image %dx%dx%d, size - %d:",
-          FileNamea,
-          *(uint16_t *)p_i_8,
-          *((uint16_t *)p_i_8 + 1),
-          *((uint8_t *)p_i_8 + 10) & 0x3F,
-          p_i_8[3]);
-        Destination = &__Destination_;
-        if ( !__Destination_ )
-          Destination = FileNamea;
-        __fwd_sub_4015C0_sub_429C80(Destination, (int32_t)FileName_1, "bmf");
-        if ( void *__nb = __op_new(8u) )
-          v56 = __fwd_sub_4015C0_sub_402EF0((uint32_t *)__nb, FileName_1, 0);
-        else v56 = 0;
-        v57 = *((uint8_t *)p_i + 10);
-        if ( (v57 & 0x80) != 0 )
-        {
-          if ( (v57 & 0x40) != 0 )
-          {
-            *((uint8_t *)p_i + 10) = v57 ^ 0x80;
-          }
-          else
-          {
-            v58 = p_i[3];
-            v85 = 0x100u >> (v57 & 31);
-            v59 = (char *)p_i + v58;
-            if ( 1 << (v57 & 31) <= 0 )
-            {
-LABEL_117:
-              *((uint8_t *)p_i + 10) = (v57 | 0x40) ^ 0x80;
-            }
-            else
-            {
-              *(uint32_t *)FileName_3 = v57;
-              v83 = 0;
-              v60 = 0;
-              v61 = 0;
-              p_i_9 = p_i;
-              while ( 1 )
-              {
-                v62 = 3 * v61;
-                if ( (uint8_t)v59[3 * v61 + 16] != v60
-                  || (uint8_t)v59[v62 + 17] != v60
-                  || (uint8_t)v59[v62 + 18] != v60 )
-                {
-                  break;
-                }
-                ++v61;
-                v60 += v85;
-                if ( v61 >= 1 << (v57 & 31) )
-                {
-                  LOBYTE(v57) = FileName_3[0];
-                  ;
-                  p_i = p_i_9;
-                  goto LABEL_117;
-                }
-              }
-              ;
-              p_i = p_i_9;
-            }
-          }
-        }
-        v63 = __fwd_sub_4015C0_sub_402FE0(v56, a1, a2, (uint16_t *)p_i, __dwLowDateTime);
-        if ( !v63 )
-          __exit_402E40(5, FileName_1);
-        __printf(
-          "%6.3f bpp%s",
-          (double)v63 * 8.0 / (double)(*((uint16_t *)p_i + 1) * *(uint16_t *)p_i),
-          "\n");
-        __op_delete(p_i);
-        goto LABEL_70;
-      }
-      goto LABEL_10;
-    }
-    if ( Buffer[1] != -118 && Buffer[1] != -112 )
-    {
-LABEL_10:
-      if ( *(uint32_t *)Buffer == 1504078485 || *(uint32_t *)Buffer == -1788172711 )
-      {
-        p_i_10 = __fwd_sub_4015C0_sub_429E80(FileNamea);
-        p_i_1 = p_i_10;
-        if ( !p_i_10 )
-          __exit_402E40(4);
-        __printf(
-          "File %16s, image %dx%dx%d, size - %d:",
-          FileNamea,
-          *p_i_10,
-          p_i_10[1],
-          p_i_10[5] & 0x3F,
-          *((uint32_t *)p_i_10 + 3));
-        Destination_1 = &__Destination_;
-        if ( !__Destination_ )
-          Destination_1 = FileNamea;
-        __fwd_sub_4015C0_sub_429C80(Destination_1, (int32_t)FileName_2, "bmf");
-        if ( void *__nb = __op_new(8u) )
-          v24 = __fwd_sub_4015C0_sub_402EF0((uint32_t *)__nb, FileName_2, 0);
-        else v24 = 0;
-        p_i_19 = (int32_t *)*((uint8_t *)p_i_1 + 10);
-        if ( ((uint8_t)p_i_19 & 0x80) != 0 )
-        {
-          if ( ((uint8_t)p_i_19 & 0x40) != 0 )
-          {
-            *((uint8_t *)p_i_1 + 10) = (uint8_t)p_i_19 ^ 0x80;
-          }
-          else
-          {
-            _bmp_ = 0x100u >> ((char)p_i_19 & 31);
-            v26 = (char *)p_i_1 + *((uint32_t *)p_i_1 + 3);
-            if ( 1 << ((char)p_i_19 & 31) <= 0 )
-            {
-LABEL_47:
-              *((uint8_t *)p_i_1 + 10) = ((uint8_t)p_i_19 | 0x40) ^ 0x80;
-            }
-            else
-            {
-              p_i_12 = p_i_19;
-              *(uint32_t *)FileName_1 = 0;
-              p_i_5 = (int32_t *)p_i_1;
-              v27 = 0;
-              v28 = 0;
-              while ( 1 )
-              {
-                v29 = 3 * v28;
-                if ( (uint8_t)v26[3 * v28 + 16] != v27
-                  || (uint8_t)v26[v29 + 17] != v27
-                  || (uint8_t)v26[v29 + 18] != v27 )
-                {
-                  break;
-                }
-                ++v28;
-                v27 += _bmp_;
-                if ( v28 >= 1 << ((char)p_i_19 & 31) )
-                {
-                  LOBYTE(p_i_19) = (uint8_t)p_i_12;
-                  ;
-                  p_i_1 = (uint16_t *)p_i_5;
-                  goto LABEL_47;
-                }
-              }
-              ;
-              p_i_1 = (uint16_t *)p_i_5;
-            }
-          }
-        }
-        v30 = __fwd_sub_4015C0_sub_402FE0(v24, a1, a2, p_i_1, __dwLowDateTime);
-        if ( !v30 )
-          __exit_402E40(5, FileName_2);
-        __printf("%6.3f bpp%s", (double)v30 * 8.0 / (double)(p_i_1[1] * *p_i_1), "\n");
-        __op_delete(p_i_1);
-      }
-      else if ( Buffer[0] == 80 && Buffer[1] >= 49 && Buffer[1] <= 54 )
-      {
-        p_i_11 = __fwd_sub_4015C0_sub_42A4E0((uint32_t)GIF8, FileNamea);
-        p_i_2 = p_i_11;
-        if ( !p_i_11 )
-          __exit_402E40(4);
-        __printf(
-          "File %16s, image %dx%dx%d, size - %d:",
-          FileNamea,
-          *(uint16_t *)p_i_11,
-          *((uint16_t *)p_i_11 + 1),
-          *((uint8_t *)p_i_11 + 10) & 0x3F,
-          p_i_11[3]);
-        Destination_2 = &__Destination_;
-        if ( !__Destination_ )
-          Destination_2 = FileNamea;
-        __fwd_sub_4015C0_sub_429C80(Destination_2, (int32_t)FileName_3, "bmf");
-        if ( void *__nb = __op_new(8u) )
-          p_i_13 = __fwd_sub_4015C0_sub_402EF0((uint32_t *)__nb, FileName_3, 0);
-        else p_i_13 = 0;
-        v46 = *((uint8_t *)p_i_2 + 10);
-        if ( (v46 & 0x80) != 0 )
-        {
-          if ( (v46 & 0x40) != 0 )
-          {
-            *((uint8_t *)p_i_2 + 10) = v46 ^ 0x80;
-          }
-          else
-          {
-            v47 = p_i_2[3];
-            _bmp_ = 0x100u >> (v46 & 31);
-            v48 = (char *)p_i_2 + v47;
-            if ( 1 << (v46 & 31) <= 0 )
-            {
-LABEL_93:
-              *((uint8_t *)p_i_2 + 10) = (v46 | 0x40) ^ 0x80;
-            }
-            else
-            {
-              *(uint32_t *)FileName_1 = v46;
-              p_i_5 = nullptr;
-              v49 = 0;
-              v50 = 0;
-              p_i_12 = p_i_2;
-              while ( 1 )
-              {
-                v51 = 3 * v50;
-                if ( (uint8_t)v48[3 * v50 + 16] != v49
-                  || (uint8_t)v48[v51 + 17] != v49
-                  || (uint8_t)v48[v51 + 18] != v49 )
-                {
-                  break;
-                }
-                ++v50;
-                v49 += _bmp_;
-                if ( v50 >= 1 << (v46 & 31) )
-                {
-                  LOBYTE(v46) = FileName_1[0];
-                  ;
-                  p_i_2 = p_i_12;
-                  goto LABEL_93;
-                }
-              }
-              ;
-              p_i_2 = p_i_12;
-            }
-          }
-        }
-        v52 = __fwd_sub_4015C0_sub_402FE0(p_i_13, a1, a2, (uint16_t *)p_i_2, __dwLowDateTime);
-        if ( !v52 )
-          __exit_402E40(5, FileName_3);
-        __printf(
-          "%6.3f bpp%s",
-          (double)v52 * 8.0 / (double)(*((uint16_t *)p_i_2 + 1) * *(uint16_t *)p_i_2),
-          "\n");
-        __op_delete(p_i_2);
-      }
-      else
-      {
-        p_i_14 = __fwd_sub_4015C0_sub_428C40(FileNamea);
-        p_i_3 = p_i_14;
-        if ( !p_i_14 )
-          __exit_402E40(4);
-        __printf(
-          "File %16s, image %dx%dx%d, size - %d:",
-          FileNamea,
-          *p_i_14,
-          p_i_14[1],
-          p_i_14[5] & 0x3F,
-          *((uint32_t *)p_i_14 + 3));
-        Destination_3 = &__Destination_;
-        if ( !__Destination_ )
-          Destination_3 = FileNamea;
-        __fwd_sub_4015C0_sub_429C80(Destination_3, (int32_t)FileName_4, "bmf");
-        if ( void *__nb = __op_new(8u) )
-          v14 = __fwd_sub_4015C0_sub_402EF0((uint32_t *)__nb, FileName_4, 0);
-        else v14 = 0;
-        p_i_15 = (int32_t *)*((uint8_t *)p_i_3 + 10);
-        if ( ((uint8_t)p_i_15 & 0x80) != 0 )
-        {
-          if ( ((uint8_t)p_i_15 & 0x40) != 0 )
-          {
-            *((uint8_t *)p_i_3 + 10) = (uint8_t)p_i_15 ^ 0x80;
-          }
-          else
-          {
-            _bmp_ = 0x100u >> ((char)p_i_15 & 31);
-            v16 = (char *)p_i_3 + *((uint32_t *)p_i_3 + 3);
-            if ( 1 << ((char)p_i_15 & 31) <= 0 )
-            {
-LABEL_28:
-              *((uint8_t *)p_i_3 + 10) = ((uint8_t)p_i_15 | 0x40) ^ 0x80;
-            }
-            else
-            {
-              p_i_12 = p_i_15;
-              *(uint32_t *)FileName_1 = 0;
-              p_i_5 = (int32_t *)p_i_3;
-              v17 = 0;
-              v18 = 0;
-              while ( 1 )
-              {
-                v19 = 3 * v18;
-                if ( (uint8_t)v16[3 * v18 + 16] != v17
-                  || (uint8_t)v16[v19 + 17] != v17
-                  || (uint8_t)v16[v19 + 18] != v17 )
-                {
-                  break;
-                }
-                ++v18;
-                v17 += _bmp_;
-                if ( v18 >= 1 << ((char)p_i_15 & 31) )
-                {
-                  LOBYTE(p_i_15) = (uint8_t)p_i_12;
-                  ;
-                  p_i_3 = (uint16_t *)p_i_5;
-                  goto LABEL_28;
-                }
-              }
-              ;
-              p_i_3 = (uint16_t *)p_i_5;
-            }
-          }
-        }
-        v20 = __fwd_sub_4015C0_sub_402FE0(v14, a1, a2, p_i_3, __dwLowDateTime);
-        if ( !v20 )
-          __exit_402E40(5, FileName_4);
-        __printf("%6.3f bpp%s", (double)v20 * 8.0 / (double)(p_i_3[1] * *p_i_3), "\n");
-        __op_delete(p_i_3);
-      }
-      goto LABEL_70;
-    }
-    if ( void *__nb = __op_new(8u) )
-      Block = (void *)__fwd_sub_4015C0_sub_402EF0((uint32_t *)__nb, FileNamea, 1);
-    else Block = nullptr; __printf("File %16s,\r", FileNamea);
-    ;
-    p_i_12 = nullptr;
-    v64 = 0;
-    while ( 1 )
-    {
-      p_i_4 = (uint32_t *)__fwd_sub_4015C0_sub_403820((int32_t)Block, a1, a2, 0, (int32_t *)&__dwLowDateTime);
-      if ( !p_i_4 )
-      {
-        __printf("\n");
-        if ( !*((uint32_t *)Block + 1) )
-          __exit_402E40(3, FileNamea);
-        __fwd_sub_4015C0_sub_402DF0((FILE1 **)Block, 1);
-        goto LABEL_70;
-      }
-      v66 = __dwLowDateTime && *(uint32_t *)__dwLowDateTime == 256;
-      ++v64;
-      p_SrcStr = (const char *)&__SrcStr;
-      if ( v66 )
-        p_SrcStr = ", archived";
-      __printf(
-        "File %16s, image %dx%dx%d, size - %d, number: %d%s\r",
-        FileNamea,
-        *(uint16_t *)p_i_4,
-        *((uint16_t *)p_i_4 + 1),
-        *((uint8_t *)p_i_4 + 10) & 0x3F,
-        p_i_4[3],
-        v64,
-        p_SrcStr);
-      if ( v66 )
-      {
-        __sub_4022C0((int32_t)p_i_4);
-        goto LABEL_156;
-      }
-      v68 = *((uint8_t *)p_i_4 + 10);
-      Destination_4 = &__Destination_;
-      if ( !__Destination_ )
-        Destination_4 = FileNamea;
-      n2 = v68 & 0x3F;
-      if ( __n2_5 )
-        break;
-      if ( n2 == 2 || n2 == 15 || n2 == 16 )
-        goto LABEL_145;
-      _bmp_ = __bmp_;
-      __fwd_sub_4015C0_sub_429C80(Destination_4, (int32_t)FileName_5, (char *)__bmp_);
-      __fwd_sub_4015C0_sub_42B0C0 = ::__fwd_sub_4015C0_sub_42B0C0;
-LABEL_146:
-      Buffer_2 = strrchr(FileName_5, 46);
-      if ( Buffer_2 - FileName_5 > 4 )
-      {
-        FileName_7 = strrchr(FileName_5, 92);
-        if ( !FileName_7 )
-          FileName_7 = FileName_5;
-        if ( Buffer_2 - FileName_7 > 4 )
-          Buffer_2 = FileName_7 + 4;
-      }
-      if ( !___access(FileName_5, 0) )
-      {
-        p_i_16 = p_i_12;
-        p_i_5 = p_i_4;
-        *(uint32_t *)FileName_1 = v64;
-        do
-        {
-          p_i_17 = p_i_16;
-          p_i_16 = (int32_t *)((char *)p_i_16 + 1);
-          __sprintf(Buffer_2, "%04.4d.%s", p_i_17, (const char *)_bmp_);
-        }
-        while ( !___access(FileName_5, 0) );
-        p_i_4 = p_i_5;
-        v64 = *(uint32_t *)FileName_1;
-        p_i_12 = p_i_16;
-      }
-      if ( !__fwd_sub_4015C0_sub_42B0C0((int32_t)p_i_4, FileName_5, __dword_441098) )
-        __exit_402E40(5, FileName_5);
-LABEL_156:
-      __op_delete(__dwLowDateTime);
-      __dwLowDateTime = 0;
-      __op_delete(p_i_4);
-    }
-    if ( __n2_5 == 2 && n2 != 2 && n2 != 4 && n2 != 15 && n2 != 16 && n2 != 32 && ((v68 & 0x3Fu) > 8 || (v68 & 0x40) != 0) )
-    {
-      _bmp_ = __bmp__0;
-      __fwd_sub_4015C0_sub_429C80(Destination_4, (int32_t)FileName_5, (char *)__bmp__0);
-      __fwd_sub_4015C0_sub_42B0C0 = (int32_t (*)(int32_t, char *, int32_t))__fwd_sub_4015C0_sub_42A350;
-      goto LABEL_146;
-    }
-LABEL_145:
-    _bmp_ = __bmp__1;
-    __fwd_sub_4015C0_sub_429C80(Destination_4, (int32_t)FileName_5, (char *)__bmp__1);
-    __fwd_sub_4015C0_sub_42B0C0 = (int32_t (*)(int32_t, char *, int32_t))__fwd_sub_4015C0_sub_429840;
-    goto LABEL_146;
-  }
-  p_i_18 = __fwd_sub_4015C0_sub_402590(FileNamea);
-  p_i_7 = p_i_18;
-  if ( !p_i_18 )
+    __exit_402E40(6, InName);
+  __fclose(Stream_v);
+  p_i = __fwd_bmf_sub_42AB20((void *)InName);
+  if ( !p_i )
     __exit_402E40(4);
   __printf(
     "File %16s, image %dx%dx%d, size - %d:",
-    FileNamea,
-    *(uint16_t *)p_i_18,
-    *((uint16_t *)p_i_18 + 1),
-    *((uint8_t *)p_i_18 + 10) & 0x3F,
-    p_i_18[3]);
-  Destination_5 = &__Destination_;
-  if ( !__Destination_ )
-    Destination_5 = FileNamea;
-  __fwd_sub_4015C0_sub_429C80(Destination_5, (int32_t)FileName_6, "bmf");
+    InName,
+    *(uint16_t *)p_i,
+    *((uint16_t *)p_i + 1),
+    *((uint8_t *)p_i + 10) & 0x3F,
+    p_i[3]);
   if ( void *__nb = __op_new(8u) )
-    p_i_6 = __fwd_sub_4015C0_sub_402EF0((uint32_t *)__nb, FileName_6, 0);
-  else p_i_6 = 0;
-  v35 = *((uint8_t *)p_i_7 + 10);
-  if ( (v35 & 0x80) != 0 )
+    Arc = __fwd_bmf_sub_402EF0((uint32_t *)__nb, (void *)OutName, 0);
+  else
+    Arc = 0;
+
+  // A palette that is nothing but a grey ramp carries no information: drop it
+  // (bit 0x80) and mark the image greyscale (bit 0x40) instead.  This is the
+  // donor's, unchanged -- it decides what goes into the stream.
+  Flags = *((uint8_t *)p_i + 10);
+  if ( (Flags & 0x80) != 0 )
   {
-    if ( (v35 & 0x40) != 0 )
+    if ( (Flags & 0x40) != 0 )
     {
-      *((uint8_t *)p_i_7 + 10) = v35 ^ 0x80;
+      *((uint8_t *)p_i + 10) = Flags ^ 0x80;
     }
     else
     {
-      v36 = p_i_7[3];
-      _bmp_ = 0x100u >> (v35 & 31);
-      v37 = (char *)p_i_7 + v36;
-      if ( 1 << (v35 & 31) <= 0 )
+      Colours = 1 << (Flags & 31);
+      Step = 0x100u >> (Flags & 31);
+      Palette = (const uint8_t *)p_i + p_i[3] + 16;
+      Grey = 0;
+      for ( i = 0; i < Colours; ++i )
       {
-LABEL_67:
-        *((uint8_t *)p_i_7 + 10) = (v35 | 0x40) ^ 0x80;
+        if ( Palette[3 * i] != Grey || Palette[3 * i + 1] != Grey || Palette[3 * i + 2] != Grey )
+          break;
+        Grey += Step;
       }
-      else
-      {
-        *(uint32_t *)FileName_1 = v35;
-        p_i_5 = nullptr;
-        v38 = 0;
-        v39 = 0;
-        p_i_12 = p_i_7;
-        while ( 1 )
-        {
-          v40 = 3 * v39;
-          if ( (uint8_t)v37[3 * v39 + 16] != v38
-            || (uint8_t)v37[v40 + 17] != v38
-            || (uint8_t)v37[v40 + 18] != v38 )
-          {
-            break;
-          }
-          ++v39;
-          v38 += _bmp_;
-          if ( v39 >= 1 << (v35 & 31) )
-          {
-            LOBYTE(v35) = FileName_1[0];
-            ;
-            p_i_7 = p_i_12;
-            goto LABEL_67;
-          }
-        }
-        ;
-        p_i_7 = p_i_12;
-      }
+      if ( i >= Colours )
+        *((uint8_t *)p_i + 10) = (Flags | 0x40) ^ 0x80;
     }
   }
-  v41 = __fwd_sub_4015C0_sub_402FE0(p_i_6, a1, a2, (uint16_t *)p_i_7, __dwLowDateTime);
-  if ( !v41 )
-    __exit_402E40(5, FileName_6);
+
+  Size = __fwd_bmf_sub_402FE0(Arc, a1, a2, (uint16_t *)p_i, (void *)__dwLowDateTime);
+  if ( !Size )
+    __exit_402E40(5, OutName);
   __printf(
-    "%6.3f bpp%s",
-    (double)v41 * 8.0 / (double)(*((uint16_t *)p_i_7 + 1) * *(uint16_t *)p_i_7),
-    "\n");
-  __op_delete(p_i_7);
-  __op_delete(__dwLowDateTime);
-  __dwLowDateTime = 0;
-LABEL_70:
-  if ( __dword_442BA0 )
-    __remove(FileNamea);
+    "%6.3f bpp\n",
+    (double)Size * 8.0 / (double)(*((uint16_t *)p_i + 1) * *(uint16_t *)p_i));
+  __op_delete(p_i);
 }
 
-static inline void __fwd_main_sub_4015C0(const __m128 &a0, const __m128 &a1, void *a2, void *a3) { __sub_4015C0(a0, a1, (const char *)a2, (const char *)a3); }
-static inline uint32_t __fwd_main_sub_4280B0(int32_t a0, int32_t a1, int32_t a2, void *a3, int32_t a4) { return __sub_4280B0(a0, a1, a2, (char *)a3, a4); }
-static inline int32_t __fwd_main_sub_4284E0(int32_t a0, void *a1, int32_t a2) { return __sub_4284E0(a0, (char *)a1, a2); }
-
- BMF_SSE int32_t __main(int32_t argc, const char **argv, const char **envp)
+// Expand the BMF stream InName into a BMP named OutName.
+BMF_SSE void __bmf_decompress(const __m128 &a1__ref, const __m128 &a2__ref,
+                              const char *InName, const char *OutName)
 {
-  alignas(16) uint8_t __hexrays_frame[400];
-  char (&String1)[4] = *(char (*)[4])(__hexrays_frame + 0);
-  char (&Str)[256] = *(char (*)[256])(__hexrays_frame + 64);
-  int32_t &n45 = *(int32_t *)(__hexrays_frame + 320);
+  ;
+  __m128 a1 = a1__ref;
+  __m128 a2 = a2__ref;
+  void *Block;
+  uint32_t *p_i;
+  int32_t Number;
+  int32_t Depth;
+
+  if ( void *__nb = __op_new(8u) )
+    Block = (void *)__fwd_bmf_sub_402EF0((uint32_t *)__nb, (void *)InName, 1);
+  else
+    Block = nullptr;
+  __printf("File %16s,\r", InName);
+  Number = 0;
+  while ( 1 )
+  {
+    p_i = (uint32_t *)__fwd_bmf_sub_403820((int32_t)Block, a1, a2, 0, (void *)&__dwLowDateTime);
+    if ( !p_i )
+    {
+      __printf("\n");
+      if ( !*((uint32_t *)Block + 1) )
+        __exit_402E40(3, InName);
+      __fwd_bmf_sub_402DF0((FILE1 **)Block, 1);
+      return;
+    }
+    ++Number;
+    __printf(
+      "File %16s, image %dx%dx%d, size - %d, number: %d\r",
+      InName,
+      *(uint16_t *)p_i,
+      *((uint16_t *)p_i + 1),
+      *((uint8_t *)p_i + 10) & 0x3F,
+      p_i[3],
+      Number);
+    // BMF sent 2, 15 and 16 bits per pixel to its TGA writer, because a BMP
+    // cannot hold them.  The output is a BMP now, so those streams have no
+    // answer here and saying so beats writing a file that is not one.
+    Depth = *((uint8_t *)p_i + 10) & 0x3F;
+    if ( Depth == 2 || Depth == 15 || Depth == 16 )
+    {
+      __printf("\n%s: %d bits per pixel is not a BMP depth\n", OutName, Depth);
+      __exit(5);
+    }
+    if ( !__fwd_bmf_sub_42B0C0((int32_t)p_i, (void *)OutName, __dword_441098) )
+      __exit_402E40(5, OutName);
+    __op_delete(__dwLowDateTime);
+    __dwLowDateTime = 0;
+    __op_delete(p_i);
+  }
+}
+
+ BMF_SSE int32_t __main(int32_t argc, const char **argv)
+{
+  alignas(16) uint8_t __hexrays_frame[16];
+  uint32_t &Csr = *(uint32_t *)(__hexrays_frame + 0);
   ;
   __m128 v3;
   __m128 v4;
-  int32_t argc_1;
-  const char *ArgList;
-  int32_t n45_1;
-  HANDLE FirstFileA;
-  __m128i *v10;
-  int32_t v11;
-  int32_t v13;
-  int32_t n2;
-  int32_t n9;
-  int32_t n15;
+  int32_t Mode;
+
   __sub_4346D0(3);
-  *(uint32_t *)String1 = _mm_getcsr() | 0x8000;
-  _mm_setcsr(*(uint32_t *)String1);
+  Csr = _mm_getcsr() | 0x8000;      // flush denormals to zero, as BMF did
+  _mm_setcsr(Csr);
   __sub_42CBB0((int32_t)__sub_402E30);
   __printf("BMF lossless image compressor, v.2.01 (C) 1998-1999, 2009 by Dmitry Shkarin\n");
-  __dword_4410A4[0] = 0;
-  __dword_44108C = __sub_427F40((int32_t)"BMF_Options", (int32_t)"UseFilters", __dword_44108C);
-  __n7_0 = __sub_428050((int32_t)"BMF_Options", (int32_t)"FSQ", __n7_0);
-  __dword_441090 = __sub_427F40((int32_t)"BMF_Options", (int32_t)"SleepyWork", __dword_441090);
-  __n7_1 = __sub_428050((int32_t)"BMF_Options", (int32_t)"MaxError", __n7_1);
-  __n2_4 = __sub_428050((int32_t)"BMF_Options", (int32_t)"TemplateUsage", __n2_4);
-  argc_1 = 1;
-  __dword_4410A4[0] = __sub_428050((int32_t)"BMF_Options", (int32_t)"Template", __dword_4410A4[0]);
-  __dword_441098 = __sub_427F40((int32_t)"BMF_Options", (int32_t)"NotPack", __dword_441098 == 0) == 0;
-  __dword_442BA0 = __sub_427F40((int32_t)"BMF_Options", (int32_t)"DeleteFile", __dword_442BA0);
-  __fwd_main_sub_4280B0((int32_t)"BMF_Options", (int32_t)"OutFileType", *(&__bmp_ + __n2_5), String1, 64);
-  if ( !___strcmpi(String1, "bmp") )
-    __n2_5 = 0;
-  if ( !___strcmpi(String1, "tga") )
-    __n2_5 = 1;
-  if ( !___strcmpi(String1, "pnm") )
-    __n2_5 = 2;
-  __fwd_main_sub_4280B0((int32_t)"BMF_Options", (int32_t)"OutFName", (int32_t)&__Destination_, &__Destination_, 256);
-  qmemcpy(String1, "-r", 2);
-  __fwd_main_sub_4280B0((int32_t)"BMF_Options", (int32_t)"RawFileInfo", (int32_t)"-", &String1[2], 62);
-  __sub_402BD0((int32_t)&String1[1]);
-  if ( argc < 2 )
-    __exit_402E40(0, (const char *)__off_44104C[__dword_44108C], __n7_0, (const char *)__off_44104C[__dword_441090], __n7_1, __n2_4, (const char *)__off_44104C[__dword_441098 == 0], (const char *)*(&__bmp_ + __n2_5), (const char *)__off_44104C[__dword_442BA0], __Destination_ ? &__Destination_ : "none", (const char *)__off_44104C[__dword_442BAC], __ElementCount, __dword_441058, __dword_44105C, __n4_6, __n0xFFFF, (const char *)__off_44104C[__dword_442BA8]);
-  do
+
+  Mode = argc == 4 && !argv[1][1] ? toupper(argv[1][0]) : 0;
+  if ( Mode != 'C' && Mode != 'D' )
   {
-    ArgList = argv[argc_1];
-    n45_1 = *ArgList;
-    if ( n45_1 == 45 || n45_1 == 47 )
-    {
-      v10 = (__m128i *)((uint32_t)(ArgList + 1) & 0xFFFFFFF0);
-      v11 = ((uint8_t)ArgList + 1) & 0xF;
-      if ( !_BitScanForward(
-              (uint32_t *)&v13,
-              (uint32_t)_mm_movemask_epi8(_mm_cmpeq_epi8((__m128i)0LL, *v10)) >> (v11 & 31)) )
-        v13 = __intel_sse2_strlen(v11, &v10->m128i_i8[v11]);
-      n45 = ArgList[v13];
-      if ( ___strcmpi(ArgList + 1, "bmp") )
-      {
-        if ( ___strcmpi(ArgList + 1, "tga") )
-        {
-          if ( ___strcmpi(ArgList + 1, "pnm") )
-          {
-            switch ( toupper(ArgList[1]) )
-            {
-              case 'D':
-                __dword_442BA0 = n45 != 45;
-                break;
-              case 'E':
-                n15 = atoi(ArgList + 2);
-                if ( n15 > 15 )
-                  n15 = 15;
-                if ( n15 < 0 )
-                  n15 = 0;
-                __n7_1 = n15;
-                break;
-              case 'F':
-                __dword_44108C = n45 != 45;
-                break;
-              case 'N':
-                __dword_441098 = n45 == 45;
-                break;
-              case 'O':
-                strcpy(&__Destination_, ArgList + 2);
-                break;
-              case 'Q':
-                n9 = n45 - 48;
-                if ( n45 - 48 > 9 )
-                  n9 = 9;
-                if ( n9 < 0 )
-                  n9 = 0;
-                __n7_0 = n9;
-                break;
-              case 'R':
-                __sub_402BD0((int32_t)(ArgList + 1));
-                break;
-              case 'S':
-                __dword_441090 = n45 != 45;
-                break;
-              case 'T':
-                n2 = atoi(ArgList + 2);
-                if ( n2 > 2 )
-                  n2 = 2;
-                if ( n2 < 0 )
-                  n2 = 0;
-                __n2_4 = n2;
-                break;
-              default:
-                __exit_402E40(2, ArgList);
-            }
-          }
-          else
-          {
-            __n2_5 = 2;
-          }
-        }
-        else
-        {
-          __n2_5 = 1;
-        }
-      }
-      else
-      {
-        __n2_5 = 0;
-      }
-    }
-    else
-    {
-      if ( bmf_path_sep(ArgList) )
-      {
-        strcpy(Str, ArgList);
-        bmf_path_sep(Str)[1] = 0;
-        ArgList = argv[argc_1];
-      }
-      else
-      {
-        Str[0] = 0;
-      }
-      FirstFileA = FindFirstFileA(ArgList, &__FindFileData);
-      if ( FirstFileA == (HANDLE)-1 )
-        __exit_402E40(1, argv[argc_1]);
-      do
-      {
-        if ( (__FindFileData.dwFileAttributes & FILE_WRITE_EA) == 0 )
-        {
-          __fwd_main_sub_4015C0(v3, v4, Str, __FindFileData.cFileName);
-          if ( __n2_4 == 1 )
-            __fwd_main_sub_4284E0((int32_t)"BMF_Options", "Template", __dword_4410A4[0]);
-        }
-      }
-      while ( FindNextFileA(FirstFileA, &__FindFileData) );
-    }
-    ++argc_1;
+    __printf(
+      "e-mail: <dmitry.shkarin@mtu-net.ru>;  web: http://compression.graphicon.ru/ds/\n"
+      "Usage: bmf c input.bmp output     compress, always with -S -Q9\n"
+      "       bmf d input output.bmp     expand\n");
+    return 1;
   }
-  while ( argc_1 < argc );
+
+  // BMF read these from its .ini and then from the switches; there are no
+  // switches now, so the compression mode is set here and the rest keep the
+  // values BMF.exe's data segment starts them at -- filters on, near-lossless
+  // error 0, no filter template, packed output.
+  __dword_441090 = 1;               // -S, slow but efficient
+  __n7_0 = 9;                       // -Q9, filter selection quality
+
+  if ( Mode == 'C' )
+    __bmf_compress(v3, v4, argv[2], argv[3]);
+  else
+    __bmf_decompress(v3, v4, argv[2], argv[3]);
   return 0;
 }
 void __sub_402E30() { __exit_402E40(7); }
 int32_t main(int32_t argc, char **argv) {
   bmf_blob_relocate();
-  *(char ***)(blob1 + 0x00445954 - BMF_BLOB_BASE) = argv;
   __sub_419680();
-  return __main(argc, (const char **)argv, nullptr);
+  return __main(argc, (const char **)argv);
 }
