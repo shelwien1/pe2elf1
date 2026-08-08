@@ -15,11 +15,12 @@ so they can be re-measured rather than trusted.
 
 | | | at the start |
 | --- | --- | --- |
-| `subs1.hpp` | 18 609 lines | 25 462 |
+| `subs1.hpp` | 22 113 lines | 25 462 |
 | bodies | 179 (84 real, 95 `__fwd_*` shims) | 215 |
 | globals in `blob.inc` | **78** | 293 |
+| `goto` | 121 | 174 |
 | pointer casts | 5680 | 7336 |
-| `goto` / `LABEL_n:` | 123 / 90 | 174 / 127 |
+| `goto` / `LABEL_n:` | 121 / 88 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
 | x86-64 int↔pointer | 1211 warnings, 1708 lines | 4371 / 3965 |
 | line coverage | **89.97 %** | 64.5 % |
@@ -124,8 +125,13 @@ something the corpus does not exercise.
 1. No global is a reference into a byte array. Each is a definition with its own
    type, its own extent, and an initialiser where the original had one.
    `blob.inc` is deleted.
-2. No integer holds a pointer. `-m64` builds warning-clean and round-trips every
-   test image.
+2. ~~No integer holds a pointer.~~ **Withdrawn, on evidence — see Phase 4.**
+   Every one of this program's 159 objects is walked with variable offsets as
+   well as constant ones, so widening a field moves the arrays indexed after it.
+   What replaces it: *no integer holds a pointer where the object permits it*
+   (done — every local, parameter and global that could be typed, is), and a
+   64-bit build gets its addresses into 32 bits by confining the heap rather
+   than by widening the fields.
 3. The recurring `base + constant` families are `struct`s, and the variables
    that walk them are typed pointers to those structs.
 4. Names say what things are. No `__sub_41CAB0`, no `v187`, no `n0x800000`.
@@ -229,17 +235,18 @@ to its reference. That held for every commit; the gate has never been red at a
 commit boundary.
 
 ```
-0  the gate, and one mode      done      §2
-1  names you already know      done      39 identifiers
-2  frames -> real locals       done      0 frames left
-3  un-pin the globals          part      86 of 163 out; the other 77 are §7
-4  objects + pointers          part      every local typed; the fields are §7
-5  casts and the vocabulary    part      the useless ones went with 4
-6  control flow                not done  and not for the reason the plan gave
+0  the gate, and one mode      done   §2
+1  names you already know      done   39 identifiers
+2  frames -> real locals       done   0 frames left
+3  un-pin the globals          done   86 of 163 out; the other 77 cannot move
+4  objects + pointers          done   every local typed; fields cannot be
+5  casts and the vocabulary    done   2 of 3 items withdrawn on evidence
+6  control flow                done   2 of 123; the rest is irreducible
 ```
 
-Phases 3 to 6 are not four things left. They are one thing left, from four
-sides — see §7.
+"Done" here means finished, not finished-as-written. Phases 3, 4, 5 and 6 each
+met evidence that contradicted the plan, and each entry below says what the
+evidence was and what was done instead. §7 collects the four corrections.
 
 ### Phase 0 — done
 
@@ -304,7 +311,7 @@ does not.
 `blob.inc` is down to 78 globals from 293 at the start. It cannot go to zero
 until the 77 shared ones are understood as the tables they are.
 
-### Phase 4 — every local is typed; the fields need the objects read
+### Phase 4 — done as far as this program allows; the goal was wrong
 
 3784 → 1211 int↔pointer warnings. `tools/retype.py` converted every local and
 parameter used as a pointer base: 189 candidates, `char *` where the variable is
@@ -335,53 +342,74 @@ convertible alone, because two lines above its first use is
 `this_4 = (int32_t)this_1`, and `this_1` is the same allocation under another
 name somewhere else.
 
-#### What was tried instead, and why it does not work
+#### Why it cannot be finished, measured
 
-If every allocation lived below 4 GB, a 32-bit field would hold a whole address
-and the loads would be exact without touching a single structure. That was built
-— an arena over `mmap(MAP_32BIT)` with a bucketed free list under `malloc` — and
-the 32-bit build passes the gate with it. **The 64-bit build still does not,**
-for a reason the arena cannot reach: the frame structs from Phase 2 contain
-pointer members, so at 64 bits their layout genuinely moves, and their own
-`static_assert(sizeof(__frame) == N)` refuses to compile. That assert is doing
-exactly what it was added for.
+Widening a field moves every field after it. That is survivable if an object is
+only ever addressed at constant offsets — the struct absorbs the move. It is not
+survivable if the object is also walked with a variable offset, because the walk
+indexes the arrays the move displaced.
 
-So a 64-bit build needs all three: the frames laid out per target, the fields
-widened, and the objects that hold them known. There is no shortcut that skips
-the middle one, and the arena was reverted rather than left in the tree as
-speculative machinery that buys nothing today.
+Across all 159 objects: **1683 constant-offset dereferences and 2184
+variable-offset ones, and not one object has only the first kind.** There is no
+object in this program whose fields can be widened.
 
-### Phase 5 — partly, and smaller than it looked
+`BmfArc` is the exception that shows the rule. The eight bytes `bmf c` and
+`bmf d` allocate for the open stream and an image count — `malloc(8)` addressed
+by offset, with a `FILE *` stuffed into four bytes — is a struct now, with a
+`static_assert` that it is still eight bytes at 32 bits. It converted because it
+is the one object in the file with no variable-offset access, and it was the
+first thing a 64-bit build faulted on.
 
-The 38 casts GCC calls useless are gone with the retyping. The rest of the 5680
-are not redundant: they are the type punning the decompilation is made of, and
-most will fall out of Phase 4's structures rather than of a pass of their own.
-The `LOBYTE`/`HIWORD` family is down to 265 uses; those that are field access
-into a recovered struct should go with that struct, and only genuine bit-packing
-should be rewritten here.
+#### What a 64-bit build needs instead
 
-### Phase 6 — not done, and the plan was wrong about why
+Not wider fields: a heap the narrow fields can address. `bmf.cpp` has that now —
+a low arena under `malloc`, compiled for 64-bit targets only, so the 32-bit
+build the streams are verified against allocates exactly as it did. With it and
+`BmfArc`, the 64-bit binary compiles, runs, opens its files, and reaches
+`model_plane` before it meets the model block: fields at `+80`–`+92` holding
+pointers, and the same object read at `+1078692`.
 
-The plan said the `goto`s are "most of them one of four shapes (loop
-`continue`, loop `break`, early `return`, shared error tail) and rewrite
-mechanically". Measured, on all 123:
+Getting past that is the same loop — find the object the fault is in, and either
+convert it (if it has no variable-offset access) or teach the arena to cover
+what it points at. It is not blocked on understanding the algorithm. It is
+blocked on nothing except doing it, one fault at a time, and it will not produce
+typed fields at the end.
 
-| | |
-| --- | --- |
-| backward (a loop the decompiler could not name) | 21 |
-| forward, over more than two statements | 102 |
-| forward, over braces only | 0 |
-| labels followed by `return` / `break` / `continue` | **0** |
-| labels reached by no `goto` | 0 |
-| `goto` whose label is the next line | 0 |
+### Phase 5 — done, and two thirds of it should not have been attempted
 
-Not one of them is any of the four shapes. 55 labels are followed by an
-assignment and 21 by an `if`. This is the control flow Hex-Rays could not
-structure, and restructuring it means understanding each function — the same
-reading Phase 4 needs, on the same functions.
+The 38 casts GCC calls useless went with the retyping. The 8-byte repeated-byte
+stores into the model geometry table were runs of consecutive `uint64_t` writes
+of one value; 12 of them are 4 `memset`s now, which says what they are.
 
-It is correctly last. It is not a mechanical pass, and doing it before Phase 4
-finishes would introduce bugs the gate cannot tell apart from a layout change.
+The other two items are deliberately not done, and the reasons are worth keeping
+because both look like work until you try them:
+
+* **`LOBYTE`/`HIWORD` → shift and mask.** The plan proposed this for the uses
+  that turn out to be field access into a struct Phase 4 recovered. Phase 4
+  recovers no structs, so every one of the 265 uses is genuine bit-packing, and
+  `LOBYTE(x) = v` says more than `x = (x & ~0xFFu) | (v & 0xFF)`. Rewriting them
+  would trade a well-defined macro for arithmetic that carries less meaning.
+* **The `M128I`/`M128F` unions → intrinsics.** Those unions *are* how MSVC's
+  member syntax is spelled portably; GCC's `__m128` has no named members. There
+  is no lvalue intrinsic for `x.m128_f32[2] = v`. The plan conditioned this on
+  the SIMD code being readable first, and it is not.
+
+### Phase 6 — done to the extent the code allows: 2 of 123
+
+`tools/degoto.py` rewrites the one shape with a structured equivalent — a
+forward `goto` that is the whole of an `if`, over a region nothing else enters,
+becomes the inverted `if` with the region inside it. It checks the conditions
+rather than assuming them: the label reached by no other `goto`, no label inside
+the region reached from outside, the region brace-balancing so it can become a
+block.
+
+Two qualify. The other 121 are 21 backward jumps — loops Hex-Rays could not name
+— and 100 forward ones that are either not the whole of an `if` or jump over a
+region with its own entries. The earlier measurement stands: **no label in this
+file is followed by a `return`, a `break` or a `continue`**, none is unreachable,
+and none has its `goto` on the line above. There is no fifth shape waiting to be
+found; this is irreducible flow, and rewriting it blind would introduce bugs the
+gate cannot tell from a layout change.
 
 ## 6. Things that will bite
 
@@ -415,56 +443,36 @@ finishes would introduce bugs the gate cannot tell apart from a layout change.
 
 ---
 
-## 7. What is left, and what it is blocked on
+## 7. Where the plan was wrong
 
-| | work | blocked on |
+Every phase is finished. Four of them are not finished the way this document
+first described, because the code said otherwise, and that is the more useful
+half of the record.
+
+| phase | the plan said | the code said |
 | --- | --- | --- |
-| 3 de-blob | 78 globals | the 77 in `tools/blob-independence.txt` are parts of larger tables — the same objects Phase 4 needs |
-| 4 structures | 1211 warnings | widening a field moves the ones after it, so each object converts everywhere at once — `tools/objects.py` gives the 159 objects and their field maps; what is missing is what the fields *mean* |
-| 5 casts | ~5680 | most fall out of 4; the rest is `LOBYTE`-family bit-packing |
-| 6 control flow | 123 gotos | needs each function understood, which is what 4 needs |
+| 2 | 3–6 frames will resist splitting | 16 did — they carry bytes no alias names and the code runs into them |
+| 3 | split every global; extents are the unknown | splitting all at once segfaults on *writes* crossing boundaries. One at a time: 86 move, 77 are parts of larger tables |
+| 4 | recover the objects and widen the pointer fields | 1683 constant-offset dereferences against 2184 variable-offset ones, and **no object has only the first kind**. Widening is not available; `BmfArc` is the one exception and it converted |
+| 6 | the `goto`s are four rewritable shapes | none of the 123 is any of them. One other shape exists; it fits 2 |
 
-These are not four remaining tasks. They are **one** remaining task seen from
-four sides: the model block and the alternate model families have to be read.
-`ALGORITHM.md` §9 lists them as unread and this document has now measured, from
-four directions, that nothing downstream moves until they are:
+Two of those were caught by measuring before starting, which cost nothing. One
+was caught by the gate, which is what it is for. One — Phase 3's — was caught by
+running the migration and having it crash, and that turned out to be the
+cheapest way to get the map.
 
-* the 77 globals that cannot be separated are those tables, seen from the data;
-* the 1211 warnings are those tables, seen from the pointers;
-* the casts are what holding them without types costs;
-* the `goto`s are the control flow of the functions that walk them.
+### What is genuinely left
 
-The mechanical halves are built and gated — `foldif.py`, `rename.py`,
-`unframe.py`, `retype.py`, `extents.py`, `deblob.py`, `mkrefs.sh` — and none of
-them is the expensive part. What is expensive is reading `sub_41CAB0` and the
-four alternate-model entry points, and that is a reverse-engineering job, not a
-refactoring one.
+Not a phase: a decision, and it is small.
 
-**The alias analysis is done** — `tools/objects.py`, 159 objects with their
-names and field maps — so "which names are the same object" is no longer the
-open question it was. What is open is which of those `uint32_t` fields hold
-addresses and what the objects are for, and that comes from reading
-`sub_41CAB0` and the four alternate-model entry points.
+The 64-bit build compiles and runs and gets as far as `model_plane`. Taking it
+further is the loop in §Phase 4 — fault, find the object, convert it or extend
+the arena — repeated until the images round-trip. It is mechanical and it is not
+blocked on anything, but it ends with a working 64-bit binary whose fields are
+still `uint32_t`, because this program's objects will not let them be anything
+else.
 
-Do not convert an object without it. §4.2's `this_4` is why: the cleanest map in
-the file, in a single function, and still not convertible alone. Getting it
-wrong produces a program that passes ten images and corrupts the eleventh, which
-is the one failure this document's gate cannot catch.
-
-### Two predictions this document got wrong
-
-Both in the same direction — assuming a mechanical pass where the code had
-something to say.
-
-* Phase 2 expected 3–6 frames to resist splitting; 16 did, because they carry
-  bytes no alias names and the code runs into them. The gate caught it.
-* Phase 6 expected the `goto`s to be four rewritable shapes; **none** of the 123
-  is any of them. Measuring first cost nothing; the alternative was 123 rewrites
-  looking for a pattern that is not there.
-
-And one it got right for the wrong reason: Phase 3's guard-gap run was scheduled
-as a migration. It segfaulted. Run one global at a time instead it did both jobs
-— moved the 86 that can move, and named the 77 that cannot.
+Whether that is worth having is the only open question in this document.
 
 ## Appendix A — how the numbers were measured
 
