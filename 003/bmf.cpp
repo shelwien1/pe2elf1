@@ -515,9 +515,6 @@ void __noreturn __break(uint16 code, uint16 subcode);
 
 #endif // HEXRAYS_DEFS_H
 
-typedef void*         HANDLE;
-typedef unsigned int  UINT;
-
 // ---------------------------------------------------------------------------
 // The data segment, as one object.
 //
@@ -549,56 +546,14 @@ typedef unsigned int  UINT;
 // hybrid build it is the identity, since blob1 is 0x00438000 there.
 #define BMF_BLOB(va) ((int)(blob1 + ((va) - BMF_BLOB_BASE)))
 
-// Win32 manifest constants the bodies spell out.  windows.h is not included
-// (see above), and these are the only ones referenced.
+// Win32 manifest constants the surviving bodies spell out.  windows.h is not
+// included (see above), and with the command line down to `c`/`d` on two named
+// files these three are all that is left: VirtualAlloc and VirtualFree are the
+// only kernel32 entries still reached, so the file, handle and find-data
+// constants and the types that went with them are gone.
 #define MEM_COMMIT      0x00001000
-#define MEM_RESERVE     0x00002000
-#define MEM_DECOMMIT    0x00004000
 #define MEM_RELEASE     0x00008000
-#define MEM_TOP_DOWN    0x00100000
-#define PAGE_NOACCESS         0x01
-#define PAGE_READONLY         0x02
 #define PAGE_READWRITE        0x04
-#define PAGE_EXECUTE_READWRITE 0x40
-#define INVALID_HANDLE_VALUE ((HANDLE)(long)-1)
-#define INVALID_FILE_ATTRIBUTES ((DWORD)-1)
-#define GENERIC_READ          0x80000000
-#define GENERIC_WRITE         0x40000000
-#define FILE_SHARE_READ              0x01
-#define FILE_READ_ATTRIBUTES         0x80
-#define FILE_ATTRIBUTE_NORMAL        0x80
-#define FILE_ATTRIBUTE_DIRECTORY     0x10
-#define FILE_WRITE_EA                0x10   // IDA's name for the same bit
-#define CREATE_ALWAYS                   2
-#define OPEN_EXISTING                   3
-#define MAX_PATH                      260
-
-// The handful of Win32 types the file-handling bodies name, with the layouts
-// windows.h gives them.  The structs are read and written by real Win32 calls
-// — through the shim in the injected build, by kernel32 itself in the Windows
-// one — so the field offsets have to match.
-typedef char           CHAR;
-typedef unsigned short WCHAR;   // `const WCHAR SrcStr = 0u;` — an empty string
-typedef char *         LPSTR;
-typedef const char *   LPCSTR;
-typedef void *         LPVOID;
-typedef struct _FILETIME {
-  DWORD dwLowDateTime;
-  DWORD dwHighDateTime;
-} FILETIME;
-typedef struct _WIN32_FIND_DATAA {
-  DWORD    dwFileAttributes;      // +0x00
-  FILETIME ftCreationTime;        // +0x04
-  FILETIME ftLastAccessTime;      // +0x0C
-  FILETIME ftLastWriteTime;       // +0x14
-  DWORD    nFileSizeHigh;         // +0x1C
-  DWORD    nFileSizeLow;          // +0x20
-  DWORD    dwReserved0;           // +0x24
-  DWORD    dwReserved1;           // +0x28
-  CHAR     cFileName[MAX_PATH];   // +0x2C
-  CHAR     cAlternateFileName[14];// +0x130
-} WIN32_FIND_DATAA;
-static_assert(sizeof(WIN32_FIND_DATAA) == 320, "Win32 WIN32_FIND_DATAA is 320 bytes");
 
 // The standalone build has no PE runtime to hand out _iobufs: every stdio
 // call goes to the host's C library, so `FILE1` is its FILE — glibc's on
@@ -637,22 +592,6 @@ typedef FILE1 Stream;
 // prologue has to realign (§8.2.3).  Standalone there is no such caller: every
 // call comes from g++, which has already done the work, and the macro is empty.
 #define BMF_REALIGN
-
-// main splits argv[] on '\' to separate the directory from the file name,
-// because BMF is a Windows program.  Under the shim that works — it translates
-// backslashes — but standalone on POSIX a `dir/file.bmp` argument would leave
-// the directory part empty and the file would be looked for in the working
-// directory instead.  fixups.txt routes both strrchr calls through this, which
-// takes whichever separator appears last, so one body serves both builds.
-static inline char *bmf_path_sep(const char *s) {
-  const char *a = strrchr(s, '/');
-  const char *b = strrchr(s, '\\');
-  return (char *)(a > b ? a : b);
-}
-
-// incdec.md §8.2
-#define _BitScanForward(idx_ptr, mask_val) \
-  ((mask_val) ? ((*(idx_ptr) = __builtin_ctz((unsigned int)(mask_val))), 1u) : 0u)
 
 // ---------------------------------------------------------------------------
 // SSE register types.
@@ -804,15 +743,11 @@ BMF_SSE static inline void _mm_stream_pi   (M64   *p, __gnu_m64   a) { _mm_strea
 typedef M128I _OWORD;
 #define __int128 M128I
 
-// The standalone build has no Intel runtime to call, so the three
-// register-convention entries below become ordinary C.  Each is a plain
-// library function underneath — Intel's own documentation for the first two
-// is "log", and the third is strlen — and the trampolines existed only to
-// reach the PE's copies with their private register convention.
-BMF_SSE static inline unsigned __intel_sse2_strlen(unsigned off, const void *p) {
-  (void)off;
-  return (unsigned)strlen((const char *)p);
-}
+// The standalone build has no Intel runtime to call, so the two
+// register-convention entries below become ordinary C.  Both are `log`
+// underneath, whatever the names say; the trampolines existed only to reach
+// the PE's copies with their private register convention.  A third,
+// __intel_sse2_strlen, went with the command-line parser that called it.
 
 // Natural log, despite the name: see override/sub_436E10.inc.  Lane 1 is
 // computed too — the caller only ever reads lane 0 through the mask, but
@@ -879,7 +814,7 @@ static unsigned bmf_xgetbv0()
 #define PROBE_HIT(sym)  ((void)0)
 
 
-//--- #include "crt.cpp"      // the C runtime and the ten kernel32 imports
+//--- #include "crt.cpp"      // the C runtime and the two kernel32 imports
 // crt.cpp — the runtime BMF used to get from the PE.
 //
 // Included between the head and the moved bodies, and only in the standalone
@@ -894,43 +829,26 @@ static unsigned bmf_xgetbv0()
 //   * The statically-linked MSVC CRT (§6.5 routed these into the PE because a
 //     glibc FILE* handed to BMF's fread would be read as a Win32 _iobuf; with
 //     BMF's code gone there is no second runtime and they are just the host's).
-//   * The ten kernel32 imports, which were behind IAT slots and so are named
+//   * The kernel32 imports, which were behind IAT slots and so are named
 //     directly rather than through a `#define`.
 //   * Three odds and ends: operator new/delete, the two Intel memcpy/memset
 //     dispatchers, and sub_402E30, the out-of-memory handler main installs.
 //
-// Two hosts.  On Windows all of this is native — the CRT entries are msvcrt's
-// under their `_`-prefixed names, and the ten kernel32 imports are the real
-// ones, so that half of the file is ten declarations and no code.  On POSIX
-// they are written out against open/opendir/futimens.
+// This was ten kernel32 imports and thirty-one CRT entries when the program
+// still had a switch parser, a wildcard walk, an .ini, five more image formats
+// and a temp-file rename.  With the command line down to `c`/`d` on two named
+// files, what the surviving bodies call is nine stdio entries, printf, vprintf,
+// exit, Intel's two error-reporting hooks, and VirtualAlloc/VirtualFree.  The
+// rest went with their callers; §6.5's reasoning still applies to what is left.
 //
-// What is deliberately *not* here on either host: winapi_shim32's Win32
-// emulation.  That is the right answer when you are running BMF's own code and
-// it expects Windows; it is the wrong one when the goal is a program that
-// stands on its own.  Ten functions against POSIX is less code than the shim's
-// handle table alone.
+// Two hosts.  On Windows all of this is native — the CRT entries are msvcrt's
+// under their `_`-prefixed names, and the two kernel32 imports are the real
+// ones, so that half of the file is two declarations and no code.  On POSIX
+// VirtualAlloc and VirtualFree are written out against mmap.
 
 #include <stdarg.h>
-#include <time.h>
-#ifdef _WIN32
-#include <conio.h>    // _getch
-#include <io.h>       // _access, _filelength, _fileno
-#include <string.h>   // _stricmp
-// Not <windows.h>: the head has already declared HANDLE, FILETIME,
-// WIN32_FIND_DATAA and the manifest constants the bodies name, with the layouts
-// the decompilation assumes, and it defines _WINDOWS_ to keep Hex-Rays' defs.h
-// from supplying *signed* BYTE/WORD/DWORD.  Including the real header on top of
-// that is a collision at best; the ten imports below are declared by hand
-// instead, with the signatures the .inc files were type-checked against.
-#else
-#include <dirent.h>
-#include <fcntl.h>
-#include <fnmatch.h>
-#include <limits.h>
+#ifndef _WIN32
 #include <sys/mman.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
 #endif
 
 // gcc checks a wrapper's format string only if told which dialect it is, and
@@ -954,31 +872,13 @@ static unsigned bmf_xgetbv0()
 #define __PE_DECL___fread
 #define __PE_DECL___fwrite
 #define __PE_DECL___fseek
-#define __PE_DECL___ftell
 #define __PE_DECL___feof
 #define __PE_DECL___ferror
 #define __PE_DECL___fgetc
-#define __PE_DECL___fgets
 #define __PE_DECL___fflush
-#define __PE_DECL___fputc
-#define __PE_DECL___putc
-#define __PE_DECL___fputs
-#define __PE_DECL___remove
-#define __PE_DECL___rename
 #define __PE_DECL___printf
-#define __PE_DECL___sprintf
-#define __PE_DECL___sscanf
-#define __PE_DECL___fprintf
-#define __PE_DECL___fscanf
 #define __PE_DECL___vprintf
 #define __PE_DECL___exit
-#define __PE_DECL___flsall
-#define __PE_DECL___tmpnam
-#define __PE_DECL____access
-#define __PE_DECL____filelength
-#define __PE_DECL____fileno
-#define __PE_DECL____getch
-#define __PE_DECL____strcmpi
 #define __PE_DECL___irc__get_msg
 #define __PE_DECL___irc__print
 
@@ -989,47 +889,11 @@ static inline unsigned __fread(void *b, unsigned s, unsigned n, FILE1 *f)
 static inline unsigned __fwrite(const void *b, unsigned s, unsigned n, FILE1 *f)
                                                            { return (unsigned)fwrite(b, s, n, f); }
 static inline int    __fseek(FILE1 *f, long o, int w)      { return fseek(f, o, w); }
-static inline long   __ftell(FILE1 *f)                     { return ftell(f); }
 static inline int    __feof(FILE1 *f)                      { return feof(f); }
 static inline int    __ferror(FILE1 *f)                    { return ferror(f); }
 static inline int    __fgetc(FILE1 *f)                     { return fgetc(f); }
-static inline char  *__fgets(char *s, int n, FILE1 *f)     { return fgets(s, n, f); }
 static inline int    __fflush(FILE1 *f)                    { return fflush(f); }
-static inline int    __fputc(int c, FILE1 *f)              { return fputc(c, f); }
-static inline int    __putc(int c, FILE1 *f)               { return fputc(c, f); }
-static inline int    __fputs(const char *s, FILE1 *f)      { return fputs(s, f); }
-static inline int    __remove(const char *p)               { return remove(p); }
-static inline int    __rename(const char *a, const char *b){ return rename(a, b); }
 static inline void   __exit(int c)                         { exit(c); }
-
-// _flsall(1) is MSVC's "flush every stream"; its argument is the commit flag,
-// which glibc has no equivalent of and which BMF never varies.
-static inline int __flsall(int) { return fflush(nullptr); }
-
-#ifdef _WIN32
-// All six are msvcrt's own, under the names it gives them.
-static inline int  ___access(const char *p, int m)  { return _access(p, m); }
-static inline int  ___fileno(FILE1 *f)              { return _fileno(f); }
-static inline int  ___strcmpi(const char *a, const char *b) { return _stricmp(a, b); }
-static inline long ___filelength(int fd)            { return _filelength(fd); }
-static inline int  ___getch()                       { return _getch(); }
-#else
-// MSVC's _access takes 0/2/4/6 for exist/write/read/both, which are F_OK/W_OK/
-// R_OK and their union — the same numbers POSIX uses.
-static inline int  ___access(const char *p, int m)  { return access(p, m); }
-static inline int  ___fileno(FILE1 *f)              { return fileno(f); }
-static inline int  ___strcmpi(const char *a, const char *b) { return strcasecmp(a, b); }
-
-static inline long ___filelength(int fd) {
-  struct stat st;
-  return fstat(fd, &st) == 0 ? (long)st.st_size : -1L;
-}
-
-// _getch reads one keystroke without waiting for Enter.  BMF uses it for the
-// "overwrite? (y/n)" prompt, where line buffering only means the user has to
-// press Return as well — not worth putting the terminal in raw mode for.
-static inline int ___getch() { return getchar(); }
-#endif
 
 // Not `#define printf ::printf`: the bodies say `printf(...)` and the .inc
 // says `#define printf __printf`, so the name that has to exist is __printf.
@@ -1041,34 +905,6 @@ static int __printf(const char *f, ...) {
   va_end(a);
   return r;
 }
-BMF_FMT(printf, 2, 3)
-static int __sprintf(char *s, const char *f, ...) {
-  va_list a; va_start(a, f);
-  int r = vsprintf(s, f, a);
-  va_end(a);
-  return r;
-}
-BMF_FMT(scanf, 2, 3)
-static int __sscanf(const char *s, const char *f, ...) {
-  va_list a; va_start(a, f);
-  int r = vsscanf(s, f, a);
-  va_end(a);
-  return r;
-}
-BMF_FMT(printf, 2, 3)
-static int __fprintf(FILE1 *s, const char *f, ...) {
-  va_list a; va_start(a, f);
-  int r = vfprintf(s, f, a);
-  va_end(a);
-  return r;
-}
-BMF_FMT(scanf, 2, 3)
-static int __fscanf(FILE1 *s, const char *f, ...) {
-  va_list a; va_start(a, f);
-  int r = vfscanf(s, f, a);
-  va_end(a);
-  return r;
-}
 
 // exit_402E40 calls this as `vprintf(fmt, &ArgList)`, where ArgList is its own
 // last named parameter — so the pointer is into the incoming argument block and
@@ -1076,20 +912,6 @@ static int __fscanf(FILE1 *s, const char *f, ...) {
 // (`typedef char *__builtin_va_list`), which is why the void* form works.
 static int __vprintf(const char *f, void *ap) {
   return vprintf(f, (va_list)ap);
-}
-
-// MSVC's tmpnam returns a name in the current directory and does not create
-// the file; the caller renames the real file onto it and back, so it has to
-// land on the same filesystem.  L_tmpnam-style "/tmp/..." would not.
-static char *__tmpnam(char *buf) {
-  static unsigned seq = 0;
-  static char own[64];
-  char *out = buf ? buf : own;
-  for (;;) {
-    sprintf(out, "bmf%05u.tmp", seq++ & 0xFFFFF);
-    if (___access(out, 0) != 0)   // 0 is "does it exist" on both hosts
-      return out;
-  }
 }
 
 // Intel's runtime error reporter, reached only from sub_4346D0's
@@ -1143,49 +965,23 @@ void __sub_402E30();
 
 // ---------------------------------------------------------------------------
 // kernel32
+//
+// Two entries left of the ten the IAT held.  The other eight were the file
+// handle, the timestamp and the wildcard walk, which the `c`/`d` command line
+// does not have: the images are opened by name through stdio, and nothing
+// copies a file's date onto its output any more.
 // ---------------------------------------------------------------------------
 #define __PE_DECL___VirtualAlloc
 #define __PE_DECL___VirtualFree
-#define __PE_DECL___CreateFileA
-#define __PE_DECL___CloseHandle
-#define __PE_DECL___SetFileTime
-#define __PE_DECL___SetFileAttributesA
-#define __PE_DECL___DosDateTimeToFileTime
-#define __PE_DECL___FileTimeToDosDateTime
-#define __PE_DECL___FindFirstFileA
-#define __PE_DECL___FindNextFileA
 #ifdef _WIN32
-// On Windows there is nothing to reimplement: these are the ten imports BMF's
-// IAT held, and the program is asking kernel32 for them again.  Declared by
-// hand rather than through <windows.h>, for the reason at the top of the file,
-// with the signatures extract.py's WINAPI_PROTO gave the call sites — every
-// pointer parameter relaxed to void*, which is ABI-identical and saves
-// dragging in the SDK's typedefs.  The head already has WIN32_FIND_DATAA at
-// the layout FindFirstFileA writes.
-//
-// FindClose is missing because BMF never calls it: it enumerates once per
-// command-line argument and lets the handle go.  That is the donor's
-// behaviour, not an omission here.
+// On Windows there is nothing to reimplement: these are two of the imports
+// BMF's IAT held, and the program is asking kernel32 for them again.  Declared
+// by hand rather than through <windows.h>, for the reason at the top of the
+// file, with the signatures extract.py's WINAPI_PROTO gave the call sites.
 #define BMF_WINAPI extern "C" __declspec(dllimport) __attribute__((stdcall))
 BMF_WINAPI void *VirtualAlloc(void *, unsigned int, unsigned int, unsigned int);
 BMF_WINAPI int   VirtualFree(void *, unsigned int, unsigned int);
-BMF_WINAPI void *CreateFileA(const char *, unsigned int, unsigned int, void *,
-                             unsigned int, unsigned int, void *);
-BMF_WINAPI int   CloseHandle(void *);
-BMF_WINAPI int   SetFileTime(void *, const void *, const void *, const void *);
-BMF_WINAPI int   SetFileAttributesA(const char *, unsigned int);
-BMF_WINAPI int   DosDateTimeToFileTime(unsigned short, unsigned short, void *);
-BMF_WINAPI int   FileTimeToDosDateTime(const void *, unsigned short *, unsigned short *);
-BMF_WINAPI void *FindFirstFileA(const char *, void *);
-BMF_WINAPI int   FindNextFileA(void *, void *);
 #else
-// 100ns ticks between 1601-01-01 and the Unix epoch.
-#define BMF_FILETIME_EPOCH 116444736000000000ULL
-
-static inline unsigned long long bmf_ft_to_u64(const FILETIME &ft) {
-  return ((unsigned long long)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
-}
-
 // VirtualAlloc's block is zero-filled and page-aligned, which malloc's is not,
 // and BMF asks for a megabyte at a time — so mmap, not calloc.  VirtualFree is
 // given only MEM_RELEASE (size 0), so the size has to be remembered; there are
@@ -1211,162 +1007,6 @@ int VirtualFree(void *p, unsigned int size, unsigned int type) {
   for (auto &s : bmf_vm)
     if (s.p == p) { munmap(s.p, s.n); s.p = nullptr; return 1; }
   return 0;
-}
-
-// A HANDLE is fd+1, so that fd 0 is not mistaken for NULL and no valid handle
-// collides with INVALID_HANDLE_VALUE.  Only CreateFileA/SetFileTime/
-// CloseHandle use file handles, and BMF holds one at a time.
-static __attribute__((stdcall))
-void *CreateFileA(const char *name, unsigned int access, unsigned int share,
-                  void *sa, unsigned int disp, unsigned int flags, void *tmpl) {
-  (void)share; (void)sa; (void)flags; (void)tmpl;
-  int oflags = (access & GENERIC_WRITE) ? ((access & GENERIC_READ) ? O_RDWR : O_WRONLY)
-                                        : O_RDONLY;
-  if (disp == CREATE_ALWAYS)
-    oflags |= O_CREAT | O_TRUNC;
-  int fd = open(name, oflags, 0666);
-  return fd < 0 ? INVALID_HANDLE_VALUE : (void *)(intptr_t)(fd + 1);
-}
-
-static __attribute__((stdcall)) int CloseHandle(void *h) {
-  intptr_t fd = (intptr_t)h - 1;
-  return (h == INVALID_HANDLE_VALUE || fd < 0) ? 0 : close((int)fd) == 0;
-}
-
-static __attribute__((stdcall))
-int SetFileTime(void *h, const void *ctime, const void *atime, const void *mtime) {
-  (void)ctime;
-  intptr_t fd = (intptr_t)h - 1;
-  if (h == INVALID_HANDLE_VALUE || fd < 0)
-    return 0;
-  struct timespec ts[2];
-  const FILETIME *in[2] = { (const FILETIME *)atime, (const FILETIME *)mtime };
-  for (int i = 0; i < 2; i++) {
-    if (!in[i]) { ts[i].tv_sec = 0; ts[i].tv_nsec = UTIME_OMIT; continue; }
-    unsigned long long v = bmf_ft_to_u64(*in[i]);
-    v = v < BMF_FILETIME_EPOCH ? 0 : v - BMF_FILETIME_EPOCH;
-    ts[i].tv_sec  = (time_t)(v / 10000000ULL);
-    ts[i].tv_nsec = (long)((v % 10000000ULL) * 100);
-  }
-  return futimens((int)fd, ts) == 0;
-}
-
-// The only attribute BMF sets is FILE_ATTRIBUTE_NORMAL, to clear the read-only
-// bit it set earlier — so this is a chmod of the write bits and nothing else.
-static __attribute__((stdcall))
-int SetFileAttributesA(const char *path, unsigned int attrs) {
-  struct stat st;
-  if (stat(path, &st) != 0)
-    return 0;
-  mode_t m = st.st_mode;
-  if (attrs & 0x01)   // FILE_ATTRIBUTE_READONLY
-    m &= ~(mode_t)(S_IWUSR | S_IWGRP | S_IWOTH);
-  else
-    m |= S_IWUSR;
-  return chmod(path, m) == 0;
-}
-
-// FAT date/time, which is what BMF stores in the archive header: date is
-// (year-1980)<<9 | month<<5 | day, time is hour<<11 | minute<<5 | second/2.
-// UTC on both sides, so the pair round-trips exactly.
-static __attribute__((stdcall))
-int FileTimeToDosDateTime(const void *pft, unsigned short *date, unsigned short *tm_) {
-  if (!pft || !date || !tm_)
-    return 0;
-  unsigned long long v = bmf_ft_to_u64(*(const FILETIME *)pft);
-  if (v < BMF_FILETIME_EPOCH) { *date = *tm_ = 0; return 0; }
-  time_t t = (time_t)((v - BMF_FILETIME_EPOCH) / 10000000ULL);
-  struct tm g;
-  gmtime_r(&t, &g);
-  if (g.tm_year < 80) { *date = *tm_ = 0; return 0; }
-  *date = (unsigned short)(((g.tm_year - 80) << 9) | ((g.tm_mon + 1) << 5) | g.tm_mday);
-  *tm_  = (unsigned short)((g.tm_hour << 11) | (g.tm_min << 5) | (g.tm_sec >> 1));
-  return 1;
-}
-
-static __attribute__((stdcall))
-int DosDateTimeToFileTime(unsigned short date, unsigned short tm_, void *pft) {
-  if (!pft)
-    return 0;
-  struct tm g;
-  memset(&g, 0, sizeof g);
-  g.tm_year = ((date >> 9) & 0x7F) + 80;
-  g.tm_mon  = ((date >> 5) & 0x0F) - 1;
-  g.tm_mday = date & 0x1F;
-  g.tm_hour = (tm_ >> 11) & 0x1F;
-  g.tm_min  = (tm_ >> 5) & 0x3F;
-  g.tm_sec  = (tm_ & 0x1F) << 1;
-  unsigned long long v = (unsigned long long)timegm(&g) * 10000000ULL + BMF_FILETIME_EPOCH;
-  ((FILETIME *)pft)->dwLowDateTime  = (DWORD)v;
-  ((FILETIME *)pft)->dwHighDateTime = (DWORD)(v >> 32);
-  return 1;
-}
-
-// FindFirstFileA/FindNextFileA over opendir + fnmatch.  main uses them for one
-// enumeration at a time and never calls FindClose, so the context is a single
-// static: closing it on exhaustion is what stops the descriptor leaking.
-static struct BmfFind {
-  DIR *dir;
-  char dirpath[PATH_MAX];
-  char glob[NAME_MAX + 1];
-} bmf_find;
-
-static void bmf_fill_find(WIN32_FIND_DATAA *fd, const char *dirpath, const char *name) {
-  memset(fd, 0, sizeof *fd);
-  char full[PATH_MAX];
-  snprintf(full, sizeof full, "%s/%s", dirpath, name);
-  struct stat st;
-  if (stat(full, &st) != 0)
-    return;
-  fd->dwFileAttributes = S_ISDIR(st.st_mode) ? 0x10 /* DIRECTORY */
-                                             : 0x20 /* ARCHIVE   */;
-  unsigned long long v = (unsigned long long)st.st_mtime * 10000000ULL + BMF_FILETIME_EPOCH;
-  fd->ftLastWriteTime.dwLowDateTime  = (DWORD)v;
-  fd->ftLastWriteTime.dwHighDateTime = (DWORD)(v >> 32);
-  fd->ftCreationTime = fd->ftLastAccessTime = fd->ftLastWriteTime;
-  fd->nFileSizeLow  = (DWORD)((unsigned long long)st.st_size & 0xFFFFFFFFu);
-  fd->nFileSizeHigh = (DWORD)((unsigned long long)st.st_size >> 32);
-  snprintf(fd->cFileName, sizeof fd->cFileName, "%s", name);
-}
-
-static __attribute__((stdcall)) int FindNextFileA(void *h, void *pfd) {
-  BmfFind *c = (BmfFind *)h;
-  if (!c || !c->dir)
-    return 0;
-  for (struct dirent *e; (e = readdir(c->dir)) != nullptr; ) {
-    if (e->d_name[0] == '.' && (!e->d_name[1] || (e->d_name[1] == '.' && !e->d_name[2])))
-      continue;
-    if (fnmatch(c->glob, e->d_name, FNM_NOESCAPE) != 0)
-      continue;
-    bmf_fill_find((WIN32_FIND_DATAA *)pfd, c->dirpath, e->d_name);
-    return 1;
-  }
-  closedir(c->dir);
-  c->dir = nullptr;
-  return 0;
-}
-
-static __attribute__((stdcall)) void *FindFirstFileA(const char *pattern, void *pfd) {
-  BmfFind *c = &bmf_find;
-  if (c->dir)
-    closedir(c->dir);
-  char tmp[PATH_MAX];
-  snprintf(tmp, sizeof tmp, "%s", pattern);
-  char *slash = strrchr(tmp, '/');
-  if (slash) {
-    *slash = '\0';
-    snprintf(c->dirpath, sizeof c->dirpath, "%s", tmp[0] ? tmp : "/");
-    snprintf(c->glob, sizeof c->glob, "%s", slash + 1);
-  } else {
-    snprintf(c->dirpath, sizeof c->dirpath, ".");
-    snprintf(c->glob, sizeof c->glob, "%s", tmp);
-  }
-  c->dir = opendir(c->dirpath);
-  if (!c->dir)
-    return INVALID_HANDLE_VALUE;
-  if (!FindNextFileA(c, pfd))
-    return INVALID_HANDLE_VALUE;
-  return c;
 }
 #endif   // !_WIN32
 
