@@ -24860,7 +24860,13 @@ BMF_SSE int32_t __sub_402EF0(uint32_t *v2, char *FileName, int32_t a2)
   const char *a_b;
   int32_t v5, v8, v9;
   v5 = (int32_t)v2;
-  a_b = "a+b";
+  // The original opened the output "a+b" so that it could append images to an
+  // existing archive; this command line writes one image per run, so all that
+  // bought was compressing twice to the same name growing the file instead of
+  // replacing it.  "w+b" creates it empty instead.  Not "wb": the pass below
+  // reads the stream back, and it is not only walking images already in the
+  // file -- it also sets up state the writer goes on to use.
+  a_b = "w+b";
   if ( a2 )
     a_b = "rb";
   *v2 = 0;
