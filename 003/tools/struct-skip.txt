@@ -66,3 +66,7 @@ __sub_419800:v61
 __sub_419800:v69
 __sub_421930:v29
 __sub_421930:v37
+__sub_421930:v66
+__sub_421930:v74
+__read_bmp:Src __read_bmp:Src_1 __read_bmp:Src_2 __read_bmp:Src_3 __read_bmp:Src_4 __read_bmp:Src_5 __read_bmp:Src_6
+__model_plane:a4 __model_plane:a5 __reduce_alphabet:a3 __reduce_alphabet:v10 __reduce_alphabet:v33 __reduce_alphabet:v4 __reduce_alphabet:v60 __reduce_alphabet:v91 __reduce_alphabet:v96 __sub_407B30:Srca_1 __sub_407B30:Srca_3 __sub_421930:a2 __sub_421930:v166
