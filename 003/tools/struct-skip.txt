@@ -40,3 +40,8 @@ __code_pixel:this_3 __sub_416860:_this __sub_418650:this_3
 __sub_417E80:_
 __sub_419800:v11
 __model_plane:_
+__sub_422DB0:v21
+__sub_422DB0:v25
+__sub_422DB0:v28
+__sub_422DB0:v32
+__sub_422DB0:v54

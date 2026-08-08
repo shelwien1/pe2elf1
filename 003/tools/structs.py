@@ -39,7 +39,7 @@ WIDTH = {'char': 1, 'uint8_t': 1, 'int8_t': 1, 'uint16_t': 2, 'int16_t': 2,
 
 
 def width(ty):
-    ty = ty.strip()
+    ty = re.sub(r'^\s*const\s+', '', ty.strip()).strip()
     return 4 if ty.endswith('*') else WIDTH.get(ty)
 
 
@@ -662,8 +662,13 @@ def main():
         best = max(tys, key=lambda t: (width(t) or 0, tys[t]))
         w = width(best)
         if w is None:
-            print('%s: cannot size %s at +%d' % (tag, best, off))
-            return
+            # returning quietly here left the sweep applying nothing, gating an
+            # unchanged file, calling it a pass, and picking the same object
+            # again on the next round.  Decline it properly.
+            with open(SKIP, 'a') as f:
+                f.write(signature(uf, key) + '\n')
+            print('%s: declined -- cannot size %s at +%d' % (tag, best, off))
+            sys.exit(3)
         if off < at:
             member[off] = None          # inside an earlier member
             continue
