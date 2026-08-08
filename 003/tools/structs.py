@@ -770,7 +770,12 @@ def main():
                               '%s->%s' % (nm, mem), text)
             # whatever arithmetic is left keeps the type it was written for --
             # `(char *)` is only right for a name that already stepped by bytes
-            cast = '(char *)' if k == 1 else '(%s)' % ty.replace('*', ' *')
+            # a name declared as an integer was doing integer arithmetic, and
+            # some of it is masked -- `(v56 + 278543) & 0xFFFFFFF0` aligns an
+            # address.  `&` has no meaning on a pointer, so an integer stays an
+            # integer; a pointer keeps the type it stepped by.
+            cast = ('(uintptr_t)' if not ty.endswith('*')
+                    else '(char *)' if k == 1 else '(%s)' % ty.replace('*', ' *'))
             text = re.sub(r'(?<![\)>\w.&])%s\b'
                           r'(?=\s*(?:\+(?!\+)|-(?![->])))' % re.escape(nm),
                           cast + nm, text)
