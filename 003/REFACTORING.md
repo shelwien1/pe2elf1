@@ -15,12 +15,13 @@ so they can be re-measured rather than trusted.
 
 | | |
 | --- | --- |
-| `subs1.hpp` | 25 460 lines, 216 bodies (102 real, 114 one-line `__fwd_*` shims) |
+| `subs1.hpp` | 25 462 lines, 216 bodies (102 real, 114 one-line `__fwd_*` shims) |
 | largest bodies | 1861, 1576, 984, 933, 801 lines; 37 over 200 |
 | globals | 293, all references pinned to `blob.inc` |
 | — named only by their address | 237 (`__dword_443384`, `__byte_44339E`, …) |
 | — carrying a name IDA guessed | 55 (`__Buffer`, `__n256_2`, …), several of them wrong |
-| pointer casts | 7242 |
+| — neither | 1 (`__bmf_half_half`, added by hand) |
+| pointer casts | 7336 |
 | `LOBYTE`/`HIWORD`/`BYTE1`… | 298 |
 | `goto` / `LABEL_n:` | 174 / 127 |
 | `__hexrays_frame` buffers | 34, with 935 aliases bound into them |
@@ -43,28 +44,45 @@ the property that matters.
 
 ```
 ./build.sh && ./test.sh ./bmf          # 10 images, encode + decode + compare
-                                       # plus: md5 of every .bmf must not move
 ```
 
-**The hole:** that gate exercises **64.5 % of `subs1.hpp`**. 22 bodies — 7198
-lines, **28 % of the file** — never run at all. The reason is structural, not
-accidental:
+**Half of that gate is not automated yet.** `test.sh` proves the round-trip; it
+compares the stream only when a reference file `testfiles/ref_<name>.bmf` is
+present, and **none is committed**. Every "digests unmoved" claim in this
+repository's history was checked by a throwaway script instead. Committing the
+ten reference streams is the smallest, highest-value task in the whole plan and
+is the first item of Phase 0.
+
+**The other hole:** the gate exercises **64.5 % of `subs1.hpp`**. 22 bodies —
+7198 lines, **28 % of the file** — never run at all. The reason is structural,
+not accidental:
 
 ```c
-__dword_441090 = 1;               // -S, slow but efficient   (subs1.hpp)
-...
-__dword_443384 = __dword_441090;
-if ( __dword_443384 ) { /* -S back end */ } else { __sub_408510(...); }
+__dword_441090 = 1;               // -S, slow but efficient        in __main
+__dword_443384 = __dword_441090;  //                               in sub_402FE0
+if ( __dword_443384 )             //                               in sub_407B30
+  __fwd_sub_407B30_sub_415380(a4, a5, p_i, Srca_1, Srca_1);        // -S
+else
+  __sub_408510((int32_t)Srca_1, *((uint32_t *)p_i + 3), p_i[2]);   // fast
 ```
 
-The command line pins `-S`, so `__dword_443384` is always 1, so the **fast back
-end is dynamically dead**: `sub_408510` (1576 lines) and its callees
-`sub_40CF80`, `sub_40BEE0`, `sub_40E860`, `sub_40FAC0`, `sub_40DEB0`,
-`sub_40B330`, `sub_40A8A0`, `sub_40AF40`, `sub_40F450`, `sub_40CC50`,
-`sub_40E590`, `sub_40BBC0` — 6415 lines — are compiled, reachable from `main`,
-and never executed. The near-lossless family (`sub_4111B0`, `sub_410AC0`) adds
-783 more, because `-E` defaults to 0. 27 of the 114 `__fwd_*` shims exist only
-to call into this dead set.
+The command line pins `-S`, so `__dword_443384` is always 1, so the fast back
+end is **dynamically** dead — compiled, reachable from `main` by the call graph,
+never executed. Where the 7198 lines go:
+
+| lines | bodies | why dark |
+| --- | --- | --- |
+| 3367 | `sub_408510` and the 8 it reaches | fast-mode **encoder** back end; the `else` branch above |
+| 768 | `sub_40CF80` | fast-mode **decoder** back end, called from `expand_image` — dark because this CLI cannot produce a fast-mode stream to feed it |
+| 653 | `sub_4111B0`, `sub_410AC0` | near-lossless encoder; `-E` defaults to 0 |
+| 2410 | `sub_40DEB0`, `sub_40E860`, `sub_40E590`, `sub_40F450`, `sub_40FAC0`, `sub_40E4D0`, `sub_410310`, `sub_427740`, and two error stubs | each dark for its own reason, and **which reason is not established** |
+
+26 of the 114 `__fwd_*` shims exist only to call into this set.
+
+That last row is the uncomfortable one: 2410 lines are unreached and nobody has
+worked out what would reach them. Establishing that is part of Phase 0, not
+Phase 7 — you cannot choose between restoring and deleting code whose entry
+condition you do not know.
 
 Refactoring inside that 28 % is unverifiable. **Phase 0 exists to close this
 before anything else starts.**
@@ -137,7 +155,7 @@ and this table does not pretend otherwise:
 
 | pointer | offset range | distinct | refs | touched by | what is known |
 | --- | --- | --- | --- | --- | --- |
-| `_this` | `0x64`–`0x5C75AC` | 75 | 205 | `sub_40A8A0`, `sub_40E590`, `sub_416860`, `sub_416C90`, … | the model block: a `0x44000`–`0x44144` header (52 fields, 405 refs across all pointers) then tables out to 6.7 MB. Allocated by `sub_414F60` / `sub_4149C0` |
+| `_this` | `0x64`–`0x5C75AC` | 75 | 205 | `sub_416860`, `sub_416C90`, `sub_419430`, `sub_4229E0`, … | the model block: a `0x44000`–`0x44144` header (52 fields, 405 refs across all pointers) then tables out to 6.7 MB. Allocated by `sub_414F60` / `sub_4149C0` |
 | `lpAddress` | `0x11021`–`0x447B0` | 33 | 104 | `sub_419610`, `sub_422DB0` | an alternate-model working set — **role not established** |
 | `n5_2` | `0x5D8`–`0xEEA` | 7 | 97 | `sub_424D90`, `sub_4259F0` | a ~3.8 KB record in the alternate model family — **role not established** |
 | `a1` | `0xC20`–`0x65E7B0` | 32 | 96 | `sub_417980`, `sub_41CAB0` | reaches the same 6.7 MB extent as `_this`, so almost certainly the model block under another name — confirm before merging |
@@ -145,20 +163,28 @@ and this table does not pretend otherwise:
 | `n0x10_2` | `0x3960C`–`0xE5836` | 14 | 46 | `sub_41CAB0` | inside the model block's tables |
 | — | `0x44339C`, 16 B stride | — | ~90 | many | the per-plane descriptors, reached through the four false bases in §4.1 |
 
-Two things this table says that matter for sequencing. First, **the model block
-is reached under at least four different pointer names** (`_this`, `a1`, `v56`,
-`n0x10_2`) in functions that never see each other's signatures — so its struct
-has to be declared once and applied everywhere at once, not discovered
-per-function. Second, the two families whose role is unknown
-(`lpAddress`, `n5_2`) sit inside the alternate model code `ALGORITHM.md` §9
-flags as unread; **structure recovery there is blocked on reading it**, which is
-why Phase 4 orders them last.
+Three things this table says that matter for sequencing.
+
+**The model block is reached under at least four different pointer names**
+(`_this`, `a1`, `v56`, `n0x10_2`), 398 references across 12 functions that never
+see each other's signatures. Its struct has to be declared once and applied
+everywhere at once, not discovered per-function.
+
+**The two families whose role is unknown** (`lpAddress`, `n5_2`) sit inside the
+alternate model code `ALGORITHM.md` §9 flags as unread, so structure recovery
+there is blocked on reading it — which is why Phase 4 orders them last.
+
+**The gate covers this work better than §2 might suggest.** Only 5 of the model
+block's 398 references (in `sub_40A8A0` and `sub_40E590`) fall in the dark 28 %.
+Phase 4's largest object is almost entirely inside covered code; it is Phase 3,
+which touches every global whether covered or not, that carries the real
+exposure to the coverage gap.
 
 ---
 
 ## 5. Order of work
 
-Each phase ends green: build, 10 images round-trip, stream digests unmoved.
+Each phase ends green: build, 10 images round-trip, streams unmoved.
 Nothing moves to the next phase with the gate red.
 
 ```
@@ -177,21 +203,28 @@ Nothing moves to the next phase with the gate red.
 **Why first.** A third of the file cannot currently be refactored safely, and
 you will not notice which third while you are in it.
 
-1. Add a `BMF_MODE` escape to the CLI (env var or a hidden argument) that lets
+1. **Commit the reference streams.** `test.sh` already compares against
+   `testfiles/ref_<name>.bmf` when the file exists; generate all ten and commit
+   them. Until this is done the gate is only half a gate, and every later phase
+   is relying on a script somebody has to remember to run.
+2. Add a `BMF_MODE` escape to the CLI (env var or a hidden argument) that lets
    the test harness set `-S`/`-F`/`-E`/`-Q` again, without changing the
-   documented `bmf c` / `bmf d` behaviour. The pins in `subs1.hpp` become
-   defaults rather than constants.
-2. Extend `test.sh` to a mode matrix: `{-S, fast} × {-E 0, -E 2} × {-Q 1, -Q 9}`
-   over the same 10 images. Record a digest per cell. Expect crashes in some
-   cells — the pristine decompilation segfaults outside `-S`; a *reproducible*
-   crash is still a usable gate, and fixing those crashes is worth doing early
-   because it is the same pointer bug the x64 build hits.
-3. Add images that exercise what these 10 files do not: 16-bit, palette, 1×N and N×1,
-   an image whose width forces every BMP row-padding case.
-4. Re-measure coverage. **Target ≥ 90 % before Phase 3 begins.**
+   documented `bmf c` / `bmf d` behaviour. The two pins in `main`
+   (`__dword_441090 = 1`, `__n7_0 = 9`) become defaults rather than constants.
+3. Extend `test.sh` to a mode matrix: `{-S, fast} × {-E 0, -E 2} × {-Q 1, -Q 9}`
+   over the same 10 images, with a reference stream per cell. Expect crashes in
+   some cells — the pristine decompilation segfaults outside `-S`. A
+   *reproducible* crash is still a usable gate, and fixing those crashes is
+   worth doing early: it is very likely the same pointer bug the x64 build hits.
+4. **Find the entry condition for the 2410 unexplained lines** (§2). Some will
+   turn out reachable once the mode matrix exists; the rest need an answer
+   before Phase 7 can make a decision rather than a guess.
+5. Add images that exercise what these ten do not: 16-bit, palette, 1×N and
+   N×1, and a width that forces every BMP row-padding case.
+6. Re-measure coverage. **Target ≥ 90 % before Phase 3 begins.**
 
-**Gate:** coverage number, plus the existing digest set unchanged.
-**Size:** small — a day, mostly in `test.sh`.
+**Gate:** the coverage number, plus every existing reference stream unchanged.
+**Size:** small — items 1 and 5 are an afternoon; item 4 is open-ended reading.
 **Risk:** low. Nothing in `subs1.hpp` changes except un-pinning two constants.
 
 ### Phase 1 — Names you already know
@@ -200,8 +233,8 @@ you will not notice which third while you are in it.
 Do not defer naming until "after the structure work" — the structure work is
 what naming makes possible.
 
-`ALGORITHM.md` §8 and §10 already establish ~25 globals and ~20 functions.
-Apply exactly those, nothing speculative:
+`ALGORITHM.md` §8 names 23 globals and §10 names 18 functions. Apply exactly
+those, nothing speculative — the table below is a sample, not the whole list:
 
 ```
 __Buffer_0      -> out_cursor            sub_402FE0 -> compress_image
@@ -219,13 +252,14 @@ Note what several of the IDA names are: `__n8`, `__n256`, `__n2` are the *value
 last assigned* to the variable, not its meaning. `__Buffer` is not a buffer
 (§4.1). Treat every inherited name as a guess.
 
-**Tooling:** a scope-aware `rename.py`. 117 locals across 44 functions shadow a
-global name and reach it through `::`; a textual rename corrupts those.
-`collect_globals.py` already contains the shadow detection to reuse.
+**Tooling:** a scope-aware `rename.py`. 25 functions declare a local that
+shadows one of 28 globals and reach the global through `::`; a textual rename
+gets those wrong in both directions. `collect_globals.py` already contains the
+shadow detection to reuse.
 
-**Gate:** digests unmoved. A rename that changes a digest is a rename that hit
+**Gate:** streams unmoved. A rename that changes a stream is a rename that hit
 something it should not have.
-**Size:** ~45 identifiers, one commit each or one commit per group.
+**Size:** 41 identifiers, one commit per group.
 **Risk:** very low, and entirely caught by the gate.
 
 ### Phase 2 — Frames → real locals
@@ -236,18 +270,25 @@ between you and every body you are about to read. It is also the cheapest place
 to build confidence in the gate.
 
 ```c
-alignas(16) uint8_t __hexrays_frame[26712];
-int32_t &v85 = *(int32_t *)(__hexrays_frame + 24608);
-uint8_t * &v98 = *(uint8_t * *)(__hexrays_frame + 26668);
+alignas(16) uint8_t __hexrays_frame[26712];              // sub_407460
+char     (&buf)[4096] = *(char (*)[4096])(__hexrays_frame + 0);
+int32_t  (&v72)[1024] = *(int32_t (*)[1024])(__hexrays_frame + 4096);
+int32_t  (&v73)[1024] = *(int32_t (*)[1024])(__hexrays_frame + 8192);
+int32_t  (&v74)[1024] = *(int32_t (*)[1024])(__hexrays_frame + 12288);
+...
+int32_t  &v83         = *(int32_t *)(__hexrays_frame + 24600);
 ```
 
 Each buffer is one function's reconstructed stack frame; each alias is a real
 local. Replace the alias with a declaration and delete the buffer.
 
 **The one hazard, and it is real:** the aliases are the *only* thing keeping
-those locals adjacent. If a body writes past the end of one alias into the next
-— and this code does index past array bounds in places — splitting them changes
-behaviour. That is exactly what the gate catches, per function.
+those locals adjacent, and the example above shows exactly why that matters —
+`buf[4096]` is followed immediately by `v72[1024]`, so a body that walks one
+element past `buf` reads `v72[0]` today and reads a compiler's choice of
+padding after the split. This code does index past array bounds in places. That
+is what the gate catches, per function, and why this phase is done one function
+at a time rather than in a sweep.
 
 **Method:** one function at a time, build + gate after each, exactly as
 `compact_locals.py` was applied. Where a frame cannot be split, leave it and
@@ -279,7 +320,9 @@ static PlaneDesc planes[MAX_PLANES];
    `planes[]`, and the 58 overlaps are where to start looking.
 3. **Initialisers.** `blob.inc` holds `.rdata` and `.data`; a global that starts
    non-zero needs its bytes lifted out of the array into a real initialiser.
-   Emit them from `mkdata.py`, do not hand-copy.
+   Generate them — `blob.inc`'s header credits a `mkdata.py`, but **that script
+   is not in this repository**, so either recover it or write the emitter as a
+   `tools/` script that reads `blob.inc` itself. Do not hand-copy 343 KB.
 4. **The 39 relocations.** `blob1_relocs[]` lists slots holding absolute
    pointers into the blob. Once objects are real, these become `&object` —
    ordinary initialised pointers, no `bmf_blob_relocate()`, and no 4-byte
@@ -292,7 +335,7 @@ original image. De-blobbing ends that permanently. If the hybrid build is still
 wanted as a cross-check, take the measurements it can give *before* this phase
 — afterwards it is not recoverable without reverting.
 
-**Gate:** digests unmoved — and this is the phase where that is most valuable,
+**Gate:** streams unmoved — and this is the phase where that is most valuable,
 because the failure mode is silent corruption of adjacent state rather than a
 crash.
 **Size:** large. The tooling (extent analysis, emitter) is most of it; the
@@ -335,16 +378,17 @@ g++ -m64 ... -c bmf.cpp 2>&1 | grep -c 'cast to pointer from integer'
 the `-m64` build should be tried on every gate image — expect it to work, and
 expect the first attempt not to.
 
-**Gate:** the `-m32` digests must stay unmoved throughout — the 32-bit build is
+**Gate:** the `-m32` streams must stay unmoved throughout — the 32-bit build is
 the reference until the 64-bit one round-trips, and only then does `-m64` join
 the matrix.
-**Size:** the largest phase. The model block alone is ~650 references.
+**Size:** the largest phase. The model block alone is ~400 references through
+four pointer names, on top of the 405 that reach its header.
 **Risk:** high, but the compiler is a strong assistant here: every site you miss
 is a warning.
 
 ### Phase 5 — Casts and the Hex-Rays vocabulary
 
-Most of the 7242 casts are consequences of Phases 3 and 4 and will already be
+Most of the 7336 casts are consequences of Phases 3 and 4 and will already be
 gone; this phase is what is left.
 
 - `LOBYTE(x) = v` → a named `uint8_t` field or a shift/mask with a comment.
@@ -412,42 +456,65 @@ What is not acceptable is refactoring it blind and claiming it works.
 
 | phase | changes | gate risk | blocked by |
 | --- | --- | --- | --- |
-| 0 widen the gate | `test.sh`, 2 pins | low | — |
-| 1 known names | ~45 identifiers | very low | — |
-| 2 frames | 34 functions, 935 aliases | medium | 0 |
-| 3 de-blob | 293 → fewer objects | **high** | 0, 2 |
+| 0a reference streams | 10 files in `testfiles/` | none | — |
+| 0b mode matrix, images, coverage | `test.sh`, 2 pins | low | 0a |
+| 1 known names | 41 identifiers | very low | 0a |
+| 2 frames | 34 functions, 935 aliases | medium | 0a |
+| 3 de-blob | 293 → fewer objects | **high** | 0b, 2 |
 | 4 objects + pointers | 3965 lines, 114 shims | **high** | 3 |
-| 5 casts | ~7000 → few hundred | low | 4 |
+| 5 casts | 7336 → a few hundred | low | 4 |
 | 6 control flow | 174 gotos | medium | 4 |
-| 7 dark 28 % | 7198 lines, 22 bodies | — | 0 |
+| 7 dark 28 % | 7198 lines, 22 bodies | — | 0b |
 
-Phases 1 and 2 can run in parallel with 0. Nothing else can be reordered: 3
-needs the coverage, 4 needs real objects to point at, 5 and 6 need the types.
+Splitting Phase 0 in two is what makes the schedule work. **0a — committing the
+reference streams — blocks everything**, and it is an afternoon. **0b** is the
+open-ended part (the mode matrix, the unexplained 2410 lines, new images), and
+only Phases 3 and 7 have to wait for it: 1 and 2 touch only code the current
+corpus already covers, so they can run alongside.
+
+Nothing else can be reordered: 3 needs the coverage, 4 needs real objects to
+point at, 5 and 6 need the types.
 
 ---
 
 ## Appendix A — how the numbers were measured
 
 ```sh
-# bodies, sizes, globals, casts, gotos, frames
-wc -l subs1.hpp
-grep -c 'blob1 + 0x' subs1.hpp                       # 293 globals
-grep -c 'static inline .*__fwd_' subs1.hpp           # 114 shims
-grep -oE '\((const )?[A-Za-z_][A-Za-z0-9_]* *\*+\)' subs1.hpp | wc -l
-grep -c 'goto ' subs1.hpp ; grep -c '__hexrays_frame + ' subs1.hpp
+# sizes and vocabulary
+wc -l subs1.hpp                                       # 25462
+grep -o 'blob1 + 0x' subs1.hpp | wc -l                # 293 globals
+grep -c 'static inline .*__fwd_' subs1.hpp            # 114 shims
+grep -oE '\((const )?[A-Za-z_][A-Za-z0-9_]* *\*+\)' subs1.hpp | wc -l   # 7336
+grep -c 'goto ' subs1.hpp                             # 174
+grep -c '__hexrays_frame + ' subs1.hpp                # 935
 
 # x86-64 work list
 g++ -m64 -march=x86-64 -msse2 -std=c++17 -fno-strict-aliasing -fpermissive \
     -fno-rtti -fno-exceptions -O0 -DNDEBUG -c bmf.cpp -o /dev/null 2>x64.log
-grep -c 'cast to pointer from integer' x64.log       # 4371
+grep -c 'cast to pointer from integer' x64.log        # 4371
 grep -E 'warning: (cast|invalid conversion)' x64.log | \
-    grep -oE '^[^:]+:[0-9]+' | sort -u | wc -l       # 3965 lines
+    grep -oE '^[^:]+:[0-9]+' | sort -u | wc -l        # 3965 lines
 
 # coverage
-g++ -m32 ... -O0 --coverage bmf.cpp -o bmfcov
-for f in testfiles/*.bmp; do ./bmfcov c $f o.bmf; ./bmfcov d o.bmf o.bmp; done
-gcov -f -n -o . bmfcov-bmf.gcno                      # 64.51 % of 18711 lines
+g++ -m32 -march=k8 -msse2 -mfpmath=sse -std=c++17 -fno-strict-aliasing \
+    -fpermissive -fno-rtti -fno-exceptions -O0 -DNDEBUG -U_FORTIFY_SOURCE \
+    -D_FORTIFY_SOURCE=0 --coverage bmf.cpp -o bmfcov
+for f in testfiles/*.bmp; do
+  rm -f o.bmf o.bmp                       # bmf opens its output "w+b"
+  ./bmfcov c "$f" o.bmf && ./bmfcov d o.bmf o.bmp
+done
+gcov -n    -o . bmfcov-bmf.gcno                       # 64.51 % of 18711 lines
+gcov -f -n -o . bmfcov-bmf.gcno                       # per function
 ```
 
-Overlap and offset-family analysis: `tools/` has no script for these yet;
-writing them is the first task of Phase 3 and Phase 4 respectively.
+Body sizes, global extents and overlaps, and the `base + constant` families in
+§4.2 were all measured with throwaway brace-matching scripts, not with anything
+in `tools/`. Turning the last two into real scripts is the first task of
+Phase 3 and Phase 4 respectively; they are also what would keep the numbers in
+this document honest as the work proceeds.
+
+One caveat on the coverage figure: `gcov` counts *instrumented* lines
+(18 711 of the file's 25 462) and counts inlined copies separately, so its
+per-function percentages do not sum the way source lines do. The 7198-line and
+28 % figures in §2 are source lines, measured separately by matching braces
+over the zero-coverage function list.
