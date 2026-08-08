@@ -30,3 +30,9 @@ __write_bmp:Bufferc __write_bmp:Bufferc_1 __write_bmp:Bufferc_2 __write_bmp:Buff
 __sub_422DB0:_
 __sub_4248D0:a2 __sub_424D90:Block __sub_424D90:v50
 __code_pixel:n2 __code_pixel:n2_1 __code_pixel:n2_10 __code_pixel:n2_15 __code_pixel:n2_16 __code_pixel:n2_3 __code_pixel:n2_5 __code_pixel:n2_7 __code_pixel:n2_9
+__sub_41CAB0:_
+__sub_4118A0:a2 __sub_4118A0:v10 __sub_4118A0:v14
+__search_filter:packer_word
+__sub_412490:a2
+__sub_412850:a2
+__sub_41A130:v11 __sub_41A130:v246 __sub_41A130:v6

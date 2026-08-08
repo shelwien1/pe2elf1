@@ -4843,6 +4843,100 @@ static_assert(sizeof(void *) != 4 || sizeof(Obj37) == 16,
               "Obj37: the layout moved");
 
 
+// Obj38 -- recovered from 12 dereferences over 2 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj38 {
+  uint8_t f0;
+  uint8_t _pad1[1];
+  int16_t f2;
+};
+static_assert(sizeof(void *) != 4 || sizeof(Obj38) == 4,
+              "Obj38: the layout moved");
+
+
+// Obj39 -- recovered from 12 dereferences over 2 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj39 {
+  uint8_t f0;
+  uint8_t _pad1[1];
+  int16_t f2;
+};
+static_assert(sizeof(void *) != 4 || sizeof(Obj39) == 4,
+              "Obj39: the layout moved");
+
+
+// Obj40 -- recovered from 12 dereferences over 2 offsets, under 3
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj40 {
+  uint8_t f0;
+  uint8_t _pad1[1];
+  int16_t f2;
+};
+static_assert(sizeof(void *) != 4 || sizeof(Obj40) == 4,
+              "Obj40: the layout moved");
+
+
+// Obj41 -- recovered from 12 dereferences over 2 offsets, under 3
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj41 {
+  uint8_t f0;
+  uint8_t _pad1[1];
+  int16_t f2;
+};
+static_assert(sizeof(void *) != 4 || sizeof(Obj41) == 4,
+              "Obj41: the layout moved");
+
+
+// Obj42 -- recovered from 12 dereferences over 2 offsets, under 4
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj42 {
+  uint8_t f0;
+  uint8_t _pad1[1];
+  int16_t f2;
+};
+static_assert(sizeof(void *) != 4 || sizeof(Obj42) == 4,
+              "Obj42: the layout moved");
+
+
+// Obj43 -- recovered from 12 dereferences over 12 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj43 {
+  uint8_t _pad0[940064];
+  uint16_t f940064;
+  uint16_t f940066;
+  uint16_t f940068;
+  uint16_t f940070;
+  uint16_t f940072;
+  uint16_t f940074;
+  uint16_t f940076;
+  uint16_t f940078;
+  uint16_t f940080;
+  uint16_t f940082;
+  uint16_t f940084;
+  uint16_t f940086;
+};
+static_assert(sizeof(void *) != 4 || sizeof(Obj43) == 940088,
+              "Obj43: the layout moved");
+
+
 struct RangeCoder {
   static const uint32_t kTop    = 0x00800000;   // renormalise at or below this
   static const uint32_t kPend   = 0x7F800000;   // low here still has a live carry
@@ -16521,10 +16615,10 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
   int32_t &v510 = __frame.v510;
   int32_t &v511 = __frame.v511;
   Obj17 *&v512 = (Obj17 *&)__frame.v512;
-  int32_t &v513 = __frame.v513;
+  Obj42 *&v513 = (Obj42 *&)__frame.v513;
   int32_t &v514 = __frame.v514;
   const char *&v515 = __frame.v515;
-  uint32_t &v516 = __frame.v516;
+  Obj41 *&v516 = (Obj41 *&)__frame.v516;
   const char *&v517 = __frame.v517;
   const char *&v518 = __frame.v518;
   const char *&v519 = __frame.v519;
@@ -16533,7 +16627,7 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
   const char *&v522 = __frame.v522;
   const char *&v523 = __frame.v523;
   const char *&v524 = __frame.v524;
-  int32_t &v525 = __frame.v525;
+  Obj40 *&v525 = (Obj40 *&)__frame.v525;
   const char *&v526 = __frame.v526;
   const char *&v527 = __frame.v527;
   const char *&v528 = __frame.v528;
@@ -16546,10 +16640,10 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
   const char *&v535 = __frame.v535;
   Obj16 *&v536 = (Obj16 *&)__frame.v536;
   const char *&v537 = __frame.v537;
-  int32_t &v538 = __frame.v538;
+  Obj39 *&v538 = (Obj39 *&)__frame.v538;
   Obj15 *&v539 = (Obj15 *&)__frame.v539;
   const char *&v540 = __frame.v540;
-  int32_t &v541 = __frame.v541;
+  Obj38 *&v541 = (Obj38 *&)__frame.v541;
   Obj23 *&v542 = (Obj23 *&)__frame.v542;
   const char *&v543 = __frame.v543;
   const char *&v544 = __frame.v544;
@@ -16566,7 +16660,7 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
   const char *&v555 = __frame.v555;
   const char *&v556 = __frame.v556;
   const char *&v557 = __frame.v557;
-  int32_t &v558 = __frame.v558;
+  Obj40 *&v558 = (Obj40 *&)__frame.v558;
   const char *&v559 = __frame.v559;
   const char *&v560 = __frame.v560;
   const char *&v561 = __frame.v561;
@@ -16574,10 +16668,10 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
   const char *&v563 = __frame.v563;
   const char *&v564 = __frame.v564;
   const char *&v565 = __frame.v565;
-  uint32_t &v566 = __frame.v566;
+  Obj41 *&v566 = (Obj41 *&)__frame.v566;
   Obj17 *&v567 = (Obj17 *&)__frame.v567;
   int32_t &v568 = __frame.v568;
-  const char *&v569 = __frame.v569;
+  Obj42 *&v569 = (Obj42 *&)__frame.v569;
   int32_t &v570 = __frame.v570;
   int32_t &v571 = __frame.v571;
   int32_t &v572 = __frame.v572;
@@ -16602,44 +16696,49 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
   bool v87, v103, v104, v105;
   char *v90, v114, v116, v312;
   Obj17 *v110;
-  const char *v91, *v93, *v94, *v107, *v111, *v112;
+  Obj40 *v94;
+  Obj41 *v111;
+  Obj42 *v107;
+  const char *v91, *v93, *v112;
   float v16, v18, v20, v21, v22, v23, v24, v26;
-  int32_t v6, v9, v75, v77, v79, v80, v81, v84, v85, v86, v88, v89, v95, v96, v98, v100, v101,
-          v102, v106, v108, v113, v115, v117, v118, v119, v120, v121, v122, v123, v124, v125,
-          v126, v127, v128, v129, v130, v131, v132, v133, v134, v135, v136, v137, v138, v139,
-          v140, v141, v142, v143, v144, v145, v146, v147, v148, v149, v150, v151, v152, v153,
-          v154, v155, v156, v157, v158, v159, v160, v161, v162, v163, v164, v165, v166, v167,
-          v168, v169, v170, v171, v172, v173, v174, v175, v176, v177, v178, v179, v180, v181,
-          v182, v183, v184, v185, v186, v187, v188, v189, v190, v191, v192, v193, v194, v195,
-          v196, v197, v198, v199, v200, v201, v202, v203, v204, v205, v206, v207, v208, v209,
-          v210, v211, v212, v213, v214, v215, v216, v217, v218, v219, v220, v221, v222, v223,
-          v224, v225, v226, v227, v228, v229, v230, v231, v232, v233, v234, v235, v236, v237,
-          v238, v239, v240, v241, v242, v243, v244, v245, v246, v247, v248, v249, v250, v251,
-          v252, v253, v254, v255, v256, v257, v258, v259, v260, v261, v262, v263, v264, v265,
-          v266, v267, v268, v269, v270, v271, v272, v273, v274, v275, v276, v277, v278, v279,
-          v280, v281, v282, v283, v284, v285, v286, v287, v288, v289, v290, v291, v292, v293,
-          v294, v295, v296, v297, v298, v299, v300, v301, v302, v303, v304, v305, v306, v307,
-          v308, v309, v310, v311, v313, v314, v315, v316, v317, v318, v319, v320, v321, v322,
-          v323, v324, v325, v326, v327, v328, v329, v330, v331, v332, v333, v334, v335, v336,
-          v337, v338, v339, v340, v341, v342, v343, v344, v345, v346, v347, v348, v349, v350,
-          v351, v352, v353, v354, v355, v356, v357, v358, v359, v360, v361, v362, v363, v364,
-          v365, v366, v367, v368, v369, v370, v371, v372, v373, v374, v375, v376, v377, v378,
-          v379, v380, v381, v382, v383, v384, v386, n15, v391, v392, v394, v395, v397, v398,
-          v399, v400, v403, v404, v406, v407, v409, v410, v412, v413, v415, v416, v417, v418,
-          v419, v421, v422, v423, v424, v425, v426, v427, v429, v430, v431, v432, v433, v434,
-          v435, v437, v438, v439, v440, v441, v442, v443, v447, v448, v449, v450, v453, v454,
-          v459, v460, v461, v464, v465, v467, v468, v470, v471, v472, v475, v476, v478, v479,
-          v481, v482, v483, v486, v487, v489, v490, v492, v493, v494, v497, v498, v500, v501,
-          v503, v504;
+  Obj42 *v98;
+  int32_t v6, v9, v75, v77, v79, v80, v81, v84, v85, v86, v88, v89, v95, v96, v100, v101, v102,
+          v106, v108, v113, v115, v117, v118, v119, v120, v121, v122, v123, v124, v125, v126,
+          v127, v128, v129, v130, v131, v132, v133, v134, v135, v136, v137, v138, v139, v140,
+          v141, v142, v143, v144, v145, v146, v147, v148, v149, v150, v151, v152, v153, v154,
+          v155, v156, v157, v158, v159, v160, v161, v162, v163, v164, v165, v166, v167, v168,
+          v169, v170, v171, v172, v173, v174, v175, v176, v177, v178, v179, v180, v181, v182,
+          v183, v184, v185, v186, v187, v188, v189, v190, v191, v192, v193, v194, v195, v196,
+          v197, v198, v199, v200, v201, v202, v203, v204, v205, v206, v207, v208, v209, v210,
+          v211, v212, v213, v214, v215, v216, v217, v218, v219, v220, v221, v222, v223, v224,
+          v225, v226, v227, v228, v229, v230, v231, v232, v233, v234, v235, v236, v237, v238,
+          v239, v240, v241, v242, v243, v244, v245, v246, v247, v248, v249, v250, v251, v252,
+          v253, v254, v255, v256, v257, v258, v259, v260, v261, v262, v263, v264, v265, v266,
+          v267, v268, v269, v270, v271, v272, v273, v274, v275, v276, v277, v278, v279, v280,
+          v281, v282, v283, v284, v285, v286, v287, v288, v289, v290, v291, v292, v293, v294,
+          v295, v296, v297, v298, v299, v300, v301, v302, v303, v304, v305, v306, v307, v308,
+          v309, v310, v311, v313, v314, v315, v316, v317, v318, v319, v320, v321, v322, v323,
+          v324, v325, v326, v327, v328, v329, v330, v331, v332, v333, v334, v335, v336, v337,
+          v338, v339, v340, v341, v342, v343, v344, v345, v346, v347, v348, v349, v350, v351,
+          v352, v353, v354, v355, v356, v357, v358, v359, v360, v361, v362, v363, v364, v365,
+          v366, v367, v368, v369, v370, v371, v372, v373, v374, v375, v376, v377, v378, v379,
+          v380, v381, v382, v383, v384, v386, n15, v391, v392, v394, v395, v397, v398, v399,
+          v400, v403, v404, v406, v407, v409, v410, v412, v413, v415, v416, v417, v418, v419,
+          v421, v422, v423, v424, v425, v426, v427, v429, v430, v431, v432, v433, v434, v435,
+          v437, v438, v439, v440, v441, v442, v443, v447, v448, v449, v450, v453, v454, v459,
+          v460, v461, v464, v465, v467, v468, v470, v471, v472, v475, v476, v478, v479, v481,
+          v482, v483, v486, v487, v489, v490, v492, v493, v494, v497, v498, v500, v501, v503,
+          v504;
   int64_t v10, v11, v12, v13, v14;
   Obj5 *n0xF0_3;
   Obj5 *n0xF0_2;
   Obj5 *n0xF0_1;
   Obj5 *n0xF0_5;
   Obj5 *n0xF0_4;
-  uint16_t *v7, *v387, *v389, *n0x10_3, *n2_2, *v408, *v411, *v420, *v428, *v436, *v444, *v445,
-           *n2_7, *n0x10_4, *v452, *v456, *v457, *n2_6, *v463, *v466, *n2_5, *v474, *v477,
-           *n2_4, *v485, *v488, *v491, *n2_3, *v502;
+  Obj43 *v445;
+  uint16_t *v7, *v387, *v389, *n0x10_3, *n2_2, *v408, *v411, *v420, *v428, *v436, *v444, *n2_7,
+           *n0x10_4, *v452, *v456, *v457, *n2_6, *v463, *v466, *n2_5, *v474, *v477, *n2_4,
+           *v485, *v488, *v491, *n2_3, *v502;
   uint32_t *v76, v78, v92, v97, v109, *v385, n0x10, v393, v396, v405, v414, v499;
   uint8_t *v82, v83;
   v6 = *(uint32_t *)(a1 + 278704) & 0xF;
@@ -16983,7 +17082,7 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
         _mm_prefetch(&v90[4 * (v81 ^ 0x2000) + 284712], 1);
         v539 = (Obj15 *)((int32_t)&v90[4 * (v81 ^ 0x2000) + 284712]);
         _mm_prefetch(&v90[4 * (v81 ^ 0x5FF0) + 284712], 1);
-        v541 = (int32_t)&v90[4 * (v81 ^ 0x5FF0) + 284712];
+        v541 = (Obj38 *)((int32_t)&v90[4 * (v81 ^ 0x5FF0) + 284712]);
         v540 = &v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x2000) & 0xC))
                   + 284712
                   + 4 * ((v81 ^ 0x2000) & 0xFFFFFFF3)];
@@ -16991,7 +17090,7 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
         _mm_prefetch(&v90[4 * (v81 ^ 0x1000) + 284712], 1);
         v536 = (Obj16 *)((int32_t)&v90[4 * (v81 ^ 0x1000) + 284712]);
         _mm_prefetch(&v90[4 * (v81 ^ 0x6FF0) + 284712], 1);
-        v538 = (int32_t)&v90[4 * (v81 ^ 0x6FF0) + 284712];
+        v538 = (Obj39 *)((int32_t)&v90[4 * (v81 ^ 0x6FF0) + 284712]);
         v537 = &v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x1000) & 0xC))
                   + 284712
                   + 4 * ((v81 ^ 0x1000) & 0xFFFFFFF3)];
@@ -17029,8 +17128,8 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
         v557 = &v90[4 * (v81 ^ 0x7EF0) + 284712];
         v526 = v557;
         _mm_prefetch(v554, 1);
-        v558 = (int32_t)&v90[4 * v92 + 284712];
-        v525 = v558;
+        v558 = (Obj40 *)((int32_t)&v90[4 * v92 + 284712]);
+        v525 = (Obj40 *)(v558);
         v559 = &v90[4 * (v81 ^ 0x80) + 284712];
         v521 = v559;
         _mm_prefetch(v555, 1);
@@ -17044,7 +17143,7 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
         v562 = &v90[4 * (v81 ^ 0x7FB0) + 284712];
         v520 = v562;
         v93 = &v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x40) & 0xC)) + 284712 + 4 * ((v81 ^ 0x40) & 0xFFFFFFF3)];
-        v94 = (const char *)v558;
+        v94 = (Obj40 *)((const char *)v558);
         _mm_prefetch(v557, 1);
         _mm_prefetch(v94, 1);
         v563 = v93;
@@ -17057,19 +17156,19 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
         v517 = v565;
         _mm_prefetch(v559, 1);
         _mm_prefetch(v523, 1);
-        v566 = (uint32_t)&v90[4 * *(int32_t *)((char *)__dword_439880 + (v95 & 0xC)) + 284712 + 4 * (v95 & 0xFFFFFFF3)];
-        v516 = v566;
+        v566 = (Obj41 *)((uint32_t)&v90[4 * *(int32_t *)((char *)__dword_439880 + (v95 & 0xC)) + 284712 + 4 * (v95 & 0xFFFFFFF3)]);
+        v516 = (Obj41 *)(v566);
         v567 = (Obj17 *)((int32_t)&v90[4 * v96 + 284712]);
         v512 = (Obj17 *)(v567);
         v97 = *(int32_t *)((char *)__dword_439880 + (v96 & 0xC)) + (v96 & 0xFFFFFFF3);
         v568 = (int32_t)&v90[4 * (v96 ^ 0x7FF0) + 284712];
         v514 = v568;
         _mm_prefetch(v560, 1);
-        v98 = (int32_t)&v90[4 * v97 + 284712];
+        v98 = (Obj42 *)((int32_t)&v90[4 * v97 + 284712]);
         n2_1 = n2;
-        v569 = (const char *)v98;
+        v569 = (Obj42 *)((const char *)v98);
         v100 = -v550;
-        v513 = v98;
+        v513 = (Obj42 *)(v98);
         LOBYTE(v97) = *(uint8_t *)n2;
         _mm_prefetch(v561, 1);
         v101 = *(int16_t *)(n2_1 + 2);
@@ -17082,13 +17181,13 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
         v106 = 32 * (!(v104 ^ v105 | v103) - (v102 < __dword_4458F4));
         _mm_prefetch(v564, 1);
         _mm_prefetch(v565, 1);
-        v107 = v569;
+        v107 = (Obj42 *)(v569);
         v108 = v550;
         v109 = v106 + v102 + 2;
         v110 = (Obj17 *)((const char *)v567);
         LOWORD(v109) = v101 + (v109 >> 2);
         v87 = n3 < 3;
-        v111 = (const char *)v566;
+        v111 = (Obj41 *)((const char *)v566);
         *(uint16_t *)(n2 + 2) = v109;
         v112 = (const char *)v568;
         _mm_prefetch(v111, 1);
@@ -17133,9 +17232,9 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
           v539->f6 += (uint32_t)(v321
                                                - ((*(int16_t *)&v539->f6 + (1 << ((v539->f4 + 31) & 31))) >> (v539->f4 & 31))
                                                + 2) >> 2;
-          v325 = *(int16_t *)(v541 + 2);
-          v326 = v549 - ((v325 + (1 << ((*(uint8_t *)v541 + 31) & 31))) >> (*(uint8_t *)v541 & 31));
-          *(uint16_t *)(v541 + 2) = v325
+          v325 = v541->f2;
+          v326 = v549 - ((v325 + (1 << ((v541->f0 + 31) & 31))) >> (v541->f0 & 31));
+          *(uint16_t *)&v541->f2 = v325
                                + ((32 * ((v326 > __dword_4458F0) - (uint32_t)(v326 < __dword_4458F4)) + v326 + 4) >> 3);
           v327 = v536->f2;
           v328 = v550 - ((v327 + (1 << ((v536->f0 + 31) & 31))) >> (v536->f0 & 31));
@@ -17148,9 +17247,9 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
           v536->f6 += (uint32_t)(v550
                                                - ((*(int16_t *)&v536->f6 + (1 << ((v536->f4 + 31) & 31))) >> (v536->f4 & 31))
                                                + 2) >> 2;
-          v331 = *(int16_t *)(v538 + 2);
-          v332 = v549 - ((v331 + (1 << ((*(uint8_t *)v538 + 31) & 31))) >> (*(uint8_t *)v538 & 31));
-          *(uint16_t *)(v538 + 2) = v331
+          v331 = v538->f2;
+          v332 = v549 - ((v331 + (1 << ((v538->f0 + 31) & 31))) >> (v538->f0 & 31));
+          *(uint16_t *)&v538->f2 = v331
                                + ((32 * ((v332 > __dword_4458F0) - (uint32_t)(v332 < __dword_4458F4)) + v332 + 4) >> 3);
           v333 = *((int16_t *)v533 + 1);
           v334 = v550 - ((v333 + (1 << ((*v533 + 31) & 31))) >> (*v533 & 31));
@@ -17201,9 +17300,9 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
           v354 = v550 - ((v352 + (1 << ((*v524 + 31) & 31))) >> (*v524 & 31));
           *((uint16_t *)v524 + 1) = v352
                                + ((32 * ((v354 > __dword_4458F0) - (uint32_t)(v354 < __dword_4458F4)) + v354 + 2) >> 2);
-          v355 = *(int16_t *)(v525 + 2);
-          v356 = v353 - ((v355 + (1 << ((*(uint8_t *)v525 + 31) & 31))) >> (*(uint8_t *)v525 & 31));
-          *(uint16_t *)(v525 + 2) = v355
+          v355 = v525->f2;
+          v356 = v353 - ((v355 + (1 << ((v525->f0 + 31) & 31))) >> (v525->f0 & 31));
+          *(uint16_t *)&v525->f2 = v355
                                + ((32 * ((v356 > __dword_4458F0) - (uint32_t)(v356 < __dword_4458F4)) + v356 + 4) >> 3);
           *((uint16_t *)v524 + 3) += (uint32_t)(v353 - ((*((int16_t *)v524 + 3) + (1 << ((v524[4] + 31) & 31))) >> (v524[4] & 31)) + 2) >> 2;
           v357 = *((int16_t *)v526 + 1);
@@ -17240,9 +17339,9 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
           v372 = v550 - ((v371 + (1 << ((*v515 + 31) & 31))) >> (*v515 & 31));
           *((uint16_t *)v515 + 1) = v371
                                + ((32 * ((v372 > __dword_4458F0) - (uint32_t)(v372 < __dword_4458F4)) + v372 + 2) >> 2);
-          v373 = *(int16_t *)(v516 + 2);
-          v374 = v550 - ((v373 + (1 << ((*(uint8_t *)v516 + 31) & 31))) >> (*(uint8_t *)v516 & 31));
-          *(uint16_t *)(v516 + 2) = v373
+          v373 = v516->f2;
+          v374 = v550 - ((v373 + (1 << ((v516->f0 + 31) & 31))) >> (v516->f0 & 31));
+          *(uint16_t *)&v516->f2 = v373
                                + ((32 * ((v374 > __dword_4458F0) - (uint32_t)(v374 < __dword_4458F4)) + v374 + 4) >> 3);
           v375 = v550;
           *((uint16_t *)v515 + 3) += (uint32_t)(v550 - ((*((int16_t *)v515 + 3) + (1 << ((v515[4] + 31) & 31))) >> (v515[4] & 31)) + 2) >> 2;
@@ -17258,9 +17357,9 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
           v379 = v550 - ((v378 + (1 << ((v512->f0 + 31) & 31))) >> (v512->f0 & 31));
           *(uint16_t *)&v512->f2 = v378
                                + ((32 * ((v379 > __dword_4458F0) - (uint32_t)(v379 < __dword_4458F4)) + v379 + 2) >> 2);
-          v380 = *(int16_t *)(v513 + 2);
-          v381 = v550 - ((v380 + (1 << ((*(uint8_t *)v513 + 31) & 31))) >> (*(uint8_t *)v513 & 31));
-          *(uint16_t *)(v513 + 2) = v380
+          v380 = v513->f2;
+          v381 = v550 - ((v380 + (1 << ((v513->f0 + 31) & 31))) >> (v513->f0 & 31));
+          *(uint16_t *)&v513->f2 = v380
                                + ((32 * ((v381 > __dword_4458F0) - (uint32_t)(v381 < __dword_4458F4)) + v381 + 4) >> 3);
           v382 = v550;
           v512->f6 += (uint32_t)(v550
@@ -17318,9 +17417,9 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
             v227 = v222 - ((v226 + (1 << ((*(uint8_t *)((uintptr_t)v539 - 4) + 31) & 31))) >> (*(uint8_t *)((uintptr_t)v539 - 4) & 31));
             *(uint16_t *)((uintptr_t)v539 - 2) = v226
                                  + ((32 * ((v227 > __dword_4458F0) - (uint32_t)(v227 < __dword_4458F4)) + v227 + 4) >> 3);
-            v228 = *(int16_t *)(v541 + 2);
-            v229 = v572 - ((v228 + (1 << ((*(uint8_t *)v541 + 31) & 31))) >> (*(uint8_t *)v541 & 31));
-            *(uint16_t *)(v541 + 2) = v228
+            v228 = v541->f2;
+            v229 = v572 - ((v228 + (1 << ((v541->f0 + 31) & 31))) >> (v541->f0 & 31));
+            *(uint16_t *)&v541->f2 = v228
                                  + ((32 * ((v229 > __dword_4458F0) - (uint32_t)(v229 < __dword_4458F4)) + v229 + 4) >> 3);
             v230 = v536->f2;
             v231 = v550;
@@ -17338,9 +17437,9 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
             v236 = v231 - ((v235 + (1 << ((*(uint8_t *)((uintptr_t)v536 - 4) + 31) & 31))) >> (*(uint8_t *)((uintptr_t)v536 - 4) & 31));
             *(uint16_t *)((uintptr_t)v536 - 2) = v235
                                  + ((32 * ((v236 > __dword_4458F0) - (uint32_t)(v236 < __dword_4458F4)) + v236 + 4) >> 3);
-            v237 = *(int16_t *)(v538 + 2);
-            v238 = v572 - ((v237 + (1 << ((*(uint8_t *)v538 + 31) & 31))) >> (*(uint8_t *)v538 & 31));
-            *(uint16_t *)(v538 + 2) = v237
+            v237 = v538->f2;
+            v238 = v572 - ((v237 + (1 << ((v538->f0 + 31) & 31))) >> (v538->f0 & 31));
+            *(uint16_t *)&v538->f2 = v237
                                  + ((32 * ((v238 > __dword_4458F0) - (uint32_t)(v238 < __dword_4458F4)) + v238 + 4) >> 3);
             v239 = *((int16_t *)v533 + 1);
             v240 = v550;
@@ -17417,9 +17516,9 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
             v269 = v550 - ((v267 + (1 << ((*v524 + 31) & 31))) >> (*v524 & 31));
             *((uint16_t *)v524 + 1) = v267
                                  + ((32 * ((v269 > __dword_4458F0) - (uint32_t)(v269 < __dword_4458F4)) + v269 + 2) >> 2);
-            v270 = *(int16_t *)(v525 + 2);
-            v271 = v268 - ((v270 + (1 << ((*(uint8_t *)v525 + 31) & 31))) >> (*(uint8_t *)v525 & 31));
-            *(uint16_t *)(v525 + 2) = v270
+            v270 = v525->f2;
+            v271 = v268 - ((v270 + (1 << ((v525->f0 + 31) & 31))) >> (v525->f0 & 31));
+            *(uint16_t *)&v525->f2 = v270
                                  + ((32 * ((v271 > __dword_4458F0) - (uint32_t)(v271 < __dword_4458F4)) + v271 + 4) >> 3);
             *((uint16_t *)v524 + 3) += (uint32_t)(v268
                                                  - ((*((int16_t *)v524 + 3) + (1 << ((v524[4] + 31) & 31))) >> (v524[4] & 31))
@@ -17479,9 +17578,9 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
             v297 = v550 - ((v295 + (1 << ((*v515 + 31) & 31))) >> (*v515 & 31));
             *((uint16_t *)v515 + 1) = v295
                                  + ((32 * ((v297 > __dword_4458F0) - (uint32_t)(v297 < __dword_4458F4)) + v297 + 2) >> 2);
-            v298 = *(int16_t *)(v516 + 2);
-            v299 = v296 - ((v298 + (1 << ((*(uint8_t *)v516 + 31) & 31))) >> (*(uint8_t *)v516 & 31));
-            *(uint16_t *)(v516 + 2) = v298
+            v298 = v516->f2;
+            v299 = v296 - ((v298 + (1 << ((v516->f0 + 31) & 31))) >> (v516->f0 & 31));
+            *(uint16_t *)&v516->f2 = v298
                                  + ((32 * ((v299 > __dword_4458F0) - (uint32_t)(v299 < __dword_4458F4)) + v299 + 4) >> 3);
             *((uint16_t *)v515 + 3) += (uint32_t)(v296
                                                  - ((*((int16_t *)v515 + 3) + (1 << ((v515[4] + 31) & 31))) >> (v515[4] & 31))
@@ -17499,9 +17598,9 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
             v306 = v550 - ((v304 + (1 << ((v512->f0 + 31) & 31))) >> (v512->f0 & 31));
             *(uint16_t *)&v512->f2 = v304
                                  + ((32 * ((v306 > __dword_4458F0) - (uint32_t)(v306 < __dword_4458F4)) + v306 + 2) >> 2);
-            v307 = *(int16_t *)(v513 + 2);
-            v308 = v305 - ((v307 + (1 << ((*(uint8_t *)v513 + 31) & 31))) >> (*(uint8_t *)v513 & 31));
-            *(uint16_t *)(v513 + 2) = v307
+            v307 = v513->f2;
+            v308 = v305 - ((v307 + (1 << ((v513->f0 + 31) & 31))) >> (v513->f0 & 31));
+            *(uint16_t *)&v513->f2 = v307
                                  + ((32 * ((v308 > __dword_4458F0) - (uint32_t)(v308 < __dword_4458F4)) + v308 + 4) >> 3);
             v512->f6 += (uint32_t)(v305
                                                  - ((*(int16_t *)&v512->f6 + (1 << ((v512->f4 + 31) & 31))) >> (v512->f4 & 31))
@@ -17538,9 +17637,9 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
             v132 = v127 - ((v131 + (1 << ((*(uint8_t *)((uintptr_t)v539 - 4) + 31) & 31))) >> (*(uint8_t *)((uintptr_t)v539 - 4) & 31));
             *(uint16_t *)((uintptr_t)v539 - 2) = v131
                                  + ((32 * ((v132 > __dword_4458F0) - (uint32_t)(v132 < __dword_4458F4)) + v132 + 4) >> 3);
-            v133 = *(int16_t *)(v541 + 2);
-            v134 = v547 - ((v133 + (1 << ((*(uint8_t *)v541 + 31) & 31))) >> (*(uint8_t *)v541 & 31));
-            *(uint16_t *)(v541 + 2) = v133
+            v133 = v541->f2;
+            v134 = v547 - ((v133 + (1 << ((v541->f0 + 31) & 31))) >> (v541->f0 & 31));
+            *(uint16_t *)&v541->f2 = v133
                                  + ((32 * ((v134 > __dword_4458F0) - (uint32_t)(v134 < __dword_4458F4)) + v134 + 4) >> 3);
             v135 = v536->f2;
             v136 = v550;
@@ -17555,9 +17654,9 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
             v141 = v136 - ((v140 + (1 << ((*(uint8_t *)((uintptr_t)v536 - 4) + 31) & 31))) >> (*(uint8_t *)((uintptr_t)v536 - 4) & 31));
             *(uint16_t *)((uintptr_t)v536 - 2) = v140
                                  + ((32 * ((v141 > __dword_4458F0) - (uint32_t)(v141 < __dword_4458F4)) + v141 + 4) >> 3);
-            v142 = *(int16_t *)(v538 + 2);
-            v143 = v547 - ((v142 + (1 << ((*(uint8_t *)v538 + 31) & 31))) >> (*(uint8_t *)v538 & 31));
-            *(uint16_t *)(v538 + 2) = v142
+            v142 = v538->f2;
+            v143 = v547 - ((v142 + (1 << ((v538->f0 + 31) & 31))) >> (v538->f0 & 31));
+            *(uint16_t *)&v538->f2 = v142
                                  + ((32 * ((v143 > __dword_4458F0) - (uint32_t)(v143 < __dword_4458F4)) + v143 + 4) >> 3);
             v144 = *((int16_t *)v533 + 1);
             v145 = v550;
@@ -17617,9 +17716,9 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
             v173 = v550 - ((v171 + (1 << ((*v524 + 31) & 31))) >> (*v524 & 31));
             *((uint16_t *)v524 + 1) = v171
                                  + ((32 * ((v173 > __dword_4458F0) - (uint32_t)(v173 < __dword_4458F4)) + v173 + 2) >> 2);
-            v174 = *(int16_t *)(v525 + 2);
-            v175 = v172 - ((v174 + (1 << ((*(uint8_t *)v525 + 31) & 31))) >> (*(uint8_t *)v525 & 31));
-            *(uint16_t *)(v525 + 2) = v174
+            v174 = v525->f2;
+            v175 = v172 - ((v174 + (1 << ((v525->f0 + 31) & 31))) >> (v525->f0 & 31));
+            *(uint16_t *)&v525->f2 = v174
                                  + ((32 * ((v175 > __dword_4458F0) - (uint32_t)(v175 < __dword_4458F4)) + v175 + 4) >> 3);
             v176 = *((int16_t *)v524 - 1);
             v177 = v172 - ((v176 + (1 << ((*(v524 - 4) + 31) & 31))) >> (*(v524 - 4) & 31));
@@ -17668,10 +17767,10 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
             v200 = v550 - ((v198 + (1 << ((*v515 + 31) & 31))) >> (*v515 & 31));
             *((uint16_t *)v515 + 1) = v198
                                  + ((32 * ((v200 > __dword_4458F0) - (uint32_t)(v200 < __dword_4458F4)) + v200 + 2) >> 2);
-            v201 = *(int16_t *)(v516 + 2);
-            v202 = v199 - ((v201 + (1 << ((*(uint8_t *)v516 + 31) & 31))) >> (*(uint8_t *)v516 & 31));
+            v201 = v516->f2;
+            v202 = v199 - ((v201 + (1 << ((v516->f0 + 31) & 31))) >> (v516->f0 & 31));
             v550 = v199;
-            *(uint16_t *)(v516 + 2) = v201
+            *(uint16_t *)&v516->f2 = v201
                                  + ((32 * ((v202 > __dword_4458F0) - (uint32_t)(v202 < __dword_4458F4)) + v202 + 4) >> 3);
             v203 = *((int16_t *)v515 - 1);
             v204 = v199 - ((v203 + (1 << ((*(v515 - 4) + 31) & 31))) >> (*(v515 - 4) & 31));
@@ -17688,9 +17787,9 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
             v209 = v550 - ((v207 + (1 << ((v512->f0 + 31) & 31))) >> (v512->f0 & 31));
             *(uint16_t *)&v512->f2 = v207
                                  + ((32 * ((v209 > __dword_4458F0) - (uint32_t)(v209 < __dword_4458F4)) + v209 + 2) >> 2);
-            v210 = *(int16_t *)(v513 + 2);
-            v211 = v208 - ((v210 + (1 << ((*(uint8_t *)v513 + 31) & 31))) >> (*(uint8_t *)v513 & 31));
-            *(uint16_t *)(v513 + 2) = v210
+            v210 = v513->f2;
+            v211 = v208 - ((v210 + (1 << ((v513->f0 + 31) & 31))) >> (v513->f0 & 31));
+            *(uint16_t *)&v513->f2 = v210
                                  + ((32 * ((v211 > __dword_4458F0) - (uint32_t)(v211 < __dword_4458F4)) + v211 + 4) >> 3);
             v212 = *(int16_t *)((uintptr_t)v512 - 2);
             v213 = v208 - ((v212 + (1 << ((*(uint8_t *)((uintptr_t)v512 - 4) + 31) & 31))) >> (*(uint8_t *)((uintptr_t)v512 - 4) & 31));
@@ -18338,22 +18437,22 @@ LABEL_128:
                + HIWORD(v385[2 * n0x10 + 235018 + 2 * (v385[69712] - v385[-v443 + 69713])]) > 29696 )
               __fwd_sub_41CAB0_sub_414800(v444);
             *(uint16_t *)((char *)v444 + v510 + 2) += (7 * (uint32_t)*v444) >> 4;
-            v445 = (uint16_t *)&v385[2 * v385[69712] + 2 * (v385[69676] - v385[v385[69710] + 69711])];
-            if ( v445[470039] + v445[470038] + v445[470037] > 29696 )
-              __fwd_sub_41CAB0_sub_414800(v445 + 470036);
-            *(uint16_t *)((char *)v445 + v511 + 940074) += (7 * (uint32_t)v445[470036]) >> 4;
+            v445 = (Obj43 *)((uint16_t *)&v385[2 * v385[69712] + 2 * (v385[69676] - v385[v385[69710] + 69711])]);
+            if ( v445->f940078 + v445->f940076 + v445->f940074 > 29696 )
+              __fwd_sub_41CAB0_sub_414800((uint16_t *)v445 + 470036);
+            *(uint16_t *)((char *)v445 + v511 + 940074) += (7 * (uint32_t)v445->f940072) >> 4;
             if ( n15 >= 15 )
               goto LABEL_115;
-            if ( v445[470043] + v445[470042] + v445[470041] > 29696 )
-              __fwd_sub_41CAB0_sub_414800(v445 + 470040);
-            n0x10 = v445[470040];
+            if ( v445->f940086 + v445->f940084 + v445->f940082 > 29696 )
+              __fwd_sub_41CAB0_sub_414800((uint16_t *)v445 + 470040);
+            n0x10 = v445->f940080;
             *(uint16_t *)((char *)v445 + v511 + 940082) += (5 * n0x10) >> 4;
             if ( n15 > 0 )
             {
 LABEL_115:
-              if ( v445[470035] + v445[470034] + v445[470033] > 29696 )
-                __fwd_sub_41CAB0_sub_414800(v445 + 470032);
-              n0x10 = v445[470032];
+              if ( v445->f940070 + v445->f940068 + v445->f940066 > 29696 )
+                __fwd_sub_41CAB0_sub_414800((uint16_t *)v445 + 470032);
+              n0x10 = v445->f940064;
               *(uint16_t *)((char *)v445 + v511 + 940066) += (6 * n0x10) >> 4;
             }
           }
