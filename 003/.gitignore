@@ -1,0 +1,6 @@
+# build artefacts
+bmf
+bmf.dbg
+*.o
+run/
+.wine/
