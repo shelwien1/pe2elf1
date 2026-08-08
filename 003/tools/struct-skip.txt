@@ -11,3 +11,6 @@ __sub_41A130:v110 __sub_41A130:v160 __sub_41A130:v173 __sub_41A130:v194 __sub_41
 __write_bmp:buf __write_bmp:buf_1 __write_bmp:buf_2 __write_bmp:buf_3
 __search_filter:v179
 __write_bmp:p_i __write_bmp:p_i_1 __write_bmp:p_i_2
+__sub_405CF0:v202 __sub_405CF0:v203 __sub_405CF0:v204 __sub_405CF0:v205 __sub_405CF0:v206 __sub_405CF0:v207 __sub_405CF0:v21 __sub_405CF0:v51
+__expand_image:p_i __sub_417DB0:p_i __sub_423600:p_i
+__sub_417980:a1
