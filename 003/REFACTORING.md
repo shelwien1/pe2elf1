@@ -1,7 +1,10 @@
 # Refactoring BMF 2.01
 
 A plan for turning the decompilation into source you would be willing to
-maintain, and to build for x86-64.
+maintain.
+
+It began as a plan to do that *and* build for x86-64. Those turned out to pull
+against each other — §Phase 4 — and the target is 32-bit.
 
 `ALGORITHM.md` says what the program *does*. This says what to do to the code,
 in what order, and how to know each step did not break it. Every number below
@@ -15,14 +18,18 @@ so they can be re-measured rather than trusted.
 
 | | | at the start |
 | --- | --- | --- |
-| `subs1.hpp` | 22 113 lines | 25 462 |
+| `subs1.hpp` | 23 180 lines | 25 462 |
 | bodies | 179 (84 real, 95 `__fwd_*` shims) | 215 |
 | globals in `blob.inc` | **78** | 293 |
-| pointer casts | 5680 | 7336 |
+| recovered structs | **44**, 1921 named field accesses | 0 |
+| raw-offset dereferences | **991** | 1646 before Phase 4 |
+| pointer casts | 5735 | 7336 |
 | `goto` / `LABEL_n:` | 121 / 88 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
-| x86-64 int↔pointer | 1211 warnings, 1708 lines | 4371 / 3965 |
 | line coverage | **89.97 %** | 64.5 % |
+
+The target is 32-bit. That is not a limitation left over from the port — it is
+the decision that made Phase 4 possible, and §Phase 4 says why.
 
 The previous rounds of work (see `tools/README.md`) fixed the vocabulary —
 stdint types, one declaration per global, no WinAPI, no Intel intrinsic
@@ -181,19 +188,23 @@ and a table.
 
 ### 4.2 Pointer typing and structure recovery are one job
 
-The x86-64 problem was 3784 `cast to pointer from integer of different size`
-warnings across 3233 lines (1211 across 1708 now — see Phase 4), and they look
-like this:
+The decompiler writes the same expression twice over:
 
 ```c
 *(uint32_t *)(_this + 278736) = v17 + 144;
 ```
 
-Two defects in one expression: `_this` is an `int32_t` holding a pointer (the
-x64 bug) and `278736` is a field offset (the structure). You cannot fix either
-alone — retyping `_this` to `char *` leaves `+ 278736`, and naming the field
-requires a struct that `_this` must already point to. So they are one pass, done
-**per object**, converting every function that touches that object at once.
+Two things are unnamed here: `_this` is an `int32_t` holding a pointer, and
+`278736` is a field offset. Neither can be fixed alone — retyping `_this` to
+`char *` leaves `+ 278736`, and naming the field requires a struct that `_this`
+must already point to. So they are one pass, done **per object**, converting
+every function that touches that object at once.
+
+This was originally written as the x86-64 problem — 3784 `cast to pointer from
+integer of different size` warnings across 3233 lines, and later 1211 across
+1708. That framing was the mistake §7 records: it made naming a field look like
+it required widening it. It does not, on a 32-bit target, and the warning count
+is no longer a measure of anything this document is trying to do.
 
 The objects, by traffic. The right-hand column is what is *known*, not what is
 guessed — `ALGORITHM.md` §9 lists the alternate model families as not worked out,
@@ -213,12 +224,17 @@ Three things this table says that matter for sequencing.
 
 **The model block is reached under at least four different pointer names**
 (`_this`, `a1`, `v56`, `n0x10_2`), just under 400 references across a dozen
-functions that never see each other's signatures. Its struct has to be declared once and applied
-everywhere at once, not discovered per-function.
+functions that never see each other's signatures. Its struct has to be declared
+once and applied everywhere at once, not discovered per-function. What actually
+happened is the safe half of that: the alias analysis connected the names it
+could see connected, and the model block came out as several structs of the same
+size rather than one. Six of them are 278 776 bytes. Merging those is a reading
+job, not a tooling one — see §Phase 4.
 
 **The two families whose role is unknown** (`lpAddress`, `n5_2`) sit inside the
-alternate model code `ALGORITHM.md` §9 flags as unread, so structure recovery
-there is blocked on reading it — which is why Phase 4 orders them last.
+alternate model code `ALGORITHM.md` §9 flags as unread. Their *layout* recovered
+anyway, because the layout is visible in the offsets and does not need the role;
+what is still blocked on reading §9 is naming the fields.
 
 **The gate covers this work.** The two functions §2.3 lists as still unreached
 are `sub_427740` and `sub_410310`; neither is a model-block user. Phase 4's
@@ -310,69 +326,73 @@ does not.
 `blob.inc` is down to 78 globals from 293 at the start. It cannot go to zero
 until the 77 shared ones are understood as the tables they are.
 
-### Phase 4 — done as far as this program allows; the goal was wrong
+### Phase 4 — 44 objects have structs; the blocker was the 64-bit goal, not the code
 
-3784 → 1211 int↔pointer warnings. `tools/retype.py` converted every local and
-parameter used as a pointer base: 189 candidates, `char *` where the variable is
-only ever an address and `uintptr_t` where the code also masks or tags it. There
-are no candidates of that kind left.
-
-What remains is one shape, and it is the shape §4.2 warned about:
+`tools/retype.py` converted every local and parameter used as a pointer base
+first: 189 candidates, `char *` where the variable is only ever an address and
+`uintptr_t` where the code also masks or tags it. That left one shape, the one
+§4.2 warned about — the local is typed, the **field** is not:
 
 ```c
 *(uint8_t *)(*(uint32_t *)(_this + 76) + 6)
 ```
 
-The local is typed; the **field** at `+76` is not.
+`tools/structs.py` closes it. The alias analysis groups the names that denote
+one allocation, the constant offsets become members, and every access is
+rewritten to use them:
 
-**The offsets are not the obstacle.** `tools/objects.py` does the alias analysis
-— two names are the same allocation if one is assigned from the other or passed
-where the other is the parameter, closed transitively through the `__fwd_*`
-shims — and the field maps come out clean: 159 objects, the largest with 174
-dereferences over 45 offsets, nearly all `uint32_t` at 4-byte-aligned offsets,
-and 2 to 7 offsets per object where a byte and a word overlap (`LOBYTE`-style,
-not a contradiction).
+```c
+*(uint32_t *)(_this + 76)   ->   _this->f76
+this_3[19]                  ->   this_3->f76
+*(uint16_t *)(v65 + v59 + 3800)
+                            ->   *(uint16_t *)((char *)v59 + (intptr_t)(v65 + 3800))
+```
 
-**The obstacle is that widening a field moves everything after it**, so an
-object has to convert in every function at once, and its allocation size has to
-move with it. `this_4` is the example: the cleanest map in the file, 34 constant
-offsets, no variable ones, used in exactly one function — and still not
-convertible alone, because two lines above its first use is
-`this_4 = (int32_t)this_1`, and `this_1` is the same allocation under another
-name somewhere else.
+**What made this possible was dropping the 64-bit target, not any new
+understanding of the program.** At 32 bits a pointer is four bytes, which is
+exactly the width the decompiled code assumes every field to be. So a struct
+laid out from the observed offsets has the layout the code already had: nothing
+moves, the variable-offset walks keep indexing what they indexed, and each
+generated struct carries a `static_assert` on its size that says so and fails
+loudly if it ever stops being true.
 
-#### Why it cannot be finished, measured
+44 structs, gated one at a time — build, encode and decode ten images, compare
+every stream against its committed reference, revert the ones that change
+anything. **991 raw-offset dereferences left, from 1646, and 1921 accesses now
+name a field.** 38 objects were tried and reverted or declined; the reasons are
+in `tools/struct-skip.txt` and the categories are below.
 
-Widening a field moves every field after it. That is survivable if an object is
-only ever addressed at constant offsets — the struct absorbs the move. It is not
-survivable if the object is also walked with a variable offset, because the walk
-indexes the arrays the move displaced.
+#### What is left, and why
 
-Across all 159 objects: **1683 constant-offset dereferences and 2184
-variable-offset ones, and not one object has only the first kind.** There is no
-object in this program whose fields can be widened.
+| why an object was not converted | what it means |
+| --- | --- |
+| the class is not one object | the biggest refusal. `v109 v12 v130 v157 v172` are five cursors *into* one table, each pointing at a different element — assignments make them aliases, but an offset from one is not an offset from another. A struct would be wrong, not merely awkward, and the compiler said so: `8 * v12` is a multiplication, so `v12` was never an object pointer at all |
+| the name is stepped as a pointer | `p += k` cannot be rewritten through a cast, because a cast is not an lvalue |
+| the declaration cannot be found | the name has no declaration the tool recognises, and a name left at its old type takes `nm->f8` with it into a file that does not build |
+| the gate rejected it | the rewrite compiled and changed a stream. Recorded, reverted, and not retried |
 
-`BmfArc` is the exception that shows the rule. The eight bytes `bmf c` and
-`bmf d` allocate for the open stream and an image count — `malloc(8)` addressed
-by offset, with a `FILE *` stuffed into four bytes — is a struct now, with a
-`static_assert` that it is still eight bytes at 32 bits. It converted because it
-is the one object in the file with no variable-offset access, and it was the
-first thing a 64-bit build faulted on.
+The same allocation can end up with more than one struct: `Obj8`, `Obj9`,
+`Obj19`, `Obj20`, `Obj31` and `Obj32` are all 278 776 bytes, which is one object
+seen in six functions the alias analysis could not connect to each other. That
+is under-merging, and it is the safe direction — each struct describes offsets
+actually observed under that name.
 
-#### What a 64-bit build needs instead
+#### What a 64-bit build would still need
 
-Not wider fields: a heap the narrow fields can address. `bmf.cpp` has that now —
+Not wider fields. Widening a field moves every field after it, which is
+survivable only if an object is addressed at constant offsets alone; across all
+objects there are **1683 constant-offset dereferences and 2184 variable-offset
+ones, and not one object has only the first kind.** The structs recovered here
+are 32-bit-shaped descriptions, not a step towards 64 bits.
+
+What 64 bits needs is a heap the narrow fields can address. `bmf.cpp` has that —
 a low arena under `malloc`, compiled for 64-bit targets only, so the 32-bit
 build the streams are verified against allocates exactly as it did. With it and
-`BmfArc`, the 64-bit binary compiles, runs, opens its files, and reaches
-`model_plane` before it meets the model block: fields at `+80`–`+92` holding
-pointers, and the same object read at `+1078692`.
-
-Getting past that is the same loop — find the object the fault is in, and either
-convert it (if it has no variable-offset access) or teach the arena to cover
-what it points at. It is not blocked on understanding the algorithm. It is
-blocked on nothing except doing it, one fault at a time, and it will not produce
-typed fields at the end.
+`BmfArc` (the eight bytes `bmf c` and `bmf d` allocate for the open stream and
+an image count, the one object with no variable-offset access), the 64-bit
+binary compiles, runs, opens its files, and reaches `model_plane` before it
+meets the model block. Getting past that is one fault at a time, and it will not
+produce typed fields at the end.
 
 ### Phase 5 — done, and two thirds of it should not have been attempted
 
@@ -452,7 +472,7 @@ half of the record.
 | --- | --- | --- |
 | 2 | 3–6 frames will resist splitting | 16 did — they carry bytes no alias names and the code runs into them |
 | 3 | split every global; extents are the unknown | splitting all at once segfaults on *writes* crossing boundaries. One at a time: 86 move, 77 are parts of larger tables |
-| 4 | recover the objects and widen the pointer fields | 1683 constant-offset dereferences against 2184 variable-offset ones, and **no object has only the first kind**. Widening is not available; `BmfArc` is the one exception and it converted |
+| 4 | recover the objects and widen the pointer fields | 1683 constant-offset dereferences against 2184 variable-offset ones, and **no object has only the first kind**. Widening is not available — but recovering the structs is, once the target is 32-bit, because there the layout does not move. 44 of them |
 | 6 | the `goto`s are four rewritable shapes | none of the 123 is any of them. One other shape exists; it fits 2 |
 
 Two of those were caught by measuring before starting, which cost nothing. One
@@ -460,36 +480,61 @@ was caught by the gate, which is what it is for. One — Phase 3's — was caugh
 running the migration and having it crash, and that turned out to be the
 cheapest way to get the map.
 
+Phase 4 is the one worth reading twice, because the measurement was right and
+the conclusion drawn from it was wrong. "No object's fields can be widened" is
+true, and it says nothing about whether the objects can be *named*. Those were
+one question only while the target was 64-bit. Dropping that made half of it
+answerable immediately, and the code had not changed at all.
+
+The tool that did it was wrong four times before it was right, and every one of
+those was found by the gate rather than by reading:
+
+- the alias analysis grouped objects by names that did not exist, because a
+  cast-stripping pattern was eating the front of `_this` and calling it `s`;
+- offsets were read as bytes for names declared as typed pointers, where the
+  code meant elements;
+- the rewrite ran line by line against a decompiler that wraps expressions, so
+  a dereference split across two lines kept arithmetic that then stepped by the
+  whole struct;
+- a subscript whose index contained a subscript was not found at all.
+
+Each of those produced a file that compiled. Three of the four segfaulted; the
+first one did not, and would have been kept if the streams had not been checked
+byte for byte.
+
 ### What is genuinely left
 
-Not a phase: a decision, and it is small.
+Two things, and neither is a phase.
 
-The 64-bit build compiles and runs and gets as far as `model_plane`. Taking it
-further is the loop in §Phase 4 — fault, find the object, convert it or extend
-the arena — repeated until the images round-trip. It is mechanical and it is not
-blocked on anything, but it ends with a working 64-bit binary whose fields are
-still `uint32_t`, because this program's objects will not let them be anything
-else.
+**Naming.** The 44 structs are `Obj0`…`Obj43` with `f76`-style members. The
+layout is recovered; the meaning is not. `ALGORITHM.md` §9 still lists the
+alternate model families as unread, and that is what naming those fields waits
+on — not tooling.
 
-Whether that is worth having is the only open question in this document.
+**The 64-bit build**, if it is wanted. It compiles and runs and gets as far as
+`model_plane`. Taking it further is the loop in §Phase 4 — fault, find the
+object, extend the arena — repeated until the images round-trip. It is
+mechanical and not blocked on anything, and it ends with a working 64-bit binary
+whose fields are still `uint32_t`.
 
 ## Appendix A — how the numbers were measured
 
 ```sh
 # sizes and vocabulary
-wc -l subs1.hpp                                       # 18609
+wc -l subs1.hpp                                       # 23180
 grep -o 'blob1 + 0x' subs1.hpp | wc -l                # 164 globals
 grep -c 'static inline .*__fwd_' subs1.hpp            # 95 shims
-grep -oE '\((const )?[A-Za-z_][A-Za-z0-9_]* *\*+\)' subs1.hpp | wc -l   # 5680
+grep -oE '\((const )?[A-Za-z_][A-Za-z0-9_]* *\*+\)' subs1.hpp | wc -l   # 5735
 grep -c 'goto ' subs1.hpp                             # 123
 grep -c '__hexrays_frame' subs1.hpp                   # 0
 
-# x86-64 work list
-g++ -m64 -march=x86-64 -msse2 -std=c++17 -fno-strict-aliasing -fpermissive \
-    -fno-rtti -fno-exceptions -O0 -DNDEBUG -c bmf.cpp -o /dev/null 2>x64.log
-grep -c 'cast to pointer from integer' x64.log        # 1211
-grep -E 'warning: (cast|invalid conversion)' x64.log | \
-    grep -oE '^[^:]+:[0-9]+' | sort -u | wc -l        # 1708 lines
+# structure recovery
+grep -c '^struct Obj' subs1.hpp                       # 44
+grep -oE '\->f[0-9]+' subs1.hpp | wc -l               # 1921 named accesses
+grep -oE '\*\((const )?[A-Za-z_][A-Za-z0-9_]*( )?\*+\)\([A-Za-z_][A-Za-z0-9_]* \+ [0-9]+\)' \
+     subs1.hpp | wc -l                                # 991 raw-offset, from 1646
+wc -l tools/struct-skip.txt                           # 38 objects declined
+python3 tools/structs.py subs1.hpp --list             # what is left, by traffic
 
 # dead code, as the linker sees it
 BMF_GC=list ./build.sh 2>&1 | grep 'removing unused section'

@@ -101,3 +101,63 @@ One thing to know if you re-run this: `bmf` opens its output with `"a+b"` — th
 original appends images to an archive rather than replacing one — so a harness
 that reuses one output path accumulates streams and every digest it computes is
 different from the last.  Delete the output before each run.
+
+## `structs.py` — give an object a struct and use it
+
+`objects.py` reports the field maps. This turns one into a declaration and
+rewrites every access to it:
+
+```
+python3 tools/structs.py subs1.hpp --list        # objects by traffic
+python3 tools/structs.py subs1.hpp --apply 0     # the busiest one not skipped
+python3 tools/structs.py subs1.hpp --skip 0      # record it as declined
+```
+
+The names that denote one allocation come from the same alias analysis
+`objects.py` uses. Constant offsets become members, the widest access at an
+offset wins, gaps become `_pad`, and the struct carries a `static_assert` on
+its size. Everything else about the object is left alone: a variable-offset
+walk becomes `*(T *)((char *)p + (intptr_t)(expr))` and still walks the same
+bytes.
+
+**This is only sound because the target is 32-bit.** A pointer is four bytes
+there, which is the width the decompiled code assumes every field to be, so the
+recovered layout is the layout the code already had. On a 64-bit target the
+same struct would move every field after the first pointer, and the walks would
+index the wrong things. The `static_assert` is what says so out loud.
+
+Four things it has to read rather than assume, each of which produced a
+compiling, wrong file before it was handled:
+
+- **the declared type of every name.** `p + 3` steps three bytes when `p` is
+  `char *` and twelve when it is `void **`. Offsets are scaled accordingly, on
+  both the survey and the rewrite side.
+- **whole function bodies, not lines.** The decompiler wraps expressions; a
+  dereference split over three lines is one dereference.
+- **matched brackets.** An index can contain a subscript —
+  `this_3[12 * k + 6 * (v39[n + 27] & v39[n + 19])]` — and stopping at the
+  first `]` finds only the inner one.
+- **what precedes a `*`.** `*v5` is a dereference and `16 * v5` is not.
+
+It declines rather than guesses: a name stepped with `p += k` (a cast is not an
+lvalue), or one whose declaration it cannot find (a name left at its old type
+takes `nm->f8` into a file that will not build).
+
+## `struct-sweep.sh` — apply, gate, keep or revert
+
+```
+tools/struct-sweep.sh 10        # ten objects, largest first
+```
+
+Each round backs the file up, applies the busiest object not on
+`tools/struct-skip.txt`, builds, and runs the gate. A round that fails is undone
+completely and the object is written to the skip list, so the next round moves
+past it instead of retrying it forever. State lives in the file and the skip
+list, so the sweep is resumable.
+
+It runs the gate with `BMF_TIMEOUT=60` rather than `test.sh`'s five minutes: a
+rewrite that loops forever should cost ten seconds to reject, not fifty minutes.
+Run the full gate before committing.
+
+44 objects converted; 38 are on the skip list. `REFACTORING.md` §Phase 4 has the
+categories and what each one means.
