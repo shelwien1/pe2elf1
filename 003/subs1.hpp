@@ -4937,6 +4937,37 @@ static_assert(sizeof(void *) != 4 || sizeof(Obj43) == 940088,
               "Obj43: the layout moved");
 
 
+// Obj44 -- recovered from 11 dereferences over 2 offsets, under 3
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj44 {
+  uint8_t f0;
+  uint8_t _pad1[1];
+  int16_t f2;
+};
+static_assert(sizeof(void *) != 4 || sizeof(Obj44) == 4,
+              "Obj44: the layout moved");
+
+
+// Obj45 -- recovered from 10 dereferences over 5 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj45 {
+  uint32_t f0;
+  uint32_t f4;
+  uint32_t f8;
+  uint32_t f12;
+  uint8_t _pad4[4];
+  uint32_t f20;
+};
+static_assert(sizeof(void *) != 4 || sizeof(Obj45) == 24,
+              "Obj45: the layout moved");
+
+
 struct RangeCoder {
   static const uint32_t kTop    = 0x00800000;   // renormalise at or below this
   static const uint32_t kPend   = 0x7F800000;   // low here still has a live carry
@@ -6817,7 +6848,8 @@ int32_t __sub_416C90(char *_this)
   int32_t n2_1, v3, v7, v9, v10, v15, v17, n2, v19, v21, v22, v23, v24, v25, v26, v27, v30,
           result;
   Obj37 *v20;
-  uint32_t **v4, *v5;
+  Obj45 *v5;
+  uint32_t **v4;
   n2_1 = *(uint32_t *)(_this + 32);
   if ( !n2_1 )
   {
@@ -6849,28 +6881,28 @@ int32_t __sub_416C90(char *_this)
       {
         v4 = (uint32_t **)(v3 - 4);
         *(uint32_t *)(_this + 1078232) = v4;
-        v5 = *v4;
+        v5 = (Obj45 *)(*v4);
         v6 = **(uint16_t **)(_this + 76);
-        v7 = v5[1];
-        v32 = v5[5];
-        if ( v7 == *v5 )
+        v7 = v5->f4;
+        v32 = v5->f20;
+        if ( v7 == v5->f0 )
         {
-          v8 = v5[5];
-          v5[1] = --v7;
+          v8 = v5->f20;
+          v5->f4 = --v7;
           v9 = *(uint8_t *)(v8 + 3 * v7 + 2);
         }
         else
         {
           v9 = 1;
         }
-        v10 = v5[2];
+        v10 = v5->f8;
         v11 = (int16_t *)(v32 + 3 * v7);
-        v5[1] = v7 + 1;
-        v5[2] = v9 + v10 + 1;
+        v5->f4 = v7 + 1;
+        v5->f8 = v9 + v10 + 1;
         *v11 = v6;
         *((uint8_t *)v11 + 2) = 2;
-        v5[3] += 4;
-        if ( v11 != (int16_t *)v5[5] )
+        v5->f12 += 4;
+        if ( v11 != (int16_t *)v5->f20 )
         {
           v12 = *v11;
           v13 = *((uint8_t *)v11 + 2);
@@ -16616,7 +16648,7 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
   int32_t &v511 = __frame.v511;
   Obj17 *&v512 = (Obj17 *&)__frame.v512;
   Obj42 *&v513 = (Obj42 *&)__frame.v513;
-  int32_t &v514 = __frame.v514;
+  Obj44 *&v514 = (Obj44 *&)__frame.v514;
   const char *&v515 = __frame.v515;
   Obj41 *&v516 = (Obj41 *&)__frame.v516;
   const char *&v517 = __frame.v517;
@@ -16670,7 +16702,7 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
   const char *&v565 = __frame.v565;
   Obj41 *&v566 = (Obj41 *&)__frame.v566;
   Obj17 *&v567 = (Obj17 *&)__frame.v567;
-  int32_t &v568 = __frame.v568;
+  Obj44 *&v568 = (Obj44 *&)__frame.v568;
   Obj42 *&v569 = (Obj42 *&)__frame.v569;
   int32_t &v570 = __frame.v570;
   int32_t &v571 = __frame.v571;
@@ -16699,7 +16731,8 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
   Obj40 *v94;
   Obj41 *v111;
   Obj42 *v107;
-  const char *v91, *v93, *v112;
+  Obj44 *v112;
+  const char *v91, *v93;
   float v16, v18, v20, v21, v22, v23, v24, v26;
   Obj42 *v98;
   int32_t v6, v9, v75, v77, v79, v80, v81, v84, v85, v86, v88, v89, v95, v96, v100, v101, v102,
@@ -17161,8 +17194,8 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
         v567 = (Obj17 *)((int32_t)&v90[4 * v96 + 284712]);
         v512 = (Obj17 *)(v567);
         v97 = *(int32_t *)((char *)__dword_439880 + (v96 & 0xC)) + (v96 & 0xFFFFFFF3);
-        v568 = (int32_t)&v90[4 * (v96 ^ 0x7FF0) + 284712];
-        v514 = v568;
+        v568 = (Obj44 *)((int32_t)&v90[4 * (v96 ^ 0x7FF0) + 284712]);
+        v514 = (Obj44 *)(v568);
         _mm_prefetch(v560, 1);
         v98 = (Obj42 *)((int32_t)&v90[4 * v97 + 284712]);
         n2_1 = n2;
@@ -17189,7 +17222,7 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
         v87 = n3 < 3;
         v111 = (Obj41 *)((const char *)v566);
         *(uint16_t *)(n2 + 2) = v109;
-        v112 = (const char *)v568;
+        v112 = (Obj44 *)((const char *)v568);
         _mm_prefetch(v111, 1);
         _mm_prefetch(v110, 1);
         _mm_prefetch(v112, 1);
@@ -17365,9 +17398,9 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
           v512->f6 += (uint32_t)(v550
                                                - ((*(int16_t *)&v512->f6 + (1 << ((v512->f4 + 31) & 31))) >> (v512->f4 & 31))
                                                + 2) >> 2;
-          v383 = *(int16_t *)(v514 + 2);
-          v384 = -v382 - ((v383 + (1 << ((*(uint8_t *)v514 + 31) & 31))) >> (*(uint8_t *)v514 & 31));
-          *(uint16_t *)(v514 + 2) = v383
+          v383 = v514->f2;
+          v384 = -v382 - ((v383 + (1 << ((v514->f0 + 31) & 31))) >> (v514->f0 & 31));
+          *(uint16_t *)&v514->f2 = v383
                                + ((32 * ((v384 > __dword_4458F0) - (uint32_t)(v384 < __dword_4458F4)) + v384 + 4) >> 3);
         }
         else
@@ -17609,8 +17642,8 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
             v310 = v305 - ((v309 + (1 << ((*(uint8_t *)((uintptr_t)v512 - 4) + 31) & 31))) >> (*(uint8_t *)((uintptr_t)v512 - 4) & 31));
             *(uint16_t *)((uintptr_t)v512 - 2) = v309
                                  + ((32 * ((v310 > __dword_4458F0) - (uint32_t)(v310 < __dword_4458F4)) + v310 + 4) >> 3);
-            v214 = *(int16_t *)(v514 + 2);
-            v215 = v574 - ((v214 + (1 << ((*(uint8_t *)v514 + 31) & 31))) >> (*(uint8_t *)v514 & 31));
+            v214 = v514->f2;
+            v215 = v574 - ((v214 + (1 << ((v514->f0 + 31) & 31))) >> (v514->f0 & 31));
           }
           else
           {
@@ -17795,10 +17828,10 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
             v213 = v208 - ((v212 + (1 << ((*(uint8_t *)((uintptr_t)v512 - 4) + 31) & 31))) >> (*(uint8_t *)((uintptr_t)v512 - 4) & 31));
             *(uint16_t *)((uintptr_t)v512 - 2) = v212
                                  + ((32 * ((v213 > __dword_4458F0) - (uint32_t)(v213 < __dword_4458F4)) + v213 + 4) >> 3);
-            v214 = *(int16_t *)(v514 + 2);
-            v215 = v571 - ((v214 + (1 << ((*(uint8_t *)v514 + 31) & 31))) >> (*(uint8_t *)v514 & 31));
+            v214 = v514->f2;
+            v215 = v571 - ((v214 + (1 << ((v514->f0 + 31) & 31))) >> (v514->f0 & 31));
           }
-          *(uint16_t *)(v514 + 2) = v214
+          *(uint16_t *)&v514->f2 = v214
                                + ((32 * ((v215 > __dword_4458F0) - (uint32_t)(v215 < __dword_4458F4)) + v215 + 4) >> 3);
         }
       }
