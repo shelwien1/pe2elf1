@@ -4212,6 +4212,41 @@ static_assert(sizeof(void *) != 4 || sizeof(Obj8) == 278776,
               "Obj8: the layout moved");
 
 
+// Obj9 -- recovered from 50 dereferences over 20 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj9 {
+  uint8_t _pad0[278528];
+  uint64_t f278528;
+  uint32_t f278536;
+  uint16_t f278540;
+  uint8_t f278542;
+  uint8_t _pad5[97];
+  uint64_t f278640;
+  uint64_t f278648;
+  uint8_t _pad8[4];
+  int32_t *f278660;
+  uint32_t f278664;
+  uint32_t f278668;
+  uint32_t f278672;
+  uint8_t _pad13[60];
+  uint32_t f278736;
+  uint32_t f278740;
+  uint32_t f278744;
+  uint32_t f278748;
+  uint32_t f278752;
+  uint32_t f278756;
+  uint32_t f278760;
+  uint32_t f278764;
+  uint32_t f278768;
+  uint32_t f278772;
+};
+static_assert(sizeof(void *) != 4 || sizeof(Obj9) == 278776,
+              "Obj9: the layout moved");
+
+
 struct RangeCoder {
   static const uint32_t kTop    = 0x00800000;   // renormalise at or below this
   static const uint32_t kPend   = 0x7F800000;   // low here still has a live carry
@@ -19245,7 +19280,8 @@ static inline int32_t __fwd_sub_421930_sub_41A130(void *a0, const __m128 &a1, co
   int32_t &v184 = __frame.v184;
   uint32_t &v185 = __frame.v185;
   ;
-  uintptr_t v44, v55;   // were int32_t: addresses, masked and tagged
+  Obj9 *v55;
+  uintptr_t v44;
   char *v13, *v24, *v25, *v29, *v33, *v37, *v40, *v45, *v56, *v62, *v66, *v70, *v74, *v77,
          *v84, *v86, *v88, *v90, *v92, *v94, *v96, *v98;   // were int32_t: these hold addresses
   __m128 v2, v3, *v114, *v125, *v133;
@@ -19470,30 +19506,30 @@ static inline int32_t __fwd_sub_421930_sub_41A130(void *a0, const __m128 &a1, co
             *(uint32_t *)(v13 + 278748) = v22 + 2 * v153 + 144;
             *(uint32_t *)(v13 + 278752) = v23;
           }
-          v55 = (int32_t)*(v17 - 1);
-          v56 = *(uint32_t *)(v55 + 278668);
+          v55 = (Obj9 *)((int32_t)*(v17 - 1));
+          v56 = v55->f278668;
           v57 = *(uint32_t *)(v56 - 4);
           *(uint32_t *)(v56 + 4) = v57;
-          **(uint32_t **)(v55 + 278668) = v57;
-          v58 = *(int32_t **)(v55 + 278660);
-          v59 = *(uint32_t *)(v55 + 278664);
-          *(uint32_t *)(v55 + 278660) = v59;
-          *(uint32_t *)(v55 + 278664) = v58;
+          **(uint32_t * *)&v55->f278668 = v57;
+          v58 = v55->f278660;
+          v59 = v55->f278664;
+          *(uint32_t *)&v55->f278660 = v59;
+          v55->f278664 = v58;
           v59 += 8;
-          *(uint32_t *)(v55 + 278668) = v59;
+          v55->f278668 = v59;
           v58 += 2;
           v2 = 0;
-          *(uint32_t *)(v55 + 278672) = v58;
+          v55->f278672 = v58;
           v60 = *v58;
           *(uint32_t *)(v59 - 4) = *v58;
-          v61 = (__m128i *)((v55 + 278543) & 0xFFFFFFF0);
-          *(uint32_t *)(*(uint32_t *)(v55 + 278668) - 8) = v60;
-          *(uint64_t *)(v55 + 278528) = 0;
-          *(uint32_t *)(v55 + 278536) = 0;
-          *(uint16_t *)(v55 + 278540) = 0;
-          *(uint8_t *)(v55 + 278542) = 0;
-          *(uint64_t *)(v55 + 278640) = 0;
-          *(uint64_t *)(v55 + 278648) = 0;
+          v61 = (__m128i *)(((uintptr_t)v55 + 278543) & 0xFFFFFFF0);
+          *(uint32_t *)(v55->f278668 - 8) = v60;
+          v55->f278528 = 0;
+          v55->f278536 = 0;
+          v55->f278540 = 0;
+          v55->f278542 = 0;
+          v55->f278640 = 0;
+          v55->f278648 = 0;
           *v61 = 0;
           v61[1] = 0;
           v61[2] = 0;
@@ -19501,7 +19537,7 @@ static inline int32_t __fwd_sub_421930_sub_41A130(void *a0, const __m128 &a1, co
           v61[4] = 0;
           v61[5] = 0;
           v61[6] = 0;
-          v62 = *(uint32_t *)(v55 + 278736);
+          v62 = v55->f278736;
           v63 = *(uint32_t *)(v62 - 14);
           v64 = *(uint32_t *)(v62 - 10);
           v65 = *(uint32_t *)(v62 - 6);
@@ -19511,7 +19547,7 @@ static inline int32_t __fwd_sub_421930_sub_41A130(void *a0, const __m128 &a1, co
           *(uint32_t *)(v62 + 8) = v64;
           *(uint32_t *)(v62 + 12) = v65;
           *(uint16_t *)(v62 + 16) = v59;
-          v66 = *(uint32_t *)(v55 + 278736);
+          v66 = v55->f278736;
           v67 = *(uint32_t *)(v66 - 32);
           v68 = *(uint32_t *)(v66 - 28);
           LOWORD(v59) = *(uint16_t *)(v66 - 20);
@@ -19521,7 +19557,7 @@ static inline int32_t __fwd_sub_421930_sub_41A130(void *a0, const __m128 &a1, co
           *(uint32_t *)(v66 + 26) = v68;
           *(uint32_t *)(v66 + 30) = v69;
           *(uint16_t *)(v66 + 34) = v59;
-          v70 = *(uint32_t *)(v55 + 278736);
+          v70 = v55->f278736;
           v71 = *(uint32_t *)(v70 - 50);
           v72 = *(uint32_t *)(v70 - 42);
           LOWORD(v59) = *(uint16_t *)(v70 - 38);
@@ -19531,7 +19567,7 @@ static inline int32_t __fwd_sub_421930_sub_41A130(void *a0, const __m128 &a1, co
           *(uint32_t *)(v70 + 44) = v73;
           *(uint32_t *)(v70 + 48) = v72;
           *(uint16_t *)(v70 + 52) = v59;
-          v74 = *(uint32_t *)(v55 + 278736);
+          v74 = v55->f278736;
           v75 = *(uint32_t *)(v74 - 64);
           v76 = *(uint32_t *)(v74 - 60);
           LOWORD(v59) = *(uint16_t *)(v74 - 56);
@@ -19540,7 +19576,7 @@ static inline int32_t __fwd_sub_421930_sub_41A130(void *a0, const __m128 &a1, co
           *(uint32_t *)(v74 + 62) = v75;
           *(uint32_t *)(v74 + 66) = v76;
           *(uint16_t *)(v74 + 70) = v59;
-          v77 = *(uint32_t *)(v55 + 278736);
+          v77 = v55->f278736;
           v78 = *(uint32_t *)(v77 - 82);
           v79 = *(uint32_t *)(v77 - 78);
           LOWORD(v76) = *(uint16_t *)(v77 - 74);
@@ -19549,78 +19585,78 @@ static inline int32_t __fwd_sub_421930_sub_41A130(void *a0, const __m128 &a1, co
           *(uint32_t *)(v77 + 80) = v78;
           *(uint32_t *)(v77 + 84) = v79;
           *(uint16_t *)(v77 + 88) = v76;
-          v80 = *(uint32_t *)(v55 + 278768);
-          v81 = *(uint32_t *)(v55 + 278772);
-          v82 = *(uint32_t *)(v55 + 278764);
-          v83 = *(uint32_t *)(v55 + 278760);
-          v84 = *(uint32_t *)(v55 + 278756);
-          *(uint32_t *)(v55 + 278772) = v80;
-          *(uint32_t *)(v55 + 278768) = v82;
-          *(uint32_t *)(v55 + 278764) = v83;
-          *(uint32_t *)(v55 + 278756) = v81;
-          *(uint32_t *)(v55 + 278760) = v84;
+          v80 = v55->f278768;
+          v81 = v55->f278772;
+          v82 = v55->f278764;
+          v83 = v55->f278760;
+          v84 = v55->f278756;
+          v55->f278772 = v80;
+          v55->f278768 = v82;
+          v55->f278764 = v83;
+          v55->f278756 = v81;
+          v55->f278760 = v84;
           v81 += 144;
-          *(uint32_t *)(v55 + 278736) = v81;
+          v55->f278736 = v81;
           v84 += 144;
-          *(uint32_t *)(v55 + 278740) = v84;
-          *(uint32_t *)(v55 + 278744) = v83 + 144;
-          *(uint32_t *)(v55 + 278748) = v82 + 144;
-          *(uint32_t *)(v55 + 278752) = v80 + 144;
+          v55->f278740 = v84;
+          v55->f278744 = v83 + 144;
+          v55->f278748 = v82 + 144;
+          v55->f278752 = v80 + 144;
           *(uint32_t *)(v81 - 18) = *(uint32_t *)v84;
           *(uint32_t *)(v81 - 14) = *(uint32_t *)(v84 + 4);
           *(uint32_t *)(v81 - 10) = *(uint32_t *)(v84 + 8);
           *(uint32_t *)(v81 - 6) = *(uint32_t *)(v84 + 12);
           *(uint16_t *)(v81 - 2) = *(uint16_t *)(v84 + 16);
-          v85 = *(uint32_t *)(v55 + 278736);
-          v86 = *(uint32_t *)(v55 + 278740);
+          v85 = v55->f278736;
+          v86 = v55->f278740;
           *(uint32_t *)(v85 - 36) = *(uint32_t *)(v86 + 18);
           *(uint32_t *)(v85 - 32) = *(uint32_t *)(v86 + 22);
           *(uint32_t *)(v85 - 28) = *(uint32_t *)(v86 + 26);
           *(uint32_t *)(v85 - 24) = *(uint32_t *)(v86 + 30);
           *(uint16_t *)(v85 - 20) = *(uint16_t *)(v86 + 34);
-          v87 = *(uint32_t *)(v55 + 278736);
-          v88 = *(uint32_t *)(v55 + 278740);
+          v87 = v55->f278736;
+          v88 = v55->f278740;
           *(uint32_t *)(v87 - 54) = *(uint32_t *)(v88 + 36);
           *(uint32_t *)(v87 - 50) = *(uint32_t *)(v88 + 40);
           *(uint32_t *)(v87 - 46) = *(uint32_t *)(v88 + 44);
           *(uint32_t *)(v87 - 42) = *(uint32_t *)(v88 + 48);
           *(uint16_t *)(v87 - 38) = *(uint16_t *)(v88 + 52);
-          v89 = *(uint32_t *)(v55 + 278736);
-          v90 = *(uint32_t *)(v55 + 278740);
+          v89 = v55->f278736;
+          v90 = v55->f278740;
           *(uint32_t *)(v89 - 72) = *(uint32_t *)(v90 + 54);
           *(uint32_t *)(v89 - 68) = *(uint32_t *)(v90 + 58);
           *(uint32_t *)(v89 - 64) = *(uint32_t *)(v90 + 62);
           *(uint32_t *)(v89 - 60) = *(uint32_t *)(v90 + 66);
           *(uint16_t *)(v89 - 56) = *(uint16_t *)(v90 + 70);
-          v91 = *(uint32_t *)(v55 + 278736);
-          v92 = *(uint32_t *)(v55 + 278740);
+          v91 = v55->f278736;
+          v92 = v55->f278740;
           *(uint32_t *)(v91 - 90) = *(uint32_t *)(v92 + 72);
           *(uint32_t *)(v91 - 86) = *(uint32_t *)(v92 + 76);
           *(uint32_t *)(v91 - 82) = *(uint32_t *)(v92 + 80);
           *(uint32_t *)(v91 - 78) = *(uint32_t *)(v92 + 84);
           *(uint16_t *)(v91 - 74) = *(uint16_t *)(v92 + 88);
-          v93 = *(uint32_t *)(v55 + 278736);
-          v94 = *(uint32_t *)(v55 + 278740);
+          v93 = v55->f278736;
+          v94 = v55->f278740;
           *(uint32_t *)(v93 - 108) = *(uint32_t *)(v94 + 90);
           *(uint32_t *)(v93 - 104) = *(uint32_t *)(v94 + 94);
           *(uint32_t *)(v93 - 100) = *(uint32_t *)(v94 + 98);
           *(uint32_t *)(v93 - 96) = *(uint32_t *)(v94 + 102);
           *(uint16_t *)(v93 - 92) = *(uint16_t *)(v94 + 106);
-          v95 = *(uint32_t *)(v55 + 278736);
-          v96 = *(uint32_t *)(v55 + 278740);
+          v95 = v55->f278736;
+          v96 = v55->f278740;
           *(uint32_t *)(v95 - 126) = *(uint32_t *)(v96 + 108);
           *(uint32_t *)(v95 - 122) = *(uint32_t *)(v96 + 112);
           *(uint32_t *)(v95 - 118) = *(uint32_t *)(v96 + 116);
           *(uint32_t *)(v95 - 114) = *(uint32_t *)(v96 + 120);
           *(uint16_t *)(v95 - 110) = *(uint16_t *)(v96 + 124);
-          v97 = *(uint32_t *)(v55 + 278736);
-          v98 = *(uint32_t *)(v55 + 278740);
+          v97 = v55->f278736;
+          v98 = v55->f278740;
           *(uint32_t *)(v97 - 144) = *(uint32_t *)(v98 + 126);
           *(uint32_t *)(v97 - 140) = *(uint32_t *)(v98 + 130);
           *(uint32_t *)(v97 - 136) = *(uint32_t *)(v98 + 134);
           *(uint32_t *)(v97 - 132) = *(uint32_t *)(v98 + 138);
           *(uint16_t *)(v97 - 128) = *(uint16_t *)(v98 + 142);
-          *(uint16_t *)(*(uint32_t *)(v55 + 278736) + 2) = 0;
+          *(uint16_t *)(v55->f278736 + 2) = 0;
           n4_1 = plane_count;
         }
         while ( plane_count > n4_2 );

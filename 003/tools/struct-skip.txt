@@ -3,5 +3,3 @@ __model_plane:Blocka __model_plane:Blocka_1 __model_plane:Blocka_2 __model_plane
 __sub_41CAB0:a1 __sub_41CAB0:v385 __sub_41CAB0:v578 __sub_422DB0:lpAddress
 __code_pixel:_this __code_pixel:this_1 __code_pixel:this_2 __code_pixel:this_3 __code_pixel:this_4 __sub_416860:_this __sub_418650:_this __sub_418650:this_1 __sub_418650:this_2 __sub_418650:this_3 __sub_418650:this_4
 __sub_41A130:v109 __sub_41A130:v12 __sub_41A130:v130 __sub_41A130:v157 __sub_41A130:v172 __sub_41A130:v201 __sub_41A130:v292
-__sub_421930:v55
-__sub_41C4B0:a3
