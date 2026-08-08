@@ -232,11 +232,14 @@ commit boundary.
 0  the gate, and one mode      done      §2
 1  names you already know      done      39 identifiers
 2  frames -> real locals       done      0 frames left
-3  un-pin the globals          part      the pointers are out; the blob is not
-4  objects + pointers          part      every local typed; the fields are not
-5  casts and the vocabulary    part      the useless ones are gone
+3  un-pin the globals          part      86 of 163 out; the other 77 are §7
+4  objects + pointers          part      every local typed; the fields are §7
+5  casts and the vocabulary    part      the useless ones went with 4
 6  control flow                not done  and not for the reason the plan gave
 ```
+
+Phases 3 to 6 are not four things left. They are one thing left, from four
+sides — see §7.
 
 ### Phase 0 — done
 
@@ -301,26 +304,61 @@ does not.
 `blob.inc` is down to 78 globals from 293 at the start. It cannot go to zero
 until the 77 shared ones are understood as the tables they are.
 
-### Phase 4 — every local is typed; the fields are not
+### Phase 4 — every local is typed; the fields need the objects read
 
 3784 → 1211 int↔pointer warnings. `tools/retype.py` converted every local and
 parameter used as a pointer base: 189 candidates, `char *` where the variable is
 only ever an address and `uintptr_t` where the code also masks or tags it. There
 are no candidates of that kind left.
 
-What remains is one shape:
+What remains is one shape, and it is the shape §4.2 warned about:
 
 ```c
 *(uint8_t *)(*(uint32_t *)(_this + 76) + 6)
 ```
 
 The local is typed; the **field** at `+76` is not. It is a pointer kept in a
-`uint32_t` inside a structure this program allocates itself, so fixing it means
-changing that structure's layout, which means knowing what the structure is.
-§4.2 said pointers and structures are one job and this is where that bites: the
-two biggest holders are the model block and the alternate model families
-`ALGORITHM.md` §9 lists as unread. **This part is reading, not rewriting**, and
-it is the largest single piece of work left in this document.
+`uint32_t` inside a structure this program allocates itself. Widening it to a
+real pointer makes it 8 bytes on a 64-bit target, which moves every offset after
+it, which means every access to that object — in every function — has to go
+through the struct at once. That is what "objects and pointers are one job"
+costs when you get to the object.
+
+**The offsets are not the obstacle.** They are mostly constant and can be read
+off:
+
+| base | accesses | distinct constant offsets | variable-offset accesses |
+| --- | --- | --- | --- |
+| `_this` | 412 | 101 | 37 |
+| `a1` | 140 | 38 | 38 |
+| `this_4` | 82 | 34 | 0 |
+| `v23` | 68 | 25 | 1 |
+
+**Object identity is.** Those are per-function local names, not objects. Before
+a struct can be declared, the names that denote the same allocation have to be
+grouped, and the code does not say so directly: there are 26 places where a base
+comes from `malloc` and 1673 where one base is assigned from another. Following
+that graph through parameters, `__fwd_*` shims and `int32_t` round-trips is
+exactly the reverse engineering `ALGORITHM.md` §9 has open.
+
+`this_4` is the worked example of why this cannot be done one function at a
+time. It has the cleanest map in the file — 34 constant offsets, no variable
+ones, and it appears in exactly one function. It still cannot be converted
+alone, because two lines above its first use is
+
+```c
+this_4 = (int32_t)this_1;
+```
+
+and `this_1` is the same allocation under a different name in a different
+function. Change the layout for one view and the other view is silently wrong —
+the failure mode §4.1 describes, and the one ten test images are least likely to
+catch.
+
+So the remaining work is: **read the model block and the alternate model
+families, group the names, then apply the mechanical part.** The mechanical part
+is ready — `tools/retype.py` for the variables, `tools/blob-independence.txt`
+for which globals belong to the same tables — and it is not the expensive half.
 
 ### Phase 5 — partly, and smaller than it looked
 
@@ -333,17 +371,26 @@ should be rewritten here.
 
 ### Phase 6 — not done, and the plan was wrong about why
 
-The plan said the 123 `goto`s are "most of them one of four shapes (loop
+The plan said the `goto`s are "most of them one of four shapes (loop
 `continue`, loop `break`, early `return`, shared error tail) and rewrite
-mechanically". Measured: **not one label in the file is followed by a `return`,
-a `break` or a `continue`.** 55 are followed by an assignment and 21 by an `if`.
-There are no unused labels and no `goto` whose label is the next line.
+mechanically". Measured, on all 123:
 
-This is irreducible control flow — the cases Hex-Rays could not structure — and
-restructuring it needs each function read and understood. It is correctly last,
-but it is not the mechanical pass the plan promised, and doing it before Phase 4
-finishes would be introducing bugs the gate cannot distinguish from a layout
-change.
+| | |
+| --- | --- |
+| backward (a loop the decompiler could not name) | 21 |
+| forward, over more than two statements | 102 |
+| forward, over braces only | 0 |
+| labels followed by `return` / `break` / `continue` | **0** |
+| labels reached by no `goto` | 0 |
+| `goto` whose label is the next line | 0 |
+
+Not one of them is any of the four shapes. 55 labels are followed by an
+assignment and 21 by an `if`. This is the control flow Hex-Rays could not
+structure, and restructuring it means understanding each function — the same
+reading Phase 4 needs, on the same functions.
+
+It is correctly last. It is not a mechanical pass, and doing it before Phase 4
+finishes would introduce bugs the gate cannot tell apart from a layout change.
 
 ## 6. Things that will bite
 
@@ -377,32 +424,51 @@ change.
 
 ---
 
-## 7. What is left
+## 7. What is left, and what it is blocked on
 
-| | work | why it is not done |
+| | work | blocked on |
 | --- | --- | --- |
-| 3 de-blob | 78 globals | the 86 separable ones are out; the 77 that are not are `tools/blob-independence.txt`, and are the same tables Phase 4 needs |
-| 4 structures | ~1211 warnings | the model block and the alternate model families have to be *read* first |
+| 3 de-blob | 78 globals | the 77 in `tools/blob-independence.txt` are parts of larger tables — the same objects Phase 4 needs |
+| 4 structures | 1211 warnings | **object identity**: 26 allocations, 1673 assignments of one base to another, and no source-level statement of which names are the same object |
 | 5 casts | ~5680 | most fall out of 4; the rest is `LOBYTE`-family bit-packing |
-| 6 control flow | 123 gotos | irreducible; needs each function understood, and needs 4 |
+| 6 control flow | 123 gotos | needs each function understood, which is what 4 needs |
 
-The order among these is forced, and tighter than it was: 3 and 4 turn out to be
-the same task seen from two ends — recover the objects — and 4 gates 5 and 6.
-6 last, still.
+These are not four remaining tasks. They are **one** remaining task seen from
+four sides: the model block and the alternate model families have to be read.
+`ALGORITHM.md` §9 lists them as unread and this document has now measured, from
+four directions, that nothing downstream moves until they are:
 
-Two of this document's own predictions were wrong, and both were wrong in the
-same direction — assuming a mechanical pass where the code had something real to
-say:
+* the 77 globals that cannot be separated are those tables, seen from the data;
+* the 1211 warnings are those tables, seen from the pointers;
+* the casts are what holding them without types costs;
+* the `goto`s are the control flow of the functions that walk them.
 
-* Phase 2 expected 3–6 frames to resist splitting; 16 did, because the frames
-  carry unnamed slack the code runs into.
-* Phase 6 expected the `goto`s to be four rewritable shapes; none of them is.
-* Phase 3 expected the guard-gap run to *migrate* all the globals at once. It
-  segfaulted. Run one global at a time it did both jobs: it moved the 86 that
-  can move, and it named the 77 that cannot.
+The mechanical halves are built and gated — `foldif.py`, `rename.py`,
+`unframe.py`, `retype.py`, `extents.py`, `deblob.py`, `mkrefs.sh` — and none of
+them is the expensive part. What is expensive is reading `sub_41CAB0` and the
+four alternate-model entry points, and that is a reverse-engineering job, not a
+refactoring one.
 
-The gate caught the first before it shipped. The second was caught by measuring
-before starting, which is the cheaper of the two.
+**Do not attempt the rest mechanically.** §4.2's `this_4` is the reason: the
+cleanest offset map in the file, in a single function, and still not convertible
+alone, because the allocation it names is called something else two frames up.
+Getting that wrong produces a program that passes ten images and corrupts the
+eleventh, which is the one failure this document's gate cannot catch.
+
+### Two predictions this document got wrong
+
+Both in the same direction — assuming a mechanical pass where the code had
+something to say.
+
+* Phase 2 expected 3–6 frames to resist splitting; 16 did, because they carry
+  bytes no alias names and the code runs into them. The gate caught it.
+* Phase 6 expected the `goto`s to be four rewritable shapes; **none** of the 123
+  is any of them. Measuring first cost nothing; the alternative was 123 rewrites
+  looking for a pattern that is not there.
+
+And one it got right for the wrong reason: Phase 3's guard-gap run was scheduled
+as a migration. It segfaulted. Run one global at a time instead it did both jobs
+— moved the 86 that can move, and named the 77 that cannot.
 
 ## Appendix A — how the numbers were measured
 
