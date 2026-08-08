@@ -86,7 +86,8 @@ def retype_params(lines, a, names):
     sig = lines[j]
     hit = [n for n in names if n in declared_params(sig)]
     for n in hit:
-        sig = re.sub(r'\b(%s) (%s)\b' % (INT, re.escape(n)), r'char *\2', sig)
+        rep = (r'uintptr_t \2' if TYPE == 'uintptr_t' else r'char *\2')
+        sig = re.sub(r'\b(%s) (%s)\b' % (INT, re.escape(n)), rep, sig)
     lines[j] = sig
     return hit
 

@@ -4080,7 +4080,7 @@ LABEL_20:
   return result;
 }
 
- int32_t __write_bmp(int32_t p_i, char *FileName, int32_t a3)
+ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
 {
   uint32_t Buffera;
   char *&Bufferb = *(char **)((char *)&Buffera);
@@ -4104,11 +4104,12 @@ LABEL_20:
   char *buf_2;
   uint32_t v77;
   ;
+  uintptr_t p_i_1;   // were int32_t: addresses, masked and tagged
   FILE *Stream_1, *Stream_2;
   bool v33;
   char *Bufferc_3, v7, *Bufferc_1, *Bufferb_1, *v19, *v24, *buf_1, *v31, *v39, v42, v43, v44,
        v45, v46, v47, *buf_3, *Bufferc_2, v56;
-  int32_t v3, p_i_1, i, Buffer_1, n8, v14, v16, v17, v20, v21, v22, v23, v25, v26, v28, n4, n2,
+  int32_t v3, i, Buffer_1, n8, v14, v16, v17, v20, v21, v22, v23, v25, v26, v28, n4, n2,
           Buffer_3, Buffer_4, Size, v40, n2_1, v49, Size_1, v55;
   uint16_t *p_i_2;
   uint32_t v15, v18, Bufferb_2, Size_3, ElementCount, v53;
@@ -10844,7 +10845,7 @@ void __sub_419430(uint32_t *_this)
   }
 }
 
- BMF_SSE int32_t __sub_417980(int32_t a1, int32_t a2, int32_t i, int32_t a4, int32_t a5)
+ BMF_SSE int32_t __sub_417980(uintptr_t a1, int32_t a2, int32_t i, int32_t a4, int32_t a5)
 {
   ;
   __m128i si128, v26, v27;
@@ -13914,12 +13915,14 @@ LABEL_115:
 static inline int32_t __fwd_sub_422DB0_sub_414620(void *a0, int32_t a1) { return __sub_414620((uint16_t *)a0, a1); }
 static inline int32_t __fwd_sub_422DB0_sub_41A130(void *a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __sub_41A130((__m128 *)a0, a1, a2, (uint32_t *)a3, (uint32_t *)a4); }
 
-BMF_SSE void __sub_422DB0(int32_t lpAddress, char ArgList, const __m128 &a3__ref, const __m128 &a4__ref, uint8_t *a5, int32_t i, int32_t a7)
+BMF_SSE void __sub_422DB0(uintptr_t lpAddress, char ArgList, const __m128 &a3__ref, const __m128 &a4__ref, uint8_t *a5, int32_t i, int32_t a7)
 {
   int32_t v95;
   uint32_t &v96 = *(uint32_t *)((char *)&v95);
   uint8_t *v97;
   ;
+  uintptr_t v11, v21, v25, v28, v32, v36, v38, v39, v40, v41, v42, v43, v44, v48, v54, v58,
+         v62, v66, v69, v76, v78, v80, v82, v84, v86, v88, v90, v93;   // were int32_t: addresses, masked and tagged
   __m128 a3 = a3__ref;
   __m128 a4 = a4__ref;
   __m128 v47;
@@ -13927,11 +13930,9 @@ BMF_SSE void __sub_422DB0(int32_t lpAddress, char ArgList, const __m128 &a3__ref
   bool v17;
   char v9, v45, v46;
   int16_t v14, v24;
-  int32_t i_1, v11, v12, v13, v18, v19, v20, v21, v22, v23, v25, v26, v27, v28, v29, v30, v31,
-          v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v48, v49, *v50, v51,
-          v52, v54, v55, v56, v57, v58, v59, v60, v61, v62, v63, v64, v65, v66, v67, v68, v69,
-          v70, v71, v72, v73, v74, v75, v76, v77, v78, v79, v80, v81, v82, v83, v84, v85, v86,
-          v87, v88, v89, v90, v92, v93, v94;
+  int32_t i_1, v12, v13, v18, v19, v20, v22, v23, v26, v27, v29, v30, v31, v33, v34, v35, v37,
+          v49, *v50, v51, v52, v55, v56, v57, v59, v60, v61, v63, v64, v65, v67, v68, v70, v71,
+          v72, v73, v74, v75, v77, v79, v81, v83, v85, v87, v89, v92, v94;
   int64_t v16;
   uint16_t *v15;
   uint32_t j;
