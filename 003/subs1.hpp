@@ -5339,6 +5339,44 @@ static_assert(sizeof(void *) != 4
               "Obj64: the layout moved");
 
 
+// Obj65 -- recovered from 8 dereferences over 8 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj65 {
+  uint16_t f0;
+  uint16_t f2;
+  uint16_t f4;
+  uint16_t f6;
+  uint16_t f8;
+  uint16_t f10;
+  uint16_t f12;
+  uint16_t f14;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj65, f14) == 14,
+              "Obj65: the layout moved");
+
+
+// Obj66 -- recovered from 8 dereferences over 5 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj66 {
+  uint16_t f0;
+  uint16_t f2;
+  uint16_t f4;
+  uint8_t _pad3[2];
+  uint16_t f8;
+  uint16_t f10;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj66, f10) == 10,
+              "Obj66: the layout moved");
+
+
 struct RangeCoder {
   static const uint32_t kTop    = 0x00800000;   // renormalise at or below this
   static const uint32_t kPend   = 0x7F800000;   // low here still has a live carry
@@ -14168,8 +14206,9 @@ int32_t __sub_418650(Obj10 *_this, int32_t a2)
   Obj18 *v171;
   Obj18 *v4;
   Obj18 *v90;
-  uint16_t *n15_9, *v16, *n4_10, *v58, *__sub_418650_n4_3, *v95, *v97, *v106, *v110, *v121,
-           v154, v162, v174;
+  Obj65 *v97;
+  uint16_t *n15_9, *v16, *n4_10, *v58, *__sub_418650_n4_3, *v95, *v106, *v110, *v121, v154,
+           v162, v174;
   Obj10 *this_3;
   Obj10 *this_2;
   uint32_t bin_tot, n4_16, n4_15, **v134, v136, v137, v138, v139, v140, v172, v173, v175, v176,
@@ -14775,19 +14814,19 @@ LABEL_86:
   this_3->f1078216 = 0;
   n4_5 = v95[1];
   n15_8 = *v95;
-  v97 = (uint16_t *)this_3->f6059432;
-  n4_6 = *v97;
-  n15_5 = v97[1];
-  v100 = (Obj18 *)((uint16_t *)v97[2]);
+  v97 = (Obj65 *)((uint16_t *)this_3->f6059432);
+  n4_6 = v97->f0;
+  n15_5 = v97->f2;
+  v100 = (Obj18 *)((uint16_t *)v97->f4);
   n4_1 = n4_5;
-  this_4 = (Obj10 *)(v97[3]);
+  this_4 = (Obj10 *)(v97->f6);
   __sub_418650_n4_4 = n4_6;
-  v102 = v97[4];
+  v102 = v97->f8;
   n15_3 = n15_5;
-  v103 = v97[5];
+  v103 = v97->f10;
   v184 = (Obj18 *)(v100);
-  v104 = v97[6];
-  v105 = v97[7];
+  v104 = v97->f12;
+  v105 = v97->f14;
   this_1 = (Obj10 *)((uint32_t *)this_4);
   v106 = (uint16_t *)this_3->f80;
   v186 = v102;
@@ -14969,8 +15008,9 @@ int32_t __code_pixel(Obj10 *_this, int32_t a2)
           v121, v122, v123, v125, v126, v127, v128, v129, n15_28, n32, n15_29, n4_5, v134, v135,
           p_n15_6, *v143, v144, n2_16, n2_17, n15_37, v149, v150, v151, v152, v154, v155, v157,
           n15_18, v161, n2_2, p_n15_10, p_n15_8, p_n15_9, n15_19;
+  Obj66 *v159;
   uint16_t *n2_7, *n2_8, *v37, *v51, *n2_11, *n2_12, *n2_13, *n2_14, *v97, *v98, *n2_6, *v108,
-           *v111, *v113, *v124, v153, *v159, *n15_39;
+           *v111, *v113, *v124, v153, *n15_39;
   uint32_t bin_tot, v55, v57, **v136, v137, p_n15_12, v139, v140, v141, v168, v169, v171, v172,
           v173;
   uint8_t *p_n15_3, *v41, *v69;
@@ -15466,27 +15506,27 @@ LABEL_42:
     }
     else
     {
-      v159 = (uint16_t *)&((int32_t *)this_3)[v82 + 24];
+      v159 = (Obj66 *)((uint16_t *)&((int32_t *)this_3)[v82 + 24]);
       n15_18 = *v185;
       arg_tot = *(uint16_t *)(n15_36 + 10);
       if ( n15_18 == n15_3 )
       {
-        v161 = *v159;
+        v161 = v159->f0;
         n2_2 = 1;
       }
       else if ( n15_18 == n15_7 )
       {
-        v161 = *v159 + v159[1];
+        v161 = v159->f0 + v159->f2;
         n2_2 = 2;
       }
       else if ( n15_18 == n15_4 )
       {
-        v161 = *v159 + v159[2] + v159[1];
+        v161 = v159->f0 + v159->f4 + v159->f2;
         n2_2 = 3;
       }
       else if ( n15_18 == n15_2 )
       {
-        v161 = v159[5] - v159[4];
+        v161 = v159->f10 - v159->f8;
         n2_2 = 4;
       }
       else

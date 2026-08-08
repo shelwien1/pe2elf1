@@ -70,3 +70,11 @@ __sub_421930:v66
 __sub_421930:v74
 __read_bmp:Src __read_bmp:Src_1 __read_bmp:Src_2 __read_bmp:Src_3 __read_bmp:Src_4 __read_bmp:Src_5 __read_bmp:Src_6
 __model_plane:a4 __model_plane:a5 __reduce_alphabet:a3 __reduce_alphabet:v10 __reduce_alphabet:v33 __reduce_alphabet:v4 __reduce_alphabet:v60 __reduce_alphabet:v91 __reduce_alphabet:v96 __sub_407B30:Srca_1 __sub_407B30:Srca_3 __sub_421930:a2 __sub_421930:v166
+__sub_405CF0:v214
+__sub_412490:_this
+__sub_412850:_this
+__symbol_list:v28
+__symbol_list:v36 __symbol_list:v37 __symbol_list:v49
+__sub_413230:v16
+__sub_413230:v23 __sub_413230:v24 __sub_413230:v33
+__sub_413E60:a1
