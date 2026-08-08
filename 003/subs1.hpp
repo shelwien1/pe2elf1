@@ -4257,12 +4257,17 @@ static_assert(sizeof(void *) != 4
               "Obj9: the layout moved");
 
 
-// Obj10 -- recovered from 174 dereferences over 25 offsets, under 5
+// ModelBlock -- the model block, and the only recovered object whose role is
+// established: the allocation sub_414F60 makes, reached here at offsets 0x64
+// to 0x5C75AC.  See REFACTORING.md section 4.2.  The other structs keep their
+// ObjN names because naming their fields waits on ALGORITHM.md section 9.
+//
+// Recovered from 174 dereferences over 25 offsets, under 5
 // names.  The layout is the one the code already assumed: at 32 bits a
 // pointer is four bytes, so naming these fields moves nothing, and the
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
-struct Obj10 {
+struct ModelBlock {
   uint32_t f0;
   uint8_t _pad1[12];
   uint32_t f16;
@@ -4296,8 +4301,8 @@ struct Obj10 {
   int32_t f6059436;
 };
 static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj10, f6059436) == 6059436,
-              "Obj10: the layout moved");
+              || __builtin_offsetof(ModelBlock, f6059436) == 6059436,
+              "ModelBlock: the layout moved");
 
 
 // Obj11 -- recovered from 353 dereferences over 39 offsets, under 23
@@ -7192,7 +7197,7 @@ void **__sub_415270(void **Blocka, char a2)
   return Blocka_1;
 }
 
-int32_t __sub_416860(Obj10 *_this, Obj24 *p_n15)
+int32_t __sub_416860(ModelBlock *_this, Obj24 *p_n15)
 {
   ;
   char *v7, *v16;   // was int32_t: these hold addresses
@@ -14153,9 +14158,9 @@ LABEL_19:
 static inline int32_t __fwd_sub_418650_sub_412850(void *a0, void *a1) { return __sub_412850((uint16_t *)a0, (uint16_t *)a1); }
 static inline int32_t __fwd_sub_418650_sub_412E60(void *a0) { return __sub_412E60((uint32_t *)a0); }
 static inline int32_t __fwd_sub_418650_sub_4148F0(void *a0) { return __sub_4148F0((uint16_t *)a0); }
-static inline int32_t __fwd_sub_418650_sub_416860(void *a0, void *a1) { return __sub_416860((Obj10 *)a0, (Obj24 *)a1); }
+static inline int32_t __fwd_sub_418650_sub_416860(void *a0, void *a1) { return __sub_416860((ModelBlock *)a0, (Obj24 *)a1); }
 
-int32_t __sub_418650(Obj10 *_this, int32_t a2)
+int32_t __sub_418650(ModelBlock *_this, int32_t a2)
 {
   struct alignas(16) {   // 164 bytes, the frame Hex-Rays could not name
       int32_t n15_8;
@@ -14199,7 +14204,7 @@ int32_t __sub_418650(Obj10 *_this, int32_t a2)
   int32_t &__sub_418650_n4_4 = __frame.__sub_418650_n4_4;
   int32_t &n15_3 = __frame.n15_3;
   Obj18 *&v184 = (Obj18 *&)__frame.v184;
-  Obj10 *&this_1 = (Obj10 *&)__frame.this_1;
+  ModelBlock *&this_1 = (ModelBlock *&)__frame.this_1;
   int32_t &v186 = __frame.v186;
   int32_t &v187 = __frame.v187;
   int32_t &v188 = __frame.v188;
@@ -14233,7 +14238,7 @@ int32_t __sub_418650(Obj10 *_this, int32_t a2)
   bool v19;
   char v70, v71, v72, v73, v74, v75, v91, *v157;
   int16_t v14, n4_14, v146, v160, n15_4;
-  Obj10 *this_4;
+  ModelBlock *this_4;
   int32_t arg_cum, arg_high, arg_tot, n4_8, n4_7, n15_6, n15_7, v8, v9, v10, v12, v13, v15,
           n4_9, __sub_418650_n15, v22, n4_11, v25, v26, v27, v29, v31, n0xFFFF, v33, n0xFFFF_1,
           n53248, n4_12, v40, n15_11, n8, n15_12, v44, n4_22, n15_14, n15_18, v49, v50, v51,
@@ -14251,8 +14256,8 @@ int32_t __sub_418650(Obj10 *_this, int32_t a2)
   Obj65 *v97;
   uint16_t *n15_9, *v16, *n4_10, *v58, *__sub_418650_n4_3, *v95, *v106, *v110, *v121, v154,
            v162, v174;
-  Obj10 *this_3;
-  Obj10 *this_2;
+  ModelBlock *this_3;
+  ModelBlock *this_2;
   uint32_t bin_tot, n4_16, n4_15, **v134, v136, v137, v138, v139, v140, v172, v173, v175, v176,
            v177;
   Obj18 *v142;
@@ -14262,7 +14267,7 @@ int32_t __sub_418650(Obj10 *_this, int32_t a2)
   v4 = (Obj18 *)((uint16_t *)*((uint32_t *)_this + 19));
   n4_7 = *((uint16_t *)v4 - 4);
   n15_6 = n15_9[4];
-  this_1 = (Obj10 *)(_this);
+  this_1 = (ModelBlock *)(_this);
   n15_7 = *(n15_9 - 4);
   n15_8 = n4_8;
   ::__n4_4 = n4_8;
@@ -14275,7 +14280,7 @@ int32_t __sub_418650(Obj10 *_this, int32_t a2)
   __sub_418650_n4_4 = n15_7;
   __n15_0 = n15_7;
   v10 = 2 * *((uint8_t *)v4 - 6) + 8 * v9 + v8;
-  this_2 = (Obj10 *)(this_1);
+  this_2 = (ModelBlock *)(this_1);
   v12 = 32 * *((uint8_t *)v4 - 4) + 16 * *((uint8_t *)v4 - 2) + v10;
   if ( n4_8 == n4_7 )
   {
@@ -14345,13 +14350,13 @@ int32_t __sub_418650(Obj10 *_this, int32_t a2)
   this_2->f40 = v22;
   n4_11 = *((uint8_t *)n15_9 + 2);
   v184 = (Obj18 *)(v4);
-  this_1 = (Obj10 *)(this_2);
+  this_1 = (ModelBlock *)(this_2);
   __sub_418650_n4_4 = n4_11;
   v25 = this_2->f92;
   v26 = *((uint8_t *)v4 - 5);
   v186 = v25;
   v27 = 8 * *((uint8_t *)v4 - 12) + 4 * *((uint8_t *)v4 - 9) + v26 + 2 * *((uint8_t *)v4 - 10);
-  this_3 = (Obj10 *)(this_1);
+  this_3 = (ModelBlock *)(this_1);
   v29 = ((uint8_t)(*(uint8_t *)(v186 + 2) & *(uint8_t *)(v21 + 2) & __sub_418650_n4_4 & *(uint8_t *)(v23 + 2)) << 9)
       + ((uint8_t)(*(uint8_t *)(v186 + 3) & *(uint8_t *)(v21 + 3) & *(uint8_t *)(v23 + 3) & *((uint8_t *)n15_9 + 3)) << 8)
       + (v22 << 10)
@@ -14416,7 +14421,7 @@ int32_t __sub_418650(Obj10 *_this, int32_t a2)
       else
       {
         n4_1 = this_3->f0 - a2;
-        this_1 = (Obj10 *)(this_3);
+        this_1 = (ModelBlock *)(this_3);
         while ( 1 )
         {
           n8 = 8 * n15_11;
@@ -14425,12 +14430,12 @@ int32_t __sub_418650(Obj10 *_this, int32_t a2)
           v40 = (uint8_t)(v39[n8 + 2] & v40);
           if ( ++n15_11 >= n4_1 )
           {
-            this_3 = (Obj10 *)(this_1);
+            this_3 = (ModelBlock *)(this_1);
             n8 = 8 * n15_11;
             goto LABEL_42;
           }
         }
-        this_3 = (Obj10 *)(this_1);
+        this_3 = (ModelBlock *)(this_1);
       }
 LABEL_42:
       n15_12 = *(uint8_t *)(this_3->f1078684 + n15_11);
@@ -14458,7 +14463,7 @@ LABEL_42:
           goto LABEL_57;
         n15_3 = n15_11;
         n15_8 = n15_12;
-        this_1 = (Obj10 *)(this_3);
+        this_1 = (ModelBlock *)(this_3);
         n15_18 = 0;
         v49 = 1 << (n15_12 & 31);
         v50 = 0;
@@ -14484,7 +14489,7 @@ LABEL_42:
           v49 >>= 1;
         }
         while ( v49 );
-        this_3 = (Obj10 *)(this_1);
+        this_3 = (ModelBlock *)(this_1);
       }
       if ( n15_18 )
         *(uint16_t *)(this_3->f76 + 8 * n15_18 - 8) = *(uint16_t *)(this_3->f76 - 8);
@@ -14621,7 +14626,7 @@ LABEL_57:
       v148 = __sub_418650_n4_3[5];
       v149 = *__sub_418650_n4_3;
       *((uint8_t *)__sub_418650_n4_3 + 14) *= 8;
-      this_1 = (Obj10 *)(this_3);
+      this_1 = (ModelBlock *)(this_3);
       v150 = 21 * __sub_418650_n4_3[1];
       n4_1 += (21 * v149 + v148 - 1) / v148;
       *__sub_418650_n4_3 = n4_1;
@@ -14638,7 +14643,7 @@ LABEL_57:
       v159 = 21 * __sub_418650_n4_3[4];
       __sub_418650_n4_3[3] = v158;
       v160 = v158 + (uint16_t)v157 + v154;
-      this_3 = (Obj10 *)(this_1);
+      this_3 = (ModelBlock *)(this_1);
       v161 = (v159 + v148 - 1) / v148 + n15_3;
       __sub_418650_n4_3[4] = v161;
       v162 = n4_1 + v161 + v160;
@@ -14691,7 +14696,7 @@ LABEL_57:
       v136 = __sub_418650_n4_3[2];
       n15_8 = n256_2;
       v137 = __sub_418650_n4_3[1];
-      this_1 = (Obj10 *)(this_3);
+      this_1 = (ModelBlock *)(this_3);
       v138 = *__sub_418650_n4_3;
       n4_1 = n4;
       __sub_418650_n4_4 = n15_1;
@@ -14710,7 +14715,7 @@ LABEL_57:
       LOWORD(v137) = v139 + v136 + v137;
       n15_1 = __sub_418650_n4_4;
       LOWORD(v140) = v138 + v140;
-      this_3 = (Obj10 *)(this_1);
+      this_3 = (ModelBlock *)(this_1);
       n256_1 = (uint16_t)(v140 + v137);
       n256 = n15_8;
       n4 = n4_1;
@@ -14787,7 +14792,7 @@ LABEL_57:
     if ( n256_4 > n256_5 && (((uint16_t *)v184)[n4_2] + n15_3 + 8 < n256_4 || n256_4 > 0x4000) )
     {
       n15_8 = n256_5;
-      this_1 = (Obj10 *)(this_3);
+      this_1 = (ModelBlock *)(this_3);
       n4_1 = (int32_t)__sub_418650_n4_3;
       __sub_418650_n4_4 = n4_2;
       v171 = (Obj18 *)(v184);
@@ -14806,7 +14811,7 @@ LABEL_57:
       LOWORD(v177) = v177 - (v177 >> 1);
       *(uint16_t *)&v171->f8 = v177;
       LOWORD(v177) = v174 + v177;
-      this_3 = (Obj10 *)(this_1);
+      this_3 = (ModelBlock *)(this_1);
       n256_4 = (uint16_t)(v177 + v176 + v175 + v172);
       n256_3 = n15_8;
       __sub_418650_n4_3 = (uint16_t *)n4_1;
@@ -14861,7 +14866,7 @@ LABEL_86:
   n15_5 = v97->f2;
   v100 = (Obj18 *)((uint16_t *)v97->f4);
   n4_1 = n4_5;
-  this_4 = (Obj10 *)(v97->f6);
+  this_4 = (ModelBlock *)(v97->f6);
   __sub_418650_n4_4 = n4_6;
   v102 = v97->f8;
   n15_3 = n15_5;
@@ -14869,7 +14874,7 @@ LABEL_86:
   v184 = (Obj18 *)(v100);
   v104 = v97->f12;
   v105 = v97->f14;
-  this_1 = (Obj10 *)((uint32_t *)this_4);
+  this_1 = (ModelBlock *)((uint32_t *)this_4);
   v106 = (uint16_t *)this_3->f80;
   v186 = v102;
   v107 = v106[8];
@@ -14958,9 +14963,9 @@ LABEL_86:
 static inline int32_t __fwd_code_pixel_sub_412490(void *a0, void *a1, int32_t a2) { return __sub_412490((uint16_t *)a0, (uint16_t *)a1, a2); }
 static inline int32_t __fwd_code_pixel_symbol_list(void *a0, int32_t a1) { return __symbol_list((uint32_t *)a0, a1); }
 static inline int32_t __fwd_code_pixel_sub_4148F0(void *a0) { return __sub_4148F0((uint16_t *)a0); }
-static inline int32_t __fwd_code_pixel_sub_416860(void *a0, void *a1) { return __sub_416860((Obj10 *)a0, (Obj24 *)a1); }
+static inline int32_t __fwd_code_pixel_sub_416860(void *a0, void *a1) { return __sub_416860((ModelBlock *)a0, (Obj24 *)a1); }
 
-int32_t __code_pixel(Obj10 *_this, int32_t a2)
+int32_t __code_pixel(ModelBlock *_this, int32_t a2)
 {
   struct alignas(16) {   // 164 bytes, the frame Hex-Rays could not name
       int32_t p_n15;
@@ -15006,7 +15011,7 @@ int32_t __code_pixel(Obj10 *_this, int32_t a2)
   int32_t &n15_31 = __frame.n15_31;
   int32_t &n15_2 = __frame.n15_2;
   int32_t &n15_4 = __frame.n15_4;
-  Obj10 *&this_1 = (Obj10 *&)__frame.this_1;
+  ModelBlock *&this_1 = (ModelBlock *&)__frame.this_1;
   int32_t &n15_3 = __frame.n15_3;
   uint16_t *&v185 = __frame.v185;
   int32_t &n15_7 = __frame.n15_7;
@@ -15037,9 +15042,9 @@ int32_t __code_pixel(Obj10 *_this, int32_t a2)
   bool v11;
   char v24, *v36, v64, v65, v66, v67, v68, v93, *v156;
   int16_t v14, n15_10, v147, v158, n15_21, v170;
-  Obj10 *this_3;
-  Obj10 *this_4;
-  Obj10 *this_2;
+  ModelBlock *this_3;
+  ModelBlock *this_4;
+  ModelBlock *this_2;
   int32_t arg_cum, arg_high, arg_tot, n4, n4_1, __code_pixel_n15, n15_1, v8, v9, v10, v13, v15,
           *v16, n15_6, n15_5, n15_8, v21, p_n15_1, n15_30, v26, v27, v29, n0xFFFF, v32,
           n0xFFFF_1, n53248, v35, v38, v39, v42, p_n15_2, n15_42, n8, v46, n15_32, n15_12,
@@ -15061,7 +15066,7 @@ int32_t __code_pixel(Obj10 *_this, int32_t a2)
   n2_8 = (uint16_t *)*((int32_t *)_this + 19);
   n4_1 = (uint16_t)*(n2_8 - 4);
   __code_pixel_n15 = n2_7[4];
-  this_1 = (Obj10 *)(_this);
+  this_1 = (ModelBlock *)(_this);
   n15_1 = *(n2_7 - 4);
   n15_3 = n4;
   ::__n4_4 = n4;
@@ -15079,7 +15084,7 @@ int32_t __code_pixel(Obj10 *_this, int32_t a2)
       + 8 * v9
       + v8;
   v11 = n4 == n4_1;
-  this_2 = (Obj10 *)(this_1);
+  this_2 = (ModelBlock *)(this_1);
   if ( v11 )
   {
     if ( n15_3 == n15_4 )
@@ -15149,7 +15154,7 @@ int32_t __code_pixel(Obj10 *_this, int32_t a2)
   p_n15_1 = *((uint8_t *)n2_7 + 2);
   v24 = *((uint8_t *)n2_7 + 3);
   n2_4 = n2_8;
-  this_1 = (Obj10 *)(this_2);
+  this_1 = (ModelBlock *)(this_2);
   p_n15 = p_n15_1;
   n15_30 = *(int32_t *)&this_2->f92;
   v26 = *((uint8_t *)n2_8 - 5);
@@ -15158,7 +15163,7 @@ int32_t __code_pixel(Obj10 *_this, int32_t a2)
       + 4 * *((uint8_t *)n2_8 - 9)
       + v26
       + 2 * *((uint8_t *)n2_8 - 10);
-  this_3 = (Obj10 *)(this_1);
+  this_3 = (ModelBlock *)(this_1);
   v29 = ((*((uint8_t *)this_1 + 1078695) == 0) << 7)
       + ((*((uint8_t *)this_1 + 1078694) == 0) << 6)
       + 32 * (*((uint8_t *)this_1 + 1078693) == 0)
@@ -15234,7 +15239,7 @@ int32_t __code_pixel(Obj10 *_this, int32_t a2)
     {
       p_n15 = p_n15_2;
       n15_42 = 1;
-      this_1 = (Obj10 *)(this_3);
+      this_1 = (ModelBlock *)(this_3);
       while ( 1 )
       {
         n8 = 8 * n15_42;
@@ -15243,13 +15248,13 @@ int32_t __code_pixel(Obj10 *_this, int32_t a2)
         v42 = (uint8_t)(v41[n8 + 2] & v42);
         if ( ++n15_42 >= p_n15 )
         {
-          this_3 = (Obj10 *)(this_1);
+          this_3 = (ModelBlock *)(this_1);
           n15_31 = n15_42;
           n8 = 8 * n15_42;
           goto LABEL_42;
         }
       }
-      this_3 = (Obj10 *)(this_1);
+      this_3 = (ModelBlock *)(this_1);
       n15_31 = n15_42;
     }
 LABEL_42:
@@ -15260,11 +15265,11 @@ LABEL_42:
     if ( *v185 == n15_3 )
     {
       p_n15 = (int32_t)p_n15_3;
-      this_1 = (Obj10 *)(this_3);
+      this_1 = (ModelBlock *)(this_3);
       do
         ++n15_12;
       while ( n15_12 < n15_31 && v185[4 * n15_12] == n15_3 );
-      this_3 = (Obj10 *)(this_1);
+      this_3 = (ModelBlock *)(this_1);
       p_n15_3 = (uint8_t *)p_n15;
     }
     n15_9 = n15_12 == n15_31;
@@ -15377,7 +15382,7 @@ LABEL_42:
     {
       n15_14 = n15_12;
       p_n15 = n15_2;
-      this_1 = (Obj10 *)(this_3);
+      this_1 = (ModelBlock *)(this_3);
       n15_33 = n15_31;
       n15_35 = 1 << (n15_2 & 31);
       n15_34 = 0;
@@ -15405,7 +15410,7 @@ LABEL_42:
       }
       while ( n15_35 );
       n15_12 = n15_14;
-      this_3 = (Obj10 *)(this_1);
+      this_3 = (ModelBlock *)(this_1);
     }
     if ( *(int32_t *)&this_3->f32 )
       return n15_12;
@@ -15435,7 +15440,7 @@ LABEL_42:
         *((uint64_t *)n2_3 + 1) = *((uint64_t *)v143 + 1);
         v149 = *((uint16_t *)n2_3 + 5);
         *((uint8_t *)n2_3 + 14) *= 8;
-        this_1 = (Obj10 *)(this_3);
+        this_1 = (ModelBlock *)(this_3);
         v150 = 21 * *((uint16_t *)n2_3 + 1);
         p_n15 += (21 * *(uint16_t *)n2_3 + v149 - 1) / v149;
         *(uint16_t *)n2_3 = p_n15;
@@ -15452,7 +15457,7 @@ LABEL_42:
         v157 = 21 * *((uint16_t *)n2_3 + 4);
         *((uint16_t *)n2_3 + 3) = (uint16_t)v156;
         v158 = (uint16_t)v156 + v150 + v153;
-        this_3 = (Obj10 *)(this_1);
+        this_3 = (ModelBlock *)(this_1);
         LOWORD(v149) = (v157 + v149 - 1) / v149 + n15_20;
         *((uint16_t *)n2_3 + 4) = v149;
         __code_pixel_n0x2000 = (uint16_t)(p_n15 + v149 + v158);
@@ -15497,7 +15502,7 @@ LABEL_42:
         v137 = *((uint16_t *)n2_3 + 2);
         p_n15 = p_n15_5;
         p_n15_12 = *((uint16_t *)n2_3 + 1);
-        this_1 = (Obj10 *)(this_3);
+        this_1 = (ModelBlock *)(this_3);
         n2_1 = n2;
         v139 = *(uint16_t *)n2_3;
         n2_4 = (uint16_t *)n15_17;
@@ -15517,7 +15522,7 @@ LABEL_42:
         n15_17 = (int32_t)n2_4;
         LOWORD(p_n15_12) = v139 + v141 + p_n15_12;
         n2 = n2_1;
-        this_3 = (Obj10 *)(this_1);
+        this_3 = (ModelBlock *)(this_1);
         p_n15_7 = (uint16_t)p_n15_12;
         p_n15_6 = p_n15;
         *((uint16_t *)n2_3 + 5) = p_n15_7;
@@ -15584,7 +15589,7 @@ LABEL_42:
       if ( p_n15_10 > p_n15_8 && (*(uint16_t *)(n15_31 + 2 * n2_2) + n15_20 + 8 < p_n15_10 || p_n15_10 > 0x4000) )
       {
         p_n15 = p_n15_8;
-        this_1 = (Obj10 *)(this_3);
+        this_1 = (ModelBlock *)(this_3);
         n15_39 = (uint16_t *)n15_31;
         v168 = *(uint16_t *)(n15_31 + 2);
         v169 = *(uint16_t *)(n15_31 + 4);
@@ -15608,7 +15613,7 @@ LABEL_42:
         p_n15_9 = p_n15;
         n2_3 = (int32_t *)n2_1;
         n15_39[5] = p_n15_10;
-        this_3 = (Obj10 *)(this_1);
+        this_3 = (ModelBlock *)(this_1);
         if ( p_n15_9 < 256 && !*(uint8_t *)(n15_31 + 14) )
         {
           p_n15_9 = 256;
@@ -15660,7 +15665,7 @@ LABEL_42:
   n2_4 = n2_6;
   n15_25 = v98[4];
   n15_20 = n15_23;
-  this_4 = (Obj10 *)((int32_t *)v98[5]);
+  this_4 = (ModelBlock *)((int32_t *)v98[5]);
   n15_31 = n15_41;
   n15_26 = v98[6];
   v108 = (uint16_t *)v98[7];
@@ -15668,7 +15673,7 @@ LABEL_42:
   v109 = *(int32_t *)&this_3->f76;
   n15_4 = n15_25;
   n15_27 = *(uint16_t *)(v109 - 16);
-  this_1 = (Obj10 *)(this_4);
+  this_1 = (ModelBlock *)(this_4);
   v111 = (uint16_t *)*(int32_t *)&this_3->f80;
   n15_3 = n15_26;
   v112 = v111[8];
@@ -16060,7 +16065,7 @@ LABEL_26:
   return a1;
 }
 static inline uint32_t __fwd_sub_417E80_sub_414860(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __sub_414860((Obj35 *)a0, a1, a2, a3); }
-static inline int32_t __fwd_sub_417E80_sub_418650(void *a0, int32_t a1) { return __sub_418650((Obj10 *)a0, a1); }
+static inline int32_t __fwd_sub_417E80_sub_418650(void *a0, int32_t a1) { return __sub_418650((ModelBlock *)a0, a1); }
 static inline void __fwd_sub_417E80_sub_419430(void *a0) { __sub_419430((uint32_t *)a0); }
 
 void __sub_417E80(uint32_t *_this, char *Src)
@@ -21105,7 +21110,7 @@ static inline int32_t __fwd_sub_421930_sub_41A130(void *a0, const __m128 &a1, co
 }
 static inline uint32_t __fwd_model_plane_sub_414860(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __sub_414860((Obj35 *)a0, a1, a2, a3); }
 static inline void ** __fwd_model_plane_sub_415270(void *a0, char a1) { return __sub_415270((void **)a0, a1); }
-static inline int32_t __fwd_model_plane_code_pixel(void *a0, int32_t a1) { return __code_pixel((Obj10 *)a0, a1); }
+static inline int32_t __fwd_model_plane_code_pixel(void *a0, int32_t a1) { return __code_pixel((ModelBlock *)a0, a1); }
 static inline void __fwd_model_plane_reduce_alphabet(int32_t a0, char a1, void *a2) { __reduce_alphabet(a0, a1, (uint8_t *)a2); }
 static inline void __fwd_model_plane_sub_4197A0(const __m128 &a0, const __m128 &a1, void *a2, int32_t a3, int32_t a4, void *a5) { __sub_4197A0(a0, a1, (uint8_t *)a2, a3, a4, (uint8_t *)a5); }
 static inline int32_t __fwd_model_plane_sub_421930(void *a0, void *a1) { return __sub_421930((Obj33 *)a0, (uint8_t *)a1); }
