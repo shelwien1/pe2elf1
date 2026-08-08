@@ -155,14 +155,24 @@ guessing an array bound (`__dword_438AFC[0x10000]` running over
 
 Four separate "globals", eight bytes apart, each written eight bytes at a time
 at the same stride — with `n16` stepping 16, 8 they cover `0x44339C`–`0x4433DC`
-contiguously. These are not four objects. They are **four strength-reduced base
-pointers into one array**, and the array is the 16-byte per-plane descriptor
-table that `ALGORITHM.md` §8 places at `0x44339C`. `__Buffer` is
-`&planes[0].field - 32`; it is not a buffer and it is not even an object.
+contiguously, which is the 16-byte per-plane descriptor table `ALGORITHM.md` §8
+places at `0x44339C`.
 
-Turning those four into four independent variables would compile, run, and
-silently corrupt the descriptors. **Extent and aliasing analysis has to come
-before de-blobbing, not after.**
+All four *are* real objects: `__Buffer` is the coded buffer's base pointer
+(`__Buffer = malloc(...)` a few hundred lines away), `__n4_5` is the plane
+count, and so on. That is what makes this nastier than a mislabelled variable.
+The compiler strength-reduced a walk over the descriptor table into four base
+pointers, and picked as those bases the addresses of four unrelated variables
+that happen to sit 32 and 64 bytes below it. The code therefore depends on
+**where these globals are relative to each other and to a table none of them
+names**.
+
+Give them independent definitions and the linker will place them wherever it
+likes; the writes still happen, 32 and 64 bytes past each, into whatever is
+there. It compiles, it runs, and it corrupts. **Extent and aliasing analysis has
+to come before de-blobbing, not after** — and for regions like this one the
+answer is a single `struct` covering `0x44337C`–`0x4433DC`, not four variables
+and a table.
 
 ### 4.2 Pointer typing and structure recovery are one job
 
@@ -267,8 +277,9 @@ The six mode switches are not on this list: Phase 0 turned them into constants
 and they carry their meaning in a comment already.
 
 Note what several of the IDA names are: `__n8`, `__n256`, `__n2` are the *value
-last assigned* to the variable, not its meaning. `__Buffer` is not a buffer
-(§4.1). Treat every inherited name as a guess.
+last assigned* to the variable, not its meaning. Treat every inherited name as a
+guess, and check it against every use before committing to a replacement — §4.1
+is what happens when you check only the first few.
 
 **Tooling:** a scope-aware `rename.py`. 25 functions declare a local that
 shadows one of 28 globals and reach the global through `::`; a textual rename
@@ -440,9 +451,12 @@ a layout change.
   reuses one output path, or a "cleanup" that removes the read, breaks things
   in ways that look like a refactoring bug. (Both were hit; see
   `git log 4c0a19c`.)
-- **Inherited names lie.** `__n8`, `__n256`, `__n2`, `__n0x800000` are the last
-  value assigned, not the meaning. `__Buffer` is not a buffer. Rename from the
-  code, not from the name.
+- **Inherited names lie, and so do first readings.** `__n8`, `__n256`, `__n2`
+  are the last value assigned, not the meaning. But the opposite error is just
+  as easy: an earlier draft of §4.1 concluded `__Buffer` was not a buffer,
+  because its address is used as a base for writes 32 bytes away. It is a
+  buffer — `__Buffer = malloc(...)` — and it is *also* a strength-reduced base.
+  Read every use before renaming, not the first few.
 - **Coverage is not correctness.** 90 % line coverage of a codec still misses
   the branch that only a 5-plane 16-bit image takes. Add images when a phase
   touches something the corpus does not reach.
