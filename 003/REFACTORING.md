@@ -18,7 +18,6 @@ so they can be re-measured rather than trusted.
 | `subs1.hpp` | 22 113 lines | 25 462 |
 | bodies | 179 (84 real, 95 `__fwd_*` shims) | 215 |
 | globals in `blob.inc` | **78** | 293 |
-| `goto` | 121 | 174 |
 | pointer casts | 5680 | 7336 |
 | `goto` / `LABEL_n:` | 121 / 88 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
