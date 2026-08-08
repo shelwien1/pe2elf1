@@ -7106,16 +7106,12 @@ int32_t *__sub_4256F0(int32_t *_this, int32_t i, int32_t a3, int32_t n4)
     v3 = v2 + 2 * (uint8_t)__n4_0;
     __byte_445728 = v3;
     __byte_44572A = v3 - 5;
-    *(uint64_t *)((char *)model_geometry + v3) = 0x505050505050505LL;
-    *(uint64_t *)((char *)model_geometry + v3 + 8) = 0x505050505050505LL;
+    memset((char *)model_geometry + v3, 0x05, 16);
     __n16 = 16;
     v4 = (uint64_t *)(v3 + 2 * (uint8_t)__n8_2);
     __byte_44572C = (char)v4;
     __byte_44572E = (uint8_t)v4 - 6;
-    *(uint64_t *)((char *)model_geometry + (uint32_t)v4) = 0x606060606060606LL;
-    *(uint64_t *)((char *)model_geometry + (uint32_t)v4 + 8) = 0x606060606060606LL;
-    *(uint64_t *)((char *)model_geometry + (uint32_t)v4 + 16) = 0x606060606060606LL;
-    *(uint64_t *)((char *)model_geometry + (uint32_t)v4 + 24) = 0x606060606060606LL;
+    memset((char *)model_geometry + (uint32_t)v4, 0x06, 32);
     si128 = _mm_load_si128((const __m128i *)&__xmmword_439800);
     __n32 = 32;
     v6 = (char *)v4 + 2 * (uint8_t)__n16;
@@ -8473,16 +8469,12 @@ BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
     v8 = v7 + 2 * (uint8_t)__n4_0;
     __byte_445728 = v8;
     __byte_44572A = v8 - 5;
-    *(uint64_t *)((char *)model_geometry + v8) = 0x505050505050505LL;
-    *(uint64_t *)((char *)model_geometry + v8 + 8) = 0x505050505050505LL;
+    memset((char *)model_geometry + v8, 0x05, 16);
     __n16 = 16;
     v9 = (uint64_t *)(v8 + 2 * (uint8_t)__n8_2);
     __byte_44572C = (char)v9;
     __byte_44572E = (uint8_t)v9 - 6;
-    *(uint64_t *)((char *)model_geometry + (uint32_t)v9) = 0x606060606060606LL;
-    *(uint64_t *)((char *)model_geometry + (uint32_t)v9 + 8) = 0x606060606060606LL;
-    *(uint64_t *)((char *)model_geometry + (uint32_t)v9 + 16) = 0x606060606060606LL;
-    *(uint64_t *)((char *)model_geometry + (uint32_t)v9 + 24) = 0x606060606060606LL;
+    memset((char *)model_geometry + (uint32_t)v9, 0x06, 32);
     si128 = _mm_load_si128((const __m128i *)&__xmmword_4397F0);
     __n32 = 32;
     v11 = (char *)v9 + 2 * (uint8_t)__n16;
@@ -13433,14 +13425,14 @@ LABEL_86:
   this_3[269555] = v133;
   while ( 1 )
   {
-    if ( !(*v134)[1] )
-      goto LABEL_95;
-    v135 = __fwd_sub_418650_sub_412E60(*v134);
-    *(uint16_t *)this_3[19] = v135;
-    if ( v135 >= 0 )
-      return n15_25 + 1;
-    v134 = (uint32_t **)this_3[269558];
-LABEL_95:
+    if ( (*v134)[1] )
+    {
+      v135 = __fwd_sub_418650_sub_412E60(*v134);
+      *(uint16_t *)this_3[19] = v135;
+      if ( v135 >= 0 )
+        return n15_25 + 1;
+      v134 = (uint32_t **)this_3[269558];
+    }
     this_3[269558] = ++v134;
   }
 }
@@ -14225,12 +14217,12 @@ LABEL_42:
   this_3[269555] = v135;
   while ( 1 )
   {
-    if ( !(*v136)[1] )
-      goto LABEL_94;
-    if ( __fwd_code_pixel_symbol_list(*v136, *(uint16_t *)this_3[19]) )
-      return n15_29 + 1;
-    v136 = (uint32_t **)this_3[269558];
-LABEL_94:
+    if ( (*v136)[1] )
+    {
+      if ( __fwd_code_pixel_symbol_list(*v136, *(uint16_t *)this_3[19]) )
+        return n15_29 + 1;
+      v136 = (uint32_t **)this_3[269558];
+    }
     this_3[269558] = (int32_t)++v136;
   }
 }
