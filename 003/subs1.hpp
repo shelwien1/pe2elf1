@@ -4,12 +4,14 @@
 // Every global the decompiled bodies touch is a reference bound to a fixed
 // offset inside blob.inc, BMF.exe's data segment.  Hex-Rays named each one
 // after the function it was recovered in, so the same object arrived under one
-// name per user -- 904 declarations for 336 objects -- each sitting just above
+// name per user -- 905 declarations for 337 objects -- each sitting just above
 // its function.  They are collected here instead, sorted by address, one
 // declaration per object, under the name IDA gave the address with the
-// function prefix dropped.  303 are left: 34 of the 336 were only ever touched
-// by bodies the `c`/`d` command line cannot reach, and __byte_44337D is new --
-// see below.
+// function prefix dropped.  293 are left of those 337: 34 went with the bodies
+// the `c`/`d` command line cannot reach, 9 were the range coder's state and are
+// now private to the class below, and 2 more went with the command-line and
+// SSE2 cleanups.  One, __byte_44337D, is not from the extractor at all -- see
+// the note further down.
 //
 // The typedefs carry the array shapes, which cannot be written inline in the
 // reference declaration.  Where one body reads an address as a bare scalar and
