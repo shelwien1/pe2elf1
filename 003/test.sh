@@ -197,5 +197,44 @@ CASES
   ) || fail=1
 fi
 
+# An allocation that fails.  `main` installs out_of_memory_handler, which prints
+# "Out of memory!" and exits 7, and for a while nothing could call it: the
+# bodies' `operator new` had been rewritten to a bare `malloc`, so a run that
+# could not get memory dereferenced null instead.  `ulimit -v` reproduces that
+# in a second, which is the whole reason it went unnoticed for as long as it did.
+#
+# The limit is not a fixed number.  How much address space the binary needs
+# before it starts depends on the libc and on whether it is static, so this
+# tries a ladder and asks two things of it: no limit may kill the program with a
+# signal, and at least one must produce the diagnostic.  A limit low enough to
+# stop the loader is not interesting and shows up as neither.
+#
+# Skipped under wine, where the limit governs the emulator and not the program.
+if [ "${BMF_OOM:-1}" = 1 ] && [ -z "$RUN" ] &&
+   ( ulimit -v 65536 ) >/dev/null 2>&1; then
+  (
+    cd "$WORK"
+    img=$(ls -- orig_*.bmp 2>/dev/null | head -1)
+    reported=0 bad=0
+    for kb in 6000 8000 10000 12000 16000; do
+      rm -f oom.bmf
+      ( ulimit -v $kb; timeout "${BMF_TIMEOUT:-300}" $RUN "$BIN" c "$img" oom.bmf ) \
+        >oom.log 2>&1
+      rc=$?
+      case $rc in
+        7) grep -q 'Out of memory!' oom.log || {
+             echo "oom: -v $kb exited 7 without saying why"; cat oom.log; bad=1; }
+           reported=1 ;;
+        0|1) ;;                       # enough memory, or too little to start
+        *) echo "oom: -v $kb exited $rc, not 7"; cat oom.log; bad=1 ;;
+      esac
+    done
+    [ $reported = 1 ] || { echo "oom: no limit in the ladder made an allocation fail"; bad=1; }
+    [ $bad -eq 0 ] || exit 1
+    printf '%-12s ok  reports and exits 7\n' 'out of mem'
+    exit 0
+  ) || fail=1
+fi
+
 [ $fail -eq 0 ] || { echo "FAIL"; exit 1; }
 echo "PASS"

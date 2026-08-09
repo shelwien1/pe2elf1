@@ -8523,7 +8523,7 @@ int32_t *__alt_p1_alloc(int32_t *_this, int32_t i, int32_t a3, int32_t n4)
   *(_this + 42) = 209952;
   *(_this + 43) = 419904;
   do
-    *(_this + n5++ + 44) = (int32_t)malloc(2 * *_this + 20);
+    *(_this + n5++ + 44) = (int32_t)bmf_new(2 * *_this + 20);
   while ( n5 < 5 );
   __fwd_alt_p1_alloc_alt_init_tables((uint8_t *)_this + 984, (char *)_this + 1496);
   v20 = *_this;
@@ -8640,7 +8640,7 @@ BMF_SSE char *__rc_begin_encode()
     *v8 = si128;
     v8[1] = si128;
     v8[2] = si128;
-    __rc_begin_encode_n256 = (char *)malloc(0x7F000u);
+    __rc_begin_encode_n256 = (char *)bmf_new(0x7F000u);
     if ( __rc_begin_encode_n256 )
     {
       v9 = 0;
@@ -8840,7 +8840,7 @@ void __alt_model_p1_d8_encode(uint8_t *a1, int32_t i, int32_t a3, uint8_t *a4)
   ;
   int32_t *v4;
   void **v5;
-  v4 = (int32_t *)malloc(0x99D4D8u);
+  v4 = (int32_t *)bmf_new(0x99D4D8u);
   if ( v4 )
     v5 = (void **)__fwd_alt_model_p1_d8_encode_alt_p1_alloc(v4, i, a3, 0);
   else
@@ -8925,8 +8925,8 @@ int32_t __alt_p2_alloc(char *_this, int32_t i, int32_t n4)
   __dword_4458F4 = -v8;
   *(uint32_t *)(_this + 278720) = -v9 - 7;
   *(uint32_t *)(_this + 278724) = v9 + 8;
-  *(uint32_t *)(_this + 278660) = malloc(4 * i + 16);
-  v10 = malloc(4 * i + 16);
+  *(uint32_t *)(_this + 278660) = bmf_new(4 * i + 16);
+  v10 = bmf_new(4 * i + 16);
   *(uint32_t *)(_this + 232) = 0x3F800000 /* 1.0f */;
   *(uint32_t *)(_this + 278664) = v10;
   *(uint32_t *)(_this + 278668) = *(uint32_t *)(_this + 278660) + 4 * i + 8;
@@ -8957,7 +8957,7 @@ int32_t __alt_p2_alloc(char *_this, int32_t i, int32_t n4)
   n5 = 0;
   Size = 18 * i + 234;
   do
-    *(uint32_t *)(_this + 4 * n5++ + 278756) = malloc(Size);
+    *(uint32_t *)(_this + 4 * n5++ + 278756) = bmf_new(Size);
   while ( n5 < 5 );
   memset(*(char **)(_this + 278756),0,Size);
   v17 = *(uint32_t *)(_this + 278756);
@@ -9077,7 +9077,7 @@ LABEL_20:
   {
     Size = 0;
   }
-  result = (int32_t *)malloc(v10 + Size + 19);
+  result = (int32_t *)bmf_new(v10 + Size + 19);
   if ( !result )
     return nullptr;
   *result = (a2 << 16) | (uint16_t)a1;
@@ -9158,7 +9158,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   Stream_1 = fopen(FileName, "wb");
   if ( !Stream_1 )
     return 0;
-  Bufferc_3 = (char *)malloc(*(uint32_t *)(p_i + 12)
+  Bufferc_3 = (char *)bmf_new(*(uint32_t *)(p_i + 12)
                                  + 8 * *(uint16_t *)(p_i + 2)
                                  + (*(uint32_t *)(p_i + 12) >> 5) + 2048);
   p_i_1 = p_i;
@@ -9582,7 +9582,7 @@ uint32_t __init_symbol_list(Obj35 *a1, int32_t a2, int32_t a3, int32_t a4)
   int32_t v7, v9, v10;
   uint32_t result;
   a1->f0 = a3;
-  buf = (char *)malloc(3 * a3);
+  buf = (char *)bmf_new(3 * a3);
   a1->f20 = (int32_t)buf;
   if ( a4 )
   {
@@ -10027,7 +10027,7 @@ BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
     *v13 = si128;
     v13[1] = si128;
     v13[2] = si128;
-    n256 = malloc(0x7F000u);
+    n256 = bmf_new(0x7F000u);
     if ( n256 )
     {
       ArgList = ArgList_1;
@@ -10322,7 +10322,7 @@ void ** __alt_model_p1_d8_decode(char ArgList, uint8_t *Src, int32_t i, int32_t 
           v26, v27, v28, v29, v30, v31, v32, v35, v36, v39, v41;
   int64_t v37;
   uint8_t *v12, *v13, *Src_1;
-  v4 = (int32_t *)malloc(0x99D4D8u);
+  v4 = (int32_t *)bmf_new(0x99D4D8u);
   if ( v4 )
     v5 = (Obj4 *)(__fwd_alt_model_p1_d8_decode_alt_p1_alloc(v4, i, a4, 0));
   else
@@ -10541,7 +10541,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
     n4 = 0;
     do
     {
-      v6 = (int32_t *)malloc(0x99D4D8u);
+      v6 = (int32_t *)bmf_new(0x99D4D8u);
       if ( v6 )
         v7 = __fwd_alt_model_p1_decode_alt_p1_alloc(v6, i_2, v3, n4);
       else
@@ -12336,7 +12336,7 @@ LABEL_14:
     n0x2000_1 = *(int32_t *)&Blockaa_1->f16;
     if ( n0x2000_1 > 0x2000 )
     {
-      Block = malloc(Blockaa_1->f4 * k_2 * *(int32_t *)&Blockaa_1->f0);
+      Block = bmf_new(Blockaa_1->f4 * k_2 * *(int32_t *)&Blockaa_1->f0);
       v26 = *(int32_t *)&Blockaa_1->f0;
       n4_2 = Blockaa_1->f4;
       n0x2000_5 = *(int32_t *)&Blockaa_1->f0;
@@ -12432,7 +12432,7 @@ LABEL_71:
       Blockaa_1->f4 = k_2 * n4_1;
       *(int32_t *)&Blockaa_1->f8 = 8;
       free(v79);
-      v34 = malloc(2 * Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0);
+      v34 = bmf_new(2 * Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0);
       v79 = Block;
       Blockaa_1->f1078236 = (int32_t)v34;
       __reduce_alphabet((int32_t)Blockaa_1, v35, (uint8_t *)v79);
@@ -13729,7 +13729,7 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
       Size_2 = Size_4;
     }
   }
-  Buffer_3 = malloc(Size_2);
+  Buffer_3 = bmf_new(Size_2);
   Src = (char *)v3 + v3[3] - *((uint16_t *)v3 + 2) + 16;
   fseek(Stream_v, Offset, 0);
   if ( n2 )
@@ -15852,7 +15852,7 @@ void __expand_alphabet(Obj10 *_this)
   *((uint32_t *)_this + 4) = v8 + 1;
   if ( (int32_t)(v8 + 1) <= 0x2000 )
   {
-    v12 = malloc(4 * v8 + 4);
+    v12 = bmf_new(4 * v8 + 4);
     j_1 = *((uint32_t *)_this + 4);
     *((uint32_t *)_this + 269560) = v12;
     if ( j_1 )
@@ -15968,7 +15968,7 @@ BMF_SSE int32_t __layout_workspace(uintptr_t a1, int32_t a2, int32_t i, int32_t 
   *(uint32_t *)(a1 + 1078240) = 0;
   for ( j = 0; j < 5; ++j )
   {
-    v8 = (char *)malloc(8 * i_1 + 128);
+    v8 = (char *)bmf_new(8 * i_1 + 128);
     *(uint32_t *)(a1 + 4 * j + 56) = v8;
     *(uint32_t *)(a1 + 4 * j + 76) = v8 + 64;
     i_1 = *(uint32_t *)a1;
@@ -15990,7 +15990,7 @@ BMF_SSE int32_t __layout_workspace(uintptr_t a1, int32_t a2, int32_t i, int32_t 
       while ( v9 < *(uint32_t *)a1 + 16 );
     }
   }
-  v10 = malloc(i_1 + 1);
+  v10 = bmf_new(i_1 + 1);
   *(uint32_t *)(a1 + 1078684) = v10;
   *v10 = 0;
   if ( *(int32_t *)a1 > 0 )
@@ -16105,7 +16105,7 @@ LABEL_26:
   while ( n8 < 8 );
   n0x18 = 0;
   memset((char *)(a1 + 1051776),0,24576);
-  *(uint32_t *)(a1 + 1078236) = malloc(2 * *(uint32_t *)(a1 + 4) * *(uint32_t *)a1);
+  *(uint32_t *)(a1 + 1078236) = bmf_new(2 * *(uint32_t *)(a1 + 4) * *(uint32_t *)a1);
   *(uint16_t *)(a1 + 1076352) = 4;
   *(uint16_t *)(a1 + 1076354) = 4;
   *(uint16_t *)(a1 + 1076356) = 72;
@@ -16334,7 +16334,7 @@ void __unmodel_plane_slow(Obj10 *_this, char *Src)
   while ( v82 + 1 < 15 );
   ArgList_2 = ArgList_1;
   this_4 = (Obj10 *)((int32_t)this_1);
-  buf = (char *)malloc(this_1->f16);
+  buf = (char *)bmf_new(this_1->f16);
   Size = this_1->f16;
   this_1->f1078688 = buf;
   memset(buf,1,Size);
@@ -16349,7 +16349,7 @@ void __unmodel_plane_slow(Obj10 *_this, char *Src)
   __fwd_unmodel_plane_slow_init_encode_symbol_list((int32_t *)((uintptr_t)this_4 + 1078184), this_4, this_4->f16, 1);
   this_4->f1078232 = (uintptr_t)this_4 + 1078216;
   v30 = this_4->f16;
-  v31 = malloc(24 * v30 + 4);
+  v31 = bmf_new(24 * v30 + 4);
   if ( v31 )
   {
     *v31 = v30;
@@ -16366,7 +16366,7 @@ void __unmodel_plane_slow(Obj10 *_this, char *Src)
   }
   v34 = this_4->f16;
   this_4->f1078208 = i;
-  v35 = malloc(24 * v34 + 4);
+  v35 = bmf_new(24 * v34 + 4);
   if ( v35 )
   {
     *v35 = v34;
@@ -16400,7 +16400,7 @@ void __unmodel_plane_slow(Obj10 *_this, char *Src)
   }
   else
   {
-    ArgList_2 = (char *)malloc(*(uint32_t *)&this_4->f4 * this_4->f0 + 3);
+    ArgList_2 = (char *)bmf_new(*(uint32_t *)&this_4->f4 * this_4->f0 + 3);
     v40 = this_4->f8;
     ArgList_3 = ArgList_2;
   }
@@ -16744,7 +16744,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
     n4 = 0;
     do
     {
-      v6 = (int32_t *)malloc(0x99D4D8u);
+      v6 = (int32_t *)bmf_new(0x99D4D8u);
       if ( v6 )
         v7 = __fwd_alt_model_p1_encode_alt_p1_alloc(v6, i_2, v3, n4);
       else
@@ -20101,7 +20101,7 @@ BMF_SSE void __unmodel_plane(char ArgList, const __m128 &a2__ref, const __m128 &
   }
   else
   {
-    v5 = malloc(0x7BA230u);
+    v5 = bmf_new(0x7BA230u);
     if ( v5 )
       v6 = (Obj10 *)((void **)__layout_workspace((int32_t)v5, p_i[1], *p_i, p_i[1], p_i[5] & 0x3F));
     else
@@ -21319,7 +21319,7 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
   }
   else
   {
-    v5 = malloc(0x7BA230u);
+    v5 = bmf_new(0x7BA230u);
     if ( v5 )
       Blocka_3 = (Obj10 *)(__layout_workspace((int32_t)v5, *(uint16_t *)((char *)&p_i->f0 + 2), *(uint16_t *)&p_i->f0, *(uint16_t *)((char *)&p_i->f0 + 2), p_i->f10 & 0x3F));
     else
@@ -21460,7 +21460,7 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
     }
     while ( (uint32_t)(v58 + 1) < 0xF );
     Blocka_1 = (Obj10 *)((int32_t)Blocka_2);
-    buf = (char *)malloc(Blocka_2->f16);
+    buf = (char *)bmf_new(Blocka_2->f16);
     Size = Blocka_2->f16;
     Blocka_2->f1078688 = (uint32_t)buf;
     memset(buf,1,Size);
@@ -21475,7 +21475,7 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
     __fwd_model_plane_init_encode_symbol_list((int32_t *)((char *)Blocka_1 + 1078184), 0, Blocka_1->f16, 1);
     Blocka_2->f1078232 = (uint32_t)((uint32_t *)Blocka_2 + 269554);
     v31 = Blocka_2->f16;
-    v32 = (uint32_t *)malloc(24 * v31 + 4);
+    v32 = (uint32_t *)bmf_new(24 * v31 + 4);
     if ( v32 )
     {
       *v32 = v31;
@@ -21510,7 +21510,7 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
     }
     v37 = Blocka_1->f16;
     Blocka_1->f1078208 = v33;
-    v38 = (uint32_t *)malloc(24 * v37 + 4);
+    v38 = (uint32_t *)bmf_new(24 * v37 + 4);
     if ( v38 )
     {
       *v38 = v37;
@@ -21794,7 +21794,7 @@ BMF_SSE void __transform_planes(Obj33 *p_i, int32_t a2, char a3, const __m128 &a
   *((uint32_t *)p_ia_1 + 3) = *((uint32_t *)p_i + 3);
   Srca_1 = (uint8_t *)((uint16_t *)p_i + 8);
   memcpy(__transform_planes_Buffer + 32,(char *)p_i + 16,*((uint32_t *)p_i + 3));
-  Src_1 = (char *)malloc(*(uint16_t *)&p_i->f0 * *(uint16_t *)((char *)&p_i->f0 + 2));
+  Src_1 = (char *)bmf_new(*(uint16_t *)&p_i->f0 * *(uint16_t *)((char *)&p_i->f0 + 2));
   Src_3 = Src_1;
   if ( plane_count > 0 )
   {
@@ -21976,7 +21976,7 @@ LABEL_15:
     {
       Buffer__1 = Buffer_;
       v12 = (ElementSize + (ElementSize == 0) + 3) & 0xFFFFFFFC;
-      v13 = malloc(v12 + 8);
+      v13 = bmf_new(v12 + 8);
       *v13 = Buffer__1;
       v13[1] = v12;
       *(uint32_t *)((char *)v13 + v12 + 4) = 0;
@@ -22034,7 +22034,7 @@ LABEL_15:
   }
   desc_slow_mode = 1;
   coded_size = ElementCount;
-  ::coded_buf = malloc(ElementCount);
+  ::coded_buf = bmf_new(ElementCount);
   out_cursor = ::coded_buf;
   packer_free_bits = 0;
   packer_acc = 0;
@@ -22197,7 +22197,7 @@ LABEL_42:
     p_i_1 = (Obj71 *)(p_i_2);
     v5 = v86;
   }
-  Src_1 = (uint8_t *)malloc(*(uint16_t *)p_i_1 * *((uint16_t *)p_i_1 + 1));
+  Src_1 = (uint8_t *)bmf_new(*(uint16_t *)p_i_1 * *((uint16_t *)p_i_1 + 1));
   if ( (v92 & 8) != 0 )
   {
     *(uint32_t *)p_i = p_i_1->f0;
@@ -22355,7 +22355,7 @@ LABEL_109:
   }
   if ( (p_i_1->f11 & 2) != 0 )
   {
-    n4_6 = (char *)malloc(*((uint32_t *)p_i_1 + 3));
+    n4_6 = (char *)bmf_new(*((uint32_t *)p_i_1 + 3));
     __expand_image_n4_5 = ::plane_count;
     v55 = *((uint16_t *)p_i_1 + 1);
     n4_1 = (int32_t)n4_6;
@@ -22501,14 +22501,14 @@ BMF_SSE uint32_t __search_filter(Obj14 *p_i, char a2, const __m128 &a3__ref, con
   // with the mode.  See REFACTORING.md §2.
   Blockb = (char *)__alloc_image(i, i_2, p_i_1->f10 & 0x3F, 0, 0);
   coded_size = *((uint32_t *)Blockb + 3) + 0x20000;
-  coded_buf = malloc(coded_size);
+  coded_buf = bmf_new(coded_size);
   out_cursor = coded_buf;
   packer_free_bits = 0;
   packer_acc = 0;
   packer_word = (uint32_t *)coded_buf;
   v179[0] = i_2 * i;
   hist_scratch = coded_buf + coded_size - 4096;
-  Srca_7 = malloc(i_2 * i);
+  Srca_7 = bmf_new(i_2 * i);
   n4_4 = ::plane_count;
   v21 = (*(uint16_t *)((char *)&p_i_1->f0 + 2) - i_2) >> 1;
   v22 = *(uint16_t *)&p_i_1->f0 - i;
@@ -22745,7 +22745,7 @@ LABEL_43:
   }
   // always taken: -Q is 9
   {
-    v101 = (char *)malloc(*((uint32_t *)Blockb + 3));
+    v101 = (char *)bmf_new(*((uint32_t *)Blockb + 3));
     v102 = *((uint16_t *)Blockb + 1);
     v178[1] = (char *)::plane_count;
     v180 = (int32_t)v101;
@@ -22831,7 +22831,7 @@ LABEL_43:
 LABEL_172:
     if ( n4_19 + (n4_19 >> 12) >= (int32_t)n4_15 )
     {
-      v178[0] = (char *)malloc(*((uint32_t *)Blockb + 3));
+      v178[0] = (char *)bmf_new(*((uint32_t *)Blockb + 3));
       v133 = ::plane_count * (*((uint16_t *)Blockb + 1) - 1);
       v178[1] = (char *)::plane_count;
       v180 = (int32_t)v178[0];
@@ -22887,7 +22887,7 @@ LABEL_172:
     else
     {
       n4_15 = (char *)n4_19;
-      v178[0] = (char *)malloc(*((uint32_t *)p_i_1 + 3));
+      v178[0] = (char *)bmf_new(*((uint32_t *)p_i_1 + 3));
       v121 = *(uint16_t *)((char *)&p_i_1->f0 + 2);
       v178[1] = (char *)::plane_count;
       v179[0] = (int32_t)v178[0];
@@ -23136,7 +23136,7 @@ LABEL_172:
 LABEL_63:
   if ( !n4_10 && ::plane_count > 1 )
   {
-    v178[0] = (char *)malloc(*((uint32_t *)Blockb + 3));
+    v178[0] = (char *)bmf_new(*((uint32_t *)Blockb + 3));
     memcpy(v178[0],(char *)Src,*((uint32_t *)Blockb + 3));
     n16_3 = 16;
     do
@@ -23402,7 +23402,7 @@ BMF_SSE int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &
   if ( (v17 & 0x3Fu) <= 4 )         // -F is on, so only the depth decides
   {
     coded_size = *((uint32_t *)p_i + 3) + 0x20000;
-    ::coded_buf = malloc(coded_size);
+    ::coded_buf = bmf_new(coded_size);
     ::packer_free_bits = 0;
     ::packer_acc = 0;
     out_cursor = ::coded_buf;
@@ -23433,7 +23433,7 @@ BMF_SSE int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &
     v18 = *((uint32_t *)p_i + 3);
   }
   coded_size = v18 + 0x20000;
-  ::coded_buf = malloc(v18 + 0x20000);
+  ::coded_buf = bmf_new(v18 + 0x20000);
   out_cursor = ::coded_buf;
   ::packer_free_bits = 0;
   ::packer_acc = 0;
@@ -23572,7 +23572,7 @@ LABEL_22:
   {
     Size = *(uint16_t *)&p_i->f0 * *(uint16_t *)((char *)&p_i->f0 + 2);
     HIBYTE(Buffera_1) |= 8u;
-    Srca = (char *)malloc(Size);
+    Srca = (char *)bmf_new(Size);
     if ( ::plane_count > 0 )
     {
       v66 = v5;
@@ -23610,7 +23610,7 @@ LABEL_57:
   free(::coded_buf);
   if ( (*((uint8_t *)p_i + 11) & 2) != 0 )
   {
-    Buffera = (char *)malloc(*((uint32_t *)p_i + 3));
+    Buffera = (char *)bmf_new(*((uint32_t *)p_i + 3));
     v41 = *(uint16_t *)((char *)&p_i->f0 + 2);
     n4_2 = ::plane_count;
     Buffera_1 = Buffera;
@@ -23731,7 +23731,7 @@ BMF_SSE void __bmf_compress(const __m128 &a1__ref, const __m128 &a2__ref,
     *((uint16_t *)p_i + 1),
     *((uint8_t *)p_i + 10) & 0x3F,
     p_i[3]);
-  if ( void *__nb = malloc(sizeof(BmfArc)) )
+  if ( void *__nb = bmf_new(sizeof(BmfArc)) )
     Arc = __fwd_bmf_bmf_open_archive((BmfArc *)__nb, (void *)OutName, 0);
   else
     Arc = 0;
@@ -23783,7 +23783,7 @@ BMF_SSE void __bmf_decompress(const __m128 &a1__ref, const __m128 &a2__ref,
   uint32_t *p_i;
   void *Block;
 
-  if ( void *__nb = malloc(sizeof(BmfArc)) )
+  if ( void *__nb = bmf_new(sizeof(BmfArc)) )
     Block = (void *)__fwd_bmf_bmf_open_archive((BmfArc *)__nb, (void *)InName, 1);
   else
     Block = nullptr;

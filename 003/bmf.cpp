@@ -836,5 +836,46 @@ static void bmf_page_free(void *p) {
 // doubt.  Defined after the bodies, since exit_402E40 is one of them.
 void __out_of_memory_handler();
 
+// ---------------------------------------------------------------------------
+// operator new is not malloc.
+//
+// Every allocation in the bodies came out of IDA as `__op_new`, MSVC's
+// `operator new`, and the imported tree defined it here as a one-line shim over
+// malloc.  A later commit inlined that shim on the grounds that a wrapper whose
+// entire content is a call to the C library stands between the bodies and the
+// library for no reason.  That was right about `fread` and wrong about this
+// one: `operator new` has a contract malloc does not, and BMF depends on it.
+// MSVC's calls the handler installed by `_set_new_handler` when an allocation
+// fails, and `main`'s first act after setting the FPU mode is
+//
+//     set_new_handler(out_of_memory_handler);
+//
+// which is `exit_402E40(7)` — "Out of memory!", exit status 7.  With the shim
+// gone that store went to a global nothing reads, the handler became a function
+// nothing can call, and a run that cannot get memory dies of a null dereference
+// with no message instead of saying what happened.  Nothing caught it because
+// no test had ever made an allocation fail; `ulimit -v` makes one fail in a
+// second (REFACTORING.md §2.3).
+//
+// This is that contract and no more of it: try, and on failure call whatever
+// handler the program stored, then try again.  The handler exits, so the retry
+// is theory rather than a loop; with no handler stored this returns null, which
+// is what the callers already assume and what the shim did.  Reading the
+// handler out of `__pout_of_memory_handler` is the point — it puts
+// `set_new_handler` back on a live path rather than working around it.
+static void *bmf_new(size_t n);
+
 #include "subs1.hpp"
+
+static void *bmf_new(size_t n) {
+  for (;;) {
+    void *p = malloc(n ? n : 1);       // `n ? n : 1` as the imported shim had it
+    if (p)
+      return p;
+    void (*handler)() = (void (*)())__pout_of_memory_handler;
+    if (!handler)
+      return nullptr;
+    handler();
+  }
+}
 
