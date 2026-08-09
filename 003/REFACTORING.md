@@ -318,19 +318,33 @@ every global whether covered or not, that carries what exposure remains.
 
 ## 5. Order of work — status
 
-Each phase ends green: build, ten images round-trip, every stream byte-identical
-to its reference. That held for every commit; the gate has never been red at a
-commit boundary.
+Each phase ends green: build, every image round-trips, every stream
+byte-identical to its reference. That held for every commit; the gate has never
+been red at a commit boundary.
 
 ```
 0  the gate, and one mode      done   §2
 1  names you already know      done   39 identifiers
 2  frames -> real locals       done   0 frames left
 3  un-pin the globals          done   86 of 163 out; the other 77 cannot move
-4  objects + pointers          done   every local typed; fields cannot be
+4  objects + pointers          done   73 structs; 2728 accesses name a field
 5  casts and the vocabulary    done   2 of 3 items withdrawn on evidence
 6  control flow                done   2 of 123; the rest is irreducible
 ```
+
+Two things happened after all seven were closed, and neither is a phase:
+
+**Naming carried on.** 26 more functions, each from evidence rather than from
+shape — what `ALGORITHM.md` establishes, which `rc` method a body calls, or
+where it sits in a dispatch. 55 named bodies now, and `tools/addrmap.txt` maps
+every one of them back to the address in `BMF.exe` it was decompiled from, so
+the names cost no traceability. 21 bodies keep their addresses because their
+roles are not established.
+
+**The corpus grew on purpose.** Four images written to reach specific code
+rather than to add another photograph, plus an archive check; 89.97 % → 92.65 %,
+and it turned up a capability an earlier commit had silently removed (§6). The
+method is in §2.3: establish the entry condition, then write the input.
 
 "Done" here means finished, not finished-as-written. Phases 3, 4, 5 and 6 each
 met evidence that contradicted the plan, and each entry below says what the
@@ -340,7 +354,9 @@ evidence was and what was done instead. §7 collects the four corrections.
 
 §2. Reference streams committed and the comparison made fatal; the mode made
 constant and everything the other modes reached deleted; `--gc-sections` so what
-is dead cannot ship. 25 462 → 17 968 lines, coverage 64.5 → 89.9 %.
+is dead cannot ship. 25 462 → 17 968 lines, coverage 64.5 → 89.9 %. The gate has
+grown twice since: `out_<name>.bmp` for inputs the program is not expected to
+echo, and a two-member archive check.
 
 ### Phase 1 — done
 
@@ -399,7 +415,7 @@ does not.
 `blob.inc` is down to 78 globals from 293 at the start. It cannot go to zero
 until the 77 shared ones are understood as the tables they are.
 
-### Phase 4 — 44 objects have structs; the blocker was the 64-bit goal, not the code
+### Phase 4 — 73 objects have structs; the blocker was the 64-bit goal, not the code
 
 `tools/retype.py` converted every local and parameter used as a pointer base
 first: 189 candidates, `char *` where the variable is only ever an address and
