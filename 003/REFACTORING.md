@@ -851,6 +851,24 @@ gate cannot tell from a layout change.
   replacing look the same. `test.sh` now builds a two-member archive and reads
   both back; reinstating `"w+b"` fails it with *SECOND MEMBER REPLACED THE
   FIRST*.
+- **Retyping a field can change what a comparison on it means, without the
+  comparison moving.** `expand_image` held the image descriptor as its own
+  struct with `char f10` at +10, and asked
+
+  ```c
+  Buffer_3 = p_i_1->f10 < 0 ? &((char *)p_i_1)[...] : nullptr;
+  ```
+
+  `char` is signed here, so `< 0` is a test of the top bit — which is the
+  palette flag. Folding that struct into `BmfImage`, where the field is
+  `uint8_t depth`, made the test always false and took the palette path with it:
+  four images failed to decompress, rc=139, the moment it was rewritten. It
+  names the bit now.
+
+  One recovered struct still has a `char fN` member, and no `x->fN < 0` is left
+  in the file — measured, so the statement is about this tree and not a hope.
+  What the trap says is general though, and a retyping tool cannot see it: the
+  expression does not move, and it still compiles. Only the gate catches this.
 - **`operator new` is not `malloc`, and the difference is the whole
   out-of-memory path.** `__op_new` was inlined to `malloc` on the reasoning
   that a wrapper whose content is a call to the same-named library function is
