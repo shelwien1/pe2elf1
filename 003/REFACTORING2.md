@@ -1,7 +1,11 @@
 # Refactoring BMF 2.01, round two
 
-`REFACTORING.md` is the record of the first round and its numbers are current.
-This is the plan for what is left, and it has three named goals:
+`REFACTORING.md` is the record of the first round. This was the plan for round
+two, and it is now also its record: goals 1 and 2 are done, goal 3 is a third
+done and has a scoreboard. §0 is what happened; the rest is the plan as it was
+written, corrected where the work proved it wrong.
+
+The three goals were:
 
 1. **`blob.inc` disappears.** The data segment of a Windows executable should
    not be a build input.
@@ -9,25 +13,75 @@ This is the plan for what is left, and it has three named goals:
 3. **The code stops being ugly.** 5603 pointer casts and 347 conversions the
    build has to pass `-fpermissive` to accept are not a style complaint.
 
-They are listed in that order because that is their order of importance. They
-are attacked in the reverse of it for a narrower reason than "A removes B's
-work": goal 3's metric is a compiler flag, and it should be measured against a
-file the other two have already cleaned. Goal 2 hands goal 1 very little — one
-subsection of §3 (`__init_sse_constants`, §3.2) removes the blob's SIMD
-constants on its own, and it is Phase B's work rather than Phase A's.
+The gate did not change: **byte-identical compressed streams against the
+committed references, and every image round-trips.** Every step below was
+answerable to it, and every step passed it.
 
-The gate does not change: **byte-identical compressed streams against the
-committed references, and every image round-trips.** Everything below is
-answerable to it.
-
-Every number in this document is reproducible; Appendix A gives the command
-for each. Round one's lesson about tools that report success (§7) applies to
-this document too, and the first draft of it failed that test in three places
-— see Appendix B.
+Every number is reproducible; Appendix A gives the command for each. Round
+one's lesson about tools that report success (§7) applies to this document too,
+and its first draft failed that test in three places — see Appendix B.
 
 ---
 
-## 1. Where this is now
+## 0. What happened
+
+| | before | after |
+| --- | --- | --- |
+| `blob.inc` | 343 794 bytes, 65 892 initialisers | **gone** |
+| globals reached through `blob1` | 78 | **0** |
+| data arrays | 86, 50 832 bytes | 21, 19 924 bytes (19 584 of it zero bss) |
+| initialised data bytes | 50 832 + 65 892 | **340** |
+| SIMD intrinsic calls | 558 | **0** |
+| `M128*` wrapper unions | 4 | 1, and no vector member |
+| conversions needing `-fpermissive` | 347 | 299 |
+| `subs1.hpp` | 23 807 lines | 19 711 |
+| `bmf.cpp` | 890 lines | 782 |
+| loops vectorised at `-O2` | 8 | 19 |
+
+**Goal 2 first, because §2.3's warning turned out to be the whole of it.**
+Reordering one horizontal sum in `alt_p2_filter` moves three of the fifteen
+streams; `-ffast-math` moves the same three. So the translation was done body
+at a time with the reduction order preserved exactly, and `bmf_hsum4` is where
+that order lives. Twelve of the fifteen images notice nothing, which is why
+the whole corpus has to run every time.
+
+What the translation found is worth more than the line count. The p2 family is
+**normalised LMS**: predict from seven weight rows against seven inputs, take
+the error, step each weight by `rate * error * input / (running mean square +
+floor)`. `alt_p2_context` does it once, `alt_p2_model` twice side by side and
+then a third time against its own prediction. Three constant tables came out of
+it — `bmf_p2_coef[7][4]`, `bmf_p2_rate[7][4]`, `bmf_p2_mix[4][6]` — and none of
+the first two is constant: both p2 model bodies save them on entry, fold or
+flatten rows, and restore on exit.
+
+**Goal 1 turned out to be two measurements, not 43 recoveries.** §3.3 assumed
+each global needed its extent, its type and its initial value recovered, with
+the initial value "the one that cannot be guessed". It can:
+
+  * *Everything above 0x44294C is zeroes.* One unbroken run, and all 41
+    surviving globals inside it. There were never any initialisers: it is bss.
+  * *Everything below is dead.* Poisoning 43 184 bytes of `blob.inc` with 0xCC
+    leaves all fifteen streams byte-identical.
+
+So the survivors became references into `bmf_bss`, 19 584 zero bytes at their
+original relative offsets, and `blob.inc` went — with the whole relocation
+layer, which the same experiment showed does nothing. Poisoning then trimmed
+four arrays that had been sized by "distance to the next global": 30 024 bytes
+to 32, 10 292 to 4, 6 592 to nothing at all, 1 968 to 4.
+
+It also found a real defect. The 64-byte guard tails were load-bearing:
+nineteen small arrays had been split out of the per-plane record table and
+were stale copies of it, and the code reads across them. Folding them back
+into `bmf_bss` put the table together and let the tails go.
+
+**Goal 3 has a scoreboard and 47 fewer conversions.** `BMF_STRICT=1
+./build.sh` drops `-fpermissive` and counts. What is left is one shape, and
+§4.2 was right that it is not satisfiable by cosmetics — see §4.2's postscript
+for what a single field retype costs.
+
+---
+
+## 1. Where this was when the plan was written
 
 | | |
 | --- | --- |
@@ -211,6 +265,14 @@ Three things follow:
   `-fvect-cost-model=cheap` (or `dynamic`), and it has to be justified by a
   measurement rather than added on principle — `g.bat`'s `-O2` is worth keeping
   for fidelity.
+
+  **Measured after the translation, and declined.** `cheap` and `dynamic` both
+  take the count from 19 loops to 41 and `-O3` to 50, but four passes over the
+  four largest images are 17.8 / 20.1 / 16.9 s at `-O2`, `cheap` and `-O3`
+  against 19.0 / 18.3 / 17.0 and 17.6 / 16.9 / 14.1 on repeat runs: the spread
+  within one binary is larger than the spread between them. There is no
+  measurement to justify the change, so `build.sh` still says what `g.bat`
+  said.
 * **Most of what is reported is SLP, not loops.** 103 of the 141 messages at
   `-O3` are `basic block part vectorized`. Counting "vectorized" therefore
   measures straight-line packing more than it measures loops, and the number to
@@ -419,6 +481,22 @@ It is also the right metric because it is not satisfiable by cosmetics. Each
 conversion is a type that is wrong, and fixing it means deciding what the thing
 actually is.
 
+**Postscript, from doing 47 of them.** Three decisions took 47 sites off the
+count: `hist_scratch` is `uint8_t *` because `coded_buf` is; two locals in the
+`rc_begin_*` pair are offsets into `model_geometry` rather than pointers; and
+twenty-three `M128` lanes hold addresses, which the union now says with a
+`char *m128_p[4]` member instead of an `int` read and a conversion.
+
+The rest is one shape — **a struct field Hex-Rays typed `int32_t` that holds a
+pointer** — and it does not come off one field at a time. Retyping
+`Obj10::f56[14]` (a set of row cursors, and unambiguously addresses: the code
+writes `*(uint8_t *)(f56[5] - 2)`) compiles and passes the gate, and takes the
+count **from 299 to 329**, because the `int32_t` locals those elements flow
+into are now wrong in the other direction. A field and the locals around it
+have to be retyped together, which makes the unit of work a function or two
+rather than a declaration. That is the shape of the remaining 299, and it is
+why the count is a scoreboard and not a burndown.
+
 The 12 `-Wint-to-pointer-cast` warnings are worth pulling out first anyway,
 because they are the narrowest and most mechanical group — but they are not part
 of the `-fpermissive` count, and they are not the 64-bit blocker either.
@@ -442,7 +520,7 @@ the objects *are*, and naming a struct's fields is worth doing in one pass per
 struct when its writer is understood. `BmfImage` and `BmpHeader` are the
 precedent.
 
-### 4.4 `goto` and `LABEL_n:` — re-examined, and the conclusion stands
+### 4.4 `goto` and `LABEL_n:` — re-examined twice, and the conclusion stands
 
 113 `goto` statements and 81 labels. Round one's Phase 6 concluded these are
 irreducible: of 123 gotos then, two qualified for `degoto.py`'s rewrite, 21
@@ -452,10 +530,10 @@ with other entries.
 
 That conclusion was reached before the frames became structs and before the
 alt-model bodies were merged, both of which changed the control flow's shape,
-so it was worth re-running. It has been: **`tools/degoto.py` now reports 0
-candidates of 114 gotos** (the 114th match is inside a comment). The count fell
-from 123 to 113 and the candidate count fell from 2 to 0. The conclusion holds
-and there is nothing here for this round — this subsection exists to say so.
+so it was worth re-running. It has been, before this round and again after it:
+**`tools/degoto.py` reports 0 candidates of 112 gotos.** The count fell from
+123 to 111 as the intrinsics went, and the candidate count from 2 to 0. The
+conclusion holds and there is nothing here — this subsection exists to say so.
 
 ---
 
@@ -525,10 +603,15 @@ ladder. The corpus runs in about 15 s.
 * **A `loop vectorized` count in the plan's numbers**, so "the compiler
   vectorises it" is a measurement and not an intention. Count `loop vectorized`
   separately from `basic block part vectorized`; §2.5 explains why the combined
-  figure misleads.
+  figure misleads. *Done: 8 before the translation, 19 after.*
 * **A no-`-fpermissive` build target**, failing at first, as Phase C's
   scoreboard: `BMF_STRICT=1 ./build.sh` counting the errors it gets. Today that
-  is 347.
+  is 347. *Done, and it is in `build.sh`; the count is 299.*
+* **A poisoning check would have been worth having in round one.** Filling an
+  array or a region with 0xCC and running the gate answers "is this read?" in
+  one build, and it is what settled `blob.inc`, four oversized arrays and the
+  64-byte guard tails. It belongs next to `deadcheck.py` as a tool rather than
+  as a thing done by hand.
 
 ---
 
@@ -610,3 +693,40 @@ three were numbers that would have shaped the work.
    `__init_sse_constants` overwrites all of them at startup from arrays that
    already moved, so none needs an initialiser recovered, and 18 are never read
    at all. Phase A is not what removes them.
+
+---
+
+## Appendix C — what is left
+
+Goals 1 and 2 are done. Goal 3 is at 299 of 347, and the three things below are
+what round three would be.
+
+* **The `-fpermissive` conversions, a function at a time.** §4.2's postscript
+  is the method: a field and the locals it flows into are one unit, and doing
+  the field alone makes the count worse before it makes it better. 88 `ObjN`
+  structs, 238 raw-offset dereferences and 5 414 pointer casts are all downstream
+  of the same thing.
+
+* **`bmf_bss` should stop being one object.** 19 584 zero bytes with the
+  original relative offsets is what made goal 1 safe to finish, not where it
+  should end. The per-plane record table is the clearest piece: sixteen bytes a
+  plane, bytes at +0/+1/+2 and int32 at +4/+8/+12, which `__byte_44339C`,
+  `__byte_44339D`, `__byte_44339E`, `__dword_4433A0`, `__dword_4433A4` and
+  `__dword_4433A8` are the six fields of. Naming it is one struct and about
+  twenty rewrites.
+
+* **The `vNN` names, still a background task.** 560 distinct, and §4.3's rate
+  has not changed: about ten a session of reading. The p2 family is now
+  readable enough to make it worth doing there first — `alt_p2_filter` and the
+  LMS blocks in `alt_p2_context` and `alt_p2_model` say what they compute, and
+  the locals around them do not.
+
+What this round settled that was open:
+
+* `estimate_cost` measures a histogram the caller builds, and the two-lane
+  accumulation is load-bearing. `algorithm_v2.md` §9's question about the p2
+  family has an answer: normalised LMS, three passes.
+* `hist_scratch` is read: it is `coded_buf + coded_size - 4096`, the histogram
+  scratch at the end of the coded buffer.
+* The 64-byte guard tails were not "nobody has explained" — they were holding
+  nineteen stale copies of one table together.

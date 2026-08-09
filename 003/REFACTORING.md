@@ -634,6 +634,20 @@ does not.
 `blob.inc` is down to 78 globals from 293 at the start. It cannot go to zero
 until the 77 shared ones are understood as the tables they are.
 
+**Round two took it to zero without understanding them, and the reason is
+worth recording here rather than only in REFACTORING2.md §0.** The question
+this phase could not answer -- what each shared global's initial value is --
+had no content: 0x44294C..0x448000 is one unbroken run of zero bytes and every
+surviving global is inside it. It is bss. Everything below that address is
+dead, which one poisoning run settles: 43 184 bytes of 0xCC and all fifteen
+streams are byte-identical. So the globals became references into one
+19 584-byte zero array at their original offsets, which keeps the shared
+tables together, and `blob.inc` went with the relocation layer.
+
+The same experiment should have been run here. "Is this read?" is one build
+and one gate run, and it would have replaced the per-global independence
+sweep this phase spent its time on.
+
 ### Phase 4 — 115 objects have structs; the blocker was the 64-bit goal, not the code
 
 `tools/retype.py` converted every local and parameter used as a pointer base
