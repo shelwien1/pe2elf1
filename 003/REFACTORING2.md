@@ -1,9 +1,9 @@
 # Refactoring BMF 2.01, round two
 
 `REFACTORING.md` is the record of the first round. This was the plan for round
-two, and it is now also its record: goals 1 and 2 are done, goal 3 is a third
-done and has a scoreboard. §0 is what happened; the rest is the plan as it was
-written, corrected where the work proved it wrong.
+two, and it is now also its record: **all three goals are done.** §0 is what
+happened; the rest is the plan as it was written, corrected where the work
+proved it wrong.
 
 The three goals were:
 
@@ -33,7 +33,7 @@ and its first draft failed that test in three places — see Appendix B.
 | initialised data bytes | 50 832 + 65 892 | **340** |
 | SIMD intrinsic calls | 558 | **0** |
 | `M128*` wrapper unions | 4 | 1, and no vector member |
-| conversions needing `-fpermissive` | 347 | **213** |
+| conversions needing `-fpermissive` | 347 | **0** |
 | `subs1.hpp` | 23 807 lines | 19 711 |
 | `bmf.cpp` | 890 lines | 782 |
 | loops vectorised at `-O2` | 8 | 19 |
@@ -74,7 +74,7 @@ nineteen small arrays had been split out of the per-plane record table and
 were stale copies of it, and the code reads across them. Folding them back
 into `bmf_bss` put the table together and let the tails go.
 
-**Goal 3 has a scoreboard and 134 fewer conversions, 39 % of the way.**
+**Goal 3 is done: the file compiles without `-fpermissive`.**
 `BMF_STRICT=1 ./build.sh` drops `-fpermissive` and counts. Six type decisions
 took most of them: `hist_scratch` is a `uint8_t *`, two `rc_begin_*` locals are
 offsets rather than pointers, twenty-three `M128` lanes hold addresses,
@@ -82,12 +82,30 @@ offsets rather than pointers, twenty-three `M128` lanes hold addresses,
 `f56[14]`, `f1051664[4]`, `f1078232`, `f1078688` — and four of `ModelBlock`'s
 — `f76`, `f80`, `f84`, `f88` — are the row cursors they are used as.
 
-What is left is one shape, and §4.2 was right that it is not satisfiable by
-cosmetics: the shortcut that would take it from 243 to 179 was tried and
-reverted, and the section says why. A sweep over every remaining field
-mentioned in `strict.log`, retyping one at a time and keeping only what both
-compiles and lowers the count, now finds **nothing**. The rest needs the
-function read first.
+§4.2 was right that the metric is not satisfiable by cosmetics, and enforcing
+that is most of what took the last 213 off. The shortcut that would have taken
+it from 243 to 179 in one pass was tried and reverted (§4.2's postscript). What
+actually did it was reading the functions: the row-cursor tables in `Obj1`,
+`Obj4`, `Obj8`, `Obj10`, `Obj19`, `Obj31`, `Obj69` and `ModelBlock` are
+pointers, together with the two hundred locals they flow through; a dozen
+register spills where MSVC kept a byte or a boolean in a register that held a
+cursor are the moves they always were; and eleven forwarding shims now take
+what they forward to.
+
+Two of those retypes changed behaviour rather than just the count, and both
+were caught by the gate rather than by reading:
+
+* Typing `Obj10::f1078208` as `uint32_t *` passes all fifteen images and
+  **segfaults the out-of-memory ladder**, because `f1078208 + 24 * n` steps 24
+  bytes on a byte pointer and 96 on a `uint32_t *`. That is the only time this
+  round the ladder caught something the images did not.
+* Typing `ModelBlock::f6059436` as `uint16_t *` -- which is what the same field
+  is called in `Obj10` -- moves three streams, for the same reason at a
+  different scale. It is `uint8_t *`.
+
+`-fpermissive` stays on the build line because `g.bat` had it, and because a
+future extraction that reintroduces the old conversions should still build
+while `BMF_STRICT=1` says what it cost.
 
 ---
 
@@ -635,7 +653,13 @@ ladder. The corpus runs in about 15 s.
   figure misleads. *Done: 8 before the translation, 19 after.*
 * **A no-`-fpermissive` build target**, failing at first, as Phase C's
   scoreboard: `BMF_STRICT=1 ./build.sh` counting the errors it gets. Today that
-  is 347. *Done, and it is in `build.sh`; the count is 299.*
+  is 347. *Done, and it is in `build.sh`; the count is 0.*
+
+  One trap in writing it, worth recording because it inflated the count by one
+  for the whole phase: `opts=("${opts[@]/-fpermissive/}")` leaves an **empty
+  element** in the array rather than removing it, and g++ reports that as
+  `error: : linker input file not found`. Build the array without the flag
+  instead.
 * **A poisoning check would have been worth having in round one.** Filling an
   array or a region with 0xCC and running the gate answers "is this read?" in
   one build, and it is what settled `blob.inc`, four oversized arrays and the
@@ -730,23 +754,12 @@ three were numbers that would have shaped the work.
 Goals 1 and 2 are done. Goal 3 is at 299 of 347, and the three things below are
 what round three would be.
 
-* **The `-fpermissive` conversions, a function at a time.** 217 left, and the
-  mechanical part is finished: a sweep over every field `strict.log` mentions,
-  retyping one at a time and keeping only what compiles *and* lowers the count,
-  finds nothing more. §4.2's postscript is the method for the rest — a field
-  and the locals it flows into are one unit. The named next one is
-  `f278736`, the ten-, six- and five-element cursor arrays in `Obj8`, `Obj19`
-  and `Obj69`: retyping it takes the count from 225 to 301 and needs
-  `alt_p2_model`'s two thousand lines read first. 88 `ObjN` structs, 234
-  raw-offset dereferences and 5 408 pointer casts are all downstream of the
-  same thing.
-
-  `ModelBlock::f6059432` and `f6059436` are the named warning. They are
-  cursors too and retyping them compiles at 212, but it **moves five streams**
-  — `**(uint16_t **)&_this->f6059432` is not the double dereference it looks
-  like everywhere it appears. It was reverted. This is the one place in the
-  round where a retype changed behaviour rather than just the count, and it is
-  why every batch runs the whole corpus.
+* **The casts.** 5 448 of them, and §4.1's accounting still holds: the ones
+  Phase A and Phase B were going to remove are gone, and what is left is
+  mostly the informative kind plus the several hundred this phase added
+  spelling out conversions the decompilation left implicit. A pass over those
+  now that the types underneath them are right would find some that no longer
+  say anything.
 
 * **`bmf_bss` should stop being one object.** 19 584 zero bytes with the
   original relative offsets is what made goal 1 safe to finish, not where it

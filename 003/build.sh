@@ -33,10 +33,15 @@ ARCH=${BMF_ARCH:--march=k8}
 
 incs=(-DNDEBUG -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0)
 
-# The dialect %gcc% pinned in g.bat.  -fpermissive is load-bearing: Hex-Rays
-# hands ints to pointer parameters throughout, and C++ makes those errors.
+# The dialect %gcc% pinned in g.bat.
+
 opts=(-m32 "$ARCH" -msse2 -mfpmath=sse -std=c++17
       -fno-strict-aliasing -fpermissive -fno-rtti -fno-exceptions)
+
+# -fpermissive is no longer load-bearing: the file compiles clean without it
+# (BMF_STRICT=1 below, which is how that is checked).  It stays because g.bat
+# had it, and because keeping it means a future extraction that reintroduces
+# the old conversions still builds while BMF_STRICT says what it cost.
 
 # BMF_STRICT=1 drops -fpermissive and counts what breaks.  That is Phase C's
 # scoreboard (REFACTORING2.md §4.2): every one of them is a place where the
@@ -45,7 +50,11 @@ opts=(-m32 "$ARCH" -msse2 -mfpmath=sse -std=c++17
 #
 #   BMF_STRICT=1 ./build.sh
 if [ "${BMF_STRICT:-0}" = 1 ]; then
-  opts=("${opts[@]/-fpermissive/}")
+  # Drop the flag, not just its text: "${a[@]/x/}" leaves an empty element,
+  # which g++ then reports as a missing linker input and which counted as an
+  # error of its own.
+  strict=(); for o in "${opts[@]}"; do [ "$o" = -fpermissive ] || strict+=("$o"); done
+  opts=("${strict[@]}")
   set -x
   "$CXX" "${opts[@]}" -O2 "${incs[@]}" -fsyntax-only -fdiagnostics-plain-output \
       bmf.cpp "$@" 2>&1 | tee strict.log | grep -c 'error:' || true
