@@ -28,3 +28,37 @@ __alt_init_tables:a2 __alt_init_tables:v10 __alt_init_tables:v14
 __search_filter:packer_word
 __encode_context_bit:a2
 __decode_context_bit:a2
+__colour_transform:Blockb __model_planes:Blockb __search_filter:Blockb __search_filter:Blockb_1 __search_filter:Blockb_2 __search_filter:Blockb_3 __search_filter:Blockb_4 __search_filter:Blockb_5 __search_filter:Blockb_6 __search_filter:Blockb_7 __search_filter:Blockb_8 __search_filter:Blockb_9 __transform_planes:p_ia __transform_planes:p_ia_1
+__alt_p2_context:v11 __alt_p2_context:v246 __alt_p2_context:v6
+__code_pixel:this_3 __decode_pixel:this_3 __pixel_context:_this
+__alt_p2_d8_decode_body:v21
+__alt_p2_d8_decode_body:v28
+__alt_p2_d8_decode_body:v58
+__alt_p2_d8_decode_body:v66
+__alt_model_p2_decode:v30
+__alt_model_p2_decode:v38
+__alt_model_p2_decode:v67
+__alt_model_p2_decode:v75
+__alt_p2_d8_encode_body:v23
+__alt_p2_d8_encode_body:v30
+__alt_p2_d8_encode_body:v61
+__alt_p2_d8_encode_body:v69
+__alt_model_p2_encode:v29
+__alt_model_p2_encode:v37
+__alt_model_p2_encode:v66
+__alt_model_p2_encode:v74
+__read_bmp:Src __read_bmp:Src_1 __read_bmp:Src_2 __read_bmp:Src_3 __read_bmp:Src_4 __read_bmp:Src_5 __read_bmp:Src_6
+__expand_image:p_i_1
+__alt_model_p2_encode:a2 __alt_model_p2_encode:v166 __model_plane:a4 __model_plane:a5 __reduce_alphabet:a3 __reduce_alphabet:v10 __reduce_alphabet:v33 __reduce_alphabet:v4 __reduce_alphabet:v60 __reduce_alphabet:v91 __reduce_alphabet:v96 __transform_planes:Srca_1 __transform_planes:Srca_3
+__choose_plane_coding:v214
+__encode_context_bit:_this
+__decode_context_bit:_this
+__encode_symbol_list:v28
+__encode_symbol_list:v36 __encode_symbol_list:v37 __encode_symbol_list:v49
+__symbol_list_update:v16
+__symbol_list_update:v23 __symbol_list_update:v24 __symbol_list_update:v33
+__alt_p1_decode_symbol:a1
+__decode_symbol_list:v36
+__decode_pixel:v61
+__code_pixel:v98
+__alt_p2_d8_encode_body:v16

@@ -5579,6 +5579,342 @@ static_assert(sizeof(void *) != 4
               "Obj71: the layout moved");
 
 
+// Obj72 -- recovered from 11 dereferences over 10 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj72 {
+  uint32_t f0;
+  uint32_t f4;
+  uint32_t f8;
+  uint32_t f12;
+  uint16_t f16;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj72, f16) == 16,
+              "Obj72: the layout moved");
+
+
+// Obj73 -- recovered from 10 dereferences over 10 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj73 {
+  uint8_t _pad0[36];
+  uint32_t f36;
+  uint32_t f40;
+  uint32_t f44;
+  uint32_t f48;
+  uint16_t f52;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj73, f52) == 52,
+              "Obj73: the layout moved");
+
+
+// Obj74 -- recovered from 10 dereferences over 10 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj74 {
+  uint8_t _pad0[72];
+  uint32_t f72;
+  uint32_t f76;
+  uint32_t f80;
+  uint32_t f84;
+  uint16_t f88;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj74, f88) == 88,
+              "Obj74: the layout moved");
+
+
+// Obj75 -- recovered from 10 dereferences over 10 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj75 {
+  uint32_t f0;
+  uint32_t f4;
+  uint32_t f8;
+  uint32_t f12;
+  uint16_t f16;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj75, f16) == 16,
+              "Obj75: the layout moved");
+
+
+// Obj76 -- recovered from 10 dereferences over 10 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj76 {
+  uint8_t _pad0[36];
+  uint32_t f36;
+  uint32_t f40;
+  uint32_t f44;
+  uint32_t f48;
+  uint16_t f52;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj76, f52) == 52,
+              "Obj76: the layout moved");
+
+
+// Obj77 -- recovered from 10 dereferences over 10 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj77 {
+  uint8_t _pad0[72];
+  uint32_t f72;
+  uint32_t f76;
+  uint32_t f80;
+  uint32_t f84;
+  uint16_t f88;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj77, f88) == 88,
+              "Obj77: the layout moved");
+
+
+// Obj78 -- recovered from 10 dereferences over 10 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj78 {
+  uint32_t f0;
+  uint32_t f4;
+  uint32_t f8;
+  uint32_t f12;
+  uint16_t f16;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj78, f16) == 16,
+              "Obj78: the layout moved");
+
+
+// Obj79 -- recovered from 10 dereferences over 10 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj79 {
+  uint8_t _pad0[36];
+  uint32_t f36;
+  uint32_t f40;
+  uint32_t f44;
+  uint32_t f48;
+  uint16_t f52;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj79, f52) == 52,
+              "Obj79: the layout moved");
+
+
+// Obj80 -- recovered from 10 dereferences over 10 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj80 {
+  uint8_t _pad0[72];
+  uint32_t f72;
+  uint32_t f76;
+  uint32_t f80;
+  uint32_t f84;
+  uint16_t f88;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj80, f88) == 88,
+              "Obj80: the layout moved");
+
+
+// Obj81 -- recovered from 10 dereferences over 10 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj81 {
+  uint32_t f0;
+  uint32_t f4;
+  uint32_t f8;
+  uint32_t f12;
+  uint16_t f16;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj81, f16) == 16,
+              "Obj81: the layout moved");
+
+
+// Obj82 -- recovered from 10 dereferences over 10 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj82 {
+  uint8_t _pad0[36];
+  uint32_t f36;
+  uint32_t f40;
+  uint32_t f44;
+  uint32_t f48;
+  uint16_t f52;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj82, f52) == 52,
+              "Obj82: the layout moved");
+
+
+// Obj83 -- recovered from 10 dereferences over 10 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj83 {
+  uint8_t _pad0[72];
+  uint32_t f72;
+  uint32_t f76;
+  uint32_t f80;
+  uint32_t f84;
+  uint16_t f88;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj83, f88) == 88,
+              "Obj83: the layout moved");
+
+
+// Obj84 -- recovered from 10 dereferences over 10 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj84 {
+  uint8_t _pad0[36];
+  uint32_t f36;
+  uint32_t f40;
+  uint32_t f44;
+  uint32_t f48;
+  uint16_t f52;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj84, f52) == 52,
+              "Obj84: the layout moved");
+
+
+// Obj85 -- recovered from 7 dereferences over 7 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj85 {
+  __m128i f0;
+  __m128i f16;
+  __m128i f32;
+  __m128i f48;
+  __m128i f64;
+  __m128i f80;
+  __m128i f96;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj85, f96) == 96,
+              "Obj85: the layout moved");
+
+
+// Obj86 -- recovered from 7 dereferences over 7 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj86 {
+  __m128i f0;
+  __m128i f16;
+  __m128i f32;
+  __m128i f48;
+  __m128i f64;
+  __m128i f80;
+  __m128i f96;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj86, f96) == 96,
+              "Obj86: the layout moved");
+
+
+// Obj87 -- recovered from 7 dereferences over 7 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj87 {
+  __m128i f0;
+  __m128i f16;
+  __m128i f32;
+  __m128i f48;
+  __m128i f64;
+  __m128i f80;
+  __m128i f96;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj87, f96) == 96,
+              "Obj87: the layout moved");
+
+
+// Obj88 -- recovered from 7 dereferences over 7 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj88 {
+  __m128i f0;
+  __m128i f16;
+  __m128i f32;
+  __m128i f48;
+  __m128i f64;
+  __m128i f80;
+  __m128i f96;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj88, f96) == 96,
+              "Obj88: the layout moved");
+
+
+// Obj89 -- recovered from 6 dereferences over 4 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj89 {
+  char f0;
+  uint8_t _pad1[252];
+  char f253;
+  char f254;
+  char f255;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj89, f255) == 255,
+              "Obj89: the layout moved");
+
+
+// Obj90 -- recovered from 6 dereferences over 1 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj90 {
+  uint16_t f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj90, f0) == 0,
+              "Obj90: the layout moved");
+
+
 struct RangeCoder {
   static const uint32_t kTop    = 0x00800000;   // renormalise at or below this
   static const uint32_t kPend   = 0x7F800000;   // low here still has a live carry
@@ -5920,7 +6256,7 @@ LABEL_24:
   return n15;
 }
 
-BMF_SSE uint32_t __alt_init_tables(uint8_t *a1, char *a2)
+BMF_SSE uint32_t __alt_init_tables(uint8_t *a1, Obj89 *a2)
 {
   ;
   char *v18, *v19, v48, v53;
@@ -5938,36 +6274,36 @@ BMF_SSE uint32_t __alt_init_tables(uint8_t *a1, char *a2)
   // 0, which a run over the corpus agrees with: 164 entries, 83 at 1 and 81
   // at 2.  Deleted on the same grounds as the fast path (REFACTORING.md
   // section 2.1) -- code no dispatch reaches is not a feature to keep.
-  *a2 = 0;
-  v18 = a2 + 2;
-  v19 = a2 + 1;
-  a2[255] = 0x80;
-  if ( (a2 + 1 <= a2 + 2 || (uint32_t)(v19 - v18) < 0xFE) && (v18 <= v19 || (uint32_t)(v18 - v19) < 0xFE) )
+  a2->f0 = 0;
+  v18 = (char *)a2 + 2;
+  v19 = (char *)a2 + 1;
+  a2->f255 = 0x80;
+  if ( ((char *)a2 + 1 <= (char *)a2 + 2 || (uint32_t)(v19 - v18) < 0xFE) && (v18 <= v19 || (uint32_t)(v18 - v19) < 0xFE) )
   {
     for ( i = 0; i < 0x3F; ++i )
     {
-      a2[4 * i + 2] = 2 * i + 1;
-      a2[4 * i + 1] = -2 * i - 1;
-      a2[4 * i + 4] = 2 * i + 2;
-      a2[4 * i + 3] = -2 * i - 2;
+      ((char *)a2)[4 * i + 2] = 2 * i + 1;
+      ((char *)a2)[4 * i + 1] = -2 * i - 1;
+      ((char *)a2)[4 * i + 4] = 2 * i + 2;
+      ((char *)a2)[4 * i + 3] = -2 * i - 2;
     }
-    a2[254] = 127;
-    a2[253] = -127;
+    a2->f254 = 127;
+    a2->f253 = -127;
   }
   else
   {
     for ( j = 0; j < 0x3F; ++j )
     {
-      a2[4 * j + 2] = 2 * j + 1;
-      a2[4 * j + 4] = 2 * j + 2;
+      ((char *)a2)[4 * j + 2] = 2 * j + 1;
+      ((char *)a2)[4 * j + 4] = 2 * j + 2;
     }
-    a2[254] = 127;
+    a2->f254 = 127;
     for ( k = 0; k < 0x3F; ++k )
     {
-      a2[4 * k + 1] = -2 * k - 1;
-      a2[4 * k + 3] = -2 * k - 2;
+      ((char *)a2)[4 * k + 1] = -2 * k - 1;
+      ((char *)a2)[4 * k + 3] = -2 * k - 2;
     }
-    a2[253] = -127;
+    a2->f253 = -127;
   }
   // never taken: -E is 0
   // The test here was `if ( plane_predictor )`, with an else for predictor
@@ -6036,8 +6372,8 @@ BMF_SSE uint32_t __alt_init_tables(uint8_t *a1, char *a2)
   }
   for ( n0x80 = 0; n0x80 < 0x80; ++n0x80 )
   {
-    a1[(uint8_t)a2[2 * n0x80] + 256] = 2 * n0x80;
-    a1[(uint8_t)a2[2 * n0x80 + 1] + 256] = 2 * n0x80 + 1;
+    a1[(uint8_t)((char *)a2)[2 * n0x80] + 256] = 2 * n0x80;
+    a1[(uint8_t)((char *)a2)[2 * n0x80 + 1] + 256] = 2 * n0x80 + 1;
   }
   return n0x80;
 }
@@ -6170,16 +6506,17 @@ int32_t __encode_symbol_list(uint32_t *_this, int32_t a2)
   int16_t v51;
   int32_t enc_cum, enc_high, enc_tot, v3, v5, v6, v7, v8, v24, n251, v35, v38,
           v41, v43, v47, v53, v54;
-  uint16_t *v4, *v25, v26, v31;
+  Obj90 *v4;
+  uint16_t *v25, v26, v31;
   uint32_t i_1, i, v34, v42, v44, *this_1;
   v2 = __byte_445700;
   v3 = *(_this + 1);
-  v4 = (uint16_t *)(*(_this + 5) - 3);
+  v4 = (Obj90 *)((uint16_t *)(*(_this + 5) - 3));
   v5 = 0;
   while ( 1 )
   {
-    v4 = (uint16_t *)((char *)v4 + 3);
-    v6 = *v4;
+    v4 = (Obj90 *)((uint16_t *)((char *)v4 + 3));
+    v6 = v4->f0;
     if ( exclusion_mask[v6] != __byte_445700 )
     {
       v7 = *((uint8_t *)v4 + 2);
@@ -6196,8 +6533,8 @@ int32_t __encode_symbol_list(uint32_t *_this, int32_t a2)
       enc_high = enc_tot;
       do
       {
-        exclusion_mask[*v4] = v2;
-        v4 = (uint16_t *)((char *)v4 - 3);
+        exclusion_mask[v4->f0] = v2;
+        v4 = (Obj90 *)((uint16_t *)((char *)v4 - 3));
       }
       while ( (uint32_t)v4 >= *(_this + 5) );
       v8 = 0;
@@ -6231,11 +6568,11 @@ LABEL_37:
   }
   else
   {
-    v26 = *v4;
+    v26 = v4->f0;
     v27 = *((uint8_t *)v4 + 2);
     v28 = (char *)v4 - 3;
     v29 = *((uint8_t *)v4 - 1);
-    *v4 = *(uint16_t *)((char *)v4 - 3);
+    v4->f0 = *(uint16_t *)((char *)v4 - 3);
     *((uint8_t *)v4 + 2) = v29;
     *(uint16_t *)v28 = v26;
     v28[2] = v27;
@@ -6249,15 +6586,15 @@ LABEL_37:
       while ( 1 )
       {
         n251 = (uint8_t)v28[2];
-        v4 = (uint16_t *)(v28 - 3);
+        v4 = (Obj90 *)((uint16_t *)(v28 - 3));
         if ( n251 <= (uint8_t)*(v28 - 1) )
           break;
         v31 = *(uint16_t *)v28;
         v32 = v28[2];
         v33 = *(v28 - 1);
-        *(uint16_t *)v28 = *v4;
+        *(uint16_t *)v28 = v4->f0;
         v28[2] = v33;
-        *v4 = v31;
+        v4->f0 = v31;
         *(v28 - 1) = v32;
         v25 = (uint16_t *)*(_this + 5);
         v28 -= 3;
@@ -8433,7 +8770,7 @@ int32_t __alt_p1_model(Obj0 *_this)
   }
   return result;
 }
-static inline uint32_t __fwd_alt_p1_alloc_alt_init_tables(void *a0, void *a1) { return __alt_init_tables((uint8_t *)a0, (char *)a1); }
+static inline uint32_t __fwd_alt_p1_alloc_alt_init_tables(void *a0, void *a1) { return __alt_init_tables((uint8_t *)a0, (Obj89 *)a1); }
 static inline uint16_t * __fwd_alt_p1_alloc_init_counter_node(void *a0) { return __init_counter_node((uint16_t *)a0); }
 
 int32_t *__alt_p1_alloc(int32_t *_this, int32_t i, int32_t a3, int32_t n4)
@@ -8867,7 +9204,7 @@ static void bmf_set_denormal_mode()
   _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
 }
 
-static inline uint32_t __fwd_alt_p2_alloc_alt_init_tables(void *a0, void *a1) { return __alt_init_tables((uint8_t *)a0, (char *)a1); }
+static inline uint32_t __fwd_alt_p2_alloc_alt_init_tables(void *a0, void *a1) { return __alt_init_tables((uint8_t *)a0, (Obj89 *)a1); }
 
 int32_t __alt_p2_alloc(char *_this, int32_t i, int32_t n4)
 {
@@ -19082,12 +19419,17 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
   uint8_t * &v97 = __frame.v97;
   ;
   Obj70 *v11;
-  uintptr_t v21, v25, v28, v32, v36, v38, v39, v40, v41, v42, v43, v44, v48, v54, v58, v62, v66,
-            v69, v76, v78, v80, v82, v84, v86, v88, v90, v93;
+  Obj73 *v25;
+  Obj74 *v32;
+  Obj75 *v54;
+  Obj76 *v62;
+  Obj77 *v69;
+  uintptr_t v21, v28, v36, v38, v39, v40, v41, v42, v43, v44, v48, v58, v66, v76, v78, v80, v82,
+            v84, v86, v88, v90, v93;
   __m128 a3 = a3__ref;
   __m128 a4 = a4__ref;
   __m128 v47;
-  __m128i *v53;
+  Obj85 *v53;
   bool v17;
   int16_t v14, v24;
   Obj70 *v12;
@@ -19180,15 +19522,15 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
   *(uint32_t *)(v21 + 26) = v22;
   *(uint32_t *)(v21 + 30) = v23;
   *(uint16_t *)(v21 + 34) = v24;
-  v25 = lpAddress->f278736;
-  v26 = *(uint32_t *)(v25 - 10);
-  v27 = *(uint32_t *)(v25 - 6);
-  *(uint32_t *)(v25 + 36) = *(uint32_t *)(v25 - 18);
-  *(uint32_t *)(v25 + 40) = *(uint32_t *)(v25 - 14);
-  LOWORD(v21) = *(uint16_t *)(v25 - 2);
-  *(uint32_t *)(v25 + 44) = v26;
-  *(uint32_t *)(v25 + 48) = v27;
-  *(uint16_t *)(v25 + 52) = v21;
+  v25 = (Obj73 *)(lpAddress->f278736);
+  v26 = *(uint32_t *)((uintptr_t)v25 - 10);
+  v27 = *(uint32_t *)((uintptr_t)v25 - 6);
+  v25->f36 = *(uint32_t *)((uintptr_t)v25 - 18);
+  v25->f40 = *(uint32_t *)((uintptr_t)v25 - 14);
+  LOWORD(v21) = *(uint16_t *)((uintptr_t)v25 - 2);
+  v25->f44 = v26;
+  v25->f48 = v27;
+  v25->f52 = v21;
   v28 = lpAddress->f278736;
   v29 = *(uint32_t *)(v28 - 14);
   v30 = *(uint32_t *)(v28 - 10);
@@ -19199,16 +19541,16 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
   *(uint32_t *)(v28 + 62) = v30;
   *(uint32_t *)(v28 + 66) = v31;
   *(uint16_t *)(v28 + 70) = v29;
-  v32 = lpAddress->f278736;
-  v33 = *(uint32_t *)(v32 - 14);
-  v34 = *(uint32_t *)(v32 - 6);
-  *(uint32_t *)(v32 + 72) = *(uint32_t *)(v32 - 18);
-  v35 = *(uint32_t *)(v32 - 10);
-  *(uint32_t *)(v32 + 76) = v33;
-  LOWORD(v33) = *(uint16_t *)(v32 - 2);
-  *(uint32_t *)(v32 + 80) = v35;
-  *(uint32_t *)(v32 + 84) = v34;
-  *(uint16_t *)(v32 + 88) = v33;
+  v32 = (Obj74 *)(lpAddress->f278736);
+  v33 = *(uint32_t *)((uintptr_t)v32 - 14);
+  v34 = *(uint32_t *)((uintptr_t)v32 - 6);
+  v32->f72 = *(uint32_t *)((uintptr_t)v32 - 18);
+  v35 = *(uint32_t *)((uintptr_t)v32 - 10);
+  v32->f76 = v33;
+  LOWORD(v33) = *(uint16_t *)((uintptr_t)v32 - 2);
+  v32->f80 = v35;
+  v32->f84 = v34;
+  v32->f88 = v33;
   v36 = lpAddress->f278736;
   v37 = -18 * i_1;
   *(uint32_t *)(v36 + v37 - 18) = *(uint32_t *)(v36 - 18 * i_1);
@@ -19286,27 +19628,27 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
       *(uint64_t *)&lpAddress->f278528 = v47.m128_u64[0];
       *(uint32_t *)((char *)&lpAddress->f278528 + 8) = 0;
       *(uint16_t *)((char *)&lpAddress->f278528 + 12) = 0;
-      v53 = (__m128i *)(((uintptr_t)lpAddress + 278543) & 0xFFFFFFF0);
+      v53 = (Obj85 *)((__m128i *)(((uintptr_t)lpAddress + 278543) & 0xFFFFFFF0));
       *(uint8_t *)((char *)&lpAddress->f278528 + 14) = 0;
       lpAddress->f278640 = v47.m128_u64[0];
       lpAddress->f278648 = v47.m128_u64[0];
-      *v53 = v47;
-      v53[1] = v47;
-      v53[2] = v47;
-      v53[3] = v47;
-      v53[4] = v47;
-      v53[5] = v47;
-      v53[6] = v47;
-      v54 = lpAddress->f278736;
-      v55 = *(uint32_t *)(v54 - 14);
-      v56 = *(uint32_t *)(v54 - 10);
-      v57 = *(uint32_t *)(v54 - 6);
-      *(uint32_t *)v54 = *(uint32_t *)(v54 - 18);
-      LOWORD(v51) = *(uint16_t *)(v54 - 2);
-      *(uint32_t *)(v54 + 4) = v55;
-      *(uint32_t *)(v54 + 8) = v56;
-      *(uint32_t *)(v54 + 12) = v57;
-      *(uint16_t *)(v54 + 16) = v51;
+      v53->f0 = v47;
+      v53->f16 = v47;
+      v53->f32 = v47;
+      v53->f48 = v47;
+      v53->f64 = v47;
+      v53->f80 = v47;
+      v53->f96 = v47;
+      v54 = (Obj75 *)(lpAddress->f278736);
+      v55 = *(uint32_t *)((uintptr_t)v54 - 14);
+      v56 = *(uint32_t *)((uintptr_t)v54 - 10);
+      v57 = *(uint32_t *)((uintptr_t)v54 - 6);
+      v54->f0 = *(uint32_t *)((uintptr_t)v54 - 18);
+      LOWORD(v51) = *(uint16_t *)((uintptr_t)v54 - 2);
+      v54->f4 = v55;
+      v54->f8 = v56;
+      v54->f12 = v57;
+      v54->f16 = v51;
       v58 = lpAddress->f278736;
       v59 = *(uint32_t *)(v58 - 32);
       v60 = *(uint32_t *)(v58 - 28);
@@ -19317,16 +19659,16 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
       *(uint32_t *)(v58 + 26) = v60;
       *(uint32_t *)(v58 + 30) = v61;
       *(uint16_t *)(v58 + 34) = v51;
-      v62 = lpAddress->f278736;
-      v63 = *(uint32_t *)(v62 - 50);
-      v64 = *(uint32_t *)(v62 - 42);
-      LOWORD(v51) = *(uint16_t *)(v62 - 38);
-      *(uint32_t *)(v62 + 36) = *(uint32_t *)(v62 - 54);
-      v65 = *(uint32_t *)(v62 - 46);
-      *(uint32_t *)(v62 + 40) = v63;
-      *(uint32_t *)(v62 + 44) = v65;
-      *(uint32_t *)(v62 + 48) = v64;
-      *(uint16_t *)(v62 + 52) = v51;
+      v62 = (Obj76 *)(lpAddress->f278736);
+      v63 = *(uint32_t *)((uintptr_t)v62 - 50);
+      v64 = *(uint32_t *)((uintptr_t)v62 - 42);
+      LOWORD(v51) = *(uint16_t *)((uintptr_t)v62 - 38);
+      v62->f36 = *(uint32_t *)((uintptr_t)v62 - 54);
+      v65 = *(uint32_t *)((uintptr_t)v62 - 46);
+      v62->f40 = v63;
+      v62->f44 = v65;
+      v62->f48 = v64;
+      v62->f52 = v51;
       v66 = lpAddress->f278736;
       v67 = *(uint32_t *)(v66 - 64);
       v68 = *(uint32_t *)(v66 - 60);
@@ -19336,15 +19678,15 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
       *(uint32_t *)(v66 + 62) = v67;
       *(uint32_t *)(v66 + 66) = v68;
       *(uint16_t *)(v66 + 70) = v51;
-      v69 = lpAddress->f278736;
-      v70 = *(uint32_t *)(v69 - 82);
-      v71 = *(uint32_t *)(v69 - 78);
-      LOWORD(v68) = *(uint16_t *)(v69 - 74);
-      *(uint32_t *)(v69 + 72) = *(uint32_t *)(v69 - 90);
-      *(uint32_t *)(v69 + 76) = *(uint32_t *)(v69 - 86);
-      *(uint32_t *)(v69 + 80) = v70;
-      *(uint32_t *)(v69 + 84) = v71;
-      *(uint16_t *)(v69 + 88) = v68;
+      v69 = (Obj77 *)(lpAddress->f278736);
+      v70 = *(uint32_t *)((uintptr_t)v69 - 82);
+      v71 = *(uint32_t *)((uintptr_t)v69 - 78);
+      LOWORD(v68) = *(uint16_t *)((uintptr_t)v69 - 74);
+      v69->f72 = *(uint32_t *)((uintptr_t)v69 - 90);
+      v69->f76 = *(uint32_t *)((uintptr_t)v69 - 86);
+      v69->f80 = v70;
+      v69->f84 = v71;
+      v69->f88 = v68;
       v72 = lpAddress->f278768;
       v73 = lpAddress->f278772;
       v74 = lpAddress->f278764;
@@ -19535,13 +19877,18 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   Obj8 *v56;
   Obj19 *v14;
   Obj31 *v25;
-  uintptr_t v26, v30, v34, v38, v41, v45, v46, v57, v63, v67, v71, v75, v78, v85, v87, v89, v91,
-            v93, v95, v97, v99;
+  Obj78 *v26;
+  Obj79 *v34;
+  Obj80 *v41;
+  Obj81 *v63;
+  Obj82 *v71;
+  Obj83 *v78;
+  uintptr_t v30, v38, v45, v46, v57, v67, v75, v85, v87, v89, v91, v93, v95, v97, v99;
   Obj11 *v120;
   Obj11 *v129;
   Obj11 *v111;
   __m128 v2, v3;
-  __m128i *v62;
+  Obj86 *v62;
   bool v17, v109;
   char v9;
   int16_t v110;
@@ -19623,16 +19970,16 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
             if ( v165 == 1 )
             {
               v25 = (Obj31 *)((int32_t)*(v18 - 1));
-              v26 = v25->f278736;
-              v27 = *(uint32_t *)(v26 - 14);
-              v28 = *(uint32_t *)(v26 - 10);
-              *(uint32_t *)v26 = *(uint32_t *)(v26 - 18);
-              v29 = *(uint32_t *)(v26 - 6);
-              *(uint32_t *)(v26 + 4) = v27;
-              LOWORD(v27) = *(uint16_t *)(v26 - 2);
-              *(uint32_t *)(v26 + 8) = v28;
-              *(uint32_t *)(v26 + 12) = v29;
-              *(uint16_t *)(v26 + 16) = v27;
+              v26 = (Obj78 *)(v25->f278736);
+              v27 = *(uint32_t *)((uintptr_t)v26 - 14);
+              v28 = *(uint32_t *)((uintptr_t)v26 - 10);
+              v26->f0 = *(uint32_t *)((uintptr_t)v26 - 18);
+              v29 = *(uint32_t *)((uintptr_t)v26 - 6);
+              v26->f4 = v27;
+              LOWORD(v27) = *(uint16_t *)((uintptr_t)v26 - 2);
+              v26->f8 = v28;
+              v26->f12 = v29;
+              v26->f16 = v27;
               v30 = v25->f278736;
               v31 = *(uint32_t *)(v30 - 14);
               v32 = *(uint32_t *)(v30 - 10);
@@ -19643,16 +19990,16 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
               *(uint32_t *)(v30 + 26) = v32;
               *(uint32_t *)(v30 + 30) = v33;
               *(uint16_t *)(v30 + 34) = v31;
-              v34 = v25->f278736;
-              v35 = *(uint32_t *)(v34 - 14);
-              v36 = *(uint32_t *)(v34 - 6);
-              *(uint32_t *)(v34 + 36) = *(uint32_t *)(v34 - 18);
-              v37 = *(uint32_t *)(v34 - 10);
-              *(uint32_t *)(v34 + 40) = v35;
-              LOWORD(v35) = *(uint16_t *)(v34 - 2);
-              *(uint32_t *)(v34 + 44) = v37;
-              *(uint32_t *)(v34 + 48) = v36;
-              *(uint16_t *)(v34 + 52) = v35;
+              v34 = (Obj79 *)(v25->f278736);
+              v35 = *(uint32_t *)((uintptr_t)v34 - 14);
+              v36 = *(uint32_t *)((uintptr_t)v34 - 6);
+              v34->f36 = *(uint32_t *)((uintptr_t)v34 - 18);
+              v37 = *(uint32_t *)((uintptr_t)v34 - 10);
+              v34->f40 = v35;
+              LOWORD(v35) = *(uint16_t *)((uintptr_t)v34 - 2);
+              v34->f44 = v37;
+              v34->f48 = v36;
+              v34->f52 = v35;
               v38 = v25->f278736;
               v39 = *(uint32_t *)(v38 - 10);
               v40 = *(uint32_t *)(v38 - 6);
@@ -19662,16 +20009,16 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
               *(uint32_t *)(v38 + 62) = v39;
               *(uint32_t *)(v38 + 66) = v40;
               *(uint16_t *)(v38 + 70) = v34;
-              v41 = v25->f278736;
-              v42 = *(uint32_t *)(v41 - 14);
-              v43 = *(uint32_t *)(v41 - 10);
-              *(uint32_t *)(v41 + 72) = *(uint32_t *)(v41 - 18);
-              v44 = *(uint32_t *)(v41 - 6);
-              *(uint32_t *)(v41 + 76) = v42;
-              LOWORD(v42) = *(uint16_t *)(v41 - 2);
-              *(uint32_t *)(v41 + 80) = v43;
-              *(uint32_t *)(v41 + 84) = v44;
-              *(uint16_t *)(v41 + 88) = v42;
+              v41 = (Obj80 *)(v25->f278736);
+              v42 = *(uint32_t *)((uintptr_t)v41 - 14);
+              v43 = *(uint32_t *)((uintptr_t)v41 - 10);
+              v41->f72 = *(uint32_t *)((uintptr_t)v41 - 18);
+              v44 = *(uint32_t *)((uintptr_t)v41 - 6);
+              v41->f76 = v42;
+              LOWORD(v42) = *(uint16_t *)((uintptr_t)v41 - 2);
+              v41->f80 = v43;
+              v41->f84 = v44;
+              v41->f88 = v42;
               v45 = v25->f278736;
               v46 = v160;
               Size_1 = Size;
@@ -19778,7 +20125,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v56->f278672 = v59;
           v61 = *v59;
           *(uint32_t *)(v60 - 4) = *v59;
-          v62 = (__m128i *)(((uintptr_t)v56 + 278543) & 0xFFFFFFF0);
+          v62 = (Obj86 *)((__m128i *)(((uintptr_t)v56 + 278543) & 0xFFFFFFF0));
           *(uint32_t *)(v56->f278668 - 8) = v61;
           v56->f278528 = 0;
           v56->f278536 = 0;
@@ -19786,23 +20133,23 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v56->f278542 = 0;
           v56->f278640 = 0;
           v56->f278648 = 0;
-          *v62 = 0;
-          v62[1] = 0;
-          v62[2] = 0;
-          v62[3] = 0;
-          v62[4] = 0;
-          v62[5] = 0;
-          v62[6] = 0;
-          v63 = v56->f278736;
-          v64 = *(uint32_t *)(v63 - 14);
-          v65 = *(uint32_t *)(v63 - 10);
-          v66 = *(uint32_t *)(v63 - 6);
-          *(uint32_t *)v63 = *(uint32_t *)(v63 - 18);
-          LOWORD(v60) = *(uint16_t *)(v63 - 2);
-          *(uint32_t *)(v63 + 4) = v64;
-          *(uint32_t *)(v63 + 8) = v65;
-          *(uint32_t *)(v63 + 12) = v66;
-          *(uint16_t *)(v63 + 16) = v60;
+          v62->f0 = 0;
+          v62->f16 = 0;
+          v62->f32 = 0;
+          v62->f48 = 0;
+          v62->f64 = 0;
+          v62->f80 = 0;
+          v62->f96 = 0;
+          v63 = (Obj81 *)(v56->f278736);
+          v64 = *(uint32_t *)((uintptr_t)v63 - 14);
+          v65 = *(uint32_t *)((uintptr_t)v63 - 10);
+          v66 = *(uint32_t *)((uintptr_t)v63 - 6);
+          v63->f0 = *(uint32_t *)((uintptr_t)v63 - 18);
+          LOWORD(v60) = *(uint16_t *)((uintptr_t)v63 - 2);
+          v63->f4 = v64;
+          v63->f8 = v65;
+          v63->f12 = v66;
+          v63->f16 = v60;
           v67 = v56->f278736;
           v68 = *(uint32_t *)(v67 - 32);
           v69 = *(uint32_t *)(v67 - 28);
@@ -19813,16 +20160,16 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           *(uint32_t *)(v67 + 26) = v69;
           *(uint32_t *)(v67 + 30) = v70;
           *(uint16_t *)(v67 + 34) = v60;
-          v71 = v56->f278736;
-          v72 = *(uint32_t *)(v71 - 50);
-          v73 = *(uint32_t *)(v71 - 42);
-          LOWORD(v60) = *(uint16_t *)(v71 - 38);
-          *(uint32_t *)(v71 + 36) = *(uint32_t *)(v71 - 54);
-          v74 = *(uint32_t *)(v71 - 46);
-          *(uint32_t *)(v71 + 40) = v72;
-          *(uint32_t *)(v71 + 44) = v74;
-          *(uint32_t *)(v71 + 48) = v73;
-          *(uint16_t *)(v71 + 52) = v60;
+          v71 = (Obj82 *)(v56->f278736);
+          v72 = *(uint32_t *)((uintptr_t)v71 - 50);
+          v73 = *(uint32_t *)((uintptr_t)v71 - 42);
+          LOWORD(v60) = *(uint16_t *)((uintptr_t)v71 - 38);
+          v71->f36 = *(uint32_t *)((uintptr_t)v71 - 54);
+          v74 = *(uint32_t *)((uintptr_t)v71 - 46);
+          v71->f40 = v72;
+          v71->f44 = v74;
+          v71->f48 = v73;
+          v71->f52 = v60;
           v75 = v56->f278736;
           v76 = *(uint32_t *)(v75 - 64);
           v77 = *(uint32_t *)(v75 - 60);
@@ -19832,15 +20179,15 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           *(uint32_t *)(v75 + 62) = v76;
           *(uint32_t *)(v75 + 66) = v77;
           *(uint16_t *)(v75 + 70) = v60;
-          v78 = v56->f278736;
-          v79 = *(uint32_t *)(v78 - 82);
-          v80 = *(uint32_t *)(v78 - 78);
-          LOWORD(v77) = *(uint16_t *)(v78 - 74);
-          *(uint32_t *)(v78 + 72) = *(uint32_t *)(v78 - 90);
-          *(uint32_t *)(v78 + 76) = *(uint32_t *)(v78 - 86);
-          *(uint32_t *)(v78 + 80) = v79;
-          *(uint32_t *)(v78 + 84) = v80;
-          *(uint16_t *)(v78 + 88) = v77;
+          v78 = (Obj83 *)(v56->f278736);
+          v79 = *(uint32_t *)((uintptr_t)v78 - 82);
+          v80 = *(uint32_t *)((uintptr_t)v78 - 78);
+          LOWORD(v77) = *(uint16_t *)((uintptr_t)v78 - 74);
+          v78->f72 = *(uint32_t *)((uintptr_t)v78 - 90);
+          v78->f76 = *(uint32_t *)((uintptr_t)v78 - 86);
+          v78->f80 = v79;
+          v78->f84 = v80;
+          v78->f88 = v77;
           v81 = v56->f278768;
           v82 = v56->f278772;
           v83 = v56->f278764;
@@ -20144,12 +20491,14 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
   Obj54 *v57;
   Obj55 *v65;
   Obj56 *v72;
-  char *v11, *v23, *v27, *v30, *v38, *v40, *v41, *v42, *v43, *v44, *v45, *v46, *v51, *v61, *v69,
-       *v79, *v81, *v83, *v85, *v87, *v89, *v91, *v93;
+  Obj72 *v11;
+  Obj84 *v27;
+  char *v23, *v30, *v38, *v40, *v41, *v42, *v43, *v44, *v45, *v46, *v51, *v61, *v69, *v79, *v81,
+       *v83, *v85, *v87, *v89, *v91, *v93;
   __m128 a2 = a2__ref;
   __m128 a3 = a3__ref;
   __m128 v50;
-  __m128i *v56;
+  Obj87 *v56;
   char v14, v97;
   int16_t v26;
   int32_t v12, v13, n16, v16, v17, v20, v21, v22, v24, v25, v28, v29, v31, v32, v33, v35, v36,
@@ -20162,13 +20511,13 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
   uint8_t *v8;
   v8 = a4;
   __rc_begin_encode();
-  v11 = lpAddress->f278736.m128_i32[0];
+  v11 = (Obj72 *)(lpAddress->f278736.m128_i32[0]);
   if ( i > 0 )
   {
     v103 = a4;
     for ( j = 0; j < i; ++j )
     {
-      v12 = *(uint16_t *)(v11 - 18) >> 4;
+      v12 = *(uint16_t *)((char *)v11 - 18) >> 4;
       v13 = (uint8_t)(*v103 - v12);
       v104 = lpAddress->f279984.m128_u8[v13];
       v14 = lpAddress->f280496.m128_i8[v104] + v12;
@@ -20219,20 +20568,20 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
       *(uint8_t *)(lpAddress->f278736.m128_i32[0] + 17) = 2;
       *(uint8_t *)(lpAddress->f278736.m128_i32[0] + 16) = (*(int16_t *)(lpAddress->f278736.m128_i32[0] + 4) <= 0)
                                                     + (*(int16_t *)(lpAddress->f278736.m128_i32[0] + 4) < 0);
-      v11 = lpAddress->f278736.m128_i32[0] + 18;
+      v11 = (Obj72 *)(lpAddress->f278736.m128_i32[0] + 18);
       lpAddress->f278736.m128_i32[0] = v11;
     }
     v8 = v103;
   }
-  v20 = *(uint32_t *)(v11 - 14);
-  v21 = *(uint32_t *)(v11 - 10);
-  *(uint32_t *)v11 = *(uint32_t *)(v11 - 18);
-  v22 = *(uint32_t *)(v11 - 6);
-  *(uint32_t *)(v11 + 4) = v20;
-  LOWORD(v20) = *(uint16_t *)(v11 - 2);
-  *(uint32_t *)(v11 + 8) = v21;
-  *(uint32_t *)(v11 + 12) = v22;
-  *(uint16_t *)(v11 + 16) = v20;
+  v20 = *(uint32_t *)((char *)v11 - 14);
+  v21 = *(uint32_t *)((char *)v11 - 10);
+  v11->f0 = *(uint32_t *)((char *)v11 - 18);
+  v22 = *(uint32_t *)((char *)v11 - 6);
+  v11->f4 = v20;
+  LOWORD(v20) = *(uint16_t *)((char *)v11 - 2);
+  v11->f8 = v21;
+  v11->f12 = v22;
+  v11->f16 = v20;
   v23 = lpAddress->f278736.m128_i32[0];
   v24 = *(uint32_t *)(v23 - 10);
   v25 = *(uint32_t *)(v23 - 6);
@@ -20242,15 +20591,15 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
   *(uint32_t *)(v23 + 26) = v24;
   *(uint32_t *)(v23 + 30) = v25;
   *(uint16_t *)(v23 + 34) = v26;
-  v27 = lpAddress->f278736.m128_i32[0];
-  v28 = *(uint32_t *)(v27 - 10);
-  v29 = *(uint32_t *)(v27 - 6);
-  *(uint32_t *)(v27 + 36) = *(uint32_t *)(v27 - 18);
-  *(uint32_t *)(v27 + 40) = *(uint32_t *)(v27 - 14);
-  LOWORD(v23) = *(uint16_t *)(v27 - 2);
-  *(uint32_t *)(v27 + 44) = v28;
-  *(uint32_t *)(v27 + 48) = v29;
-  *(uint16_t *)(v27 + 52) = v23;
+  v27 = (Obj84 *)(lpAddress->f278736.m128_i32[0]);
+  v28 = *(uint32_t *)((char *)v27 - 10);
+  v29 = *(uint32_t *)((char *)v27 - 6);
+  v27->f36 = *(uint32_t *)((char *)v27 - 18);
+  v27->f40 = *(uint32_t *)((char *)v27 - 14);
+  LOWORD(v23) = *(uint16_t *)((char *)v27 - 2);
+  v27->f44 = v28;
+  v27->f48 = v29;
+  v27->f52 = v23;
   v30 = lpAddress->f278736.m128_i32[0];
   v31 = *(uint32_t *)(v30 - 14);
   v32 = *(uint32_t *)(v30 - 10);
@@ -20354,14 +20703,14 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
       lpAddress->f278528.m128_i8[14] = 0;
       lpAddress->f278640.m128_u64[0] = v50.m128_u64[0];
       lpAddress->f278640.m128_u64[1] = v50.m128_u64[0];
-      v56 = (__m128i *)(((uint32_t)&lpAddress->f278528.m128_u32[3] + 3) & 0xFFFFFFF0);
-      *v56 = v50;
-      v56[1] = v50;
-      v56[2] = v50;
-      v56[3] = v50;
-      v56[4] = v50;
-      v56[5] = v50;
-      v56[6] = v50;
+      v56 = (Obj87 *)((__m128i *)(((uint32_t)&lpAddress->f278528.m128_u32[3] + 3) & 0xFFFFFFF0));
+      v56->f0 = v50;
+      v56->f16 = v50;
+      v56->f32 = v50;
+      v56->f48 = v50;
+      v56->f64 = v50;
+      v56->f80 = v50;
+      v56->f96 = v50;
       v57 = (Obj54 *)(lpAddress->f278736.m128_i32[0]);
       v58 = *(uint32_t *)((char *)v57 - 14);
       v59 = *(uint32_t *)((char *)v57 - 10);
@@ -20650,7 +20999,7 @@ BMF_SSE int32_t __alt_model_p2_encode(Obj33 *p_i, uint8_t *a2)
   Obj11 *v133;
   Obj11 *v114;
   __m128 v2, v3;
-  __m128i *v61;
+  Obj88 *v61;
   bool v16;
   char v9;
   int16_t v113;
@@ -20887,7 +21236,7 @@ BMF_SSE int32_t __alt_model_p2_encode(Obj33 *p_i, uint8_t *a2)
           v55->f278672 = v58;
           v60 = *v58;
           *(uint32_t *)(v59 - 4) = *v58;
-          v61 = (__m128i *)(((uintptr_t)v55 + 278543) & 0xFFFFFFF0);
+          v61 = (Obj88 *)((__m128i *)(((uintptr_t)v55 + 278543) & 0xFFFFFFF0));
           *(uint32_t *)(v55->f278668 - 8) = v60;
           v55->f278528 = 0;
           v55->f278536 = 0;
@@ -20895,13 +21244,13 @@ BMF_SSE int32_t __alt_model_p2_encode(Obj33 *p_i, uint8_t *a2)
           v55->f278542 = 0;
           v55->f278640 = 0;
           v55->f278648 = 0;
-          *v61 = 0;
-          v61[1] = 0;
-          v61[2] = 0;
-          v61[3] = 0;
-          v61[4] = 0;
-          v61[5] = 0;
-          v61[6] = 0;
+          v61->f0 = 0;
+          v61->f16 = 0;
+          v61->f32 = 0;
+          v61->f48 = 0;
+          v61->f64 = 0;
+          v61->f80 = 0;
+          v61->f96 = 0;
           v62 = (Obj60 *)(v55->f278736);
           v63 = *(uint32_t *)((char *)v62 - 14);
           v64 = *(uint32_t *)((char *)v62 - 10);

@@ -680,6 +680,20 @@ def main():
         member[off] = (nm, best)
         at = off + w
 
+    if not any(member.values()):
+        # Every offset landed inside the one before it.  That happens when the
+        # first access at +0 is four bytes wide and the rest read +1, +2 and +3
+        # out of it: the object is one word being taken apart, not a struct with
+        # fields, and there is no layout to name.  Declined for the same reason
+        # and by the same route as an unsizeable member -- quietly returning
+        # here is what once left the sweep gating an unchanged file and calling
+        # it a pass.
+        with open(SKIP, 'a') as f:
+            f.write(signature(uf, key) + '\n')
+        print('%s: declined -- all %d offsets fall inside the member at +%d'
+              % (tag, len(offs), min(offs)))
+        sys.exit(3)
+
     # the guard is the last member's offset, not the struct's size: a struct
     # whose members end at 90 is 92 bytes once it is aligned, and asserting the
     # size would be asserting the padding rule rather than the layout.  Any
