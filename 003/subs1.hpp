@@ -9634,6 +9634,49 @@ int32_t __alt_p2_alloc(char *_this, int32_t i, int32_t n4)
   return _this;
 }
 
+// The image descriptor `alloc_image` returns, and every reader of an image
+// takes.  Sixteen bytes, then the pixels.
+//
+// This one is not documented anywhere -- it is BMF's own -- but it does not
+// need to be inferred from the offsets its readers touch, because
+// `alloc_image` writes all four words in a row and the arithmetic around them
+// says what each is:
+//
+//   result[0] = (a2 << 16) | (uint16_t)a1;   width in the low half, height in
+//                                            the high half -- a1 and a2 are its
+//                                            first two parameters
+//   result[1] = v9;                          v9 is the row length in bytes,
+//                                            computed from the width and the
+//                                            depth and rounded up per depth
+//   result[2] = v7;                          v7 = ((uint8_t)n5 << 16) | ...,
+//                                            so the depth byte lands at +10
+//   result[3] = v10;                         v10 = v9 * a2 -- stride times
+//                                            height, the size of the pixels
+//   buf = (char *)result + result[3] + 16;   which start at +16
+//
+// The depth byte carries two flags above its six bits of depth.  0x80 is set
+// only on the palette path -- `a4` true and a depth of 8 or less -- and every
+// reader tests it before looking for a palette; `bmf_compress` toggles it and
+// sets 0x40 around the call to the coder.  The byte after it starts as 0x40
+// from `v7`'s `| 0x40000000` and is a second flag byte: `compress_image` ors
+// bit 7 into it and tests bit 1.  Only +8 and +9 are genuinely unread.
+struct BmfImage {
+  uint16_t width;             // +0
+  uint16_t height;            // +2
+  uint32_t stride;            // +4   bytes per row -- a word, as result[1] is
+  uint8_t  _pad8[2];          // +8
+  uint8_t  depth;             // +10  bits 0..5 the depth; 0x40 and 0x80 flags
+  uint8_t  flags;             // +11  0x40 from alloc_image; compress_image
+                              //      sets bit 7 and toggles bit 1
+  uint32_t data_size;         // +12  stride * height
+};                            // +16  pixels
+static_assert(sizeof(BmfImage) == 16, "BmfImage is not the image header");
+static_assert(__builtin_offsetof(BmfImage, stride) == 4
+              && __builtin_offsetof(BmfImage, flags) == 11
+              && __builtin_offsetof(BmfImage, depth) == 10
+              && __builtin_offsetof(BmfImage, data_size) == 12,
+              "BmfImage fields are not where alloc_image puts them");
+
 int32_t *__alloc_image(int32_t a1, int32_t a2, int32_t n5, int32_t a4, int32_t a5)
 {
   ;
@@ -9706,10 +9749,17 @@ LABEL_20:
   result = ((int32_t *)bmf_new(v10 + Size + 19));
   if ( !result )
     return nullptr;
-  result[0] = (a2 << 16) | (uint16_t)a1;
-  result[1] = v9;
-  result[2] = v7;
-  result[3] = v10;
+  // The descriptor, and the reason BmfImage looks the way it does.  Three of
+  // these four words are one field each and say so now; `result[2]` is not,
+  // and stays a packed store: it covers +8 through +11, and the two bytes at
+  // +8 are zero only because they are written as part of it.  Splitting it
+  // would mean zeroing them separately, which is more code saying less.
+  BmfImage *const img = (BmfImage *)result;
+  img->width = a1;
+  img->height = a2;
+  img->stride = v9;
+  result[2] = v7;                 // +8 and +9 zero, depth at +10, flags at +11
+  img->data_size = v10;
   if ( Size )
   {
     if ( (*((uint8_t *)result + 10) & 0x80) != 0 )
@@ -9722,49 +9772,6 @@ LABEL_20:
   }
   return (int32_t *)result;
 }
-
-// The image descriptor `alloc_image` returns, and every reader of an image
-// takes.  Sixteen bytes, then the pixels.
-//
-// This one is not documented anywhere -- it is BMF's own -- but it does not
-// need to be inferred from the offsets its readers touch, because
-// `alloc_image` writes all four words in a row and the arithmetic around them
-// says what each is:
-//
-//   result[0] = (a2 << 16) | (uint16_t)a1;   width in the low half, height in
-//                                            the high half -- a1 and a2 are its
-//                                            first two parameters
-//   result[1] = v9;                          v9 is the row length in bytes,
-//                                            computed from the width and the
-//                                            depth and rounded up per depth
-//   result[2] = v7;                          v7 = ((uint8_t)n5 << 16) | ...,
-//                                            so the depth byte lands at +10
-//   result[3] = v10;                         v10 = v9 * a2 -- stride times
-//                                            height, the size of the pixels
-//   buf = (char *)result + result[3] + 16;   which start at +16
-//
-// The depth byte carries two flags above its six bits of depth.  0x80 is set
-// only on the palette path -- `a4` true and a depth of 8 or less -- and every
-// reader tests it before looking for a palette; `bmf_compress` toggles it and
-// sets 0x40 around the call to the coder.  The byte after it starts as 0x40
-// from `v7`'s `| 0x40000000` and is a second flag byte: `compress_image` ors
-// bit 7 into it and tests bit 1.  Only +8 and +9 are genuinely unread.
-struct BmfImage {
-  uint16_t width;             // +0
-  uint16_t height;            // +2
-  uint32_t stride;            // +4   bytes per row -- a word, as result[1] is
-  uint8_t  _pad8[2];          // +8
-  uint8_t  depth;             // +10  bits 0..5 the depth; 0x40 and 0x80 flags
-  uint8_t  flags;             // +11  0x40 from alloc_image; compress_image
-                              //      sets bit 7 and toggles bit 1
-  uint32_t data_size;         // +12  stride * height
-};                            // +16  pixels
-static_assert(sizeof(BmfImage) == 16, "BmfImage is not the image header");
-static_assert(__builtin_offsetof(BmfImage, stride) == 4
-              && __builtin_offsetof(BmfImage, flags) == 11
-              && __builtin_offsetof(BmfImage, depth) == 10
-              && __builtin_offsetof(BmfImage, data_size) == 12,
-              "BmfImage fields are not where alloc_image puts them");
 
 // The two headers a .bmp file begins with: a 14-byte BITMAPFILEHEADER and the
 // 40-byte BITMAPINFOHEADER after it.
