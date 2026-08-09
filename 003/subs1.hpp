@@ -5397,7 +5397,7 @@ int32_t __alt_p2_alloc(char *_this, int32_t i, int32_t n4)
   __dword_4458F4 = -v8;
   *(uint32_t *)(_this + 278720) = -v9 - 7;
   *(uint32_t *)(_this + 278724) = v9 + 8;
-  *(uint32_t *)(_this + 278660) = bmf_new(4 * i + 16);
+  *(uint32_t *)(_this + 278660) = (uint32_t)bmf_new(4 * i + 16);
   v10 = bmf_new(4 * i + 16);
   *(uint32_t *)(_this + 232) = 0x3F800000 /* 1.0f */;
   *(uint32_t *)(_this + 278664) = v10;
@@ -5429,7 +5429,7 @@ int32_t __alt_p2_alloc(char *_this, int32_t i, int32_t n4)
   n5 = 0;
   Size = 18 * i + 234;
   do
-    *(uint32_t *)(_this + 4 * n5++ + 278756) = bmf_new(Size);
+    *(uint32_t *)(_this + 4 * n5++ + 278756) = (uint32_t)bmf_new(Size);
   while ( n5 < 5 );
   memset(*(char **)(_this + 278756),0,Size);
   v17 = *(uint32_t *)(_this + 278756);
@@ -6591,7 +6591,7 @@ int32_t __rc_begin_decode(char ArgList_1)
     __byte_445730 = (char)v11;
     __byte_445732[0] = (uint8_t)v11 - 7;
     memset((char *)model_geometry + v11, 0x07, 64);
-    n256 = bmf_new(0x7F000u);
+    n256 = (uint16_t *)bmf_new(0x7F000u);
     if ( n256 )
     {
       ArgList = ArgList_1;
@@ -12393,7 +12393,7 @@ int32_t __layout_workspace(uintptr_t a1, int32_t a2, int32_t i, int32_t a4, int3
       while ( v9 < *(uint32_t *)a1 + 16 );
     }
   }
-  v10 = bmf_new(i_1 + 1);
+  v10 = (uint8_t *)bmf_new(i_1 + 1);
   *(uint32_t *)(a1 + 1078684) = v10;
   *v10 = 0;
   if ( *(int32_t *)a1 > 0 )
@@ -12457,7 +12457,7 @@ int32_t __layout_workspace(uintptr_t a1, int32_t a2, int32_t i, int32_t a4, int3
   while ( n8 < 8 );
   n0x18 = 0;
   memset((char *)(a1 + 1051776),0,24576);
-  *(uint32_t *)(a1 + 1078236) = bmf_new(2 * *(uint32_t *)(a1 + 4) * *(uint32_t *)a1);
+  *(uint32_t *)(a1 + 1078236) = (uint32_t)bmf_new(2 * *(uint32_t *)(a1 + 4) * *(uint32_t *)a1);
   *(uint16_t *)(a1 + 1076352) = 4;
   *(uint16_t *)(a1 + 1076354) = 4;
   *(uint16_t *)(a1 + 1076356) = 72;
@@ -12701,7 +12701,7 @@ void __unmodel_plane_slow(Obj10 *_this, char *Src)
   __fwd_unmodel_plane_slow_init_encode_symbol_list((int32_t *)((uintptr_t)this_4 + 1078184), this_4, this_4->f16, 1);
   this_4->f1078232 = (uint32_t **)((char *)this_4 + 1078216);
   v30 = this_4->f16;
-  v31 = bmf_new(24 * v30 + 4);
+  v31 = (uint32_t *)bmf_new(24 * v30 + 4);
   if ( v31 )
   {
     *v31 = v30;
@@ -12718,7 +12718,7 @@ void __unmodel_plane_slow(Obj10 *_this, char *Src)
   }
   v34 = this_4->f16;
   this_4->f1078208 = i;
-  v35 = bmf_new(24 * v34 + 4);
+  v35 = (uint32_t *)bmf_new(24 * v34 + 4);
   if ( v35 )
   {
     *v35 = v34;
@@ -17741,7 +17741,7 @@ char * __expand_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref, in
       uint32_t Size;
       int32_t n4_1;
       void *Src;
-      int32_t v86;
+      char *v86;
       char *p_i_2;
       int32_t v88;
       uint32_t ElementCount_3;
@@ -17763,7 +17763,7 @@ char * __expand_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref, in
   uint32_t &Size = __frame.Size;
   int32_t &n4_1 = __frame.n4_1;
   void *&Src = __frame.Src;
-  int32_t &v86 = __frame.v86;
+  char *&v86 = __frame.v86;
   BmfImage *&p_i_2 = (BmfImage *&)__frame.p_i_2;
   int32_t &v88 = __frame.v88;
   uint32_t &ElementCount_3 = __frame.ElementCount_3;
@@ -17834,7 +17834,7 @@ LABEL_15:
     {
       Buffer__1 = Buffer_;
       v12 = (ElementSize + (ElementSize == 0) + 3) & 0xFFFFFFFC;
-      v13 = bmf_new(v12 + 8);
+      v13 = (uint32_t *)bmf_new(v12 + 8);
       *v13 = Buffer__1;
       v13[1] = v12;
       *(uint32_t *)((char *)v13 + v12 + 4) = 0;
@@ -17892,7 +17892,7 @@ LABEL_15:
   }
   desc_slow_mode = 1;
   coded_size = ElementCount;
-  ::coded_buf = bmf_new(ElementCount);
+  ::coded_buf = (uint8_t *)bmf_new(ElementCount);
   out_cursor = ::coded_buf;
   packer_free_bits = 0;
   packer_acc = 0;
@@ -18364,7 +18364,7 @@ uint32_t __search_filter(BmfImage *p_i, char a2, const __m128 &a3__ref, const __
   // with the mode.  See REFACTORING.md §2.
   Blockb = (char *)__alloc_image(i, i_2, p_i_1->depth & 0x3F, 0, 0);
   coded_size = *((uint32_t *)Blockb + 3) + 0x20000;
-  coded_buf = bmf_new(coded_size);
+  coded_buf = (uint8_t *)bmf_new(coded_size);
   out_cursor = coded_buf;
   packer_free_bits = 0;
   packer_acc = 0;
@@ -19184,12 +19184,12 @@ int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref,
       char *Buffera_4;
       uint8_t _pad0[12];
       uint8_t slot16[4];
-      char *Buffera;
+      uint32_t Buffera;
       int32_t n4_2;
       char *Buffera_1;
       int32_t v64;
       int32_t v65;
-      int32_t v66;
+      char *v66;
       void *Buffer_2;
       uint8_t _pad1[32];
   } __frame;
@@ -19198,12 +19198,12 @@ int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref,
   uint32_t &ElementCount = *(uint32_t *)((char *)__frame.slot16);
   int32_t &ElementCounta = *(int32_t *)((char *)__frame.slot16);
   uint32_t &ElementCountb = *(uint32_t *)((char *)__frame.slot16);
-  char *&Buffera = __frame.Buffera;
+  uint32_t &Buffera = __frame.Buffera;
   int32_t &n4_2 = __frame.n4_2;
   char *&Buffera_1 = __frame.Buffera_1;
   int32_t &v64 = __frame.v64;
   int32_t &v65 = __frame.v65;
-  int32_t &v66 = __frame.v66;
+  char *&v66 = __frame.v66;
   void *&Buffer_2 = __frame.Buffer_2;
   ;
   char *v5;   // were int32_t: these hold addresses
@@ -19234,7 +19234,7 @@ int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref,
       __fwd_compress_image_expand_image(v5, a2, a3, 1, nullptr);
     }
   }
-  __compress_image_Buffer_1 = (char)coded_buf;
+  __compress_image_Buffer_1 = (char)(uintptr_t)coded_buf;
   p_i_1 = (BmfImage *)(p_i);
   row_bytes = *((uint32_t *)p_i + 1);
   if ( coded_buf )
@@ -19265,7 +19265,7 @@ int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref,
   if ( (v17 & 0x3Fu) <= 4 )         // -F is on, so only the depth decides
   {
     coded_size = *((uint32_t *)p_i + 3) + 0x20000;
-    ::coded_buf = bmf_new(coded_size);
+    ::coded_buf = (uint8_t *)bmf_new(coded_size);
     ::packer_free_bits = 0;
     ::packer_acc = 0;
     out_cursor = ::coded_buf;
@@ -19296,7 +19296,7 @@ int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref,
     v18 = *((uint32_t *)p_i + 3);
   }
   coded_size = v18 + 0x20000;
-  ::coded_buf = bmf_new(v18 + 0x20000);
+  ::coded_buf = (uint8_t *)bmf_new(v18 + 0x20000);
   out_cursor = ::coded_buf;
   ::packer_free_bits = 0;
   ::packer_acc = 0;
@@ -19454,8 +19454,8 @@ LABEL_22:
 LABEL_57:
   *(uint32_t *)::packer_word = ::packer_acc;
   v38 = (uint32_t)(out_cursor - (uint32_t)::coded_buf) < *((uint32_t *)p_i + 3);
-  ElementCounta = out_cursor - (uint32_t)::coded_buf;
-  v64 = out_cursor - (uint32_t)::coded_buf;
+  ElementCounta = out_cursor - ::coded_buf;
+  v64 = out_cursor - ::coded_buf;
   if ( v38 )
   {
     v39 = fwrite(&Buffera, 1u, 0x10u, ((BmfArc *)v5)->fp) == 16;
@@ -19494,7 +19494,7 @@ LABEL_57:
         i_1 = p_i_1->width;
         v65 = v47;
         Buffera_1 = Buffera_3;
-        v49 = (char *)p_i_1 + v47 + 16;
+        v49 = (uint8_t *)p_i_1 + v47 + 16;
         v50 = v64;
         do
         {
