@@ -5614,7 +5614,7 @@ BmfArc *__bmf_destroy_archive(BmfArc *Block, char a2)
   return Block;
 }
 
- BMF_SSE void __sub_410650(uint32_t Src, int32_t i, int32_t a3)
+ BMF_SSE void __expand_predictor_mode0(uint32_t Src, int32_t i, int32_t a3)
 {
   ;
   __m128i si128, v7, v8, v9, v11, v12, v19, v20, v22, v23, v24, v25, v26, v27, v28;
@@ -7134,7 +7134,7 @@ void __rc_end_encode()
     free(model_tables);
 }
 
-void **__sub_415270(void **Blocka, char a2)
+void **__free_workspace(void **Blocka, char a2)
 {
   ;
   int32_t v4, v6, v10, v13, i;
@@ -7197,7 +7197,7 @@ void **__sub_415270(void **Blocka, char a2)
   return Blocka_1;
 }
 
-int32_t __sub_416860(ModelBlock *_this, Obj24 *p_n15)
+int32_t __pixel_context(ModelBlock *_this, Obj24 *p_n15)
 {
   ;
   char *v7, *v16;   // was int32_t: these hold addresses
@@ -7517,7 +7517,7 @@ void **__sub_419610(void **lpAddress, char a2)
   return lpAddress;
 }
 
- void __sub_419680()
+ void __init_sse_constants()
 {
   ;
   __xmmword_445760[0] = __xmmword_439A00;
@@ -9520,7 +9520,7 @@ LABEL_76:
   fclose(Stream_2);
   return 1;
 }
-uint32_t __sub_414860(Obj35 *a1, int32_t a2, int32_t a3, int32_t a4)
+uint32_t __init_symbol_list(Obj35 *a1, int32_t a2, int32_t a3, int32_t a4)
 {
   ;
   char *buf, v6;
@@ -9561,7 +9561,7 @@ uint32_t __sub_414860(Obj35 *a1, int32_t a2, int32_t a3, int32_t a4)
   return result;
 }
 
-char * __sub_4081E0(char *p_i, char *Src, int32_t a3, char a4)
+char * __interleave_plane(char *p_i, char *Src, int32_t a3, char a4)
 {
   ;
   char *Src_5, *v25;
@@ -10012,7 +10012,7 @@ BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
   }
   rc.dec_init();
   return out_cursor;
-} BMF_SSE uint8_t *__sub_410310(char *Src, int32_t i, int32_t a3)
+} BMF_SSE uint8_t *__unpredict_med(char *Src, int32_t i, int32_t a3)
 {
   ;
   uintptr_t Src_1, v41;   // were int32_t: addresses, masked and tagged
@@ -11970,7 +11970,7 @@ BMF_SSE int32_t __sub_41A130(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3_
 }
 
 static inline int32_t __fwd_reduce_alphabet_symbol_list(void *a0, int32_t a1) { return __symbol_list((uint32_t *)a0, a1); }
-static inline uint32_t __fwd_reduce_alphabet_sub_414860(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __sub_414860((Obj35 *)a0, a1, a2, a3); }
+static inline uint32_t __fwd_reduce_alphabet_init_symbol_list(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __init_symbol_list((Obj35 *)a0, a1, a2, a3); }
 
 void __reduce_alphabet(char *Blocka, char a2, uint8_t *a3)
 {
@@ -12134,7 +12134,7 @@ void __reduce_alphabet(char *Blocka, char a2, uint8_t *a3)
     v64 = Blockaa_1[4];
     if ( v64 <= v93 )
     {
-      __fwd_reduce_alphabet_sub_414860((int32_t *)v86, (int32_t)Blockaa_1, v93 - v64 + 2, 1);
+      __fwd_reduce_alphabet_init_symbol_list((int32_t *)v86, (int32_t)Blockaa_1, v93 - v64 + 2, 1);
       v87 = 19 * LODWORD(v86[0]);
       v70 = Blockaa_1[4];
       if ( v70 )
@@ -12388,7 +12388,7 @@ LABEL_71:
         v19 = 0;
         do
         {
-          __fwd_reduce_alphabet_sub_414860((int32_t *)&v86[3 * v19], v19, 256, 1);
+          __fwd_reduce_alphabet_init_symbol_list((int32_t *)&v86[3 * v19], v19, 256, 1);
           ++v19;
         }
         while ( v19 < 4 * k_2 );
@@ -14158,7 +14158,7 @@ LABEL_19:
 static inline int32_t __fwd_decode_pixel_decode_context_bit(void *a0, void *a1) { return __decode_context_bit((uint16_t *)a0, (uint16_t *)a1); }
 static inline int32_t __fwd_decode_pixel_sub_412E60(void *a0) { return __sub_412E60((uint32_t *)a0); }
 static inline int32_t __fwd_decode_pixel_rescale_counter_pair(void *a0) { return __rescale_counter_pair((uint16_t *)a0); }
-static inline int32_t __fwd_decode_pixel_sub_416860(void *a0, void *a1) { return __sub_416860((ModelBlock *)a0, (Obj24 *)a1); }
+static inline int32_t __fwd_decode_pixel_pixel_context(void *a0, void *a1) { return __pixel_context((ModelBlock *)a0, (Obj24 *)a1); }
 
 int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
 {
@@ -14925,7 +14925,7 @@ LABEL_86:
   v211 = v126;
   do
   {
-    v127 = __fwd_decode_pixel_sub_416860(this_3, &n15_8);
+    v127 = __fwd_decode_pixel_pixel_context(this_3, &n15_8);
     if ( v127 >= 0 )
     {
       v128 = __fwd_decode_pixel_decode_context_bit(
@@ -14963,7 +14963,7 @@ LABEL_86:
 static inline int32_t __fwd_code_pixel_encode_context_bit(void *a0, void *a1, int32_t a2) { return __encode_context_bit((uint16_t *)a0, (uint16_t *)a1, a2); }
 static inline int32_t __fwd_code_pixel_symbol_list(void *a0, int32_t a1) { return __symbol_list((uint32_t *)a0, a1); }
 static inline int32_t __fwd_code_pixel_rescale_counter_pair(void *a0) { return __rescale_counter_pair((uint16_t *)a0); }
-static inline int32_t __fwd_code_pixel_sub_416860(void *a0, void *a1) { return __sub_416860((ModelBlock *)a0, (Obj24 *)a1); }
+static inline int32_t __fwd_code_pixel_pixel_context(void *a0, void *a1) { return __pixel_context((ModelBlock *)a0, (Obj24 *)a1); }
 
 int32_t __code_pixel(ModelBlock *_this, int32_t a2)
 {
@@ -15719,7 +15719,7 @@ LABEL_42:
   *(int32_t *)&this_3->f44 = 0;
   do
   {
-    v129 = __fwd_code_pixel_sub_416860(this_3, &p_n15);
+    v129 = __fwd_code_pixel_pixel_context(this_3, &p_n15);
     if ( v129 >= 0 )
     {
       n15_28 = v129 == *(uint16_t *)*(int32_t *)&this_3->f76;
@@ -15754,7 +15754,7 @@ LABEL_42:
   }
 }
 static inline int32_t __fwd_sub_419430_sub_412E60(void *a0) { return __sub_412E60((uint32_t *)a0); }
-static inline uint32_t __fwd_sub_419430_sub_414860(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __sub_414860((Obj35 *)a0, a1, a2, a3); }
+static inline uint32_t __fwd_sub_419430_init_symbol_list(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __init_symbol_list((Obj35 *)a0, a1, a2, a3); }
 
 void __sub_419430(uint32_t *_this)
 {
@@ -15809,7 +15809,7 @@ void __sub_419430(uint32_t *_this)
       {
         v15 = 0;
         do
-          __fwd_sub_419430_sub_414860((int32_t *)&v28[3 * v15++], (int32_t)_this, 256, 1);
+          __fwd_sub_419430_init_symbol_list((int32_t *)&v28[3 * v15++], (int32_t)_this, 256, 1);
         while ( v15 < 4 * v4 );
         j_1 = *(_this + 4);
       }
@@ -15844,7 +15844,7 @@ void __sub_419430(uint32_t *_this)
     }
     else if ( j_1 <= j_2 )
     {
-      __fwd_sub_419430_sub_414860((int32_t *)v28, (int32_t)_this, j_2 - j_1 + 2, 1);
+      __fwd_sub_419430_init_symbol_list((int32_t *)v28, (int32_t)_this, j_2 - j_1 + 2, 1);
       v24 = *(_this + 4) == 0;
       v29 = 19 * LODWORD(v28[0]);
       if ( !v24 )
@@ -16064,7 +16064,7 @@ LABEL_26:
   while ( n0x18 < 0x18 );
   return a1;
 }
-static inline uint32_t __fwd_unmodel_plane_slow_sub_414860(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __sub_414860((Obj35 *)a0, a1, a2, a3); }
+static inline uint32_t __fwd_unmodel_plane_slow_init_symbol_list(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __init_symbol_list((Obj35 *)a0, a1, a2, a3); }
 static inline int32_t __fwd_unmodel_plane_slow_decode_pixel(void *a0, int32_t a1) { return __decode_pixel((ModelBlock *)a0, a1); }
 static inline void __fwd_unmodel_plane_slow_sub_419430(void *a0) { __sub_419430((uint32_t *)a0); }
 
@@ -16257,7 +16257,7 @@ void __unmodel_plane_slow(uint32_t *_this, char *Src)
   *(uint32_t *)(this_4 + 1051672) = v28;
   *(uint32_t *)(this_4 + 1051676) = v29;
   *(uint32_t *)(this_4 + 1078224) = this_4 + 1078184;
-  __fwd_unmodel_plane_slow_sub_414860((int32_t *)(this_4 + 1078184), this_4, *(uint32_t *)(this_4 + 16), 1);
+  __fwd_unmodel_plane_slow_init_symbol_list((int32_t *)(this_4 + 1078184), this_4, *(uint32_t *)(this_4 + 16), 1);
   *(uint32_t *)(this_4 + 1078232) = this_4 + 1078216;
   v30 = *(uint32_t *)(this_4 + 16);
   v31 = malloc(24 * v30 + 4);
@@ -16299,8 +16299,8 @@ void __unmodel_plane_slow(uint32_t *_this, char *Src)
     v39 = 0;
     do
     {
-      __fwd_unmodel_plane_slow_sub_414860((int32_t *)(*(uint32_t *)(this_4 + 1078208) + 24 * v39), this_4, 99, 0);
-      __fwd_unmodel_plane_slow_sub_414860((int32_t *)(*(uint32_t *)(this_4 + 1078212) + 24 * v39++), this_4, 33, 0);
+      __fwd_unmodel_plane_slow_init_symbol_list((int32_t *)(*(uint32_t *)(this_4 + 1078208) + 24 * v39), this_4, 99, 0);
+      __fwd_unmodel_plane_slow_init_symbol_list((int32_t *)(*(uint32_t *)(this_4 + 1078212) + 24 * v39++), this_4, 33, 0);
     }
     while ( v39 < *(uint32_t *)(this_4 + 16) );
   }
@@ -19964,7 +19964,7 @@ static inline int32_t __fwd_alt_model_p2_decode_sub_41A130(void *a0, const __m12
   }
   return n4_3;
 }
-static inline void ** __fwd_unmodel_plane_sub_415270(void *a0, char a1) { return __sub_415270((void **)a0, a1); }
+static inline void ** __fwd_unmodel_plane_free_workspace(void *a0, char a1) { return __free_workspace((void **)a0, a1); }
 static inline void __fwd_unmodel_plane_unmodel_plane_slow(void *a0, void *a1) { __unmodel_plane_slow((uint32_t *)a0, (char *)a1); }
 static inline void __fwd_unmodel_plane_alt_model_p2_d8_decode(const __m128 &a0, const __m128 &a1, void *a2, int32_t a3, int32_t a4) { __alt_model_p2_d8_decode(a0, a1, (uint8_t *)a2, a3, a4); }
 static inline int32_t __fwd_unmodel_plane_alt_model_p2_decode(void *a0, void *a1) { return __alt_model_p2_decode((uint16_t *)a0, (uint8_t *)a1); }
@@ -20003,7 +20003,7 @@ BMF_SSE void __unmodel_plane(char ArgList, const __m128 &a2__ref, const __m128 &
       v6 = nullptr;
     __fwd_unmodel_plane_unmodel_plane_slow(v6, Src);
     if ( v6 )
-      __fwd_unmodel_plane_sub_415270(v6, 1);
+      __fwd_unmodel_plane_free_workspace(v6, 1);
   }
 }
 static inline int32_t __fwd_sub_419800_sub_414390(void *a0, int32_t a1, int32_t a2) { return __sub_414390((uint16_t *)a0, a1, a2); }
@@ -21108,8 +21108,8 @@ static inline int32_t __fwd_alt_model_p2_encode_sub_41A130(void *a0, const __m12
   }
   return n4_3;
 }
-static inline uint32_t __fwd_model_plane_sub_414860(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __sub_414860((Obj35 *)a0, a1, a2, a3); }
-static inline void ** __fwd_model_plane_sub_415270(void *a0, char a1) { return __sub_415270((void **)a0, a1); }
+static inline uint32_t __fwd_model_plane_init_symbol_list(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __init_symbol_list((Obj35 *)a0, a1, a2, a3); }
+static inline void ** __fwd_model_plane_free_workspace(void *a0, char a1) { return __free_workspace((void **)a0, a1); }
 static inline int32_t __fwd_model_plane_code_pixel(void *a0, int32_t a1) { return __code_pixel((ModelBlock *)a0, a1); }
 static inline void __fwd_model_plane_reduce_alphabet(int32_t a0, char a1, void *a2) { __reduce_alphabet(a0, a1, (uint8_t *)a2); }
 static inline void __fwd_model_plane_alt_model_p2_d8_encode(const __m128 &a0, const __m128 &a1, void *a2, int32_t a3, int32_t a4, void *a5) { __alt_model_p2_d8_encode(a0, a1, (uint8_t *)a2, a3, a4, (uint8_t *)a5); }
@@ -21321,7 +21321,7 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
     Blocka_2[262918] = v29;
     Blocka_2[262919] = v30;
     Blocka_2[269556] = (uint32_t)(Blocka_2 + 269546);
-    __fwd_model_plane_sub_414860((int32_t *)(Blocka_1 + 1078184), 0, *(uint32_t *)(Blocka_1 + 16), 1);
+    __fwd_model_plane_init_symbol_list((int32_t *)(Blocka_1 + 1078184), 0, *(uint32_t *)(Blocka_1 + 16), 1);
     Blocka_2[269558] = (uint32_t)(Blocka_2 + 269554);
     v31 = Blocka_2[4];
     v32 = (uint32_t *)malloc(24 * v31 + 4);
@@ -21400,8 +21400,8 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
       v44 = 0;
       do
       {
-        __fwd_model_plane_sub_414860((int32_t *)(*(uint32_t *)(Blocka_1 + 1078208) + 24 * v44), 0, 99, 0);
-        __fwd_model_plane_sub_414860((int32_t *)(*(uint32_t *)(Blocka_1 + 1078212) + 24 * v44++), 0, 33, 0);
+        __fwd_model_plane_init_symbol_list((int32_t *)(*(uint32_t *)(Blocka_1 + 1078208) + 24 * v44), 0, 99, 0);
+        __fwd_model_plane_init_symbol_list((int32_t *)(*(uint32_t *)(Blocka_1 + 1078212) + 24 * v44++), 0, 33, 0);
       }
       while ( v44 < *(uint32_t *)(Blocka_1 + 16) );
     }
@@ -21487,14 +21487,14 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
       while ( v45 < *(uint32_t *)(Blocka_1 + 4) );
     }
     __rc_end_encode();
-    __fwd_model_plane_sub_415270((void **)Blocka_1, 1);
+    __fwd_model_plane_free_workspace((void **)Blocka_1, 1);
   }
 }
-static inline char * __fwd_sub_405840_colour_transform(void *a0, void *a1, int32_t a2, char a3) { return __colour_transform((char *)a0, (char *)a1, a2, a3); }
-static inline char * __fwd_sub_405840_sub_4081E0(void *a0, void *a1, int32_t a2, char a3) { return __sub_4081E0((char *)a0, (char *)a1, a2, a3); }
-static inline void __fwd_sub_405840_model_plane(const __m128 &a0, const __m128 &a1, void *a2, void *a3, void *a4) { __model_plane(a0, a1, (Obj33 *)a2, (uint8_t *)a3, (uint8_t *)a4); }
+static inline char * __fwd_model_planes_colour_transform(void *a0, void *a1, int32_t a2, char a3) { return __colour_transform((char *)a0, (char *)a1, a2, a3); }
+static inline char * __fwd_model_planes_interleave_plane(void *a0, void *a1, int32_t a2, char a3) { return __interleave_plane((char *)a0, (char *)a1, a2, a3); }
+static inline void __fwd_model_planes_model_plane(const __m128 &a0, const __m128 &a1, void *a2, void *a3, void *a4) { __model_plane(a0, a1, (Obj33 *)a2, (uint8_t *)a3, (uint8_t *)a4); }
 
-BMF_SSE void __sub_405840(char *Blockb, char *Srca_3, int32_t a3, char a4, const __m128 &a5__ref, const __m128 &a6__ref)
+BMF_SSE void __model_planes(char *Blockb, char *Srca_3, int32_t a3, char a4, const __m128 &a5__ref, const __m128 &a6__ref)
 {
   struct alignas(16) {   // 76 bytes, the frame Hex-Rays could not name
       uint8_t slot0[4];
@@ -21532,7 +21532,7 @@ BMF_SSE void __sub_405840(char *Blockb, char *Srca_3, int32_t a3, char a4, const
   char *v12;   // was int32_t: these hold addresses
   __m128 a5 = a5__ref;
   __m128 a6 = a6__ref;
-  char *Srca_1, v8, *Srca_2, v10, *__sub_405840_buf, v15, v20, *Srca_5, *Srca_6, v27, v29, v30,
+  char *Srca_1, v8, *Srca_2, v10, *__model_planes_buf, v15, v20, *Srca_5, *Srca_6, v27, v29, v30,
        v31, *Srca_4;
   int32_t n1008, v17, v18, v19, Size_2, v24, Size_1, v26, Sizea_2, v34, Sizea_1, v36;
   uint32_t *v14, *v28;
@@ -21544,15 +21544,15 @@ BMF_SSE void __sub_405840(char *Blockb, char *Srca_3, int32_t a3, char a4, const
   plane_predictor = v8 & 3;
   plane_alt_model = (uint8_t)(__byte_44339E[16 * a3] & 4) >> 2;
   Srca_2 = Srca_3;
-  __fwd_sub_405840_colour_transform(Blockb, Srca_3, a3, a4);
-  __sub_405840_buf = ::hist_scratch;
+  __fwd_model_planes_colour_transform(Blockb, Srca_3, a3, a4);
+  __model_planes_buf = ::hist_scratch;
   v12 = (uint32_t)(::hist_scratch + 15) & 0xFFFFFFF0;
   *(uint64_t *)::hist_scratch = 0;
-  *((uint32_t *)__sub_405840_buf + 2) = 0;
-  *((uint16_t *)__sub_405840_buf + 6) = 0;
-  __sub_405840_buf[14] = 0;
-  *((uint64_t *)__sub_405840_buf + 126) = 0;
-  *((uint64_t *)__sub_405840_buf + 127) = 0;
+  *((uint32_t *)__model_planes_buf + 2) = 0;
+  *((uint16_t *)__model_planes_buf + 6) = 0;
+  __model_planes_buf[14] = 0;
+  *((uint64_t *)__model_planes_buf + 126) = 0;
+  *((uint64_t *)__model_planes_buf + 127) = 0;
   n1008 = 1008;
   do
   {
@@ -21579,11 +21579,11 @@ BMF_SSE void __sub_405840(char *Blockb, char *Srca_3, int32_t a3, char a4, const
     // never taken: -E is 0
     if ( plane_predictor == 1 && !plane_alt_model )
       __predict_med((int32_t)Srca_1, *(uint16_t *)Blockb, *((uint16_t *)Blockb + 1));
-    __fwd_sub_405840_model_plane(a5, a6, p_i, (uint8_t *)Srca_1, Srca_2);
+    __fwd_model_planes_model_plane(a5, a6, p_i, (uint8_t *)Srca_1, Srca_2);
     if ( Srca_2 != Srca_1 )
     {
       if ( (uint8_t)__byte_44339C[v52] != plane_count - 1 )
-        __fwd_sub_405840_sub_4081E0(Blockb, Srca_2, v53, v20);
+        __fwd_model_planes_interleave_plane(Blockb, Srca_2, v53, v20);
       free(Srca_2);
     }
   }
@@ -21700,7 +21700,7 @@ BMF_SSE void __transform_planes(Obj33 *p_i, int32_t a2, char a3, const __m128 &a
     __fwd_transform_planes_model_plane(a4, a5, p_i, Srca_1, Srca_1);
   }
 }
-static inline char * __fwd_expand_image_sub_4081E0(void *a0, void *a1, int32_t a2, char a3) { return __sub_4081E0((char *)a0, (char *)a1, a2, a3); }
+static inline char * __fwd_expand_image_interleave_plane(void *a0, void *a1, int32_t a2, char a3) { return __interleave_plane((char *)a0, (char *)a1, a2, a3); }
 static inline void __fwd_expand_image_unmodel_plane(char a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { __unmodel_plane(a0, a1, a2, (uint16_t *)a3, (uint8_t *)a4); }
 
 BMF_SSE char * __expand_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref, int32_t a4, int32_t *p_dwLowDateTime)
@@ -22049,16 +22049,16 @@ LABEL_42:
           if ( ::plane_predictor == 1 )
           {
             if ( !plane_alt_model )
-              __sub_410310((int32_t)Src_1, *(uint16_t *)p_i_1, *((uint16_t *)p_i_1 + 1));
+              __unpredict_med((int32_t)Src_1, *(uint16_t *)p_i_1, *((uint16_t *)p_i_1 + 1));
           }
           // `else if ( !desc_slow_mode && ::plane_predictor == 2 )` -- the fast-mode
           // predictor-2 expander, never reached: -S is on.
         }
         else
         {
-          __sub_410650((uint32_t)Src_1, *(uint16_t *)p_i_1, *((uint16_t *)p_i_1 + 1));
+          __expand_predictor_mode0((uint32_t)Src_1, *(uint16_t *)p_i_1, *((uint16_t *)p_i_1 + 1));
         }
-        __fwd_expand_image_sub_4081E0(p_i_1, (char *)Src_1, v33, v34);
+        __fwd_expand_image_interleave_plane(p_i_1, (char *)Src_1, v33, v34);
         ++ArgList;
       }
       while ( ArgList < ::plane_count );
@@ -22148,13 +22148,13 @@ LABEL_104:
           if ( n2_2 )
           {
             if ( n2_2 == 1 )
-              __sub_410310((int32_t)Src_1, *(uint16_t *)p_i_1, *((uint16_t *)p_i_1 + 1));
+              __unpredict_med((int32_t)Src_1, *(uint16_t *)p_i_1, *((uint16_t *)p_i_1 + 1));
           }
           else
           {
-            __sub_410650((uint32_t)Src_1, *(uint16_t *)p_i_1, *((uint16_t *)p_i_1 + 1));
+            __expand_predictor_mode0((uint32_t)Src_1, *(uint16_t *)p_i_1, *((uint16_t *)p_i_1 + 1));
           }
-          __fwd_expand_image_sub_4081E0(p_i_1, (char *)Src_1, v37, v35);
+          __fwd_expand_image_interleave_plane(p_i_1, (char *)Src_1, v37, v35);
         }
       }
       while ( n4_4 < ::plane_count );
@@ -22236,7 +22236,7 @@ LABEL_109:
   return p_i_1;
 }
 
-static inline void __fwd_search_filter_sub_405840(void *a0, void *a1, int32_t a2, char a3, const __m128 &a4, const __m128 &a5) { __sub_405840((char *)a0, (char *)a1, a2, a3, a4, a5); }
+static inline void __fwd_search_filter_model_planes(void *a0, void *a1, int32_t a2, char a3, const __m128 &a4, const __m128 &a5) { __model_planes((char *)a0, (char *)a1, a2, a3, a4, a5); }
 static inline void __fwd_search_filter_transform_planes(void *a0, int32_t a1, char a2, const __m128 &a3, const __m128 &a4) { __transform_planes((Obj33 *)a0, a1, a2, a3, a4); }
 
 BMF_SSE uint32_t __search_filter(Obj14 *p_i, char a2, const __m128 &a3__ref, const __m128 &a4__ref)
@@ -22389,7 +22389,7 @@ BMF_SSE uint32_t __search_filter(Obj14 *p_i, char a2, const __m128 &a3__ref, con
         Srca = (char *)Srca_7;
         v172 = v179[1];
         __byte_44339E[16 * v179[1]] = 0;
-        __fwd_search_filter_sub_405840(Blockb_1, Srca, v172, v19, a3, a4);
+        __fwd_search_filter_model_planes(Blockb_1, Srca, v172, v19, a3, a4);
         n0x7FFFFFFF_1 = 8 * (out_cursor - coded_buf);
         n0x7FFFFFFF = __n256_2[0] - packer_free_bits + n0x7FFFFFFF_1 + 32;
         v35 = 0;                            // -S
@@ -22412,7 +22412,7 @@ BMF_SSE uint32_t __search_filter(Obj14 *p_i, char a2, const __m128 &a3__ref, con
       Srca_1 = (char *)Srca_7;
       v32 = v179[1];
       __byte_44339E[v180] = 5;
-      __fwd_search_filter_sub_405840(Blockb_2, Srca_1, v32, v19, a3, a4);
+      __fwd_search_filter_model_planes(Blockb_2, Srca_1, v32, v19, a3, a4);
       n0x7FFFFFFF_8 = 8 * (out_cursor - coded_buf);
       n0x7FFFFFFF_2 = __n256_2[0] - packer_free_bits + n0x7FFFFFFF_8 + 32;
       v35 = 0;                            // -S
@@ -22437,7 +22437,7 @@ BMF_SSE uint32_t __search_filter(Obj14 *p_i, char a2, const __m128 &a3__ref, con
         Srca_2 = (char *)Srca_7;
         v166 = v179[1];
         __byte_44339E[v180] = 6;
-        __fwd_search_filter_sub_405840(Blockb_3, Srca_2, v166, v19, a3, a4);
+        __fwd_search_filter_model_planes(Blockb_3, Srca_2, v166, v19, a3, a4);
         n0x7FFFFFFF_9 = 8 * (out_cursor - coded_buf);
         n0x7FFFFFFF_3 = __n256_2[0] - packer_free_bits + n0x7FFFFFFF_9 + 32;
         v35 = 0;                            // -S
@@ -22465,7 +22465,7 @@ LABEL_191:
             Srca_3 = (char *)Srca_7;
             v149 = v179[1];
             __byte_44339E[v180] = 8;
-            __fwd_search_filter_sub_405840(Blockb_4, Srca_3, v149, v19, a3, a4);
+            __fwd_search_filter_model_planes(Blockb_4, Srca_3, v149, v19, a3, a4);
             n0x7FFFFFFF_10 = 8 * (out_cursor - coded_buf);
             n0x7FFFFFFF_4 = __n256_2[0] - packer_free_bits + n0x7FFFFFFF_10 + 32;
             v35 = 0;                            // -S
@@ -22489,7 +22489,7 @@ LABEL_191:
           Srca_4 = (char *)Srca_7;
           v155 = v179[1];
           __byte_44339E[v180] = 13;
-          __fwd_search_filter_sub_405840(Blockb_5, Srca_4, v155, v19, a3, a4);
+          __fwd_search_filter_model_planes(Blockb_5, Srca_4, v155, v19, a3, a4);
           n0x7FFFFFFF_11 = 8 * (out_cursor - coded_buf);
           n0x7FFFFFFF_5 = (char *)(__n256_2[0] - packer_free_bits + n0x7FFFFFFF_11 + 32);
           v35 = 0;                            // -S
@@ -22515,7 +22515,7 @@ LABEL_191:
             Srca_5 = (char *)Srca_7;
             v160 = v179[1];
             __byte_44339E[v180] = 14;
-            __fwd_search_filter_sub_405840(Blockb, Srca_5, v160, v19, a3, a4);
+            __fwd_search_filter_model_planes(Blockb, Srca_5, v160, v19, a3, a4);
             n0x7FFFFFFF_6 = __n256_2[0] - packer_free_bits + 8 * (out_cursor - coded_buf) + 32;
             // always taken: -S
               n0x7FFFFFFF_6 = 8 * (out_cursor - coded_buf);
@@ -22635,7 +22635,7 @@ LABEL_43:
       {
         v119 = (uint8_t)__byte_44339D[16 * v118];
         v178[0] = (char *)v119;
-        __fwd_search_filter_sub_405840(Blockb, (char *)Srca_7, v119, v116, a3, a4);
+        __fwd_search_filter_model_planes(Blockb, (char *)Srca_7, v119, v116, a3, a4);
         v120 = 8 * (out_cursor - coded_buf);
         // never taken: -S
         *(uint32_t *)packer_word = packer_acc;
@@ -23133,7 +23133,7 @@ LABEL_11:
 
 static inline char * __fwd_compress_image_expand_image(int32_t a0, const __m128 &a1, const __m128 &a2, int32_t a3, void *a4) { return __expand_image(a0, a1, a2, a3, (int32_t *)a4); }
 static inline uint32_t __fwd_compress_image_search_filter(void *a0, char a1, const __m128 &a2, const __m128 &a3) { return __search_filter((Obj14 *)a0, a1, a2, a3); }
-static inline void __fwd_compress_image_sub_405840(void *a0, void *a1, int32_t a2, char a3, const __m128 &a4, const __m128 &a5) { __sub_405840((char *)a0, (char *)a1, a2, a3, a4, a5); }
+static inline void __fwd_compress_image_model_planes(void *a0, void *a1, int32_t a2, char a3, const __m128 &a4, const __m128 &a5) { __model_planes((char *)a0, (char *)a1, a2, a3, a4, a5); }
 static inline void __fwd_compress_image_transform_planes(void *a0, int32_t a1, char a2, const __m128 &a3, const __m128 &a4) { __transform_planes((Obj33 *)a0, a1, a2, a3, a4); }
 static inline void __fwd_compress_image_model_plane(const __m128 &a0, const __m128 &a1, void *a2, void *a3, void *a4) { __model_plane(a0, a1, (Obj33 *)a2, (uint8_t *)a3, (uint8_t *)a4); }
 
@@ -23400,7 +23400,7 @@ LABEL_22:
       v66 = v5;
       n4_1 = 0;
       do
-        __fwd_compress_image_sub_405840((char *)p_i, Srca, (uint8_t)__byte_44339D[16 * n4_1++], v36, a2, a3);
+        __fwd_compress_image_model_planes((char *)p_i, Srca, (uint8_t)__byte_44339D[16 * n4_1++], v36, a2, a3);
       while ( n4_1 < ::plane_count );
       v5 = v66;
     }
@@ -23678,6 +23678,6 @@ void __out_of_memory_handler() { __exit_402E40(7); }
 int32_t main(int32_t argc, char **argv) {
   bmf_blob_relocate();      // the globals still in blob1
   bmf_data_relocate();      // and the slots inside the ones that moved
-  __sub_419680();
+  __init_sse_constants();
   return __main(argc, (const char **)argv);
 }
