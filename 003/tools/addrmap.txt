@@ -19,7 +19,6 @@ expand_predictor_mode0     0x00410650
 rc_decode_flat             0x004123E0
 encode_context_bit         0x00412490
 decode_context_bit         0x00412850
-symbol_list                0x00412B10
 update_binary_pair         0x00413430
 encode_symbol_tree         0x00413900
 decode_three_way           0x00414620
@@ -51,5 +50,6 @@ alloc_image                0x0042B830
 set_new_handler            0x0042CBB0
 log_two_lane               0x00436E10
 
-# 49 mapped.  4 named bodies have no recorded address:
-#   estimate_cost             predict_med               rc_begin_encode           write_bmp
+# 48 mapped.  7 named bodies have no recorded address:
+#   decode_symbol_list        encode_symbol_list        estimate_cost             init_model_tables
+#   predict_med               rc_begin_encode           write_bmp

@@ -389,7 +389,7 @@ The state is `private`, so "does anything outside still touch the coder?" is a
 question the compiler answers.
 
 Two model functions still hold a coding step that is more than one call:
-`symbol_list` encodes a symbol against a sorted frequency list (§7.3) and
+`encode_symbol_list` encodes a symbol against a sorted frequency list (§7.3) and
 `decode_three_way` decodes one from a 3-way counter node. Both now do their search
 and then call `rc`.
 
@@ -585,7 +585,7 @@ coder of §5.
 3. `reduce_alphabet` — **alphabet reduction**, and the first thing written. It scans
    the plane for the symbols actually used, encodes `distinct - 1` with
    `rc.encode` as a flat one-wide slot out of the full alphabet size, encodes each used
-   symbol with `symbol_list`, and then re-indexes the plane onto the dense
+   symbol with `encode_symbol_list`, and then re-indexes the plane onto the dense
    alphabet that leaves. A plane using 40 of 256 values is coded over 40
    symbols from here on.
 4. Model initialisation — the tables described below.
@@ -684,7 +684,8 @@ The increment starts large and ratchets down each time the node rescales — fas
 adaptation early, stability later — with 16 as the floor, so the node never
 stops adapting entirely.
 
-**Sorted list — `symbol_list`.** For alphabets rather than bits: a list of
+**Sorted list — `encode_symbol_list` and `decode_symbol_list`.** For alphabets
+rather than bits: a list of
 `(symbol, count)` triples kept in descending count order. Encoding sums counts
 until the symbol is found (that sum is `cumFreq`), calls the range coder, then
 adds 4 to the symbol's count and bubbles it toward the front by swapping with
@@ -803,5 +804,5 @@ Stated plainly, so the rest can be trusted:
 | `-S` model driver | `model_plane` | `0x00415380` |
 | alphabet reduction | `reduce_alphabet` | `0x00417200` |
 | `-S` per-pixel coder | `code_pixel` | `0x004159E0` |
-| adaptive symbol list | `symbol_list` | `0x00412B10` |
+| adaptive symbol list | `encode_symbol_list` | `0x00412B10` |
 | BMP read / write | `read_bmp` / `write_bmp` | `0x0042AB20` / `0x0042B0C0` |
