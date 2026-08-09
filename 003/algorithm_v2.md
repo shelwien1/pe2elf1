@@ -62,10 +62,11 @@ Each member is
 | --- | --- |
 | 4 | magic `81 8A 32 30` |
 | 16 | the image descriptor, §2.2, with `data_size` replaced by the payload length |
-| n | the coded payload |
+| n | the payload — coded, or raw pixels if the coder did not win (§10) |
+| 3·2^depth | the palette, only if the depth byte's 0x80 survived (§2.4) |
 
 Verified against the corpus: `t8g.bmf` is 42 896 bytes with `7C A7 00 00` at
-+12 — 42 876 + 4 + 16.
++12 — 42 876 + 4 + 16, and no palette because its grey ramp was dropped.
 
 ### 2.2 The image descriptor — `BmfImage`
 
@@ -77,7 +78,7 @@ one place, which is what fixes the layout:
 | +0 | `uint16 width` | |
 | +2 | `uint16 height` | |
 | +4 | `uint32 stride` | bytes per row, rounded up per depth |
-| +8 | | never read |
+| +8 … +9 | | never read |
 | +10 | `uint8 depth` | bits 0–5 the depth; 0x80 = a palette follows the payload; 0x40 = the palette was a grey ramp and was dropped (§2.4) |
 | +11 | `uint8 flags` | mode bits, §2.3 |
 | +12 | `uint32 data_size` | `stride * height`; in the stream, the payload length |
@@ -101,14 +102,19 @@ it writes — so what follows is what that assembly sets, and no more:
   it when coding the image with rows and columns exchanged costs less, and both
   `expand_image` and the raw-store path toggle it back while undoing the
   transpose.
-* **bit 7** — set from `compress_image`'s fifth argument, which is 1 whenever
-  the caller passed a coded buffer.
+* **bit 7** — set from `compress_image`'s fifth argument. **Never set in this
+  build**: `bmf_compress` passes `(void *)__dwLowDateTime` — the value, not the
+  address — which is zero, so the argument is null. The `if (coded_buf)
+  fwrite(...)` guarded by the same value never fires either, and that second
+  payload is dead code here.
 
 Observed in the corpus: `3C` for a photographic 8-bit or 24-bit image, `64` for
-a palette image that fell back to raw. **Bit 3 is set in both and this document
-did not find where** — it is not in the `|= 0x24` / `|= 0x10` assembly and not
-in any write to the descriptor's `+11`, so it arrives in the frame slot from
-somewhere this reading missed. §11.
+a palette image that fell back to raw. **Neither the byte's starting value nor
+bit 3 was traced.** `alloc_image` leaves 0x40 at +11, which would give `74`
+after the two OR-ins above, and the streams show `3C` — so something between
+resets it, and the transpose branch's `HIBYTE(...) = 0x34 | old` replaces rather
+than ORs, which is where `3C` could come from if `old` were `08`. Where `08`
+comes from is open. §11.
 
 ### 2.4 Grey palettes are dropped
 
@@ -147,8 +153,9 @@ what de-interleaves them.
 ## 3. Inter-plane decorrelation
 
 `colour_transform(image, dst, p, ·)` produces plane `p` as a separate byte
-array, and while doing so subtracts a prediction made from other planes. Three
-cases, selected by the per-plane header (§5.1):
+array, and while doing so subtracts a prediction made from other planes. The
+reference count in the per-plane header (§5.1) is two bits, and all four values
+are implemented:
 
 **No reference** — bit 3 of the mode nibble clear. A plain de-interleave:
 
@@ -168,13 +175,29 @@ dst[i] = plane[i] - bias - ref[i];
 dst[i] = plane[i] - bias - ((w0 * ref0[i] + w1 * ref1[i] + 40) >> 7);
 ```
 
-where `w0 + w1 == 128` (the code special-cases exactly that sum), the `+ 40`
-is the rounding term, and both weights are stored biased by 64. `bias` is the
-8-bit constant from the header.
+`+ 40` is the rounding term and the weights are stored biased by 64. The code
+tests `w0 + w1 == 128` only to spot two degenerate cases — either weight zero
+sends it down the single-reference path with the other plane — so that sum is
+not a constraint on the weights in general.
+
+**Three references** — reference count 3, reading the three planes immediately
+before this one:
+
+```c
+dst[i] = plane[i] - bias
+       - ((w1·ref[i-2] + w0·ref[i-3] + w2·ref[i-1] + 63) >> 7);
+```
+
+Note the rounding term is `+ 63` here and `+ 40` in the two-reference case;
+they are not the same expression with a different arity.
+
+The reference planes are given as **offsets relative to the current plane**, not
+absolute indices, so the same header codes the same relationship wherever a
+plane sits.
 
 This is a **general linear inter-plane predictor**, not a fixed colour
 transform. There is no RGB→YCoCg matrix anywhere in the file; what there is, is
-a per-plane choice of up to two reference planes and a pair of weights, searched
+a per-plane choice of up to three reference planes and their weights, searched
 for by §5. A green-from-blue-and-red prediction is one point in that space and
 the search will find it on a photograph, but it is not built in.
 
@@ -192,12 +215,19 @@ cost = (S·ln S − T) · log₂e          bits
 ```
 
 which is `Σ h[i]·log₂(S / h[i])` — the **zeroth-order empirical entropy of the
-histogram, in bits**. Nothing about the actual model enters it. It is a proxy,
-and a cheap one: the histogram it measures is the one `predict_med` fills in as
-a side effect of predicting (§7), so a candidate costs one prediction pass.
+histogram, in bits**. Nothing about the actual model enters it: it is a proxy
+for what the coder will spend, not a measurement of it.
 
-`cost_candidate` wraps it: build the residual histogram for one candidate
-configuration, call `estimate_cost`, return the bits.
+`cost_candidate` builds the histograms and calls it **seven times per
+candidate** — once on a 512-bin histogram and six times on 1024-bin ones — and
+files four of the results into a table indexed by candidate. So a candidate is
+scored on several residual distributions at once, not one, and the chooser has
+four numbers per candidate to compare rather than a single cost. Which
+distribution each of the seven is, this document does not establish.
+
+The 1024 and 512 bin counts are worth noticing: the folded residual alphabet of
+§7 is 256 symbols, so these histograms are over something wider than a single
+plane's folded residuals.
 
 ---
 
@@ -272,11 +302,24 @@ then place `NW` — and it checks out against the definition case by case.
 The residual `x − pred` is then **folded into an unsigned byte alphabet** through
 a 256-entry table built at the top of the function: positive residuals map to
 even codes, negative to odd, so that small magnitudes of either sign are small
-symbols. The first row is only prediction from `N` (there is no `W`), and the
-first column only from `W`.
+symbols.
 
-Every folded residual increments `hist_scratch[4·s]`, which is the histogram
-§4 measures. Prediction and costing are the same pass.
+The two edges are handled outside the MED loop, and each uses the one causal
+neighbour it has:
+
+* **the first column** — one pixel per row, taken at the end of each row's pass
+  and predicted from `N`, the pixel directly above;
+* **the first row** — a separate pass after all the rows, predicted from `W`,
+  the pixel to the left.
+
+(The whole function walks backwards from the last pixel, which is why the first
+row is the last thing it touches.)
+
+Every folded residual increments `hist_scratch[4·s]`. Nothing in this file was
+found to read those counts back — `estimate_cost` measures histograms
+`cost_candidate` builds for itself (§4), and `model_planes` uses the same buffer
+as scratch — so this accumulation may be vestigial in this build. It is not the
+cost metric's input.
 
 `unpredict_med` is the inverse and runs in the decoder under
 `plane_predictor == 1`.
@@ -310,11 +353,14 @@ The model keeps a list of recent and neighbouring symbols — the array
    symbol against the neighbourhood in groups —
 
    ```
-   +64  if it equals the nearest neighbour
-   +32  if it equals any of the next five
-   +16  if it equals any of the next sixteen
-   + 8  if it equals an entry in the second table
+   +64  if it equals p_n15[10]
+   +32  if it equals any of p_n15[11 … 15]
+   +16  if it equals any of p_n15[16 … 31]
+   + 8  if it equals an entry in a second table, reached through the workspace
    ```
+
+   Which pixel of the image each of those indices is, this document does not
+   establish — the grouping is read off the comparisons, not off a geometry.
 
    A candidate already excluded, or one whose match state is zero after the
    sixth position, is skipped (`pixel_context` returns −1).
@@ -336,8 +382,9 @@ saying which.
 `encode_context_bit(node, parent, bit)` codes each of those decisions. A node is
 three `uint16`: `{c0, c1, limit}`.
 
-* **Lazy initialisation from the parent.** A node that has seen a zero and no
-  one yet is seeded from its parent's ratio, scaled to 64:
+* **Lazy initialisation from the parent.** The first time a node is used with
+  `c0` non-zero and `c1` still zero, it is seeded from its parent's ratio,
+  scaled to 64:
 
   ```c
   P  = p0 + p1;
@@ -488,8 +535,13 @@ bytes skips the model entirely and goes straight to the raw store.
 * **Which symbol lists are in the escape chain, and in what order** (§8.4). The
   walk is over a pointer chain built by `init_model_tables`, and the chain's
   membership is not established.
-* **Where flag bit 3 comes from** (§2.3). It is set in every stream the corpus
-  produces and it is not in the assembly that builds the byte.
+* **Where flag bit 3 comes from, and what the flags byte starts as** (§2.3).
+  Bit 3 is set in every stream the corpus produces, and the value `alloc_image`
+  leaves there does not reach the stream.
+* **What the seven `estimate_cost` calls per candidate measure** (§4), and why
+  four of the seven are the ones filed against the candidate.
+* **Whether `predict_med`'s histogram is read at all** (§7). It fills
+  `hist_scratch`; nothing found here reads those counts.
 * **The fast (non-`-S`) back end**, which is deleted from this source. It
   remains unestablished about BMF itself, and would have to be read out of
   `BMF.exe`.
