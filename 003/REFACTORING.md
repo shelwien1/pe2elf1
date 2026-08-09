@@ -18,7 +18,7 @@ so they can be re-measured rather than trusted.
 
 | | | at the start |
 | --- | --- | --- |
-| `subs1.hpp` | 23 893 lines | 25 462 |
+| `subs1.hpp` | 23 861 lines | 25 462 |
 | bodies | 179 (84 real, 95 `__fwd_*` shims) | 215 |
 | globals in `blob.inc` | **78** | 293 |
 | recovered structs | **73**, 2728 named field accesses | 0 |
@@ -26,7 +26,7 @@ so they can be re-measured rather than trusted.
 | pointer casts | 5804 | 7336 |
 | `goto` / `LABEL_n:` | 113 / 81 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
-| line coverage | **95.69 %** | 64.5 % |
+| line coverage | **95.91 %** | 64.5 % |
 
 The target is 32-bit. That is not a limitation left over from the port — it is
 the decision that made Phase 4 possible, and §Phase 4 says why.
@@ -52,10 +52,12 @@ the property that matters.
 ```
 
 Both halves are automated: the round-trip, and the comparison against the
-fifteen committed reference streams. A fifteenth check builds an archive with
-two members in it and reads both back, because the one thing the per-image
-checks cannot see is a change that breaks the container rather than the codec —
-and one did. A run with a missing reference fails, and a stream
+fifteen committed reference streams. Three checks follow the images, and each
+exists because the per-image loop is blind to something a refactoring can
+delete: one builds an archive with two members and reads both back, one hands
+the program fifteen inputs it should refuse and pins the exit status of every
+one, and one starves it of memory. Every one of the three was added after a
+defect it would have caught (§2.3, §6). A run with a missing reference fails, and a stream
 that differs from its reference fails. Where an input is not reproduced byte for
 byte — an RLE-compressed BMP comes back with BMF's own run splitting —
 `testfiles/out_<name>.bmp` holds what the decoder is expected to write and the
@@ -123,15 +125,15 @@ thinks so".
 
 ### 2.3 What the gate still does not reach
 
-4.3 % of the file — 573 unexecuted lines across the bodies:
+4.1 % of the file — 546 unexecuted lines across the bodies:
 
 | body | unexecuted |
 | --- | --- |
 | `unmodel_plane_slow` | 78 |
-| `expand_image` | 69 |
 | `compress_image` | 65 |
-| `read_bmp` | 48 |
+| `expand_image` | 60 |
 | `write_bmp` | 47 |
+| `read_bmp` | 46 |
 | `interleave_plane` | 40 |
 
 Measured with the archive check included, which earlier runs of this had left
@@ -174,11 +176,81 @@ palette, a 4-bit and a 1-bit — and the marginal gain was **zero lines**. The
 corpus already spans the format space; what is left is inside the paths those
 formats share.
 
-By kind, the 573 lines are 417 of assignment and computation, 107 of control
+By kind, the 573 lines were 417 of assignment and computation, 107 of control
 flow, 35 of allocation and error exit, and 14 of file-I/O checking. That last
-50 needs a failing `malloc` or a truncated file, not another picture, and the
+50 needed a failing `malloc` or a truncated file, not another picture, and the
 417 are deep inside branches of `unmodel_plane_slow`, `write_bmp` and
 `interleave_plane` that the corpus reaches the *other* side of.
+
+**The truncated file was worth having.** The gate now hands the program fifteen
+inputs it should refuse — an empty archive, five truncations of a real stream,
+two files of constant bytes, a missing name in either mode, a BMP whose pixels
+run out, each file given to the mode that wants the other, and two malformed
+command lines — and pins the exit status of every one. 576 → 551 unexecuted
+lines, 95.69 % → 95.87 %, and the 25 are exactly where they should be:
+
+| body | what the refusals reached |
+| --- | --- |
+| `exit_402E40` | 6 — **all of it**. The program's error reporter had never run. |
+| `expand_image` | 9 — the `return nullptr` exits and the frees that unwind to them |
+| `bmf_open_archive` | 3 — the two `fclose`-and-fail paths |
+| `read_bmp`, `bmf_compress`, `bmf_decompress`, `main` | 7 — the `Can't open file:`, `Read error!` and usage exits |
+
+A test suite that only ever hands a program valid input has not tested the
+program, it has tested one half of it, and the half it skipped is the half that
+runs when something is wrong. Six of these lines are a `printf` of a message
+table; the value is not the six lines but that the table is now known to be
+indexed correctly, which nothing had ever checked.
+
+#### What the refusals found next: `operator new` is not `malloc`
+
+`out_of_memory_handler` was the one body in the file with no coverage, and the
+note against it said it "runs when `malloc` fails", which was a guess from its
+name. Asking whether that was true took one command:
+
+```
+(ulimit -v 3000; ./bmf)                      # rc=1, usage — the loader is fine at this limit
+(ulimit -v 8000; ./bmf c t8g.bmp o.bmf)      # rc=139, SIGSEGV, no message
+(ulimit -v 15000; ./bmf c t8g.bmp o.bmf)     # rc=0
+```
+
+It could not run. `main` calls `set_new_handler(out_of_memory_handler)`, that
+body stores the pointer into the global at 0x445930 — MSVC's CRT new-handler
+slot — and nothing in the build read it, so the store was dead and a run that
+could not get memory died of a null dereference instead of saying so.
+
+**The disconnection was ours.** Every allocation came out of IDA as `__op_new`,
+and the imported tree defined it in `bmf.cpp` as `malloc(n ? n : 1)`. A later
+commit, *Call the C library directly*, inlined 65 of those to a bare `malloc`
+on the grounds that a wrapper whose entire content is a call to the function of
+the same name has no reason to exist. True of `fread`. False of this one:
+`operator new` has a contract `malloc` does not, and the program is built on it.
+MSVC's calls the installed handler on failure; BMF installs one; that is the
+whole mechanism, and rewriting the call removed it.
+
+`bmf_new` in `bmf.cpp` is that contract and nothing else — try, and on failure
+call whatever handler the program stored, then try again — and the 46 sites go
+through it. Reading the handler out of `__pout_of_memory_handler` is the point:
+it puts `set_new_handler` back on a live path rather than routing around it.
+Every stream is byte-identical, because nothing about a successful allocation
+changed, and the failing run now says what happened:
+
+```
+File          t8g.bmp, image 320x240x8, size - 76800:Out of memory!   # rc=7
+```
+
+This is the third defect of its exact shape — a wrapper collapsed into the
+library function it resembled, a mode changed from `"a+b"` to `"w+b"`, a frame
+split into locals — and all three were invisible to a gate built from valid
+input and successful runs. The pattern is not carelessness in any of the three
+commits; each was locally reasonable. It is that **a refactoring gate has to
+exercise the paths a refactoring can silently delete**, and failure paths are
+first among them precisely because nothing routine goes there.
+
+`test.sh` pins it with a ladder of `ulimit -v` values, asking two things: no
+limit may kill the program with a signal, and at least one must produce the
+diagnostic. Against the tree before the fix it reports
+`oom: -v 8000 exited 139, not 7`.
 
 Three checks were run to say that lever was spent — no body with zero coverage,
 no folded-mode marker with a live `else`, no `!plane_predictor` guard left in
@@ -197,16 +269,40 @@ an always-true jump the folding pass left. Everything between the jump and its
 label was unreachable, including the `n128_6 < 128` test the only live path
 never evaluated. 13 lines, one label, one `goto`.
 
-The lever is spent now, and `tools/deadcheck.py` is why that is a statement
-rather than an impression. It looks for all four shapes — labels with no
-`goto`, constant tests as statements, tests on a pinned global in either
-spelling, and bodies nothing calls — and it is verified the only way that
-means anything: against the tree as it stood before any of the four were
-removed it reports all four; against the tree now, none.
+**A fifth came from the coverage number, not from the checks.** After the
+allocation fix, one entry was left in the file with no coverage at all:
+`__fwd_model_planes_interleave_plane`, a shim whose body runs perfectly well
+from `expand_image`'s two call sites. What had never run was the *call*, and its
+guard is `if ( Srca_2 != Srca_1 )` — where both locals are assigned `Srca_3`,
+once, and neither is reassigned or has its address taken. The test is false on
+every path.
 
-Two of the four were originally found by checks written *after* the case they
+It was not always. `Srca_2` got its own buffer inside the `-E` block, which
+*One mode, and only the code that implements it* deleted; the tombstone comment
+`// never taken: -E is 0` still stands three lines above the test that asked
+whether that block had run. **Deleting a block does not delete the test that
+asked about it,** and this one outlived the block by a fortnight, taking an
+interleave, a `free` and a shim with it.
+
+That is the last of the arithmetic in this section: 551 unexecuted lines after
+the refusals, less the 4 that went with this block, less the 1 that
+`out_of_memory_handler` stopped being, is **546 of 13 346 — 95.91 %**, with no
+body in the file at 0.00 %.
+
+The lever is spent now, and `tools/deadcheck.py` is why that is a statement
+rather than an impression. It looks for all five shapes — labels with no
+`goto`, constant tests as statements, tests on a pinned global in either
+spelling, bodies nothing calls, and two locals compared that hold the same
+thing — and it is verified the only way that means anything: against the tree
+as it stood before each was removed it reports it; against the tree now, none.
+
+Three of the five were originally found by checks written *after* the case they
 would have caught. That is the wrong order, and it is the reason this one
-exists as a file rather than as four greps in a commit message.
+exists as a file rather than as five greps in a commit message. The fifth check
+is the first that has to follow a value rather than match a shape, and it is
+kept deliberately narrow — one assignment, from a plain name, address never
+taken — because a dead-code report is worth having only while every line in it
+is dead.
 
 These are format and descriptor combinations fifteen images still do not reach.
 `alt_model_p1_decode` used to head this table with 268 lines and is not on it
@@ -214,9 +310,11 @@ at all now; what happened when it finally ran is §6's first entry.
 
 **Every function in the file now executes under the gate.** That is the number
 that matters after §6, more than the percentage: the category that hid the bug
-was not "partly covered", it was *"never run at all"*, and it is empty. The two
-apparent exceptions are `out_of_memory_handler`, which runs when `malloc` fails,
-and an `__attribute__` block the body scanner counts as a function.
+was not "partly covered", it was *"never run at all"*, and it is now empty with
+no exceptions. It held two entries for a fortnight and neither survived being
+looked at: `out_of_memory_handler` could not be called, which is the defect
+above, and `__fwd_model_planes_interleave_plane` was reached only from code that
+could not run, which is the one below.
 
 What is left is branches inside bodies that do run — a different and much weaker
 kind of blind spot, because the frame, the types and the struct layouts around
@@ -655,6 +753,16 @@ gate cannot tell from a layout change.
   replacing look the same. `test.sh` now builds a two-member archive and reads
   both back; reinstating `"w+b"` fails it with *SECOND MEMBER REPLACED THE
   FIRST*.
+- **`operator new` is not `malloc`, and the difference is the whole
+  out-of-memory path.** `__op_new` was inlined to `malloc` on the reasoning
+  that a wrapper whose content is a call to the same-named library function is
+  noise. It was not: MSVC's `operator new` calls the handler
+  `set_new_handler` installed, BMF installs one, and with the call rewritten
+  that store went nowhere and an allocation failure became a SIGSEGV instead of
+  *Out of memory!*. `bmf_new` in `bmf.cpp` restores exactly that contract; the
+  gate pins it with `ulimit -v`. **A wrapper is only noise once you have read
+  what it wraps** — the same reasoning collapsed `fread` correctly and this
+  one wrongly, in a single commit.
 - **A body no test reaches is a body no gate protects, and one of them was
   broken for the whole project.** `alt_model_p1_decode` — 268 lines, the
   largest thing the corpus never touched — segfaulted the first time an image
@@ -812,20 +920,22 @@ python3 tools/structs.py subs1.hpp --list             # what is left, by traffic
 BMF_GC=list ./build.sh 2>&1 | grep 'removing unused section'
 
 # coverage
+#
+# Run the gate itself rather than a hand-written imitation of it.  The two
+# versions of this recipe that ran their own loop both understated the number,
+# once by leaving out the archive and once by leaving out the refusals, and each
+# time the missing lines looked like dead code.  `./test.sh ./bmfcov` cannot
+# drift from what the gate does, because it is what the gate does.
 g++ -m32 -march=k8 -msse2 -mfpmath=sse -std=c++17 -fno-strict-aliasing \
     -fpermissive -fno-rtti -fno-exceptions -O0 -DNDEBUG -U_FORTIFY_SOURCE \
     -D_FORTIFY_SOURCE=0 --coverage bmf.cpp -o bmfcov
-for f in testfiles/*.bmp; do
-  rm -f o.bmf o.bmp                       # bmf appends to its output
-  ./bmfcov c "$f" o.bmf && ./bmfcov d o.bmf o.bmp
-done
-# the archive check too -- the per-image loop never walks a multi-member
-# archive, and leaving it out makes compress_image's feof loop look dead
-rm -f a.bmf a.bmp
-./bmfcov c testfiles/t1.bmp a.bmf && ./bmfcov c testfiles/t8g.bmp a.bmf
-./bmfcov d a.bmf a.bmp
-gcov -n    -o . bmfcov-bmf.gcno                       # 95.69 % of 13351 lines
-gcov -f -n -o . bmfcov-bmf.gcno                       # per function
+rm -f bmfcov-bmf.gcda
+BMF_TIMEOUT=600 ./test.sh ./bmfcov                    # 1m43 instrumented, 19 s not
+gcov -n    -o . bmfcov-bmf.gcno                       # 95.91 % of 13346 lines
+gcov -f -n -o . bmfcov-bmf.gcno                       # per function; nothing at 0.00 %
+gcov      -o . bmfcov-bmf.gcno                        # writes subs1.hpp.gcov
+awk -F: '$1 ~ /#####/' subs1.hpp.gcov | wc -l         # 546 unexecuted lines
+rm -f bmfcov bmfcov-bmf.gc?? ./*.gcov                 # none of this is committed
 ```
 
 Body sizes, global extents and overlaps, and the `base + constant` families in
