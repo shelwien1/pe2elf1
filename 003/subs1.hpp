@@ -83,29 +83,23 @@ alignas(16) static uint8_t bmf_byte_4398A0[32 + 64] = {   // 0x4398A0
 };
 typedef uint8_t t_byte_4398A0[32];
 static t_byte_4398A0& __byte_4398A0 = *(t_byte_4398A0*)bmf_byte_4398A0;
-alignas(16) static uint8_t bmf_dword_4398F0[272 + 64] = {   // 0x4398F0
-  0x00,0x90,0x00,0x00,0x04,0x00,0x00,0x00,0x0f,0x00,0x00,0x00,0x2a,0x00,0x00,0x00,0x01,0x00,
-  0x00,0x00,0x08,0x00,0x00,0x00,0x13,0x00,0x00,0x00,0x00,0x0a,0x00,0x00,0x00,0x1b,0x00,0x00,
-  0x00,0x2c,0x00,0x00,0x00,0x28,0x00,0x00,0x00,0x70,0x00,0x00,0x00,0x18,0x01,0x00,0x00,0x20,
-  0x02,0x00,0x05,0x00,0x00,0x00,0x0e,0x00,0x00,0x00,0x15,0x00,0x00,0x00,0x04,0x00,0x00,0x00,
-  0x09,0x00,0x00,0x00,0x19,0x00,0x00,0x00,0x00,0x0f,0x00,0x00,0x00,0x21,0x00,0x00,0x00,0x2f,
-  0x00,0x00,0x00,0x40,0x00,0x00,0x00,0x68,0x00,0x00,0x00,0xa8,0x00,0x00,0x00,0x48,0x01,0x00,
-  0x06,0x00,0x00,0x00,0x0b,0x00,0x00,0x00,0x14,0x00,0x00,0x00,0x05,0x00,0x00,0x00,0x0b,0x00,
-  0x00,0x00,0x17,0x00,0x00,0x00,0x00,0x0b,0x00,0x00,0x00,0x17,0x00,0x00,0x00,0x29,0x00,0x00,
-  0x00,0x58,0x00,0x00,0x00,0x80,0x00,0x00,0x00,0xc8,0x00,0x00,0x00,0x00,0x02,0x00,0x00,0x00,
-  0x00,0x00,0x0b,0x00,0x00,0x00,0x1e,0x00,0x00,0x00,0x07,0x00,0x00,0x00,0x0d,0x00,0x00,0x00,
-  0x16,0x00,0x00,0x00,0x00,0x11,0x00,0x00,0x00,0x21,0x00,0x00,0x00,0x3a,0x00,0x00,0x00,0x40,
-  0x00,0x00,0x00,0x98,0x00,0x00,0x00,0xe0,0x00,0x00,0x00,0x70,0x01,0x00,0x07,0x00,0x00,0x00,
-  0x0a,0x00,0x00,0x00,0x1f,0x00,0x00,0x00,0xff,0xff,0xff,0xff,0x0b,0x00,0x00,0x00,0x15,0x00,
-  0x00,0x00,0x00,0xff,0xff,0xff,0x00,0x04,0x00,0x00,0x00,0x17,0x00,0x00,0x00,0xf8,0xff,0xff,
-  0x00,0xf8,0xff,0xff,0x00,0xf8,0xff,0xff,0x00,0x38,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-  0x00,0x00,0xcd,0xcc,0xcc,0x3e,0xcd,0xcc,0xcc,0x3e,0xcd,0xcc,0xcc,0x3e,0xcd,0xcc,0xcc,0x3e,
-  0xcd,0xcc,0xcc,0x3d,0xcd,0xcc,0xcc,0x3d,0xcd,0xcc,0xcc,0x3d,0xcd,0xcc,0xcc,0x3d,0x9a,0x99,
-  0x19,0x3e,0x9a,0x99,0x19,0x3e,0x9a,0x99,0x19,0x3e,0x9a,0x99,0x19,0x3e,0x1f,0x85,0x6b,0x3e,
-  0x1f,0x85,0x6b,0x3e,0x1f,0x85,0x6b,0x3e,0x1f,0x85,0x6b,0x3e,
+// alt_p2_context's context thresholds: six rows of thirteen, chosen by how
+// far the coded length has run past the plane's size.  BMF.exe kept them at
+// 0x4398C0..0x4399F7 and Hex-Rays split the first twelve columns into twelve
+// globals, each subscripted by the same `13 * row`, leaving the thirteenth as
+// one array at 0x4398F0.  It is one table.
+//
+// The columns come in four runs -- 0..2, 3..5, 6..8, 9..12 -- each an ascending
+// ladder compared against one of the four neighbourhood sums, and each turning
+// into a small count that becomes part of the context index.
+alignas(16) static int32_t bmf_p2_thresholds[6][13] = {
+  {       6,      14,      28,       4,       8,      26,    4096,    6144,   13056,   10240,   14336,   26624,   36864 },
+  {       4,      15,      42,       1,       8,      19,    2560,    6912,   11264,   10240,   28672,   71680,  139264 },
+  {       5,      14,      21,       4,       9,      25,    3840,    8448,   12032,   16384,   26624,   43008,   83968 },
+  {       6,      11,      20,       5,      11,      23,    2816,    5888,   10496,   22528,   32768,   51200,  131072 },
+  {       0,      11,      30,       7,      13,      22,    4352,    8448,   14848,   16384,   38912,   57344,   94208 },
+  {       7,      10,      31,      -1,      11,      21,    -256,    1024,    5888,   -2048,   -2048,   -2048,  145408 },
 };
-typedef int32_t t_dword_4398F0[0x10000];
-static t_dword_4398F0& __dword_4398F0 = *(t_dword_4398F0*)bmf_dword_4398F0;
 alignas(16) static uint8_t bmf_xmmword_439B10[16 + 64] = {   // 0x439B10
   0x7f,0x6a,0xbc,0x3c,0x7f,0x6a,0xbc,0x3c,0x7f,0x6a,0xbc,0x3c,0x7f,0x6a,0xbc,0x3c,0x14,0xae,
   0x47,0x3f,0x14,0xae,0x47,0x3f,0x14,0xae,0x47,0x3f,0x14,0xae,0x47,0x3f,0x5c,0x8f,0x42,0x3e,
@@ -3176,7 +3170,7 @@ static unsigned char *bmf_addr(unsigned va)
   if (va >= 0x439880u && va < 0x439890u) return bmf_dword_439880 + (va - 0x439880u);
   if (va >= 0x439890u && va < 0x4398A0u) return bmf_byte_439890 + (va - 0x439890u);
   if (va >= 0x4398A0u && va < 0x4398C0u) return bmf_byte_4398A0 + (va - 0x4398A0u);
-  if (va >= 0x4398F0u && va < 0x439A00u) return bmf_dword_4398F0 + (va - 0x4398F0u);
+  if (va >= 0x4398C0u && va < 0x4399F8u) return (unsigned char *)bmf_p2_thresholds + (va - 0x4398C0u);
   if (va >= 0x439B10u && va < 0x439B20u) return bmf_xmmword_439B10 + (va - 0x439B10u);
   if (va >= 0x439B40u && va < 0x439B50u) return bmf_xmmword_439B40 + (va - 0x439B40u);
   if (va >= 0x439B50u && va < 0x439B60u) return bmf_xmmword_439B50 + (va - 0x439B50u);
@@ -3274,30 +3268,6 @@ static void bmf_data_relocate()
     __builtin_memcpy(slot, &p, sizeof p);
   }
 }
-typedef int32_t t_dword_4398C0[0x10000];
-static t_dword_4398C0& __dword_4398C0 = *(t_dword_4398C0*)(blob1 + 0x004398C0 - BMF_BLOB_BASE);
-typedef int32_t t_dword_4398C4[0x10000];
-static t_dword_4398C4& __dword_4398C4 = *(t_dword_4398C4*)(blob1 + 0x004398C4 - BMF_BLOB_BASE);
-typedef int32_t t_dword_4398C8[0x10000];
-static t_dword_4398C8& __dword_4398C8 = *(t_dword_4398C8*)(blob1 + 0x004398C8 - BMF_BLOB_BASE);
-typedef int32_t t_dword_4398CC[0x10000];
-static t_dword_4398CC& __dword_4398CC = *(t_dword_4398CC*)(blob1 + 0x004398CC - BMF_BLOB_BASE);
-typedef int32_t t_dword_4398D0[0x10000];
-static t_dword_4398D0& __dword_4398D0 = *(t_dword_4398D0*)(blob1 + 0x004398D0 - BMF_BLOB_BASE);
-typedef int32_t t_dword_4398D4[0x10000];
-static t_dword_4398D4& __dword_4398D4 = *(t_dword_4398D4*)(blob1 + 0x004398D4 - BMF_BLOB_BASE);
-typedef int32_t t_dword_4398D8[0x10000];
-static t_dword_4398D8& __dword_4398D8 = *(t_dword_4398D8*)(blob1 + 0x004398D8 - BMF_BLOB_BASE);
-typedef int32_t t_dword_4398DC[0x10000];
-static t_dword_4398DC& __dword_4398DC = *(t_dword_4398DC*)(blob1 + 0x004398DC - BMF_BLOB_BASE);
-typedef int32_t t_dword_4398E0[0x10000];
-static t_dword_4398E0& __dword_4398E0 = *(t_dword_4398E0*)(blob1 + 0x004398E0 - BMF_BLOB_BASE);
-typedef int32_t t_dword_4398E4[0x10000];
-static t_dword_4398E4& __dword_4398E4 = *(t_dword_4398E4*)(blob1 + 0x004398E4 - BMF_BLOB_BASE);
-typedef int32_t t_dword_4398E8[0x10000];
-static t_dword_4398E8& __dword_4398E8 = *(t_dword_4398E8*)(blob1 + 0x004398E8 - BMF_BLOB_BASE);
-typedef int32_t t_dword_4398EC[0x10000];
-static t_dword_4398EC& __dword_4398EC = *(t_dword_4398EC*)(blob1 + 0x004398EC - BMF_BLOB_BASE);
 // ---------------------------------------------------------------------------
 // The compression mode.
 //
@@ -10624,17 +10594,20 @@ int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3__ref
   Obj68 *v54;
   Obj95 *v22;
   Obj30 *v104;
-  int32_t v6, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v23, v24, v25,
-          v27, v29, v30, v47, v48, v51, v55, v56, v57, v65, v68, v74, v75, v85, v88, *v103,
-          v105, n2, v107, n3536_5, v109, v111, v112, v113, v114, v116, v117, n3536_1, v121,
-          v122, v123, v124, v125, v126, v127, v128, v130, n2256, v132, v134, v137, v138, v140,
-          v141, v144, n2576, n1840_13, v147, v148, v149, v151, v154, v155, v156, n2896, v161,
-          v162, v163, v164, v167, v168, v169, v171, n3536_2, v175, v176, v177, v178, v179, v181,
-          v182, n3536_3, v185, v186, v188, v189, v190, v191, v192, v193, n1840_14, n1840_15,
-          v198, n1840_16, v200, v201, n1840_17, v203, v206, v207, v208, n960, n3536_4, v211,
-          v212, v213, v214, v215, n1840_3, n1840_8, n1840_7, n1840_10, n1840_9, v222, v224,
-          n1840_11, n1840_12, n255, v228, n1840_5, n1840_4, n1840_6, v234, v235, v236, v237,
-          v238, v239, v240, v241, v242;
+  int32_t v6, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20,
+          v21, v23, v25, v27, v29, v30, v47, v48, v51, v55, v56, v57, v65,
+          v68, v74, v75, v85, v88, *v103, v105, n2, v107, n3536_5, v109, v111,
+          v112, v113, v114, v116, v117, n3536_1, v121, v122, v123, v124, v125,
+          v126, v127, v128, v130, n2256, v132, v134, v137, v138, v140, v141,
+          v144, n2576, n1840_13, v147, v148, v149, v151, v154, v155, v156,
+          n2896, v161, v162, v163, v164, v167, v168, v169, v171, n3536_2,
+          v175, v176, v177, v178, v179, v181, v182, n3536_3, v185, v186, v188,
+          v189, v190, v191, v192, v193, n1840_14, n1840_15, v198, n1840_16,
+          v200, v201, n1840_17, v203, v206, v207, v208, n960, n3536_4, v211,
+          v212, v213, v214, v215, n1840_3, n1840_8, n1840_7, n1840_10,
+          n1840_9, v222, v224, n1840_11, n1840_12, n255, v228, n1840_5,
+          n1840_4, n1840_6, v234, v235, v236, v237, v238, v239, v240, v241,
+          v242;
   int8_t v139;
   uint32_t v120, v133, v135, v136, v152, v153, v165, v180;
   uint8_t *v187;
@@ -10689,29 +10662,26 @@ int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3__ref
   v276 = (Obj95 *)((int16_t *)v22);
   v277 = v19 + v23;
   v279 = 16 * v20;
-  v24 = 13
-      * ((8 * v12 > 43 * n3536)
-       + (8 * v12 > 17 * n3536)
-       + (8 * v12 > 9 * n3536)
-       + (8 * v12 > 5 * n3536)
-       + (8 * v12 > 2 * n3536));
-  v25 = v290 > __dword_4398E4[v24];
-  v26 = v290 <= __dword_4398E8[v24];
+  // Which row of the threshold table: how many of five ratios the coded
+  // length has passed.  This was `13 * <the same sum>` used as a flat
+  // subscript, with the sum itself recomputed two statements later.
   v278 = (8 * v12 > 43 * n3536)
        + (8 * v12 > 17 * n3536)
        + (8 * v12 > 9 * n3536)
        + (8 * v12 > 5 * n3536)
        + (8 * v12 > 2 * n3536);
-  v256 = ((v290 > __dword_4398F0[v24]) + (v290 > __dword_4398EC[v24]) + !v26 + v25) << 6;
-  v280 = (16 * n1840_2 > n1840_1 * __dword_4398D4[v24])
-       + (16 * n1840_2 > n1840_1 * __dword_4398D0[v24])
-       + (16 * n1840_2 > n1840_1 * __dword_4398CC[v24]);
-  v27 = __dword_4398C0[v24];
-  v281 = (Obj36 *)((int16_t *)(16 * ((v277 > __dword_4398E0[v24]) + (v277 > __dword_4398DC[v24]) + (v277 > __dword_4398D8[v24]))));
+  v25 = v290 > bmf_p2_thresholds[v278][9];
+  v26 = v290 <= bmf_p2_thresholds[v278][10];
+  v256 = ((v290 > bmf_p2_thresholds[v278][12]) + (v290 > bmf_p2_thresholds[v278][11]) + !v26 + v25) << 6;
+  v280 = (16 * n1840_2 > n1840_1 * bmf_p2_thresholds[v278][5])
+       + (16 * n1840_2 > n1840_1 * bmf_p2_thresholds[v278][4])
+       + (16 * n1840_2 > n1840_1 * bmf_p2_thresholds[v278][3]);
+  v27 = bmf_p2_thresholds[v278][0];
+  v281 = (Obj36 *)((int16_t *)(16 * ((v277 > bmf_p2_thresholds[v278][8]) + (v277 > bmf_p2_thresholds[v278][7]) + (v277 > bmf_p2_thresholds[v278][6]))));
   v28 = (Obj11 *)(v289);
   v257 = (char *)&((int16_t *)v281)[160 * v278 + 2 * v280]
-       + (v279 > __dword_4398C8[v24] * (int32_t)v276)
-       + (v279 > (int32_t)v276 * __dword_4398C4[v24])
+       + (v279 > bmf_p2_thresholds[v278][2] * (int32_t)v276)
+       + (v279 > (int32_t)v276 * bmf_p2_thresholds[v278][1])
        + (v279 > (int32_t)v276 * v27)
        + v256;
   v29 = v289->f280864.m128_i16[(uint32_t)v257 + 4];
