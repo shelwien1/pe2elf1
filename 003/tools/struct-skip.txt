@@ -118,3 +118,47 @@ __alt_p2_model:v15
 __alt_p2_context:v31
 __alt_p2_model:v17
 __alt_p2_filter:a2
+__pixel_context:p_n15
+__init_symbol_list:a1
+__init_model_tables:v20
+__alt_p2_model:v445
+__alt_p2_context:v282
+__decode_pixel:v97
+__alt_p2_context:v284
+__alt_p2_d8_decode_body:v53
+__alt_model_p2_decode:v62
+__alt_p2_d8_encode_body:v56
+__alt_model_p2_encode:v61
+__alt_model_p1_encode:v30
+__pixel_context:v8
+__pixel_context:v11
+__alloc_image:result
+__decode_pixel:v76
+__code_pixel:v69
+__alt_model_p2_encode:v131
+__alt_model_p2_encode:__byte_4433BD
+__model_plane:v51
+__model_plane:v52
+__search_filter:v181
+__predict_med:v3
+__encode_symbol_tree:_this __encode_symbol_tree:this_2
+__alt_p1_encode_symbol:v27
+__decode_symbol_tree:_this
+__init_model_tables:v30
+__alt_p1_context:v33
+__update_binary_pair:v8
+__alt_p1_d8_encode_body:v27
+__interleave_plane:p_i
+__unpredict_med:v52
+__alt_model_p1_d8_decode:v29
+__alt_model_p1_decode:v47
+__choose_plane_coding:buf_1
+__read_bmp:Buffer_2
+__decode_symbol_list:v20 __decode_symbol_list:v25 __decode_symbol_list:v43 __decode_symbol_list:v52 __decode_symbol_list:v55 __decode_symbol_list:v66
+__decode_pixel:n15_10 __decode_pixel:n15_11 __decode_pixel:n15_13 __decode_pixel:n15_15 __decode_pixel:n15_18 __decode_pixel:n15_2 __decode_pixel:n15_20 __decode_pixel:n15_22 __decode_pixel:n15_24 __decode_pixel:n15_25 __decode_pixel:n15_3 __decode_pixel:n15_4 __decode_pixel:n15_5 __decode_pixel:n15_6 __decode_pixel:n15_9
+__decode_pixel:n15_12 __decode_pixel:n15_14 __decode_pixel:n15_16 __decode_pixel:n15_17 __decode_pixel:n15_19 __decode_pixel:n15_21 __decode_pixel:n15_8 __decode_pixel:n256 __decode_pixel:n256_2 __decode_pixel:n256_3 __decode_pixel:n256_5 __decode_pixel:n4_8
+__decode_pixel:v110
+__code_pixel:v113
+__alt_model_p1_encode:v46
+__alt_model_p1_encode:__byte_4433AD
+__alt_model_p1_encode:__byte_44339D
