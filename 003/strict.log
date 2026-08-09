@@ -1,13 +1,9 @@
 In file included from bmf.cpp:774:
-subs1.hpp: In function 'int32_t __encode_symbol_list(uint32_t*, int32_t)':
-subs1.hpp:2766:11: error: comparison between distinct pointer types 'Obj90*' and 'uint16_t*' {aka 'short unsigned int*'} lacks a cast [-fpermissive]
-subs1.hpp:2803:17: error: comparison between distinct pointer types 'Obj90*' and 'uint16_t*' {aka 'short unsigned int*'} lacks a cast [-fpermissive]
 subs1.hpp: In function 'int32_t __pixel_context(ModelBlock*, uint32_t*)':
 subs1.hpp:3733:8: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
 subs1.hpp: In function 'int32_t __init_model_tables(Obj10*)':
 subs1.hpp:3838:19: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
 subs1.hpp:3841:20: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
-subs1.hpp:3856:18: error: comparison between distinct pointer types 'Obj14*' and 'int16_t*' {aka 'short int*'} lacks a cast [-fpermissive]
 subs1.hpp: In function 'int32_t __alt_p1_context(Obj25*, uint32_t*, Obj91*)':
 subs1.hpp:4053:8: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp:4063:12: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
@@ -30,7 +26,6 @@ subs1.hpp:5880:22: error: invalid conversion from 'char*' to 'uint32_t' {aka 'un
 subs1.hpp:5940:31: error: invalid conversion from 'char*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
 subs1.hpp:6020:25: error: invalid conversion from 'char*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
 subs1.hpp: In function 'int32_t __rc_begin_decode(char)':
-subs1.hpp:6535:19: error: comparison between distinct pointer types 'uint8_t*' {aka 'unsigned char*'} and 'uint32_t*' {aka 'unsigned int*'} lacks a cast [-fpermissive]
 subs1.hpp:6633:10: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'int32_t' {aka 'int'} [-fpermissive]
 subs1.hpp: In function 'uint8_t* __unpredict_med(char*, int32_t, int32_t)':
 subs1.hpp:6645:11: error: invalid conversion from 'char*' to 'uintptr_t' {aka 'unsigned int'} [-fpermissive]
@@ -44,8 +39,6 @@ subs1.hpp:7094:17: error: invalid conversion from 'int32_t' {aka 'int'} to 'Obj1
 subs1.hpp:7156:27: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'int32_t' {aka 'int'} [-fpermissive]
 subs1.hpp:7181:17: error: invalid conversion from 'void*' to 'uint32_t*' {aka 'unsigned int*'} [-fpermissive]
 subs1.hpp:7224:20: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
-subs1.hpp:7243:27: error: cast from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} loses precision [-fpermissive]
-subs1.hpp:7281:29: error: cast from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} loses precision [-fpermissive]
 subs1.hpp: In function 'int32_t __alt_p2_context(Obj11*, const M128&, const M128&, Obj11*, Obj11*)':
 subs1.hpp:7836:18: error: invalid conversion from 'Obj3*' to 'int32_t' {aka 'int'} [-fpermissive]
 subs1.hpp:7887:14: error: invalid conversion from 'Obj3*' to 'int32_t' {aka 'int'} [-fpermissive]
@@ -57,17 +50,12 @@ subs1.hpp:8727:42: error: invalid conversion from 'void*' to 'uint32_t' {aka 'un
 subs1.hpp:8823:21: error: invalid conversion from 'void*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
 subs1.hpp: In function 'int32_t __cost_candidate(uint8_t*, uint8_t*, int32_t, char, int32_t, int32_t, int32_t, char*)':
 subs1.hpp:9007:9: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
-subs1.hpp:9016:28: error: cast from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} loses precision [-fpermissive]
-subs1.hpp:9155:27: error: cast from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} loses precision [-fpermissive]
-subs1.hpp:9158:28: error: cast from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} loses precision [-fpermissive]
 subs1.hpp: In function 'int32_t __fwd_choose_plane_coding_cost_candidate(void*, void*, int32_t, char, int32_t, int32_t, int32_t, int32_t)':
 subs1.hpp:9172:229: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
 subs1.hpp:8910:115: note:   initializing argument 8 of 'int32_t __cost_candidate(uint8_t*, uint8_t*, int32_t, char, int32_t, int32_t, int32_t, char*)'
 subs1.hpp: In function 'int32_t __choose_plane_coding(Obj97*, int32_t, char)':
 subs1.hpp:9323:26: error: invalid conversion from 'char*' to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
-subs1.hpp:9752:16: error: cast from 'char*' to 'uint8_t' {aka 'unsigned char'} loses precision [-fpermissive]
 subs1.hpp:9831:27: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint32' {aka 'unsigned int'} [-fpermissive]
-subs1.hpp:10003:16: error: cast from 'int32_t*' {aka 'int*'} to 'uint8_t' {aka 'unsigned char'} loses precision [-fpermissive]
 subs1.hpp: In function 'int32_t* __read_bmp(char*)':
 subs1.hpp:10126:44: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
 subs1.hpp:10131:44: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
@@ -76,9 +64,6 @@ subs1.hpp: In function 'int32_t __decode_symbol_list(uint32_t*)':
 subs1.hpp:10411:12: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
 subs1.hpp:10413:9: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp:10419:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:10455:13: error: cast from 'uint32_t*' {aka 'unsigned int*'} to 'char' loses precision [-fpermissive]
-subs1.hpp:10514:18: error: comparison between distinct pointer types 'Obj32*' and 'char*' lacks a cast [-fpermissive]
-subs1.hpp:10549:20: error: comparison between distinct pointer types 'Obj33*' and 'uint16_t*' {aka 'short unsigned int*'} lacks a cast [-fpermissive]
 subs1.hpp: In function 'int32_t __decode_pixel(ModelBlock*, int32_t)':
 subs1.hpp:10787:11: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp:10822:12: error: invalid conversion from 'int32_t' {aka 'int'} to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
@@ -87,19 +72,14 @@ subs1.hpp:10975:41: error: invalid conversion from 'uint8_t*' {aka 'unsigned cha
 subs1.hpp:10979:15: error: invalid conversion from 'int32_t' {aka 'int'} to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
 subs1.hpp:10997:29: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'char*' [-fpermissive]
 subs1.hpp:11045:18: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
-subs1.hpp:11099:21: error: cast from 'char*' to 'uint16_t' {aka 'short unsigned int'} loses precision [-fpermissive]
-subs1.hpp:11103:21: error: cast from 'char*' to 'uint16_t' {aka 'short unsigned int'} loses precision [-fpermissive]
 subs1.hpp:11325:20: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp:11327:12: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp:11403:18: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'int32_t' {aka 'int'} [-fpermissive]
 subs1.hpp:11407:22: error: invalid conversion from 'int32_t' {aka 'int'} to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
 subs1.hpp: In function 'int32_t __code_pixel(ModelBlock*, int32_t)':
 subs1.hpp:11641:10: error: invalid conversion from 'int32_t' {aka 'int'} to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
-subs1.hpp:11755:39: error: cast from 'Obj34*' to 'uint16_t' {aka 'short unsigned int'} loses precision [-fpermissive]
 subs1.hpp:11778:27: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'char*' [-fpermissive]
 subs1.hpp:11887:14: error: invalid conversion from 'char*' to 'int32_t' {aka 'int'} [-fpermissive]
-subs1.hpp:11923:35: error: cast from 'char*' to 'uint16_t' {aka 'short unsigned int'} loses precision [-fpermissive]
-subs1.hpp:11924:16: error: cast from 'char*' to 'uint16_t' {aka 'short unsigned int'} loses precision [-fpermissive]
 subs1.hpp:12013:18: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
 subs1.hpp:12097:16: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
 subs1.hpp:12124:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
@@ -121,7 +101,6 @@ subs1.hpp:13212:27: error: invalid conversion from 'uint8_t*' {aka 'unsigned cha
 subs1.hpp: In function 'uint32_t __alt_p2_model(Obj69*, const M128&, int32_t, uint8_t, int32_t)':
 subs1.hpp:13699:21: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
 subs1.hpp:13957:16: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
-subs1.hpp:14686:34: error: cast from 'uint16_t*' {aka 'short unsigned int*'} to 'uint8_t' {aka 'unsigned char'} loses precision [-fpermissive]
 subs1.hpp: In function 'int32_t __fwd_alt_p2_d8_decode_body_alt_p2_decode_symbol(void*, int32_t)':
 subs1.hpp:15273:139: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
 subs1.hpp:3506:52: note:   initializing argument 2 of 'int32_t __alt_p2_decode_symbol(Obj13*, char*)'
@@ -164,9 +143,6 @@ subs1.hpp:18241:15: error: invalid conversion from 'int32_t' {aka 'int'} to 'cha
 subs1.hpp:18261:19: error: invalid conversion from 'char*' to 'int32_t' {aka 'int'} [-fpermissive]
 subs1.hpp:18263:23: error: ISO C++ forbids comparison between pointer and integer [-fpermissive]
 subs1.hpp: In function 'uint32_t __search_filter(BmfImage*, char, const M128&, const M128&)':
-subs1.hpp:18585:14: error: cast from 'char*' to 'uint8_t' {aka 'unsigned char'} loses precision [-fpermissive]
-subs1.hpp:18590:16: error: cast from 'char*' to 'uint8_t' {aka 'unsigned char'} loses precision [-fpermissive]
-subs1.hpp:18603:28: error: cast from 'char*' to 'char' loses precision [-fpermissive]
 subs1.hpp:18774:39: error: invalid conversion from 'char*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
 subs1.hpp: In function 'char* __fwd_bmf_open_archive_expand_image(int32_t, const M128&, const M128&, int32_t, void*)':
 subs1.hpp:19118:152: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
