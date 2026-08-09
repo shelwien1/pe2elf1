@@ -187,6 +187,15 @@ model at a depth other than 8**, which is the combination `alt_model_p1_decode`
 needs. That is a measurement, not a proof of impossibility — it is measured
 across 35 images now, and it is the reason that body is still untested.
 
+Two routes remain if it matters. Establish that the combination cannot occur,
+by reading how `choose_plane_coding` sets the descriptor's predictor and
+alternate-model bits — in which case 268 lines are dead and go the way of the
+fast path (§2.1). Or force it: the bits reach the encoder through the plane
+descriptor, which `choose_plane_coding` writes as a block, so a build that
+overrides them there would produce a stream to decode. That stream would be a
+decode-only fixture — no unmodified encoder makes it — which is worth having
+for 268 lines of decoder, and worth labelling as what it is.
+
 Neither is dead — nothing has shown any entry condition to be impossible — so
 these are refactored last and with more care than the rest, or their entry
 conditions are established first and the corpus grown to reach them.
