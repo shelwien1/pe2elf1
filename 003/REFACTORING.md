@@ -166,9 +166,19 @@ guards are the same guard. The test is always true, so it and its 45-line else
 are gone.
 
 **What is left uncovered is diffuse**, and that is the useful summary. The
-unexecuted lines now form runs of at most 9, and mostly of 1 to 3. There are no
-more dead features to find here; there are allocation-failure checks, error
-returns and format variants, a line or two at a time.
+unexecuted lines now form runs of at most 9, and mostly of 1 to 3.
+
+More images of the ordinary kind will not move it. Four more format variants
+were generated and measured — 24-bit with identical channels, an 8-bit
+palette, a 4-bit and a 1-bit — and the marginal gain was **zero lines**. The
+corpus already spans the format space; what is left is inside the paths those
+formats share.
+
+By kind, the 573 lines are 417 of assignment and computation, 107 of control
+flow, 35 of allocation and error exit, and 14 of file-I/O checking. That last
+50 needs a failing `malloc` or a truncated file, not another picture, and the
+417 are deep inside branches of `unmodel_plane_slow`, `write_bmp` and
+`interleave_plane` that the corpus reaches the *other* side of.
 
 Three checks were run to say that lever was spent — no body with zero coverage,
 no folded-mode marker with a live `else`, no `!plane_predictor` guard left in
