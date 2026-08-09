@@ -78,7 +78,11 @@ def stream(index, pack, delta):
     out = bytearray()
     for y in range(H - 1, -1, -1):
         row = [index(x, y) for x in range(W)]
-        stop = W - 8 if (delta and y % 4 == 0) else W
+        # An odd skip is the point of this: it leaves the write position on a
+        # half byte, so the absolute-run decoder takes its `v22` path -- the
+        # one that carries a nibble across from the previous byte.  An even
+        # skip never reaches it, which is what the first version of this did.
+        stop = W - (7 if y % 4 == 0 else 8) if delta else W
         out += runs(row, stop, pack)
         if stop != W:
             out += bytes((0, 2, W - stop, 0))  # delta: skip right, same row
