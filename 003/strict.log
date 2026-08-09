@@ -149,10 +149,6 @@ subs1.hpp:12395:33: error: invalid conversion from 'uint8_t*' {aka 'unsigned cha
 subs1.hpp:12458:40: error: invalid conversion from 'void*' to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
 subs1.hpp: In function 'void __unmodel_plane_slow(Obj10*, char*)':
 subs1.hpp:12549:21: error: cast from 'char*' to 'char' loses precision [-fpermissive]
-subs1.hpp:12693:39: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
-subs1.hpp:12695:25: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
-subs1.hpp:12696:25: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
-subs1.hpp:12697:25: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
 subs1.hpp:12699:94: error: invalid conversion from 'Obj10*' to 'int32_t' {aka 'int'} [-fpermissive]
 subs1.hpp:12477:91: note:   initializing argument 2 of 'uint32_t __fwd_unmodel_plane_slow_init_encode_symbol_list(void*, int32_t, int32_t, int32_t)'
 subs1.hpp:12702:16: error: invalid conversion from 'void*' to 'uint32_t*' {aka 'unsigned int*'} [-fpermissive]
@@ -163,11 +159,11 @@ subs1.hpp:12741:98: error: invalid conversion from 'Obj10*' to 'int32_t' {aka 'i
 subs1.hpp:12477:91: note:   initializing argument 2 of 'uint32_t __fwd_unmodel_plane_slow_init_encode_symbol_list(void*, int32_t, int32_t, int32_t)'
 subs1.hpp:12742:100: error: invalid conversion from 'Obj10*' to 'int32_t' {aka 'int'} [-fpermissive]
 subs1.hpp:12477:91: note:   initializing argument 2 of 'uint32_t __fwd_unmodel_plane_slow_init_encode_symbol_list(void*, int32_t, int32_t, int32_t)'
-subs1.hpp:12787:31: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
-subs1.hpp:12788:42: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
-subs1.hpp:12789:42: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
-subs1.hpp:12791:42: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
-subs1.hpp:12792:42: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
+subs1.hpp:12787:20: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
+subs1.hpp:12788:31: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
+subs1.hpp:12789:31: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
+subs1.hpp:12791:31: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
+subs1.hpp:12792:31: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
 subs1.hpp:12855:25: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
 subs1.hpp: In function 'int32_t __alt_model_p1_encode(uint16_t*, char*)':
 subs1.hpp:13137:15: error: invalid conversion from 'char*' to 'int32_t' {aka 'int'} [-fpermissive]
@@ -241,17 +237,13 @@ subs1.hpp: In function 'void __model_plane(const M128&, const M128&, BmfImage*, 
 subs1.hpp:17202:39: error: invalid conversion from 'Obj10*' to 'int32_t' {aka 'int'} [-fpermissive]
 subs1.hpp:17111:62: note:   initializing argument 1 of 'void __fwd_model_plane_reduce_alphabet(int32_t, char, void*)'
 subs1.hpp:17224:35: error: invalid conversion from 'uintptr_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
-subs1.hpp:17343:45: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
-subs1.hpp:17345:29: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
-subs1.hpp:17346:29: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
-subs1.hpp:17347:29: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
 subs1.hpp:17386:26: error: invalid conversion from 'uint32_t*' {aka 'unsigned int*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
 subs1.hpp:17422:26: error: invalid conversion from 'uint32_t*' {aka 'unsigned int*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
-subs1.hpp:17460:33: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
-subs1.hpp:17461:46: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
-subs1.hpp:17462:46: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
-subs1.hpp:17464:46: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
-subs1.hpp:17465:46: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
+subs1.hpp:17460:22: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
+subs1.hpp:17461:35: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
+subs1.hpp:17462:35: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
+subs1.hpp:17464:35: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
+subs1.hpp:17465:35: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
 subs1.hpp: In function 'void __model_planes(char*, char*, int32_t, char, const M128&, const M128&)':
 subs1.hpp:17556:41: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
 subs1.hpp: In function 'void __transform_planes(BmfImage*, int32_t, char, const M128&, const M128&)':

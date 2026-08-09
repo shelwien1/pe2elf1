@@ -1171,7 +1171,7 @@ struct Obj10 {
   uint8_t _pad9[8];
   uint8_t  *f56[14];   // +56 .. +108, the row cursors: every element is an address
   uint8_t _pad24[1051552];
-  uint32_t  f1051664[4];   // +1051664 .. +1051676
+  uint8_t  *f1051664[4];   // +1051664 .. +1051676, four more row cursors
   uint8_t _pad29[26524];
   void*f1078204;
   uint32_t f1078208;
