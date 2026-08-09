@@ -4251,8 +4251,8 @@ int32_t __alt_p1_model(Obj0 *_this)
      + _this->f12[28 - _this->f12[25]]
      + _this->f12[24 - _this->f12[21]]
      + _this->f12[20 - _this->f12[17]]
-     + *(uint32_t *)((char *)_this + (- 4 * v5 + 76))
-     + *(uint32_t *)((char *)_this + (- 4 * v3 + 60))
+     + _this->f12[16 - v5]
+     + _this->f12[12 - v3]
      + _this->f12[7]
      + (_this->f12[0] & 0x1F);
   v9 = (Obj26 *)((char *)_this + 16 * v8);
@@ -4370,7 +4370,7 @@ int32_t __alt_p1_model(Obj0 *_this)
     }
     else
     {
-      v17 = (char *)_this + 16 * (*(uint32_t *)((char *)_this + (- 4 * v16 + 44)) + result - *(uint32_t *)((char *)_this + (4 * v16 + 36)));
+      v17 = (char *)_this + 16 * (_this->f12[8 - v16] + result - _this->f12[6 + v16]);
       *(uint16_t *)(v17 + 2 * n5_2 + 3802) += 7;
       *(uint16_t *)(v17 + 3800) += 7;
       v18 = v8 + _this->f12[6] - _this->f12[7];
@@ -4432,7 +4432,7 @@ int32_t __alt_p1_model(Obj0 *_this)
     }
     else
     {
-      v23 = (char *)_this + 16 * (*(uint32_t *)((char *)_this + (- 4 * v22 + 60)) + v21 - *(uint32_t *)((char *)_this + (4 * v22 + 52)));
+      v23 = (char *)_this + 16 * (_this->f12[12 - v22] + v21 - _this->f12[10 + v22]);
       *(uint16_t *)(v23 + 2 * n5_2 + 3802) += 7;
       *(uint16_t *)(v23 + 3800) += 7;
       v24 = _this->f12[11];
@@ -4492,7 +4492,7 @@ int32_t __alt_p1_model(Obj0 *_this)
     }
     else
     {
-      v31 = (char *)_this + 16 * (*(uint32_t *)((char *)_this + (- 4 * v30 + 76)) + v29 - *(uint32_t *)((char *)_this + (4 * v30 + 68)));
+      v31 = (char *)_this + 16 * (_this->f12[16 - v30] + v29 - _this->f12[14 + v30]);
       *(uint16_t *)(v31 + 2 * n5_2 + 3802) += 7;
       *(uint16_t *)(v31 + 3800) += 7;
       v32 = _this->f12[15];
@@ -4552,7 +4552,7 @@ int32_t __alt_p1_model(Obj0 *_this)
     }
     else
     {
-      v39 = (char *)_this + 16 * (*(uint32_t *)((char *)_this + (- 4 * v38 + 92)) + v37 - *(uint32_t *)((char *)_this + (4 * v38 + 84)));
+      v39 = (char *)_this + 16 * (_this->f12[20 - v38] + v37 - _this->f12[18 + v38]);
       *(uint16_t *)(v39 + 2 * n5_2 + 3802) += 7;
       *(uint16_t *)(v39 + 3800) += 7;
       v40 = _this->f12[19];
@@ -4612,7 +4612,7 @@ int32_t __alt_p1_model(Obj0 *_this)
     }
     else
     {
-      v47 = (char *)_this + 16 * (*(uint32_t *)((char *)_this + (- 4 * v46 + 108)) + v45 - *(uint32_t *)((char *)_this + (4 * v46 + 100)));
+      v47 = (char *)_this + 16 * (_this->f12[24 - v46] + v45 - _this->f12[22 + v46]);
       *(uint16_t *)(v47 + 2 * n5_2 + 3802) += 7;
       *(uint16_t *)(v47 + 3800) += 7;
       v48 = _this->f12[23];
@@ -4672,7 +4672,7 @@ int32_t __alt_p1_model(Obj0 *_this)
     }
     else
     {
-      v55 = (char *)_this + 16 * (*(uint32_t *)((char *)_this + (- 4 * v54 + 124)) + v53 - *(uint32_t *)((char *)_this + (4 * v54 + 116)));
+      v55 = (char *)_this + 16 * (_this->f12[28 - v54] + v53 - _this->f12[26 + v54]);
       *(uint16_t *)(v55 + 2 * n5_2 + 3802) += 7;
       *(uint16_t *)(v55 + 3800) += 7;
       v56 = _this->f12[27];
@@ -4732,7 +4732,7 @@ int32_t __alt_p1_model(Obj0 *_this)
     }
     else
     {
-      v63 = (char *)_this + 16 * (*(uint32_t *)((char *)_this + (- 4 * v62 + 140)) + v61 - *(uint32_t *)((char *)_this + (4 * v62 + 132)));
+      v63 = (char *)_this + 16 * (_this->f12[32 - v62] + v61 - _this->f12[30 + v62]);
       *(uint16_t *)(v63 + 2 * n5_2 + 3802) += 7;
       *(uint16_t *)(v63 + 3800) += 7;
       v64 = _this->f12[31];
@@ -4792,7 +4792,7 @@ int32_t __alt_p1_model(Obj0 *_this)
     }
     else
     {
-      v71 = (char *)_this + 16 * (*(uint32_t *)((char *)_this + (- 4 * v70 + 156)) + v69 - *(uint32_t *)((char *)_this + (4 * v70 + 148)));
+      v71 = (char *)_this + 16 * (_this->f12[36 - v70] + v69 - _this->f12[34 + v70]);
       *(uint16_t *)(v71 + 2 * n5_2 + 3802) += 7;
       *(uint16_t *)(v71 + 3800) += 7;
       v72 = _this->f12[35];
@@ -4851,7 +4851,7 @@ int32_t __alt_p1_model(Obj0 *_this)
     }
     else
     {
-      v79 = (char *)_this + 16 * (*(uint32_t *)((char *)_this + (- 4 * v78 + 172)) + v77 - *(uint32_t *)((char *)_this + (4 * v78 + 164)));
+      v79 = (char *)_this + 16 * (_this->f12[40 - v78] + v77 - _this->f12[38 + v78]);
       *(uint16_t *)(v79 + 2 * n5_2 + 3802) += 7;
       *(uint16_t *)(v79 + 3800) += 7;
       v80 = _this->f12[39];
