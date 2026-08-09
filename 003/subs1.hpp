@@ -243,13 +243,25 @@ typedef char t_byte_4433CF;
 static t_byte_4433CF& __byte_4433CF = *(t_byte_4433CF*)(bmf_bss + 0x4433CF - 0x443380);
 typedef int32_t t_n191_0;
 static t_n191_0& __n191_0 = *(t_n191_0*)(bmf_bss + 0x4433D4 - 0x443380);
-typedef int32_t t_dword_445660[32];
-static t_dword_445660& model_geometry = *(t_dword_445660*)(bmf_bss + 0x445660 - 0x443380);
+static int32_t model_geometry[32];   // was 0x445660 in bmf_bss
 static char __byte_445700;   // was 0x445700 in bmf_bss
 static int32_t __n8_1;   // was 0x44570C in bmf_bss
 static int32_t __n8_0;   // was 0x445710 in bmf_bss
-typedef char t_byte_44571E;
-static t_byte_44571E& __byte_44571E = *(t_byte_44571E*)(bmf_bss + 0x44571E - 0x443380);
+// The level geometry, and it is a table: eight 4-byte records with three
+// bytes used in each.  `rc_begin_encode` writes records 2..7 out longhand, one
+// level a line -- `level_geom[7].first = v6; level_geom[7].tbl_base = v6 - 7;
+// memset(model_geometry + v6, 7, 64);` -- and the readers index it,
+// `level_geom[n].first`, which is why the three record-0 globals existed
+// twice: once as record 0 and once as the base the subscript walked from.
+// Record 1 has no name because nothing read it on its own.
+// Was 0x445714..0x445733 in bmf_bss.
+struct LevelGeom {
+  uint8_t first;      // the level's first symbol; readers compute `sym - first`
+  uint8_t half;       // half the level's symbol count, and the count doubles
+  uint8_t tbl_base;   // `first - level`, an index into a table of 16-bit words
+  uint8_t _pad;
+};
+static LevelGeom level_geom[8];
 // Four running bias terms, one per context sum.  `alt_model_p2_encode` zeroes
 // them at the start of a plane, decays them `>>= 3` each row and re-accumulates
 // them; `alt_p2_context` adds one apiece into the four neighbourhood sums it
@@ -349,46 +361,6 @@ static t_byte_445440& __byte_445440 = *(t_byte_445440*)(bmf_bss + 0x445440 - 0x4
 // 254-entry strips.  An int32_t in the data segment holding an address, so a
 // pointer here, and out of the blob.  BMF.exe had it at 0x00445708.
 static uint16_t *model_tables;
-typedef uint8_t t_byte_445714[0x10000];
-static t_byte_445714& __byte_445714 = *(t_byte_445714*)(bmf_bss + 0x445714 - 0x443380);
-typedef uint8_t t_byte_445715[0x10000];
-static t_byte_445715& __byte_445715 = *(t_byte_445715*)(bmf_bss + 0x445715 - 0x443380);
-typedef uint8_t t_byte_445716[0x10000];
-static t_byte_445716& __byte_445716 = *(t_byte_445716*)(bmf_bss + 0x445716 - 0x443380);
-typedef char t_n2_0;
-static t_n2_0& __n2_0 = *(t_n2_0*)(bmf_bss + 0x44571C - 0x443380);
-typedef char t_byte_44571D;
-static t_byte_44571D& __byte_44571D = *(t_byte_44571D*)(bmf_bss + 0x44571D - 0x443380);
-typedef char t_n4;
-static t_n4& __n4 = *(t_n4*)(bmf_bss + 0x445720 - 0x443380);
-typedef char t_n2_1;
-static t_n2_1& __n2_1 = *(t_n2_1*)(bmf_bss + 0x445721 - 0x443380);
-typedef char t_byte_445722;
-static t_byte_445722& __byte_445722 = *(t_byte_445722*)(bmf_bss + 0x445722 - 0x443380);
-typedef char t_byte_445724;
-static t_byte_445724& __byte_445724 = *(t_byte_445724*)(bmf_bss + 0x445724 - 0x443380);
-typedef char t_n4_0;
-static t_n4_0& __n4_0 = *(t_n4_0*)(bmf_bss + 0x445725 - 0x443380);
-typedef char t_byte_445726;
-static t_byte_445726& __byte_445726 = *(t_byte_445726*)(bmf_bss + 0x445726 - 0x443380);
-typedef char t_byte_445728;
-static t_byte_445728& __byte_445728 = *(t_byte_445728*)(bmf_bss + 0x445728 - 0x443380);
-typedef char t_n8_2;
-static t_n8_2& __n8_2 = *(t_n8_2*)(bmf_bss + 0x445729 - 0x443380);
-typedef char t_byte_44572A;
-static t_byte_44572A& __byte_44572A = *(t_byte_44572A*)(bmf_bss + 0x44572A - 0x443380);
-typedef char t_byte_44572C;
-static t_byte_44572C& __byte_44572C = *(t_byte_44572C*)(bmf_bss + 0x44572C - 0x443380);
-typedef char t_n16;
-static t_n16& __n16 = *(t_n16*)(bmf_bss + 0x44572D - 0x443380);
-typedef char t_byte_44572E;
-static t_byte_44572E& __byte_44572E = *(t_byte_44572E*)(bmf_bss + 0x44572E - 0x443380);
-typedef char t_byte_445730;
-static t_byte_445730& __byte_445730 = *(t_byte_445730*)(bmf_bss + 0x445730 - 0x443380);
-typedef char t_n32;
-static t_n32& __n32 = *(t_n32*)(bmf_bss + 0x445731 - 0x443380);
-typedef uint8_t t_byte_445732[10];
-static t_byte_445732& __byte_445732 = *(t_byte_445732*)(bmf_bss + 0x445732 - 0x443380);
 // A five-entry table, and the extent is measured rather than assumed: the one
 // site that subscripts it -- `*(uint16_t *)f56[5] = tbl44573C[n4]`, with `n4`
 // out of `ModelBlock::f32` -- steps four bytes, and the four globals after
@@ -3113,14 +3085,14 @@ int32_t __encode_symbol_tree(uint16_t *_this, int32_t n2) {
   if ( n2 >= 2 )
   {
     n0x7F800000_5 = n0x7F800000_6;
-    v66 = (uint8_t)__byte_445715[4 * n4_1];
-    v56 = n2 - (uint8_t)__byte_445714[4 * n4_1];
+    v66 = (uint8_t)level_geom[n4_1].half;
+    v56 = n2 - (uint8_t)level_geom[n4_1].first;
     v59 = 0;
     n0x800000_3 = n0x800000_6;
     this_2 = _this;
     for ( i = 1; ; i *= 2 )
     {
-      v25 = (char *)&this_2[2 * (uint8_t)__byte_445716[4 * n4_1] + 8];
+      v25 = (char *)&this_2[2 * (uint8_t)level_geom[n4_1].tbl_base + 8];
       v26 = (uint16_t *)(v25 + 4 * (i + v59));
       v65 = v26[1];
       v27 = (v66 & v56) != 0;
@@ -3290,12 +3262,12 @@ int32_t __decode_symbol_tree(uint16_t *_this)
     return n2;
   else
   {
-    v38 = (uint8_t)__byte_445715[4 * n2];
+    v38 = (uint8_t)level_geom[n2].half;
     v40 = 0;
     v43 = 1;
     do
     {
-      v17 = _this + 2 * (uint8_t)__byte_445716[4 * n2] + 2 * v43 + 2 * v40 + 8;
+      v17 = _this + 2 * (uint8_t)level_geom[n2].tbl_base + 2 * v43 + 2 * v40 + 8;
       v18 = *v17;
       v44 = v17[1];
       v23 = rc.decode_bit(v18, v44);
@@ -3313,7 +3285,7 @@ int32_t __decode_symbol_tree(uint16_t *_this)
       v40 = v25;
     }
     while ( v38 );
-    v26 = (uint8_t)__byte_445714[4 * n2];
+    v26 = (uint8_t)level_geom[n2].first;
     return v25 + v26;
   }
 }
@@ -4163,9 +4135,9 @@ int32_t __update_binary_pair(Obj20 *_this, int32_t symbol)
     _this->f0 = n0x8000;
     if ( symbol >= 2 )
     {
-      n0x8000 = (uint8_t)__byte_445715[4 * v3];
-      v11 = symbol - (uint8_t)__byte_445714[4 * v3];
-      v5 = (int32_t)((uint16_t *)_this + 2 * (uint8_t)__byte_445716[4 * v3] + 8);
+      n0x8000 = (uint8_t)level_geom[v3].half;
+      v11 = symbol - (uint8_t)level_geom[v3].first;
+      v5 = (int32_t)((uint16_t *)_this + 2 * (uint8_t)level_geom[v3].tbl_base + 8);
       v6 = 0;
       v12 = (char *)v5;
       v7 = 1;
@@ -5049,33 +5021,33 @@ char *__rc_begin_encode()
       __n8_1 = 16;
       __n8_0 = 64;
     }
-    __n2_0 = 2;
+    level_geom[2].first = 2;
     model_geometry[0] = 0x02020100;
-    __byte_44571E = 0;
-    __byte_44571D = 1;
-    __n2_1 = 2;
-    __n4 = 4;
-    __byte_445722 = 1;
+    level_geom[2].tbl_base = 0;
+    level_geom[2].half = 1;
+    level_geom[3].half = 2;
+    level_geom[3].first = 4;
+    level_geom[3].tbl_base = 1;
     model_geometry[1] = 0x03030303;
-    __n4_0 = 4;
-    v2 = 2 * (uint8_t)__n2_1 + 4;
-    __byte_445724 = 2 * __n2_1 + 4;
-    __byte_445726 = 2 * __n2_1;
+    level_geom[4].half = 4;
+    v2 = 2 * (uint8_t)level_geom[3].half + 4;
+    level_geom[4].first = 2 * level_geom[3].half + 4;
+    level_geom[4].tbl_base = 2 * level_geom[3].half;
     *(uint64_t *)((char *)model_geometry + v2) = 0x404040404040404LL;
-    __n8_2 = 8;
-    v3 = v2 + 2 * (uint8_t)__n4_0;
-    __byte_445728 = v3;
-    __byte_44572A = v3 - 5;
+    level_geom[5].half = 8;
+    v3 = v2 + 2 * (uint8_t)level_geom[4].half;
+    level_geom[5].first = v3;
+    level_geom[5].tbl_base = v3 - 5;
     memset((char *)model_geometry + v3, 0x05, 16);
-    __n16 = 16;
-    v4 = v3 + 2 * (uint8_t)__n8_2;
-    __byte_44572C = (char)v4;
-    __byte_44572E = (uint8_t)v4 - 6;
+    level_geom[6].half = 16;
+    v4 = v3 + 2 * (uint8_t)level_geom[5].half;
+    level_geom[6].first = (char)v4;
+    level_geom[6].tbl_base = (uint8_t)v4 - 6;
     memset((char *)model_geometry + v4, 0x06, 32);
-    __n32 = 32;
-    v6 = v4 + 2 * (uint8_t)__n16;
-    __byte_445730 = (char)v6;
-    __byte_445732[0] = (uint8_t)v6 - 7;
+    level_geom[7].half = 32;
+    v6 = v4 + 2 * (uint8_t)level_geom[6].half;
+    level_geom[7].first = (char)v6;
+    level_geom[7].tbl_base = (uint8_t)v6 - 7;
     // 64 bytes of 7, after 16 of 5 and 32 of 6 -- one level per line.  MSVC
     // inlined this third one because the length crossed its threshold, which
     // is why it arrived as a scalar head, three aligned stores and a tail.
@@ -6527,33 +6499,33 @@ int32_t __rc_begin_decode(char ArgList_1)
       __n8_1 = 16;
       __n8_0 = 64;
     }
-    __n2_0 = 2;
+    level_geom[2].first = 2;
     model_geometry[0] = 0x02020100;
-    __byte_44571E = 0;
-    __byte_44571D = 1;
-    __n2_1 = 2;
-    __n4 = 4;
-    __byte_445722 = 1;
+    level_geom[2].tbl_base = 0;
+    level_geom[2].half = 1;
+    level_geom[3].half = 2;
+    level_geom[3].first = 4;
+    level_geom[3].tbl_base = 1;
     model_geometry[1] = 0x03030303;
-    __n4_0 = 4;
-    v7 = 2 * (uint8_t)__n2_1 + 4;
-    __byte_445724 = 2 * __n2_1 + 4;
-    __byte_445726 = 2 * __n2_1;
+    level_geom[4].half = 4;
+    v7 = 2 * (uint8_t)level_geom[3].half + 4;
+    level_geom[4].first = 2 * level_geom[3].half + 4;
+    level_geom[4].tbl_base = 2 * level_geom[3].half;
     *(uint64_t *)((char *)model_geometry + v7) = 0x404040404040404LL;
-    __n8_2 = 8;
-    v8 = v7 + 2 * (uint8_t)__n4_0;
-    __byte_445728 = v8;
-    __byte_44572A = v8 - 5;
+    level_geom[5].half = 8;
+    v8 = v7 + 2 * (uint8_t)level_geom[4].half;
+    level_geom[5].first = v8;
+    level_geom[5].tbl_base = v8 - 5;
     memset((char *)model_geometry + v8, 0x05, 16);
-    __n16 = 16;
-    v9 = v8 + 2 * (uint8_t)__n8_2;
-    __byte_44572C = (char)v9;
-    __byte_44572E = (uint8_t)v9 - 6;
+    level_geom[6].half = 16;
+    v9 = v8 + 2 * (uint8_t)level_geom[5].half;
+    level_geom[6].first = (char)v9;
+    level_geom[6].tbl_base = (uint8_t)v9 - 6;
     memset((char *)model_geometry + v9, 0x06, 32);
-    __n32 = 32;
-    v11 = v9 + 2 * (uint8_t)__n16;
-    __byte_445730 = (char)v11;
-    __byte_445732[0] = (uint8_t)v11 - 7;
+    level_geom[7].half = 32;
+    v11 = v9 + 2 * (uint8_t)level_geom[6].half;
+    level_geom[7].first = (char)v11;
+    level_geom[7].tbl_base = (uint8_t)v11 - 7;
     memset((char *)model_geometry + v11, 0x07, 64);
     n256 = (uint16_t *)bmf_new(0x7F000u);
     if ( n256 )
