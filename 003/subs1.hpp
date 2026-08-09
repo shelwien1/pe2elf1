@@ -5995,7 +5995,7 @@ int32_t __encode_context_bit(uint16_t *_this, uint16_t *a2, int32_t n15)
 {
   ;
   int32_t v3, v4, n0x4000, result, v18, v19, n0x4000_1, v31, v33;
-  uint32_t __encode_context_bit_n0x88, n0x88_1, v30, v32, v34;
+  uint32_t tot, n0x88_1, v30, v32, v34;
   v3 = *_this;
   if ( *_this )
   {
@@ -6013,10 +6013,10 @@ int32_t __encode_context_bit(uint16_t *_this, uint16_t *a2, int32_t n15)
       v3 = *_this;
       v4 = *(_this + 1);
     }
-    __encode_context_bit_n0x88 = v3 + v4;
+    tot = v3 + v4;
     rc.encode_bit(v3, v4, n15);
     n0x4000 = *(_this + 2);
-    if ( __encode_context_bit_n0x88 > n0x4000 )
+    if ( tot > n0x4000 )
     {
       v30 = *(_this + 1);
       *_this -= *_this >> 1;
@@ -6026,7 +6026,7 @@ int32_t __encode_context_bit(uint16_t *_this, uint16_t *a2, int32_t n15)
     }
     result = *(_this + n15) + 8;
     *(_this + n15) = result;
-    a2[n15] += (uint32_t)__encode_context_bit_n0x88 < 0x88;
+    a2[n15] += (uint32_t)tot < 0x88;
     return result;
   }
   v18 = *a2;
@@ -6052,7 +6052,7 @@ int32_t __decode_context_bit(uint16_t *_this, uint16_t *a2)
 {
   ;
   int32_t v2, v3, result, n0x4000, v13, v14, n0x4000_1, v24, v26;
-  uint32_t __decode_context_bit_n0x88, n0x88_1, v23, v25, v27;
+  uint32_t tot, n0x88_1, v23, v25, v27;
   v2 = *_this;
   if ( *_this )
   {
@@ -6070,10 +6070,10 @@ int32_t __decode_context_bit(uint16_t *_this, uint16_t *a2)
       v2 = *_this;
       v3 = *(_this + 1);
     }
-    __decode_context_bit_n0x88 = v2 + v3;
+    tot = v2 + v3;
     result = rc.decode_bit(v2, v3);
     n0x4000 = *(_this + 2);
-    if ( __decode_context_bit_n0x88 > n0x4000 )
+    if ( tot > n0x4000 )
     {
       v23 = *(_this + 1);
       *_this -= *_this >> 1;
@@ -6082,7 +6082,7 @@ int32_t __decode_context_bit(uint16_t *_this, uint16_t *a2)
         *(_this + 2) = n0x4000 + 64;
     }
     *(_this + result) += 8;
-    a2[result] += (uint32_t)__decode_context_bit_n0x88 < 0x88;
+    a2[result] += (uint32_t)tot < 0x88;
   }
   else
   {
@@ -6621,8 +6621,8 @@ BMF_SSE int32_t __alt_p1_encode_symbol(uint16_t *a1, int32_t n5, int32_t a3, int
   int16_t v4;
   int32_t n5a_1, n0x2000_2, result, n256, n5a_2;
   uint16_t *v12, *v27, *v30, v31, *v35, *v37;
-  uint32_t __alt_p1_encode_symbol_n0x2000, n5a_3, n5a_4,
-           __alt_p1_encode_symbol_n0x2000_1, n0x2000_3;
+  uint32_t tot, n5a_3, n5a_4,
+           tot_1, n0x2000_3;
   v4 = *a1;
   n5a_1 = 6 - (n5a & 1);
   if ( n5a < 5 )
@@ -6630,7 +6630,7 @@ BMF_SSE int32_t __alt_p1_encode_symbol(uint16_t *a1, int32_t n5, int32_t a3, int
   n5a_2 = n5a_1;
   v37 = a1 + 1;
   v35 = a1 + 1;
-  __alt_p1_encode_symbol_n0x2000 = v4 & 0x7FFF;
+  tot = v4 & 0x7FFF;
   if ( n5a_1 )
   {
     if ( n5a_1 < 4 )
@@ -6655,7 +6655,7 @@ BMF_SSE int32_t __alt_p1_encode_symbol(uint16_t *a1, int32_t n5, int32_t a3, int
     }
     if ( n5a_3 < n5a_2 )
     {
-      __alt_p1_encode_symbol_n0x2000_1 = __alt_p1_encode_symbol_n0x2000;
+      tot_1 = tot;
       do
       {
         n0x2000_2 += v37[n5a_3];
@@ -6663,7 +6663,7 @@ BMF_SSE int32_t __alt_p1_encode_symbol(uint16_t *a1, int32_t n5, int32_t a3, int
       }
       while ( n5a_3 < n5a_2 );
       v35 = v12;
-      __alt_p1_encode_symbol_n0x2000 = __alt_p1_encode_symbol_n0x2000_1;
+      tot = tot_1;
     }
   }
   else
@@ -6671,8 +6671,8 @@ BMF_SSE int32_t __alt_p1_encode_symbol(uint16_t *a1, int32_t n5, int32_t a3, int
     n0x2000_2 = 0;
   }
   n0x2000_3 = n0x2000_2 + *v35;
-  rc.encode(n0x2000_2, n0x2000_3, __alt_p1_encode_symbol_n0x2000);
-  if ( __alt_p1_encode_symbol_n0x2000 > 0x2000 )
+  rc.encode(n0x2000_2, n0x2000_3, tot);
+  if ( tot > 0x2000 )
   {
     *a1 = 0x8000;
     v27 = a1 + 7;
@@ -6830,17 +6830,17 @@ int32_t __alt_p1_decode_symbol(uint16_t *a1, int32_t a2, int32_t a3)
   int16_t v16, v23;
   int32_t n5, n256;
   uint16_t *v11, *v19, *v22;
-  uint32_t __alt_p1_decode_symbol_n0x2000, __alt_p1_decode_symbol_n0x2000_1,
+  uint32_t tot, sym,
            n0x2000_2, v24;
-  __alt_p1_decode_symbol_n0x2000 = *a1 & 0x7FFF;
-  __alt_p1_decode_symbol_n0x2000_1 = rc.get_freq(__alt_p1_decode_symbol_n0x2000);
+  tot = *a1 & 0x7FFF;
+  sym = rc.get_freq(tot);
   v11 = a1 + 1;
   n0x2000_2 = (uint16_t)a1[1];
   v24 = (uint32_t)(a1 + 1);
-  while ( n0x2000_2 <= __alt_p1_decode_symbol_n0x2000_1 )
+  while ( n0x2000_2 <= sym )
     n0x2000_2 += (uint16_t)*++v11;
-  rc.decode(n0x2000_2 - (uint16_t)*v11, n0x2000_2, __alt_p1_decode_symbol_n0x2000);
-  if ( __alt_p1_decode_symbol_n0x2000 > 0x2000 )
+  rc.decode(n0x2000_2 - (uint16_t)*v11, n0x2000_2, tot);
+  if ( tot > 0x2000 )
   {
     *a1 = 0x8000;
     v19 = a1 + 7;
@@ -6898,10 +6898,10 @@ int32_t __alt_p2_encode_symbol(Obj7 *_this, char *a2, int32_t a3)
   int32_t v3, n32;
   Obj113 *v25;
   uint16_t *v5;
-  uint32_t __alt_p2_encode_symbol_n0x2000, __alt_p2_encode_symbol_n0x2000_1,
+  uint32_t tot, tot_1,
            v21, v22, v23;
   v3 = *((uint16_t *)_this + 2) + *((uint16_t *)_this + 1);
-  __alt_p2_encode_symbol_n0x2000 = v3 + *((uint16_t *)_this + 3);
+  tot = v3 + *((uint16_t *)_this + 3);
   if ( a3 )
   {
     if ( (a3 & 1) != 0 )
@@ -6922,8 +6922,8 @@ int32_t __alt_p2_encode_symbol(Obj7 *_this, char *a2, int32_t a3)
     v3 = 0;
     v25 = (Obj113 *)((uint16_t *)_this + 1);
   }
-  __alt_p2_encode_symbol_n0x2000_1 = v3 + *v5;
-  rc.encode(v3, __alt_p2_encode_symbol_n0x2000_1, __alt_p2_encode_symbol_n0x2000);
+  tot_1 = v3 + *v5;
+  rc.encode(v3, tot_1, tot);
   v18 = v25->f0;
   if ( v25->f0 > 0x4000u )
   {
@@ -9991,7 +9991,7 @@ BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
   ;
   __m128i si128, *v13;
   char *v11, *v12, ArgList;
-  int32_t __rc_begin_decode_n8, v7, v8, v16, v17, v20;
+  int32_t bits_left, v7, v8, v16, v17, v20;
   uint16_t *n256, *__rc_begin_decode_n256_1;
   uint32_t i;
   uint64_t *v9;
@@ -9999,7 +9999,7 @@ BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
   v1 = out_cursor;
   if ( out_cursor != packer_word )
   {
-    __rc_begin_decode_n8 = ::packer_free_bits - 8;
+    bits_left = ::packer_free_bits - 8;
     if ( ::packer_free_bits - 8 < 0 )
     {
       ::packer_free_bits -= 8;
@@ -10009,11 +10009,11 @@ BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
       do
       {
         --v1;
-        __rc_begin_decode_n8 -= 8;
+        bits_left -= 8;
       }
-      while ( __rc_begin_decode_n8 >= 0 );
+      while ( bits_left >= 0 );
       out_cursor = v1;
-      ::packer_free_bits = __rc_begin_decode_n8;
+      ::packer_free_bits = bits_left;
     }
   }
   if ( plane_alt_model )
@@ -23334,7 +23334,7 @@ BMF_SSE int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &
   bool v38;
   char __compress_image_Buffer_1, *Buffera_5, v12, v13, v15, v17, *Buffera_6,
        v21, *Srca, v36, *Buffera_2, *Buffera_3;
-  int32_t __compress_image_n4_5, v11, v18, n4_6, __compress_image_n8, n4, v27, n8_1,
+  int32_t __compress_image_n4_5, v11, v18, n4_6, bits_left, n4, v27, n8_1,
           __compress_image_n256, n4_1, v40, v41, v43, n4_3, v47, i_1, v50, n4_4, v56;
   BmfImage *p_i_1;
   uint16_t i_2, v53;
@@ -23454,50 +23454,50 @@ LABEL_22:
   __dword_443388 = 0;
   if ( ::plane_count > 0 )
   {
-    __compress_image_n8 = ::packer_free_bits;
+    bits_left = ::packer_free_bits;
     v66 = v5;
     n4 = 0;
     do
     {
       v25 = (4 * (uint8_t)__byte_44339E[16 * n4]) | (uint8_t)__byte_44339C[16 * n4];
-      if ( __compress_image_n8 < 6 )
+      if ( bits_left < 6 )
       {
-        *(uint32_t *)::packer_word = ::packer_acc | (2 * (v25 << ((31 - __compress_image_n8) & 31)));
+        *(uint32_t *)::packer_word = ::packer_acc | (2 * (v25 << ((31 - bits_left) & 31)));
         ::packer_word = (uint32_t *)out_cursor;
         out_cursor += 4;
-        __compress_image_n8 = ::packer_free_bits + 26;
+        bits_left = ::packer_free_bits + 26;
         ::packer_acc = v25 >> (::packer_free_bits & 31);
       }
       else
       {
-        ::packer_acc |= v25 << (-(char)__compress_image_n8 & 31);
-        __compress_image_n8 = ::packer_free_bits - 6;
+        ::packer_acc |= v25 << (-(char)bits_left & 31);
+        bits_left = ::packer_free_bits - 6;
       }
-      ::packer_free_bits = __compress_image_n8;
+      ::packer_free_bits = bits_left;
       if ( (__byte_44339E[16 * n4] & 8) != 0 )
       {
         v26 = (uint8_t)__byte_44339F[16 * n4];
-        if ( __compress_image_n8 < 8 )
+        if ( bits_left < 8 )
         {
-          *(uint32_t *)::packer_word = ::packer_acc | (2 * (v26 << ((31 - __compress_image_n8) & 31)));
+          *(uint32_t *)::packer_word = ::packer_acc | (2 * (v26 << ((31 - bits_left) & 31)));
           ::packer_word = (uint32_t *)out_cursor;
           out_cursor += 4;
-          __compress_image_n8 = ::packer_free_bits + 24;
+          bits_left = ::packer_free_bits + 24;
           ::packer_acc = v26 >> (::packer_free_bits & 31);
         }
         else
         {
-          v27 = v26 << (-(char)__compress_image_n8 & 31);
-          __compress_image_n8 -= 8;
+          v27 = v26 << (-(char)bits_left & 31);
+          bits_left -= 8;
           ::packer_acc |= v27;
         }
-        ::packer_free_bits = __compress_image_n8;
+        ::packer_free_bits = bits_left;
         if ( (uint8_t)__byte_44339C[16 * n4] > 1u )
         {
           v28 = __dword_4433A0[4 * n4] + 64;
-          if ( __compress_image_n8 < 8 )
+          if ( bits_left < 8 )
           {
-            *(uint32_t *)::packer_word = ::packer_acc | (2 * (v28 << ((31 - __compress_image_n8) & 31)));
+            *(uint32_t *)::packer_word = ::packer_acc | (2 * (v28 << ((31 - bits_left) & 31)));
             ::packer_word = (uint32_t *)out_cursor;
             out_cursor += 4;
             n8_1 = ::packer_free_bits + 24;
@@ -23505,7 +23505,7 @@ LABEL_22:
           }
           else
           {
-            ::packer_acc |= v28 << (-(char)__compress_image_n8 & 31);
+            ::packer_acc |= v28 << (-(char)bits_left & 31);
             n8_1 = ::packer_free_bits - 8;
           }
           ::packer_free_bits = n8_1;
@@ -23515,33 +23515,33 @@ LABEL_22:
             *(uint32_t *)::packer_word = ::packer_acc | (2 * (v30 << ((31 - n8_1) & 31)));
             ::packer_word = (uint32_t *)out_cursor;
             out_cursor += 4;
-            __compress_image_n8 = ::packer_free_bits + 24;
+            bits_left = ::packer_free_bits + 24;
             ::packer_acc = v30 >> (::packer_free_bits & 31);
           }
           else
           {
             v31 = v30 << (-(char)n8_1 & 31);
-            __compress_image_n8 = n8_1 - 8;
+            bits_left = n8_1 - 8;
             ::packer_acc |= v31;
           }
-          ::packer_free_bits = __compress_image_n8;
+          ::packer_free_bits = bits_left;
           if ( (uint8_t)__byte_44339C[16 * n4] > 2u )
           {
             v32 = __dword_4433A8[4 * n4] + 64;
-            if ( __compress_image_n8 < 8 )
+            if ( bits_left < 8 )
             {
-              *(uint32_t *)::packer_word = ::packer_acc | (2 * (v32 << ((31 - __compress_image_n8) & 31)));
+              *(uint32_t *)::packer_word = ::packer_acc | (2 * (v32 << ((31 - bits_left) & 31)));
               ::packer_word = (uint32_t *)out_cursor;
               out_cursor += 4;
               __compress_image_n256 = v32 >> (::packer_free_bits & 31);
-              __compress_image_n8 = ::packer_free_bits + 24;
+              bits_left = ::packer_free_bits + 24;
               ::packer_free_bits += 24;
               ::packer_acc = __compress_image_n256;
             }
             else
             {
-              ::packer_acc |= v32 << (-(char)__compress_image_n8 & 31);
-              __compress_image_n8 = ::packer_free_bits - 8;
+              ::packer_acc |= v32 << (-(char)bits_left & 31);
+              bits_left = ::packer_free_bits - 8;
               ::packer_free_bits -= 8;
             }
           }
