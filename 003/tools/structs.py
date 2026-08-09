@@ -680,6 +680,24 @@ def main():
         member[off] = (nm, best)
         at = off + w
 
+    named = [o for o in sorted(member) if member[o]]
+    if len(named) >= 4:
+        tys = {member[o][1] for o in named}
+        steps = {named[i + 1] - named[i] for i in range(len(named) - 1)}
+        if len(tys) == 1 and len(steps) == 1:
+            # One type, evenly spaced, with a gap between each: an array with a
+            # stride, not a record.  Naming those `f2 f10 f18` hides the stride,
+            # which is the only thing about the object worth seeing -- and the
+            # same object is elsewhere subscripted with a computed index, which
+            # the struct form cannot spell at all.  tools/unstruct.py converted
+            # eleven of these back after they had been applied; this is so
+            # there is no twelfth.
+            with open(SKIP, 'a') as f:
+                f.write(signature(uf, key) + '\n')
+            print('%s: declined -- %d x %s at a stride of %d is an array'
+                  % (tag, len(named), list(tys)[0], list(steps)[0]))
+            sys.exit(3)
+
     if not any(member.values()):
         # Every offset landed inside the one before it.  That happens when the
         # first access at +0 is four bytes wide and the rest read +1, +2 and +3
