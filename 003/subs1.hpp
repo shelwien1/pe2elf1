@@ -6924,55 +6924,52 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
   // REFACTORING.md section 2.3 lists as unexercised.  testfiles/altp1.bmp
   // reaches it now.
   struct alignas(16) {   // 116 bytes, the frame Hex-Rays could not name
-      Obj0     *v83;
-      void     *v84;
-      int32_t   v85;
+      uint8_t   _gap0[4];   // was Obj0     * v83
+      uint8_t   _gap1[4];   // was void     * v84
+      uint8_t   _gap2[4];   // was int32_t v85
       uint32_t  v86;
       int32_t   v88;
-      char     *Src_1;
-      int32_t   v91;
-      int32_t   v92;
-      void     *Block;
-      Obj0     *v94;
-      Obj25    *v95;
-      Obj25    *v96;
-      int32_t   v97;
-      int32_t   v98;
-      uint32_t  i_1;
-      int32_t   ArgList_1;
-      int32_t   v101;
-      uint32_t  i_4;
-      int32_t   v103;
-      int32_t   v104;
-      int32_t   v105;
+      uint8_t   _gap3[4];   // was char     * Src_1
+      uint8_t   _gap4[4];   // was int32_t v91
+      uint8_t   _gap5[4];   // was int32_t v92
+      uint8_t   _gap6[16];   // was void * Block_plane
+      uint8_t   _gap7[4];   // was int32_t v97
+      uint8_t   _gap8[4];   // was int32_t v98
+      uint8_t   _gap9[4];   // was uint32_t i_1
+      uint8_t   _gap10[4];   // was int32_t ArgList_1
+      uint8_t   _gap11[4];   // was int32_t v101
+      uint8_t   _gap12[4];   // was uint32_t i_4
+      uint8_t   _gap13[4];   // was int32_t v103
+      uint8_t   _gap14[4];   // was int32_t v104
+      uint8_t   _gap15[4];   // was int32_t v105
       uint8_t   _pad0[44];   // 32 of frame the aliases do not name, then
   } __frame;                 // 12 more because alignas(16) rounds 116 up
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 128, "frame layout moved");
   static_assert(sizeof(void *) != 4 || __builtin_offsetof(__typeof__(__frame), _pad0) == 84,
                 "the named part of the frame moved");
-  Obj0 *&v83 = __frame.v83;
-  void *&v84 = __frame.v84;
-  int32_t &v85 = __frame.v85;
+  Obj0 *v83;
+  void *v84;
+  int32_t v85;
   uint32_t &v86 = __frame.v86;
   uint32_t &v87 = __frame.v86;
   int32_t &v88 = __frame.v88;
   int32_t &v89 = __frame.v88;
-  char *&Src_1 = __frame.Src_1;
-  int32_t &v91 = __frame.v91;
-  int32_t &v92 = __frame.v92;
-  void *&Block = __frame.Block;
-  Obj0 *&v94 = __frame.v94;
-  Obj25 *&v95 = __frame.v95;
-  Obj25 *&v96 = __frame.v96;
-  int32_t &v97 = __frame.v97;
-  int32_t &v98 = __frame.v98;
-  uint32_t &i_1 = __frame.i_1;
-  int32_t &ArgList_1 = __frame.ArgList_1;
-  int32_t &v101 = __frame.v101;
-  uint32_t &i_4 = __frame.i_4;
-  int32_t &v103 = __frame.v103;
-  int32_t &v104 = __frame.v104;
-  int32_t &v105 = __frame.v105;
+  char *Src_1;
+  int32_t v91;
+  int32_t v92;
+  void * Block_plane[4];
+  Obj0 * &v94 = (Obj0 * &)Block_plane[1];
+  Obj25 * &v95 = (Obj25 * &)Block_plane[2];
+  Obj25 * &v96 = (Obj25 * &)Block_plane[3];
+  int32_t v97;
+  int32_t v98;
+  uint32_t i_1;
+  int32_t ArgList_1;
+  int32_t v101;
+  uint32_t i_4;
+  int32_t v103;
+  int32_t v104;
+  int32_t v105;
   ;
   Obj0 *v59;
   uintptr_t v61;
@@ -7006,7 +7003,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
         v7 = __fwd_alt_model_p1_decode_alt_p1_alloc(v6, i_2, v3, n4);
       else
         v7 = nullptr;
-      *(&Block + n4++) = v7;
+      Block_plane[n4++] = v7;
     }
     while ( n4 < plane_count );
   }
@@ -7044,7 +7041,9 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
         do
         {
           ++n4_2;
-          v24 = (Obj1 *)*(&v92 + n4_2);
+          // `&v92 + n` is `Block_plane[n - 1]`: v92 is the member
+          // before the array, and this loop pre-increments from 0.
+          v24 = (Obj1 *)Block_plane[n4_2 - 1];
           **(uint16_t **)&v24->cur[0] = *(uint16_t *)(v24->cur[0] - 2);
           *(uint16_t *)(v24->cur[0] + 2) = *(uint16_t *)(v24->cur[0] - 4);
           *(uint16_t *)(v24->cur[0] + 4) = *(uint16_t *)(v24->cur[0] - 6);
@@ -7131,8 +7130,8 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
         v89 = v3;
         do
         {
-          v51 = (uint32_t *)Block;
-          __fwd_alt_model_p1_decode_alt_p1_context((uint8_t **)Block, nullptr, 0);
+          v51 = (uint32_t *)Block_plane[0];
+          __fwd_alt_model_p1_decode_alt_p1_context((uint8_t **)Block_plane[0], nullptr, 0);
           v53 = __fwd_alt_model_p1_decode_alt_p1_decode_symbol(&v51[4 * v51[3] + 950], v52, v51[4]);
           v54 = v51[2];
           v55 = (uint8_t *)v51[49];
@@ -7159,7 +7158,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           v51[53] += 2;
           v59 = (Obj0 *)v94;
           *(uint8_t *)((uint8_t)plane_desc[1].b1 + Src) = v58;
-          __fwd_alt_model_p1_decode_alt_p1_context((uint8_t **)v59, Block, 0);
+          __fwd_alt_model_p1_decode_alt_p1_context((uint8_t **)v59, Block_plane[0], 0);
           v61 = __fwd_alt_model_p1_decode_alt_p1_decode_symbol((uint16_t *)((char *)v59 + 16 * v59->f12[0] + 3800), v60, v59->f12[1]);
           v62 = *(uint32_t *)&v59->f8;
           v63 = *(uint8_t **)&v59->f12[46];
@@ -7186,7 +7185,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           if ( v101 )
             v104 += v97 + *(uint8_t *)((uint8_t)plane_desc[1].b1 + Src);
           v66 = (Obj25 *)(v95);
-          v84 = Block;
+          v84 = Block_plane[0];
           v83 = v94;
           *(uint8_t *)(Src + (uint8_t)plane_desc[2].b1) = v104;
           __fwd_alt_model_p1_decode_alt_p1_context(v66, v83, (int32_t)v84);
@@ -7278,7 +7277,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
     n4_4 = 0;
     do
     {
-      v82 = (void **)*(&Block + n4_4);
+      v82 = (void **)Block_plane[n4_4];
       if ( v82 )
       {
         __fwd_alt_model_p1_decode_alt_p1_free(v82, 1);
@@ -12965,69 +12964,66 @@ static inline int32_t * __fwd_alt_model_p1_encode_alt_p1_alloc(void *a0, int32_t
 int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
 {
   struct alignas(16) {   // 144 bytes, the frame Hex-Rays could not name
-      char v90;
+      uint8_t   _gap0[1];   // was char v90
       uint8_t _pad0[3];
       uint8_t slot4[4];
       uint8_t slot8[4];
-      char *v95;
-      int32_t v96;
-      char v97;
+      uint8_t   _gap1[4];   // was char * v95
+      uint8_t   _gap2[4];   // was int32_t v96
+      uint8_t   _gap3[1];   // was char v97
       uint8_t _pad1[3];
-      int32_t v98;
-      int32_t v99;
-      int32_t n5_8;
-      void *Block;
-      uint8_t **v102;
-      uint8_t **v103;
-      uint8_t **v104;
-      int32_t v105;
-      int32_t v106;
-      uint32_t i_1;
-      int32_t v108;
-      int32_t v109;
-      uint32_t i_4;
-      int32_t v111;
-      int32_t v112;
-      int32_t v113;
-      int32_t v114;
-      int32_t v115;
-      int32_t n5_6;
-      int32_t v117;
-      int32_t v118;
-      int32_t n5;
+      uint8_t   _gap4[4];   // was int32_t v98
+      uint8_t   _gap5[4];   // was int32_t v99
+      uint8_t   _gap6[4];   // was int32_t n5_8
+      uint8_t   _gap7[16];   // was void * Block_plane
+      uint8_t   _gap8[4];   // was int32_t v105
+      uint8_t   _gap9[4];   // was int32_t v106
+      uint8_t   _gap10[4];   // was uint32_t i_1
+      uint8_t   _gap11[4];   // was int32_t v108
+      uint8_t   _gap12[4];   // was int32_t v109
+      uint8_t   _gap13[4];   // was uint32_t i_4
+      uint8_t   _gap14[4];   // was int32_t v111
+      uint8_t   _gap15[4];   // was int32_t v112
+      uint8_t   _gap16[4];   // was int32_t v113
+      uint8_t   _gap17[4];   // was int32_t v114
+      uint8_t   _gap18[4];   // was int32_t v115
+      uint8_t   _gap19[4];   // was int32_t n5_6
+      uint8_t   _gap20[4];   // was int32_t v117
+      uint8_t   _gap21[4];   // was int32_t v118
+      uint8_t   _gap22[4];   // was int32_t n5
       uint8_t _pad2[32];
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 144, "frame layout moved");
-  char &v90 = __frame.v90;
+  char v90;
   uint32_t &v91 = *(uint32_t *)((char *)__frame.slot4);
   uint32_t &v92 = *(uint32_t *)((char *)__frame.slot4);
   int32_t &v93 = *(int32_t *)((char *)__frame.slot8);
   int32_t &v94 = *(int32_t *)((char *)__frame.slot8);
-  char *&v95 = __frame.v95;
-  int32_t &v96 = __frame.v96;
-  char &v97 = __frame.v97;
-  int32_t &v98 = __frame.v98;
-  int32_t &v99 = __frame.v99;
-  int32_t &n5_8 = __frame.n5_8;
-  void *&Block = __frame.Block;
-  Obj25 *&v102 = (Obj25 *&)__frame.v102;
-  Obj25 *&v103 = (Obj25 *&)__frame.v103;
-  Obj25 *&v104 = (Obj25 *&)__frame.v104;
-  int32_t &v105 = __frame.v105;
-  int32_t &v106 = __frame.v106;
-  uint32_t &i_1 = __frame.i_1;
-  int32_t &v108 = __frame.v108;
-  int32_t &v109 = __frame.v109;
-  uint32_t &i_4 = __frame.i_4;
-  int32_t &v111 = __frame.v111;
-  int32_t &v112 = __frame.v112;
-  int32_t &v113 = __frame.v113;
-  int32_t &v114 = __frame.v114;
-  int32_t &v115 = __frame.v115;
-  int32_t &n5_6 = __frame.n5_6;
-  int32_t &v117 = __frame.v117;
-  int32_t &v118 = __frame.v118;
-  int32_t &n5 = __frame.n5;
+  char *v95;
+  int32_t v96;
+  char v97;
+  int32_t v98;
+  int32_t v99;
+  int32_t n5_8;
+  void * Block_plane[4];
+  Obj25 * &v102 = (Obj25 * &)Block_plane[1];
+  Obj25 * &v103 = (Obj25 * &)Block_plane[2];
+  Obj25 * &v104 = (Obj25 * &)Block_plane[3];
+  int32_t v105;
+  int32_t v106;
+  uint32_t i_1;
+  int32_t v108;
+  int32_t v109;
+  uint32_t i_4;
+  int32_t v111;
+  int32_t v112;
+  int32_t v113;
+  int32_t v114;
+  int32_t v115;
+  int32_t n5_6;
+  int32_t v117;
+  int32_t v118;
+  int32_t n5;
   ;
   uintptr_t n3;   // were int32_t: addresses, masked and tagged
   Obj1 *v23;
@@ -13062,7 +13058,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
         v7 = __fwd_alt_model_p1_encode_alt_p1_alloc(v6, i_2, v3, n4);
       else
         v7 = nullptr;
-      *(&Block + n4++) = v7;
+      Block_plane[n4++] = v7;
     }
     while ( n4 < plane_count );
   }
@@ -13100,7 +13096,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
         do
         {
           ++n4_2;
-          v23 = (Obj1 *)*(&n5_8 + n4_2);
+          v23 = (Obj1 *)Block_plane[n4_2 - 1];
           **(uint16_t **)&v23->cur[0] = *(uint16_t *)(v23->cur[0] - 2);
           *(uint16_t *)(v23->cur[0] + 2) = *(uint16_t *)(v23->cur[0] - 4);
           *(uint16_t *)(v23->cur[0] + 4) = *(uint16_t *)(v23->cur[0] - 6);
@@ -13187,11 +13183,11 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
         v94 = v3;
         do
         {
-          v50 = (uint8_t *)Block;
+          v50 = (uint8_t *)Block_plane[0];
           n5_9 = *(uint8_t *)(a2 + (uint8_t)plane_desc[1].b1);
           v114 = (uint8_t)plane_desc[1].b1;
           n5_6 = n5_9;
-          __fwd_alt_model_p1_encode_alt_p1_context((uint8_t **)Block, nullptr, 0);
+          __fwd_alt_model_p1_encode_alt_p1_context((uint8_t **)Block_plane[0], nullptr, 0);
           n5_7 = n5_6;
           v53 = v50[8];
           v112 = (uint8_t)(n5_6 - v53);
@@ -13235,7 +13231,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
             v60 = v60 - v105 - *(uint8_t *)((uint8_t)plane_desc[1].b1 + a2);
           v61 = (Obj25 *)(v102);
           v118 = v60;
-          __fwd_alt_model_p1_encode_alt_p1_context(v102, Block, 0);
+          __fwd_alt_model_p1_encode_alt_p1_context(v102, Block_plane[0], 0);
           v62 = *((uint8_t *)v61 + 8);
           v63 = (uint8_t)(v118 - v62);
           n5 = *((uint8_t *)v61 + v63 + 984);
@@ -13283,7 +13279,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
                                     * (uint32_t)*(uint8_t *)((uint8_t)plane_desc[2].b1 + a2)
                                     + 40) >> 7));
           v70 = (Obj25 *)(v103);
-          __fwd_alt_model_p1_encode_alt_p1_context(v103, (uint32_t *)v102, (int32_t)Block);
+          __fwd_alt_model_p1_encode_alt_p1_context(v103, (uint32_t *)v102, (int32_t)Block_plane[0]);
           v71 = *((uint8_t *)v70 + 8);
           v115 = (uint8_t)(v69 - v71);
           n5_4 = *((uint8_t *)v70 + v115 + 984);
@@ -13391,7 +13387,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
     n4_4 = 0;
     do
     {
-      v89 = (void **)*(&Block + n4_4);
+      v89 = (void **)Block_plane[n4_4];
       if ( v89 )
       {
         __fwd_alt_model_p1_encode_alt_p1_free(v89, 1);
