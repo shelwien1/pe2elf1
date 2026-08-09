@@ -5273,53 +5273,53 @@ static void bmf_set_denormal_mode()
 
 static inline uint32_t __fwd_alt_p2_alloc_alt_init_tables(void *a0, void *a1) { return __alt_init_tables((Obj43 *)a0, (Obj16 *)a1); }
 
-char *__alt_p2_alloc(char *_this, int32_t i, int32_t n4)
+char *__alt_p2_alloc(Obj11 *_this, int32_t i, int32_t n4)
 {
   ;
   int32_t v7, v8, v9, v13, Size, v17, v18, v20, v21, v22, v23, v24, v26, v27, v28, v29;
   uint32_t j, k, n0x1E60, m_1, m, n5, n0x82, n;
   void *v10;
-  *(uint32_t *)(_this + 278728) = n4;
+  _this->f278728 = n4;
   for ( j = 0; j < 0x14000; ++j )
   {
-    *(uint16_t *)(_this + 8 * j + 284714) = 0;
-    *(uint16_t *)(_this + 8 * j + 284718) = 0;
+    *(uint16_t *)((char *)_this + 8 * j + 284714) = 0;
+    *(uint16_t *)((char *)_this + 8 * j + 284718) = 0;
   }
   for ( k = 0; k < 0x14000; ++k )
   {
-    *(uint8_t *)(_this + 8 * k + 284712) = 5;
-    *(uint8_t *)(_this + 8 * k + 284713) = 2;
-    *(uint8_t *)(_this + 8 * k + 284716) = 5;
-    *(uint8_t *)(_this + 8 * k + 284717) = 2;
+    *(uint8_t *)((char *)_this + 8 * k + 284712) = 5;
+    *(uint8_t *)((char *)_this + 8 * k + 284713) = 2;
+    *(uint8_t *)((char *)_this + 8 * k + 284716) = 5;
+    *(uint8_t *)((char *)_this + 8 * k + 284717) = 2;
   }
   n0x1E60 = 0;
   do
   {
     v7 = 16 * n0x1E60;
-    *(uint16_t *)(_this + v7 + 940074) = 2048;
+    *(uint16_t *)((char *)_this + v7 + 940074) = 2048;
     ++n0x1E60;
-    *(uint16_t *)(_this + v7 + 940076) = 2816;
-    *(uint16_t *)(_this + v7 + 940078) = 2816;
-    *(uint16_t *)(_this + v7 + 940072) = 4096;
-    *(uint16_t *)(_this + v7 + 940082) = 2048;
-    *(uint16_t *)(_this + v7 + 940084) = 2816;
-    *(uint16_t *)(_this + v7 + 940086) = 2816;
-    *(uint16_t *)(_this + v7 + 940080) = 4096;
+    *(uint16_t *)((char *)_this + v7 + 940076) = 2816;
+    *(uint16_t *)((char *)_this + v7 + 940078) = 2816;
+    *(uint16_t *)((char *)_this + v7 + 940072) = 4096;
+    *(uint16_t *)((char *)_this + v7 + 940082) = 2048;
+    *(uint16_t *)((char *)_this + v7 + 940084) = 2816;
+    *(uint16_t *)((char *)_this + v7 + 940086) = 2816;
+    *(uint16_t *)((char *)_this + v7 + 940080) = 4096;
   }
   while ( n0x1E60 < 0x1E60 );
   v8 = 4 * plane_desc[0].w12 + 1;
   v9 = 16 * plane_desc[0].w12;
-  *(uint32_t *)(_this + 278732) = (uint8_t)(plane_desc[(uint8_t)plane_desc[*(uint32_t *)(_this + 278728) + 1].b1 + 1].b2
+  *(uint32_t *)((char *)_this + 278732) = (uint8_t)(plane_desc[(uint8_t)plane_desc[_this->f278728 + 1].b1 + 1].b2
                                                & 8) >> 3;
   deadzone_hi = v8;
   deadzone_lo = -v8;
-  *(uint32_t *)(_this + 278720) = -v9 - 7;
-  *(uint32_t *)(_this + 278724) = v9 + 8;
-  *(char **)(_this + 278660) = (char *)bmf_new(4 * i + 16);
+  *(uint32_t *)((char *)_this + 278720) = -v9 - 7;
+  *(uint32_t *)((char *)_this + 278724) = v9 + 8;
+  *(char * *)((char *)_this + 278660) = (char *)bmf_new(4 * i + 16);
   v10 = bmf_new(4 * i + 16);
-  *(uint32_t *)(_this + 232) = 0x3F800000 /* 1.0f */;
-  *(char **)(_this + 278664) = (char *)v10;
-  *(char **)(_this + 278668) = *(char **)(_this + 278660) + 4 * i + 8;
+  *(uint32_t *)((char *)_this + 232) = 0x3F800000 /* 1.0f */;
+  *(char * *)((char *)_this + 278664) = (char *)v10;
+  *(char * *)((char *)_this + 278668) = *(char * *)((char *)_this + 278660) + 4 * i + 8;
   if ( i > -4 )
   {
     m_1 = (i + 4) / 2;
@@ -5327,10 +5327,10 @@ char *__alt_p2_alloc(char *_this, int32_t i, int32_t n4)
     {
       for ( m = 0; m < m_1; ++m )
       {
-        *(char **)(*(char **)(_this + 278664) + 8 * m) = _this;
-        *(char **)(*(char **)(_this + 278660) + 8 * m) = _this;
-        *(char **)(*(char **)(_this + 278664) + 8 * m + 4) = _this;
-        *(char **)(*(char **)(_this + 278660) + 8 * m + 4) = _this;
+        *(char **)(*(char * *)((char *)_this + 278664) + 8 * m) = (char *)_this;
+        *(char **)(*(char * *)((char *)_this + 278660) + 8 * m) = (char *)_this;
+        *(char **)(*(char * *)((char *)_this + 278664) + 8 * m + 4) = (char *)_this;
+        *(char **)(*(char * *)((char *)_this + 278660) + 8 * m + 4) = (char *)_this;
       }
       v13 = 2 * m + 1;
     }
@@ -5340,31 +5340,31 @@ char *__alt_p2_alloc(char *_this, int32_t i, int32_t n4)
     }
     if ( i + 4 > (uint32_t)(v13 - 1) )
     {
-      *(char **)(*(char **)(_this + 278664) + 4 * v13 - 4) = _this;
-      *(char **)(*(char **)(_this + 278660) + 4 * v13 - 4) = _this;
+      *(char **)(*(char * *)((char *)_this + 278664) + 4 * v13 - 4) = (char *)_this;
+      *(char **)(*(char * *)((char *)_this + 278660) + 4 * v13 - 4) = (char *)_this;
     }
   }
   n5 = 0;
   Size = 18 * i + 234;
   do
-    *(char **)(_this + 4 * n5++ + 278756) = (char *)bmf_new(Size);
+    *(char **)((char *)_this + 4 * n5++ + 278756) = (char *)bmf_new(Size);
   while ( n5 < 5 );
-  memset(*(char **)(_this + 278756),0,Size);
-  v17 = *(uint32_t *)(_this + 278756);
+  memset(_this->f278756,0,Size);
+  v17 = *(uint32_t *)((char *)_this + 278756);
   ctx_bias[3] = 0;
   v18 = 0;
   ctx_bias[2] = 0;
   ctx_bias[1] = 0;
   n0x82 = 0;
   ctx_bias[0] = 0;
-  *(uint32_t *)(_this + 278736) = v17 + 144;
+  *(uint32_t *)((char *)_this + 278736) = v17 + 144;
   do
   {
     v20 = (uint8_t)__byte_439890[v18];
-    *(uint32_t *)(_this + 8 * n0x82 + 278944) = (*(uint32_t *)(_this + 278728) << 8) | (16 * v18);
+    *(uint32_t *)((char *)_this + 8 * n0x82 + 278944) = (_this->f278728 << 8) | (16 * v18);
     v21 = (2 * n0x82 == v20) + v18;
     v22 = (uint8_t)__byte_439890[v21];
-    *(uint32_t *)(_this + 8 * n0x82 + 278948) = (*(uint32_t *)(_this + 278728) << 8) | (16 * v21);
+    *(uint32_t *)((char *)_this + 8 * n0x82 + 278948) = (_this->f278728 << 8) | (16 * v21);
     v23 = 2 * n0x82++ + 1 == v22;
     v18 = v23 + v21;
   }
@@ -5373,31 +5373,31 @@ char *__alt_p2_alloc(char *_this, int32_t i, int32_t n4)
   for ( n = 0; n < 0x3C; ++n )
   {
     v26 = (uint8_t)__byte_4398A0[v24];
-    *(uint8_t *)(_this + 2 * n + 280752) = v24;
+    *(uint8_t *)((char *)_this + 2 * n + 280752) = v24;
     v27 = (2 * n == v26) + v24;
     v28 = (uint8_t)__byte_4398A0[v27];
-    *(uint8_t *)(_this + 2 * n + 280753) = v27;
+    *(uint8_t *)((char *)_this + 2 * n + 280753) = v27;
     v29 = 2 * n + 1 == v28;
     v24 = v29 + v27;
   }
-  *(uint32_t *)(_this + 278704) = 15;
-  __fwd_alt_p2_alloc_alt_init_tables((uint8_t *)(_this + 279984), (_this + 280496));
-  *(uint32_t *)(_this + 278844) = 0;
-  *(uint32_t *)(_this + 278784) = 64;
-  *(uint32_t *)(_this + 278828) = 0;
-  *(uint32_t *)(_this + 278788) = 128;
-  *(uint32_t *)(_this + 278812) = 0;
-  *(uint32_t *)(_this + 278800) = 192;
-  *(uint32_t *)(_this + 278796) = 0;
-  *(uint32_t *)(_this + 278804) = 384;
-  *(uint32_t *)(_this + 278780) = 0;
-  *(uint32_t *)(_this + 278816) = 576;
-  *(uint32_t *)(_this + 278820) = 1152;
-  *(uint32_t *)(_this + 278832) = 1728;
-  *(uint32_t *)(_this + 278836) = 3456;
-  *(uint32_t *)(_this + 278848) = 5184;
-  *(uint32_t *)(_this + 278852) = 10368;
-  return _this;
+  _this->f278704 = 15;
+  __fwd_alt_p2_alloc_alt_init_tables((uint8_t *)((char *)_this + 279984), ((char *)_this + 280496));
+  *(uint32_t *)((char *)_this + 278844) = 0;
+  *(uint32_t *)((char *)_this + 278784) = 64;
+  *(uint32_t *)((char *)_this + 278828) = 0;
+  *(uint32_t *)((char *)_this + 278788) = 128;
+  *(uint32_t *)((char *)_this + 278812) = 0;
+  *(uint32_t *)((char *)_this + 278800) = 192;
+  *(uint32_t *)((char *)_this + 278796) = 0;
+  *(uint32_t *)((char *)_this + 278804) = 384;
+  *(uint32_t *)((char *)_this + 278780) = 0;
+  *(uint32_t *)((char *)_this + 278816) = 576;
+  *(uint32_t *)((char *)_this + 278820) = 1152;
+  *(uint32_t *)((char *)_this + 278832) = 1728;
+  *(uint32_t *)((char *)_this + 278836) = 3456;
+  *(uint32_t *)((char *)_this + 278848) = 5184;
+  *(uint32_t *)((char *)_this + 278852) = 10368;
+  return (char *)_this;
 }
 
 // The image descriptor `alloc_image` returns, and every reader of an image
@@ -15286,7 +15286,7 @@ void __alt_model_p2_d8_decode(const __m128 &a1__ref, const __m128 &a2__ref, uint
   void *v5, **lpAddress;
   v5 = bmf_page_alloc(0x103E30u);
   if ( v5 )
-    lpAddress = (void **)__alt_p2_alloc((char *)v5, i, 0);
+    lpAddress = (void **)__alt_p2_alloc((Obj11 *)v5, i, 0);
   else
     lpAddress = nullptr;
   __fwd_alt_model_p2_d8_decode_alt_p2_d8_decode_body((int32_t)lpAddress, i, a1, a2, Src, i, a5);
@@ -15421,7 +15421,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
     {
       v7 = bmf_page_alloc(0x103E30u);
       if ( v7 )
-        v8 = __alt_p2_alloc((char *)v7, i, n4);
+        v8 = __alt_p2_alloc((Obj11 *)v7, i, n4);
       else
         v8 = nullptr;
       plane[n4++] = (Obj11 *)v8;
@@ -16199,7 +16199,7 @@ void __alt_model_p2_d8_encode(const __m128 &a1__ref, const __m128 &a2__ref, uint
   Obj11 *lpAddress;
   v6 = bmf_page_alloc(0x103E30u);
   if ( v6 )
-    lpAddress = (Obj11 *)((__m128 *)__alt_p2_alloc((char *)v6, i, 0));
+    lpAddress = (Obj11 *)((__m128 *)__alt_p2_alloc((Obj11 *)v6, i, 0));
   else
     lpAddress = (Obj11 *)(nullptr);
   __fwd_alt_model_p2_d8_encode_alt_p2_d8_encode_body(lpAddress, a1, a2, a3, i, a5, a6);
@@ -16356,7 +16356,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
     {
       v7 = bmf_page_alloc(0x103E30u);
       if ( v7 )
-        v8 = (void *)__alt_p2_alloc((char *)v7, i_1, n4);
+        v8 = (void *)__alt_p2_alloc((Obj11 *)v7, i_1, n4);
       else
         v8 = nullptr;
       plane[n4++] = (Obj11 *)v8;

@@ -58,13 +58,23 @@ def load():
 
 
 def rawoffsets(lines, span):
-    """Every raw-offset site, as (line, function, base)."""
+    """Every raw-offset site, as (line, function, base).
+
+    One site, not one pattern: `*(uint32_t *)((char *)_this + 278720)` is P1
+    with a byte-cast base *and* P2 on that inner cast, and counting it twice
+    made retyping a parameter look like it doubled the arithmetic in a function
+    when all it did was add the cast the new type needs.  Keyed by where the
+    base identifier sits, so each one counts once.
+    """
     out = []
     for i, l in enumerate(lines):
         code = l.split('//')[0]
+        at = {}
         for p in (P1, P2, P3):
             for m in p.finditer(code):
-                out.append((i + 1, span.get(i, '<top>'), m.group(1)))
+                at.setdefault(m.start(1), m.group(1))
+        for pos in sorted(at):
+            out.append((i + 1, span.get(i, '<top>'), at[pos]))
     return out
 
 
