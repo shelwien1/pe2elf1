@@ -514,7 +514,7 @@ static_assert(sizeof(void *) != 4
 struct Obj4 {
   int32_t   f0[8];   // +0 .. +28
   uint8_t _pad8[144];
-  int32_t   f176[10];   // +176 .. +212
+  uint8_t  *f176[10];   // +176 .. +212, ten row cursors
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj4, f176[9]) == 212,
@@ -5937,7 +5937,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
                 {
 LABEL_67:
                   *buf_2 = 0;
-                  v72 = buf_2 + 2;
+                  v72 = (uint8_t *)buf_2 + 2;
                   buf_2[1] = Size << (v75 & 31);
                   memcpy(buf_2 + 2,&v31[-Size],Size);
                   buf_2 += Size + 2;
@@ -6017,7 +6017,7 @@ LABEL_70:
               goto LABEL_55;
             }
             *buf_2 = 0;
-            v68 = buf_2 + 2;
+            v68 = (uint8_t *)buf_2 + 2;
             buf_2[1] = Size << (v75 & 31);
             memcpy(buf_2 + 2,&v39[-Size],Size);
             buf_2 += Size + 2;
@@ -6817,11 +6817,11 @@ static inline int32_t * __fwd_alt_model_p1_d8_decode_alt_p1_alloc(void *a0, int3
 void ** __alt_model_p1_d8_decode(char ArgList, uint8_t *Src, int32_t i, int32_t a4)
 {
   ;
-  char *v11;   // were int32_t: these hold addresses
+  uint8_t *v7, *v8, *v9, *v10, *v11;   // the five row cursors of f176
   bool v33;
   Obj4 *v5;
   Obj92 *v4;
-  int32_t v6, v7, v8, v9, v10, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26,
+  int32_t v6, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26,
           v27, v28, v29, v30, v31, v32, v35, v36, v39, v41;
   int64_t v37;
   uint8_t *v12, *v13, *Src_1;
@@ -7178,7 +7178,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
         v89 = v3;
         do
         {
-          v51 = Block;
+          v51 = (uint32_t *)Block;
           __fwd_alt_model_p1_decode_alt_p1_context((uint8_t **)Block, nullptr, 0);
           v53 = __fwd_alt_model_p1_decode_alt_p1_decode_symbol(&v51[4 * v51[3] + 950], v52, v51[4]);
           v54 = v51[2];
@@ -10994,7 +10994,7 @@ LABEL_57:
               *(uint16_t *)(this_3->f6059436 + 2) = n4_14;
               *(uint32_t *)this_3->f76 = n15_13;
               *(uint32_t *)(this_3->f76 + 4) = v60;
-              v66 = this_3->f6059436;
+              v66 = (uint32_t)this_3->f6059436;
               this_3->f76 += 8;
               *(uint16_t *)(v66 + 2) = n4_14;
               *(uint32_t *)this_3->f76 = n15_13;
@@ -12860,7 +12860,7 @@ LABEL_53:
         v56 = 0;
         do
         {
-          v57 = this_4->f1078240;
+          v57 = (uint32_t)this_4->f1078240;
           v58 = *(uint16_t *)(this_4->f56[0] + 8 * v56 + 64);
           *(uint16_t *)ArgList_7 = *(uint16_t *)(v57 + 4 * v58);
           *((uint8_t *)ArgList_7 + 2) = *(uint8_t *)(v57 + 4 * v58 + 2);
@@ -17647,8 +17647,8 @@ void __transform_planes(BmfImage *p_i, int32_t a2, char a3, const __m128 &a4__re
           v24;
   uint8_t *Srca_1;
   memset(hist_scratch,0,4096);
-  __transform_planes_Buffer = ::coded_buf;
-  p_ia_1 = ::coded_buf + 16;
+  __transform_planes_Buffer = (char *)::coded_buf;
+  p_ia_1 = (char *)::coded_buf + 16;
   *((uint32_t *)::coded_buf + 4) = *(uint32_t *)&p_i->width;
   *((uint32_t *)p_ia_1 + 1) = *((uint32_t *)p_i + 1);
   *((uint32_t *)p_ia_1 + 2) = *((uint32_t *)p_i + 2);
@@ -18771,7 +18771,7 @@ LABEL_172:
           i_6 = p_i_1->width;
           v179[1] = v126;
           v180 = v125;
-          v128 = (char *)p_i_1 + v126 + 16;
+          v128 = (uint8_t *)p_i_1 + v126 + 16;
           p_i_2 = (BmfImage *)(p_i_1);
           v129 = (uint8_t *)v179[0];
           do
