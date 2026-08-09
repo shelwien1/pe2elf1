@@ -5683,19 +5683,6 @@ static_assert(sizeof(void *) != 4
               "Obj97: the layout moved");
 
 
-// Obj98 -- recovered from 6 dereferences over 1 offsets, under 2
-// names.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj98 {
-  uint8_t _pad0[12];
-  int32_t f12;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj98, f12) == 12,
-              "Obj98: the layout moved");
-
 
 // Obj99 -- recovered from 6 dereferences over 6 offsets, under 1
 // name.  The layout is the one the code already assumed: at 32 bits a
@@ -14414,7 +14401,7 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
   int32_t &Size = *(int32_t *)((char *)__frame.slot4);
   uint32_t &Sizea = *(uint32_t *)((char *)__frame.slot4);
   char &Sizeb = *((char *)__frame.slot4);
-  Obj98 *&v52 = (Obj98 *&)__frame.v52;
+  BmfImage *&v52 = (BmfImage *&)__frame.v52;
   int32_t &Src_2 = *(int32_t *)((char *)__frame.slot12);
   int32_t &v54 = *(int32_t *)((char *)__frame.slot12);
   void *&Buffer_3 = __frame.Buffer_3;
@@ -14435,7 +14422,7 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
   FILE *Stream_v;
   __m128i v17, v18, v19, v20, v21;
   char v25, *Src_4, v28, v30, *Src_3, *Src_6, *Buffer_4, *Src_5;
-  Obj98 *v3;
+  BmfImage *v3;
   int32_t Size_1, i, j_3, Sizea_1, v22, n2_1, v26, v31, Offset_2, v35, v38, v40, v41;
   uint32_t Size_2, j_1, j_2, n2_2, v29, ElementCount, ElementCount_1, v44;
   // These two freads land in the frame, and each writes across several of the
@@ -14469,8 +14456,8 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
   {
     return nullptr;
   }
-  v3 = (Obj98 *)(__alloc_image(bmp_info_hdr[1], bmp_height, bmp_bits, bmp_bits <= 8u, 1));
-  Size_2 = (*((uint16_t *)v3 + 2) + 3) & 0xFFFFFFFC;
+  v3 = (BmfImage *)(__alloc_image(bmp_info_hdr[1], bmp_height, bmp_bits, bmp_bits <= 8u, 1));
+  Size_2 = (v3->stride + 3) & 0xFFFFFFFC;
   if ( bmp_bits <= 8u )
   {
     Size_1 = 1 << (bmp_bits & 31);
@@ -14478,23 +14465,23 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
       Size_1 = bmp_clr_used;
     if ( Size_1 > 0 )
     {
-      Size_4 = (*((uint16_t *)v3 + 2) + 3) & 0xFFFFFFFC;
+      Size_4 = (v3->stride + 3) & 0xFFFFFFFC;
       Size = Size_1;
       for ( i = 0; i < Size; ++i )
       {
         fread(bmp_bgra, 4u, 1u, Stream_v);
-        if ( (*((uint8_t *)v3 + 10) & 0x80) != 0 )
-          v7 = (int32_t)v3 + v3->f12 + 16;
+        if ( (v3->depth & 0x80) != 0 )
+          v7 = (int32_t)v3 + v3->data_size + 16;
         else
           v7 = 0;
         *(uint8_t *)(v7 + 3 * i + 2) = bmp_bgra[2];
-        if ( (*((uint8_t *)v3 + 10) & 0x80) != 0 )
-          v8 = (int32_t)v3 + v3->f12 + 16;
+        if ( (v3->depth & 0x80) != 0 )
+          v8 = (int32_t)v3 + v3->data_size + 16;
         else
           v8 = 0;
         *(uint8_t *)(v8 + 3 * i + 1) = bmp_bgra[1];
-        if ( (*((uint8_t *)v3 + 10) & 0x80) != 0 )
-          v9 = (int32_t)v3 + v3->f12 + 16;
+        if ( (v3->depth & 0x80) != 0 )
+          v9 = (int32_t)v3 + v3->data_size + 16;
         else
           v9 = 0;
         *(uint8_t *)(v9 + 3 * i) = bmp_bgra[0];
@@ -14503,16 +14490,16 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
     }
   }
   Buffer_3 = bmf_new(Size_2);
-  Src = (char *)v3 + v3->f12 - *((uint16_t *)v3 + 2) + 16;
+  Src = (char *)v3 + v3->data_size - v3->stride + 16;
   fseek(Stream_v, bmp_off_bits, 0);
   if ( bmp_compression )
   {
     if ( bmp_compression == 1 )
     {
-      memset((char *)v3 + 16,0,v3->f12);
+      memset((char *)v3 + 16,0,v3->data_size);
       Src_1 = (int32_t)Src;
-      v52 = (Obj98 *)(v3);
-      v46 = *((uint16_t *)v3 + 1) - 1;
+      v52 = v3;
+      v46 = v3->height - 1;
       while ( 1 )
       {
         Src_2 = Src_1;
@@ -14583,10 +14570,10 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
     }
     if ( bmp_compression != 2 )
       return nullptr;
-    memset((char *)v3 + 16,0,v3->f12);
-    v52 = (Obj98 *)(v3);
+    memset((char *)v3 + 16,0,v3->data_size);
+    v52 = v3;
     v22 = 1;
-    v47 = *((uint16_t *)v3 + 1) - 1;
+    v47 = v3->height - 1;
     while ( 1 )
     {
       while ( 1 )
@@ -14708,13 +14695,13 @@ LABEL_44:
       }
     }
   }
-  ElementCount = *((uint16_t *)v3 + 2);
+  ElementCount = v3->stride;
   Offset_2 = Size_2 - ElementCount;
   if ( bmp_height - 1 >= 0 )
   {
     Offset_1 = Offset_2;
     v35 = bmp_height - 1;
-    v52 = (Obj98 *)(v3);
+    v52 = v3;
     Src_6 = Src;
     while ( 1 )
     {
@@ -14731,7 +14718,7 @@ LABEL_44:
       if ( --v35 < 0 )
       {
 LABEL_61:
-        v3 = (Obj98 *)(v52);
+        v3 = v52;
         break;
       }
     }
