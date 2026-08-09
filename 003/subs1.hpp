@@ -1169,7 +1169,7 @@ struct Obj10 {
   uint8_t _pad7[8];
   uint32_t f44;
   uint8_t _pad9[8];
-  uint32_t  f56[14];   // +56 .. +108
+  uint8_t  *f56[14];   // +56 .. +108, the row cursors: every element is an address
   uint8_t _pad24[1051552];
   uint32_t  f1051664[4];   // +1051664 .. +1051676
   uint8_t _pad29[26524];
@@ -3789,12 +3789,14 @@ static inline void __fwd_init_model_tables_symbol_list_update(void *a0, int32_t 
 int32_t __init_model_tables(Obj10 *_this)
 {
   ;
-  char *v8, *v28, *v29, *v32;   // were int32_t: these hold addresses
+  char *v8, *v32;   // were int32_t: these hold addresses
+  uint8_t *v28, *v29;           // row cursors out of f56
   char v13, v14, *buf;
   Obj14 *v11;
   int16_t v6, v12;
   uint32_t **v3;
-  int32_t n2_1, v7, v9, v10, v15, v17, n2, v19, v21, v22, v23, v24, v25, v26, v27, v30,
+  uint8_t *v30;
+  int32_t n2_1, v7, v9, v10, v15, v17, n2, v19, v21, v22, v23, v24, v25, v26, v27,
           result;
   uint16_t *v20;
   Obj45 *v5;
@@ -3977,12 +3979,12 @@ LABEL_21:
 LABEL_37:
   *(uint16_t *)(*(uint32_t *)&_this->f6059436 + 2) = *_this->f6059436;
   *_this->f6059436 = **(uint16_t **)&_this->f56[5];
-  *(uint8_t *)(_this->f56[5] + 2) = **(uint16_t **)&_this->f56[5] == **(uint16_t **)&_this->f56[6];
-  *(uint8_t *)(_this->f56[5] + 3) = **(uint16_t **)&_this->f56[5] == *(uint16_t *)(_this->f56[5] - 8);
-  *(uint8_t *)(_this->f56[5] + 4) = **(uint16_t **)&_this->f56[5] == *(uint16_t *)(_this->f56[6] + 8);
-  *(uint8_t *)(_this->f56[5] + 5) = **(uint16_t **)&_this->f56[5] == *(uint16_t *)(_this->f56[6] - 8);
-  *(uint8_t *)(_this->f56[5] + 6) = **(uint16_t **)&_this->f56[5] == *(uint16_t *)(_this->f56[6] + 16);
-  *(uint8_t *)(_this->f56[5] + 7) = **(uint16_t **)&_this->f56[5] == *(uint16_t *)(_this->f56[6] + 24);
+  *(_this->f56[5] + 2) = **(uint16_t **)&_this->f56[5] == **(uint16_t **)&_this->f56[6];
+  *(_this->f56[5] + 3) = **(uint16_t **)&_this->f56[5] == *(uint16_t *)(_this->f56[5] - 8);
+  *(_this->f56[5] + 4) = **(uint16_t **)&_this->f56[5] == *(uint16_t *)(_this->f56[6] + 8);
+  *(_this->f56[5] + 5) = **(uint16_t **)&_this->f56[5] == *(uint16_t *)(_this->f56[6] - 8);
+  *(_this->f56[5] + 6) = **(uint16_t **)&_this->f56[5] == *(uint16_t *)(_this->f56[6] + 16);
+  *(_this->f56[5] + 7) = **(uint16_t **)&_this->f56[5] == *(uint16_t *)(_this->f56[6] + 24);
   v28 = _this->f56[6];
   v29 = _this->f56[7];
   v30 = _this->f56[5] + 8;
@@ -3993,10 +3995,10 @@ LABEL_37:
   v29 += 8;
   _this->f56[9] += 8;
   _this->f56[7] = v29;
-  _this->f1078692[0] += *(uint8_t *)(v28 + 34) - *(uint8_t *)(v28 - 30);
-  _this->f1078692[1] += *(uint8_t *)(v29 + 34) - *(uint8_t *)(v29 - 30);
-  _this->f1078692[2] += *(uint8_t *)(v30 - 5) - *(uint8_t *)(v30 - 37);
-  result = *(uint8_t *)(v30 - 6) - *(uint8_t *)(v30 - 62);
+  _this->f1078692[0] += *(v28 + 34) - *(v28 - 30);
+  _this->f1078692[1] += *(v29 + 34) - *(v29 - 30);
+  _this->f1078692[2] += *(v30 - 5) - *(v30 - 37);
+  result = *(v30 - 6) - *(v30 - 62);
   _this->f1078692[3] += result;
   return result;
 }
@@ -12528,14 +12530,14 @@ void __unmodel_plane_slow(Obj10 *_this, char *Src)
   int32_t &v102 = __frame.v102;
   ;
   Obj10 *this_4;
-  uintptr_t v44, v48;
   char *v57;   // were int32_t: these hold addresses
   bool v38;
   char *ArgList, *v9, *ArgList_2, *buf, *ArgList_3, *ArgList_9, *ArgList_10,
        *Src_2, *v77, *ArgList_8;
   int16_t v20;
-  int32_t v3, v5, v6, v8, n5, v11, v14, v15, v16, v17, v18, v19, n0x10000, v27, v28, v29, v30,
-          v34, v39, v40, n4_1, v43, v45, v46, v47, v51, v52, v53, v54, v56, v58, v60, v61, v62,
+  uint8_t *v27, *v28, *v29, *v44, *v45, *v46, *v47, *v48;   // row cursors out of f56
+  int32_t v3, v5, v6, v8, n5, v11, v14, v15, v16, v17, v18, v19, n0x10000, v30,
+          v34, v39, v40, n4_1, v43, v51, v52, v53, v54, v56, v58, v60, v61, v62,
           v64, v65, v66, n6, v68, v69, n6_4, n6_1, v73, n6_2, v76, v78, v80;
   Obj10 *this_3;
   Obj10 *this_2;
@@ -12762,8 +12764,8 @@ void __unmodel_plane_slow(Obj10 *_this, char *Src)
     while ( 1 )
     {
       v86 = v43;
-      *(uint8_t *)(this_4->f56[5] + 3) = *(uint16_t *)(this_4->f56[5] - 8) == 0;
-      *(uint8_t *)(this_4->f56[5] + 5) = *(uint16_t *)(this_4->f56[6] - 8) == 0;
+      *(this_4->f56[5] + 3) = *(uint16_t *)(this_4->f56[5] - 8) == 0;
+      *(this_4->f56[5] + 5) = *(uint16_t *)(this_4->f56[6] - 8) == 0;
       v44 = this_4->f56[4];
       v45 = this_4->f56[3];
       v46 = this_4->f56[2];
@@ -12782,15 +12784,15 @@ void __unmodel_plane_slow(Obj10 *_this, char *Src)
       this_4->f56[8] = v46 + 56;
       this_4->f56[9] = v45 + 56;
       LOBYTE(v48) = *(uint16_t *)(v48 + 8) == 0;
-      *(uint8_t *)(v44 + 4) = v48;
-      *(uint8_t *)(this_4->f56[5] - 2) = v48;
-      *(uint8_t *)(this_4->f56[5] - 9) = v48;
+      *(v44 + 4) = v48;
+      *(this_4->f56[5] - 2) = v48;
+      *(this_4->f56[5] - 9) = v48;
       LOBYTE(v46) = *(uint16_t *)(this_4->f56[6] + 16) == 0;
-      *(uint8_t *)(this_4->f56[5] + 6) = v46;
-      *(uint8_t *)(this_4->f56[5] - 1) = v46;
-      *(uint8_t *)(this_4->f56[5] + 7) = *(uint16_t *)(this_4->f56[6] + 24) == 0;
-      v49 = *(uint8_t **)&this_4->f56[6];
-      v50 = *(uint8_t **)&this_4->f56[7];
+      *(this_4->f56[5] + 6) = v46;
+      *(this_4->f56[5] - 1) = v46;
+      *(this_4->f56[5] + 7) = *(uint16_t *)(this_4->f56[6] + 24) == 0;
+      v49 = *&this_4->f56[6];
+      v50 = *&this_4->f56[7];
       this_4->f56[5] += 8;
       v49 += 8;
       this_4->f56[8] += 8;
@@ -12799,15 +12801,13 @@ void __unmodel_plane_slow(Obj10 *_this, char *Src)
       this_4->f56[7] = v50;
       this_4->f56[9] += 8;
       this_4->f1078692[0] = v49[26] + v49[18] + v49[10] + v49[2] + v49[34] - 5;
-      LOBYTE(v47) = v50[2];
-      LOBYTE(v44) = v50[10];
-      LOBYTE(v48) = v50[18];
-      LOBYTE(v49) = v50[26];
-      LOBYTE(v50) = v50[34];
+      // The same five counts as the line above, off the other row.  MSVC
+      // spilled each byte into a register whose upper bits were leftovers,
+      // and the destination is one byte, so only the low bytes ever counted.
       this_4->f1078692[3] = 0;
       this_4->f1078692[2] = 0;
       v51 = this_4->f0;
-      this_4->f1078692[1] = (uint8_t)v49 + v48 + v44 + v47 + (uint8_t)v50 - 5;
+      this_4->f1078692[1] = v50[26] + v50[18] + v50[10] + v50[2] + v50[34] - 5;
       v52 = v86;
       if ( v51 <= 0 )
         break;
@@ -17160,7 +17160,7 @@ void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, BmfImage *p_i, 
   uint32_t &n5 = __frame.n5;
   ;
   Obj10 *Blocka_1;
-  char *v46, *v50;
+  uint8_t *v46, *v50;   // row cursors out of f56
   __m128 a1 = a1__ref;
   __m128 a2 = a2__ref;
   bool v43;
@@ -17169,8 +17169,9 @@ void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, BmfImage *p_i, 
   Obj10 *Blocka_3;
   Obj10 *Blocka_4;
   int32_t v8, v10, v11, v14, n2_1, n2_2, v17, v18, v19, v20, v21, v35, v36, v41, v42, v44, v45,
-          v47, v48, v49, v53, v54, v55, v56;
-  uint32_t *v12, n0x10000, *v24, v28, v29, v30, v31, *v32, *v33, v34, v37, *v38, *v39, v40;
+          v53, v54, v55, v56;
+  uint8_t *v28, *v29, *v30, *v47, *v48, *v49;   // row cursors out of f56
+  uint32_t *v12, n0x10000, *v24, v31, *v32, *v33, v34, v37, *v38, *v39, v40;
   uint8_t *v51, *v52;
   void *v5;
   if ( plane_alt_model )
@@ -17436,8 +17437,8 @@ void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, BmfImage *p_i, 
       do
       {
         v61 = v45 + 1;
-        *(uint8_t *)(Blocka_1->f56[5] + 3) = *(uint16_t *)(Blocka_1->f56[5] - 8) == 0;
-        *(uint8_t *)(Blocka_1->f56[5] + 5) = *(uint16_t *)(Blocka_1->f56[6] - 8) == 0;
+        *(Blocka_1->f56[5] + 3) = *(uint16_t *)(Blocka_1->f56[5] - 8) == 0;
+        *(Blocka_1->f56[5] + 5) = *(uint16_t *)(Blocka_1->f56[6] - 8) == 0;
         v46 = Blocka_1->f56[4];
         v47 = Blocka_1->f56[3];
         v48 = Blocka_1->f56[2];
@@ -17456,15 +17457,15 @@ void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, BmfImage *p_i, 
         Blocka_1->f56[8] = v48 + 56;
         Blocka_1->f56[9] = v47 + 56;
         LOBYTE(v50) = *(uint16_t *)(v50 + 8) == 0;
-        *(uint8_t *)(v46 + 4) = v50;
-        *(uint8_t *)(Blocka_1->f56[5] - 2) = v50;
-        *(uint8_t *)(Blocka_1->f56[5] - 9) = v50;
+        *(v46 + 4) = v50;
+        *(Blocka_1->f56[5] - 2) = v50;
+        *(Blocka_1->f56[5] - 9) = v50;
         LOBYTE(v50) = *(uint16_t *)(Blocka_1->f56[6] + 16) == 0;
-        *(uint8_t *)(Blocka_1->f56[5] + 6) = v50;
-        *(uint8_t *)(Blocka_1->f56[5] - 1) = v50;
-        *(uint8_t *)(Blocka_1->f56[5] + 7) = *(uint16_t *)(Blocka_1->f56[6] + 24) == 0;
-        v51 = *(uint8_t **)&Blocka_1->f56[6];
-        v52 = *(uint8_t **)&Blocka_1->f56[7];
+        *(Blocka_1->f56[5] + 6) = v50;
+        *(Blocka_1->f56[5] - 1) = v50;
+        *(Blocka_1->f56[5] + 7) = *(uint16_t *)(Blocka_1->f56[6] + 24) == 0;
+        v51 = *&Blocka_1->f56[6];
+        v52 = *&Blocka_1->f56[7];
         Blocka_1->f56[5] += 8;
         v51 += 8;
         Blocka_1->f56[6] = v51;
@@ -17473,16 +17474,12 @@ void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, BmfImage *p_i, 
         Blocka_1->f56[7] = v52;
         Blocka_1->f56[9] += 8;
         Blocka_1->f1078692[0] = v51[26] + v51[18] + v51[10] + v51[2] + v51[34] - 5;
-        LOBYTE(v50) = v52[26];
-        LOBYTE(v47) = v52[10] + v52[2];
-        LOBYTE(v51) = v52[18];
-        LOBYTE(v52) = v52[34];
+        // The same five counts as the line above, off the other row.
         Blocka_1->f1078692[3] = 0;
         Blocka_1->f1078692[2] = 0;
-        LOBYTE(v50) = v50 + (uint8_t)v51 + v47 + (uint8_t)v52 - 5;
         v45 = v61;
         v53 = Blocka_1->f0;
-        Blocka_1->f1078692[1] = v50;
+        Blocka_1->f1078692[1] = v52[26] + v52[18] + v52[10] + v52[2] + v52[34] - 5;
         if ( v53 > 0 )
         {
           v54 = 0;
