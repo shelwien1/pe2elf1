@@ -18,12 +18,12 @@ so they can be re-measured rather than trusted.
 
 | | | at the start |
 | --- | --- | --- |
-| `subs1.hpp` | 23 892 lines | 25 462 |
+| `subs1.hpp` | 23 856 lines | 25 462 |
 | bodies | 179 (84 real, 94 `__fwd_*` shims, 1 helper) | 215 |
 | globals in `blob.inc` | **78** | 293 |
-| recovered structs | **77** + 3 named ones, 2593 field accesses, 17 arrays put back | 0 |
+| recovered structs | **76** + 3 named ones, 2567 field accesses, 18 arrays put back | 0 |
 | raw-offset dereferences | **250** | 1646 before Phase 4 |
-| pointer casts | 5609 | 7336 |
+| pointer casts | 5579 | 7336 |
 | `goto` / `LABEL_n:` | 113 / 81 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
 | line coverage | **95.87 %** of 13 222 | 64.5 % |
@@ -738,7 +738,12 @@ function at offsets stepping by 18 and alternating sign. Also not objects.
 
 That is `memcpy(v73 - 18, v76, 18)` as MSVC unrolled it — four dwords and a word
 — and as Hex-Rays could only hand back. Phase 5 did this for fills; `tools/uncopy.py`
-does it for copies: 27 runs, 135 lines, one call each.
+does it for copies: 27 runs, 135 lines, one call each — and five more later,
+once it learned that the sweep had given three of those rows a struct each, so
+half of a copy reads `->f36` where the other half still reads `+ 36`. A member's
+`fN` *is* its offset, so both spellings name the same address. Not the same
+expression, though: `v80` is an `Obj53 *`, so `v80 + 36` steps ninety bytes, and
+the member side has to be emitted as `&v80->f36`.
 
 A store sequence and a `memcpy` differ in exactly one case, so overlap is
 checked rather than argued. `BMF_COPY_CHECK=1 ./build.sh` routes the calls
@@ -1151,6 +1156,6 @@ into three kinds:
   nothing against the tree that does not; all five of `deadcheck.py`'s do.
 
 One caveat on the coverage figure: `gcov` counts *instrumented* lines (13 222
-of the file's 23 892) and counts inlined copies separately, so its per-function
+of the file's 23 856) and counts inlined copies separately, so its per-function
 percentages do not sum the way source lines do. The line counts in §2 are source
 lines, measured separately by matching braces over the function list.
