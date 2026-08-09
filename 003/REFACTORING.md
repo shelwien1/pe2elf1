@@ -145,6 +145,21 @@ have said "the corpus does not go there", which is what was said about
 `alt_model_p1_decode` before an image reached it and found a bug. The call
 graph is what turns that into *cannot*.
 
+**The same shape appears in `unpredict_med` and was not deleted.** Its
+`else` — 16 lines, the largest contiguous unexecuted run left in the file — is
+the `plane_predictor == 0` side of a test, and one of its two call sites is
+guarded by `plane_predictor == 1`. The other is guarded by a *different*
+variable, so the call graph does not close, and the measurement is 4 entries
+against `sub_4118A0`'s 164. Two weak halves are not one strong one. Left in
+place; what to check is whether that second guard is the predictor under
+another name.
+
+**What is left uncovered is diffuse**, and that is the useful summary. Across
+the whole file the unexecuted lines form 249 runs of 1–3 lines, 48 runs of 4–9,
+and exactly one of 10 or more — the `unpredict_med` block above. There are no
+more dead features to find here; there are allocation-failure checks, error
+returns and format variants, a line or two at a time.
+
 These are format and descriptor combinations fifteen images still do not reach.
 `alt_model_p1_decode` used to head this table with 268 lines and is not on it
 at all now; what happened when it finally ran is §6's first entry.
