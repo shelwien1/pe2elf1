@@ -18,12 +18,12 @@ so they can be re-measured rather than trusted.
 
 | | | at the start |
 | --- | --- | --- |
-| `subs1.hpp` | 24 336 lines | 25 462 |
+| `subs1.hpp` | 24 420 lines | 25 462 |
 | bodies | 179 (84 real, 94 `__fwd_*` shims, 1 helper) | 215 |
 | globals in `blob.inc` | **78** | 293 |
-| recovered structs | **109**, 2620 named field accesses, 17 arrays put back | 0 |
-| raw-offset dereferences | **294** | 1646 before Phase 4 |
-| pointer casts | 5740 | 7336 |
+| recovered structs | **115**, 2645 named field accesses, 17 arrays put back | 0 |
+| raw-offset dereferences | **290** | 1646 before Phase 4 |
+| pointer casts | 5801 | 7336 |
 | `goto` / `LABEL_n:` | 113 / 81 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
 | line coverage | **95.87 %** of 13 217 | 64.5 % |
@@ -400,8 +400,8 @@ last of them found a bug.
    64-bit build gets its addresses into 32 bits by confining the heap rather
    than by widening the fields.
 3. The recurring `base + constant` families are `struct`s, and the variables
-   that walk them are typed pointers to those structs. **Done for 109 objects**
-   — 2620 accesses name a field, 294 raw-offset dereferences remain, and the
+   that walk them are typed pointers to those structs. **Done for 115 objects**
+   — 2645 accesses name a field, 290 raw-offset dereferences remain, and the
    ones declined are listed with their reasons in Phase 4. Seventeen were
    recovered as structs and are arrays; they are subscripted now.
 4. Names say what things are. **No `__sub_XXXXXX` is left in the file** — the
@@ -627,7 +627,7 @@ does not.
 `blob.inc` is down to 78 globals from 293 at the start. It cannot go to zero
 until the 77 shared ones are understood as the tables they are.
 
-### Phase 4 — 109 objects have structs; the blocker was the 64-bit goal, not the code
+### Phase 4 — 115 objects have structs; the blocker was the 64-bit goal, not the code
 
 `tools/retype.py` converted every local and parameter used as a pointer base
 first: 189 candidates, `char *` where the variable is only ever an address and
@@ -657,10 +657,10 @@ moves, the variable-offset walks keep indexing what they indexed, and each
 generated struct carries a `static_assert` on its size that says so and fails
 loudly if it ever stops being true.
 
-109 structs, gated one at a time — build, encode and decode every image, compare
+115 structs, gated one at a time — build, encode and decode every image, compare
 every stream against its committed reference, revert the ones that change
-anything. **294 raw-offset dereferences left, from 1646, and 2620 accesses now
-name a field.** 112 objects are on the skip list; the reasons are
+anything. **290 raw-offset dereferences left, from 1646, and 2645 accesses now
+name a field.** 164 objects are on the skip list; the reasons are
 in `tools/struct-skip.txt` and the categories are below.
 
 It stood at 73 for a fortnight, reported as exhausted, and it was not. The skip
@@ -669,7 +669,8 @@ list identifies an object by the sorted set of its `function:local` pairs, and
 naming a function that is not in the file. A signature is matched whole, so one
 stale token un-skips the object: the sweep was spending its rounds re-offering
 things it had already rejected instead of reaching what it had never seen. With
-the list corrected it applied 36 more in 130 rounds. **"The tool says there is
+the list corrected it applied 42 more in 180 rounds. Six of those came from behind the array shapes,
+which the sweep used to apply rather than decline. **"The tool says there is
 nothing left" is a claim about the tool.**
 
 Two of those rounds are worth keeping. One candidate whose every offset fell
@@ -1026,7 +1027,7 @@ grep -c 'struct \(Obj[0-9]*\|ModelBlock\) {' subs1.hpp  # 73
 grep -oE '\->f[0-9]+' subs1.hpp | wc -l               # 2728 named accesses
 grep -oE '\*\((const )?[A-Za-z_][A-Za-z0-9_]*( )?\*+\)\([A-Za-z_][A-Za-z0-9_]* \+ [0-9]+\)' \
      subs1.hpp | wc -l                                # 523 raw-offset, from 1646
-wc -l tools/struct-skip.txt                           # 112 objects declined
+wc -l tools/struct-skip.txt                           # 164 objects declined
 python3 tools/unstruct.py subs1.hpp --list             # 0 recovered structs are arrays
 python3 tools/uncopy.py  subs1.hpp --list             # 0 unrolled block copies
 python3 tools/structs.py subs1.hpp --list             # what is left, by traffic
@@ -1067,6 +1068,6 @@ into three kinds:
   nothing against the tree that does not; all five of `deadcheck.py`'s do.
 
 One caveat on the coverage figure: `gcov` counts *instrumented* lines (13 217
-of the file's 24 336) and counts inlined copies separately, so its per-function
+of the file's 24 420) and counts inlined copies separately, so its per-function
 percentages do not sum the way source lines do. The line counts in §2 are source
 lines, measured separately by matching braces over the function list.
