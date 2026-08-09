@@ -180,3 +180,15 @@ __decode_symbol_tree:v37 __decode_symbol_tree:v8
 __alt_p1_decode_symbol:v19
 __alt_p2_decode_symbol:v9
 __decode_pixel:freq_tbl __decode_pixel:n4 __decode_pixel:n4_1 __decode_pixel:n4_12 __decode_pixel:n4_13 __decode_pixel:n4_14 __decode_pixel:n4_17 __decode_pixel:n4_5 __decode_pixel:n4_7
+__rc_begin_encode:model_geometry
+__alt_p1_d8_encode_body:a2
+__alt_p1_d8_encode_body:a3 __alt_p1_d8_encode_body:v32
+__rc_begin_decode:model_geometry
+__alt_model_p1_d8_decode:v5
+__alt_model_p1_decode:__byte_4433AD
+__alt_model_p1_decode:__byte_44339D
+__alt_p2_context:v247 __alt_p2_context:v67
+__reduce_alphabet:buf
+__cost_candidate:a3 __cost_candidate:v101 __cost_candidate:v14 __cost_candidate:v64 __cost_candidate:v88
+__choose_plane_coding:v215
+__read_bmp:bmp_info_hdr

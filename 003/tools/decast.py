@@ -35,7 +35,8 @@ import sys
 
 CXX = ('g++ -m32 -march=k8 -msse2 -mfpmath=sse -std=c++17 -fno-strict-aliasing '
        '-fpermissive -fno-rtti -fno-exceptions -O2 -DNDEBUG -U_FORTIFY_SOURCE '
-       '-D_FORTIFY_SOURCE=0 -Wuseless-cast -fsyntax-only bmf.cpp')
+       '-D_FORTIFY_SOURCE=0 -Wuseless-cast -fdiagnostics-plain-output '
+       '-fsyntax-only bmf.cpp')
 WARN = re.compile(r'^(\S+):(\d+):(\d+): warning: useless cast to type')
 
 

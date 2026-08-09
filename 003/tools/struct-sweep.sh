@@ -19,13 +19,19 @@ cd "$(dirname "$0")/.."
 
 # The inner loop is a filter, not the gate.  It runs the small images -- every
 # depth, both alternate model families, both RLE forms and the raw fallback --
-# and skips the three large photographs, which take three quarters of the time
-# and exercise nothing the others do not.  4.8 seconds a round instead of 17.7.
+# and skips two of the three large photographs, which take most of the time.
 #
-# Run the full `./test.sh ./bmf` before committing.  That is the authority; this
-# is what makes it affordable to ask 30 times in a row.
+# It used to skip all three, "which exercise nothing the others do not".  That
+# was wrong: a run of 27 applied objects passed this filter and then failed the
+# real gate on x_ep alone, and the whole run had to be redone.  x_ep is in the
+# filter now -- it costs about eight seconds a round and it is the only image
+# ever seen to discriminate on its own.
+#
+# Run the full `./test.sh ./bmf` before committing.  That is still the
+# authority; this is what makes it affordable to ask 30 times in a row, and
+# what happened above is what the authority is for.
 FILTER=${BMF_SWEEP_IMAGES:-"DLRAW.bmp altp1.bmp med32.bmp noise24.bmp rle4.bmp \
-rle8.bmp t1.bmp t24.bmp t32.bmp t8g.bmp t8p.bmp"}
+rle8.bmp t1.bmp t24.bmp t32.bmp t8g.bmp t8p.bmp x_ep.bmp"}
 
 rounds=${1:-1}
 i=0

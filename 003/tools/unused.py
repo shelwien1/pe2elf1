@@ -17,8 +17,7 @@ gets any of those wrong deletes something live.  The compiler already has the
 answer and cannot be wrong about it, so this reads the warnings and edits
 exactly what they point at.
 
-Warnings are read from stdin or from a file given with `--from`; with neither,
-the compile is run.  A declaration statement is rebuilt from its declarators
+Warnings come from running the compile, or from a file given with `--from`.  A declaration statement is rebuilt from its declarators
 after the named ones are dropped, wrapped at the width the file already uses,
 and deleted outright when nothing is left.
 """
@@ -28,15 +27,25 @@ import sys
 
 CXX = ('g++ -m32 -march=k8 -msse2 -mfpmath=sse -std=c++17 -fno-strict-aliasing '
        '-fpermissive -fno-rtti -fno-exceptions -O2 -DNDEBUG -U_FORTIFY_SOURCE '
-       '-D_FORTIFY_SOURCE=0 -Wunused-variable -fsyntax-only bmf.cpp')
-WARN = re.compile(r"^(\S+):(\d+):\d+: warning: unused variable '([^']+)'")
+       '-D_FORTIFY_SOURCE=0 -Wunused-variable -fdiagnostics-plain-output '
+       '-fsyntax-only bmf.cpp')
+# `-fdiagnostics-plain-output` in the command above is what makes this pattern
+# reliable: without it GCC quotes the name with the locale's quotation marks,
+# and this file was silently finding nothing under a locale that gave it curly
+# ones.  The pattern accepts both anyway, because a tool that depends on a flag
+# staying in a string is one edit from being wrong again.
+WARN = re.compile(r'^(\S+):(\d+):\d+: warning: unused variable '
+                  r'[\'‘"`]([^\'’"`]+)[\'’"`]')
 
 
 def warnings(argv):
+    # Read the compile, unless a saved one is named.  This used to take stdin
+    # whenever stdin was not a terminal, which is most of the time a script runs
+    # it: the tool then read nothing, reported "no unused-variable warnings",
+    # and left 66 of them in the file.  A default that silently means "do
+    # nothing" is worse than no default.
     if '--from' in argv:
         text = open(argv[argv.index('--from') + 1]).read()
-    elif not sys.stdin.isatty():
-        text = sys.stdin.read()
     else:
         text = subprocess.run(CXX, shell=True, capture_output=True,
                               text=True).stderr

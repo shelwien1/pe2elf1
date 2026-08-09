@@ -5622,6 +5622,133 @@ static_assert(sizeof(void *) != 4
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Obj35 -- recovered from 3 dereferences over 3 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj35 {
+  __m128i f0;
+  __m128i f16;
+  __m128i f32;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj35, f32) == 32,
+              "Obj35: the layout moved");
+
+
+
+
+// Obj29 -- recovered from 3 dereferences over 3 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj29 {
+  int16_t f0;
+  uint8_t _pad1[16];
+  int16_t f18;
+  uint8_t _pad3[16];
+  int16_t f36;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj29, f36) == 36,
+              "Obj29: the layout moved");
+
+
+// Obj30 -- recovered from 3 dereferences over 3 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj30 {
+  int32_t f0;
+  int32_t f4;
+  int32_t f8;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj30, f8) == 8,
+              "Obj30: the layout moved");
+
+
+// Obj32 -- recovered from 3 dereferences over 2 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj32 {
+  uint16_t f0;
+  char f2;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj32, f2) == 2,
+              "Obj32: the layout moved");
+
+
+// Obj33 -- recovered from 3 dereferences over 1 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj33 {
+  uint16_t f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj33, f0) == 0,
+              "Obj33: the layout moved");
+
+
+// Obj34 -- recovered from 3 dereferences over 1 offsets, under 4
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj34 {
+  uint16_t f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj34, f0) == 0,
+              "Obj34: the layout moved");
+
+
 struct RangeCoder {
   static const uint32_t kTop    = 0x00800000;   // renormalise at or below this
   static const uint32_t kPend   = 0x7F800000;   // low here still has a live carry
@@ -7849,8 +7976,25 @@ int32_t __alt_p1_model(Obj0 *_this)
   Obj26 *v99;
   Obj26 *v100;
   Obj26 *v43;
-  uint16_t *v44, *v51, *v52, *v59, *v60, *v67, *v68, *v75, *v76, *v81, *v84, *v87, *v88, *v90,
-           *v91, *v93, *v94, *v96, *v97;
+  Obj26 *v44;
+  Obj26 *v96;
+  Obj26 *v97;
+  Obj26 *v51;
+  Obj26 *v52;
+  Obj26 *v93;
+  Obj26 *v94;
+  Obj26 *v59;
+  Obj26 *v60;
+  Obj26 *v90;
+  Obj26 *v91;
+  Obj26 *v67;
+  Obj26 *v68;
+  Obj26 *v87;
+  Obj26 *v88;
+  Obj26 *v75;
+  Obj26 *v76;
+  Obj26 *v84;
+  Obj26 *v81;
   uint32_t n5, v110, v112;
   n5 = *(uint8_t *)((uint8_t)(**(uint8_t **)&_this->f196 - *(uint8_t *)&_this->f8) + (char *)_this + 984);
   v3 = _this->f48;
@@ -7876,14 +8020,14 @@ int32_t __alt_p1_model(Obj0 *_this)
      + (_this->f12 & 0x1F);
   v9 = (Obj26 *)((char *)_this + 16 * v8);
   v111 = (Obj26 *)(v9);
-  *(uint16_t *)((char *)v9 + (intptr_t)(2 * n5_3 + 3802)) += 17;
+  *(uint16_t *)((char *)v9 + (2 * n5_3 + 3802)) += 17;
   v9->f3800 += 17;
   result = _this->f12;
   if ( (result & 7) != 7 )
   {
     v11 = (Obj27 *)((char *)_this + 16 * result);
     v110 = (((_this->f16 & 7u) - 7) >> 31) + _this->f16;
-    *(uint16_t *)((char *)v11 + (intptr_t)(2 * n5_2 + 3818)) += 11;
+    *(uint16_t *)((char *)v11 + (2 * n5_2 + 3818)) += 11;
     v12 = v11->f3816 + 11;
     v11->f3816 = v12;
     if ( n5_2 >= 5 )
@@ -7894,7 +8038,7 @@ int32_t __alt_p1_model(Obj0 *_this)
       + 254
       * ((((v12 & 0x7FFF)
          + v11->f3818
-         - 2 * (uint32_t)*(uint16_t *)((char *)v11 + (intptr_t)(2 * n5_2 + 3818))) >> 25)
+         - 2 * (uint32_t)*(uint16_t *)((char *)v11 + (2 * n5_2 + 3818))) >> 25)
        & 0xFFFFFFC0),
         (int32_t)(n5 - 5) >> 1);
     result = _this->f12;
@@ -7903,7 +8047,7 @@ int32_t __alt_p1_model(Obj0 *_this)
   {
     v13 = (Obj28 *)((char *)_this + 16 * result);
     v14 = _this->f16 - ((_this->f16 & 7) != 0);
-    *(uint16_t *)((char *)v13 + (intptr_t)(2 * n5_2 + 3786)) += 13;
+    *(uint16_t *)((char *)v13 + (2 * n5_2 + 3786)) += 13;
     v15 = v13->f3784 + 13;
     v13->f3784 = v15;
     if ( n5_2 >= 5 )
@@ -7914,7 +8058,7 @@ int32_t __alt_p1_model(Obj0 *_this)
       + 254
       * ((((v15 & 0x7FFF)
          + v13->f3786
-         - 2 * (uint32_t)*(uint16_t *)((char *)v13 + (intptr_t)(2 * n5_2 + 3786))) >> 25)
+         - 2 * (uint32_t)*(uint16_t *)((char *)v13 + (2 * n5_2 + 3786))) >> 25)
        & 0xFFFFFFC0),
         n2);
     result = _this->f12;
@@ -7923,13 +8067,13 @@ int32_t __alt_p1_model(Obj0 *_this)
   {
     if ( (result & 7u) < 7 )
     {
-      *(uint16_t *)((char *)v111 + (intptr_t)(2 * n5_4 + 3818)) += 7;
+      *(uint16_t *)((char *)v111 + (2 * n5_4 + 3818)) += 7;
       v111->f3816 += 7;
       result = _this->f12;
     }
     if ( (result & 7) != 0 )
     {
-      *(uint16_t *)((char *)v111 + (intptr_t)(2 * n5_4 + 3786)) += 5;
+      *(uint16_t *)((char *)v111 + (2 * n5_4 + 3786)) += 5;
       v111->f3784 += 5;
       result = _this->f12;
     }
@@ -8180,24 +8324,24 @@ int32_t __alt_p1_model(Obj0 *_this)
       v43 = (Obj26 *)((uint16_t *)((char *)_this + 16 * v41));
       ((uint16_t *)v43)[n5_2 + 1901] += 6;
       v43->f3800 += 6;
-      v44 = (uint16_t *)((char *)_this + 16 * v42);
-      v44[n5_4 + 1901] += 4;
-      v44[1900] += 4;
+      v44 = (Obj26 *)((uint16_t *)((char *)_this + 16 * v42));
+      ((uint16_t *)v44)[n5_4 + 1901] += 4;
+      v44->f3800 += 4;
       v45 = _this->f12;
       if ( (v45 & 7) != 7 )
       {
         ((uint16_t *)v43)[n5_2 + 1909] += 4;
         v43->f3816 += 4;
-        v44[n5_4 + 1909] += 2;
-        v44[1908] += 2;
+        ((uint16_t *)v44)[n5_4 + 1909] += 2;
+        v44->f3816 += 2;
         v45 = _this->f12;
       }
       if ( (v45 & 7) != 0 )
       {
         ((uint16_t *)v43)[n5_2 + 1893] += 3;
         v43->f3784 += 3;
-        v44[n5_4 + 1893] += 2;
-        v44[1892] += 2;
+        ((uint16_t *)v44)[n5_4 + 1893] += 2;
+        v44->f3784 += 2;
         v45 = _this->f12;
       }
     }
@@ -8205,27 +8349,27 @@ int32_t __alt_p1_model(Obj0 *_this)
     if ( v46 == 1 )
     {
       v95 = v45 - _this->f104;
-      v96 = (uint16_t *)((char *)_this + 16 * (v95 + _this->f100));
-      v97 = (uint16_t *)((char *)_this + 16 * (_this->f108 + v95));
-      v96[n5_2 + 1901] += 6;
-      v96[1900] += 6;
-      v97[n5_2 + 1901] += 6;
-      v97[1900] += 6;
+      v96 = (Obj26 *)((uint16_t *)((char *)_this + 16 * (v95 + _this->f100)));
+      v97 = (Obj26 *)((uint16_t *)((char *)_this + 16 * (_this->f108 + v95)));
+      ((uint16_t *)v96)[n5_2 + 1901] += 6;
+      v96->f3800 += 6;
+      ((uint16_t *)v97)[n5_2 + 1901] += 6;
+      v97->f3800 += 6;
       v53 = _this->f12;
       if ( (v53 & 7) != 7 )
       {
-        v96[n5_2 + 1909] += 4;
-        v96[1908] += 4;
-        v97[n5_2 + 1909] += 4;
-        v97[1908] += 4;
+        ((uint16_t *)v96)[n5_2 + 1909] += 4;
+        v96->f3816 += 4;
+        ((uint16_t *)v97)[n5_2 + 1909] += 4;
+        v97->f3816 += 4;
         v53 = _this->f12;
       }
       if ( (v53 & 7) != 0 )
       {
-        v96[n5_2 + 1893] += 3;
-        v96[1892] += 3;
-        v97[n5_2 + 1893] += 3;
-        v97[1892] += 3;
+        ((uint16_t *)v96)[n5_2 + 1893] += 3;
+        v96->f3784 += 3;
+        ((uint16_t *)v97)[n5_2 + 1893] += 3;
+        v97->f3784 += 3;
         v53 = _this->f12;
       }
     }
@@ -8237,27 +8381,27 @@ int32_t __alt_p1_model(Obj0 *_this)
       v48 = _this->f104;
       v49 = v48 + _this->f12 - *(uint32_t *)((char *)_this + (intptr_t)(4 * _this->f96 + 100));
       v50 = v8 + v48 - *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f96 + 108));
-      v51 = (uint16_t *)((char *)_this + 16 * v49);
-      v51[n5_2 + 1901] += 6;
-      v51[1900] += 6;
-      v52 = (uint16_t *)((char *)_this + 16 * v50);
-      v52[n5_4 + 1901] += 4;
-      v52[1900] += 4;
+      v51 = (Obj26 *)((uint16_t *)((char *)_this + 16 * v49));
+      ((uint16_t *)v51)[n5_2 + 1901] += 6;
+      v51->f3800 += 6;
+      v52 = (Obj26 *)((uint16_t *)((char *)_this + 16 * v50));
+      ((uint16_t *)v52)[n5_4 + 1901] += 4;
+      v52->f3800 += 4;
       v53 = _this->f12;
       if ( (v53 & 7) != 7 )
       {
-        v51[n5_2 + 1909] += 4;
-        v51[1908] += 4;
-        v52[n5_4 + 1909] += 2;
-        v52[1908] += 2;
+        ((uint16_t *)v51)[n5_2 + 1909] += 4;
+        v51->f3816 += 4;
+        ((uint16_t *)v52)[n5_4 + 1909] += 2;
+        v52->f3816 += 2;
         v53 = _this->f12;
       }
       if ( (v53 & 7) != 0 )
       {
-        v51[n5_2 + 1893] += 3;
-        v51[1892] += 3;
-        v52[n5_4 + 1893] += 2;
-        v52[1892] += 2;
+        ((uint16_t *)v51)[n5_2 + 1893] += 3;
+        v51->f3784 += 3;
+        ((uint16_t *)v52)[n5_4 + 1893] += 2;
+        v52->f3784 += 2;
         v53 = _this->f12;
       }
     }
@@ -8265,27 +8409,27 @@ int32_t __alt_p1_model(Obj0 *_this)
     if ( v54 == 1 )
     {
       v92 = v53 - _this->f120;
-      v93 = (uint16_t *)((char *)_this + 16 * (v92 + _this->f116));
-      v94 = (uint16_t *)((char *)_this + 16 * (_this->f124 + v92));
-      v93[n5_2 + 1901] += 6;
-      v93[1900] += 6;
-      v94[n5_2 + 1901] += 6;
-      v94[1900] += 6;
+      v93 = (Obj26 *)((uint16_t *)((char *)_this + 16 * (v92 + _this->f116)));
+      v94 = (Obj26 *)((uint16_t *)((char *)_this + 16 * (_this->f124 + v92)));
+      ((uint16_t *)v93)[n5_2 + 1901] += 6;
+      v93->f3800 += 6;
+      ((uint16_t *)v94)[n5_2 + 1901] += 6;
+      v94->f3800 += 6;
       v61 = _this->f12;
       if ( (v61 & 7) != 7 )
       {
-        v93[n5_2 + 1909] += 4;
-        v93[1908] += 4;
-        v94[n5_2 + 1909] += 4;
-        v94[1908] += 4;
+        ((uint16_t *)v93)[n5_2 + 1909] += 4;
+        v93->f3816 += 4;
+        ((uint16_t *)v94)[n5_2 + 1909] += 4;
+        v94->f3816 += 4;
         v61 = _this->f12;
       }
       if ( (v61 & 7) != 0 )
       {
-        v93[n5_2 + 1893] += 3;
-        v93[1892] += 3;
-        v94[n5_2 + 1893] += 3;
-        v94[1892] += 3;
+        ((uint16_t *)v93)[n5_2 + 1893] += 3;
+        v93->f3784 += 3;
+        ((uint16_t *)v94)[n5_2 + 1893] += 3;
+        v94->f3784 += 3;
         v61 = _this->f12;
       }
     }
@@ -8297,27 +8441,27 @@ int32_t __alt_p1_model(Obj0 *_this)
       v56 = _this->f120;
       v57 = v56 + _this->f12 - *(uint32_t *)((char *)_this + (intptr_t)(4 * _this->f112 + 116));
       v58 = v8 + v56 - *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f112 + 124));
-      v59 = (uint16_t *)((char *)_this + 16 * v57);
-      v59[n5_2 + 1901] += 6;
-      v59[1900] += 6;
-      v60 = (uint16_t *)((char *)_this + 16 * v58);
-      v60[n5_4 + 1901] += 4;
-      v60[1900] += 4;
+      v59 = (Obj26 *)((uint16_t *)((char *)_this + 16 * v57));
+      ((uint16_t *)v59)[n5_2 + 1901] += 6;
+      v59->f3800 += 6;
+      v60 = (Obj26 *)((uint16_t *)((char *)_this + 16 * v58));
+      ((uint16_t *)v60)[n5_4 + 1901] += 4;
+      v60->f3800 += 4;
       v61 = _this->f12;
       if ( (v61 & 7) != 7 )
       {
-        v59[n5_2 + 1909] += 4;
-        v59[1908] += 4;
-        v60[n5_4 + 1909] += 2;
-        v60[1908] += 2;
+        ((uint16_t *)v59)[n5_2 + 1909] += 4;
+        v59->f3816 += 4;
+        ((uint16_t *)v60)[n5_4 + 1909] += 2;
+        v60->f3816 += 2;
         v61 = _this->f12;
       }
       if ( (v61 & 7) != 0 )
       {
-        v59[n5_2 + 1893] += 3;
-        v59[1892] += 3;
-        v60[n5_4 + 1893] += 2;
-        v60[1892] += 2;
+        ((uint16_t *)v59)[n5_2 + 1893] += 3;
+        v59->f3784 += 3;
+        ((uint16_t *)v60)[n5_4 + 1893] += 2;
+        v60->f3784 += 2;
         v61 = _this->f12;
       }
     }
@@ -8325,27 +8469,27 @@ int32_t __alt_p1_model(Obj0 *_this)
     if ( v62 == 1 )
     {
       v89 = v61 - _this->f136;
-      v90 = (uint16_t *)((char *)_this + 16 * (v89 + _this->f132));
-      v91 = (uint16_t *)((char *)_this + 16 * (_this->f140 + v89));
-      v90[n5_2 + 1901] += 6;
-      v90[1900] += 6;
-      v91[n5_2 + 1901] += 6;
-      v91[1900] += 6;
+      v90 = (Obj26 *)((uint16_t *)((char *)_this + 16 * (v89 + _this->f132)));
+      v91 = (Obj26 *)((uint16_t *)((char *)_this + 16 * (_this->f140 + v89)));
+      ((uint16_t *)v90)[n5_2 + 1901] += 6;
+      v90->f3800 += 6;
+      ((uint16_t *)v91)[n5_2 + 1901] += 6;
+      v91->f3800 += 6;
       v69 = _this->f12;
       if ( (v69 & 7) != 7 )
       {
-        v90[n5_2 + 1909] += 4;
-        v90[1908] += 4;
-        v91[n5_2 + 1909] += 4;
-        v91[1908] += 4;
+        ((uint16_t *)v90)[n5_2 + 1909] += 4;
+        v90->f3816 += 4;
+        ((uint16_t *)v91)[n5_2 + 1909] += 4;
+        v91->f3816 += 4;
         v69 = _this->f12;
       }
       if ( (v69 & 7) != 0 )
       {
-        v90[n5_2 + 1893] += 3;
-        v90[1892] += 3;
-        v91[n5_2 + 1893] += 3;
-        v91[1892] += 3;
+        ((uint16_t *)v90)[n5_2 + 1893] += 3;
+        v90->f3784 += 3;
+        ((uint16_t *)v91)[n5_2 + 1893] += 3;
+        v91->f3784 += 3;
         v69 = _this->f12;
       }
     }
@@ -8357,27 +8501,27 @@ int32_t __alt_p1_model(Obj0 *_this)
       v64 = _this->f136;
       v65 = v64 + _this->f12 - *(uint32_t *)((char *)_this + (intptr_t)(4 * _this->f128 + 132));
       v66 = v8 + v64 - *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f128 + 140));
-      v67 = (uint16_t *)((char *)_this + 16 * v65);
-      v67[n5_2 + 1901] += 6;
-      v67[1900] += 6;
-      v68 = (uint16_t *)((char *)_this + 16 * v66);
-      v68[n5_4 + 1901] += 4;
-      v68[1900] += 4;
+      v67 = (Obj26 *)((uint16_t *)((char *)_this + 16 * v65));
+      ((uint16_t *)v67)[n5_2 + 1901] += 6;
+      v67->f3800 += 6;
+      v68 = (Obj26 *)((uint16_t *)((char *)_this + 16 * v66));
+      ((uint16_t *)v68)[n5_4 + 1901] += 4;
+      v68->f3800 += 4;
       v69 = _this->f12;
       if ( (v69 & 7) != 7 )
       {
-        v67[n5_2 + 1909] += 4;
-        v67[1908] += 4;
-        v68[n5_4 + 1909] += 2;
-        v68[1908] += 2;
+        ((uint16_t *)v67)[n5_2 + 1909] += 4;
+        v67->f3816 += 4;
+        ((uint16_t *)v68)[n5_4 + 1909] += 2;
+        v68->f3816 += 2;
         v69 = _this->f12;
       }
       if ( (v69 & 7) != 0 )
       {
-        v67[n5_2 + 1893] += 3;
-        v67[1892] += 3;
-        v68[n5_4 + 1893] += 2;
-        v68[1892] += 2;
+        ((uint16_t *)v67)[n5_2 + 1893] += 3;
+        v67->f3784 += 3;
+        ((uint16_t *)v68)[n5_4 + 1893] += 2;
+        v68->f3784 += 2;
         v69 = _this->f12;
       }
     }
@@ -8385,27 +8529,27 @@ int32_t __alt_p1_model(Obj0 *_this)
     if ( v70 == 1 )
     {
       v86 = v69 - _this->f152;
-      v87 = (uint16_t *)((char *)_this + 16 * (v86 + _this->f148));
-      v88 = (uint16_t *)((char *)_this + 16 * (_this->f156 + v86));
-      v87[n5_2 + 1901] += 6;
-      v87[1900] += 6;
-      v88[n5_2 + 1901] += 6;
-      v88[1900] += 6;
+      v87 = (Obj26 *)((uint16_t *)((char *)_this + 16 * (v86 + _this->f148)));
+      v88 = (Obj26 *)((uint16_t *)((char *)_this + 16 * (_this->f156 + v86)));
+      ((uint16_t *)v87)[n5_2 + 1901] += 6;
+      v87->f3800 += 6;
+      ((uint16_t *)v88)[n5_2 + 1901] += 6;
+      v88->f3800 += 6;
       v77 = _this->f12;
       if ( (v77 & 7) != 7 )
       {
-        v87[n5_2 + 1909] += 4;
-        v87[1908] += 4;
-        v88[n5_2 + 1909] += 4;
-        v88[1908] += 4;
+        ((uint16_t *)v87)[n5_2 + 1909] += 4;
+        v87->f3816 += 4;
+        ((uint16_t *)v88)[n5_2 + 1909] += 4;
+        v88->f3816 += 4;
         v77 = _this->f12;
       }
       if ( (v77 & 7) != 0 )
       {
-        v87[n5_2 + 1893] += 3;
-        v87[1892] += 3;
-        v88[n5_2 + 1893] += 3;
-        v88[1892] += 3;
+        ((uint16_t *)v87)[n5_2 + 1893] += 3;
+        v87->f3784 += 3;
+        ((uint16_t *)v88)[n5_2 + 1893] += 3;
+        v88->f3784 += 3;
         v77 = _this->f12;
       }
     }
@@ -8417,27 +8561,27 @@ int32_t __alt_p1_model(Obj0 *_this)
       v72 = _this->f152;
       v73 = v72 + _this->f12 - *(uint32_t *)((char *)_this + (intptr_t)(4 * _this->f144 + 148));
       v74 = v8 + v72 - *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f144 + 156));
-      v75 = (uint16_t *)((char *)_this + 16 * v73);
-      v75[n5_2 + 1901] += 6;
-      v75[1900] += 6;
-      v76 = (uint16_t *)((char *)_this + 16 * v74);
-      v76[n5_4 + 1901] += 4;
-      v76[1900] += 4;
+      v75 = (Obj26 *)((uint16_t *)((char *)_this + 16 * v73));
+      ((uint16_t *)v75)[n5_2 + 1901] += 6;
+      v75->f3800 += 6;
+      v76 = (Obj26 *)((uint16_t *)((char *)_this + 16 * v74));
+      ((uint16_t *)v76)[n5_4 + 1901] += 4;
+      v76->f3800 += 4;
       v77 = _this->f12;
       if ( (v77 & 7) != 7 )
       {
-        v75[n5_2 + 1909] += 4;
-        v75[1908] += 4;
-        v76[n5_4 + 1909] += 2;
-        v76[1908] += 2;
+        ((uint16_t *)v75)[n5_2 + 1909] += 4;
+        v75->f3816 += 4;
+        ((uint16_t *)v76)[n5_4 + 1909] += 2;
+        v76->f3816 += 2;
         v77 = _this->f12;
       }
       if ( (v77 & 7) != 0 )
       {
-        v75[n5_2 + 1893] += 3;
-        v75[1892] += 3;
-        v76[n5_4 + 1893] += 2;
-        v76[1892] += 2;
+        ((uint16_t *)v75)[n5_2 + 1893] += 3;
+        v75->f3784 += 3;
+        ((uint16_t *)v76)[n5_4 + 1893] += 2;
+        v76->f3784 += 2;
         v77 = _this->f12;
       }
     }
@@ -8445,25 +8589,25 @@ int32_t __alt_p1_model(Obj0 *_this)
     if ( v78 == 1 )
     {
       v83 = v77 - _this->f168;
-      v84 = (uint16_t *)((char *)_this + 16 * (v83 + _this->f164));
+      v84 = (Obj26 *)((uint16_t *)((char *)_this + 16 * (v83 + _this->f164)));
       result = (char *)_this + 16 * (_this->f172 + v83);
-      v84[n5_2 + 1901] += 6;
-      v84[1900] += 6;
+      ((uint16_t *)v84)[n5_2 + 1901] += 6;
+      v84->f3800 += 6;
       *(uint16_t *)(result + 2 * n5_2 + 3802) += 6;
       *(uint16_t *)(result + 3800) += 6;
       v85 = _this->f12;
       if ( (v85 & 7) != 7 )
       {
-        v84[n5_2 + 1909] += 4;
-        v84[1908] += 4;
+        ((uint16_t *)v84)[n5_2 + 1909] += 4;
+        v84->f3816 += 4;
         *(uint16_t *)(result + 2 * n5_2 + 3818) += 4;
         *(uint16_t *)(result + 3816) += 4;
         v85 = _this->f12;
       }
       if ( (v85 & 7) != 0 )
       {
-        v84[n5_2 + 1893] += 3;
-        v84[1892] += 3;
+        ((uint16_t *)v84)[n5_2 + 1893] += 3;
+        v84->f3784 += 3;
         *(uint16_t *)(result + 2 * n5_2 + 3786) += 3;
         *(uint16_t *)(result + 3784) += 3;
       }
@@ -8475,27 +8619,27 @@ int32_t __alt_p1_model(Obj0 *_this)
       *(uint16_t *)(v79 + 3800) += 7;
       v80 = _this->f168;
       result = (char *)_this + 16 * (v80 + _this->f12 - *(uint32_t *)((char *)_this + (intptr_t)(4 * _this->f160 + 164)));
-      v81 = (uint16_t *)((char *)_this + 16 * (v80 - *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f160 + 172)) + v8));
+      v81 = (Obj26 *)((uint16_t *)((char *)_this + 16 * (v80 - *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f160 + 172)) + v8)));
       *(uint16_t *)(result + 2 * n5_2 + 3802) += 6;
       *(uint16_t *)(result + 3800) += 6;
-      v81[n5_4 + 1901] += 4;
-      v81[1900] += 4;
+      ((uint16_t *)v81)[n5_4 + 1901] += 4;
+      v81->f3800 += 4;
       v82 = _this->f12;
       if ( (v82 & 7) != 7 )
       {
         *(uint16_t *)(result + 2 * n5_2 + 3818) += 4;
         *(uint16_t *)(result + 3816) += 4;
-        v81[n5_4 + 1909] += 2;
-        v81[1908] += 2;
+        ((uint16_t *)v81)[n5_4 + 1909] += 2;
+        v81->f3816 += 2;
         v82 = _this->f12;
       }
       if ( (v82 & 7) != 0 )
       {
         *(uint16_t *)(result + 2 * n5_2 + 3786) += 3;
         *(uint16_t *)(result + 3784) += 3;
-        result = (uint16_t)v81[n5_4 + 1893] + 2;
-        v81[n5_4 + 1893] = result;
-        v81[1892] += 2;
+        result = (uint16_t)((uint16_t *)v81)[n5_4 + 1893] + 2;
+        ((uint16_t *)v81)[n5_4 + 1893] = result;
+        v81->f3784 += 2;
       }
     }
   }
@@ -8619,7 +8763,8 @@ int32_t *__alt_p1_alloc(Obj92 *_this, int32_t i, int32_t a3, int32_t n4)
 BMF_SSE char *__rc_begin_encode()
 {
   ;
-  __m128i si128, *v8;
+  Obj35 *v8;
+  __m128i si128;
   char *__rc_begin_encode_n256, *v6, *v7, *__rc_begin_encode_n256_1;
   int32_t Buffer, v2, v3, v9, v10, v13;
   uint32_t i;
@@ -8688,15 +8833,15 @@ BMF_SSE char *__rc_begin_encode()
     __byte_445732[0] = (uint8_t)v6 - 7;
     v7 = (char *)model_geometry + (uint32_t)v6;
     *(uint64_t *)v7 = si128.m128i_i64[0];
-    v8 = (__m128i *)(((int32_t)&model_geometry[3] + (uint32_t)v6 + 3) & 0xFFFFFFF0);
+    v8 = (Obj35 *)((__m128i *)(((int32_t)&model_geometry[3] + (uint32_t)v6 + 3) & 0xFFFFFFF0));
     *((uint32_t *)v7 + 2) = 0x07070707;
     *((uint16_t *)v7 + 6) = 0x0707;
     v7[14] = 7;
     *((uint64_t *)v7 + 6) = si128.m128i_i64[0];
     *((uint64_t *)v7 + 7) = si128.m128i_i64[0];
-    *v8 = si128;
-    v8[1] = si128;
-    v8[2] = si128;
+    v8->f0 = si128;
+    v8->f16 = si128;
+    v8->f32 = si128;
     __rc_begin_encode_n256 = (char *)bmf_new(0x7F000u);
     if ( __rc_begin_encode_n256 )
     {
@@ -10110,7 +10255,8 @@ __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...)
 BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
 {
   ;
-  __m128i si128, *v13;
+  Obj35 *v13;
+  __m128i si128;
   char *v11, *v12, ArgList;
   int32_t bits_left, v7, v8, v16, v17, v20;
   uint16_t *n256, *tbl;
@@ -10179,15 +10325,15 @@ BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
     __byte_445732[0] = (uint8_t)v11 - 7;
     v12 = (char *)model_geometry + (uint32_t)v11;
     *(uint64_t *)v12 = si128.m128i_i64[0];
-    v13 = (__m128i *)(((int32_t)&model_geometry[3] + (uint32_t)v11 + 3) & 0xFFFFFFF0);
+    v13 = (Obj35 *)((__m128i *)(((int32_t)&model_geometry[3] + (uint32_t)v11 + 3) & 0xFFFFFFF0));
     *((uint32_t *)v12 + 2) = 0x07070707;
     *((uint16_t *)v12 + 6) = 0x0707;
     v12[14] = 7;
     *((uint64_t *)v12 + 6) = si128.m128i_i64[0];
     *((uint64_t *)v12 + 7) = si128.m128i_i64[0];
-    *v13 = si128;
-    v13[1] = si128;
-    v13[2] = si128;
+    v13->f0 = si128;
+    v13->f16 = si128;
+    v13->f32 = si128;
     n256 = bmf_new(0x7F000u);
     if ( n256 )
     {
@@ -11353,20 +11499,22 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
   Obj96 *v78;
   Obj96 *v84;
   Obj117 *v129;
-  int16_t *v7, *v45, *v66, *v67, *v90, *v99, *v143, v150, *v158, *v205;
+  Obj29 *v66;
+  int16_t *v7, *v45, *v67, *v90, *v99, *v143, v150, *v158, *v205;
   Obj68 *v54;
   Obj95 *v22;
+  Obj30 *v104;
   int32_t v6, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v23, v24, v25,
           v27, v29, v30, v47, v48, v51, v55, v56, v57, v65, v68, v74, v75, v85, v88, *v103,
-          *v104, v105, n2, v107, n3536_5, v109, v111, v112, v113, v114, v116, v117, n3536_1,
-          v121, v122, v123, v124, v125, v126, v127, v128, v130, n2256, v132, v134, v137, v138,
-          v140, v141, v144, n2576, n1840_13, v147, v148, v149, v151, v154, v155, v156, n2896,
-          v161, v162, v163, v164, v167, v168, v169, v171, n3536_2, v175, v176, v177, v178, v179,
-          v181, v182, n3536_3, v185, v186, v188, v189, v190, v191, v192, v193, n1840_14,
-          n1840_15, v198, n1840_16, v200, v201, n1840_17, v203, v206, v207, v208, n960, n3536_4,
-          v211, v212, v213, v214, v215, n1840_3, n1840_8, n1840_7, n1840_10, n1840_9, v222,
-          v224, n1840_11, n1840_12, n255, v228, n1840_5, n1840_4, n1840_6, v234, v235, v236,
-          v237, v238, v239, v240, v241, v242;
+          v105, n2, v107, n3536_5, v109, v111, v112, v113, v114, v116, v117, n3536_1, v121,
+          v122, v123, v124, v125, v126, v127, v128, v130, n2256, v132, v134, v137, v138, v140,
+          v141, v144, n2576, n1840_13, v147, v148, v149, v151, v154, v155, v156, n2896, v161,
+          v162, v163, v164, v167, v168, v169, v171, n3536_2, v175, v176, v177, v178, v179, v181,
+          v182, n3536_3, v185, v186, v188, v189, v190, v191, v192, v193, n1840_14, n1840_15,
+          v198, n1840_16, v200, v201, n1840_17, v203, v206, v207, v208, n960, n3536_4, v211,
+          v212, v213, v214, v215, n1840_3, n1840_8, n1840_7, n1840_10, n1840_9, v222, v224,
+          n1840_11, n1840_12, n255, v228, n1840_5, n1840_4, n1840_6, v234, v235, v236, v237,
+          v238, v239, v240, v241, v242;
   int8_t v139;
   uint32_t v120, v133, v135, v136, v152, v153, v165, v180;
   uint8_t *v187;
@@ -11657,14 +11805,14 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
     {
       v28->f278592.m128_f32[0] = (float)(*(int16_t *)((char *)v46 - 54) + *(int16_t *)((char *)v46 - 18) - *(int16_t *)((char *)v46 - 72));
       v258 = v46;
-      v66 = (int16_t *)v28->f278736.m128_i32[3];
+      v66 = (Obj29 *)((int16_t *)v28->f278736.m128_i32[3]);
       v28->f278592.m128_f32[1] = (float)(*(int16_t *)((char *)v46 - 90) + *v45 - *(v45 - 45));
       v67 = (int16_t *)v28->f278736.m128_i32[2];
       v28->f278592.m128_f32[2] = (float)(*(int16_t *)((char *)v46 - 72) + *v45 - *(v45 - 36));
       v247 = v67;
       v68 = *v67 + 3 * v45[9] - 4 * v67[9];
       v69 = (Obj36 *)(v281);
-      v70 = (float)(v68 - (((v45[18] - *v45 - (v66[18] - *v66)) >> 1) - v66[9]));
+      v70 = (float)(v68 - (((v45[18] - *v45 - (v66->f36 - v66->f0)) >> 1) - v66->f18));
       v71 = (int16_t *)(v282);
       v28->f278592.m128_f32[3] = v70;
       v72 = (Obj68 *)(v286);
@@ -11719,11 +11867,11 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
   }
   v103 = (int32_t *)v28->f278656.m128_i32[3];
   v275 = (__m128 *)*(v103 - 1);
-  v104 = (int32_t *)v28->f278672.m128_i32[0];
-  v276 = (Obj95 *)((int16_t *)v104[1]);
-  v277 = v104[2];
+  v104 = (Obj30 *)((int32_t *)v28->f278672.m128_i32[0]);
+  v276 = (Obj95 *)((int16_t *)v104->f4);
+  v277 = v104->f8;
   v278 = *(v103 - 2);
-  v279 = *v104;
+  v279 = v104->f0;
   v280 = *v103;
   v105 = 14 * n3536;
   n2 = 1;
@@ -14206,11 +14354,13 @@ int32_t __decode_symbol_list(uint32_t *a1)
   uint32_t *&v68 = __frame.v68;
   ;
   char *v3, *v7;   // were int32_t: these hold addresses
-  char v23, v34, *v36, *v38, v40;
+  Obj32 *v38;
+  char v23, v34, *v36, v40;
   int16_t v39;
   int32_t sym_cum, sym_high, v2, v5, v6, v8, n0x2000_5, n0x2000_2, n251, v46,
           v49, v51, v53;
-  uint16_t **v4, *v20, **v21, *v25, **v26, *v33, v35, *v43, *v44, *v45, *v47, *v48, *v52;
+  Obj33 *v47;
+  uint16_t **v4, *v20, **v21, *v25, **v26, *v33, v35, *v43, *v44, *v45, *v48, *v52;
   uint32_t *v9, __decode_symbol_list_n0x800000, n0x2000_6, n0x2000_4,
            n0x2000_3, tot_1, *v32, v41, v42, v50,
            v54;
@@ -14310,21 +14460,21 @@ int32_t __decode_symbol_list(uint32_t *a1)
       while ( 1 )
       {
         n251 = (uint8_t)v36[2];
-        v38 = v36 - 3;
+        v38 = (Obj32 *)(v36 - 3);
         if ( n251 <= (uint8_t)*(v36 - 1) )
           break;
         v39 = *(uint16_t *)v36;
         v40 = v36[2];
-        *(uint16_t *)v36 = *(uint16_t *)v38;
+        *(uint16_t *)v36 = v38->f0;
         v36[2] = *(v36 - 1);
-        *(uint16_t *)v38 = v39;
+        v38->f0 = v39;
         *(v36 - 1) = v40;
         v33 = (uint16_t *)v32[5];
         v36 -= 3;
         if ( v38 == (char *)v33 )
         {
           __decode_symbol_list_n0x800000 = n0x800000_1;
-          n251 = (uint8_t)v38[2];
+          n251 = (uint8_t)v38->f2;
           goto LABEL_30;
         }
       }
@@ -14349,12 +14499,12 @@ LABEL_30:
       *((uint8_t *)v44 + 2) = v46;
       if ( v44 != (uint16_t *)v32[5] )
       {
-        v47 = (uint16_t *)((char *)v44 - 3);
+        v47 = (Obj33 *)((uint16_t *)((char *)v44 - 3));
         v58 = *((uint8_t *)v44 - 1);
         if ( v46 > v58 )
         {
           v57 = *v44;
-          *v44 = *v47;
+          *v44 = v47->f0;
           *((uint8_t *)v44 + 2) = v58;
           if ( v47 != (uint16_t *)v32[5] )
           {
@@ -14366,15 +14516,15 @@ LABEL_30:
               v49 = *((uint8_t *)v47 - 1);
               if ( v46 <= v49 )
                 break;
-              *v47 = *v48;
+              v47->f0 = *v48;
               *((uint8_t *)v47 + 2) = v49;
-              v47 = (uint16_t *)((char *)v47 - 3);
+              v47 = (Obj33 *)((uint16_t *)((char *)v47 - 3));
             }
             while ( v48 != (uint16_t *)v32[5] );
             v44 = v56;
             v43 = v55;
           }
-          *v47 = v57;
+          v47->f0 = v57;
           *((uint8_t *)v47 + 2) = v46;
         }
       }
@@ -15279,7 +15429,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   int32_t &n15_4 = __frame.n15_4;
   ModelBlock *&this_1 = (ModelBlock *&)__frame.this_1;
   int32_t &n15_3 = __frame.n15_3;
-  uint16_t *&v185 = __frame.v185;
+  Obj34 *&v185 = (Obj34 *&)__frame.v185;
   int32_t &n15_7 = __frame.n15_7;
   int32_t &v187 = __frame.v187;
   int32_t &v188 = __frame.v188;
@@ -15324,8 +15474,11 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
           n15_18, v161, n2_2, p_n15_10, p_n15_8, p_n15_9, n15_19;
   Obj66 *v159;
   Obj121 *v111;
-  uint16_t *n2_7, *n2_8, *v37, *v51, *n2_11, *n2_12, *n2_13, *n2_14, *v97, *v98, *n2_6, *v108,
-           *v113, *v124, v153, *n15_39;
+  Obj34 *v51;
+  Obj34 *v37;
+  Obj34 *v108;
+  uint16_t *n2_7, *n2_8, *n2_11, *n2_12, *n2_13, *n2_14, *v97, *v98, *n2_6, *v113, *v124, v153,
+           *n15_39;
   uint32_t bin_tot, v55, v57, **v136, v137, p_n15_12, v139, v140, v141, v168, v169, v171, v172,
           v173;
   uint8_t *v69;
@@ -15479,10 +15632,10 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
       n0xFFFF_1 = *((uint16_t *)v36 + 3339224);
     }
   }
-  v37 = (uint16_t *)*(int32_t *)&this_3->f76;
+  v37 = (Obj34 *)((uint16_t *)*(int32_t *)&this_3->f76);
   v38 = *((uint8_t *)v37 - 5);
   v39 = *((uint8_t *)v37 - 6);
-  v185 = v37;
+  v185 = (Obj34 *)(v37);
   if ( (v38 & v39) != 0
     && (p_n15_3 = (uint8_t *)*(int32_t *)&this_3->f80,
         v41 = (uint8_t *)*(int32_t *)&this_3->f84,
@@ -15531,13 +15684,13 @@ LABEL_42:
     n15_2 = *(uint8_t *)(*(int32_t *)&this_3->f1078684 + n15_31);
     n15_32 = *(uint8_t *)(*(int32_t *)&this_3->f1078688 + n15_3) + 8 * n15_2 + 4 * v46 + 2 * v42;
     n15_12 = 0;
-    if ( *v185 == n15_3 )
+    if ( v185->f0 == n15_3 )
     {
       p_n15 = (int32_t)p_n15_3;
       this_1 = (ModelBlock *)(this_3);
       do
         ++n15_12;
-      while ( n15_12 < n15_31 && v185[4 * n15_12] == n15_3 );
+      while ( n15_12 < n15_31 && ((uint16_t *)v185)[4 * n15_12] == n15_3 );
       this_3 = (ModelBlock *)(this_1);
       p_n15_3 = (uint8_t *)p_n15;
     }
@@ -15549,7 +15702,7 @@ LABEL_42:
       *(int32_t *)&this_3->f84 = (int32_t)&v41[8 * n15_12 + -8 * n15_9];
       v50 = *(int32_t *)&this_3->f92;
       *(int32_t *)&this_3->f88 = *(int32_t *)&this_3->f88 + 8 * n15_12 - 8 * n15_9;
-      v51 = v185;
+      v51 = (Obj34 *)(v185);
       *(int32_t *)&this_3->f92 = v50 + 8 * n15_12 - 8 * n15_9;
       *((uint32_t *)v51 + 1) = 0x01010101;
       *(uint32_t *)*(int32_t *)&this_3->f76 = 0x01010101;
@@ -15731,9 +15884,9 @@ LABEL_42:
         *((uint16_t *)n2_3 + 4) = v149;
         __code_pixel_n0x2000 = (uint16_t)(p_n15 + v149 + v158);
         *((uint16_t *)n2_3 + 5) = __code_pixel_n0x2000;
-        v185 = (uint16_t *)*(int32_t *)&this_3->f76;
+        v185 = (Obj34 *)((uint16_t *)*(int32_t *)&this_3->f76);
       }
-      n15_16 = *v185;
+      n15_16 = v185->f0;
       arg_tot = __code_pixel_n0x2000;
       if ( n15_16 == n15_3 )
       {
@@ -15823,7 +15976,7 @@ LABEL_42:
     else
     {
       v159 = (Obj66 *)((uint16_t *)&((int32_t *)this_3)[v82 + 24]);
-      n15_18 = *v185;
+      n15_18 = v185->f0;
       arg_tot = *(uint16_t *)(n15_36 + 10);
       if ( n15_18 == n15_3 )
       {
@@ -15937,7 +16090,7 @@ LABEL_42:
   this_4 = (ModelBlock *)((int32_t *)v98[5]);
   n15_31 = n15_41;
   n15_26 = v98[6];
-  v108 = (uint16_t *)v98[7];
+  v108 = (Obj34 *)((uint16_t *)v98[7]);
   n15_2 = n15_24;
   v109 = *(int32_t *)&this_3->f76;
   n15_4 = n15_25;
@@ -15946,7 +16099,7 @@ LABEL_42:
   v111 = (Obj121 *)((uint16_t *)*(int32_t *)&this_3->f80);
   n15_3 = n15_26;
   v112 = v111->f16;
-  v185 = v108;
+  v185 = (Obj34 *)(v108);
   n15_7 = n15_27;
   v113 = (uint16_t *)*(int32_t *)&this_3->f84;
   v114 = v113[4];
@@ -19317,9 +19470,9 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
   bool v17;
   int16_t v14, v24;
   char *v12;
-  int32_t i_1, v13, v18, v19, v20, v22, v23, v26, v27, v29, v30, v31, v33, v34, v35, v37, v49,
-          *v50, v51, v52, v55, v56, v57, v59, v60, v61, v63, v64, v65, v67, v68, v70, v71, v72,
-          v73, v74, v75, v77, v79, v81, v83, v85, v87, v89, v92, v94;
+  int32_t i_1, v13, v22, v23, v29, v30, v31, v37, v49, *v50, v51, v52, v59,
+          v60, v61, v67, v68, v72, v73, v74, v75, v77, v79, v81, v83, v85,
+          v87, v89, v92, v94;
   int64_t v16;
   uint16_t *v15;
   uint32_t j;
@@ -19700,12 +19853,12 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   bool v17, v109;
   char v9;
   int16_t v110;
-  int32_t i, v5, n4, n4_1, v15, v16, v21, v22, v23, v24, v27, v28, v29, v31, v32, v33, v35,
-          v36, v37, v39, v40, v42, v43, v44, v47, v48, v49, v50, v51, v52, v53, v58, *v59, v60,
-          v61, v64, v65, v66, v68, v69, v70, v72, v73, v74, v76, v77, v79, v80, v81, v82, v83,
-          v84, v86, v88, v90, v92, v94, v96, v98, v101, v103, v104, v105, v106, v107, v108,
-          v112, v113, v114, v115, v116, v117, v118, v119, v121, v122, v123, v124, v125, v126,
-          v127, v128, v130, v131, v132, v133, v134, v135, n4_3, n4_4;
+  int32_t i, v5, n4, n4_1, v15, v16, v21, v22, v23, v24, v31, v32, v33, v39,
+          v40, v47, v48, v49, v50, v51, v52, v53, v58, *v59, v60, v61, v68,
+          v69, v70, v76, v77, v81, v82, v83, v84, v86, v88, v90, v92, v94,
+          v96, v98, v101, v103, v104, v105, v106, v107, v108, v112, v113,
+          v114, v115, v116, v117, v118, v119, v121, v122, v123, v124, v125,
+          v126, v127, v128, v130, v131, v132, v133, v134, v135, n4_3, n4_4;
   uint16_t *v102;
   Obj11 *lpAddress_1;
   uint32_t v11;
@@ -20230,10 +20383,9 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
   __m128i *v56;
   char v14, v97;
   int16_t v26;
-  int32_t v12, v13, n16, v16, v17, v20, v21, v22, v24, v25, v28, v29, v31, v32, v33, v35, v36,
-          v37, v39, Size, v52, *v53, v54, v55, v58, v59, v60, v62, v63, v64, v66, v67, v68,
-          v70, v71, v73, v74, v75, v76, v77, v78, v80, v82, v84, v86, v88, v90, v92, v95, v96,
-          n16_1, v99, v100;
+  int32_t v12, v13, n16, v16, v17, v24, v25, v31, v32, v33, v39, Size, v52,
+          *v53, v54, v55, v62, v63, v64, v70, v71, v75, v76, v77, v78, v80,
+          v82, v84, v86, v88, v90, v92, v95, v96, n16_1, v99, v100;
   int64_t v19;
   uint16_t *v18;
   uint32_t k;
@@ -20654,13 +20806,13 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   bool v16;
   char v9;
   int16_t v113;
-  int32_t i_1, v5, n4, n4_1, v14, v15, v20, v21, v22, v23, v26, v27, v28, v30, v31, v32, v34,
-          v35, v36, v38, v39, v41, v42, v43, v46, v47, v48, v49, v50, v51, v52, v57, *v58, v59,
-          v60, v63, v64, v65, v67, v68, v69, v71, v72, v73, v75, v76, v78, v79, v80, v81, v82,
-          v83, v85, v87, v89, v91, v93, v95, v97, v99, v100, v101, v102, v104, v105, v106,
-          v107, n16, v109, v110, v111, v112, v115, v116, v117, v118, n16_1, v120, v121, v122,
-          v123, v124, v126, v127, v128, v129, n16_2, v131, v132, v134, v135, v136, v137, n16_3,
-          v139, n4_3, n4_4;
+  int32_t i_1, v5, n4, n4_1, v14, v15, v20, v21, v22, v23, v30, v31, v32, v38,
+          v39, v46, v47, v48, v49, v50, v51, v52, v57, *v58, v59, v60, v67,
+          v68, v69, v75, v76, v80, v81, v82, v83, v85, v87, v89, v91, v93,
+          v95, v97, v99, v100, v101, v102, v104, v105, v106, v107, n16, v109,
+          v110, v111, v112, v115, v116, v117, v118, n16_1, v120, v121, v122,
+          v123, v124, v126, v127, v128, v129, n16_2, v131, v132, v134, v135,
+          v136, v137, n16_3, v139, n4_3, n4_4;
   uint32_t v11;
   Obj11 *lpAddress_1;
   void *v7, *v8, **lpAddress_2;
