@@ -5983,20 +5983,11 @@ BMF_SSE uint32_t __alt_init_tables(uint8_t *a1, char *a2)
   *a1 = 0;
   n128_6 = 1;
   a1[128] = -1;
-  if ( 1 )   // -E is 0
-    goto LABEL_52;
-  v29 = -1;
-  do
+  // -E is 0, so the near-lossless fill that stood here never ran: the jump
+  // over it was `if ( 1 ) goto LABEL_52`, and LABEL_52 had no other source.
+  // The `n128_6 < 128` test it jumped past went with it -- the only live
+  // path entered the block without evaluating it.
   {
-    a1[v29 + 256] = 0;
-    a1[n128_6] = 0;
-    --v29;
-    ++n128_6;
-  }
-  while ( n128_6 <= near_lossless_max[0] );
-  if ( n128_6 < 128 )
-  {
-LABEL_52:
     v49 = 128 - n128_6;
     v52 = (128 - n128_6) / 2;
     v30 = 0;

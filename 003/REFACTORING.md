@@ -24,7 +24,7 @@ so they can be re-measured rather than trusted.
 | recovered structs | **73**, 2728 named field accesses | 0 |
 | raw-offset dereferences | **523** | 1646 before Phase 4 |
 | pointer casts | 5804 | 7336 |
-| `goto` / `LABEL_n:` | 121 / 88 | 174 / 127 |
+| `goto` / `LABEL_n:` | 113 / 81 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
 | line coverage | **95.63 %** | 64.5 % |
 
@@ -170,9 +170,18 @@ the subsystem — and **one of them was too narrow.** It searched for
 round. `alt_init_tables` had one, with a 22-line else, and a `LABEL_47` that
 lost its last `goto` when the earlier block went.
 
-Re-run over the whole subsystem in both forms: that was the only one. The lever
-is spent now, and the check that says so is one that would have found the case
-it missed.
+Re-run over the whole subsystem in both forms: that was the only one.
+
+A fourth turned up right beside it, and by a different route. `near_lossless_max[0]`
+is assigned 0 at four places and nowhere else, so it is pinned exactly as the
+six mode switches are — and next to a test on it stood `if ( 1 ) goto LABEL_52`,
+an always-true jump the folding pass left. Everything between the jump and its
+label was unreachable, including the `n128_6 < 128` test the only live path
+never evaluated. 13 lines, one label, one `goto`.
+
+The lever is spent now, and the checks that say so are the ones that would have
+found all four: both spellings of the predictor test, `if ( 1 )` as a
+statement, and labels with no remaining source.
 
 These are format and descriptor combinations fifteen images still do not reach.
 `alt_model_p1_decode` used to head this table with 268 lines and is not on it
@@ -785,7 +794,7 @@ for f in testfiles/*.bmp; do
   rm -f o.bmf o.bmp                       # bmf appends to its output
   ./bmfcov c "$f" o.bmf && ./bmfcov d o.bmf o.bmp
 done
-gcov -n    -o . bmfcov-bmf.gcno                       # 95.63 % of 13353 lines
+gcov -n    -o . bmfcov-bmf.gcno                       # 95.63 % of 13351 lines
 gcov -f -n -o . bmfcov-bmf.gcno                       # per function
 ```
 
