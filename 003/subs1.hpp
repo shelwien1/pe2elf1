@@ -10115,8 +10115,13 @@ BMF_SSE uint8_t *__unpredict_med(char *Src, int32_t i, int32_t a3)
   n256 = near_lossless_max[0];
   result = (uint8_t *)(Src + 1);
   n128_1 = 2 * near_lossless_max[0] + 1;
-  if ( plane_predictor )
-  {
+  // The test here was `if ( plane_predictor )`, with a 45-line else building
+  // a table for predictor mode 0.  Nothing reaches it: expand_image calls
+  // this from two places and both are guarded by the predictor being 1 --
+  // the second through n2_2, which is `*(uint32_t *)p_i` read back from
+  // `*(uint32_t *)p_i = n2_1`, and n2_1 is `__byte_44339E[16 * v37] & 3`,
+  // the predictor itself.  The test is always true, so it is gone with its
+  // else.  See REFACTORING.md section 2.3.
     si128 = _mm_load_si128((const __m128i *)&__xmmword_439640);
     v8 = _mm_load_si128((const __m128i *)&__xmmword_439620);
     v9 = _mm_load_si128((const __m128i *)&__xmmword_439650);
@@ -10146,53 +10151,6 @@ BMF_SSE uint8_t *__unpredict_med(char *Src, int32_t i, int32_t a3)
     v52[253] = -127;
     v52[254] = 127;
     // never taken: -E is 0
-  }
-  else
-  {
-    v20 = _mm_load_si128((const __m128i *)&__xmmword_439620);
-    v21 = _mm_load_si128((const __m128i *)&__xmmword_439630);
-    for ( k = 0; k < 0x100; k += 128 )
-    {
-      *(__m128i *)&v52[k] = v21;
-      v23 = _mm_add_epi8(v21, v20);
-      *(__m128i *)&v52[k + 16] = v23;
-      v24 = _mm_add_epi8(v23, v20);
-      *(__m128i *)&v52[k + 32] = v24;
-      v25 = _mm_add_epi8(v24, v20);
-      *(__m128i *)&v52[k + 48] = v25;
-      v26 = _mm_add_epi8(v25, v20);
-      *(__m128i *)&v52[k + 64] = v26;
-      v27 = _mm_add_epi8(v26, v20);
-      *(__m128i *)&v52[k + 80] = v27;
-      v28 = _mm_add_epi8(v27, v20);
-      *(__m128i *)&v52[k + 96] = v28;
-      v29 = _mm_add_epi8(v28, v20);
-      *(__m128i *)&v52[k + 112] = v29;
-      v21 = _mm_add_epi8(v29, v20);
-    }
-    n256_1 = n256;
-    v31 = 0;
-    if ( n256 < 256 )
-    {
-      n128_2 = n128_1;
-      do
-      {
-        v33 = v52[v31];
-        v52[v31++] = v52[n256];
-        v52[n256] = v33;
-        n256 += n128_2;
-      }
-      while ( n256 < 256 );
-      Src_1 = Src;
-      n256_1 = near_lossless_max[0];
-    }
-    if ( n256 - n256_1 < 256 )
-    {
-      v34 = v52[v31];
-      v52[v31] = v53;
-      v53 = v34;
-    }
-  }
   i_1 = i;
   if ( i == 1 )
   {

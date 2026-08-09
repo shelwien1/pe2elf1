@@ -26,7 +26,7 @@ so they can be re-measured rather than trusted.
 | pointer casts | 5805 | 7336 |
 | `goto` / `LABEL_n:` | 121 / 88 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
-| line coverage | **95.28 %** | 64.5 % |
+| line coverage | **95.52 %** | 64.5 % |
 
 The target is 32-bit. That is not a limitation left over from the port — it is
 the decision that made Phase 4 possible, and §Phase 4 says why.
@@ -123,7 +123,7 @@ thinks so".
 
 ### 2.3 What the gate still does not reach
 
-4.7 % of the file — 629 unexecuted lines across the bodies:
+4.4 % of the file — 595 unexecuted lines across the bodies:
 
 | body | unexecuted |
 | --- | --- |
@@ -145,18 +145,20 @@ have said "the corpus does not go there", which is what was said about
 `alt_model_p1_decode` before an image reached it and found a bug. The call
 graph is what turns that into *cannot*.
 
-**The same shape appears in `unpredict_med` and was not deleted.** Its
-`else` — 16 lines, the largest contiguous unexecuted run left in the file — is
-the `plane_predictor == 0` side of a test, and one of its two call sites is
-guarded by `plane_predictor == 1`. The other is guarded by a *different*
-variable, so the call graph does not close, and the measurement is 4 entries
-against `sub_4118A0`'s 164. Two weak halves are not one strong one. Left in
-place; what to check is whether that second guard is the predictor under
-another name.
+**The same shape appears in `unpredict_med`,** and it was written down as *not*
+deletable before it was: one of its two call sites is guarded by
+`plane_predictor == 1` and the other by a different variable, so the call graph
+did not close, and the measurement behind it was 4 entries against
+`sub_4118A0`'s 164. Two weak halves are not one strong one.
 
-**What is left uncovered is diffuse**, and that is the useful summary. Across
-the whole file the unexecuted lines form 249 runs of 1–3 lines, 48 runs of 4–9,
-and exactly one of 10 or more — the `unpredict_med` block above. There are no
+Then the question that was written down got asked. `n2_2` is
+`*(uint32_t *)p_i` read back from `*(uint32_t *)p_i = n2_1`, and `n2_1` is
+`__byte_44339E[16 * v37] & 3` — the predictor itself, stored and reloaded. Both
+guards are the same guard. The test is always true, so it and its 45-line else
+are gone.
+
+**What is left uncovered is diffuse**, and that is the useful summary. The
+unexecuted lines now form runs of at most 9, and mostly of 1 to 3. There are no
 more dead features to find here; there are allocation-failure checks, error
 returns and format variants, a line or two at a time.
 
@@ -767,7 +769,7 @@ for f in testfiles/*.bmp; do
   rm -f o.bmf o.bmp                       # bmf appends to its output
   ./bmfcov c "$f" o.bmf && ./bmfcov d o.bmf o.bmp
 done
-gcov -n    -o . bmfcov-bmf.gcno                       # 95.28 % of 13406 lines
+gcov -n    -o . bmfcov-bmf.gcno                       # 95.52 % of 13371 lines
 gcov -f -n -o . bmfcov-bmf.gcno                       # per function
 ```
 
