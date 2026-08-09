@@ -229,10 +229,8 @@ alignas(16) static uint8_t bmf_coded_size[20] = {   // 0x443370
 };
 typedef int32_t t_ElementCount_0;
 static t_ElementCount_0& coded_size = *(t_ElementCount_0*)bmf_coded_size;
-typedef int32_t t_dword_443384;
-static t_dword_443384& desc_slow_mode = *(t_dword_443384*)(bmf_bss + 0x443384 - 0x443380);
-typedef int32_t t_dword_443388;
-static t_dword_443388& __dword_443388 = *(t_dword_443388*)(bmf_bss + 0x443388 - 0x443380);
+static int32_t desc_slow_mode;   // was 0x443384 in bmf_bss
+static int32_t __dword_443388;   // was 0x443388 in bmf_bss
 typedef int32_t t_n256_0[0x10000];
 static t_n256_0& near_lossless_max = *(t_n256_0*)(bmf_bss + 0x443398 - 0x443380);
 typedef uint8_t t_byte_44339F[0x10000];
@@ -247,26 +245,23 @@ typedef int32_t t_n191_0;
 static t_n191_0& __n191_0 = *(t_n191_0*)(bmf_bss + 0x4433D4 - 0x443380);
 typedef int32_t t_dword_445660[32];
 static t_dword_445660& model_geometry = *(t_dword_445660*)(bmf_bss + 0x445660 - 0x443380);
-typedef char t_byte_445700;
-static t_byte_445700& __byte_445700 = *(t_byte_445700*)(bmf_bss + 0x445700 - 0x443380);
-typedef int32_t t_n8_1;
-static t_n8_1& __n8_1 = *(t_n8_1*)(bmf_bss + 0x44570C - 0x443380);
-typedef int32_t t_n8_0;
-static t_n8_0& __n8_0 = *(t_n8_0*)(bmf_bss + 0x445710 - 0x443380);
+static char __byte_445700;   // was 0x445700 in bmf_bss
+static int32_t __n8_1;   // was 0x44570C in bmf_bss
+static int32_t __n8_0;   // was 0x445710 in bmf_bss
 typedef char t_byte_44571E;
 static t_byte_44571E& __byte_44571E = *(t_byte_44571E*)(bmf_bss + 0x44571E - 0x443380);
-typedef int32_t t_dword_4458E0;
-static t_dword_4458E0& __dword_4458E0 = *(t_dword_4458E0*)(bmf_bss + 0x4458E0 - 0x443380);
-typedef int32_t t_dword_4458E4;
-static t_dword_4458E4& __dword_4458E4 = *(t_dword_4458E4*)(bmf_bss + 0x4458E4 - 0x443380);
-typedef int32_t t_dword_4458E8;
-static t_dword_4458E8& __dword_4458E8 = *(t_dword_4458E8*)(bmf_bss + 0x4458E8 - 0x443380);
-typedef int32_t t_dword_4458EC;
-static t_dword_4458EC& __dword_4458EC = *(t_dword_4458EC*)(bmf_bss + 0x4458EC - 0x443380);
-typedef int32_t t_dword_4458F0;
-static t_dword_4458F0& __dword_4458F0 = *(t_dword_4458F0*)(bmf_bss + 0x4458F0 - 0x443380);
-typedef int32_t t_dword_4458F4;
-static t_dword_4458F4& __dword_4458F4 = *(t_dword_4458F4*)(bmf_bss + 0x4458F4 - 0x443380);
+// Four running bias terms, one per context sum.  `alt_model_p2_encode` zeroes
+// them at the start of a plane, decays them `>>= 3` each row and re-accumulates
+// them; `alt_p2_context` adds one apiece into the four neighbourhood sums it
+// folds into a context word.  Were 0x4458E0..0x4458EC in bmf_bss.
+static int32_t ctx_bias[4];
+
+// The near-lossless dead zone.  `rc_begin_encode` sets these to +d and -d for
+// d = 4 * near_lossless_max + 1, and every reader spells the same shape --
+// `(x > deadzone_hi) - (x < deadzone_lo)`, a sign that is 0 inside the zone.
+// Were 0x4458F0 and 0x4458F4 in bmf_bss.
+static int32_t deadzone_hi;
+static int32_t deadzone_lo;
 // MSVC's CRT new-handler slot, and nothing else.  This was 10 292 bytes of
 // CRT state because that is how far it was to the next global; one word of it
 // is live -- `set_new_handler` writes it and `bmf_new` reads it (REFACTORING.md
@@ -394,16 +389,13 @@ typedef char t_n32;
 static t_n32& __n32 = *(t_n32*)(bmf_bss + 0x445731 - 0x443380);
 typedef uint8_t t_byte_445732[10];
 static t_byte_445732& __byte_445732 = *(t_byte_445732*)(bmf_bss + 0x445732 - 0x443380);
-typedef int32_t t_dword_44573C[0x10000];
-static t_dword_44573C& __dword_44573C = *(t_dword_44573C*)(bmf_bss + 0x44573C - 0x443380);
-typedef int32_t t_n4_4;
-static t_n4_4& __n4_4 = *(t_n4_4*)(bmf_bss + 0x445740 - 0x443380);
-typedef int32_t t_n4_3;
-static t_n4_3& __n4_3 = *(t_n4_3*)(bmf_bss + 0x445744 - 0x443380);
-typedef int32_t t_n15;
-static t_n15& __n15 = *(t_n15*)(bmf_bss + 0x445748 - 0x443380);
-typedef int32_t t_n15_0;
-static t_n15_0& __n15_0 = *(t_n15_0*)(bmf_bss + 0x44574C - 0x443380);
+// A five-entry table, and the extent is measured rather than assumed: the one
+// site that subscripts it -- `*(uint16_t *)f56[5] = tbl44573C[n4]`, with `n4`
+// out of `ModelBlock::f32` -- steps four bytes, and the four globals after
+// 0x44573C were the elements it was stepping onto.  `init_model_tables` reads
+// elements 1..3 as bare symbol values.  What the index means is not
+// established, so the name still records the address rather than a role.
+static int32_t tbl44573C[5];
 
 // The plane descriptor table, `ALGORITHM.md` §6.2: four 16-byte records at
 // 0x0044339C, whose fields the file also declares one at a time as
@@ -3701,7 +3693,7 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
     return -1;
   v7 = (char *)*((int32_t *)_this + 269553);
   v16 = v7;
-  v8 = (uint16_t *)(*(uint16_t **)(v7 + 24 * __n4_4 + 20));
+  v8 = (uint16_t *)(*(uint16_t **)(v7 + 24 * tbl44573C[1] + 20));
   v9 = v6
      + 8
      * (result == *(uint16_t *)((char *)v8 + 27)
@@ -3715,9 +3707,9 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
      || result == *(uint16_t *)((char *)v8 + 3)
      || result == v8[0]);
   *((int32_t *)_this + 13) = v9;
-  v10 = (Obj53 *)(*(uint16_t **)(v7 + 24 * __n4_3 + 20));
+  v10 = (Obj53 *)(*(uint16_t **)(v7 + 24 * tbl44573C[2] + 20));
   v11 = (uint16_t *)(*(uint16_t **)(v7 + 24 * result + 20));
-  v12 = (Obj9 *)(*(uint16_t **)(v16 + 24 * __n15 + 20));
+  v12 = (Obj9 *)(*(uint16_t **)(v16 + 24 * tbl44573C[3] + 20));
   v13 = (result == *(uint16_t *)((char *)v12 + 15)
       || result == v12->f12
       || result == *(uint16_t *)((char *)v12 + 9)
@@ -3725,16 +3717,16 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
       || result == *(uint16_t *)((char *)v12 + 3)
       || result == v12->f0)
       + 2
-      * (__n4_3 == *(uint16_t *)((char *)v11 + 27)
-      || __n4_3 == v11[12]
-      || __n4_3 == *(uint16_t *)((char *)v11 + 21)
-      || __n4_3 == v11[9]
-      || __n4_3 == *(uint16_t *)((char *)v11 + 15)
-      || __n4_3 == v11[6]
-      || __n4_3 == *(uint16_t *)((char *)v11 + 9)
-      || __n4_3 == v11[3]
-      || __n4_3 == *(uint16_t *)((char *)v11 + 3)
-      || __n4_3 == v11[0])
+      * (tbl44573C[2] == *(uint16_t *)((char *)v11 + 27)
+      || tbl44573C[2] == v11[12]
+      || tbl44573C[2] == *(uint16_t *)((char *)v11 + 21)
+      || tbl44573C[2] == v11[9]
+      || tbl44573C[2] == *(uint16_t *)((char *)v11 + 15)
+      || tbl44573C[2] == v11[6]
+      || tbl44573C[2] == *(uint16_t *)((char *)v11 + 9)
+      || tbl44573C[2] == v11[3]
+      || tbl44573C[2] == *(uint16_t *)((char *)v11 + 3)
+      || tbl44573C[2] == v11[0])
       + 4
       * (result == *(uint16_t *)((char *)v10 + 9)
       || result == v10->f6
@@ -3777,25 +3769,25 @@ int32_t __init_model_tables(ModelBlock *_this)
     {
       if ( _this->f1078216 )
       {
-        __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078212 + 24 * __n4_4), **(uint16_t **)&_this->f56[5], 3u);
-        __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f56[5]), __n4_3, 2u);
-        __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078208 + 24 * __n4_4), **(uint16_t **)&_this->f56[5], 4u);
-        __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078208 + 24 * **(uint16_t **)&_this->f56[5]), __n4_4, 2u);
+        __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078212 + 24 * tbl44573C[1]), **(uint16_t **)&_this->f56[5], 3u);
+        __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f56[5]), tbl44573C[2], 2u);
+        __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078208 + 24 * tbl44573C[1]), **(uint16_t **)&_this->f56[5], 4u);
+        __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078208 + 24 * **(uint16_t **)&_this->f56[5]), tbl44573C[1], 2u);
       }
       else
       {
         __fwd_init_model_tables_symbol_list_update(
-          (uint32_t *)(_this->f1078212 + 24 * __n4_3),
+          (uint32_t *)(_this->f1078212 + 24 * tbl44573C[2]),
           **(uint16_t **)&_this->f56[5],
           (_this->f44 > 3) + 2);
       }
     }
     else
     {
-      __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078212 + 24 * __n4_4), **(uint16_t **)&_this->f56[5], 3u);
-      __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f56[5]), __n4_3, 2u);
-      __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f56[5]), __n4_4, 1u);
-      __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078208 + 24 * **(uint16_t **)&_this->f56[5]), __n4_4, 2u);
+      __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078212 + 24 * tbl44573C[1]), **(uint16_t **)&_this->f56[5], 3u);
+      __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f56[5]), tbl44573C[2], 2u);
+      __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f56[5]), tbl44573C[1], 1u);
+      __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078208 + 24 * **(uint16_t **)&_this->f56[5]), tbl44573C[1], 2u);
       v3 = _this->f1078232;
       do
       {
@@ -3866,9 +3858,9 @@ LABEL_19:
   }
   if ( n2_1 <= 2 )
     goto LABEL_37;
-  if ( __n15 != __n15_0 )
+  if ( tbl44573C[3] != tbl44573C[4] )
   {
-    __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078212 + 24 * __n4_3), **(uint16_t **)&_this->f56[5], 1u);
+    __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078212 + 24 * tbl44573C[2]), **(uint16_t **)&_this->f56[5], 1u);
     n2 = _this->f32;
     goto LABEL_19;
   }
@@ -5368,8 +5360,8 @@ char *__alt_p2_alloc(char *_this, int32_t i, int32_t n4)
                                                            * (uint8_t)__byte_44339D[16
                                                                                         * *(uint32_t *)(_this + 278728)]]
                                                & 8) >> 3;
-  __dword_4458F0 = v8;
-  __dword_4458F4 = -v8;
+  deadzone_hi = v8;
+  deadzone_lo = -v8;
   *(uint32_t *)(_this + 278720) = -v9 - 7;
   *(uint32_t *)(_this + 278724) = v9 + 8;
   *(char **)(_this + 278660) = (char *)bmf_new(4 * i + 16);
@@ -5408,12 +5400,12 @@ char *__alt_p2_alloc(char *_this, int32_t i, int32_t n4)
   while ( n5 < 5 );
   memset(*(char **)(_this + 278756),0,Size);
   v17 = *(uint32_t *)(_this + 278756);
-  __dword_4458EC = 0;
+  ctx_bias[3] = 0;
   v18 = 0;
-  __dword_4458E8 = 0;
-  __dword_4458E4 = 0;
+  ctx_bias[2] = 0;
+  ctx_bias[1] = 0;
   n0x82 = 0;
-  __dword_4458E0 = 0;
+  ctx_bias[0] = 0;
   *(uint32_t *)(_this + 278736) = v17 + 144;
   do
   {
@@ -7623,7 +7615,7 @@ int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3__ref
           + 22 * v7[15]
           + v9
           + 20 * v7[6]
-          + __dword_4458E0
+          + ctx_bias[0]
           + 14 * v8;
   n1840_2 = 17 * v10
           + 21 * v7[25]
@@ -7631,7 +7623,7 @@ int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3__ref
           + 25 * v7[7]
           + 9 * *(v7 - 2)
           + 22 * *(int16_t *)(v6 - 4)
-          + __dword_4458E4
+          + ctx_bias[1]
           + 19 * *(int16_t *)(v6 - 22);
   v11 = v6;
   v12 = 17 * v7[31]
@@ -7640,14 +7632,14 @@ int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3__ref
       + 18 * v7[4]
       + 16 * *(v7 - 5)
       + 22 * *(int16_t *)(v6 - 10)
-      + __dword_4458E8
+      + ctx_bias[2]
       + 19 * *(int16_t *)(v6 - 28);
   v13 = v275->m128_i16[5];
   v14 = *(int16_t *)(v289->f278528[13].m128_i32[3] + 10);
   v15 = *(int16_t *)(v11 - 26);
   v16 = *(int16_t *)(v11 - 8);
   v292 = v12;
-  n3536 = 14 * v268[32] + 23 * v268[14] + 19 * v268[5] + 25 * v16 + __dword_4458EC + 17 * v15 + 15 * (v14 + v13);
+  n3536 = 14 * v268[32] + 23 * v268[14] + 19 * v268[5] + 25 * v16 + ctx_bias[3] + 17 * v15 + 15 * (v14 + v13);
   v17 = v275[-2].m128_i16[7];
   v18 = v275[2].m128_i16[2] + v275->m128_i16[0];
   v290 = v12 + n3536 + n1840_1 + n1840_2;
@@ -8672,7 +8664,7 @@ void __reduce_alphabet(ModelBlock *Blocka, char a2, uint8_t *a3)
               {
                 v12 = v92;
                 v10 = v91;
-                __n4_4 = n4;
+                tbl44573C[1] = n4;
                 goto LABEL_12;
               }
             }
@@ -8682,7 +8674,7 @@ void __reduce_alphabet(ModelBlock *Blocka, char a2, uint8_t *a3)
             Block = v13;
             Blockaa_2 = (ModelBlock *)(Blockaa);
             v68 = Blockaa->f16;
-            __n4_4 = n4;
+            tbl44573C[1] = n4;
             v11 = (uint16_t)v68;
             n0x2000 = v68 + 1;
             *(uint16_t *)(n0x2000_5 + 2 * n4) = v11;
@@ -10700,15 +10692,15 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   this_1 = (ModelBlock *)(_this);
   n15_7 = *(n15_9 - 4);
   n15_8 = n4_8;
-  ::__n4_4 = n4_8;
+  ::tbl44573C[1] = n4_8;
   n4_1 = n4_7;
-  ::__n4_3 = n4_7;
+  ::tbl44573C[2] = n4_7;
   n15_3 = n15_6;
-  ::__n15 = n15_6;
+  ::tbl44573C[3] = n15_6;
   v8 = *((uint8_t *)n15_9 + 3) + 4 * (n15_6 == n15_7);
   v9 = *((uint8_t *)n15_9 + 11);
   freq_i = n15_7;
-  __n15_0 = n15_7;
+  tbl44573C[4] = n15_7;
   v10 = 2 * *((uint8_t *)v4 - 6) + 8 * v9 + v8;
   this_2 = (ModelBlock *)(this_1);
   v12 = 32 * *((uint8_t *)v4 - 4) + 16 * *((uint8_t *)v4 - 2) + v10;
@@ -10877,7 +10869,7 @@ LABEL_42:
             + 3 * *(this_3->f1078688 + n15_8)
             + 1,
               (uint16_t *)this_3 + 538176);
-      n4_22 = ::__n4_4;
+      n4_22 = ::tbl44573C[1];
       v46 = (char *)this_3->f1078688;
       this_3->f32 = v44;
       *(uint8_t *)(v46 + n4_22) = v44;
@@ -10939,9 +10931,9 @@ LABEL_57:
         *(uint32_t *)(v57 + 4) = 0x01010101;
         *(uint32_t *)this_3->f56[5] = 0x01010101;
         v58 = (uint16_t *)this_3->f6059436;
-        LOWORD(v55) = ::__n4_4;
+        LOWORD(v55) = ::tbl44573C[1];
         LOWORD(v54) = *v58;
-        n4_1 = ::__n4_4;
+        n4_1 = ::tbl44573C[1];
         v58[1] = (uint16_t)(uintptr_t)v54;
         *(uint16_t *)this_3->f56[5] = (uint16_t)(uintptr_t)v55;
         *(uint16_t *)this_3->f6059436 = (uint16_t)(uintptr_t)v55;
@@ -11272,17 +11264,17 @@ LABEL_57:
   }
   if ( n4 )
   {
-    *(uint16_t *)this_3->f56[5] = __dword_44573C[n4];
+    *(uint16_t *)this_3->f56[5] = tbl44573C[n4];
     return 1;
   }
   n15_18 = 0;
 LABEL_86:
   v91 = __byte_445700;
-  n15_23 = ::__n15;
-  n4_19 = ::__n4_4;
+  n15_23 = ::tbl44573C[3];
+  n4_19 = ::tbl44573C[1];
   n15_24 = n15_18;
-  n4_20 = ::__n4_3;
-  exclusion_mask[__n15_0] = __byte_445700;
+  n4_20 = ::tbl44573C[2];
+  exclusion_mask[tbl44573C[4]] = __byte_445700;
   v95 = (uint16_t *)this_3->f6059436;
   exclusion_mask[n15_23] = v91;
   exclusion_mask[n4_20] = v91;
@@ -11371,9 +11363,9 @@ LABEL_86:
   }
   while ( n32 < 32 );
   n15_25 = n15_24;
-  n4_21 = ::__n4_4;
+  n4_21 = ::tbl44573C[1];
   v132 = (int32_t)(uintptr_t)this_3->f1078208;
-  this_3->f1078216 = this_3->f1078212 + 24 * ::__n4_3;
+  this_3->f1078216 = this_3->f1078212 + 24 * ::tbl44573C[2];
   v133 = v132 + 24 * n4_21;
   v134 = (uint32_t **)this_3->f1078232;
   this_3->f1078220 = (uint8_t *)v133;
@@ -11506,15 +11498,15 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   this_1 = (ModelBlock *)(_this);
   n15_1 = *(n2_7 - 4);
   n15_3 = n4;
-  ::__n4_4 = n4;
+  ::tbl44573C[1] = n4;
   n15_7 = n4_1;
-  ::__n4_3 = n4_1;
+  ::tbl44573C[2] = n4_1;
   n15_4 = __code_pixel_n15;
-  ::__n15 = __code_pixel_n15;
+  ::tbl44573C[3] = __code_pixel_n15;
   v8 = *((uint8_t *)n2_7 + 3) + 4 * (__code_pixel_n15 == n15_1);
   v9 = *((uint8_t *)n2_7 + 11);
   n15_2 = n15_1;
-  __n15_0 = n15_1;
+  tbl44573C[4] = n15_1;
   v10 = 32 * *((uint8_t *)n2_8 - 4)
       + 16 * *((uint8_t *)n2_8 - 2)
       + 2 * *((uint8_t *)n2_8 - 6)
@@ -11811,7 +11803,7 @@ LABEL_42:
     }
     __fwd_code_pixel_encode_context_bit((uint16_t *)this_3 + 3 * n15_32 + 538179, (uint16_t *)this_3 + 538176, n15_4);
     n15_13 = n15_4;
-    n4_2 = ::__n4_4;
+    n4_2 = ::tbl44573C[1];
     v74 = (char *)this_3->f1078688;
     *(int32_t *)&this_3->f32 = n15_4;
     *(uint8_t *)(v74 + n4_2) = n15_13;
@@ -12079,10 +12071,10 @@ LABEL_42:
     n15_12 = 0;
   }
   v93 = __byte_445700;
-  n15_22 = ::__n15;
-  excl_sym_a = ::__n4_3;
-  excl_sym_b = ::__n4_4;
-  exclusion_mask[__n15_0] = __byte_445700;
+  n15_22 = ::tbl44573C[3];
+  excl_sym_a = ::tbl44573C[2];
+  excl_sym_b = ::tbl44573C[1];
+  exclusion_mask[tbl44573C[4]] = __byte_445700;
   exclusion_mask[n15_22] = v93;
   v97 = (uint16_t *)this_3->f6059436;
   exclusion_mask[excl_sym_a] = v93;
@@ -12173,9 +12165,9 @@ LABEL_42:
   }
   while ( n32 < 32 );
   n15_29 = n15_14;
-  n4_5 = ::__n4_4;
+  n4_5 = ::tbl44573C[1];
   v134 = *(int32_t *)&this_3->f1078208;
-  *(int32_t *)&this_3->f1078216 = *(int32_t *)&this_3->f1078212 + 24 * ::__n4_3;
+  *(int32_t *)&this_3->f1078216 = *(int32_t *)&this_3->f1078212 + 24 * ::tbl44573C[2];
   v135 = v134 + 24 * n4_5;
   v136 = (uint32_t **)*(int32_t *)&this_3->f1078232;
   *(int32_t *)&this_3->f1078220 = v135;
@@ -13681,7 +13673,7 @@ uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, uint8_t a4
     if ( v580 )
     {
       v576 = v75;
-      v80 = v79 + 4 * ((v77 > __dword_4458F0) - (v77 < __dword_4458F4));
+      v80 = v79 + 4 * ((v77 > deadzone_hi) - (v77 < deadzone_lo));
       *(uint16_t *)((char *)v581 + v78 + 284714) = v80;
       v575 = v80;
       v81 = v576;
@@ -13721,7 +13713,7 @@ uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, uint8_t a4
               v87 = n3 <= 0,
               *(uint16_t *)((char *)v581 + v78 + 284718) = v85
                                                       + ((32
-                                                        * ((v86 > __dword_4458F0) - (uint32_t)(v86 < __dword_4458F4))
+                                                        * ((v86 > deadzone_hi) - (uint32_t)(v86 < deadzone_lo))
                                                         + v86
                                                         + 1) >> 1),
               v81 = v576,
@@ -13732,7 +13724,7 @@ uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, uint8_t a4
           v88 = *(int16_t *)((char *)v581 + v78 + 284710);
           v89 = v84 - ((v88 + (1 << ((*((uint8_t *)v581 + v78 + 284708) + 31) & 31))) >> (*((uint8_t *)v581 + v78 + 284708) & 31));
           *(uint16_t *)((char *)v581 + v78 + 284710) = v88
-                                                  + ((32 * ((v89 > __dword_4458F0) - (uint32_t)(v89 < __dword_4458F4))
+                                                  + ((32 * ((v89 > deadzone_hi) - (uint32_t)(v89 < deadzone_lo))
                                                     + v89
                                                     + 2) >> 2);
           v81 = v576;
@@ -13842,11 +13834,11 @@ uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, uint8_t a4
         v101 = *(int16_t *)(n2_1 + 2);
         __builtin_prefetch(v562, 0, 1);
         v102 = v100 - ((v101 + (1 << ((v97 + 31) & 31))) >> (v97 & 31));
-        v105 = __OFSUB__(v102, __dword_4458F0);
-        v103 = v102 == __dword_4458F0;
-        v104 = v102 - __dword_4458F0 < 0;
+        v105 = __OFSUB__(v102, deadzone_hi);
+        v103 = v102 == deadzone_hi;
+        v104 = v102 - deadzone_hi < 0;
         __builtin_prefetch(v563, 0, 1);
-        v106 = 32 * (!(v104 ^ v105 | v103) - (v102 < __dword_4458F4));
+        v106 = 32 * (!(v104 ^ v105 | v103) - (v102 < deadzone_lo));
         __builtin_prefetch(v564, 0, 1);
         __builtin_prefetch(v565, 0, 1);
         v107 = (Obj42 *)(v569);
@@ -13875,11 +13867,11 @@ uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, uint8_t a4
           v550 = v108;
           v313 = v108 - ((v311 + (1 << ((v312 + 31) & 31))) >> (v312 & 31));
           *(uint16_t *)&v542->f2 = v311
-                               + ((32 * ((v313 > __dword_4458F0) - (uint32_t)(v313 < __dword_4458F4)) + v313 + 2) >> 2);
+                               + ((32 * ((v313 > deadzone_hi) - (uint32_t)(v313 < deadzone_lo)) + v313 + 2) >> 2);
           v314 = *((int16_t *)v543 + 1);
           v315 = v108 - ((v314 + (1 << ((v543->f0 + 31) & 31))) >> (v543->f0 & 31));
           *((uint16_t *)v543 + 1) = v314
-                               + ((32 * ((v315 > __dword_4458F0) - (uint32_t)(v315 < __dword_4458F4)) + v315 + 4) >> 3);
+                               + ((32 * ((v315 > deadzone_hi) - (uint32_t)(v315 < deadzone_lo)) + v315 + 4) >> 3);
           v316 = v542->f6;
           v317 = (v316 + (1 << ((v542->f4 + 31) & 31))) >> (v542->f4 & 31);
           v549 = -v108;
@@ -13887,74 +13879,74 @@ uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, uint8_t a4
           v318 = *((int16_t *)v544 + 1);
           v319 = -v108 - ((v318 + (1 << ((v544->f0 + 31) & 31))) >> (v544->f0 & 31));
           *((uint16_t *)v544 + 1) = v318
-                               + ((32 * ((v319 > __dword_4458F0) - (uint32_t)(v319 < __dword_4458F4)) + v319 + 4) >> 3);
+                               + ((32 * ((v319 > deadzone_hi) - (uint32_t)(v319 < deadzone_lo)) + v319 + 4) >> 3);
           v320 = v539->f2;
           v321 = v550;
           v322 = v550 - ((v320 + (1 << ((v539->f0 + 31) & 31))) >> (v539->f0 & 31));
           *(uint16_t *)&v539->f2 = v320
-                               + ((32 * ((v322 > __dword_4458F0) - (uint32_t)(v322 < __dword_4458F4)) + v322 + 2) >> 2);
+                               + ((32 * ((v322 > deadzone_hi) - (uint32_t)(v322 < deadzone_lo)) + v322 + 2) >> 2);
           v323 = *((int16_t *)v540 + 1);
           v324 = v321 - ((v323 + (1 << ((v540->f0 + 31) & 31))) >> (v540->f0 & 31));
           *((uint16_t *)v540 + 1) = v323
-                               + ((32 * ((v324 > __dword_4458F0) - (uint32_t)(v324 < __dword_4458F4)) + v324 + 4) >> 3);
+                               + ((32 * ((v324 > deadzone_hi) - (uint32_t)(v324 < deadzone_lo)) + v324 + 4) >> 3);
           v539->f6 += (uint32_t)(v321
                                                - ((*(int16_t *)&v539->f6 + (1 << ((v539->f4 + 31) & 31))) >> (v539->f4 & 31))
                                                + 2) >> 2;
           v325 = v541->f2;
           v326 = v549 - ((v325 + (1 << ((v541->f0 + 31) & 31))) >> (v541->f0 & 31));
           *(uint16_t *)&v541->f2 = v325
-                               + ((32 * ((v326 > __dword_4458F0) - (uint32_t)(v326 < __dword_4458F4)) + v326 + 4) >> 3);
+                               + ((32 * ((v326 > deadzone_hi) - (uint32_t)(v326 < deadzone_lo)) + v326 + 4) >> 3);
           v327 = v536->f2;
           v328 = v550 - ((v327 + (1 << ((v536->f0 + 31) & 31))) >> (v536->f0 & 31));
           *(uint16_t *)&v536->f2 = v327
-                               + ((32 * ((v328 > __dword_4458F0) - (uint32_t)(v328 < __dword_4458F4)) + v328 + 2) >> 2);
+                               + ((32 * ((v328 > deadzone_hi) - (uint32_t)(v328 < deadzone_lo)) + v328 + 2) >> 2);
           v329 = *((int16_t *)v537 + 1);
           v330 = v550 - ((v329 + (1 << ((v537->f0 + 31) & 31))) >> (v537->f0 & 31));
           *((uint16_t *)v537 + 1) = v329
-                               + ((32 * ((v330 > __dword_4458F0) - (uint32_t)(v330 < __dword_4458F4)) + v330 + 4) >> 3);
+                               + ((32 * ((v330 > deadzone_hi) - (uint32_t)(v330 < deadzone_lo)) + v330 + 4) >> 3);
           v536->f6 += (uint32_t)(v550
                                                - ((*(int16_t *)&v536->f6 + (1 << ((v536->f4 + 31) & 31))) >> (v536->f4 & 31))
                                                + 2) >> 2;
           v331 = v538->f2;
           v332 = v549 - ((v331 + (1 << ((v538->f0 + 31) & 31))) >> (v538->f0 & 31));
           *(uint16_t *)&v538->f2 = v331
-                               + ((32 * ((v332 > __dword_4458F0) - (uint32_t)(v332 < __dword_4458F4)) + v332 + 4) >> 3);
+                               + ((32 * ((v332 > deadzone_hi) - (uint32_t)(v332 < deadzone_lo)) + v332 + 4) >> 3);
           v333 = *((int16_t *)v533 + 1);
           v334 = v550 - ((v333 + (1 << ((v533->f0 + 31) & 31))) >> (v533->f0 & 31));
           *((uint16_t *)v533 + 1) = v333
-                               + ((32 * ((v334 > __dword_4458F0) - (uint32_t)(v334 < __dword_4458F4)) + v334 + 2) >> 2);
+                               + ((32 * ((v334 > deadzone_hi) - (uint32_t)(v334 < deadzone_lo)) + v334 + 2) >> 2);
           v335 = *((int16_t *)v534 + 1);
           v336 = v550 - ((v335 + (1 << ((v534->f0 + 31) & 31))) >> (v534->f0 & 31));
           *((uint16_t *)v534 + 1) = v335
-                               + ((32 * ((v336 > __dword_4458F0) - (uint32_t)(v336 < __dword_4458F4)) + v336 + 4) >> 3);
+                               + ((32 * ((v336 > deadzone_hi) - (uint32_t)(v336 < deadzone_lo)) + v336 + 4) >> 3);
           *((uint16_t *)v533 + 3) += (uint32_t)(v550 - ((*((int16_t *)v533 + 3) + (1 << ((v533->f4 + 31) & 31))) >> (v533->f4 & 31)) + 2) >> 2;
           v337 = *((int16_t *)v535 + 1);
           v338 = v549 - ((v337 + (1 << ((v535->f0 + 31) & 31))) >> (v535->f0 & 31));
           *((uint16_t *)v535 + 1) = v337
-                               + ((32 * ((v338 > __dword_4458F0) - (uint32_t)(v338 < __dword_4458F4)) + v338 + 4) >> 3);
+                               + ((32 * ((v338 > deadzone_hi) - (uint32_t)(v338 < deadzone_lo)) + v338 + 4) >> 3);
           v339 = *((int16_t *)v530 + 1);
           v340 = v550 - ((v339 + (1 << ((v530->f0 + 31) & 31))) >> (v530->f0 & 31));
           *((uint16_t *)v530 + 1) = v339
-                               + ((32 * ((v340 > __dword_4458F0) - (uint32_t)(v340 < __dword_4458F4)) + v340 + 2) >> 2);
+                               + ((32 * ((v340 > deadzone_hi) - (uint32_t)(v340 < deadzone_lo)) + v340 + 2) >> 2);
           v341 = *((int16_t *)v531 + 1);
           v342 = v550 - ((v341 + (1 << ((v531->f0 + 31) & 31))) >> (v531->f0 & 31));
           *((uint16_t *)v531 + 1) = v341
-                               + ((32 * ((v342 > __dword_4458F0) - (uint32_t)(v342 < __dword_4458F4)) + v342 + 4) >> 3);
+                               + ((32 * ((v342 > deadzone_hi) - (uint32_t)(v342 < deadzone_lo)) + v342 + 4) >> 3);
           v343 = v550;
           *((uint16_t *)v530 + 3) += (uint32_t)(v550 - ((*((int16_t *)v530 + 3) + (1 << ((v530->f4 + 31) & 31))) >> (v530->f4 & 31)) + 2) >> 2;
           v344 = *((int16_t *)v532 + 1);
           v549 -= (v344 + (1 << ((v532->f0 + 31) & 31))) >> (v532->f0 & 31);
           v550 = v343;
           *((uint16_t *)v532 + 1) = v344
-                               + ((32 * ((v549 > __dword_4458F0) - (uint32_t)(v549 < __dword_4458F4)) + v549 + 4) >> 3);
+                               + ((32 * ((v549 > deadzone_hi) - (uint32_t)(v549 < deadzone_lo)) + v549 + 4) >> 3);
           v345 = *((int16_t *)v527 + 1);
           v346 = v550 - ((v345 + (1 << ((v527->f0 + 31) & 31))) >> (v527->f0 & 31));
           *((uint16_t *)v527 + 1) = v345
-                               + ((32 * ((v346 > __dword_4458F0) - (uint32_t)(v346 < __dword_4458F4)) + v346 + 2) >> 2);
+                               + ((32 * ((v346 > deadzone_hi) - (uint32_t)(v346 < deadzone_lo)) + v346 + 2) >> 2);
           v347 = *((int16_t *)v528 + 1);
           v348 = v550 - ((v347 + (1 << ((v528->f0 + 31) & 31))) >> (v528->f0 & 31));
           *((uint16_t *)v528 + 1) = v347
-                               + ((32 * ((v348 > __dword_4458F0) - (uint32_t)(v348 < __dword_4458F4)) + v348 + 4) >> 3);
+                               + ((32 * ((v348 > deadzone_hi) - (uint32_t)(v348 < deadzone_lo)) + v348 + 4) >> 3);
           v349 = v550;
           *((uint16_t *)v527 + 3) += (uint32_t)(v550 - ((*((int16_t *)v527 + 3) + (1 << ((v527->f4 + 31) & 31))) >> (v527->f4 & 31)) + 2) >> 2;
           v350 = *((int16_t *)v529 + 1);
@@ -13962,73 +13954,73 @@ uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, uint8_t a4
           v548 = -v349;
           v351 = -v349 - ((v350 + (1 << ((v345 + 31) & 31))) >> (v345 & 31));
           *((uint16_t *)v529 + 1) = v350
-                               + ((32 * ((v351 > __dword_4458F0) - (uint32_t)(v351 < __dword_4458F4)) + v351 + 4) >> 3);
+                               + ((32 * ((v351 > deadzone_hi) - (uint32_t)(v351 < deadzone_lo)) + v351 + 4) >> 3);
           v352 = *((int16_t *)v524 + 1);
           v353 = v550;
           v354 = v550 - ((v352 + (1 << ((v524->f0 + 31) & 31))) >> (v524->f0 & 31));
           *((uint16_t *)v524 + 1) = v352
-                               + ((32 * ((v354 > __dword_4458F0) - (uint32_t)(v354 < __dword_4458F4)) + v354 + 2) >> 2);
+                               + ((32 * ((v354 > deadzone_hi) - (uint32_t)(v354 < deadzone_lo)) + v354 + 2) >> 2);
           v355 = v525->f2;
           v356 = v353 - ((v355 + (1 << ((v525->f0 + 31) & 31))) >> (v525->f0 & 31));
           *(uint16_t *)&v525->f2 = v355
-                               + ((32 * ((v356 > __dword_4458F0) - (uint32_t)(v356 < __dword_4458F4)) + v356 + 4) >> 3);
+                               + ((32 * ((v356 > deadzone_hi) - (uint32_t)(v356 < deadzone_lo)) + v356 + 4) >> 3);
           *((uint16_t *)v524 + 3) += (uint32_t)(v353 - ((*((int16_t *)v524 + 3) + (1 << ((v524->f4 + 31) & 31))) >> (v524->f4 & 31)) + 2) >> 2;
           v357 = *((int16_t *)v526 + 1);
           v358 = v548 - ((v357 + (1 << ((v526->f0 + 31) & 31))) >> (v526->f0 & 31));
           *((uint16_t *)v526 + 1) = v357
-                               + ((32 * ((v358 > __dword_4458F0) - (uint32_t)(v358 < __dword_4458F4)) + v358 + 4) >> 3);
+                               + ((32 * ((v358 > deadzone_hi) - (uint32_t)(v358 < deadzone_lo)) + v358 + 4) >> 3);
           v359 = *((int16_t *)v521 + 1);
           v360 = v550 - ((v359 + (1 << ((v521->f0 + 31) & 31))) >> (v521->f0 & 31));
           *((uint16_t *)v521 + 1) = v359
-                               + ((32 * ((v360 > __dword_4458F0) - (uint32_t)(v360 < __dword_4458F4)) + v360 + 2) >> 2);
+                               + ((32 * ((v360 > deadzone_hi) - (uint32_t)(v360 < deadzone_lo)) + v360 + 2) >> 2);
           v361 = *((int16_t *)v522 + 1);
           v362 = v550 - ((v361 + (1 << ((v522->f0 + 31) & 31))) >> (v522->f0 & 31));
           *((uint16_t *)v522 + 1) = v361
-                               + ((32 * ((v362 > __dword_4458F0) - (uint32_t)(v362 < __dword_4458F4)) + v362 + 4) >> 3);
+                               + ((32 * ((v362 > deadzone_hi) - (uint32_t)(v362 < deadzone_lo)) + v362 + 4) >> 3);
           *((uint16_t *)v521 + 3) += (uint32_t)(v550 - ((*((int16_t *)v521 + 3) + (1 << ((v521->f4 + 31) & 31))) >> (v521->f4 & 31)) + 2) >> 2;
           v363 = *((int16_t *)v523 + 1);
           v364 = v548 - ((v363 + (1 << ((v523->f0 + 31) & 31))) >> (v523->f0 & 31));
           *((uint16_t *)v523 + 1) = v363
-                               + ((32 * ((v364 > __dword_4458F0) - (uint32_t)(v364 < __dword_4458F4)) + v364 + 4) >> 3);
+                               + ((32 * ((v364 > deadzone_hi) - (uint32_t)(v364 < deadzone_lo)) + v364 + 4) >> 3);
           v365 = *((int16_t *)v518 + 1);
           v366 = v550 - ((v365 + (1 << ((v518->f0 + 31) & 31))) >> (v518->f0 & 31));
           *((uint16_t *)v518 + 1) = v365
-                               + ((32 * ((v366 > __dword_4458F0) - (uint32_t)(v366 < __dword_4458F4)) + v366 + 2) >> 2);
+                               + ((32 * ((v366 > deadzone_hi) - (uint32_t)(v366 < deadzone_lo)) + v366 + 2) >> 2);
           v367 = *((int16_t *)v519 + 1);
           v368 = v550 - ((v367 + (1 << ((v519->f0 + 31) & 31))) >> (v519->f0 & 31));
           *((uint16_t *)v519 + 1) = v367
-                               + ((32 * ((v368 > __dword_4458F0) - (uint32_t)(v368 < __dword_4458F4)) + v368 + 4) >> 3);
+                               + ((32 * ((v368 > deadzone_hi) - (uint32_t)(v368 < deadzone_lo)) + v368 + 4) >> 3);
           *((uint16_t *)v518 + 3) += (uint32_t)(v550 - ((*((int16_t *)v518 + 3) + (1 << ((v518->f4 + 31) & 31))) >> (v518->f4 & 31)) + 2) >> 2;
           v369 = *((int16_t *)v520 + 1);
           v370 = v548 - ((v369 + (1 << ((v520->f0 + 31) & 31))) >> (v520->f0 & 31));
           *((uint16_t *)v520 + 1) = v369
-                               + ((32 * ((v370 > __dword_4458F0) - (uint32_t)(v370 < __dword_4458F4)) + v370 + 4) >> 3);
+                               + ((32 * ((v370 > deadzone_hi) - (uint32_t)(v370 < deadzone_lo)) + v370 + 4) >> 3);
           v371 = *((int16_t *)v515 + 1);
           v372 = v550 - ((v371 + (1 << ((v515->f0 + 31) & 31))) >> (v515->f0 & 31));
           *((uint16_t *)v515 + 1) = v371
-                               + ((32 * ((v372 > __dword_4458F0) - (uint32_t)(v372 < __dword_4458F4)) + v372 + 2) >> 2);
+                               + ((32 * ((v372 > deadzone_hi) - (uint32_t)(v372 < deadzone_lo)) + v372 + 2) >> 2);
           v373 = v516->f2;
           v374 = v550 - ((v373 + (1 << ((v516->f0 + 31) & 31))) >> (v516->f0 & 31));
           *(uint16_t *)&v516->f2 = v373
-                               + ((32 * ((v374 > __dword_4458F0) - (uint32_t)(v374 < __dword_4458F4)) + v374 + 4) >> 3);
+                               + ((32 * ((v374 > deadzone_hi) - (uint32_t)(v374 < deadzone_lo)) + v374 + 4) >> 3);
           v375 = v550;
           *((uint16_t *)v515 + 3) += (uint32_t)(v550 - ((*((int16_t *)v515 + 3) + (1 << ((v515->f4 + 31) & 31))) >> (v515->f4 & 31)) + 2) >> 2;
           v376 = *((int16_t *)v517 + 1);
           v377 = (v376 + (1 << ((v517->f0 + 31) & 31))) >> (v517->f0 & 31);
           v550 = v375;
           *((uint16_t *)v517 + 1) = v376
-                               + ((32 * ((v548 - v377 > __dword_4458F0) - (uint32_t)(v548 - v377 < __dword_4458F4))
+                               + ((32 * ((v548 - v377 > deadzone_hi) - (uint32_t)(v548 - v377 < deadzone_lo))
                                  + v548
                                  - v377
                                  + 4) >> 3);
           v378 = v512->f2;
           v379 = v550 - ((v378 + (1 << ((v512->f0 + 31) & 31))) >> (v512->f0 & 31));
           *(uint16_t *)&v512->f2 = v378
-                               + ((32 * ((v379 > __dword_4458F0) - (uint32_t)(v379 < __dword_4458F4)) + v379 + 2) >> 2);
+                               + ((32 * ((v379 > deadzone_hi) - (uint32_t)(v379 < deadzone_lo)) + v379 + 2) >> 2);
           v380 = v513->f2;
           v381 = v550 - ((v380 + (1 << ((v513->f0 + 31) & 31))) >> (v513->f0 & 31));
           *(uint16_t *)&v513->f2 = v380
-                               + ((32 * ((v381 > __dword_4458F0) - (uint32_t)(v381 < __dword_4458F4)) + v381 + 4) >> 3);
+                               + ((32 * ((v381 > deadzone_hi) - (uint32_t)(v381 < deadzone_lo)) + v381 + 4) >> 3);
           v382 = v550;
           v512->f6 += (uint32_t)(v550
                                                - ((*(int16_t *)&v512->f6 + (1 << ((v512->f4 + 31) & 31))) >> (v512->f4 & 31))
@@ -14036,7 +14028,7 @@ uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, uint8_t a4
           v383 = v514->f2;
           v384 = -v382 - ((v383 + (1 << ((v514->f0 + 31) & 31))) >> (v514->f0 & 31));
           *(uint16_t *)&v514->f2 = v383
-                               + ((32 * ((v384 > __dword_4458F0) - (uint32_t)(v384 < __dword_4458F4)) + v384 + 4) >> 3);
+                               + ((32 * ((v384 > deadzone_hi) - (uint32_t)(v384 < deadzone_lo)) + v384 + 4) >> 3);
         }
         else
         {
@@ -14047,12 +14039,12 @@ uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, uint8_t a4
           v117 = v542->f2;
           v118 = v550 - ((v117 + (1 << ((v542->f0 + 31) & 31))) >> (v542->f0 & 31));
           *(uint16_t *)&v542->f2 = v117
-                               + ((32 * ((v118 > __dword_4458F0) - (uint32_t)(v118 < __dword_4458F4)) + v118 + 2) >> 2);
+                               + ((32 * ((v118 > deadzone_hi) - (uint32_t)(v118 < deadzone_lo)) + v118 + 2) >> 2);
           v119 = *((int16_t *)v543 + 1);
           v87 = n3 < 3;
           v120 = v550 - ((v119 + (1 << ((v543->f0 + 31) & 31))) >> (v543->f0 & 31));
           *((uint16_t *)v543 + 1) = v119
-                               + ((32 * ((v120 > __dword_4458F0) - (uint32_t)(v120 < __dword_4458F4)) + v120 + 4) >> 3);
+                               + ((32 * ((v120 > deadzone_hi) - (uint32_t)(v120 < deadzone_lo)) + v120 + 4) >> 3);
           v121 = v550;
           if ( v87 )
           {
@@ -14064,84 +14056,84 @@ uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, uint8_t a4
             v218 = -v121;
             v572 = v218;
             *(uint16_t *)((uintptr_t)v542 - 2) = v216
-                                 + ((32 * ((v217 > __dword_4458F0) - (uint32_t)(v217 < __dword_4458F4)) + v217 + 4) >> 3);
+                                 + ((32 * ((v217 > deadzone_hi) - (uint32_t)(v217 < deadzone_lo)) + v217 + 4) >> 3);
             v219 = *((int16_t *)v544 + 1);
             v220 = v218 - ((v219 + (1 << ((v544->f0 + 31) & 31))) >> (v544->f0 & 31));
             *((uint16_t *)v544 + 1) = v219
-                                 + ((32 * ((v220 > __dword_4458F0) - (uint32_t)(v220 < __dword_4458F4)) + v220 + 4) >> 3);
+                                 + ((32 * ((v220 > deadzone_hi) - (uint32_t)(v220 < deadzone_lo)) + v220 + 4) >> 3);
             v221 = v539->f2;
             v222 = v550;
             v223 = v550 - ((v221 + (1 << ((v539->f0 + 31) & 31))) >> (v539->f0 & 31));
             *(uint16_t *)&v539->f2 = v221
-                                 + ((32 * ((v223 > __dword_4458F0) - (uint32_t)(v223 < __dword_4458F4)) + v223 + 2) >> 2);
+                                 + ((32 * ((v223 > deadzone_hi) - (uint32_t)(v223 < deadzone_lo)) + v223 + 2) >> 2);
             v224 = *((int16_t *)v540 + 1);
             v225 = v222 - ((v224 + (1 << ((v540->f0 + 31) & 31))) >> (v540->f0 & 31));
             *((uint16_t *)v540 + 1) = v224
-                                 + ((32 * ((v225 > __dword_4458F0) - (uint32_t)(v225 < __dword_4458F4)) + v225 + 4) >> 3);
+                                 + ((32 * ((v225 > deadzone_hi) - (uint32_t)(v225 < deadzone_lo)) + v225 + 4) >> 3);
             v539->f6 += (uint32_t)(v222
                                                  - ((*(int16_t *)&v539->f6 + (1 << ((v539->f4 + 31) & 31))) >> (v539->f4 & 31))
                                                  + 2) >> 2;
             v226 = *(int16_t *)((uintptr_t)v539 - 2);
             v227 = v222 - ((v226 + (1 << ((*(uint8_t *)((uintptr_t)v539 - 4) + 31) & 31))) >> (*(uint8_t *)((uintptr_t)v539 - 4) & 31));
             *(uint16_t *)((uintptr_t)v539 - 2) = v226
-                                 + ((32 * ((v227 > __dword_4458F0) - (uint32_t)(v227 < __dword_4458F4)) + v227 + 4) >> 3);
+                                 + ((32 * ((v227 > deadzone_hi) - (uint32_t)(v227 < deadzone_lo)) + v227 + 4) >> 3);
             v228 = v541->f2;
             v229 = v572 - ((v228 + (1 << ((v541->f0 + 31) & 31))) >> (v541->f0 & 31));
             *(uint16_t *)&v541->f2 = v228
-                                 + ((32 * ((v229 > __dword_4458F0) - (uint32_t)(v229 < __dword_4458F4)) + v229 + 4) >> 3);
+                                 + ((32 * ((v229 > deadzone_hi) - (uint32_t)(v229 < deadzone_lo)) + v229 + 4) >> 3);
             v230 = v536->f2;
             v231 = v550;
             v232 = v550 - ((v230 + (1 << ((v536->f0 + 31) & 31))) >> (v536->f0 & 31));
             *(uint16_t *)&v536->f2 = v230
-                                 + ((32 * ((v232 > __dword_4458F0) - (uint32_t)(v232 < __dword_4458F4)) + v232 + 2) >> 2);
+                                 + ((32 * ((v232 > deadzone_hi) - (uint32_t)(v232 < deadzone_lo)) + v232 + 2) >> 2);
             v233 = *((int16_t *)v537 + 1);
             v234 = v231 - ((v233 + (1 << ((v537->f0 + 31) & 31))) >> (v537->f0 & 31));
             *((uint16_t *)v537 + 1) = v233
-                                 + ((32 * ((v234 > __dword_4458F0) - (uint32_t)(v234 < __dword_4458F4)) + v234 + 4) >> 3);
+                                 + ((32 * ((v234 > deadzone_hi) - (uint32_t)(v234 < deadzone_lo)) + v234 + 4) >> 3);
             v536->f6 += (uint32_t)(v231
                                                  - ((*(int16_t *)&v536->f6 + (1 << ((v536->f4 + 31) & 31))) >> (v536->f4 & 31))
                                                  + 2) >> 2;
             v235 = *(int16_t *)((uintptr_t)v536 - 2);
             v236 = v231 - ((v235 + (1 << ((*(uint8_t *)((uintptr_t)v536 - 4) + 31) & 31))) >> (*(uint8_t *)((uintptr_t)v536 - 4) & 31));
             *(uint16_t *)((uintptr_t)v536 - 2) = v235
-                                 + ((32 * ((v236 > __dword_4458F0) - (uint32_t)(v236 < __dword_4458F4)) + v236 + 4) >> 3);
+                                 + ((32 * ((v236 > deadzone_hi) - (uint32_t)(v236 < deadzone_lo)) + v236 + 4) >> 3);
             v237 = v538->f2;
             v238 = v572 - ((v237 + (1 << ((v538->f0 + 31) & 31))) >> (v538->f0 & 31));
             *(uint16_t *)&v538->f2 = v237
-                                 + ((32 * ((v238 > __dword_4458F0) - (uint32_t)(v238 < __dword_4458F4)) + v238 + 4) >> 3);
+                                 + ((32 * ((v238 > deadzone_hi) - (uint32_t)(v238 < deadzone_lo)) + v238 + 4) >> 3);
             v239 = *((int16_t *)v533 + 1);
             v240 = v550;
             v241 = v550 - ((v239 + (1 << ((v533->f0 + 31) & 31))) >> (v533->f0 & 31));
             *((uint16_t *)v533 + 1) = v239
-                                 + ((32 * ((v241 > __dword_4458F0) - (uint32_t)(v241 < __dword_4458F4)) + v241 + 2) >> 2);
+                                 + ((32 * ((v241 > deadzone_hi) - (uint32_t)(v241 < deadzone_lo)) + v241 + 2) >> 2);
             v242 = *((int16_t *)v534 + 1);
             v243 = v240 - ((v242 + (1 << ((v534->f0 + 31) & 31))) >> (v534->f0 & 31));
             *((uint16_t *)v534 + 1) = v242
-                                 + ((32 * ((v243 > __dword_4458F0) - (uint32_t)(v243 < __dword_4458F4)) + v243 + 4) >> 3);
+                                 + ((32 * ((v243 > deadzone_hi) - (uint32_t)(v243 < deadzone_lo)) + v243 + 4) >> 3);
             *((uint16_t *)v533 + 3) += (uint32_t)(v240
                                                  - ((*((int16_t *)v533 + 3) + (1 << ((v533->f4 + 31) & 31))) >> (v533->f4 & 31))
                                                  + 2) >> 2;
             v244 = *((int16_t *)v533 - 1);
             v245 = v240 - ((v244 + (1 << ((*((char *)v533 - 4) + 31) & 31))) >> (*((char *)v533 - 4) & 31));
             *((uint16_t *)v533 - 1) = v244
-                                 + ((32 * ((v245 > __dword_4458F0) - (uint32_t)(v245 < __dword_4458F4)) + v245 + 4) >> 3);
+                                 + ((32 * ((v245 > deadzone_hi) - (uint32_t)(v245 < deadzone_lo)) + v245 + 4) >> 3);
             v246 = *((int16_t *)v535 + 1);
             v247 = v572 - ((v246 + (1 << ((v535->f0 + 31) & 31))) >> (v535->f0 & 31));
             *((uint16_t *)v535 + 1) = v246
-                                 + ((32 * ((v247 > __dword_4458F0) - (uint32_t)(v247 < __dword_4458F4)) + v247 + 4) >> 3);
+                                 + ((32 * ((v247 > deadzone_hi) - (uint32_t)(v247 < deadzone_lo)) + v247 + 4) >> 3);
             v248 = *((int16_t *)v530 + 1);
             v249 = v550;
             v250 = v550 - ((v248 + (1 << ((v530->f0 + 31) & 31))) >> (v530->f0 & 31));
             *((uint16_t *)v530 + 1) = v248
-                                 + ((32 * ((v250 > __dword_4458F0) - (uint32_t)(v250 < __dword_4458F4)) + v250 + 2) >> 2);
+                                 + ((32 * ((v250 > deadzone_hi) - (uint32_t)(v250 < deadzone_lo)) + v250 + 2) >> 2);
             v251 = *((int16_t *)v531 + 1);
             LOBYTE(v248) = v531->f0;
             v252 = v251 + (1 << ((v531->f0 + 31) & 31));
             v550 = v249;
             *((uint16_t *)v531 + 1) = v251
                                  + ((32
-                                   * ((v249 - (v252 >> (v248 & 31)) > __dword_4458F0)
-                                    - (uint32_t)(v249 - (v252 >> (v248 & 31)) < __dword_4458F4))
+                                   * ((v249 - (v252 >> (v248 & 31)) > deadzone_hi)
+                                    - (uint32_t)(v249 - (v252 >> (v248 & 31)) < deadzone_lo))
                                    + v249
                                    - (v252 >> (v248 & 31))
                                    + 4) >> 3);
@@ -14152,82 +14144,82 @@ uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, uint8_t a4
             v254 = *((int16_t *)v530 - 1);
             v255 = v253 - ((v254 + (1 << ((*((char *)v530 - 4) + 31) & 31))) >> (*((char *)v530 - 4) & 31));
             *((uint16_t *)v530 - 1) = v254
-                                 + ((32 * ((v255 > __dword_4458F0) - (uint32_t)(v255 < __dword_4458F4)) + v255 + 4) >> 3);
+                                 + ((32 * ((v255 > deadzone_hi) - (uint32_t)(v255 < deadzone_lo)) + v255 + 4) >> 3);
             v256 = *((int16_t *)v532 + 1);
             LOBYTE(v254) = v532->f0;
             v573 = -v253;
             v257 = -v253 - ((v256 + (1 << ((v254 + 31) & 31))) >> (v254 & 31));
             *((uint16_t *)v532 + 1) = v256
-                                 + ((32 * ((v257 > __dword_4458F0) - (uint32_t)(v257 < __dword_4458F4)) + v257 + 4) >> 3);
+                                 + ((32 * ((v257 > deadzone_hi) - (uint32_t)(v257 < deadzone_lo)) + v257 + 4) >> 3);
             v258 = *((int16_t *)v527 + 1);
             v259 = v550;
             v260 = v550 - ((v258 + (1 << ((v527->f0 + 31) & 31))) >> (v527->f0 & 31));
             *((uint16_t *)v527 + 1) = v258
-                                 + ((32 * ((v260 > __dword_4458F0) - (uint32_t)(v260 < __dword_4458F4)) + v260 + 2) >> 2);
+                                 + ((32 * ((v260 > deadzone_hi) - (uint32_t)(v260 < deadzone_lo)) + v260 + 2) >> 2);
             v261 = *((int16_t *)v528 + 1);
             v262 = v259 - ((v261 + (1 << ((v528->f0 + 31) & 31))) >> (v528->f0 & 31));
             *((uint16_t *)v528 + 1) = v261
-                                 + ((32 * ((v262 > __dword_4458F0) - (uint32_t)(v262 < __dword_4458F4)) + v262 + 4) >> 3);
+                                 + ((32 * ((v262 > deadzone_hi) - (uint32_t)(v262 < deadzone_lo)) + v262 + 4) >> 3);
             *((uint16_t *)v527 + 3) += (uint32_t)(v259
                                                  - ((*((int16_t *)v527 + 3) + (1 << ((v527->f4 + 31) & 31))) >> (v527->f4 & 31))
                                                  + 2) >> 2;
             v263 = *((int16_t *)v527 - 1);
             v264 = v259 - ((v263 + (1 << ((*((char *)v527 - 4) + 31) & 31))) >> (*((char *)v527 - 4) & 31));
             *((uint16_t *)v527 - 1) = v263
-                                 + ((32 * ((v264 > __dword_4458F0) - (uint32_t)(v264 < __dword_4458F4)) + v264 + 4) >> 3);
+                                 + ((32 * ((v264 > deadzone_hi) - (uint32_t)(v264 < deadzone_lo)) + v264 + 4) >> 3);
             v265 = *((int16_t *)v529 + 1);
             v266 = v573 - ((v265 + (1 << ((v529->f0 + 31) & 31))) >> (v529->f0 & 31));
             *((uint16_t *)v529 + 1) = v265
-                                 + ((32 * ((v266 > __dword_4458F0) - (uint32_t)(v266 < __dword_4458F4)) + v266 + 4) >> 3);
+                                 + ((32 * ((v266 > deadzone_hi) - (uint32_t)(v266 < deadzone_lo)) + v266 + 4) >> 3);
             v267 = *((int16_t *)v524 + 1);
             v268 = v550;
             v269 = v550 - ((v267 + (1 << ((v524->f0 + 31) & 31))) >> (v524->f0 & 31));
             *((uint16_t *)v524 + 1) = v267
-                                 + ((32 * ((v269 > __dword_4458F0) - (uint32_t)(v269 < __dword_4458F4)) + v269 + 2) >> 2);
+                                 + ((32 * ((v269 > deadzone_hi) - (uint32_t)(v269 < deadzone_lo)) + v269 + 2) >> 2);
             v270 = v525->f2;
             v271 = v268 - ((v270 + (1 << ((v525->f0 + 31) & 31))) >> (v525->f0 & 31));
             *(uint16_t *)&v525->f2 = v270
-                                 + ((32 * ((v271 > __dword_4458F0) - (uint32_t)(v271 < __dword_4458F4)) + v271 + 4) >> 3);
+                                 + ((32 * ((v271 > deadzone_hi) - (uint32_t)(v271 < deadzone_lo)) + v271 + 4) >> 3);
             *((uint16_t *)v524 + 3) += (uint32_t)(v268
                                                  - ((*((int16_t *)v524 + 3) + (1 << ((v524->f4 + 31) & 31))) >> (v524->f4 & 31))
                                                  + 2) >> 2;
             v272 = *((int16_t *)v524 - 1);
             v273 = v268 - ((v272 + (1 << ((*((char *)v524 - 4) + 31) & 31))) >> (*((char *)v524 - 4) & 31));
             *((uint16_t *)v524 - 1) = v272
-                                 + ((32 * ((v273 > __dword_4458F0) - (uint32_t)(v273 < __dword_4458F4)) + v273 + 4) >> 3);
+                                 + ((32 * ((v273 > deadzone_hi) - (uint32_t)(v273 < deadzone_lo)) + v273 + 4) >> 3);
             v274 = *((int16_t *)v526 + 1);
             v275 = v573 - ((v274 + (1 << ((v526->f0 + 31) & 31))) >> (v526->f0 & 31));
             *((uint16_t *)v526 + 1) = v274
-                                 + ((32 * ((v275 > __dword_4458F0) - (uint32_t)(v275 < __dword_4458F4)) + v275 + 4) >> 3);
+                                 + ((32 * ((v275 > deadzone_hi) - (uint32_t)(v275 < deadzone_lo)) + v275 + 4) >> 3);
             v276 = *((int16_t *)v521 + 1);
             v277 = v550;
             v278 = v550 - ((v276 + (1 << ((v521->f0 + 31) & 31))) >> (v521->f0 & 31));
             *((uint16_t *)v521 + 1) = v276
-                                 + ((32 * ((v278 > __dword_4458F0) - (uint32_t)(v278 < __dword_4458F4)) + v278 + 2) >> 2);
+                                 + ((32 * ((v278 > deadzone_hi) - (uint32_t)(v278 < deadzone_lo)) + v278 + 2) >> 2);
             v279 = *((int16_t *)v522 + 1);
             v280 = v277 - ((v279 + (1 << ((v522->f0 + 31) & 31))) >> (v522->f0 & 31));
             *((uint16_t *)v522 + 1) = v279
-                                 + ((32 * ((v280 > __dword_4458F0) - (uint32_t)(v280 < __dword_4458F4)) + v280 + 4) >> 3);
+                                 + ((32 * ((v280 > deadzone_hi) - (uint32_t)(v280 < deadzone_lo)) + v280 + 4) >> 3);
             *((uint16_t *)v521 + 3) += (uint32_t)(v277
                                                  - ((*((int16_t *)v521 + 3) + (1 << ((v521->f4 + 31) & 31))) >> (v521->f4 & 31))
                                                  + 2) >> 2;
             v281 = *((int16_t *)v521 - 1);
             v282 = v277 - ((v281 + (1 << ((*((char *)v521 - 4) + 31) & 31))) >> (*((char *)v521 - 4) & 31));
             *((uint16_t *)v521 - 1) = v281
-                                 + ((32 * ((v282 > __dword_4458F0) - (uint32_t)(v282 < __dword_4458F4)) + v282 + 4) >> 3);
+                                 + ((32 * ((v282 > deadzone_hi) - (uint32_t)(v282 < deadzone_lo)) + v282 + 4) >> 3);
             v283 = *((int16_t *)v523 + 1);
             v284 = v573 - ((v283 + (1 << ((v523->f0 + 31) & 31))) >> (v523->f0 & 31));
             *((uint16_t *)v523 + 1) = v283
-                                 + ((32 * ((v284 > __dword_4458F0) - (uint32_t)(v284 < __dword_4458F4)) + v284 + 4) >> 3);
+                                 + ((32 * ((v284 > deadzone_hi) - (uint32_t)(v284 < deadzone_lo)) + v284 + 4) >> 3);
             v285 = *((int16_t *)v518 + 1);
             v286 = v550;
             v287 = v550 - ((v285 + (1 << ((v518->f0 + 31) & 31))) >> (v518->f0 & 31));
             *((uint16_t *)v518 + 1) = v285
-                                 + ((32 * ((v287 > __dword_4458F0) - (uint32_t)(v287 < __dword_4458F4)) + v287 + 2) >> 2);
+                                 + ((32 * ((v287 > deadzone_hi) - (uint32_t)(v287 < deadzone_lo)) + v287 + 2) >> 2);
             v288 = *((int16_t *)v519 + 1);
             v289 = v286 - ((v288 + (1 << ((v519->f0 + 31) & 31))) >> (v519->f0 & 31));
             *((uint16_t *)v519 + 1) = v288
-                                 + ((32 * ((v289 > __dword_4458F0) - (uint32_t)(v289 < __dword_4458F4)) + v289 + 4) >> 3);
+                                 + ((32 * ((v289 > deadzone_hi) - (uint32_t)(v289 < deadzone_lo)) + v289 + 4) >> 3);
             *((uint16_t *)v518 + 3) += (uint32_t)(v286
                                                  - ((*((int16_t *)v518 + 3) + (1 << ((v518->f4 + 31) & 31))) >> (v518->f4 & 31))
                                                  + 2) >> 2;
@@ -14236,47 +14228,47 @@ uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, uint8_t a4
             v292 = -v286;
             v574 = v292;
             *((uint16_t *)v518 - 1) = v290
-                                 + ((32 * ((v291 > __dword_4458F0) - (uint32_t)(v291 < __dword_4458F4)) + v291 + 4) >> 3);
+                                 + ((32 * ((v291 > deadzone_hi) - (uint32_t)(v291 < deadzone_lo)) + v291 + 4) >> 3);
             v293 = *((int16_t *)v520 + 1);
             v294 = v292 - ((v293 + (1 << ((v520->f0 + 31) & 31))) >> (v520->f0 & 31));
             *((uint16_t *)v520 + 1) = v293
-                                 + ((32 * ((v294 > __dword_4458F0) - (uint32_t)(v294 < __dword_4458F4)) + v294 + 4) >> 3);
+                                 + ((32 * ((v294 > deadzone_hi) - (uint32_t)(v294 < deadzone_lo)) + v294 + 4) >> 3);
             v295 = *((int16_t *)v515 + 1);
             v296 = v550;
             v297 = v550 - ((v295 + (1 << ((v515->f0 + 31) & 31))) >> (v515->f0 & 31));
             *((uint16_t *)v515 + 1) = v295
-                                 + ((32 * ((v297 > __dword_4458F0) - (uint32_t)(v297 < __dword_4458F4)) + v297 + 2) >> 2);
+                                 + ((32 * ((v297 > deadzone_hi) - (uint32_t)(v297 < deadzone_lo)) + v297 + 2) >> 2);
             v298 = v516->f2;
             v299 = v296 - ((v298 + (1 << ((v516->f0 + 31) & 31))) >> (v516->f0 & 31));
             *(uint16_t *)&v516->f2 = v298
-                                 + ((32 * ((v299 > __dword_4458F0) - (uint32_t)(v299 < __dword_4458F4)) + v299 + 4) >> 3);
+                                 + ((32 * ((v299 > deadzone_hi) - (uint32_t)(v299 < deadzone_lo)) + v299 + 4) >> 3);
             *((uint16_t *)v515 + 3) += (uint32_t)(v296
                                                  - ((*((int16_t *)v515 + 3) + (1 << ((v515->f4 + 31) & 31))) >> (v515->f4 & 31))
                                                  + 2) >> 2;
             v300 = *((int16_t *)v515 - 1);
             v301 = v296 - ((v300 + (1 << ((*((char *)v515 - 4) + 31) & 31))) >> (*((char *)v515 - 4) & 31));
             *((uint16_t *)v515 - 1) = v300
-                                 + ((32 * ((v301 > __dword_4458F0) - (uint32_t)(v301 < __dword_4458F4)) + v301 + 4) >> 3);
+                                 + ((32 * ((v301 > deadzone_hi) - (uint32_t)(v301 < deadzone_lo)) + v301 + 4) >> 3);
             v302 = *((int16_t *)v517 + 1);
             v303 = v574 - ((v302 + (1 << ((v517->f0 + 31) & 31))) >> (v517->f0 & 31));
             *((uint16_t *)v517 + 1) = v302
-                                 + ((32 * ((v303 > __dword_4458F0) - (uint32_t)(v303 < __dword_4458F4)) + v303 + 4) >> 3);
+                                 + ((32 * ((v303 > deadzone_hi) - (uint32_t)(v303 < deadzone_lo)) + v303 + 4) >> 3);
             v304 = v512->f2;
             v305 = v550;
             v306 = v550 - ((v304 + (1 << ((v512->f0 + 31) & 31))) >> (v512->f0 & 31));
             *(uint16_t *)&v512->f2 = v304
-                                 + ((32 * ((v306 > __dword_4458F0) - (uint32_t)(v306 < __dword_4458F4)) + v306 + 2) >> 2);
+                                 + ((32 * ((v306 > deadzone_hi) - (uint32_t)(v306 < deadzone_lo)) + v306 + 2) >> 2);
             v307 = v513->f2;
             v308 = v305 - ((v307 + (1 << ((v513->f0 + 31) & 31))) >> (v513->f0 & 31));
             *(uint16_t *)&v513->f2 = v307
-                                 + ((32 * ((v308 > __dword_4458F0) - (uint32_t)(v308 < __dword_4458F4)) + v308 + 4) >> 3);
+                                 + ((32 * ((v308 > deadzone_hi) - (uint32_t)(v308 < deadzone_lo)) + v308 + 4) >> 3);
             v512->f6 += (uint32_t)(v305
                                                  - ((*(int16_t *)&v512->f6 + (1 << ((v512->f4 + 31) & 31))) >> (v512->f4 & 31))
                                                  + 2) >> 2;
             v309 = *(int16_t *)((uintptr_t)v512 - 2);
             v310 = v305 - ((v309 + (1 << ((*(uint8_t *)((uintptr_t)v512 - 4) + 31) & 31))) >> (*(uint8_t *)((uintptr_t)v512 - 4) & 31));
             *(uint16_t *)((uintptr_t)v512 - 2) = v309
-                                 + ((32 * ((v310 > __dword_4458F0) - (uint32_t)(v310 < __dword_4458F4)) + v310 + 4) >> 3);
+                                 + ((32 * ((v310 > deadzone_hi) - (uint32_t)(v310 < deadzone_lo)) + v310 + 4) >> 3);
             v214 = v514->f2;
             v215 = v574 - ((v214 + (1 << ((v514->f0 + 31) & 31))) >> (v514->f0 & 31));
           }
@@ -14285,189 +14277,189 @@ uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, uint8_t a4
             v122 = *(int16_t *)((uintptr_t)v542 - 2);
             v123 = v550 - ((v122 + (1 << ((*(uint8_t *)((uintptr_t)v542 - 4) + 31) & 31))) >> (*(uint8_t *)((uintptr_t)v542 - 4) & 31));
             *(uint16_t *)((uintptr_t)v542 - 2) = v122
-                                 + ((32 * ((v123 > __dword_4458F0) - (uint32_t)(v123 < __dword_4458F4)) + v123 + 4) >> 3);
+                                 + ((32 * ((v123 > deadzone_hi) - (uint32_t)(v123 < deadzone_lo)) + v123 + 4) >> 3);
             v124 = *((int16_t *)v544 + 1);
             LOBYTE(v122) = v544->f0;
             v547 = -v121;
             v125 = -v121 - ((v124 + (1 << ((v122 + 31) & 31))) >> (v122 & 31));
             *((uint16_t *)v544 + 1) = v124
-                                 + ((32 * ((v125 > __dword_4458F0) - (uint32_t)(v125 < __dword_4458F4)) + v125 + 4) >> 3);
+                                 + ((32 * ((v125 > deadzone_hi) - (uint32_t)(v125 < deadzone_lo)) + v125 + 4) >> 3);
             v126 = v539->f2;
             v127 = v550;
             v128 = v550 - ((v126 + (1 << ((v539->f0 + 31) & 31))) >> (v539->f0 & 31));
             *(uint16_t *)&v539->f2 = v126
-                                 + ((32 * ((v128 > __dword_4458F0) - (uint32_t)(v128 < __dword_4458F4)) + v128 + 2) >> 2);
+                                 + ((32 * ((v128 > deadzone_hi) - (uint32_t)(v128 < deadzone_lo)) + v128 + 2) >> 2);
             v129 = *((int16_t *)v540 + 1);
             v130 = v127 - ((v129 + (1 << ((v540->f0 + 31) & 31))) >> (v540->f0 & 31));
             *((uint16_t *)v540 + 1) = v129
-                                 + ((32 * ((v130 > __dword_4458F0) - (uint32_t)(v130 < __dword_4458F4)) + v130 + 4) >> 3);
+                                 + ((32 * ((v130 > deadzone_hi) - (uint32_t)(v130 < deadzone_lo)) + v130 + 4) >> 3);
             v131 = *(int16_t *)((uintptr_t)v539 - 2);
             v132 = v127 - ((v131 + (1 << ((*(uint8_t *)((uintptr_t)v539 - 4) + 31) & 31))) >> (*(uint8_t *)((uintptr_t)v539 - 4) & 31));
             *(uint16_t *)((uintptr_t)v539 - 2) = v131
-                                 + ((32 * ((v132 > __dword_4458F0) - (uint32_t)(v132 < __dword_4458F4)) + v132 + 4) >> 3);
+                                 + ((32 * ((v132 > deadzone_hi) - (uint32_t)(v132 < deadzone_lo)) + v132 + 4) >> 3);
             v133 = v541->f2;
             v134 = v547 - ((v133 + (1 << ((v541->f0 + 31) & 31))) >> (v541->f0 & 31));
             *(uint16_t *)&v541->f2 = v133
-                                 + ((32 * ((v134 > __dword_4458F0) - (uint32_t)(v134 < __dword_4458F4)) + v134 + 4) >> 3);
+                                 + ((32 * ((v134 > deadzone_hi) - (uint32_t)(v134 < deadzone_lo)) + v134 + 4) >> 3);
             v135 = v536->f2;
             v136 = v550;
             v137 = v550 - ((v135 + (1 << ((v536->f0 + 31) & 31))) >> (v536->f0 & 31));
             *(uint16_t *)&v536->f2 = v135
-                                 + ((32 * ((v137 > __dword_4458F0) - (uint32_t)(v137 < __dword_4458F4)) + v137 + 2) >> 2);
+                                 + ((32 * ((v137 > deadzone_hi) - (uint32_t)(v137 < deadzone_lo)) + v137 + 2) >> 2);
             v138 = *((int16_t *)v537 + 1);
             v139 = v136 - ((v138 + (1 << ((v537->f0 + 31) & 31))) >> (v537->f0 & 31));
             *((uint16_t *)v537 + 1) = v138
-                                 + ((32 * ((v139 > __dword_4458F0) - (uint32_t)(v139 < __dword_4458F4)) + v139 + 4) >> 3);
+                                 + ((32 * ((v139 > deadzone_hi) - (uint32_t)(v139 < deadzone_lo)) + v139 + 4) >> 3);
             v140 = *(int16_t *)((uintptr_t)v536 - 2);
             v141 = v136 - ((v140 + (1 << ((*(uint8_t *)((uintptr_t)v536 - 4) + 31) & 31))) >> (*(uint8_t *)((uintptr_t)v536 - 4) & 31));
             *(uint16_t *)((uintptr_t)v536 - 2) = v140
-                                 + ((32 * ((v141 > __dword_4458F0) - (uint32_t)(v141 < __dword_4458F4)) + v141 + 4) >> 3);
+                                 + ((32 * ((v141 > deadzone_hi) - (uint32_t)(v141 < deadzone_lo)) + v141 + 4) >> 3);
             v142 = v538->f2;
             v143 = v547 - ((v142 + (1 << ((v538->f0 + 31) & 31))) >> (v538->f0 & 31));
             *(uint16_t *)&v538->f2 = v142
-                                 + ((32 * ((v143 > __dword_4458F0) - (uint32_t)(v143 < __dword_4458F4)) + v143 + 4) >> 3);
+                                 + ((32 * ((v143 > deadzone_hi) - (uint32_t)(v143 < deadzone_lo)) + v143 + 4) >> 3);
             v144 = *((int16_t *)v533 + 1);
             v145 = v550;
             v146 = v550 - ((v144 + (1 << ((v533->f0 + 31) & 31))) >> (v533->f0 & 31));
             *((uint16_t *)v533 + 1) = v144
-                                 + ((32 * ((v146 > __dword_4458F0) - (uint32_t)(v146 < __dword_4458F4)) + v146 + 2) >> 2);
+                                 + ((32 * ((v146 > deadzone_hi) - (uint32_t)(v146 < deadzone_lo)) + v146 + 2) >> 2);
             v147 = *((int16_t *)v534 + 1);
             v148 = v145 - ((v147 + (1 << ((v534->f0 + 31) & 31))) >> (v534->f0 & 31));
             *((uint16_t *)v534 + 1) = v147
-                                 + ((32 * ((v148 > __dword_4458F0) - (uint32_t)(v148 < __dword_4458F4)) + v148 + 4) >> 3);
+                                 + ((32 * ((v148 > deadzone_hi) - (uint32_t)(v148 < deadzone_lo)) + v148 + 4) >> 3);
             v149 = *((int16_t *)v533 - 1);
             v150 = v145 - ((v149 + (1 << ((*((char *)v533 - 4) + 31) & 31))) >> (*((char *)v533 - 4) & 31));
             *((uint16_t *)v533 - 1) = v149
-                                 + ((32 * ((v150 > __dword_4458F0) - (uint32_t)(v150 < __dword_4458F4)) + v150 + 4) >> 3);
+                                 + ((32 * ((v150 > deadzone_hi) - (uint32_t)(v150 < deadzone_lo)) + v150 + 4) >> 3);
             v151 = *((int16_t *)v535 + 1);
             v152 = v547 - ((v151 + (1 << ((v535->f0 + 31) & 31))) >> (v535->f0 & 31));
             *((uint16_t *)v535 + 1) = v151
-                                 + ((32 * ((v152 > __dword_4458F0) - (uint32_t)(v152 < __dword_4458F4)) + v152 + 4) >> 3);
+                                 + ((32 * ((v152 > deadzone_hi) - (uint32_t)(v152 < deadzone_lo)) + v152 + 4) >> 3);
             v153 = *((int16_t *)v530 + 1);
             v154 = v550;
             v155 = v550 - ((v153 + (1 << ((v530->f0 + 31) & 31))) >> (v530->f0 & 31));
             *((uint16_t *)v530 + 1) = v153
-                                 + ((32 * ((v155 > __dword_4458F0) - (uint32_t)(v155 < __dword_4458F4)) + v155 + 2) >> 2);
+                                 + ((32 * ((v155 > deadzone_hi) - (uint32_t)(v155 < deadzone_lo)) + v155 + 2) >> 2);
             v156 = *((int16_t *)v531 + 1);
             v157 = v154 - ((v156 + (1 << ((v531->f0 + 31) & 31))) >> (v531->f0 & 31));
             *((uint16_t *)v531 + 1) = v156
-                                 + ((32 * ((v157 > __dword_4458F0) - (uint32_t)(v157 < __dword_4458F4)) + v157 + 4) >> 3);
+                                 + ((32 * ((v157 > deadzone_hi) - (uint32_t)(v157 < deadzone_lo)) + v157 + 4) >> 3);
             v158 = *((int16_t *)v530 - 1);
             v159 = v154 - ((v158 + (1 << ((*((char *)v530 - 4) + 31) & 31))) >> (*((char *)v530 - 4) & 31));
             *((uint16_t *)v530 - 1) = v158
-                                 + ((32 * ((v159 > __dword_4458F0) - (uint32_t)(v159 < __dword_4458F4)) + v159 + 4) >> 3);
+                                 + ((32 * ((v159 > deadzone_hi) - (uint32_t)(v159 < deadzone_lo)) + v159 + 4) >> 3);
             v160 = *((int16_t *)v532 + 1);
             v547 -= (v160 + (1 << ((v532->f0 + 31) & 31))) >> (v532->f0 & 31);
             v161 = v550;
             *((uint16_t *)v532 + 1) = v160
-                                 + ((32 * ((v547 > __dword_4458F0) - (uint32_t)(v547 < __dword_4458F4)) + v547 + 4) >> 3);
+                                 + ((32 * ((v547 > deadzone_hi) - (uint32_t)(v547 < deadzone_lo)) + v547 + 4) >> 3);
             v162 = *((int16_t *)v527 + 1);
             v163 = v161 - ((v162 + (1 << ((v527->f0 + 31) & 31))) >> (v527->f0 & 31));
             *((uint16_t *)v527 + 1) = v162
-                                 + ((32 * ((v163 > __dword_4458F0) - (uint32_t)(v163 < __dword_4458F4)) + v163 + 2) >> 2);
+                                 + ((32 * ((v163 > deadzone_hi) - (uint32_t)(v163 < deadzone_lo)) + v163 + 2) >> 2);
             v164 = *((int16_t *)v528 + 1);
             v165 = v161 - ((v164 + (1 << ((v528->f0 + 31) & 31))) >> (v528->f0 & 31));
             *((uint16_t *)v528 + 1) = v164
-                                 + ((32 * ((v165 > __dword_4458F0) - (uint32_t)(v165 < __dword_4458F4)) + v165 + 4) >> 3);
+                                 + ((32 * ((v165 > deadzone_hi) - (uint32_t)(v165 < deadzone_lo)) + v165 + 4) >> 3);
             v166 = *((int16_t *)v527 - 1);
             v167 = v161 - ((v166 + (1 << ((*((char *)v527 - 4) + 31) & 31))) >> (*((char *)v527 - 4) & 31));
             v168 = -v161;
             v570 = v168;
             *((uint16_t *)v527 - 1) = v166
-                                 + ((32 * ((v167 > __dword_4458F0) - (uint32_t)(v167 < __dword_4458F4)) + v167 + 4) >> 3);
+                                 + ((32 * ((v167 > deadzone_hi) - (uint32_t)(v167 < deadzone_lo)) + v167 + 4) >> 3);
             v169 = *((int16_t *)v529 + 1);
             v170 = v168 - ((v169 + (1 << ((v529->f0 + 31) & 31))) >> (v529->f0 & 31));
             *((uint16_t *)v529 + 1) = v169
-                                 + ((32 * ((v170 > __dword_4458F0) - (uint32_t)(v170 < __dword_4458F4)) + v170 + 4) >> 3);
+                                 + ((32 * ((v170 > deadzone_hi) - (uint32_t)(v170 < deadzone_lo)) + v170 + 4) >> 3);
             v171 = *((int16_t *)v524 + 1);
             v172 = v550;
             v173 = v550 - ((v171 + (1 << ((v524->f0 + 31) & 31))) >> (v524->f0 & 31));
             *((uint16_t *)v524 + 1) = v171
-                                 + ((32 * ((v173 > __dword_4458F0) - (uint32_t)(v173 < __dword_4458F4)) + v173 + 2) >> 2);
+                                 + ((32 * ((v173 > deadzone_hi) - (uint32_t)(v173 < deadzone_lo)) + v173 + 2) >> 2);
             v174 = v525->f2;
             v175 = v172 - ((v174 + (1 << ((v525->f0 + 31) & 31))) >> (v525->f0 & 31));
             *(uint16_t *)&v525->f2 = v174
-                                 + ((32 * ((v175 > __dword_4458F0) - (uint32_t)(v175 < __dword_4458F4)) + v175 + 4) >> 3);
+                                 + ((32 * ((v175 > deadzone_hi) - (uint32_t)(v175 < deadzone_lo)) + v175 + 4) >> 3);
             v176 = *((int16_t *)v524 - 1);
             v177 = v172 - ((v176 + (1 << ((*((char *)v524 - 4) + 31) & 31))) >> (*((char *)v524 - 4) & 31));
             *((uint16_t *)v524 - 1) = v176
-                                 + ((32 * ((v177 > __dword_4458F0) - (uint32_t)(v177 < __dword_4458F4)) + v177 + 4) >> 3);
+                                 + ((32 * ((v177 > deadzone_hi) - (uint32_t)(v177 < deadzone_lo)) + v177 + 4) >> 3);
             v178 = *((int16_t *)v526 + 1);
             v179 = v570 - ((v178 + (1 << ((v526->f0 + 31) & 31))) >> (v526->f0 & 31));
             *((uint16_t *)v526 + 1) = v178
-                                 + ((32 * ((v179 > __dword_4458F0) - (uint32_t)(v179 < __dword_4458F4)) + v179 + 4) >> 3);
+                                 + ((32 * ((v179 > deadzone_hi) - (uint32_t)(v179 < deadzone_lo)) + v179 + 4) >> 3);
             v180 = *((int16_t *)v521 + 1);
             v181 = v550;
             v182 = v550 - ((v180 + (1 << ((v521->f0 + 31) & 31))) >> (v521->f0 & 31));
             *((uint16_t *)v521 + 1) = v180
-                                 + ((32 * ((v182 > __dword_4458F0) - (uint32_t)(v182 < __dword_4458F4)) + v182 + 2) >> 2);
+                                 + ((32 * ((v182 > deadzone_hi) - (uint32_t)(v182 < deadzone_lo)) + v182 + 2) >> 2);
             v183 = *((int16_t *)v522 + 1);
             v184 = v181 - ((v183 + (1 << ((v522->f0 + 31) & 31))) >> (v522->f0 & 31));
             *((uint16_t *)v522 + 1) = v183
-                                 + ((32 * ((v184 > __dword_4458F0) - (uint32_t)(v184 < __dword_4458F4)) + v184 + 4) >> 3);
+                                 + ((32 * ((v184 > deadzone_hi) - (uint32_t)(v184 < deadzone_lo)) + v184 + 4) >> 3);
             v185 = *((int16_t *)v521 - 1);
             v186 = v181 - ((v185 + (1 << ((*((char *)v521 - 4) + 31) & 31))) >> (*((char *)v521 - 4) & 31));
             *((uint16_t *)v521 - 1) = v185
-                                 + ((32 * ((v186 > __dword_4458F0) - (uint32_t)(v186 < __dword_4458F4)) + v186 + 4) >> 3);
+                                 + ((32 * ((v186 > deadzone_hi) - (uint32_t)(v186 < deadzone_lo)) + v186 + 4) >> 3);
             v187 = *((int16_t *)v523 + 1);
             v188 = v570 - ((v187 + (1 << ((v523->f0 + 31) & 31))) >> (v523->f0 & 31));
             *((uint16_t *)v523 + 1) = v187
-                                 + ((32 * ((v188 > __dword_4458F0) - (uint32_t)(v188 < __dword_4458F4)) + v188 + 4) >> 3);
+                                 + ((32 * ((v188 > deadzone_hi) - (uint32_t)(v188 < deadzone_lo)) + v188 + 4) >> 3);
             v189 = *((int16_t *)v518 + 1);
             v190 = v550;
             v191 = v550 - ((v189 + (1 << ((v518->f0 + 31) & 31))) >> (v518->f0 & 31));
             *((uint16_t *)v518 + 1) = v189
-                                 + ((32 * ((v191 > __dword_4458F0) - (uint32_t)(v191 < __dword_4458F4)) + v191 + 2) >> 2);
+                                 + ((32 * ((v191 > deadzone_hi) - (uint32_t)(v191 < deadzone_lo)) + v191 + 2) >> 2);
             v192 = *((int16_t *)v519 + 1);
             v193 = v190 - ((v192 + (1 << ((v519->f0 + 31) & 31))) >> (v519->f0 & 31));
             *((uint16_t *)v519 + 1) = v192
-                                 + ((32 * ((v193 > __dword_4458F0) - (uint32_t)(v193 < __dword_4458F4)) + v193 + 4) >> 3);
+                                 + ((32 * ((v193 > deadzone_hi) - (uint32_t)(v193 < deadzone_lo)) + v193 + 4) >> 3);
             v194 = *((int16_t *)v518 - 1);
             v195 = v190 - ((v194 + (1 << ((*((char *)v518 - 4) + 31) & 31))) >> (*((char *)v518 - 4) & 31));
             *((uint16_t *)v518 - 1) = v194
-                                 + ((32 * ((v195 > __dword_4458F0) - (uint32_t)(v195 < __dword_4458F4)) + v195 + 4) >> 3);
+                                 + ((32 * ((v195 > deadzone_hi) - (uint32_t)(v195 < deadzone_lo)) + v195 + 4) >> 3);
             v196 = *((int16_t *)v520 + 1);
             v197 = v570 - ((v196 + (1 << ((v520->f0 + 31) & 31))) >> (v520->f0 & 31));
             *((uint16_t *)v520 + 1) = v196
-                                 + ((32 * ((v197 > __dword_4458F0) - (uint32_t)(v197 < __dword_4458F4)) + v197 + 4) >> 3);
+                                 + ((32 * ((v197 > deadzone_hi) - (uint32_t)(v197 < deadzone_lo)) + v197 + 4) >> 3);
             v198 = *((int16_t *)v515 + 1);
             v199 = v550;
             v200 = v550 - ((v198 + (1 << ((v515->f0 + 31) & 31))) >> (v515->f0 & 31));
             *((uint16_t *)v515 + 1) = v198
-                                 + ((32 * ((v200 > __dword_4458F0) - (uint32_t)(v200 < __dword_4458F4)) + v200 + 2) >> 2);
+                                 + ((32 * ((v200 > deadzone_hi) - (uint32_t)(v200 < deadzone_lo)) + v200 + 2) >> 2);
             v201 = v516->f2;
             v202 = v199 - ((v201 + (1 << ((v516->f0 + 31) & 31))) >> (v516->f0 & 31));
             v550 = v199;
             *(uint16_t *)&v516->f2 = v201
-                                 + ((32 * ((v202 > __dword_4458F0) - (uint32_t)(v202 < __dword_4458F4)) + v202 + 4) >> 3);
+                                 + ((32 * ((v202 > deadzone_hi) - (uint32_t)(v202 < deadzone_lo)) + v202 + 4) >> 3);
             v203 = *((int16_t *)v515 - 1);
             v204 = v199 - ((v203 + (1 << ((*((char *)v515 - 4) + 31) & 31))) >> (*((char *)v515 - 4) & 31));
             *((uint16_t *)v515 - 1) = v203
-                                 + ((32 * ((v204 > __dword_4458F0) - (uint32_t)(v204 < __dword_4458F4)) + v204 + 4) >> 3);
+                                 + ((32 * ((v204 > deadzone_hi) - (uint32_t)(v204 < deadzone_lo)) + v204 + 4) >> 3);
             v205 = *((int16_t *)v517 + 1);
             LOBYTE(v203) = v517->f0;
             v571 = -v199;
             v206 = -v199 - ((v205 + (1 << ((v203 + 31) & 31))) >> (v203 & 31));
             *((uint16_t *)v517 + 1) = v205
-                                 + ((32 * ((v206 > __dword_4458F0) - (uint32_t)(v206 < __dword_4458F4)) + v206 + 4) >> 3);
+                                 + ((32 * ((v206 > deadzone_hi) - (uint32_t)(v206 < deadzone_lo)) + v206 + 4) >> 3);
             v207 = v512->f2;
             v208 = v550;
             v209 = v550 - ((v207 + (1 << ((v512->f0 + 31) & 31))) >> (v512->f0 & 31));
             *(uint16_t *)&v512->f2 = v207
-                                 + ((32 * ((v209 > __dword_4458F0) - (uint32_t)(v209 < __dword_4458F4)) + v209 + 2) >> 2);
+                                 + ((32 * ((v209 > deadzone_hi) - (uint32_t)(v209 < deadzone_lo)) + v209 + 2) >> 2);
             v210 = v513->f2;
             v211 = v208 - ((v210 + (1 << ((v513->f0 + 31) & 31))) >> (v513->f0 & 31));
             *(uint16_t *)&v513->f2 = v210
-                                 + ((32 * ((v211 > __dword_4458F0) - (uint32_t)(v211 < __dword_4458F4)) + v211 + 4) >> 3);
+                                 + ((32 * ((v211 > deadzone_hi) - (uint32_t)(v211 < deadzone_lo)) + v211 + 4) >> 3);
             v212 = *(int16_t *)((uintptr_t)v512 - 2);
             v213 = v208 - ((v212 + (1 << ((*(uint8_t *)((uintptr_t)v512 - 4) + 31) & 31))) >> (*(uint8_t *)((uintptr_t)v512 - 4) & 31));
             *(uint16_t *)((uintptr_t)v512 - 2) = v212
-                                 + ((32 * ((v213 > __dword_4458F0) - (uint32_t)(v213 < __dword_4458F4)) + v213 + 4) >> 3);
+                                 + ((32 * ((v213 > deadzone_hi) - (uint32_t)(v213 < deadzone_lo)) + v213 + 4) >> 3);
             v214 = v514->f2;
             v215 = v571 - ((v214 + (1 << ((v514->f0 + 31) & 31))) >> (v514->f0 & 31));
           }
           *(uint16_t *)&v514->f2 = v214
-                               + ((32 * ((v215 > __dword_4458F0) - (uint32_t)(v215 < __dword_4458F4)) + v215 + 4) >> 3);
+                               + ((32 * ((v215 > deadzone_hi) - (uint32_t)(v215 < deadzone_lo)) + v215 + 4) >> 3);
         }
       }
     }
@@ -15858,10 +15850,10 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
         i = i_1;
         Src = Src_1;
       }
-      __dword_4458EC = 0;
-      __dword_4458E8 = 0;
-      __dword_4458E4 = 0;
-      __dword_4458E0 = 0;
+      ctx_bias[3] = 0;
+      ctx_bias[2] = 0;
+      ctx_bias[1] = 0;
+      ctx_bias[0] = 0;
       if ( i > 0 )
       {
         v165 = v11;
@@ -15870,10 +15862,10 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
         i_1 = i;
         do
         {
-          __dword_4458E0 >>= 3;
-          __dword_4458E4 >>= 3;
-          __dword_4458E8 >>= 3;
-          __dword_4458EC >>= 3;
+          ctx_bias[0] >>= 3;
+          ctx_bias[1] >>= 3;
+          ctx_bias[2] >>= 3;
+          ctx_bias[3] >>= 3;
           lpAddress_1 = (Obj11 *)(plane[0]);
           v101 = __fwd_alt_model_p2_decode_alt_p2_context((__m128 *)plane[0], v2, v3, plane[2], plane[1]);
           v102 = (uint16_t *)&((uint32_t *)lpAddress_1)[2 * *(uint32_t *)&lpAddress_1->f278528[11] + 235018];
@@ -15884,11 +15876,11 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v105 = *(uint32_t *)&lpAddress_1->f278528[13];
           v106 = *(int16_t *)(v105 - 10);
           v107 = 32 * *(int16_t *)(v105 - 4);
-          __dword_4458E0 += 32 * *(int16_t *)(v105 - 6);
+          ctx_bias[0] += 32 * *(int16_t *)(v105 - 6);
           v108 = *(int16_t *)(v105 - 8);
-          __dword_4458E4 += v107;
-          __dword_4458E8 += 32 * v106;
-          __dword_4458EC += 32 * v108;
+          ctx_bias[1] += v107;
+          ctx_bias[2] += 32 * v106;
+          ctx_bias[3] += 32 * v108;
           v109 = v163 == 0;
           Src[(uint8_t)__byte_44339D[0]] = v104;
           if ( v109 )
@@ -15905,11 +15897,11 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v115 = v111->f278528[13].m128_i32[0];
           v116 = *(int16_t *)(v115 - 4);
           v117 = *(int16_t *)(v115 - 10);
-          __dword_4458E0 += 32 * *(int16_t *)(v115 - 6);
+          ctx_bias[0] += 32 * *(int16_t *)(v115 - 6);
           v118 = *(int16_t *)(v115 - 8);
-          __dword_4458E4 += 32 * v116;
-          __dword_4458E8 += 32 * v117;
-          __dword_4458EC += 32 * v118;
+          ctx_bias[1] += 32 * v116;
+          ctx_bias[2] += 32 * v117;
+          ctx_bias[3] += 32 * v118;
           v109 = ArgList == 0;
           Src[(uint8_t)__byte_4433AD[0]] = v169;
           if ( v109 )
@@ -15927,11 +15919,11 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v124 = v120->f278528[13].m128_i32[0];
           v125 = *(int16_t *)(v124 - 4);
           v126 = *(int16_t *)(v124 - 10);
-          __dword_4458E0 += 32 * *(int16_t *)(v124 - 6);
+          ctx_bias[0] += 32 * *(int16_t *)(v124 - 6);
           v127 = *(int16_t *)(v124 - 8);
-          __dword_4458E4 += 32 * v125;
-          __dword_4458E8 += 32 * v126;
-          __dword_4458EC += 32 * v127;
+          ctx_bias[1] += 32 * v125;
+          ctx_bias[2] += 32 * v126;
+          ctx_bias[3] += 32 * v127;
           Src[(uint8_t)__byte_4433BD[0]] = v170;
           n4_1 = plane_count;
           if ( plane_count >= 4 )
@@ -15952,10 +15944,10 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
             v133 = *(int16_t *)(v132 - 4);
             v134 = *(int16_t *)(v132 - 10);
             v135 = *(int16_t *)(v132 - 8);
-            __dword_4458E0 += 32 * *(int16_t *)(v132 - 6);
-            __dword_4458E4 += 32 * v133;
-            __dword_4458E8 += 32 * v134;
-            __dword_4458EC += 32 * v135;
+            ctx_bias[0] += 32 * *(int16_t *)(v132 - 6);
+            ctx_bias[1] += 32 * v133;
+            ctx_bias[2] += 32 * v134;
+            ctx_bias[3] += 32 * v135;
             Src[3] = v154;
             n4_1 = plane_count;
           }
@@ -16791,10 +16783,10 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
       }
       if ( i_2 <= 0 )
       {
-        __dword_4458E0 = 0;
-        __dword_4458E4 = 0;
-        __dword_4458E8 = 0;
-        __dword_4458EC = 0;
+        ctx_bias[0] = 0;
+        ctx_bias[1] = 0;
+        ctx_bias[2] = 0;
+        ctx_bias[3] = 0;
       }
       else
       {
@@ -16806,10 +16798,10 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
         for ( i = 0; i < i_2; ++i )
         {
           v184 = (uint8_t)__byte_44339D[0];
-          __dword_4458E0 = v102 >> 3;
-          __dword_4458E4 = v101 >> 3;
-          __dword_4458E8 = v100 >> 3;
-          __dword_4458EC = v99 >> 3;
+          ctx_bias[0] = v102 >> 3;
+          ctx_bias[1] = v101 >> 3;
+          ctx_bias[2] = v100 >> 3;
+          ctx_bias[3] = v99 >> 3;
           lpAddress_1 = (Obj11 *)(plane[0]);
           v104 = v166[(uint8_t)__byte_44339D[0]];
           v178 = __fwd_alt_model_p2_encode_alt_p2_context((__m128 *)plane[0], v2, v3, plane[2], plane[1]);
@@ -16837,10 +16829,10 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           v110 = *(int16_t *)(v109 - 4);
           v111 = *(int16_t *)(v109 - 10);
           v112 = *(int16_t *)(v109 - 8);
-          __dword_4458E0 += 32 * *(int16_t *)(v109 - 6);
-          __dword_4458E4 += 32 * v110;
-          __dword_4458E8 += 32 * v111;
-          __dword_4458EC += 32 * v112;
+          ctx_bias[0] += 32 * *(int16_t *)(v109 - 6);
+          ctx_bias[1] += 32 * v110;
+          ctx_bias[2] += 32 * v111;
+          ctx_bias[3] += 32 * v112;
           if ( v169 )
             v113 = 16 * v166[(uint8_t)__byte_44339D[0]];
           else
@@ -16871,10 +16863,10 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           v121 = *(int16_t *)(v120 - 4);
           v122 = *(int16_t *)(v120 - 10);
           v123 = *(int16_t *)(v120 - 8);
-          __dword_4458E0 += 32 * *(int16_t *)(v120 - 6);
-          __dword_4458E4 += 32 * v121;
-          __dword_4458E8 += 32 * v122;
-          __dword_4458EC += 32 * v123;
+          ctx_bias[0] += 32 * *(int16_t *)(v120 - 6);
+          ctx_bias[1] += 32 * v121;
+          ctx_bias[2] += 32 * v122;
+          ctx_bias[3] += 32 * v123;
           if ( v168 )
             v124 = (__dword_4433A4[4 * (uint8_t)__byte_4433BD[0]] * v166[(uint8_t)__byte_4433AD[0]]
                   + __dword_4433A0[4 * (uint8_t)__byte_4433BD[0]] * v166[(uint8_t)__byte_44339D[0]]) >> 3;
@@ -16904,16 +16896,16 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           __alt_p2_model((Obj69 *)v125, __xmmword_439B50, v126, v127, v126 - v180);
           v131 = v125->f278528[13].m128_i32[0];
           n4_1 = plane_count;
-          v102 = __dword_4458E0 + 32 * *(int16_t *)(v131 - 6);
-          v101 = __dword_4458E4 + 32 * *(int16_t *)(v131 - 4);
-          v100 = __dword_4458E8 + 32 * *(int16_t *)(v131 - 10);
-          v99 = __dword_4458EC + 32 * *(int16_t *)(v131 - 8);
+          v102 = ctx_bias[0] + 32 * *(int16_t *)(v131 - 6);
+          v101 = ctx_bias[1] + 32 * *(int16_t *)(v131 - 4);
+          v100 = ctx_bias[2] + 32 * *(int16_t *)(v131 - 10);
+          v99 = ctx_bias[3] + 32 * *(int16_t *)(v131 - 8);
           if ( plane_count >= 4 )
           {
-            __dword_4458E0 += 32 * *(int16_t *)(v131 - 6);
-            __dword_4458E4 = v101;
-            __dword_4458E8 = v100;
-            __dword_4458EC = v99;
+            ctx_bias[0] += 32 * *(int16_t *)(v131 - 6);
+            ctx_bias[1] = v101;
+            ctx_bias[2] = v100;
+            ctx_bias[3] = v99;
             if ( v155 )
               v132 = (__dword_4433A8[4 * (uint8_t)__n3_0] * v166[2]
                     + __dword_4433A4[4 * (uint8_t)__n3_0] * v166[1]
@@ -16943,18 +16935,18 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             __alt_p2_model((Obj69 *)v133, __xmmword_439B50, v134, v135, v134 - v157);
             v139 = v133->f278528[13].m128_i32[0];
             n4_1 = plane_count;
-            v102 = __dword_4458E0 + 32 * *(int16_t *)(v139 - 6);
-            v101 = __dword_4458E4 + 32 * *(int16_t *)(v139 - 4);
-            v100 = __dword_4458E8 + 32 * *(int16_t *)(v139 - 10);
-            v99 = __dword_4458EC + 32 * *(int16_t *)(v139 - 8);
+            v102 = ctx_bias[0] + 32 * *(int16_t *)(v139 - 6);
+            v101 = ctx_bias[1] + 32 * *(int16_t *)(v139 - 4);
+            v100 = ctx_bias[2] + 32 * *(int16_t *)(v139 - 10);
+            v99 = ctx_bias[3] + 32 * *(int16_t *)(v139 - 8);
           }
           v166 += n4_1;
         }
         v11 = v170;
-        __dword_4458E0 = v102;
-        __dword_4458E4 = v101;
-        __dword_4458E8 = v100;
-        __dword_4458EC = v99;
+        ctx_bias[0] = v102;
+        ctx_bias[1] = v101;
+        ctx_bias[2] = v100;
+        ctx_bias[3] = v99;
       }
       ++v11;
     }
