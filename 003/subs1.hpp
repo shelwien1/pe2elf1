@@ -547,7 +547,7 @@ struct Obj8 {
   uint32_t f278668;
   uint32_t f278672;
   uint8_t _pad13[60];
-  uint32_t  f278736[10];   // +278736 .. +278772
+  uint8_t  *f278736[10];   // +278736 .. +278772, row cursors
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj8, f278736[9]) == 278772,
@@ -703,7 +703,7 @@ static_assert(sizeof(void *) != 4
 // computed index are padding here -- their bounds are not visible.
 struct Obj19 {
   uint8_t _pad0[278736];
-  uint32_t  f278736[6];   // +278736 .. +278756
+  uint8_t  *f278736[6];   // +278736 .. +278756, row cursors
   char *f278760;
   char *f278764;
   char *f278768;
@@ -792,7 +792,7 @@ static_assert(sizeof(void *) != 4
 // computed index are padding here -- their bounds are not visible.
 struct Obj31 {
   uint8_t _pad0[278736];
-  uint32_t f278736;
+  uint8_t *f278736;   // a row cursor
   uint8_t _pad2[16];
   char *f278756;
   char *f278760;
@@ -15667,7 +15667,8 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   char *v78;
   char *v89;
   char *v93;
-  uintptr_t v30, v38, v45, v46, v57, v67, v75, v85, v87, v91, v95, v97, v99;
+  uint8_t *v30, *v38, *v45, *v57, *v67, *v75, *v85, *v87, *v91, *v95, *v97, *v99;
+  int32_t v46;   // an offset from v45, not a cursor
   Obj11 *v120;
   Obj11 *v129;
   Obj11 *v111;
@@ -15676,10 +15677,12 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   bool v17, v109;
   char v9;
   int16_t v110;
-  int32_t i, v5, n4, n4_1, v15, v16, v21, v22, v23, v24, v31, v32, v33, v39,
-          v40, v47, v48, v49, v50, v51, v52, v53, v58, *v59, v60, v61, v68,
-          v69, v70, v76, v77, v81, v82, v83, v84, v86, v88, v90, v92, v94,
-          v96, v98, v101, v103, v104, v105, v106, v107, v108, v112, v113,
+  uint8_t *v47, *v48, *v49, *v50, *v51, *v52, *v53;   // row cursors
+  uint8_t *v21, *v22, *v23, *v24, *v81, *v82, *v83, *v84, *v86, *v88, *v90,
+          *v92, *v94, *v96, *v98;   // row cursors
+  int32_t i, v5, n4, n4_1, v15, v16, v31, v32, v33, v39,
+          v40, v58, *v59, v60, v61, v68,
+          v69, v70, v76, v77, v101, v103, v104, v105, v106, v107, v108, v112, v113,
           v114, v115, v116, v117, v118, v119, v121, v122, v123, v124, v125,
           v126, v127, v128, v130, v131, v132, v133, v134, v135, n4_3, n4_4;
   uint16_t *v102;
@@ -15850,8 +15853,8 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
               v17 = ++v15 < v171;
               *(uint16_t *)(v14->f278736[5] + 2 * v16 + 2) = 256;
               *(uint16_t *)(v14->f278736[5] + 2 * v16 + 4) = -16;
-              *(uint8_t *)(v14->f278736[5] + 2 * v16 + 16) = 1;
-              *(uint8_t *)(v14->f278736[5] + 2 * v16 + 17) = 3;
+              *(v14->f278736[5] + 2 * v16 + 16) = 1;
+              *(v14->f278736[5] + 2 * v16 + 17) = 3;
               *(uint16_t *)(v14->f278736[5] + 2 * v16 + 6) = 512;
               *(uint16_t *)(v14->f278736[5] + 2 * v16 + 14) = 512;
               *(uint16_t *)(v14->f278736[5] + 2 * v16 + 12) = 512;
@@ -16599,7 +16602,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   uint32_t &v185 = __frame.v185;
   ;
   Obj8 *v55;
-  uintptr_t v44;
+  uint8_t *v44;
   Obj19 *v13;
   Obj31 *v24;
   char *v25;
@@ -16608,7 +16611,8 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   char *v62;
   char *v70;
   char *v77;
-  char *v29, *v37, *v45, *v56, *v66, *v74, *v84, *v86, *v88, *v90, *v92, *v94, *v96, *v98;
+  uint8_t *v29, *v37, *v56, *v66, *v74, *v84, *v86, *v88, *v90, *v92, *v94, *v96, *v98;
+  int32_t v45;   // an offset from v44, not a cursor
   Obj11 *v125;
   Obj11 *v133;
   Obj11 *v114;
@@ -16617,10 +16621,12 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   bool v16;
   char v9;
   int16_t v113;
-  int32_t i_1, v5, n4, n4_1, v14, v15, v20, v21, v22, v23, v30, v31, v32, v38,
-          v39, v46, v47, v48, v49, v50, v51, v52, v57, *v58, v59, v60, v67,
-          v68, v69, v75, v76, v80, v81, v82, v83, v85, v87, v89, v91, v93,
-          v95, v97, v99, v100, v101, v102, v104, v105, v106, v107, n16, v109,
+  uint8_t *v46, *v47, *v48, *v49, *v50, *v51, *v52;   // row cursors
+  uint8_t *v20, *v21, *v22, *v23, *v80, *v81, *v82, *v83, *v85, *v87, *v89,
+          *v91, *v93, *v95, *v97;   // row cursors
+  int32_t i_1, v5, n4, n4_1, v14, v15, v30, v31, v32, v38, v99,
+          v39, v57, *v58, v59, v60, v67,
+          v68, v69, v75, v76, v100, v101, v102, v104, v105, v106, v107, n16, v109,
           v110, v111, v112, v115, v116, v117, v118, n16_1, v120, v121, v122,
           v123, v124, v126, v127, v128, v129, n16_2, v131, v132, v134, v135,
           v136, v137, n16_3, v139, n4_3, n4_4;
@@ -16791,8 +16797,8 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
               v16 = ++v14 < v185;
               *(uint16_t *)(v13->f278736[5] + 2 * v15 + 2) = 256;
               *(uint16_t *)(v13->f278736[5] + 2 * v15 + 4) = -16;
-              *(uint8_t *)(v13->f278736[5] + 2 * v15 + 16) = 1;
-              *(uint8_t *)(v13->f278736[5] + 2 * v15 + 17) = 3;
+              *(v13->f278736[5] + 2 * v15 + 16) = 1;
+              *(v13->f278736[5] + 2 * v15 + 17) = 3;
               *(uint16_t *)(v13->f278736[5] + 2 * v15 + 6) = 512;
               *(uint16_t *)(v13->f278736[5] + 2 * v15 + 14) = 512;
               *(uint16_t *)(v13->f278736[5] + 2 * v15 + 12) = 512;

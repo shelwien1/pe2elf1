@@ -183,120 +183,114 @@ subs1.hpp: In function 'int32_t __fwd_alt_model_p2_decode_alt_p2_decode_symbol(v
 subs1.hpp:15592:137: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
 subs1.hpp:3506:52: note:   initializing argument 2 of 'int32_t __alt_p2_decode_symbol(Obj13*, char*)'
 subs1.hpp: In function 'int32_t __alt_model_p2_decode(uint16_t*, uint8_t*)':
-subs1.hpp:15726:30: error: invalid conversion from 'void*' to 'Obj11*' [-fpermissive]
-subs1.hpp:15757:30: error: invalid conversion from 'Obj11**' to 'void**' [-fpermissive]
-subs1.hpp:15783:41: error: invalid conversion from 'char*' to 'uint16_t' {aka 'short unsigned int'} [-fpermissive]
-subs1.hpp:15884:26: error: invalid conversion from 'int32_t*' {aka 'int*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
-subs1.hpp:15889:26: error: invalid conversion from 'int32_t*' {aka 'int*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
+subs1.hpp:15729:30: error: invalid conversion from 'void*' to 'Obj11*' [-fpermissive]
+subs1.hpp:15760:30: error: invalid conversion from 'Obj11**' to 'void**' [-fpermissive]
+subs1.hpp:15786:41: error: invalid conversion from 'char*' to 'uint16_t' {aka 'short unsigned int'} [-fpermissive]
+subs1.hpp:15869:57: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
+subs1.hpp:15871:19: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
+subs1.hpp:15873:19: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
+subs1.hpp:15875:43: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
+subs1.hpp:15880:22: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
+subs1.hpp:15887:26: error: invalid conversion from 'int32_t*' {aka 'int*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
+subs1.hpp:15892:26: error: invalid conversion from 'int32_t*' {aka 'int*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
 subs1.hpp: In function 'int32_t __fwd_unmodel_plane_alt_model_p1_decode(void*, int32_t)':
-subs1.hpp:16119:132: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
+subs1.hpp:16122:132: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
 subs1.hpp:6961:52: note:   initializing argument 2 of 'int32_t __alt_model_p1_decode(uint16_t*, char*)'
 subs1.hpp: In function 'int32_t __fwd_alt_p2_d8_encode_body_alt_p2_encode_symbol(void*, int32_t, int32_t)':
-subs1.hpp:16157:150: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
+subs1.hpp:16160:150: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
 subs1.hpp:3428:51: note:   initializing argument 2 of 'int32_t __alt_p2_encode_symbol(Obj7*, char*, int32_t)'
 subs1.hpp: In function 'void __alt_p2_d8_encode_body(Obj11*, const M128&, const M128&, uint8_t*, int32_t, int32_t, uint8_t*)':
-subs1.hpp:16273:44: error: invalid conversion from 'char*' to 'int' [-fpermissive]
-subs1.hpp:16356:12: error: invalid conversion from 'char*' to 'int8_t*' {aka 'signed char*'} [-fpermissive]
-subs1.hpp:16403:33: error: cast from 'int32_t*' {aka 'int*'} to 'uint16_t' {aka 'short unsigned int'} loses precision [-fpermissive]
-subs1.hpp:16414:33: error: cast from 'int32_t*' {aka 'int*'} to 'uint16_t' {aka 'short unsigned int'} loses precision [-fpermissive]
-subs1.hpp:16426:44: error: invalid conversion from 'char*' to 'int' [-fpermissive]
-subs1.hpp:16430:44: error: invalid conversion from 'char*' to 'int' [-fpermissive]
+subs1.hpp:16276:44: error: invalid conversion from 'char*' to 'int' [-fpermissive]
+subs1.hpp:16359:12: error: invalid conversion from 'char*' to 'int8_t*' {aka 'signed char*'} [-fpermissive]
+subs1.hpp:16406:33: error: cast from 'int32_t*' {aka 'int*'} to 'uint16_t' {aka 'short unsigned int'} loses precision [-fpermissive]
+subs1.hpp:16417:33: error: cast from 'int32_t*' {aka 'int*'} to 'uint16_t' {aka 'short unsigned int'} loses precision [-fpermissive]
+subs1.hpp:16429:44: error: invalid conversion from 'char*' to 'int' [-fpermissive]
+subs1.hpp:16433:44: error: invalid conversion from 'char*' to 'int' [-fpermissive]
 subs1.hpp: In function 'int32_t __fwd_alt_model_p2_encode_alt_p2_encode_symbol(void*, int32_t, int32_t)':
-subs1.hpp:16512:148: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
+subs1.hpp:16515:148: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
 subs1.hpp:3428:51: note:   initializing argument 2 of 'int32_t __alt_p2_encode_symbol(Obj7*, char*, int32_t)'
 subs1.hpp: In function 'int32_t __alt_model_p2_encode(BmfImage*, uint8_t*)':
-subs1.hpp:16668:30: error: invalid conversion from 'void*' to 'Obj11*' [-fpermissive]
-subs1.hpp:16698:30: error: invalid conversion from 'Obj11**' to 'void**' [-fpermissive]
-subs1.hpp:16704:26: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
-subs1.hpp:16716:26: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
-subs1.hpp:16724:41: error: invalid conversion from 'char*' to 'uint16_t' {aka 'short unsigned int'} [-fpermissive]
-subs1.hpp:16728:21: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
-subs1.hpp:16818:22: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
-subs1.hpp:16825:26: error: invalid conversion from 'int32_t*' {aka 'int*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
-subs1.hpp:16830:26: error: invalid conversion from 'int32_t*' {aka 'int*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
-subs1.hpp:16850:31: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
-subs1.hpp:16862:31: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
-subs1.hpp:16877:31: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
-subs1.hpp:16882:29: error: invalid conversion from 'char*' to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
-subs1.hpp:16886:29: error: invalid conversion from 'char*' to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
-subs1.hpp:16892:31: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
-subs1.hpp:16895:31: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
-subs1.hpp:16898:31: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
-subs1.hpp:16901:31: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
-subs1.hpp:16904:31: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
-subs1.hpp:16907:31: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
-subs1.hpp:16910:31: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
+subs1.hpp:16674:30: error: invalid conversion from 'void*' to 'Obj11*' [-fpermissive]
+subs1.hpp:16704:30: error: invalid conversion from 'Obj11**' to 'void**' [-fpermissive]
+subs1.hpp:16730:41: error: invalid conversion from 'char*' to 'uint16_t' {aka 'short unsigned int'} [-fpermissive]
+subs1.hpp:16813:57: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
+subs1.hpp:16815:19: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
+subs1.hpp:16817:19: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
+subs1.hpp:16819:43: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
+subs1.hpp:16824:22: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
+subs1.hpp:16831:26: error: invalid conversion from 'int32_t*' {aka 'int*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
+subs1.hpp:16836:26: error: invalid conversion from 'int32_t*' {aka 'int*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
 subs1.hpp: In function 'int32_t __fwd_model_plane_alt_model_p1_encode(void*, int32_t)':
-subs1.hpp:17117:130: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
+subs1.hpp:17123:130: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
 subs1.hpp:13006:52: note:   initializing argument 2 of 'int32_t __alt_model_p1_encode(uint16_t*, char*)'
 subs1.hpp: In function 'void __model_plane(const M128&, const M128&, BmfImage*, uint8_t*, uint8_t*)':
-subs1.hpp:17204:39: error: invalid conversion from 'Obj10*' to 'int32_t' {aka 'int'} [-fpermissive]
-subs1.hpp:17113:62: note:   initializing argument 1 of 'void __fwd_model_plane_reduce_alphabet(int32_t, char, void*)'
-subs1.hpp:17226:35: error: invalid conversion from 'uintptr_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
-subs1.hpp:17388:26: error: invalid conversion from 'uint32_t*' {aka 'unsigned int*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
-subs1.hpp:17424:26: error: invalid conversion from 'uint32_t*' {aka 'unsigned int*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
-subs1.hpp:17462:22: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
-subs1.hpp:17463:35: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
-subs1.hpp:17464:35: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
-subs1.hpp:17466:35: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
-subs1.hpp:17467:35: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
+subs1.hpp:17210:39: error: invalid conversion from 'Obj10*' to 'int32_t' {aka 'int'} [-fpermissive]
+subs1.hpp:17119:62: note:   initializing argument 1 of 'void __fwd_model_plane_reduce_alphabet(int32_t, char, void*)'
+subs1.hpp:17232:35: error: invalid conversion from 'uintptr_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
+subs1.hpp:17394:26: error: invalid conversion from 'uint32_t*' {aka 'unsigned int*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
+subs1.hpp:17430:26: error: invalid conversion from 'uint32_t*' {aka 'unsigned int*'} to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
+subs1.hpp:17468:22: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
+subs1.hpp:17469:35: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
+subs1.hpp:17470:35: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
+subs1.hpp:17472:35: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
+subs1.hpp:17473:35: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'uint8_t' {aka 'unsigned char'} [-fpermissive]
 subs1.hpp: In function 'void __model_planes(char*, char*, int32_t, char, const M128&, const M128&)':
-subs1.hpp:17558:41: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
+subs1.hpp:17564:41: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
 subs1.hpp: In function 'void __transform_planes(BmfImage*, int32_t, char, const M128&, const M128&)':
-subs1.hpp:17640:33: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'char*' [-fpermissive]
-subs1.hpp:17641:24: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'char*' [-fpermissive]
+subs1.hpp:17646:33: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'char*' [-fpermissive]
+subs1.hpp:17647:24: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'char*' [-fpermissive]
 subs1.hpp: In function 'char* __expand_image(char*, const M128&, const M128&, int32_t, int32_t*)':
-subs1.hpp:17831:20: error: invalid conversion from 'void*' to 'uint32_t*' {aka 'unsigned int*'} [-fpermissive]
-subs1.hpp:17889:24: error: invalid conversion from 'void*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
-subs1.hpp:17953:11: error: invalid conversion from 'char*' to 'int32_t' {aka 'int'} [-fpermissive]
-subs1.hpp:18050:10: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
-subs1.hpp:18062:13: error: invalid conversion from 'char*' to 'int32_t' {aka 'int'} [-fpermissive]
-subs1.hpp:18090:12: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
-subs1.hpp:18105:13: error: invalid conversion from 'char*' to 'int32_t' {aka 'int'} [-fpermissive]
+subs1.hpp:17837:20: error: invalid conversion from 'void*' to 'uint32_t*' {aka 'unsigned int*'} [-fpermissive]
+subs1.hpp:17895:24: error: invalid conversion from 'void*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
+subs1.hpp:17959:11: error: invalid conversion from 'char*' to 'int32_t' {aka 'int'} [-fpermissive]
+subs1.hpp:18056:10: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
+subs1.hpp:18068:13: error: invalid conversion from 'char*' to 'int32_t' {aka 'int'} [-fpermissive]
+subs1.hpp:18096:12: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
+subs1.hpp:18111:13: error: invalid conversion from 'char*' to 'int32_t' {aka 'int'} [-fpermissive]
 subs1.hpp: In function 'uint32_t __search_filter(BmfImage*, char, const M128&, const M128&)':
-subs1.hpp:18361:22: error: invalid conversion from 'void*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
-subs1.hpp:18575:14: error: cast from 'char*' to 'uint8_t' {aka 'unsigned char'} loses precision [-fpermissive]
-subs1.hpp:18580:16: error: cast from 'char*' to 'uint8_t' {aka 'unsigned char'} loses precision [-fpermissive]
-subs1.hpp:18593:28: error: cast from 'char*' to 'char' loses precision [-fpermissive]
-subs1.hpp:18764:39: error: invalid conversion from 'char*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
+subs1.hpp:18367:22: error: invalid conversion from 'void*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
+subs1.hpp:18581:14: error: cast from 'char*' to 'uint8_t' {aka 'unsigned char'} loses precision [-fpermissive]
+subs1.hpp:18586:16: error: cast from 'char*' to 'uint8_t' {aka 'unsigned char'} loses precision [-fpermissive]
+subs1.hpp:18599:28: error: cast from 'char*' to 'char' loses precision [-fpermissive]
+subs1.hpp:18770:39: error: invalid conversion from 'char*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
 subs1.hpp: In function 'char* __fwd_bmf_open_archive_expand_image(int32_t, const M128&, const M128&, int32_t, void*)':
-subs1.hpp:19108:152: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
-subs1.hpp:17728:29: note:   initializing argument 1 of 'char* __expand_image(char*, const M128&, const M128&, int32_t, int32_t*)'
+subs1.hpp:19114:152: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
+subs1.hpp:17734:29: note:   initializing argument 1 of 'char* __expand_image(char*, const M128&, const M128&, int32_t, int32_t*)'
 subs1.hpp: In function 'BmfArc* __bmf_open_archive(BmfArc*, char*, int32_t)':
-subs1.hpp:19154:41: error: invalid conversion from 'BmfArc*' to 'int32_t' {aka 'int'} [-fpermissive]
-subs1.hpp:19108:66: note:   initializing argument 1 of 'char* __fwd_bmf_open_archive_expand_image(int32_t, const M128&, const M128&, int32_t, void*)'
+subs1.hpp:19160:41: error: invalid conversion from 'BmfArc*' to 'int32_t' {aka 'int'} [-fpermissive]
+subs1.hpp:19114:66: note:   initializing argument 1 of 'char* __fwd_bmf_open_archive_expand_image(int32_t, const M128&, const M128&, int32_t, void*)'
 subs1.hpp: In function 'char* __fwd_compress_image_expand_image(int32_t, const M128&, const M128&, int32_t, void*)':
-subs1.hpp:19169:150: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
-subs1.hpp:17728:29: note:   initializing argument 1 of 'char* __expand_image(char*, const M128&, const M128&, int32_t, int32_t*)'
+subs1.hpp:19175:150: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
+subs1.hpp:17734:29: note:   initializing argument 1 of 'char* __expand_image(char*, const M128&, const M128&, int32_t, int32_t*)'
 subs1.hpp: In function 'int32_t __compress_image(char*, const M128&, const M128&, BmfImage*, void*)':
-subs1.hpp:19221:39: error: invalid conversion from 'char*' to 'int32_t' {aka 'int'} [-fpermissive]
-subs1.hpp:19169:64: note:   initializing argument 1 of 'char* __fwd_compress_image_expand_image(int32_t, const M128&, const M128&, int32_t, void*)'
-subs1.hpp:19228:41: error: invalid conversion from 'char*' to 'int32_t' {aka 'int'} [-fpermissive]
-subs1.hpp:19169:64: note:   initializing argument 1 of 'char* __fwd_compress_image_expand_image(int32_t, const M128&, const M128&, int32_t, void*)'
-subs1.hpp:19231:31: error: cast from 'void*' to 'char' loses precision [-fpermissive]
-subs1.hpp:19236:13: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
-subs1.hpp:19262:26: error: invalid conversion from 'void*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
-subs1.hpp:19281:15: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
-subs1.hpp:19293:24: error: invalid conversion from 'void*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
-subs1.hpp:19331:11: error: invalid conversion from 'char*' to 'int32_t' {aka 'int'} [-fpermissive]
-subs1.hpp:19426:10: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
-subs1.hpp:19435:13: error: invalid conversion from 'char*' to 'int32_t' {aka 'int'} [-fpermissive]
-subs1.hpp:19440:12: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
-subs1.hpp:19451:30: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'int32_t' {aka 'int'} [-fpermissive]
-subs1.hpp:19452:20: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'int32_t' {aka 'int'} [-fpermissive]
-subs1.hpp:19485:13: error: invalid conversion from 'char*' to 'int32_t' {aka 'int'} [-fpermissive]
-subs1.hpp:19491:35: error: invalid conversion from 'char*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
-subs1.hpp:19513:12: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
+subs1.hpp:19227:39: error: invalid conversion from 'char*' to 'int32_t' {aka 'int'} [-fpermissive]
+subs1.hpp:19175:64: note:   initializing argument 1 of 'char* __fwd_compress_image_expand_image(int32_t, const M128&, const M128&, int32_t, void*)'
+subs1.hpp:19234:41: error: invalid conversion from 'char*' to 'int32_t' {aka 'int'} [-fpermissive]
+subs1.hpp:19175:64: note:   initializing argument 1 of 'char* __fwd_compress_image_expand_image(int32_t, const M128&, const M128&, int32_t, void*)'
+subs1.hpp:19237:31: error: cast from 'void*' to 'char' loses precision [-fpermissive]
+subs1.hpp:19242:13: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
+subs1.hpp:19268:26: error: invalid conversion from 'void*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
+subs1.hpp:19287:15: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
+subs1.hpp:19299:24: error: invalid conversion from 'void*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
+subs1.hpp:19337:11: error: invalid conversion from 'char*' to 'int32_t' {aka 'int'} [-fpermissive]
+subs1.hpp:19432:10: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
+subs1.hpp:19441:13: error: invalid conversion from 'char*' to 'int32_t' {aka 'int'} [-fpermissive]
+subs1.hpp:19446:12: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
+subs1.hpp:19457:30: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'int32_t' {aka 'int'} [-fpermissive]
+subs1.hpp:19458:20: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'int32_t' {aka 'int'} [-fpermissive]
+subs1.hpp:19491:13: error: invalid conversion from 'char*' to 'int32_t' {aka 'int'} [-fpermissive]
+subs1.hpp:19497:35: error: invalid conversion from 'char*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
+subs1.hpp:19519:12: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
 subs1.hpp: In function 'int32_t __fwd_bmf_compress_image(int32_t, const M128&, const M128&, void*, void*)':
-subs1.hpp:19539:142: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
-subs1.hpp:19175:32: note:   initializing argument 1 of 'int32_t __compress_image(char*, const M128&, const M128&, BmfImage*, void*)'
+subs1.hpp:19545:142: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
+subs1.hpp:19181:32: note:   initializing argument 1 of 'int32_t __compress_image(char*, const M128&, const M128&, BmfImage*, void*)'
 subs1.hpp: In function 'char* __fwd_bmf_expand_image(int32_t, const M128&, const M128&, int32_t, void*)':
-subs1.hpp:19540:139: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
-subs1.hpp:17728:29: note:   initializing argument 1 of 'char* __expand_image(char*, const M128&, const M128&, int32_t, int32_t*)'
+subs1.hpp:19546:139: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
+subs1.hpp:17734:29: note:   initializing argument 1 of 'char* __expand_image(char*, const M128&, const M128&, int32_t, int32_t*)'
 subs1.hpp: In function 'void __bmf_compress(const M128&, const M128&, const char*, const char*)':
-subs1.hpp:19593:37: error: invalid conversion from 'BmfArc*' to 'int32_t' {aka 'int'} [-fpermissive]
+subs1.hpp:19599:37: error: invalid conversion from 'BmfArc*' to 'int32_t' {aka 'int'} [-fpermissive]
 subs1.hpp: In function 'void __bmf_decompress(const M128&, const M128&, const char*, const char*)':
-subs1.hpp:19682:10: error: invalid conversion from 't_dwLowDateTime' {aka 'int'} to 'void*' [-fpermissive]
+subs1.hpp:19688:10: error: invalid conversion from 't_dwLowDateTime' {aka 'int'} to 'void*' [-fpermissive]
 In file included from /usr/include/c++/13/cstdlib:79,
                  from bmf.cpp:35:
 /usr/include/stdlib.h:687:25: note:   initializing argument 1 of 'void free(void*)'
