@@ -10309,15 +10309,7 @@ LABEL_61:
 int32_t __decode_symbol_list(uint32_t *a1)
 {
   struct alignas(16) {   // 32824 bytes, the frame Hex-Rays could not name
-      uint16_t *v55;
-      uint16_t *v56;
-      int32_t v57;
-      int32_t v58;
-      int32_t v59;
-      uint32_t n0x800000_1;
-      int32_t v61;
-      int32_t v62;
-      uint8_t _pad0[32736];
+      uint16_t *list[8192];   // the symbol list: 8 named slots and 32736 bytes of tail, one array
       uint32_t n0x7F800000_1;
       int32_t tot;
       int32_t v65;
@@ -10327,13 +10319,13 @@ int32_t __decode_symbol_list(uint32_t *a1)
       uint8_t _pad1[32];
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 32832, "frame layout moved");
-  uint16_t *&v55 = __frame.v55;
-  uint16_t *&v56 = __frame.v56;
-  int32_t &v57 = __frame.v57;
-  int32_t &v58 = __frame.v58;
-  int32_t &v59 = __frame.v59;
-  uint32_t &n0x800000_1 = __frame.n0x800000_1;
-  int32_t &v62 = __frame.v62;
+  uint16_t * &v55 = (uint16_t * &)__frame.list[0];
+  uint16_t * &v56 = (uint16_t * &)__frame.list[1];
+  int32_t &v57 = (int32_t &)__frame.list[2];
+  int32_t &v58 = (int32_t &)__frame.list[3];
+  int32_t &v59 = (int32_t &)__frame.list[4];
+  uint32_t &n0x800000_1 = (uint32_t &)__frame.list[5];
+  int32_t &v62 = (int32_t &)__frame.list[7];
   int32_t &tot = __frame.tot;
   int32_t &v65 = __frame.v65;
   uint16_t *&v66 = __frame.v66;
@@ -10356,7 +10348,7 @@ int32_t __decode_symbol_list(uint32_t *a1)
   v1 = alloca(32788);
   v2 = a1[1];
   v3 = (char *)a1[5];
-  v4 = &v55;
+  v4 = __frame.list;
   v68 = (uint32_t *)(uint8_t)__byte_445700;
   v67 = a1;
   v5 = 0;
@@ -10388,7 +10380,7 @@ int32_t __decode_symbol_list(uint32_t *a1)
   v67 = v9;
   n0x2000_5 = v5 + v65 - 1;
   v20 = v55;
-  v21 = &v56;
+  v21 = &__frame.list[1];
   v66 = v55;
   n0x2000_2 = 0;
   while ( 1 )
@@ -10404,7 +10396,7 @@ int32_t __decode_symbol_list(uint32_t *a1)
       n0x2000_3 = tot;
       sym_high = tot;
       v25 = v66;
-      v26 = &v56;
+      v26 = &__frame.list[1];
       do
       {
         exclusion_mask[*v25] = v23;
@@ -15956,15 +15948,15 @@ void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, const __m1
 {
   struct alignas(16) {   // 68 bytes, the frame Hex-Rays could not name
       int32_t   j;
-      uint8_t * v103;
+      uint8_t   _gap0[4];   // was uint8_t * v103
       int32_t   v104;
-      int8_t *  v106;
-      char      v107;
+      uint8_t   _gap1[4];   // was int8_t * v106
+      uint8_t   _gap2[1];   // was char v107
       uint8_t   _pad5[3];
-      Obj11 *   lpAddress_1;
-      uint8_t * v109;
+      uint8_t   _gap3[4];   // was Obj11 * lpAddress_1
+      uint8_t   _gap4[4];   // was uint8_t * v109
       uint8_t   _pad8[4];
-      uint8_t   v110;
+      uint8_t   _gap5[1];   // was uint8_t v110
       uint8_t   _pad10[35];
       uint8_t   _tail[12];   // alignas(16) rounds 68 up
   } __frame;
@@ -15975,14 +15967,14 @@ void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, const __m1
                 "the named part of the frame moved");
   int32_t &j = __frame.j;
   uint32_t &v102 = *(uint32_t *)((char *)&__frame.j);
-  uint8_t * &v103 = __frame.v103;
+  uint8_t *v103;
   int32_t &v104 = __frame.v104;
   uint8_t * &v105 = *(uint8_t * *)((char *)&__frame.v104);
-  int8_t * &v106 = __frame.v106;
-  char &v107 = __frame.v107;
-  Obj11 * &lpAddress_1 = __frame.lpAddress_1;
-  uint8_t * &v109 = __frame.v109;
-  uint8_t &v110 = __frame.v110;
+  int8_t *v106;
+  char v107;
+  Obj11 *lpAddress_1;
+  uint8_t *v109;
+  uint8_t v110;
   ;
   char *v34;
   char *v57;
@@ -17534,8 +17526,7 @@ char * __expand_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref, in
       uint8_t v91;
       char v92;
       uint32_t ElementCount;
-      int32_t Buffer_;
-      uint32_t ElementSize;
+      uint8_t   hdr[8];   // the 8-byte member header `fread` takes in one call
       uint32_t __expand_image_Buffer;
       uint8_t _pad0[32];
   } __frame;
@@ -17556,8 +17547,8 @@ char * __expand_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref, in
   uint8_t &v91 = __frame.v91;
   char &v92 = __frame.v92;
   uint32_t &ElementCount = __frame.ElementCount;
-  int32_t &Buffer_ = __frame.Buffer_;
-  uint32_t &ElementSize = __frame.ElementSize;
+  int32_t &Buffer_ = *(int32_t *)&__frame.hdr[0];
+  uint32_t &ElementSize = *(uint32_t *)&__frame.hdr[4];
   uint32_t &__expand_image_Buffer = __frame.__expand_image_Buffer;
   ;
   char *v5;   // were int32_t: these hold addresses
@@ -17595,7 +17586,7 @@ char * __expand_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref, in
     if ( (uint16_t)__expand_image_Buffer != 0x9081 )
       break;
     plane_desc[0].w4 = ((BYTE2(__expand_image_Buffer) << 8) - 12288) | (HIBYTE(__expand_image_Buffer) - 48);
-    if ( plane_desc[0].w4 != 512 || fread(&Buffer_, 8u, 1u, ((BmfArc *)v5)->fp) != 1 )
+    if ( plane_desc[0].w4 != 512 || fread(__frame.hdr, 8u, 1u, ((BmfArc *)v5)->fp) != 1 )
       break;
     fseek(((BmfArc *)v5)->fp, ElementSize, 1);
     Stream_1 = ((BmfArc *)v5)->fp;
@@ -17614,7 +17605,7 @@ LABEL_15:
   ++*(uint32_t *)v5;
   if ( v10 < 0 )
   {
-    fread(&Buffer_, 8u, 1u, ((BmfArc *)v5)->fp);
+    fread(__frame.hdr, 8u, 1u, ((BmfArc *)v5)->fp);
     if ( p_dwLowDateTime )
     {
       Buffer__1 = Buffer_;
@@ -18968,10 +18959,7 @@ int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref,
       char *Buffera_4;
       uint8_t _pad0[12];
       uint8_t slot16[4];
-      uint32_t Buffera;
-      int32_t n4_2;
-      char *Buffera_1;
-      int32_t v64;
+      uint8_t   hdr[16];   // the 16-byte archive member header `fwrite` sends in one call
       int32_t v65;
       char *v66;
       void *Buffer_2;
@@ -18982,11 +18970,11 @@ int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref,
   uint32_t &ElementCount = *(uint32_t *)((char *)__frame.slot16);
   int32_t &ElementCounta = *(int32_t *)((char *)__frame.slot16);
   uint32_t &ElementCountb = *(uint32_t *)((char *)__frame.slot16);
-  uint32_t &Buffera = __frame.Buffera;
-  char *&Buffer_copy = (char *&)__frame.Buffera;   // the same slot, the other role
-  int32_t &n4_2 = __frame.n4_2;
-  char *&Buffera_1 = __frame.Buffera_1;
-  int32_t &v64 = __frame.v64;
+  uint32_t &Buffera = *(uint32_t *)&__frame.hdr[0];
+  char *&Buffer_copy = *(char **)&__frame.hdr[0];   // the same slot, the other role
+  int32_t &n4_2 = *(int32_t *)&__frame.hdr[4];
+  char * &Buffera_1 = *(char * *)&__frame.hdr[8];
+  int32_t &v64 = *(int32_t *)&__frame.hdr[12];
   int32_t &v65 = __frame.v65;
   char *&v66 = __frame.v66;
   void *&Buffer_2 = __frame.Buffer_2;
@@ -19243,7 +19231,7 @@ LABEL_57:
   v64 = out_cursor - ::coded_buf;
   if ( v38 )
   {
-    v39 = fwrite(&Buffera, 1u, 0x10u, ((BmfArc *)v5)->fp) == 16;
+    v39 = fwrite(__frame.hdr, 1u, 0x10u, ((BmfArc *)v5)->fp) == 16;
     if ( coded_buf )
       v39 &= fwrite(coded_buf, 1u, *((uint32_t *)coded_buf + 1) + 8, ((BmfArc *)v5)->fp) == *((uint32_t *)coded_buf + 1) + 8;
     v40 = (fwrite(::coded_buf, 1u, ElementCounta, ((BmfArc *)v5)->fp) == ElementCounta) & v39;

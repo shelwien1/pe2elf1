@@ -60,14 +60,46 @@ def width(ty, count):
     return None if n is None else n * (int(count) if count else 1)
 
 
+IO = re.compile(r'\bf(?:read|write)\s*\(\s*&\s*(\w+)\s*,'
+                r'\s*(0x[0-9A-Fa-f]+|\d+)[uU]?\s*,\s*(0x[0-9A-Fa-f]+|\d+)[uU]?\s*,')
+
+
+def bounded_io(text, name, wide):
+    """True when every address-of `name` is an I/O call inside its own width.
+
+    `fread(&__expand_image_Buffer, 4u, 1u, f)` fills the four bytes of a
+    four-byte member.  It takes an address, but it cannot reach the member
+    after it, so it is not a reason to pin the frame.  A count that overruns
+    the member is a run of members and has to be declared as one -- which is
+    what `compress_image`'s 16-byte `fwrite` and `expand_image`'s 8-byte
+    `fread` turned out to be.
+    """
+    hits = 0
+    for m in IO.finditer(text):
+        if m.group(1) != name:
+            continue
+        try:
+            n = int(m.group(2), 0) * int(m.group(3), 0)
+        except ValueError:
+            return False
+        if n > wide:
+            return False
+        hits += 1
+    if not hits:
+        return False
+    bare = len(re.findall(r'&\s*%s\b(?!\s*(?:\[|->|\.))' % re.escape(name), text))
+    return bare == hits
+
+
 def addr_taken(text, name):
     """`&name` in an address-of position, not `a & name` and not `&&`.
 
     `&name[i]` is not one: it is `name + i`, arithmetic on what the member
     holds rather than on where the member sits.  Reading it as address-taking
-    pinned six frames that have nothing wrong with them.
+    pinned six frames that have nothing wrong with them.  Nor are `&name->f`
+    and `&name.f`, which address a field of what the member points at.
     """
-    for m in re.finditer(r'&\s*' + re.escape(name) + r'\b(\s*\[)?', text):
+    for m in re.finditer(r'&\s*' + re.escape(name) + r'\b(\s*(?:\[|->|\.))?', text):
         if m.group(1):
             continue
         j = m.start() - 1
@@ -146,11 +178,17 @@ def split(lines, a, b, fr, runs):
     # front of `v72[1024]` means a body that walks one past `buf` reads `v72[0]`
     # today and reads whatever the compiler puts there afterwards.  `--arrays`
     # lifts them anyway and lets the gate answer.
+    wide = {m['name']: width(m['ty'], m['count']) for m in fr['members']}
     frozen = [x['name'] for x in fr['aliases']
               if (x['array'] and '--arrays' not in sys.argv)
-              or x['name'] in runs or addr_taken(text, x['name'])]
-    if '&__frame' in text:
-        frozen.append('&__frame')       # the struct itself is addressed
+              or x['name'] in runs
+              or (addr_taken(text, x['name'])
+                  and not bounded_io(text, x['name'],
+                                     wide.get(x['member'].split('[')[0], 0)))]
+    # `&__frame` is the struct itself; `&__frame.hdr[8]` is an element of a
+    # member and says nothing about the members around it.
+    if re.search(r'&__frame\b(?!\s*\.)', text):
+        frozen.append('&__frame')
     if frozen:
         why = 'frame pinned by ' + ', '.join(sorted(set(frozen))[:3])
         return [], [dict(x, why=why) for x in fr['aliases']]

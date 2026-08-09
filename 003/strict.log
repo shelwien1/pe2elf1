@@ -5,13 +5,13 @@ subs1.hpp:4018:12: warning: cast to pointer from integer of different size [-Win
 subs1.hpp:4027:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp:4091:9: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp: In function 'int32_t __decode_symbol_list(uint32_t*)':
-subs1.hpp:10360:9: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:10366:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:10352:9: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:10358:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp: In function 'int32_t __decode_pixel(ModelBlock*, int32_t)':
-subs1.hpp:10704:11: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:11245:20: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:11247:12: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:10696:11: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:11237:20: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:11239:12: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp: In function 'int32_t __code_pixel(ModelBlock*, int32_t)':
-subs1.hpp:12013:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:12022:27: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:12025:20: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:12005:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:12014:27: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:12017:20: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
