@@ -6,16 +6,24 @@ This is the plan for what is left, and it has three named goals:
 1. **`blob.inc` disappears.** The data segment of a Windows executable should
    not be a build input.
 2. **The SIMD intrinsics become C**, and the compiler vectorises it.
-3. **The code stops being ugly.** 5603 pointer casts and 330 conversions the
+3. **The code stops being ugly.** 5603 pointer casts and 347 conversions the
    build has to pass `-fpermissive` to accept are not a style complaint.
 
-They are listed in that order because that is their order of importance, and
-attacked in the reverse of it, because goal 2 removes a third of goal 1's work
-and a chunk of goal 3's.
+They are listed in that order because that is their order of importance. They
+are attacked in the reverse of it for a narrower reason than "A removes B's
+work": goal 3's metric is a compiler flag, and it should be measured against a
+file the other two have already cleaned. Goal 2 hands goal 1 very little — one
+subsection of §3 (`__init_sse_constants`, §3.2) removes the blob's SIMD
+constants on its own, and it is Phase B's work rather than Phase A's.
 
 The gate does not change: **byte-identical compressed streams against the
 committed references, and every image round-trips.** Everything below is
 answerable to it.
+
+Every number in this document is reproducible; Appendix A gives the command
+for each. Round one's lesson about tools that report success (§7) applies to
+this document too, and the first draft of it failed that test in three places
+— see Appendix B.
 
 ---
 
@@ -25,23 +33,24 @@ answerable to it.
 | --- | --- |
 | `subs1.hpp` | 23 807 lines |
 | `blob.inc` | 343 794 bytes, 65 892 initialisers |
-| globals still inside `blob1` | 77 declared, **43 referenced** |
+| globals still declared as references into `blob1` | **78**, none unreferenced |
+| — of those, written but never read | 35 (§3.2, §7) |
 | arrays already moved out of it | 86, 50 832 bytes |
 | SIMD intrinsic calls | **558**, 33 distinct, in 16 bodies |
-| — of those, float arithmetic | 402 (`mul_ps` 189, `add_ps` 157, `sub_ps` 28, `div_ps` 28) |
+| — of those, single-precision float arithmetic | 402 (`mul_ps` 189, `add_ps` 157, `sub_ps` 28, `div_ps` 28) |
 | pointer casts | 5603 |
 | raw-offset dereferences | 238 |
-| `-fpermissive` conversions | ~330 |
+| conversions that need `-fpermissive` | **347** (+12 `-Wint-to-pointer-cast`, which do not) |
 | `goto` / `LABEL_n:` | 113 / 81 |
 | distinct `vNN` locals | 560 |
-| recovered structs still `ObjN` with `fNN` members | 89 |
-| loops the compiler vectorises at `-O2` | **0** |
-| loops the compiler vectorises at `-O3` | **141** |
+| recovered structs still `ObjN` with `fNN` members | 88 |
+| vectoriser reports at `-O2` | 8 loops + 67 SLP blocks |
+| vectoriser reports at `-O3` | 38 loops + 103 SLP blocks |
 
-Two of those lines are the whole argument for goal 2. The compiler will
-vectorise a hundred and forty-one loops in this file the moment it is given
-loops instead of intrinsics — and it vectorises nothing today, because `-O2`
-does not and because there is nothing to vectorise.
+The last two lines are not the argument for goal 2 — they are the correction to
+it. GCC 13 **does** vectorise at `-O2`; see §2.5. What it cannot do is vectorise
+code that has no loops in it, and 558 hand-written intrinsic calls are exactly
+that.
 
 ---
 
@@ -65,63 +74,94 @@ That matters for sequencing: the p2 family is also the least understood part of
 the file (`algorithm_v2.md` §9), so this phase and that reading help each other
 — translating the arithmetic is how you find out what it computes.
 
-By kind:
+By kind, exhaustively — the categories below sum to 558:
 
-* **402 float arithmetic** — `mul_ps`, `add_ps`, `sub_ps`, `div_ps`. These are
-  straight-line vector expressions and they are the whole of the win.
-* **34 `_mm_prefetch`** — no C equivalent; `__builtin_prefetch`, or drop them
-  and measure.
-* **~90 shuffles, packs and horizontal reductions** — `movehl_ps`,
-  `shuffle_ps`, `unpacklo_*`, `srli_si128`, `cvtsi128_si32`. These are the
-  awkward ones, §2.3.
-* **~30 integer vector ops** — `add_epi32`, `slli_epi16`, `add_epi8`.
+| kind | n | what it is |
+| --- | --- | --- |
+| single-precision arithmetic | 402 | `mul_ps` 189, `add_ps` 157, `sub_ps` 28, `div_ps` 28 |
+| lane shuffles, packs, unpacks | 53 | `unpacklo_ps` 11, `movelh_ps` 11, `srli_si128` 10, `shuffle_ps` 5, `movehl_ps` 5, six more |
+| integer vector arithmetic | 34 | `add_epi32` 24, `slli_epi16` 4, `add_epi8` 4, `xor_si128` 1, `cmpeq_epi32` 1 |
+| `_mm_prefetch` | 34 | no C equivalent |
+| vector loads | 17 | `load_si128` 14, `loadl_epi64` 3 |
+| converts and extracts | 10 | `cvtsi128_si32` 5, `cvtsi32_si128` 3, `cvtepi32_pd` 1, `movemask_pd` 1 |
+| double-precision and float bitwise | 8 | all of them inside `estimate_cost` and `log_two_lane` |
+
+The 402 are the whole of the win: straight-line vector expressions that are
+loops written out. The 53 shuffles are the awkward ones (§2.3). The 34
+prefetches have no C spelling — `__builtin_prefetch`, or drop them and measure.
+The 8 double-precision ops are a self-contained problem in one function and can
+be left until last.
 
 ### 2.2 The shape they translate into
 
-`alt_p2_filter` is the model for the whole phase. It currently reads:
+`alt_p2_filter` is the model for the whole phase. Verbatim from `subs1.hpp`,
+with only the line wrapping changed:
 
 ```c
-v5 = _mm_add_ps(
-       _mm_add_ps(
+  v5 = _mm_add_ps(
          _mm_add_ps(
            _mm_add_ps(
              _mm_add_ps(
-               _mm_add_ps(_mm_mul_ps(__xmmword_441120, a2[0]),
-                          _mm_mul_ps(__xmmword_441130, a2[1])),
-               _mm_mul_ps(__xmmword_441140, a2[2])),
-             _mm_mul_ps(__xmmword_441150, a2[3])),
-           _mm_mul_ps(__xmmword_441160, a2[4])),
-         _mm_mul_ps(__xmmword_441170, a2[5])),
-       _mm_mul_ps(__xmmword_441180, a2[6]));
-v6 = _mm_add_ps(v5, _mm_movehl_ps(v5, v5));
-v6.m128_f32[0] = v6.m128_f32[0] + M128F(_mm_shuffle_ps(v6, v6, 1)).m128_f32[0];
+               _mm_add_ps(
+                 _mm_add_ps(_mm_mul_ps((__m128)__xmmword_441120, a2[0]),
+                            _mm_mul_ps((__m128)__xmmword_441130, a2[1])),
+                 _mm_mul_ps((__m128)__xmmword_441140, a2[2])),
+               _mm_mul_ps((__m128)__xmmword_441150, a2[3])),
+             _mm_mul_ps((__m128)__xmmword_441160, a2[4])),
+           _mm_mul_ps((__m128)__xmmword_441170, a2[5])),
+         _mm_mul_ps((__m128)__xmmword_441180, a2[6]));
+  v6 = _mm_add_ps(v5, _mm_movehl_ps(v5, v5));
+  v6.m128_f32[0] = v6.m128_f32[0] + M128F(_mm_shuffle_ps(v6, v6, 1)).m128_f32[0];
 ```
 
-That is a **dot product of seven four-wide vectors against seven constant
-vectors, then a horizontal sum**. Written as C it is two loops and a reduction,
-the coefficients are a `float[7][4]` instead of seven blob constants, and the
-compiler emits the same instructions — plus it can now see what it is.
+That is a **weighted sum of seven four-wide vectors against seven constant
+vectors, then a horizontal sum of the four lanes** — a 28-term dot product.
+Written as C it is two loops and a reduction, the coefficients are a
+`float[7][4]` instead of seven blob constants, and the compiler emits the same
+instructions — plus it can now see what it is.
 
-### 2.3 The one thing that can go wrong, and why the gate catches it
+The vertical part translates with nothing to think about: the `_mm_add_ps`
+chain is left-to-right, which is what `for (i = 0; i < 7; i++) s += c[i]*a[i];`
+also does. The horizontal part is where the care goes.
+
+### 2.3 The one thing that can go wrong — and it is measured, not assumed
 
 **Float addition is not associative.** The horizontal sum above adds lanes in a
-specific order: `(0+2, 1+3)` from `movehl`, then `+shuffle(...,1)`. A C
-reduction written as `for (i = 0; i < 4; i++) s += v[i];` sums `0+1+2+3` and is
-**a different number**, in the last bits, on some inputs.
+specific order: `movehl_ps(v5, v5)` brings the high half down, so the add gives
+lane 0 = `v5[0]+v5[2]` and lane 1 = `v5[1]+v5[3]`; `shuffle_ps(v6, v6, 1)` then
+selects lane 1. The result is `(v5[0]+v5[2]) + (v5[1]+v5[3])`. A C reduction
+written as `for (i = 0; i < 4; i++) s += v[i];` sums `((v[0]+v[1])+v[2])+v[3]`
+and is **a different number** in the last bits.
 
-This project is unusually well placed to catch that. The floats feed
-`estimate_cost` and the p2 model, both of which decide what gets coded, so a
-last-bit difference changes a decision and the stream stops matching its
-reference. **A rounding difference here is a hard gate failure, not a silent
-drift.** That is the opposite of the usual situation with float refactoring and
-it should be exploited: translate aggressively, let the gate arbitrate.
+This is not a worry, it is a fact about this file, and the experiment is cheap.
+Replacing that one horizontal sum with the left-to-right order and running the
+gate:
+
+| | |
+| --- | --- |
+| streams unchanged | 12 of 15 |
+| `t8g` | changed, same length (42 896) |
+| `t8p` | changed, same length (43 664) |
+| `x_ep` | changed, **330 684** bytes against a reference of 330 656 |
+
+Building the unmodified file with `-ffast-math` breaks the same three images
+(`x_ep` at 330 676). So:
+
+* **The gate does catch reassociation.** A last-bit difference in
+  `alt_p2_filter` moves a decision, the decision moves a symbol, and the stream
+  stops matching. This is the opposite of the usual situation with float
+  refactoring and it should be exploited: translate, let the gate arbitrate.
+* **Twelve of the fifteen images did not notice.** That is the reason for small
+  batches and for never running a subset of the corpus. A translation that
+  passes `t24` and `t32` has been told nothing.
 
 Two rules follow:
 
-* **Never `-ffast-math`, `-funsafe-math-optimizations` or `-Ofast`.** They
-  license exactly the reassociation the gate would then catch as a regression,
-  and turning them on would mean regenerating the references, which means
-  giving up the property that makes this whole project checkable.
+* **Never `-ffast-math`, `-funsafe-math-optimizations` or `-Ofast`.** Measured
+  above: they break three images today. They license exactly the reassociation
+  the gate exists to catch, and turning them on would mean regenerating the
+  references, which means giving up the property that makes this whole project
+  checkable.
 * **Preserve the reduction order explicitly** where one exists. A horizontal
   sum written as `(v[0]+v[2]) + (v[1]+v[3])` compiles to the same tree the
   intrinsics build and stays bit-exact.
@@ -130,46 +170,77 @@ Two rules follow:
 
 `bmf.cpp` carries `M128I`, `M128F`, `M128D` and `M64` — unions that exist only
 because MSVC's `__m128` has named members (`.m128_f32[0]`) and GCC's does not.
-There are 457 uses of `__m128` in the file and 203 of `.m128_i32` alone.
+
+Their size is easy to misread. The wrapper *names* appear in `subs1.hpp` only
+five times (`M128F(` three, `M128D(` two), because their real work is implicit:
+457 lines mention `__m128` (307 occurrences of `__m128` itself, 535 counting
+`__m128i` and `__m128d`), and those lines reach into the unions **657** times
+through member spellings — `.m128_i32` 203, `.m128i_i32` 156, `.m128_f32` 112,
+and nine more.
 
 They are a translation artefact of a translation artefact: MSVC's spelling of a
 type that only exists because of the intrinsics. When the intrinsics go, so do
-these, and `bmf.cpp` loses its largest remaining block of scaffolding.
+these, and `bmf.cpp` loses its largest remaining block of scaffolding. The 657
+member accesses are the measure of the job, not the five wrapper calls.
 
-### 2.5 Making sure it actually vectorised
-
-The point of the exercise is the compiler doing the work, so check that it did:
+### 2.5 Making sure it actually vectorised — and what `-O2` really does
 
 ```
-BMF_OUT=/dev/null ./build.sh -fopt-info-vec 2>&1 | grep -c vectorized
+BMF_OUT=bmf.vec ./build.sh -fopt-info-vec 2>&1 | grep -c vectorized
 ```
 
-Baseline today is 0 at `-O2` and 141 at `-O3`. Two things follow:
+Do **not** write `BMF_OUT=/dev/null`. `build.sh` runs `rm -f "$OUT" ./*.o`,
+so that deletes `/dev/null` and the build then fails for an unrelated reason —
+which is how the first draft of this document came to record "0 loops
+vectorised at `-O2`".
 
-* `-O2` does not auto-vectorise in GCC 13. The build's `-O2` comes from
-  `g.bat` and is worth keeping for fidelity, so the phase ends by adding
-  **`-ftree-vectorize`** to `build.sh` rather than moving to `-O3`.
-* **`-O3` already passes the gate** — checked: byte-identical streams, 942 532
-  bytes against `-O2`'s 913 860. So the optimiser is not reassociating floats
-  today and there is no reason to expect it to start. That is the evidence for
-  §2.3's claim rather than a hope.
+The real baseline, GCC 13.3 on this tree:
 
-And measure the result. The corpus runs in 19 s; if translating 400 intrinsics
-into C makes that materially worse, the translation is wrong somewhere and the
-`-fopt-info-vec` count will say where.
+| | loops | SLP blocks | total messages |
+| --- | --- | --- | --- |
+| `-O2` (the build's) | 8 | 67 | 75 |
+| `-O3` | 38 | 103 | 141 |
+
+Three things follow:
+
+* **`-O2` already auto-vectorises.** `-ftree-loop-vectorize` and
+  `-ftree-slp-vectorize` are both *enabled* at `-O2` in GCC 12 and later; the
+  difference from `-O3` is `-fvect-cost-model`, `very-cheap` against `dynamic`.
+  Adding `-ftree-vectorize` to `build.sh` would therefore be a no-op. If this
+  phase wants the `-O3` behaviour without `-O3`, the knob is
+  `-fvect-cost-model=cheap` (or `dynamic`), and it has to be justified by a
+  measurement rather than added on principle — `g.bat`'s `-O2` is worth keeping
+  for fidelity.
+* **Most of what is reported is SLP, not loops.** 103 of the 141 messages at
+  `-O3` are `basic block part vectorized`. Counting "vectorized" therefore
+  measures straight-line packing more than it measures loops, and the number to
+  watch as intrinsics turn into loops is the `loop vectorized` count on its own.
+* **`-O3` passes the gate byte-identically** — checked, all 15 streams and the
+  archive, 942 532 bytes of binary against `-O2`'s 913 860. That shows GCC is
+  not reassociating floats here. It is *not* evidence for §2.3's claim, which is
+  about what happens when the source order changes; §2.3 measures that directly.
+
+And measure the runtime. The corpus takes about 15 s; if translating 400
+intrinsics into C makes that materially worse, the translation is wrong
+somewhere and the `loop vectorized` count will say where.
 
 ### 2.6 What this hands to Phase B
 
-74 distinct `__xmmword_*` constants feed these bodies — **24 still reached
-through `blob1`, 50 already sitting in `bmf_*` byte arrays**, which is to say
-they are spread across both halves of Phase B's list (§3.1 and §3.6).
+Less than the first draft claimed, and the honest accounting is worth having.
 
-Translating their users turns each into an ordinary `static const float[4]` or
-`int32_t[4]` with a real initialiser. A vector constant is the easiest kind of
-global to move: its extent is 16 bytes by construction, and its type is whatever
-the arithmetic around it says — which is the one thing §3.3 says cannot usually
-be guessed, and here it can. **Phase A takes 74 entries off Phase B's list as a
-side effect**, 24 of them from the harder half. That is why it goes first.
+74 distinct `__xmmword_*` constants exist. **37 of them are read by a body that
+contains intrinsics** (31 only there, 6 also elsewhere); the other 37 are read
+by non-SIMD code or, in eighteen cases, not read at all. 24 of the 74 are still
+reached through `blob1`; 50 already sit in `bmf_*` byte arrays.
+
+Translating a constant's users turns it into an ordinary `static const
+float[4]` or `int32_t[4]` with a real initialiser, which is worth doing on its
+own: a vector constant's extent is 16 bytes by construction, and its type
+follows from the arithmetic around it.
+
+But **Phase A does not take the 24 blob1 entries off Phase B's list.** §3.2
+does, for a reason that has nothing to do with intrinsics, and it takes all 24
+at once.
 
 ---
 
@@ -178,29 +249,64 @@ side effect**, 24 of them from the harder half. That is why it goes first.
 ### 3.1 What is left
 
 343 794 bytes of generated C, 65 892 byte initialisers, holding whatever the
-first round did not move. Against it: **77 globals declared as references into
-`blob1`, of which only 43 are referenced anywhere.**
+first round did not move. Against it: **78 globals declared as references into
+`blob1`**, and — contrary to what round one's Phase 3 note implies —
+**every one of them is referenced somewhere.** There are no free deletions in
+that list. (`REFACTORING.md` Phase 3 says "77"; the extra one is
+`__bmf_half_half`, which has no `typedef` line and so slips past the two-line
+regex in `tools/extents.py`. Its summary line, `77 globals: 2 const, 43 scalar,
+32 var`, classifies by *subscript shape* — `scalar` means "never subscripted",
+not "referenced" — and misreading it is how the first draft of this document
+invented 34 dead globals.)
 
 The machinery around it is `bmf_addr(va)`, `bmf_blob_relocate()` and
 `bmf_data_relocate()` — an address-translation layer that exists so a global
 can be reached by the virtual address it had in `BMF.exe`.
 
-### 3.2 The 34 dead ones go first
+### 3.2 The 24 SIMD constants go first, and they are free
 
-Thirty-four declarations name a global nothing uses. They cost nothing to
-delete and they shrink the problem by 44 % before any thinking is required.
-The check is the same shape as `deadcheck.py`'s: a declaration whose name
-appears twice in the file — its `typedef` and itself — is unreferenced.
+`__init_sse_constants()` (`subs1.hpp:7603`) is 24 assignments and nothing else:
 
-### 3.3 The 43 live ones, one at a time
+```c
+  __xmmword_445760[0] = __xmmword_439A00;
+  ...
+  __xmmword_4458D0 = __xmmword_439B00;
+```
+
+Every one of the 24 `__xmmword_4457xx`/`4458xx` slots still in `blob1` is
+**written at startup from a `bmf_xmmword_439A*` array that has already moved out
+of the blob** — 17 distinct sources, several used twice. So:
+
+* **None of the 24 needs an initialiser recovered.** Whatever `blob.inc` holds
+  at those addresses is overwritten before anything reads it. §3.3's hard step
+  does not apply to them at all.
+* **18 of the 24 are never read anywhere else.** `__xmmword_4457C0` through
+  `__xmmword_4458D0` are written by `__init_sse_constants` and that is their
+  only appearance. They and their assignments can go outright.
+* **The remaining 6** — `__xmmword_445760` … `__xmmword_4457B0`, seven uses
+  each — become direct references to their `bmf_xmmword_439A*` source, and
+  `__init_sse_constants` goes with them.
+
+That is 24 of 78 removed, the whole SIMD half of the blob, from one function
+that says what it is doing. Do it before the reading starts.
+
+Do not generalise the argument. 35 of the 78 are written and never read, but
+only these 18 are safe to delete on that basis; see §7.
+
+### 3.3 The 54 that are left, one at a time
 
 Each needs three things, and the third is the work:
 
 1. **Its extent.** How many bytes belong to it — the address of the next global
-   is an upper bound, and `tools/extents.py` already computes these.
+   is an upper bound, and `tools/extents.py` already computes these. Its
+   `const N` / `var` / `scalar` column says which extents are knowable from the
+   source at all: 43 of the 77 it sees are never subscripted, 2 have only
+   constant subscripts, and 32 are indexed by an expression and so have no
+   static extent.
 2. **Its type.** What the code reads out of it. `plane_count` is an `int32_t`;
    `exclusion_mask` is a byte array indexed by symbol; `__byte_44339E` is
-   16 bytes per plane. Most of these are already typed at their use sites.
+   indexed `[16 * plane]`, so 16 bytes per plane. Most of these are already
+   typed at their use sites.
 3. **Its initial value.** This is the one that cannot be guessed: a global BMF
    initialised in its data segment has to keep that value, and the only source
    is `blob.inc` itself. So the move is: read the bytes out of the blob at that
@@ -215,18 +321,24 @@ silently changes the initialiser's meaning. Hence one at a time, gated.
 
 | global | uses |
 | --- | --- |
-| `plane_count` | 153 |
-| `__byte_44339E` | 46 |
-| `__n3_0` | 28 |
-| `__byte_44339D` | 25 |
-| `__byte_4433AD` | 20 |
-| `__n4_3` | 20 |
+| `plane_count` | 154 |
+| `__byte_44339E` | 47 |
+| `__n3_0` | 29 |
+| `__byte_44339D` | 26 |
+| `__byte_4433AD` | 21 |
+| `__n4_3` | 21 |
+| `__n4_4` | 19 |
+| `exclusion_mask` | 18 |
 
-`plane_count` alone is 153 uses of an `int32_t` whose initial value is
-irrelevant — `compress_image` computes it from the depth before anything reads
-it. Several of the others are the same: **a global whose first access is a
-write does not need its initialiser recovered at all**, and finding those is
-worth doing before the extraction work starts.
+`plane_count` alone is 154 uses of an `int32_t` whose initial value is
+irrelevant: **both** entry points compute it from the depth byte before
+anything reads it — `compress_image` at `subs1.hpp:23333` and `expand_image` at
+`21955`, each `((depth & 0x3F) + 7) >> 3`. The decoder path is the one to check
+in every such case, because it is the one a corrupt stream reaches first.
+
+Several of the others are the same: **a global whose first access is a write
+does not need its initialiser recovered at all**, and finding those is worth
+doing before the extraction work starts. §7 is the qualification.
 
 ### 3.5 When the last one goes
 
@@ -243,12 +355,15 @@ They live in `subs1.hpp` as `alignas(16) static uint8_t bmf_NAME[n + 64]` with
 byte initialisers — out of the blob, but still untyped byte arrays with a
 64-byte tail nobody has explained. 50 832 bytes of them, the largest being
 `bmf_dword_439BD8` at 30 024. Giving those real types and real extents is the
-same job as §3.3 and belongs in the same phase.
+same job as §3.3 and belongs in the same phase. §3.2's 17 SIMD sources are the
+easy end of it: each is 16 bytes with a known type.
 
 One of them should simply go: `bmf_pout_of_memory_handler`, 10 292 bytes,
 exists because `set_new_handler` writes a function pointer into MSVC's CRT
-new-handler slot. `bmf_new` reads that one word (`REFACTORING.md` §6). The
-other 10 288 bytes are CRT state nothing touches.
+new-handler slot. That slot is the array's first word, and it is the only word
+anything touches — `bmf_new` reads it (`REFACTORING.md` §6) and
+`set_new_handler` writes it. The other 10 288 bytes are CRT state nothing
+references.
 
 ---
 
@@ -258,50 +373,60 @@ other 10 288 bytes are CRT state nothing touches.
 
 5603 pointer casts. They are not all noise — `structs.py` writes
 `*(uint8_t *)&p->f8` to reach a byte inside a word, and that cast carries
-information. But three groups do not:
+information. Three groups do not, but only one of them is large:
 
-* **Casts around `blob1` references.** Every one of the 77 globals is reached
-  through a cast that Phase B deletes outright.
-* **Casts on the `M128*` unions.** `(__m128)__xmmword_441120` and the `M128F(…)`
-  wrappers — Phase A's.
+* **Casts on the `M128*` unions.** 158 value casts — `(__m128)__xmmword_441120`
+  and friends — plus the `(__m128 *)`-shaped pointer casts, 240 for the family
+  as a whole. Phase A's.
+* **Casts in the blob and moved-array declarations.** One per global: 78 for
+  the `blob1` references, 86 for the moved arrays. The whole declaration block
+  (lines 1–3910) holds 166 casts of the 5603, so Phase B's contribution here is
+  small — its value is elsewhere.
 * **Casts between an integer and a pointer.** The `-fpermissive` conversions,
   §4.2, which are the ones that indicate a wrong type rather than a narrow
   access.
 
-Measure after A and B before deciding what to do about the rest. Two of the
-three groups are already someone else's phase.
+That leaves 5437 casts inside function bodies, most of them the informative
+kind. Measure after A and B before deciding what to do about the rest, and do
+not treat the total as a target (§7).
 
 ### 4.2 `-fpermissive` is the honest metric
 
-The build passes `-fpermissive` and gets ~330 warnings:
+The build emits 359 warnings. Dropping `-fpermissive` turns **347** of them into
+errors, and that is the number this phase is against:
 
-```
-150  invalid conversion from int32_t to <pointer>
- 90  invalid conversion from <pointer> to int32_t
- 32  invalid conversion (other)
- 25  invalid conversion, both aka
- 15  cast loses precision
- 12  cast to pointer from integer of different size
-```
+| n | diagnostic | `-fpermissive`? |
+| --- | --- | --- |
+| 297 | `invalid conversion from X to Y` | yes |
+| 37 | `cast from X to Y loses precision` | yes |
+| 6 | `ISO C++ forbids comparison between pointer and integer` | yes |
+| 7 | `comparison between distinct pointer types … lacks a cast` | yes |
+| 12 | `cast to pointer from integer of different size` | **no** — `-Wint-to-pointer-cast` |
 
-Every one of those is a place where the decompilation put an integer where a
-pointer belongs or the reverse. **The goal for this phase is stated exactly:
-the file compiles without `-fpermissive`.** That is a binary condition, the
-compiler adjudicates it, and it cannot be argued with — which is the same
-property that made `-Wunused-variable` and `-Wuseless-cast` the right drivers
-in round one.
+The 297 conversions by direction: **156 int → pointer, 97 pointer → int, 44
+pointer → pointer.** (GCC splits them four ways in its output — 150 / 90 / 32 /
+25 — but that split is only about which side it chose to print an `{aka …}` for,
+and says nothing about the direction.)
+
+Every one of the 347 is a place where the decompilation put an integer where a
+pointer belongs, or the reverse, or compared two things that are not the same
+kind. **The goal for this phase is stated exactly: the file compiles without
+`-fpermissive`.** That is a binary condition, the compiler adjudicates it, and
+it cannot be argued with — the same property that made `-Wunused-variable` and
+`-Wuseless-cast` the right drivers in round one.
 
 It is also the right metric because it is not satisfiable by cosmetics. Each
 conversion is a type that is wrong, and fixing it means deciding what the thing
 actually is.
 
-The 12 `cast to pointer from integer of different size` are worth pulling out
-first because they are the narrowest and most mechanical group, not because they
-are the 64-bit blocker. They are not: `REFACTORING.md` §Phase 4 establishes that
-the 64-bit gap is the program's **32-bit pointer fields**, which cannot be
-widened because every object is walked with variable offsets as well as constant
-ones, and which the low arena in `bmf.cpp` addresses instead. Fixing these 12
-makes the file cleaner and does not move that.
+The 12 `-Wint-to-pointer-cast` warnings are worth pulling out first anyway,
+because they are the narrowest and most mechanical group — but they are not part
+of the `-fpermissive` count, and they are not the 64-bit blocker either.
+`REFACTORING.md` §Phase 4 establishes that the 64-bit gap is the program's
+**32-bit pointer fields**, which cannot be widened because every object is
+walked with variable offsets as well as constant ones, and which the low arena
+in `bmf.cpp` addresses instead. Fixing these 12 makes the file cleaner and does
+not move that.
 
 ### 4.3 The `vNN` names
 
@@ -311,47 +436,57 @@ argued from what the code does with it. At that rate this is not a phase, it is
 a background task, and it should be treated as one — a body at a time, when
 that body is being read for another reason.
 
-The exception is the `ObjN` structs' `fNN` members, 89 structs' worth. Those
+The exception is the `ObjN` structs' `fNN` members, 88 structs' worth. Those
 are not read-one-at-a-time work: `algorithm_v2.md` establishes what several of
 the objects *are*, and naming a struct's fields is worth doing in one pass per
 struct when its writer is understood. `BmfImage` and `BmpHeader` are the
 precedent.
 
-### 4.4 `goto` and `LABEL_n:`
+### 4.4 `goto` and `LABEL_n:` — re-examined, and the conclusion stands
 
-113 and 81. Round one's Phase 6 concluded these are irreducible — 21 backward
-jumps that are loops Hex-Rays could not name, and 100 forward ones that are
-either not the whole of an `if` or jump into a region with other entries.
+113 `goto` statements and 81 labels. Round one's Phase 6 concluded these are
+irreducible: of 123 gotos then, two qualified for `degoto.py`'s rewrite, 21
+were backward jumps that are loops Hex-Rays could not name, and 100 were
+forward jumps that are either not the whole of an `if` or jump into a region
+with other entries.
 
-That conclusion should be re-examined once, and only once, and for a specific
-reason: **it was reached before the frames became structs and before the
-alt-model bodies were merged.** Both changed the control flow's shape. If
-`degoto.py` still finds two candidates out of 123, the conclusion stands and
-this line can be deleted from the plan.
+That conclusion was reached before the frames became structs and before the
+alt-model bodies were merged, both of which changed the control flow's shape,
+so it was worth re-running. It has been: **`tools/degoto.py` now reports 0
+candidates of 114 gotos** (the 114th match is inside a comment). The count fell
+from 123 to 113 and the candidate count fell from 2 to 0. The conclusion holds
+and there is nothing here for this round — this subsection exists to say so.
 
 ---
 
 ## 5. Order, and what depends on what
 
 ```
-  Phase A  intrinsics → C          removes 21 blob constants, the M128 unions,
-     │                             and ~200 casts before B and C start
+  Phase A  intrinsics → C          removes the M128 unions, 158 value casts,
+     │                             and 657 member accesses
      ▼
-  Phase B  blob.inc → typed C      removes the bmf_addr layer and ~77 globals'
-     │                             worth of casts
+  Phase B  blob.inc → typed C      §3.2 removes 24 blob globals outright;
+     │                             the other 54 one at a time
      ▼
   Phase C  -fpermissive → clean    what is left is the real type errors
 ```
 
-A before B because A deletes blob entries. B before C because C's metric counts
-conversions that B removes. C last because it is the only one whose finish line
-is a compiler flag rather than a count, and it should be measured against a file
-the other two have already cleaned.
+The arrows are sequencing, not dependency. A genuinely blocks nothing in B, and
+B blocks nothing in C. The order is A → B → C because:
+
+* A is where the reading pays off twice: translating the p2 arithmetic is how
+  `algorithm_v2.md` §9 gets written, and §9 is what tells you whether a
+  translation is right beyond "the gate passed".
+* C last because it is the only one whose finish line is a compiler flag rather
+  than a count, and a flag should be measured against a file the other two have
+  already cleaned. B removes 164 declaration casts before C starts counting.
 
 Within each phase: **one object, one body, or one intrinsic family at a time,
 gated.** Round one's evidence for that is `tools/struct-sweep.sh` — 130 rounds,
 of which a dozen failed the gate and were reverted, and one of the failures was
-caught only by an image the sweep's filter had been skipping.
+caught only by an image the sweep's filter had been skipping. §2.3's experiment
+is the same lesson from the other direction: three of fifteen images noticed a
+real regression.
 
 ---
 
@@ -359,50 +494,119 @@ caught only by an image the sweep's filter had been skipping.
 
 It is in good shape — 15 images with committed reference streams, a two-member
 archive, 15 refused inputs with pinned exit statuses, and an out-of-memory
-ladder. Three additions this round needs:
+ladder. The corpus runs in about 15 s.
 
 * **Nothing, for Phase A — checked, and this is the good news.** The obvious
   worry was round one's: 268 lines of `alt_model_p1_decode` were broken for a
   fortnight because no image ran them. So the question was asked before planning
-  rather than after, and the answer is that the three bodies holding 82 % of the
-  intrinsics are **fully covered**:
+  rather than after, and the answer is as strong as it could be:
 
-  | | lines run |
+  **All 558 intrinsic call sites lie on lines that execute during a gate run.**
+  Not one is on an uncovered line, in any of the 16 bodies.
+
+  | body | line coverage |
   | --- | --- |
   | `alt_p2_model` | 1591 of 1591 — 100 % |
   | `alt_p2_context` | 817 of 817 — 100 % |
   | `alt_p2_filter` | 129 of 129 — 100 % |
+  | `choose_plane_coding` | 622 of 656 — 94.8 % |
+  | `estimate_cost` | 31 of 48 — 64.6 % |
 
-  Every float operation Phase A touches in those bodies executes during a gate
-  run, and a rounding difference in any of them moves a stream. Phase A is as
-  well gated as anything in this project.
+  The two bodies that are not at 100 % are still fully covered *where the
+  intrinsics are*. `choose_plane_coding`'s 34 unreached lines contain none.
+  `estimate_cost`'s unreached lines are its `n2 < 2` guards and its scalar
+  odd-bin tail — all 15 call sites pass 512 or 1024, so the tail cannot run;
+  it is scalar `log()` arithmetic with no intrinsics in it. If a translation
+  changes that function's shape, the tail still has no test, and the honest
+  move is to say so rather than to assume an odd histogram never happens.
 
-  The exception is `estimate_cost` at **64.6 %**, which is the one SIMD body
-  with unreached lines — its scalar tail, for histograms with an odd bin count.
-  Translating it needs a histogram of odd length to reach that path, and there
-  is no evidence one occurs; check before touching it.
-* **A `-fopt-info-vec` count in the plan's numbers**, so "the compiler
-  vectorises it" is a measurement and not an intention.
+  Combined with §2.3 — a deliberate reassociation fails the gate on three
+  images — Phase A is as well gated as anything in this project.
+* **A `loop vectorized` count in the plan's numbers**, so "the compiler
+  vectorises it" is a measurement and not an intention. Count `loop vectorized`
+  separately from `basic block part vectorized`; §2.5 explains why the combined
+  figure misleads.
 * **A no-`-fpermissive` build target**, failing at first, as Phase C's
-  scoreboard: `BMF_STRICT=1 ./build.sh` counting the errors it gets.
+  scoreboard: `BMF_STRICT=1 ./build.sh` counting the errors it gets. Today that
+  is 347.
 
 ---
 
 ## 7. What would make this fail
 
 * **Translating floats by pattern instead of by reading.** A horizontal sum has
-  an order and a reduction loop has a different one. The gate catches it, but a
-  tool that rewrites 400 sites and fails the gate tells you nothing about which
-  of the 400 was wrong. Small batches.
-* **Deciding a blob global's type from its name.** `__n4_3`, `__n256`, `__n15`
-  are named for the last constant compared against them (`REFACTORING.md` §6),
-  and a wrong type silently changes the initialiser bytes' meaning. The type
-  comes from the use sites, and the initialiser comes from the blob, and both
-  have to agree.
-* **Chasing the cast count.** 5603 is not a target. Two thirds of them belong
-  to other phases and the rest carry information. `-fpermissive` is the metric;
-  the cast count is a side effect.
+  an order and a reduction loop has a different one, and §2.3 measured what that
+  costs. The gate catches it, but a tool that rewrites 400 sites and fails the
+  gate tells you nothing about which of the 400 was wrong. Small batches, whole
+  corpus.
+* **Treating "written and never read" as "deletable".** 35 of the 78 blob
+  globals are only ever assigned. Eighteen of them are safe (§3.2) because
+  `__init_sse_constants` is the only writer and nothing reads that address
+  range. The other 17 are not: `__n2_0 = 2; __n4 = 4;` at 0x44571C and
+  0x445720, `__byte_445440[0] = …`, and fourteen more are adjacent slots in one
+  data-segment region, and `REFACTORING.md` Phase 3 measured
+  exactly this failure — **a store through one name has to be visible through
+  another**, which is why the all-at-once blob split segfaults. Write-only is a
+  hint about where to look, not a licence.
+* **Deciding a blob global's type from its name.** `__n4_3`, `__n256_2`,
+  `__n15` are named for the last constant compared against them
+  (`REFACTORING.md` §6), and a wrong type silently changes the initialiser
+  bytes' meaning. The type comes from the use sites, the initialiser comes from
+  the blob, and both have to agree.
+* **Chasing the cast count.** 5603 is not a target. §4.1 accounts for where the
+  removable ones are and they are a few hundred; the rest carry information.
+  `-fpermissive` is the metric; the cast count is a side effect.
 * **Believing a tool that reports success.** Round one had `unused.py` report
   "no warnings" while 66 sat in the file, for two independent reasons at once.
-  Every count in this document should be reproducible by a command that does not
-  go through the tool being checked.
+  Every count in this document is reproducible by the command in Appendix A,
+  and Appendix B lists the three places where the first draft of this document
+  failed that standard.
+
+---
+
+## Appendix A — how the numbers were measured
+
+From `003/`, GCC 13.3, `-m32`:
+
+| number | command |
+| --- | --- |
+| intrinsic calls, by name | `grep -o '_mm_[a-z0-9_]*' subs1.hpp \| sort \| uniq -c \| sort -rn` |
+| intrinsics per body | `tools/structs.py`'s `bodies()` + the same regex |
+| blob globals | `grep -n 'blob1 +' subs1.hpp`, minus the two comments and `bmf_addr`'s `return` |
+| a global's uses | count `\bNAME\b` on every line but its declaration |
+| extents and subscript shape | `python3 tools/extents.py` |
+| `-fpermissive` count | compile without `-fpermissive`, `-fsyntax-only`, count `error:` |
+| vectorisation | `BMF_OUT=bmf.vec ./build.sh -fopt-info-vec`, count `loop vectorized` and `basic block part vectorized` separately |
+| coverage | `BMF_STATIC=0 BMF_GC=0 BMF_OUT=bmf.cov ./build.sh --coverage -O0`, run `test.sh ./bmf.cov`, `gcov -f bmf.cpp` |
+| intrinsics on covered lines | intersect the `_mm_` line numbers with `#####` lines in `subs1.hpp.gcov` |
+| reassociation experiment | rewrite `alt_p2_filter`'s horizontal sum, `./build.sh`, `./test.sh` |
+| goto candidates | `python3 tools/degoto.py subs1.hpp` |
+
+`gcov` needs the profile files named after the source: build with `BMF_OUT=x`
+and the `.gcno`/`.gcda` arrive as `x-bmf.gcno`; rename to `bmf.gcno`/`bmf.gcda`
+before running `gcov bmf.cpp`. Do not pass `-fprofile-dir`, which mangles the
+`.gcda` name further.
+
+## Appendix B — what the first draft of this document got wrong
+
+Kept because it is the same failure mode §7 warns about, and because two of the
+three were numbers that would have shaped the work.
+
+1. **"77 globals declared, 43 referenced" and "the 34 dead ones go first."**
+   Both came from misreading one line of `tools/extents.py` output — `77
+   globals: 2 const, 43 scalar, 32 var` — where `scalar` means "never
+   subscripted". There are 78 declarations and none is unreferenced. An entire
+   subsection proposed deleting globals that are all in use, on a rule ("the
+   name appears twice, in its `typedef` and itself") that does not hold because
+   the `typedef` names `t_NAME`, not `NAME`.
+2. **"0 loops vectorised at `-O2`."** Measured with
+   `BMF_OUT=/dev/null ./build.sh`, which `rm -f`s `/dev/null` and then fails.
+   `-O2` vectorises 8 loops and 67 blocks. The draft's conclusion — add
+   `-ftree-vectorize` to `build.sh` — would have been a no-op, since GCC 12+
+   enables it at `-O2` already.
+3. **"74 constants feed these bodies … Phase A takes 74 entries off Phase B's
+   list, 24 of them from the harder half."** 37 are read by an intrinsic-bearing
+   body, and the 24 in `blob1` are the *easiest* entries rather than the hardest:
+   `__init_sse_constants` overwrites all of them at startup from arrays that
+   already moved, so none needs an initialiser recovered, and 18 are never read
+   at all. Phase A is not what removes them.
