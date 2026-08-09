@@ -69,6 +69,13 @@ When the data does not compress (`coded size >= raw size`) the member is
 rewritten with the descriptor's "compressed" flag clear and the raw pixels in
 place of the coded data.
 
+> **What `read_bmp` checks.** The `BM` signature, a 40-byte DIB header, and a
+> plane count of 1. Not the sign of the height: a top-down BMP, which is legal,
+> reaches `alloc_image` with a negative height and segfaults. Not the depth
+> against what can be written back either — 16 bits per pixel reads, compresses,
+> and then has no writer (§10 of `REFACTORING.md`'s list, and `bmf_decompress`
+> exits 5 saying so).
+
 ## 3. The image descriptor
 
 16 bytes, and also the header of the in-memory image object that `alloc_image`

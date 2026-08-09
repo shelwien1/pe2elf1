@@ -531,6 +531,21 @@ gate cannot tell from a layout change.
   replacing look the same. `test.sh` now builds a two-member archive and reads
   both back; reinstating `"w+b"` fails it with *SECOND MEMBER REPLACED THE
   FIRST*.
+- **`read_bmp` validates less than it looks like it does.** It checks the `BM`
+  signature, that the DIB header is 40 bytes and that the plane count is 1, and
+  then trusts the rest. A **top-down BMP — a negative height, which is legal and
+  common — segfaults it**, in `alloc_image` off a negative size. Found by
+  feeding it one; the header checks that exist are BMF's own, so the donor is
+  unlikely to have fared better. Left alone deliberately: this is a refactoring,
+  and a crash that reproduces is behaviour the gate is there to preserve. Worth
+  knowing before anyone points this at untrusted input.
+- **A 16-bit BMP compresses and then cannot be expanded.** `read_bmp` accepts
+  16 bits per pixel; the writer refuses depths 2, 15 and 16, because BMF sent
+  those to a TGA writer and this build only writes BMP (`bmf_decompress` says
+  so and exits 5). The stream is fine — nothing in this build can turn it back
+  into a file. The asymmetry is in the original's shape, not introduced here,
+  but the trap is: `bmf c` reports success on input whose output is
+  unreachable.
 - **Inherited names lie, and so do first readings.** `__n8`, `__n256`, `__n2`
   are the last value assigned, not the meaning. But the opposite error is just
   as easy: an earlier draft of §4.1 concluded `__Buffer` was not a buffer,
