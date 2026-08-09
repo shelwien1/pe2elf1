@@ -13455,176 +13455,83 @@ static inline uint32_t __fwd_alt_p2_model_rescale_three_way(void *a0) { return _
 
 uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, uint8_t a4, int32_t a5)
 {
-  struct alignas(16) {   // 416 bytes, the frame Hex-Rays could not name
-      int32_t n2;
-      uint16_t *n0xF0;
-      uint32_t n0x10_2;
-      uint16_t *v508;
-      uint32_t n0x10_1;
-      int32_t v510;
-      int32_t v511;
-      uint8_t _pad0[36];
-      int32_t v512;
-      int32_t v513;
-      int32_t v514;
-      uint8_t _pad1[4];
-      const char *v515;
-      uint32_t v516;
-      const char *v517;
-      uint8_t _pad2[4];
-      const char *v518;
-      const char *v519;
-      const char *v520;
-      uint8_t _pad3[4];
-      const char *v521;
-      const char *v522;
-      const char *v523;
-      uint8_t _pad4[4];
-      const char *v524;
-      int32_t v525;
-      const char *v526;
-      uint8_t _pad5[4];
-      const char *v527;
-      const char *v528;
-      const char *v529;
-      uint8_t _pad6[4];
-      const char *v530;
-      const char *v531;
-      const char *v532;
-      uint8_t _pad7[4];
-      const char *v533;
-      const char *v534;
-      const char *v535;
-      uint8_t _pad8[4];
-      int32_t v536;
-      const char *v537;
-      int32_t v538;
-      uint8_t _pad9[4];
-      int32_t v539;
-      const char *v540;
-      int32_t v541;
-      uint8_t _pad10[4];
-      int32_t v542;
-      const char *v543;
-      const char *v544;
-      uint8_t _pad11[4];
-      uint32_t v545;
-      int32_t n3;
-      int32_t v547;
-      int32_t v548;
-      int32_t v549;
-      int32_t v550;
-      const char *v551;
-      const char *v552;
-      const char *v553;
-      const char *v554;
-      const char *v555;
-      const char *v556;
-      const char *v557;
-      int32_t v558;
-      const char *v559;
-      const char *v560;
-      const char *v561;
-      const char *v562;
-      const char *v563;
-      const char *v564;
-      const char *v565;
-      uint32_t v566;
-      int32_t v567;
-      int32_t v568;
-      const char *v569;
-      int32_t v570;
-      int32_t v571;
-      int32_t v572;
-      int32_t v573;
-      int32_t v574;
-      int32_t v575;
-      int32_t v576;
-      int32_t v577;
-      uint32_t *v578;
-      uint32_t n5;
-      int32_t v580;
-      uint32_t *v581;
-      uint8_t _pad12[28];
-  } __frame;
-  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 416, "frame layout moved");
-  int32_t &n2 = __frame.n2;
-  uint16_t *&n0xF0 = __frame.n0xF0;
-  uint32_t &n0x10_2 = __frame.n0x10_2;
-  uint16_t *&v508 = __frame.v508;
-  uint32_t &n0x10_1 = __frame.n0x10_1;
-  int32_t &v510 = __frame.v510;
-  int32_t &v511 = __frame.v511;
-  Obj15 *&v512 = (Obj15 *&)__frame.v512;
-  Obj42 *&v513 = (Obj42 *&)__frame.v513;
-  Obj44 *&v514 = (Obj44 *&)__frame.v514;
-  Obj52 *&v515 = (Obj52 *&)__frame.v515;
-  Obj41 *&v516 = (Obj41 *&)__frame.v516;
-  Obj127 *&v517 = (Obj127 *&)__frame.v517;
-  Obj51 *&v518 = (Obj51 *&)__frame.v518;
-  Obj111 *&v519 = (Obj111 *&)__frame.v519;
-  Obj112 *&v520 = (Obj112 *&)__frame.v520;
-  Obj50 *&v521 = (Obj50 *&)__frame.v521;
-  Obj109 *&v522 = (Obj109 *&)__frame.v522;
-  Obj110 *&v523 = (Obj110 *&)__frame.v523;
-  Obj49 *&v524 = (Obj49 *&)__frame.v524;
-  Obj40 *&v525 = (Obj40 *&)__frame.v525;
-  Obj108 *&v526 = (Obj108 *&)__frame.v526;
-  Obj48 *&v527 = (Obj48 *&)__frame.v527;
-  Obj107 *&v528 = (Obj107 *&)__frame.v528;
-  Obj126 *&v529 = (Obj126 *&)__frame.v529;
-  Obj47 *&v530 = (Obj47 *&)__frame.v530;
-  Obj106 *&v531 = (Obj106 *&)__frame.v531;
-  Obj125 *&v532 = (Obj125 *&)__frame.v532;
-  Obj46 *&v533 = (Obj46 *&)__frame.v533;
-  Obj104 *&v534 = (Obj104 *&)__frame.v534;
-  Obj105 *&v535 = (Obj105 *&)__frame.v535;
-  Obj15 *&v536 = (Obj15 *&)__frame.v536;
-  Obj103 *&v537 = (Obj103 *&)__frame.v537;
-  Obj39 *&v538 = (Obj39 *&)__frame.v538;
-  Obj15 *&v539 = (Obj15 *&)__frame.v539;
-  Obj102 *&v540 = (Obj102 *&)__frame.v540;
-  Obj38 *&v541 = (Obj38 *&)__frame.v541;
-  Obj23 *&v542 = (Obj23 *&)__frame.v542;
-  Obj2 *&v543 = (Obj2 *&)__frame.v543;
-  Obj124 *&v544 = (Obj124 *&)__frame.v544;
-  uint32_t &v545 = __frame.v545;
-  int32_t &n3 = __frame.n3;
-  int32_t &v547 = __frame.v547;
-  int32_t &v548 = __frame.v548;
-  int32_t &v549 = __frame.v549;
-  int32_t &v550 = __frame.v550;
-  Obj46 *&v551 = (Obj46 *&)__frame.v551;
-  Obj47 *&v552 = (Obj47 *&)__frame.v552;
-  Obj125 *&v553 = (Obj125 *&)__frame.v553;
-  Obj48 *&v554 = (Obj48 *&)__frame.v554;
-  Obj126 *&v555 = (Obj126 *&)__frame.v555;
-  Obj49 *&v556 = (Obj49 *&)__frame.v556;
-  Obj108 *&v557 = (Obj108 *&)__frame.v557;
-  Obj40 *&v558 = (Obj40 *&)__frame.v558;
-  Obj50 *&v559 = (Obj50 *&)__frame.v559;
-  Obj109 *&v560 = (Obj109 *&)__frame.v560;
-  Obj51 *&v561 = (Obj51 *&)__frame.v561;
-  Obj112 *&v562 = (Obj112 *&)__frame.v562;
-  Obj111 *&v563 = (Obj111 *&)__frame.v563;
-  Obj52 *&v564 = (Obj52 *&)__frame.v564;
-  Obj127 *&v565 = (Obj127 *&)__frame.v565;
-  Obj41 *&v566 = (Obj41 *&)__frame.v566;
-  Obj15 *&v567 = (Obj15 *&)__frame.v567;
-  Obj44 *&v568 = (Obj44 *&)__frame.v568;
-  Obj42 *&v569 = (Obj42 *&)__frame.v569;
-  int32_t &v570 = __frame.v570;
-  int32_t &v571 = __frame.v571;
-  int32_t &v572 = __frame.v572;
-  int32_t &v573 = __frame.v573;
-  int32_t &v574 = __frame.v574;
-  int32_t &v575 = __frame.v575;
-  int32_t &v576 = __frame.v576;
-  int32_t &v577 = __frame.v577;
-  Obj69 *&v578 = (Obj69 *&)__frame.v578;
-  uint32_t &n5 = __frame.n5;
-  int32_t &v580 = __frame.v580;
-  uint32_t *&v581 = __frame.v581;
+  int32_t n2;
+  uint16_t *n0xF0;
+  uint32_t n0x10_2;
+  uint16_t *v508;
+  uint32_t n0x10_1;
+  int32_t v510;
+  int32_t v511;
+  Obj15 *v512;
+  Obj42 *v513;
+  Obj44 *v514;
+  Obj52 *v515;
+  Obj41 *v516;
+  Obj127 *v517;
+  Obj51 *v518;
+  Obj111 *v519;
+  Obj112 *v520;
+  Obj50 *v521;
+  Obj109 *v522;
+  Obj110 *v523;
+  Obj49 *v524;
+  Obj40 *v525;
+  Obj108 *v526;
+  Obj48 *v527;
+  Obj107 *v528;
+  Obj126 *v529;
+  Obj47 *v530;
+  Obj106 *v531;
+  Obj125 *v532;
+  Obj46 *v533;
+  Obj104 *v534;
+  Obj105 *v535;
+  Obj15 *v536;
+  Obj103 *v537;
+  Obj39 *v538;
+  Obj15 *v539;
+  Obj102 *v540;
+  Obj38 *v541;
+  Obj23 *v542;
+  Obj2 *v543;
+  Obj124 *v544;
+  uint32_t v545;
+  int32_t n3;
+  int32_t v547;
+  int32_t v548;
+  int32_t v549;
+  int32_t v550;
+  Obj46 *v551;
+  Obj47 *v552;
+  Obj125 *v553;
+  Obj48 *v554;
+  Obj126 *v555;
+  Obj49 *v556;
+  Obj108 *v557;
+  Obj40 *v558;
+  Obj50 *v559;
+  Obj109 *v560;
+  Obj51 *v561;
+  Obj112 *v562;
+  Obj111 *v563;
+  Obj52 *v564;
+  Obj127 *v565;
+  Obj41 *v566;
+  Obj15 *v567;
+  Obj44 *v568;
+  Obj42 *v569;
+  int32_t v570;
+  int32_t v571;
+  int32_t v572;
+  int32_t v573;
+  int32_t v574;
+  int32_t v575;
+  int32_t v576;
+  int32_t v577;
+  Obj69 *v578;
+  uint32_t n5;
+  int32_t v580;
+  uint32_t *v581;
   ;
   char *v8, *n2_1;   // were int32_t: these hold addresses
   __m128 a2 = a2__ref;
@@ -17126,22 +17033,22 @@ static inline int32_t __fwd_model_plane_alt_model_p1_encode(void *a0, char *a1) 
 void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, BmfImage *p_i, uint8_t *a4, uint8_t *a5)
 {
   struct alignas(16) {   // 96 bytes, the frame Hex-Rays could not name
-      int32_t   Size;
+      uint8_t   _gap0[4];   // was int32_t Size
       uint8_t   _pad1[4];
       int32_t   v58;
       Obj10 *   Blocka_5;
       Obj10 *   Blocka_2;
-      int32_t   v64;
-      int32_t   v65;
-      int32_t   v66;
-      int32_t   v67;
-      int32_t   v68;
-      int32_t   v69;
-      int32_t   v70;
-      char *    v71;
-      int32_t   v72;
-      int32_t   v73;
-      uint32_t  n5;
+      uint8_t   _gap1[4];   // was int32_t v64
+      uint8_t   _gap2[4];   // was int32_t v65
+      uint8_t   _gap3[4];   // was int32_t v66
+      uint8_t   _gap4[4];   // was int32_t v67
+      uint8_t   _gap5[4];   // was int32_t v68
+      uint8_t   _gap6[4];   // was int32_t v69
+      uint8_t   _gap7[4];   // was int32_t v70
+      uint8_t   _gap8[4];   // was char * v71
+      uint8_t   _gap9[4];   // was int32_t v72
+      uint8_t   _gap10[4];   // was int32_t v73
+      uint8_t   _gap11[4];   // was uint32_t n5
       uint8_t   _pad16[32];
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 96,
@@ -17149,24 +17056,24 @@ void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, BmfImage *p_i, 
   static_assert(sizeof(void *) != 4
                 || __builtin_offsetof(__typeof__(__frame), _pad16) == 64,
                 "the named part of the frame moved");
-  int32_t &Size = __frame.Size;
+  int32_t Size;
   int32_t &v58 = __frame.v58;
   int32_t &v59 = __frame.v58;
   Obj10 * &Blocka_5 = __frame.Blocka_5;
   int32_t &v61 = *(int32_t *)((char *)&__frame.Blocka_5);
   Obj10 * &Blocka = __frame.Blocka_2;
   Obj10 * &Blocka_2 = __frame.Blocka_2;
-  int32_t &v64 = __frame.v64;
-  int32_t &v65 = __frame.v65;
-  int32_t &v66 = __frame.v66;
-  int32_t &v67 = __frame.v67;
-  int32_t &v68 = __frame.v68;
-  int32_t &v69 = __frame.v69;
-  int32_t &v70 = __frame.v70;
-  char * &v71 = __frame.v71;
-  int32_t &v72 = __frame.v72;
-  int32_t &v73 = __frame.v73;
-  uint32_t &n5 = __frame.n5;
+  int32_t v64;
+  int32_t v65;
+  int32_t v66;
+  int32_t v67;
+  int32_t v68;
+  int32_t v69;
+  int32_t v70;
+  char *v71;
+  int32_t v72;
+  int32_t v73;
+  uint32_t n5;
   ;
   Obj10 *Blocka_1;
   uint8_t *v46, *v50;   // row cursors out of f56
@@ -17620,12 +17527,12 @@ void __transform_planes(BmfImage *p_i, int32_t a2, char a3, const __m128 &a4__re
       int32_t   Size;
       int32_t   n4;
       char *    Srca;
-      int32_t   n4_3;
+      uint8_t   _gap0[4];   // was int32_t n4_3
       uint16_t * p_i_1;
-      char *    Src;
-      uint16_t * Srca_3;
-      char *    p_ia;
-      char *    Buffer_1;
+      uint8_t   _gap1[4];   // was char * Src
+      uint8_t   _gap2[4];   // was uint16_t * Srca_3
+      uint8_t   _gap3[4];   // was char * p_ia
+      uint8_t   _gap4[4];   // was char * Buffer_1
       uint8_t   _pad11[32];
       uint8_t   _tail[4];   // alignas(16) rounds 76 up
   } __frame;
@@ -17634,11 +17541,11 @@ void __transform_planes(BmfImage *p_i, int32_t a2, char a3, const __m128 &a4__re
   static_assert(sizeof(void *) != 4
                 || __builtin_offsetof(__typeof__(__frame), _pad11) == 44,
                 "the named part of the frame moved");
-  int32_t &n4_3 = __frame.n4_3;
-  char * &Src = __frame.Src;
-  uint16_t * &Srca_3 = __frame.Srca_3;
-  char * &p_ia = __frame.p_ia;
-  char * &Buffer_1 = __frame.Buffer_1;
+  int32_t n4_3;
+  char *Src;
+  uint16_t *Srca_3;
+  char *p_ia;
+  char *Buffer_1;
   ;
   __m128 a4 = a4__ref;
   __m128 a5 = a5__ref;
