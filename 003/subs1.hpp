@@ -434,7 +434,7 @@ __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...);
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj0 {
-  uint32_t f0;
+  int32_t f0;   // signed: `alt_p1_alloc` tests `f0 > -10`
   int32_t f4;
   int32_t f8;
   uint32_t  f12[51];   // +12 .. +212
@@ -1248,17 +1248,6 @@ static_assert(sizeof(void *) != 4
               "Obj91: the layout moved");
 
 
-// Obj92 -- recovered from 6 dereferences over 1 offsets, under 3
-// names.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj92 {
-  int32_t f0;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj92, f0) == 0,
-              "Obj92: the layout moved");
 
 
 
@@ -4885,7 +4874,7 @@ int32_t __alt_p1_model(Obj0 *_this)
 static inline uint32_t __fwd_alt_p1_alloc_alt_init_tables(void *a0, void *a1) { return __alt_init_tables((Obj43 *)a0, (Obj16 *)a1); }
 static inline uint16_t * __fwd_alt_p1_alloc_init_counter_node(void *a0) { return __init_counter_node((uint16_t *)a0); }
 
-int32_t *__alt_p1_alloc(Obj92 *_this, int32_t i, int32_t a3, int32_t n4)
+int32_t *__alt_p1_alloc(Obj0 *_this, int32_t i, int32_t a3, int32_t n4)
 {
   ;
   bool v11;
@@ -4894,11 +4883,11 @@ int32_t *__alt_p1_alloc(Obj92 *_this, int32_t i, int32_t a3, int32_t n4)
   uint32_t n0x99C60, n0x80, n5;
   n0x99C60 = 0;
   _this->f0 = i;
-  *((int32_t *)_this + 1) = a3;
+  _this->f4 = a3;
   do
     __fwd_alt_p1_alloc_init_counter_node((uint16_t *)_this + 8 * n0x99C60++ + 1900);
   while ( n0x99C60 < 0x99C60 );
-  *((int32_t *)_this + 2) = 0;
+  _this->f8 = 0;
   v6 = 0;
   v7 = 0;
   v8 = 0;
@@ -4932,34 +4921,34 @@ int32_t *__alt_p1_alloc(Obj92 *_this, int32_t i, int32_t a3, int32_t n4)
     v15 = v18 + v17;
   }
   while ( n0x80 < 0x80 );
-  *((int32_t *)_this + 10) = 32;
-  *((int32_t *)_this + 41) = 0;
-  *((int32_t *)_this + 37) = 0;
-  *((int32_t *)_this + 11) = 64;
-  *((int32_t *)_this + 33) = 0;
-  *((int32_t *)_this + 29) = 0;
-  *((int32_t *)_this + 25) = 0;
-  *((int32_t *)_this + 14) = 96;
-  *((int32_t *)_this + 21) = 0;
-  *((int32_t *)_this + 17) = 0;
-  *((int32_t *)_this + 13) = 0;
-  *((int32_t *)_this + 15) = 192;
-  *((int32_t *)_this + 9) = 0;
+  _this->f12[7] = 32;
+  _this->f12[38] = 0;
+  _this->f12[34] = 0;
+  _this->f12[8] = 64;
+  _this->f12[30] = 0;
+  _this->f12[26] = 0;
+  _this->f12[22] = 0;
+  _this->f12[11] = 96;
+  _this->f12[18] = 0;
+  _this->f12[14] = 0;
+  _this->f12[10] = 0;
+  _this->f12[12] = 192;
+  _this->f12[6] = 0;
   n5 = 0;
-  *((int32_t *)_this + 18) = 288;
-  *((int32_t *)_this + 19) = 576;
-  *((int32_t *)_this + 22) = 864;
-  *((int32_t *)_this + 23) = 1728;
-  *((int32_t *)_this + 26) = 2592;
-  *((int32_t *)_this + 27) = 5184;
-  *((int32_t *)_this + 30) = 7776;
-  *((int32_t *)_this + 31) = 15552;
-  *((int32_t *)_this + 34) = 23328;
-  *((int32_t *)_this + 35) = 46656;
-  *((int32_t *)_this + 38) = 69984;
-  *((int32_t *)_this + 39) = 139968;
-  *((int32_t *)_this + 42) = 209952;
-  *((int32_t *)_this + 43) = 419904;
+  _this->f12[15] = 288;
+  _this->f12[16] = 576;
+  _this->f12[19] = 864;
+  _this->f12[20] = 1728;
+  _this->f12[23] = 2592;
+  _this->f12[24] = 5184;
+  _this->f12[27] = 7776;
+  _this->f12[28] = 15552;
+  _this->f12[31] = 23328;
+  _this->f12[32] = 46656;
+  _this->f12[35] = 69984;
+  _this->f12[36] = 139968;
+  _this->f12[39] = 209952;
+  _this->f12[40] = 419904;
   do
     *((int32_t *)_this + n5++ + 44) = (int32_t)bmf_new(2 * _this->f0 + 20);
   while ( n5 < 5 );
@@ -4970,30 +4959,30 @@ int32_t *__alt_p1_alloc(Obj92 *_this, int32_t i, int32_t a3, int32_t n4)
     v21 = 0;
     do
     {
-      *(uint8_t *)(*((int32_t *)_this + 48) + 2 * v21) = 72;
-      *(uint8_t *)(*((int32_t *)_this + 47) + 2 * v21) = 72;
-      *(uint8_t *)(*((int32_t *)_this + 46) + 2 * v21) = 72;
-      *(uint8_t *)(*((int32_t *)_this + 45) + 2 * v21) = 72;
-      *(uint8_t *)(*((int32_t *)_this + 44) + 2 * v21) = 72;
-      *(uint8_t *)(*((int32_t *)_this + 48) + 2 * v21 + 1) = 0;
-      *(uint8_t *)(*((int32_t *)_this + 47) + 2 * v21 + 1) = 0;
-      *(uint8_t *)(*((int32_t *)_this + 46) + 2 * v21 + 1) = 0;
-      *(uint8_t *)(*((int32_t *)_this + 45) + 2 * v21 + 1) = 0;
-      *(uint8_t *)(*((int32_t *)_this + 44) + 2 * v21 + 1) = 0;
+      *(uint8_t *)(_this->f12[45] + 2 * v21) = 72;
+      *(uint8_t *)(_this->f12[44] + 2 * v21) = 72;
+      *(uint8_t *)(_this->f12[43] + 2 * v21) = 72;
+      *(uint8_t *)(_this->f12[42] + 2 * v21) = 72;
+      *(uint8_t *)(_this->f12[41] + 2 * v21) = 72;
+      *(uint8_t *)(_this->f12[45] + 2 * v21 + 1) = 0;
+      *(uint8_t *)(_this->f12[44] + 2 * v21 + 1) = 0;
+      *(uint8_t *)(_this->f12[43] + 2 * v21 + 1) = 0;
+      *(uint8_t *)(_this->f12[42] + 2 * v21 + 1) = 0;
+      *(uint8_t *)(_this->f12[41] + 2 * v21 + 1) = 0;
       v20 = _this->f0;
       ++v21;
     }
     while ( v21 < _this->f0 + 10 );
   }
-  v22 = *((int32_t *)_this + 45);
-  *((int32_t *)_this + 49) = *((int32_t *)_this + 44) + 2 * v20 + 8;
-  v23 = *((int32_t *)_this + 46);
-  *((int32_t *)_this + 50) = v22 + 2 * v20 + 8;
-  v24 = *((int32_t *)_this + 47);
-  *((int32_t *)_this + 51) = v23 + 2 * v20 + 8;
-  v25 = *((int32_t *)_this + 48);
-  *((int32_t *)_this + 52) = v24 + 2 * v20 + 8;
-  *((int32_t *)_this + 53) = v25 + 2 * v20 + 8;
+  v22 = _this->f12[42];
+  _this->f12[46] = _this->f12[41] + 2 * v20 + 8;
+  v23 = _this->f12[43];
+  _this->f12[47] = v22 + 2 * v20 + 8;
+  v24 = _this->f12[44];
+  _this->f12[48] = v23 + 2 * v20 + 8;
+  v25 = _this->f12[45];
+  _this->f12[49] = v24 + 2 * v20 + 8;
+  _this->f12[50] = v25 + 2 * v20 + 8;
   return (int32_t *)_this;
 }
 
@@ -5264,14 +5253,14 @@ void __alt_p1_d8_encode_body(Obj0 *_this, uint8_t *a2, uint8_t *a3)
 }
 static inline void ** __fwd_alt_model_p1_d8_encode_alt_p1_free(void *a0, char a1) { return __alt_p1_free((void **)a0, a1); }
 static inline void __fwd_alt_model_p1_d8_encode_alt_p1_d8_encode_body(Obj0 *a0, void *a1, void *a2) { __alt_p1_d8_encode_body(a0, (uint8_t *)a1, (uint8_t *)a2); }
-static inline int32_t * __fwd_alt_model_p1_d8_encode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((Obj92 *)a0, a1, a2, a3); }
+static inline int32_t * __fwd_alt_model_p1_d8_encode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((Obj0 *)a0, a1, a2, a3); }
 
 void __alt_model_p1_d8_encode(uint8_t *a1, int32_t i, int32_t a3, uint8_t *a4)
 {
   ;
-  Obj92 *v4;
+  Obj0 *v4;
   void **v5;
-  v4 = (Obj92 *)((int32_t *)bmf_new(0x99D4D8u));
+  v4 = (Obj0 *)((int32_t *)bmf_new(0x99D4D8u));
   if ( v4 )
     v5 = (void **)__fwd_alt_model_p1_d8_encode_alt_p1_alloc(v4, i, a3, 0);
   else
@@ -6765,7 +6754,7 @@ int32_t __estimate_cost(char *a1, int32_t n2)
 static inline int32_t __fwd_alt_model_p1_d8_decode_alt_p1_decode_symbol(void *a0, int32_t a1, int32_t a2) { return __alt_p1_decode_symbol((uint16_t *)a0, a1, a2); }
 static inline void ** __fwd_alt_model_p1_d8_decode_alt_p1_free(void *a0, char a1) { return __alt_p1_free((void **)a0, a1); }
 static inline int32_t __fwd_alt_model_p1_d8_decode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj25 *)a0, (uint32_t *)a1, (Obj91 *)a2); }
-static inline int32_t * __fwd_alt_model_p1_d8_decode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((Obj92 *)a0, a1, a2, a3); }
+static inline int32_t * __fwd_alt_model_p1_d8_decode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((Obj0 *)a0, a1, a2, a3); }
 
 void ** __alt_model_p1_d8_decode(char ArgList, uint8_t *Src, int32_t i, int32_t a4)
 {
@@ -6773,12 +6762,12 @@ void ** __alt_model_p1_d8_decode(char ArgList, uint8_t *Src, int32_t i, int32_t 
   uint8_t *v7, *v8, *v9, *v10, *v11;   // the five row cursors of f176
   bool v33;
   Obj4 *v5;
-  Obj92 *v4;
+  Obj0 *v4;
   int32_t v6, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26,
           v27, v28, v29, v30, v31, v32, v35, v36, v39, v41;
   int64_t v37;
   uint8_t *v12, *v13, *Src_1;
-  v4 = (Obj92 *)((int32_t *)bmf_new(0x99D4D8u));
+  v4 = (Obj0 *)((int32_t *)bmf_new(0x99D4D8u));
   if ( v4 )
     v5 = (Obj4 *)(__fwd_alt_model_p1_d8_decode_alt_p1_alloc(v4, i, a4, 0));
   else
@@ -6909,7 +6898,7 @@ void ** __alt_model_p1_d8_decode(char ArgList, uint8_t *Src, int32_t i, int32_t 
 static inline int32_t __fwd_alt_model_p1_decode_alt_p1_decode_symbol(void *a0, int32_t a1, int32_t a2) { return __alt_p1_decode_symbol((uint16_t *)a0, a1, a2); }
 static inline void ** __fwd_alt_model_p1_decode_alt_p1_free(void *a0, char a1) { return __alt_p1_free((void **)a0, a1); }
 static inline int32_t __fwd_alt_model_p1_decode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj25 *)a0, (uint32_t *)a1, (Obj91 *)a2); }
-static inline int32_t * __fwd_alt_model_p1_decode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((Obj92 *)a0, a1, a2, a3); }
+static inline int32_t * __fwd_alt_model_p1_decode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((Obj0 *)a0, a1, a2, a3); }
 
 int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
 {
@@ -6952,7 +6941,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
   Obj1 *v24;
   uint8_t *v29, *v65;   // row cursors out of Obj1
   char v11, v12, v13, v58;
-  Obj92 *v6;
+  Obj0 *v6;
   uint8_t *v25, *v26, *v27, *v28;   // row cursors out of Obj1
   int32_t i, v3, i_2, n4, *v7, v8, v9, v10, v14, v15, v16, ArgList, v18, i_3, n4_1, n4_2,
           v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45,
@@ -6974,7 +6963,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
     n4 = 0;
     do
     {
-      v6 = (Obj92 *)((int32_t *)bmf_new(0x99D4D8u));
+      v6 = (Obj0 *)((int32_t *)bmf_new(0x99D4D8u));
       if ( v6 )
         v7 = __fwd_alt_model_p1_decode_alt_p1_alloc(v6, i_2, v3, n4);
       else
@@ -12838,7 +12827,7 @@ LABEL_76:
 static inline int32_t __fwd_alt_model_p1_encode_alt_p1_encode_symbol(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_encode_symbol((uint16_t *)a0, a1, a2, a3); }
 static inline void ** __fwd_alt_model_p1_encode_alt_p1_free(void *a0, char a1) { return __alt_p1_free((void **)a0, a1); }
 static inline int32_t __fwd_alt_model_p1_encode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj25 *)a0, (uint32_t *)a1, (Obj91 *)a2); }
-static inline int32_t * __fwd_alt_model_p1_encode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((Obj92 *)a0, a1, a2, a3); }
+static inline int32_t * __fwd_alt_model_p1_encode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((Obj0 *)a0, a1, a2, a3); }
 
 int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
 {
@@ -12908,7 +12897,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
   Obj1 *v23;
   uint8_t *v28;   // a row cursor out of Obj1
   char v11, v12, v13, v62, v71, v81, v83;
-  Obj92 *v6;
+  Obj0 *v6;
   uint8_t *v24, *v25, *v26, *v27;   // row cursors out of Obj1
   int32_t i, v3, i_2, n4, *v7, v8, v9, v10, v14, v15, v16, v17, i_3, n4_1, n4_2,
           v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46,
@@ -12932,7 +12921,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
     n4 = 0;
     do
     {
-      v6 = (Obj92 *)((int32_t *)bmf_new(0x99D4D8u));
+      v6 = (Obj0 *)((int32_t *)bmf_new(0x99D4D8u));
       if ( v6 )
         v7 = __fwd_alt_model_p1_encode_alt_p1_alloc(v6, i_2, v3, n4);
       else
