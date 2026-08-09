@@ -18,12 +18,12 @@ so they can be re-measured rather than trusted.
 
 | | | at the start |
 | --- | --- | --- |
-| `subs1.hpp` | 23 861 lines | 25 462 |
-| bodies | 179 (84 real, 95 `__fwd_*` shims) | 215 |
+| `subs1.hpp` | 23 830 lines | 25 462 |
+| bodies | 179 (84 real, 94 `__fwd_*` shims, 1 helper) | 215 |
 | globals in `blob.inc` | **78** | 293 |
-| recovered structs | **73**, 2728 named field accesses | 0 |
+| recovered structs | **73**, 2729 named field accesses | 0 |
 | raw-offset dereferences | **523** | 1646 before Phase 4 |
-| pointer casts | 5804 | 7336 |
+| pointer casts | 5778 | 7336 |
 | `goto` / `LABEL_n:` | 113 / 81 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
 | line coverage | **95.91 %** | 64.5 % |
@@ -403,9 +403,14 @@ last of them found a bug.
    that walk them are typed pointers to those structs. **Done for 73 objects**
    — 2728 accesses name a field, 523 raw-offset dereferences remain, and the
    ones declined are listed with their reasons in Phase 4.
-4. Names say what things are. No `__sub_41CAB0`, no `v187`, no `n0x800000`.
-   The recovered structs are the open part of this: their layouts are known,
-   their meanings mostly are not, and `ModelBlock` is the one that is.
+4. Names say what things are. **No `__sub_XXXXXX` is left in the file** — the
+   last five went on evidence from the call graph and from what they touch, and
+   the argument for each is written above the body it names. The recovered
+   structs are the open part of this: their layouts are known, their meanings
+   mostly are not, and `ModelBlock` is the one that is. So is the boundary
+   between naming a *role* and naming an *algorithm*: `alt_p2_context` is
+   defensible because nothing in it codes and both sides call it, while what its
+   context terms mean is `ALGORITHM.md` §9's open question, not this one.
 5. `casts`, `LOBYTE`-family macros, `goto`, and `__hexrays_frame` are gone or
    reduced to the handful of places where they are genuinely the clearest
    expression.
@@ -695,6 +700,19 @@ The 38 casts GCC calls useless went with the retyping. The 8-byte repeated-byte
 stores into the model geometry table were runs of consecutive `uint64_t` writes
 of one value; 12 of them are 4 `memset`s now, which says what they are.
 
+**381 locals went with it, and the compiler picked them.** Folding the six mode
+switches removed a third of the file and left the declarations of everything
+that code had used: `expand_predictor_mode0` declared 41 locals and uses 2,
+`encode_context_bit` declared 40 and uses 14. `tools/unused.py` takes the list
+from `g++ -Wunused-variable` rather than from a pattern of its own, which is the
+whole design — a declaration here can span three lines, share a type with names
+that *are* used, be an array, an `alignas(16)` buffer or a reference to a
+`__frame` member, and a scanner that gets any of those wrong deletes something
+live. The compiler already knows and cannot be wrong; the tool only has to edit
+what the warnings point at. 48 declarations deleted, 57 rewritten, and the file
+is now clean under `-Wunused-variable`, `-Wunused-but-set-variable`,
+`-Wunused-function`, `-Wunused-value` and `-Wunused-label`.
+
 The other two items are deliberately not done. Both were re-checked after Phase
 4 recovered its structs, since the first one's reason depended on Phase 4
 having recovered none:
@@ -940,12 +958,18 @@ rm -f bmfcov bmfcov-bmf.gc?? ./*.gcov                 # none of this is committe
 
 Body sizes, global extents and overlaps, and the `base + constant` families in
 §4.2 were all measured with throwaway brace-matching scripts, not with anything
-in `tools/`.  What is in `tools/` is what got run repeatedly: `foldif.py`,
-`rename.py`, `unframe.py`, `retype.py`, `extents.py`, `mkrefs.sh`. Turning the last two into real scripts is the first task of
-Phase 3 and Phase 4 respectively; they are also what would keep the numbers in
-this document honest as the work proceeds.
+in `tools/`.  What is in `tools/` is what got run repeatedly, and it divides
+into three kinds:
 
-One caveat on the coverage figure: `gcov` counts *instrumented* lines (13 313
-of the file's 18 609) and counts inlined copies separately, so its per-function
+* **transforms** — `foldif.py`, `rename.py`, `unframe.py`, `reframe.py`,
+  `retype.py`, `structs.py`, `degoto.py`, `unused.py`. Each edits the file and
+  is answerable to the gate.
+* **measurements** — `extents.py`, `addrmap.py`. These only report.
+* **checks** — `deadcheck.py`, and `test.sh` itself. A check earns its place by
+  reporting the case it was written for against the tree that still had it, and
+  nothing against the tree that does not; all five of `deadcheck.py`'s do.
+
+One caveat on the coverage figure: `gcov` counts *instrumented* lines (13 346
+of the file's 23 830) and counts inlined copies separately, so its per-function
 percentages do not sum the way source lines do. The line counts in §2 are source
 lines, measured separately by matching braces over the function list.
