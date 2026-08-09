@@ -18,12 +18,12 @@ so they can be re-measured rather than trusted.
 
 | | | at the start |
 | --- | --- | --- |
-| `subs1.hpp` | 23 870 lines | 25 462 |
+| `subs1.hpp` | 23 893 lines | 25 462 |
 | bodies | 179 (84 real, 95 `__fwd_*` shims) | 215 |
 | globals in `blob.inc` | **78** | 293 |
 | recovered structs | **73**, 2728 named field accesses | 0 |
 | raw-offset dereferences | **523** | 1646 before Phase 4 |
-| pointer casts | 5805 | 7336 |
+| pointer casts | 5804 | 7336 |
 | `goto` / `LABEL_n:` | 121 / 88 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
 | line coverage | **95.52 %** | 64.5 % |
@@ -161,6 +161,11 @@ are gone.
 unexecuted lines now form runs of at most 9, and mostly of 1 to 3. There are no
 more dead features to find here; there are allocation-failure checks, error
 returns and format variants, a line or two at a time.
+
+Three checks say that lever is spent, not merely tiring: no body has zero
+coverage, no folded-mode test still has a live `else` (all 23 markers were
+checked), and the two structurally-unreachable branches that did exist have
+been removed. What remains needs inputs, not deletions.
 
 These are format and descriptor combinations fifteen images still do not reach.
 `alt_model_p1_decode` used to head this table with 268 lines and is not on it
@@ -743,10 +748,10 @@ whose fields are still `uint32_t`.
 
 ```sh
 # sizes and vocabulary
-wc -l subs1.hpp                                       # 23870
+wc -l subs1.hpp                                       # 23893
 grep -o 'blob1 + 0x' subs1.hpp | wc -l                # 164 globals
 grep -c 'static inline .*__fwd_' subs1.hpp            # 95 shims
-grep -oE '\((const )?[A-Za-z_][A-Za-z0-9_]* *\*+\)' subs1.hpp | wc -l   # 5805
+grep -oE '\((const )?[A-Za-z_][A-Za-z0-9_]* *\*+\)' subs1.hpp | wc -l   # 5804
 grep -c 'goto ' subs1.hpp                             # 123
 grep -c '__hexrays_frame' subs1.hpp                   # 0
 
