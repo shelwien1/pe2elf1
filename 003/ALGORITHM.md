@@ -695,7 +695,7 @@ end of the list codes an escape — a PPM-style exclusion mechanism.
 
 Every address is an offset into `blob.inc`, BMF.exe's data segment. For
 functions rather than globals, `tools/addrmap.txt` is the corresponding map:
-41 names to the addresses their bodies were decompiled from, recovered by
+49 names to the addresses their bodies were decompiled from, recovered by
 `tools/addrmap.py` from the commits that made each rename rather than
 reconstructed from the code.
 
