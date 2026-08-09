@@ -10610,29 +10610,66 @@ static inline int32_t * __fwd_alt_model_p1_decode_sub_4256F0(void *a0, int32_t a
 
 int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
 {
-  Obj0 *v83;
-  void *v84;
-  int32_t v85;
-  uint32_t v86;
-  uint32_t &v87 = v86;
-  int32_t v88;
-  int32_t &v89 = v88;
-  int32_t Src_1;
-  int32_t v91;
-  int32_t v92;
-  void *Block;
-  Obj0 *v94;
-  Obj26 *v95;
-  Obj27 *v96;
-  int32_t v97;
-  int32_t v98;
-  uint32_t i_1;
-  int32_t ArgList_1;
-  int32_t v101;
-  uint32_t i_4;
-  int32_t v103;
-  int32_t v104;
-  int32_t v105;
+  // Phase 2 split this frame into plain locals, which is what the other eight
+  // frames took -- and it is wrong here.  The frame was 116 bytes and its
+  // aliases only reach offset 84; the code writes into the 32 bytes of slack
+  // past the end, and once each local has its own storage those writes land on
+  // whatever the compiler put next.  At -O2 that is a null pointer handed to
+  // sub_4248D0; at -O0 it is a plane that decodes to the wrong pixels.
+  //
+  // Nothing caught it because nothing reached it: this is the body
+  // REFACTORING.md section 2.3 lists as unexercised.  testfiles/altp1.bmp
+  // reaches it now.
+  struct alignas(16) {   // 116 bytes, the frame Hex-Rays could not name
+      Obj0     *v83;
+      void     *v84;
+      int32_t   v85;
+      uint32_t  v86;
+      int32_t   v88;
+      int32_t   Src_1;
+      int32_t   v91;
+      int32_t   v92;
+      void     *Block;
+      Obj0     *v94;
+      Obj26    *v95;
+      Obj27    *v96;
+      int32_t   v97;
+      int32_t   v98;
+      uint32_t  i_1;
+      int32_t   ArgList_1;
+      int32_t   v101;
+      uint32_t  i_4;
+      int32_t   v103;
+      int32_t   v104;
+      int32_t   v105;
+      uint8_t   _pad0[44];   // 32 of frame the aliases do not name, then
+  } __frame;                 // 12 more because alignas(16) rounds 116 up
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 128, "frame layout moved");
+  static_assert(sizeof(void *) != 4 || __builtin_offsetof(__typeof__(__frame), _pad0) == 84,
+                "the named part of the frame moved");
+  Obj0 *&v83 = __frame.v83;
+  void *&v84 = __frame.v84;
+  int32_t &v85 = __frame.v85;
+  uint32_t &v86 = __frame.v86;
+  uint32_t &v87 = __frame.v86;
+  int32_t &v88 = __frame.v88;
+  int32_t &v89 = __frame.v88;
+  int32_t &Src_1 = __frame.Src_1;
+  int32_t &v91 = __frame.v91;
+  int32_t &v92 = __frame.v92;
+  void *&Block = __frame.Block;
+  Obj0 *&v94 = __frame.v94;
+  Obj26 *&v95 = __frame.v95;
+  Obj27 *&v96 = __frame.v96;
+  int32_t &v97 = __frame.v97;
+  int32_t &v98 = __frame.v98;
+  uint32_t &i_1 = __frame.i_1;
+  int32_t &ArgList_1 = __frame.ArgList_1;
+  int32_t &v101 = __frame.v101;
+  uint32_t &i_4 = __frame.i_4;
+  int32_t &v103 = __frame.v103;
+  int32_t &v104 = __frame.v104;
+  int32_t &v105 = __frame.v105;
   ;
   Obj0 *v59;
   uintptr_t v61;

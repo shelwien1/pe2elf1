@@ -26,7 +26,7 @@ so they can be re-measured rather than trusted.
 | pointer casts | 5805 | 7336 |
 | `goto` / `LABEL_n:` | 121 / 88 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
-| line coverage | **92.65 %** | 64.5 % |
+| line coverage | **94.71 %** | 64.5 % |
 
 The target is 32-bit. That is not a limitation left over from the port — it is
 the decision that made Phase 4 possible, and §Phase 4 says why.
@@ -47,12 +47,12 @@ every image still round-trips.** No test can tell you a rename was
 the property that matters.
 
 ```
-./build.sh && ./test.sh ./bmf     # 14 images, encode + decode + compare,
+./build.sh && ./test.sh ./bmf     # 15 images, encode + decode + compare,
                                   # each stream against testfiles/ref_<name>.bmf
 ```
 
 Both halves are automated: the round-trip, and the comparison against the
-fourteen committed reference streams. A fifteenth check builds an archive with
+fifteen committed reference streams. A fifteenth check builds an archive with
 two members in it and reads both back, because the one thing the per-image
 checks cannot see is a change that breaks the container rather than the codec —
 and one did. A run with a missing reference fails, and a stream
@@ -123,22 +123,21 @@ thinks so".
 
 ### 2.3 What the gate still does not reach
 
-7.3 % of the file — 975 unexecuted lines across the bodies:
+5.3 % of the file — 706 unexecuted lines across the bodies:
 
 | body | unexecuted |
 | --- | --- |
-| `alt_model_p1_decode` | 268 |
 | `sub_4118A0` | 103 |
 | `unmodel_plane_slow` | 78 |
 | `compress_image` | 71 |
 | `expand_image` | 69 |
 | `unpredict_med` | 48 |
 
-The first sits in the alternate model families `ALGORITHM.md` §9 flags as
-unread. The rest are format and descriptor combinations fourteen images still
-do not reach.
+These are format and descriptor combinations fifteen images still do not reach.
+`alt_model_p1_decode` used to head this table with 268 lines and is not on it
+at all now; what happened when it finally ran is §6's first entry.
 
-Four of those fourteen are recent, and each was written to reach something
+Five of those fifteen are recent, and each was written to reach something
 specific rather than to add another photograph:
 
 | image | what it reaches | coverage |
@@ -147,6 +146,7 @@ specific rather than to add another photograph:
 | `rle8.bmp` | the run-length reader's encoded and absolute runs | |
 | `rle4.bmp` | its nibble path and the delta escape | 92.05 % → 92.45 % |
 | `noise24.bmp` | the store-it-raw fallback for data that does not compress | 92.45 % → 92.65 % |
+| `altp1.bmp` | `alt_model_p1_decode`, 268 lines, **and a bug in them** | 92.65 % → 94.71 % |
 
 `read_bmp` went from 101 unexecuted lines to 48 and off this table. The
 generators are `tools/mkmed32.py`, `tools/mkrle.py` and `tools/mknoise.py`, so
@@ -184,25 +184,25 @@ writes one — four identical channels carrying `x*x/256 + y` — and 79 of thos
 images across 4-, 24- and 32-bit, identical and independent channels, smooth,
 noisy and structured. **None of them produced predictor 1 with the alternate
 model at a depth other than 8**, which is the combination `alt_model_p1_decode`
-needs. That is a measurement, not a proof of impossibility — it is measured
-across 35 images now, and it is the reason that body is still untested.
+needs. That was a measurement, not a proof of impossibility, and it is worth reading
+what happened next as a caution about the difference. **The very next thing
+measured contradicted it.** The dispatch counts showed `alt_model_p1_encode`
+running twice during the corpus run — the encoder does construct that
+combination while searching, it just never wins — so the combination was
+reachable all along and the 35 images had simply missed a region of the input
+space: three identical channels carrying one function and a *fourth* carrying a
+different one. Seven of the next 31 generated images hit it.
 
-Two routes remain if it matters. Establish that the combination cannot occur,
-by reading how `choose_plane_coding` sets the descriptor's predictor and
-alternate-model bits — in which case 268 lines are dead and go the way of the
-fast path (§2.1). Or force it: the bits reach the encoder through the plane
-descriptor, which `choose_plane_coding` writes as a block, so a build that
-overrides them there would produce a stream to decode. That stream would be a
-decode-only fixture — no unmodified encoder makes it — which is worth having
-for 268 lines of decoder, and worth labelling as what it is.
+The first one decoded to a segfault. §6.
 
 Neither is dead — nothing has shown any entry condition to be impossible — so
 these are refactored last and with more care than the rest, or their entry
 conditions are established first and the corpus grown to reach them.
 
-Fourteen images is a signal, not a proof. Add images when a phase touches
-something the corpus does not exercise — `med32.bmp` and the two RLE images are what
-that looks like when it is done deliberately.
+Fifteen images is a signal, not a proof. Add images when a phase touches
+something the corpus does not exercise — `med32.bmp`, the two RLE images and
+`altp1.bmp` are what that looks like when it is done deliberately — and the
+last of them found a bug.
 
 ## 3. What "done" looks like
 
@@ -374,12 +374,19 @@ speculative. `tools/rename.py` is scope-aware and refuses rather than guesses.
 
 ### Phase 2 — done
 
-All 24 frames gone. **The plan said "expect 3–6 to resist" and 16 did.** Those
+All 24 frames gone. **The plan said "expect 3–6 to resist" and 17 did.** Those
 frames have bytes no alias names — `choose_plane_coding` names 29 220 of 41 456 — and the
 code reaches that slack by running off the end of the alias next door. They keep
 their layout as a struct with explicit padding and lose only the casts, each
 carrying `static_assert(sizeof(__frame) == N)` so a layout that moves is a
 compile error rather than something the corpus has to notice.
+
+**16, then.** The seventeenth was `alt_model_p1_decode`, and it took the plain
+split because the gate said it was fine — and the gate said so because nothing
+in the corpus ran that function. It was broken from this commit until the day an
+image reached it; §6 has the details. The number to take from this phase is not
+16 or 17, it is that *the gate's verdict on a body it never executes is not a
+verdict*.
 
 ### Phase 3 — 86 globals out, 78 left, and a map of why
 
@@ -556,6 +563,26 @@ gate cannot tell from a layout change.
   replacing look the same. `test.sh` now builds a two-member archive and reads
   both back; reinstating `"w+b"` fails it with *SECOND MEMBER REPLACED THE
   FIRST*.
+- **A body no test reaches is a body no gate protects, and one of them was
+  broken for the whole project.** `alt_model_p1_decode` — 268 lines, the
+  largest thing the corpus never touched — segfaulted the first time an image
+  reached it. Bisected to Phase 2: its `__hexrays_frame` was 116 bytes and its
+  aliases only named the first 84, and the plain split gave each local its own
+  storage, so the code's writes into the trailing 32 bytes landed on unrelated
+  stack. At `-O2` that is a null pointer handed to `sub_4248D0`; at `-O0` it is
+  a plane that decodes to the wrong pixels. §Phase 2 says 16 of 24 frames could
+  not take the plain split; this was the seventeenth, and the only reason it
+  looked like one of the eight is that nothing ran it.
+
+  It has the layout-preserving struct the other sixteen have, `testfiles/altp1.bmp`
+  reaches it, and the reference stream is byte-identical to the one the
+  *original decompilation* produces — so the encoder was right the whole time
+  and only the decoder was broken. Reinstating the split fails the gate with
+  *altp1: DECOMPRESS FAILED (rc=139)*.
+
+  The lesson is not "write more tests". It is that **the gate's coverage is
+  part of the gate**, and 10 % of a file that nothing exercises is 10 % where
+  every phase was running unchecked.
 - **`read_bmp` validates less than it looks like it does.** It checks the `BM`
   signature, that the DIB header is 40 bytes and that the plane count is 1, and
   then trusts the rest. A **top-down BMP — a negative height, which is legal and
@@ -678,7 +705,7 @@ for f in testfiles/*.bmp; do
   rm -f o.bmf o.bmp                       # bmf appends to its output
   ./bmfcov c "$f" o.bmf && ./bmfcov d o.bmf o.bmp
 done
-gcov -n    -o . bmfcov-bmf.gcno                       # 92.65 % of 13398 lines
+gcov -n    -o . bmfcov-bmf.gcno                       # 94.71 % of 13419 lines
 gcov -f -n -o . bmfcov-bmf.gcno                       # per function
 ```
 
