@@ -370,7 +370,7 @@ frames have bytes no alias names — `choose_plane_coding` names 29 220 of 41 45
 code reaches that slack by running off the end of the alias next door. They keep
 their layout as a struct with explicit padding and lose only the casts, each
 carrying `static_assert(sizeof(__frame) == N)` so a layout that moves is a
-compile error rather than something ten images have to notice.
+compile error rather than something the corpus has to notice.
 
 ### Phase 3 — 86 globals out, 78 left, and a map of why
 
@@ -445,7 +445,7 @@ moves, the variable-offset walks keep indexing what they indexed, and each
 generated struct carries a `static_assert` on its size that says so and fails
 loudly if it ever stops being true.
 
-73 structs, gated one at a time — build, encode and decode ten images, compare
+73 structs, gated one at a time — build, encode and decode every image, compare
 every stream against its committed reference, revert the ones that change
 anything. **523 raw-offset dereferences left, from 1646, and 2728 accesses now
 name a field.** 30 objects are on the skip list; the reasons are
