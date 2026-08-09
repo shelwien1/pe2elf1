@@ -396,7 +396,7 @@ question the compiler answers.
 
 Two model functions still hold a coding step that is more than one call:
 `encode_symbol_list` encodes a symbol against a sorted frequency list (§7.3) and
-`decode_three_way` decodes one from a 3-way counter node. Both now do their search
+`alt_p2_decode_symbol` decodes one from a 3-way counter node. Both now do their search
 and then call `rc`.
 
 ## 6. The modelling front end
@@ -681,7 +681,7 @@ if (counter > 0x2000) {            /* rescale before it saturates */
 counter += (__n8_0 * ((plane_predictor == 2) + 5)) >> 3;   /* adaptive increment */
 ```
 
-**Three-way node — `decode_three_way`,** the decoder for a node holding three
+**Three-way node — `alt_p2_decode_symbol`,** the decoder for a node holding three
 frequencies (`node[1]`, `node[2]`, `node[3]`) plus its own increment in
 `node[0]`. After decoding it does
 
@@ -782,19 +782,41 @@ Stated plainly, so the rest can be trusted:
 * **The alternate model families.** When descriptor `+2` bit 2 is set,
   `model_plane` hands the plane to one of the four alternate families instead
   (the table is in §7.2). I established only which one is picked, not what they
-  do; `sub_41CAB0` (1969 lines here) sits under two of them.
+  do; `alt_p2_model` (1969 lines here) sits under two of them.
 
   **The gap has a boundary, at least.** 22 bodies are reachable *only* from
-  this dispatch and from nothing else — `sub_41CAB0`, `sub_41A130`,
-  `sub_4259F0`, `sub_4256F0`, `sub_4229E0` and the rest, plus
-  `update_binary_pair` and `decode_three_way`, which the slow path does not
+  this dispatch and from nothing else — `alt_p2_model`, `alt_p2_context`,
+  `alt_p1_model`, `alt_p1_alloc`, `alt_p2_alloc` and the rest, plus
+  `update_binary_pair` and `alt_p2_decode_symbol`, which the slow path does not
   use. That is the subsystem, and it is a closed one: anything outside it is
   described elsewhere in this document.
 
-  One thing has already come out of knowing that. `sub_4118A0` had a
+  One thing has already come out of knowing that. `alt_init_tables` had a
   predictor-mode-0 branch, and because the dispatch reaches this subsystem only
   under predictor 1 or 2, no path could enter it; 111 lines went (REFACTORING.md
   §2.3). It is the only such guard in the 22.
+
+  **Three things about the p2 family's memory are settled, from its own code
+  rather than from reading the model.** They are not the model, but anyone who
+  reads it will need them:
+
+  * **The record is 18 bytes**, and thirty-two places copy one. MSVC unrolled
+    each into four dwords and a word, which is what made them recognisable:
+    `*(uint32_t *)(d - 18) = *(uint32_t *)s` through `*(uint16_t *)(d - 2) =
+    *(uint16_t *)(s + 16)`. They are `bmf_copy` calls now (REFACTORING.md
+    §Phase 4).
+  * **Rows are 144 bytes apart.** `alt_model_p2_decode` rotates five row
+    pointers and advances three of them by exactly 144: `f278744 = v84 + 144`,
+    `f278748 = v83 + 144`, `f278752 = v81 + 144`. Eight rows of 18 bytes.
+  * **The copies never overlap**, which is why they can be `memcpy`. Checked at
+    run time rather than argued: `BMF_COPY_CHECK=1 ./build.sh` aborts if any
+    pair of regions touches, and the gate passes against it with all
+    thirty-two sites executing.
+
+  What none of that says is what an 18-byte record *holds*, which is the
+  question. The five fields are four `uint32_t` and a `uint16_t`, and
+  `alt_p2_context` computes the values that go into them — that is where a
+  reading would start.
 
   **This is the largest gap in the document, and larger than it used to look.**
   A coverage run over `testfiles/` puts 8 of 15 decoded planes through these
@@ -809,9 +831,9 @@ Stated plainly, so the rest can be trusted:
   `if (plane_predictor == 1)` is reached 7 times out of 11 and the call inside
   it never.
 
-  An earlier draft of §6.6 listed `sub_41A130`, `sub_41C4B0` and `sub_41CAB0`
+  An earlier draft of §6.6 listed `alt_p2_context`, `alt_p2_filter` and `alt_p2_model`
   as cost functions alongside the two above. They are not: none of them calls
-  `estimate_cost`, and `sub_41CAB0` calls `update_binary_pair`, which makes it
+  `estimate_cost`, and `alt_p2_model` calls `update_binary_pair`, which makes it
   a model rather than a measurement. They are floating-point and they are in
   the alternate model families, which is as much as is established.
   (`sub_40A8A0` was in that list too and no longer exists — it went with the
