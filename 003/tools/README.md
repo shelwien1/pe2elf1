@@ -224,3 +224,35 @@ trailing comment, which a pattern anchored at the end of the line cannot see
 past, and the tool assumed a frame's declarations sit together when later
 phases had moved some apart. Two properties of the tool, mistaken for
 properties of the code.
+
+## `deadcheck.py` — report code nothing can reach
+
+```
+python3 tools/deadcheck.py subs1.hpp
+```
+
+Four kinds of unreachable code have been found in this file, each after the
+previous one had been declared the last:
+
+- a label with no `goto` left (`LABEL_47`, orphaned by a deletion);
+- an always-true test as a statement (`if ( 1 ) goto LABEL_52`, left by the
+  mode-folding pass, with everything up to the label dead behind it);
+- a test on a global the dispatch pins, in **either** spelling —
+  `if ( !plane_predictor )` and `if ( plane_predictor ) … else`. The first
+  search wrote only the first spelling and missed a 22-line else;
+- a body nothing calls.
+
+Two of those were found by checks written *after* the case they would have
+caught, which is the wrong order. This is the check standing on its own: run
+against the tree as it was before any of the four were removed it reports all
+four, and against the tree now it reports none.
+
+What it cannot derive it is told, and says so: that the alternate model
+subsystem is entered only under predictor 1 or 2, and that `unpredict_med`'s
+two call sites both guard on predictor 1. Each fact is checked where it is
+used, and the closed set of bodies it applies to is computed rather than
+listed.
+
+One thing it learned the hard way: it reads code with comments stripped. A
+comment describing deleted code quotes it, so the first run found the very
+thing it was written to find, in the note saying that thing was gone.
