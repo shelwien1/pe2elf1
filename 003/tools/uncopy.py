@@ -33,6 +33,17 @@ overlap, and the gate is run against it.
 import re
 import sys
 
+# A store whose source is a struct member.  The sweep gave three of these rows a
+# struct each -- Obj53, Obj54, Obj55 -- so half of some copies now reads `->f36`
+# where the other half still reads `+ 36`, and a rule that wanted raw offsets on
+# both sides walked past five of them.  The member's `fN` *is* its offset, so
+# both spellings mean the same thing and both are accepted.
+MEMBER = re.compile(
+    r'^(?P<ind>\s*)\*\((?P<dt>uint(?:8|16|32|64)_t) \*\)'
+    r'\((?P<d>[A-Za-z_][A-Za-z0-9_]*)(?: (?P<dop>[-+]) (?P<dk>\d+))?\)'
+    r'\s*=\s*'
+    r'(?P<s>[A-Za-z_][A-Za-z0-9_]*)->f(?P<sk>\d+);\s*$')
+
 STORE = re.compile(
     r'^(?P<ind>\s*)\*\((?P<dt>uint(?:8|16|32|64)_t) \*\)'
     r'\((?P<d>[A-Za-z_][A-Za-z0-9_]*)(?: (?P<dop>[-+]) (?P<dk>\d+))?\)'
@@ -48,13 +59,24 @@ WIDTH = {'uint8_t': 1, 'uint16_t': 2, 'uint32_t': 4, 'uint64_t': 8}
 
 
 def store(line):
-    m = STORE.match(line) or BARE.match(line)
+    m = STORE.match(line) or BARE.match(line) or MEMBER.match(line)
     if not m:
         return None
     g = m.groupdict()
+    # `v80->f36` and `v80 + 36` are the same address and not the same
+    # expression: v80 is an `Obj53 *`, so `v80 + 36` steps ninety bytes at a
+    # time.  The first fold of these emitted exactly that -- and the flag saying
+    # not to was computed *after* the line below had filled the field it tested,
+    # so it was always false and the mistake shipped twice before the gate had
+    # said it once.  A member source is emitted as `&v80->f36`, which cannot be
+    # got wrong.
+    member = 'st' not in g
+    if member:                            # its width is the store's, and the
+        g['st'] = g['dt']                 # member's `fN` is its offset
     d = int(g['dk'] or 0) * (-1 if g.get('dop') == '-' else 1)
     s = int(g.get('sk') or 0) * (-1 if g.get('sop') == '-' else 1)
-    return (g['ind'], g['d'], d, WIDTH[g['dt']], g['s'], s, WIDTH[g['st']])
+    return (g['ind'], g['d'], d, WIDTH[g['dt']], g['s'], s, WIDTH[g['dt']],
+            member)
 
 
 def run_at(lines, i):
@@ -62,7 +84,7 @@ def run_at(lines, i):
     first = store(lines[i])
     if not first:
         return None
-    ind, dnm, d0, dw, snm, s0, sw = first
+    ind, dnm, d0, dw, snm, s0, sw, mem = first
     if dw != sw:
         return None
     j, at_d, at_s = i, d0, s0
@@ -70,16 +92,19 @@ def run_at(lines, i):
         cur = store(lines[j])
         if not cur:
             break
-        _, dn, d, w, sn, s, w2 = cur
-        if dn != dnm or sn != snm or w != w2 or d != at_d or s != at_s:
+        _, dn, d, w, sn, s, w2, m2 = cur
+        if (dn != dnm or sn != snm or w != w2 or d != at_d or s != at_s
+                or m2 != mem):
             break
         at_d, at_s = d + w, s + w
         j += 1
     n = at_d - d0
-    return (i, j, ind, dnm, d0, snm, s0, n) if j - i >= 3 else None
+    return (i, j, ind, dnm, d0, snm, s0, n, mem) if j - i >= 3 else None
 
 
-def expr(nm, off):
+def expr(nm, off, member=False):
+    if member:
+        return '&%s->f%d' % (nm, off)
     if off == 0:
         return nm
     return '%s %s %d' % (nm, '-' if off < 0 else '+', abs(off))
@@ -100,16 +125,16 @@ def main():
         print('no unrolled copies')
         return 0
     if '--list' in sys.argv:
-        for i, j, ind, d, dk, s, sk, n in runs:
+        for i, j, ind, d, dk, s, sk, n, mem in runs:
             print('%s:%d: %d stores, %d bytes, %s <- %s'
-                  % (path, i + 1, j - i, n, expr(d, dk), expr(s, sk)))
+                  % (path, i + 1, j - i, n, expr(d, dk), expr(s, sk, mem)))
         print('%d runs, %d lines -> %d calls'
               % (len(runs), sum(j - i for i, j, *_ in runs), len(runs)))
         return 0
 
-    for i, j, ind, d, dk, s, sk, n in reversed(runs):
+    for i, j, ind, d, dk, s, sk, n, mem in reversed(runs):
         lines[i:j] = ['%sbmf_copy((void *)(%s), (const void *)(%s), %d);'
-                      % (ind, expr(d, dk), expr(s, sk), n)]
+                      % (ind, expr(d, dk), expr(s, sk, mem), n)]
     open(path, 'w').write('\n'.join(lines))
     print('%d runs folded, %d lines -> %d calls'
           % (len(runs), sum(j - i for i, j, *_ in runs), len(runs)))
