@@ -20,9 +20,9 @@ manufactured.  `*(uint32_t *)((char *)p + N)` matched two of the three patterns.
 | frame aliases | 602 | **336** |
 | runs walked as arrays | 24 sites, 12 bases | **0, 0** |
 | frames pinned | 21 | **0** |
-| structs | 93 | **89** |
-| — still `ObjN` | 88 | **82** |
-| `fNN` members / named | 280 / 35 | **246 / 51** |
+| structs | 93 | **88** |
+| — still `ObjN` | 88 | **81** |
+| `fNN` members / named | 280 / 35 | **241 / 57** |
 
 **Phase B is done.**  All 60 globals left `bmf_bss` and the array is gone with
 them.  Two could not separate from each other and now say so in an 8736-byte
@@ -35,14 +35,24 @@ over: they hold workspace arrays that the code walks past the end of, and that
 adjacency is the program's rather than Hex-Rays'.  Round one's `reframe.py` put
 those frames back for the same reason.
 
-**Phase A has items 1, 2 and 3 done.**  `Obj11` absorbed `Obj8`, `Obj19`,
-`Obj31` and `Obj69`; `ModelBlock` absorbed `Obj10`; `alt_p2_alloc` takes the
-object it allocates instead of `char *`.  Item 4 -- the p1 side -- is blocked
-where the plan said it would be, on two fields that two recoveries type
-differently (`+8` and `+20`, `uint8_t *` against `int32_t`, twenty use sites)
-and one name collision.  §6 says the merge is the moment to resolve those by
-reading, and picking is what moved three streams in round two.  Item 5, the
-`fNN` names, is open by construction: 246 left, 51 named.
+**Phase A has items 1 to 4 done and item 5 open by construction.**  `Obj11`
+absorbed `Obj8`, `Obj19`, `Obj31` and `Obj69`; `ModelBlock` absorbed `Obj10`;
+`alt_p2_alloc` takes the object it allocates instead of `char *`; and `Obj0`
+absorbed `Obj25` after the conflict that blocked it was read rather than
+picked -- `Obj25`'s four "row cursors" are counters, and all 36 of their use
+sites cast the pointer away.
+
+Two of the p1 views are left, `Obj1` and `Obj4`, and they are array-shaped over
+the span `Obj0` already covers with `f12[51]`.  Merging them needs `merge.py`'s
+renderer taught to lay out two overlapping arrays; the *conflict* the plan
+named is gone.
+
+Item 5 is the open-ended one -- 241 `fNN` members against 57 named.  What this
+round named is what it evidenced: `PlaneDesc::predictor`, `src_plane` and
+`flags` (a plane number fed back as a record index, and a byte read as `& 3`,
+`& 4` and `& 8`), `ModelBlock::sym_pos` (the 0..31 index `pixel_context` reads
+`sym[]` with), `LevelGeom::first`/`half`/`tbl_base`, `deadzone_hi`/`lo`,
+`ctx_bias[4]`.
 
 ### What the plan got wrong
 
