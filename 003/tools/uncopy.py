@@ -134,10 +134,10 @@ def expr(nm, off, member=False):
 # The block is only folded when every statement in it is one of these four
 # kinds, so there is nothing between the first load and the last store that
 # could observe the difference.
-ADDR = r'\(\s*(?:\(uintptr_t\)\s*)?(\w+)(?:\s*([-+])\s*(\d+))?\s*\)'
+ADDR = r'\(\s*(?:\(\s*\w+\s*\**\s*\)\s*)?(\w+)(?:\s*([-+])\s*(\d+))?\s*\)'
 LOAD = re.compile(r'^\s*(\w+) = \*\((uint(?:8|16|32|64)_t) \*\)%s;\s*$' % ADDR)
 LOW = re.compile(r'^\s*LOWORD\((\w+)\) = \*\(uint16_t \*\)%s;\s*$' % ADDR)
-STM = re.compile(r'^\s*(\w+)->f(\d+) = (\w+);\s*$')
+STM = re.compile(r'^\s*(\w+)->f(\d+) = (?:\(\s*\w+\s*\)\s*)?(\w+);\s*$')
 SLD = re.compile(r'^\s*(\w+)->f(\d+) = \*\((uint(?:8|16|32|64)_t) \*\)%s;\s*$' % ADDR)
 
 
@@ -180,6 +180,14 @@ def sched_at(lines, i):
         break
     if len(pairs) < 4 or not dnm or not snm:
         return None
+    # A temporary loaded inside the block and stored after it must not be
+    # folded away with the block.  `v57->f16 = (uint16_t)v53;` sat one line past
+    # the end because of its cast, and the fold deleted the load of v53 while
+    # leaving the store -- three streams changed, which is what the reference
+    # comparison is for.  Every load has to be consumed here.
+    for v, (off, w) in held.items():
+        if not any(s == off and ww == w for _, s, ww in pairs):
+            return None
     pairs.sort()
     deltas = {d - s for d, s, _ in pairs}
     if len(deltas) != 1:
