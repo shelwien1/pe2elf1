@@ -19,3 +19,12 @@ __colour_transform:Blockb __interleave_plane:p_i __model_planes:Blockb __search_
 __sub_4118A0:near_lossless_max
 __sub_4248D0:v3
 __sub_413230:n251 __sub_413230:n251_1
+__sub_41A130:v268 __sub_41A130:v7
+__sub_41A130:v143 __sub_41A130:v158 __sub_41A130:v187 __sub_41A130:v205 __sub_41A130:v295
+__write_bmp:Bufferc __write_bmp:Bufferc_1 __write_bmp:Bufferc_2 __write_bmp:Bufferc_3
+__alt_model_p1_encode:Block __alt_model_p1_encode:v50 __sub_4248D0:a2
+__code_pixel:n2 __code_pixel:n2_1 __code_pixel:n2_10 __code_pixel:n2_15 __code_pixel:n2_16 __code_pixel:n2_3 __code_pixel:n2_5 __code_pixel:n2_7 __code_pixel:n2_9
+__sub_4118A0:a2 __sub_4118A0:v10 __sub_4118A0:v14
+__search_filter:packer_word
+__encode_context_bit:a2
+__decode_context_bit:a2
