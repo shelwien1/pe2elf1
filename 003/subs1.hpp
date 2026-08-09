@@ -15372,7 +15372,7 @@ void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m128 &a3__r
                                                        + (*(int16_t *)(lpAddress->f278736[0] + 4) < 0);
       v11 = (char *)(lpAddress->f278736[0] + 18);
       v17 = v95 + 1 < i;
-      lpAddress->f278736[0] = v11;
+      lpAddress->f278736[0] = (uint8_t *)v11;
       ++v95;
       if ( !v17 )
         break;
@@ -15462,18 +15462,18 @@ void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m128 &a3__r
     v47 = 0;
     do
     {
-      v48 = lpAddress->f278668;
+      v48 = (int32_t *)lpAddress->f278668;
       v49 = *(uint32_t *)(v48 - 4);
       v97 = a5;
       *(uint32_t *)(v48 + 4) = v49;
       *(uint32_t *)lpAddress->f278668 = v49;
       v50 = lpAddress->f278660;
-      v51 = lpAddress->f278664;
+      v51 = (int32_t *)lpAddress->f278664;
       lpAddress->f278660 = (int32_t *)v51;
       lpAddress->f278664 = (uint8_t *)v50;
       v51 += 8;
       v50 += 2;
-      lpAddress->f278668 = v51;
+      lpAddress->f278668 = (uint8_t *)v51;
       lpAddress->f278672 = (uint8_t *)v50;
       v52 = *v50;
       *(uint32_t *)(v51 - 4) = *v50;
@@ -16262,7 +16262,7 @@ void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, const __m1
         v104);
       ++v103;
       LOWORD(v16) = 16 * (uint8_t)*a7;
-      *(uint16_t *)lpAddress->f278528[13].m128_i32[0] = v16;
+      *(uint16_t *)lpAddress->f278528[13].m128_p[0] = v16;
       *(uint16_t *)(lpAddress->f278528[13].m128_i32[0] + 2) = v16;
       ++a7;
       v18 = (uint16_t *)lpAddress->f278528[13].m128_i32[0];
@@ -16278,7 +16278,7 @@ void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, const __m1
       *(uint8_t *)(lpAddress->f278528[13].m128_i32[0] + 16) = (*(int16_t *)(lpAddress->f278528[13].m128_i32[0] + 4) <= 0)
                                                     + (*(int16_t *)(lpAddress->f278528[13].m128_i32[0] + 4) < 0);
       v11 = (char *)(lpAddress->f278528[13].m128_i32[0] + 18);
-      lpAddress->f278528[13].m128_i32[0] = v11;
+      lpAddress->f278528[13].m128_p[0] = v11;
     }
     v8 = v103;
   }
@@ -16361,7 +16361,7 @@ void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, const __m1
   memcpy((char *)lpAddress->f278528[15].m128_i32[0],(char *)lpAddress->f278528[14].m128_i32[1],Size);
   if ( a6 > 1 )
   {
-    v106 = &lpAddress->f278528[11].m128_i8[4];
+    v106 = (int8_t *)&lpAddress->f278528[11].m128_i8[4];
     v105 = a7;
     v50 = 0;
     v102 = 0;
@@ -16402,24 +16402,22 @@ void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, const __m1
       v61 = lpAddress->f278528[13].m128_p[0];
       v62 = *(uint32_t *)(v61 - 32);
       v63 = *(uint32_t *)(v61 - 28);
-      LOWORD(v53) = *(uint16_t *)(v61 - 20);
       *(uint32_t *)(v61 + 18) = *(uint32_t *)(v61 - 36);
       v64 = *(uint32_t *)(v61 - 24);
       *(uint32_t *)(v61 + 22) = v62;
       *(uint32_t *)(v61 + 26) = v63;
       *(uint32_t *)(v61 + 30) = v64;
-      *(uint16_t *)(v61 + 34) = (uint16_t)v53;
+      *(uint16_t *)(v61 + 34) = *(uint16_t *)(v61 - 20);
       v65 = (char *)(lpAddress->f278528[13].m128_i32[0]);
       bmf_copy((void *)((char *)v65 + 36), (const void *)((uintptr_t)v65 - 54), 18);
       v69 = lpAddress->f278528[13].m128_p[0];
       v70 = *(uint32_t *)(v69 - 64);
       v71 = *(uint32_t *)(v69 - 60);
-      LOWORD(v53) = *(uint16_t *)(v69 - 56);
       *(uint32_t *)(v69 + 54) = *(uint32_t *)(v69 - 72);
       *(uint32_t *)(v69 + 58) = *(uint32_t *)(v69 - 68);
       *(uint32_t *)(v69 + 62) = v70;
       *(uint32_t *)(v69 + 66) = v71;
-      *(uint16_t *)(v69 + 70) = (uint16_t)v53;
+      *(uint16_t *)(v69 + 70) = *(uint16_t *)(v69 - 56);
       v72 = (char *)(lpAddress->f278528[13].m128_i32[0]);
       bmf_copy((void *)((char *)v72 + 72), (const void *)((uintptr_t)v72 - 90), 18);
       v75 = lpAddress->f278528[15].m128_i32[0];
@@ -16431,11 +16429,11 @@ void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, const __m1
       lpAddress->f278528[15].m128_i32[0] = v77;
       lpAddress->f278528[14].m128_i32[3] = v78;
       lpAddress->f278528[14].m128_i32[1] = v76;
-      lpAddress->f278528[14].m128_i32[2] = v79;
+      lpAddress->f278528[14].m128_p[2] = v79;
       v76 += 144;
       lpAddress->f278528[13].m128_i32[0] = v76;
       v79 += 144;
-      lpAddress->f278528[13].m128_i32[1] = v79;
+      lpAddress->f278528[13].m128_p[1] = v79;
       lpAddress->f278528[13].m128_i32[2] = v78 + 144;
       lpAddress->f278528[13].m128_i32[3] = v77 + 144;
       lpAddress->f278528[14].m128_i32[0] = v75 + 144;
@@ -19178,7 +19176,7 @@ LABEL_11:
   return v5;
 }
 
-static inline char * __fwd_compress_image_expand_image(int32_t a0, const __m128 &a1, const __m128 &a2, int32_t a3, void *a4) { return __expand_image(a0, a1, a2, a3, (int32_t *)a4); }
+static inline char * __fwd_compress_image_expand_image(char *a0, const __m128 &a1, const __m128 &a2, int32_t a3, void *a4) { return __expand_image(a0, a1, a2, a3, (int32_t *)a4); }
 static inline uint32_t __fwd_compress_image_search_filter(void *a0, char a1, const __m128 &a2, const __m128 &a3) { return __search_filter((BmfImage *)a0, a1, a2, a3); }
 static inline void __fwd_compress_image_model_planes(void *a0, void *a1, int32_t a2, char a3, const __m128 &a4, const __m128 &a5) { __model_planes((char *)a0, (char *)a1, a2, a3, a4, a5); }
 static inline void __fwd_compress_image_transform_planes(void *a0, int32_t a1, char a2, const __m128 &a3, const __m128 &a4) { __transform_planes((BmfImage *)a0, a1, a2, a3, a4); }
@@ -19205,6 +19203,7 @@ int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref,
   int32_t &ElementCounta = *(int32_t *)((char *)__frame.slot16);
   uint32_t &ElementCountb = *(uint32_t *)((char *)__frame.slot16);
   uint32_t &Buffera = __frame.Buffera;
+  char *&Buffer_copy = (char *&)__frame.Buffera;   // the same slot, the other role
   int32_t &n4_2 = __frame.n4_2;
   char *&Buffera_1 = __frame.Buffera_1;
   int32_t &v64 = __frame.v64;
@@ -19479,13 +19478,13 @@ LABEL_57:
   free(::coded_buf);
   if ( (*((uint8_t *)p_i + 11) & 2) != 0 )
   {
-    Buffera = (char *)bmf_new(*((uint32_t *)p_i + 3));
+    Buffer_copy = (char *)bmf_new(*((uint32_t *)p_i + 3));
     v41 = p_i->height;
     n4_2 = ::plane_count;
-    Buffera_1 = Buffera;
+    Buffera_1 = Buffer_copy;
     v64 = ::plane_count * (v41 - 1);
     Buffer_2 = (uint16_t *)p_i + 8;
-    memcpy(Buffera,(char *)p_i + 16,*((uint32_t *)p_i + 3));
+    memcpy(Buffer_copy,(char *)p_i + 16,*((uint32_t *)p_i + 3));
     LOWORD(v43) = p_i->height;
     if ( (uint16_t)v43 )
     {
@@ -19524,7 +19523,7 @@ LABEL_57:
       ElementCount_1 = ElementCountb;
       v5 = v66;
     }
-    Buffera_4 = Buffera;
+    Buffera_4 = Buffer_copy;
     i_2 = p_i_1->width;
     v53 = v43 * n4_2;
     p_i_1->width = v43;
