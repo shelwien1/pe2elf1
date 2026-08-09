@@ -5310,21 +5310,6 @@ static_assert(sizeof(void *) != 4
               "Obj70: the layout moved");
 
 
-// Obj71 -- recovered from 16 dereferences over 3 offsets, under 2
-// names.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj71 {
-  uint32_t f0;
-  uint8_t _pad1[6];
-  char f10;
-  char f11;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj71, f11) == 11,
-              "Obj71: the layout moved");
-
 
 // Obj72 -- recovered from 11 dereferences over 10 offsets, under 1
 // name.  The layout is the one the code already assumed: at 32 bits a
@@ -22574,7 +22559,7 @@ BMF_SSE char * __expand_image(char *a1, const __m128 &a2__ref, const __m128 &a3_
   int32_t &n4_1 = __frame.n4_1;
   void *&Src = __frame.Src;
   int32_t &v86 = __frame.v86;
-  Obj71 *&p_i_2 = (Obj71 *&)__frame.p_i_2;
+  BmfImage *&p_i_2 = (BmfImage *&)__frame.p_i_2;
   int32_t &v88 = __frame.v88;
   uint32_t &ElementCount_3 = __frame.ElementCount_3;
   uint16_t (&Buffer_2)[5] = __frame.Buffer_2;
@@ -22589,7 +22574,7 @@ BMF_SSE char * __expand_image(char *a1, const __m128 &a2__ref, const __m128 &a3_
   __m128 a2 = a2__ref;
   __m128 a3 = a3__ref;
   FILE *Stream_1, *Stream_v;
-  Obj71 *p_i_1;
+  BmfImage *p_i_1;
   char v10, v17, v18, v20, v34, v35, *Buffer_3, *n4_6, *n4_7, *v64;
   int32_t Buffer__1, dwLowDateTime, v21, n4, v24, __expand_image_n2, v27, v28,
           v29, v30, ArgList, v33, n4_4, v37, n2_1, i, Size_4, Size_5, n4_3,
@@ -22665,9 +22650,9 @@ LABEL_15:
     fseek(((BmfArc *)v5)->fp, ElementCount_3 + ElementCount, 1);
     return nullptr;
   }
-  p_i_1 = (Obj71 *)((char *)__alloc_image(Buffer_2[0], Buffer_2[1], v91 & 0x3F, (uint8_t)(v91 & 0x80) >> 7, 1));
+  p_i_1 = (BmfImage *)((char *)__alloc_image(Buffer_2[0], Buffer_2[1], v91 & 0x3F, (uint8_t)(v91 & 0x80) >> 7, 1));
   v88 = v91;
-  p_i_1->f10 = v91;
+  p_i_1->depth = v91;
   if ( p_dwLowDateTime )
   {
     dwLowDateTime = *p_dwLowDateTime;
@@ -22680,7 +22665,7 @@ LABEL_15:
   }
   v17 = v92;
   v18 = v88;
-  p_i_1->f11 |= v92 & 2 | ((uint8_t)dwLowDateTime << 7);
+  p_i_1->flags |= v92 & 2 | ((uint8_t)dwLowDateTime << 7);
   ::plane_count = ((v18 & 0x3Fu) + 7) >> 3;
   if ( (v17 & 0x20) == 0 )
   {
@@ -22716,7 +22701,7 @@ LABEL_31:
     ((BmfArc *)v5)->fp = 0;
     return nullptr;
   }
-  v20 = p_i_1->f10;
+  v20 = p_i_1->depth;
   if ( (v20 & 0x3Fu) <= 4 || (v92 & 0x10) == 0 )
   {
     ::plane_predictor = 0;
@@ -22765,7 +22750,7 @@ LABEL_42:
   {
     LOBYTE(ElementCount_2) = 63;
     *(uint32_t *)p_i = 255;
-    p_i_2 = (Obj71 *)(p_i_1);
+    p_i_2 = p_i_1;
     v86 = v5;
     n4 = 0;
     do
@@ -22862,16 +22847,16 @@ LABEL_42:
       ++n4;
     }
     while ( n4 < ::plane_count );
-    p_i_1 = (Obj71 *)(p_i_2);
+    p_i_1 = p_i_2;
     v5 = v86;
   }
   Src_1 = (uint8_t *)bmf_new(*(uint16_t *)p_i_1 * *((uint16_t *)p_i_1 + 1));
   if ( (v92 & 8) != 0 )
   {
-    *(uint32_t *)p_i = p_i_1->f0;
+    *(uint32_t *)p_i = *(uint32_t *)&p_i_1->width;
     v81 = *((uint32_t *)p_i_1 + 1);
     n4_10 = *((uint32_t *)p_i_1 + 2);
-    Size = *((uint32_t *)p_i_1 + 3);
+    Size = p_i_1->data_size;
     BYTE2(n4_10) = 72;
     if ( ::plane_count > 0 )
     {
@@ -22950,7 +22935,7 @@ LABEL_104:
               v81 = v37;
               n4_10 = n4_4;
               Size_2 = Size;
-              p_i_2 = (Obj71 *)(p_i_1);
+              p_i_2 = p_i_1;
               Size_3 = 0;
               n4_2 = n4_1;
               v48 = 0;
@@ -22968,7 +22953,7 @@ LABEL_104:
               v81 = v37;
               n4_10 = n4_4;
               Size_4 = Size;
-              p_i_2 = (Obj71 *)(p_i_1);
+              p_i_2 = p_i_1;
               Size_5 = 0;
               n4_3 = n4_1;
               v44 = 0;
@@ -22983,7 +22968,7 @@ LABEL_104:
             n2_2 = *(uint32_t *)p_i;
             v37 = v81;
             n4_4 = n4_10;
-            p_i_1 = (Obj71 *)(p_i_2);
+            p_i_1 = p_i_2;
           }
           if ( n2_2 )
           {
@@ -23016,19 +23001,22 @@ LABEL_107:
 LABEL_109:
   if ( (v88 & 0x80) != 0 )
   {
-    Buffer_3 = p_i_1->f10 < 0 ? &((char *)p_i_1)[*((uint32_t *)p_i_1 + 3) + 16] : nullptr;
+    // `f10 < 0` was a signed char testing its own top bit -- the palette
+    // flag.  depth is unsigned, so the test has to name the bit; it read as
+    // always-false otherwise, which is what the gate caught.
+    Buffer_3 = (p_i_1->depth & 0x80) ? &((char *)p_i_1)[p_i_1->data_size + 16] : nullptr;
     ElementCount_4 = fread(Buffer_3, 1u, ElementCount_3, ((BmfArc *)v5)->fp);
     if ( ElementCount_4 != ElementCount_3 )
       goto LABEL_107;
   }
-  if ( (p_i_1->f11 & 2) != 0 )
+  if ( (p_i_1->flags & 2) != 0 )
   {
-    n4_6 = (char *)bmf_new(*((uint32_t *)p_i_1 + 3));
+    n4_6 = (char *)bmf_new(p_i_1->data_size);
     __expand_image_n4_5 = ::plane_count;
     v55 = *((uint16_t *)p_i_1 + 1);
     n4_1 = (int32_t)n4_6;
     Src_2 = ::plane_count * (v55 - 1);
-    memcpy(n4_6,(char *)p_i_1 + 16,*((uint32_t *)p_i_1 + 3));
+    memcpy(n4_6,(char *)p_i_1 + 16,p_i_1->data_size);
     LOWORD(v58) = *((uint16_t *)p_i_1 + 1);
     if ( (uint16_t)v58 )
     {
@@ -23043,7 +23031,7 @@ LABEL_109:
         n4_1 = n4_8;
         v86 = v61;
         Src_3 = Src;
-        p_i_2 = (Obj71 *)(p_i_1);
+        p_i_2 = p_i_1;
         v64 = &((char *)p_i_1)[n4_8 + 16];
         do
         {
@@ -23058,7 +23046,7 @@ LABEL_109:
           --i_1;
         }
         while ( i_1 );
-        p_i_1 = (Obj71 *)(p_i_2);
+        p_i_1 = p_i_2;
         v58 = *((uint16_t *)p_i_2 + 1);
         n4_8 = __expand_image_n4_5 + n4_1;
         v61 = v86 + 1;
@@ -23067,8 +23055,8 @@ LABEL_109:
       n4_6 = Blocka;
     }
     i_2 = *(uint16_t *)p_i_1;
-    *(uint16_t *)p_i_1 = (Obj71 *)(v58);
-    p_i_1->f11 ^= 2u;
+    *(uint16_t *)p_i_1 = v58;
+    p_i_1->flags ^= 2u;
     *((uint16_t *)p_i_1 + 1) = i_2;
     *((uint16_t *)p_i_1 + 2) = v58 * __expand_image_n4_5;
     free(n4_6);
