@@ -31,6 +31,17 @@ to `p[N/sizeof T]`, and delete the struct.
 Four or more members, one type, offsets in exact arithmetic progression.  A
 struct with two types in it is a record and is left alone; a packed run of one
 type is not spared, because `f0 f4 f8 f12` names nothing a subscript does not.
+
+There is a second shape this rule does not reach, and `Obj89` is the example:
+four `char` members at 0, 253, 254 and 255.  Not a progression -- they are the
+sentinels at the two ends of a 256-entry table, and everything between them is
+written `((char *)a2)[4 * i + 2]`, through a cast the struct made necessary.
+Ten such casts against four named offsets.  It was converted by hand rather than
+by widening the rule here, because "the members are one type and the pointer is
+also cast-and-subscripted" catches `Obj11` too -- 37 `__m128` members at
+scattered offsets in a large object, where subscripts would read `p[17421]` and
+the named offsets are the better spelling.  Which of those two a struct is, is
+a judgement about the object, and this file does not make judgements.
 """
 import re
 import sys

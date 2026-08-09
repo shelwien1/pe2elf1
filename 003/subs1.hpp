@@ -4978,22 +4978,6 @@ static_assert(sizeof(void *) != 4
 
 
 
-// Obj89 -- recovered from 6 dereferences over 4 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj89 {
-  char f0;
-  uint8_t _pad1[252];
-  char f253;
-  char f254;
-  char f255;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj89, f255) == 255,
-              "Obj89: the layout moved");
-
 
 // Obj90 -- recovered from 6 dereferences over 1 offsets, under 1
 // name.  The layout is the one the code already assumed: at 32 bits a
@@ -5905,7 +5889,7 @@ LABEL_24:
   return n15;
 }
 
-BMF_SSE uint32_t __alt_init_tables(uint8_t *a1, Obj89 *a2)
+BMF_SSE uint32_t __alt_init_tables(uint8_t *a1, char *a2)
 {
   ;
   char *v18, *v19, v48, v53;
@@ -5923,36 +5907,36 @@ BMF_SSE uint32_t __alt_init_tables(uint8_t *a1, Obj89 *a2)
   // 0, which a run over the corpus agrees with: 164 entries, 83 at 1 and 81
   // at 2.  Deleted on the same grounds as the fast path (REFACTORING.md
   // section 2.1) -- code no dispatch reaches is not a feature to keep.
-  a2->f0 = 0;
-  v18 = (char *)a2 + 2;
-  v19 = (char *)a2 + 1;
-  a2->f255 = 0x80;
-  if ( ((char *)a2 + 1 <= (char *)a2 + 2 || (uint32_t)(v19 - v18) < 0xFE) && (v18 <= v19 || (uint32_t)(v18 - v19) < 0xFE) )
+  a2[0] = 0;
+  v18 = a2 + 2;
+  v19 = a2 + 1;
+  a2[255] = 0x80;
+  if ( (a2 + 1 <= a2 + 2 || (uint32_t)(v19 - v18) < 0xFE) && (v18 <= v19 || (uint32_t)(v18 - v19) < 0xFE) )
   {
     for ( i = 0; i < 0x3F; ++i )
     {
-      ((char *)a2)[4 * i + 2] = 2 * i + 1;
-      ((char *)a2)[4 * i + 1] = -2 * i - 1;
-      ((char *)a2)[4 * i + 4] = 2 * i + 2;
-      ((char *)a2)[4 * i + 3] = -2 * i - 2;
+      a2[4 * i + 2] = 2 * i + 1;
+      a2[4 * i + 1] = -2 * i - 1;
+      a2[4 * i + 4] = 2 * i + 2;
+      a2[4 * i + 3] = -2 * i - 2;
     }
-    a2->f254 = 127;
-    a2->f253 = -127;
+    a2[254] = 127;
+    a2[253] = -127;
   }
   else
   {
     for ( j = 0; j < 0x3F; ++j )
     {
-      ((char *)a2)[4 * j + 2] = 2 * j + 1;
-      ((char *)a2)[4 * j + 4] = 2 * j + 2;
+      a2[4 * j + 2] = 2 * j + 1;
+      a2[4 * j + 4] = 2 * j + 2;
     }
-    a2->f254 = 127;
+    a2[254] = 127;
     for ( k = 0; k < 0x3F; ++k )
     {
-      ((char *)a2)[4 * k + 1] = -2 * k - 1;
-      ((char *)a2)[4 * k + 3] = -2 * k - 2;
+      a2[4 * k + 1] = -2 * k - 1;
+      a2[4 * k + 3] = -2 * k - 2;
     }
-    a2->f253 = -127;
+    a2[253] = -127;
   }
   // never taken: -E is 0
   // The test here was `if ( plane_predictor )`, with an else for predictor
@@ -6021,8 +6005,8 @@ BMF_SSE uint32_t __alt_init_tables(uint8_t *a1, Obj89 *a2)
   }
   for ( n0x80 = 0; n0x80 < 0x80; ++n0x80 )
   {
-    a1[(uint8_t)((char *)a2)[2 * n0x80] + 256] = 2 * n0x80;
-    a1[(uint8_t)((char *)a2)[2 * n0x80 + 1] + 256] = 2 * n0x80 + 1;
+    a1[(uint8_t)a2[2 * n0x80] + 256] = 2 * n0x80;
+    a1[(uint8_t)a2[2 * n0x80 + 1] + 256] = 2 * n0x80 + 1;
   }
   return n0x80;
 }
@@ -8425,7 +8409,7 @@ int32_t __alt_p1_model(Obj0 *_this)
   }
   return result;
 }
-static inline uint32_t __fwd_alt_p1_alloc_alt_init_tables(void *a0, void *a1) { return __alt_init_tables((uint8_t *)a0, (Obj89 *)a1); }
+static inline uint32_t __fwd_alt_p1_alloc_alt_init_tables(void *a0, void *a1) { return __alt_init_tables((uint8_t *)a0, (char *)a1); }
 static inline uint16_t * __fwd_alt_p1_alloc_init_counter_node(void *a0) { return __init_counter_node((uint16_t *)a0); }
 
 int32_t *__alt_p1_alloc(Obj92 *_this, int32_t i, int32_t a3, int32_t n4)
@@ -8859,7 +8843,7 @@ static void bmf_set_denormal_mode()
   _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
 }
 
-static inline uint32_t __fwd_alt_p2_alloc_alt_init_tables(void *a0, void *a1) { return __alt_init_tables((uint8_t *)a0, (Obj89 *)a1); }
+static inline uint32_t __fwd_alt_p2_alloc_alt_init_tables(void *a0, void *a1) { return __alt_init_tables((uint8_t *)a0, (char *)a1); }
 
 int32_t __alt_p2_alloc(char *_this, int32_t i, int32_t n4)
 {
