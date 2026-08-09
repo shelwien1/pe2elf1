@@ -26,7 +26,7 @@ so they can be re-measured rather than trusted.
 | pointer casts | 5804 | 7336 |
 | `goto` / `LABEL_n:` | 113 / 81 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
-| line coverage | **95.63 %** | 64.5 % |
+| line coverage | **95.69 %** | 64.5 % |
 
 The target is 32-bit. That is not a limitation left over from the port — it is
 the decision that made Phase 4 possible, and §Phase 4 says why.
@@ -123,15 +123,23 @@ thinks so".
 
 ### 2.3 What the gate still does not reach
 
-4.4 % of the file — 583 unexecuted lines across the bodies:
+4.3 % of the file — 573 unexecuted lines across the bodies:
 
 | body | unexecuted |
 | --- | --- |
 | `unmodel_plane_slow` | 78 |
-| `compress_image` | 71 |
 | `expand_image` | 69 |
-| `unpredict_med` | 48 |
+| `compress_image` | 65 |
 | `read_bmp` | 48 |
+| `write_bmp` | 47 |
+| `interleave_plane` | 40 |
+
+Measured with the archive check included, which earlier runs of this had left
+out — the per-image loop does not walk a multi-member archive, so
+`compress_image`'s `feof` loop looked unreachable when it is exercised on every
+run of the gate. **A coverage number is only as good as the harness it is
+measured with**, which is the same lesson as the rest of §6 wearing different
+clothes.
 
 `sub_4118A0` headed this table with 103 and is off it: 111 of those lines were
 a predictor-mode-0 branch **no dispatch can reach**. The call graph is closed —
@@ -801,7 +809,12 @@ for f in testfiles/*.bmp; do
   rm -f o.bmf o.bmp                       # bmf appends to its output
   ./bmfcov c "$f" o.bmf && ./bmfcov d o.bmf o.bmp
 done
-gcov -n    -o . bmfcov-bmf.gcno                       # 95.63 % of 13351 lines
+# the archive check too -- the per-image loop never walks a multi-member
+# archive, and leaving it out makes compress_image's feof loop look dead
+rm -f a.bmf a.bmp
+./bmfcov c testfiles/t1.bmp a.bmf && ./bmfcov c testfiles/t8g.bmp a.bmf
+./bmfcov d a.bmf a.bmp
+gcov -n    -o . bmfcov-bmf.gcno                       # 95.69 % of 13351 lines
 gcov -f -n -o . bmfcov-bmf.gcno                       # per function
 ```
 
