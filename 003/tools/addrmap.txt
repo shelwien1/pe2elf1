@@ -17,6 +17,7 @@ interleave_plane           0x004081E0
 unpredict_med              0x00410310
 expand_predictor_mode0     0x00410650
 predict_med                0x004108C0
+estimate_cost              0x00411700
 rc_decode_flat             0x004123E0
 encode_context_bit         0x00412490
 decode_context_bit         0x00412850
@@ -30,6 +31,7 @@ rescale_counter_pair       0x004148F0
 rc_end_decode              0x00414920
 rc_begin_decode            0x004149C0
 rc_end_encode              0x00414CE0
+rc_begin_encode            0x00414F60
 free_workspace             0x00415270
 model_plane                0x00415380
 code_pixel                 0x004159E0
@@ -55,5 +57,4 @@ alloc_image                0x0042B830
 set_new_handler            0x0042CBB0
 log_two_lane               0x00436E10
 
-# 53 mapped.  2 named bodies have no recorded address:
-#   estimate_cost             rc_begin_encode
+# 55 mapped.  0 named bodies have no recorded address:

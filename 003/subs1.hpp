@@ -4258,8 +4258,8 @@ static_assert(sizeof(void *) != 4
 
 
 // ModelBlock -- the model block, and the only recovered object whose role is
-// established: the allocation sub_414F60 makes, reached here at offsets 0x64
-// to 0x5C75AC.  See REFACTORING.md section 4.2.  The other structs keep their
+// established: the allocation rc_begin_encode and rc_begin_decode make,
+// reached here at offsets 0x64 to 0x5C75AC.  See REFACTORING.md section 4.2.  The other structs keep their
 // ObjN names because naming their fields waits on ALGORITHM.md section 9.
 //
 // Recovered from 174 dereferences over 25 offsets, under 5
