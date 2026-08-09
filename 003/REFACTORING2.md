@@ -33,7 +33,7 @@ and its first draft failed that test in three places — see Appendix B.
 | initialised data bytes | 50 832 + 65 892 | **340** |
 | SIMD intrinsic calls | 558 | **0** |
 | `M128*` wrapper unions | 4 | 1, and no vector member |
-| conversions needing `-fpermissive` | 347 | **217** |
+| conversions needing `-fpermissive` | 347 | **213** |
 | `subs1.hpp` | 23 807 lines | 19 711 |
 | `bmf.cpp` | 890 lines | 782 |
 | loops vectorised at `-O2` | 8 | 19 |
@@ -74,13 +74,13 @@ nineteen small arrays had been split out of the per-plane record table and
 were stale copies of it, and the code reads across them. Folding them back
 into `bmf_bss` put the table together and let the tails go.
 
-**Goal 3 has a scoreboard and 130 fewer conversions, 37 % of the way.**
+**Goal 3 has a scoreboard and 134 fewer conversions, 39 % of the way.**
 `BMF_STRICT=1 ./build.sh` drops `-fpermissive` and counts. Six type decisions
 took most of them: `hist_scratch` is a `uint8_t *`, two `rc_begin_*` locals are
 offsets rather than pointers, twenty-three `M128` lanes hold addresses,
 `symbol_list_update` returns nothing, and three of `Obj10`'s fields —
-`f56[14]`, `f1051664[4]`, `f1078232`, `f1078688` — are the row cursors they are
-used as.
+`f56[14]`, `f1051664[4]`, `f1078232`, `f1078688` — and four of `ModelBlock`'s
+— `f76`, `f80`, `f84`, `f88` — are the row cursors they are used as.
 
 What is left is one shape, and §4.2 was right that it is not satisfiable by
 cosmetics: the shortcut that would take it from 243 to 179 was tried and
@@ -738,8 +738,15 @@ what round three would be.
   `f278736`, the ten-, six- and five-element cursor arrays in `Obj8`, `Obj19`
   and `Obj69`: retyping it takes the count from 225 to 301 and needs
   `alt_p2_model`'s two thousand lines read first. 88 `ObjN` structs, 234
-  raw-offset dereferences and 5 433 pointer casts are all downstream of the
+  raw-offset dereferences and 5 408 pointer casts are all downstream of the
   same thing.
+
+  `ModelBlock::f6059432` and `f6059436` are the named warning. They are
+  cursors too and retyping them compiles at 212, but it **moves five streams**
+  — `**(uint16_t **)&_this->f6059432` is not the double dereference it looks
+  like everywhere it appears. It was reverted. This is the one place in the
+  round where a retype changed behaviour rather than just the count, and it is
+  why every batch runs the whole corpus.
 
 * **`bmf_bss` should stop being one object.** 19 584 zero bytes with the
   original relative offsets is what made goal 1 safe to finish, not where it
