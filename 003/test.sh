@@ -120,5 +120,82 @@ if [ "${BMF_ARCHIVE:-1}" = 1 ] && [ -f "$TESTDIR/t1.bmp" ] && [ -f "$TESTDIR/t8g
   ) || fail=1
 fi
 
+# Input the program is expected to refuse.  Every check above hands it a file
+# it can read, so the whole of the error half -- the "bad file!", "Read error!"
+# and "Can't open file:" exits, and the frees that unwind to them -- ran only in
+# whatever way a passing run happens to reach it, which is not at all.  These
+# runs are the cheapest coverage left, and they check the thing worth checking
+# about an error path: that it is an exit and not a crash.
+#
+# The exit status is pinned rather than merely required to be nonzero.  A status
+# is behaviour the same way a stream is, and these are the runs that decide
+# which one you get; leaving them as "not zero" would let 3 and 4 trade places
+# unnoticed.  A status of 124 is the timeout and anything at or above 128 is a
+# fatal signal, so those can never be an expectation here.
+#
+# The empty file is the one case that is not an error: an archive is a sequence
+# of members and a file with none in it decodes to nothing, successfully.
+if [ "${BMF_MALFORMED:-1}" = 1 ]; then
+  (
+    cd "$WORK"
+    ref=$(ls -- *.bmf 2>/dev/null | grep -v '^arc\.' | head -1)
+    img=$(ls -- orig_*.bmp 2>/dev/null | head -1)
+    [ -n "$ref" ] && [ -n "$img" ] || { echo "malformed: no stream to truncate"; exit 1; }
+    : >empty.bmf
+    head -c 2000 /dev/zero >zeros.bmf
+    head -c 2000 /dev/zero | tr '\0' '\377' >ones.bmf
+    for n in 4 40 400 4000 40000; do head -c $n "$ref" >"cut$n.bmf"; done
+    head -c 6000 "$img" >cut.bmp
+    rm -f gone.bmp gone.bmf
+
+    bad=0
+    # mode  input        want  what it should hit
+    while read -r mode file want _; do
+      [ -n "${mode:-}" ] || continue
+      rm -f mal.out
+      timeout "${BMF_TIMEOUT:-300}" $RUN "$BIN" $mode "$file" mal.out >mal.log 2>&1
+      rc=$?
+      if [ "$rc" != "$want" ]; then
+        echo "malformed: $BIN $mode $file exited $rc, expected $want"
+        cat mal.log; bad=1; continue
+      fi
+      [ -f mal.out ] && { echo "malformed: $BIN $mode $file wrote an output anyway"; bad=1; }
+    done <<'CASES'
+d empty.bmf   0   an archive with no members in it
+d cut4.bmf    3   the header read, short
+d cut40.bmf   3   the header read, torn
+d cut400.bmf  3   the member read, short
+d cut4000.bmf 3   inside the first member
+d cut40000.bmf 3  most of a member
+d zeros.bmf   3   a stream that is not one
+d ones.bmf    3   the other end of the same
+d gone.bmf    6   an input that is not there
+c gone.bmp    6   the same, compressing
+c cut.bmp     4   a BMP whose pixels run out
+CASES
+
+    # The two files that are each other's wrong kind.  Named separately because
+    # they come from the corpus rather than from anything written above.
+    for pair in "d $img 3" "c $ref 4"; do
+      set -- $pair
+      rm -f mal.out
+      timeout "${BMF_TIMEOUT:-300}" $RUN "$BIN" "$1" "$2" mal.out >mal.log 2>&1
+      rc=$?
+      [ "$rc" = "$3" ] || { echo "malformed: $BIN $1 $2 exited $rc, expected $3"; cat mal.log; bad=1; }
+    done
+
+    # No arguments at all, and a mode letter that is neither c nor d.
+    for args in "" "x a b"; do
+      timeout "${BMF_TIMEOUT:-300}" $RUN "$BIN" $args >mal.log 2>&1
+      rc=$?
+      [ "$rc" = 1 ] || { echo "malformed: $BIN $args exited $rc, expected 1"; cat mal.log; bad=1; }
+    done
+
+    [ $bad -eq 0 ] || exit 1
+    printf '%-12s ok  refused 15 inputs, no crash\n' malformed
+    exit 0
+  ) || fail=1
+fi
+
 [ $fail -eq 0 ] || { echo "FAIL"; exit 1; }
 echo "PASS"
