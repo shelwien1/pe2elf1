@@ -59,10 +59,15 @@ def rename_in(path, fn, pairs):
         sys.exit('%s: no such function' % fn)
     a, b = span
     text = '\n'.join(lines[a:b + 1])
+    # the collision check reads code only.  A comment saying "predictor-2
+    # expander" is not a declaration of `predictor`, and refusing on it sends
+    # you off to invent a worse name; the rewrite below still covers comments,
+    # because a comment naming the variable should follow it.
+    code = '\n'.join(l.split('//')[0] for l in lines[a:b + 1])
     for old, new in pairs:
         if not re.search(r'\b%s\b' % re.escape(old), text):
             sys.exit('%s: %s does not appear in it' % (fn, old))
-        if re.search(r'\b%s\b' % re.escape(new), text):
+        if re.search(r'\b%s\b' % re.escape(new), code):
             sys.exit('%s: %s already means something in it' % (fn, new))
     total = 0
     for old, new in pairs:

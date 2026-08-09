@@ -10037,7 +10037,7 @@ BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
   __m128i si128, *v13;
   char *v11, *v12, ArgList;
   int32_t bits_left, v7, v8, v16, v17, v20;
-  uint16_t *n256, *__rc_begin_decode_n256_1;
+  uint16_t *n256, *tbl;
   uint32_t i;
   uint64_t *v9;
   uint8_t *v1;
@@ -10116,13 +10116,13 @@ BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
     if ( n256 )
     {
       ArgList = ArgList_1;
-      __rc_begin_decode_n256_1 = n256;
+      tbl = n256;
       v16 = 0;
       v17 = 0;
       do
       {
         v20 = v16;
-        __rc_begin_decode_n256_1[1] = 24 * __n8_1;
+        tbl[1] = 24 * __n8_1;
         n256[v17 + 2] = 205;
         n256[v17 + 6] = 48;
         n256[v17 + 3] = 124;
@@ -10131,13 +10131,13 @@ BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
         n256[v17 + 5] = 83;
         n256[v17 + 8] = 8;
         n256[v17 + 9] = 4;
-        *__rc_begin_decode_n256_1 = 635;
+        *tbl = 635;
         for ( i = 0; i < 0x7A; ++i )
         {
-          __rc_begin_decode_n256_1[2 * i + 10] = 60;
-          __rc_begin_decode_n256_1[2 * i + 11] = 36;
+          tbl[2 * i + 10] = 60;
+          tbl[2 * i + 11] = 36;
         }
-        __rc_begin_decode_n256_1 += 254;
+        tbl += 254;
         v17 += 254;
         ++v16;
       }
@@ -14108,7 +14108,7 @@ int32_t __decode_symbol_list(uint32_t *a1)
       int32_t v62;
       uint8_t _pad0[32736];
       uint32_t n0x7F800000_1;
-      int32_t __decode_symbol_list_n0x2000;
+      int32_t tot;
       int32_t v65;
       uint16_t *v66;
       uint32_t *v67;
@@ -14123,7 +14123,7 @@ int32_t __decode_symbol_list(uint32_t *a1)
   int32_t &v59 = __frame.v59;
   uint32_t &n0x800000_1 = __frame.n0x800000_1;
   int32_t &v62 = __frame.v62;
-  int32_t &__decode_symbol_list_n0x2000 = __frame.__decode_symbol_list_n0x2000;
+  int32_t &tot = __frame.tot;
   int32_t &v65 = __frame.v65;
   uint16_t *&v66 = __frame.v66;
   uint32_t *&v67 = __frame.v67;
@@ -14136,7 +14136,7 @@ int32_t __decode_symbol_list(uint32_t *a1)
           v49, v51, v53;
   uint16_t **v4, *v20, **v21, *v25, **v26, *v33, v35, *v43, *v44, *v45, *v47, *v48, *v52;
   uint32_t *v9, __decode_symbol_list_n0x800000, n0x2000_6, n0x2000_4,
-           n0x2000_3, __decode_symbol_list_n0x2000_1, *v32, v41, v42, v50,
+           n0x2000_3, tot_1, *v32, v41, v42, v50,
            v54;
   void *v1;
   v68 = a1;
@@ -14171,7 +14171,7 @@ int32_t __decode_symbol_list(uint32_t *a1)
   v65 = v9[2];
   n0x2000_6 = v5 + v65;
   n0x2000_4 = rc.get_freq(n0x2000_6);
-  __decode_symbol_list_n0x2000 = v5 + v65;
+  tot = v5 + v65;
   v67 = v9;
   n0x2000_5 = v5 + v65 - 1;
   v20 = v55;
@@ -14188,8 +14188,8 @@ int32_t __decode_symbol_list(uint32_t *a1)
     {
       v23 = (char)v68;
       sym_cum = n0x2000_2;
-      n0x2000_3 = __decode_symbol_list_n0x2000;
-      sym_high = __decode_symbol_list_n0x2000;
+      n0x2000_3 = tot;
+      sym_high = tot;
       v25 = v66;
       v26 = &v56;
       do
@@ -14198,7 +14198,7 @@ int32_t __decode_symbol_list(uint32_t *a1)
         v25 = *v26++;
       }
       while ( v25 );
-      __decode_symbol_list_n0x2000_1 = __decode_symbol_list_n0x2000;
+      tot_1 = tot;
       v62 = -1;
       goto LABEL_19;
     }
@@ -14327,17 +14327,17 @@ LABEL_30:
     v32[2] = v50 - (v50 >> 1);
     n0x2000_2 = sym_cum;
     n0x2000_3 = sym_high;
-    __decode_symbol_list_n0x2000_1 = n0x2000_6;
+    tot_1 = n0x2000_6;
     v32[3] = v54 - (v54 >> 1);
   }
   else
   {
-    __decode_symbol_list_n0x2000_1 = n0x2000_6;
+    tot_1 = n0x2000_6;
     n0x2000_2 = sym_cum;
     n0x2000_3 = sym_high;
   }
 LABEL_19:
-  rc.decode(n0x2000_2, n0x2000_3, __decode_symbol_list_n0x2000_1);
+  rc.decode(n0x2000_2, n0x2000_3, tot_1);
   return v62;
 }
 static inline int32_t __fwd_decode_pixel_decode_context_bit(void *a0, void *a1) { return __decode_context_bit((uint16_t *)a0, (uint16_t *)a1); }
@@ -14350,7 +14350,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   struct alignas(16) {   // 164 bytes, the frame Hex-Rays could not name
       int32_t n15_8;
       int32_t n4_1;
-      int32_t __decode_pixel_n4_4;
+      int32_t freq_i;
       int32_t n15_3;
       uint16_t *v184;
       uint32_t *this_1;
@@ -14386,7 +14386,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 176, "frame layout moved");
   int32_t &n15_8 = __frame.n15_8;
   int32_t &n4_1 = __frame.n4_1;
-  int32_t &__decode_pixel_n4_4 = __frame.__decode_pixel_n4_4;
+  int32_t &freq_i = __frame.freq_i;
   int32_t &n15_3 = __frame.n15_3;
   Obj18 *&v184 = (Obj18 *&)__frame.v184;
   ModelBlock *&this_1 = (ModelBlock *&)__frame.this_1;
@@ -14441,7 +14441,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   Obj18 *v90;
   uint16_t *v97;
   Obj121 *v106;
-  uint16_t *n15_9, *v16, *n4_10, *v58, *__decode_pixel_n4_3, *v95, *v110, *v121, v154, v162,
+  uint16_t *n15_9, *v16, *n4_10, *v58, *freq_tbl, *v95, *v110, *v121, v154, v162,
            v174;
   ModelBlock *this_3;
   ModelBlock *this_2;
@@ -14467,7 +14467,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   ::__n15 = n15_6;
   v8 = *((uint8_t *)n15_9 + 3) + 4 * (n15_6 == n15_7);
   v9 = *((uint8_t *)n15_9 + 11);
-  __decode_pixel_n4_4 = n15_7;
+  freq_i = n15_7;
   __n15_0 = n15_7;
   v10 = 2 * *((uint8_t *)v4 - 6) + 8 * v9 + v8;
   this_2 = (ModelBlock *)(this_1);
@@ -14477,10 +14477,10 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
     if ( n15_3 == n15_8 )
     {
       v14 = *((uint16_t *)this_1 + n4_8 + 3029720);
-      if ( n4_8 == __decode_pixel_n4_4 )
+      if ( n4_8 == freq_i )
         v13 = (uint16_t)(v14 - *((uint16_t *)v4 - 8));
       else
-        v13 = (uint16_t)(v14 - __decode_pixel_n4_4);
+        v13 = (uint16_t)(v14 - freq_i);
     }
     else
     {
@@ -14511,7 +14511,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   }
   else
   {
-    v19 = n4_9 == __decode_pixel_n4_4;
+    v19 = n4_9 == freq_i;
     __decode_pixel_n15 = 60;
     if ( !v19 )
       __decode_pixel_n15 = 0;
@@ -14529,7 +14529,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   {
     __decode_pixel_n15 += 225;
   }
-  else if ( n4_10 == (uint16_t *)__decode_pixel_n4_4 )
+  else if ( n4_10 == (uint16_t *)freq_i )
   {
     __decode_pixel_n15 += 300;
   }
@@ -14541,13 +14541,13 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   n4_11 = *((uint8_t *)n15_9 + 2);
   v184 = (Obj18 *)(v4);
   this_1 = (ModelBlock *)(this_2);
-  __decode_pixel_n4_4 = n4_11;
+  freq_i = n4_11;
   v25 = this_2->f92;
   v26 = *((uint8_t *)v4 - 5);
   v186 = v25;
   v27 = 8 * *((uint8_t *)v4 - 12) + 4 * *((uint8_t *)v4 - 9) + v26 + 2 * *((uint8_t *)v4 - 10);
   this_3 = (ModelBlock *)(this_1);
-  v29 = ((uint8_t)(*(uint8_t *)(v186 + 2) & *(uint8_t *)(v21 + 2) & __decode_pixel_n4_4 & *(uint8_t *)(v23 + 2)) << 9)
+  v29 = ((uint8_t)(*(uint8_t *)(v186 + 2) & *(uint8_t *)(v21 + 2) & freq_i & *(uint8_t *)(v23 + 2)) << 9)
       + ((uint8_t)(*(uint8_t *)(v186 + 3) & *(uint8_t *)(v21 + 3) & *(uint8_t *)(v23 + 3) & *((uint8_t *)n15_9 + 3)) << 8)
       + (v22 << 10)
       + v27;
@@ -14565,9 +14565,9 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
     v4 = (Obj18 *)((uint16_t *)this_3->f76);
     ++this_3->f20;
     n0xFFFF = *((uint16_t *)this_3 + v31 + 3037912);
-    __decode_pixel_n4_4 = *(uint8_t *)(n15_10 + 2);
+    freq_i = *(uint8_t *)(n15_10 + 2);
   }
-  v33 = *((uint8_t *)v4 - 1) + 4 * *(uint8_t *)(n15_10 + 13) + 2 * __decode_pixel_n4_4 + 8 * n0xFFFF;
+  v33 = *((uint8_t *)v4 - 1) + 4 * *(uint8_t *)(n15_10 + 13) + 2 * freq_i + 8 * n0xFFFF;
   n0xFFFF_1 = *((uint16_t *)this_3 + v33 + 3230424);
   if ( n0xFFFF_1 == 0xFFFF )
   {
@@ -14662,15 +14662,15 @@ LABEL_42:
           if ( (v49 | v50) < n15_3 )
           {
             v51 = *((uint16_t *)&((uint32_t *)this_1)[24 * (v50 == 0) + 269473 + 24 * (n15_12 == n15_8)] + 3 * n15_12 + 1);
-            __decode_pixel_n4_4 = (int32_t)&((uint32_t *)this_1)[24 * (v50 == 0) + 269473 + 24 * (n15_12 == n15_8)] + 6 * n15_12 + 2;
+            freq_i = (int32_t)&((uint32_t *)this_1)[24 * (v50 == 0) + 269473 + 24 * (n15_12 == n15_8)] + 6 * n15_12 + 2;
             bin_tot = v51 + *((uint16_t *)&((uint32_t *)this_1)[24 * (v50 == 0) + 269474 + 24 * (n15_12 == n15_8)] + 3 * n15_12);
             n4_1 = rc.decode_bit(
                      v51,
                      *((uint16_t *)&((uint32_t *)this_1)[24 * (v50 == 0) + 269474 + 24 * (n15_12 == n15_8)] + 3 * n15_12));
             if ( *((uint16_t *)&((uint32_t *)this_1)[24 * (v50 == 0) + 269474 + 24 * (n15_12 == n15_8)] + 3 * n15_12 + 1) < (uint32_t)bin_tot )
-              __fwd_decode_pixel_rescale_counter_pair((uint16_t *)__decode_pixel_n4_4);
+              __fwd_decode_pixel_rescale_counter_pair((uint16_t *)freq_i);
             n4_13 = n4_1;
-            *(uint16_t *)(__decode_pixel_n4_4 + 2 * n4_1) += 8;
+            *(uint16_t *)(freq_i + 2 * n4_1) += 8;
             if ( n4_13 )
               n15_18 |= v49;
             v50 |= n15_18 & v49;
@@ -14712,15 +14712,15 @@ LABEL_57:
         this_3->f76 = v61;
         if ( n15_18 - n15_14 != 1 )
         {
-          __decode_pixel_n4_4 = (n15_18 - n15_14 - 1) / 2;
-          if ( __decode_pixel_n4_4 )
+          freq_i = (n15_18 - n15_14 - 1) / 2;
+          if ( freq_i )
           {
             n15_13 = n15_3;
             n15_8 = n15_14;
             n4_14 = n4_1;
             n4_16 = 0;
             n15_24 = n15_18;
-            n4_15 = __decode_pixel_n4_4;
+            n4_15 = freq_i;
             do
             {
               *(uint16_t *)(*(uint32_t *)&this_3->f6059436 + 2) = n4_14;
@@ -14795,7 +14795,7 @@ LABEL_57:
   v80 = (Obj18 *)((int32_t)&((uint32_t *)this_3)[4 * this_3->f40 + 24]);
   v184 = (Obj18 *)((uint16_t *)v80);
   v81 = 4 * n0xFFFF_1;
-  __decode_pixel_n4_3 = (uint16_t *)&((uint32_t *)this_3)[v81 + 776];
+  freq_tbl = (uint16_t *)&((uint32_t *)this_3)[v81 + 776];
   v83 = HIWORD(((uint32_t *)this_3)[v81 + 778]);
   if ( HIWORD(((uint32_t *)this_3)[v81 + 778]) )
   {
@@ -14804,57 +14804,57 @@ LABEL_57:
       v142 = (Obj18 *)((uint64_t *)v80);
       v143 = *(uint8_t *)((char *)&v80->f8 + 7);
       n4_18 = v143 * LOWORD(((uint32_t *)this_3)[v81 + 777]);
-      n15_19 = v143 * __decode_pixel_n4_3[3];
-      n4_1 = v143 * *__decode_pixel_n4_3;
-      v146 = v143 * __decode_pixel_n4_3[1];
-      __decode_pixel_n4_4 = n4_18;
-      n15_20 = v143 * __decode_pixel_n4_3[4];
+      n15_19 = v143 * freq_tbl[3];
+      n4_1 = v143 * *freq_tbl;
+      v146 = v143 * freq_tbl[1];
+      freq_i = n4_18;
+      n15_20 = v143 * freq_tbl[4];
       n15_8 = n15_19;
       n15_3 = n15_20;
-      *(uint64_t *)__decode_pixel_n4_3 = v142->f0;
-      *((uint64_t *)__decode_pixel_n4_3 + 1) = v142->f8;
-      v148 = __decode_pixel_n4_3[5];
-      v149 = *__decode_pixel_n4_3;
-      *((uint8_t *)__decode_pixel_n4_3 + 14) *= 8;
+      *(uint64_t *)freq_tbl = v142->f0;
+      *((uint64_t *)freq_tbl + 1) = v142->f8;
+      v148 = freq_tbl[5];
+      v149 = *freq_tbl;
+      *((uint8_t *)freq_tbl + 14) *= 8;
       this_1 = (ModelBlock *)(this_3);
-      v150 = 21 * __decode_pixel_n4_3[1];
+      v150 = 21 * freq_tbl[1];
       n4_1 += (21 * v149 + v148 - 1) / v148;
-      *__decode_pixel_n4_3 = n4_1;
+      *freq_tbl = n4_1;
       v151 = (v150 + v148 - 1) / v148;
-      v152 = 21 * __decode_pixel_n4_3[2];
-      v153 = __decode_pixel_n4_3[3];
+      v152 = 21 * freq_tbl[2];
+      v153 = freq_tbl[3];
       v154 = v151 + v146;
-      __decode_pixel_n4_3[1] = v154;
+      freq_tbl[1] = v154;
       v155 = 21 * v153;
       n15_21 = n15_8;
-      v157 = (char *)((v152 + v148 - 1) / v148 + __decode_pixel_n4_4);
-      __decode_pixel_n4_3[2] = (uint16_t)v157;
+      v157 = (char *)((v152 + v148 - 1) / v148 + freq_i);
+      freq_tbl[2] = (uint16_t)v157;
       v158 = (v155 + v148 - 1) / v148 + n15_21;
-      v159 = 21 * __decode_pixel_n4_3[4];
-      __decode_pixel_n4_3[3] = v158;
+      v159 = 21 * freq_tbl[4];
+      freq_tbl[3] = v158;
       v160 = v158 + (uint16_t)v157 + v154;
       this_3 = (ModelBlock *)(this_1);
       v161 = (v159 + v148 - 1) / v148 + n15_3;
-      __decode_pixel_n4_3[4] = v161;
+      freq_tbl[4] = v161;
       v162 = n4_1 + v161 + v160;
       v83 = v162;
-      __decode_pixel_n4_3[5] = v162;
+      freq_tbl[5] = v162;
     }
     arg_tot = v83;
     v84 = rc.get_freq(arg_tot);
-    v85 = *__decode_pixel_n4_3;
+    v85 = *freq_tbl;
     if ( v85 <= v84 )
     {
-      v85 += __decode_pixel_n4_3[1];
+      v85 += freq_tbl[1];
       if ( v85 <= v84 )
       {
-        v85 += __decode_pixel_n4_3[2];
+        v85 += freq_tbl[2];
         if ( v85 <= v84 )
         {
-          v85 += __decode_pixel_n4_3[3];
+          v85 += freq_tbl[3];
           if ( v85 <= v84 )
           {
-            v85 += __decode_pixel_n4_3[4];
+            v85 += freq_tbl[4];
             n4 = 4;
           }
           else
@@ -14876,59 +14876,59 @@ LABEL_57:
     {
       n4 = 0;
     }
-    n256_2 = __decode_pixel_n4_3[6];
+    n256_2 = freq_tbl[6];
     arg_high = v85;
-    n15_1 = *((uint8_t *)__decode_pixel_n4_3 + 15);
-    arg_cum = v85 - __decode_pixel_n4_3[n4];
-    n256_1 = __decode_pixel_n4_3[5];
-    if ( n256_1 > n256_2 && (__decode_pixel_n4_3[n4] + n15_1 + 8 < n256_1 || __decode_pixel_n4_3[5] > 0x4000u) )
+    n15_1 = *((uint8_t *)freq_tbl + 15);
+    arg_cum = v85 - freq_tbl[n4];
+    n256_1 = freq_tbl[5];
+    if ( n256_1 > n256_2 && (freq_tbl[n4] + n15_1 + 8 < n256_1 || freq_tbl[5] > 0x4000u) )
     {
-      v136 = __decode_pixel_n4_3[2];
+      v136 = freq_tbl[2];
       n15_8 = n256_2;
-      v137 = __decode_pixel_n4_3[1];
+      v137 = freq_tbl[1];
       this_1 = (ModelBlock *)(this_3);
-      v138 = *__decode_pixel_n4_3;
+      v138 = *freq_tbl;
       n4_1 = n4;
-      __decode_pixel_n4_4 = n15_1;
+      freq_i = n15_1;
       LOWORD(v138) = v138 - (v138 >> 1);
-      *__decode_pixel_n4_3 = v138;
+      *freq_tbl = v138;
       LOWORD(v137) = v137 - (v137 >> 1);
-      __decode_pixel_n4_3[1] = v137;
+      freq_tbl[1] = v137;
       LOWORD(v136) = v136 - (v136 >> 1);
-      v139 = __decode_pixel_n4_3[3];
-      __decode_pixel_n4_3[2] = v136;
+      v139 = freq_tbl[3];
+      freq_tbl[2] = v136;
       LOWORD(v139) = v139 - (v139 >> 1);
-      v140 = __decode_pixel_n4_3[4];
-      __decode_pixel_n4_3[3] = v139;
+      v140 = freq_tbl[4];
+      freq_tbl[3] = v139;
       LOWORD(v140) = v140 - (v140 >> 1);
-      __decode_pixel_n4_3[4] = v140;
+      freq_tbl[4] = v140;
       LOWORD(v137) = v139 + v136 + v137;
-      n15_1 = __decode_pixel_n4_4;
+      n15_1 = freq_i;
       LOWORD(v140) = v138 + v140;
       this_3 = (ModelBlock *)(this_1);
       n256_1 = (uint16_t)(v140 + v137);
       n256 = n15_8;
       n4 = n4_1;
-      __decode_pixel_n4_3[5] = n256_1;
-      if ( n256 < 256 && !*((uint8_t *)__decode_pixel_n4_3 + 14) )
+      freq_tbl[5] = n256_1;
+      if ( n256 < 256 && !*((uint8_t *)freq_tbl + 14) )
       {
         n256 = 256;
-        __decode_pixel_n4_3[6] = 256;
+        freq_tbl[6] = 256;
       }
       if ( n256_1 > n256 )
       {
         if ( n15_1 < 15 )
           LOWORD(n15_1) = 15;
-        *((uint8_t *)__decode_pixel_n4_3 + 15) = n15_1;
+        *((uint8_t *)freq_tbl + 15) = n15_1;
       }
     }
-    __decode_pixel_n4_3[5] = n15_1 + n256_1;
-    __decode_pixel_n4_3[n4] += n15_1;
+    freq_tbl[5] = n15_1 + n256_1;
+    freq_tbl[n4] += n15_1;
     rc.decode(arg_cum, arg_high, arg_tot);
     this_3->f32 = n4;
-    if ( *((uint8_t *)__decode_pixel_n4_3 + 14) )
+    if ( *((uint8_t *)freq_tbl + 14) )
     {
-      --*((uint8_t *)__decode_pixel_n4_3 + 14);
+      --*((uint8_t *)freq_tbl + 14);
       v90 = (Obj18 *)(v184);
       ++*(uint16_t *)((char *)&v184->f8 + 2);
       ++((uint16_t *)v90)[n4];
@@ -14983,8 +14983,8 @@ LABEL_57:
     {
       n15_8 = n256_5;
       this_1 = (ModelBlock *)(this_3);
-      n4_1 = (int32_t)__decode_pixel_n4_3;
-      __decode_pixel_n4_4 = n4_2;
+      n4_1 = (int32_t)freq_tbl;
+      freq_i = n4_2;
       v171 = (Obj18 *)(v184);
       v172 = *(uint16_t *)((char *)&v184->f0 + 2);
       v173 = *(uint16_t *)((char *)&v184->f0 + 4);
@@ -15004,9 +15004,9 @@ LABEL_57:
       this_3 = (ModelBlock *)(this_1);
       n256_4 = (uint16_t)(v177 + v176 + v175 + v172);
       n256_3 = n15_8;
-      __decode_pixel_n4_3 = (uint16_t *)n4_1;
+      freq_tbl = (uint16_t *)n4_1;
       *(uint16_t *)((char *)&v171->f8 + 2) = n256_4;
-      n4_2 = __decode_pixel_n4_4;
+      n4_2 = freq_i;
       if ( n256_3 < 256 && !*((uint8_t *)v184 + 14) )
       {
         n256_3 = 256;
@@ -15027,7 +15027,7 @@ LABEL_57:
     ((uint16_t *)v170)[n4_2] += n15_4;
     rc.decode(arg_cum, arg_high, arg_tot);
     this_3->f32 = n4_2;
-    __decode_pixel_n4_3[5] = __decode_pixel_n4_3[n4_2]++ != 0;
+    freq_tbl[5] = freq_tbl[n4_2]++ != 0;
     n4 = this_3->f32;
   }
   if ( n4 )
@@ -15057,7 +15057,7 @@ LABEL_86:
   v100 = (Obj18 *)((uint16_t *)v97[2]);
   n4_1 = n4_5;
   this_4 = (ModelBlock *)(v97[3]);
-  __decode_pixel_n4_4 = n4_6;
+  freq_i = n4_6;
   v102 = v97[4];
   n15_3 = n15_5;
   v103 = v97[5];
@@ -15241,7 +15241,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
           n0xFFFF_1, n53248, v35, v38, v39, v42, p_n15_2, n15_42, n8, v46, n15_32, n15_12,
           n15_9, v50, v53, p_n15_4, n2_10, v61, n15_11, n15_13, n4_2, n15_33, n15_35, n15_34,
           n15_15, n2_15, v82, *n2_3, __code_pixel_n0x2000, n15_16, v87, n2, p_n15_5, p_n15_7,
-          n15_17, n15_22, __code_pixel_n4_3, __code_pixel_n4_4, p_n15_11, n2_5, n15_41, n15_23,
+          n15_17, n15_22, excl_sym_a, excl_sym_b, p_n15_11, n2_5, n15_41, n15_23,
           n15_24, n15_25, n15_26, v109, n15_27, v112, v114, v115, v116, v117, v118, v119, v120,
           v121, v122, v123, v125, v126, v127, v128, v129, n15_28, n32, n15_29, n4_5, v134, v135,
           p_n15_6, *v143, v144, n2_16, n2_17, n15_37, v149, v150, v151, v152, v154, v155, v157,
@@ -15836,13 +15836,13 @@ LABEL_42:
   }
   v93 = __byte_445700;
   n15_22 = ::__n15;
-  __code_pixel_n4_3 = ::__n4_3;
-  __code_pixel_n4_4 = ::__n4_4;
+  excl_sym_a = ::__n4_3;
+  excl_sym_b = ::__n4_4;
   exclusion_mask[__n15_0] = __byte_445700;
   exclusion_mask[n15_22] = v93;
   v97 = (uint16_t *)this_3->f6059436;
-  exclusion_mask[__code_pixel_n4_3] = v93;
-  exclusion_mask[__code_pixel_n4_4] = v93;
+  exclusion_mask[excl_sym_a] = v93;
+  exclusion_mask[excl_sym_b] = v93;
   v98 = (uint16_t *)*(int32_t *)&this_3->f6059432;
   __byte_445440[0] = v93;
   n15_14 = n15_12;
@@ -21805,7 +21805,7 @@ BMF_SSE void __transform_planes(BmfImage *p_i, int32_t a2, char a3, const __m128
   __m128 a4 = a4__ref;
   __m128 a5 = a5__ref;
   char *__transform_planes_Buffer, *p_ia_1, *Src_1, v11, *Src_3, *Src_2, *v20;
-  int32_t n4_1, v14, __transform_planes_n2, v16, Size_3, n4_2, v21, i, Size_4,
+  int32_t n4_1, v14, predictor, v16, Size_3, n4_2, v21, i, Size_4,
           v24;
   uint8_t *Srca_1;
   memset(hist_scratch,0,4096);
@@ -21830,11 +21830,11 @@ BMF_SSE void __transform_planes(BmfImage *p_i, int32_t a2, char a3, const __m128
     {
       ++n4_1;
       v14 = BYTE1(__n256_2[4 * n4_1]);
-      __transform_planes_n2 = __byte_44339E[16 * v14] & 3;
-      ::plane_predictor = __transform_planes_n2;
+      predictor = __byte_44339E[16 * v14] & 3;
+      ::plane_predictor = predictor;
       v16 = (uint8_t)(__byte_44339E[16 * v14] & 4) >> 2;
       plane_alt_model = v16;
-      if ( ((__byte_44339E[16 * v14] & 8) != 0 || __transform_planes_n2) && !v16 )
+      if ( ((__byte_44339E[16 * v14] & 8) != 0 || predictor) && !v16 )
       {
         __fwd_transform_planes_colour_transform(p_ia, Src, v14, v11);
         if ( ::plane_predictor != 2 )
@@ -21947,9 +21947,9 @@ BMF_SSE char * __expand_image(char *a1, const __m128 &a2__ref, const __m128 &a3_
   FILE *Stream_1, *Stream_v;
   BmfImage *p_i_1;
   char v10, v17, v18, v20, v34, v35, *Buffer_3, *n4_6, *n4_7, *v64;
-  int32_t Buffer__1, dwLowDateTime, v21, n4, v24, __expand_image_n2, v27, v28,
+  int32_t Buffer__1, dwLowDateTime, v21, n4, v24, predictor, v27, v28,
           v29, v30, ArgList, v33, n4_4, v37, n2_1, i, Size_4, Size_5, n4_3,
-          v44, Size_2, Size_3, n4_2, v48, n2_2, __expand_image_n4_5, v55,
+          v44, Size_2, Size_3, n4_2, v48, n2_2, n_planes, v55,
           Src_2, v58, n4_8, v61, i_1, n4_9, v76;
   uint16_t i_2;
   uint32_t __expand_image_Buffer_1, v12, *v13, ElementCount_5, ElementCount_2,
@@ -22142,10 +22142,10 @@ LABEL_42:
       }
       v24 = 16 * n4;
       v25 = v23 >> 2;
-      __expand_image_n2 = v23 & 3;
+      predictor = v23 & 3;
       __byte_44339E[v24] = v25;
-      __byte_44339C[v24] = __expand_image_n2;
-      __byte_44339D[16 * __expand_image_n2] = n4;
+      __byte_44339C[v24] = predictor;
+      __byte_44339D[16 * predictor] = n4;
       if ( (__byte_44339E[16 * n4] & 8) != 0 )
       {
         packer_free_bits -= 8;
@@ -22163,7 +22163,7 @@ LABEL_42:
           packer_acc = (uint32_t)packer_acc >> 8;
         }
         __byte_44339F[16 * n4] = v27;
-        if ( __expand_image_n2 > 1 )
+        if ( predictor > 1 )
         {
           packer_free_bits -= 8;
           if ( packer_free_bits < 0 )
@@ -22195,7 +22195,7 @@ LABEL_42:
             packer_acc = (uint32_t)packer_acc >> 8;
           }
           __dword_4433A4[4 * n4] = v29 - 64;
-          if ( __expand_image_n2 > 2 )
+          if ( predictor > 2 )
           {
             packer_free_bits -= 8;
             if ( packer_free_bits < 0 )
@@ -22383,7 +22383,7 @@ LABEL_109:
   if ( (p_i_1->flags & 2) != 0 )
   {
     n4_6 = (char *)bmf_new(p_i_1->data_size);
-    __expand_image_n4_5 = ::plane_count;
+    n_planes = ::plane_count;
     v55 = *((uint16_t *)p_i_1 + 1);
     n4_1 = (int32_t)n4_6;
     Src_2 = ::plane_count * (v55 - 1);
@@ -22406,7 +22406,7 @@ LABEL_109:
         v64 = &((char *)p_i_1)[n4_8 + 16];
         do
         {
-          n4_9 = __expand_image_n4_5;
+          n4_9 = n_planes;
           do
           {
             *v64++ = *n4_7++;
@@ -22419,7 +22419,7 @@ LABEL_109:
         while ( i_1 );
         p_i_1 = p_i_2;
         v58 = *((uint16_t *)p_i_2 + 1);
-        n4_8 = __expand_image_n4_5 + n4_1;
+        n4_8 = n_planes + n4_1;
         v61 = v86 + 1;
       }
       while ( v86 + 1 < v58 );
@@ -22429,7 +22429,7 @@ LABEL_109:
     *(uint16_t *)p_i_1 = v58;
     p_i_1->flags ^= 2u;
     *((uint16_t *)p_i_1 + 1) = i_2;
-    *((uint16_t *)p_i_1 + 2) = v58 * __expand_image_n4_5;
+    *((uint16_t *)p_i_1 + 2) = v58 * n_planes;
     free(n4_6);
   }
   return (char *)p_i_1;
@@ -22494,7 +22494,7 @@ BMF_SSE uint32_t __search_filter(BmfImage *p_i, char a2, const __m128 &a3__ref, 
   int32_t i, i_2, n4, v10, n4_4, v21, v22, v23, Size, n0x7FFFFFFF, v32,
           n0x7FFFFFFF_8, n0x7FFFFFFF_2, n5, n2, v40, v41, v42, v43, v45,
           n16_1, n4_7, n4_8, v61, n16_2, n4_9, v69, v71, n16,
-          __search_filter_n4_5, v76, n4_20, n4_6, n16_3, n4_11, v85, n4_16,
+          plane, v76, n4_20, n4_6, n16_3, n4_11, v85, n4_16,
           n16_4, n4_12, n4_18, v102, v104, v106, v108, v109, n4_19, v118,
           v119, v120, v121, v123, v125, v126, i_6, v133, v135, v137, v139,
           v140, v149, n0x7FFFFFFF_10, n0x7FFFFFFF_4, n5_3, v155,
@@ -22985,14 +22985,14 @@ LABEL_172:
       while ( n16 * 4 );
       if ( ::plane_count > 0 )
       {
-        __search_filter_n4_5 = 0;
+        plane = 0;
         do
         {
-          v76 = 16 * __search_filter_n4_5;
-          v77 = __byte_44339E[16 * __search_filter_n4_5++] & 8 | 5;
+          v76 = 16 * plane;
+          v77 = __byte_44339E[16 * plane++] & 8 | 5;
           __byte_44339E[v76] = v77;
         }
-        while ( __search_filter_n4_5 < ::plane_count );
+        while ( plane < ::plane_count );
       }
       __fwd_search_filter_transform_planes((uint16_t *)Blockb, (int32_t)v74, v44, a3, a4);
       n4_20 = 8 * (out_cursor - coded_buf);
@@ -23379,8 +23379,8 @@ BMF_SSE int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &
   bool v38;
   char __compress_image_Buffer_1, *Buffera_5, v12, v13, v15, v17, *Buffera_6,
        v21, *Srca, v36, *Buffera_2, *Buffera_3;
-  int32_t __compress_image_n4_5, v11, v18, n4_6, bits_left, n4, v27, n8_1,
-          __compress_image_n256, n4_1, v40, v41, v43, n4_3, v47, i_1, v50, n4_4, v56;
+  int32_t row_bytes, v11, v18, n4_6, bits_left, n4, v27, n8_1,
+          acc, n4_1, v40, v41, v43, n4_3, v47, i_1, v50, n4_4, v56;
   BmfImage *p_i_1;
   uint16_t i_2, v53;
   uint32_t ElementCount_1, n7, v25, v26, v28, v30, v31, v32, Size, v55;
@@ -23402,14 +23402,14 @@ BMF_SSE int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &
   }
   __compress_image_Buffer_1 = (char)coded_buf;
   p_i_1 = (BmfImage *)(p_i);
-  __compress_image_n4_5 = *((uint32_t *)p_i + 1);
+  row_bytes = *((uint32_t *)p_i + 1);
   if ( coded_buf )
     __compress_image_Buffer_1 = 1;
   Buffera = *(uint32_t *)&p_i->width;
   *((uint8_t *)p_i + 11) |= __compress_image_Buffer_1 << 7;
   Buffera_5 = *((char **)p_i + 2);
   v11 = *((uint32_t *)p_i + 3);
-  n4_2 = __compress_image_n4_5;
+  n4_2 = row_bytes;
   __n512[0] = 512;
   v12 = *((uint8_t *)p_i + 10);
   near_lossless_max[0] = 0;
@@ -23578,10 +23578,10 @@ LABEL_22:
               *(uint32_t *)::packer_word = ::packer_acc | (2 * (v32 << ((31 - bits_left) & 31)));
               ::packer_word = (uint32_t *)out_cursor;
               out_cursor += 4;
-              __compress_image_n256 = v32 >> (::packer_free_bits & 31);
+              acc = v32 >> (::packer_free_bits & 31);
               bits_left = ::packer_free_bits + 24;
               ::packer_free_bits += 24;
-              ::packer_acc = __compress_image_n256;
+              ::packer_acc = acc;
             }
             else
             {
