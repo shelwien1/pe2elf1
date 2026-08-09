@@ -597,7 +597,10 @@ It is a binary context model driving the range coder of §5.
 
 1. `malloc(0x7BA230)` — an ~8 MB workspace — laid out by `layout_workspace`.
 2. `rc_begin_encode` — start the range coder (§5.2).
-3. `reduce_alphabet` — **alphabet reduction**, and the first thing written. It scans
+3. `reduce_alphabet` — **alphabet reduction**, and the first thing written, with
+   `expand_alphabet` reading it back: the same helpers in the same order, the
+   flat slot encoded with `rc.encode` and decoded with `rc_decode_flat`, and
+   both recursive. It scans
    the plane for the symbols actually used, encodes `distinct - 1` with
    `rc.encode` as a flat one-wide slot out of the full alphabet size, encodes each used
    symbol with `encode_symbol_list`, and then re-indexes the plane onto the dense
