@@ -4872,7 +4872,7 @@ int32_t __alt_p1_model(Obj0 *_this)
     {
       v83 = v77 - _this->f12[39];
       v84 = (Obj26 *)((uint16_t *)((char *)_this + 16 * (v83 + _this->f12[38])));
-      result = (char *)_this + 16 * (_this->f12[40] + v83);
+      result = (uintptr_t)((char *)_this + 16 * (_this->f12[40] + v83));
       ((uint16_t *)v84)[n5_2 + 1901] += 6;
       v84->f3800 += 6;
       *(uint16_t *)(result + 2 * n5_2 + 3802) += 6;
@@ -4900,7 +4900,7 @@ int32_t __alt_p1_model(Obj0 *_this)
       *(uint16_t *)(v79 + 2 * n5_2 + 3802) += 7;
       *(uint16_t *)(v79 + 3800) += 7;
       v80 = _this->f12[39];
-      result = (char *)_this + 16 * (v80 + _this->f12[0] - _this->f12[38 + _this->f12[37]]);
+      result = (uintptr_t)((char *)_this + 16 * (v80 + _this->f12[0] - _this->f12[38 + _this->f12[37]]));
       v81 = (Obj26 *)((uint16_t *)((char *)_this + 16 * (v80 - _this->f12[40 - _this->f12[37]] + v8)));
       *(uint16_t *)(result + 2 * n5_2 + 3802) += 6;
       *(uint16_t *)(result + 3800) += 6;
@@ -5877,7 +5877,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   {
     buf_1 = buf;
     v31 = (char *)p_i_2 + Bufferb_2 - Size_2 + 16;
-    bmp->bfOffBits = v65;
+    bmp->bfOffBits = (uintptr_t)v65;
     if ( !v28 )
       break;
     n4 = p_i_2[5] & 0x3F;
@@ -6923,14 +6923,14 @@ void ** __alt_model_p1_d8_decode(char ArgList, uint8_t *Src, int32_t i, int32_t 
           *Src_1 = v36;
           v37 = v36 - v5->f0[2];
           *(uint8_t *)v5->f176[5] = v36;
-          *(uint8_t *)(v5->f176[5] + 1) = (BYTE4(v37) ^ v37) - BYTE4(v37);
+          *(v5->f176[5] + 1) = (BYTE4(v37) ^ v37) - BYTE4(v37);
           ((int32_t *)v5)[v5->f0[5] + 6] = ((int32_t *)v5)[v5->f0[5] + 6]
-                        + *(uint8_t *)(v5->f176[5] + 1)
-                        - *(uint8_t *)(v5->f176[5] - 7)
-                        - (*(uint8_t *)(v5->f176[9] - 3)
-                         - *(uint8_t *)(v5->f176[9] + 13)
-                         + *(uint8_t *)(v5->f176[7] - 3)
-                         - *(uint8_t *)(v5->f176[7] + 13));
+                        + *(v5->f176[5] + 1)
+                        - *(v5->f176[5] - 7)
+                        - (*(v5->f176[9] - 3)
+                         - *(v5->f176[9] + 13)
+                         + *(v5->f176[7] - 3)
+                         - *(v5->f176[7] + 13));
           LODWORD(v37) = 16 * v5->f0[3];
           v5->f0[5] = v5->f0[5] == 0;
           if ( *(uint16_t *)((char *)v5 + v37 + 3800) < 0x4000u )
@@ -8585,7 +8585,7 @@ void __reduce_alphabet(Obj10 *Blocka, char a2, uint8_t *a3)
       do
       {
         *(int32_t *)&Blockaa_1->f16 += *(uint32_t *)&buf[4 * *v60 - 4] == 0;
-        v62 = Blockaa_1->f1078236;
+        v62 = (char *)Blockaa_1->f1078236;
         v63 = *v60;
         *(uint32_t *)&buf[4 * v63 - 4] = 1;
         ++v60;
@@ -8724,7 +8724,7 @@ void __reduce_alphabet(Obj10 *Blocka, char a2, uint8_t *a3)
               Blockaa_1 = (Obj10 *)((int32_t *)Blockaa);
               goto LABEL_14;
             }
-            *(uint32_t *)&buf[8 * v11] = Block;
+            *(void **)&buf[8 * v11] = Block;
           }
         }
 LABEL_12:
@@ -8820,7 +8820,7 @@ LABEL_14:
               }
               if ( v44 - 1 >= k_1 )
                 break;
-              v45 = *(&Block + v44);
+              v45 = (uint8_t *)*(&Block + v44);
               v4 = &v33[v44];
               *v45 = v33[v44 - 1];
               v46 = ++v39 < v94;
