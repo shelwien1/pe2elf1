@@ -6339,7 +6339,12 @@ LABEL_9:
   return v8;
 }
 
-int32_t __sub_413230(uint32_t *_this, int32_t a2, uint32_t a3)
+// Add `a3` to symbol `a2`'s count in the list `encode_symbol_list` codes from
+// -- the same 3-byte entries, `_this[5]` base, `_this[1]` length -- then bubble
+// the entry forward while it outweighs its predecessor, and halve every count
+// when one passes 251 or the total passes `_this[4]`.  Sort, then rescale: this
+// is the model update, and the only caller is `init_model_tables`.
+int32_t __symbol_list_update(uint32_t *_this, int32_t a2, uint32_t a3)
 {
   ;
   char *n251;   // was int32_t: these hold addresses
@@ -6770,7 +6775,12 @@ BMF_SSE int32_t __alt_p1_encode_symbol(uint16_t *a1, int32_t n5, int32_t a3, int
   return result;
 }
 
-int32_t __sub_414060(uint16_t *_this)
+// The decoder half of `encode_symbol_tree`.  Same object -- `model_tables +
+// 254 * index`, counts from `_this + 2`, total in `*_this` -- same halving when
+// the total passes 0x4000, and the two are called from the matching sides:
+// `encode_symbol_tree` from alt_p1/alt_p2_encode_symbol, this from
+// alt_p1_decode_symbol and decode_three_way.
+int32_t __decode_symbol_tree(uint16_t *_this)
 {
   ;
   int16_t v31, v33;
@@ -6868,7 +6878,7 @@ int32_t __sub_414060(uint16_t *_this)
     return v25 + v26;
   }
 }
-static inline int32_t __fwd_alt_p1_decode_symbol_sub_414060(void *a0) { return __sub_414060((uint16_t *)a0); }
+static inline int32_t __fwd_alt_p1_decode_symbol_decode_symbol_tree(void *a0) { return __decode_symbol_tree((uint16_t *)a0); }
 
 int32_t __alt_p1_decode_symbol(uint16_t *a1, int32_t a2, int32_t a3)
 {
@@ -6926,7 +6936,7 @@ int32_t __alt_p1_decode_symbol(uint16_t *a1, int32_t a2, int32_t a3)
   n5 = (int32_t)((int32_t)v11 - v24) >> 1;
   if ( n5 >= 5 )
     n5 += 2
-        * __fwd_alt_p1_decode_symbol_sub_414060(
+        * __fwd_alt_p1_decode_symbol_decode_symbol_tree(
             model_tables
           + 32512 * (n5 & 1)
           + 254
@@ -7005,7 +7015,7 @@ int32_t __alt_p2_encode_symbol(uint16_t *_this, char *a2, int32_t a3)
     return __fwd_alt_p2_encode_symbol_encode_symbol_tree(model_tables + 254 * *(uint32_t *)(a2 + 4 * (a3 & 1)), (a3 - 1) >> 1);
   return result;
 }
-static inline int32_t __fwd_decode_three_way_sub_414060(void *a0) { return __sub_414060((uint16_t *)a0); }
+static inline int32_t __fwd_decode_three_way_decode_symbol_tree(void *a0) { return __decode_symbol_tree((uint16_t *)a0); }
 
 int32_t __decode_three_way(uint16_t *_this, char *a2)
 {
@@ -7073,7 +7083,7 @@ int32_t __decode_three_way(uint16_t *_this, char *a2)
   *v9 = n32 + n0x4000;
   v16 = v9 - v24;
   if ( v16 )
-    return v16 + 2 * __fwd_decode_three_way_sub_414060(model_tables + 254 * *(uint32_t *)(a2 + 4 * (v16 & 1)));
+    return v16 + 2 * __fwd_decode_three_way_decode_symbol_tree(model_tables + 254 * *(uint32_t *)(a2 + 4 * (v16 & 1)));
   else
     return 0;
 }
@@ -7285,7 +7295,7 @@ int32_t __pixel_context(ModelBlock *_this, Obj24 *p_n15)
   }
   return result;
 }
-static inline int32_t __fwd_init_model_tables_sub_413230(void *a0, int32_t a1, uint32_t a2) { return __sub_413230((uint32_t *)a0, a1, a2); }
+static inline int32_t __fwd_init_model_tables_symbol_list_update(void *a0, int32_t a1, uint32_t a2) { return __symbol_list_update((uint32_t *)a0, a1, a2); }
 
 int32_t __init_model_tables(Obj10 *_this)
 {
@@ -7305,14 +7315,14 @@ int32_t __init_model_tables(Obj10 *_this)
     {
       if ( _this->f1078216 )
       {
-        __fwd_init_model_tables_sub_413230((uint32_t *)(_this->f1078212 + 24 * __n4_4), **(uint16_t **)&_this->f76, 3u);
-        __fwd_init_model_tables_sub_413230((uint32_t *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f76), __n4_3, 2u);
-        __fwd_init_model_tables_sub_413230((uint32_t *)(_this->f1078208 + 24 * __n4_4), **(uint16_t **)&_this->f76, 4u);
-        __fwd_init_model_tables_sub_413230((uint32_t *)(_this->f1078208 + 24 * **(uint16_t **)&_this->f76), __n4_4, 2u);
+        __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078212 + 24 * __n4_4), **(uint16_t **)&_this->f76, 3u);
+        __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f76), __n4_3, 2u);
+        __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078208 + 24 * __n4_4), **(uint16_t **)&_this->f76, 4u);
+        __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078208 + 24 * **(uint16_t **)&_this->f76), __n4_4, 2u);
       }
       else
       {
-        __fwd_init_model_tables_sub_413230(
+        __fwd_init_model_tables_symbol_list_update(
           (uint32_t *)(_this->f1078212 + 24 * __n4_3),
           **(uint16_t **)&_this->f76,
           (_this->f44 > 3) + 2);
@@ -7320,10 +7330,10 @@ int32_t __init_model_tables(Obj10 *_this)
     }
     else
     {
-      __fwd_init_model_tables_sub_413230((uint32_t *)(_this->f1078212 + 24 * __n4_4), **(uint16_t **)&_this->f76, 3u);
-      __fwd_init_model_tables_sub_413230((uint32_t *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f76), __n4_3, 2u);
-      __fwd_init_model_tables_sub_413230((uint32_t *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f76), __n4_4, 1u);
-      __fwd_init_model_tables_sub_413230((uint32_t *)(_this->f1078208 + 24 * **(uint16_t **)&_this->f76), __n4_4, 2u);
+      __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078212 + 24 * __n4_4), **(uint16_t **)&_this->f76, 3u);
+      __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f76), __n4_3, 2u);
+      __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f76), __n4_4, 1u);
+      __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078208 + 24 * **(uint16_t **)&_this->f76), __n4_4, 2u);
       v3 = _this->f1078232;
       do
       {
@@ -7396,7 +7406,7 @@ LABEL_19:
     goto LABEL_37;
   if ( __n15 != __n15_0 )
   {
-    __fwd_init_model_tables_sub_413230((uint32_t *)(_this->f1078212 + 24 * __n4_3), **(uint16_t **)&_this->f76, 1u);
+    __fwd_init_model_tables_symbol_list_update((uint32_t *)(_this->f1078212 + 24 * __n4_3), **(uint16_t **)&_this->f76, 1u);
     n2 = _this->f32;
     goto LABEL_19;
   }
@@ -7557,7 +7567,13 @@ void **__alt_p1_free(void **Block, char a2)
   return Block;
 }
 
-int32_t __sub_4248D0(Obj25 *_this, uint32_t *a2, char *a3)
+// Context for the alternate p1 model: reads the causal neighbourhood through
+// the row pointers at `_this[49..51]`, forms the gradients (`2*W - WW - N` and
+// friends) and a weighted neighbour sum, and stores them along with the model
+// table pointers they select.  It codes nothing -- no `rc.` call anywhere in it
+// -- and all four p1 bodies call it, encoder and decoder alike, which is what
+// says it is context rather than coding.
+int32_t __alt_p1_context(Obj25 *_this, uint32_t *a2, char *a3)
 {
   ;
   Obj22 *v5;
@@ -8647,7 +8663,7 @@ BMF_SSE char *__rc_begin_encode()
   return __rc_begin_encode_n256;
 }
 static inline int32_t __fwd_alt_p1_d8_encode_body_alt_p1_encode_symbol(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_encode_symbol((uint16_t *)a0, a1, a2, a3); }
-static inline int32_t __fwd_alt_p1_d8_encode_body_sub_4248D0(void *a0, void *a1, int32_t a2) { return __sub_4248D0((Obj25 *)a0, (uint32_t *)a1, a2); }
+static inline int32_t __fwd_alt_p1_d8_encode_body_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj25 *)a0, (uint32_t *)a1, a2); }
 
 void __alt_p1_d8_encode_body(Obj0 *_this, uint8_t *a2, uint8_t *a3)
 {
@@ -8746,7 +8762,7 @@ void __alt_p1_d8_encode_body(Obj0 *_this, uint8_t *a2, uint8_t *a3)
         do
         {
           ++v42;
-          __fwd_alt_p1_d8_encode_body_sub_4248D0((uint8_t **)_this, nullptr, 0);
+          __fwd_alt_p1_d8_encode_body_alt_p1_context((uint8_t **)_this, nullptr, 0);
           v33 = *(uint8_t *)&_this->f8;
           v34 = (uint8_t)(*a2 - v33);
           v35 = *(uint8_t *)(*(uint8_t *)((char *)_this + (v34 + 984)) + (char *)_this + 1496) + v33;
@@ -10275,7 +10291,7 @@ BMF_SSE int32_t __estimate_cost(char *a1, int32_t n2)
 }
 static inline int32_t __fwd_alt_model_p1_d8_decode_alt_p1_decode_symbol(void *a0, int32_t a1, int32_t a2) { return __alt_p1_decode_symbol((uint16_t *)a0, a1, a2); }
 static inline void ** __fwd_alt_model_p1_d8_decode_alt_p1_free(void *a0, char a1) { return __alt_p1_free((void **)a0, a1); }
-static inline int32_t __fwd_alt_model_p1_d8_decode_sub_4248D0(void *a0, void *a1, int32_t a2) { return __sub_4248D0((Obj25 *)a0, (uint32_t *)a1, a2); }
+static inline int32_t __fwd_alt_model_p1_d8_decode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj25 *)a0, (uint32_t *)a1, a2); }
 static inline int32_t * __fwd_alt_model_p1_d8_decode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((int32_t *)a0, a1, a2, a3); }
 
 void ** __alt_model_p1_d8_decode(char ArgList, uint8_t *Src, int32_t i, int32_t a4)
@@ -10380,7 +10396,7 @@ void ** __alt_model_p1_d8_decode(char ArgList, uint8_t *Src, int32_t i, int32_t 
         do
         {
           ++v41;
-          __fwd_alt_model_p1_d8_decode_sub_4248D0((uint32_t *)v5, nullptr, 0);
+          __fwd_alt_model_p1_d8_decode_alt_p1_context((uint32_t *)v5, nullptr, 0);
           v36 = (uint8_t)(*((uint8_t *)v5 + 8)
                                 + *((uint8_t *)v5 + (uint8_t)__fwd_alt_model_p1_d8_decode_alt_p1_decode_symbol(&((int32_t *)v5)[4 * v5->f12 + 950], v35, v5->f16) + 1496));
           *Src_1 = v36;
@@ -10418,7 +10434,7 @@ void ** __alt_model_p1_d8_decode(char ArgList, uint8_t *Src, int32_t i, int32_t 
 
 static inline int32_t __fwd_alt_model_p1_decode_alt_p1_decode_symbol(void *a0, int32_t a1, int32_t a2) { return __alt_p1_decode_symbol((uint16_t *)a0, a1, a2); }
 static inline void ** __fwd_alt_model_p1_decode_alt_p1_free(void *a0, char a1) { return __alt_p1_free((void **)a0, a1); }
-static inline int32_t __fwd_alt_model_p1_decode_sub_4248D0(void *a0, void *a1, int32_t a2) { return __sub_4248D0((Obj25 *)a0, (uint32_t *)a1, a2); }
+static inline int32_t __fwd_alt_model_p1_decode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj25 *)a0, (uint32_t *)a1, a2); }
 static inline int32_t * __fwd_alt_model_p1_decode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((int32_t *)a0, a1, a2, a3); }
 
 int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
@@ -10428,7 +10444,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
   // aliases only reach offset 84; the code writes into the 32 bytes of slack
   // past the end, and once each local has its own storage those writes land on
   // whatever the compiler put next.  At -O2 that is a null pointer handed to
-  // sub_4248D0; at -O0 it is a plane that decodes to the wrong pixels.
+  // alt_p1_context; at -O0 it is a plane that decodes to the wrong pixels.
   //
   // Nothing caught it because nothing reached it: this is the body
   // REFACTORING.md section 2.3 lists as unexercised.  testfiles/altp1.bmp
@@ -10638,7 +10654,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
         do
         {
           v51 = Block;
-          __fwd_alt_model_p1_decode_sub_4248D0((uint8_t **)Block, nullptr, 0);
+          __fwd_alt_model_p1_decode_alt_p1_context((uint8_t **)Block, nullptr, 0);
           v53 = __fwd_alt_model_p1_decode_alt_p1_decode_symbol(&v51[4 * v51[3] + 950], v52, v51[4]);
           v54 = v51[2];
           v55 = (uint8_t *)v51[49];
@@ -10665,7 +10681,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           v51[53] += 2;
           v59 = (int32_t)v94;
           *(uint8_t *)((uint8_t)__byte_44339D[0] + Src) = v58;
-          __fwd_alt_model_p1_decode_sub_4248D0((uint8_t **)v59, Block, 0);
+          __fwd_alt_model_p1_decode_alt_p1_context((uint8_t **)v59, Block, 0);
           v61 = __fwd_alt_model_p1_decode_alt_p1_decode_symbol((uint16_t *)((char *)v59 + 16 * v59->f12 + 3800), v60, v59->f16);
           v62 = *(uint32_t *)&v59->f8;
           v63 = *(uint8_t **)&v59->f196;
@@ -10695,7 +10711,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           v84 = Block;
           v83 = v94;
           *(uint8_t *)(Src + (uint8_t)__byte_4433AD[0]) = v104;
-          __fwd_alt_model_p1_decode_sub_4248D0(v66, v83, (int32_t)v84);
+          __fwd_alt_model_p1_decode_alt_p1_context(v66, v83, (int32_t)v84);
           v68 = __fwd_alt_model_p1_decode_alt_p1_decode_symbol(&((uint8_t**)v66)[4 * (uint32_t)v66->f12 + 950], v67, (int32_t)v66->f16);
           v69 = v66->f8;
           v70 = v66->f196;
@@ -10733,7 +10749,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           if ( plane_count >= 4 )
           {
             v73 = (Obj27 *)(v96);
-            __fwd_alt_model_p1_decode_sub_4248D0(v96, v95, (int32_t)v94);
+            __fwd_alt_model_p1_decode_alt_p1_context(v96, v95, (int32_t)v94);
             v75 = __fwd_alt_model_p1_decode_alt_p1_decode_symbol(&((uint8_t**)v73)[4 * (uint32_t)v73->f12 + 950], v74, (int32_t)v73->f16);
             v76 = v73->f8;
             v77 = v73->f196;
@@ -10797,7 +10813,11 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
   return n4_3;
 }
 
-BMF_SSE int32_t __sub_41C4B0(__m128 *_this, Obj21 *a2, Obj12 *a3, int32_t n2)
+// The fixed-coefficient weighted sum `alt_p2_context` calls, and its only
+// caller.  Sums `a2`'s rows against the constants at 0x441120 onward, keeps the
+// result in `a2->f112[1]` and returns it, and reloads `_this` from `a3` scaled
+// by two more constants.  Float throughout, and it codes nothing.
+BMF_SSE int32_t __alt_p2_filter(__m128 *_this, Obj21 *a2, Obj12 *a3, int32_t n2)
 {
   ;
   __m128 v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v23,
@@ -10975,9 +10995,15 @@ BMF_SSE int32_t __sub_41C4B0(__m128 *_this, Obj21 *a2, Obj12 *a3, int32_t n2)
     return (int32_t)v22;
   }
 }
-static inline int32_t __fwd_sub_41A130_sub_41C4B0(void *a0, void *a1, void *a2, int32_t a3) { return __sub_41C4B0((__m128 *)a0, (Obj21 *)a1, (Obj12 *)a2, a3); }
+static inline int32_t __fwd_alt_p2_context_alt_p2_filter(void *a0, void *a1, void *a2, int32_t a3) { return __alt_p2_filter((__m128 *)a0, (Obj21 *)a1, (Obj12 *)a2, a3); }
 
-BMF_SSE int32_t __sub_41A130(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3__ref, Obj11 *a4, Obj11 *a5)
+// `alt_p1_context`'s opposite number for p2, and the largest body in the file
+// at a thousand lines.  Same evidence for the name: no `rc.` call in it, and
+// all four p2 bodies call it from both sides.  It ends by folding the
+// neighbourhood sums into three context words and returning the 0..255 index
+// they are read with.  What the individual terms *mean* is ALGORITHM.md §9's
+// question, and it is still open -- this names the role, not the algorithm.
+BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3__ref, Obj11 *a4, Obj11 *a5)
 {
   struct alignas(16) {   // 208 bytes, the frame Hex-Rays could not name
       uint8_t slot0[4];
@@ -11523,7 +11549,7 @@ BMF_SSE int32_t __sub_41A130(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3_
     v107 = v105;
   if ( v107 > 11 * n1840_1 )
     n2 = 3;
-  n3536_5 = __fwd_sub_41A130_sub_41C4B0((__m128 *)v28->f278656.m128_i32[0], v293, &v275, n2);
+  n3536_5 = __fwd_alt_p2_context_alt_p2_filter((__m128 *)v28->f278656.m128_i32[0], v293, &v275, n2);
   v109 = v28->f278736.m128_i32[0];
   v110 = (__m128 *)v28->f278736.m128_i32[1];
   v28->f278688.m128_i32[3] = n3536_5;
@@ -16613,7 +16639,7 @@ LABEL_76:
 }
 static inline int32_t __fwd_alt_model_p1_encode_alt_p1_encode_symbol(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_encode_symbol((uint16_t *)a0, a1, a2, a3); }
 static inline void ** __fwd_alt_model_p1_encode_alt_p1_free(void *a0, char a1) { return __alt_p1_free((void **)a0, a1); }
-static inline int32_t __fwd_alt_model_p1_encode_sub_4248D0(void *a0, void *a1, int32_t a2) { return __sub_4248D0((Obj25 *)a0, (uint32_t *)a1, a2); }
+static inline int32_t __fwd_alt_model_p1_encode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj25 *)a0, (uint32_t *)a1, a2); }
 static inline int32_t * __fwd_alt_model_p1_encode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((int32_t *)a0, a1, a2, a3); }
 
 int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
@@ -16841,7 +16867,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
           n5_9 = *(uint8_t *)(a2 + (uint8_t)__byte_44339D[0]);
           v114 = (uint8_t)__byte_44339D[0];
           n5_6 = n5_9;
-          __fwd_alt_model_p1_encode_sub_4248D0((uint8_t **)Block, nullptr, 0);
+          __fwd_alt_model_p1_encode_alt_p1_context((uint8_t **)Block, nullptr, 0);
           n5_7 = n5_6;
           v53 = v50[8];
           v112 = (uint8_t)(n5_6 - v53);
@@ -16885,7 +16911,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
             v60 = v60 - v105 - *(uint8_t *)((uint8_t)__byte_44339D[0] + a2);
           v61 = (Obj25 *)(v102);
           v118 = v60;
-          __fwd_alt_model_p1_encode_sub_4248D0(v102, Block, 0);
+          __fwd_alt_model_p1_encode_alt_p1_context(v102, Block, 0);
           v62 = *((uint8_t *)v61 + 8);
           v63 = (uint8_t)(v118 - v62);
           n5 = *((uint8_t *)v61 + v63 + 984);
@@ -16933,7 +16959,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
                                     * (uint32_t)*(uint8_t *)((uint8_t)__byte_4433AD[0] + a2)
                                     + 40) >> 7));
           v70 = (Obj28 *)(v103);
-          __fwd_alt_model_p1_encode_sub_4248D0(v103, (uint32_t *)v102, (int32_t)Block);
+          __fwd_alt_model_p1_encode_alt_p1_context(v103, (uint32_t *)v102, (int32_t)Block);
           v71 = *((uint8_t *)v70 + 8);
           v115 = (uint8_t)(v69 - v71);
           n5_4 = *((uint8_t *)v70 + v115 + 984);
@@ -16983,7 +17009,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
               v79 = *(uint8_t *)((uint8_t)__n3_0 + a2);
             v80 = (Obj29 *)(v104);
             v99 = v79;
-            __fwd_alt_model_p1_encode_sub_4248D0(v104, (uint32_t *)v103, (int32_t)v102);
+            __fwd_alt_model_p1_encode_alt_p1_context(v104, (uint32_t *)v103, (int32_t)v102);
             v81 = *((uint8_t *)v80 + 8);
             n5_5 = *((uint8_t *)v80 + (uint8_t)(v99 - v81) + 984);
             v98 = (uint8_t)(v99 - v81);
@@ -19029,7 +19055,7 @@ LABEL_115:
 }
 
 static inline int32_t __fwd_alt_p2_d8_decode_body_decode_three_way(void *a0, int32_t a1) { return __decode_three_way((uint16_t *)a0, a1); }
-static inline int32_t __fwd_alt_p2_d8_decode_body_sub_41A130(void *a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __sub_41A130((Obj11 *)a0, a1, a2, (Obj11 *)a3, (Obj11 *)a4); }
+static inline int32_t __fwd_alt_p2_d8_decode_body_alt_p2_context(void *a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __alt_p2_context((Obj11 *)a0, a1, a2, (Obj11 *)a3, (Obj11 *)a4); }
 
 BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m128 &a3__ref, const __m128 &a4__ref, uint8_t *a5, int32_t i, int32_t a7)
 {
@@ -19389,7 +19415,7 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
       {
         for ( j = 0; j < i; ++j )
         {
-          v92 = __fwd_alt_p2_d8_decode_body_sub_41A130((__m128 *)lpAddress, v47, a3, nullptr, nullptr);
+          v92 = __fwd_alt_p2_d8_decode_body_alt_p2_context((__m128 *)lpAddress, v47, a3, nullptr, nullptr);
           v93 = __fwd_alt_p2_d8_decode_body_decode_three_way(
                   (uint16_t *)((uintptr_t)lpAddress + 8 * lpAddress->f278704 + 940072),
                   (uintptr_t)lpAddress + 278708);
@@ -19426,7 +19452,7 @@ BMF_SSE void __alt_model_p2_d8_decode(const __m128 &a1__ref, const __m128 &a2__r
 }
 static inline int32_t __fwd_alt_model_p2_decode_decode_three_way(void *a0, int32_t a1) { return __decode_three_way((uint16_t *)a0, a1); }
 static inline void ** __fwd_alt_model_p2_decode_alt_p2_free(void *a0, char a1) { return __alt_p2_free((void **)a0, a1); }
-static inline int32_t __fwd_alt_model_p2_decode_sub_41A130(void *a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __sub_41A130((Obj11 *)a0, a1, a2, (Obj11 *)a3, (Obj11 *)a4); }
+static inline int32_t __fwd_alt_model_p2_decode_alt_p2_context(void *a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __alt_p2_context((Obj11 *)a0, a1, a2, (Obj11 *)a3, (Obj11 *)a4); }
 
 BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
 {
@@ -19906,7 +19932,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           __dword_4458E8 >>= 3;
           __dword_4458EC >>= 3;
           lpAddress_1 = (Obj11 *)(lpAddress);
-          v101 = __fwd_alt_model_p2_decode_sub_41A130((__m128 *)lpAddress, v2, v3, v157, v156);
+          v101 = __fwd_alt_model_p2_decode_alt_p2_context((__m128 *)lpAddress, v2, v3, v157, v156);
           v102 = (uint16_t *)&((uint32_t *)lpAddress_1)[2 * *(uint32_t *)&lpAddress_1->f278704 + 235018];
           v168 = v101;
           v103 = __fwd_alt_model_p2_decode_decode_three_way(v102, (int32_t)((uint32_t *)lpAddress_1 + 69677));
@@ -19928,7 +19954,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
             v110 = 16 * Src[(uint8_t)__byte_44339D[0]];
           v111 = (Obj11 *)(v156);
           *(uint16_t *)(v156->f278736.m128_i32[0] + 2) = v110;
-          v112 = __fwd_alt_model_p2_decode_sub_41A130(v111, v2, v3, lpAddress, v157);
+          v112 = __fwd_alt_model_p2_decode_alt_p2_context(v111, v2, v3, lpAddress, v157);
           v113 = __fwd_alt_model_p2_decode_decode_three_way(&v111->f940064.m128_u16[4 * v111->f278704.m128_i32[0] + 4], (int32_t)&v111->f278704.m128_i32[1]);
           v114 = (uint8_t)(v112 + v111->f280496.m128_i8[v113]);
           v169 = v114;
@@ -19950,7 +19976,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
                   + __dword_4433A0[4 * (uint8_t)__byte_4433BD[0]] * Src[(uint8_t)__byte_44339D[0]]) >> 3;
           v120 = (Obj11 *)(v157);
           *(uint16_t *)(v157->f278736.m128_i32[0] + 2) = v119;
-          v121 = __fwd_alt_model_p2_decode_sub_41A130(v120, v2, v3, lpAddress, v156);
+          v121 = __fwd_alt_model_p2_decode_alt_p2_context(v120, v2, v3, lpAddress, v156);
           v122 = __fwd_alt_model_p2_decode_decode_three_way(&v120->f940064.m128_u16[4 * v120->f278704.m128_i32[0] + 4], (int32_t)&v120->f278704.m128_i32[1]);
           v123 = (uint8_t)(v121 + v120->f280496.m128_i8[v122]);
           v170 = v123;
@@ -19975,7 +20001,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
               LOWORD(v128) = 0;
             v129 = (Obj11 *)(v158);
             *(uint16_t *)(v158->f278736.m128_i32[0] + 2) = v128;
-            v130 = __fwd_alt_model_p2_decode_sub_41A130(v129, v2, v3, v157, lpAddress);
+            v130 = __fwd_alt_model_p2_decode_alt_p2_context(v129, v2, v3, v157, lpAddress);
             v131 = __fwd_alt_model_p2_decode_decode_three_way(&v129->f940064.m128_u16[4 * v129->f278704.m128_i32[0] + 4], (int32_t)&v129->f278704.m128_i32[1]);
             v154 = (uint8_t)(v130 + v129->f280496.m128_i8[v131]);
             __alt_p2_model((int32_t)v129, (__m128)__xmmword_439B60, v154, v131, v154 - v130);
@@ -20074,7 +20100,7 @@ BMF_SSE void __unmodel_plane(char ArgList, const __m128 &a2__ref, const __m128 &
   }
 }
 static inline int32_t __fwd_alt_p2_d8_encode_body_alt_p2_encode_symbol(void *a0, int32_t a1, int32_t a2) { return __alt_p2_encode_symbol((uint16_t *)a0, a1, a2); }
-static inline int32_t __fwd_alt_p2_d8_encode_body_sub_41A130(void *a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __sub_41A130((Obj11 *)a0, a1, a2, (Obj11 *)a3, (Obj11 *)a4); }
+static inline int32_t __fwd_alt_p2_d8_encode_body_alt_p2_context(void *a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __alt_p2_context((Obj11 *)a0, a1, a2, (Obj11 *)a3, (Obj11 *)a4); }
 
 BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, const __m128 &a3__ref, uint8_t *a4, int32_t i, int32_t a6, uint8_t *a7)
 {
@@ -20455,7 +20481,7 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
         lpAddress_1 = (Obj11 *)(lpAddress);
         for ( k = 0; k < i; ++k )
         {
-          v95 = __fwd_alt_p2_d8_encode_body_sub_41A130(lpAddress_1, v50, a2, nullptr, nullptr);
+          v95 = __fwd_alt_p2_d8_encode_body_alt_p2_context(lpAddress_1, v50, a2, nullptr, nullptr);
           v107 = v109[k];
           v96 = (uint8_t)(v107 - v95);
           v97 = v95 + lpAddress_1->f280496.m128_i8[lpAddress_1->f279984.m128_u8[v96]];
@@ -20507,7 +20533,7 @@ BMF_SSE void __alt_model_p2_d8_encode(const __m128 &a1__ref, const __m128 &a2__r
 }
 static inline int32_t __fwd_alt_model_p2_encode_alt_p2_encode_symbol(void *a0, int32_t a1, int32_t a2) { return __alt_p2_encode_symbol((uint16_t *)a0, a1, a2); }
 static inline void ** __fwd_alt_model_p2_encode_alt_p2_free(void *a0, char a1) { return __alt_p2_free((void **)a0, a1); }
-static inline int32_t __fwd_alt_model_p2_encode_sub_41A130(void *a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __sub_41A130((Obj11 *)a0, a1, a2, (Obj11 *)a3, (Obj11 *)a4); }
+static inline int32_t __fwd_alt_model_p2_encode_alt_p2_context(void *a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __alt_p2_context((Obj11 *)a0, a1, a2, (Obj11 *)a3, (Obj11 *)a4); }
 
 BMF_SSE int32_t __alt_model_p2_encode(Obj33 *p_i, uint8_t *a2)
 {
@@ -21018,7 +21044,7 @@ BMF_SSE int32_t __alt_model_p2_encode(Obj33 *p_i, uint8_t *a2)
           __dword_4458EC = v99 >> 3;
           lpAddress_1 = (Obj11 *)(lpAddress);
           v104 = v166[(uint8_t)__byte_44339D[0]];
-          v178 = __fwd_alt_model_p2_encode_sub_41A130((__m128 *)lpAddress, v2, v3, v161, v160);
+          v178 = __fwd_alt_model_p2_encode_alt_p2_context((__m128 *)lpAddress, v2, v3, v161, v160);
           v181 = (uint8_t)(v104 - v178);
           v105 = (uint8_t)((uint8_t *)lpAddress_1)[v181 + 279984];
           v106 = v166[v184];
@@ -21055,7 +21081,7 @@ BMF_SSE int32_t __alt_model_p2_encode(Obj33 *p_i, uint8_t *a2)
           *(uint16_t *)(v160->f278736.m128_i32[0] + 2) = v113;
           v176 = (uint8_t)__byte_4433AD[0];
           v115 = v166[(uint8_t)__byte_4433AD[0]];
-          v179 = __fwd_alt_model_p2_encode_sub_41A130(v114, v2, v3, lpAddress, v161);
+          v179 = __fwd_alt_model_p2_encode_alt_p2_context(v114, v2, v3, lpAddress, v161);
           v183 = (uint8_t)(v115 - v179);
           v116 = v114->f279984.m128_u8[v183];
           v117 = v166[v176];
@@ -21090,7 +21116,7 @@ BMF_SSE int32_t __alt_model_p2_encode(Obj33 *p_i, uint8_t *a2)
           *(uint16_t *)(v161->f278736.m128_i32[0] + 2) = v124;
           v177 = (uint8_t)__byte_4433BD[0];
           v126 = v166[(uint8_t)__byte_4433BD[0]];
-          v180 = __fwd_alt_model_p2_encode_sub_41A130(v125, v2, v3, lpAddress, v160);
+          v180 = __fwd_alt_model_p2_encode_alt_p2_context(v125, v2, v3, lpAddress, v160);
           v182 = (uint8_t)(v126 - v180);
           v127 = v125->f279984.m128_u8[v182];
           v128 = v166[v177];
@@ -21130,7 +21156,7 @@ BMF_SSE int32_t __alt_model_p2_encode(Obj33 *p_i, uint8_t *a2)
             *(uint16_t *)(v162->f278736.m128_i32[0] + 2) = v132;
             n3 = (uint8_t)__n3_0;
             v134 = v166[(uint8_t)__n3_0];
-            v157 = __fwd_alt_model_p2_encode_sub_41A130(v133, v2, v3, v161, lpAddress);
+            v157 = __fwd_alt_model_p2_encode_alt_p2_context(v133, v2, v3, v161, lpAddress);
             v158 = (uint8_t)(v134 - v157);
             v135 = v133->f279984.m128_u8[v158];
             v136 = v166[n3];
