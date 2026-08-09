@@ -723,7 +723,7 @@ typedef M128I _OWORD;
 // FILE* handed to BMF's fread would be read as a Win32 _iobuf -- ended when
 // BMF's fread did.
 //
-// Which leaves this file with two things: the page allocator and sub_402E30.
+// Which leaves this file with two things: the page allocator and out_of_memory_handler.
 // Intel's runtime went the same way -- its two error-reporting hooks served
 // only the no-SSE2 exit, and its log entries were `log` -- and so did the
 // CPUID helpers that answered for its dispatcher.  No Win32 and no Intel
@@ -830,11 +830,11 @@ static void bmf_page_free(void *p) {
     free(((void **)p)[-1]);
 }
 
-// sub_402E30 is `push 7; call exit_402E40` — the out-of-memory handler main
-// hands to sub_42CBB0.  IDA's call analysis failed on it (hence "no decompiled
+// out_of_memory_handler is `push 7; call exit_402E40` — the handler main
+// hands to set_new_handler.  IDA's call analysis failed on it (hence "no decompiled
 // body" in the generated declaration), but the two instructions are not in
 // doubt.  Defined after the bodies, since exit_402E40 is one of them.
-void __sub_402E30();
+void __out_of_memory_handler();
 
 #include "subs1.hpp"
 
