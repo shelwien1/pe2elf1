@@ -1870,60 +1870,28 @@ alignas(16) static float bmf_p2_coef[7][4] = {
   {     0.04f,     0.02f,     0.04f,     0.05f },   // 0x441170
   {     0.07f,      0.0f,     0.03f,     0.02f },   // 0x441180
 };
-alignas(16) static uint8_t bmf_xmmword_441190[16 + 64] = {   // 0x441190
-  0x7c,0xf2,0x30,0x3c,0x65,0x19,0xe2,0x3b,0x7c,0xf2,0xb0,0x3b,0xc3,0x64,0xaa,0x3b,0x27,0xa0,
-  0x89,0x3b,0x27,0xa0,0x89,0x3b,0x27,0xa0,0x89,0x3b,0x24,0x97,0x7f,0x3b,0x42,0x60,0x65,0x3b,
-  0x42,0x60,0x65,0x3b,0x34,0x80,0x37,0x3b,0x34,0x80,0x37,0x3b,0x7c,0xf2,0x30,0x3b,0xc3,0x64,
-  0x2a,0x3b,0xc3,0x64,0x2a,0x3b,0x52,0x49,0x1d,0x3b,0x99,0xbb,0x16,0x3b,0x99,0xbb,0x16,0x3b,
-  0xe0,0x2d,0x10,0x3b,0x27,0xa0,0x09,0x3b,
+// The p2 model's seven learning rates, one four-lane row per input.  BMF.exe
+// kept them at 0x441190..0x4411FF.  Rows 4..6 are not constants: a run starts
+// by saving them and setting all three to `bmf_p2_rate_reset`, and puts them
+// back at the end, so the last three inputs learn at a flat rate inside a run
+// and at the schedule's rate outside it.
+alignas(16) static float bmf_p2_rate[7][4] = {
+  { 0.0108f, 0.0069f, 0.0054f, 0.0052f },   // 0x441190
+  { 0.0042f, 0.0042f, 0.0042f, 0.0039f },   // 0x4411A0
+  { 0.0035f, 0.0035f, 0.0028f, 0.0028f },   // 0x4411B0
+  { 0.0027f, 0.0026f, 0.0026f, 0.0024f },   // 0x4411C0
+  { 0.0023f, 0.0023f, 0.0022f, 0.0021f },   // 0x4411D0
+  { 0.0019f, 0.0019f, 0.0017f, 0.0017f },   // 0x4411E0
+  { 0.0015f, 0.0015f, 0.0011f, 0.0009f },   // 0x4411F0
 };
-typedef __m128i t_xmmword_441190;
-static t_xmmword_441190& __xmmword_441190 = *(t_xmmword_441190*)bmf_xmmword_441190;
-alignas(16) static uint8_t bmf_xmmword_4411A0[16 + 64] = {   // 0x4411A0
-  0x27,0xa0,0x89,0x3b,0x27,0xa0,0x89,0x3b,0x27,0xa0,0x89,0x3b,0x24,0x97,0x7f,0x3b,0x42,0x60,
-  0x65,0x3b,0x42,0x60,0x65,0x3b,0x34,0x80,0x37,0x3b,0x34,0x80,0x37,0x3b,0x7c,0xf2,0x30,0x3b,
-  0xc3,0x64,0x2a,0x3b,0xc3,0x64,0x2a,0x3b,0x52,0x49,0x1d,0x3b,0x99,0xbb,0x16,0x3b,0x99,0xbb,
-  0x16,0x3b,0xe0,0x2d,0x10,0x3b,0x27,0xa0,0x09,0x3b,0x6c,0x09,0xf9,0x3a,0x6c,0x09,0xf9,0x3a,
-  0x89,0xd2,0xde,0x3a,0x89,0xd2,0xde,0x3a,
-};
-typedef __m128i t_xmmword_4411A0;
-static t_xmmword_4411A0& __xmmword_4411A0 = *(t_xmmword_4411A0*)bmf_xmmword_4411A0;
-alignas(16) static uint8_t bmf_xmmword_4411B0[16 + 64] = {   // 0x4411B0
-  0x42,0x60,0x65,0x3b,0x42,0x60,0x65,0x3b,0x34,0x80,0x37,0x3b,0x34,0x80,0x37,0x3b,0x7c,0xf2,
-  0x30,0x3b,0xc3,0x64,0x2a,0x3b,0xc3,0x64,0x2a,0x3b,0x52,0x49,0x1d,0x3b,0x99,0xbb,0x16,0x3b,
-  0x99,0xbb,0x16,0x3b,0xe0,0x2d,0x10,0x3b,0x27,0xa0,0x09,0x3b,0x6c,0x09,0xf9,0x3a,0x6c,0x09,
-  0xf9,0x3a,0x89,0xd2,0xde,0x3a,0x89,0xd2,0xde,0x3a,0xa6,0x9b,0xc4,0x3a,0xa6,0x9b,0xc4,0x3a,
-  0xe0,0x2d,0x90,0x3a,0xfa,0xed,0x6b,0x3a,
-};
-typedef __m128i t_xmmword_4411B0;
-static t_xmmword_4411B0& __xmmword_4411B0 = *(t_xmmword_4411B0*)bmf_xmmword_4411B0;
-alignas(16) static uint8_t bmf_xmmword_4411C0[16 + 64] = {   // 0x4411C0
-  0x7c,0xf2,0x30,0x3b,0xc3,0x64,0x2a,0x3b,0xc3,0x64,0x2a,0x3b,0x52,0x49,0x1d,0x3b,0x99,0xbb,
-  0x16,0x3b,0x99,0xbb,0x16,0x3b,0xe0,0x2d,0x10,0x3b,0x27,0xa0,0x09,0x3b,0x6c,0x09,0xf9,0x3a,
-  0x6c,0x09,0xf9,0x3a,0x89,0xd2,0xde,0x3a,0x89,0xd2,0xde,0x3a,0xa6,0x9b,0xc4,0x3a,0xa6,0x9b,
-  0xc4,0x3a,0xe0,0x2d,0x90,0x3a,0xfa,0xed,0x6b,0x3a,0x75,0x98,0x00,0x00,0x73,0x98,0x00,0x00,
-  0xeb,0xd2,0x42,0x00,0x02,0xd3,0x42,0x00,
-};
-typedef __m128i t_xmmword_4411C0;
-static t_xmmword_4411C0& __xmmword_4411C0 = *(t_xmmword_4411C0*)bmf_xmmword_4411C0;
-alignas(16) static uint8_t bmf_xmmword_4411D0[16 + 64] = {   // 0x4411D0
-  0x99,0xbb,0x16,0x3b,0x99,0xbb,0x16,0x3b,0xe0,0x2d,0x10,0x3b,0x27,0xa0,0x09,0x3b,0x6c,0x09,
-  0xf9,0x3a,0x6c,0x09,0xf9,0x3a,0x89,0xd2,0xde,0x3a,0x89,0xd2,0xde,0x3a,0xa6,0x9b,0xc4,0x3a,
-  0xa6,0x9b,0xc4,0x3a,0xe0,0x2d,0x90,0x3a,0xfa,0xed,0x6b,0x3a,0x75,0x98,0x00,0x00,0x73,0x98,
-  0x00,0x00,0xeb,0xd2,0x42,0x00,0x02,0xd3,0x42,0x00,0x02,0xd3,0x42,0x00,0x00,0x00,0x00,0x00,
-  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-};
-typedef __m128i t_xmmword_4411D0;
-static t_xmmword_4411D0& __xmmword_4411D0 = *(t_xmmword_4411D0*)bmf_xmmword_4411D0;
-alignas(16) static uint8_t bmf_xmmword_4411E0[16 + 64] = {   // 0x4411E0
-  0x6c,0x09,0xf9,0x3a,0x6c,0x09,0xf9,0x3a,0x89,0xd2,0xde,0x3a,0x89,0xd2,0xde,0x3a,0xa6,0x9b,
-  0xc4,0x3a,0xa6,0x9b,0xc4,0x3a,0xe0,0x2d,0x90,0x3a,0xfa,0xed,0x6b,0x3a,0x75,0x98,0x00,0x00,
-  0x73,0x98,0x00,0x00,0xeb,0xd2,0x42,0x00,0x02,0xd3,0x42,0x00,0x02,0xd3,0x42,0x00,0x00,0x00,
-  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x27,0xd2,0x42,0x00,0x01,0x00,0x00,0x00,
-  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-};
-typedef __m128i t_xmmword_4411E0;
-static t_xmmword_4411E0& __xmmword_4411E0 = *(t_xmmword_4411E0*)bmf_xmmword_4411E0;
+
+// What a run resets rows 4..6 to.  BMF.exe had it twice, 0x439B50 for the
+// encoder and 0x439B60 for the decoder, the same number in both, and passed it
+// to `alt_p2_model` as that half's mean-square rate.
+static const float bmf_p2_rate_reset = 0.0024f;
+
+// How fast an input's running mean square follows it.  0x439B10.
+static const float bmf_p2_ms_rate = 0.023f;
 alignas(16) static uint8_t bmf_xmmword_4411F0[6592 + 64] = {   // 0x4411F0
   0xa6,0x9b,0xc4,0x3a,0xa6,0x9b,0xc4,0x3a,0xe0,0x2d,0x90,0x3a,0xfa,0xed,0x6b,0x3a,0x75,0x98,
   0x00,0x00,0x73,0x98,0x00,0x00,0xeb,0xd2,0x42,0x00,0x02,0xd3,0x42,0x00,0x02,0xd3,0x42,0x00,
@@ -2296,8 +2264,6 @@ alignas(16) static uint8_t bmf_xmmword_4411F0[6592 + 64] = {   // 0x4411F0
   0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
   0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
 };
-typedef __m128i t_xmmword_4411F0;
-static t_xmmword_4411F0& __xmmword_4411F0 = *(t_xmmword_4411F0*)bmf_xmmword_4411F0;
 alignas(16) static uint8_t bmf_dwLowDateTime[1968 + 64] = {   // 0x442BB0
   0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
   0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
@@ -3221,13 +3187,8 @@ static unsigned char *bmf_addr(unsigned va)
   if (va >= 0x439BD0u && va < 0x439BD8u) return bmf_byte_439BD0 + (va - 0x439BD0u);
   if (va >= 0x439BD8u && va < 0x441120u) return bmf_dword_439BD8 + (va - 0x439BD8u);
   if (va >= 0x441120u && va < 0x441190u) return (unsigned char *)bmf_p2_coef + (va - 0x441120u);
-  if (va >= 0x441190u && va < 0x4411A0u) return bmf_xmmword_441190 + (va - 0x441190u);
-  if (va >= 0x4411A0u && va < 0x4411B0u) return bmf_xmmword_4411A0 + (va - 0x4411A0u);
-  if (va >= 0x4411B0u && va < 0x4411C0u) return bmf_xmmword_4411B0 + (va - 0x4411B0u);
-  if (va >= 0x4411C0u && va < 0x4411D0u) return bmf_xmmword_4411C0 + (va - 0x4411C0u);
-  if (va >= 0x4411D0u && va < 0x4411E0u) return bmf_xmmword_4411D0 + (va - 0x4411D0u);
-  if (va >= 0x4411E0u && va < 0x4411F0u) return bmf_xmmword_4411E0 + (va - 0x4411E0u);
-  if (va >= 0x4411F0u && va < 0x442BB0u) return bmf_xmmword_4411F0 + (va - 0x4411F0u);
+  if (va >= 0x441190u && va < 0x441200u) return (unsigned char *)bmf_p2_rate + (va - 0x441190u);
+  if (va >= 0x441200u && va < 0x442BB0u) return bmf_xmmword_4411F0 + (va - 0x4411F0u);
   if (va >= 0x442BB0u && va < 0x443360u) return bmf_dwLowDateTime + (va - 0x442BB0u);
   if (va >= 0x443360u && va < 0x443364u) return bmf_plane_predictor + (va - 0x443360u);
   if (va >= 0x443364u && va < 0x443368u) return bmf_plane_alt_model + (va - 0x443364u);
@@ -5390,7 +5351,7 @@ BmfArc *__bmf_destroy_archive(BmfArc *Block, char a2)
   return Block;
 }
 
-BMF_SSE void __expand_predictor_mode0(uint32_t Src, int32_t i, int32_t a3)
+void __expand_predictor_mode0(uint32_t Src, int32_t i, int32_t a3)
 {
   ;
   int32_t n256, n256_1;
@@ -5399,7 +5360,7 @@ BMF_SSE void __expand_predictor_mode0(uint32_t Src, int32_t i, int32_t a3)
   // never taken: -E is 0
 }
 
-BMF_SSE uint32_t __predict_med(char *Src, int32_t i, int32_t a3)
+uint32_t __predict_med(char *Src, int32_t i, int32_t a3)
 {
   ;
   char v26;
@@ -5510,7 +5471,7 @@ LABEL_24:
   return n15;
 }
 
-BMF_SSE uint32_t __alt_init_tables(Obj43 *a1, Obj16 *a2)
+uint32_t __alt_init_tables(Obj43 *a1, Obj16 *a2)
 {
   ;
   char *v18, *v19, v48, v53;
@@ -6121,7 +6082,7 @@ uint16_t *__init_counter_node(uint16_t *_this)
   return _this;
 }
 
-BMF_SSE int32_t __encode_symbol_tree(uint16_t *_this, int32_t n2) {
+int32_t __encode_symbol_tree(uint16_t *_this, int32_t n2) {
   ;
   char *v25;   // were int32_t: these hold addresses
   bool v47;
@@ -6230,7 +6191,7 @@ BMF_SSE int32_t __encode_symbol_tree(uint16_t *_this, int32_t n2) {
 }
 static inline int32_t __fwd_alt_p1_encode_symbol_encode_symbol_tree(void *a0, int32_t a1) { return __encode_symbol_tree((uint16_t *)a0, a1); }
 
-BMF_SSE int32_t __alt_p1_encode_symbol(uint16_t *a1, int32_t n5, int32_t a3, int32_t n5a)
+int32_t __alt_p1_encode_symbol(uint16_t *a1, int32_t n5, int32_t a3, int32_t n5a)
 {
   ;
   bool v29;
@@ -8085,7 +8046,7 @@ int32_t *__alt_p1_alloc(Obj92 *_this, int32_t i, int32_t a3, int32_t n4)
   return (int32_t *)_this;
 }
 
-BMF_SSE char *__rc_begin_encode()
+char *__rc_begin_encode()
 {
   ;
   char *__rc_begin_encode_n256, *v6, *__rc_begin_encode_n256_1;
@@ -9567,7 +9528,7 @@ __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...)
   exit(Code);
   __builtin_unreachable();
 }
-BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
+int32_t __rc_begin_decode(char ArgList_1)
 {
   ;
   char *v11, ArgList;
@@ -9678,7 +9639,7 @@ BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
   return out_cursor;
 }
 
-BMF_SSE uint8_t *__unpredict_med(char *Src, int32_t i, int32_t a3)
+uint8_t *__unpredict_med(char *Src, int32_t i, int32_t a3)
 {
   ;
   uintptr_t Src_1, v41;   // were int32_t: addresses, masked and tagged
@@ -10491,7 +10452,7 @@ static inline int32_t __fwd_alt_p2_context_alt_p2_filter(void *a0, void *a1, voi
 // neighbourhood sums into three context words and returning the 0..255 index
 // they are read with.  What the individual terms *mean* is ALGORITHM.md §9's
 // question, and it is still open -- this names the role, not the algorithm.
-BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3__ref, Obj11 *a4, Obj11 *a5)
+int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3__ref, Obj11 *a4, Obj11 *a5)
 {
   struct alignas(16) {   // 208 bytes, the frame Hex-Rays could not name
       uint8_t slot0[4];
@@ -10622,8 +10583,8 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
   Obj11 *v166;
   Obj11 *v118;
   Obj11 *v184;
-  __m128 v32, v33, n0x45F20000, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, *v50, *v53,
-         *v59, v60, v61, v62, v63, v64, *v110, *v160, *v173, *v194, *v204, *v243;
+  __m128 *v50, *v53, *v59, v60, v61, v62, *v110, *v160, *v173, *v194, *v204,
+         *v243;
   bool v26, v58;
   char v142;
   float v70, v77, v79, v89, v94, v101, v244;
@@ -10759,71 +10720,35 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
     v293 = (__m128 *)v289 + 17408;
     v31 = (&((__m128 *)v289)[16 * v29]);
     v289->f278528[8].m128_i32[0] = (int32_t)v31;
-    v32 = _mm_add_ps(
-            _mm_add_ps(
-              _mm_add_ps(
-                _mm_add_ps(
-                  _mm_add_ps(
-                    _mm_add_ps(_mm_mul_ps(v31[0], v28->f278528[0]), _mm_mul_ps(v31[1], v28->f278528[1])),
-                    _mm_mul_ps(v31[2], v28->f278528[2])),
-                  _mm_mul_ps(v31[3], v28->f278528[3])),
-                _mm_mul_ps(v31[4], v28->f278528[4])),
-              _mm_mul_ps(v31[5], v28->f278528[5])),
-            _mm_mul_ps(v31[6], v28->f278528[6]));
-    v33 = _mm_add_ps(v32, _mm_movehl_ps(v32, v32));
-    a3.m128_f32[0] = ((float)*(int16_t *)(v246 - 18)
-                           - ((v33.m128_f32[0] + COERCE_FLOAT(_mm_shuffle_ps(v33, v33, 1)))
-                                   + v28->f278528[7].m128_f32[0]))
-                   * 2.0999999f;
-    n0x45F20000 = (__m128)0x45F20000u;
-    n0x45F20000.m128_f32[0] = 7744.0f * v31[14].m128_f32[2];
-    v35 = _mm_unpacklo_ps(a3, a3);
-    v36 = _mm_movelh_ps(v35, v35);
-    v37 = _mm_unpacklo_ps(n0x45F20000, n0x45F20000);
-    a2 = _mm_movelh_ps(v37, v37);
-    v38 = _mm_add_ps(v31[7], _mm_mul_ps(_mm_sub_ps(_mm_mul_ps(v28->f278528[0], v28->f278528[0]), v31[7]), (__m128)__xmmword_439B10));
-    v31[7] = v38;
-    v31[0] = _mm_add_ps(
-             _mm_div_ps(_mm_mul_ps(_mm_mul_ps((__m128)__xmmword_441190, v36), v28->f278528[0]), _mm_add_ps(v38, a2)),
-             v31[0]);
-    v39 = _mm_add_ps(_mm_mul_ps(_mm_sub_ps(_mm_mul_ps(v28->f278528[1], v28->f278528[1]), v31[8]), (__m128)__xmmword_439B10), v31[8]);
-    v31[8] = v39;
-    v31[1] = _mm_add_ps(
-               _mm_div_ps(_mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411A0, v36), v28->f278528[1]), _mm_add_ps(v39, a2)),
-               v31[1]);
-    v40 = _mm_add_ps(_mm_mul_ps(_mm_sub_ps(_mm_mul_ps(v28->f278528[2], v28->f278528[2]), v31[9]), (__m128)__xmmword_439B10), v31[9]);
-    v31[9] = v40;
-    v31[2] = _mm_add_ps(
-               _mm_div_ps(_mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411B0, v36), v28->f278528[2]), _mm_add_ps(v40, a2)),
-               v31[2]);
-    v41 = _mm_add_ps(
-            _mm_mul_ps(_mm_sub_ps(_mm_mul_ps(v28->f278528[3], v28->f278528[3]), v31[10]), (__m128)__xmmword_439B10),
-            v31[10]);
-    v31[10] = v41;
-    v31[3] = _mm_add_ps(
-               _mm_div_ps(_mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411C0, v36), v28->f278528[3]), _mm_add_ps(v41, a2)),
-               v31[3]);
-    v42 = _mm_add_ps(
-            _mm_mul_ps(_mm_sub_ps(_mm_mul_ps(v28->f278528[4], v28->f278528[4]), v31[11]), (__m128)__xmmword_439B10),
-            v31[11]);
-    v31[11] = v42;
-    v31[4] = _mm_add_ps(
-               _mm_div_ps(_mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411D0, v36), v28->f278528[4]), _mm_add_ps(v42, a2)),
-               v31[4]);
-    v43 = _mm_add_ps(
-            _mm_mul_ps(_mm_sub_ps(_mm_mul_ps(v28->f278528[5], v28->f278528[5]), v31[12]), (__m128)__xmmword_439B10),
-            v31[12]);
-    v31[12] = v43;
-    v31[5] = _mm_add_ps(
-               _mm_div_ps(_mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411E0, v36), v28->f278528[5]), _mm_add_ps(v43, a2)),
-               v31[5]);
-    v44 = _mm_add_ps(
-            _mm_mul_ps(_mm_sub_ps(_mm_mul_ps(v28->f278528[6], v28->f278528[6]), v31[13]), (__m128)__xmmword_439B10),
-            v31[13]);
-    v31[13] = v44;
-    v31[6] = _mm_add_ps(
-               _mm_div_ps(_mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411F0, v36), v28->f278528[6]), _mm_add_ps(v44, a2)),
-               v31[6]);
+    // Normalised LMS.  Predict from the seven weight rows against the seven
+    // inputs, take the error against what actually came, and step every weight
+    // by  rate * error * input / (that input's running mean square + a floor).
+    // Rows 7..13 of the block hold the mean squares; row 14 lane 2 scales the
+    // floor.
+    {
+      float acc[4], err, floor_;
+      int32_t j, k;
+
+      for ( k = 0; k < 4; ++k )
+      {
+        acc[k] = v31[0].m128_f32[k] * v28->f278528[0].m128_f32[k];
+        for ( j = 1; j < 7; ++j )
+          acc[k] += v31[j].m128_f32[k] * v28->f278528[j].m128_f32[k];
+      }
+      err = ((float)*(int16_t *)(v246 - 18)
+             - (bmf_hsum4(acc) + v28->f278528[7].m128_f32[0])) * 2.0999999f;
+      floor_ = 7744.0f * v31[14].m128_f32[2];
+
+      for ( j = 0; j < 7; ++j )
+        for ( k = 0; k < 4; ++k )
+        {
+          float x  = v28->f278528[j].m128_f32[k];
+          float ms = v31[7 + j].m128_f32[k]
+                   + (x * x - v31[7 + j].m128_f32[k]) * bmf_p2_ms_rate;
+          v31[7 + j].m128_f32[k] = ms;
+          v31[j].m128_f32[k] += bmf_p2_rate[j][k] * err * x / (ms + floor_);
+        }
+    }
   }
   else
   {
@@ -10879,13 +10804,14 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
       v60 = v293[1];
       v61 = v293[2];
       v62 = v293[3];
-      a2.m128_f32[0] = (float)v46->f2;
-      v63 = _mm_unpacklo_ps(a2, a2);
-      v64 = _mm_movelh_ps(v63, v63);
-      *v293 = _mm_add_ps(*v293, v64);
-      v59[1] = _mm_add_ps(v60, v64);
-      v59[2] = _mm_add_ps(v61, v64);
-      v59[3] = _mm_add_ps(v62, v64);
+      // One number added to all sixteen floats of the first four rows.
+      {
+        float bias = (float)v46->f2;
+        int32_t j, k;
+        for ( j = 0; j < 4; ++j )
+          for ( k = 0; k < 4; ++k )
+            v293[j].m128_f32[k] += bias;
+      }
       v46 = v28->f278528[13].m128_i32[0];
       v45 = (int16_t *)v28->f278528[13].m128_i32[1];
     }
@@ -12250,7 +12176,7 @@ int32_t __cost_candidate(uint8_t *a1, uint8_t *n2, int32_t a3, char a4, int32_t 
 
 static inline int32_t __fwd_choose_plane_coding_cost_candidate(void *a0, void *a1, int32_t a2, char a3, int32_t a4, int32_t a5, int32_t a6, int32_t a7) { return __cost_candidate((uint8_t *)a0, (uint8_t *)a1, a2, a3, a4, a5, a6, a7); }
 
-BMF_SSE int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, char a3)
+int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, char a3)
 {
   struct alignas(16) {   // 41456 bytes, the frame Hex-Rays could not name
       int32_t v174;
@@ -13102,7 +13028,7 @@ LABEL_19:
   return n192;
 }
 
-BMF_SSE int32_t *__read_bmp(char *FileName)
+int32_t *__read_bmp(char *FileName)
 {
   struct alignas(16) {   // 128 bytes, the frame Hex-Rays could not name
       uint8_t slot0[4];
@@ -15430,7 +15356,7 @@ void __expand_alphabet(Obj10 *_this)
   }
 }
 
-BMF_SSE int32_t __layout_workspace(uintptr_t a1, int32_t a2, int32_t i, int32_t a4, int32_t a5)
+int32_t __layout_workspace(uintptr_t a1, int32_t a2, int32_t i, int32_t a4, int32_t a5)
 {
   ;
   char *v8, v12;
@@ -16525,7 +16451,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
 static inline int32_t __fwd_alt_p2_model_update_binary_pair(void *a0, int32_t a1) { return __update_binary_pair((Obj20 *)a0, a1); }
 static inline uint32_t __fwd_alt_p2_model_rescale_three_way(void *a0) { return __rescale_three_way((uint16_t *)a0); }
 
-BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, uint8_t a4, int32_t a5)
+uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, uint8_t a4, int32_t a5)
 {
   struct alignas(16) {   // 416 bytes, the frame Hex-Rays could not name
       int32_t n2;
@@ -16702,10 +16628,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
   __m128 a2 = a2__ref;
   __m128 *v15;
   __m128 *v17;
-  __m128 v19, n0x46D22000, v27, n0x459D8800, n0x3C54FDF4, v30, v31, v32, v33, v34, v35, v36,
-         v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53,
-         v54, v55, v56, v57, v58, v59, v60, v61, v62, v63, v64, v65, v66, v67, v68, v69, v70,
-         v71, v72, v73, v74;
+  __m128 v19;
   bool v87, v103, v104, v105;
   char *v90, v114, v116, v312;
   Obj15 *v110;
@@ -16802,218 +16725,65 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
   if ( (0.1f * v23) <= v22 )
     v24 = fminf(v23, v22);
   v15[14].m128_f32[0] = v24;
-  n0x46D22000 = (__m128)0x46D22000u;
-  n0x46D22000.m128_f32[0] = 26896.0f * v15[14].m128_f32[2];
+  // Two normalised-LMS updates side by side, on two weight blocks: `v15` at a
+  // fixed mean-square rate and `v17` at one scaled by the confidence `v26`.
+  // Same shape as `alt_p2_context`'s, run twice with different errors and
+  // different floors.
   v26 = (1.0f - (v24 / (v23 + 576.0f))) * 2.0f;
-  v27 = a2;
-  v19.m128_f32[0] = v19.m128_f32[0] * v26;
-  n0x459D8800 = (__m128)0x459D8800u;
-  n0x459D8800.m128_f32[0] = 5041.0f * v17[14].m128_f32[2];
-  v27.m128_f32[0] = (a2.m128_f32[0] - v20) * 2.5999999f;
-  n0x3C54FDF4 = (__m128)0x3C54FDF4u;
-  n0x3C54FDF4.m128_f32[0] = 0.013f * v26;
-  v30 = _mm_unpacklo_ps(v27, v27);
-  v31 = _mm_movelh_ps(v30, v30);
-  v32 = _mm_unpacklo_ps(n0x46D22000, n0x46D22000);
-  v33 = _mm_movelh_ps(v32, v32);
-  v34 = _mm_unpacklo_ps(n0x3C54FDF4, n0x3C54FDF4);
-  v35 = _mm_movelh_ps(v34, v34);
-  v36 = _mm_unpacklo_ps(v19, v19);
-  v37 = _mm_movelh_ps(v36, v36);
-  v38 = _mm_unpacklo_ps(n0x459D8800, n0x459D8800);
-  v39 = _mm_movelh_ps(v38, v38);
-  v40 = a1->f278528[0];
-  n0xF0 = (((uint16_t *)a2.m128_i32[0]));
-  v41 = _mm_add_ps(_mm_mul_ps(_mm_sub_ps(_mm_mul_ps(v40, v40), v15[7]), (__m128)__xmmword_439B40), v15[7]);
-  v15[7] = v41;
-  v15[0] = _mm_add_ps(
-           _mm_div_ps(
-             _mm_mul_ps(_mm_mul_ps((__m128)__xmmword_441190, v31), a1->f278528[0]),
-             _mm_add_ps(v41, v33)),
-           v15[0]);
-  v42 = a1->f278528[0];
   n5 = 0;
-  v43 = _mm_add_ps(_mm_mul_ps(_mm_sub_ps(_mm_mul_ps(v42, v42), v17[7]), v35), v17[7]);
   v577 = v9;
-  v17[7] = v43;
-  v17[0] = _mm_add_ps(
-           _mm_div_ps(
-             _mm_mul_ps(_mm_mul_ps((__m128)__xmmword_441190, v37), a1->f278528[0]),
-             _mm_add_ps(v43, v39)),
-           v17[0]);
-  v44 = a1->f278528[1];
   v578 = (Obj69 *)((uint32_t *)a1);
-  v45 = _mm_add_ps(_mm_mul_ps(_mm_sub_ps(_mm_mul_ps(v44, v44), v15[8]), (__m128)__xmmword_439B40), v15[8]);
-  v15[8] = v45;
-  v15[1] = _mm_add_ps(
-             _mm_div_ps(
-               _mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411A0, v31), a1->f278528[1]),
-               _mm_add_ps(v45, v33)),
-             v15[1]);
-  v46 = _mm_add_ps(
-          _mm_mul_ps(_mm_sub_ps(_mm_mul_ps(a1->f278528[1], a1->f278528[1]), v17[8]), v35),
-          v17[8]);
-  v17[8] = v46;
-  v17[1] = _mm_add_ps(
-             _mm_div_ps(
-               _mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411A0, v37), a1->f278528[1]),
-               _mm_add_ps(v46, v39)),
-             v17[1]);
-  v47 = _mm_add_ps(
-          _mm_mul_ps(
-            _mm_sub_ps(_mm_mul_ps(a1->f278528[2], a1->f278528[2]), v15[9]),
-            (__m128)__xmmword_439B40),
-          v15[9]);
-  v15[9] = v47;
-  v15[2] = _mm_add_ps(
-             _mm_div_ps(
-               _mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411B0, v31), a1->f278528[2]),
-               _mm_add_ps(v47, v33)),
-             v15[2]);
-  v48 = _mm_add_ps(
-          _mm_mul_ps(_mm_sub_ps(_mm_mul_ps(a1->f278528[2], a1->f278528[2]), v17[9]), v35),
-          v17[9]);
-  v17[9] = v48;
-  v17[2] = _mm_add_ps(
-             _mm_div_ps(
-               _mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411B0, v37), a1->f278528[2]),
-               _mm_add_ps(v48, v39)),
-             v17[2]);
-  v49 = _mm_add_ps(
-          _mm_mul_ps(
-            _mm_sub_ps(_mm_mul_ps(a1->f278528[3], a1->f278528[3]), v15[10]),
-            (__m128)__xmmword_439B40),
-          v15[10]);
-  v15[10] = v49;
-  v15[3] = _mm_add_ps(
-             _mm_div_ps(
-               _mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411C0, v31), a1->f278528[3]),
-               _mm_add_ps(v49, v33)),
-             v15[3]);
-  v50 = _mm_add_ps(
-          _mm_mul_ps(_mm_sub_ps(_mm_mul_ps(a1->f278528[3], a1->f278528[3]), v17[10]), v35),
-          v17[10]);
-  v17[10] = v50;
-  v17[3] = _mm_add_ps(
-             _mm_div_ps(
-               _mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411C0, v37), a1->f278528[3]),
-               _mm_add_ps(v50, v39)),
-             v17[3]);
-  v51 = _mm_add_ps(
-          _mm_mul_ps(
-            _mm_sub_ps(_mm_mul_ps(a1->f278528[4], a1->f278528[4]), v15[11]),
-            (__m128)__xmmword_439B40),
-          v15[11]);
-  v15[11] = v51;
-  v15[4] = _mm_add_ps(
-             _mm_div_ps(
-               _mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411D0, v31), a1->f278528[4]),
-               _mm_add_ps(v51, v33)),
-             v15[4]);
-  v52 = _mm_add_ps(
-          _mm_mul_ps(_mm_sub_ps(_mm_mul_ps(a1->f278528[4], a1->f278528[4]), v17[11]), v35),
-          v17[11]);
-  v17[11] = v52;
-  v17[4] = _mm_add_ps(
-             _mm_div_ps(
-               _mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411D0, v37), a1->f278528[4]),
-               _mm_add_ps(v52, v39)),
-             v17[4]);
-  v53 = _mm_add_ps(
-          _mm_mul_ps(
-            _mm_sub_ps(_mm_mul_ps(a1->f278528[5], a1->f278528[5]), v15[12]),
-            (__m128)__xmmword_439B40),
-          v15[12]);
-  v15[12] = v53;
-  v15[5] = _mm_add_ps(
-             _mm_div_ps(
-               _mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411E0, v31), a1->f278528[5]),
-               _mm_add_ps(v53, v33)),
-             v15[5]);
-  v54 = _mm_add_ps(
-          _mm_mul_ps(_mm_sub_ps(_mm_mul_ps(a1->f278528[5], a1->f278528[5]), v17[12]), v35),
-          v17[12]);
-  v17[12] = v54;
-  v17[5] = _mm_add_ps(
-             _mm_div_ps(
-               _mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411E0, v37), a1->f278528[5]),
-               _mm_add_ps(v54, v39)),
-             v17[5]);
-  v55 = _mm_add_ps(
-          _mm_mul_ps(
-            _mm_sub_ps(_mm_mul_ps(a1->f278528[6], a1->f278528[6]), v15[13]),
-            (__m128)__xmmword_439B40),
-          v15[13]);
-  v15[13] = v55;
-  v15[6] = _mm_add_ps(
-             _mm_div_ps(
-               _mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411F0, v31), a1->f278528[6]),
-               _mm_add_ps(v55, v33)),
-             v15[6]);
-  v56 = _mm_add_ps(
-          _mm_mul_ps(v35, _mm_sub_ps(_mm_mul_ps(a1->f278528[6], a1->f278528[6]), v17[13])),
-          v17[13]);
-  v17[13] = v56;
-  v17[6] = _mm_add_ps(
-             _mm_div_ps(
-               _mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411F0, v37), a1->f278528[6]),
-               _mm_add_ps(v56, v39)),
-             v17[6]);
-  v57 = (__m128)(uint32_t)n0xF0;
-  v58 = _mm_add_ps(
-          _mm_add_ps(
-            _mm_add_ps(
-              _mm_add_ps(
-                _mm_add_ps(
-                  _mm_add_ps(_mm_mul_ps(v15[0], a1->f278528[0]), _mm_mul_ps(v15[1], a1->f278528[1])),
-                  _mm_mul_ps(v15[2], a1->f278528[2])),
-                _mm_mul_ps(v15[3], a1->f278528[3])),
-              _mm_mul_ps(v15[4], a1->f278528[4])),
-            _mm_mul_ps(v15[5], a1->f278528[5])),
-          _mm_mul_ps(v15[6], a1->f278528[6]));
-  v59 = _mm_add_ps(v58, _mm_movehl_ps(v58, v58));
-  v31.m128_f32[0] = *(float *)&n2 + (v59.m128_f32[0] + COERCE_FLOAT(_mm_shuffle_ps(v59, v59, 1)));
-  v60 = v15[9];
-  v57.m128_f32[0] = *(float *)&n0xF0 - v31.m128_f32[0];
-  v31.m128_i32[0] = v15[14].m128_i32[2];
-  v61 = (__m128)v31.m128_u32[0];
-  v61.m128_f32[0] = v31.m128_f32[0] * 529.0f;
-  v62 = _mm_unpacklo_ps(v57, v57);
-  v63 = _mm_movelh_ps(v62, v62);
-  v64 = _mm_unpacklo_ps(v61, v61);
-  v65 = _mm_movelh_ps(v64, v64);
-  v66 = _mm_add_ps(v15[8], v65);
-  v15[0] = _mm_add_ps(
-           _mm_div_ps(
-             _mm_mul_ps(_mm_mul_ps((__m128)__xmmword_441190, v63), a1->f278528[0]),
-             _mm_add_ps(v15[7], v65)),
-           v15[0]);
-  v67 = v15[10];
-  v15[1] = _mm_add_ps(
-             _mm_div_ps(_mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411A0, v63), a1->f278528[1]), v66),
-             v15[1]);
-  v68 = _mm_div_ps(_mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411B0, v63), a1->f278528[2]), _mm_add_ps(v60, v65));
-  v69 = v15[11];
-  v15[2] = _mm_add_ps(v68, v15[2]);
-  v70 = _mm_div_ps(_mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411C0, v63), a1->f278528[3]), _mm_add_ps(v67, v65));
-  v71 = v15[12];
-  v15[3] = _mm_add_ps(v70, v15[3]);
-  v15[4] = _mm_add_ps(
-             _mm_div_ps(
-               _mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411D0, v63), a1->f278528[4]),
-               _mm_add_ps(v69, v65)),
-             v15[4]);
-  v15[5] = _mm_add_ps(
-             _mm_div_ps(
-               _mm_mul_ps(_mm_mul_ps((__m128)__xmmword_4411E0, v63), a1->f278528[5]),
-               _mm_add_ps(v71, v65)),
-             v15[5]);
-  v72 = _mm_mul_ps((__m128)__xmmword_4411F0, v63);
-  v73 = v15[13];
-  v74 = _mm_mul_ps(v72, a1->f278528[6]);
-  ++v15[15].m128_i32[0];
-  v15[6] = _mm_add_ps(_mm_div_ps(v74, _mm_add_ps(v73, v65)), v15[6]);
-  v15[14].m128_f32[2] = v31.m128_f32[0] + ((10.0f - v31.m128_f32[0]) * 0.00019999999f);
+  {
+    const float err_a     = (a2.m128_f32[0] - v20) * 2.5999999f;
+    const float err_b     = v19.m128_f32[0] * v26;
+    const float floor_a   = 26896.0f * v15[14].m128_f32[2];
+    const float floor_b   = 5041.0f * v17[14].m128_f32[2];
+    const float ms_rate_b = 0.013f * v26;
+    int32_t j, k;
+
+    for ( j = 0; j < 7; ++j )
+      for ( k = 0; k < 4; ++k )
+      {
+        float x = a1->f278528[j].m128_f32[k];
+        float ms;
+
+        ms = v15[7 + j].m128_f32[k]
+           + (x * x - v15[7 + j].m128_f32[k]) * 0.05f;      // 0x439B40
+        v15[7 + j].m128_f32[k] = ms;
+        v15[j].m128_f32[k] += bmf_p2_rate[j][k] * err_a * x / (ms + floor_a);
+
+        ms = v17[7 + j].m128_f32[k]
+           + (x * x - v17[7 + j].m128_f32[k]) * ms_rate_b;
+        v17[7 + j].m128_f32[k] = ms;
+        v17[j].m128_f32[k] += bmf_p2_rate[j][k] * err_b * x / (ms + floor_b);
+      }
+  }
+
+  // The first block's prediction, and one more step of the same update against
+  // the error in it.  Row 14 lane 2 scales the floor, and decays toward ten as
+  // this context is seen more often.
+  {
+    float acc[4], pred, err, ms_scale;
+    int32_t j, k;
+
+    for ( k = 0; k < 4; ++k )
+    {
+      acc[k] = v15[0].m128_f32[k] * a1->f278528[0].m128_f32[k];
+      for ( j = 1; j < 7; ++j )
+        acc[k] += v15[j].m128_f32[k] * a1->f278528[j].m128_f32[k];
+    }
+    pred     = *(float *)&n2 + bmf_hsum4(acc);
+    err      = a2.m128_f32[0] - pred;
+    ms_scale = v15[14].m128_f32[2];
+
+    for ( j = 0; j < 7; ++j )
+      for ( k = 0; k < 4; ++k )
+        v15[j].m128_f32[k] += bmf_p2_rate[j][k] * err * a1->f278528[j].m128_f32[k]
+                            / (v15[7 + j].m128_f32[k] + ms_scale * 529.0f);
+
+    ++v15[15].m128_i32[0];
+    v15[14].m128_f32[2] = ms_scale + ((10.0f - ms_scale) * 0.00019999999f);
+  }
   **(uint32_t **)&a1->f278668 = *(uint32_t *)&a1->f278656;
   a1->f278668 += 4;
   a1->f278672 += 4;
@@ -17058,7 +16828,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
       }
       if ( !__dword_443388 )
       {
-        _mm_prefetch((const char *)&n2, _MM_HINT_T2);
+        __builtin_prefetch((const char *)&n2, 0, 1);
         n2 = (int32_t)&((uint32_t *)v578)[(v81 ^ 0x7FF0) + 71178] + v78;
         v84 = ((uint32_t *)v578)[2 * n5 + 69727] + v77;
         n3 = v81 & 3;
@@ -17088,30 +16858,30 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
         }
         v90 = (char *)v578 + v78;
         v550 = v84;
-        _mm_prefetch(&v90[4 * (v81 ^ 0x4000) + 284712], _MM_HINT_T2);
+        __builtin_prefetch(&v90[4 * (v81 ^ 0x4000) + 284712], 0, 1);
         v542 = (Obj23 *)((int32_t)&v90[4 * (v81 ^ 0x4000) + 284712]);
         v544 = (Obj124 *)(&v90[4 * (v81 ^ 0x3FF0) + 284712]);
-        _mm_prefetch(v544, _MM_HINT_T2);
+        __builtin_prefetch(v544, 0, 1);
         v543 = (Obj2 *)(&v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x4000) & 0xC))
                   + 284712
                   + 4 * ((v81 ^ 0x4000) & 0xFFFFFFF3)]);
-        _mm_prefetch(v543, _MM_HINT_T2);
-        _mm_prefetch(&v90[4 * (v81 ^ 0x2000) + 284712], _MM_HINT_T2);
+        __builtin_prefetch(v543, 0, 1);
+        __builtin_prefetch(&v90[4 * (v81 ^ 0x2000) + 284712], 0, 1);
         v539 = (Obj15 *)((int32_t)&v90[4 * (v81 ^ 0x2000) + 284712]);
-        _mm_prefetch(&v90[4 * (v81 ^ 0x5FF0) + 284712], _MM_HINT_T2);
+        __builtin_prefetch(&v90[4 * (v81 ^ 0x5FF0) + 284712], 0, 1);
         v541 = (Obj38 *)((int32_t)&v90[4 * (v81 ^ 0x5FF0) + 284712]);
         v540 = (Obj102 *)(&v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x2000) & 0xC))
                   + 284712
                   + 4 * ((v81 ^ 0x2000) & 0xFFFFFFF3)]);
-        _mm_prefetch(v540, _MM_HINT_T2);
-        _mm_prefetch(&v90[4 * (v81 ^ 0x1000) + 284712], _MM_HINT_T2);
+        __builtin_prefetch(v540, 0, 1);
+        __builtin_prefetch(&v90[4 * (v81 ^ 0x1000) + 284712], 0, 1);
         v536 = (Obj15 *)((int32_t)&v90[4 * (v81 ^ 0x1000) + 284712]);
-        _mm_prefetch(&v90[4 * (v81 ^ 0x6FF0) + 284712], _MM_HINT_T2);
+        __builtin_prefetch(&v90[4 * (v81 ^ 0x6FF0) + 284712], 0, 1);
         v538 = (Obj39 *)((int32_t)&v90[4 * (v81 ^ 0x6FF0) + 284712]);
         v537 = (Obj103 *)(&v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x1000) & 0xC))
                   + 284712
                   + 4 * ((v81 ^ 0x1000) & 0xFFFFFFF3)]);
-        _mm_prefetch(v537, _MM_HINT_T2);
+        __builtin_prefetch(v537, 0, 1);
         v551 = (Obj46 *)(&v90[4 * (v81 ^ 0x800) + 284712]);
         v533 = (Obj46 *)(v551);
         v535 = (Obj105 *)(&v90[4 * (v81 ^ 0x77F0) + 284712]);
@@ -17120,9 +16890,9 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
                   + 4 * ((v81 ^ 0x800) & 0xFFFFFFF3)]);
         v552 = (Obj47 *)(&v90[4 * (v81 ^ 0x400) + 284712]);
         v530 = (Obj47 *)(v552);
-        _mm_prefetch(v551, _MM_HINT_T2);
-        _mm_prefetch(v535, _MM_HINT_T2);
-        _mm_prefetch(v534, _MM_HINT_T2);
+        __builtin_prefetch(v551, 0, 1);
+        __builtin_prefetch(v535, 0, 1);
+        __builtin_prefetch(v534, 0, 1);
         v553 = (Obj125 *)(&v90[4 * (v81 ^ 0x7BF0) + 284712]);
         v532 = (Obj125 *)(v553);
         v531 = (Obj106 *)(&v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x400) & 0xC))
@@ -17130,39 +16900,39 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
                   + 4 * ((v81 ^ 0x400) & 0xFFFFFFF3)]);
         v554 = (Obj48 *)(&v90[4 * (v81 ^ 0x200) + 284712]);
         v527 = (Obj48 *)(v554);
-        _mm_prefetch(v552, _MM_HINT_T2);
+        __builtin_prefetch(v552, 0, 1);
         v555 = (Obj126 *)(&v90[4 * (v81 ^ 0x7DF0) + 284712]);
         v529 = (Obj126 *)(v555);
         v91 = (Obj107 *)(&v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x200) & 0xC))
                  + 284712
                  + 4 * ((v81 ^ 0x200) & 0xFFFFFFF3)]);
-        _mm_prefetch(v553, _MM_HINT_T2);
-        _mm_prefetch(v531, _MM_HINT_T2);
+        __builtin_prefetch(v553, 0, 1);
+        __builtin_prefetch(v531, 0, 1);
         v528 = (Obj107 *)(v91);
         v556 = (Obj49 *)(&v90[4 * (v81 ^ 0x100) + 284712]);
         v524 = (Obj49 *)(v556);
         v92 = *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x100) & 0xC)) + ((v81 ^ 0x100) & 0xFFFFFFF3);
         v557 = (Obj108 *)(&v90[4 * (v81 ^ 0x7EF0) + 284712]);
         v526 = (Obj108 *)(v557);
-        _mm_prefetch(v554, _MM_HINT_T2);
+        __builtin_prefetch(v554, 0, 1);
         v558 = (Obj40 *)((int32_t)&v90[4 * v92 + 284712]);
         v525 = (Obj40 *)(v558);
         v559 = (Obj50 *)(&v90[4 * (v81 ^ 0x80) + 284712]);
         v521 = (Obj50 *)(v559);
-        _mm_prefetch(v555, _MM_HINT_T2);
-        _mm_prefetch(v91, _MM_HINT_T2);
+        __builtin_prefetch(v555, 0, 1);
+        __builtin_prefetch(v91, 0, 1);
         v523 = (Obj110 *)(&v90[4 * (v81 ^ 0x7F70) + 284712]);
         v560 = (Obj109 *)(&v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x80) & 0xC)) + 284712 + 4 * ((v81 ^ 0x80) & 0xFFFFFFF3)]);
         v522 = (Obj109 *)(v560);
         v561 = (Obj51 *)(&v90[4 * (v81 ^ 0x40) + 284712]);
         v518 = (Obj51 *)(v561);
-        _mm_prefetch(v556, _MM_HINT_T2);
+        __builtin_prefetch(v556, 0, 1);
         v562 = (Obj112 *)(&v90[4 * (v81 ^ 0x7FB0) + 284712]);
         v520 = (Obj112 *)(v562);
         v93 = (Obj111 *)(&v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x40) & 0xC)) + 284712 + 4 * ((v81 ^ 0x40) & 0xFFFFFFF3)]);
         v94 = (Obj40 *)((const char *)v558);
-        _mm_prefetch(v557, _MM_HINT_T2);
-        _mm_prefetch(v94, _MM_HINT_T2);
+        __builtin_prefetch(v557, 0, 1);
+        __builtin_prefetch(v94, 0, 1);
         v563 = (Obj111 *)(v93);
         v519 = (Obj111 *)(v93);
         v95 = v81 ^ 0x20;
@@ -17171,8 +16941,8 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
         v515 = (Obj52 *)(v564);
         v565 = (Obj127 *)(&v90[4 * (v95 ^ 0x7FF0) + 284712]);
         v517 = (Obj127 *)(v565);
-        _mm_prefetch(v559, _MM_HINT_T2);
-        _mm_prefetch(v523, _MM_HINT_T2);
+        __builtin_prefetch(v559, 0, 1);
+        __builtin_prefetch(v523, 0, 1);
         v566 = (Obj41 *)((uint32_t)&v90[4 * *(int32_t *)((char *)__dword_439880 + (v95 & 0xC)) + 284712 + 4 * (v95 & 0xFFFFFFF3)]);
         v516 = (Obj41 *)(v566);
         v567 = (Obj15 *)((int32_t)&v90[4 * v96 + 284712]);
@@ -17180,24 +16950,24 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
         v97 = *(int32_t *)((char *)__dword_439880 + (v96 & 0xC)) + (v96 & 0xFFFFFFF3);
         v568 = (Obj44 *)((int32_t)&v90[4 * (v96 ^ 0x7FF0) + 284712]);
         v514 = (Obj44 *)(v568);
-        _mm_prefetch(v560, _MM_HINT_T2);
+        __builtin_prefetch(v560, 0, 1);
         v98 = (Obj42 *)((int32_t)&v90[4 * v97 + 284712]);
         n2_1 = n2;
         v569 = (Obj42 *)((const char *)v98);
         v100 = -v550;
         v513 = (Obj42 *)(v98);
         LOBYTE(v97) = *(uint8_t *)n2;
-        _mm_prefetch(v561, _MM_HINT_T2);
+        __builtin_prefetch(v561, 0, 1);
         v101 = *(int16_t *)(n2_1 + 2);
-        _mm_prefetch(v562, _MM_HINT_T2);
+        __builtin_prefetch(v562, 0, 1);
         v102 = v100 - ((v101 + (1 << ((v97 + 31) & 31))) >> (v97 & 31));
         v105 = __OFSUB__(v102, __dword_4458F0);
         v103 = v102 == __dword_4458F0;
         v104 = v102 - __dword_4458F0 < 0;
-        _mm_prefetch(v563, _MM_HINT_T2);
+        __builtin_prefetch(v563, 0, 1);
         v106 = 32 * (!(v104 ^ v105 | v103) - (v102 < __dword_4458F4));
-        _mm_prefetch(v564, _MM_HINT_T2);
-        _mm_prefetch(v565, _MM_HINT_T2);
+        __builtin_prefetch(v564, 0, 1);
+        __builtin_prefetch(v565, 0, 1);
         v107 = (Obj42 *)(v569);
         v108 = v550;
         v109 = v106 + v102 + 2;
@@ -17207,10 +16977,10 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
         v111 = (Obj41 *)((const char *)v566);
         *(uint16_t *)(n2 + 2) = v109;
         v112 = (Obj44 *)((const char *)v568);
-        _mm_prefetch(v111, _MM_HINT_T2);
-        _mm_prefetch(v110, _MM_HINT_T2);
-        _mm_prefetch(v112, _MM_HINT_T2);
-        _mm_prefetch(v107, _MM_HINT_T2);
+        __builtin_prefetch(v111, 0, 1);
+        __builtin_prefetch(v110, 0, 1);
+        __builtin_prefetch(v112, 0, 1);
+        __builtin_prefetch(v107, 0, 1);
         if ( v87
           && (v113 = *(int16_t *)(n2 + 6),
               v114 = *(uint8_t *)(n2 + 4),
@@ -18501,7 +18271,7 @@ LABEL_115:
 static inline int32_t __fwd_alt_p2_d8_decode_body_alt_p2_decode_symbol(void *a0, int32_t a1) { return __alt_p2_decode_symbol((Obj13 *)a0, a1); }
 static inline int32_t __fwd_alt_p2_d8_decode_body_alt_p2_context(void *a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __alt_p2_context((Obj11 *)a0, a1, a2, (Obj11 *)a3, (Obj11 *)a4); }
 
-BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m128 &a3__ref, const __m128 &a4__ref, uint8_t *a5, int32_t i, int32_t a7)
+void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m128 &a3__ref, const __m128 &a4__ref, uint8_t *a5, int32_t i, int32_t a7)
 {
   struct alignas(16) {   // 44 bytes, the frame Hex-Rays could not name
       int32_t   v95;
@@ -18809,7 +18579,7 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
 static inline void ** __fwd_alt_model_p2_d8_decode_alt_p2_free(void *a0, char a1) { return __alt_p2_free((void **)a0, a1); }
 static inline void __fwd_alt_model_p2_d8_decode_alt_p2_d8_decode_body(int32_t a0, char a1, const __m128 &a2, const __m128 &a3, void *a4, int32_t a5, int32_t a6) { __alt_p2_d8_decode_body((Obj69 *)a0, a1, a2, a3, (uint8_t *)a4, a5, a6); }
 
-BMF_SSE void __alt_model_p2_d8_decode(const __m128 &a1__ref, const __m128 &a2__ref, uint8_t *Src, int32_t i, int32_t a5)
+void __alt_model_p2_d8_decode(const __m128 &a1__ref, const __m128 &a2__ref, uint8_t *Src, int32_t i, int32_t a5)
 {
   ;
   __m128 a1 = a1__ref;
@@ -18828,7 +18598,7 @@ static inline int32_t __fwd_alt_model_p2_decode_alt_p2_decode_symbol(void *a0, i
 static inline void ** __fwd_alt_model_p2_decode_alt_p2_free(void *a0, char a1) { return __alt_p2_free((void **)a0, a1); }
 static inline int32_t __fwd_alt_model_p2_decode_alt_p2_context(void *a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __alt_p2_context((Obj11 *)a0, a1, a2, (Obj11 *)a3, (Obj11 *)a4); }
 
-BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
+int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
 {
   struct alignas(16) {   // 276 bytes, the frame Hex-Rays could not name
       uint32_t Size_1;
@@ -18867,9 +18637,6 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 288, "frame layout moved");
   uint32_t &Size_1 = __frame.Size_1;
-  __m128i &v146 = *(__m128i *)((char *)__frame.slot100);
-  __m128i &v147 = *(__m128i *)((char *)__frame.slot116);
-  __m128i &v148 = *(__m128i *)((char *)__frame.slot132);
   int32_t &v149 = __frame.v149;
   int32_t &v150 = *(int32_t *)((char *)__frame.slot152);
   int32_t &v151 = *(int32_t *)((char *)__frame.slot152);
@@ -18939,12 +18706,16 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
     bmf_p2_coef[5][k] = 0;
     bmf_p2_coef[6][k] = 0;
   }
-  v146 = __xmmword_4411D0;
-  v147 = __xmmword_4411E0;
-  v148 = __xmmword_4411F0;
-  __xmmword_4411F0 = __xmmword_439B60;
-  __xmmword_4411E0 = __xmmword_439B60;
-  __xmmword_4411D0 = __xmmword_439B60;
+  // Rows 4..6 of the rate schedule are flattened for the length of a run,
+  // and put back at the end.
+  float saved_p2_rate[3][4];
+  __builtin_memcpy(saved_p2_rate, bmf_p2_rate[4], sizeof saved_p2_rate);
+  for ( int k = 0; k < 4; k++ )
+  {
+    bmf_p2_rate[4][k] = bmf_p2_rate_reset;
+    bmf_p2_rate[5][k] = bmf_p2_rate_reset;
+    bmf_p2_rate[6][k] = bmf_p2_rate_reset;
+  }
   i = *p_i;
   v5 = p_i[1];
   if ( plane_count > 0 )
@@ -19326,9 +19097,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   }
   __rc_end_decode();
   __builtin_memcpy(bmf_p2_coef, saved_p2_coef, sizeof saved_p2_coef);
-  __xmmword_4411D0 = v146;
-  __xmmword_4411E0 = v147;
-  __xmmword_4411F0 = v148;
+  __builtin_memcpy(bmf_p2_rate[4], saved_p2_rate, sizeof saved_p2_rate);
   n4_3 = plane_count;
   if ( plane_count > 0 )
   {
@@ -19354,7 +19123,7 @@ static inline int32_t __fwd_unmodel_plane_alt_model_p2_decode(void *a0, void *a1
 static inline void ** __fwd_unmodel_plane_alt_model_p1_d8_decode(char a0, void *a1, int32_t a2, int32_t a3) { return __alt_model_p1_d8_decode(a0, (uint8_t *)a1, a2, a3); }
 static inline int32_t __fwd_unmodel_plane_alt_model_p1_decode(void *a0, int32_t a1) { return __alt_model_p1_decode((uint16_t *)a0, a1); }
 
-BMF_SSE void __unmodel_plane(char ArgList, const __m128 &a2__ref, const __m128 &a3__ref, uint16_t *p_i, uint8_t *Src)
+void __unmodel_plane(char ArgList, const __m128 &a2__ref, const __m128 &a3__ref, uint16_t *p_i, uint8_t *Src)
 {
   ;
   __m128 a2 = a2__ref;
@@ -19393,7 +19162,7 @@ BMF_SSE void __unmodel_plane(char ArgList, const __m128 &a2__ref, const __m128 &
 static inline int32_t __fwd_alt_p2_d8_encode_body_alt_p2_encode_symbol(void *a0, int32_t a1, int32_t a2) { return __alt_p2_encode_symbol((Obj7 *)a0, a1, a2); }
 static inline int32_t __fwd_alt_p2_d8_encode_body_alt_p2_context(void *a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __alt_p2_context((Obj11 *)a0, a1, a2, (Obj11 *)a3, (Obj11 *)a4); }
 
-BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, const __m128 &a3__ref, uint8_t *a4, int32_t i, int32_t a6, uint8_t *a7)
+void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, const __m128 &a3__ref, uint8_t *a4, int32_t i, int32_t a6, uint8_t *a7)
 {
   struct alignas(16) {   // 68 bytes, the frame Hex-Rays could not name
       int32_t   j;
@@ -19729,7 +19498,7 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
 static inline void ** __fwd_alt_model_p2_d8_encode_alt_p2_free(void *a0, char a1) { return __alt_p2_free((void **)a0, a1); }
 static inline void __fwd_alt_model_p2_d8_encode_alt_p2_d8_encode_body(void *a0, const __m128 &a1, const __m128 &a2, void *a3, int32_t a4, int32_t a5, void *a6) { __alt_p2_d8_encode_body((Obj11 *)a0, a1, a2, (uint8_t *)a3, a4, a5, (uint8_t *)a6); }
 
-BMF_SSE void __alt_model_p2_d8_encode(const __m128 &a1__ref, const __m128 &a2__ref, uint8_t *a3, int32_t i, int32_t a5, uint8_t *a6)
+void __alt_model_p2_d8_encode(const __m128 &a1__ref, const __m128 &a2__ref, uint8_t *a3, int32_t i, int32_t a5, uint8_t *a6)
 {
   ;
   __m128 a1 = a1__ref;
@@ -19749,7 +19518,7 @@ static inline int32_t __fwd_alt_model_p2_encode_alt_p2_encode_symbol(void *a0, i
 static inline void ** __fwd_alt_model_p2_encode_alt_p2_free(void *a0, char a1) { return __alt_p2_free((void **)a0, a1); }
 static inline int32_t __fwd_alt_model_p2_encode_alt_p2_context(void *a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __alt_p2_context((Obj11 *)a0, a1, a2, (Obj11 *)a3, (Obj11 *)a4); }
 
-BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
+int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
 {
   struct alignas(16) {   // 324 bytes, the frame Hex-Rays could not name
       uint32_t Size_1;
@@ -19800,9 +19569,6 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 336, "frame layout moved");
   uint32_t &Size_1 = __frame.Size_1;
-  __m128i &v150 = *(__m128i *)((char *)__frame.slot100);
-  __m128i &v151 = *(__m128i *)((char *)__frame.slot116);
-  __m128i &v152 = *(__m128i *)((char *)__frame.slot132);
   int32_t &v153 = __frame.v153;
   uint32_t &v154 = __frame.v154;
   int32_t &v155 = __frame.v155;
@@ -19882,12 +19648,16 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
     bmf_p2_coef[5][k] = 0;
     bmf_p2_coef[6][k] = 0;
   }
-  v150 = __xmmword_4411D0;
-  v151 = __xmmword_4411E0;
-  v152 = __xmmword_4411F0;
-  __xmmword_4411F0 = __xmmword_439B50;
-  __xmmword_4411E0 = __xmmword_439B50;
-  __xmmword_4411D0 = __xmmword_439B50;
+  // Rows 4..6 of the rate schedule are flattened for the length of a run,
+  // and put back at the end.
+  float saved_p2_rate[3][4];
+  __builtin_memcpy(saved_p2_rate, bmf_p2_rate[4], sizeof saved_p2_rate);
+  for ( int k = 0; k < 4; k++ )
+  {
+    bmf_p2_rate[4][k] = bmf_p2_rate_reset;
+    bmf_p2_rate[5][k] = bmf_p2_rate_reset;
+    bmf_p2_rate[6][k] = bmf_p2_rate_reset;
+  }
   i_1 = p_i->width;
   v5 = p_i->height;
   if ( plane_count > 0 )
@@ -20323,9 +20093,7 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   }
   __rc_end_encode();
   __builtin_memcpy(bmf_p2_coef, saved_p2_coef, sizeof saved_p2_coef);
-  __xmmword_4411D0 = v150;
-  __xmmword_4411E0 = v151;
-  __xmmword_4411F0 = v152;
+  __builtin_memcpy(bmf_p2_rate[4], saved_p2_rate, sizeof saved_p2_rate);
   n4_3 = plane_count;
   if ( plane_count > 0 )
   {
@@ -20353,7 +20121,7 @@ static inline int32_t __fwd_model_plane_alt_model_p2_encode(void *a0, void *a1) 
 static inline void __fwd_model_plane_alt_model_p1_d8_encode(void *a0, int32_t a1, int32_t a2, void *a3) { __alt_model_p1_d8_encode((uint8_t *)a0, a1, a2, (uint8_t *)a3); }
 static inline int32_t __fwd_model_plane_alt_model_p1_encode(void *a0, int32_t a1) { return __alt_model_p1_encode((uint16_t *)a0, a1); }
 
-BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, BmfImage *p_i, uint8_t *a4, uint8_t *a5)
+void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, BmfImage *p_i, uint8_t *a4, uint8_t *a5)
 {
   struct alignas(16) {   // 96 bytes, the frame Hex-Rays could not name
       int32_t   Size;
@@ -20756,7 +20524,7 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, BmfImag
 static inline char * __fwd_model_planes_colour_transform(void *a0, void *a1, int32_t a2, char a3) { return __colour_transform((char *)a0, (char *)a1, a2, a3); }
 static inline void __fwd_model_planes_model_plane(const __m128 &a0, const __m128 &a1, void *a2, void *a3, void *a4) { __model_plane(a0, a1, (BmfImage *)a2, (uint8_t *)a3, (uint8_t *)a4); }
 
-BMF_SSE void __model_planes(char *Blockb, char *Srca_3, int32_t a3, char a4, const __m128 &a5__ref, const __m128 &a6__ref)
+void __model_planes(char *Blockb, char *Srca_3, int32_t a3, char a4, const __m128 &a5__ref, const __m128 &a6__ref)
 {
   struct alignas(16) {   // 76 bytes, the frame Hex-Rays could not name
       uint8_t slot0[4];
@@ -20841,7 +20609,7 @@ BMF_SSE void __model_planes(char *Blockb, char *Srca_3, int32_t a3, char a4, con
 static inline char * __fwd_transform_planes_colour_transform(void *a0, void *a1, int32_t a2, char a3) { return __colour_transform((char *)a0, (char *)a1, a2, a3); }
 static inline void __fwd_transform_planes_model_plane(const __m128 &a0, const __m128 &a1, void *a2, void *a3, void *a4) { __model_plane(a0, a1, (BmfImage *)a2, (uint8_t *)a3, (uint8_t *)a4); }
 
-BMF_SSE void __transform_planes(BmfImage *p_i, int32_t a2, char a3, const __m128 &a4__ref, const __m128 &a5__ref)
+void __transform_planes(BmfImage *p_i, int32_t a2, char a3, const __m128 &a4__ref, const __m128 &a5__ref)
 {
   struct alignas(16) {   // 76 bytes, the frame Hex-Rays could not name
       int32_t   v32;
@@ -20964,7 +20732,7 @@ BMF_SSE void __transform_planes(BmfImage *p_i, int32_t a2, char a3, const __m128
 static inline char * __fwd_expand_image_interleave_plane(void *a0, void *a1, int32_t a2, char a3) { return __interleave_plane((char *)a0, (char *)a1, a2, a3); }
 static inline void __fwd_expand_image_unmodel_plane(char a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { __unmodel_plane(a0, a1, a2, (uint16_t *)a3, (uint8_t *)a4); }
 
-BMF_SSE char * __expand_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref, int32_t a4, int32_t *p_dwLowDateTime)
+char * __expand_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref, int32_t a4, int32_t *p_dwLowDateTime)
 {
   struct alignas(16) {   // 104 bytes, the frame Hex-Rays could not name
       uint8_t slot0[4];
@@ -21505,7 +21273,7 @@ LABEL_109:
 static inline void __fwd_search_filter_model_planes(void *a0, void *a1, int32_t a2, char a3, const __m128 &a4, const __m128 &a5) { __model_planes((char *)a0, (char *)a1, a2, a3, a4, a5); }
 static inline void __fwd_search_filter_transform_planes(void *a0, int32_t a1, char a2, const __m128 &a3, const __m128 &a4) { __transform_planes((BmfImage *)a0, a1, a2, a3, a4); }
 
-BMF_SSE uint32_t __search_filter(BmfImage *p_i, char a2, const __m128 &a3__ref, const __m128 &a4__ref)
+uint32_t __search_filter(BmfImage *p_i, char a2, const __m128 &a3__ref, const __m128 &a4__ref)
 {
   struct alignas(16) {   // 164 bytes, the frame Hex-Rays could not name
       uint8_t slot0[4];
@@ -22346,7 +22114,7 @@ LABEL_63:
 
 static inline char * __fwd_bmf_open_archive_expand_image(int32_t a0, const __m128 &a1, const __m128 &a2, int32_t a3, void *a4) { return __expand_image(a0, a1, a2, a3, (int32_t *)a4); }
 
-BMF_SSE BmfArc *__bmf_open_archive(BmfArc *v2, char *FileName, int32_t a2)
+BmfArc *__bmf_open_archive(BmfArc *v2, char *FileName, int32_t a2)
 {
   ;
   BmfArc *v5;
@@ -22411,7 +22179,7 @@ static inline void __fwd_compress_image_model_planes(void *a0, void *a1, int32_t
 static inline void __fwd_compress_image_transform_planes(void *a0, int32_t a1, char a2, const __m128 &a3, const __m128 &a4) { __transform_planes((BmfImage *)a0, a1, a2, a3, a4); }
 static inline void __fwd_compress_image_model_plane(const __m128 &a0, const __m128 &a1, void *a2, void *a3, void *a4) { __model_plane(a0, a1, (BmfImage *)a2, (uint8_t *)a3, (uint8_t *)a4); }
 
-BMF_SSE int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref, BmfImage *p_i, void *coded_buf)
+int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref, BmfImage *p_i, void *coded_buf)
 {
   struct alignas(16) {   // 80 bytes, the frame Hex-Rays could not name
       char *Buffera_4;
@@ -22799,7 +22567,7 @@ static inline BmfArc * __fwd_bmf_bmf_destroy_archive(void *a0, char a1) { return
 // ---------------------------------------------------------------------------
 
 // Compress InName, which must be a BMP, into a BMF stream named OutName.
-BMF_SSE void __bmf_compress(const __m128 &a1__ref, const __m128 &a2__ref,
+void __bmf_compress(const __m128 &a1__ref, const __m128 &a2__ref,
                             const char *InName, const char *OutName)
 {
   ;
@@ -22870,7 +22638,7 @@ BMF_SSE void __bmf_compress(const __m128 &a1__ref, const __m128 &a2__ref,
 }
 
 // Expand the BMF stream InName into a BMP named OutName.
-BMF_SSE void __bmf_decompress(const __m128 &a1__ref, const __m128 &a2__ref,
+void __bmf_decompress(const __m128 &a1__ref, const __m128 &a2__ref,
                               const char *InName, const char *OutName)
 {
   ;
@@ -22924,7 +22692,7 @@ BMF_SSE void __bmf_decompress(const __m128 &a1__ref, const __m128 &a2__ref,
   }
 }
 
-BMF_SSE int32_t __main(int32_t argc, const char **argv)
+int32_t __main(int32_t argc, const char **argv)
 {
   ;
   __m128 v3, v4;
