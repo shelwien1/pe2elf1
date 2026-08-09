@@ -8398,19 +8398,7 @@ void __reduce_alphabet(ModelBlock *Blocka, char a2, uint8_t *a3)
       uint8_t slot65604[16];
       int32_t v87;
       uint32_t v88[91];
-      int32_t n4_1;
-      void *Block;
-      uint8_t *v91;
-      uint32_t v92;
-      uint32_t v93;
-      uint8_t _pad1[4];
-      uint32_t v94;
-      int32_t Blockaa;
-      uint8_t *v96;
-      uint32_t k_1;
-      uint8_t _pad2[4];
-      int32_t Blocka_1;
-      uint8_t _pad3[28];
+      void *slot[19];   // one array, three bases: `&n4_1`, `*(&Block + n)` and the interleaved `(&v91)[2*j]` / `*(&v92 + 2*j)`
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 66064, "frame layout moved");
   uint32_t (&v78)[15] = __frame.v78;
@@ -8424,16 +8412,16 @@ void __reduce_alphabet(ModelBlock *Blocka, char a2, uint8_t *a3)
   uint64_t (&v86)[2] = *(uint64_t (*)[2])((char *)__frame.slot65604);
   int32_t &v87 = __frame.v87;
   uint32_t (&v88)[91] = __frame.v88;
-  int32_t &n4_1 = __frame.n4_1;
-  void *&Block = __frame.Block;
-  uint8_t *&v91 = __frame.v91;
-  uint32_t &v92 = __frame.v92;
-  uint32_t &v93 = __frame.v93;
-  uint32_t &v94 = __frame.v94;
-  ModelBlock *&Blockaa = (ModelBlock *&)__frame.Blockaa;
-  uint8_t *&v96 = __frame.v96;
-  uint32_t &k_1 = __frame.k_1;
-  ModelBlock *&Blocka_1 = (ModelBlock *&)__frame.Blocka_1;
+  int32_t &n4_1 = (int32_t &)__frame.slot[0];
+  void * &Block = (void * &)__frame.slot[1];
+  uint8_t * &v91 = (uint8_t * &)__frame.slot[2];
+  uint32_t &v92 = (uint32_t &)__frame.slot[3];
+  uint32_t &v93 = (uint32_t &)__frame.slot[4];
+  uint32_t &v94 = (uint32_t &)__frame.slot[6];
+  ModelBlock * &Blockaa = (ModelBlock * &)__frame.slot[7];
+  uint8_t * &v96 = (uint8_t * &)__frame.slot[8];
+  uint32_t &k_1 = (uint32_t &)__frame.slot[9];
+  ModelBlock * &Blocka_1 = (ModelBlock * &)__frame.slot[11];
   ;
   ModelBlock *Blockaa_2;
   char *v62;
@@ -8588,7 +8576,7 @@ void __reduce_alphabet(ModelBlock *Blocka, char a2, uint8_t *a3)
         }
         while ( v75 < Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0 );
       }
-      p_n4_1 = &n4_1;
+      p_n4_1 = (int32_t *)__frame.slot;
       n16 = 16;
       do
       {
@@ -8600,7 +8588,7 @@ void __reduce_alphabet(ModelBlock *Blocka, char a2, uint8_t *a3)
     }
     else
     {
-      p_n4_2 = &n4_1;
+      p_n4_2 = (int32_t *)__frame.slot;
       n16_1 = 16;
       do
       {
@@ -8712,8 +8700,8 @@ LABEL_14:
           {
             v30 = 2 * v29;
             v31 = 2 * v29++ * v94;
-            (&v91)[v30] = (uint8_t *)Block + v31;
-            *(&v92 + v30) = (uint32_t)&v28[v31];
+            __frame.slot[v30 + 2] = (uint8_t *)Block + v31;
+            __frame.slot[v30 + 3] = (uint32_t)&v28[v31];
           }
           while ( v29 < k_2 >> 1 );
           v4 = v96;
@@ -8726,7 +8714,7 @@ LABEL_14:
           v32 = 1;
         }
         if ( k_2 > v32 - 1 )
-          *(&Block + v32) = (char *)Block + n4_1 * -n0x2000_5 + v94 * v32;
+          __frame.slot[v32 + 1] = (char *)Block + n4_1 * -n0x2000_5 + v94 * v32;
       }
       else
       {
@@ -8751,12 +8739,12 @@ LABEL_14:
               {
                 for ( j = 0; j < j_1; ++j )
                 {
-                  v42 = (&v91)[2 * j];
+                  v42 = __frame.slot[2 * j + 2];
                   *v42 = v33[2 * j];
-                  v43 = (uint8_t *)*(&v92 + 2 * j);
-                  (&v91)[2 * j] = v42 + 1;
+                  v43 = (uint8_t *)__frame.slot[2 * j + 3];
+                  __frame.slot[2 * j + 2] = v42 + 1;
                   *v43 = v33[2 * j + 1];
-                  *(&v92 + 2 * j) = (uint32_t)(v43 + 1);
+                  __frame.slot[2 * j + 3] = (uint32_t)(v43 + 1);
                 }
                 v44 = 2 * j + 1;
                 v4 = &v33[2 * j];
@@ -8767,11 +8755,11 @@ LABEL_14:
               }
               if ( v44 - 1 >= k_1 )
                 break;
-              v45 = (uint8_t *)*(&Block + v44);
+              v45 = (uint8_t *)__frame.slot[v44 + 1];
               v4 = &v33[v44];
               *v45 = v33[v44 - 1];
               v46 = ++v39 < v94;
-              *(&Block + v44) = v45 + 1;
+              __frame.slot[v44 + 1] = v45 + 1;
               if ( !v46 )
                 goto LABEL_71;
               v33 += v44;
@@ -8842,7 +8830,7 @@ LABEL_71:
         while ( n0x2000_4 < n0x2000_3 );
       }
     }
-    p_n4 = &n4_1;
+    p_n4 = (int32_t *)__frame.slot;
     n16_2 = 16;
     do
     {
@@ -12371,25 +12359,11 @@ void __unmodel_plane_slow(ModelBlock *_this, char *Src)
       char *    v85;
       int32_t   v88;
       char *    ArgList_1;
-      char *    v92;
-      int32_t   v93;
-      int32_t   v94;
-      int32_t   v95;
-      int32_t   ArgList_4;
-      char *    Src_1;
-      ModelBlock *   this_1;
-      int32_t   v99;
-      int32_t   v100;
-      int32_t   v101;
-      int32_t   v102;
-      uint8_t   _pad17[32];
+      char *row[19];   // the row-pointer array; the loop fills (&v92)[k] for k < n6, five at a time
       uint8_t   _tail[12];   // alignas(16) rounds 100 up
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 112,
                 "frame layout moved");
-  static_assert(sizeof(void *) != 4
-                || __builtin_offsetof(__typeof__(__frame), _pad17) == 68,
-                "the named part of the frame moved");
   int32_t &Size = __frame.Size;
   int32_t &n4 = __frame.v82;
   int32_t &v82 = __frame.v82;
@@ -12401,17 +12375,17 @@ void __unmodel_plane_slow(ModelBlock *_this, char *Src)
   char * &ArgList_1 = __frame.ArgList_1;
   char * &ArgList_5 = __frame.ArgList_1;
   int32_t &n6_3 = *(int32_t *)((char *)&__frame.ArgList_1);
-  char * &v92 = __frame.v92;
-  int32_t &v93 = __frame.v93;
-  int32_t &v94 = __frame.v94;
-  int32_t &v95 = __frame.v95;
-  int32_t &ArgList_4 = __frame.ArgList_4;
-  char * &Src_1 = __frame.Src_1;
-  ModelBlock * &this_1 = __frame.this_1;
-  int32_t &v99 = __frame.v99;
-  int32_t &v100 = __frame.v100;
-  int32_t &v101 = __frame.v101;
-  int32_t &v102 = __frame.v102;
+  char * &v92 = (char * &)__frame.row[0];
+  int32_t &v93 = (int32_t &)__frame.row[1];
+  int32_t &v94 = (int32_t &)__frame.row[2];
+  int32_t &v95 = (int32_t &)__frame.row[3];
+  int32_t &ArgList_4 = (int32_t &)__frame.row[4];
+  char * &Src_1 = (char * &)__frame.row[5];
+  ModelBlock * &this_1 = (ModelBlock * &)__frame.row[6];
+  int32_t &v99 = (int32_t &)__frame.row[7];
+  int32_t &v100 = (int32_t &)__frame.row[8];
+  int32_t &v101 = (int32_t &)__frame.row[9];
+  int32_t &v102 = (int32_t &)__frame.row[10];
   ;
   ModelBlock *this_4;
   char *v57;   // were int32_t: these hold addresses
@@ -12837,12 +12811,12 @@ LABEL_76:
         ArgList_10 = ArgList_3;
         do
         {
-          (&v92)[n6_4] = ArgList_10;
+          __frame.row[n6_4] = ArgList_10;
           ArgList_10 += 5 * v69;
-          *(&v93 + n6_4) = (int32_t)&ArgList_3[v69 * (n6_4 + 1)];
-          *(&v94 + n6_4) = (int32_t)&ArgList_3[v69 * (n6_4 + 2)];
-          *(&v95 + n6_4) = (int32_t)&ArgList_3[v69 * (n6_4 + 3)];
-          *(&ArgList_4 + n6_4) = (int32_t)&ArgList_3[v69 * (n6_4 + 4)];
+          __frame.row[n6_4 + 1] = (int32_t)&ArgList_3[v69 * (n6_4 + 1)];
+          __frame.row[n6_4 + 2] = (int32_t)&ArgList_3[v69 * (n6_4 + 2)];
+          __frame.row[n6_4 + 3] = (int32_t)&ArgList_3[v69 * (n6_4 + 3)];
+          __frame.row[n6_4 + 4] = (int32_t)&ArgList_3[v69 * (n6_4 + 4)];
           n6_4 += 5;
         }
         while ( n6_4 <= n6 - 6 );
@@ -12855,7 +12829,7 @@ LABEL_76:
       this_1 = (ModelBlock *)((uint32_t *)this_4);
       do
       {
-        (&v92)[n6_1] = &ArgList_3[v73];
+        __frame.row[n6_1] = &ArgList_3[v73];
         v73 += v69;
         ++n6_1;
       }
@@ -12870,11 +12844,11 @@ LABEL_76:
       v76 = 0;
       do
       {
-        v77 = (&v92)[n6_2];
+        v77 = __frame.row[n6_2];
         *Src_2 = *v77;
         v78 = *(uint32_t *)&this_4->f4 * this_4->f0;
         ++Src_2;
-        (&v92)[n6_2++] = v77 + 1;
+        __frame.row[n6_2++] = v77 + 1;
         if ( n6_2 == n6 )
           n6_2 = 0;
         ++v76;
