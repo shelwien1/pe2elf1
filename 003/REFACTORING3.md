@@ -40,6 +40,12 @@ are blocked on things the plan did not know:
   *loop variable* in `alt_p2_filter`. The region is genuinely both, so the
   merge needs the union written by hand from a reading of the filter, not a
   union built from offsets.
+* **A merge retypes fields, and the locals downstream of them cascade.**
+  `ModelBlock` absorbing `Obj10` folded `f92` into the `uint8_t *` row-cursor
+  array and left three conversions in `decode_pixel` that only
+  `BMF_STRICT=1 ./build.sh` could see.  Two were row cursors that now say so;
+  the third is a stack slot holding a cursor and a `uint16_t` at different
+  points, which §4.2 says needs the frame to dissolve first.
 * **`Obj92` cannot become `Obj0`.** Every offset in `alt_p1_alloc` is
   `*((int32_t *)_this + K)` for K ≤ 53, which is `Obj0`'s `f0`/`f4`/`f8`/
   `f12[51]` exactly — and retyping the parameter alone, with no offset touched,
@@ -564,8 +570,24 @@ What it leaves behind is §2.2's argument in plain code:
     v121 = alt_p2_context(v120,               v2, v3, plane[0], plane[1]);
 ```
 
-The six that are left are in `reduce_alphabet` and `unmodel_plane_slow`, and
-`unmodel_plane_slow`'s four are one array reached from four bases at once.
+**The six that are left are a different problem, and it is the reason the six
+frames behind them stay.** Each is an array whose *extent is decided at run
+time*, so there is no length to declare:
+
+* `unmodel_plane_slow` fills `(&v92)[k]` for `k < n6` five at a time, `n6`
+  being the segment count. Five bases into one array, and the array runs past
+  `Src_1` and `this_1` — which the same loop uses as ordinary variables, saving
+  a register into `this_1` across it.
+* `reduce_alphabet` walks two *interleaved* series in one array, `(&v91)[2*j]`
+  and `*(&v92 + 2*j)` for `j < j_1`.
+* `decode_pixel` and `code_pixel` hand `&n15_8` and `&p_n15` to `pixel_context`,
+  which reads `p_n15[n6]` with `n6 = _this->f44` — an index out of the model
+  block, not a constant.
+
+A guess at the length is not answerable to the gate in the way the rest of this
+round has been: too short and the reads that go past it are exactly the ones no
+test image happens to make. These six want the loop bound read, not the members
+declared, and that is reverse engineering rather than rewriting.
 
 ### 4.3 Why this is worth doing
 
@@ -680,9 +702,13 @@ which caught a scaling error the fifteen images did not. **Run the whole gate,
 every batch.** `BMF_MALFORMED=0 BMF_OOM=0` exists for iteration, not for
 deciding.
 
-`BMF_STRICT=1 ./build.sh` reports zero today and will keep doing so; the
-companion scoreboard for this round is `python3 tools/shape.py`, which prints
-§1's table. Neither replaces the gate — a count can improve while a stream
+`BMF_STRICT=1 ./build.sh` reports zero today and **has to be run with the
+gate**, not instead of it: this round took it 0 -> 3 without moving a stream,
+because merging `Obj10` into `ModelBlock` retyped a field and the `int32_t`
+locals downstream of it went wrong in the other direction.  A `-fpermissive`
+conversion is a compile-time property and no amount of byte-identical output
+will find one.  The companion scoreboard for this round is
+`python3 tools/shape.py`, which prints §1's table. Neither replaces the gate — a count can improve while a stream
 moves, which is the whole content of §6.
 
 ---
