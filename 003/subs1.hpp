@@ -482,8 +482,8 @@ struct Obj1 {
   uint32_t f24;
   uint32_t f28;
   uint8_t _pad4[144];
-  uint32_t row[5];            // +176 .. +192, rotated one place each pass
-  uint32_t cur[5];            // +196 .. +212, derived from row
+  uint8_t  *row[5];           // +176 .. +192, rotated one place each pass
+  uint8_t  *cur[5];           // +196 .. +212, derived from row
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj1, cur[4]) == 212,
@@ -543,9 +543,9 @@ struct Obj8 {
   uint64_t f278648;
   uint8_t _pad8[4];
   int32_t *f278660;
-  uint32_t f278664;
-  uint32_t f278668;
-  uint32_t f278672;
+  uint8_t *f278664;   // a row cursor
+  uint8_t *f278668;   // a row cursor
+  uint8_t *f278672;   // a row cursor
   uint8_t _pad13[60];
   uint8_t  *f278736[10];   // +278736 .. +278772, row cursors
 };
@@ -707,7 +707,7 @@ struct Obj19 {
   char *f278760;
   char *f278764;
   char *f278768;
-  uint32_t f278772;
+  char *f278772;   // a row cursor, like its three neighbours
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj19, f278772) == 278772,
@@ -1208,9 +1208,9 @@ struct Obj69 {
   uint64_t f278648;
   __m128 *f278656;
   int32_t *f278660;
-  uint32_t f278664;
-  uint32_t f278668;
-  uint32_t f278672;
+  uint8_t *f278664;   // a row cursor
+  uint8_t *f278668;   // a row cursor
+  uint8_t *f278672;   // a row cursor
   uint8_t _pad15[24];
   uint16_t f278700;
   uint8_t _pad17[2];
@@ -6976,7 +6976,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
       int32_t   v85;
       uint32_t  v86;
       int32_t   v88;
-      int32_t   Src_1;
+      char     *Src_1;
       int32_t   v91;
       int32_t   v92;
       void     *Block;
@@ -7004,7 +7004,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
   uint32_t &v87 = __frame.v86;
   int32_t &v88 = __frame.v88;
   int32_t &v89 = __frame.v88;
-  int32_t &Src_1 = __frame.Src_1;
+  char *&Src_1 = __frame.Src_1;
   int32_t &v91 = __frame.v91;
   int32_t &v92 = __frame.v92;
   void *&Block = __frame.Block;
@@ -7024,11 +7024,12 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
   Obj0 *v59;
   uintptr_t v61;
   Obj1 *v24;
-  char *v29, *v65;
+  uint8_t *v29, *v65;   // row cursors out of Obj1
   char v11, v12, v13, v58;
   Obj92 *v6;
-  int32_t i, v3, i_2, n4, *v7, v8, v9, v10, v14, v15, v16, ArgList, v18, i_3, n4_1, n4_2, v25,
-          v26, v27, v28, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45,
+  uint8_t *v25, *v26, *v27, *v28;   // row cursors out of Obj1
+  int32_t i, v3, i_2, n4, *v7, v8, v9, v10, v14, v15, v16, ArgList, v18, i_3, n4_1, n4_2,
+          v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45,
           v46, v47, v48, v49, v50, v52, v53, v54, v56, v57, v60, v62, v64, v67, v68, v71, v72,
           v74, v75, v78, v79, n4_3, n4_4;
   uint32_t v20, *v51;
@@ -7118,8 +7119,8 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           *(uint16_t *)(v24->cur[0] - 6) = *(uint16_t *)(v24->cur[1] + 4);
           *(uint16_t *)(v24->cur[0] - 4) = *(uint16_t *)(v24->cur[1] + 2);
           *(uint16_t *)(v24->cur[0] - 2) = **(uint16_t **)&v24->cur[1];
-          v30 = (uint8_t *)(*(uint8_t **)&v24->cur[2]);
-          v31 = (uint8_t *)(*(uint8_t **)&v24->cur[4]);
+          v30 = (uint8_t *)(*&v24->cur[2]);
+          v31 = (uint8_t *)(*&v24->cur[4]);
           v24->f20 = 0;
           v24->f24 = 0;
           v24->f28 = 0;
@@ -13015,7 +13016,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
       uint8_t _pad0[3];
       uint8_t slot4[4];
       uint8_t slot8[4];
-      int32_t v95;
+      char *v95;
       int32_t v96;
       char v97;
       uint8_t _pad1[3];
@@ -13049,7 +13050,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
   uint32_t &v92 = *(uint32_t *)((char *)__frame.slot4);
   int32_t &v93 = *(int32_t *)((char *)__frame.slot8);
   int32_t &v94 = *(int32_t *)((char *)__frame.slot8);
-  int32_t &v95 = __frame.v95;
+  char *&v95 = __frame.v95;
   int32_t &v96 = __frame.v96;
   char &v97 = __frame.v97;
   int32_t &v98 = __frame.v98;
@@ -13077,11 +13078,12 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
   ;
   uintptr_t n3;   // were int32_t: addresses, masked and tagged
   Obj1 *v23;
-  char *v28;
+  uint8_t *v28;   // a row cursor out of Obj1
   char v11, v12, v13, v62, v71, v81, v83;
   Obj92 *v6;
-  int32_t i, v3, i_2, n4, *v7, v8, v9, v10, v14, v15, v16, v17, i_3, n4_1, n4_2, v24, v25, v26,
-          v27, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46,
+  uint8_t *v24, *v25, *v26, *v27;   // row cursors out of Obj1
+  int32_t i, v3, i_2, n4, *v7, v8, v9, v10, v14, v15, v16, v17, i_3, n4_1, n4_2,
+          v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46,
           v47, v48, v49, n5_9, n5_7, n5_2, n5_1, v56, n16, v58, v59, v63, v64, v65, n16_1, n5_3,
           v69, n5_4, v73, v74, n16_2, v77, n5_5, v84, n16_3, n4_3, n4_4;
   int64_t v68, v76, v86;
@@ -13173,8 +13175,8 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
           *(uint16_t *)(v23->cur[0] - 6) = *(uint16_t *)(v23->cur[1] + 4);
           *(uint16_t *)(v23->cur[0] - 4) = *(uint16_t *)(v23->cur[1] + 2);
           *(uint16_t *)(v23->cur[0] - 2) = **(uint16_t **)&v23->cur[1];
-          v29 = (uint8_t *)(*(uint8_t **)&v23->cur[2]);
-          v30 = (uint8_t *)(*(uint8_t **)&v23->cur[4]);
+          v29 = (uint8_t *)(*&v23->cur[2]);
+          v30 = (uint8_t *)(*&v23->cur[4]);
           v23->f20 = 0;
           v23->f24 = 0;
           v23->f28 = 0;
@@ -15468,11 +15470,11 @@ void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m128 &a3__r
       v50 = lpAddress->f278660;
       v51 = lpAddress->f278664;
       *(uint32_t *)&lpAddress->f278660 = v51;
-      lpAddress->f278664 = v50;
+      lpAddress->f278664 = (uint8_t *)v50;
       v51 += 8;
       v50 += 2;
       lpAddress->f278668 = v51;
-      lpAddress->f278672 = v50;
+      lpAddress->f278672 = (uint8_t *)v50;
       v52 = *v50;
       *(uint32_t *)(v51 - 4) = *v50;
       *(uint32_t *)(lpAddress->f278668 - 8) = v52;
@@ -15889,12 +15891,12 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v59 = v56->f278660;
           v60 = v56->f278664;
           *(uint32_t *)&v56->f278660 = v60;
-          v56->f278664 = v59;
+          v56->f278664 = (uint8_t *)v59;
           v60 += 8;
           v56->f278668 = v60;
           v59 += 2;
           v2 = 0;
-          v56->f278672 = v59;
+          v56->f278672 = (uint8_t *)v59;
           v61 = *v59;
           *(uint32_t *)(v60 - 4) = *v59;
           v62 = ((__m128i *)(((uintptr_t)v56 + 278543) & 0xFFFFFFF0));
@@ -16833,12 +16835,12 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           v58 = v55->f278660;
           v59 = v55->f278664;
           *(uint32_t *)&v55->f278660 = v59;
-          v55->f278664 = v58;
+          v55->f278664 = (uint8_t *)v58;
           v59 += 8;
           v55->f278668 = v59;
           v58 += 2;
           v2 = 0;
-          v55->f278672 = v58;
+          v55->f278672 = (uint8_t *)v58;
           v60 = *v58;
           *(uint32_t *)(v59 - 4) = *v58;
           v61 = ((__m128i *)(((uintptr_t)v55 + 278543) & 0xFFFFFFF0));
