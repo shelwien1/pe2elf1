@@ -218,7 +218,9 @@ identifier in the initialiser rather than by matching each shape. And a slot may
 have no declaration at all, because later work stopped using it — that becomes
 padding, since the bytes are still part of the layout.
 
-Six of the eight are converted. `model_plane` is not: its members ended up
-spread across shared declaration lists, and extracting them is surgery worth
-more than it buys for the frame that runs on every image and has 3 unexecuted
-lines.
+All eight are converted, and with them all 24 frames. `model_plane` looked like
+it would need declaration-list surgery and did not: one of its members has a
+trailing comment, which a pattern anchored at the end of the line cannot see
+past, and the tool assumed a frame's declarations sit together when later
+phases had moved some apart. Two properties of the tool, mistaken for
+properties of the code.

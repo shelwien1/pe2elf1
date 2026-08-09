@@ -64,6 +64,12 @@ def current_types(now, fn, names):
             continue
         for i in range(a + 1, b + 1):
             l = now[i]
+            l = l.split('//')[0]      # earlier phases left explanatory
+            #                             comments on the declarations they
+            #                             retyped, and a pattern anchored at
+            #                             the end of the line does not see past
+            #                             one.  That alone kept model_plane's
+            #                             frame from converting.
             m = re.match(r'^\s*([A-Za-z_][A-Za-z0-9_ ]*?\**)\s*'
                          r'([A-Za-z_][A-Za-z0-9_]*)\s*(\[\d+\])?\s*;\s*$', l)
             if m and m.group(2) in names:
@@ -192,10 +198,13 @@ def main():
         sys.exit('%s: %s' % (fn, err))
     if not order:
         sys.exit('%s: found no declarations to replace' % fn)
-    lo, hi = min(order), max(order)
-    if hi - lo + 1 != len(order):
-        sys.exit('%s: its declarations are not contiguous' % fn)
-    out = now[:lo] + body.split('\n')[:-1] + refs + now[hi + 1:]
+    # The declarations need not sit together: later phases moved some of them,
+    # so each goes where it is and the struct goes where the first one was.
+    out = list(now)
+    for i in sorted(order, reverse=True):
+        del out[i]
+    at = min(order)
+    out[at:at] = body.split('\n')[:-1] + refs
     open(sys.argv[1], 'w').write('\n'.join(out))
     print('%s: %d bytes, %d members restored to one frame'
           % (fn, size, len(slots)))

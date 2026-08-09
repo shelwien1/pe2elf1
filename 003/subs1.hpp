@@ -21420,27 +21420,51 @@ static inline int32_t __fwd_model_plane_alt_model_p1_encode(void *a0, int32_t a1
 
 BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *p_i, uint8_t *a4, uint8_t *a5)
 {
-  int32_t Size;
-  int32_t v58;
-  int32_t &v59 = v58;
-  Obj10 *Blocka_5;
-  int32_t &v61 = (int32_t &)Blocka_5;
-  Obj10 *Blocka_2;
-  Obj10 *&Blocka = (Obj10 *&)*(void **)((char *)&Blocka_2);
-  int32_t v64;
-  int32_t v65;
-  int32_t v66;
-  int32_t v67;
-  int32_t v68;
-  int32_t v69;
-  int32_t v70;
-  int32_t v72;
-  int32_t v73;
-  uint32_t n5;
+  struct alignas(16) {   // 96 bytes, the frame Hex-Rays could not name
+      int32_t   Size;
+      uint8_t   _pad1[4];
+      int32_t   v58;
+      Obj10 *   Blocka_5;
+      Obj10 *   Blocka_2;
+      int32_t   v64;
+      int32_t   v65;
+      int32_t   v66;
+      int32_t   v67;
+      int32_t   v68;
+      int32_t   v69;
+      int32_t   v70;
+      char *    v71;
+      int32_t   v72;
+      int32_t   v73;
+      uint32_t  n5;
+      uint8_t   _pad16[32];
+  } __frame;
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 96,
+                "frame layout moved");
+  static_assert(sizeof(void *) != 4
+                || __builtin_offsetof(__typeof__(__frame), _pad16) == 64,
+                "the named part of the frame moved");
+  int32_t &Size = __frame.Size;
+  int32_t &v58 = __frame.v58;
+  int32_t &v59 = __frame.v58;
+  Obj10 * &Blocka_5 = __frame.Blocka_5;
+  int32_t &v61 = *(int32_t *)((char *)&__frame.Blocka_5);
+  Obj10 * &Blocka = __frame.Blocka_2;
+  Obj10 * &Blocka_2 = __frame.Blocka_2;
+  int32_t &v64 = __frame.v64;
+  int32_t &v65 = __frame.v65;
+  int32_t &v66 = __frame.v66;
+  int32_t &v67 = __frame.v67;
+  int32_t &v68 = __frame.v68;
+  int32_t &v69 = __frame.v69;
+  int32_t &v70 = __frame.v70;
+  char * &v71 = __frame.v71;
+  int32_t &v72 = __frame.v72;
+  int32_t &v73 = __frame.v73;
+  uint32_t &n5 = __frame.n5;
   ;
   Obj10 *Blocka_1;
   char *v46, *v50;
-  char *v71;   // was int32_t: these hold addresses
   __m128 a1 = a1__ref;
   __m128 a2 = a2__ref;
   bool v43;
