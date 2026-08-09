@@ -6923,37 +6923,13 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
   // Nothing caught it because nothing reached it: this is the body
   // REFACTORING.md section 2.3 lists as unexercised.  testfiles/altp1.bmp
   // reaches it now.
-  struct alignas(16) {   // 116 bytes, the frame Hex-Rays could not name
-      uint8_t   _gap0[4];   // was Obj0     * v83
-      uint8_t   _gap1[4];   // was void     * v84
-      uint8_t   _gap2[4];   // was int32_t v85
-      uint32_t  v86;
-      int32_t   v88;
-      uint8_t   _gap3[4];   // was char     * Src_1
-      uint8_t   _gap4[4];   // was int32_t v91
-      uint8_t   _gap5[4];   // was int32_t v92
-      uint8_t   _gap6[16];   // was void * Block_plane
-      uint8_t   _gap7[4];   // was int32_t v97
-      uint8_t   _gap8[4];   // was int32_t v98
-      uint8_t   _gap9[4];   // was uint32_t i_1
-      uint8_t   _gap10[4];   // was int32_t ArgList_1
-      uint8_t   _gap11[4];   // was int32_t v101
-      uint8_t   _gap12[4];   // was uint32_t i_4
-      uint8_t   _gap13[4];   // was int32_t v103
-      uint8_t   _gap14[4];   // was int32_t v104
-      uint8_t   _gap15[4];   // was int32_t v105
-      uint8_t   _pad0[44];   // 32 of frame the aliases do not name, then
-  } __frame;                 // 12 more because alignas(16) rounds 116 up
-  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 128, "frame layout moved");
-  static_assert(sizeof(void *) != 4 || __builtin_offsetof(__typeof__(__frame), _pad0) == 84,
-                "the named part of the frame moved");
   Obj0 *v83;
   void *v84;
   int32_t v85;
-  uint32_t &v86 = __frame.v86;
-  uint32_t &v87 = __frame.v86;
-  int32_t &v88 = __frame.v88;
-  int32_t &v89 = __frame.v88;
+  uint32_t v86;
+  uint32_t v87;
+  int32_t v88;
+  int32_t v89;
   char *Src_1;
   int32_t v91;
   int32_t v92;
@@ -12353,39 +12329,39 @@ static inline void __fwd_unmodel_plane_slow_expand_alphabet(void *a0) { __expand
 void __unmodel_plane_slow(ModelBlock *_this, char *Src)
 {
   struct alignas(16) {   // 100 bytes, the frame Hex-Rays could not name
-      int32_t   Size;
+      uint8_t   _gap0[4];   // was int32_t Size
       uint8_t   _pad1[4];
       int32_t   v82;
       char *    v85;
-      int32_t   v88;
+      uint8_t   _gap1[4];   // was int32_t v88
       char *    ArgList_1;
       char *row[19];   // the row-pointer array; the loop fills (&v92)[k] for k < n6, five at a time
       uint8_t   _tail[12];   // alignas(16) rounds 100 up
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 112,
                 "frame layout moved");
-  int32_t &Size = __frame.Size;
+  int32_t Size;
   int32_t &n4 = __frame.v82;
   int32_t &v82 = __frame.v82;
   int32_t &v84 = __frame.v82;
   char * &v85 = __frame.v85;
   int32_t &v86 = *(int32_t *)((char *)&__frame.v85);
   int32_t &v87 = *(int32_t *)((char *)&__frame.v85);
-  int32_t &v88 = __frame.v88;
+  int32_t v88;
   char * &ArgList_1 = __frame.ArgList_1;
   char * &ArgList_5 = __frame.ArgList_1;
   int32_t &n6_3 = *(int32_t *)((char *)&__frame.ArgList_1);
-  char * &v92 = (char * &)__frame.row[0];
-  int32_t &v93 = (int32_t &)__frame.row[1];
-  int32_t &v94 = (int32_t &)__frame.row[2];
-  int32_t &v95 = (int32_t &)__frame.row[3];
-  int32_t &ArgList_4 = (int32_t &)__frame.row[4];
-  char * &Src_1 = (char * &)__frame.row[5];
-  ModelBlock * &this_1 = (ModelBlock * &)__frame.row[6];
-  int32_t &v99 = (int32_t &)__frame.row[7];
-  int32_t &v100 = (int32_t &)__frame.row[8];
-  int32_t &v101 = (int32_t &)__frame.row[9];
-  int32_t &v102 = (int32_t &)__frame.row[10];
+  char *v92;
+  int32_t v93;
+  int32_t v94;
+  int32_t v95;
+  int32_t ArgList_4;
+  char *Src_1;
+  ModelBlock *this_1;
+  int32_t v99;
+  int32_t v100;
+  int32_t v101;
+  int32_t v102;
   ;
   ModelBlock *this_4;
   char *v57;   // were int32_t: these hold addresses

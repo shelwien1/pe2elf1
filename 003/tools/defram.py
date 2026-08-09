@@ -192,9 +192,22 @@ def split(lines, a, b, fr, runs):
     if frozen:
         why = 'frame pinned by ' + ', '.join(sorted(set(frozen))[:3])
         return [], [dict(x, why=why) for x in fr['aliases']]
+    # `--split-slots` offers the shared ones too, but only where every name on
+    # the slot has the same type: `uint32_t &Size_2`, `uint32_t &v62` and
+    # `uint32_t &v63` on one member is MSVC reusing a slot for three locals with
+    # disjoint live ranges, and splitting it is a rename into separate storage.
+    # Two *types* on one slot is the other thing -- a byte, a dword and a copy
+    # buffer in four bytes -- and that is a decision, not a rewrite (§4.2).
+    types = {}
+    for x in fr['aliases']:
+        types.setdefault(x['member'], set()).add(
+            x['decl'][:-len(x['name'])].strip())
     go, stay = [], []
     for x in fr['aliases']:
-        why = 'shared slot' if x['member'] in shared else None
+        why = None
+        if x['member'] in shared:
+            why = ('shared slot' if '--split-slots' not in sys.argv
+                   or len(types[x['member']]) > 1 else None)
         (stay if why else go).append(dict(x, why=why))
     return go, stay
 
