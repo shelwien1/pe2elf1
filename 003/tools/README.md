@@ -225,6 +225,41 @@ past, and the tool assumed a frame's declarations sit together when later
 phases had moved some apart. Two properties of the tool, mistaken for
 properties of the code.
 
+## `shape.py` — count what is still written as arithmetic
+
+```
+python3 tools/shape.py                  # the table REFACTORING3.md §1 quotes
+python3 tools/shape.py --this           # raw offsets off `_this`, by function
+python3 tools/shape.py --frames         # one line per frame
+python3 tools/shape.py --bss            # the bmf_bss globals, grouped
+python3 tools/shape.py --overlap Obj8 Obj11 Obj19 Obj31 Obj69
+```
+
+This reads nothing and rewrites nothing; it is a scoreboard, the way
+`BMF_STRICT=1 ./build.sh` was round two's. Round three's defect is an object
+whose layout is known by address arithmetic rather than by declaration, and the
+three shapes that means in this file are counted at the top of the script as
+`P1`, `P2` and `P3`:
+
+```
+   (T *)(base + …)          (T *)((char *)base + …)
+   ((T *)base + …)          — the same, with the offset scaled
+   … + (char *)base         — Hex-Rays' reversed form, where the index came first
+```
+
+`base` has to be a plain identifier, so `(char *)v->f4 + n` is not counted;
+allowing member expressions raises the total by about 60. Comments are stripped
+first — `deadcheck.py` below learned that lesson the expensive way.
+
+The reason it exists is that a plan full of counts nobody can re-derive is a
+plan that gets believed. Round two's first draft had three numbers in it that
+were wrong, and each was wrong because the count came from reading rather than
+from a command. Everything in REFACTORING3.md §1 is one of these sub-commands.
+
+**It is a counter, not a target.** `exclusion_mask[symbol]` is a byte buffer
+being indexed and will never become a member; the number moving is a signal that
+something changed, not that something improved.
+
 ## `deadcheck.py` — report code nothing can reach
 
 ```
