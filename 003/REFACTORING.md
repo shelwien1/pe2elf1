@@ -285,7 +285,7 @@ and this table does not pretend otherwise:
 
 | pointer | offset range | distinct | refs | touched by | what is known |
 | --- | --- | --- | --- | --- | --- |
-| `_this` | `0x64`–`0x5C75AC` | 72 | 200 | `pixel_context`, `init_model_tables`, `sub_419430`, `sub_4229E0`, … | the model block: a `0x44000`–`0x44144` header (52 fields, 405 refs across all pointers) then tables out to 6.7 MB. Allocated by `sub_414F60` / `rc_begin_decode` |
+| `_this` | `0x64`–`0x5C75AC` | 72 | 200 | `pixel_context`, `init_model_tables`, `sub_419430`, `sub_4229E0`, … | the model block: a `0x44000`–`0x44144` header (52 fields, 405 refs across all pointers) then tables out to 6.7 MB. Allocated by `rc_begin_encode` / `rc_begin_decode` |
 | `lpAddress` | `0x11021`–`0x447B0` | 33 | 104 | `sub_419610`, `sub_422DB0` | an alternate-model working set — **role not established** |
 | `n5_2` | `0x5D8`–`0xEEA` | 7 | 97 | `alt_model_p1_encode`, `sub_4259F0` | a ~3.8 KB record in the alternate model family — **role not established** |
 | `a1` | `0xC20`–`0x65E7B0` | 32 | 96 | `layout_workspace`, `sub_41CAB0` | reaches the same 6.7 MB extent as `_this`, so almost certainly the model block under another name — confirm before merging |

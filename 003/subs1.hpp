@@ -5775,7 +5775,7 @@ BmfArc *__bmf_destroy_archive(BmfArc *Block, char a2)
   return Block;
 }
 
- BMF_SSE void __expand_predictor_mode0(uint32_t Src, int32_t i, int32_t a3)
+BMF_SSE void __expand_predictor_mode0(uint32_t Src, int32_t i, int32_t a3)
 {
   ;
   __m128i si128, v7, v8, v9, v11, v12, v19, v20, v22, v23, v24, v25, v26, v27, v28;
@@ -5788,7 +5788,7 @@ BmfArc *__bmf_destroy_archive(BmfArc *Block, char a2)
   // never taken: -E is 0
 }
 
- BMF_SSE uint32_t __predict_med(char *Src, int32_t i, int32_t a3)
+BMF_SSE uint32_t __predict_med(char *Src, int32_t i, int32_t a3)
 {
   ;
   __m128i si128, v7, v13, v14;
@@ -5924,7 +5924,7 @@ LABEL_24:
   return n15;
 }
 
- BMF_SSE uint32_t __sub_4118A0(uint8_t *a1, char *a2)
+BMF_SSE uint32_t __sub_4118A0(uint8_t *a1, char *a2)
 {
   ;
   __m128i si128, v7;
@@ -6822,7 +6822,7 @@ BMF_SSE int32_t __encode_symbol_tree(uint16_t *_this, int32_t n2) {
 }
 static inline int32_t __fwd_sub_4135A0_encode_symbol_tree(void *a0, int32_t a1) { return __encode_symbol_tree((uint16_t *)a0, a1); }
 
- BMF_SSE int32_t __sub_4135A0(uint16_t *a1, int32_t n5, int32_t a3, int32_t n5a)
+BMF_SSE int32_t __sub_4135A0(uint16_t *a1, int32_t n5, int32_t a3, int32_t n5a)
 {
   ;
   __m128i v9, v10;
@@ -7033,7 +7033,7 @@ int32_t __sub_414060(uint16_t *_this)
 }
 static inline int32_t __fwd_sub_413E60_sub_414060(void *a0) { return __sub_414060((uint16_t *)a0); }
 
- int32_t __sub_413E60(uint16_t *a1, int32_t a2, int32_t a3)
+int32_t __sub_413E60(uint16_t *a1, int32_t a2, int32_t a3)
 {
   ;
   bool v21;
@@ -7683,7 +7683,7 @@ void **__sub_419610(void **lpAddress, char a2)
   return lpAddress;
 }
 
- void __init_sse_constants()
+void __init_sse_constants()
 {
   ;
   __xmmword_445760[0] = __xmmword_439A00;
@@ -8694,7 +8694,7 @@ int32_t *__sub_4256F0(int32_t *_this, int32_t i, int32_t a3, int32_t n4)
   return _this;
 }
 
- BMF_SSE char *__rc_begin_encode()
+BMF_SSE char *__rc_begin_encode()
 {
   ;
   __m128i si128, *v8;
@@ -8970,7 +8970,7 @@ static inline void ** __fwd_alt_model_p1_d8_encode_sub_4244A0(void *a0, char a1)
 static inline void __fwd_alt_model_p1_d8_encode_sub_424550(int32_t a0, void *a1, void *a2) { __sub_424550(a0, (uint8_t *)a1, (uint8_t *)a2); }
 static inline int32_t * __fwd_alt_model_p1_d8_encode_sub_4256F0(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __sub_4256F0((int32_t *)a0, a1, a2, a3); }
 
- void __alt_model_p1_d8_encode(uint8_t *a1, int32_t i, int32_t a3, uint8_t *a4)
+void __alt_model_p1_d8_encode(uint8_t *a1, int32_t i, int32_t a3, uint8_t *a4)
 {
   ;
   int32_t *v4;
@@ -8984,7 +8984,7 @@ static inline int32_t * __fwd_alt_model_p1_d8_encode_sub_4256F0(void *a0, int32_
   if ( v5 )
     __fwd_alt_model_p1_d8_encode_sub_4244A0(v5, 1);
 }
- int32_t __set_new_handler(int32_t __out_of_memory_handler)
+int32_t __set_new_handler(int32_t __out_of_memory_handler)
 {
   ;
   int32_t __set_new_handler_pout_of_memory_handler;
@@ -9145,7 +9145,7 @@ int32_t __sub_4229E0(char *_this, int32_t i, int32_t n4)
   return _this;
 }
 
- int32_t *__alloc_image(int32_t a1, int32_t a2, int32_t n5, int32_t a4, int32_t a5)
+int32_t *__alloc_image(int32_t a1, int32_t a2, int32_t n5, int32_t a4, int32_t a5)
 {
   ;
   char v13, *buf;
@@ -9232,7 +9232,7 @@ LABEL_20:
   return result;
 }
 
- int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
+int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
 {
   uint32_t Buffera;
   char *&Bufferb = *(char **)((char *)&Buffera);
@@ -10390,7 +10390,7 @@ __gnu_m128d __log_two_lane(const __m128d &a0__ref, const __m128d &a1__ref)
   return x;
 }
 
- BMF_SSE int32_t __estimate_cost(char *a1, int32_t n2)
+BMF_SSE int32_t __estimate_cost(char *a1, int32_t n2)
 {
   ;
   __m128 v17, v18;
@@ -10608,7 +10608,7 @@ static inline void ** __fwd_alt_model_p1_decode_sub_4244A0(void *a0, char a1) { 
 static inline int32_t __fwd_alt_model_p1_decode_sub_4248D0(void *a0, void *a1, int32_t a2) { return __sub_4248D0((Obj25 *)a0, (uint32_t *)a1, a2); }
 static inline int32_t * __fwd_alt_model_p1_decode_sub_4256F0(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __sub_4256F0((int32_t *)a0, a1, a2, a3); }
 
- int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
+int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
 {
   Obj0 *v83;
   void *v84;
@@ -13747,7 +13747,7 @@ LABEL_19:
   return n192;
 }
 
- BMF_SSE int32_t *__read_bmp(char *FileName)
+BMF_SSE int32_t *__read_bmp(char *FileName)
 {
   struct alignas(16) {   // 128 bytes, the frame Hex-Rays could not name
       uint8_t slot0[4];
@@ -16065,7 +16065,7 @@ void __sub_419430(Obj10 *_this)
   }
 }
 
- BMF_SSE int32_t __layout_workspace(uintptr_t a1, int32_t a2, int32_t i, int32_t a4, int32_t a5)
+BMF_SSE int32_t __layout_workspace(uintptr_t a1, int32_t a2, int32_t i, int32_t a4, int32_t a5)
 {
   ;
   __m128i si128, v26, v27;
@@ -16743,7 +16743,7 @@ static inline void ** __fwd_alt_model_p1_encode_sub_4244A0(void *a0, char a1) { 
 static inline int32_t __fwd_alt_model_p1_encode_sub_4248D0(void *a0, void *a1, int32_t a2) { return __sub_4248D0((Obj25 *)a0, (uint32_t *)a1, a2); }
 static inline int32_t * __fwd_alt_model_p1_encode_sub_4256F0(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __sub_4256F0((int32_t *)a0, a1, a2, a3); }
 
- int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
+int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
 {
   struct alignas(16) {   // 144 bytes, the frame Hex-Rays could not name
       char v90;
@@ -19544,7 +19544,7 @@ static inline int32_t __fwd_alt_model_p2_decode_decode_three_way(void *a0, int32
 static inline void ** __fwd_alt_model_p2_decode_sub_419610(void *a0, char a1) { return __sub_419610((void **)a0, a1); }
 static inline int32_t __fwd_alt_model_p2_decode_sub_41A130(void *a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __sub_41A130((Obj11 *)a0, a1, a2, (Obj11 *)a3, (Obj11 *)a4); }
 
- BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
+BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
 {
   struct alignas(16) {   // 276 bytes, the frame Hex-Rays could not name
       uint32_t Size_1;
@@ -20606,7 +20606,7 @@ static inline int32_t __fwd_alt_model_p2_encode_sub_414390(void *a0, int32_t a1,
 static inline void ** __fwd_alt_model_p2_encode_sub_419610(void *a0, char a1) { return __sub_419610((void **)a0, a1); }
 static inline int32_t __fwd_alt_model_p2_encode_sub_41A130(void *a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __sub_41A130((Obj11 *)a0, a1, a2, (Obj11 *)a3, (Obj11 *)a4); }
 
- BMF_SSE int32_t __alt_model_p2_encode(Obj33 *p_i, uint8_t *a2)
+BMF_SSE int32_t __alt_model_p2_encode(Obj33 *p_i, uint8_t *a2)
 {
   struct alignas(16) {   // 324 bytes, the frame Hex-Rays could not name
       uint32_t Size_1;
@@ -23841,7 +23841,7 @@ BMF_SSE void __bmf_decompress(const __m128 &a1__ref, const __m128 &a2__ref,
   }
 }
 
- BMF_SSE int32_t __main(int32_t argc, const char **argv)
+BMF_SSE int32_t __main(int32_t argc, const char **argv)
 {
   ;
   __m128 v3, v4;

@@ -510,7 +510,8 @@ quantised with step `2E + 1`:
 n128_1 = 2 * near_lossless_max[0] + 1;
 ```
 
-`sub_4111B0` (encode) and `sub_410650` (decode) built the quantisation and
+`sub_4111B0` (encode) and `expand_predictor_mode0` (decode) built the
+quantisation and
 reconstruction tables with SSE, then ran the same MED loop against the
 *reconstructed* neighbours so encoder and decoder stayed in step. This is the
 one mode where the round trip is not bit-exact, by design.
@@ -803,7 +804,7 @@ Stated plainly, so the rest can be trusted:
 * **What predictor modes 0 and 3 mean.** The dispatch table in §6.4 is read off
   the code, but 0 and 3 land in the same places and I did not work out what
   distinguishes them, nor what mode 2 does instead of predicting. This is why
-  `sub_410650`, the mode-0 expander, is still in the source even though the
+  `expand_predictor_mode0` is still in the source even though the
   linker discards it: see REFACTORING.md §2.2.
 * **The `search_filter` search order.** Which candidates are tried is visible as
   loop bounds but I did not enumerate the candidate set. How `-Q` pruned them is
