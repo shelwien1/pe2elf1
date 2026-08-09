@@ -20,6 +20,7 @@ Every pair is checked against the file before it is printed: the new name has
 to be there and the old one has to be gone.  Names with no recorded address are
 listed at the end rather than left to look accounted for.
 """
+import difflib
 import re
 import subprocess
 import sys
@@ -27,8 +28,63 @@ import sys
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs                                                  # noqa: E402
 
+DEF = re.compile(r'^[A-Za-z_].*?\b__([A-Za-z_][A-Za-z0-9_]*)\s*\(')
 PAIR = re.compile(r'\bsub_([0-9A-F]{6})\s*(?:->|=>|=|→)\s*'
                   r'([a-z_][a-z0-9_]*)')
+
+
+def real_bodies(text):
+    """Every non-shim definition, in file order."""
+    return [DEF.match(l).group(1) for l in text.split('\n')
+            if DEF.match(l) and not l.lstrip().startswith('static inline')]
+
+
+def from_commits(names):
+    """Pair names with addresses across the commit that introduced each.
+
+    `tools/rename.py --funcs` substitutes a token; it does not reorder or
+    remove anything.  So the list of real bodies in file order is the same list
+    before and after, and the k-th entry before a renaming commit is the k-th
+    entry after it.  Equal lengths is the check that the commit did only that,
+    and any commit that fails it is skipped rather than guessed through.
+    """
+    out = {}
+    for name in names:
+        try:
+            revs = subprocess.check_output(
+                ['git', 'log', '--format=%H', '-S', '__%s(' % name, '--',
+                 '003/subs1.hpp'], stderr=subprocess.DEVNULL).decode().split()
+        except subprocess.CalledProcessError:
+            continue
+        for rev in reversed(revs):
+            try:
+                after = subprocess.check_output(
+                    ['git', 'show', '%s:003/subs1.hpp' % rev],
+                    stderr=subprocess.DEVNULL).decode('utf8', 'replace')
+                before = subprocess.check_output(
+                    ['git', 'show', '%s^:003/subs1.hpp' % rev],
+                    stderr=subprocess.DEVNULL).decode('utf8', 'replace')
+            except subprocess.CalledProcessError:
+                continue
+            a, b = real_bodies(after), real_bodies(before)
+            if len(a) == len(b):
+                blocks = [(b, a)]
+            else:
+                # the commit did more than rename.  Line the two lists up and
+                # take only the stretches where the same number of bodies
+                # changed on each side; anywhere else the k-th does not answer
+                # to the k-th and there is nothing to read off.
+                sm = difflib.SequenceMatcher(None, b, a, autojunk=False)
+                blocks = [(b[i1:i2], a[j1:j2])
+                          for tag, i1, i2, j1, j2 in sm.get_opcodes()
+                          if tag == 'replace' and i2 - i1 == j2 - j1]
+            for olds, news in blocks:
+                for n, o in zip(news, olds):
+                    if n == name and o.startswith('sub_'):
+                        out[name] = o[4:]
+            if name in out:
+                break
+    return out
 
 
 def from_log():
@@ -56,6 +112,12 @@ def main():
             rejected.append((name, addr))
             continue
         pairs[name] = addr
+
+    unmapped = {n.lstrip('_') for n in defined
+                if not n.startswith('__sub_')} - set(pairs)
+    for name, addr in from_commits(sorted(unmapped)).items():
+        if 'sub_%s' % addr not in text:
+            pairs[name] = addr
 
     print('# name -> the address of the body in BMF.exe it was decompiled from.')
     print('# Recovered by tools/addrmap.py from the commits that made each')

@@ -5,9 +5,12 @@ two coded streams, the range coder and its state, the modelling front end, and
 the two entropy back ends.
 
 Everything below was derived by reading the decompiled bodies. Function names
-are the donor's addresses inside `BMF.exe` (`compress_image` is the body at
-`0x00402FE0`); global names are IDA's, and each one is a reference into
-`blob.inc` — BMF.exe's data segment — at the address given in the tables.
+started as the donor's addresses inside `BMF.exe` and have been replaced, as
+each role was established, by names that say what the body does;
+`tools/addrmap.txt` maps every one of them back to the address it came from,
+and lists the four it cannot. Global names are IDA's, and each one is a
+reference into `blob.inc` — BMF.exe's data segment — at the address given in
+the tables.
 
 **Confidence.** Sections 1–6 and the range coder in §5 are read off the code
 directly; where a detail is inferred rather than read, it says so. §7 is where
@@ -25,10 +28,10 @@ main
 └── __main                                 argv: "c in.bmp out" / "d in out.bmp"
     ├── __bmf_compress
     │   ├── read_bmp                     read a BMP into the in-memory image
-    │   ├── sub_402EF0                     open the output archive
+    │   ├── bmf_open_archive                     open the output archive
     │   └── compress_image                     compress one image      ← §2
     └── __bmf_decompress
-        ├── sub_402EF0                     open the input archive
+        ├── bmf_open_archive                     open the input archive
         ├── expand_image                     expand one image        ← §2
         └── write_bmp                     write a BMP
 ```
@@ -60,7 +63,7 @@ fwrite("\x81\x8A""20\x81\x90""20a+b", 4u, 1u, out);
 Only the first four bytes are written. What looks like one long literal is
 three string constants that the original linker tail-merged into one another —
 the signature, the second accepted signature `81 90 32 30`, and `"a+b"`, the
-mode `sub_402EF0` opens the archive with. The reader that used to sniff input
+mode `bmf_open_archive` opens the archive with. The reader that used to sniff input
 formats accepted either signature.
 
 When the data does not compress (`coded size >= raw size`) the member is
@@ -69,7 +72,7 @@ place of the coded data.
 
 ## 3. The image descriptor
 
-16 bytes, and also the header of the in-memory image object that `sub_42B830`
+16 bytes, and also the header of the in-memory image object that `alloc_image`
 allocates. Pixels follow it at offset 16; the palette, if any, follows the
 pixels.
 
@@ -345,7 +348,7 @@ else            { range  = rt;             return 0; }
 ```
 
 `rc.encode_bit(f0, f1, bit)` is its encoder twin. It returns the width of the
-interval it chose — the new `range` — which is what `sub_413900` passes on as
+interval it chose — the new `range` — which is what `encode_symbol_tree` passes on as
 its own result.
 
 **Finish — `rc.finish()`**, called by `rc_end_decode`, renormalises, then scans
@@ -387,7 +390,7 @@ question the compiler answers.
 
 Two model functions still hold a coding step that is more than one call:
 `symbol_list` encodes a symbol against a sorted frequency list (§7.3) and
-`sub_414620` decodes one from a 3-way counter node. Both now do their search
+`decode_three_way` decodes one from a 3-way counter node. Both now do their search
 and then call `rc`.
 
 ## 6. The modelling front end
@@ -475,7 +478,7 @@ residual `X - pred` (mod 256) is then folded from signed to unsigned through a
 accumulated in `hist_scratch` for the filter search.
 
 `__byte_44339E & 3` (`plane_predictor`, `0x00443360`) chooses the mode, and it interacts
-with `E`. The dispatch, read off `sub_407B30`, is:
+with `E`. The dispatch, read off `transform_planes`, is:
 
 | `plane_predictor` | `E == 0` | `E != 0` |
 | --- | --- | --- |
@@ -526,14 +529,14 @@ bits** of a histogram of `n` counts summing to `N`:
 H = (N·log N  −  Σᵢ nᵢ·log nᵢ) · log₂(e)
 ```
 
-computed in `double`, two histogram entries at a time in SSE. `sub_436E10`
+computed in `double`, two histogram entries at a time in SSE. `log_two_lane`
 supplies the two-lane `log`, and takes a mask: where a lane's count is zero it
 substitutes `0.5` (`__bmf_half_half`, `0x0043B480`) so that `log` is never
 handed a zero, and the caller then masks those lanes back out of the running sum
 with `_mm_andnot_ps`. The substituted value is never used — it exists to keep a
 `-inf` out of the vector. This
-and the cost functions `choose_plane_coding` (`sub_405CF0`) and `cost_candidate`
-(`sub_407460`) are the floating-point part of the compressor, and
+and the cost functions `choose_plane_coding` (`choose_plane_coding`) and `cost_candidate`
+(`cost_candidate`) are the floating-point part of the compressor, and
 the reason the SSE denormal mode (`bmf_set_denormal_mode`, §5 of the build) is
 set at startup: flush-to-zero and denormals-are-zero keep these sums fast and
 identical run to run. The search picks the transform and predictor whose folded
@@ -577,7 +580,7 @@ coder of §5.
 
 `model_plane` runs the plane through this pipeline, in this order:
 
-1. `malloc(0x7BA230)` — an ~8 MB workspace — laid out by `sub_417980`.
+1. `malloc(0x7BA230)` — an ~8 MB workspace — laid out by `layout_workspace`.
 2. `rc_begin_encode` — start the range coder (§5.2).
 3. `reduce_alphabet` — **alphabet reduction**, and the first thing written. It scans
    the plane for the symbols actually used, encodes `distinct - 1` with
@@ -590,9 +593,19 @@ coder of §5.
 6. `rc_end_encode` — flush the range coder (§5.2).
 
 When `plane_alt_model` (descriptor `+2` bit 2) is set, `model_plane` instead
-dispatches to one of `sub_424500` / `sub_424D90` / `sub_4197A0` / `sub_421930`,
-picked by predictor mode and by whether the depth is exactly 8. Those are
-separate model families and are not described here.
+dispatches to one of four separate model families, picked by predictor mode
+and by whether the depth is exactly 8. `unmodel_plane` has the same dispatch
+on the way back, which is what pairs them:
+
+| predictor | depth | encode | decode |
+| --- | --- | --- | --- |
+| 1 | 8 | `alt_model_p1_d8_encode` | `alt_model_p1_d8_decode` |
+| 1 | otherwise | `alt_model_p1_encode` | `alt_model_p1_decode` |
+| 2 | 8 | `alt_model_p2_d8_encode` | `alt_model_p2_d8_decode` |
+| 2 | otherwise | `alt_model_p2_encode` | `alt_model_p2_decode` |
+
+The names say the entry condition because that is all that is established;
+what the families *do* is §9.
 
 What the model initialisation builds:
 
@@ -640,7 +653,7 @@ pair, which is fed to `rc.encode_bit` / `rc.decode_bit` as `(f0, f1)`.
 Two counter shapes appear, both 16-bit, both with the halve-on-overflow rule
 that keeps them adaptive:
 
-**Binary pair — `sub_413430`.** Walks a bit tree; at each node
+**Binary pair — `update_binary_pair`.** Walks a bit tree; at each node
 
 ```c
 if (counter > 0x2000) {            /* rescale before it saturates */
@@ -650,7 +663,7 @@ if (counter > 0x2000) {            /* rescale before it saturates */
 counter += (__n8_0 * ((plane_predictor == 2) + 5)) >> 3;   /* adaptive increment */
 ```
 
-**Three-way node — `sub_414620`,** the decoder for a node holding three
+**Three-way node — `decode_three_way`,** the decoder for a node holding three
 frequencies (`node[1]`, `node[2]`, `node[3]`) plus its own increment in
 `node[0]`. After decoding it does
 
@@ -680,7 +693,11 @@ end of the list codes an escape — a PPM-style exclusion mechanism.
 
 ## 8. Global map
 
-Every address is an offset into `blob.inc`, BMF.exe's data segment.
+Every address is an offset into `blob.inc`, BMF.exe's data segment. For
+functions rather than globals, `tools/addrmap.txt` is the corresponding map:
+41 names to the addresses their bodies were decompiled from, recovered by
+`tools/addrmap.py` from the commits that made each rename rather than
+reconstructed from the code.
 
 **Range coder.** None: its state is `RangeCoder`'s private members, and the
 nine words it used to occupy (`0x004456E0`…`0x004456FC` and `0x00445704`) are
@@ -742,10 +759,10 @@ Stated plainly, so the rest can be trusted:
   64K binary counters each, a 5 × 5 sub-state grid, neighbour-match state
   indices — but not the exact derivation of the 16-bit context index, nor how
   the 15 groups' predictions are combined into the one probability handed to the
-  coder. `code_pixel` is 901 lines and would need a full reading.
+  coder. `code_pixel` is 787 lines and would need a full reading.
 * **The alternate model families.** When descriptor `+2` bit 2 is set,
-  `model_plane` hands the plane to `sub_424500` / `sub_424D90` / `sub_4197A0` /
-  `sub_421930` instead. I established only which one is picked, not what they
+  `model_plane` hands the plane to one of the four alternate families instead
+  (the table is in §7.2). I established only which one is picked, not what they
   do; `sub_41CAB0` (1969 lines here) sits under two of them.
 
   An earlier draft of §6.6 listed `sub_41A130`, `sub_41C4B0` and `sub_41CAB0`

@@ -1,0 +1,47 @@
+# name -> the address of the body in BMF.exe it was decompiled from.
+# Recovered by tools/addrmap.py from the commits that made each
+# rename; see ALGORITHM.md section 8.
+bmf_destroy_archive        0x00402DF0
+out_of_memory_handler      0x00402E30
+bmf_open_archive           0x00402EF0
+bmf_close_archive          0x00402FB0
+compress_image             0x00402FE0
+expand_image               0x00403820
+search_filter              0x004043E0
+choose_plane_coding        0x00405CF0
+cost_candidate             0x00407460
+transform_planes           0x00407B30
+colour_transform           0x00407EF0
+rc_decode_flat             0x004123E0
+encode_context_bit         0x00412490
+decode_context_bit         0x00412850
+symbol_list                0x00412B10
+update_binary_pair         0x00413430
+encode_symbol_tree         0x00413900
+decode_three_way           0x00414620
+rescale_counter_pair       0x004148F0
+rc_end_decode              0x00414920
+rc_begin_decode            0x004149C0
+rc_end_encode              0x00414CE0
+model_plane                0x00415380
+code_pixel                 0x004159E0
+reduce_alphabet            0x00417200
+layout_workspace           0x00417980
+unmodel_plane              0x00417DB0
+unmodel_plane_slow         0x00417E80
+decode_pixel               0x00418650
+alt_model_p2_d8_encode     0x004197A0
+alt_model_p2_encode        0x00421930
+alt_model_p2_d8_decode     0x00422D60
+alt_model_p2_decode        0x00423600
+alt_model_p1_d8_encode     0x00424500
+alt_model_p1_encode        0x00424D90
+alt_model_p1_d8_decode     0x004273F0
+alt_model_p1_decode        0x00427740
+read_bmp                   0x0042AB20
+alloc_image                0x0042B830
+set_new_handler            0x0042CBB0
+log_two_lane               0x00436E10
+
+# 41 mapped.  4 named bodies have no recorded address:
+#   estimate_cost             predict_med               rc_begin_encode           write_bmp
