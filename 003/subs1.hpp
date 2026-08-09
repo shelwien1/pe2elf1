@@ -7900,12 +7900,12 @@ int32_t __alt_p1_model(Obj0 *_this)
   if ( n5_1 < 5 )
     n5_3 = n5_1;
   n5_4 = n5_3;
-  v8 = *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f12[37] + 172))
-     + *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f12[33] + 156))
-     + *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f12[29] + 140))
-     + *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f12[25] + 124))
-     + *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f12[21] + 108))
-     + *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f12[17] + 92))
+  v8 = _this->f12[40 - _this->f12[37]]
+     + _this->f12[36 - _this->f12[33]]
+     + _this->f12[32 - _this->f12[29]]
+     + _this->f12[28 - _this->f12[25]]
+     + _this->f12[24 - _this->f12[21]]
+     + _this->f12[20 - _this->f12[17]]
      + *(uint32_t *)((char *)_this + (- 4 * v5 + 76))
      + *(uint32_t *)((char *)_this + (- 4 * v3 + 60))
      + _this->f12[7]
@@ -8033,7 +8033,7 @@ int32_t __alt_p1_model(Obj0 *_this)
                     + 16
                     * (_this->f12[7]
                      + _this->f12[0]
-                     - *(uint32_t *)((char *)_this + (intptr_t)(4 * _this->f12[5] + 36)))));
+                     - _this->f12[6 + _this->f12[5]])));
       ((uint16_t *)v19)[n5_2 + 1901] += 6;
       v19->f3800 += 6;
       v20 = (Obj26 *)((uint16_t *)((char *)_this + 16 * v18));
@@ -8091,8 +8091,8 @@ int32_t __alt_p1_model(Obj0 *_this)
       *(uint16_t *)(v23 + 2 * n5_2 + 3802) += 7;
       *(uint16_t *)(v23 + 3800) += 7;
       v24 = _this->f12[11];
-      v25 = v24 + _this->f12[0] - *(uint32_t *)((char *)_this + (intptr_t)(4 * _this->f12[9] + 52));
-      v26 = v8 + v24 - *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f12[9] + 60));
+      v25 = v24 + _this->f12[0] - _this->f12[10 + _this->f12[9]];
+      v26 = v8 + v24 - _this->f12[12 - _this->f12[9]];
       v27 = (Obj26 *)((uint16_t *)((char *)_this + 16 * v25));
       ((uint16_t *)v27)[n5_2 + 1901] += 6;
       v27->f3800 += 6;
@@ -8151,8 +8151,8 @@ int32_t __alt_p1_model(Obj0 *_this)
       *(uint16_t *)(v31 + 2 * n5_2 + 3802) += 7;
       *(uint16_t *)(v31 + 3800) += 7;
       v32 = _this->f12[15];
-      v33 = v32 + _this->f12[0] - *(uint32_t *)((char *)_this + (intptr_t)(4 * _this->f12[13] + 68));
-      v34 = v8 + v32 - *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f12[13] + 76));
+      v33 = v32 + _this->f12[0] - _this->f12[14 + _this->f12[13]];
+      v34 = v8 + v32 - _this->f12[16 - _this->f12[13]];
       v35 = (Obj26 *)((uint16_t *)((char *)_this + 16 * v33));
       ((uint16_t *)v35)[n5_2 + 1901] += 6;
       v35->f3800 += 6;
@@ -8211,8 +8211,8 @@ int32_t __alt_p1_model(Obj0 *_this)
       *(uint16_t *)(v39 + 2 * n5_2 + 3802) += 7;
       *(uint16_t *)(v39 + 3800) += 7;
       v40 = _this->f12[19];
-      v41 = v40 + _this->f12[0] - *(uint32_t *)((char *)_this + (intptr_t)(4 * _this->f12[17] + 84));
-      v42 = v8 + v40 - *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f12[17] + 92));
+      v41 = v40 + _this->f12[0] - _this->f12[18 + _this->f12[17]];
+      v42 = v8 + v40 - _this->f12[20 - _this->f12[17]];
       v43 = (Obj26 *)((uint16_t *)((char *)_this + 16 * v41));
       ((uint16_t *)v43)[n5_2 + 1901] += 6;
       v43->f3800 += 6;
@@ -8271,8 +8271,8 @@ int32_t __alt_p1_model(Obj0 *_this)
       *(uint16_t *)(v47 + 2 * n5_2 + 3802) += 7;
       *(uint16_t *)(v47 + 3800) += 7;
       v48 = _this->f12[23];
-      v49 = v48 + _this->f12[0] - *(uint32_t *)((char *)_this + (intptr_t)(4 * _this->f12[21] + 100));
-      v50 = v8 + v48 - *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f12[21] + 108));
+      v49 = v48 + _this->f12[0] - _this->f12[22 + _this->f12[21]];
+      v50 = v8 + v48 - _this->f12[24 - _this->f12[21]];
       v51 = (Obj26 *)((uint16_t *)((char *)_this + 16 * v49));
       ((uint16_t *)v51)[n5_2 + 1901] += 6;
       v51->f3800 += 6;
@@ -8331,8 +8331,8 @@ int32_t __alt_p1_model(Obj0 *_this)
       *(uint16_t *)(v55 + 2 * n5_2 + 3802) += 7;
       *(uint16_t *)(v55 + 3800) += 7;
       v56 = _this->f12[27];
-      v57 = v56 + _this->f12[0] - *(uint32_t *)((char *)_this + (intptr_t)(4 * _this->f12[25] + 116));
-      v58 = v8 + v56 - *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f12[25] + 124));
+      v57 = v56 + _this->f12[0] - _this->f12[26 + _this->f12[25]];
+      v58 = v8 + v56 - _this->f12[28 - _this->f12[25]];
       v59 = (Obj26 *)((uint16_t *)((char *)_this + 16 * v57));
       ((uint16_t *)v59)[n5_2 + 1901] += 6;
       v59->f3800 += 6;
@@ -8391,8 +8391,8 @@ int32_t __alt_p1_model(Obj0 *_this)
       *(uint16_t *)(v63 + 2 * n5_2 + 3802) += 7;
       *(uint16_t *)(v63 + 3800) += 7;
       v64 = _this->f12[31];
-      v65 = v64 + _this->f12[0] - *(uint32_t *)((char *)_this + (intptr_t)(4 * _this->f12[29] + 132));
-      v66 = v8 + v64 - *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f12[29] + 140));
+      v65 = v64 + _this->f12[0] - _this->f12[30 + _this->f12[29]];
+      v66 = v8 + v64 - _this->f12[32 - _this->f12[29]];
       v67 = (Obj26 *)((uint16_t *)((char *)_this + 16 * v65));
       ((uint16_t *)v67)[n5_2 + 1901] += 6;
       v67->f3800 += 6;
@@ -8451,8 +8451,8 @@ int32_t __alt_p1_model(Obj0 *_this)
       *(uint16_t *)(v71 + 2 * n5_2 + 3802) += 7;
       *(uint16_t *)(v71 + 3800) += 7;
       v72 = _this->f12[35];
-      v73 = v72 + _this->f12[0] - *(uint32_t *)((char *)_this + (intptr_t)(4 * _this->f12[33] + 148));
-      v74 = v8 + v72 - *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f12[33] + 156));
+      v73 = v72 + _this->f12[0] - _this->f12[34 + _this->f12[33]];
+      v74 = v8 + v72 - _this->f12[36 - _this->f12[33]];
       v75 = (Obj26 *)((uint16_t *)((char *)_this + 16 * v73));
       ((uint16_t *)v75)[n5_2 + 1901] += 6;
       v75->f3800 += 6;
@@ -8510,8 +8510,8 @@ int32_t __alt_p1_model(Obj0 *_this)
       *(uint16_t *)(v79 + 2 * n5_2 + 3802) += 7;
       *(uint16_t *)(v79 + 3800) += 7;
       v80 = _this->f12[39];
-      result = (char *)_this + 16 * (v80 + _this->f12[0] - *(uint32_t *)((char *)_this + (intptr_t)(4 * _this->f12[37] + 164)));
-      v81 = (Obj26 *)((uint16_t *)((char *)_this + 16 * (v80 - *(uint32_t *)((char *)_this + (intptr_t)(-4 * _this->f12[37] + 172)) + v8)));
+      result = (char *)_this + 16 * (v80 + _this->f12[0] - _this->f12[38 + _this->f12[37]]);
+      v81 = (Obj26 *)((uint16_t *)((char *)_this + 16 * (v80 - _this->f12[40 - _this->f12[37]] + v8)));
       *(uint16_t *)(result + 2 * n5_2 + 3802) += 6;
       *(uint16_t *)(result + 3800) += 6;
       ((uint16_t *)v81)[n5_4 + 1901] += 4;
@@ -8898,7 +8898,7 @@ void __alt_p1_d8_encode_body(Obj0 *_this, uint8_t *a2, uint8_t *a3)
           v39 = v38 - _this->f8;
           **(uint8_t **)&_this->f12[46] = v38;
           *(uint8_t *)(_this->f12[46] + 1) = (BYTE4(v39) ^ v39) - BYTE4(v39);
-          *(uint32_t *)((char *)_this + (intptr_t)(4 * _this->f12[2] + 24)) = *(uint32_t *)((char *)_this + (intptr_t)(4 * _this->f12[2] + 24))
+          _this->f12[3 + _this->f12[2]] = _this->f12[3 + _this->f12[2]]
                                                               + *(uint8_t *)(_this->f12[46] + 1)
                                                               - *(uint8_t *)(_this->f12[46] - 7)
                                                               - (*(uint8_t *)(_this->f12[50] - 3)
@@ -10911,7 +10911,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           v104 = v64;
           *v63 = v64;
           *(uint8_t *)(v59->f12[46] + 1) = abs32(v64 - v62);
-          *(uint32_t *)((char *)v59 + (intptr_t)(4 * v59->f12[2] + 24)) = *(uint32_t *)((char *)v59 + (intptr_t)(4 * v59->f12[2] + 24))
+          v59->f12[3 + v59->f12[2]] = v59->f12[3 + v59->f12[2]]
                                                             + *(uint8_t *)(v59->f12[46] + 1)
                                                             - *(uint8_t *)(v59->f12[46] - 7)
                                                             - (*(uint8_t *)(v59->f12[50] - 3)
