@@ -18,12 +18,12 @@ so they can be re-measured rather than trusted.
 
 | | | at the start |
 | --- | --- | --- |
-| `subs1.hpp` | 23 856 lines | 25 462 |
+| `subs1.hpp` | 23 914 lines | 25 462 |
 | bodies | 179 (84 real, 94 `__fwd_*` shims, 1 helper) | 215 |
 | globals in `blob.inc` | **78** | 293 |
-| recovered structs | **76** + 3 named ones, 2567 field accesses, 18 arrays put back | 0 |
-| raw-offset dereferences | **250** | 1646 before Phase 4 |
-| pointer casts | 5579 | 7336 |
+| recovered structs | **85** + 3 named ones, 18 arrays put back, 3 that were a `memcpy` | 0 |
+| raw-offset dereferences | **238** | 1646 before Phase 4 |
+| pointer casts | 5644 | 7336 |
 | `goto` / `LABEL_n:` | 113 / 81 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
 | line coverage | **95.87 %** of 13 222 | 64.5 % |
@@ -753,7 +753,28 @@ does abort, so the check can fail. They are rows of a table 144 bytes apart.
 
 **Both of these are the same lesson.** A tool that only knows how to make
 structs will describe everything as a struct, and its offer list stops being
-evidence the moment it starts repeating itself. The shape of what it was
+evidence the moment it starts repeating itself.
+
+And it does not settle: recovering changes the alias classes, so merging
+duplicates and folding non-objects feeds new candidates back in. Four rounds of
+recover → dedup → fold ran before the offer list came down to threes, and the
+three record structs ended by disappearing entirely — once every copy was folded,
+their only remaining use was `&v->f36` inside a `bmf_copy` argument, which is
+`(char *)v + 36` with extra steps.
+
+Two process failures came out of those rounds, and both are worth more than the
+objects they cost:
+
+* **The sweep's inner filter skipped the three large photographs**, on a comment
+  claiming they "exercise nothing the others do not". A run of 27 applied
+  objects passed the filter and failed the real gate on `x_ep` alone. The claim
+  was an assumption written as a fact; `x_ep` is in the filter now.
+* **`unused.py` reported "no unused-variable warnings" with 66 in the file.**
+  It read stdin whenever stdin was not a terminal — every time a script runs it
+  — and its pattern wanted ASCII quotes where this locale's GCC emits curly
+  ones. Either alone was enough. **A tool whose failure mode is "reports
+  success, does nothing" is worse than one that crashes,** and what caught it
+  was counting the warnings independently rather than believing the tool. The shape of what it was
 offering — the same five fields, over and over, in one function — was the
 finding, and it was visible for 130 rounds before anyone looked at it.
 
@@ -1156,6 +1177,6 @@ into three kinds:
   nothing against the tree that does not; all five of `deadcheck.py`'s do.
 
 One caveat on the coverage figure: `gcov` counts *instrumented* lines (13 222
-of the file's 23 856) and counts inlined copies separately, so its per-function
+of the file's 23 914) and counts inlined copies separately, so its per-function
 percentages do not sum the way source lines do. The line counts in §2 are source
 lines, measured separately by matching braces over the function list.
