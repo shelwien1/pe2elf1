@@ -18,12 +18,12 @@ so they can be re-measured rather than trusted.
 
 | | | at the start |
 | --- | --- | --- |
-| `subs1.hpp` | 23 847 lines | 25 462 |
+| `subs1.hpp` | 23 892 lines | 25 462 |
 | bodies | 179 (84 real, 94 `__fwd_*` shims, 1 helper) | 215 |
 | globals in `blob.inc` | **78** | 293 |
-| recovered structs | **74** + 3 named ones, 2583 field accesses, 17 arrays put back | 0 |
+| recovered structs | **77** + 3 named ones, 2593 field accesses, 17 arrays put back | 0 |
 | raw-offset dereferences | **250** | 1646 before Phase 4 |
-| pointer casts | 5603 | 7336 |
+| pointer casts | 5609 | 7336 |
 | `goto` / `LABEL_n:` | 113 / 81 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
 | line coverage | **95.87 %** of 13 222 | 64.5 % |
@@ -777,7 +777,10 @@ question about meaning. 82 of the structs were byte-for-byte copies of one of
 sixteen declarations — ten copies of the 18-byte record `uncopy.py` found being
 `memcpy`d, ten more of it at +36, eight at +0, each from a different cursor the
 analysis could not connect. `tools/dedup.py` merges identical declarations and
-keeps the lowest-numbered name: **111 structs → 74**, and 645 lines.
+keeps the lowest-numbered name: **111 structs → 74**, and 645 lines. The sweep
+then found three more, because merging changes the alias classes it reads —
+which is the third time in this round of work that the offer list has been
+evidence about something other than what is left to recover.
 
 It stops short of the same trap on purpose. A shape with fewer than three
 members is left alone, because fifteen structs are just `const char f0;` and
@@ -1148,6 +1151,6 @@ into three kinds:
   nothing against the tree that does not; all five of `deadcheck.py`'s do.
 
 One caveat on the coverage figure: `gcov` counts *instrumented* lines (13 222
-of the file's 23 847) and counts inlined copies separately, so its per-function
+of the file's 23 892) and counts inlined copies separately, so its per-function
 percentages do not sum the way source lines do. The line counts in §2 are source
 lines, measured separately by matching braces over the function list.
