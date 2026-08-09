@@ -134,10 +134,27 @@ unread. The others are mostly format variants the corpus does not carry —
 `read_bmp` and `expand_image` between them handle every BMP layout and every
 descriptor combination, and ten images do not reach all of them.
 
-`unpredict_med` is the one worth a second look: the corpus round-trips, so the
-inverse of `predict_med` must be running, and 127 of its lines are not. Either
-the decoder reaches it by a path the corpus does not exercise, or the images all
-take one branch through it. That is a question for the corpus, not for the code.
+`unpredict_med` looked impossible — the corpus round-trips, so something must
+invert `predict_med`, and not one of its 127 lines runs. Chasing it down turned
+out to be the most useful thing this measurement produced. The dispatch counts:
+
+| | encode (95 entries to `model_plane`) | decode (15 entries to `unmodel_plane`) |
+| --- | --- | --- |
+| alternate model families | 62 | **8** |
+| the path §7.2 of `ALGORITHM.md` describes | 33 | **7** |
+
+The encode side runs more often because `search_filter` encodes candidates it
+then throws away; the decode side counts the planes actually in the streams.
+
+So `unpredict_med` is not reached because **every plane whose predictor is MED
+also has `plane_alt_model` set**, and the alternate family inverts the
+prediction itself. And `alt_model_p1_decode` is not reached because nothing in
+the corpus is finally coded as predictor 1 at a depth other than 8 — the other
+three families all run.
+
+That reverses an impression both documents gave. The alternate model families
+are not a side path: they carry the majority of the planes, and they are the
+part `ALGORITHM.md` §9 says is unread.
 
 Neither is dead — nothing has shown any entry condition to be impossible — so
 these are refactored last and with more care than the rest, or their entry

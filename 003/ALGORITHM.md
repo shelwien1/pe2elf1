@@ -574,8 +574,16 @@ nobody will read them here again:
 
 ### 7.2 Slow path (`-S`) — `model_plane` and below
 
-This is the one `bmf c` uses. It is a binary context model driving the range
-coder of §5.
+This is the one `bmf c` uses when `plane_alt_model` is clear, which on the ten
+images in `testfiles/` is **7 of the 15 planes decoded** — the other 8 go to the
+alternate families below, and this section does not describe them. Measured, not
+assumed: `plane_alt_model` is a bit in each plane's descriptor, and the counts
+are in `REFACTORING.md` §2.3.
+
+That is worth saying plainly, because the shape of this document implies
+otherwise. The part that is read in detail is the minority path.
+
+It is a binary context model driving the range coder of §5.
 
 `model_plane` runs the plane through this pipeline, in this order:
 
@@ -764,6 +772,19 @@ Stated plainly, so the rest can be trusted:
   `model_plane` hands the plane to one of the four alternate families instead
   (the table is in §7.2). I established only which one is picked, not what they
   do; `sub_41CAB0` (1969 lines here) sits under two of them.
+
+  **This is the largest gap in the document, and larger than it used to look.**
+  A coverage run over `testfiles/` puts 8 of 15 decoded planes through these
+  families and 7 through the path §7.2 describes. Three of the four run; only
+  `alt_model_p1_decode` — predictor 1 at a depth other than 8 — is never
+  reached, so nothing in the corpus is finally coded that way.
+
+  It also explains a result that looks impossible at first: `unpredict_med` is
+  never executed, on a corpus that round-trips, while `predict_med` is. Every
+  plane whose predictor is MED also has `plane_alt_model` set, and the
+  alternate family inverts the prediction itself. `expand_image`'s
+  `if (plane_predictor == 1)` is reached 7 times out of 11 and the call inside
+  it never.
 
   An earlier draft of §6.6 listed `sub_41A130`, `sub_41C4B0` and `sub_41CAB0`
   as cost functions alongside the two above. They are not: none of them calls
