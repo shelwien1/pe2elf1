@@ -184,7 +184,7 @@ each side are read.
 
 Every pair is checked against the file — the new name present, the old one
 gone — and names it cannot resolve are printed as unresolved rather than
-filled in. All 67 are mapped.
+filled in. All 71 are mapped.
 
 Matching bodies by the constants they contain is the obvious alternative and
 is in this file's history. It does not work: an encoder and its decoder test

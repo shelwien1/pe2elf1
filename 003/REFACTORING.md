@@ -387,12 +387,16 @@ been red at a commit boundary.
 
 Two things happened after all seven were closed, and neither is a phase:
 
-**Naming carried on.** 26 more functions, each from evidence rather than from
-shape — what `ALGORITHM.md` establishes, which `rc` method a body calls, or
-where it sits in a dispatch. 55 named bodies now, and `tools/addrmap.txt` maps
-every one of them back to the address in `BMF.exe` it was decompiled from, so
-the names cost no traceability. 21 bodies keep their addresses because their
-roles are not established.
+**Naming carried on.** 42 more functions, each from evidence rather than from
+shape — what `ALGORITHM.md` establishes, which `rc` method a body calls, where
+it sits in a dispatch, or what its position in the call graph makes it. 71
+named bodies now, and `tools/addrmap.txt` maps every one of them back to the
+address in `BMF.exe` it was decompiled from, so the names cost no traceability.
+
+**Five keep their addresses.** Two are pure SSE with no coder calls and no
+distinguishing callers; three are helpers inside the alternate model families
+whose role is not separable from the family's. A name for any of them would be
+a guess, and §6 has the entry about what those cost.
 
 **The corpus grew on purpose.** Four images written to reach specific code
 rather than to add another photograph, plus an archive check; 89.97 % → 92.65 %,

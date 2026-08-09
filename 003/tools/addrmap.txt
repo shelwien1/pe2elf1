@@ -18,6 +18,7 @@ unpredict_med              0x00410310
 expand_predictor_mode0     0x00410650
 predict_med                0x004108C0
 estimate_cost              0x00411700
+alt_init_tables            0x004118A0
 rc_decode_flat             0x004123E0
 encode_context_bit         0x00412490
 decode_context_bit         0x00412850
@@ -47,10 +48,12 @@ layout_workspace           0x00417980
 unmodel_plane              0x00417DB0
 unmodel_plane_slow         0x00417E80
 decode_pixel               0x00418650
+expand_alphabet            0x00419430
 alt_p2_free                0x00419610
 init_sse_constants         0x00419680
 alt_model_p2_d8_encode     0x004197A0
 alt_p2_d8_encode_body      0x00419800
+alt_p2_model               0x0041CAB0
 alt_model_p2_encode        0x00421930
 alt_p2_alloc               0x004229E0
 alt_model_p2_d8_decode     0x00422D60
@@ -61,6 +64,7 @@ alt_model_p1_d8_encode     0x00424500
 alt_p1_d8_encode_body      0x00424550
 alt_model_p1_encode        0x00424D90
 alt_p1_alloc               0x004256F0
+alt_p1_model               0x004259F0
 alt_model_p1_d8_decode     0x004273F0
 alt_model_p1_decode        0x00427740
 read_bmp                   0x0042AB20
@@ -69,4 +73,4 @@ alloc_image                0x0042B830
 set_new_handler            0x0042CBB0
 log_two_lane               0x00436E10
 
-# 67 mapped.  0 named bodies have no recorded address:
+# 71 mapped.  0 named bodies have no recorded address:
