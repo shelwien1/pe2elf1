@@ -78,7 +78,7 @@ one place, which is what fixes the layout:
 | +2 | `uint16 height` | |
 | +4 | `uint32 stride` | bytes per row, rounded up per depth |
 | +8 | | never read |
-| +10 | `uint8 depth` | bits 0–5 the depth; 0x80 = palette follows; 0x40 a second flag |
+| +10 | `uint8 depth` | bits 0–5 the depth; 0x80 = a palette follows the payload; 0x40 = the palette was a grey ramp and was dropped (§2.4) |
 | +11 | `uint8 flags` | mode bits, §2.3 |
 | +12 | `uint32 data_size` | `stride * height`; in the stream, the payload length |
 | +16 | | pixels, and the palette after them at `+16 + data_size` |
@@ -110,7 +110,29 @@ did not find where** — it is not in the `|= 0x24` / `|= 0x10` assembly and not
 in any write to the descriptor's `+11`, so it arrives in the frame slot from
 somewhere this reading missed. §11.
 
-### 2.4 Planes
+### 2.4 Grey palettes are dropped
+
+Before the encoder runs, `bmf_compress` looks at the palette of any image that
+has one. It walks the entries and asks whether they are exactly the grey ramp
+
+```c
+step = 256 >> depth;
+palette[i] == (r, g, b) == (i·step, i·step, i·step)   for every i
+```
+
+If they are, it sets 0x40 in the depth byte and clears 0x80: the image is coded
+as greyscale and **the palette is not stored at all**. If they are not, 0x80
+stays and the palette is written after the payload, three bytes per entry.
+
+This is why `t8g.bmp` — an 8-bit BMP with a grey palette — has `48` at +10 and
+no palette in its stream, while `t1.bmp` and `rle4.bmp` have `81` and `84` and
+carry theirs. It is a real saving on exactly the class of image where a palette
+is pure overhead, and it costs one pass over at most 256 entries.
+
+(There is a third case in the same branch: an image that arrives with both bits
+already set has 0x80 cleared and nothing else done.)
+
+### 2.5 Planes
 
 ```
 plane_count = ((depth & 0x3F) + 7) >> 3
@@ -476,7 +498,7 @@ bytes skips the model entirely and goes straight to the raw store.
 
 | | |
 | --- | --- |
-| container, descriptor | `bmf_compress`, `bmf_open_archive`, `alloc_image`, `read_bmp`, `write_bmp` |
+| container, descriptor, grey palettes | `bmf_compress`, `bmf_open_archive`, `alloc_image`, `read_bmp`, `write_bmp` |
 | per-plane header | `compress_image` (writes), `expand_image` (reads) |
 | inter-plane prediction | `colour_transform` |
 | cost | `estimate_cost`, `cost_candidate` |
