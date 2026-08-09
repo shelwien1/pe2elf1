@@ -91,11 +91,13 @@ def frames(lines):
     return out
 
 
-# The six things the 60 globals in bmf_bss really are; see REFACTORING3.md §3.1.
-GROUPS = [('A  per-plane record', 0x44339C, 0x4433DB),
+# The five things the 60 globals in bmf_bss really are; see REFACTORING3.md §3.1.
+# A starts at 0x44338C and not at 0x44339C: `__n256_2`, `__n512`, `plane_count`
+# and `near_lossless_max` are record 0 of the same 16-byte-record table, which
+# `alt_model_p2_encode` walks with those four names as its field bases.
+GROUPS = [('A  plane descriptors', 0x44338C, 0x4433DB),
           ('B  level geometry', 0x445714, 0x445733),
-          ('C  counter clamps', 0x4458E0, 0x4458F7),
-          ('E  the int32 run', 0x44338C, 0x443398)]
+          ('C  thresholds + biases', 0x4458E0, 0x4458F7)]
 BUFFERS = {'exclusion_mask', '__byte_445440', 'model_geometry'}
 
 
@@ -108,7 +110,7 @@ def bss():
         if m.group(2) in BUFFERS:
             grp = 'D  buffers'
         else:
-            grp = next((g for g, lo, hi in GROUPS if lo <= addr <= hi), 'F  scalars')
+            grp = next((g for g, lo, hi in GROUPS if lo <= addr <= hi), 'E  scalars')
         uses = len(re.findall(r'\b%s\b' % re.escape(m.group(2)), src)) - 1
         subs = [' '.join(s.split()) for s in
                 re.findall(re.escape(m.group(2)) + r'\s*\[([^\]]*)\]', src)]
@@ -217,4 +219,7 @@ def main():
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except BrokenPipeError:                    # `| head`, which is how this is read
+        sys.exit(0)

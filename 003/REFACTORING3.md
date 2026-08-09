@@ -87,19 +87,29 @@ char *__alt_p2_alloc(char *_this, int32_t i, int32_t n4)
     ...
 ```
 
-That is a run of dwords at +278720 and a table of 8-byte records at +284712,
-written as arithmetic. This one function touches **47 distinct offsets**, from
-+4 to +940086, and the strides it indexes with are 8 and 2 — record sizes, not
-arbitrary numbers. Across the file, `_this` takes **41 distinct constant offsets
-above 1000**, and the strides applied to it are 16 (19 sites), 8 (9), 2 (8) and
-4 (1).
+That is a table of 8-byte records at +284712, written as arithmetic. The
+excerpt's `+278728` is one of a run of dwords the same function fills a hundred
+lines later, and that run says what the fields are:
+
+```c
+  v9 = 16 * near_lossless_max[0];
+  *(uint32_t *)(_this + 278720) = -v9 - 7;
+  *(uint32_t *)(_this + 278724) =  v9 + 8;
+```
+
+— a `±` range pair derived from the near-lossless setting, sitting beside the
+`+278728` the excerpt writes. This one function touches **47 distinct offsets**,
+from +4 to +940086, and the strides it indexes with are 8 and 2 — record sizes,
+not arbitrary numbers. Across the file, `_this` takes **41 distinct constant
+offsets above 1000**, and the strides applied to it are 16 (19 sites), 8 (9),
+2 (8) and 4 (1).
 
 `alt_p1_model` is the same shape with a struct that only covers the head:
 `Obj0` declares `f0`, `f4`, `f8` and `f12[51]`, and everything past +212 arrives
 as `*(uint32_t *)((char *)_this + ...)`. Its 131 sites are the largest single
 concentration in the file.
 
-### 2.2 The structs that exist are five views of one object
+### 2.2 Several of the structs that exist are views of one object
 
 `structs.py` recovered a struct per *access pattern*, so the same workspace has
 several. `tools/shape.py --overlap Obj8 Obj11 Obj19 Obj31 Obj69`:
@@ -181,10 +191,19 @@ exists means naming it twice and finding out later that one of them was wrong.
    understood. 280 members against 35 named ones. `algorithm_v2.md` already
    establishes what several of these objects are.
 
-`tools/structs.py`, `tools/dedup.py` and `tools/arrayify.py` are the machinery
-from round one; `tools/objects.py` prints the offsets an object is touched at.
-What none of them can do is decide that two recoveries are one object — that is
-§2.2's evidence, read by hand.
+The machinery from round one still applies: `tools/structs.py` recovers a struct
+and rewrites its accesses, `tools/dedup.py` collapses byte-identical
+declarations, `tools/arrayify.py` turns a run of same-type members into the
+array it is. `tools/objects.py` is the one to run first — it groups names that
+denote the same allocation (assignment or call, transitively, through the
+`__fwd_*` shims) and prints each class's field map with the type conflicts
+called out rather than resolved. It reports 54 classes with a dereference today,
+down from round one's 159 because struct recovery has already absorbed most raw
+offsets, and its largest class is `_this` with 26 offsets — Phase A's target.
+
+What it cannot do is the last step. It relates *names*; §2.2's four views are
+different struct *types* on names it has already joined, and deciding that two
+recoveries are one object is a judgement about the evidence, not a closure.
 
 ### 2.4 What this is worth
 
@@ -206,22 +225,67 @@ marked SHARED in `tools/blob-independence.txt`**. (The other 19 were never
 tested one at a time; §3.2 uses that.) Keeping one object made goal 1 safe to
 finish. It is not where this should end.
 
-They are not 60 things. They are six — `tools/shape.py --bss` prints the
+They are not 60 things. They are five — `tools/shape.py --bss` prints the
 grouping, the address and the subscript shape of each:
 
-**A. The per-plane record, 0x44339C..0x4433DB — 16 globals.** Sixteen bytes a
-plane, four planes:
+**A. The plane-descriptor table, 0x44338C..0x4433DB — 20 globals.** Five
+16-byte records based at **0x44338C**. Record 0 holds image-wide parameters;
+records 1..4 are the four planes, so the plane `p` a reader sees is record
+`p + 1`:
 
 ```
-+0  __byte_44339C   +1  __byte_44339D   +2  __byte_44339E   +3  __byte_44339F
-+4  __dword_4433A0  +8  __dword_4433A4  +12 __dword_4433A8
+        +0                +1               +2               +3
+  rec0  __n256_2 . . . . . . . . . . . . . . . . . . . . . . . .   (read as one dword)
+  rec1  __byte_44339C     __byte_44339D    __byte_44339E    __byte_44339F
+  rec2  __byte_4433AC     __byte_4433AD
+  rec3                    __byte_4433BD
+  rec4  __n3_1            __n3_0                            __byte_4433CF
+
+        +4                +8               +12
+  rec0  __n512            plane_count      near_lossless_max
+  rec1  __dword_4433A0    __dword_4433A4   __dword_4433A8
+  rec4  __n191            __n191_0         __n191_1
 ```
 
-with `__byte_4433AC`/`__byte_4433AD` the +0/+1 fields of plane 1,
-`__byte_4433BD` the +1 field of plane 2, and `__n3_1`, `__n3_0`,
-`__byte_4433CF`, `__n191`, `__n191_0`, `__n191_1` the +0, +1, +3, +4, +8 and +12
-fields of plane 3. The evidence is in the subscripts the code already writes:
-`__byte_44339E[16 * plane]`, `__dword_4433A0[4 * plane]`.
+Three independent things say this is one table rather than 20 globals:
+
+* the subscripts already in the code — `__byte_44339E[16 * plane]`,
+  `__dword_4433A0[4 * plane]`, both stepping whole records;
+* **field +1 is reached from two different origins, one record apart.**
+  `transform_planes` reads it as `BYTE1(__n256_2[4 * n4_1])` after
+  pre-incrementing `n4_1` from 0, so its index is 0-based on the *table* and its
+  first iteration is record 1; `rc_begin_encode` reads the same field as
+  `__byte_44339D[16 * p]`, 0-based on the *planes*. Two origins differing by
+  exactly one record is what a header entry in front of the array looks like.
+  (Both then feed the result back in as a record index —
+  `__byte_44339E[16 * v14]` — so field +1 holds a plane number, which is a name
+  waiting to be written down);
+* and `alt_model_p2_encode` walks all four plane records with one loop, using
+  four of the record-0 globals as the four field bases:
+
+  ```c
+        n16 = 16;
+        do {
+          v179[n16 + 1] = near_lossless_max[n16];                          // +12
+          v179[n16]     = *(int32_t *)((char *)&::plane_count + n16 * 4);  // +8
+          v178[n16 + 1] = (char *)__n512[n16];                             // +4
+          v178[n16]     = (char *)__n256_2[n16];                           // +0
+          n16 -= 4;
+        } while ( n16 * 4 );
+  ```
+
+  `n16` = 16, 12, 8, 4 is records 4, 3, 2, 1 — the planes — and the four bases
+  are record 0's four dwords.
+
+So `plane_count`, the scalar read 154 times, is **field +8 of record 0**, and
+`near_lossless_max`, `__n512` and `__n256_2` are its +12, +4 and +0. That is the
+single most useful fact in this section and it is why there is no separate group
+for them.
+
+One question the table does not answer: records 1..4 use +0..+3 as four
+separate bytes, and record 0's +0..+3 is read as a whole dword
+(`__n256_2[0] - packer_free_bits + …` at 18433). Union, or a genuinely
+different record 0. Reading the packer settles it.
 
 **B. The level geometry, 0x445714..0x445733 — 21 globals.** A table of 4-byte
 records with three bytes used in each, `{start, start/2, start - level}`.
@@ -241,11 +305,23 @@ are the *same three fields* read with a variable index — `__byte_445714[4 * n]
 strided table whose entries also exist as separate globals. Record 1, at
 0x445718, is never named because nothing reads it individually.
 
-**C. The counter clamps, 0x4458E0..0x4458F7 — 6 int32.** The last two,
-`__dword_4458F0` and `__dword_4458F4`, are used 125 and 123 times and are the
-`+limit` / `-limit` pair every counter update tests against. The four before them
-are used 16 times each and are a table of the same shape. **None of the six is
-marked SHARED.**
+**C. Six int32 at 0x4458E0..0x4458F7 — two things, not one.** The last two,
+`__dword_4458F0` and `__dword_4458F4`, are the near-lossless error thresholds,
+set together in `rc_begin_encode`:
+
+```c
+  v8 = 4 * near_lossless_max[0] + 1;
+  __dword_4458F0 =  v8;
+  __dword_4458F4 = -v8;
+```
+
+and read 125 and 123 times as `(x > +d) - (x < -d)` — a sign with a dead zone.
+They are one pair and should be one pair of named constants. The four before
+them, used 16 times each, are running bias accumulators: zeroed at the start of
+a plane, decayed `>>= 3` each row and re-accumulated in `alt_model_p2_encode`,
+then added one apiece into the four context sums `alt_p2_context` builds. Four
+parallel accumulators is an array. **None of the six is marked SHARED**, which
+makes this the cheapest group to move.
 
 **D. Three real buffers.** `exclusion_mask` at 0x443440 (8192 bytes to the next
 global, indexed by symbol), `__byte_445440` (544, declared `uint8_t[544]`),
@@ -253,27 +329,25 @@ global, indexed by symbol), `__byte_445440` (544, declared `uint8_t[544]`),
 global; the symbol → level table `rc_begin_*` fills). These are already arrays;
 they need a size and a home of their own, not a type.
 
-**E. The int32 run at 0x44338C..0x443398 — 4 globals.** `__n256_2`, `__n512`,
-`plane_count` and `near_lossless_max`, consecutive dwords. `__n512[n16]` and
-`near_lossless_max[n16]` have the same variable-index shape and step across
-`plane_count`, which sits between them and is read 154 times as a scalar.
-`__n256_2` is indexed `[4 * n]`. Whether this is one table with a scalar
-embedded in it or two overlapping views is the one thing here that needs reading
-rather than measuring, and it is why this group is last.
-
-**F. Ten plain scalars.** `desc_slow_mode`, `__dword_443388`, `__byte_445700`,
+**E. Ten plain scalars.** `desc_slow_mode`, `__dword_443388`, `__byte_445700`,
 `__n8_1`, `__n8_0`, `__dword_44573C`, `__n4_4`, `__n4_3`, `__n15`, `__n15_0`.
-These are `static int32_t x;` and nothing else. Five of the ten are not marked
-SHARED.
+These are `static int32_t x;` and nothing else — `__byte_445700` is a rolling
+stamp value `exclusion_mask` entries are compared against, `__n8_0`/`__n8_1` are
+model parameters `rc_begin_*` sets to 8/8 or 64/16. Five of the ten are not
+marked SHARED.
 
 ### 3.2 The order
 
-**C, then F, then D, then B, then A, then E.** C first because all six are
-un-marked, so one split-and-gate says whether the un-marked ones are genuinely
-independent — and that answer decides how much of F and D is free. Then the
-strided groups, smallest first, because each one that leaves makes `bmf_bss`
-smaller and the strides between what is left easier to see. E last, because §3.1E
-is a question rather than a layout.
+**C, then E, then D, then B, then A.** C first because none of its six is marked
+SHARED, so one split-and-gate says whether un-marked really means independent —
+and that answer decides how much of E and D is free. Then the strided groups,
+smallest first, because each one that leaves makes `bmf_bss` smaller and the
+strides between what is left easier to see.
+
+A is last because it is the largest and because it is the one whose shape was
+wrong until it was measured: the first draft of this document had its record 0
+written up as a separate group of four unrelated dwords. Twenty globals, one
+table, and `plane_count` inside it.
 
 A global that is provably not strided across can move on its own; round one
 moved **86 of 163** out exactly this way, one at a time, and
@@ -292,9 +366,12 @@ that knows what address BMF.exe loaded at.
 
 ### 4.1 What they are
 
-Hex-Rays could not name these, so `tools/reframe.py` gave each function one
-`struct alignas(16)` with the stack layout it had, plus a reference alias per
-variable so the bodies could keep their `vNN` names:
+Hex-Rays could not name these. Round one's Phase 2 split all 24 into plain
+locals; 16 could not take it and were given a `struct alignas(16)` with the
+stack layout they had, and `tools/reframe.py` converted the other 8 after one of
+them — `alt_model_p1_decode`, which no test image reached — segfaulted the first
+time an image did. Each frame carries a reference alias per variable so the
+bodies could keep their `vNN` names:
 
 ```c
   struct alignas(16) {   // 208 bytes, the frame Hex-Rays could not name
@@ -326,10 +403,12 @@ run of members walked as an array. Their aliases become ordinary declarations
 and the struct and its `static_assert` go. That is **232 of the 564**.
 
 Three of those frames are large — 41 456, 32 824 and 26 712 bytes — but that is
-because they hold real workspace arrays, which stay as arrays. The
-`v3 = alloca(41424);` beside each is Hex-Rays' record of the frame's size and
-has no reader; it goes with the struct. (`reduce_alphabet`'s 66 064-byte frame,
-the largest in the file, is *not* in this group: it has six run sites.)
+because they hold real workspace arrays, which stay as arrays. Each has an
+`alloca` beside it (`v3 = alloca(41424);` in `choose_plane_coding`, 32 788 and
+26 672 in the other two) that is Hex-Rays' record of the frame's size; all four
+`alloca` sites in the file assign to a local mentioned nowhere else, so they go
+with the struct. (`reduce_alphabet`'s 66 064-byte frame, the largest in the
+file, is *not* in this group: it has six run sites.)
 
 **27 slots carry more than one name — 62 extra names, in 13 functions.** These
 are MSVC's register reuse showing through, and they are not all the same
@@ -365,8 +444,12 @@ it names the element type at the same time.
 
 The frames are the reason a reader cannot tell a variable from a stack offset.
 564 aliases is 564 places where the declaration says `__frame.x` instead of a
-type, `sizeof(void *) != 4` guards 24 layouts that no longer need guarding, and
-the 27 double-booked slots are the only real bugs hiding in the file's shape.
+type. The 24 `sizeof(__frame)` assertions are load-bearing while the frames
+exist — that is exactly §6's point — but they are guarding a layout that only
+has to hold because the frame is one object, so nine of them stop being needed
+the moment the frame they guard dissolves. And the 27 double-booked slots are
+the only real bugs hiding in the file's shape: a slot with two meanings is one
+misread away from a wrong one.
 
 ---
 
@@ -376,16 +459,25 @@ the 27 double-booked slots are the only real bugs hiding in the file's shape.
   Phase A  workspaces -> structs     merges first, then alt_p2_alloc,
      │                               then the fNN names
      ▼
-  Phase B  bmf_bss -> tables         C, F, D, B, A, E; each move is a
+  Phase B  bmf_bss -> tables         C, E, D, B, A; each move is a
      │                               reader read
      ▼
   Phase C  frames -> locals          nine dissolve, 12 runs become arrays,
                                      27 slots get split by reading
 ```
 
-A before B because several `bmf_bss` globals are indexed by a plane number that
-Phase A's struct will have named, and the record layouts in §3.1A and §2.2 are
-the same kind of evidence read twice.
+A before B because §3.1A's table is indexed by a plane number that lives in a
+Phase A field. `rc_begin_encode` has the two in one expression:
+
+```c
+  *(uint32_t *)(_this + 278732) =
+      (uint8_t)(__byte_44339E[16 * (uint8_t)__byte_44339D[16 * *(uint32_t *)(_this + 278728)]] & 8) >> 3;
+```
+
+— a workspace field at +278728 selects a descriptor record, a byte of that
+record selects another, and the result goes back into the workspace at +278732.
+Neither half is readable until both are declared, and Phase A is the half that
+makes the subscripts mean something.
 
 C is independent of both and can be interleaved — with one exception that argues
 for doing part of it first: the run sites in §4.2 are where §2.2's `Obj11` array
@@ -413,8 +505,10 @@ not been run, and all three are in this round's path.
 * **Two names for one field can disagree.** `ModelBlock::f6059436` and
   `Obj10::f6059436` are the same bytes and were declared `uint8_t *` and
   `uint16_t *`; making the first match the second moves three streams. Phase A's
-  merges will surface more of these — §2.2 lists three still open — and the
-  merge is the moment to resolve them, not to pick one.
+  merges will surface more of these — five are already visible in §2.2's two
+  tables, three in the plane workspace (+278528, +278736, +278760) and two
+  between `Obj10` and `ModelBlock` — and the merge is the moment to resolve
+  them by reading, not to pick one.
 
 * **A retype can be right and still be wrong at the use site.**
   `tools/retype_locals.py` offers every local whose conversions agree on one
@@ -450,8 +544,8 @@ out-of-memory ladder cover every path this round touches:
   `alt_p2_model` 1591/1591 lines, `alt_p2_context` 817/817 and `alt_p2_filter`
   129/129 are 100 % covered; `choose_plane_coding` is 622/656 — 94.8 % — and
   none of its unreached lines is one of these.
-* Phase B's globals include `plane_count` (154 uses) and the counter clamps
-  (125 and 123), which nothing can move without moving a stream.
+* Phase B's globals include `plane_count` (154 uses) and the near-lossless
+  threshold pair (125 and 123), which nothing can move without moving a stream.
 * Phase C's nine clean frames are in the hottest functions in the file.
 
 The one check that earned its place in round two was the out-of-memory ladder,
@@ -479,7 +573,7 @@ sub-commands print the per-item detail behind §2, §3 and §4:
 | `bmf_bss` globals, groups, subscript shapes | `python3 tools/shape.py --bss` |
 | struct overlap | `python3 tools/shape.py --overlap Obj8 Obj11 Obj19 Obj31 Obj69` |
 | conversions | `BMF_STRICT=1 ./build.sh` (0 today) |
-| coverage | `BMF_STATIC=0 BMF_GC=0 BMF_OUT=bmf.cov ./build.sh --coverage -O0`, run `test.sh ./bmf.cov`, rename the profile files to `bmf.gcno`/`bmf.gcda`, `gcov -f bmf.cpp` |
+| coverage | `BMF_STATIC=0 BMF_GC=0 BMF_OUT=bmf.cov ./build.sh --coverage -O0`, run `test.sh ./bmf.cov`, `gcov -f bmf.cpp` |
 
 A **raw-offset site** is one of three textual shapes, all of which mean "an
 object's layout written as arithmetic":
