@@ -2,11 +2,6 @@ In file included from bmf.cpp:774:
 subs1.hpp: In function 'int32_t __encode_symbol_list(uint32_t*, int32_t)':
 subs1.hpp:2766:11: error: comparison between distinct pointer types 'Obj90*' and 'uint16_t*' {aka 'short unsigned int*'} lacks a cast [-fpermissive]
 subs1.hpp:2803:17: error: comparison between distinct pointer types 'Obj90*' and 'uint16_t*' {aka 'short unsigned int*'} lacks a cast [-fpermissive]
-subs1.hpp: In function 'void** __free_workspace(Obj10*, char)':
-subs1.hpp:3642:8: error: invalid conversion from 'void*' to 'uint32_t*' {aka 'unsigned int*'} [-fpermissive]
-subs1.hpp:3650:12: error: invalid conversion from 'void*' to 'uint32_t*' {aka 'unsigned int*'} [-fpermissive]
-subs1.hpp:3664:8: error: invalid conversion from 'void*' to 'uint32_t*' {aka 'unsigned int*'} [-fpermissive]
-subs1.hpp:3671:13: error: invalid conversion from 'void*' to 'uint32_t*' {aka 'unsigned int*'} [-fpermissive]
 subs1.hpp: In function 'int32_t __pixel_context(ModelBlock*, uint32_t*)':
 subs1.hpp:3733:8: error: invalid conversion from 'int32_t' {aka 'int'} to 'char*' [-fpermissive]
 subs1.hpp: In function 'int32_t __init_model_tables(Obj10*)':

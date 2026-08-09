@@ -502,10 +502,19 @@ Two measurements say so:
 
 So a field, the locals it flows into, and the calls between them are one unit,
 and the unit is a function or two rather than a declaration. That is the shape
-of the remaining 243, and it is why the count is a scoreboard and not a
+of the remaining 239, and it is why the count is a scoreboard and not a
 burndown. `retype_locals.py` stays because the worklist it prints is the right
 starting point for each of those functions, not because the rewrite it offers
 can be taken.
+
+**And this is where "not satisfiable by cosmetics" has to be enforced rather
+than asserted.** Sixty-one of those 239 are a pointer stored into an `int32_t`
+or `uint32_t` field — `_this->f56[6] = v28`, `v24->row[1] = v29` — and writing
+`(uint32_t)(v28)` at each of them compiles, passes the gate, and takes the
+count from 243 to 179 without a single type being decided. That was tried and
+reverted. A cast at the store says "an address goes in this integer slot",
+which is true and is exactly the defect; the fix is that the slot should not be
+an integer. If the count ever falls quickly, this is what to check first.
 
 The 12 `-Wint-to-pointer-cast` warnings are worth pulling out first anyway,
 because they are the narrowest and most mechanical group — but they are not part

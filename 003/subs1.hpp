@@ -3639,7 +3639,7 @@ void **__free_workspace(Obj10 *Blocka, char a2)
   free(*(void**)&Blocka_1->f1078236);
   free(Blocka_1->f1078684);
   free(*(void**)&Blocka_1->f1078688);
-  v3 = *(void**)&Blocka_1->f1078208;
+  v3 = (uint32_t *)Blocka_1->f1078208;
   if ( v3 )
   {
     v4 = *(v3 - 1);
@@ -3647,7 +3647,7 @@ void **__free_workspace(Obj10 *Blocka, char a2)
     {
       Blocka_2 = (Obj10 *)(Blocka_1);
       v6 = *(v3 - 1);
-      v7 = *(void**)&Blocka_1->f1078208;
+      v7 = (uint32_t *)Blocka_1->f1078208;
       v8 = (void **)&v3[6 * v4];
       do
       {
@@ -3661,14 +3661,14 @@ void **__free_workspace(Obj10 *Blocka, char a2)
     }
     free(v3 - 1);
   }
-  v9 = *(void**)&Blocka_1->f1078212;
+  v9 = (uint32_t *)Blocka_1->f1078212;
   if ( v9 )
   {
     v10 = *(v9 - 1);
     if ( v10 )
     {
       Blocka_3 = (Obj10 *)(Blocka_1);
-      v12 = *(void**)&Blocka_1->f1078212;
+      v12 = (uint32_t *)Blocka_1->f1078212;
       v13 = *(v9 - 1);
       v14 = (void **)&v9[6 * v10];
       do
