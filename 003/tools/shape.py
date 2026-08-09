@@ -41,7 +41,7 @@ FRAME = re.compile(r'// (\d+) bytes, the frame Hex-Rays could not name')
 # scalar and `T (&v)[N] = …` for an array member -- missing the second is how
 # this file's first alias count came out 38 short.
 ALIAS = re.compile(r'(?:&\s*|\(&)([A-Za-z_]\w*)\)?(?:\[\d+\])?\s*=\s*'
-                   r'(?:.*?)__frame\.(\w+)')
+                   r'(?:.*?)__frame\.(\w+(?:\[\d+\])?)')
 RUN = re.compile(r'\(\s*&(\w+)\s*\+\s*')
 BSS = re.compile(r'^static (t_\w+)& (\w+) = \*\(t_\w+\*\)\(bmf_bss \+ (0x[0-9A-F]+)', re.M)
 TYPEDEF = re.compile(r'^typedef\s+(.+?)\s+(t_\w+)\s*(\[[^\]]*\])?\s*;', re.M)

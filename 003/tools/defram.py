@@ -41,8 +41,8 @@ sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import shape                                                      # noqa: E402
 import structs                                                    # noqa: E402
 
-SCALAR = re.compile(r'^(\s*)(.+?)\s*&\s*(\w+)\s*=\s*(.*?)__frame\.(\w+)\s*;\s*$')
-ARRAY = re.compile(r'^(\s*)(.+?)\s*\(&(\w+)\)(\[\d+\])\s*=\s*(.*?)__frame\.(\w+)\s*;\s*$')
+SCALAR = re.compile(r'^(\s*)(.+?)\s*&\s*(\w+)\s*=\s*(.*?)__frame\.(\w+(?:\[\d+\])?)\s*;\s*$')
+ARRAY = re.compile(r'^(\s*)(.+?)\s*\(&(\w+)\)(\[\d+\])\s*=\s*(.*?)__frame\.(\w+(?:\[\d+\])?)\s*;\s*$')
 OPEN = re.compile(r'^(\s*)struct alignas\(16\) \{\s*// (\d+) bytes, the frame')
 MEMBER = re.compile(r'^(\s*)([A-Za-z_][\w ]*?\s*\**)\s*(\w+)\s*(\[(\d+)\])?\s*;(.*)$')
 ANYALIAS = re.compile(r'^\s*[^=;]*&\s*\(?\w+\)?(?:\[\d+\])?\s*=[^;]*__frame\.\w+[^;]*;\s*$')

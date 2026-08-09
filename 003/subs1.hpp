@@ -7405,47 +7405,42 @@ int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3__ref
       uint8_t slot0[4];
       uint8_t slot4[4];
       uint8_t slot8[4];
-      __m128 *v275;
-      int16_t *v276;
-      int32_t v277;
-      int32_t v278;
-      int32_t v279;
-      int32_t v280;
-      int16_t *v281;
-      int16_t *v282;
-      int16_t *v283;
-      int16_t *v284;
-      int16_t *v285;
-      int16_t *v286;
-      int32_t n1840_2;
-      int32_t n1840_1;
-      __m128 *v289;
-      int32_t v290;
-      int32_t n3536;
-      int32_t v292;
-      __m128 *v293;
-      int16_t *v294;
-      int16_t *v295;
-      int16_t *v296;
-      uint32_t v297;
-      uint32_t v298;
-      int32_t n960_1;
-      int32_t n1840;
-      int32_t v301;
-      int32_t v302;
-      int32_t v303;
-      int32_t v304;
-      int32_t v305;
-      int32_t v306;
-      int32_t v307;
-      int32_t v308;
-      int32_t v309;
-      int32_t v310;
-      int32_t v311;
-      int32_t v312;
-      int32_t v313;
-      int32_t v314;
-      int32_t v315;
+      __m128 *  sub[6];   // an Obj12: the six sub-model weight vectors alt_p2_filter walks
+      uint8_t   _gap0[4];   // was int16_t * v281
+      uint8_t   _gap1[4];   // was int16_t * v282
+      uint8_t   _gap2[4];   // was int16_t * v283
+      uint8_t   _gap3[4];   // was int16_t * v284
+      uint8_t   _gap4[4];   // was int16_t * v285
+      uint8_t   _gap5[4];   // was int16_t * v286
+      uint8_t   _gap6[4];   // was int32_t n1840_2
+      uint8_t   _gap7[4];   // was int32_t n1840_1
+      uint8_t   _gap8[4];   // was __m128 * v289
+      uint8_t   _gap9[4];   // was int32_t v290
+      uint8_t   _gap10[4];   // was int32_t n3536
+      uint8_t   _gap11[4];   // was int32_t v292
+      uint8_t   _gap12[4];   // was __m128 * v293
+      uint8_t   _gap13[4];   // was int16_t * v294
+      uint8_t   _gap14[4];   // was int16_t * v295
+      uint8_t   _gap15[4];   // was int16_t * v296
+      uint8_t   _gap16[4];   // was uint32_t v297
+      uint8_t   _gap17[4];   // was uint32_t v298
+      uint8_t   _gap18[4];   // was int32_t n960_1
+      uint8_t   _gap19[4];   // was int32_t n1840
+      uint8_t   _gap20[4];   // was int32_t v301
+      uint8_t   _gap21[4];   // was int32_t v302
+      uint8_t   _gap22[4];   // was int32_t v303
+      uint8_t   _gap23[4];   // was int32_t v304
+      uint8_t   _gap24[4];   // was int32_t v305
+      uint8_t   _gap25[4];   // was int32_t v306
+      uint8_t   _gap26[4];   // was int32_t v307
+      uint8_t   _gap27[4];   // was int32_t v308
+      uint8_t   _gap28[4];   // was int32_t v309
+      uint8_t   _gap29[4];   // was int32_t v310
+      uint8_t   _gap30[4];   // was int32_t v311
+      uint8_t   _gap31[4];   // was int32_t v312
+      uint8_t   _gap32[4];   // was int32_t v313
+      uint8_t   _gap33[4];   // was int32_t v314
+      uint8_t   _gap34[4];   // was int32_t v315
       uint8_t _pad0[32];
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 208, "frame layout moved");
@@ -7478,47 +7473,47 @@ int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3__ref
   int32_t &v272 = *(int32_t *)((char *)__frame.slot8);
   int32_t &v273 = *(int32_t *)((char *)__frame.slot8);
   int16_t *&v274 = *(int16_t **)((char *)__frame.slot8);
-  __m128 *&v275 = __frame.v275;
-  Obj95 *&v276 = (Obj95 *&)__frame.v276;
-  int32_t &v277 = __frame.v277;
-  int32_t &v278 = __frame.v278;
-  int32_t &v279 = __frame.v279;
-  int32_t &v280 = __frame.v280;
-  Obj36 *&v281 = (Obj36 *&)__frame.v281;
-  int16_t *&v282 = __frame.v282;
-  Obj67 *&v283 = (Obj67 *&)__frame.v283;
-  int16_t *&v284 = __frame.v284;
-  Obj96 *&v285 = (Obj96 *&)__frame.v285;
-  Obj68 *&v286 = (Obj68 *&)__frame.v286;
-  int32_t &n1840_2 = __frame.n1840_2;
-  int32_t &n1840_1 = __frame.n1840_1;
-  Obj11 *&v289 = (Obj11 *&)__frame.v289;
-  int32_t &v290 = __frame.v290;
-  int32_t &n3536 = __frame.n3536;
-  int32_t &v292 = __frame.v292;
-  __m128 *&v293 = __frame.v293;
-  Obj64 *&v294 = (Obj64 *&)__frame.v294;
-  int16_t *&v295 = __frame.v295;
-  Obj117 *&v296 = (Obj117 *&)__frame.v296;
-  uint32_t &v297 = __frame.v297;
-  uint32_t &v298 = __frame.v298;
-  int32_t &n960_1 = __frame.n960_1;
-  int32_t &n1840 = __frame.n1840;
-  int32_t &v301 = __frame.v301;
-  int32_t &v302 = __frame.v302;
-  int32_t &v303 = __frame.v303;
-  int32_t &v304 = __frame.v304;
-  int32_t &v305 = __frame.v305;
-  int32_t &v306 = __frame.v306;
-  int32_t &v307 = __frame.v307;
-  int32_t &v308 = __frame.v308;
-  int32_t &v309 = __frame.v309;
-  int32_t &v310 = __frame.v310;
-  int32_t &v311 = __frame.v311;
-  int32_t &v312 = __frame.v312;
-  int32_t &v313 = __frame.v313;
-  int32_t &v314 = __frame.v314;
-  int32_t &v315 = __frame.v315;
+  __m128 * &v275 = (__m128 * &)__frame.sub[0];
+  Obj95 * &v276 = (Obj95 * &)__frame.sub[1];
+  int32_t &v277 = (int32_t &)__frame.sub[2];
+  int32_t &v278 = (int32_t &)__frame.sub[3];
+  int32_t &v279 = (int32_t &)__frame.sub[4];
+  int32_t &v280 = (int32_t &)__frame.sub[5];
+  Obj36 *v281;
+  int16_t *v282;
+  Obj67 *v283;
+  int16_t *v284;
+  Obj96 *v285;
+  Obj68 *v286;
+  int32_t n1840_2;
+  int32_t n1840_1;
+  Obj11 *v289;
+  int32_t v290;
+  int32_t n3536;
+  int32_t v292;
+  __m128 *v293;
+  Obj64 *v294;
+  int16_t *v295;
+  Obj117 *v296;
+  uint32_t v297;
+  uint32_t v298;
+  int32_t n960_1;
+  int32_t n1840;
+  int32_t v301;
+  int32_t v302;
+  int32_t v303;
+  int32_t v304;
+  int32_t v305;
+  int32_t v306;
+  int32_t v307;
+  int32_t v308;
+  int32_t v309;
+  int32_t v310;
+  int32_t v311;
+  int32_t v312;
+  int32_t v313;
+  int32_t v314;
+  int32_t v315;
   ;
   Obj3 *v46;
   char *v157, *v172;
@@ -7919,7 +7914,7 @@ int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3__ref
     v107 = v105;
   if ( v107 > 11 * n1840_1 )
     n2 = 3;
-  n3536_5 = __fwd_alt_p2_context_alt_p2_filter((__m128 *)v28->f278528[8].m128_i32[0], v293, &v275, n2);
+  n3536_5 = __fwd_alt_p2_context_alt_p2_filter((__m128 *)v28->f278528[8].m128_i32[0], v293, (Obj12 *)__frame.sub, n2);
   v109 = v28->f278528[13].m128_i32[0];
   v110 = (__m128 *)v28->f278528[13].m128_i32[1];
   v28->f278528[10].m128_i32[3] = n3536_5;
@@ -10566,75 +10561,44 @@ static inline int32_t __fwd_decode_pixel_pixel_context(void *a0, void *a1) { ret
 int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
 {
   struct alignas(16) {   // 164 bytes, the frame Hex-Rays could not name
-      int32_t n15_8;
-      int32_t n4_1;
-      int32_t freq_i;
-      int32_t n15_3;
-      uint16_t *v184;
-      uint32_t *this_1;
-      int32_t v186;
-      int32_t v187;
-      int32_t v188;
-      int32_t v189;
-      int32_t v190;
-      int32_t v191;
-      int32_t v192;
-      int32_t v193;
-      int32_t v194;
-      int32_t v195;
-      int32_t v196;
-      int32_t v197;
-      int32_t v198;
-      int32_t v199;
-      int32_t v200;
-      int32_t v201;
-      int32_t v202;
-      int32_t v203;
-      int32_t v204;
-      int32_t v205;
-      int32_t v206;
-      int32_t v207;
-      int32_t v208;
-      int32_t v209;
-      int32_t v210;
-      int32_t v211;
-      int32_t n15_24;
+      uint32_t  sym[32];   // pixel_context reads sym[0..31]; `f44` runs 0..31 (was n15_8 .. v211)
+      uint8_t   _gap0[4];   // was int32_t n15_24
       uint8_t _pad0[32];
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 176, "frame layout moved");
-  int32_t &n15_8 = __frame.n15_8;
-  int32_t &n4_1 = __frame.n4_1;
-  int32_t &freq_i = __frame.freq_i;
-  int32_t &n15_3 = __frame.n15_3;
-  Obj18 *&v184 = (Obj18 *&)__frame.v184;
-  ModelBlock *&this_1 = (ModelBlock *&)__frame.this_1;
-  int32_t &v186 = __frame.v186;
-  int32_t &v187 = __frame.v187;
-  int32_t &v188 = __frame.v188;
-  int32_t &v189 = __frame.v189;
-  int32_t &v190 = __frame.v190;
-  int32_t &v191 = __frame.v191;
-  int32_t &v192 = __frame.v192;
-  int32_t &v193 = __frame.v193;
-  int32_t &v194 = __frame.v194;
-  int32_t &v195 = __frame.v195;
-  int32_t &v196 = __frame.v196;
-  int32_t &v197 = __frame.v197;
-  int32_t &v198 = __frame.v198;
-  int32_t &v199 = __frame.v199;
-  int32_t &v200 = __frame.v200;
-  int32_t &v201 = __frame.v201;
-  int32_t &v202 = __frame.v202;
-  int32_t &v203 = __frame.v203;
-  int32_t &v204 = __frame.v204;
-  int32_t &v205 = __frame.v205;
-  int32_t &v206 = __frame.v206;
-  int32_t &v207 = __frame.v207;
-  int32_t &v208 = __frame.v208;
-  int32_t &v209 = __frame.v209;
-  int32_t &v210 = __frame.v210;
-  int32_t &v211 = __frame.v211;
-  int32_t &n15_24 = __frame.n15_24;
+  int32_t &n15_8 = (int32_t &)__frame.sym[0];
+  int32_t &n4_1 = (int32_t &)__frame.sym[1];
+  int32_t &freq_i = (int32_t &)__frame.sym[2];
+  int32_t &n15_3 = (int32_t &)__frame.sym[3];
+  Obj18 * &v184 = (Obj18 * &)__frame.sym[4];
+  ModelBlock * &this_1 = (ModelBlock * &)__frame.sym[5];
+  int32_t &v186 = (int32_t &)__frame.sym[6];
+  int32_t &v187 = (int32_t &)__frame.sym[7];
+  int32_t &v188 = (int32_t &)__frame.sym[8];
+  int32_t &v189 = (int32_t &)__frame.sym[9];
+  int32_t &v190 = (int32_t &)__frame.sym[10];
+  int32_t &v191 = (int32_t &)__frame.sym[11];
+  int32_t &v192 = (int32_t &)__frame.sym[12];
+  int32_t &v193 = (int32_t &)__frame.sym[13];
+  int32_t &v194 = (int32_t &)__frame.sym[14];
+  int32_t &v195 = (int32_t &)__frame.sym[15];
+  int32_t &v196 = (int32_t &)__frame.sym[16];
+  int32_t &v197 = (int32_t &)__frame.sym[17];
+  int32_t &v198 = (int32_t &)__frame.sym[18];
+  int32_t &v199 = (int32_t &)__frame.sym[19];
+  int32_t &v200 = (int32_t &)__frame.sym[20];
+  int32_t &v201 = (int32_t &)__frame.sym[21];
+  int32_t &v202 = (int32_t &)__frame.sym[22];
+  int32_t &v203 = (int32_t &)__frame.sym[23];
+  int32_t &v204 = (int32_t &)__frame.sym[24];
+  int32_t &v205 = (int32_t &)__frame.sym[25];
+  int32_t &v206 = (int32_t &)__frame.sym[26];
+  int32_t &v207 = (int32_t &)__frame.sym[27];
+  int32_t &v208 = (int32_t &)__frame.sym[28];
+  int32_t &v209 = (int32_t &)__frame.sym[29];
+  int32_t &v210 = (int32_t &)__frame.sym[30];
+  int32_t &v211 = (int32_t &)__frame.sym[31];
+  int32_t n15_24;
   ;
   Obj18 *v80;
   Obj24 *v36;
@@ -11339,7 +11303,7 @@ LABEL_86:
   v211 = v126;
   do
   {
-    v127 = __fwd_decode_pixel_pixel_context(this_3, &n15_8);
+    v127 = __fwd_decode_pixel_pixel_context(this_3, __frame.sym);
     if ( v127 >= 0 )
     {
       v128 = __fwd_decode_pixel_decode_context_bit(
@@ -11382,75 +11346,44 @@ static inline int32_t __fwd_code_pixel_pixel_context(void *a0, void *a1) { retur
 int32_t __code_pixel(ModelBlock *_this, int32_t a2)
 {
   struct alignas(16) {   // 164 bytes, the frame Hex-Rays could not name
-      int32_t p_n15;
-      int32_t n2_1;
-      uint16_t *n2_4;
-      int32_t n15_20;
-      int32_t n15_31;
-      int32_t n15_2;
-      int32_t n15_4;
-      int32_t *this_1;
-      int32_t n15_3;
-      uint16_t *v185;
-      int32_t n15_7;
-      int32_t v187;
-      int32_t v188;
-      int32_t v189;
-      int32_t v190;
-      int32_t v191;
-      int32_t v192;
-      int32_t v193;
-      int32_t v194;
-      int32_t v195;
-      int32_t v196;
-      int32_t v197;
-      int32_t v198;
-      int32_t v199;
-      int32_t v200;
-      int32_t v201;
-      int32_t v202;
-      int32_t v203;
-      int32_t v204;
-      int32_t v205;
-      int32_t v206;
-      int32_t v207;
-      int32_t n15_14;
+      uint32_t  sym[32];   // pixel_context reads sym[0..31]; `f44` runs 0..31 (was p_n15 .. v207)
+      uint8_t   _gap0[4];   // was int32_t n15_14
       uint8_t _pad0[32];
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 176, "frame layout moved");
-  int32_t &p_n15 = __frame.p_n15;
-  int32_t &n2_1 = __frame.n2_1;
-  uint16_t *&n2_4 = __frame.n2_4;
-  int32_t &n15_20 = __frame.n15_20;
-  int32_t &n15_31 = __frame.n15_31;
-  int32_t &n15_2 = __frame.n15_2;
-  int32_t &n15_4 = __frame.n15_4;
-  ModelBlock *&this_1 = (ModelBlock *&)__frame.this_1;
-  int32_t &n15_3 = __frame.n15_3;
-  Obj34 *&v185 = (Obj34 *&)__frame.v185;
-  int32_t &n15_7 = __frame.n15_7;
-  int32_t &v187 = __frame.v187;
-  int32_t &v188 = __frame.v188;
-  int32_t &v189 = __frame.v189;
-  int32_t &v190 = __frame.v190;
-  int32_t &v191 = __frame.v191;
-  int32_t &v192 = __frame.v192;
-  int32_t &v193 = __frame.v193;
-  int32_t &v194 = __frame.v194;
-  int32_t &v195 = __frame.v195;
-  int32_t &v196 = __frame.v196;
-  int32_t &v197 = __frame.v197;
-  int32_t &v198 = __frame.v198;
-  int32_t &v199 = __frame.v199;
-  int32_t &v200 = __frame.v200;
-  int32_t &v201 = __frame.v201;
-  int32_t &v202 = __frame.v202;
-  int32_t &v203 = __frame.v203;
-  int32_t &v204 = __frame.v204;
-  int32_t &v205 = __frame.v205;
-  int32_t &v206 = __frame.v206;
-  int32_t &v207 = __frame.v207;
-  int32_t &n15_14 = __frame.n15_14;
+  int32_t &p_n15 = (int32_t &)__frame.sym[0];
+  int32_t &n2_1 = (int32_t &)__frame.sym[1];
+  uint16_t * &n2_4 = (uint16_t * &)__frame.sym[2];
+  int32_t &n15_20 = (int32_t &)__frame.sym[3];
+  int32_t &n15_31 = (int32_t &)__frame.sym[4];
+  int32_t &n15_2 = (int32_t &)__frame.sym[5];
+  int32_t &n15_4 = (int32_t &)__frame.sym[6];
+  ModelBlock * &this_1 = (ModelBlock * &)__frame.sym[7];
+  int32_t &n15_3 = (int32_t &)__frame.sym[8];
+  Obj34 * &v185 = (Obj34 * &)__frame.sym[9];
+  int32_t &n15_7 = (int32_t &)__frame.sym[10];
+  int32_t &v187 = (int32_t &)__frame.sym[11];
+  int32_t &v188 = (int32_t &)__frame.sym[12];
+  int32_t &v189 = (int32_t &)__frame.sym[13];
+  int32_t &v190 = (int32_t &)__frame.sym[14];
+  int32_t &v191 = (int32_t &)__frame.sym[15];
+  int32_t &v192 = (int32_t &)__frame.sym[16];
+  int32_t &v193 = (int32_t &)__frame.sym[17];
+  int32_t &v194 = (int32_t &)__frame.sym[18];
+  int32_t &v195 = (int32_t &)__frame.sym[19];
+  int32_t &v196 = (int32_t &)__frame.sym[20];
+  int32_t &v197 = (int32_t &)__frame.sym[21];
+  int32_t &v198 = (int32_t &)__frame.sym[22];
+  int32_t &v199 = (int32_t &)__frame.sym[23];
+  int32_t &v200 = (int32_t &)__frame.sym[24];
+  int32_t &v201 = (int32_t &)__frame.sym[25];
+  int32_t &v202 = (int32_t &)__frame.sym[26];
+  int32_t &v203 = (int32_t &)__frame.sym[27];
+  int32_t &v204 = (int32_t &)__frame.sym[28];
+  int32_t &v205 = (int32_t &)__frame.sym[29];
+  int32_t &v206 = (int32_t &)__frame.sym[30];
+  int32_t &v207 = (int32_t &)__frame.sym[31];
+  int32_t n15_14;
   ;
   Obj99 *v63;
   uint8_t *v20, *v22, *n2_9, *v52, *v109;   // row cursors out of ModelBlock
@@ -12140,7 +12073,7 @@ LABEL_42:
   *(int32_t *)&this_3->f44 = 0;
   do
   {
-    v129 = __fwd_code_pixel_pixel_context(this_3, &p_n15);
+    v129 = __fwd_code_pixel_pixel_context(this_3, __frame.sym);
     if ( v129 >= 0 )
     {
       n15_28 = v129 == *(uint16_t *)this_3->f56[5];
