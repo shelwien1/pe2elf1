@@ -586,8 +586,8 @@ struct ModelBlock {
   uint8_t *f88;   // a row cursor
   uint32_t f92;
   uint8_t _pad18[1078112];
-  uint32_t f1078208;
-  uint32_t f1078212;
+  uint8_t *f1078208;   // the symbol lists, 24 bytes each
+  uint8_t *f1078212;   // the symbol lists, 24 bytes each
   uint32_t f1078216;
   uint32_t f1078220;
   uint8_t _pad23[8];
@@ -1174,15 +1174,15 @@ struct Obj10 {
   uint8_t  *f1051664[4];   // +1051664 .. +1051676, four more row cursors
   uint8_t _pad29[26524];
   void*f1078204;
-  uint32_t f1078208;
-  uint32_t f1078212;
+  uint8_t *f1078208;   // the symbol lists, 24 bytes each
+  uint8_t *f1078212;   // the symbol lists, 24 bytes each
   uint32_t f1078216;
   uint8_t _pad34[4];
   uint32_t f1078224;
   uint8_t _pad36[4];
   uint32_t **f1078232;   // the symbol-list cursor: a walk over uint32_t *
   int32_t f1078236;
-  uint32_t f1078240;
+  uint8_t *f1078240;   // a row cursor
   uint8_t _pad40[440];
   void*f1078684;
   uint8_t *f1078688;     // the alphabet map, one byte a symbol
@@ -12477,7 +12477,7 @@ int32_t __layout_workspace(uintptr_t a1, int32_t a2, int32_t i, int32_t a4, int3
   while ( n0x18 < 0x18 );
   return a1;
 }
-static inline uint32_t __fwd_unmodel_plane_slow_init_encode_symbol_list(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __init_symbol_list((int32_t *)a0, a1, a2, a3); }
+static inline uint32_t __fwd_unmodel_plane_slow_init_encode_symbol_list(void *a0, void *a1, int32_t a2, int32_t a3) { return __init_symbol_list((int32_t *)a0, (int32_t)a1, a2, a3); }
 static inline int32_t __fwd_unmodel_plane_slow_decode_pixel(void *a0, int32_t a1) { return __decode_pixel((ModelBlock *)a0, a1); }
 static inline void __fwd_unmodel_plane_slow_expand_alphabet(void *a0) { __expand_alphabet((Obj10 *)a0); }
 
@@ -12549,7 +12549,7 @@ void __unmodel_plane_slow(Obj10 *_this, char *Src)
   v3 = *((uint32_t *)_this + 2) < 8;
   Src_1 = Src;
   ArgList = &Src[-v3];
-  __rc_begin_decode((char)ArgList);
+  __rc_begin_decode(0);
   __fwd_unmodel_plane_slow_expand_alphabet(_this);
   ArgList_1 = ArgList;
   this_1 = (Obj10 *)(_this);
@@ -12718,7 +12718,7 @@ void __unmodel_plane_slow(Obj10 *_this, char *Src)
     i = nullptr;
   }
   v34 = this_4->f16;
-  this_4->f1078208 = i;
+  this_4->f1078208 = (uint8_t *)i;
   v35 = (uint32_t *)bmf_new(24 * v34 + 4);
   if ( v35 )
   {
@@ -12735,7 +12735,7 @@ void __unmodel_plane_slow(Obj10 *_this, char *Src)
     j = nullptr;
   }
   v38 = this_4->f16 <= 0;
-  this_4->f1078212 = j;
+  this_4->f1078212 = (uint8_t *)j;
   if ( !v38 )
   {
     v39 = 0;
@@ -17392,7 +17392,7 @@ void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, BmfImage *p_i, 
       v33 = nullptr;
     }
     v37 = Blocka_1->f16;
-    Blocka_1->f1078208 = v33;
+    Blocka_1->f1078208 = (uint8_t *)v33;
     v38 = (uint32_t *)bmf_new(24 * v37 + 4);
     if ( v38 )
     {
@@ -17428,7 +17428,7 @@ void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, BmfImage *p_i, 
       v39 = nullptr;
     }
     v43 = Blocka_1->f16 <= 0;
-    Blocka_1->f1078212 = v39;
+    Blocka_1->f1078212 = (uint8_t *)v39;
     if ( !v43 )
     {
       v44 = 0;
