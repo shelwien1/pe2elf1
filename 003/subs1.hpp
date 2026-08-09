@@ -5975,100 +5975,77 @@ BMF_SSE uint32_t __alt_init_tables(uint8_t *a1, char *a2)
     a2[253] = -127;
   }
   // never taken: -E is 0
-LABEL_47:
-  if ( plane_predictor )
+  // The test here was `if ( plane_predictor )`, with an else for predictor
+  // mode 0.  This function is called only by alt_p1_alloc and alt_p2_alloc,
+  // and those only by the eight alt_model bodies, which the dispatch reaches
+  // only under the predictor being 1 or 2.  Always true, so it and its
+  // 22-line else are gone.  Same argument as the block above it.
+  *a1 = 0;
+  n128_6 = 1;
+  a1[128] = -1;
+  if ( 1 )   // -E is 0
+    goto LABEL_52;
+  v29 = -1;
+  do
   {
-    *a1 = 0;
-    n128_6 = 1;
-    a1[128] = -1;
-    if ( 1 )   // -E is 0
-      goto LABEL_52;
-    v29 = -1;
-    do
-    {
-      a1[v29 + 256] = 0;
-      a1[n128_6] = 0;
-      --v29;
-      ++n128_6;
-    }
-    while ( n128_6 <= near_lossless_max[0] );
-    if ( n128_6 < 128 )
-    {
-LABEL_52:
-      v49 = 128 - n128_6;
-      v52 = (128 - n128_6) / 2;
-      v30 = 0;
-      n128_5 = 1;
-      if ( v52 )
-      {
-        n128_11 = n128_6;
-        v32 = 0;
-        n128_2 = n128_1;
-        v33 = 0;
-        v50 = &a1[n128_6];
-        v51 = &a1[-n128_6];
-        do
-        {
-          n128_3 = n128_2;
-          n128_4 = n128_5 - 1;
-          if ( n128_4 )
-            n128_3 = n128_4;
-          else
-            ++v30;
-          v48 = 2 * v30;
-          v50[2 * v32] = 2 * v30;
-          v53 = 2 * v30 - 1;
-          n128_5 = n128_3 - 1;
-          v51[v33 + 256] = v53;
-          if ( n128_3 == 1 )
-          {
-            n128_5 = n128_2;
-            v48 = 2 * ++v30;
-            v53 = 2 * v30 - 1;
-          }
-          v50[2 * v32++ + 1] = v48;
-          v51[v33 + 255] = v53;
-          v33 -= 2;
-        }
-        while ( v32 < v52 );
-        n128_6 = n128_11;
-        v36 = 2 * v32 + 1;
-      }
-      else
-      {
-        v36 = 1;
-      }
-      if ( v36 - 1 < v49 )
-      {
-        if ( n128_5 == 1 )
-          LOBYTE(v30) = v30 + 1;
-        a1[n128_6 - 1 + v36] = 2 * v30;
-        a1[-n128_6 - v36 + 257] = 2 * v30 - 1;
-      }
-    }
+    a1[v29 + 256] = 0;
+    a1[n128_6] = 0;
+    --v29;
+    ++n128_6;
   }
-  else
+  while ( n128_6 <= near_lossless_max[0] );
+  if ( n128_6 < 128 )
   {
-    n128_7 = n128_1;
-    n128_10 = n128_1 + 1;
-    v38 = 0;
-    for ( m = 0; m < 0x80; ++m )
+LABEL_52:
+    v49 = 128 - n128_6;
+    v52 = (128 - n128_6) / 2;
+    v30 = 0;
+    n128_5 = 1;
+    if ( v52 )
     {
-      n128_8 = n128_7;
-      n128_9 = n128_10 - 1;
-      if ( n128_9 )
-        n128_8 = n128_9;
-      else
-        ++v38;
-      v42 = v38;
-      a1[2 * m] = v38;
-      n128_10 = n128_8 - 1;
-      if ( n128_8 == 1 )
+      n128_11 = n128_6;
+      v32 = 0;
+      n128_2 = n128_1;
+      v33 = 0;
+      v50 = &a1[n128_6];
+      v51 = &a1[-n128_6];
+      do
       {
-        n128_10 = n128_7;
-        v42 = ++v38;
+        n128_3 = n128_2;
+        n128_4 = n128_5 - 1;
+        if ( n128_4 )
+          n128_3 = n128_4;
+        else
+          ++v30;
+        v48 = 2 * v30;
+        v50[2 * v32] = 2 * v30;
+        v53 = 2 * v30 - 1;
+        n128_5 = n128_3 - 1;
+        v51[v33 + 256] = v53;
+        if ( n128_3 == 1 )
+        {
+          n128_5 = n128_2;
+          v48 = 2 * ++v30;
+          v53 = 2 * v30 - 1;
+        }
+        v50[2 * v32++ + 1] = v48;
+        v51[v33 + 255] = v53;
+        v33 -= 2;
       }
-      a1[2 * m + 1] = v42;
+      while ( v32 < v52 );
+      n128_6 = n128_11;
+      v36 = 2 * v32 + 1;
+    }
+    else
+    {
+      v36 = 1;
+    }
+    if ( v36 - 1 < v49 )
+    {
+      if ( n128_5 == 1 )
+        LOBYTE(v30) = v30 + 1;
+      a1[n128_6 - 1 + v36] = 2 * v30;
+      a1[-n128_6 - v36 + 257] = 2 * v30 - 1;
     }
   }
   for ( n0x80 = 0; n0x80 < 0x80; ++n0x80 )

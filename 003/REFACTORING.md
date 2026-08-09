@@ -26,7 +26,7 @@ so they can be re-measured rather than trusted.
 | pointer casts | 5804 | 7336 |
 | `goto` / `LABEL_n:` | 121 / 88 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
-| line coverage | **95.52 %** | 64.5 % |
+| line coverage | **95.63 %** | 64.5 % |
 
 The target is 32-bit. That is not a limitation left over from the port — it is
 the decision that made Phase 4 possible, and §Phase 4 says why.
@@ -123,7 +123,7 @@ thinks so".
 
 ### 2.3 What the gate still does not reach
 
-4.4 % of the file — 595 unexecuted lines across the bodies:
+4.4 % of the file — 583 unexecuted lines across the bodies:
 
 | body | unexecuted |
 | --- | --- |
@@ -162,10 +162,17 @@ unexecuted lines now form runs of at most 9, and mostly of 1 to 3. There are no
 more dead features to find here; there are allocation-failure checks, error
 returns and format variants, a line or two at a time.
 
-Three checks say that lever is spent, not merely tiring: no body has zero
-coverage, no folded-mode test still has a live `else` (all 23 markers were
-checked), and the two structurally-unreachable branches that did exist have
-been removed. What remains needs inputs, not deletions.
+Three checks were run to say that lever was spent — no body with zero coverage,
+no folded-mode marker with a live `else`, no `!plane_predictor` guard left in
+the subsystem — and **one of them was too narrow.** It searched for
+`!plane_predictor` and `plane_predictor == 0`, and missed
+`if (plane_predictor) … else`, which is the same test written the other way
+round. `alt_init_tables` had one, with a 22-line else, and a `LABEL_47` that
+lost its last `goto` when the earlier block went.
+
+Re-run over the whole subsystem in both forms: that was the only one. The lever
+is spent now, and the check that says so is one that would have found the case
+it missed.
 
 These are format and descriptor combinations fifteen images still do not reach.
 `alt_model_p1_decode` used to head this table with 268 lines and is not on it
@@ -778,7 +785,7 @@ for f in testfiles/*.bmp; do
   rm -f o.bmf o.bmp                       # bmf appends to its output
   ./bmfcov c "$f" o.bmf && ./bmfcov d o.bmf o.bmp
 done
-gcov -n    -o . bmfcov-bmf.gcno                       # 95.52 % of 13371 lines
+gcov -n    -o . bmfcov-bmf.gcno                       # 95.63 % of 13353 lines
 gcov -f -n -o . bmfcov-bmf.gcno                       # per function
 ```
 
