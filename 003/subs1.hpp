@@ -3163,111 +3163,16 @@ alignas(16) static uint8_t bmf_pout_of_memory_handler[10292 + 64] = {   // 0x445
 typedef int32_t t_pout_of_memory_handler;
 static t_pout_of_memory_handler& __pout_of_memory_handler = *(t_pout_of_memory_handler*)bmf_pout_of_memory_handler;
 
-static unsigned char *bmf_addr(unsigned va)
-{
-  switch (0) { default: break; }
-  if (va >= 0x439860u && va < 0x439880u) return bmf_ctx_group_flags + (va - 0x439860u);
-  if (va >= 0x439880u && va < 0x439890u) return bmf_dword_439880 + (va - 0x439880u);
-  if (va >= 0x439890u && va < 0x4398A0u) return bmf_byte_439890 + (va - 0x439890u);
-  if (va >= 0x4398A0u && va < 0x4398C0u) return bmf_byte_4398A0 + (va - 0x4398A0u);
-  if (va >= 0x4398C0u && va < 0x4399F8u) return (unsigned char *)bmf_p2_thresholds + (va - 0x4398C0u);
-  if (va >= 0x439B10u && va < 0x439B20u) return bmf_xmmword_439B10 + (va - 0x439B10u);
-  if (va >= 0x439B40u && va < 0x439B50u) return bmf_xmmword_439B40 + (va - 0x439B40u);
-  if (va >= 0x439B50u && va < 0x439B60u) return bmf_xmmword_439B50 + (va - 0x439B50u);
-  if (va >= 0x439B60u && va < 0x439B7Cu) return bmf_xmmword_439B60 + (va - 0x439B60u);
-  if (va >= 0x439B7Cu && va < 0x439BC0u) return bmf_dword_439B7C + (va - 0x439B7Cu);
-  if (va >= 0x439BC0u && va < 0x439BC8u) return bmf_byte_439BC0 + (va - 0x439BC0u);
-  if (va >= 0x439BC8u && va < 0x439BD0u) return bmf_byte_439BC8 + (va - 0x439BC8u);
-  if (va >= 0x439BD0u && va < 0x439BD8u) return bmf_byte_439BD0 + (va - 0x439BD0u);
-  if (va >= 0x439BD8u && va < 0x441120u) return bmf_dword_439BD8 + (va - 0x439BD8u);
-  if (va >= 0x441120u && va < 0x441190u) return (unsigned char *)bmf_p2_coef + (va - 0x441120u);
-  if (va >= 0x441190u && va < 0x441200u) return (unsigned char *)bmf_p2_rate + (va - 0x441190u);
-  if (va >= 0x441200u && va < 0x442BB0u) return bmf_xmmword_4411F0 + (va - 0x4411F0u);
-  if (va >= 0x442BB0u && va < 0x443360u) return bmf_dwLowDateTime + (va - 0x442BB0u);
-  if (va >= 0x443360u && va < 0x443364u) return bmf_plane_predictor + (va - 0x443360u);
-  if (va >= 0x443364u && va < 0x443368u) return bmf_plane_alt_model + (va - 0x443364u);
-  if (va >= 0x443368u && va < 0x44336Cu) return bmf_packer_free_bits + (va - 0x443368u);
-  if (va >= 0x44336Cu && va < 0x443370u) return bmf_packer_acc + (va - 0x44336Cu);
-  if (va >= 0x443370u && va < 0x443384u) return bmf_coded_size + (va - 0x443370u);
-  if (va >= 0x443384u && va < 0x443388u) return bmf_desc_slow_mode + (va - 0x443384u);
-  if (va >= 0x443388u && va < 0x44338Cu) return bmf_dword_443388 + (va - 0x443388u);
-  if (va >= 0x443398u && va < 0x44339Cu) return bmf_near_lossless_max + (va - 0x443398u);
-  if (va >= 0x44339Fu && va < 0x4433A0u) return bmf_byte_44339F + (va - 0x44339Fu);
-  if (va >= 0x4433ACu && va < 0x4433ADu) return bmf_byte_4433AC + (va - 0x4433ACu);
-  if (va >= 0x4433BDu && va < 0x4433CCu) return bmf_byte_4433BD + (va - 0x4433BDu);
-  if (va >= 0x4433CFu && va < 0x4433D0u) return bmf_byte_4433CF + (va - 0x4433CFu);
-  if (va >= 0x4433D4u && va < 0x4433D8u) return bmf_n191_0 + (va - 0x4433D4u);
-  if (va >= 0x445660u && va < 0x445700u) return bmf_model_geometry + (va - 0x445660u);
-  if (va >= 0x445700u && va < 0x44570Cu) return bmf_byte_445700 + (va - 0x445700u);
-  if (va >= 0x44570Cu && va < 0x445710u) return bmf_n8_1 + (va - 0x44570Cu);
-  if (va >= 0x445710u && va < 0x445714u) return bmf_n8_0 + (va - 0x445710u);
-  if (va >= 0x44571Eu && va < 0x445720u) return bmf_byte_44571E + (va - 0x44571Eu);
-  if (va >= 0x4458E0u && va < 0x4458E4u) return bmf_dword_4458E0 + (va - 0x4458E0u);
-  if (va >= 0x4458E4u && va < 0x4458E8u) return bmf_dword_4458E4 + (va - 0x4458E4u);
-  if (va >= 0x4458E8u && va < 0x4458ECu) return bmf_dword_4458E8 + (va - 0x4458E8u);
-  if (va >= 0x4458ECu && va < 0x4458F0u) return bmf_dword_4458EC + (va - 0x4458ECu);
-  if (va >= 0x4458F0u && va < 0x4458F4u) return bmf_dword_4458F0 + (va - 0x4458F0u);
-  if (va >= 0x4458F4u && va < 0x445930u) return bmf_dword_4458F4 + (va - 0x4458F4u);
-  if (va >= 0x445930u && va < 0x448164u) return bmf_pout_of_memory_handler + (va - 0x445930u);
-  return blob1 + (va - BMF_BLOB_BASE);
-}
-
-// The absolute pointers BMF.exe baked into its data.  These slots
-// are inside definitions that moved, so blob.inc's own pass no
-// longer reaches them and they are rebased here instead -- onto
-// wherever the linker put the definitions above, or back into
-// blob1 for a target that has not moved.
-static const unsigned bmf_reloc_slots[] = {
-  0x0043A9A8,
-  0x00441040,
-  0x00441044,
-  0x00441048,
-  0x0044104C,
-  0x00441050,
-  0x00441068,
-  0x0044106C,
-  0x00441070,
-  0x00441074,
-  0x00441078,
-  0x0044107C,
-  0x00441080,
-  0x00441084,
-  0x00441088,
-  0x004410C0,
-  0x004410C4,
-  0x004410C8,
-  0x004410CC,
-  0x004410D0,
-  0x004410D4,
-  0x004410D8,
-  0x004410DC,
-  0x004410E0,
-  0x004410E4,
-  0x004410E8,
-  0x004410EC,
-  0x004410F0,
-  0x004410F4,
-  0x004410F8,
-  0x004410FC,
-  0x00441100,
-  0x00441104,
-  0x00441230,
-  0x00441234,
-  0x00441238,
-  0x004414B8,
-  0x004414BC,
-  0x004418FC,
-};
-static void bmf_data_relocate()
-{
-  for (unsigned i = 0; i < sizeof bmf_reloc_slots / sizeof *bmf_reloc_slots; i++) {
-    unsigned char *slot = bmf_addr(bmf_reloc_slots[i]);
-    unsigned va;
-    __builtin_memcpy(&va, slot, 4);
-    unsigned char *p = bmf_addr(va);
-    __builtin_memcpy(slot, &p, sizeof p);
-  }
-}
+// bmf_addr, bmf_reloc_slots and bmf_data_relocate were here, with
+// bmf_blob_relocate in blob.inc: an address-translation layer that let a global
+// be reached by the virtual address it had in BMF.exe, and two startup passes
+// that rebased the absolute pointers sitting inside the data.
+//
+// All of it is dead, and measured to be.  Taking both relocation calls out
+// leaves every one of the fifteen streams byte-identical, because the 39
+// pointers they rebased all point into the string tables under 0x44294C --
+// which the poisoning experiment described at `bmf_bss` shows nothing reads.
+// They belong to the modes that are gone (REFACTORING.md §2.1).
 // ---------------------------------------------------------------------------
 // The compression mode.
 //
@@ -3301,92 +3206,115 @@ static uint8_t  *coded_buf;     // base of the buffer, from malloc
 // pointer, and out of the blob for the same reason as the cursors above.
 // BMF.exe had it at 0x00443380.
 static char *hist_scratch;
+// BMF's .bss, the last of its data segment that is still one object.
+//
+// Every global below is a reference into it at its original offset, which is
+// what `blob1` used to be -- but this is 19 584 bytes of zeroes rather than a
+// generated copy of the whole data segment, because that is all the surviving
+// globals need.  Two measurements say so:
+//
+//   * 0x44294C..0x448000 is one unbroken run of zero bytes in BMF.exe's data
+//     segment, and all of these globals are inside it.  There are no
+//     initialisers to recover: this is bss.
+//   * Everything below it is dead.  Filling 43 184 bytes of blob.inc with 0xCC
+//     -- the whole segment under 0x44294C, bar the relocation slots -- leaves
+//     all fifteen streams byte-identical.  The string tables down there belong
+//     to the modes that are gone.
+//
+// The offsets stay because the code still strides between these globals with
+// variable subscripts: `__byte_44339E[16 * plane]` walks four sixteen-byte
+// records that Hex-Rays split into a name per field (REFACTORING.md Phase 3
+// calls these SHARED, and all 41 are).  Giving them separate storage is what
+// §3.6 is for; keeping one object is what makes it safe not to have done it
+// yet.
+alignas(16) static uint8_t bmf_bss[19584];   // 0x443380..0x448000
+
 typedef int32_t t_n256_2[0x10000];
-static t_n256_2& __n256_2 = *(t_n256_2*)(blob1 + 0x0044338C - BMF_BLOB_BASE);
+static t_n256_2& __n256_2 = *(t_n256_2*)(bmf_bss + 0x44338C - 0x443380);
 typedef int32_t t_n512[0x10000];
-static t_n512& __n512 = *(t_n512*)(blob1 + 0x00443390 - BMF_BLOB_BASE);
+static t_n512& __n512 = *(t_n512*)(bmf_bss + 0x443390 - 0x443380);
 typedef int32_t t_n4_5;
-static t_n4_5& plane_count = *(t_n4_5*)(blob1 + 0x00443394 - BMF_BLOB_BASE);
+static t_n4_5& plane_count = *(t_n4_5*)(bmf_bss + 0x443394 - 0x443380);
 typedef uint8_t t_byte_44339C[0x10000];
-static t_byte_44339C& __byte_44339C = *(t_byte_44339C*)(blob1 + 0x0044339C - BMF_BLOB_BASE);
+static t_byte_44339C& __byte_44339C = *(t_byte_44339C*)(bmf_bss + 0x44339C - 0x443380);
 typedef uint8_t t_byte_44339D[0x10000];
-static t_byte_44339D& __byte_44339D = *(t_byte_44339D*)(blob1 + 0x0044339D - BMF_BLOB_BASE);
+static t_byte_44339D& __byte_44339D = *(t_byte_44339D*)(bmf_bss + 0x44339D - 0x443380);
 typedef uint8_t t_byte_44339E[0x10000];
-static t_byte_44339E& __byte_44339E = *(t_byte_44339E*)(blob1 + 0x0044339E - BMF_BLOB_BASE);
+static t_byte_44339E& __byte_44339E = *(t_byte_44339E*)(bmf_bss + 0x44339E - 0x443380);
 typedef int32_t t_dword_4433A0[0x10000];
-static t_dword_4433A0& __dword_4433A0 = *(t_dword_4433A0*)(blob1 + 0x004433A0 - BMF_BLOB_BASE);
+static t_dword_4433A0& __dword_4433A0 = *(t_dword_4433A0*)(bmf_bss + 0x4433A0 - 0x443380);
 typedef int32_t t_dword_4433A4[0x10000];
-static t_dword_4433A4& __dword_4433A4 = *(t_dword_4433A4*)(blob1 + 0x004433A4 - BMF_BLOB_BASE);
+static t_dword_4433A4& __dword_4433A4 = *(t_dword_4433A4*)(bmf_bss + 0x4433A4 - 0x443380);
 typedef int32_t t_dword_4433A8[0x10000];
-static t_dword_4433A8& __dword_4433A8 = *(t_dword_4433A8*)(blob1 + 0x004433A8 - BMF_BLOB_BASE);
+static t_dword_4433A8& __dword_4433A8 = *(t_dword_4433A8*)(bmf_bss + 0x4433A8 - 0x443380);
 typedef uint8_t t_byte_4433AD[16];
-static t_byte_4433AD& __byte_4433AD = *(t_byte_4433AD*)(blob1 + 0x004433AD - BMF_BLOB_BASE);
+static t_byte_4433AD& __byte_4433AD = *(t_byte_4433AD*)(bmf_bss + 0x4433AD - 0x443380);
 typedef char t_n3_1;
-static t_n3_1& __n3_1 = *(t_n3_1*)(blob1 + 0x004433CC - BMF_BLOB_BASE);
+static t_n3_1& __n3_1 = *(t_n3_1*)(bmf_bss + 0x4433CC - 0x443380);
 typedef char t_n3_0;
-static t_n3_0& __n3_0 = *(t_n3_0*)(blob1 + 0x004433CD - BMF_BLOB_BASE);
+static t_n3_0& __n3_0 = *(t_n3_0*)(bmf_bss + 0x4433CD - 0x443380);
 typedef int32_t t_n191;
-static t_n191& __n191 = *(t_n191*)(blob1 + 0x004433D0 - BMF_BLOB_BASE);
+static t_n191& __n191 = *(t_n191*)(bmf_bss + 0x4433D0 - 0x443380);
 typedef int32_t t_n191_1;
-static t_n191_1& __n191_1 = *(t_n191_1*)(blob1 + 0x004433D8 - BMF_BLOB_BASE);
+static t_n191_1& __n191_1 = *(t_n191_1*)(bmf_bss + 0x4433D8 - 0x443380);
 typedef char t_buf_0[0x10000];
-static t_buf_0& exclusion_mask = *(t_buf_0*)(blob1 + 0x00443440 - BMF_BLOB_BASE);
+static t_buf_0& exclusion_mask = *(t_buf_0*)(bmf_bss + 0x443440 - 0x443380);
 typedef uint8_t t_byte_445440[544];
-static t_byte_445440& __byte_445440 = *(t_byte_445440*)(blob1 + 0x00445440 - BMF_BLOB_BASE);
+static t_byte_445440& __byte_445440 = *(t_byte_445440*)(bmf_bss + 0x445440 - 0x443380);
 // The model's counter tables, ALGORITHM.md §8: one allocation, handed out in
 // 254-entry strips.  An int32_t in the data segment holding an address, so a
 // pointer here, and out of the blob.  BMF.exe had it at 0x00445708.
 static uint16_t *model_tables;
 typedef uint8_t t_byte_445714[0x10000];
-static t_byte_445714& __byte_445714 = *(t_byte_445714*)(blob1 + 0x00445714 - BMF_BLOB_BASE);
+static t_byte_445714& __byte_445714 = *(t_byte_445714*)(bmf_bss + 0x445714 - 0x443380);
 typedef uint8_t t_byte_445715[0x10000];
-static t_byte_445715& __byte_445715 = *(t_byte_445715*)(blob1 + 0x00445715 - BMF_BLOB_BASE);
+static t_byte_445715& __byte_445715 = *(t_byte_445715*)(bmf_bss + 0x445715 - 0x443380);
 typedef uint8_t t_byte_445716[0x10000];
-static t_byte_445716& __byte_445716 = *(t_byte_445716*)(blob1 + 0x00445716 - BMF_BLOB_BASE);
+static t_byte_445716& __byte_445716 = *(t_byte_445716*)(bmf_bss + 0x445716 - 0x443380);
 typedef char t_n2_0;
-static t_n2_0& __n2_0 = *(t_n2_0*)(blob1 + 0x0044571C - BMF_BLOB_BASE);
+static t_n2_0& __n2_0 = *(t_n2_0*)(bmf_bss + 0x44571C - 0x443380);
 typedef char t_byte_44571D;
-static t_byte_44571D& __byte_44571D = *(t_byte_44571D*)(blob1 + 0x0044571D - BMF_BLOB_BASE);
+static t_byte_44571D& __byte_44571D = *(t_byte_44571D*)(bmf_bss + 0x44571D - 0x443380);
 typedef char t_n4;
-static t_n4& __n4 = *(t_n4*)(blob1 + 0x00445720 - BMF_BLOB_BASE);
+static t_n4& __n4 = *(t_n4*)(bmf_bss + 0x445720 - 0x443380);
 typedef char t_n2_1;
-static t_n2_1& __n2_1 = *(t_n2_1*)(blob1 + 0x00445721 - BMF_BLOB_BASE);
+static t_n2_1& __n2_1 = *(t_n2_1*)(bmf_bss + 0x445721 - 0x443380);
 typedef char t_byte_445722;
-static t_byte_445722& __byte_445722 = *(t_byte_445722*)(blob1 + 0x00445722 - BMF_BLOB_BASE);
+static t_byte_445722& __byte_445722 = *(t_byte_445722*)(bmf_bss + 0x445722 - 0x443380);
 typedef char t_byte_445724;
-static t_byte_445724& __byte_445724 = *(t_byte_445724*)(blob1 + 0x00445724 - BMF_BLOB_BASE);
+static t_byte_445724& __byte_445724 = *(t_byte_445724*)(bmf_bss + 0x445724 - 0x443380);
 typedef char t_n4_0;
-static t_n4_0& __n4_0 = *(t_n4_0*)(blob1 + 0x00445725 - BMF_BLOB_BASE);
+static t_n4_0& __n4_0 = *(t_n4_0*)(bmf_bss + 0x445725 - 0x443380);
 typedef char t_byte_445726;
-static t_byte_445726& __byte_445726 = *(t_byte_445726*)(blob1 + 0x00445726 - BMF_BLOB_BASE);
+static t_byte_445726& __byte_445726 = *(t_byte_445726*)(bmf_bss + 0x445726 - 0x443380);
 typedef char t_byte_445728;
-static t_byte_445728& __byte_445728 = *(t_byte_445728*)(blob1 + 0x00445728 - BMF_BLOB_BASE);
+static t_byte_445728& __byte_445728 = *(t_byte_445728*)(bmf_bss + 0x445728 - 0x443380);
 typedef char t_n8_2;
-static t_n8_2& __n8_2 = *(t_n8_2*)(blob1 + 0x00445729 - BMF_BLOB_BASE);
+static t_n8_2& __n8_2 = *(t_n8_2*)(bmf_bss + 0x445729 - 0x443380);
 typedef char t_byte_44572A;
-static t_byte_44572A& __byte_44572A = *(t_byte_44572A*)(blob1 + 0x0044572A - BMF_BLOB_BASE);
+static t_byte_44572A& __byte_44572A = *(t_byte_44572A*)(bmf_bss + 0x44572A - 0x443380);
 typedef char t_byte_44572C;
-static t_byte_44572C& __byte_44572C = *(t_byte_44572C*)(blob1 + 0x0044572C - BMF_BLOB_BASE);
+static t_byte_44572C& __byte_44572C = *(t_byte_44572C*)(bmf_bss + 0x44572C - 0x443380);
 typedef char t_n16;
-static t_n16& __n16 = *(t_n16*)(blob1 + 0x0044572D - BMF_BLOB_BASE);
+static t_n16& __n16 = *(t_n16*)(bmf_bss + 0x44572D - 0x443380);
 typedef char t_byte_44572E;
-static t_byte_44572E& __byte_44572E = *(t_byte_44572E*)(blob1 + 0x0044572E - BMF_BLOB_BASE);
+static t_byte_44572E& __byte_44572E = *(t_byte_44572E*)(bmf_bss + 0x44572E - 0x443380);
 typedef char t_byte_445730;
-static t_byte_445730& __byte_445730 = *(t_byte_445730*)(blob1 + 0x00445730 - BMF_BLOB_BASE);
+static t_byte_445730& __byte_445730 = *(t_byte_445730*)(bmf_bss + 0x445730 - 0x443380);
 typedef char t_n32;
-static t_n32& __n32 = *(t_n32*)(blob1 + 0x00445731 - BMF_BLOB_BASE);
+static t_n32& __n32 = *(t_n32*)(bmf_bss + 0x445731 - 0x443380);
 typedef uint8_t t_byte_445732[10];
-static t_byte_445732& __byte_445732 = *(t_byte_445732*)(blob1 + 0x00445732 - BMF_BLOB_BASE);
+static t_byte_445732& __byte_445732 = *(t_byte_445732*)(bmf_bss + 0x445732 - 0x443380);
 typedef int32_t t_dword_44573C[0x10000];
-static t_dword_44573C& __dword_44573C = *(t_dword_44573C*)(blob1 + 0x0044573C - BMF_BLOB_BASE);
+static t_dword_44573C& __dword_44573C = *(t_dword_44573C*)(bmf_bss + 0x44573C - 0x443380);
 typedef int32_t t_n4_4;
-static t_n4_4& __n4_4 = *(t_n4_4*)(blob1 + 0x00445740 - BMF_BLOB_BASE);
+static t_n4_4& __n4_4 = *(t_n4_4*)(bmf_bss + 0x445740 - 0x443380);
 typedef int32_t t_n4_3;
-static t_n4_3& __n4_3 = *(t_n4_3*)(blob1 + 0x00445744 - BMF_BLOB_BASE);
+static t_n4_3& __n4_3 = *(t_n4_3*)(bmf_bss + 0x445744 - 0x443380);
 typedef int32_t t_n15;
-static t_n15& __n15 = *(t_n15*)(blob1 + 0x00445748 - BMF_BLOB_BASE);
+static t_n15& __n15 = *(t_n15*)(bmf_bss + 0x445748 - 0x443380);
 typedef int32_t t_n15_0;
-static t_n15_0& __n15_0 = *(t_n15_0*)(blob1 + 0x0044574C - BMF_BLOB_BASE);
+static t_n15_0& __n15_0 = *(t_n15_0*)(bmf_bss + 0x44574C - 0x443380);
 
 // The plane descriptor table, `ALGORITHM.md` §6.2: four 16-byte records at
 // 0x0044339C, whose fields the file also declares one at a time as
@@ -22690,7 +22618,5 @@ int32_t __main(int32_t argc, const char **argv)
 }
 void __out_of_memory_handler() { __exit_402E40(7); }
 int32_t main(int32_t argc, char **argv) {
-  bmf_blob_relocate();      // the globals still in blob1
-  bmf_data_relocate();      // and the slots inside the ones that moved
   return __main(argc, (const char **)argv);
 }

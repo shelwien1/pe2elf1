@@ -21,7 +21,9 @@
 // exist, no call-count probes.
 #define BMF_STANDALONE 1
 
-#include "blob.inc"     // BMF's data segment, and the globals' base
+// blob.inc was here: BMF.exe's data segment as one generated array, 343 794
+// bytes of it.  What survived is `bmf_bss` in subs1.hpp -- 19 584 zero bytes,
+// which is what the surviving globals actually need.
 //--- #include "bmfhead.h"    // Hex-Rays' type vocabulary, SSE wrappers, defs.h
 // bmfhead.h — the vocabulary the decompiled bodies are written in.
 //
@@ -511,40 +513,6 @@ void __noreturn __break(uint16 code, uint16 subcode);
 #define ADJ(p) (__parentof(p) *)(p-__deltaof(p))
 
 #endif // HEXRAYS_DEFS_H
-
-// ---------------------------------------------------------------------------
-// The data segment, as one object.
-//
-// Every global a moved body touches is a reference into `blob1` at its
-// original offset — `*(int*)(blob1 + 0x00441040 - BMF_BLOB_BASE)` — rather
-// than a bare `*(int *)0x00441040`.  Same address, same layout, but the data
-// has a definition instead of being 845 scattered constants, and the two
-// builds can put it in different places:
-//
-//   hybrid      blob1 *is* the loaded PE's data.  The moved bodies share their
-//               globals with the code still running in the image, so there is
-//               nothing to copy and the pointer is the load address.
-//   standalone  blob1 is an array, defined in standalone/blob.inc, which
-//               build.sh includes ahead of this file.  The linker puts it
-//               wherever it likes; the absolute pointers *inside* the data are
-//               rebased once at startup.
-//
-// incdec.md §6.1 is why the offsets stay: naming the globals is a much larger
-// job than moving them, because the same address is an `int` to one function
-// and a `char[]` to the next.
-// ---------------------------------------------------------------------------
-#ifndef BMF_BLOB_BASE
-#define BMF_BLOB_BASE 0x00438000u
-#endif
-
-// There is deliberately no BMF_BLOB(va) macro any more.  extract.py emits one
-// for each address Hex-Rays baked into an *expression* rather than into a named
-// global — `*(_QWORD *)(n64 + 4469652)`, where 4469652 is 0x00443394 — and
-// subs1.hpp had 42 of them.  They now take the address of the global that owns
-// the byte they start at, which is the same address written a way you can read.
-// A freshly extracted subs1.hpp will fail to compile here until
-// tools/name_raw_addrs.py has been run over it; that is the intended way to
-// find out, rather than the numbers quietly coming back.
 
 // defs.h stops at SLODWORD/SHIDWORD; the bodies also index DWORD lanes
 // directly.  Same DWORDn/SDWORDn machinery, just the names it left out.

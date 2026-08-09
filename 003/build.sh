@@ -12,10 +12,10 @@
 # -f switches.  All of that is reproduced below; the only difference is the
 # output name, since what comes out here is an ELF executable and not a PE.
 #
-# -m32 is not negotiable.  Every global the decompiled bodies touch is a
-# 32-bit absolute address into blob.inc (see bmf.cpp's BMF_BLOB), the moved
-# entry points carry i386 calling-convention attributes, and the CPUID helpers
-# are i386 inline asm.  On a 64-bit host that means the multilib runtime:
+# -m32 is not negotiable.  The recovered structs are laid out for a four-byte
+# pointer and their static_asserts say so, the moved entry points carry i386
+# calling-convention attributes, and the CPUID helpers are i386 inline asm.  On
+# a 64-bit host that means the multilib runtime:
 #
 #   Debian/Ubuntu   apt install g++-multilib
 #   Fedora          dnf install glibc-devel.i686 libstdc++-static.i686
