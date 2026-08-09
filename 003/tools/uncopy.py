@@ -110,6 +110,101 @@ def expr(nm, off, member=False):
     return '%s %s %d' % (nm, '-' if off < 0 else '+', abs(off))
 
 
+# ---------------------------------------------------------------------------
+# The same copy, scheduled.
+#
+# The compiler was free to hoist the loads out of the stores, and in twelve
+# places it did:
+#
+#     v18 = *(uint32_t *)((uintptr_t)v11 - 14);
+#     v19 = *(uint32_t *)((uintptr_t)v11 - 10);
+#     v11->f0 = *(uint32_t *)((uintptr_t)v11 - 18);
+#     v20 = *(uint32_t *)((uintptr_t)v11 - 6);
+#     v11->f4 = v18;
+#     LOWORD(v18) = *(uint16_t *)((uintptr_t)v11 - 2);
+#     v11->f8 = v19;
+#     v11->f12 = v20;
+#     v11->f16 = v18;
+#
+# Eighteen bytes from `v11 - 18` to `v11`, with the temporaries interleaved and
+# `v18` used twice -- loaded at -14, stored to f4, then its low half reloaded
+# from -2 and stored to f16.  Pairing by program order handles that and nothing
+# else does: a temporary means whatever was last put in it.
+#
+# The block is only folded when every statement in it is one of these four
+# kinds, so there is nothing between the first load and the last store that
+# could observe the difference.
+ADDR = r'\(\s*(?:\(uintptr_t\)\s*)?(\w+)(?:\s*([-+])\s*(\d+))?\s*\)'
+LOAD = re.compile(r'^\s*(\w+) = \*\((uint(?:8|16|32|64)_t) \*\)%s;\s*$' % ADDR)
+LOW = re.compile(r'^\s*LOWORD\((\w+)\) = \*\(uint16_t \*\)%s;\s*$' % ADDR)
+STM = re.compile(r'^\s*(\w+)->f(\d+) = (\w+);\s*$')
+SLD = re.compile(r'^\s*(\w+)->f(\d+) = \*\((uint(?:8|16|32|64)_t) \*\)%s;\s*$' % ADDR)
+
+
+def sched_at(lines, i):
+    """One scheduled copy starting at line i, or None."""
+    held, pairs, snm, dnm, j = {}, [], None, None, i
+    while j < len(lines):
+        l = lines[j]
+        m = LOAD.match(l) or LOW.match(l)
+        if m:
+            g = m.groups()
+            w = 2 if LOW.match(l) else WIDTH[LOAD.match(l).group(2)]
+            base, off = g[-3], int(g[-1] or 0) * (-1 if g[-2] == '-' else 1)
+            if snm and base != snm:
+                break
+            snm = base
+            held[g[0]] = (off, w)
+            j += 1
+            continue
+        m = SLD.match(l)
+        if m:
+            d, f, ty, base, sop, sk = m.groups()
+            off = int(sk or 0) * (-1 if sop == '-' else 1)
+            if (dnm and d != dnm) or (snm and base != snm):
+                break
+            dnm, snm = d, base
+            pairs.append((int(f), off, WIDTH[ty]))
+            j += 1
+            continue
+        m = STM.match(l)
+        if m and m.group(3) in held:
+            d, f, v = m.groups()
+            if dnm and d != dnm:
+                break
+            dnm = d
+            off, w = held[v]
+            pairs.append((int(f), off, w))
+            j += 1
+            continue
+        break
+    if len(pairs) < 4 or not dnm or not snm:
+        return None
+    pairs.sort()
+    deltas = {d - s for d, s, _ in pairs}
+    if len(deltas) != 1:
+        return None
+    at = pairs[0][0]
+    for d, _, w in pairs:
+        if d != at:
+            return None
+        at = d + w
+    return (i, j, re.match(r'^\s*', lines[i]).group(0), dnm, pairs[0][0],
+            snm, pairs[0][1], at - pairs[0][0])
+
+
+def scheduled(lines):
+    out, i = [], 0
+    while i < len(lines):
+        r = sched_at(lines, i)
+        if r:
+            out.append(r)
+            i = r[1]
+        else:
+            i += 1
+    return out
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else 'subs1.hpp'
     lines = open(path).read().split('\n')
@@ -121,23 +216,34 @@ def main():
             i = r[1]
         else:
             i += 1
-    if not runs:
+    sched = scheduled(lines)
+    if not runs and not sched:
         print('no unrolled copies')
         return 0
     if '--list' in sys.argv:
         for i, j, ind, d, dk, s, sk, n, mem in runs:
             print('%s:%d: %d stores, %d bytes, %s <- %s'
                   % (path, i + 1, j - i, n, expr(d, dk), expr(s, sk, mem)))
-        print('%d runs, %d lines -> %d calls'
-              % (len(runs), sum(j - i for i, j, *_ in runs), len(runs)))
+        for i, j, ind, d, dk, s, sk, n in sched:
+            print('%s:%d: scheduled, %d bytes, %s <- %s'
+                  % (path, i + 1, n, expr(d, dk, dk != 0), expr(s, sk)))
+        print('%d runs and %d scheduled, %d lines -> %d calls'
+              % (len(runs), len(sched),
+                 sum(j - i for i, j, *_ in runs) + sum(j - i for i, j, *_ in sched),
+                 len(runs) + len(sched)))
         return 0
 
+    for i, j, ind, d, dk, s, sk, n in reversed(sched):
+        lines[i:j] = ['%sbmf_copy((void *)(%s), (const void *)((uintptr_t)%s), %d);'
+                      % (ind, expr(d, dk, dk != 0), expr(s, sk), n)]
     for i, j, ind, d, dk, s, sk, n, mem in reversed(runs):
         lines[i:j] = ['%sbmf_copy((void *)(%s), (const void *)(%s), %d);'
                       % (ind, expr(d, dk), expr(s, sk, mem), n)]
     open(path, 'w').write('\n'.join(lines))
-    print('%d runs folded, %d lines -> %d calls'
-          % (len(runs), sum(j - i for i, j, *_ in runs), len(runs)))
+    print('%d runs and %d scheduled folded, %d lines -> %d calls'
+          % (len(runs), len(sched),
+             sum(j - i for i, j, *_ in runs) + sum(j - i for i, j, *_ in sched),
+             len(runs) + len(sched)))
     return 0
 
 
