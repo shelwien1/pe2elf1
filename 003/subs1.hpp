@@ -4647,57 +4647,7 @@ static_assert(sizeof(void *) != 4
               "Obj52: the layout moved");
 
 
-// Obj53 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj53 {
-  uint8_t _pad0[72];
-  uint32_t f72;
-  uint32_t f76;
-  uint32_t f80;
-  uint32_t f84;
-  uint16_t f88;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj53, f88) == 88,
-              "Obj53: the layout moved");
 
-
-// Obj54 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj54 {
-  uint32_t f0;
-  uint32_t f4;
-  uint32_t f8;
-  uint32_t f12;
-  uint16_t f16;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj54, f16) == 16,
-              "Obj54: the layout moved");
-
-
-// Obj55 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj55 {
-  uint8_t _pad0[36];
-  uint32_t f36;
-  uint32_t f40;
-  uint32_t f44;
-  uint32_t f48;
-  uint16_t f52;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj55, f52) == 52,
-              "Obj55: the layout moved");
 
 
 
@@ -19207,14 +19157,14 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
   uint32_t &v96 = *(uint32_t *)((char *)&__frame.v95);
   uint8_t * &v97 = __frame.v97;
   ;
-  Obj54 *v11;
-  Obj55 *v25;
-  Obj53 *v32;
-  Obj54 *v54;
-  Obj55 *v62;
-  Obj53 *v69;
-  Obj55 *v80;
-  Obj53 *v84;
+  char *v11;
+  char *v25;
+  char *v32;
+  char *v54;
+  char *v62;
+  char *v69;
+  char *v80;
+  char *v84;
   Obj130 *v88;
   uintptr_t v21, v28, v36, v38, v39, v40, v41, v42, v43, v44, v48, v58, v66, v76, v78, v82, v86,
             v90, v93;
@@ -19224,7 +19174,7 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
   __m128i *v53;
   bool v17;
   int16_t v14, v24;
-  Obj54 *v12;
+  char *v12;
   int32_t i_1, v13, v18, v19, v20, v22, v23, v26, v27, v29, v30, v31, v33, v34, v35, v37, v49,
           *v50, v51, v52, v55, v56, v57, v59, v60, v61, v63, v64, v65, v67, v68, v70, v71, v72,
           v73, v74, v75, v77, v79, v81, v83, v85, v87, v89, v92, v94;
@@ -19233,8 +19183,8 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
   uint32_t j;
   __rc_begin_decode(ArgList);
   i_1 = i;
-  v11 = (Obj54 *)(lpAddress->f278736);
-  v12 = (Obj54 *)(v11);
+  v11 = (char *)(lpAddress->f278736);
+  v12 = (char *)(v11);
   if ( i > 0 )
   {
     v95 = 0;
@@ -19286,13 +19236,13 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
       *(uint8_t *)(lpAddress->f278736 + 17) = 2;
       *(uint8_t *)(lpAddress->f278736 + 16) = (*(int16_t *)(lpAddress->f278736 + 4) <= 0)
                                                        + (*(int16_t *)(lpAddress->f278736 + 4) < 0);
-      v11 = (Obj54 *)(lpAddress->f278736 + 18);
+      v11 = (char *)(lpAddress->f278736 + 18);
       v17 = v95 + 1 < i;
       lpAddress->f278736 = v11;
       ++v95;
       if ( !v17 )
         break;
-      v12 = (Obj54 *)(lpAddress->f278736);
+      v12 = (char *)(lpAddress->f278736);
     }
     i_1 = i;
   }
@@ -19306,8 +19256,8 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
   *(uint32_t *)(v21 + 26) = v22;
   *(uint32_t *)(v21 + 30) = v23;
   *(uint16_t *)(v21 + 34) = v24;
-  v25 = (Obj55 *)(lpAddress->f278736);
-  bmf_copy((void *)(&v25->f36), (const void *)((uintptr_t)v25 - 18), 18);
+  v25 = (char *)(lpAddress->f278736);
+  bmf_copy((void *)((char *)v25 + 36), (const void *)((uintptr_t)v25 - 18), 18);
   v28 = lpAddress->f278736;
   v29 = *(uint32_t *)(v28 - 14);
   v30 = *(uint32_t *)(v28 - 10);
@@ -19318,8 +19268,8 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
   *(uint32_t *)(v28 + 62) = v30;
   *(uint32_t *)(v28 + 66) = v31;
   *(uint16_t *)(v28 + 70) = v29;
-  v32 = (Obj53 *)(lpAddress->f278736);
-  bmf_copy((void *)(&v32->f72), (const void *)((uintptr_t)v32 - 18), 18);
+  v32 = (char *)(lpAddress->f278736);
+  bmf_copy((void *)((char *)v32 + 72), (const void *)((uintptr_t)v32 - 18), 18);
   v36 = lpAddress->f278736;
   v37 = -18 * i_1;
   *(uint32_t *)(v36 + v37 - 18) = *(uint32_t *)(v36 - 18 * i_1);
@@ -19408,7 +19358,7 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
       v53[4] = v47;
       v53[5] = v47;
       v53[6] = v47;
-      v54 = (Obj54 *)(lpAddress->f278736);
+      v54 = (char *)(lpAddress->f278736);
       bmf_copy((void *)(v54), (const void *)((uintptr_t)v54 - 18), 18);
       v58 = lpAddress->f278736;
       v59 = *(uint32_t *)(v58 - 32);
@@ -19420,8 +19370,8 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
       *(uint32_t *)(v58 + 26) = v60;
       *(uint32_t *)(v58 + 30) = v61;
       *(uint16_t *)(v58 + 34) = v51;
-      v62 = (Obj55 *)(lpAddress->f278736);
-      bmf_copy((void *)(&v62->f36), (const void *)((uintptr_t)v62 - 54), 18);
+      v62 = (char *)(lpAddress->f278736);
+      bmf_copy((void *)((char *)v62 + 36), (const void *)((uintptr_t)v62 - 54), 18);
       v66 = lpAddress->f278736;
       v67 = *(uint32_t *)(v66 - 64);
       v68 = *(uint32_t *)(v66 - 60);
@@ -19431,8 +19381,8 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
       *(uint32_t *)(v66 + 62) = v67;
       *(uint32_t *)(v66 + 66) = v68;
       *(uint16_t *)(v66 + 70) = v51;
-      v69 = (Obj53 *)(lpAddress->f278736);
-      bmf_copy((void *)(&v69->f72), (const void *)((uintptr_t)v69 - 90), 18);
+      v69 = (char *)(lpAddress->f278736);
+      bmf_copy((void *)((char *)v69 + 72), (const void *)((uintptr_t)v69 - 90), 18);
       v72 = lpAddress->f278768;
       v73 = lpAddress->f278772;
       v74 = lpAddress->f278764;
@@ -19455,20 +19405,20 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
       v78 = lpAddress->f278740;
       bmf_copy((void *)(v77 - 36), (const void *)(v78 + 18), 18);
       v79 = lpAddress->f278736;
-      v80 = (Obj55 *)(lpAddress->f278740);
-      bmf_copy((void *)(v79 - 54), (const void *)(&v80->f36), 18);
+      v80 = (char *)(lpAddress->f278740);
+      bmf_copy((void *)(v79 - 54), (const void *)((char *)v80 + 36), 18);
       v81 = lpAddress->f278736;
       v82 = lpAddress->f278740;
       bmf_copy((void *)(v81 - 72), (const void *)(v82 + 54), 18);
       v83 = lpAddress->f278736;
-      v84 = (Obj53 *)(lpAddress->f278740);
-      bmf_copy((void *)(v83 - 90), (const void *)(&v84->f72), 18);
+      v84 = (char *)(lpAddress->f278740);
+      bmf_copy((void *)(v83 - 90), (const void *)((char *)v84 + 72), 18);
       v85 = lpAddress->f278736;
       v86 = lpAddress->f278740;
       bmf_copy((void *)(v85 - 108), (const void *)(v86 + 90), 18);
       v87 = lpAddress->f278736;
       v88 = (Obj130 *)(lpAddress->f278740);
-      bmf_copy((void *)(v87 - 126), (const void *)(&v88->f108), 18);
+      bmf_copy((void *)(v87 - 126), (const void *)((char *)v88 + 108), 18);
       v89 = lpAddress->f278736;
       v90 = lpAddress->f278740;
       bmf_copy((void *)(v89 - 144), (const void *)(v90 + 126), 18);
@@ -19591,14 +19541,14 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   Obj8 *v56;
   Obj19 *v14;
   Obj31 *v25;
-  Obj54 *v26;
-  Obj55 *v34;
-  Obj53 *v41;
-  Obj54 *v63;
-  Obj55 *v71;
-  Obj53 *v78;
-  Obj55 *v89;
-  Obj53 *v93;
+  char *v26;
+  char *v34;
+  char *v41;
+  char *v63;
+  char *v71;
+  char *v78;
+  char *v89;
+  char *v93;
   uintptr_t v30, v38, v45, v46, v57, v67, v75, v85, v87, v91, v95, v97, v99;
   Obj11 *v120;
   Obj11 *v129;
@@ -19686,7 +19636,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
             if ( v165 == 1 )
             {
               v25 = (Obj31 *)((int32_t)*(v18 - 1));
-              v26 = (Obj54 *)(v25->f278736);
+              v26 = (char *)(v25->f278736);
               bmf_copy((void *)(v26), (const void *)((uintptr_t)v26 - 18), 18);
               v30 = v25->f278736;
               v31 = *(uint32_t *)(v30 - 14);
@@ -19698,8 +19648,8 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
               *(uint32_t *)(v30 + 26) = v32;
               *(uint32_t *)(v30 + 30) = v33;
               *(uint16_t *)(v30 + 34) = v31;
-              v34 = (Obj55 *)(v25->f278736);
-              bmf_copy((void *)(&v34->f36), (const void *)((uintptr_t)v34 - 18), 18);
+              v34 = (char *)(v25->f278736);
+              bmf_copy((void *)((char *)v34 + 36), (const void *)((uintptr_t)v34 - 18), 18);
               v38 = v25->f278736;
               v39 = *(uint32_t *)(v38 - 10);
               v40 = *(uint32_t *)(v38 - 6);
@@ -19709,8 +19659,8 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
               *(uint32_t *)(v38 + 62) = v39;
               *(uint32_t *)(v38 + 66) = v40;
               *(uint16_t *)(v38 + 70) = v34;
-              v41 = (Obj53 *)(v25->f278736);
-              bmf_copy((void *)(&v41->f72), (const void *)((uintptr_t)v41 - 18), 18);
+              v41 = (char *)(v25->f278736);
+              bmf_copy((void *)((char *)v41 + 72), (const void *)((uintptr_t)v41 - 18), 18);
               v45 = v25->f278736;
               v46 = v160;
               Size_1 = Size;
@@ -19832,7 +19782,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v62[4] = 0;
           v62[5] = 0;
           v62[6] = 0;
-          v63 = (Obj54 *)(v56->f278736);
+          v63 = (char *)(v56->f278736);
           bmf_copy((void *)(v63), (const void *)((uintptr_t)v63 - 18), 18);
           v67 = v56->f278736;
           v68 = *(uint32_t *)(v67 - 32);
@@ -19844,8 +19794,8 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           *(uint32_t *)(v67 + 26) = v69;
           *(uint32_t *)(v67 + 30) = v70;
           *(uint16_t *)(v67 + 34) = v60;
-          v71 = (Obj55 *)(v56->f278736);
-          bmf_copy((void *)(&v71->f36), (const void *)((uintptr_t)v71 - 54), 18);
+          v71 = (char *)(v56->f278736);
+          bmf_copy((void *)((char *)v71 + 36), (const void *)((uintptr_t)v71 - 54), 18);
           v75 = v56->f278736;
           v76 = *(uint32_t *)(v75 - 64);
           v77 = *(uint32_t *)(v75 - 60);
@@ -19855,8 +19805,8 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           *(uint32_t *)(v75 + 62) = v76;
           *(uint32_t *)(v75 + 66) = v77;
           *(uint16_t *)(v75 + 70) = v60;
-          v78 = (Obj53 *)(v56->f278736);
-          bmf_copy((void *)(&v78->f72), (const void *)((uintptr_t)v78 - 90), 18);
+          v78 = (char *)(v56->f278736);
+          bmf_copy((void *)((char *)v78 + 72), (const void *)((uintptr_t)v78 - 90), 18);
           v81 = v56->f278768;
           v82 = v56->f278772;
           v83 = v56->f278764;
@@ -19879,14 +19829,14 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v87 = v56->f278740;
           bmf_copy((void *)(v86 - 36), (const void *)(v87 + 18), 18);
           v88 = v56->f278736;
-          v89 = (Obj55 *)(v56->f278740);
-          bmf_copy((void *)(v88 - 54), (const void *)(&v89->f36), 18);
+          v89 = (char *)(v56->f278740);
+          bmf_copy((void *)(v88 - 54), (const void *)((char *)v89 + 36), 18);
           v90 = v56->f278736;
           v91 = v56->f278740;
           bmf_copy((void *)(v90 - 72), (const void *)(v91 + 54), 18);
           v92 = v56->f278736;
-          v93 = (Obj53 *)(v56->f278740);
-          bmf_copy((void *)(v92 - 90), (const void *)(&v93->f72), 18);
+          v93 = (char *)(v56->f278740);
+          bmf_copy((void *)(v92 - 90), (const void *)((char *)v93 + 72), 18);
           v94 = v56->f278736;
           v95 = v56->f278740;
           bmf_copy((void *)(v94 - 108), (const void *)(v95 + 90), 18);
@@ -20124,12 +20074,12 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
   uint8_t * &v109 = __frame.v109;
   uint8_t &v110 = __frame.v110;
   ;
-  Obj53 *v34;
-  Obj54 *v57;
-  Obj55 *v65;
-  Obj53 *v72;
-  Obj54 *v11;
-  Obj55 *v27;
+  char *v34;
+  char *v57;
+  char *v65;
+  char *v72;
+  char *v11;
+  char *v27;
   char *v23, *v30, *v38, *v40, *v41, *v42, *v43, *v44, *v45, *v46, *v51, *v61, *v69, *v79, *v81,
        *v83, *v85, *v87, *v89, *v91, *v93;
   __m128 a2 = a2__ref;
@@ -20148,7 +20098,7 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
   uint8_t *v8;
   v8 = a4;
   __rc_begin_encode();
-  v11 = (Obj54 *)(lpAddress->f278736.m128_i32[0]);
+  v11 = (char *)(lpAddress->f278736.m128_i32[0]);
   if ( i > 0 )
   {
     v103 = a4;
@@ -20205,7 +20155,7 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
       *(uint8_t *)(lpAddress->f278736.m128_i32[0] + 17) = 2;
       *(uint8_t *)(lpAddress->f278736.m128_i32[0] + 16) = (*(int16_t *)(lpAddress->f278736.m128_i32[0] + 4) <= 0)
                                                     + (*(int16_t *)(lpAddress->f278736.m128_i32[0] + 4) < 0);
-      v11 = (Obj54 *)(lpAddress->f278736.m128_i32[0] + 18);
+      v11 = (char *)(lpAddress->f278736.m128_i32[0] + 18);
       lpAddress->f278736.m128_i32[0] = v11;
     }
     v8 = v103;
@@ -20220,8 +20170,8 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
   *(uint32_t *)(v23 + 26) = v24;
   *(uint32_t *)(v23 + 30) = v25;
   *(uint16_t *)(v23 + 34) = v26;
-  v27 = (Obj55 *)(lpAddress->f278736.m128_i32[0]);
-  bmf_copy((void *)(&v27->f36), (const void *)((uintptr_t)v27 - 18), 18);
+  v27 = (char *)(lpAddress->f278736.m128_i32[0]);
+  bmf_copy((void *)((char *)v27 + 36), (const void *)((uintptr_t)v27 - 18), 18);
   v30 = lpAddress->f278736.m128_i32[0];
   v31 = *(uint32_t *)(v30 - 14);
   v32 = *(uint32_t *)(v30 - 10);
@@ -20232,8 +20182,8 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
   *(uint32_t *)(v30 + 62) = v32;
   *(uint32_t *)(v30 + 66) = v33;
   *(uint16_t *)(v30 + 70) = v31;
-  v34 = (Obj53 *)(lpAddress->f278736.m128_i32[0]);
-  bmf_copy((void *)(&v34->f72), (const void *)((uintptr_t)v34 - 18), 18);
+  v34 = (char *)(lpAddress->f278736.m128_i32[0]);
+  bmf_copy((void *)((char *)v34 + 72), (const void *)((uintptr_t)v34 - 18), 18);
   v38 = lpAddress->f278736.m128_i32[0];
   v39 = -18 * i;
   *(uint32_t *)(v38 + v39 - 18) = *(uint32_t *)(v38 - 18 * i);
@@ -20325,7 +20275,7 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
       v56[4] = v50;
       v56[5] = v50;
       v56[6] = v50;
-      v57 = (Obj54 *)(lpAddress->f278736.m128_i32[0]);
+      v57 = (char *)(lpAddress->f278736.m128_i32[0]);
       bmf_copy((void *)(v57), (const void *)((uintptr_t)v57 - 18), 18);
       v61 = lpAddress->f278736.m128_i32[0];
       v62 = *(uint32_t *)(v61 - 32);
@@ -20337,8 +20287,8 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
       *(uint32_t *)(v61 + 26) = v63;
       *(uint32_t *)(v61 + 30) = v64;
       *(uint16_t *)(v61 + 34) = (uint16_t)v53;
-      v65 = (Obj55 *)(lpAddress->f278736.m128_i32[0]);
-      bmf_copy((void *)(&v65->f36), (const void *)((uintptr_t)v65 - 54), 18);
+      v65 = (char *)(lpAddress->f278736.m128_i32[0]);
+      bmf_copy((void *)((char *)v65 + 36), (const void *)((uintptr_t)v65 - 54), 18);
       v69 = lpAddress->f278736.m128_i32[0];
       v70 = *(uint32_t *)(v69 - 64);
       v71 = *(uint32_t *)(v69 - 60);
@@ -20348,8 +20298,8 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
       *(uint32_t *)(v69 + 62) = v70;
       *(uint32_t *)(v69 + 66) = v71;
       *(uint16_t *)(v69 + 70) = (uint16_t)v53;
-      v72 = (Obj53 *)(lpAddress->f278736.m128_i32[0]);
-      bmf_copy((void *)(&v72->f72), (const void *)((uintptr_t)v72 - 90), 18);
+      v72 = (char *)(lpAddress->f278736.m128_i32[0]);
+      bmf_copy((void *)((char *)v72 + 72), (const void *)((uintptr_t)v72 - 90), 18);
       v75 = lpAddress->f278768.m128_i32[0];
       v76 = lpAddress->f278768.m128_i32[1];
       v77 = lpAddress->f278752.m128_i32[3];
@@ -20547,12 +20497,12 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   uintptr_t v44;
   Obj19 *v13;
   Obj31 *v24;
-  Obj54 *v25;
-  Obj55 *v33;
-  Obj53 *v40;
-  Obj54 *v62;
-  Obj55 *v70;
-  Obj53 *v77;
+  char *v25;
+  char *v33;
+  char *v40;
+  char *v62;
+  char *v70;
+  char *v77;
   char *v29, *v37, *v45, *v56, *v66, *v74, *v84, *v86, *v88, *v90, *v92, *v94, *v96, *v98;
   Obj11 *v125;
   Obj11 *v133;
@@ -20640,7 +20590,7 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             if ( v170 == 1 )
             {
               v24 = (Obj31 *)((int32_t)*(v17 - 1));
-              v25 = (Obj54 *)(v24->f278736);
+              v25 = (char *)(v24->f278736);
               bmf_copy((void *)(v25), (const void *)((uintptr_t)v25 - 18), 18);
               v29 = v24->f278736;
               v30 = *(uint32_t *)(v29 - 14);
@@ -20652,8 +20602,8 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
               *(uint32_t *)(v29 + 26) = v31;
               *(uint32_t *)(v29 + 30) = v32;
               *(uint16_t *)(v29 + 34) = v30;
-              v33 = (Obj55 *)(v24->f278736);
-              bmf_copy((void *)(&v33->f36), (const void *)((uintptr_t)v33 - 18), 18);
+              v33 = (char *)(v24->f278736);
+              bmf_copy((void *)((char *)v33 + 36), (const void *)((uintptr_t)v33 - 18), 18);
               v37 = v24->f278736;
               v38 = *(uint32_t *)(v37 - 10);
               v39 = *(uint32_t *)(v37 - 6);
@@ -20663,8 +20613,8 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
               *(uint32_t *)(v37 + 62) = v38;
               *(uint32_t *)(v37 + 66) = v39;
               *(uint16_t *)(v37 + 70) = v33;
-              v40 = (Obj53 *)(v24->f278736);
-              bmf_copy((void *)(&v40->f72), (const void *)((uintptr_t)v40 - 18), 18);
+              v40 = (char *)(v24->f278736);
+              bmf_copy((void *)((char *)v40 + 72), (const void *)((uintptr_t)v40 - 18), 18);
               v44 = v24->f278736;
               v45 = v164;
               Size_1 = Size;
@@ -20786,7 +20736,7 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           v61[4] = 0;
           v61[5] = 0;
           v61[6] = 0;
-          v62 = (Obj54 *)(v55->f278736);
+          v62 = (char *)(v55->f278736);
           bmf_copy((void *)(v62), (const void *)((uintptr_t)v62 - 18), 18);
           v66 = v55->f278736;
           v67 = *(uint32_t *)(v66 - 32);
@@ -20798,8 +20748,8 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           *(uint32_t *)(v66 + 26) = v68;
           *(uint32_t *)(v66 + 30) = v69;
           *(uint16_t *)(v66 + 34) = v59;
-          v70 = (Obj55 *)(v55->f278736);
-          bmf_copy((void *)(&v70->f36), (const void *)((uintptr_t)v70 - 54), 18);
+          v70 = (char *)(v55->f278736);
+          bmf_copy((void *)((char *)v70 + 36), (const void *)((uintptr_t)v70 - 54), 18);
           v74 = v55->f278736;
           v75 = *(uint32_t *)(v74 - 64);
           v76 = *(uint32_t *)(v74 - 60);
@@ -20809,8 +20759,8 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           *(uint32_t *)(v74 + 62) = v75;
           *(uint32_t *)(v74 + 66) = v76;
           *(uint16_t *)(v74 + 70) = v59;
-          v77 = (Obj53 *)(v55->f278736);
-          bmf_copy((void *)(&v77->f72), (const void *)((uintptr_t)v77 - 90), 18);
+          v77 = (char *)(v55->f278736);
+          bmf_copy((void *)((char *)v77 + 72), (const void *)((uintptr_t)v77 - 90), 18);
           v80 = v55->f278768;
           v81 = v55->f278772;
           v82 = v55->f278764;
