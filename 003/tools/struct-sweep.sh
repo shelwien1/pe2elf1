@@ -16,6 +16,17 @@
 # off.
 set -e
 cd "$(dirname "$0")/.."
+
+# The inner loop is a filter, not the gate.  It runs the small images -- every
+# depth, both alternate model families, both RLE forms and the raw fallback --
+# and skips the three large photographs, which take three quarters of the time
+# and exercise nothing the others do not.  4.8 seconds a round instead of 17.7.
+#
+# Run the full `./test.sh ./bmf` before committing.  That is the authority; this
+# is what makes it affordable to ask 30 times in a row.
+FILTER=${BMF_SWEEP_IMAGES:-"DLRAW.bmp altp1.bmp med32.bmp noise24.bmp rle4.bmp \
+rle8.bmp t1.bmp t24.bmp t32.bmp t8g.bmp t8p.bmp"}
+
 rounds=${1:-1}
 i=0
 while [ "$i" -lt "$rounds" ]; do
@@ -33,8 +44,8 @@ while [ "$i" -lt "$rounds" ]; do
     break
   fi
   if ./build.sh >/tmp/struct-build.log 2>&1 &&
-     BMF_TIMEOUT=${BMF_TIMEOUT:-60} ./test.sh ./bmf 2>/tmp/struct-test.log |
-       tail -1 | grep -q PASS; then
+     BMF_TIMEOUT=${BMF_TIMEOUT:-25} BMF_IMAGES="$FILTER" \
+       ./test.sh ./bmf 2>/tmp/struct-test.log | tail -1 | grep -q PASS; then
     echo "round $i: PASS"
   else
     echo "round $i: FAIL -- reverting and skipping"
