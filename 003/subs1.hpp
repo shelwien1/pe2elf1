@@ -9736,6 +9736,47 @@ LABEL_20:
   return (int32_t *)result;
 }
 
+// The two headers a .bmp file begins with: a 14-byte BITMAPFILEHEADER and the
+// 40-byte BITMAPINFOHEADER after it.
+//
+// Unlike the ObjN structs this is not recovered from the offsets the code
+// happens to touch -- it is the documented layout of the format, and the code
+// agrees with it at every offset it uses.  `biSize = 40` at +14 is the one that
+// settles it: that field exists to say which info header this is, and 40 is
+// this one.  read_bmp checks the same two numbers on the way in, `'BM'` at +0
+// and 40 at +14.
+//
+// Packed, because `bfSize` sits at +2 and every later field is odd of its own
+// alignment.  The static_asserts are the same guard the recovered structs
+// carry, and here they check the port against a published layout rather than
+// against itself.
+#pragma pack(push, 1)
+struct BmpHeader {
+  uint16_t bfType;            // +0   'BM'
+  uint32_t bfSize;            // +2   the whole file, header included
+  uint16_t bfReserved1;       // +6
+  uint16_t bfReserved2;       // +8
+  uint32_t bfOffBits;         // +10  where the pixels start
+  uint32_t biSize;            // +14  40
+  int32_t  biWidth;           // +18
+  int32_t  biHeight;          // +22  negative means top-down (§6)
+  uint16_t biPlanes;          // +26  1
+  uint16_t biBitCount;        // +28
+  uint32_t biCompression;     // +30  0 none, 1 RLE8, 2 RLE4
+  uint32_t biSizeImage;       // +34
+  int32_t  biXPelsPerMeter;   // +38
+  int32_t  biYPelsPerMeter;   // +42
+  uint32_t biClrUsed;         // +46
+  uint32_t biClrImportant;    // +50
+};                            // 54 bytes, then the palette
+#pragma pack(pop)
+static_assert(sizeof(BmpHeader) == 54, "BmpHeader is not the BMP header");
+static_assert(__builtin_offsetof(BmpHeader, bfOffBits) == 10
+              && __builtin_offsetof(BmpHeader, biSize) == 14
+              && __builtin_offsetof(BmpHeader, biBitCount) == 28
+              && __builtin_offsetof(BmpHeader, biClrImportant) == 50,
+              "BmpHeader fields are not where the format puts them");
+
 int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
 {
   struct alignas(16) {   // 96 bytes, the frame Hex-Rays could not name
@@ -9802,24 +9843,29 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
                                  + (*(uint32_t *)(p_i + 12) >> 5) + 2048);
   p_i_1 = p_i;
   Bufferc_1 = Bufferc_3;
+  // Bufferc, Bufferc_1, Bufferc_2 and Bufferc_3 are one allocation: the chain
+  // is Bufferc_1 = Bufferc_3, Bufferc = Bufferc_1, Bufferc_2 = Bufferc, and
+  // none of them is ever stepped.  So one view of the header serves all four,
+  // and the pixel writes through Bufferc_1[k + 54] keep the spelling they had.
+  BmpHeader *bmp = (BmpHeader *)Bufferc_3;
   i = *(uint16_t *)p_i;
-  *(uint32_t *)(Bufferc_3 + 14) = 40;
-  *(uint16_t *)Bufferc_3 = 0x4D42 /* 'BM' */;
+  bmp->biSize = 40;
+  bmp->bfType = 0x4D42 /* 'BM' */;
   Buffer_1 = *(uint16_t *)(p_i + 2);
   Buffer_2 = Buffer_1;
-  *((uint16_t *)Bufferc_3 + 4) = 0;
-  *((uint16_t *)Bufferc_3 + 3) = 0;
-  *(uint32_t *)(Bufferc_3 + 18) = i;
-  *(uint32_t *)(Bufferc_3 + 22) = Buffer_1;
+  bmp->bfReserved2 = 0;
+  bmp->bfReserved1 = 0;
+  bmp->biWidth = i;
+  bmp->biHeight = Buffer_1;
   LOBYTE(Buffer_1) = *(uint8_t *)(p_i + 10);
   Buffer = Buffer_1;
-  *((uint16_t *)Bufferc_3 + 13) = 1;
+  bmp->biPlanes = 1;
   n8 = Buffer_1 & 0x3F;
-  *((uint16_t *)Bufferc_3 + 14) = n8;
-  *(uint32_t *)(Bufferc_3 + 50) = 0;
-  *(uint32_t *)(Bufferc_3 + 46) = 0;
-  *(uint32_t *)(Bufferc_3 + 42) = 0;
-  *(uint32_t *)(Bufferc_3 + 38) = 0;
+  bmp->biBitCount = n8;
+  bmp->biClrImportant = 0;
+  bmp->biClrUsed = 0;
+  bmp->biYPelsPerMeter = 0;
+  bmp->biXPelsPerMeter = 0;
   buf = Bufferc_3 + 54;
   if ( n8 <= 8 )
   {
@@ -9936,7 +9982,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   {
     buf_1 = buf;
     v31 = (char *)p_i_2 + Bufferb_2 - Size_2 + 16;
-    *(uint32_t *)(Bufferc + 10) = v65;
+    bmp->bfOffBits = v65;
     if ( !v28 )
       break;
     n4 = p_i_2[5] & 0x3F;
@@ -9950,7 +9996,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
     n2 = 2;
     if ( !v33 )
       n2 = 1;
-    *(uint32_t *)(Bufferc + 30) = n2;
+    bmp->biCompression = n2;
     v75 = n2 - 1;
     n2_2 = (0x100u >> ((n2 - 1) & 31)) - 1;
     if ( Buffer_2 > 0 )
@@ -10176,7 +10222,7 @@ LABEL_72:
   }
   Stream_2 = Stream_v;
   Bufferc_2 = Bufferc;
-  *(uint32_t *)(Bufferc + 30) = 0;
+  bmp->biCompression = 0;
   if ( Buffer_2 <= 0 )
   {
     v49 = 0;
@@ -10205,10 +10251,10 @@ LABEL_72:
     v49 = buf_1 - buf;
   }
 LABEL_76:
-  *(uint32_t *)(Bufferc_2 + 34) = v49;
+  bmp->biSizeImage = v49;
   ElementCount = buf_1 - Bufferc_2;
-  *(uint32_t *)(Bufferc_2 + 2) = ElementCount;
-  if ( fwrite(Bufferc_2, 1u, ElementCount, Stream_2) != *(uint32_t *)(Bufferc_2 + 2) )
+  bmp->bfSize = ElementCount;
+  if ( fwrite(Bufferc_2, 1u, ElementCount, Stream_2) != bmp->bfSize )
     return 0;
   free(Bufferc_2);
   fclose(Stream_2);
@@ -14301,16 +14347,16 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
       uint8_t _pad0[4];
       char *Src;
       uint8_t _pad1[4];
-      uint8_t Buffer_2[4];
-      uint32_t Buffer_1[2];
-      int32_t v59;
-      int16_t v60;
-      uint16_t n5;
-      int32_t n2;
+      uint8_t bmp_bgra[4];
+      uint32_t bmp_info_hdr[2];
+      int32_t bmp_height;
+      int16_t bmp_planes;
+      uint16_t bmp_bits;
+      int32_t bmp_compression;
       uint8_t _pad2[12];
-      int32_t Size_3;
+      int32_t bmp_clr_used;
       uint8_t _pad3[4];
-      int16_t Buffer[5];
+      int16_t bmp_file_hdr[5];
       uint8_t slot86[4];
       uint8_t _pad4[38];
   } __frame;
@@ -14327,15 +14373,15 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
   int32_t &v54 = *(int32_t *)((char *)__frame.slot12);
   void *&Buffer_3 = __frame.Buffer_3;
   char *&Src = __frame.Src;
-  uint8_t (&Buffer_2)[4] = __frame.Buffer_2;
-  uint32_t (&Buffer_1)[2] = __frame.Buffer_1;
-  int32_t &v59 = __frame.v59;
-  int16_t &v60 = __frame.v60;
-  uint16_t &n5 = __frame.n5;
-  int32_t &n2 = __frame.n2;
-  int32_t &Size_3 = __frame.Size_3;
-  int16_t (&Buffer)[5] = __frame.Buffer;
-  int32_t &Offset = *(int32_t *)((char *)__frame.slot86);
+  uint8_t (&bmp_bgra)[4] = __frame.bmp_bgra;
+  uint32_t (&bmp_info_hdr)[2] = __frame.bmp_info_hdr;
+  int32_t &bmp_height = __frame.bmp_height;
+  int16_t &bmp_planes = __frame.bmp_planes;
+  uint16_t &bmp_bits = __frame.bmp_bits;
+  int32_t &bmp_compression = __frame.bmp_compression;
+  int32_t &bmp_clr_used = __frame.bmp_clr_used;
+  int16_t (&bmp_file_hdr)[5] = __frame.bmp_file_hdr;
+  int32_t &bmp_off_bits = *(int32_t *)((char *)__frame.slot86);
   ;
   uintptr_t Src_1;   // were int32_t: addresses, masked and tagged
   char *v7, *v8, *v9;   // were int32_t: these hold addresses
@@ -14346,55 +14392,76 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
   Obj98 *v3;
   int32_t Size_1, i, j_3, Sizea_1, v22, n2_1, v26, v31, Offset_2, v35, v38, v40, v41;
   uint32_t Size_2, j_1, j_2, n2_2, v29, ElementCount, ElementCount_1, v44;
+  // These two freads land in the frame, and each writes across several of the
+  // slots Hex-Rays split it into -- which is why the fields do not look like
+  // fields.  `bmp_info_hdr` is declared `uint32_t[2]` and the read is 40 bytes:
+  //
+  //   frame +36  bmp_info_hdr[0]  biSize          checked == 40 below
+  //         +40  bmp_info_hdr[1]  biWidth
+  //         +44  bmp_height       biHeight
+  //         +48  bmp_planes       biPlanes        checked == 1 below
+  //         +50  bmp_bits         biBitCount
+  //         +52  bmp_compression  biCompression   0 none, 1 RLE8, 2 RLE4
+  //         +56  _pad2[12]        biSizeImage and the two pixels-per-metre
+  //         +68  bmp_clr_used     biClrUsed
+  //         +72  _pad3[4]         biClrImportant
+  //
+  // and the 14-byte read covers `bmp_file_hdr[0..4]` and the slot after it,
+  // whose four bytes are `bfOffBits` -- `bmp_off_bits`, which the fseek below
+  // uses.  Every one of these names is confirmed by what the code does with it,
+  // not by the offset alone: bmp_compression is tested against 1 and 2,
+  // bmp_clr_used overrides `1 << bmp_bits` as the palette size, bmp_height goes
+  // to alloc_image as the height.  The struct that says the same thing in one
+  // piece is `BmpHeader`, above write_bmp, which builds this on the way out.
   Stream_v = fopen(FileName, "rb");
   if ( !Stream_v
-    || fread(Buffer, 0xEu, 1u, Stream_v) != 1
-    || Buffer[0] != 0x4D42 /* 'BM' */
-    || fread(Buffer_1, 0x28u, 1u, Stream_v) != 1
-    || Buffer_1[0] != 40
-    || v60 != 1 )
+    || fread(bmp_file_hdr, 0xEu, 1u, Stream_v) != 1
+    || bmp_file_hdr[0] != 0x4D42 /* 'BM' */
+    || fread(bmp_info_hdr, 0x28u, 1u, Stream_v) != 1
+    || bmp_info_hdr[0] != 40
+    || bmp_planes != 1 )
   {
     return nullptr;
   }
-  v3 = (Obj98 *)(__alloc_image(Buffer_1[1], v59, n5, n5 <= 8u, 1));
+  v3 = (Obj98 *)(__alloc_image(bmp_info_hdr[1], bmp_height, bmp_bits, bmp_bits <= 8u, 1));
   Size_2 = (*((uint16_t *)v3 + 2) + 3) & 0xFFFFFFFC;
-  if ( n5 <= 8u )
+  if ( bmp_bits <= 8u )
   {
-    Size_1 = 1 << (n5 & 31);
-    if ( Size_3 )
-      Size_1 = Size_3;
+    Size_1 = 1 << (bmp_bits & 31);
+    if ( bmp_clr_used )
+      Size_1 = bmp_clr_used;
     if ( Size_1 > 0 )
     {
       Size_4 = (*((uint16_t *)v3 + 2) + 3) & 0xFFFFFFFC;
       Size = Size_1;
       for ( i = 0; i < Size; ++i )
       {
-        fread(Buffer_2, 4u, 1u, Stream_v);
+        fread(bmp_bgra, 4u, 1u, Stream_v);
         if ( (*((uint8_t *)v3 + 10) & 0x80) != 0 )
           v7 = (int32_t)v3 + v3->f12 + 16;
         else
           v7 = 0;
-        *(uint8_t *)(v7 + 3 * i + 2) = Buffer_2[2];
+        *(uint8_t *)(v7 + 3 * i + 2) = bmp_bgra[2];
         if ( (*((uint8_t *)v3 + 10) & 0x80) != 0 )
           v8 = (int32_t)v3 + v3->f12 + 16;
         else
           v8 = 0;
-        *(uint8_t *)(v8 + 3 * i + 1) = Buffer_2[1];
+        *(uint8_t *)(v8 + 3 * i + 1) = bmp_bgra[1];
         if ( (*((uint8_t *)v3 + 10) & 0x80) != 0 )
           v9 = (int32_t)v3 + v3->f12 + 16;
         else
           v9 = 0;
-        *(uint8_t *)(v9 + 3 * i) = Buffer_2[0];
+        *(uint8_t *)(v9 + 3 * i) = bmp_bgra[0];
       }
       Size_2 = Size_4;
     }
   }
   Buffer_3 = bmf_new(Size_2);
   Src = (char *)v3 + v3->f12 - *((uint16_t *)v3 + 2) + 16;
-  fseek(Stream_v, Offset, 0);
-  if ( n2 )
+  fseek(Stream_v, bmp_off_bits, 0);
+  if ( bmp_compression )
   {
-    if ( n2 == 1 )
+    if ( bmp_compression == 1 )
     {
       memset((char *)v3 + 16,0,v3->f12);
       Src_1 = (int32_t)Src;
@@ -14468,7 +14535,7 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
         }
       }
     }
-    if ( n2 != 2 )
+    if ( bmp_compression != 2 )
       return nullptr;
     memset((char *)v3 + 16,0,v3->f12);
     v52 = (Obj98 *)(v3);
@@ -14597,10 +14664,10 @@ LABEL_44:
   }
   ElementCount = *((uint16_t *)v3 + 2);
   Offset_2 = Size_2 - ElementCount;
-  if ( v59 - 1 >= 0 )
+  if ( bmp_height - 1 >= 0 )
   {
     Offset_1 = Offset_2;
-    v35 = v59 - 1;
+    v35 = bmp_height - 1;
     v52 = (Obj98 *)(v3);
     Src_6 = Src;
     while ( 1 )

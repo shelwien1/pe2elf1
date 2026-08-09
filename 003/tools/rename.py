@@ -21,6 +21,13 @@ is what the collision check catches.
 
 Names in a --file are one `OLD NEW` pair per line; `#` starts a comment.
 
+`--in FUNC` scopes the rename to one function body, signature included.  Almost
+every `vNN` in this file is shared -- `v59` is a local in read_bmp and a
+different local in thirty other bodies -- so a whole-file rename of one is
+almost always wrong, and without this the only renameable locals were the
+accidentally unique ones.  Inside a body the check is the same one, asked of
+that body: the new name must not already mean something there.
+
 `--funcs` switches to renaming a Hex-Rays function token — `sub_402FE0` — which
 is not a whole word: it appears bare in `__sub_402FE0` and twice over in the
 forwarding shims, `__fwd_sub_402FE0_sub_403820`.  In that mode the token is
@@ -29,6 +36,42 @@ instead of keeping their addresses.
 """
 import re
 import sys
+
+sys.path.insert(0, __file__.rsplit('/', 1)[0])
+import structs                                                  # noqa: E402
+
+
+def body_span(lines, fn):
+    """The line range of one function, its signature included."""
+    for a, b, n, sig in structs.bodies(lines):
+        if n == fn and 'static inline' not in sig:
+            # bodies() starts at the brace; the parameters are above it
+            while a > 0 and '(' not in lines[a]:
+                a -= 1
+            return a, b
+    return None
+
+
+def rename_in(path, fn, pairs):
+    lines = open(path).read().split('\n')
+    span = body_span(lines, fn)
+    if not span:
+        sys.exit('%s: no such function' % fn)
+    a, b = span
+    text = '\n'.join(lines[a:b + 1])
+    for old, new in pairs:
+        if not re.search(r'\b%s\b' % re.escape(old), text):
+            sys.exit('%s: %s does not appear in it' % (fn, old))
+        if re.search(r'\b%s\b' % re.escape(new), text):
+            sys.exit('%s: %s already means something in it' % (fn, new))
+    total = 0
+    for old, new in pairs:
+        text, k = re.subn(r'\b%s\b' % re.escape(old), new, text)
+        print('%-22s -> %-22s %4d' % (old, new, k))
+        total += k
+    lines[a:b + 1] = text.split('\n')
+    open(path, 'w').write('\n'.join(lines))
+    print('%d occurrences in %s, %d names' % (total, fn.lstrip('_'), len(pairs)))
 
 
 def locals_named(text, name):
@@ -85,6 +128,14 @@ def main():
     path = sys.argv[1]
     pairs = []
     args = sys.argv[2:]
+    if args and args[0] == '--in':
+        scope, args = args[1], args[2:]
+        for a in args:
+            old, _, new = a.partition('=')
+            if not new:
+                sys.exit('expected OLD=NEW, got %r' % a)
+            pairs.append((old, new))
+        return rename_in(path, scope, pairs)
     funcs = False
     if args[0] == '--funcs':
         funcs = True

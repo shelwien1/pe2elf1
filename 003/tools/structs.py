@@ -62,6 +62,12 @@ def bodies(lines):
                         prev = lines[j].split('//')[0]
                         if prev.rstrip().endswith((';', '}', '{', ':')):
                             break
+                        # a directive is not a signature, and `#pragma
+                        # pack(push, 1)` above a struct has the parenthesis this
+                        # is looking for -- which made deadcheck.py report a
+                        # function called `pack` that nothing calls
+                        if prev.lstrip().startswith('#'):
+                            break
                         buf = prev + ' ' + buf
                     m = re.search(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(', buf)
                     name = m.group(1) if m and '(' in buf else None
