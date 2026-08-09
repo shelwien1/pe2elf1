@@ -9736,6 +9736,45 @@ LABEL_20:
   return (int32_t *)result;
 }
 
+// The image descriptor `alloc_image` returns, and every reader of an image
+// takes.  Sixteen bytes, then the pixels.
+//
+// This one is not documented anywhere -- it is BMF's own -- but it does not
+// need to be inferred from the offsets its readers touch, because
+// `alloc_image` writes all four words in a row and the arithmetic around them
+// says what each is:
+//
+//   result[0] = (a2 << 16) | (uint16_t)a1;   width in the low half, height in
+//                                            the high half -- a1 and a2 are its
+//                                            first two parameters
+//   result[1] = v9;                          v9 is the row length in bytes,
+//                                            computed from the width and the
+//                                            depth and rounded up per depth
+//   result[2] = v7;                          v7 = ((uint8_t)n5 << 16) | ...,
+//                                            so the depth byte lands at +10
+//   result[3] = v10;                         v10 = v9 * a2 -- stride times
+//                                            height, the size of the pixels
+//   buf = (char *)result + result[3] + 16;   which start at +16
+//
+// Bit 0x80 of the depth byte is set only on the palette path -- `a4` true and a
+// depth of 8 or less -- and every reader tests it before looking for a palette.
+// The bytes at +6, +8 and +11 are padding here: they are written as part of
+// those packed words and nothing reads them back.
+struct BmfImage {
+  uint16_t width;             // +0
+  uint16_t height;            // +2
+  uint16_t stride;            // +4   bytes per row
+  uint8_t  _pad6[4];          // +6
+  uint8_t  depth;             // +10  bits 0..5 the depth, 0x80 has a palette
+  uint8_t  _pad11;            // +11
+  uint32_t data_size;         // +12  stride * height
+};                            // +16  pixels
+static_assert(sizeof(BmfImage) == 16, "BmfImage is not the image header");
+static_assert(__builtin_offsetof(BmfImage, stride) == 4
+              && __builtin_offsetof(BmfImage, depth) == 10
+              && __builtin_offsetof(BmfImage, data_size) == 12,
+              "BmfImage fields are not where alloc_image puts them");
+
 // The two headers a .bmp file begins with: a 14-byte BITMAPFILEHEADER and the
 // 40-byte BITMAPINFOHEADER after it.
 //
@@ -9779,6 +9818,13 @@ static_assert(__builtin_offsetof(BmpHeader, bfOffBits) == 10
 
 int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
 {
+  // p_i, p_i_1 and p_i_2 are the same descriptor -- `p_i_1 = p_i` and
+  // `p_i_2 = (uint16_t *)p_i`, and none is stepped -- so one view serves all
+  // three.  Where a read of +12 was typed `char *` it stays a value cast back
+  // from the size, because that is what the code then does with it: `&x[p_i]`
+  // with x the size and p_i the descriptor is `p_i + data_size`, which is where
+  // alloc_image put the palette.
+  BmfImage *const img = (BmfImage *)p_i;
   struct alignas(16) {   // 96 bytes, the frame Hex-Rays could not name
       uint32_t  Buffera;
       uint32_t  v62;
@@ -9838,9 +9884,9 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   Stream_1 = fopen(FileName, "wb");
   if ( !Stream_1 )
     return 0;
-  Bufferc_3 = (char *)bmf_new(*(uint32_t *)(p_i + 12)
-                                 + 8 * *(uint16_t *)(p_i + 2)
-                                 + (*(uint32_t *)(p_i + 12) >> 5) + 2048);
+  Bufferc_3 = (char *)bmf_new(img->data_size
+                                 + 8 * img->height
+                                 + (img->data_size >> 5) + 2048);
   p_i_1 = p_i;
   Bufferc_1 = Bufferc_3;
   // Bufferc, Bufferc_1, Bufferc_2 and Bufferc_3 are one allocation: the chain
@@ -9848,16 +9894,16 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   // none of them is ever stepped.  So one view of the header serves all four,
   // and the pixel writes through Bufferc_1[k + 54] keep the spelling they had.
   BmpHeader *bmp = (BmpHeader *)Bufferc_3;
-  i = *(uint16_t *)p_i;
+  i = img->width;
   bmp->biSize = 40;
   bmp->bfType = 0x4D42 /* 'BM' */;
-  Buffer_1 = *(uint16_t *)(p_i + 2);
+  Buffer_1 = img->height;
   Buffer_2 = Buffer_1;
   bmp->bfReserved2 = 0;
   bmp->bfReserved1 = 0;
   bmp->biWidth = i;
   bmp->biHeight = Buffer_1;
-  LOBYTE(Buffer_1) = *(uint8_t *)(p_i + 10);
+  LOBYTE(Buffer_1) = img->depth;
   Buffer = Buffer_1;
   bmp->biPlanes = 1;
   n8 = Buffer_1 & 0x3F;
@@ -9904,12 +9950,12 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
                                               | (uint8_t)(Buffera * (v17 - 1))
                                               | ((uint8_t)(Buffera * (v17 - 1)) << 8);
       }
-      Bufferb_1 = *(char **)(p_i_1 + 12);
+      Bufferb_1 = (char *)(uintptr_t)img->data_size;
       v67 = 4 * v66;
     }
     else if ( Buffer < 0 )
     {
-      Bufferb_1 = *(char **)(p_i + 12);
+      Bufferb_1 = (char *)(uintptr_t)img->data_size;
       if ( v66 <= 0 )
       {
         v67 = 4 * v14;
@@ -9919,7 +9965,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
         v62 = v14 / 2;
         if ( v14 / 2 )
         {
-          Bufferb = *(char **)(p_i + 12);
+          Bufferb = (char *)(uintptr_t)img->data_size;
           v18 = 0;
           v19 = &Bufferb_1[p_i];
           do
@@ -9962,16 +10008,16 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
       v67 = 4 * v14;
       memset(buf,0,4 * v14);
       p_i_1 = p_i;
-      Bufferb_1 = *(char **)(p_i + 12);
-      Buffer_2 = *(uint16_t *)(p_i + 2);
+      Bufferb_1 = (char *)(uintptr_t)img->data_size;
+      Buffer_2 = img->height;
     }
     buf = &Bufferc_1[v67 + 54];
   }
   else
   {
-    Bufferb_1 = *(char **)(p_i + 12);
+    Bufferb_1 = (char *)(uintptr_t)img->data_size;
   }
-  Size_2 = *(uint16_t *)(p_i_1 + 4);
+  Size_2 = img->stride;
   Bufferc = Bufferc_1;
   v65 = (char *)(buf - Bufferc_1);
   Stream_v = Stream_1;
@@ -10087,8 +10133,8 @@ LABEL_70:
               {
                 buf_1 = buf_3;
                 Buffer_4 = Buffer_5;
-                Buffer_3 = *(uint16_t *)(p_i + 2);
-                Size_3 = *(uint16_t *)(p_i + 4);
+                Buffer_3 = img->height;
+                Size_3 = img->stride;
                 goto LABEL_72;
               }
             }
@@ -10136,8 +10182,8 @@ LABEL_55:
             {
               buf_1 = buf_2;
               Buffer_4 = Buffer_5;
-              Buffer_3 = *(uint16_t *)(p_i + 2);
-              Size_3 = *(uint16_t *)(p_i + 4);
+              Buffer_3 = img->height;
+              Size_3 = img->stride;
               goto LABEL_72;
             }
             Size = 0;
@@ -10154,8 +10200,8 @@ LABEL_55:
           {
             buf_2[1] = *(v39 - 1);
             *buf_2 = 2;
-            Buffer_3 = *(uint16_t *)(p_i + 2);
-            Size_3 = *(uint16_t *)(p_i + 4);
+            Buffer_3 = img->height;
+            Size_3 = img->stride;
             buf_1 = buf_2 + 2;
             goto LABEL_72;
           }
@@ -10168,14 +10214,14 @@ LABEL_97:
           if ( (Size & 1) != 0 )
           {
             buf_2[Size + 2] = 0;
-            Buffer_3 = *(uint16_t *)(p_i + 2);
-            Size_3 = *(uint16_t *)(p_i + 4);
+            Buffer_3 = img->height;
+            Size_3 = img->stride;
             ++buf_1;
             goto LABEL_72;
           }
 LABEL_89:
-          Buffer_3 = *(uint16_t *)(p_i + 2);
-          Size_3 = *(uint16_t *)(p_i + 4);
+          Buffer_3 = img->height;
+          Size_3 = img->stride;
           goto LABEL_72;
         }
         if ( Size >= 3 )
@@ -10189,8 +10235,8 @@ LABEL_89:
         }
         buf_1[1] = *(v39 - 1);
         *buf_1 = 1;
-        Buffer_3 = *(uint16_t *)(p_i + 2);
-        Size_3 = *(uint16_t *)(p_i + 4);
+        Buffer_3 = img->height;
+        Size_3 = img->stride;
         buf_1 += 2;
 LABEL_72:
         *buf_1 = 0;
@@ -10203,7 +10249,7 @@ LABEL_72:
           Buffer_2 = Buffer_3;
           Size_2 = Size_3;
           p_i_2 = (uint16_t *)p_i;
-          Bufferb_2 = *(uint32_t *)(p_i + 12);
+          Bufferb_2 = img->data_size;
           break;
         }
       }
@@ -10235,7 +10281,7 @@ LABEL_72:
     do
     {
       memcpy(buf_1,v31,Size_1);
-      Size_1 = *(uint16_t *)(p_i + 4);
+      Size_1 = img->stride;
       buf_1 += Size_1;
       v31 -= Size_1;
       if ( v53 )
@@ -10245,7 +10291,7 @@ LABEL_72:
       }
       ++v55;
     }
-    while ( v55 < *(uint16_t *)(p_i + 2) );
+    while ( v55 < img->height );
     Bufferc_2 = Bufferc;
     Stream_2 = Stream_v;
     v49 = buf_1 - buf;
