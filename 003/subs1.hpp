@@ -437,10 +437,20 @@ struct Obj0 {
   int32_t f0;   // signed: `alt_p1_alloc` tests `f0 > -10`
   int32_t f4;
   int32_t f8;
-  uint32_t  f12[51];   // +12 .. +212
+  union {   // the same bytes, 2 recoveries
+    uint32_t f12[51];   // +12 .. +212
+    struct {
+      uint8_t _u3_0_0[184];
+      uint8_t *f196;
+      uint8_t *f200;
+      uint8_t *f204;
+      uint8_t *f208;
+      uint8_t *f212;
+    };
+  };
 };
 static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj0, f12[50]) == 212,
+              || __builtin_offsetof(Obj0, f12) == 12,
               "Obj0: the layout moved");
 
 
@@ -748,27 +758,12 @@ static_assert(sizeof(void *) != 4
 
 
 
-// Obj25 -- recovered from 22 dereferences over 9 offsets, under 3
+// Obj0 -- recovered from 22 dereferences over 9 offsets, under 3
 // names.  The layout is the one the code already assumed: at 32 bits a
 // pointer is four bytes, so naming these fields moves nothing, and the
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
-struct Obj25 {
-  uint8_t _pad0[8];
-  uint8_t*f8;
-  uint8_t*f12;
-  uint8_t*f16;
-  uint8_t*f20;
-  uint8_t _pad5[172];
-  uint8_t*f196;
-  uint8_t*f200;
-  uint8_t*f204;
-  uint8_t*f208;
-  uint8_t*f212;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj25, f212) == 212,
-              "Obj25: the layout moved");
+
 
 
 
@@ -3955,7 +3950,7 @@ void **__alt_p1_free(void **Block, char a2)
 // table pointers they select.  It codes nothing -- no `rc.` call anywhere in it
 // -- and all four p1 bodies call it, encoder and decoder alike, which is what
 // says it is context rather than coding.
-int32_t __alt_p1_context(Obj25 *_this, uint32_t *a2, Obj91 *a3)
+int32_t __alt_p1_context(Obj0 *_this, uint32_t *a2, Obj91 *a3)
 {
   ;
   Obj22 *v5;
@@ -5073,7 +5068,7 @@ char *__rc_begin_encode()
   return __rc_begin_encode_n256;
 }
 static inline int32_t __fwd_alt_p1_d8_encode_body_alt_p1_encode_symbol(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_encode_symbol((uint16_t *)a0, a1, a2, a3); }
-static inline int32_t __fwd_alt_p1_d8_encode_body_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj25 *)a0, (uint32_t *)a1, (Obj91 *)a2); }
+static inline int32_t __fwd_alt_p1_d8_encode_body_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj0 *)a0, (uint32_t *)a1, (Obj91 *)a2); }
 
 void __alt_p1_d8_encode_body(Obj0 *_this, uint8_t *a2, uint8_t *a3)
 {
@@ -6726,7 +6721,7 @@ int32_t __estimate_cost(char *a1, int32_t n2)
 }
 static inline int32_t __fwd_alt_model_p1_d8_decode_alt_p1_decode_symbol(void *a0, int32_t a1, int32_t a2) { return __alt_p1_decode_symbol((uint16_t *)a0, a1, a2); }
 static inline void ** __fwd_alt_model_p1_d8_decode_alt_p1_free(void *a0, char a1) { return __alt_p1_free((void **)a0, a1); }
-static inline int32_t __fwd_alt_model_p1_d8_decode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj25 *)a0, (uint32_t *)a1, (Obj91 *)a2); }
+static inline int32_t __fwd_alt_model_p1_d8_decode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj0 *)a0, (uint32_t *)a1, (Obj91 *)a2); }
 static inline int32_t * __fwd_alt_model_p1_d8_decode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((Obj0 *)a0, a1, a2, a3); }
 
 void ** __alt_model_p1_d8_decode(char ArgList, uint8_t *Src, int32_t i, int32_t a4)
@@ -6870,7 +6865,7 @@ void ** __alt_model_p1_d8_decode(char ArgList, uint8_t *Src, int32_t i, int32_t 
 
 static inline int32_t __fwd_alt_model_p1_decode_alt_p1_decode_symbol(void *a0, int32_t a1, int32_t a2) { return __alt_p1_decode_symbol((uint16_t *)a0, a1, a2); }
 static inline void ** __fwd_alt_model_p1_decode_alt_p1_free(void *a0, char a1) { return __alt_p1_free((void **)a0, a1); }
-static inline int32_t __fwd_alt_model_p1_decode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj25 *)a0, (uint32_t *)a1, (Obj91 *)a2); }
+static inline int32_t __fwd_alt_model_p1_decode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj0 *)a0, (uint32_t *)a1, (Obj91 *)a2); }
 static inline int32_t * __fwd_alt_model_p1_decode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((Obj0 *)a0, a1, a2, a3); }
 
 int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
@@ -6897,8 +6892,8 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
   int32_t v92;
   void * Block_plane[4];
   Obj0 * &v94 = (Obj0 * &)Block_plane[1];
-  Obj25 * &v95 = (Obj25 * &)Block_plane[2];
-  Obj25 * &v96 = (Obj25 * &)Block_plane[3];
+  Obj0 * &v95 = (Obj0 * &)Block_plane[2];
+  Obj0 * &v96 = (Obj0 * &)Block_plane[3];
   int32_t v97;
   int32_t v98;
   uint32_t i_1;
@@ -6921,8 +6916,8 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           v46, v47, v48, v49, v50, v52, v53, v54, v56, v57, v60, v62, v64, v67, v68, v71, v72,
           v74, v75, v78, v79, n4_3, n4_4;
   uint32_t v20, *v51;
-  Obj25 *v66;
-  Obj25 *v73;
+  Obj0 *v66;
+  Obj0 *v73;
   uint8_t *v30;
   uint8_t *v31;
   uint8_t *v55, *v63, *v69, *v70, *v76, *v77;
@@ -7122,26 +7117,26 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           v59->f12[50] += 2;
           if ( v101 )
             v104 += v97 + *(uint8_t *)((uint8_t)plane_desc[1].b1 + Src);
-          v66 = (Obj25 *)(v95);
+          v66 = (Obj0 *)(v95);
           v84 = Block_plane[0];
           v83 = v94;
           *(uint8_t *)(Src + (uint8_t)plane_desc[2].b1) = v104;
           __fwd_alt_model_p1_decode_alt_p1_context(v66, v83, (int32_t)v84);
-          v68 = __fwd_alt_model_p1_decode_alt_p1_decode_symbol(&((uint8_t**)v66)[4 * (uint32_t)v66->f12 + 950], v67, (int32_t)v66->f16);
-          v69 = v66->f8;
+          v68 = __fwd_alt_model_p1_decode_alt_p1_decode_symbol(&((uint8_t**)v66)[4 * v66->f12[0] + 950], v67, (int32_t)v66->f12[1]);
+          v69 = (unsigned char *)(v66->f8);
           v70 = v66->f196;
           v71 = (uint8_t)((uint8_t)(uintptr_t)v69 + *((uint8_t *)v66 + v68 + 1496));
           v105 = v71;
           *v70 = v71;
           v66->f196[1] = abs32(v71 - (uint32_t)v69);
-          ((uint8_t**)v66)[(uint32_t)v66->f20 + 6] = &((uint8_t**)v66)[(uint32_t)v66->f20 + 6][v66->f196[1]
+          ((uint8_t**)v66)[v66->f12[2] + 6] = &((uint8_t**)v66)[v66->f12[2] + 6][v66->f196[1]
                                                            - *(v66->f196 - 7)
                                                            - (*(v66->f212 - 3)
                                                             - v66->f212[13])
                                                            - (*(v66->f204 - 3)
                                                             - v66->f204[13])];
-          v72 = 4 * (uint32_t)v66->f12;
-          v66->f20 = (uint8_t *)(v66->f20 == nullptr);
+          v72 = 4 * v66->f12[0];
+          v66->f12[2] = v66->f12[2] == 0;
           if ( LOWORD(((uint8_t**)v66)[v72 + 950]) < 0x4000u )
             __alt_p1_model((Obj0 *)v66);
           v66->f196 += 2;
@@ -7163,23 +7158,23 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           n4_1 = plane_count;
           if ( plane_count >= 4 )
           {
-            v73 = (Obj25 *)(v96);
+            v73 = (Obj0 *)(v96);
             __fwd_alt_model_p1_decode_alt_p1_context(v96, v95, (int32_t)v94);
-            v75 = __fwd_alt_model_p1_decode_alt_p1_decode_symbol(&((uint8_t**)v73)[4 * (uint32_t)v73->f12 + 950], v74, (int32_t)v73->f16);
-            v76 = v73->f8;
+            v75 = __fwd_alt_model_p1_decode_alt_p1_decode_symbol(&((uint8_t**)v73)[4 * v73->f12[0] + 950], v74, (int32_t)v73->f12[1]);
+            v76 = (unsigned char *)(v73->f8);
             v77 = v73->f196;
             v78 = (uint8_t)((uint8_t)(uintptr_t)v76 + *((uint8_t *)v73 + v75 + 1496));
             v92 = v78;
             *v77 = v78;
             v73->f196[1] = abs32(v78 - (uint32_t)v76);
-            ((uint8_t**)v73)[(uint32_t)v73->f20 + 6] = &((uint8_t**)v73)[(uint32_t)v73->f20 + 6][v73->f196[1]
+            ((uint8_t**)v73)[v73->f12[2] + 6] = &((uint8_t**)v73)[v73->f12[2] + 6][v73->f196[1]
                                                              - *(v73->f196 - 7)
                                                              - (*(v73->f212 - 3)
                                                               - v73->f212[13])
                                                              - (*(v73->f204 - 3)
                                                               - v73->f204[13])];
-            v79 = 4 * (uint32_t)v73->f12;
-            v73->f20 = (uint8_t *)(v73->f20 == nullptr);
+            v79 = 4 * v73->f12[0];
+            v73->f12[2] = v73->f12[2] == 0;
             if ( LOWORD(((uint8_t**)v73)[v79 + 950]) < 0x4000u )
               __alt_p1_model((Obj0 *)v73);
             v73->f196 += 2;
@@ -8639,7 +8634,7 @@ LABEL_14:
             v30 = 2 * v29;
             v31 = 2 * v29++ * v94;
             __frame.slot[v30 + 2] = (uint8_t *)Block + v31;
-            __frame.slot[v30 + 3] = (uint32_t)&v28[v31];
+            __frame.slot[v30 + 3] = (void *)&v28[v31];
           }
           while ( v29 < k_2 >> 1 );
           v4 = v96;
@@ -8677,12 +8672,12 @@ LABEL_14:
               {
                 for ( j = 0; j < j_1; ++j )
                 {
-                  v42 = __frame.slot[2 * j + 2];
+                  v42 = (unsigned char *)(__frame.slot[2 * j + 2]);
                   *v42 = v33[2 * j];
                   v43 = (uint8_t *)__frame.slot[2 * j + 3];
                   __frame.slot[2 * j + 2] = v42 + 1;
                   *v43 = v33[2 * j + 1];
-                  __frame.slot[2 * j + 3] = (uint32_t)(v43 + 1);
+                  __frame.slot[2 * j + 3] = (void *)(v43 + 1);
                 }
                 v44 = 2 * j + 1;
                 v4 = &v33[2 * j];
@@ -12751,10 +12746,10 @@ LABEL_76:
         {
           __frame.row[n6_4] = ArgList_10;
           ArgList_10 += 5 * v69;
-          __frame.row[n6_4 + 1] = (int32_t)&ArgList_3[v69 * (n6_4 + 1)];
-          __frame.row[n6_4 + 2] = (int32_t)&ArgList_3[v69 * (n6_4 + 2)];
-          __frame.row[n6_4 + 3] = (int32_t)&ArgList_3[v69 * (n6_4 + 3)];
-          __frame.row[n6_4 + 4] = (int32_t)&ArgList_3[v69 * (n6_4 + 4)];
+          __frame.row[n6_4 + 1] = (char *)&ArgList_3[v69 * (n6_4 + 1)];
+          __frame.row[n6_4 + 2] = (char *)&ArgList_3[v69 * (n6_4 + 2)];
+          __frame.row[n6_4 + 3] = (char *)&ArgList_3[v69 * (n6_4 + 3)];
+          __frame.row[n6_4 + 4] = (char *)&ArgList_3[v69 * (n6_4 + 4)];
           n6_4 += 5;
         }
         while ( n6_4 <= n6 - 6 );
@@ -12799,7 +12794,7 @@ LABEL_76:
 }
 static inline int32_t __fwd_alt_model_p1_encode_alt_p1_encode_symbol(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_encode_symbol((uint16_t *)a0, a1, a2, a3); }
 static inline void ** __fwd_alt_model_p1_encode_alt_p1_free(void *a0, char a1) { return __alt_p1_free((void **)a0, a1); }
-static inline int32_t __fwd_alt_model_p1_encode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj25 *)a0, (uint32_t *)a1, (Obj91 *)a2); }
+static inline int32_t __fwd_alt_model_p1_encode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj0 *)a0, (uint32_t *)a1, (Obj91 *)a2); }
 static inline int32_t * __fwd_alt_model_p1_encode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((Obj0 *)a0, a1, a2, a3); }
 
 int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
@@ -12847,9 +12842,9 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
   int32_t v99;
   int32_t n5_8;
   void * Block_plane[4];
-  Obj25 * &v102 = (Obj25 * &)Block_plane[1];
-  Obj25 * &v103 = (Obj25 * &)Block_plane[2];
-  Obj25 * &v104 = (Obj25 * &)Block_plane[3];
+  Obj0 * &v102 = (Obj0 * &)Block_plane[1];
+  Obj0 * &v103 = (Obj0 * &)Block_plane[2];
+  Obj0 * &v104 = (Obj0 * &)Block_plane[3];
   int32_t v105;
   int32_t v106;
   uint32_t i_1;
@@ -12878,9 +12873,9 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
           v69, n5_4, v73, v74, n16_2, v77, n5_5, v84, n16_3, n4_3, n4_4;
   int64_t v68, v76, v86;
   uint32_t v19;
-  Obj25 *v61;
-  Obj25 *v70;
-  Obj25 *v80;
+  Obj0 *v61;
+  Obj0 *v70;
+  Obj0 *v80;
   uint8_t *v29;
   uint8_t *v30;
   uint8_t *v50, v53, v60, v79;
@@ -13070,7 +13065,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
           v113 = (uint8_t)plane_desc[2].b1;
           if ( v109 )
             v60 = v60 - v105 - *(uint8_t *)((uint8_t)plane_desc[1].b1 + a2);
-          v61 = (Obj25 *)(v102);
+          v61 = (Obj0 *)(v102);
           v118 = v60;
           __fwd_alt_model_p1_encode_alt_p1_context(v102, Block_plane[0], 0);
           v62 = *((uint8_t *)v61 + 8);
@@ -13090,18 +13085,18 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
             *(uint8_t *)(a2 + v113) = v111;
             v118 = v65;
           }
-          __fwd_alt_model_p1_encode_alt_p1_encode_symbol((uint16_t *)&((uint8_t**)v61)[4 * (uint32_t)v61->f12 + 950], 16 * (uint32_t)v61->f12, (int32_t)v61->f16, n5_3);
-          v68 = v118 - (int32_t)v61->f8;
+          __fwd_alt_model_p1_encode_alt_p1_encode_symbol((uint16_t *)&((uint8_t**)v61)[4 * v61->f12[0] + 950], 16 * v61->f12[0], (int32_t)v61->f12[1], n5_3);
+          v68 = v118 - v61->f8;
           *v61->f196 = v118;
           v61->f196[1] = (BYTE4(v68) ^ v68) - BYTE4(v68);
-          ((uint8_t**)v61)[(uint32_t)v61->f20 + 6] = &((uint8_t**)v61)[(uint32_t)v61->f20 + 6][v61->f196[1]
+          ((uint8_t**)v61)[v61->f12[2] + 6] = &((uint8_t**)v61)[v61->f12[2] + 6][v61->f196[1]
                                                            - *(v61->f196 - 7)
                                                            - (*(v61->f212 - 3)
                                                             - v61->f212[13])
                                                            - (*(v61->f204 - 3)
                                                             - v61->f204[13])];
-          LODWORD(v68) = 16 * (uint32_t)v61->f12;
-          v61->f20 = (uint8_t *)(v61->f20 == nullptr);
+          LODWORD(v68) = 16 * v61->f12[0];
+          v61->f12[2] = v61->f12[2] == 0;
           if ( *(uint16_t *)((char *)v61 + v68 + 3800) < 0x4000u )
             __alt_p1_model((Obj0 *)v61);
           v61->f196 += 2;
@@ -13119,7 +13114,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
                                     + plane_desc[(uint8_t)plane_desc[3].b1 + 1].w8
                                     * (uint32_t)*(uint8_t *)((uint8_t)plane_desc[2].b1 + a2)
                                     + 40) >> 7));
-          v70 = (Obj25 *)(v103);
+          v70 = (Obj0 *)(v103);
           __fwd_alt_model_p1_encode_alt_p1_context(v103, (uint32_t *)v102, (int32_t)Block_plane[0]);
           v71 = *((uint8_t *)v70 + 8);
           v115 = (uint8_t)(v69 - v71);
@@ -13136,18 +13131,18 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
             v69 = v73;
             *(uint8_t *)(v117 + a2) = v74;
           }
-          __fwd_alt_model_p1_encode_alt_p1_encode_symbol((uint16_t *)&((uint8_t**)v70)[4 * (uint32_t)v70->f12 + 950], n5_4, (int32_t)v70->f16, n5_4);
-          v76 = v69 - (int32_t)v70->f8;
+          __fwd_alt_model_p1_encode_alt_p1_encode_symbol((uint16_t *)&((uint8_t**)v70)[4 * v70->f12[0] + 950], n5_4, (int32_t)v70->f12[1], n5_4);
+          v76 = v69 - v70->f8;
           *v70->f196 = v69;
           v70->f196[1] = (BYTE4(v76) ^ v76) - BYTE4(v76);
-          ((uint8_t**)v70)[(uint32_t)v70->f20 + 6] = &((uint8_t**)v70)[(uint32_t)v70->f20 + 6][v70->f196[1]
+          ((uint8_t**)v70)[v70->f12[2] + 6] = &((uint8_t**)v70)[v70->f12[2] + 6][v70->f196[1]
                                                            - *(v70->f196 - 7)
                                                            - (*(v70->f212 - 3)
                                                             - v70->f212[13])
                                                            - (*(v70->f204 - 3)
                                                             - v70->f204[13])];
-          v77 = 4 * (uint32_t)v70->f12;
-          v70->f20 = (uint8_t *)(v70->f20 == nullptr);
+          v77 = 4 * v70->f12[0];
+          v70->f12[2] = v70->f12[2] == 0;
           if ( LOWORD(((uint8_t**)v70)[v77 + 950]) < 0x4000u )
             __alt_p1_model((Obj0 *)v70);
           v70->f196 += 2;
@@ -13168,7 +13163,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
                     + 64) >> 7);
             else
               v79 = *(uint8_t *)((uint8_t)__n3_0 + a2);
-            v80 = (Obj25 *)(v104);
+            v80 = (Obj0 *)(v104);
             v99 = v79;
             __fwd_alt_model_p1_encode_alt_p1_context(v104, (uint32_t *)v103, (int32_t)v102);
             v81 = *((uint8_t *)v80 + 8);
@@ -13188,18 +13183,18 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
               v99 = v84;
               *(uint8_t *)(n3 + a2) = v97;
             }
-            __fwd_alt_model_p1_encode_alt_p1_encode_symbol((uint16_t *)&((uint8_t**)v80)[4 * (uint32_t)v80->f12 + 950], n5_5, (int32_t)v80->f16, n5_5);
-            v86 = v99 - (int32_t)v80->f8;
+            __fwd_alt_model_p1_encode_alt_p1_encode_symbol((uint16_t *)&((uint8_t**)v80)[4 * v80->f12[0] + 950], n5_5, (int32_t)v80->f12[1], n5_5);
+            v86 = v99 - v80->f8;
             *v80->f196 = v99;
             v80->f196[1] = (BYTE4(v86) ^ v86) - BYTE4(v86);
-            ((uint8_t**)v80)[(uint32_t)v80->f20 + 6] = &((uint8_t**)v80)[(uint32_t)v80->f20 + 6][v80->f196[1]
+            ((uint8_t**)v80)[v80->f12[2] + 6] = &((uint8_t**)v80)[v80->f12[2] + 6][v80->f196[1]
                                                              - *(v80->f196 - 7)
                                                              - (*(v80->f212 - 3)
                                                               - v80->f212[13])
                                                              - (*(v80->f204 - 3)
                                                               - v80->f204[13])];
-            LODWORD(v86) = 16 * (uint32_t)v80->f12;
-            v80->f20 = (uint8_t *)(v80->f20 == nullptr);
+            LODWORD(v86) = 16 * v80->f12[0];
+            v80->f12[2] = v80->f12[2] == 0;
             if ( *(uint16_t *)((char *)v80 + v86 + 3800) < 0x4000u )
               __alt_p1_model((Obj0 *)v80);
             v80->f196 += 2;
@@ -15069,7 +15064,7 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, const __m128 &a3__r
                                                        + (*(int16_t *)(lpAddress->f278736[0] + 4) < 0);
       v11 = (char *)(lpAddress->f278736[0] + 18);
       v17 = v95 + 1 < i;
-      lpAddress->f278736[0] = (uintptr_t)(uint8_t *)v11;
+      lpAddress->f278736[0] = (uint8_t *)(uint8_t *)v11;
       ++v95;
       if ( !v17 )
         break;
@@ -15078,7 +15073,7 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, const __m128 &a3__r
     i_1 = i;
   }
   bmf_copy((void *)(v11), (const void *)((uintptr_t)v11 - 18), 18);
-  v21 = lpAddress->f278736[0];
+  v21 = (unsigned int)(lpAddress->f278736[0]);
   v22 = *(uint32_t *)(v21 - 10);
   v23 = *(uint32_t *)(v21 - 6);
   *(uint32_t *)(v21 + 18) = *(uint32_t *)(v21 - 18);
@@ -15089,7 +15084,7 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, const __m128 &a3__r
   *(uint16_t *)(v21 + 34) = v24;
   v25 = (char *)(lpAddress->f278736[0]);
   bmf_copy((void *)((char *)v25 + 36), (const void *)((uintptr_t)v25 - 18), 18);
-  v28 = lpAddress->f278736[0];
+  v28 = (unsigned int)(lpAddress->f278736[0]);
   v29 = *(uint32_t *)(v28 - 14);
   v30 = *(uint32_t *)(v28 - 10);
   *(uint32_t *)(v28 + 54) = *(uint32_t *)(v28 - 18);
@@ -15101,50 +15096,50 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, const __m128 &a3__r
   *(uint16_t *)(v28 + 70) = v29;
   v32 = (char *)(lpAddress->f278736[0]);
   bmf_copy((void *)((char *)v32 + 72), (const void *)((uintptr_t)v32 - 18), 18);
-  v36 = lpAddress->f278736[0];
+  v36 = (unsigned int)(lpAddress->f278736[0]);
   v37 = -18 * i_1;
   *(uint32_t *)(v36 + v37 - 18) = *(uint32_t *)(v36 - 18 * i_1);
   *(uint32_t *)(v36 + v37 - 14) = *(uint32_t *)(v36 - 18 * i_1 + 4);
   *(uint32_t *)(v36 + v37 - 10) = *(uint32_t *)(v36 - 18 * i_1 + 8);
   *(uint32_t *)(v36 + v37 - 6) = *(uint32_t *)(v36 - 18 * i_1 + 12);
   *(uint16_t *)(v36 + v37 - 2) = *(uint16_t *)(v36 - 18 * i_1 + 16);
-  v38 = lpAddress->f278736[0];
+  v38 = (unsigned int)(lpAddress->f278736[0]);
   *(uint32_t *)(v38 + v37 - 36) = *(uint32_t *)(v38 - 18 * i_1 + 18);
   *(uint32_t *)(v38 + v37 - 32) = *(uint32_t *)(v38 - 18 * i_1 + 22);
   *(uint32_t *)(v38 + v37 - 28) = *(uint32_t *)(v38 - 18 * i_1 + 26);
   *(uint32_t *)(v38 + v37 - 24) = *(uint32_t *)(v38 - 18 * i_1 + 30);
   *(uint16_t *)(v38 + v37 - 20) = *(uint16_t *)(v38 - 18 * i_1 + 34);
-  v39 = lpAddress->f278736[0];
+  v39 = (unsigned int)(lpAddress->f278736[0]);
   *(uint32_t *)(v39 + v37 - 54) = *(uint32_t *)(v39 - 18 * i_1 + 36);
   *(uint32_t *)(v39 + v37 - 50) = *(uint32_t *)(v39 - 18 * i_1 + 40);
   *(uint32_t *)(v39 + v37 - 46) = *(uint32_t *)(v39 - 18 * i_1 + 44);
   *(uint32_t *)(v39 + v37 - 42) = *(uint32_t *)(v39 - 18 * i_1 + 48);
   *(uint16_t *)(v39 + v37 - 38) = *(uint16_t *)(v39 - 18 * i_1 + 52);
-  v40 = lpAddress->f278736[0];
+  v40 = (unsigned int)(lpAddress->f278736[0]);
   *(uint32_t *)(v40 + v37 - 72) = *(uint32_t *)(v40 - 18 * i_1 + 54);
   *(uint32_t *)(v40 + v37 - 68) = *(uint32_t *)(v40 - 18 * i_1 + 58);
   *(uint32_t *)(v40 + v37 - 64) = *(uint32_t *)(v40 - 18 * i_1 + 62);
   *(uint32_t *)(v40 + v37 - 60) = *(uint32_t *)(v40 - 18 * i_1 + 66);
   *(uint16_t *)(v40 + v37 - 56) = *(uint16_t *)(v40 - 18 * i_1 + 70);
-  v41 = lpAddress->f278736[0];
+  v41 = (unsigned int)(lpAddress->f278736[0]);
   *(uint32_t *)(v41 + v37 - 90) = *(uint32_t *)(v41 - 18 * i_1 + 72);
   *(uint32_t *)(v41 + v37 - 86) = *(uint32_t *)(v41 - 18 * i_1 + 76);
   *(uint32_t *)(v41 + v37 - 82) = *(uint32_t *)(v41 - 18 * i_1 + 80);
   *(uint32_t *)(v41 + v37 - 78) = *(uint32_t *)(v41 - 18 * i_1 + 84);
   *(uint16_t *)(v41 + v37 - 74) = *(uint16_t *)(v41 - 18 * i_1 + 88);
-  v42 = lpAddress->f278736[0];
+  v42 = (unsigned int)(lpAddress->f278736[0]);
   *(uint32_t *)(v42 + v37 - 108) = *(uint32_t *)(v42 - 18 * i_1 + 90);
   *(uint32_t *)(v42 + v37 - 104) = *(uint32_t *)(v42 - 18 * i_1 + 94);
   *(uint32_t *)(v42 + v37 - 100) = *(uint32_t *)(v42 - 18 * i_1 + 98);
   *(uint32_t *)(v42 + v37 - 96) = *(uint32_t *)(v42 - 18 * i_1 + 102);
   *(uint16_t *)(v42 + v37 - 92) = *(uint16_t *)(v42 - 18 * i_1 + 106);
-  v43 = lpAddress->f278736[0];
+  v43 = (unsigned int)(lpAddress->f278736[0]);
   *(uint32_t *)(v43 + v37 - 126) = *(uint32_t *)(v43 - 18 * i_1 + 108);
   *(uint32_t *)(v43 + v37 - 122) = *(uint32_t *)(v43 - 18 * i_1 + 112);
   *(uint32_t *)(v43 + v37 - 118) = *(uint32_t *)(v43 - 18 * i_1 + 116);
   *(uint32_t *)(v43 + v37 - 114) = *(uint32_t *)(v43 - 18 * i_1 + 120);
   *(uint16_t *)(v43 + v37 - 110) = *(uint16_t *)(v43 - 18 * i_1 + 124);
-  v44 = lpAddress->f278736[0];
+  v44 = (unsigned int)(lpAddress->f278736[0]);
   *(uint32_t *)(v44 + v37 - 144) = *(uint32_t *)(v44 - 18 * i_1 + 126);
   *(uint32_t *)(v44 + v37 - 140) = *(uint32_t *)(v44 - 18 * i_1 + 130);
   *(uint32_t *)(v44 + v37 - 136) = *(uint32_t *)(v44 - 18 * i_1 + 134);
@@ -15191,7 +15186,7 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, const __m128 &a3__r
       v53[6] = v47;
       v54 = (char *)(lpAddress->f278736[0]);
       bmf_copy((void *)(v54), (const void *)((uintptr_t)v54 - 18), 18);
-      v58 = lpAddress->f278736[0];
+      v58 = (unsigned int)(lpAddress->f278736[0]);
       v59 = *(uint32_t *)(v58 - 32);
       v60 = *(uint32_t *)(v58 - 28);
       LOWORD(v51) = *(uint16_t *)(v58 - 20);
@@ -15203,7 +15198,7 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, const __m128 &a3__r
       *(uint16_t *)(v58 + 34) = v51;
       v62 = (char *)(lpAddress->f278736[0]);
       bmf_copy((void *)((char *)v62 + 36), (const void *)((uintptr_t)v62 - 54), 18);
-      v66 = lpAddress->f278736[0];
+      v66 = (unsigned int)(lpAddress->f278736[0]);
       v67 = *(uint32_t *)(v66 - 64);
       v68 = *(uint32_t *)(v66 - 60);
       LOWORD(v51) = *(uint16_t *)(v66 - 56);
@@ -15225,33 +15220,33 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, const __m128 &a3__r
       *(uint32_t *)&lpAddress->f278756 = v73;
       lpAddress->f278760[0] = v76;
       v73 += 144;
-      lpAddress->f278736[0] = v73;
+      lpAddress->f278736[0] = (unsigned char *)(v73);
       v76 += 144;
-      lpAddress->f278736[1] = v76;
-      lpAddress->f278736[2] = v75 + 144;
-      lpAddress->f278736[3] = v74 + 144;
-      lpAddress->f278736[4] = v72 + 144;
+      lpAddress->f278736[1] = (unsigned char *)(v76);
+      lpAddress->f278736[2] = (unsigned char *)(v75 + 144);
+      lpAddress->f278736[3] = (unsigned char *)(v74 + 144);
+      lpAddress->f278736[4] = (unsigned char *)(v72 + 144);
       bmf_copy((void *)(v73 - 18), (const void *)(v76), 18);
-      v77 = lpAddress->f278736[0];
-      v78 = lpAddress->f278736[1];
+      v77 = (int)(lpAddress->f278736[0]);
+      v78 = (unsigned int)(lpAddress->f278736[1]);
       bmf_copy((void *)(v77 - 36), (const void *)(v78 + 18), 18);
-      v79 = lpAddress->f278736[0];
+      v79 = (int)(lpAddress->f278736[0]);
       v80 = (char *)(lpAddress->f278736[1]);
       bmf_copy((void *)(v79 - 54), (const void *)((char *)v80 + 36), 18);
-      v81 = lpAddress->f278736[0];
-      v82 = lpAddress->f278736[1];
+      v81 = (int)(lpAddress->f278736[0]);
+      v82 = (unsigned int)(lpAddress->f278736[1]);
       bmf_copy((void *)(v81 - 72), (const void *)(v82 + 54), 18);
-      v83 = lpAddress->f278736[0];
+      v83 = (int)(lpAddress->f278736[0]);
       v84 = (char *)(lpAddress->f278736[1]);
       bmf_copy((void *)(v83 - 90), (const void *)((char *)v84 + 72), 18);
-      v85 = lpAddress->f278736[0];
-      v86 = lpAddress->f278736[1];
+      v85 = (int)(lpAddress->f278736[0]);
+      v86 = (unsigned int)(lpAddress->f278736[1]);
       bmf_copy((void *)(v85 - 108), (const void *)(v86 + 90), 18);
-      v87 = lpAddress->f278736[0];
+      v87 = (int)(lpAddress->f278736[0]);
       v88 = (Obj130 *)(lpAddress->f278736[1]);
       bmf_copy((void *)(v87 - 126), (const void *)((char *)v88 + 108), 18);
-      v89 = lpAddress->f278736[0];
-      v90 = lpAddress->f278736[1];
+      v89 = (int)(lpAddress->f278736[0]);
+      v90 = (unsigned int)(lpAddress->f278736[1]);
       bmf_copy((void *)(v89 - 144), (const void *)(v90 + 126), 18);
       *(uint16_t *)(lpAddress->f278736[0] + 2) = 0;
       if ( i > 0 )

@@ -31,6 +31,7 @@ import re
 import sys
 
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
+from structs import bodies                                        # noqa: E402
 
 WIDTH = {'char': 1, 'int8_t': 1, 'uint8_t': 1, 'int16_t': 2, 'uint16_t': 2,
          'int32_t': 4, 'uint32_t': 4, 'int64_t': 8, 'uint64_t': 8,
@@ -263,8 +264,27 @@ def main():
     end = src.find('\n', tail) + 1 if tail > 0 else b
     src = src[:a] + render(target, merged) + '\n' + src[end:]
 
-    for nm, to in absorbed.items():
-        src = re.sub(r'\b%s\b(?!\s*\[)' % nm, to, src)
+    # Scoped, not global: `f0`, `f4` and `f8` are members of half the structs
+    # in the file, and renaming them everywhere redeclares `ModelBlock::f0` as
+    # an array.  Only rewrite `v->field` where `v` is a variable of one of the
+    # types being merged.
+    if absorbed:
+        lines = src.split('\n')
+        for a, b, fn, fsig in bodies(lines):
+            # the signature too: `_this` is a parameter, not a local, and
+            # scanning only the body misses every function that takes one
+            body = fsig + '\n' + '\n'.join(lines[a:b + 1])
+            vs = set()
+            for t in names:
+                vs |= set(re.findall(r'\b%s\s*\*&?\s*(\w+)' % t, body))
+                vs |= set(re.findall(r'\(%s \*\)\s*\(?(\w+)' % t, body))
+            for i in range(a, b + 1):
+                for v in vs:
+                    for nm, to in absorbed.items():
+                        lines[i] = re.sub(
+                            r'\b%s->%s\b(?!\s*\[)' % (re.escape(v), nm),
+                            '%s->%s' % (v, to), lines[i])
+        src = '\n'.join(lines)
     for n in names[1:]:
         src = re.sub(r'\b%s\b' % n, target, src)
     open(path, 'w').write(src)
