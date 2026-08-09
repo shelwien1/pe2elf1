@@ -758,6 +758,10 @@ def main():
         text = '\n'.join(out[code:b + 1])
         types = decl_types(sigof[fn], out, a, b)
         step = {nm: elem_size(types.get(nm)) for nm in nms}
+        rm = re.match(r'^\s*(?:BMF_SSE\s+|static\s+|inline\s+)*'
+                      r'((?:const\s+)?[A-Za-z_][A-Za-z0-9_]*(?:\s*\*)*)\s*'
+                      r'[A-Za-z_][A-Za-z0-9_]*\s*\(', sigof[fn])
+        ret = re.sub(r'\s+', ' ', rm.group(1)).strip() if rm else None
         pos = 0
         while True:                           # innermost dereferences first
             m = INNER.search(text, pos)
@@ -833,6 +837,11 @@ def main():
                           r'(?=\s*(?:\+(?!\+)|-(?![->])))' % re.escape(nm),
                           cast + nm, text)
 
+            # `return Blocka_1;` from a function that returns something else
+            if ret and ret != '%s *' % tag:
+                text = re.sub(r'\breturn\s+%s\s*;' % re.escape(nm),
+                              'return (%s)%s;' % (ret, nm), text)
+
             # `v5 = malloc(...)` was int-to-int or pointer-to-same-pointer
             # before; now the left side is a struct pointer and C++ will not
             # convert silently.  The cast wraps the whole right-hand side, so a
@@ -862,6 +871,17 @@ def main():
             if any(re.search(r'\b%s\s*\*+\s*%s\b' % (tag, re.escape(nm)), l)
                    for l in out[s:a + 1]):
                 continue
+            # `int32_t &v61 = Blocka_5;` binds a reference to the same
+            # storage under another type.  The reference keeps its type; what
+            # it binds to has to be spelled as that type.  This is in the
+            # declarations, which the rewrite above deliberately does not
+            # touch, so it belongs here.
+            for i in range(a, b + 1):
+                out[i] = re.sub(r'^(\s*(?:const\s+)?([A-Za-z_][A-Za-z0-9_]*)'
+                                r'\s*\*?\s*&\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*)'
+                                r'%s\s*;' % re.escape(nm),
+                                lambda m: '%s(%s &)%s;'
+                                % (m.group(1), m.group(2), nm), out[i])
             delta = retype_local(out, a, b, nm, tag)
             if delta is None:
                 # a name left at its old type would take `nm->f8` with it, and

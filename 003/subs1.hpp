@@ -5418,6 +5418,68 @@ static_assert(sizeof(void *) != 4
               "Obj68: the layout moved");
 
 
+// Obj10 -- recovered from 328 dereferences over 41 offsets, under 17
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj10 {
+  uint32_t f0;
+  int32_t f4;
+  uint32_t f8;
+  uint32_t f12;
+  uint32_t f16;
+  uint8_t _pad5[12];
+  uint32_t f32;
+  uint8_t _pad7[8];
+  uint32_t f44;
+  uint8_t _pad9[8];
+  uint32_t f56;
+  uint32_t f60;
+  uint32_t f64;
+  uint32_t f68;
+  uint32_t f72;
+  uint32_t f76;
+  uint32_t f80;
+  uint32_t f84;
+  uint32_t f88;
+  uint32_t f92;
+  uint32_t f96;
+  uint32_t f100;
+  uint32_t f104;
+  uint32_t f108;
+  uint8_t _pad24[1051552];
+  uint32_t f1051664;
+  uint32_t f1051668;
+  uint32_t f1051672;
+  uint32_t f1051676;
+  uint8_t _pad29[26524];
+  void*f1078204;
+  uint32_t f1078208;
+  uint32_t f1078212;
+  uint32_t f1078216;
+  uint8_t _pad34[4];
+  uint32_t f1078224;
+  uint8_t _pad36[4];
+  uint32_t f1078232;
+  int32_t f1078236;
+  uint32_t f1078240;
+  uint8_t _pad40[440];
+  void*f1078684;
+  uint32_t f1078688;
+  uint8_t f1078692;
+  uint8_t f1078693;
+  uint8_t f1078694;
+  uint8_t f1078695;
+  uint8_t _pad47[4980736];
+  uint32_t f6059432;
+  uint16_t *f6059436;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj10, f6059436) == 6059436,
+              "Obj10: the layout moved");
+
+
 struct RangeCoder {
   static const uint32_t kTop    = 0x00800000;   // renormalise at or below this
   static const uint32_t kPend   = 0x7F800000;   // low here still has a live carry
@@ -7136,26 +7198,29 @@ void __rc_end_encode()
     free(model_tables);
 }
 
-void **__free_workspace(void **Blocka, char a2)
+void **__free_workspace(Obj10 *Blocka, char a2)
 {
   ;
   int32_t v4, v6, v10, v13, i;
   uint32_t *v3, *v7, *v9, *v12;
-  void **Blocka_1, **Blocka_2, **v8, **Blocka_3, **v14;
-  Blocka_1 = Blocka;
-  free(*(Blocka + 269560));
-  free(Blocka_1[269559]);
-  free(Blocka_1[269671]);
-  free(Blocka_1[269672]);
-  v3 = Blocka_1[269552];
+  Obj10 *Blocka_3;
+  Obj10 *Blocka_1;
+  Obj10 *Blocka_2;
+  void **v8, **v14;
+  Blocka_1 = (Obj10 *)(Blocka);
+  free(*((void **)Blocka + 269560));
+  free(*(void**)&Blocka_1->f1078236);
+  free(Blocka_1->f1078684);
+  free(*(void**)&Blocka_1->f1078688);
+  v3 = *(void**)&Blocka_1->f1078208;
   if ( v3 )
   {
     v4 = *(v3 - 1);
     if ( v4 )
     {
-      Blocka_2 = Blocka_1;
+      Blocka_2 = (Obj10 *)(Blocka_1);
       v6 = *(v3 - 1);
-      v7 = Blocka_1[269552];
+      v7 = *(void**)&Blocka_1->f1078208;
       v8 = (void **)&v3[6 * v4];
       do
       {
@@ -7165,18 +7230,18 @@ void **__free_workspace(void **Blocka, char a2)
       }
       while ( v6 );
       v3 = v7;
-      Blocka_1 = Blocka_2;
+      Blocka_1 = (Obj10 *)(Blocka_2);
     }
     free(v3 - 1);
   }
-  v9 = Blocka_1[269553];
+  v9 = *(void**)&Blocka_1->f1078212;
   if ( v9 )
   {
     v10 = *(v9 - 1);
     if ( v10 )
     {
-      Blocka_3 = Blocka_1;
-      v12 = Blocka_1[269553];
+      Blocka_3 = (Obj10 *)(Blocka_1);
+      v12 = *(void**)&Blocka_1->f1078212;
       v13 = *(v9 - 1);
       v14 = (void **)&v9[6 * v10];
       do
@@ -7187,16 +7252,16 @@ void **__free_workspace(void **Blocka, char a2)
       }
       while ( v13 );
       v9 = v12;
-      Blocka_1 = Blocka_3;
+      Blocka_1 = (Obj10 *)(Blocka_3);
     }
     free(v9 - 1);
   }
   for ( i = 0; i < 5; ++i )
-    free(Blocka_1[i + 14]);
-  free(Blocka_1[269551]);
+    free(((void**)Blocka_1)[i + 14]);
+  free(Blocka_1->f1078204);
   if ( (a2 & 1) != 0 )
     free(Blocka_1);
-  return Blocka_1;
+  return (void **)Blocka_1;
 }
 
 int32_t __pixel_context(ModelBlock *_this, Obj24 *p_n15)
@@ -7291,7 +7356,7 @@ int32_t __pixel_context(ModelBlock *_this, Obj24 *p_n15)
 }
 static inline int32_t __fwd_init_model_tables_sub_413230(void *a0, int32_t a1, uint32_t a2) { return __sub_413230((uint32_t *)a0, a1, a2); }
 
-int32_t __init_model_tables(char *_this)
+int32_t __init_model_tables(Obj10 *_this)
 {
   ;
   char *v8, *v28, *v29, *v32;   // were int32_t: these hold addresses
@@ -7302,39 +7367,39 @@ int32_t __init_model_tables(char *_this)
   Obj37 *v20;
   Obj45 *v5;
   uint32_t **v4;
-  n2_1 = *(uint32_t *)(_this + 32);
+  n2_1 = _this->f32;
   if ( !n2_1 )
   {
-    if ( _this + 1078216 == *(uint32_t *)(_this + 1078232) )
+    if ( (char *)_this + 1078216 == _this->f1078232 )
     {
-      if ( *(uint32_t *)(_this + 1078216) )
+      if ( _this->f1078216 )
       {
-        __fwd_init_model_tables_sub_413230((uint32_t *)(*(uint32_t *)(_this + 1078212) + 24 * __n4_4), **(uint16_t **)(_this + 76), 3u);
-        __fwd_init_model_tables_sub_413230((uint32_t *)(*(uint32_t *)(_this + 1078212) + 24 * **(uint16_t **)(_this + 76)), __n4_3, 2u);
-        __fwd_init_model_tables_sub_413230((uint32_t *)(*(uint32_t *)(_this + 1078208) + 24 * __n4_4), **(uint16_t **)(_this + 76), 4u);
-        __fwd_init_model_tables_sub_413230((uint32_t *)(*(uint32_t *)(_this + 1078208) + 24 * **(uint16_t **)(_this + 76)), __n4_4, 2u);
+        __fwd_init_model_tables_sub_413230((uint32_t *)(_this->f1078212 + 24 * __n4_4), **(uint16_t **)&_this->f76, 3u);
+        __fwd_init_model_tables_sub_413230((uint32_t *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f76), __n4_3, 2u);
+        __fwd_init_model_tables_sub_413230((uint32_t *)(_this->f1078208 + 24 * __n4_4), **(uint16_t **)&_this->f76, 4u);
+        __fwd_init_model_tables_sub_413230((uint32_t *)(_this->f1078208 + 24 * **(uint16_t **)&_this->f76), __n4_4, 2u);
       }
       else
       {
         __fwd_init_model_tables_sub_413230(
-          (uint32_t *)(*(uint32_t *)(_this + 1078212) + 24 * __n4_3),
-          **(uint16_t **)(_this + 76),
-          (*(uint32_t *)(_this + 44) > 3) + 2);
+          (uint32_t *)(_this->f1078212 + 24 * __n4_3),
+          **(uint16_t **)&_this->f76,
+          (_this->f44 > 3) + 2);
       }
     }
     else
     {
-      __fwd_init_model_tables_sub_413230((uint32_t *)(*(uint32_t *)(_this + 1078212) + 24 * __n4_4), **(uint16_t **)(_this + 76), 3u);
-      __fwd_init_model_tables_sub_413230((uint32_t *)(*(uint32_t *)(_this + 1078212) + 24 * **(uint16_t **)(_this + 76)), __n4_3, 2u);
-      __fwd_init_model_tables_sub_413230((uint32_t *)(*(uint32_t *)(_this + 1078212) + 24 * **(uint16_t **)(_this + 76)), __n4_4, 1u);
-      __fwd_init_model_tables_sub_413230((uint32_t *)(*(uint32_t *)(_this + 1078208) + 24 * **(uint16_t **)(_this + 76)), __n4_4, 2u);
-      v3 = *(uint32_t *)(_this + 1078232);
+      __fwd_init_model_tables_sub_413230((uint32_t *)(_this->f1078212 + 24 * __n4_4), **(uint16_t **)&_this->f76, 3u);
+      __fwd_init_model_tables_sub_413230((uint32_t *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f76), __n4_3, 2u);
+      __fwd_init_model_tables_sub_413230((uint32_t *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f76), __n4_4, 1u);
+      __fwd_init_model_tables_sub_413230((uint32_t *)(_this->f1078208 + 24 * **(uint16_t **)&_this->f76), __n4_4, 2u);
+      v3 = _this->f1078232;
       do
       {
         v4 = (uint32_t **)(v3 - 4);
-        *(uint32_t *)(_this + 1078232) = v4;
+        _this->f1078232 = v4;
         v5 = (Obj45 *)(*v4);
-        v6 = **(uint16_t **)(_this + 76);
+        v6 = **(uint16_t **)&_this->f76;
         v7 = v5->f4;
         v32 = v5->f20;
         if ( v7 == v5->f0 )
@@ -7364,13 +7429,13 @@ int32_t __init_model_tables(char *_this)
           *(int16_t *)((char *)v11 - 3) = v12;
           *((uint8_t *)v11 - 1) = v13;
         }
-        v3 = *(uint32_t *)(_this + 1078232);
+        v3 = _this->f1078232;
       }
-      while ( v3 != _this + 1078216 );
+      while ( v3 != (char *)_this + 1078216 );
     }
     if ( __byte_445700 == -1 )
     {
-      v15 = *(uint32_t *)(_this + 16);
+      v15 = _this->f16;
       __byte_445700 = 1;
       buf = exclusion_mask;
       v17 = (v15 + 15) >> 4;
@@ -7384,12 +7449,12 @@ int32_t __init_model_tables(char *_this)
         --v17;
       }
       while ( v17 );
-      n2 = *(uint32_t *)(_this + 32);
+      n2 = _this->f32;
     }
     else
     {
       ++__byte_445700;
-      n2 = *(uint32_t *)(_this + 32);
+      n2 = _this->f32;
     }
 LABEL_19:
     if ( n2 && n2 <= 2 )
@@ -7400,13 +7465,13 @@ LABEL_19:
     goto LABEL_37;
   if ( __n15 != __n15_0 )
   {
-    __fwd_init_model_tables_sub_413230((uint32_t *)(*(uint32_t *)(_this + 1078212) + 24 * __n4_3), **(uint16_t **)(_this + 76), 1u);
-    n2 = *(uint32_t *)(_this + 32);
+    __fwd_init_model_tables_sub_413230((uint32_t *)(_this->f1078212 + 24 * __n4_3), **(uint16_t **)&_this->f76, 1u);
+    n2 = _this->f32;
     goto LABEL_19;
   }
 LABEL_21:
-  v19 = **(uint16_t **)(_this + 76);
-  v20 = (Obj37 *)(*(uint16_t **)(_this + 6059432));
+  v19 = **(uint16_t **)&_this->f76;
+  v20 = (Obj37 *)(*(uint16_t **)&_this->f6059432);
   v21 = v20->f0;
   if ( v19 != v21 )
   {
@@ -7421,7 +7486,7 @@ LABEL_21:
       if ( v19 == v23 )
       {
         v20->f4 = v22;
-        *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 2) = **(uint16_t **)(_this + 6059432);
+        *(uint16_t *)(_this->f6059432 + 2) = **(uint16_t **)&_this->f6059432;
       }
       else
       {
@@ -7429,8 +7494,8 @@ LABEL_21:
         if ( v19 == v24 )
         {
           v20->f6 = v23;
-          *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 4) = *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 2);
-          *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 2) = **(uint16_t **)(_this + 6059432);
+          *(uint16_t *)(_this->f6059432 + 4) = *(uint16_t *)(_this->f6059432 + 2);
+          *(uint16_t *)(_this->f6059432 + 2) = **(uint16_t **)&_this->f6059432;
         }
         else
         {
@@ -7438,9 +7503,9 @@ LABEL_21:
           if ( v19 == v25 )
           {
             v20->f8 = v24;
-            *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 6) = *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 4);
-            *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 4) = *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 2);
-            *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 2) = **(uint16_t **)(_this + 6059432);
+            *(uint16_t *)(_this->f6059432 + 6) = *(uint16_t *)(_this->f6059432 + 4);
+            *(uint16_t *)(_this->f6059432 + 4) = *(uint16_t *)(_this->f6059432 + 2);
+            *(uint16_t *)(_this->f6059432 + 2) = **(uint16_t **)&_this->f6059432;
           }
           else
           {
@@ -7448,10 +7513,10 @@ LABEL_21:
             if ( v19 == v26 )
             {
               v20->f10 = v25;
-              *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 8) = *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 6);
-              *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 6) = *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 4);
-              *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 4) = *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 2);
-              *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 2) = **(uint16_t **)(_this + 6059432);
+              *(uint16_t *)(_this->f6059432 + 8) = *(uint16_t *)(_this->f6059432 + 6);
+              *(uint16_t *)(_this->f6059432 + 6) = *(uint16_t *)(_this->f6059432 + 4);
+              *(uint16_t *)(_this->f6059432 + 4) = *(uint16_t *)(_this->f6059432 + 2);
+              *(uint16_t *)(_this->f6059432 + 2) = **(uint16_t **)&_this->f6059432;
             }
             else
             {
@@ -7463,44 +7528,44 @@ LABEL_21:
               else
               {
                 v20->f14 = v27;
-                *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 12) = *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 10);
+                *(uint16_t *)(_this->f6059432 + 12) = *(uint16_t *)(_this->f6059432 + 10);
               }
-              *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 10) = *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 8);
-              *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 8) = *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 6);
-              *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 6) = *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 4);
-              *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 4) = *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 2);
-              *(uint16_t *)(*(uint32_t *)(_this + 6059432) + 2) = **(uint16_t **)(_this + 6059432);
+              *(uint16_t *)(_this->f6059432 + 10) = *(uint16_t *)(_this->f6059432 + 8);
+              *(uint16_t *)(_this->f6059432 + 8) = *(uint16_t *)(_this->f6059432 + 6);
+              *(uint16_t *)(_this->f6059432 + 6) = *(uint16_t *)(_this->f6059432 + 4);
+              *(uint16_t *)(_this->f6059432 + 4) = *(uint16_t *)(_this->f6059432 + 2);
+              *(uint16_t *)(_this->f6059432 + 2) = **(uint16_t **)&_this->f6059432;
             }
           }
         }
       }
     }
-    **(uint16_t **)(_this + 6059432) = v19;
+    **(uint16_t **)&_this->f6059432 = v19;
   }
 LABEL_37:
-  *(uint16_t *)(*(uint32_t *)(_this + 6059436) + 2) = **(uint16_t **)(_this + 6059436);
-  **(uint16_t **)(_this + 6059436) = **(uint16_t **)(_this + 76);
-  *(uint8_t *)(*(uint32_t *)(_this + 76) + 2) = **(uint16_t **)(_this + 76) == **(uint16_t **)(_this + 80);
-  *(uint8_t *)(*(uint32_t *)(_this + 76) + 3) = **(uint16_t **)(_this + 76) == *(uint16_t *)(*(uint32_t *)(_this + 76) - 8);
-  *(uint8_t *)(*(uint32_t *)(_this + 76) + 4) = **(uint16_t **)(_this + 76) == *(uint16_t *)(*(uint32_t *)(_this + 80) + 8);
-  *(uint8_t *)(*(uint32_t *)(_this + 76) + 5) = **(uint16_t **)(_this + 76) == *(uint16_t *)(*(uint32_t *)(_this + 80) - 8);
-  *(uint8_t *)(*(uint32_t *)(_this + 76) + 6) = **(uint16_t **)(_this + 76) == *(uint16_t *)(*(uint32_t *)(_this + 80) + 16);
-  *(uint8_t *)(*(uint32_t *)(_this + 76) + 7) = **(uint16_t **)(_this + 76) == *(uint16_t *)(*(uint32_t *)(_this + 80) + 24);
-  v28 = *(uint32_t *)(_this + 80);
-  v29 = *(uint32_t *)(_this + 84);
-  v30 = *(uint32_t *)(_this + 76) + 8;
-  *(uint32_t *)(_this + 76) = v30;
-  *(uint32_t *)(_this + 88) += 8;
+  *(uint16_t *)(*(uint32_t *)&_this->f6059436 + 2) = *_this->f6059436;
+  *_this->f6059436 = **(uint16_t **)&_this->f76;
+  *(uint8_t *)(_this->f76 + 2) = **(uint16_t **)&_this->f76 == **(uint16_t **)&_this->f80;
+  *(uint8_t *)(_this->f76 + 3) = **(uint16_t **)&_this->f76 == *(uint16_t *)(_this->f76 - 8);
+  *(uint8_t *)(_this->f76 + 4) = **(uint16_t **)&_this->f76 == *(uint16_t *)(_this->f80 + 8);
+  *(uint8_t *)(_this->f76 + 5) = **(uint16_t **)&_this->f76 == *(uint16_t *)(_this->f80 - 8);
+  *(uint8_t *)(_this->f76 + 6) = **(uint16_t **)&_this->f76 == *(uint16_t *)(_this->f80 + 16);
+  *(uint8_t *)(_this->f76 + 7) = **(uint16_t **)&_this->f76 == *(uint16_t *)(_this->f80 + 24);
+  v28 = _this->f80;
+  v29 = _this->f84;
+  v30 = _this->f76 + 8;
+  _this->f76 = v30;
+  _this->f88 += 8;
   v28 += 8;
-  *(uint32_t *)(_this + 80) = v28;
+  _this->f80 = v28;
   v29 += 8;
-  *(uint32_t *)(_this + 92) += 8;
-  *(uint32_t *)(_this + 84) = v29;
-  *(uint8_t *)(_this + 1078692) += *(uint8_t *)(v28 + 34) - *(uint8_t *)(v28 - 30);
-  *(uint8_t *)(_this + 1078693) += *(uint8_t *)(v29 + 34) - *(uint8_t *)(v29 - 30);
-  *(uint8_t *)(_this + 1078694) += *(uint8_t *)(v30 - 5) - *(uint8_t *)(v30 - 37);
+  _this->f92 += 8;
+  _this->f84 = v29;
+  _this->f1078692 += *(uint8_t *)(v28 + 34) - *(uint8_t *)(v28 - 30);
+  _this->f1078693 += *(uint8_t *)(v29 + 34) - *(uint8_t *)(v29 - 30);
+  _this->f1078694 += *(uint8_t *)(v30 - 5) - *(uint8_t *)(v30 - 37);
   result = *(uint8_t *)(v30 - 6) - *(uint8_t *)(v30 - 62);
-  *(uint8_t *)(_this + 1078695) += result;
+  _this->f1078695 += result;
   return result;
 }
 
@@ -11978,7 +12043,7 @@ BMF_SSE int32_t __sub_41A130(Obj11 *a1, const __m128 &a2__ref, const __m128 &a3_
 static inline int32_t __fwd_reduce_alphabet_encode_symbol_list(void *a0, int32_t a1) { return __encode_symbol_list((uint32_t *)a0, a1); }
 static inline uint32_t __fwd_reduce_alphabet_init_encode_symbol_list(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __init_symbol_list((Obj35 *)a0, a1, a2, a3); }
 
-void __reduce_alphabet(char *Blocka, char a2, uint8_t *a3)
+void __reduce_alphabet(Obj10 *Blocka, char a2, uint8_t *a3)
 {
   struct alignas(16) {   // 66064 bytes, the frame Hex-Rays could not name
       uint32_t v78[15];
@@ -12025,28 +12090,32 @@ void __reduce_alphabet(char *Blocka, char a2, uint8_t *a3)
   uint32_t &v92 = __frame.v92;
   uint32_t &v93 = __frame.v93;
   uint32_t &v94 = __frame.v94;
-  int32_t &Blockaa = __frame.Blockaa;
+  Obj10 *&Blockaa = (Obj10 *&)__frame.Blockaa;
   uint8_t *&v96 = __frame.v96;
   uint32_t &k_1 = __frame.k_1;
-  int32_t &Blocka_1 = __frame.Blocka_1;
+  Obj10 *&Blocka_1 = (Obj10 *&)__frame.Blocka_1;
   ;
-  char *v62, *Blockaa_2;   // were int32_t: these hold addresses
+  Obj10 *Blockaa_2;
+  char *v62;
   bool v46, v48, v59;
   char *v28, v35;
-  int32_t n8, v8, *Blockaa_1, v11, n4, n0x2000_2, n0x2000_1, v20, Blockaa_4, v26, n4_2, v30,
-          v31, v32, *p_n4, n16_2, v39, v44, n256, v49, v50, v51, v52, v54, v55, v56, v57, v58,
-          v63, *p_n4_2, n16_1, v68, n0x2000, v71, v72, v74, *p_n4_1, n16;
-  uint32_t k_2, i, v12, *Blockaa_3, v19, n0x2000_4, n0x2000_3, v24, k, v29, k_3, j_1, j, v53,
-          v61, v64, v70, v73, v75;
+  Obj10 *Blockaa_1;
+  Obj10 *Blockaa_4;
+  int32_t n8, v8, v11, n4, n0x2000_2, n0x2000_1, v20, v26, n4_2, v30, v31, v32, *p_n4, n16_2,
+          v39, v44, n256, v49, v50, v51, v52, v54, v55, v56, v57, v58, v63, *p_n4_2, n16_1, v68,
+          n0x2000, v71, v72, v74, *p_n4_1, n16;
+  Obj10 *Blockaa_3;
+  uint32_t k_2, i, v12, v19, n0x2000_4, n0x2000_3, v24, k, v29, k_3, j_1, j, v53, v61, v64, v70,
+           v73, v75;
   uint64_t *n0x2000_6;
   uint8_t *v4, *v10, *v33, *v42, *v43, *v45, *v60;
   void *v3, *v13, *v34;
-  Blocka_1 = Blocka;
+  Blocka_1 = (Obj10 *)(Blocka);
   v3 = alloca(65968);
   v4 = a3;
-  n8 = *(uint32_t *)(Blocka + 8);
+  n8 = Blocka->f8;
   v91 = a3;
-  Blockaa = Blocka;
+  Blockaa = (Obj10 *)(Blocka);
   v93 = 0xFFFFFFFF >> (-(char)n8 & 31);
   k_2 = (n8 + 7) >> 3;
   for ( i = 0; i < 8; ++i )
@@ -12055,7 +12124,7 @@ void __reduce_alphabet(char *Blocka, char a2, uint8_t *a3)
     v88[v8] = 0;
     v88[v8 + 6] = 0;
   }
-  Blockaa_1 = (int32_t *)Blockaa;
+  Blockaa_1 = (Obj10 *)((int32_t *)Blockaa);
   if ( n8 <= 8 )
   {
     n256 = 256;
@@ -12068,15 +12137,15 @@ void __reduce_alphabet(char *Blocka, char a2, uint8_t *a3)
       n256 -= 16;
     }
     while ( n256 * 4 );
-    v48 = Blockaa_1[2] < 8;
-    v49 = Blockaa_1[1];
-    Blockaa_1[4] = 0;
+    v48 = *(int32_t *)&Blockaa_1->f8 < 8;
+    v49 = Blockaa_1->f4;
+    *(int32_t *)&Blockaa_1->f16 = 0;
     if ( v48 )
     {
       v50 = 0;
       if ( v49 )
       {
-        v51 = *Blockaa_1;
+        v51 = *(int32_t *)&Blockaa_1->f0;
         v96 = a3 - 1;
         v84 = 0;
         v52 = 0;
@@ -12090,7 +12159,7 @@ void __reduce_alphabet(char *Blocka, char a2, uint8_t *a3)
           v55 = 0;
           do
           {
-            v56 = Blockaa_1[2];
+            v56 = *(int32_t *)&Blockaa_1->f8;
             v57 = v55 - v56;
             if ( v57 < 0 )
             {
@@ -12103,46 +12172,46 @@ void __reduce_alphabet(char *Blocka, char a2, uint8_t *a3)
             ++v53;
             *(uint32_t *)&buf[4 * v58 - 4] = 1;
             v55 = v85;
-            Blockaa_1[4] += v59;
-            *(uint16_t *)(Blockaa_1[269559] + 2 * v54) = v58;
-            v51 = *Blockaa_1;
+            *(int32_t *)&Blockaa_1->f16 += v59;
+            *(uint16_t *)(Blockaa_1->f1078236 + 2 * v54) = v58;
+            v51 = *(int32_t *)&Blockaa_1->f0;
             ++v54;
           }
-          while ( v53 < *Blockaa_1 );
-          v50 = Blockaa_1[4];
+          while ( v53 < *(int32_t *)&Blockaa_1->f0 );
+          v50 = *(int32_t *)&Blockaa_1->f16;
           v84 = v54;
           v52 = v83 + 1;
         }
-        while ( v83 + 1 < (uint32_t)Blockaa_1[1] );
+        while ( v83 + 1 < (uint32_t)Blockaa_1->f4 );
       }
     }
-    else if ( v49 * *Blockaa_1 )
+    else if ( v49 * *(int32_t *)&Blockaa_1->f0 )
     {
       v60 = v91;
       v61 = 0;
       do
       {
-        Blockaa_1[4] += *(uint32_t *)&buf[4 * *v60 - 4] == 0;
-        v62 = Blockaa_1[269559];
+        *(int32_t *)&Blockaa_1->f16 += *(uint32_t *)&buf[4 * *v60 - 4] == 0;
+        v62 = Blockaa_1->f1078236;
         v63 = *v60;
         *(uint32_t *)&buf[4 * v63 - 4] = 1;
         ++v60;
         *(uint16_t *)(v62 + 2 * v61++) = v63;
       }
-      while ( v61 < Blockaa_1[1] * *Blockaa_1 );
-      v50 = Blockaa_1[4];
+      while ( v61 < Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0 );
+      v50 = *(int32_t *)&Blockaa_1->f16;
     }
     else
     {
       v50 = 0;
     }
     rc.encode(v50 - 1, v50, v93 + 1);
-    v64 = Blockaa_1[4];
+    v64 = *(int32_t *)&Blockaa_1->f16;
     if ( v64 <= v93 )
     {
       __fwd_reduce_alphabet_init_encode_symbol_list((int32_t *)v86, (int32_t)Blockaa_1, v93 - v64 + 2, 1);
       v87 = 19 * LODWORD(v86[0]);
-      v70 = Blockaa_1[4];
+      v70 = *(int32_t *)&Blockaa_1->f16;
       if ( v70 )
       {
         v71 = 0;
@@ -12153,7 +12222,7 @@ void __reduce_alphabet(char *Blocka, char a2, uint8_t *a3)
           if ( *(uint32_t *)&buf[4 * v72 - 4] )
           {
             __fwd_reduce_alphabet_encode_symbol_list((uint32_t *)v86, v72 - v71);
-            v70 = Blockaa_1[4];
+            v70 = *(int32_t *)&Blockaa_1->f16;
             *(uint32_t *)&buf[4 * v72 - 4] = v73;
             v74 = v72 + 1;
             v71 = v72 + 1;
@@ -12167,17 +12236,17 @@ void __reduce_alphabet(char *Blocka, char a2, uint8_t *a3)
         }
         while ( v73 < v70 );
       }
-      if ( Blockaa_1[1] * *Blockaa_1 )
+      if ( Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0 )
       {
         v75 = 0;
         do
         {
-          *(uint16_t *)(Blockaa_1[269559] + 2 * v75) = *(uint32_t *)&buf[4
-                                                                  * *(uint16_t *)(Blockaa_1[269559] + 2 * v75)
+          *(uint16_t *)(Blockaa_1->f1078236 + 2 * v75) = *(uint32_t *)&buf[4
+                                                                  * *(uint16_t *)(Blockaa_1->f1078236 + 2 * v75)
                                                                   - 4];
           ++v75;
         }
-        while ( v75 < Blockaa_1[1] * *Blockaa_1 );
+        while ( v75 < Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0 );
       }
       p_n4_1 = &n4_1;
       n16 = 16;
@@ -12205,14 +12274,14 @@ void __reduce_alphabet(char *Blocka, char a2, uint8_t *a3)
   else
   {
     memset(buf,0,0x10000);
-    Blockaa_1[4] = 1;
+    *(int32_t *)&Blockaa_1->f16 = 1;
     *(uint32_t *)buf = v93 & *(uint32_t *)a3;
-    *(uint16_t *)Blockaa_1[269559] = 0;
-    if ( (uint32_t)(Blockaa_1[1] * *Blockaa_1) > 1 )
+    *(uint16_t *)Blockaa_1->f1078236 = 0;
+    if ( (uint32_t)(Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0) > 1 )
     {
       v96 = a3;
       k_1 = k_2;
-      Blockaa = (int32_t)Blockaa_1;
+      Blockaa = (Obj10 *)((int32_t)Blockaa_1);
       v10 = v91;
       v11 = 0;
       v12 = 1;
@@ -12246,48 +12315,48 @@ void __reduce_alphabet(char *Blocka, char a2, uint8_t *a3)
             v10 = v91;
             n4_1 = n4;
             Block = v13;
-            Blockaa_2 = Blockaa;
-            v68 = *(uint32_t *)(Blockaa + 16);
+            Blockaa_2 = (Obj10 *)(Blockaa);
+            v68 = Blockaa->f16;
             __n4_4 = n4;
             v11 = (uint16_t)v68;
             n0x2000 = v68 + 1;
             *(uint16_t *)(n0x2000_5 + 2 * n4) = v11;
             v12 = v92;
-            *(uint32_t *)(Blockaa_2 + 16) = n0x2000;
+            Blockaa_2->f16 = n0x2000;
             if ( n0x2000 > 0x2000 )
             {
               v4 = v96;
               n0x2000_2 = n0x2000;
               k_2 = k_1;
-              Blockaa_1 = (int32_t *)Blockaa;
+              Blockaa_1 = (Obj10 *)((int32_t *)Blockaa);
               goto LABEL_14;
             }
             *(uint32_t *)&buf[8 * v11] = Block;
           }
         }
 LABEL_12:
-        Blockaa_3 = (uint32_t *)Blockaa;
-        *(uint16_t *)(*(uint32_t *)(Blockaa + 1078236) + 2 * v12++) = v11;
-        if ( v12 >= Blockaa_3[1] * *Blockaa_3 )
+        Blockaa_3 = (Obj10 *)((uint32_t *)Blockaa);
+        *(uint16_t *)(*(uint32_t *)&Blockaa->f1078236 + 2 * v12++) = v11;
+        if ( v12 >= *(uint32_t *)&Blockaa_3->f4 * Blockaa_3->f0 )
         {
           v4 = v96;
           k_2 = k_1;
-          Blockaa_1 = (int32_t *)Blockaa;
-          n0x2000_2 = *(uint32_t *)(Blockaa + 16);
+          Blockaa_1 = (Obj10 *)((int32_t *)Blockaa);
+          n0x2000_2 = Blockaa->f16;
           goto LABEL_14;
         }
       }
     }
-    n0x2000_2 = Blockaa_1[4];
+    n0x2000_2 = *(int32_t *)&Blockaa_1->f16;
 LABEL_14:
     rc.encode(n0x2000_2 - 1, n0x2000_2, 0x2001u);
-    n0x2000_1 = Blockaa_1[4];
+    n0x2000_1 = *(int32_t *)&Blockaa_1->f16;
     if ( n0x2000_1 > 0x2000 )
     {
-      Block = malloc(Blockaa_1[1] * k_2 * *Blockaa_1);
-      v26 = *Blockaa_1;
-      n4_2 = Blockaa_1[1];
-      n0x2000_5 = *Blockaa_1;
+      Block = malloc(Blockaa_1->f4 * k_2 * *(int32_t *)&Blockaa_1->f0);
+      v26 = *(int32_t *)&Blockaa_1->f0;
+      n4_2 = Blockaa_1->f4;
+      n0x2000_5 = *(int32_t *)&Blockaa_1->f0;
       n4_1 = n4_2;
       if ( k_2 )
       {
@@ -12297,7 +12366,7 @@ LABEL_14:
           v28 = (char *)Block + n4_1 * n0x2000_5;
           v96 = v4;
           k_1 = k_2;
-          Blockaa = (int32_t)Blockaa_1;
+          Blockaa = (Obj10 *)((int32_t)Blockaa_1);
           v29 = 0;
           do
           {
@@ -12309,7 +12378,7 @@ LABEL_14:
           while ( v29 < k_2 >> 1 );
           v4 = v96;
           k_2 = k_1;
-          Blockaa_1 = (int32_t *)Blockaa;
+          Blockaa_1 = (Obj10 *)((int32_t *)Blockaa);
           v32 = 2 * v29 + 1;
         }
         else
@@ -12329,7 +12398,7 @@ LABEL_14:
         if ( k_2 )
         {
           k_1 = k_2;
-          Blockaa = (int32_t)Blockaa_1;
+          Blockaa = (Obj10 *)((int32_t)Blockaa_1);
           n0x2000_5 = 0;
           k_3 = k_2;
           v39 = 0;
@@ -12373,16 +12442,16 @@ LABEL_14:
           }
 LABEL_71:
           k_2 = k_1;
-          Blockaa_1 = (int32_t *)Blockaa;
+          Blockaa_1 = (Obj10 *)((int32_t *)Blockaa);
         }
       }
-      v79 = (void *)Blockaa_1[269559];
-      Blockaa_1[1] = k_2 * n4_1;
-      Blockaa_1[2] = 8;
+      v79 = (void *)Blockaa_1->f1078236;
+      Blockaa_1->f4 = k_2 * n4_1;
+      *(int32_t *)&Blockaa_1->f8 = 8;
       free(v79);
-      v34 = malloc(2 * Blockaa_1[1] * *Blockaa_1);
+      v34 = malloc(2 * Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0);
       v79 = Block;
-      Blockaa_1[269559] = (int32_t)v34;
+      Blockaa_1->f1078236 = (int32_t)v34;
       __reduce_alphabet((int32_t)Blockaa_1, v35, (uint8_t *)v79);
       free(Block);
     }
@@ -12390,7 +12459,7 @@ LABEL_71:
     {
       if ( 4 * k_2 )
       {
-        Blockaa = (int32_t)Blockaa_1;
+        Blockaa = (Obj10 *)((int32_t)Blockaa_1);
         v19 = 0;
         do
         {
@@ -12398,15 +12467,15 @@ LABEL_71:
           ++v19;
         }
         while ( v19 < 4 * k_2 );
-        Blockaa_1 = (int32_t *)Blockaa;
-        n0x2000_1 = *(uint32_t *)(Blockaa + 16);
+        Blockaa_1 = (Obj10 *)((int32_t *)Blockaa);
+        n0x2000_1 = Blockaa->f16;
       }
       if ( n0x2000_1 )
       {
         v20 = 0;
         n0x2000_4 = 0;
         n0x2000_3 = n0x2000_1;
-        Blockaa_4 = (int32_t)Blockaa_1;
+        Blockaa_4 = (Obj10 *)((int32_t)Blockaa_1);
         do
         {
           v24 = *(uint32_t *)&buf[8 * n0x2000_4];
@@ -12414,7 +12483,7 @@ LABEL_71:
           {
             n0x2000_5 = n0x2000_4;
             k_1 = k_2;
-            Blockaa = Blockaa_4;
+            Blockaa = (Obj10 *)(Blockaa_4);
             for ( k = 0; k < k_1; ++k )
             {
               __fwd_reduce_alphabet_encode_symbol_list((uint32_t *)&v86[12 * k + 3 * v20], (uint8_t)v24);
@@ -12423,9 +12492,9 @@ LABEL_71:
             }
             n0x2000_4 = n0x2000_5;
             k_2 = k_1;
-            Blockaa_4 = Blockaa;
+            Blockaa_4 = (Obj10 *)(Blockaa);
             v24 = *(uint32_t *)&buf[8 * n0x2000_5];
-            n0x2000_3 = *(uint32_t *)(Blockaa + 16);
+            n0x2000_3 = Blockaa->f16;
           }
           v20 = (uint8_t)v24 >> 7;
           ++n0x2000_4;
@@ -15764,7 +15833,7 @@ LABEL_42:
 static inline int32_t __fwd_sub_419430_decode_encode_symbol_list(void *a0) { return __decode_symbol_list((uint32_t *)a0); }
 static inline uint32_t __fwd_sub_419430_init_encode_symbol_list(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __init_symbol_list((Obj35 *)a0, a1, a2, a3); }
 
-void __sub_419430(uint32_t *_this)
+void __sub_419430(Obj10 *_this)
 {
   struct alignas(16) {   // 420 bytes, the frame Hex-Rays could not name
       uint64_t v28[2];
@@ -15784,7 +15853,7 @@ void __sub_419430(uint32_t *_this)
   int32_t n8, v4, v6, v9, n16_1, n16, v25, v27;
   uint32_t j_2, i, n8193, v8, *v10, j_1, j, v15, v17, v18, v19, v20, v21, *v22, v26;
   void *v12;
-  n8 = *(_this + 2);
+  n8 = *((uint32_t *)_this + 2);
   j_2 = 0xFFFFFFFF >> (-*((uint8_t *)_this + 8) & 31);
   v4 = (n8 + 7) >> 3;
   for ( i = 0; i < 8; ++i )
@@ -15797,21 +15866,21 @@ void __sub_419430(uint32_t *_this)
   if ( n8 > 8 )
     n8193 = 8193;
   v8 = __rc_decode_flat(n8193);
-  *(_this + 4) = v8 + 1;
+  *((uint32_t *)_this + 4) = v8 + 1;
   if ( (int32_t)(v8 + 1) <= 0x2000 )
   {
     v12 = malloc(4 * v8 + 4);
-    j_1 = *(_this + 4);
-    *(_this + 269560) = v12;
+    j_1 = *((uint32_t *)_this + 4);
+    *((uint32_t *)_this + 269560) = v12;
     if ( j_1 )
     {
       for ( j = 0; j < j_1; ++j )
       {
-        *(uint32_t *)(*(_this + 269560) + 4 * j) = j;
-        j_1 = *(_this + 4);
+        *(uint32_t *)(*((uint32_t *)_this + 269560) + 4 * j) = j;
+        j_1 = *((uint32_t *)_this + 4);
       }
     }
-    if ( (int32_t)*(_this + 2) > 8 )
+    if ( (int32_t)*((uint32_t *)_this + 2) > 8 )
     {
       if ( 4 * v4 )
       {
@@ -15819,11 +15888,11 @@ void __sub_419430(uint32_t *_this)
         do
           __fwd_sub_419430_init_encode_symbol_list((int32_t *)&v28[3 * v15++], (int32_t)_this, 256, 1);
         while ( v15 < 4 * v4 );
-        j_1 = *(_this + 4);
+        j_1 = *((uint32_t *)_this + 4);
       }
       if ( j_1 )
       {
-        v16 = *(_this + 269560);
+        v16 = *((uint32_t *)_this + 269560);
         v17 = 0;
         v18 = 0;
         do
@@ -15838,22 +15907,22 @@ void __sub_419430(uint32_t *_this)
               v20 = __fwd_sub_419430_decode_encode_symbol_list((uint32_t *)&v28[12 * v19 + 3 * v17]);
               v21 = v20 << ((8 * v19) & 31);
               v17 = v20 >> 6;
-              *(uint32_t *)(*(_this + 269560) + 4 * v18) += v21;
+              *(uint32_t *)(*((uint32_t *)_this + 269560) + 4 * v18) += v21;
               ++v19;
             }
             while ( v19 < v31[0] );
             v4 = v31[0];
           }
-          v16 = *(_this + 269560);
+          v16 = *((uint32_t *)_this + 269560);
           v17 = *(uint8_t *)(v16 + 4 * v18++) >> 7;
         }
-        while ( v18 < *(_this + 4) );
+        while ( v18 < *((uint32_t *)_this + 4) );
       }
     }
     else if ( j_1 <= j_2 )
     {
       __fwd_sub_419430_init_encode_symbol_list((int32_t *)v28, (int32_t)_this, j_2 - j_1 + 2, 1);
-      v24 = *(_this + 4) == 0;
+      v24 = *((uint32_t *)_this + 4) == 0;
       v29 = 19 * LODWORD(v28[0]);
       if ( !v24 )
       {
@@ -15862,11 +15931,11 @@ void __sub_419430(uint32_t *_this)
         do
         {
           v27 = __fwd_sub_419430_decode_encode_symbol_list(v28);
-          *(uint32_t *)(*(_this + 269560) + 4 * v26) = v27 + v25;
+          *(uint32_t *)(*((uint32_t *)_this + 269560) + 4 * v26) = v27 + v25;
           v25 += v27 + 1;
           ++v26;
         }
-        while ( v26 < *(_this + 4) );
+        while ( v26 < *((uint32_t *)_this + 4) );
       }
     }
     v22 = v31;
@@ -15881,9 +15950,9 @@ void __sub_419430(uint32_t *_this)
   }
   else
   {
-    v9 = *(_this + 1) * v4;
-    *(_this + 2) = 8;
-    *(_this + 1) = v9;
+    v9 = *((uint32_t *)_this + 1) * v4;
+    *((uint32_t *)_this + 2) = 8;
+    *((uint32_t *)_this + 1) = v9;
     __sub_419430(_this);
     v10 = v31;
     n16_1 = 16;
@@ -16074,9 +16143,9 @@ LABEL_26:
 }
 static inline uint32_t __fwd_unmodel_plane_slow_init_encode_symbol_list(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __init_symbol_list((Obj35 *)a0, a1, a2, a3); }
 static inline int32_t __fwd_unmodel_plane_slow_decode_pixel(void *a0, int32_t a1) { return __decode_pixel((ModelBlock *)a0, a1); }
-static inline void __fwd_unmodel_plane_slow_sub_419430(void *a0) { __sub_419430((uint32_t *)a0); }
+static inline void __fwd_unmodel_plane_slow_sub_419430(void *a0) { __sub_419430((Obj10 *)a0); }
 
-void __unmodel_plane_slow(uint32_t *_this, char *Src)
+void __unmodel_plane_slow(Obj10 *_this, char *Src)
 {
   int32_t Size;
   int32_t v82;
@@ -16095,13 +16164,14 @@ void __unmodel_plane_slow(uint32_t *_this, char *Src)
   int32_t v95;
   int32_t ArgList_4;
   char *Src_1;
-  uint32_t *this_1;
+  Obj10 *this_1;
   int32_t v99;
   int32_t v100;
   int32_t v101;
   int32_t v102;
   ;
-  uintptr_t this_4, v44, v48;   // were int32_t: addresses, masked and tagged
+  Obj10 *this_4;
+  uintptr_t v44, v48;
   char *v57;   // were int32_t: these hold addresses
   bool v38;
   char *ArgList, *v9, *ArgList_2, *buf, v26, *ArgList_3, *ArgList_9, *ArgList_10, *Src_2, *v77,
@@ -16110,21 +16180,23 @@ void __unmodel_plane_slow(uint32_t *_this, char *Src)
   int32_t v3, v5, v6, v8, n5, v11, v14, v15, v16, v17, v18, v19, n0x10000, v27, v28, v29, v30,
           v34, v39, v40, n4_1, v43, v45, v46, v47, v51, v52, v53, v54, v56, v58, v60, v61, v62,
           v64, v65, v66, n6, v68, v69, n6_4, n6_1, v73, n6_2, v76, v78, v80;
-  uint32_t *this_2, *this_3, *v13, *v22, *v31, *i_1, *i, *v35, *j_1, *j, *ArgList_7, *ArgList_6;
+  Obj10 *this_3;
+  Obj10 *this_2;
+  uint32_t *v13, *v22, *v31, *i_1, *i, *v35, *j_1, *j, *ArgList_7, *ArgList_6;
   uint8_t *v49, *v50;
-  v3 = *(_this + 2) < 8;
+  v3 = *((uint32_t *)_this + 2) < 8;
   Src_1 = Src;
   ArgList = &Src[-v3];
   __rc_begin_decode((char)ArgList);
   __fwd_unmodel_plane_slow_sub_419430(_this);
   ArgList_1 = ArgList;
-  this_1 = _this;
+  this_1 = (Obj10 *)(_this);
   v102 = 0;
   v5 = 0;
   do
   {
     v6 = (uint8_t)ctx_group_flags[v5];
-    this_2 = this_1;
+    this_2 = (Obj10 *)(this_1);
     *((uint8_t *)this_1 + v6 + 1078244) = v5;
     v100 = 0;
     v82 = v5;
@@ -16145,10 +16217,10 @@ void __unmodel_plane_slow(uint32_t *_this, char *Src)
       do
       {
         v11 = v102;
-        this_3 = this_1;
+        this_3 = (Obj10 *)(this_1);
         v85[75 * n5 + 1078308] = v102;
-        v101 = this_3[4];
-        v13 = &this_3[4 * v11];
+        v101 = this_3->f16;
+        v13 = &((uint32_t *)this_3)[4 * v11];
         *((uint16_t *)v13 + 49) = 2;
         *((uint16_t *)v13 + 50) = 2;
         *((uint16_t *)v13 + 51) = 2;
@@ -16241,7 +16313,7 @@ void __unmodel_plane_slow(uint32_t *_this, char *Src)
     }
     while ( v100 + 1 < 5 );
     n0x10000 = 0;
-    v22 = &this_1[0x10000 * v82];
+    v22 = &((uint32_t *)this_1)[0x10000 * v82];
     do
     {
       LOWORD(v22[n0x10000 + 531818]) = 0x2000;
@@ -16252,22 +16324,22 @@ void __unmodel_plane_slow(uint32_t *_this, char *Src)
   }
   while ( v82 + 1 < 15 );
   ArgList_2 = ArgList_1;
-  this_4 = (int32_t)this_1;
-  buf = (char *)malloc(this_1[4]);
-  Size = this_1[4];
-  this_1[269672] = buf;
+  this_4 = (Obj10 *)((int32_t)this_1);
+  buf = (char *)malloc(this_1->f16);
+  Size = this_1->f16;
+  this_1->f1078688 = buf;
   memset(buf,1,Size);
-  v27 = *(uint32_t *)(this_4 + 100);
-  v28 = *(uint32_t *)(this_4 + 104);
-  *(uint32_t *)(this_4 + 1051664) = *(uint32_t *)(this_4 + 96);
-  v29 = *(uint32_t *)(this_4 + 108);
-  *(uint32_t *)(this_4 + 1051668) = v27;
-  *(uint32_t *)(this_4 + 1051672) = v28;
-  *(uint32_t *)(this_4 + 1051676) = v29;
-  *(uint32_t *)(this_4 + 1078224) = this_4 + 1078184;
-  __fwd_unmodel_plane_slow_init_encode_symbol_list((int32_t *)(this_4 + 1078184), this_4, *(uint32_t *)(this_4 + 16), 1);
-  *(uint32_t *)(this_4 + 1078232) = this_4 + 1078216;
-  v30 = *(uint32_t *)(this_4 + 16);
+  v27 = this_4->f100;
+  v28 = this_4->f104;
+  this_4->f1051664 = this_4->f96;
+  v29 = this_4->f108;
+  this_4->f1051668 = v27;
+  this_4->f1051672 = v28;
+  this_4->f1051676 = v29;
+  this_4->f1078224 = (uintptr_t)this_4 + 1078184;
+  __fwd_unmodel_plane_slow_init_encode_symbol_list((int32_t *)((uintptr_t)this_4 + 1078184), this_4, this_4->f16, 1);
+  this_4->f1078232 = (uintptr_t)this_4 + 1078216;
+  v30 = this_4->f16;
   v31 = malloc(24 * v30 + 4);
   if ( v31 )
   {
@@ -16283,8 +16355,8 @@ void __unmodel_plane_slow(uint32_t *_this, char *Src)
   {
     i = nullptr;
   }
-  v34 = *(uint32_t *)(this_4 + 16);
-  *(uint32_t *)(this_4 + 1078208) = i;
+  v34 = this_4->f16;
+  this_4->f1078208 = i;
   v35 = malloc(24 * v34 + 4);
   if ( v35 )
   {
@@ -16300,31 +16372,31 @@ void __unmodel_plane_slow(uint32_t *_this, char *Src)
   {
     j = nullptr;
   }
-  v38 = *(uint32_t *)(this_4 + 16) <= 0;
-  *(uint32_t *)(this_4 + 1078212) = j;
+  v38 = this_4->f16 <= 0;
+  this_4->f1078212 = j;
   if ( !v38 )
   {
     v39 = 0;
     do
     {
-      __fwd_unmodel_plane_slow_init_encode_symbol_list((int32_t *)(*(uint32_t *)(this_4 + 1078208) + 24 * v39), this_4, 99, 0);
-      __fwd_unmodel_plane_slow_init_encode_symbol_list((int32_t *)(*(uint32_t *)(this_4 + 1078212) + 24 * v39++), this_4, 33, 0);
+      __fwd_unmodel_plane_slow_init_encode_symbol_list((int32_t *)(this_4->f1078208 + 24 * v39), this_4, 99, 0);
+      __fwd_unmodel_plane_slow_init_encode_symbol_list((int32_t *)(this_4->f1078212 + 24 * v39++), this_4, 33, 0);
     }
-    while ( v39 < *(uint32_t *)(this_4 + 16) );
+    while ( v39 < this_4->f16 );
   }
-  v40 = *(uint32_t *)(this_4 + 8);
-  if ( v40 == *(uint32_t *)(this_4 + 12) )
+  v40 = this_4->f8;
+  if ( v40 == this_4->f12 )
   {
     ArgList_3 = nullptr;
   }
   else
   {
-    ArgList_2 = (char *)malloc(*(uint32_t *)(this_4 + 4) * *(uint32_t *)this_4 + 3);
-    v40 = *(uint32_t *)(this_4 + 8);
+    ArgList_2 = (char *)malloc(*(uint32_t *)&this_4->f4 * this_4->f0 + 3);
+    v40 = this_4->f8;
     ArgList_3 = ArgList_2;
   }
   n4_1 = (v40 + 7) >> 3;
-  if ( *(int32_t *)(this_4 + 4) > 0 )
+  if ( this_4->f4 > 0 )
   {
     n4 = n4_1;
     ArgList_4 = (int32_t)ArgList_3;
@@ -16333,52 +16405,52 @@ void __unmodel_plane_slow(uint32_t *_this, char *Src)
     while ( 1 )
     {
       v86 = v43;
-      *(uint8_t *)(*(uint32_t *)(this_4 + 76) + 3) = *(uint16_t *)(*(uint32_t *)(this_4 + 76) - 8) == 0;
-      *(uint8_t *)(*(uint32_t *)(this_4 + 76) + 5) = *(uint16_t *)(*(uint32_t *)(this_4 + 80) - 8) == 0;
-      v44 = *(uint32_t *)(this_4 + 72);
-      v45 = *(uint32_t *)(this_4 + 68);
-      v46 = *(uint32_t *)(this_4 + 64);
-      v47 = *(uint32_t *)(this_4 + 60);
-      v48 = *(uint32_t *)(this_4 + 56);
-      *(uint32_t *)(this_4 + 72) = v45;
-      *(uint32_t *)(this_4 + 68) = v46;
-      *(uint32_t *)(this_4 + 64) = v47;
-      *(uint32_t *)(this_4 + 60) = v48;
-      *(uint32_t *)(this_4 + 56) = v44;
+      *(uint8_t *)(this_4->f76 + 3) = *(uint16_t *)(this_4->f76 - 8) == 0;
+      *(uint8_t *)(this_4->f76 + 5) = *(uint16_t *)(this_4->f80 - 8) == 0;
+      v44 = this_4->f72;
+      v45 = this_4->f68;
+      v46 = this_4->f64;
+      v47 = this_4->f60;
+      v48 = this_4->f56;
+      this_4->f72 = v45;
+      this_4->f68 = v46;
+      this_4->f64 = v47;
+      this_4->f60 = v48;
+      this_4->f56 = v44;
       v44 += 56;
-      *(uint32_t *)(this_4 + 76) = v44;
+      this_4->f76 = v44;
       v48 += 56;
-      *(uint32_t *)(this_4 + 80) = v48;
-      *(uint32_t *)(this_4 + 84) = v47 + 56;
-      *(uint32_t *)(this_4 + 88) = v46 + 56;
-      *(uint32_t *)(this_4 + 92) = v45 + 56;
+      this_4->f80 = v48;
+      this_4->f84 = v47 + 56;
+      this_4->f88 = v46 + 56;
+      this_4->f92 = v45 + 56;
       LOBYTE(v48) = *(uint16_t *)(v48 + 8) == 0;
       *(uint8_t *)(v44 + 4) = v48;
-      *(uint8_t *)(*(uint32_t *)(this_4 + 76) - 2) = v48;
-      *(uint8_t *)(*(uint32_t *)(this_4 + 76) - 9) = v48;
-      LOBYTE(v46) = *(uint16_t *)(*(uint32_t *)(this_4 + 80) + 16) == 0;
-      *(uint8_t *)(*(uint32_t *)(this_4 + 76) + 6) = v46;
-      *(uint8_t *)(*(uint32_t *)(this_4 + 76) - 1) = v46;
-      *(uint8_t *)(*(uint32_t *)(this_4 + 76) + 7) = *(uint16_t *)(*(uint32_t *)(this_4 + 80) + 24) == 0;
-      v49 = *(uint8_t **)(this_4 + 80);
-      v50 = *(uint8_t **)(this_4 + 84);
-      *(uint32_t *)(this_4 + 76) += 8;
+      *(uint8_t *)(this_4->f76 - 2) = v48;
+      *(uint8_t *)(this_4->f76 - 9) = v48;
+      LOBYTE(v46) = *(uint16_t *)(this_4->f80 + 16) == 0;
+      *(uint8_t *)(this_4->f76 + 6) = v46;
+      *(uint8_t *)(this_4->f76 - 1) = v46;
+      *(uint8_t *)(this_4->f76 + 7) = *(uint16_t *)(this_4->f80 + 24) == 0;
+      v49 = *(uint8_t **)&this_4->f80;
+      v50 = *(uint8_t **)&this_4->f84;
+      this_4->f76 += 8;
       v49 += 8;
-      *(uint32_t *)(this_4 + 88) += 8;
-      *(uint32_t *)(this_4 + 80) = v49;
+      this_4->f88 += 8;
+      this_4->f80 = v49;
       v50 += 8;
-      *(uint32_t *)(this_4 + 84) = v50;
-      *(uint32_t *)(this_4 + 92) += 8;
-      *(uint8_t *)(this_4 + 1078692) = v49[26] + v49[18] + v49[10] + v49[2] + v49[34] - 5;
+      this_4->f84 = v50;
+      this_4->f92 += 8;
+      this_4->f1078692 = v49[26] + v49[18] + v49[10] + v49[2] + v49[34] - 5;
       LOBYTE(v47) = v50[2];
       LOBYTE(v44) = v50[10];
       LOBYTE(v48) = v50[18];
       LOBYTE(v49) = v50[26];
       LOBYTE(v50) = v50[34];
-      *(uint8_t *)(this_4 + 1078695) = 0;
-      *(uint8_t *)(this_4 + 1078694) = 0;
-      v51 = *(uint32_t *)this_4;
-      *(uint8_t *)(this_4 + 1078693) = (uint8_t)v49 + v48 + v44 + v47 + (uint8_t)v50 - 5;
+      this_4->f1078695 = 0;
+      this_4->f1078694 = 0;
+      v51 = this_4->f0;
+      this_4->f1078693 = (uint8_t)v49 + v48 + v44 + v47 + (uint8_t)v50 - 5;
       v52 = v86;
       if ( v51 <= 0 )
         break;
@@ -16387,10 +16459,10 @@ void __unmodel_plane_slow(uint32_t *_this, char *Src)
       {
         v54 = __fwd_unmodel_plane_slow_decode_pixel((uint32_t *)this_4, v53);
         __init_model_tables(this_4);
-        v51 = *(uint32_t *)this_4;
+        v51 = this_4->f0;
         v53 += v54;
       }
-      while ( v53 < *(uint32_t *)this_4 );
+      while ( v53 < this_4->f0 );
       v52 = v86;
       if ( n4 != 4 )
         goto LABEL_53;
@@ -16399,14 +16471,14 @@ void __unmodel_plane_slow(uint32_t *_this, char *Src)
         ArgList_6 = (uint32_t *)ArgList_5;
         v65 = 0;
         do
-          *ArgList_6++ = *(uint32_t *)(*(uint32_t *)(this_4 + 1078240)
-                                   + 4 * *(uint16_t *)(*(uint32_t *)(this_4 + 56) + 8 * v65++ + 64));
-        while ( v65 < *(uint32_t *)this_4 );
+          *ArgList_6++ = *(uint32_t *)(this_4->f1078240
+                                   + 4 * *(uint16_t *)(this_4->f56 + 8 * v65++ + 64));
+        while ( v65 < this_4->f0 );
         goto LABEL_73;
       }
 LABEL_74:
       v43 = v52 + 1;
-      if ( v43 >= *(uint32_t *)(this_4 + 4) )
+      if ( v43 >= *(uint32_t *)&this_4->f4 )
       {
         ArgList_3 = (char *)ArgList_4;
         goto LABEL_76;
@@ -16423,30 +16495,30 @@ LABEL_53:
         v56 = 0;
         do
         {
-          v57 = *(uint32_t *)(this_4 + 1078240);
-          v58 = *(uint16_t *)(*(uint32_t *)(this_4 + 56) + 8 * v56 + 64);
+          v57 = this_4->f1078240;
+          v58 = *(uint16_t *)(this_4->f56 + 8 * v56 + 64);
           *(uint16_t *)ArgList_7 = *(uint16_t *)(v57 + 4 * v58);
           *((uint8_t *)ArgList_7 + 2) = *(uint8_t *)(v57 + 4 * v58 + 2);
           ++v56;
           ArgList_7 = (uint32_t *)((char *)ArgList_7 + 3);
         }
-        while ( v56 < *(uint32_t *)this_4 );
+        while ( v56 < this_4->f0 );
         ArgList_5 = (char *)ArgList_7;
       }
       goto LABEL_74;
     }
     if ( n4 != 2 )
     {
-      if ( *(uint32_t *)(this_4 + 8) == 8 )
+      if ( this_4->f8 == 8 )
       {
         if ( v51 > 0 )
         {
           ArgList_8 = ArgList_5;
           v80 = 0;
           do
-            *ArgList_8++ = *(uint8_t *)(*(uint32_t *)(this_4 + 1078240)
-                                    + 4 * *(uint16_t *)(*(uint32_t *)(this_4 + 56) + 8 * v80++ + 64));
-          while ( v80 < *(uint32_t *)this_4 );
+            *ArgList_8++ = *(uint8_t *)(this_4->f1078240
+                                    + 4 * *(uint16_t *)(this_4->f56 + 8 * v80++ + 64));
+          while ( v80 < this_4->f0 );
           ArgList_5 = ArgList_8;
         }
       }
@@ -16458,22 +16530,22 @@ LABEL_53:
         ArgList_9 = ArgList_5;
         do
         {
-          v64 = *(uint32_t *)(this_4 + 8);
+          v64 = this_4->f8;
           v62 -= v64;
           if ( v62 < 0 )
           {
             v62 = 8 - v64;
-            *++ArgList_9 = *(uint32_t *)(*(uint32_t *)(this_4 + 1078240)
-                                     + 4 * *(uint16_t *)(*(uint32_t *)(this_4 + 56) + 8 * v61 + 64)) << ((8 - v64) & 31);
+            *++ArgList_9 = *(uint32_t *)(this_4->f1078240
+                                     + 4 * *(uint16_t *)(this_4->f56 + 8 * v61 + 64)) << ((8 - v64) & 31);
           }
           else
           {
-            *ArgList_9 |= *(uint32_t *)(*(uint32_t *)(this_4 + 1078240)
-                                    + 4 * *(uint16_t *)(*(uint32_t *)(this_4 + 56) + 8 * v61 + 64)) << (v62 & 31);
+            *ArgList_9 |= *(uint32_t *)(this_4->f1078240
+                                    + 4 * *(uint16_t *)(this_4->f56 + 8 * v61 + 64)) << (v62 & 31);
           }
           ++v61;
         }
-        while ( v61 < *(uint32_t *)this_4 );
+        while ( v61 < this_4->f0 );
         v52 = v87;
         ArgList_5 = ArgList_9;
       }
@@ -16485,11 +16557,11 @@ LABEL_53:
       v60 = 0;
       do
       {
-        *(uint16_t *)ArgList_6 = *(uint32_t *)(*(uint32_t *)(this_4 + 1078240)
-                                        + 4 * *(uint16_t *)(*(uint32_t *)(this_4 + 56) + 8 * v60++ + 64));
+        *(uint16_t *)ArgList_6 = *(uint32_t *)(this_4->f1078240
+                                        + 4 * *(uint16_t *)(this_4->f56 + 8 * v60++ + 64));
         ArgList_6 = (uint32_t *)((char *)ArgList_6 + 2);
       }
-      while ( v60 < *(uint32_t *)this_4 );
+      while ( v60 < this_4->f0 );
 LABEL_73:
       ArgList_5 = (char *)ArgList_6;
       goto LABEL_74;
@@ -16498,24 +16570,24 @@ LABEL_73:
   }
 LABEL_76:
   __rc_end_decode();
-  v66 = *(uint32_t *)(this_4 + 12);
-  if ( v66 != *(uint32_t *)(this_4 + 8) )
+  v66 = this_4->f12;
+  if ( v66 != this_4->f8 )
   {
     n6 = (v66 + 7) >> 3;
     if ( n6 <= 0 )
     {
-      v68 = *(uint32_t *)(this_4 + 4) * *(uint32_t *)this_4;
+      v68 = *(uint32_t *)&this_4->f4 * this_4->f0;
     }
     else
     {
       n6_3 = 0;
-      v68 = *(uint32_t *)(this_4 + 4) * *(uint32_t *)this_4;
+      v68 = *(uint32_t *)&this_4->f4 * this_4->f0;
       v69 = v68 / n6;
       if ( n6 >= 6 )
       {
-        v84 = *(uint32_t *)(this_4 + 4) * *(uint32_t *)this_4;
+        v84 = *(uint32_t *)&this_4->f4 * this_4->f0;
         n6_4 = 0;
-        this_1 = (uint32_t *)this_4;
+        this_1 = (Obj10 *)((uint32_t *)this_4);
         ArgList_10 = ArgList_3;
         do
         {
@@ -16528,13 +16600,13 @@ LABEL_76:
           n6_4 += 5;
         }
         while ( n6_4 <= n6 - 6 );
-        this_4 = (int32_t)this_1;
+        this_4 = (Obj10 *)((int32_t)this_1);
         n6_3 = n6_4;
         v68 = v84;
       }
       n6_1 = n6_3;
       v73 = v69 * n6_3;
-      this_1 = (uint32_t *)this_4;
+      this_1 = (Obj10 *)((uint32_t *)this_4);
       do
       {
         (&v92)[n6_1] = &ArgList_3[v73];
@@ -16542,7 +16614,7 @@ LABEL_76:
         ++n6_1;
       }
       while ( n6_1 < n6 );
-      this_4 = (int32_t)this_1;
+      this_4 = (Obj10 *)((int32_t)this_1);
     }
     if ( v68 > 0 )
     {
@@ -16554,7 +16626,7 @@ LABEL_76:
       {
         v77 = (&v92)[n6_2];
         *Src_2 = *v77;
-        v78 = *(uint32_t *)(this_4 + 4) * *(uint32_t *)this_4;
+        v78 = *(uint32_t *)&this_4->f4 * this_4->f0;
         ++Src_2;
         (&v92)[n6_2++] = v77 + 1;
         if ( n6_2 == n6 )
@@ -19972,8 +20044,8 @@ static inline int32_t __fwd_alt_model_p2_decode_sub_41A130(void *a0, const __m12
   }
   return n4_3;
 }
-static inline void ** __fwd_unmodel_plane_free_workspace(void *a0, char a1) { return __free_workspace((void **)a0, a1); }
-static inline void __fwd_unmodel_plane_unmodel_plane_slow(void *a0, void *a1) { __unmodel_plane_slow((uint32_t *)a0, (char *)a1); }
+static inline void ** __fwd_unmodel_plane_free_workspace(void *a0, char a1) { return __free_workspace((Obj10 *)a0, a1); }
+static inline void __fwd_unmodel_plane_unmodel_plane_slow(void *a0, void *a1) { __unmodel_plane_slow((Obj10 *)a0, (char *)a1); }
 static inline void __fwd_unmodel_plane_alt_model_p2_d8_decode(const __m128 &a0, const __m128 &a1, void *a2, int32_t a3, int32_t a4) { __alt_model_p2_d8_decode(a0, a1, (uint8_t *)a2, a3, a4); }
 static inline int32_t __fwd_unmodel_plane_alt_model_p2_decode(void *a0, void *a1) { return __alt_model_p2_decode((uint16_t *)a0, (uint8_t *)a1); }
 static inline void ** __fwd_unmodel_plane_alt_model_p1_d8_decode(char a0, void *a1, int32_t a2, int32_t a3) { return __alt_model_p1_d8_decode(a0, (uint8_t *)a1, a2, a3); }
@@ -19984,7 +20056,8 @@ BMF_SSE void __unmodel_plane(char ArgList, const __m128 &a2__ref, const __m128 &
   ;
   __m128 a2 = a2__ref;
   __m128 a3 = a3__ref;
-  void *v5, **v6;
+  Obj10 *v6;
+  void *v5;
   if ( plane_alt_model )
   {
     if ( plane_predictor == 1 )
@@ -20006,9 +20079,9 @@ BMF_SSE void __unmodel_plane(char ArgList, const __m128 &a2__ref, const __m128 &
   {
     v5 = malloc(0x7BA230u);
     if ( v5 )
-      v6 = (void **)__layout_workspace((int32_t)v5, p_i[1], *p_i, p_i[1], p_i[5] & 0x3F);
+      v6 = (Obj10 *)((void **)__layout_workspace((int32_t)v5, p_i[1], *p_i, p_i[1], p_i[5] & 0x3F));
     else
-      v6 = nullptr;
+      v6 = (Obj10 *)(nullptr);
     __fwd_unmodel_plane_unmodel_plane_slow(v6, Src);
     if ( v6 )
       __fwd_unmodel_plane_free_workspace(v6, 1);
@@ -21117,9 +21190,9 @@ static inline int32_t __fwd_alt_model_p2_encode_sub_41A130(void *a0, const __m12
   return n4_3;
 }
 static inline uint32_t __fwd_model_plane_init_encode_symbol_list(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __init_symbol_list((Obj35 *)a0, a1, a2, a3); }
-static inline void ** __fwd_model_plane_free_workspace(void *a0, char a1) { return __free_workspace((void **)a0, a1); }
+static inline void ** __fwd_model_plane_free_workspace(void *a0, char a1) { return __free_workspace((Obj10 *)a0, a1); }
 static inline int32_t __fwd_model_plane_code_pixel(void *a0, int32_t a1) { return __code_pixel((ModelBlock *)a0, a1); }
-static inline void __fwd_model_plane_reduce_alphabet(int32_t a0, char a1, void *a2) { __reduce_alphabet(a0, a1, (uint8_t *)a2); }
+static inline void __fwd_model_plane_reduce_alphabet(int32_t a0, char a1, void *a2) { __reduce_alphabet((Obj10 *)a0, a1, (uint8_t *)a2); }
 static inline void __fwd_model_plane_alt_model_p2_d8_encode(const __m128 &a0, const __m128 &a1, void *a2, int32_t a3, int32_t a4, void *a5) { __alt_model_p2_d8_encode(a0, a1, (uint8_t *)a2, a3, a4, (uint8_t *)a5); }
 static inline int32_t __fwd_model_plane_alt_model_p2_encode(void *a0, void *a1) { return __alt_model_p2_encode((Obj33 *)a0, (uint8_t *)a1); }
 static inline void __fwd_model_plane_alt_model_p1_d8_encode(void *a0, int32_t a1, int32_t a2, void *a3) { __alt_model_p1_d8_encode((uint8_t *)a0, a1, a2, (uint8_t *)a3); }
@@ -21130,10 +21203,10 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
   int32_t Size;
   int32_t v58;
   int32_t &v59 = v58;
-  int32_t Blocka_5;
-  int32_t &v61 = Blocka_5;
-  uint32_t *Blocka_2;
-  void *&Blocka = *(void **)((char *)&Blocka_2);
+  Obj10 *Blocka_5;
+  int32_t &v61 = (int32_t &)Blocka_5;
+  Obj10 *Blocka_2;
+  Obj10 *&Blocka = (Obj10 *&)*(void **)((char *)&Blocka_2);
   int32_t v64;
   int32_t v65;
   int32_t v66;
@@ -21145,15 +21218,18 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
   int32_t v73;
   uint32_t n5;
   ;
-  char *Blocka_1, *v46, *v50;   // were int32_t: these hold addresses
+  Obj10 *Blocka_1;
+  char *v46, *v50;
   char *v71;   // was int32_t: these hold addresses
   __m128 a1 = a1__ref;
   __m128 a2 = a2__ref;
   bool v43;
   char v7, *buf, v27;
   int16_t __model_plane_n2, v22;
-  int32_t Blocka_3, v8, Blocka_4, v10, v11, v14, n2_1, n2_2, v17, v18, v19, v20, v21, v35, v36,
-          v41, v42, v44, v45, v47, v48, v49, v53, v54, v55, v56;
+  Obj10 *Blocka_3;
+  Obj10 *Blocka_4;
+  int32_t v8, v10, v11, v14, n2_1, n2_2, v17, v18, v19, v20, v21, v35, v36, v41, v42, v44, v45,
+          v47, v48, v49, v53, v54, v55, v56;
   uint32_t *v12, n0x10000, *v24, v28, v29, v30, v31, *v32, *v33, v34, v37, *v38, *v39, v40;
   uint8_t *v51, *v52;
   void *v5;
@@ -21178,15 +21254,15 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
   {
     v5 = malloc(0x7BA230u);
     if ( v5 )
-      Blocka_3 = __layout_workspace((int32_t)v5, *(uint16_t *)((char *)&p_i->f0 + 2), *(uint16_t *)&p_i->f0, *(uint16_t *)((char *)&p_i->f0 + 2), p_i->f10 & 0x3F);
+      Blocka_3 = (Obj10 *)(__layout_workspace((int32_t)v5, *(uint16_t *)((char *)&p_i->f0 + 2), *(uint16_t *)&p_i->f0, *(uint16_t *)((char *)&p_i->f0 + 2), p_i->f10 & 0x3F));
     else
-      Blocka_3 = 0;
+      Blocka_3 = (Obj10 *)(0);
     __rc_begin_encode();
     __fwd_model_plane_reduce_alphabet(Blocka_3, v7, a4);
     v64 = 0;
     v8 = 0;
-    Blocka_2 = (uint32_t *)Blocka_3;
-    Blocka_4 = Blocka_3;
+    Blocka_2 = (Obj10 *)((uint32_t *)Blocka_3);
+    Blocka_4 = (Obj10 *)(Blocka_3);
     do
     {
       v10 = (uint8_t)ctx_group_flags[v8];
@@ -21203,13 +21279,13 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
       {
         v72 = v11;
         n5 = 0;
-        Blocka_5 = Blocka_4;
-        v71 = Blocka_4 + 15 * v11;
+        Blocka_5 = (Obj10 *)(Blocka_4);
+        v71 = (uintptr_t)Blocka_4 + 15 * v11;
         do
         {
           *(uint8_t *)(v71 + 75 * n5 + 1078308) = v64;
-          v73 = Blocka_2[4];
-          v12 = &Blocka_2[4 * v64];
+          v73 = Blocka_2->f16;
+          v12 = &((uint32_t *)Blocka_2)[4 * v64];
           __model_plane_n2 = 2;
           *((uint16_t *)v12 + 48) = 2;
           LOWORD(v14) = 2;
@@ -21300,38 +21376,38 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
           ++n5;
         }
         while ( n5 < 5 );
-        Blocka_4 = Blocka_5;
+        Blocka_4 = (Obj10 *)(Blocka_5);
         v11 = v72 + 1;
       }
       while ( (uint32_t)(v72 + 1) < 5 );
       n0x10000 = 0;
-      v24 = &Blocka_2[0x10000 * v58];
+      v24 = &((uint32_t *)Blocka_2)[0x10000 * v58];
       do
       {
         LOWORD(v24[n0x10000 + 531818]) = 0x2000;
         HIWORD(v24[n0x10000++ + 531818]) = 0x2000;
       }
       while ( n0x10000 < 0x10000 );
-      Blocka_4 = Blocka_5 + 1;
+      Blocka_4 = (Obj10 *)((uintptr_t)Blocka_5 + 1);
       v8 = v58 + 1;
     }
     while ( (uint32_t)(v58 + 1) < 0xF );
-    Blocka_1 = (int32_t)Blocka_2;
-    buf = (char *)malloc(Blocka_2[4]);
-    Size = Blocka_2[4];
-    Blocka_2[269672] = (uint32_t)buf;
+    Blocka_1 = (Obj10 *)((int32_t)Blocka_2);
+    buf = (char *)malloc(Blocka_2->f16);
+    Size = Blocka_2->f16;
+    Blocka_2->f1078688 = (uint32_t)buf;
     memset(buf,1,Size);
-    v28 = Blocka_2[25];
-    v29 = Blocka_2[26];
-    Blocka_2[262916] = Blocka_2[24];
-    v30 = Blocka_2[27];
-    Blocka_2[262917] = v28;
-    Blocka_2[262918] = v29;
-    Blocka_2[262919] = v30;
-    Blocka_2[269556] = (uint32_t)(Blocka_2 + 269546);
-    __fwd_model_plane_init_encode_symbol_list((int32_t *)(Blocka_1 + 1078184), 0, *(uint32_t *)(Blocka_1 + 16), 1);
-    Blocka_2[269558] = (uint32_t)(Blocka_2 + 269554);
-    v31 = Blocka_2[4];
+    v28 = Blocka_2->f100;
+    v29 = Blocka_2->f104;
+    Blocka_2->f1051664 = Blocka_2->f96;
+    v30 = Blocka_2->f108;
+    Blocka_2->f1051668 = v28;
+    Blocka_2->f1051672 = v29;
+    Blocka_2->f1051676 = v30;
+    Blocka_2->f1078224 = (uint32_t)((uint32_t *)Blocka_2 + 269546);
+    __fwd_model_plane_init_encode_symbol_list((int32_t *)((char *)Blocka_1 + 1078184), 0, Blocka_1->f16, 1);
+    Blocka_2->f1078232 = (uint32_t)((uint32_t *)Blocka_2 + 269554);
+    v31 = Blocka_2->f16;
     v32 = (uint32_t *)malloc(24 * v31 + 4);
     if ( v32 )
     {
@@ -21350,7 +21426,7 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
             v32[v35 + 12] = 0;
           }
           while ( v34 < v31 >> 1 );
-          Blocka_1 = (int32_t)Blocka_2;
+          Blocka_1 = (Obj10 *)((int32_t)Blocka_2);
           v36 = 2 * v34 + 1;
         }
         else
@@ -21365,8 +21441,8 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
     {
       v33 = nullptr;
     }
-    v37 = *(uint32_t *)(Blocka_1 + 16);
-    *(uint32_t *)(Blocka_1 + 1078208) = v33;
+    v37 = Blocka_1->f16;
+    Blocka_1->f1078208 = v33;
     v38 = (uint32_t *)malloc(24 * v37 + 4);
     if ( v38 )
     {
@@ -21376,7 +21452,7 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
       {
         if ( v37 >> 1 )
         {
-          Blocka = (void *)Blocka_1;
+          Blocka = (Obj10 *)((void *)Blocka_1);
           v40 = 0;
           do
           {
@@ -21386,7 +21462,7 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
             v38[v41 + 12] = 0;
           }
           while ( v40 < v37 >> 1 );
-          Blocka_1 = (int32_t)Blocka;
+          Blocka_1 = (Obj10 *)((int32_t)Blocka);
           v42 = 2 * v40 + 1;
         }
         else
@@ -21401,82 +21477,82 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
     {
       v39 = nullptr;
     }
-    v43 = *(uint32_t *)(Blocka_1 + 16) <= 0;
-    *(uint32_t *)(Blocka_1 + 1078212) = v39;
+    v43 = Blocka_1->f16 <= 0;
+    Blocka_1->f1078212 = v39;
     if ( !v43 )
     {
       v44 = 0;
       do
       {
-        __fwd_model_plane_init_encode_symbol_list((int32_t *)(*(uint32_t *)(Blocka_1 + 1078208) + 24 * v44), 0, 99, 0);
-        __fwd_model_plane_init_encode_symbol_list((int32_t *)(*(uint32_t *)(Blocka_1 + 1078212) + 24 * v44++), 0, 33, 0);
+        __fwd_model_plane_init_encode_symbol_list((int32_t *)(Blocka_1->f1078208 + 24 * v44), 0, 99, 0);
+        __fwd_model_plane_init_encode_symbol_list((int32_t *)(Blocka_1->f1078212 + 24 * v44++), 0, 33, 0);
       }
-      while ( v44 < *(uint32_t *)(Blocka_1 + 16) );
+      while ( v44 < Blocka_1->f16 );
     }
-    if ( *(int32_t *)(Blocka_1 + 4) > 0 )
+    if ( Blocka_1->f4 > 0 )
     {
-      v59 = *(uint32_t *)(Blocka_1 + 1078236);
+      v59 = *(uint32_t *)&Blocka_1->f1078236;
       v45 = 0;
       do
       {
         v61 = v45 + 1;
-        *(uint8_t *)(*(uint32_t *)(Blocka_1 + 76) + 3) = *(uint16_t *)(*(uint32_t *)(Blocka_1 + 76) - 8) == 0;
-        *(uint8_t *)(*(uint32_t *)(Blocka_1 + 76) + 5) = *(uint16_t *)(*(uint32_t *)(Blocka_1 + 80) - 8) == 0;
-        v46 = *(uint32_t *)(Blocka_1 + 72);
-        v47 = *(uint32_t *)(Blocka_1 + 68);
-        v48 = *(uint32_t *)(Blocka_1 + 64);
-        v49 = *(uint32_t *)(Blocka_1 + 60);
-        v50 = *(uint32_t *)(Blocka_1 + 56);
-        *(uint32_t *)(Blocka_1 + 72) = v47;
-        *(uint32_t *)(Blocka_1 + 68) = v48;
-        *(uint32_t *)(Blocka_1 + 64) = v49;
-        *(uint32_t *)(Blocka_1 + 60) = v50;
-        *(uint32_t *)(Blocka_1 + 56) = v46;
+        *(uint8_t *)(Blocka_1->f76 + 3) = *(uint16_t *)(Blocka_1->f76 - 8) == 0;
+        *(uint8_t *)(Blocka_1->f76 + 5) = *(uint16_t *)(Blocka_1->f80 - 8) == 0;
+        v46 = Blocka_1->f72;
+        v47 = Blocka_1->f68;
+        v48 = Blocka_1->f64;
+        v49 = Blocka_1->f60;
+        v50 = Blocka_1->f56;
+        Blocka_1->f72 = v47;
+        Blocka_1->f68 = v48;
+        Blocka_1->f64 = v49;
+        Blocka_1->f60 = v50;
+        Blocka_1->f56 = v46;
         v46 += 56;
-        *(uint32_t *)(Blocka_1 + 76) = v46;
+        Blocka_1->f76 = v46;
         v50 += 56;
-        *(uint32_t *)(Blocka_1 + 80) = v50;
-        *(uint32_t *)(Blocka_1 + 84) = v49 + 56;
-        *(uint32_t *)(Blocka_1 + 88) = v48 + 56;
-        *(uint32_t *)(Blocka_1 + 92) = v47 + 56;
+        Blocka_1->f80 = v50;
+        Blocka_1->f84 = v49 + 56;
+        Blocka_1->f88 = v48 + 56;
+        Blocka_1->f92 = v47 + 56;
         LOBYTE(v50) = *(uint16_t *)(v50 + 8) == 0;
         *(uint8_t *)(v46 + 4) = v50;
-        *(uint8_t *)(*(uint32_t *)(Blocka_1 + 76) - 2) = v50;
-        *(uint8_t *)(*(uint32_t *)(Blocka_1 + 76) - 9) = v50;
-        LOBYTE(v50) = *(uint16_t *)(*(uint32_t *)(Blocka_1 + 80) + 16) == 0;
-        *(uint8_t *)(*(uint32_t *)(Blocka_1 + 76) + 6) = v50;
-        *(uint8_t *)(*(uint32_t *)(Blocka_1 + 76) - 1) = v50;
-        *(uint8_t *)(*(uint32_t *)(Blocka_1 + 76) + 7) = *(uint16_t *)(*(uint32_t *)(Blocka_1 + 80) + 24) == 0;
-        v51 = *(uint8_t **)(Blocka_1 + 80);
-        v52 = *(uint8_t **)(Blocka_1 + 84);
-        *(uint32_t *)(Blocka_1 + 76) += 8;
+        *(uint8_t *)(Blocka_1->f76 - 2) = v50;
+        *(uint8_t *)(Blocka_1->f76 - 9) = v50;
+        LOBYTE(v50) = *(uint16_t *)(Blocka_1->f80 + 16) == 0;
+        *(uint8_t *)(Blocka_1->f76 + 6) = v50;
+        *(uint8_t *)(Blocka_1->f76 - 1) = v50;
+        *(uint8_t *)(Blocka_1->f76 + 7) = *(uint16_t *)(Blocka_1->f80 + 24) == 0;
+        v51 = *(uint8_t **)&Blocka_1->f80;
+        v52 = *(uint8_t **)&Blocka_1->f84;
+        Blocka_1->f76 += 8;
         v51 += 8;
-        *(uint32_t *)(Blocka_1 + 80) = v51;
-        *(uint32_t *)(Blocka_1 + 88) += 8;
+        Blocka_1->f80 = v51;
+        Blocka_1->f88 += 8;
         v52 += 8;
-        *(uint32_t *)(Blocka_1 + 84) = v52;
-        *(uint32_t *)(Blocka_1 + 92) += 8;
-        *(uint8_t *)(Blocka_1 + 1078692) = v51[26] + v51[18] + v51[10] + v51[2] + v51[34] - 5;
+        Blocka_1->f84 = v52;
+        Blocka_1->f92 += 8;
+        Blocka_1->f1078692 = v51[26] + v51[18] + v51[10] + v51[2] + v51[34] - 5;
         LOBYTE(v50) = v52[26];
         LOBYTE(v47) = v52[10] + v52[2];
         LOBYTE(v51) = v52[18];
         LOBYTE(v52) = v52[34];
-        *(uint8_t *)(Blocka_1 + 1078695) = 0;
-        *(uint8_t *)(Blocka_1 + 1078694) = 0;
+        Blocka_1->f1078695 = 0;
+        Blocka_1->f1078694 = 0;
         LOBYTE(v50) = v50 + (uint8_t)v51 + v47 + (uint8_t)v52 - 5;
         v45 = v61;
-        v53 = *(uint32_t *)Blocka_1;
-        *(uint8_t *)(Blocka_1 + 1078693) = v50;
+        v53 = Blocka_1->f0;
+        Blocka_1->f1078693 = v50;
         if ( v53 > 0 )
         {
           v54 = 0;
           do
           {
             ++v54;
-            *(uint16_t *)(*(uint32_t *)(Blocka_1 + 76) + 8 * v54 - 8) = *(uint16_t *)(v59 + 2 * v54 - 2);
-            v53 = *(uint32_t *)Blocka_1;
+            *(uint16_t *)(Blocka_1->f76 + 8 * v54 - 8) = *(uint16_t *)(v59 + 2 * v54 - 2);
+            v53 = Blocka_1->f0;
           }
-          while ( v54 < *(uint32_t *)Blocka_1 );
+          while ( v54 < Blocka_1->f0 );
           v59 += 2 * v54;
         }
         if ( v53 > 0 )
@@ -21488,11 +21564,11 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
             __init_model_tables(Blocka_1);
             v55 += v56;
           }
-          while ( v55 < *(uint32_t *)Blocka_1 );
+          while ( v55 < Blocka_1->f0 );
           v45 = v61;
         }
       }
-      while ( v45 < *(uint32_t *)(Blocka_1 + 4) );
+      while ( v45 < *(uint32_t *)&Blocka_1->f4 );
     }
     __rc_end_encode();
     __fwd_model_plane_free_workspace((void **)Blocka_1, 1);
