@@ -532,8 +532,8 @@ substitutes `0.5` (`__bmf_half_half`, `0x0043B480`) so that `log` is never
 handed a zero, and the caller then masks those lanes back out of the running sum
 with `_mm_andnot_ps`. The substituted value is never used — it exists to keep a
 `-inf` out of the vector. This
-and the cost functions in `sub_405CF0`, `sub_407460`, `sub_40A8A0`, `sub_41A130`,
-`sub_41C4B0` and `sub_41CAB0` are the floating-point part of the compressor, and
+and the cost functions `choose_plane_coding` (`sub_405CF0`) and `cost_candidate`
+(`sub_407460`) are the floating-point part of the compressor, and
 the reason the SSE denormal mode (`bmf_set_denormal_mode`, §5 of the build) is
 set at startup: flush-to-zero and denormals-are-zero keep these sums fast and
 identical run to run. The search picks the transform and predictor whose folded
@@ -746,7 +746,15 @@ Stated plainly, so the rest can be trusted:
 * **The alternate model families.** When descriptor `+2` bit 2 is set,
   `model_plane` hands the plane to `sub_424500` / `sub_424D90` / `sub_4197A0` /
   `sub_421930` instead. I established only which one is picked, not what they
-  do; `sub_41CAB0` (2320 lines) sits under two of them.
+  do; `sub_41CAB0` (1969 lines here) sits under two of them.
+
+  An earlier draft of §6.6 listed `sub_41A130`, `sub_41C4B0` and `sub_41CAB0`
+  as cost functions alongside the two above. They are not: none of them calls
+  `estimate_cost`, and `sub_41CAB0` calls `update_binary_pair`, which makes it
+  a model rather than a measurement. They are floating-point and they are in
+  the alternate model families, which is as much as is established.
+  (`sub_40A8A0` was in that list too and no longer exists — it went with the
+  fast path, REFACTORING.md §2.1.)
 * **What predictor modes 0 and 3 mean.** The dispatch table in §6.4 is read off
   the code, but 0 and 3 land in the same places and I did not work out what
   distinguishes them, nor what mode 2 does instead of predicting. This is why
