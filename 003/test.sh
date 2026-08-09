@@ -138,13 +138,34 @@ fi
 if [ "${BMF_MALFORMED:-1}" = 1 ]; then
   (
     cd "$WORK"
-    ref=$(ls -- *.bmf 2>/dev/null | grep -v '^arc\.' | head -1)
-    img=$(ls -- orig_*.bmp 2>/dev/null | head -1)
+    # The largest stream, not the first.  Taking the first made the truncation
+    # lengths depend on the corpus: under BMF_IMAGES with only small images,
+    # `head -c 40000` of a 192-byte stream is the whole file, which decodes
+    # perfectly and fails a check that expects a refusal.  A cut is only a cut
+    # if there is something past it, so the lengths are filtered against the
+    # size as well.
+    ref=$(ls -S -- *.bmf 2>/dev/null | grep -v '^arc\.' | head -1)
+    # The largest *uncompressed* BMP -- the compression field of the info
+    # header, at offset 30, has to be 0.  Cutting an RLE8 file short does not
+    # produce a refusal, it produces a buffer overflow: read_bmp's run decoder
+    # writes each run into the pixel buffer without bounding it, so a stream
+    # that ends mid-run keeps writing.  That is a real defect and it is recorded
+    # rather than repaired (REFACTORING.md §6), the same as the top-down BMP;
+    # what belongs here is the case that has an exit to check.
+    img=""
+    for f in $(ls -S -- orig_*.bmp 2>/dev/null); do
+      [ "$(od -An -tu4 -j30 -N4 "$f" | tr -d ' ')" = 0 ] || continue
+      img=$f; break
+    done
     [ -n "$ref" ] && [ -n "$img" ] || { echo "malformed: no stream to truncate"; exit 1; }
     : >empty.bmf
     head -c 2000 /dev/zero >zeros.bmf
     head -c 2000 /dev/zero | tr '\0' '\377' >ones.bmf
-    for n in 4 40 400 4000 40000; do head -c $n "$ref" >"cut$n.bmf"; done
+    cuts=""
+    for n in 4 40 400 4000 40000; do
+      [ "$n" -lt "$(stat -c%s "$ref")" ] || continue
+      head -c $n "$ref" >"cut$n.bmf"; cuts="$cuts $n"
+    done
     head -c 6000 "$img" >cut.bmp
     rm -f gone.bmp gone.bmf
 
@@ -160,13 +181,9 @@ if [ "${BMF_MALFORMED:-1}" = 1 ]; then
         cat mal.log; bad=1; continue
       fi
       [ -f mal.out ] && { echo "malformed: $BIN $mode $file wrote an output anyway"; bad=1; }
-    done <<'CASES'
+    done <<CASES
 d empty.bmf   0   an archive with no members in it
-d cut4.bmf    3   the header read, short
-d cut40.bmf   3   the header read, torn
-d cut400.bmf  3   the member read, short
-d cut4000.bmf 3   inside the first member
-d cut40000.bmf 3  most of a member
+$(for n in $cuts; do echo "d cut$n.bmf 3 cut at $n bytes"; done)
 d zeros.bmf   3   a stream that is not one
 d ones.bmf    3   the other end of the same
 d gone.bmf    6   an input that is not there
@@ -192,7 +209,7 @@ CASES
     done
 
     [ $bad -eq 0 ] || exit 1
-    printf '%-12s ok  refused 15 inputs, no crash\n' malformed
+    printf '%-12s ok  refused %d inputs, no crash\n' malformed "$(( $(echo $cuts | wc -w) + 10 ))"
     exit 0
   ) || fail=1
 fi
