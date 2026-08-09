@@ -10122,35 +10122,35 @@ BMF_SSE uint8_t *__unpredict_med(char *Src, int32_t i, int32_t a3)
   // `*(uint32_t *)p_i = n2_1`, and n2_1 is `__byte_44339E[16 * v37] & 3`,
   // the predictor itself.  The test is always true, so it is gone with its
   // else.  See REFACTORING.md section 2.3.
-    si128 = _mm_load_si128((const __m128i *)&__xmmword_439640);
-    v8 = _mm_load_si128((const __m128i *)&__xmmword_439620);
-    v9 = _mm_load_si128((const __m128i *)&__xmmword_439650);
-    v10 = _mm_load_si128((const __m128i *)&__xmmword_439660);
-    n0x70 = 0;
-    v52[0] = 0;
-    v53 = 0x80;
-    do
-    {
-      v12 = v9;
-      v13 = v9;
-      v9 = _mm_add_epi8(v9, si128);
-      *(__m128i *)&v52[2 * n0x70 + 1] = _mm_unpacklo_epi8(v12, v10);
-      *(__m128i *)&v52[2 * n0x70 + 17] = _mm_unpackhi_epi8(v13, v10);
-      v10 = _mm_add_epi8(v10, v8);
-      n0x70 += 16;
-    }
-    while ( n0x70 < 0x70 );
-    for ( j = 0; j < 7; ++j )
-    {
-      v52[4 * j + 225] = -2 * j - 113;
-      v52[4 * j + 227] = -2 * j - 114;
-      v52[4 * j + 226] = 2 * j + 113;
-      v52[4 * j + 228] = 2 * j + 114;
-    }
-    Src_1 = Src;
-    v52[253] = -127;
-    v52[254] = 127;
-    // never taken: -E is 0
+  si128 = _mm_load_si128((const __m128i *)&__xmmword_439640);
+  v8 = _mm_load_si128((const __m128i *)&__xmmword_439620);
+  v9 = _mm_load_si128((const __m128i *)&__xmmword_439650);
+  v10 = _mm_load_si128((const __m128i *)&__xmmword_439660);
+  n0x70 = 0;
+  v52[0] = 0;
+  v53 = 0x80;
+  do
+  {
+    v12 = v9;
+    v13 = v9;
+    v9 = _mm_add_epi8(v9, si128);
+    *(__m128i *)&v52[2 * n0x70 + 1] = _mm_unpacklo_epi8(v12, v10);
+    *(__m128i *)&v52[2 * n0x70 + 17] = _mm_unpackhi_epi8(v13, v10);
+    v10 = _mm_add_epi8(v10, v8);
+    n0x70 += 16;
+  }
+  while ( n0x70 < 0x70 );
+  for ( j = 0; j < 7; ++j )
+  {
+    v52[4 * j + 225] = -2 * j - 113;
+    v52[4 * j + 227] = -2 * j - 114;
+    v52[4 * j + 226] = 2 * j + 113;
+    v52[4 * j + 228] = 2 * j + 114;
+  }
+  Src_1 = Src;
+  v52[253] = -127;
+  v52[254] = 127;
+  // never taken: -E is 0
   i_1 = i;
   if ( i == 1 )
   {
