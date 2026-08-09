@@ -137,6 +137,16 @@ These are format and descriptor combinations fifteen images still do not reach.
 `alt_model_p1_decode` used to head this table with 268 lines and is not on it
 at all now; what happened when it finally ran is §6's first entry.
 
+**Every function in the file now executes under the gate.** That is the number
+that matters after §6, more than the percentage: the category that hid the bug
+was not "partly covered", it was *"never run at all"*, and it is empty. The two
+apparent exceptions are `out_of_memory_handler`, which runs when `malloc` fails,
+and an `__attribute__` block the body scanner counts as a function.
+
+What is left is branches inside bodies that do run — a different and much weaker
+kind of blind spot, because the frame, the types and the struct layouts around
+them are all exercised by the paths that do.
+
 Five of those fifteen are recent, and each was written to reach something
 specific rather than to add another photograph:
 
