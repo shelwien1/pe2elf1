@@ -17543,7 +17543,7 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
       }
       if ( !__dword_443388 )
       {
-        _mm_prefetch((const char *)&n2, 1);
+        _mm_prefetch((const char *)&n2, _MM_HINT_T2);
         n2 = (int32_t)&v578[(v81 ^ 0x7FF0) + 71178] + v78;
         v84 = v578[2 * n5 + 69727] + v77;
         n3 = v81 & 3;
@@ -17573,30 +17573,30 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
         }
         v90 = (char *)v578 + v78;
         v550 = v84;
-        _mm_prefetch(&v90[4 * (v81 ^ 0x4000) + 284712], 1);
+        _mm_prefetch(&v90[4 * (v81 ^ 0x4000) + 284712], _MM_HINT_T2);
         v542 = (Obj23 *)((int32_t)&v90[4 * (v81 ^ 0x4000) + 284712]);
         v544 = &v90[4 * (v81 ^ 0x3FF0) + 284712];
-        _mm_prefetch(v544, 1);
+        _mm_prefetch(v544, _MM_HINT_T2);
         v543 = &v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x4000) & 0xC))
                   + 284712
                   + 4 * ((v81 ^ 0x4000) & 0xFFFFFFF3)];
-        _mm_prefetch(v543, 1);
-        _mm_prefetch(&v90[4 * (v81 ^ 0x2000) + 284712], 1);
+        _mm_prefetch(v543, _MM_HINT_T2);
+        _mm_prefetch(&v90[4 * (v81 ^ 0x2000) + 284712], _MM_HINT_T2);
         v539 = (Obj15 *)((int32_t)&v90[4 * (v81 ^ 0x2000) + 284712]);
-        _mm_prefetch(&v90[4 * (v81 ^ 0x5FF0) + 284712], 1);
+        _mm_prefetch(&v90[4 * (v81 ^ 0x5FF0) + 284712], _MM_HINT_T2);
         v541 = (Obj38 *)((int32_t)&v90[4 * (v81 ^ 0x5FF0) + 284712]);
         v540 = &v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x2000) & 0xC))
                   + 284712
                   + 4 * ((v81 ^ 0x2000) & 0xFFFFFFF3)];
-        _mm_prefetch(v540, 1);
-        _mm_prefetch(&v90[4 * (v81 ^ 0x1000) + 284712], 1);
+        _mm_prefetch(v540, _MM_HINT_T2);
+        _mm_prefetch(&v90[4 * (v81 ^ 0x1000) + 284712], _MM_HINT_T2);
         v536 = (Obj16 *)((int32_t)&v90[4 * (v81 ^ 0x1000) + 284712]);
-        _mm_prefetch(&v90[4 * (v81 ^ 0x6FF0) + 284712], 1);
+        _mm_prefetch(&v90[4 * (v81 ^ 0x6FF0) + 284712], _MM_HINT_T2);
         v538 = (Obj39 *)((int32_t)&v90[4 * (v81 ^ 0x6FF0) + 284712]);
         v537 = &v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x1000) & 0xC))
                   + 284712
                   + 4 * ((v81 ^ 0x1000) & 0xFFFFFFF3)];
-        _mm_prefetch(v537, 1);
+        _mm_prefetch(v537, _MM_HINT_T2);
         v551 = (Obj46 *)(&v90[4 * (v81 ^ 0x800) + 284712]);
         v533 = (Obj46 *)(v551);
         v535 = &v90[4 * (v81 ^ 0x77F0) + 284712];
@@ -17605,9 +17605,9 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
                   + 4 * ((v81 ^ 0x800) & 0xFFFFFFF3)];
         v552 = (Obj47 *)(&v90[4 * (v81 ^ 0x400) + 284712]);
         v530 = (Obj47 *)(v552);
-        _mm_prefetch(v551, 1);
-        _mm_prefetch(v535, 1);
-        _mm_prefetch(v534, 1);
+        _mm_prefetch(v551, _MM_HINT_T2);
+        _mm_prefetch(v535, _MM_HINT_T2);
+        _mm_prefetch(v534, _MM_HINT_T2);
         v553 = &v90[4 * (v81 ^ 0x7BF0) + 284712];
         v532 = v553;
         v531 = &v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x400) & 0xC))
@@ -17615,39 +17615,39 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
                   + 4 * ((v81 ^ 0x400) & 0xFFFFFFF3)];
         v554 = (Obj48 *)(&v90[4 * (v81 ^ 0x200) + 284712]);
         v527 = (Obj48 *)(v554);
-        _mm_prefetch(v552, 1);
+        _mm_prefetch(v552, _MM_HINT_T2);
         v555 = &v90[4 * (v81 ^ 0x7DF0) + 284712];
         v529 = v555;
         v91 = &v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x200) & 0xC))
                  + 284712
                  + 4 * ((v81 ^ 0x200) & 0xFFFFFFF3)];
-        _mm_prefetch(v553, 1);
-        _mm_prefetch(v531, 1);
+        _mm_prefetch(v553, _MM_HINT_T2);
+        _mm_prefetch(v531, _MM_HINT_T2);
         v528 = v91;
         v556 = (Obj49 *)(&v90[4 * (v81 ^ 0x100) + 284712]);
         v524 = (Obj49 *)(v556);
         v92 = *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x100) & 0xC)) + ((v81 ^ 0x100) & 0xFFFFFFF3);
         v557 = &v90[4 * (v81 ^ 0x7EF0) + 284712];
         v526 = v557;
-        _mm_prefetch(v554, 1);
+        _mm_prefetch(v554, _MM_HINT_T2);
         v558 = (Obj40 *)((int32_t)&v90[4 * v92 + 284712]);
         v525 = (Obj40 *)(v558);
         v559 = (Obj50 *)(&v90[4 * (v81 ^ 0x80) + 284712]);
         v521 = (Obj50 *)(v559);
-        _mm_prefetch(v555, 1);
-        _mm_prefetch(v91, 1);
+        _mm_prefetch(v555, _MM_HINT_T2);
+        _mm_prefetch(v91, _MM_HINT_T2);
         v523 = &v90[4 * (v81 ^ 0x7F70) + 284712];
         v560 = &v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x80) & 0xC)) + 284712 + 4 * ((v81 ^ 0x80) & 0xFFFFFFF3)];
         v522 = v560;
         v561 = (Obj51 *)(&v90[4 * (v81 ^ 0x40) + 284712]);
         v518 = (Obj51 *)(v561);
-        _mm_prefetch(v556, 1);
+        _mm_prefetch(v556, _MM_HINT_T2);
         v562 = &v90[4 * (v81 ^ 0x7FB0) + 284712];
         v520 = v562;
         v93 = &v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x40) & 0xC)) + 284712 + 4 * ((v81 ^ 0x40) & 0xFFFFFFF3)];
         v94 = (Obj40 *)((const char *)v558);
-        _mm_prefetch(v557, 1);
-        _mm_prefetch(v94, 1);
+        _mm_prefetch(v557, _MM_HINT_T2);
+        _mm_prefetch(v94, _MM_HINT_T2);
         v563 = v93;
         v519 = v93;
         v95 = v81 ^ 0x20;
@@ -17656,8 +17656,8 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
         v515 = (Obj52 *)(v564);
         v565 = &v90[4 * (v95 ^ 0x7FF0) + 284712];
         v517 = v565;
-        _mm_prefetch(v559, 1);
-        _mm_prefetch(v523, 1);
+        _mm_prefetch(v559, _MM_HINT_T2);
+        _mm_prefetch(v523, _MM_HINT_T2);
         v566 = (Obj41 *)((uint32_t)&v90[4 * *(int32_t *)((char *)__dword_439880 + (v95 & 0xC)) + 284712 + 4 * (v95 & 0xFFFFFFF3)]);
         v516 = (Obj41 *)(v566);
         v567 = (Obj17 *)((int32_t)&v90[4 * v96 + 284712]);
@@ -17665,24 +17665,24 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
         v97 = *(int32_t *)((char *)__dword_439880 + (v96 & 0xC)) + (v96 & 0xFFFFFFF3);
         v568 = (Obj44 *)((int32_t)&v90[4 * (v96 ^ 0x7FF0) + 284712]);
         v514 = (Obj44 *)(v568);
-        _mm_prefetch(v560, 1);
+        _mm_prefetch(v560, _MM_HINT_T2);
         v98 = (Obj42 *)((int32_t)&v90[4 * v97 + 284712]);
         n2_1 = n2;
         v569 = (Obj42 *)((const char *)v98);
         v100 = -v550;
         v513 = (Obj42 *)(v98);
         LOBYTE(v97) = *(uint8_t *)n2;
-        _mm_prefetch(v561, 1);
+        _mm_prefetch(v561, _MM_HINT_T2);
         v101 = *(int16_t *)(n2_1 + 2);
-        _mm_prefetch(v562, 1);
+        _mm_prefetch(v562, _MM_HINT_T2);
         v102 = v100 - ((v101 + (1 << ((v97 + 31) & 31))) >> (v97 & 31));
         v105 = __OFSUB__(v102, __dword_4458F0);
         v103 = v102 == __dword_4458F0;
         v104 = v102 - __dword_4458F0 < 0;
-        _mm_prefetch(v563, 1);
+        _mm_prefetch(v563, _MM_HINT_T2);
         v106 = 32 * (!(v104 ^ v105 | v103) - (v102 < __dword_4458F4));
-        _mm_prefetch(v564, 1);
-        _mm_prefetch(v565, 1);
+        _mm_prefetch(v564, _MM_HINT_T2);
+        _mm_prefetch(v565, _MM_HINT_T2);
         v107 = (Obj42 *)(v569);
         v108 = v550;
         v109 = v106 + v102 + 2;
@@ -17692,10 +17692,10 @@ BMF_SSE uint32_t __sub_41CAB0(char *a1, const __m128 &a2__ref, int32_t a3, uint8
         v111 = (Obj41 *)((const char *)v566);
         *(uint16_t *)(n2 + 2) = v109;
         v112 = (Obj44 *)((const char *)v568);
-        _mm_prefetch(v111, 1);
-        _mm_prefetch(v110, 1);
-        _mm_prefetch(v112, 1);
-        _mm_prefetch(v107, 1);
+        _mm_prefetch(v111, _MM_HINT_T2);
+        _mm_prefetch(v110, _MM_HINT_T2);
+        _mm_prefetch(v112, _MM_HINT_T2);
+        _mm_prefetch(v107, _MM_HINT_T2);
         if ( v87
           && (v113 = *(int16_t *)(n2 + 6),
               v114 = *(uint8_t *)(n2 + 4),
