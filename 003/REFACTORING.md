@@ -26,7 +26,7 @@ so they can be re-measured rather than trusted.
 | pointer casts | 5805 | 7336 |
 | `goto` / `LABEL_n:` | 121 / 88 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
-| line coverage | **89.97 %** | 64.5 % |
+| line coverage | **90.04 %** | 64.5 % |
 
 The target is 32-bit. That is not a limitation left over from the port — it is
 the decision that made Phase 4 possible, and §Phase 4 says why.
@@ -117,11 +117,31 @@ thinks so".
 
 ### 2.3 What the gate still does not reach
 
-10.1 % of the file, concentrated in two bodies: `alt_model_p1_decode` (290 lines) and
-`unpredict_med` (130). Both sit in the alternate model families `ALGORITHM.md` §9
-flags as unread. Neither is dead — nothing has shown their entry condition to be
-impossible — so they are refactored last and with more care than the rest, or
-their entry condition is established first and the corpus grown to reach them.
+10 % of the file — 1324 unexecuted lines across the bodies, re-measured after
+the struct recovery and the renames. The concentration has not moved:
+
+| body | unexecuted |
+| --- | --- |
+| `alt_model_p1_decode` | 268 |
+| `unpredict_med` | 127 |
+| `expand_image` | 125 |
+| `sub_4118A0` | 103 |
+| `read_bmp` | 101 |
+| `compress_image` | 95 |
+
+The first sits in the alternate model families `ALGORITHM.md` §9 flags as
+unread. The others are mostly format variants the corpus does not carry —
+`read_bmp` and `expand_image` between them handle every BMP layout and every
+descriptor combination, and ten images do not reach all of them.
+
+`unpredict_med` is the one worth a second look: the corpus round-trips, so the
+inverse of `predict_med` must be running, and 127 of its lines are not. Either
+the decoder reaches it by a path the corpus does not exercise, or the images all
+take one branch through it. That is a question for the corpus, not for the code.
+
+Neither is dead — nothing has shown any entry condition to be impossible — so
+these are refactored last and with more care than the rest, or their entry
+conditions are established first and the corpus grown to reach them.
 
 Ten similar images is a signal, not a proof. Add images when a phase touches
 something the corpus does not exercise.
@@ -555,7 +575,7 @@ for f in testfiles/*.bmp; do
   rm -f o.bmf o.bmp                       # bmf opens its output "w+b"
   ./bmfcov c "$f" o.bmf && ./bmfcov d o.bmf o.bmp
 done
-gcov -n    -o . bmfcov-bmf.gcno                       # 89.97 % of 13313 lines
+gcov -n    -o . bmfcov-bmf.gcno                       # 90.04 % of 13398 lines
 gcov -f -n -o . bmfcov-bmf.gcno                       # per function
 ```
 

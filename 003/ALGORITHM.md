@@ -7,10 +7,9 @@ the two entropy back ends.
 Everything below was derived by reading the decompiled bodies. Function names
 started as the donor's addresses inside `BMF.exe` and have been replaced, as
 each role was established, by names that say what the body does;
-`tools/addrmap.txt` maps every one of them back to the address it came from,
-and lists the four it cannot. Global names are IDA's, and each one is a
-reference into `blob.inc` — BMF.exe's data segment — at the address given in
-the tables.
+`tools/addrmap.txt` maps every one of them back to the address it came from.
+Global names are IDA's, and each one is a reference into `blob.inc` — BMF.exe's
+data segment — at the address given in the tables.
 
 **Confidence.** Sections 1–6 and the range coder in §5 are read off the code
 directly; where a detail is inferred rather than read, it says so. §7 is where
