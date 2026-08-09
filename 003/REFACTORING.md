@@ -18,12 +18,12 @@ so they can be re-measured rather than trusted.
 
 | | | at the start |
 | --- | --- | --- |
-| `subs1.hpp` | 23 683 lines | 25 462 |
+| `subs1.hpp` | 23 870 lines | 25 462 |
 | bodies | 179 (84 real, 95 `__fwd_*` shims) | 215 |
 | globals in `blob.inc` | **78** | 293 |
-| recovered structs | **69**, 2109 named field accesses | 0 |
-| raw-offset dereferences | **939** | 1646 before Phase 4 |
-| pointer casts | 5930 | 7336 |
+| recovered structs | **73**, 2728 named field accesses | 0 |
+| raw-offset dereferences | **523** | 1646 before Phase 4 |
+| pointer casts | 5805 | 7336 |
 | `goto` / `LABEL_n:` | 121 / 88 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
 | line coverage | **89.97 %** | 64.5 % |
@@ -108,7 +108,7 @@ was discarded, which is a better dead-code report than a textual call graph: it
 sees through the branches the constants fold away.
 
 It is a report, not an authority. It currently discards one body whose source is
-deliberately kept — `sub_410650`, the predictor-mode-0 expander, whose call
+deliberately kept — `expand_predictor_mode0`, the predictor-mode-0 expander, whose call
 sites the optimiser proves unreachable at `-O1` and above but not at `-O0`. That
 reasoning may be exploiting undefined behaviour rather than a real
 impossibility, and `ALGORITHM.md` §9 lists predictor mode 0 as a mode whose
@@ -117,8 +117,8 @@ thinks so".
 
 ### 2.3 What the gate still does not reach
 
-10.1 % of the file, concentrated in two bodies: `sub_427740` (290 lines) and
-`sub_410310` (130). Both sit in the alternate model families `ALGORITHM.md` §9
+10.1 % of the file, concentrated in two bodies: `alt_model_p1_decode` (290 lines) and
+`unpredict_med` (130). Both sit in the alternate model families `ALGORITHM.md` §9
 flags as unread. Neither is dead — nothing has shown their entry condition to be
 impossible — so they are refactored last and with more care than the rest, or
 their entry condition is established first and the corpus grown to reach them.
@@ -139,9 +139,9 @@ something the corpus does not exercise.
    64-bit build gets its addresses into 32 bits by confining the heap rather
    than by widening the fields.
 3. The recurring `base + constant` families are `struct`s, and the variables
-   that walk them are typed pointers to those structs. **Done for 69 objects**
-   — 2109 accesses name a field, 939 raw-offset dereferences remain, and the 81
-   that were declined are listed with their reasons in Phase 4.
+   that walk them are typed pointers to those structs. **Done for 73 objects**
+   — 2728 accesses name a field, 523 raw-offset dereferences remain, and the
+   ones declined are listed with their reasons in Phase 4.
 4. Names say what things are. No `__sub_41CAB0`, no `v187`, no `n0x800000`.
    The recovered structs are the open part of this: their layouts are known,
    their meanings mostly are not, and `ModelBlock` is the one that is.
@@ -216,11 +216,11 @@ and this table does not pretend otherwise:
 
 | pointer | offset range | distinct | refs | touched by | what is known |
 | --- | --- | --- | --- | --- | --- |
-| `_this` | `0x64`–`0x5C75AC` | 72 | 200 | `sub_416860`, `sub_416C90`, `sub_419430`, `sub_4229E0`, … | the model block: a `0x44000`–`0x44144` header (52 fields, 405 refs across all pointers) then tables out to 6.7 MB. Allocated by `sub_414F60` / `sub_4149C0` |
+| `_this` | `0x64`–`0x5C75AC` | 72 | 200 | `pixel_context`, `init_model_tables`, `sub_419430`, `sub_4229E0`, … | the model block: a `0x44000`–`0x44144` header (52 fields, 405 refs across all pointers) then tables out to 6.7 MB. Allocated by `sub_414F60` / `rc_begin_decode` |
 | `lpAddress` | `0x11021`–`0x447B0` | 33 | 104 | `sub_419610`, `sub_422DB0` | an alternate-model working set — **role not established** |
-| `n5_2` | `0x5D8`–`0xEEA` | 7 | 97 | `sub_424D90`, `sub_4259F0` | a ~3.8 KB record in the alternate model family — **role not established** |
-| `a1` | `0xC20`–`0x65E7B0` | 32 | 96 | `sub_417980`, `sub_41CAB0` | reaches the same 6.7 MB extent as `_this`, so almost certainly the model block under another name — confirm before merging |
-| `v56` | `0x44000`–`0x440F4` | 21 | 51 | `sub_423600` | the model block's header only |
+| `n5_2` | `0x5D8`–`0xEEA` | 7 | 97 | `alt_model_p1_encode`, `sub_4259F0` | a ~3.8 KB record in the alternate model family — **role not established** |
+| `a1` | `0xC20`–`0x65E7B0` | 32 | 96 | `layout_workspace`, `sub_41CAB0` | reaches the same 6.7 MB extent as `_this`, so almost certainly the model block under another name — confirm before merging |
+| `v56` | `0x44000`–`0x440F4` | 21 | 51 | `alt_model_p2_decode` | the model block's header only |
 | `n0x10_2` | `0x3960C`–`0xE5836` | 14 | 46 | `sub_41CAB0` | inside the model block's tables |
 | — | `0x44339C`, 16 B stride | — | ~90 | many | the per-plane descriptors, reached through the four false bases in §4.1 |
 
@@ -241,7 +241,7 @@ anyway, because the layout is visible in the offsets and does not need the role;
 what is still blocked on reading §9 is naming the fields.
 
 **The gate covers this work.** The two functions §2.3 lists as still unreached
-are `sub_427740` and `sub_410310`; neither is a model-block user. Phase 4's
+are `alt_model_p1_decode` and `unpredict_med`; neither is a model-block user. Phase 4's
 largest object is entirely inside covered code. It is Phase 3, which touches
 every global whether covered or not, that carries what exposure remains.
 
@@ -281,7 +281,7 @@ speculative. `tools/rename.py` is scope-aware and refuses rather than guesses.
 ### Phase 2 — done
 
 All 24 frames gone. **The plan said "expect 3–6 to resist" and 16 did.** Those
-frames have bytes no alias names — `sub_405CF0` names 29 220 of 41 456 — and the
+frames have bytes no alias names — `choose_plane_coding` names 29 220 of 41 456 — and the
 code reaches that slack by running off the end of the alias next door. They keep
 their layout as a struct with explicit padding and lose only the casts, each
 carrying `static_assert(sizeof(__frame) == N)` so a layout that moves is a
@@ -301,7 +301,7 @@ gap; it segfaults on the first image. Three variants say what kind of failure:
 
 | guard | contents | result |
 | --- | --- | --- |
-| 64 bytes | zero | SIGSEGV in `sub_416860` |
+| 64 bytes | zero | SIGSEGV in `pixel_context` |
 | 64 bytes | the bytes that followed in the data segment | SIGSEGV, same place |
 | 4096 bytes | the bytes that followed in the data segment | SIGSEGV, same place |
 
@@ -360,10 +360,10 @@ moves, the variable-offset walks keep indexing what they indexed, and each
 generated struct carries a `static_assert` on its size that says so and fails
 loudly if it ever stops being true.
 
-69 structs, gated one at a time — build, encode and decode ten images, compare
+73 structs, gated one at a time — build, encode and decode ten images, compare
 every stream against its committed reference, revert the ones that change
-anything. **939 raw-offset dereferences left, from 1646, and 2109 accesses now
-name a field.** 81 objects were tried and reverted or declined; the reasons are
+anything. **523 raw-offset dereferences left, from 1646, and 2728 accesses now
+name a field.** 30 objects are on the skip list; the reasons are
 in `tools/struct-skip.txt` and the categories are below.
 
 #### What is left, and why
@@ -479,7 +479,7 @@ half of the record.
 | --- | --- | --- |
 | 2 | 3–6 frames will resist splitting | 16 did — they carry bytes no alias names and the code runs into them |
 | 3 | split every global; extents are the unknown | splitting all at once segfaults on *writes* crossing boundaries. One at a time: 86 move, 77 are parts of larger tables |
-| 4 | recover the objects and widen the pointer fields | 1683 constant-offset dereferences against 2184 variable-offset ones, and **no object has only the first kind**. Widening is not available — but recovering the structs is, once the target is 32-bit, because there the layout does not move. 69 of them |
+| 4 | recover the objects and widen the pointer fields | 1683 constant-offset dereferences against 2184 variable-offset ones, and **no object has only the first kind**. Widening is not available — but recovering the structs is, once the target is 32-bit, because there the layout does not move. 73 of them |
 | 6 | the `goto`s are four rewritable shapes | none of the 123 is any of them. One other shape exists; it fits 2 |
 
 Two of those were caught by measuring before starting, which cost nothing. One
@@ -513,7 +513,7 @@ byte for byte.
 
 Two things, and neither is a phase.
 
-**Naming.** 68 of the 69 structs are `ObjN` with `f76`-style members. The layout is
+**Naming.** 72 of the 73 structs are `ObjN` with `f76`-style members. The layout is
 recovered; the meaning is not. `ModelBlock` is the exception, and it is named
 only because §4.2 had already established what it is. `ALGORITHM.md` §9 still lists the
 alternate model families as unread, and that is what naming those fields waits
@@ -529,19 +529,19 @@ whose fields are still `uint32_t`.
 
 ```sh
 # sizes and vocabulary
-wc -l subs1.hpp                                       # 23683
+wc -l subs1.hpp                                       # 23870
 grep -o 'blob1 + 0x' subs1.hpp | wc -l                # 164 globals
 grep -c 'static inline .*__fwd_' subs1.hpp            # 95 shims
-grep -oE '\((const )?[A-Za-z_][A-Za-z0-9_]* *\*+\)' subs1.hpp | wc -l   # 5930
+grep -oE '\((const )?[A-Za-z_][A-Za-z0-9_]* *\*+\)' subs1.hpp | wc -l   # 5805
 grep -c 'goto ' subs1.hpp                             # 123
 grep -c '__hexrays_frame' subs1.hpp                   # 0
 
 # structure recovery
-grep -c 'struct \(Obj[0-9]*\|ModelBlock\) {' subs1.hpp  # 69
-grep -oE '\->f[0-9]+' subs1.hpp | wc -l               # 2109 named accesses
+grep -c 'struct \(Obj[0-9]*\|ModelBlock\) {' subs1.hpp  # 73
+grep -oE '\->f[0-9]+' subs1.hpp | wc -l               # 2728 named accesses
 grep -oE '\*\((const )?[A-Za-z_][A-Za-z0-9_]*( )?\*+\)\([A-Za-z_][A-Za-z0-9_]* \+ [0-9]+\)' \
-     subs1.hpp | wc -l                                # 939 raw-offset, from 1646
-wc -l tools/struct-skip.txt                           # 81 objects declined
+     subs1.hpp | wc -l                                # 523 raw-offset, from 1646
+wc -l tools/struct-skip.txt                           # 30 objects declined
 python3 tools/structs.py subs1.hpp --list             # what is left, by traffic
 
 # dead code, as the linker sees it
