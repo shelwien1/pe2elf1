@@ -36,7 +36,11 @@
 #include <cmath>
 #include <cctype>     // isspace/isdigit/toupper — §6.5 lets these fall through
 #include <cstdarg>
-#include <immintrin.h>
+// The last intrinsic is gone; M128 below is a plain union and needs no header.
+// These two are still here for the MXCSR mode bits alone -- flush-to-zero and
+// denormals-are-zero, which main sets and the float results depend on.
+#include <xmmintrin.h>   // _MM_SET_FLUSH_ZERO_MODE
+#include <pmmintrin.h>   // _MM_SET_DENORMALS_ZERO_MODE
 
 // ---------------------------------------------------------------------------
 // Hex-Rays type vocabulary.
@@ -552,67 +556,31 @@ void __noreturn __break(uint16 code, uint16 subcode);
 #define SDWORD3(x) SDWORDn(x, 3)
 
 // ---------------------------------------------------------------------------
-// SSE register types.
+// Sixteen bytes, read as whatever reads them.
 //
-// Hex-Rays writes MSVC's spelling for the halves of an SSE register —
-// `v.m128i_i32[1]`, `q.m128_f32[0]`, `w.m64_u64` — because on Windows __m128i,
-// __m128, __m128d and __m64 are *unions* with those members.  That union is
-// MSVC's; GCC's __m128i is a bare vector type (`long long
-// __attribute__((vector_size(16)))`) with no members at all, and nothing in
-// immintrin.h / x86intrin.h adds them.  <intrin.h> does not help either — on
-// GCC that header is just an x86intrin.h alias, so the Intel-compiler spelling
-// it provides on Windows is not what arrives here.
+// Hex-Rays wrote MSVC's spelling for the halves of an SSE register --
+// `v.m128i_i32[1]`, `q.m128_f32[0]` -- because on Windows __m128i, __m128 and
+// __m128d are *unions* with those members, and GCC's are bare vector types
+// with none.  The bodies used to need the vector types themselves, so there
+// were four wrappers -- one per MSVC union, each with its own member prefix --
+// with conversions between them and target attributes to carry them through
+// the intrinsics.
 //
-// So wrap them.  Each M* below is the MSVC union plus conversions in both
-// directions, and the __m128* / __m64 names are redirected onto the wrappers
-// *after* the intrinsic headers are done with the originals.  The conversions
-// carry a wrapper through the intrinsics unchanged: `_mm_mul_ps(a, b)` takes
-// its arguments via `operator __gnu_m128&`, and its `__m128` result lands back
-// in an M128F through the converting constructor.  Reinterpreting casts between
-// the four (`(__m128)xmmword_441120`, which Hex-Rays emits freely) go through
-// the cross-type constructors, which copy the bits.
+// There are no intrinsics left.  What the file actually does with these is
+// read and write sixteen bytes under half a dozen names, which is one union
+// with all the names in it -- no vector member, no conversions, no target
+// attribute.  `__m128` and `__m128i` are both spellings of it, so the casts
+// Hex-Rays wrote between them are the no-ops they always were.
 //
-// The unions are layout-compatible with the vector types — same size, same
-// alignment, vector first — so a pointer cast to one of them still addresses a
-// real SSE register image, which is what makes `*(__m128i *)ptr` work.
+// The alignment is stated rather than inherited: `*(__m128i *)ptr` still has
+// to address a sixteen-byte-aligned object, and several globals are declared
+// alignas(16) on the strength of it.
 // ---------------------------------------------------------------------------
-typedef __m128i __gnu_m128i;
-typedef __m128  __gnu_m128;
-typedef __m128d __gnu_m128d;
-typedef __m64   __gnu_m64;
-
-union M128I;
-union M128F;
-union M128D;
-
-union M128I {
-  __gnu_m128i v;
-  // m128i_i8 is `char`, not `signed char`: MSVC's __int8 is plain char (so is
-  // Hex-Rays' — see defs.h), and the bodies hand `x.m128i_i8` straight to
-  // strcpy/strrchr, which take char*.
-  char               m128i_i8[16];
-  short              m128i_i16[8];
-  int                m128i_i32[4];
-  long long          m128i_i64[2];
-  unsigned char      m128i_u8[16];
-  unsigned short     m128i_u16[8];
-  unsigned int       m128i_u32[4];
-  unsigned long long m128i_u64[2];
-  M128I() = default;
-  M128I(__gnu_m128i a) : v(a) {}
-  // Hex-Rays writes "zero the register" as `x = 0` / `(__m128i)0LL` even for a
-  // 16-byte object; a non-zero scalar zero-extends, which is what the
-  // corresponding MOVD/MOVQ does.
-  M128I(long long z) { __builtin_memset(this, 0, 16); m128i_i64[0] = z; }
-  inline M128I(const M128F &o);
-  inline M128I(const M128D &o);
-  operator __gnu_m128i&() { return v; }
-  operator const __gnu_m128i&() const { return v; }
-};
-
-union M128F {
-  __gnu_m128         v;
+union alignas(16) M128 {
   float              m128_f32[4];
+  // m128_i8 is `char`, not `signed char`: MSVC's __int8 is plain char (so is
+  // Hex-Rays' -- see defs.h), and the bodies hand `x.m128_i8` straight to
+  // strcpy/strrchr, which take char*.
   char               m128_i8[16];
   short              m128_i16[8];
   int                m128_i32[4];
@@ -621,85 +589,24 @@ union M128F {
   unsigned short     m128_u16[8];
   unsigned int       m128_u32[4];
   unsigned long long m128_u64[2];
-  M128F() = default;
-  M128F(__gnu_m128 a) : v(a) {}
-  M128F(long long z) { __builtin_memset(this, 0, 16); m128_i64[0] = z; }
-  inline M128F(const M128I &o);
-  inline M128F(const M128D &o);
-  operator __gnu_m128&() { return v; }
-  operator const __gnu_m128&() const { return v; }
+  M128() = default;
+  // Hex-Rays writes "zero the register" as `x = 0` / `(__m128)0LL` even for a
+  // 16-byte object; a non-zero scalar zero-extends, which is what the
+  // corresponding MOVD/MOVQ does.
+  M128(long long z) { __builtin_memset(this, 0, 16); m128_i64[0] = z; }
 };
 
-union M128D {
-  __gnu_m128d        v;
-  double             m128d_f64[2];
-  float              m128d_f32[4];
-  long long          m128d_i64[2];
-  unsigned long long m128d_u64[2];
-  M128D() = default;
-  M128D(__gnu_m128d a) : v(a) {}
-  M128D(long long z) { __builtin_memset(this, 0, 16); m128d_i64[0] = z; }
-  inline M128D(const M128I &o);
-  inline M128D(const M128F &o);
-  operator __gnu_m128d&() { return v; }
-  operator const __gnu_m128d&() const { return v; }
-};
+static_assert(sizeof(M128) == 16 && alignof(M128) == 16, "M128 layout");
 
-inline M128I::M128I(const M128F &o) { __builtin_memcpy(this, &o, 16); }
-inline M128I::M128I(const M128D &o) { __builtin_memcpy(this, &o, 16); }
-inline M128F::M128F(const M128I &o) { __builtin_memcpy(this, &o, 16); }
-inline M128F::M128F(const M128D &o) { __builtin_memcpy(this, &o, 16); }
-inline M128D::M128D(const M128I &o) { __builtin_memcpy(this, &o, 16); }
-inline M128D::M128D(const M128F &o) { __builtin_memcpy(this, &o, 16); }
-
-union M64 {
-  __gnu_m64          v;
-  char               m64_i8[8];
-  short              m64_i16[4];
-  int                m64_i32[2];
-  long long          m64_i64;
-  unsigned char      m64_u8[8];
-  unsigned short     m64_u16[4];
-  unsigned int       m64_u32[2];
-  unsigned long long m64_u64;
-  M64() = default;
-  M64(__gnu_m64 a) : v(a) {}
-  M64(long long z) : m64_i64(z) {}
-  operator __gnu_m64&() { return v; }
-  operator const __gnu_m64&() const { return v; }
-};
-
-static_assert(sizeof(M128I) == 16 && alignof(M128I) == alignof(__gnu_m128i), "M128I layout");
-static_assert(sizeof(M128F) == 16 && alignof(M128F) == alignof(__gnu_m128),  "M128F layout");
-static_assert(sizeof(M128D) == 16 && alignof(M128D) == alignof(__gnu_m128d), "M128D layout");
-static_assert(sizeof(M64)   ==  8, "M64 layout");
-
-// The memory-operand intrinsics take a pointer to the *vector* type, and the
-// bodies cast to the wrapper (`(__m128i *)p` expands to `(M128I *)p`).  These
-// overloads accept that.  They are the only place the head itself touches SSE,
-// hence the explicit target attribute: build.sh deliberately does not turn SSE
-// on for the whole translation unit — extract.py puts the same attribute on
-// each body that needs it, so nothing else in the file has its code generation
-// changed by intrinsics appearing in one function.
-#define BMF_SSE __attribute__((target("mmx,sse4.2,fxsr")))
-BMF_SSE static inline __gnu_m128i _mm_load_si128 (const M128I *p) { __gnu_m128i r; __builtin_memcpy(&r, p, 16); return r; }
-BMF_SSE static inline __gnu_m128i _mm_loadu_si128(const M128I *p) { __gnu_m128i r; __builtin_memcpy(&r, p, 16); return r; }
-BMF_SSE static inline __gnu_m128i _mm_loadl_epi64(const M128I *p) { __gnu_m128i r = __extension__ (__gnu_m128i){0, 0}; __builtin_memcpy(&r, p, 8); return r; }
-BMF_SSE static inline void _mm_store_si128 (M128I *p, __gnu_m128i a) { __builtin_memcpy(p, &a, 16); }
-BMF_SSE static inline void _mm_storeu_si128(M128I *p, __gnu_m128i a) { __builtin_memcpy(p, &a, 16); }
-BMF_SSE static inline void _mm_stream_si128(M128I *p, __gnu_m128i a) { _mm_stream_si128((__gnu_m128i *)p, a); }
-BMF_SSE static inline void _mm_stream_pi   (M64   *p, __gnu_m64   a) { _mm_stream_pi((__gnu_m64 *)p, a); }
-
-#define __m128i M128I
-#define __m128  M128F
-#define __m128d M128D
-#define __m64   M64
+#define __m128i M128
+#define __m128  M128
+#define __m128d M128
 
 // i386 g++ has no __int128 (verified: "expected primary-expression").  The
 // only things typed that way here are 16-byte xmmword globals, so give them
-// the same 16-byte SSE type.
-typedef M128I _OWORD;
-#define __int128 M128I
+// the same 16-byte type.
+typedef M128 _OWORD;
+#define __int128 M128
 
 //--- #include "crt.cpp"      // what is left of the runtime BMF got from the PE
 // crt.cpp — the runtime BMF used to get from the PE.
