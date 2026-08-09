@@ -12374,7 +12374,7 @@ BMF_SSE int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, char a3)
   uint32_t &v227 = __frame.v227;
   Obj97 *&v228 = (Obj97 *&)__frame.v228;
   ;
-  __m128i v21, v46, v47, v51, v54, v113, v114;
+  __m128i v21;
   bool v19, n2_4, v42, v106;
   char v7, v10, v12, v16, v18, *v44, n0x100_1, k;
   double v65, v66, v68, v69, v70, v72, v73, v74, v75, v76;
@@ -12829,19 +12829,14 @@ LABEL_19:
       *(int32_t *)((char *)__dword_4433A4 + v43) = n128_1;
       v44 = &buf[4096 * n2_1];
       n0x100 = (uint8_t)v44 & 0xF;
-      v46 = _mm_cvtsi32_si128(0);
-      do
-      {
-        v46 = _mm_add_epi32(
-                _mm_add_epi32(
-                  _mm_add_epi32(_mm_add_epi32(v46, *(__m128i *)&v44[4 * n0x100]), *(__m128i *)&v44[4 * n0x100 + 16]),
-                  *(__m128i *)&v44[4 * n0x100 + 32]),
-                *(__m128i *)&v44[4 * n0x100 + 48]);
-        n0x100 += 16;
-      }
-      while ( (uint32_t)n0x100 < 0x100 );
-      v47 = _mm_add_epi32(v46, _mm_srli_si128(v46, 8));
-      v48 = _mm_cvtsi128_si32(_mm_add_epi32(v47, _mm_srli_si128(v47, 4)));
+      // The first 256-wide window over these 1024 counters.  Where it starts
+      // is the pointer's low four bits, which the frame's alignas(16) makes
+      // zero; sixteen counters an iteration is all the vectors were doing,
+      // and integer addition does not care which lane a term landed in.
+      v48 = 0;
+      for ( i = 0; i < 256; ++i )
+        v48 += *(int32_t *)&v44[4 * (n0x100 + i)];
+      n0x100 += 256;
       v49 = v48;
       n0x100_1 = -1;
       if ( n0x100 < 1024 )
@@ -12860,17 +12855,13 @@ LABEL_19:
         while ( n0x100 < 1024 );
         n4 = HIDWORD(v209);
       }
-      v51 = v21;
       __byte_44339F[v205.m128i_i32[1]] = n0x100_1 + 1;
-      for ( i = 0; (uint32_t)i < 0x100; i += 16 )
-        v51 = _mm_add_epi32(
-                _mm_add_epi32(
-                  _mm_add_epi32(_mm_add_epi32(v51, *(__m128i *)&v180[i + 1024]), *(__m128i *)&v180[i + 1028]),
-                  *(__m128i *)&v180[i + 1032]),
-                *(__m128i *)&v180[i + 1036]);
+      // Same window, over the second table.  `i` is left at 256 for the slide
+      // that follows.
+      j_1 = 0;
+      for ( i = 0; i < 0x100; ++i )
+        j_1 += v180[i + 1024];
       n255 = 255;
-      v54 = _mm_add_epi32(v51, _mm_srli_si128(v51, 8));
-      j_1 = _mm_cvtsi128_si32(_mm_add_epi32(v54, _mm_srli_si128(v54, 4)));
       for ( j = j_1; i < 512; ++i )
       {
         j = v180[i + 1024] + j - v180[i + 768];
@@ -13089,19 +13080,11 @@ LABEL_19:
         ::__n3_1 = 3;
         v112 = &v180[1024 * __choose_plane_coding_n3_1 + 1024];
         n192 = (uint8_t)v112 & 0xF;
-        v113 = _mm_cvtsi32_si128(0);
-        do
-        {
-          v113 = _mm_add_epi32(
-                   _mm_add_epi32(
-                     _mm_add_epi32(_mm_add_epi32(v113, *(__m128i *)&v112[n192]), *(__m128i *)&v112[n192 + 4]),
-                     *(__m128i *)&v112[n192 + 8]),
-                   *(__m128i *)&v112[n192 + 12]);
-          n192 += 16;
-        }
-        while ( (uint32_t)n192 < 0x100 );
-        v114 = _mm_add_epi32(v113, _mm_srli_si128(v113, 8));
-        v115 = _mm_cvtsi128_si32(_mm_add_epi32(v114, _mm_srli_si128(v114, 4)));
+        // And the same again, over the third.
+        v115 = 0;
+        for ( i = 0; i < 256; ++i )
+          v115 += v112[n192 + i];
+        n192 += 256;
         v116 = v115;
         for ( k = -1; n192 < 1024; ++n192 )
         {
