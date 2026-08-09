@@ -588,8 +588,8 @@ struct ModelBlock {
   uint8_t _pad18[1078112];
   uint8_t *f1078208;   // the symbol lists, 24 bytes each
   uint8_t *f1078212;   // the symbol lists, 24 bytes each
-  uint32_t f1078216;
-  uint32_t f1078220;
+  uint8_t *f1078216;   // where the symbol lists end
+  uint8_t *f1078220;   // where the symbol lists end
   uint8_t _pad23[8];
   uint32_t **f1078232;   // the symbol-list cursor: a walk over uint32_t *
   uint8_t _pad25[448];
@@ -597,7 +597,7 @@ struct ModelBlock {
   uint8_t *f1078688;     // the alphabet map, one byte a symbol
   uint8_t _pad28[4980740];
   uint32_t f6059432;
-  int32_t f6059436;
+  uint8_t *f6059436;   // a row cursor; `f6059436 + 2` steps two bytes
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(ModelBlock, f6059436) == 6059436,
@@ -1176,7 +1176,7 @@ struct Obj10 {
   void*f1078204;
   uint8_t *f1078208;   // the symbol lists, 24 bytes each
   uint8_t *f1078212;   // the symbol lists, 24 bytes each
-  uint32_t f1078216;
+  uint8_t *f1078216;   // where the symbol lists end
   uint8_t _pad34[4];
   uint32_t f1078224;
   uint8_t _pad36[4];
@@ -10759,11 +10759,11 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   {
     v13 = (uint16_t)(*((uint16_t *)this_1 + n4_8 + 3029720) - n4_1);
   }
-  this_1->f6059432 = &((uint32_t *)this_1)[4 * v13 + 269674];
+  this_1->f6059432 = (uint32_t)&((uint32_t *)this_1)[4 * v13 + 269674];
   v15 = *((uint8_t *)this_2 + v12 + 1078244);
   this_2->f36 = v15;
   v16 = (uint16_t *)&((uint32_t *)this_2)[0x10000 * v15 + 531818 + v13];
-  *(uint32_t *)&this_2->f6059436 = v16;
+  this_2->f6059436 = (uint8_t *)v16;
   n4_9 = *v16;
   if ( n4_9 == n15_8 )
   {
@@ -10966,13 +10966,13 @@ LABEL_57:
         this_3->f92 = v56 + 8 * n15_18 - 8 * n15_14;
         *(uint32_t *)(v57 + 4) = 0x01010101;
         *(uint32_t *)this_3->f76 = 0x01010101;
-        v58 = (uint16_t *)*(uint32_t *)&this_3->f6059436;
+        v58 = (uint16_t *)this_3->f6059436;
         LOWORD(v55) = ::__n4_4;
         LOWORD(v54) = *v58;
         n4_1 = ::__n4_4;
         v58[1] = v54;
         *(uint16_t *)this_3->f76 = (uint16_t)(uintptr_t)v55;
-        *(uint16_t *)*(uint32_t *)&this_3->f6059436 = v55;
+        *(uint16_t *)this_3->f6059436 = v55;
         v59 = (int32_t *)this_3->f76;
         v60 = v59[1];
         n15_3 = *v59;
@@ -10991,10 +10991,10 @@ LABEL_57:
             n4_15 = freq_i;
             do
             {
-              *(uint16_t *)(*(uint32_t *)&this_3->f6059436 + 2) = n4_14;
+              *(uint16_t *)(this_3->f6059436 + 2) = n4_14;
               *(uint32_t *)this_3->f76 = n15_13;
               *(uint32_t *)(this_3->f76 + 4) = v60;
-              v66 = *(uint32_t *)&this_3->f6059436;
+              v66 = this_3->f6059436;
               this_3->f76 += 8;
               *(uint16_t *)(v66 + 2) = n4_14;
               *(uint32_t *)this_3->f76 = n15_13;
@@ -11015,7 +11015,7 @@ LABEL_57:
           if ( n15_18 - n15_14 - 1 > (uint32_t)(v67 - 1) )
           {
             n15_15 = n15_3;
-            *(uint16_t *)(*(uint32_t *)&this_3->f6059436 + 2) = n4_1;
+            *(uint16_t *)(this_3->f6059436 + 2) = n4_1;
             *(uint32_t *)this_3->f76 = n15_15;
             *(uint32_t *)(this_3->f76 + 4) = v60;
             v61 = this_3->f76 + 8;
@@ -11311,7 +11311,7 @@ LABEL_86:
   n15_24 = n15_18;
   n4_20 = ::__n4_3;
   exclusion_mask[__n15_0] = __byte_445700;
-  v95 = (uint16_t *)*(uint32_t *)&this_3->f6059436;
+  v95 = (uint16_t *)this_3->f6059436;
   exclusion_mask[n15_23] = v91;
   exclusion_mask[n4_20] = v91;
   exclusion_mask[n4_19] = v91;
@@ -11569,11 +11569,11 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   {
     v13 = (uint16_t)(*((uint16_t *)this_1 + n15_3 + 3029720) - n15_7);
   }
-  *(int32_t *)&this_1->f6059432 = (int32_t)&((int32_t *)this_1)[4 * v13 + 269674];
+  this_1->f6059432 = (uint32_t)&((int32_t *)this_1)[4 * v13 + 269674];
   v15 = *((uint8_t *)this_2 + v10 + 1078244);
   *(int32_t *)&this_2->f36 = v15;
   v16 = &((int32_t *)this_2)[0x10000 * v15 + 531818 + v13];
-  this_2->f6059436 = (int32_t)v16;
+  this_2->f6059436 = (uint8_t *)v16;
   n15_6 = *(uint16_t *)v16;
   if ( n15_6 == n15_3 )
   {
@@ -12881,7 +12881,7 @@ LABEL_53:
           ArgList_8 = ArgList_5;
           v80 = 0;
           do
-            *ArgList_8++ = *(uint8_t *)(this_4->f1078240
+            *ArgList_8++ = *(this_4->f1078240
                                     + 4 * *(uint16_t *)(this_4->f56[0] + 8 * v80++ + 64));
           while ( v80 < this_4->f0 );
           ArgList_5 = ArgList_8;
