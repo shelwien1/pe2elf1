@@ -6019,7 +6019,9 @@ LABEL_52:
     a1[(uint8_t)a2[2 * n0x80 + 1] + 256] = 2 * n0x80 + 1;
   }
   return n0x80;
-}uint32_t __rc_decode_flat(uint32_t tot)
+}
+
+uint32_t __rc_decode_flat(uint32_t tot)
 {
   uint32_t sym = rc.get_freq(tot);
   rc.decode(sym, sym + 1, tot);
@@ -10012,7 +10014,9 @@ BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
   }
   rc.dec_init();
   return out_cursor;
-} BMF_SSE uint8_t *__unpredict_med(char *Src, int32_t i, int32_t a3)
+}
+
+BMF_SSE uint8_t *__unpredict_med(char *Src, int32_t i, int32_t a3)
 {
   ;
   uintptr_t Src_1, v41;   // were int32_t: addresses, masked and tagged
@@ -10777,7 +10781,9 @@ static inline int32_t * __fwd_alt_model_p1_decode_sub_4256F0(void *a0, int32_t a
     while ( n4_4 < n4_3 );
   }
   return n4_3;
-}BMF_SSE int32_t __sub_41C4B0(__m128 *_this, Obj21 *a2, Obj12 *a3, int32_t n2)
+}
+
+BMF_SSE int32_t __sub_41C4B0(__m128 *_this, Obj21 *a2, Obj12 *a3, int32_t n2)
 {
   ;
   __m128 v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v23,
@@ -13908,7 +13914,9 @@ LABEL_61:
   fclose(Stream_v);
   free(Buffer_3);
   return v3;
-} int32_t __decode_symbol_list(uint32_t *a1)
+}
+
+int32_t __decode_symbol_list(uint32_t *a1)
 {
   struct alignas(16) {   // 32824 bytes, the frame Hex-Rays could not name
       uint16_t *v55;

@@ -16,9 +16,12 @@ colour_transform           0x00407EF0
 interleave_plane           0x004081E0
 unpredict_med              0x00410310
 expand_predictor_mode0     0x00410650
+predict_med                0x004108C0
 rc_decode_flat             0x004123E0
 encode_context_bit         0x00412490
 decode_context_bit         0x00412850
+encode_symbol_list         0x00412B10
+decode_symbol_list         0x00412E60
 update_binary_pair         0x00413430
 encode_symbol_tree         0x00413900
 decode_three_way           0x00414620
@@ -31,6 +34,7 @@ free_workspace             0x00415270
 model_plane                0x00415380
 code_pixel                 0x004159E0
 pixel_context              0x00416860
+init_model_tables          0x00416C90
 reduce_alphabet            0x00417200
 layout_workspace           0x00417980
 unmodel_plane              0x00417DB0
@@ -46,10 +50,10 @@ alt_model_p1_encode        0x00424D90
 alt_model_p1_d8_decode     0x004273F0
 alt_model_p1_decode        0x00427740
 read_bmp                   0x0042AB20
+write_bmp                  0x0042B0C0
 alloc_image                0x0042B830
 set_new_handler            0x0042CBB0
 log_two_lane               0x00436E10
 
-# 48 mapped.  7 named bodies have no recorded address:
-#   decode_symbol_list        encode_symbol_list        estimate_cost             init_model_tables
-#   predict_med               rc_begin_encode           write_bmp
+# 53 mapped.  2 named bodies have no recorded address:
+#   estimate_cost             rc_begin_encode

@@ -29,7 +29,9 @@ import sys
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs                                                  # noqa: E402
 
-DEF = re.compile(r'^[A-Za-z_].*?\b__([A-Za-z_][A-Za-z0-9_]*)\s*\(')
+# a closing brace with a definition glued to it -- `}int32_t __f(...)` --
+# is a definition, and older revisions of the file are full of them
+DEF = re.compile(r'^\}?\s?[A-Za-z_].*?\b__([A-Za-z_][A-Za-z0-9_]*)\s*\(')
 def git(args, root=None):
     return subprocess.check_output(['git'] + args, cwd=root,
                                    stderr=subprocess.DEVNULL).decode('utf8',
@@ -70,11 +72,27 @@ def from_commits(names, root, rel):
     """
     out = {}
     for name in names:
+        out.update(walk(name, root, rel, set()))
+    return out
+
+
+def walk(name, root, rel, seen):
+    """Follow a name back to an address, through however many renames.
+
+    A body can be renamed twice -- `sub_412B10` to `symbol_list` to
+    `encode_symbol_list` -- and only the first of those hops ends at an
+    address.  Stopping at the first hop reports the name as unresolved even
+    though the chain is complete.
+    """
+    if name in seen:
+        return {}
+    seen.add(name)
+    for _ in (0,):
         try:
             revs = git(['log', '--format=%H', '-S', '__%s(' % name, '--',
                         rel], root).split()
         except subprocess.CalledProcessError:
-            continue
+            return {}
         for rev in reversed(revs):
             try:
                 after = git(['show', '%s:%s' % (rev, rel)], root)
@@ -95,11 +113,14 @@ def from_commits(names, root, rel):
                           if tag == 'replace' and i2 - i1 == j2 - j1]
             for olds, news in blocks:
                 for n, o in zip(news, olds):
-                    if n == name and o.startswith('sub_'):
-                        out[name] = o[4:]
-            if name in out:
-                break
-    return out
+                    if n != name or o == name:
+                        continue
+                    if o.startswith('sub_'):
+                        return {name: o[4:]}
+                    back = walk(o, root, rel, seen)
+                    if o in back:
+                        return {name: back[o]}
+    return {}
 
 
 def from_log(root):

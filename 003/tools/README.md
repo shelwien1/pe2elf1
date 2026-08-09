@@ -182,7 +182,7 @@ each side are read.
 
 Every pair is checked against the file — the new name present, the old one
 gone — and names it cannot resolve are printed as unresolved rather than
-filled in. 49 of 53 are mapped.
+filled in. 53 of 55 are mapped.
 
 Matching bodies by the constants they contain is the obvious alternative and
 is in this file's history. It does not work: an encoder and its decoder test
