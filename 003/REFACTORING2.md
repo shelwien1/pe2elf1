@@ -487,15 +487,25 @@ count: `hist_scratch` is `uint8_t *` because `coded_buf` is; two locals in the
 twenty-three `M128` lanes hold addresses, which the union now says with a
 `char *m128_p[4]` member instead of an `int` read and a conversion.
 
-The rest is one shape — **a struct field Hex-Rays typed `int32_t` that holds a
-pointer** — and it does not come off one field at a time. Retyping
-`Obj10::f56[14]` (a set of row cursors, and unambiguously addresses: the code
-writes `*(uint8_t *)(f56[5] - 2)`) compiles and passes the gate, and takes the
-count **from 299 to 329**, because the `int32_t` locals those elements flow
-into are now wrong in the other direction. A field and the locals around it
-have to be retyped together, which makes the unit of work a function or two
-rather than a declaration. That is the shape of the remaining 299, and it is
-why the count is a scoreboard and not a burndown.
+The rest is one shape — **a slot Hex-Rays typed `int32_t` that holds a
+pointer, or the reverse** — and it does not come off one declaration at a time.
+Two measurements say so:
+
+* Retyping `Obj10::f56[14]` (a set of row cursors, and unambiguously addresses:
+  the code writes `*(uint8_t *)(f56[5] - 2)`) compiles and passes the gate, and
+  takes the count **from 299 to 329**, because the `int32_t` locals those
+  elements flow into are now wrong in the other direction.
+* `tools/retype_locals.py` reads `strict.log` and offers every local whose
+  complaints all agree on one source type — 62 of them. Applying all 62 leaves
+  the file not compiling at all (192 errors). Applying them **one at a time and
+  keeping only what still compiles keeps exactly one.**
+
+So a field, the locals it flows into, and the calls between them are one unit,
+and the unit is a function or two rather than a declaration. That is the shape
+of the remaining 243, and it is why the count is a scoreboard and not a
+burndown. `retype_locals.py` stays because the worklist it prints is the right
+starting point for each of those functions, not because the rewrite it offers
+can be taken.
 
 The 12 `-Wint-to-pointer-cast` warnings are worth pulling out first anyway,
 because they are the narrowest and most mechanical group — but they are not part

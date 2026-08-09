@@ -10682,7 +10682,8 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   ;
   Obj18 *v80;
   Obj24 *v36;
-  char *v21, *v23, *n15_10, *v46, *v57, *v66, *n15_17;
+  char *v21, *v23, *v46, *v57, *v66, *n15_17;
+  uint32_t n15_10;
   bool v19;
   char v70, v71, v72, v73, v74, v75, v91, *v157;
   int16_t v14, n4_14, v146, v160, n15_4;
