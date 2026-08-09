@@ -33,7 +33,7 @@ and its first draft failed that test in three places — see Appendix B.
 | initialised data bytes | 50 832 + 65 892 | **340** |
 | SIMD intrinsic calls | 558 | **0** |
 | `M128*` wrapper unions | 4 | 1, and no vector member |
-| conversions needing `-fpermissive` | 347 | 299 |
+| conversions needing `-fpermissive` | 347 | **217** |
 | `subs1.hpp` | 23 807 lines | 19 711 |
 | `bmf.cpp` | 890 lines | 782 |
 | loops vectorised at `-O2` | 8 | 19 |
@@ -74,10 +74,20 @@ nineteen small arrays had been split out of the per-plane record table and
 were stale copies of it, and the code reads across them. Folding them back
 into `bmf_bss` put the table together and let the tails go.
 
-**Goal 3 has a scoreboard and 47 fewer conversions.** `BMF_STRICT=1
-./build.sh` drops `-fpermissive` and counts. What is left is one shape, and
-§4.2 was right that it is not satisfiable by cosmetics — see §4.2's postscript
-for what a single field retype costs.
+**Goal 3 has a scoreboard and 130 fewer conversions, 37 % of the way.**
+`BMF_STRICT=1 ./build.sh` drops `-fpermissive` and counts. Six type decisions
+took most of them: `hist_scratch` is a `uint8_t *`, two `rc_begin_*` locals are
+offsets rather than pointers, twenty-three `M128` lanes hold addresses,
+`symbol_list_update` returns nothing, and three of `Obj10`'s fields —
+`f56[14]`, `f1051664[4]`, `f1078232`, `f1078688` — are the row cursors they are
+used as.
+
+What is left is one shape, and §4.2 was right that it is not satisfiable by
+cosmetics: the shortcut that would take it from 243 to 179 was tried and
+reverted, and the section says why. A sweep over every remaining field
+mentioned in `strict.log`, retyping one at a time and keeping only what both
+compiles and lowers the count, now finds **nothing**. The rest needs the
+function read first.
 
 ---
 
@@ -720,11 +730,16 @@ three were numbers that would have shaped the work.
 Goals 1 and 2 are done. Goal 3 is at 299 of 347, and the three things below are
 what round three would be.
 
-* **The `-fpermissive` conversions, a function at a time.** §4.2's postscript
-  is the method: a field and the locals it flows into are one unit, and doing
-  the field alone makes the count worse before it makes it better. 88 `ObjN`
-  structs, 238 raw-offset dereferences and 5 414 pointer casts are all downstream
-  of the same thing.
+* **The `-fpermissive` conversions, a function at a time.** 217 left, and the
+  mechanical part is finished: a sweep over every field `strict.log` mentions,
+  retyping one at a time and keeping only what compiles *and* lowers the count,
+  finds nothing more. §4.2's postscript is the method for the rest — a field
+  and the locals it flows into are one unit. The named next one is
+  `f278736`, the ten-, six- and five-element cursor arrays in `Obj8`, `Obj19`
+  and `Obj69`: retyping it takes the count from 225 to 301 and needs
+  `alt_p2_model`'s two thousand lines read first. 88 `ObjN` structs, 234
+  raw-offset dereferences and 5 433 pointer casts are all downstream of the
+  same thing.
 
 * **`bmf_bss` should stop being one object.** 19 584 zero bytes with the
   original relative offsets is what made goal 1 safe to finish, not where it
