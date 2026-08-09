@@ -5353,7 +5353,7 @@ static void bmf_set_denormal_mode()
 
 static inline uint32_t __fwd_alt_p2_alloc_alt_init_tables(void *a0, void *a1) { return __alt_init_tables((Obj43 *)a0, (Obj16 *)a1); }
 
-int32_t __alt_p2_alloc(char *_this, int32_t i, int32_t n4)
+char *__alt_p2_alloc(char *_this, int32_t i, int32_t n4)
 {
   ;
   int32_t v7, v8, v9, v13, Size, v17, v18, v20, v21, v22, v23, v24, v26, v27, v28, v29;
@@ -5397,11 +5397,11 @@ int32_t __alt_p2_alloc(char *_this, int32_t i, int32_t n4)
   __dword_4458F4 = -v8;
   *(uint32_t *)(_this + 278720) = -v9 - 7;
   *(uint32_t *)(_this + 278724) = v9 + 8;
-  *(uint32_t *)(_this + 278660) = (uint32_t)bmf_new(4 * i + 16);
+  *(char **)(_this + 278660) = (char *)bmf_new(4 * i + 16);
   v10 = bmf_new(4 * i + 16);
   *(uint32_t *)(_this + 232) = 0x3F800000 /* 1.0f */;
-  *(uint32_t *)(_this + 278664) = v10;
-  *(uint32_t *)(_this + 278668) = *(uint32_t *)(_this + 278660) + 4 * i + 8;
+  *(char **)(_this + 278664) = (char *)v10;
+  *(char **)(_this + 278668) = *(char **)(_this + 278660) + 4 * i + 8;
   if ( i > -4 )
   {
     m_1 = (i + 4) / 2;
@@ -5409,10 +5409,10 @@ int32_t __alt_p2_alloc(char *_this, int32_t i, int32_t n4)
     {
       for ( m = 0; m < m_1; ++m )
       {
-        *(uint32_t *)(*(uint32_t *)(_this + 278664) + 8 * m) = _this;
-        *(uint32_t *)(*(uint32_t *)(_this + 278660) + 8 * m) = _this;
-        *(uint32_t *)(*(uint32_t *)(_this + 278664) + 8 * m + 4) = _this;
-        *(uint32_t *)(*(uint32_t *)(_this + 278660) + 8 * m + 4) = _this;
+        *(char **)(*(char **)(_this + 278664) + 8 * m) = _this;
+        *(char **)(*(char **)(_this + 278660) + 8 * m) = _this;
+        *(char **)(*(char **)(_this + 278664) + 8 * m + 4) = _this;
+        *(char **)(*(char **)(_this + 278660) + 8 * m + 4) = _this;
       }
       v13 = 2 * m + 1;
     }
@@ -5422,14 +5422,14 @@ int32_t __alt_p2_alloc(char *_this, int32_t i, int32_t n4)
     }
     if ( i + 4 > (uint32_t)(v13 - 1) )
     {
-      *(uint32_t *)(*(uint32_t *)(_this + 278664) + 4 * v13 - 4) = _this;
-      *(uint32_t *)(*(uint32_t *)(_this + 278660) + 4 * v13 - 4) = _this;
+      *(char **)(*(char **)(_this + 278664) + 4 * v13 - 4) = _this;
+      *(char **)(*(char **)(_this + 278660) + 4 * v13 - 4) = _this;
     }
   }
   n5 = 0;
   Size = 18 * i + 234;
   do
-    *(uint32_t *)(_this + 4 * n5++ + 278756) = (uint32_t)bmf_new(Size);
+    *(char **)(_this + 4 * n5++ + 278756) = (char *)bmf_new(Size);
   while ( n5 < 5 );
   memset(*(char **)(_this + 278756),0,Size);
   v17 = *(uint32_t *)(_this + 278756);
@@ -12785,13 +12785,18 @@ void __unmodel_plane_slow(Obj10 *_this, char *Src)
       this_4->f56[7] = v47 + 56;
       this_4->f56[8] = v46 + 56;
       this_4->f56[9] = v45 + 56;
-      LOBYTE(v48) = *(uint16_t *)(v48 + 8) == 0;
-      *(v44 + 4) = v48;
-      *(this_4->f56[5] - 2) = v48;
-      *(this_4->f56[5] - 9) = v48;
-      LOBYTE(v46) = *(uint16_t *)(this_4->f56[6] + 16) == 0;
-      *(this_4->f56[5] + 6) = v46;
-      *(this_4->f56[5] - 1) = v46;
+      // Two "is this count zero" flags, written to three and two places.
+      // MSVC put each in the low byte of a register that held a cursor, which
+      // is where `LOBYTE(v48) = ...` came from; neither cursor is read again.
+      {
+        uint8_t zero = *(uint16_t *)(v48 + 8) == 0;
+        *(v44 + 4) = zero;
+        *(this_4->f56[5] - 2) = zero;
+        *(this_4->f56[5] - 9) = zero;
+        zero = *(uint16_t *)(this_4->f56[6] + 16) == 0;
+        *(this_4->f56[5] + 6) = zero;
+        *(this_4->f56[5] - 1) = zero;
+      }
       *(this_4->f56[5] + 7) = *(uint16_t *)(this_4->f56[6] + 24) == 0;
       v49 = *&this_4->f56[6];
       v50 = *&this_4->f56[7];
@@ -15723,7 +15728,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
     {
       v7 = bmf_page_alloc(0x103E30u);
       if ( v7 )
-        v8 = (void *)__alt_p2_alloc((char *)v7, i, n4);
+        v8 = __alt_p2_alloc((char *)v7, i, n4);
       else
         v8 = nullptr;
       *(&lpAddress + n4++) = v8;
@@ -17464,13 +17469,16 @@ void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, BmfImage *p_i, 
         Blocka_1->f56[7] = v49 + 56;
         Blocka_1->f56[8] = v48 + 56;
         Blocka_1->f56[9] = v47 + 56;
-        LOBYTE(v50) = *(uint16_t *)(v50 + 8) == 0;
-        *(v46 + 4) = v50;
-        *(Blocka_1->f56[5] - 2) = v50;
-        *(Blocka_1->f56[5] - 9) = v50;
-        LOBYTE(v50) = *(uint16_t *)(Blocka_1->f56[6] + 16) == 0;
-        *(Blocka_1->f56[5] + 6) = v50;
-        *(Blocka_1->f56[5] - 1) = v50;
+        // The same two flags, on the encoding side.
+        {
+          uint8_t zero = *(uint16_t *)(v50 + 8) == 0;
+          *(v46 + 4) = zero;
+          *(Blocka_1->f56[5] - 2) = zero;
+          *(Blocka_1->f56[5] - 9) = zero;
+          zero = *(uint16_t *)(Blocka_1->f56[6] + 16) == 0;
+          *(Blocka_1->f56[5] + 6) = zero;
+          *(Blocka_1->f56[5] - 1) = zero;
+        }
         *(Blocka_1->f56[5] + 7) = *(uint16_t *)(Blocka_1->f56[6] + 24) == 0;
         v51 = *&Blocka_1->f56[6];
         v52 = *&Blocka_1->f56[7];
