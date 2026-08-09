@@ -26,7 +26,7 @@ so they can be re-measured rather than trusted.
 | pointer casts | 5805 | 7336 |
 | `goto` / `LABEL_n:` | 121 / 88 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
-| line coverage | **94.71 %** | 64.5 % |
+| line coverage | **94.73 %** | 64.5 % |
 
 The target is 32-bit. That is not a limitation left over from the port — it is
 the decision that made Phase 4 possible, and §Phase 4 says why.
@@ -381,12 +381,16 @@ their layout as a struct with explicit padding and lose only the casts, each
 carrying `static_assert(sizeof(__frame) == N)` so a layout that moves is a
 compile error rather than something the corpus has to notice.
 
-**16, then.** The seventeenth was `alt_model_p1_decode`, and it took the plain
-split because the gate said it was fine — and the gate said so because nothing
-in the corpus ran that function. It was broken from this commit until the day an
-image reached it; §6 has the details. The number to take from this phase is not
-16 or 17, it is that *the gate's verdict on a body it never executes is not a
-verdict*.
+**16, then — 23 now.** The seventeenth was `alt_model_p1_decode`, which took
+the plain split because the gate said it was fine, and the gate said so because
+nothing in the corpus ran that function. It was broken from this commit until
+the day an image reached it (§6). Six more have since been converted for the
+same reason without waiting for a symptom: they have the same unnamed slack and
+only the gate's silence said they were safe. `model_plane` is the last one
+split, and it runs on every image.
+
+The number to take from this phase is not 16 or 17, it is that *the gate's
+verdict on a body it never executes is not a verdict*.
 
 ### Phase 3 — 86 globals out, 78 left, and a map of why
 
@@ -583,6 +587,21 @@ gate cannot tell from a layout change.
   The lesson is not "write more tests". It is that **the gate's coverage is
   part of the gate**, and 10 % of a file that nothing exercises is 10 % where
   every phase was running unchecked.
+
+  The audit that followed is the useful part. Of the 24 frames, 16 took the
+  struct in Phase 2 and 8 took the plain split. **Every one of those 8 has the
+  same ~32 bytes past its last alias** — the shape that broke the seventh — so
+  rather than argue about which are safe, `tools/reframe.py` converts them: it
+  reads each frame's offsets out of the pre-Phase-2 revision, keeps the types
+  the later phases gave the locals, and emits the struct with padding and two
+  `static_assert`s. Six of the eight are converted; `model_plane` is the one
+  left, because later work spread its members across shared declaration lists
+  and taking them apart is surgery the gate cannot check as cheaply. It is also
+  the lowest-risk of them: 3 unexecuted lines out of 241.
+
+  23 frames now carry `static_assert(sizeof(__frame) == N)`. That turns "the
+  gate has not caught it" into "the layout cannot move" for everything except
+  one function that runs on every image.
 - **`read_bmp` validates less than it looks like it does.** It checks the `BM`
   signature, that the DIB header is 40 bytes and that the plane count is 1, and
   then trusts the rest. A **top-down BMP — a negative height, which is legal and
@@ -705,7 +724,7 @@ for f in testfiles/*.bmp; do
   rm -f o.bmf o.bmp                       # bmf appends to its output
   ./bmfcov c "$f" o.bmf && ./bmfcov d o.bmf o.bmp
 done
-gcov -n    -o . bmfcov-bmf.gcno                       # 94.71 % of 13419 lines
+gcov -n    -o . bmfcov-bmf.gcno                       # 94.73 % of 13469 lines
 gcov -f -n -o . bmfcov-bmf.gcno                       # per function
 ```
 

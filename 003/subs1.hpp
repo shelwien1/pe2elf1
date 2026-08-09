@@ -9234,27 +9234,51 @@ LABEL_20:
 
 int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
 {
-  uint32_t Buffera;
-  char *&Bufferb = *(char **)((char *)&Buffera);
-  char *&Bufferd = *(char **)((char *)&Buffera);
-  char *&Bufferc = *(char **)((char *)&Buffera);
-  char &Buffer = *(char *)((char *)&Buffera);
-  uint32_t v62;
-  uint32_t &v63 = v62;
-  uint32_t &Size_2 = v62;
-  char *v65;
-  int32_t v66;
-  int32_t &v67 = v66;
-  uint8_t *&v68 = *(uint8_t **)((char *)&v66);
-  FILE *Stream_v;
-  int32_t Buffer_2;
-  char *buf;
-  uint8_t *v72;
-  int32_t Buffer_5;
-  int32_t n2_2;
-  int32_t v75;
-  char *buf_2;
-  uint32_t v77;
+  struct alignas(16) {   // 96 bytes, the frame Hex-Rays could not name
+      uint32_t  Buffera;
+      uint32_t  v62;
+      char *    v65;
+      int32_t   v66;
+      FILE *    Stream_v;
+      int32_t   Buffer_2;
+      char *    buf;
+      uint8_t * v72;
+      uint8_t   _pad8[4];
+      int32_t   Buffer_5;
+      uint8_t   _pad10[4];
+      int32_t   n2_2;
+      int32_t   v75;
+      char *    buf_2;
+      uint8_t   _pad14[4];
+      uint32_t  v77;
+      uint8_t   _pad16[32];
+  } __frame;
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 96,
+                "frame layout moved");
+  static_assert(sizeof(void *) != 4
+                || __builtin_offsetof(__typeof__(__frame), _pad16) == 64,
+                "the named part of the frame moved");
+  char &Buffer = *(char *)((char *)&__frame.Buffera);
+  uint32_t &Buffera = __frame.Buffera;
+  char * &Bufferb = *(char * *)((char *)&__frame.Buffera);
+  char * &Bufferc = *(char * *)((char *)&__frame.Buffera);
+  char * &Bufferd = *(char * *)((char *)&__frame.Buffera);
+  uint32_t &Size_2 = __frame.v62;
+  uint32_t &v62 = __frame.v62;
+  uint32_t &v63 = __frame.v62;
+  char * &v65 = __frame.v65;
+  int32_t &v66 = __frame.v66;
+  int32_t &v67 = __frame.v66;
+  uint8_t * &v68 = *(uint8_t * *)((char *)&__frame.v66);
+  FILE * &Stream_v = __frame.Stream_v;
+  int32_t &Buffer_2 = __frame.Buffer_2;
+  char * &buf = __frame.buf;
+  uint8_t * &v72 = __frame.v72;
+  int32_t &Buffer_5 = __frame.Buffer_5;
+  int32_t &n2_2 = __frame.n2_2;
+  int32_t &v75 = __frame.v75;
+  char * &buf_2 = __frame.buf_2;
+  uint32_t &v77 = __frame.v77;
   ;
   uintptr_t p_i_1;   // were int32_t: addresses, masked and tagged
   FILE *Stream_1, *Stream_2;
@@ -16283,28 +16307,54 @@ static inline void __fwd_unmodel_plane_slow_sub_419430(void *a0) { __sub_419430(
 
 void __unmodel_plane_slow(Obj10 *_this, char *Src)
 {
-  int32_t Size;
-  int32_t v82;
-  int32_t &n4 = v82;
-  int32_t &v84 = v82;
-  char *v85;
-  int32_t &v86 = *(int32_t *)((char *)&v85);
-  int32_t &v87 = *(int32_t *)((char *)&v85);
-  int32_t v88;
-  char *ArgList_1;
-  char *&ArgList_5 = ArgList_1;
-  int32_t &n6_3 = *(int32_t *)((char *)&ArgList_1);
-  char *v92;
-  int32_t v93;
-  int32_t v94;
-  int32_t v95;
-  int32_t ArgList_4;
-  char *Src_1;
-  Obj10 *this_1;
-  int32_t v99;
-  int32_t v100;
-  int32_t v101;
-  int32_t v102;
+  struct alignas(16) {   // 100 bytes, the frame Hex-Rays could not name
+      int32_t   Size;
+      uint8_t   _pad1[4];
+      int32_t   v82;
+      char *    v85;
+      int32_t   v88;
+      char *    ArgList_1;
+      char *    v92;
+      int32_t   v93;
+      int32_t   v94;
+      int32_t   v95;
+      int32_t   ArgList_4;
+      char *    Src_1;
+      Obj10 *   this_1;
+      int32_t   v99;
+      int32_t   v100;
+      int32_t   v101;
+      int32_t   v102;
+      uint8_t   _pad17[32];
+      uint8_t   _tail[12];   // alignas(16) rounds 100 up
+  } __frame;
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 112,
+                "frame layout moved");
+  static_assert(sizeof(void *) != 4
+                || __builtin_offsetof(__typeof__(__frame), _pad17) == 68,
+                "the named part of the frame moved");
+  int32_t &Size = __frame.Size;
+  int32_t &n4 = __frame.v82;
+  int32_t &v82 = __frame.v82;
+  int32_t &v84 = __frame.v82;
+  char * &v85 = __frame.v85;
+  int32_t &v86 = *(int32_t *)((char *)&__frame.v85);
+  int32_t &v87 = *(int32_t *)((char *)&__frame.v85);
+  int32_t &v88 = __frame.v88;
+  char * &ArgList_1 = __frame.ArgList_1;
+  char * &ArgList_5 = __frame.ArgList_1;
+  int32_t &n6_3 = *(int32_t *)((char *)&__frame.ArgList_1);
+  char * &v92 = __frame.v92;
+  int32_t &v93 = __frame.v93;
+  int32_t &v94 = __frame.v94;
+  int32_t &v95 = __frame.v95;
+  int32_t &ArgList_4 = __frame.ArgList_4;
+  char * &Src_1 = __frame.Src_1;
+  Obj10 * &this_1 = __frame.this_1;
+  int32_t &v99 = __frame.v99;
+  int32_t &v100 = __frame.v100;
+  int32_t &v101 = __frame.v101;
+  int32_t &v102 = __frame.v102;
   ;
   Obj10 *this_4;
   uintptr_t v44, v48;
@@ -19197,9 +19247,21 @@ static inline int32_t __fwd_sub_422DB0_sub_41A130(void *a0, const __m128 &a1, co
 
 BMF_SSE void __sub_422DB0(Obj69 *lpAddress, char ArgList, const __m128 &a3__ref, const __m128 &a4__ref, uint8_t *a5, int32_t i, int32_t a7)
 {
-  int32_t v95;
-  uint32_t &v96 = *(uint32_t *)((char *)&v95);
-  uint8_t *v97;
+  struct alignas(16) {   // 44 bytes, the frame Hex-Rays could not name
+      int32_t   v95;
+      uint8_t   _pad1[4];
+      uint8_t * v97;
+      uint8_t   _pad3[32];
+      uint8_t   _tail[4];   // alignas(16) rounds 44 up
+  } __frame;
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 48,
+                "frame layout moved");
+  static_assert(sizeof(void *) != 4
+                || __builtin_offsetof(__typeof__(__frame), _pad3) == 12,
+                "the named part of the frame moved");
+  int32_t &v95 = __frame.v95;
+  uint32_t &v96 = *(uint32_t *)((char *)&__frame.v95);
+  uint8_t * &v97 = __frame.v97;
   ;
   Obj70 *v11;
   uintptr_t v21, v25, v28, v32, v36, v38, v39, v40, v41, v42, v43, v44, v48, v54, v58, v62, v66,
@@ -20231,16 +20293,35 @@ static inline int32_t __fwd_sub_419800_sub_41A130(void *a0, const __m128 &a1, co
 
 BMF_SSE void __sub_419800(Obj11 *lpAddress, const __m128 &a2__ref, const __m128 &a3__ref, uint8_t *a4, int32_t i, int32_t a6, uint8_t *a7)
 {
-  int32_t j;
-  uint32_t &v102 = *(uint32_t *)((char *)&j);
-  uint8_t *v103;
-  int32_t v104;
-  uint8_t *&v105 = *(uint8_t **)((char *)&v104);
-  int8_t *v106;
-  char v107;
-  Obj11 *lpAddress_1;
-  uint8_t *v109;
-  uint8_t v110;
+  struct alignas(16) {   // 68 bytes, the frame Hex-Rays could not name
+      int32_t   j;
+      uint8_t * v103;
+      int32_t   v104;
+      int8_t *  v106;
+      char      v107;
+      uint8_t   _pad5[3];
+      Obj11 *   lpAddress_1;
+      uint8_t * v109;
+      uint8_t   _pad8[4];
+      uint8_t   v110;
+      uint8_t   _pad10[35];
+      uint8_t   _tail[12];   // alignas(16) rounds 68 up
+  } __frame;
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 80,
+                "frame layout moved");
+  static_assert(sizeof(void *) != 4
+                || __builtin_offsetof(__typeof__(__frame), _pad10) == 33,
+                "the named part of the frame moved");
+  int32_t &j = __frame.j;
+  uint32_t &v102 = *(uint32_t *)((char *)&__frame.j);
+  uint8_t * &v103 = __frame.v103;
+  int32_t &v104 = __frame.v104;
+  uint8_t * &v105 = *(uint8_t * *)((char *)&__frame.v104);
+  int8_t * &v106 = __frame.v106;
+  char &v107 = __frame.v107;
+  Obj11 * &lpAddress_1 = __frame.lpAddress_1;
+  uint8_t * &v109 = __frame.v109;
+  uint8_t &v110 = __frame.v110;
   ;
   Obj53 *v34;
   Obj54 *v57;
@@ -21817,18 +21898,38 @@ static inline void __fwd_transform_planes_model_plane(const __m128 &a0, const __
 
 BMF_SSE void __transform_planes(Obj33 *p_i, int32_t a2, char a3, const __m128 &a4__ref, const __m128 &a5__ref)
 {
-  int32_t v32;
-  int32_t v33;
-  int32_t Size;
-  int32_t n4;
-  char *Srca;
-  int32_t n4_3;
-  int32_t &n4_4 = n4_3;
-  uint16_t *p_i_1;
-  char *Src;
-  uint16_t *Srca_3;
-  char *p_ia;
-  char *Buffer_1;
+  struct alignas(16) {   // 76 bytes, the frame Hex-Rays could not name
+      int32_t   v32;
+      int32_t   v33;
+      int32_t   Size;
+      int32_t   n4;
+      char *    Srca;
+      int32_t   n4_3;
+      uint16_t * p_i_1;
+      char *    Src;
+      uint16_t * Srca_3;
+      char *    p_ia;
+      char *    Buffer_1;
+      uint8_t   _pad11[32];
+      uint8_t   _tail[4];   // alignas(16) rounds 76 up
+  } __frame;
+  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 80,
+                "frame layout moved");
+  static_assert(sizeof(void *) != 4
+                || __builtin_offsetof(__typeof__(__frame), _pad11) == 44,
+                "the named part of the frame moved");
+  int32_t &v32 = __frame.v32;
+  int32_t &v33 = __frame.v33;
+  int32_t &Size = __frame.Size;
+  int32_t &n4 = __frame.n4;
+  char * &Srca = __frame.Srca;
+  int32_t &n4_3 = __frame.n4_3;
+  int32_t &n4_4 = __frame.n4_3;
+  uint16_t * &p_i_1 = __frame.p_i_1;
+  char * &Src = __frame.Src;
+  uint16_t * &Srca_3 = __frame.Srca_3;
+  char * &p_ia = __frame.p_ia;
+  char * &Buffer_1 = __frame.Buffer_1;
   ;
   __m128 a4 = a4__ref;
   __m128 a5 = a5__ref;

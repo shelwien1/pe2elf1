@@ -190,3 +190,35 @@ Matching bodies by the constants they contain is the obvious alternative and
 is in this file's history. It does not work: an encoder and its decoder test
 the same numbers, so it mapped `encode_context_bit` and `decode_context_bit` to
 one address and gave no sign that anything was wrong.
+
+## `reframe.py` — give a plain-split frame its layout back
+
+```
+python3 tools/reframe.py subs1.hpp pre2.hpp --list
+python3 tools/reframe.py subs1.hpp pre2.hpp __write_bmp
+```
+
+Phase 2 split all 24 `__hexrays_frame` buffers into locals; 16 could not take it
+and got a struct with explicit padding instead. The other 8 kept the split
+because the gate accepted them — and for one of them, `alt_model_p1_decode`, the
+gate accepted it only because nothing in the corpus ran that function. Its
+aliases named 84 of 116 bytes and the code writes into the rest; with each local
+in its own storage those writes landed on unrelated stack. It segfaulted the
+first time an image reached it.
+
+All 8 have that shape. This converts them rather than reasoning about which are
+safe: the frame's offsets come from the revision before Phase 2 — the only place
+they still exist — the types come from the current file so later retyping and
+struct recovery are kept, and the result carries `static_assert`s on both the
+total size and the offset where the named part ends.
+
+Two things it has to cope with, both created by later phases. A slot's name may
+have four different alias spellings by now, so the owner is taken as the last
+identifier in the initialiser rather than by matching each shape. And a slot may
+have no declaration at all, because later work stopped using it — that becomes
+padding, since the bytes are still part of the layout.
+
+Six of the eight are converted. `model_plane` is not: its members ended up
+spread across shared declaration lists, and extracting them is surgery worth
+more than it buys for the frame that runs on every image and has 3 unexecuted
+lines.
