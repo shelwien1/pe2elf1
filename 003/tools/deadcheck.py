@@ -3,7 +3,7 @@
 
     python3 tools/deadcheck.py subs1.hpp
 
-Four kinds of unreachable code have been found in this file, each after the
+Five kinds of unreachable code have been found in this file, each after the
 previous one had been declared the last. Two were found by a check that was
 written *after* the case it would have caught, which is the wrong order, so
 this is the check standing on its own:
@@ -20,6 +20,18 @@ this is the check standing on its own:
   * **a body nothing calls.** `--gc-sections` reports these at link time
     (`BMF_GC=list ./build.sh`); this reports them from the source, which is
     where they have to be deleted.
+  * **two locals compared that hold the same thing.** `model_planes` kept
+    `if ( Srca_2 != Srca_1 )` after the `-E` block that gave `Srca_2` its own
+    buffer was deleted, so both names were the caller's buffer and the
+    interleave-and-free behind the test could not run. Coverage found this one;
+    the check below is what makes it a rule instead of an anecdote.
+
+The four shapes above are all *local* -- a label, a constant, a global, a call
+graph -- and this fifth one is the first that needs to follow a value. It stays
+deliberately small: only a local assigned exactly once, from a plain name, with
+its address never taken. Anything cleverer would start reporting tests that are
+merely usually equal, and a dead-code report is worth having only while every
+line in it is dead.
 
 A pinned global is one that is only ever assigned a constant: `plane_predictor`
 is not one in general, but inside the closed set of bodies reachable only from
@@ -123,6 +135,37 @@ def main():
             if negated or (k <= b and lines[k].strip() == 'else'):
                 print('%s:%d: predictor test in %s, which the dispatch pins to '
                       '1 or 2' % (path, i + 1, n.lstrip('_')))
+                bad += 1
+
+    for a, b, n, sig in structs.bodies(lines):
+        if 'static inline' in sig:
+            continue
+        body = lines[a + 1:b + 1]
+        # name -> what it was assigned, or None once it has been assigned twice,
+        # assigned anything but a plain name, or had its address taken.
+        once = {}
+        for l in body:
+            m = re.match(r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*'
+                         r'([A-Za-z_][A-Za-z0-9_]*)\s*;\s*$', l)
+            if m:
+                once[m.group(1)] = None if m.group(1) in once else m.group(2)
+                continue
+            for m in re.finditer(r'(?<![\w.>])([A-Za-z_][A-Za-z0-9_]*)\s*'
+                                 r'(?:=(?!=)|\+\+|--)', l):
+                if m.group(1) in once:
+                    once[m.group(1)] = None
+            for m in re.finditer(r'&\s*([A-Za-z_][A-Za-z0-9_]*)', l):
+                once[m.group(1)] = None
+        for i in range(a + 1, b + 1):
+            m = re.search(r'\bif\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*'
+                          r'([!=]=)\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)', lines[i])
+            if not m:
+                continue
+            p, q = once.get(m.group(1)), once.get(m.group(3))
+            if p and q and p == q:
+                print('%s:%d: %s %s %s in %s, and both are %s'
+                      % (path, i + 1, m.group(1), m.group(2), m.group(3),
+                         n.lstrip('_'), p))
                 bad += 1
 
     called = set()

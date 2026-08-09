@@ -21642,7 +21642,6 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
   }
 }
 static inline char * __fwd_model_planes_colour_transform(void *a0, void *a1, int32_t a2, char a3) { return __colour_transform((char *)a0, (char *)a1, a2, a3); }
-static inline char * __fwd_model_planes_interleave_plane(void *a0, void *a1, int32_t a2, char a3) { return __interleave_plane((char *)a0, (char *)a1, a2, a3); }
 static inline void __fwd_model_planes_model_plane(const __m128 &a0, const __m128 &a1, void *a2, void *a3, void *a4) { __model_plane(a0, a1, (Obj33 *)a2, (uint8_t *)a3, (uint8_t *)a4); }
 
 BMF_SSE void __model_planes(char *Blockb, char *Srca_3, int32_t a3, char a4, const __m128 &a5__ref, const __m128 &a6__ref)
@@ -21731,12 +21730,13 @@ BMF_SSE void __model_planes(char *Blockb, char *Srca_3, int32_t a3, char a4, con
     if ( plane_predictor == 1 && !plane_alt_model )
       __predict_med((int32_t)Srca_1, *(uint16_t *)Blockb, *((uint16_t *)Blockb + 1));
     __fwd_model_planes_model_plane(a5, a6, p_i, (uint8_t *)Srca_1, Srca_2);
-    if ( Srca_2 != Srca_1 )
-    {
-      if ( (uint8_t)__byte_44339C[v52] != plane_count - 1 )
-        __fwd_model_planes_interleave_plane(Blockb, Srca_2, v53, v20);
-      free(Srca_2);
-    }
+    // `if ( Srca_2 != Srca_1 )` stood here, and behind it an interleave and a
+    // free.  It was the test for "the -E block above allocated a second
+    // buffer"; with that block gone, both names hold the caller's one buffer
+    // and the test is false on every path.  Deleting a block does not delete
+    // the test that asked whether it ran, and this one outlived it by a
+    // fortnight -- as the last thing in the file gcov could report as never
+    // executed.  tools/deadcheck.py looks for the shape now.
   }
 }
 
