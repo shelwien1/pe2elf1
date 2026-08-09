@@ -21,12 +21,12 @@ so they can be re-measured rather than trusted.
 | `subs1.hpp` | 24 533 lines | 25 462 |
 | bodies | 179 (84 real, 94 `__fwd_*` shims, 1 helper) | 215 |
 | globals in `blob.inc` | **78** | 293 |
-| recovered structs | **115** + 2 named ones, 2645 field accesses, 17 arrays put back | 0 |
+| recovered structs | **114** + 3 named ones, 2639 field accesses, 17 arrays put back | 0 |
 | raw-offset dereferences | **250** | 1646 before Phase 4 |
-| pointer casts | 5730 | 7336 |
+| pointer casts | 5707 | 7336 |
 | `goto` / `LABEL_n:` | 113 / 81 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
-| line coverage | **95.87 %** of 13 217 | 64.5 % |
+| line coverage | **95.87 %** of 13 222 | 64.5 % |
 
 The target is 32-bit. That is not a limitation left over from the port — it is
 the decision that made Phase 4 possible, and §Phase 4 says why.
@@ -1014,7 +1014,11 @@ Three are named, and how each got there is the useful part:
   image descriptor, but `alloc_image` fills all four of its words in a row, and
   the arithmetic around them names each one — `result[3] = v10` where
   `v10 = v9 * a2`, and `v9` is the row length, so +12 is stride times height.
-  Then `buf = (char *)result + result[3] + 16` says where the pixels start.
+  Then `buf = (char *)result + result[3] + 16` says where the pixels start. The
+  struct now sits above `alloc_image` rather than below it, so the layout is
+  asserted at the site that creates it, and `Obj98` — the same descriptor,
+  recovered separately in `read_bmp` because the alias analysis never connected
+  the two functions — is gone into it.
 
 That is the pattern for the rest, and it is not tooling: **a struct gets named
 when some site writes it, checks it, or matches a published layout** — not when
@@ -1068,7 +1072,7 @@ g++ -m32 -march=k8 -msse2 -mfpmath=sse -std=c++17 -fno-strict-aliasing \
     -D_FORTIFY_SOURCE=0 --coverage bmf.cpp -o bmfcov
 rm -f bmfcov-bmf.gcda
 BMF_TIMEOUT=600 ./test.sh ./bmfcov                    # 1m43 instrumented, 19 s not
-gcov -n    -o . bmfcov-bmf.gcno                       # 95.87 % of 13217 lines
+gcov -n    -o . bmfcov-bmf.gcno                       # 95.87 % of 13222 lines
 gcov -f -n -o . bmfcov-bmf.gcno                       # per function; nothing at 0.00 %
 gcov      -o . bmfcov-bmf.gcno                        # writes subs1.hpp.gcov
 awk -F: '$1 ~ /#####/' subs1.hpp.gcov | wc -l         # 546 unexecuted lines
@@ -1097,7 +1101,7 @@ into three kinds:
   reporting the case it was written for against the tree that still had it, and
   nothing against the tree that does not; all five of `deadcheck.py`'s do.
 
-One caveat on the coverage figure: `gcov` counts *instrumented* lines (13 217
-of the file's 24 420) and counts inlined copies separately, so its per-function
+One caveat on the coverage figure: `gcov` counts *instrumented* lines (13 222
+of the file's 24 533) and counts inlined copies separately, so its per-function
 percentages do not sum the way source lines do. The line counts in §2 are source
 lines, measured separately by matching braces over the function list.
