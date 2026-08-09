@@ -57,4 +57,7 @@ alloc_image                0x0042B830
 set_new_handler            0x0042CBB0
 log_two_lane               0x00436E10
 
-# 55 mapped.  0 named bodies have no recorded address:
+# 55 mapped.  12 named bodies have no recorded address:
+#   alt_p1_alloc              alt_p1_d8_encode_body     alt_p1_decode_symbol      alt_p1_encode_symbol
+#   alt_p1_free               alt_p2_alloc              alt_p2_d8_decode_body     alt_p2_d8_encode_body
+#   alt_p2_encode_symbol      alt_p2_free               init_counter_node         rescale_three_way
