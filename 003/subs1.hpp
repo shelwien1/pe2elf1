@@ -45,122 +45,6 @@
 // the [0x10000] bounds Hex-Rays emitted are guesses and there is no
 // way to tell from the source which are real.  REFACTORING.md §4.1.
 // ---------------------------------------------------------------
-alignas(16) static uint8_t bmf_xmmword_439620[16 + 64] = {   // 0x439620
-  0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x00,0x01,
-  0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0xf0,0xf0,0xf0,0xf0,
-  0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xff,0xfe,0xfd,0xfc,0xfb,0xfa,
-  0xf9,0xf8,0xf7,0xf6,0xf5,0xf4,0xf3,0xf2,0xf1,0xf0,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,
-  0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x10,
-};
-typedef __m128i t_xmmword_439620;
-static t_xmmword_439620& __xmmword_439620 = *(t_xmmword_439620*)bmf_xmmword_439620;
-alignas(16) static uint8_t bmf_xmmword_439640[16 + 64] = {   // 0x439640
-  0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xff,0xfe,
-  0xfd,0xfc,0xfb,0xfa,0xf9,0xf8,0xf7,0xf6,0xf5,0xf4,0xf3,0xf2,0xf1,0xf0,0x01,0x02,0x03,0x04,
-  0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x10,0x10,0x10,0x10,0x10,0x10,0x10,
-  0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,
-  0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,
-};
-typedef __m128i t_xmmword_439640;
-static t_xmmword_439640& __xmmword_439640 = *(t_xmmword_439640*)bmf_xmmword_439640;
-alignas(16) static uint8_t bmf_xmmword_439650[16 + 64] = {   // 0x439650
-  0xff,0xfe,0xfd,0xfc,0xfb,0xfa,0xf9,0xf8,0xf7,0xf6,0xf5,0xf4,0xf3,0xf2,0xf1,0xf0,0x01,0x02,
-  0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x10,0x10,0x10,0x10,0x10,
-  0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x00,0x01,0x02,0x03,0x04,0x05,
-  0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,
-  0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,
-};
-typedef __m128i t_xmmword_439650;
-static t_xmmword_439650& __xmmword_439650 = *(t_xmmword_439650*)bmf_xmmword_439650;
-alignas(16) static uint8_t bmf_xmmword_439660[96 + 64] = {   // 0x439660
-  0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x10,0x10,0x10,
-  0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x00,0x01,0x02,0x03,
-  0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,
-  0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xff,0xfe,0xfd,0xfc,0xfb,0xfa,0xf9,0xf8,
-  0xf7,0xf6,0xf5,0xf4,0xf3,0xf2,0xf1,0xf0,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,
-  0x0b,0x0c,0x0d,0x0e,0x0f,0x10,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,
-  0x20,0x20,0x20,0x20,0x20,0x22,0x24,0x26,0x28,0x2a,0x2c,0x2e,0x30,0x32,0x34,0x36,0x38,0x3a,
-  0x3c,0x3e,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,
-  0xdf,0xdd,0xdb,0xd9,0xd7,0xd5,0xd3,0xd1,0xcf,0xcd,0xcb,0xc9,0xc7,0xc5,0xc3,0xc1,
-};
-typedef __m128i t_xmmword_439660;
-static t_xmmword_439660& __xmmword_439660 = *(t_xmmword_439660*)bmf_xmmword_439660;
-alignas(16) static uint8_t bmf_xmmword_4396C0[16 + 64] = {   // 0x4396C0
-  0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x22,
-  0x24,0x26,0x28,0x2a,0x2c,0x2e,0x30,0x32,0x34,0x36,0x38,0x3a,0x3c,0x3e,0xe0,0xe0,0xe0,0xe0,
-  0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xdf,0xdd,0xdb,0xd9,0xd7,0xd5,
-  0xd3,0xd1,0xcf,0xcd,0xcb,0xc9,0xc7,0xc5,0xc3,0xc1,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,
-  0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,
-};
-typedef __m128i t_xmmword_4396C0;
-static t_xmmword_4396C0& __xmmword_4396C0 = *(t_xmmword_4396C0*)bmf_xmmword_4396C0;
-alignas(16) static uint8_t bmf_xmmword_4396D0[16 + 64] = {   // 0x4396D0
-  0x20,0x22,0x24,0x26,0x28,0x2a,0x2c,0x2e,0x30,0x32,0x34,0x36,0x38,0x3a,0x3c,0x3e,0xe0,0xe0,
-  0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xdf,0xdd,0xdb,0xd9,
-  0xd7,0xd5,0xd3,0xd1,0xcf,0xcd,0xcb,0xc9,0xc7,0xc5,0xc3,0xc1,0x10,0x10,0x10,0x10,0x10,0x10,
-  0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,
-  0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,
-};
-typedef __m128i t_xmmword_4396D0;
-static t_xmmword_4396D0& __xmmword_4396D0 = *(t_xmmword_4396D0*)bmf_xmmword_4396D0;
-alignas(16) static uint8_t bmf_xmmword_4396E0[16 + 64] = {   // 0x4396E0
-  0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xe0,0xdf,0xdd,
-  0xdb,0xd9,0xd7,0xd5,0xd3,0xd1,0xcf,0xcd,0xcb,0xc9,0xc7,0xc5,0xc3,0xc1,0x10,0x10,0x10,0x10,
-  0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x00,0x01,0x02,0x03,0x04,0x05,
-  0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,
-  0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,
-};
-typedef __m128i t_xmmword_4396E0;
-static t_xmmword_4396E0& __xmmword_4396E0 = *(t_xmmword_4396E0*)bmf_xmmword_4396E0;
-alignas(16) static uint8_t bmf_xmmword_4396F0[176 + 64] = {   // 0x4396F0
-  0xdf,0xdd,0xdb,0xd9,0xd7,0xd5,0xd3,0xd1,0xcf,0xcd,0xcb,0xc9,0xc7,0xc5,0xc3,0xc1,0x10,0x10,
-  0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x00,0x01,0x02,0x03,
-  0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,
-  0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xff,0xfe,0xfd,0xfc,0xfb,0xfa,0xf9,0xf8,
-  0xf7,0xf6,0xf5,0xf4,0xf3,0xf2,0xf1,0xf0,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,
-  0x0b,0x0c,0x0d,0x0e,0x0f,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,
-  0x10,0x10,0x10,0x10,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,
-  0x0e,0x0f,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,0xf0,
-  0xff,0xfe,0xfd,0xfc,0xfb,0xfa,0xf9,0xf8,0xf7,0xf6,0xf5,0xf4,0xf3,0xf2,0xf1,0xf0,0x01,0x02,
-  0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x10,0xff,0xff,0xff,0xff,
-  0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0x10,0x10,0x10,0x10,0x10,0x10,
-  0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0xfe,0x82,0x2b,0x65,0x47,0x15,0xf7,0x3f,
-  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-  0x00,0x00,0x00,0x00,0x00,0x00,
-};
-typedef __m128i t_xmmword_4396F0;
-static t_xmmword_4396F0& __xmmword_4396F0 = *(t_xmmword_4396F0*)bmf_xmmword_4396F0;
-alignas(16) static uint8_t bmf_xmmword_4397A0[16 + 64] = {   // 0x4397A0
-  0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0x10,0x10,
-  0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0xfe,0x82,0x2b,0x65,
-  0x47,0x15,0xf7,0x3f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,
-  0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,
-};
-typedef __m128i t_xmmword_4397A0;
-static t_xmmword_4397A0& __xmmword_4397A0 = *(t_xmmword_4397A0*)bmf_xmmword_4397A0;
-alignas(16) static uint8_t bmf_xmmword_4397F0[16 + 64] = {   // 0x4397F0
-  0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,
-  0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x04,0x04,0x04,0x04,
-  0x04,0x04,0x04,0x04,0x05,0x05,0x05,0x05,0x05,0x05,0x05,0x05,0x06,0x06,0x06,0x06,0x06,0x06,
-  0x06,0x06,0x04,0x04,0x04,0x04,0x04,0x04,0x04,0x04,0x05,0x05,0x05,0x05,0x05,0x05,0x05,0x05,
-  0x06,0x06,0x06,0x06,0x06,0x06,0x06,0x06,
-};
-typedef __m128i t_xmmword_4397F0;
-static t_xmmword_4397F0& __xmmword_4397F0 = *(t_xmmword_4397F0*)bmf_xmmword_4397F0;
-alignas(16) static uint8_t bmf_xmmword_439800[96 + 64] = {   // 0x439800
-  0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x07,0x04,0x04,
-  0x04,0x04,0x04,0x04,0x04,0x04,0x05,0x05,0x05,0x05,0x05,0x05,0x05,0x05,0x06,0x06,0x06,0x06,
-  0x06,0x06,0x06,0x06,0x04,0x04,0x04,0x04,0x04,0x04,0x04,0x04,0x05,0x05,0x05,0x05,0x05,0x05,
-  0x05,0x05,0x06,0x06,0x06,0x06,0x06,0x06,0x06,0x06,0x04,0x04,0x04,0x04,0x04,0x04,0x04,0x04,
-  0x05,0x05,0x05,0x05,0x05,0x05,0x05,0x05,0x06,0x06,0x06,0x06,0x06,0x06,0x06,0x06,0x00,0x00,
-  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x02,0x04,0x08,0x0a,0x0d,0x10,0x11,0x16,0x20,0x23,
-  0x24,0x38,0x3f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-  0x00,0x00,0x04,0x00,0x00,0x00,0x08,0x00,0x00,0x00,0x0c,0x00,0x00,0x00,0x08,0x00,0x00,0x00,
-  0x11,0x14,0x1b,0x25,0x31,0x46,0x5d,0x7c,0x9d,0xbf,0xcd,0xe4,0xeb,0xec,0xed,0x00,
-};
-typedef __m128i t_xmmword_439800;
-static t_xmmword_439800& __xmmword_439800 = *(t_xmmword_439800*)bmf_xmmword_439800;
 alignas(16) static uint8_t bmf_ctx_group_flags[32 + 64] = {   // 0x439860
   0x00,0x01,0x02,0x04,0x08,0x0a,0x0d,0x10,0x11,0x16,0x20,0x23,0x24,0x38,0x3f,0x00,0x00,0x00,
   0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x04,0x00,0x00,0x00,
@@ -3322,17 +3206,6 @@ static t_pout_of_memory_handler& __pout_of_memory_handler = *(t_pout_of_memory_h
 static unsigned char *bmf_addr(unsigned va)
 {
   switch (0) { default: break; }
-  if (va >= 0x439620u && va < 0x439630u) return bmf_xmmword_439620 + (va - 0x439620u);
-  if (va >= 0x439640u && va < 0x439650u) return bmf_xmmword_439640 + (va - 0x439640u);
-  if (va >= 0x439650u && va < 0x439660u) return bmf_xmmword_439650 + (va - 0x439650u);
-  if (va >= 0x439660u && va < 0x4396C0u) return bmf_xmmword_439660 + (va - 0x439660u);
-  if (va >= 0x4396C0u && va < 0x4396D0u) return bmf_xmmword_4396C0 + (va - 0x4396C0u);
-  if (va >= 0x4396D0u && va < 0x4396E0u) return bmf_xmmword_4396D0 + (va - 0x4396D0u);
-  if (va >= 0x4396E0u && va < 0x4396F0u) return bmf_xmmword_4396E0 + (va - 0x4396E0u);
-  if (va >= 0x4396F0u && va < 0x4397A0u) return bmf_xmmword_4396F0 + (va - 0x4396F0u);
-  if (va >= 0x4397A0u && va < 0x4397B0u) return bmf_xmmword_4397A0 + (va - 0x4397A0u);
-  if (va >= 0x4397F0u && va < 0x439800u) return bmf_xmmword_4397F0 + (va - 0x4397F0u);
-  if (va >= 0x439800u && va < 0x439860u) return bmf_xmmword_439800 + (va - 0x439800u);
   if (va >= 0x439860u && va < 0x439880u) return bmf_ctx_group_flags + (va - 0x439860u);
   if (va >= 0x439880u && va < 0x439890u) return bmf_dword_439880 + (va - 0x439880u);
   if (va >= 0x439890u && va < 0x4398A0u) return bmf_byte_439890 + (va - 0x439890u);
@@ -3464,7 +3337,6 @@ typedef int32_t t_dword_4398E8[0x10000];
 static t_dword_4398E8& __dword_4398E8 = *(t_dword_4398E8*)(blob1 + 0x004398E8 - BMF_BLOB_BASE);
 typedef int32_t t_dword_4398EC[0x10000];
 static t_dword_4398EC& __dword_4398EC = *(t_dword_4398EC*)(blob1 + 0x004398EC - BMF_BLOB_BASE);
-static __m128d &__bmf_half_half = *(__m128d *)(blob1 + 0x0043B480 - BMF_BLOB_BASE);
 // ---------------------------------------------------------------------------
 // The compression mode.
 //
@@ -5530,50 +5402,24 @@ BMF_SSE void __expand_predictor_mode0(uint32_t Src, int32_t i, int32_t a3)
 BMF_SSE uint32_t __predict_med(char *Src, int32_t i, int32_t a3)
 {
   ;
-  __m128i si128, v7, v13, v14;
-  char v11, v26;
-  int32_t v9, i_1, v16, v17, v18, v19, v20, v21, v22, v24, v27, v29;
-  uint32_t j, k, m, n15, v23, v25, n15_1;
+  char v26;
+  int32_t i_1, v16, v17, v18, v19, v20, v21, v22, v24, v27, v29;
+  uint32_t j, n15, v23, v25, n15_1;
   Obj37 *v28;
   uint8_t *v3, *v4;
   alignas(16) uint8_t v31[272];
-  v31[0] = 0;
   v3 = (uint8_t *)(Src + a3 * i);
   v4 = &v3[-i];
-  v31[128] = -1;
-  for ( j = 0; j < 7; ++j )
+  // The folding table, value -> code: a non-negative residual takes the even
+  // codes counting up from 0, a negative one the odd codes counting down from
+  // -1.  `unpredict_med` builds the inverse of this.  Wrapping to eight bits
+  // is what the byte stores did.
+  for ( j = 0; j < 128; ++j )
   {
-    v31[2 * j + 1] = 4 * j + 2;
-    v31[2 * j + 2] = 4 * j + 4;
-  }
-  si128 = _mm_load_si128((const __m128i *)&__xmmword_4396C0);
-  v7 = _mm_load_si128((const __m128i *)&__xmmword_4396D0);
-  v31[15] = 30;
-  for ( k = 15; k < 0x7F; k += 16 )
-  {
-    *(__m128i *)&v31[k + 1] = v7;
-    v7 = _mm_add_epi8(v7, si128);
-  }
-  v9 = 0;
-  for ( m = 0; m < 7; ++m )
-  {
-    v31[2 * m + 129] = 2 * v9 - 3;
-    v11 = 2 * v9 - 5;
-    v9 -= 2;
-    v31[2 * m + 130] = v11;
+    v31[j]       = (uint8_t)(2 * j);
+    v31[128 + j] = (uint8_t)(-1 - 2 * (int32_t)j);
   }
   i_1 = i;
-  v13 = _mm_load_si128((const __m128i *)&__xmmword_4396E0);
-  v14 = _mm_load_si128((const __m128i *)&__xmmword_4396F0);
-  n15 = 15;
-  v31[143] = -31;
-  do
-  {
-    *(__m128i *)&v31[n15 + 129] = v14;
-    v14 = _mm_add_epi8(v14, v13);
-    n15 += 16;
-  }
-  while ( n15 < 0x7F );
   v16 = a3 - 1;
   if ( a3 == 1 )
     goto LABEL_24;
@@ -6278,54 +6124,23 @@ uint16_t *__init_counter_node(uint16_t *_this)
 BMF_SSE int32_t __encode_symbol_tree(uint16_t *_this, int32_t n2) {
   ;
   char *v25;   // were int32_t: these hold addresses
-  __m128i v6, v7;
   bool v47;
   int16_t v24, v42;
-  int32_t n4, v8, v9, n0x800000_6, n0x7F800000_6, n0x800000_5, v27, v28, v46,
-          v50, v56, v59, i, v65, v66, n0x7F800000_5, n0x7F800000_7;
+  int32_t n4, v8, n0x800000_6, n0x7F800000_6, n0x800000_5, v27, v28, v46, v50,
+          v56, v59, i, v65, v66, n0x7F800000_5, n0x7F800000_7;
   uint16_t *v3, *v26, n0x4000, v39, v41, *v51, *this_2;
-  uint32_t n4_2, n4_3, v38, v40, v43, v44, v45, v48, v52, n4_1, n0x800000_3;
+  uint32_t n4_2, v38, v40, v43, v44, v45, v48, v52, n4_1, n0x800000_3;
   n4 = *((uint8_t *)model_geometry + n2);
   n4_1 = n4;
   v3 = _this + 2;
   v51 = _this + 2;
-  if ( n4 )
-  {
-    if ( n4 < 4 )
-    {
-      v8 = 0;
-      n4_2 = 0;
-    }
-    else
-    {
-      n4_2 = n4 - (n4 & 3);
-      n4_3 = 0;
-      v6 = 0;
-      do
-      {
-        v6 = _mm_add_epi32(v6, _mm_unpacklo_epi16(_mm_loadl_epi64((const __m128i *)&v3[n4_3]), (__m128i)0LL));
-        n4_3 += 4;
-      }
-      while ( n4_3 < n4_2 );
-      v51 = _this + n4_3 + 2;
-      v7 = _mm_add_epi32(v6, _mm_srli_si128(v6, 8));
-      v8 = _mm_cvtsi128_si32(_mm_add_epi32(v7, _mm_srli_si128(v7, 4)));
-    }
-    if ( n4_2 < n4_1 )
-    {
-      do
-      {
-        v8 += v3[n4_2];
-        v9 = (int32_t)&v3[++n4_2];
-      }
-      while ( n4_2 < n4_1 );
-      v51 = (uint16_t *)v9;
-    }
-  }
-  else
-  {
-    v8 = 0;
-  }
+  // The counts below `n2`, which is where the range coder's interval starts.
+  // Four at a time in SSE, then a scalar tail; integer addition does not care
+  // about the order, so it is one loop.
+  v8 = 0;
+  for ( n4_2 = 0; n4_2 < n4_1; n4_2++ )
+    v8 += v3[n4_2];
+  v51 = &v3[n4_1];
   v52 = v8 + *v51;
   v48 = *_this;
   n0x800000_5 = rc.encode(v8, v52, v48);
@@ -6418,13 +6233,11 @@ static inline int32_t __fwd_alt_p1_encode_symbol_encode_symbol_tree(void *a0, in
 BMF_SSE int32_t __alt_p1_encode_symbol(uint16_t *a1, int32_t n5, int32_t a3, int32_t n5a)
 {
   ;
-  __m128i v9, v10;
   bool v29;
   int16_t v4;
   int32_t n5a_1, n0x2000_2, result, n256, n5a_2;
-  uint16_t *v12, *v27, *v30, v31, *v35, *v37;
-  uint32_t tot, n5a_3, n5a_4,
-           tot_1, n0x2000_3;
+  uint16_t *v27, *v30, v31, *v35, *v37;
+  uint32_t tot, n5a_3, n0x2000_3;
   v4 = *a1;
   n5a_1 = 6 - (n5a & 1);
   if ( n5a < 5 )
@@ -6433,45 +6246,11 @@ BMF_SSE int32_t __alt_p1_encode_symbol(uint16_t *a1, int32_t n5, int32_t a3, int
   v37 = a1 + 1;
   v35 = a1 + 1;
   tot = v4 & 0x7FFF;
-  if ( n5a_1 )
-  {
-    if ( n5a_1 < 4 )
-    {
-      n0x2000_2 = 0;
-      n5a_3 = 0;
-    }
-    else
-    {
-      n5a_3 = n5a_1 - (n5a_1 & 3);
-      n5a_4 = 0;
-      v9 = 0;
-      do
-      {
-        v9 = _mm_add_epi32(v9, _mm_unpacklo_epi16(_mm_loadl_epi64((const __m128i *)&v37[n5a_4]), (__m128i)0LL));
-        n5a_4 += 4;
-      }
-      while ( n5a_4 < n5a_3 );
-      v35 = &a1[n5a_4 + 1];
-      v10 = _mm_add_epi32(v9, _mm_srli_si128(v9, 8));
-      n0x2000_2 = _mm_cvtsi128_si32(_mm_add_epi32(v10, _mm_srli_si128(v10, 4)));
-    }
-    if ( n5a_3 < n5a_2 )
-    {
-      tot_1 = tot;
-      do
-      {
-        n0x2000_2 += v37[n5a_3];
-        v12 = &a1[n5a_3++ + 2];
-      }
-      while ( n5a_3 < n5a_2 );
-      v35 = v12;
-      tot = tot_1;
-    }
-  }
-  else
-  {
-    n0x2000_2 = 0;
-  }
+  // The counts below the symbol, same shape as `encode_symbol_tree`'s.
+  n0x2000_2 = 0;
+  for ( n5a_3 = 0; n5a_3 < n5a_2; n5a_3++ )
+    n0x2000_2 += v37[n5a_3];
+  v35 = &v37[n5a_2];
   n0x2000_3 = n0x2000_2 + *v35;
   rc.encode(n0x2000_2, n0x2000_3, tot);
   if ( tot > 0x2000 )
@@ -8309,9 +8088,6 @@ int32_t *__alt_p1_alloc(Obj92 *_this, int32_t i, int32_t a3, int32_t n4)
 BMF_SSE char *__rc_begin_encode()
 {
   ;
-  Obj35 *v8;
-  __m128i si128;
-  Obj54 *v7;
   char *__rc_begin_encode_n256, *v6, *__rc_begin_encode_n256_1;
   int32_t Buffer, v2, v3, v9, v10, v13;
   uint32_t i;
@@ -8373,22 +8149,14 @@ BMF_SSE char *__rc_begin_encode()
     __byte_44572C = (char)v4;
     __byte_44572E = (uint8_t)v4 - 6;
     memset((char *)model_geometry + (uint32_t)v4, 0x06, 32);
-    si128 = _mm_load_si128((const __m128i *)&__xmmword_439800);
     __n32 = 32;
     v6 = (char *)v4 + 2 * (uint8_t)__n16;
     __byte_445730 = (char)v6;
     __byte_445732[0] = (uint8_t)v6 - 7;
-    v7 = (Obj54 *)((char *)model_geometry + (uint32_t)v6);
-    v7->f0 = si128.m128i_i64[0];
-    v8 = (Obj35 *)((__m128i *)(((int32_t)&model_geometry[3] + (uint32_t)v6 + 3) & 0xFFFFFFF0));
-    *((uint32_t *)v7 + 2) = 0x07070707;
-    *((uint16_t *)v7 + 6) = 0x0707;
-    v7->f14 = 7;
-    *((uint64_t *)v7 + 6) = si128.m128i_i64[0];
-    *((uint64_t *)v7 + 7) = si128.m128i_i64[0];
-    v8->f0 = si128;
-    v8->f16 = si128;
-    v8->f32 = si128;
+    // 64 bytes of 7, after 16 of 5 and 32 of 6 -- one level per line.  MSVC
+    // inlined this third one because the length crossed its threshold, which
+    // is why it arrived as a scalar head, three aligned stores and a tail.
+    memset((char *)model_geometry + (uint32_t)v6, 0x07, 64);
     __rc_begin_encode_n256 = (char *)bmf_new(0x7F000u);
     if ( __rc_begin_encode_n256 )
     {
@@ -9802,9 +9570,7 @@ __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...)
 BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
 {
   ;
-  Obj35 *v13;
-  __m128i si128;
-  char *v11, *v12, ArgList;
+  char *v11, ArgList;
   int32_t bits_left, v7, v8, v16, v17, v20;
   uint16_t *n256, *tbl;
   uint32_t i;
@@ -9865,22 +9631,11 @@ BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
     __byte_44572C = (char)v9;
     __byte_44572E = (uint8_t)v9 - 6;
     memset((char *)model_geometry + (uint32_t)v9, 0x06, 32);
-    si128 = _mm_load_si128((const __m128i *)&__xmmword_4397F0);
     __n32 = 32;
     v11 = (char *)v9 + 2 * (uint8_t)__n16;
     __byte_445730 = (char)v11;
     __byte_445732[0] = (uint8_t)v11 - 7;
-    v12 = (char *)model_geometry + (uint32_t)v11;
-    *(uint64_t *)v12 = si128.m128i_i64[0];
-    v13 = (Obj35 *)((__m128i *)(((int32_t)&model_geometry[3] + (uint32_t)v11 + 3) & 0xFFFFFFF0));
-    *((uint32_t *)v12 + 2) = 0x07070707;
-    *((uint16_t *)v12 + 6) = 0x0707;
-    v12[14] = 7;
-    *((uint64_t *)v12 + 6) = si128.m128i_i64[0];
-    *((uint64_t *)v12 + 7) = si128.m128i_i64[0];
-    v13->f0 = si128;
-    v13->f16 = si128;
-    v13->f32 = si128;
+    memset((char *)model_geometry + (uint32_t)v11, 0x07, 64);
     n256 = bmf_new(0x7F000u);
     if ( n256 )
     {
@@ -9927,10 +9682,9 @@ BMF_SSE uint8_t *__unpredict_med(char *Src, int32_t i, int32_t a3)
 {
   ;
   uintptr_t Src_1, v41;   // were int32_t: addresses, masked and tagged
-  __m128i si128, v8, v9, v10, v12, v13;
-  char v39, v40, v53;
+  char v39, v40;
   int32_t n256, n128_1, i_1, v42, v45, v46, v47, v48;
-  uint32_t n0x70, j, v36, m_1, m, v44, v50;
+  uint32_t j, v36, m_1, m, v44, v50;
   uint8_t *result, *v43;
   alignas(16) uint8_t v52[255];
   Src_1 = Src;
@@ -9944,34 +9698,16 @@ BMF_SSE uint8_t *__unpredict_med(char *Src, int32_t i, int32_t a3)
   // `*(uint32_t *)p_i = n2_1`, and n2_1 is `__byte_44339E[16 * v37] & 3`,
   // the predictor itself.  The test is always true, so it is gone with its
   // else.  See REFACTORING.md section 2.3.
-  si128 = _mm_load_si128((const __m128i *)&__xmmword_439640);
-  v8 = _mm_load_si128((const __m128i *)&__xmmword_439620);
-  v9 = _mm_load_si128((const __m128i *)&__xmmword_439650);
-  v10 = _mm_load_si128((const __m128i *)&__xmmword_439660);
-  n0x70 = 0;
+  // The unfolding table, code -> residual: code 0 is no change and the rest
+  // alternate -1, +1, -2, +2 ... out to +-127.  `predict_med` builds the
+  // inverse.
   v52[0] = 0;
-  v53 = 0x80;
-  do
+  for ( j = 0; j < 127; ++j )
   {
-    v12 = v9;
-    v13 = v9;
-    v9 = _mm_add_epi8(v9, si128);
-    *(__m128i *)&v52[2 * n0x70 + 1] = _mm_unpacklo_epi8(v12, v10);
-    *(__m128i *)&v52[2 * n0x70 + 17] = _mm_unpackhi_epi8(v13, v10);
-    v10 = _mm_add_epi8(v10, v8);
-    n0x70 += 16;
-  }
-  while ( n0x70 < 0x70 );
-  for ( j = 0; j < 7; ++j )
-  {
-    v52[4 * j + 225] = -2 * j - 113;
-    v52[4 * j + 227] = -2 * j - 114;
-    v52[4 * j + 226] = 2 * j + 113;
-    v52[4 * j + 228] = 2 * j + 114;
+    v52[2 * j + 1] = (uint8_t)(-1 - (int32_t)j);
+    v52[2 * j + 2] = (uint8_t)(1 + j);
   }
   Src_1 = Src;
-  v52[253] = -127;
-  v52[254] = 127;
   // never taken: -E is 0
   i_1 = i;
   if ( i == 1 )
@@ -10070,96 +9806,53 @@ LABEL_41:
   }
   return result;
 }
-BMF_SSE __attribute__((visibility("hidden")))
-__gnu_m128d __log_two_lane(const __m128d &a0__ref, const __m128d &a1__ref)
-{
-  ;
-  __m128d a0 = a0__ref;
-  __m128d a1 = a1__ref;
-  __m128d x = _mm_or_pd(_mm_and_pd(a0, a1), _mm_andnot_pd(a1, __bmf_half_half));
-  if ( _mm_movemask_pd(a1) )
-  {
-    // Intel's __svml_log2 was the natural log despite the name (see
-    // override/log_two_lane.inc).  Lane 1 is computed too: the caller only reads
-    // lane 0 through the mask, but leaving it undefined would let a signalling
-    // value through.
-    __m128d r;
-    r.m128d_f64[0] = log(x.m128d_f64[0]);
-    r.m128d_f64[1] = log(x.m128d_f64[1]);
-    return r;
-  }
-  return x;
-}
 
-BMF_SSE int32_t __estimate_cost(char *a1, int32_t n2)
+// The zeroth-order cost of a histogram, in bits: `total*log(total) - sum(n*log n)`
+// over ln 2.  `a1` is `n2` int32 bins.
+//
+// Two running pairs rather than one running total, because that is what the
+// SSE original had: even bins accumulated in lane 0, odd bins in lane 1, and
+// the two added at the end.  Double addition is not associative, so folding
+// them into one accumulator would be a different number.
+int32_t __estimate_cost(char *a1, int32_t n2)
 {
-  ;
-  __m128 v17, v18;
-  __m128d v13, v15;
-  __m128i v4, v5;
-  double v7, v8, v14, v16;
-  int32_t v11;
-  uint32_t n2_1, v3, n2_4, n2_3, n2_2;
-  n2_1 = n2;
-  if ( n2 <= 0 )
+  const int32_t *bin = (const int32_t *)a1;
+  double sum_even = 0.0, sum_odd = 0.0, ent_even = 0.0, ent_odd = 0.0;
+  double total, entropy;
+  int32_t i;
+
+  for ( i = 0; i + 1 < n2; i += 2 )
   {
-    v7 = 0;
-    v8 = 0.0;
+    // An empty bin contributes nothing.  The original masked it off rather
+    // than branching, and took the logarithm anyway -- of 0.5, so it could not
+    // raise anything -- which is the same arithmetic with the same result.
+    if ( bin[i] )
+    {
+      sum_even += (double)bin[i];
+      ent_even += (double)bin[i] * log((double)bin[i]);
+    }
+    if ( bin[i + 1] )
+    {
+      sum_odd += (double)bin[i + 1];
+      ent_odd += (double)bin[i + 1] * log((double)bin[i + 1]);
+    }
   }
-  else
-  {
-    if ( n2 < 2 )
+  entropy = ent_even + ent_odd;
+  total   = sum_even + sum_odd;
+
+  // The odd bin at the end, if there is one.  No call has ever reached this:
+  // every one of the fifteen passes 512 or 1024 (REFACTORING2.md §6), so it is
+  // the one part of this function the gate does not cover.
+  for ( ; i < n2; i++ )
+    if ( bin[i] )
     {
-      n2_4 = 0;
-      v7 = 0;
-      v8 = 0;
+      total   += (double)bin[i];
+      entropy += (double)bin[i] * log((double)bin[i]);
     }
-    else
-    {
-      v13 = 0;
-      v15 = 0;
-      v3 = 0;
-      do
-      {
-        v4 = _mm_loadl_epi64((const __m128i *)(a1 + 4 * v3));
-        v17 = (__m128)_mm_cvtepi32_pd(v4);
-        v5 = _mm_cmpeq_epi32((__m128i)0LL, v4);
-        v18 = (__m128)_mm_unpacklo_epi32(v5, v5);
-        v13 = _mm_add_pd(v13, (__m128d)_mm_andnot_ps(v18, v17));
-        __m128d v19 = __log_two_lane((__m128d)v17, (__m128d)_mm_xor_si128((__m128i)__xmmword_4397A0, (__m128i)v18));
-        v3 += 2;
-        v15 = _mm_add_pd(v15, (__m128d)_mm_andnot_ps(v18, (__m128)_mm_mul_pd((__m128d)v17, v19)));
-      }
-      while ( v3 < n2 - (n2 & 1u) );
-      n2_1 = n2;
-      n2_4 = n2 - (n2 & 1);
-      v7 = v15.m128d_f64[0] + M128D(_mm_unpackhi_pd(v15, v15)).m128d_f64[0];
-      v8 = v13.m128d_f64[0] + M128D(_mm_unpackhi_pd(v13, v13)).m128d_f64[0];
-    }
-    if ( n2_4 < n2_1 )
-    {
-      v14 = v7;
-      v16 = v8;
-      n2_3 = n2_4;
-      n2_2 = n2_1;
-      do
-      {
-        v11 = *(uint32_t *)(a1 + 4 * n2_3);
-        if ( v11 )
-        {
-          v16 = v16 + (double)v11;
-          v14 = v14 + (double)v11 * log((double)v11);
-        }
-        ++n2_3;
-      }
-      while ( n2_3 < n2_2 );
-      v7 = v14;
-      v8 = v16;
-    }
-    if ( v8 != 0.0 )
-      v8 = v8 * log(v8);
-  }
-  return (int32_t)((v8 - v7) * 1.442695040888963);
+
+  if ( total != 0.0 )
+    total = total * log(total);
+  return (int32_t)((total - entropy) * 1.442695040888963);
 }
 static inline int32_t __fwd_alt_model_p1_d8_decode_alt_p1_decode_symbol(void *a0, int32_t a1, int32_t a2) { return __alt_p1_decode_symbol((uint16_t *)a0, a1, a2); }
 static inline void ** __fwd_alt_model_p1_d8_decode_alt_p1_free(void *a0, char a1) { return __alt_p1_free((void **)a0, a1); }
@@ -13475,13 +13168,11 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
   ;
   uintptr_t Src_1;   // were int32_t: addresses, masked and tagged
   char *v7, *v8, *v9;   // were int32_t: these hold addresses
-  char *j;   // was int32_t: these hold addresses
   FILE *Stream_v;
-  __m128i v17, v18, v19, v20, v21;
   char v25, *Src_4, v28, v30, *Src_3, *Src_6, *Buffer_4, *Src_5;
   BmfImage *v3;
   int32_t Size_1, i, j_3, Sizea_1, v22, n2_1, v26, v31, Offset_2, v35, v38, v40, v41;
-  uint32_t Size_2, j_1, j_2, n2_2, v29, ElementCount, ElementCount_1, v44;
+  uint32_t Size_2, n2_2, v29, ElementCount, ElementCount_1, v44;
   // These two freads land in the frame, and each writes across several of the
   // slots Hex-Rays split it into -- which is why the fields do not look like
   // fields.  `bmp_info_hdr` is declared `uint32_t[2]` and the read is 40 bytes:
@@ -13567,39 +13258,18 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
         Sizea = Sizea_1;
         if ( j_3 )
         {
-          j_1 = Src_1 & 0xF;
-          if ( (Src_1 & 0xF) != 0 )
-            j_1 = 16 - (Src_1 & 0xF);
-          if ( j_3 < (int32_t)(j_1 + 16) )
-          {
-            j_2 = 0;
-          }
-          else
-          {
-            j_2 = j_3 - (((uint8_t)j_3 - (uint8_t)j_1) & 0xF);
-            if ( j_1 )
-            {
-              for ( j = 0; j < j_1; ++j )
-                *(uint8_t *)(j + Src_1) = Sizea;
-            }
-            v17 = _mm_cvtsi32_si128((char)Sizea);
-            v18 = _mm_unpacklo_epi8(v17, v17);
-            v19 = _mm_unpacklo_epi16(v18, v18);
-            v20 = _mm_unpacklo_epi32(v19, v19);
-            v21 = _mm_unpacklo_epi64(v20, v20);
-            do
-            {
-              *(__m128i *)(Src_1 + j_1) = v21;
-              j_1 += 16;
-            }
-            while ( j_1 < j_2 );
-            Src_1 += j_1;
-          }
-          for ( ; j_2 < j_3; ++j_2 )
-          {
-            *(uint8_t *)(Src_2 + j_2) = Sizea;
-            Src_1 = j_2 + Src_2 + 1;
-          }
+          // An RLE8 run: `j_3` copies of one byte.  What was here instead was
+          // a scalar head to reach sixteen-byte alignment, sixteen bytes an
+          // iteration, and a scalar tail -- memset with the alignment written
+          // out, and a separate short-run path for anything under 16 + the
+          // head.
+          //
+          // The write is still not bounded by the pixel buffer: a stream that
+          // ends mid-run keeps writing.  That is a real defect, recorded
+          // rather than repaired (REFACTORING.md §6), and it is why the
+          // malformed-input check truncates an uncompressed BMP instead.
+          __builtin_memset((void *)Src_2, Sizea, j_3);
+          Src_1 = Src_2 + j_3;
         }
         else if ( Sizea_1 )
         {
@@ -15780,11 +15450,10 @@ void __expand_alphabet(Obj10 *_this)
 BMF_SSE int32_t __layout_workspace(uintptr_t a1, int32_t a2, int32_t i, int32_t a4, int32_t a5)
 {
   ;
-  __m128i si128, v26, v27;
   char *v8, v12;
   int16_t v19;
-  int32_t i_1, j, v9, v13, n0x2000_4, k_1, v35, v38;
-  uint32_t n0x2000_2, n0x2000_5, n0x2000, k, m, n0x2000_3, n0x2000_6, n0x2000_1, n, n8, n0x18;
+  int32_t i_1, j, v9, v13, k_1, v35, v38;
+  uint32_t k, m, n0x2000_1, n, n8, n0x18;
   uint8_t *v10;
   i_1 = i;
   __byte_445700 = 1;
@@ -15832,34 +15501,11 @@ BMF_SSE int32_t __layout_workspace(uintptr_t a1, int32_t a2, int32_t i, int32_t 
     }
     while ( v13 < *(uint32_t *)a1 );
   }
-  n0x2000_4 = a1 & 0xF;
-  n0x2000_2 = n0x2000_4;
-  if ( (a1 & 0xF) != 0 )
-  {
-    if ( (n0x2000_4 & 1) != 0 )
-    {
-      n0x2000 = 0;
-      goto LABEL_15;
-    }
-    n0x2000_2 = (uint32_t)(16 - n0x2000_4) >> 1;
-    n0x2000_5 = 0;
-    do
-      *(uint16_t *)(a1 + 2 * n0x2000_5++ + 6059440) = 0;
-    while ( n0x2000_5 < n0x2000_2 );
-  }
-  n0x2000 = 0x2000 - (-n0x2000_2 & 0x1F);
-  do
-  {
-    *(__m128i *)(a1 + 2 * n0x2000_2 + 6059440) = 0;
-    *(__m128i *)(a1 + 2 * n0x2000_2 + 6059456) = 0;
-    *(__m128i *)(a1 + 2 * n0x2000_2 + 6059472) = 0;
-    *(__m128i *)(a1 + 2 * n0x2000_2 + 6059488) = 0;
-    n0x2000_2 += 32;
-  }
-  while ( n0x2000_2 < n0x2000 );
-LABEL_15:
-  while ( n0x2000 < 0x2000 )
-    *(uint16_t *)(a1 + 2 * n0x2000++ + 6059440) = 0;
+  // 0x2000 sixteen-bit counters cleared.  What was here instead was the same
+  // range in three passes -- a scalar head to reach sixteen-byte alignment,
+  // thirty-two counters an iteration, a scalar tail -- with a branch for the
+  // case where `a1` is odd and no alignment is reachable at all.
+  __builtin_memset((void *)(a1 + 6059440), 0, 2 * 0x2000);
   for ( k = 0; k < 0x2000; ++k )
   {
     v19 = *(uint16_t *)(a1 + 2 * k + 6059440);
@@ -15871,38 +15517,10 @@ LABEL_15:
     }
     *(uint16_t *)(a1 + 2 * k + 6059440) = v19;
   }
-  n0x2000_3 = a1 & 0xF;
-  if ( (a1 & 0xF) != 0 )
-  {
-    if ( (a1 & 1) != 0 )
-    {
-      n0x2000_1 = 0;
-      goto LABEL_26;
-    }
-    n0x2000_3 = (16 - (a1 & 0xFu)) >> 1;
-    n0x2000_6 = 0;
-    do
-      *(uint16_t *)(a1 + 2 * n0x2000_6++ + 6059440) *= 8;
-    while ( n0x2000_6 < n0x2000_3 );
-  }
-  n0x2000_1 = 0x2000 - (-n0x2000_3 & 0x1F);
-  do
-  {
-    si128 = _mm_load_si128((const __m128i *)(a1 + 2 * n0x2000_3 + 6059456));
-    v26 = _mm_load_si128((const __m128i *)(a1 + 2 * n0x2000_3 + 6059472));
-    v27 = _mm_load_si128((const __m128i *)(a1 + 2 * n0x2000_3 + 6059488));
-    *(__m128i *)(a1 + 2 * n0x2000_3 + 6059440) = _mm_slli_epi16(
-                                                   _mm_load_si128((const __m128i *)(a1 + 2 * n0x2000_3 + 6059440)),
-                                                   3u);
-    *(__m128i *)(a1 + 2 * n0x2000_3 + 6059456) = _mm_slli_epi16(si128, 3u);
-    *(__m128i *)(a1 + 2 * n0x2000_3 + 6059472) = _mm_slli_epi16(v26, 3u);
-    *(__m128i *)(a1 + 2 * n0x2000_3 + 6059488) = _mm_slli_epi16(v27, 3u);
-    n0x2000_3 += 32;
-  }
-  while ( n0x2000_3 < n0x2000_1 );
-LABEL_26:
-  while ( n0x2000_1 < 0x2000 )
-    *(uint16_t *)(a1 + 2 * n0x2000_1++ + 6059440) *= 8;
+  // ... and every one of them scaled by eight, the same range in the same
+  // three passes.
+  for ( n0x2000_1 = 0; n0x2000_1 < 0x2000; ++n0x2000_1 )
+    *(uint16_t *)(a1 + 2 * n0x2000_1 + 6059440) *= 8;
   memset((char *)(a1 + 3104),0,0x100000);
   *(uint32_t *)(a1 + 28) = 0;
   *(uint32_t *)(a1 + 24) = 0;
@@ -19266,12 +18884,6 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 288, "frame layout moved");
   uint32_t &Size_1 = __frame.Size_1;
-  __m128i &v140 = *(__m128i *)((char *)__frame.slot4);
-  __m128i &v141 = *(__m128i *)((char *)__frame.slot20);
-  __m128i &v142 = *(__m128i *)((char *)__frame.slot36);
-  __m128i &v143 = *(__m128i *)((char *)__frame.slot52);
-  __m128i &v144 = *(__m128i *)((char *)__frame.slot68);
-  __m128i &v145 = *(__m128i *)((char *)__frame.slot84);
   __m128i &v146 = *(__m128i *)((char *)__frame.slot100);
   __m128i &v147 = *(__m128i *)((char *)__frame.slot116);
   __m128i &v148 = *(__m128i *)((char *)__frame.slot132);
@@ -20205,12 +19817,6 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 336, "frame layout moved");
   uint32_t &Size_1 = __frame.Size_1;
-  __m128i &v144 = *(__m128i *)((char *)__frame.slot4);
-  __m128i &v145 = *(__m128i *)((char *)__frame.slot20);
-  __m128i &v146 = *(__m128i *)((char *)__frame.slot36);
-  __m128i &v147 = *(__m128i *)((char *)__frame.slot52);
-  __m128i &v148 = *(__m128i *)((char *)__frame.slot68);
-  __m128i &v149 = *(__m128i *)((char *)__frame.slot84);
   __m128i &v150 = *(__m128i *)((char *)__frame.slot100);
   __m128i &v151 = *(__m128i *)((char *)__frame.slot116);
   __m128i &v152 = *(__m128i *)((char *)__frame.slot132);
