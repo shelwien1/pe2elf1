@@ -18,12 +18,12 @@ so they can be re-measured rather than trusted.
 
 | | | at the start |
 | --- | --- | --- |
-| `subs1.hpp` | 24 420 lines | 25 462 |
+| `subs1.hpp` | 24 533 lines | 25 462 |
 | bodies | 179 (84 real, 94 `__fwd_*` shims, 1 helper) | 215 |
 | globals in `blob.inc` | **78** | 293 |
-| recovered structs | **115**, 2645 named field accesses, 17 arrays put back | 0 |
-| raw-offset dereferences | **290** | 1646 before Phase 4 |
-| pointer casts | 5801 | 7336 |
+| recovered structs | **115** + 2 named ones, 2645 field accesses, 17 arrays put back | 0 |
+| raw-offset dereferences | **250** | 1646 before Phase 4 |
+| pointer casts | 5730 | 7336 |
 | `goto` / `LABEL_n:` | 113 / 81 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
 | line coverage | **95.87 %** of 13 217 | 64.5 % |
@@ -999,11 +999,32 @@ byte for byte.
 
 Two things, and neither is a phase.
 
-**Naming.** 72 of the 73 structs are `ObjN` with `f76`-style members. The layout is
-recovered; the meaning is not. `ModelBlock` is the exception, and it is named
-only because §4.2 had already established what it is. `ALGORITHM.md` §9 still lists the
-alternate model families as unread, and that is what naming those fields waits
-on — not tooling.
+**Naming.** 112 of the 115 structs are `ObjN` with `f76`-style members. The
+layout is recovered; the meaning is not.
+
+Three are named, and how each got there is the useful part:
+
+* `ModelBlock`, because §4.2 had already established what it is.
+* **`BmpHeader`**, because the layout is published. The offsets `write_bmp`
+  writes are `BITMAPFILEHEADER` followed by `BITMAPINFOHEADER`, and
+  `*(uint32_t *)(Bufferc_3 + 14) = 40` settles which info header: that field
+  exists to say so. Its `static_assert`s check the port against a documented
+  format rather than against itself.
+* **`BmfImage`**, because the writer is in the file. Nothing documents BMF's own
+  image descriptor, but `alloc_image` fills all four of its words in a row, and
+  the arithmetic around them names each one — `result[3] = v10` where
+  `v10 = v9 * a2`, and `v9` is the row length, so +12 is stride times height.
+  Then `buf = (char *)result + result[3] + 16` says where the pixels start.
+
+That is the pattern for the rest, and it is not tooling: **a struct gets named
+when some site writes it, checks it, or matches a published layout** — not when
+its offsets are known. `read_bmp`'s header fields were named the same way, one
+at a time, each from what the code does with it rather than from where it sits:
+`bmp_compression` is tested against 1 and 2, `bmp_clr_used` overrides
+`1 << bits` as the palette size, `bmp_planes` is checked against 1.
+
+`ALGORITHM.md` §9 still lists the alternate model families as unread, and their
+structs are where the remaining 112 mostly are.
 
 **The 64-bit build**, if it is wanted. It compiles and runs and gets as far as
 `model_plane`. Taking it further is the loop in §Phase 4 — fault, find the
@@ -1061,7 +1082,16 @@ into three kinds:
 
 * **transforms** — `foldif.py`, `rename.py`, `unframe.py`, `reframe.py`,
   `retype.py`, `structs.py`, `unstruct.py`, `uncopy.py`, `degoto.py`,
-  `unused.py`. Each edits the file and is answerable to the gate.
+  `unused.py`, `decast.py`. Each edits the file and is answerable to the gate.
+  Two of them take their worklist from the *compiler* rather than from a
+  pattern of their own — `unused.py` from `-Wunused-variable`, `decast.py` from
+  `-Wuseless-cast` — which is the strongest form this kind of tool can take:
+  the compiler cannot be wrong about which variable is unread or which cast
+  casts a thing to its own type, and the tool is left with nothing to decide.
+  `-Wuseless-cast` has one trap, and it is worth knowing before reaching for
+  this trick again: it answers for the target it ran against. `~(uintptr_t)(x)`
+  is a useless cast at 32 bits and load-bearing at 64, so the 64-bit
+  syntax-only compile is checked either side of a run.
 * **measurements** — `extents.py`, `addrmap.py`. These only report.
 * **checks** — `deadcheck.py`, and `test.sh` itself. A check earns its place by
   reporting the case it was written for against the tree that still had it, and
