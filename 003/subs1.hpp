@@ -10645,10 +10645,11 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   char v70, v71, v72, v73, v74, v75, v91, *v157;
   int16_t v14, n4_14, v146, v160, n15_4;
   ModelBlock *this_4;
+  uint8_t *v25, *v56;   // row cursors out of f56[9]; were int32_t
   int32_t arg_cum, arg_high, arg_tot, n4_8, n4_7, n15_6, n15_7, v8, v9, v10, v12, v13, v15,
-          n4_9, __decode_pixel_n15, v22, n4_11, v25, v26, v27, v29, v31, n0xFFFF, v33, n0xFFFF_1,
+          n4_9, __decode_pixel_n15, v22, n4_11, v26, v27, v29, v31, n0xFFFF, v33, n0xFFFF_1,
           n53248, n4_12, v40, n15_11, n8, n15_12, v44, n4_22, n15_14, n15_18, v49, v50, v51,
-          n4_13, v56, *v59, v60, n15_13, v67, n15_15, n4_17, v81, v83, v84,
+          n4_13, *v59, v60, n15_13, v67, n15_15, n4_17, v81, v83, v84,
           v85, n4, n256_2, n15_1, n256_1, n15_23, n4_19, n4_20, n4_5, n4_6, n15_5, v102, v103,
           v104, v105, v107, v109, v111, v112, v113, v114, v115, v116, v117, v118, v119,
           v120, v122, v123, v124, v125, v126, v127, v128, n32, n15_25, n4_21, v132, v133, v135,
@@ -10764,7 +10765,10 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   freq_i = n4_11;
   v25 = this_2->f56[9];
   v26 = *((uint8_t *)v4 - 5);
-  v186 = v25;
+  // `v186` is one stack slot with two roles: a row cursor here, and the
+  // `uint16_t` value out of `v97[4]` at 11290.  Splitting it needs the frame
+  // to dissolve first, so the cast records the double booking (§4.2).
+  v186 = (int32_t)v25;
   v27 = 8 * *((uint8_t *)v4 - 12) + 4 * *((uint8_t *)v4 - 9) + v26 + 2 * *((uint8_t *)v4 - 10);
   this_3 = (ModelBlock *)(this_1);
   v29 = ((uint8_t)(*(uint8_t *)(v186 + 2) & *(v21 + 2) & freq_i & *(v23 + 2)) << 9)
