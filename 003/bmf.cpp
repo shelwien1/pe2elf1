@@ -865,6 +865,32 @@ void __out_of_memory_handler();
 // `set_new_handler` back on a live path rather than working around it.
 static void *bmf_new(size_t n);
 
+// ---------------------------------------------------------------------------
+// The block copies MSVC unrolled.
+//
+// Twenty-seven places in the bodies copy an 18-byte record as four dwords and a
+// word, ascending, which is what the compiler made of `memcpy(d, s, 18)` and
+// all Hex-Rays could give back.  `tools/uncopy.py` folds each run into one call
+// through here.
+//
+// A store sequence and a `memcpy` differ in exactly one case -- overlapping
+// regions -- so that is checked rather than argued.  `BMF_COPY_CHECK=1
+// ./build.sh` makes this abort when the regions touch, and the gate is run
+// against it; none of the twenty-seven does.  They are rows of a table 144
+// bytes apart, which is why.
+// ---------------------------------------------------------------------------
+static inline void bmf_copy(void *d, const void *s, size_t n) {
+#ifdef BMF_COPY_CHECK
+  const char *dp = (const char *)d, *sp = (const char *)s;
+  if (dp < sp + n && sp < dp + n) {
+    fprintf(stderr, "bmf: overlapping copy, %p <- %p, %u bytes\n",
+            d, s, (unsigned)n);
+    abort();
+  }
+#endif
+  memcpy(d, s, n);
+}
+
 #include "subs1.hpp"
 
 static void *bmf_new(size_t n) {

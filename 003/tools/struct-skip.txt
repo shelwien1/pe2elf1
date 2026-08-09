@@ -62,3 +62,51 @@ __decode_symbol_list:v36
 __decode_pixel:v61
 __code_pixel:v98
 __alt_p2_d8_encode_body:v16
+__encode_symbol_tree:v26
+__alt_p1_encode_symbol:a1
+__decode_symbol_tree:v17
+__code_pixel:n15_17 __code_pixel:n2_11 __code_pixel:n2_12 __code_pixel:n2_13 __code_pixel:n2_14 __code_pixel:n2_17 __code_pixel:n2_2 __code_pixel:n2_4 __code_pixel:n2_6 __code_pixel:n2_8 __rescale_counter_pair:_this
+__alt_p1_model:result
+__alt_p1_d8_encode_body:v10
+__alt_p1_d8_encode_body:v11
+__alt_model_p1_d8_decode:v12
+__alt_model_p1_d8_decode:v13
+__alt_model_p1_d8_decode:Src __alt_model_p1_d8_decode:Src_1 __alt_model_p2_d8_decode:Src __alt_model_p2_decode:Src __alt_model_p2_decode:Src_1 __expand_image:Src_1 __unmodel_plane:Src __unmodel_plane_slow:Src __unmodel_plane_slow:Src_1 __unmodel_plane_slow:Src_2
+__expand_alphabet:v10 __expand_alphabet:v22 __expand_alphabet:v31
+__expand_image:out_cursor
+__search_filter:__n256_2
+__main:argv
+__predict_med:v31
+__encode_symbol_list:v39
+__symbol_list_update:v26
+__alt_model_p1_decode:__byte_4433BD
+__alt_p2_context:v243 __alt_p2_context:v275 __alt_p2_context:v50 __alt_p2_context:v53
+__cost_candidate:buf_1
+__decode_pixel:v108
+__code_pixel:v109
+__code_pixel:v41
+__code_pixel:__n15_0 __code_pixel:n15_1 __code_pixel:n15_15 __code_pixel:n15_2 __code_pixel:n15_24 __code_pixel:p_n15 __code_pixel:p_n15_1 __code_pixel:p_n15_11 __code_pixel:p_n15_2 __code_pixel:p_n15_3 __code_pixel:p_n15_4 __code_pixel:p_n15_5 __code_pixel:p_n15_6 __code_pixel:p_n15_8 __code_pixel:p_n15_9
+__unmodel_plane_slow:v49
+__unmodel_plane_slow:v50
+__alt_model_p1_encode:__byte_4433BD
+__alt_p2_d8_decode_body:v73
+__alt_p2_d8_decode_body:v76
+__alt_p2_d8_decode_body:v77
+__alt_p2_d8_decode_body:v78
+__alt_p2_d8_decode_body:v79
+__alt_p2_d8_decode_body:v81
+__alt_p2_d8_decode_body:v82
+__alt_p2_d8_decode_body:v83
+__alt_p2_d8_decode_body:v85
+__alt_p2_d8_decode_body:v86
+__alt_p2_d8_decode_body:v87
+__alt_p2_d8_decode_body:v89
+__alt_p2_d8_decode_body:v90
+__alt_model_p2_decode:v82
+__alt_model_p2_decode:v85
+__alt_model_p2_decode:v86
+__alt_model_p2_decode:v87
+__alt_model_p2_decode:v88
+__alt_model_p2_decode:v90
+__alt_model_p2_decode:v91
+__alt_model_p2_decode:v92

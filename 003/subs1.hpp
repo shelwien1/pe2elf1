@@ -5915,6 +5915,726 @@ static_assert(sizeof(void *) != 4
               "Obj90: the layout moved");
 
 
+// Obj91 -- recovered from 6 dereferences over 2 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj91 {
+  uint8_t _pad0[8];
+  uint32_t f8;
+  uint8_t _pad2[184];
+  uint32_t f196;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj91, f196) == 196,
+              "Obj91: the layout moved");
+
+
+// Obj92 -- recovered from 6 dereferences over 1 offsets, under 3
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj92 {
+  int32_t f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj92, f0) == 0,
+              "Obj92: the layout moved");
+
+
+// Obj93 -- recovered from 6 dereferences over 6 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj93 {
+  uint8_t _pad0[1];
+  uint8_t f1;
+  uint8_t _pad2[1];
+  uint8_t f3;
+  uint8_t _pad4[1];
+  uint8_t f5;
+  uint8_t _pad6[1];
+  uint8_t f7;
+  uint8_t _pad8[1];
+  uint8_t f9;
+  uint8_t _pad10[1];
+  uint8_t f11;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj93, f11) == 11,
+              "Obj93: the layout moved");
+
+
+// Obj94 -- recovered from 6 dereferences over 6 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj94 {
+  uint8_t _pad0[1];
+  uint8_t f1;
+  uint8_t _pad2[1];
+  uint8_t f3;
+  uint8_t _pad4[1];
+  uint8_t f5;
+  uint8_t _pad6[1];
+  uint8_t f7;
+  uint8_t _pad8[1];
+  uint8_t f9;
+  uint8_t _pad10[1];
+  uint8_t f11;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj94, f11) == 11,
+              "Obj94: the layout moved");
+
+
+// Obj95 -- recovered from 6 dereferences over 5 offsets, under 5
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj95 {
+  int16_t f0;
+  int16_t f2;
+  uint8_t _pad2[14];
+  int16_t f18;
+  uint8_t _pad4[18];
+  int16_t f38;
+  uint8_t _pad6[14];
+  int16_t f54;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj95, f54) == 54,
+              "Obj95: the layout moved");
+
+
+// Obj96 -- recovered from 6 dereferences over 4 offsets, under 4
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj96 {
+  int16_t f0;
+  uint8_t _pad1[16];
+  int16_t f18;
+  uint8_t _pad3[18];
+  int16_t f38;
+  uint8_t _pad5[14];
+  int16_t f54;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj96, f54) == 54,
+              "Obj96: the layout moved");
+
+
+// Obj97 -- recovered from 6 dereferences over 3 offsets, under 3
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj97 {
+  uint16_t f0;
+  uint8_t _pad1[2];
+  uint16_t f4;
+  uint8_t _pad3[6];
+  uint32_t f12;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj97, f12) == 12,
+              "Obj97: the layout moved");
+
+
+// Obj98 -- recovered from 6 dereferences over 1 offsets, under 2
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj98 {
+  uint8_t _pad0[12];
+  int32_t f12;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj98, f12) == 12,
+              "Obj98: the layout moved");
+
+
+// Obj99 -- recovered from 6 dereferences over 6 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj99 {
+  uint8_t _pad0[8];
+  uint16_t f8;
+  uint8_t _pad2[8];
+  uint8_t f18;
+  uint8_t _pad4[7];
+  uint8_t f26;
+  uint8_t _pad6[7];
+  uint8_t f34;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj99, f34) == 34,
+              "Obj99: the layout moved");
+
+
+// Obj100 -- recovered from 6 dereferences over 6 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj100 {
+  uint8_t _pad0[1];
+  uint8_t f1;
+  uint8_t _pad2[1];
+  uint8_t f3;
+  uint8_t _pad4[1];
+  uint8_t f5;
+  uint8_t _pad6[1];
+  uint8_t f7;
+  uint8_t _pad8[1];
+  uint8_t f9;
+  uint8_t _pad10[1];
+  uint8_t f11;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj100, f11) == 11,
+              "Obj100: the layout moved");
+
+
+// Obj101 -- recovered from 6 dereferences over 6 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj101 {
+  uint8_t _pad0[1];
+  uint8_t f1;
+  uint8_t _pad2[1];
+  uint8_t f3;
+  uint8_t _pad4[1];
+  uint8_t f5;
+  uint8_t _pad6[1];
+  uint8_t f7;
+  uint8_t _pad8[1];
+  uint8_t f9;
+  uint8_t _pad10[1];
+  uint8_t f11;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj101, f11) == 11,
+              "Obj101: the layout moved");
+
+
+// Obj102 -- recovered from 6 dereferences over 1 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj102 {
+  const char f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj102, f0) == 0,
+              "Obj102: the layout moved");
+
+
+// Obj103 -- recovered from 6 dereferences over 1 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj103 {
+  const char f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj103, f0) == 0,
+              "Obj103: the layout moved");
+
+
+// Obj104 -- recovered from 6 dereferences over 1 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj104 {
+  const char f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj104, f0) == 0,
+              "Obj104: the layout moved");
+
+
+// Obj105 -- recovered from 6 dereferences over 1 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj105 {
+  const char f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj105, f0) == 0,
+              "Obj105: the layout moved");
+
+
+// Obj106 -- recovered from 6 dereferences over 1 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj106 {
+  const char f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj106, f0) == 0,
+              "Obj106: the layout moved");
+
+
+// Obj107 -- recovered from 6 dereferences over 1 offsets, under 2
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj107 {
+  const char f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj107, f0) == 0,
+              "Obj107: the layout moved");
+
+
+// Obj108 -- recovered from 6 dereferences over 1 offsets, under 2
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj108 {
+  const char f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj108, f0) == 0,
+              "Obj108: the layout moved");
+
+
+// Obj109 -- recovered from 6 dereferences over 1 offsets, under 2
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj109 {
+  const char f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj109, f0) == 0,
+              "Obj109: the layout moved");
+
+
+// Obj110 -- recovered from 6 dereferences over 1 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj110 {
+  const char f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj110, f0) == 0,
+              "Obj110: the layout moved");
+
+
+// Obj111 -- recovered from 6 dereferences over 1 offsets, under 3
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj111 {
+  const char f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj111, f0) == 0,
+              "Obj111: the layout moved");
+
+
+// Obj112 -- recovered from 6 dereferences over 1 offsets, under 2
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj112 {
+  const char f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj112, f0) == 0,
+              "Obj112: the layout moved");
+
+
+// Obj113 -- recovered from 5 dereferences over 1 offsets, under 2
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj113 {
+  uint16_t f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj113, f0) == 0,
+              "Obj113: the layout moved");
+
+
+// Obj114 -- recovered from 5 dereferences over 5 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj114 {
+  uint16_t f0;
+  uint8_t _pad1[4];
+  uint16_t f6;
+  uint8_t _pad3[4];
+  uint16_t f12;
+  uint8_t _pad5[4];
+  uint16_t f18;
+  uint8_t _pad7[4];
+  uint16_t f24;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj114, f24) == 24,
+              "Obj114: the layout moved");
+
+
+// Obj115 -- recovered from 5 dereferences over 5 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj115 {
+  uint16_t f0;
+  uint8_t _pad1[4];
+  uint16_t f6;
+  uint8_t _pad3[4];
+  uint16_t f12;
+  uint8_t _pad5[4];
+  uint16_t f18;
+  uint8_t _pad7[4];
+  uint16_t f24;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj115, f24) == 24,
+              "Obj115: the layout moved");
+
+
+// Obj116 -- recovered from 5 dereferences over 4 offsets, under 2
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj116 {
+  int32_t f0;
+  int32_t f4;
+  int32_t f8;
+  int32_t f12;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj116, f12) == 12,
+              "Obj116: the layout moved");
+
+
+// Obj117 -- recovered from 5 dereferences over 4 offsets, under 2
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj117 {
+  int16_t f0;
+  uint8_t _pad1[34];
+  int16_t f36;
+  uint8_t _pad3[16];
+  int16_t f54;
+  uint8_t _pad5[16];
+  int16_t f72;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj117, f72) == 72,
+              "Obj117: the layout moved");
+
+
+// Obj118 -- recovered from 5 dereferences over 5 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj118 {
+  uint8_t _pad0[2];
+  uint8_t f2;
+  uint8_t f3;
+  uint8_t _pad3[7];
+  uint8_t f11;
+  uint8_t _pad5[7];
+  uint8_t f19;
+  uint8_t _pad7[7];
+  uint8_t f27;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj118, f27) == 27,
+              "Obj118: the layout moved");
+
+
+// Obj119 -- recovered from 5 dereferences over 5 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj119 {
+  uint8_t _pad0[2];
+  uint8_t f2;
+  uint8_t f3;
+  uint8_t _pad3[7];
+  uint8_t f11;
+  uint8_t _pad5[7];
+  uint8_t f19;
+  uint8_t _pad7[7];
+  uint8_t f27;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj119, f27) == 27,
+              "Obj119: the layout moved");
+
+
+// Obj120 -- recovered from 5 dereferences over 5 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj120 {
+  uint8_t _pad0[2];
+  uint8_t f2;
+  uint8_t _pad2[7];
+  uint8_t f10;
+  uint8_t _pad4[7];
+  uint8_t f18;
+  uint8_t _pad6[7];
+  uint8_t f26;
+  uint8_t _pad8[7];
+  uint8_t f34;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj120, f34) == 34,
+              "Obj120: the layout moved");
+
+
+// Obj121 -- recovered from 5 dereferences over 5 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj121 {
+  uint8_t _pad0[16];
+  uint16_t f16;
+  uint8_t _pad2[6];
+  uint16_t f24;
+  uint8_t _pad4[6];
+  uint16_t f32;
+  uint8_t _pad6[6];
+  uint16_t f40;
+  uint8_t _pad8[14];
+  uint16_t f56;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj121, f56) == 56,
+              "Obj121: the layout moved");
+
+
+// Obj122 -- recovered from 5 dereferences over 5 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj122 {
+  uint8_t _pad0[2];
+  uint8_t f2;
+  uint8_t _pad2[7];
+  uint8_t f10;
+  uint8_t _pad4[7];
+  uint8_t f18;
+  uint8_t _pad6[7];
+  uint8_t f26;
+  uint8_t _pad8[7];
+  uint8_t f34;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj122, f34) == 34,
+              "Obj122: the layout moved");
+
+
+// Obj123 -- recovered from 5 dereferences over 5 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj123 {
+  uint8_t _pad0[16];
+  uint16_t f16;
+  uint8_t _pad2[6];
+  uint16_t f24;
+  uint8_t _pad4[6];
+  uint16_t f32;
+  uint8_t _pad6[6];
+  uint16_t f40;
+  uint8_t _pad8[14];
+  uint16_t f56;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj123, f56) == 56,
+              "Obj123: the layout moved");
+
+
+// Obj124 -- recovered from 5 dereferences over 1 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj124 {
+  const char f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj124, f0) == 0,
+              "Obj124: the layout moved");
+
+
+// Obj125 -- recovered from 5 dereferences over 1 offsets, under 2
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj125 {
+  const char f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj125, f0) == 0,
+              "Obj125: the layout moved");
+
+
+// Obj126 -- recovered from 5 dereferences over 1 offsets, under 2
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj126 {
+  const char f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj126, f0) == 0,
+              "Obj126: the layout moved");
+
+
+// Obj127 -- recovered from 5 dereferences over 1 offsets, under 2
+// names.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj127 {
+  const char f0;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj127, f0) == 0,
+              "Obj127: the layout moved");
+
+
+// Obj128 -- recovered from 5 dereferences over 5 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj128 {
+  uint8_t _pad0[36];
+  uint32_t f36;
+  uint32_t f40;
+  uint32_t f44;
+  uint32_t f48;
+  uint16_t f52;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj128, f52) == 52,
+              "Obj128: the layout moved");
+
+
+// Obj129 -- recovered from 5 dereferences over 5 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj129 {
+  uint8_t _pad0[72];
+  uint32_t f72;
+  uint32_t f76;
+  uint32_t f80;
+  uint32_t f84;
+  uint16_t f88;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj129, f88) == 88,
+              "Obj129: the layout moved");
+
+
+// Obj130 -- recovered from 5 dereferences over 5 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj130 {
+  uint8_t _pad0[108];
+  uint32_t f108;
+  uint32_t f112;
+  uint32_t f116;
+  uint32_t f120;
+  uint16_t f124;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj130, f124) == 124,
+              "Obj130: the layout moved");
+
+
+// Obj131 -- recovered from 5 dereferences over 5 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj131 {
+  uint8_t _pad0[36];
+  uint32_t f36;
+  uint32_t f40;
+  uint32_t f44;
+  uint32_t f48;
+  uint16_t f52;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj131, f52) == 52,
+              "Obj131: the layout moved");
+
+
+// Obj132 -- recovered from 5 dereferences over 5 offsets, under 1
+// name.  The layout is the one the code already assumed: at 32 bits a
+// pointer is four bytes, so naming these fields moves nothing, and the
+// static_assert is what says so.  Offsets the code only reaches with a
+// computed index are padding here -- their bounds are not visible.
+struct Obj132 {
+  uint8_t _pad0[72];
+  uint32_t f72;
+  uint32_t f76;
+  uint32_t f80;
+  uint32_t f84;
+  uint16_t f88;
+};
+static_assert(sizeof(void *) != 4
+              || __builtin_offsetof(Obj132, f88) == 88,
+              "Obj132: the layout moved");
+
+
 struct RangeCoder {
   static const uint32_t kTop    = 0x00800000;   // renormalise at or below this
   static const uint32_t kPend   = 0x7F800000;   // low here still has a live carry
@@ -7288,8 +8008,10 @@ int32_t __alt_p2_encode_symbol(uint16_t *_this, char *a2, int32_t a3)
 {
   ;
   int16_t v18;
-  int32_t v3, n32, result;
-  uint16_t *v5, *v25;
+  Obj113 *result;
+  int32_t v3, n32;
+  Obj113 *v25;
+  uint16_t *v5;
   uint32_t __alt_p2_encode_symbol_n0x2000, __alt_p2_encode_symbol_n0x2000_1,
            v21, v22, v23;
   v3 = *(_this + 2) + *(_this + 1);
@@ -7300,24 +8022,24 @@ int32_t __alt_p2_encode_symbol(uint16_t *_this, char *a2, int32_t a3)
     {
       v3 = *(_this + 1);
       v5 = _this + 2;
-      v25 = _this + 2;
+      v25 = (Obj113 *)(_this + 2);
     }
     else
     {
       v5 = _this + 3;
-      v25 = _this + 3;
+      v25 = (Obj113 *)(_this + 3);
     }
   }
   else
   {
     v5 = _this + 1;
     v3 = 0;
-    v25 = _this + 1;
+    v25 = (Obj113 *)(_this + 1);
   }
   __alt_p2_encode_symbol_n0x2000_1 = v3 + *v5;
   rc.encode(v3, __alt_p2_encode_symbol_n0x2000_1, __alt_p2_encode_symbol_n0x2000);
-  v18 = *v25;
-  if ( *v25 > 0x4000u )
+  v18 = v25->f0;
+  if ( v25->f0 > 0x4000u )
   {
     v21 = *(_this + 2);
     v22 = *(_this + 3);
@@ -7333,24 +8055,24 @@ int32_t __alt_p2_encode_symbol(uint16_t *_this, char *a2, int32_t a3)
         LOWORD(v23) = 32;
       LOWORD(n32) = n32 - v23;
       *_this = n32;
-      v18 = *v25;
+      v18 = v25->f0;
     }
     else
     {
       n32 = (uint32_t)n32 >> 1;
       *_this = n32;
-      v18 = *v25;
+      v18 = v25->f0;
     }
   }
   else
   {
     LOWORD(n32) = *_this;
   }
-  result = (int32_t)v25;
-  *v25 = n32 + v18;
+  result = (Obj113 *)((int32_t)v25);
+  v25->f0 = n32 + v18;
   if ( a3 > 0 )
     return __fwd_alt_p2_encode_symbol_encode_symbol_tree(model_tables + 254 * *(uint32_t *)(a2 + 4 * (a3 & 1)), (a3 - 1) >> 1);
-  return result;
+  return (int32_t)result;
 }
 static inline int32_t __fwd_alt_p2_decode_symbol_decode_symbol_tree(void *a0) { return __decode_symbol_tree((uint16_t *)a0); }
 
@@ -7554,7 +8276,9 @@ int32_t __pixel_context(ModelBlock *_this, Obj24 *p_n15)
   char *v7, *v16;   // was int32_t: these hold addresses
   bool v5;
   int32_t result, v3, v4, v6, v9, v13, v14, n6;
-  uint16_t *v8, *v10, *v11, *v12;
+  Obj114 *v8;
+  Obj115 *v11;
+  uint16_t *v10, *v12;
   n6 = *((int32_t *)_this + 11);
   result = ((uint32_t *)p_n15)[n6];
   if ( exclusion_mask[result] == __byte_445700 )
@@ -7586,22 +8310,22 @@ int32_t __pixel_context(ModelBlock *_this, Obj24 *p_n15)
     return -1;
   v7 = *((int32_t *)_this + 269553);
   v16 = v7;
-  v8 = *(uint16_t **)(v7 + 24 * __n4_4 + 20);
+  v8 = (Obj114 *)(*(uint16_t **)(v7 + 24 * __n4_4 + 20));
   v9 = v6
      + 8
      * (result == *(uint16_t *)((char *)v8 + 27)
-     || result == v8[12]
+     || result == v8->f24
      || result == *(uint16_t *)((char *)v8 + 21)
-     || result == v8[9]
+     || result == v8->f18
      || result == *(uint16_t *)((char *)v8 + 15)
-     || result == v8[6]
+     || result == v8->f12
      || result == *(uint16_t *)((char *)v8 + 9)
-     || result == v8[3]
+     || result == v8->f6
      || result == *(uint16_t *)((char *)v8 + 3)
-     || result == *v8);
+     || result == v8->f0);
   *((int32_t *)_this + 13) = v9;
   v10 = *(uint16_t **)(v7 + 24 * __n4_3 + 20);
-  v11 = *(uint16_t **)(v7 + 24 * result + 20);
+  v11 = (Obj115 *)(*(uint16_t **)(v7 + 24 * result + 20));
   v12 = *(uint16_t **)(v16 + 24 * __n15 + 20);
   v13 = (result == *(uint16_t *)((char *)v12 + 15)
       || result == v12[6]
@@ -7611,15 +8335,15 @@ int32_t __pixel_context(ModelBlock *_this, Obj24 *p_n15)
       || result == *v12)
       + 2
       * (__n4_3 == *(uint16_t *)((char *)v11 + 27)
-      || __n4_3 == v11[12]
+      || __n4_3 == v11->f24
       || __n4_3 == *(uint16_t *)((char *)v11 + 21)
-      || __n4_3 == v11[9]
+      || __n4_3 == v11->f18
       || __n4_3 == *(uint16_t *)((char *)v11 + 15)
-      || __n4_3 == v11[6]
+      || __n4_3 == v11->f12
       || __n4_3 == *(uint16_t *)((char *)v11 + 9)
-      || __n4_3 == v11[3]
+      || __n4_3 == v11->f6
       || __n4_3 == *(uint16_t *)((char *)v11 + 3)
-      || __n4_3 == *v11)
+      || __n4_3 == v11->f0)
       + 4
       * (result == *(uint16_t *)((char *)v10 + 9)
       || result == v10[3]
@@ -7916,7 +8640,7 @@ void **__alt_p1_free(void **Block, char a2)
 // table pointers they select.  It codes nothing -- no `rc.` call anywhere in it
 // -- and all four p1 bodies call it, encoder and decoder alike, which is what
 // says it is context rather than coding.
-int32_t __alt_p1_context(Obj25 *_this, uint32_t *a2, char *a3)
+int32_t __alt_p1_context(Obj25 *_this, uint32_t *a2, Obj91 *a3)
 {
   ;
   Obj22 *v5;
@@ -7965,7 +8689,7 @@ int32_t __alt_p1_context(Obj25 *_this, uint32_t *a2, char *a3)
     {
       v34 = (Obj22 *)(v5);
       v12 = a2[49];
-      v36 = v11 + 2 * (*(uint8_t *)(*(uint32_t *)(a3 + 196) - 1) + *(uint8_t *)(v12 - 1));
+      v36 = v11 + 2 * (*(uint8_t *)(a3->f196 - 1) + *(uint8_t *)(v12 - 1));
       *((uint8_t **)_this + 28) = (uint8_t *)(*v3
                                        - (uint32_t)v4
                                        + *(uint8_t *)(v12 - 2)
@@ -7977,11 +8701,11 @@ int32_t __alt_p1_context(Obj25 *_this, uint32_t *a2, char *a3)
       *((uint8_t **)_this + 32) = (uint8_t *)(*(uint8_t *)((uintptr_t)v34 - 2) - (uint32_t)v4 + v14 - v15);
       *((uint8_t **)_this + 36) = (uint8_t *)(*(uint8_t *)((uintptr_t)v34 - 2)
                                        - (uint32_t)v4
-                                       + *(uint8_t *)(*(uint32_t *)(a3 + 196) - 2)
-                                       - *(uint8_t *)(*(uint32_t *)(a3 + 196) - 4));
-      *((uint8_t **)_this + 40) = (uint8_t *)(*(uint8_t *)(*(uint32_t *)(a3 + 196) - 2) - *(uint32_t *)(a3 + 8));
+                                       + *(uint8_t *)(a3->f196 - 2)
+                                       - *(uint8_t *)(a3->f196 - 4));
+      *((uint8_t **)_this + 40) = (uint8_t *)(*(uint8_t *)(a3->f196 - 2) - a3->f8);
       *((uint8_t **)_this + 20) = (uint8_t *)(*(uint8_t *)(a2[49] - 2) - a2[2]);
-      v37 = (*(uint8_t *)(*(uint32_t *)(a3 + 196) - 1) + (uint32_t)*(uint8_t *)(a2[49] - 1) - 16) >> 31;
+      v37 = (*(uint8_t *)(a3->f196 - 1) + (uint32_t)*(uint8_t *)(a2[49] - 1) - 16) >> 31;
     }
     else
     {
@@ -8773,7 +9497,7 @@ int32_t __alt_p1_model(Obj0 *_this)
 static inline uint32_t __fwd_alt_p1_alloc_alt_init_tables(void *a0, void *a1) { return __alt_init_tables((uint8_t *)a0, (Obj89 *)a1); }
 static inline uint16_t * __fwd_alt_p1_alloc_init_counter_node(void *a0) { return __init_counter_node((uint16_t *)a0); }
 
-int32_t *__alt_p1_alloc(int32_t *_this, int32_t i, int32_t a3, int32_t n4)
+int32_t *__alt_p1_alloc(Obj92 *_this, int32_t i, int32_t a3, int32_t n4)
 {
   ;
   bool v11;
@@ -8781,12 +9505,12 @@ int32_t *__alt_p1_alloc(int32_t *_this, int32_t i, int32_t a3, int32_t n4)
           v28;
   uint32_t n0x99C60, n0x80, n5;
   n0x99C60 = 0;
-  *_this = i;
-  *(_this + 1) = a3;
+  _this->f0 = i;
+  *((int32_t *)_this + 1) = a3;
   do
     __fwd_alt_p1_alloc_init_counter_node((uint16_t *)_this + 8 * n0x99C60++ + 1900);
   while ( n0x99C60 < 0x99C60 );
-  *(_this + 2) = 0;
+  *((int32_t *)_this + 2) = 0;
   v6 = 0;
   v7 = 0;
   v8 = 0;
@@ -8797,13 +9521,13 @@ int32_t *__alt_p1_alloc(int32_t *_this, int32_t i, int32_t a3, int32_t n4)
     v28 = v8;
     *((uint8_t *)_this + 2 * v8 + 216) = v6;
     v10 = (2 * v8 == v9) + v6;
-    *(_this + 2 * v8 + 438) = v27 | v7;
+    *((int32_t *)_this + 2 * v8 + 438) = v27 | v7;
     v11 = 2 * v8 == (uint8_t)__byte_439BC8[v7];
     *((uint8_t *)_this + 2 * v8 + 217) = v10;
     v12 = 2 * v8 + 1;
     v13 = v11 + v7;
     v6 = (v12 == (uint8_t)__byte_439BC0[v10]) + v10;
-    *(_this + 2 * v8 + 439) = v13 | v27;
+    *((int32_t *)_this + 2 * v8 + 439) = v13 | v27;
     v7 = (v12 == (uint8_t)__byte_439BC8[v13]) + v13;
     ++v8;
   }
@@ -8820,69 +9544,69 @@ int32_t *__alt_p1_alloc(int32_t *_this, int32_t i, int32_t a3, int32_t n4)
     v15 = v18 + v17;
   }
   while ( n0x80 < 0x80 );
-  *(_this + 10) = 32;
-  *(_this + 41) = 0;
-  *(_this + 37) = 0;
-  *(_this + 11) = 64;
-  *(_this + 33) = 0;
-  *(_this + 29) = 0;
-  *(_this + 25) = 0;
-  *(_this + 14) = 96;
-  *(_this + 21) = 0;
-  *(_this + 17) = 0;
-  *(_this + 13) = 0;
-  *(_this + 15) = 192;
-  *(_this + 9) = 0;
+  *((int32_t *)_this + 10) = 32;
+  *((int32_t *)_this + 41) = 0;
+  *((int32_t *)_this + 37) = 0;
+  *((int32_t *)_this + 11) = 64;
+  *((int32_t *)_this + 33) = 0;
+  *((int32_t *)_this + 29) = 0;
+  *((int32_t *)_this + 25) = 0;
+  *((int32_t *)_this + 14) = 96;
+  *((int32_t *)_this + 21) = 0;
+  *((int32_t *)_this + 17) = 0;
+  *((int32_t *)_this + 13) = 0;
+  *((int32_t *)_this + 15) = 192;
+  *((int32_t *)_this + 9) = 0;
   n5 = 0;
-  *(_this + 18) = 288;
-  *(_this + 19) = 576;
-  *(_this + 22) = 864;
-  *(_this + 23) = 1728;
-  *(_this + 26) = 2592;
-  *(_this + 27) = 5184;
-  *(_this + 30) = 7776;
-  *(_this + 31) = 15552;
-  *(_this + 34) = 23328;
-  *(_this + 35) = 46656;
-  *(_this + 38) = 69984;
-  *(_this + 39) = 139968;
-  *(_this + 42) = 209952;
-  *(_this + 43) = 419904;
+  *((int32_t *)_this + 18) = 288;
+  *((int32_t *)_this + 19) = 576;
+  *((int32_t *)_this + 22) = 864;
+  *((int32_t *)_this + 23) = 1728;
+  *((int32_t *)_this + 26) = 2592;
+  *((int32_t *)_this + 27) = 5184;
+  *((int32_t *)_this + 30) = 7776;
+  *((int32_t *)_this + 31) = 15552;
+  *((int32_t *)_this + 34) = 23328;
+  *((int32_t *)_this + 35) = 46656;
+  *((int32_t *)_this + 38) = 69984;
+  *((int32_t *)_this + 39) = 139968;
+  *((int32_t *)_this + 42) = 209952;
+  *((int32_t *)_this + 43) = 419904;
   do
-    *(_this + n5++ + 44) = (int32_t)bmf_new(2 * *_this + 20);
+    *((int32_t *)_this + n5++ + 44) = (int32_t)bmf_new(2 * _this->f0 + 20);
   while ( n5 < 5 );
   __fwd_alt_p1_alloc_alt_init_tables((uint8_t *)_this + 984, (char *)_this + 1496);
-  v20 = *_this;
-  if ( *_this > -10 )
+  v20 = _this->f0;
+  if ( _this->f0 > -10 )
   {
     v21 = 0;
     do
     {
-      *(uint8_t *)(*(_this + 48) + 2 * v21) = 72;
-      *(uint8_t *)(*(_this + 47) + 2 * v21) = 72;
-      *(uint8_t *)(*(_this + 46) + 2 * v21) = 72;
-      *(uint8_t *)(*(_this + 45) + 2 * v21) = 72;
-      *(uint8_t *)(*(_this + 44) + 2 * v21) = 72;
-      *(uint8_t *)(*(_this + 48) + 2 * v21 + 1) = 0;
-      *(uint8_t *)(*(_this + 47) + 2 * v21 + 1) = 0;
-      *(uint8_t *)(*(_this + 46) + 2 * v21 + 1) = 0;
-      *(uint8_t *)(*(_this + 45) + 2 * v21 + 1) = 0;
-      *(uint8_t *)(*(_this + 44) + 2 * v21 + 1) = 0;
-      v20 = *_this;
+      *(uint8_t *)(*((int32_t *)_this + 48) + 2 * v21) = 72;
+      *(uint8_t *)(*((int32_t *)_this + 47) + 2 * v21) = 72;
+      *(uint8_t *)(*((int32_t *)_this + 46) + 2 * v21) = 72;
+      *(uint8_t *)(*((int32_t *)_this + 45) + 2 * v21) = 72;
+      *(uint8_t *)(*((int32_t *)_this + 44) + 2 * v21) = 72;
+      *(uint8_t *)(*((int32_t *)_this + 48) + 2 * v21 + 1) = 0;
+      *(uint8_t *)(*((int32_t *)_this + 47) + 2 * v21 + 1) = 0;
+      *(uint8_t *)(*((int32_t *)_this + 46) + 2 * v21 + 1) = 0;
+      *(uint8_t *)(*((int32_t *)_this + 45) + 2 * v21 + 1) = 0;
+      *(uint8_t *)(*((int32_t *)_this + 44) + 2 * v21 + 1) = 0;
+      v20 = _this->f0;
       ++v21;
     }
-    while ( v21 < *_this + 10 );
+    while ( v21 < _this->f0 + 10 );
   }
-  v22 = *(_this + 45);
-  *(_this + 49) = *(_this + 44) + 2 * v20 + 8;
-  v23 = *(_this + 46);
-  *(_this + 50) = v22 + 2 * v20 + 8;
-  v24 = *(_this + 47);
-  *(_this + 51) = v23 + 2 * v20 + 8;
-  v25 = *(_this + 48);
-  *(_this + 52) = v24 + 2 * v20 + 8;
-  *(_this + 53) = v25 + 2 * v20 + 8;
-  return _this;
+  v22 = *((int32_t *)_this + 45);
+  *((int32_t *)_this + 49) = *((int32_t *)_this + 44) + 2 * v20 + 8;
+  v23 = *((int32_t *)_this + 46);
+  *((int32_t *)_this + 50) = v22 + 2 * v20 + 8;
+  v24 = *((int32_t *)_this + 47);
+  *((int32_t *)_this + 51) = v23 + 2 * v20 + 8;
+  v25 = *((int32_t *)_this + 48);
+  *((int32_t *)_this + 52) = v24 + 2 * v20 + 8;
+  *((int32_t *)_this + 53) = v25 + 2 * v20 + 8;
+  return (int32_t *)_this;
 }
 
 BMF_SSE char *__rc_begin_encode()
@@ -9006,7 +9730,7 @@ BMF_SSE char *__rc_begin_encode()
   return __rc_begin_encode_n256;
 }
 static inline int32_t __fwd_alt_p1_d8_encode_body_alt_p1_encode_symbol(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_encode_symbol((uint16_t *)a0, a1, a2, a3); }
-static inline int32_t __fwd_alt_p1_d8_encode_body_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj25 *)a0, (uint32_t *)a1, a2); }
+static inline int32_t __fwd_alt_p1_d8_encode_body_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj25 *)a0, (uint32_t *)a1, (Obj91 *)a2); }
 
 void __alt_p1_d8_encode_body(Obj0 *_this, uint8_t *a2, uint8_t *a3)
 {
@@ -9159,14 +9883,14 @@ void __alt_p1_d8_encode_body(Obj0 *_this, uint8_t *a2, uint8_t *a3)
 }
 static inline void ** __fwd_alt_model_p1_d8_encode_alt_p1_free(void *a0, char a1) { return __alt_p1_free((void **)a0, a1); }
 static inline void __fwd_alt_model_p1_d8_encode_alt_p1_d8_encode_body(int32_t a0, void *a1, void *a2) { __alt_p1_d8_encode_body(a0, (uint8_t *)a1, (uint8_t *)a2); }
-static inline int32_t * __fwd_alt_model_p1_d8_encode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((int32_t *)a0, a1, a2, a3); }
+static inline int32_t * __fwd_alt_model_p1_d8_encode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((Obj92 *)a0, a1, a2, a3); }
 
 void __alt_model_p1_d8_encode(uint8_t *a1, int32_t i, int32_t a3, uint8_t *a4)
 {
   ;
-  int32_t *v4;
+  Obj92 *v4;
   void **v5;
-  v4 = (int32_t *)bmf_new(0x99D4D8u);
+  v4 = (Obj92 *)((int32_t *)bmf_new(0x99D4D8u));
   if ( v4 )
     v5 = (void **)__fwd_alt_model_p1_d8_encode_alt_p1_alloc(v4, i, a3, 0);
   else
@@ -9339,7 +10063,9 @@ int32_t *__alloc_image(int32_t a1, int32_t a2, int32_t n5, int32_t a4, int32_t a
 {
   ;
   char *buf;
-  int32_t n4, v7, v8, v9, v10, Size, *result, *v15;
+  Obj116 *result;
+  Obj116 *v15;
+  int32_t n4, v7, v8, v9, v10, Size;
   uint32_t v5;
   LOWORD(v5) = a1;
   n4 = n5;
@@ -9402,24 +10128,24 @@ LABEL_20:
   {
     Size = 0;
   }
-  result = (int32_t *)bmf_new(v10 + Size + 19);
+  result = (Obj116 *)((int32_t *)bmf_new(v10 + Size + 19));
   if ( !result )
     return nullptr;
-  *result = (a2 << 16) | (uint16_t)a1;
-  result[1] = v9;
-  result[2] = v7;
-  result[3] = v10;
+  result->f0 = (a2 << 16) | (uint16_t)a1;
+  result->f4 = v9;
+  result->f8 = v7;
+  result->f12 = v10;
   if ( Size )
   {
     if ( (*((uint8_t *)result + 10) & 0x80) != 0 )
-      buf = (char *)result + result[3] + 16;
+      buf = (char *)result + result->f12 + 16;
     else
       buf = nullptr;
-    v15 = result;
+    v15 = (Obj116 *)(result);
     memset(buf,0,Size);
-    return v15;
+    return (int32_t *)v15;
   }
-  return result;
+  return (int32_t *)result;
 }
 
 int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
@@ -10634,8 +11360,8 @@ BMF_SSE int32_t __estimate_cost(char *a1, int32_t n2)
 }
 static inline int32_t __fwd_alt_model_p1_d8_decode_alt_p1_decode_symbol(void *a0, int32_t a1, int32_t a2) { return __alt_p1_decode_symbol((uint16_t *)a0, a1, a2); }
 static inline void ** __fwd_alt_model_p1_d8_decode_alt_p1_free(void *a0, char a1) { return __alt_p1_free((void **)a0, a1); }
-static inline int32_t __fwd_alt_model_p1_d8_decode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj25 *)a0, (uint32_t *)a1, a2); }
-static inline int32_t * __fwd_alt_model_p1_d8_decode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((int32_t *)a0, a1, a2, a3); }
+static inline int32_t __fwd_alt_model_p1_d8_decode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj25 *)a0, (uint32_t *)a1, (Obj91 *)a2); }
+static inline int32_t * __fwd_alt_model_p1_d8_decode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((Obj92 *)a0, a1, a2, a3); }
 
 void ** __alt_model_p1_d8_decode(char ArgList, uint8_t *Src, int32_t i, int32_t a4)
 {
@@ -10643,11 +11369,12 @@ void ** __alt_model_p1_d8_decode(char ArgList, uint8_t *Src, int32_t i, int32_t 
   char *v11;   // were int32_t: these hold addresses
   bool v33;
   Obj4 *v5;
-  int32_t *v4, v6, v7, v8, v9, v10, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25,
-          v26, v27, v28, v29, v30, v31, v32, v35, v36, v39, v41;
+  Obj92 *v4;
+  int32_t v6, v7, v8, v9, v10, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26,
+          v27, v28, v29, v30, v31, v32, v35, v36, v39, v41;
   int64_t v37;
   uint8_t *v12, *v13, *Src_1;
-  v4 = (int32_t *)bmf_new(0x99D4D8u);
+  v4 = (Obj92 *)((int32_t *)bmf_new(0x99D4D8u));
   if ( v4 )
     v5 = (Obj4 *)(__fwd_alt_model_p1_d8_decode_alt_p1_alloc(v4, i, a4, 0));
   else
@@ -10777,8 +11504,8 @@ void ** __alt_model_p1_d8_decode(char ArgList, uint8_t *Src, int32_t i, int32_t 
 
 static inline int32_t __fwd_alt_model_p1_decode_alt_p1_decode_symbol(void *a0, int32_t a1, int32_t a2) { return __alt_p1_decode_symbol((uint16_t *)a0, a1, a2); }
 static inline void ** __fwd_alt_model_p1_decode_alt_p1_free(void *a0, char a1) { return __alt_p1_free((void **)a0, a1); }
-static inline int32_t __fwd_alt_model_p1_decode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj25 *)a0, (uint32_t *)a1, a2); }
-static inline int32_t * __fwd_alt_model_p1_decode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((int32_t *)a0, a1, a2, a3); }
+static inline int32_t __fwd_alt_model_p1_decode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj25 *)a0, (uint32_t *)a1, (Obj91 *)a2); }
+static inline int32_t * __fwd_alt_model_p1_decode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((Obj92 *)a0, a1, a2, a3); }
 
 int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
 {
@@ -10848,14 +11575,17 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
   Obj1 *v24;
   char *v29, *v65;
   char v11, v12, v13, v58;
-  int32_t i, v3, i_2, n4, *v6, *v7, v8, v9, v10, v14, v15, v16, ArgList, v18, i_3, n4_1, n4_2,
-          v25, v26, v27, v28, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44,
-          v45, v46, v47, v48, v49, v50, v52, v53, v54, v56, v57, v60, v62, v64, v67, v68, v71,
-          v72, v74, v75, v78, v79, n4_3, n4_4;
+  Obj92 *v6;
+  int32_t i, v3, i_2, n4, *v7, v8, v9, v10, v14, v15, v16, ArgList, v18, i_3, n4_1, n4_2, v25,
+          v26, v27, v28, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45,
+          v46, v47, v48, v49, v50, v52, v53, v54, v56, v57, v60, v62, v64, v67, v68, v71, v72,
+          v74, v75, v78, v79, n4_3, n4_4;
   uint32_t v20, *v51;
   Obj26 *v66;
   Obj27 *v73;
-  uint8_t *v30, *v31, *v55, *v63, *v69, *v70, *v76, *v77;
+  Obj93 *v30;
+  Obj94 *v31;
+  uint8_t *v55, *v63, *v69, *v70, *v76, *v77;
   void **v82;
   i = *p_i;
   v3 = p_i[1];
@@ -10866,7 +11596,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
     n4 = 0;
     do
     {
-      v6 = (int32_t *)bmf_new(0x99D4D8u);
+      v6 = (Obj92 *)((int32_t *)bmf_new(0x99D4D8u));
       if ( v6 )
         v7 = __fwd_alt_model_p1_decode_alt_p1_alloc(v6, i_2, v3, n4);
       else
@@ -10937,43 +11667,43 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           *(uint16_t *)(v24->f196 - 6) = *(uint16_t *)(v24->f200 + 4);
           *(uint16_t *)(v24->f196 - 4) = *(uint16_t *)(v24->f200 + 2);
           *(uint16_t *)(v24->f196 - 2) = **(uint16_t **)&v24->f200;
-          v30 = *(uint8_t **)&v24->f204;
-          v31 = *(uint8_t **)&v24->f212;
+          v30 = (Obj93 *)(*(uint8_t **)&v24->f204);
+          v31 = (Obj94 *)(*(uint8_t **)&v24->f212);
           v24->f20 = 0;
           v24->f24 = 0;
           v24->f28 = 0;
-          v32 = *(v30 - 3);
+          v32 = *((char *)v30 - 3);
           v24->f24 = v32;
-          v33 = *(v30 - 1);
+          v33 = *((char *)v30 - 1);
           v24->f28 = v33;
-          v34 = *(v31 - 3) + v32;
+          v34 = *((char *)v31 - 3) + v32;
           v24->f24 = v34;
-          v35 = *(v31 - 1) + v33;
+          v35 = *((char *)v31 - 1) + v33;
           v24->f28 = v35;
-          v36 = v30[1] + v34;
+          v36 = v30->f1 + v34;
           v24->f24 = v36;
-          v37 = v30[3] + v35;
+          v37 = v30->f3 + v35;
           v24->f28 = v37;
-          v38 = v31[1] + v36;
+          v38 = v31->f1 + v36;
           v24->f24 = v38;
-          v39 = v31[3] + v37;
+          v39 = v31->f3 + v37;
           v24->f28 = v39;
-          v40 = v30[5] + v38;
+          v40 = v30->f5 + v38;
           v24->f24 = v40;
-          v41 = v30[7] + v39;
+          v41 = v30->f7 + v39;
           v24->f28 = v41;
-          v42 = v31[5] + v40;
+          v42 = v31->f5 + v40;
           v24->f24 = v42;
-          v43 = v31[7] + v41;
+          v43 = v31->f7 + v41;
           v24->f28 = v43;
-          v44 = v30[9] + v42;
+          v44 = v30->f9 + v42;
           v24->f24 = v44;
-          v45 = v30[11] + v43;
+          v45 = v30->f11 + v43;
           v24->f28 = v45;
-          v46 = v31[9] + v44;
+          v46 = v31->f9 + v44;
           v47 = v24->f196;
           v24->f24 = v46;
-          v48 = v31[11] + v45;
+          v48 = v31->f11 + v45;
           v24->f28 = v48;
           v49 = *(uint8_t *)(v47 - 7) + v46;
           v24->f24 = v49;
@@ -11426,7 +12156,7 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
   int32_t &v273 = *(int32_t *)((char *)__frame.slot8);
   int16_t *&v274 = *(int16_t **)((char *)__frame.slot8);
   __m128 *&v275 = __frame.v275;
-  int16_t *&v276 = __frame.v276;
+  Obj95 *&v276 = (Obj95 *&)__frame.v276;
   int32_t &v277 = __frame.v277;
   int32_t &v278 = __frame.v278;
   int32_t &v279 = __frame.v279;
@@ -11435,7 +12165,7 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
   Obj30 *&v282 = (Obj30 *&)__frame.v282;
   Obj67 *&v283 = (Obj67 *&)__frame.v283;
   Obj34 *&v284 = (Obj34 *&)__frame.v284;
-  int16_t *&v285 = __frame.v285;
+  Obj96 *&v285 = (Obj96 *&)__frame.v285;
   Obj68 *&v286 = (Obj68 *&)__frame.v286;
   int32_t &n1840_2 = __frame.n1840_2;
   int32_t &n1840_1 = __frame.n1840_1;
@@ -11446,7 +12176,7 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
   __m128 *&v293 = __frame.v293;
   Obj64 *&v294 = (Obj64 *&)__frame.v294;
   int16_t *&v295 = __frame.v295;
-  int16_t *&v296 = __frame.v296;
+  Obj117 *&v296 = (Obj117 *&)__frame.v296;
   uint32_t &v297 = __frame.v297;
   uint32_t &v298 = __frame.v298;
   int32_t &n960_1 = __frame.n960_1;
@@ -11506,11 +12236,18 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
   Obj68 *v91;
   Obj68 *v72;
   Obj68 *v96;
-  int16_t *v7, *v45, *v49, *v52, *v66, *v67, *v78, *v84, *v90, *v99, *v100, *v129, *v143, v150,
-          *v158, *v205, *v245;
+  Obj95 *v245;
+  Obj95 *v49;
+  Obj95 *v52;
+  Obj96 *v100;
+  Obj96 *v78;
+  Obj96 *v84;
+  Obj117 *v129;
+  int16_t *v7, *v45, *v66, *v67, *v90, *v99, *v143, v150, *v158, *v205;
   Obj68 *v54;
-  int32_t v6, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24,
-          v25, v27, v29, v30, v47, v48, v51, v55, v56, v57, v65, v68, v74, v75, v85, v88, *v103,
+  Obj95 *v22;
+  int32_t v6, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v23, v24, v25,
+          v27, v29, v30, v47, v48, v51, v55, v56, v57, v65, v68, v74, v75, v85, v88, *v103,
           *v104, v105, n2, v107, n3536_5, v109, v111, v112, v113, v114, v116, v117, n3536_1,
           v121, v122, v123, v124, v125, v126, v127, v128, v130, n2256, v132, v134, v137, v138,
           v140, v141, v144, n2576, n1840_13, v147, v148, v149, v151, v154, v155, v156, n2896,
@@ -11569,9 +12306,9 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
   v19 = v268[9];
   v20 = v18 + v19 + v17;
   v21 = *(int16_t *)(v246 - 18);
-  v22 = 2 * *(int16_t *)(v246 - 36) + 2 * v21;
+  v22 = (Obj95 *)(2 * *(int16_t *)(v246 - 36) + 2 * v21);
   v23 = *v268 + 2 * v21;
-  v276 = (int16_t *)v22;
+  v276 = (Obj95 *)((int16_t *)v22);
   v277 = v19 + v23;
   v279 = 16 * v20;
   v24 = 13
@@ -11686,25 +12423,25 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
   v28->f278528.m128_f32[2] = (float)(*(int16_t *)((char *)v46 - 16) + v45[1] - *(v45 - 8));
   v47 = *(int16_t *)((char *)v46 - 34);
   v48 = v45[1] - *(v45 - 17);
-  v276 = (int16_t *)v28->f278736.m128_i32[2];
-  v49 = v276;
+  v276 = (Obj95 *)((int16_t *)v28->f278736.m128_i32[2]);
+  v49 = (Obj95 *)(v276);
   v28->f278528.m128_f32[3] = (float)(v47 + v48);
   v50 = (__m128 *)v28->f278736.m128_i32[3];
-  v28->f278544.m128_f32[0] = (float)(*(v45 - 8) + v45[1] - *(v49 - 8));
+  v28->f278544.m128_f32[0] = (float)(*(v45 - 8) + v45[1] - *((int16_t *)v49 - 8));
   v51 = v50->m128_i16[1];
   v275 = v50;
-  v28->f278544.m128_f32[1] = (float)(-3 * (v49[1] - v45[1]) + v51);
+  v28->f278544.m128_f32[1] = (float)(-3 * (v49->f2 - v45[1]) + v51);
   v28->f278544.m128_f32[2] = (float)(*(int16_t *)((char *)v46 - 16) + v45[19] - v45[10]);
   v28->f278544.m128_f32[3] = (float)(*(int16_t *)((char *)v46 - 34) + v45[10] - *(v45 - 8));
   v28->f278560.m128_f32[0] = (float)(2 * *(int16_t *)((char *)v46 - 16) - *(int16_t *)((char *)v46 - 34));
-  v52 = v276;
+  v52 = (Obj95 *)(v276);
   v28->f278560.m128_f32[1] = (float)(*(int16_t *)((char *)v46 - 52) + v45[1] - *(v45 - 26));
-  v28->f278560.m128_f32[2] = (float)(v52[1] + v45[10] - v275[1].m128_i16[2]);
+  v28->f278560.m128_f32[2] = (float)(v52->f2 + v45[10] - v275[1].m128_i16[2]);
   v28->f278560.m128_f32[3] = (float)*(int16_t *)((char *)v46 - 52);
-  v28->f278576.m128_f32[0] = (float)(*(v45 - 17) + v45[1] - *(v52 - 17));
+  v28->f278576.m128_f32[0] = (float)(*(v45 - 17) + v45[1] - *((int16_t *)v52 - 17));
   v28->f278576.m128_f32[1] = (float)(*(int16_t *)((char *)v46 - 34) + *(v45 - 8) - *(v45 - 26));
   v53 = v275;
-  v28->f278576.m128_f32[2] = (float)(v45[10] + ((v45[19] + v45[1]) >> 1) - v52[19]);
+  v28->f278576.m128_f32[2] = (float)(v45[10] + ((v45[19] + v45[1]) >> 1) - v52->f38);
   v28->f278576.m128_f32[3] = (float)v53->m128_i16[1];
   if ( a4 )
   {
@@ -11718,7 +12455,7 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
     v284 = (Obj34 *)((int16_t *)(v55 - 18));
     v58 = v28->f278720.m128_i32[3] == 0;
     v283 = (Obj67 *)((int16_t *)(v56 - 18));
-    v285 = (int16_t *)(v57 - 18);
+    v285 = (Obj96 *)((int16_t *)(v57 - 18));
     if ( !v58 )
     {
       v59 = v293;
@@ -11746,9 +12483,9 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
         v28->f278592.m128_f32[1] = (float)(*(int16_t *)((char *)v46 - 36) + v81->f36 - v81->f0);
         v28->f278592.m128_f32[2] = (float)(v45[9] + *((int16_t *)v82 - 9) - v81->f0);
         v83 = (Obj67 *)(v283);
-        v84 = v285;
+        v84 = (Obj96 *)(v285);
         v28->f278592.m128_f32[3] = (float)(*(int16_t *)((char *)v46 - 18) + v81->f0 - *((int16_t *)v81 - 9));
-        v85 = v83->f36 - v84[27];
+        v85 = v83->f36 - v84->f54;
         v86 = (Obj34 *)(v284);
         v28->f278608.m128_f32[0] = (float)(v45[9] + v85);
         v87 = (Obj30 *)(v282);
@@ -11793,9 +12530,9 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
         v98 = (Obj34 *)(v284);
         v28->f278608.m128_f32[2] = (float)(*(int16_t *)((char *)v46 - 36) + v97->f0 - *((int16_t *)v97 - 18));
         v99 = (int16_t *)v28->f278736.m128_i32[2];
-        v100 = v285;
+        v100 = (Obj96 *)(v285);
         v28->f278608.m128_f32[3] = (float)(*(int16_t *)((char *)v46 - 36) + v98->f0 - *((int16_t *)v98 - 18));
-        v28->f278624.m128_f32[0] = (float)(*v99 + v98->f0 - *v100);
+        v28->f278624.m128_f32[0] = (float)(*v99 + v98->f0 - v100->f0);
         v28->f278624.m128_f32[1] = (float)(*((int16_t *)v98 - 18)
                                        + v98->f0
                                        - *(int16_t *)((char *)v46 - 36)
@@ -11829,32 +12566,32 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
       v75 = *((int16_t *)v73 - 18) + v73->f0 - *(int16_t *)((char *)v258 - 36);
       v76 = (Obj34 *)(v284);
       v77 = (float)(v75 + 2 * v74);
-      v78 = v285;
+      v78 = (Obj96 *)(v285);
       v28->f278608.m128_f32[3] = v77;
-      v28->f278624.m128_f32[0] = (float)(v247[9] + v76->f0 - v78[9]);
+      v28->f278624.m128_f32[0] = (float)(v247[9] + v76->f0 - v78->f18);
       v79 = (float)(*(int16_t *)((char *)v258 - 36) + v76->f0 - *((int16_t *)v76 - 18));
       v80 = (Obj67 *)(v283);
       v28->f278624.m128_f32[1] = v79;
       v28->f278624.m128_f32[2] = (float)(*(int16_t *)((char *)v258 - 18) + v80->f18 - v80->f0);
-      v28->f278624.m128_f32[3] = (float)(v45[9] + v80->f36 - v78[27]);
+      v28->f278624.m128_f32[3] = (float)(v45[9] + v80->f36 - v78->f54);
     }
   }
   else
   {
     v274 = v45;
-    v28->f278592.m128_f32[0] = (float)(v45[27] + *v45 - v52[27]);
+    v28->f278592.m128_f32[0] = (float)(v45[27] + *v45 - v52->f54);
     v239 = *v45;
     v240 = *(v45 - 36);
-    v276 = v52;
+    v276 = (Obj95 *)(v52);
     v28->f278592.m128_f32[1] = (float)(*(int16_t *)((char *)v46 - 72) + v239 - v240);
-    v241 = *v52 + 3 * v45[9] - 4 * v52[9];
+    v241 = v52->f0 + 3 * v45[9] - 4 * v52->f18;
     v242 = v45[18] - *v45;
     v243 = v275;
     v244 = (float)(v241 - (((v242 - (v275[2].m128_i16[2] - v275->m128_i16[0])) >> 1) - v275[1].m128_i16[1]));
-    v245 = v276;
+    v245 = (Obj95 *)(v276);
     v28->f278592.m128_f32[2] = v244;
     v255 = (int16_t *)v28->f278752.m128_i32[0];
-    v28->f278592.m128_f32[3] = (float)(*(v245 - 9) + v274[9] - v243->m128_i16[0]);
+    v28->f278592.m128_f32[3] = (float)(*((int16_t *)v245 - 9) + v274[9] - v243->m128_i16[0]);
     v28->f278608.m128_f32[0] = (float)(v243[1].m128_i16[1] + *v274 - v255[9]);
     v28->f278608.m128_f32[1] = (float)v274[27];
     v28->f278608.m128_f32[2] = (float)(*(int16_t *)((char *)v46 - 54) + *(int16_t *)((char *)v46 - 18) - *(int16_t *)((char *)v46 - 72));
@@ -11863,7 +12600,7 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
     v28->f278624.m128_f32[1] = (float)*v255;
     v28->f278624.m128_f32[2] = (float)(*(int16_t *)((char *)v46 - 90) + *(int16_t *)((char *)v46 - 18) - *(int16_t *)((char *)v46 - 108));
     v28->f278624.m128_f32[3] = (float)*(v274 - 54);
-    v285 = nullptr;
+    v285 = (Obj96 *)(nullptr);
     v283 = (Obj67 *)(nullptr);
     v284 = (Obj34 *)(nullptr);
     v286 = (Obj68 *)(nullptr);
@@ -11873,7 +12610,7 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
   v103 = (int32_t *)v28->f278656.m128_i32[3];
   v275 = (__m128 *)*(v103 - 1);
   v104 = (int32_t *)v28->f278672.m128_i32[0];
-  v276 = (int16_t *)v104[1];
+  v276 = (Obj95 *)((int16_t *)v104[1]);
   v277 = v104[2];
   v278 = *(v103 - 2);
   v279 = *v104;
@@ -11963,14 +12700,14 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
   v118->f278672.m128_i32[1] = v126;
   v127 = ((1 << ((v118->f284704.m128_i8[4 * v126 + 8] + 31) & 31)) + v118->f284704.m128_i16[2 * v126 + 5]) >> (v118->f284704.m128_i8[4 * v126 + 8] & 31);
   v128 = v290;
-  v129 = (int16_t *)v118->f278752.m128_i32[0];
+  v129 = (Obj117 *)((int16_t *)v118->f278752.m128_i32[0]);
   v130 = v292;
   v118->f278896.m128_i32[3] = v127;
   n2256 = v127 + n3536_1;
   v118->f278896.m128_i32[2] = n2256;
   v132 = *(int16_t *)(v130 - 90);
-  v296 = v129;
-  n1840 = v129[36];
+  v296 = (Obj117 *)(v129);
+  n1840 = v129->f72;
   v290 = ((v269 << 9) + v128) >> 13;
   n960_1 = v132 - n2256;
   v133 = ((uint32_t)(24 - v290) >> 20) & 0xFFFFF800;
@@ -11987,7 +12724,7 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
     v270 = v293[2].m128_i16[3];
     v135 = (v248 + *(int16_t *)(v292 - 52) - n2256 - (v270 - v293[5].m128_i16[6])) & 0x800000
          | (v248 + *(int16_t *)(v292 - 88) - n2256) & 0x400000
-         | (v248 + v293->m128_i16[1] + v283->f38 - v285[19] - n2256) & 0x200000
+         | (v248 + v293->m128_i16[1] + v283->f38 - v285->f38 - n2256) & 0x200000
          | (v248 + *(int16_t *)(v292 - 16) + v284->f2 - *((int16_t *)v284 - 8) - n2256) & 0x100000
          | (*(v295 - 8) + v248 + v134 - *((int16_t *)v286 - 8) - n2256) & 0x80000
          | (v248 + v270 + v134 - v281->f38 - n2256) & 0x40000
@@ -12011,13 +12748,13 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
     v273 = v293[2].m128_i16[2];
     v137 = (v293[-6].m128_i16[3] - v293[-3].m128_i16[6] + v267) & 0x1000000
          | (v267 + v273 - v301) & 0x800000
-         | (v296[27] - v295[18] + n2256 - v295[9]) & 0x400000
-         | (*(v296 - 9) - v254 + n2256 - v293[-2].m128_i16[7]) & 0x200000
+         | (v296->f54 - v295[18] + n2256 - v295[9]) & 0x400000
+         | (*((int16_t *)v296 - 9) - v254 + n2256 - v293[-2].m128_i16[7]) & 0x200000
          | (v293->m128_i16[0] - v273 + n2256 - *(int16_t *)(v292 - 36)) & 0x100000
          | -n1840_2 & 0x80000
          | -n1840_1 & 0x40000
-         | (n2256 - v296[18]) & 0x20000
-         | (n2256 - *(v296 - 27)) & 0x10000
+         | (n2256 - v296->f36) & 0x20000
+         | (n2256 - *((int16_t *)v296 - 27)) & 0x10000
          | -n960_1 & 0x8000
          | (((n2256 > 2400) + (n2256 > 1024) + (n2256 > 240)) << 13)
          | (v297 + v133 + (((uint32_t)(11 - v290) >> 20) & 0xFFFFF800))
@@ -12065,7 +12802,7 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
     v153 = v298;
     v154 = (v249 + v293[-1].m128_i16[0] - n2576 - (v295[1] - n1840_2)) & 0x2000000
          | (v249 + v149 - n2576 - (v293->m128_i16[1] - n1840_2)) & 0x1000000
-         | (v262 - n2576 + n1840 - *v285) & 0x800000
+         | (v262 - n2576 + n1840 - v285->f0) & 0x800000
          | (n1840_1 + n1840 - v286->f0) & 0x400000
          | (n1840_1 + v293[-2].m128_i16[7] - *((int16_t *)v281 - 9)) & 0x200000
          | v152;
@@ -12075,7 +12812,7 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
     v235 = v294->f0;
     v289 = (Obj11 *)(v118);
     v153 = v298;
-    v266 = *v296;
+    v266 = v296->f0;
     v272 = v294->f18;
     v154 = (n2576 + 3 * (n1840 - n960_1) - v235) & 0x2000000
          | (n2576 + v266 - (v295[18] + *(v295 - 18))) & 0x1000000
@@ -12083,7 +12820,7 @@ BMF_SSE int32_t __alt_p2_context(Obj11 *a1, const __m128 &a2__ref, const __m128 
          | (v272 - v293[1].m128_i16[1] - v303) & 0x400000
          | (v235 - n960_1 - v303) & 0x200000
          | v301 & 0x100000
-         | (n2576 - v296[27]) & 0x80000
+         | (n2576 - v296->f54) & 0x80000
          | (v272 - n2576) & 0x40000
          | (n2576 - v266) & 0x20000
          | (n2576 - *((int16_t *)v294 - 18)) & 0x10000
@@ -13096,7 +13833,7 @@ int32_t __cost_candidate(uint8_t *a1, uint8_t *n2, int32_t a3, char a4, int32_t 
 
 static inline int32_t __fwd_choose_plane_coding_cost_candidate(void *a0, void *a1, int32_t a2, char a3, int32_t a4, int32_t a5, int32_t a6, int32_t a7) { return __cost_candidate((uint8_t *)a0, (uint8_t *)a1, a2, a3, a4, a5, a6, a7); }
 
-BMF_SSE int32_t __choose_plane_coding(char *a1, int32_t n3, char a3)
+BMF_SSE int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, char a3)
 {
   struct alignas(16) {   // 41456 bytes, the frame Hex-Rays could not name
       int32_t v174;
@@ -13216,9 +13953,9 @@ BMF_SSE int32_t __choose_plane_coding(char *a1, int32_t n3, char a3)
   uint8_t *&v223 = __frame.v223;
   uint32_t &v224 = __frame.v224;
   int32_t &__choose_plane_coding_n191_1 = __frame.__choose_plane_coding_n191_1;
-  uint8_t *&v226 = __frame.v226;
+  Obj97 *&v226 = (Obj97 *&)__frame.v226;
   uint32_t &v227 = __frame.v227;
-  int32_t &v228 = __frame.v228;
+  Obj97 *&v228 = (Obj97 *&)__frame.v228;
   ;
   __m128i v21, v46, v47, v51, v54, v113, v114;
   bool v19, n2_4, v42, v106;
@@ -13237,15 +13974,15 @@ BMF_SSE int32_t __choose_plane_coding(char *a1, int32_t n3, char a3)
            v159, v172;
   uint8_t *v29, *v64, *v97, *v121, *v122, *v123, *v134, *v135, *v136, *v151, *v153, *v164, *v166;
   void *v3;
-  v228 = a1;
+  v228 = (Obj97 *)(a1);
   v3 = alloca(41424);
   n4 = plane_count;
-  v5 = *(uint16_t *)(a1 + 4);
-  v6 = *(uint32_t *)(a1 + 12);
-  v226 = (uint8_t *)a1;
+  v5 = a1->f4;
+  v6 = a1->f12;
+  v226 = (Obj97 *)((uint8_t *)a1);
   __dword_443388 = 1;
   LODWORD(v208) = v5;
-  v227 = a1 + v6 + 16;
+  v227 = (char *)a1 + v6 + 16;
   memset(buf,0,0x8000);
   n192 = 192;
   do
@@ -13334,7 +14071,7 @@ BMF_SSE int32_t __choose_plane_coding(char *a1, int32_t n3, char a3)
         n128_3 = n128_1;
         v61 = v183;
         *(uint32_t *)buf_1 = n128_3 - v202.m128i_i32[1];
-        v202.m128i_i32[0] = (int32_t)&v226[v205.m128i_i32[2]];
+        v202.m128i_i32[0] = (int32_t)&((uint8_t *)v226)[v205.m128i_i32[2]];
         v62 = n128_3 - v202.m128i_i32[1];
         while ( 1 )
         {
@@ -13369,7 +14106,7 @@ BMF_SSE int32_t __choose_plane_coding(char *a1, int32_t n3, char a3)
                 {
                   v202.m128i_i32[2] = n192_3;
                   memset(buf_1,0,2048);
-                  v148 = *(uint16_t *)v226 * (*((uint16_t *)v226 + 1) - 1);
+                  v148 = v226->f0 * (*((uint16_t *)v226 + 1) - 1);
                   v149 = *((uint16_t *)v226 + 2);
                   v205.m128i_i32[3] = n192_2;
                   v203.m128i_i32[0] = n192_1;
@@ -13431,7 +14168,7 @@ LABEL_109:
                   {
                     v202.m128i_i32[3] = n192_4;
                     memset(buf_2,0,2048);
-                    v161 = *(uint16_t *)v226 * (*((uint16_t *)v226 + 1) - 1);
+                    v161 = v226->f0 * (*((uint16_t *)v226 + 1) - 1);
                     v162 = *((uint16_t *)v226 + 2);
                     v205.m128i_i32[3] = n192_2;
                     v203.m128i_i32[0] = n192_1;
@@ -13498,7 +14235,7 @@ LABEL_109:
           {
             *(uint32_t *)buf_1 = v62;
             memset(buf_3,0,2048);
-            v118 = *(uint16_t *)v226 * (*((uint16_t *)v226 + 1) - 1);
+            v118 = v226->f0 * (*((uint16_t *)v226 + 1) - 1);
             v119 = *((uint16_t *)v226 + 2);
             v192 = v59;
             v184 = v57;
@@ -13556,7 +14293,7 @@ LABEL_55:
             {
               v183 = v61;
               memset(buf_4,0,2048);
-              v131 = *(uint16_t *)v226 * (*((uint16_t *)v226 + 1) - 1);
+              v131 = v226->f0 * (*((uint16_t *)v226 + 1) - 1);
               v132 = *((uint16_t *)v226 + 2);
               v192 = v59;
               v184 = v57;
@@ -13613,7 +14350,7 @@ LABEL_55:
         }
       }
 LABEL_19:
-      v29 = &v226[v208 + 16 + n4 + v205.m128i_i32[2]];
+      v29 = &((uint8_t *)v226)[v208 + 16 + n4 + v205.m128i_i32[2]];
       if ( (uint32_t)v29 < v227 )
       {
         LODWORD(v210) = n128_1;
@@ -13737,9 +14474,9 @@ LABEL_19:
         v206 = v21;
         v207 = v21;
         memset(buf,0,0x8000);
-        v223 = &v226[v208];
-        v63 = (int32_t)(v227 - 17 - (uint32_t)&v226[v208]) / 4;
-        v64 = &v226[v208 + 20];
+        v223 = &((uint8_t *)v226)[v208];
+        v63 = (int32_t)(v227 - 17 - (uint32_t)&((uint8_t *)v226)[v208]) / 4;
+        v64 = &((uint8_t *)v226)[v208 + 20];
         if ( v227 <= (uint32_t)v64 )
         {
           v72 = *(double *)&v202.m128i_i64[1];
@@ -13762,15 +14499,15 @@ LABEL_19:
           v222 = *(double *)&v204.m128i_i64[1];
           v213 = *(double *)v207.m128i_i64;
           v211 = *(double *)&v207.m128i_i64[1];
-          LODWORD(v210) = &v226[v208 + 20];
+          LODWORD(v210) = &((uint8_t *)v226)[v208 + 20];
           v67 = 0;
-          v224 = (int32_t)(v227 - 17 - (uint32_t)&v226[v208]) / 4;
+          v224 = (int32_t)(v227 - 17 - (uint32_t)&((uint8_t *)v226)[v208]) / 4;
           do
           {
-            v68 = (double)(v226[4 * v67 + 16] + v223[4 * v67 + 20] - (v226[4 * v67 + 20] + v223[4 * v67 + 16]));
-            v69 = (double)(v226[4 * v67 + 17] + v223[4 * v67 + 21] - (v226[4 * v67 + 21] + v223[4 * v67 + 17]));
-            v70 = (double)(v226[4 * v67 + 18] + v223[4 * v67 + 22] - (v226[4 * v67 + 22] + v223[4 * v67 + 18]));
-            v71 = v226[4 * v67 + 19] + v223[4 * v67 + 23] - (v226[4 * v67 + 23] + v223[4 * v67 + 19]);
+            v68 = (double)(((uint8_t *)v226)[4 * v67 + 16] + v223[4 * v67 + 20] - (((uint8_t *)v226)[4 * v67 + 20] + v223[4 * v67 + 16]));
+            v69 = (double)(((uint8_t *)v226)[4 * v67 + 17] + v223[4 * v67 + 21] - (((uint8_t *)v226)[4 * v67 + 21] + v223[4 * v67 + 17]));
+            v70 = (double)(((uint8_t *)v226)[4 * v67 + 18] + v223[4 * v67 + 22] - (((uint8_t *)v226)[4 * v67 + 22] + v223[4 * v67 + 18]));
+            v71 = ((uint8_t *)v226)[4 * v67 + 19] + v223[4 * v67 + 23] - (((uint8_t *)v226)[4 * v67 + 23] + v223[4 * v67 + 19]);
             v216 = v216 + v68 * v68;
             ++v67;
             v221 = v221 + v68 * v69;
@@ -13845,8 +14582,8 @@ LABEL_19:
           v80 = 0;
           do
           {
-            v81 = v226[4 * v80 + 20];
-            v82 = v226[4 * v80 + 16] + v223[4 * v80 + 20];
+            v81 = ((uint8_t *)v226)[4 * v80 + 20];
+            v82 = ((uint8_t *)v226)[4 * v80 + 16] + v223[4 * v80 + 20];
             v83 = v223[4 * v80 + 16];
             v202.m128i_i32[2] = v80;
             v84 = v81 + v83;
@@ -13854,12 +14591,12 @@ LABEL_19:
             v86 = v82 - v84;
             v87 = v223[4 * v80 + 17];
             v202.m128i_i32[3] = v86;
-            v88 = v226[4 * v80 + 22];
-            v89 = v226[4 * v80 + 17] + v85 - (v226[4 * v80 + 21] + v87);
+            v88 = ((uint8_t *)v226)[4 * v80 + 22];
+            v89 = ((uint8_t *)v226)[4 * v80 + 17] + v85 - (((uint8_t *)v226)[4 * v80 + 21] + v87);
             v90 = v223[4 * v80 + 22];
             v203.m128i_i32[0] = v89;
-            v91 = v226[4 * v80 + 18] + v90 - (v88 + v223[4 * v80 + 18]);
-            LOWORD(v89) = v226[4 * v80 + 19] + v223[4 * v80 + 23] - v223[4 * v80 + 19] - v226[4 * v80 + 23];
+            v91 = ((uint8_t *)v226)[4 * v80 + 18] + v90 - (v88 + v223[4 * v80 + 18]);
+            LOWORD(v89) = ((uint8_t *)v226)[4 * v80 + 19] + v223[4 * v80 + 23] - v223[4 * v80 + 19] - ((uint8_t *)v226)[4 * v80 + 23];
             v92 = v203.m128i_i16[0];
             LOWORD(v89) = v89 - 512;
             v93 = v203.m128i_i32[0] * v202.m128i_i32[0] + v202.m128i_i32[3] * __choose_plane_coding_n191_1;
@@ -13997,7 +14734,7 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
   int32_t &Size = *(int32_t *)((char *)__frame.slot4);
   uint32_t &Sizea = *(uint32_t *)((char *)__frame.slot4);
   char &Sizeb = *(char *)((char *)__frame.slot4);
-  int32_t *&v52 = __frame.v52;
+  Obj98 *&v52 = (Obj98 *&)__frame.v52;
   int32_t &Src_2 = *(int32_t *)((char *)__frame.slot12);
   int32_t &v54 = *(int32_t *)((char *)__frame.slot12);
   void *&Buffer_3 = __frame.Buffer_3;
@@ -14018,7 +14755,8 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
   FILE *Stream_v;
   __m128i v17, v18, v19, v20, v21;
   char v25, *Src_4, v28, v30, *Src_3, *Src_6, *Buffer_4, *Src_5;
-  int32_t *v3, Size_1, i, j_3, Sizea_1, v22, n2_1, v26, v31, Offset_2, v35, v38, v40, v41;
+  Obj98 *v3;
+  int32_t Size_1, i, j_3, Sizea_1, v22, n2_1, v26, v31, Offset_2, v35, v38, v40, v41;
   uint32_t Size_2, j_1, j_2, n2_2, v29, ElementCount, ElementCount_1, v44;
   Stream_v = fopen(FileName, "rb");
   if ( !Stream_v
@@ -14030,7 +14768,7 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
   {
     return nullptr;
   }
-  v3 = __alloc_image(Buffer_1[1], v59, n5, n5 <= 8u, 1);
+  v3 = (Obj98 *)(__alloc_image(Buffer_1[1], v59, n5, n5 <= 8u, 1));
   Size_2 = (*((uint16_t *)v3 + 2) + 3) & 0xFFFFFFFC;
   if ( n5 <= 8u )
   {
@@ -14045,17 +14783,17 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
       {
         fread(Buffer_2, 4u, 1u, Stream_v);
         if ( (*((uint8_t *)v3 + 10) & 0x80) != 0 )
-          v7 = (int32_t)v3 + v3[3] + 16;
+          v7 = (int32_t)v3 + v3->f12 + 16;
         else
           v7 = 0;
         *(uint8_t *)(v7 + 3 * i + 2) = Buffer_2[2];
         if ( (*((uint8_t *)v3 + 10) & 0x80) != 0 )
-          v8 = (int32_t)v3 + v3[3] + 16;
+          v8 = (int32_t)v3 + v3->f12 + 16;
         else
           v8 = 0;
         *(uint8_t *)(v8 + 3 * i + 1) = Buffer_2[1];
         if ( (*((uint8_t *)v3 + 10) & 0x80) != 0 )
-          v9 = (int32_t)v3 + v3[3] + 16;
+          v9 = (int32_t)v3 + v3->f12 + 16;
         else
           v9 = 0;
         *(uint8_t *)(v9 + 3 * i) = Buffer_2[0];
@@ -14064,15 +14802,15 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
     }
   }
   Buffer_3 = bmf_new(Size_2);
-  Src = (char *)v3 + v3[3] - *((uint16_t *)v3 + 2) + 16;
+  Src = (char *)v3 + v3->f12 - *((uint16_t *)v3 + 2) + 16;
   fseek(Stream_v, Offset, 0);
   if ( n2 )
   {
     if ( n2 == 1 )
     {
-      memset((char *)v3 + 16,0,v3[3]);
+      memset((char *)v3 + 16,0,v3->f12);
       Src_1 = (int32_t)Src;
-      v52 = v3;
+      v52 = (Obj98 *)(v3);
       v46 = *((uint16_t *)v3 + 1) - 1;
       while ( 1 )
       {
@@ -14144,8 +14882,8 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
     }
     if ( n2 != 2 )
       return nullptr;
-    memset((char *)v3 + 16,0,v3[3]);
-    v52 = v3;
+    memset((char *)v3 + 16,0,v3->f12);
+    v52 = (Obj98 *)(v3);
     v22 = 1;
     v47 = *((uint16_t *)v3 + 1) - 1;
     while ( 1 )
@@ -14275,7 +15013,7 @@ LABEL_44:
   {
     Offset_1 = Offset_2;
     v35 = v59 - 1;
-    v52 = v3;
+    v52 = (Obj98 *)(v3);
     Src_6 = Src;
     while ( 1 )
     {
@@ -14292,14 +15030,14 @@ LABEL_44:
       if ( --v35 < 0 )
       {
 LABEL_61:
-        v3 = v52;
+        v3 = (Obj98 *)(v52);
         break;
       }
     }
   }
   fclose(Stream_v);
   free(Buffer_3);
-  return v3;
+  return (int32_t *)v3;
 }
 
 int32_t __decode_symbol_list(uint32_t *a1)
@@ -14646,14 +15384,18 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   Obj18 *v4;
   Obj18 *v90;
   Obj65 *v97;
-  uint16_t *n15_9, *v16, *n4_10, *v58, *__decode_pixel_n4_3, *v95, *v106, *v110, *v121, v154,
-           v162, v174;
+  Obj121 *v106;
+  uint16_t *n15_9, *v16, *n4_10, *v58, *__decode_pixel_n4_3, *v95, *v110, *v121, v154, v162,
+           v174;
   ModelBlock *this_3;
   ModelBlock *this_2;
   uint32_t bin_tot, n4_16, n4_15, **v134, v136, v137, v138, v139, v140, v172, v173, v175, v176,
            v177;
   Obj18 *v142;
-  uint8_t *v38, *v39, *n15_16, *v76;
+  Obj118 *v39;
+  Obj119 *v38;
+  Obj120 *v76;
+  uint8_t *n15_16;
   n15_9 = (uint16_t *)*((uint32_t *)_this + 20);
   n4_8 = *n15_9;
   v4 = (Obj18 *)((uint16_t *)*((uint32_t *)_this + 19));
@@ -14799,12 +15541,12 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   }
   if ( (*(uint8_t *)(this_3->f76 - 5) & *(uint8_t *)(this_3->f76 - 6)) != 0 )
   {
-    v38 = (uint8_t *)this_3->f80;
-    v39 = (uint8_t *)this_3->f84;
-    if ( ((uint8_t)(v39[19] & v39[11] & v39[3] & v38[27] & v38[19] & v38[11] & v38[3] & v38[2] & *(v38 - 5))
-        & v39[27]) != 0 )
+    v38 = (Obj119 *)((uint8_t *)this_3->f80);
+    v39 = (Obj118 *)((uint8_t *)this_3->f84);
+    if ( ((uint8_t)(v39->f19 & v39->f11 & v39->f3 & v38->f27 & v38->f19 & v38->f11 & v38->f3 & v38->f2 & *((char *)v38 - 5))
+        & v39->f27) != 0 )
     {
-      v40 = v39[2];
+      v40 = v39->f2;
       n15_11 = 1;
       if ( this_3->f0 - a2 <= 1 )
       {
@@ -14817,9 +15559,9 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
         while ( 1 )
         {
           n8 = 8 * n15_11;
-          if ( (v38[8 * n15_11 + 19] & v38[8 * n15_11 + 18]) == 0 )
+          if ( (((uint8_t *)v38)[8 * n15_11 + 19] & ((uint8_t *)v38)[8 * n15_11 + 18]) == 0 )
             break;
-          v40 = (uint8_t)(v39[n8 + 2] & v40);
+          v40 = (uint8_t)(((uint8_t *)v39)[n8 + 2] & v40);
           if ( ++n15_11 >= n4_1 )
           {
             this_3 = (ModelBlock *)(this_1);
@@ -14834,7 +15576,7 @@ LABEL_42:
       v44 = __fwd_decode_pixel_decode_context_bit(
               (uint16_t *)&((uint32_t *)this_3)[12 * n15_12
                                         + 269089
-                                        + 6 * (uint8_t)(v39[n8 + 27] & v39[n8 + 19])
+                                        + 6 * (uint8_t)(((uint8_t *)v39)[n8 + 27] & ((uint8_t *)v39)[n8 + 19])
                                         + 3 * v40]
             + 3 * *(uint8_t *)(this_3->f1078688 + n15_8)
             + 1,
@@ -14965,16 +15707,16 @@ LABEL_57:
         n15_8 = (int32_t)n15_16;
         v74 = v71 + v70;
         v75 = n15_16[34];
-        v76 = (uint8_t *)this_3->f84;
+        v76 = (Obj120 *)((uint8_t *)this_3->f84);
         *((uint8_t *)this_3 + 1078692) = v73 + v72 + v74 + v75 - 5;
-        *((uint8_t *)this_3 + 1078693) = v76[26]
-                                     + v76[18]
-                                     + v76[10]
-                                     + v76[2]
-                                     + *(v76 - 6)
-                                     + *(v76 - 14)
-                                     + *(v76 - 22)
-                                     + v76[34]
+        *((uint8_t *)this_3 + 1078693) = v76->f26
+                                     + v76->f18
+                                     + v76->f10
+                                     + v76->f2
+                                     + *((char *)v76 - 6)
+                                     + *((char *)v76 - 14)
+                                     + *((char *)v76 - 22)
+                                     + v76->f34
                                      - 8;
         n15_17 = n15_8;
         *((uint8_t *)this_3 + 1078694) = *(uint8_t *)(v61 - 29) + *(uint8_t *)(v61 - 21) - 2;
@@ -15267,9 +16009,9 @@ LABEL_86:
   v104 = v97->f12;
   v105 = v97->f14;
   this_1 = (ModelBlock *)((uint32_t *)this_4);
-  v106 = (uint16_t *)this_3->f80;
+  v106 = (Obj121 *)((uint16_t *)this_3->f80);
   v186 = v102;
-  v107 = v106[8];
+  v107 = v106->f16;
   v187 = v103;
   v108 = this_3->f76;
   v188 = v104;
@@ -15281,19 +16023,19 @@ LABEL_86:
   v191 = v107;
   v112 = *v110;
   v192 = v111;
-  v113 = *(v106 - 8);
+  v113 = *((uint16_t *)v106 - 8);
   v193 = v112;
   v114 = *(v110 - 4);
   v194 = v113;
   v115 = *(uint16_t *)(v108 - 24);
   v195 = v114;
-  v116 = v106[12];
+  v116 = v106->f24;
   v196 = v115;
-  v117 = v106[16];
+  v117 = v106->f32;
   v197 = v116;
   v118 = *(uint16_t *)(v108 - 32);
   v198 = v117;
-  v119 = *(v106 - 12);
+  v119 = *((uint16_t *)v106 - 12);
   v199 = v118;
   v120 = v110[8];
   v200 = v119;
@@ -15305,8 +16047,8 @@ LABEL_86:
   v123 = *(uint16_t *)(v108 - 56);
   v204 = v122;
   v205 = v121[4];
-  v124 = v106[20];
-  v125 = v106[28];
+  v124 = v106->f40;
+  v125 = v106->f56;
   v206 = v124;
   v207 = *(uint16_t *)this_3->f92;
   v208 = v123;
@@ -15430,7 +16172,8 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   int32_t &v207 = __frame.v207;
   int32_t &n15_14 = __frame.n15_14;
   ;
-  char *v20, *v22, *n2_9, *v52, *v59, *v63, *v74, *n15_36, *n15_38, *n15_40;   // were int32_t: these hold addresses
+  Obj99 *v63;
+  char *v20, *v22, *n2_9, *v52, *v59, *v74, *n15_36, *n15_38, *n15_40;
   bool v11;
   char v24, *v36, v64, v65, v66, v67, v68, v93, *v156;
   int16_t v14, n15_10, v147, v158, n15_21, v170;
@@ -15448,11 +16191,13 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
           p_n15_6, *v143, v144, n2_16, n2_17, n15_37, v149, v150, v151, v152, v154, v155, v157,
           n15_18, v161, n2_2, p_n15_10, p_n15_8, p_n15_9, n15_19;
   Obj66 *v159;
+  Obj123 *v111;
   uint16_t *n2_7, *n2_8, *v37, *v51, *n2_11, *n2_12, *n2_13, *n2_14, *v97, *v98, *n2_6, *v108,
-           *v111, *v113, *v124, v153, *n15_39;
+           *v113, *v124, v153, *n15_39;
   uint32_t bin_tot, v55, v57, **v136, v137, p_n15_12, v139, v140, v141, v168, v169, v171, v172,
           v173;
-  uint8_t *p_n15_3, *v41, *v69;
+  Obj122 *v69;
+  uint8_t *p_n15_3, *v41;
   n2_7 = (uint16_t *)*((int32_t *)_this + 20);
   n4 = *n2_7;
   n2_8 = (uint16_t *)*((int32_t *)_this + 19);
@@ -15732,25 +16477,25 @@ LABEL_42:
           n2_4 = n2_12;
         }
       }
-      v63 = *(int32_t *)&this_3->f80;
-      v64 = *(uint8_t *)(v63 - 14);
-      v65 = *(uint8_t *)(v63 + 18);
-      v66 = *(uint8_t *)(v63 + 34);
+      v63 = (Obj99 *)(*(int32_t *)&this_3->f80);
+      v64 = *(uint8_t *)((char *)v63 - 14);
+      v65 = v63->f18;
+      v66 = v63->f34;
       n15_20 = n15_32;
-      v67 = *(uint8_t *)(v63 - 22);
+      v67 = *(uint8_t *)((char *)v63 - 22);
       n15_14 = n15_12;
-      v68 = *(uint8_t *)(v63 + 26) + v65 + v64 + v67 + v66 - 5;
-      v69 = (uint8_t *)*(int32_t *)&this_3->f84;
+      v68 = v63->f26 + v65 + v64 + v67 + v66 - 5;
+      v69 = (Obj122 *)((uint8_t *)*(int32_t *)&this_3->f84);
       *((uint8_t *)this_3 + 1078692) = v68;
       n2_13 = n2_4;
-      *((uint8_t *)this_3 + 1078693) = v69[26]
-                                   + v69[18]
-                                   + v69[10]
-                                   + v69[2]
-                                   + *(v69 - 6)
-                                   + *(v69 - 14)
-                                   + *(v69 - 22)
-                                   + v69[34]
+      *((uint8_t *)this_3 + 1078693) = v69->f26
+                                   + v69->f18
+                                   + v69->f10
+                                   + v69->f2
+                                   + *((char *)v69 - 6)
+                                   + *((char *)v69 - 14)
+                                   + *((char *)v69 - 22)
+                                   + v69->f34
                                    - 8;
       *((uint8_t *)this_3 + 1078694) = *((uint8_t *)n2_13 - 29) + *((uint8_t *)n2_13 - 21) - 2;
       n15_11 = n15_3;
@@ -15759,7 +16504,7 @@ LABEL_42:
                                    + *((uint8_t *)n2_13 - 54)
                                    + *((uint8_t *)n2_13 - 30)
                                    - 4;
-      *((uint8_t *)n2_13 - 2) = n15_11 == *(uint16_t *)(v63 + 8);
+      *((uint8_t *)n2_13 - 2) = n15_11 == v63->f8;
       n15_32 = n15_20;
       *(uint8_t *)(*(int32_t *)&this_3->f76 - 1) = n15_11 == *(uint16_t *)(*(int32_t *)&this_3->f80 + 16);
       n15_12 = n15_14;
@@ -16066,9 +16811,9 @@ LABEL_42:
   n15_4 = n15_25;
   n15_27 = *(uint16_t *)(v109 - 16);
   this_1 = (ModelBlock *)(this_4);
-  v111 = (uint16_t *)*(int32_t *)&this_3->f80;
+  v111 = (Obj123 *)((uint16_t *)*(int32_t *)&this_3->f80);
   n15_3 = n15_26;
-  v112 = v111[8];
+  v112 = v111->f16;
   v185 = v108;
   n15_7 = n15_27;
   v113 = (uint16_t *)*(int32_t *)&this_3->f84;
@@ -16076,19 +16821,19 @@ LABEL_42:
   v187 = v112;
   v115 = *v113;
   v188 = v114;
-  v116 = *(v111 - 8);
+  v116 = *((uint16_t *)v111 - 8);
   v189 = v115;
   v117 = *(v113 - 4);
   v190 = v116;
   v118 = *(uint16_t *)(v109 - 24);
   v191 = v117;
-  v119 = v111[12];
+  v119 = v111->f24;
   v192 = v118;
-  v120 = v111[16];
+  v120 = v111->f32;
   v193 = v119;
   v121 = *(uint16_t *)(v109 - 32);
   v194 = v120;
-  v122 = *(v111 - 12);
+  v122 = *((uint16_t *)v111 - 12);
   v195 = v121;
   v123 = v113[8];
   v196 = v122;
@@ -16100,8 +16845,8 @@ LABEL_42:
   v126 = *(uint16_t *)(v109 - 56);
   v200 = v125;
   v201 = v124[4];
-  v127 = v111[20];
-  v128 = v111[28];
+  v127 = v111->f40;
+  v128 = v111->f56;
   v202 = v127;
   v203 = *(uint16_t *)*(int32_t *)&this_3->f92;
   v204 = v126;
@@ -16982,8 +17727,8 @@ LABEL_76:
 }
 static inline int32_t __fwd_alt_model_p1_encode_alt_p1_encode_symbol(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_encode_symbol((uint16_t *)a0, a1, a2, a3); }
 static inline void ** __fwd_alt_model_p1_encode_alt_p1_free(void *a0, char a1) { return __alt_p1_free((void **)a0, a1); }
-static inline int32_t __fwd_alt_model_p1_encode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj25 *)a0, (uint32_t *)a1, a2); }
-static inline int32_t * __fwd_alt_model_p1_encode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((int32_t *)a0, a1, a2, a3); }
+static inline int32_t __fwd_alt_model_p1_encode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj25 *)a0, (uint32_t *)a1, (Obj91 *)a2); }
+static inline int32_t * __fwd_alt_model_p1_encode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((Obj92 *)a0, a1, a2, a3); }
 
 int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
 {
@@ -17056,16 +17801,19 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
   Obj2 *v23;
   char *v28;
   char v11, v12, v13, v62, v71, v81, v83;
-  int32_t i, v3, i_2, n4, *v6, *v7, v8, v9, v10, v14, v15, v16, v17, i_3, n4_1, n4_2, v24, v25,
-          v26, v27, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45,
-          v46, v47, v48, v49, n5_9, n5_7, n5_2, n5_1, v56, n16, v58, v59, v63, v64, v65, n16_1,
-          n5_3, v69, n5_4, v73, v74, n16_2, v77, n5_5, v84, n16_3, n4_3, n4_4;
+  Obj92 *v6;
+  int32_t i, v3, i_2, n4, *v7, v8, v9, v10, v14, v15, v16, v17, i_3, n4_1, n4_2, v24, v25, v26,
+          v27, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46,
+          v47, v48, v49, n5_9, n5_7, n5_2, n5_1, v56, n16, v58, v59, v63, v64, v65, n16_1, n5_3,
+          v69, n5_4, v73, v74, n16_2, v77, n5_5, v84, n16_3, n4_3, n4_4;
   int64_t v68, v76, v86;
   uint32_t v19;
   Obj25 *v61;
   Obj28 *v70;
   Obj29 *v80;
-  uint8_t *v29, *v30, *v50, v53, v60, v79;
+  Obj100 *v29;
+  Obj101 *v30;
+  uint8_t *v50, v53, v60, v79;
   void **v89;
   i = *p_i;
   v3 = p_i[1];
@@ -17076,7 +17824,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
     n4 = 0;
     do
     {
-      v6 = (int32_t *)bmf_new(0x99D4D8u);
+      v6 = (Obj92 *)((int32_t *)bmf_new(0x99D4D8u));
       if ( v6 )
         v7 = __fwd_alt_model_p1_encode_alt_p1_alloc(v6, i_2, v3, n4);
       else
@@ -17147,43 +17895,43 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
           *(uint16_t *)(v23->f196 - 6) = *(uint16_t *)(v23->f200 + 4);
           *(uint16_t *)(v23->f196 - 4) = *(uint16_t *)(v23->f200 + 2);
           *(uint16_t *)(v23->f196 - 2) = **(uint16_t **)&v23->f200;
-          v29 = *(uint8_t **)&v23->f204;
-          v30 = *(uint8_t **)&v23->f212;
+          v29 = (Obj100 *)(*(uint8_t **)&v23->f204);
+          v30 = (Obj101 *)(*(uint8_t **)&v23->f212);
           v23->f20 = 0;
           v23->f24 = 0;
           v23->f28 = 0;
-          v31 = *(v29 - 3);
+          v31 = *((char *)v29 - 3);
           v23->f24 = v31;
-          v32 = *(v29 - 1);
+          v32 = *((char *)v29 - 1);
           v23->f28 = v32;
-          v33 = *(v30 - 3) + v31;
+          v33 = *((char *)v30 - 3) + v31;
           v23->f24 = v33;
-          v34 = *(v30 - 1) + v32;
+          v34 = *((char *)v30 - 1) + v32;
           v23->f28 = v34;
-          v35 = v29[1] + v33;
+          v35 = v29->f1 + v33;
           v23->f24 = v35;
-          v36 = v29[3] + v34;
+          v36 = v29->f3 + v34;
           v23->f28 = v36;
-          v37 = v30[1] + v35;
+          v37 = v30->f1 + v35;
           v23->f24 = v37;
-          v38 = v30[3] + v36;
+          v38 = v30->f3 + v36;
           v23->f28 = v38;
-          v39 = v29[5] + v37;
+          v39 = v29->f5 + v37;
           v23->f24 = v39;
-          v40 = v29[7] + v38;
+          v40 = v29->f7 + v38;
           v23->f28 = v40;
-          v41 = v30[5] + v39;
+          v41 = v30->f5 + v39;
           v23->f24 = v41;
-          v42 = v30[7] + v40;
+          v42 = v30->f7 + v40;
           v23->f28 = v42;
-          v43 = v29[9] + v41;
+          v43 = v29->f9 + v41;
           v23->f24 = v43;
-          v44 = v29[11] + v42;
+          v44 = v29->f11 + v42;
           v23->f28 = v44;
-          v45 = v30[9] + v43;
+          v45 = v30->f9 + v43;
           v46 = v23->f196;
           v23->f24 = v45;
-          v47 = v30[11] + v44;
+          v47 = v30->f11 + v44;
           v23->f28 = v47;
           v48 = *(uint8_t *)(v46 - 7) + v45;
           v23->f24 = v48;
@@ -17532,34 +18280,34 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
   Obj44 *&v514 = (Obj44 *&)__frame.v514;
   Obj52 *&v515 = (Obj52 *&)__frame.v515;
   Obj41 *&v516 = (Obj41 *&)__frame.v516;
-  const char *&v517 = __frame.v517;
+  Obj127 *&v517 = (Obj127 *&)__frame.v517;
   Obj51 *&v518 = (Obj51 *&)__frame.v518;
-  const char *&v519 = __frame.v519;
-  const char *&v520 = __frame.v520;
+  Obj111 *&v519 = (Obj111 *&)__frame.v519;
+  Obj112 *&v520 = (Obj112 *&)__frame.v520;
   Obj50 *&v521 = (Obj50 *&)__frame.v521;
-  const char *&v522 = __frame.v522;
-  const char *&v523 = __frame.v523;
+  Obj109 *&v522 = (Obj109 *&)__frame.v522;
+  Obj110 *&v523 = (Obj110 *&)__frame.v523;
   Obj49 *&v524 = (Obj49 *&)__frame.v524;
   Obj40 *&v525 = (Obj40 *&)__frame.v525;
-  const char *&v526 = __frame.v526;
+  Obj108 *&v526 = (Obj108 *&)__frame.v526;
   Obj48 *&v527 = (Obj48 *&)__frame.v527;
-  const char *&v528 = __frame.v528;
-  const char *&v529 = __frame.v529;
+  Obj107 *&v528 = (Obj107 *&)__frame.v528;
+  Obj126 *&v529 = (Obj126 *&)__frame.v529;
   Obj47 *&v530 = (Obj47 *&)__frame.v530;
-  const char *&v531 = __frame.v531;
-  const char *&v532 = __frame.v532;
+  Obj106 *&v531 = (Obj106 *&)__frame.v531;
+  Obj125 *&v532 = (Obj125 *&)__frame.v532;
   Obj46 *&v533 = (Obj46 *&)__frame.v533;
-  const char *&v534 = __frame.v534;
-  const char *&v535 = __frame.v535;
+  Obj104 *&v534 = (Obj104 *&)__frame.v534;
+  Obj105 *&v535 = (Obj105 *&)__frame.v535;
   Obj16 *&v536 = (Obj16 *&)__frame.v536;
-  const char *&v537 = __frame.v537;
+  Obj103 *&v537 = (Obj103 *&)__frame.v537;
   Obj39 *&v538 = (Obj39 *&)__frame.v538;
   Obj15 *&v539 = (Obj15 *&)__frame.v539;
-  const char *&v540 = __frame.v540;
+  Obj102 *&v540 = (Obj102 *&)__frame.v540;
   Obj38 *&v541 = (Obj38 *&)__frame.v541;
   Obj23 *&v542 = (Obj23 *&)__frame.v542;
   const char *&v543 = __frame.v543;
-  const char *&v544 = __frame.v544;
+  Obj124 *&v544 = (Obj124 *&)__frame.v544;
   uint32_t &v545 = __frame.v545;
   int32_t &n3 = __frame.n3;
   int32_t &v547 = __frame.v547;
@@ -17568,19 +18316,19 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
   int32_t &v550 = __frame.v550;
   Obj46 *&v551 = (Obj46 *&)__frame.v551;
   Obj47 *&v552 = (Obj47 *&)__frame.v552;
-  const char *&v553 = __frame.v553;
+  Obj125 *&v553 = (Obj125 *&)__frame.v553;
   Obj48 *&v554 = (Obj48 *&)__frame.v554;
-  const char *&v555 = __frame.v555;
+  Obj126 *&v555 = (Obj126 *&)__frame.v555;
   Obj49 *&v556 = (Obj49 *&)__frame.v556;
-  const char *&v557 = __frame.v557;
+  Obj108 *&v557 = (Obj108 *&)__frame.v557;
   Obj40 *&v558 = (Obj40 *&)__frame.v558;
   Obj50 *&v559 = (Obj50 *&)__frame.v559;
-  const char *&v560 = __frame.v560;
+  Obj109 *&v560 = (Obj109 *&)__frame.v560;
   Obj51 *&v561 = (Obj51 *&)__frame.v561;
-  const char *&v562 = __frame.v562;
-  const char *&v563 = __frame.v563;
+  Obj112 *&v562 = (Obj112 *&)__frame.v562;
+  Obj111 *&v563 = (Obj111 *&)__frame.v563;
   Obj52 *&v564 = (Obj52 *&)__frame.v564;
-  const char *&v565 = __frame.v565;
+  Obj127 *&v565 = (Obj127 *&)__frame.v565;
   Obj41 *&v566 = (Obj41 *&)__frame.v566;
   Obj17 *&v567 = (Obj17 *&)__frame.v567;
   Obj44 *&v568 = (Obj44 *&)__frame.v568;
@@ -17613,7 +18361,8 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
   Obj41 *v111;
   Obj42 *v107;
   Obj44 *v112;
-  const char *v91, *v93;
+  Obj107 *v91;
+  Obj111 *v93;
   float v16, v18, v20, v21, v22, v23, v24, v26;
   Obj42 *v98;
   int32_t v6, v9, v75, v77, v79, v80, v81, v84, v85, v86, v88, v89, v95, v96, v100, v101, v102,
@@ -17989,7 +18738,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
         v550 = v84;
         _mm_prefetch(&v90[4 * (v81 ^ 0x4000) + 284712], _MM_HINT_T2);
         v542 = (Obj23 *)((int32_t)&v90[4 * (v81 ^ 0x4000) + 284712]);
-        v544 = &v90[4 * (v81 ^ 0x3FF0) + 284712];
+        v544 = (Obj124 *)(&v90[4 * (v81 ^ 0x3FF0) + 284712]);
         _mm_prefetch(v544, _MM_HINT_T2);
         v543 = &v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x4000) & 0xC))
                   + 284712
@@ -17999,50 +18748,50 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
         v539 = (Obj15 *)((int32_t)&v90[4 * (v81 ^ 0x2000) + 284712]);
         _mm_prefetch(&v90[4 * (v81 ^ 0x5FF0) + 284712], _MM_HINT_T2);
         v541 = (Obj38 *)((int32_t)&v90[4 * (v81 ^ 0x5FF0) + 284712]);
-        v540 = &v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x2000) & 0xC))
+        v540 = (Obj102 *)(&v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x2000) & 0xC))
                   + 284712
-                  + 4 * ((v81 ^ 0x2000) & 0xFFFFFFF3)];
+                  + 4 * ((v81 ^ 0x2000) & 0xFFFFFFF3)]);
         _mm_prefetch(v540, _MM_HINT_T2);
         _mm_prefetch(&v90[4 * (v81 ^ 0x1000) + 284712], _MM_HINT_T2);
         v536 = (Obj16 *)((int32_t)&v90[4 * (v81 ^ 0x1000) + 284712]);
         _mm_prefetch(&v90[4 * (v81 ^ 0x6FF0) + 284712], _MM_HINT_T2);
         v538 = (Obj39 *)((int32_t)&v90[4 * (v81 ^ 0x6FF0) + 284712]);
-        v537 = &v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x1000) & 0xC))
+        v537 = (Obj103 *)(&v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x1000) & 0xC))
                   + 284712
-                  + 4 * ((v81 ^ 0x1000) & 0xFFFFFFF3)];
+                  + 4 * ((v81 ^ 0x1000) & 0xFFFFFFF3)]);
         _mm_prefetch(v537, _MM_HINT_T2);
         v551 = (Obj46 *)(&v90[4 * (v81 ^ 0x800) + 284712]);
         v533 = (Obj46 *)(v551);
-        v535 = &v90[4 * (v81 ^ 0x77F0) + 284712];
-        v534 = &v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x800) & 0xC))
+        v535 = (Obj105 *)(&v90[4 * (v81 ^ 0x77F0) + 284712]);
+        v534 = (Obj104 *)(&v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x800) & 0xC))
                   + 284712
-                  + 4 * ((v81 ^ 0x800) & 0xFFFFFFF3)];
+                  + 4 * ((v81 ^ 0x800) & 0xFFFFFFF3)]);
         v552 = (Obj47 *)(&v90[4 * (v81 ^ 0x400) + 284712]);
         v530 = (Obj47 *)(v552);
         _mm_prefetch(v551, _MM_HINT_T2);
         _mm_prefetch(v535, _MM_HINT_T2);
         _mm_prefetch(v534, _MM_HINT_T2);
-        v553 = &v90[4 * (v81 ^ 0x7BF0) + 284712];
-        v532 = v553;
-        v531 = &v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x400) & 0xC))
+        v553 = (Obj125 *)(&v90[4 * (v81 ^ 0x7BF0) + 284712]);
+        v532 = (Obj125 *)(v553);
+        v531 = (Obj106 *)(&v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x400) & 0xC))
                   + 284712
-                  + 4 * ((v81 ^ 0x400) & 0xFFFFFFF3)];
+                  + 4 * ((v81 ^ 0x400) & 0xFFFFFFF3)]);
         v554 = (Obj48 *)(&v90[4 * (v81 ^ 0x200) + 284712]);
         v527 = (Obj48 *)(v554);
         _mm_prefetch(v552, _MM_HINT_T2);
-        v555 = &v90[4 * (v81 ^ 0x7DF0) + 284712];
-        v529 = v555;
-        v91 = &v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x200) & 0xC))
+        v555 = (Obj126 *)(&v90[4 * (v81 ^ 0x7DF0) + 284712]);
+        v529 = (Obj126 *)(v555);
+        v91 = (Obj107 *)(&v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x200) & 0xC))
                  + 284712
-                 + 4 * ((v81 ^ 0x200) & 0xFFFFFFF3)];
+                 + 4 * ((v81 ^ 0x200) & 0xFFFFFFF3)]);
         _mm_prefetch(v553, _MM_HINT_T2);
         _mm_prefetch(v531, _MM_HINT_T2);
-        v528 = v91;
+        v528 = (Obj107 *)(v91);
         v556 = (Obj49 *)(&v90[4 * (v81 ^ 0x100) + 284712]);
         v524 = (Obj49 *)(v556);
         v92 = *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x100) & 0xC)) + ((v81 ^ 0x100) & 0xFFFFFFF3);
-        v557 = &v90[4 * (v81 ^ 0x7EF0) + 284712];
-        v526 = v557;
+        v557 = (Obj108 *)(&v90[4 * (v81 ^ 0x7EF0) + 284712]);
+        v526 = (Obj108 *)(v557);
         _mm_prefetch(v554, _MM_HINT_T2);
         v558 = (Obj40 *)((int32_t)&v90[4 * v92 + 284712]);
         v525 = (Obj40 *)(v558);
@@ -18050,26 +18799,26 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
         v521 = (Obj50 *)(v559);
         _mm_prefetch(v555, _MM_HINT_T2);
         _mm_prefetch(v91, _MM_HINT_T2);
-        v523 = &v90[4 * (v81 ^ 0x7F70) + 284712];
-        v560 = &v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x80) & 0xC)) + 284712 + 4 * ((v81 ^ 0x80) & 0xFFFFFFF3)];
-        v522 = v560;
+        v523 = (Obj110 *)(&v90[4 * (v81 ^ 0x7F70) + 284712]);
+        v560 = (Obj109 *)(&v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x80) & 0xC)) + 284712 + 4 * ((v81 ^ 0x80) & 0xFFFFFFF3)]);
+        v522 = (Obj109 *)(v560);
         v561 = (Obj51 *)(&v90[4 * (v81 ^ 0x40) + 284712]);
         v518 = (Obj51 *)(v561);
         _mm_prefetch(v556, _MM_HINT_T2);
-        v562 = &v90[4 * (v81 ^ 0x7FB0) + 284712];
-        v520 = v562;
-        v93 = &v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x40) & 0xC)) + 284712 + 4 * ((v81 ^ 0x40) & 0xFFFFFFF3)];
+        v562 = (Obj112 *)(&v90[4 * (v81 ^ 0x7FB0) + 284712]);
+        v520 = (Obj112 *)(v562);
+        v93 = (Obj111 *)(&v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x40) & 0xC)) + 284712 + 4 * ((v81 ^ 0x40) & 0xFFFFFFF3)]);
         v94 = (Obj40 *)((const char *)v558);
         _mm_prefetch(v557, _MM_HINT_T2);
         _mm_prefetch(v94, _MM_HINT_T2);
-        v563 = v93;
-        v519 = v93;
+        v563 = (Obj111 *)(v93);
+        v519 = (Obj111 *)(v93);
         v95 = v81 ^ 0x20;
         v96 = v81 ^ 0x10;
         v564 = (Obj52 *)(&v90[4 * v95 + 284712]);
         v515 = (Obj52 *)(v564);
-        v565 = &v90[4 * (v95 ^ 0x7FF0) + 284712];
-        v517 = v565;
+        v565 = (Obj127 *)(&v90[4 * (v95 ^ 0x7FF0) + 284712]);
+        v517 = (Obj127 *)(v565);
         _mm_prefetch(v559, _MM_HINT_T2);
         _mm_prefetch(v523, _MM_HINT_T2);
         v566 = (Obj41 *)((uint32_t)&v90[4 * *(int32_t *)((char *)__dword_439880 + (v95 & 0xC)) + 284712 + 4 * (v95 & 0xFFFFFFF3)]);
@@ -18133,7 +18882,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
           v549 = -v108;
           *(uint16_t *)&v542->f6 = ((uint32_t)(v108 - v317 + 2) >> 2) + v316;
           v318 = *((int16_t *)v544 + 1);
-          v319 = -v108 - ((v318 + (1 << ((*v544 + 31) & 31))) >> (*v544 & 31));
+          v319 = -v108 - ((v318 + (1 << ((v544->f0 + 31) & 31))) >> (v544->f0 & 31));
           *((uint16_t *)v544 + 1) = v318
                                + ((32 * ((v319 > __dword_4458F0) - (uint32_t)(v319 < __dword_4458F4)) + v319 + 4) >> 3);
           v320 = v539->f2;
@@ -18142,7 +18891,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
           *(uint16_t *)&v539->f2 = v320
                                + ((32 * ((v322 > __dword_4458F0) - (uint32_t)(v322 < __dword_4458F4)) + v322 + 2) >> 2);
           v323 = *((int16_t *)v540 + 1);
-          v324 = v321 - ((v323 + (1 << ((*v540 + 31) & 31))) >> (*v540 & 31));
+          v324 = v321 - ((v323 + (1 << ((v540->f0 + 31) & 31))) >> (v540->f0 & 31));
           *((uint16_t *)v540 + 1) = v323
                                + ((32 * ((v324 > __dword_4458F0) - (uint32_t)(v324 < __dword_4458F4)) + v324 + 4) >> 3);
           v539->f6 += (uint32_t)(v321
@@ -18157,7 +18906,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
           *(uint16_t *)&v536->f2 = v327
                                + ((32 * ((v328 > __dword_4458F0) - (uint32_t)(v328 < __dword_4458F4)) + v328 + 2) >> 2);
           v329 = *((int16_t *)v537 + 1);
-          v330 = v550 - ((v329 + (1 << ((*v537 + 31) & 31))) >> (*v537 & 31));
+          v330 = v550 - ((v329 + (1 << ((v537->f0 + 31) & 31))) >> (v537->f0 & 31));
           *((uint16_t *)v537 + 1) = v329
                                + ((32 * ((v330 > __dword_4458F0) - (uint32_t)(v330 < __dword_4458F4)) + v330 + 4) >> 3);
           v536->f6 += (uint32_t)(v550
@@ -18172,12 +18921,12 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
           *((uint16_t *)v533 + 1) = v333
                                + ((32 * ((v334 > __dword_4458F0) - (uint32_t)(v334 < __dword_4458F4)) + v334 + 2) >> 2);
           v335 = *((int16_t *)v534 + 1);
-          v336 = v550 - ((v335 + (1 << ((*v534 + 31) & 31))) >> (*v534 & 31));
+          v336 = v550 - ((v335 + (1 << ((v534->f0 + 31) & 31))) >> (v534->f0 & 31));
           *((uint16_t *)v534 + 1) = v335
                                + ((32 * ((v336 > __dword_4458F0) - (uint32_t)(v336 < __dword_4458F4)) + v336 + 4) >> 3);
           *((uint16_t *)v533 + 3) += (uint32_t)(v550 - ((*((int16_t *)v533 + 3) + (1 << ((v533->f4 + 31) & 31))) >> (v533->f4 & 31)) + 2) >> 2;
           v337 = *((int16_t *)v535 + 1);
-          v338 = v549 - ((v337 + (1 << ((*v535 + 31) & 31))) >> (*v535 & 31));
+          v338 = v549 - ((v337 + (1 << ((v535->f0 + 31) & 31))) >> (v535->f0 & 31));
           *((uint16_t *)v535 + 1) = v337
                                + ((32 * ((v338 > __dword_4458F0) - (uint32_t)(v338 < __dword_4458F4)) + v338 + 4) >> 3);
           v339 = *((int16_t *)v530 + 1);
@@ -18185,13 +18934,13 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
           *((uint16_t *)v530 + 1) = v339
                                + ((32 * ((v340 > __dword_4458F0) - (uint32_t)(v340 < __dword_4458F4)) + v340 + 2) >> 2);
           v341 = *((int16_t *)v531 + 1);
-          v342 = v550 - ((v341 + (1 << ((*v531 + 31) & 31))) >> (*v531 & 31));
+          v342 = v550 - ((v341 + (1 << ((v531->f0 + 31) & 31))) >> (v531->f0 & 31));
           *((uint16_t *)v531 + 1) = v341
                                + ((32 * ((v342 > __dword_4458F0) - (uint32_t)(v342 < __dword_4458F4)) + v342 + 4) >> 3);
           v343 = v550;
           *((uint16_t *)v530 + 3) += (uint32_t)(v550 - ((*((int16_t *)v530 + 3) + (1 << ((v530->f4 + 31) & 31))) >> (v530->f4 & 31)) + 2) >> 2;
           v344 = *((int16_t *)v532 + 1);
-          v549 -= (v344 + (1 << ((*v532 + 31) & 31))) >> (*v532 & 31);
+          v549 -= (v344 + (1 << ((v532->f0 + 31) & 31))) >> (v532->f0 & 31);
           v550 = v343;
           *((uint16_t *)v532 + 1) = v344
                                + ((32 * ((v549 > __dword_4458F0) - (uint32_t)(v549 < __dword_4458F4)) + v549 + 4) >> 3);
@@ -18200,13 +18949,13 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
           *((uint16_t *)v527 + 1) = v345
                                + ((32 * ((v346 > __dword_4458F0) - (uint32_t)(v346 < __dword_4458F4)) + v346 + 2) >> 2);
           v347 = *((int16_t *)v528 + 1);
-          v348 = v550 - ((v347 + (1 << ((*v528 + 31) & 31))) >> (*v528 & 31));
+          v348 = v550 - ((v347 + (1 << ((v528->f0 + 31) & 31))) >> (v528->f0 & 31));
           *((uint16_t *)v528 + 1) = v347
                                + ((32 * ((v348 > __dword_4458F0) - (uint32_t)(v348 < __dword_4458F4)) + v348 + 4) >> 3);
           v349 = v550;
           *((uint16_t *)v527 + 3) += (uint32_t)(v550 - ((*((int16_t *)v527 + 3) + (1 << ((v527->f4 + 31) & 31))) >> (v527->f4 & 31)) + 2) >> 2;
           v350 = *((int16_t *)v529 + 1);
-          LOBYTE(v345) = *v529;
+          LOBYTE(v345) = v529->f0;
           v548 = -v349;
           v351 = -v349 - ((v350 + (1 << ((v345 + 31) & 31))) >> (v345 & 31));
           *((uint16_t *)v529 + 1) = v350
@@ -18222,7 +18971,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
                                + ((32 * ((v356 > __dword_4458F0) - (uint32_t)(v356 < __dword_4458F4)) + v356 + 4) >> 3);
           *((uint16_t *)v524 + 3) += (uint32_t)(v353 - ((*((int16_t *)v524 + 3) + (1 << ((v524->f4 + 31) & 31))) >> (v524->f4 & 31)) + 2) >> 2;
           v357 = *((int16_t *)v526 + 1);
-          v358 = v548 - ((v357 + (1 << ((*v526 + 31) & 31))) >> (*v526 & 31));
+          v358 = v548 - ((v357 + (1 << ((v526->f0 + 31) & 31))) >> (v526->f0 & 31));
           *((uint16_t *)v526 + 1) = v357
                                + ((32 * ((v358 > __dword_4458F0) - (uint32_t)(v358 < __dword_4458F4)) + v358 + 4) >> 3);
           v359 = *((int16_t *)v521 + 1);
@@ -18230,12 +18979,12 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
           *((uint16_t *)v521 + 1) = v359
                                + ((32 * ((v360 > __dword_4458F0) - (uint32_t)(v360 < __dword_4458F4)) + v360 + 2) >> 2);
           v361 = *((int16_t *)v522 + 1);
-          v362 = v550 - ((v361 + (1 << ((*v522 + 31) & 31))) >> (*v522 & 31));
+          v362 = v550 - ((v361 + (1 << ((v522->f0 + 31) & 31))) >> (v522->f0 & 31));
           *((uint16_t *)v522 + 1) = v361
                                + ((32 * ((v362 > __dword_4458F0) - (uint32_t)(v362 < __dword_4458F4)) + v362 + 4) >> 3);
           *((uint16_t *)v521 + 3) += (uint32_t)(v550 - ((*((int16_t *)v521 + 3) + (1 << ((v521->f4 + 31) & 31))) >> (v521->f4 & 31)) + 2) >> 2;
           v363 = *((int16_t *)v523 + 1);
-          v364 = v548 - ((v363 + (1 << ((*v523 + 31) & 31))) >> (*v523 & 31));
+          v364 = v548 - ((v363 + (1 << ((v523->f0 + 31) & 31))) >> (v523->f0 & 31));
           *((uint16_t *)v523 + 1) = v363
                                + ((32 * ((v364 > __dword_4458F0) - (uint32_t)(v364 < __dword_4458F4)) + v364 + 4) >> 3);
           v365 = *((int16_t *)v518 + 1);
@@ -18243,12 +18992,12 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
           *((uint16_t *)v518 + 1) = v365
                                + ((32 * ((v366 > __dword_4458F0) - (uint32_t)(v366 < __dword_4458F4)) + v366 + 2) >> 2);
           v367 = *((int16_t *)v519 + 1);
-          v368 = v550 - ((v367 + (1 << ((*v519 + 31) & 31))) >> (*v519 & 31));
+          v368 = v550 - ((v367 + (1 << ((v519->f0 + 31) & 31))) >> (v519->f0 & 31));
           *((uint16_t *)v519 + 1) = v367
                                + ((32 * ((v368 > __dword_4458F0) - (uint32_t)(v368 < __dword_4458F4)) + v368 + 4) >> 3);
           *((uint16_t *)v518 + 3) += (uint32_t)(v550 - ((*((int16_t *)v518 + 3) + (1 << ((v518->f4 + 31) & 31))) >> (v518->f4 & 31)) + 2) >> 2;
           v369 = *((int16_t *)v520 + 1);
-          v370 = v548 - ((v369 + (1 << ((*v520 + 31) & 31))) >> (*v520 & 31));
+          v370 = v548 - ((v369 + (1 << ((v520->f0 + 31) & 31))) >> (v520->f0 & 31));
           *((uint16_t *)v520 + 1) = v369
                                + ((32 * ((v370 > __dword_4458F0) - (uint32_t)(v370 < __dword_4458F4)) + v370 + 4) >> 3);
           v371 = *((int16_t *)v515 + 1);
@@ -18262,7 +19011,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
           v375 = v550;
           *((uint16_t *)v515 + 3) += (uint32_t)(v550 - ((*((int16_t *)v515 + 3) + (1 << ((v515->f4 + 31) & 31))) >> (v515->f4 & 31)) + 2) >> 2;
           v376 = *((int16_t *)v517 + 1);
-          v377 = (v376 + (1 << ((*v517 + 31) & 31))) >> (*v517 & 31);
+          v377 = (v376 + (1 << ((v517->f0 + 31) & 31))) >> (v517->f0 & 31);
           v550 = v375;
           *((uint16_t *)v517 + 1) = v376
                                + ((32 * ((v548 - v377 > __dword_4458F0) - (uint32_t)(v548 - v377 < __dword_4458F4))
@@ -18314,7 +19063,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *(uint16_t *)((uintptr_t)v542 - 2) = v216
                                  + ((32 * ((v217 > __dword_4458F0) - (uint32_t)(v217 < __dword_4458F4)) + v217 + 4) >> 3);
             v219 = *((int16_t *)v544 + 1);
-            v220 = v218 - ((v219 + (1 << ((*v544 + 31) & 31))) >> (*v544 & 31));
+            v220 = v218 - ((v219 + (1 << ((v544->f0 + 31) & 31))) >> (v544->f0 & 31));
             *((uint16_t *)v544 + 1) = v219
                                  + ((32 * ((v220 > __dword_4458F0) - (uint32_t)(v220 < __dword_4458F4)) + v220 + 4) >> 3);
             v221 = v539->f2;
@@ -18323,7 +19072,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *(uint16_t *)&v539->f2 = v221
                                  + ((32 * ((v223 > __dword_4458F0) - (uint32_t)(v223 < __dword_4458F4)) + v223 + 2) >> 2);
             v224 = *((int16_t *)v540 + 1);
-            v225 = v222 - ((v224 + (1 << ((*v540 + 31) & 31))) >> (*v540 & 31));
+            v225 = v222 - ((v224 + (1 << ((v540->f0 + 31) & 31))) >> (v540->f0 & 31));
             *((uint16_t *)v540 + 1) = v224
                                  + ((32 * ((v225 > __dword_4458F0) - (uint32_t)(v225 < __dword_4458F4)) + v225 + 4) >> 3);
             v539->f6 += (uint32_t)(v222
@@ -18343,7 +19092,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *(uint16_t *)&v536->f2 = v230
                                  + ((32 * ((v232 > __dword_4458F0) - (uint32_t)(v232 < __dword_4458F4)) + v232 + 2) >> 2);
             v233 = *((int16_t *)v537 + 1);
-            v234 = v231 - ((v233 + (1 << ((*v537 + 31) & 31))) >> (*v537 & 31));
+            v234 = v231 - ((v233 + (1 << ((v537->f0 + 31) & 31))) >> (v537->f0 & 31));
             *((uint16_t *)v537 + 1) = v233
                                  + ((32 * ((v234 > __dword_4458F0) - (uint32_t)(v234 < __dword_4458F4)) + v234 + 4) >> 3);
             v536->f6 += (uint32_t)(v231
@@ -18363,7 +19112,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v533 + 1) = v239
                                  + ((32 * ((v241 > __dword_4458F0) - (uint32_t)(v241 < __dword_4458F4)) + v241 + 2) >> 2);
             v242 = *((int16_t *)v534 + 1);
-            v243 = v240 - ((v242 + (1 << ((*v534 + 31) & 31))) >> (*v534 & 31));
+            v243 = v240 - ((v242 + (1 << ((v534->f0 + 31) & 31))) >> (v534->f0 & 31));
             *((uint16_t *)v534 + 1) = v242
                                  + ((32 * ((v243 > __dword_4458F0) - (uint32_t)(v243 < __dword_4458F4)) + v243 + 4) >> 3);
             *((uint16_t *)v533 + 3) += (uint32_t)(v240
@@ -18374,7 +19123,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v533 - 1) = v244
                                  + ((32 * ((v245 > __dword_4458F0) - (uint32_t)(v245 < __dword_4458F4)) + v245 + 4) >> 3);
             v246 = *((int16_t *)v535 + 1);
-            v247 = v572 - ((v246 + (1 << ((*v535 + 31) & 31))) >> (*v535 & 31));
+            v247 = v572 - ((v246 + (1 << ((v535->f0 + 31) & 31))) >> (v535->f0 & 31));
             *((uint16_t *)v535 + 1) = v246
                                  + ((32 * ((v247 > __dword_4458F0) - (uint32_t)(v247 < __dword_4458F4)) + v247 + 4) >> 3);
             v248 = *((int16_t *)v530 + 1);
@@ -18383,8 +19132,8 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v530 + 1) = v248
                                  + ((32 * ((v250 > __dword_4458F0) - (uint32_t)(v250 < __dword_4458F4)) + v250 + 2) >> 2);
             v251 = *((int16_t *)v531 + 1);
-            LOBYTE(v248) = *v531;
-            v252 = v251 + (1 << ((*v531 + 31) & 31));
+            LOBYTE(v248) = v531->f0;
+            v252 = v251 + (1 << ((v531->f0 + 31) & 31));
             v550 = v249;
             *((uint16_t *)v531 + 1) = v251
                                  + ((32
@@ -18402,7 +19151,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v530 - 1) = v254
                                  + ((32 * ((v255 > __dword_4458F0) - (uint32_t)(v255 < __dword_4458F4)) + v255 + 4) >> 3);
             v256 = *((int16_t *)v532 + 1);
-            LOBYTE(v254) = *v532;
+            LOBYTE(v254) = v532->f0;
             v573 = -v253;
             v257 = -v253 - ((v256 + (1 << ((v254 + 31) & 31))) >> (v254 & 31));
             *((uint16_t *)v532 + 1) = v256
@@ -18413,7 +19162,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v527 + 1) = v258
                                  + ((32 * ((v260 > __dword_4458F0) - (uint32_t)(v260 < __dword_4458F4)) + v260 + 2) >> 2);
             v261 = *((int16_t *)v528 + 1);
-            v262 = v259 - ((v261 + (1 << ((*v528 + 31) & 31))) >> (*v528 & 31));
+            v262 = v259 - ((v261 + (1 << ((v528->f0 + 31) & 31))) >> (v528->f0 & 31));
             *((uint16_t *)v528 + 1) = v261
                                  + ((32 * ((v262 > __dword_4458F0) - (uint32_t)(v262 < __dword_4458F4)) + v262 + 4) >> 3);
             *((uint16_t *)v527 + 3) += (uint32_t)(v259
@@ -18424,7 +19173,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v527 - 1) = v263
                                  + ((32 * ((v264 > __dword_4458F0) - (uint32_t)(v264 < __dword_4458F4)) + v264 + 4) >> 3);
             v265 = *((int16_t *)v529 + 1);
-            v266 = v573 - ((v265 + (1 << ((*v529 + 31) & 31))) >> (*v529 & 31));
+            v266 = v573 - ((v265 + (1 << ((v529->f0 + 31) & 31))) >> (v529->f0 & 31));
             *((uint16_t *)v529 + 1) = v265
                                  + ((32 * ((v266 > __dword_4458F0) - (uint32_t)(v266 < __dword_4458F4)) + v266 + 4) >> 3);
             v267 = *((int16_t *)v524 + 1);
@@ -18444,7 +19193,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v524 - 1) = v272
                                  + ((32 * ((v273 > __dword_4458F0) - (uint32_t)(v273 < __dword_4458F4)) + v273 + 4) >> 3);
             v274 = *((int16_t *)v526 + 1);
-            v275 = v573 - ((v274 + (1 << ((*v526 + 31) & 31))) >> (*v526 & 31));
+            v275 = v573 - ((v274 + (1 << ((v526->f0 + 31) & 31))) >> (v526->f0 & 31));
             *((uint16_t *)v526 + 1) = v274
                                  + ((32 * ((v275 > __dword_4458F0) - (uint32_t)(v275 < __dword_4458F4)) + v275 + 4) >> 3);
             v276 = *((int16_t *)v521 + 1);
@@ -18453,7 +19202,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v521 + 1) = v276
                                  + ((32 * ((v278 > __dword_4458F0) - (uint32_t)(v278 < __dword_4458F4)) + v278 + 2) >> 2);
             v279 = *((int16_t *)v522 + 1);
-            v280 = v277 - ((v279 + (1 << ((*v522 + 31) & 31))) >> (*v522 & 31));
+            v280 = v277 - ((v279 + (1 << ((v522->f0 + 31) & 31))) >> (v522->f0 & 31));
             *((uint16_t *)v522 + 1) = v279
                                  + ((32 * ((v280 > __dword_4458F0) - (uint32_t)(v280 < __dword_4458F4)) + v280 + 4) >> 3);
             *((uint16_t *)v521 + 3) += (uint32_t)(v277
@@ -18464,7 +19213,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v521 - 1) = v281
                                  + ((32 * ((v282 > __dword_4458F0) - (uint32_t)(v282 < __dword_4458F4)) + v282 + 4) >> 3);
             v283 = *((int16_t *)v523 + 1);
-            v284 = v573 - ((v283 + (1 << ((*v523 + 31) & 31))) >> (*v523 & 31));
+            v284 = v573 - ((v283 + (1 << ((v523->f0 + 31) & 31))) >> (v523->f0 & 31));
             *((uint16_t *)v523 + 1) = v283
                                  + ((32 * ((v284 > __dword_4458F0) - (uint32_t)(v284 < __dword_4458F4)) + v284 + 4) >> 3);
             v285 = *((int16_t *)v518 + 1);
@@ -18473,7 +19222,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v518 + 1) = v285
                                  + ((32 * ((v287 > __dword_4458F0) - (uint32_t)(v287 < __dword_4458F4)) + v287 + 2) >> 2);
             v288 = *((int16_t *)v519 + 1);
-            v289 = v286 - ((v288 + (1 << ((*v519 + 31) & 31))) >> (*v519 & 31));
+            v289 = v286 - ((v288 + (1 << ((v519->f0 + 31) & 31))) >> (v519->f0 & 31));
             *((uint16_t *)v519 + 1) = v288
                                  + ((32 * ((v289 > __dword_4458F0) - (uint32_t)(v289 < __dword_4458F4)) + v289 + 4) >> 3);
             *((uint16_t *)v518 + 3) += (uint32_t)(v286
@@ -18486,7 +19235,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v518 - 1) = v290
                                  + ((32 * ((v291 > __dword_4458F0) - (uint32_t)(v291 < __dword_4458F4)) + v291 + 4) >> 3);
             v293 = *((int16_t *)v520 + 1);
-            v294 = v292 - ((v293 + (1 << ((*v520 + 31) & 31))) >> (*v520 & 31));
+            v294 = v292 - ((v293 + (1 << ((v520->f0 + 31) & 31))) >> (v520->f0 & 31));
             *((uint16_t *)v520 + 1) = v293
                                  + ((32 * ((v294 > __dword_4458F0) - (uint32_t)(v294 < __dword_4458F4)) + v294 + 4) >> 3);
             v295 = *((int16_t *)v515 + 1);
@@ -18506,7 +19255,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v515 - 1) = v300
                                  + ((32 * ((v301 > __dword_4458F0) - (uint32_t)(v301 < __dword_4458F4)) + v301 + 4) >> 3);
             v302 = *((int16_t *)v517 + 1);
-            v303 = v574 - ((v302 + (1 << ((*v517 + 31) & 31))) >> (*v517 & 31));
+            v303 = v574 - ((v302 + (1 << ((v517->f0 + 31) & 31))) >> (v517->f0 & 31));
             *((uint16_t *)v517 + 1) = v302
                                  + ((32 * ((v303 > __dword_4458F0) - (uint32_t)(v303 < __dword_4458F4)) + v303 + 4) >> 3);
             v304 = v512->f2;
@@ -18535,7 +19284,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *(uint16_t *)((uintptr_t)v542 - 2) = v122
                                  + ((32 * ((v123 > __dword_4458F0) - (uint32_t)(v123 < __dword_4458F4)) + v123 + 4) >> 3);
             v124 = *((int16_t *)v544 + 1);
-            LOBYTE(v122) = *v544;
+            LOBYTE(v122) = v544->f0;
             v547 = -v121;
             v125 = -v121 - ((v124 + (1 << ((v122 + 31) & 31))) >> (v122 & 31));
             *((uint16_t *)v544 + 1) = v124
@@ -18546,7 +19295,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *(uint16_t *)&v539->f2 = v126
                                  + ((32 * ((v128 > __dword_4458F0) - (uint32_t)(v128 < __dword_4458F4)) + v128 + 2) >> 2);
             v129 = *((int16_t *)v540 + 1);
-            v130 = v127 - ((v129 + (1 << ((*v540 + 31) & 31))) >> (*v540 & 31));
+            v130 = v127 - ((v129 + (1 << ((v540->f0 + 31) & 31))) >> (v540->f0 & 31));
             *((uint16_t *)v540 + 1) = v129
                                  + ((32 * ((v130 > __dword_4458F0) - (uint32_t)(v130 < __dword_4458F4)) + v130 + 4) >> 3);
             v131 = *(int16_t *)((uintptr_t)v539 - 2);
@@ -18563,7 +19312,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *(uint16_t *)&v536->f2 = v135
                                  + ((32 * ((v137 > __dword_4458F0) - (uint32_t)(v137 < __dword_4458F4)) + v137 + 2) >> 2);
             v138 = *((int16_t *)v537 + 1);
-            v139 = v136 - ((v138 + (1 << ((*v537 + 31) & 31))) >> (*v537 & 31));
+            v139 = v136 - ((v138 + (1 << ((v537->f0 + 31) & 31))) >> (v537->f0 & 31));
             *((uint16_t *)v537 + 1) = v138
                                  + ((32 * ((v139 > __dword_4458F0) - (uint32_t)(v139 < __dword_4458F4)) + v139 + 4) >> 3);
             v140 = *(int16_t *)((uintptr_t)v536 - 2);
@@ -18580,7 +19329,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v533 + 1) = v144
                                  + ((32 * ((v146 > __dword_4458F0) - (uint32_t)(v146 < __dword_4458F4)) + v146 + 2) >> 2);
             v147 = *((int16_t *)v534 + 1);
-            v148 = v145 - ((v147 + (1 << ((*v534 + 31) & 31))) >> (*v534 & 31));
+            v148 = v145 - ((v147 + (1 << ((v534->f0 + 31) & 31))) >> (v534->f0 & 31));
             *((uint16_t *)v534 + 1) = v147
                                  + ((32 * ((v148 > __dword_4458F0) - (uint32_t)(v148 < __dword_4458F4)) + v148 + 4) >> 3);
             v149 = *((int16_t *)v533 - 1);
@@ -18588,7 +19337,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v533 - 1) = v149
                                  + ((32 * ((v150 > __dword_4458F0) - (uint32_t)(v150 < __dword_4458F4)) + v150 + 4) >> 3);
             v151 = *((int16_t *)v535 + 1);
-            v152 = v547 - ((v151 + (1 << ((*v535 + 31) & 31))) >> (*v535 & 31));
+            v152 = v547 - ((v151 + (1 << ((v535->f0 + 31) & 31))) >> (v535->f0 & 31));
             *((uint16_t *)v535 + 1) = v151
                                  + ((32 * ((v152 > __dword_4458F0) - (uint32_t)(v152 < __dword_4458F4)) + v152 + 4) >> 3);
             v153 = *((int16_t *)v530 + 1);
@@ -18597,7 +19346,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v530 + 1) = v153
                                  + ((32 * ((v155 > __dword_4458F0) - (uint32_t)(v155 < __dword_4458F4)) + v155 + 2) >> 2);
             v156 = *((int16_t *)v531 + 1);
-            v157 = v154 - ((v156 + (1 << ((*v531 + 31) & 31))) >> (*v531 & 31));
+            v157 = v154 - ((v156 + (1 << ((v531->f0 + 31) & 31))) >> (v531->f0 & 31));
             *((uint16_t *)v531 + 1) = v156
                                  + ((32 * ((v157 > __dword_4458F0) - (uint32_t)(v157 < __dword_4458F4)) + v157 + 4) >> 3);
             v158 = *((int16_t *)v530 - 1);
@@ -18605,7 +19354,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v530 - 1) = v158
                                  + ((32 * ((v159 > __dword_4458F0) - (uint32_t)(v159 < __dword_4458F4)) + v159 + 4) >> 3);
             v160 = *((int16_t *)v532 + 1);
-            v547 -= (v160 + (1 << ((*v532 + 31) & 31))) >> (*v532 & 31);
+            v547 -= (v160 + (1 << ((v532->f0 + 31) & 31))) >> (v532->f0 & 31);
             v161 = v550;
             *((uint16_t *)v532 + 1) = v160
                                  + ((32 * ((v547 > __dword_4458F0) - (uint32_t)(v547 < __dword_4458F4)) + v547 + 4) >> 3);
@@ -18614,7 +19363,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v527 + 1) = v162
                                  + ((32 * ((v163 > __dword_4458F0) - (uint32_t)(v163 < __dword_4458F4)) + v163 + 2) >> 2);
             v164 = *((int16_t *)v528 + 1);
-            v165 = v161 - ((v164 + (1 << ((*v528 + 31) & 31))) >> (*v528 & 31));
+            v165 = v161 - ((v164 + (1 << ((v528->f0 + 31) & 31))) >> (v528->f0 & 31));
             *((uint16_t *)v528 + 1) = v164
                                  + ((32 * ((v165 > __dword_4458F0) - (uint32_t)(v165 < __dword_4458F4)) + v165 + 4) >> 3);
             v166 = *((int16_t *)v527 - 1);
@@ -18624,7 +19373,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v527 - 1) = v166
                                  + ((32 * ((v167 > __dword_4458F0) - (uint32_t)(v167 < __dword_4458F4)) + v167 + 4) >> 3);
             v169 = *((int16_t *)v529 + 1);
-            v170 = v168 - ((v169 + (1 << ((*v529 + 31) & 31))) >> (*v529 & 31));
+            v170 = v168 - ((v169 + (1 << ((v529->f0 + 31) & 31))) >> (v529->f0 & 31));
             *((uint16_t *)v529 + 1) = v169
                                  + ((32 * ((v170 > __dword_4458F0) - (uint32_t)(v170 < __dword_4458F4)) + v170 + 4) >> 3);
             v171 = *((int16_t *)v524 + 1);
@@ -18641,7 +19390,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v524 - 1) = v176
                                  + ((32 * ((v177 > __dword_4458F0) - (uint32_t)(v177 < __dword_4458F4)) + v177 + 4) >> 3);
             v178 = *((int16_t *)v526 + 1);
-            v179 = v570 - ((v178 + (1 << ((*v526 + 31) & 31))) >> (*v526 & 31));
+            v179 = v570 - ((v178 + (1 << ((v526->f0 + 31) & 31))) >> (v526->f0 & 31));
             *((uint16_t *)v526 + 1) = v178
                                  + ((32 * ((v179 > __dword_4458F0) - (uint32_t)(v179 < __dword_4458F4)) + v179 + 4) >> 3);
             v180 = *((int16_t *)v521 + 1);
@@ -18650,7 +19399,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v521 + 1) = v180
                                  + ((32 * ((v182 > __dword_4458F0) - (uint32_t)(v182 < __dword_4458F4)) + v182 + 2) >> 2);
             v183 = *((int16_t *)v522 + 1);
-            v184 = v181 - ((v183 + (1 << ((*v522 + 31) & 31))) >> (*v522 & 31));
+            v184 = v181 - ((v183 + (1 << ((v522->f0 + 31) & 31))) >> (v522->f0 & 31));
             *((uint16_t *)v522 + 1) = v183
                                  + ((32 * ((v184 > __dword_4458F0) - (uint32_t)(v184 < __dword_4458F4)) + v184 + 4) >> 3);
             v185 = *((int16_t *)v521 - 1);
@@ -18658,7 +19407,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v521 - 1) = v185
                                  + ((32 * ((v186 > __dword_4458F0) - (uint32_t)(v186 < __dword_4458F4)) + v186 + 4) >> 3);
             v187 = *((int16_t *)v523 + 1);
-            v188 = v570 - ((v187 + (1 << ((*v523 + 31) & 31))) >> (*v523 & 31));
+            v188 = v570 - ((v187 + (1 << ((v523->f0 + 31) & 31))) >> (v523->f0 & 31));
             *((uint16_t *)v523 + 1) = v187
                                  + ((32 * ((v188 > __dword_4458F0) - (uint32_t)(v188 < __dword_4458F4)) + v188 + 4) >> 3);
             v189 = *((int16_t *)v518 + 1);
@@ -18667,7 +19416,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v518 + 1) = v189
                                  + ((32 * ((v191 > __dword_4458F0) - (uint32_t)(v191 < __dword_4458F4)) + v191 + 2) >> 2);
             v192 = *((int16_t *)v519 + 1);
-            v193 = v190 - ((v192 + (1 << ((*v519 + 31) & 31))) >> (*v519 & 31));
+            v193 = v190 - ((v192 + (1 << ((v519->f0 + 31) & 31))) >> (v519->f0 & 31));
             *((uint16_t *)v519 + 1) = v192
                                  + ((32 * ((v193 > __dword_4458F0) - (uint32_t)(v193 < __dword_4458F4)) + v193 + 4) >> 3);
             v194 = *((int16_t *)v518 - 1);
@@ -18675,7 +19424,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v518 - 1) = v194
                                  + ((32 * ((v195 > __dword_4458F0) - (uint32_t)(v195 < __dword_4458F4)) + v195 + 4) >> 3);
             v196 = *((int16_t *)v520 + 1);
-            v197 = v570 - ((v196 + (1 << ((*v520 + 31) & 31))) >> (*v520 & 31));
+            v197 = v570 - ((v196 + (1 << ((v520->f0 + 31) & 31))) >> (v520->f0 & 31));
             *((uint16_t *)v520 + 1) = v196
                                  + ((32 * ((v197 > __dword_4458F0) - (uint32_t)(v197 < __dword_4458F4)) + v197 + 4) >> 3);
             v198 = *((int16_t *)v515 + 1);
@@ -18693,7 +19442,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
             *((uint16_t *)v515 - 1) = v203
                                  + ((32 * ((v204 > __dword_4458F0) - (uint32_t)(v204 < __dword_4458F4)) + v204 + 4) >> 3);
             v205 = *((int16_t *)v517 + 1);
-            LOBYTE(v203) = *v517;
+            LOBYTE(v203) = v517->f0;
             v571 = -v199;
             v206 = -v199 - ((v205 + (1 << ((v203 + 31) & 31))) >> (v203 & 31));
             *((uint16_t *)v517 + 1) = v205
@@ -19424,8 +20173,11 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
   Obj75 *v54;
   Obj76 *v62;
   Obj77 *v69;
-  uintptr_t v21, v28, v36, v38, v39, v40, v41, v42, v43, v44, v48, v58, v66, v76, v78, v80, v82,
-            v84, v86, v88, v90, v93;
+  Obj128 *v80;
+  Obj129 *v84;
+  Obj130 *v88;
+  uintptr_t v21, v28, v36, v38, v39, v40, v41, v42, v43, v44, v48, v58, v66, v76, v78, v82, v86,
+            v90, v93;
   __m128 a3 = a3__ref;
   __m128 a4 = a4__ref;
   __m128 v47;
@@ -19704,60 +20456,40 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
       lpAddress->f278744 = v75 + 144;
       lpAddress->f278748 = v74 + 144;
       lpAddress->f278752 = v72 + 144;
-      *(uint32_t *)(v73 - 18) = *(uint32_t *)v76;
-      *(uint32_t *)(v73 - 14) = *(uint32_t *)(v76 + 4);
-      *(uint32_t *)(v73 - 10) = *(uint32_t *)(v76 + 8);
-      *(uint32_t *)(v73 - 6) = *(uint32_t *)(v76 + 12);
-      *(uint16_t *)(v73 - 2) = *(uint16_t *)(v76 + 16);
+      bmf_copy((void *)(v73 - 18), (const void *)(v76), 18);
       v77 = lpAddress->f278736;
       v78 = lpAddress->f278740;
-      *(uint32_t *)(v77 - 36) = *(uint32_t *)(v78 + 18);
-      *(uint32_t *)(v77 - 32) = *(uint32_t *)(v78 + 22);
-      *(uint32_t *)(v77 - 28) = *(uint32_t *)(v78 + 26);
-      *(uint32_t *)(v77 - 24) = *(uint32_t *)(v78 + 30);
-      *(uint16_t *)(v77 - 20) = *(uint16_t *)(v78 + 34);
+      bmf_copy((void *)(v77 - 36), (const void *)(v78 + 18), 18);
       v79 = lpAddress->f278736;
-      v80 = lpAddress->f278740;
-      *(uint32_t *)(v79 - 54) = *(uint32_t *)(v80 + 36);
-      *(uint32_t *)(v79 - 50) = *(uint32_t *)(v80 + 40);
-      *(uint32_t *)(v79 - 46) = *(uint32_t *)(v80 + 44);
-      *(uint32_t *)(v79 - 42) = *(uint32_t *)(v80 + 48);
-      *(uint16_t *)(v79 - 38) = *(uint16_t *)(v80 + 52);
+      v80 = (Obj128 *)(lpAddress->f278740);
+      *(uint32_t *)(v79 - 54) = v80->f36;
+      *(uint32_t *)(v79 - 50) = v80->f40;
+      *(uint32_t *)(v79 - 46) = v80->f44;
+      *(uint32_t *)(v79 - 42) = v80->f48;
+      *(uint16_t *)(v79 - 38) = v80->f52;
       v81 = lpAddress->f278736;
       v82 = lpAddress->f278740;
-      *(uint32_t *)(v81 - 72) = *(uint32_t *)(v82 + 54);
-      *(uint32_t *)(v81 - 68) = *(uint32_t *)(v82 + 58);
-      *(uint32_t *)(v81 - 64) = *(uint32_t *)(v82 + 62);
-      *(uint32_t *)(v81 - 60) = *(uint32_t *)(v82 + 66);
-      *(uint16_t *)(v81 - 56) = *(uint16_t *)(v82 + 70);
+      bmf_copy((void *)(v81 - 72), (const void *)(v82 + 54), 18);
       v83 = lpAddress->f278736;
-      v84 = lpAddress->f278740;
-      *(uint32_t *)(v83 - 90) = *(uint32_t *)(v84 + 72);
-      *(uint32_t *)(v83 - 86) = *(uint32_t *)(v84 + 76);
-      *(uint32_t *)(v83 - 82) = *(uint32_t *)(v84 + 80);
-      *(uint32_t *)(v83 - 78) = *(uint32_t *)(v84 + 84);
-      *(uint16_t *)(v83 - 74) = *(uint16_t *)(v84 + 88);
+      v84 = (Obj129 *)(lpAddress->f278740);
+      *(uint32_t *)(v83 - 90) = v84->f72;
+      *(uint32_t *)(v83 - 86) = v84->f76;
+      *(uint32_t *)(v83 - 82) = v84->f80;
+      *(uint32_t *)(v83 - 78) = v84->f84;
+      *(uint16_t *)(v83 - 74) = v84->f88;
       v85 = lpAddress->f278736;
       v86 = lpAddress->f278740;
-      *(uint32_t *)(v85 - 108) = *(uint32_t *)(v86 + 90);
-      *(uint32_t *)(v85 - 104) = *(uint32_t *)(v86 + 94);
-      *(uint32_t *)(v85 - 100) = *(uint32_t *)(v86 + 98);
-      *(uint32_t *)(v85 - 96) = *(uint32_t *)(v86 + 102);
-      *(uint16_t *)(v85 - 92) = *(uint16_t *)(v86 + 106);
+      bmf_copy((void *)(v85 - 108), (const void *)(v86 + 90), 18);
       v87 = lpAddress->f278736;
-      v88 = lpAddress->f278740;
-      *(uint32_t *)(v87 - 126) = *(uint32_t *)(v88 + 108);
-      *(uint32_t *)(v87 - 122) = *(uint32_t *)(v88 + 112);
-      *(uint32_t *)(v87 - 118) = *(uint32_t *)(v88 + 116);
-      *(uint32_t *)(v87 - 114) = *(uint32_t *)(v88 + 120);
-      *(uint16_t *)(v87 - 110) = *(uint16_t *)(v88 + 124);
+      v88 = (Obj130 *)(lpAddress->f278740);
+      *(uint32_t *)(v87 - 126) = v88->f108;
+      *(uint32_t *)(v87 - 122) = v88->f112;
+      *(uint32_t *)(v87 - 118) = v88->f116;
+      *(uint32_t *)(v87 - 114) = v88->f120;
+      *(uint16_t *)(v87 - 110) = v88->f124;
       v89 = lpAddress->f278736;
       v90 = lpAddress->f278740;
-      *(uint32_t *)(v89 - 144) = *(uint32_t *)(v90 + 126);
-      *(uint32_t *)(v89 - 140) = *(uint32_t *)(v90 + 130);
-      *(uint32_t *)(v89 - 136) = *(uint32_t *)(v90 + 134);
-      *(uint32_t *)(v89 - 132) = *(uint32_t *)(v90 + 138);
-      *(uint16_t *)(v89 - 128) = *(uint16_t *)(v90 + 142);
+      bmf_copy((void *)(v89 - 144), (const void *)(v90 + 126), 18);
       *(uint16_t *)(lpAddress->f278736 + 2) = 0;
       if ( i > 0 )
       {
@@ -19883,7 +20615,9 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   Obj81 *v63;
   Obj82 *v71;
   Obj83 *v78;
-  uintptr_t v30, v38, v45, v46, v57, v67, v75, v85, v87, v89, v91, v93, v95, v97, v99;
+  Obj131 *v89;
+  Obj132 *v93;
+  uintptr_t v30, v38, v45, v46, v57, v67, v75, v85, v87, v91, v95, v97, v99;
   Obj11 *v120;
   Obj11 *v129;
   Obj11 *v111;
@@ -20205,60 +20939,36 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v56->f278744 = v84 + 144;
           v56->f278748 = v83 + 144;
           v56->f278752 = v81 + 144;
-          *(uint32_t *)(v82 - 18) = *(uint32_t *)v85;
-          *(uint32_t *)(v82 - 14) = *(uint32_t *)(v85 + 4);
-          *(uint32_t *)(v82 - 10) = *(uint32_t *)(v85 + 8);
-          *(uint32_t *)(v82 - 6) = *(uint32_t *)(v85 + 12);
-          *(uint16_t *)(v82 - 2) = *(uint16_t *)(v85 + 16);
+          bmf_copy((void *)(v82 - 18), (const void *)(v85), 18);
           v86 = v56->f278736;
           v87 = v56->f278740;
-          *(uint32_t *)(v86 - 36) = *(uint32_t *)(v87 + 18);
-          *(uint32_t *)(v86 - 32) = *(uint32_t *)(v87 + 22);
-          *(uint32_t *)(v86 - 28) = *(uint32_t *)(v87 + 26);
-          *(uint32_t *)(v86 - 24) = *(uint32_t *)(v87 + 30);
-          *(uint16_t *)(v86 - 20) = *(uint16_t *)(v87 + 34);
+          bmf_copy((void *)(v86 - 36), (const void *)(v87 + 18), 18);
           v88 = v56->f278736;
-          v89 = v56->f278740;
-          *(uint32_t *)(v88 - 54) = *(uint32_t *)(v89 + 36);
-          *(uint32_t *)(v88 - 50) = *(uint32_t *)(v89 + 40);
-          *(uint32_t *)(v88 - 46) = *(uint32_t *)(v89 + 44);
-          *(uint32_t *)(v88 - 42) = *(uint32_t *)(v89 + 48);
-          *(uint16_t *)(v88 - 38) = *(uint16_t *)(v89 + 52);
+          v89 = (Obj131 *)(v56->f278740);
+          *(uint32_t *)(v88 - 54) = v89->f36;
+          *(uint32_t *)(v88 - 50) = v89->f40;
+          *(uint32_t *)(v88 - 46) = v89->f44;
+          *(uint32_t *)(v88 - 42) = v89->f48;
+          *(uint16_t *)(v88 - 38) = v89->f52;
           v90 = v56->f278736;
           v91 = v56->f278740;
-          *(uint32_t *)(v90 - 72) = *(uint32_t *)(v91 + 54);
-          *(uint32_t *)(v90 - 68) = *(uint32_t *)(v91 + 58);
-          *(uint32_t *)(v90 - 64) = *(uint32_t *)(v91 + 62);
-          *(uint32_t *)(v90 - 60) = *(uint32_t *)(v91 + 66);
-          *(uint16_t *)(v90 - 56) = *(uint16_t *)(v91 + 70);
+          bmf_copy((void *)(v90 - 72), (const void *)(v91 + 54), 18);
           v92 = v56->f278736;
-          v93 = v56->f278740;
-          *(uint32_t *)(v92 - 90) = *(uint32_t *)(v93 + 72);
-          *(uint32_t *)(v92 - 86) = *(uint32_t *)(v93 + 76);
-          *(uint32_t *)(v92 - 82) = *(uint32_t *)(v93 + 80);
-          *(uint32_t *)(v92 - 78) = *(uint32_t *)(v93 + 84);
-          *(uint16_t *)(v92 - 74) = *(uint16_t *)(v93 + 88);
+          v93 = (Obj132 *)(v56->f278740);
+          *(uint32_t *)(v92 - 90) = v93->f72;
+          *(uint32_t *)(v92 - 86) = v93->f76;
+          *(uint32_t *)(v92 - 82) = v93->f80;
+          *(uint32_t *)(v92 - 78) = v93->f84;
+          *(uint16_t *)(v92 - 74) = v93->f88;
           v94 = v56->f278736;
           v95 = v56->f278740;
-          *(uint32_t *)(v94 - 108) = *(uint32_t *)(v95 + 90);
-          *(uint32_t *)(v94 - 104) = *(uint32_t *)(v95 + 94);
-          *(uint32_t *)(v94 - 100) = *(uint32_t *)(v95 + 98);
-          *(uint32_t *)(v94 - 96) = *(uint32_t *)(v95 + 102);
-          *(uint16_t *)(v94 - 92) = *(uint16_t *)(v95 + 106);
+          bmf_copy((void *)(v94 - 108), (const void *)(v95 + 90), 18);
           v96 = v56->f278736;
           v97 = v56->f278740;
-          *(uint32_t *)(v96 - 126) = *(uint32_t *)(v97 + 108);
-          *(uint32_t *)(v96 - 122) = *(uint32_t *)(v97 + 112);
-          *(uint32_t *)(v96 - 118) = *(uint32_t *)(v97 + 116);
-          *(uint32_t *)(v96 - 114) = *(uint32_t *)(v97 + 120);
-          *(uint16_t *)(v96 - 110) = *(uint16_t *)(v97 + 124);
+          bmf_copy((void *)(v96 - 126), (const void *)(v97 + 108), 18);
           v98 = v56->f278736;
           v99 = v56->f278740;
-          *(uint32_t *)(v98 - 144) = *(uint32_t *)(v99 + 126);
-          *(uint32_t *)(v98 - 140) = *(uint32_t *)(v99 + 130);
-          *(uint32_t *)(v98 - 136) = *(uint32_t *)(v99 + 134);
-          *(uint32_t *)(v98 - 132) = *(uint32_t *)(v99 + 138);
-          *(uint16_t *)(v98 - 128) = *(uint16_t *)(v99 + 142);
+          bmf_copy((void *)(v98 - 144), (const void *)(v99 + 126), 18);
           *(uint16_t *)(v56->f278736 + 2) = 0;
           n4_1 = plane_count;
         }
@@ -20776,60 +21486,28 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
       lpAddress->f278736.m128_i32[2] = v78 + 144;
       lpAddress->f278736.m128_i32[3] = v77 + 144;
       lpAddress->f278752.m128_i32[0] = v75 + 144;
-      *(uint32_t *)(v76 - 18) = *(uint32_t *)v79;
-      *(uint32_t *)(v76 - 14) = *(uint32_t *)(v79 + 4);
-      *(uint32_t *)(v76 - 10) = *(uint32_t *)(v79 + 8);
-      *(uint32_t *)(v76 - 6) = *(uint32_t *)(v79 + 12);
-      *(uint16_t *)(v76 - 2) = *(uint16_t *)(v79 + 16);
+      bmf_copy((void *)(v76 - 18), (const void *)(v79), 18);
       v80 = lpAddress->f278736.m128_i32[0];
       v81 = lpAddress->f278736.m128_i32[1];
-      *(uint32_t *)(v80 - 36) = *(uint32_t *)(v81 + 18);
-      *(uint32_t *)(v80 - 32) = *(uint32_t *)(v81 + 22);
-      *(uint32_t *)(v80 - 28) = *(uint32_t *)(v81 + 26);
-      *(uint32_t *)(v80 - 24) = *(uint32_t *)(v81 + 30);
-      *(uint16_t *)(v80 - 20) = *(uint16_t *)(v81 + 34);
+      bmf_copy((void *)(v80 - 36), (const void *)(v81 + 18), 18);
       v82 = lpAddress->f278736.m128_i32[0];
       v83 = lpAddress->f278736.m128_i32[1];
-      *(uint32_t *)(v82 - 54) = *(uint32_t *)(v83 + 36);
-      *(uint32_t *)(v82 - 50) = *(uint32_t *)(v83 + 40);
-      *(uint32_t *)(v82 - 46) = *(uint32_t *)(v83 + 44);
-      *(uint32_t *)(v82 - 42) = *(uint32_t *)(v83 + 48);
-      *(uint16_t *)(v82 - 38) = *(uint16_t *)(v83 + 52);
+      bmf_copy((void *)(v82 - 54), (const void *)(v83 + 36), 18);
       v84 = lpAddress->f278736.m128_i32[0];
       v85 = lpAddress->f278736.m128_i32[1];
-      *(uint32_t *)(v84 - 72) = *(uint32_t *)(v85 + 54);
-      *(uint32_t *)(v84 - 68) = *(uint32_t *)(v85 + 58);
-      *(uint32_t *)(v84 - 64) = *(uint32_t *)(v85 + 62);
-      *(uint32_t *)(v84 - 60) = *(uint32_t *)(v85 + 66);
-      *(uint16_t *)(v84 - 56) = *(uint16_t *)(v85 + 70);
+      bmf_copy((void *)(v84 - 72), (const void *)(v85 + 54), 18);
       v86 = lpAddress->f278736.m128_i32[0];
       v87 = lpAddress->f278736.m128_i32[1];
-      *(uint32_t *)(v86 - 90) = *(uint32_t *)(v87 + 72);
-      *(uint32_t *)(v86 - 86) = *(uint32_t *)(v87 + 76);
-      *(uint32_t *)(v86 - 82) = *(uint32_t *)(v87 + 80);
-      *(uint32_t *)(v86 - 78) = *(uint32_t *)(v87 + 84);
-      *(uint16_t *)(v86 - 74) = *(uint16_t *)(v87 + 88);
+      bmf_copy((void *)(v86 - 90), (const void *)(v87 + 72), 18);
       v88 = lpAddress->f278736.m128_i32[0];
       v89 = lpAddress->f278736.m128_i32[1];
-      *(uint32_t *)(v88 - 108) = *(uint32_t *)(v89 + 90);
-      *(uint32_t *)(v88 - 104) = *(uint32_t *)(v89 + 94);
-      *(uint32_t *)(v88 - 100) = *(uint32_t *)(v89 + 98);
-      *(uint32_t *)(v88 - 96) = *(uint32_t *)(v89 + 102);
-      *(uint16_t *)(v88 - 92) = *(uint16_t *)(v89 + 106);
+      bmf_copy((void *)(v88 - 108), (const void *)(v89 + 90), 18);
       v90 = lpAddress->f278736.m128_i32[0];
       v91 = lpAddress->f278736.m128_i32[1];
-      *(uint32_t *)(v90 - 126) = *(uint32_t *)(v91 + 108);
-      *(uint32_t *)(v90 - 122) = *(uint32_t *)(v91 + 112);
-      *(uint32_t *)(v90 - 118) = *(uint32_t *)(v91 + 116);
-      *(uint32_t *)(v90 - 114) = *(uint32_t *)(v91 + 120);
-      *(uint16_t *)(v90 - 110) = *(uint16_t *)(v91 + 124);
+      bmf_copy((void *)(v90 - 126), (const void *)(v91 + 108), 18);
       v92 = lpAddress->f278736.m128_i32[0];
       v93 = lpAddress->f278736.m128_i32[1];
-      *(uint32_t *)(v92 - 144) = *(uint32_t *)(v93 + 126);
-      *(uint32_t *)(v92 - 140) = *(uint32_t *)(v93 + 130);
-      *(uint32_t *)(v92 - 136) = *(uint32_t *)(v93 + 134);
-      *(uint32_t *)(v92 - 132) = *(uint32_t *)(v93 + 138);
-      *(uint16_t *)(v92 - 128) = *(uint16_t *)(v93 + 142);
+      bmf_copy((void *)(v92 - 144), (const void *)(v93 + 126), 18);
       *(uint16_t *)(lpAddress->f278736.m128_i32[0] + 2) = 0;
       if ( i > 0 )
       {
@@ -21316,60 +21994,28 @@ BMF_SSE int32_t __alt_model_p2_encode(Obj33 *p_i, uint8_t *a2)
           v55->f278744 = v83 + 144;
           v55->f278748 = v82 + 144;
           v55->f278752 = v80 + 144;
-          *(uint32_t *)(v81 - 18) = *(uint32_t *)v84;
-          *(uint32_t *)(v81 - 14) = *(uint32_t *)(v84 + 4);
-          *(uint32_t *)(v81 - 10) = *(uint32_t *)(v84 + 8);
-          *(uint32_t *)(v81 - 6) = *(uint32_t *)(v84 + 12);
-          *(uint16_t *)(v81 - 2) = *(uint16_t *)(v84 + 16);
+          bmf_copy((void *)(v81 - 18), (const void *)(v84), 18);
           v85 = v55->f278736;
           v86 = v55->f278740;
-          *(uint32_t *)(v85 - 36) = *(uint32_t *)(v86 + 18);
-          *(uint32_t *)(v85 - 32) = *(uint32_t *)(v86 + 22);
-          *(uint32_t *)(v85 - 28) = *(uint32_t *)(v86 + 26);
-          *(uint32_t *)(v85 - 24) = *(uint32_t *)(v86 + 30);
-          *(uint16_t *)(v85 - 20) = *(uint16_t *)(v86 + 34);
+          bmf_copy((void *)(v85 - 36), (const void *)(v86 + 18), 18);
           v87 = v55->f278736;
           v88 = v55->f278740;
-          *(uint32_t *)(v87 - 54) = *(uint32_t *)(v88 + 36);
-          *(uint32_t *)(v87 - 50) = *(uint32_t *)(v88 + 40);
-          *(uint32_t *)(v87 - 46) = *(uint32_t *)(v88 + 44);
-          *(uint32_t *)(v87 - 42) = *(uint32_t *)(v88 + 48);
-          *(uint16_t *)(v87 - 38) = *(uint16_t *)(v88 + 52);
+          bmf_copy((void *)(v87 - 54), (const void *)(v88 + 36), 18);
           v89 = v55->f278736;
           v90 = v55->f278740;
-          *(uint32_t *)(v89 - 72) = *(uint32_t *)(v90 + 54);
-          *(uint32_t *)(v89 - 68) = *(uint32_t *)(v90 + 58);
-          *(uint32_t *)(v89 - 64) = *(uint32_t *)(v90 + 62);
-          *(uint32_t *)(v89 - 60) = *(uint32_t *)(v90 + 66);
-          *(uint16_t *)(v89 - 56) = *(uint16_t *)(v90 + 70);
+          bmf_copy((void *)(v89 - 72), (const void *)(v90 + 54), 18);
           v91 = v55->f278736;
           v92 = v55->f278740;
-          *(uint32_t *)(v91 - 90) = *(uint32_t *)(v92 + 72);
-          *(uint32_t *)(v91 - 86) = *(uint32_t *)(v92 + 76);
-          *(uint32_t *)(v91 - 82) = *(uint32_t *)(v92 + 80);
-          *(uint32_t *)(v91 - 78) = *(uint32_t *)(v92 + 84);
-          *(uint16_t *)(v91 - 74) = *(uint16_t *)(v92 + 88);
+          bmf_copy((void *)(v91 - 90), (const void *)(v92 + 72), 18);
           v93 = v55->f278736;
           v94 = v55->f278740;
-          *(uint32_t *)(v93 - 108) = *(uint32_t *)(v94 + 90);
-          *(uint32_t *)(v93 - 104) = *(uint32_t *)(v94 + 94);
-          *(uint32_t *)(v93 - 100) = *(uint32_t *)(v94 + 98);
-          *(uint32_t *)(v93 - 96) = *(uint32_t *)(v94 + 102);
-          *(uint16_t *)(v93 - 92) = *(uint16_t *)(v94 + 106);
+          bmf_copy((void *)(v93 - 108), (const void *)(v94 + 90), 18);
           v95 = v55->f278736;
           v96 = v55->f278740;
-          *(uint32_t *)(v95 - 126) = *(uint32_t *)(v96 + 108);
-          *(uint32_t *)(v95 - 122) = *(uint32_t *)(v96 + 112);
-          *(uint32_t *)(v95 - 118) = *(uint32_t *)(v96 + 116);
-          *(uint32_t *)(v95 - 114) = *(uint32_t *)(v96 + 120);
-          *(uint16_t *)(v95 - 110) = *(uint16_t *)(v96 + 124);
+          bmf_copy((void *)(v95 - 126), (const void *)(v96 + 108), 18);
           v97 = v55->f278736;
           v98 = v55->f278740;
-          *(uint32_t *)(v97 - 144) = *(uint32_t *)(v98 + 126);
-          *(uint32_t *)(v97 - 140) = *(uint32_t *)(v98 + 130);
-          *(uint32_t *)(v97 - 136) = *(uint32_t *)(v98 + 134);
-          *(uint32_t *)(v97 - 132) = *(uint32_t *)(v98 + 138);
-          *(uint16_t *)(v97 - 128) = *(uint16_t *)(v98 + 142);
+          bmf_copy((void *)(v97 - 144), (const void *)(v98 + 126), 18);
           *(uint16_t *)(v55->f278736 + 2) = 0;
           n4_1 = plane_count;
         }
