@@ -18,12 +18,12 @@ so they can be re-measured rather than trusted.
 
 | | | at the start |
 | --- | --- | --- |
-| `subs1.hpp` | 24 533 lines | 25 462 |
+| `subs1.hpp` | 24 492 lines | 25 462 |
 | bodies | 179 (84 real, 94 `__fwd_*` shims, 1 helper) | 215 |
 | globals in `blob.inc` | **78** | 293 |
-| recovered structs | **114** + 3 named ones, 2639 field accesses, 17 arrays put back | 0 |
+| recovered structs | **111** + 3 named ones, 2583 field accesses, 17 arrays put back | 0 |
 | raw-offset dereferences | **250** | 1646 before Phase 4 |
-| pointer casts | 5707 | 7336 |
+| pointer casts | 5640 | 7336 |
 | `goto` / `LABEL_n:` | 113 / 81 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
 | line coverage | **95.87 %** of 13 222 | 64.5 % |
@@ -403,7 +403,8 @@ last of them found a bug.
    that walk them are typed pointers to those structs. **Done for 115 objects**
    — 2645 accesses name a field, 290 raw-offset dereferences remain, and the
    ones declined are listed with their reasons in Phase 4. Seventeen were
-   recovered as structs and are arrays; they are subscripted now.
+   recovered as structs and are arrays; they are subscripted now. Five were the
+   same object recovered five times; they are one named struct now.
 4. Names say what things are. **No `__sub_XXXXXX` is left in the file** — the
    last five went on evidence from the call graph and from what they touch, and
    the argument for each is written above the body it names. The recovered
@@ -756,6 +757,20 @@ to their last member, which is one object seen in six functions the alias
 analysis could not connect to each other. That
 is under-merging, and it is the safe direction — each struct describes offsets
 actually observed under that name.
+
+**The image descriptor was recovered five times**, and merging them by hand is
+what named it. `Obj14`, `Obj33`, `Obj71`, `Obj98` and the offsets `write_bmp`
+walks raw are one 16-byte header; no two of the functions holding them pass it
+to each other in a form the analysis can follow, so the names never unioned, and
+each recovery was correct about the offsets it saw and silent about the rest.
+The cost is visible in what they disagreed on: `Obj14` typed +0 as `char *`
+because that is how its readers reach the two 16-bit halves, `Obj71` typed +10
+as `char`, `Obj98` found one field out of six. All five are `BmfImage` now —
+111 structs from 115, and 52 more accesses that read as fields.
+
+Which is the argument for merging by hand where the evidence is good, and
+against teaching the analysis to guess: **what made this safe was not a better
+alias rule, it was `alloc_image` writing all four words in one place.**
 
 #### What a 64-bit build would still need
 
