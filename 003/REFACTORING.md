@@ -26,7 +26,7 @@ so they can be re-measured rather than trusted.
 | pointer casts | 5805 | 7336 |
 | `goto` / `LABEL_n:` | 121 / 88 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
-| line coverage | **94.73 %** | 64.5 % |
+| line coverage | **95.28 %** | 64.5 % |
 
 The target is 32-bit. That is not a limitation left over from the port — it is
 the decision that made Phase 4 possible, and §Phase 4 says why.
@@ -123,15 +123,27 @@ thinks so".
 
 ### 2.3 What the gate still does not reach
 
-5.3 % of the file — 706 unexecuted lines across the bodies:
+4.7 % of the file — 629 unexecuted lines across the bodies:
 
 | body | unexecuted |
 | --- | --- |
-| `sub_4118A0` | 103 |
 | `unmodel_plane_slow` | 78 |
 | `compress_image` | 71 |
 | `expand_image` | 69 |
 | `unpredict_med` | 48 |
+| `read_bmp` | 48 |
+
+`sub_4118A0` headed this table with 103 and is off it: 111 of those lines were
+a predictor-mode-0 branch **no dispatch can reach**. The call graph is closed —
+that function is called only by `sub_4229E0` and `sub_4256F0`, those only by
+the eight alternate model bodies, and `model_plane` and `unmodel_plane` reach
+those only under `plane_predictor == 1` or `== 2`. A run over the corpus agrees:
+164 entries, 83 at 1 and 81 at 2, none at 0. Deleted on §2.1's grounds.
+
+Reaching that conclusion needed both halves. The measurement alone would only
+have said "the corpus does not go there", which is what was said about
+`alt_model_p1_decode` before an image reached it and found a bug. The call
+graph is what turns that into *cannot*.
 
 These are format and descriptor combinations fifteen images still do not reach.
 `alt_model_p1_decode` used to head this table with 268 lines and is not on it
@@ -740,7 +752,7 @@ for f in testfiles/*.bmp; do
   rm -f o.bmf o.bmp                       # bmf appends to its output
   ./bmfcov c "$f" o.bmf && ./bmfcov d o.bmf o.bmp
 done
-gcov -n    -o . bmfcov-bmf.gcno                       # 94.73 % of 13469 lines
+gcov -n    -o . bmfcov-bmf.gcno                       # 95.28 % of 13406 lines
 gcov -f -n -o . bmfcov-bmf.gcno                       # per function
 ```
 

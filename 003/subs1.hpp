@@ -5934,118 +5934,15 @@ BMF_SSE uint32_t __sub_4118A0(uint8_t *a1, char *a2)
   uint32_t n0x100_1, n0x100_2, n0x100, j, k, i, v32, m, n0x80, v49, v52;
   uint8_t *v50, *v51;
   n128_1 = 2 * near_lossless_max[0] + 1;
-  if ( !plane_predictor )
-  {
-    n0x100_1 = (uint8_t)a2 & 0xF;
-    if ( ((uint8_t)a2 & 0xF) != 0 )
-    {
-      n0x100_1 = 16 - n0x100_1;
-      n0x100_2 = 0;
-      do
-      {
-        a2[n0x100_2] = n0x100_2;
-        ++n0x100_2;
-      }
-      while ( n0x100_2 < n0x100_1 );
-    }
-    si128 = _mm_load_si128((const __m128i *)&__xmmword_4397B0);
-    n0x100 = 256 - (-n0x100_1 & 0xF);
-    v7 = _mm_unpacklo_epi64(
-           _mm_unpacklo_epi32(
-             _mm_unpacklo_epi16(
-               _mm_unpacklo_epi8(_mm_cvtsi32_si128(n0x100_1), _mm_cvtsi32_si128(n0x100_1 + 1)),
-               _mm_unpacklo_epi8(_mm_cvtsi32_si128(n0x100_1 + 2), _mm_cvtsi32_si128(n0x100_1 + 3))),
-             _mm_unpacklo_epi16(
-               _mm_unpacklo_epi8(_mm_cvtsi32_si128(n0x100_1 + 4), _mm_cvtsi32_si128(n0x100_1 + 5)),
-               _mm_unpacklo_epi8(_mm_cvtsi32_si128(n0x100_1 + 6), _mm_cvtsi32_si128(n0x100_1 + 7)))),
-           _mm_unpacklo_epi32(
-             _mm_unpacklo_epi16(
-               _mm_unpacklo_epi8(_mm_cvtsi32_si128(n0x100_1 + 8), _mm_cvtsi32_si128(n0x100_1 + 9)),
-               _mm_unpacklo_epi8(_mm_cvtsi32_si128(n0x100_1 + 10), _mm_cvtsi32_si128(n0x100_1 + 11))),
-             _mm_unpacklo_epi16(
-               _mm_unpacklo_epi8(_mm_cvtsi32_si128(n0x100_1 + 12), _mm_cvtsi32_si128(n0x100_1 + 13)),
-               _mm_unpacklo_epi8(_mm_cvtsi32_si128(n0x100_1 + 14), _mm_cvtsi32_si128(n0x100_1 + 15)))));
-    do
-    {
-      *(__m128i *)&a2[n0x100_1] = v7;
-      v7 = _mm_add_epi8(v7, si128);
-      n0x100_1 += 16;
-    }
-    while ( n0x100_1 < n0x100 );
-    for ( ; n0x100 < 0x100; ++n0x100 )
-      a2[n0x100] = n0x100;
-    v8 = near_lossless_max[0];
-    v9 = near_lossless_max[0];
-    if ( near_lossless_max[0] >= 256 )
-    {
-      v11 = 0;
-LABEL_29:
-      if ( v9 - v8 < 256 )
-      {
-        v17 = a2[v11];
-        a2[v11] = a2[255];
-        a2[255] = v17;
-      }
-      goto LABEL_47;
-    }
-    v44 = &a2[near_lossless_max[0]];
-    if ( n128_1 <= 0 )
-    {
-      v47 = (n128_1 - (int64_t)near_lossless_max[0] + 255) / n128_1;
-      goto LABEL_26;
-    }
-    v47 = (n128_1 - (int64_t)near_lossless_max[0] + 255) / n128_1;
-    if ( a2 >= v44 || near_lossless_max[0] < (uint32_t)v47 )
-    {
-      if ( n128_1 > 1 || a2 <= v44 || -near_lossless_max[0] < (uint32_t)(v47 * n128_1) )
-        goto LABEL_26;
-    }
-    else if ( n128_1 > 1 || a2 <= v44 )
-    {
-LABEL_20:
-      if ( a2 < v44 && near_lossless_max[0] >= (uint32_t)v47 )
-        goto LABEL_22;
-LABEL_26:
-      v14 = a2;
-      v45 = near_lossless_max[0];
-      v11 = 0;
-      v15 = &a2[near_lossless_max[0]];
-      do
-      {
-        v16 = *v14;
-        *v14 = *v15;
-        *v15 = v16;
-        v15 += n128_1;
-        ++v14;
-        ++v11;
-      }
-      while ( v11 < v47 );
-      goto LABEL_28;
-    }
-    if ( -near_lossless_max[0] >= (uint32_t)(v47 * n128_1) )
-    {
-LABEL_22:
-      v10 = a2;
-      v45 = near_lossless_max[0];
-      v11 = 0;
-      v12 = &a2[near_lossless_max[0]];
-      do
-      {
-        v13 = *v10;
-        *v10 = *v12;
-        *v12 = v13;
-        v12 += n128_1;
-        ++v10;
-        ++v11;
-      }
-      while ( v11 < v47 );
-LABEL_28:
-      v9 = v45 + v11 * n128_1;
-      v8 = near_lossless_max[0];
-      goto LABEL_29;
-    }
-    goto LABEL_20;
-  }
+  // The predictor-mode-0 branch was here: 111 lines building a 256-entry
+  // identity table with SSE.  Nothing can reach it.  This function is called
+  // only by sub_4229E0 and sub_4256F0; those are called only by the eight
+  // alt_model_p{1,2}[_d8]_{encode,decode} bodies; and model_plane and
+  // unmodel_plane dispatch to those bodies only under plane_predictor == 1
+  // or == 2.  The call graph is closed and has no path with the predictor at
+  // 0, which a run over the corpus agrees with: 164 entries, 83 at 1 and 81
+  // at 2.  Deleted on the same grounds as the fast path (REFACTORING.md
+  // section 2.1) -- code no dispatch reaches is not a feature to keep.
   *a2 = 0;
   v18 = a2 + 2;
   v19 = a2 + 1;
