@@ -781,6 +781,18 @@ Stated plainly, so the rest can be trusted:
   (the table is in §7.2). I established only which one is picked, not what they
   do; `sub_41CAB0` (1969 lines here) sits under two of them.
 
+  **The gap has a boundary, at least.** 22 bodies are reachable *only* from
+  this dispatch and from nothing else — `sub_41CAB0`, `sub_41A130`,
+  `sub_4259F0`, `sub_4256F0`, `sub_4229E0` and the rest, plus
+  `update_binary_pair` and `decode_three_way`, which the slow path does not
+  use. That is the subsystem, and it is a closed one: anything outside it is
+  described elsewhere in this document.
+
+  One thing has already come out of knowing that. `sub_4118A0` had a
+  predictor-mode-0 branch, and because the dispatch reaches this subsystem only
+  under predictor 1 or 2, no path could enter it; 111 lines went (REFACTORING.md
+  §2.3). It is the only such guard in the 22.
+
   **This is the largest gap in the document, and larger than it used to look.**
   A coverage run over `testfiles/` puts 8 of 15 decoded planes through these
   families and 7 through the path §7.2 describes. Three of the four run; only
