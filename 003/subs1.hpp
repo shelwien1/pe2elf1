@@ -3835,10 +3835,10 @@ int32_t __init_model_tables(Obj10 *_this)
         v5 = (Obj45 *)(*v4);
         v6 = **(uint16_t **)&_this->f56[5];
         v7 = v5->f0[1];
-        v32 = v5->f20;
+        v32 = (int32_t)v5->f20;
         if ( v7 == v5->f0[0] )
         {
-          v8 = v5->f20;
+          v8 = (int32_t)v5->f20;
           v5->f0[1] = --v7;
           v9 = *(uint8_t *)(v8 + 3 * v7 + 2);
         }
@@ -5185,16 +5185,16 @@ void __alt_p1_d8_encode_body(Obj0 *_this, uint8_t *a2, uint8_t *a3)
       v6 = _this->f12[44];
       v7 = _this->f12[43];
       v8 = _this->f12[42];
-      v9 = _this->f12[41];
+      v9 = (char *)_this->f12[41];
       _this->f12[45] = v6;
       _this->f12[44] = v7;
       _this->f12[43] = v8;
-      _this->f12[42] = v9;
+      _this->f12[42] = (uint32_t)v9;
       _this->f12[41] = v5;
       v5 += 8;
       _this->f12[46] = v5;
       v9 += 8;
-      _this->f12[47] = v9;
+      _this->f12[47] = (uint32_t)v9;
       _this->f12[48] = v8 + 8;
       _this->f12[49] = v7 + 8;
       _this->f12[50] = v6 + 8;
@@ -6630,7 +6630,7 @@ int32_t __rc_begin_decode(char ArgList_1)
     v1 = out_cursor;
   }
   rc.dec_init();
-  return out_cursor;
+  return (int32_t)(uintptr_t)out_cursor;
 }
 
 uint8_t *__unpredict_med(char *Src, int32_t i, int32_t a3)
@@ -6642,7 +6642,7 @@ uint8_t *__unpredict_med(char *Src, int32_t i, int32_t a3)
   uint32_t j, v36, m_1, m, v44, v50;
   uint8_t *result, *v43;
   alignas(16) uint8_t v52[255];
-  Src_1 = Src;
+  Src_1 = (uintptr_t)Src;
   n256 = near_lossless_max[0];
   result = (uint8_t *)(Src + 1);
   n128_1 = 2 * near_lossless_max[0] + 1;
@@ -6662,7 +6662,7 @@ uint8_t *__unpredict_med(char *Src, int32_t i, int32_t a3)
     v52[2 * j + 1] = (uint8_t)(-1 - (int32_t)j);
     v52[2 * j + 2] = (uint8_t)(1 + j);
   }
-  Src_1 = Src;
+  Src_1 = (uintptr_t)Src;
   // never taken: -E is 0
   i_1 = i;
   if ( i == 1 )
@@ -6911,7 +6911,7 @@ void ** __alt_model_p1_d8_decode(char ArgList, uint8_t *Src, int32_t i, int32_t 
       v5->f0[7] = *(uint8_t *)(v29 - 1) + v32;
       if ( !v33 )
       {
-        Src_1 = Src;
+        Src_1 = (uintptr_t)Src;
         v39 = v6;
         v41 = 0;
         do
@@ -7087,7 +7087,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
         v86 = v20;
         n4_2 = 0;
         v88 = v3;
-        Src_1 = Src;
+        Src_1 = (uintptr_t)Src;
         do
         {
           ++n4_2;
@@ -7221,7 +7221,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
                                                              - *(uint8_t *)(v59->f12[50] + 13)
                                                              + *(uint8_t *)(v59->f12[48] - 3)
                                                              - *(uint8_t *)(v59->f12[48] + 13));
-          v65 = 16 * v59->f12[0];
+          v65 = (uint8_t *)(16 * v59->f12[0]);
           v59->f12[2] = v59->f12[2] == 0;
           if ( *(uint16_t *)((char *)v59 + (intptr_t)(v65 + 3800)) < 0x4000u )
             __alt_p1_model(v59);
@@ -9320,7 +9320,7 @@ int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, char a3)
   v226 = (Obj97 *)((uint8_t *)a1);
   __dword_443388 = 1;
   LODWORD(v208) = v5;
-  v227 = (char *)a1 + v6 + 16;
+  v227 = (uintptr_t)((char *)a1 + v6 + 16);
   memset(buf,0,0x8000);
   n192 = 192;
   do
@@ -9828,7 +9828,7 @@ LABEL_19:
           v222 = *(double *)&v204.m128_i64[1];
           v213 = *(double *)v207.m128_i64;
           v211 = *(double *)&v207.m128_i64[1];
-          LODWORD(v210) = &((uint8_t *)v226)[v208 + 20];
+          LODWORD(v210) = (uintptr_t)&((uint8_t *)v226)[v208 + 20];
           v67 = 0;
           v224 = (int32_t)(v227 - 17 - (uint32_t)&((uint8_t *)v226)[v208]) / 4;
           do
@@ -10123,17 +10123,17 @@ int32_t *__read_bmp(char *FileName)
       {
         fread(bmp_bgra, 4u, 1u, Stream_v);
         if ( (v3->depth & 0x80) != 0 )
-          v7 = (int32_t)v3 + v3->data_size + 16;
+          v7 = (uintptr_t)v3 + v3->data_size + 16;
         else
           v7 = 0;
         *(uint8_t *)(v7 + 3 * i + 2) = bmp_bgra[2];
         if ( (v3->depth & 0x80) != 0 )
-          v8 = (int32_t)v3 + v3->data_size + 16;
+          v8 = (uintptr_t)v3 + v3->data_size + 16;
         else
           v8 = 0;
         *(uint8_t *)(v8 + 3 * i + 1) = bmp_bgra[1];
         if ( (v3->depth & 0x80) != 0 )
-          v9 = (int32_t)v3 + v3->data_size + 16;
+          v9 = (uintptr_t)v3 + v3->data_size + 16;
         else
           v9 = 0;
         *(uint8_t *)(v9 + 3 * i) = bmp_bgra[0];
@@ -10408,7 +10408,7 @@ int32_t __decode_symbol_list(uint32_t *a1)
   v68 = a1;
   v1 = alloca(32788);
   v2 = a1[1];
-  v3 = a1[5];
+  v3 = (char *)a1[5];
   v4 = &v55;
   v68 = (uint32_t *)(uint8_t)__byte_445700;
   v67 = a1;
@@ -12259,7 +12259,7 @@ void __expand_alphabet(Obj10 *_this)
   {
     v12 = bmf_new(4 * v8 + 4);
     j_1 = *((uint32_t *)_this + 4);
-    *((uint32_t *)_this + 269560) = v12;
+    *((void **)_this + 269560) = v12;
     if ( j_1 )
     {
       for ( j = 0; j < j_1; ++j )
@@ -12280,7 +12280,7 @@ void __expand_alphabet(Obj10 *_this)
       }
       if ( j_1 )
       {
-        v16 = *((uint32_t *)_this + 269560);
+        v16 = (char *)*((void **)_this + 269560);
         v17 = 0;
         v18 = 0;
         do
@@ -12301,7 +12301,7 @@ void __expand_alphabet(Obj10 *_this)
             while ( v19 < v31[0] );
             v4 = v31[0];
           }
-          v16 = *((uint32_t *)_this + 269560);
+          v16 = (char *)*((void **)_this + 269560);
           v17 = *(uint8_t *)(v16 + 4 * v18++) >> 7;
         }
         while ( v18 < *((uint32_t *)_this + 4) );
@@ -12373,8 +12373,8 @@ int32_t __layout_workspace(uintptr_t a1, int32_t a2, int32_t i, int32_t a4, int3
   for ( j = 0; j < 5; ++j )
   {
     v8 = (char *)bmf_new(8 * i_1 + 128);
-    *(uint32_t *)(a1 + 4 * j + 56) = v8;
-    *(uint32_t *)(a1 + 4 * j + 76) = v8 + 64;
+    *(char **)(a1 + 4 * j + 56) = v8;
+    *(char **)(a1 + 4 * j + 76) = v8 + 64;
     i_1 = *(uint32_t *)a1;
     if ( *(int32_t *)a1 > -16 )
     {
@@ -12395,7 +12395,7 @@ int32_t __layout_workspace(uintptr_t a1, int32_t a2, int32_t i, int32_t a4, int3
     }
   }
   v10 = (uint8_t *)bmf_new(i_1 + 1);
-  *(uint32_t *)(a1 + 1078684) = v10;
+  *(uint8_t **)(a1 + 1078684) = v10;
   *v10 = 0;
   if ( *(int32_t *)a1 > 0 )
   {
@@ -12547,7 +12547,7 @@ void __unmodel_plane_slow(Obj10 *_this, char *Src)
   uint32_t *v13, *v22, *v31, *i_1, *i, *v35, *j_1, *j, *ArgList_7, *ArgList_6;
   uint8_t *v49, *v50;
   v3 = *((uint32_t *)_this + 2) < 8;
-  Src_1 = Src;
+  Src_1 = (uintptr_t)Src;
   ArgList = &Src[-v3];
   __rc_begin_decode(0);
   __fwd_unmodel_plane_slow_expand_alphabet(_this);
@@ -12860,7 +12860,7 @@ LABEL_53:
         v56 = 0;
         do
         {
-          v57 = (uint32_t)this_4->f1078240;
+          v57 = (char *)this_4->f1078240;
           v58 = *(uint16_t *)(this_4->f56[0] + 8 * v56 + 64);
           *(uint16_t *)ArgList_7 = *(uint16_t *)(v57 + 4 * v58);
           *((uint8_t *)ArgList_7 + 2) = *(uint8_t *)(v57 + 4 * v58 + 2);
@@ -13696,7 +13696,7 @@ uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, uint8_t a4
                                                                 + ((uint32_t)(4 - v6) >> 31)
                                                                 + 2 * ((uint32_t)(9 - v6) >> 31)));
   *(uint8_t *)(a1->f278736[0] + 17) = abs32(a5);
-  v8 = a1->f278736[0];
+  v8 = (uint8_t *)a1->f278736[0];
   v9 = v577;
   a2.m128_f32[0] = (float)v577;
   v19 = a2;
@@ -15758,7 +15758,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
         n4_2 = 0;
         v150 = v5;
         i_1 = i;
-        Src_1 = Src;
+        Src_1 = (uintptr_t)Src;
         do
         {
           ++n4_2;
@@ -17208,7 +17208,7 @@ void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, BmfImage *p_i, 
     else
       Blocka_3 = (Obj10 *)(0);
     __rc_begin_encode();
-    __fwd_model_plane_reduce_alphabet(Blocka_3, v7, a4);
+    __fwd_model_plane_reduce_alphabet(Blocka_3, (int32_t)v7, a4);
     v64 = 0;
     v8 = 0;
     Blocka_2 = (Obj10 *)((uint32_t *)Blocka_3);
@@ -17230,7 +17230,7 @@ void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, BmfImage *p_i, 
         v72 = v11;
         n5 = 0;
         Blocka_5 = (Obj10 *)(Blocka_4);
-        v71 = (uintptr_t)Blocka_4 + 15 * v11;
+        v71 = (char *)((uintptr_t)Blocka_4 + 15 * v11);
         do
         {
           *(uint8_t *)(v71 + 75 * n5 + 1078308) = v64;
@@ -17565,7 +17565,7 @@ void __model_planes(char *Blockb, char *Srca_3, int32_t a3, char a4, const __m12
   Srca_2 = Srca_3;
   __fwd_model_planes_colour_transform(Blockb, Srca_3, a3, a4);
   __model_planes_buf = ::hist_scratch;
-  v12 = (uint32_t)(::hist_scratch + 15) & 0xFFFFFFF0;
+  v12 = (uintptr_t)(::hist_scratch + 15) & 0xFFFFFFF0;
   *(uint64_t *)::hist_scratch = 0;
   *((uint32_t *)__model_planes_buf + 2) = 0;
   *((uint16_t *)__model_planes_buf + 6) = 0;
@@ -19601,7 +19601,7 @@ void __bmf_compress(const __m128 &a1__ref, const __m128 &a2__ref,
     p_i_img->depth & 0x3F,
     p_i_img->data_size);
   if ( void *__nb = bmf_new(sizeof(BmfArc)) )
-    Arc = __fwd_bmf_bmf_open_archive((BmfArc *)__nb, (void *)OutName, 0);
+    Arc = (int32_t)__fwd_bmf_bmf_open_archive((BmfArc *)__nb, (void *)OutName, 0);
   else
     Arc = 0;
 
@@ -19690,7 +19690,7 @@ void __bmf_decompress(const __m128 &a1__ref, const __m128 &a2__ref,
     }
     if ( !__fwd_bmf_write_bmp((int32_t)p_i, (void *)OutName, 1) )
       __exit_402E40(5, OutName);
-    free(__dwLowDateTime);
+    free((void *)(uintptr_t)__dwLowDateTime);
     __dwLowDateTime = 0;
     free(p_i);
   }
