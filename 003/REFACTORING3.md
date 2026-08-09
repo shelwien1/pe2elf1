@@ -1,5 +1,69 @@
 # Refactoring BMF 2.01, round three
 
+## 0. What happened
+
+This was written as a plan and then worked through. Phase B is finished; A and
+C are part done and the parts that are not have measured reasons. Every number
+below is `python3 tools/shape.py` before and after.
+
+| | planned | before | now |
+| --- | --- | --- | --- |
+| raw-offset sites | fall by most of itself | 1930 | **1843** |
+| — off `_this` | | 403 | **363** |
+| globals at a 1997 address | 0 | 60 | **0** |
+| `bmf_bss` | gone | 19 584 bytes | **gone** |
+| frames | 0 | 24 | **23** |
+| frame aliases | 0 | 602 | **396** |
+| runs walked as arrays | 0 | 24 sites, 12 bases | **10 sites, 6 bases** |
+| structs | fewer | 93 | 94 |
+| — still `ObjN` | fewer | 88 | **87** |
+| `fNN` members | named | 280 | **263** |
+
+**Phase B is done.** All 60 globals left `bmf_bss` and the array itself is gone
+(§3.1 has the details, corrected where the work refuted the plan). Two of them
+could not separate from each other and now say so in an 8736-byte object
+instead of by accident in a 19 584-byte one.
+
+**Phase C is about a third done.** 206 of the 602 aliases lifted, three frames
+dissolved, and six of the twelve walked runs are declared arrays — including
+both p2 plane arrays and both p1 ones, which §5 said to do first.
+
+**Phase A is partly done.** `ModelBlock` absorbed `Obj10` after both of their
+disagreements were settled by reading; the plane-descriptor table is declared
+and 178 of its subscript sites read as records. The two merges that are left
+are blocked on things the plan did not know:
+
+* **`Obj11` cannot absorb `Obj8`, `Obj19`, `Obj31` and `Obj69` by union.**
+  `Obj11::f278528` is `__m128[21]` covering +278528..+278863, and the other
+  four declare 15 individual fields inside those bytes. It is not a coarse
+  recovery to be discarded either: `f278528[j].m128_f32[k]` is indexed with a
+  *loop variable* in `alt_p2_filter`. The region is genuinely both, so the
+  merge needs the union written by hand from a reading of the filter, not a
+  union built from offsets.
+* **`Obj92` cannot become `Obj0`.** Every offset in `alt_p1_alloc` is
+  `*((int32_t *)_this + K)` for K ≤ 53, which is `Obj0`'s `f0`/`f4`/`f8`/
+  `f12[51]` exactly — and retyping the parameter alone, with no offset touched,
+  moves four streams. Something walks that pointer at the struct's own stride.
+  §6's first hazard, in the place §2.3 said to start.
+
+Four things the plan asserted turned out to be wrong, and each is corrected in
+place below with the measurement that corrected it:
+
+1. **"Nine frames dissolve outright."** Three do. The shared-slot and run-site
+   tests miss two other ways a frame stays one object, and both were found by
+   the gate rather than by reading — see §4.2.
+2. **The alias count was 38 short**, because it missed the array bindings.
+3. **Group C was not "six counter clamps"** but a threshold pair and four
+   accumulators, and **group E was not ten scalars** but five and a table.
+4. **`&x[i]` is not address-taking.** Reading it as such pinned six frames that
+   have nothing wrong with them.
+
+New tools: `defram.py` (lift frame members), `runarray.py` (declare a walked
+run), `merge.py` (union two recoveries), `unbss.py` (give a global storage),
+`frame-sweep.sh` (lift, gate, keep or revert). `shape.py` is the scoreboard.
+
+---
+
 `REFACTORING.md` and `REFACTORING2.md` are the records of rounds one and two.
 Round two finished all three of its goals: `blob.inc` is gone, there are no SIMD
 intrinsics left, and the file compiles without `-fpermissive`. What is left is
@@ -23,10 +87,11 @@ out-of-memory ladder.** Everything below is answerable to it.
 
 ---
 
-## 1. Where this is
+## 1. Where this was
 
 `python3 tools/shape.py` prints this table, so every number in this document can
-be re-derived without trusting it:
+be re-derived without trusting it.  **This is the state the plan was written
+against; §0 has the same table as it stands now.**
 
 | | |
 | --- | --- |
@@ -228,7 +293,9 @@ finish. It is not where this should end.
 They are not 60 things. They are five — `tools/shape.py --bss` prints the
 grouping, the address and the subscript shape of each:
 
-**A. The plane-descriptor table, 0x44338C..0x4433DB — 20 globals.** Five
+**A. The plane-descriptor table, 0x44338C..0x4433DB — 20 globals.** *(Done:
+`PlaneDesc plane_desc[5]`, 178 of the ~221 subscript sites converted; the 43
+left are an index multiplied by 16 in a local that has other readers.)* Five
 16-byte records based at **0x44338C**. Record 0 holds image-wide parameters;
 records 1..4 are the four planes, so the plane `p` a reader sees is record
 `p + 1`:
@@ -287,7 +354,8 @@ separate bytes, and record 0's +0..+3 is read as a whole dword
 (`__n256_2[0] - packer_free_bits + …` at 18433). Union, or a genuinely
 different record 0. Reading the packer settles it.
 
-**B. The level geometry, 0x445714..0x445733 — 21 globals.** A table of 4-byte
+**B. The level geometry, 0x445714..0x445733 — 21 globals.** *(Done:
+`LevelGeom level_geom[8]`.)* A table of 4-byte
 records with three bytes used in each, `{start, start/2, start - level}`.
 `rc_begin_encode` writes six of them out longhand, one per level:
 
@@ -305,7 +373,8 @@ are the *same three fields* read with a variable index — `__byte_445714[4 * n]
 strided table whose entries also exist as separate globals. Record 1, at
 0x445718, is never named because nothing reads it individually.
 
-**C. Six int32 at 0x4458E0..0x4458F7 — two things, not one.** The last two,
+**C. Six int32 at 0x4458E0..0x4458F7 — two things, not one.** *(Done:
+`deadzone_hi`/`deadzone_lo` and `ctx_bias[4]`.)* The last two,
 `__dword_4458F0` and `__dword_4458F4`, are the near-lossless error thresholds,
 set together in `rc_begin_encode`:
 
@@ -329,7 +398,19 @@ global, indexed by symbol), `__byte_445440` (544, declared `uint8_t[544]`),
 global; the symbol → level table `rc_begin_*` fills). These are already arrays;
 they need a size and a home of their own, not a type.
 
-**E. Ten plain scalars.** `desc_slow_mode`, `__dword_443388`, `__byte_445700`,
+*Measured:* `model_geometry` moves out clean. The other two segfault every
+multi-plane image the moment either gets storage of its own, and they are
+exactly the two that `blob-independence.txt` marks SHARED while
+`model_geometry` is one of the nineteen it never tested. They are shared with
+each other — 8192 bytes and then 544, with something reading across the
+boundary — so they keep their adjacency in an 8736-byte object that says why.
+Finding the reader is what would separate them.
+
+**E. Five plain scalars and a table** — this said ten, and one of the ten was
+subscripted. `__dword_44573C[n4]` steps four bytes, so the four globals after
+it were the elements it was stepping onto; they are `tbl44573C[1]` .. `[4]`
+now, and `init_model_tables` reading three of them as bare symbol values is the
+same table read the other way. The five that really are scalars: `desc_slow_mode`, `__dword_443388`, `__byte_445700`,
 `__n8_1`, `__n8_0`, `__dword_44573C`, `__n4_4`, `__n4_3`, `__n15`, `__n15_0`.
 These are `static int32_t x;` and nothing else — `__byte_445700` is a rolling
 stamp value `exclusion_mask` entries are compared against, `__n8_0`/`__n8_1` are
@@ -395,12 +476,34 @@ onto storage nothing needs to be contiguous.
 
 ### 4.2 Three kinds, and only one is work
 
-**Nine frames dissolve outright.** `choose_plane_coding`, `decode_symbol_list`,
-`cost_candidate`, `expand_alphabet`, `alt_p2_model`, `decode_pixel`,
-`code_pixel`, `transform_planes` and `model_planes` have neither of the two
-things that need a frame to stay one object: no slot carrying two names, and no
-run of members walked as an array. Their aliases become ordinary declarations
-and the struct and its `static_assert` go. That is **232 of the 564**.
+**Three frames dissolve outright** — and this paragraph said nine, which is the
+most useful thing the implementation found. The shared-slot and run-site tests
+are not the whole of what keeps a frame one object. Two more things do, and the
+gate found both:
+
+* **An array member reaches its neighbours without naming them.**
+  `model_planes` passes all three tests and dies on five of the eight images:
+  its frame holds `uint16_t p_i[2]` at +20 with `v49`, `v50`, `v51` at +24, +28
+  and +32, and the body writes a four-word image descriptor through `p_i`.
+  Lifting array members anyway, in the six frames that have them, was rejected
+  by the gate in all six — `buf[4096]` really does sit in front of `v72[1024]`
+  and the body really does walk one past the end.
+* **An address that escapes does not stop at the member it came from.**
+  `alt_p2_context` takes `&v275` and hands it to `alt_p2_filter` as an `Obj12
+  *`; lifting the forty members after it segfaults every image but the
+  one-plane one. So an address-taken member freezes the *whole* frame, not
+  itself. Only a shared slot is local to its own member.
+
+`alt_p2_model` (77 aliases), `transform_planes` (5) and `model_plane` (12 of
+17) pass all four tests, and `tools/defram.py` lifts them: each alias becomes
+the declaration it stood for, and a `uint8_t _gapN[width]` takes the member's
+place so that every surviving member keeps its offset and the `static_assert`s
+still assert what they did.
+
+The other 21 frames are pinned, and unpinning them is the third category below
+rather than a separate problem. Declaring the runs freed four more frames —
+`alt_model_p2_encode`, `alt_model_p2_decode`, `alt_model_p1_encode` and all but
+the shared slots of `alt_model_p1_decode` — for 206 of the 602 aliases so far.
 
 Three of those frames are large — 41 456, 32 824 and 26 712 bytes — but that is
 because they hold real workspace arrays, which stay as arrays. Each has an
@@ -439,6 +542,30 @@ Those runs *are* arrays — `Obj11 *plane[4]` and so on — and declaring them t
 way removes the site and the cast together. This is `arrayify.py`'s operation
 applied to a frame instead of a struct, and it is also §2.2's evidence, so doing
 it names the element type at the same time.
+
+`tools/runarray.py` does it, and six of the twelve bases are done: both p2
+plane arrays and both p1 ones. Two things it had to learn:
+
+* **The run's element type comes from the aliases, not the members.** Hex-Rays
+  declared the four p2 plane pointers as one `Obj11 *` and three `__m128 *`,
+  and then aliased all four as `Obj11 *`.
+* **The walk does not always start at the array.** The p1 fill loop walks from
+  `Block` and the read loop walks from `v92`, the member *before* it,
+  pre-incrementing from zero — two origins one element apart, which is the same
+  shape as the plane-descriptor table's record 0 and the level table's base.
+  Whichever variable the walk started from is what Hex-Rays recovered, and that
+  is not always the array.
+
+What it leaves behind is §2.2's argument in plain code:
+
+```c
+    v101 = alt_p2_context((__m128 *)plane[0], v2, v3, plane[2], plane[1]);
+    v112 = alt_p2_context(v111,               v2, v3, plane[0], plane[2]);
+    v121 = alt_p2_context(v120,               v2, v3, plane[0], plane[1]);
+```
+
+The six that are left are in `reduce_alphabet` and `unmodel_plane_slow`, and
+`unmodel_plane_slow`'s four are one array reached from four bases at once.
 
 ### 4.3 Why this is worth doing
 

@@ -291,3 +291,36 @@ listed.
 One thing it learned the hard way: it reads code with comments stripped. A
 comment describing deleted code quotes it, so the first run found the very
 thing it was written to find, in the note saying that thing was gone.
+
+## `defram.py`, `runarray.py`, `merge.py`, `unbss.py` — round three
+
+Four rewriters and a sweep, one per shape REFACTORING3.md names.  Each has its
+own docstring; what they share is that their rules are static analysis over
+decompiled code that indexes past the ends of things, so the rules propose and
+the gate decides.
+
+```
+python3 tools/defram.py subs1.hpp --list      # frame members that can lift
+python3 tools/runarray.py subs1.hpp --list    # runs walked as arrays
+python3 tools/merge.py subs1.hpp --plan ModelBlock Obj10
+python3 tools/unbss.py subs1.hpp --list       # globals still at a 1997 address
+tools/frame-sweep.sh                          # lift, gate, keep or revert
+```
+
+Between them they took `bmf_bss` from 60 globals to none, 602 frame aliases to
+396, and 24 walked runs to 10.  Four things they were wrong about first, all
+four caught by the gate rather than by reading, and all four now in their
+docstrings because the next person will believe the rule otherwise:
+
+- **An address that escapes does not stop at the member it came from.**
+  Lifting the forty members after `alt_p2_context`'s `&v275` segfaults every
+  image but the one-plane one.  An address-taken member pins the whole frame.
+- **An array member reaches its neighbours without naming them.**
+  `model_planes` writes a four-word image descriptor through `uint16_t p_i[2]`
+  into the three members after it.
+- **`&x[i]` is `x + i`.**  Reading it as address-taking pinned six frames that
+  have nothing wrong with them.
+- **Two four-byte pointers of different types at one offset is the dangerous
+  merge, not two members of different widths.**  `merge.py`'s first version
+  compared widths and silently took one of `Obj10::f6059436` and
+  `ModelBlock::f6059436`; round two moved three streams on exactly that.
