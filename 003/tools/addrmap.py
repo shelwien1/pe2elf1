@@ -21,6 +21,7 @@ to be there and the old one has to be gone.  Names with no recorded address are
 listed at the end rather than left to look accounted for.
 """
 import difflib
+import os
 import re
 import subprocess
 import sys
@@ -29,6 +30,25 @@ sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs                                                  # noqa: E402
 
 DEF = re.compile(r'^[A-Za-z_].*?\b__([A-Za-z_][A-Za-z0-9_]*)\s*\(')
+def git(args, root=None):
+    return subprocess.check_output(['git'] + args, cwd=root,
+                                   stderr=subprocess.DEVNULL).decode('utf8',
+                                                                     'replace')
+
+
+def repo_path(path):
+    """The repository root, and the file's path inside it.
+
+    `git log -S ... -- 003/subs1.hpp` finds nothing when it is run from inside
+    003, and finding nothing looks exactly like a name with no recorded
+    address.  Neither the root nor the path is assumed.
+    """
+    full = os.path.abspath(path)
+    root = git(['rev-parse', '--show-toplevel'],
+               os.path.dirname(full)).strip()
+    return root, os.path.relpath(full, root)
+
+
 PAIR = re.compile(r'\bsub_([0-9A-F]{6})\s*(?:->|=>|=|→)\s*'
                   r'([a-z_][a-z0-9_]*)')
 
@@ -39,7 +59,7 @@ def real_bodies(text):
             if DEF.match(l) and not l.lstrip().startswith('static inline')]
 
 
-def from_commits(names):
+def from_commits(names, root, rel):
     """Pair names with addresses across the commit that introduced each.
 
     `tools/rename.py --funcs` substitutes a token; it does not reorder or
@@ -51,19 +71,14 @@ def from_commits(names):
     out = {}
     for name in names:
         try:
-            revs = subprocess.check_output(
-                ['git', 'log', '--format=%H', '-S', '__%s(' % name, '--',
-                 '003/subs1.hpp'], stderr=subprocess.DEVNULL).decode().split()
+            revs = git(['log', '--format=%H', '-S', '__%s(' % name, '--',
+                        rel], root).split()
         except subprocess.CalledProcessError:
             continue
         for rev in reversed(revs):
             try:
-                after = subprocess.check_output(
-                    ['git', 'show', '%s:003/subs1.hpp' % rev],
-                    stderr=subprocess.DEVNULL).decode('utf8', 'replace')
-                before = subprocess.check_output(
-                    ['git', 'show', '%s^:003/subs1.hpp' % rev],
-                    stderr=subprocess.DEVNULL).decode('utf8', 'replace')
+                after = git(['show', '%s:%s' % (rev, rel)], root)
+                before = git(['show', '%s^:%s' % (rev, rel)], root)
             except subprocess.CalledProcessError:
                 continue
             a, b = real_bodies(after), real_bodies(before)
@@ -87,10 +102,8 @@ def from_commits(names):
     return out
 
 
-def from_log():
-    log = subprocess.check_output(['git', 'log', '--format=%B'],
-                                  stderr=subprocess.DEVNULL).decode('utf8',
-                                                                    'replace')
+def from_log(root):
+    log = git(['log', '--format=%B'], root)
     out = {}
     for addr, name in PAIR.findall(log):
         out.setdefault(name, addr)
@@ -99,13 +112,14 @@ def from_log():
 
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else 'subs1.hpp'
+    root, rel = repo_path(path)
     lines = open(path).read().split('\n')
     text = '\n'.join(lines)
     defined = {n for _, _, n, sig in structs.bodies(lines)
                if 'static inline' not in sig}
 
     pairs, rejected = {}, []
-    for name, addr in from_log().items():
+    for name, addr in from_log(root).items():
         if '__' + name not in defined:
             continue
         if 'sub_%s' % addr in text:
@@ -115,7 +129,7 @@ def main():
 
     unmapped = {n.lstrip('_') for n in defined
                 if not n.startswith('__sub_')} - set(pairs)
-    for name, addr in from_commits(sorted(unmapped)).items():
+    for name, addr in from_commits(sorted(unmapped), root, rel).items():
         if 'sub_%s' % addr not in text:
             pairs[name] = addr
 
