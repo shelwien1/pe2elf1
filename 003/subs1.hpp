@@ -591,10 +591,10 @@ struct ModelBlock {
   uint32_t f1078216;
   uint32_t f1078220;
   uint8_t _pad23[8];
-  uint32_t f1078232;
+  uint32_t **f1078232;   // the symbol-list cursor: a walk over uint32_t *
   uint8_t _pad25[448];
   uint32_t f1078684;
-  uint32_t f1078688;
+  uint8_t *f1078688;     // the alphabet map, one byte a symbol
   uint8_t _pad28[4980740];
   uint32_t f6059432;
   int32_t f6059436;
@@ -1180,12 +1180,12 @@ struct Obj10 {
   uint8_t _pad34[4];
   uint32_t f1078224;
   uint8_t _pad36[4];
-  uint32_t f1078232;
+  uint32_t **f1078232;   // the symbol-list cursor: a walk over uint32_t *
   int32_t f1078236;
   uint32_t f1078240;
   uint8_t _pad40[440];
   void*f1078684;
-  uint32_t f1078688;
+  uint8_t *f1078688;     // the alphabet map, one byte a symbol
   uint8_t   f1078692[4];   // +1078692 .. +1078695
   uint8_t _pad47[4980736];
   uint32_t f6059432;
@@ -3793,7 +3793,8 @@ int32_t __init_model_tables(Obj10 *_this)
   char v13, v14, *buf;
   Obj14 *v11;
   int16_t v6, v12;
-  int32_t n2_1, v3, v7, v9, v10, v15, v17, n2, v19, v21, v22, v23, v24, v25, v26, v27, v30,
+  uint32_t **v3;
+  int32_t n2_1, v7, v9, v10, v15, v17, n2, v19, v21, v22, v23, v24, v25, v26, v27, v30,
           result;
   uint16_t *v20;
   Obj45 *v5;
@@ -3801,7 +3802,7 @@ int32_t __init_model_tables(Obj10 *_this)
   n2_1 = _this->f32;
   if ( !n2_1 )
   {
-    if ( (char *)_this + 1078216 == _this->f1078232 )
+    if ( (uint32_t **)((char *)_this + 1078216) == _this->f1078232 )
     {
       if ( _this->f1078216 )
       {
@@ -3827,7 +3828,7 @@ int32_t __init_model_tables(Obj10 *_this)
       v3 = _this->f1078232;
       do
       {
-        v4 = (uint32_t **)(v3 - 4);
+        v4 = v3 - 1;
         _this->f1078232 = v4;
         v5 = (Obj45 *)(*v4);
         v6 = **(uint16_t **)&_this->f56[5];
@@ -3862,7 +3863,7 @@ int32_t __init_model_tables(Obj10 *_this)
         }
         v3 = _this->f1078232;
       }
-      while ( v3 != (char *)_this + 1078216 );
+      while ( v3 != (uint32_t **)((char *)_this + 1078216) );
     }
     if ( __byte_445700 == -1 )
     {
@@ -10897,11 +10898,11 @@ LABEL_42:
                                         + 269089
                                         + 6 * (uint8_t)(((uint8_t *)v39)[n8 + 27] & ((uint8_t *)v39)[n8 + 19])
                                         + 3 * v40]
-            + 3 * *(uint8_t *)(this_3->f1078688 + n15_8)
+            + 3 * *(this_3->f1078688 + n15_8)
             + 1,
               (uint16_t *)this_3 + 538176);
       n4_22 = ::__n4_4;
-      v46 = this_3->f1078688;
+      v46 = (char *)this_3->f1078688;
       this_3->f32 = v44;
       *(uint8_t *)(v46 + n4_22) = v44;
       n15_14 = this_3->f32;
@@ -11834,7 +11835,7 @@ LABEL_42:
     __fwd_code_pixel_encode_context_bit((uint16_t *)this_3 + 3 * n15_32 + 538179, (uint16_t *)this_3 + 538176, n15_4);
     n15_13 = n15_4;
     n4_2 = ::__n4_4;
-    v74 = *(int32_t *)&this_3->f1078688;
+    v74 = (char *)this_3->f1078688;
     *(int32_t *)&this_3->f32 = n15_4;
     *(uint8_t *)(v74 + n4_2) = n15_13;
     if ( !n15_13 && n15_31 != 1 )
@@ -12683,7 +12684,7 @@ void __unmodel_plane_slow(Obj10 *_this, char *Src)
   this_4 = (Obj10 *)((int32_t)this_1);
   buf = (char *)bmf_new(this_1->f16);
   Size = this_1->f16;
-  this_1->f1078688 = buf;
+  this_1->f1078688 = (uint8_t *)buf;
   memset(buf,1,Size);
   v27 = this_4->f56[11];
   v28 = this_4->f56[12];
@@ -12694,7 +12695,7 @@ void __unmodel_plane_slow(Obj10 *_this, char *Src)
   this_4->f1051664[3] = v29;
   this_4->f1078224 = (uintptr_t)this_4 + 1078184;
   __fwd_unmodel_plane_slow_init_encode_symbol_list((int32_t *)((uintptr_t)this_4 + 1078184), this_4, this_4->f16, 1);
-  this_4->f1078232 = (uintptr_t)this_4 + 1078216;
+  this_4->f1078232 = (uint32_t **)((char *)this_4 + 1078216);
   v30 = this_4->f16;
   v31 = bmf_new(24 * v30 + 4);
   if ( v31 )
@@ -17334,7 +17335,7 @@ void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, BmfImage *p_i, 
     Blocka_1 = (Obj10 *)((int32_t)Blocka_2);
     buf = (char *)bmf_new(Blocka_2->f16);
     Size = Blocka_2->f16;
-    Blocka_2->f1078688 = (uint32_t)buf;
+    Blocka_2->f1078688 = (uint8_t *)buf;
     memset(buf,1,Size);
     v28 = Blocka_2->f56[11];
     v29 = Blocka_2->f56[12];
@@ -17345,7 +17346,7 @@ void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, BmfImage *p_i, 
     Blocka_2->f1051664[3] = v30;
     Blocka_2->f1078224 = (uint32_t)((uint32_t *)Blocka_2 + 269546);
     __fwd_model_plane_init_encode_symbol_list((int32_t *)((char *)Blocka_1 + 1078184), 0, Blocka_1->f16, 1);
-    Blocka_2->f1078232 = (uint32_t)((uint32_t *)Blocka_2 + 269554);
+    Blocka_2->f1078232 = (uint32_t **)((uint32_t *)Blocka_2 + 269554);
     v31 = Blocka_2->f16;
     v32 = (uint32_t *)bmf_new(24 * v31 + 4);
     if ( v32 )
