@@ -9743,21 +9743,25 @@ LABEL_20:
 //                                            height, the size of the pixels
 //   buf = (char *)result + result[3] + 16;   which start at +16
 //
-// Bit 0x80 of the depth byte is set only on the palette path -- `a4` true and a
-// depth of 8 or less -- and every reader tests it before looking for a palette.
-// The bytes at +6, +8 and +11 are padding here: they are written as part of
-// those packed words and nothing reads them back.
+// The depth byte carries two flags above its six bits of depth.  0x80 is set
+// only on the palette path -- `a4` true and a depth of 8 or less -- and every
+// reader tests it before looking for a palette; `bmf_compress` toggles it and
+// sets 0x40 around the call to the coder.  The byte after it starts as 0x40
+// from `v7`'s `| 0x40000000` and is a second flag byte: `compress_image` ors
+// bit 7 into it and tests bit 1.  Only +8 and +9 are genuinely unread.
 struct BmfImage {
   uint16_t width;             // +0
   uint16_t height;            // +2
-  uint16_t stride;            // +4   bytes per row
-  uint8_t  _pad6[4];          // +6
-  uint8_t  depth;             // +10  bits 0..5 the depth, 0x80 has a palette
-  uint8_t  _pad11;            // +11
+  uint32_t stride;            // +4   bytes per row -- a word, as result[1] is
+  uint8_t  _pad8[2];          // +8
+  uint8_t  depth;             // +10  bits 0..5 the depth; 0x40 and 0x80 flags
+  uint8_t  flags;             // +11  0x40 from alloc_image; compress_image
+                              //      sets bit 7 and toggles bit 1
   uint32_t data_size;         // +12  stride * height
 };                            // +16  pixels
 static_assert(sizeof(BmfImage) == 16, "BmfImage is not the image header");
 static_assert(__builtin_offsetof(BmfImage, stride) == 4
+              && __builtin_offsetof(BmfImage, flags) == 11
               && __builtin_offsetof(BmfImage, depth) == 10
               && __builtin_offsetof(BmfImage, data_size) == 12,
               "BmfImage fields are not where alloc_image puts them");
@@ -24383,13 +24387,14 @@ BMF_SSE void __bmf_compress(const __m128 &a1__ref, const __m128 &a2__ref,
   p_i = __fwd_bmf_read_bmp((void *)InName);
   if ( !p_i )
     __exit_402E40(4);
+  BmfImage *const p_i_img = (BmfImage *)p_i;
   printf(
     "File %16s, image %dx%dx%d, size - %d:",
     InName,
-    *(uint16_t *)p_i,
-    *((uint16_t *)p_i + 1),
-    *((uint8_t *)p_i + 10) & 0x3F,
-    p_i[3]);
+    p_i_img->width,
+    p_i_img->height,
+    p_i_img->depth & 0x3F,
+    p_i_img->data_size);
   if ( void *__nb = bmf_new(sizeof(BmfArc)) )
     Arc = __fwd_bmf_bmf_open_archive((BmfArc *)__nb, (void *)OutName, 0);
   else
@@ -24398,18 +24403,18 @@ BMF_SSE void __bmf_compress(const __m128 &a1__ref, const __m128 &a2__ref,
   // A palette that is nothing but a grey ramp carries no information: drop it
   // (bit 0x80) and mark the image greyscale (bit 0x40) instead.  This is the
   // donor's, unchanged -- it decides what goes into the stream.
-  Flags = *((uint8_t *)p_i + 10);
+  Flags = p_i_img->depth;
   if ( (Flags & 0x80) != 0 )
   {
     if ( (Flags & 0x40) != 0 )
     {
-      *((uint8_t *)p_i + 10) = Flags ^ 0x80;
+      p_i_img->depth = Flags ^ 0x80;
     }
     else
     {
       Colours = 1 << (Flags & 31);
       Step = 0x100u >> (Flags & 31);
-      Palette = (const uint8_t *)p_i + p_i[3] + 16;
+      Palette = (const uint8_t *)p_i + p_i_img->data_size + 16;
       Grey = 0;
       for ( i = 0; i < Colours; ++i )
       {
@@ -24418,7 +24423,7 @@ BMF_SSE void __bmf_compress(const __m128 &a1__ref, const __m128 &a2__ref,
         Grey += Step;
       }
       if ( i >= Colours )
-        *((uint8_t *)p_i + 10) = (Flags | 0x40) ^ 0x80;
+        p_i_img->depth = (Flags | 0x40) ^ 0x80;
     }
   }
 
@@ -24427,7 +24432,7 @@ BMF_SSE void __bmf_compress(const __m128 &a1__ref, const __m128 &a2__ref,
     __exit_402E40(5, OutName);
   printf(
     "%6.3f bpp\n",
-    (double)Size * 8.0 / (double)(*((uint16_t *)p_i + 1) * *(uint16_t *)p_i));
+    (double)Size * 8.0 / (double)(p_i_img->height * p_i_img->width));
   free(p_i);
 }
 
@@ -24451,6 +24456,7 @@ BMF_SSE void __bmf_decompress(const __m128 &a1__ref, const __m128 &a2__ref,
   while ( 1 )
   {
     p_i = (uint32_t *)__fwd_bmf_expand_image((int32_t)Block, a1, a2, 0, (void *)&__dwLowDateTime);
+    BmfImage *const p_i_img = (BmfImage *)p_i;
     if ( !p_i )
     {
       printf("\n");
@@ -24463,15 +24469,15 @@ BMF_SSE void __bmf_decompress(const __m128 &a1__ref, const __m128 &a2__ref,
     printf(
       "File %16s, image %dx%dx%d, size - %d, number: %d\r",
       InName,
-      *(uint16_t *)p_i,
-      *((uint16_t *)p_i + 1),
-      *((uint8_t *)p_i + 10) & 0x3F,
-      p_i[3],
+      p_i_img->width,
+      p_i_img->height,
+      p_i_img->depth & 0x3F,
+      p_i_img->data_size,
       Number);
     // BMF sent 2, 15 and 16 bits per pixel to its TGA writer, because a BMP
     // cannot hold them.  The output is a BMP now, so those streams have no
     // answer here and saying so beats writing a file that is not one.
-    Depth = *((uint8_t *)p_i + 10) & 0x3F;
+    Depth = p_i_img->depth & 0x3F;
     if ( Depth == 2 || Depth == 15 || Depth == 16 )
     {
       printf("\n%s: %d bits per pixel is not a BMP depth\n", OutName, Depth);
