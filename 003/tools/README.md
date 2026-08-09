@@ -22,7 +22,7 @@ nothing — and none touches `bmf.cpp` or `blob.inc`.
     python3 tools/prune_unreachable.py subs1.hpp --apply  # rewrite
     python3 tools/name_raw_addrs.py subs1.hpp
     python3 tools/hex_constants.py subs1.hpp
-    python3 tools/compact_locals.py subs1.hpp out.hpp __sub_402EF0 2
+    python3 tools/compact_locals.py subs1.hpp out.hpp __bmf_open_archive 2
 
 `name_raw_addrs.py` runs after `collect_globals.py`, since it needs the globals
 it rewrites onto to exist.  Its substitution is address-identical by
