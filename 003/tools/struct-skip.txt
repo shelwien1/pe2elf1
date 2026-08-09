@@ -208,3 +208,7 @@ __init_model_tables:v29
 __alt_p1_context:v12
 __alt_p1_context:v13
 __alt_p2_alloc:near_lossless_max
+__interleave_plane:__byte_4433AD
+__interleave_plane:Src_2 __interleave_plane:Src_3 __interleave_plane:Src_4
+__colour_transform:__byte_4433AD
+__colour_transform:Src_3 __colour_transform:Src_4 __colour_transform:Src_5
