@@ -161,3 +161,30 @@ Run the full gate before committing.
 
 69 objects converted; 81 are on the skip list. `REFACTORING.md` §Phase 4 has the
 categories and what each one means.
+
+## `addrmap.py` — which address in BMF.exe a name came from
+
+```
+python3 tools/addrmap.py subs1.hpp > tools/addrmap.txt
+```
+
+`ALGORITHM.md` used to be able to say that function names *were* the donor's
+addresses. Every rename since is a small loss of that, and this recovers it —
+from the record, not from the code.
+
+Two sources, in order. Commit messages carry `tools/rename.py`'s own output, so
+`sub_412850 -> decode_context_bit` is a statement of what happened. Where a
+rename predates that habit, the tool pairs the file's two revisions across the
+commit that made it: a token substitution does not reorder or remove bodies, so
+the k-th non-shim definition before is the k-th after. If the commit did more
+than rename, the two lists are aligned and only stretches with equal counts on
+each side are read.
+
+Every pair is checked against the file — the new name present, the old one
+gone — and names it cannot resolve are printed as unresolved rather than
+filled in. 41 of 45 are mapped.
+
+Matching bodies by the constants they contain is the obvious alternative and
+is in this file's history. It does not work: an encoder and its decoder test
+the same numbers, so it mapped `encode_context_bit` and `decode_context_bit` to
+one address and gave no sign that anything was wrong.
