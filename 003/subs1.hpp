@@ -15466,10 +15466,10 @@ void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m128 &a3__r
       v49 = *(uint32_t *)(v48 - 4);
       v97 = a5;
       *(uint32_t *)(v48 + 4) = v49;
-      **(uint32_t **)&lpAddress->f278668 = v49;
+      *(uint32_t *)lpAddress->f278668 = v49;
       v50 = lpAddress->f278660;
       v51 = lpAddress->f278664;
-      *(uint32_t *)&lpAddress->f278660 = v51;
+      lpAddress->f278660 = (int32_t *)v51;
       lpAddress->f278664 = (uint8_t *)v50;
       v51 += 8;
       v50 += 2;
@@ -15618,7 +15618,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
       uint8_t *Src_1;
       int32_t v153;
       int32_t v154;
-      void *lpAddress;
+      Obj11 *lpAddress;
       __m128 *v156;
       __m128 *v157;
       __m128 *v158;
@@ -15645,7 +15645,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   uint8_t *&Src_1 = __frame.Src_1;
   int32_t &v153 = __frame.v153;
   int32_t &v154 = __frame.v154;
-  Obj11 *&lpAddress = (Obj11 *&)__frame.lpAddress;
+  Obj11 *&lpAddress = __frame.lpAddress;
   Obj11 *&v156 = (Obj11 *&)__frame.v156;
   Obj11 *&v157 = (Obj11 *&)__frame.v157;
   Obj11 *&v158 = (Obj11 *&)__frame.v158;
@@ -15685,10 +15685,10 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   char v9;
   int16_t v110;
   uint8_t *v47, *v48, *v49, *v50, *v51, *v52, *v53;   // row cursors
-  uint8_t *v21, *v22, *v23, *v24, *v81, *v82, *v83, *v84, *v86, *v88, *v90,
+  uint8_t *v21, *v22, *v23, *v24, *v60, *v81, *v82, *v83, *v84, *v86, *v88, *v90,
           *v92, *v94, *v96, *v98;   // row cursors
   int32_t i, v5, n4, n4_1, v15, v16, v31, v32, v33, v39,
-          v40, v58, *v59, v60, v61, v68,
+          v40, v58, *v59, v61, v68,
           v69, v70, v76, v77, v101, v103, v104, v105, v106, v107, v108, v112, v113,
           v114, v115, v116, v117, v118, v119, v121, v122, v123, v124, v125,
           v126, v127, v128, v130, v131, v132, v133, v134, v135, n4_3, n4_4;
@@ -15696,7 +15696,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   Obj11 *lpAddress_1;
   uint32_t v11;
   void *v7, *v8, **lpAddress_2;
-  void * *v18;
+  Obj11 **v18;
   // The p2 filter coefficients drift over a run: rows 4..6 are folded into
   // rows 0..2 here and then zeroed, and the whole table goes back on the way
   // out, so a run starts from the same place the last one did.
@@ -15869,17 +15869,17 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
               *(uint16_t *)(v14->f278736[5] + 2 * v16 + 8) = 256;
             }
             while ( v17 );
-            v18 = (void **)v159;
+            v18 = (Obj11 **)v159;
             memcpy(v14->f278760,*(char **)&v14->f278736[5],Size);
             memcpy(v14->f278764,*(char **)&v14->f278736[5],Size);
             memcpy(v14->f278768,*(char **)&v14->f278736[5],Size);
-            v21 = *(uint32_t *)&v14->f278760 + 2 * v149 + 144;
+            v21 = (uint8_t *)v14->f278760 + 2 * v149 + 144;
             v14->f278736[0] = v14->f278736[5] + 2 * v149 + 144;
-            v22 = *(uint32_t *)&v14->f278764;
+            v22 = (uint8_t *)v14->f278764;
             v14->f278736[1] = v21;
-            v23 = *(uint32_t *)&v14->f278768;
+            v23 = (uint8_t *)v14->f278768;
             v14->f278736[2] = v22 + 2 * v149 + 144;
-            v24 = v14->f278772 + 2 * v149 + 144;
+            v24 = (uint8_t *)v14->f278772 + 2 * v149 + 144;
             v14->f278736[3] = v23 + 2 * v149 + 144;
             v14->f278736[4] = v24;
           }
@@ -15887,10 +15887,10 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v57 = v56->f278668;
           v58 = *(uint32_t *)(v57 - 4);
           *(uint32_t *)(v57 + 4) = v58;
-          **(uint32_t **)&v56->f278668 = v58;
+          *(uint32_t *)v56->f278668 = v58;
           v59 = v56->f278660;
           v60 = v56->f278664;
-          *(uint32_t *)&v56->f278660 = v60;
+          v56->f278660 = (int32_t *)v60;
           v56->f278664 = (uint8_t *)v59;
           v60 += 8;
           v56->f278668 = v60;
@@ -15919,24 +15919,22 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v67 = v56->f278736[0];
           v68 = *(uint32_t *)(v67 - 32);
           v69 = *(uint32_t *)(v67 - 28);
-          LOWORD(v60) = *(uint16_t *)(v67 - 20);
           *(uint32_t *)(v67 + 18) = *(uint32_t *)(v67 - 36);
           v70 = *(uint32_t *)(v67 - 24);
           *(uint32_t *)(v67 + 22) = v68;
           *(uint32_t *)(v67 + 26) = v69;
           *(uint32_t *)(v67 + 30) = v70;
-          *(uint16_t *)(v67 + 34) = v60;
+          *(uint16_t *)(v67 + 34) = *(uint16_t *)(v67 - 20);
           v71 = (char *)(v56->f278736[0]);
           bmf_copy((void *)((char *)v71 + 36), (const void *)((uintptr_t)v71 - 54), 18);
           v75 = v56->f278736[0];
           v76 = *(uint32_t *)(v75 - 64);
           v77 = *(uint32_t *)(v75 - 60);
-          LOWORD(v60) = *(uint16_t *)(v75 - 56);
           *(uint32_t *)(v75 + 54) = *(uint32_t *)(v75 - 72);
           *(uint32_t *)(v75 + 58) = *(uint32_t *)(v75 - 68);
           *(uint32_t *)(v75 + 62) = v76;
           *(uint32_t *)(v75 + 66) = v77;
-          *(uint16_t *)(v75 + 70) = v60;
+          *(uint16_t *)(v75 + 70) = *(uint16_t *)(v75 - 56);
           v78 = (char *)(v56->f278736[0]);
           bmf_copy((void *)((char *)v78 + 72), (const void *)((uintptr_t)v78 - 90), 18);
           v81 = v56->f278736[8];
@@ -16543,7 +16541,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
       int32_t n3;
       int32_t v157;
       int32_t v158;
-      void *lpAddress;
+      Obj11 *lpAddress;
       __m128 *v160;
       __m128 *v161;
       __m128 *v162;
@@ -16580,7 +16578,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   int32_t &n3 = __frame.n3;
   int32_t &v157 = __frame.v157;
   int32_t &v158 = __frame.v158;
-  Obj11 *&lpAddress = (Obj11 *&)__frame.lpAddress;
+  Obj11 *&lpAddress = __frame.lpAddress;
   Obj11 *&v160 = (Obj11 *&)__frame.v160;
   Obj11 *&v161 = (Obj11 *&)__frame.v161;
   Obj11 *&v162 = (Obj11 *&)__frame.v162;
@@ -16629,10 +16627,10 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   char v9;
   int16_t v113;
   uint8_t *v46, *v47, *v48, *v49, *v50, *v51, *v52;   // row cursors
-  uint8_t *v20, *v21, *v22, *v23, *v80, *v81, *v82, *v83, *v85, *v87, *v89,
+  uint8_t *v20, *v21, *v22, *v23, *v59, *v80, *v81, *v82, *v83, *v85, *v87, *v89,
           *v91, *v93, *v95, *v97;   // row cursors
   int32_t i_1, v5, n4, n4_1, v14, v15, v30, v31, v32, v38, v99,
-          v39, v57, *v58, v59, v60, v67,
+          v39, v57, *v58, v60, v67,
           v68, v69, v75, v76, v100, v101, v102, v104, v105, v106, v107, n16, v109,
           v110, v111, v112, v115, v116, v117, v118, n16_1, v120, v121, v122,
           v123, v124, v126, v127, v128, v129, n16_2, v131, v132, v134, v135,
@@ -16640,7 +16638,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   uint32_t v11;
   Obj11 *lpAddress_1;
   void *v7, *v8, **lpAddress_2;
-  void * *v17;
+  Obj11 **v17;
   v166 = a2;
   // The p2 filter coefficients drift over a run: rows 4..6 are folded into
   // rows 0..2 here and then zeroed, and the whole table goes back on the way
@@ -16813,17 +16811,17 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
               *(uint16_t *)(v13->f278736[5] + 2 * v15 + 8) = 256;
             }
             while ( v16 );
-            v17 = (void **)v163;
+            v17 = (Obj11 **)v163;
             memcpy(v13->f278760,*(char **)&v13->f278736[5],Size);
             memcpy(v13->f278764,*(char **)&v13->f278736[5],Size);
             memcpy(v13->f278768,*(char **)&v13->f278736[5],Size);
-            v20 = *(uint32_t *)&v13->f278760 + 2 * v153 + 144;
+            v20 = (uint8_t *)v13->f278760 + 2 * v153 + 144;
             v13->f278736[0] = v13->f278736[5] + 2 * v153 + 144;
-            v21 = *(uint32_t *)&v13->f278764;
+            v21 = (uint8_t *)v13->f278764;
             v13->f278736[1] = v20;
-            v22 = *(uint32_t *)&v13->f278768;
+            v22 = (uint8_t *)v13->f278768;
             v13->f278736[2] = v21 + 2 * v153 + 144;
-            v23 = v13->f278772 + 2 * v153 + 144;
+            v23 = (uint8_t *)v13->f278772 + 2 * v153 + 144;
             v13->f278736[3] = v22 + 2 * v153 + 144;
             v13->f278736[4] = v23;
           }
@@ -16831,10 +16829,10 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           v56 = v55->f278668;
           v57 = *(uint32_t *)(v56 - 4);
           *(uint32_t *)(v56 + 4) = v57;
-          **(uint32_t **)&v55->f278668 = v57;
+          *(uint32_t *)v55->f278668 = v57;
           v58 = v55->f278660;
           v59 = v55->f278664;
-          *(uint32_t *)&v55->f278660 = v59;
+          v55->f278660 = (int32_t *)v59;
           v55->f278664 = (uint8_t *)v58;
           v59 += 8;
           v55->f278668 = v59;
@@ -16863,24 +16861,22 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           v66 = v55->f278736[0];
           v67 = *(uint32_t *)(v66 - 32);
           v68 = *(uint32_t *)(v66 - 28);
-          LOWORD(v59) = *(uint16_t *)(v66 - 20);
           *(uint32_t *)(v66 + 18) = *(uint32_t *)(v66 - 36);
           v69 = *(uint32_t *)(v66 - 24);
           *(uint32_t *)(v66 + 22) = v67;
           *(uint32_t *)(v66 + 26) = v68;
           *(uint32_t *)(v66 + 30) = v69;
-          *(uint16_t *)(v66 + 34) = v59;
+          *(uint16_t *)(v66 + 34) = *(uint16_t *)(v66 - 20);
           v70 = (char *)(v55->f278736[0]);
           bmf_copy((void *)((char *)v70 + 36), (const void *)((uintptr_t)v70 - 54), 18);
           v74 = v55->f278736[0];
           v75 = *(uint32_t *)(v74 - 64);
           v76 = *(uint32_t *)(v74 - 60);
-          LOWORD(v59) = *(uint16_t *)(v74 - 56);
           *(uint32_t *)(v74 + 54) = *(uint32_t *)(v74 - 72);
           *(uint32_t *)(v74 + 58) = *(uint32_t *)(v74 - 68);
           *(uint32_t *)(v74 + 62) = v75;
           *(uint32_t *)(v74 + 66) = v76;
-          *(uint16_t *)(v74 + 70) = v59;
+          *(uint16_t *)(v74 + 70) = *(uint16_t *)(v74 - 56);
           v77 = (char *)(v55->f278736[0]);
           bmf_copy((void *)((char *)v77 + 72), (const void *)((uintptr_t)v77 - 90), 18);
           v80 = v55->f278736[8];
