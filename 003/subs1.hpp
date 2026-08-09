@@ -6779,7 +6779,7 @@ BMF_SSE int32_t __alt_p1_encode_symbol(uint16_t *a1, int32_t n5, int32_t a3, int
 // 254 * index`, counts from `_this + 2`, total in `*_this` -- same halving when
 // the total passes 0x4000, and the two are called from the matching sides:
 // `encode_symbol_tree` from alt_p1/alt_p2_encode_symbol, this from
-// alt_p1_decode_symbol and decode_three_way.
+// alt_p1_decode_symbol and alt_p2_decode_symbol.
 int32_t __decode_symbol_tree(uint16_t *_this)
 {
   ;
@@ -7015,9 +7015,15 @@ int32_t __alt_p2_encode_symbol(uint16_t *_this, char *a2, int32_t a3)
     return __fwd_alt_p2_encode_symbol_encode_symbol_tree(model_tables + 254 * *(uint32_t *)(a2 + 4 * (a3 & 1)), (a3 - 1) >> 1);
   return result;
 }
-static inline int32_t __fwd_decode_three_way_decode_symbol_tree(void *a0) { return __decode_symbol_tree((uint16_t *)a0); }
+static inline int32_t __fwd_alt_p2_decode_symbol_decode_symbol_tree(void *a0) { return __decode_symbol_tree((uint16_t *)a0); }
 
-int32_t __decode_three_way(uint16_t *_this, char *a2)
+// alt_p2_encode_symbol's counterpart, and called on the same two objects from
+// the p2 decoders that the encoders hand to it.  It was `decode_three_way` for
+// the shape of its first step -- a three-way choice over the counts at
+// `_this[1..3]` -- but so is the encoder's first step, and a pair that codes
+// the same thing should read as one.  The three-way part is still the first
+// twenty lines; the name now says which half of the pair this is.
+int32_t __alt_p2_decode_symbol(uint16_t *_this, char *a2)
 {
   ;
   int32_t v7, v8, v10, n0x4000, n32, v16, v21, v23;
@@ -7083,7 +7089,7 @@ int32_t __decode_three_way(uint16_t *_this, char *a2)
   *v9 = n32 + n0x4000;
   v16 = v9 - v24;
   if ( v16 )
-    return v16 + 2 * __fwd_decode_three_way_decode_symbol_tree(model_tables + 254 * *(uint32_t *)(a2 + 4 * (v16 & 1)));
+    return v16 + 2 * __fwd_alt_p2_decode_symbol_decode_symbol_tree(model_tables + 254 * *(uint32_t *)(a2 + 4 * (v16 & 1)));
   else
     return 0;
 }
@@ -19054,7 +19060,7 @@ LABEL_115:
   return n0x10;
 }
 
-static inline int32_t __fwd_alt_p2_d8_decode_body_decode_three_way(void *a0, int32_t a1) { return __decode_three_way((uint16_t *)a0, a1); }
+static inline int32_t __fwd_alt_p2_d8_decode_body_alt_p2_decode_symbol(void *a0, int32_t a1) { return __alt_p2_decode_symbol((uint16_t *)a0, a1); }
 static inline int32_t __fwd_alt_p2_d8_decode_body_alt_p2_context(void *a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __alt_p2_context((Obj11 *)a0, a1, a2, (Obj11 *)a3, (Obj11 *)a4); }
 
 BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m128 &a3__ref, const __m128 &a4__ref, uint8_t *a5, int32_t i, int32_t a7)
@@ -19104,7 +19110,7 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
       lpAddress->f278708 = lpAddress->f278704 + *(uint32_t *)((char *)lpAddress + (4 * v13 + 278960));
       lpAddress->f278712 = lpAddress->f278704 + *(uint32_t *)((char *)lpAddress + (4 * v13 + 278944));
       v14 = (uint8_t)((*(uint16_t *)(lpAddress->f278736 - 18) >> 4)
-                            + *(uint8_t *)(__fwd_alt_p2_d8_decode_body_decode_three_way(
+                            + *(uint8_t *)(__fwd_alt_p2_d8_decode_body_alt_p2_decode_symbol(
                                            (uint16_t *)((uintptr_t)lpAddress
                                                               + 8
                                                               * (lpAddress->f278704
@@ -19416,7 +19422,7 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
         for ( j = 0; j < i; ++j )
         {
           v92 = __fwd_alt_p2_d8_decode_body_alt_p2_context((__m128 *)lpAddress, v47, a3, nullptr, nullptr);
-          v93 = __fwd_alt_p2_d8_decode_body_decode_three_way(
+          v93 = __fwd_alt_p2_d8_decode_body_alt_p2_decode_symbol(
                   (uint16_t *)((uintptr_t)lpAddress + 8 * lpAddress->f278704 + 940072),
                   (uintptr_t)lpAddress + 278708);
           v94 = (uint8_t)(v92 + *(uint8_t *)((char *)lpAddress + (v93 + 280496)));
@@ -19450,7 +19456,7 @@ BMF_SSE void __alt_model_p2_d8_decode(const __m128 &a1__ref, const __m128 &a2__r
   if ( lpAddress )
     __fwd_alt_model_p2_d8_decode_alt_p2_free(lpAddress, 1);
 }
-static inline int32_t __fwd_alt_model_p2_decode_decode_three_way(void *a0, int32_t a1) { return __decode_three_way((uint16_t *)a0, a1); }
+static inline int32_t __fwd_alt_model_p2_decode_alt_p2_decode_symbol(void *a0, int32_t a1) { return __alt_p2_decode_symbol((uint16_t *)a0, a1); }
 static inline void ** __fwd_alt_model_p2_decode_alt_p2_free(void *a0, char a1) { return __alt_p2_free((void **)a0, a1); }
 static inline int32_t __fwd_alt_model_p2_decode_alt_p2_context(void *a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __alt_p2_context((Obj11 *)a0, a1, a2, (Obj11 *)a3, (Obj11 *)a4); }
 
@@ -19935,7 +19941,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v101 = __fwd_alt_model_p2_decode_alt_p2_context((__m128 *)lpAddress, v2, v3, v157, v156);
           v102 = (uint16_t *)&((uint32_t *)lpAddress_1)[2 * *(uint32_t *)&lpAddress_1->f278704 + 235018];
           v168 = v101;
-          v103 = __fwd_alt_model_p2_decode_decode_three_way(v102, (int32_t)((uint32_t *)lpAddress_1 + 69677));
+          v103 = __fwd_alt_model_p2_decode_alt_p2_decode_symbol(v102, (int32_t)((uint32_t *)lpAddress_1 + 69677));
           v104 = (uint8_t)(v168 + *((uint8_t *)lpAddress_1 + v103 + 280496));
           __alt_p2_model((int32_t)lpAddress_1, (__m128)__xmmword_439B60, v104, v103, v104 - v168);
           v105 = *(uint32_t *)&lpAddress_1->f278736;
@@ -19955,7 +19961,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v111 = (Obj11 *)(v156);
           *(uint16_t *)(v156->f278736.m128_i32[0] + 2) = v110;
           v112 = __fwd_alt_model_p2_decode_alt_p2_context(v111, v2, v3, lpAddress, v157);
-          v113 = __fwd_alt_model_p2_decode_decode_three_way(&v111->f940064.m128_u16[4 * v111->f278704.m128_i32[0] + 4], (int32_t)&v111->f278704.m128_i32[1]);
+          v113 = __fwd_alt_model_p2_decode_alt_p2_decode_symbol(&v111->f940064.m128_u16[4 * v111->f278704.m128_i32[0] + 4], (int32_t)&v111->f278704.m128_i32[1]);
           v114 = (uint8_t)(v112 + v111->f280496.m128_i8[v113]);
           v169 = v114;
           __alt_p2_model((int32_t)v111, (__m128)__xmmword_439B60, v114, v113, v114 - v112);
@@ -19977,7 +19983,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v120 = (Obj11 *)(v157);
           *(uint16_t *)(v157->f278736.m128_i32[0] + 2) = v119;
           v121 = __fwd_alt_model_p2_decode_alt_p2_context(v120, v2, v3, lpAddress, v156);
-          v122 = __fwd_alt_model_p2_decode_decode_three_way(&v120->f940064.m128_u16[4 * v120->f278704.m128_i32[0] + 4], (int32_t)&v120->f278704.m128_i32[1]);
+          v122 = __fwd_alt_model_p2_decode_alt_p2_decode_symbol(&v120->f940064.m128_u16[4 * v120->f278704.m128_i32[0] + 4], (int32_t)&v120->f278704.m128_i32[1]);
           v123 = (uint8_t)(v121 + v120->f280496.m128_i8[v122]);
           v170 = v123;
           __alt_p2_model((int32_t)v120, (__m128)__xmmword_439B60, v123, v122, v123 - v121);
@@ -20002,7 +20008,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
             v129 = (Obj11 *)(v158);
             *(uint16_t *)(v158->f278736.m128_i32[0] + 2) = v128;
             v130 = __fwd_alt_model_p2_decode_alt_p2_context(v129, v2, v3, v157, lpAddress);
-            v131 = __fwd_alt_model_p2_decode_decode_three_way(&v129->f940064.m128_u16[4 * v129->f278704.m128_i32[0] + 4], (int32_t)&v129->f278704.m128_i32[1]);
+            v131 = __fwd_alt_model_p2_decode_alt_p2_decode_symbol(&v129->f940064.m128_u16[4 * v129->f278704.m128_i32[0] + 4], (int32_t)&v129->f278704.m128_i32[1]);
             v154 = (uint8_t)(v130 + v129->f280496.m128_i8[v131]);
             __alt_p2_model((int32_t)v129, (__m128)__xmmword_439B60, v154, v131, v154 - v130);
             v132 = v129->f278736.m128_i32[0];
