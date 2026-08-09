@@ -18,12 +18,12 @@ so they can be re-measured rather than trusted.
 
 | | | at the start |
 | --- | --- | --- |
-| `subs1.hpp` | 24 492 lines | 25 462 |
+| `subs1.hpp` | 23 847 lines | 25 462 |
 | bodies | 179 (84 real, 94 `__fwd_*` shims, 1 helper) | 215 |
 | globals in `blob.inc` | **78** | 293 |
-| recovered structs | **111** + 3 named ones, 2583 field accesses, 17 arrays put back | 0 |
+| recovered structs | **74** + 3 named ones, 2583 field accesses, 17 arrays put back | 0 |
 | raw-offset dereferences | **250** | 1646 before Phase 4 |
-| pointer casts | 5640 | 7336 |
+| pointer casts | 5603 | 7336 |
 | `goto` / `LABEL_n:` | 113 / 81 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
 | line coverage | **95.87 %** of 13 222 | 64.5 % |
@@ -772,6 +772,18 @@ Which is the argument for merging by hand where the evidence is good, and
 against teaching the analysis to guess: **what made this safe was not a better
 alias rule, it was `alloc_image` writing all four words in one place.**
 
+The rest of the duplication needed no evidence at all, because it was not a
+question about meaning. 82 of the structs were byte-for-byte copies of one of
+sixteen declarations — ten copies of the 18-byte record `uncopy.py` found being
+`memcpy`d, ten more of it at +36, eight at +0, each from a different cursor the
+analysis could not connect. `tools/dedup.py` merges identical declarations and
+keeps the lowest-numbered name: **111 structs → 74**, and 645 lines.
+
+It stops short of the same trap on purpose. A shape with fewer than three
+members is left alone, because fifteen structs are just `const char f0;` and
+merging those would put unrelated objects under one name — a claim, where
+"these have the same layout" was a fact.
+
 #### What a 64-bit build would still need
 
 Not wider fields. Widening a field moves every field after it, which is
@@ -1119,7 +1131,8 @@ into three kinds:
 
 * **transforms** — `foldif.py`, `rename.py`, `unframe.py`, `reframe.py`,
   `retype.py`, `structs.py`, `unstruct.py`, `uncopy.py`, `degoto.py`,
-  `unused.py`, `decast.py`. Each edits the file and is answerable to the gate.
+  `unused.py`, `decast.py`, `dedup.py`. Each edits the file and is answerable to
+  the gate.
   Two of them take their worklist from the *compiler* rather than from a
   pattern of their own — `unused.py` from `-Wunused-variable`, `decast.py` from
   `-Wuseless-cast` — which is the strongest form this kind of tool can take:
@@ -1135,6 +1148,6 @@ into three kinds:
   nothing against the tree that does not; all five of `deadcheck.py`'s do.
 
 One caveat on the coverage figure: `gcov` counts *instrumented* lines (13 222
-of the file's 24 533) and counts inlined copies separately, so its per-function
+of the file's 23 847) and counts inlined copies separately, so its per-function
 percentages do not sum the way source lines do. The line counts in §2 are source
 lines, measured separately by matching braces over the function list.
