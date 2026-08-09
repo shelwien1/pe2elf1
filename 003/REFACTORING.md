@@ -179,9 +179,16 @@ an always-true jump the folding pass left. Everything between the jump and its
 label was unreachable, including the `n128_6 < 128` test the only live path
 never evaluated. 13 lines, one label, one `goto`.
 
-The lever is spent now, and the checks that say so are the ones that would have
-found all four: both spellings of the predictor test, `if ( 1 )` as a
-statement, and labels with no remaining source.
+The lever is spent now, and `tools/deadcheck.py` is why that is a statement
+rather than an impression. It looks for all four shapes — labels with no
+`goto`, constant tests as statements, tests on a pinned global in either
+spelling, and bodies nothing calls — and it is verified the only way that
+means anything: against the tree as it stood before any of the four were
+removed it reports all four; against the tree now, none.
+
+Two of the four were originally found by checks written *after* the case they
+would have caught. That is the wrong order, and it is the reason this one
+exists as a file rather than as four greps in a commit message.
 
 These are format and descriptor combinations fifteen images still do not reach.
 `alt_model_p1_decode` used to head this table with 268 lines and is not on it
