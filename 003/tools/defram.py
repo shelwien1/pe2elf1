@@ -61,8 +61,15 @@ def width(ty, count):
 
 
 def addr_taken(text, name):
-    """`&name` in an address-of position, not `a & name` and not `&&`."""
-    for m in re.finditer(r'&\s*' + re.escape(name) + r'\b', text):
+    """`&name` in an address-of position, not `a & name` and not `&&`.
+
+    `&name[i]` is not one: it is `name + i`, arithmetic on what the member
+    holds rather than on where the member sits.  Reading it as address-taking
+    pinned six frames that have nothing wrong with them.
+    """
+    for m in re.finditer(r'&\s*' + re.escape(name) + r'\b(\s*\[)?', text):
+        if m.group(1):
+            continue
         j = m.start() - 1
         while j >= 0 and text[j] == ' ':
             j -= 1
@@ -135,8 +142,13 @@ def split(lines, a, b, fr, runs):
     # segfaults every image but the one-plane one -- so an address-taken
     # member, an array member or a run base freezes the *whole* frame, not
     # itself.  Only a shared slot is local to its own member.
+    # An array member is a risk rather than a proof: `buf[4096]` sitting in
+    # front of `v72[1024]` means a body that walks one past `buf` reads `v72[0]`
+    # today and reads whatever the compiler puts there afterwards.  `--arrays`
+    # lifts them anyway and lets the gate answer.
     frozen = [x['name'] for x in fr['aliases']
-              if x['array'] or x['name'] in runs or addr_taken(text, x['name'])]
+              if (x['array'] and '--arrays' not in sys.argv)
+              or x['name'] in runs or addr_taken(text, x['name'])]
     if '&__frame' in text:
         frozen.append('&__frame')       # the struct itself is addressed
     if frozen:
