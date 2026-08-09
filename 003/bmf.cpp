@@ -557,6 +557,11 @@ union alignas(16) M128 {
   unsigned short     m128_u16[8];
   unsigned int       m128_u32[4];
   unsigned long long m128_u64[2];
+  // Several of these lanes hold addresses -- `f278528[13].m128_i32[0]` is a
+  // row base -- and at -m32 a pointer is exactly one lane wide.  Reading them
+  // through this says so, instead of through m128_i32 and a conversion that
+  // only -fpermissive allows.
+  char              *m128_p[4];
   M128() = default;
   // Hex-Rays writes "zero the register" as `x = 0` / `(__m128)0LL` even for a
   // 16-byte object; a non-zero scalar zero-extends, which is what the

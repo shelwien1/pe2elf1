@@ -38,6 +38,22 @@ incs=(-DNDEBUG -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0)
 opts=(-m32 "$ARCH" -msse2 -mfpmath=sse -std=c++17
       -fno-strict-aliasing -fpermissive -fno-rtti -fno-exceptions)
 
+# BMF_STRICT=1 drops -fpermissive and counts what breaks.  That is Phase C's
+# scoreboard (REFACTORING2.md §4.2): every one of them is a place where the
+# decompilation put an integer where a pointer belongs, or the reverse, or
+# compared two things that are not the same kind.  The target is zero.
+#
+#   BMF_STRICT=1 ./build.sh
+if [ "${BMF_STRICT:-0}" = 1 ]; then
+  opts=("${opts[@]/-fpermissive/}")
+  set -x
+  "$CXX" "${opts[@]}" -O2 "${incs[@]}" -fsyntax-only -fdiagnostics-plain-output \
+      bmf.cpp "$@" 2>&1 | tee strict.log | grep -c 'error:' || true
+  set +x
+  echo "^ conversions still needing -fpermissive (see strict.log)"
+  exit 0
+fi
+
 # g.bat set these in %opts% but its live command line never used them; kept
 # here for the same reason, so the two files still read the same.
 # unused=(-fomit-frame-pointer -fno-stack-protector -fno-stack-check
