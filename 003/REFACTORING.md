@@ -18,15 +18,15 @@ so they can be re-measured rather than trusted.
 
 | | | at the start |
 | --- | --- | --- |
-| `subs1.hpp` | 23 830 lines | 25 462 |
+| `subs1.hpp` | 24 336 lines | 25 462 |
 | bodies | 179 (84 real, 94 `__fwd_*` shims, 1 helper) | 215 |
 | globals in `blob.inc` | **78** | 293 |
-| recovered structs | **73**, 2729 named field accesses | 0 |
-| raw-offset dereferences | **523** | 1646 before Phase 4 |
-| pointer casts | 5778 | 7336 |
+| recovered structs | **109**, 2620 named field accesses, 17 arrays put back | 0 |
+| raw-offset dereferences | **294** | 1646 before Phase 4 |
+| pointer casts | 5740 | 7336 |
 | `goto` / `LABEL_n:` | 113 / 81 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
-| line coverage | **95.91 %** | 64.5 % |
+| line coverage | **95.87 %** of 13 217 | 64.5 % |
 
 The target is 32-bit. That is not a limitation left over from the port — it is
 the decision that made Phase 4 possible, and §Phase 4 says why.
@@ -400,9 +400,10 @@ last of them found a bug.
    64-bit build gets its addresses into 32 bits by confining the heap rather
    than by widening the fields.
 3. The recurring `base + constant` families are `struct`s, and the variables
-   that walk them are typed pointers to those structs. **Done for 73 objects**
-   — 2728 accesses name a field, 523 raw-offset dereferences remain, and the
-   ones declined are listed with their reasons in Phase 4.
+   that walk them are typed pointers to those structs. **Done for 109 objects**
+   — 2620 accesses name a field, 294 raw-offset dereferences remain, and the
+   ones declined are listed with their reasons in Phase 4. Seventeen were
+   recovered as structs and are arrays; they are subscripted now.
 4. Names say what things are. **No `__sub_XXXXXX` is left in the file** — the
    last five went on evidence from the call graph and from what they touch, and
    the argument for each is written above the body it names. The recovered
@@ -626,7 +627,7 @@ does not.
 `blob.inc` is down to 78 globals from 293 at the start. It cannot go to zero
 until the 77 shared ones are understood as the tables they are.
 
-### Phase 4 — 73 objects have structs; the blocker was the 64-bit goal, not the code
+### Phase 4 — 109 objects have structs; the blocker was the 64-bit goal, not the code
 
 `tools/retype.py` converted every local and parameter used as a pointer base
 first: 189 candidates, `char *` where the variable is only ever an address and
@@ -656,11 +657,25 @@ moves, the variable-offset walks keep indexing what they indexed, and each
 generated struct carries a `static_assert` on its size that says so and fails
 loudly if it ever stops being true.
 
-73 structs, gated one at a time — build, encode and decode every image, compare
+109 structs, gated one at a time — build, encode and decode every image, compare
 every stream against its committed reference, revert the ones that change
-anything. **523 raw-offset dereferences left, from 1646, and 2728 accesses now
-name a field.** 30 objects are on the skip list; the reasons are
+anything. **294 raw-offset dereferences left, from 1646, and 2620 accesses now
+name a field.** 112 objects are on the skip list; the reasons are
 in `tools/struct-skip.txt` and the categories are below.
+
+It stood at 73 for a fortnight, reported as exhausted, and it was not. The skip
+list identifies an object by the sorted set of its `function:local` pairs, and
+`rename.py` had never been told, so eight renamed bodies left 60 of 141 entries
+naming a function that is not in the file. A signature is matched whole, so one
+stale token un-skips the object: the sweep was spending its rounds re-offering
+things it had already rejected instead of reaching what it had never seen. With
+the list corrected it applied 36 more in 130 rounds. **"The tool says there is
+nothing left" is a claim about the tool.**
+
+Two of those rounds are worth keeping. One candidate whose every offset fell
+inside the member before it crashed `structs.py` outright — `max()` on an empty
+sequence — and killed the sweep mid-run; it declines now. And the last
+candidates were not objects at all, which is the next two headings.
 
 #### What is left, and why
 
@@ -670,6 +685,70 @@ in `tools/struct-skip.txt` and the categories are below.
 | the name is stepped as a pointer | `p += k` cannot be rewritten through a cast, because a cast is not an lvalue |
 | the declaration cannot be found | the name has no declaration the tool recognises, and a name left at its old type takes `nm->f8` with it into a file that does not build |
 | the gate rejected it | the rewrite compiled and changed a stream. Recorded, reverted, and not retried |
+
+#### Seventeen of them were arrays
+
+    struct Obj120 {
+      uint8_t _pad0[2];
+      uint8_t f2;
+      uint8_t _pad2[7];
+      uint8_t f10;
+      ...
+
+Five members, one type, evenly spaced, seven bytes of padding between each. That
+is not a record with five awkward fields — it is an array with a stride of
+eight, and `f2 f10 f18 f26 f34` hides the one thing about it worth seeing.
+`structs.py` half-knew: the comment it generates says "offsets the code only
+reaches with a computed index are padding here".
+
+The fix is not to revert to `*(uint8_t *)(p + 18)`. It is `p[18]`, with the
+pointer typed — and in `pixel_context` the payoff is immediate, because the same
+object is *also* subscripted with a variable index, which the struct form could
+not spell at all and left sitting next to the ones it could:
+
+```c
+result = ((uint32_t *)p_n15)[n6];               // was, and still is
+v3 = 32 * (result == p_n15->f60 || ...)         // was
+v3 = 32 * (result == p_n15[15]  || ...)         // is
+```
+
+`tools/unstruct.py` converted all seventeen, 400 accesses, and `structs.py`
+declines the shape now — four or more members, one type, offsets in exact
+arithmetic progression. The first version of that rule also required a gap
+between the members, on the idea that a packed run of one type might be a
+record. `Obj24`'s twenty-two consecutive `uint32_t` are as much an array as
+`Obj120`'s five at a stride of eight, and every member is named for its offset
+either way, so there is nothing in the struct form the subscript loses.
+
+#### And the last candidates were a `memcpy`
+
+After the arrays, everything the sweep offered had the same shape again: five
+fields four bytes apart, eighteen bytes end to end, twenty-four of them in one
+function at offsets stepping by 18 and alternating sign. Also not objects.
+
+```c
+*(uint32_t *)(v73 - 18) = *(uint32_t *)v76;
+*(uint32_t *)(v73 - 14) = *(uint32_t *)(v76 + 4);
+*(uint32_t *)(v73 - 10) = *(uint32_t *)(v76 + 8);
+*(uint32_t *)(v73 -  6) = *(uint32_t *)(v76 + 12);
+*(uint16_t *)(v73 -  2) = *(uint16_t *)(v76 + 16);
+```
+
+That is `memcpy(v73 - 18, v76, 18)` as MSVC unrolled it — four dwords and a word
+— and as Hex-Rays could only hand back. Phase 5 did this for fills; `tools/uncopy.py`
+does it for copies: 27 runs, 135 lines, one call each.
+
+A store sequence and a `memcpy` differ in exactly one case, so overlap is
+checked rather than argued. `BMF_COPY_CHECK=1 ./build.sh` routes the calls
+through a wrapper that aborts when the regions touch; the gate passes against
+it, all 27 sites execute during that run, and a deliberately overlapped copy
+does abort, so the check can fail. They are rows of a table 144 bytes apart.
+
+**Both of these are the same lesson.** A tool that only knows how to make
+structs will describe everything as a struct, and its offer list stops being
+evidence the moment it starts repeating itself. The shape of what it was
+offering — the same five fields, over and over, in one function — was the
+finding, and it was visible for 130 rounds before anyone looked at it.
 
 The same allocation can end up with more than one struct: six structs are all 278 772 bytes
 to their last member, which is one object seen in six functions the alias
@@ -831,6 +910,22 @@ gate cannot tell from a layout change.
   unlikely to have fared better. Left alone deliberately: this is a refactoring,
   and a crash that reproduces is behaviour the gate is there to preserve. Worth
   knowing before anyone points this at untrusted input.
+
+  **It has a second one, and the gate found this one for me.** The run decoder
+  inside `read_bmp` writes each run into the pixel buffer without bounding it,
+  so an RLE8 file that ends mid-run keeps writing past the end:
+
+  ```
+  head -c 6000 testfiles/x_ci.bmp > cut.bmp
+  ./bmf c cut.bmp o.bmf          # SIGSEGV in read_bmp, subs1.hpp:14835
+  ```
+
+  Any truncation of an RLE8 file does it; the same treatment of an uncompressed
+  BMP exits 4 with *Read error!*, which is why the truncated-BMP case in
+  `test.sh` picks the largest **uncompressed** image, off the compression field
+  of the info header rather than off a filename. Recorded, not repaired, for the
+  reason above — but this one is a buffer overflow rather than a null
+  dereference, and reachable from an ordinary file.
 - **A 16-bit BMP compresses and then cannot be expanded.** `read_bmp` accepts
   16 bits per pixel; the writer refuses depths 2, 15 and 16, because BMF sent
   those to a TGA writer and this build only writes BMP (`bmf_decompress` says
@@ -931,7 +1026,9 @@ grep -c 'struct \(Obj[0-9]*\|ModelBlock\) {' subs1.hpp  # 73
 grep -oE '\->f[0-9]+' subs1.hpp | wc -l               # 2728 named accesses
 grep -oE '\*\((const )?[A-Za-z_][A-Za-z0-9_]*( )?\*+\)\([A-Za-z_][A-Za-z0-9_]* \+ [0-9]+\)' \
      subs1.hpp | wc -l                                # 523 raw-offset, from 1646
-wc -l tools/struct-skip.txt                           # 30 objects declined
+wc -l tools/struct-skip.txt                           # 112 objects declined
+python3 tools/unstruct.py subs1.hpp --list             # 0 recovered structs are arrays
+python3 tools/uncopy.py  subs1.hpp --list             # 0 unrolled block copies
 python3 tools/structs.py subs1.hpp --list             # what is left, by traffic
 
 # dead code, as the linker sees it
@@ -949,7 +1046,7 @@ g++ -m32 -march=k8 -msse2 -mfpmath=sse -std=c++17 -fno-strict-aliasing \
     -D_FORTIFY_SOURCE=0 --coverage bmf.cpp -o bmfcov
 rm -f bmfcov-bmf.gcda
 BMF_TIMEOUT=600 ./test.sh ./bmfcov                    # 1m43 instrumented, 19 s not
-gcov -n    -o . bmfcov-bmf.gcno                       # 95.91 % of 13346 lines
+gcov -n    -o . bmfcov-bmf.gcno                       # 95.87 % of 13217 lines
 gcov -f -n -o . bmfcov-bmf.gcno                       # per function; nothing at 0.00 %
 gcov      -o . bmfcov-bmf.gcno                        # writes subs1.hpp.gcov
 awk -F: '$1 ~ /#####/' subs1.hpp.gcov | wc -l         # 546 unexecuted lines
@@ -962,14 +1059,14 @@ in `tools/`.  What is in `tools/` is what got run repeatedly, and it divides
 into three kinds:
 
 * **transforms** — `foldif.py`, `rename.py`, `unframe.py`, `reframe.py`,
-  `retype.py`, `structs.py`, `degoto.py`, `unused.py`. Each edits the file and
-  is answerable to the gate.
+  `retype.py`, `structs.py`, `unstruct.py`, `uncopy.py`, `degoto.py`,
+  `unused.py`. Each edits the file and is answerable to the gate.
 * **measurements** — `extents.py`, `addrmap.py`. These only report.
 * **checks** — `deadcheck.py`, and `test.sh` itself. A check earns its place by
   reporting the case it was written for against the tree that still had it, and
   nothing against the tree that does not; all five of `deadcheck.py`'s do.
 
-One caveat on the coverage figure: `gcov` counts *instrumented* lines (13 346
-of the file's 23 830) and counts inlined copies separately, so its per-function
+One caveat on the coverage figure: `gcov` counts *instrumented* lines (13 217
+of the file's 24 336) and counts inlined copies separately, so its per-function
 percentages do not sum the way source lines do. The line counts in §2 are source
 lines, measured separately by matching braces over the function list.
