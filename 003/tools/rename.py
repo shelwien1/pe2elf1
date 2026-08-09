@@ -39,6 +39,46 @@ def locals_named(text, name):
     return len(pat.findall(text))
 
 
+SKIP = 'tools/struct-skip.txt'
+
+
+def follow_skip_list(pairs, pat):
+    """Carry a rename into the objects structs.py has been told to leave alone.
+
+    `structs.py` identifies a declined object by the sorted set of its
+    `function:local` pairs, on the reasoning -- written down in its own
+    docstring -- that the set "stays the same as long as the names do".  Renames
+    are exactly what this file does, and for a long time it did not tell it: by
+    the time anyone looked, eight bodies had been renamed and 60 of the 141
+    entries named a function no longer in the file, which is to say every object
+    that had been tried and rejected was back on the offer list.
+
+    Both halves of an entry can move -- the function token and a local named
+    after it -- and the sort order moves with them, so the line is rebuilt
+    rather than patched.
+    """
+    try:
+        lines = open(SKIP).read().split('\n')
+    except IOError:
+        return 0
+    out, moved = [], 0
+    for l in lines:
+        toks = l.split()
+        if not toks:
+            continue
+        new = []
+        for t in toks:
+            was = t
+            for old, nm in pairs:
+                t = re.sub(pat(old), nm, t)
+            moved += was != t
+            new.append(t)
+        out.append(' '.join(sorted(new)))
+    if moved:
+        open(SKIP, 'w').write('\n'.join(out) + '\n')
+    return moved
+
+
 def main():
     if len(sys.argv) < 3:
         sys.exit(__doc__.strip().split('\n\n')[1].strip())
@@ -80,6 +120,9 @@ def main():
         total += k
     open(path, 'w').write(text)
     print('%d occurrences, %d names' % (total, len(pairs)))
+    n = follow_skip_list(pairs, pat)
+    if n:
+        print('%s: %d entries followed the rename' % (SKIP, n))
 
 
 if __name__ == '__main__':

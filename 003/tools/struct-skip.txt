@@ -1,30 +1,30 @@
-__sub_41A130:v109 __sub_41A130:v12 __sub_41A130:v130 __sub_41A130:v157 __sub_41A130:v172 __sub_41A130:v201 __sub_41A130:v292
-__sub_414800:_this __sub_41CAB0:n2 __sub_41CAB0:n2_1 __sub_41CAB0:n2_2 __sub_41CAB0:n2_3 __sub_41CAB0:n2_4 __sub_41CAB0:n2_5 __sub_41CAB0:n2_6 __sub_41CAB0:n2_7 __sub_41CAB0:v389 __sub_41CAB0:v411 __sub_41CAB0:v420 __sub_41CAB0:v428 __sub_41CAB0:v436 __sub_41CAB0:v444 __sub_41CAB0:v452 __sub_41CAB0:v456 __sub_41CAB0:v463 __sub_41CAB0:v474 __sub_41CAB0:v485 __sub_41CAB0:v491 __sub_41CAB0:v508
+__alt_p2_context:v109 __alt_p2_context:v12 __alt_p2_context:v130 __alt_p2_context:v157 __alt_p2_context:v172 __alt_p2_context:v201 __alt_p2_context:v292
+__alt_p2_model:n2 __alt_p2_model:n2_1 __alt_p2_model:n2_2 __alt_p2_model:n2_3 __alt_p2_model:n2_4 __alt_p2_model:n2_5 __alt_p2_model:n2_6 __alt_p2_model:n2_7 __alt_p2_model:v389 __alt_p2_model:v411 __alt_p2_model:v420 __alt_p2_model:v428 __alt_p2_model:v436 __alt_p2_model:v444 __alt_p2_model:v452 __alt_p2_model:v456 __alt_p2_model:v463 __alt_p2_model:v474 __alt_p2_model:v485 __alt_p2_model:v491 __alt_p2_model:v508 __rescale_three_way:_this
 __decode_pixel:__decode_pixel_n4_3 __decode_pixel:n4 __decode_pixel:n4_1 __decode_pixel:n4_12 __decode_pixel:n4_13 __decode_pixel:n4_14 __decode_pixel:n4_17 __decode_pixel:n4_5 __decode_pixel:n4_7
-__sub_41A130:v274 __sub_41A130:v45
-__sub_4229E0:_this
+__alt_p2_context:v274 __alt_p2_context:v45
+__alt_p2_alloc:_this
 __search_filter:v178
-__sub_41A130:v110 __sub_41A130:v160 __sub_41A130:v173 __sub_41A130:v194 __sub_41A130:v204 __sub_41A130:v293 __sub_41A130:v59
+__alt_p2_context:v110 __alt_p2_context:v160 __alt_p2_context:v173 __alt_p2_context:v194 __alt_p2_context:v204 __alt_p2_context:v293 __alt_p2_context:v59
 __write_bmp:buf __write_bmp:buf_1 __write_bmp:buf_2 __write_bmp:buf_3
 __search_filter:v179
 __write_bmp:p_i __write_bmp:p_i_1 __write_bmp:p_i_2
 __choose_plane_coding:v202 __choose_plane_coding:v203 __choose_plane_coding:v204 __choose_plane_coding:v205 __choose_plane_coding:v206 __choose_plane_coding:v207 __choose_plane_coding:v21 __choose_plane_coding:v51
 __alt_model_p2_decode:p_i __expand_image:p_i __unmodel_plane:p_i
 __layout_workspace:a1
-__sub_41CAB0:n0x10 __sub_41CAB0:n0x10_1 __sub_41CAB0:n0x10_2 __sub_41CAB0:n0x10_3 __sub_41CAB0:n0x10_4
-__decode_symbol_list:a1 __decode_symbol_list:v23 __decode_symbol_list:v32 __decode_symbol_list:v67 __decode_symbol_list:v68 __decode_symbol_list:v9 __sub_419430:v28
+__alt_p2_model:n0x10 __alt_p2_model:n0x10_1 __alt_p2_model:n0x10_2 __alt_p2_model:n0x10_3 __alt_p2_model:n0x10_4
+__decode_symbol_list:a1 __decode_symbol_list:v23 __decode_symbol_list:v32 __decode_symbol_list:v67 __decode_symbol_list:v68 __decode_symbol_list:v9 __expand_alphabet:v28
 __code_pixel:n15_31 __code_pixel:n15_33 __code_pixel:n15_35 __code_pixel:n15_36 __code_pixel:n15_38 __code_pixel:n15_39 __code_pixel:n15_40 __code_pixel:n15_41 __code_pixel:n15_42
 __alt_model_p1_decode:Block __alt_model_p1_decode:v51 __alt_model_p1_decode:v84
 __colour_transform:Blockb __interleave_plane:p_i __model_planes:Blockb __search_filter:Blockb __search_filter:Blockb_1 __search_filter:Blockb_2 __search_filter:Blockb_3 __search_filter:Blockb_4 __search_filter:Blockb_5 __search_filter:Blockb_6 __search_filter:Blockb_7 __search_filter:Blockb_8 __search_filter:Blockb_9 __transform_planes:p_ia __transform_planes:p_ia_1
-__sub_4118A0:near_lossless_max
-__sub_4248D0:v3
-__sub_413230:n251 __sub_413230:n251_1
-__sub_41A130:v268 __sub_41A130:v7
-__sub_41A130:v143 __sub_41A130:v158 __sub_41A130:v187 __sub_41A130:v205 __sub_41A130:v295
+__alt_init_tables:near_lossless_max
+__alt_p1_context:v3
+__symbol_list_update:n251 __symbol_list_update:n251_1
+__alt_p2_context:v268 __alt_p2_context:v7
+__alt_p2_context:v143 __alt_p2_context:v158 __alt_p2_context:v187 __alt_p2_context:v205 __alt_p2_context:v295
 __write_bmp:Bufferc __write_bmp:Bufferc_1 __write_bmp:Bufferc_2 __write_bmp:Bufferc_3
-__alt_model_p1_encode:Block __alt_model_p1_encode:v50 __sub_4248D0:a2
+__alt_model_p1_encode:Block __alt_model_p1_encode:v50 __alt_p1_context:a2
 __code_pixel:n2 __code_pixel:n2_1 __code_pixel:n2_10 __code_pixel:n2_15 __code_pixel:n2_16 __code_pixel:n2_3 __code_pixel:n2_5 __code_pixel:n2_7 __code_pixel:n2_9
-__sub_4118A0:a2 __sub_4118A0:v10 __sub_4118A0:v14
+__alt_init_tables:a2 __alt_init_tables:v10 __alt_init_tables:v14
 __search_filter:packer_word
 __encode_context_bit:a2
 __decode_context_bit:a2
