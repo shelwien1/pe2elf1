@@ -18,10 +18,10 @@ so they can be re-measured rather than trusted.
 
 | | | at the start |
 | --- | --- | --- |
-| `subs1.hpp` | 23 914 lines | 25 462 |
+| `subs1.hpp` | 23 807 lines | 25 462 |
 | bodies | 179 (84 real, 94 `__fwd_*` shims, 1 helper) | 215 |
 | globals in `blob.inc` | **78** | 293 |
-| recovered structs | **85** + 3 named ones, 18 arrays put back, 3 that were a `memcpy` | 0 |
+| recovered structs | **89** + 3 named ones; 18 were arrays, 3 were a `memcpy` | 0 |
 | raw-offset dereferences | **238** | 1646 before Phase 4 |
 | pointer casts | 5644 | 7336 |
 | `goto` / `LABEL_n:` | 113 / 81 | 174 / 127 |
@@ -714,6 +714,20 @@ v3 = 32 * (result == p_n15->f60 || ...)         // was
 v3 = 32 * (result == p_n15[15]  || ...)         // is
 ```
 
+**And 186 members inside structs that stay were runs of one.** `Obj0` declared
+fifty-one `uint32_t` at +12 through +212, a member each; seventeen such runs
+across ten structs. `tools/arrayify.py` collapses each into `uint32_t f12[51]`
+and rewrites the 1136 accesses. The name keeps the offset, because the offset is
+what is known — that is arithmetic, not a reading, and the `static_assert`s
+still name the same byte.
+
+`Obj1`'s two runs got real names, and that took a reading. `alt_model_p1_decode`
+rotates the five at +176 by one place every pass — `row[4] = v26; row[3] = v27;
+… row[0] = v25;` — which is a five-deep ring of row pointers, and the five at
++196 are derived from it with three of them offset by eight. So `row` and `cur`.
+The difference between those two operations is the difference this section keeps
+coming back to: one is counting, the other is evidence.
+
 `tools/unstruct.py` converted all seventeen, 400 accesses, and `structs.py`
 declines the shape now — four or more members, one type, offsets in exact
 arithmetic progression. The first version of that rule also required a gap
@@ -1160,8 +1174,8 @@ into three kinds:
 
 * **transforms** — `foldif.py`, `rename.py`, `unframe.py`, `reframe.py`,
   `retype.py`, `structs.py`, `unstruct.py`, `uncopy.py`, `degoto.py`,
-  `unused.py`, `decast.py`, `dedup.py`. Each edits the file and is answerable to
-  the gate.
+  `unused.py`, `decast.py`, `dedup.py`, `arrayify.py`. Each edits the file and
+  is answerable to the gate.
   Two of them take their worklist from the *compiler* rather than from a
   pattern of their own — `unused.py` from `-Wunused-variable`, `decast.py` from
   `-Wuseless-cast` — which is the strongest form this kind of tool can take:
