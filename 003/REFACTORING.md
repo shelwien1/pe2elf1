@@ -23,10 +23,10 @@ so they can be re-measured rather than trusted.
 | globals in `blob.inc` | **78** | 293 |
 | recovered structs | **89** + 3 named ones; 18 were arrays, 3 were a `memcpy` | 0 |
 | raw-offset dereferences | **238** | 1646 before Phase 4 |
-| pointer casts | 5644 | 7336 |
+| pointer casts | 5603 | 7336 |
 | `goto` / `LABEL_n:` | 113 / 81 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
-| line coverage | **95.87 %** of 13 222 | 64.5 % |
+| line coverage | **95.81 %** of 13 016 | 64.5 % |
 
 The target is 32-bit. That is not a limitation left over from the port — it is
 the decision that made Phase 4 possible, and §Phase 4 says why.
@@ -166,6 +166,12 @@ Then the question that was written down got asked. `n2_2` is
 `__byte_44339E[16 * v37] & 3` — the predictor itself, stored and reloaded. Both
 guards are the same guard. The test is always true, so it and its 45-line else
 are gone.
+
+The percentage moved down a tenth while the file got shorter, and the reason is
+worth a sentence because it will happen again: the 546 unexecuted lines have not
+changed at all, but folding 56 unrolled copies and 17 member runs removed
+*executed* lines from the denominator. **A coverage percentage falls when you
+delete code that runs.** The count is the number to watch.
 
 **What is left uncovered is diffuse**, and that is the useful summary. The
 unexecuted lines now form runs of at most 9, and mostly of 1 to 3.
@@ -1160,7 +1166,7 @@ g++ -m32 -march=k8 -msse2 -mfpmath=sse -std=c++17 -fno-strict-aliasing \
     -D_FORTIFY_SOURCE=0 --coverage bmf.cpp -o bmfcov
 rm -f bmfcov-bmf.gcda
 BMF_TIMEOUT=600 ./test.sh ./bmfcov                    # 1m43 instrumented, 19 s not
-gcov -n    -o . bmfcov-bmf.gcno                       # 95.87 % of 13222 lines
+gcov -n    -o . bmfcov-bmf.gcno                       # 95.81 % of 13016 lines
 gcov -f -n -o . bmfcov-bmf.gcno                       # per function; nothing at 0.00 %
 gcov      -o . bmfcov-bmf.gcno                        # writes subs1.hpp.gcov
 awk -F: '$1 ~ /#####/' subs1.hpp.gcov | wc -l         # 546 unexecuted lines
@@ -1190,7 +1196,7 @@ into three kinds:
   reporting the case it was written for against the tree that still had it, and
   nothing against the tree that does not; all five of `deadcheck.py`'s do.
 
-One caveat on the coverage figure: `gcov` counts *instrumented* lines (13 222
+One caveat on the coverage figure: `gcov` counts *instrumented* lines (13 016
 of the file's 23 914) and counts inlined copies separately, so its per-function
 percentages do not sum the way source lines do. The line counts in §2 are source
 lines, measured separately by matching braces over the function list.
