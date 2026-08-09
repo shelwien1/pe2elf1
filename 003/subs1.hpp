@@ -5778,11 +5778,7 @@ BmfArc *__bmf_destroy_archive(BmfArc *Block, char a2)
 BMF_SSE void __expand_predictor_mode0(uint32_t Src, int32_t i, int32_t a3)
 {
   ;
-  __m128i si128, v7, v8, v9, v11, v12, v19, v20, v22, v23, v24, v25, v26, v27, v28;
-  char v16, v17, v18, v31, v32, v40;
-  int32_t n256, n256_1, n128_1, n128, v15, v29, n256_2, v33, v35, v36, n128_2;
-  uint32_t n0x70, j, k, v34;
-  alignas(16) uint8_t v39[255];
+  int32_t n256, n256_1;
   n256 = near_lossless_max[0];
   n256_1 = near_lossless_max[0];
   // never taken: -E is 0
@@ -5927,11 +5923,10 @@ LABEL_24:
 BMF_SSE uint32_t __alt_init_tables(uint8_t *a1, char *a2)
 {
   ;
-  __m128i si128, v7;
-  char *v10, *v12, v13, *v14, *v15, v16, v17, *v18, *v19, v25, v26, v27, v42, *v44, v48, v53;
-  int32_t n128_1, v8, v9, v11, n128, v24, n128_6, v29, v30, n128_5, v33, n128_3, n128_4, v36,
-          n128_10, v38, n128_8, n128_9, v45, n128_11, v47, n128_2, n128_7;
-  uint32_t n0x100_1, n0x100_2, n0x100, j, k, i, v32, m, n0x80, v49, v52;
+  char *v18, *v19, v48, v53;
+  int32_t n128_1, n128_6, v30, n128_5, v33, n128_3, n128_4, v36, n128_11,
+          n128_2;
+  uint32_t j, k, i, v32, n0x80, v49, v52;
   uint8_t *v50, *v51;
   n128_1 = 2 * near_lossless_max[0] + 1;
   // The predictor-mode-0 branch was here: 111 lines building a 256-entry
@@ -6057,14 +6052,8 @@ uint32_t __rc_decode_flat(uint32_t tot)
 int32_t __encode_context_bit(uint16_t *_this, uint16_t *a2, int32_t n15)
 {
   ;
-  char v41, v42;
-  int32_t v3, v4, __encode_context_bit_n0x7F800000, v7, v9, v10, n0x800000_1, n0x4000, result, v18, v19,
-          n0x7F800000_1, v21, v23, v24, n0x800000_5, n0x4000_1, v31, v33, v35, v36, v37, v38,
-          v45, v46;
-  uint16_t *this_1, *this_2;
-  uint32_t __encode_context_bit_n0x800000, v8, v11, __encode_context_bit_n0x88, n0x800000_3, v22, v25, n0x88_1,
-           v30, v32, v34, n0x800000_2, n0x800000_4;
-  uint8_t *v12, *v26;
+  int32_t v3, v4, n0x4000, result, v18, v19, n0x4000_1, v31, v33;
+  uint32_t __encode_context_bit_n0x88, n0x88_1, v30, v32, v34;
   v3 = *_this;
   if ( *_this )
   {
@@ -6120,12 +6109,8 @@ int32_t __encode_context_bit(uint16_t *_this, uint16_t *a2, int32_t n15)
 int32_t __decode_context_bit(uint16_t *_this, uint16_t *a2)
 {
   ;
-  int32_t v2, v3, v8, result, n0x4000, v13, v14, n0x7F800000_3, v19, n0x4000_1, v24, v26;
-  uint16_t *this_1;
-  uint32_t __decode_context_bit_n0x7F800000, v5, n0x800000_1, __decode_context_bit_n0x88, n0x7F800000_1, v15,
-           n0x800000_3, n0x88_1, n0x7F800000_4, v23, v25, v27, __decode_context_bit_n0x800000,
-           n0x800000_2, n0x7F800000_2;
-  uint8_t *v6, *v16;
+  int32_t v2, v3, result, n0x4000, v13, v14, n0x4000_1, v24, v26;
+  uint32_t __decode_context_bit_n0x88, n0x88_1, v23, v25, v27;
   v2 = *_this;
   if ( *_this )
   {
@@ -6181,14 +6166,12 @@ int32_t __decode_context_bit(uint16_t *_this, uint16_t *a2)
 int32_t __encode_symbol_list(uint32_t *_this, int32_t a2)
 {
   ;
-  char v2, v27, *v28, v29, v32, v33, *v36, *v37, *v39, *v40, *v49, v50;
+  char v2, v27, *v28, v29, v32, v33, *v36, *v37, *v39, *v40, *v49;
   int16_t v51;
-  int32_t enc_cum, enc_high, enc_tot, v3, v5, v6, v7, v8, __encode_symbol_list_n0x7F800000, v11, v13,
-          v14, n0x800000_2, n0x800000_3, v24, n251, v35, v38, v41, v43, v45, v47, v52, v53, v54;
+  int32_t enc_cum, enc_high, enc_tot, v3, v5, v6, v7, v8, v24, n251, v35, v38,
+          v41, v43, v47, v53, v54;
   uint16_t *v4, *v25, v26, v31;
-  uint32_t __encode_symbol_list_n0x800000, v12, v15, v17, v18, i_1, i, v34, v42, v44, *this_1,
-           n0x800000_1;
-  uint8_t *v16;
+  uint32_t i_1, i, v34, v42, v44, *this_1;
   v2 = __byte_445700;
   v3 = *(_this + 1);
   v4 = (uint16_t *)(*(_this + 5) - 3);
@@ -6547,16 +6530,11 @@ BMF_SSE int32_t __encode_symbol_tree(uint16_t *_this, int32_t n2) {
   char *v25;   // were int32_t: these hold addresses
   __m128i v6, v7;
   bool v47;
-  char v55, v70;
   int16_t v24, v42;
-  int32_t n4, v8, v9, __encode_symbol_tree_n0x7F800000, v12, v14, v15, v19, v20, n0x800000_6,
-          n0x7F800000_6, n0x800000_5, v27, v28, v29, n0x7F800000_3, v32, v33, v46, v50, v53,
-          v56, n0x7F800000_1, n0x7F800000_2, v59, v60, i, v65, v66, n0x7F800000_5,
-          n0x7F800000_4, n0x7F800000_7, n0x800000_1, v73;
-  uint16_t *v3, *v26, n0x4000, v39, v41, *v49, *v51, *this_1, *this_2;
-  uint32_t n4_2, n4_3, __encode_symbol_tree_n0x800000, v13, v16, n0x800000_2, v31, v34, n0x800000_4,
-          v38, v40, v43, v44, v45, v48, v52, v54, n4_1, n0x800000_3;
-  uint8_t *v17, *v35;
+  int32_t n4, v8, v9, n0x800000_6, n0x7F800000_6, n0x800000_5, v27, v28, v46,
+          v50, v56, v59, i, v65, v66, n0x7F800000_5, n0x7F800000_7;
+  uint16_t *v3, *v26, n0x4000, v39, v41, *v51, *this_2;
+  uint32_t n4_2, n4_3, v38, v40, v43, v44, v45, v48, v52, n4_1, n0x800000_3;
   n4 = *((uint8_t *)model_geometry + n2);
   n4_1 = n4;
   v3 = _this + 2;
@@ -6692,14 +6670,11 @@ BMF_SSE int32_t __alt_p1_encode_symbol(uint16_t *a1, int32_t n5, int32_t a3, int
   ;
   __m128i v9, v10;
   bool v29;
-  char v39;
   int16_t v4;
-  int32_t n5a_1, n0x2000_2, v14, n0x7F800000_1, v17, v18, v22, v23, n0x800000_3, n0x800000_4,
-          result, n256, n5a_2, __alt_p1_encode_symbol_n0x7F800000, n0x7F800000_2, v42, n0x800000_1;
+  int32_t n5a_1, n0x2000_2, result, n256, n5a_2;
   uint16_t *v12, *v27, *v30, v31, *v35, *v37;
-  uint32_t __alt_p1_encode_symbol_n0x2000, n5a_3, n5a_4, __alt_p1_encode_symbol_n0x800000, v16, v19, n0x800000_2,
-           __alt_p1_encode_symbol_n0x2000_1, n0x2000_3, n0x2000_4;
-  uint8_t *v20;
+  uint32_t __alt_p1_encode_symbol_n0x2000, n5a_3, n5a_4,
+           __alt_p1_encode_symbol_n0x2000_1, n0x2000_3;
   v4 = *a1;
   n5a_1 = 6 - (n5a & 1);
   if ( n5a < 5 )
@@ -6799,12 +6774,9 @@ int32_t __sub_414060(uint16_t *_this)
 {
   ;
   int16_t v31, v33;
-  int32_t v5, v6, n2_1, v11, v12, n0x800000_2, v18, v21, v23, v25, v26, v36, v38, v40, n2, v43,
-          v44;
+  int32_t n2_1, v11, v18, v23, v25, v26, v36, v38, v40, n2, v43, v44;
   uint16_t *v8, v16, *v17, n0x4000, v28, v30, v32, v34, *v37;
-  uint32_t __sub_414060_n0x800000, __sub_414060_n0x7F800000, v3, v7, v9, n0x7F800000_1,
-           n0x800000_1, v19, n0x7F800000_2, v29, v35, v39;
-  uint8_t *v4, *v20;
+  uint32_t v7, v9, v29, v35, v39;
   v39 = *_this;
   n2 = 0;
   v7 = rc.get_freq(v39);
@@ -6903,11 +6875,10 @@ int32_t __alt_p1_decode_symbol(uint16_t *a1, int32_t a2, int32_t a3)
   ;
   bool v21;
   int16_t v16, v23;
-  int32_t n0x7F800000_1, v8, v9, v13, n0x800000_2, n0x800000_1, n5, n256;
+  int32_t n5, n256;
   uint16_t *v11, *v19, *v22;
-  uint32_t __alt_p1_decode_symbol_n0x800000, __alt_p1_decode_symbol_n0x2000, v5, __alt_p1_decode_symbol_n0x2000_1, n0x2000_2,
-           v24, __alt_p1_decode_symbol_n0x7F800000;
-  uint8_t *v6;
+  uint32_t __alt_p1_decode_symbol_n0x2000, __alt_p1_decode_symbol_n0x2000_1,
+           n0x2000_2, v24;
   __alt_p1_decode_symbol_n0x2000 = *a1 & 0x7FFF;
   __alt_p1_decode_symbol_n0x2000_1 = rc.get_freq(__alt_p1_decode_symbol_n0x2000);
   v11 = a1 + 1;
@@ -6969,14 +6940,11 @@ static inline int32_t __fwd_alt_p2_encode_symbol_encode_symbol_tree(void *a0, in
 int32_t __alt_p2_encode_symbol(uint16_t *_this, char *a2, int32_t a3)
 {
   ;
-  char v29;
   int16_t v18;
-  int32_t v3, v8, n0x7F800000_1, v11, v12, v15, n0x800000_3, n0x800000_2, n32, result,
-          __alt_p2_encode_symbol_n0x7F800000, v30;
+  int32_t v3, n32, result;
   uint16_t *v5, *v25;
-  uint32_t __alt_p2_encode_symbol_n0x2000, __alt_p2_encode_symbol_n0x800000, __alt_p2_encode_symbol_n0x2000_1, v10, v13, v21,
-           v22, v23, n0x2000_2, n0x800000_1;
-  uint8_t *v14;
+  uint32_t __alt_p2_encode_symbol_n0x2000, __alt_p2_encode_symbol_n0x2000_1,
+           v21, v22, v23;
   v3 = *(_this + 2) + *(_this + 1);
   __alt_p2_encode_symbol_n0x2000 = v3 + *(_this + 3);
   if ( a3 )
@@ -7042,10 +7010,9 @@ static inline int32_t __fwd_decode_three_way_sub_414060(void *a0) { return __sub
 int32_t __decode_three_way(uint16_t *_this, char *a2)
 {
   ;
-  int32_t v6, v7, v8, v10, v12, n0x800000_1, n0x4000, n32, v16, v21, v23, v25;
+  int32_t v7, v8, v10, n0x4000, n32, v16, v21, v23;
   uint16_t *v9, *v24;
-  uint32_t __decode_three_way_n0x800000, __decode_three_way_n0x7F800000, v4, v11, v18, v19, v20;
-  uint8_t *v5;
+  uint32_t v11, v18, v19, v20;
   v23 = *(_this + 3);
   v21 = *(_this + 2) + *(_this + 1);
   v20 = v23 + v21;
@@ -8883,7 +8850,6 @@ static inline uint32_t __fwd_alt_p2_alloc_alt_init_tables(void *a0, void *a1) { 
 int32_t __alt_p2_alloc(char *_this, int32_t i, int32_t n4)
 {
   ;
-  char v16;
   int32_t v7, v8, v9, v13, Size, v17, v18, v20, v21, v22, v23, v24, v26, v27, v28, v29;
   uint32_t j, k, n0x1E60, m_1, m, n5, n0x82, n;
   void *v10;
@@ -9013,7 +8979,7 @@ int32_t __alt_p2_alloc(char *_this, int32_t i, int32_t n4)
 int32_t *__alloc_image(int32_t a1, int32_t a2, int32_t n5, int32_t a4, int32_t a5)
 {
   ;
-  char v13, *buf;
+  char *buf;
   int32_t n4, v7, v8, v9, v10, Size, *result, *v15;
   uint32_t v5;
   LOWORD(v5) = a1;
@@ -9148,8 +9114,8 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   uintptr_t p_i_1;   // were int32_t: addresses, masked and tagged
   FILE *Stream_1, *Stream_2;
   bool v33;
-  char *Bufferc_3, v7, *Bufferc_1, *Bufferb_1, *v19, *v24, *buf_1, *v31, *v39, v42, v43, v44,
-       v45, v46, v47, *buf_3, *Bufferc_2, v56;
+  char *Bufferc_3, *Bufferc_1, *Bufferb_1, *v19, *v24, *buf_1, *v31, *v39,
+       v42, v43, v44, v45, v46, v47, *buf_3, *Bufferc_2, v56;
   int32_t v3, i, Buffer_1, n8, v14, v16, v17, v20, v21, v22, v23, v25, v26, v28, n4, n2,
           Buffer_3, Buffer_4, Size, v40, n2_1, v49, Size_1, v55;
   uint16_t *p_i_2;
@@ -9578,7 +9544,7 @@ LABEL_76:
 uint32_t __init_symbol_list(Obj35 *a1, int32_t a2, int32_t a3, int32_t a4)
 {
   ;
-  char *buf, v6;
+  char *buf;
   int32_t v7, v9, v10;
   uint32_t result;
   a1->f0 = a3;
@@ -9951,11 +9917,11 @@ BMF_SSE int32_t __rc_begin_decode(char ArgList_1)
   ;
   __m128i si128, *v13;
   char *v11, *v12, ArgList;
-  int32_t __rc_begin_decode_n8, n151, result, v7, v8, v16, v17, v20;
+  int32_t __rc_begin_decode_n8, v7, v8, v16, v17, v20;
   uint16_t *n256, *__rc_begin_decode_n256_1;
-  uint32_t v5, i;
+  uint32_t i;
   uint64_t *v9;
-  uint8_t *v1, *v4;
+  uint8_t *v1;
   v1 = out_cursor;
   if ( out_cursor != packer_word )
   {
@@ -10073,10 +10039,10 @@ BMF_SSE uint8_t *__unpredict_med(char *Src, int32_t i, int32_t a3)
 {
   ;
   uintptr_t Src_1, v41;   // were int32_t: addresses, masked and tagged
-  __m128i si128, v8, v9, v10, v12, v13, v20, v21, v23, v24, v25, v26, v27, v28, v29;
-  char v17, v18, v19, v33, v34, v39, v40, v53;
-  int32_t n256, n128_1, n128, v16, n256_1, v31, n128_2, i_1, v42, v45, v46, v47, v48, n128_3;
-  uint32_t n0x70, j, k, v36, m_1, m, v44, v50;
+  __m128i si128, v8, v9, v10, v12, v13;
+  char v39, v40, v53;
+  int32_t n256, n128_1, i_1, v42, v45, v46, v47, v48;
+  uint32_t n0x70, j, v36, m_1, m, v44, v50;
   uint8_t *result, *v43;
   alignas(16) uint8_t v52[255];
   Src_1 = Src;
@@ -12570,7 +12536,6 @@ int32_t __cost_candidate(uint8_t *a1, uint8_t *n2, int32_t a3, char a4, int32_t 
   uintptr_t v63, v64;   // were int32_t: addresses, masked and tagged
   char *v14;   // were int32_t: these hold addresses
   bool v57, v67;
-  char v11;
   double v16, v17, v18, v19, v20, v32, n191_1, n191_4;
   int32_t v9, v10, v12, v22, v23, v24, v25, v26, v27, v28, v30, v31, n191, n191_3, v37, v38,
           v39, v40, v41, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v58, v59,
@@ -12888,7 +12853,7 @@ BMF_SSE int32_t __choose_plane_coding(char *a1, int32_t n3, char a3)
   ;
   __m128i v21, v46, v47, v51, v54, v113, v114;
   bool v19, n2_4, v42, v106;
-  char v7, v10, v12, v16, v18, v22, *v44, n0x100_1, k;
+  char v7, v10, v12, v16, v18, *v44, n0x100_1, k;
   double v65, v66, v68, v69, v70, v72, v73, v74, v75, v76;
   int16_t v92;
   int32_t n4, v5, v6, n192, v11, v13, v14, n2_3, n2, n16, *v25, n128_1, n128, v30, v31, v32, v33,
@@ -13683,7 +13648,7 @@ BMF_SSE int32_t *__read_bmp(char *FileName)
   char *j;   // was int32_t: these hold addresses
   FILE *Stream_v;
   __m128i v17, v18, v19, v20, v21;
-  char v10, v25, *Src_4, v28, v30, *Src_3, *Src_6, v39, *Buffer_4, *Src_5;
+  char v25, *Src_4, v28, v30, *Src_3, *Src_6, *Buffer_4, *Src_5;
   int32_t *v3, Size_1, i, j_3, Sizea_1, v22, n2_1, v26, v31, Offset_2, v35, v38, v40, v41;
   uint32_t Size_2, j_1, j_2, n2_2, v29, ElementCount, ElementCount_1, v44;
   Stream_v = fopen(FileName, "rb");
@@ -13995,9 +13960,7 @@ int32_t __decode_symbol_list(uint32_t *a1)
   int32_t &v58 = __frame.v58;
   int32_t &v59 = __frame.v59;
   uint32_t &n0x800000_1 = __frame.n0x800000_1;
-  int32_t &v61 = __frame.v61;
   int32_t &v62 = __frame.v62;
-  uint32_t &n0x7F800000_1 = __frame.n0x7F800000_1;
   int32_t &__decode_symbol_list_n0x2000 = __frame.__decode_symbol_list_n0x2000;
   int32_t &v65 = __frame.v65;
   uint16_t *&v66 = __frame.v66;
@@ -14007,12 +13970,12 @@ int32_t __decode_symbol_list(uint32_t *a1)
   char *v3, *v7;   // were int32_t: these hold addresses
   char v23, v34, *v36, *v38, v40;
   int16_t v39;
-  int32_t sym_cum, sym_high, v2, v5, v6, v8, __decode_symbol_list_n0x7F800000, n0x7F800000_2, v16, v17,
-          n0x2000_5, n0x2000_2, v28, n0x800000_3, n0x800000_2, n251, v46, v49, v51, v53;
+  int32_t sym_cum, sym_high, v2, v5, v6, v8, n0x2000_5, n0x2000_2, n251, v46,
+          v49, v51, v53;
   uint16_t **v4, *v20, **v21, *v25, **v26, *v33, v35, *v43, *v44, *v45, *v47, *v48, *v52;
-  uint32_t *v9, __decode_symbol_list_n0x800000, n0x2000_6, v13, n0x2000_4, n0x2000_3,
-          __decode_symbol_list_n0x2000_1, *v32, v41, v42, v50, v54;
-  uint8_t *Buffer;
+  uint32_t *v9, __decode_symbol_list_n0x800000, n0x2000_6, n0x2000_4,
+           n0x2000_3, __decode_symbol_list_n0x2000_1, *v32, v41, v42, v50,
+           v54;
   void *v1;
   v68 = a1;
   v1 = alloca(32788);
@@ -15953,7 +15916,7 @@ BMF_SSE int32_t __layout_workspace(uintptr_t a1, int32_t a2, int32_t i, int32_t 
 {
   ;
   __m128i si128, v26, v27;
-  char *v8, v11, v12, v28, v29, v30, v31, v32, v37;
+  char *v8, v12;
   int16_t v19;
   int32_t i_1, j, v9, v13, n0x2000_4, k_1, v35, v38;
   uint32_t n0x2000_2, n0x2000_5, n0x2000, k, m, n0x2000_3, n0x2000_6, n0x2000_1, n, n8, n0x18;
@@ -16183,8 +16146,8 @@ void __unmodel_plane_slow(Obj10 *_this, char *Src)
   uintptr_t v44, v48;
   char *v57;   // were int32_t: these hold addresses
   bool v38;
-  char *ArgList, *v9, *ArgList_2, *buf, v26, *ArgList_3, *ArgList_9, *ArgList_10, *Src_2, *v77,
-       *ArgList_8;
+  char *ArgList, *v9, *ArgList_2, *buf, *ArgList_3, *ArgList_9, *ArgList_10,
+       *Src_2, *v77, *ArgList_8;
   int16_t v20;
   int32_t v3, v5, v6, v8, n5, v11, v14, v15, v16, v17, v18, v19, n0x10000, v27, v28, v29, v30,
           v34, v39, v40, n4_1, v43, v45, v46, v47, v51, v52, v53, v54, v56, v58, v60, v61, v62,
@@ -19094,7 +19057,6 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
   __m128 v47;
   __m128i *v53;
   bool v17;
-  char v9, v45, v46;
   int16_t v14, v24;
   Obj70 *v12;
   int32_t i_1, v13, v18, v19, v20, v22, v23, v26, v27, v29, v30, v31, v33, v34, v35, v37, v49,
@@ -19549,7 +19511,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   __m128 v2, v3;
   __m128i *v62;
   bool v17, v109;
-  char v9, v10, v19, v20, v54, v55;
+  char v9;
   int16_t v110;
   int32_t i, v5, n4, n4_1, v15, v16, v21, v22, v23, v24, v27, v28, v29, v31, v32, v33, v35,
           v36, v37, v39, v40, v42, v43, v44, v47, v48, v49, v50, v51, v52, v53, v58, *v59, v60,
@@ -20156,7 +20118,7 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
   __m128 a3 = a3__ref;
   __m128 v50;
   __m128i *v56;
-  char v10, v14, v48, v49, v97;
+  char v14, v97;
   int16_t v26;
   int32_t v12, v13, n16, v16, v17, v20, v21, v22, v24, v25, v28, v29, v31, v32, v33, v35, v36,
           v37, v39, Size, v52, *v53, v54, v55, v58, v59, v60, v62, v63, v64, v66, v67, v68,
@@ -20658,7 +20620,7 @@ BMF_SSE int32_t __alt_model_p2_encode(Obj33 *p_i, uint8_t *a2)
   __m128 v2, v3;
   __m128i *v61;
   bool v16;
-  char v9, v10, v18, v19, v53, v54;
+  char v9;
   int16_t v113;
   int32_t i_1, v5, n4, n4_1, v14, v15, v20, v21, v22, v23, v26, v27, v28, v30, v31, v32, v34,
           v35, v36, v38, v39, v41, v42, v43, v46, v47, v48, v49, v50, v51, v52, v57, *v58, v59,
@@ -21291,7 +21253,7 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
   __m128 a1 = a1__ref;
   __m128 a2 = a2__ref;
   bool v43;
-  char v7, *buf, v27;
+  char v7, *buf;
   int16_t __model_plane_n2, v22;
   Obj10 *Blocka_3;
   Obj10 *Blocka_4;
@@ -21661,17 +21623,6 @@ BMF_SSE void __model_planes(char *Blockb, char *Srca_3, int32_t a3, char a4, con
       uint8_t _pad0[32];
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 80, "frame layout moved");
-  char *&Blockb_1 = *(char **)((char *)__frame.slot0);
-  void **&Blocka = *(void ***)((char *)__frame.slot0);
-  char *&Blockc = *(char **)((char *)__frame.slot0);
-  char *&Src = *(char **)((char *)__frame.slot4);
-  char *&Srca = *(char **)((char *)__frame.slot4);
-  char *&v42 = *(char **)((char *)__frame.slot8);
-  char *&v43 = *(char **)((char *)__frame.slot8);
-  int32_t &Size = *(int32_t *)((char *)__frame.slot12);
-  int32_t &Sizea = *(int32_t *)((char *)__frame.slot12);
-  int32_t &n4_1 = *(int32_t *)((char *)__frame.slot16);
-  int32_t &n4 = *(int32_t *)((char *)__frame.slot16);
   uint16_t (&p_i)[2] = __frame.p_i;
   int32_t &v49 = __frame.v49;
   int32_t &v50 = __frame.v50;
@@ -21682,11 +21633,8 @@ BMF_SSE void __model_planes(char *Blockb, char *Srca_3, int32_t a3, char a4, con
   char *v12;   // was int32_t: these hold addresses
   __m128 a5 = a5__ref;
   __m128 a6 = a6__ref;
-  char *Srca_1, v8, *Srca_2, v10, *__model_planes_buf, v15, v20, *Srca_5, *Srca_6, v27, v29, v30,
-       v31, *Srca_4;
-  int32_t n1008, v17, v18, v19, Size_2, v24, Size_1, v26, Sizea_2, v34, Sizea_1, v36;
-  uint32_t *v14, *v28;
-  void **Blockb_2;
+  char *Srca_1, v8, *Srca_2, *__model_planes_buf;
+  int32_t n1008, v17, v18, v19;
   v53 = a3;
   Srca_1 = Srca_3;
   v8 = __byte_44339E[16 * a3];
@@ -21765,14 +21713,7 @@ BMF_SSE void __transform_planes(Obj33 *p_i, int32_t a2, char a3, const __m128 &a
   static_assert(sizeof(void *) != 4
                 || __builtin_offsetof(__typeof__(__frame), _pad11) == 44,
                 "the named part of the frame moved");
-  int32_t &v32 = __frame.v32;
-  int32_t &v33 = __frame.v33;
-  int32_t &Size = __frame.Size;
-  int32_t &n4 = __frame.n4;
-  char * &Srca = __frame.Srca;
   int32_t &n4_3 = __frame.n4_3;
-  int32_t &n4_4 = __frame.n4_3;
-  uint16_t * &p_i_1 = __frame.p_i_1;
   char * &Src = __frame.Src;
   uint16_t * &Srca_3 = __frame.Srca_3;
   char * &p_ia = __frame.p_ia;
@@ -21780,10 +21721,9 @@ BMF_SSE void __transform_planes(Obj33 *p_i, int32_t a2, char a3, const __m128 &a
   ;
   __m128 a4 = a4__ref;
   __m128 a5 = a5__ref;
-  char *__transform_planes_Buffer, *p_ia_1, v9, *Src_1, v11, *Src_3, *Src_2, *v20, v25, v31;
-  int32_t n4_1, v14, __transform_planes_n2, v16, Size_3, n4_2, v21, i, Size_4, v24, Size_2, v28,
-          Size_1, v30;
-  uint32_t Srca_2;
+  char *__transform_planes_Buffer, *p_ia_1, *Src_1, v11, *Src_3, *Src_2, *v20;
+  int32_t n4_1, v14, __transform_planes_n2, v16, Size_3, n4_2, v21, i, Size_4,
+          v24;
   uint8_t *Srca_1;
   memset(hist_scratch,0,4096);
   __transform_planes_Buffer = ::coded_buf;
@@ -21900,7 +21840,6 @@ BMF_SSE char * __expand_image(char *a1, const __m128 &a2__ref, const __m128 &a3_
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 112, "frame layout moved");
   char *&Block = *(char **)((char *)__frame.slot0);
   char *&Blocka = *(char **)((char *)__frame.slot0);
-  void **&Blockb = *(void ***)((char *)__frame.slot0);
   uint16_t (&p_i)[2] = __frame.p_i;
   int32_t &v81 = __frame.v81;
   int32_t &n4_10 = __frame.n4_10;
@@ -21924,13 +21863,15 @@ BMF_SSE char * __expand_image(char *a1, const __m128 &a2__ref, const __m128 &a3_
   __m128 a3 = a3__ref;
   FILE *Stream_1, *Stream_v;
   Obj71 *p_i_1;
-  char v10, v17, v18, v20, v34, v35, *Buffer_3, *n4_6, v57, *n4_7, *v64, v72;
-  int32_t Buffer__1, dwLowDateTime, v21, n4, v24, __expand_image_n2, v27, v28, v29, v30,
-          ArgList, v33, n4_4, v37, n2_1, i, Size_4, Size_5, n4_3, v44, Size_2, Size_3, n4_2,
-          v48, n2_2, __expand_image_n4_5, v55, Src_2, v58, n4_8, v61, i_1, n4_9, *Blockb_1, v76;
+  char v10, v17, v18, v20, v34, v35, *Buffer_3, *n4_6, *n4_7, *v64;
+  int32_t Buffer__1, dwLowDateTime, v21, n4, v24, __expand_image_n2, v27, v28,
+          v29, v30, ArgList, v33, n4_4, v37, n2_1, i, Size_4, Size_5, n4_3,
+          v44, Size_2, Size_3, n4_2, v48, n2_2, __expand_image_n4_5, v55,
+          Src_2, v58, n4_8, v61, i_1, n4_9, v76;
   uint16_t i_2;
-  uint32_t __expand_image_Buffer_1, v12, *v13, ElementCount_5, ElementCount_2, v23, v25,
-          Size_1, ElementCount_1, ElementCount_4, v67, v68, v69, v70, *v71, v74, v75;
+  uint32_t __expand_image_Buffer_1, v12, *v13, ElementCount_5, ElementCount_2,
+           v23, v25, Size_1, ElementCount_1, ElementCount_4, v67, v68, v69,
+           v70, v74, v75;
   uint8_t *Src_1;
   void *Src_3;
   v5 = a1;
@@ -22457,24 +22398,26 @@ BMF_SSE uint32_t __search_filter(Obj14 *p_i, char a2, const __m128 &a3__ref, con
   __m128 a3 = a3__ref;
   __m128 a4 = a4__ref;
   bool v35, v162;
-  char *n4_1, v19, *v24, *v26, *v27, *n4_13, *Blockb_2, *Srca_1, *Srca_6, v44, *v46, v49, *v54,
-       v62, v63, *n4_14, *v67, v70, *v74, v77, v81, v82, v86, v87, *n4_17, v93, *v101, v103,
-       *v105, *Blockb_6, *v110, *v111, *v112, *Blockb_7, v116, v122, *v124, *v130, v134, *v136,
-       *Blockb_8, *v141, *v142, *v143, *Blockb_9, *Blockb_4, *Srca_3, *Blockb_5, *Srca_4,
-       *n0x7FFFFFFF_5, *Srca_5, *Blockb_3, *Srca_2, *Blockb_1, *Srca, *n5_6;
+  char v19, *v24, *v26, *v27, *n4_13, *Blockb_2, *Srca_1, v44, v62, v63,
+       *n4_14, *v67, v70, *v74, v77, v82, v86, *n4_17, v93, *v101, *v105,
+       *Blockb_6, *v110, *v111, *v112, *Blockb_7, v116, *v124, *v130, *v136,
+       *Blockb_8, *v141, *v142, *v143, *Blockb_9, *Blockb_4, *Srca_3,
+       *Blockb_5, *Srca_4, *n0x7FFFFFFF_5, *Srca_5, *Blockb_3, *Srca_2,
+       *Blockb_1, *Srca, *n5_6;
   int16_t v114, v115, v145, v146;
-  int32_t i, i_2, i_1, i_3, n4, v10, v14, v16, v17, v18, n4_4, v21, v22, v23, Size, n0x7FFFFFFF,
-          v32, n0x7FFFFFFF_8, n0x7FFFFFFF_2, n5, n2, n0x7FFFFFFF_7, v40, v41, v42, v43, v45,
-          n4_2, v48, v50, v51, v52, i_4, n4_3, n16_1, n4_7, n4_8, v61, n16_2, n4_9, v69, v71,
-          n16, __search_filter_n4_5, v76, n4_20, n4_6, n16_3, n4_11, v85, n4_16, n16_4, n4_12,
-          n4_18, v96, v98, v99, v100, v102, v104, v106, v108, v109, n4_19, v118, v119, v120,
-          v121, v123, v125, v126, i_6, v133, v135, v137, v139, v140, v149, n0x7FFFFFFF_10,
-          n0x7FFFFFFF_4, n5_3, v155, n0x7FFFFFFF_11, n5_4, v160, n0x7FFFFFFF_6, n5_5, v166,
+  int32_t i, i_2, n4, v10, n4_4, v21, v22, v23, Size, n0x7FFFFFFF, v32,
+          n0x7FFFFFFF_8, n0x7FFFFFFF_2, n5, n2, v40, v41, v42, v43, v45,
+          n16_1, n4_7, n4_8, v61, n16_2, n4_9, v69, v71, n16,
+          __search_filter_n4_5, v76, n4_20, n4_6, n16_3, n4_11, v85, n4_16,
+          n16_4, n4_12, n4_18, v102, v104, v106, v108, v109, n4_19, v118,
+          v119, v120, v121, v123, v125, v126, i_6, v133, v135, v137, v139,
+          v140, v149, n0x7FFFFFFF_10, n0x7FFFFFFF_4, n5_3, v155,
+          n0x7FFFFFFF_11, n5_4, v160, n0x7FFFFFFF_6, n5_5, v166,
           n0x7FFFFFFF_9, n0x7FFFFFFF_3, n5_2, v172, n0x7FFFFFFF_1;
   Obj14 *p_i_1;
-  uint16_t i_5, i_7, v132;
-  uint32_t v13, v15, n64_2, n64_1, n64, n64_3, n64_4, v97;
-  uint8_t *v55, *v128, *v129;
+  uint16_t i_7, v132;
+  uint32_t n64_2, n64_1, n64, n64_3, n64_4;
+  uint8_t *v128, *v129;
   p_i_1 = (Obj14 *)(p_i);
   i = *(uint16_t *)&p_i->f0;
   i_2 = *(uint16_t *)((char *)&p_i->f0 + 2);
@@ -23348,8 +23291,8 @@ BMF_SSE int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &
   __m128 a3 = a3__ref;
   FILE *i;
   bool v38;
-  char __compress_image_Buffer_1, *Buffera_5, v12, v13, v15, v17, *Buffera_6, v21, *Srca, v36, v42,
-       *Buffera_2, *Buffera_3;
+  char __compress_image_Buffer_1, *Buffera_5, v12, v13, v15, v17, *Buffera_6,
+       v21, *Srca, v36, *Buffera_2, *Buffera_3;
   int32_t __compress_image_n4_5, v11, v18, n4_6, __compress_image_n8, n4, v27, n8_1,
           __compress_image_n256, n4_1, v40, v41, v43, n4_3, v47, i_1, v50, n4_4, v56;
   Obj14 *p_i_1;
