@@ -4619,20 +4619,6 @@ static_assert(sizeof(void *) != 4
               "Obj32: the layout moved");
 
 
-// Obj33 -- recovered from 19 dereferences over 3 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj33 {
-  uint32_t f0;
-  uint8_t _pad1[6];
-  uint16_t f10;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj33, f10) == 10,
-              "Obj33: the layout moved");
-
 
 
 
@@ -21238,7 +21224,7 @@ static inline int32_t __fwd_alt_model_p2_encode_alt_p2_encode_symbol(void *a0, i
 static inline void ** __fwd_alt_model_p2_encode_alt_p2_free(void *a0, char a1) { return __alt_p2_free((void **)a0, a1); }
 static inline int32_t __fwd_alt_model_p2_encode_alt_p2_context(void *a0, const __m128 &a1, const __m128 &a2, void *a3, void *a4) { return __alt_p2_context((Obj11 *)a0, a1, a2, (Obj11 *)a3, (Obj11 *)a4); }
 
-BMF_SSE int32_t __alt_model_p2_encode(Obj33 *p_i, uint8_t *a2)
+BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
 {
   struct alignas(16) {   // 324 bytes, the frame Hex-Rays could not name
       uint32_t Size_1;
@@ -21383,8 +21369,8 @@ BMF_SSE int32_t __alt_model_p2_encode(Obj33 *p_i, uint8_t *a2)
   __xmmword_441160 = 0;
   __xmmword_441170 = 0;
   __xmmword_441180 = 0;
-  i_1 = *(uint16_t *)&p_i->f0;
-  v5 = *(uint16_t *)((char *)&p_i->f0 + 2);
+  i_1 = p_i->width;
+  v5 = p_i->height;
   if ( plane_count > 0 )
   {
     n4 = 0;
@@ -21896,11 +21882,11 @@ static inline void ** __fwd_model_plane_free_workspace(void *a0, char a1) { retu
 static inline int32_t __fwd_model_plane_code_pixel(void *a0, int32_t a1) { return __code_pixel((ModelBlock *)a0, a1); }
 static inline void __fwd_model_plane_reduce_alphabet(int32_t a0, char a1, void *a2) { __reduce_alphabet((Obj10 *)a0, a1, (uint8_t *)a2); }
 static inline void __fwd_model_plane_alt_model_p2_d8_encode(const __m128 &a0, const __m128 &a1, void *a2, int32_t a3, int32_t a4, void *a5) { __alt_model_p2_d8_encode(a0, a1, (uint8_t *)a2, a3, a4, (uint8_t *)a5); }
-static inline int32_t __fwd_model_plane_alt_model_p2_encode(void *a0, void *a1) { return __alt_model_p2_encode((Obj33 *)a0, (uint8_t *)a1); }
+static inline int32_t __fwd_model_plane_alt_model_p2_encode(void *a0, void *a1) { return __alt_model_p2_encode((BmfImage *)a0, (uint8_t *)a1); }
 static inline void __fwd_model_plane_alt_model_p1_d8_encode(void *a0, int32_t a1, int32_t a2, void *a3) { __alt_model_p1_d8_encode((uint8_t *)a0, a1, a2, (uint8_t *)a3); }
 static inline int32_t __fwd_model_plane_alt_model_p1_encode(void *a0, int32_t a1) { return __alt_model_p1_encode((uint16_t *)a0, a1); }
 
-BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *p_i, uint8_t *a4, uint8_t *a5)
+BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, BmfImage *p_i, uint8_t *a4, uint8_t *a5)
 {
   struct alignas(16) {   // 96 bytes, the frame Hex-Rays could not name
       int32_t   Size;
@@ -21963,15 +21949,15 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
   {
     if ( ::plane_predictor == 1 )
     {
-      if ( (p_i->f10 & 0x3F) == 8 )
-        __fwd_model_plane_alt_model_p1_d8_encode(a4, *(uint16_t *)&p_i->f0, *(uint16_t *)((char *)&p_i->f0 + 2), a5);
+      if ( (p_i->depth & 0x3F) == 8 )
+        __fwd_model_plane_alt_model_p1_d8_encode(a4, p_i->width, p_i->height, a5);
       else
         __fwd_model_plane_alt_model_p1_encode(p_i, (int32_t)a4);
     }
     else if ( ::plane_predictor == 2 )
     {
-      if ( (p_i->f10 & 0x3F) == 8 )
-        __fwd_model_plane_alt_model_p2_d8_encode(a1, a2, a4, *(uint16_t *)&p_i->f0, *(uint16_t *)((char *)&p_i->f0 + 2), a5);
+      if ( (p_i->depth & 0x3F) == 8 )
+        __fwd_model_plane_alt_model_p2_d8_encode(a1, a2, a4, p_i->width, p_i->height, a5);
       else
         __fwd_model_plane_alt_model_p2_encode(p_i, a4);
     }
@@ -21980,7 +21966,7 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
   {
     v5 = bmf_new(0x7BA230u);
     if ( v5 )
-      Blocka_3 = (Obj10 *)(__layout_workspace((int32_t)v5, *(uint16_t *)((char *)&p_i->f0 + 2), *(uint16_t *)&p_i->f0, *(uint16_t *)((char *)&p_i->f0 + 2), p_i->f10 & 0x3F));
+      Blocka_3 = (Obj10 *)(__layout_workspace((int32_t)v5, p_i->height, p_i->width, p_i->height, p_i->depth & 0x3F));
     else
       Blocka_3 = (Obj10 *)(0);
     __rc_begin_encode();
@@ -22301,7 +22287,7 @@ BMF_SSE void __model_plane(const __m128 &a1__ref, const __m128 &a2__ref, Obj33 *
   }
 }
 static inline char * __fwd_model_planes_colour_transform(void *a0, void *a1, int32_t a2, char a3) { return __colour_transform((char *)a0, (char *)a1, a2, a3); }
-static inline void __fwd_model_planes_model_plane(const __m128 &a0, const __m128 &a1, void *a2, void *a3, void *a4) { __model_plane(a0, a1, (Obj33 *)a2, (uint8_t *)a3, (uint8_t *)a4); }
+static inline void __fwd_model_planes_model_plane(const __m128 &a0, const __m128 &a1, void *a2, void *a3, void *a4) { __model_plane(a0, a1, (BmfImage *)a2, (uint8_t *)a3, (uint8_t *)a4); }
 
 BMF_SSE void __model_planes(char *Blockb, char *Srca_3, int32_t a3, char a4, const __m128 &a5__ref, const __m128 &a6__ref)
 {
@@ -22386,9 +22372,9 @@ BMF_SSE void __model_planes(char *Blockb, char *Srca_3, int32_t a3, char a4, con
 }
 
 static inline char * __fwd_transform_planes_colour_transform(void *a0, void *a1, int32_t a2, char a3) { return __colour_transform((char *)a0, (char *)a1, a2, a3); }
-static inline void __fwd_transform_planes_model_plane(const __m128 &a0, const __m128 &a1, void *a2, void *a3, void *a4) { __model_plane(a0, a1, (Obj33 *)a2, (uint8_t *)a3, (uint8_t *)a4); }
+static inline void __fwd_transform_planes_model_plane(const __m128 &a0, const __m128 &a1, void *a2, void *a3, void *a4) { __model_plane(a0, a1, (BmfImage *)a2, (uint8_t *)a3, (uint8_t *)a4); }
 
-BMF_SSE void __transform_planes(Obj33 *p_i, int32_t a2, char a3, const __m128 &a4__ref, const __m128 &a5__ref)
+BMF_SSE void __transform_planes(BmfImage *p_i, int32_t a2, char a3, const __m128 &a4__ref, const __m128 &a5__ref)
 {
   struct alignas(16) {   // 76 bytes, the frame Hex-Rays could not name
       int32_t   v32;
@@ -22425,13 +22411,13 @@ BMF_SSE void __transform_planes(Obj33 *p_i, int32_t a2, char a3, const __m128 &a
   memset(hist_scratch,0,4096);
   __transform_planes_Buffer = ::coded_buf;
   p_ia_1 = ::coded_buf + 16;
-  *((uint32_t *)::coded_buf + 4) = p_i->f0;
+  *((uint32_t *)::coded_buf + 4) = *(uint32_t *)&p_i->width;
   *((uint32_t *)p_ia_1 + 1) = *((uint32_t *)p_i + 1);
   *((uint32_t *)p_ia_1 + 2) = *((uint32_t *)p_i + 2);
   *((uint32_t *)p_ia_1 + 3) = *((uint32_t *)p_i + 3);
   Srca_1 = (uint8_t *)((uint16_t *)p_i + 8);
   memcpy(__transform_planes_Buffer + 32,(char *)p_i + 16,*((uint32_t *)p_i + 3));
-  Src_1 = (char *)bmf_new(*(uint16_t *)&p_i->f0 * *(uint16_t *)((char *)&p_i->f0 + 2));
+  Src_1 = (char *)bmf_new(p_i->width * p_i->height);
   Src_3 = Src_1;
   if ( plane_count > 0 )
   {
@@ -22456,10 +22442,10 @@ BMF_SSE void __transform_planes(Obj33 *p_i, int32_t a2, char a3, const __m128 &a
           // never taken: -E is 0
           if ( ::plane_predictor == 1 )
           {
-            __predict_med((int32_t)Src, *(uint16_t *)&p_i->f0, *(uint16_t *)((char *)&p_i->f0 + 2));
+            __predict_med((int32_t)Src, p_i->width, p_i->height);
           }
         }
-        Size_3 = *(uint16_t *)&p_i->f0 * *(uint16_t *)((char *)&p_i->f0 + 2);
+        Size_3 = p_i->width * p_i->height;
         n4_2 = plane_count;
         Src_2 = (char *)p_i + v14 + 16;
         if ( plane_count == 1 )
@@ -23050,7 +23036,7 @@ LABEL_109:
 }
 
 static inline void __fwd_search_filter_model_planes(void *a0, void *a1, int32_t a2, char a3, const __m128 &a4, const __m128 &a5) { __model_planes((char *)a0, (char *)a1, a2, a3, a4, a5); }
-static inline void __fwd_search_filter_transform_planes(void *a0, int32_t a1, char a2, const __m128 &a3, const __m128 &a4) { __transform_planes((Obj33 *)a0, a1, a2, a3, a4); }
+static inline void __fwd_search_filter_transform_planes(void *a0, int32_t a1, char a2, const __m128 &a3, const __m128 &a4) { __transform_planes((BmfImage *)a0, a1, a2, a3, a4); }
 
 BMF_SSE uint32_t __search_filter(BmfImage *p_i, char a2, const __m128 &a3__ref, const __m128 &a4__ref)
 {
@@ -23955,8 +23941,8 @@ LABEL_11:
 static inline char * __fwd_compress_image_expand_image(int32_t a0, const __m128 &a1, const __m128 &a2, int32_t a3, void *a4) { return __expand_image(a0, a1, a2, a3, (int32_t *)a4); }
 static inline uint32_t __fwd_compress_image_search_filter(void *a0, char a1, const __m128 &a2, const __m128 &a3) { return __search_filter((BmfImage *)a0, a1, a2, a3); }
 static inline void __fwd_compress_image_model_planes(void *a0, void *a1, int32_t a2, char a3, const __m128 &a4, const __m128 &a5) { __model_planes((char *)a0, (char *)a1, a2, a3, a4, a5); }
-static inline void __fwd_compress_image_transform_planes(void *a0, int32_t a1, char a2, const __m128 &a3, const __m128 &a4) { __transform_planes((Obj33 *)a0, a1, a2, a3, a4); }
-static inline void __fwd_compress_image_model_plane(const __m128 &a0, const __m128 &a1, void *a2, void *a3, void *a4) { __model_plane(a0, a1, (Obj33 *)a2, (uint8_t *)a3, (uint8_t *)a4); }
+static inline void __fwd_compress_image_transform_planes(void *a0, int32_t a1, char a2, const __m128 &a3, const __m128 &a4) { __transform_planes((BmfImage *)a0, a1, a2, a3, a4); }
+static inline void __fwd_compress_image_model_plane(const __m128 &a0, const __m128 &a1, void *a2, void *a3, void *a4) { __model_plane(a0, a1, (BmfImage *)a2, (uint8_t *)a3, (uint8_t *)a4); }
 
 BMF_SSE int32_t __compress_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref, BmfImage *p_i, void *coded_buf)
 {
