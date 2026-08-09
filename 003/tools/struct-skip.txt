@@ -192,3 +192,19 @@ __reduce_alphabet:buf
 __cost_candidate:a3 __cost_candidate:v101 __cost_candidate:v14 __cost_candidate:v64 __cost_candidate:v88
 __choose_plane_coding:v215
 __read_bmp:bmp_info_hdr
+__unmodel_plane_slow:ArgList __unmodel_plane_slow:ArgList_1 __unmodel_plane_slow:ArgList_10 __unmodel_plane_slow:ArgList_2 __unmodel_plane_slow:ArgList_3 __unmodel_plane_slow:ArgList_4 __unmodel_plane_slow:ArgList_5 __unmodel_plane_slow:ArgList_6 __unmodel_plane_slow:ArgList_7 __unmodel_plane_slow:ArgList_8 __unmodel_plane_slow:ArgList_9
+__alt_model_p2_decode:__byte_4433AD
+__alt_model_p2_decode:__byte_44339D
+__expand_image:Buffer_2
+__expand_image:p_dwLowDateTime
+__expand_predictor_mode0:near_lossless_max
+__predict_med:v4
+__encode_symbol_tree:v51 __encode_symbol_tree:v9
+__alt_p1_encode_symbol:v12 __alt_p1_encode_symbol:v35
+__alt_p1_encode_symbol:v30
+__alt_p1_decode_symbol:v22
+__init_model_tables:v28
+__init_model_tables:v29
+__alt_p1_context:v12
+__alt_p1_context:v13
+__alt_p2_alloc:near_lossless_max
