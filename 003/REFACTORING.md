@@ -26,7 +26,7 @@ so they can be re-measured rather than trusted.
 | pointer casts | 5805 | 7336 |
 | `goto` / `LABEL_n:` | 121 / 88 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
-| line coverage | **92.45 %** | 64.5 % |
+| line coverage | **92.65 %** | 64.5 % |
 
 The target is 32-bit. That is not a limitation left over from the port — it is
 the decision that made Phase 4 possible, and §Phase 4 says why.
@@ -47,12 +47,12 @@ every image still round-trips.** No test can tell you a rename was
 the property that matters.
 
 ```
-./build.sh && ./test.sh ./bmf     # 13 images, encode + decode + compare,
+./build.sh && ./test.sh ./bmf     # 14 images, encode + decode + compare,
                                   # each stream against testfiles/ref_<name>.bmf
 ```
 
 Both halves are automated: the round-trip, and the comparison against the
-thirteen committed reference streams. A run with a missing reference fails, and a stream
+fourteen committed reference streams. A run with a missing reference fails, and a stream
 that differs from its reference fails. Where an input is not reproduced byte for
 byte — an RLE-compressed BMP comes back with BMF's own run splitting —
 `testfiles/out_<name>.bmp` holds what the decoder is expected to write and the
@@ -120,22 +120,22 @@ thinks so".
 
 ### 2.3 What the gate still does not reach
 
-7.5 % of the file — 1002 unexecuted lines across the bodies:
+7.3 % of the file — 975 unexecuted lines across the bodies:
 
 | body | unexecuted |
 | --- | --- |
 | `alt_model_p1_decode` | 268 |
 | `sub_4118A0` | 103 |
-| `compress_image` | 82 |
 | `unmodel_plane_slow` | 78 |
-| `expand_image` | 72 |
+| `compress_image` | 71 |
+| `expand_image` | 69 |
 | `unpredict_med` | 48 |
 
 The first sits in the alternate model families `ALGORITHM.md` §9 flags as
-unread. The rest are format and descriptor combinations thirteen images still
+unread. The rest are format and descriptor combinations fourteen images still
 do not reach.
 
-Three of those thirteen are recent, and each was written to reach something
+Four of those fourteen are recent, and each was written to reach something
 specific rather than to add another photograph:
 
 | image | what it reaches | coverage |
@@ -143,11 +143,12 @@ specific rather than to add another photograph:
 | `med32.bmp` | `unpredict_med`, which had 127 unexecuted lines and no way in | 90.04 % → 92.05 % |
 | `rle8.bmp` | the run-length reader's encoded and absolute runs | |
 | `rle4.bmp` | its nibble path and the delta escape | 92.05 % → 92.45 % |
+| `noise24.bmp` | the store-it-raw fallback for data that does not compress | 92.45 % → 92.65 % |
 
 `read_bmp` went from 101 unexecuted lines to 48 and off this table. The
-generators are `tools/mkmed32.py` and `tools/mkrle.py`, so the images are
-reproducible rather than opaque; what each one had to do to reach its target is
-in the generator's docstring.
+generators are `tools/mkmed32.py`, `tools/mkrle.py` and `tools/mknoise.py`, so
+the images are reproducible rather than opaque; what each one had to do to
+reach its target is in the generator's docstring.
 
 `unpredict_med` looked impossible — the corpus round-trips, so something must
 invert `predict_med`, and not one of its 127 lines ran. Chasing it down turned
@@ -187,7 +188,7 @@ Neither is dead — nothing has shown any entry condition to be impossible — s
 these are refactored last and with more care than the rest, or their entry
 conditions are established first and the corpus grown to reach them.
 
-Thirteen images is a signal, not a proof. Add images when a phase touches
+Fourteen images is a signal, not a proof. Add images when a phase touches
 something the corpus does not exercise — `med32.bmp` and the two RLE images are what
 that looks like when it is done deliberately.
 
@@ -620,7 +621,7 @@ for f in testfiles/*.bmp; do
   rm -f o.bmf o.bmp                       # bmf opens its output "w+b"
   ./bmfcov c "$f" o.bmf && ./bmfcov d o.bmf o.bmp
 done
-gcov -n    -o . bmfcov-bmf.gcno                       # 92.45 % of 13398 lines
+gcov -n    -o . bmfcov-bmf.gcno                       # 92.65 % of 13398 lines
 gcov -f -n -o . bmfcov-bmf.gcno                       # per function
 ```
 
