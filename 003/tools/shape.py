@@ -157,7 +157,7 @@ def summary():
     row('  off `_this`',
         '%d, in %d functions' % (len(this), len(set(r[1] for r in this))))
     row('pointer casts', len(re.findall(r'\([A-Za-z_]\w*\s*\*+\s*\)', src)))
-    row('bmf_bss globals', len(bss()))
+    row('globals still at a 1997 address', len(bss()))
     row('frames', '%d, %d bytes, %d aliases'
         % (len(fr), sum(f['size'] for f in fr), sum(f['alias'] for f in fr)))
     row('  slots carrying two names',

@@ -66,7 +66,6 @@
 // calls these SHARED, and all 41 are).  Giving them separate storage is what
 // §3.6 is for; keeping one object is what makes it safe not to have done it
 // yet.
-alignas(16) static uint8_t bmf_bss[19584];   // 0x443380..0x448000
 
 alignas(16) static uint8_t bmf_ctx_group_flags[32] = {   // 0x439860
   0x00,0x01,0x02,0x04,0x08,0x0a,0x0d,0x10,0x11,0x16,0x20,0x23,0x24,0x38,0x3f,0x00,0x00,0x00,
@@ -231,18 +230,61 @@ typedef int32_t t_ElementCount_0;
 static t_ElementCount_0& coded_size = *(t_ElementCount_0*)bmf_coded_size;
 static int32_t desc_slow_mode;   // was 0x443384 in bmf_bss
 static int32_t __dword_443388;   // was 0x443388 in bmf_bss
-typedef int32_t t_n256_0[0x10000];
-static t_n256_0& near_lossless_max = *(t_n256_0*)(bmf_bss + 0x443398 - 0x443380);
-typedef uint8_t t_byte_44339F[0x10000];
-static t_byte_44339F& __byte_44339F = *(t_byte_44339F*)(bmf_bss + 0x44339F - 0x443380);
-typedef uint8_t t_byte_4433AC[0x10000];
-static t_byte_4433AC& __byte_4433AC = *(t_byte_4433AC*)(bmf_bss + 0x4433AC - 0x443380);
-typedef uint8_t t_byte_4433BD[15];
-static t_byte_4433BD& __byte_4433BD = *(t_byte_4433BD*)(bmf_bss + 0x4433BD - 0x443380);
-typedef char t_byte_4433CF;
-static t_byte_4433CF& __byte_4433CF = *(t_byte_4433CF*)(bmf_bss + 0x4433CF - 0x443380);
-typedef int32_t t_n191_0;
-static t_n191_0& __n191_0 = *(t_n191_0*)(bmf_bss + 0x4433D4 - 0x443380);
+// The plane-descriptor table: five 16-byte records, based at what used to be
+// 0x44338C.  Record 0 holds the image-wide parameters and records 1..4 are the
+// four planes, so the plane `p` a reader sees is record `p + 1`.  Three things
+// say it is one table rather than twenty globals:
+//
+//   * the subscripts the code already writes -- `__byte_44339E[16 * plane]`,
+//     `__dword_4433A0[4 * plane]` -- both step whole records;
+//   * field +1 is reached from two origins one record apart, `transform_planes`
+//     pre-incrementing from 0 into `__n256_2[4 * n]` and `rc_begin_encode`
+//     indexing `__byte_44339D[16 * p]` by plane, which is what a header entry
+//     in front of an array looks like;
+//   * and `alt_model_p2_encode` walks all four plane records in one loop using
+//     four of the record-0 names as its field bases.
+//
+// So `plane_count`, read 154 times as a scalar, is field +8 of record 0.
+//
+// The union is the one thing here that is still a question rather than a
+// layout: records 1..4 use +0..+3 as four separate bytes, and record 0 has its
+// +0..+3 read as a whole dword by the packer bit accounting at 18433.
+struct PlaneDesc {
+  union {
+    int32_t w0;
+    struct { uint8_t b0, b1, b2, b3; };
+  };
+  int32_t w4;
+  int32_t w8;
+  int32_t w12;
+};
+static_assert(sizeof(void *) != 4 || sizeof(PlaneDesc) == 16,
+              "PlaneDesc: the layout moved");
+static PlaneDesc plane_desc[5];
+
+// The twenty names the table arrived as, now views of it at their old offsets.
+// Each subscript that steps a whole record -- `[16 * p]` on a byte field,
+// `[4 * p]` on a dword one -- still means what it meant, and reads record p+1.
+static int32_t (&__n256_2)[20] = *(int32_t (*)[20])((uint8_t *)plane_desc + 0);
+static int32_t (&__n512)[19] = *(int32_t (*)[19])((uint8_t *)plane_desc + 4);
+static int32_t &plane_count = *(int32_t *)&plane_desc[0].w8;
+static int32_t (&near_lossless_max)[17] = *(int32_t (*)[17])((uint8_t *)plane_desc + 12);
+static uint8_t (&__byte_44339C)[64] = *(uint8_t (*)[64])((uint8_t *)plane_desc + 16);
+static uint8_t (&__byte_44339D)[63] = *(uint8_t (*)[63])((uint8_t *)plane_desc + 17);
+static uint8_t (&__byte_44339E)[62] = *(uint8_t (*)[62])((uint8_t *)plane_desc + 18);
+static uint8_t (&__byte_44339F)[61] = *(uint8_t (*)[61])((uint8_t *)plane_desc + 19);
+static int32_t (&__dword_4433A0)[15] = *(int32_t (*)[15])((uint8_t *)plane_desc + 20);
+static int32_t (&__dword_4433A4)[14] = *(int32_t (*)[14])((uint8_t *)plane_desc + 24);
+static int32_t (&__dword_4433A8)[13] = *(int32_t (*)[13])((uint8_t *)plane_desc + 28);
+static uint8_t (&__byte_4433AC)[48] = *(uint8_t (*)[48])((uint8_t *)plane_desc + 32);
+static uint8_t (&__byte_4433AD)[47] = *(uint8_t (*)[47])((uint8_t *)plane_desc + 33);
+static uint8_t (&__byte_4433BD)[31] = *(uint8_t (*)[31])((uint8_t *)plane_desc + 49);
+static char &__n3_1 = *(char *)&plane_desc[4].b0;
+static char &__n3_0 = *(char *)&plane_desc[4].b1;
+static char &__byte_4433CF = *(char *)&plane_desc[4].b3;
+static int32_t &__n191 = *(int32_t *)&plane_desc[4].w4;
+static int32_t &__n191_0 = *(int32_t *)&plane_desc[4].w8;
+static int32_t &__n191_1 = *(int32_t *)&plane_desc[4].w12;
 static int32_t model_geometry[32];   // was 0x445660 in bmf_bss
 static char __byte_445700;   // was 0x445700 in bmf_bss
 static int32_t __n8_1;   // was 0x44570C in bmf_bss
@@ -290,7 +332,7 @@ static t_pout_of_memory_handler& __pout_of_memory_handler = *(t_pout_of_memory_h
 // All of it is dead, and measured to be.  Taking both relocation calls out
 // leaves every one of the fifteen streams byte-identical, because the 39
 // pointers they rebased all point into the string tables under 0x44294C --
-// which the poisoning experiment described at `bmf_bss` shows nothing reads.
+// which the poisoning experiment in REFACTORING2.md §3.1 shows nothing reads.
 // They belong to the modes that are gone (REFACTORING.md §2.1).
 // ---------------------------------------------------------------------------
 // The compression mode.
@@ -325,38 +367,15 @@ static uint8_t  *coded_buf;     // base of the buffer, from malloc
 // pointer, and out of the blob for the same reason as the cursors above.
 // BMF.exe had it at 0x00443380.
 static uint8_t *hist_scratch;
-typedef int32_t t_n256_2[0x10000];
-static t_n256_2& __n256_2 = *(t_n256_2*)(bmf_bss + 0x44338C - 0x443380);
-typedef int32_t t_n512[0x10000];
-static t_n512& __n512 = *(t_n512*)(bmf_bss + 0x443390 - 0x443380);
-typedef int32_t t_n4_5;
-static t_n4_5& plane_count = *(t_n4_5*)(bmf_bss + 0x443394 - 0x443380);
-typedef uint8_t t_byte_44339C[0x10000];
-static t_byte_44339C& __byte_44339C = *(t_byte_44339C*)(bmf_bss + 0x44339C - 0x443380);
-typedef uint8_t t_byte_44339D[0x10000];
-static t_byte_44339D& __byte_44339D = *(t_byte_44339D*)(bmf_bss + 0x44339D - 0x443380);
-typedef uint8_t t_byte_44339E[0x10000];
-static t_byte_44339E& __byte_44339E = *(t_byte_44339E*)(bmf_bss + 0x44339E - 0x443380);
-typedef int32_t t_dword_4433A0[0x10000];
-static t_dword_4433A0& __dword_4433A0 = *(t_dword_4433A0*)(bmf_bss + 0x4433A0 - 0x443380);
-typedef int32_t t_dword_4433A4[0x10000];
-static t_dword_4433A4& __dword_4433A4 = *(t_dword_4433A4*)(bmf_bss + 0x4433A4 - 0x443380);
-typedef int32_t t_dword_4433A8[0x10000];
-static t_dword_4433A8& __dword_4433A8 = *(t_dword_4433A8*)(bmf_bss + 0x4433A8 - 0x443380);
-typedef uint8_t t_byte_4433AD[16];
-static t_byte_4433AD& __byte_4433AD = *(t_byte_4433AD*)(bmf_bss + 0x4433AD - 0x443380);
-typedef char t_n3_1;
-static t_n3_1& __n3_1 = *(t_n3_1*)(bmf_bss + 0x4433CC - 0x443380);
-typedef char t_n3_0;
-static t_n3_0& __n3_0 = *(t_n3_0*)(bmf_bss + 0x4433CD - 0x443380);
-typedef int32_t t_n191;
-static t_n191& __n191 = *(t_n191*)(bmf_bss + 0x4433D0 - 0x443380);
-typedef int32_t t_n191_1;
-static t_n191_1& __n191_1 = *(t_n191_1*)(bmf_bss + 0x4433D8 - 0x443380);
-typedef char t_buf_0[0x10000];
-static t_buf_0& exclusion_mask = *(t_buf_0*)(bmf_bss + 0x443440 - 0x443380);
-typedef uint8_t t_byte_445440[544];
-static t_byte_445440& __byte_445440 = *(t_byte_445440*)(bmf_bss + 0x445440 - 0x443380);
+// The last two.  `tools/blob-independence.txt` marks both SHARED, and they are
+// shared with each other: `exclusion_mask` is 8192 bytes and the 544 of
+// `__byte_445440` follow it immediately, and giving either one storage of its
+// own segfaults every multi-plane image.  Keeping them adjacent is what the
+// evidence supports; which side reads across the boundary is still open, and
+// finding it is what would let them separate.
+alignas(16) static uint8_t bss_exclusion[8192 + 544];
+static char    (&exclusion_mask)[8192] = *(char (*)[8192])bss_exclusion;
+static uint8_t (&__byte_445440)[544]   = *(uint8_t (*)[544])(bss_exclusion + 8192);
 // The model's counter tables, ALGORITHM.md §8: one allocation, handed out in
 // 254-entry strips.  An int32_t in the data segment holding an address, so a
 // pointer here, and out of the blob.  BMF.exe had it at 0x00445708.
