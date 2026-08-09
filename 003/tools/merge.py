@@ -56,7 +56,10 @@ def parse(src, name):
         f = MEMBER.match(line)
         if not f:
             continue
-        ty, nm, cnt, com = f.group(1).strip(), f.group(2), f.group(3), f.group(4)
+        # `uint8_t  *` and `uint8_t *` are one type; comparing the source
+        # spelling made `Obj31`'s scalar look unlike `Obj8`'s array of it.
+        ty = ' '.join(f.group(1).split()).replace(' *', '*').replace('*', ' *', 1)
+        nm, cnt, com = f.group(2), f.group(3), f.group(4)
         w = width(ty)
         if w is None:
             return None, None
@@ -77,7 +80,7 @@ def plan(structs):
     for who, members in structs:
         for f in members:
             byoff.setdefault(f['off'], []).append((who, f))
-    merged, conflicts, absorbed = [], [], {}
+    merged, conflicts, absorbed, alt = [], [], {}, {}
     for off in sorted(byoff):
         cands = byoff[off]
         best = max(cands, key=lambda c: (c[1]['end'], c[1]['count']))
@@ -86,17 +89,34 @@ def plan(structs):
             # the easiest to miss: `Obj10::f6059436` is `uint16_t *` where
             # `ModelBlock::f6059436` is `uint8_t *`, and round two moved three
             # streams by making one match the other.  Width is not the test.
-            if f['ty'] != best[1]['ty'] or f['count'] != best[1]['count']:
-                if f['end'] <= best[1]['end'] and f['count'] > 1 == best[1]['count']:
-                    continue
-                conflicts.append((off, who, '%s%s' % (f['ty'], '[%d]' % f['count']
-                                                      if f['count'] > 1 else ''),
-                                  best[0], '%s%s' % (best[1]['ty'],
-                                                     '[%d]' % best[1]['count']
-                                                     if best[1]['count'] > 1 else '')))
+            if f['ty'] == best[1]['ty'] and f['count'] == best[1]['count']:
+                continue
+            if f['ty'] == best[1]['ty'] and f['end'] <= best[1]['end']:
+                # A prefix of the longer array, not a rival.  A *scalar* at the
+                # array's own offset is its element 0 -- `Obj31::f278736` is one
+                # `uint8_t *` where `Obj8::f278736` is ten of them.
+                if f['count'] == 1 and best[1]['count'] > 1:
+                    absorbed[f['name']] = '%s[0]' % best[1]['name']
+                continue
+            if f['count'] > 1 or best[1]['count'] > 1:
+                alt.setdefault(off, []).append(f)   # two granularities: union
+                continue
+                continue
+            # Two scalars of the same width at one offset is the dangerous
+            # case: `Obj10::f6059436` is `uint16_t *` where
+            # `ModelBlock::f6059436` is `uint8_t *`, and round two moved three
+            # streams by making one match the other.
+            conflicts.append((off, who, f['ty'], best[0], best[1]['ty']))
         merged.append(best[1])
-    # a scalar covered by an earlier array becomes a subscript of it
-    keep = []
+    # A scalar covered by an earlier array is one of two things.  If the array
+    # is of the scalar's own type and the offset lands on an element, the
+    # scalar *is* that element and becomes a subscript -- ten row cursors read
+    # as an array say something ten names do not.  If it is not -- `Obj11`
+    # recovered +278528 as `__m128[21]` because `alt_p2_filter` walks it with a
+    # loop variable, while four other recoveries declare fifteen individual
+    # fields inside those same bytes -- then the region is genuinely both, and
+    # the merged struct says so with a union instead of picking one.
+    keep, covered = [], {}
     for f in merged:
         cover = next((k for k in keep
                       if k['count'] > 1 and k['off'] < f['off'] < k['end']), None)
@@ -104,11 +124,42 @@ def plan(structs):
             keep.append(f)
             continue
         step = width(cover['ty'])
-        if (f['off'] - cover['off']) % step or f['end'] > cover['end']:
-            conflicts.append((f['off'], '', f['ty'], '', 'inside %s' % cover['name']))
+        if f['ty'] == cover['ty'] and not (f['off'] - cover['off']) % step \
+                and f['end'] <= cover['end']:
+            absorbed[f['name']] = '%s[%d]' % (cover['name'],
+                                              (f['off'] - cover['off']) // step)
+        else:
+            covered.setdefault(cover['name'], []).append(f)
+    # Every extra view belongs to whichever kept member spans its bytes -- keyed
+    # by the *view's* offset, not the cover's, which is how three of them went
+    # missing the first time.
+    for off, extras in alt.items():
+        host = next((k for k in keep if k['off'] <= off < k['end']), None)
+        if host is None:
+            conflicts.append((off, 'a second view', extras[0]['ty'], '', 'no host'))
             continue
-        absorbed[f['name']] = '%s[%d]' % (cover['name'],
-                                          (f['off'] - cover['off']) // step)
+        covered.setdefault(host['name'], []).extend(extras)
+    for f in keep:
+        u, seen_k = [], set()
+        for g in sorted(covered.get(f['name'], []), key=lambda g: g['off']):
+            k = (g['off'], g['ty'], g['count'], g['name'])
+            if k in seen_k:          # two recoveries that agree are one view
+                continue
+            seen_k.add(k)
+            u.append(g)
+        f['union'] = u
+    # Anonymous structs inside a union share the union's scope, so two views
+    # that both call one offset `fNN` cannot both be emitted -- and dropping one
+    # silently is how `Obj19::f278760` (a `char *`) became `Obj69`'s
+    # `uint32_t[24]` and segfaulted three images.  Report it; the fix is to
+    # rename the losing view's field at its own use sites first.
+    for f in keep:
+        seen_n = {f['name']}
+        for g in f['union']:
+            if g['name'] in seen_n:
+                conflicts.append((g['off'], 'a second view', g['ty'],
+                                  'the union', 'the name %s twice' % g['name']))
+            seen_n.add(g['name'])
     return keep, conflicts, absorbed
 
 
@@ -120,8 +171,41 @@ def render(name, members):
             out.append('  uint8_t _pad%d[%d];' % (i, f['off'] - off))
         arr = '[%d]' % f['count'] if f['count'] > 1 else ''
         sp = '' if f['ty'].endswith('*') else ' '
-        out.append('  %s%s%s%s;%s' % (f['ty'], sp, f['name'], arr,
-                                      ('   ' + f['com']) if f['com'] else ''))
+        decl = '%s%s%s%s;%s' % (f['ty'], sp, f['name'], arr,
+                                ('   ' + f['com']) if f['com'] else '')
+        if not f.get('union'):
+            out.append('  ' + decl)
+        else:
+            # The covered fields need not be disjoint from each other either --
+            # `f278736[10]` spans the bytes `f278756` and `f278760[24]` name,
+            # and `f278760[24]` spans `f278764` and `f278768`.  Lay them out in
+            # as many overlapping views as it takes, greedily, widest first.
+            layers = []
+            for g in sorted(f['union'], key=lambda g: (g['off'], -g['end'])):
+                for L in layers:
+                    if L[-1]['end'] <= g['off']:
+                        L.append(g)
+                        break
+                else:
+                    layers.append([g])
+            out.append('  union {   // the same bytes, %d recoveries'
+                       % (len(layers) + 1))
+            out.append('    ' + decl)
+            for k, L in enumerate(layers):
+                out.append('    struct {')
+                at = f['off']
+                for j, g in enumerate(L):
+                    if g['off'] > at:
+                        out.append('      uint8_t _u%d_%d_%d[%d];'
+                                   % (i, k, j, g['off'] - at))
+                    ga = '[%d]' % g['count'] if g['count'] > 1 else ''
+                    gs = '' if g['ty'].endswith('*') else ' '
+                    out.append('      %s%s%s%s;%s'
+                               % (g['ty'], gs, g['name'], ga,
+                                  ('   ' + g['com']) if g['com'] else ''))
+                    at = g['end']
+                out.append('    };')
+            out.append('  };')
         off = f['end']
     out.append('};')
     last = members[-1]
