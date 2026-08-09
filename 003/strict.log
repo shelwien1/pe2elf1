@@ -18,29 +18,17 @@ subs1.hpp:4206:13: error: invalid conversion from 'int32_t' {aka 'int'} to 'char
 subs1.hpp: In function 'int32_t __alt_p1_model(Obj0*)':
 subs1.hpp:4875:30: error: invalid conversion from 'char*' to 'uintptr_t' {aka 'unsigned int'} [-fpermissive]
 subs1.hpp:4903:30: error: invalid conversion from 'char*' to 'uintptr_t' {aka 'unsigned int'} [-fpermissive]
-subs1.hpp: In function 'char* __rc_begin_encode()':
-subs1.hpp:5053:12: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'int32_t' {aka 'int'} [-fpermissive]
-subs1.hpp:5054:19: error: comparison between distinct pointer types 'uint8_t*' {aka 'unsigned char*'} and 'uint32_t*' {aka 'unsigned int*'} lacks a cast [-fpermissive]
-subs1.hpp:5069:20: error: invalid conversion from 'int32_t' {aka 'int'} to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
 subs1.hpp: In function 'void __alt_p1_d8_encode_body(Obj0*, uint8_t*, uint8_t*)':
-subs1.hpp:5185:25: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
-subs1.hpp:5189:24: error: invalid conversion from 'char*' to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
-subs1.hpp:5194:24: error: invalid conversion from 'char*' to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
+subs1.hpp:5188:25: error: invalid conversion from 'uint32_t' {aka 'unsigned int'} to 'char*' [-fpermissive]
+subs1.hpp:5192:24: error: invalid conversion from 'char*' to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
+subs1.hpp:5197:24: error: invalid conversion from 'char*' to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
 subs1.hpp: In function 'void __fwd_alt_model_p1_d8_encode_alt_p1_d8_encode_body(int32_t, void*, void*)':
-subs1.hpp:5308:129: error: invalid conversion from 'int32_t' {aka 'int'} to 'Obj0*' [-fpermissive]
-subs1.hpp:5158:36: note:   initializing argument 1 of 'void __alt_p1_d8_encode_body(Obj0*, uint8_t*, uint8_t*)'
+subs1.hpp:5311:129: error: invalid conversion from 'int32_t' {aka 'int'} to 'Obj0*' [-fpermissive]
+subs1.hpp:5161:36: note:   initializing argument 1 of 'void __alt_p1_d8_encode_body(Obj0*, uint8_t*, uint8_t*)'
 subs1.hpp: In function 'int32_t __write_bmp(uintptr_t, char*, int32_t)':
-subs1.hpp:5877:22: error: invalid conversion from 'char*' to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
-subs1.hpp:5937:31: error: invalid conversion from 'char*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
-subs1.hpp:6017:25: error: invalid conversion from 'char*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
-subs1.hpp: In function 'char* __interleave_plane(char*, char*, int32_t, char)':
-subs1.hpp:6210:20: error: invalid conversion from 'void*' to 'char*' [-fpermissive]
-subs1.hpp:6270:20: error: cast from 'char*' to 'uint8_t' {aka 'unsigned char'} loses precision [-fpermissive]
-subs1.hpp:6289:20: error: cast from 'char*' to 'uint8_t' {aka 'unsigned char'} loses precision [-fpermissive]
-subs1.hpp: In function 'char* __colour_transform(char*, char*, int32_t, char)':
-subs1.hpp:6369:20: error: invalid conversion from 'void*' to 'char*' [-fpermissive]
-subs1.hpp:6474:16: error: cast from 'char*' to 'char' loses precision [-fpermissive]
-subs1.hpp:6491:16: error: cast from 'char*' to 'char' loses precision [-fpermissive]
+subs1.hpp:5880:22: error: invalid conversion from 'char*' to 'uint32_t' {aka 'unsigned int'} [-fpermissive]
+subs1.hpp:5940:31: error: invalid conversion from 'char*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
+subs1.hpp:6020:25: error: invalid conversion from 'char*' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
 subs1.hpp: In function 'int32_t __rc_begin_decode(char)':
 subs1.hpp:6535:19: error: comparison between distinct pointer types 'uint8_t*' {aka 'unsigned char*'} and 'uint32_t*' {aka 'unsigned int*'} lacks a cast [-fpermissive]
 subs1.hpp:6633:10: error: invalid conversion from 'uint8_t*' {aka 'unsigned char*'} to 'int32_t' {aka 'int'} [-fpermissive]

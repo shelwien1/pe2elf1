@@ -5046,28 +5046,31 @@ char *__rc_begin_encode()
 {
   ;
   char *__rc_begin_encode_n256, *__rc_begin_encode_n256_1;
-  int32_t Buffer, v2, v3, v9, v10, v13;
+  int32_t v2, v3, v9, v10, v13;
+  int32_t bits;          // the same slot as the buffer pointer below, in a
+  uint8_t *Buffer;       // register MSVC reused; two roles, two names
   uint32_t i, v4, v6;   // offsets into model_geometry, not pointers
-  __rc_begin_encode_n256 = (char *)::packer_acc;
-  *(uint32_t *)packer_word = ::packer_acc;
+  *packer_word = ::packer_acc;
   Buffer = out_cursor;
-  if ( out_cursor != packer_word )
+  // Back the output cursor up over whatever whole bytes the packer has not
+  // filled, and keep the leftover bit count.
+  if ( out_cursor != (uint8_t *)packer_word )
   {
-    __rc_begin_encode_n256 = (char *)(packer_free_bits - 8);
-    if ( packer_free_bits - 8 < 0 )
+    bits = packer_free_bits - 8;
+    if ( bits < 0 )
     {
-      packer_free_bits -= 8;
+      packer_free_bits = bits;
     }
     else
     {
       do
       {
         --Buffer;
-        __rc_begin_encode_n256 = (char *)((uintptr_t)__rc_begin_encode_n256 - (8));
+        bits -= 8;
       }
-      while ( (int32_t)__rc_begin_encode_n256 >= 0 );
+      while ( bits >= 0 );
       out_cursor = Buffer;
-      packer_free_bits = (int32_t)__rc_begin_encode_n256;
+      packer_free_bits = bits;
     }
   }
   if ( plane_alt_model )
@@ -6207,7 +6210,7 @@ char * __interleave_plane(char *p_i, char *Src, int32_t a3, char a4)
     n4 = plane_count;
     Src_1 = (uint32_t)&p_i[a3 + 16];
     if ( plane_count == 1 )
-      return memcpy(&p_i[a3 + 16],Src,Size);
+      return (char *)memcpy(&p_i[a3 + 16],Src,Size);
     p_i += a3;
     if ( Size <= 6
       || plane_count <= 0
@@ -6265,9 +6268,9 @@ LABEL_3:
         do
         {
           v23 = v34 + (uint8_t)*Src++;
-          p_i = (char *)(((v32 * (uint8_t)Src_3[v29] + v27 * (uint32_t)(uint8_t)Src_3[v31] + 40) >> 7)
-                       + v23);
-          *Src_3 = (uint8_t)p_i;
+          *Src_3 = (uint8_t)(((v32 * (uint8_t)Src_3[v29]
+                               + v27 * (uint32_t)(uint8_t)Src_3[v31] + 40) >> 7)
+                             + v23);
           Src_3 += n4_1;
           --v21;
         }
@@ -6281,12 +6284,11 @@ LABEL_3:
         do
         {
           v20 = v34 + (uint8_t)*Src++;
-          p_i = (char *)(((v26 * (uint8_t)*(Src_4 - 2)
-                         + v32 * (uint8_t)*(Src_4 - 3)
-                         + v30 * (uint32_t)(uint8_t)*(Src_4 - 1)
-                         + 63) >> 7)
-                       + v20);
-          *Src_4 = (uint8_t)p_i;
+          *Src_4 = (uint8_t)(((v26 * (uint8_t)*(Src_4 - 2)
+                               + v32 * (uint8_t)*(Src_4 - 3)
+                               + v30 * (uint32_t)(uint8_t)*(Src_4 - 1)
+                               + 63) >> 7)
+                             + v20);
           Src_4 += n4_1;
           --v18;
         }
@@ -6366,7 +6368,7 @@ char * __colour_transform(char *Blockb, char *Src, int32_t a3, char a4)
     n4 = plane_count;
     Src_1 = (uint32_t)&Blockb[a3 + 16];
     if ( plane_count == 1 )
-      return memcpy(Src,&Blockb[a3 + 16],Size);
+      return (char *)memcpy(Src,&Blockb[a3 + 16],Size);
     Blockb += a3;
     if ( Size > 6 && plane_count > 0 )
     {
@@ -6470,8 +6472,7 @@ LABEL_4:
       v26 = *Src_4 - v37;
       v27 = v36 * Src_4[v33] + v31 * Src_4[v35] + 40;
       Src_4 += n4_1;
-      Blockb = (char *)(v26 - (v27 >> 7));
-      *Src++ = (char)Blockb;
+      *Src++ = (char)(v26 - (v27 >> 7));
       --v24;
     }
     while ( v24 );
@@ -6487,8 +6488,7 @@ LABEL_4:
       v22 = v30 * *(Src_5 - 2) + v36 * *(Src_5 - 3);
       v23 = v34 * *(Src_5 - 1);
       Src_5 += n4_1;
-      Blockb = (char *)(v21 - ((uint32_t)(v22 + v23 + 63) >> 7));
-      *Src++ = (char)Blockb;
+      *Src++ = (char)(v21 - ((uint32_t)(v22 + v23 + 63) >> 7));
       --v19;
     }
     while ( v19 );
