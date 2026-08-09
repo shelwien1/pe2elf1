@@ -23274,13 +23274,19 @@ BMF_SSE BmfArc *__bmf_open_archive(BmfArc *v2, char *FileName, int32_t a2)
   const char *a_b;
   int32_t v8, v9;
   v5 = v2;
-  // The original opened the output "a+b" so that it could append images to an
-  // existing archive; this command line writes one image per run, so all that
-  // bought was compressing twice to the same name growing the file instead of
-  // replacing it.  "w+b" creates it empty instead.  Not "wb": the pass below
-  // reads the stream back, and it is not only walking images already in the
-  // file -- it also sets up state the writer goes on to use.
-  a_b = "w+b";
+  // "a+b", as the original had it, and not "w+b".  An earlier pass here
+  // reasoned that since the command line writes one image per run, appending
+  // only meant that compressing twice to the same name grew the file instead
+  // of replacing it.  That is what appending *is*: `bmf c a.bmp arc.bmf`
+  // followed by `bmf c b.bmp arc.bmf` is how a multi-image archive is built,
+  // and `bmf d` reads every member back -- it prints "number: 1", "number: 2"
+  // and decodes both.  Opening "w+b" did not tidy a harness annoyance, it
+  // removed half of a feature the format carries a flag for.
+  //
+  // Not "wb" either: the pass below reads the stream back, and it is not only
+  // walking the images already in the file -- it also sets up state the writer
+  // goes on to use.
+  a_b = "a+b";
   if ( a2 )
     a_b = "rb";
   v2->images = 0;

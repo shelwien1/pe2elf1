@@ -97,10 +97,12 @@ but no longer encodes the same way.
 had to fall back to mode 1 and nothing had to be skipped.  4559 declaration
 lines went away.
 
-One thing to know if you re-run this: `bmf` opens its output with `"a+b"` — the
-original appends images to an archive rather than replacing one — so a harness
-that reuses one output path accumulates streams and every digest it computes is
-different from the last.  Delete the output before each run.
+One thing to know if you re-run this: `bmf` opens its output with `"a+b"` — it
+appends a member to the archive rather than replacing one — so a harness that
+reuses one output path accumulates streams and every digest it computes is
+different from the last.  Delete the output before each run.  (Changing the
+mode instead is the wrong fix, and was made and reverted once: appending is how
+a multi-image archive is built, and `bmf d` reads every member back.)
 
 ## `structs.py` — give an object a struct and use it
 

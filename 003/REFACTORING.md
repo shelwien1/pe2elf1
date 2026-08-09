@@ -509,11 +509,19 @@ gate cannot tell from a layout change.
   aliases one type through another, and depends on adjacency. Every phase that
   changes layout — 2, 3, 4 — can change behaviour without changing meaning.
   This is why the gate is a *byte-identical stream*, not "it still compresses".
-- **`bmf` opens its output `"w+b"` and reads it back**, and that read-back is
+- **`bmf` opens its output `"a+b"` and reads it back**, and that read-back is
   not only walking an archive — it initialises writer state. A harness that
   reuses one output path, or a "cleanup" that removes the read, breaks things
   in ways that look like a refactoring bug. (Both were hit; see
   `git log 4c0a19c`.)
+
+  The mode itself was changed to `"w+b"` at one point, on the reasoning that
+  the command line writes one image per run so appending only meant that
+  compressing twice to the same name grew the file. That is what appending
+  *is*: two `bmf c` runs against one archive is how a multi-image archive is
+  built, and `bmf d` reads every member back. It has been changed back. **A
+  harness annoyance is not evidence about what a program is for** — the fix
+  was to delete the output before each encode, which is what `test.sh` does.
 - **Inherited names lie, and so do first readings.** `__n8`, `__n256`, `__n2`
   are the last value assigned, not the meaning. But the opposite error is just
   as easy: an earlier draft of §4.1 concluded `__Buffer` was not a buffer,
@@ -618,7 +626,7 @@ g++ -m32 -march=k8 -msse2 -mfpmath=sse -std=c++17 -fno-strict-aliasing \
     -fpermissive -fno-rtti -fno-exceptions -O0 -DNDEBUG -U_FORTIFY_SOURCE \
     -D_FORTIFY_SOURCE=0 --coverage bmf.cpp -o bmfcov
 for f in testfiles/*.bmp; do
-  rm -f o.bmf o.bmp                       # bmf opens its output "w+b"
+  rm -f o.bmf o.bmp                       # bmf appends to its output
   ./bmfcov c "$f" o.bmf && ./bmfcov d o.bmf o.bmp
 done
 gcov -n    -o . bmfcov-bmf.gcno                       # 92.65 % of 13398 lines
