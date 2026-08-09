@@ -2,71 +2,90 @@
 
 ## 0. What happened
 
-This was written as a plan and then worked through. Phase B is finished; A and
-C are part done and the parts that are not have measured reasons. Every number
-below is `python3 tools/shape.py` before and after.
+This was written as a plan and then worked through.  Phase B is finished, Phase
+C is finished as far as the gate allows, and Phase A has three of its five items
+done and two blocked on decisions the plan correctly said need reading.
 
-| | planned | before | now |
-| --- | --- | --- | --- |
-| raw-offset sites | fall by most of itself | 1930 | **1843** |
-| — off `_this` | | 403 | **363** |
-| globals at a 1997 address | 0 | 60 | **0** |
-| `bmf_bss` | gone | 19 584 bytes | **gone** |
-| frames | 0 | 24 | **23** |
-| frame aliases | 0 | 602 | **396** |
-| runs walked as arrays | 0 | 24 sites, 12 bases | **10 sites, 6 bases** |
-| structs | fewer | 93 | 94 |
-| — still `ObjN` | fewer | 88 | **87** |
-| `fNN` members | named | 280 | **263** |
+**The counter in §1 was double-counting**, so both ends of the comparison are
+restated against the fixed one rather than quoting an improvement the old one
+manufactured.  `*(uint32_t *)((char *)p + N)` matched two of the three patterns.
 
-**Phase B is done.** All 60 globals left `bmf_bss` and the array itself is gone
-(§3.1 has the details, corrected where the work refuted the plan). Two of them
-could not separate from each other and now say so in an 8736-byte object
-instead of by accident in a 19 584-byte one.
+| | round two's end | now |
+| --- | --- | --- |
+| raw-offset sites | 1750 | **1629** |
+| — off `_this` | 330 | **256** |
+| globals at a 1997 address | 60 | **0** |
+| `bmf_bss` | 19 584 bytes | **gone** |
+| frames | 24 | **22** |
+| frame aliases | 602 | **336** |
+| runs walked as arrays | 24 sites, 12 bases | **0, 0** |
+| frames pinned | 21 | **0** |
+| structs | 93 | **89** |
+| — still `ObjN` | 88 | **82** |
+| `fNN` members / named | 280 / 35 | **246 / 51** |
 
-**Phase C is about a third done.** 206 of the 602 aliases lifted, three frames
-dissolved, and six of the twelve walked runs are declared arrays — including
-both p2 plane arrays and both p1 ones, which §5 said to do first.
+**Phase B is done.**  All 60 globals left `bmf_bss` and the array is gone with
+them.  Two could not separate from each other and now say so in an 8736-byte
+object instead of by accident in a 19 584-byte one.
 
-**Phase A is partly done.** `ModelBlock` absorbed `Obj10` after both of their
-disagreements were settled by reading; the plane-descriptor table is declared
-and 178 of its subscript sites read as records. The two merges that are left
-are blocked on things the plan did not know:
+**Phase C is done to the gate's limit.**  Every one of the 24 walked runs is a
+declared array, no frame is pinned, and 266 of the 602 aliases are gone.  The
+336 that remain are in frames the gate has refused to dissolve, sixteen times
+over: they hold workspace arrays that the code walks past the end of, and that
+adjacency is the program's rather than Hex-Rays'.  Round one's `reframe.py` put
+those frames back for the same reason.
 
-* **`Obj11` cannot absorb `Obj8`, `Obj19`, `Obj31` and `Obj69` by union.**
-  `Obj11::f278528` is `__m128[21]` covering +278528..+278863, and the other
-  four declare 15 individual fields inside those bytes. It is not a coarse
-  recovery to be discarded either: `f278528[j].m128_f32[k]` is indexed with a
-  *loop variable* in `alt_p2_filter`. The region is genuinely both, so the
-  merge needs the union written by hand from a reading of the filter, not a
-  union built from offsets.
-* **A merge retypes fields, and the locals downstream of them cascade.**
-  `ModelBlock` absorbing `Obj10` folded `f92` into the `uint8_t *` row-cursor
-  array and left three conversions in `decode_pixel` that only
-  `BMF_STRICT=1 ./build.sh` could see.  Two were row cursors that now say so;
-  the third is a stack slot holding a cursor and a `uint16_t` at different
-  points, which §4.2 says needs the frame to dissolve first.
-* **`Obj92` cannot become `Obj0`.** Every offset in `alt_p1_alloc` is
-  `*((int32_t *)_this + K)` for K ≤ 53, which is `Obj0`'s `f0`/`f4`/`f8`/
-  `f12[51]` exactly — and retyping the parameter alone, with no offset touched,
-  moves four streams. Something walks that pointer at the struct's own stride.
-  §6's first hazard, in the place §2.3 said to start.
+**Phase A has items 1, 2 and 3 done.**  `Obj11` absorbed `Obj8`, `Obj19`,
+`Obj31` and `Obj69`; `ModelBlock` absorbed `Obj10`; `alt_p2_alloc` takes the
+object it allocates instead of `char *`.  Item 4 -- the p1 side -- is blocked
+where the plan said it would be, on two fields that two recoveries type
+differently (`+8` and `+20`, `uint8_t *` against `int32_t`, twenty use sites)
+and one name collision.  §6 says the merge is the moment to resolve those by
+reading, and picking is what moved three streams in round two.  Item 5, the
+`fNN` names, is open by construction: 246 left, 51 named.
 
-Four things the plan asserted turned out to be wrong, and each is corrected in
-place below with the measurement that corrected it:
+### What the plan got wrong
 
-1. **"Nine frames dissolve outright."** Three do. The shared-slot and run-site
-   tests miss two other ways a frame stays one object, and both were found by
-   the gate rather than by reading — see §4.2.
-2. **The alias count was 38 short**, because it missed the array bindings.
-3. **Group C was not "six counter clamps"** but a threshold pair and four
+Eight things, each corrected in place below with the measurement that corrected
+it.  Six were found by the gate rather than by reading.
+
+1. **"Nine frames dissolve outright."**  Three did.  The shared-slot and
+   run-site tests miss two other ways a frame stays one object: an array member
+   reaches its neighbours without naming them, and an escaping address does not
+   stop at the member it came from (§4.2).
+2. **"The last six runs are not rewritable."**  All six were, and five of them
+   were fixed-size objects with the size written in the source -- an `Obj12`,
+   a 32-element array the loop bound and the constant indices both give as 32,
+   an 8192-entry list whose body is the frame's padding, and two I/O headers.
+3. **"`Obj92` cannot become `Obj0`."**  It can.  The blocker was not pointer
+   stride but **signedness**: `int32_t f0` against `uint32_t f0`, and
+   `alt_p1_alloc` tests `f0 > -10`.
+4. **"`Obj11` needs its union written by hand."**  It needed three rules added
+   to `merge.py`, and the union it emits is mechanical (§2.3).
+5. **The alias count was 38 short**, because it missed the array bindings.
+6. **Group C was not "six counter clamps"** but a threshold pair and four
    accumulators, and **group E was not ten scalars** but five and a table.
-4. **`&x[i]` is not address-taking.** Reading it as such pinned six frames that
-   have nothing wrong with them.
+7. **`&x[i]` is not address-taking**, nor is `&p->f`.  Reading them as such
+   pinned eight frames that have nothing wrong with them.
+8. **The raw-offset counter counted one site twice.**
+
+### What round three adds to §6
+
+Three hazards beside the two it inherited:
+
+* **Signedness is part of a field's type.**  Two recoveries can agree on
+  offset, width and role and differ on it, and nothing but the gate will say
+  so -- an unsigned compare against a negative constant is not a warning.
+* **A merge retypes fields, and the locals downstream cascade.**  Absorbing
+  `Obj10` took `BMF_STRICT` from 0 to 3 without moving a stream.  Compile-time
+  properties need the strict build; the gate cannot see them.
+* **A rewrite that keeps the offset can still change the width.**  Replacing
+  `*(uint16_t *)(_this + N)` with a `uint32_t` member at N compiles, passes
+  seven images, and corrupts the heap.
 
 New tools: `defram.py` (lift frame members), `runarray.py` (declare a walked
 run), `merge.py` (union two recoveries), `unbss.py` (give a global storage),
-`frame-sweep.sh` (lift, gate, keep or revert). `shape.py` is the scoreboard.
+`frame-sweep.sh` (lift, gate, keep or revert).  `shape.py` is the scoreboard.
 
 ---
 
@@ -570,24 +589,31 @@ What it leaves behind is §2.2's argument in plain code:
     v121 = alt_p2_context(v120,               v2, v3, plane[0], plane[1]);
 ```
 
-**The six that are left are a different problem, and it is the reason the six
-frames behind them stay.** Each is an array whose *extent is decided at run
-time*, so there is no length to declare:
+**The six that are left were the reason six frames stayed, and every one of
+them turned out to have its length written in the source.** I read `p_n15[n6]`
+and `(&v92)[k < n6]` as unbounded and stopped; the bounds were three lines
+away:
 
-* `unmodel_plane_slow` fills `(&v92)[k]` for `k < n6` five at a time, `n6`
-  being the segment count. Five bases into one array, and the array runs past
-  `Src_1` and `this_1` — which the same loop uses as ordinary variables, saving
-  a register into `this_1` across it.
-* `reduce_alphabet` walks two *interleaved* series in one array, `(&v91)[2*j]`
-  and `*(&v92 + 2*j)` for `j < j_1`.
-* `decode_pixel` and `code_pixel` hand `&n15_8` and `&p_n15` to `pixel_context`,
-  which reads `p_n15[n6]` with `n6 = _this->f44` — an index out of the model
-  block, not a constant.
+* `alt_p2_context` hands `&v275` to `alt_p2_filter` **as an `Obj12 *`**, and
+  `Obj12` is `__m128 *f0[6]` — six pointers, 24 bytes, fixed. The six members
+  from `v275` are that array.
+* `pixel_context` reads `p_n15[n6]` with `n6 = _this->f44`, which is what made
+  the extent look unknown — and it also reads `p_n15[0]` through `p_n15[31]`
+  with constant indices, and both callers drive `f44` with
+  `f44 = 0; do { ... } while ( ++n32 < 32 );`. Thirty-two, from two directions,
+  and both frames have exactly 33 four-byte members from the base.
+* `decode_symbol_list`'s null-terminated list is 8192 entries: eight named
+  four-byte members and then `_pad0[32736]`, which is 32 768 bytes exactly.
+  **The pad is the array's body.** Hex-Rays named the first eight slots because
+  something touched them individually.
+* `unmodel_plane_slow` and `reduce_alphabet` are the same shape once more — the
+  run plus the padding after it is exactly the rest of the frame, 19 elements
+  each. Their loop bounds really are data; their arrays are not.
 
-A guess at the length is not answerable to the gate in the way the rest of this
-round has been: too short and the reads that go past it are exactly the ones no
-test image happens to make. These six want the loop bound read, not the members
-declared, and that is reverse engineering rather than rewriting.
+So the rule is: **when a walk looks unbounded, the frame usually knows the
+bound.** A run that ends in a pad is a run whose length is the pad, and a
+callee that indexes with a variable usually indexes with constants too. All 24
+runs are declared and no frame is pinned.
 
 ### 4.3 Why this is worth doing
 

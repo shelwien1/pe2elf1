@@ -324,3 +324,28 @@ docstrings because the next person will believe the rule otherwise:
   merge, not two members of different widths.**  `merge.py`'s first version
   compared widths and silently took one of `Obj10::f6059436` and
   `ModelBlock::f6059436`; round two moved three streams on exactly that.
+
+### What the four rewriters had wrong, and how each was caught
+
+Nine rules, every one of which produced a plausible wrong answer first.  They
+are in the scripts' docstrings; collected here because the pattern matters more
+than any of them: **six of the nine were caught by the gate, two by the
+compiler, and one by the heap allocator.  None by reading.**
+
+| rule | what it cost |
+| --- | --- |
+| an escaping address does not stop at its own member | 40 members lifted, every image but the one-plane one segfaulted |
+| an array member reaches its neighbours without naming them | `model_planes` passed three tests, died on five images |
+| `&x[i]` is `x + i`, and `&p->f` is a field of the pointee | eight frames pinned for no reason |
+| a fixed-count `fread`/`fwrite` inside the member's width is bounded | two more |
+| two four-byte pointers of different types at one offset is the dangerous merge | `merge.py` silently took one; round two moved three streams on it |
+| a scalar at an array's offset is its element 0 | eight compile errors |
+| `uint8_t  *` and `uint8_t *` are one type | the above, again |
+| an extra view belongs to the member that spans it, keyed by its own offset | three views dropped, three images segfaulted |
+| a rewrite that keeps the offset can still change the width | `uint16_t` store became `uint32_t`, heap corruption |
+
+The two that are worth carrying into any future round: **signedness is part of
+a field's type** (`int32_t f0` against `uint32_t f0`, and one comparison
+against `-10`, is four streams), and **when a walk looks unbounded the frame
+usually knows the bound** — a run that ends in a pad is a run whose length is
+the pad.
