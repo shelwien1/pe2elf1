@@ -26,7 +26,7 @@ so they can be re-measured rather than trusted.
 | pointer casts | 5805 | 7336 |
 | `goto` / `LABEL_n:` | 121 / 88 | 174 / 127 |
 | `__hexrays_frame` | **0** | 24 buffers, 935 aliases |
-| line coverage | **92.05 %** | 64.5 % |
+| line coverage | **92.45 %** | 64.5 % |
 
 The target is 32-bit. That is not a limitation left over from the port — it is
 the decision that made Phase 4 possible, and §Phase 4 says why.
@@ -47,13 +47,16 @@ every image still round-trips.** No test can tell you a rename was
 the property that matters.
 
 ```
-./build.sh && ./test.sh ./bmf     # 11 images, encode + decode + compare,
+./build.sh && ./test.sh ./bmf     # 13 images, encode + decode + compare,
                                   # each stream against testfiles/ref_<name>.bmf
 ```
 
 Both halves are automated: the round-trip, and the comparison against the
-eleven committed reference streams. A run with a missing reference fails, and a stream
-that differs from its reference fails. `tools/mkrefs.sh` regenerates them, and
+thirteen committed reference streams. A run with a missing reference fails, and a stream
+that differs from its reference fails. Where an input is not reproduced byte for
+byte — an RLE-compressed BMP comes back with BMF's own run splitting —
+`testfiles/out_<name>.bmp` holds what the decoder is expected to write and the
+round-trip is compared against that. `tools/mkrefs.sh` regenerates them, and
 is to be run only when a change is *meant* to move the output.
 
 ### 2.1 One mode, and only the code that implements it
@@ -117,26 +120,34 @@ thinks so".
 
 ### 2.3 What the gate still does not reach
 
-8 % of the file — 1055 unexecuted lines across the bodies:
+7.5 % of the file — 1002 unexecuted lines across the bodies:
 
 | body | unexecuted |
 | --- | --- |
 | `alt_model_p1_decode` | 268 |
 | `sub_4118A0` | 103 |
-| `read_bmp` | 101 |
 | `compress_image` | 82 |
 | `unmodel_plane_slow` | 78 |
 | `expand_image` | 72 |
 | `unpredict_med` | 48 |
 
 The first sits in the alternate model families `ALGORITHM.md` §9 flags as
-unread. The others are mostly format variants the corpus does not carry —
-`read_bmp` and `expand_image` between them handle every BMP layout and every
-descriptor combination, and eleven images do not reach all of them.
+unread. The rest are format and descriptor combinations thirteen images still
+do not reach.
 
-The eleventh is `med32.bmp`, and it is there because of what the measurement
-below turned up. Coverage was 90.04 % on ten images and is 92.05 % on eleven:
-one 147 KB image, written to reach one body, moved it two points.
+Three of those thirteen are recent, and each was written to reach something
+specific rather than to add another photograph:
+
+| image | what it reaches | coverage |
+| --- | --- | --- |
+| `med32.bmp` | `unpredict_med`, which had 127 unexecuted lines and no way in | 90.04 % → 92.05 % |
+| `rle8.bmp` | the run-length reader's encoded and absolute runs | |
+| `rle4.bmp` | its nibble path and the delta escape | 92.05 % → 92.45 % |
+
+`read_bmp` went from 101 unexecuted lines to 48 and off this table. The
+generators are `tools/mkmed32.py` and `tools/mkrle.py`, so the images are
+reproducible rather than opaque; what each one had to do to reach its target is
+in the generator's docstring.
 
 `unpredict_med` looked impossible — the corpus round-trips, so something must
 invert `predict_med`, and not one of its 127 lines ran. Chasing it down turned
@@ -176,9 +187,9 @@ Neither is dead — nothing has shown any entry condition to be impossible — s
 these are refactored last and with more care than the rest, or their entry
 conditions are established first and the corpus grown to reach them.
 
-Eleven similar images is a signal, not a proof. Add images when a phase touches
-something the corpus does not exercise — `med32.bmp` is what that looks like
-when it is done deliberately.
+Thirteen images is a signal, not a proof. Add images when a phase touches
+something the corpus does not exercise — `med32.bmp` and the two RLE images are what
+that looks like when it is done deliberately.
 
 ## 3. What "done" looks like
 
@@ -609,7 +620,7 @@ for f in testfiles/*.bmp; do
   rm -f o.bmf o.bmp                       # bmf opens its output "w+b"
   ./bmfcov c "$f" o.bmf && ./bmfcov d o.bmf o.bmp
 done
-gcov -n    -o . bmfcov-bmf.gcno                       # 92.05 % of 13398 lines
+gcov -n    -o . bmfcov-bmf.gcno                       # 92.45 % of 13398 lines
 gcov -f -n -o . bmfcov-bmf.gcno                       # per function
 ```
 

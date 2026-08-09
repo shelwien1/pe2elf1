@@ -43,8 +43,10 @@ BIN=${1:-./bmf}
 [ -x "$BIN" ] || { echo "no $BIN (run ./build.sh)"; exit 1; }
 
 [ -d "$TESTDIR" ] || { echo "no test corpus at $TESTDIR"; exit 1; }
-# Default corpus: every .bmp in TESTDIR, in a stable order.
-IMAGES=${BMF_IMAGES:-$(cd "$TESTDIR" && ls *.bmp 2>/dev/null | sort)}
+# Default corpus: every .bmp in TESTDIR, in a stable order.  `out_<name>.bmp`
+# is not an input — it is what the decoder is expected to write for an input
+# it does not reproduce byte for byte (see the comparison below).
+IMAGES=${BMF_IMAGES:-$(cd "$TESTDIR" && ls *.bmp 2>/dev/null | grep -v '^out_' | sort)}
 [ -n "$IMAGES" ] || { echo "no .bmp images in $TESTDIR"; exit 1; }
 
 rm -rf "$WORK"; mkdir -p "$WORK"
@@ -77,7 +79,14 @@ for img in $IMAGES; do
     fi
     timeout "${BMF_TIMEOUT:-300}" $RUN "$BIN" d "$st.bmf" "$img" >"$st.decompress.log" 2>&1
     rc=$?; [ $rc -ne 0 ] && { echo "$st: DECOMPRESS FAILED (rc=$rc)"; cat "$st.decompress.log"; exit 1; }
-    cmp -s "orig_$img" "$img" || { echo "$st: NOT LOSSLESS"; exit 1; }
+    # Most inputs come back byte for byte.  An RLE-compressed BMP does not:
+    # BMF decodes the runs on the way in and re-encodes them on the way out,
+    # with its own run splitting, so the pixels are identical and the file is
+    # not.  For those, testfiles/out_<name>.bmp holds what the decoder is
+    # expected to write, which still catches any change in behaviour.
+    want="orig_$img"
+    [ -f "../$TESTDIR/out_$img" ] && want="../$TESTDIR/out_$img"
+    cmp -s "$want" "$img" || { echo "$st: NOT LOSSLESS"; exit 1; }
     printf '%-12s ok  %8s -> %8s\n' "$st" \
       "$(stat -c%s "orig_$img")" "$(stat -c%s "$st.bmf")"
     exit 0
