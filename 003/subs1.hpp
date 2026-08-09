@@ -4033,31 +4033,6 @@ static_assert(sizeof(void *) != 4
               "Obj1: the layout moved");
 
 
-// Obj2 -- recovered from 59 dereferences over 13 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj2 {
-  uint8_t _pad0[20];
-  uint32_t f20;
-  uint32_t f24;
-  uint32_t f28;
-  uint8_t _pad4[144];
-  uint32_t f176;
-  uint32_t f180;
-  uint32_t f184;
-  uint32_t f188;
-  uint32_t f192;
-  uint32_t f196;
-  uint32_t f200;
-  uint32_t f204;
-  uint32_t f208;
-  uint32_t f212;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj2, f212) == 212,
-              "Obj2: the layout moved");
 
 
 // Obj3 -- recovered from 51 dereferences over 10 offsets, under 3
@@ -4147,40 +4122,6 @@ static_assert(sizeof(void *) != 4
               "Obj8: the layout moved");
 
 
-// Obj9 -- recovered from 50 dereferences over 20 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj9 {
-  uint8_t _pad0[278528];
-  uint64_t f278528;
-  uint32_t f278536;
-  uint16_t f278540;
-  uint8_t f278542;
-  uint8_t _pad5[97];
-  uint64_t f278640;
-  uint64_t f278648;
-  uint8_t _pad8[4];
-  int32_t *f278660;
-  uint32_t f278664;
-  uint32_t f278668;
-  uint32_t f278672;
-  uint8_t _pad13[60];
-  uint32_t f278736;
-  uint32_t f278740;
-  uint32_t f278744;
-  uint32_t f278748;
-  uint32_t f278752;
-  uint32_t f278756;
-  uint32_t f278760;
-  uint32_t f278764;
-  uint32_t f278768;
-  uint32_t f278772;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj9, f278772) == 278772,
-              "Obj9: the layout moved");
 
 
 // ModelBlock -- the model block, and the only recovered object whose role is
@@ -4332,40 +4273,8 @@ static_assert(sizeof(void *) != 4
               "Obj15: the layout moved");
 
 
-// Obj16 -- recovered from 28 dereferences over 6 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj16 {
-  uint8_t f0;
-  uint8_t _pad1[1];
-  int16_t f2;
-  uint8_t f4;
-  uint8_t _pad4[1];
-  uint16_t f6;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj16, f6) == 6,
-              "Obj16: the layout moved");
 
 
-// Obj17 -- recovered from 28 dereferences over 6 offsets, under 3
-// names.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj17 {
-  uint8_t f0;
-  uint8_t _pad1[1];
-  int16_t f2;
-  uint8_t f4;
-  uint8_t _pad4[1];
-  uint16_t f6;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj17, f6) == 6,
-              "Obj17: the layout moved");
 
 
 // Obj18 -- recovered from 26 dereferences over 8 offsets, under 8
@@ -4405,27 +4314,6 @@ static_assert(sizeof(void *) != 4
               "Obj19: the layout moved");
 
 
-// Obj20 -- recovered from 26 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj20 {
-  uint8_t _pad0[278736];
-  uint32_t f278736;
-  uint32_t f278740;
-  uint32_t f278744;
-  uint32_t f278748;
-  uint32_t f278752;
-  uint32_t f278756;
-  char *f278760;
-  char *f278764;
-  char *f278768;
-  uint32_t f278772;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj20, f278772) == 278772,
-              "Obj20: the layout moved");
 
 
 
@@ -4487,96 +4375,12 @@ static_assert(sizeof(void *) != 4
               "Obj25: the layout moved");
 
 
-// Obj26 -- recovered from 21 dereferences over 9 offsets, under 2
-// names.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj26 {
-  uint8_t _pad0[8];
-  uint8_t*f8;
-  uint8_t*f12;
-  uint8_t*f16;
-  uint8_t*f20;
-  uint8_t _pad5[172];
-  uint8_t*f196;
-  uint8_t*f200;
-  uint8_t*f204;
-  uint8_t*f208;
-  uint8_t*f212;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj26, f212) == 212,
-              "Obj26: the layout moved");
 
 
-// Obj27 -- recovered from 21 dereferences over 9 offsets, under 2
-// names.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj27 {
-  uint8_t _pad0[8];
-  uint8_t*f8;
-  uint8_t*f12;
-  uint8_t*f16;
-  uint8_t*f20;
-  uint8_t _pad5[172];
-  uint8_t*f196;
-  uint8_t*f200;
-  uint8_t*f204;
-  uint8_t*f208;
-  uint8_t*f212;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj27, f212) == 212,
-              "Obj27: the layout moved");
 
 
-// Obj28 -- recovered from 21 dereferences over 9 offsets, under 2
-// names.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj28 {
-  uint8_t _pad0[8];
-  uint8_t*f8;
-  uint8_t*f12;
-  uint8_t*f16;
-  uint8_t*f20;
-  uint8_t _pad5[172];
-  uint8_t*f196;
-  uint8_t*f200;
-  uint8_t*f204;
-  uint8_t*f208;
-  uint8_t*f212;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj28, f212) == 212,
-              "Obj28: the layout moved");
 
 
-// Obj29 -- recovered from 21 dereferences over 9 offsets, under 2
-// names.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj29 {
-  uint8_t _pad0[8];
-  uint8_t*f8;
-  uint8_t*f12;
-  uint8_t*f16;
-  uint8_t*f20;
-  uint8_t _pad5[172];
-  uint8_t*f196;
-  uint8_t*f200;
-  uint8_t*f204;
-  uint8_t*f208;
-  uint8_t*f212;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj29, f212) == 212,
-              "Obj29: the layout moved");
 
 
 
@@ -4600,23 +4404,6 @@ static_assert(sizeof(void *) != 4
               "Obj31: the layout moved");
 
 
-// Obj32 -- recovered from 19 dereferences over 5 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj32 {
-  uint8_t _pad0[278736];
-  uint32_t f278736;
-  uint8_t _pad2[16];
-  char *f278756;
-  char *f278760;
-  char *f278764;
-  char *f278768;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj32, f278768) == 278768,
-              "Obj32: the layout moved");
 
 
 
@@ -4913,128 +4700,18 @@ static_assert(sizeof(void *) != 4
               "Obj55: the layout moved");
 
 
-// Obj56 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj56 {
-  uint8_t _pad0[72];
-  uint32_t f72;
-  uint32_t f76;
-  uint32_t f80;
-  uint32_t f84;
-  uint16_t f88;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj56, f88) == 88,
-              "Obj56: the layout moved");
 
 
-// Obj57 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj57 {
-  uint32_t f0;
-  uint32_t f4;
-  uint32_t f8;
-  uint32_t f12;
-  uint16_t f16;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj57, f16) == 16,
-              "Obj57: the layout moved");
 
 
-// Obj58 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj58 {
-  uint8_t _pad0[36];
-  uint32_t f36;
-  uint32_t f40;
-  uint32_t f44;
-  uint32_t f48;
-  uint16_t f52;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj58, f52) == 52,
-              "Obj58: the layout moved");
 
 
-// Obj59 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj59 {
-  uint8_t _pad0[72];
-  uint32_t f72;
-  uint32_t f76;
-  uint32_t f80;
-  uint32_t f84;
-  uint16_t f88;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj59, f88) == 88,
-              "Obj59: the layout moved");
 
 
-// Obj60 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj60 {
-  uint32_t f0;
-  uint32_t f4;
-  uint32_t f8;
-  uint32_t f12;
-  uint16_t f16;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj60, f16) == 16,
-              "Obj60: the layout moved");
 
 
-// Obj61 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj61 {
-  uint8_t _pad0[36];
-  uint32_t f36;
-  uint32_t f40;
-  uint32_t f44;
-  uint32_t f48;
-  uint16_t f52;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj61, f52) == 52,
-              "Obj61: the layout moved");
 
 
-// Obj62 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj62 {
-  uint8_t _pad0[72];
-  uint32_t f72;
-  uint32_t f76;
-  uint32_t f80;
-  uint32_t f84;
-  uint16_t f88;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj62, f88) == 88,
-              "Obj62: the layout moved");
 
 
 // Obj63 -- recovered from 9 dereferences over 9 offsets, under 1
@@ -5264,252 +4941,33 @@ static_assert(sizeof(void *) != 4
               "Obj69: the layout moved");
 
 
-// Obj70 -- recovered from 17 dereferences over 12 offsets, under 2
-// names.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj70 {
-  uint32_t f0;
-  uint32_t f4;
-  uint32_t f8;
-  uint32_t f12;
-  uint16_t f16;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj70, f16) == 16,
-              "Obj70: the layout moved");
 
 
 
-// Obj72 -- recovered from 11 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj72 {
-  uint32_t f0;
-  uint32_t f4;
-  uint32_t f8;
-  uint32_t f12;
-  uint16_t f16;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj72, f16) == 16,
-              "Obj72: the layout moved");
 
 
-// Obj73 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj73 {
-  uint8_t _pad0[36];
-  uint32_t f36;
-  uint32_t f40;
-  uint32_t f44;
-  uint32_t f48;
-  uint16_t f52;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj73, f52) == 52,
-              "Obj73: the layout moved");
 
 
-// Obj74 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj74 {
-  uint8_t _pad0[72];
-  uint32_t f72;
-  uint32_t f76;
-  uint32_t f80;
-  uint32_t f84;
-  uint16_t f88;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj74, f88) == 88,
-              "Obj74: the layout moved");
 
 
-// Obj75 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj75 {
-  uint32_t f0;
-  uint32_t f4;
-  uint32_t f8;
-  uint32_t f12;
-  uint16_t f16;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj75, f16) == 16,
-              "Obj75: the layout moved");
 
 
-// Obj76 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj76 {
-  uint8_t _pad0[36];
-  uint32_t f36;
-  uint32_t f40;
-  uint32_t f44;
-  uint32_t f48;
-  uint16_t f52;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj76, f52) == 52,
-              "Obj76: the layout moved");
 
 
-// Obj77 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj77 {
-  uint8_t _pad0[72];
-  uint32_t f72;
-  uint32_t f76;
-  uint32_t f80;
-  uint32_t f84;
-  uint16_t f88;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj77, f88) == 88,
-              "Obj77: the layout moved");
 
 
-// Obj78 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj78 {
-  uint32_t f0;
-  uint32_t f4;
-  uint32_t f8;
-  uint32_t f12;
-  uint16_t f16;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj78, f16) == 16,
-              "Obj78: the layout moved");
 
 
-// Obj79 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj79 {
-  uint8_t _pad0[36];
-  uint32_t f36;
-  uint32_t f40;
-  uint32_t f44;
-  uint32_t f48;
-  uint16_t f52;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj79, f52) == 52,
-              "Obj79: the layout moved");
 
 
-// Obj80 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj80 {
-  uint8_t _pad0[72];
-  uint32_t f72;
-  uint32_t f76;
-  uint32_t f80;
-  uint32_t f84;
-  uint16_t f88;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj80, f88) == 88,
-              "Obj80: the layout moved");
 
 
-// Obj81 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj81 {
-  uint32_t f0;
-  uint32_t f4;
-  uint32_t f8;
-  uint32_t f12;
-  uint16_t f16;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj81, f16) == 16,
-              "Obj81: the layout moved");
 
 
-// Obj82 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj82 {
-  uint8_t _pad0[36];
-  uint32_t f36;
-  uint32_t f40;
-  uint32_t f44;
-  uint32_t f48;
-  uint16_t f52;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj82, f52) == 52,
-              "Obj82: the layout moved");
 
 
-// Obj83 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj83 {
-  uint8_t _pad0[72];
-  uint32_t f72;
-  uint32_t f76;
-  uint32_t f80;
-  uint32_t f84;
-  uint16_t f88;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj83, f88) == 88,
-              "Obj83: the layout moved");
 
 
-// Obj84 -- recovered from 10 dereferences over 10 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj84 {
-  uint8_t _pad0[36];
-  uint32_t f36;
-  uint32_t f40;
-  uint32_t f44;
-  uint32_t f48;
-  uint16_t f52;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj84, f52) == 52,
-              "Obj84: the layout moved");
 
 
 
@@ -5866,25 +5324,6 @@ static_assert(sizeof(void *) != 4
               "Obj118: the layout moved");
 
 
-// Obj119 -- recovered from 5 dereferences over 5 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj119 {
-  uint8_t _pad0[2];
-  uint8_t f2;
-  uint8_t f3;
-  uint8_t _pad3[7];
-  uint8_t f11;
-  uint8_t _pad5[7];
-  uint8_t f19;
-  uint8_t _pad7[7];
-  uint8_t f27;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj119, f27) == 27,
-              "Obj119: the layout moved");
 
 
 
@@ -5913,26 +5352,6 @@ static_assert(sizeof(void *) != 4
 
 
 
-// Obj123 -- recovered from 5 dereferences over 5 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj123 {
-  uint8_t _pad0[16];
-  uint16_t f16;
-  uint8_t _pad2[6];
-  uint16_t f24;
-  uint8_t _pad4[6];
-  uint16_t f32;
-  uint8_t _pad6[6];
-  uint16_t f40;
-  uint8_t _pad8[14];
-  uint16_t f56;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj123, f56) == 56,
-              "Obj123: the layout moved");
 
 
 // Obj124 -- recovered from 5 dereferences over 1 offsets, under 1
@@ -5987,40 +5406,8 @@ static_assert(sizeof(void *) != 4
               "Obj127: the layout moved");
 
 
-// Obj128 -- recovered from 5 dereferences over 5 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj128 {
-  uint8_t _pad0[36];
-  uint32_t f36;
-  uint32_t f40;
-  uint32_t f44;
-  uint32_t f48;
-  uint16_t f52;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj128, f52) == 52,
-              "Obj128: the layout moved");
 
 
-// Obj129 -- recovered from 5 dereferences over 5 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj129 {
-  uint8_t _pad0[72];
-  uint32_t f72;
-  uint32_t f76;
-  uint32_t f80;
-  uint32_t f84;
-  uint16_t f88;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj129, f88) == 88,
-              "Obj129: the layout moved");
 
 
 // Obj130 -- recovered from 5 dereferences over 5 offsets, under 1
@@ -6041,40 +5428,8 @@ static_assert(sizeof(void *) != 4
               "Obj130: the layout moved");
 
 
-// Obj131 -- recovered from 5 dereferences over 5 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj131 {
-  uint8_t _pad0[36];
-  uint32_t f36;
-  uint32_t f40;
-  uint32_t f44;
-  uint32_t f48;
-  uint16_t f52;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj131, f52) == 52,
-              "Obj131: the layout moved");
 
 
-// Obj132 -- recovered from 5 dereferences over 5 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj132 {
-  uint8_t _pad0[72];
-  uint32_t f72;
-  uint32_t f76;
-  uint32_t f80;
-  uint32_t f84;
-  uint16_t f88;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj132, f88) == 88,
-              "Obj132: the layout moved");
 
 
 
@@ -11164,8 +10519,8 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
       int32_t   v92;
       void     *Block;
       Obj0     *v94;
-      Obj26    *v95;
-      Obj27    *v96;
+      Obj25    *v95;
+      Obj25    *v96;
       int32_t   v97;
       int32_t   v98;
       uint32_t  i_1;
@@ -11192,8 +10547,8 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
   int32_t &v92 = __frame.v92;
   void *&Block = __frame.Block;
   Obj0 *&v94 = __frame.v94;
-  Obj26 *&v95 = __frame.v95;
-  Obj27 *&v96 = __frame.v96;
+  Obj25 *&v95 = __frame.v95;
+  Obj25 *&v96 = __frame.v96;
   int32_t &v97 = __frame.v97;
   int32_t &v98 = __frame.v98;
   uint32_t &i_1 = __frame.i_1;
@@ -11215,8 +10570,8 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           v46, v47, v48, v49, v50, v52, v53, v54, v56, v57, v60, v62, v64, v67, v68, v71, v72,
           v74, v75, v78, v79, n4_3, n4_4;
   uint32_t v20, *v51;
-  Obj26 *v66;
-  Obj27 *v73;
+  Obj25 *v66;
+  Obj25 *v73;
   uint8_t *v30;
   uint8_t *v31;
   uint8_t *v55, *v63, *v69, *v70, *v76, *v77;
@@ -11414,7 +10769,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           v59->f212 += 2;
           if ( v101 )
             v104 += v97 + *(uint8_t *)((uint8_t)__byte_44339D[0] + Src);
-          v66 = (Obj26 *)(v95);
+          v66 = (Obj25 *)(v95);
           v84 = Block;
           v83 = v94;
           *(uint8_t *)(Src + (uint8_t)__byte_4433AD[0]) = v104;
@@ -11455,7 +10810,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           n4_1 = plane_count;
           if ( plane_count >= 4 )
           {
-            v73 = (Obj27 *)(v96);
+            v73 = (Obj25 *)(v96);
             __fwd_alt_model_p1_decode_alt_p1_context(v96, v95, (int32_t)v94);
             v75 = __fwd_alt_model_p1_decode_alt_p1_decode_symbol(&((uint8_t**)v73)[4 * (uint32_t)v73->f12 + 950], v74, (int32_t)v73->f16);
             v76 = v73->f8;
@@ -15049,7 +14404,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
            v177;
   Obj18 *v142;
   Obj118 *v39;
-  Obj119 *v38;
+  Obj118 *v38;
   uint8_t *v76;
   uint8_t *n15_16;
   n15_9 = (uint16_t *)*((uint32_t *)_this + 20);
@@ -15197,7 +14552,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   }
   if ( (*(uint8_t *)(this_3->f76 - 5) & *(uint8_t *)(this_3->f76 - 6)) != 0 )
   {
-    v38 = (Obj119 *)((uint8_t *)this_3->f80);
+    v38 = (Obj118 *)((uint8_t *)this_3->f80);
     v39 = (Obj118 *)((uint8_t *)this_3->f84);
     if ( ((uint8_t)(v39->f19 & v39->f11 & v39->f3 & v38->f27 & v38->f19 & v38->f11 & v38->f3 & v38->f2 & *((char *)v38 - 5))
         & v39->f27) != 0 )
@@ -15847,7 +15202,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
           p_n15_6, *v143, v144, n2_16, n2_17, n15_37, v149, v150, v151, v152, v154, v155, v157,
           n15_18, v161, n2_2, p_n15_10, p_n15_8, p_n15_9, n15_19;
   Obj66 *v159;
-  Obj123 *v111;
+  Obj121 *v111;
   uint16_t *n2_7, *n2_8, *v37, *v51, *n2_11, *n2_12, *n2_13, *n2_14, *v97, *v98, *n2_6, *v108,
            *v113, *v124, v153, *n15_39;
   uint32_t bin_tot, v55, v57, **v136, v137, p_n15_12, v139, v140, v141, v168, v169, v171, v172,
@@ -16467,7 +15822,7 @@ LABEL_42:
   n15_4 = n15_25;
   n15_27 = *(uint16_t *)(v109 - 16);
   this_1 = (ModelBlock *)(this_4);
-  v111 = (Obj123 *)((uint16_t *)*(int32_t *)&this_3->f80);
+  v111 = (Obj121 *)((uint16_t *)*(int32_t *)&this_3->f80);
   n15_3 = n15_26;
   v112 = v111->f16;
   v185 = v108;
@@ -17435,8 +16790,8 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
   int32_t &n5_8 = __frame.n5_8;
   void *&Block = __frame.Block;
   Obj25 *&v102 = (Obj25 *&)__frame.v102;
-  Obj28 *&v103 = (Obj28 *&)__frame.v103;
-  Obj29 *&v104 = (Obj29 *&)__frame.v104;
+  Obj25 *&v103 = (Obj25 *&)__frame.v103;
+  Obj25 *&v104 = (Obj25 *&)__frame.v104;
   int32_t &v105 = __frame.v105;
   int32_t &v106 = __frame.v106;
   uint32_t &i_1 = __frame.i_1;
@@ -17454,7 +16809,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
   int32_t &n5 = __frame.n5;
   ;
   uintptr_t n3;   // were int32_t: addresses, masked and tagged
-  Obj2 *v23;
+  Obj1 *v23;
   char *v28;
   char v11, v12, v13, v62, v71, v81, v83;
   Obj92 *v6;
@@ -17465,8 +16820,8 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
   int64_t v68, v76, v86;
   uint32_t v19;
   Obj25 *v61;
-  Obj28 *v70;
-  Obj29 *v80;
+  Obj25 *v70;
+  Obj25 *v80;
   uint8_t *v29;
   uint8_t *v30;
   uint8_t *v50, v53, v60, v79;
@@ -17705,7 +17060,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
                                     + __dword_4433A4[4 * (uint8_t)__byte_4433BD[0]]
                                     * (uint32_t)*(uint8_t *)((uint8_t)__byte_4433AD[0] + a2)
                                     + 40) >> 7));
-          v70 = (Obj28 *)(v103);
+          v70 = (Obj25 *)(v103);
           __fwd_alt_model_p1_encode_alt_p1_context(v103, (uint32_t *)v102, (int32_t)Block);
           v71 = *((uint8_t *)v70 + 8);
           v115 = (uint8_t)(v69 - v71);
@@ -17754,7 +17109,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
                     + 64) >> 7);
             else
               v79 = *(uint8_t *)((uint8_t)__n3_0 + a2);
-            v80 = (Obj29 *)(v104);
+            v80 = (Obj25 *)(v104);
             v99 = v79;
             __fwd_alt_model_p1_encode_alt_p1_context(v104, (uint32_t *)v103, (int32_t)v102);
             v81 = *((uint8_t *)v80 + 8);
@@ -17931,7 +17286,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
   uint32_t &n0x10_1 = __frame.n0x10_1;
   int32_t &v510 = __frame.v510;
   int32_t &v511 = __frame.v511;
-  Obj17 *&v512 = (Obj17 *&)__frame.v512;
+  Obj15 *&v512 = (Obj15 *&)__frame.v512;
   Obj42 *&v513 = (Obj42 *&)__frame.v513;
   Obj44 *&v514 = (Obj44 *&)__frame.v514;
   Obj52 *&v515 = (Obj52 *&)__frame.v515;
@@ -17955,7 +17310,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
   Obj46 *&v533 = (Obj46 *&)__frame.v533;
   Obj104 *&v534 = (Obj104 *&)__frame.v534;
   Obj105 *&v535 = (Obj105 *&)__frame.v535;
-  Obj16 *&v536 = (Obj16 *&)__frame.v536;
+  Obj15 *&v536 = (Obj15 *&)__frame.v536;
   Obj103 *&v537 = (Obj103 *&)__frame.v537;
   Obj39 *&v538 = (Obj39 *&)__frame.v538;
   Obj15 *&v539 = (Obj15 *&)__frame.v539;
@@ -17986,7 +17341,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
   Obj52 *&v564 = (Obj52 *&)__frame.v564;
   Obj127 *&v565 = (Obj127 *&)__frame.v565;
   Obj41 *&v566 = (Obj41 *&)__frame.v566;
-  Obj17 *&v567 = (Obj17 *&)__frame.v567;
+  Obj15 *&v567 = (Obj15 *&)__frame.v567;
   Obj44 *&v568 = (Obj44 *&)__frame.v568;
   Obj42 *&v569 = (Obj42 *&)__frame.v569;
   int32_t &v570 = __frame.v570;
@@ -18012,7 +17367,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
          v71, v72, v73, v74;
   bool v87, v103, v104, v105;
   char *v90, v114, v116, v312;
-  Obj17 *v110;
+  Obj15 *v110;
   Obj40 *v94;
   Obj41 *v111;
   Obj42 *v107;
@@ -18409,7 +17764,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
                   + 4 * ((v81 ^ 0x2000) & 0xFFFFFFF3)]);
         _mm_prefetch(v540, _MM_HINT_T2);
         _mm_prefetch(&v90[4 * (v81 ^ 0x1000) + 284712], _MM_HINT_T2);
-        v536 = (Obj16 *)((int32_t)&v90[4 * (v81 ^ 0x1000) + 284712]);
+        v536 = (Obj15 *)((int32_t)&v90[4 * (v81 ^ 0x1000) + 284712]);
         _mm_prefetch(&v90[4 * (v81 ^ 0x6FF0) + 284712], _MM_HINT_T2);
         v538 = (Obj39 *)((int32_t)&v90[4 * (v81 ^ 0x6FF0) + 284712]);
         v537 = (Obj103 *)(&v90[4 * *(int32_t *)((char *)__dword_439880 + ((v81 ^ 0x1000) & 0xC))
@@ -18479,8 +17834,8 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
         _mm_prefetch(v523, _MM_HINT_T2);
         v566 = (Obj41 *)((uint32_t)&v90[4 * *(int32_t *)((char *)__dword_439880 + (v95 & 0xC)) + 284712 + 4 * (v95 & 0xFFFFFFF3)]);
         v516 = (Obj41 *)(v566);
-        v567 = (Obj17 *)((int32_t)&v90[4 * v96 + 284712]);
-        v512 = (Obj17 *)(v567);
+        v567 = (Obj15 *)((int32_t)&v90[4 * v96 + 284712]);
+        v512 = (Obj15 *)(v567);
         v97 = *(int32_t *)((char *)__dword_439880 + (v96 & 0xC)) + (v96 & 0xFFFFFFF3);
         v568 = (Obj44 *)((int32_t)&v90[4 * (v96 ^ 0x7FF0) + 284712]);
         v514 = (Obj44 *)(v568);
@@ -18505,7 +17860,7 @@ BMF_SSE uint32_t __alt_p2_model(Obj69 *a1, const __m128 &a2__ref, int32_t a3, ui
         v107 = (Obj42 *)(v569);
         v108 = v550;
         v109 = v106 + v102 + 2;
-        v110 = (Obj17 *)((const char *)v567);
+        v110 = (Obj15 *)((const char *)v567);
         LOWORD(v109) = v101 + (v109 >> 2);
         v87 = n3 < 3;
         v111 = (Obj41 *)((const char *)v566);
@@ -19823,14 +19178,14 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
   uint32_t &v96 = *(uint32_t *)((char *)&__frame.v95);
   uint8_t * &v97 = __frame.v97;
   ;
-  Obj70 *v11;
-  Obj73 *v25;
-  Obj74 *v32;
-  Obj75 *v54;
-  Obj76 *v62;
-  Obj77 *v69;
-  Obj128 *v80;
-  Obj129 *v84;
+  Obj54 *v11;
+  Obj55 *v25;
+  Obj53 *v32;
+  Obj54 *v54;
+  Obj55 *v62;
+  Obj53 *v69;
+  Obj55 *v80;
+  Obj53 *v84;
   Obj130 *v88;
   uintptr_t v21, v28, v36, v38, v39, v40, v41, v42, v43, v44, v48, v58, v66, v76, v78, v82, v86,
             v90, v93;
@@ -19840,7 +19195,7 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
   __m128i *v53;
   bool v17;
   int16_t v14, v24;
-  Obj70 *v12;
+  Obj54 *v12;
   int32_t i_1, v13, v18, v19, v20, v22, v23, v26, v27, v29, v30, v31, v33, v34, v35, v37, v49,
           *v50, v51, v52, v55, v56, v57, v59, v60, v61, v63, v64, v65, v67, v68, v70, v71, v72,
           v73, v74, v75, v77, v79, v81, v83, v85, v87, v89, v92, v94;
@@ -19849,8 +19204,8 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
   uint32_t j;
   __rc_begin_decode(ArgList);
   i_1 = i;
-  v11 = (Obj70 *)(lpAddress->f278736);
-  v12 = (Obj70 *)(v11);
+  v11 = (Obj54 *)(lpAddress->f278736);
+  v12 = (Obj54 *)(v11);
   if ( i > 0 )
   {
     v95 = 0;
@@ -19902,13 +19257,13 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
       *(uint8_t *)(lpAddress->f278736 + 17) = 2;
       *(uint8_t *)(lpAddress->f278736 + 16) = (*(int16_t *)(lpAddress->f278736 + 4) <= 0)
                                                        + (*(int16_t *)(lpAddress->f278736 + 4) < 0);
-      v11 = (Obj70 *)(lpAddress->f278736 + 18);
+      v11 = (Obj54 *)(lpAddress->f278736 + 18);
       v17 = v95 + 1 < i;
       lpAddress->f278736 = v11;
       ++v95;
       if ( !v17 )
         break;
-      v12 = (Obj70 *)(lpAddress->f278736);
+      v12 = (Obj54 *)(lpAddress->f278736);
     }
     i_1 = i;
   }
@@ -19930,7 +19285,7 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
   *(uint32_t *)(v21 + 26) = v22;
   *(uint32_t *)(v21 + 30) = v23;
   *(uint16_t *)(v21 + 34) = v24;
-  v25 = (Obj73 *)(lpAddress->f278736);
+  v25 = (Obj55 *)(lpAddress->f278736);
   v26 = *(uint32_t *)((uintptr_t)v25 - 10);
   v27 = *(uint32_t *)((uintptr_t)v25 - 6);
   v25->f36 = *(uint32_t *)((uintptr_t)v25 - 18);
@@ -19949,7 +19304,7 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
   *(uint32_t *)(v28 + 62) = v30;
   *(uint32_t *)(v28 + 66) = v31;
   *(uint16_t *)(v28 + 70) = v29;
-  v32 = (Obj74 *)(lpAddress->f278736);
+  v32 = (Obj53 *)(lpAddress->f278736);
   v33 = *(uint32_t *)((uintptr_t)v32 - 14);
   v34 = *(uint32_t *)((uintptr_t)v32 - 6);
   v32->f72 = *(uint32_t *)((uintptr_t)v32 - 18);
@@ -20047,7 +19402,7 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
       v53[4] = v47;
       v53[5] = v47;
       v53[6] = v47;
-      v54 = (Obj75 *)(lpAddress->f278736);
+      v54 = (Obj54 *)(lpAddress->f278736);
       v55 = *(uint32_t *)((uintptr_t)v54 - 14);
       v56 = *(uint32_t *)((uintptr_t)v54 - 10);
       v57 = *(uint32_t *)((uintptr_t)v54 - 6);
@@ -20067,7 +19422,7 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
       *(uint32_t *)(v58 + 26) = v60;
       *(uint32_t *)(v58 + 30) = v61;
       *(uint16_t *)(v58 + 34) = v51;
-      v62 = (Obj76 *)(lpAddress->f278736);
+      v62 = (Obj55 *)(lpAddress->f278736);
       v63 = *(uint32_t *)((uintptr_t)v62 - 50);
       v64 = *(uint32_t *)((uintptr_t)v62 - 42);
       LOWORD(v51) = *(uint16_t *)((uintptr_t)v62 - 38);
@@ -20086,7 +19441,7 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
       *(uint32_t *)(v66 + 62) = v67;
       *(uint32_t *)(v66 + 66) = v68;
       *(uint16_t *)(v66 + 70) = v51;
-      v69 = (Obj77 *)(lpAddress->f278736);
+      v69 = (Obj53 *)(lpAddress->f278736);
       v70 = *(uint32_t *)((uintptr_t)v69 - 82);
       v71 = *(uint32_t *)((uintptr_t)v69 - 78);
       LOWORD(v68) = *(uint16_t *)((uintptr_t)v69 - 74);
@@ -20117,7 +19472,7 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
       v78 = lpAddress->f278740;
       bmf_copy((void *)(v77 - 36), (const void *)(v78 + 18), 18);
       v79 = lpAddress->f278736;
-      v80 = (Obj128 *)(lpAddress->f278740);
+      v80 = (Obj55 *)(lpAddress->f278740);
       *(uint32_t *)(v79 - 54) = v80->f36;
       *(uint32_t *)(v79 - 50) = v80->f40;
       *(uint32_t *)(v79 - 46) = v80->f44;
@@ -20127,7 +19482,7 @@ BMF_SSE void __alt_p2_d8_decode_body(Obj69 *lpAddress, char ArgList, const __m12
       v82 = lpAddress->f278740;
       bmf_copy((void *)(v81 - 72), (const void *)(v82 + 54), 18);
       v83 = lpAddress->f278736;
-      v84 = (Obj129 *)(lpAddress->f278740);
+      v84 = (Obj53 *)(lpAddress->f278740);
       *(uint32_t *)(v83 - 90) = v84->f72;
       *(uint32_t *)(v83 - 86) = v84->f76;
       *(uint32_t *)(v83 - 82) = v84->f80;
@@ -20265,14 +19620,14 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   Obj8 *v56;
   Obj19 *v14;
   Obj31 *v25;
-  Obj78 *v26;
-  Obj79 *v34;
-  Obj80 *v41;
-  Obj81 *v63;
-  Obj82 *v71;
-  Obj83 *v78;
-  Obj131 *v89;
-  Obj132 *v93;
+  Obj54 *v26;
+  Obj55 *v34;
+  Obj53 *v41;
+  Obj54 *v63;
+  Obj55 *v71;
+  Obj53 *v78;
+  Obj55 *v89;
+  Obj53 *v93;
   uintptr_t v30, v38, v45, v46, v57, v67, v75, v85, v87, v91, v95, v97, v99;
   Obj11 *v120;
   Obj11 *v129;
@@ -20360,7 +19715,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
             if ( v165 == 1 )
             {
               v25 = (Obj31 *)((int32_t)*(v18 - 1));
-              v26 = (Obj78 *)(v25->f278736);
+              v26 = (Obj54 *)(v25->f278736);
               v27 = *(uint32_t *)((uintptr_t)v26 - 14);
               v28 = *(uint32_t *)((uintptr_t)v26 - 10);
               v26->f0 = *(uint32_t *)((uintptr_t)v26 - 18);
@@ -20380,7 +19735,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
               *(uint32_t *)(v30 + 26) = v32;
               *(uint32_t *)(v30 + 30) = v33;
               *(uint16_t *)(v30 + 34) = v31;
-              v34 = (Obj79 *)(v25->f278736);
+              v34 = (Obj55 *)(v25->f278736);
               v35 = *(uint32_t *)((uintptr_t)v34 - 14);
               v36 = *(uint32_t *)((uintptr_t)v34 - 6);
               v34->f36 = *(uint32_t *)((uintptr_t)v34 - 18);
@@ -20399,7 +19754,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
               *(uint32_t *)(v38 + 62) = v39;
               *(uint32_t *)(v38 + 66) = v40;
               *(uint16_t *)(v38 + 70) = v34;
-              v41 = (Obj80 *)(v25->f278736);
+              v41 = (Obj53 *)(v25->f278736);
               v42 = *(uint32_t *)((uintptr_t)v41 - 14);
               v43 = *(uint32_t *)((uintptr_t)v41 - 10);
               v41->f72 = *(uint32_t *)((uintptr_t)v41 - 18);
@@ -20530,7 +19885,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v62[4] = 0;
           v62[5] = 0;
           v62[6] = 0;
-          v63 = (Obj81 *)(v56->f278736);
+          v63 = (Obj54 *)(v56->f278736);
           v64 = *(uint32_t *)((uintptr_t)v63 - 14);
           v65 = *(uint32_t *)((uintptr_t)v63 - 10);
           v66 = *(uint32_t *)((uintptr_t)v63 - 6);
@@ -20550,7 +19905,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           *(uint32_t *)(v67 + 26) = v69;
           *(uint32_t *)(v67 + 30) = v70;
           *(uint16_t *)(v67 + 34) = v60;
-          v71 = (Obj82 *)(v56->f278736);
+          v71 = (Obj55 *)(v56->f278736);
           v72 = *(uint32_t *)((uintptr_t)v71 - 50);
           v73 = *(uint32_t *)((uintptr_t)v71 - 42);
           LOWORD(v60) = *(uint16_t *)((uintptr_t)v71 - 38);
@@ -20569,7 +19924,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           *(uint32_t *)(v75 + 62) = v76;
           *(uint32_t *)(v75 + 66) = v77;
           *(uint16_t *)(v75 + 70) = v60;
-          v78 = (Obj83 *)(v56->f278736);
+          v78 = (Obj53 *)(v56->f278736);
           v79 = *(uint32_t *)((uintptr_t)v78 - 82);
           v80 = *(uint32_t *)((uintptr_t)v78 - 78);
           LOWORD(v77) = *(uint16_t *)((uintptr_t)v78 - 74);
@@ -20600,7 +19955,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v87 = v56->f278740;
           bmf_copy((void *)(v86 - 36), (const void *)(v87 + 18), 18);
           v88 = v56->f278736;
-          v89 = (Obj131 *)(v56->f278740);
+          v89 = (Obj55 *)(v56->f278740);
           *(uint32_t *)(v88 - 54) = v89->f36;
           *(uint32_t *)(v88 - 50) = v89->f40;
           *(uint32_t *)(v88 - 46) = v89->f44;
@@ -20610,7 +19965,7 @@ BMF_SSE int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v91 = v56->f278740;
           bmf_copy((void *)(v90 - 72), (const void *)(v91 + 54), 18);
           v92 = v56->f278736;
-          v93 = (Obj132 *)(v56->f278740);
+          v93 = (Obj53 *)(v56->f278740);
           *(uint32_t *)(v92 - 90) = v93->f72;
           *(uint32_t *)(v92 - 86) = v93->f76;
           *(uint32_t *)(v92 - 82) = v93->f80;
@@ -20856,9 +20211,9 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
   Obj53 *v34;
   Obj54 *v57;
   Obj55 *v65;
-  Obj56 *v72;
-  Obj72 *v11;
-  Obj84 *v27;
+  Obj53 *v72;
+  Obj54 *v11;
+  Obj55 *v27;
   char *v23, *v30, *v38, *v40, *v41, *v42, *v43, *v44, *v45, *v46, *v51, *v61, *v69, *v79, *v81,
        *v83, *v85, *v87, *v89, *v91, *v93;
   __m128 a2 = a2__ref;
@@ -20877,7 +20232,7 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
   uint8_t *v8;
   v8 = a4;
   __rc_begin_encode();
-  v11 = (Obj72 *)(lpAddress->f278736.m128_i32[0]);
+  v11 = (Obj54 *)(lpAddress->f278736.m128_i32[0]);
   if ( i > 0 )
   {
     v103 = a4;
@@ -20934,7 +20289,7 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
       *(uint8_t *)(lpAddress->f278736.m128_i32[0] + 17) = 2;
       *(uint8_t *)(lpAddress->f278736.m128_i32[0] + 16) = (*(int16_t *)(lpAddress->f278736.m128_i32[0] + 4) <= 0)
                                                     + (*(int16_t *)(lpAddress->f278736.m128_i32[0] + 4) < 0);
-      v11 = (Obj72 *)(lpAddress->f278736.m128_i32[0] + 18);
+      v11 = (Obj54 *)(lpAddress->f278736.m128_i32[0] + 18);
       lpAddress->f278736.m128_i32[0] = v11;
     }
     v8 = v103;
@@ -20957,7 +20312,7 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
   *(uint32_t *)(v23 + 26) = v24;
   *(uint32_t *)(v23 + 30) = v25;
   *(uint16_t *)(v23 + 34) = v26;
-  v27 = (Obj84 *)(lpAddress->f278736.m128_i32[0]);
+  v27 = (Obj55 *)(lpAddress->f278736.m128_i32[0]);
   v28 = *(uint32_t *)((char *)v27 - 10);
   v29 = *(uint32_t *)((char *)v27 - 6);
   v27->f36 = *(uint32_t *)((char *)v27 - 18);
@@ -21116,7 +20471,7 @@ BMF_SSE void __alt_p2_d8_encode_body(Obj11 *lpAddress, const __m128 &a2__ref, co
       *(uint32_t *)(v69 + 62) = v70;
       *(uint32_t *)(v69 + 66) = v71;
       *(uint16_t *)(v69 + 70) = (uint16_t)v53;
-      v72 = (Obj56 *)(lpAddress->f278736.m128_i32[0]);
+      v72 = (Obj53 *)(lpAddress->f278736.m128_i32[0]);
       v73 = *(uint32_t *)((char *)v72 - 82);
       v74 = *(uint32_t *)((char *)v72 - 78);
       LOWORD(v71) = *(uint16_t *)((char *)v72 - 74);
@@ -21318,16 +20673,16 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   int32_t &v184 = __frame.v184;
   uint32_t &v185 = __frame.v185;
   ;
-  Obj9 *v55;
+  Obj8 *v55;
   uintptr_t v44;
-  Obj20 *v13;
-  Obj32 *v24;
-  Obj57 *v25;
-  Obj58 *v33;
-  Obj59 *v40;
-  Obj60 *v62;
-  Obj61 *v70;
-  Obj62 *v77;
+  Obj19 *v13;
+  Obj31 *v24;
+  Obj54 *v25;
+  Obj55 *v33;
+  Obj53 *v40;
+  Obj54 *v62;
+  Obj55 *v70;
+  Obj53 *v77;
   char *v29, *v37, *v45, *v56, *v66, *v74, *v84, *v86, *v88, *v90, *v92, *v94, *v96, *v98;
   Obj11 *v125;
   Obj11 *v133;
@@ -21414,8 +20769,8 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             v17 = &lpAddress + n4_2;
             if ( v170 == 1 )
             {
-              v24 = (Obj32 *)((int32_t)*(v17 - 1));
-              v25 = (Obj57 *)(v24->f278736);
+              v24 = (Obj31 *)((int32_t)*(v17 - 1));
+              v25 = (Obj54 *)(v24->f278736);
               v26 = *(uint32_t *)((char *)v25 - 14);
               v27 = *(uint32_t *)((char *)v25 - 10);
               v25->f0 = *(uint32_t *)((char *)v25 - 18);
@@ -21435,7 +20790,7 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
               *(uint32_t *)(v29 + 26) = v31;
               *(uint32_t *)(v29 + 30) = v32;
               *(uint16_t *)(v29 + 34) = v30;
-              v33 = (Obj58 *)(v24->f278736);
+              v33 = (Obj55 *)(v24->f278736);
               v34 = *(uint32_t *)((char *)v33 - 14);
               v35 = *(uint32_t *)((char *)v33 - 6);
               v33->f36 = *(uint32_t *)((char *)v33 - 18);
@@ -21454,7 +20809,7 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
               *(uint32_t *)(v37 + 62) = v38;
               *(uint32_t *)(v37 + 66) = v39;
               *(uint16_t *)(v37 + 70) = v33;
-              v40 = (Obj59 *)(v24->f278736);
+              v40 = (Obj53 *)(v24->f278736);
               v41 = *(uint32_t *)((char *)v40 - 14);
               v42 = *(uint32_t *)((char *)v40 - 10);
               v40->f72 = *(uint32_t *)((char *)v40 - 18);
@@ -21521,7 +20876,7 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           }
           else
           {
-            v13 = (Obj20 *)((int32_t)*(&lpAddress + n4_2 - 1));
+            v13 = (Obj19 *)((int32_t)*(&lpAddress + n4_2 - 1));
             v163 = (int32_t)(&lpAddress + n4_2);
             v14 = 0;
             do
@@ -21554,7 +20909,7 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             v13->f278748 = v22 + 2 * v153 + 144;
             v13->f278752 = v23;
           }
-          v55 = (Obj9 *)((int32_t)*(v17 - 1));
+          v55 = (Obj8 *)((int32_t)*(v17 - 1));
           v56 = v55->f278668;
           v57 = *(uint32_t *)(v56 - 4);
           *(uint32_t *)(v56 + 4) = v57;
@@ -21585,7 +20940,7 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           v61[4] = 0;
           v61[5] = 0;
           v61[6] = 0;
-          v62 = (Obj60 *)(v55->f278736);
+          v62 = (Obj54 *)(v55->f278736);
           v63 = *(uint32_t *)((char *)v62 - 14);
           v64 = *(uint32_t *)((char *)v62 - 10);
           v65 = *(uint32_t *)((char *)v62 - 6);
@@ -21605,7 +20960,7 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           *(uint32_t *)(v66 + 26) = v68;
           *(uint32_t *)(v66 + 30) = v69;
           *(uint16_t *)(v66 + 34) = v59;
-          v70 = (Obj61 *)(v55->f278736);
+          v70 = (Obj55 *)(v55->f278736);
           v71 = *(uint32_t *)((char *)v70 - 50);
           v72 = *(uint32_t *)((char *)v70 - 42);
           LOWORD(v59) = *(uint16_t *)((char *)v70 - 38);
@@ -21624,7 +20979,7 @@ BMF_SSE int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           *(uint32_t *)(v74 + 62) = v75;
           *(uint32_t *)(v74 + 66) = v76;
           *(uint16_t *)(v74 + 70) = v59;
-          v77 = (Obj62 *)(v55->f278736);
+          v77 = (Obj53 *)(v55->f278736);
           v78 = *(uint32_t *)((char *)v77 - 82);
           v79 = *(uint32_t *)((char *)v77 - 78);
           LOWORD(v76) = *(uint16_t *)((char *)v77 - 74);
