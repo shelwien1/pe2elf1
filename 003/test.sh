@@ -92,5 +92,33 @@ for img in $IMAGES; do
     exit 0
   ) || fail=1
 done
+# The archive holds more than one member.  `bmf c` appends, `bmf d` walks every
+# member and decodes each one, and the writing half of that was removed once by
+# a change of the output mode that nothing caught, because no test built an
+# archive with two images in it.  This does.
+if [ "${BMF_ARCHIVE:-1}" = 1 ] && [ -f "$TESTDIR/t1.bmp" ] && [ -f "$TESTDIR/t8g.bmp" ]; then
+  (
+    cd "$WORK"
+    rm -f arc.bmf arc.bmp
+    $RUN "$BIN" c orig_t1.bmp arc.bmf >arc.log 2>&1 &&
+    $RUN "$BIN" c orig_t8g.bmp arc.bmf >>arc.log 2>&1 ||
+      { echo "archive: COMPRESS FAILED"; cat arc.log; exit 1; }
+    one=$(stat -c%s t8g.bmf) both=$(stat -c%s arc.bmf)
+    [ "$both" -gt "$one" ] || {
+      echo "archive: SECOND MEMBER REPLACED THE FIRST ($both bytes, t8g alone is $one)"
+      exit 1
+    }
+    $RUN "$BIN" d arc.bmf arc.bmp >arc.d.log 2>&1 ||
+      { echo "archive: DECOMPRESS FAILED"; cat arc.d.log; exit 1; }
+    grep -q 'number: 2' arc.d.log || {
+      echo "archive: SECOND MEMBER NOT READ BACK"; cat arc.d.log; exit 1
+    }
+    cmp -s orig_t8g.bmp arc.bmp || { echo "archive: LAST MEMBER NOT LOSSLESS"; exit 1; }
+    printf '%-12s ok  %8s -> %8s  (2 members)\n' archive \
+      "$(stat -c%s orig_t1.bmp)" "$both"
+    exit 0
+  ) || fail=1
+fi
+
 [ $fail -eq 0 ] || { echo "FAIL"; exit 1; }
 echo "PASS"

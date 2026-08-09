@@ -52,7 +52,10 @@ the property that matters.
 ```
 
 Both halves are automated: the round-trip, and the comparison against the
-fourteen committed reference streams. A run with a missing reference fails, and a stream
+fourteen committed reference streams. A fifteenth check builds an archive with
+two members in it and reads both back, because the one thing the per-image
+checks cannot see is a change that breaks the container rather than the codec —
+and one did. A run with a missing reference fails, and a stream
 that differs from its reference fails. Where an input is not reproduced byte for
 byte — an RLE-compressed BMP comes back with BMF's own run splitting —
 `testfiles/out_<name>.bmp` holds what the decoder is expected to write and the
@@ -522,6 +525,12 @@ gate cannot tell from a layout change.
   built, and `bmf d` reads every member back. It has been changed back. **A
   harness annoyance is not evidence about what a program is for** — the fix
   was to delete the output before each encode, which is what `test.sh` does.
+
+  Nothing caught it for a long time because every check in the gate compressed
+  one image to a fresh path, which is exactly the case where appending and
+  replacing look the same. `test.sh` now builds a two-member archive and reads
+  both back; reinstating `"w+b"` fails it with *SECOND MEMBER REPLACED THE
+  FIRST*.
 - **Inherited names lie, and so do first readings.** `__n8`, `__n256`, `__n2`
   are the last value assigned, not the meaning. But the opposite error is just
   as easy: an earlier draft of §4.1 concluded `__Buffer` was not a buffer,
