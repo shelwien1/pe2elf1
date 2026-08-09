@@ -24,8 +24,13 @@ decode_context_bit         0x00412850
 encode_symbol_list         0x00412B10
 decode_symbol_list         0x00412E60
 update_binary_pair         0x00413430
+init_counter_node          0x00413560
+alt_p1_encode_symbol       0x004135A0
 encode_symbol_tree         0x00413900
+alt_p1_decode_symbol       0x00413E60
+alt_p2_encode_symbol       0x00414390
 decode_three_way           0x00414620
+rescale_three_way          0x00414800
 init_symbol_list           0x00414860
 rescale_counter_pair       0x004148F0
 rc_end_decode              0x00414920
@@ -42,13 +47,20 @@ layout_workspace           0x00417980
 unmodel_plane              0x00417DB0
 unmodel_plane_slow         0x00417E80
 decode_pixel               0x00418650
+alt_p2_free                0x00419610
 init_sse_constants         0x00419680
 alt_model_p2_d8_encode     0x004197A0
+alt_p2_d8_encode_body      0x00419800
 alt_model_p2_encode        0x00421930
+alt_p2_alloc               0x004229E0
 alt_model_p2_d8_decode     0x00422D60
+alt_p2_d8_decode_body      0x00422DB0
 alt_model_p2_decode        0x00423600
+alt_p1_free                0x004244A0
 alt_model_p1_d8_encode     0x00424500
+alt_p1_d8_encode_body      0x00424550
 alt_model_p1_encode        0x00424D90
+alt_p1_alloc               0x004256F0
 alt_model_p1_d8_decode     0x004273F0
 alt_model_p1_decode        0x00427740
 read_bmp                   0x0042AB20
@@ -57,7 +69,4 @@ alloc_image                0x0042B830
 set_new_handler            0x0042CBB0
 log_two_lane               0x00436E10
 
-# 55 mapped.  12 named bodies have no recorded address:
-#   alt_p1_alloc              alt_p1_d8_encode_body     alt_p1_decode_symbol      alt_p1_encode_symbol
-#   alt_p1_free               alt_p2_alloc              alt_p2_d8_decode_body     alt_p2_d8_encode_body
-#   alt_p2_encode_symbol      alt_p2_free               init_counter_node         rescale_three_way
+# 67 mapped.  0 named bodies have no recorded address:
