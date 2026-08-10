@@ -808,10 +808,12 @@ Stated plainly, so the rest can be trusted:
   * **Rows are 144 bytes apart.** `alt_model_p2_decode` rotates five row
     pointers and advances three of them by exactly 144: `f278744 = v84 + 144`,
     `f278748 = v83 + 144`, `f278752 = v81 + 144`. Eight rows of 18 bytes.
-  * **The copies never overlap**, which is why they can be `memcpy`. Checked at
-    run time rather than argued: `BMF_COPY_CHECK=1 ./build.sh` aborts if any
-    pair of regions touches, and the gate passes against it with all
-    thirty-two sites executing.
+  * **The copies never overlap**, which is why they can be `memcpy`. This was
+    checked at run time while they were `memcpy`s -- `BMF_COPY_CHECK=1
+    ./build.sh` aborted if any pair of regions touched, and the gate passed
+    against it with all thirty-two sites executing. Round six made every one of
+    them a `P2Ctx` assignment, so the types say it instead: two distinct
+    records are `sizeof(P2Ctx)` apart at the least.
 
   What none of that says is what an 18-byte record *holds*, which is the
   question. The five fields are four `uint32_t` and a `uint16_t`, and

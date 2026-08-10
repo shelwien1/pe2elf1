@@ -779,11 +779,16 @@ half of a copy reads `->f36` where the other half still reads `+ 36`. A member's
 expression, though: `v80` is an `Obj53 *`, so `v80 + 36` steps ninety bytes, and
 the member side has to be emitted as `&v80->f36`.
 
-A store sequence and a `memcpy` differ in exactly one case, so overlap is
-checked rather than argued. `BMF_COPY_CHECK=1 ./build.sh` routes the calls
-through a wrapper that aborts when the regions touch; the gate passes against
-it, all 27 sites execute during that run, and a deliberately overlapped copy
-does abort, so the check can fail. They are rows of a table 144 bytes apart.
+A store sequence and a `memcpy` differ in exactly one case, so overlap was
+checked rather than argued. `BMF_COPY_CHECK=1 ./build.sh` routed the calls
+through a wrapper that aborted when the regions touched; the gate passed
+against it, all 27 sites executed during that run, and a deliberately
+overlapped copy did abort, so the check could fail. They are rows of a table
+144 bytes apart.
+
+*(Round six gave the 18-byte record a type. All 56 copies are `((P2Ctx *)p)[i]
+= ((P2Ctx *)p)[j]` now, `bmf_copy` and its check are gone, and the overlap
+question is answered by `sizeof` instead of by a run.)*
 
 **Both of these are the same lesson.** A tool that only knows how to make
 structs will describe everything as a struct, and its offer list stops being
