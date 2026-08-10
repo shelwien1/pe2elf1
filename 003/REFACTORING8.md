@@ -23,10 +23,10 @@ bytes.
 `python3 tools/shape.py`, verbatim:
 
 ```
-subs1.hpp / bmf.cpp lines          17904 / 358
+subs1.hpp / bmf.cpp lines          17911 / 358
 raw-offset sites                   22
   off `_this`                      1, in 1 functions
-pointer casts                      2183
+pointer casts                      2141
 globals still at a 1997 address    0
 frames                             17, 169180 bytes, 0 aliases
   slots carrying two names         0, 0 extra names, in 0 functions
@@ -379,6 +379,39 @@ ends on the line immediately before `n1840` is used. It assigns `n960_1`;
 `n1840` is set forty lines earlier from a counter prediction. The four
 selectors I read *off the selector statements themselves* were right; the one I
 inferred from what sat above it was not, and that is the whole difference.
+
+---
+
+## 4.7 A stride that was out of phase, and what it was hiding
+
+`alt_p2_context` reaches its neighbourhood through eight cursors Hex-Rays
+typed `int16_t (*)[8]` — a **sixteen**-byte stride over **eighteen**-byte
+records. `v293[3][6]` was three sixteens and six twos: the byte arithmetic was
+right and the subscripts meant nothing.
+
+Decoding all 72 reaches against the real record size lands every one of them on
+a field boundary — 0 misaligned, across all eight cursors. A sixteen-byte
+stride hitting eighteen-byte fields 72 times running is not a coincidence, so
+the cursors are `P2Ctx *` and each reach says which record and which lane.
+
+That is what settled the last two open questions, and neither needed dataflow
+tracing in the end — only a type that was not lying.
+
+**Group 3 of the p2 context** was `((uint8_t *)v204[1])[0]`. Byte 16 is `sign`:
+`ctx_w[3].sel = v204->sign`. So groups 3 and 4 are both a stored sign digit,
+read back off two different rows.
+
+**Why a record holds one magnitude five times.** Each of `lane[3 .. 7]` is the
+input to a *different* fixed-tap linear predictor over the same neighbourhood —
+taps 21/12/16/22/20/14 for one, 17/21/15/25/9/22/19 for another,
+17/15/21/18/16/22/19 for a third, each with its own `ctx_bias` accumulator, and
+two plainer reductions beside them. Five copies because five filters consume
+it; they diverge because `alt_p2_model` writes each filter's residual back into
+its own lane.
+
+So the five digits take `lane[0]` twice, `sign` twice, and a predicted level,
+and the magnitudes reach them only through the predictions. Pointer casts
+2183 → 2141.
 
 ---
 
