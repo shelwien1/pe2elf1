@@ -1,17 +1,17 @@
 In file included from bmf.cpp:756:
 subs1.hpp: In function 'int32_t __alt_p1_context(Obj0*, uint32_t*, Obj91*)':
-subs1.hpp:3857:8: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:3867:12: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:3876:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:3940:9: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:3874:8: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:3884:12: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:3893:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:3957:9: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp: In function 'int32_t __decode_symbol_list(uint32_t*)':
-subs1.hpp:10179:9: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:10185:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:10196:9: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:10202:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp: In function 'int32_t __decode_pixel(ModelBlock*, int32_t)':
-subs1.hpp:10523:11: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:11064:20: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:11066:12: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:10540:11: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:11081:20: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:11083:12: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp: In function 'int32_t __code_pixel(ModelBlock*, int32_t)':
-subs1.hpp:11832:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:11841:27: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:11844:20: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:11849:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:11858:27: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:11861:20: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]

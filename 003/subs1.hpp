@@ -499,12 +499,29 @@ struct ModelBlock {
   uint8_t *f1078684;
   uint8_t *f1078688;   // the alphabet map, one byte a symbol
   uint8_t f1078692[4];   // +1078692 .. +1078695
-  uint8_t _pad28[4980736];
+  // `layout_workspace` seeds this one 0x40000 times, two counters an
+  // iteration, both 0x2000.
+  uint16_t f1078696[524288];   // +1078696 .. +2127271
+  uint8_t _pad28[3932160];
   uint32_t f6059432;
   uint8_t *f6059436;   // a row cursor; `f6059436 + 2` steps two bytes
+  // The four regions `layout_workspace` ends on.  Each extent is the loop
+  // bound or the memset length that fills it, and the four of them run to
+  // 8102448 -- which is the 0x7BA230 both callers ask `bmf_new` for, so the
+  // last one ends exactly at the end of the object.
+  uint16_t f6059440[8192];   // +6059440 .. +6075823
+  uint8_t f6075824[385024];   // +6075824 .. +6460847
+  uint8_t f6460848[217600];   // +6460848 .. +6678447
+  uint8_t f6678448[1424000];   // +6678448 .. +8102447
 };
 static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(ModelBlock, f6059436) == 6059436,
+              || (__builtin_offsetof(ModelBlock, f6059436) == 6059436
+                  && __builtin_offsetof(ModelBlock, f1078696) == 1078696
+                  && __builtin_offsetof(ModelBlock, f6059440) == 6059440
+                  && __builtin_offsetof(ModelBlock, f6075824) == 6075824
+                  && __builtin_offsetof(ModelBlock, f6460848) == 6460848
+                  && __builtin_offsetof(ModelBlock, f6678448) == 6678448
+                  && sizeof(ModelBlock) == 0x7BA230),
               "ModelBlock: the layout moved");
 
 
@@ -12062,125 +12079,126 @@ void __expand_alphabet(ModelBlock *_this)
   }
 }
 
-int32_t __layout_workspace(uintptr_t a1, int32_t a2, int32_t i, int32_t a4, int32_t a5)
+ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4, int32_t a5)
 {
   ;
-  char *v8, v12;
+  uint8_t *v8;
+  char v12;
   int16_t v19;
   int32_t i_1, j, v9, v13, k_1, v35, v38;
   uint32_t k, m, n0x2000_1, n, n8, n0x18;
   uint8_t *v10;
   i_1 = i;
   __byte_445700 = 1;
-  *(uint32_t *)a1 = i;
-  *(uint32_t *)(a1 + 4) = a4;
-  *(uint32_t *)(a1 + 8) = a5;
-  *(uint32_t *)(a1 + 12) = a5;
-  *(uint32_t *)(a1 + 1078204) = 0;
-  *(uint32_t *)(a1 + 1078240) = 0;
+  a1->f0 = i;
+  *(uint32_t *)&a1->f4 = a4;
+  a1->f8 = a5;
+  a1->f12 = a5;
+  *(uint32_t *)&a1->f1078204 = 0;
+  *(uint32_t *)&a1->f1078240 = 0;
   for ( j = 0; j < 5; ++j )
   {
-    v8 = (char *)bmf_new(8 * i_1 + 128);
-    *(char **)(a1 + 4 * j + 56) = v8;
-    *(char **)(a1 + 4 * j + 76) = v8 + 64;
-    i_1 = *(uint32_t *)a1;
-    if ( *(int32_t *)a1 > -16 )
+    v8 = (uint8_t *)bmf_new(8 * i_1 + 128);
+    a1->f56[j] = v8;
+    a1->f56[j + 5] = v8 + 64;
+    i_1 = a1->f0;
+    if ( (int32_t)a1->f0 > -16 )
     {
       v9 = 0;
       do
       {
-        *(uint16_t *)(*(uint32_t *)(a1 + 4 * j + 56) + 8 * v9) = 0;
-        *(uint8_t *)(*(uint32_t *)(a1 + 4 * j + 56) + 8 * v9 + 7) = 1;
-        *(uint8_t *)(*(uint32_t *)(a1 + 4 * j + 56) + 8 * v9 + 6) = 1;
-        *(uint8_t *)(*(uint32_t *)(a1 + 4 * j + 56) + 8 * v9 + 5) = 1;
-        *(uint8_t *)(*(uint32_t *)(a1 + 4 * j + 56) + 8 * v9 + 4) = 1;
-        *(uint8_t *)(*(uint32_t *)(a1 + 4 * j + 56) + 8 * v9 + 3) = 1;
-        *(uint8_t *)(*(uint32_t *)(a1 + 4 * j + 56) + 8 * v9 + 2) = 1;
-        i_1 = *(uint32_t *)a1;
+        *(uint16_t *)(a1->f56[j] + 8 * v9) = 0;
+        *(uint8_t *)(a1->f56[j] + 8 * v9 + 7) = 1;
+        *(uint8_t *)(a1->f56[j] + 8 * v9 + 6) = 1;
+        *(uint8_t *)(a1->f56[j] + 8 * v9 + 5) = 1;
+        *(uint8_t *)(a1->f56[j] + 8 * v9 + 4) = 1;
+        *(uint8_t *)(a1->f56[j] + 8 * v9 + 3) = 1;
+        *(uint8_t *)(a1->f56[j] + 8 * v9 + 2) = 1;
+        i_1 = a1->f0;
         ++v9;
       }
-      while ( v9 < *(uint32_t *)a1 + 16 );
+      while ( v9 < a1->f0 + 16 );
     }
   }
   v10 = (uint8_t *)bmf_new(i_1 + 1);
-  *(uint8_t **)(a1 + 1078684) = v10;
+  a1->f1078684 = v10;
   *v10 = 0;
-  if ( *(int32_t *)a1 > 0 )
+  if ( (int32_t)a1->f0 > 0 )
   {
     v12 = 0;
     v13 = 0;
     do
     {
       v12 += v13 == 2 << (v12 & 31);
-      *(uint8_t *)(*(uint32_t *)(a1 + 1078684) + v13++ + 1) = v12;
+      *(uint8_t *)(*(uint32_t *)&a1->f1078684 + v13++ + 1) = v12;
     }
-    while ( v13 < *(uint32_t *)a1 );
+    while ( v13 < a1->f0 );
   }
   // 0x2000 sixteen-bit counters cleared.  What was here instead was the same
   // range in three passes -- a scalar head to reach sixteen-byte alignment,
   // thirty-two counters an iteration, a scalar tail -- with a branch for the
   // case where `a1` is odd and no alignment is reachable at all.
-  __builtin_memset((void *)(a1 + 6059440), 0, 2 * 0x2000);
+  __builtin_memset(a1->f6059440, 0, sizeof a1->f6059440);
   for ( k = 0; k < 0x2000; ++k )
   {
-    v19 = *(uint16_t *)(a1 + 2 * k + 6059440);
+    v19 = a1->f6059440[k];
     k_1 = k;
     for ( m = 0; m < 0xD; ++m )
     {
       v19 += v19 + (k_1 & 1);
       k_1 >>= 1;
     }
-    *(uint16_t *)(a1 + 2 * k + 6059440) = v19;
+    a1->f6059440[k] = v19;
   }
   // ... and every one of them scaled by eight, the same range in the same
   // three passes.
   for ( n0x2000_1 = 0; n0x2000_1 < 0x2000; ++n0x2000_1 )
-    *(uint16_t *)(a1 + 2 * n0x2000_1 + 6059440) *= 8;
-  memset((char *)(a1 + 3104),0,0x100000);
-  *(uint32_t *)(a1 + 28) = 0;
-  *(uint32_t *)(a1 + 24) = 0;
-  *(uint32_t *)(a1 + 20) = 0;
-  memset((char *)(a1 + 6075824),255,385024);
-  memset((char *)(a1 + 6460848),255,217600);
-  memset((char *)(a1 + 6678448),255,1424000);
+    a1->f6059440[n0x2000_1] *= 8;
+  memset((char *)a1 + 3104,0,0x100000);
+  a1->f28 = 0;
+  a1->f24 = 0;
+  a1->f20 = 0;
+  memset(a1->f6075824,255,sizeof a1->f6075824);
+  memset(a1->f6460848,255,sizeof a1->f6460848);
+  memset(a1->f6678448,255,sizeof a1->f6678448);
   memset(exclusion_mask,0,8193);
-  *(uint64_t *)(a1 + 1078216) = 0;
-  *(uint64_t *)(a1 + 1078224) = 0;
+  *(uint64_t *)((char *)a1 + 1078216) = 0;
+  *(uint64_t *)((char *)a1 + 1078224) = 0;
   for ( n = 0; n < 0x40000; ++n )
   {
-    *(uint16_t *)(a1 + 4 * n + 1078696) = 0x2000;
-    *(uint16_t *)(a1 + 4 * n + 1078698) = 0x2000;
+    a1->f1078696[2 * n] = 0x2000;
+    a1->f1078696[2 * n + 1] = 0x2000;
   }
   n8 = 0;
   do
   {
     v35 = 6 * n8;
-    *(uint16_t *)(a1 + 2 * v35 + 1051680) = 40;
+    *(uint16_t *)((char *)a1 + 2 * v35 + 1051680) = 40;
     ++n8;
-    *(uint16_t *)(a1 + 2 * v35 + 1051682) = 16;
-    *(uint16_t *)(a1 + 2 * v35 + 1051684) = 512;
-    *(uint16_t *)(a1 + 2 * v35 + 1051686) = 40;
-    *(uint16_t *)(a1 + 2 * v35 + 1051688) = 16;
-    *(uint16_t *)(a1 + 2 * v35 + 1051690) = 512;
+    *(uint16_t *)((char *)a1 + 2 * v35 + 1051682) = 16;
+    *(uint16_t *)((char *)a1 + 2 * v35 + 1051684) = 512;
+    *(uint16_t *)((char *)a1 + 2 * v35 + 1051686) = 40;
+    *(uint16_t *)((char *)a1 + 2 * v35 + 1051688) = 16;
+    *(uint16_t *)((char *)a1 + 2 * v35 + 1051690) = 512;
   }
   while ( n8 < 8 );
   n0x18 = 0;
-  memset((char *)(a1 + 1051776),0,24576);
-  *(uint32_t *)(a1 + 1078236) = (uint32_t)bmf_new(2 * *(uint32_t *)(a1 + 4) * *(uint32_t *)a1);
-  *(uint16_t *)(a1 + 1076352) = 4;
-  *(uint16_t *)(a1 + 1076354) = 4;
-  *(uint16_t *)(a1 + 1076356) = 72;
-  memset((char *)(a1 + 1076358),0,1536);
+  memset((char *)a1 + 1051776,0,24576);
+  a1->f1078236 = (int32_t)bmf_new(2 * a1->f4 * a1->f0);
+  *(uint16_t *)((char *)a1 + 1076352) = 4;
+  *(uint16_t *)((char *)a1 + 1076354) = 4;
+  *(uint16_t *)((char *)a1 + 1076356) = 72;
+  memset((char *)a1 + 1076358,0,1536);
   do
   {
     v38 = 6 * n0x18;
-    *(uint16_t *)(a1 + 2 * v38 + 1077894) = 4;
+    *(uint16_t *)((char *)a1 + 2 * v38 + 1077894) = 4;
     ++n0x18;
-    *(uint16_t *)(a1 + 2 * v38 + 1077896) = 4;
-    *(uint16_t *)(a1 + 2 * v38 + 1077898) = 72;
-    *(uint16_t *)(a1 + 2 * v38 + 1077900) = 4;
-    *(uint16_t *)(a1 + 2 * v38 + 1077902) = 4;
-    *(uint16_t *)(a1 + 2 * v38 + 1077904) = 72;
+    *(uint16_t *)((char *)a1 + 2 * v38 + 1077896) = 4;
+    *(uint16_t *)((char *)a1 + 2 * v38 + 1077898) = 72;
+    *(uint16_t *)((char *)a1 + 2 * v38 + 1077900) = 4;
+    *(uint16_t *)((char *)a1 + 2 * v38 + 1077902) = 4;
+    *(uint16_t *)((char *)a1 + 2 * v38 + 1077904) = 72;
   }
   while ( n0x18 < 0x18 );
   return a1;
@@ -15731,7 +15749,7 @@ void __unmodel_plane(char ArgList, uint16_t *p_i, uint8_t *Src)
   {
     v5 = bmf_new(0x7BA230u);
     if ( v5 )
-      v6 = (ModelBlock *)((void **)__layout_workspace((int32_t)v5, p_i[1], *p_i, p_i[1], p_i[5] & 0x3F));
+      v6 = __layout_workspace((ModelBlock *)v5, p_i[1], *p_i, p_i[1], p_i[5] & 0x3F);
     else
       v6 = (ModelBlock *)(nullptr);
     __fwd_unmodel_plane_unmodel_plane_slow(v6, Src);
@@ -16751,7 +16769,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
   {
     v5 = bmf_new(0x7BA230u);
     if ( v5 )
-      Blocka_3 = (ModelBlock *)(__layout_workspace((int32_t)v5, p_i->height, p_i->width, p_i->height, p_i->depth & 0x3F));
+      Blocka_3 = __layout_workspace((ModelBlock *)v5, p_i->height, p_i->width, p_i->height, p_i->depth & 0x3F);
     else
       Blocka_3 = (ModelBlock *)(0);
     __rc_begin_encode();
