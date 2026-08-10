@@ -546,6 +546,28 @@ guessed at:
 | p1 | 9 | 32 | 3^9 = 19683 | 629856 `CounterNode` |
 | p2 | 5 | 64 | 3^5 = 243 | 15552 four-word records |
 
+For the p2 side the five digits themselves are now readable, and four of the
+five are the same test against one pair of numbers:
+
+| group | what it classifies |
+| --- | --- |
+| 0 | a weighted sum of the neighbourhood's `mag` — nine records, the one behind weighted 8 — against the fixed 272 and 1840 |
+| 1 | a prediction error, against the band |
+| 2 | the difference from the previous record's `lane[0]`, against the band |
+| 3 | a third difference, against the band |
+| 4 | the previous record's stored `sign` (§9.2) — already a digit, taken as one |
+
+The band is `band_lo .. band_hi`, which `alt_p2_alloc` sets to
+−(16q + 7) .. 16q + 8 for `q = plane_desc[0].w12`, and the test is
+`(d <= band_hi) + (d < band_lo)` — above, inside, below. Two lines earlier the
+same `q` sets `deadzone_hi`/`deadzone_lo` to ±(4q + 1), the dead zone
+`p2_bump` uses. **One tolerance at two scales**: the narrow one decides whether
+a counter update counts, the wide one which context an error falls in.
+
+So group 0 asks how busy the neighbourhood is, groups 1–3 ask whether three
+different predictions landed inside the tolerance, and group 4 remembers which
+way the last gradient went.
+
 Two details are the models' own rather than the scheme's. The encoder adds
 `w[digit]` and the decoder `w[2 − digit]`, which agree only when the digit is
 1, so the two sides walk the space in opposite directions. And the p1 sum

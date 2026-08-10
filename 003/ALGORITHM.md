@@ -858,10 +858,17 @@ Stated plainly, so the rest can be trusted:
   base-3 digit of the next context. The model writes a digit into the plane and
   reads it back as a digit.
 
-  What is left is not the layout but the *use*: which of the five magnitude
-  lanes feeds which of the remaining four weight groups, and what the eight
-  lanes mean once `alt_p2_model` has written them separately for a few thousand
-  pixels. The five fields are four `uint32_t` and a `uint16_t`, and
+  And the five digits themselves are readable: group 0 buckets a weighted sum
+  of the neighbourhood's magnitudes against two fixed thresholds, groups 1–3
+  each classify a different prediction difference against one adaptive band,
+  and group 4 is the stored sign. The band is ±(16q + 7..8) and the counter
+  dead zone is ±(4q + 1) for the same `q` — one tolerance at two scales.
+  `algorithm_v2.md` §9.1 has the table.
+
+  What is left is what the eight lanes come to *mean* once `alt_p2_model` has
+  written them separately for a few thousand pixels — the five magnitudes start
+  equal and diverge, and which of them feeds which of groups 1–3 is the part
+  still to trace. The five fields are four `uint32_t` and a `uint16_t`, and
   `alt_p2_context` computes the values that go into them — that is where a
   reading would start.
 

@@ -916,8 +916,16 @@ struct AltP2Block {
       // `a2[a3 & 1]`, and `alt_p2_context` writes both from `ctx_delta`.
       uint32_t ctx_pair[2];   // +278708 .. +278715
       int32_t f278716;
-      int32_t f278720;
-      int32_t f278724;
+      // The context band: `alt_p2_alloc` sets it to -(16q + 7) .. 16q + 8 for
+      // `q = plane_desc[0].w12`, and three of the five weight groups classify a
+      // difference against it as `(d <= band_hi) + (d < band_lo)` -- above,
+      // inside, below, which is a base-3 digit.  The same `q` sets
+      // `deadzone_hi`/`deadzone_lo` to +-(4q + 1) two lines earlier, so the
+      // model carries one tolerance at two scales: the narrow one decides
+      // whether a counter update counts, the wide one which context an error
+      // falls in.
+      int32_t band_lo;   // +278720
+      int32_t band_hi;   // +278724
       // The plane this block is coding: every reader uses it as
       // `plane_desc[plane_idx + 1]`'s subscript, and `alt_p2_alloc` folds it
       // into the high bits of every `ctx_delta` entry.
@@ -4264,8 +4272,8 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
                                                & 8) >> 3;
   deadzone_hi = v8;
   deadzone_lo = -v8;
-  *(uint32_t *)&_this->f278720 = -v9 - 7;
-  *(uint32_t *)&_this->f278724 = v9 + 8;
+  *(uint32_t *)&_this->band_lo = -v9 - 7;
+  *(uint32_t *)&_this->band_hi = v9 + 8;
   _this->row0 = (int32_t *)bmf_new(4 * i + 16);
   v10 = bmf_new(4 * i + 16);
   *(uint32_t *)((uint8_t *)_this + 232) = 0x3F800000 /* 1.0f */;
@@ -7199,10 +7207,10 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
          + 4 * v315
          + 2 * v314;
   v196 = (AltP2Block *)(v289);
-  n1840_15 = v289->f278720;
+  n1840_15 = v289->band_lo;
   v289->ctx_w[0].sel = (n1840 < 1840) + (n1840 < 272);
   v198 = v194[0][0];
-  n1840_16 = v196->f278724;
+  n1840_16 = v196->band_hi;
   n1840_1 = n1840_15;
   n1840_2 = n1840_16;
   v200 = (n1840_14 - v198 <= n1840_16) + (n1840_14 - v198 < n1840_15);
