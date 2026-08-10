@@ -17461,10 +17461,10 @@ char * __expand_image(char *a1, const __m128 &a2__ref, const __m128 &a3__ref, in
   FILE *Stream_1, *Stream_v;
   BmfImage *p_i_1;
   char v10, v17, v18, v20, v34, v35, *Buffer_3, *n4_6, *n4_7, *v64;
-  int32_t Buffer__1, dwLowDateTime, v21, n4, v24, predictor, v27, v28,
-          v29, v30, ArgList, v33, n4_4, v37, n2_1, i, Size_4, Size_5, n4_3,
-          v44, Size_2, Size_3, n4_2, v48, n2_2, n_planes, v55,
-          Src_2, v58, n4_8, v61, i_1, n4_9, v76;
+  int32_t Buffer__1, dwLowDateTime, v21, n4, predictor, v27, v28, v29, v30,
+          ArgList, v33, n4_4, v37, n2_1, i, Size_4, Size_5, n4_3, v44, Size_2,
+          Size_3, n4_2, v48, n2_2, n_planes, v55, Src_2, v58, n4_8, v61, i_1,
+          n4_9, v76;
   uint16_t i_2;
   uint32_t __expand_image_Buffer_1, v12, *v13, ElementCount_5, ElementCount_2,
            v23, v25, Size_1, ElementCount_1, ElementCount_4, v67, v68, v69,
