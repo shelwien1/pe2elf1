@@ -604,19 +604,33 @@ struct CtrPair {
 };
 static_assert(sizeof(CtrPair) == 4, "CtrPair: the record is four bytes");
 
-// Two counts and a total: the unit `encode_context_bit` and its decoder take a
-// pointer to.  `layout_workspace` seeds each one (40, 16, 512) or (4, 4, 72),
-// and the four tables that hold them are all indexed `3 * k`.
+// One adaptive binary counter: a count per bit value, and the total at which
+// the pair is rescaled.  `layout_workspace` seeds them (40, 16, 512) or
+// (4, 4, 72), and the four tables that hold them are all indexed `3 * k`.
 //
-// `w[3]` rather than two names and a third, because `encode_context_bit`
-// reaches `w[w[0] - 1]` -- it steps by the first count.  That is only inside
-// the record while `w[0]` stays under four, which is not obvious from the
-// seeds: a `__builtin_trap()` on `w[0] > 3` at that site fires on none of the
-// fifteen images.
+// `encode_context_bit` codes with `rc.encode_bit(n[0], n[1], bit)`, adds 8 to
+// `n[bit]`, and when `n[0] + n[1]` passes `limit` halves both and raises
+// `limit` by 64 -- to a ceiling of 0x4000, so the counter forgets faster while
+// it is young and settles as it ages.
+//
+// A record has three states, and the first two are why `n` is an array.  Cold
+// is `n[0] == 0`: the coder falls back on the second counter it was handed,
+// codes from that, and leaves `n[0] = bit + 1`, so `n[0]` is *the first bit
+// seen plus one* and not a count at all.  Half-warm is `n[1] == 0`: `n[0]` and
+// `n[1]` are seeded from the fallback's ratio scaled to 64, `limit` is set to
+// 512, and `n[n[0] - 1] += 4` bumps the bit that cold state remembered.  Live
+// is everything after.
+//
+// That reach only lands inside the record while `n[0]` is 1 or 2, which the
+// seeds actively contradict -- 40 and 4.  It holds because it is reachable
+// only from half-warm: a `__builtin_trap()` on `n[0] > 2` there fires on none
+// of the fifteen images.
 struct BitCtr {
-  uint16_t w[3];
+  uint16_t n[2];    // +0 .. +3
+  uint16_t limit;   // +4
 };
-static_assert(sizeof(BitCtr) == 6, "BitCtr: two counts and a total");
+static_assert(sizeof(BitCtr) == 6, "BitCtr: two counts and a rescale limit");
+static_assert(__builtin_offsetof(BitCtr, limit) == 4, "BitCtr: the limit is last");
 
 struct ModelBlock {
   uint32_t f0;
@@ -1450,55 +1464,55 @@ int32_t __encode_context_bit(BitCtr *_this, BitCtr *a2, int32_t n15)
   ;
   int32_t v3, v4, n0x4000, result, v18, v19, n0x4000_1, v31, v33;
   uint32_t tot, n0x88_1, v30, v32, v34;
-  v3 = _this->w[0];
-  if ( _this->w[0] )
+  v3 = _this->n[0];
+  if ( _this->n[0] )
   {
-    v4 = _this->w[1];
-    if ( !_this->w[1] )
+    v4 = _this->n[1];
+    if ( !_this->n[1] )
     {
-      v31 = a2->w[0];
-      v32 = v31 + a2->w[1];
-      _this->w[0] = (v32 + (v31 << 6) - 64) / v32;
-      _this->w[1] = ((a2->w[1] << 6) + v32 - 64) / v32;
-      _this->w[v3 - 1] += 4;
-      _this->w[2] = 512;
-      v33 = a2->w[v3 - 1];
-      a2->w[v3 - 1] = -3 * ((uint32_t)(3 - v33) >> 31) + v33;
-      v3 = _this->w[0];
-      v4 = _this->w[1];
+      v31 = a2->n[0];
+      v32 = v31 + a2->n[1];
+      _this->n[0] = (v32 + (v31 << 6) - 64) / v32;
+      _this->n[1] = ((a2->n[1] << 6) + v32 - 64) / v32;
+      _this->n[v3 - 1] += 4;
+      _this->limit = 512;
+      v33 = a2->n[v3 - 1];
+      a2->n[v3 - 1] = -3 * ((uint32_t)(3 - v33) >> 31) + v33;
+      v3 = _this->n[0];
+      v4 = _this->n[1];
     }
     tot = v3 + v4;
     rc.encode_bit(v3, v4, n15);
-    n0x4000 = _this->w[2];
+    n0x4000 = _this->limit;
     if ( tot > n0x4000 )
     {
-      v30 = _this->w[1];
-      _this->w[0] -= _this->w[0] >> 1;
-      _this->w[1] = v30 - (v30 >> 1);
+      v30 = _this->n[1];
+      _this->n[0] -= _this->n[0] >> 1;
+      _this->n[1] = v30 - (v30 >> 1);
       if ( n0x4000 < 0x4000 )
-        _this->w[2] = n0x4000 + 64;
+        _this->limit = n0x4000 + 64;
     }
-    result = _this->w[n15] + 8;
-    _this->w[n15] = result;
-    a2->w[n15] += (uint32_t)tot < 0x88;
+    result = _this->n[n15] + 8;
+    _this->n[n15] = result;
+    a2->n[n15] += (uint32_t)tot < 0x88;
     return result;
   }
-  v18 = a2->w[0];
-  v19 = a2->w[1];
+  v18 = a2->n[0];
+  v19 = a2->n[1];
   n0x88_1 = v18 + v19;
   rc.encode_bit(v18, v19, n15);
-  n0x4000_1 = a2->w[2];
+  n0x4000_1 = a2->limit;
   if ( n0x88_1 > n0x4000_1 )
   {
-    v34 = a2->w[1];
-    a2->w[0] -= a2->w[0] >> 1;
-    a2->w[1] = v34 - (v34 >> 1);
+    v34 = a2->n[1];
+    a2->n[0] -= a2->n[0] >> 1;
+    a2->n[1] = v34 - (v34 >> 1);
     if ( n0x4000_1 < 0x4000 )
-      a2->w[2] = n0x4000_1 + 64;
+      a2->limit = n0x4000_1 + 64;
   }
-  result = a2->w[n15] + 8;
-  a2->w[n15] = result;
-  _this->w[0] = n15 + 1;
+  result = a2->n[n15] + 8;
+  a2->n[n15] = result;
+  _this->n[0] = n15 + 1;
   return result;
 }
 
@@ -1507,54 +1521,54 @@ int32_t __decode_context_bit(BitCtr *_this, BitCtr *a2)
   ;
   int32_t v2, v3, result, n0x4000, v13, v14, n0x4000_1, v24, v26;
   uint32_t tot, n0x88_1, v23, v25, v27;
-  v2 = _this->w[0];
-  if ( _this->w[0] )
+  v2 = _this->n[0];
+  if ( _this->n[0] )
   {
-    v3 = _this->w[1];
-    if ( !_this->w[1] )
+    v3 = _this->n[1];
+    if ( !_this->n[1] )
     {
-      v24 = a2->w[0];
-      v25 = v24 + a2->w[1];
-      _this->w[0] = (v25 + (v24 << 6) - 64) / v25;
-      _this->w[1] = ((a2->w[1] << 6) + v25 - 64) / v25;
-      _this->w[v2 - 1] += 4;
-      _this->w[2] = 512;
-      v26 = a2->w[v2 - 1];
-      a2->w[v2 - 1] = -3 * ((uint32_t)(3 - v26) >> 31) + v26;
-      v2 = _this->w[0];
-      v3 = _this->w[1];
+      v24 = a2->n[0];
+      v25 = v24 + a2->n[1];
+      _this->n[0] = (v25 + (v24 << 6) - 64) / v25;
+      _this->n[1] = ((a2->n[1] << 6) + v25 - 64) / v25;
+      _this->n[v2 - 1] += 4;
+      _this->limit = 512;
+      v26 = a2->n[v2 - 1];
+      a2->n[v2 - 1] = -3 * ((uint32_t)(3 - v26) >> 31) + v26;
+      v2 = _this->n[0];
+      v3 = _this->n[1];
     }
     tot = v2 + v3;
     result = rc.decode_bit(v2, v3);
-    n0x4000 = _this->w[2];
+    n0x4000 = _this->limit;
     if ( tot > n0x4000 )
     {
-      v23 = _this->w[1];
-      _this->w[0] -= _this->w[0] >> 1;
-      _this->w[1] = v23 - (v23 >> 1);
+      v23 = _this->n[1];
+      _this->n[0] -= _this->n[0] >> 1;
+      _this->n[1] = v23 - (v23 >> 1);
       if ( n0x4000 < 0x4000 )
-        _this->w[2] = n0x4000 + 64;
+        _this->limit = n0x4000 + 64;
     }
-    _this->w[result] += 8;
-    a2->w[result] += (uint32_t)tot < 0x88;
+    _this->n[result] += 8;
+    a2->n[result] += (uint32_t)tot < 0x88;
   }
   else
   {
-    v13 = a2->w[0];
-    v14 = a2->w[1];
+    v13 = a2->n[0];
+    v14 = a2->n[1];
     n0x88_1 = v13 + v14;
     result = rc.decode_bit(v13, v14);
-    n0x4000_1 = a2->w[2];
+    n0x4000_1 = a2->limit;
     if ( n0x88_1 > n0x4000_1 )
     {
-      v27 = a2->w[1];
-      a2->w[0] -= a2->w[0] >> 1;
-      a2->w[1] = v27 - (v27 >> 1);
+      v27 = a2->n[1];
+      a2->n[0] -= a2->n[0] >> 1;
+      a2->n[1] = v27 - (v27 >> 1);
       if ( n0x4000_1 < 0x4000 )
-        a2->w[2] = n0x4000_1 + 64;
+        a2->limit = n0x4000_1 + 64;
     }
-    a2->w[result] += 8;
-    _this->w[0] = result + 1;
+    a2->n[result] += 8;
+    _this->n[0] = result + 1;
   }
   return result;
 }
@@ -11209,32 +11223,32 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
   do
   {
     v35 = 2 * n8;   // two records a pass
-    a1->f1051680[v35].w[0] = 40;
+    a1->f1051680[v35].n[0] = 40;
     ++n8;
-    a1->f1051680[v35].w[1] = 16;
-    a1->f1051680[v35].w[2] = 512;
-    a1->f1051680[v35 + 1].w[0] = 40;
-    a1->f1051680[v35 + 1].w[1] = 16;
-    a1->f1051680[v35 + 1].w[2] = 512;
+    a1->f1051680[v35].n[1] = 16;
+    a1->f1051680[v35].limit = 512;
+    a1->f1051680[v35 + 1].n[0] = 40;
+    a1->f1051680[v35 + 1].n[1] = 16;
+    a1->f1051680[v35 + 1].limit = 512;
   }
   while ( n8 < 8 );
   n0x18 = 0;
   memset(a1->f1051776,0,sizeof a1->f1051776);
   a1->sym_word = (uint16_t *)bmf_new(2 * a1->f4 * a1->f0);
-  a1->f1076352[0].w[0] = 4;
-  a1->f1076352[0].w[1] = 4;
-  a1->f1076352[0].w[2] = 72;
+  a1->f1076352[0].n[0] = 4;
+  a1->f1076352[0].n[1] = 4;
+  a1->f1076352[0].limit = 72;
   memset(&a1->f1076352[1],0,1536);
   do
   {
     v38 = 2 * n0x18;   // two records a pass
-    a1->f1077894[v38].w[0] = 4;
+    a1->f1077894[v38].n[0] = 4;
     ++n0x18;
-    a1->f1077894[v38].w[1] = 4;
-    a1->f1077894[v38].w[2] = 72;
-    a1->f1077894[v38 + 1].w[0] = 4;
-    a1->f1077894[v38 + 1].w[1] = 4;
-    a1->f1077894[v38 + 1].w[2] = 72;
+    a1->f1077894[v38].n[1] = 4;
+    a1->f1077894[v38].limit = 72;
+    a1->f1077894[v38 + 1].n[0] = 4;
+    a1->f1077894[v38 + 1].n[1] = 4;
+    a1->f1077894[v38 + 1].limit = 72;
   }
   while ( n0x18 < 0x18 );
   return a1;
