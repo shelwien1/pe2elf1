@@ -8961,6 +8961,12 @@ int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, char a3)
       uint8_t _pad4[2044];
       char buf_2[4];
       uint8_t _pad5[2044];
+      // Six sixteen-byte spill slots, and they stay sixteen bytes wide: the
+      // body reads them 157 times as `m128_i32[k]`, 48 times as an `m128_i64`
+      // pair it hands to `*(double *)`, and three times as an `m128_i16`.  One
+      // slot holding four ints or two doubles depending on the statement is
+      // what the original had in XMM0..XMM5, and what M128 is for.  Splitting
+      // them is REFACTORING4.md §5's job, not this one's.
       __m128i v202;
       __m128i v203;
       __m128i v204;
@@ -9048,7 +9054,6 @@ int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, char a3)
   uint32_t &v227 = __frame.v227;
   Obj97 *&v228 = (Obj97 *&)__frame.v228;
   ;
-  __m128i v21;
   bool v19, n2_4, v42, v106;
   char v7, v10, v12, v16, v18, *v44, n0x100_1, k;
   double v65, v66, v68, v69, v70, v72, v73, v74, v75, v76;
@@ -9123,7 +9128,6 @@ int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, char a3)
         v17 = v15;
       n2_3 = !v19;
       v205.m128_i32[2] = n2_3;
-      v21 = 0;
       n2_4 = __fwd_choose_plane_coding_cost_candidate(v226, (uint8_t *)2, v219, v18, v174, v175, v176, (char *)&v214[2]) < v17;
       n2 = n2_3;
       if ( n2_4 )
@@ -9187,7 +9191,6 @@ int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, char a3)
                     n128_1 = LODWORD(v210);
                     n128 = v207.m128_i32[3];
                     n4 = HIDWORD(v209);
-                    v21 = 0;
                     goto LABEL_19;
                   }
                   if ( n192_1 >= n192_4 )
@@ -9555,12 +9558,12 @@ LABEL_19:
       plane_desc[HIDWORD(v208) + v205.m128_i32[2] + 1].b3 = n192;
       if ( n4 >= 4 )
       {
-        v202 = v21;
-        v203 = v21;
-        v204 = v21;
-        v205 = v21;
-        v206 = v21;
-        v207 = v21;
+        v202 = 0;
+        v203 = 0;
+        v204 = 0;
+        v205 = 0;
+        v206 = 0;
+        v207 = 0;
         memset(buf,0,0x8000);
         v223 = &((uint8_t *)v226)[v208];
         v63 = (int32_t)(v227 - 17 - (uint32_t)&((uint8_t *)v226)[v208]) / 4;
