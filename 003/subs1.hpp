@@ -4828,6 +4828,15 @@ uint32_t __init_symbol_list(SymList *a1, int32_t a2, int32_t a3, int32_t a4)
   return result;
 }
 
+// `width * height` off an image header the caller holds as bytes.  Both fields
+// are `uint16_t` at +0 and +2, which is what `*(uint16_t *)p * *((uint16_t *)p
+// + 1)` was spelling at eight sites in the two plane-shuffling functions --
+// where the same name is also a byte cursor, so it cannot simply be retyped.
+static inline int32_t bmf_pixels(const uint8_t *p) {
+  const BmfImage *img = (const BmfImage *)p;
+  return img->width * img->height;
+}
+
 uint8_t * __interleave_plane(uint8_t *p_i, uint8_t *Src, int32_t a3, int8_t a4)
 {
   ;
@@ -4838,7 +4847,7 @@ uint8_t * __interleave_plane(uint8_t *p_i, uint8_t *Src, int32_t a3, int8_t a4)
   uint8_t *Src_4, *Src_3;
   if ( (plane_desc[a3 + 1].flags & 8) == 0 )
   {
-    Size = *(uint16_t *)p_i * *((uint16_t *)p_i + 1);
+    Size = bmf_pixels(p_i);
     n4 = plane_count;
     Src_1 = (uint32_t)&p_i[a3 + 16];
     if ( plane_count == 1 )
@@ -4874,7 +4883,7 @@ uint8_t * __interleave_plane(uint8_t *p_i, uint8_t *Src, int32_t a3, int8_t a4)
     return p_i;
   }
   n4_1 = plane_count;
-  n6 = *(uint16_t *)p_i * *((uint16_t *)p_i + 1);
+  n6 = bmf_pixels(p_i);
   v29 = plane_desc[1].src_plane - a3;
   v31 = plane_desc[2].src_plane - a3;
   n2 = plane_desc[a3 + 1].predictor;
@@ -4894,7 +4903,7 @@ LABEL_3:
     {
       if ( n2 == 2 )
       {
-        v21 = *(uint16_t *)p_i * *((uint16_t *)p_i + 1);
+        v21 = bmf_pixels(p_i);
         v27 = v4;
         Src_3 = (uint8_t *)Src_2;
         do
@@ -4910,7 +4919,7 @@ LABEL_3:
       }
       else if ( n2 == 3 )
       {
-        v18 = *(uint16_t *)p_i * *((uint16_t *)p_i + 1);
+        v18 = bmf_pixels(p_i);
         v26 = v4;
         Src_4 = (uint8_t *)Src_2;
         do
@@ -4997,7 +5006,7 @@ uint8_t * __colour_transform(uint8_t *Blockb, uint8_t *Src, int32_t a3, int8_t a
   uint8_t *Src_5, *Src_4;
   if ( (plane_desc[a3 + 1].flags & 8) == 0 )
   {
-    Size = *(uint16_t *)Blockb * *((uint16_t *)Blockb + 1);
+    Size = bmf_pixels(Blockb);
     n4 = plane_count;
     Src_1 = (uint32_t)&Blockb[a3 + 16];
     if ( plane_count == 1 )
@@ -5040,7 +5049,7 @@ LABEL_31:
     return Blockb;
   }
   n4_1 = plane_count;
-  n6 = *(uint16_t *)Blockb * *((uint16_t *)Blockb + 1);
+  n6 = bmf_pixels(Blockb);
   v33 = plane_desc[1].src_plane - a3;
   v35 = plane_desc[2].src_plane - a3;
   n2 = plane_desc[a3 + 1].predictor;
@@ -5097,7 +5106,7 @@ LABEL_4:
   }
   if ( n2 == 2 )
   {
-    v24 = *(uint16_t *)Blockb * *((uint16_t *)Blockb + 1);
+    v24 = bmf_pixels(Blockb);
     v31 = v4;
     Src_4 = (uint8_t *)Src_3;
     do
@@ -5112,7 +5121,7 @@ LABEL_4:
   }
   else if ( n2 == 3 )
   {
-    v19 = *(uint16_t *)Blockb * *((uint16_t *)Blockb + 1);
+    v19 = bmf_pixels(Blockb);
     v30 = v4;
     Src_5 = (uint8_t *)Src_3;
     do
@@ -15619,7 +15628,7 @@ void __model_planes(uint8_t *Blockb, uint8_t *Srca_3, int32_t a3, int8_t a4)
     __frame.hdr.depth = 72;
     // never taken: -E is 0
     if ( plane_predictor == 1 && !plane_alt_model )
-      __predict_med(Srca_1, *(uint16_t *)Blockb, *((uint16_t *)Blockb + 1));
+      __predict_med(Srca_1, ((const BmfImage *)Blockb)->width, ((const BmfImage *)Blockb)->height);
     __model_plane(&__frame.hdr, Srca_1, Srca_2);
     // `if ( Srca_2 != Srca_1 )` stood here, and behind it an interleave and a
     // free.  It was the test for "the -E block above allocated a second
@@ -16041,7 +16050,7 @@ LABEL_42:
     p_i_1 = __frame.p_i_2;
     v5 = __frame.v86;
   }
-  Src_1 = (uint8_t *)bmf_new(*(uint16_t *)p_i_1 * p_i_1->height);
+  Src_1 = (uint8_t *)bmf_new(p_i_1->width * p_i_1->height);
   if ( (__frame.v92 & 8) != 0 )
   {
     // The caller's header with the depth byte replaced, exactly as
@@ -16064,14 +16073,14 @@ LABEL_42:
           if ( ::plane_predictor == 1 )
           {
             if ( !plane_alt_model )
-              __unpredict_med(Src_1, *(uint16_t *)p_i_1, p_i_1->height);
+              __unpredict_med(Src_1, p_i_1->width, p_i_1->height);
           }
           // `else if ( !desc_slow_mode && ::plane_predictor == 2 )` -- the fast-mode
           // predictor-2 expander, never reached: -S is on.
         }
         else
         {
-          __expand_predictor_mode0((uint32_t)Src_1, *(uint16_t *)p_i_1, p_i_1->height);
+          __expand_predictor_mode0((uint32_t)Src_1, p_i_1->width, p_i_1->height);
         }
         __interleave_plane((uint8_t *)p_i_1, Src_1, v33, v34);
         ++ArgList;
@@ -16103,7 +16112,7 @@ LABEL_104:
         ::plane_predictor = n2_1;
         if ( (plane_desc[v37 + 1].flags & 8) != 0 || n2_1 )
         {
-          i = *(uint16_t *)p_i_1;
+          i = p_i_1->width;
           __frame.Src = &((uint8_t *)p_i_1)[v37 + 16];
           Size_1 = i * p_i_1->height;
           __frame.n4_1 = ::plane_count;
@@ -16163,11 +16172,11 @@ LABEL_104:
           if ( n2_2 )
           {
             if ( n2_2 == 1 )
-              __unpredict_med(Src_1, *(uint16_t *)p_i_1, p_i_1->height);
+              __unpredict_med(Src_1, p_i_1->width, p_i_1->height);
           }
           else
           {
-            __expand_predictor_mode0((uint32_t)Src_1, *(uint16_t *)p_i_1, p_i_1->height);
+            __expand_predictor_mode0((uint32_t)Src_1, p_i_1->width, p_i_1->height);
           }
           __interleave_plane((uint8_t *)p_i_1, Src_1, v37, v35);
         }
@@ -16217,7 +16226,7 @@ LABEL_109:
       v61 = 0;
       do
       {
-        i_1 = *(uint16_t *)p_i_1;
+        i_1 = p_i_1->width;
         __frame.n4_1 = n4_8;
         __frame.v86 = (uint8_t *)v61;
         Src_3 = __frame.Src;
@@ -16595,7 +16604,7 @@ LABEL_43:
       v108 = 0;
       do
       {
-        v109 = *(uint16_t *)Blockb_6;
+        v109 = ((const BmfImage *)Blockb_6)->width;
         __frame.v179[1] = v108;
         __frame.v179[0] = v106;
         v110 = &Blockb_6[v108 + 16];
@@ -16624,12 +16633,12 @@ LABEL_43:
       p_i_1 = (BmfImage *)(__frame.p_i_2);
     }
     Blockb_7 = __frame.Blockb;
-    v114 = *(uint16_t *)__frame.Blockb;
+    v114 = ((const BmfImage *)__frame.Blockb)->width;
     v115 = v104 * LOWORD(__frame.v178[1]);
-    *(uint16_t *)__frame.Blockb = v104;
-    *((uint16_t *)Blockb_7 + 1) = v114;
-    Blockb_7[11] ^= 2u;
-    *((uint16_t *)Blockb_7 + 2) = v115;
+    ((BmfImage *)__frame.Blockb)->width = v104;
+    ((BmfImage *)Blockb_7)->height = v114;
+    ((BmfImage *)Blockb_7)->flags ^= 2u;
+    *(uint16_t *)&((BmfImage *)Blockb_7)->stride = v115;
     free(v101);
     n4_19 = 0;
     if ( ::plane_count > 0 )
@@ -16680,7 +16689,7 @@ LABEL_172:
         v139 = 0;
         do
         {
-          v140 = *(uint16_t *)Blockb_8;
+          v140 = ((const BmfImage *)Blockb_8)->width;
           __frame.v179[1] = v139;
           __frame.v179[0] = v137;
           v141 = &Blockb_8[v139 + 16];
@@ -16709,12 +16718,12 @@ LABEL_172:
       }
       Blockb_9 = __frame.Blockb;
       v176 = __frame.v178[0];
-      v145 = *(uint16_t *)__frame.Blockb;
+      v145 = ((const BmfImage *)__frame.Blockb)->width;
       v146 = v135 * LOWORD(__frame.v178[1]);
-      *(uint16_t *)__frame.Blockb = v135;
-      *((uint16_t *)Blockb_9 + 1) = v145;
-      Blockb_9[11] ^= 2u;
-      *((uint16_t *)Blockb_9 + 2) = v146;
+      ((BmfImage *)__frame.Blockb)->width = v135;
+      ((BmfImage *)Blockb_9)->height = v145;
+      ((BmfImage *)Blockb_9)->flags ^= 2u;
+      *(uint16_t *)&((BmfImage *)Blockb_9)->stride = v146;
       free(v176);
     }
     else
