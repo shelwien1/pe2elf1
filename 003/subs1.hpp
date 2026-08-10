@@ -3006,14 +3006,14 @@ int32_t __alt_p1_model(AltP1Block *_this)
      + _this->f12[12 - v3]
      + _this->f12[7]
      + (_this->f12[0] & 0x1F);
-  v9 = (P1Count *)((uint8_t *)_this + 16 * v8);
+  v9 = &((P1Count *)_this)[v8];
   v111 = (P1Count *)(v9);
   ((P1Count *)v9)[237].bin[n5_3] += 17;
   v9[237].total += 17;
   result = _this->f12[0];
   if ( (result & 7) != 7 )
   {
-    v11 = (P1Count *)((uint8_t *)_this + 16 * result);
+    v11 = &((P1Count *)_this)[result];
     v110 = (((_this->f12[1] & 7u) - 7) >> 31) + _this->f12[1];
     ((P1Count *)v11)[238].bin[n5_2] += 11;
     v12 = v11[238].total + 11;
@@ -3031,7 +3031,7 @@ int32_t __alt_p1_model(AltP1Block *_this)
   }
   if ( (result & 7) != 0 )
   {
-    v13 = (P1Count *)((uint8_t *)_this + 16 * result);
+    v13 = &((P1Count *)_this)[result];
     v14 = _this->f12[1] - ((_this->f12[1] & 7) != 0);
     ((P1Count *)v13)[236].bin[n5_2] += 13;
     v15 = v13[236].total + 13;
@@ -3089,8 +3089,8 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( v16 == 1 )
     {
       v107 = result - _this->f12[7];
-      v108 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * (v107 + _this->f12[6])));
-      v109 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * (_this->f12[8] + v107)));
+      v108 = &((P1Count *)_this)[v107 + _this->f12[6]];
+      v109 = &((P1Count *)_this)[_this->f12[8] + v107];
       v108[237].bin[n5_2] += 6;
       v108[237].total += 6;
       v109[237].bin[n5_2] += 6;
@@ -3126,7 +3126,7 @@ int32_t __alt_p1_model(AltP1Block *_this)
                      - _this->f12[6 + _this->f12[5]])));
       v19[237].bin[n5_2] += 6;
       v19[237].total += 6;
-      v20 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * v18));
+      v20 = &((P1Count *)_this)[v18];
       v20[237].bin[n5_4] += 4;
       v20[237].total += 4;
       v21 = _this->f12[0];
@@ -3151,8 +3151,8 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( v22 == 1 )
     {
       v104 = v21 - _this->f12[11];
-      v105 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * (v104 + _this->f12[10])));
-      v106 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * (_this->f12[12] + v104)));
+      v105 = &((P1Count *)_this)[v104 + _this->f12[10]];
+      v106 = &((P1Count *)_this)[_this->f12[12] + v104];
       v105[237].bin[n5_2] += 6;
       v105[237].total += 6;
       v106[237].bin[n5_2] += 6;
@@ -3183,10 +3183,10 @@ int32_t __alt_p1_model(AltP1Block *_this)
       v24 = _this->f12[11];
       v25 = v24 + _this->f12[0] - _this->f12[10 + _this->f12[9]];
       v26 = v8 + v24 - _this->f12[12 - _this->f12[9]];
-      v27 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * v25));
+      v27 = &((P1Count *)_this)[v25];
       v27[237].bin[n5_2] += 6;
       v27[237].total += 6;
-      v28 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * v26));
+      v28 = &((P1Count *)_this)[v26];
       v28[237].bin[n5_4] += 4;
       v28[237].total += 4;
       v29 = _this->f12[0];
@@ -3211,8 +3211,8 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( v30 == 1 )
     {
       v101 = v29 - _this->f12[15];
-      v102 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * (v101 + _this->f12[14])));
-      v103 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * (_this->f12[16] + v101)));
+      v102 = &((P1Count *)_this)[v101 + _this->f12[14]];
+      v103 = &((P1Count *)_this)[_this->f12[16] + v101];
       v102[237].bin[n5_2] += 6;
       v102[237].total += 6;
       v103[237].bin[n5_2] += 6;
@@ -3243,10 +3243,10 @@ int32_t __alt_p1_model(AltP1Block *_this)
       v32 = _this->f12[15];
       v33 = v32 + _this->f12[0] - _this->f12[14 + _this->f12[13]];
       v34 = v8 + v32 - _this->f12[16 - _this->f12[13]];
-      v35 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * v33));
+      v35 = &((P1Count *)_this)[v33];
       v35[237].bin[n5_2] += 6;
       v35[237].total += 6;
-      v36 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * v34));
+      v36 = &((P1Count *)_this)[v34];
       v36[237].bin[n5_4] += 4;
       v36[237].total += 4;
       v37 = _this->f12[0];
@@ -3271,8 +3271,8 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( v38 == 1 )
     {
       v98 = v37 - _this->f12[19];
-      v99 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * (v98 + _this->f12[18])));
-      v100 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * (_this->f12[20] + v98)));
+      v99 = &((P1Count *)_this)[v98 + _this->f12[18]];
+      v100 = &((P1Count *)_this)[_this->f12[20] + v98];
       v99[237].bin[n5_2] += 6;
       v99[237].total += 6;
       v100[237].bin[n5_2] += 6;
@@ -3303,10 +3303,10 @@ int32_t __alt_p1_model(AltP1Block *_this)
       v40 = _this->f12[19];
       v41 = v40 + _this->f12[0] - _this->f12[18 + _this->f12[17]];
       v42 = v8 + v40 - _this->f12[20 - _this->f12[17]];
-      v43 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * v41));
+      v43 = &((P1Count *)_this)[v41];
       v43[237].bin[n5_2] += 6;
       v43[237].total += 6;
-      v44 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * v42));
+      v44 = &((P1Count *)_this)[v42];
       v44[237].bin[n5_4] += 4;
       v44[237].total += 4;
       v45 = _this->f12[0];
@@ -3331,8 +3331,8 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( v46 == 1 )
     {
       v95 = v45 - _this->f12[23];
-      v96 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * (v95 + _this->f12[22])));
-      v97 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * (_this->f12[24] + v95)));
+      v96 = &((P1Count *)_this)[v95 + _this->f12[22]];
+      v97 = &((P1Count *)_this)[_this->f12[24] + v95];
       v96[237].bin[n5_2] += 6;
       v96[237].total += 6;
       v97[237].bin[n5_2] += 6;
@@ -3363,10 +3363,10 @@ int32_t __alt_p1_model(AltP1Block *_this)
       v48 = _this->f12[23];
       v49 = v48 + _this->f12[0] - _this->f12[22 + _this->f12[21]];
       v50 = v8 + v48 - _this->f12[24 - _this->f12[21]];
-      v51 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * v49));
+      v51 = &((P1Count *)_this)[v49];
       v51[237].bin[n5_2] += 6;
       v51[237].total += 6;
-      v52 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * v50));
+      v52 = &((P1Count *)_this)[v50];
       v52[237].bin[n5_4] += 4;
       v52[237].total += 4;
       v53 = _this->f12[0];
@@ -3391,8 +3391,8 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( v54 == 1 )
     {
       v92 = v53 - _this->f12[27];
-      v93 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * (v92 + _this->f12[26])));
-      v94 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * (_this->f12[28] + v92)));
+      v93 = &((P1Count *)_this)[v92 + _this->f12[26]];
+      v94 = &((P1Count *)_this)[_this->f12[28] + v92];
       v93[237].bin[n5_2] += 6;
       v93[237].total += 6;
       v94[237].bin[n5_2] += 6;
@@ -3423,10 +3423,10 @@ int32_t __alt_p1_model(AltP1Block *_this)
       v56 = _this->f12[27];
       v57 = v56 + _this->f12[0] - _this->f12[26 + _this->f12[25]];
       v58 = v8 + v56 - _this->f12[28 - _this->f12[25]];
-      v59 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * v57));
+      v59 = &((P1Count *)_this)[v57];
       v59[237].bin[n5_2] += 6;
       v59[237].total += 6;
-      v60 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * v58));
+      v60 = &((P1Count *)_this)[v58];
       v60[237].bin[n5_4] += 4;
       v60[237].total += 4;
       v61 = _this->f12[0];
@@ -3451,8 +3451,8 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( v62 == 1 )
     {
       v89 = v61 - _this->f12[31];
-      v90 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * (v89 + _this->f12[30])));
-      v91 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * (_this->f12[32] + v89)));
+      v90 = &((P1Count *)_this)[v89 + _this->f12[30]];
+      v91 = &((P1Count *)_this)[_this->f12[32] + v89];
       v90[237].bin[n5_2] += 6;
       v90[237].total += 6;
       v91[237].bin[n5_2] += 6;
@@ -3483,10 +3483,10 @@ int32_t __alt_p1_model(AltP1Block *_this)
       v64 = _this->f12[31];
       v65 = v64 + _this->f12[0] - _this->f12[30 + _this->f12[29]];
       v66 = v8 + v64 - _this->f12[32 - _this->f12[29]];
-      v67 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * v65));
+      v67 = &((P1Count *)_this)[v65];
       v67[237].bin[n5_2] += 6;
       v67[237].total += 6;
-      v68 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * v66));
+      v68 = &((P1Count *)_this)[v66];
       v68[237].bin[n5_4] += 4;
       v68[237].total += 4;
       v69 = _this->f12[0];
@@ -3511,8 +3511,8 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( v70 == 1 )
     {
       v86 = v69 - _this->f12[35];
-      v87 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * (v86 + _this->f12[34])));
-      v88 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * (_this->f12[36] + v86)));
+      v87 = &((P1Count *)_this)[v86 + _this->f12[34]];
+      v88 = &((P1Count *)_this)[_this->f12[36] + v86];
       v87[237].bin[n5_2] += 6;
       v87[237].total += 6;
       v88[237].bin[n5_2] += 6;
@@ -3543,10 +3543,10 @@ int32_t __alt_p1_model(AltP1Block *_this)
       v72 = _this->f12[35];
       v73 = v72 + _this->f12[0] - _this->f12[34 + _this->f12[33]];
       v74 = v8 + v72 - _this->f12[36 - _this->f12[33]];
-      v75 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * v73));
+      v75 = &((P1Count *)_this)[v73];
       v75[237].bin[n5_2] += 6;
       v75[237].total += 6;
-      v76 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * v74));
+      v76 = &((P1Count *)_this)[v74];
       v76[237].bin[n5_4] += 4;
       v76[237].total += 4;
       v77 = _this->f12[0];
@@ -3571,7 +3571,7 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( v78 == 1 )
     {
       v83 = v77 - _this->f12[39];
-      v84 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * (v83 + _this->f12[38])));
+      v84 = &((P1Count *)_this)[v83 + _this->f12[38]];
       result = (uintptr_t)((uint8_t *)_this + 16 * (_this->f12[40] + v83));
       v84[237].bin[n5_2] += 6;
       v84[237].total += 6;
@@ -3601,7 +3601,7 @@ int32_t __alt_p1_model(AltP1Block *_this)
       ((P1Count *)v79)[237].total += 7;
       v80 = _this->f12[39];
       result = (uintptr_t)((uint8_t *)_this + 16 * (v80 + _this->f12[0] - _this->f12[38 + _this->f12[37]]));
-      v81 = (P1Count *)((uint16_t *)((uint8_t *)_this + 16 * (v80 - _this->f12[40 - _this->f12[37]] + v8)));
+      v81 = &((P1Count *)_this)[v80 - _this->f12[40 - _this->f12[37]] + v8];
       ((P1Count *)result)[237].bin[n5_2] += 6;
       ((P1Count *)result)[237].total += 6;
       v81[237].bin[n5_4] += 4;
