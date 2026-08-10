@@ -444,7 +444,7 @@ Two additions to how it is run rather than to what it is:
 | reference declarations | Appendix B — `grep -c` counts *lines*, and some of these regexes match twice on one |
 | the twenty file-scope tables | `grep -cE '^static \w+& \w+ = ' subs1.hpp` |
 | the `plane_desc` views and their users | Appendix B |
-| what a frame lift costs | `tools/frame-sweep.sh` (5 kept of 10 after §9) |
+| what a frame lift costs | `tools/frame-sweep.sh` (5 of 10), `--arrays` (0 of 13) |
 | shared slots and their names | `python3 tools/unslot.py subs1.hpp --list` |
 | what the `f278528` layer became | `python3 tools/unlane.py subs1.hpp --list` |
 | what the thread cost | `python3 tools/dethread.py subs1.hpp --list` |
@@ -556,6 +556,10 @@ free with Phase A. §3.3 and §3.4 say in the plan itself that they want
 `algorithm_v2.md` §9 read first, and they still do.
 
 **Phase D is done except for §5 item 2, which the tree disproved** — see below.
+Item 1 named all 22 frames, item 3 split all 25 shared slots, the sweep was
+retried twice (five frames lifted without `--arrays`, 0 of 13 with it), and each
+of the thirteen frames that stay carries the one-line result of the experiment
+that would remove it.
 
 ### Five things the plan got wrong
 
@@ -606,9 +610,9 @@ the other 177 hold.
 2. **`Obj11` and `ModelBlock`'s middle**. Both now have their ends pinned by a
    `sizeof` assert against the allocation. `ModelBlock`'s +3104 region and
    `Obj11`'s +278676..+278735 are named offsets with no roles yet.
-3. **The seven frames that stay.** They hold workspace arrays the code walks
-   past the end of; `alt_p2_context`, `decode_pixel`, `code_pixel` and
-   `decode_symbol_list` segfault the moment their members stop being adjacent.
-   That adjacency is the program's, so the deliverable is a comment saying which
-   walk needs it, not a lift.
+3. **Which walk needs each frame's adjacency.** Every one of the thirteen now
+   says *that* it is a layout and how the sweep fails on it -- altp1 segfaults,
+   med32 divides by zero, the archive stops decompressing. What none of them
+   says yet is *which* walk does it, and that is a read of the function rather
+   than another experiment.
 4. **77 structs still called `ObjN`** and 240 `fNNNN` members against 60 named.
