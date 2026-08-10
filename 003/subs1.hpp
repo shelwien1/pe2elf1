@@ -731,24 +731,19 @@ static_assert(sizeof(void *) != 4
 
 
 
-// Obj99 -- recovered from 6 dereferences over 6 offsets, under 1
-// name.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj99 {
-  uint8_t _pad0[8];
-  uint16_t f8;
-  uint8_t _pad2[8];
-  uint8_t f18;
-  uint8_t _pad4[7];
-  uint8_t f26;
-  uint8_t _pad6[7];
-  uint8_t f34;
+// The pixel model's per-pixel record.  Eight bytes, which is what every cursor
+// in `ModelBlock::f56` steps: `f56[5] += 8`, `f56[8] += 8`, `f56[6] += 8 * n`,
+// and `f56[7] = v49 + 56` is seven of them.
+//
+// `code_pixel` writes the symbol at +0 and then six comparisons of it against
+// six neighbours' symbols at +2..+7 -- the match state `ALGORITHM.md` §8.2
+// describes -- and its five-tap predictor sums `match[0]` of records -3, -2,
+// +2, +3 and +4.  What the other five flags feed is not established.
+struct PixRec {
+  uint16_t sym;        // +0
+  uint8_t  match[6];   // +2 .. +7
 };
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj99, f34) == 34,
-              "Obj99: the layout moved");
+static_assert(sizeof(PixRec) == 8, "PixRec: the record is eight bytes");
 
 
 
@@ -2736,12 +2731,17 @@ LABEL_37:
   // line -- so the field is a byte cursor and these two were the odd ones.
   *(uint16_t *)(_this->f6059436 + 2) = *(uint16_t *)_this->f6059436;
   *(uint16_t *)_this->f6059436 = **(uint16_t **)&_this->f56[5];
-  *(_this->f56[5] + 2) = **(uint16_t **)&_this->f56[5] == **(uint16_t **)&_this->f56[6];
-  *(_this->f56[5] + 3) = **(uint16_t **)&_this->f56[5] == *(uint16_t *)(_this->f56[5] - 8);
-  *(_this->f56[5] + 4) = **(uint16_t **)&_this->f56[5] == *(uint16_t *)(_this->f56[6] + 8);
-  *(_this->f56[5] + 5) = **(uint16_t **)&_this->f56[5] == *(uint16_t *)(_this->f56[6] - 8);
-  *(_this->f56[5] + 6) = **(uint16_t **)&_this->f56[5] == *(uint16_t *)(_this->f56[6] + 16);
-  *(_this->f56[5] + 7) = **(uint16_t **)&_this->f56[5] == *(uint16_t *)(_this->f56[6] + 24);
+  // Six neighbours, compared against the symbol just written.
+  {
+    PixRec *const here = (PixRec *)_this->f56[5];
+    PixRec *const up   = (PixRec *)_this->f56[6];
+    here->match[0] = here->sym == up->sym;
+    here->match[1] = here->sym == here[-1].sym;
+    here->match[2] = here->sym == up[1].sym;
+    here->match[3] = here->sym == up[-1].sym;
+    here->match[4] = here->sym == up[2].sym;
+    here->match[5] = here->sym == up[3].sym;
+  }
   v28 = _this->f56[6];
   v29 = _this->f56[7];
   v30 = _this->f56[5] + 8;
@@ -10123,7 +10123,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 176, "frame layout moved");
   int32_t n15_14;
   ;
-  Obj99 *v63;
+  PixRec *v63;
   uint8_t *v20, *v22, *n2_9, *v52, *v109;   // row cursors out of ModelBlock
   uint8_t *v59, *v74, *n15_36, *n15_38, *n15_40;
   bool v11;
@@ -10436,14 +10436,14 @@ LABEL_42:
           __frame.sym2 = n2_12;
         }
       }
-      v63 = (Obj99 *)(this_3->f56[6]);
-      v64 = *((uint8_t *)v63 - 14);
-      v65 = v63->f18;
-      v66 = v63->f34;
+      v63 = (PixRec *)this_3->f56[6];
+      v64 = v63[-2].match[0];
+      v65 = v63[2].match[0];
+      v66 = v63[4].match[0];
       __frame.sym3 = n15_32;
-      v67 = *((uint8_t *)v63 - 22);
+      v67 = v63[-3].match[0];
       n15_14 = n15_12;
-      v68 = v63->f26 + v65 + v64 + v67 + v66 - 5;
+      v68 = v63[3].match[0] + v65 + v64 + v67 + v66 - 5;
       v69 = ((uint8_t *)this_3->f56[7]);
       this_3->f1078692[0] = v68;
       n2_13 = (uint8_t *)__frame.sym2;
@@ -10463,7 +10463,7 @@ LABEL_42:
                                    + n2_13[-54]
                                    + n2_13[-30]
                                    - 4;
-      n2_13[-2] = n15_11 == v63->f8;
+      n2_13[-2] = n15_11 == v63[1].sym;
       n15_32 = __frame.sym3;
       *(this_3->f56[5] - 1) = n15_11 == *(uint16_t *)(this_3->f56[6] + 16);
       n15_12 = n15_14;
