@@ -14981,8 +14981,6 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, uint8_t *a5, int32_
   Obj130 *v88;
   uintptr_t v21, v28, v36, v38, v39, v40, v41, v42, v43, v44, v48, v58, v66, v76, v78, v82, v86,
             v90, v93;
-  __m128 v47;
-  __m128i *v53;
   bool v17;
   int16_t v14, v24;
   char *v12;
@@ -15136,7 +15134,6 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, uint8_t *a5, int32_
   if ( a7 > 1 )
   {
     v96 = 0;
-    v47 = 0;
     do
     {
       v48 = (uintptr_t)(int32_t *)lpAddress->f278668;
@@ -15155,20 +15152,16 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, uint8_t *a5, int32_
       v52 = *v50;
       *(uint32_t *)(v51 - 4) = *v50;
       *(uint32_t *)(lpAddress->f278668 - 8) = v52;
-      *(uint64_t *)&lpAddress->f278528[0] = v47.m128_u64[0];
-      *(uint32_t *)((char *)&lpAddress->f278528[0] + 8) = 0;
-      *(uint16_t *)((char *)&lpAddress->f278528[0] + 12) = 0;
-      v53 = ((__m128i *)(((uintptr_t)lpAddress + 278543) & 0xFFFFFFF0));
-      *(uint8_t *)((char *)&lpAddress->f278528[0] + 14) = 0;
-      lpAddress->f278640 = v47.m128_u64[0];
-      lpAddress->f278648 = v47.m128_u64[0];
-      v53[0] = v47;
-      v53[1] = v47;
-      v53[2] = v47;
-      v53[3] = v47;
-      v53[4] = v47;
-      v53[5] = v47;
-      v53[6] = v47;
+      lpAddress->f278528_q = 0;
+      lpAddress->f278536 = 0;
+      lpAddress->f278540 = 0;
+      lpAddress->f278542 = 0;
+      lpAddress->f278640 = 0;
+      lpAddress->f278648 = 0;
+      // `(p + 278543) & ~15` is `&p->p2_row[0]`: +278528 is a multiple of 16
+      // and the object comes from `bmf_page_alloc`, so the round-up is a no-op.
+      // Seven sixteen-byte stores are the 112 bytes of the seven rows.
+      __builtin_memset(lpAddress->p2_row, 0, sizeof lpAddress->p2_row);
       v54 = (char *)(lpAddress->f278736[0]);
       bmf_copy((void *)(v54), (const void *)((uintptr_t)v54 - 18), 18);
       v58 = (unsigned int)(lpAddress->f278736[0]);
@@ -15247,7 +15240,6 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, uint8_t *a5, int32_
           __alt_p2_model(lpAddress, v94, v93, v94 - v92);
           a5 = &v97[j + 1];
         }
-        v47 = 0;
       }
       ++v96;
     }
@@ -15348,7 +15340,6 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   Obj11 *v120;
   Obj11 *v129;
   Obj11 *v111;
-  __m128i *v62;
   bool v17, v109;
   char v9;
   int16_t v110;
@@ -15566,7 +15557,6 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
               v56->f278672 = (uint8_t *)v59;
           v61 = *v59;
           *(uint32_t *)(v60 - 4) = *v59;
-          v62 = ((__m128i *)(((uintptr_t)v56 + 278543) & 0xFFFFFFF0));
           *(uint32_t *)(v56->f278668 - 8) = v61;
           v56->f278528_q = 0;
           v56->f278536 = 0;
@@ -15574,13 +15564,10 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v56->f278542 = 0;
           v56->f278640 = 0;
           v56->f278648 = 0;
-          v62[0] = 0;
-          v62[1] = 0;
-          v62[2] = 0;
-          v62[3] = 0;
-          v62[4] = 0;
-          v62[5] = 0;
-          v62[6] = 0;
+          // `(p + 278543) & ~15` is `&p->p2_row[0]`: +278528 is a multiple of 16
+          // and the object comes from `bmf_page_alloc`, so the round-up is a no-op.
+          // Seven sixteen-byte stores are the 112 bytes of the seven rows.
+          __builtin_memset(v56->p2_row, 0, sizeof v56->p2_row);
           v63 = (char *)(v56->f278736[0]);
           bmf_copy((void *)(v63), (const void *)((uintptr_t)v63 - 18), 18);
           v67 = v56->f278736[0];
@@ -15870,8 +15857,6 @@ void __alt_p2_d8_encode_body(Obj11 *lpAddress, uint8_t *a4, int32_t i, int32_t a
   char *v27;
   char *v23, *v30, *v38, *v40, *v41, *v42, *v43, *v44, *v45, *v46, *v51, *v61, *v69, *v79, *v81,
        *v83, *v85, *v87, *v89, *v91, *v93;
-  __m128 v50;
-  __m128i *v56;
   char v14, v97;
   int16_t v26;
   int32_t v12, v13, n16, v16, v17, v24, v25, v31, v32, v33, v39, Size, v52,
@@ -16025,7 +16010,6 @@ void __alt_p2_d8_encode_body(Obj11 *lpAddress, uint8_t *a4, int32_t i, int32_t a
   {
     v106 = (int8_t *)&lpAddress->f278528[11].m128_i8[4];
     v105 = a7;
-    v50 = 0;
     v102 = 0;
     do
     {
@@ -16045,20 +16029,16 @@ void __alt_p2_d8_encode_body(Obj11 *lpAddress, uint8_t *a4, int32_t i, int32_t a
       v55 = *v53;
       *(uint32_t *)(v54 - 4) = *v53;
       *(uint32_t *)(lpAddress->f278528[8].m128_i32[3] - 8) = v55;
-      lpAddress->f278528[0].m128_u64[0] = v50.m128_u64[0];
-      lpAddress->f278528[0].m128_i32[2] = 0;
-      lpAddress->f278528[0].m128_i16[6] = 0;
-      lpAddress->f278528[0].m128_i8[14] = 0;
-      lpAddress->f278528[7].m128_u64[0] = v50.m128_u64[0];
-      lpAddress->f278528[7].m128_u64[1] = v50.m128_u64[0];
-      v56 = ((__m128i *)(((uint32_t)&lpAddress->f278528[0].m128_u32[3] + 3) & 0xFFFFFFF0));
-      v56[0] = v50;
-      v56[1] = v50;
-      v56[2] = v50;
-      v56[3] = v50;
-      v56[4] = v50;
-      v56[5] = v50;
-      v56[6] = v50;
+      lpAddress->f278528_q = 0;
+      lpAddress->f278536 = 0;
+      lpAddress->f278540 = 0;
+      lpAddress->f278542 = 0;
+      lpAddress->f278640 = 0;
+      lpAddress->f278648 = 0;
+      // `(p + 278543) & ~15` is `&p->p2_row[0]`: +278528 is a multiple of 16
+      // and the object comes from `bmf_page_alloc`, so the round-up is a no-op.
+      // Seven sixteen-byte stores are the 112 bytes of the seven rows.
+      __builtin_memset(lpAddress->p2_row, 0, sizeof lpAddress->p2_row);
       v57 = (char *)(lpAddress->f278528[13].m128_i32[0]);
       bmf_copy((void *)(v57), (const void *)((uintptr_t)v57 - 18), 18);
       v61 = lpAddress->f278528[13].m128_p[0];
@@ -16150,7 +16130,6 @@ void __alt_p2_d8_encode_body(Obj11 *lpAddress, uint8_t *a4, int32_t i, int32_t a
         }
         lpAddress = (Obj11 *)(lpAddress_1);
         v105 = (uint8_t *)v100;
-        v50 = 0;
       }
       ++v102;
     }
@@ -16273,7 +16252,6 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   Obj11 *v125;
   Obj11 *v133;
   Obj11 *v114;
-  __m128i *v61;
   bool v16;
   char v9;
   int16_t v113;
@@ -16491,7 +16469,6 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
               v55->f278672 = (uint8_t *)v58;
           v60 = *v58;
           *(uint32_t *)(v59 - 4) = *v58;
-          v61 = ((__m128i *)(((uintptr_t)v55 + 278543) & 0xFFFFFFF0));
           *(uint32_t *)(v55->f278668 - 8) = v60;
           v55->f278528_q = 0;
           v55->f278536 = 0;
@@ -16499,13 +16476,10 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           v55->f278542 = 0;
           v55->f278640 = 0;
           v55->f278648 = 0;
-          v61[0] = 0;
-          v61[1] = 0;
-          v61[2] = 0;
-          v61[3] = 0;
-          v61[4] = 0;
-          v61[5] = 0;
-          v61[6] = 0;
+          // `(p + 278543) & ~15` is `&p->p2_row[0]`: +278528 is a multiple of 16
+          // and the object comes from `bmf_page_alloc`, so the round-up is a no-op.
+          // Seven sixteen-byte stores are the 112 bytes of the seven rows.
+          __builtin_memset(v55->p2_row, 0, sizeof v55->p2_row);
           v62 = (char *)(v55->f278736[0]);
           bmf_copy((void *)(v62), (const void *)((uintptr_t)v62 - 18), 18);
           v66 = v55->f278736[0];
