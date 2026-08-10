@@ -13126,7 +13126,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
       v393 = (10 * (uint32_t)v387[470040 + 0]) >> 4;
       if ( a4 )
       {
-        *(uint16_t *)(n2 - 2 * v511 + 6) += v393;
+        ((uint16_t *)n2)[3 - v511] += v393;
         __update_binary_pair((uint16_t *)model_tables + 254 * (uint32_t)v508 + 254, (a4 - 1) >> 1);
       }
       else
@@ -13166,14 +13166,12 @@ LABEL_37:
             n0x10 = n0x10_1;
           }
           v405 = *(uint16_t *)(p2_rec + 940080) & 0xFFFC;
-          v510 *= 2;
-          *(uint16_t *)(n2 + v510 + 2) += v405 >> 2;
+          ((uint16_t *)n2)[v510 + 1] += v405 >> 2;
           if ( n15 <= 0 )
             goto LABEL_48;
         }
         else
         {
-          v510 *= 2;
         }
         v406 = *(uint16_t *)(p2_rec + 940066);
         v407 = *(uint16_t *)(p2_rec + 940068);
@@ -13184,7 +13182,7 @@ LABEL_37:
           __rescale_three_way((uint16_t *)(p2_rec + 940064));
           n0x10 = n0x10_1;
         }
-        *(uint16_t *)(n2 + v510 + 2) += (uint16_t)(*(uint16_t *)(p2_rec + 940064) & 0xFFFC) >> 2;
+        ((uint16_t *)n2)[v510 + 1] += (uint16_t)(*(uint16_t *)(p2_rec + 940064) & 0xFFFC) >> 2;
 LABEL_48:
         if ( a4 )
         {
@@ -13210,7 +13208,7 @@ LABEL_48:
           __rescale_three_way((uint16_t *)(p2_rec + 940072));
           n0x10 = n0x10_1;
         }
-        *(uint16_t *)((uint8_t *)v408 + v510 + 2) += (6 * (uint32_t)*(uint16_t *)(p2_rec + 940072)) >> 4;
+        ((uint16_t *)v408)[v510 + 1] += (6 * (uint32_t)*(uint16_t *)(p2_rec + 940072)) >> 4;
         if ( !v385->f278728 || LOWORD((*(uint32_t *)&v385->f940072[4 * v385->f278704])) > 0x100u )
         {
           v409 = 2 - v511;
@@ -13230,7 +13228,7 @@ LABEL_48:
               __rescale_three_way((uint16_t *)v491);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)((uint8_t *)v508 + v510 + 2) += (uint16_t)(*v508 & 0xFFFC) >> 2;
+            ((uint16_t *)v508)[v510 + 1] += (uint16_t)(*v508 & 0xFFFC) >> 2;
             v494 = v385->f278704 - v385->f278760[6];
             n0xF0_1 = ((uint16_t *)&((uint32_t *)v385)[2 * v494 + 2 * v385->f278760[5]]);
             n0x10_2 = v385->f278760[7] + v494;
@@ -13246,8 +13244,7 @@ LABEL_48:
               n0x10 = n0x10_1;
             }
             v499 = 3 * n0xF0[470036];
-            v511 *= 2;
-            *(uint16_t *)(n2 + v511 + 2) += v499 >> 4;
+            ((uint16_t *)n2)[v511 + 1] += v499 >> 4;
             if ( n15 >= 15 )
               goto LABEL_180;
             v500 = n0xF0[470041];
@@ -13259,7 +13256,7 @@ LABEL_48:
               __rescale_three_way((uint16_t *)(uint16_t *)n0xF0 + 470040);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)(n2 + v511 + 2) += (uint16_t)(n0xF0[470040] & 0xFFFC) >> 2;
+            ((uint16_t *)n2)[v511 + 1] += (uint16_t)(n0xF0[470040] & 0xFFFC) >> 2;
             v502 = &v385->f940072[4 * n0x10_2 + 4];
             if ( HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
                + LOWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
@@ -13269,7 +13266,7 @@ LABEL_48:
               __rescale_three_way(&v385->f940072[4 * n0x10_2 + 4]);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)((uint8_t *)v502 + v511 + 2) += (uint16_t)(*v502 & 0xFFF8) >> 3;
+            ((uint16_t *)v502)[v511 + 1] += (uint16_t)(*v502 & 0xFFF8) >> 3;
             if ( n15 > 2 )
             {
 LABEL_180:
@@ -13282,7 +13279,7 @@ LABEL_180:
                 __rescale_three_way((uint16_t *)(uint16_t *)n0xF0 + 470032);
                 n0x10 = n0x10_1;
               }
-              *(uint16_t *)(n2 + v511 + 2) += (6 * (uint32_t)n0xF0[470032]) >> 4;
+              ((uint16_t *)n2)[v511 + 1] += (6 * (uint32_t)n0xF0[470032]) >> 4;
             }
           }
           else
@@ -13296,7 +13293,7 @@ LABEL_180:
               __rescale_three_way((uint16_t *)v411);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)((uint8_t *)v411 + v510 + 2) += (7 * (uint32_t)*v411) >> 4;
+            ((uint16_t *)v411)[v510 + 1] += (7 * (uint32_t)*v411) >> 4;
             n0xF0 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->f278760[6] + 2 * (v385->f278704 - ((uint32_t *)v385)[v385->f278760[4] + 69695])]));
             v412 = n0xF0[470037];
             v413 = n0xF0[470038];
@@ -13308,8 +13305,7 @@ LABEL_180:
               n0x10 = n0x10_1;
             }
             v414 = 7 * n0xF0[470036];
-            v511 *= 2;
-            *(uint16_t *)(n2 + v511 + 2) += v414 >> 4;
+            ((uint16_t *)n2)[v511 + 1] += v414 >> 4;
             if ( n15 >= 15 )
               goto LABEL_67;
             v415 = n0xF0[470041];
@@ -13322,7 +13318,7 @@ LABEL_180:
               n0x10 = n0x10_1;
             }
             n0x10_1 = n0x10;
-            *(uint16_t *)(n2 + v511 + 2) = *(uint16_t *)(v511 + n2 + 2) + ((5 * (uint32_t)n0xF0[470040]) >> 4);
+            ((uint16_t *)n2)[v511 + 1] = ((uint16_t *)n2)[v511 + 1] + ((5 * (uint32_t)n0xF0[470040]) >> 4);
             n0x10 = n0x10_1;
             if ( n15 > 0 )
             {
@@ -13336,7 +13332,7 @@ LABEL_67:
                 __rescale_three_way((uint16_t *)(uint16_t *)n0xF0 + 470032);
                 n0x10 = n0x10_1;
               }
-              *(uint16_t *)(n2 + v511 + 2) += (6 * (uint32_t)n0xF0[470032]) >> 4;
+              ((uint16_t *)n2)[v511 + 1] += (6 * (uint32_t)n0xF0[470032]) >> 4;
             }
           }
           v419 = v385->f278760[8];
@@ -13352,7 +13348,7 @@ LABEL_67:
               __rescale_three_way((uint16_t *)n2_4);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)(n2 + v510 + 2) += (uint16_t)(*(uint16_t *)n2 & 0xFFFC) >> 2;
+            ((uint16_t *)n2)[v510 + 1] += (uint16_t)(*(uint16_t *)n2 & 0xFFFC) >> 2;
             v483 = v385->f278704 - v385->f278760[10];
             n0xF0_2 = ((uint16_t *)&((uint32_t *)v385)[2 * v483 + 2 * v385->f278760[9]]);
             n0x10_2 = v385->f278760[11] + v483;
@@ -13364,7 +13360,7 @@ LABEL_67:
               __rescale_three_way((uint16_t *)v485);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)((uint8_t *)v485 + v511 + 2) += (3 * (uint32_t)n0xF0[470036]) >> 4;
+            ((uint16_t *)v485)[v511 + 1] += (3 * (uint32_t)n0xF0[470036]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_167;
             v486 = n0xF0[470041];
@@ -13376,7 +13372,7 @@ LABEL_67:
               __rescale_three_way((uint16_t *)(uint16_t *)n0xF0 + 470040);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)(n2 + v511 + 2) += (uint16_t)(n0xF0[470040] & 0xFFFC) >> 2;
+            ((uint16_t *)n2)[v511 + 1] += (uint16_t)(n0xF0[470040] & 0xFFFC) >> 2;
             v488 = &v385->f940072[4 * n0x10_2 + 4];
             if ( HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
                + LOWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
@@ -13386,7 +13382,7 @@ LABEL_67:
               __rescale_three_way(&v385->f940072[4 * n0x10_2 + 4]);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)((uint8_t *)v488 + v511 + 2) += (uint16_t)(*v488 & 0xFFF8) >> 3;
+            ((uint16_t *)v488)[v511 + 1] += (uint16_t)(*v488 & 0xFFF8) >> 3;
             if ( n15 > 2 )
             {
 LABEL_167:
@@ -13399,7 +13395,7 @@ LABEL_167:
                 __rescale_three_way((uint16_t *)(uint16_t *)n0xF0 + 470032);
                 n0x10 = n0x10_1;
               }
-              *(uint16_t *)(n2 + v511 + 2) += (6 * (uint32_t)n0xF0[470032]) >> 4;
+              ((uint16_t *)n2)[v511 + 1] += (6 * (uint32_t)n0xF0[470032]) >> 4;
             }
           }
           else
@@ -13413,7 +13409,7 @@ LABEL_167:
               __rescale_three_way((uint16_t *)v420);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)((uint8_t *)v420 + v510 + 2) += (7 * (uint32_t)*v420) >> 4;
+            ((uint16_t *)v420)[v510 + 1] += (7 * (uint32_t)*v420) >> 4;
             n0xF0 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->f278760[10] + 2 * (v385->f278704 - ((uint32_t *)v385)[v385->f278760[8] + 69699])]));
             v421 = n0xF0[470037];
             v422 = n0xF0[470038];
@@ -13424,7 +13420,7 @@ LABEL_167:
               __rescale_three_way((uint16_t *)(uint16_t *)n0xF0 + 470036);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)(n2 + v511 + 2) += (7 * (uint32_t)n0xF0[470036]) >> 4;
+            ((uint16_t *)n2)[v511 + 1] += (7 * (uint32_t)n0xF0[470036]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_79;
             v423 = n0xF0[470041];
@@ -13436,7 +13432,7 @@ LABEL_167:
               __rescale_three_way((uint16_t *)(uint16_t *)n0xF0 + 470040);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)(v511 + n2 + 2) += (5 * (uint32_t)n0xF0[470040]) >> 4;
+            ((uint16_t *)n2)[v511 + 1] += (5 * (uint32_t)n0xF0[470040]) >> 4;
             if ( n15 > 0 )
             {
 LABEL_79:
@@ -13449,7 +13445,7 @@ LABEL_79:
                 __rescale_three_way((uint16_t *)(uint16_t *)n0xF0 + 470032);
                 n0x10 = n0x10_1;
               }
-              *(uint16_t *)(n2 + v511 + 2) += (6 * (uint32_t)n0xF0[470032]) >> 4;
+              ((uint16_t *)n2)[v511 + 1] += (6 * (uint32_t)n0xF0[470032]) >> 4;
             }
           }
           v427 = v385->f278760[12];
@@ -13465,7 +13461,7 @@ LABEL_79:
               __rescale_three_way((uint16_t *)n2_5);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)(n2 + v510 + 2) += (uint16_t)(*(uint16_t *)n2 & 0xFFFC) >> 2;
+            ((uint16_t *)n2)[v510 + 1] += (uint16_t)(*(uint16_t *)n2 & 0xFFFC) >> 2;
             v472 = v385->f278704 - v385->f278760[14];
             n0xF0_3 = ((uint16_t *)&((uint32_t *)v385)[2 * v472 + 2 * v385->f278760[13]]);
             n0x10_2 = v385->f278760[15] + v472;
@@ -13477,7 +13473,7 @@ LABEL_79:
               __rescale_three_way((uint16_t *)v474);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)((uint8_t *)v474 + v511 + 2) += (3 * (uint32_t)n0xF0[470036]) >> 4;
+            ((uint16_t *)v474)[v511 + 1] += (3 * (uint32_t)n0xF0[470036]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_154;
             v475 = n0xF0[470041];
@@ -13489,7 +13485,7 @@ LABEL_79:
               __rescale_three_way((uint16_t *)(uint16_t *)n0xF0 + 470040);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)(n2 + v511 + 2) += (uint16_t)(n0xF0[470040] & 0xFFFC) >> 2;
+            ((uint16_t *)n2)[v511 + 1] += (uint16_t)(n0xF0[470040] & 0xFFFC) >> 2;
             v477 = &v385->f940072[4 * n0x10_2 + 4];
             if ( HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
                + LOWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
@@ -13499,7 +13495,7 @@ LABEL_79:
               __rescale_three_way(&v385->f940072[4 * n0x10_2 + 4]);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)((uint8_t *)v477 + v511 + 2) += (uint16_t)(*v477 & 0xFFF8) >> 3;
+            ((uint16_t *)v477)[v511 + 1] += (uint16_t)(*v477 & 0xFFF8) >> 3;
             if ( n15 > 2 )
             {
 LABEL_154:
@@ -13512,7 +13508,7 @@ LABEL_154:
                 __rescale_three_way((uint16_t *)(uint16_t *)n0xF0 + 470032);
                 n0x10 = n0x10_1;
               }
-              *(uint16_t *)(n2 + v511 + 2) += (6 * (uint32_t)n0xF0[470032]) >> 4;
+              ((uint16_t *)n2)[v511 + 1] += (6 * (uint32_t)n0xF0[470032]) >> 4;
             }
           }
           else
@@ -13526,7 +13522,7 @@ LABEL_154:
               __rescale_three_way((uint16_t *)v428);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)((uint8_t *)v428 + v510 + 2) += (7 * (uint32_t)*v428) >> 4;
+            ((uint16_t *)v428)[v510 + 1] += (7 * (uint32_t)*v428) >> 4;
             n0xF0 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->f278760[14] + 2 * (v385->f278704 - ((uint32_t *)v385)[v385->f278760[12] + 69703])]));
             v429 = n0xF0[470037];
             v430 = n0xF0[470038];
@@ -13537,7 +13533,7 @@ LABEL_154:
               __rescale_three_way((uint16_t *)(uint16_t *)n0xF0 + 470036);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)(n2 + v511 + 2) += (7 * (uint32_t)n0xF0[470036]) >> 4;
+            ((uint16_t *)n2)[v511 + 1] += (7 * (uint32_t)n0xF0[470036]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_91;
             v431 = n0xF0[470041];
@@ -13549,7 +13545,7 @@ LABEL_154:
               __rescale_three_way((uint16_t *)(uint16_t *)n0xF0 + 470040);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)(v511 + n2 + 2) += (5 * (uint32_t)n0xF0[470040]) >> 4;
+            ((uint16_t *)n2)[v511 + 1] += (5 * (uint32_t)n0xF0[470040]) >> 4;
             if ( n15 > 0 )
             {
 LABEL_91:
@@ -13562,7 +13558,7 @@ LABEL_91:
                 __rescale_three_way((uint16_t *)(uint16_t *)n0xF0 + 470032);
                 n0x10 = n0x10_1;
               }
-              *(uint16_t *)(n2 + v511 + 2) += (6 * (uint32_t)n0xF0[470032]) >> 4;
+              ((uint16_t *)n2)[v511 + 1] += (6 * (uint32_t)n0xF0[470032]) >> 4;
             }
           }
           v435 = v385->f278760[16];
@@ -13578,7 +13574,7 @@ LABEL_91:
               __rescale_three_way((uint16_t *)n2_6);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)(n2 + v510 + 2) += (uint16_t)(*(uint16_t *)n2 & 0xFFFC) >> 2;
+            ((uint16_t *)n2)[v510 + 1] += (uint16_t)(*(uint16_t *)n2 & 0xFFFC) >> 2;
             v461 = v385->f278704 - v385->f278760[18];
             n0xF0_4 = ((uint16_t *)&((uint32_t *)v385)[2 * v461 + 2 * v385->f278760[17]]);
             n0x10_2 = v385->f278760[19] + v461;
@@ -13590,7 +13586,7 @@ LABEL_91:
               __rescale_three_way((uint16_t *)v463);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)((uint8_t *)v463 + v511 + 2) += (3 * (uint32_t)n0xF0[470036]) >> 4;
+            ((uint16_t *)v463)[v511 + 1] += (3 * (uint32_t)n0xF0[470036]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_141;
             v464 = n0xF0[470041];
@@ -13602,7 +13598,7 @@ LABEL_91:
               __rescale_three_way((uint16_t *)(uint16_t *)n0xF0 + 470040);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)(n2 + v511 + 2) += (uint16_t)(n0xF0[470040] & 0xFFFC) >> 2;
+            ((uint16_t *)n2)[v511 + 1] += (uint16_t)(n0xF0[470040] & 0xFFFC) >> 2;
             v466 = &v385->f940072[4 * n0x10_2 + 4];
             if ( HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
                + LOWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
@@ -13612,7 +13608,7 @@ LABEL_91:
               __rescale_three_way(&v385->f940072[4 * n0x10_2 + 4]);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)((uint8_t *)v466 + v511 + 2) += (uint16_t)(*v466 & 0xFFF8) >> 3;
+            ((uint16_t *)v466)[v511 + 1] += (uint16_t)(*v466 & 0xFFF8) >> 3;
             if ( n15 > 2 )
             {
 LABEL_141:
@@ -13625,7 +13621,7 @@ LABEL_141:
                 __rescale_three_way((uint16_t *)(uint16_t *)n0xF0 + 470032);
                 n0x10 = n0x10_1;
               }
-              *(uint16_t *)(n2 + v511 + 2) += (6 * (uint32_t)n0xF0[470032]) >> 4;
+              ((uint16_t *)n2)[v511 + 1] += (6 * (uint32_t)n0xF0[470032]) >> 4;
             }
           }
           else
@@ -13639,7 +13635,7 @@ LABEL_141:
               __rescale_three_way((uint16_t *)v436);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)((uint8_t *)v436 + v510 + 2) += (7 * (uint32_t)*v436) >> 4;
+            ((uint16_t *)v436)[v510 + 1] += (7 * (uint32_t)*v436) >> 4;
             n0xF0 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->f278760[18] + 2 * (v385->f278704 - ((uint32_t *)v385)[v385->f278760[16] + 69707])]));
             v437 = n0xF0[470037];
             v438 = n0xF0[470038];
@@ -13650,7 +13646,7 @@ LABEL_141:
               __rescale_three_way((uint16_t *)(uint16_t *)n0xF0 + 470036);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)(n2 + v511 + 2) += (7 * (uint32_t)n0xF0[470036]) >> 4;
+            ((uint16_t *)n2)[v511 + 1] += (7 * (uint32_t)n0xF0[470036]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_103;
             v439 = n0xF0[470041];
@@ -13662,7 +13658,7 @@ LABEL_141:
               __rescale_three_way((uint16_t *)(uint16_t *)n0xF0 + 470040);
               n0x10 = n0x10_1;
             }
-            *(uint16_t *)(v511 + n2 + 2) += (5 * (uint32_t)n0xF0[470040]) >> 4;
+            ((uint16_t *)n2)[v511 + 1] += (5 * (uint32_t)n0xF0[470040]) >> 4;
             if ( n15 > 0 )
             {
 LABEL_103:
@@ -13675,7 +13671,7 @@ LABEL_103:
                 __rescale_three_way((uint16_t *)(uint16_t *)n0xF0 + 470032);
                 n0x10 = n0x10_1;
               }
-              *(uint16_t *)(n2 + v511 + 2) += (6 * (uint32_t)n0xF0[470032]) >> 4;
+              ((uint16_t *)n2)[v511 + 1] += (6 * (uint32_t)n0xF0[470032]) >> 4;
             }
           }
           v443 = v385->f278760[20];
@@ -13688,7 +13684,7 @@ LABEL_103:
             n2 = (uint8_t *)n2_7;
             if ( v449 + v448 + v447 > 29696 )
               __rescale_three_way((uint16_t *)n2_7);
-            *(uint16_t *)(n2 + v510 + 2) += (uint16_t)(*(uint16_t *)n2 & 0xFFFC) >> 2;
+            ((uint16_t *)n2)[v510 + 1] += (uint16_t)(*(uint16_t *)n2 & 0xFFFC) >> 2;
             v450 = v385->f278704 - v385->f278760[22];
             n0x10_4 = (uint16_t *)&((uint32_t *)v385)[2 * v450 + 2 * v385->f278760[21]];
             n0xF0 = (((uint16_t *)(v385->f278760[23] + v450)));
@@ -13696,7 +13692,7 @@ LABEL_103:
             v452 = n0x10_4 + 470036;
             if ( n0x10_4[470039] + n0x10_4[470038] + n0x10_4[470037] > 29696 )
               __rescale_three_way((uint16_t *)v452);
-            *(uint16_t *)((uint8_t *)v452 + v511 + 2) += (3 * (uint32_t)*(uint16_t *)(p2_rec + 940072)) >> 4;
+            ((uint16_t *)v452)[v511 + 1] += (3 * (uint32_t)*(uint16_t *)(p2_rec + 940072)) >> 4;
             if ( n15 >= 15 )
               goto LABEL_128;
             v453 = *(uint16_t *)(p2_rec + 940086);
@@ -13705,12 +13701,12 @@ LABEL_103:
             if ( v453 + v454 > 29696 )
               __rescale_three_way((uint16_t *)(p2_rec + 940080));
             n0xF0_5 = (uint16_t *)(n0xF0);
-            *(uint16_t *)(n2 + v511 + 2) += (uint16_t)(*(uint16_t *)(p2_rec + 940080) & 0xFFFC) >> 2;
+            ((uint16_t *)n2)[v511 + 1] += (uint16_t)(*(uint16_t *)(p2_rec + 940080) & 0xFFFC) >> 2;
             v456 = &v385->f940072[4 * (uint32_t)n0xF0_5 + 4];
             if ( v456[3] + v456[2] + v456[1] > 29696 )
               __rescale_three_way((uint16_t *)v456);
             n0x10 = (uint16_t)(*v456 & 0xFFF8) >> 3;
-            *(uint16_t *)((uint8_t *)v456 + v511 + 2) += n0x10;
+            ((uint16_t *)v456)[v511 + 1] += n0x10;
             if ( n15 > 2 )
             {
 LABEL_128:
@@ -13720,7 +13716,7 @@ LABEL_128:
                  + *(uint16_t *)(p2_rec + 940066) > 29696 )
                 __rescale_three_way((uint16_t *)(p2_rec + 940064));
               n0x10 = (uintptr_t)p2_rec;   // the slot's last value, and what this path returns
-              *(uint16_t *)((uint8_t *)v457 + v511 + 2) += (6
+              ((uint16_t *)v457)[v511 + 1] += (6
                                                                * (uint32_t)*(uint16_t *)(p2_rec + 940064)) >> 4;
             }
           }
@@ -13731,24 +13727,24 @@ LABEL_128:
                + LOWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[22] - v385->f278760[-v443 + 23])])
                + HIWORD(((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[22] - v385->f278760[-v443 + 23])]) > 29696 )
               __rescale_three_way((uint16_t *)v444);
-            *(uint16_t *)((uint8_t *)v444 + v510 + 2) += (7 * (uint32_t)*v444) >> 4;
+            ((uint16_t *)v444)[v510 + 1] += (7 * (uint32_t)*v444) >> 4;
             v445 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->f278760[22] + 2 * (v385->f278704 - ((uint32_t *)v385)[v385->f278760[20] + 69711])]));
             if ( v445[470039] + v445[470038] + v445[470037] > 29696 )
               __rescale_three_way((uint16_t *)(uint16_t *)v445 + 470036);
-            *(uint16_t *)((uint8_t *)v445 + v511 + 940074) += (7 * (uint32_t)v445[470036]) >> 4;
+            ((uint16_t *)v445)[v511 + 470037] += (7 * (uint32_t)v445[470036]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_115;
             if ( v445[470043] + v445[470042] + v445[470041] > 29696 )
               __rescale_three_way((uint16_t *)(uint16_t *)v445 + 470040);
             n0x10 = v445[470040];
-            *(uint16_t *)((uint8_t *)v445 + v511 + 940082) += (5 * n0x10) >> 4;
+            ((uint16_t *)v445)[v511 + 470041] += (5 * n0x10) >> 4;
             if ( n15 > 0 )
             {
 LABEL_115:
               if ( v445[470035] + v445[470034] + v445[470033] > 29696 )
                 __rescale_three_way((uint16_t *)(uint16_t *)v445 + 470032);
               n0x10 = v445[470032];
-              *(uint16_t *)((uint8_t *)v445 + v511 + 940066) += (6 * n0x10) >> 4;
+              ((uint16_t *)v445)[v511 + 470033] += (6 * n0x10) >> 4;
             }
           }
         }
@@ -13764,7 +13760,7 @@ LABEL_115:
     v396 = (13 * (uint32_t)v387[470032 + 0]) >> 4;
     if ( a4 )
     {
-      *(uint16_t *)(n2 - 2 * v511 + 6) += v396;
+      ((uint16_t *)n2)[3 - v511] += v396;
       __update_binary_pair((uint16_t *)model_tables + 254 * (uint32_t)v508 - 254, (a4 - 1) >> 1);
     }
     else
