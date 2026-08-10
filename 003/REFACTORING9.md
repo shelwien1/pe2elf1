@@ -22,9 +22,9 @@ and 3.
 
 ```
                                    round 8   round 9
-subs1.hpp / bmf.cpp lines            17787     17782
-raw-offset sites                        22        17
-byte offsets on a typed base           121         8
+subs1.hpp / bmf.cpp lines            17787     17842
+raw-offset sites                        22        13
+byte offsets on a typed base           121         0
 pointer casts                         2137      1758
 fNN members / named ones             93/121    44/121
 distinct vNN locals                    554       553
@@ -248,23 +248,28 @@ noticing that a tool's *input* was narrower than the file.
 
 ## 8. What is left
 
-* **`AltP1Block::cursor` and `::buf`** are five `uint8_t *` each over a
-  two-byte record, and the record is established: `alt_model_p1_decode` writes
-  the reconstructed sample at +0 and `abs32(v56 - v54)` — the size of the
-  prediction error — at +1. `alt_p1_alloc` takes `2 * width + 20`, the width
-  plus ten records, and starts each cursor four records in, seeding every
-  record to `sym = 72, mag = 0`. The subscripts split cleanly on parity:
-  `cursor[0][1]`, `cursor[0][-7]`, `cursor[4][-3]` and `cursor[4][13]` are
-  `mag` of records 0, −4, −2 and +6; `cursor[0] - 2`, `- 4`, `- 6` are records
-  −1, −2, −3.
+* **`AltP1Block::cursor` and `::buf` are still `uint8_t *`**, though `P1Ctx` is
+  declared and every reach through them is now a subscript rather than a cast.
+  The record is established — the sample at +0 and `abs32(v56 - v54)`, the size
+  of the prediction error, at +1, written one line apart in
+  `alt_model_p1_decode` — and the row-start blocks are record copies:
 
-  The conversion was attempted and reverted. What stopped it is not the record
-  — that part is certain — but that a two-byte stride makes `*p` and `a * b`
-  the same three characters to a regex, and a substitution that turns
-  `16 * v37` into `16 v37->sym` is a silent semantic change of exactly the
-  class §5 spent an afternoon on. It needs a converter that parses expressions
-  rather than matching them, or it needs doing by hand, and the hand version is
-  about 250 sites across seven bodies.
+  ```c
+  P1Ctx *const here = (P1Ctx *)_this->cursor[0];
+  here[0] = here[-1];  here[1] = here[-2];  ...  here[5] = here[-6];
+  ```
+
+  which is the row end mirrored into the right margin, the same idiom §3 and §4
+  found in the other two models.
+
+  Retyping the array itself was attempted twice and reverted twice. What stops
+  it is not the record but the arithmetic: a two-byte stride makes `*p` and
+  `a * b` the same three characters to a regex, and a substitution that turned
+  `16 * v37` into `16 v37->sym` is a silent semantic change of exactly the class
+  §5 spent an afternoon on. It needs a converter that parses expressions rather
+  than matching them. What is left after this round is 41 subscripts of the form
+  `cursor[k][±even]` and `[±odd]`, which are readable against the record above
+  and no longer hidden inside a cast.
 * ~~**`alt_p1_context` reaches its two neighbour blocks through `int32_t *`.**~~
   Done. Both parameters are `AltP1Block *`, `a2[49]` and `a2[50]` are
   `cursor[0]` and `cursor[1]`, `a2[2]` is `f8`, and fifteen raw offsets became

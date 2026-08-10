@@ -440,6 +440,17 @@ struct CounterNode {
 };
 static_assert(sizeof(CounterNode) == 16, "CounterNode: the record is sixteen bytes");
 
+// The alternate p1 model's per-pixel record.  Two bytes, and both writers sit
+// one line apart in `alt_model_p1_decode`: the reconstructed sample at +0 and
+// `abs32(v56 - v54)` -- the size of the prediction error -- at +1.
+// `alt_p1_alloc` takes `2 * width + 20`, the width plus ten records, seeds
+// every one of them to (72, 0) and starts each cursor four records in.
+struct P1Ctx {
+  uint8_t sym;   // +0
+  uint8_t mag;   // +1
+};
+static_assert(sizeof(P1Ctx) == 2, "P1Ctx: the record is two bytes");
+
 struct AltP1Block {
   // Hex-Rays had two readings of these thirty-two bytes, `f0[8]` and `f4`/`f8`
   // with `f12[]` behind them, and the eight words are the same eight either
@@ -4072,12 +4083,17 @@ void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
     do
     {
       ++v4;
-      **(uint16_t **)&_this->cursor[0] = *(uint16_t *)(_this->cursor[0] - 2);
-      *(uint16_t *)(_this->cursor[0] + 2) = *(uint16_t *)(_this->cursor[0] - 4);
-      *(uint16_t *)(_this->cursor[0] + 4) = *(uint16_t *)(_this->cursor[0] - 6);
-      *(uint16_t *)(_this->cursor[0] + 6) = *(uint16_t *)(_this->cursor[0] - 8);
-      *(uint16_t *)(_this->cursor[0] + 8) = *(uint16_t *)(_this->cursor[0] - 10);
-      *(uint16_t *)(_this->cursor[0] + 10) = *(uint16_t *)(_this->cursor[0] - 12);
+      // The row end mirrored into the right margin: records 0..5 take -1..-6.
+      // Two bytes each, which is what the twelve even offsets were.
+      {
+        P1Ctx *const here = (P1Ctx *)_this->cursor[0];
+        here[0] = here[-1];
+        here[1] = here[-2];
+        here[2] = here[-3];
+        here[3] = here[-4];
+        here[4] = here[-5];
+        here[5] = here[-6];
+      }
       v5 = _this->buf[4];
       v6 = _this->buf[3];
       v7 = _this->buf[2];
@@ -4095,10 +4111,15 @@ void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
       _this->cursor[2] = v8 + 8;
       _this->cursor[3] = v7 + 8;
       _this->cursor[4] = v6 + 8;
-      *(uint16_t *)(v5 - 8) = *(uint16_t *)(v9 + 6);
-      *(uint16_t *)(_this->cursor[0] - 6) = *(uint16_t *)(_this->cursor[1] + 4);
-      *(uint16_t *)(_this->cursor[0] - 4) = *(uint16_t *)(_this->cursor[1] + 2);
-      *(uint16_t *)(_this->cursor[0] - 2) = **(uint16_t **)&_this->cursor[1];
+      ((P1Ctx *)v5)[-4] = ((P1Ctx *)v9)[3];
+      // And the rest of the new row's left margin, from the row above.
+      {
+        P1Ctx *const here = (P1Ctx *)_this->cursor[0];
+        P1Ctx *const up   = (P1Ctx *)_this->cursor[1];
+        here[-3] = up[2];
+        here[-2] = up[1];
+        here[-1] = up[0];
+      }
       v10 = _this->cursor[2];
       v11 = _this->cursor[4];
       _this->f12[2] = 0;
@@ -5742,12 +5763,17 @@ void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_
     do
     {
       ++v6;
-      *(uint16_t *)v5->cursor[0] = *(uint16_t *)(v5->cursor[0] - 2);
-      *(uint16_t *)(v5->cursor[0] + 2) = *(uint16_t *)(v5->cursor[0] - 4);
-      *(uint16_t *)(v5->cursor[0] + 4) = *(uint16_t *)(v5->cursor[0] - 6);
-      *(uint16_t *)(v5->cursor[0] + 6) = *(uint16_t *)(v5->cursor[0] - 8);
-      *(uint16_t *)(v5->cursor[0] + 8) = *(uint16_t *)(v5->cursor[0] - 10);
-      *(uint16_t *)(v5->cursor[0] + 10) = *(uint16_t *)(v5->cursor[0] - 12);
+      // The row end mirrored into the right margin: records 0..5 take -1..-6.
+      // Two bytes each, which is what the twelve even offsets were.
+      {
+        P1Ctx *const here = (P1Ctx *)v5->cursor[0];
+        here[0] = here[-1];
+        here[1] = here[-2];
+        here[2] = here[-3];
+        here[3] = here[-4];
+        here[4] = here[-5];
+        here[5] = here[-6];
+      }
       v7 = v5->buf[4];
       v8 = v5->buf[3];
       v9 = v5->buf[2];
@@ -5765,10 +5791,15 @@ void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_
       v5->cursor[2] = v10 + 8;
       v5->cursor[3] = v9 + 8;
       v5->cursor[4] = v8 + 8;
-      *(uint16_t *)(v7 - 8) = *(uint16_t *)(v11 + 6);
-      *(uint16_t *)(v5->cursor[0] - 6) = *(uint16_t *)(v5->cursor[1] + 4);
-      *(uint16_t *)(v5->cursor[0] - 4) = *(uint16_t *)(v5->cursor[1] + 2);
-      *(uint16_t *)(v5->cursor[0] - 2) = *(uint16_t *)v5->cursor[1];
+      ((P1Ctx *)v7)[-4] = ((P1Ctx *)v11)[3];
+      // And the rest of the new row's left margin, from the row above.
+      {
+        P1Ctx *const here = (P1Ctx *)v5->cursor[0];
+        P1Ctx *const up   = (P1Ctx *)v5->cursor[1];
+        here[-3] = up[2];
+        here[-2] = up[1];
+        here[-1] = up[0];
+      }
       v12 = (uint8_t *)v5->cursor[2];
       v13 = (uint8_t *)v5->cursor[4];
       v5->f12[2] = 0;
@@ -5956,12 +5987,17 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
           // `&v92 + n` is `Block_plane[n - 1]`: v92 is the member
           // before the array, and this loop pre-increments from 0.
           v24 = (AltP1Block *)Block_plane[n4_2 - 1];
-          **(uint16_t **)&v24->cursor[0] = *(uint16_t *)(v24->cursor[0] - 2);
-          *(uint16_t *)(v24->cursor[0] + 2) = *(uint16_t *)(v24->cursor[0] - 4);
-          *(uint16_t *)(v24->cursor[0] + 4) = *(uint16_t *)(v24->cursor[0] - 6);
-          *(uint16_t *)(v24->cursor[0] + 6) = *(uint16_t *)(v24->cursor[0] - 8);
-          *(uint16_t *)(v24->cursor[0] + 8) = *(uint16_t *)(v24->cursor[0] - 10);
-          *(uint16_t *)(v24->cursor[0] + 10) = *(uint16_t *)(v24->cursor[0] - 12);
+          // The row end mirrored into the right margin: records 0..5 take -1..-6.
+          // Two bytes each, which is what the twelve even offsets were.
+          {
+            P1Ctx *const here = (P1Ctx *)v24->cursor[0];
+            here[0] = here[-1];
+            here[1] = here[-2];
+            here[2] = here[-3];
+            here[3] = here[-4];
+            here[4] = here[-5];
+            here[5] = here[-6];
+          }
           v25 = v24->buf[4];
           v26 = v24->buf[3];
           v27 = v24->buf[2];
@@ -5979,10 +6015,15 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
           v24->cursor[2] = v28 + 8;
           v24->cursor[3] = v27 + 8;
           v24->cursor[4] = v26 + 8;
-          *(uint16_t *)(v25 - 8) = *(uint16_t *)(v29 + 6);
-          *(uint16_t *)(v24->cursor[0] - 6) = *(uint16_t *)(v24->cursor[1] + 4);
-          *(uint16_t *)(v24->cursor[0] - 4) = *(uint16_t *)(v24->cursor[1] + 2);
-          *(uint16_t *)(v24->cursor[0] - 2) = **(uint16_t **)&v24->cursor[1];
+          ((P1Ctx *)v25)[-4] = ((P1Ctx *)v29)[3];
+          // And the rest of the new row's left margin, from the row above.
+          {
+            P1Ctx *const here = (P1Ctx *)v24->cursor[0];
+            P1Ctx *const up   = (P1Ctx *)v24->cursor[1];
+            here[-3] = up[2];
+            here[-2] = up[1];
+            here[-1] = up[0];
+          }
           v30 = (uint8_t *)(*&v24->cursor[2]);
           v31 = (uint8_t *)(*&v24->cursor[4]);
           v24->f12[2] = 0;
@@ -11941,12 +11982,17 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
         {
           ++n4_2;
           v23 = (AltP1Block *)Block_plane[n4_2 - 1];
-          **(uint16_t **)&v23->cursor[0] = *(uint16_t *)(v23->cursor[0] - 2);
-          *(uint16_t *)(v23->cursor[0] + 2) = *(uint16_t *)(v23->cursor[0] - 4);
-          *(uint16_t *)(v23->cursor[0] + 4) = *(uint16_t *)(v23->cursor[0] - 6);
-          *(uint16_t *)(v23->cursor[0] + 6) = *(uint16_t *)(v23->cursor[0] - 8);
-          *(uint16_t *)(v23->cursor[0] + 8) = *(uint16_t *)(v23->cursor[0] - 10);
-          *(uint16_t *)(v23->cursor[0] + 10) = *(uint16_t *)(v23->cursor[0] - 12);
+          // The row end mirrored into the right margin: records 0..5 take -1..-6.
+          // Two bytes each, which is what the twelve even offsets were.
+          {
+            P1Ctx *const here = (P1Ctx *)v23->cursor[0];
+            here[0] = here[-1];
+            here[1] = here[-2];
+            here[2] = here[-3];
+            here[3] = here[-4];
+            here[4] = here[-5];
+            here[5] = here[-6];
+          }
           v24 = v23->buf[4];
           v25 = v23->buf[3];
           v26 = v23->buf[2];
@@ -11964,10 +12010,15 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
           v23->cursor[2] = v27 + 8;
           v23->cursor[3] = v26 + 8;
           v23->cursor[4] = v25 + 8;
-          *(uint16_t *)(v24 - 8) = *(uint16_t *)(v28 + 6);
-          *(uint16_t *)(v23->cursor[0] - 6) = *(uint16_t *)(v23->cursor[1] + 4);
-          *(uint16_t *)(v23->cursor[0] - 4) = *(uint16_t *)(v23->cursor[1] + 2);
-          *(uint16_t *)(v23->cursor[0] - 2) = **(uint16_t **)&v23->cursor[1];
+          ((P1Ctx *)v24)[-4] = ((P1Ctx *)v28)[3];
+          // And the rest of the new row's left margin, from the row above.
+          {
+            P1Ctx *const here = (P1Ctx *)v23->cursor[0];
+            P1Ctx *const up   = (P1Ctx *)v23->cursor[1];
+            here[-3] = up[2];
+            here[-2] = up[1];
+            here[-1] = up[0];
+          }
           v29 = (uint8_t *)(*&v23->cursor[2]);
           v30 = (uint8_t *)(*&v23->cursor[4]);
           v23->f12[2] = 0;
