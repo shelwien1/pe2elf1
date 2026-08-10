@@ -561,6 +561,28 @@ A weighted sum of the neighbourhood's `mag` — nine records, the one behind
 weighted 8 — is computed a few lines above these, but it feeds `n960` and the
 row arithmetic, not a selector.
 
+**And none of the five magnitude lanes feeds a selector either.** §9.2 left the
+question of why `lane[3 .. 7]` start equal and diverge; the answer is that each
+is the input to a *different* linear predictor over the same neighbourhood:
+
+| lane | reduction |
+| --- | --- |
+| 3 | an unweighted sum over seven records |
+| 4 | taps 17, 15, 21, 18, 16, 22, 19 + `ctx_bias[2]` |
+| 5 | read once, unweighted |
+| 6 | taps 21, 12, 16, 22, 20, 14 + `ctx_bias[0]` |
+| 7 | taps 17, 21, 15, 25, 9, 22, 19 + `ctx_bias[1]` |
+
+Three fixed-tap FIR filters over the causal neighbourhood, each with its own
+adaptive bias — the biases `alt_p2_model` decays `>>= 3` a row and
+re-accumulates. So the record stores one gradient magnitude five times because
+five different filters consume it, and what makes lanes 3..7 diverge after the
+first write is `alt_p2_model` writing each filter's own residual back.
+
+Which leaves the five digits taking their inputs from `lane[0]` (twice, as the
+difference from two different neighbours), `sign` (twice, read back off two
+rows), and `n1840` — and none from the magnitudes directly.
+
 The band is `band_lo .. band_hi`, which `alt_p2_alloc` sets to
 −(16q + 7) .. 16q + 8 for `q = plane_desc[0].w12`, and the test is
 `(d <= band_hi) + (d < band_lo)` — above, inside, below. Two lines earlier the

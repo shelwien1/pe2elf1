@@ -864,10 +864,15 @@ Stated plainly, so the rest can be trusted:
   dead zone is ±(4q + 1) for the same `q` — one tolerance at two scales.
   `algorithm_v2.md` §9.1 has the table.
 
-  What is left is what the eight lanes come to *mean* once `alt_p2_model` has
-  written them separately for a few thousand pixels — the five magnitudes start
-  equal and diverge, and which of them feeds which of groups 1–3 is the part
-  still to trace. The five fields are four `uint32_t` and a `uint16_t`, and
+  The five magnitudes start equal and diverge because **each is the input to a
+  different fixed-tap linear predictor** over the same causal neighbourhood —
+  three of them with distinct integer taps and their own adaptive bias out of
+  `ctx_bias`, one an unweighted sum, one read singly. None feeds a context
+  digit directly: the digits take `lane[0]` twice, `sign` twice, and a
+  predicted level. `algorithm_v2.md` §9.1 has both tables.
+
+  What is left is quantitative rather than structural — what the taps are
+  tuned for, and what the four `ctx_bias` accumulators converge to. The five fields are four `uint32_t` and a `uint16_t`, and
   `alt_p2_context` computes the values that go into them — that is where a
   reading would start.
 
