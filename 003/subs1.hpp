@@ -457,7 +457,16 @@ struct ModelBlock {
   uint8_t  *f56[14];   // +56 .. +108, the row cursors: every element is an address
   uint8_t _pad15[1051552];
   uint8_t  *f1051664[4];   // +1051664 .. +1051676, four more row cursors
-  uint8_t _pad16[26524];
+  // What `layout_workspace` seeds, and the boundaries are its own: sixteen
+  // three-word records at +1 051 680, a 24 KiB block it `memset`s, one record
+  // and 1536 bytes it `memset`s at +1 076 352, and 48 more records at
+  // +1 077 894.  Each record is (40, 16, 512) or (4, 4, 72), which is two
+  // counts and a total.
+  uint16_t f1051680[48];      // +1051680 .. +1051775
+  uint8_t  f1051776[24576];   // +1051776 .. +1076351
+  uint16_t f1076352[771];     // +1076352 .. +1077893
+  uint16_t f1077894[144];     // +1077894 .. +1078181
+  uint8_t _pad16[22];
   void*f1078204;
   uint8_t *f1078208;   // the symbol lists, 24 bytes each
   uint8_t *f1078212;   // the symbol lists, 24 bytes each
@@ -11034,32 +11043,32 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
   do
   {
     v35 = 6 * n8;
-    *(uint16_t *)((uint8_t *)a1 + 2 * v35 + 1051680) = 40;
+    a1->f1051680[v35] = 40;
     ++n8;
-    *(uint16_t *)((uint8_t *)a1 + 2 * v35 + 1051682) = 16;
-    *(uint16_t *)((uint8_t *)a1 + 2 * v35 + 1051684) = 512;
-    *(uint16_t *)((uint8_t *)a1 + 2 * v35 + 1051686) = 40;
-    *(uint16_t *)((uint8_t *)a1 + 2 * v35 + 1051688) = 16;
-    *(uint16_t *)((uint8_t *)a1 + 2 * v35 + 1051690) = 512;
+    a1->f1051680[v35 + 1] = 16;
+    a1->f1051680[v35 + 2] = 512;
+    a1->f1051680[v35 + 3] = 40;
+    a1->f1051680[v35 + 4] = 16;
+    a1->f1051680[v35 + 5] = 512;
   }
   while ( n8 < 8 );
   n0x18 = 0;
-  memset((uint8_t *)a1 + 1051776,0,24576);
+  memset(a1->f1051776,0,24576);
   a1->f1078236 = (uint8_t *)bmf_new(2 * a1->f4 * a1->f0);
-  *(uint16_t *)((uint8_t *)a1 + 1076352) = 4;
-  *(uint16_t *)((uint8_t *)a1 + 1076354) = 4;
-  *(uint16_t *)((uint8_t *)a1 + 1076356) = 72;
-  memset((uint8_t *)a1 + 1076358,0,1536);
+  a1->f1076352[0] = 4;
+  a1->f1076352[1] = 4;
+  a1->f1076352[2] = 72;
+  memset(&a1->f1076352[3],0,1536);
   do
   {
     v38 = 6 * n0x18;
-    *(uint16_t *)((uint8_t *)a1 + 2 * v38 + 1077894) = 4;
+    a1->f1077894[v38] = 4;
     ++n0x18;
-    *(uint16_t *)((uint8_t *)a1 + 2 * v38 + 1077896) = 4;
-    *(uint16_t *)((uint8_t *)a1 + 2 * v38 + 1077898) = 72;
-    *(uint16_t *)((uint8_t *)a1 + 2 * v38 + 1077900) = 4;
-    *(uint16_t *)((uint8_t *)a1 + 2 * v38 + 1077902) = 4;
-    *(uint16_t *)((uint8_t *)a1 + 2 * v38 + 1077904) = 72;
+    a1->f1077894[v38 + 1] = 4;
+    a1->f1077894[v38 + 2] = 72;
+    a1->f1077894[v38 + 3] = 4;
+    a1->f1077894[v38 + 4] = 4;
+    a1->f1077894[v38 + 5] = 72;
   }
   while ( n0x18 < 0x18 );
   return a1;
