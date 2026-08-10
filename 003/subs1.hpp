@@ -554,6 +554,31 @@ struct P2Ctx {
 };
 static_assert(sizeof(P2Ctx) == 18, "P2Ctx: the record is eighteen bytes");
 
+// A symbol list.  `init_symbol_list` allocates `3 * n` bytes for the entries
+// and fills them with (symbol, 1); `symbol_list_update` promotes one entry
+// towards the front and halves the counts when they run out.  The header is 24
+// bytes, which is what every caller's `+ 24 * k` says.
+#pragma pack(push, 1)
+struct SymEntry {
+  uint16_t sym;
+  uint8_t  cnt;
+};
+#pragma pack(pop)
+static_assert(sizeof(SymEntry) == 3, "SymEntry: the record is three bytes");
+
+struct SymList {
+  // Unsigned because `symbol_list_update` read them through a `uint32_t *` and
+  // every one of them counts something; `init_symbol_list` took the same bytes
+  // as `int32_t *` and its comparisons are unsigned either way.
+  uint32_t  n;        // +0   the alphabet size
+  uint32_t  live;     // +4   entries in use
+  uint32_t  f8;       // +8
+  uint32_t  f12;      // +12  12 * n at init; `symbol_list_update`'s `a3` adds here
+  uint32_t  f16;      // +16  8 * n at init
+  SymEntry *ent;      // +20
+};
+static_assert(sizeof(SymList) == 24, "SymList: the header is 24 bytes");
+
 // AltP2Block -- recovered from 353 dereferences over 39 offsets, under 23
 // names.  The layout is the one the code already assumed: at 32 bits a
 // pointer is four bytes, so naming these fields moves nothing, and the
@@ -1627,20 +1652,21 @@ LABEL_9:
 // which of them reached the final `return` depended on the branch.  Split into
 // `list` and `count`, there is nothing sensible to return, so it returns
 // nothing.
-void __symbol_list_update(uint32_t *_this, int32_t a2, uint32_t a3)
+void __symbol_list_update(SymList *_this, int32_t a2, uint32_t a3)
 {
   ;
-  uint8_t *list;         // the three-byte entries, `_this[5]`
+  uint8_t *list;         // the three-byte entries, `_this->ent`
   uint32_t count;     // a symbol's count byte, while it is being compared
   bool v7;
   uint8_t v11, v12, v15, v17, v19, v20;
   uint8_t *v16, *v23, *v24, *v26, *v27, *v33;   // `uint8_t *` beside the `char` scalars above
   int16_t v10, v34;
-  int32_t v8, v9, v22, v25, v28, v30, v32, v35, v36;
+  int32_t v8, v9, v25, v28, v30, v32, v35, v36;
+  uint32_t v22;   // a count, like `live` which it is subtracted from
   uint16_t *n251_1, *n251_2, v14, v18;
   uint32_t v4, v6, v21, v29, v31;
-  list = (uint8_t *)_this[5];
-  v4 = _this[1];
+  list = (uint8_t *)_this->ent;
+  v4 = _this->live;
   n251_1 = (uint16_t *)list;
   v6 = v4;
   if ( v4 )
@@ -1652,8 +1678,8 @@ void __symbol_list_update(uint32_t *_this, int32_t a2, uint32_t a3)
         goto LABEL_4;
     }
     *((uint8_t *)n251_1 + 2) += a3;
-    _this[3] += a3;
-    n251_2 = (uint16_t *)_this[5];
+    _this->f12 += a3;
+    n251_2 = (uint16_t *)_this->ent;
     if ( n251_1 == n251_2 )
     {
 LABEL_16:
@@ -1669,7 +1695,7 @@ LABEL_16:
       *((uint8_t *)n251_1 + 2) = v17;
       *(uint16_t *)v16 = v14;
       v16[2] = v15;
-      n251_2 = (uint16_t *)_this[5];
+      n251_2 = (uint16_t *)_this->ent;
       if ( (uint16_t *)((uint8_t *)n251_1 - 3) == n251_2 )
       {
         count = *((uint8_t *)n251_1 - 1);
@@ -1689,18 +1715,18 @@ LABEL_16:
           v16[2] = v20;
           *n251_1 = v18;
           *(v16 - 1) = v19;
-          n251_2 = (uint16_t *)_this[5];
+          n251_2 = (uint16_t *)_this->ent;
           v16 -= 3;
           if ( n251_1 == n251_2 )
             goto LABEL_16;
         }
       }
     }
-    v21 = _this[4];
-    if ( count > 251 || v21 < _this[3] )
+    v21 = _this->f16;
+    if ( count > 251 || v21 < _this->f12 )
     {
-      v22 = _this[1];
-      v36 = v21 < 20 * *_this;
+      v22 = _this->live;
+      v36 = v21 < 20 * _this->n;
       v23 = (uint8_t *)n251_2 - 3;
       do
       {
@@ -1708,7 +1734,7 @@ LABEL_16:
         v23 += 3;
         v25 = (v36 + (uint32_t)(uint8_t)v23[2]) >> 1;
         v23[2] = v25;
-        if ( v23 != (uint8_t *)_this[5] )
+        if ( v23 != (uint8_t *)_this->ent )
         {
           v26 = v23 - 3;
           v35 = (uint8_t)*(v23 - 1);
@@ -1717,7 +1743,7 @@ LABEL_16:
             v34 = *(uint16_t *)v23;
             *(uint16_t *)v23 = *(uint16_t *)v26;
             v23[2] = v35;
-            if ( v26 != (uint8_t *)_this[5] )
+            if ( v26 != (uint8_t *)_this->ent )
             {
               v33 = v23;
               v32 = v22;
@@ -1731,7 +1757,7 @@ LABEL_16:
                 v26[2] = v28;
                 v26 -= 3;
               }
-              while ( v27 != (uint8_t *)_this[5] );
+              while ( v27 != (uint8_t *)_this->ent );
               v23 = v33;
               v22 = v32;
             }
@@ -1742,52 +1768,52 @@ LABEL_16:
         --v22;
       }
       while ( v22 );
-      v29 = _this[2];
+      v29 = _this->f8;
       if ( !v23[2] )
       {
         do
         {
           ++v22;
-          _this[2] = ++v29;
+          _this->f8 = ++v29;
           v30 = (uint8_t)v24[2];
           v24 -= 3;
         }
         while ( !v30 );
-        _this[1] -= v22;
+        _this->live -= v22;
       }
-      v31 = _this[3];
-      _this[2] = v29 - (v29 >> 1);
-      _this[3] = v31 - (v31 >> 1);
+      v31 = _this->f12;
+      _this->f8 = v29 - (v29 >> 1);
+      _this->f12 = v31 - (v31 >> 1);
       return;
     }
   }
   else
   {
 LABEL_4:
-    v7 = v4 == *_this;
-    if ( v4 >= *_this )
+    v7 = v4 == _this->n;
+    if ( v4 >= _this->n )
     {
       if ( a3 <= 1 )
         return;
-      v7 = v4 == *_this;
+      v7 = v4 == _this->n;
     }
     if ( v7 )
     {
-      _this[1] = --v4;
+      _this->live = --v4;
       v8 = *(3 * v4 + list + 2);
     }
     else
     {
       v8 = 1;
     }
-    v9 = _this[2];
+    v9 = _this->f8;
     list += 3 * v4;
-    _this[1] = v4 + 1;
-    _this[2] = v8 + v9 + 1;
+    _this->live = v4 + 1;
+    _this->f8 = v8 + v9 + 1;
     *(list + 2) = 2;
     *(uint16_t *)list = a2;
-    _this[3] += 4;
-    if ( list != (uint8_t *)_this[5] )
+    _this->f12 += 4;
+    if ( list != (uint8_t *)_this->ent )
     {
       v10 = *(uint16_t *)list;
       v11 = *(list + 2);
@@ -2539,22 +2565,22 @@ int32_t __init_model_tables(ModelBlock *_this)
     {
       if ( _this->f1078216 )
       {
-        __symbol_list_update((uint32_t *)(_this->f1078212 + 24 * mode_symbol[1]), **(uint16_t **)&_this->f56[5], 3u);
-        __symbol_list_update((uint32_t *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f56[5]), mode_symbol[2], 2u);
-        __symbol_list_update((uint32_t *)(_this->f1078208 + 24 * mode_symbol[1]), **(uint16_t **)&_this->f56[5], 4u);
-        __symbol_list_update((uint32_t *)(_this->f1078208 + 24 * **(uint16_t **)&_this->f56[5]), mode_symbol[1], 2u);
+        __symbol_list_update((SymList *)(_this->f1078212 + 24 * mode_symbol[1]), **(uint16_t **)&_this->f56[5], 3u);
+        __symbol_list_update((SymList *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f56[5]), mode_symbol[2], 2u);
+        __symbol_list_update((SymList *)(_this->f1078208 + 24 * mode_symbol[1]), **(uint16_t **)&_this->f56[5], 4u);
+        __symbol_list_update((SymList *)(_this->f1078208 + 24 * **(uint16_t **)&_this->f56[5]), mode_symbol[1], 2u);
       }
       else
       {
-        __symbol_list_update((uint32_t *)(_this->f1078212 + 24 * mode_symbol[2]), **(uint16_t **)&_this->f56[5], (_this->sym_pos > 3) + 2);
+        __symbol_list_update((SymList *)(_this->f1078212 + 24 * mode_symbol[2]), **(uint16_t **)&_this->f56[5], (_this->sym_pos > 3) + 2);
       }
     }
     else
     {
-      __symbol_list_update((uint32_t *)(_this->f1078212 + 24 * mode_symbol[1]), **(uint16_t **)&_this->f56[5], 3u);
-      __symbol_list_update((uint32_t *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f56[5]), mode_symbol[2], 2u);
-      __symbol_list_update((uint32_t *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f56[5]), mode_symbol[1], 1u);
-      __symbol_list_update((uint32_t *)(_this->f1078208 + 24 * **(uint16_t **)&_this->f56[5]), mode_symbol[1], 2u);
+      __symbol_list_update((SymList *)(_this->f1078212 + 24 * mode_symbol[1]), **(uint16_t **)&_this->f56[5], 3u);
+      __symbol_list_update((SymList *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f56[5]), mode_symbol[2], 2u);
+      __symbol_list_update((SymList *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f56[5]), mode_symbol[1], 1u);
+      __symbol_list_update((SymList *)(_this->f1078208 + 24 * **(uint16_t **)&_this->f56[5]), mode_symbol[1], 2u);
       v3 = _this->f1078232;
       do
       {
@@ -2627,7 +2653,7 @@ LABEL_19:
     goto LABEL_37;
   if ( mode_symbol[3] != mode_symbol[4] )
   {
-    __symbol_list_update((uint32_t *)(_this->f1078212 + 24 * mode_symbol[2]), **(uint16_t **)&_this->f56[5], 1u);
+    __symbol_list_update((SymList *)(_this->f1078212 + 24 * mode_symbol[2]), **(uint16_t **)&_this->f56[5], 1u);
     n2 = _this->f32;
     goto LABEL_19;
   }
@@ -4880,42 +4906,41 @@ LABEL_76:
   fclose(Stream_2);
   return 1;
 }
-uint32_t __init_symbol_list(int32_t *a1, int32_t a2, int32_t a3, int32_t a4)
+uint32_t __init_symbol_list(SymList *a1, int32_t a2, int32_t a3, int32_t a4)
 {
   ;
-  uint8_t *buf;
-  int32_t v7, v9, v10;
-  uint32_t result;
-  a1[0] = a3;
-  buf = (uint8_t *)bmf_new(3 * a3);
-  a1[5] = (int32_t)buf;
+  SymEntry *buf;
+  uint32_t v7, v10, result;   // counts, like the header fields they move
+  a1->n = a3;
+  buf = (SymEntry *)bmf_new(3 * a3);
+  a1->ent = buf;
   if ( a4 )
   {
-    v7 = a1[0];
-    a1[2] = 0;
-    a1[1] = v7;
+    v7 = a1->n;
+    a1->f8 = 0;
+    a1->live = v7;
     result = 12 * v7;
-    a1[3] = 12 * v7;
-    a1[4] = 8 * v7;
+    a1->f12 = 12 * v7;
+    a1->f16 = 8 * v7;
     if ( v7 )
     {
       result = 0;
       do
       {
-        v9 = 3 * result;
-        *(uint16_t *)(a1[5] + v9) = result++;
-        *(uint8_t *)(a1[5] + v9 + 2) = 1;
+        a1->ent[result].sym = result;
+        a1->ent[result].cnt = 1;
+        ++result;
       }
-      while ( result < a1[1] );
+      while ( result < a1->live );
     }
   }
   else
   {
-    v10 = a1[0];
-    a1[2] = 2;
-    a1[4] = 20 * v10;
-    a1[1] = 0;
-    a1[3] = 18 * v10;
+    v10 = a1->n;
+    a1->f8 = 2;
+    a1->f16 = 20 * v10;
+    a1->live = 0;
+    a1->f12 = 18 * v10;
     return (uint32_t)memset(buf,0,3 * v10);
   }
   return result;
@@ -7326,7 +7351,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
     v64 = *(int32_t *)&Blockaa_1->f16;
     if ( v64 <= __frame.slot4 )
     {
-      __init_symbol_list((int32_t *)(*(uint64_t (*)[2])((uint8_t *)__frame.v86)), (int32_t)Blockaa_1, __frame.slot4 - v64 + 2, 1);
+      __init_symbol_list((SymList *)(*(uint64_t (*)[2])((uint8_t *)__frame.v86)), (int32_t)Blockaa_1, __frame.slot4 - v64 + 2, 1);
       __frame.v87 = 19 * LODWORD((*(uint64_t (*)[2])((uint8_t *)__frame.v86))[0]);
       v70 = *(int32_t *)&Blockaa_1->f16;
       if ( v70 )
@@ -7580,7 +7605,7 @@ LABEL_71:
         v19 = 0;
         do
         {
-          __init_symbol_list((int32_t *)&(*(uint64_t (*)[2])((uint8_t *)__frame.v86))[3 * v19], v19, 256, 1);
+          __init_symbol_list((SymList *)&(*(uint64_t (*)[2])((uint8_t *)__frame.v86))[3 * v19], v19, 256, 1);
           ++v19;
         }
         while ( v19 < 4 * k_2 );
@@ -10873,7 +10898,7 @@ void __expand_alphabet(ModelBlock *_this)
       {
         v15 = 0;
         do
-          __init_symbol_list((int32_t *)&__frame.v28[3 * v15++], (int32_t)_this, 256, 1);
+          __init_symbol_list((SymList *)&__frame.v28[3 * v15++], (int32_t)_this, 256, 1);
         while ( v15 < 4 * v4 );
         j_1 = _this->f16;
       }
@@ -10908,7 +10933,7 @@ void __expand_alphabet(ModelBlock *_this)
     }
     else if ( j_1 <= j_2 )
     {
-      __init_symbol_list((int32_t *)__frame.v28, (int32_t)_this, j_2 - j_1 + 2, 1);
+      __init_symbol_list((SymList *)__frame.v28, (int32_t)_this, j_2 - j_1 + 2, 1);
       v24 = _this->f16 == 0;
       __frame.v29 = 19 * LODWORD(__frame.v28[0]);
       if ( !v24 )
@@ -11294,7 +11319,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   this_4->f1051664[2] = v28;
   this_4->f1051664[3] = v29;
   this_4->f1078224 = (uintptr_t)this_4 + 1078184;
-  __init_symbol_list((int32_t *)((uintptr_t)this_4 + 1078184), (int32_t)this_4, this_4->f16, 1);
+  __init_symbol_list((SymList *)((uintptr_t)this_4 + 1078184), (int32_t)this_4, this_4->f16, 1);
   this_4->f1078232 = (uint32_t **)((uint8_t *)this_4 + 1078216);
   v30 = this_4->f16;
   v31 = (uint32_t *)bmf_new(24 * v30 + 4);
@@ -11336,8 +11361,8 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
     v39 = 0;
     do
     {
-      __init_symbol_list((int32_t *)(this_4->f1078208 + 24 * v39), (int32_t)this_4, 99, 0);
-      __init_symbol_list((int32_t *)(this_4->f1078212 + 24 * v39++), (int32_t)this_4, 33, 0);
+      __init_symbol_list((SymList *)(this_4->f1078208 + 24 * v39), (int32_t)this_4, 99, 0);
+      __init_symbol_list((SymList *)(this_4->f1078212 + 24 * v39++), (int32_t)this_4, 33, 0);
     }
     while ( v39 < this_4->f16 );
   }
@@ -15558,7 +15583,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
     Blocka_2->f1051664[2] = v29;
     Blocka_2->f1051664[3] = v30;
     Blocka_2->f1078224 = (uint32_t)((uint32_t *)Blocka_2 + 269546);
-    __init_symbol_list((int32_t *)((uint8_t *)Blocka_1 + 1078184), 0, Blocka_1->f16, 1);
+    __init_symbol_list((SymList *)((uint8_t *)Blocka_1 + 1078184), 0, Blocka_1->f16, 1);
     Blocka_2->f1078232 = (uint32_t **)((uint32_t *)Blocka_2 + 269554);
     v31 = Blocka_2->f16;
     v32 = (uint32_t *)bmf_new(24 * v31 + 4);
@@ -15637,8 +15662,8 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
       v44 = 0;
       do
       {
-        __init_symbol_list((int32_t *)(Blocka_1->f1078208 + 24 * v44), 0, 99, 0);
-        __init_symbol_list((int32_t *)(Blocka_1->f1078212 + 24 * v44++), 0, 33, 0);
+        __init_symbol_list((SymList *)(Blocka_1->f1078208 + 24 * v44), 0, 99, 0);
+        __init_symbol_list((SymList *)(Blocka_1->f1078212 + 24 * v44++), 0, 33, 0);
       }
       while ( v44 < Blocka_1->f16 );
     }
