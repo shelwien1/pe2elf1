@@ -346,7 +346,7 @@ static inline void bmf_copy(void *d, const void *s, size_t n) {
   const char *dp = (const char *)d, *sp = (const char *)s;
   if (dp < sp + n && sp < dp + n) {
     fprintf(stderr, "bmf: overlapping copy, %p <- %p, %u bytes\n",
-            d, s, (unsigned)n);
+            d, s, (uint32_t)n);
     abort();
   }
 #endif

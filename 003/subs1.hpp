@@ -7055,7 +7055,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
           *(Src + plane_desc[2].src_plane) = v104;
           __fwd_alt_model_p1_decode_alt_p1_context(v66, v83, (int32_t)v84);
           v68 = __fwd_alt_model_p1_decode_alt_p1_decode_symbol(&((uint8_t**)v66)[4 * v66->f12[0] + 950], v67, (int32_t)v66->f12[1]);
-          v69 = (unsigned uint8_t *)(v66->f8);
+          v69 = (uint8_t *)(v66->f8);
           v70 = v66->cur[0];
           v71 = (uint8_t)((uint8_t)(uintptr_t)v69 + *((uint8_t *)v66 + v68 + 1496));
           v105 = v71;
@@ -7093,7 +7093,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
             v73 = (Obj0 *)(v96);
             __fwd_alt_model_p1_decode_alt_p1_context(v96, v95, (int32_t)v94);
             v75 = __fwd_alt_model_p1_decode_alt_p1_decode_symbol(&((uint8_t**)v73)[4 * v73->f12[0] + 950], v74, (int32_t)v73->f12[1]);
-            v76 = (unsigned uint8_t *)(v73->f8);
+            v76 = (uint8_t *)(v73->f8);
             v77 = v73->cur[0];
             v78 = (uint8_t)((uint8_t)(uintptr_t)v76 + *((uint8_t *)v73 + v75 + 1496));
             v92 = v78;
@@ -8613,7 +8613,7 @@ LABEL_14:
               {
                 for ( j = 0; j < j_1; ++j )
                 {
-                  v42 = (unsigned uint8_t *)(__frame.slot[2 * j + 2]);
+                  v42 = (uint8_t *)(__frame.slot[2 * j + 2]);
                   *v42 = v33[2 * j];
                   v43 = (uint8_t *)__frame.slot[2 * j + 3];
                   __frame.slot[2 * j + 2] = v42 + 1;
@@ -15032,12 +15032,12 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, int8_t ArgList, uint8_t *a5, int3
       *(uint32_t *)&lpAddress->f278756 = v73;
       lpAddress->f278760[0] = v76;
       v73 += 144;
-      lpAddress->f278736[0] = (unsigned uint8_t *)(v73);
+      lpAddress->f278736[0] = (uint8_t *)(v73);
       v76 += 144;
-      lpAddress->f278736[1] = (unsigned uint8_t *)(v76);
-      lpAddress->f278736[2] = (unsigned uint8_t *)(v75 + 144);
-      lpAddress->f278736[3] = (unsigned uint8_t *)(v74 + 144);
-      lpAddress->f278736[4] = (unsigned uint8_t *)(v72 + 144);
+      lpAddress->f278736[1] = (uint8_t *)(v76);
+      lpAddress->f278736[2] = (uint8_t *)(v75 + 144);
+      lpAddress->f278736[3] = (uint8_t *)(v74 + 144);
+      lpAddress->f278736[4] = (uint8_t *)(v72 + 144);
       bmf_copy((void *)(v73 - 18), (const void *)(v76), 18);
       v77 = (int)(lpAddress->f278736[0]);
       v78 = (uintptr_t)(lpAddress->f278736[1]);
