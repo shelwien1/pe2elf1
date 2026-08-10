@@ -23,7 +23,7 @@ bytes.
 `python3 tools/shape.py`, verbatim:
 
 ```
-subs1.hpp / bmf.cpp lines          17842 / 358
+subs1.hpp / bmf.cpp lines          17904 / 358
 raw-offset sites                   22
   off `_this`                      1, in 1 functions
 pointer casts                      2183
@@ -33,7 +33,7 @@ frames                             17, 169180 bytes, 0 aliases
   member runs walked as arrays     0 sites, 0 bases, 0 functions
   frames that dissolve outright    17, 0 aliases
 structs                            22, 0 still ObjN
-  fNN members / named ones         46 / 115
+  fNN members / named ones         44 / 121
 distinct vNN locals                559
 goto / LABEL_n:                    112 / 79
 __fwd_* shims                      0
@@ -351,6 +351,34 @@ failing to lower it, and `n[0] > 2` at the half-warm site. None fires on any of
 the fifteen images. The first two matter because `LOWORD(n32) = step` leaves
 the high half of `n32` alone, so "the addend is `step`" is a claim about what
 is in those bits and not about where they came from.
+
+---
+
+## 4.6 The five p2 digits
+
+With `mag`, `sign`, `ctx_w` and the band named, `alt_p2_context`'s five
+selectors read directly. Four of the five are the same test:
+
+    (d <= band_hi) + (d < band_lo)
+
+which is above / inside / below — a base-3 digit. `band_lo` and `band_hi` are
+`f278720` and `f278724`, set once to −(16q + 7) .. 16q + 8 for
+`q = plane_desc[0].w12`. Two lines earlier the same `q` sets `deadzone_hi` and
+`deadzone_lo` to ±(4q + 1), the dead zone `p2_bump` uses. **One tolerance at
+two scales**: the narrow one decides whether a counter update counts, the wide
+one which context an error falls in — and both widen as the coding gets
+lossier.
+
+Group 4 is `v201[-1].sign`, the previous record's stored digit, taken as a
+digit. Group 0 buckets `n1840` at the fixed 272 and 1840. Groups 1–3 take three
+different differences against the band.
+
+**One claim here was wrong and had to be corrected in the commit after it.** I
+read `n1840` as a weighted sum of the neighbourhood's `mag`, because such a sum
+ends on the line immediately before `n1840` is used. It assigns `n960_1`;
+`n1840` is set forty lines earlier from a counter prediction. The four
+selectors I read *off the selector statements themselves* were right; the one I
+inferred from what sat above it was not, and that is the whole difference.
 
 ---
 
