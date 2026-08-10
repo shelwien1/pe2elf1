@@ -817,9 +817,11 @@ struct AltP2Block {
       int32_t f278696;
       uint16_t f278700;
       uint8_t _u0_0_12[2];
-      uint32_t f278704;
-      uint32_t f278708;
-      uint32_t f278712;
+      uint32_t ctx;
+      // Two indices derived from `ctx`, one per parity of a bit the coders
+      // are handed alongside the record: `alt_p2_encode_symbol` reads
+      // `a2[a3 & 1]`, and `alt_p2_context` writes both from `f278944`.
+      uint32_t ctx_pair[2];   // +278708 .. +278715
       int32_t f278716;
       int32_t f278720;
       int32_t f278724;
@@ -883,7 +885,7 @@ struct AltP2Block {
   // `algorithm_v2.md` §9.1 derives from the five weight groups.  The size is
   // not an independent fact about the table; it is what `ctx_w` can index.
   //
-  // `alt_p2_encode_symbol` is handed `&freq[f278704]`, `f278704` being that
+  // `alt_p2_encode_symbol` is handed `&freq[ctx]`, `ctx` being that
   // index, and `alt_p2_model` updates records `k - 1`, `k` and `k + 1` --
   // three adjacent, the way the p1 model does.
   //
@@ -2233,7 +2235,7 @@ int32_t __alt_p1_decode_symbol(uint16_t *a1, int32_t a2, int32_t a3)
   return n5;
 }
 
-int32_t __alt_p2_encode_symbol(P2Freq *_this, uint8_t *a2, int32_t a3)
+int32_t __alt_p2_encode_symbol(P2Freq *_this, const uint32_t *a2, int32_t a3)
 {
   ;
   int16_t v18;
@@ -2296,7 +2298,7 @@ int32_t __alt_p2_encode_symbol(P2Freq *_this, uint8_t *a2, int32_t a3)
   result = v25;
   *v25 = n32 + v18;
   if ( a3 > 0 )
-    return __encode_symbol_tree(model_strip(*(uint32_t *)(a2 + 4 * (a3 & 1))), (a3 - 1) >> 1);
+    return __encode_symbol_tree(model_strip(a2[a3 & 1]), (a3 - 1) >> 1);
   return (int32_t)result;
 }
 
@@ -2306,7 +2308,7 @@ int32_t __alt_p2_encode_symbol(P2Freq *_this, uint8_t *a2, int32_t a3)
 // `_this[1..3]` -- but so is the encoder's first step, and a pair that codes
 // the same thing should read as one.  The three-way part is still the first
 // twenty lines; the name now says which half of the pair this is.
-int32_t __alt_p2_decode_symbol(P2Freq *_this, uint8_t *a2)
+int32_t __alt_p2_decode_symbol(P2Freq *_this, const uint32_t *a2)
 {
   ;
   int32_t v7, v8, v10, n0x4000, n32, v16, v21, v23;
@@ -2372,7 +2374,7 @@ int32_t __alt_p2_decode_symbol(P2Freq *_this, uint8_t *a2)
   *v9 = n32 + n0x4000;
   v16 = v9 - v24;
   if ( v16 )
-    return v16 + 2 * __decode_symbol_tree(model_strip(*(uint32_t *)(a2 + 4 * (v16 & 1))));
+    return v16 + 2 * __decode_symbol_tree(model_strip(a2[v16 & 1]));
   else
     return 0;
 }
@@ -4240,7 +4242,7 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
     v29 = 2 * n + 1 == v28;
     v24 = v29 + v27;
   }
-  _this->f278704 = 15;
+  _this->ctx = 15;
   __alt_init_tables(_this->f279984, _this->f280496);
   _this->ctx_w[4].w[0] = 0;
   _this->ctx_w[0].w[1] = 64;
@@ -7215,22 +7217,22 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   if ( n960 >= 960 )
   {
     n15 = 15;
-    *(int32_t *)&v196->f278704 = 15;
+    v196->ctx = 15;
   }
   else
   {
     n15 = v196->f280752[n960 >> 3];
-    *(int32_t *)&v196->f278704 = n15;
+    v196->ctx = n15;
   }
   n255 = (n3536_4 + v271 + 7) >> 4;
   if ( n255 >= 255 )
     n255 = 255;
   if ( n255 < 0 )
     n255 = 0;
-  *(int32_t *)&v196->f278708 = v196->f278944[n255 + 4] + n15;
+  v196->ctx_pair[0] = v196->f278944[n255 + 4] + n15;
   v228 = v196->ctx_w[0].sel;
-  *(int32_t *)&v196->f278712 = n15 + v196->f278944[n255];
-  *(int32_t *)&v196->f278704 = n15
+  v196->ctx_pair[1] = n15 + v196->f278944[n255];
+  v196->ctx = n15
                           + 32 * (v215 == 0)
                           + 16 * (v214 == 0)
                           + v196->ctx_w[4].w[v196->ctx_w[4].sel]
@@ -12177,7 +12179,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   uint32_t n0x10_2;   // a record index in four regions ...
   P2Freq *p2_rec;
   // Two things in one slot, and both are read as numbers: the strip index
-  // out of `f278708` or `f278712`, and later an address.  It is neither a
+  // out of `ctx_pair[0]` or `ctx_pair[1]`, and later an address.  It is neither a
   // `uint16_t *` nor an index -- it is the register MSVC put both in.
   uintptr_t v508;
   uint32_t n0x10_1;
@@ -12324,7 +12326,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   AltP2Block *v385;
   uint32_t *v76, v78, v92, v97, v109, n0x10, v393, v396, v405, v414, v499;
   uint8_t v83;
-  v6 = a1->f278704 & 0xF;
+  v6 = a1->ctx & 0xF;
   v7 = *(uint16_t **)&a1->cursor[0];
   v577 = 16 * a3;
   *v7 = 16 * a3;
@@ -13109,7 +13111,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   }
   while ( n5 < 5 );
   v385 = (AltP2Block *)(v578);
-  v386 = v578->f278704;
+  v386 = v578->ctx;
   v578->cursor[0] += 18;
   v387 = (&v385->freq[v386]);
   v385->cursor[1] += 18;
@@ -13121,7 +13123,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   {
     v511 = a4 & 1;
     n15 = v386 & 0xF;
-    v508 = (&v385->f278708)[a4 & 1];
+    v508 = v385->ctx_pair[a4 & 1];
     if ( n15 < 15 )
     {
       v391 = v387[1].c[1];
@@ -13142,7 +13144,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
       if ( n15 <= 0 )
       {
 LABEL_37:
-        n0x10 = v385->f278704;
+        n0x10 = v385->ctx;
         if ( v385->freq[n0x10].c[0] <= 0x1Au )
           return n0x10;
         v397 = v385->ctx_w[1].sel;
@@ -13150,7 +13152,7 @@ LABEL_37:
         if ( !v385->f279984[(uint8_t)-a5] )
           v398 = v385->f279984[(uint8_t)-a5];
         v399 = v385->ctx_w[2].sel;
-        v400 = v385->ctx_w[0].w[1] + (v385->f278704 & 0x3F);
+        v400 = v385->ctx_w[0].w[1] + (v385->ctx & 0x3F);
         v510 = v398;
         n0x10 = v385->ctx_w[4].w[2 - v385->ctx_w[4].sel]
               + v385->ctx_w[3].w[2 - v385->ctx_w[3].sel]
@@ -13217,7 +13219,7 @@ LABEL_48:
           n0x10 = n0x10_1;
         }
         v408->c[v510 + 1] += (6 * (uint32_t)p2_rec[0].c[0]) >> 4;
-        if ( !v385->f278728 || v385->freq[v385->f278704].c[0] > 0x100u )
+        if ( !v385->f278728 || v385->freq[v385->ctx].c[0] > 0x100u )
         {
           v409 = 2 - v511;
           if ( !a4 )
@@ -13237,7 +13239,7 @@ LABEL_48:
               n0x10 = n0x10_1;
             }
             v491->c[v510 + 1] += (uint16_t)(v491->c[0] & 0xFFFC) >> 2;
-            v494 = v385->f278704 - v385->ctx_w[0].w[1];
+            v494 = v385->ctx - v385->ctx_w[0].w[1];
             n0xF0_1 = (&v385->freq[v494 + v385->ctx_w[0].w[0]]);
             n0x10_2 = v385->ctx_w[0].w[2] + v494;
             n0xF0 = n0xF0_1;
@@ -13302,7 +13304,7 @@ LABEL_180:
               n0x10 = n0x10_1;
             }
             v411->c[v510 + 1] += (7 * (uint32_t)v411->c[0]) >> 4;
-            n0xF0 = ((&v385->freq[v385->ctx_w[0].w[1] + (v385->f278704 - v385->ctx_w[0].w[v385->ctx_w[0].sel])]));
+            n0xF0 = ((&v385->freq[v385->ctx_w[0].w[1] + (v385->ctx - v385->ctx_w[0].w[v385->ctx_w[0].sel])]));
             v412 = n0xF0[0].c[1];
             v413 = n0xF0[0].c[2];
             n2 = (uint16_t *)&n0xF0[0];
@@ -13357,7 +13359,7 @@ LABEL_67:
               n0x10 = n0x10_1;
             }
             n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
-            v483 = v385->f278704 - v385->ctx_w[1].w[1];
+            v483 = v385->ctx - v385->ctx_w[1].w[1];
             n0xF0_2 = (&v385->freq[v483 + v385->ctx_w[1].w[0]]);
             n0x10_2 = v385->ctx_w[1].w[2] + v483;
             n0xF0 = n0xF0_2;
@@ -13418,7 +13420,7 @@ LABEL_167:
               n0x10 = n0x10_1;
             }
             v420->c[v510 + 1] += (7 * (uint32_t)v420->c[0]) >> 4;
-            n0xF0 = ((&v385->freq[v385->ctx_w[1].w[1] + (v385->f278704 - v385->ctx_w[1].w[v385->ctx_w[1].sel])]));
+            n0xF0 = ((&v385->freq[v385->ctx_w[1].w[1] + (v385->ctx - v385->ctx_w[1].w[v385->ctx_w[1].sel])]));
             v421 = n0xF0[0].c[1];
             v422 = n0xF0[0].c[2];
             n2 = (uint16_t *)&n0xF0[0];
@@ -13470,7 +13472,7 @@ LABEL_79:
               n0x10 = n0x10_1;
             }
             n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
-            v472 = v385->f278704 - v385->ctx_w[2].w[1];
+            v472 = v385->ctx - v385->ctx_w[2].w[1];
             n0xF0_3 = (&v385->freq[v472 + v385->ctx_w[2].w[0]]);
             n0x10_2 = v385->ctx_w[2].w[2] + v472;
             n0xF0 = n0xF0_3;
@@ -13531,7 +13533,7 @@ LABEL_154:
               n0x10 = n0x10_1;
             }
             v428->c[v510 + 1] += (7 * (uint32_t)v428->c[0]) >> 4;
-            n0xF0 = ((&v385->freq[v385->ctx_w[2].w[1] + (v385->f278704 - v385->ctx_w[2].w[v385->ctx_w[2].sel])]));
+            n0xF0 = ((&v385->freq[v385->ctx_w[2].w[1] + (v385->ctx - v385->ctx_w[2].w[v385->ctx_w[2].sel])]));
             v429 = n0xF0[0].c[1];
             v430 = n0xF0[0].c[2];
             n2 = (uint16_t *)&n0xF0[0];
@@ -13583,7 +13585,7 @@ LABEL_91:
               n0x10 = n0x10_1;
             }
             n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
-            v461 = v385->f278704 - v385->ctx_w[3].w[1];
+            v461 = v385->ctx - v385->ctx_w[3].w[1];
             n0xF0_4 = (&v385->freq[v461 + v385->ctx_w[3].w[0]]);
             n0x10_2 = v385->ctx_w[3].w[2] + v461;
             n0xF0 = n0xF0_4;
@@ -13644,7 +13646,7 @@ LABEL_141:
               n0x10 = n0x10_1;
             }
             v436->c[v510 + 1] += (7 * (uint32_t)v436->c[0]) >> 4;
-            n0xF0 = ((&v385->freq[v385->ctx_w[3].w[1] + (v385->f278704 - v385->ctx_w[3].w[v385->ctx_w[3].sel])]));
+            n0xF0 = ((&v385->freq[v385->ctx_w[3].w[1] + (v385->ctx - v385->ctx_w[3].w[v385->ctx_w[3].sel])]));
             v437 = n0xF0[0].c[1];
             v438 = n0xF0[0].c[2];
             n2 = (uint16_t *)&n0xF0[0];
@@ -13693,7 +13695,7 @@ LABEL_103:
             if ( v449 + v448 + v447 > 29696 )
               __rescale_three_way(n2_7);
             n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
-            v450 = v385->f278704 - v385->ctx_w[4].w[1];
+            v450 = v385->ctx - v385->ctx_w[4].w[1];
             n0x10_4 = &v385->freq[v450 + v385->ctx_w[4].w[0]];
             // An index, not an address -- the same register again.
             rec_idx = v385->ctx_w[4].w[2] + v450;
@@ -13736,7 +13738,7 @@ LABEL_128:
                + v385->freq[n0x10 + v385->ctx_w[4].w[1] - v385->ctx_w[4].w[2 - v443]].c[1] > 29696 )
               __rescale_three_way(v444);
             v444->c[v510 + 1] += (7 * (uint32_t)v444->c[0]) >> 4;
-            v445 = ((&v385->freq[v385->ctx_w[4].w[1] + (v385->f278704 - v385->ctx_w[4].w[v385->ctx_w[4].sel])]));
+            v445 = ((&v385->freq[v385->ctx_w[4].w[1] + (v385->ctx - v385->ctx_w[4].w[v385->ctx_w[4].sel])]));
             if ( v445[0].c[3] + v445[0].c[2] + v445[0].c[1] > 29696 )
               __rescale_three_way(&v445[0]);
             v445[0].c[v511 + 1] += (7 * (uint32_t)v445[0].c[0]) >> 4;
@@ -13758,7 +13760,7 @@ LABEL_115:
         }
         return n0x10;
       }
-      v387 = (&v385->freq[v385->f278704]);
+      v387 = (&v385->freq[v385->ctx]);
     }
     v394 = v387[-1].c[1];
     v395 = v387[-1].c[2];
@@ -13823,17 +13825,17 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
     while ( 1 )
     {
       v13 = *(int16_t *)((uintptr_t)v11 - 18) >> 4;
-      lpAddress->f278708 = lpAddress->f278704 + (*(uint32_t *)&lpAddress->f278944[v13 + 4]);
-      lpAddress->f278712 = lpAddress->f278704 + (*(uint32_t *)&lpAddress->f278944[v13]);
+      lpAddress->ctx_pair[0] = lpAddress->ctx + (*(uint32_t *)&lpAddress->f278944[v13 + 4]);
+      lpAddress->ctx_pair[1] = lpAddress->ctx + (*(uint32_t *)&lpAddress->f278944[v13]);
       v14 = (uint8_t)((*(uint16_t *)(lpAddress->cursor[0] - 18) >> 4)
-                            + *(uint8_t *)(__alt_p2_decode_symbol(&lpAddress->freq[lpAddress->f278704
+                            + *(uint8_t *)(__alt_p2_decode_symbol(&lpAddress->freq[lpAddress->ctx
                                                                + lpAddress->ctx_w[3].w[((*(int16_t *)((uintptr_t)v12 - 18) <= *(int16_t *)((uintptr_t)v12 - 36))
                                                                             + (*(int16_t *)((uintptr_t)v12 - 18) < *(int16_t *)((uintptr_t)v12 - 36)))]
                                                                + lpAddress->ctx_w[2].w[*(uint8_t *)((uintptr_t)v12 - 20)]
                                                                + lpAddress->ctx_w[1].w[*(uint8_t *)((uintptr_t)v12 - 2)]
                                                                + lpAddress->ctx_w[0].w[(((uint32_t)(v13 - 115) >> 31)
                                                                             + ((uint32_t)(v13 - 17) >> 31))]
-                                                               + lpAddress->ctx_w[4].w[1]], (uint8_t *)lpAddress + 278708)
+                                                               + lpAddress->ctx_w[4].w[1]], lpAddress->ctx_pair)
                                        + (uintptr_t)lpAddress
                                        + 280496));
       *a5 = v14;
@@ -13991,7 +13993,7 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
         for ( j = 0; j < i; ++j )
         {
           v92 = __alt_p2_context((AltP2Block *)lpAddress, (AltP2Block *)nullptr, (AltP2Block *)nullptr);
-          v93 = __alt_p2_decode_symbol(&lpAddress->freq[lpAddress->f278704], (uint8_t *)lpAddress + 278708);
+          v93 = __alt_p2_decode_symbol(&lpAddress->freq[lpAddress->ctx], lpAddress->ctx_pair);
           v94 = (uint8_t)(v92 + (*(uint8_t *)&lpAddress->f280496[v93]));
           v97[j] = v94;
           __alt_p2_model(lpAddress, v94, v93, v94 - v92);
@@ -14366,9 +14368,9 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           ctx_bias[3] >>= 3;
           lpAddress_1 = (AltP2Block *)(plane[0]);
           v101 = __alt_p2_context((AltP2Block *)plane[0], (AltP2Block *)plane[2], (AltP2Block *)plane[1]);
-          v102 = &lpAddress_1->freq[*&lpAddress_1->f278704];
+          v102 = &lpAddress_1->freq[lpAddress_1->ctx];
           v168 = v101;
-          v103 = __alt_p2_decode_symbol(v102, (uint8_t *)&lpAddress_1->f278708);
+          v103 = __alt_p2_decode_symbol(v102, lpAddress_1->ctx_pair);
           v104 = (uint8_t)(v168 + (*(uint8_t *)&lpAddress_1->f280496[v103]));
           __alt_p2_model((AltP2Block *)lpAddress_1, v104, v103, v104 - v168);
           v105 = *(uint32_t *)&lpAddress_1->cursor[0];
@@ -14388,7 +14390,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v111 = (AltP2Block *)(plane[1]);
           *(uint16_t *)(plane[1]->cursor[0] + 2) = v110;
           v112 = __alt_p2_context((AltP2Block *)v111, (AltP2Block *)plane[0], (AltP2Block *)plane[2]);
-          v113 = __alt_p2_decode_symbol(&v111->freq[*(int32_t *)&v111->f278704], (uint8_t *)&v111->f278708);
+          v113 = __alt_p2_decode_symbol(&v111->freq[v111->ctx], v111->ctx_pair);
           v114 = (uint8_t)(v112 + v111->f280496[v113]);
           v169 = v114;
           __alt_p2_model((AltP2Block *)v111, v114, v113, v114 - v112);
@@ -14410,7 +14412,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v120 = (AltP2Block *)(plane[2]);
           *(uint16_t *)(plane[2]->cursor[0] + 2) = v119;
           v121 = __alt_p2_context((AltP2Block *)v120, (AltP2Block *)plane[0], (AltP2Block *)plane[1]);
-          v122 = __alt_p2_decode_symbol(&v120->freq[*(int32_t *)&v120->f278704], (uint8_t *)&v120->f278708);
+          v122 = __alt_p2_decode_symbol(&v120->freq[v120->ctx], v120->ctx_pair);
           v123 = (uint8_t)(v121 + v120->f280496[v122]);
           v170 = v123;
           __alt_p2_model((AltP2Block *)v120, v123, v122, v123 - v121);
@@ -14435,7 +14437,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
             v129 = (AltP2Block *)(plane[3]);
             *(uint16_t *)(plane[3]->cursor[0] + 2) = v128;
             v130 = __alt_p2_context((AltP2Block *)v129, (AltP2Block *)plane[2], (AltP2Block *)plane[0]);
-            v131 = __alt_p2_decode_symbol(&v129->freq[*(int32_t *)&v129->f278704], (uint8_t *)&v129->f278708);
+            v131 = __alt_p2_decode_symbol(&v129->freq[v129->ctx], v129->ctx_pair);
             v154 = (uint8_t)(v130 + v129->f280496[v131]);
             __alt_p2_model((AltP2Block *)v129, v154, v131, v154 - v130);
             v132 = *(int32_t *)&v129->cursor[0];
@@ -14533,7 +14535,7 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
   uint8_t *v105;
-  int8_t *v106;
+  uint32_t *v106;   // the block's `ctx_pair`
   uint8_t v107;
   AltP2Block *lpAddress_1;
   uint8_t *v109;
@@ -14587,12 +14589,12 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
       }
       v16 = *(int32_t *)&lpAddress->cursor[0];
       v17 = *(int16_t *)(v16 - 18) >> 4;
-      *(int32_t *)&lpAddress->f278708 = *(int32_t *)&lpAddress->f278704 + lpAddress->f278944[v17 + 4];
-      *(int32_t *)&lpAddress->f278712 = *(int32_t *)&lpAddress->f278704 + lpAddress->f278944[v17];
+      lpAddress->ctx_pair[0] = lpAddress->ctx + lpAddress->f278944[v17 + 4];
+      lpAddress->ctx_pair[1] = lpAddress->ctx + lpAddress->f278944[v17];
       // The composed index, the encoder's own copy of `alt_p2_context`'s sum:
       // four selected weights, one constant, and the running context.
       __alt_p2_encode_symbol(
-          &lpAddress->freq[*(int32_t *)&lpAddress->f278704
+          &lpAddress->freq[lpAddress->ctx
                          + lpAddress->ctx_w[3].w[(*(int16_t *)(v16 - 18) <= *(int16_t *)(v16 - 36))
                                                + (*(int16_t *)(v16 - 18) < *(int16_t *)(v16 - 36))]
                          + lpAddress->ctx_w[2].w[*(uint8_t *)(v16 - 20)]
@@ -14600,7 +14602,7 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
                          + lpAddress->ctx_w[0].w[((uint32_t)(v17 - 115) >> 31)
                                                + ((uint32_t)(v17 - 17) >> 31)]
                          + lpAddress->ctx_w[4].w[1]],
-          (uint8_t *)&lpAddress->f278708, v104);
+          lpAddress->ctx_pair, v104);
       ++v103;
       LOWORD(v16) = 16 * (uint8_t)*a7;
       *(uint16_t *)lpAddress->cursor[0] = v16;
@@ -14657,7 +14659,7 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
   memcpy(lpAddress->buf[3],lpAddress->buf[0],Size);
   if ( a6 > 1 )
   {
-    v106 = &*(int8_t *)&lpAddress->f278708;
+    v106 = lpAddress->ctx_pair;
     v105 = a7;
     v102 = 0;
     do
@@ -14766,7 +14768,7 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
             v105[k] = v97;
           }
           v110 = v99;
-          __alt_p2_encode_symbol(&lpAddress_1->freq[*(int32_t *)&lpAddress_1->f278704], (uint8_t *)v106, v99);
+          __alt_p2_encode_symbol(&lpAddress_1->freq[lpAddress_1->ctx], v106, v99);
           __alt_p2_model((AltP2Block *)lpAddress_1, (uint8_t)v105[k], v110, (uint8_t)v105[k] - v95);
           v8 = &v109[k + 1];
           v100 = (int32_t)&v105[k + 1];
@@ -15135,7 +15137,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             v104 = v173;
             v166[v184] = v107;
           }
-          __alt_p2_encode_symbol(&lpAddress_1->freq[lpAddress_1->f278704], (uint8_t *)lpAddress_1 + 278708, v105);
+          __alt_p2_encode_symbol(&lpAddress_1->freq[lpAddress_1->ctx], lpAddress_1->ctx_pair, v105);
           __alt_p2_model((AltP2Block *)lpAddress_1, v104, v105, v104 - v178);
           v109 = *(uint32_t *)&lpAddress_1->cursor[0];
           v110 = *(int16_t *)(v109 - 4);
@@ -15169,7 +15171,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             v115 = v175;
             v166[v176] = v118;
           }
-          __alt_p2_encode_symbol(&v114->freq[*(int32_t *)&v114->f278704], (uint8_t *)&v114->f278708, v116);
+          __alt_p2_encode_symbol(&v114->freq[v114->ctx], v114->ctx_pair, v116);
           __alt_p2_model((AltP2Block *)v114, v115, v116, v115 - v179);
           v120 = *(int32_t *)&v114->cursor[0];
           v121 = *(int16_t *)(v120 - 4);
@@ -15204,7 +15206,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             v126 = v174;
             v166[v177] = v129;
           }
-          __alt_p2_encode_symbol(&v125->freq[*(int32_t *)&v125->f278704], (uint8_t *)&v125->f278708, v127);
+          __alt_p2_encode_symbol(&v125->freq[v125->ctx], v125->ctx_pair, v127);
           __alt_p2_model((AltP2Block *)v125, v126, v127, v126 - v180);
           v131 = *(int32_t *)&v125->cursor[0];
           n4_1 = plane_count;
@@ -15243,7 +15245,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
               v134 = (uint8_t)(v157 + v133->f280496[v135]);
               v166[n3] = v137;
             }
-            __alt_p2_encode_symbol(&v133->freq[*(int32_t *)&v133->f278704], (uint8_t *)&v133->f278708, v135);
+            __alt_p2_encode_symbol(&v133->freq[v133->ctx], v133->ctx_pair, v135);
             __alt_p2_model((AltP2Block *)v133, v134, v135, v134 - v157);
             v139 = *(int32_t *)&v133->cursor[0];
             n4_1 = plane_count;
