@@ -23,17 +23,17 @@ bytes.
 `python3 tools/shape.py`, verbatim:
 
 ```
-subs1.hpp / bmf.cpp lines          17851 / 358
-raw-offset sites                   24
+subs1.hpp / bmf.cpp lines          17842 / 358
+raw-offset sites                   22
   off `_this`                      1, in 1 functions
-pointer casts                      2193
+pointer casts                      2183
 globals still at a 1997 address    0
 frames                             17, 169180 bytes, 0 aliases
   slots carrying two names         0, 0 extra names, in 0 functions
   member runs walked as arrays     0 sites, 0 bases, 0 functions
   frames that dissolve outright    17, 0 aliases
 structs                            22, 0 still ObjN
-  fNN members / named ones         51 / 114
+  fNN members / named ones         46 / 115
 distinct vNN locals                559
 goto / LABEL_n:                    112 / 79
 __fwd_* shims                      0
@@ -41,7 +41,7 @@ __fwd_* shims                      0
 
 against 37 raw offsets, 2541 pointer casts and 83 `fNN` members where round
 seven's last commit left them. (§1 of that document quotes 44 / 2822 / 93,
-from earlier in the round.) The conversion-warning ceiling went 1975 → 1468,
+from earlier in the round.) The conversion-warning ceiling went 1975 → 1463,
 and §4.1 is the one place this round it moved the wrong way.
 
 Nothing here was a sweep. Every tool in `tools/` reports zero removals against
@@ -278,6 +278,40 @@ let through.
 
 ---
 
+## 4.4 Two things that were always five
+
+`alt_p2_model`'s outer loop runs `n5` from 0 to 4 and opens each pass with
+`((uint32_t *)block)[n5 + 69669]`. 69669 · 4 is +278676, the first of six
+`int32_t` scalars, so five of them are one array — `bank_ctx[5]` — and the
+sixth is not part of it. They arrived as scalars because `alt_p2_context`
+writes them one at a time.
+
+What the pass then works on was
+
+    (P2Count *)((uint8_t *)&((uint32_t *)block)[v75] + (n5 << 17)) + 71178
+
+and every constant in it is a name: 71178 records is +284712, which is
+`p2_ctr`, and `n5 << 17` is 131072 bytes, which is 32768 records. So it reads
+`&p2_ctr[32768 * n5 + bank_ctx[n5]]` — five banks of 32768, which is exactly
+what the struct comment had worked out from the index widths two hundred lines
+above, now said by the code that uses it rather than only about it.
+
+And one branch, in `alt_init_tables`:
+
+    if ( (a2 + 1 <= a2 + 2 || (uint32_t)(v19 - v18) < 0xFE)
+      && (v18 <= v19 || (uint32_t)(v18 - v19) < 0xFE) )
+
+`v18` and `v19` are `a2 + 2` and `a2 + 1`, so the first half is
+`a2 + 1 <= a2 + 2` and the second falls to `1 < 254`. That is MSVC's
+"do these two ranges overlap" test for a vectorised loop, and it cannot be
+false. **The `else` is the evidence rather than a casualty of removing it**: it
+writes the same 256 values in two passes instead of one, which is what an
+overlap fallback is, and what says the branch belonged to the compiler. Both
+went, the one loop stayed, and `unused.py` took the two loop variables with
+them.
+
+---
+
 ## 5. A costume, and the one cast that was not one
 
 `alt_p1_context` writes and reads its selectors through `uint8_t **`:
@@ -345,7 +379,7 @@ caught by reading the result. It is in the check now.
 
 ## 7. What is left
 
-* **24 raw offsets**, from 37. What survives is a name plus a genuinely
+* **22 raw offsets**, from 37. What survives is a name plus a genuinely
   computed offset. Four of them are the same statement in four coder bodies —
   `*(uint16_t *)(cur - 8) = *(uint16_t *)(other + 6)`, a four-word guard row
   copied backwards — and naming it waits on knowing what the sixteen bytes in
@@ -355,14 +389,14 @@ caught by reading the result. It is in the check now.
   block, 10 whose `goto` is not the whole of an `if`, 8 backward, 5 jumping
   out, 4 whose skipped region something else enters. Every one needs a flag or
   a copy of the body.
-* **51 `fNN` members and 559 `vNN` locals**, against 93 and 559 at the round's
-  start — 40 distinct names, and the largest is 11 sites. The locals have not
+* **46 `fNN` members and 559 `vNN` locals**, against 93 and 559 at the round's
+  start — 36 distinct names, and the largest is 11 sites. The locals have not
   moved at all, and will not until the model is read: 503 of the 559 are in
   `alt_p2_model` and 251 in `alt_p2_context`. What is left in the p2
   block is not where the index lands, which §4.1 answers, but what the four
   counters in a record *are*, and that is the same question as the 18-byte
   `P2Ctx` record rather than a separate one.
-* **1468 conversion warnings** — 848 `-Wsign-conversion`, 517 `-Wconversion`,
+* **1463 conversion warnings** — 847 `-Wsign-conversion`, 513 `-Wconversion`,
   99 `-Wsign-compare`, 4 `-Wuseless-cast`, 5 `-Wint-to-pointer-cast` and one
   `-Wmain`. §5 is the reason to keep holding it there, and this round is the
   first where lowering it was mostly a by-product of typing things correctly
