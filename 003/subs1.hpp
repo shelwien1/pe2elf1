@@ -836,8 +836,11 @@ struct AltP2Block {
       uint16_t f278540;
       uint8_t f278542;
       uint8_t _u0_0_4[97];
-      uint64_t f278640;
-      uint64_t f278648;
+      // Four floats, and only three have a reader: `alt_p2_filter` takes
+      // `bias[0]` and `bias[1]`, `alt_p2_context` takes `bias[2]`, and all
+      // four are cleared together at the start of a plane.  Hex-Rays had them
+      // as two `uint64_t` because that is how the clearing writes them.
+      float bias[4];   // +278640 .. +278655
       float (*f278656)[4];   // a weight block: 16 rows of four, `alt_p2_filter`'s `_this`
       // Two row buffers out of one `bmf_new(4 * i + 16)`, swapped once a row,
       // and two cursors into them: `cur` walks the row being written and
@@ -860,12 +863,15 @@ struct AltP2Block {
       uint32_t ctx;
       // Two indices derived from `ctx`, one per parity of a bit the coders
       // are handed alongside the record: `alt_p2_encode_symbol` reads
-      // `a2[a3 & 1]`, and `alt_p2_context` writes both from `f278944`.
+      // `a2[a3 & 1]`, and `alt_p2_context` writes both from `ctx_delta`.
       uint32_t ctx_pair[2];   // +278708 .. +278715
       int32_t f278716;
       int32_t f278720;
       int32_t f278724;
-      uint32_t f278728;
+      // The plane this block is coding: every reader uses it as
+      // `plane_desc[plane_idx + 1]`'s subscript, and `alt_p2_alloc` folds it
+      // into the high bits of every `ctx_delta` entry.
+      uint32_t plane_idx;
       int32_t f278732;
       // Five p2 planes and a cursor into each.  `alt_p2_alloc` takes five
       // buffers of `18 * width + 234` bytes -- `sizeof(P2Ctx)` times
@@ -892,7 +898,7 @@ struct AltP2Block {
   // `t[n + 4]` pair looks like when the compiler keeps both addresses in
   // registers.  `n` is capped at 255 one line above each read, and 255 + 4 is
   // the last element.
-  int32_t f278944[260];   // +278944 .. +279983
+  int32_t ctx_delta[260];   // +278944 .. +279983
   // Three 256-entry maps over a byte value.  `fold` and `unfold` are the pair
   // `AltP1Block` has, built by the same `alt_init_tables` call; what
   // `fold_hi` between them holds has no writer in this binary.
@@ -952,7 +958,7 @@ static_assert(sizeof(void *) != 4 || sizeof(AltP2Block) == 0x103E30,
               "AltP2Block: bmf_page_alloc asks for 0x103E30 and this is it");
 static_assert(sizeof(void *) != 4
               || (__builtin_offsetof(AltP2Block, nb_sum) == 278904
-                  && __builtin_offsetof(AltP2Block, f278944) == 278944
+                  && __builtin_offsetof(AltP2Block, ctx_delta) == 278944
                   && __builtin_offsetof(AltP2Block, fold) == 279984
                   && __builtin_offsetof(AltP2Block, fold_hi) == 280240
                   && __builtin_offsetof(AltP2Block, unfold) == 280496
@@ -4180,7 +4186,7 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
   int32_t v7, v8, v9, v13, Size, v17, v18, v20, v21, v22, v23, v24, v26, v27, v28, v29;
   uint32_t j, k, n0x1E60, m_1, m, n5, n0x82, n;
   void *v10;
-  _this->f278728 = n4;
+  _this->plane_idx = n4;
   // Two records a step, which is how MSVC unrolled the seed of all 163 840.
   for ( j = 0; j < 0x14000; ++j )
   {
@@ -4212,7 +4218,7 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
   while ( n0x1E60 < 0x1E60 );
   v8 = 4 * plane_desc[0].w12 + 1;
   v9 = 16 * plane_desc[0].w12;
-  *(uint32_t *)&_this->f278732 = (uint8_t)(plane_desc[plane_desc[_this->f278728 + 1].src_plane + 1].flags
+  *(uint32_t *)&_this->f278732 = (uint8_t)(plane_desc[plane_desc[_this->plane_idx + 1].src_plane + 1].flags
                                                & 8) >> 3;
   deadzone_hi = v8;
   deadzone_lo = -v8;
@@ -4264,10 +4270,10 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
   do
   {
     v20 = p2_ctx_edges[v18];
-    *(uint32_t *)&_this->f278944[2 * n0x82] = (_this->f278728 << 8) | (16 * v18);
+    *(uint32_t *)&_this->ctx_delta[2 * n0x82] = (_this->plane_idx << 8) | (16 * v18);
     v21 = (2 * n0x82 == v20) + v18;
     v22 = p2_ctx_edges[v21];
-    *(uint32_t *)&_this->f278944[2 * n0x82 + 1] = (_this->f278728 << 8) | (16 * v21);
+    *(uint32_t *)&_this->ctx_delta[2 * n0x82 + 1] = (_this->plane_idx << 8) | (16 * v21);
     v23 = 2 * n0x82++ + 1 == v22;
     v18 = v23 + v21;
   }
@@ -6588,7 +6594,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
           acc[k] += v31[j][k] * v28->p2_row[j][k];
       }
       err = ((float)*(int16_t *)(__frame.v246 - 18)
-             - (bmf_hsum4(acc) + *(float *)&v28->f278640)) * 2.0999999f;
+             - (bmf_hsum4(acc) + v28->bias[0])) * 2.0999999f;
       floor_ = 7744.0f * v31[14][2];
 
       for ( j = 0; j < 7; ++j )
@@ -6662,7 +6668,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
       v46 = (int16_t *)v28->cursor[0];
       v45 = (P2Ctx *)v28->cursor[1];
     }
-    v65 = *(int32_t *)&v28->f278728;
+    v65 = *(int32_t *)&v28->plane_idx;
     if ( v65 )
     {
       if ( v65 == 1 )
@@ -7204,7 +7210,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
     {
       v215 = v251 + v264 + v302 + *((uint8_t *)&v285->lane[8] + 1) + *((uint8_t *)&v286->lane[8] + 1);
     }
-    if ( *(int32_t *)&v289->f278728 == 1 )
+    if ( *(int32_t *)&v289->plane_idx == 1 )
     {
       v230 = (int16_t *)(v282);
       n960_1 = n960;
@@ -7219,7 +7225,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
       n3536_4 = n3536;
       v196->ctx_w[4].sel = v234;
     }
-    else if ( *(int32_t *)&v196->f278728 > 1 )
+    else if ( *(int32_t *)&v196->plane_idx > 1 )
     {
       v217 = (int16_t *)(v284);
       n960_1 = n960;
@@ -7270,9 +7276,9 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
     n255 = 255;
   if ( n255 < 0 )
     n255 = 0;
-  v196->ctx_pair[0] = v196->f278944[n255 + 4] + n15;
+  v196->ctx_pair[0] = v196->ctx_delta[n255 + 4] + n15;
   v228 = v196->ctx_w[0].sel;
-  v196->ctx_pair[1] = n15 + v196->f278944[n255];
+  v196->ctx_pair[1] = n15 + v196->ctx_delta[n255];
   v196->ctx = n15
                           + 32 * (v215 == 0)
                           + 16 * (v214 == 0)
@@ -12397,10 +12403,10 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   v15 = a1->f278656;
   v16 = v15[14][1] + 0.000099999997f;
   v17 = *(float (**)[4])(a1->cur - 1);
-  v18 = *(float *)&a1->f278648;
-  n2_bias = *(float *)&a1->f278640;
+  v18 = a1->bias[2];
+  n2_bias = a1->bias[0];
   v19 = sample - v18;
-  v20 = *(float *)((uint8_t *)&a1->f278640 + 4);
+  v20 = a1->bias[1];
   v21 = v20 - v18;
   v22 = ((((sample - v18) * (v20 - v18)) - v15[14][0]) * 0.001f)
       + v15[14][0];
@@ -13260,7 +13266,7 @@ LABEL_48:
           n0x10 = n0x10_1;
         }
         v408->c[v510 + 1] += (6 * (uint32_t)p2_rec[0].c[0]) >> 4;
-        if ( !v385->f278728 || v385->freq[v385->ctx].c[0] > 0x100u )
+        if ( !v385->plane_idx || v385->freq[v385->ctx].c[0] > 0x100u )
         {
           v409 = 2 - v511;
           if ( !a4 )
@@ -13866,8 +13872,8 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
     while ( 1 )
     {
       v13 = *(int16_t *)((uintptr_t)v11 - 18) >> 4;
-      lpAddress->ctx_pair[0] = lpAddress->ctx + (*(uint32_t *)&lpAddress->f278944[v13 + 4]);
-      lpAddress->ctx_pair[1] = lpAddress->ctx + (*(uint32_t *)&lpAddress->f278944[v13]);
+      lpAddress->ctx_pair[0] = lpAddress->ctx + (*(uint32_t *)&lpAddress->ctx_delta[v13 + 4]);
+      lpAddress->ctx_pair[1] = lpAddress->ctx + (*(uint32_t *)&lpAddress->ctx_delta[v13]);
       v14 = (uint8_t)((*(uint16_t *)(lpAddress->cursor[0] - 18) >> 4)
                             + *(uint8_t *)(__alt_p2_decode_symbol(&lpAddress->freq[lpAddress->ctx
                                                                + lpAddress->ctx_w[3].w[((*(int16_t *)((uintptr_t)v12 - 18) <= *(int16_t *)((uintptr_t)v12 - 36))
@@ -13964,8 +13970,13 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
       lpAddress->f278536 = 0;
       lpAddress->f278540 = 0;
       lpAddress->f278542 = 0;
-      lpAddress->f278640 = 0;
-      lpAddress->f278648 = 0;
+      lpAddress->bias[0] = 0.0f;
+
+      lpAddress->bias[1] = 0.0f;
+
+      lpAddress->bias[2] = 0.0f;
+
+      lpAddress->bias[3] = 0.0f;
       // `(p + 278543) & ~15` is `&p->p2_row[0]`: +278528 is a multiple of 16
       // and the object comes from `bmf_page_alloc`, so the round-up is a no-op.
       // Seven sixteen-byte stores are the 112 bytes of the seven rows.
@@ -14322,8 +14333,13 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v56->f278536 = 0;
           v56->f278540 = 0;
           v56->f278542 = 0;
-          v56->f278640 = 0;
-          v56->f278648 = 0;
+          v56->bias[0] = 0.0f;
+
+          v56->bias[1] = 0.0f;
+
+          v56->bias[2] = 0.0f;
+
+          v56->bias[3] = 0.0f;
           // `(p + 278543) & ~15` is `&p->p2_row[0]`: +278528 is a multiple of 16
           // and the object comes from `bmf_page_alloc`, so the round-up is a no-op.
           // Seven sixteen-byte stores are the 112 bytes of the seven rows.
@@ -14630,8 +14646,8 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
       }
       v16 = *(int32_t *)&lpAddress->cursor[0];
       v17 = *(int16_t *)(v16 - 18) >> 4;
-      lpAddress->ctx_pair[0] = lpAddress->ctx + lpAddress->f278944[v17 + 4];
-      lpAddress->ctx_pair[1] = lpAddress->ctx + lpAddress->f278944[v17];
+      lpAddress->ctx_pair[0] = lpAddress->ctx + lpAddress->ctx_delta[v17 + 4];
+      lpAddress->ctx_pair[1] = lpAddress->ctx + lpAddress->ctx_delta[v17];
       // The composed index, the encoder's own copy of `alt_p2_context`'s sum:
       // four selected weights, one constant, and the running context.
       __alt_p2_encode_symbol(
@@ -14727,8 +14743,13 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
       lpAddress->f278536 = 0;
       lpAddress->f278540 = 0;
       lpAddress->f278542 = 0;
-      lpAddress->f278640 = 0;
-      lpAddress->f278648 = 0;
+      lpAddress->bias[0] = 0.0f;
+
+      lpAddress->bias[1] = 0.0f;
+
+      lpAddress->bias[2] = 0.0f;
+
+      lpAddress->bias[3] = 0.0f;
       // `(p + 278543) & ~15` is `&p->p2_row[0]`: +278528 is a multiple of 16
       // and the object comes from `bmf_page_alloc`, so the round-up is a no-op.
       // Seven sixteen-byte stores are the 112 bytes of the seven rows.
@@ -15073,8 +15094,13 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           v55->f278536 = 0;
           v55->f278540 = 0;
           v55->f278542 = 0;
-          v55->f278640 = 0;
-          v55->f278648 = 0;
+          v55->bias[0] = 0.0f;
+
+          v55->bias[1] = 0.0f;
+
+          v55->bias[2] = 0.0f;
+
+          v55->bias[3] = 0.0f;
           // `(p + 278543) & ~15` is `&p->p2_row[0]`: +278528 is a multiple of 16
           // and the object comes from `bmf_page_alloc`, so the round-up is a no-op.
           // Seven sixteen-byte stores are the 112 bytes of the seven rows.
