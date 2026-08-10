@@ -643,9 +643,22 @@ What the model initialisation builds:
   `table[N] - <one of N, W, NE, NW>`; exactly which table and which neighbour is
   in §9's unread list.
 * **A 5×5 sub-state grid per group**, with mixing weights `1 << (5 - depth)` and
-  a running total in `*((uint16 *)v12 + 53)`. `model_plane` computes, for each
-  cell, how many of the six inputs are active and derives the weight from that
-  count — a static mixing table rather than a learned one.
+  a running total. `model_plane` computes, for each cell, how many of the six
+  inputs are active and derives the weight from that count — a static mixing
+  table rather than a learned one.
+
+  The record is sixteen bytes at `ModelBlock + 96 + 16 * bucket`: five counts,
+  their total, the scaled weight, then a byte for the depth and a byte for
+  `1 << (5 - depth)`. 15 groups × 5 × 5 is 375 cells, but the counter only
+  advances for cells that get one, and it reaches exactly **189** — measured
+  with a `__builtin_trap()` on `>= 188`, which fires, against one on `>= 189`,
+  which does not.
+
+  Those 189 records are the front of one array. The frequency records
+  `code_pixel` and `decode_pixel` walk are the same sixteen bytes on the same
+  grid, starting at record 188 (+3104) and running to +1051663 — so the last
+  sub-state record and the first frequency record are one and the same, and the
+  initialisation loop's final iteration seeds it.
 
 `code_pixel` is the per-symbol coder on this path. It forms a context by
 comparing the current pixel's neighbours (`N`, `W`, `NE`, `NW` — the locals
