@@ -99,12 +99,18 @@ def main():
     stmts = {}
     for ln in want:
         i = ln - 1
-        while i > 0 and ';' not in lines[i - 1].split('//')[0]:
-            i -= 1                      # walk back to the first line
+        # Walk back to the statement's first line -- but stop at a comment or a
+        # blank, or the walk climbs into the paragraph above a declaration and
+        # the type match fails silently.  Round eight put comments above enough
+        # declarations to make that five missed deletions.
+        while (i > 0 and ';' not in lines[i - 1].split('//')[0]
+               and lines[i - 1].strip()
+               and not lines[i - 1].lstrip().startswith('//')):
+            i -= 1
         a, b = statement(lines, i)
         stmts.setdefault((a, b), set()).update(want[ln])
 
-    gone = kept = 0
+    gone = kept = deleted = 0
     for (a, b) in sorted(stmts, reverse=True):
         text = '\n'.join(lines[a:b + 1])
         code, _, tail = text.partition(';')
@@ -125,6 +131,7 @@ def main():
         gone += dropped
         if not keep:
             del lines[a:b + 1]
+            deleted += 1
             continue
         kept += 1
         out, cur = [], '%s%s ' % (indent, ty)
@@ -138,8 +145,11 @@ def main():
         lines[a:b + 1] = out
 
     open(path, 'w').write('\n'.join(lines))
+    # `len(stmts) - kept` counted a statement the type match skipped as a
+    # deletion, which is how five of them were reported gone while the file was
+    # byte-identical afterwards.  Count what was actually removed.
     print('%d declarations deleted, %d rewritten, %d names gone'
-          % (len(stmts) - kept, kept, gone))
+          % (deleted, kept, gone))
     return 0
 
 

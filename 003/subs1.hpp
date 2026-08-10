@@ -2930,7 +2930,7 @@ int32_t __alt_p1_context(AltP1Block *_this, uint32_t *a2, uint32_t *a3)
   // and `&v4[k]` on a `uint8_t *` is the addition it looks like.  The
   // `(uint32_t)` casts on them stay: `(216 - (uint32_t)v4) >> 31` is a
   // logical shift, and it is a selector -- signed it would be -1, not 1.
-  int32_t v4, v8, v10, v17, v31;
+  int32_t v4, v8, v10, v17;
   v3 = _this->cursor[1];
   v4 = *v3;
   v5 = (uint8_t *)((int32_t)_this->cursor[0]);
@@ -6341,7 +6341,6 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  P2Ctx *v247;   // row cursors into the neighbourhood table
   // These shared `__frame.v246` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
@@ -6409,12 +6408,11 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   int32_t  sub2_n, sub3_row, sub4_n, sub5_n;
   int32_t v290;
   int32_t n3536;
-  P2Ctx *v109;
+  P2Ctx *v109;   // the p2 row cursor, `cursor[0]`
   int32_t v292_cost;   // the first of two lifetimes MSVC gave one slot
   // The p2 row cursor and its copies.  Every dereference is a lane of the
   // 18-byte record or the high byte of one, so the byte offsets divide into
   // a record and a lane -- `-37` is record -3, lane 8, high byte.
-  P2Ctx *v292;       // the p2 row cursor, `cursor[0]`
   // A `P2Ctx *`: Hex-Rays typed it `int16_t (*)[8]`, a sixteen-byte
   // stride over eighteen-byte records, so its subscripts were out of
   // phase with the grid.  All 48 reaches through it land on a field
@@ -8849,7 +8847,6 @@ int32_t *__read_bmp(char *FileName)
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  uint32_t Sizea;
   // These shared `__frame.Size` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
