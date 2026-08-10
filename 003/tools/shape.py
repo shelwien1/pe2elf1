@@ -36,7 +36,8 @@ P1 = re.compile(r'\(\s*%s\s*\*\s*\)\s*\(\s*(?:\(\s*%s\s*\*\s*\)\s*)?'
 P2 = re.compile(r'\(\s*\(\s*%s\s*\*\s*\)\s*([A-Za-z_]\w*)\s*\+' % T)
 P3 = re.compile(r'\+\s*\(\s*%s\s*\*\s*\)\s*([A-Za-z_]\w*)\b' % T)
 
-FRAME = re.compile(r'// (\d+) bytes, the frame Hex-Rays could not name')
+# The tag came with REFACTORING4.md §5 item 1; the byte count is what counts.
+FRAME = re.compile(r'struct alignas\(16\) \w* ?\{   // (\d+) bytes')
 # An alias binds one name to one frame member.  Two spellings: `T &v = …` for a
 # scalar and `T (&v)[N] = …` for an array member -- missing the second is how
 # this file's first alias count came out 38 short.

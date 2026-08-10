@@ -5523,11 +5523,19 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   char * &Bufferc = *(char * *)((char *)&__frame.Buffera);
   char * &Bufferd = *(char * *)((char *)&__frame.Buffera);
   uint32_t &Size_2 = __frame.v62;
-  uint32_t &v62 = __frame.v62;
-  uint32_t &v63 = __frame.v62;
+  // 3 locals with disjoint live ranges, which is why MSVC gave them one
+  // stack slot and Hex-Rays gave the slot 3 names.  Splitting them back is
+  // the whole gate: nothing writes one and reads another.  `__frame.v62`
+  // keeps the first of the 3.
+  uint32_t v62;
+  uint32_t v63;
   char *v65;
   int32_t &v66 = __frame.v66;
-  int32_t &v67 = __frame.v66;
+  // 2 locals with disjoint live ranges, which is why MSVC gave them one
+  // stack slot and Hex-Rays gave the slot 2 names.  Splitting them back is
+  // the whole gate: nothing writes one and reads another.  `__frame.v66`
+  // keeps the first of the 2.
+  int32_t v67;
   uint8_t * &v68 = *(uint8_t * *)((char *)&__frame.v66);
   FILE *Stream_v;
   int32_t Buffer_2;
@@ -7295,32 +7303,44 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 208, "frame layout moved");
   int32_t &v246 = *(int32_t *)((char *)__frame.slot0);
   int16_t *&v247 = *(int16_t **)((char *)__frame.slot0);
-  int32_t &v248 = *(int32_t *)((char *)__frame.slot0);
-  int32_t &v249 = *(int32_t *)((char *)__frame.slot0);
-  int32_t &v250 = *(int32_t *)((char *)__frame.slot0);
-  int32_t &v251 = *(int32_t *)((char *)__frame.slot0);
-  int32_t &n15 = *(int32_t *)((char *)__frame.slot0);
-  int32_t &v253 = *(int32_t *)((char *)__frame.slot0);
-  int32_t &v254 = *(int32_t *)((char *)__frame.slot0);
+  // 8 locals with disjoint live ranges, which is why MSVC gave them one
+  // stack slot and Hex-Rays gave the slot 8 names.  Splitting them back is
+  // the whole gate: nothing writes one and reads another.  `__frame.slot0`
+  // keeps the first of the 8.
+  int32_t v248;
+  int32_t v249;
+  int32_t v250;
+  int32_t v251;
+  int32_t n15;
+  int32_t v253;
+  int32_t v254;
   int16_t *&v255 = *(int16_t **)((char *)__frame.slot0);
   int32_t &v256 = *(int32_t *)((char *)__frame.slot4);
   char *&v257 = *(char **)((char *)__frame.slot4);
-  int32_t &v258 = *(int32_t *)((char *)__frame.slot4);
-  int32_t &v259 = *(int32_t *)((char *)__frame.slot4);
-  int32_t &v260 = *(int32_t *)((char *)__frame.slot4);
-  uint32_t &v261 = *(uint32_t *)((char *)__frame.slot4);
-  int32_t &v262 = *(int32_t *)((char *)__frame.slot4);
-  int32_t &v263 = *(int32_t *)((char *)__frame.slot4);
-  int32_t &v264 = *(int32_t *)((char *)__frame.slot4);
-  int32_t &v265 = *(int32_t *)((char *)__frame.slot4);
-  int32_t &v266 = *(int32_t *)((char *)__frame.slot4);
-  int32_t &v267 = *(int32_t *)((char *)__frame.slot4);
+  // 11 locals with disjoint live ranges, which is why MSVC gave them one
+  // stack slot and Hex-Rays gave the slot 11 names.  Splitting them back is
+  // the whole gate: nothing writes one and reads another.  `__frame.slot4`
+  // keeps the first of the 11.
+  int32_t v258;
+  int32_t v259;
+  int32_t v260;
+  uint32_t v261;
+  int32_t v262;
+  int32_t v263;
+  int32_t v264;
+  int32_t v265;
+  int32_t v266;
+  int32_t v267;
   int16_t *&v268 = *(int16_t **)((char *)__frame.slot8);
   int32_t &v269 = *(int32_t *)((char *)__frame.slot8);
-  int32_t &v270 = *(int32_t *)((char *)__frame.slot8);
-  int32_t &v271 = *(int32_t *)((char *)__frame.slot8);
-  int32_t &v272 = *(int32_t *)((char *)__frame.slot8);
-  int32_t &v273 = *(int32_t *)((char *)__frame.slot8);
+  // 5 locals with disjoint live ranges, which is why MSVC gave them one
+  // stack slot and Hex-Rays gave the slot 5 names.  Splitting them back is
+  // the whole gate: nothing writes one and reads another.  `__frame.slot8`
+  // keeps the first of the 5.
+  int32_t v270;
+  int32_t v271;
+  int32_t v272;
+  int32_t v273;
   int16_t *&v274 = *(int16_t **)((char *)__frame.slot8);
   int16_t (*&v275)[8] = (int16_t (*&)[8])__frame.sub[0];
   Obj95 * &v276 = (Obj95 * &)__frame.sub[1];
@@ -9840,15 +9860,27 @@ int32_t *__read_bmp(char *FileName)
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 128, "frame layout moved");
   uint32_t &Size_4 = *(uint32_t *)((char *)__frame.slot0);
-  int32_t &v46 = *(int32_t *)((char *)__frame.slot0);
-  int32_t &v47 = *(int32_t *)((char *)__frame.slot0);
-  int32_t &Offset_1 = *(int32_t *)((char *)__frame.slot0);
+  // 4 locals with disjoint live ranges, which is why MSVC gave them one
+  // stack slot and Hex-Rays gave the slot 4 names.  Splitting them back is
+  // the whole gate: nothing writes one and reads another.  `__frame.slot0`
+  // keeps the first of the 4.
+  int32_t v46;
+  int32_t v47;
+  int32_t Offset_1;
   int32_t &Size = *(int32_t *)((char *)__frame.slot4);
-  uint32_t &Sizea = *(uint32_t *)((char *)__frame.slot4);
+  // 2 locals with disjoint live ranges, which is why MSVC gave them one
+  // stack slot and Hex-Rays gave the slot 2 names.  Splitting them back is
+  // the whole gate: nothing writes one and reads another.  `__frame.slot4`
+  // keeps the first of the 2.
+  uint32_t Sizea;
   char &Sizeb = *((char *)__frame.slot4);
   BmfImage *&v52 = (BmfImage *&)__frame.v52;
   int32_t &Src_2 = *(int32_t *)((char *)__frame.slot12);
-  int32_t &v54 = *(int32_t *)((char *)__frame.slot12);
+  // 2 locals with disjoint live ranges, which is why MSVC gave them one
+  // stack slot and Hex-Rays gave the slot 2 names.  Splitting them back is
+  // the whole gate: nothing writes one and reads another.  `__frame.slot12`
+  // keeps the first of the 2.
+  int32_t v54;
   void *&Buffer_3 = __frame.Buffer_3;
   char *&Src = __frame.Src;
   uint8_t (&bmp_bgra)[4] = __frame.bmp_bgra;
@@ -12223,8 +12255,12 @@ void __unmodel_plane_slow(ModelBlock *_this, char *Src)
                 "frame layout moved");
   int32_t Size;
   int32_t &n4 = __frame.v82;
-  int32_t &v82 = __frame.v82;
-  int32_t &v84 = __frame.v82;
+  // 3 locals with disjoint live ranges, which is why MSVC gave them one
+  // stack slot and Hex-Rays gave the slot 3 names.  Splitting them back is
+  // the whole gate: nothing writes one and reads another.  `__frame.v82`
+  // keeps the first of the 3.
+  int32_t v82;
+  int32_t v84;
   char * &v85 = __frame.v85;
   int32_t &v86 = *(int32_t *)((char *)&__frame.v85);
   int32_t &v87 = *(int32_t *)((char *)&__frame.v85);
@@ -12756,9 +12792,17 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 144, "frame layout moved");
   char v90;
   uint32_t &v91 = *(uint32_t *)((char *)__frame.slot4);
-  uint32_t &v92 = *(uint32_t *)((char *)__frame.slot4);
+  // 2 locals with disjoint live ranges, which is why MSVC gave them one
+  // stack slot and Hex-Rays gave the slot 2 names.  Splitting them back is
+  // the whole gate: nothing writes one and reads another.  `__frame.slot4`
+  // keeps the first of the 2.
+  uint32_t v92;
   int32_t &v93 = *(int32_t *)((char *)__frame.slot8);
-  int32_t &v94 = *(int32_t *)((char *)__frame.slot8);
+  // 2 locals with disjoint live ranges, which is why MSVC gave them one
+  // stack slot and Hex-Rays gave the slot 2 names.  Splitting them back is
+  // the whole gate: nothing writes one and reads another.  `__frame.slot8`
+  // keeps the first of the 2.
+  int32_t v94;
   char *v95;
   int32_t v96;
   char v97;
@@ -15248,7 +15292,11 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   uint32_t Size_1;
   int32_t v149;
   int32_t &v150 = *(int32_t *)((char *)__frame.slot152);
-  int32_t &v151 = *(int32_t *)((char *)__frame.slot152);
+  // 2 locals with disjoint live ranges, which is why MSVC gave them one
+  // stack slot and Hex-Rays gave the slot 2 names.  Splitting them back is
+  // the whole gate: nothing writes one and reads another.  `__frame.slot152`
+  // keeps the first of the 2.
+  int32_t v151;
   uint8_t *Src_1;
   int32_t v153;
   int32_t v154;
@@ -16718,7 +16766,11 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
                 "the named part of the frame moved");
   int32_t Size;
   int32_t &v58 = __frame.v58;
-  int32_t &v59 = __frame.v58;
+  // 2 locals with disjoint live ranges, which is why MSVC gave them one
+  // stack slot and Hex-Rays gave the slot 2 names.  Splitting them back is
+  // the whole gate: nothing writes one and reads another.  `__frame.v58`
+  // keeps the first of the 2.
+  int32_t v59;
   ModelBlock * &Blocka_5 = __frame.Blocka_5;
   int32_t &v61 = *(int32_t *)((char *)&__frame.Blocka_5);
   ModelBlock * &Blocka = __frame.Blocka_2;
@@ -18743,8 +18795,12 @@ int32_t __compress_image(char *a1, BmfImage *p_i, void *coded_buf)
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 80, "frame layout moved");
   char *&Buffera_4 = __frame.Buffera_4;
   uint32_t &ElementCount = *(uint32_t *)((char *)__frame.slot16);
-  int32_t &ElementCounta = *(int32_t *)((char *)__frame.slot16);
-  uint32_t &ElementCountb = *(uint32_t *)((char *)__frame.slot16);
+  // 3 locals with disjoint live ranges, which is why MSVC gave them one
+  // stack slot and Hex-Rays gave the slot 3 names.  Splitting them back is
+  // the whole gate: nothing writes one and reads another.  `__frame.slot16`
+  // keeps the first of the 3.
+  int32_t ElementCounta;
+  uint32_t ElementCountb;
   uint32_t &Buffera = *(uint32_t *)&__frame.hdr[0];
   char *&Buffer_copy = *(char **)&__frame.hdr[0];   // the same slot, the other role
   int32_t &n4_2 = *(int32_t *)&__frame.hdr[4];
