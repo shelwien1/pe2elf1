@@ -445,6 +445,8 @@ Two additions to how it is run rather than to what it is:
 | the twenty file-scope tables | `grep -cE '^static \w+& \w+ = ' subs1.hpp` |
 | the `plane_desc` views and their users | Appendix B |
 | what a frame lift costs | `tools/frame-sweep.sh` (5 of 10), `--arrays` (0 of 13) |
+| frame aliases left to fold | `python3 tools/unalias.py subs1.hpp --list` (none) |
+| members still read through a cast | `python3 tools/unmemcast.py subs1.hpp --list` |
 | shared slots and their names | `python3 tools/unslot.py subs1.hpp --list` |
 | what the `f278528` layer became | `python3 tools/unlane.py subs1.hpp --list` |
 | what the thread cost | `python3 tools/dethread.py subs1.hpp --list` |
@@ -521,13 +523,13 @@ which.
 | --- | --- | --- |
 | `__m128` / `M128` occurrences | 160 | **4**, and all four are prose |
 | `.m128_` lane accesses | 562 (§2.1's four) | **0** |
-| reference declarations | 384 | 274 |
+| reference declarations | 384 | **10** |
 | `plane_desc` views | 20 | 1 |
 | file-scope tables said three times | 20 | 1 |
 | frames | 22 | 19 |
-| frame aliases | 336 | 265 |
+| frame aliases | 336 | **0** |
 | slots carrying two names | 25, 60 extra | **0** |
-| raw-offset sites | 1514 | 1462 |
+| raw-offset sites | 1514 | 1389 |
 | `BMF_STRICT` conversions | 0 | 0, and the gate checks it now |
 
 **Phase A is finished, including its last line.** The 29-parameter thread, its
@@ -555,8 +557,8 @@ left is `__dword_439B7C`, which is walked as
 free with Phase A. §3.3 and §3.4 say in the plan itself that they want
 `algorithm_v2.md` §9 read first, and they still do.
 
-**Phase D is done except for §5 item 2, which the tree disproved** — see below.
-Item 1 named all 22 frames, item 3 split all 25 shared slots, the sweep was
+**Phase D is finished.** Item 1 named all 22 frames, item 2 folded all 265
+aliases into their members, item 3 split all 25 shared slots, the sweep was
 retried twice (five frames lifted without `--arrays`, 0 of 13 with it), and each
 of the thirteen frames that stay carries the one-line result of the experiment
 that would remove it.
@@ -577,14 +579,18 @@ that would remove it.
 3. **§4.1 counted comment mentions as uses.** Six views were dead in code, not
    three.
 
-4. **§5 item 2 does not apply to this tree.** The instruction was to fold each
-   frame alias into its member. Measured: **156 of the 265 aliases have the same
-   name as their member**, so folding them writes `__frame.x` where the body
-   says `x` and gains nothing; the other 109 point at members called `slotN`,
-   `sym[k]` or `sub[k]`, which say less than the alias does. The alias is doing
-   its job — it makes a frame member read like the local it was. What was worth
-   doing instead is item 3 and the fifteen `slotN` members that now carry the
-   name of the one local left in them.
+4. **§5 item 2 looked wrong and was right.** Measured before doing it: 156 of
+   the 265 aliases had the same name as their member, so folding them writes
+   `__frame.x` where the body says `x`, and the other 109 point at members
+   called `slotN`, `sym[k]` or `sub[k]`, which say less than the alias does.
+   That reading stopped at the declaration. Done, it is 265 declarations gone
+   and 1828 sites that name the frame they live in, and the two things it
+   turned up could not have been seen any other way: seventeen members whose
+   readers all agree on a type the member did not have, and `read_bmp`'s
+   `bmp_off_bits`, four bytes at offset 86 behind an `int16_t[5]`, which cannot
+   become an `int32_t` without moving the tail of the frame. The lesson is
+   round three's and it keeps costing: a measurement of the *declarations* is
+   not a measurement of the *code*.
 
 5. **§5 said the sweep would keep nothing.** It kept five frames, three of them
    outright, once the shared slots were split — and two of those five were being
@@ -615,4 +621,8 @@ the other 177 hold.
    med32 divides by zero, the archive stops decompressing. What none of them
    says yet is *which* walk does it, and that is a read of the function rather
    than another experiment.
-4. **77 structs still called `ObjN`** and 240 `fNNNN` members against 60 named.
+4. **The 538 casts the fold left.** Every one is an array element --
+   `((int32_t &)__frame.sym[0])` -- so `unmemcast.py` cannot retype it: the
+   element's neighbours are read as other types. What those arrays are is the
+   same read as item 1.
+5. **77 structs still called `ObjN`** and 240 `fNNNN` members against 60 named.
