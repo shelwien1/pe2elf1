@@ -9,6 +9,10 @@ Two things mattered more than any of them: a warning count one above its floor
 caught a byte that had silently become a word, and an anomaly that had been
 written down as a curiosity turned out to be the evidence.
 
+The two largest declared paddings are gone with them. `_pad15` is a megabyte of
+sixteen-byte records with two walkers over it, and `_pad3800` is the p1 counter
+table; between them they were 11 MB of "we do not know what is here".
+
 ---
 
 ## 1. Where the file is
@@ -16,17 +20,17 @@ written down as a curiosity turned out to be the evidence.
 `python3 tools/shape.py`, verbatim:
 
 ```
-subs1.hpp / bmf.cpp lines          17692 / 358
+subs1.hpp / bmf.cpp lines          17719 / 358
 raw-offset sites                   101
   off `_this`                      7, in 4 functions
-pointer casts                      3021
+pointer casts                      3003
 globals still at a 1997 address    0
 frames                             17, 169180 bytes, 0 aliases
   slots carrying two names         0, 0 extra names, in 0 functions
   member runs walked as arrays     0 sites, 0 bases, 0 functions
   frames that dissolve outright    17, 0 aliases
 structs                            17, 0 still ObjN
-  fNN members / named ones         92 / 79
+  fNN members / named ones         91 / 80
 distinct vNN locals                560
 goto / LABEL_n:                    112 / 79
 __fwd_* shims                        0
@@ -36,10 +40,10 @@ against round six's close:
 
 | | round six | round seven |
 | --- | --- | --- |
-| lines | 17 833 / 358 | **17 692 / 358** |
+| lines | 17 833 / 358 | **17 719 / 358** |
 | raw-offset sites | 504 | **101** |
 | — off `_this` | 27 | **7** |
-| pointer casts | 3986 | **3021** |
+| pointer casts | 3986 | **3003** |
 | structs | 16, 3 still `ObjN` | **17, 0 still `ObjN`** |
 | conversion warnings | 2075 | **1994** |
 
@@ -145,7 +149,7 @@ reasoned away.
 
 ---
 
-## 5. Padding that was two tables and four record grids
+## 5. Padding that was two tables, a megabyte grid and four more
 
 Round six's §6 rule — *when a walk looks unbounded, the code that writes it
 knows the bound* — paid out twice more.
@@ -162,6 +166,24 @@ knows the bound* — paid out twice more.
   from two four-way neighbour comparisons. One writer stepped a base pointer by
   one per state instead of adding the index, which is the same address and is
   why it looked like a third spelling.
+
+**`_pad15`, a megabyte.** `ModelBlock + 96 .. +1051663` is 65723 sixteen-byte
+records, and the two things that walk it are one table. `model_plane` and
+`unmodel_plane_slow` fill records 0..188 as context buckets — five counts,
+their total, a scaled weight, and a level with its weight in the last word's
+two bytes. `code_pixel` and `decode_pixel` reach records 188 and up as
+frequency records, spelled `(FreqRec *)&((uint32_t *)this)[4 * k + 776]`, which
+is +3104 + 16k. **Record 188 is both**, so the bucket loop's last iteration
+seeds the frequency table's first record.
+
+The bucket count is not inferred. A `__builtin_trap()` on `bucket >= 188` fires
+on fourteen of the gate's streams and one on `>= 189` fires on none, which is
+the same technique that proved `v510` even in round six and is the only kind of
+evidence available for a bound the types do not carry.
+
+That also settled `f56`, which was fourteen pointers reaching to +111. It is
+ten, to +95: the four it lost were `grid[0]`, and the only thing that read them
+was a copy into `f1051664` that nothing read back.
 
 **Four three-word grids.** `f1051680`, `f1051776`, `f1076352` and `f1077894`
 are all indexed `3 * k`, and a record is the (count, count, total) triple
@@ -288,28 +310,7 @@ question. Two of them are, and they are still there.
   value, then a cost, and `alt_p2_model`'s `v508` is a pointer and a strip
   index within one expression. Those do need a liveness argument each, and
   there is no tool shape for it.
-* **The bucket record, and what it says about two other members.** Sixteen
-  bytes per context bucket at `ModelBlock + 96 + 16 * bucket`: five counts,
-  their total, a scaled weight, and two bytes — a level and the `1 << (5 -
-  level)` it derives. The grid is anchored at the object and the bucket counter
-  starts at zero, so **record 0 is +96 .. +111** — which `f56[10..13]` also
-  claims, and which the `f1051664[k] = f56[10 + k]` copy immediately after the
-  loop reads back. That copy is either four row cursors or record 0's four
-  dwords and it cannot be both, so one of `f56`'s length and `f1051664`'s type
-  is wrong. **That copy is dead** — `f1051664` is written in two places and
-  read nowhere, in this file or in `bmf.cpp` — so the collision costs nothing
-  at run time and the gate will never speak to it.
-
-  The rest did need run-time evidence, and a `__builtin_trap()` supplied it.
-  A trap on `bucket >= 188` fires on fourteen of the gate's streams and a trap
-  on `>= 189` fires on none, so **the table is 189 records, +96 .. +3119**.
-  `FreqRec` is on the same grid from record 188 (+3104) — which makes the last
-  bucket record and the first frequency record the same sixteen bytes. The two
-  tables abut and share one, and no declaration can say that without a union.
-  That is where this stops: the extent is measured, the overlap is exact, and
-  what the shared record means is `algorithm_v2.md`'s question rather than
-  this document's.
-* **101 raw offsets, 92 `fNN` members, 560 `vNN` locals, 112 `goto`s.** The
+* **101 raw offsets, 91 `fNN` members, 560 `vNN` locals, 112 `goto`s.** The
   offsets are down from 1389 over five rounds; what remains is in bases that
   are genuinely computed — a name plus a variable byte offset, with nothing
   either end to say what the stride is. `degoto.py` still reports 0 candidates.
@@ -332,7 +333,7 @@ That is the honest measure of where this round's work was: `unrec`,
 `unoffset`, `uncast`, `unused`, `unwrite`, `unhoist`, `uncursor`, `dedup`,
 `arrayify` and `degoto` are all run against the file at the end of this round
 and all of them report zero, exactly as they did at the end of round six — and
-the file still lost 403 raw offsets and 965 pointer casts in between.
+the file still lost 403 raw offsets and 983 pointer casts in between.
 
 `unrecast`'s addition is worth one line of its own. It dropped
 `*((uint32_t *)p + 1)` when `p` was already a `uint32_t *` but never looked at
