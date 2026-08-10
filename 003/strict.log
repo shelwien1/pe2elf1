@@ -1,10 +1,10 @@
 In file included from bmf.cpp:345:
 subs1.hpp: In function 'int32_t __decode_pixel(ModelBlock*, int32_t)':
-subs1.hpp:10127:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:10129:12: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:10135:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:10137:12: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp: In function 'int32_t __code_pixel(ModelBlock*, int32_t)':
-subs1.hpp:10912:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:10921:27: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:10924:11: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:10920:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:10929:27: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:10932:11: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp: At global scope:
-subs1.hpp:17772:9: warning: second argument of 'int32_t main(int32_t, uint8_t**)' should be 'char **' [-Wmain]
+subs1.hpp:17780:9: warning: second argument of 'int32_t main(int32_t, uint8_t**)' should be 'char **' [-Wmain]

@@ -22,13 +22,14 @@ and 3.
 
 ```
                                    round 8   round 9
-subs1.hpp / bmf.cpp lines            17787     17775
+subs1.hpp / bmf.cpp lines            17787     17782
 raw-offset sites                        22        17
+byte offsets on a typed base           121        23
 pointer casts                         2137      1758
 fNN members / named ones             93/121    44/121
 distinct vNN locals                    554       553
 goto / LABEL_n:                     112/79    112/79
-conversion warnings (ratchet)         1455      1408
+conversion warnings (ratchet)         1455      1403
 ```
 
 Every tool reports zero: `unused.py`, `unwrite.py`, `unaliasvar.py`,
@@ -264,13 +265,14 @@ noticing that a tool's *input* was narrower than the file.
   class §5 spent an afternoon on. It needs a converter that parses expressions
   rather than matching them, or it needs doing by hand, and the hand version is
   about 250 sites across seven bodies.
-* **`alt_p1_context` reaches its two neighbour blocks through `int32_t *`.**
-  `a2[49]` is `cursor[0]`, `a2[50]` is `cursor[1]`, `a2[2]` is `f8`, and
-  `*(uint8_t *)(a3[49] - 1)` is `mag` of the record behind the third block's
-  cursor. Fifteen raw offsets, and retyping the two parameters to
-  `AltP1Block *` removes all of them. It is independent of the record question
-  and smaller.
-* **38 raw byte offsets**, down from 121. Almost all are the p1 sites above.
+* ~~**`alt_p1_context` reaches its two neighbour blocks through `int32_t *`.**~~
+  Done. Both parameters are `AltP1Block *`, `a2[49]` and `a2[50]` are
+  `cursor[0]` and `cursor[1]`, `a2[2]` is `f8`, and fifteen raw offsets became
+  `cursor[0][-1]`, `[-2]` and `[-4]` — which, against §8's record, is the error
+  magnitude one pixel back and the samples one and two pixels back. It needed
+  no stride change, because the cursor stays a byte cursor; only the *base*
+  was mistyped.
+* **23 raw byte offsets**, down from 121. All are the p1 record sites above.
 * **112 gotos and 79 labels**, unchanged for four rounds, and `degoto.py`
   reports nothing reducible. What is left are MSVC's shared tails.
 * **553 `vNN` locals and 44 `fNN` members.** Round eight said this is
@@ -278,7 +280,7 @@ noticing that a tool's *input* was narrower than the file.
   looks like when it works — thirteen `vNN` in `alt_p2_context` became `P2Ctx`
   cursors and their reads became field names, and none of it needed a new
   naming pass.
-* **1408 conversion warnings.** The ratchet fell 47 this round and every step
+* **1403 conversion warnings.** The ratchet fell 52 this round and every step
   was a by-product: a `match[0]` read through a typed field does not need the
   cast that a raw byte read did.
 
@@ -292,6 +294,7 @@ No new tools. Two fixes and one scan that lives in this document rather than in
 | tool | change |
 | --- | --- |
 | `unwrite.py` | carry the declaration state across comma-continued lines |
+| `unaliasvar.py` | unchanged; it found one more fold after §4 |
 | `triage.sh` | unchanged, and it paid for itself four times over |
 
 The stride scan is in §2. It is not committed as a tool because a scan that
