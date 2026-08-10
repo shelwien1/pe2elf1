@@ -13,8 +13,11 @@ The code is still ugly, and four things make it so:
    file. What is left is 29 by-reference parameters, 18 struct members and
    4 globals wearing a 16-byte vector type — and **the parameters are dead**.
 2. **`_this + ofs` with a cast on every access**, still 1514 sites.
-3. **References that should be tables and variables** — 336 of them, all onto
-   frame members.
+3. **References that should be tables and variables** — 384 of them. 336 are
+   frame aliases; **20 are file-scope tables declared three times each**, which
+   is the plainest case in the file and the one this document first missed; and
+   20 more are views into `plane_desc` that round three left behind, three of
+   them already dead.
 4. **The frames themselves** — 22 structs, 169 788 bytes.
 
 They are the same problem round three named, one layer further in: *a type that
@@ -40,6 +43,7 @@ without trusting the document:
 | raw-offset sites | **1514** (161 off `_this`, in 11 functions) |
 | pointer casts | 5191 |
 | globals at a 1997 address | 0 |
+| reference declarations | **384** — 336 frame aliases, **20 file-scope tables**, 20 `plane_desc` views, 8 other |
 | frames | **22**, 169 788 bytes, **336 aliases** |
 | — slots carrying two names | 25 slots, 60 extra names |
 | — runs walked as arrays | 0 |
@@ -48,7 +52,7 @@ without trusting the document:
 | distinct `vNN` locals | 560 |
 | `goto` / `LABEL_n:` | 112 / 79 |
 | `__fwd_*` shims | 94 |
-| `__m128` mentions | **160** — 0 intrinsics, 29 parameters in 15 functions (21 more on shims), 18 struct members, 4 globals, 51 locals |
+| `__m128` occurrences | **199** on 160 lines — 0 intrinsics, 29 parameters in 15 functions (21 more on shims), 18 struct members, 4 globals, the rest locals and casts |
 
 ---
 
@@ -88,8 +92,9 @@ and they are passed down **fifteen functions** and **21 forwarding shims** --
 `alt_p2_d8_encode_body`, `alt_p2_d8_decode_body`, `alt_p2_model`,
 `alt_p2_context` -- and `alt_p2_context`, at the bottom, never reads them.
 
-**The experiment:** poison every `__m128 a = a__ref;` copy in the file, all 31
-of them, with `__builtin_memset(&a, 0xA5, 16)`, and run the gate.
+**The experiment:** poison all 31 sites where an `__m128` value enters the
+program -- the 29 `__m128 a = a__ref;` copies and `main`'s two uninitialised
+locals -- with `__builtin_memset(&a, 0xA5, 16)`, and run the gate.
 
 > **PASS.** Fifteen streams byte-identical, archive, malformed, out-of-memory
 > ladder. Nothing in the program observes any of these 29 values.
@@ -101,7 +106,7 @@ once. Of the 29:
 | --- | --- |
 | never read at all | **25** |
 | `alt_p2_model::a2` | read 4 times — **after being overwritten** (§2.3) |
-| `search_filter::a3`/`a4` | written to memory as `m128_u64[0]`; the poison reaches that memory and no stream moves |
+| `search_filter::a3`/`a4` | stored to memory as `m128_u64[0]` -- and `search_filter` **is** reached: a `__builtin_trap()` at its top fires on `altp1`, `med32` and `noise24`, so the poison really does land in that memory and no stream moves |
 
 ### 2.3 `alt_p2_model::a2` is a local `float`
 
@@ -155,10 +160,12 @@ three in `Obj35`.
    cheap to re-run after each function.
 2. **`alt_p2_model::a2` becomes `float sample`.** Its four readers are in one
    function.
-3. **`search_filter::a3`/`a4` become the constant they write.** The poison says
-   the value is not observed; what it *should* write is the question, and
-   `xorps xmm, xmm` before a 16-byte store is the idiom to look for. If nothing
-   reads the destination, say so and drop the store.
+3. **`search_filter::a3`/`a4` become the constant they write.** The trap probe
+   settles the one thing §7 would otherwise hedge on: the function runs on
+   three of the images, so the poison genuinely reaches its two `m128_u64[0]`
+   stores and nothing downstream reads them. `xorps xmm, xmm` before a 16-byte
+   store is the idiom to look for, so `0` is the likely value; either write it
+   or, if the destination has no reader at all, drop the store and say which.
 4. **The `__xmmword_*` globals go with the thread** — they have no other
    reader.
 5. **`f278528[21]` becomes `float coef[21][4]`** for `alt_p2_filter`'s sake,
@@ -178,13 +185,16 @@ Round three took this from 1750 to 1514 and `_this` from 330 to 161.
 `unoffset.py` has 14 sites left, every one a narrower-than-member read. The
 rest are not one problem:
 
+Partitioned by function and base, so the rows sum to 1514 and nothing is
+counted twice:
+
 | where | sites | what it is |
 | --- | --- | --- |
-| `alt_p1_model` | 48 | one counter table, computed indices |
+| `alt_p1_model` | **85** | one counter table, computed indices (48 off `_this`) |
 | `layout_workspace` off `a1` | 50 | the p1 allocator, still taking a `uintptr_t` |
 | `alt_p2_alloc` | 31 | two counter tables |
-| row cursors (`v45`, `v46`, `v12`, `v13`) | 182 | literal byte offsets off a cursor |
-| the rest | ~1200 | locals whose object has no struct |
+| row cursors (`v45`, `v46`, `v12`, `v13`) | **252** | literal byte offsets off a cursor |
+| the rest | **1096** | locals whose object has no struct |
 
 ### 3.1 `layout_workspace` is the one that is simply wrong
 
@@ -237,41 +247,110 @@ naming them (`NW`, `N`, `NE`, …) would say more than any retype. This wants
 
 ---
 
-## 4. Phase C — the 336 references
+## 4. Phase C — the twenty tables declared three times
 
-Every reference declaration in the file is now a frame alias; there are no
-others. 140 are the plain `T &v = __frame.m;` form and the rest carry a cast or
-a subscript.
+This is the plainest thing in the file and the plan's first draft did not see
+it, because it went looking for frame aliases and stopped when it found 336.
+There are **384** reference declarations. 336 are frame aliases (§5), 20 are at
+file scope, 20 are views into `plane_desc`, and 8 are the two `bss_exclusion`
+buffers and six `Obj0 *` bindings into a plane array.
 
-`defram.py` offers 249 of them and **the gate has refused every batch,
-sixteen times.** The frames that will not dissolve hold workspace arrays —
-`buf[4096]` in front of `v72[1024]` — and the code walks past their ends.
-`search_filter` moves five streams if its frame goes. That adjacency is the
-program's, not Hex-Rays': round one's `reframe.py` put these frames back after
-one of them segfaulted for exactly this reason.
+Each of the twenty file-scope ones is a table said three ways:
 
-So the honest reading is that **§4 is not a rewrite, it is a rename.** The
+```c
+alignas(16) static uint8_t bmf_dword_439880[16] = {   // 0x439880
+  0x04,0x00,0x00,0x00,0x08,0x00,0x00,0x00,0x0c,0x00,0x00,0x00,0x08,0x00,0x00,0x00,
+};
+typedef int32_t t_dword_439880[4];
+static t_dword_439880& __dword_439880 = *(t_dword_439880*)bmf_dword_439880;
+```
+
+A byte image, a typedef for the real type, and a reference that reinterprets
+one as the other. What it means is
+
+```c
+static int32_t __dword_439880[4] = { 4, 8, 12, 8 };
+```
+
+— one declaration instead of three, and the values legible instead of
+little-endian hex. Twenty tables, 60 declarations becoming 20.
+
+The three-way form is a leftover of round one's `collect_globals.py`, which had
+to keep the byte image because the globals still lived at their 1997 addresses
+and something might stride between them. Round three ended that: `bmf_bss` is
+gone and no global is at an address any more. The reason for the indirection
+went with it.
+
+**What to check per table, since the byte image is what is verified today:**
+
+* **the element type**, from the typedef — `t_dword_439880` is `int32_t[4]`,
+  so the sixteen bytes are four dwords and the hex should become decimal;
+* **the extent**, which is not always the buffer's. `bmf_ctx_group_flags[32]`
+  holds fifteen non-zero bytes and seventeen zeros, and 32 is the distance to
+  the next 1997 global, not the table's length. The zeros may be padding or
+  may be entries;
+* **the name.** Four of the twenty are the `__xmmword_*` broadcasts §2.4
+  decodes as `0.023f`, `0.05f` and `0.0024f`, and two of those already have
+  names elsewhere in the file. They go with Phase A, not here.
+
+The gate answers each one: a table whose bytes are re-expressed wrongly moves a
+stream immediately, and these are read on every image.
+
+### 4.1 And twenty views into `plane_desc`
+
+Round three declared the plane-descriptor table and left the twenty names it
+arrived as bound to it, so that the ~221 subscript sites could move in their
+own time. 178 of them did. What is left is:
+
+| | |
+| --- | --- |
+| **already dead** | `__n512`, `__byte_4433AC`, `__byte_4433BD` — no readers at all; delete the declarations |
+| **worth keeping** | `plane_count` (155 uses) and `__n3_0` (29) — `plane_desc[0].w8` and `plane_desc[4].src_plane` say less than the names do, so these stay as named references and the *name* is the deliverable |
+| **to fold** | the other fifteen, 42 uses between them — every one an index multiplied by 16 several statements earlier, in a local with other readers |
+
+The fold is the one thing round three named and did not finish, and the reason
+is in its §0: a substitution cannot do it, because the multiply is hoisted into
+a local that is read for other purposes. Each of the fifteen wants its local
+split first.
+
+---
+
+## 5. Phase D — the 336 frame references
+
+336 of the file's 384 reference declarations are frame aliases. 140 are the
+plain `T &v = __frame.m;` form and the rest carry a cast or a subscript.
+
+`defram.py --list --arrays` offers 249 of them across 13 frames, and
+`tools/frame-sweep.sh --arrays` — which lifts one frame, runs the whole gate,
+and puts it back if anything moves — **kept 0 of the 13** on the tree as it
+stands. Every one of them holds workspace arrays, `buf[4096]` in front of
+`v72[1024]`, and the code walks past their ends. `search_filter` moves five
+streams if its frame goes; `model_planes` dies on five of the eight images.
+That adjacency is the program's, not Hex-Rays': round one's `reframe.py` put
+these frames back after one of them segfaulted for exactly this reason.
+
+So the honest reading is that **this phase is not a rewrite, it is a rename.** The
 declarations say `__frame.x` instead of a type, and that is worth fixing, but
 the fix is not "make them locals" — it is:
 
 1. **Name the frames.** A frame that survives is an aggregate local, and
    `struct PlaneScratch { … } scratch;` says something `struct alignas(16) { … }
    __frame;` does not. 22 frames, 22 names, each from the function that owns it.
-2. **Fold the alias into the member.** Once the struct has a name, `__frame.v72`
-   can become `scratch.hist` and the alias goes. That is 336 declarations
-   deleted and 336 use-sites-per-name rewritten, mechanical once the name
-   exists.
+2. **Fold the alias into the member.** Once the struct has a name, the alias
+   `int32_t (&v72)[1024] = __frame.v72;` goes and the body says `scratch.hist`
+   where it said `v72`. 336 declarations deleted, and one rename per alias
+   through its function -- mechanical once the name exists, and a rename is
+   answerable to the compiler rather than to the gate.
 3. **Split the 25 double-booked slots that can split.** Round three tried and
    the gate kept one of six; the other five are genuinely one variable with two
    Hex-Rays names. Those five want their *name* chosen, not their storage.
 
-The 10 frames that do dissolve outright have already been offered and refused
-as a group; they should be retried one at a time after Phase A, because
-deleting the `__m128` members changes what is adjacent to what.
+Retry the sweep after Phase A regardless: deleting 47 `__m128` elements from
+`Obj11` changes what is adjacent to what, and the sweep costs one command.
 
 ---
 
-## 5. Order
+## 6. Order
 
 ```
   Phase A   __m128 -> nothing          the thread first, then the members
@@ -280,19 +359,24 @@ deleting the `__m128` members changes what is adjacent to what.
   Phase B   _this + ofs                layout_workspace, then the tables
      │                                 Phase A has to go first: the tables
      ▼                                 overlap the __m128 members
-  Phase C   frames get names           retry the dissolves after A
+  Phase C   20 tables -> 20 arrays    independent of everything; four of the
+     │                                twenty are Phase A's broadcasts
+     ▼
+  Phase D   frames get names          retry the sweep after A
 ```
 
 A before B because §3.2's tables overlap the `__m128` members Phase A deletes.
-A before C because the same deletion changes which frame members are adjacent,
-which is the only thing standing between the ten clean frames and the gate.
+A before D because the same deletion changes which frame members are adjacent,
+which is the only thing between the 13 offered frames and the gate. C is
+independent and is the cheapest thing here; do it first if a short session is
+all there is.
 
 Within each phase: **one function, one struct, one frame at a time, gated** —
 and the gate now includes the strict build.
 
 ---
 
-## 6. What would make this fail
+## 7. What would make this fail
 
 The five hazards rounds two and three measured, all of which are still live:
 
@@ -313,12 +397,12 @@ The five hazards rounds two and three measured, all of which are still live:
 
 And two this round adds before it starts:
 
-* **A dead value is not a removable one.** The poison run says nothing observes
-  the `__m128` thread *on this corpus*. `search_filter` is reachable and its
-  `m128_u64[0]` stores land in memory; if no test image drives that path, the
-  poison proves nothing about it. Check reachability before deleting a store,
-  and prefer replacing the value with the constant it should be over deleting
-  the write.
+* **A dead value is not a removable one, and the poison only speaks for paths
+  the corpus runs.** For `search_filter` a `__builtin_trap()` probe settled it
+  -- the function runs on three images, so the poison covers its stores. Do
+  that probe before trusting a poison result about any function whose
+  reachability is not obvious, and prefer replacing a value with the constant
+  it should be over deleting the write.
 * **Deleting a struct member moves everything after it.** Phase A removes 640
   bytes of `__m128` members from `Obj11`. Every `static_assert` on the file's
   offsets is what stands between that and silence — do not relax one to make a
@@ -326,13 +410,15 @@ And two this round adds before it starts:
 
 ---
 
-## 7. What the gate needs
+## 8. What the gate needs
 
 Nothing new, again, and the reason is worth stating: Phase A's thread runs
 through `bmf_compress` and `bmf_decompress`, so every image exercises it, and
-Phase B's tables are the p2 model's counters, which `REFACTORING2.md` §5
-measured at 100 % line coverage. Phase C's frames are in the hottest functions
-in the file.
+Phase B's tables are `alt_p2_alloc`'s, and the allocator runs once per plane on
+every image. Phase C's twenty tables are read on every image by construction --
+they are the model's constants. Phase D's frames are in the hottest functions
+in the file; `REFACTORING2.md` §5 measured `alt_p2_model`, `alt_p2_context` and
+`alt_p2_filter` at 100 % line coverage and `choose_plane_coding` at 94.8 %.
 
 Two additions to how it is run rather than to what it is:
 
@@ -355,8 +441,13 @@ Two additions to how it is run rather than to what it is:
 | what still lifts out of a frame | `python3 tools/defram.py subs1.hpp --list --arrays` |
 | conversions | `BMF_STRICT=1 ./build.sh` (0 today) |
 | intrinsics | `grep -cE '_mm_\|__builtin_ia32' subs1.hpp` (0) |
+| reference declarations | Appendix B — `grep -c` counts *lines*, and some of these regexes match twice on one |
+| the twenty file-scope tables | `grep -cE '^static \w+& \w+ = ' subs1.hpp` |
+| the `plane_desc` views and their users | Appendix B |
+| what a frame lift costs | `tools/frame-sweep.sh --arrays` (0 kept of 13) |
 | `__m128` parameters and their lanes | Appendix B |
 | the poison run | Appendix B |
+| whether a function is reached | `__builtin_trap()` at its top, then `./test.sh` |
 
 ## Appendix B — the two experiments this plan rests on
 
@@ -390,6 +481,23 @@ for i, l in enumerate(lines):
 open(p, 'w').write('\n'.join(lines))
 EOF
 ./build.sh && ./test.sh          # PASS, 31 sites poisoned
+```
+
+**The reference taxonomy**, which is where this document's first draft went
+wrong -- it counted 336 frame aliases with one regex, 350 lines with another,
+and reported the difference as "14 other" without checking that 336 + 20 > 350:
+
+```
+python3 - <<'EOF'
+import re, sys
+sys.path.insert(0, 'tools'); import shape
+lines = open('subs1.hpp').read().split('\n')
+DECL = re.compile(r'^\s*(?:static\s+)?[A-Za-z_][\w ]*[\w*]\s*\(?&\s*\w+\)?(?:\[\d+\])?\s*=')
+allr  = set(i for i, l in enumerate(lines) if DECL.match(l))
+frame = set(i for i, l in enumerate(lines) if shape.ALIAS.search(l))
+fs    = set(i for i, l in enumerate(lines) if re.match(r'^static \w+& \w+ = ', l))
+print(len(allr), len(frame), len(fs), len(allr - frame - fs))    # 384 336 20 28
+EOF
 ```
 
 `REFACTORING3.md`'s Appendix B is the standing warning and it still applies:
