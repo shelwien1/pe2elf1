@@ -12,16 +12,16 @@ rounds is not a list of sweeps.
 `python3 tools/shape.py`, verbatim:
 
 ```
-subs1.hpp / bmf.cpp lines          17893 / 358
-raw-offset sites                    648
-  off `_this`                        40, in 9 functions
-pointer casts                      4171
+subs1.hpp / bmf.cpp lines          17833 / 358
+raw-offset sites                    504
+  off `_this`                        27, in 8 functions
+pointer casts                      3986
 globals still at a 1997 address       0
 frames                               17, 169180 bytes, 0 aliases
   slots carrying two names            0, 0 extra names, in 0 functions
   member runs walked as arrays        0 sites, 0 bases, 0 functions
 structs                              16, 3 still ObjN
-  fNN members / named ones           94 / 64
+  fNN members / named ones          100 / 64
 distinct vNN locals                 560
 goto / LABEL_n:                     112 / 79
 __fwd_* shims                         0
@@ -31,13 +31,19 @@ against round five's close:
 
 | | round five | round six |
 | --- | --- | --- |
-| lines | 18 090 / 369 | **17 893 / 358** |
-| raw-offset sites | 1089 | **648** |
-| — off `_this` | 141 | **40** |
-| pointer casts | 4700 | **4171** |
+| lines | 18 090 / 369 | **17 833 / 358** |
+| raw-offset sites | 1089 | **504** |
+| — off `_this` | 141 | **27** |
+| pointer casts | 4700 | **3986** |
 | structs | 17, 4 still `ObjN` | **16, 3 still `ObjN`** |
 | `__fwd_*` shims | 94 | **0** |
-| conversion warnings | 2160 | **2158** |
+| conversion warnings | 2160 | **2075** |
+
+> **Every tool in `tools/` reports zero.** `unrec`, `uncopyrec`, `unp2`,
+> `unscalar`, `unshim`, `unindex`, `unrecast`, `unwiden`, `unoffset`, `uncast`,
+> `unused`, `unwrite`, `unhoist`, `dedup`, `arrayify`, `degoto` — each one is
+> run against the file at the end of this round and each one finds nothing left
+> to do. That is the sense in which the mechanical work is finished.
 
 The gate is unchanged and green at every commit: 15 reference streams
 byte-identical, a lossless round trip, a two-member archive, 15 refused
@@ -193,30 +199,34 @@ sixteen bytes apart.
 Nothing on this list is a sweep. Each one needs a reading of the model, which is
 `algorithm_v2.md`'s open work rather than this document's.
 
-* **`AltP1Block` stops at 216 bytes** and the code reaches +984, +1240, +1496
-  and +3784 through it. Those are the p1 model's tables, and giving them members
-  is §6's operation with the extents still to be read. 21 of the remaining raw
-  offsets are one function's byte-indexing of this object.
-* **`alt_p2_model`'s `n2`, `p2_rec` and `n0xF0`** carry 74 raw offsets between
-  them, all with a *variable* byte offset — `*(uint16_t *)(n2 + v510 + 2)`.
-  Turning those into subscripts needs `v510` proved even, which is a reading of
-  where it comes from.
+* **`alt_p2_model`'s `n2`, `p2_rec` and `n0xF0`** carry 74 of the remaining 504
+  raw offsets, all with a *variable* byte offset — `*(uint16_t *)(n2 + v510 +
+  2)`. Turning those into subscripts needs `v510` proved even, which is a
+  reading of where it comes from.
+* **`AltP1Block`'s counter table at +3800** keeps a pad. The code reaches it as
+  `((P1Count *)_this)[k + 237]` — a record grid anchored at the object's base,
+  so record 237's fields begin at +3800 and its first eight bytes are the tail
+  of `f1752`. Naming it means re-basing 208 subscripts, which is a change to the
+  addressing rather than to the declaration.
 * **Three `ObjN` remain**: `Obj99` is `code_pixel`'s five-tap neighbour at an
   8-byte stride, `Obj130` a row-cursor view in `alt_p2_d8_decode_body`, `Obj32`
   a two-field view in the alphabet reduction. Each is a record like `P2Ctx` and
   each needs its stride established the way §2 established eighteen.
-* **94 `fNN` members** still carry their offset for a name, and **560 `vNN`
+* **100 `fNN` members** still carry their offset for a name, and **560 `vNN`
   locals** still carry Hex-Rays' numbering. Both are answerable only by knowing
-  what the values mean.
+  what the values mean. (The count went *up* this round: naming
+  `AltP1Block`'s and `ModelBlock`'s tables added ten members that are `fNN`
+  because their role is not established, which is the honest name for them.)
 * **112 `goto`s over 79 labels.** `degoto.py` reports 0 candidates: none is a
   loop `continue`, a `break`, an early `return` or a shared error tail, and the
   one rewritable shape is exhausted. What is left is genuine irreducible flow.
-* **2158 conversion warnings.** §2.5 of round five said this is a documented
-  floor rather than a target, and the floor is now 1410 `-Wsign-conversion`,
-  641 `-Wconversion`, 103 `-Wsign-compare`, 12 `-Wint-to-pointer-cast`, 4
+* **2075 conversion warnings**, and §2.5 of round five said this is a documented
+  floor rather than a target. The floor is 1327 `-Wsign-conversion`, 641
+  `-Wconversion`, 103 `-Wsign-compare`, 12 `-Wint-to-pointer-cast`, 4
   `-Wuseless-cast` and one `-Wmain`. The 12 int-to-pointer are the 32-bit
   addresses the model stores in `int32_t` members; the 4 useless casts are
-  load-bearing at another expansion of the same macro.
+  load-bearing at another expansion of the same macro; `-Wmain` is `argv`
+  being `uint8_t **`.
 
 ---
 
@@ -233,6 +243,9 @@ Nothing on this list is a sweep. Each one needs a reading of the model, which is
 | `unrecast.py` | drop the cast when the base already has that type |
 | `unwiden.py` | give a cursor the type its dereferences read |
 | `unspill.py` | a frame's spill area -> one member per slot (round five) |
+| `uncursor.py` | a run of reloads of one base -> one cursor |
+| `unwrite.py` | a local written once and never read |
+| `unhoist.py` | say a value through the variable that already holds it |
 
 Every one of them takes `--list` first and writes nothing until asked, and every
 one was run a function or a struct at a time against the gate.
