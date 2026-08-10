@@ -410,8 +410,14 @@ it; they diverge because `alt_p2_model` writes each filter's residual back into
 its own lane.
 
 So the five digits take `lane[0]` twice, `sign` twice, and a predicted level,
-and the magnitudes reach them only through the predictions. Pointer casts
-2183 → 2141.
+and the magnitudes reach them only through the predictions.
+
+A ninth cursor walked the same grid in *words* — `v46`, an `int16_t *` where a
+record is nine subscripts and a lane is one, so `v46[-54]` and `v46[-53]` are
+the same record. Its 45 reaches decode as records −6 .. 0 at lanes 0 and 1.
+With it, every cursor into the neighbourhood table steps by a record.
+
+Pointer casts 2183 → 2141.
 
 ---
 
