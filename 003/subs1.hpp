@@ -2168,7 +2168,7 @@ void __expand_predictor_mode0(uint32_t Src, int32_t i, int32_t a3)
 uint32_t __predict_med(uint8_t *Src, int32_t i, int32_t a3)
 {
   ;
-  int8_t v26;
+  uint8_t v26;
   int32_t i_1, v16, v17, v18, v19, v20, v21, v22, v24, v27, v29;
   uint32_t j, n15, v23, v25, n15_1;
   Obj37 *v28;
@@ -2279,7 +2279,7 @@ LABEL_24:
 uint32_t __alt_init_tables(Obj43 *a1, Obj16 *a2)
 {
   ;
-  int8_t v48, v53;
+  uint8_t v48, v53;
   uint8_t *v18, *v19;   // `uint8_t *` beside the `char` scalars above
   int32_t n128_1, n128_6, v30, n128_5, v33, n128_3, n128_4, v36, n128_11,
           n128_2;
@@ -2523,7 +2523,8 @@ int32_t __decode_context_bit(uint16_t *_this, uint16_t *a2)
 int32_t __encode_symbol_list(uint32_t *_this, int32_t a2)
 {
   ;
-  int8_t v2, v27, v29, v32, v33;
+  int8_t v2;
+  uint8_t v27, v29, v32, v33;
   uint8_t *v28, *v36, *v37, *v39, *v40, *v49;   // `uint8_t *` beside the `char` scalars above
   int16_t v51;
   int32_t enc_cum, enc_high, enc_tot, v3, v5, v6, v7, v8, v24, n251, v35, v38,
@@ -2715,7 +2716,7 @@ void __symbol_list_update(Obj6 *_this, int32_t a2, uint32_t a3)
   uint8_t *list;         // the three-byte entries, `_this[5]`
   uint32_t count;     // a symbol's count byte, while it is being compared
   bool v7;
-  int8_t v11, v12, v15, v17, v19, v20;
+  uint8_t v11, v12, v15, v17, v19, v20;
   uint8_t *v16, *v23, *v24, *v26, *v27, *v33;   // `uint8_t *` beside the `char` scalars above
   int16_t v10, v34;
   int32_t v8, v9, v22, v25, v28, v30, v32, v35, v36;
@@ -3612,7 +3613,7 @@ int32_t __init_model_tables(ModelBlock *_this)
   ;
   uint8_t *v8, *v32;   // were int32_t: these hold addresses
   uint8_t *v28, *v29;           // row cursors out of f56
-  int8_t v13, v14;
+  uint8_t v13, v14;
   uint8_t *buf;   // `uint8_t *` beside the `char` scalars above
   Obj14 *v11;
   int16_t v6, v12;
@@ -4930,12 +4931,12 @@ uint8_t *__rc_begin_encode()
     memset((uint8_t *)model_geometry + v3, 0x05, 16);
     level_geom[6].half = 16;
     v4 = v3 + 2 * (uint8_t)level_geom[5].half;
-    level_geom[6].first = (int8_t)v4;
+    level_geom[6].first = (uint8_t)v4;
     level_geom[6].tbl_base = (uint8_t)v4 - 6;
     memset((uint8_t *)model_geometry + v4, 0x06, 32);
     level_geom[7].half = 32;
     v6 = v4 + 2 * (uint8_t)level_geom[6].half;
-    level_geom[7].first = (int8_t)v6;
+    level_geom[7].first = (uint8_t)v6;
     level_geom[7].tbl_base = (uint8_t)v6 - 7;
     // 64 bytes of 7, after 16 of 5 and 32 of 6 -- one level per line.  MSVC
     // inlined this third one because the length crossed its threshold, which
@@ -4988,7 +4989,7 @@ void __alt_p1_d8_encode_body(Obj0 *_this, uint8_t *a2, uint8_t *a3)
   ;
   uint8_t *v9;   // were int32_t: these hold addresses
   bool v31;
-  int8_t v33, v35;
+  uint8_t v33, v35;
   int32_t v4, v5, v6, v7, v8, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24,
           v25, v26, v27, v28, v29, v30, v34, n5, n16, v38, v40, v42;
   int64_t v39;
@@ -5561,7 +5562,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   uintptr_t p_i_1;   // were int32_t: addresses, masked and tagged
   FILE *Stream_1, *Stream_2;
   bool v33;
-  int8_t v42, v43, v44, v45, v46, v47, v56;
+  uint8_t v42, v43, v44, v45, v46, v47, v56;
   uint8_t *Bufferc_3, *Bufferc_1, *Bufferb_1, *v19, *v24, *buf_1, *v31, *v39, *buf_3, *Bufferc_2;   // `uint8_t *` beside the `char` scalars above
   int32_t v3, i, Buffer_1, n8, v14, v16, v17, v20, v21, v22, v23, v25, v26, v28, n4, n2,
           Buffer_3, Buffer_4, Size, v40, n2_1, v49, Size_1, v55;
@@ -6195,7 +6196,7 @@ LABEL_25:
 uint8_t * __colour_transform(uint8_t *Blockb, uint8_t *Src, int32_t a3, int8_t a4)
 {
   ;
-  int8_t v8, v11;
+  uint8_t v8, v11;
   uint8_t *v29;   // `uint8_t *` beside the `char` scalars above
   int32_t v4, n6_2, v7, n6_1, v10, Size, n4, Size_1, v16, Size_2, v18, v19, v21, v22, v23, v24,
           v26, n2, v30, v31, v33, v34, v35, v36, v37, n4_1, n6;
@@ -6311,7 +6312,7 @@ LABEL_4:
       v26 = *Src_4 - v37;
       v27 = v36 * Src_4[v33] + v31 * Src_4[v35] + 40;
       Src_4 += n4_1;
-      *Src++ = (int8_t)(v26 - (v27 >> 7));
+      *Src++ = (uint8_t)(v26 - (v27 >> 7));
       --v24;
     }
     while ( v24 );
@@ -6327,7 +6328,7 @@ LABEL_4:
       v22 = v30 * *(Src_5 - 2) + v36 * *(Src_5 - 3);
       v23 = v34 * *(Src_5 - 1);
       Src_5 += n4_1;
-      *Src++ = (int8_t)(v21 - ((uint32_t)(v22 + v23 + 63) >> 7));
+      *Src++ = (uint8_t)(v21 - ((uint32_t)(v22 + v23 + 63) >> 7));
       --v19;
     }
     while ( v19 );
@@ -6422,12 +6423,12 @@ int32_t __rc_begin_decode(int8_t ArgList_1)
     memset((uint8_t *)model_geometry + v8, 0x05, 16);
     level_geom[6].half = 16;
     v9 = v8 + 2 * (uint8_t)level_geom[5].half;
-    level_geom[6].first = (int8_t)v9;
+    level_geom[6].first = (uint8_t)v9;
     level_geom[6].tbl_base = (uint8_t)v9 - 6;
     memset((uint8_t *)model_geometry + v9, 0x06, 32);
     level_geom[7].half = 32;
     v11 = v9 + 2 * (uint8_t)level_geom[6].half;
-    level_geom[7].first = (int8_t)v11;
+    level_geom[7].first = (uint8_t)v11;
     level_geom[7].tbl_base = (uint8_t)v11 - 7;
     memset((uint8_t *)model_geometry + v11, 0x07, 64);
     n256 = (uint16_t *)bmf_new(0x7F000u);
@@ -6476,7 +6477,7 @@ uint8_t *__unpredict_med(uint8_t *Src, int32_t i, int32_t a3)
 {
   ;
   uintptr_t Src_1, v41;   // were int32_t: addresses, masked and tagged
-  int8_t v39, v40;
+  uint8_t v39, v40;
   int32_t n256, n128_1, i_1, v42, v45, v46, v47, v48;
   uint32_t j, v36, m_1, m, v44, v50;
   uint8_t *result, *v43;
@@ -6837,7 +6838,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
   uintptr_t v61;
   Obj0 *v24;
   uint8_t *v29, *v65;   // row cursors out of Obj0
-  int8_t v11, v12, v13, v58;
+  uint8_t v11, v12, v13, v58;
   Obj0 *v6;
   uint8_t *v25, *v26, *v27, *v28;   // row cursors out of Obj0
   int32_t i, v3, i_2, n4, *v7, v8, v9, v10, v14, v15, v16, ArgList, v18, i_3, n4_1, n4_2,
@@ -9029,7 +9030,8 @@ int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, int8_t a3)
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 41456, "frame layout moved");
   ;
   bool v19, n2_4, v42, v106;
-  int8_t v7, v10, v12, v16, v18, n0x100_1, k;
+  int8_t v7, v16, v18, n0x100_1, k;
+  uint8_t v10, v12;
   uint8_t *v44;   // `uint8_t *` beside the `char` scalars above
   double v65, v66, v68, v69, v70, v72, v73, v74, v75, v76;
   int16_t v92;
@@ -9803,7 +9805,7 @@ int32_t *__read_bmp(char *FileName)
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int8_t Sizeb;
+  uint8_t Sizeb;
   // These shared `__frame.Src_2` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
@@ -9813,7 +9815,8 @@ int32_t *__read_bmp(char *FileName)
   uintptr_t Src_1;   // were int32_t: addresses, masked and tagged
   uint8_t *v7, *v8, *v9;   // were int32_t: these hold addresses
   FILE *Stream_v;
-  int8_t v25, v28, v30;
+  int8_t v25;
+  uint8_t v28, v30;
   uint8_t *Src_4, *Src_3, *Src_6, *Buffer_4, *Src_5;   // `uint8_t *` beside the `char` scalars above
   BmfImage *v3;
   int32_t Size_1, i, j_3, Sizea_1, v22, n2_1, v26, v31, Offset_2, v35, v38, v40, v41;
@@ -10118,7 +10121,8 @@ int32_t __decode_symbol_list(uint32_t *a1)
   ;
   uint8_t *v3, *v7;   // were int32_t: these hold addresses
   Obj32 *v38;
-  int8_t v23, v34, v40;
+  int8_t v23;
+  uint8_t v34, v40;
   uint8_t *v36;   // `uint8_t *` beside the `char` scalars above
   int16_t v39;
   int32_t sym_cum, sym_high, v2, v5, v6, v8, n0x2000_5, n0x2000_2, n251, v46,
@@ -10353,7 +10357,8 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   uint8_t *v46, *v66, *n15_17;
   uint8_t *v53, *v54, *v55, *v61, *v108, *n15_10;   // row cursors out of ModelBlock
   bool v19;
-  int8_t v70, v71, v72, v73, v74, v75, v91;
+  int8_t v74, v91;
+  uint8_t v70, v71, v72, v73, v75;
   uint8_t *v157;   // `uint8_t *` beside the `char` scalars above
   int16_t v14, n4_14, v146, v160, n15_4;
   ModelBlock *this_4;
@@ -11107,7 +11112,8 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   uint8_t *v20, *v22, *n2_9, *v52, *v109;   // row cursors out of ModelBlock
   uint8_t *v59, *v74, *n15_36, *n15_38, *n15_40;
   bool v11;
-  int8_t v24, v64, v65, v66, v67, v68, v93;
+  int8_t v93;
+  uint8_t v24, v64, v65, v66, v67, v68;
   uint8_t *v36, *v156;   // `uint8_t *` beside the `char` scalars above
   int16_t v14, n15_10, v147, v158, n15_21, v170;
   ModelBlock *this_3;
@@ -11964,7 +11970,7 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
 {
   ;
   uint8_t *v8;
-  int8_t v12;
+  uint8_t v12;
   int16_t v19;
   int32_t i_1, j, v9, v13, k_1, v35, v38;
   uint32_t k, m, n0x2000_1, n, n8, n0x18;
@@ -12659,7 +12665,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
   int32_t v94;
   uint8_t *v95;
   int32_t v96;
-  int8_t v97;
+  uint8_t v97;
   int32_t v98;
   int32_t v99;
   int32_t n5_8;
@@ -12686,7 +12692,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
   uintptr_t n3;   // were int32_t: addresses, masked and tagged
   Obj0 *v23;
   uint8_t *v28;   // a row cursor out of Obj0
-  int8_t v11, v12, v13, v62, v71, v81, v83;
+  uint8_t v11, v12, v13, v62, v71, v81, v83;
   Obj0 *v6;
   uint8_t *v24, *v25, *v26, *v27;   // row cursors out of Obj0
   int32_t i, v3, i_2, n4, *v7, v8, v9, v10, v14, v15, v16, v17, i_3, n4_1, n4_2,
@@ -13153,7 +13159,7 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
   float (*v17)[4];
   float v19;
   bool v87, v103, v104, v105;
-  int8_t v114, v116, v312;
+  uint8_t v114, v116, v312;
   uint8_t *v90;   // `uint8_t *` beside the `char` scalars above
   Obj15 *v110;
   Obj40 *v94;
@@ -15178,7 +15184,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   Obj11 *v129;
   Obj11 *v111;
   bool v17, v109;
-  int8_t v9;
+  uint8_t v9;
   int16_t v110;
   uint8_t *v47, *v48, *v49, *v50, *v51, *v52, *v53;   // row cursors
   uint8_t *v21, *v22, *v23, *v24, *v60, *v81, *v82, *v83, *v84, *v86, *v88, *v90,
@@ -15670,7 +15676,7 @@ void __alt_p2_d8_encode_body(Obj11 *lpAddress, uint8_t *a4, int32_t i, int32_t a
   // the gate's answer -- nothing writes one of them and reads another.
   uint8_t *v105;
   int8_t *v106;
-  int8_t v107;
+  uint8_t v107;
   Obj11 *lpAddress_1;
   uint8_t *v109;
   uint8_t v110;
@@ -15682,7 +15688,7 @@ void __alt_p2_d8_encode_body(Obj11 *lpAddress, uint8_t *a4, int32_t i, int32_t a
   uint8_t *v11;
   uint8_t *v27;
   uint8_t *v23, *v30, *v38, *v40, *v41, *v42, *v43, *v44, *v45, *v46, *v51, *v61, *v69, *v79, *v81, *v83, *v85, *v87, *v89, *v91, *v93;
-  int8_t v14, v97;
+  uint8_t v14, v97;
   int16_t v26;
   int32_t v12, v13, n16, v16, v17, v24, v25, v31, v32, v33, v39, Size, v52,
           *v53, v54, v55, v62, v63, v64, v70, v71, v75, v76, v77, v78, v80,
@@ -16076,7 +16082,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   Obj11 *v133;
   Obj11 *v114;
   bool v16;
-  int8_t v9;
+  uint8_t v9;
   int16_t v113;
   uint8_t *v46, *v47, *v48, *v49, *v50, *v51, *v52;   // row cursors
   uint8_t *v20, *v21, *v22, *v23, *v59, *v80, *v81, *v82, *v83, *v85, *v87, *v89,
@@ -16983,7 +16989,7 @@ void __model_planes(uint8_t *Blockb, uint8_t *Srca_3, int32_t a3, int8_t a4)
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 80, "frame layout moved");
   ;
   uint8_t *v12;   // was int32_t: these hold addresses
-  int8_t v8;
+  uint8_t v8;
   uint8_t *Srca_1, *Srca_2;   // `uint8_t *` beside the `char` scalars above
   uint8_t *__model_planes_buf;
   int32_t n1008, v17, v18, v19;
@@ -17199,7 +17205,8 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, int32_t *p_dwLowDateTime)
   uint8_t *v5;   // were int32_t: these hold addresses
   FILE *Stream_1, *Stream_v;
   BmfImage *p_i_1;
-  int8_t v10, v17, v18, v20, v34, v35;
+  int8_t v10, v17, v18, v34, v35;
+  uint8_t v20;
   uint8_t *Buffer_3, *n4_6, *n4_7, *v64;   // `uint8_t *` beside the `char` scalars above
   int32_t Buffer__1, dwLowDateTime, v21, n4, predictor, v27, v28, v29, v30,
           ArgList, v33, n4_4, v37, n2_1, i, Size_4, Size_5, n4_3, v44, Size_2,
@@ -17724,7 +17731,8 @@ uint32_t __search_filter(BmfImage *p_i, int8_t a2)
   uint8_t *v176;
   ;
   bool v35, v162;
-  int8_t v19, v44, v62, v63, v70, v77, v82, v86, v93, v116;
+  int8_t v19, v44, v63, v82, v93, v116;
+  uint8_t v62, v70, v77, v86;
   uint8_t *v24, *v26, *v27, *n4_13, *Blockb_2, *Srca_1, *n4_14, *v67, *v74, *n4_17, *v101, *v105, *Blockb_6, *v110, *v111, *v112, *Blockb_7, *v124, *v130, *v136, *Blockb_8, *v141, *v142, *v143, *Blockb_9, *Blockb_4, *Srca_3, *Blockb_5, *Srca_4, *n0x7FFFFFFF_5, *Srca_5, *Blockb_3, *Srca_2, *Blockb_1, *Srca, *n5_6;   // `uint8_t *` beside the `char` scalars above
   int16_t v114, v115, v145, v146;
   int32_t i, i_2, n4, v10, n4_4, v21, v22, v23, Size, n0x7FFFFFFF, v32,
@@ -18601,7 +18609,8 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
   uint8_t *v5;   // were int32_t: these hold addresses
   FILE *i;
   bool v38;
-  int8_t v12, v13, v15, v17, v21, v36;
+  int8_t v13, v21, v36;
+  uint8_t v12, v15, v17;
   uint8_t __compress_image_Buffer_1;   // 0/1, shifted into bit 7 of the header byte
   uint8_t *Buffera_5, *Buffera_6, *Srca, *Buffera_2, *Buffera_3;   // `uint8_t *` beside the `char` scalars above
   int32_t row_bytes, v11, v18, n4_6, bits_left, n4, v27, n8_1,
@@ -18646,7 +18655,7 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
   v15 = *((uint8_t *)p_i + 10);
   ++*(uint32_t *)v5;
   ElementCount_1 = v15 & 0x80;
-  if ( v15 < 0 )
+  if ( (v15 & 0x80) != 0 )   // bit 7 is the palette flag, not a sign
     ElementCount_1 = 3 << (v15 & 31);
   if ( *((uint32_t *)p_i + 3) < 0x10u )   // -N is on, so only the size decides
     goto LABEL_76;
