@@ -49,8 +49,27 @@ for a, b, nm, sig in structs.bodies(lines):
                 return m.group(0)
             n[nm] += 1
             return '%s[%s%d]' % (v, '-' if m.group(3) == '-' else '', k // W[t])
+        def bare(m):
+            t, v = m.group(1), m.group(2)
+            if ty.get(v) != t:
+                return m.group(0)
+            n[nm] += 1
+            return v
         code = re.sub(r'\*\(\((\w+) \*\)(\w+) ([-+]) (\d+)\)', scaled, code)
         code = re.sub(r'\*\((\w+) \*\)\(\(uint8_t \*\)(\w+) ([-+]) (\d+)\)', bytes_, code)
+        # The cast with no dereference behind it: `(uint16_t *)_this + 2` where
+        # `_this` is already a `uint16_t *`.  Only when the next token cannot
+        # make it part of a larger cast or a declaration.
+        #
+        # Repeated until it stops changing, because Hex-Rays stacked these --
+        # `(uint16_t *)(uint16_t *)n0xF0` -- and dropping the inner one leaves
+        # the outer one matching a pattern it did not match before.
+        while True:
+            out = re.sub(r'\((u?int(?:8|16|32|64)_t|float|double) \*\)(\w+)(?=\s*[-+),;\]])',
+                         bare, code)
+            if out == code:
+                break
+            code = out
         lines[i] = code + sep + com
 for k, v in n.most_common(10):
     print('%-26s %3d' % (k.lstrip('_'), v))
