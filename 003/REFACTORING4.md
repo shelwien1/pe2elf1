@@ -444,7 +444,10 @@ Two additions to how it is run rather than to what it is:
 | reference declarations | Appendix B — `grep -c` counts *lines*, and some of these regexes match twice on one |
 | the twenty file-scope tables | `grep -cE '^static \w+& \w+ = ' subs1.hpp` |
 | the `plane_desc` views and their users | Appendix B |
-| what a frame lift costs | `tools/frame-sweep.sh --arrays` (0 kept of 13) |
+| what a frame lift costs | `tools/frame-sweep.sh` (5 kept of 10 after §9) |
+| shared slots and their names | `python3 tools/unslot.py subs1.hpp --list` |
+| what the `f278528` layer became | `python3 tools/unlane.py subs1.hpp --list` |
+| what the thread cost | `python3 tools/dethread.py subs1.hpp --list` |
 | `__m128` parameters and their lanes | Appendix B |
 | the poison run | Appendix B |
 | whether a function is reached | `__builtin_trap()` at its top, then `./test.sh` |
@@ -505,3 +508,99 @@ every count in a plan should be reproducible by a command that does not go
 through the tool being checked. Round three's plan had eleven claims that the
 work disproved, and the ones that survived were the ones with an experiment
 attached.
+
+---
+
+## 9. What the work did, and where the plan was wrong
+
+Written after the fact, so that the next round starts from what happened rather
+than from what was planned. Every number below is one command; Appendix A says
+which.
+
+| | before | after |
+| --- | --- | --- |
+| `__m128` occurrences | 160 | **1**, and it is a sentence in a comment |
+| `.m128_` lane accesses | 562 (§2.1's four) | 209, every one in `choose_plane_coding` |
+| reference declarations | 384 | 274 |
+| `plane_desc` views | 20 | 1 |
+| file-scope tables said three times | 20 | 1 |
+| frames | 22 | 19 |
+| frame aliases | 336 | 265 |
+| slots carrying two names | 25, 60 extra | **0** |
+| raw-offset sites | 1514 | 1462 |
+| `BMF_STRICT` conversions | 0 | 0, and the gate checks it now |
+
+**Phase A is finished.** The 29-parameter thread, its 21 shims, the four
+`__xmmword_*` broadcasts, `Obj11`'s eighteen `__m128` members and the union
+layer that reached 336 bytes of it are all gone, and so are `__m128`, `__m128d`,
+`__int128`, `_OWORD` and `_LONGLONG`. What survives is `choose_plane_coding`'s
+six sixteen-byte spill slots, which really are one slot each holding four ints
+or two doubles depending on the statement.
+
+**Phase C is finished.** `untable.py` converted fifteen; four of the remaining
+five were the `__xmmword_*` broadcasts, which Phase A deleted outright. The one
+left is `__dword_439B7C`, which is walked as
+`*((uint8_t *)&__dword_439B7C + v83 + 3)` and so stays a table with a typedef.
+§4.1 is finished too.
+
+**Phase B is finished to the plan's own limit.** §3.1 is done and §3.2 came
+free with Phase A. §3.3 and §3.4 say in the plan itself that they want
+`algorithm_v2.md` §9 read first, and they still do.
+
+**Phase D is done except for §5 item 2, which the tree disproved** — see below.
+
+### Five things the plan got wrong
+
+1. **§2.6 item 3 guessed a constant that is a register copy.**
+   `search_filter`'s `a3`/`a4` were said to be `xorps`-zeroed and stored. They
+   are not: they are scratch for a 64-bit move, and the *fifth* copy of the same
+   four-store loop was already written without them. Reading the neighbours
+   settled in a minute what a guess would have got wrong.
+
+2. **§4.1 said to keep `__n3_0`.** It is `plane_desc[4].src_plane`, and at its
+   28 sites it is read exactly the way records 1, 2 and 3's `src_plane` already
+   are — in four functions it stood next to those spellings as the odd one out.
+   The name said nothing that the field does not.
+
+3. **§4.1 counted comment mentions as uses.** Six views were dead in code, not
+   three.
+
+4. **§5 item 2 does not apply to this tree.** The instruction was to fold each
+   frame alias into its member. Measured: **156 of the 265 aliases have the same
+   name as their member**, so folding them writes `__frame.x` where the body
+   says `x` and gains nothing; the other 109 point at members called `slotN`,
+   `sym[k]` or `sub[k]`, which say less than the alias does. The alias is doing
+   its job — it makes a frame member read like the local it was. What was worth
+   doing instead is item 3 and the fifteen `slotN` members that now carry the
+   name of the one local left in them.
+
+5. **§5 said the sweep would keep nothing.** It kept five frames, three of them
+   outright, once the shared slots were split — and two of those five were being
+   hidden by a `defram.py` bug (duplicate `_gapN` names) that looked like a pin.
+
+### One bug the work found
+
+`plane_desc[HIDWORD(v208) + v205.m128_i32[1] + 1].b3` was
+`__byte_44339F[16 * HIDWORD(v208) + v205.m128_i32[1]]` before round three folded
+it, and only the first of the two terms got divided by sixteen. A
+`__builtin_trap()` on `v205.m128_i32[1] != 0` passes the whole gate, so every
+reference image picks colour transform 0 and the two spellings agree there; an
+image that picks 1 or 2 writes sixteen or thirty-two records past the table.
+Found by re-deriving the scale factor of every index in that commit's diff —
+the other 177 hold.
+
+### What is left, in the order it wants doing
+
+1. **`algorithm_v2.md` §9**, which three deferred items now wait on: §3.3's
+   `alt_p1_model` table, §3.4's 252 row-cursor displacements, and naming
+   `Obj11`'s remaining `fNNNN` members. The 1462 raw offsets do not get smaller
+   without it.
+2. **`Obj11` and `ModelBlock`'s middle**. Both now have their ends pinned by a
+   `sizeof` assert against the allocation. `ModelBlock`'s +3104 region and
+   `Obj11`'s +278676..+278735 are named offsets with no roles yet.
+3. **The seven frames that stay.** They hold workspace arrays the code walks
+   past the end of; `alt_p2_context`, `decode_pixel`, `code_pixel` and
+   `decode_symbol_list` segfault the moment their members stop being adjacent.
+   That adjacency is the program's, so the deliverable is a comment saying which
+   walk needs it, not a lift.
+4. **77 structs still called `ObjN`** and 240 `fNNNN` members against 60 named.
