@@ -471,8 +471,8 @@ struct AltP1Block {
   // cursor from its own plane.  Three readings had these forty bytes --
   // `f176[10]`, `f12[41 .. 50]`, and `cur[5]` with four more named pointers --
   // and all three rotate the same five and step the same five.
-  uint8_t *buf[5];      // +176 .. +195
-  uint8_t *cursor[5];   // +196 .. +215
+  P1Ctx *buf[5];       // +176 .. +195
+  P1Ctx *cursor[5];    // +196 .. +215
   // `alt_p1_alloc` seeds five tables between +216 and +3800 and they tile the
   // range exactly, which is what says where each one ends: 216 + 512 = 728,
   // + 256 = 984, + 256 = 1240, + 256 = 1496, + 256 = 1752, + 2048 = 3800.
@@ -2946,33 +2946,32 @@ void **__alt_p1_free(void **Block, int8_t a2)
 // says it is context rather than coding.
 int32_t __alt_p1_context(AltP1Block *_this, AltP1Block *a2, AltP1Block *a3)
 {
+  P1Ctx *v12, *v13, *v3, *v33;
   ;
-  uint8_t *v5;
-  uint8_t *v32;
+  P1Ctx *v5;
+  P1Ctx *v32;
   bool v9, v19, v20;
-  uint8_t *v34;
-  uint8_t *v12, *v13;   // `a2->cursor[0]`, the neighbour block's row cursor
+  P1Ctx *v34;
   int32_t v6, v7, v11, v14, v15, v16, v18, v21, v22, v23, v24, v25, v26, v27, v28,
           v29, result, v35, v36, v39, v40, v41, v42;
   uint32_t v37, v38;
-  uint8_t *v3, *v33;
   // Byte values Hex-Rays gave a pointer type: none is dereferenced here,
   // and `&v4[k]` on a `uint8_t *` is the addition it looks like.  The
   // `(uint32_t)` casts on them stay: `(216 - (uint32_t)v4) >> 31` is a
   // logical shift, and it is a selector -- signed it would be -1, not 1.
   int32_t v4, v8, v10, v17;
   v3 = _this->cursor[1];
-  v4 = *v3;
-  v5 = (uint8_t *)((int32_t)_this->cursor[0]);
-  v6 = v5[-2];
-  v7 = *(v3 - 2);
+  v4 = v3->sym;
+  v5 = _this->cursor[0];
+  v6 = v5[-1].sym;
+  v7 = v3[-1].sym;
   if ( v6 < v4 )
   {
     if ( v7 >= v6 )
     {
       v10 = v4 + v6 - v7;
       v9 = v7 < v4;
-      v4 = v5[-2];
+      v4 = v5[-1].sym;
       if ( v9 )
         v4 = v10;
     }
@@ -2981,18 +2980,18 @@ int32_t __alt_p1_context(AltP1Block *_this, AltP1Block *a2, AltP1Block *a3)
   {
     v8 = v4 + v6 - v7;
     v9 = v7 <= v4;
-    v4 = v5[-2];
+    v4 = v5[-1].sym;
     if ( !v9 )
       v4 = v8;
   }
   _this->f8 = v4;
   v33 = _this->cursor[2];
-  v11 = *(v3 - 1)
-      + v5[-5]
-      + 3 * (v3[3] + v33[1])
-      + 6 * v5[-1]
-      + 4 * (v3[1] + v5[-3])
-      + 2 * (v33[5] + v3[5] + v5[-7]);
+  v11 = v3[-1].mag
+      + v5[-3].mag
+      + 3 * (v3[1].mag + v33->mag)
+      + 6 * v5[-1].mag
+      + 4 * (v3->mag + v5[-2].mag)
+      + 2 * (v33[2].mag + v3[2].mag + v5[-4].mag);
   // The two neighbouring planes, reached through their own row cursors.  Both
   // rows are two bytes a pixel -- the reconstructed sample at +0 and the size
   // of the prediction error at +1 -- so the odd subscript `[-1]` is the error
@@ -3004,52 +3003,52 @@ int32_t __alt_p1_context(AltP1Block *_this, AltP1Block *a2, AltP1Block *a3)
   {
     if ( a3 )
     {
-      v34 = (uint8_t *)(v5);
+      v34 = v5;
       v12 = a2->cursor[0];
-      v36 = v11 + 2 * (a3->cursor[0][-1] + v12[-1]);
-      _this->ctx_w[5].sel = (*v3
+      v36 = v11 + 2 * (a3->cursor[0][-1].mag + v12[-1].mag);
+      _this->ctx_w[5].sel = (v3->sym
                                        - (uint32_t)v4
-                                       + v12[-2]
-                                       - a2->cursor[1][-2]);
+                                       + v12[-1].sym
+                                       - a2->cursor[1][-1].sym);
       v13 = a2->cursor[0];
-      v14 = v13[-2];
-      v15 = v13[-4];
-      v5 = (uint8_t *)(v34);
-      _this->ctx_w[6].sel = (*(uint8_t *)((uintptr_t)v34 - 2) - (uint32_t)v4 + v14 - v15);
-      _this->ctx_w[7].sel = (*(uint8_t *)((uintptr_t)v34 - 2)
+      v14 = v13[-1].sym;
+      v15 = v13[-2].sym;
+      v5 = v34;
+      _this->ctx_w[6].sel = (v34[-1].sym - (uint32_t)v4 + v14 - v15);
+      _this->ctx_w[7].sel = (v34[-1].sym
                                        - (uint32_t)v4
-                                       + a3->cursor[0][-2]
-                                       - a3->cursor[0][-4]);
-      _this->ctx_w[8].sel = (a3->cursor[0][-2] - a3->f8);
-      _this->ctx_w[3].sel = (a2->cursor[0][-2] - a2->f8);
-      v37 = (a3->cursor[0][-1] + (uint32_t)a2->cursor[0][-1] - 16) >> 31;
+                                       + a3->cursor[0][-1].sym
+                                       - a3->cursor[0][-2].sym);
+      _this->ctx_w[8].sel = (a3->cursor[0][-1].sym - a3->f8);
+      _this->ctx_w[3].sel = (a2->cursor[0][-1].sym - a2->f8);
+      v37 = (a3->cursor[0][-1].mag + (uint32_t)a2->cursor[0][-1].mag - 16) >> 31;
     }
     else
     {
-      v36 = v3[7] + v11 + 3 * a2->cursor[0][-1];
-      _this->ctx_w[5].sel = (2 * v5[-2] - v5[-4] - (uint32_t)v4);
-      _this->ctx_w[6].sel = (2 * v5[-2] - v5[-4] - (uint32_t)v4);
-      _this->ctx_w[7].sel = (-v4 - *v3 + v3[2] + v5[-2]);
-      _this->ctx_w[8].sel = (v5[-2]
+      v36 = v3[3].mag + v11 + 3 * a2->cursor[0][-1].mag;
+      _this->ctx_w[5].sel = (2 * v5[-1].sym - v5[-2].sym - (uint32_t)v4);
+      _this->ctx_w[6].sel = (2 * v5[-1].sym - v5[-2].sym - (uint32_t)v4);
+      _this->ctx_w[7].sel = (-v4 - v3->sym + v3[1].sym + v5[-1].sym);
+      _this->ctx_w[8].sel = (v5[-1].sym
                                        - (uint32_t)v4
-                                       + a2->cursor[0][-2]
-                                       - a2->cursor[0][-4]);
-      _this->ctx_w[3].sel = (a2->cursor[0][-2] - a2->f8);
-      v37 = ((uint32_t)a2->cursor[0][-1] - 8) >> 31;
+                                       + a2->cursor[0][-1].sym
+                                       - a2->cursor[0][-2].sym);
+      _this->ctx_w[3].sel = (a2->cursor[0][-1].sym - a2->f8);
+      v37 = ((uint32_t)a2->cursor[0][-1].mag - 8) >> 31;
     }
   }
   else
   {
-    v32 = (uint8_t *)((int32_t)_this->cursor[4]);
-    v36 = v32[1] + *(v33 - 3) + v3[7] + v11 + v32[5];
-    _this->ctx_w[5].sel = (2 * v5[-2] - v5[-4] - (uint32_t)v4);
-    _this->ctx_w[6].sel = (2 * *v3 - *v33 - (uint32_t)v4);
-    _this->ctx_w[7].sel = (-v4 - *v3 + v3[2] + v5[-2]);
-    _this->ctx_w[8].sel = (-3 * (v5[-4] - v5[-2])
-                                     + v5[-6]
+    v32 = _this->cursor[4];
+    v36 = v32->mag + v33[-2].mag + v3[3].mag + v11 + v32[2].mag;
+    _this->ctx_w[5].sel = (2 * v5[-1].sym - v5[-2].sym - (uint32_t)v4);
+    _this->ctx_w[6].sel = (2 * v3->sym - v33->sym - (uint32_t)v4);
+    _this->ctx_w[7].sel = (-v4 - v3->sym + v3[1].sym + v5[-1].sym);
+    _this->ctx_w[8].sel = (-3 * (v5[-2].sym - v5[-1].sym)
+                                     + v5[-3].sym
                                      - (uint32_t)v4);
-    _this->ctx_w[3].sel = (v3[4] - (uint32_t)v4);
-    v37 = v5[1] + v32[1] + (_this->cursor[3])[1] + v33[1] + v3[1] == 0;
+    _this->ctx_w[3].sel = (v3[2].sym - (uint32_t)v4);
+    v37 = v5->mag + v32->mag + _this->cursor[3]->mag + v33->mag + v3->mag == 0;
   }
   v16 = (v36 + 7) >> 4;
   v17 = _this->f216[v16];
@@ -3058,13 +3057,13 @@ int32_t __alt_p1_context(AltP1Block *_this, AltP1Block *a2, AltP1Block *a3)
   _this->f12[1] = _this->f1752[v16] + _this->f728[(uint32_t)v4];
   _this->ctx_w[0].sel = (((216 - (uint32_t)v4) >> 31) + ((22 - (uint32_t)v4) >> 31));
   v38 = ((216 - (uint32_t)v4) >> 31) + ((22 - (uint32_t)v4) >> 31);
-  v18 = (*(v3 - 2) - *v3 >= 0) + (*(v3 - 2) > (int32_t)*v3);
+  v18 = (v3[-1].sym - v3->sym >= 0) + (v3[-1].sym > (int32_t)v3->sym);
   _this->ctx_w[1].sel = v18;
-  v39 = (*(v3 - 2) - v5[-2] >= 0) + (*(v3 - 2) > (int32_t)v5[-2]);
+  v39 = (v3[-1].sym - v5[-1].sym >= 0) + (v3[-1].sym > (int32_t)v5[-1].sym);
   _this->ctx_w[2].sel = v39;
   v19 = _this->ctx_w[3].sel == 0;
   v20 = _this->ctx_w[3].sel < 0;
-  v40 = (v3[2] - v4 >= -v35) + (v3[2] - v4 > v35);
+  v40 = (v3[1].sym - v4 >= -v35) + (v3[1].sym - v4 > v35);
   _this->ctx_w[4].sel = v40;
   v21 = v35 < _this->ctx_w[5].sel;
   v22 = -v35 <= _this->ctx_w[5].sel;
@@ -3197,14 +3196,14 @@ int32_t __alt_p1_model(AltP1Block *_this)
   CounterNode *v84;
   CounterNode *v81;
   uint32_t n5, v110, v112;
-  n5 = *((uint8_t)(*_this->cursor[0] - (uint8_t)_this->f8) + _this->fold);
+  n5 = *((uint8_t)(_this->cursor[0]->sym - (uint8_t)_this->f8) + _this->fold);
   v3 = _this->ctx_w[1].sel;
-  n5_1 = *((uint8_t)((uint8_t)_this->f8 - *_this->cursor[0]) + _this->fold);
+  n5_1 = *((uint8_t)((uint8_t)_this->f8 - _this->cursor[0]->sym) + _this->fold);
   v5 = _this->ctx_w[2].sel;
   n2 = (int32_t)(n5 - 5) >> 1;
   n5_2 = 6 - (n5 & 1);
   if ( n5 < 5 )
-    n5_2 = *((uint8_t)(*_this->cursor[0] - (uint8_t)_this->f8) + _this->fold);
+    n5_2 = *((uint8_t)(_this->cursor[0]->sym - (uint8_t)_this->f8) + _this->fold);
   n5_3 = 6 - (n5_1 & 1);
   if ( n5_1 < 5 )
     n5_3 = n5_1;
@@ -3835,11 +3834,11 @@ int32_t __alt_p1_model(AltP1Block *_this)
 
 int32_t *__alt_p1_alloc(AltP1Block *_this, int32_t i, int32_t a3, int32_t n4)
 {
+  P1Ctx *v22, *v23, *v24, *v25;
   ;
   bool v11;
   int32_t v6, v7, v8, v9, v10, v12, v13, v15, v16, v17, v18, v20, v21, v27,
           v28;
-  uint8_t *v22, *v23, *v24, *v25;   // the four planes whose cursors follow
   uint32_t n0x99C60, n0x80, n5;
   n0x99C60 = 0;
   _this->f0 = i;
@@ -3910,7 +3909,7 @@ int32_t *__alt_p1_alloc(AltP1Block *_this, int32_t i, int32_t a3, int32_t n4)
   _this->ctx_w[8].w[1] = 209952;
   _this->ctx_w[8].w[2] = 419904;
   do
-    *(int32_t *)&_this->buf[n5++] = (int32_t)bmf_new(2 * _this->f0 + 20);
+    _this->buf[n5++] = (P1Ctx *)bmf_new(2 * _this->f0 + 20);
   while ( n5 < 5 );
   __alt_init_tables(_this->fold, (int8_t *)_this->unfold);
   v20 = _this->f0;
@@ -3919,30 +3918,30 @@ int32_t *__alt_p1_alloc(AltP1Block *_this, int32_t i, int32_t a3, int32_t n4)
     v21 = 0;
     do
     {
-      _this->buf[4][2 * v21] = 72;
-      _this->buf[3][2 * v21] = 72;
-      _this->buf[2][2 * v21] = 72;
-      _this->buf[1][2 * v21] = 72;
-      _this->buf[0][2 * v21] = 72;
-      _this->buf[4][2 * v21 + 1] = 0;
-      _this->buf[3][2 * v21 + 1] = 0;
-      _this->buf[2][2 * v21 + 1] = 0;
-      _this->buf[1][2 * v21 + 1] = 0;
-      _this->buf[0][2 * v21 + 1] = 0;
+      _this->buf[4][v21].sym = 72;
+      _this->buf[3][v21].sym = 72;
+      _this->buf[2][v21].sym = 72;
+      _this->buf[1][v21].sym = 72;
+      _this->buf[0][v21].sym = 72;
+      _this->buf[4][v21].mag = 0;
+      _this->buf[3][v21].mag = 0;
+      _this->buf[2][v21].mag = 0;
+      _this->buf[1][v21].mag = 0;
+      _this->buf[0][v21].mag = 0;
       v20 = _this->f0;
       ++v21;
     }
     while ( v21 < _this->f0 + 10 );
   }
   v22 = _this->buf[1];
-  _this->cursor[0] = _this->buf[0] + 2 * v20 + 8;
+  _this->cursor[0] = _this->buf[0] + v20 + 4;
   v23 = _this->buf[2];
-  _this->cursor[1] = v22 + 2 * v20 + 8;
+  _this->cursor[1] = v22 + v20 + 4;
   v24 = _this->buf[3];
-  _this->cursor[2] = v23 + 2 * v20 + 8;
+  _this->cursor[2] = v23 + v20 + 4;
   v25 = _this->buf[4];
-  _this->cursor[3] = v24 + 2 * v20 + 8;
-  _this->cursor[4] = v25 + 2 * v20 + 8;
+  _this->cursor[3] = v24 + v20 + 4;
+  _this->cursor[4] = v25 + v20 + 4;
   return (int32_t *)_this;
 }
 
@@ -4065,17 +4064,16 @@ uint8_t *__rc_begin_encode()
 
 void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
 {
+  P1Ctx *v10, *v11, *v27, *v5, *v6, *v7, *v8, *v9;
   ;
-  uint8_t *v9;   // were int32_t: these hold addresses
   bool v31;
   uint8_t v33, v35;
   int32_t v4, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24,
           v25, v26, v28, v29, v30, v34, n5, n16, v38, v40, v42;
   // The five planes, held across the rotation that ends a row, and the cursor
   // the row is written through.
-  uint8_t *v5, *v6, *v7, *v8, *v27;
   int64_t v39;
-  uint8_t *v10, *v11, *v32;
+  uint8_t *v32;
   __rc_begin_encode();
   if ( _this->f4 > 0 )
   {
@@ -4104,13 +4102,13 @@ void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
       _this->buf[2] = v8;
       _this->buf[1] = v9;
       _this->buf[0] = v5;
-      v5 += 8;
+      v5 += 4;
       _this->cursor[0] = v5;
-      v9 += 8;
+      v9 += 4;
       _this->cursor[1] = v9;
-      _this->cursor[2] = v8 + 8;
-      _this->cursor[3] = v7 + 8;
-      _this->cursor[4] = v6 + 8;
+      _this->cursor[2] = v8 + 4;
+      _this->cursor[3] = v7 + 4;
+      _this->cursor[4] = v6 + 4;
       ((P1Ctx *)v5)[-4] = ((P1Ctx *)v9)[3];
       // And the rest of the new row's left margin, from the row above.
       {
@@ -4125,46 +4123,46 @@ void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
       _this->f12[2] = 0;
       _this->f12[3] = 0;
       _this->f12[4] = 0;
-      v12 = *(v10 - 3);
+      v12 = v10[-2].mag;
       _this->f12[3] = v12;
-      v13 = *(v10 - 1);
+      v13 = v10[-1].mag;
       _this->f12[4] = v13;
-      v14 = *(v11 - 3) + v12;
+      v14 = v11[-2].mag + v12;
       _this->f12[3] = v14;
-      v15 = *(v11 - 1) + v13;
+      v15 = v11[-1].mag + v13;
       _this->f12[4] = v15;
-      v16 = v10[1] + v14;
+      v16 = v10->mag + v14;
       _this->f12[3] = v16;
-      v17 = v10[3] + v15;
+      v17 = v10[1].mag + v15;
       _this->f12[4] = v17;
-      v18 = v11[1] + v16;
+      v18 = v11->mag + v16;
       _this->f12[3] = v18;
-      v19 = v11[3] + v17;
+      v19 = v11[1].mag + v17;
       _this->f12[4] = v19;
-      v20 = v10[5] + v18;
+      v20 = v10[2].mag + v18;
       _this->f12[3] = v20;
-      v21 = v10[7] + v19;
+      v21 = v10[3].mag + v19;
       _this->f12[4] = v21;
-      v22 = v11[5] + v20;
+      v22 = v11[2].mag + v20;
       _this->f12[3] = v22;
-      v23 = v11[7] + v21;
+      v23 = v11[3].mag + v21;
       _this->f12[4] = v23;
-      v24 = v10[9] + v22;
+      v24 = v10[4].mag + v22;
       _this->f12[3] = v24;
-      v25 = v10[11] + v23;
+      v25 = v10[5].mag + v23;
       _this->f12[4] = v25;
-      v26 = v11[9] + v24;
+      v26 = v11[4].mag + v24;
       v27 = _this->cursor[0];
       _this->f12[3] = v26;
-      v28 = v11[11] + v25;
+      v28 = v11[5].mag + v25;
       _this->f12[4] = v28;
-      v29 = *(v27 - 7) + v26;
+      v29 = v27[-4].mag + v26;
       _this->f12[3] = v29;
-      v30 = *(v27 - 5) + v28;
+      v30 = v27[-3].mag + v28;
       _this->f12[4] = v30;
-      _this->f12[3] = *(v27 - 3) + v29;
+      _this->f12[3] = v27[-2].mag + v29;
       v31 = _this->f0 <= 0;
-      _this->f12[4] = *(v27 - 1) + v30;
+      _this->f12[4] = v27[-1].mag + v30;
       if ( !v31 )
       {
         v32 = a3;
@@ -4191,24 +4189,24 @@ void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
           __alt_p1_encode_symbol(&_this->counters[_this->f12[0]].total, 16 * _this->f12[0], _this->f12[1], n5);
           v38 = (uint8_t)*v32;
           v39 = v38 - _this->f8;
-          *_this->cursor[0] = v38;
-          _this->cursor[0][1] = (BYTE4(v39) ^ v39) - BYTE4(v39);
+          _this->cursor[0]->sym = v38;
+          _this->cursor[0]->mag = (BYTE4(v39) ^ v39) - BYTE4(v39);
           _this->f12[3 + _this->f12[2]] = _this->f12[3 + _this->f12[2]]
-                                                              + _this->cursor[0][1]
-                                                              - _this->cursor[0][-7]
-                                                              - (_this->cursor[4][-3]
-                                                               - _this->cursor[4][13]
-                                                               + _this->cursor[2][-3]
-                                                               - _this->cursor[2][13]);
+                                                              + _this->cursor[0]->mag
+                                                              - _this->cursor[0][-4].mag
+                                                              - (_this->cursor[4][-2].mag
+                                                               - _this->cursor[4][6].mag
+                                                               + _this->cursor[2][-2].mag
+                                                               - _this->cursor[2][6].mag);
                   _this->f12[2] = _this->f12[2] == 0;
           if ( _this->counters[_this->f12[0]].total < 0x4000u )
             __alt_p1_model(_this);
-          _this->cursor[0] += 2;
+          ++_this->cursor[0];
           ++v32;
-          _this->cursor[1] += 2;
-          _this->cursor[2] += 2;
-          _this->cursor[3] += 2;
-          _this->cursor[4] += 2;
+          ++_this->cursor[1];
+          ++_this->cursor[2];
+          ++_this->cursor[3];
+          ++_this->cursor[4];
           ++a2;
         }
         while ( v42 < _this->f0 );
@@ -5741,9 +5739,8 @@ int32_t __estimate_cost(uint8_t *a1, int32_t n2)
 
 void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_t a4)
 {
-  uint8_t *v29;   // `cursor[0]`, the row being written
+  P1Ctx *v10, *v11, *v29, *v7, *v8, *v9;
   ;
-  uint8_t *v7, *v8, *v9, *v10, *v11;   // the five row cursors of f176
   bool v33;
   AltP1Block *v5;
   AltP1Block *v4;
@@ -5784,13 +5781,13 @@ void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_
       v5->buf[2] = v10;
       v5->buf[1] = v11;
       v5->buf[0] = v7;
-      v7 += 8;
+      v7 += 4;
       v5->cursor[0] = v7;
-      v11 += 8;
+      v11 += 4;
       v5->cursor[1] = v11;
-      v5->cursor[2] = v10 + 8;
-      v5->cursor[3] = v9 + 8;
-      v5->cursor[4] = v8 + 8;
+      v5->cursor[2] = v10 + 4;
+      v5->cursor[3] = v9 + 4;
+      v5->cursor[4] = v8 + 4;
       ((P1Ctx *)v7)[-4] = ((P1Ctx *)v11)[3];
       // And the rest of the new row's left margin, from the row above.
       {
@@ -5838,13 +5835,13 @@ void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_
       v5->f12[3] = v28;
       v30 = v13[11] + v27;
       v5->f12[4] = v30;
-      v31 = v29[-7] + v28;
+      v31 = v29[-4].mag + v28;
       v5->f12[3] = v31;
-      v32 = v29[-5] + v30;
+      v32 = v29[-3].mag + v30;
       v5->f12[4] = v32;
-      v5->f12[3] = v29[-3] + v31;
+      v5->f12[3] = v29[-2].mag + v31;
       v33 = v5->f0 <= 0;
-      v5->f12[4] = v29[-1] + v32;
+      v5->f12[4] = v29[-1].mag + v32;
       if ( !v33 )
       {
         Src_1 = Src;
@@ -5858,24 +5855,26 @@ void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_
                                 + *((uint8_t *)v5 + (uint8_t)__alt_p1_decode_symbol((uint16_t *)&((int32_t *)v5)[4 * v5->f12[0] + 950], v35, v5->f12[1]) + 1496));
           *Src_1 = v36;
           v37 = v36 - v5->f8;
-          *(uint8_t *)v5->cursor[0] = v36;
-          v5->cursor[0][1] = (BYTE4(v37) ^ v37) - BYTE4(v37);
+          // The record's two writers, one line apart: the reconstructed
+          // sample, then the size of the prediction error.
+          v5->cursor[0]->sym = v36;
+          v5->cursor[0]->mag = (BYTE4(v37) ^ v37) - BYTE4(v37);
           v5->f12[3 + v5->f12[2]] = v5->f12[3 + v5->f12[2]]
-                        + v5->cursor[0][1]
-                        - v5->cursor[0][-7]
-                        - (v5->cursor[4][-3]
-                         - v5->cursor[4][13]
-                         + v5->cursor[2][-3]
-                         - v5->cursor[2][13]);
+                        + v5->cursor[0]->mag
+                        - v5->cursor[0][-4].mag
+                        - (v5->cursor[4][-2].mag
+                         - v5->cursor[4][6].mag
+                         + v5->cursor[2][-2].mag
+                         - v5->cursor[2][6].mag);
             v5->f12[2] = v5->f12[2] == 0;
           if ( v5->counters[v5->f12[0]].total < 0x4000u )
             __alt_p1_model((AltP1Block *)v5);
-          v5->cursor[0] += 2;
+          ++v5->cursor[0];
           ++Src_1;
-          v5->cursor[1] += 2;
-          v5->cursor[2] += 2;
-          v5->cursor[3] += 2;
-          v5->cursor[4] += 2;
+          ++v5->cursor[1];
+          ++v5->cursor[2];
+          ++v5->cursor[3];
+          ++v5->cursor[4];
         }
         while ( v41 < v5->f0 );
         v6 = v39;
@@ -5891,7 +5890,7 @@ void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_
 
 int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
 {
-  uint8_t *v47;   // `cursor[0]`, the row being written
+  P1Ctx *v25, *v26, *v27, *v28, *v29, *v47, *v55, *v63, *v70, *v77;
   // Phase 2 split this frame into plain locals, which is what the other eight
   // frames took -- and it is wrong here.  The frame was 116 bytes and its
   // aliases only reach offset 84; the code writes into the 32 bytes of slack
@@ -5921,10 +5920,8 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
   AltP1Block *v59;
   uintptr_t v61;
   AltP1Block *v24;
-  uint8_t *v29;
   uint8_t v11, v12, v13;
   AltP1Block *v6;
-  uint8_t *v25, *v26, *v27, *v28;   // row cursors out of AltP1Block
   int32_t i, v3, n4, *v7, v8, v9, v10, v14, v15, v16, ArgList, v18, i_3, n4_1,
           n4_2, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43,
           v44, v45, v46, v48, v49, v50, v52, v53, v54, v56, v57, v60,
@@ -5934,7 +5931,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
   AltP1Block *v73;
   uint8_t *v30;
   uint8_t *v31;
-  uint8_t *v55, *v63, *v69, *v70, *v76, *v77;
+  uint8_t *v69, *v76;
   void **v82;
   i = *p_i;
   v3 = p_i[1];
@@ -6008,13 +6005,13 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
           v24->buf[2] = v28;
           v24->buf[1] = v29;
           v24->buf[0] = v25;
-          v25 += 8;
+          v25 += 4;
           v24->cursor[0] = v25;
-          v29 += 8;
+          v29 += 4;
           v24->cursor[1] = v29;
-          v24->cursor[2] = v28 + 8;
-          v24->cursor[3] = v27 + 8;
-          v24->cursor[4] = v26 + 8;
+          v24->cursor[2] = v28 + 4;
+          v24->cursor[3] = v27 + 4;
+          v24->cursor[4] = v26 + 4;
           ((P1Ctx *)v25)[-4] = ((P1Ctx *)v29)[3];
           // And the rest of the new row's left margin, from the row above.
           {
@@ -6062,12 +6059,12 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
           v24->f12[3] = v46;
           v48 = v31[11] + v45;
           v24->f12[4] = v48;
-          v49 = v47[-7] + v46;
+          v49 = v47[-4].mag + v46;
           v24->f12[3] = v49;
-          v50 = v47[-5] + v48;
+          v50 = v47[-3].mag + v48;
           v24->f12[4] = v50;
-          v24->f12[3] = v47[-3] + v49;
-          v24->f12[4] = v47[-1] + v50;
+          v24->f12[3] = v47[-2].mag + v49;
+          v24->f12[4] = v47[-1].mag + v50;
           n4_1 = plane_count;
         }
         while ( n4_2 < plane_count );
@@ -6095,15 +6092,15 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
           // `[-7]` is the one four pixels back, and the four terms off
           // `cursor[2]` and `cursor[4]` are two records back and six forward on
           // the other two planes.
-          *v55 = v56;
-          blk->cursor[0][1] = abs32(v56 - v54);
+          v55->sym = v56;
+          blk->cursor[0]->mag = abs32(v56 - v54);
           v51[v51[5] + 6] = v51[v51[5] + 6]
-                          + blk->cursor[0][1]
-                          - blk->cursor[0][-7]
-                          - (blk->cursor[4][-3]
-                           - blk->cursor[4][13]
-                           + blk->cursor[2][-3]
-                           - blk->cursor[2][13]);
+                          + blk->cursor[0]->mag
+                          - blk->cursor[0][-4].mag
+                          - (blk->cursor[4][-2].mag
+                           - blk->cursor[4][6].mag
+                           + blk->cursor[2][-2].mag
+                           - blk->cursor[2][6].mag);
           v57 = 4 * v51[3];
           v51[5] = v51[5] == 0;
           if ( LOWORD(v51[v57 + 950]) < 0x4000u )
@@ -6121,23 +6118,23 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
           v63 = v59->cursor[0];
           v64 = (uint8_t)(v62 + v59->unfold[v61]);
           v104 = v64;
-          *v63 = v64;
-          v59->cursor[0][1] = abs32(v64 - v62);
+          v63->sym = v64;
+          v59->cursor[0]->mag = abs32(v64 - v62);
           v59->f12[3 + v59->f12[2]] = v59->f12[3 + v59->f12[2]]
-                                                            + v59->cursor[0][1]
-                                                            - v59->cursor[0][-7]
-                                                            - (v59->cursor[4][-3]
-                                                             - v59->cursor[4][13]
-                                                             + v59->cursor[2][-3]
-                                                             - v59->cursor[2][13]);
+                                                            + v59->cursor[0]->mag
+                                                            - v59->cursor[0][-4].mag
+                                                            - (v59->cursor[4][-2].mag
+                                                             - v59->cursor[4][6].mag
+                                                             + v59->cursor[2][-2].mag
+                                                             - v59->cursor[2][6].mag);
           v59->f12[2] = v59->f12[2] == 0;
           if ( v59->counters[v59->f12[0]].total < 0x4000u )
             __alt_p1_model(v59);
-          v59->cursor[0] += 2;
-          v59->cursor[1] += 2;
-          v59->cursor[2] += 2;
-          v59->cursor[3] += 2;
-          v59->cursor[4] += 2;
+          ++v59->cursor[0];
+          ++v59->cursor[1];
+          ++v59->cursor[2];
+          ++v59->cursor[3];
+          ++v59->cursor[4];
           if ( v16 )
             v104 += v97 + *(plane_desc[1].src_plane + Src);
           v66 = (AltP1Block *)(v95);
@@ -6149,23 +6146,23 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
           v69 = (uint8_t *)(v66->f8);
           v70 = v66->cursor[0];
           v71 = (uint8_t)((uint8_t)(uintptr_t)v69 + v66->unfold[v68]);
-          *v70 = v71;
-          v66->cursor[0][1] = abs32(v71 - (uint32_t)v69);
-          ((uint8_t**)v66)[v66->f12[2] + 6] = &((uint8_t**)v66)[v66->f12[2] + 6][v66->cursor[0][1]
-                                                           - v66->cursor[0][-7]
-                                                           - (v66->cursor[4][-3]
-                                                            - v66->cursor[4][13])
-                                                           - (v66->cursor[2][-3]
-                                                            - v66->cursor[2][13])];
+          v70->sym = v71;
+          v66->cursor[0]->mag = abs32(v71 - (uint32_t)v69);
+          ((uint8_t**)v66)[v66->f12[2] + 6] = &((uint8_t**)v66)[v66->f12[2] + 6][v66->cursor[0]->mag
+                                                           - v66->cursor[0][-4].mag
+                                                           - (v66->cursor[4][-2].mag
+                                                            - v66->cursor[4][6].mag)
+                                                           - (v66->cursor[2][-2].mag
+                                                            - v66->cursor[2][6].mag)];
           v72 = 4 * v66->f12[0];
           v66->f12[2] = v66->f12[2] == 0;
           if ( LOWORD(((uint8_t**)v66)[v72 + 950]) < 0x4000u )
             __alt_p1_model((AltP1Block *)v66);
-          v66->cursor[0] += 2;
-          v66->cursor[1] += 2;
-          v66->cursor[2] += 2;
-          v66->cursor[3] += 2;
-          v66->cursor[4] += 2;
+          ++v66->cursor[0];
+          ++v66->cursor[1];
+          ++v66->cursor[2];
+          ++v66->cursor[3];
+          ++v66->cursor[4];
           if ( ArgList )
             *(plane_desc[3].src_plane + Src) = ((plane_desc[plane_desc[3].src_plane + 1].w4
                                                                 * *(plane_desc[1].src_plane
@@ -6187,23 +6184,23 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
             v77 = v73->cursor[0];
             v78 = (uint8_t)((uint8_t)(uintptr_t)v76 + v73->unfold[v75]);
             v92 = v78;
-            *v77 = v78;
-            v73->cursor[0][1] = abs32(v78 - (uint32_t)v76);
-            ((uint8_t**)v73)[v73->f12[2] + 6] = &((uint8_t**)v73)[v73->f12[2] + 6][v73->cursor[0][1]
-                                                             - v73->cursor[0][-7]
-                                                             - (v73->cursor[4][-3]
-                                                              - v73->cursor[4][13])
-                                                             - (v73->cursor[2][-3]
-                                                              - v73->cursor[2][13])];
+            v77->sym = v78;
+            v73->cursor[0]->mag = abs32(v78 - (uint32_t)v76);
+            ((uint8_t**)v73)[v73->f12[2] + 6] = &((uint8_t**)v73)[v73->f12[2] + 6][v73->cursor[0]->mag
+                                                             - v73->cursor[0][-4].mag
+                                                             - (v73->cursor[4][-2].mag
+                                                              - v73->cursor[4][6].mag)
+                                                             - (v73->cursor[2][-2].mag
+                                                              - v73->cursor[2][6].mag)];
             v79 = 4 * v73->f12[0];
             v73->f12[2] = v73->f12[2] == 0;
             if ( LOWORD(((uint8_t**)v73)[v79 + 950]) < 0x4000u )
               __alt_p1_model((AltP1Block *)v73);
-            v73->cursor[0] += 2;
-            v73->cursor[1] += 2;
-            v73->cursor[2] += 2;
-            v73->cursor[3] += 2;
-            v73->cursor[4] += 2;
+            ++v73->cursor[0];
+            ++v73->cursor[1];
+            ++v73->cursor[2];
+            ++v73->cursor[3];
+            ++v73->cursor[4];
             if ( v18 )
               v92 += ((plane_desc[plane_desc[4].src_plane + 1].w8 * *(plane_desc[4].src_plane + Src - 2)
                      + plane_desc[plane_desc[4].src_plane + 1].w4 * *(plane_desc[4].src_plane + Src - 3)
@@ -11848,7 +11845,7 @@ LABEL_76:
 
 int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
 {
-  uint8_t *v46;   // `cursor[0]`, the row being written
+  P1Ctx *v24, *v25, *v26, *v27, *v28, *v46;
   struct alignas(16) AltModelP1EncodeFrame {   // 144 bytes, one stack frame
       uint8_t   _gap0[1];   // was int8_t v90
       uint8_t _pad0[3];
@@ -11913,10 +11910,8 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
   ;
   uintptr_t n3;   // were int32_t: addresses, masked and tagged
   AltP1Block *v23;
-  uint8_t *v28;   // a row cursor out of AltP1Block
   uint8_t v11, v12, v13, v62, v71, v81, v83;
   AltP1Block *v6;
-  uint8_t *v24, *v25, *v26, *v27;   // row cursors out of AltP1Block
   int32_t i, v3, n4, *v7, v8, v9, v10, v14, v15, v16, v17, i_3, n4_1, n4_2,
           v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43,
           v44, v45, v47, v48, v49, n5_9, n5_7, n5_2, n5_1, v56, n16, v58,
@@ -12003,13 +11998,13 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
           v23->buf[2] = v27;
           v23->buf[1] = v28;
           v23->buf[0] = v24;
-          v24 += 8;
+          v24 += 4;
           v23->cursor[0] = v24;
-          v28 += 8;
+          v28 += 4;
           v23->cursor[1] = v28;
-          v23->cursor[2] = v27 + 8;
-          v23->cursor[3] = v26 + 8;
-          v23->cursor[4] = v25 + 8;
+          v23->cursor[2] = v27 + 4;
+          v23->cursor[3] = v26 + 4;
+          v23->cursor[4] = v25 + 4;
           ((P1Ctx *)v24)[-4] = ((P1Ctx *)v28)[3];
           // And the rest of the new row's left margin, from the row above.
           {
@@ -12057,12 +12052,12 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
           v23->f12[3] = v45;
           v47 = v30[11] + v44;
           v23->f12[4] = v47;
-          v48 = v46[-7] + v45;
+          v48 = v46[-4].mag + v45;
           v23->f12[3] = v48;
-          v49 = v46[-5] + v47;
+          v49 = v46[-3].mag + v47;
           v23->f12[4] = v49;
-          v23->f12[3] = v46[-3] + v48;
-          v23->f12[4] = v46[-1] + v49;
+          v23->f12[3] = v46[-2].mag + v48;
+          v23->f12[4] = v46[-1].mag + v49;
           n4_1 = plane_count;
         }
         while ( n4_2 < plane_count );
@@ -12102,23 +12097,23 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
           }
           __alt_p1_encode_symbol(&v50->counters[v50->f12[0]].total, n5_1, v50->f12[1], n5_2);
           v58 = n5_7 - v50->f8;
-          *v50->cursor[0] = n5_6;
-          v50->cursor[0][1] = abs32(v58);
+          v50->cursor[0]->sym = n5_6;
+          v50->cursor[0]->mag = abs32(v58);
           v50->f12[v50->f12[2] + 3] = v50->f12[v50->f12[2] + 3]
-                                                         + v50->cursor[0][1]
-                                                         - v50->cursor[0][-7]
-                                                         - (v50->cursor[4][-3]
-                                                          - v50->cursor[4][13]
-                                                          + v50->cursor[2][-3]
-                                                          - v50->cursor[2][13]);
+                                                         + v50->cursor[0]->mag
+                                                         - v50->cursor[0][-4].mag
+                                                         - (v50->cursor[4][-2].mag
+                                                          - v50->cursor[4][6].mag
+                                                          + v50->cursor[2][-2].mag
+                                                          - v50->cursor[2][6].mag);
           v50->f12[2] = v50->f12[2] == 0;
           if ( v50->counters[v50->f12[0]].total < 0x4000u )
             __alt_p1_model(v50);
-          v50->cursor[0] += 2;
-          v50->cursor[1] += 2;
-          v50->cursor[2] += 2;
-          v50->cursor[3] += 2;
-          v50->cursor[4] += 2;
+          ++v50->cursor[0];
+          ++v50->cursor[1];
+          ++v50->cursor[2];
+          ++v50->cursor[3];
+          ++v50->cursor[4];
           v60 = *(a2 + plane_desc[2].src_plane);
           v113 = plane_desc[2].src_plane;
           if ( v15 )
@@ -12145,22 +12140,22 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
           }
           __alt_p1_encode_symbol((uint16_t *)&((uint8_t**)v61)[4 * v61->f12[0] + 950], 16 * v61->f12[0], (int32_t)v61->f12[1], n5_3);
           v68 = v118 - v61->f8;
-          *v61->cursor[0] = v118;
-          v61->cursor[0][1] = (BYTE4(v68) ^ v68) - BYTE4(v68);
-          ((uint8_t**)v61)[v61->f12[2] + 6] = &((uint8_t**)v61)[v61->f12[2] + 6][v61->cursor[0][1]
-                                                           - v61->cursor[0][-7]
-                                                           - (v61->cursor[4][-3]
-                                                            - v61->cursor[4][13])
-                                                           - (v61->cursor[2][-3]
-                                                            - v61->cursor[2][13])];
+          v61->cursor[0]->sym = v118;
+          v61->cursor[0]->mag = (BYTE4(v68) ^ v68) - BYTE4(v68);
+          ((uint8_t**)v61)[v61->f12[2] + 6] = &((uint8_t**)v61)[v61->f12[2] + 6][v61->cursor[0]->mag
+                                                           - v61->cursor[0][-4].mag
+                                                           - (v61->cursor[4][-2].mag
+                                                            - v61->cursor[4][6].mag)
+                                                           - (v61->cursor[2][-2].mag
+                                                            - v61->cursor[2][6].mag)];
           v61->f12[2] = v61->f12[2] == 0;
           if ( v61->counters[v61->f12[0]].total < 0x4000u )
             __alt_p1_model((AltP1Block *)v61);
-          v61->cursor[0] += 2;
-          v61->cursor[1] += 2;
-          v61->cursor[2] += 2;
-          v61->cursor[3] += 2;
-          v61->cursor[4] += 2;
+          ++v61->cursor[0];
+          ++v61->cursor[1];
+          ++v61->cursor[2];
+          ++v61->cursor[3];
+          ++v61->cursor[4];
           v69 = *(plane_desc[3].src_plane + a2);
           v117 = plane_desc[3].src_plane;
           if ( v16 )
@@ -12190,23 +12185,23 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
           }
           __alt_p1_encode_symbol((uint16_t *)&((uint8_t**)v70)[4 * v70->f12[0] + 950], n5_4, (int32_t)v70->f12[1], n5_4);
           v76 = v69 - v70->f8;
-          *v70->cursor[0] = v69;
-          v70->cursor[0][1] = (BYTE4(v76) ^ v76) - BYTE4(v76);
-          ((uint8_t**)v70)[v70->f12[2] + 6] = &((uint8_t**)v70)[v70->f12[2] + 6][v70->cursor[0][1]
-                                                           - v70->cursor[0][-7]
-                                                           - (v70->cursor[4][-3]
-                                                            - v70->cursor[4][13])
-                                                           - (v70->cursor[2][-3]
-                                                            - v70->cursor[2][13])];
+          v70->cursor[0]->sym = v69;
+          v70->cursor[0]->mag = (BYTE4(v76) ^ v76) - BYTE4(v76);
+          ((uint8_t**)v70)[v70->f12[2] + 6] = &((uint8_t**)v70)[v70->f12[2] + 6][v70->cursor[0]->mag
+                                                           - v70->cursor[0][-4].mag
+                                                           - (v70->cursor[4][-2].mag
+                                                            - v70->cursor[4][6].mag)
+                                                           - (v70->cursor[2][-2].mag
+                                                            - v70->cursor[2][6].mag)];
           v77 = 4 * v70->f12[0];
           v70->f12[2] = v70->f12[2] == 0;
           if ( LOWORD(((uint8_t**)v70)[v77 + 950]) < 0x4000u )
             __alt_p1_model((AltP1Block *)v70);
-          v70->cursor[0] += 2;
-          v70->cursor[1] += 2;
-          v70->cursor[2] += 2;
-          v70->cursor[3] += 2;
-          v70->cursor[4] += 2;
+          ++v70->cursor[0];
+          ++v70->cursor[1];
+          ++v70->cursor[2];
+          ++v70->cursor[3];
+          ++v70->cursor[4];
           n4_1 = plane_count;
           if ( plane_count >= 4 )
           {
@@ -12241,22 +12236,22 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
             }
             __alt_p1_encode_symbol((uint16_t *)&((uint8_t**)v80)[4 * v80->f12[0] + 950], n5_5, (int32_t)v80->f12[1], n5_5);
             v86 = v99 - v80->f8;
-            *v80->cursor[0] = v99;
-            v80->cursor[0][1] = (BYTE4(v86) ^ v86) - BYTE4(v86);
-            ((uint8_t**)v80)[v80->f12[2] + 6] = &((uint8_t**)v80)[v80->f12[2] + 6][v80->cursor[0][1]
-                                                             - v80->cursor[0][-7]
-                                                             - (v80->cursor[4][-3]
-                                                              - v80->cursor[4][13])
-                                                             - (v80->cursor[2][-3]
-                                                              - v80->cursor[2][13])];
+            v80->cursor[0]->sym = v99;
+            v80->cursor[0]->mag = (BYTE4(v86) ^ v86) - BYTE4(v86);
+            ((uint8_t**)v80)[v80->f12[2] + 6] = &((uint8_t**)v80)[v80->f12[2] + 6][v80->cursor[0]->mag
+                                                             - v80->cursor[0][-4].mag
+                                                             - (v80->cursor[4][-2].mag
+                                                              - v80->cursor[4][6].mag)
+                                                             - (v80->cursor[2][-2].mag
+                                                              - v80->cursor[2][6].mag)];
             v80->f12[2] = v80->f12[2] == 0;
             if ( v80->counters[v80->f12[0]].total < 0x4000u )
               __alt_p1_model((AltP1Block *)v80);
-            v80->cursor[0] += 2;
-            v80->cursor[1] += 2;
-            v80->cursor[2] += 2;
-            v80->cursor[3] += 2;
-            v80->cursor[4] += 2;
+            ++v80->cursor[0];
+            ++v80->cursor[1];
+            ++v80->cursor[2];
+            ++v80->cursor[3];
+            ++v80->cursor[4];
             n4_1 = plane_count;
           }
           a2 += n4_1;
