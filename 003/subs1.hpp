@@ -15647,51 +15647,6 @@ static inline int32_t __fwd_alt_model_p2_encode_alt_p2_context(void *a0, void *a
 
 int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
 {
-  struct alignas(16) AltModelP2EncodeFrame {   // 324 bytes, one stack frame
-      uint8_t   _gap0[4];   // was uint32_t Size_1
-      uint8_t slot4[16];
-      uint8_t slot20[16];
-      uint8_t slot36[16];
-      uint8_t slot52[16];
-      uint8_t slot68[16];
-      uint8_t slot84[16];
-      uint8_t slot100[16];
-      uint8_t slot116[16];
-      uint8_t slot132[16];
-      uint8_t   _gap1[4];   // was int32_t v153
-      uint8_t _pad0[4];
-      uint8_t   _gap2[4];   // was uint32_t v154
-      uint8_t   _gap3[4];   // was int32_t v155
-      uint8_t   _gap4[4];   // was int32_t n3
-      uint8_t   _gap5[4];   // was int32_t v157
-      uint8_t   _gap6[4];   // was int32_t v158
-      uint8_t   _gap7[16];   // was Obj11 * plane
-      uint8_t   _gap8[4];   // was int32_t v163
-      uint8_t   _gap9[4];   // was int32_t v164
-      uint8_t   _gap10[4];   // was uint32_t Size
-      uint8_t   _gap11[4];   // was uint8_t * v166
-      uint8_t   _gap12[4];   // was int32_t i_2
-      uint8_t   _gap13[4];   // was int32_t v168
-      uint8_t   _gap14[4];   // was int32_t v169
-      uint8_t   _gap15[4];   // was uint32_t v170
-      uint8_t   _gap16[4];   // was int32_t n4_2
-      uint8_t   _gap17[4];   // was uint32_t i
-      uint8_t   _gap18[4];   // was int32_t v173
-      uint8_t   _gap19[4];   // was int32_t v174
-      uint8_t   _gap20[4];   // was int32_t v175
-      uint8_t   _gap21[4];   // was int32_t v176
-      uint8_t   _gap22[4];   // was int32_t v177
-      uint8_t   _gap23[4];   // was int32_t v178
-      uint8_t   _gap24[4];   // was int32_t v179
-      uint8_t   _gap25[4];   // was int32_t v180
-      uint8_t   _gap26[4];   // was int32_t v181
-      uint8_t   _gap27[4];   // was int32_t v182
-      uint8_t   _gap28[4];   // was int32_t v183
-      uint8_t   _gap29[4];   // was int32_t v184
-      uint8_t   _gap30[4];   // was uint32_t v185
-      uint8_t _pad1[40];
-  } __frame;
-  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 336, "frame layout moved");
   uint32_t Size_1;
   int32_t v153;
   uint32_t v154;
@@ -16709,26 +16664,6 @@ static inline void __fwd_transform_planes_model_plane( void *a2, void *a3, void 
 
 void __transform_planes(BmfImage *p_i, int32_t a2, int8_t a3)
 {
-  struct alignas(16) TransformPlanesFrame {   // 76 bytes, one stack frame
-      int32_t   v32;
-      int32_t   v33;
-      int32_t   Size;
-      int32_t   n4;
-      uint8_t *    Srca;
-      uint8_t   _gap0[4];   // was int32_t n4_3
-      uint16_t * p_i_1;
-      uint8_t   _gap1[4];   // was uint8_t * Src
-      uint8_t   _gap2[4];   // was uint16_t * Srca_3
-      uint8_t   _gap3[4];   // was uint8_t * p_ia
-      uint8_t   _gap4[4];   // was uint8_t * Buffer_1
-      uint8_t   _pad11[32];
-      uint8_t   _tail[4];   // alignas(16) rounds 76 up
-  } __frame;
-  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 80,
-                "frame layout moved");
-  static_assert(sizeof(void *) != 4
-                || __builtin_offsetof(__typeof__(__frame), _pad11) == 44,
-                "the named part of the frame moved");
   int32_t n4_3;
   uint8_t *Src;
   uint16_t *Srca_3;
