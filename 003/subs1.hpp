@@ -439,14 +439,24 @@ __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...);
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj0 {
-  int32_t f0;   // signed: `alt_p1_alloc` tests `f0 > -10`
-  int32_t f4;
-  int32_t f8;
-  union {   // the same bytes, 2 recoveries
-    uint32_t f12[51];   // +12 .. +212
+  union {   // the same bytes, 4 recoveries
     struct {
-      uint8_t _u3_0_0[184];
-      uint8_t *f196;
+      int32_t f0[8];   // +0 .. +28
+      uint8_t _u0_0_1[144];
+      uint8_t *f176[10];   // +176 .. +212, ten row cursors
+    };
+    struct {
+      uint8_t _u0_1_0[4];
+      int32_t f4;
+      int32_t f8;
+      uint32_t f12[51];   // +12 .. +212
+    };
+    struct {
+      uint8_t _u0_2_0[196];
+      uint8_t *cur[5];   // +196 .. +212, derived from row
+    };
+    struct {
+      uint8_t _u0_3_0[200];
       uint8_t *f200;
       uint8_t *f204;
       uint8_t *f208;
@@ -455,11 +465,11 @@ struct Obj0 {
   };
 };
 static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj0, f12) == 12,
+              || __builtin_offsetof(Obj0, f212) == 212,
               "Obj0: the layout moved");
 
 
-// Obj1 -- recovered from 59 dereferences over 13 offsets, under 1
+// Obj0 -- recovered from 59 dereferences over 13 offsets, under 1
 // name.  The layout is the one the code already assumed: at 32 bits a
 // pointer is four bytes, so naming these fields moves nothing, and the
 // static_assert is what says so.  Offsets the code only reaches with a
@@ -474,18 +484,7 @@ static_assert(sizeof(void *) != 4
 // the five offset by eight.  Naming ten consecutive `uint32_t` f176 through
 // f212 hid the one fact about them worth having.  The layout is unchanged:
 // `row[0]` is still +176, and the static_assert says so.
-struct Obj1 {
-  uint8_t _pad0[20];
-  uint32_t f20;
-  uint32_t f24;
-  uint32_t f28;
-  uint8_t _pad4[144];
-  uint8_t  *row[5];           // +176 .. +192, rotated one place each pass
-  uint8_t  *cur[5];           // +196 .. +212, derived from row
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj1, cur[4]) == 212,
-              "Obj1: the layout moved");
+
 
 
 
@@ -504,19 +503,12 @@ static_assert(sizeof(void *) != 4
               "Obj3: the layout moved");
 
 
-// Obj4 -- recovered from 84 dereferences over 18 offsets, under 1
+// Obj0 -- recovered from 84 dereferences over 18 offsets, under 1
 // name.  The layout is the one the code already assumed: at 32 bits a
 // pointer is four bytes, so naming these fields moves nothing, and the
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
-struct Obj4 {
-  int32_t   f0[8];   // +0 .. +28
-  uint8_t _pad8[144];
-  uint8_t  *f176[10];   // +176 .. +212, ten row cursors
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj4, f176[9]) == 212,
-              "Obj4: the layout moved");
+
 
 
 
@@ -4855,7 +4847,7 @@ int32_t *__alt_p1_alloc(Obj0 *_this, int32_t i, int32_t a3, int32_t n4)
           v28;
   uint32_t n0x99C60, n0x80, n5;
   n0x99C60 = 0;
-  _this->f0 = i;
+  _this->f0[0] = i;
   _this->f4 = a3;
   do
     __fwd_alt_p1_alloc_init_counter_node((uint16_t *)_this + 8 * n0x99C60++ + 1900);
@@ -4923,11 +4915,11 @@ int32_t *__alt_p1_alloc(Obj0 *_this, int32_t i, int32_t a3, int32_t n4)
   _this->f12[39] = 209952;
   _this->f12[40] = 419904;
   do
-    *((int32_t *)_this + n5++ + 44) = (int32_t)bmf_new(2 * _this->f0 + 20);
+    *((int32_t *)_this + n5++ + 44) = (int32_t)bmf_new(2 * _this->f0[0] + 20);
   while ( n5 < 5 );
   __fwd_alt_p1_alloc_alt_init_tables((uint8_t *)_this + 984, (char *)_this + 1496);
-  v20 = _this->f0;
-  if ( _this->f0 > -10 )
+  v20 = _this->f0[0];
+  if ( _this->f0[0] > -10 )
   {
     v21 = 0;
     do
@@ -4942,10 +4934,10 @@ int32_t *__alt_p1_alloc(Obj0 *_this, int32_t i, int32_t a3, int32_t n4)
       *(uint8_t *)(_this->f12[43] + 2 * v21 + 1) = 0;
       *(uint8_t *)(_this->f12[42] + 2 * v21 + 1) = 0;
       *(uint8_t *)(_this->f12[41] + 2 * v21 + 1) = 0;
-      v20 = _this->f0;
+      v20 = _this->f0[0];
       ++v21;
     }
-    while ( v21 < _this->f0 + 10 );
+    while ( v21 < _this->f0[0] + 10 );
   }
   v22 = _this->f12[42];
   _this->f12[46] = _this->f12[41] + 2 * v20 + 8;
@@ -5162,7 +5154,7 @@ void __alt_p1_d8_encode_body(Obj0 *_this, uint8_t *a2, uint8_t *a3)
       v30 = *(uint8_t *)(v27 - 5) + v28;
       _this->f12[4] = v30;
       _this->f12[3] = *(uint8_t *)(v27 - 3) + v29;
-      v31 = _this->f0 <= 0;
+      v31 = _this->f0[0] <= 0;
       _this->f12[4] = *(uint8_t *)(v27 - 1) + v30;
       if ( !v31 )
       {
@@ -5215,7 +5207,7 @@ void __alt_p1_d8_encode_body(Obj0 *_this, uint8_t *a2, uint8_t *a3)
           _this->f12[50] += 2;
           ++a2;
         }
-        while ( v42 < _this->f0 );
+        while ( v42 < _this->f0[0] );
         v4 = v40;
         a3 = v32;
       }
@@ -6734,7 +6726,7 @@ void ** __alt_model_p1_d8_decode(char ArgList, uint8_t *Src, int32_t i, int32_t 
   ;
   uint8_t *v7, *v8, *v9, *v10, *v11;   // the five row cursors of f176
   bool v33;
-  Obj4 *v5;
+  Obj0 *v5;
   Obj0 *v4;
   int32_t v6, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26,
           v27, v28, v29, v30, v31, v32, v35, v36, v39, v41;
@@ -6742,9 +6734,9 @@ void ** __alt_model_p1_d8_decode(char ArgList, uint8_t *Src, int32_t i, int32_t 
   uint8_t *v12, *v13, *Src_1;
   v4 = (Obj0 *)((int32_t *)bmf_new(0x99D4D8u));
   if ( v4 )
-    v5 = (Obj4 *)(__fwd_alt_model_p1_d8_decode_alt_p1_alloc(v4, i, a4, 0));
+    v5 = (Obj0 *)(__fwd_alt_model_p1_d8_decode_alt_p1_alloc(v4, i, a4, 0));
   else
-    v5 = (Obj4 *)(nullptr);
+    v5 = (Obj0 *)(nullptr);
   __rc_begin_decode(ArgList);
   if ( v5->f0[1] > 0 )
   {
@@ -6911,11 +6903,11 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
   ;
   Obj0 *v59;
   uintptr_t v61;
-  Obj1 *v24;
-  uint8_t *v29, *v65;   // row cursors out of Obj1
+  Obj0 *v24;
+  uint8_t *v29, *v65;   // row cursors out of Obj0
   char v11, v12, v13, v58;
   Obj0 *v6;
-  uint8_t *v25, *v26, *v27, *v28;   // row cursors out of Obj1
+  uint8_t *v25, *v26, *v27, *v28;   // row cursors out of Obj0
   int32_t i, v3, i_2, n4, *v7, v8, v9, v10, v14, v15, v16, ArgList, v18, i_3, n4_1, n4_2,
           v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45,
           v46, v47, v48, v49, v50, v52, v53, v54, v56, v57, v60, v62, v64, v67, v68, v71, v72,
@@ -6981,23 +6973,23 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           ++n4_2;
           // `&v92 + n` is `Block_plane[n - 1]`: v92 is the member
           // before the array, and this loop pre-increments from 0.
-          v24 = (Obj1 *)Block_plane[n4_2 - 1];
+          v24 = (Obj0 *)Block_plane[n4_2 - 1];
           **(uint16_t **)&v24->cur[0] = *(uint16_t *)(v24->cur[0] - 2);
           *(uint16_t *)(v24->cur[0] + 2) = *(uint16_t *)(v24->cur[0] - 4);
           *(uint16_t *)(v24->cur[0] + 4) = *(uint16_t *)(v24->cur[0] - 6);
           *(uint16_t *)(v24->cur[0] + 6) = *(uint16_t *)(v24->cur[0] - 8);
           *(uint16_t *)(v24->cur[0] + 8) = *(uint16_t *)(v24->cur[0] - 10);
           *(uint16_t *)(v24->cur[0] + 10) = *(uint16_t *)(v24->cur[0] - 12);
-          v25 = v24->row[4];
-          v26 = v24->row[3];
-          v27 = v24->row[2];
-          v28 = v24->row[1];
-          v29 = v24->row[0];
-          v24->row[4] = v26;
-          v24->row[3] = v27;
-          v24->row[2] = v28;
-          v24->row[1] = v29;
-          v24->row[0] = v25;
+          v25 = v24->f176[4];
+          v26 = v24->f176[3];
+          v27 = v24->f176[2];
+          v28 = v24->f176[1];
+          v29 = v24->f176[0];
+          v24->f176[4] = v26;
+          v24->f176[3] = v27;
+          v24->f176[2] = v28;
+          v24->f176[1] = v29;
+          v24->f176[0] = v25;
           v25 += 8;
           v24->cur[0] = v25;
           v29 += 8;
@@ -7011,48 +7003,48 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           *(uint16_t *)(v24->cur[0] - 2) = **(uint16_t **)&v24->cur[1];
           v30 = (uint8_t *)(*&v24->cur[2]);
           v31 = (uint8_t *)(*&v24->cur[4]);
-          v24->f20 = 0;
-          v24->f24 = 0;
-          v24->f28 = 0;
+          v24->f12[2] = 0;
+          v24->f12[3] = 0;
+          v24->f12[4] = 0;
           v32 = *((char *)v30 - 3);
-          v24->f24 = v32;
+          v24->f12[3] = v32;
           v33 = *((char *)v30 - 1);
-          v24->f28 = v33;
+          v24->f12[4] = v33;
           v34 = *((char *)v31 - 3) + v32;
-          v24->f24 = v34;
+          v24->f12[3] = v34;
           v35 = *((char *)v31 - 1) + v33;
-          v24->f28 = v35;
+          v24->f12[4] = v35;
           v36 = v30[1] + v34;
-          v24->f24 = v36;
+          v24->f12[3] = v36;
           v37 = v30[3] + v35;
-          v24->f28 = v37;
+          v24->f12[4] = v37;
           v38 = v31[1] + v36;
-          v24->f24 = v38;
+          v24->f12[3] = v38;
           v39 = v31[3] + v37;
-          v24->f28 = v39;
+          v24->f12[4] = v39;
           v40 = v30[5] + v38;
-          v24->f24 = v40;
+          v24->f12[3] = v40;
           v41 = v30[7] + v39;
-          v24->f28 = v41;
+          v24->f12[4] = v41;
           v42 = v31[5] + v40;
-          v24->f24 = v42;
+          v24->f12[3] = v42;
           v43 = v31[7] + v41;
-          v24->f28 = v43;
+          v24->f12[4] = v43;
           v44 = v30[9] + v42;
-          v24->f24 = v44;
+          v24->f12[3] = v44;
           v45 = v30[11] + v43;
-          v24->f28 = v45;
+          v24->f12[4] = v45;
           v46 = v31[9] + v44;
           v47 = (int32_t)(uintptr_t)v24->cur[0];
-          v24->f24 = v46;
+          v24->f12[3] = v46;
           v48 = v31[11] + v45;
-          v24->f28 = v48;
+          v24->f12[4] = v48;
           v49 = *(uint8_t *)(v47 - 7) + v46;
-          v24->f24 = v49;
+          v24->f12[3] = v49;
           v50 = *(uint8_t *)(v47 - 5) + v48;
-          v24->f28 = v50;
-          v24->f24 = *(uint8_t *)(v47 - 3) + v49;
-          v24->f28 = *(uint8_t *)(v47 - 1) + v50;
+          v24->f12[4] = v50;
+          v24->f12[3] = *(uint8_t *)(v47 - 3) + v49;
+          v24->f12[4] = *(uint8_t *)(v47 - 1) + v50;
           n4_1 = plane_count;
         }
         while ( n4_2 < plane_count );
@@ -7129,13 +7121,13 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           __fwd_alt_model_p1_decode_alt_p1_context(v66, v83, (int32_t)v84);
           v68 = __fwd_alt_model_p1_decode_alt_p1_decode_symbol(&((uint8_t**)v66)[4 * v66->f12[0] + 950], v67, (int32_t)v66->f12[1]);
           v69 = (unsigned char *)(v66->f8);
-          v70 = v66->f196;
+          v70 = v66->cur[0];
           v71 = (uint8_t)((uint8_t)(uintptr_t)v69 + *((uint8_t *)v66 + v68 + 1496));
           v105 = v71;
           *v70 = v71;
-          v66->f196[1] = abs32(v71 - (uint32_t)v69);
-          ((uint8_t**)v66)[v66->f12[2] + 6] = &((uint8_t**)v66)[v66->f12[2] + 6][v66->f196[1]
-                                                           - *(v66->f196 - 7)
+          v66->cur[0][1] = abs32(v71 - (uint32_t)v69);
+          ((uint8_t**)v66)[v66->f12[2] + 6] = &((uint8_t**)v66)[v66->f12[2] + 6][v66->cur[0][1]
+                                                           - *(v66->cur[0] - 7)
                                                            - (*(v66->f212 - 3)
                                                             - v66->f212[13])
                                                            - (*(v66->f204 - 3)
@@ -7144,7 +7136,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           v66->f12[2] = v66->f12[2] == 0;
           if ( LOWORD(((uint8_t**)v66)[v72 + 950]) < 0x4000u )
             __alt_p1_model((Obj0 *)v66);
-          v66->f196 += 2;
+          v66->cur[0] += 2;
           v66->f200 += 2;
           v66->f204 += 2;
           v66->f208 += 2;
@@ -7167,13 +7159,13 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
             __fwd_alt_model_p1_decode_alt_p1_context(v96, v95, (int32_t)v94);
             v75 = __fwd_alt_model_p1_decode_alt_p1_decode_symbol(&((uint8_t**)v73)[4 * v73->f12[0] + 950], v74, (int32_t)v73->f12[1]);
             v76 = (unsigned char *)(v73->f8);
-            v77 = v73->f196;
+            v77 = v73->cur[0];
             v78 = (uint8_t)((uint8_t)(uintptr_t)v76 + *((uint8_t *)v73 + v75 + 1496));
             v92 = v78;
             *v77 = v78;
-            v73->f196[1] = abs32(v78 - (uint32_t)v76);
-            ((uint8_t**)v73)[v73->f12[2] + 6] = &((uint8_t**)v73)[v73->f12[2] + 6][v73->f196[1]
-                                                             - *(v73->f196 - 7)
+            v73->cur[0][1] = abs32(v78 - (uint32_t)v76);
+            ((uint8_t**)v73)[v73->f12[2] + 6] = &((uint8_t**)v73)[v73->f12[2] + 6][v73->cur[0][1]
+                                                             - *(v73->cur[0] - 7)
                                                              - (*(v73->f212 - 3)
                                                               - v73->f212[13])
                                                              - (*(v73->f204 - 3)
@@ -7182,7 +7174,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
             v73->f12[2] = v73->f12[2] == 0;
             if ( LOWORD(((uint8_t**)v73)[v79 + 950]) < 0x4000u )
               __alt_p1_model((Obj0 *)v73);
-            v73->f196 += 2;
+            v73->cur[0] += 2;
             v73->f200 += 2;
             v73->f204 += 2;
             v73->f208 += 2;
@@ -12867,11 +12859,11 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
   int32_t n5;
   ;
   uintptr_t n3;   // were int32_t: addresses, masked and tagged
-  Obj1 *v23;
-  uint8_t *v28;   // a row cursor out of Obj1
+  Obj0 *v23;
+  uint8_t *v28;   // a row cursor out of Obj0
   char v11, v12, v13, v62, v71, v81, v83;
   Obj0 *v6;
-  uint8_t *v24, *v25, *v26, *v27;   // row cursors out of Obj1
+  uint8_t *v24, *v25, *v26, *v27;   // row cursors out of Obj0
   int32_t i, v3, i_2, n4, *v7, v8, v9, v10, v14, v15, v16, v17, i_3, n4_1, n4_2,
           v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46,
           v47, v48, v49, n5_9, n5_7, n5_2, n5_1, v56, n16, v58, v59, v63, v64, v65, n16_1, n5_3,
@@ -12937,23 +12929,23 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
         do
         {
           ++n4_2;
-          v23 = (Obj1 *)Block_plane[n4_2 - 1];
+          v23 = (Obj0 *)Block_plane[n4_2 - 1];
           **(uint16_t **)&v23->cur[0] = *(uint16_t *)(v23->cur[0] - 2);
           *(uint16_t *)(v23->cur[0] + 2) = *(uint16_t *)(v23->cur[0] - 4);
           *(uint16_t *)(v23->cur[0] + 4) = *(uint16_t *)(v23->cur[0] - 6);
           *(uint16_t *)(v23->cur[0] + 6) = *(uint16_t *)(v23->cur[0] - 8);
           *(uint16_t *)(v23->cur[0] + 8) = *(uint16_t *)(v23->cur[0] - 10);
           *(uint16_t *)(v23->cur[0] + 10) = *(uint16_t *)(v23->cur[0] - 12);
-          v24 = v23->row[4];
-          v25 = v23->row[3];
-          v26 = v23->row[2];
-          v27 = v23->row[1];
-          v28 = v23->row[0];
-          v23->row[4] = v25;
-          v23->row[3] = v26;
-          v23->row[2] = v27;
-          v23->row[1] = v28;
-          v23->row[0] = v24;
+          v24 = v23->f176[4];
+          v25 = v23->f176[3];
+          v26 = v23->f176[2];
+          v27 = v23->f176[1];
+          v28 = v23->f176[0];
+          v23->f176[4] = v25;
+          v23->f176[3] = v26;
+          v23->f176[2] = v27;
+          v23->f176[1] = v28;
+          v23->f176[0] = v24;
           v24 += 8;
           v23->cur[0] = v24;
           v28 += 8;
@@ -12967,48 +12959,48 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
           *(uint16_t *)(v23->cur[0] - 2) = **(uint16_t **)&v23->cur[1];
           v29 = (uint8_t *)(*&v23->cur[2]);
           v30 = (uint8_t *)(*&v23->cur[4]);
-          v23->f20 = 0;
-          v23->f24 = 0;
-          v23->f28 = 0;
+          v23->f12[2] = 0;
+          v23->f12[3] = 0;
+          v23->f12[4] = 0;
           v31 = *((char *)v29 - 3);
-          v23->f24 = v31;
+          v23->f12[3] = v31;
           v32 = *((char *)v29 - 1);
-          v23->f28 = v32;
+          v23->f12[4] = v32;
           v33 = *((char *)v30 - 3) + v31;
-          v23->f24 = v33;
+          v23->f12[3] = v33;
           v34 = *((char *)v30 - 1) + v32;
-          v23->f28 = v34;
+          v23->f12[4] = v34;
           v35 = v29[1] + v33;
-          v23->f24 = v35;
+          v23->f12[3] = v35;
           v36 = v29[3] + v34;
-          v23->f28 = v36;
+          v23->f12[4] = v36;
           v37 = v30[1] + v35;
-          v23->f24 = v37;
+          v23->f12[3] = v37;
           v38 = v30[3] + v36;
-          v23->f28 = v38;
+          v23->f12[4] = v38;
           v39 = v29[5] + v37;
-          v23->f24 = v39;
+          v23->f12[3] = v39;
           v40 = v29[7] + v38;
-          v23->f28 = v40;
+          v23->f12[4] = v40;
           v41 = v30[5] + v39;
-          v23->f24 = v41;
+          v23->f12[3] = v41;
           v42 = v30[7] + v40;
-          v23->f28 = v42;
+          v23->f12[4] = v42;
           v43 = v29[9] + v41;
-          v23->f24 = v43;
+          v23->f12[3] = v43;
           v44 = v29[11] + v42;
-          v23->f28 = v44;
+          v23->f12[4] = v44;
           v45 = v30[9] + v43;
           v46 = (int32_t)(uintptr_t)v23->cur[0];
-          v23->f24 = v45;
+          v23->f12[3] = v45;
           v47 = v30[11] + v44;
-          v23->f28 = v47;
+          v23->f12[4] = v47;
           v48 = *(uint8_t *)(v46 - 7) + v45;
-          v23->f24 = v48;
+          v23->f12[3] = v48;
           v49 = *(uint8_t *)(v46 - 5) + v47;
-          v23->f28 = v49;
-          v23->f24 = *(uint8_t *)(v46 - 3) + v48;
-          v23->f28 = *(uint8_t *)(v46 - 1) + v49;
+          v23->f12[4] = v49;
+          v23->f12[3] = *(uint8_t *)(v46 - 3) + v48;
+          v23->f12[4] = *(uint8_t *)(v46 - 1) + v49;
           n4_1 = plane_count;
         }
         while ( n4_2 < plane_count );
@@ -13092,10 +13084,10 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
           }
           __fwd_alt_model_p1_encode_alt_p1_encode_symbol((uint16_t *)&((uint8_t**)v61)[4 * v61->f12[0] + 950], 16 * v61->f12[0], (int32_t)v61->f12[1], n5_3);
           v68 = v118 - v61->f8;
-          *v61->f196 = v118;
-          v61->f196[1] = (BYTE4(v68) ^ v68) - BYTE4(v68);
-          ((uint8_t**)v61)[v61->f12[2] + 6] = &((uint8_t**)v61)[v61->f12[2] + 6][v61->f196[1]
-                                                           - *(v61->f196 - 7)
+          *v61->cur[0] = v118;
+          v61->cur[0][1] = (BYTE4(v68) ^ v68) - BYTE4(v68);
+          ((uint8_t**)v61)[v61->f12[2] + 6] = &((uint8_t**)v61)[v61->f12[2] + 6][v61->cur[0][1]
+                                                           - *(v61->cur[0] - 7)
                                                            - (*(v61->f212 - 3)
                                                             - v61->f212[13])
                                                            - (*(v61->f204 - 3)
@@ -13104,7 +13096,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
           v61->f12[2] = v61->f12[2] == 0;
           if ( *(uint16_t *)((char *)v61 + v68 + 3800) < 0x4000u )
             __alt_p1_model((Obj0 *)v61);
-          v61->f196 += 2;
+          v61->cur[0] += 2;
           v61->f200 += 2;
           v61->f204 += 2;
           v61->f208 += 2;
@@ -13138,10 +13130,10 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
           }
           __fwd_alt_model_p1_encode_alt_p1_encode_symbol((uint16_t *)&((uint8_t**)v70)[4 * v70->f12[0] + 950], n5_4, (int32_t)v70->f12[1], n5_4);
           v76 = v69 - v70->f8;
-          *v70->f196 = v69;
-          v70->f196[1] = (BYTE4(v76) ^ v76) - BYTE4(v76);
-          ((uint8_t**)v70)[v70->f12[2] + 6] = &((uint8_t**)v70)[v70->f12[2] + 6][v70->f196[1]
-                                                           - *(v70->f196 - 7)
+          *v70->cur[0] = v69;
+          v70->cur[0][1] = (BYTE4(v76) ^ v76) - BYTE4(v76);
+          ((uint8_t**)v70)[v70->f12[2] + 6] = &((uint8_t**)v70)[v70->f12[2] + 6][v70->cur[0][1]
+                                                           - *(v70->cur[0] - 7)
                                                            - (*(v70->f212 - 3)
                                                             - v70->f212[13])
                                                            - (*(v70->f204 - 3)
@@ -13150,7 +13142,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
           v70->f12[2] = v70->f12[2] == 0;
           if ( LOWORD(((uint8_t**)v70)[v77 + 950]) < 0x4000u )
             __alt_p1_model((Obj0 *)v70);
-          v70->f196 += 2;
+          v70->cur[0] += 2;
           v70->f200 += 2;
           v70->f204 += 2;
           v70->f208 += 2;
@@ -13190,10 +13182,10 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
             }
             __fwd_alt_model_p1_encode_alt_p1_encode_symbol((uint16_t *)&((uint8_t**)v80)[4 * v80->f12[0] + 950], n5_5, (int32_t)v80->f12[1], n5_5);
             v86 = v99 - v80->f8;
-            *v80->f196 = v99;
-            v80->f196[1] = (BYTE4(v86) ^ v86) - BYTE4(v86);
-            ((uint8_t**)v80)[v80->f12[2] + 6] = &((uint8_t**)v80)[v80->f12[2] + 6][v80->f196[1]
-                                                             - *(v80->f196 - 7)
+            *v80->cur[0] = v99;
+            v80->cur[0][1] = (BYTE4(v86) ^ v86) - BYTE4(v86);
+            ((uint8_t**)v80)[v80->f12[2] + 6] = &((uint8_t**)v80)[v80->f12[2] + 6][v80->cur[0][1]
+                                                             - *(v80->cur[0] - 7)
                                                              - (*(v80->f212 - 3)
                                                               - v80->f212[13])
                                                              - (*(v80->f204 - 3)
@@ -13202,7 +13194,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
             v80->f12[2] = v80->f12[2] == 0;
             if ( *(uint16_t *)((char *)v80 + v86 + 3800) < 0x4000u )
               __alt_p1_model((Obj0 *)v80);
-            v80->f196 += 2;
+            v80->cur[0] += 2;
             v80->f200 += 2;
             v80->f204 += 2;
             v80->f208 += 2;

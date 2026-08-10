@@ -52,8 +52,27 @@ def parse(src, name):
                   re.S | re.M)
     if not m:
         return None, None
+    # Union-aware, because this has to read structs it wrote: inside a
+    # `union { ... }` every `struct { ... }` layer restarts at the union's own
+    # offset and the union ends at the widest layer.  Walking it as a flat list
+    # put `Obj0`'s span at +400 and made its pads look like members.
     out, off = [], 0
+    union = []          # [start, widest_end] per open union
     for line in m.group(1).split('\n'):
+        t = line.strip()
+        if t.startswith('union {'):
+            union.append([off, off])
+            continue
+        if t.startswith('struct {') and union:
+            off = union[-1][0]
+            continue
+        if t.startswith('};') and union:
+            union[-1][1] = max(union[-1][1], off)
+            if not re.match(r'^\s{6,}\};', line):
+                off = union.pop()[1]
+            else:
+                off = union[-1][0]
+            continue
         f = MEMBER.match(line)
         if not f:
             continue
@@ -65,7 +84,7 @@ def parse(src, name):
         if w is None:
             return None, None
         n = int(cnt) if cnt else 1
-        if not nm.startswith('_pad'):
+        if not nm.startswith('_'):
             at = int(nm[1:]) if re.fullmatch(r'f\d+', nm) else off
             out.append(dict(off=at, ty=ty, name=nm, count=n, com=com or '',
                             end=at + w * n))
@@ -81,7 +100,7 @@ def plan(structs):
     for who, members in structs:
         for f in members:
             byoff.setdefault(f['off'], []).append((who, f))
-    merged, conflicts, absorbed, alt = [], [], {}, {}
+    merged, conflicts, absorbed, alt, renamed = [], [], {}, {}, {}
     for off in sorted(byoff):
         cands = byoff[off]
         best = max(cands, key=lambda c: (c[1]['end'], c[1]['count']))
@@ -98,6 +117,11 @@ def plan(structs):
                 # `uint8_t *` where `Obj8::f278736` is ten of them.
                 if f['count'] == 1 and best[1]['count'] > 1:
                     absorbed[f['name']] = '%s[0]' % best[1]['name']
+                elif f['count'] > 1 and f['off'] == best[1]['off']:
+                    # a shorter array at the same offset is the same array seen
+                    # less far: `Obj1::row[5]` is `Obj4::f176[10]`, so this is a
+                    # rename and the subscript comes along unchanged
+                    renamed[f['name']] = best[1]['name']
                 continue
             if f['count'] > 1 or best[1]['count'] > 1:
                 alt.setdefault(off, []).append(f)   # two granularities: union
@@ -109,59 +133,54 @@ def plan(structs):
             # streams by making one match the other.
             conflicts.append((off, who, f['ty'], best[0], best[1]['ty']))
         merged.append(best[1])
-    # A scalar covered by an earlier array is one of two things.  If the array
-    # is of the scalar's own type and the offset lands on an element, the
-    # scalar *is* that element and becomes a subscript -- ten row cursors read
-    # as an array say something ten names do not.  If it is not -- `Obj11`
-    # recovered +278528 as `__m128[21]` because `alt_p2_filter` walks it with a
-    # loop variable, while four other recoveries declare fifteen individual
-    # fields inside those same bytes -- then the region is genuinely both, and
-    # the merged struct says so with a union instead of picking one.
-    keep, covered = [], {}
-    for f in merged:
-        cover = next((k for k in keep
-                      if k['count'] > 1 and k['off'] < f['off'] < k['end']), None)
-        if cover is None:
-            keep.append(f)
-            continue
-        step = width(cover['ty'])
-        if f['ty'] == cover['ty'] and not (f['off'] - cover['off']) % step \
-                and f['end'] <= cover['end']:
-            absorbed[f['name']] = '%s[%d]' % (cover['name'],
-                                              (f['off'] - cover['off']) // step)
-        else:
-            covered.setdefault(cover['name'], []).append(f)
-    # Every extra view belongs to whichever kept member spans its bytes -- keyed
-    # by the *view's* offset, not the cover's, which is how three of them went
-    # missing the first time.
+    # Group the survivors into maximal overlapping regions.  One member to a
+    # region renders as itself; several render as a union, because that is what
+    # several recoveries of one span *are*.  Regions rather than a cover
+    # relation, because two arrays can overlap without either containing the
+    # other -- `Obj4::f0[8]` runs +0..+28 and `Obj0::f12[51]` runs +12..+212.
+    merged.sort(key=lambda f: (f['off'], -f['end']))
     for off, extras in alt.items():
-        host = next((k for k in keep if k['off'] <= off < k['end']), None)
-        if host is None:
-            conflicts.append((off, 'a second view', extras[0]['ty'], '', 'no host'))
-            continue
-        covered.setdefault(host['name'], []).extend(extras)
-    for f in keep:
-        u, seen_k = [], set()
-        for g in sorted(covered.get(f['name'], []), key=lambda g: g['off']):
-            k = (g['off'], g['ty'], g['count'], g['name'])
-            if k in seen_k:          # two recoveries that agree are one view
+        merged.extend(extras)
+    merged.sort(key=lambda f: (f['off'], -f['end']))
+    regions = []
+    for f in merged:
+        if regions and f['off'] < regions[-1]['end']:
+            regions[-1]['at'].append(f)
+            regions[-1]['end'] = max(regions[-1]['end'], f['end'])
+        else:
+            regions.append(dict(off=f['off'], end=f['end'], at=[f]))
+    keep = []
+    for r in regions:
+        # inside a region, a scalar that lands on an element of a same-type
+        # array in the same region *is* that element
+        head = max(r['at'], key=lambda f: (f['count'], f['end']))
+        rest = []
+        for f in r['at']:
+            if f is head:
                 continue
-            seen_k.add(k)
-            u.append(g)
-        f['union'] = u
-    # Anonymous structs inside a union share the union's scope, so two views
-    # that both call one offset `fNN` cannot both be emitted -- and dropping one
-    # silently is how `Obj19::f278760` (a `char *`) became `Obj69`'s
-    # `uint32_t[24]` and segfaulted three images.  Report it; the fix is to
-    # rename the losing view's field at its own use sites first.
-    for f in keep:
-        seen_n = {f['name']}
-        for g in f['union']:
-            if g['name'] in seen_n:
-                conflicts.append((g['off'], 'a second view', g['ty'],
-                                  'the union', 'the name %s twice' % g['name']))
-            seen_n.add(g['name'])
-    return keep, conflicts, absorbed
+            step = width(head['ty'])
+            if f['ty'] == head['ty'] and head['count'] > 1 \
+                    and head['off'] <= f['off'] and f['end'] <= head['end'] \
+                    and not (f['off'] - head['off']) % step:
+                absorbed[f['name']] = '%s[%d]' % (head['name'],
+                                                  (f['off'] - head['off']) // step)
+            elif (f['off'], f['ty'], f['count'], f['name']) != \
+                    (head['off'], head['ty'], head['count'], head['name']):
+                rest.append(f)
+        seen_n, uniq = {head['name']}, []
+        for f in sorted(rest, key=lambda f: (f['off'], -f['end'])):
+            if f['name'] in seen_n:
+                conflicts.append((f['off'], 'a second view', f['ty'],
+                                  'the union', 'the name %s twice' % f['name']))
+                continue
+            seen_n.add(f['name'])
+            uniq.append(f)
+        # the head keeps its own offset by living in the view list; the
+        # region's offset is only where the union sits
+        keep.append(dict(head, union=([head] + uniq) if uniq else [],
+                         off=r['off'], end=r['end']))
+    absorbed.update({k: v for k, v in renamed.items()})
+    return keep, conflicts, absorbed, set(renamed)
 
 
 def render(name, members):
@@ -177,10 +196,10 @@ def render(name, members):
         if not f.get('union'):
             out.append('  ' + decl)
         else:
-            # The covered fields need not be disjoint from each other either --
-            # `f278736[10]` spans the bytes `f278756` and `f278760[24]` name,
-            # and `f278760[24]` spans `f278764` and `f278768`.  Lay them out in
-            # as many overlapping views as it takes, greedily, widest first.
+            # Every member is a layer, the head included: a region can start
+            # before its widest member does -- `Obj4::f0[8]` runs +0..+28 and
+            # `Obj0::f12[51]` starts at +12 -- and putting the head at the
+            # region's start moved it twelve bytes.
             layers = []
             for g in sorted(f['union'], key=lambda g: (g['off'], -g['end'])):
                 for L in layers:
@@ -189,30 +208,33 @@ def render(name, members):
                         break
                 else:
                     layers.append([g])
-            out.append('  union {   // the same bytes, %d recoveries'
-                       % (len(layers) + 1))
-            out.append('    ' + decl)
+            out.append('  union {   // the same bytes, %d recoveries' % len(layers))
             for k, L in enumerate(layers):
-                out.append('    struct {')
+                one = len(L) == 1 and L[0]['off'] == f['off']
+                if not one:
+                    out.append('    struct {')
                 at = f['off']
                 for j, g in enumerate(L):
                     if g['off'] > at:
-                        out.append('      uint8_t _u%d_%d_%d[%d];'
-                                   % (i, k, j, g['off'] - at))
+                        out.append('    %suint8_t _u%d_%d_%d[%d];'
+                                   % ('  ' if not one else '', i, k, j, g['off'] - at))
                     ga = '[%d]' % g['count'] if g['count'] > 1 else ''
                     gs = '' if g['ty'].endswith('*') else ' '
-                    out.append('      %s%s%s%s;%s'
-                               % (g['ty'], gs, g['name'], ga,
-                                  ('   ' + g['com']) if g['com'] else ''))
+                    out.append('    %s%s%s%s%s;%s'
+                               % ('  ' if not one else '', g['ty'], gs, g['name'],
+                                  ga, ('   ' + g['com']) if g['com'] else ''))
                     at = g['end']
-                out.append('    };')
+                if not one:
+                    out.append('    };')
             out.append('  };')
         off = f['end']
     out.append('};')
-    last = members[-1]
+    flat = [g for f in members for g in ([f] + f.get('union', []))]
+    last = max(flat, key=lambda g: g['off'])
     out.append('static_assert(sizeof(void *) != 4')
     out.append('              || __builtin_offsetof(%s, %s) == %d,'
-               % (name, last['name'], last['off']))
+               % (name, last['name'] + ('[0]' if last['count'] > 1 else ''),
+                  last['off']))
     out.append('              "%s: the layout moved");' % name)
     return '\n'.join(out)
 
@@ -234,7 +256,7 @@ def main():
         structs.append((n, members))
         spans[n] = span
     target = names[0]
-    merged, conflicts, absorbed = plan(structs)
+    merged, conflicts, absorbed, renamed = plan(structs)
 
     if '--apply' not in sys.argv:
         for n, members in structs:
@@ -281,8 +303,15 @@ def main():
             for i in range(a, b + 1):
                 for v in vs:
                     for nm, to in absorbed.items():
+                        # Whatever subscript follows comes along -- `f196` is a
+                        # `uint8_t *`, `v66->f196[1]` reads through it, and
+                        # `cur[0][1]` is what that becomes.  Unless the two
+                        # spellings share a name: `f0 -> f0[0]` is `Obj0`'s
+                        # scalar joining `Obj4`'s array, and `x->f0[1]` is the
+                        # array's own use, which must not gain a subscript.
+                        tail = r'(?!\s*\[)' if to.startswith(nm + '[') else ''
                         lines[i] = re.sub(
-                            r'\b%s->%s\b(?!\s*\[)' % (re.escape(v), nm),
+                            r'\b%s->%s\b%s' % (re.escape(v), nm, tail),
                             '%s->%s' % (v, to), lines[i])
         src = '\n'.join(lines)
     for n in names[1:]:
