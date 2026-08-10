@@ -87,11 +87,20 @@ def convert(lines, a, b, sig, tables, only=None):
         if off not in tbl:
             return m.group(0)
         mty, expr = tbl[off]
-        if norm(mty) != acc:
-            wide += 1
-            return m.group(0)
-        n += 1
-        return '%s->%s' % (base, expr)
+        if norm(mty) == acc:
+            n += 1
+            return '%s->%s' % (base, expr)
+        # Same width, different reading: `alt_p1_context` writes
+        # `*((uint8_t **)_this + 20)` into a slot it then compares `< 0` and
+        # against `nullptr`, so the slot is an integer and the cast is the
+        # access's, not the member's.  Say that at the member instead of
+        # arithmetic -- the bits are identical and the offset stops being a
+        # number.  A *narrower* access is a union in disguise and is left alone.
+        if merge.width(m.group(1).strip()) == merge.width(mty):
+            n += 1
+            return '*(%s *)&%s->%s' % (m.group(1).strip(), base, expr)
+        wide += 1
+        return m.group(0)
 
     for i in range(a, b + 1):
         s = lines[i]

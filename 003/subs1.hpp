@@ -3541,7 +3541,7 @@ void **__free_workspace(ModelBlock *Blocka, char a2)
   ModelBlock *Blocka_2;
   void **v8, **v14;
   Blocka_1 = (ModelBlock *)(Blocka);
-  free(*((void **)Blocka + 269560));
+  free(*(void * *)&Blocka->f1078240);
   free(*(void**)&Blocka_1->f1078236);
   free(Blocka_1->f1078684);
   free(*(void**)&Blocka_1->f1078688);
@@ -3607,7 +3607,7 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
   uint16_t *v11;
   Obj9 *v12;
   Obj53 *v10;
-  n6 = *((int32_t *)_this + 11);
+  n6 = *(int32_t *)&_this->sym_pos;
   result = ((uint32_t *)p_n15)[n6];
   if ( exclusion_mask[result] == __byte_445700 )
     return -1;
@@ -3633,10 +3633,10 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
      || result == p_n15[16]);
   v5 = v4 + v3 == 0;
   v6 = v4 + v3;
-  *((int32_t *)_this + 13) = v6;
+  *(int32_t *)&_this->f52 = v6;
   if ( v5 && n6 > 6 )
     return -1;
-  v7 = (char *)*((int32_t *)_this + 269553);
+  v7 = (char *)*(int32_t *)&_this->f1078212;
   v16 = v7;
   v8 = (uint16_t *)(*(uint16_t **)(v7 + 24 * tbl44573C[1] + 20));
   v9 = v6
@@ -3651,7 +3651,7 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
      || result == v8[3]
      || result == *(uint16_t *)((char *)v8 + 3)
      || result == v8[0]);
-  *((int32_t *)_this + 13) = v9;
+  *(int32_t *)&_this->f52 = v9;
   v10 = (Obj53 *)(*(uint16_t **)(v7 + 24 * tbl44573C[2] + 20));
   v11 = (uint16_t *)(*(uint16_t **)(v7 + 24 * result + 20));
   v12 = (Obj9 *)(*(uint16_t **)(v16 + 24 * tbl44573C[3] + 20));
@@ -3680,12 +3680,12 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
   v14 = v13 + v9;
   if ( n6 <= 14 || (v14 & 0xB) != 0 )
   {
-    *((int32_t *)_this + 13) = (n6 << 7) + v14;
-    *((int32_t *)_this + 12) = v13 + 8 * (n6 > 9);
+    *(int32_t *)&_this->f52 = (n6 << 7) + v14;
+    *(int32_t *)&_this->f48 = v13 + 8 * (n6 > 9);
   }
   else
   {
-    *((int32_t *)_this + 12) = v13;
+    *(int32_t *)&_this->f48 = v13;
     return -1;
   }
   return result;
@@ -3982,7 +3982,7 @@ int32_t __alt_p1_context(Obj0 *_this, uint32_t *a2, Obj91 *a3)
     if ( !v9 )
       v4 = v8;
   }
-  *((uint8_t **)_this + 2) = v4;
+  *(uint8_t * *)&_this->f0[2] = v4;
   v33 = _this->f176[7];
   v11 = *(v3 - 1)
       + *(uint8_t *)((char *)v5 - 5)
@@ -3997,7 +3997,7 @@ int32_t __alt_p1_context(Obj0 *_this, uint32_t *a2, Obj91 *a3)
       v34 = (Obj22 *)(v5);
       v12 = a2[49];
       v36 = v11 + 2 * (*(uint8_t *)(a3->f196 - 1) + *(uint8_t *)(v12 - 1));
-      *((uint8_t **)_this + 28) = (uint8_t *)(*v3
+      *(uint8_t * *)&_this->f12[25] = (uint8_t *)(*v3
                                        - (uint32_t)v4
                                        + *(uint8_t *)(v12 - 2)
                                        - *(uint8_t *)(a2[50] - 2));
@@ -4005,26 +4005,26 @@ int32_t __alt_p1_context(Obj0 *_this, uint32_t *a2, Obj91 *a3)
       v14 = *(uint8_t *)(v13 - 2);
       v15 = *(uint8_t *)(v13 - 4);
       v5 = (Obj22 *)(v34);
-      *((uint8_t **)_this + 32) = (uint8_t *)(*(uint8_t *)((uintptr_t)v34 - 2) - (uint32_t)v4 + v14 - v15);
-      *((uint8_t **)_this + 36) = (uint8_t *)(*(uint8_t *)((uintptr_t)v34 - 2)
+      *(uint8_t * *)&_this->f12[29] = (uint8_t *)(*(uint8_t *)((uintptr_t)v34 - 2) - (uint32_t)v4 + v14 - v15);
+      *(uint8_t * *)&_this->f12[33] = (uint8_t *)(*(uint8_t *)((uintptr_t)v34 - 2)
                                        - (uint32_t)v4
                                        + *(uint8_t *)(a3->f196 - 2)
                                        - *(uint8_t *)(a3->f196 - 4));
-      *((uint8_t **)_this + 40) = (uint8_t *)(*(uint8_t *)(a3->f196 - 2) - a3->f8);
-      *((uint8_t **)_this + 20) = (uint8_t *)(*(uint8_t *)(a2[49] - 2) - a2[2]);
+      *(uint8_t * *)&_this->f12[37] = (uint8_t *)(*(uint8_t *)(a3->f196 - 2) - a3->f8);
+      *(uint8_t * *)&_this->f12[17] = (uint8_t *)(*(uint8_t *)(a2[49] - 2) - a2[2]);
       v37 = (*(uint8_t *)(a3->f196 - 1) + (uint32_t)*(uint8_t *)(a2[49] - 1) - 16) >> 31;
     }
     else
     {
       v36 = v3[7] + v11 + 3 * *(uint8_t *)(a2[49] - 1);
-      *((uint8_t **)_this + 28) = (uint8_t *)(2 * *(uint8_t *)((char *)v5 - 2) - *(uint8_t *)((char *)v5 - 4) - (uint32_t)v4);
-      *((uint8_t **)_this + 32) = (uint8_t *)(2 * *(uint8_t *)((char *)v5 - 2) - *(uint8_t *)((char *)v5 - 4) - (uint32_t)v4);
-      *((uint8_t **)_this + 36) = (uint8_t *)(-(int32_t)v4 - *v3 + v3[2] + *(uint8_t *)((char *)v5 - 2));
-      *((uint8_t **)_this + 40) = (uint8_t *)(*(uint8_t *)((char *)v5 - 2)
+      *(uint8_t * *)&_this->f12[25] = (uint8_t *)(2 * *(uint8_t *)((char *)v5 - 2) - *(uint8_t *)((char *)v5 - 4) - (uint32_t)v4);
+      *(uint8_t * *)&_this->f12[29] = (uint8_t *)(2 * *(uint8_t *)((char *)v5 - 2) - *(uint8_t *)((char *)v5 - 4) - (uint32_t)v4);
+      *(uint8_t * *)&_this->f12[33] = (uint8_t *)(-(int32_t)v4 - *v3 + v3[2] + *(uint8_t *)((char *)v5 - 2));
+      *(uint8_t * *)&_this->f12[37] = (uint8_t *)(*(uint8_t *)((char *)v5 - 2)
                                        - (uint32_t)v4
                                        + *(uint8_t *)(a2[49] - 2)
                                        - *(uint8_t *)(a2[49] - 4));
-      *((uint8_t **)_this + 20) = (uint8_t *)(*(uint8_t *)(a2[49] - 2) - a2[2]);
+      *(uint8_t * *)&_this->f12[17] = (uint8_t *)(*(uint8_t *)(a2[49] - 2) - a2[2]);
       v37 = ((uint32_t)*(uint8_t *)(a2[49] - 1) - 8) >> 31;
     }
   }
@@ -4032,60 +4032,60 @@ int32_t __alt_p1_context(Obj0 *_this, uint32_t *a2, Obj91 *a3)
   {
     v32 = (Obj17 *)((int32_t)_this->f176[9]);
     v36 = v32->f1 + *(v33 - 3) + v3[7] + v11 + v32->f5;
-    *((uint8_t **)_this + 28) = (uint8_t *)(2 * *(uint8_t *)((char *)v5 - 2) - *(uint8_t *)((char *)v5 - 4) - (uint32_t)v4);
-    *((uint8_t **)_this + 32) = (uint8_t *)(2 * *v3 - *v33 - (uint32_t)v4);
-    *((uint8_t **)_this + 36) = (uint8_t *)(-(int32_t)v4 - *v3 + v3[2] + *(uint8_t *)((char *)v5 - 2));
-    *((uint8_t **)_this + 40) = (uint8_t *)(-3 * (*(uint8_t *)((char *)v5 - 4) - *(uint8_t *)((char *)v5 - 2))
+    *(uint8_t * *)&_this->f12[25] = (uint8_t *)(2 * *(uint8_t *)((char *)v5 - 2) - *(uint8_t *)((char *)v5 - 4) - (uint32_t)v4);
+    *(uint8_t * *)&_this->f12[29] = (uint8_t *)(2 * *v3 - *v33 - (uint32_t)v4);
+    *(uint8_t * *)&_this->f12[33] = (uint8_t *)(-(int32_t)v4 - *v3 + v3[2] + *(uint8_t *)((char *)v5 - 2));
+    *(uint8_t * *)&_this->f12[37] = (uint8_t *)(-3 * (*(uint8_t *)((char *)v5 - 4) - *(uint8_t *)((char *)v5 - 2))
                                      + *(uint8_t *)((char *)v5 - 6)
                                      - (uint32_t)v4);
-    *((uint8_t **)_this + 20) = (uint8_t *)(v3[4] - (uint32_t)v4);
+    *(uint8_t * *)&_this->f12[17] = (uint8_t *)(v3[4] - (uint32_t)v4);
     v37 = v5->f1 + v32->f1 + (_this->f176[8])[1] + v33[1] + v3[1] == 0;
   }
   v16 = (v36 + 7) >> 4;
   v17 = (uint8_t *)*((uint8_t *)_this + v16 + 216);
   v31 = v17;
   v35 = __dword_439BD8[(uint32_t)v17];
-  *((uint8_t **)_this + 3) = v17;
-  *((uint8_t **)_this + 4) = &(*((uint8_t **)_this + v16 + 438))[*((uint8_t *)_this + (uint32_t)v4 + 728)];
-  *((uint8_t **)_this + 8) = (uint8_t *)(((216 - (uint32_t)v4) >> 31) + ((22 - (uint32_t)v4) >> 31));
+  *(uint8_t * *)&_this->f0[3] = v17;
+  *(uint8_t * *)&_this->f0[4] = &(*((uint8_t **)_this + v16 + 438))[*((uint8_t *)_this + (uint32_t)v4 + 728)];
+  *(uint8_t * *)&_this->f12[5] = (uint8_t *)(((216 - (uint32_t)v4) >> 31) + ((22 - (uint32_t)v4) >> 31));
   v38 = ((216 - (uint32_t)v4) >> 31) + ((22 - (uint32_t)v4) >> 31);
   v18 = (*(v3 - 2) - *v3 >= 0) + (*(v3 - 2) > (int32_t)*v3);
-  *((uint8_t **)_this + 12) = (uint8_t *)v18;
+  *(uint8_t * *)&_this->f12[9] = (uint8_t *)v18;
   v39 = (*(v3 - 2) - *(uint8_t *)((char *)v5 - 2) >= 0) + (*(v3 - 2) > (int32_t)*(uint8_t *)((char *)v5 - 2));
-  *((uint8_t **)_this + 16) = (uint8_t *)v39;
-  v19 = *((uint8_t **)_this + 20) == nullptr;
-  v20 = (int32_t)*((uint8_t **)_this + 20) < 0;
+  *(uint8_t * *)&_this->f12[13] = (uint8_t *)v39;
+  v19 = *(uint8_t * *)&_this->f12[17] == nullptr;
+  v20 = (int32_t)*(uint8_t * *)&_this->f12[17] < 0;
   v40 = (v3[2] - (int32_t)v4 >= -v35) + (v3[2] - (int32_t)v4 > v35);
-  *((uint8_t **)_this + 24) = (uint8_t *)v40;
-  v21 = v35 < (int32_t)*((uint8_t **)_this + 28);
-  v22 = -v35 <= (int32_t)*((uint8_t **)_this + 28);
+  *(uint8_t * *)&_this->f12[21] = (uint8_t *)v40;
+  v21 = v35 < (int32_t)*(uint8_t * *)&_this->f12[25];
+  v22 = -v35 <= (int32_t)*(uint8_t * *)&_this->f12[25];
   v23 = !v20 + (!v20 && !v19);
-  *((uint8_t **)_this + 20) = (uint8_t *)v23;
+  *(uint8_t * *)&_this->f12[17] = (uint8_t *)v23;
   v24 = v22 + v21;
-  v19 = *((uint8_t **)_this + 32) == nullptr;
-  v20 = (int32_t)*((uint8_t **)_this + 32) < 0;
-  *((uint8_t **)_this + 28) = (uint8_t *)v24;
+  v19 = *(uint8_t * *)&_this->f12[29] == nullptr;
+  v20 = (int32_t)*(uint8_t * *)&_this->f12[29] < 0;
+  *(uint8_t * *)&_this->f12[25] = (uint8_t *)v24;
   v25 = !v20 && !v19;
   v26 = !v20;
-  v19 = *((uint8_t **)_this + 36) == nullptr;
-  v20 = (int32_t)*((uint8_t **)_this + 36) < 0;
+  v19 = *(uint8_t * *)&_this->f12[33] == nullptr;
+  v20 = (int32_t)*(uint8_t * *)&_this->f12[33] < 0;
   v41 = v26 + v25;
-  *((uint8_t **)_this + 32) = (uint8_t *)(v26 + v25);
+  *(uint8_t * *)&_this->f12[29] = (uint8_t *)(v26 + v25);
   v27 = !v20 && !v19;
   v28 = !v20;
-  v19 = *((uint8_t **)_this + 40) == nullptr;
-  v20 = (int32_t)*((uint8_t **)_this + 40) < 0;
+  v19 = *(uint8_t * *)&_this->f12[37] == nullptr;
+  v20 = (int32_t)*(uint8_t * *)&_this->f12[37] < 0;
   v42 = v28 + v27;
-  *((uint8_t **)_this + 36) = (uint8_t *)(v28 + v27);
+  *(uint8_t * *)&_this->f12[33] = (uint8_t *)(v28 + v27);
   v29 = !v20 + (!v20 && !v19);
-  *((uint8_t **)_this + 40) = (uint8_t *)v29;
+  *(uint8_t * *)&_this->f12[37] = (uint8_t *)v29;
   result = (int32_t)&(*((uint8_t **)_this + v29 + 41))[16 * v37
-                                    + 8 * (*((uint8_t **)_this + (uint32_t)*((uint8_t **)_this + 5) + 6) == nullptr)
+                                    + 8 * (*((uint8_t **)_this + (uint32_t)*(uint8_t * *)&_this->f0[5] + 6) == nullptr)
                                     + (uint32_t)&(*((uint8_t **)_this + v41 + 33))[(uint32_t)*((uint8_t **)_this + v42 + 37)
                                                                         + (uint32_t)&(*((uint8_t **)_this + v40 + 25))[(uint32_t)*((uint8_t **)_this + v24 + 29)]
                                                                         + (uint32_t)&(*((uint8_t **)_this + v39 + 17))[(uint32_t)*((uint8_t **)_this + v23 + 21) + (uint32_t)&(*((uint8_t **)_this + v38 + 9))[(uint32_t)*((uint8_t **)_this + v18 + 13)]]]
                                     + (uint32_t)v31];
-  *((uint8_t **)_this + 3) = (uint8_t *)result;
+  *(uint8_t * *)&_this->f0[3] = (uint8_t *)result;
   return result;
 }
 
@@ -5307,11 +5307,11 @@ char *__alt_p2_alloc(Obj11 *_this, int32_t i, int32_t n4)
   deadzone_lo = -v8;
   *(uint32_t *)((char *)_this + 278720) = -v9 - 7;
   *(uint32_t *)((char *)_this + 278724) = v9 + 8;
-  *(char * *)((char *)_this + 278660) = (char *)bmf_new(4 * i + 16);
+  *(char * *)&_this->f278660 = (char *)bmf_new(4 * i + 16);
   v10 = bmf_new(4 * i + 16);
   *(uint32_t *)((char *)_this + 232) = 0x3F800000 /* 1.0f */;
-  *(char * *)((char *)_this + 278664) = (char *)v10;
-  *(char * *)((char *)_this + 278668) = *(char * *)((char *)_this + 278660) + 4 * i + 8;
+  *(char * *)&_this->f278664 = (char *)v10;
+  *(char * *)&_this->f278668 = *(char * *)&_this->f278660 + 4 * i + 8;
   if ( i > -4 )
   {
     m_1 = (i + 4) / 2;
@@ -5319,10 +5319,10 @@ char *__alt_p2_alloc(Obj11 *_this, int32_t i, int32_t n4)
     {
       for ( m = 0; m < m_1; ++m )
       {
-        *(char **)(*(char * *)((char *)_this + 278664) + 8 * m) = (char *)_this;
-        *(char **)(*(char * *)((char *)_this + 278660) + 8 * m) = (char *)_this;
-        *(char **)(*(char * *)((char *)_this + 278664) + 8 * m + 4) = (char *)_this;
-        *(char **)(*(char * *)((char *)_this + 278660) + 8 * m + 4) = (char *)_this;
+        *(char **)(*(char * *)&_this->f278664 + 8 * m) = (char *)_this;
+        *(char **)(*(char * *)&_this->f278660 + 8 * m) = (char *)_this;
+        *(char **)(*(char * *)&_this->f278664 + 8 * m + 4) = (char *)_this;
+        *(char **)(*(char * *)&_this->f278660 + 8 * m + 4) = (char *)_this;
       }
       v13 = 2 * m + 1;
     }
@@ -5332,8 +5332,8 @@ char *__alt_p2_alloc(Obj11 *_this, int32_t i, int32_t n4)
     }
     if ( i + 4 > (uint32_t)(v13 - 1) )
     {
-      *(char **)(*(char * *)((char *)_this + 278664) + 4 * v13 - 4) = (char *)_this;
-      *(char **)(*(char * *)((char *)_this + 278660) + 4 * v13 - 4) = (char *)_this;
+      *(char **)(*(char * *)&_this->f278664 + 4 * v13 - 4) = (char *)_this;
+      *(char **)(*(char * *)&_this->f278660 + 4 * v13 - 4) = (char *)_this;
     }
   }
   n5 = 0;
@@ -5342,7 +5342,7 @@ char *__alt_p2_alloc(Obj11 *_this, int32_t i, int32_t n4)
     *(char **)((char *)_this + 4 * n5++ + 278756) = (char *)bmf_new(Size);
   while ( n5 < 5 );
   memset(_this->f278756,0,Size);
-  v17 = *(uint32_t *)((char *)_this + 278756);
+  v17 = *(uint32_t *)&_this->f278736[5];
   ctx_bias[3] = 0;
   v18 = 0;
   ctx_bias[2] = 0;
@@ -10547,9 +10547,9 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   Obj118 *v38;
   uint8_t *v76;
   uint8_t *n15_16;
-  n15_9 = (uint16_t *)*((uint32_t *)_this + 20);
+  n15_9 = (uint16_t *)*(uint32_t *)&_this->f56[6];
   n4_8 = *n15_9;
-  v4 = (Obj18 *)((uint16_t *)*((uint32_t *)_this + 19));
+  v4 = (Obj18 *)((uint16_t *)*(uint32_t *)&_this->f56[5]);
   n4_7 = *((uint16_t *)v4 - 4);
   n15_6 = n15_9[4];
   this_1 = (ModelBlock *)(_this);
@@ -11325,9 +11325,9 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
           v173;
   uint8_t *v69;
   uint8_t *p_n15_3, *v41;
-  n2_7 = (uint16_t *)*((int32_t *)_this + 20);
+  n2_7 = (uint16_t *)*(int32_t *)&_this->f56[6];
   n4 = *n2_7;
-  n2_8 = (uint16_t *)*((int32_t *)_this + 19);
+  n2_8 = (uint16_t *)*(int32_t *)&_this->f56[5];
   n4_1 = (uint16_t)*(n2_8 - 4);
   __code_pixel_n15 = n2_7[4];
   this_1 = (ModelBlock *)(_this);
@@ -12058,12 +12058,12 @@ void __expand_alphabet(ModelBlock *_this)
   {
     v12 = bmf_new(4 * v8 + 4);
     j_1 = _this->f16;
-    *((void **)_this + 269560) = v12;
+    *(void * *)&_this->f1078240 = v12;
     if ( j_1 )
     {
       for ( j = 0; j < j_1; ++j )
       {
-        *(uint32_t *)(*((uint32_t *)_this + 269560) + 4 * j) = j;
+        *(uint32_t *)(*(uint32_t *)&_this->f1078240 + 4 * j) = j;
         j_1 = _this->f16;
       }
     }
@@ -12079,7 +12079,7 @@ void __expand_alphabet(ModelBlock *_this)
       }
       if ( j_1 )
       {
-        v16 = (char *)*((void **)_this + 269560);
+        v16 = (char *)*(void * *)&_this->f1078240;
         v17 = 0;
         v18 = 0;
         do
@@ -12094,13 +12094,13 @@ void __expand_alphabet(ModelBlock *_this)
               v20 = __fwd_expand_alphabet_decode_encode_symbol_list((uint32_t *)&v28[12 * v19 + 3 * v17]);
               v21 = v20 << ((8 * v19) & 31);
               v17 = v20 >> 6;
-              *(uint32_t *)(*((uint32_t *)_this + 269560) + 4 * v18) += v21;
+              *(uint32_t *)(*(uint32_t *)&_this->f1078240 + 4 * v18) += v21;
               ++v19;
             }
             while ( v19 < v31[0] );
             v4 = v31[0];
           }
-          v16 = (char *)*((void **)_this + 269560);
+          v16 = (char *)*(void * *)&_this->f1078240;
           v17 = *(uint8_t *)(v16 + 4 * v18++) >> 7;
         }
         while ( v18 < _this->f16 );
@@ -12118,7 +12118,7 @@ void __expand_alphabet(ModelBlock *_this)
         do
         {
           v27 = __fwd_expand_alphabet_decode_encode_symbol_list(v28);
-          *(uint32_t *)(*((uint32_t *)_this + 269560) + 4 * v26) = v27 + v25;
+          *(uint32_t *)(*(uint32_t *)&_this->f1078240 + 4 * v26) = v27 + v25;
           v25 += v27 + 1;
           ++v26;
         }
@@ -12137,9 +12137,9 @@ void __expand_alphabet(ModelBlock *_this)
   }
   else
   {
-    v9 = *((uint32_t *)_this + 1) * v4;
+    v9 = *(uint32_t *)&_this->f4 * v4;
     _this->f8 = 8;
-    *((uint32_t *)_this + 1) = v9;
+    *(uint32_t *)&_this->f4 = v9;
     __expand_alphabet(_this);
     v10 = v31;
     n16_1 = 16;
