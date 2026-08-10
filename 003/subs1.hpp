@@ -852,11 +852,10 @@ struct AltP2Block {
       int32_t *row1;    // +278664
       int32_t *cur;     // +278668
       int32_t *above;   // +278672
-      int32_t f278676;
-      int32_t f278680;
-      int32_t f278684;
-      int32_t f278688;
-      int32_t f278692;
+      // One per bank: `alt_p2_model` runs five passes and reads
+      // `bank_ctx[n5]` at the top of each, which is what says these five
+      // scalars are an array.  `alt_p2_context` writes them one at a time.
+      int32_t bank_ctx[5];   // +278676 .. +278695
       int32_t f278696;
       uint16_t f278700;
       uint8_t _u0_0_12[2];
@@ -6847,7 +6846,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
        | ((((uint32_t)(752 - (v269 + v117)) >> 31)
          + ((uint32_t)(400 - (v269 + v117)) >> 31)
          + ((uint32_t)(240 - (v269 + v117)) >> 31)) << 11);
-  v289->f278676 = v120;
+  v289->bank_ctx[0] = v120;
   if ( a4 )
   {
     v261 = v120;
@@ -6884,7 +6883,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
          | v120;
   }
   v126 = v125 >> 11;
-  v118->f278676 = v126;
+  v118->bank_ctx[0] = v126;
   v127 = p2_pred(v118->p2_ctr[v126].w2, v118->p2_ctr[v126].b0);
   v128 = v290;
   v129 = (P2Ctx *)((int16_t *)v118->cursor[4]);
@@ -6950,7 +6949,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   }
   v298 = v136;
   v138 = v137 >> 11;
-  v118->f278680 = v138;
+  v118->bank_ctx[1] = v138;
   v139 = v118->p2_ctr[v138 + 32768].b0;
   v140 = v118->p2_ctr[v138 + 32768].w2;
   v141 = 1 << ((v139 + 31) & 31);
@@ -7018,7 +7017,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   v289 = (AltP2Block *)(v118);
   v298 = v153;
   v155 = v154 >> 11;
-  v118->f278684 = v155;
+  v118->bank_ctx[2] = v155;
   v156 = p2_pred(v118->p2_ctr[v155 + 65536].w2, v118->p2_ctr[v155 + 65536].b0);
   v157 = v292;
   v158 = v295;
@@ -7055,7 +7054,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
              | (n2896 - v163) & 0x8000
              | (((n2896 > 2896) + (n2896 > 1568) + (n2896 > 592)) << 13)
              | ((((uint32_t)(v290 + 37) >> 31) + ((uint32_t)(v290 + 19) >> 31) + (v165 >> 31)) << 11)) >> 11;
-  v289->f278688 = v167;
+  v289->bank_ctx[3] = v167;
   v168 = v166->p2_ctr[v167 + 98304].w2;
   v170 = (P2Ctx *)(v294);
   // The rate reached `>>` through two `LOBYTE` copies, `v163` then `v164`;
@@ -7097,7 +7096,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
              | (v312 - v293[-3][7]) & 0x10000
              | v181
              | v180) >> 11;
-  v289->f278692 = v185;
+  v289->bank_ctx[4] = v185;
   v186 = p2_pred(v184->p2_ctr[v185 + 131072].w2, v184->p2_ctr[v185 + 131072].b0);
   v187 = (uint8_t *)v295;
   v271 = v186;
@@ -12294,7 +12293,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   int32_t v580;
   // The counter this pass updates and its two neighbours: `v581[-1]`,
   // `v581[0]` and `v581[1]` are +284 708, +284 712 and +284 716 off the
-  // row base, which is `p2_ctr` reached through `v76` and `v78`.
+  // row base, which is `p2_ctr` reached through `v78`.
   P2Count *v581;
   ;
   uint8_t *v8;   // was int32_t: this holds an address
@@ -12362,7 +12361,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
          *v428, *v436, *v444, *v452, *v456, *v457, *v463, *v466, *v474,
          *v477, *v485, *v488, *v491, *v502;
   AltP2Block *v385;
-  uint32_t *v76, v78, v92, v97, v109, n0x10, v393, v396, v405, v414, v499;
+  uint32_t v78, v92, v97, v109, n0x10, v393, v396, v405, v414, v499;
   uint8_t v83;
   v6 = a1->ctx & 0xF;
   v7 = *(uint16_t **)&a1->cursor[0];
@@ -12470,11 +12469,12 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   ++a1->above;
   do
   {
-    v75 = ((uint32_t *)v578)[n5 + 69669];
-    v76 = &((uint32_t *)v578)[v75];
+    v75 = (uint32_t)v578->bank_ctx[n5];
     v77 = v577 - (*(uint32_t *)&v578->nb_sum[2 * n5]);
     v78 = n5 << 17;
-    v581 = (P2Count *)((uint8_t *)v76 + v78) + 71178;
+    // 71178 records is +284712, `p2_ctr`, and `v78` is `n5 << 17` --
+    // 32768 records a bank, which is what the five banks are.
+    v581 = &v578->p2_ctr[32768 * n5 + v75];
     v79 = v77 + (uint16_t)v581->w2;
     *(uint16_t *)&v581->w2 = v79;
     v580 = v581->b1;
