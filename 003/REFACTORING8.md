@@ -23,17 +23,17 @@ bytes.
 `python3 tools/shape.py`, verbatim:
 
 ```
-subs1.hpp / bmf.cpp lines          17779 / 358
-raw-offset sites                   27
+subs1.hpp / bmf.cpp lines          17811 / 358
+raw-offset sites                   24
   off `_this`                      1, in 1 functions
-pointer casts                      2261
+pointer casts                      2198
 globals still at a 1997 address    0
 frames                             17, 169180 bytes, 0 aliases
   slots carrying two names         0, 0 extra names, in 0 functions
   member runs walked as arrays     0 sites, 0 bases, 0 functions
   frames that dissolve outright    17, 0 aliases
 structs                            21, 0 still ObjN
-  fNN members / named ones         77 / 89
+  fNN members / named ones         58 / 107
 distinct vNN locals                559
 goto / LABEL_n:                    112 / 79
 __fwd_* shims                      0
@@ -41,8 +41,8 @@ __fwd_* shims                      0
 
 against 37 raw offsets, 2541 pointer casts and 83 `fNN` members where round
 seven's last commit left them. (§1 of that document quotes 44 / 2822 / 93,
-from earlier in the round.) The conversion-warning ceiling went 1975 → 1470,
-and §6.1 is the one place this round it moved the wrong way.
+from earlier in the round.) The conversion-warning ceiling went 1975 → 1468,
+and §4.1 is the one place this round it moved the wrong way.
 
 Nothing here was a sweep. Every tool in `tools/` reports zero removals against
 the file at the end of this round, exactly as at the start -- `unwrite` finds
@@ -211,6 +211,43 @@ interesting statement were the same statement.
 
 ---
 
+## 4.2 Names for things that already had meanings
+
+Sixteen members were documented in a comment beside their offset and still
+carried the offset as the name, so the comment was doing the identifier's work.
+`sym_cache`, `pix_cur`, `grad`, `p2_ctr`, `sel0_list`, `sel1_list`,
+`escape_list`, `sel_cur`, `sym_code` and `alpha_map` are the plain half of
+that; `ctx`, `ctx_pair`, `fold`, `unfold` and `fold_hi` needed something
+established first.
+
+`ctx` is `f278704`, the number §4 composes and `freq[]` is indexed by.
+`f278708` and `f278712` are `ctx` plus one of two entries of `f278944`, and
+the symbol coders read them as `a2[bit]` — one array, so `ctx_pair[2]`, and
+the coders take a `const uint32_t *` rather than a `uint8_t *` with
+`4 * (a3 & 1)` done by hand.
+
+`fold` and `unfold` are the pair `alt_init_tables` builds, and both blocks have
+it. The second is 0, -1, 1, -2, 2, … — the zigzag that folds a signed residual
+onto a non-negative symbol — and the coders use both ends: `n = fold[residual]`,
+code `n`, reconstruct with `unfold[n] + predictor`.
+
+`fold_hi` is a measurement rather than a reading, and the way it was measured
+is the point. The 256 bytes between `fold` and `unfold` had no writer anywhere
+in the file, so the first probe asked whether they were non-zero after
+`alt_init_tables`. **That probe was worthless**: `bmf_new` is `malloc`, so a
+non-zero byte there says nothing about who put it there. The second wrote a
+sentinel over them immediately before the call and checked immediately after —
+gone, at index 0 and at index 255, in both blocks. So the call writes 512 bytes
+and not 256. The split into two members is the readers': some index `fold`,
+some `fold_hi`, none crosses. What separates the two index spaces is not
+established, which is why this is not `fold[512]`.
+
+Nine table entries can be named this way at all because the round's earlier
+sections gave the model enough shape to say what a table is *for*. That is the
+order the work went in, and it is why §4.1 could not have come first.
+
+---
+
 ## 5. A costume, and the one cast that was not one
 
 `alt_p1_context` writes and reads its selectors through `uint8_t **`:
@@ -278,9 +315,8 @@ caught by reading the result. It is in the check now.
 
 ## 7. What is left
 
-* **27 raw offsets**, from 37 — one more than §4.1 left, because naming the
-  table turned one folded constant back into an explicit reach. What survives
-  is a name plus a genuinely computed offset. Four of them are the same statement in four coder bodies —
+* **24 raw offsets**, from 37. What survives is a name plus a genuinely
+  computed offset. Four of them are the same statement in four coder bodies —
   `*(uint16_t *)(cur - 8) = *(uint16_t *)(other + 6)`, a four-word guard row
   copied backwards — and naming it waits on knowing what the sixteen bytes in
   front of a row are for.
@@ -289,12 +325,13 @@ caught by reading the result. It is in the check now.
   block, 10 whose `goto` is not the whole of an `if`, 8 backward, 5 jumping
   out, 4 whose skipped region something else enters. Every one needs a flag or
   a copy of the body.
-* **77 `fNN` members and 559 `vNN` locals.** The largest is now `f6059432`
-  (39 sites), then `f278704` (37) — the running context index itself. What is
-  left in the p2 block is not where the index lands, which §4.1 answers, but
-  what the four counters in a record *are*, and that is the same question as
-  the 18-byte `P2Ctx` record rather than a separate one.
-* **1470 conversion warnings** — 844 `-Wsign-conversion`, 523 `-Wconversion`,
+* **58 `fNN` members and 559 `vNN` locals**, against 93 and 559 at the round's
+  start. The largest left is `f278904` (15 sites), the ten scalars
+  `alt_p2_context` folds its neighbourhood sums into. What is left in the p2
+  block is not where the index lands, which §4.1 answers, but what the four
+  counters in a record *are*, and that is the same question as the 18-byte
+  `P2Ctx` record rather than a separate one.
+* **1468 conversion warnings** — 848 `-Wsign-conversion`, 517 `-Wconversion`,
   99 `-Wsign-compare`, 4 `-Wuseless-cast`, 5 `-Wint-to-pointer-cast` and one
   `-Wmain`. §5 is the reason to keep holding it there, and this round is the
   first where lowering it was mostly a by-product of typing things correctly
