@@ -537,7 +537,10 @@ struct ModelBlock {
   uint8_t _pad22[4];
   SymList **f1078232;    // the cursor over `sel`
   uint8_t *f1078236;   // freed by free_workspace: a buffer, not an int
-  uint8_t *f1078240;   // a row cursor
+  // The alphabet map: one 24-bit symbol code per entry.  `expand_alphabet`
+  // builds it as whole words -- `= j`, `+= v20 << 8 * k`, `= v27 + v25` -- and
+  // `unmodel_plane_slow` reads a word back per pixel.
+  uint32_t *f1078240;
   // Two tables the plane setup fills, and both loops give their own bounds.
   // `ctx_state` inverts `ctx_group_flags`: it stores `s` at
   // `ctx_group_flags[s]` for the fifteen states, and the largest entry there
@@ -2262,7 +2265,7 @@ void **__free_workspace(ModelBlock *Blocka, int8_t a2)
   ModelBlock *Blocka_1;
   ModelBlock *Blocka_2;
   Blocka_1 = (ModelBlock *)(Blocka);
-  free(*(void **)&Blocka->f1078240);
+  free(Blocka->f1078240);
   free(Blocka_1->f1078236);
   free(Blocka_1->f1078684);
   free(*(void**)&Blocka_1->f1078688);
@@ -10735,7 +10738,7 @@ void __expand_alphabet(ModelBlock *_this)
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 432, "frame layout moved");
   ;
-  uint8_t *v16;   // was int32_t: these hold addresses
+  uint32_t *v16;   // was int32_t: this holds an address
   bool v24;
   int32_t n8, v4, v6, v9, n16_1, n16, v25, v27;
   uint32_t j_2, i, n8193, v8, *v10, j_1, j, v15, v17, v18, v19, v20, v21, *v22, v26;
@@ -10758,12 +10761,12 @@ void __expand_alphabet(ModelBlock *_this)
   {
     v12 = bmf_new(4 * v8 + 4);
     j_1 = _this->f16;
-    *(void **)&_this->f1078240 = v12;
+    _this->f1078240 = (uint32_t *)v12;
     if ( j_1 )
     {
       for ( j = 0; j < j_1; ++j )
       {
-        *(uint32_t *)(*(uint32_t *)&_this->f1078240 + 4 * j) = j;
+        _this->f1078240[j] = j;
         j_1 = _this->f16;
       }
     }
@@ -10779,12 +10782,12 @@ void __expand_alphabet(ModelBlock *_this)
       }
       if ( j_1 )
       {
-        v16 = (uint8_t *)*(void **)&_this->f1078240;
+        v16 = _this->f1078240;
         v17 = 0;
         v18 = 0;
         do
         {
-          *(uint32_t *)(v16 + 4 * v18) = 0;
+          v16[v18] = 0;
           if ( v4 )
           {
             __frame.v31[0] = v4;
@@ -10794,14 +10797,14 @@ void __expand_alphabet(ModelBlock *_this)
               v20 = __decode_symbol_list(&((SymList *)__frame.v28)[4 * v19 + v17]);
               v21 = v20 << ((8 * v19) & 31);
               v17 = v20 >> 6;
-              *(uint32_t *)(*(uint32_t *)&_this->f1078240 + 4 * v18) += v21;
+              _this->f1078240[v18] += v21;
               ++v19;
             }
             while ( v19 < __frame.v31[0] );
             v4 = __frame.v31[0];
           }
-          v16 = (uint8_t *)*(void **)&_this->f1078240;
-          v17 = *(v16 + 4 * v18++) >> 7;
+          v16 = _this->f1078240;
+          v17 = (uint8_t)v16[v18++] >> 7;
         }
         while ( v18 < _this->f16 );
       }
@@ -10818,7 +10821,7 @@ void __expand_alphabet(ModelBlock *_this)
         do
         {
           v27 = __decode_symbol_list((SymList *)__frame.v28);
-          *(uint32_t *)(*(uint32_t *)&_this->f1078240 + 4 * v26) = v27 + v25;
+          _this->f1078240[v26] = v27 + v25;
           v25 += v27 + 1;
           ++v26;
         }
@@ -10869,7 +10872,7 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
   a1->f8 = a5;
   a1->f12 = a5;
   a1->escape.ent = nullptr;
-  *(uint32_t *)&a1->f1078240 = 0;
+  a1->f1078240 = nullptr;
   for ( j = 0; j < 5; ++j )
   {
     v8 = (uint8_t *)bmf_new(8 * i_1 + 128);
@@ -11026,7 +11029,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   int32_t v102;
   ;
   ModelBlock *this_4;
-  uint8_t *v57;   // were int32_t: these hold addresses
+  uint32_t *v57;   // the alphabet map again
   bool v38;
   uint8_t *ArgList, *ArgList_2, *buf, *ArgList_3, *ArgList_9, *ArgList_10,
           *Src_2, *v77, *ArgList_8;
@@ -11037,7 +11040,8 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
           v64, v65, v66, n6, v68, v69, n6_4, n6_1, v73, n6_2, v76, v78, v80;
   ModelBlock *this_3;
   ModelBlock *this_2;
-  uint32_t *v22, *v31, *v35, *ArgList_7, *ArgList_6;
+  uint32_t *v22, *v31, *v35, *ArgList_6;
+  SymEntry *ArgList_7;
   SymList *i_1, *i, *j_1, *j;
   uint16_t *v13;   // was uint32_t *, read only as uint16_t
   uint8_t *v49, *v50;
@@ -11326,8 +11330,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         ArgList_6 = (uint32_t *)ArgList_5;
         v65 = 0;
         do
-          *ArgList_6++ = *(uint32_t *)(this_4->f1078240
-                                   + 4 * *(uint16_t *)(this_4->f56[0] + 8 * v65++ + 64));
+          *ArgList_6++ = this_4->f1078240[*(uint16_t *)(this_4->f56[0] + 8 * v65++ + 64)];
         while ( v65 < this_4->f0 );
         goto LABEL_73;
       }
@@ -11346,16 +11349,18 @@ LABEL_53:
     {
       if ( v51 > 0 )
       {
-        ArgList_7 = (uint32_t *)ArgList_5;
+        // Three bytes out of each 24-bit code: the low half and byte 2, which
+        // is a `SymEntry` -- the same three-byte pair the symbol lists hold.
+        ArgList_7 = (SymEntry *)ArgList_5;
         v56 = 0;
         do
         {
-          v57 = (uint8_t *)this_4->f1078240;
+          v57 = this_4->f1078240;
           v58 = *(uint16_t *)(this_4->f56[0] + 8 * v56 + 64);
-          *(uint16_t *)ArgList_7 = *(uint16_t *)(v57 + 4 * v58);
-          *((uint8_t *)ArgList_7 + 2) = *(v57 + 4 * v58 + 2);
+          ArgList_7->sym = (uint16_t)v57[v58];
+          ArgList_7->cnt = (uint8_t)(v57[v58] >> 16);
           ++v56;
-          ArgList_7 = (uint32_t *)((uint8_t *)ArgList_7 + 3);
+          ++ArgList_7;
         }
         while ( v56 < this_4->f0 );
         ArgList_5 = (uint8_t *)ArgList_7;
@@ -11371,8 +11376,9 @@ LABEL_53:
           ArgList_8 = ArgList_5;
           v80 = 0;
           do
-            *ArgList_8++ = *(this_4->f1078240
-                                    + 4 * *(uint16_t *)(this_4->f56[0] + 8 * v80++ + 64));
+            // A byte, not a word: this branch is the 8-bits-per-pixel one, and
+            // `f1078240` was a `uint8_t *` when this dereference was written.
+            *ArgList_8++ = (uint8_t)this_4->f1078240[*(uint16_t *)(this_4->f56[0] + 8 * v80++ + 64)];
           while ( v80 < this_4->f0 );
           ArgList_5 = ArgList_8;
         }
@@ -11390,13 +11396,11 @@ LABEL_53:
           if ( v62 < 0 )
           {
             v62 = 8 - v64;
-            *++ArgList_9 = *(uint32_t *)(this_4->f1078240
-                                     + 4 * *(uint16_t *)(this_4->f56[0] + 8 * v61 + 64)) << ((8 - v64) & 31);
+            *++ArgList_9 = this_4->f1078240[*(uint16_t *)(this_4->f56[0] + 8 * v61 + 64)] << ((8 - v64) & 31);
           }
           else
           {
-            *ArgList_9 |= *(uint32_t *)(this_4->f1078240
-                                    + 4 * *(uint16_t *)(this_4->f56[0] + 8 * v61 + 64)) << (v62 & 31);
+            *ArgList_9 |= this_4->f1078240[*(uint16_t *)(this_4->f56[0] + 8 * v61 + 64)] << (v62 & 31);
           }
           ++v61;
         }
@@ -11412,8 +11416,7 @@ LABEL_53:
       v60 = 0;
       do
       {
-        *(uint16_t *)ArgList_6 = *(uint32_t *)(this_4->f1078240
-                                        + 4 * *(uint16_t *)(this_4->f56[0] + 8 * v60++ + 64));
+        *(uint16_t *)ArgList_6 = this_4->f1078240[*(uint16_t *)(this_4->f56[0] + 8 * v60++ + 64)];
         ArgList_6 = (uint32_t *)((uint8_t *)ArgList_6 + 2);
       }
       while ( v60 < this_4->f0 );
