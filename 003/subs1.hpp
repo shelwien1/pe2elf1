@@ -604,6 +604,20 @@ struct CtrPair {
 };
 static_assert(sizeof(CtrPair) == 4, "CtrPair: the record is four bytes");
 
+// Two counts and a total: the unit `encode_context_bit` and its decoder take a
+// pointer to.  `layout_workspace` seeds each one (40, 16, 512) or (4, 4, 72),
+// and the four tables that hold them are all indexed `3 * k`.
+//
+// `w[3]` rather than two names and a third, because `encode_context_bit`
+// reaches `w[w[0] - 1]` -- it steps by the first count.  That is only inside
+// the record while `w[0]` stays under four, which is not obvious from the
+// seeds: a `__builtin_trap()` on `w[0] > 3` at that site fires on none of the
+// fifteen images.
+struct BitCtr {
+  uint16_t w[3];
+};
+static_assert(sizeof(BitCtr) == 6, "BitCtr: two counts and a total");
+
 struct ModelBlock {
   uint32_t f0;
   int32_t f4;
@@ -641,10 +655,10 @@ struct ModelBlock {
   // +1 077 894.  Each record is (40, 16, 512) or (4, 4, 72), which is two
   // counts and a total -- the unit `encode_context_bit` takes a pointer to,
   // which is why every reader of these four indexes them `3 * k`.
-  uint16_t f1051680[48];      // +1051680 .. +1051775, 16 records
-  uint16_t f1051776[12288];   // +1051776 .. +1076351, 4096 records
-  uint16_t f1076352[771];     // +1076352 .. +1077893, 257 records
-  uint16_t f1077894[144];     // +1077894 .. +1078181, 48 records
+  BitCtr   f1051680[16];      // +1051680 .. +1051775, 16 records
+  BitCtr   f1051776[4096];   // +1051776 .. +1076351, 4096 records
+  BitCtr   f1076352[257];     // +1076352 .. +1077893, 257 records
+  BitCtr   f1077894[48];     // +1077894 .. +1078181, 48 records
   uint8_t _pad16[2];   // +1078182 .. +1078183
   // A twenty-fourth symbol list, inside the object rather than in the array
   // beside it: `init_model_tables` initialises `_this + 1078184` and
@@ -667,7 +681,7 @@ struct ModelBlock {
   SymList **sel_cur;    // the cursor over `sel`
   // A `uint16_t` per symbol -- `bmf_new(2 * f4 * f8)` -- and every reader
   // indexes it `*(uint16_t *)(p + 2 * k)`.
-  uint16_t *f1078236;
+  uint16_t *sym_word;
   // The alphabet map: one 24-bit symbol code per entry.  `expand_alphabet`
   // builds it as whole words -- `= j`, `+= v20 << 8 * k`, `= v27 + v25` -- and
   // `unmodel_plane_slow` reads a word back per pixel.
@@ -691,7 +705,7 @@ struct ModelBlock {
   uint8_t grad[4];   // +1078692 .. +1078695
   // `layout_workspace` seeds this one 0x40000 times, two counters an
   // iteration, both 0x2000.
-  uint16_t f1078696[524288];   // +1078696 .. +2127271
+  uint16_t sym_ctr[524288];   // +1078696 .. +2127271
   // Fifteen context groups of 0x10000 counter pairs.  `model_plane` and
   // `unmodel_plane_slow` seed every one to (0x2000, 0x2000) through a base of
   // `&((uint32_t *)this)[0x10000 * group]` and an index of `entry + 531818`,
@@ -700,7 +714,7 @@ struct ModelBlock {
   // the neighbourhood; the group is `ctx_state[flags]`.
   CtrPair group_ctr[15][65536];   // +2127272 .. +6059431
   // The symbol cache `code_pixel` promotes through: a cursor into
-  // `f1078696`, set to `&f1078696[8 * ctx]` and walked as `[0..6]`.
+  // `sym_ctr`, set to `&sym_ctr[8 * ctx]` and walked as `[0..6]`.
   uint16_t *sym_cache;
   // A row cursor, and every read and write through it is a `uint16_t`:
   // `[0]` is this position and `[1]` the one ahead.
@@ -719,7 +733,7 @@ struct ModelBlock {
 };
 static_assert(sizeof(void *) != 4
               || (__builtin_offsetof(ModelBlock, pix_cur) == 6059436
-                  && __builtin_offsetof(ModelBlock, f1078696) == 1078696
+                  && __builtin_offsetof(ModelBlock, sym_ctr) == 1078696
                   && __builtin_offsetof(ModelBlock, f6059440) == 6059440
                   && __builtin_offsetof(ModelBlock, f6075824) == 6075824
                   && __builtin_offsetof(ModelBlock, f6460848) == 6460848
@@ -804,7 +818,7 @@ static_assert(sizeof(P2Ctx) == 18, "P2Ctx: the record is eighteen bytes");
 struct AltP2Block {
   uint8_t _pad0[278528];
   // 336 bytes, 278528..278863, and four readings of them.  The extent is the
-  // distance to `f278904`, not a measurement of any one reading: Hex-Rays had
+  // distance to `nb_sum`, not a measurement of any one reading: Hex-Rays had
   // a fifth, `__m128 f278528[21]`, which was its record of the sixteen-byte
   // access unit the original used to reach all of this, and every one of that
   // one's 175 sites is one of the four below at a fixed offset.
@@ -872,7 +886,7 @@ struct AltP2Block {
   };
   uint8_t _pad1[40];
   // Ten scalars `alt_p2_context` writes as it folds its neighbourhood sums.
-  int32_t f278904[10];   // +278904 .. +278943
+  int32_t nb_sum[10];   // +278904 .. +278943
   // One table, reached from two bases four elements apart -- Hex-Rays' 16-byte
   // view called them element 3 and element 4 -- which is what a `t[n]`/
   // `t[n + 4]` pair looks like when the compiler keeps both addresses in
@@ -937,7 +951,7 @@ static_assert(sizeof(void *) != 4 || __builtin_offsetof(AltP2Block, ctx_w) == 27
 static_assert(sizeof(void *) != 4 || sizeof(AltP2Block) == 0x103E30,
               "AltP2Block: bmf_page_alloc asks for 0x103E30 and this is it");
 static_assert(sizeof(void *) != 4
-              || (__builtin_offsetof(AltP2Block, f278904) == 278904
+              || (__builtin_offsetof(AltP2Block, nb_sum) == 278904
                   && __builtin_offsetof(AltP2Block, f278944) == 278944
                   && __builtin_offsetof(AltP2Block, fold) == 279984
                   && __builtin_offsetof(AltP2Block, fold_hi) == 280240
@@ -1423,116 +1437,116 @@ uint32_t __rc_decode_flat(uint32_t tot)
   return sym;
 }
 
-int32_t __encode_context_bit(uint16_t *_this, uint16_t *a2, int32_t n15)
+int32_t __encode_context_bit(BitCtr *_this, BitCtr *a2, int32_t n15)
 {
   ;
   int32_t v3, v4, n0x4000, result, v18, v19, n0x4000_1, v31, v33;
   uint32_t tot, n0x88_1, v30, v32, v34;
-  v3 = *_this;
-  if ( *_this )
+  v3 = _this->w[0];
+  if ( _this->w[0] )
   {
-    v4 = *(_this + 1);
-    if ( !*(_this + 1) )
+    v4 = _this->w[1];
+    if ( !_this->w[1] )
     {
-      v31 = *a2;
-      v32 = v31 + a2[1];
-      *_this = (v32 + (v31 << 6) - 64) / v32;
-      *(_this + 1) = ((a2[1] << 6) + v32 - 64) / v32;
-      *(_this + v3 - 1) += 4;
-      *(_this + 2) = 512;
-      v33 = a2[v3 - 1];
-      a2[v3 - 1] = -3 * ((uint32_t)(3 - v33) >> 31) + v33;
-      v3 = *_this;
-      v4 = *(_this + 1);
+      v31 = a2->w[0];
+      v32 = v31 + a2->w[1];
+      _this->w[0] = (v32 + (v31 << 6) - 64) / v32;
+      _this->w[1] = ((a2->w[1] << 6) + v32 - 64) / v32;
+      _this->w[v3 - 1] += 4;
+      _this->w[2] = 512;
+      v33 = a2->w[v3 - 1];
+      a2->w[v3 - 1] = -3 * ((uint32_t)(3 - v33) >> 31) + v33;
+      v3 = _this->w[0];
+      v4 = _this->w[1];
     }
     tot = v3 + v4;
     rc.encode_bit(v3, v4, n15);
-    n0x4000 = *(_this + 2);
+    n0x4000 = _this->w[2];
     if ( tot > n0x4000 )
     {
-      v30 = *(_this + 1);
-      *_this -= *_this >> 1;
-      *(_this + 1) = v30 - (v30 >> 1);
+      v30 = _this->w[1];
+      _this->w[0] -= _this->w[0] >> 1;
+      _this->w[1] = v30 - (v30 >> 1);
       if ( n0x4000 < 0x4000 )
-        *(_this + 2) = n0x4000 + 64;
+        _this->w[2] = n0x4000 + 64;
     }
-    result = *(_this + n15) + 8;
-    *(_this + n15) = result;
-    a2[n15] += (uint32_t)tot < 0x88;
+    result = _this->w[n15] + 8;
+    _this->w[n15] = result;
+    a2->w[n15] += (uint32_t)tot < 0x88;
     return result;
   }
-  v18 = *a2;
-  v19 = a2[1];
+  v18 = a2->w[0];
+  v19 = a2->w[1];
   n0x88_1 = v18 + v19;
   rc.encode_bit(v18, v19, n15);
-  n0x4000_1 = a2[2];
+  n0x4000_1 = a2->w[2];
   if ( n0x88_1 > n0x4000_1 )
   {
-    v34 = a2[1];
-    *a2 -= *a2 >> 1;
-    a2[1] = v34 - (v34 >> 1);
+    v34 = a2->w[1];
+    a2->w[0] -= a2->w[0] >> 1;
+    a2->w[1] = v34 - (v34 >> 1);
     if ( n0x4000_1 < 0x4000 )
-      a2[2] = n0x4000_1 + 64;
+      a2->w[2] = n0x4000_1 + 64;
   }
-  result = a2[n15] + 8;
-  a2[n15] = result;
-  *_this = n15 + 1;
+  result = a2->w[n15] + 8;
+  a2->w[n15] = result;
+  _this->w[0] = n15 + 1;
   return result;
 }
 
-int32_t __decode_context_bit(uint16_t *_this, uint16_t *a2)
+int32_t __decode_context_bit(BitCtr *_this, BitCtr *a2)
 {
   ;
   int32_t v2, v3, result, n0x4000, v13, v14, n0x4000_1, v24, v26;
   uint32_t tot, n0x88_1, v23, v25, v27;
-  v2 = *_this;
-  if ( *_this )
+  v2 = _this->w[0];
+  if ( _this->w[0] )
   {
-    v3 = *(_this + 1);
-    if ( !*(_this + 1) )
+    v3 = _this->w[1];
+    if ( !_this->w[1] )
     {
-      v24 = *a2;
-      v25 = v24 + a2[1];
-      *_this = (v25 + (v24 << 6) - 64) / v25;
-      *(_this + 1) = ((a2[1] << 6) + v25 - 64) / v25;
-      *(_this + v2 - 1) += 4;
-      *(_this + 2) = 512;
-      v26 = a2[v2 - 1];
-      a2[v2 - 1] = -3 * ((uint32_t)(3 - v26) >> 31) + v26;
-      v2 = *_this;
-      v3 = *(_this + 1);
+      v24 = a2->w[0];
+      v25 = v24 + a2->w[1];
+      _this->w[0] = (v25 + (v24 << 6) - 64) / v25;
+      _this->w[1] = ((a2->w[1] << 6) + v25 - 64) / v25;
+      _this->w[v2 - 1] += 4;
+      _this->w[2] = 512;
+      v26 = a2->w[v2 - 1];
+      a2->w[v2 - 1] = -3 * ((uint32_t)(3 - v26) >> 31) + v26;
+      v2 = _this->w[0];
+      v3 = _this->w[1];
     }
     tot = v2 + v3;
     result = rc.decode_bit(v2, v3);
-    n0x4000 = *(_this + 2);
+    n0x4000 = _this->w[2];
     if ( tot > n0x4000 )
     {
-      v23 = *(_this + 1);
-      *_this -= *_this >> 1;
-      *(_this + 1) = v23 - (v23 >> 1);
+      v23 = _this->w[1];
+      _this->w[0] -= _this->w[0] >> 1;
+      _this->w[1] = v23 - (v23 >> 1);
       if ( n0x4000 < 0x4000 )
-        *(_this + 2) = n0x4000 + 64;
+        _this->w[2] = n0x4000 + 64;
     }
-    *(_this + result) += 8;
-    a2[result] += (uint32_t)tot < 0x88;
+    _this->w[result] += 8;
+    a2->w[result] += (uint32_t)tot < 0x88;
   }
   else
   {
-    v13 = *a2;
-    v14 = a2[1];
+    v13 = a2->w[0];
+    v14 = a2->w[1];
     n0x88_1 = v13 + v14;
     result = rc.decode_bit(v13, v14);
-    n0x4000_1 = a2[2];
+    n0x4000_1 = a2->w[2];
     if ( n0x88_1 > n0x4000_1 )
     {
-      v27 = a2[1];
-      *a2 -= *a2 >> 1;
-      a2[1] = v27 - (v27 >> 1);
+      v27 = a2->w[1];
+      a2->w[0] -= a2->w[0] >> 1;
+      a2->w[1] = v27 - (v27 >> 1);
       if ( n0x4000_1 < 0x4000 )
-        a2[2] = n0x4000_1 + 64;
+        a2->w[2] = n0x4000_1 + 64;
     }
-    a2[result] += 8;
-    *_this = result + 1;
+    a2->w[result] += 8;
+    _this->w[0] = result + 1;
   }
   return result;
 }
@@ -2467,7 +2481,7 @@ void **__free_workspace(ModelBlock *Blocka, int8_t a2)
   ModelBlock *Blocka_2;
   Blocka_1 = (ModelBlock *)(Blocka);
   free(Blocka->sym_code);
-  free(Blocka_1->f1078236);
+  free(Blocka_1->sym_word);
   free(Blocka_1->f1078684);
   free(*(void**)&Blocka_1->alpha_map);
   // Both arrays are allocated as `bmf_new(24 * n + 4)` with the count in the
@@ -6878,9 +6892,9 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   v128 = v290;
   v129 = (P2Ctx *)((int16_t *)v118->cursor[4]);
   v130 = v292;
-  v118->f278904[1] = v127;
+  v118->nb_sum[1] = v127;
   n2256 = v127 + n3536_1;
-  v118->f278904[0] = n2256;
+  v118->nb_sum[0] = n2256;
   v132 = v130[-5].lane[0];
   v296 = (P2Ctx *)(v129);
   n1840 = v129[4].lane[0];
@@ -6947,8 +6961,8 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   v143 = v295;
   v144 = (v141 + v140) >> (v142 & 31);
   n2576 = v144 + n2256;
-  v118->f278904[2] = n2576;
-  v118->f278904[3] = v144;
+  v118->nb_sum[2] = n2576;
+  v118->nb_sum[3] = v144;
   n1840_13 = v143->lane[0];
   n960_1 = v293[0][0];
   v147 = v292[-2].lane[0];
@@ -7011,10 +7025,10 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   v156 = p2_pred(v118->p2_ctr[v155 + 65536].w2, v118->p2_ctr[v155 + 65536].b0);
   v157 = v292;
   v158 = v295;
-  v118->f278904[5] = v156;
+  v118->nb_sum[5] = v156;
   n2896 = v156 + n2576;
   v160 = v293;
-  v118->f278904[4] = n2896;
+  v118->nb_sum[4] = n2896;
   v161 = v160[0][1];
   v162 = v157[-2].lane[0];
   v250 = v157[0].lane[1];
@@ -7052,10 +7066,10 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   v171 = p2_pred(v168, v166->p2_ctr[v167 + 98304].b0);
   v172 = v292;
   v173 = v293;
-  v166->f278904[7] = v171;
+  v166->nb_sum[7] = v171;
   n3536_2 = v171 + n2896;
   n3536 = n3536_2;
-  v166->f278904[6] = n3536_2;
+  v166->nb_sum[6] = n3536_2;
   v175 = v173[0][0];
   v176 = v170->lane[0];
   v307 = v172[0].lane[1];
@@ -7090,9 +7104,9 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   v186 = p2_pred(v184->p2_ctr[v185 + 131072].w2, v184->p2_ctr[v185 + 131072].b0);
   v187 = (uint8_t *)v295;
   v271 = v186;
-  v184->f278904[9] = v186;
+  v184->nb_sum[9] = v186;
   n1840 = n3536_3 + v186;
-  v184->f278904[8] = n3536_3 + v186;
+  v184->nb_sum[8] = n3536_3 + v186;
   v188 = ((uint8_t *)v293[-1])[15];
   v189 = v187[17];
   v314 = ((uint8_t *)v293[-2])[13]
@@ -7322,7 +7336,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
                 "buf is not the 64 KiB the memset clears");
   ;
   ModelBlock *Blockaa_2;
-  uint16_t *v62;   // a cursor into `f1078236`
+  uint16_t *v62;   // a cursor into `sym_word`
   bool v46, v48, v59;
   int8_t v35;
   uint8_t *v28;   // `uint8_t *` beside the `char` scalars above
@@ -7399,7 +7413,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
             *(uint32_t *)&__frame.buf[4 * v58 - 4] = 1;
             v55 = __frame.v85;
             *(int32_t *)&Blockaa_1->f16 += v59;
-            Blockaa_1->f1078236[v54] = v58;
+            Blockaa_1->sym_word[v54] = v58;
             v51 = *(int32_t *)&Blockaa_1->f0;
             ++v54;
           }
@@ -7418,7 +7432,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
       do
       {
         *(int32_t *)&Blockaa_1->f16 += *(uint32_t *)&__frame.buf[4 * *v60 - 4] == 0;
-        v62 = Blockaa_1->f1078236;
+        v62 = Blockaa_1->sym_word;
         v63 = *v60;
         *(uint32_t *)&__frame.buf[4 * v63 - 4] = 1;
         ++v60;
@@ -7467,8 +7481,8 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
         v75 = 0;
         do
         {
-          Blockaa_1->f1078236[v75] = *(uint32_t *)&__frame.buf[4
-                                                                  * Blockaa_1->f1078236[v75]
+          Blockaa_1->sym_word[v75] = *(uint32_t *)&__frame.buf[4
+                                                                  * Blockaa_1->sym_word[v75]
                                                                   - 4];
           ++v75;
         }
@@ -7502,7 +7516,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
     memset(__frame.buf,0,0x10000);
     *(int32_t *)&Blockaa_1->f16 = 1;
     *(uint32_t *)__frame.buf = __frame.slot4 & *(uint32_t *)a3;
-    Blockaa_1->f1078236[0] = 0;
+    Blockaa_1->sym_word[0] = 0;
     if ( (uint32_t)(Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0) > 1 )
     {
       __frame.slot8 = a3;
@@ -7562,7 +7576,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
         }
 LABEL_12:
         Blockaa_3 = (ModelBlock *)((uint32_t *)__frame.slot7);
-        __frame.slot7->f1078236[v12++] = v11;
+        __frame.slot7->sym_word[v12++] = v11;
         if ( v12 >= *(uint32_t *)&Blockaa_3->f4 * Blockaa_3->f0 )
         {
           v4 = __frame.slot8;
@@ -7671,13 +7685,13 @@ LABEL_71:
           Blockaa_1 = (ModelBlock *)((int32_t *)__frame.slot7);
         }
       }
-      __frame.v79 = Blockaa_1->f1078236;
+      __frame.v79 = Blockaa_1->sym_word;
       Blockaa_1->f4 = k_2 * __frame.slot0;
       *(int32_t *)&Blockaa_1->f8 = 8;
       free(__frame.v79);
       v34 = bmf_new(2 * Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0);
       __frame.v79 = (__frame.slot[1]);
-      Blockaa_1->f1078236 = (uint16_t *)v34;
+      Blockaa_1->sym_word = (uint16_t *)v34;
       __reduce_alphabet((ModelBlock *)Blockaa_1, v35, (uint8_t *)__frame.v79);
       free((__frame.slot[1]));
     }
@@ -9526,7 +9540,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   {
     v13 = (uint16_t)(*((uint16_t *)__frame.sym5 + n4_8 + 3029720) - __frame.sym1);
   }
-  __frame.sym5->sym_cache = &__frame.sym5->f1078696[8 * v13];
+  __frame.sym5->sym_cache = &__frame.sym5->sym_ctr[8 * v13];
   v15 = this_2->ctx_state[v12];
   this_2->f36 = v15;
   v16 = &this_2->group_ctr[v15][v13];
@@ -9671,7 +9685,7 @@ LABEL_42:
       // of the 257-record grid: `269089 * 4` is +1 076 356, four bytes past
       // `f1076352`, and every term above it is a multiple of three words.
       v44 = __decode_context_bit(
-            &this_3->f1076352[3 * (8 * n15_12
+            &this_3->f1076352[(8 * n15_12
                                    + 4 * (uint8_t)((v39)[n8 + 27] & (v39)[n8 + 19])
                                    + 2 * v40
                                    + *(this_3->alpha_map + __frame.sym0)
@@ -10156,7 +10170,7 @@ LABEL_86:
     v127 = __pixel_context((ModelBlock *)this_3, (uint32_t *)__frame.sym);
     if ( v127 >= 0 )
     {
-      v128 = __decode_context_bit(&this_3->f1051776[3 * this_3->f52], &this_3->f1051680[3 * this_3->f48]);
+      v128 = __decode_context_bit(&this_3->f1051776[this_3->f52], &this_3->f1051680[this_3->f48]);
       *(uint16_t *)this_3->f56[5] = v127;
       if ( v128 )
         return n15_24 + 1;
@@ -10318,7 +10332,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   {
     v13 = (uint16_t)(*((uint16_t *)__frame.sym7 + __frame.sym8 + 3029720) - __frame.sym10);
   }
-  __frame.sym7->sym_cache = &__frame.sym7->f1078696[8 * v13];
+  __frame.sym7->sym_cache = &__frame.sym7->sym_ctr[8 * v13];
   v15 = this_2->ctx_state[v10];
   *(int32_t *)&this_2->f36 = v15;
   v16 = &this_2->group_ctr[v15][v13];
@@ -10586,7 +10600,7 @@ LABEL_42:
       *(this_3->f56[5] - 1) = n15_11 == *(uint16_t *)(this_3->f56[6] + 16);
       n15_12 = n15_14;
     }
-    __encode_context_bit(&this_3->f1076352[3 * (n15_32 + 1)], this_3->f1076352, __frame.sym6);
+    __encode_context_bit(&this_3->f1076352[(n15_32 + 1)], this_3->f1076352, __frame.sym6);
     n15_13 = __frame.sym6;
     n4_2 = ::mode_symbol[1];
     v74 = (uint8_t *)this_3->alpha_map;
@@ -10935,7 +10949,7 @@ LABEL_42:
     if ( v129 >= 0 )
     {
       n15_28 = v129 == *(uint16_t *)this_3->f56[5];
-      __encode_context_bit(&this_3->f1051776[3 * *(int32_t *)&this_3->f52], &this_3->f1051680[3 * *(int32_t *)&this_3->f48], n15_28);
+      __encode_context_bit(&this_3->f1051776[*(int32_t *)&this_3->f52], &this_3->f1051680[*(int32_t *)&this_3->f48], n15_28);
       if ( n15_28 )
         return n15_14 + 1;
       exclusion_mask[v129] = exclusion_gen;
@@ -11181,39 +11195,39 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
   *(uint64_t *)&a1->escape_list = 0;
   for ( n = 0; n < 0x40000; ++n )
   {
-    a1->f1078696[2 * n] = 0x2000;
-    a1->f1078696[2 * n + 1] = 0x2000;
+    a1->sym_ctr[2 * n] = 0x2000;
+    a1->sym_ctr[2 * n + 1] = 0x2000;
   }
   n8 = 0;
   do
   {
-    v35 = 6 * n8;
-    a1->f1051680[v35] = 40;
+    v35 = 2 * n8;   // two records a pass
+    a1->f1051680[v35].w[0] = 40;
     ++n8;
-    a1->f1051680[v35 + 1] = 16;
-    a1->f1051680[v35 + 2] = 512;
-    a1->f1051680[v35 + 3] = 40;
-    a1->f1051680[v35 + 4] = 16;
-    a1->f1051680[v35 + 5] = 512;
+    a1->f1051680[v35].w[1] = 16;
+    a1->f1051680[v35].w[2] = 512;
+    a1->f1051680[v35 + 1].w[0] = 40;
+    a1->f1051680[v35 + 1].w[1] = 16;
+    a1->f1051680[v35 + 1].w[2] = 512;
   }
   while ( n8 < 8 );
   n0x18 = 0;
   memset(a1->f1051776,0,sizeof a1->f1051776);
-  a1->f1078236 = (uint16_t *)bmf_new(2 * a1->f4 * a1->f0);
-  a1->f1076352[0] = 4;
-  a1->f1076352[1] = 4;
-  a1->f1076352[2] = 72;
-  memset(&a1->f1076352[3],0,1536);
+  a1->sym_word = (uint16_t *)bmf_new(2 * a1->f4 * a1->f0);
+  a1->f1076352[0].w[0] = 4;
+  a1->f1076352[0].w[1] = 4;
+  a1->f1076352[0].w[2] = 72;
+  memset(&a1->f1076352[1],0,1536);
   do
   {
-    v38 = 6 * n0x18;
-    a1->f1077894[v38] = 4;
+    v38 = 2 * n0x18;   // two records a pass
+    a1->f1077894[v38].w[0] = 4;
     ++n0x18;
-    a1->f1077894[v38 + 1] = 4;
-    a1->f1077894[v38 + 2] = 72;
-    a1->f1077894[v38 + 3] = 4;
-    a1->f1077894[v38 + 4] = 4;
-    a1->f1077894[v38 + 5] = 72;
+    a1->f1077894[v38].w[1] = 4;
+    a1->f1077894[v38].w[2] = 72;
+    a1->f1077894[v38 + 1].w[0] = 4;
+    a1->f1077894[v38 + 1].w[1] = 4;
+    a1->f1077894[v38 + 1].w[2] = 72;
   }
   while ( n0x18 < 0x18 );
   return a1;
@@ -12461,7 +12475,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   {
     v75 = ((uint32_t *)v578)[n5 + 69669];
     v76 = &((uint32_t *)v578)[v75];
-    v77 = v577 - (*(uint32_t *)&v578->f278904[2 * n5]);
+    v77 = v577 - (*(uint32_t *)&v578->nb_sum[2 * n5]);
     v78 = n5 << 17;
     v581 = (P2Count *)((uint8_t *)v76 + v78) + 71178;
     v79 = v77 + (uint16_t)v581->w2;
@@ -12499,7 +12513,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
       {
         __builtin_prefetch(&n2, 0, 1);
         n2 = (uint16_t *)((uint8_t *)&v578->p2_ctr[(v81 ^ 0x7FF0)] + v78);
-        v84 = (*(uint32_t *)&v578->f278904[2 * n5 + 1]) + v77;
+        v84 = (*(uint32_t *)&v578->nb_sum[2 * n5 + 1]) + v77;
         n3 = v81 & 3;
         if ( (uint32_t)n3 >= 3
           || (v545 = v78,
@@ -15323,7 +15337,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  uint16_t *v59;   // a row cursor into f1078236
+  uint16_t *v59;   // a row cursor into sym_word
   ModelBlock *Blocka_5;
   // These shared `__frame.Blocka_5` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
@@ -15599,7 +15613,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
     }
     if ( Blocka_1->f4 > 0 )
     {
-      v59 = Blocka_1->f1078236;
+      v59 = Blocka_1->sym_word;
       v45 = 0;
       do
       {
