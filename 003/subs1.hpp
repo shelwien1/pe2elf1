@@ -11109,6 +11109,11 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         this_3 = (ModelBlock *)(this_1);
         this_2->ctx_bucket[v5 + 15 * v8 + 75 * n5] = v102;
         v101 = this_3->f16;
+        // A sixteen-byte record per bucket, at `+96 + 16 * bucket`: five
+        // counts at words 0..4, their total at 5, a scaled weight at 6, and
+        // two bytes at 7 -- a level (`<= f16`) and the weight `1 << (5 -
+        // level)` it derives.  The base is the object, so record 0 lands on
+        // `f56[10..13]`; naming it means settling that overlap first.
         v13 = (uint16_t *)&((uint32_t *)this_3)[4 * v11];
         v13[49] = 2;
         v13[50] = 2;
@@ -11165,13 +11170,13 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         v17 = (v14 != 0) + (v16 != 0) + (v15 != 0) + 2;
         if ( v17 <= v101 )
         {
-          *((uint8_t *)v13 + 110) = v17;
+          *(uint8_t *)&v13[55] = v17;
           v13[48] = 2;
         }
         else
         {
           LOBYTE(v17) = v17 - 1;
-          *((uint8_t *)v13 + 110) = v17;
+          *(uint8_t *)&v13[55] = v17;
           v13[48] = 0;
         }
         if ( v13[v100 + 48] && v13[n5 + 48] && (uint8_t)v17 <= v101 )
@@ -11179,10 +11184,10 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
           v19 = v100;
           v18 = 1;
           v20 = (uint8_t)(1 << ((5 - v17) & 31));
-          *((uint8_t *)v13 + 111) = v20;
+          ((uint8_t *)&v13[55])[1] = v20;
           v13[54] = v20 << 6;
           v13[v19 + 48] += v20;
-          v13[n5 + 48] += *((uint8_t *)v13 + 111);
+          v13[n5 + 48] += ((uint8_t *)&v13[55])[1];
           v13[53] = v13[48]
                                + v13[52]
                                + v13[51]
@@ -15302,6 +15307,11 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
         {
           Blocka_2->ctx_bucket[v8 + 15 * v11 + 75 * n5] = v64;
           v73 = Blocka_2->f16;
+          // A sixteen-byte record per bucket, at `+96 + 16 * bucket`: five
+          // counts at words 0..4, their total at 5, a scaled weight at 6, and
+          // two bytes at 7 -- a level (`<= f16`) and the weight `1 << (5 -
+          // level)` it derives.  The base is the object, so record 0 lands on
+          // `f56[10..13]`; naming it means settling that overlap first.
           v12 = (uint16_t *)&((uint32_t *)Blocka_2)[4 * v64];
           __model_plane_n2 = 2;
           v12[48] = 2;
@@ -15362,23 +15372,23 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
           v19 = v18 + v17 + v14 + 2;
           if ( v19 <= v73 )
           {
-            *((uint8_t *)v12 + 110) = v19;
+            *(uint8_t *)&v12[55] = v19;
           }
           else
           {
-            *((uint8_t *)v12 + 110) = v18 + v17 + v14 + 1;
+            *(uint8_t *)&v12[55] = v18 + v17 + v14 + 1;
             v12[48] = 0;
           }
           if ( v12[v72 + 48]
             && v12[n5 + 48]
-            && (v20 = *((uint8_t *)v12 + 110), v20 <= v73) )
+            && (v20 = *(uint8_t *)&v12[55], v20 <= v73) )
           {
             v21 = 1;
             v22 = (uint8_t)(1 << ((5 - v20) & 31));
-            *((uint8_t *)v12 + 111) = v22;
+            ((uint8_t *)&v12[55])[1] = v22;
             v12[54] = v22 << 6;
             v12[v72 + 48] += v22;
-            v12[n5 + 48] += *((uint8_t *)v12 + 111);
+            v12[n5 + 48] += ((uint8_t *)&v12[55])[1];
             v12[53] = v12[48]
                                  + v12[52]
                                  + v12[51]

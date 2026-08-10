@@ -16,8 +16,8 @@ written down as a curiosity turned out to be the evidence.
 `python3 tools/shape.py`, verbatim:
 
 ```
-subs1.hpp / bmf.cpp lines          17682 / 358
-raw-offset sites                   110
+subs1.hpp / bmf.cpp lines          17692 / 358
+raw-offset sites                   101
   off `_this`                      7, in 4 functions
 pointer casts                      3021
 globals still at a 1997 address    0
@@ -36,8 +36,8 @@ against round six's close:
 
 | | round six | round seven |
 | --- | --- | --- |
-| lines | 17 833 / 358 | **17 682 / 358** |
-| raw-offset sites | 504 | **110** |
+| lines | 17 833 / 358 | **17 692 / 358** |
+| raw-offset sites | 504 | **101** |
 | — off `_this` | 27 | **7** |
 | pointer casts | 3986 | **3021** |
 | structs | 16, 3 still `ObjN` | **17, 0 still `ObjN`** |
@@ -288,7 +288,15 @@ question. Two of them are, and they are still there.
   value, then a cost, and `alt_p2_model`'s `v508` is a pointer and a strip
   index within one expression. Those do need a liveness argument each, and
   there is no tool shape for it.
-* **110 raw offsets, 92 `fNN` members, 560 `vNN` locals, 112 `goto`s.** The
+* **The bucket record in `model_plane` and `unmodel_plane_slow`.** Sixteen
+  bytes per context bucket at `ModelBlock + 96 + 16 * bucket`: five counts,
+  their total, a scaled weight, and two bytes — a level and the `1 << (5 -
+  level)` it derives. The finding is in the file as a comment rather than as a
+  member, because the grid is anchored at the object and record 0 therefore
+  lands on `f56[10..13]`, four live row cursors. After §6, an overlap that
+  looks like a coincidence is exactly the thing not to declare around until it
+  is settled.
+* **101 raw offsets, 92 `fNN` members, 560 `vNN` locals, 112 `goto`s.** The
   offsets are down from 1389 over five rounds; what remains is in bases that
   are genuinely computed — a name plus a variable byte offset, with nothing
   either end to say what the stride is. `degoto.py` still reports 0 candidates.
@@ -311,7 +319,7 @@ That is the honest measure of where this round's work was: `unrec`,
 `unoffset`, `uncast`, `unused`, `unwrite`, `unhoist`, `uncursor`, `dedup`,
 `arrayify` and `degoto` are all run against the file at the end of this round
 and all of them report zero, exactly as they did at the end of round six — and
-the file still lost 394 raw offsets and 965 pointer casts in between.
+the file still lost 403 raw offsets and 965 pointer casts in between.
 
 `unrecast`'s addition is worth one line of its own. It dropped
 `*((uint32_t *)p + 1)` when `p` was already a `uint32_t *` but never looked at
