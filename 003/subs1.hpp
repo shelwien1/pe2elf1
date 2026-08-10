@@ -25,8 +25,7 @@
 // byte is inside an object rather than at its start, the offset is written out
 // (`(char *)model_geometry + v3 + 8`) rather than given a global of its own;
 // the exception is 0x0044337D, byte 1 of the dword array based at coded_buf,
-// which is indexed like an array and so got the byte global its neighbours
-// __byte_44339D and __byte_4433AD already had.
+// which is indexed like an array and so got a byte global of its own.
 //
 // A few functions declare a local with the same name as the global they use
 // and reach the global through `::`; those locals still carry their original
@@ -228,23 +227,12 @@ static PlaneDesc plane_desc[5];
 // The twenty names the table arrived as, now views of it at their old offsets.
 // Each subscript that steps a whole record -- `[16 * p]` on a byte field,
 // `[4 * p]` on a dword one -- still means what it meant, and reads record p+1.
-static int32_t (&__n256_2)[20] = *(int32_t (*)[20])((uint8_t *)plane_desc + 0);
 static int32_t &plane_count = *(int32_t *)&plane_desc[0].w8;
-static int32_t (&near_lossless_max)[17] = *(int32_t (*)[17])((uint8_t *)plane_desc + 12);
 static uint8_t (&__byte_44339C)[64] = *(uint8_t (*)[64])((uint8_t *)plane_desc + 16);
 static uint8_t (&__byte_44339D)[63] = *(uint8_t (*)[63])((uint8_t *)plane_desc + 17);
 static uint8_t (&__byte_44339E)[62] = *(uint8_t (*)[62])((uint8_t *)plane_desc + 18);
 static uint8_t (&__byte_44339F)[61] = *(uint8_t (*)[61])((uint8_t *)plane_desc + 19);
-static int32_t (&__dword_4433A0)[15] = *(int32_t (*)[15])((uint8_t *)plane_desc + 20);
-static int32_t (&__dword_4433A4)[14] = *(int32_t (*)[14])((uint8_t *)plane_desc + 24);
-static int32_t (&__dword_4433A8)[13] = *(int32_t (*)[13])((uint8_t *)plane_desc + 28);
-static uint8_t (&__byte_4433AD)[47] = *(uint8_t (*)[47])((uint8_t *)plane_desc + 33);
-static char &__n3_1 = *(char *)&plane_desc[4].predictor;
 static char &__n3_0 = *(char *)&plane_desc[4].src_plane;
-static char &__byte_4433CF = *(char *)&plane_desc[4].b3;
-static int32_t &__n191 = *(int32_t *)&plane_desc[4].w4;
-static int32_t &__n191_0 = *(int32_t *)&plane_desc[4].w8;
-static int32_t &__n191_1 = *(int32_t *)&plane_desc[4].w12;
 static int32_t model_geometry[32];   // was 0x445660 in bmf_bss
 static char __byte_445700;   // was 0x445700 in bmf_bss
 static int32_t __n8_1;   // was 0x44570C in bmf_bss
@@ -271,7 +259,7 @@ static LevelGeom level_geom[8];
 static int32_t ctx_bias[4];
 
 // The near-lossless dead zone.  `rc_begin_encode` sets these to +d and -d for
-// d = 4 * near_lossless_max + 1, and every reader spells the same shape --
+// d = 4 * plane_desc[0].w12 + 1, and every reader spells the same shape --
 // `(x > deadzone_hi) - (x < deadzone_lo)`, a sign that is 0 inside the zone.
 // Were 0x4458F0 and 0x4458F4 in bmf_bss.
 static int32_t deadzone_hi;
@@ -348,21 +336,22 @@ static uint16_t *model_tables;
 // established, so the name still records the address rather than a role.
 static int32_t tbl44573C[5];
 
-// The plane descriptor table, `ALGORITHM.md` §6.2: four 16-byte records at
-// 0x0044339C, whose fields the file also declares one at a time as
-// __byte_44339C .. __dword_4433A8.
+// The four plane records, `plane_desc[1]` onwards, as a byte cursor.
 //
 // Six places copy all four records in or out with 64-bit moves, and Hex-Rays
 // wrote those as offsets from four *other* globals -- coded_buf,
-// desc_slow_mode, __n256_2, plane_count -- which sit 32, 24, 16 and 8 bytes
-// below the table.  That is the original compiler's strength reduction showing
-// through, not something the program means; those four are a buffer pointer, a
-// mode flag, a counter and a plane count, and none of them is a base for this.
-// Written against the table itself the arithmetic is the same and the
-// dependency on where four unrelated globals sit is gone.  REFACTORING.md §4.1.
+// desc_slow_mode, and the two dwords that are now `plane_desc[0].w0` and
+// `plane_desc[0].w8` -- which sit 32, 24, 16 and 8 bytes below the records.
+// That is the original compiler's strength reduction showing through, not
+// something the program means; those four are a buffer pointer, a mode flag, a
+// counter and a plane count, and none of them is a base for this.  Written
+// against the records themselves the arithmetic is the same and the dependency
+// on where four unrelated globals sit is gone.  REFACTORING.md §4.1.
+//
+// `off` runs 0..56, the 64 bytes of records 1..4, eight at a time.
 static inline char *bmf_plane_desc(int32_t off)
 {
-  return (char *)__byte_44339C + off;
+  return (char *)&plane_desc[1] + off;
 }
 
 // ---------------------------------------------------------------------------
@@ -9177,9 +9166,9 @@ int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, char a3)
     n192 = v13 - 1;
     if ( n4 > (uint32_t)(v13 - 1) )
     {
-      v14 = 4 * v13;
-      BYTE1(__n256_2[v14]) = n192;
-      LOBYTE(__n256_2[v14]) = n192;
+      v14 = v13;   // a record index; it was 4 * v13, a dword index into record 0
+      plane_desc[v14].src_plane = n192;
+      plane_desc[v14].predictor = n192;
     }
     if ( n4 >= 3 )
     {
@@ -9560,14 +9549,14 @@ LABEL_19:
       v42 = v38 <= *(uint32_t *)((char *)v215 + v205.m128_i32[1] + 4);
       if ( v38 > *(uint32_t *)((char *)v215 + v205.m128_i32[1] + 4) )
         n2_1 = 3;
-      v43 = v205.m128_i32[1];
+      v43 = v205.m128_i32[2];   // a record index; it was the byte offset 16 * it
       if ( !v42 )
       {
         n128 = 64;
         n128_1 = 64;
       }
-      *(int32_t *)((char *)__dword_4433A0 + v205.m128_i32[1]) = n128;
-      *(int32_t *)((char *)__dword_4433A4 + v43) = n128_1;
+      plane_desc[v205.m128_i32[2] + 1].w4 = n128;
+      plane_desc[v43 + 1].w8 = n128_1;
       v44 = &buf[4096 * n2_1];
       n0x100 = (uint8_t)(uintptr_t)v44 & 0xF;
       // The first 256-wide window over these 1024 counters.  Where it starts
@@ -9596,7 +9585,7 @@ LABEL_19:
         while ( n0x100 < 1024 );
         n4 = HIDWORD(v209);
       }
-      __byte_44339F[v205.m128_i32[1]] = n0x100_1 + 1;
+      plane_desc[v205.m128_i32[2] + 1].b3 = n0x100_1 + 1;
       // Same window, over the second table.  `i` is left at 256 for the slide
       // that follows.
       j_1 = 0;
@@ -9820,11 +9809,11 @@ LABEL_19:
           n191_2 = 0;
           __choose_plane_coding_n191_1 = 0;
         }
-        ::__n191 = __choose_plane_coding_n191_1;
-        __n191_0 = n191_2;
-        ::__n191_1 = n191_3;
-        __n3_0 = 3;
-        ::__n3_1 = 3;
+        plane_desc[4].w4 = __choose_plane_coding_n191_1;
+        plane_desc[4].w8 = n191_2;
+        plane_desc[4].w12 = n191_3;
+        plane_desc[4].src_plane = 3;
+        plane_desc[4].predictor = 3;
         v112 = &v180[1024 * __choose_plane_coding_n3_1 + 1024];
         n192 = (uint8_t)(uintptr_t)v112 & 0xF;
         // And the same again, over the third.
@@ -9842,7 +9831,7 @@ LABEL_19:
             v116 = v115;
           }
         }
-        __byte_4433CF = k + 1;
+        plane_desc[4].b3 = k + 1;
       }
     }
   }
