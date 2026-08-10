@@ -38,6 +38,7 @@ import merge                                                      # noqa: E402
 import structs                                                    # noqa: E402
 
 RECORD = 4
+RECNAME = 'P2Count' 
 VIEW = re.compile(r'\((Obj\d+) \*\)\(\s*(?:\(int32_t\))?\s*&?\w+\[4 \* ')
 DECL = re.compile(r'\b(Obj\d+) \*(\w+)\b')
 SIGNED = {'char': True, 'int8_t': True, 'int16_t': True, 'int32_t': True,
@@ -51,6 +52,8 @@ def views(src):
 
 def field(off, ty):
     """`P2Count` expression for `off` bytes read as `ty`, or None."""
+    if RECORD != 4:
+        return lane(off, ty)
     w = merge.width(ty)
     signed = SIGNED.get(re.sub(r'^(?:const|volatile) ', '', ty.strip()))
     if w is None or signed is None:
@@ -64,6 +67,26 @@ def field(off, ty):
         return base('b1') if not signed else '*(int8_t *)&' + base('b1')
     if rem == 2 and w == 2:
         return base('w2') if signed else '*(uint16_t *)&' + base('w2')
+    return None
+
+
+def lane(off, ty):
+    """`P2Ctx` expression for `off` bytes read as `ty`, or None.
+
+    The record is nine `int16_t` and the fields have no names, so the record
+    index and the lane are what a site can say: `p[2].lane[0]` where it said
+    `p->f36`, and `p[-1].lane[1]` where it said `*((int16_t *)p - 8)`.
+    """
+    w = merge.width(ty)
+    if w is None:
+        return None
+    rec, rem = divmod(off, RECORD)
+    if w == 2 and rem % 2 == 0:
+        at = '%%s[%d].lane[%d]' % (rec, rem // 2) if rec else '%%s->lane[%d]' % (rem // 2)
+        return at if SIGNED.get(ty.strip()) else '*(%s *)&' % ty.strip() + at
+    if w == 1:
+        at = '%%s[%d].lane[%d]' % (rec, rem // 2) if rec else '%%s->lane[%d]' % (rem // 2)
+        return '*((%s *)&%s + %d)' % (ty.strip(), at, rem % 2)
     return None
 
 
@@ -168,10 +191,12 @@ def members(src, name):
     return None if ms is None else {f['name']: (f['off'], f['ty']) for f in ms}
 
 
-def cursors(src, lines, want, debug=None):
+def cursors(src, lines, want, debug=None, only=None):
     """{(function, var): (view, edits)} for every cursor the retype can read."""
     out = {}
     for a, b, fn, _ in structs.bodies(lines):
+        if only and fn.lstrip('_') != only:
+            continue
         seen = {}
         for i in range(a, b + 1):
             code = lines[i].split('//')[0]
@@ -201,9 +226,24 @@ def main():
     lines = src.split('\n')
     args = [x for x in sys.argv[2:] if not x.startswith('--')]
 
-    want = set(args) if args else set(views(src))
+    global RECORD, RECNAME
+    only = None
+    for x in sys.argv:
+        if x.startswith('--in='):
+            only = x[5:]
+    if '--ctx' in sys.argv:
+        # The p2 context table: 18-byte records, rows 144 bytes apart, which
+        # `algorithm_v2.md` §9 established from 56 copy sites.  The views of it
+        # are not produced by one expression the way §3.1's were, so the
+        # candidate set is every `ObjN` and the per-cursor read does the
+        # filtering -- a cursor whose uses do not all land on a lane keeps its
+        # struct.
+        RECORD, RECNAME = 18, 'P2Ctx'
+        want = set(args) if args else set(re.findall(r'^struct (Obj\d+) \{', src, re.M))
+    else:
+        want = set(args) if args else set(views(src))
     dbg = [] if '--why' in sys.argv else None
-    found = cursors(src, lines, want, dbg)
+    found = cursors(src, lines, want, dbg, only)
 
     if dbg is not None:
         for fn, var, ty, d in dbg:
@@ -245,10 +285,10 @@ def main():
         a, b = body[fn]
         for i in range(a, b + 1):
             s = lines[i]
-            s = re.sub(r'\bObj\d+ (\*%s\b)' % v, r'P2Count \1', s)
-            s = re.sub(r'(?<![\w.])(%s = )\(Obj\d+ \*\)' % v, r'\1(P2Count *)', s)
+            s = re.sub(r'\bObj\d+ (\*%s\b)' % v, RECNAME + r' \1', s)
+            s = re.sub(r'(?<![\w.])(%s = )\(Obj\d+ \*\)' % v, r'\1(' + RECNAME + ' *)', s)
             s = re.sub(r'\(Obj\d+ \*\)\(\s*(?:\((?:const char \*|int32_t)\))?\s*(%s)\s*\)' % v,
-                       r'(P2Count *)(\1)', s)
+                       '(' + RECNAME + ' *)(\\1)', s)
             lines[i] = s
     src = '\n'.join(lines)
 
