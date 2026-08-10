@@ -23,7 +23,7 @@ bytes.
 `python3 tools/shape.py`, verbatim:
 
 ```
-subs1.hpp / bmf.cpp lines          17790 / 358
+subs1.hpp / bmf.cpp lines          17787 / 358
 raw-offset sites                   22
   off `_this`                      1, in 1 functions
 pointer casts                      2137
@@ -531,6 +531,7 @@ caught by reading the result. It is in the check now.
 | --- | --- |
 | `triage.sh` | four images against their reference streams, for bisecting |
 | `unwrite.py` | a call is an identifier followed by `(`, not any `(` |
+| `unused.py` | stop the walk-back at a comment; count deletions |
 | `unaliasvar.py` | a local that is one assignment of another local |
 
 `unaliasvar.py` is the round's one new refactoring tool, and what it cost is
@@ -549,7 +550,18 @@ per-body bisection found each in minutes:
 
 67 folded, 51 declarations dropped after them, 117 lines gone.
 
-One of the other two is not a refactoring tool. Round seven's tools all still report
+The other two are fixes to tools that had been reporting zero while work
+remained, and both were made findable by this round rather than by the file.
+`unwrite.py` declined four dead loads because its test for "has a call on the
+right" counted every cast. `unused.py` missed five declarations because it
+walks back to a statement's first line by looking for a `;` above, and a
+comment line has none — so it climbed into the paragraph above the declaration
+and the type match failed silently. Round eight put comments above enough
+declarations to turn that from theoretical into five misses, and it also
+printed those five as "deleted" while the file was byte-identical afterwards.
+
+A tool reporting zero is only evidence if the zero can be wrong in a way you
+would notice. Round seven's tools all still report
 zero; what this round needed was not another pattern but a faster way to ask
 "did that break it", because §5's failure took a bisection over six changes and
 the gate is minutes per attempt.
