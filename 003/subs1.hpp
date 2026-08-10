@@ -7607,7 +7607,11 @@ int32_t __cost_candidate(uint8_t *a1, int32_t n2, uint8_t *a3, int8_t a4, int32_
       uint8_t *v88;
       uint8_t *v89;
       int32_t v90;
-      int32_t v91;
+      // `v91` held three unrelated `int32_t` here in three phases -- a base
+      // address, a pixel difference inside the inner loop, and a cost -- with
+      // no overlap between them.  All three are locals now and the slot is
+      // dead; it stays to hold the layout.
+      int32_t _pad91;
       int32_t v92;
       int32_t v93;
       int32_t v94;
@@ -7622,6 +7626,9 @@ int32_t __cost_candidate(uint8_t *a1, int32_t n2, uint8_t *a3, int8_t a4, int32_
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 26720, "frame layout moved");
   ;
+  int32_t cand_base;   // was `__frame.v91`, phase one: `&v15[n2_3]` as a number
+  int32_t diff;        // was `__frame.v91`, phase two: a pixel difference
+  int32_t cost;        // was `__frame.v91`, phase three: an `estimate_cost`
   int32_t v63;      // a byte offset into `v64`, which is the address
   uint8_t *v64;
   uint8_t *v14;   // were int32_t: these hold addresses
@@ -7659,7 +7666,7 @@ int32_t __cost_candidate(uint8_t *a1, int32_t n2, uint8_t *a3, int8_t a4, int32_
   __frame.v90 = 16 * __frame.n2_2;
   __frame.v88[16 * __frame.n2_2] = 2;
   v14[33] = (uint8_t)n2_3;
-  __frame.v91 = (int32_t)&v15[n2_3];
+  cand_base = (int32_t)&v15[n2_3];
   v21 = &v15[n2_3 + 16 + v12 + __frame.n4];
   if ( (uint32_t)v21 < __frame.v78 )
   {
@@ -7722,7 +7729,7 @@ int32_t __cost_candidate(uint8_t *a1, int32_t n2, uint8_t *a3, int8_t a4, int32_
   __frame.v94 = v38 - 1;
   __frame.v93 = -v37;
   v39 = -plane_count;
-  v40 = __frame.v91 - (-v37 - plane_count);
+  v40 = cand_base - (-v37 - plane_count);
   __frame.v101 = -v37 - plane_count;
   __frame.v99 = (uint8_t *)(v40 + 16);
   v41 = v10 + v40 + 16;
@@ -7739,10 +7746,10 @@ int32_t __cost_candidate(uint8_t *a1, int32_t n2, uint8_t *a3, int8_t a4, int32_
     __frame.n2_1 = n2_4;
     v46 = v45 + *v42 - v42[__frame.v93] - v42[v39];
     v47 = *v44;
-    __frame.v91 = v46;
+    diff = v46;
     v48 = __frame.v94;
     n2_4 = &__frame.n2_1[-v39];
-    v49 = ((uint16_t)__frame.v91
+    v49 = ((uint16_t)diff
          - (uint16_t)((__frame.n191_2 * (v44[__frame.v101] + v47 - v44[__frame.v93] - v44[v39])
                              + __frame.n191_5 * (__frame.n2_1[__frame.v101] + *__frame.n2_1 - __frame.n2_1[__frame.v93] - (uint32_t)__frame.n2_1[v39])
                              + 40) >> 7)
@@ -7761,17 +7768,17 @@ int32_t __cost_candidate(uint8_t *a1, int32_t n2, uint8_t *a3, int8_t a4, int32_
   a8[v52 + 1] = __estimate_cost((uint8_t *)__frame.v74, 1024);
   a8[v52 + 2] = __estimate_cost((uint8_t *)__frame.v75, 1024);
   a8[v52 + 3] = __estimate_cost((uint8_t *)__frame.v76, 1024);
-  __frame.v91 = __estimate_cost((uint8_t *)__frame.buf, 1024);
+  cost = __estimate_cost((uint8_t *)__frame.buf, 1024);
   __frame.v92 = __estimate_cost((uint8_t *)__frame.v72, 1024);
   v53 = __estimate_cost((uint8_t *)__frame.v73, 1024);
   __frame.v94 = v53;
   v54 = v53;
-  if ( __frame.v91 < v53 )
-    v54 = __frame.v91;
+  if ( cost < v53 )
+    v54 = cost;
   if ( __frame.v92 < v53 )
     v53 = __frame.v92;
   v55 = __frame.v92 + v54;
-  v56 = __frame.v91 + v53;
+  v56 = cost + v53;
   v57 = v55 < v56;
   __frame.v93 = v56;
   v58 = __frame.v94;
@@ -7780,7 +7787,7 @@ int32_t __cost_candidate(uint8_t *a1, int32_t n2, uint8_t *a3, int8_t a4, int32_
     __frame.v93 = v55;
     v59 = v50;
     v50 = __frame.v95;
-    __frame.v91 = __frame.v92;
+    cost = __frame.v92;
     __frame.v95 = v59;
     v60 = a8[v52 + 1];
     a8[v52 + 1] = a8[v52 + 2];
@@ -7802,7 +7809,7 @@ int32_t __cost_candidate(uint8_t *a1, int32_t n2, uint8_t *a3, int8_t a4, int32_
   v64[16 * v66] = 1;
   v64[17] = (uint8_t)v66;
   if ( !v67 && *((uint32_t *)__frame.v89 + 3) > 0x1000000u )
-    return __frame.v91 + v58 + a8[v52];
+    return cost + v58 + a8[v52];
   v69 = a8[v52];
   v70 = a8[v52 + 2];
   if ( v69 >= a8[v52 + 1] )
@@ -12029,7 +12036,10 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   uint16_t *n0xF0;
   uint32_t n0x10_2;   // a record index in four regions ...
   uint16_t *p2_rec;   // element units: every offset through it is even    // ... and a record address in the two below
-  uint16_t *v508;
+  // Two things in one slot, and both are read as numbers: the strip index
+  // out of `f278708` or `f278712`, and later an address.  It is neither a
+  // `uint16_t *` nor an index -- it is the register MSVC put both in.
+  uintptr_t v508;
   uint32_t n0x10_1;
   int32_t v510;
   int32_t v511;
@@ -12164,9 +12174,9 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   uint16_t *n0xF0_4;
   uint16_t *v445;
   uint16_t *v387;
-  uint16_t *v7, *v389, *n0x10_3, *n2_2, *v408, *v411, *v420, *v428, *v436, *v444, *n2_7,
-           *n0x10_4, *v452, *v456, *v457, *n2_6, *v463, *v466, *n2_5, *v474, *v477, *n2_4,
-           *v485, *v488, *v491, *n2_3, *v502;
+  uint16_t *v7, *n0x10_3, *n2_2, *v408, *v411, *v420, *v428, *v436, *v444,
+           *n2_7, *n0x10_4, *v452, *v456, *v457, *n2_6, *v463, *v466, *n2_5,
+           *v474, *v477, *n2_4, *v485, *v488, *v491, *n2_3, *v502;
   AltP2Block *v385;
   uint32_t *v76, v78, v92, v97, v109, n0x10, v393, v396, v405, v414, v499;
   uint8_t v83;
@@ -13090,10 +13100,9 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   n0x10 = v387[470032 + 4];
   if ( n0x10 > 0x10 )
   {
-    v389 = (uint16_t *)(&v385->f278708)[a4 & 1];
     v511 = a4 & 1;
     n15 = v386 & 0xF;
-    v508 = v389;
+    v508 = (&v385->f278708)[a4 & 1];
     if ( n15 < 15 )
     {
       v391 = v387[470040 + 1];
@@ -13165,7 +13174,7 @@ LABEL_48:
         if ( a4 )
         {
           n2_half = (a4 - 1) >> 1;
-          n0xF0 = (((uint16_t *)((uint8_t)(uintptr_t)v508 & 0xF0)));
+          n0xF0 = (uint16_t *)((uint8_t)v508 & 0xF0);
           if ( (uint32_t)n0xF0 >= 0xF0
             || (n0x10_1 = n0x10,
                 __update_binary_pair(model_strip((uint32_t)v508 + 16), n2_half),
@@ -13199,14 +13208,14 @@ LABEL_48:
             v491 = (uint16_t *)&((uint32_t *)v385)[2 * v385->f278760[5] + 235018 + 2 * (n0x10 - v385->f278760[6])];
             v492 = HIWORD(((uint32_t *)v385)[2 * v385->f278760[5] + 235018 + 2 * (n0x10 - v385->f278760[6])]);
             v493 = LOWORD(((uint32_t *)v385)[2 * v385->f278760[5] + 235019 + 2 * (n0x10 - v385->f278760[6])]);
-            v508 = v491;
+            v508 = (uintptr_t)v491;
             if ( v491[3] + v493 + v492 > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way((uint16_t *)v491);
               n0x10 = n0x10_1;
             }
-            (v508)[v510 + 1] += (uint16_t)(*v508 & 0xFFFC) >> 2;
+            v491[v510 + 1] += (uint16_t)(*v491 & 0xFFFC) >> 2;
             v494 = v385->f278704 - v385->f278760[6];
             n0xF0_1 = ((uint16_t *)&((uint32_t *)v385)[2 * v494 + 2 * v385->f278760[5]]);
             n0x10_2 = v385->f278760[7] + v494;
