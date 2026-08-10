@@ -2662,7 +2662,11 @@ int32_t __init_model_tables(ModelBlock *_this)
 {
   ;
   SymEntry *v8, *v11, *v32;
-  uint8_t *v28, *v29;           // row cursors out of f56
+  // The two rows above, walked one record at a time.  Every reach through
+  // them is `match[0]` -- byte 2 of an eight-byte record -- so the byte
+  // offsets 34 and -30 were records +4 and -4: the window `grad` slides,
+  // adding the record entering on the right and dropping the one leaving.
+  PixRec *v28, *v29;            // row cursors out of f56
   uint8_t v13, v14;
   uint8_t *buf;   // `uint8_t *` beside the `char` scalars above
   uint16_t v6, v12;
@@ -2862,18 +2866,18 @@ LABEL_37:
     here->match[4] = here->sym == up[2].sym;
     here->match[5] = here->sym == up[3].sym;
   }
-  v28 = _this->f56[6];
-  v29 = _this->f56[7];
+  v28 = (PixRec *)_this->f56[6];
+  v29 = (PixRec *)_this->f56[7];
   v30 = _this->f56[5] + 8;
   _this->f56[5] = v30;
   _this->f56[8] += 8;
-  v28 += 8;
-  _this->f56[6] = v28;
-  v29 += 8;
+  ++v28;
+  _this->f56[6] = (uint8_t *)v28;
+  ++v29;
   _this->f56[9] += 8;
-  _this->f56[7] = v29;
-  _this->grad[0] += *(v28 + 34) - *(v28 - 30);
-  _this->grad[1] += *(v29 + 34) - *(v29 - 30);
+  _this->f56[7] = (uint8_t *)v29;
+  _this->grad[0] += v28[4].match[0] - v28[-4].match[0];
+  _this->grad[1] += v29[4].match[0] - v29[-4].match[0];
   _this->grad[2] += *(v30 - 5) - *(v30 - 37);
   result = *(v30 - 6) - *(v30 - 62);
   _this->grad[3] += result;
@@ -9473,7 +9477,9 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   uint64_t *v4;
   FreqRec *v90;
   uint16_t *v97;
-  uint16_t *v106;
+  // `f56[6]`, the row above: every reach through it is a multiple of
+  // four `uint16_t`, which is one `PixRec`, and every one is `sym`.
+  PixRec *v106;
   FreqRec *freq_tbl;
   CtrPair *v16;   // the group's counter pair for this context
   PixRec *n15_9;   // `f56[6]`, the row above
@@ -9488,8 +9494,8 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
            v177;
   uint8_t *v39;
   uint8_t *v38;
-  uint8_t *v76;
-  uint8_t *n15_16;
+  PixRec *v76;      // `f56[7]`, two rows above
+  PixRec *n15_16;   // `f56[6]`, the row above
   n15_9 = (PixRec *)_this->f56[6];
   n4_8 = n15_9->sym;
   v4 = (uint64_t *)((uint16_t *)*(uint32_t *)&_this->f56[5]);
@@ -9798,24 +9804,30 @@ LABEL_57:
           }
         }
         n15_24 = n15_18;
-        n15_16 = (uint8_t *)this_3->f56[6];
-        v70 = *(n15_16 - 22);
-        v71 = *(n15_16 - 14);
-        v72 = n15_16[18];
-        v73 = n15_16[26];
+        n15_16 = (PixRec *)this_3->f56[6];
+        v70 = n15_16[-3].match[0];
+        v71 = n15_16[-2].match[0];
+        v72 = n15_16[2].match[0];
+        v73 = n15_16[3].match[0];
         __frame.sym0 = (int32_t)n15_16;
         v74 = v71 + v70;
-        v75 = n15_16[34];
-        v76 = ((uint8_t *)this_3->f56[7]);
+        v75 = n15_16[4].match[0];
+        v76 = (PixRec *)this_3->f56[7];
         this_3->grad[0] = v73 + v72 + v74 + v75 - 5;
-        this_3->grad[1] = v76[26]
-                                     + v76[18]
-                                     + v76[10]
-                                     + v76[2]
-                                     + *((int8_t *)v76 - 6)
-                                     + *((int8_t *)v76 - 14)
-                                     + *((int8_t *)v76 - 22)
-                                     + v76[34]
+        // Eight records of the row two above, `match[0]` in each: the
+        // byte offsets 2, 10, 18, 26, 34 and -6, -14, -22 were records
+        // 0..4 and -1..-3.  Three of the eight loads are `movsx` in the
+        // original and five are `movzx`; every writer of these bytes is
+        // a comparison, so the sign never shows, and the casts stay
+        // because the instruction is what is being transcribed.
+        this_3->grad[1] = v76[3].match[0]
+                                     + v76[2].match[0]
+                                     + v76[1].match[0]
+                                     + v76[0].match[0]
+                                     + (int8_t)v76[-1].match[0]
+                                     + (int8_t)v76[-2].match[0]
+                                     + (int8_t)v76[-3].match[0]
+                                     + v76[4].match[0]
                                      - 8;
         n15_17 = (uint8_t *)__frame.sym0;
         this_3->grad[2] = *(v61 - 29) + *(v61 - 21) - 2;
@@ -10105,9 +10117,9 @@ LABEL_86:
   v104 = v97[6];
   v105 = v97[7];
   __frame.sym5 = (ModelBlock *)((uint32_t *)this_4);
-  v106 = ((uint16_t *)this_3->f56[6]);
+  v106 = (PixRec *)this_3->f56[6];
   __frame.sym6 = v102;
-  v107 = v106[8];
+  v107 = v106[2].sym;
   __frame.sym7 = v103;
   v108 = this_3->f56[5];
   __frame.sym8 = v104;
@@ -10119,19 +10131,19 @@ LABEL_86:
   __frame.sym11 = v107;
   v112 = *v110;
   __frame.sym12 = v111;
-  v113 = v106[-8];
+  v113 = v106[-2].sym;
   __frame.sym13 = v112;
   v114 = *(v110 - 4);
   __frame.sym14 = v113;
   v115 = *(uint16_t *)(v108 - 24);
   __frame.sym15 = v114;
-  v116 = v106[12];
+  v116 = v106[3].sym;
   __frame.sym16 = v115;
-  v117 = v106[16];
+  v117 = v106[4].sym;
   __frame.sym17 = v116;
   v118 = *(uint16_t *)(v108 - 32);
   __frame.sym18 = v117;
-  v119 = v106[-12];
+  v119 = v106[-3].sym;
   __frame.sym19 = v118;
   v120 = v110[8];
   __frame.sym20 = v119;
@@ -10143,8 +10155,8 @@ LABEL_86:
   v123 = *(uint16_t *)(v108 - 56);
   __frame.sym24 = v122;
   __frame.sym25 = v121[4];
-  v124 = v106[20];
-  v125 = v106[28];
+  v124 = v106[5].sym;
+  v125 = v106[7].sym;
   __frame.sym26 = v124;
   __frame.sym27 = *(uint16_t *)this_3->f56[9];
   __frame.sym28 = v123;
@@ -10264,7 +10276,9 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
           n15_18, v161, n2_2, p_n15_10, p_n15_8, p_n15_9, n15_19;
   FreqRec *n2_3;
   uint16_t *v159;
-  uint16_t *v111;
+  // `f56[6]`, the row above: every reach through it is a multiple of
+  // four `uint16_t`, which is one `PixRec`, and every one is `sym`.
+  PixRec *v111;
   uint16_t *v51;
   uint16_t *v37;
   uint16_t *v108;
@@ -10275,7 +10289,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   SymList **v136;
   uint32_t bin_tot, v55, v57, v137, p_n15_12, v139, v140, v141, v168, v169, v171, v172,
           v173;
-  uint8_t *v69;
+  PixRec *v69;      // `f56[7]`, two rows above
   uint8_t *p_n15_3, *v41;
   n2_7 = (PixRec *)_this->f56[6];
   n4 = n2_7->sym;
@@ -10564,17 +10578,23 @@ LABEL_42:
       v67 = v63[-3].match[0];
       n15_14 = n15_12;
       v68 = v63[3].match[0] + v65 + v64 + v67 + v66 - 5;
-      v69 = ((uint8_t *)this_3->f56[7]);
+      v69 = (PixRec *)this_3->f56[7];
       this_3->grad[0] = v68;
       n2_13 = (uint8_t *)__frame.sym2;
-      this_3->grad[1] = v69[26]
-                                   + v69[18]
-                                   + v69[10]
-                                   + v69[2]
-                                   + *((int8_t *)v69 - 6)
-                                   + *((int8_t *)v69 - 14)
-                                   + *((int8_t *)v69 - 22)
-                                   + v69[34]
+      // Eight records of the row two above, `match[0]` in each: the
+      // byte offsets 2, 10, 18, 26, 34 and -6, -14, -22 were records
+      // 0..4 and -1..-3.  Three of the eight loads are `movsx` in the
+      // original and five are `movzx`; every writer of these bytes is
+      // a comparison, so the sign never shows, and the casts stay
+      // because the instruction is what is being transcribed.
+      this_3->grad[1] = v69[3].match[0]
+                                   + v69[2].match[0]
+                                   + v69[1].match[0]
+                                   + v69[0].match[0]
+                                   + (int8_t)v69[-1].match[0]
+                                   + (int8_t)v69[-2].match[0]
+                                   + (int8_t)v69[-3].match[0]
+                                   + v69[4].match[0]
                                    - 8;
       this_3->grad[2] = n2_13[-29] + n2_13[-21] - 2;
       n15_11 = __frame.sym8;
@@ -10888,9 +10908,9 @@ LABEL_42:
   __frame.sym6 = n15_25;
   n15_27 = *(uint16_t *)(v109 - 16);
   __frame.sym7 = (ModelBlock *)(this_4);
-  v111 = ((uint16_t *)this_3->f56[6]);
+  v111 = (PixRec *)this_3->f56[6];
   __frame.sym8 = n15_26;
-  v112 = v111[8];
+  v112 = v111[2].sym;
   __frame.sym9 = (uint16_t *)(v108);
   __frame.sym10 = n15_27;
   v113 = (uint16_t *)this_3->f56[7];
@@ -10898,19 +10918,19 @@ LABEL_42:
   __frame.sym11 = v112;
   v115 = *v113;
   __frame.sym12 = v114;
-  v116 = v111[-8];
+  v116 = v111[-2].sym;
   __frame.sym13 = v115;
   v117 = *(v113 - 4);
   __frame.sym14 = v116;
   v118 = *(uint16_t *)(v109 - 24);
   __frame.sym15 = v117;
-  v119 = v111[12];
+  v119 = v111[3].sym;
   __frame.sym16 = v118;
-  v120 = v111[16];
+  v120 = v111[4].sym;
   __frame.sym17 = v119;
   v121 = *(uint16_t *)(v109 - 32);
   __frame.sym18 = v120;
-  v122 = v111[-12];
+  v122 = v111[-3].sym;
   __frame.sym19 = v121;
   v123 = v113[8];
   __frame.sym20 = v122;
@@ -10922,8 +10942,8 @@ LABEL_42:
   v126 = *(uint16_t *)(v109 - 56);
   __frame.sym24 = v125;
   __frame.sym25 = v124[4];
-  v127 = v111[20];
-  v128 = v111[28];
+  v127 = v111[5].sym;
+  v128 = v111[7].sym;
   __frame.sym26 = v127;
   __frame.sym27 = *(uint16_t *)*(int32_t *)&this_3->f56[9];
   __frame.sym28 = v126;
@@ -11284,7 +11304,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   SymEntry *ArgList_7;
   SymList *i_1, *i, *j_1, *j;
   FreqRec *v13;   // a bucket record: `grid[bucket]`
-  uint8_t *v49, *v50;
+  PixRec *v49, *v50;   // `f56[6]` and `f56[7]`, the two rows above
   v3 = _this->f8 < 8;
   Src_1 = Src;
   ArgList = &Src[-v3];
@@ -11540,23 +11560,23 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         *(this_4->f56[5] - 1) = zero;
       }
       *(this_4->f56[5] + 7) = *(uint16_t *)(this_4->f56[6] + 24) == 0;
-      v49 = *&this_4->f56[6];
-      v50 = *&this_4->f56[7];
+      v49 = (PixRec *)this_4->f56[6];
+      v50 = (PixRec *)this_4->f56[7];
       this_4->f56[5] += 8;
-      v49 += 8;
+      ++v49;
       this_4->f56[8] += 8;
-      this_4->f56[6] = v49;
-      v50 += 8;
-      this_4->f56[7] = v50;
+      this_4->f56[6] = (uint8_t *)v49;
+      ++v50;
+      this_4->f56[7] = (uint8_t *)v50;
       this_4->f56[9] += 8;
-      this_4->grad[0] = v49[26] + v49[18] + v49[10] + v49[2] + v49[34] - 5;
+      this_4->grad[0] = v49[3].match[0] + v49[2].match[0] + v49[1].match[0] + v49[0].match[0] + v49[4].match[0] - 5;
       // The same five counts as the line above, off the other row.  MSVC
       // spilled each byte into a register whose upper bits were leftovers,
       // and the destination is one byte, so only the low bytes ever counted.
       this_4->grad[3] = 0;
       this_4->grad[2] = 0;
       v51 = this_4->f0;
-      this_4->grad[1] = v50[26] + v50[18] + v50[10] + v50[2] + v50[34] - 5;
+      this_4->grad[1] = v50[3].match[0] + v50[2].match[0] + v50[1].match[0] + v50[0].match[0] + v50[4].match[0] - 5;
       v52 = v86;
       if ( v51 <= 0 )
         break;
@@ -15340,7 +15360,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
   CtrPair *v24;   // one group's row of counter pairs
   SymList *v33, *v39;
   FreqRec *v12;   // a bucket record: `grid[bucket]`
-  uint8_t *v51, *v52;
+  PixRec *v51, *v52;   // `f56[6]` and `f56[7]`, the two rows above
   void *v5;
   if ( plane_alt_model )
   {
@@ -15612,22 +15632,22 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
           *(Blocka_1->f56[5] - 1) = zero;
         }
         *(Blocka_1->f56[5] + 7) = *(uint16_t *)(Blocka_1->f56[6] + 24) == 0;
-        v51 = *&Blocka_1->f56[6];
-        v52 = *&Blocka_1->f56[7];
+        v51 = (PixRec *)Blocka_1->f56[6];
+        v52 = (PixRec *)Blocka_1->f56[7];
         Blocka_1->f56[5] += 8;
-        v51 += 8;
-        Blocka_1->f56[6] = v51;
+        ++v51;
+        Blocka_1->f56[6] = (uint8_t *)v51;
         Blocka_1->f56[8] += 8;
-        v52 += 8;
-        Blocka_1->f56[7] = v52;
+        ++v52;
+        Blocka_1->f56[7] = (uint8_t *)v52;
         Blocka_1->f56[9] += 8;
-        Blocka_1->grad[0] = v51[26] + v51[18] + v51[10] + v51[2] + v51[34] - 5;
+        Blocka_1->grad[0] = v51[3].match[0] + v51[2].match[0] + v51[1].match[0] + v51[0].match[0] + v51[4].match[0] - 5;
         // The same five counts as the line above, off the other row.
         Blocka_1->grad[3] = 0;
         Blocka_1->grad[2] = 0;
         v45 = v61;
         v53 = Blocka_1->f0;
-        Blocka_1->grad[1] = v52[26] + v52[18] + v52[10] + v52[2] + v52[34] - 5;
+        Blocka_1->grad[1] = v52[3].match[0] + v52[2].match[0] + v52[1].match[0] + v52[0].match[0] + v52[4].match[0] - 5;
         if ( v53 > 0 )
         {
           v54 = 0;
