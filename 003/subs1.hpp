@@ -526,7 +526,7 @@ struct Obj11 {
       uint8_t _u0_0_4[97];
       uint64_t f278640;
       uint64_t f278648;
-      __m128 *f278656;
+      float (*f278656)[4];   // a weight block: 16 rows of four, `alt_p2_filter`'s `_this`
       int32_t *f278660;
       uint8_t *f278664;   // a row cursor
       uint8_t *f278668;   // a row cursor
@@ -7382,13 +7382,13 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   ;
   Obj3 *v46;
   char *v157, *v172;
-  __m128 *v31;
+  float (*v31)[4];
   Obj11 *v196;
   Obj11 *v28;
   Obj11 *v166;
   Obj11 *v118;
   Obj11 *v184;
-  __m128 *v50, *v53, *v59, v60, v61, v62, *v110, *v160, *v173, *v194, *v204,
+  __m128 *v50, *v53, *v110, *v160, *v173, *v194, *v204,
          *v243;
   bool v26, v58;
   char v142;
@@ -7523,7 +7523,7 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   if ( v289->f280864.m128_i16[(uint32_t)v257 + 4] )
   {
     v293 = (__m128 *)v289 + 17408;
-    v31 = (&((__m128 *)v289)[16 * v29]);
+    v31 = &((float (*)[4])v289)[16 * v29];
     v289->f278528[8].m128_i32[0] = (int32_t)v31;
     // Normalised LMS.  Predict from the seven weight rows against the seven
     // inputs, take the error against what actually came, and step every weight
@@ -7536,22 +7536,22 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
 
       for ( k = 0; k < 4; ++k )
       {
-        acc[k] = v31[0].m128_f32[k] * v28->p2_row[0][k];
+        acc[k] = v31[0][k] * v28->p2_row[0][k];
         for ( j = 1; j < 7; ++j )
-          acc[k] += v31[j].m128_f32[k] * v28->p2_row[j][k];
+          acc[k] += v31[j][k] * v28->p2_row[j][k];
       }
       err = ((float)*(int16_t *)(v246 - 18)
              - (bmf_hsum4(acc) + v28->f278528[7].m128_f32[0])) * 2.0999999f;
-      floor_ = 7744.0f * v31[14].m128_f32[2];
+      floor_ = 7744.0f * v31[14][2];
 
       for ( j = 0; j < 7; ++j )
         for ( k = 0; k < 4; ++k )
         {
           float x  = v28->p2_row[j][k];
-          float ms = v31[7 + j].m128_f32[k]
-                   + (x * x - v31[7 + j].m128_f32[k]) * bmf_p2_ms_rate;
-          v31[7 + j].m128_f32[k] = ms;
-          v31[j].m128_f32[k] += bmf_p2_rate[j][k] * err * x / (ms + floor_);
+          float ms = v31[7 + j][k]
+                   + (x * x - v31[7 + j][k]) * bmf_p2_ms_rate;
+          v31[7 + j][k] = ms;
+          v31[j][k] += bmf_p2_rate[j][k] * err * x / (ms + floor_);
         }
     }
   }
@@ -7605,17 +7605,13 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
     v285 = (Obj96 *)((int16_t *)(v57 - 18));
     if ( !v58 )
     {
-      v59 = v293;
-      v60 = v293[1];
-      v61 = v293[2];
-      v62 = v293[3];
       // One number added to all sixteen floats of the first four rows.
       {
         float bias = (float)v46->f2;
         int32_t j, k;
         for ( j = 0; j < 4; ++j )
           for ( k = 0; k < 4; ++k )
-            v293[j].m128_f32[k] += bias;
+            v28->p2_row[j][k] += bias;
       }
       v46 = (Obj3 *)v28->f278528[13].m128_p[0];
       v45 = (int16_t *)v28->f278528[13].m128_i32[1];
@@ -13263,8 +13259,8 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
   // touched at all.  It is XMM0 being reused as a scratch register, which is
   // what MSVC did and what Hex-Rays recorded.  `v19` is the same, one lane.
   float sample;
-  __m128 *v15;
-  __m128 *v17;
+  float (*v15)[4];
+  float (*v17)[4];
   float v19;
   bool v87, v103, v104, v105;
   char *v90, v114, v116, v312;
@@ -13345,22 +13341,22 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
   v14 = (int16_t)(v9 - a1->f278700);
   *(uint16_t *)(a1->f278736[0] + 4) = v14;
   *(uint16_t *)(a1->f278736[0] + 6) = (WORD2(v14) ^ v14) - WORD2(v14);
-  v15 = (__m128 *)(a1->f278656);
-  v16 = v15[14].m128_f32[1] + 0.000099999997f;
-  v17 = (__m128 *)(*(__m128 **)(a1->f278668 - 4));
+  v15 = a1->f278656;
+  v16 = v15[14][1] + 0.000099999997f;
+  v17 = *(float (**)[4])(a1->f278668 - 4);
   v18 = *(float *)&a1->f278648;
   n2 = *(int32_t *)&a1->f278640;
   v19 = sample - v18;
   v20 = *(float *)((char *)&a1->f278640 + 4);
   v21 = v20 - v18;
-  v22 = ((((sample - v18) * (v20 - v18)) - v15[14].m128_f32[0]) * 0.001f)
-      + v15[14].m128_f32[0];
-  v23 = v16 + (((v21 * v21) - v15[14].m128_f32[1]) * 0.001f);
-  v15[14].m128_f32[1] = v23;
+  v22 = ((((sample - v18) * (v20 - v18)) - v15[14][0]) * 0.001f)
+      + v15[14][0];
+  v23 = v16 + (((v21 * v21) - v15[14][1]) * 0.001f);
+  v15[14][1] = v23;
   v24 = 0.1f * v23;
   if ( (0.1f * v23) <= v22 )
     v24 = fminf(v23, v22);
-  v15[14].m128_f32[0] = v24;
+  v15[14][0] = v24;
   // Two normalised-LMS updates side by side, on two weight blocks: `v15` at a
   // fixed mean-square rate and `v17` at one scaled by the confidence `v26`.
   // Same shape as `alt_p2_context`'s, run twice with different errors and
@@ -13372,8 +13368,8 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
   {
     const float err_a     = (sample - v20) * 2.5999999f;
     const float err_b     = v19 * v26;
-    const float floor_a   = 26896.0f * v15[14].m128_f32[2];
-    const float floor_b   = 5041.0f * v17[14].m128_f32[2];
+    const float floor_a   = 26896.0f * v15[14][2];
+    const float floor_b   = 5041.0f * v17[14][2];
     const float ms_rate_b = 0.013f * v26;
     int32_t j, k;
 
@@ -13383,15 +13379,15 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
         float x = a1->p2_row[j][k];
         float ms;
 
-        ms = v15[7 + j].m128_f32[k]
-           + (x * x - v15[7 + j].m128_f32[k]) * 0.05f;      // 0x439B40
-        v15[7 + j].m128_f32[k] = ms;
-        v15[j].m128_f32[k] += bmf_p2_rate[j][k] * err_a * x / (ms + floor_a);
+        ms = v15[7 + j][k]
+           + (x * x - v15[7 + j][k]) * 0.05f;      // 0x439B40
+        v15[7 + j][k] = ms;
+        v15[j][k] += bmf_p2_rate[j][k] * err_a * x / (ms + floor_a);
 
-        ms = v17[7 + j].m128_f32[k]
-           + (x * x - v17[7 + j].m128_f32[k]) * ms_rate_b;
-        v17[7 + j].m128_f32[k] = ms;
-        v17[j].m128_f32[k] += bmf_p2_rate[j][k] * err_b * x / (ms + floor_b);
+        ms = v17[7 + j][k]
+           + (x * x - v17[7 + j][k]) * ms_rate_b;
+        v17[7 + j][k] = ms;
+        v17[j][k] += bmf_p2_rate[j][k] * err_b * x / (ms + floor_b);
       }
   }
 
@@ -13404,21 +13400,21 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
 
     for ( k = 0; k < 4; ++k )
     {
-      acc[k] = v15[0].m128_f32[k] * a1->p2_row[0][k];
+      acc[k] = v15[0][k] * a1->p2_row[0][k];
       for ( j = 1; j < 7; ++j )
-        acc[k] += v15[j].m128_f32[k] * a1->p2_row[j][k];
+        acc[k] += v15[j][k] * a1->p2_row[j][k];
     }
     pred     = *(float *)&n2 + bmf_hsum4(acc);
     err      = sample - pred;
-    ms_scale = v15[14].m128_f32[2];
+    ms_scale = v15[14][2];
 
     for ( j = 0; j < 7; ++j )
       for ( k = 0; k < 4; ++k )
-        v15[j].m128_f32[k] += bmf_p2_rate[j][k] * err * a1->p2_row[j][k]
-                            / (v15[7 + j].m128_f32[k] + ms_scale * 529.0f);
+        v15[j][k] += bmf_p2_rate[j][k] * err * a1->p2_row[j][k]
+                            / (v15[7 + j][k] + ms_scale * 529.0f);
 
-    ++v15[15].m128_i32[0];
-    v15[14].m128_f32[2] = ms_scale + ((10.0f - ms_scale) * 0.00019999999f);
+    ++*(int32_t *)&v15[15][0];
+    v15[14][2] = ms_scale + ((10.0f - ms_scale) * 0.00019999999f);
   }
   **(uint32_t **)&a1->f278668 = *(uint32_t *)&a1->f278656;
   a1->f278668 += 4;
