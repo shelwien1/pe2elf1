@@ -12126,7 +12126,10 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   AltP2Block *v578;
   uint32_t n5;
   int32_t v580;
-  uint32_t *v581;
+  // The counter this pass updates and its two neighbours: `v581[-1]`,
+  // `v581[0]` and `v581[1]` are +284 708, +284 712 and +284 716 off the
+  // row base, which is `f284712` reached through `v76` and `v78`.
+  P2Count *v581;
   ;
   uint8_t *v8, *n2_1;   // were int32_t: these hold addresses
   // The parameter this used to copy is never read: `sample` is written from
@@ -12288,7 +12291,6 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
       for ( k = 0; k < 4; ++k )
         v15[j][k] += bmf_p2_rate[j][k] * err * a1->p2_row[j][k]
                             / (v15[7 + j][k] + ms_scale * 529.0f);
-
     ++*(int32_t *)&v15[15][0];
     v15[14][2] = ms_scale + ((10.0f - ms_scale) * 0.00019999999f);
   }
@@ -12300,37 +12302,36 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
     v75 = ((uint32_t *)v578)[n5 + 69669];
     v76 = &((uint32_t *)v578)[v75];
     v77 = v577 - (*(uint32_t *)&v578->f278904[2 * n5]);
-    v581 = v76;
     v78 = n5 << 17;
-    v79 = v77 + HIWORD(v76[0x8000 * n5 + 71178]);
-    *(uint16_t *)((uint8_t *)v76 + v78 + 284714) = v79;
-    v580 = *((uint8_t *)v76 + v78 + 284713);
+    v581 = (P2Count *)((uint8_t *)v76 + v78) + 71178;
+    v79 = v77 + (uint16_t)v581->w2;
+    *(uint16_t *)&v581->w2 = v79;
+    v580 = v581->b1;
     if ( v580 )
     {
       v576 = v75;
       v80 = v79 + 4 * ((v77 > deadzone_hi) - (v77 < deadzone_lo));
-      *(uint16_t *)((uint8_t *)v581 + v78 + 284714) = v80;
+      *(uint16_t *)&v581->w2 = v80;
       v575 = v80;
       v81 = v576;
       if ( (int32_t)abs32(v77) < 38 )
       {
         if ( (uint8_t)--v580 )
         {
-          *((uint8_t *)v581 + v78 + 284713) = v580;
+          v581->b1 = v580;
         }
         else
         {
-          v82 = (uint8_t *)v581;
-          if ( *((uint8_t *)v581 + v78 + 284712) < 8u )
+          if ( *(uint8_t *)&v581->b0 < 8u )
           {
-            v83 = *((uint8_t *)v581 + v78 + 284712) + 1;
-            *((uint8_t *)v581 + v78 + 284712) = v83;
-            v82[v78 + 284713] = *((uint8_t *)&p2_b1_seed + v83 + 3);
-            *(uint16_t *)&v82[v78 + 284714] = 2 * v575;
+            v83 = *(uint8_t *)&v581->b0 + 1;
+            *(uint8_t *)&v581->b0 = v83;
+            v581->b1 = *((uint8_t *)&p2_b1_seed + v83 + 3);
+            *(uint16_t *)&v581->w2 = 2 * v575;
           }
           else
           {
-            *((uint8_t *)v581 + v78 + 284713) = v580;
+            v581->b1 = v580;
           }
         }
       }
@@ -12343,10 +12344,10 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
         if ( (uint32_t)n3 >= 3
           || (v545 = v78,
               v576 = v81,
-              v85 = *(int16_t *)((uint8_t *)v581 + v78 + 284718),
-              v86 = v84 - ((v85 + (1 << ((*((uint8_t *)v581 + v78 + 284716) + 31) & 31))) >> (*((uint8_t *)v581 + v78 + 284716) & 31)),
+              v85 = v581[1].w2,
+              v86 = v84 - ((v85 + (1 << ((*(uint8_t *)&v581[1].b0 + 31) & 31))) >> (*(uint8_t *)&v581[1].b0 & 31)),
               v87 = n3 <= 0,
-              *(uint16_t *)((uint8_t *)v581 + v78 + 284718) = v85
+              *(uint16_t *)&v581[1].w2 = v85
                                                       + ((32
                                                         * ((v86 > deadzone_hi) - (uint32_t)(v86 < deadzone_lo))
                                                         + v86
@@ -12356,9 +12357,9 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
         {
           v545 = v78;
           v576 = v81;
-          v88 = *(int16_t *)((uint8_t *)v581 + v78 + 284710);
-          v89 = v84 - ((v88 + (1 << ((*((uint8_t *)v581 + v78 + 284708) + 31) & 31))) >> (*((uint8_t *)v581 + v78 + 284708) & 31));
-          *(uint16_t *)((uint8_t *)v581 + v78 + 284710) = v88
+          v88 = v581[-1].w2;
+          v89 = v84 - ((v88 + (1 << ((*(uint8_t *)&v581[-1].b0 + 31) & 31))) >> (*(uint8_t *)&v581[-1].b0 & 31));
+          *(uint16_t *)&v581[-1].w2 = v88
                                                   + ((32 * ((v89 > deadzone_hi) - (uint32_t)(v89 < deadzone_lo))
                                                     + v89
                                                     + 2) >> 2);
