@@ -828,6 +828,22 @@ Stated plainly, so the rest can be trusted:
     them a `P2Ctx` assignment, so the types say it instead: two distinct
     records are `sizeof(P2Ctx)` apart at the least.
 
+  **A fourth thing is settled now, and it is about the model rather than its
+  memory: how a context becomes a table index.** Both families keep a fixed
+  number of weight groups — nine for p1, five for p2 — of a selector and three
+  weights. The context routine writes each selector from a difference of
+  causal neighbours and reads it back as its sign, 0, 1 or 2; the index is the
+  chosen weights added together. The weights `alt_p1_alloc` writes are 32·3^g
+  and 64·3^g for g = 0..8, so the sum is a **base-3 number with nine digits**,
+  scaled by the 32 counters a context owns — and 3^9 · 32 is 629856, exactly
+  the number of `CounterNode`s the allocator asks for. The p2 side is the same
+  with five digits and a unit of 64: 3^5 · 64 = 15552. `algorithm_v2.md` §9.1
+  has the table and the two asymmetries.
+
+  This does not say what the *neighbours* mean, and it is not a reading of the
+  model. It says the context space is 3^9 (or 3^5) sign patterns, which is a
+  bound on what the rest can be.
+
   What none of that says is what an 18-byte record *holds*, which is the
   question. The five fields are four `uint32_t` and a `uint16_t`, and
   `alt_p2_context` computes the values that go into them — that is where a

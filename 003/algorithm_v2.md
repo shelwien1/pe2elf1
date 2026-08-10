@@ -489,6 +489,63 @@ them is open work. What *is* established, from their own code:
   another). Only counts 0..2 are ever read; what 3..6 hold has no reader in this
   binary.
 
+### 9.1 How a context becomes an index
+
+Both families compose their table index the same way, and it is the one thing
+about them that is now settled rather than described.
+
+Each block holds a fixed number of **weight groups** — nine in `AltP1Block`,
+five in `AltP2Block` — of four words each:
+
+    struct CtxWeight { int32_t sel; uint32_t w[3]; };
+
+`alt_p1_context` and `alt_p2_context` write `sel` from a difference of causal
+neighbours — `2W − WW − N`, `NE − W`, and their relatives — and then read the
+same slot back, classified:
+
+    digit = !(sel < 0) + (!(sel < 0) && !(sel == 0))
+
+which is 0 when the difference is negative, 1 when it is zero and 2 when it is
+positive. The index is `w[digit]` summed over the groups, and `alt_p1_context`
+returns exactly that sum plus three terms of its own.
+
+The weights say what the sum means. `alt_p1_alloc` fills its nine groups with
+0, 32·3^g and 64·3^g:
+
+| g | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `w[1]` | 32 | 96 | 288 | 864 | 2592 | 7776 | 23328 | 69984 | 209952 |
+| `w[2]` | 64 | 192 | 576 | 1728 | 5184 | 15552 | 46656 | 139968 | 419904 |
+
+so a digit of `d` in group `g` contributes `d · 32 · 3^g`. Those are the place
+values of a **base-3 number**: nine ternary digits, and 32 counters per
+context. That is 3^9 · 32 = 629856 — which is the number of `CounterNode`s
+`alt_p1_alloc` allocates, `0x99C60 · 16` bytes of them. The table size is not
+an independent fact about the model; it is the context space.
+
+`alt_p2_alloc` does the same with five groups and a unit of 64 — 0, 64·3^g and
+128·3^g, up to 5184 and 10368 — so 3^5 · 64 = 15552, and that number is in its
+own allocator too. `AltP2Block::f940072` is `uint16_t[62208]`, and the loop
+that seeds it runs `0x1E60` = 7776 times writing eight words a pass: 15552
+records of four `uint16_t`, seeded (4096, 2048, 2816, 2816). The p2 coder's
+three-way choice over three counters, §9's last bullet, is a choice inside one
+of those records.
+
+So both tables are exactly their context space, and neither size had to be
+guessed at:
+
+| | digits | unit | contexts | table |
+| --- | --- | --- | --- | --- |
+| p1 | 9 | 32 | 3^9 = 19683 | 629856 `CounterNode` |
+| p2 | 5 | 64 | 3^5 = 243 | 15552 four-word records |
+
+Two details are the models' own rather than the scheme's. The encoder adds
+`w[digit]` and the decoder `w[2 − digit]`, which agree only when the digit is
+1, so the two sides walk the space in opposite directions. And the p1 sum
+carries three terms past the nine digits: `16 · v37`, eight more when the pair
+`f12[2]` selects between is null, and a byte from the level map — bits below
+the ternary place values, inside the 32 counters a context owns.
+
 So: a context model with its own neighbourhood statistics and its own
 frequency tables, on a sliding window of rows. What the eighteen bytes of a
 record hold is the question, and `alt_p2_context` — which computes the values
