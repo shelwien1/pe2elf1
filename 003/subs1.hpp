@@ -14813,7 +14813,6 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
 {
   P2Ctx *v109, *v120, *v131, *v139, *v20, *v21, *v22, *v23, *v29, *v33, *v37, *v66,
           *v74, *v80, *v81, *v82, *v83, *v84, *v85, *v87, *v89, *v91, *v93, *v95, *v97;
-  int32_t v153;
   int32_t v155;
   int32_t n3;
   int32_t v157;
@@ -14921,7 +14920,6 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   if ( v5 > 0 )
   {
     v11 = 0;
-    v153 = i_1;
     v164 = -i_1;
     Size = 18 * i_1 + 234;
     v185 = i_1 + 13;
@@ -14995,14 +14993,14 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             memcpy(v13->buf[1],v13->buf[0],Size);
             memcpy(v13->buf[2],v13->buf[0],Size);
             memcpy(v13->buf[3],v13->buf[0],Size);
-            v20 = v13->buf[1] + v153 + 8;
-            v13->cursor[0] = v13->buf[0] + v153 + 8;
+            v20 = v13->buf[1] + i_1 + 8;
+            v13->cursor[0] = v13->buf[0] + i_1 + 8;
             v21 = v13->buf[2];
             v13->cursor[1] = v20;
             v22 = v13->buf[3];
-            v13->cursor[2] = v21 + v153 + 8;
-            v23 = v13->buf[4] + v153 + 8;
-            v13->cursor[3] = v22 + v153 + 8;
+            v13->cursor[2] = v21 + i_1 + 8;
+            v23 = v13->buf[4] + i_1 + 8;
+            v13->cursor[3] = v22 + i_1 + 8;
             v13->cursor[4] = v23;
           }
           v55 = (AltP2Block *)((int32_t)*(v17 - 1));

@@ -377,6 +377,60 @@ This is the part of BMF that does the work on natural images: most pixels equal
 one of their close neighbours, and the cascade spends a fraction of a bit
 saying which.
 
+### 8.2.1 The row record, and the four gradient counters
+
+The neighbourhood the cascade tests against is not recomputed per pixel: it is
+written into the row as it goes. `ModelBlock::f56` is ten pointers into the
+plane's five row buffers — five buffers rotated one step per row, five cursors
+walking them, the current row and the four above — and each buffer holds one
+eight-byte record per pixel:
+
+```c
+struct PixRec {
+  uint16_t sym;        // +0, the symbol coded here
+  uint8_t  match[6];   // +2 .. +7, six comparisons of it against six neighbours
+};
+```
+
+`init_model_tables` writes all six immediately after the symbol:
+
+| flag | the neighbour it is compared against |
+| --- | --- |
+| `match[0]` | the pixel above |
+| `match[1]` | the pixel to the left |
+| `match[2]` | above and one to the right |
+| `match[3]` | above and one to the left |
+| `match[4]` | above and two to the right |
+| `match[5]` | above and three to the right |
+
+The buffers are allocated as the width plus sixteen records, eight of left
+margin and eight of right, and `layout_workspace` seeds **every record
+including both margins** to "matches all six neighbours". So a read off either
+end of a row contributes one rather than whatever the allocator left there;
+this is the same idiom the alternate p2 model uses (§9.2's buffers are the
+width plus thirteen, seeded to a fixed record) and it is why none of the edge
+cases need a bounds test.
+
+Four counters slide over those flags, one record per pixel:
+
+| counter | flag | row | width |
+| --- | --- | --- | --- |
+| `grad[0]` | `match[0]` | one above | 8 records |
+| `grad[1]` | `match[0]` | two above | 8 records |
+| `grad[2]` | `match[1]` | current | 4 records |
+| `grad[3]` | `match[0]` | current | 8 records |
+
+Each is seeded at the row start from the records that are on the row — five
+terms for the eight-wide windows, two for the four-wide one, each minus its own
+count so a fully-matching neighbourhood reads zero — and then updated per pixel
+by adding the record entering the window and subtracting the one leaving it.
+`pixel_context` reads `grad[0]` and `grad[1]` only as "is this zero", weighted
+16 and 32 into the candidate's match state.
+
+`match[2..5]` are read one and two records back and weighted 2, 4, 8, 16 and 32
+into the same index. So the "second table reached through the workspace" in
+§8.2's fourth line is the row itself, two pixels back.
+
 ### 8.3 The binary counter model
 
 `encode_context_bit(node, parent, bit)` codes each of those decisions. A node is
@@ -707,7 +761,12 @@ bytes skips the model entirely and goes straight to the raw store.
   dispatch.
 * **The exact derivation of the match state** in `pixel_context` (§8.2). The
   four groups and their weights are read off the code; which neighbours are in
-  which group, in image coordinates, is not worked out here.
+  which group, in image coordinates, is not worked out here. §8.2.1 narrows it:
+  the geometry of the *record* is established, so `+16` and `+32` are "no
+  disagreement in an eight-record window on the row above / two above", and the
+  2/4/8 terms are three of the six flags read one and two pixels back. What is
+  still open is the first group — `p_n15[10]` and the ranked candidate list —
+  which is a different table.
 * **Which symbol lists are in the escape chain, and in what order** (§8.4). The
   walk is over a pointer chain built by `init_model_tables`, and the chain's
   membership is not established.

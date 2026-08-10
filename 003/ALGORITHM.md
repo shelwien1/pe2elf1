@@ -791,7 +791,11 @@ Stated plainly, so the rest can be trusted:
   64K binary counters each, a 5 × 5 sub-state grid, neighbour-match state
   indices — but not the exact derivation of the 16-bit context index, nor how
   the 15 groups' predictions are combined into the one probability handed to the
-  coder. `code_pixel` is 787 lines and would need a full reading.
+  coder. Part of it is settled now: the neighbour-match state is stored, not
+  recomputed. Each row buffer holds one eight-byte record per pixel — the symbol
+  and six flags comparing it against the pixel above, the pixel to the left, and
+  four diagonals — and four counters slide eight-record and four-record windows
+  over two of those flags. `algorithm_v2.md` §8.2.1 has the table. `code_pixel` is 787 lines and would need a full reading.
 * **The alternate model families.** When descriptor `+2` bit 2 is set,
   `model_plane` hands the plane to one of the four alternate families instead
   (the table is in §7.2). I established only which one is picked, not what they
