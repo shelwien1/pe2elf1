@@ -675,16 +675,6 @@ static_assert(sizeof(void *) != 4
 
 
 
-struct Obj97 {
-  uint16_t f0;
-  uint8_t _pad1[2];
-  uint16_t f4;
-  uint8_t _pad3[6];
-  uint32_t f12;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj97, f12) == 12,
-              "Obj97: the layout moved");
 
 
 
@@ -7899,7 +7889,7 @@ int32_t __cost_candidate(uint8_t *a1, uint8_t *n2, int32_t a3, int8_t a4, int32_
 
 static inline int32_t __fwd_choose_plane_coding_cost_candidate(void *a0, void *a1, void *a2, int8_t a3, int32_t a4, int32_t a5, int32_t a6, uint8_t *a7) { return __cost_candidate((uint8_t *)a0, (uint8_t *)a1, (int32_t)(uintptr_t)a2, a3, a4, a5, a6, a7); }
 
-int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, int8_t a3)
+int32_t __choose_plane_coding(BmfImage *a1, int32_t n3, int8_t a3)
 {
   // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
   // gives every member its own storage and altp1 segfaults while compressing.
@@ -7978,10 +7968,10 @@ int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, int8_t a3)
       uint8_t *v223;
       uint32_t v224;
       int32_t __choose_plane_coding_n191_1;
-      Obj97 *v226;
+      BmfImage *v226;
       uint32_t v227;
       uint8_t _pad6[4];
-      Obj97 *v228;
+      BmfImage *v228;
       uint8_t _pad7[28];
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 41456, "frame layout moved");
@@ -8004,12 +7994,12 @@ int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, int8_t a3)
            v159, v172;
   uint8_t *v29, *v64, *v97, *v121, *v122, *v123, *v134, *v135, *v136, *v151, *v153, *v164, *v166;
   void *v3;
-  __frame.v228 = (Obj97 *)(a1);
+  __frame.v228 = (BmfImage *)(a1);
   v3 = alloca(41424);
   n4 = plane_count;
-  v5 = a1->f4;
-  v6 = a1->f12;
-  __frame.v226 = (Obj97 *)((uint8_t *)a1);
+  v5 = (uint16_t)a1->stride;
+  v6 = a1->data_size;
+  __frame.v226 = (BmfImage *)((uint8_t *)a1);
   alphabet_reduced = 1;
   LODWORD(__frame.v208) = v5;
   __frame.v227 = (uintptr_t)((uint8_t *)a1 + v6 + 16);
@@ -8134,8 +8124,8 @@ int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, int8_t a3)
                 {
                   __frame.v202[2] = n192_3;
                   memset(__frame.buf_1,0,2048);
-                  v148 = __frame.v226->f0 * (*((uint16_t *)__frame.v226 + 1) - 1);
-                  v149 = __frame.v226->f4;
+                  v148 = __frame.v226->width * (__frame.v226->height - 1);
+                  v149 = (uint16_t)__frame.v226->stride;
                   __frame.v205[3] = n192_2;
                   __frame.v203[0] = n192_1;
                   __frame.v203[1] = v148 - 1;
@@ -8196,8 +8186,8 @@ LABEL_109:
                   {
                     __frame.v202[3] = n192_4;
                     memset(__frame.buf_2,0,2048);
-                    v161 = __frame.v226->f0 * (*((uint16_t *)__frame.v226 + 1) - 1);
-                    v162 = __frame.v226->f4;
+                    v161 = __frame.v226->width * (__frame.v226->height - 1);
+                    v162 = (uint16_t)__frame.v226->stride;
                     __frame.v205[3] = n192_2;
                     __frame.v203[0] = n192_1;
                     __frame.v206[0] = v161 - 1;
@@ -8263,8 +8253,8 @@ LABEL_109:
           {
             *(uint32_t *)__frame.buf_1 = v62;
             memset(__frame.buf_3,0,2048);
-            v118 = __frame.v226->f0 * (*((uint16_t *)__frame.v226 + 1) - 1);
-            v119 = __frame.v226->f4;
+            v118 = __frame.v226->width * (__frame.v226->height - 1);
+            v119 = (uint16_t)__frame.v226->stride;
             __frame.v192 = v59;
             __frame.v184 = v57;
             __frame.v185 = v118 - 1;
@@ -8321,8 +8311,8 @@ LABEL_55:
             {
               __frame.v183 = v61;
               memset(__frame.buf_4,0,2048);
-              v131 = __frame.v226->f0 * (*((uint16_t *)__frame.v226 + 1) - 1);
-              v132 = __frame.v226->f4;
+              v131 = __frame.v226->width * (__frame.v226->height - 1);
+              v132 = (uint16_t)__frame.v226->stride;
               __frame.v192 = v59;
               __frame.v184 = v57;
               __frame.v193 = v131 - 1;
@@ -16741,7 +16731,7 @@ uint32_t __search_filter(BmfImage *p_i, int8_t a2)
     }
     return 0;
   }
-  __choose_plane_coding((Obj97 *)p_i_1, i_2, a2);
+  __choose_plane_coding((BmfImage *)p_i_1, i_2, a2);
   // `if ( opt_filter_template == 2 )` -- 94 lines of the -T2 filter-template path, gone
   // with the mode.  See REFACTORING.md §2.
   __frame.Blockb = (uint8_t *)__alloc_image(i, i_2, p_i_1->depth & 0x3F, 0, 0);
