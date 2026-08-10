@@ -199,6 +199,10 @@ sixteen bytes apart.
 Nothing on this list is a sweep. Each one needs a reading of the model, which is
 `algorithm_v2.md`'s open work rather than this document's.
 
+> **Round seven did that reading.** Six of the seven items below are closed and
+> the seventh is documented as not worth doing; see `REFACTORING7.md`. The
+> numbers in this document are round six's and are left as they were.
+
 * **`alt_p2_model`'s `n2`, `p2_rec` and `n0xF0`** carry 74 of the remaining 504
   raw offsets, all with a *variable* byte offset — `*(uint16_t *)(n2 + v510 +
   2)`. Turning those into subscripts needs `v510` proved even, which is a
