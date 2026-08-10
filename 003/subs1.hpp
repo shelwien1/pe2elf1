@@ -23,9 +23,9 @@
 // `*(_QWORD *)(n64 + 4469652)` shape, 4469652 being 0x00443394 -- and those now
 // take the address of the global that owns the byte they start at.  Where that
 // byte is inside an object rather than at its start, the offset is written out
-// (`(uint8_t *)model_geometry + v3 + 8`) rather than given a global of its own;
-// the exception is 0x0044337D, byte 1 of the dword array based at coded_buf,
-// which is indexed like an array and so got a byte global of its own.
+// rather than given a global of its own; the exception is 0x0044337D, byte 1 of
+// the dword array based at coded_buf, which is indexed like an array and so got
+// a byte global of its own.
 //
 // A few functions declare a local with the same name as the global they use
 // and reach the global through `::`; those locals still carry their original
@@ -230,7 +230,13 @@ static PlaneDesc plane_desc[5];
 // This one stays.  It is record 0's `w8` read as a scalar 149 times, always as
 // the number of planes, and no other field is read that way.
 static int32_t &plane_count = *&plane_desc[0].w8;
-static int32_t model_geometry[32];   // was 0x445660 in bmf_bss
+// Symbol -> level, one byte a symbol.  `rc_begin_encode` fills it one level a
+// line, and the runs are the level sizes: one symbol at level 0, one at 1, two
+// at 2, then 4, 8, 16, 32 and 64 -- which is `level_geom[n].first` and
+// `2 * level_geom[n].half` said the other way round.  128 bytes exactly.
+// It was `int32_t[32]` because MSVC folded the four shortest runs into two
+// immediate stores; every reader indexes it by a byte.
+static uint8_t model_geometry[128];   // was 0x445660 in bmf_bss
 static int8_t exclusion_gen;   // was 0x445700 in bmf_bss
 // The two symbol-list constants `alt_init_tables` picks from the predictor:
 // the initial count a new symbol gets, and the count at which the list
@@ -1743,7 +1749,7 @@ int32_t __encode_symbol_tree(uint16_t *_this, int32_t n2) {
           v65, v66, n0x7F800000_5, n0x7F800000_7;
   uint16_t *v3, *v26, n0x4000, v39, v41, *v51, *this_2;
   uint32_t n4_2, v38, v40, v43, v44, v45, v48, v52, n4_1;
-  n4 = *((uint8_t *)model_geometry + n2);
+  n4 = model_geometry[n2];
   n4_1 = n4;
   v3 = _this + 2;
   v51 = _this + 2;
@@ -2827,7 +2833,7 @@ int32_t __update_binary_pair(uint16_t *_this, int32_t symbol)
   n0x8000 = *_this;
   if ( (uint32_t)n0x8000 <= 0x8000 )
   {
-    v3 = *((uint8_t *)model_geometry + symbol);
+    v3 = model_geometry[symbol];
     v4 = (_this[1] >> 2) & 0xFFFFFFE0;
     if ( ::plane_predictor == 2 )
       v4 = 15 * (_this[1] >> 5);
@@ -3711,28 +3717,31 @@ uint8_t *__rc_begin_encode()
       alt_freq_init = 64;
     }
     level_geom[2].first = 2;
-    model_geometry[0] = 0x02020100;
+    model_geometry[0] = 0;
+    model_geometry[1] = 1;
+    model_geometry[2] = 2;
+    model_geometry[3] = 2;
     level_geom[2].tbl_base = 0;
     level_geom[2].half = 1;
     level_geom[3].half = 2;
     level_geom[3].first = 4;
     level_geom[3].tbl_base = 1;
-    model_geometry[1] = 0x03030303;
+    memset(&model_geometry[4], 3, 4);
     level_geom[4].half = 4;
     v2 = 2 * level_geom[3].half + 4;
     level_geom[4].first = 2 * level_geom[3].half + 4;
     level_geom[4].tbl_base = 2 * level_geom[3].half;
-    *(uint64_t *)((uint8_t *)model_geometry + v2) = 0x404040404040404LL;
+    memset(&model_geometry[v2], 4, 8);
     level_geom[5].half = 8;
     v3 = v2 + 2 * level_geom[4].half;
     level_geom[5].first = v3;
     level_geom[5].tbl_base = v3 - 5;
-    memset((uint8_t *)model_geometry + v3, 0x05, 16);
+    memset(&model_geometry[v3], 0x05, 16);
     level_geom[6].half = 16;
     v4 = v3 + 2 * level_geom[5].half;
     level_geom[6].first = (uint8_t)v4;
     level_geom[6].tbl_base = (uint8_t)v4 - 6;
-    memset((uint8_t *)model_geometry + v4, 0x06, 32);
+    memset(&model_geometry[v4], 0x06, 32);
     level_geom[7].half = 32;
     v6 = v4 + 2 * level_geom[6].half;
     level_geom[7].first = (uint8_t)v6;
@@ -3740,7 +3749,7 @@ uint8_t *__rc_begin_encode()
     // 64 bytes of 7, after 16 of 5 and 32 of 6 -- one level per line.  MSVC
     // inlined this third one because the length crossed its threshold, which
     // is why it arrived as a scalar head, three aligned stores and a tail.
-    memset((uint8_t *)model_geometry + v6, 0x07, 64);
+    memset(&model_geometry[v6], 0x07, 64);
     __rc_begin_encode_n256 = (uint8_t *)bmf_new(0x7F000u);
     if ( __rc_begin_encode_n256 )
     {
@@ -5191,33 +5200,36 @@ int32_t __rc_begin_decode(int8_t ArgList_1)
       alt_freq_init = 64;
     }
     level_geom[2].first = 2;
-    model_geometry[0] = 0x02020100;
+    model_geometry[0] = 0;
+    model_geometry[1] = 1;
+    model_geometry[2] = 2;
+    model_geometry[3] = 2;
     level_geom[2].tbl_base = 0;
     level_geom[2].half = 1;
     level_geom[3].half = 2;
     level_geom[3].first = 4;
     level_geom[3].tbl_base = 1;
-    model_geometry[1] = 0x03030303;
+    memset(&model_geometry[4], 3, 4);
     level_geom[4].half = 4;
     v7 = 2 * level_geom[3].half + 4;
     level_geom[4].first = 2 * level_geom[3].half + 4;
     level_geom[4].tbl_base = 2 * level_geom[3].half;
-    *(uint64_t *)((uint8_t *)model_geometry + v7) = 0x404040404040404LL;
+    memset(&model_geometry[v7], 4, 8);
     level_geom[5].half = 8;
     v8 = v7 + 2 * level_geom[4].half;
     level_geom[5].first = v8;
     level_geom[5].tbl_base = v8 - 5;
-    memset((uint8_t *)model_geometry + v8, 0x05, 16);
+    memset(&model_geometry[v8], 0x05, 16);
     level_geom[6].half = 16;
     v9 = v8 + 2 * level_geom[5].half;
     level_geom[6].first = (uint8_t)v9;
     level_geom[6].tbl_base = (uint8_t)v9 - 6;
-    memset((uint8_t *)model_geometry + v9, 0x06, 32);
+    memset(&model_geometry[v9], 0x06, 32);
     level_geom[7].half = 32;
     v11 = v9 + 2 * level_geom[6].half;
     level_geom[7].first = (uint8_t)v11;
     level_geom[7].tbl_base = (uint8_t)v11 - 7;
-    memset((uint8_t *)model_geometry + v11, 0x07, 64);
+    memset(&model_geometry[v11], 0x07, 64);
     n256 = (uint16_t *)bmf_new(0x7F000u);
     if ( n256 )
     {
@@ -15560,10 +15572,9 @@ void __model_planes(uint8_t *Blockb, uint8_t *Srca_3, int32_t a3, int8_t a4)
       uint8_t slot8[4];
       uint8_t slot12[4];
       uint8_t slot16[4];
-      uint16_t p_i[2];
-      int32_t v49;
-      int32_t v50;
-      int32_t v51;
+      // Four consecutive words that `model_plane` is handed as a `BmfImage *`:
+      // this is the header, copied from the caller's a word at a time.
+      BmfImage hdr;   // +20 .. +35
       int32_t v52;
       int32_t v53;
       uint8_t _pad0[32];
@@ -15574,7 +15585,7 @@ void __model_planes(uint8_t *Blockb, uint8_t *Srca_3, int32_t a3, int8_t a4)
   uint8_t v8;
   uint8_t *Srca_1, *Srca_2;   // `uint8_t *` beside the `char` scalars above
   uint8_t *__model_planes_buf;
-  int32_t n1008, v17, v18, v19;
+  int32_t n1008;
   __frame.v53 = a3;
   Srca_1 = Srca_3;
   v8 = plane_desc[a3 + 1].flags;
@@ -15606,18 +15617,14 @@ void __model_planes(uint8_t *Blockb, uint8_t *Srca_3, int32_t a3, int8_t a4)
   while ( n1008 );
   // always taken: -S
   {
-    v17 = *((uint32_t *)Blockb + 1);
-    v18 = *((uint32_t *)Blockb + 2);
-    v19 = *((uint32_t *)Blockb + 3);
-    *(uint32_t *)__frame.p_i = *(uint32_t *)Blockb;
-    __frame.v49 = v17;
-    __frame.v50 = v18;
-    BYTE2(__frame.v50) = 72;
-    __frame.v51 = v19;
+    // The caller's header, with the depth byte replaced: 72 is 8 bits plus the
+    // 0x40 flag `alloc_image` sets.
+    __frame.hdr = *(BmfImage *)Blockb;
+    __frame.hdr.depth = 72;
     // never taken: -E is 0
     if ( plane_predictor == 1 && !plane_alt_model )
       __predict_med((uint8_t *)Srca_1, *(uint16_t *)Blockb, *((uint16_t *)Blockb + 1));
-    __model_plane((BmfImage *)__frame.p_i, (uint8_t *)(uint8_t *)Srca_1, (uint8_t *)Srca_2);
+    __model_plane(&__frame.hdr, (uint8_t *)Srca_1, (uint8_t *)Srca_2);
     // `if ( Srca_2 != Srca_1 )` stood here, and behind it an interleave and a
     // free.  It was the test for "the -E block above allocated a second
     // buffer"; with that block gone, both names hold the caller's one buffer
@@ -15644,10 +15651,8 @@ void __transform_planes(BmfImage *p_i, int32_t a2, int8_t a3)
   memset(hist_scratch,0,4096);
   __transform_planes_Buffer = (uint8_t *)::coded_buf;
   p_ia_1 = (uint8_t *)::coded_buf + 16;
-  *((uint32_t *)::coded_buf + 4) = *(uint32_t *)&p_i->width;
-  *((uint32_t *)p_ia_1 + 1) = p_i->stride;
-  *((uint32_t *)p_ia_1 + 2) = *((uint32_t *)p_i + 2);
-  *((uint32_t *)p_ia_1 + 3) = p_i->data_size;
+  // The whole sixteen-byte header, which MSVC moved a word at a time.
+  *(BmfImage *)p_ia_1 = *p_i;
   Srca_1 = (uint8_t *)((uint16_t *)p_i + 8);
   memcpy(__transform_planes_Buffer + 32,(uint8_t *)p_i + 16,p_i->data_size);
   Src_1 = (uint8_t *)bmf_new(p_i->width * p_i->height);
