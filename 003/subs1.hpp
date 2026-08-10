@@ -4165,7 +4165,8 @@ struct BmfImage {
   uint8_t  flags;             // +11  0x40 from alloc_image; compress_image
                               //      sets bit 7 and toggles bit 1
   uint32_t data_size;         // +12  stride * height
-};                            // +16  pixels
+  uint8_t  pixels[0];         // +16  the image itself, `data_size` bytes
+};
 static_assert(sizeof(BmfImage) == 16, "BmfImage is not the image header");
 static_assert(__builtin_offsetof(BmfImage, stride) == 4
               && __builtin_offsetof(BmfImage, flags) == 11
@@ -4876,9 +4877,9 @@ uint8_t * __interleave_plane(uint8_t *p_i, uint8_t *Src, int32_t a3, int8_t a4)
   {
     Size = bmf_pixels(p_i);
     n4 = plane_count;
-    Src_1 = (uint32_t)&p_i[a3 + 16];
+    Src_1 = (uint32_t)&((const BmfImage *)p_i)->pixels[a3];
     if ( plane_count == 1 )
-      return (uint8_t *)memcpy(&p_i[a3 + 16],Src,Size);
+      return (uint8_t *)memcpy(&((BmfImage *)p_i)->pixels[a3],Src,Size);
     p_i += a3;
     if ( Size <= 6
       || plane_count <= 0
@@ -4915,7 +4916,7 @@ uint8_t * __interleave_plane(uint8_t *p_i, uint8_t *Src, int32_t a3, int8_t a4)
   v31 = plane_desc[2].src_plane - a3;
   n2 = plane_desc[a3 + 1].predictor;
   v34 = plane_desc[a3 + 1].b3;
-  Src_2 = (uint32_t)&p_i[a3 + 16];
+  Src_2 = (uint32_t)&((const BmfImage *)p_i)->pixels[a3];
   v4 = plane_desc[a3 + 1].w8;
   v32 = plane_desc[a3 + 1].w4;
   v30 = plane_desc[a3 + 1].w12;
@@ -5035,9 +5036,9 @@ uint8_t * __colour_transform(uint8_t *Blockb, uint8_t *Src, int32_t a3, int8_t a
   {
     Size = bmf_pixels(Blockb);
     n4 = plane_count;
-    Src_1 = (uint32_t)&Blockb[a3 + 16];
+    Src_1 = (uint32_t)&((const BmfImage *)Blockb)->pixels[a3];
     if ( plane_count == 1 )
-      return (uint8_t *)memcpy(Src,&Blockb[a3 + 16],Size);
+      return (uint8_t *)memcpy(Src,&((const BmfImage *)Blockb)->pixels[a3],Size);
     Blockb += a3;
     if ( Size > 6 && plane_count > 0 )
     {
@@ -5081,7 +5082,7 @@ LABEL_31:
   v35 = plane_desc[2].src_plane - a3;
   n2 = plane_desc[a3 + 1].predictor;
   v37 = plane_desc[a3 + 1].b3;
-  Src_3 = (uint32_t)&Blockb[a3 + 16];
+  Src_3 = (uint32_t)&((const BmfImage *)Blockb)->pixels[a3];
   v4 = plane_desc[a3 + 1].w8;
   v36 = plane_desc[a3 + 1].w4;
   v34 = plane_desc[a3 + 1].w12;
@@ -8770,7 +8771,7 @@ int32_t *__read_bmp(char *FileName)
   {
     if ( __frame.bmp_compression == 1 )
     {
-      memset((uint8_t *)v3 + 16,0,v3->data_size);
+      memset(v3->pixels,0,v3->data_size);
       Src_1 = (int32_t)__frame.Src;
       __frame.v52 = v3;
       v46 = v3->height - 1;
@@ -8823,7 +8824,7 @@ int32_t *__read_bmp(char *FileName)
     }
     if ( __frame.bmp_compression != 2 )
       return nullptr;
-    memset((uint8_t *)v3 + 16,0,v3->data_size);
+    memset(v3->pixels,0,v3->data_size);
     __frame.v52 = v3;
     v22 = 1;
     v47 = v3->height - 1;
@@ -15717,14 +15718,14 @@ void __transform_planes(BmfImage *p_i, int32_t a2, int8_t a3)
   p_ia_1 = (uint8_t *)::coded_buf + 16;
   // The whole sixteen-byte header, which MSVC moved a word at a time.
   *(BmfImage *)p_ia_1 = *p_i;
-  Srca_1 = (uint8_t *)((uint16_t *)p_i + 8);
-  memcpy(__transform_planes_Buffer + 32,(uint8_t *)p_i + 16,p_i->data_size);
+  Srca_1 = (uint8_t *)((uint16_t *)p_i->pixels);
+  memcpy(__transform_planes_Buffer + 32,p_i->pixels,p_i->data_size);
   Src_1 = (uint8_t *)bmf_new(p_i->width * p_i->height);
   Src_3 = Src_1;
   if ( plane_count > 0 )
   {
     Src = Src_1;
-    Srca_3 = (uint16_t *)p_i + 8;
+    Srca_3 = (uint16_t *)p_i->pixels;
     p_ia = p_ia_1;
     n4_1 = 0;
     do
@@ -15930,7 +15931,7 @@ LABEL_15:
   if ( (v17 & 0x20) == 0 )
   {
     ElementCount_1 = __frame.ElementCount;
-    if ( fread((uint8_t *)p_i_1 + 16, 1u, __frame.ElementCount, ((BmfArc *)v5)->fp) != ElementCount_1 )
+    if ( fread(p_i_1->pixels, 1u, __frame.ElementCount, ((BmfArc *)v5)->fp) != ElementCount_1 )
       goto LABEL_31;
     goto LABEL_109;
   }
@@ -15967,7 +15968,7 @@ LABEL_31:
     ::plane_predictor = 0;
     plane_alt_model = 0;
     // always taken: -S
-      __unmodel_plane(ElementCount_2, (uint16_t *)p_i_1, (uint8_t *)p_i_1 + 16);
+      __unmodel_plane(ElementCount_2, (uint16_t *)p_i_1, p_i_1->pixels);
     goto LABEL_106;
   }
   if ( ::plane_count == 1 )
@@ -16155,7 +16156,7 @@ LABEL_104:
     plane_alt_model = (uint8_t)(plane_desc[1].flags & 4) >> 2;
     // always taken: -S
     {
-      __unmodel_plane(ElementCount_2, (uint16_t *)p_i_1, (uint8_t *)p_i_1 + 16);
+      __unmodel_plane(ElementCount_2, (uint16_t *)p_i_1, p_i_1->pixels);
       if ( plane_alt_model )
         goto LABEL_105;
     }
@@ -16274,7 +16275,7 @@ LABEL_109:
     v55 = p_i_1->height;
     __frame.n4_1 = (int32_t)n4_6;
     Src_2 = ::plane_count * (v55 - 1);
-    memcpy(n4_6,(uint8_t *)p_i_1 + 16,p_i_1->data_size);
+    memcpy(n4_6,p_i_1->pixels,p_i_1->data_size);
     LOWORD(v58) = p_i_1->height;
     if ( (uint16_t)v58 )
     {
@@ -16793,7 +16794,7 @@ LABEL_172:
       __frame.v178[1] = (uint8_t *)::plane_count;
       __frame.v179[0] = (int32_t)__frame.v178[0];
       __frame.v181[0] = ::plane_count * (v121 - 1);
-      memcpy(__frame.v178[0],(uint8_t *)p_i_1 + 16,p_i_1->data_size);
+      memcpy(__frame.v178[0],p_i_1->pixels,p_i_1->data_size);
       LOWORD(v123) = p_i_1->height;
       if ( (uint16_t)v123 )
       {
@@ -17311,7 +17312,7 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
     plane_alt_model = 0;
     alphabet_reduced = 0;
     // always taken: -S
-      __model_plane((BmfImage *)p_i, (uint8_t *)p_i + 16, (uint8_t *)p_i + 16);
+      __model_plane((BmfImage *)p_i, p_i->pixels, p_i->pixels);
     goto LABEL_57;
   }
   __frame.ElementCount = __search_filter((BmfImage *)p_i, v13);
@@ -17500,7 +17501,7 @@ LABEL_57:
     v40 = (fwrite(::coded_buf, 1u, ElementCounta, ((BmfArc *)v5)->fp) == ElementCounta) & v39;
     free(::coded_buf);
     if ( v40 && (p_i->depth & 0x80) != 0 )
-      fwrite((uint8_t *)p_i + p_i->data_size + 16, 1u, ElementCount_1, ((BmfArc *)v5)->fp);
+      fwrite(&p_i->pixels[p_i->data_size], 1u, ElementCount_1, ((BmfArc *)v5)->fp);
     fflush(((BmfArc *)v5)->fp);
     if ( v40 )
       return (int32_t)__frame.hdr.data_size;
@@ -17514,8 +17515,8 @@ LABEL_57:
     __frame.plane_n = ::plane_count;
     __frame.row = Buffer_copy;
     __frame.row_step = ::plane_count * (v41 - 1);
-    __frame.Buffer_2 = (uint16_t *)p_i + 8;
-    memcpy(Buffer_copy,(uint8_t *)p_i + 16,p_i->data_size);
+    __frame.Buffer_2 = (uint16_t *)p_i->pixels;
+    memcpy(Buffer_copy,p_i->pixels,p_i->data_size);
     LOWORD(v43) = p_i->height;
     if ( (uint16_t)v43 )
     {
@@ -17565,7 +17566,7 @@ LABEL_57:
     goto LABEL_77;
   }
 LABEL_76:
-  __frame.Buffer_2 = (uint16_t *)p_i + 8;
+  __frame.Buffer_2 = (uint16_t *)p_i->pixels;
 LABEL_77:
   v54 = fwrite(p_i_1, 1u, 0x10u, ((BmfArc *)v5)->fp) == 16;
   if ( coded_buf )
