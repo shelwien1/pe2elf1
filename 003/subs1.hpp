@@ -11122,7 +11122,8 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
           v64, v65, v66, n6, v68, v69, n6_4, n6_1, v73, n6_2, v76, v78, v80;
   ModelBlock *this_3;
   ModelBlock *this_2;
-  uint32_t *v13, *v22, *v31, *i_1, *i, *v35, *j_1, *j, *ArgList_7, *ArgList_6;
+  uint32_t *v22, *v31, *i_1, *i, *v35, *j_1, *j, *ArgList_7, *ArgList_6;
+  uint16_t *v13;   // was uint32_t *, read only as uint16_t
   uint8_t *v49, *v50;
   v3 = _this->f8 < 8;
   Src_1 = (uint8_t *)Src;
@@ -11160,85 +11161,85 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         this_3 = (ModelBlock *)(this_1);
         v85[75 * n5 + 1078308] = v102;
         v101 = this_3->f16;
-        v13 = &((uint32_t *)this_3)[4 * v11];
-        *((uint16_t *)v13 + 49) = 2;
-        *((uint16_t *)v13 + 50) = 2;
-        *((uint16_t *)v13 + 51) = 2;
-        *((uint16_t *)v13 + 52) = 2;
+        v13 = (uint16_t *)&((uint32_t *)this_3)[4 * v11];
+        v13[49] = 2;
+        v13[50] = 2;
+        v13[51] = 2;
+        v13[52] = 2;
         if ( v88 )
         {
-          v14 = (uint16_t)(*((uint16_t *)v13 + 52) + *((uint16_t *)v13 + 51));
-          *((uint16_t *)v13 + 51) = v14;
+          v14 = (uint16_t)(v13[52] + v13[51]);
+          v13[51] = v14;
           v15 = 0;
-          *((uint16_t *)v13 + 52) = 0;
+          v13[52] = 0;
         }
         else
         {
-          v14 = *((uint16_t *)v13 + 51);
-          v15 = *((uint16_t *)v13 + 52);
+          v14 = v13[51];
+          v15 = v13[52];
         }
         if ( v99 )
         {
-          v16 = (uint16_t)(v15 + *((uint16_t *)v13 + 50));
-          *((uint16_t *)v13 + 50) = v16;
+          v16 = (uint16_t)(v15 + v13[50]);
+          v13[50] = v16;
           v15 = 0;
-          *((uint16_t *)v13 + 52) = 0;
+          v13[52] = 0;
         }
         else
         {
-          v16 = *((uint16_t *)v13 + 50);
+          v16 = v13[50];
         }
         if ( v95 )
         {
           v16 = (uint16_t)(v14 + v16);
-          *((uint16_t *)v13 + 50) = v16;
+          v13[50] = v16;
           v14 = 0;
-          *((uint16_t *)v13 + 51) = 0;
+          v13[51] = 0;
         }
         if ( v93 )
         {
-          *((uint16_t *)v13 + 49) += v15;
+          v13[49] += v15;
           v15 = 0;
-          *((uint16_t *)v13 + 52) = 0;
+          v13[52] = 0;
         }
         if ( v94 )
         {
-          *((uint16_t *)v13 + 49) += v14;
+          v13[49] += v14;
           v14 = 0;
-          *((uint16_t *)v13 + 51) = 0;
+          v13[51] = 0;
         }
         if ( ArgList_4 )
         {
-          *((uint16_t *)v13 + 49) += v16;
+          v13[49] += v16;
           v16 = 0;
-          *((uint16_t *)v13 + 50) = 0;
+          v13[50] = 0;
         }
         v17 = (v14 != 0) + (v16 != 0) + (v15 != 0) + 2;
         if ( v17 <= v101 )
         {
           *((uint8_t *)v13 + 110) = v17;
-          *((uint16_t *)v13 + 48) = 2;
+          v13[48] = 2;
         }
         else
         {
           LOBYTE(v17) = v17 - 1;
           *((uint8_t *)v13 + 110) = v17;
-          *((uint16_t *)v13 + 48) = 0;
+          v13[48] = 0;
         }
-        if ( *((uint16_t *)v13 + v100 + 48) && *((uint16_t *)v13 + n5 + 48) && (uint8_t)v17 <= v101 )
+        if ( v13[v100 + 48] && v13[n5 + 48] && (uint8_t)v17 <= v101 )
         {
           v19 = v100;
           v18 = 1;
           v20 = (uint8_t)(1 << ((5 - v17) & 31));
           *((uint8_t *)v13 + 111) = v20;
-          *((uint16_t *)v13 + 54) = v20 << 6;
-          *((uint16_t *)v13 + v19 + 48) += v20;
-          *((uint16_t *)v13 + n5 + 48) += *((uint8_t *)v13 + 111);
-          *((uint16_t *)v13 + 53) = *((uint16_t *)v13 + 48)
-                               + *((uint16_t *)v13 + 52)
-                               + *((uint16_t *)v13 + 51)
-                               + *((uint16_t *)v13 + 50)
-                               + *((uint16_t *)v13 + 49);
+          v13[54] = v20 << 6;
+          v13[v19 + 48] += v20;
+          v13[n5 + 48] += *((uint8_t *)v13 + 111);
+          v13[53] = v13[48]
+                               + v13[52]
+                               + v13[51]
+                               + v13[50]
+                               + v13[49];
         }
         else
         {
@@ -15429,7 +15430,8 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
   int32_t v8, v10, v11, v14, n2_1, n2_2, v17, v18, v19, v20, v21, v35, v36, v41, v42, v44, v45,
           v53, v54, v55, v56;
   uint8_t *v28, *v29, *v30, *v47, *v48, *v49;   // row cursors out of f56
-  uint32_t *v12, n0x10000, *v24, v31, *v32, *v33, v34, v37, *v38, *v39, v40;
+  uint32_t n0x10000, *v24, v31, *v32, *v33, v34, v37, *v38, *v39, v40;
+  uint16_t *v12;   // was uint32_t *, read only as uint16_t
   uint8_t *v51, *v52;
   void *v5;
   if ( plane_alt_model )
@@ -15484,9 +15486,9 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
         {
           *(v71 + 75 * n5 + 1078308) = v64;
           v73 = Blocka_2->f16;
-          v12 = &((uint32_t *)Blocka_2)[4 * v64];
+          v12 = (uint16_t *)&((uint32_t *)Blocka_2)[4 * v64];
           __model_plane_n2 = 2;
-          *((uint16_t *)v12 + 48) = 2;
+          v12[48] = 2;
           LOWORD(v14) = 2;
           n2_1 = 2;
           n2_2 = 2;
@@ -15509,32 +15511,32 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
           {
             __model_plane_n2 = n2_2 + 2;
             n2_2 = 0;
-            *((uint16_t *)v12 + 52) = 0;
+            v12[52] = 0;
           }
           else
           {
-            *((uint16_t *)v12 + 52) = n2_2;
+            v12[52] = n2_2;
           }
           if ( v65 )
           {
             __model_plane_n2 += n2_1;
             n2_1 = 0;
-            *((uint16_t *)v12 + 51) = 0;
+            v12[51] = 0;
           }
           else
           {
-            *((uint16_t *)v12 + 51) = n2_1;
+            v12[51] = n2_1;
           }
           if ( v70 )
           {
-            *((uint16_t *)v12 + 49) = v14 + __model_plane_n2;
+            v12[49] = v14 + __model_plane_n2;
             LOWORD(v14) = 0;
-            *((uint16_t *)v12 + 50) = 0;
+            v12[50] = 0;
           }
           else
           {
-            *((uint16_t *)v12 + 50) = v14;
-            *((uint16_t *)v12 + 49) = __model_plane_n2;
+            v12[50] = v14;
+            v12[49] = __model_plane_n2;
           }
           v17 = n2_1 != 0;
           v18 = n2_2 != 0;
@@ -15549,23 +15551,23 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
           else
           {
             *((uint8_t *)v12 + 110) = v18 + v17 + v14 + 1;
-            *((uint16_t *)v12 + 48) = 0;
+            v12[48] = 0;
           }
-          if ( *((uint16_t *)v12 + v72 + 48)
-            && *((uint16_t *)v12 + n5 + 48)
+          if ( v12[v72 + 48]
+            && v12[n5 + 48]
             && (v20 = *((uint8_t *)v12 + 110), v20 <= v73) )
           {
             v21 = 1;
             v22 = (uint8_t)(1 << ((5 - v20) & 31));
             *((uint8_t *)v12 + 111) = v22;
-            *((uint16_t *)v12 + 54) = v22 << 6;
-            *((uint16_t *)v12 + v72 + 48) += v22;
-            *((uint16_t *)v12 + n5 + 48) += *((uint8_t *)v12 + 111);
-            *((uint16_t *)v12 + 53) = *((uint16_t *)v12 + 48)
-                                 + *((uint16_t *)v12 + 52)
-                                 + *((uint16_t *)v12 + 51)
-                                 + *((uint16_t *)v12 + 50)
-                                 + *((uint16_t *)v12 + 49);
+            v12[54] = v22 << 6;
+            v12[v72 + 48] += v22;
+            v12[n5 + 48] += *((uint8_t *)v12 + 111);
+            v12[53] = v12[48]
+                                 + v12[52]
+                                 + v12[51]
+                                 + v12[50]
+                                 + v12[49];
           }
           else
           {
