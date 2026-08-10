@@ -10,8 +10,10 @@ caught a byte that had silently become a word, and an anomaly that had been
 written down as a curiosity turned out to be the evidence.
 
 The two largest declared paddings are gone with them. `_pad15` is a megabyte of
-sixteen-byte records with two walkers over it, and `_pad3800` is the p1 counter
-table; between them they were 11 MB of "we do not know what is here".
+sixteen-byte records with two walkers over it, `_pad3800` is the p1 counter
+table and `_pad28` is fifteen groups of 0x10000 binary counters; between them
+they were 15 MB of "we do not know what is here", and the largest padding left
+in `ModelBlock` is sixteen bytes.
 
 ---
 
@@ -20,17 +22,17 @@ table; between them they were 11 MB of "we do not know what is here".
 `python3 tools/shape.py`, verbatim:
 
 ```
-subs1.hpp / bmf.cpp lines          17719 / 358
-raw-offset sites                   101
+subs1.hpp / bmf.cpp lines          17739 / 358
+raw-offset sites                   99
   off `_this`                      7, in 4 functions
-pointer casts                      3003
+pointer casts                      2955
 globals still at a 1997 address    0
 frames                             17, 169180 bytes, 0 aliases
   slots carrying two names         0, 0 extra names, in 0 functions
   member runs walked as arrays     0 sites, 0 bases, 0 functions
   frames that dissolve outright    17, 0 aliases
-structs                            17, 0 still ObjN
-  fNN members / named ones         91 / 80
+structs                            18, 0 still ObjN
+  fNN members / named ones         93 / 80
 distinct vNN locals                560
 goto / LABEL_n:                    112 / 79
 __fwd_* shims                        0
@@ -40,11 +42,11 @@ against round six's close:
 
 | | round six | round seven |
 | --- | --- | --- |
-| lines | 17 833 / 358 | **17 719 / 358** |
-| raw-offset sites | 504 | **101** |
+| lines | 17 833 / 358 | **17 739 / 358** |
+| raw-offset sites | 504 | **99** |
 | — off `_this` | 27 | **7** |
-| pointer casts | 3986 | **3003** |
-| structs | 16, 3 still `ObjN` | **17, 0 still `ObjN`** |
+| pointer casts | 3986 | **2955** |
+| structs | 16, 3 still `ObjN` | **18, 0 still `ObjN`** |
 | conversion warnings | 2075 | **1994** |
 
 `ObjN` is zero. Every recovered struct in the file has a name that says what it
@@ -149,7 +151,7 @@ reasoned away.
 
 ---
 
-## 5. Padding that was two tables, a megabyte grid and four more
+## 5. Fifteen megabytes of padding that were tables
 
 Round six's §6 rule — *when a walk looks unbounded, the code that writes it
 knows the bound* — paid out twice more.
@@ -184,6 +186,15 @@ evidence available for a bound the types do not carry.
 That also settled `f56`, which was fourteen pointers reaching to +111. It is
 ten, to +95: the four it lost were `grid[0]`, and the only thing that read them
 was a copy into `f1051664` that nothing read back.
+
+**`_pad28`, 3 932 160 bytes**, and `15 * 0x10000 * 4` is 3 932 160. Fifteen
+context groups of 0x10000 counter pairs, every one seeded to (0x2000, 0x2000)
+— p = ½ for a fresh binary counter — through a base of
+`&((uint32_t *)this)[0x10000 * group]` and an index of `entry + 531818`, which
+is this member's first byte. With it went `f6059432`, a `uint32_t` holding the
+address `&f1078696[8 * ctx]` that 27 sites walked as
+`*(uint16_t *)(f6059432 + 2 * k)`: the symbol cache `code_pixel` promotes a
+match through, seven entries deep.
 
 **Four three-word grids.** `f1051680`, `f1051776`, `f1076352` and `f1077894`
 are all indexed `3 * k`, and a record is the (count, count, total) triple
@@ -310,7 +321,7 @@ question. Two of them are, and they are still there.
   value, then a cost, and `alt_p2_model`'s `v508` is a pointer and a strip
   index within one expression. Those do need a liveness argument each, and
   there is no tool shape for it.
-* **101 raw offsets, 91 `fNN` members, 560 `vNN` locals, 112 `goto`s.** The
+* **99 raw offsets, 93 `fNN` members, 560 `vNN` locals, 112 `goto`s.** The
   offsets are down from 1389 over five rounds; what remains is in bases that
   are genuinely computed — a name plus a variable byte offset, with nothing
   either end to say what the stride is. `degoto.py` still reports 0 candidates.
@@ -333,7 +344,7 @@ That is the honest measure of where this round's work was: `unrec`,
 `unoffset`, `uncast`, `unused`, `unwrite`, `unhoist`, `uncursor`, `dedup`,
 `arrayify` and `degoto` are all run against the file at the end of this round
 and all of them report zero, exactly as they did at the end of round six — and
-the file still lost 403 raw offsets and 983 pointer casts in between.
+the file still lost 405 raw offsets and 1031 pointer casts in between.
 
 `unrecast`'s addition is worth one line of its own. It dropped
 `*((uint32_t *)p + 1)` when `p` was already a `uint32_t *` but never looked at
