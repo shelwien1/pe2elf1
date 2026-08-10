@@ -656,20 +656,48 @@ static_assert(sizeof(void *) != 4
 
 // One p2 counter.  `alt_p2_alloc` resets every one of them to b0 = 5, b1 = 2,
 // w2 = 0; `alt_p2_model` raises b0 by one per update while it is under 8, sets
-// b1 from `p2_b1_seed` by the new b0, and rescales w2.  The five readers
-// all say the same thing:
-//
-//   ((1 << ((b0 + 31) & 31)) + w2) >> (b0 & 31)
-//
-// so b0 is a shift and w2 is what it scales.  Nothing in this build reads b1.
-// The signedness is each site's: b0 and w2 are read signed, b1 is written
-// unsigned and never read.
+// b1 from `p2_b1_seed` by the new b0, and rescales w2.  Every reader says the
+// same thing -- `p2_pred` below -- so b0 is a shift and w2 is what it scales.
+// Nothing in this build reads b1.  The signedness is each site's: b0 and w2
+// are read signed, b1 is written unsigned and never read.
 struct P2Count {
   int8_t b0;
   uint8_t b1;
   int16_t w2;
 };
 static_assert(sizeof(P2Count) == 4, "P2Count: the record is four bytes");
+
+// A counter's prediction: `w2` rounded and shifted right by its own rate.
+// `1 << ((rate + 31) & 31)` is the rounding half-step written the way MSVC
+// emits it, and the `& 31` on the shift is x86's own masking showing through.
+// 150 sites, in nine spellings that differ only in how the counter and the
+// rate were reached -- including three that add the two terms the other way
+// round, and five where the rate arrived through a `LOBYTE` copy.  Both masks
+// are mod 32, so only the byte such a copy writes can reach the shift.
+//
+// `rate` is `int32_t` and not `int8_t` because a third of the sites reach b0
+// through a widened temporary; `-Wsign-conversion` is what checks that none of
+// them passes an unsigned value, which would have made `>>` a logical shift.
+static inline int32_t p2_pred(int32_t w2, int32_t rate) {
+  return (w2 + (1 << ((rate + 31) & 31))) >> (rate & 31);
+}
+
+// The counter update, and the file's most repeated expression: 117 sites.
+//
+// `err` is the prediction error.  A dead zone around zero contributes +-32 --
+// `deadzone_hi` and `deadzone_lo` are the edges -- and the rest is the error
+// scaled down by `shift`, with the rounding term `1 << (shift - 1)` that MSVC
+// emitted as the constant 2 or 4.
+//
+// The arithmetic stays unsigned, which is what the `(uint32_t)` on the second
+// comparison made it.  For a negative sum an unsigned shift and an arithmetic
+// one differ only above bit 29, and the result is kept in sixteen bits, so the
+// low half is the same either way -- but writing it unsigned keeps that a fact
+// about this function rather than an assumption at 117 call sites.
+static inline int16_t p2_bump(int32_t w2, int32_t err, int32_t shift) {
+  const uint32_t kick = 32u * (uint32_t)((err > deadzone_hi) - (err < deadzone_lo));
+  return (int16_t)((uint32_t)w2 + ((kick + (uint32_t)err + (1u << (shift - 1))) >> shift));
+}
 
 // The p2 model's neighbourhood table: eighteen bytes a record, rows 144 bytes
 // apart -- eight records to a row -- which `algorithm_v2.md` §9 established
@@ -6722,7 +6750,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   }
   v126 = v125 >> 11;
   v118->f278676 = v126;
-  v127 = ((1 << ((v118->f284712[v126].b0 + 31) & 31)) + v118->f284712[v126].w2) >> (v118->f284712[v126].b0 & 31);
+  v127 = p2_pred(v118->f284712[v126].w2, v118->f284712[v126].b0);
   v128 = v290;
   v129 = (P2Ctx *)((int16_t *)v118->f278736[4]);
   v130 = v292;
@@ -6856,7 +6884,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   v298 = v153;
   v155 = v154 >> 11;
   v118->f278684 = v155;
-  v156 = ((1 << ((v118->f284712[v155 + 65536].b0 + 31) & 31)) + v118->f284712[v155 + 65536].w2) >> (v118->f284712[v155 + 65536].b0 & 31);
+  v156 = p2_pred(v118->f284712[v155 + 65536].w2, v118->f284712[v155 + 65536].b0);
   v157 = v292;
   v158 = v295;
   v118->f278904[5] = v156;
@@ -6893,12 +6921,11 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
              | (((n2896 > 2896) + (n2896 > 1568) + (n2896 > 592)) << 13)
              | ((((uint32_t)(v290 + 37) >> 31) + ((uint32_t)(v290 + 19) >> 31) + (v165 >> 31)) << 11)) >> 11;
   v289->f278688 = v167;
-  LOBYTE(v163) = v166->f284712[v167 + 98304].b0;
   v168 = v166->f284712[v167 + 98304].w2;
-  v169 = 1 << ((v163 + 31) & 31);
-  LOBYTE(v164) = v163;
   v170 = (P2Ctx *)(v294);
-  v171 = (v169 + v168) >> (v164 & 31);
+  // The rate reached `>>` through two `LOBYTE` copies, `v163` then `v164`;
+  // both masks read only the byte each copy wrote.
+  v171 = p2_pred(v168, v166->f284712[v167 + 98304].b0);
   v172 = v292;
   v173 = v293;
   v166->f278904[7] = v171;
@@ -6936,7 +6963,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
              | v181
              | v180) >> 11;
   v289->f278692 = v185;
-  v186 = ((1 << ((v184->f284712[v185 + 131072].b0 + 31) & 31)) + v184->f284712[v185 + 131072].w2) >> (v184->f284712[v185 + 131072].b0 & 31);
+  v186 = p2_pred(v184->f284712[v185 + 131072].w2, v184->f284712[v185 + 131072].b0);
   v187 = (uint8_t *)v295;
   v271 = v186;
   v184->f278904[9] = v186;
@@ -9322,7 +9349,8 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   FreqRec *freq_tbl;
   CtrPair *v16;   // the group's counter pair for this context
   PixRec *n15_9;   // `f56[6]`, the row above
-  uint16_t *n4_10, *v58, *v95, *v110, *v121, v154, v162,
+  uint16_t n4_10;   // a symbol, compared against four others
+  uint16_t *v58, *v95, *v110, *v121, v154, v162,
            v174;
   ModelBlock *this_3;
   ModelBlock *this_2;
@@ -9399,20 +9427,20 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
     if ( !v19 )
       __decode_pixel_n15 = 0;
   }
-  n4_10 = (uint16_t *)v16->f1;
-  if ( n4_10 == (uint16_t *)__frame.sym0 )
+  n4_10 = v16->f1;
+  if ( n4_10 == __frame.sym0 )
   {
     __decode_pixel_n15 += 75;
   }
-  else if ( n4_10 == (uint16_t *)__frame.sym1 )
+  else if ( n4_10 == __frame.sym1 )
   {
     __decode_pixel_n15 += 150;
   }
-  else if ( n4_10 == (uint16_t *)__frame.sym3 )
+  else if ( n4_10 == __frame.sym3 )
   {
     __decode_pixel_n15 += 225;
   }
-  else if ( n4_10 == (uint16_t *)__frame.sym2 )
+  else if ( n4_10 == __frame.sym2 )
   {
     __decode_pixel_n15 += 300;
   }
@@ -12347,7 +12375,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
           || (v545 = v78,
               v576 = v81,
               v85 = v581[1].w2,
-              v86 = v84 - ((v85 + (1 << ((*(uint8_t *)&v581[1].b0 + 31) & 31))) >> (*(uint8_t *)&v581[1].b0 & 31)),
+              v86 = v84 - (p2_pred(v85, *(uint8_t *)&v581[1].b0)),
               v87 = n3 <= 0,
               *(uint16_t *)&v581[1].w2 = v85
                                                       + ((32
@@ -12360,7 +12388,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
           v545 = v78;
           v576 = v81;
           v88 = v581[-1].w2;
-          v89 = v84 - ((v88 + (1 << ((*(uint8_t *)&v581[-1].b0 + 31) & 31))) >> (*(uint8_t *)&v581[-1].b0 & 31));
+          v89 = v84 - (p2_pred(v88, *(uint8_t *)&v581[-1].b0));
           *(uint16_t *)&v581[-1].w2 = v88
                                                   + ((32 * ((v89 > deadzone_hi) - (uint32_t)(v89 < deadzone_lo))
                                                     + v89
@@ -12471,7 +12499,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
         __builtin_prefetch(v561, 0, 1);
         v101 = (int16_t)n2_1[1];
         __builtin_prefetch(v562, 0, 1);
-        v102 = v100 - ((v101 + (1 << ((v97 + 31) & 31))) >> (v97 & 31));
+        v102 = v100 - (p2_pred(v101, v97));
         v105 = __OFSUB__(v102, deadzone_hi);
         v103 = v102 == deadzone_hi;
         v104 = v102 - deadzone_hi < 0;
@@ -12497,154 +12525,124 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
               v114 = (uint8_t)n2[2],
               v550 = v108,
               v87 = n3 <= 0,
-              n2[3] = ((uint32_t)(-v108 - ((v113 + (1 << ((v114 + 31) & 31))) >> (v114 & 31)) + 2) >> 2) + v113,
+              n2[3] = ((uint32_t)(-v108 - (p2_pred(v113, v114)) + 2) >> 2) + v113,
               v87) )
         {
           v311 = v542->w2;
           v312 = *(uint8_t *)&v542->b0;
           v550 = v108;
-          v313 = v108 - ((v311 + (1 << ((v312 + 31) & 31))) >> (v312 & 31));
-          *(uint16_t *)&v542->w2 = v311
-                               + ((32 * ((v313 > deadzone_hi) - (uint32_t)(v313 < deadzone_lo)) + v313 + 2) >> 2);
+          v313 = v108 - (p2_pred(v311, v312));
+          v542->w2 = p2_bump(v311, v313, 2);
           v314 = v543->w2;
-          v315 = v108 - ((v314 + (1 << ((v543->b0 + 31) & 31))) >> (v543->b0 & 31));
-          *(uint16_t *)&v543->w2 = v314
-                               + ((32 * ((v315 > deadzone_hi) - (uint32_t)(v315 < deadzone_lo)) + v315 + 4) >> 3);
+          v315 = v108 - (p2_pred(v314, v543->b0));
+          v543->w2 = p2_bump(v314, v315, 3);
           v316 = v542[1].w2;
-          v317 = (v316 + (1 << ((*(uint8_t *)&v542[1].b0 + 31) & 31))) >> (*(uint8_t *)&v542[1].b0 & 31);
+          v317 = p2_pred(v316, *(uint8_t *)&v542[1].b0);
           v549 = -v108;
           *(uint16_t *)&v542[1].w2 = ((uint32_t)(v108 - v317 + 2) >> 2) + v316;
           v318 = v544->w2;
-          v319 = -v108 - ((v318 + (1 << ((v544->b0 + 31) & 31))) >> (v544->b0 & 31));
-          *(uint16_t *)&v544->w2 = v318
-                               + ((32 * ((v319 > deadzone_hi) - (uint32_t)(v319 < deadzone_lo)) + v319 + 4) >> 3);
+          v319 = -v108 - (p2_pred(v318, v544->b0));
+          v544->w2 = p2_bump(v318, v319, 3);
           v320 = v539->w2;
           v321 = v550;
-          v322 = v550 - ((v320 + (1 << ((*(uint8_t *)&v539->b0 + 31) & 31))) >> (*(uint8_t *)&v539->b0 & 31));
-          *(uint16_t *)&v539->w2 = v320
-                               + ((32 * ((v322 > deadzone_hi) - (uint32_t)(v322 < deadzone_lo)) + v322 + 2) >> 2);
+          v322 = v550 - (p2_pred(v320, *(uint8_t *)&v539->b0));
+          v539->w2 = p2_bump(v320, v322, 2);
           v323 = v540->w2;
-          v324 = v321 - ((v323 + (1 << ((v540->b0 + 31) & 31))) >> (v540->b0 & 31));
-          *(uint16_t *)&v540->w2 = v323
-                               + ((32 * ((v324 > deadzone_hi) - (uint32_t)(v324 < deadzone_lo)) + v324 + 4) >> 3);
+          v324 = v321 - (p2_pred(v323, v540->b0));
+          v540->w2 = p2_bump(v323, v324, 3);
           *(uint16_t *)&v539[1].w2 += (uint32_t)(v321
-                                               - ((*(int16_t *)&*(uint16_t *)&v539[1].w2 + (1 << ((*(uint8_t *)&v539[1].b0 + 31) & 31))) >> (*(uint8_t *)&v539[1].b0 & 31))
+                                               - (p2_pred(*(int16_t *)&*(uint16_t *)&v539[1].w2, *(uint8_t *)&v539[1].b0))
                                                + 2) >> 2;
           v325 = v541->w2;
-          v326 = v549 - ((v325 + (1 << ((*(uint8_t *)&v541->b0 + 31) & 31))) >> (*(uint8_t *)&v541->b0 & 31));
-          *(uint16_t *)&v541->w2 = v325
-                               + ((32 * ((v326 > deadzone_hi) - (uint32_t)(v326 < deadzone_lo)) + v326 + 4) >> 3);
+          v326 = v549 - (p2_pred(v325, *(uint8_t *)&v541->b0));
+          v541->w2 = p2_bump(v325, v326, 3);
           v327 = v536->w2;
-          v328 = v550 - ((v327 + (1 << ((*(uint8_t *)&v536->b0 + 31) & 31))) >> (*(uint8_t *)&v536->b0 & 31));
-          *(uint16_t *)&v536->w2 = v327
-                               + ((32 * ((v328 > deadzone_hi) - (uint32_t)(v328 < deadzone_lo)) + v328 + 2) >> 2);
+          v328 = v550 - (p2_pred(v327, *(uint8_t *)&v536->b0));
+          v536->w2 = p2_bump(v327, v328, 2);
           v329 = v537->w2;
-          v330 = v550 - ((v329 + (1 << ((v537->b0 + 31) & 31))) >> (v537->b0 & 31));
-          *(uint16_t *)&v537->w2 = v329
-                               + ((32 * ((v330 > deadzone_hi) - (uint32_t)(v330 < deadzone_lo)) + v330 + 4) >> 3);
+          v330 = v550 - (p2_pred(v329, v537->b0));
+          v537->w2 = p2_bump(v329, v330, 3);
           *(uint16_t *)&v536[1].w2 += (uint32_t)(v550
-                                               - ((*(int16_t *)&*(uint16_t *)&v536[1].w2 + (1 << ((*(uint8_t *)&v536[1].b0 + 31) & 31))) >> (*(uint8_t *)&v536[1].b0 & 31))
+                                               - (p2_pred(*(int16_t *)&*(uint16_t *)&v536[1].w2, *(uint8_t *)&v536[1].b0))
                                                + 2) >> 2;
           v331 = v538->w2;
-          v332 = v549 - ((v331 + (1 << ((*(uint8_t *)&v538->b0 + 31) & 31))) >> (*(uint8_t *)&v538->b0 & 31));
-          *(uint16_t *)&v538->w2 = v331
-                               + ((32 * ((v332 > deadzone_hi) - (uint32_t)(v332 < deadzone_lo)) + v332 + 4) >> 3);
+          v332 = v549 - (p2_pred(v331, *(uint8_t *)&v538->b0));
+          v538->w2 = p2_bump(v331, v332, 3);
           v333 = v533->w2;
-          v334 = v550 - ((v333 + (1 << ((v533->b0 + 31) & 31))) >> (v533->b0 & 31));
-          *(uint16_t *)&v533->w2 = v333
-                               + ((32 * ((v334 > deadzone_hi) - (uint32_t)(v334 < deadzone_lo)) + v334 + 2) >> 2);
+          v334 = v550 - (p2_pred(v333, v533->b0));
+          v533->w2 = p2_bump(v333, v334, 2);
           v335 = v534->w2;
-          v336 = v550 - ((v335 + (1 << ((v534->b0 + 31) & 31))) >> (v534->b0 & 31));
-          *(uint16_t *)&v534->w2 = v335
-                               + ((32 * ((v336 > deadzone_hi) - (uint32_t)(v336 < deadzone_lo)) + v336 + 4) >> 3);
-          *(uint16_t *)&v533[1].w2 += (uint32_t)(v550 - ((v533[1].w2 + (1 << ((v533[1].b0 + 31) & 31))) >> (v533[1].b0 & 31)) + 2) >> 2;
+          v336 = v550 - (p2_pred(v335, v534->b0));
+          v534->w2 = p2_bump(v335, v336, 3);
+          *(uint16_t *)&v533[1].w2 += (uint32_t)(v550 - (p2_pred(v533[1].w2, v533[1].b0)) + 2) >> 2;
           v337 = v535->w2;
-          v338 = v549 - ((v337 + (1 << ((v535->b0 + 31) & 31))) >> (v535->b0 & 31));
-          *(uint16_t *)&v535->w2 = v337
-                               + ((32 * ((v338 > deadzone_hi) - (uint32_t)(v338 < deadzone_lo)) + v338 + 4) >> 3);
+          v338 = v549 - (p2_pred(v337, v535->b0));
+          v535->w2 = p2_bump(v337, v338, 3);
           v339 = v530->w2;
-          v340 = v550 - ((v339 + (1 << ((v530->b0 + 31) & 31))) >> (v530->b0 & 31));
-          *(uint16_t *)&v530->w2 = v339
-                               + ((32 * ((v340 > deadzone_hi) - (uint32_t)(v340 < deadzone_lo)) + v340 + 2) >> 2);
+          v340 = v550 - (p2_pred(v339, v530->b0));
+          v530->w2 = p2_bump(v339, v340, 2);
           v341 = v531->w2;
-          v342 = v550 - ((v341 + (1 << ((v531->b0 + 31) & 31))) >> (v531->b0 & 31));
-          *(uint16_t *)&v531->w2 = v341
-                               + ((32 * ((v342 > deadzone_hi) - (uint32_t)(v342 < deadzone_lo)) + v342 + 4) >> 3);
+          v342 = v550 - (p2_pred(v341, v531->b0));
+          v531->w2 = p2_bump(v341, v342, 3);
           v343 = v550;
-          *(uint16_t *)&v530[1].w2 += (uint32_t)(v550 - ((v530[1].w2 + (1 << ((v530[1].b0 + 31) & 31))) >> (v530[1].b0 & 31)) + 2) >> 2;
+          *(uint16_t *)&v530[1].w2 += (uint32_t)(v550 - (p2_pred(v530[1].w2, v530[1].b0)) + 2) >> 2;
           v344 = v532->w2;
-          v549 -= (v344 + (1 << ((v532->b0 + 31) & 31))) >> (v532->b0 & 31);
+          v549 -= p2_pred(v344, v532->b0);
           v550 = v343;
-          *(uint16_t *)&v532->w2 = v344
-                               + ((32 * ((v549 > deadzone_hi) - (uint32_t)(v549 < deadzone_lo)) + v549 + 4) >> 3);
+          v532->w2 = p2_bump(v344, v549, 3);
           v345 = v527->w2;
-          v346 = v550 - ((v345 + (1 << ((v527->b0 + 31) & 31))) >> (v527->b0 & 31));
-          *(uint16_t *)&v527->w2 = v345
-                               + ((32 * ((v346 > deadzone_hi) - (uint32_t)(v346 < deadzone_lo)) + v346 + 2) >> 2);
+          v346 = v550 - (p2_pred(v345, v527->b0));
+          v527->w2 = p2_bump(v345, v346, 2);
           v347 = v528->w2;
-          v348 = v550 - ((v347 + (1 << ((v528->b0 + 31) & 31))) >> (v528->b0 & 31));
-          *(uint16_t *)&v528->w2 = v347
-                               + ((32 * ((v348 > deadzone_hi) - (uint32_t)(v348 < deadzone_lo)) + v348 + 4) >> 3);
+          v348 = v550 - (p2_pred(v347, v528->b0));
+          v528->w2 = p2_bump(v347, v348, 3);
           v349 = v550;
-          *(uint16_t *)&v527[1].w2 += (uint32_t)(v550 - ((v527[1].w2 + (1 << ((v527[1].b0 + 31) & 31))) >> (v527[1].b0 & 31)) + 2) >> 2;
+          *(uint16_t *)&v527[1].w2 += (uint32_t)(v550 - (p2_pred(v527[1].w2, v527[1].b0)) + 2) >> 2;
           v350 = v529->w2;
-          LOBYTE(v345) = v529->b0;
           v548 = -v349;
-          v351 = -v349 - ((v350 + (1 << ((v345 + 31) & 31))) >> (v345 & 31));
-          *(uint16_t *)&v529->w2 = v350
-                               + ((32 * ((v351 > deadzone_hi) - (uint32_t)(v351 < deadzone_lo)) + v351 + 4) >> 3);
+          v351 = -v349 - (p2_pred(v350, v529->b0));
+          v529->w2 = p2_bump(v350, v351, 3);
           v352 = v524->w2;
           v353 = v550;
-          v354 = v550 - ((v352 + (1 << ((v524->b0 + 31) & 31))) >> (v524->b0 & 31));
-          *(uint16_t *)&v524->w2 = v352
-                               + ((32 * ((v354 > deadzone_hi) - (uint32_t)(v354 < deadzone_lo)) + v354 + 2) >> 2);
+          v354 = v550 - (p2_pred(v352, v524->b0));
+          v524->w2 = p2_bump(v352, v354, 2);
           v355 = v525->w2;
-          v356 = v353 - ((v355 + (1 << ((*(uint8_t *)&v525->b0 + 31) & 31))) >> (*(uint8_t *)&v525->b0 & 31));
-          *(uint16_t *)&v525->w2 = v355
-                               + ((32 * ((v356 > deadzone_hi) - (uint32_t)(v356 < deadzone_lo)) + v356 + 4) >> 3);
-          *(uint16_t *)&v524[1].w2 += (uint32_t)(v353 - ((v524[1].w2 + (1 << ((v524[1].b0 + 31) & 31))) >> (v524[1].b0 & 31)) + 2) >> 2;
+          v356 = v353 - (p2_pred(v355, *(uint8_t *)&v525->b0));
+          v525->w2 = p2_bump(v355, v356, 3);
+          *(uint16_t *)&v524[1].w2 += (uint32_t)(v353 - (p2_pred(v524[1].w2, v524[1].b0)) + 2) >> 2;
           v357 = v526->w2;
-          v358 = v548 - ((v357 + (1 << ((v526->b0 + 31) & 31))) >> (v526->b0 & 31));
-          *(uint16_t *)&v526->w2 = v357
-                               + ((32 * ((v358 > deadzone_hi) - (uint32_t)(v358 < deadzone_lo)) + v358 + 4) >> 3);
+          v358 = v548 - (p2_pred(v357, v526->b0));
+          v526->w2 = p2_bump(v357, v358, 3);
           v359 = v521->w2;
-          v360 = v550 - ((v359 + (1 << ((v521->b0 + 31) & 31))) >> (v521->b0 & 31));
-          *(uint16_t *)&v521->w2 = v359
-                               + ((32 * ((v360 > deadzone_hi) - (uint32_t)(v360 < deadzone_lo)) + v360 + 2) >> 2);
+          v360 = v550 - (p2_pred(v359, v521->b0));
+          v521->w2 = p2_bump(v359, v360, 2);
           v361 = v522->w2;
-          v362 = v550 - ((v361 + (1 << ((v522->b0 + 31) & 31))) >> (v522->b0 & 31));
-          *(uint16_t *)&v522->w2 = v361
-                               + ((32 * ((v362 > deadzone_hi) - (uint32_t)(v362 < deadzone_lo)) + v362 + 4) >> 3);
-          *(uint16_t *)&v521[1].w2 += (uint32_t)(v550 - ((v521[1].w2 + (1 << ((v521[1].b0 + 31) & 31))) >> (v521[1].b0 & 31)) + 2) >> 2;
+          v362 = v550 - (p2_pred(v361, v522->b0));
+          v522->w2 = p2_bump(v361, v362, 3);
+          *(uint16_t *)&v521[1].w2 += (uint32_t)(v550 - (p2_pred(v521[1].w2, v521[1].b0)) + 2) >> 2;
           v363 = v523->w2;
-          v364 = v548 - ((v363 + (1 << ((v523->b0 + 31) & 31))) >> (v523->b0 & 31));
-          *(uint16_t *)&v523->w2 = v363
-                               + ((32 * ((v364 > deadzone_hi) - (uint32_t)(v364 < deadzone_lo)) + v364 + 4) >> 3);
+          v364 = v548 - (p2_pred(v363, v523->b0));
+          v523->w2 = p2_bump(v363, v364, 3);
           v365 = v518->w2;
-          v366 = v550 - ((v365 + (1 << ((v518->b0 + 31) & 31))) >> (v518->b0 & 31));
-          *(uint16_t *)&v518->w2 = v365
-                               + ((32 * ((v366 > deadzone_hi) - (uint32_t)(v366 < deadzone_lo)) + v366 + 2) >> 2);
+          v366 = v550 - (p2_pred(v365, v518->b0));
+          v518->w2 = p2_bump(v365, v366, 2);
           v367 = v519->w2;
-          v368 = v550 - ((v367 + (1 << ((v519->b0 + 31) & 31))) >> (v519->b0 & 31));
-          *(uint16_t *)&v519->w2 = v367
-                               + ((32 * ((v368 > deadzone_hi) - (uint32_t)(v368 < deadzone_lo)) + v368 + 4) >> 3);
-          *(uint16_t *)&v518[1].w2 += (uint32_t)(v550 - ((v518[1].w2 + (1 << ((v518[1].b0 + 31) & 31))) >> (v518[1].b0 & 31)) + 2) >> 2;
+          v368 = v550 - (p2_pred(v367, v519->b0));
+          v519->w2 = p2_bump(v367, v368, 3);
+          *(uint16_t *)&v518[1].w2 += (uint32_t)(v550 - (p2_pred(v518[1].w2, v518[1].b0)) + 2) >> 2;
           v369 = v520->w2;
-          v370 = v548 - ((v369 + (1 << ((v520->b0 + 31) & 31))) >> (v520->b0 & 31));
-          *(uint16_t *)&v520->w2 = v369
-                               + ((32 * ((v370 > deadzone_hi) - (uint32_t)(v370 < deadzone_lo)) + v370 + 4) >> 3);
+          v370 = v548 - (p2_pred(v369, v520->b0));
+          v520->w2 = p2_bump(v369, v370, 3);
           v371 = v515->w2;
-          v372 = v550 - ((v371 + (1 << ((v515->b0 + 31) & 31))) >> (v515->b0 & 31));
-          *(uint16_t *)&v515->w2 = v371
-                               + ((32 * ((v372 > deadzone_hi) - (uint32_t)(v372 < deadzone_lo)) + v372 + 2) >> 2);
+          v372 = v550 - (p2_pred(v371, v515->b0));
+          v515->w2 = p2_bump(v371, v372, 2);
           v373 = v516->w2;
-          v374 = v550 - ((v373 + (1 << ((*(uint8_t *)&v516->b0 + 31) & 31))) >> (*(uint8_t *)&v516->b0 & 31));
-          *(uint16_t *)&v516->w2 = v373
-                               + ((32 * ((v374 > deadzone_hi) - (uint32_t)(v374 < deadzone_lo)) + v374 + 4) >> 3);
+          v374 = v550 - (p2_pred(v373, *(uint8_t *)&v516->b0));
+          v516->w2 = p2_bump(v373, v374, 3);
           v375 = v550;
-          *(uint16_t *)&v515[1].w2 += (uint32_t)(v550 - ((v515[1].w2 + (1 << ((v515[1].b0 + 31) & 31))) >> (v515[1].b0 & 31)) + 2) >> 2;
+          *(uint16_t *)&v515[1].w2 += (uint32_t)(v550 - (p2_pred(v515[1].w2, v515[1].b0)) + 2) >> 2;
           v376 = v517->w2;
-          v377 = (v376 + (1 << ((v517->b0 + 31) & 31))) >> (v517->b0 & 31);
+          v377 = p2_pred(v376, v517->b0);
           v550 = v375;
           *(uint16_t *)&v517->w2 = v376
                                + ((32 * ((v548 - v377 > deadzone_hi) - (uint32_t)(v548 - v377 < deadzone_lo))
@@ -12652,452 +12650,357 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
                                  - v377
                                  + 4) >> 3);
           v378 = v512->w2;
-          v379 = v550 - ((v378 + (1 << ((*(uint8_t *)&v512->b0 + 31) & 31))) >> (*(uint8_t *)&v512->b0 & 31));
-          *(uint16_t *)&v512->w2 = v378
-                               + ((32 * ((v379 > deadzone_hi) - (uint32_t)(v379 < deadzone_lo)) + v379 + 2) >> 2);
+          v379 = v550 - (p2_pred(v378, *(uint8_t *)&v512->b0));
+          v512->w2 = p2_bump(v378, v379, 2);
           v380 = v513->w2;
-          v381 = v550 - ((v380 + (1 << ((*(uint8_t *)&v513->b0 + 31) & 31))) >> (*(uint8_t *)&v513->b0 & 31));
-          *(uint16_t *)&v513->w2 = v380
-                               + ((32 * ((v381 > deadzone_hi) - (uint32_t)(v381 < deadzone_lo)) + v381 + 4) >> 3);
+          v381 = v550 - (p2_pred(v380, *(uint8_t *)&v513->b0));
+          v513->w2 = p2_bump(v380, v381, 3);
           v382 = v550;
           *(uint16_t *)&v512[1].w2 += (uint32_t)(v550
-                                               - ((*(int16_t *)&*(uint16_t *)&v512[1].w2 + (1 << ((*(uint8_t *)&v512[1].b0 + 31) & 31))) >> (*(uint8_t *)&v512[1].b0 & 31))
+                                               - (p2_pred(*(int16_t *)&*(uint16_t *)&v512[1].w2, *(uint8_t *)&v512[1].b0))
                                                + 2) >> 2;
           v383 = v514->w2;
-          v384 = -v382 - ((v383 + (1 << ((*(uint8_t *)&v514->b0 + 31) & 31))) >> (*(uint8_t *)&v514->b0 & 31));
-          *(uint16_t *)&v514->w2 = v383
-                               + ((32 * ((v384 > deadzone_hi) - (uint32_t)(v384 < deadzone_lo)) + v384 + 4) >> 3);
+          v384 = -v382 - (p2_pred(v383, *(uint8_t *)&v514->b0));
+          v514->w2 = p2_bump(v383, v384, 3);
         }
         else
         {
           v115 = (int16_t)n2[-1];
           v116 = (uint8_t)n2[-2];
           v550 = v108;
-          n2[-1] = ((uint32_t)(-v108 - ((v115 + (1 << ((v116 + 31) & 31))) >> (v116 & 31)) + 4) >> 3) + v115;
+          n2[-1] = ((uint32_t)(-v108 - (p2_pred(v115, v116)) + 4) >> 3) + v115;
           v117 = v542->w2;
-          v118 = v550 - ((v117 + (1 << ((*(uint8_t *)&v542->b0 + 31) & 31))) >> (*(uint8_t *)&v542->b0 & 31));
-          *(uint16_t *)&v542->w2 = v117
-                               + ((32 * ((v118 > deadzone_hi) - (uint32_t)(v118 < deadzone_lo)) + v118 + 2) >> 2);
+          v118 = v550 - (p2_pred(v117, *(uint8_t *)&v542->b0));
+          v542->w2 = p2_bump(v117, v118, 2);
           v119 = v543->w2;
           v87 = n3 < 3;
-          v120 = v550 - ((v119 + (1 << ((v543->b0 + 31) & 31))) >> (v543->b0 & 31));
-          *(uint16_t *)&v543->w2 = v119
-                               + ((32 * ((v120 > deadzone_hi) - (uint32_t)(v120 < deadzone_lo)) + v120 + 4) >> 3);
+          v120 = v550 - (p2_pred(v119, v543->b0));
+          v543->w2 = p2_bump(v119, v120, 3);
           v121 = v550;
           if ( v87 )
           {
             *(uint16_t *)&v542[1].w2 += (uint32_t)(v550
-                                                 - ((v542[1].w2 + (1 << ((*(uint8_t *)&v542[1].b0 + 31) & 31))) >> (*(uint8_t *)&v542[1].b0 & 31))
+                                                 - (p2_pred(v542[1].w2, *(uint8_t *)&v542[1].b0))
                                                  + 2) >> 2;
             v216 = v542[-1].w2;
-            v217 = v121 - ((v216 + (1 << ((*(uint8_t *)&v542[-1].b0 + 31) & 31))) >> (*(uint8_t *)&v542[-1].b0 & 31));
+            v217 = v121 - (p2_pred(v216, *(uint8_t *)&v542[-1].b0));
             v218 = -v121;
             v572 = v218;
-            *(uint16_t *)&v542[-1].w2 = v216
-                                 + ((32 * ((v217 > deadzone_hi) - (uint32_t)(v217 < deadzone_lo)) + v217 + 4) >> 3);
+            v542[-1].w2 = p2_bump(v216, v217, 3);
             v219 = v544->w2;
-            v220 = v218 - ((v219 + (1 << ((v544->b0 + 31) & 31))) >> (v544->b0 & 31));
-            *(uint16_t *)&v544->w2 = v219
-                                 + ((32 * ((v220 > deadzone_hi) - (uint32_t)(v220 < deadzone_lo)) + v220 + 4) >> 3);
+            v220 = v218 - (p2_pred(v219, v544->b0));
+            v544->w2 = p2_bump(v219, v220, 3);
             v221 = v539->w2;
             v222 = v550;
-            v223 = v550 - ((v221 + (1 << ((*(uint8_t *)&v539->b0 + 31) & 31))) >> (*(uint8_t *)&v539->b0 & 31));
-            *(uint16_t *)&v539->w2 = v221
-                                 + ((32 * ((v223 > deadzone_hi) - (uint32_t)(v223 < deadzone_lo)) + v223 + 2) >> 2);
+            v223 = v550 - (p2_pred(v221, *(uint8_t *)&v539->b0));
+            v539->w2 = p2_bump(v221, v223, 2);
             v224 = v540->w2;
-            v225 = v222 - ((v224 + (1 << ((v540->b0 + 31) & 31))) >> (v540->b0 & 31));
-            *(uint16_t *)&v540->w2 = v224
-                                 + ((32 * ((v225 > deadzone_hi) - (uint32_t)(v225 < deadzone_lo)) + v225 + 4) >> 3);
+            v225 = v222 - (p2_pred(v224, v540->b0));
+            v540->w2 = p2_bump(v224, v225, 3);
             *(uint16_t *)&v539[1].w2 += (uint32_t)(v222
-                                                 - ((*(int16_t *)&*(uint16_t *)&v539[1].w2 + (1 << ((*(uint8_t *)&v539[1].b0 + 31) & 31))) >> (*(uint8_t *)&v539[1].b0 & 31))
+                                                 - (p2_pred(*(int16_t *)&*(uint16_t *)&v539[1].w2, *(uint8_t *)&v539[1].b0))
                                                  + 2) >> 2;
             v226 = v539[-1].w2;
-            v227 = v222 - ((v226 + (1 << ((*(uint8_t *)&v539[-1].b0 + 31) & 31))) >> (*(uint8_t *)&v539[-1].b0 & 31));
-            *(uint16_t *)&v539[-1].w2 = v226
-                                 + ((32 * ((v227 > deadzone_hi) - (uint32_t)(v227 < deadzone_lo)) + v227 + 4) >> 3);
+            v227 = v222 - (p2_pred(v226, *(uint8_t *)&v539[-1].b0));
+            v539[-1].w2 = p2_bump(v226, v227, 3);
             v228 = v541->w2;
-            v229 = v572 - ((v228 + (1 << ((*(uint8_t *)&v541->b0 + 31) & 31))) >> (*(uint8_t *)&v541->b0 & 31));
-            *(uint16_t *)&v541->w2 = v228
-                                 + ((32 * ((v229 > deadzone_hi) - (uint32_t)(v229 < deadzone_lo)) + v229 + 4) >> 3);
+            v229 = v572 - (p2_pred(v228, *(uint8_t *)&v541->b0));
+            v541->w2 = p2_bump(v228, v229, 3);
             v230 = v536->w2;
             v231 = v550;
-            v232 = v550 - ((v230 + (1 << ((*(uint8_t *)&v536->b0 + 31) & 31))) >> (*(uint8_t *)&v536->b0 & 31));
-            *(uint16_t *)&v536->w2 = v230
-                                 + ((32 * ((v232 > deadzone_hi) - (uint32_t)(v232 < deadzone_lo)) + v232 + 2) >> 2);
+            v232 = v550 - (p2_pred(v230, *(uint8_t *)&v536->b0));
+            v536->w2 = p2_bump(v230, v232, 2);
             v233 = v537->w2;
-            v234 = v231 - ((v233 + (1 << ((v537->b0 + 31) & 31))) >> (v537->b0 & 31));
-            *(uint16_t *)&v537->w2 = v233
-                                 + ((32 * ((v234 > deadzone_hi) - (uint32_t)(v234 < deadzone_lo)) + v234 + 4) >> 3);
+            v234 = v231 - (p2_pred(v233, v537->b0));
+            v537->w2 = p2_bump(v233, v234, 3);
             *(uint16_t *)&v536[1].w2 += (uint32_t)(v231
-                                                 - ((*(int16_t *)&*(uint16_t *)&v536[1].w2 + (1 << ((*(uint8_t *)&v536[1].b0 + 31) & 31))) >> (*(uint8_t *)&v536[1].b0 & 31))
+                                                 - (p2_pred(*(int16_t *)&*(uint16_t *)&v536[1].w2, *(uint8_t *)&v536[1].b0))
                                                  + 2) >> 2;
             v235 = v536[-1].w2;
-            v236 = v231 - ((v235 + (1 << ((*(uint8_t *)&v536[-1].b0 + 31) & 31))) >> (*(uint8_t *)&v536[-1].b0 & 31));
-            *(uint16_t *)&v536[-1].w2 = v235
-                                 + ((32 * ((v236 > deadzone_hi) - (uint32_t)(v236 < deadzone_lo)) + v236 + 4) >> 3);
+            v236 = v231 - (p2_pred(v235, *(uint8_t *)&v536[-1].b0));
+            v536[-1].w2 = p2_bump(v235, v236, 3);
             v237 = v538->w2;
-            v238 = v572 - ((v237 + (1 << ((*(uint8_t *)&v538->b0 + 31) & 31))) >> (*(uint8_t *)&v538->b0 & 31));
-            *(uint16_t *)&v538->w2 = v237
-                                 + ((32 * ((v238 > deadzone_hi) - (uint32_t)(v238 < deadzone_lo)) + v238 + 4) >> 3);
+            v238 = v572 - (p2_pred(v237, *(uint8_t *)&v538->b0));
+            v538->w2 = p2_bump(v237, v238, 3);
             v239 = v533->w2;
             v240 = v550;
-            v241 = v550 - ((v239 + (1 << ((v533->b0 + 31) & 31))) >> (v533->b0 & 31));
-            *(uint16_t *)&v533->w2 = v239
-                                 + ((32 * ((v241 > deadzone_hi) - (uint32_t)(v241 < deadzone_lo)) + v241 + 2) >> 2);
+            v241 = v550 - (p2_pred(v239, v533->b0));
+            v533->w2 = p2_bump(v239, v241, 2);
             v242 = v534->w2;
-            v243 = v240 - ((v242 + (1 << ((v534->b0 + 31) & 31))) >> (v534->b0 & 31));
-            *(uint16_t *)&v534->w2 = v242
-                                 + ((32 * ((v243 > deadzone_hi) - (uint32_t)(v243 < deadzone_lo)) + v243 + 4) >> 3);
+            v243 = v240 - (p2_pred(v242, v534->b0));
+            v534->w2 = p2_bump(v242, v243, 3);
             *(uint16_t *)&v533[1].w2 += (uint32_t)(v240
-                                                 - ((v533[1].w2 + (1 << ((v533[1].b0 + 31) & 31))) >> (v533[1].b0 & 31))
+                                                 - (p2_pred(v533[1].w2, v533[1].b0))
                                                  + 2) >> 2;
             v244 = v533[-1].w2;
-            v245 = v240 - ((v244 + (1 << ((v533[-1].b0 + 31) & 31))) >> (v533[-1].b0 & 31));
-            *(uint16_t *)&v533[-1].w2 = v244
-                                 + ((32 * ((v245 > deadzone_hi) - (uint32_t)(v245 < deadzone_lo)) + v245 + 4) >> 3);
+            v245 = v240 - (p2_pred(v244, v533[-1].b0));
+            v533[-1].w2 = p2_bump(v244, v245, 3);
             v246 = v535->w2;
-            v247 = v572 - ((v246 + (1 << ((v535->b0 + 31) & 31))) >> (v535->b0 & 31));
-            *(uint16_t *)&v535->w2 = v246
-                                 + ((32 * ((v247 > deadzone_hi) - (uint32_t)(v247 < deadzone_lo)) + v247 + 4) >> 3);
+            v247 = v572 - (p2_pred(v246, v535->b0));
+            v535->w2 = p2_bump(v246, v247, 3);
             v248 = v530->w2;
             v249 = v550;
-            v250 = v550 - ((v248 + (1 << ((v530->b0 + 31) & 31))) >> (v530->b0 & 31));
-            *(uint16_t *)&v530->w2 = v248
-                                 + ((32 * ((v250 > deadzone_hi) - (uint32_t)(v250 < deadzone_lo)) + v250 + 2) >> 2);
+            v250 = v550 - (p2_pred(v248, v530->b0));
+            v530->w2 = p2_bump(v248, v250, 2);
             v251 = v531->w2;
-            LOBYTE(v248) = v531->b0;
-            v252 = v251 + (1 << ((v531->b0 + 31) & 31));
+            // `LOBYTE(v248) = v531->b0` and `v248 & 31` was the rate: the mask
+            // reads only the byte that was written.
+            v252 = v249 - p2_pred(v251, v531->b0);
             v550 = v249;
-            *(uint16_t *)&v531->w2 = v251
-                                 + ((32
-                                   * ((v249 - (v252 >> (v248 & 31)) > deadzone_hi)
-                                    - (uint32_t)(v249 - (v252 >> (v248 & 31)) < deadzone_lo))
-                                   + v249
-                                   - (v252 >> (v248 & 31))
-                                   + 4) >> 3);
+            v531->w2 = p2_bump(v251, v252, 3);
             v253 = v550;
             *(uint16_t *)&v530[1].w2 += (uint32_t)(v550
-                                                 - ((v530[1].w2 + (1 << ((v530[1].b0 + 31) & 31))) >> (v530[1].b0 & 31))
+                                                 - (p2_pred(v530[1].w2, v530[1].b0))
                                                  + 2) >> 2;
             v254 = v530[-1].w2;
-            v255 = v253 - ((v254 + (1 << ((v530[-1].b0 + 31) & 31))) >> (v530[-1].b0 & 31));
-            *(uint16_t *)&v530[-1].w2 = v254
-                                 + ((32 * ((v255 > deadzone_hi) - (uint32_t)(v255 < deadzone_lo)) + v255 + 4) >> 3);
+            v255 = v253 - (p2_pred(v254, v530[-1].b0));
+            v530[-1].w2 = p2_bump(v254, v255, 3);
             v256 = v532->w2;
-            LOBYTE(v254) = v532->b0;
             v573 = -v253;
-            v257 = -v253 - ((v256 + (1 << ((v254 + 31) & 31))) >> (v254 & 31));
-            *(uint16_t *)&v532->w2 = v256
-                                 + ((32 * ((v257 > deadzone_hi) - (uint32_t)(v257 < deadzone_lo)) + v257 + 4) >> 3);
+            v257 = -v253 - (p2_pred(v256, v532->b0));
+            v532->w2 = p2_bump(v256, v257, 3);
             v258 = v527->w2;
             v259 = v550;
-            v260 = v550 - ((v258 + (1 << ((v527->b0 + 31) & 31))) >> (v527->b0 & 31));
-            *(uint16_t *)&v527->w2 = v258
-                                 + ((32 * ((v260 > deadzone_hi) - (uint32_t)(v260 < deadzone_lo)) + v260 + 2) >> 2);
+            v260 = v550 - (p2_pred(v258, v527->b0));
+            v527->w2 = p2_bump(v258, v260, 2);
             v261 = v528->w2;
-            v262 = v259 - ((v261 + (1 << ((v528->b0 + 31) & 31))) >> (v528->b0 & 31));
-            *(uint16_t *)&v528->w2 = v261
-                                 + ((32 * ((v262 > deadzone_hi) - (uint32_t)(v262 < deadzone_lo)) + v262 + 4) >> 3);
+            v262 = v259 - (p2_pred(v261, v528->b0));
+            v528->w2 = p2_bump(v261, v262, 3);
             *(uint16_t *)&v527[1].w2 += (uint32_t)(v259
-                                                 - ((v527[1].w2 + (1 << ((v527[1].b0 + 31) & 31))) >> (v527[1].b0 & 31))
+                                                 - (p2_pred(v527[1].w2, v527[1].b0))
                                                  + 2) >> 2;
             v263 = v527[-1].w2;
-            v264 = v259 - ((v263 + (1 << ((v527[-1].b0 + 31) & 31))) >> (v527[-1].b0 & 31));
-            *(uint16_t *)&v527[-1].w2 = v263
-                                 + ((32 * ((v264 > deadzone_hi) - (uint32_t)(v264 < deadzone_lo)) + v264 + 4) >> 3);
+            v264 = v259 - (p2_pred(v263, v527[-1].b0));
+            v527[-1].w2 = p2_bump(v263, v264, 3);
             v265 = v529->w2;
-            v266 = v573 - ((v265 + (1 << ((v529->b0 + 31) & 31))) >> (v529->b0 & 31));
-            *(uint16_t *)&v529->w2 = v265
-                                 + ((32 * ((v266 > deadzone_hi) - (uint32_t)(v266 < deadzone_lo)) + v266 + 4) >> 3);
+            v266 = v573 - (p2_pred(v265, v529->b0));
+            v529->w2 = p2_bump(v265, v266, 3);
             v267 = v524->w2;
             v268 = v550;
-            v269 = v550 - ((v267 + (1 << ((v524->b0 + 31) & 31))) >> (v524->b0 & 31));
-            *(uint16_t *)&v524->w2 = v267
-                                 + ((32 * ((v269 > deadzone_hi) - (uint32_t)(v269 < deadzone_lo)) + v269 + 2) >> 2);
+            v269 = v550 - (p2_pred(v267, v524->b0));
+            v524->w2 = p2_bump(v267, v269, 2);
             v270 = v525->w2;
-            v271 = v268 - ((v270 + (1 << ((*(uint8_t *)&v525->b0 + 31) & 31))) >> (*(uint8_t *)&v525->b0 & 31));
-            *(uint16_t *)&v525->w2 = v270
-                                 + ((32 * ((v271 > deadzone_hi) - (uint32_t)(v271 < deadzone_lo)) + v271 + 4) >> 3);
+            v271 = v268 - (p2_pred(v270, *(uint8_t *)&v525->b0));
+            v525->w2 = p2_bump(v270, v271, 3);
             *(uint16_t *)&v524[1].w2 += (uint32_t)(v268
-                                                 - ((v524[1].w2 + (1 << ((v524[1].b0 + 31) & 31))) >> (v524[1].b0 & 31))
+                                                 - (p2_pred(v524[1].w2, v524[1].b0))
                                                  + 2) >> 2;
             v272 = v524[-1].w2;
-            v273 = v268 - ((v272 + (1 << ((v524[-1].b0 + 31) & 31))) >> (v524[-1].b0 & 31));
-            *(uint16_t *)&v524[-1].w2 = v272
-                                 + ((32 * ((v273 > deadzone_hi) - (uint32_t)(v273 < deadzone_lo)) + v273 + 4) >> 3);
+            v273 = v268 - (p2_pred(v272, v524[-1].b0));
+            v524[-1].w2 = p2_bump(v272, v273, 3);
             v274 = v526->w2;
-            v275 = v573 - ((v274 + (1 << ((v526->b0 + 31) & 31))) >> (v526->b0 & 31));
-            *(uint16_t *)&v526->w2 = v274
-                                 + ((32 * ((v275 > deadzone_hi) - (uint32_t)(v275 < deadzone_lo)) + v275 + 4) >> 3);
+            v275 = v573 - (p2_pred(v274, v526->b0));
+            v526->w2 = p2_bump(v274, v275, 3);
             v276 = v521->w2;
             v277 = v550;
-            v278 = v550 - ((v276 + (1 << ((v521->b0 + 31) & 31))) >> (v521->b0 & 31));
-            *(uint16_t *)&v521->w2 = v276
-                                 + ((32 * ((v278 > deadzone_hi) - (uint32_t)(v278 < deadzone_lo)) + v278 + 2) >> 2);
+            v278 = v550 - (p2_pred(v276, v521->b0));
+            v521->w2 = p2_bump(v276, v278, 2);
             v279 = v522->w2;
-            v280 = v277 - ((v279 + (1 << ((v522->b0 + 31) & 31))) >> (v522->b0 & 31));
-            *(uint16_t *)&v522->w2 = v279
-                                 + ((32 * ((v280 > deadzone_hi) - (uint32_t)(v280 < deadzone_lo)) + v280 + 4) >> 3);
+            v280 = v277 - (p2_pred(v279, v522->b0));
+            v522->w2 = p2_bump(v279, v280, 3);
             *(uint16_t *)&v521[1].w2 += (uint32_t)(v277
-                                                 - ((v521[1].w2 + (1 << ((v521[1].b0 + 31) & 31))) >> (v521[1].b0 & 31))
+                                                 - (p2_pred(v521[1].w2, v521[1].b0))
                                                  + 2) >> 2;
             v281 = v521[-1].w2;
-            v282 = v277 - ((v281 + (1 << ((v521[-1].b0 + 31) & 31))) >> (v521[-1].b0 & 31));
-            *(uint16_t *)&v521[-1].w2 = v281
-                                 + ((32 * ((v282 > deadzone_hi) - (uint32_t)(v282 < deadzone_lo)) + v282 + 4) >> 3);
+            v282 = v277 - (p2_pred(v281, v521[-1].b0));
+            v521[-1].w2 = p2_bump(v281, v282, 3);
             v283 = v523->w2;
-            v284 = v573 - ((v283 + (1 << ((v523->b0 + 31) & 31))) >> (v523->b0 & 31));
-            *(uint16_t *)&v523->w2 = v283
-                                 + ((32 * ((v284 > deadzone_hi) - (uint32_t)(v284 < deadzone_lo)) + v284 + 4) >> 3);
+            v284 = v573 - (p2_pred(v283, v523->b0));
+            v523->w2 = p2_bump(v283, v284, 3);
             v285 = v518->w2;
             v286 = v550;
-            v287 = v550 - ((v285 + (1 << ((v518->b0 + 31) & 31))) >> (v518->b0 & 31));
-            *(uint16_t *)&v518->w2 = v285
-                                 + ((32 * ((v287 > deadzone_hi) - (uint32_t)(v287 < deadzone_lo)) + v287 + 2) >> 2);
+            v287 = v550 - (p2_pred(v285, v518->b0));
+            v518->w2 = p2_bump(v285, v287, 2);
             v288 = v519->w2;
-            v289 = v286 - ((v288 + (1 << ((v519->b0 + 31) & 31))) >> (v519->b0 & 31));
-            *(uint16_t *)&v519->w2 = v288
-                                 + ((32 * ((v289 > deadzone_hi) - (uint32_t)(v289 < deadzone_lo)) + v289 + 4) >> 3);
+            v289 = v286 - (p2_pred(v288, v519->b0));
+            v519->w2 = p2_bump(v288, v289, 3);
             *(uint16_t *)&v518[1].w2 += (uint32_t)(v286
-                                                 - ((v518[1].w2 + (1 << ((v518[1].b0 + 31) & 31))) >> (v518[1].b0 & 31))
+                                                 - (p2_pred(v518[1].w2, v518[1].b0))
                                                  + 2) >> 2;
             v290 = v518[-1].w2;
-            v291 = v286 - ((v290 + (1 << ((v518[-1].b0 + 31) & 31))) >> (v518[-1].b0 & 31));
+            v291 = v286 - (p2_pred(v290, v518[-1].b0));
             v292 = -v286;
             v574 = v292;
-            *(uint16_t *)&v518[-1].w2 = v290
-                                 + ((32 * ((v291 > deadzone_hi) - (uint32_t)(v291 < deadzone_lo)) + v291 + 4) >> 3);
+            v518[-1].w2 = p2_bump(v290, v291, 3);
             v293 = v520->w2;
-            v294 = v292 - ((v293 + (1 << ((v520->b0 + 31) & 31))) >> (v520->b0 & 31));
-            *(uint16_t *)&v520->w2 = v293
-                                 + ((32 * ((v294 > deadzone_hi) - (uint32_t)(v294 < deadzone_lo)) + v294 + 4) >> 3);
+            v294 = v292 - (p2_pred(v293, v520->b0));
+            v520->w2 = p2_bump(v293, v294, 3);
             v295 = v515->w2;
             v296 = v550;
-            v297 = v550 - ((v295 + (1 << ((v515->b0 + 31) & 31))) >> (v515->b0 & 31));
-            *(uint16_t *)&v515->w2 = v295
-                                 + ((32 * ((v297 > deadzone_hi) - (uint32_t)(v297 < deadzone_lo)) + v297 + 2) >> 2);
+            v297 = v550 - (p2_pred(v295, v515->b0));
+            v515->w2 = p2_bump(v295, v297, 2);
             v298 = v516->w2;
-            v299 = v296 - ((v298 + (1 << ((*(uint8_t *)&v516->b0 + 31) & 31))) >> (*(uint8_t *)&v516->b0 & 31));
-            *(uint16_t *)&v516->w2 = v298
-                                 + ((32 * ((v299 > deadzone_hi) - (uint32_t)(v299 < deadzone_lo)) + v299 + 4) >> 3);
+            v299 = v296 - (p2_pred(v298, *(uint8_t *)&v516->b0));
+            v516->w2 = p2_bump(v298, v299, 3);
             *(uint16_t *)&v515[1].w2 += (uint32_t)(v296
-                                                 - ((v515[1].w2 + (1 << ((v515[1].b0 + 31) & 31))) >> (v515[1].b0 & 31))
+                                                 - (p2_pred(v515[1].w2, v515[1].b0))
                                                  + 2) >> 2;
             v300 = v515[-1].w2;
-            v301 = v296 - ((v300 + (1 << ((v515[-1].b0 + 31) & 31))) >> (v515[-1].b0 & 31));
-            *(uint16_t *)&v515[-1].w2 = v300
-                                 + ((32 * ((v301 > deadzone_hi) - (uint32_t)(v301 < deadzone_lo)) + v301 + 4) >> 3);
+            v301 = v296 - (p2_pred(v300, v515[-1].b0));
+            v515[-1].w2 = p2_bump(v300, v301, 3);
             v302 = v517->w2;
-            v303 = v574 - ((v302 + (1 << ((v517->b0 + 31) & 31))) >> (v517->b0 & 31));
-            *(uint16_t *)&v517->w2 = v302
-                                 + ((32 * ((v303 > deadzone_hi) - (uint32_t)(v303 < deadzone_lo)) + v303 + 4) >> 3);
+            v303 = v574 - (p2_pred(v302, v517->b0));
+            v517->w2 = p2_bump(v302, v303, 3);
             v304 = v512->w2;
             v305 = v550;
-            v306 = v550 - ((v304 + (1 << ((*(uint8_t *)&v512->b0 + 31) & 31))) >> (*(uint8_t *)&v512->b0 & 31));
-            *(uint16_t *)&v512->w2 = v304
-                                 + ((32 * ((v306 > deadzone_hi) - (uint32_t)(v306 < deadzone_lo)) + v306 + 2) >> 2);
+            v306 = v550 - (p2_pred(v304, *(uint8_t *)&v512->b0));
+            v512->w2 = p2_bump(v304, v306, 2);
             v307 = v513->w2;
-            v308 = v305 - ((v307 + (1 << ((*(uint8_t *)&v513->b0 + 31) & 31))) >> (*(uint8_t *)&v513->b0 & 31));
-            *(uint16_t *)&v513->w2 = v307
-                                 + ((32 * ((v308 > deadzone_hi) - (uint32_t)(v308 < deadzone_lo)) + v308 + 4) >> 3);
+            v308 = v305 - (p2_pred(v307, *(uint8_t *)&v513->b0));
+            v513->w2 = p2_bump(v307, v308, 3);
             *(uint16_t *)&v512[1].w2 += (uint32_t)(v305
-                                                 - ((*(int16_t *)&*(uint16_t *)&v512[1].w2 + (1 << ((*(uint8_t *)&v512[1].b0 + 31) & 31))) >> (*(uint8_t *)&v512[1].b0 & 31))
+                                                 - (p2_pred(*(int16_t *)&*(uint16_t *)&v512[1].w2, *(uint8_t *)&v512[1].b0))
                                                  + 2) >> 2;
             v309 = v512[-1].w2;
-            v310 = v305 - ((v309 + (1 << ((*(uint8_t *)&v512[-1].b0 + 31) & 31))) >> (*(uint8_t *)&v512[-1].b0 & 31));
-            *(uint16_t *)&v512[-1].w2 = v309
-                                 + ((32 * ((v310 > deadzone_hi) - (uint32_t)(v310 < deadzone_lo)) + v310 + 4) >> 3);
+            v310 = v305 - (p2_pred(v309, *(uint8_t *)&v512[-1].b0));
+            v512[-1].w2 = p2_bump(v309, v310, 3);
             v214 = v514->w2;
-            v215 = v574 - ((v214 + (1 << ((*(uint8_t *)&v514->b0 + 31) & 31))) >> (*(uint8_t *)&v514->b0 & 31));
+            v215 = v574 - (p2_pred(v214, *(uint8_t *)&v514->b0));
           }
           else
           {
             v122 = v542[-1].w2;
-            v123 = v550 - ((v122 + (1 << ((*(uint8_t *)&v542[-1].b0 + 31) & 31))) >> (*(uint8_t *)&v542[-1].b0 & 31));
-            *(uint16_t *)&v542[-1].w2 = v122
-                                 + ((32 * ((v123 > deadzone_hi) - (uint32_t)(v123 < deadzone_lo)) + v123 + 4) >> 3);
+            v123 = v550 - (p2_pred(v122, *(uint8_t *)&v542[-1].b0));
+            v542[-1].w2 = p2_bump(v122, v123, 3);
             v124 = v544->w2;
-            LOBYTE(v122) = v544->b0;
             v547 = -v121;
-            v125 = -v121 - ((v124 + (1 << ((v122 + 31) & 31))) >> (v122 & 31));
-            *(uint16_t *)&v544->w2 = v124
-                                 + ((32 * ((v125 > deadzone_hi) - (uint32_t)(v125 < deadzone_lo)) + v125 + 4) >> 3);
+            v125 = -v121 - (p2_pred(v124, v544->b0));
+            v544->w2 = p2_bump(v124, v125, 3);
             v126 = v539->w2;
             v127 = v550;
-            v128 = v550 - ((v126 + (1 << ((*(uint8_t *)&v539->b0 + 31) & 31))) >> (*(uint8_t *)&v539->b0 & 31));
-            *(uint16_t *)&v539->w2 = v126
-                                 + ((32 * ((v128 > deadzone_hi) - (uint32_t)(v128 < deadzone_lo)) + v128 + 2) >> 2);
+            v128 = v550 - (p2_pred(v126, *(uint8_t *)&v539->b0));
+            v539->w2 = p2_bump(v126, v128, 2);
             v129 = v540->w2;
-            v130 = v127 - ((v129 + (1 << ((v540->b0 + 31) & 31))) >> (v540->b0 & 31));
-            *(uint16_t *)&v540->w2 = v129
-                                 + ((32 * ((v130 > deadzone_hi) - (uint32_t)(v130 < deadzone_lo)) + v130 + 4) >> 3);
+            v130 = v127 - (p2_pred(v129, v540->b0));
+            v540->w2 = p2_bump(v129, v130, 3);
             v131 = v539[-1].w2;
-            v132 = v127 - ((v131 + (1 << ((*(uint8_t *)&v539[-1].b0 + 31) & 31))) >> (*(uint8_t *)&v539[-1].b0 & 31));
-            *(uint16_t *)&v539[-1].w2 = v131
-                                 + ((32 * ((v132 > deadzone_hi) - (uint32_t)(v132 < deadzone_lo)) + v132 + 4) >> 3);
+            v132 = v127 - (p2_pred(v131, *(uint8_t *)&v539[-1].b0));
+            v539[-1].w2 = p2_bump(v131, v132, 3);
             v133 = v541->w2;
-            v134 = v547 - ((v133 + (1 << ((*(uint8_t *)&v541->b0 + 31) & 31))) >> (*(uint8_t *)&v541->b0 & 31));
-            *(uint16_t *)&v541->w2 = v133
-                                 + ((32 * ((v134 > deadzone_hi) - (uint32_t)(v134 < deadzone_lo)) + v134 + 4) >> 3);
+            v134 = v547 - (p2_pred(v133, *(uint8_t *)&v541->b0));
+            v541->w2 = p2_bump(v133, v134, 3);
             v135 = v536->w2;
             v136 = v550;
-            v137 = v550 - ((v135 + (1 << ((*(uint8_t *)&v536->b0 + 31) & 31))) >> (*(uint8_t *)&v536->b0 & 31));
-            *(uint16_t *)&v536->w2 = v135
-                                 + ((32 * ((v137 > deadzone_hi) - (uint32_t)(v137 < deadzone_lo)) + v137 + 2) >> 2);
+            v137 = v550 - (p2_pred(v135, *(uint8_t *)&v536->b0));
+            v536->w2 = p2_bump(v135, v137, 2);
             v138 = v537->w2;
-            v139 = v136 - ((v138 + (1 << ((v537->b0 + 31) & 31))) >> (v537->b0 & 31));
-            *(uint16_t *)&v537->w2 = v138
-                                 + ((32 * ((v139 > deadzone_hi) - (uint32_t)(v139 < deadzone_lo)) + v139 + 4) >> 3);
+            v139 = v136 - (p2_pred(v138, v537->b0));
+            v537->w2 = p2_bump(v138, v139, 3);
             v140 = v536[-1].w2;
-            v141 = v136 - ((v140 + (1 << ((*(uint8_t *)&v536[-1].b0 + 31) & 31))) >> (*(uint8_t *)&v536[-1].b0 & 31));
-            *(uint16_t *)&v536[-1].w2 = v140
-                                 + ((32 * ((v141 > deadzone_hi) - (uint32_t)(v141 < deadzone_lo)) + v141 + 4) >> 3);
+            v141 = v136 - (p2_pred(v140, *(uint8_t *)&v536[-1].b0));
+            v536[-1].w2 = p2_bump(v140, v141, 3);
             v142 = v538->w2;
-            v143 = v547 - ((v142 + (1 << ((*(uint8_t *)&v538->b0 + 31) & 31))) >> (*(uint8_t *)&v538->b0 & 31));
-            *(uint16_t *)&v538->w2 = v142
-                                 + ((32 * ((v143 > deadzone_hi) - (uint32_t)(v143 < deadzone_lo)) + v143 + 4) >> 3);
+            v143 = v547 - (p2_pred(v142, *(uint8_t *)&v538->b0));
+            v538->w2 = p2_bump(v142, v143, 3);
             v144 = v533->w2;
             v145 = v550;
-            v146 = v550 - ((v144 + (1 << ((v533->b0 + 31) & 31))) >> (v533->b0 & 31));
-            *(uint16_t *)&v533->w2 = v144
-                                 + ((32 * ((v146 > deadzone_hi) - (uint32_t)(v146 < deadzone_lo)) + v146 + 2) >> 2);
+            v146 = v550 - (p2_pred(v144, v533->b0));
+            v533->w2 = p2_bump(v144, v146, 2);
             v147 = v534->w2;
-            v148 = v145 - ((v147 + (1 << ((v534->b0 + 31) & 31))) >> (v534->b0 & 31));
-            *(uint16_t *)&v534->w2 = v147
-                                 + ((32 * ((v148 > deadzone_hi) - (uint32_t)(v148 < deadzone_lo)) + v148 + 4) >> 3);
+            v148 = v145 - (p2_pred(v147, v534->b0));
+            v534->w2 = p2_bump(v147, v148, 3);
             v149 = v533[-1].w2;
-            v150 = v145 - ((v149 + (1 << ((v533[-1].b0 + 31) & 31))) >> (v533[-1].b0 & 31));
-            *(uint16_t *)&v533[-1].w2 = v149
-                                 + ((32 * ((v150 > deadzone_hi) - (uint32_t)(v150 < deadzone_lo)) + v150 + 4) >> 3);
+            v150 = v145 - (p2_pred(v149, v533[-1].b0));
+            v533[-1].w2 = p2_bump(v149, v150, 3);
             v151 = v535->w2;
-            v152 = v547 - ((v151 + (1 << ((v535->b0 + 31) & 31))) >> (v535->b0 & 31));
-            *(uint16_t *)&v535->w2 = v151
-                                 + ((32 * ((v152 > deadzone_hi) - (uint32_t)(v152 < deadzone_lo)) + v152 + 4) >> 3);
+            v152 = v547 - (p2_pred(v151, v535->b0));
+            v535->w2 = p2_bump(v151, v152, 3);
             v153 = v530->w2;
             v154 = v550;
-            v155 = v550 - ((v153 + (1 << ((v530->b0 + 31) & 31))) >> (v530->b0 & 31));
-            *(uint16_t *)&v530->w2 = v153
-                                 + ((32 * ((v155 > deadzone_hi) - (uint32_t)(v155 < deadzone_lo)) + v155 + 2) >> 2);
+            v155 = v550 - (p2_pred(v153, v530->b0));
+            v530->w2 = p2_bump(v153, v155, 2);
             v156 = v531->w2;
-            v157 = v154 - ((v156 + (1 << ((v531->b0 + 31) & 31))) >> (v531->b0 & 31));
-            *(uint16_t *)&v531->w2 = v156
-                                 + ((32 * ((v157 > deadzone_hi) - (uint32_t)(v157 < deadzone_lo)) + v157 + 4) >> 3);
+            v157 = v154 - (p2_pred(v156, v531->b0));
+            v531->w2 = p2_bump(v156, v157, 3);
             v158 = v530[-1].w2;
-            v159 = v154 - ((v158 + (1 << ((v530[-1].b0 + 31) & 31))) >> (v530[-1].b0 & 31));
-            *(uint16_t *)&v530[-1].w2 = v158
-                                 + ((32 * ((v159 > deadzone_hi) - (uint32_t)(v159 < deadzone_lo)) + v159 + 4) >> 3);
+            v159 = v154 - (p2_pred(v158, v530[-1].b0));
+            v530[-1].w2 = p2_bump(v158, v159, 3);
             v160 = v532->w2;
-            v547 -= (v160 + (1 << ((v532->b0 + 31) & 31))) >> (v532->b0 & 31);
+            v547 -= p2_pred(v160, v532->b0);
             v161 = v550;
-            *(uint16_t *)&v532->w2 = v160
-                                 + ((32 * ((v547 > deadzone_hi) - (uint32_t)(v547 < deadzone_lo)) + v547 + 4) >> 3);
+            v532->w2 = p2_bump(v160, v547, 3);
             v162 = v527->w2;
-            v163 = v161 - ((v162 + (1 << ((v527->b0 + 31) & 31))) >> (v527->b0 & 31));
-            *(uint16_t *)&v527->w2 = v162
-                                 + ((32 * ((v163 > deadzone_hi) - (uint32_t)(v163 < deadzone_lo)) + v163 + 2) >> 2);
+            v163 = v161 - (p2_pred(v162, v527->b0));
+            v527->w2 = p2_bump(v162, v163, 2);
             v164 = v528->w2;
-            v165 = v161 - ((v164 + (1 << ((v528->b0 + 31) & 31))) >> (v528->b0 & 31));
-            *(uint16_t *)&v528->w2 = v164
-                                 + ((32 * ((v165 > deadzone_hi) - (uint32_t)(v165 < deadzone_lo)) + v165 + 4) >> 3);
+            v165 = v161 - (p2_pred(v164, v528->b0));
+            v528->w2 = p2_bump(v164, v165, 3);
             v166 = v527[-1].w2;
-            v167 = v161 - ((v166 + (1 << ((v527[-1].b0 + 31) & 31))) >> (v527[-1].b0 & 31));
+            v167 = v161 - (p2_pred(v166, v527[-1].b0));
             v168 = -v161;
             v570 = v168;
-            *(uint16_t *)&v527[-1].w2 = v166
-                                 + ((32 * ((v167 > deadzone_hi) - (uint32_t)(v167 < deadzone_lo)) + v167 + 4) >> 3);
+            v527[-1].w2 = p2_bump(v166, v167, 3);
             v169 = v529->w2;
-            v170 = v168 - ((v169 + (1 << ((v529->b0 + 31) & 31))) >> (v529->b0 & 31));
-            *(uint16_t *)&v529->w2 = v169
-                                 + ((32 * ((v170 > deadzone_hi) - (uint32_t)(v170 < deadzone_lo)) + v170 + 4) >> 3);
+            v170 = v168 - (p2_pred(v169, v529->b0));
+            v529->w2 = p2_bump(v169, v170, 3);
             v171 = v524->w2;
             v172 = v550;
-            v173 = v550 - ((v171 + (1 << ((v524->b0 + 31) & 31))) >> (v524->b0 & 31));
-            *(uint16_t *)&v524->w2 = v171
-                                 + ((32 * ((v173 > deadzone_hi) - (uint32_t)(v173 < deadzone_lo)) + v173 + 2) >> 2);
+            v173 = v550 - (p2_pred(v171, v524->b0));
+            v524->w2 = p2_bump(v171, v173, 2);
             v174 = v525->w2;
-            v175 = v172 - ((v174 + (1 << ((*(uint8_t *)&v525->b0 + 31) & 31))) >> (*(uint8_t *)&v525->b0 & 31));
-            *(uint16_t *)&v525->w2 = v174
-                                 + ((32 * ((v175 > deadzone_hi) - (uint32_t)(v175 < deadzone_lo)) + v175 + 4) >> 3);
+            v175 = v172 - (p2_pred(v174, *(uint8_t *)&v525->b0));
+            v525->w2 = p2_bump(v174, v175, 3);
             v176 = v524[-1].w2;
-            v177 = v172 - ((v176 + (1 << ((v524[-1].b0 + 31) & 31))) >> (v524[-1].b0 & 31));
-            *(uint16_t *)&v524[-1].w2 = v176
-                                 + ((32 * ((v177 > deadzone_hi) - (uint32_t)(v177 < deadzone_lo)) + v177 + 4) >> 3);
+            v177 = v172 - (p2_pred(v176, v524[-1].b0));
+            v524[-1].w2 = p2_bump(v176, v177, 3);
             v178 = v526->w2;
-            v179 = v570 - ((v178 + (1 << ((v526->b0 + 31) & 31))) >> (v526->b0 & 31));
-            *(uint16_t *)&v526->w2 = v178
-                                 + ((32 * ((v179 > deadzone_hi) - (uint32_t)(v179 < deadzone_lo)) + v179 + 4) >> 3);
+            v179 = v570 - (p2_pred(v178, v526->b0));
+            v526->w2 = p2_bump(v178, v179, 3);
             v180 = v521->w2;
             v181 = v550;
-            v182 = v550 - ((v180 + (1 << ((v521->b0 + 31) & 31))) >> (v521->b0 & 31));
-            *(uint16_t *)&v521->w2 = v180
-                                 + ((32 * ((v182 > deadzone_hi) - (uint32_t)(v182 < deadzone_lo)) + v182 + 2) >> 2);
+            v182 = v550 - (p2_pred(v180, v521->b0));
+            v521->w2 = p2_bump(v180, v182, 2);
             v183 = v522->w2;
-            v184 = v181 - ((v183 + (1 << ((v522->b0 + 31) & 31))) >> (v522->b0 & 31));
-            *(uint16_t *)&v522->w2 = v183
-                                 + ((32 * ((v184 > deadzone_hi) - (uint32_t)(v184 < deadzone_lo)) + v184 + 4) >> 3);
+            v184 = v181 - (p2_pred(v183, v522->b0));
+            v522->w2 = p2_bump(v183, v184, 3);
             v185 = v521[-1].w2;
-            v186 = v181 - ((v185 + (1 << ((v521[-1].b0 + 31) & 31))) >> (v521[-1].b0 & 31));
-            *(uint16_t *)&v521[-1].w2 = v185
-                                 + ((32 * ((v186 > deadzone_hi) - (uint32_t)(v186 < deadzone_lo)) + v186 + 4) >> 3);
+            v186 = v181 - (p2_pred(v185, v521[-1].b0));
+            v521[-1].w2 = p2_bump(v185, v186, 3);
             v187 = v523->w2;
-            v188 = v570 - ((v187 + (1 << ((v523->b0 + 31) & 31))) >> (v523->b0 & 31));
-            *(uint16_t *)&v523->w2 = v187
-                                 + ((32 * ((v188 > deadzone_hi) - (uint32_t)(v188 < deadzone_lo)) + v188 + 4) >> 3);
+            v188 = v570 - (p2_pred(v187, v523->b0));
+            v523->w2 = p2_bump(v187, v188, 3);
             v189 = v518->w2;
             v190 = v550;
-            v191 = v550 - ((v189 + (1 << ((v518->b0 + 31) & 31))) >> (v518->b0 & 31));
-            *(uint16_t *)&v518->w2 = v189
-                                 + ((32 * ((v191 > deadzone_hi) - (uint32_t)(v191 < deadzone_lo)) + v191 + 2) >> 2);
+            v191 = v550 - (p2_pred(v189, v518->b0));
+            v518->w2 = p2_bump(v189, v191, 2);
             v192 = v519->w2;
-            v193 = v190 - ((v192 + (1 << ((v519->b0 + 31) & 31))) >> (v519->b0 & 31));
-            *(uint16_t *)&v519->w2 = v192
-                                 + ((32 * ((v193 > deadzone_hi) - (uint32_t)(v193 < deadzone_lo)) + v193 + 4) >> 3);
+            v193 = v190 - (p2_pred(v192, v519->b0));
+            v519->w2 = p2_bump(v192, v193, 3);
             v194 = v518[-1].w2;
-            v195 = v190 - ((v194 + (1 << ((v518[-1].b0 + 31) & 31))) >> (v518[-1].b0 & 31));
-            *(uint16_t *)&v518[-1].w2 = v194
-                                 + ((32 * ((v195 > deadzone_hi) - (uint32_t)(v195 < deadzone_lo)) + v195 + 4) >> 3);
+            v195 = v190 - (p2_pred(v194, v518[-1].b0));
+            v518[-1].w2 = p2_bump(v194, v195, 3);
             v196 = v520->w2;
-            v197 = v570 - ((v196 + (1 << ((v520->b0 + 31) & 31))) >> (v520->b0 & 31));
-            *(uint16_t *)&v520->w2 = v196
-                                 + ((32 * ((v197 > deadzone_hi) - (uint32_t)(v197 < deadzone_lo)) + v197 + 4) >> 3);
+            v197 = v570 - (p2_pred(v196, v520->b0));
+            v520->w2 = p2_bump(v196, v197, 3);
             v198 = v515->w2;
             v199 = v550;
-            v200 = v550 - ((v198 + (1 << ((v515->b0 + 31) & 31))) >> (v515->b0 & 31));
-            *(uint16_t *)&v515->w2 = v198
-                                 + ((32 * ((v200 > deadzone_hi) - (uint32_t)(v200 < deadzone_lo)) + v200 + 2) >> 2);
+            v200 = v550 - (p2_pred(v198, v515->b0));
+            v515->w2 = p2_bump(v198, v200, 2);
             v201 = v516->w2;
-            v202 = v199 - ((v201 + (1 << ((*(uint8_t *)&v516->b0 + 31) & 31))) >> (*(uint8_t *)&v516->b0 & 31));
+            v202 = v199 - (p2_pred(v201, *(uint8_t *)&v516->b0));
             v550 = v199;
-            *(uint16_t *)&v516->w2 = v201
-                                 + ((32 * ((v202 > deadzone_hi) - (uint32_t)(v202 < deadzone_lo)) + v202 + 4) >> 3);
+            v516->w2 = p2_bump(v201, v202, 3);
             v203 = v515[-1].w2;
-            v204 = v199 - ((v203 + (1 << ((v515[-1].b0 + 31) & 31))) >> (v515[-1].b0 & 31));
-            *(uint16_t *)&v515[-1].w2 = v203
-                                 + ((32 * ((v204 > deadzone_hi) - (uint32_t)(v204 < deadzone_lo)) + v204 + 4) >> 3);
+            v204 = v199 - (p2_pred(v203, v515[-1].b0));
+            v515[-1].w2 = p2_bump(v203, v204, 3);
             v205 = v517->w2;
-            LOBYTE(v203) = v517->b0;
             v571 = -v199;
-            v206 = -v199 - ((v205 + (1 << ((v203 + 31) & 31))) >> (v203 & 31));
-            *(uint16_t *)&v517->w2 = v205
-                                 + ((32 * ((v206 > deadzone_hi) - (uint32_t)(v206 < deadzone_lo)) + v206 + 4) >> 3);
+            v206 = -v199 - (p2_pred(v205, v517->b0));
+            v517->w2 = p2_bump(v205, v206, 3);
             v207 = v512->w2;
             v208 = v550;
-            v209 = v550 - ((v207 + (1 << ((*(uint8_t *)&v512->b0 + 31) & 31))) >> (*(uint8_t *)&v512->b0 & 31));
-            *(uint16_t *)&v512->w2 = v207
-                                 + ((32 * ((v209 > deadzone_hi) - (uint32_t)(v209 < deadzone_lo)) + v209 + 2) >> 2);
+            v209 = v550 - (p2_pred(v207, *(uint8_t *)&v512->b0));
+            v512->w2 = p2_bump(v207, v209, 2);
             v210 = v513->w2;
-            v211 = v208 - ((v210 + (1 << ((*(uint8_t *)&v513->b0 + 31) & 31))) >> (*(uint8_t *)&v513->b0 & 31));
-            *(uint16_t *)&v513->w2 = v210
-                                 + ((32 * ((v211 > deadzone_hi) - (uint32_t)(v211 < deadzone_lo)) + v211 + 4) >> 3);
+            v211 = v208 - (p2_pred(v210, *(uint8_t *)&v513->b0));
+            v513->w2 = p2_bump(v210, v211, 3);
             v212 = v512[-1].w2;
-            v213 = v208 - ((v212 + (1 << ((*(uint8_t *)&v512[-1].b0 + 31) & 31))) >> (*(uint8_t *)&v512[-1].b0 & 31));
-            *(uint16_t *)&v512[-1].w2 = v212
-                                 + ((32 * ((v213 > deadzone_hi) - (uint32_t)(v213 < deadzone_lo)) + v213 + 4) >> 3);
+            v213 = v208 - (p2_pred(v212, *(uint8_t *)&v512[-1].b0));
+            v512[-1].w2 = p2_bump(v212, v213, 3);
             v214 = v514->w2;
-            v215 = v571 - ((v214 + (1 << ((*(uint8_t *)&v514->b0 + 31) & 31))) >> (*(uint8_t *)&v514->b0 & 31));
+            v215 = v571 - (p2_pred(v214, *(uint8_t *)&v514->b0));
           }
-          *(uint16_t *)&v514->w2 = v214
-                               + ((32 * ((v215 > deadzone_hi) - (uint32_t)(v215 < deadzone_lo)) + v215 + 4) >> 3);
+          v514->w2 = p2_bump(v214, v215, 3);
         }
       }
     }
