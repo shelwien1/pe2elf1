@@ -586,7 +586,9 @@ static_assert(sizeof(void *) != 4
 struct Obj12 {
   // Six pointers to the same shape, one per sub-model, which is what
   // `alt_p2_filter` treats them as: it walks all six with one weight each.
-  __m128 *f0[6];   // +0 .. +20
+  // Each points at rows of four floats -- the function reads nothing else
+  // through them -- so that is what they are.
+  float (*f0[6])[4];   // +0 .. +20
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj12, f0[5]) == 20,
@@ -7174,7 +7176,7 @@ static const float bmf_p2_mix[4][6] = {
 static const float bmf_p2_decay = 0.78f;   // 0x439B20
 static const float bmf_p2_seed  = 0.19f;   // 0x439B30
 
-int32_t __alt_p2_filter(__m128 *_this, __m128 *a2, Obj12 *a3, int32_t n2)
+int32_t __alt_p2_filter(float (*_this)[4], float (*a2)[4], Obj12 *a3, int32_t n2)
 {
   const float *mix = bmf_p2_mix[n2];
   float acc[4], mixed[7][4], centre, prediction, own;
@@ -7184,53 +7186,53 @@ int32_t __alt_p2_filter(__m128 *_this, __m128 *a2, Obj12 *a3, int32_t n2)
   // coefficient rows, then a horizontal sum of what is left.
   for ( k = 0; k < 4; k++ )
   {
-    acc[k] = bmf_p2_coef[0][k] * a2[0].m128_f32[k];
+    acc[k] = bmf_p2_coef[0][k] * a2[0][k];
     for ( j = 1; j < 7; j++ )
-      acc[k] += bmf_p2_coef[j][k] * a2[j].m128_f32[k];
+      acc[k] += bmf_p2_coef[j][k] * a2[j][k];
   }
   centre = bmf_hsum4(acc);
-  a2[7].m128_f32[0] = centre;
+  a2[7][0] = centre;
 
   // Every row is then recentred on it, in place -- this is the only thing the
   // function writes back into `a2[0..6]`.
   for ( j = 0; j < 7; j++ )
     for ( k = 0; k < 4; k++ )
-      a2[j].m128_f32[k] -= centre;
+      a2[j][k] -= centre;
 
   // The six sub-models mixed with this plane count's weights, row by row.
   for ( j = 0; j < 7; j++ )
     for ( k = 0; k < 4; k++ )
     {
-      mixed[j][k] = mix[0] * a3->f0[0][j].m128_f32[k];
+      mixed[j][k] = mix[0] * a3->f0[0][j][k];
       for ( i = 1; i < 6; i++ )
-        mixed[j][k] += mix[i] * a3->f0[i][j].m128_f32[k];
+        mixed[j][k] += mix[i] * a3->f0[i][j][k];
     }
 
   // The mixture against the recentred rows, summed and put back on the centre.
   for ( k = 0; k < 4; k++ )
   {
-    acc[k] = mixed[0][k] * a2[0].m128_f32[k];
+    acc[k] = mixed[0][k] * a2[0][k];
     for ( j = 1; j < 7; j++ )
-      acc[k] += mixed[j][k] * a2[j].m128_f32[k];
+      acc[k] += mixed[j][k] * a2[j][k];
   }
   prediction = bmf_hsum4(acc) + centre;
-  a2[7].m128_f32[2] = prediction;
+  a2[7][2] = prediction;
 
-  if ( _this[15].m128_u32[0] )
+  if ( *(uint32_t *)&_this[15][0] )
   {
     // `_this` holds a second set of weights, kept from the previous call, and
     // the answer is the two predictions blended 47:169.2.
     for ( k = 0; k < 4; k++ )
     {
-      acc[k] = _this[0].m128_f32[k] * a2[0].m128_f32[k];
+      acc[k] = _this[0][k] * a2[0][k];
       for ( j = 1; j < 7; j++ )
-        acc[k] += _this[j].m128_f32[k] * a2[j].m128_f32[k];
+        acc[k] += _this[j][k] * a2[j][k];
     }
     own = centre + bmf_hsum4(acc);
-    a2[7].m128_f32[1] = own;
+    a2[7][1] = own;
     return (int32_t)(prediction
-                     + ((own - prediction) * _this[14].m128_f32[0])
-                         / _this[14].m128_f32[1]);
+                     + ((own - prediction) * _this[14][0])
+                         / _this[14][1]);
   }
 
   // First call against this `_this`: seed it from what was just computed and
@@ -7238,16 +7240,16 @@ int32_t __alt_p2_filter(__m128 *_this, __m128 *a2, Obj12 *a3, int32_t n2)
   for ( j = 0; j < 7; j++ )
     for ( k = 0; k < 4; k++ )
     {
-      _this[j].m128_f32[k]     = mixed[j][k] * bmf_p2_decay;
-      _this[j + 7].m128_f32[k] = a3->f0[0][j + 7].m128_f32[k] * bmf_p2_seed;
+      _this[j][k]     = mixed[j][k] * bmf_p2_decay;
+      _this[j + 7][k] = a3->f0[0][j + 7][k] * bmf_p2_seed;
     }
-  _this[14].m128_f32[0] = 47.0f;
-  _this[14].m128_f32[1] = 169.2f;
-  _this[14].m128_f32[2] = 1.0f;
-  a2[7].m128_f32[1] = prediction;
+  _this[14][0] = 47.0f;
+  _this[14][1] = 169.2f;
+  _this[14][2] = 1.0f;
+  a2[7][1] = prediction;
   return (int32_t)prediction;
 }
-static inline int32_t __fwd_alt_p2_context_alt_p2_filter(void *a0, void *a1, void *a2, int32_t a3) { return __alt_p2_filter((__m128 *)a0, (__m128 *)a1, (Obj12 *)a2, a3); }
+static inline int32_t __fwd_alt_p2_context_alt_p2_filter(void *a0, void *a1, void *a2, int32_t a3) { return __alt_p2_filter((float (*)[4])a0, (float (*)[4])a1, (Obj12 *)a2, a3); }
 
 // `alt_p1_context`'s opposite number for p2, and the largest body in the file
 // at a thousand lines.  Same evidence for the name: no `rc.` call in it, and
