@@ -298,13 +298,17 @@ question. Two of them are, and they are still there.
   dwords and it cannot be both, so one of `f56`'s length and `f1051664`'s type
   is wrong. **That copy is dead** — `f1051664` is written in two places and
   read nowhere, in this file or in `bmf.cpp` — so the collision costs nothing
-  at run time and the gate will never speak to it. The same sixteen-byte grid
-  also carries `FreqRec`, at record 188 (+3104), so whatever the region from
-  +96 is, the bucket walker and the pixel coders share it. The finding is in
-  the file as a comment rather than as a member: after §6, an overlap that
-  looks like a coincidence is precisely the thing not to declare around until
-  it is settled, and settling this one needs run-time evidence rather than
-  another reading.
+  at run time and the gate will never speak to it.
+
+  The rest did need run-time evidence, and a `__builtin_trap()` supplied it.
+  A trap on `bucket >= 188` fires on fourteen of the gate's streams and a trap
+  on `>= 189` fires on none, so **the table is 189 records, +96 .. +3119**.
+  `FreqRec` is on the same grid from record 188 (+3104) — which makes the last
+  bucket record and the first frequency record the same sixteen bytes. The two
+  tables abut and share one, and no declaration can say that without a union.
+  That is where this stops: the extent is measured, the overlap is exact, and
+  what the shared record means is `algorithm_v2.md`'s question rather than
+  this document's.
 * **101 raw offsets, 92 `fNN` members, 560 `vNN` locals, 112 `goto`s.** The
   offsets are down from 1389 over five rounds; what remains is in bases that
   are genuinely computed — a name plus a variable byte offset, with nothing

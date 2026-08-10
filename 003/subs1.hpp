@@ -11120,9 +11120,14 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         // claims, and which the `f1051664[k] = f56[10 + k]` copy after this
         // loop reads back.  That copy is dead -- nothing reads `f1051664` --
         // so the collision costs nothing at run time, but it does mean one
-        // of `f56`'s length and `f1051664`'s type is wrong.  The same
-        // sixteen-byte grid carries `FreqRec` from record 188 (+3104), so
-        // whatever this region is, the two walkers share it.
+        // of `f56`'s length and `f1051664`'s type is wrong.
+        //
+        // The bucket counter reaches exactly 188: a `__builtin_trap()` on
+        // `>= 188` fires on fourteen of the gate's streams and one on
+        // `>= 189` fires on none.  So this table is 189 records, +96 ..
+        // +3119.  `FreqRec` is on the same grid from record 188 (+3104),
+        // which makes the last bucket record and the first frequency record
+        // the same sixteen bytes -- the two tables abut and share one.
         v13 = (uint16_t *)&((uint32_t *)this_3)[4 * v11];
         v13[49] = 2;
         v13[50] = 2;
@@ -15324,9 +15329,14 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
           // claims, and which the `f1051664[k] = f56[10 + k]` copy after this
           // loop reads back.  That copy is dead -- nothing reads `f1051664` --
           // so the collision costs nothing at run time, but it does mean one
-          // of `f56`'s length and `f1051664`'s type is wrong.  The same
-          // sixteen-byte grid carries `FreqRec` from record 188 (+3104), so
-          // whatever this region is, the two walkers share it.
+          // of `f56`'s length and `f1051664`'s type is wrong.
+          //
+          // The bucket counter reaches exactly 188: a `__builtin_trap()` on
+          // `>= 188` fires on fourteen of the gate's streams and one on
+          // `>= 189` fires on none.  So this table is 189 records, +96 ..
+          // +3119.  `FreqRec` is on the same grid from record 188 (+3104),
+          // which makes the last bucket record and the first frequency record
+          // the same sixteen bytes -- the two tables abut and share one.
           v12 = (uint16_t *)&((uint32_t *)Blocka_2)[4 * v64];
           __model_plane_n2 = 2;
           v12[48] = 2;
