@@ -549,9 +549,12 @@ width", caught by the gate on its first run.
 
 **Phase C is finished.** `untable.py` converted fifteen; four of the remaining
 five were the `__xmmword_*` broadcasts, which Phase A deleted outright. The one
-left is `__dword_439B7C`, which is walked as
-`*((uint8_t *)&__dword_439B7C + v83 + 3)` and so stays a table with a typedef.
-§4.1 is finished too.
+left is `bmf_pout_of_memory_handler`, the CRT new-handler slot, whose reference
+is an `int32_t` over a `uint8_t[4]`.  §4.1 is finished too.
+
+*(Corrected: this said `__dword_439B7C`, which `untable.py` did convert — it is
+a plain `int32_t[17]` and has been since Phase C.  REFACTORING5.md §4 has the
+right one.)*
 
 **Phase B is finished to the plan's own limit.** §3.1 is done and §3.2 came
 free with Phase A. §3.3 and §3.4 say in the plan itself that they want

@@ -12,7 +12,7 @@ measures to today:
 | the complaint | what it is | how many |
 | --- | --- | --- |
 | "`_this+ofs` with typecasts" | raw byte offsets off a typed base | **1389** sites |
-| "mistyped globals" | 43 globals, 19 still named after a 1997 address | **19** |
+| "mistyped globals" | 4 of 43 globals carry the wrong type; 19 more carry an address for a name | **4 + 19** |
 | "context frames in functions" | `__frame.x` in the body, 538 of them through a cast | **1857** |
 | "non-stdint types are used again" | `char` 1056, `unsigned char`/`unsigned int` 24 | **1080** |
 
@@ -26,21 +26,34 @@ compiler check attached, and the other three shrink as a consequence.
 
 ## 1. Where the file is
 
+`python3 tools/shape.py`, verbatim:
+
 ```
 subs1.hpp / bmf.cpp lines          19098 / 746
 raw-offset sites                   1389        ← §3
   off `_this`                      161, in 11 functions
-pointer casts                      5253        ← §2, §3
+pointer casts                      5131        ← §2, §3
 frames                             19, 169580 bytes, 0 aliases
-  `__frame.` in bodies             1857, 538 of them through a cast   ← §5
+  slots carrying two names         0, 0 extra names, in 0 functions
 structs                            85, 77 still ObjN                  ← §3.1
   fNN members / named ones         240 / 60
-globals                            43, 19 named after an address      ← §4
 distinct vNN locals                560
-`nNN` / `n0xNNN` locals            231 / 50
 goto / LABEL_n:                    112 / 79
-__fwd_* shims                      94, every one `void *` in and a cast out
+__fwd_* shims                      94
 ```
+
+and four counts it does not keep, measured by Appendix B:
+
+```
+`__frame.` in bodies               1857, 538 of them through a cast   ← §5
+globals                            43, 19 named after an address      ← §4
+`nNN` locals                       231 distinct, 50 of them `n0xNNN`
+__fwd_* shims                      every one `void *` in and a cast out
+```
+
+`shape.py`'s cast count is `\(\w+\s*\*+\s*\)` — a one-word type. Allowing
+`const` and `unsigned char` finds 5253; the difference is §2.4's 24 and the
+`const void *` the CRT shims take.
 
 And the four numbers that are new this round, because round five has a checker
 round four did not:
@@ -84,19 +97,34 @@ rounds, and a vocabulary nothing uses is a vocabulary nobody checks.
 
 ### 2.2 `char` — 1056, and three different jobs
 
+Bucketed by how many stars follow the keyword, so the three rows partition the
+1056:
+
 | shape | count | what it is |
 | --- | --- | --- |
 | `char *` | 893 | Hex-Rays' "pointer to memory" |
-| `(char *)` casts | 713 (a subset) | the byte-arithmetic idiom, §3 |
-| scalar `char` | 142 | a value in arithmetic |
+| scalar `char` | 142 | a value in arithmetic, §2.3 |
 | `char **` | 21 | a pointer to one of the above |
 
-**`char *` is not a byte pointer, it is a decision not to say.** The file has
-641 `uint8_t *` casts already, and the two spell the same address; which one a
-site uses is an accident of which Hex-Rays pass produced it. A `char *` that is
-walked, indexed and cast is `uint8_t *`, and saying so removes the sign of the
-element from the reader's list of things to worry about — `-Wsign-conversion`
-fires 1578 times and this is a large part of it.
+713 of the 893 are `(char *)` casts rather than declarations — the
+byte-arithmetic idiom §3 is about — but that is a subset of the first row, not
+a fourth.
+
+**`char *` is not a byte pointer, it is a decision not to say.** The file
+already has 641 `uint8_t *` casts spelling the same address, so which one a
+site uses is not a distinction the code makes.
+
+The reason a wholesale retype is *safe* is worth measuring rather than
+asserting, because `char` is signed on this target and the two types differ the
+moment an element is read as a value:
+
+> **There are zero `*(char *)` dereferences in the file.** Every `char *` is
+> re-cast to a width before anything is read through it. 75 sites subscript a
+> `char *` local directly, and those are the ones to look at one at a time —
+> most are stores of a value the `uint8_t` type describes better than `char`
+> does.
+
+`-Wsign-conversion` fires 1578 times and this is a large part of it.
 
 The exception is real and should stay: **`bmf.cpp` hands `char *` to the CRT.**
 `strcpy`, `strrchr`, `fopen`'s name, `printf`'s format — those are `char *`
@@ -108,10 +136,11 @@ because C says so, not because Hex-Rays could not decide.
 
 * **`-(char)x & 31`, 15 sites.** A shift count, truncated to eight bits and
   negated. This is `x86`'s shift-count masking showing through, and `char` is
-  doing modular arithmetic rather than holding a character. Write the mask the
-  code means — `(-x) & 31` on an `int32_t` is the same value and says it — and
-  check each one, because the truncation is only a no-op while `x` is under
-  128.
+  doing modular arithmetic rather than holding a character. `(-x) & 31` on an
+  `int32_t` is the same value **for every `x`**, not just for small ones: `& 31`
+  reads five bits and the truncation to eight preserves them. Checked
+  exhaustively over −100000…100000 rather than argued, because the argument is
+  the kind that is right until the mask is `& 63`.
 * **`(char)(uintptr_t)ptr`, 3 sites.** A pointer's low byte. `(uint8_t)` says
   the same thing without the signedness question.
 * **the rest** are `int8_t` or `uint8_t` depending on what they are compared
@@ -136,15 +165,15 @@ type in two words.
 ### 2.5 The scoreboard, and how it becomes a gate
 
 `test.sh` already runs `BMF_STRICT=1 ./build.sh` and fails on a non-zero count.
-Add a second step in the same shape — `BMF_WARN=1 ./build.sh`, counting the
-four families — and the phase has a number that goes to zero the way round
-three's did.
+Add a second step in the same shape — `BMF_WARN=1 ./build.sh`, counting the four
+families — and the phase has a number to work against.
 
-> The number will not reach zero, and the plan should say so before the work
-> starts. A decompilation of 1997 x86 reinterprets memory on purpose, and some
-> of these warnings are the program. **The deliverable is a documented floor:**
-> every warning left is either fixed or has a one-line reason next to it, and
-> the count is pinned so a future round notices when it moves.
+> **Not a number that goes to zero.** `BMF_STRICT` could, because every
+> conversion `-fpermissive` forgave was a defect. These four cannot: a
+> decompilation of 1997 x86 reinterprets memory on purpose and some of these
+> warnings *are* the program. **The deliverable is a documented floor** — every
+> warning left is either fixed or has a one-line reason next to it — and the
+> gate is a ratchet on the count rather than an assertion that it is zero.
 
 ---
 
@@ -180,8 +209,10 @@ struct P2Count { int8_t b0; uint8_t b1; int16_t w2; };   // four bytes
 ```
 
 `Obj46::f0` is `P2Count[0].b0`, `Obj46::f4` is `P2Count[1].b0`, and the
-`*((int16_t *)v530 + 1)` beside every one of them is `P2Count[0].w2`. The
-readers prove it — they are the expression round four already identified:
+`*((int16_t *)p + 1)` beside every one of them is `P2Count[0].w2`. The readers
+prove it — they are the expression round four already identified (`v530` here
+is an `Obj47 *`, whose declaration is character-for-character `Obj46`'s, which
+is the point):
 
 ```c
   v340 = v550 - ((v339 + (1 << ((v530->f0 + 31) & 31))) >> (v530->f0 & 31));
@@ -216,8 +247,14 @@ This is REFACTORING4.md §3.3's finding — "record 237 + v8, field 4 of a
 `rec[v8 + 237][4]` is not more readable than the arithmetic *until the record
 has fields with names*. 115 sites read `f3784`/`f3800`/`f3816`; 85 raw offsets
 sit beside them. `algorithm_v2.md` §9 is where the read goes, and this round
-should do it rather than defer it again — it is the last thing blocking the
-largest single group of offsets in the file.
+should do it rather than defer it a fourth time.
+
+It is not the largest group — `alt_p2_model` has 322 raw offsets to
+`alt_p1_model`'s 85, and `alt_model_p2_decode` (109), `alt_model_p2_encode`
+(107) and `alt_p2_d8_encode_body` (104) also beat it. What makes it the one to
+do first is that it is the only one of the five whose blocker is a *reading*
+rather than a tool: the other four are §3.1's and §3.3's, and both of those are
+mechanical once the type is right.
 
 ### 3.3 289 integers that hold addresses
 
@@ -231,9 +268,10 @@ Nine functions, and four of them account for 258: `alt_model_p2_decode` (75),
 
 Every one of these forces two casts — one to get the address into the integer
 and one to get it back out — so this is 289 sites generating ~578 of the 5253
-pointer casts. Retyping the local to `uint8_t *` deletes both and turns
-`*(uint32_t *)(v21 - 10)` into `*(uint32_t *)(v21 - 10)` with `v21` a real
-pointer, which is the same line with one fewer lie in it.
+pointer casts. Retyping the local to `uint8_t *` deletes the pair: the
+assignment becomes `v21 = lpAddress->f278736[0];` with no cast at all, and
+`*(uint32_t *)(v21 - 10)` keeps the one cast it needs — the one that says how
+wide the read is — instead of also needing one to make `v21` addressable.
 
 **§7's first hazard applies at full force**: the moment the local is a pointer,
 `v21 - 10` scales. It scales by one on `uint8_t *`, which is what the integer
@@ -244,27 +282,52 @@ say so on the first image.
 
 ### 3.4 303 scaled-index sites
 
+186 of the `((T *)p)[expr + K]` shape and 117 of `(T *)p + K`, and **they are
+two different things** that the constant tells apart. `K × width` is either an
+offset from the object's base or an offset inside a record:
+
 ```c
-  ((uint32_t *)v385)[2 * v386 + 69677]        // +278708
-  (uint16_t *)v387 + 470040                   // +940080
-  ((char *)a2)[4 * i + 2]
+  ((uint32_t *)v385)[2 * v386 + 69677]   // 69677 x 4 = +278708, a member
+  (uint16_t *)v387 + 470040              // 470040 x 2 = +940080, a member
+  ((char *)a2)[4 * i + 2]                // 2, a field in a four-byte record
 ```
 
-186 of the `((T *)p)[expr + K]` shape and 117 of `(T *)p + K`. The constant
-times the element width is a member offset — 69677 × 4 is 278708, 470040 × 2 is
-940080 — so these are members reached by dividing the offset by the width and
-hoping the reader multiplies it back. `unoffset.py` does not see them because
-the base is not `_this` and the index is not constant; `unlane.py`'s approach
-does apply, and extending it to a variable index plus a constant is the tool
-work this section needs.
+**282 are members and 21 are record fields** (Appendix B splits them at
+`K × width < 256`, which separates the two cleanly here — the smallest member
+offset in the set is 257 and the largest record field is 4).
+
+The 282 are members reached by dividing the offset by the width and hoping the
+reader multiplies it back. `unoffset.py` does not see them because the base is
+not `_this` and the index is not constant; `unlane.py`'s approach does apply,
+and extending it to a variable index plus a constant is the tool work this
+section needs.
+
+The 21 want the opposite treatment: `((char *)a2)[4 * i + 2]` is `rec[i].f2` of
+a table `a2` contains, so what they need is the record declared — the same
+thing §3.2 needs and the same thing round four did for `P2Count`.
 
 ### 3.5 What is left off `_this`
 
 161 sites in 11 functions, led by `alt_p1_model` (48), `alt_p2_alloc` (31) and
-`symbol_list_update` (24). `alt_p2_alloc`'s 31 are the two counter tables it
-seeds, which now have names — `f284712` and `f940072` — so those are
-`unoffset.py`'s the moment the loop bounds are written against the members
-instead of against byte offsets.
+`symbol_list_update` (24).
+
+`alt_p2_alloc`'s 31 are **not** one thing: 14 of them seed the two counter
+tables round four named, and the other 17 land on `+232`, `+278720`, `+278724`,
+`+278732`, `+278736`, `+278756`, `+278944`, `+278948`, `+279984`, `+280752`,
+`+280753` and `+278784` through `+278848`. Every one of those *is* a member of
+`Obj11` today.
+
+> **So the blocker is the tool, not the code.** `merge.parse` returns `None`
+> for `Obj11` because `Obj11` has a union, so `unoffset.py` sees *zero* `Obj11`
+> members and folds nothing in any of the eleven functions that take one.
+> Teaching `merge.parse` to walk a union — each layer at the union's own offset,
+> the first layer to name a byte wins — is the smallest change in this plan with
+> the largest reach.
+
+One of the 17 is worth a second look on its own: `*(uint32_t *)((char *)_this +
+232) = 0x3F800000` writes a `1.0f` at offset 232, which is inside the
+`_pad0[278528]` `Obj11` declares as padding. Either the pad is not all padding
+or that write is not to an `Obj11`.
 
 ---
 
@@ -296,8 +359,17 @@ And one class of pure noise: **17 casts of a `uint8_t` field to `uint8_t`**.
 `level_geom`'s three members became `uint8_t` in round three and the 17
 `(uint8_t)level_geom[k].half` sites did not follow. `ctx_group_flags`,
 `__byte_439890`, `__byte_4398A0` and the three `__byte_439BCx` have the same
-thing, two sites each. `-Wuseless-cast` finds 43 of these across the file and
-is the cheapest number in this plan to take to zero.
+thing, two sites each — 29 in all.
+
+> **`-Wuseless-cast` does not find any of them.** Its 43 are every one a
+> *pointer* cast: 14 `uint8_t*`, 11 `uint16_t*&`, 8 `void*&`, and nine others.
+> GCC will not call `(uint8_t)x` useless when `x` is a `uint8_t`, because
+> integer promotion has already made the operand an `int` by the time the cast
+> is applied, so the cast is a genuine narrowing as far as the front end is
+> concerned. Checked on a four-line program, not inferred.
+
+So this class needs a regex and the 43 need the compiler, and they are two jobs
+rather than one. Both are cheap; neither checks the other.
 
 ---
 
@@ -320,7 +392,7 @@ declaration and a use — and that it made two things visible that were not.
 | `reduce_alphabet` | 141 | **79** | 66 064 |
 | … 13 more | 368 | 65 | |
 
-### 5.1 The 538 casts are four spill arrays
+### 5.1 The 538 casts are five spill arrays
 
 ```c
   ((ModelBlock * &)__frame.slot[7]) = (ModelBlock *)((int32_t)Blockaa_1);
@@ -354,8 +426,10 @@ Two of the five need a decision before a sweep can touch them:
 
 ### 5.2 Two frames are entirely dead
 
-`alt_model_p2_encode`'s frame is 336 bytes of `_gapN` and nine `slotN[16]`, and
-**nothing in the body reads it**. `transform_planes`'s is 80 bytes, same story.
+`alt_model_p2_encode`'s frame is 324 declared bytes — 336 with the padding
+`alignas(16)` adds, which is what its `static_assert` pins — of `_gapN` and
+nine `slotN[16]`, and **nothing in the body reads it**. `transform_planes`'s is
+76 declared and 80 pinned, same story.
 Both are what is left after four rounds of lifting members out one at a time,
 and both can go with their `static_assert`s.
 
@@ -467,6 +541,11 @@ model; §3.3's four functions are the p2 encoder and decoder;
 | the four warning families | `-Wconversion -Wsign-conversion -Wsign-compare -Wuseless-cast`, counted per `[-Wname]` tag |
 | type spellings in code | strip `//` first, then count — `char` inside a comment is not a type |
 | `char` by star count | `re.finditer(r'\bchar\b(\s*\**)')` and bucket on `count('*')`: 142 / 893 / 21 |
+| `*(char *)` dereferences | `grep -c '\*(char \*)'` — 0, which is why §2.2's retype is safe |
+| whether `-(char)x & 31` is `(-x) & 31` | a four-line program over −100000…100000, not an argument |
+| whether `-Wuseless-cast` sees a `(uint8_t)` on a `uint8_t` | a four-line program; it does not |
+| what `-Wuseless-cast` does see | `sed -E "s/.*to type '([^']*)'.*/\1/"` over its output: all 43 are pointer casts |
+| why `unoffset.py` folds nothing in `Obj11` | `merge.parse(src, 'Obj11')` returns `None` — it cannot walk a union |
 | Hex-Rays type names still used | `grep -c '\bnameformula\b'` per name over both files; all 26 are 0 in `subs1.hpp` |
 | globals and their types | the `^static …;` regex in Appendix B |
 | `ObjN` never declared as a value | Appendix B |
@@ -512,6 +591,29 @@ between the cast and the address — `(Obj44 *)((int32_t)&v90[4 * v92 + 284712])
 
 `+284712` is `Obj11::f284712`, the base is `(char *)obj + v78`, and the element
 is four bytes — which is `sizeof(P2Count)`.
+
+**What `K` means in §3.4's 303**, which is the difference between a member and a
+field and is the constant alone:
+
+```
+python3 - <<'EOF'
+import re
+W = {'uint8_t':1,'int8_t':1,'char':1,'uint16_t':2,'int16_t':2,
+     'uint32_t':4,'int32_t':4,'uint64_t':8,'int64_t':8,'float':4,'double':8}
+A = re.compile(r'\(\(\s*(\w+)\s*\*\)\s*(\w+)\)\[([^\]]*?)\+\s*(\d+)\]')
+small = big = 0
+for l in open('subs1.hpp'):
+    for m in A.finditer(l.split('//')[0]):
+        if m.group(1) in W:
+            off = int(m.group(4)) * W[m.group(1)]
+            small, big = (small + 1, big) if off < 256 else (small, big + 1)
+print(small, 'record fields,', big, 'member offsets')     # 21 165, +117 from the other shape
+EOF
+```
+
+The gap between the two populations is wide — the largest field offset is 4 and
+the smallest member offset is 257 — so the 256 threshold is reading the data
+rather than choosing where to cut it.
 
 **Integers that hold addresses**, which is where §3.3's 289 comes from: a local
 declared as an integer and then dereferenced.
