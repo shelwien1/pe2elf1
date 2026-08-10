@@ -2,9 +2,9 @@
 
 ## 0. What happened
 
-This was written as a plan and then worked through.  Phase B is finished, Phase
-C is finished as far as the gate allows, and Phase A has three of its five items
-done and two blocked on decisions the plan correctly said need reading.
+This was written as a plan and then worked through.  All three phases are done
+as far as the gate allows: every goal that is a rewrite has been made, and what
+is left is reading, which §2.3 item 5 says so in as many words.
 
 **The counter in §1 was double-counting**, so both ends of the comparison are
 restated against the fixed one rather than quoting an improvement the old one
@@ -12,52 +12,68 @@ manufactured.  `*(uint32_t *)((char *)p + N)` matched two of the three patterns.
 
 | | round two's end | now |
 | --- | --- | --- |
-| raw-offset sites | 1750 | **1629** |
-| — off `_this` | 330 | **256** |
+| raw-offset sites | 1750 | **1514** |
+| — off `_this` | 330 | **161**, in 11 functions not 15 |
 | globals at a 1997 address | 60 | **0** |
 | `bmf_bss` | 19 584 bytes | **gone** |
 | frames | 24 | **22** |
 | frame aliases | 602 | **336** |
 | runs walked as arrays | 24 sites, 12 bases | **0, 0** |
 | frames pinned | 21 | **0** |
-| structs | 93 | **88** |
-| — still `ObjN` | 88 | **81** |
-| `fNN` members / named | 280 / 35 | **241 / 57** |
+| structs | 93 | **86** |
+| — still `ObjN` | 88 | **79** |
+| `fNN` members / named | 280 / 35 | **236 / 59** |
+| pointer casts | 5383 | **5191** |
+| lines | 19 728 | **19 400** |
 
 **Phase B is done.**  All 60 globals left `bmf_bss` and the array is gone with
 them.  Two could not separate from each other and now say so in an 8736-byte
 object instead of by accident in a 19 584-byte one.
 
-**Phase C is done to the gate's limit.**  Every one of the 24 walked runs is a
-declared array, no frame is pinned, and 266 of the 602 aliases are gone.  The
-336 that remain are in frames the gate has refused to dissolve, sixteen times
-over: they hold workspace arrays that the code walks past the end of, and that
-adjacency is the program's rather than Hex-Rays'.  Round one's `reframe.py` put
-those frames back for the same reason.
+**Phase C is done.**  Every one of the 24 walked runs is a declared array and
+no frame is pinned.  266 of the 602 aliases are gone; the 336 that remain are
+in frames the gate has refused to dissolve, sixteen times over, because they
+hold workspace arrays the code walks past the end of.  That adjacency is the
+program's, not Hex-Rays' -- round one's `reframe.py` put those frames back for
+the same reason, and `search_filter` moves five streams if its frame goes.
 
-**Phase A has items 1 to 4 done and item 5 open by construction.**  `Obj11`
-absorbed `Obj8`, `Obj19`, `Obj31` and `Obj69`; `ModelBlock` absorbed `Obj10`;
-`alt_p2_alloc` takes the object it allocates instead of `char *`; and `Obj0`
-absorbed `Obj25` after the conflict that blocked it was read rather than
-picked -- `Obj25`'s four "row cursors" are counters, and all 36 of their use
-sites cast the pointer away.
+**Phase A is done to item 5.**  `Obj11` absorbed `Obj8`, `Obj19`, `Obj31` and
+`Obj69`; `ModelBlock` absorbed `Obj10`; `alt_p2_alloc` takes the object it
+allocates; `Obj0` absorbed `Obj25`, `Obj4` and `Obj1`, so the p1 workspace has
+one declaration.  Item 5 -- the `fNN` names -- is open by construction, and
+what is named is what was evidenced: 236 members against 59 names, from 280
+against 35.
 
-Two of the p1 views are left, `Obj1` and `Obj4`, and they are array-shaped over
-the span `Obj0` already covers with `f12[51]`.  Merging them needs `merge.py`'s
-renderer taught to lay out two overlapping arrays; the *conflict* the plan
-named is gone.
+### What is left, and why none of it is mechanical
 
-Item 5 is the open-ended one -- 241 `fNN` members against 57 named.  What this
-round named is what it evidenced: `PlaneDesc::predictor`, `src_plane` and
-`flags` (a plane number fed back as a record index, and a byte read as `& 3`,
-`& 4` and `& 8`), `ModelBlock::sym_pos` (the 0..31 index `pixel_context` reads
-`sym[]` with), `LevelGeom::first`/`half`/`tbl_base`, `deadzone_hi`/`lo`,
-`ctx_bias[4]`.
+The passes have run dry.  `dedup.py`, `deadcheck.py`, `degoto.py` and
+`unused.py` all report nothing; `unoffset.py` has 14 sites left and every one
+is a narrower-than-member read, which is a union to be typed rather than an
+offset to be folded; `defram.py` offers 249 aliases the gate has already
+refused.  What remains is reading:
+
+* **`alt_p1_model`'s 48 offsets index one counter table with computed
+  indices** -- `_this + 16 * v8 + 3800` is record 237 + v8, field 4.  Writing
+  that as `rec[v8 + 237][4]` is not more readable than the arithmetic, and §6
+  is explicit that the metric is whether a reader can tell what the object is.
+  This one wants the *table* named, which wants the p1 model read.
+* **`alt_p2_alloc`'s two counter tables have extents that check each other**:
+  284712 + 0x14000 × 8 == 940072 exactly, so the 8-byte `pair` table ends where
+  the 16-byte `node` table begins, and both loop bounds are the allocator's own.
+  Declaring them needs `Obj11` rebuilt as overlapping regions, because
+  `f284704` and `f940064` are the SIMD view of the same bytes -- appending a
+  union instead puts the tables 940 080 bytes too far along, which the gate
+  said immediately.
+* **Two structs the code casts between are not the same object.**  `Obj11` and
+  `Obj3` merge cleanly and segfault, so a cast between two types is weaker
+  evidence than the `lpAddress` array was: there, one element was cast four
+  ways and passed to callees typed two more.
 
 ### What the plan got wrong
 
-Eight things, each corrected in place below with the measurement that corrected
-it.  Six were found by the gate rather than by reading.
+Eleven things, each corrected in place below with the measurement that
+corrected it.  Most were found by the gate, two by the compiler, one by the
+heap allocator; none by reading.
 
 1. **"Nine frames dissolve outright."**  Three did.  The shared-slot and
    run-site tests miss two other ways a frame stays one object: an array member
@@ -78,6 +94,14 @@ it.  Six were found by the gate rather than by reading.
 7. **`&x[i]` is not address-taking**, nor is `&p->f`.  Reading them as such
    pinned eight frames that have nothing wrong with them.
 8. **The raw-offset counter counted one site twice.**
+9. **"Item 4 is blocked on two fields two recoveries type differently."**
+   Not blocked: `Obj25`'s four "row cursors" are counters, and all 36 of their
+   use sites cast the pointer away.
+10. **"`Obj1` and `Obj4` need the renderer fixed."**  They did -- five bugs'
+    worth -- and then they merged.
+11. **`BMF_STRICT` drifted from 0 to 36 across four commits without the gate
+    noticing**, twice.  It is a compile-time property; byte-identical output
+    cannot see it.
 
 ### What round three adds to §6
 
