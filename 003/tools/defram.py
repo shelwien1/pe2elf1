@@ -43,7 +43,8 @@ import structs                                                    # noqa: E402
 
 SCALAR = re.compile(r'^(\s*)(.+?)\s*&\s*(\w+)\s*=\s*(.*?)__frame\.(\w+(?:\[\d+\])?)\s*;\s*$')
 ARRAY = re.compile(r'^(\s*)(.+?)\s*\(&(\w+)\)(\[\d+\])\s*=\s*(.*?)__frame\.(\w+(?:\[\d+\])?)\s*;\s*$')
-OPEN = re.compile(r'^(\s*)struct alignas\(16\) \{\s*// (\d+) bytes, the frame')
+# The tag came with REFACTORING4.md §5 item 1.
+OPEN = re.compile(r'^(\s*)struct alignas\(16\) \w* ?\{\s*// (\d+) bytes')
 MEMBER = re.compile(r'^(\s*)([A-Za-z_][\w ]*?\s*\**)\s*(\w+)\s*(\[(\d+)\])?\s*;(.*)$')
 ANYALIAS = re.compile(r'^\s*[^=;]*&\s*\(?\w+\)?(?:\[\d+\])?\s*=[^;]*__frame\.\w+[^;]*;\s*$')
 ASSERT = re.compile(r'^\s*(static_assert|"|\|\||==)')
@@ -218,7 +219,11 @@ def apply(lines, fr, go):
     edits = {}
     for x in go:
         edits[x['line']] = ['%s%s;' % (x['ind'], x['decl'])]
-    n = 0
+    # `_gapN` names have to miss the ones the frame already carries: a member
+    # this pass lifts sits beside gaps an earlier pass left, and two `_gap0`
+    # members in one struct is a redeclaration, not a layout fault.
+    n = 1 + max([int(x) for m in fr['members']
+                 for x in re.findall(r'^_gap(\d+)$', m['name'])] or [-1])
     for m in fr['members']:
         if m['name'] not in gone:
             continue
