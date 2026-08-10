@@ -9307,7 +9307,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
             int32_t sym1;
             int32_t sym2;
             int32_t sym3;
-            uint64_t *sym4;
+            FreqRec *sym4;   // the coder's frequency record
             ModelBlock *sym5;
             int32_t sym6;
             int32_t sym7;
@@ -9343,7 +9343,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 176, "frame layout moved");
   int32_t n15_24;
   ;
-  uint64_t *v80;
+  FreqRec *v80;
   uint16_t *v36;
   uint8_t *v21, *v23, *v57;   // row cursors out of ModelBlock
   uint8_t *v46, *n15_17;
@@ -9367,11 +9367,11 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
           n4_21, v135, n256, v143, n4_18, n15_19, n15_20, v148, v149, v150,
           v151, v152, v153, v155, n15_21, v158, v159, v161, v163, v164, n4_2,
           n15_22, n256_4, n256_5, n256_3, n15_2;
-  uint64_t *v170;
-  uint64_t *v100;
-  uint64_t *v171;
+  FreqRec *v170;
+  FreqRec *v100;
+  FreqRec *v171;
   uint64_t *v4;
-  uint64_t *v90;
+  FreqRec *v90;
   uint16_t *v97;
   uint16_t *v106;
   FreqRec *freq_tbl;
@@ -9386,7 +9386,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   SymList **v134;
   uint32_t bin_tot, n4_16, n4_15, v136, v137, v138, v139, v140, v172, v173, v175, v176,
            v177;
-  uint64_t *v142;
+  FreqRec *v142;
   uint8_t *v39;
   uint8_t *v38;
   uint8_t *v76;
@@ -9478,7 +9478,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   v23 = this_2->f56[7];
   this_2->f40 = v22;
   n4_11 = n15_9->match[0];
-  __frame.sym4 = (uint64_t *)(v4);
+  __frame.sym4 = (FreqRec *)v4;
   __frame.sym5 = (ModelBlock *)(this_2);
   __frame.sym2 = n4_11;
   v25 = this_2->f56[9];
@@ -9736,16 +9736,16 @@ LABEL_57:
       goto LABEL_86;
     }
   }
-  v80 = (uint64_t *)((int32_t)(uint32_t *)&this_3->f56[4 * this_3->f40 + 10]);
-  __frame.sym4 = (uint64_t *)((uint16_t *)v80);
+  v80 = (FreqRec *)&this_3->f56[4 * this_3->f40 + 10];
+  __frame.sym4 = v80;
   freq_tbl = &this_3->grid[n0xFFFF_1 + 188];
   v83 = freq_tbl->w[5];
   if ( freq_tbl->w[5] )
   {
     if ( v83 == 1 )
     {
-      v142 = (uint64_t *)(v80);
-      v143 = *((uint8_t *)&v80[1] + 7);
+      v142 = v80;
+      v143 = v80->b15;
       n4_18 = v143 * freq_tbl->w[2];
       n15_19 = v143 * freq_tbl->w[3];
       __frame.sym1 = v143 * freq_tbl->w[0];
@@ -9754,7 +9754,7 @@ LABEL_57:
       n15_20 = v143 * freq_tbl->w[4];
       __frame.sym0 = n15_19;
       __frame.sym3 = n15_20;
-      *freq_tbl = *(FreqRec *)v142;
+      *freq_tbl = *v142;
       v148 = freq_tbl->w[5];
       v149 = freq_tbl->w[0];
       freq_tbl->b14 *= 8;
@@ -9871,29 +9871,29 @@ LABEL_57:
     if ( freq_tbl->b14 )
     {
       --freq_tbl->b14;
-      v90 = (uint64_t *)(__frame.sym4);
-      ++*(uint16_t *)((uint8_t *)&__frame.sym4[1] + 2);
-      ++((uint16_t *)v90)[n4];
+      v90 = __frame.sym4;
+      ++__frame.sym4->w[5];
+      ++v90->w[n4];
       n4 = this_3->f32;
     }
   }
   else
   {
-    arg_tot = *(uint16_t *)((uint8_t *)&v80[1] + 2);
+    arg_tot = v80->w[5];
     v163 = rc.get_freq(arg_tot);
-    v164 = *(uint16_t *)&*__frame.sym4;
+    v164 = __frame.sym4->w[0];
     if ( v164 <= v163 )
     {
-      v164 += *(uint16_t *)((uint8_t *)&*__frame.sym4 + 2);
+      v164 += __frame.sym4->w[1];
       if ( v164 <= v163 )
       {
-        v164 += *(uint16_t *)((uint8_t *)&*__frame.sym4 + 4);
+        v164 += __frame.sym4->w[2];
         if ( v164 <= v163 )
         {
-          v164 += *(uint16_t *)((uint8_t *)&*__frame.sym4 + 6);
+          v164 += __frame.sym4->w[3];
           if ( v164 <= v163 )
           {
-            v164 += *(uint16_t *)&__frame.sym4[1];
+            v164 += __frame.sym4->w[4];
             n4_2 = 4;
           }
           else
@@ -9915,44 +9915,44 @@ LABEL_57:
     {
       n4_2 = 0;
     }
-    n15_22 = *((uint8_t *)__frame.sym4 + 15);
+    n15_22 = __frame.sym4->b15;
     arg_high = v164;
-    arg_cum = v164 - ((uint16_t *)__frame.sym4)[n4_2];
-    n256_4 = *(uint16_t *)((uint8_t *)&__frame.sym4[1] + 2);
-    n256_5 = *(uint16_t *)((uint8_t *)&__frame.sym4[1] + 4);
+    arg_cum = v164 - __frame.sym4->w[n4_2];
+    n256_4 = __frame.sym4->w[5];
+    n256_5 = __frame.sym4->w[6];
     __frame.sym3 = n15_22;
-    if ( n256_4 > n256_5 && (((uint16_t *)__frame.sym4)[n4_2] + __frame.sym3 + 8 < n256_4 || n256_4 > 0x4000) )
+    if ( n256_4 > n256_5 && (__frame.sym4->w[n4_2] + __frame.sym3 + 8 < n256_4 || n256_4 > 0x4000) )
     {
       __frame.sym0 = n256_5;
       __frame.sym5 = (ModelBlock *)(this_3);
       __frame.sym1 = (int32_t)(uintptr_t)freq_tbl;
       __frame.sym2 = n4_2;
-      v171 = (uint64_t *)(__frame.sym4);
-      v172 = *(uint16_t *)((uint8_t *)&*__frame.sym4 + 2);
-      v173 = *(uint16_t *)((uint8_t *)&*__frame.sym4 + 4);
-      v174 = *(uint16_t *)&*__frame.sym4 - (*(uint16_t *)&*__frame.sym4 >> 1);
-      *(uint16_t *)&*__frame.sym4 = v174;
+      v171 = __frame.sym4;
+      v172 = __frame.sym4->w[1];
+      v173 = __frame.sym4->w[2];
+      v174 = __frame.sym4->w[0] - (__frame.sym4->w[0] >> 1);
+      __frame.sym4->w[0] = v174;
       LOWORD(v172) = v172 - (v172 >> 1);
-      *(uint16_t *)((uint8_t *)&*v171 + 2) = v172;
+      v171->w[1] = v172;
       v175 = v173 - (v173 >> 1);
-      v176 = (uint16_t)*(uint16_t *)((uint8_t *)&*v171 + 6);
-      *(uint16_t *)((uint8_t *)&*v171 + 4) = v175;
+      v176 = (uint16_t)v171->w[3];
+      v171->w[2] = v175;
       LOWORD(v176) = v176 - (v176 >> 1);
-      v177 = (uint16_t)*(uint16_t *)&v171[1];
-      *(uint16_t *)((uint8_t *)&*v171 + 6) = v176;
+      v177 = (uint16_t)v171->w[4];
+      v171->w[3] = v176;
       LOWORD(v177) = v177 - (v177 >> 1);
-      *(uint16_t *)&v171[1] = v177;
+      v171->w[4] = v177;
       LOWORD(v177) = v174 + v177;
       this_3 = (ModelBlock *)(__frame.sym5);
       n256_4 = (uint16_t)(v177 + v176 + v175 + v172);
       n256_3 = __frame.sym0;
       freq_tbl = (FreqRec *)__frame.sym1;
-      *(uint16_t *)((uint8_t *)&v171[1] + 2) = n256_4;
+      v171->w[5] = n256_4;
       n4_2 = __frame.sym2;
-      if ( n256_3 < 256 && !*((uint8_t *)__frame.sym4 + 14) )
+      if ( n256_3 < 256 && !__frame.sym4->b14 )
       {
         n256_3 = 256;
-        *(uint16_t *)((uint8_t *)&__frame.sym4[1] + 4) = 256;
+        __frame.sym4->w[6] = 256;
       }
       if ( n256_4 > n256_3 )
       {
@@ -9960,13 +9960,13 @@ LABEL_57:
         if ( __frame.sym3 < 15 )
           n15_2 = 15;
         __frame.sym3 = n15_2;
-        *((uint8_t *)__frame.sym4 + 15) = n15_2;
+        __frame.sym4->b15 = n15_2;
       }
     }
     n15_4 = __frame.sym3;
-    v170 = (uint64_t *)(__frame.sym4);
-    *(uint16_t *)((uint8_t *)&__frame.sym4[1] + 2) = __frame.sym3 + n256_4;
-    ((uint16_t *)v170)[n4_2] += n15_4;
+    v170 = __frame.sym4;
+    __frame.sym4->w[5] = __frame.sym3 + n256_4;
+    v170->w[n4_2] += n15_4;
     rc.decode(arg_cum, arg_high, arg_tot);
     this_3->f32 = n4_2;
     freq_tbl->w[5] = freq_tbl->w[n4_2]++ != 0;
@@ -9996,14 +9996,14 @@ LABEL_86:
   v97 = this_3->f6059432;
   n4_6 = v97[0];
   n15_5 = v97[1];
-  v100 = (uint64_t *)((uint16_t *)v97[2]);
+  v100 = (FreqRec *)v97[2];
   __frame.sym1 = n4_5;
   this_4 = (ModelBlock *)(v97[3]);
   __frame.sym2 = n4_6;
   v102 = v97[4];
   __frame.sym3 = n15_5;
   v103 = v97[5];
-  __frame.sym4 = (uint64_t *)(v100);
+  __frame.sym4 = v100;
   v104 = v97[6];
   v105 = v97[7];
   __frame.sym5 = (ModelBlock *)((uint32_t *)this_4);
@@ -10141,7 +10141,8 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   ;
   PixRec *v63;
   uint8_t *v20, *v22, *n2_9, *v52, *v109;   // row cursors out of ModelBlock
-  uint8_t *v74, *n15_36, *n15_38, *n15_40;
+  uint8_t *v74;
+  FreqRec *n15_36, *n15_38, *n15_40;   // the coder's frequency record
   uint16_t *v59;   // a copy of `f6059436`
   bool v11;
   int8_t v93;
@@ -10170,8 +10171,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   uint16_t *v37;
   uint16_t *v108;
   PixRec *n2_7;   // `f56[6]`, the row above
-  uint16_t *n2_8, *n2_11, *n2_12, *n2_14, *v97, *v98, *n2_6, *v113, *v124, v153,
-           *n15_39;
+  uint16_t *n2_8, *n2_11, *n2_12, *n2_14, *v97, *v98, *n2_6, *v113, *v124, v153;
   uint8_t *n2_13;   // was uint16_t *, read only as uint8_t
   SymList *v134, *v135;
   SymList **v136;
@@ -10536,7 +10536,7 @@ LABEL_42:
   else
   {
     v82 = 4 * *(int32_t *)&this_3->f40;
-    n15_36 = (uint8_t *)&this_3->f56[v82 + 10];
+    n15_36 = (FreqRec *)&this_3->f56[v82 + 10];
     __frame.sym4 = (int32_t)(uintptr_t)n15_36;
     n2_3 = &this_3->grid[n0xFFFF_1 + 188];
     __code_pixel_n0x2000 = HIWORD(((int32_t *)this_3)[4 * n0xFFFF_1 + 778]);
@@ -10545,7 +10545,7 @@ LABEL_42:
       if ( __code_pixel_n0x2000 == 1 )
       {
         v143 = (int32_t *)&this_3->f56[v82 + 10];
-        v144 = *(n15_36 + 15);
+        v144 = n15_36->b15;
         n2_16 = v144 * n2_3->w[2];
         n2_17 = v144 * n2_3->w[3];
         __frame.sym0 = v144 * n2_3->w[0];
@@ -10662,9 +10662,9 @@ LABEL_42:
       if ( n2_3->b14 )
       {
         --n2_3->b14;
-        n15_38 = (uint8_t *)__frame.sym4;
-        ++*(uint16_t *)(__frame.sym4 + 10);
-        ++*(uint16_t *)(n15_38 + 2 * n2);
+        n15_38 = n15_36;
+        ++n15_36->w[5];
+        ++n15_38->w[n2];
         n2 = *(int32_t *)&this_3->f32;
       }
     }
@@ -10672,7 +10672,7 @@ LABEL_42:
     {
       v159 = ((uint16_t *)&this_3->f56[v82 + 10]);
       n15_18 = *__frame.sym9;
-      arg_tot = *(uint16_t *)(n15_36 + 10);
+      arg_tot = n15_36->w[5];
       if ( n15_18 == __frame.sym8 )
       {
         v161 = *v159;
@@ -10699,42 +10699,41 @@ LABEL_42:
         n2_2 = 0;
       }
       arg_cum = v161;
-      arg_high = *(uint16_t *)(__frame.sym4 + 2 * n2_2) + v161;
-      p_n15_10 = *(uint16_t *)(__frame.sym4 + 10);
-      p_n15_8 = *(uint16_t *)(__frame.sym4 + 12);
-      __frame.sym3 = *(uint8_t *)(__frame.sym4 + 15);
-      if ( p_n15_10 > p_n15_8 && (*(uint16_t *)(__frame.sym4 + 2 * n2_2) + __frame.sym3 + 8 < p_n15_10 || p_n15_10 > 0x4000) )
+      arg_high = n15_36->w[n2_2] + v161;
+      p_n15_10 = n15_36->w[5];
+      p_n15_8 = n15_36->w[6];
+      __frame.sym3 = n15_36->b15;
+      if ( p_n15_10 > p_n15_8 && (n15_36->w[n2_2] + __frame.sym3 + 8 < p_n15_10 || p_n15_10 > 0x4000) )
       {
         __frame.sym0 = p_n15_8;
         __frame.sym7 = (ModelBlock *)(this_3);
-        n15_39 = (uint16_t *)__frame.sym4;
-        v168 = *(uint16_t *)(__frame.sym4 + 2);
-        v169 = *(uint16_t *)(__frame.sym4 + 4);
+        v168 = n15_36->w[1];
+        v169 = n15_36->w[2];
         __frame.sym1 = (int32_t)(uintptr_t)n2_3;
         __frame.sym2 = (uint16_t *)n2_2;
-        v170 = *(uint16_t *)__frame.sym4 - (*(uint16_t *)__frame.sym4 >> 1);
-        *(uint16_t *)__frame.sym4 = v170;
+        v170 = n15_36->w[0] - (n15_36->w[0] >> 1);
+        n15_36->w[0] = v170;
         LOWORD(v168) = v168 - (v168 >> 1);
-        n15_39[1] = v168;
+        n15_36->w[1] = v168;
         v171 = v169 - (v169 >> 1);
-        v172 = (uint16_t)n15_39[3];
-        n15_39[2] = v171;
+        v172 = (uint16_t)n15_36->w[3];
+        n15_36->w[2] = v171;
         LOWORD(v172) = v172 - (v172 >> 1);
-        v173 = (uint16_t)n15_39[4];
-        n15_39[3] = v172;
+        v173 = (uint16_t)n15_36->w[4];
+        n15_36->w[3] = v172;
         LOWORD(v173) = v173 - (v173 >> 1);
-        n15_39[4] = v173;
+        n15_36->w[4] = v173;
         LOWORD(v173) = v170 + v173;
         n2_2 = (int32_t)__frame.sym2;
         p_n15_10 = (uint16_t)(v173 + v172 + v171 + v168);
         p_n15_9 = __frame.sym0;
         n2_3 = (FreqRec *)__frame.sym1;
-        n15_39[5] = p_n15_10;
+        n15_36->w[5] = p_n15_10;
         this_3 = (ModelBlock *)(__frame.sym7);
-        if ( p_n15_9 < 256 && !*(uint8_t *)(__frame.sym4 + 14) )
+        if ( p_n15_9 < 256 && !n15_36->b14 )
         {
           p_n15_9 = 256;
-          *(uint16_t *)(__frame.sym4 + 12) = 256;
+          n15_36->w[6] = 256;
         }
         if ( p_n15_10 > p_n15_9 )
         {
@@ -10742,13 +10741,13 @@ LABEL_42:
           if ( __frame.sym3 < 15 )
             n15_19 = 15;
           __frame.sym3 = n15_19;
-          *(uint8_t *)(__frame.sym4 + 15) = n15_19;
+          n15_36->b15 = n15_19;
         }
       }
       n15_21 = __frame.sym3;
-      n15_40 = (uint8_t *)__frame.sym4;
-      *(uint16_t *)(__frame.sym4 + 10) = __frame.sym3 + p_n15_10;
-      *(uint16_t *)(n15_40 + 2 * n2_2) += n15_21;
+      n15_40 = n15_36;
+      n15_36->w[5] = __frame.sym3 + p_n15_10;
+      n15_40->w[n2_2] += n15_21;
       rc.encode(arg_cum, arg_high, arg_tot);
       *(int32_t *)&this_3->f32 = n2_2;
       n2_3->w[5] = (n2_3->w[n2_2])++ != 0;
