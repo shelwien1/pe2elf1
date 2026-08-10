@@ -266,5 +266,20 @@ if [ "${BMF_STRICT_GATE:-1}" = 1 ] && [ -x ./build.sh ]; then
   fi
 fi
 
+# The conversion scoreboard, REFACTORING5.md §2.5.  A ratchet and not a target:
+# `warn.txt` holds what the tree costs today and this fails when the count goes
+# up.  Lowering `warn.txt` is how a round records that it took some away; every
+# warning left is meant to have a reason beside it, because a decompilation
+# reinterprets memory on purpose and some of these are the program.
+if [ "${BMF_WARN_GATE:-1}" = 1 ] && [ -x ./build.sh ] && [ -r warn.txt ]; then
+  want=$(cat warn.txt)
+  got=$(BMF_WARN=1 ./build.sh 2>/dev/null | tail -1)
+  if [ "$got" -le "$want" ] 2>/dev/null; then
+    printf '%-12s ok  %s conversion warnings, ceiling %s\n' 'warnings' "$got" "$want"
+  else
+    echo "warnings: $got, up from the $want in warn.txt (see warn.log)"; fail=1
+  fi
+fi
+
 [ $fail -eq 0 ] || { echo "FAIL"; exit 1; }
 echo "PASS"

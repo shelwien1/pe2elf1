@@ -63,6 +63,22 @@ if [ "${BMF_STRICT:-0}" = 1 ]; then
   exit 0
 fi
 
+# BMF_WARN=1 counts the four conversion families REFACTORING5.md §2.5 uses as a
+# scoreboard: `-Wconversion`, `-Wsign-conversion`, `-Wsign-compare` and
+# `-Wuseless-cast`.  Unlike BMF_STRICT this is a *ratchet* and not a target --
+# a decompilation of 1997 x86 reinterprets memory on purpose, so some of these
+# warnings are the program.  `test.sh` fails when the count rises above what
+# `warn.txt` records; lowering that file is how progress is recorded.
+#
+#   BMF_WARN=1 ./build.sh          # print the count, write warn.log
+if [ "${BMF_WARN:-0}" = 1 ]; then
+  warn=(-Wconversion -Wsign-conversion -Wsign-compare -Wuseless-cast)
+  "$CXX" "${opts[@]}" -O2 "${incs[@]}" "${warn[@]}" -fsyntax-only \
+      -fdiagnostics-plain-output bmf.cpp "$@" 2>&1 | tee warn.log |
+      grep -cE '\[-W(conversion|sign-conversion|sign-compare|useless-cast)\]' || true
+  exit 0
+fi
+
 # g.bat set these in %opts% but its live command line never used them; kept
 # here for the same reason, so the two files still read the same.
 # unused=(-fomit-frame-pointer -fno-stack-protector -fno-stack-check
