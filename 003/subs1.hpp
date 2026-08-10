@@ -6897,19 +6897,18 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
       int32_t v246;
       int32_t v256;
       int16_t *v268;
-      // Six pointer-sized slots.  `alt_p2_filter` reads them as an `Obj12`,
-      // six sub-model weight vectors; the aliases below read the same six
-      // slots as a row cursor, an Obj95 and four counters, which is what the
-      // original had in the six registers it spilled here.
+      // `alt_p2_filter`'s six sub-model weight blocks, which is what `Obj12`
+      // says and the only thing the six slots hold by the time it is called.
+      // The scratch the body kept here first is six locals now.
       union {
           void *sub[6];
-          struct {   // the locals MSVC spilled into these bytes
-            void *sub0;
-            Obj95 *sub1;
-            int32_t sub2;
-            int32_t sub3;
-            int32_t sub4;
-            int32_t sub5;
+          struct {
+            float (*sub0)[4];
+            float (*sub1)[4];
+            float (*sub2)[4];
+            float (*sub3)[4];
+            float (*sub4)[4];
+            float (*sub5)[4];
           };
       };
       uint8_t   _gap0[4];   // was int16_t * v281
@@ -7017,6 +7016,12 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   int32_t n1840_2;
   int32_t n1840_1;
   Obj11 *v289;
+  // The six spill slots before `alt_p2_filter`'s six weight pointers are
+  // loaded into them: a row cursor, a neighbour, a threshold-row index and
+  // three counts.  Both lifetimes were `__frame.sub[0..5]`.
+  int16_t (*sub0_row)[8];
+  Obj95   *sub1_nb;
+  int32_t  sub2_n, sub3_row, sub4_n, sub5_n;
   int32_t v290;
   int32_t n3536;
   uint8_t *v109, *v130, *v201;   // copies of the row cursor
@@ -7124,9 +7129,9 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   v289 = (Obj11 *)(a1);
   __frame.v246 = v6;
   __frame.v268 = v7;
-  ((int16_t (*&)[8])__frame.sub[0]) = (int16_t (*)[8])*(int32_t *)&a1->f278736[2];
-  v10 = ((int16_t (*&)[8])__frame.sub[0])[-2][5];
-  n1840_1 = 21 * ((int16_t (*&)[8])__frame.sub[0])[-1][5]
+  sub0_row = (int16_t (*)[8])*(int32_t *)&a1->f278736[2];
+  v10 = sub0_row[-2][5];
+  n1840_1 = 21 * sub0_row[-1][5]
           + 12 * v7[33]
           + 16 * v7[24]
           + 22 * v7[15]
@@ -7151,44 +7156,44 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
       + 22 * *(int16_t *)(v6 - 10)
       + ctx_bias[2]
       + 19 * *(int16_t *)(v6 - 28);
-  v13 = ((int16_t (*&)[8])__frame.sub[0])[0][5];
+  v13 = sub0_row[0][5];
   v14 = *(int16_t *)(v289->f278736[3] + 10);
   v15 = *(int16_t *)(v11 - 26);
   v16 = *(int16_t *)(v11 - 8);
   v292_cost = v12;
   n3536 = 14 * __frame.v268[32] + 23 * __frame.v268[14] + 19 * __frame.v268[5] + 25 * v16 + ctx_bias[3] + 17 * v15 + 15 * (v14 + v13);
-  v17 = ((int16_t (*&)[8])__frame.sub[0])[-2][7];
-  v18 = ((int16_t (*&)[8])__frame.sub[0])[2][2] + ((int16_t (*&)[8])__frame.sub[0])[0][0];
+  v17 = sub0_row[-2][7];
+  v18 = sub0_row[2][2] + sub0_row[0][0];
   v290 = v12 + n3536 + n1840_1 + n1840_2;
   v19 = __frame.v268[9];
   v20 = v18 + v19 + v17;
   v21 = *(int16_t *)(__frame.v246 - 18);
   v22 = (Obj95 *)(2 * *(int16_t *)(__frame.v246 - 36) + 2 * v21);
   v23 = *__frame.v268 + 2 * v21;
-  __frame.sub1 = (Obj95 *)((int16_t *)v22);
-  __frame.sub2 = v19 + v23;
-  __frame.sub4 = 16 * v20;
+  sub1_nb = (Obj95 *)((int16_t *)v22);
+  sub2_n = v19 + v23;
+  sub4_n = 16 * v20;
   // Which row of the threshold table: how many of five ratios the coded
   // length has passed.  This was `13 * <the same sum>` used as a flat
   // subscript, with the sum itself recomputed two statements later.
-  __frame.sub3 = (8 * v12 > 43 * n3536)
+  sub3_row = (8 * v12 > 43 * n3536)
        + (8 * v12 > 17 * n3536)
        + (8 * v12 > 9 * n3536)
        + (8 * v12 > 5 * n3536)
        + (8 * v12 > 2 * n3536);
-  v25 = v290 > bmf_p2_thresholds[__frame.sub3][9];
-  v26 = v290 <= bmf_p2_thresholds[__frame.sub3][10];
-  __frame.v256 = ((v290 > bmf_p2_thresholds[__frame.sub3][12]) + (v290 > bmf_p2_thresholds[__frame.sub3][11]) + !v26 + v25) << 6;
-  __frame.sub5 = (16 * n1840_2 > n1840_1 * bmf_p2_thresholds[__frame.sub3][5])
-       + (16 * n1840_2 > n1840_1 * bmf_p2_thresholds[__frame.sub3][4])
-       + (16 * n1840_2 > n1840_1 * bmf_p2_thresholds[__frame.sub3][3]);
-  v27 = bmf_p2_thresholds[__frame.sub3][0];
-  v281 = (Obj36 *)((int16_t *)(16 * ((__frame.sub2 > bmf_p2_thresholds[__frame.sub3][8]) + (__frame.sub2 > bmf_p2_thresholds[__frame.sub3][7]) + (__frame.sub2 > bmf_p2_thresholds[__frame.sub3][6]))));
+  v25 = v290 > bmf_p2_thresholds[sub3_row][9];
+  v26 = v290 <= bmf_p2_thresholds[sub3_row][10];
+  __frame.v256 = ((v290 > bmf_p2_thresholds[sub3_row][12]) + (v290 > bmf_p2_thresholds[sub3_row][11]) + !v26 + v25) << 6;
+  sub5_n = (16 * n1840_2 > n1840_1 * bmf_p2_thresholds[sub3_row][5])
+       + (16 * n1840_2 > n1840_1 * bmf_p2_thresholds[sub3_row][4])
+       + (16 * n1840_2 > n1840_1 * bmf_p2_thresholds[sub3_row][3]);
+  v27 = bmf_p2_thresholds[sub3_row][0];
+  v281 = (Obj36 *)((int16_t *)(16 * ((sub2_n > bmf_p2_thresholds[sub3_row][8]) + (sub2_n > bmf_p2_thresholds[sub3_row][7]) + (sub2_n > bmf_p2_thresholds[sub3_row][6]))));
   v28 = (Obj11 *)(v289);
-  v257 = (uint8_t *)&((int16_t *)v281)[160 * __frame.sub3 + 2 * __frame.sub5]
-       + (__frame.sub4 > bmf_p2_thresholds[__frame.sub3][2] * (int32_t)__frame.sub1)
-       + (__frame.sub4 > (int32_t)__frame.sub1 * bmf_p2_thresholds[__frame.sub3][1])
-       + (__frame.sub4 > (int32_t)__frame.sub1 * v27)
+  v257 = (uint8_t *)&((int16_t *)v281)[160 * sub3_row + 2 * sub5_n]
+       + (sub4_n > bmf_p2_thresholds[sub3_row][2] * (int32_t)sub1_nb)
+       + (sub4_n > (int32_t)sub1_nb * bmf_p2_thresholds[sub3_row][1])
+       + (sub4_n > (int32_t)sub1_nb * v27)
        + __frame.v256;
   v29 = v289->f280872[(uint32_t)v257];
   if ( v289->f280872[(uint32_t)v257] )
@@ -7239,24 +7244,24 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   v28->p2_row[0][2] = (float)(*(int16_t *)((uint8_t *)v46 - 16) + v45[1] - *(v45 - 8));
   v47 = *(int16_t *)((uint8_t *)v46 - 34);
   v48 = v45[1] - *(v45 - 17);
-  __frame.sub1 = (Obj95 *)((int16_t *)v28->f278736[2]);
-  v49 = (Obj95 *)(__frame.sub1);
+  sub1_nb = (Obj95 *)((int16_t *)v28->f278736[2]);
+  v49 = (Obj95 *)(sub1_nb);
   v28->p2_row[0][3] = (float)(v47 + v48);
   v50 = (int16_t (*)[8])*(int32_t *)&v28->f278736[3];
   v28->p2_row[1][0] = (float)(*(v45 - 8) + v45[1] - *((int16_t *)v49 - 8));
   v51 = v50[0][1];
-  ((int16_t (*&)[8])__frame.sub[0]) = v50;
+  sub0_row = v50;
   v28->p2_row[1][1] = (float)(-3 * (v49->f2 - v45[1]) + v51);
   v28->p2_row[1][2] = (float)(*(int16_t *)((uint8_t *)v46 - 16) + v45[19] - v45[10]);
   v28->p2_row[1][3] = (float)(*(int16_t *)((uint8_t *)v46 - 34) + v45[10] - *(v45 - 8));
   v28->p2_row[2][0] = (float)(2 * *(int16_t *)((uint8_t *)v46 - 16) - *(int16_t *)((uint8_t *)v46 - 34));
-  v52 = (Obj95 *)(__frame.sub1);
+  v52 = (Obj95 *)(sub1_nb);
   v28->p2_row[2][1] = (float)(*(int16_t *)((uint8_t *)v46 - 52) + v45[1] - *(v45 - 26));
-  v28->p2_row[2][2] = (float)(v52->f2 + v45[10] - ((int16_t (*&)[8])__frame.sub[0])[1][2]);
+  v28->p2_row[2][2] = (float)(v52->f2 + v45[10] - sub0_row[1][2]);
   v28->p2_row[2][3] = (float)*(int16_t *)((uint8_t *)v46 - 52);
   v28->p2_row[3][0] = (float)(*(v45 - 17) + v45[1] - *((int16_t *)v52 - 17));
   v28->p2_row[3][1] = (float)(*(int16_t *)((uint8_t *)v46 - 34) + *(v45 - 8) - *(v45 - 26));
-  v53 = ((int16_t (*&)[8])__frame.sub[0]);
+  v53 = sub0_row;
   v28->p2_row[3][2] = (float)(v45[10] + ((v45[19] + v45[1]) >> 1) - v52->f38);
   v28->p2_row[3][3] = (float)v53[0][1];
   if ( a4 )
@@ -7395,13 +7400,13 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
     v28->p2_row[4][0] = (float)(v45[27] + *v45 - v52->f54);
     v239 = *v45;
     v240 = *(v45 - 36);
-    __frame.sub1 = (Obj95 *)(v52);
+    sub1_nb = (Obj95 *)(v52);
     v28->p2_row[4][1] = (float)(*(int16_t *)((uint8_t *)v46 - 72) + v239 - v240);
     v241 = v52->f0 + 3 * v45[9] - 4 * v52->f18;
     v242 = v45[18] - *v45;
-    v243 = ((int16_t (*&)[8])__frame.sub[0]);
-    v244 = (float)(v241 - (((v242 - (((int16_t (*&)[8])__frame.sub[0])[2][2] - ((int16_t (*&)[8])__frame.sub[0])[0][0])) >> 1) - ((int16_t (*&)[8])__frame.sub[0])[1][1]));
-    v245 = (Obj95 *)(__frame.sub1);
+    v243 = sub0_row;
+    v244 = (float)(v241 - (((v242 - (sub0_row[2][2] - sub0_row[0][0])) >> 1) - sub0_row[1][1]));
+    v245 = sub1_nb;
     v28->p2_row[4][2] = v244;
     v255 = (int16_t *)v28->f278736[4];
     v28->p2_row[4][3] = (float)(*((int16_t *)v245 - 9) + v274[9] - v243[0][0]);
@@ -7421,13 +7426,13 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
     v282 = (int16_t *)(nullptr);
   }
   v103 = (int32_t *)*(int32_t *)&v28->f278668;
-  ((int16_t (*&)[8])__frame.sub[0]) = (int16_t (*)[8])*(v103 - 1);
+  __frame.sub0 = (float (*)[4])*(v103 - 1);
   v104 = (Obj30 *)((int32_t *)*(int32_t *)&v28->f278672);
-  __frame.sub1 = (Obj95 *)((int16_t *)v104->f4);
-  __frame.sub2 = v104->f8;
-  __frame.sub3 = *(v103 - 2);
-  __frame.sub4 = v104->f0;
-  __frame.sub5 = *v103;
+  __frame.sub1 = (float (*)[4])v104->f4;
+  __frame.sub2 = (float (*)[4])v104->f8;
+  __frame.sub3 = (float (*)[4])*(v103 - 2);
+  __frame.sub4 = (float (*)[4])v104->f0;
+  __frame.sub5 = (float (*)[4])*v103;
   v105 = 14 * n3536;
   n2 = 1;
   v107 = 13 * n1840_2;
