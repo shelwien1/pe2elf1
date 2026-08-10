@@ -17,6 +17,18 @@ move is over that reload plus the same offset -- which is what says the
 eight names are one cursor.  Nothing between them writes the member being
 reloaded; the record assignments write the table it points at.
 """
+import re
+import sys
+
+p = sys.argv[1] if len(sys.argv) > 1 else 'subs1.hpp'
+L = open(p).read().split('\n')
+LOAD = re.compile(r'^(\s*)(\w+) = (?:\(uintptr_t\)|\(uint8_t \*\))?\(?(.+?)\)?;$')
+COPY = re.compile(r'^\s*\(\(P2Ctx \*\)\((\w+) \+ (\w+)\)\)\[(-?\d+)\] = '
+                  r'\(\(P2Ctx \*\)\((\w+) \+ (\w+)\)\)\[(-?\d+)\];$')
+
+
+def pair(i):
+    """(indent, base expr, offset var, dst, src) if lines i, i+1 are a reload."""
     m = LOAD.match(L[i]) if i < len(L) else None
     c = COPY.match(L[i + 1]) if m and i + 1 < len(L) else None
     if not c:
