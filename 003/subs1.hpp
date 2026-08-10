@@ -13850,13 +13850,15 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
   P2Ctx *v80;   // a record cursor
   P2Ctx *v84;   // a record cursor
   P2Ctx *v88;   // a record cursor
-  uintptr_t v21, v28, v58, v66, v78, v82, v86, v90, v93;
+  uintptr_t v78, v82, v86, v90, v93;
+  P2Ctx *v21;
+  P2Ctx *v28, *v58, *v66;   // `cursor[0]`, the record being written
   int32_t *v48, *v51;   // the row cursors, four bytes a step
   bool v17;
   int16_t v14;
   // The five planes, held across the rotation that ends a row.
-  int32_t i_1, v13, v29, v37, v49, *v50, v52, v77, v79, v81, v83, v85, v87,
-          v89, v92, v94;
+  int32_t i_1, v13, v37, v49, *v50, v52, v77, v79, v81, v83, v85, v87, v89,
+          v92, v94;
   int64_t v16;
   uint32_t j;
   __rc_begin_decode(ArgList);
@@ -13910,14 +13912,12 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
     i_1 = i;
   }
   ((P2Ctx *)v11)[0] = ((P2Ctx *)v11)[-1];
-  v21 = (uintptr_t)(lpAddress->cursor[0]);
-  ((P2Ctx *)v21)[1] = ((P2Ctx *)v21)[-1];
+  v21 = lpAddress->cursor[0];
+  (v21)[1] = (v21)[-1];
   v25 = (P2Ctx *)lpAddress->cursor[0];
   v25[2] = v25[-1];
-  v28 = (uintptr_t)(lpAddress->cursor[0]);
-  v29 = *(uint32_t *)(v28 - 14);
-  ((P2Ctx *)v28)[3] = ((P2Ctx *)v28)[-1];
-  LOWORD(v29) = *(uint16_t *)(v28 - 2);
+  v28 = lpAddress->cursor[0];
+  (v28)[3] = (v28)[-1];
   v32 = (P2Ctx *)lpAddress->cursor[0];
   v32[4] = v32[-1];
   v37 = -i_1;
@@ -13975,14 +13975,12 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
       __builtin_memset(lpAddress->p2_row, 0, sizeof lpAddress->p2_row);
       v54 = (P2Ctx *)lpAddress->cursor[0];
       v54[0] = v54[-1];
-      v58 = (uintptr_t)(lpAddress->cursor[0]);
-      LOWORD(v51) = *(uint16_t *)(v58 - 20);
-      ((P2Ctx *)v58)[1] = ((P2Ctx *)v58)[-2];
+      v58 = lpAddress->cursor[0];
+      (v58)[1] = (v58)[-2];
       v62 = (P2Ctx *)lpAddress->cursor[0];
       v62[2] = v62[-3];
-      v66 = (uintptr_t)(lpAddress->cursor[0]);
-      LOWORD(v51) = *(uint16_t *)(v66 - 56);
-      ((P2Ctx *)v66)[3] = ((P2Ctx *)v66)[-4];
+      v66 = lpAddress->cursor[0];
+      (v66)[3] = (v66)[-4];
       v69 = (P2Ctx *)lpAddress->cursor[0];
       v69[4] = v69[-5];
       // The five planes rotate right by one, and each cursor follows its own
@@ -14815,7 +14813,6 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
 {
   P2Ctx *v109, *v120, *v131, *v139, *v20, *v21, *v22, *v23, *v29, *v33, *v37, *v66,
           *v74, *v80, *v81, *v82, *v83, *v84, *v85, *v87, *v89, *v91, *v93, *v95, *v97;
-  uint32_t Size_1;
   int32_t v153;
   int32_t v155;
   int32_t n3;
