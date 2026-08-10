@@ -5239,13 +5239,14 @@ int32_t __rc_begin_decode(int8_t ArgList_1)
 uint8_t *__unpredict_med(uint8_t *Src, int32_t i, int32_t a3)
 {
   ;
-  uintptr_t Src_1, v41;   // were int32_t: addresses, masked and tagged
+  uint8_t *Src_1;   // `Src` again: every use of it is a subscript
+  uint32_t v41;     // an index into it, not an address
   uint8_t v39, v40;
   int32_t i_1, v42, v45, v46, v47, v48;
   uint32_t j, v36, m_1, m, v44, v50;
   uint8_t *result, *v43;
   alignas(16) uint8_t v52[255];
-  Src_1 = (uintptr_t)Src;
+  Src_1 = Src;
   result = (Src + 1);
   // The test here was `if ( plane_predictor )`, with a 45-line else building
   // a table for predictor mode 0.  Nothing reaches it: expand_image calls
@@ -5263,7 +5264,7 @@ uint8_t *__unpredict_med(uint8_t *Src, int32_t i, int32_t a3)
     v52[2 * j + 1] = (uint8_t)(-1 - (int32_t)j);
     v52[2 * j + 2] = (uint8_t)(1 + j);
   }
-  Src_1 = (uintptr_t)Src;
+  Src_1 = Src;
   // never taken: -E is 0
   i_1 = i;
   if ( i == 1 )
@@ -5280,11 +5281,11 @@ uint8_t *__unpredict_med(uint8_t *Src, int32_t i, int32_t a3)
   {
     for ( m = 0; m < m_1; ++m )
     {
-      v39 = *(uint8_t *)(Src_1 + 2 * m) + v52[*(uint8_t *)(Src_1 + 2 * m + 1)];
-      v40 = v52[*(uint8_t *)(Src_1 + 2 * m + 2)];
-      *(uint8_t *)(Src_1 + 2 * m + 1) = v39;
-      *(uint8_t *)(Src_1 + 2 * m + 2) = v39 + v40;
-      result = (uint8_t *)(Src_1 + 2 * m + 3);
+      v39 = Src_1[2 * m] + v52[Src_1[2 * m + 1]];
+      v40 = v52[Src_1[2 * m + 2]];
+      Src_1[2 * m + 1] = v39;
+      Src_1[2 * m + 2] = v39 + v40;
+      result = &Src_1[2 * m + 3];
     }
     i_1 = i;
     v41 = 2 * m + 1;
@@ -5295,8 +5296,8 @@ uint8_t *__unpredict_med(uint8_t *Src, int32_t i, int32_t a3)
   }
   if ( v36 > v41 - 1 )
   {
-    *(uint8_t *)(v41 + Src_1) = *(uint8_t *)(v41 + Src_1 - 1) + v52[*(uint8_t *)(v41 + Src_1)];
-    result = (uint8_t *)(Src_1 + v41 + 1);
+    Src_1[v41] = Src_1[v41 - 1] + v52[Src_1[v41]];
+    result = &Src_1[v41 + 1];
     v42 = a3 - 1;
     if ( a3 == 1 )
       return result;
@@ -7510,7 +7511,10 @@ LABEL_71:
   }
 }
 
-int32_t __cost_candidate(uint8_t *a1, uint8_t *n2, int32_t a3, int8_t a4, int32_t a5, int32_t a6, int32_t a7, uint8_t *a8)
+// `n2` is the candidate index 0, 1 or 2 -- the callers pass those three
+// literals -- and `a8` is an array of four-word cost records, one per
+// candidate.  Both arrived as `uint8_t *` and neither is an address.
+int32_t __cost_candidate(uint8_t *a1, int32_t n2, uint8_t *a3, int8_t a4, int32_t a5, int32_t a6, int32_t a7, uint32_t *a8)
 {
   // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
   // gives every member its own storage and altp1 segfaults while compressing.
@@ -7532,8 +7536,8 @@ int32_t __cost_candidate(uint8_t *a1, uint8_t *n2, int32_t a3, int8_t a4, int32_
       int32_t v85;
       int32_t v86;
       uint8_t _pad0[2008];
-      uint8_t *n2_2;
-      int32_t v88;
+      int32_t n2_2;
+      uint8_t *v88;
       uint8_t *v89;
       int32_t v90;
       int32_t v91;
@@ -7551,7 +7555,8 @@ int32_t __cost_candidate(uint8_t *a1, uint8_t *n2, int32_t a3, int8_t a4, int32_
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 26720, "frame layout moved");
   ;
-  uintptr_t v63, v64;   // were int32_t: addresses, masked and tagged
+  int32_t v63;      // a byte offset into `v64`, which is the address
+  uint8_t *v64;
   uint8_t *v14;   // were int32_t: these hold addresses
   bool v57, v67;
   double v16, v17, v18, v19, v20, v32, n191_1, n191_4;
@@ -7559,9 +7564,10 @@ int32_t __cost_candidate(uint8_t *a1, uint8_t *n2, int32_t a3, int8_t a4, int32_
           v39, v40, v41, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v58, v59,
           v60, n191_6, n191_7;
   uint32_t v69, v70;
-  uint8_t *n2_3, *v15, *v21, *v29, *v42, *n2_4, *v44, *v65, *v66;
-  __frame.v101 = a3;
-  __frame.n2_1 = n2;
+  uint8_t *v15, *v21, *v29, *v42, *n2_4, *v44;
+  int32_t n2_3, v65, v66;   // candidate indices, not addresses
+  __frame.v101 = (int32_t)(uintptr_t)a3;
+  __frame.n2_1 = (uint8_t *)n2;   // the slot is reused as an address below
   __frame.v99 = a1;
   __frame.v88 = a3;
   __frame.n4 = plane_count;
@@ -7576,18 +7582,18 @@ int32_t __cost_candidate(uint8_t *a1, uint8_t *n2, int32_t a3, int8_t a4, int32_
   memset(__frame.buf,0,24576);
   v12 = *(uint32_t *)__frame.buf_1;
   n2_3 = __frame.n2_2;
-  v14 = (uint8_t *)__frame.v88;
+  v14 = __frame.v88;
   v15 = __frame.v89;
   v16 = 0;
   v17 = 0.0;
   v18 = 0.0;
   v19 = 0.0;
   v20 = 0.0;
-  __frame.v90 = 16 * (uint32_t)__frame.n2_2;
-  *(uint8_t *)(16 * (uint32_t)__frame.n2_2 + __frame.v88) = 2;
-  *(v14 + 33) = (uint8_t)(uintptr_t)n2_3;
-  __frame.v91 = (int32_t)&n2_3[(uint32_t)v15];
-  v21 = &n2_3[(uint32_t)v15 + 16 + v12 + __frame.n4];
+  __frame.v90 = 16 * __frame.n2_2;
+  __frame.v88[16 * __frame.n2_2] = 2;
+  v14[33] = (uint8_t)n2_3;
+  __frame.v91 = (int32_t)&v15[n2_3];
+  v21 = &v15[n2_3 + 16 + v12 + __frame.n4];
   if ( (uint32_t)v21 < __frame.v78 )
   {
     __frame.v92 = v10;
@@ -7683,11 +7689,11 @@ int32_t __cost_candidate(uint8_t *a1, uint8_t *n2, int32_t a3, int8_t a4, int32_
   while ( v48 != 1 );
   v50 = __frame.v92;
   v51 = __estimate_cost((uint8_t *)__frame.buf_1, 512);
-  v52 = 16 * (uint32_t)__frame.n2_2;
-  *(uint32_t *)(a8 + 16 * (uint32_t)__frame.n2_2) = v51;
-  *(uint32_t *)(a8 + v52 + 4) = __estimate_cost((uint8_t *)__frame.v74, 1024);
-  *(uint32_t *)(a8 + v52 + 8) = __estimate_cost((uint8_t *)__frame.v75, 1024);
-  *(uint32_t *)(a8 + v52 + 12) = __estimate_cost((uint8_t *)__frame.v76, 1024);
+  v52 = 4 * __frame.n2_2;   // this candidate's four-word record
+  a8[v52] = v51;
+  a8[v52 + 1] = __estimate_cost((uint8_t *)__frame.v74, 1024);
+  a8[v52 + 2] = __estimate_cost((uint8_t *)__frame.v75, 1024);
+  a8[v52 + 3] = __estimate_cost((uint8_t *)__frame.v76, 1024);
   __frame.v91 = __estimate_cost((uint8_t *)__frame.buf, 1024);
   __frame.v92 = __estimate_cost((uint8_t *)__frame.v72, 1024);
   v53 = __estimate_cost((uint8_t *)__frame.v73, 1024);
@@ -7709,33 +7715,33 @@ int32_t __cost_candidate(uint8_t *a1, uint8_t *n2, int32_t a3, int8_t a4, int32_
     v50 = __frame.v95;
     __frame.v91 = __frame.v92;
     __frame.v95 = v59;
-    v60 = *(uint32_t *)(a8 + v52 + 4);
-    *(uint32_t *)(a8 + v52 + 4) = *(uint32_t *)(a8 + v52 + 8);
+    v60 = a8[v52 + 1];
+    a8[v52 + 1] = a8[v52 + 2];
     n191_6 = __frame.n191_5;
-    *(uint32_t *)(a8 + v52 + 8) = v60;
+    a8[v52 + 2] = v60;
     n191_7 = __frame.n191_2;
     __frame.n191_2 = n191_6;
     __frame.n191_5 = n191_7;
   }
   v63 = __frame.v90;
   v64 = __frame.v88;
-  *(uint32_t *)(__frame.v90 + __frame.v88 + 4) = __frame.n191_2;
-  *(uint32_t *)(v63 + v64 + 8) = __frame.n191_5;
-  v65 = &__frame.n2_2[v50];
-  v66 = &__frame.n2_2[__frame.v95];
-  *(uint8_t *)(16 * (uint32_t)v65 + v64) = 0;
-  *(uint8_t *)(v64 + 1) = (uint8_t)(uintptr_t)v65;
+  *(uint32_t *)&__frame.v88[__frame.v90 + 4] = __frame.n191_2;
+  *(uint32_t *)&v64[v63 + 8] = __frame.n191_5;
+  v65 = __frame.n2_2 + v50;
+  v66 = __frame.n2_2 + __frame.v95;
+  v64[16 * v65] = 0;
+  v64[1] = (uint8_t)v65;
   v67 = 0;                            // -S
-  *(uint8_t *)(16 * (uint32_t)v66 + v64) = 1;
-  *(uint8_t *)(v64 + 17) = (uint8_t)(uintptr_t)v66;
+  v64[16 * v66] = 1;
+  v64[17] = (uint8_t)v66;
   if ( !v67 && *((uint32_t *)__frame.v89 + 3) > 0x1000000u )
-    return __frame.v91 + v58 + *(uint32_t *)(a8 + v52);
-  v69 = *(uint32_t *)(a8 + v52);
-  v70 = *(uint32_t *)(a8 + v52 + 8);
-  if ( v69 >= *(uint32_t *)(a8 + v52 + 4) )
-    v69 = *(uint32_t *)(a8 + v52 + 4);
-  if ( v70 >= *(uint32_t *)(a8 + v52 + 12) )
-    v70 = *(uint32_t *)(a8 + v52 + 12);
+    return __frame.v91 + v58 + a8[v52];
+  v69 = a8[v52];
+  v70 = a8[v52 + 2];
+  if ( v69 >= a8[v52 + 1] )
+    v69 = a8[v52 + 1];
+  if ( v70 >= a8[v52 + 3] )
+    v70 = a8[v52 + 3];
   if ( v69 < v70 )
     v70 = v69;
   return __frame.v93 + v70;
@@ -7896,14 +7902,14 @@ int32_t __choose_plane_coding(BmfImage *a1, int32_t n3, int8_t a3)
     }
     if ( n4 >= 3 )
     {
-      v15 = __cost_candidate((uint8_t *)__frame.v226, (uint8_t *)nullptr, (int32_t)(uintptr_t)__frame.v217, v7, __frame.v174, __frame.v175, __frame.v176, (uint8_t *)&__frame.v214[2]);
-      v17 = __cost_candidate((uint8_t *)__frame.v226, (uint8_t *)1, (int32_t)(uintptr_t)__frame.v218, v16, __frame.v174, __frame.v175, __frame.v176, (uint8_t *)&__frame.v214[2]);
+      v15 = __cost_candidate((uint8_t *)__frame.v226, 0, (uint8_t *)__frame.v217, v7, __frame.v174, __frame.v175, __frame.v176, (uint32_t *)&__frame.v214[2]);
+      v17 = __cost_candidate((uint8_t *)__frame.v226, 1, __frame.v218, v16, __frame.v174, __frame.v175, __frame.v176, (uint32_t *)&__frame.v214[2]);
       v19 = v17 >= v15;
       if ( v17 >= v15 )
         v17 = v15;
       n2_3 = !v19;
       __frame.v205[2] = n2_3;
-      n2_4 = __cost_candidate((uint8_t *)__frame.v226, (uint8_t *)2, (int32_t)(uintptr_t)__frame.v219, v18, __frame.v174, __frame.v175, __frame.v176, (uint8_t *)&__frame.v214[2]) < v17;
+      n2_4 = __cost_candidate((uint8_t *)__frame.v226, 2, __frame.v219, v18, __frame.v174, __frame.v175, __frame.v176, (uint32_t *)&__frame.v214[2]) < v17;
       n2 = n2_3;
       if ( n2_4 )
         n2 = 2;
