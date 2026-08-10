@@ -23,10 +23,10 @@ bytes.
 `python3 tools/shape.py`, verbatim:
 
 ```
-subs1.hpp / bmf.cpp lines          17911 / 358
+subs1.hpp / bmf.cpp lines          17907 / 358
 raw-offset sites                   22
   off `_this`                      1, in 1 functions
-pointer casts                      2141
+pointer casts                      2137
 globals still at a 1997 address    0
 frames                             17, 169180 bytes, 0 aliases
   slots carrying two names         0, 0 extra names, in 0 functions
@@ -41,14 +41,14 @@ __fwd_* shims                      0
 
 against 37 raw offsets, 2541 pointer casts and 83 `fNN` members where round
 seven's last commit left them. (§1 of that document quotes 44 / 2822 / 93,
-from earlier in the round.) The conversion-warning ceiling went 1975 → 1463,
+from earlier in the round.) The conversion-warning ceiling went 1975 → 1461,
 and §4.1 is the one place this round it moved the wrong way.
 
-Nothing here was a sweep. Every tool in `tools/` reports zero removals against
-the file at the end of this round, exactly as at the start -- `unwrite` finds
-two write-only loads and declines both, and that is the whole of it. The
-numbers moved because four objects were re-read, not because anything was
-found by pattern.
+Nothing here was a sweep. Every tool in `tools/` reports zero against the file
+at the end of this round — and for the first time that includes `unwrite`,
+which had been declining four dead loads because its test for "has a call on
+the right" counted every cast. The numbers moved because four objects were
+re-read, not because anything was found by pattern.
 
 ---
 
@@ -505,7 +505,7 @@ caught by reading the result. It is in the check now.
   block is not where the index lands, which §4.1 answers, but what the four
   counters in a record *are*, and that is the same question as the 18-byte
   `P2Ctx` record rather than a separate one.
-* **1463 conversion warnings** — 847 `-Wsign-conversion`, 513 `-Wconversion`,
+* **1461 conversion warnings** — 845 `-Wsign-conversion`, 513 `-Wconversion`,
   99 `-Wsign-compare`, 4 `-Wuseless-cast`, 5 `-Wint-to-pointer-cast` and one
   `-Wmain`. §5 is the reason to keep holding it there, and this round is the
   first where lowering it was mostly a by-product of typing things correctly
@@ -530,6 +530,7 @@ caught by reading the result. It is in the check now.
 | tool | what it does |
 | --- | --- |
 | `triage.sh` | four images against their reference streams, for bisecting |
+| `unwrite.py` | a call is an identifier followed by `(`, not any `(` |
 
 One, and it is not a refactoring tool. Round seven's tools all still report
 zero; what this round needed was not another pattern but a faster way to ask
