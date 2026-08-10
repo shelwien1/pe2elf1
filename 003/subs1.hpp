@@ -329,7 +329,7 @@ static int32_t tbl44573C[5];
 //
 // `off` runs 0..56, the 64 bytes of records 1..4, eight at a time.
 // Sixteen zero bytes.  MSVC unrolled `memset(p, 0, n)` into aligned SSE stores
-// and Hex-Rays wrote each one as `*(__m128i *)p = 0`; three loops in this file
+// and Hex-Rays wrote each one as `*(M128 *)p = 0`; three loops in this file
 // are that, four to seven stores at a time.  The width is the store's, not a
 // vector's -- nothing here reads sixteen bytes at once.
 static inline void bmf_zero16(void *p) { __builtin_memset(p, 0, 16); }
@@ -8979,12 +8979,12 @@ int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, char a3)
       // slot holding four ints or two doubles depending on the statement is
       // what the original had in XMM0..XMM5, and what M128 is for.  Splitting
       // them is REFACTORING4.md §5's job, not this one's.
-      __m128i v202;
-      __m128i v203;
-      __m128i v204;
-      __m128i v205;
-      __m128i v206;
-      __m128i v207;
+      M128 v202;
+      M128 v203;
+      M128 v204;
+      M128 v205;
+      M128 v206;
+      M128 v207;
       int64_t v208;
       int64_t v209;
       double v210;
@@ -9038,12 +9038,12 @@ int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, char a3)
   int32_t &v199 = __frame.v199;
   char (&buf_4)[4] = __frame.buf_4;
   char (&buf_2)[4] = __frame.buf_2;
-  __m128i &v202 = __frame.v202;
-  __m128i &v203 = __frame.v203;
-  __m128i &v204 = __frame.v204;
-  __m128i &v205 = __frame.v205;
-  __m128i &v206 = __frame.v206;
-  __m128i &v207 = __frame.v207;
+  M128 &v202 = __frame.v202;
+  M128 &v203 = __frame.v203;
+  M128 &v204 = __frame.v204;
+  M128 &v205 = __frame.v205;
+  M128 &v206 = __frame.v206;
+  M128 &v207 = __frame.v207;
   int64_t &v208 = __frame.v208;
   int64_t &v209 = __frame.v209;
   double &v210 = __frame.v210;

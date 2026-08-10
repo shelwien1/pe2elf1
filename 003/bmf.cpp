@@ -127,9 +127,6 @@ typedef ull             uint64;
 #define _WORD  uint16
 #define _DWORD uint32
 #define _QWORD uint64
-#if !defined(_MSC_VER)
-#define _LONGLONG __int128
-#endif
 
 // Non-standard boolean types. They are used when the decompiler cannot use
 // the standard "bool" type because of the size mistmatch but the possible
@@ -534,34 +531,25 @@ void __noreturn __break(uint16 code, uint16 subcode);
 // with conversions between them and target attributes to carry them through
 // the intrinsics.
 //
-// There are no intrinsics left.  What the file actually does with these is
-// read and write sixteen bytes under half a dozen names, which is one union
-// with all the names in it -- no vector member, no conversions, no target
-// attribute.  `__m128` and `__m128i` are both spellings of it, so the casts
-// Hex-Rays wrote between them are the no-ops they always were.
+// There are no intrinsics left, and almost nothing is spelled this way any
+// more: the rows are `float[4]`, the tables are tables, the parameter thread
+// that carried a 16-byte type through fifteen functions is gone.  What is left
+// is `choose_plane_coding`'s six spill slots, which really are one slot each
+// holding four ints or two doubles depending on the statement -- XMM0..XMM5 as
+// the original used them.
 //
-// The alignment is stated rather than inherited: `*(__m128i *)ptr` still has
-// to address a sixteen-byte-aligned object, and several globals are declared
+// The alignment is stated rather than inherited: `*(M128 *)ptr` still has to
+// address a sixteen-byte-aligned object, and several globals are declared
 // alignas(16) on the strength of it.
 // ---------------------------------------------------------------------------
 union alignas(16) M128 {
-  float              m128_f32[4];
-  // m128_i8 is `char`, not `signed char`: MSVC's __int8 is plain char (so is
-  // Hex-Rays' -- see defs.h), and the bodies hand `x.m128_i8` straight to
-  // strcpy/strrchr, which take char*.
-  char               m128_i8[16];
+  // Three members, because three are read.  This had ten -- one per MSVC lane
+  // name -- while the objects and the globals were still reached through it;
+  // they are members and tables of their own now, and what is left is
+  // `choose_plane_coding`'s six spill slots.
   short              m128_i16[8];
   int                m128_i32[4];
   long long          m128_i64[2];
-  unsigned char      m128_u8[16];
-  unsigned short     m128_u16[8];
-  unsigned int       m128_u32[4];
-  unsigned long long m128_u64[2];
-  // Several of these lanes hold addresses -- `f278528[13].m128_i32[0]` is a
-  // row base -- and at -m32 a pointer is exactly one lane wide.  Reading them
-  // through this says so, instead of through m128_i32 and a conversion that
-  // only -fpermissive allows.
-  char              *m128_p[4];
   M128() = default;
   // Hex-Rays writes "zero the register" as `x = 0` / `(__m128)0LL` even for a
   // 16-byte object; a non-zero scalar zero-extends, which is what the
@@ -571,15 +559,9 @@ union alignas(16) M128 {
 
 static_assert(sizeof(M128) == 16 && alignof(M128) == 16, "M128 layout");
 
-#define __m128i M128
-#define __m128  M128
-#define __m128d M128
-
-// i386 g++ has no __int128 (verified: "expected primary-expression").  The
-// only things typed that way here are 16-byte xmmword globals, so give them
-// the same 16-byte type.
-typedef M128 _OWORD;
-#define __int128 M128
+// `__m128`, `__m128d`, `__int128` and `_OWORD` were four more spellings of the
+// same sixteen bytes.  Nothing spells it any of those ways now, and nothing
+// spells it `__m128i` either -- the six places left say `M128`.
 
 //--- #include "crt.cpp"      // what is left of the runtime BMF got from the PE
 // crt.cpp — the runtime BMF used to get from the PE.
