@@ -48,7 +48,12 @@ def main():
     path = sys.argv[1] if len(sys.argv) > 1 else 'subs1.hpp'
     lines = open(path).read().split('\n')
     found = writeonly(lines)
-    calls = [f for f in found if '(' in lines[f[0]].split('=', 1)[1]]
+    # A call is an identifier followed by `(`.  Testing for a bare `(` counts
+    # every cast as a call -- `v = (uint8_t *)p + 2` and `v = *(uint16_t *)(p -
+    # 2)` are a sum and a load, and this declined to touch four of those until
+    # the shapes around them changed enough to make them worth looking at.
+    calls = [f for f in found
+             if re.search(r'\w+\s*\(', lines[f[0]].split('=', 1)[1])]
 
     if '--all' not in sys.argv:
         for i, v, _ in found:

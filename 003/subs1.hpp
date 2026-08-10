@@ -1375,7 +1375,6 @@ uint32_t __alt_init_tables(uint8_t *a1, int8_t *a2)
 {
   ;
   uint8_t v48, v53;
-  uint8_t *v18, *v19;   // `uint8_t *` beside the `char` scalars above
   int32_t n128_1, n128_6, v30, n128_5, v33, n128_3, n128_4, v36, n128_11,
           n128_2;
   uint32_t i, v32, n0x80, v49, v52;
@@ -1391,8 +1390,6 @@ uint32_t __alt_init_tables(uint8_t *a1, int8_t *a2)
   // at 2.  Deleted on the same grounds as the fast path (REFACTORING.md
   // section 2.1) -- code no dispatch reaches is not a feature to keep.
   *a2 = 0;
-  v18 = (uint8_t *)a2 + 2;
-  v19 = (uint8_t *)a2 + 1;
   a2[255] = 0x80;
   // MSVC's overlap check for the loop below, and it is always true:
   // `a2 + 1 <= a2 + 2` settles the first half, and the second falls to
@@ -13914,7 +13911,7 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
   uintptr_t v21, v28, v58, v66, v78, v82, v86, v90, v93;
   int32_t *v48, *v51;   // the row cursors, four bytes a step
   bool v17;
-  int16_t v14, v24;
+  int16_t v14;
   uint8_t *v12;
   // The five planes, held across the rotation that ends a row.
   uint8_t *v72, *v73, *v74, *v75, *v76;
@@ -13979,7 +13976,6 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
   v22 = *(uint32_t *)(v21 - 10);
   v23 = *(uint32_t *)(v21 - 6);
   ((P2Ctx *)v21)[1] = ((P2Ctx *)v21)[-1];
-  v24 = *(uint16_t *)(v21 - 2);
   v25 = (P2Ctx *)lpAddress->cursor[0];
   v25[2] = v25[-1];
   v28 = (uintptr_t)(lpAddress->cursor[0]);
@@ -14676,7 +14672,6 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
   P2Ctx *v83;   // a record cursor
   P2Ctx *v81;   // a record cursor
   uint8_t v14, v97;
-  int16_t v26;
   int32_t v12, v13, n16, v16, v17, v24, v25, v31, v32, v33, v39, Size, v52,
           *v53, v55, v62, v63, v64, v70, v71, v75, v76, v77, v78, v80,
           v82, v84, v86, v88, v90, v92, v95, v96, n16_1, v99, v100;
@@ -14749,7 +14744,6 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
   v24 = *(uint32_t *)(v23 - 10);
   v25 = *(uint32_t *)(v23 - 6);
   ((P2Ctx *)v23)[1] = ((P2Ctx *)v23)[-1];
-  v26 = *(uint16_t *)(v23 - 2);
   v27 = (P2Ctx *)(uint8_t *)(*(int32_t *)&lpAddress->cursor[0]);
   v27[2] = v27[-1];
   v30 = lpAddress->cursor[0];
