@@ -409,8 +409,8 @@ __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...);
 // The encoder adds `w[sel]` and the decoder `w[2 - sel]`; the two are the same
 // slot only when `sel` is 1, so the direction is each side's, not a symmetry.
 struct CtxWeight {
-  int32_t sel;
-  int32_t w[3];
+  int32_t  sel;
+  uint32_t w[3];
 };
 static_assert(sizeof(CtxWeight) == 16, "CtxWeight: a selector and three weights");
 
@@ -715,6 +715,27 @@ struct P2Count {
 };
 static_assert(sizeof(P2Count) == 4, "P2Count: the record is four bytes");
 
+// One p2 frequency record: four counters seeded (4096, 2048, 2816, 2816).
+// `rescale_three_way` is the whole of what says it is four and not two or
+// eight -- it halves `c[1 .. 3]` and adjusts `c[0]`, and every reader indexes
+// the table by `4 * k`.  `alt_p2_model` rescales a record when `c[1] + c[2] +
+// c[3]` passes 29696.
+struct P2Freq {
+  uint16_t c[4];
+};
+static_assert(sizeof(P2Freq) == 8, "P2Freq: four counters");
+
+// `alt_p2_model` reaches the table through a `uint16_t *` cursor at
+// `block + 8 * idx`, so record `idx + d` is at `cur[470036 + 4 * d + k]`:
+// 470036 * 2 is 940072, the table's own offset, which the compiler folded into
+// the index because the cursor already carried the 8 * idx.  The three
+// constants that appear are 470032, 470036 and 470040 -- records `idx - 1`,
+// `idx` and `idx + 1`, three adjacent, the way the p1 model updates three
+// adjacent nodes.
+static inline P2Freq *p2_freq_at(uint16_t *cur, int32_t d) {
+  return (P2Freq *)((uint8_t *)cur + 940072) + d;
+}
+
 // A counter's prediction: `w2` rounded and shifted right by its own rate.
 // `1 << ((rate + 31) & 31)` is the rounding half-step written the way MSVC
 // emits it, and the `& 31` on the shift is x86's own masking showing through.
@@ -866,10 +887,16 @@ struct AltP2Block {
   //     updates the same three fields through raw offsets from +284712;
   //   * five banks of 32768 is 163840, and the last record ends at 940071.
   P2Count f284712[163840];   // +284712 .. +940071
-  // The three-way frequency counters, in 8-byte groups.  `alt_p2_alloc` seeds
-  // 0x1E60 sixteen-byte pairs of them; `alt_p2_model` rescales a group when
-  // its three add past 29696.  The extent is the allocation's.
-  uint16_t f940072[62208];   // +940072 .. +1064487
+  // The frequency records the composed context index selects, one per context.
+  // `alt_p2_alloc` seeds 0x1E60 = 7776 pairs of them, eight `uint16_t` a pass,
+  // which is 15552 records -- and 15552 is 3^5 * 64, the p2 context space
+  // `algorithm_v2.md` §9.1 derives from the five weight groups.  The size is
+  // not an independent fact about the table; it is what `ctx_w` can index.
+  //
+  // `alt_p2_encode_symbol` is handed `&freq[f278704]`, `f278704` being that
+  // index, and `alt_p2_model` updates records `k - 1`, `k` and `k + 1` --
+  // three adjacent, the way the p1 model does.
+  P2Freq freq[15552];   // +940072 .. +1064487
   uint8_t _pad3[8];   // +1064488 .. +1064495
 };
 // The three readings this replaced disagreed about where the pointers stop and
@@ -891,7 +918,7 @@ static_assert(sizeof(void *) != 4
                   && __builtin_offsetof(AltP2Block, f280752) == 280752
                   && __builtin_offsetof(AltP2Block, f280872) == 280872
                   && __builtin_offsetof(AltP2Block, f284712) == 284712
-                  && __builtin_offsetof(AltP2Block, f940072) == 940072),
+                  && __builtin_offsetof(AltP2Block, freq) == 940072),
               "AltP2Block: the layout moved");
 
 
@@ -2208,7 +2235,7 @@ int32_t __alt_p1_decode_symbol(uint16_t *a1, int32_t a2, int32_t a3)
   return n5;
 }
 
-int32_t __alt_p2_encode_symbol(uint16_t *_this, uint8_t *a2, int32_t a3)
+int32_t __alt_p2_encode_symbol(P2Freq *_this, uint8_t *a2, int32_t a3)
 {
   ;
   int16_t v18;
@@ -2217,36 +2244,36 @@ int32_t __alt_p2_encode_symbol(uint16_t *_this, uint8_t *a2, int32_t a3)
   uint16_t *v25;
   uint32_t tot, tot_1,
            v21, v22, v23;
-  v3 = _this[2] + _this[1];
-  tot = v3 + _this[3];
+  v3 = _this->c[2] + _this->c[1];
+  tot = v3 + _this->c[3];
   if ( a3 )
   {
     if ( (a3 & 1) != 0 )
     {
-      v3 = _this[1];
-      v25 = _this + 2;
+      v3 = _this->c[1];
+      v25 = &_this->c[2];
     }
     else
     {
-      v25 = _this + 3;
+      v25 = &_this->c[3];
     }
   }
   else
   {
     v3 = 0;
-    v25 = _this + 1;
+    v25 = &_this->c[1];
   }
   tot_1 = v3 + *v25;
   rc.encode(v3, tot_1, tot);
   v18 = *v25;
   if ( *v25 > 0x4000u )
   {
-    v21 = _this[2];
-    v22 = _this[3];
-    _this[1] -= _this[1] >> 1;
-    n32 = *_this;
-    _this[2] = v21 - (v21 >> 1);
-    _this[3] = v22 - (v22 >> 1);
+    v21 = _this->c[2];
+    v22 = _this->c[3];
+    _this->c[1] -= _this->c[1] >> 1;
+    n32 = _this->c[0];
+    _this->c[2] = v21 - (v21 >> 1);
+    _this->c[3] = v22 - (v22 >> 1);
     if ( n32 <= 256 )
     {
       if ( n32 <= 32 )
@@ -2254,19 +2281,19 @@ int32_t __alt_p2_encode_symbol(uint16_t *_this, uint8_t *a2, int32_t a3)
       else
         LOWORD(v23) = 32;
       LOWORD(n32) = n32 - v23;
-      *_this = n32;
+      _this->c[0] = n32;
       v18 = *v25;
     }
     else
     {
       n32 = (uint32_t)n32 >> 1;
-      *_this = n32;
+      _this->c[0] = n32;
       v18 = *v25;
     }
   }
   else
   {
-    LOWORD(n32) = *_this;
+    LOWORD(n32) = _this->c[0];
   }
   result = v25;
   *v25 = n32 + v18;
@@ -2281,35 +2308,35 @@ int32_t __alt_p2_encode_symbol(uint16_t *_this, uint8_t *a2, int32_t a3)
 // `_this[1..3]` -- but so is the encoder's first step, and a pair that codes
 // the same thing should read as one.  The three-way part is still the first
 // twenty lines; the name now says which half of the pair this is.
-int32_t __alt_p2_decode_symbol(uint16_t *_this, uint8_t *a2)
+int32_t __alt_p2_decode_symbol(P2Freq *_this, uint8_t *a2)
 {
   ;
   int32_t v7, v8, v10, n0x4000, n32, v16, v21, v23;
   uint16_t *v9, *v24;
   uint32_t v11, v18, v19, v20;
-  v23 = _this[3];
-  v21 = _this[2] + _this[1];
+  v23 = _this->c[3];
+  v21 = _this->c[2] + _this->c[1];
   v20 = v23 + v21;
   v7 = rc.get_freq(v20);
-  v8 = _this[1];
+  v8 = _this->c[1];
   if ( v7 >= v8 )
   {
     if ( v7 >= v21 )
     {
       v8 = v21;
-      v9 = _this + 3;
+      v9 = &_this->c[3];
     }
     else
     {
-      v9 = _this + 2;
+      v9 = &_this->c[2];
     }
-    v24 = _this + 1;
+    v24 = &_this->c[1];
   }
   else
   {
-    v9 = _this + 1;
+    v9 = &_this->c[1];
     v8 = 0;
-    v24 = _this + 1;
+    v24 = &_this->c[1];
   }
   v10 = (uint16_t)*v9;
   v11 = v8 + v10;
@@ -2317,12 +2344,12 @@ int32_t __alt_p2_decode_symbol(uint16_t *_this, uint8_t *a2)
   n0x4000 = (uint16_t)*v9;
   if ( n0x4000 > 0x4000 )
   {
-    v18 = _this[2];
-    v19 = _this[3];
-    _this[1] -= _this[1] >> 1;
-    n32 = *_this;
-    _this[2] = v18 - (v18 >> 1);
-    _this[3] = v19 - (v19 >> 1);
+    v18 = _this->c[2];
+    v19 = _this->c[3];
+    _this->c[1] -= _this->c[1] >> 1;
+    n32 = _this->c[0];
+    _this->c[2] = v18 - (v18 >> 1);
+    _this->c[3] = v19 - (v19 >> 1);
     if ( n32 <= 256 )
     {
       if ( n32 <= 32 )
@@ -2330,19 +2357,19 @@ int32_t __alt_p2_decode_symbol(uint16_t *_this, uint8_t *a2)
       else
         LOWORD(n0x4000) = 32;
       LOWORD(n32) = n32 - n0x4000;
-      *_this = n32;
+      _this->c[0] = n32;
       LOWORD(n0x4000) = *v9;
     }
     else
     {
       n32 = (uint32_t)n32 >> 1;
-      *_this = n32;
+      _this->c[0] = n32;
       LOWORD(n0x4000) = *v9;
     }
   }
   else
   {
-    LOWORD(n32) = *_this;
+    LOWORD(n32) = _this->c[0];
   }
   *v9 = n32 + n0x4000;
   v16 = v9 - v24;
@@ -2352,26 +2379,26 @@ int32_t __alt_p2_decode_symbol(uint16_t *_this, uint8_t *a2)
     return 0;
 }
 
-uint32_t __rescale_three_way(uint16_t *_this)
+uint32_t __rescale_three_way(P2Freq *_this)
 {
   ;
   uint32_t n32, n0x100;
-  *(_this + 1) -= *(_this + 1) >> 1;
-  *(_this + 2) -= *(_this + 2) >> 1;
-  n32 = *(_this + 3) >> 1;
-  *(_this + 3) -= n32;
-  n0x100 = *_this;
+  _this->c[1] -= _this->c[1] >> 1;
+  _this->c[2] -= _this->c[2] >> 1;
+  n32 = _this->c[3] >> 1;
+  _this->c[3] -= n32;
+  n0x100 = _this->c[0];
   if ( n0x100 <= 0x100 )
   {
-    if ( *_this <= 0x20u )
+    if ( _this->c[0] <= 0x20u )
       n32 = ((16 - n0x100) >> 30) & 0xFFFFFFFE;
     else
       n32 = 32;
-    *_this = n0x100 - n32;
+    _this->c[0] = n0x100 - n32;
   }
   else
   {
-    *_this >>= 1;
+    _this->c[0] >>= 1;
   }
   return n32;
 }
@@ -4129,16 +4156,17 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
   n0x1E60 = 0;
   do
   {
-    v7 = 8 * n0x1E60;   // two four-lane groups a step
-    _this->f940072[v7 + 1] = 2048;
+    // Two records a pass, 0x1E60 passes: 15552 of them.
+    v7 = 2 * n0x1E60;
+    _this->freq[v7].c[1] = 2048;
     ++n0x1E60;
-    _this->f940072[v7 + 2] = 2816;
-    _this->f940072[v7 + 3] = 2816;
-    _this->f940072[v7] = 4096;
-    _this->f940072[v7 + 5] = 2048;
-    _this->f940072[v7 + 6] = 2816;
-    _this->f940072[v7 + 7] = 2816;
-    _this->f940072[v7 + 4] = 4096;
+    _this->freq[v7].c[2] = 2816;
+    _this->freq[v7].c[3] = 2816;
+    _this->freq[v7].c[0] = 4096;
+    _this->freq[v7 + 1].c[1] = 2048;
+    _this->freq[v7 + 1].c[2] = 2816;
+    _this->freq[v7 + 1].c[3] = 2816;
+    _this->freq[v7 + 1].c[0] = 4096;
   }
   while ( n0x1E60 < 0x1E60 );
   v8 = 4 * plane_desc[0].w12 + 1;
@@ -12286,9 +12314,12 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   uint16_t *n0xF0_4;
   uint16_t *v445;
   uint16_t *v387;
-  uint16_t *v7, *n0x10_3, *n2_2, *v408, *v411, *v420, *v428, *v436, *v444,
-           *n2_7, *n0x10_4, *v452, *v456, *v457, *n2_6, *v463, *v466, *n2_5,
-           *v474, *v477, *n2_4, *v485, *v488, *v491, *n2_3, *v502;
+  // Cursors at `block + 8 * idx`; `p2_freq_at` is how they reach the table.
+  uint16_t *v7, *n0x10_3, *n0x10_4;
+  // Records: the one the composed index selects, and its two neighbours.
+  P2Freq *n2_2, *n2_3, *n2_4, *n2_5, *n2_6, *n2_7, *v408, *v411, *v420,
+         *v428, *v436, *v444, *v452, *v456, *v457, *v463, *v466, *v474,
+         *v477, *v485, *v488, *v491, *v502;
   AltP2Block *v385;
   uint32_t *v76, v78, v92, v97, v109, n0x10, v393, v396, v405, v414, v499;
   uint8_t v83;
@@ -13084,7 +13115,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   v385->cursor[2] += 18;
   v385->cursor[3] += 18;
   v385->cursor[4] += 18;
-  n0x10 = v387[470032 + 4];
+  n0x10 = p2_freq_at(v387, 0)->c[0];
   if ( n0x10 > 0x10 )
   {
     v511 = a4 & 1;
@@ -13092,12 +13123,12 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
     v508 = (&v385->f278708)[a4 & 1];
     if ( n15 < 15 )
     {
-      v391 = v387[470040 + 1];
-      v392 = v387[470040 + 2];
-      n2 = v387 + 470040;
-      if ( v387[470040 + 3] + v392 + v391 > 29696 )
-        __rescale_three_way(v387 + 470040);
-      v393 = (10 * (uint32_t)v387[470040 + 0]) >> 4;
+      v391 = p2_freq_at(v387, 1)->c[1];
+      v392 = p2_freq_at(v387, 1)->c[2];
+      n2 = (uint16_t *)p2_freq_at(v387, 1);
+      if ( p2_freq_at(v387, 1)->c[3] + v392 + v391 > 29696 )
+        __rescale_three_way(p2_freq_at(v387, 1));
+      v393 = (10 * (uint32_t)p2_freq_at(v387, 1)->c[0]) >> 4;
       if ( a4 )
       {
         n2[3 - v511] += v393;
@@ -13111,7 +13142,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
       {
 LABEL_37:
         n0x10 = v385->f278704;
-        if ( LOWORD((*(uint32_t *)&v385->f940072[4 * n0x10])) <= 0x1Au )
+        if ( v385->freq[n0x10].c[0] <= 0x1Au )
           return n0x10;
         v397 = v385->ctx_w[1].sel;
         v398 = 2 - (v385->f279984[(uint8_t)-a5] & 1);
@@ -13129,17 +13160,17 @@ LABEL_37:
         p2_rec = n0x10_3;
         if ( n15 < 15 )
         {
-          n2_2 = n0x10_3 + 470040;
-          v403 = n0x10_3[470041];
-          v404 = n0x10_3[470042];
-          n2 = n2_2;
-          if ( n2_2[3] + v404 + v403 > 29696 )
+          n2_2 = p2_freq_at(n0x10_3, 1);
+          v403 = p2_freq_at(n0x10_3, 1)->c[1];
+          v404 = p2_freq_at(n0x10_3, 1)->c[2];
+          n2 = (uint16_t *)n2_2;
+          if ( n2_2->c[3] + v404 + v403 > 29696 )
           {
             n0x10_1 = n0x10;
-            __rescale_three_way((uint16_t *)n2_2);
+            __rescale_three_way(n2_2);
             n0x10 = n0x10_1;
           }
-          v405 = p2_rec[470040] & 0xFFFC;
+          v405 = p2_freq_at(p2_rec, 1)->c[0] & 0xFFFC;
           n2[v510 + 1] += v405 >> 2;
           if ( n15 <= 0 )
             goto LABEL_48;
@@ -13147,16 +13178,16 @@ LABEL_37:
         else
         {
         }
-        v406 = p2_rec[470033];
-        v407 = p2_rec[470034];
-        n2 = &p2_rec[470032];
-        if ( p2_rec[470035] + v407 + v406 > 29696 )
+        v406 = p2_freq_at(p2_rec, -1)->c[1];
+        v407 = p2_freq_at(p2_rec, -1)->c[2];
+        n2 = (uint16_t *)p2_freq_at(p2_rec, -1);
+        if ( p2_freq_at(p2_rec, -1)->c[3] + v407 + v406 > 29696 )
         {
           n0x10_1 = n0x10;
-          __rescale_three_way(&p2_rec[470032]);
+          __rescale_three_way(p2_freq_at(p2_rec, -1));
           n0x10 = n0x10_1;
         }
-        n2[v510 + 1] += (uint16_t)(p2_rec[470032] & 0xFFFC) >> 2;
+        n2[v510 + 1] += (uint16_t)(p2_freq_at(p2_rec, -1)->c[0] & 0xFFFC) >> 2;
 LABEL_48:
         if ( a4 )
         {
@@ -13173,17 +13204,17 @@ LABEL_48:
             n0x10 = n0x10_1;
           }
         }
-        v408 = &p2_rec[470036];
-        if ( p2_rec[470039]
-           + p2_rec[470038]
-           + p2_rec[470037] > 29696 )
+        v408 = p2_freq_at(p2_rec, 0);
+        if ( p2_freq_at(p2_rec, 0)->c[3]
+           + p2_freq_at(p2_rec, 0)->c[2]
+           + p2_freq_at(p2_rec, 0)->c[1] > 29696 )
         {
           n0x10_1 = n0x10;
-          __rescale_three_way(&p2_rec[470036]);
+          __rescale_three_way(p2_freq_at(p2_rec, 0));
           n0x10 = n0x10_1;
         }
-        ((uint16_t *)v408)[v510 + 1] += (6 * (uint32_t)p2_rec[470036]) >> 4;
-        if ( !v385->f278728 || LOWORD((*(uint32_t *)&v385->f940072[4 * v385->f278704])) > 0x100u )
+        v408->c[v510 + 1] += (6 * (uint32_t)p2_freq_at(p2_rec, 0)->c[0]) >> 4;
+        if ( !v385->f278728 || v385->freq[v385->f278704].c[0] > 0x100u )
         {
           v409 = 2 - v511;
           if ( !a4 )
@@ -13192,134 +13223,134 @@ LABEL_48:
           v511 = v409;
           if ( v410 == 1 )
           {
-            v491 = (uint16_t *)&((uint32_t *)v385)[2 * v385->ctx_w[0].w[0] + 235018 + 2 * (n0x10 - v385->ctx_w[0].w[1])];
-            v492 = HIWORD(((uint32_t *)v385)[2 * v385->ctx_w[0].w[0] + 235018 + 2 * (n0x10 - v385->ctx_w[0].w[1])]);
-            v493 = LOWORD(((uint32_t *)v385)[2 * v385->ctx_w[0].w[0] + 235019 + 2 * (n0x10 - v385->ctx_w[0].w[1])]);
+            v491 = &v385->freq[v385->ctx_w[0].w[0] + n0x10 - v385->ctx_w[0].w[1]];
+            v492 = v385->freq[v385->ctx_w[0].w[0] + n0x10 - v385->ctx_w[0].w[1]].c[1];
+            v493 = v385->freq[v385->ctx_w[0].w[0] + n0x10 - v385->ctx_w[0].w[1]].c[2];
             v508 = (uintptr_t)v491;
-            if ( v491[3] + v493 + v492 > 29696 )
+            if ( v491->c[3] + v493 + v492 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way((uint16_t *)v491);
+              __rescale_three_way(v491);
               n0x10 = n0x10_1;
             }
-            v491[v510 + 1] += (uint16_t)(*v491 & 0xFFFC) >> 2;
+            v491->c[v510 + 1] += (uint16_t)(v491->c[0] & 0xFFFC) >> 2;
             v494 = v385->f278704 - v385->ctx_w[0].w[1];
             n0xF0_1 = ((uint16_t *)&((uint32_t *)v385)[2 * v494 + 2 * v385->ctx_w[0].w[0]]);
             n0x10_2 = v385->ctx_w[0].w[2] + v494;
             n0xF0 = n0xF0_1;
-            n2_3 = n0xF0_1 + 470036;
-            v497 = n2_3[2] + n2_3[1];
-            v498 = n2_3[3];
-            n2 = n2_3;
+            n2_3 = p2_freq_at(n0xF0_1, 0);
+            v497 = n2_3->c[2] + n2_3->c[1];
+            v498 = n2_3->c[3];
+            n2 = (uint16_t *)n2_3;
             if ( v498 + v497 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way((uint16_t *)n2_3);
+              __rescale_three_way(n2_3);
               n0x10 = n0x10_1;
             }
-            v499 = 3 * n0xF0[470036];
+            v499 = 3 * p2_freq_at(n0xF0, 0)->c[0];
             n2[v511 + 1] += v499 >> 4;
             if ( n15 >= 15 )
               goto LABEL_180;
-            v500 = n0xF0[470041];
-            v501 = n0xF0[470042];
-            n2 = n0xF0 + 470040;
-            if ( n0xF0[470043] + v501 + v500 > 29696 )
+            v500 = p2_freq_at(n0xF0, 1)->c[1];
+            v501 = p2_freq_at(n0xF0, 1)->c[2];
+            n2 = (uint16_t *)p2_freq_at(n0xF0, 1);
+            if ( p2_freq_at(n0xF0, 1)->c[3] + v501 + v500 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(n0xF0 + 470040);
+              __rescale_three_way(p2_freq_at(n0xF0, 1));
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (uint16_t)(n0xF0[470040] & 0xFFFC) >> 2;
-            v502 = &v385->f940072[4 * n0x10_2 + 4];
-            if ( HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
-               + LOWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
-               + HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 4])) > 29696 )
+            n2[v511 + 1] += (uint16_t)(p2_freq_at(n0xF0, 1)->c[0] & 0xFFFC) >> 2;
+            v502 = &v385->freq[n0x10_2 + 1];
+            if ( v385->freq[n0x10_2 + 1].c[3]
+               + v385->freq[n0x10_2 + 1].c[2]
+               + v385->freq[n0x10_2 + 1].c[1] > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(&v385->f940072[4 * n0x10_2 + 4]);
+              __rescale_three_way(&v385->freq[n0x10_2 + 1]);
               n0x10 = n0x10_1;
             }
-            ((uint16_t *)v502)[v511 + 1] += (uint16_t)(*v502 & 0xFFF8) >> 3;
+            v502->c[v511 + 1] += (v502->c[0] & 0xFFF8) >> 3;
             if ( n15 > 2 )
             {
 LABEL_180:
-              v503 = n0xF0[470033];
-              v504 = n0xF0[470034];
-              n2 = n0xF0 + 470032;
-              if ( n0xF0[470035] + v504 + v503 > 29696 )
+              v503 = p2_freq_at(n0xF0, -1)->c[1];
+              v504 = p2_freq_at(n0xF0, -1)->c[2];
+              n2 = (uint16_t *)p2_freq_at(n0xF0, -1);
+              if ( p2_freq_at(n0xF0, -1)->c[3] + v504 + v503 > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(n0xF0 + 470032);
+                __rescale_three_way(p2_freq_at(n0xF0, -1));
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)n0xF0[470032]) >> 4;
+              n2[v511 + 1] += (6 * (uint32_t)p2_freq_at(n0xF0, -1)->c[0]) >> 4;
             }
           }
           else
           {
-            v411 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->ctx_w[0].w[1] - v385->ctx_w[0].w[2 - v410])];
-            if ( HIWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->ctx_w[0].w[1] - v385->ctx_w[0].w[2 - v410])])
-               + LOWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->ctx_w[0].w[1] - v385->ctx_w[0].w[2 - v410])])
-               + HIWORD(((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->ctx_w[0].w[1] - v385->ctx_w[0].w[2 - v410])]) > 29696 )
+            v411 = &v385->freq[n0x10 + v385->ctx_w[0].w[1] - v385->ctx_w[0].w[2 - v410]];
+            if ( v385->freq[n0x10 + v385->ctx_w[0].w[1] - v385->ctx_w[0].w[2 - v410]].c[3]
+               + v385->freq[n0x10 + v385->ctx_w[0].w[1] - v385->ctx_w[0].w[2 - v410]].c[2]
+               + v385->freq[n0x10 + v385->ctx_w[0].w[1] - v385->ctx_w[0].w[2 - v410]].c[1] > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way((uint16_t *)v411);
+              __rescale_three_way(v411);
               n0x10 = n0x10_1;
             }
-            ((uint16_t *)v411)[v510 + 1] += (7 * (uint32_t)*v411) >> 4;
+            v411->c[v510 + 1] += (7 * (uint32_t)v411->c[0]) >> 4;
             n0xF0 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->ctx_w[0].w[1] + 2 * (v385->f278704 - v385->ctx_w[0].w[v385->ctx_w[0].sel])]));
-            v412 = n0xF0[470037];
-            v413 = n0xF0[470038];
-            n2 = n0xF0 + 470036;
-            if ( n0xF0[470039] + v413 + v412 > 29696 )
+            v412 = p2_freq_at(n0xF0, 0)->c[1];
+            v413 = p2_freq_at(n0xF0, 0)->c[2];
+            n2 = (uint16_t *)p2_freq_at(n0xF0, 0);
+            if ( p2_freq_at(n0xF0, 0)->c[3] + v413 + v412 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(n0xF0 + 470036);
+              __rescale_three_way(p2_freq_at(n0xF0, 0));
               n0x10 = n0x10_1;
             }
-            v414 = 7 * n0xF0[470036];
+            v414 = 7 * p2_freq_at(n0xF0, 0)->c[0];
             n2[v511 + 1] += v414 >> 4;
             if ( n15 >= 15 )
               goto LABEL_67;
-            v415 = n0xF0[470041];
-            v416 = n0xF0[470042];
-            n2 = n0xF0 + 470040;
-            if ( n0xF0[470043] + v416 + v415 > 29696 )
+            v415 = p2_freq_at(n0xF0, 1)->c[1];
+            v416 = p2_freq_at(n0xF0, 1)->c[2];
+            n2 = (uint16_t *)p2_freq_at(n0xF0, 1);
+            if ( p2_freq_at(n0xF0, 1)->c[3] + v416 + v415 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(n0xF0 + 470040);
+              __rescale_three_way(p2_freq_at(n0xF0, 1));
               n0x10 = n0x10_1;
             }
             n0x10_1 = n0x10;
-            n2[v511 + 1] = n2[v511 + 1] + ((5 * (uint32_t)n0xF0[470040]) >> 4);
+            n2[v511 + 1] = n2[v511 + 1] + ((5 * (uint32_t)p2_freq_at(n0xF0, 1)->c[0]) >> 4);
             n0x10 = n0x10_1;
             if ( n15 > 0 )
             {
 LABEL_67:
-              v417 = n0xF0[470033];
-              v418 = n0xF0[470034];
-              n2 = n0xF0 + 470032;
-              if ( n0xF0[470035] + v418 + v417 > 29696 )
+              v417 = p2_freq_at(n0xF0, -1)->c[1];
+              v418 = p2_freq_at(n0xF0, -1)->c[2];
+              n2 = (uint16_t *)p2_freq_at(n0xF0, -1);
+              if ( p2_freq_at(n0xF0, -1)->c[3] + v418 + v417 > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(n0xF0 + 470032);
+                __rescale_three_way(p2_freq_at(n0xF0, -1));
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)n0xF0[470032]) >> 4;
+              n2[v511 + 1] += (6 * (uint32_t)p2_freq_at(n0xF0, -1)->c[0]) >> 4;
             }
           }
           v419 = v385->ctx_w[1].sel;
           if ( v419 == 1 )
           {
-            n2_4 = (uint16_t *)&((uint32_t *)v385)[2 * v385->ctx_w[1].w[0] + 235018 + 2 * (n0x10 - v385->ctx_w[1].w[1])];
-            v481 = HIWORD(((uint32_t *)v385)[2 * v385->ctx_w[1].w[0] + 235018 + 2 * (n0x10 - v385->ctx_w[1].w[1])]);
-            v482 = LOWORD(((uint32_t *)v385)[2 * v385->ctx_w[1].w[0] + 235019 + 2 * (n0x10 - v385->ctx_w[1].w[1])]);
-            n2 = n2_4;
-            if ( n2_4[3] + v482 + v481 > 29696 )
+            n2_4 = &v385->freq[v385->ctx_w[1].w[0] + n0x10 - v385->ctx_w[1].w[1]];
+            v481 = v385->freq[v385->ctx_w[1].w[0] + n0x10 - v385->ctx_w[1].w[1]].c[1];
+            v482 = v385->freq[v385->ctx_w[1].w[0] + n0x10 - v385->ctx_w[1].w[1]].c[2];
+            n2 = (uint16_t *)n2_4;
+            if ( n2_4->c[3] + v482 + v481 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way((uint16_t *)n2_4);
+              __rescale_three_way(n2_4);
               n0x10 = n0x10_1;
             }
             n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
@@ -13327,112 +13358,112 @@ LABEL_67:
             n0xF0_2 = ((uint16_t *)&((uint32_t *)v385)[2 * v483 + 2 * v385->ctx_w[1].w[0]]);
             n0x10_2 = v385->ctx_w[1].w[2] + v483;
             n0xF0 = n0xF0_2;
-            v485 = n0xF0_2 + 470036;
-            if ( v485[3] + v485[2] + v485[1] > 29696 )
+            v485 = p2_freq_at(n0xF0_2, 0);
+            if ( v485->c[3] + v485->c[2] + v485->c[1] > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way((uint16_t *)v485);
+              __rescale_three_way(v485);
               n0x10 = n0x10_1;
             }
-            ((uint16_t *)v485)[v511 + 1] += (3 * (uint32_t)n0xF0[470036]) >> 4;
+            v485->c[v511 + 1] += (3 * (uint32_t)p2_freq_at(n0xF0, 0)->c[0]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_167;
-            v486 = n0xF0[470041];
-            v487 = n0xF0[470042];
-            n2 = n0xF0 + 470040;
-            if ( n0xF0[470043] + v487 + v486 > 29696 )
+            v486 = p2_freq_at(n0xF0, 1)->c[1];
+            v487 = p2_freq_at(n0xF0, 1)->c[2];
+            n2 = (uint16_t *)p2_freq_at(n0xF0, 1);
+            if ( p2_freq_at(n0xF0, 1)->c[3] + v487 + v486 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(n0xF0 + 470040);
+              __rescale_three_way(p2_freq_at(n0xF0, 1));
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (uint16_t)(n0xF0[470040] & 0xFFFC) >> 2;
-            v488 = &v385->f940072[4 * n0x10_2 + 4];
-            if ( HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
-               + LOWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
-               + HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 4])) > 29696 )
+            n2[v511 + 1] += (uint16_t)(p2_freq_at(n0xF0, 1)->c[0] & 0xFFFC) >> 2;
+            v488 = &v385->freq[n0x10_2 + 1];
+            if ( v385->freq[n0x10_2 + 1].c[3]
+               + v385->freq[n0x10_2 + 1].c[2]
+               + v385->freq[n0x10_2 + 1].c[1] > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(&v385->f940072[4 * n0x10_2 + 4]);
+              __rescale_three_way(&v385->freq[n0x10_2 + 1]);
               n0x10 = n0x10_1;
             }
-            ((uint16_t *)v488)[v511 + 1] += (uint16_t)(*v488 & 0xFFF8) >> 3;
+            v488->c[v511 + 1] += (v488->c[0] & 0xFFF8) >> 3;
             if ( n15 > 2 )
             {
 LABEL_167:
-              v489 = n0xF0[470033];
-              v490 = n0xF0[470034];
-              n2 = n0xF0 + 470032;
-              if ( n0xF0[470035] + v490 + v489 > 29696 )
+              v489 = p2_freq_at(n0xF0, -1)->c[1];
+              v490 = p2_freq_at(n0xF0, -1)->c[2];
+              n2 = (uint16_t *)p2_freq_at(n0xF0, -1);
+              if ( p2_freq_at(n0xF0, -1)->c[3] + v490 + v489 > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(n0xF0 + 470032);
+                __rescale_three_way(p2_freq_at(n0xF0, -1));
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)n0xF0[470032]) >> 4;
+              n2[v511 + 1] += (6 * (uint32_t)p2_freq_at(n0xF0, -1)->c[0]) >> 4;
             }
           }
           else
           {
-            v420 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->ctx_w[1].w[1] - v385->ctx_w[1].w[2 - v419])];
-            if ( HIWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->ctx_w[1].w[1] - v385->ctx_w[1].w[2 - v419])])
-               + LOWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->ctx_w[1].w[1] - v385->ctx_w[1].w[2 - v419])])
-               + HIWORD(((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->ctx_w[1].w[1] - v385->ctx_w[1].w[2 - v419])]) > 29696 )
+            v420 = &v385->freq[n0x10 + v385->ctx_w[1].w[1] - v385->ctx_w[1].w[2 - v419]];
+            if ( v385->freq[n0x10 + v385->ctx_w[1].w[1] - v385->ctx_w[1].w[2 - v419]].c[3]
+               + v385->freq[n0x10 + v385->ctx_w[1].w[1] - v385->ctx_w[1].w[2 - v419]].c[2]
+               + v385->freq[n0x10 + v385->ctx_w[1].w[1] - v385->ctx_w[1].w[2 - v419]].c[1] > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way((uint16_t *)v420);
+              __rescale_three_way(v420);
               n0x10 = n0x10_1;
             }
-            ((uint16_t *)v420)[v510 + 1] += (7 * (uint32_t)*v420) >> 4;
+            v420->c[v510 + 1] += (7 * (uint32_t)v420->c[0]) >> 4;
             n0xF0 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->ctx_w[1].w[1] + 2 * (v385->f278704 - v385->ctx_w[1].w[v385->ctx_w[1].sel])]));
-            v421 = n0xF0[470037];
-            v422 = n0xF0[470038];
-            n2 = n0xF0 + 470036;
-            if ( n0xF0[470039] + v422 + v421 > 29696 )
+            v421 = p2_freq_at(n0xF0, 0)->c[1];
+            v422 = p2_freq_at(n0xF0, 0)->c[2];
+            n2 = (uint16_t *)p2_freq_at(n0xF0, 0);
+            if ( p2_freq_at(n0xF0, 0)->c[3] + v422 + v421 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(n0xF0 + 470036);
+              __rescale_three_way(p2_freq_at(n0xF0, 0));
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (7 * (uint32_t)n0xF0[470036]) >> 4;
+            n2[v511 + 1] += (7 * (uint32_t)p2_freq_at(n0xF0, 0)->c[0]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_79;
-            v423 = n0xF0[470041];
-            v424 = n0xF0[470042];
-            n2 = n0xF0 + 470040;
-            if ( n0xF0[470043] + v424 + v423 > 29696 )
+            v423 = p2_freq_at(n0xF0, 1)->c[1];
+            v424 = p2_freq_at(n0xF0, 1)->c[2];
+            n2 = (uint16_t *)p2_freq_at(n0xF0, 1);
+            if ( p2_freq_at(n0xF0, 1)->c[3] + v424 + v423 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(n0xF0 + 470040);
+              __rescale_three_way(p2_freq_at(n0xF0, 1));
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (5 * (uint32_t)n0xF0[470040]) >> 4;
+            n2[v511 + 1] += (5 * (uint32_t)p2_freq_at(n0xF0, 1)->c[0]) >> 4;
             if ( n15 > 0 )
             {
 LABEL_79:
-              v425 = n0xF0[470033];
-              v426 = n0xF0[470034];
-              n2 = n0xF0 + 470032;
-              if ( n0xF0[470035] + v426 + v425 > 29696 )
+              v425 = p2_freq_at(n0xF0, -1)->c[1];
+              v426 = p2_freq_at(n0xF0, -1)->c[2];
+              n2 = (uint16_t *)p2_freq_at(n0xF0, -1);
+              if ( p2_freq_at(n0xF0, -1)->c[3] + v426 + v425 > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(n0xF0 + 470032);
+                __rescale_three_way(p2_freq_at(n0xF0, -1));
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)n0xF0[470032]) >> 4;
+              n2[v511 + 1] += (6 * (uint32_t)p2_freq_at(n0xF0, -1)->c[0]) >> 4;
             }
           }
           v427 = v385->ctx_w[2].sel;
           if ( v427 == 1 )
           {
-            n2_5 = (uint16_t *)&((uint32_t *)v385)[2 * v385->ctx_w[2].w[0] + 235018 + 2 * (n0x10 - v385->ctx_w[2].w[1])];
-            v470 = HIWORD(((uint32_t *)v385)[2 * v385->ctx_w[2].w[0] + 235018 + 2 * (n0x10 - v385->ctx_w[2].w[1])]);
-            v471 = LOWORD(((uint32_t *)v385)[2 * v385->ctx_w[2].w[0] + 235019 + 2 * (n0x10 - v385->ctx_w[2].w[1])]);
-            n2 = n2_5;
-            if ( n2_5[3] + v471 + v470 > 29696 )
+            n2_5 = &v385->freq[v385->ctx_w[2].w[0] + n0x10 - v385->ctx_w[2].w[1]];
+            v470 = v385->freq[v385->ctx_w[2].w[0] + n0x10 - v385->ctx_w[2].w[1]].c[1];
+            v471 = v385->freq[v385->ctx_w[2].w[0] + n0x10 - v385->ctx_w[2].w[1]].c[2];
+            n2 = (uint16_t *)n2_5;
+            if ( n2_5->c[3] + v471 + v470 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way((uint16_t *)n2_5);
+              __rescale_three_way(n2_5);
               n0x10 = n0x10_1;
             }
             n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
@@ -13440,112 +13471,112 @@ LABEL_79:
             n0xF0_3 = ((uint16_t *)&((uint32_t *)v385)[2 * v472 + 2 * v385->ctx_w[2].w[0]]);
             n0x10_2 = v385->ctx_w[2].w[2] + v472;
             n0xF0 = n0xF0_3;
-            v474 = n0xF0_3 + 470036;
-            if ( v474[3] + v474[2] + v474[1] > 29696 )
+            v474 = p2_freq_at(n0xF0_3, 0);
+            if ( v474->c[3] + v474->c[2] + v474->c[1] > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way((uint16_t *)v474);
+              __rescale_three_way(v474);
               n0x10 = n0x10_1;
             }
-            ((uint16_t *)v474)[v511 + 1] += (3 * (uint32_t)n0xF0[470036]) >> 4;
+            v474->c[v511 + 1] += (3 * (uint32_t)p2_freq_at(n0xF0, 0)->c[0]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_154;
-            v475 = n0xF0[470041];
-            v476 = n0xF0[470042];
-            n2 = n0xF0 + 470040;
-            if ( n0xF0[470043] + v476 + v475 > 29696 )
+            v475 = p2_freq_at(n0xF0, 1)->c[1];
+            v476 = p2_freq_at(n0xF0, 1)->c[2];
+            n2 = (uint16_t *)p2_freq_at(n0xF0, 1);
+            if ( p2_freq_at(n0xF0, 1)->c[3] + v476 + v475 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(n0xF0 + 470040);
+              __rescale_three_way(p2_freq_at(n0xF0, 1));
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (uint16_t)(n0xF0[470040] & 0xFFFC) >> 2;
-            v477 = &v385->f940072[4 * n0x10_2 + 4];
-            if ( HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
-               + LOWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
-               + HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 4])) > 29696 )
+            n2[v511 + 1] += (uint16_t)(p2_freq_at(n0xF0, 1)->c[0] & 0xFFFC) >> 2;
+            v477 = &v385->freq[n0x10_2 + 1];
+            if ( v385->freq[n0x10_2 + 1].c[3]
+               + v385->freq[n0x10_2 + 1].c[2]
+               + v385->freq[n0x10_2 + 1].c[1] > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(&v385->f940072[4 * n0x10_2 + 4]);
+              __rescale_three_way(&v385->freq[n0x10_2 + 1]);
               n0x10 = n0x10_1;
             }
-            ((uint16_t *)v477)[v511 + 1] += (uint16_t)(*v477 & 0xFFF8) >> 3;
+            v477->c[v511 + 1] += (v477->c[0] & 0xFFF8) >> 3;
             if ( n15 > 2 )
             {
 LABEL_154:
-              v478 = n0xF0[470033];
-              v479 = n0xF0[470034];
-              n2 = n0xF0 + 470032;
-              if ( n0xF0[470035] + v479 + v478 > 29696 )
+              v478 = p2_freq_at(n0xF0, -1)->c[1];
+              v479 = p2_freq_at(n0xF0, -1)->c[2];
+              n2 = (uint16_t *)p2_freq_at(n0xF0, -1);
+              if ( p2_freq_at(n0xF0, -1)->c[3] + v479 + v478 > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(n0xF0 + 470032);
+                __rescale_three_way(p2_freq_at(n0xF0, -1));
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)n0xF0[470032]) >> 4;
+              n2[v511 + 1] += (6 * (uint32_t)p2_freq_at(n0xF0, -1)->c[0]) >> 4;
             }
           }
           else
           {
-            v428 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->ctx_w[2].w[1] - v385->ctx_w[2].w[2 - v427])];
-            if ( HIWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->ctx_w[2].w[1] - v385->ctx_w[2].w[2 - v427])])
-               + LOWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->ctx_w[2].w[1] - v385->ctx_w[2].w[2 - v427])])
-               + HIWORD(((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->ctx_w[2].w[1] - v385->ctx_w[2].w[2 - v427])]) > 29696 )
+            v428 = &v385->freq[n0x10 + v385->ctx_w[2].w[1] - v385->ctx_w[2].w[2 - v427]];
+            if ( v385->freq[n0x10 + v385->ctx_w[2].w[1] - v385->ctx_w[2].w[2 - v427]].c[3]
+               + v385->freq[n0x10 + v385->ctx_w[2].w[1] - v385->ctx_w[2].w[2 - v427]].c[2]
+               + v385->freq[n0x10 + v385->ctx_w[2].w[1] - v385->ctx_w[2].w[2 - v427]].c[1] > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way((uint16_t *)v428);
+              __rescale_three_way(v428);
               n0x10 = n0x10_1;
             }
-            ((uint16_t *)v428)[v510 + 1] += (7 * (uint32_t)*v428) >> 4;
+            v428->c[v510 + 1] += (7 * (uint32_t)v428->c[0]) >> 4;
             n0xF0 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->ctx_w[2].w[1] + 2 * (v385->f278704 - v385->ctx_w[2].w[v385->ctx_w[2].sel])]));
-            v429 = n0xF0[470037];
-            v430 = n0xF0[470038];
-            n2 = n0xF0 + 470036;
-            if ( n0xF0[470039] + v430 + v429 > 29696 )
+            v429 = p2_freq_at(n0xF0, 0)->c[1];
+            v430 = p2_freq_at(n0xF0, 0)->c[2];
+            n2 = (uint16_t *)p2_freq_at(n0xF0, 0);
+            if ( p2_freq_at(n0xF0, 0)->c[3] + v430 + v429 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(n0xF0 + 470036);
+              __rescale_three_way(p2_freq_at(n0xF0, 0));
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (7 * (uint32_t)n0xF0[470036]) >> 4;
+            n2[v511 + 1] += (7 * (uint32_t)p2_freq_at(n0xF0, 0)->c[0]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_91;
-            v431 = n0xF0[470041];
-            v432 = n0xF0[470042];
-            n2 = n0xF0 + 470040;
-            if ( n0xF0[470043] + v432 + v431 > 29696 )
+            v431 = p2_freq_at(n0xF0, 1)->c[1];
+            v432 = p2_freq_at(n0xF0, 1)->c[2];
+            n2 = (uint16_t *)p2_freq_at(n0xF0, 1);
+            if ( p2_freq_at(n0xF0, 1)->c[3] + v432 + v431 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(n0xF0 + 470040);
+              __rescale_three_way(p2_freq_at(n0xF0, 1));
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (5 * (uint32_t)n0xF0[470040]) >> 4;
+            n2[v511 + 1] += (5 * (uint32_t)p2_freq_at(n0xF0, 1)->c[0]) >> 4;
             if ( n15 > 0 )
             {
 LABEL_91:
-              v433 = n0xF0[470033];
-              v434 = n0xF0[470034];
-              n2 = n0xF0 + 470032;
-              if ( n0xF0[470035] + v434 + v433 > 29696 )
+              v433 = p2_freq_at(n0xF0, -1)->c[1];
+              v434 = p2_freq_at(n0xF0, -1)->c[2];
+              n2 = (uint16_t *)p2_freq_at(n0xF0, -1);
+              if ( p2_freq_at(n0xF0, -1)->c[3] + v434 + v433 > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(n0xF0 + 470032);
+                __rescale_three_way(p2_freq_at(n0xF0, -1));
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)n0xF0[470032]) >> 4;
+              n2[v511 + 1] += (6 * (uint32_t)p2_freq_at(n0xF0, -1)->c[0]) >> 4;
             }
           }
           v435 = v385->ctx_w[3].sel;
           if ( v435 == 1 )
           {
-            n2_6 = (uint16_t *)&((uint32_t *)v385)[2 * v385->ctx_w[3].w[0] + 235018 + 2 * (n0x10 - v385->ctx_w[3].w[1])];
-            v459 = HIWORD(((uint32_t *)v385)[2 * v385->ctx_w[3].w[0] + 235018 + 2 * (n0x10 - v385->ctx_w[3].w[1])]);
-            v460 = LOWORD(((uint32_t *)v385)[2 * v385->ctx_w[3].w[0] + 235019 + 2 * (n0x10 - v385->ctx_w[3].w[1])]);
-            n2 = n2_6;
-            if ( n2_6[3] + v460 + v459 > 29696 )
+            n2_6 = &v385->freq[v385->ctx_w[3].w[0] + n0x10 - v385->ctx_w[3].w[1]];
+            v459 = v385->freq[v385->ctx_w[3].w[0] + n0x10 - v385->ctx_w[3].w[1]].c[1];
+            v460 = v385->freq[v385->ctx_w[3].w[0] + n0x10 - v385->ctx_w[3].w[1]].c[2];
+            n2 = (uint16_t *)n2_6;
+            if ( n2_6->c[3] + v460 + v459 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way((uint16_t *)n2_6);
+              __rescale_three_way(n2_6);
               n0x10 = n0x10_1;
             }
             n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
@@ -13553,172 +13584,172 @@ LABEL_91:
             n0xF0_4 = ((uint16_t *)&((uint32_t *)v385)[2 * v461 + 2 * v385->ctx_w[3].w[0]]);
             n0x10_2 = v385->ctx_w[3].w[2] + v461;
             n0xF0 = n0xF0_4;
-            v463 = n0xF0_4 + 470036;
-            if ( v463[3] + v463[2] + v463[1] > 29696 )
+            v463 = p2_freq_at(n0xF0_4, 0);
+            if ( v463->c[3] + v463->c[2] + v463->c[1] > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way((uint16_t *)v463);
+              __rescale_three_way(v463);
               n0x10 = n0x10_1;
             }
-            ((uint16_t *)v463)[v511 + 1] += (3 * (uint32_t)n0xF0[470036]) >> 4;
+            v463->c[v511 + 1] += (3 * (uint32_t)p2_freq_at(n0xF0, 0)->c[0]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_141;
-            v464 = n0xF0[470041];
-            v465 = n0xF0[470042];
-            n2 = n0xF0 + 470040;
-            if ( n0xF0[470043] + v465 + v464 > 29696 )
+            v464 = p2_freq_at(n0xF0, 1)->c[1];
+            v465 = p2_freq_at(n0xF0, 1)->c[2];
+            n2 = (uint16_t *)p2_freq_at(n0xF0, 1);
+            if ( p2_freq_at(n0xF0, 1)->c[3] + v465 + v464 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(n0xF0 + 470040);
+              __rescale_three_way(p2_freq_at(n0xF0, 1));
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (uint16_t)(n0xF0[470040] & 0xFFFC) >> 2;
-            v466 = &v385->f940072[4 * n0x10_2 + 4];
-            if ( HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
-               + LOWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
-               + HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 4])) > 29696 )
+            n2[v511 + 1] += (uint16_t)(p2_freq_at(n0xF0, 1)->c[0] & 0xFFFC) >> 2;
+            v466 = &v385->freq[n0x10_2 + 1];
+            if ( v385->freq[n0x10_2 + 1].c[3]
+               + v385->freq[n0x10_2 + 1].c[2]
+               + v385->freq[n0x10_2 + 1].c[1] > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(&v385->f940072[4 * n0x10_2 + 4]);
+              __rescale_three_way(&v385->freq[n0x10_2 + 1]);
               n0x10 = n0x10_1;
             }
-            ((uint16_t *)v466)[v511 + 1] += (uint16_t)(*v466 & 0xFFF8) >> 3;
+            v466->c[v511 + 1] += (v466->c[0] & 0xFFF8) >> 3;
             if ( n15 > 2 )
             {
 LABEL_141:
-              v467 = n0xF0[470033];
-              v468 = n0xF0[470034];
-              n2 = n0xF0 + 470032;
-              if ( n0xF0[470035] + v468 + v467 > 29696 )
+              v467 = p2_freq_at(n0xF0, -1)->c[1];
+              v468 = p2_freq_at(n0xF0, -1)->c[2];
+              n2 = (uint16_t *)p2_freq_at(n0xF0, -1);
+              if ( p2_freq_at(n0xF0, -1)->c[3] + v468 + v467 > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(n0xF0 + 470032);
+                __rescale_three_way(p2_freq_at(n0xF0, -1));
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)n0xF0[470032]) >> 4;
+              n2[v511 + 1] += (6 * (uint32_t)p2_freq_at(n0xF0, -1)->c[0]) >> 4;
             }
           }
           else
           {
-            v436 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->ctx_w[3].w[1] - v385->ctx_w[3].w[2 - v435])];
-            if ( HIWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->ctx_w[3].w[1] - v385->ctx_w[3].w[2 - v435])])
-               + LOWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->ctx_w[3].w[1] - v385->ctx_w[3].w[2 - v435])])
-               + HIWORD(((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->ctx_w[3].w[1] - v385->ctx_w[3].w[2 - v435])]) > 29696 )
+            v436 = &v385->freq[n0x10 + v385->ctx_w[3].w[1] - v385->ctx_w[3].w[2 - v435]];
+            if ( v385->freq[n0x10 + v385->ctx_w[3].w[1] - v385->ctx_w[3].w[2 - v435]].c[3]
+               + v385->freq[n0x10 + v385->ctx_w[3].w[1] - v385->ctx_w[3].w[2 - v435]].c[2]
+               + v385->freq[n0x10 + v385->ctx_w[3].w[1] - v385->ctx_w[3].w[2 - v435]].c[1] > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way((uint16_t *)v436);
+              __rescale_three_way(v436);
               n0x10 = n0x10_1;
             }
-            ((uint16_t *)v436)[v510 + 1] += (7 * (uint32_t)*v436) >> 4;
+            v436->c[v510 + 1] += (7 * (uint32_t)v436->c[0]) >> 4;
             n0xF0 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->ctx_w[3].w[1] + 2 * (v385->f278704 - v385->ctx_w[3].w[v385->ctx_w[3].sel])]));
-            v437 = n0xF0[470037];
-            v438 = n0xF0[470038];
-            n2 = n0xF0 + 470036;
-            if ( n0xF0[470039] + v438 + v437 > 29696 )
+            v437 = p2_freq_at(n0xF0, 0)->c[1];
+            v438 = p2_freq_at(n0xF0, 0)->c[2];
+            n2 = (uint16_t *)p2_freq_at(n0xF0, 0);
+            if ( p2_freq_at(n0xF0, 0)->c[3] + v438 + v437 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(n0xF0 + 470036);
+              __rescale_three_way(p2_freq_at(n0xF0, 0));
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (7 * (uint32_t)n0xF0[470036]) >> 4;
+            n2[v511 + 1] += (7 * (uint32_t)p2_freq_at(n0xF0, 0)->c[0]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_103;
-            v439 = n0xF0[470041];
-            v440 = n0xF0[470042];
-            n2 = n0xF0 + 470040;
-            if ( n0xF0[470043] + v440 + v439 > 29696 )
+            v439 = p2_freq_at(n0xF0, 1)->c[1];
+            v440 = p2_freq_at(n0xF0, 1)->c[2];
+            n2 = (uint16_t *)p2_freq_at(n0xF0, 1);
+            if ( p2_freq_at(n0xF0, 1)->c[3] + v440 + v439 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(n0xF0 + 470040);
+              __rescale_three_way(p2_freq_at(n0xF0, 1));
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (5 * (uint32_t)n0xF0[470040]) >> 4;
+            n2[v511 + 1] += (5 * (uint32_t)p2_freq_at(n0xF0, 1)->c[0]) >> 4;
             if ( n15 > 0 )
             {
 LABEL_103:
-              v441 = n0xF0[470033];
-              v442 = n0xF0[470034];
-              n2 = n0xF0 + 470032;
-              if ( n0xF0[470035] + v442 + v441 > 29696 )
+              v441 = p2_freq_at(n0xF0, -1)->c[1];
+              v442 = p2_freq_at(n0xF0, -1)->c[2];
+              n2 = (uint16_t *)p2_freq_at(n0xF0, -1);
+              if ( p2_freq_at(n0xF0, -1)->c[3] + v442 + v441 > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(n0xF0 + 470032);
+                __rescale_three_way(p2_freq_at(n0xF0, -1));
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)n0xF0[470032]) >> 4;
+              n2[v511 + 1] += (6 * (uint32_t)p2_freq_at(n0xF0, -1)->c[0]) >> 4;
             }
           }
           v443 = v385->ctx_w[4].sel;
           if ( v443 == 1 )
           {
-            n2_7 = (uint16_t *)&((uint32_t *)v385)[2 * v385->ctx_w[4].w[0] + 235018 + 2 * (n0x10 - v385->ctx_w[4].w[1])];
-            v447 = HIWORD(((uint32_t *)v385)[2 * v385->ctx_w[4].w[0] + 235018 + 2 * (n0x10 - v385->ctx_w[4].w[1])]);
-            v448 = LOWORD(((uint32_t *)v385)[2 * v385->ctx_w[4].w[0] + 235019 + 2 * (n0x10 - v385->ctx_w[4].w[1])]);
-            v449 = n2_7[3];
-            n2 = n2_7;
+            n2_7 = &v385->freq[v385->ctx_w[4].w[0] + n0x10 - v385->ctx_w[4].w[1]];
+            v447 = v385->freq[v385->ctx_w[4].w[0] + n0x10 - v385->ctx_w[4].w[1]].c[1];
+            v448 = v385->freq[v385->ctx_w[4].w[0] + n0x10 - v385->ctx_w[4].w[1]].c[2];
+            v449 = n2_7->c[3];
+            n2 = (uint16_t *)n2_7;
             if ( v449 + v448 + v447 > 29696 )
-              __rescale_three_way((uint16_t *)n2_7);
+              __rescale_three_way(n2_7);
             n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
             v450 = v385->f278704 - v385->ctx_w[4].w[1];
             n0x10_4 = (uint16_t *)&((uint32_t *)v385)[2 * v450 + 2 * v385->ctx_w[4].w[0]];
             n0xF0 = (((uint16_t *)(v385->ctx_w[4].w[2] + v450)));
             p2_rec = n0x10_4;
-            v452 = n0x10_4 + 470036;
-            if ( n0x10_4[470039] + n0x10_4[470038] + n0x10_4[470037] > 29696 )
-              __rescale_three_way((uint16_t *)v452);
-            ((uint16_t *)v452)[v511 + 1] += (3 * (uint32_t)p2_rec[470036]) >> 4;
+            v452 = p2_freq_at(n0x10_4, 0);
+            if ( p2_freq_at(n0x10_4, 0)->c[3] + p2_freq_at(n0x10_4, 0)->c[2] + p2_freq_at(n0x10_4, 0)->c[1] > 29696 )
+              __rescale_three_way(v452);
+            v452->c[v511 + 1] += (3 * (uint32_t)p2_freq_at(p2_rec, 0)->c[0]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_128;
-            v453 = p2_rec[470043];
-            v454 = p2_rec[470042] + p2_rec[470041];
-            n2 = &p2_rec[470040];
+            v453 = p2_freq_at(p2_rec, 1)->c[3];
+            v454 = p2_freq_at(p2_rec, 1)->c[2] + p2_freq_at(p2_rec, 1)->c[1];
+            n2 = (uint16_t *)p2_freq_at(p2_rec, 1);
             if ( v453 + v454 > 29696 )
-              __rescale_three_way(&p2_rec[470040]);
+              __rescale_three_way(p2_freq_at(p2_rec, 1));
             n0xF0_5 = (uint16_t *)(n0xF0);
-            n2[v511 + 1] += (uint16_t)(p2_rec[470040] & 0xFFFC) >> 2;
-            v456 = &v385->f940072[4 * (uint32_t)n0xF0_5 + 4];
-            if ( v456[3] + v456[2] + v456[1] > 29696 )
-              __rescale_three_way((uint16_t *)v456);
-            n0x10 = (uint16_t)(*v456 & 0xFFF8) >> 3;
-            ((uint16_t *)v456)[v511 + 1] += n0x10;
+            n2[v511 + 1] += (uint16_t)(p2_freq_at(p2_rec, 1)->c[0] & 0xFFFC) >> 2;
+            v456 = &v385->freq[(uint32_t)n0xF0_5 + 1];
+            if ( v456->c[3] + v456->c[2] + v456->c[1] > 29696 )
+              __rescale_three_way(v456);
+            n0x10 = (v456->c[0] & 0xFFF8) >> 3;
+            v456->c[v511 + 1] += n0x10;
             if ( n15 > 2 )
             {
 LABEL_128:
-              v457 = &p2_rec[470032];
-              if ( p2_rec[470035]
-                 + p2_rec[470034]
-                 + p2_rec[470033] > 29696 )
-                __rescale_three_way(&p2_rec[470032]);
+              v457 = p2_freq_at(p2_rec, -1);
+              if ( p2_freq_at(p2_rec, -1)->c[3]
+                 + p2_freq_at(p2_rec, -1)->c[2]
+                 + p2_freq_at(p2_rec, -1)->c[1] > 29696 )
+                __rescale_three_way(p2_freq_at(p2_rec, -1));
               n0x10 = (uintptr_t)p2_rec;   // the slot's last value, and what this path returns
-              ((uint16_t *)v457)[v511 + 1] += (6
-                                                               * (uint32_t)p2_rec[470032]) >> 4;
+              v457->c[v511 + 1] += (6
+                                                               * (uint32_t)p2_freq_at(p2_rec, -1)->c[0]) >> 4;
             }
           }
           else
           {
-            v444 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->ctx_w[4].w[1] - v385->ctx_w[4].w[2 - v443])];
-            if ( HIWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->ctx_w[4].w[1] - v385->ctx_w[4].w[2 - v443])])
-               + LOWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->ctx_w[4].w[1] - v385->ctx_w[4].w[2 - v443])])
-               + HIWORD(((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->ctx_w[4].w[1] - v385->ctx_w[4].w[2 - v443])]) > 29696 )
-              __rescale_three_way((uint16_t *)v444);
-            ((uint16_t *)v444)[v510 + 1] += (7 * (uint32_t)*v444) >> 4;
+            v444 = &v385->freq[n0x10 + v385->ctx_w[4].w[1] - v385->ctx_w[4].w[2 - v443]];
+            if ( v385->freq[n0x10 + v385->ctx_w[4].w[1] - v385->ctx_w[4].w[2 - v443]].c[3]
+               + v385->freq[n0x10 + v385->ctx_w[4].w[1] - v385->ctx_w[4].w[2 - v443]].c[2]
+               + v385->freq[n0x10 + v385->ctx_w[4].w[1] - v385->ctx_w[4].w[2 - v443]].c[1] > 29696 )
+              __rescale_three_way(v444);
+            v444->c[v510 + 1] += (7 * (uint32_t)v444->c[0]) >> 4;
             v445 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->ctx_w[4].w[1] + 2 * (v385->f278704 - v385->ctx_w[4].w[v385->ctx_w[4].sel])]));
-            if ( v445[470039] + v445[470038] + v445[470037] > 29696 )
-              __rescale_three_way(v445 + 470036);
-            (v445)[v511 + 470037] += (7 * (uint32_t)v445[470036]) >> 4;
+            if ( p2_freq_at(v445, 0)->c[3] + p2_freq_at(v445, 0)->c[2] + p2_freq_at(v445, 0)->c[1] > 29696 )
+              __rescale_three_way(p2_freq_at(v445, 0));
+            p2_freq_at(v445, 0)->c[v511 + 1] += (7 * (uint32_t)p2_freq_at(v445, 0)->c[0]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_115;
-            if ( v445[470043] + v445[470042] + v445[470041] > 29696 )
-              __rescale_three_way(v445 + 470040);
-            n0x10 = v445[470040];
-            (v445)[v511 + 470041] += (5 * n0x10) >> 4;
+            if ( p2_freq_at(v445, 1)->c[3] + p2_freq_at(v445, 1)->c[2] + p2_freq_at(v445, 1)->c[1] > 29696 )
+              __rescale_three_way(p2_freq_at(v445, 1));
+            n0x10 = p2_freq_at(v445, 1)->c[0];
+            p2_freq_at(v445, 1)->c[v511 + 1] += (5 * n0x10) >> 4;
             if ( n15 > 0 )
             {
 LABEL_115:
-              if ( v445[470035] + v445[470034] + v445[470033] > 29696 )
-                __rescale_three_way(v445 + 470032);
-              n0x10 = v445[470032];
-              (v445)[v511 + 470033] += (6 * n0x10) >> 4;
+              if ( p2_freq_at(v445, -1)->c[3] + p2_freq_at(v445, -1)->c[2] + p2_freq_at(v445, -1)->c[1] > 29696 )
+                __rescale_three_way(p2_freq_at(v445, -1));
+              n0x10 = p2_freq_at(v445, -1)->c[0];
+              p2_freq_at(v445, -1)->c[v511 + 1] += (6 * n0x10) >> 4;
             }
           }
         }
@@ -13726,12 +13757,12 @@ LABEL_115:
       }
       v387 = ((uint16_t *)&((uint32_t *)v385)[2 * v385->f278704]);
     }
-    v394 = v387[470032 + 1];
-    v395 = v387[470032 + 2];
-    n2 = v387 + 470032;
-    if ( v387[470032 + 3] + v395 + v394 > 29696 )
-      __rescale_three_way(v387 + 470032);
-    v396 = (13 * (uint32_t)v387[470032 + 0]) >> 4;
+    v394 = p2_freq_at(v387, -1)->c[1];
+    v395 = p2_freq_at(v387, -1)->c[2];
+    n2 = (uint16_t *)p2_freq_at(v387, -1);
+    if ( p2_freq_at(v387, -1)->c[3] + v395 + v394 > 29696 )
+      __rescale_three_way(p2_freq_at(v387, -1));
+    v396 = (13 * (uint32_t)p2_freq_at(v387, -1)->c[0]) >> 4;
     if ( a4 )
     {
       n2[3 - v511] += v396;
@@ -13792,27 +13823,14 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
       lpAddress->f278708 = lpAddress->f278704 + (*(uint32_t *)&lpAddress->f278944[v13 + 4]);
       lpAddress->f278712 = lpAddress->f278704 + (*(uint32_t *)&lpAddress->f278944[v13]);
       v14 = (uint8_t)((*(uint16_t *)(lpAddress->cursor[0] - 18) >> 4)
-                            + *(uint8_t *)(__alt_p2_decode_symbol((uint16_t *)((uintptr_t)lpAddress
-                                                              + 8
-                                                              * (lpAddress->f278704
-                                                               + *(uint32_t *)((uintptr_t)lpAddress
-                                                                           + 4
-                                                                           * ((*(int16_t *)((uintptr_t)v12 - 18) <= *(int16_t *)((uintptr_t)v12 - 36))
-                                                                            + (*(int16_t *)((uintptr_t)v12 - 18) < *(int16_t *)((uintptr_t)v12 - 36)))
-                                                                           + 278828)
-                                                               + *(uint32_t *)((uintptr_t)lpAddress
-                                                                           + 4 * *(uint8_t *)((uintptr_t)v12 - 20)
-                                                                           + 278812)
-                                                               + *(uint32_t *)((uintptr_t)lpAddress
-                                                                           + 4 * *(uint8_t *)((uintptr_t)v12 - 2)
-                                                                           + 278796)
-                                                               + *(uint32_t *)((uintptr_t)lpAddress
-                                                                           + 4
-                                                                           * (((uint32_t)(v13 - 115) >> 31)
-                                                                            + ((uint32_t)(v13 - 17) >> 31))
-                                                                           + 278780)
-                                                               + lpAddress->ctx_w[4].w[1])
-                                                              + 940072), (uint8_t *)lpAddress + 278708)
+                            + *(uint8_t *)(__alt_p2_decode_symbol(&lpAddress->freq[lpAddress->f278704
+                                                               + lpAddress->ctx_w[3].w[((*(int16_t *)((uintptr_t)v12 - 18) <= *(int16_t *)((uintptr_t)v12 - 36))
+                                                                            + (*(int16_t *)((uintptr_t)v12 - 18) < *(int16_t *)((uintptr_t)v12 - 36)))]
+                                                               + lpAddress->ctx_w[2].w[*(uint8_t *)((uintptr_t)v12 - 20)]
+                                                               + lpAddress->ctx_w[1].w[*(uint8_t *)((uintptr_t)v12 - 2)]
+                                                               + lpAddress->ctx_w[0].w[(((uint32_t)(v13 - 115) >> 31)
+                                                                            + ((uint32_t)(v13 - 17) >> 31))]
+                                                               + lpAddress->ctx_w[4].w[1]], (uint8_t *)lpAddress + 278708)
                                        + (uintptr_t)lpAddress
                                        + 280496));
       *a5 = v14;
@@ -13970,7 +13988,7 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
         for ( j = 0; j < i; ++j )
         {
           v92 = __alt_p2_context((AltP2Block *)lpAddress, (AltP2Block *)nullptr, (AltP2Block *)nullptr);
-          v93 = __alt_p2_decode_symbol((uint16_t *)((uintptr_t)lpAddress + 8 * lpAddress->f278704 + 940072), (uint8_t *)lpAddress + 278708);
+          v93 = __alt_p2_decode_symbol(&lpAddress->freq[lpAddress->f278704], (uint8_t *)lpAddress + 278708);
           v94 = (uint8_t)(v92 + (*(uint8_t *)&lpAddress->f280496[v93]));
           v97[j] = v94;
           __alt_p2_model(lpAddress, v94, v93, v94 - v92);
@@ -14090,7 +14108,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v69, v70, v76, v77, v101, v103, v104, v105, v106, v107, v108, v112, v113,
           v114, v115, v116, v117, v118, v119, v121, v122, v123, v124, v125,
           v126, v127, v128, v130, v131, v132, v133, v134, v135, n4_3, n4_4;
-  uint16_t *v102;
+  P2Freq *v102;
   AltP2Block *lpAddress_1;
   uint32_t v11;
   void *v7, *v8, **lpAddress_2;
@@ -14345,7 +14363,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           ctx_bias[3] >>= 3;
           lpAddress_1 = (AltP2Block *)(plane[0]);
           v101 = __alt_p2_context((AltP2Block *)plane[0], (AltP2Block *)plane[2], (AltP2Block *)plane[1]);
-          v102 = &lpAddress_1->f940072[4 * *&lpAddress_1->f278704];
+          v102 = &lpAddress_1->freq[*&lpAddress_1->f278704];
           v168 = v101;
           v103 = __alt_p2_decode_symbol(v102, (uint8_t *)&lpAddress_1->f278708);
           v104 = (uint8_t)(v168 + (*(uint8_t *)&lpAddress_1->f280496[v103]));
@@ -14367,7 +14385,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v111 = (AltP2Block *)(plane[1]);
           *(uint16_t *)(plane[1]->cursor[0] + 2) = v110;
           v112 = __alt_p2_context((AltP2Block *)v111, (AltP2Block *)plane[0], (AltP2Block *)plane[2]);
-          v113 = __alt_p2_decode_symbol(&v111->f940072[4 * *(int32_t *)&v111->f278704], (uint8_t *)&v111->f278708);
+          v113 = __alt_p2_decode_symbol(&v111->freq[*(int32_t *)&v111->f278704], (uint8_t *)&v111->f278708);
           v114 = (uint8_t)(v112 + v111->f280496[v113]);
           v169 = v114;
           __alt_p2_model((AltP2Block *)v111, v114, v113, v114 - v112);
@@ -14389,7 +14407,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v120 = (AltP2Block *)(plane[2]);
           *(uint16_t *)(plane[2]->cursor[0] + 2) = v119;
           v121 = __alt_p2_context((AltP2Block *)v120, (AltP2Block *)plane[0], (AltP2Block *)plane[1]);
-          v122 = __alt_p2_decode_symbol(&v120->f940072[4 * *(int32_t *)&v120->f278704], (uint8_t *)&v120->f278708);
+          v122 = __alt_p2_decode_symbol(&v120->freq[*(int32_t *)&v120->f278704], (uint8_t *)&v120->f278708);
           v123 = (uint8_t)(v121 + v120->f280496[v122]);
           v170 = v123;
           __alt_p2_model((AltP2Block *)v120, v123, v122, v123 - v121);
@@ -14414,7 +14432,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
             v129 = (AltP2Block *)(plane[3]);
             *(uint16_t *)(plane[3]->cursor[0] + 2) = v128;
             v130 = __alt_p2_context((AltP2Block *)v129, (AltP2Block *)plane[2], (AltP2Block *)plane[0]);
-            v131 = __alt_p2_decode_symbol(&v129->f940072[4 * *(int32_t *)&v129->f278704], (uint8_t *)&v129->f278708);
+            v131 = __alt_p2_decode_symbol(&v129->freq[*(int32_t *)&v129->f278704], (uint8_t *)&v129->f278708);
             v154 = (uint8_t)(v130 + v129->f280496[v131]);
             __alt_p2_model((AltP2Block *)v129, v154, v131, v154 - v130);
             v132 = *(int32_t *)&v129->cursor[0];
@@ -14568,16 +14586,18 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
       v17 = *(int16_t *)(v16 - 18) >> 4;
       *(int32_t *)&lpAddress->f278708 = *(int32_t *)&lpAddress->f278704 + lpAddress->f278944[v17 + 4];
       *(int32_t *)&lpAddress->f278712 = *(int32_t *)&lpAddress->f278704 + lpAddress->f278944[v17];
-      __alt_p2_encode_symbol(&lpAddress->f940072[4 * *(int32_t *)&lpAddress->f278704
-                                 + 4
-                                 * lpAddress->ctx_w[3].w[(*(int16_t *)(v16 - 18) <= *(int16_t *)(v16 - 36))
-                                                           + (*(int16_t *)(v16 - 18) < *(int16_t *)(v16 - 36))]
-                                 + 4 * lpAddress->ctx_w[2].w[*(uint8_t *)(v16 - 20)]
-                                 + 4 * lpAddress->ctx_w[1].w[*(uint8_t *)(v16 - 2)]
-                                 + 4
-                                 * lpAddress->ctx_w[0].w[((uint32_t)(v17 - 115) >> 31)
-                                                           + ((uint32_t)(v17 - 17) >> 31)]
-                                 + 4 * lpAddress->ctx_w[4].w[1]], (uint8_t *)&lpAddress->f278708, v104);
+      // The composed index, the encoder's own copy of `alt_p2_context`'s sum:
+      // four selected weights, one constant, and the running context.
+      __alt_p2_encode_symbol(
+          &lpAddress->freq[*(int32_t *)&lpAddress->f278704
+                         + lpAddress->ctx_w[3].w[(*(int16_t *)(v16 - 18) <= *(int16_t *)(v16 - 36))
+                                               + (*(int16_t *)(v16 - 18) < *(int16_t *)(v16 - 36))]
+                         + lpAddress->ctx_w[2].w[*(uint8_t *)(v16 - 20)]
+                         + lpAddress->ctx_w[1].w[*(uint8_t *)(v16 - 2)]
+                         + lpAddress->ctx_w[0].w[((uint32_t)(v17 - 115) >> 31)
+                                               + ((uint32_t)(v17 - 17) >> 31)]
+                         + lpAddress->ctx_w[4].w[1]],
+          (uint8_t *)&lpAddress->f278708, v104);
       ++v103;
       LOWORD(v16) = 16 * (uint8_t)*a7;
       *(uint16_t *)lpAddress->cursor[0] = v16;
@@ -14743,7 +14763,7 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
             v105[k] = v97;
           }
           v110 = v99;
-          __alt_p2_encode_symbol(&lpAddress_1->f940072[4 * *(int32_t *)&lpAddress_1->f278704], (uint8_t *)v106, v99);
+          __alt_p2_encode_symbol(&lpAddress_1->freq[*(int32_t *)&lpAddress_1->f278704], (uint8_t *)v106, v99);
           __alt_p2_model((AltP2Block *)lpAddress_1, (uint8_t)v105[k], v110, (uint8_t)v105[k] - v95);
           v8 = &v109[k + 1];
           v100 = (int32_t)&v105[k + 1];
@@ -15112,7 +15132,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             v104 = v173;
             v166[v184] = v107;
           }
-          __alt_p2_encode_symbol((uint16_t *)&((uint8_t *)lpAddress_1)[8 * lpAddress_1->f278704 + 940072], (uint8_t *)lpAddress_1 + 278708, v105);
+          __alt_p2_encode_symbol(&lpAddress_1->freq[lpAddress_1->f278704], (uint8_t *)lpAddress_1 + 278708, v105);
           __alt_p2_model((AltP2Block *)lpAddress_1, v104, v105, v104 - v178);
           v109 = *(uint32_t *)&lpAddress_1->cursor[0];
           v110 = *(int16_t *)(v109 - 4);
@@ -15146,7 +15166,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             v115 = v175;
             v166[v176] = v118;
           }
-          __alt_p2_encode_symbol(&v114->f940072[4 * *(int32_t *)&v114->f278704], (uint8_t *)&v114->f278708, v116);
+          __alt_p2_encode_symbol(&v114->freq[*(int32_t *)&v114->f278704], (uint8_t *)&v114->f278708, v116);
           __alt_p2_model((AltP2Block *)v114, v115, v116, v115 - v179);
           v120 = *(int32_t *)&v114->cursor[0];
           v121 = *(int16_t *)(v120 - 4);
@@ -15181,7 +15201,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             v126 = v174;
             v166[v177] = v129;
           }
-          __alt_p2_encode_symbol(&v125->f940072[4 * *(int32_t *)&v125->f278704], (uint8_t *)&v125->f278708, v127);
+          __alt_p2_encode_symbol(&v125->freq[*(int32_t *)&v125->f278704], (uint8_t *)&v125->f278708, v127);
           __alt_p2_model((AltP2Block *)v125, v126, v127, v126 - v180);
           v131 = *(int32_t *)&v125->cursor[0];
           n4_1 = plane_count;
@@ -15220,7 +15240,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
               v134 = (uint8_t)(v157 + v133->f280496[v135]);
               v166[n3] = v137;
             }
-            __alt_p2_encode_symbol(&v133->f940072[4 * *(int32_t *)&v133->f278704], (uint8_t *)&v133->f278708, v135);
+            __alt_p2_encode_symbol(&v133->freq[*(int32_t *)&v133->f278704], (uint8_t *)&v133->f278708, v135);
             __alt_p2_model((AltP2Block *)v133, v134, v135, v134 - v157);
             v139 = *(int32_t *)&v133->cursor[0];
             n4_1 = plane_count;
