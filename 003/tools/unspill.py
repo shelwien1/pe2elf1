@@ -59,8 +59,8 @@ def spills(lines):
                 bare[m.group(1)] += 1
         g = {}
         for mem, (i, n) in decl.items():
-            if mem in use and len(use[mem]) > 1 and not sub[mem]:
-                g[mem] = (i, n, use[mem], bare[mem])
+            if mem in use and len(use[mem]) > 1:
+                g[mem] = (i, n, use[mem], bare[mem], sorted(sub[mem]))
         if g:
             out[nm.lstrip('_')] = g
     return out
@@ -68,7 +68,7 @@ def spills(lines):
 
 def split(lines, fn, mem, found):
     """Rewrite one member.  Returns (slots, sites) or None if it cannot."""
-    i, n, use, bare = found[fn][mem]
+    i, n, use, bare, walk = found[fn][mem]
     # `decode_pixel` and `code_pixel` both call their spill area `sym`, so the
     # rewrite is bounded by the declaring body -- a file-wide sub renamed both.
     span = next((a, b) for a, b, x, _ in structs.bodies(lines) if x.lstrip('_') == fn)
@@ -85,7 +85,13 @@ def split(lines, fn, mem, found):
     # takes the array whole, so the array has to stay.  The named layer is the
     # same bytes under the names the spilled locals are read by.
     decl = [indent + 'union {', '    ' + lines[i]]
-    decl.append(indent + '    struct {   // the locals MSVC spilled into these bytes')
+    if walk:
+        decl += [indent + '    // The locals MSVC spilled into these bytes.  The walk above reaches',
+                 indent + '    // the same slots again with an expression, which is the same storage',
+                 indent + '    // at a later point in the function and not a second variable.',
+                 indent + '    struct {']
+    else:
+        decl.append(indent + '    struct {   // the locals MSVC spilled into these bytes')
     top = max(use) + 1
     elem = ('%s %s' % (base, star)).strip()
     for k in range(top):
@@ -126,11 +132,12 @@ def main():
 
     if len(args) < 2:
         for fn, g in found.items():
-            for mem, (i, n, use, bare) in g.items():
+            for mem, (i, n, use, bare, walk) in g.items():
                 tys = sorted({t for c in use.values() for t in c})
-                print('%-22s %-6s %3d slots, %2d used, %2d casts, %s'
+                print('%-22s %-6s %3d slots, %2d used, %3d casts, %s%s'
                       % (fn, mem, n, len(use),
-                         sum(sum(c.values()) for c in use.values()), tys))
+                         sum(sum(c.values()) for c in use.values()), tys,
+                         ', %d walks' % len(walk) if walk else ''))
         return 0
 
     fn, mem = args[0], args[1]

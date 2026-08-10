@@ -7961,7 +7961,27 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
       uint8_t v86[16];
       int32_t v87;
       uint32_t v88[91];
-      void *slot[19];   // one array, three bases: `&n4_1`, `*(&Block + n)` and the interleaved `(&v91)[2*j]` / `*(&v92 + 2*j)`
+      union {
+          void *slot[19];   // one array, three bases: `&n4_1`, `*(&Block + n)` and the interleaved `(&v91)[2*j]` / `*(&v92 + 2*j)`
+          // The locals MSVC spilled into these bytes.  The walk above reaches
+          // the same slots again with an expression, which is the same storage
+          // at a later point in the function and not a second variable.
+          struct {
+            int32_t slot0;
+            void *slot1;
+            uint8_t *slot2;
+            uint32_t slot3;
+            uint32_t slot4;
+            void *slot5;
+            uint32_t slot6;
+            ModelBlock *slot7;
+            uint8_t *slot8;
+            uint32_t slot9;
+            void *slot10;
+            ModelBlock *slot11;
+            void *slot_tail[7];
+          };
+      };
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 66064, "frame layout moved");
   ;
@@ -7981,13 +8001,13 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
   uint64_t *n0x2000_6;
   uint8_t *v4, *v10, *v33, *v42, *v43, *v45, *v60;
   void *v3, *v13, *v34;
-  ((ModelBlock * &)__frame.slot[11]) = (ModelBlock *)(Blocka);
+  __frame.slot11 = (ModelBlock *)(Blocka);
   v3 = alloca(65968);
   v4 = a3;
   n8 = Blocka->f8;
-  ((uint8_t * &)__frame.slot[2]) = a3;
-  ((ModelBlock * &)__frame.slot[7]) = (ModelBlock *)(Blocka);
-  ((uint32_t &)__frame.slot[4]) = 0xFFFFFFFF >> (-n8 & 31);
+  __frame.slot2 = a3;
+  __frame.slot7 = (ModelBlock *)(Blocka);
+  __frame.slot4 = 0xFFFFFFFF >> (-n8 & 31);
   k_2 = (n8 + 7) >> 3;
   for ( i = 0; i < 8; ++i )
   {
@@ -7995,7 +8015,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
     __frame.v88[v8] = 0;
     __frame.v88[v8 + 6] = 0;
   }
-  Blockaa_1 = (ModelBlock *)((int32_t *)((ModelBlock * &)__frame.slot[7]));
+  Blockaa_1 = (ModelBlock *)((int32_t *)__frame.slot7);
   if ( n8 <= 8 )
   {
     n256 = 256;
@@ -8017,7 +8037,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
       if ( v49 )
       {
         v51 = *(int32_t *)&Blockaa_1->f0;
-        ((uint8_t * &)__frame.slot[8]) = a3 - 1;
+        __frame.slot8 = a3 - 1;
         __frame.v84 = 0;
         v52 = 0;
         do
@@ -8034,10 +8054,10 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
             v57 = v55 - v56;
             if ( v57 < 0 )
             {
-              ++((uint8_t * &)__frame.slot[8]);
+              ++__frame.slot8;
               v57 = 8 - v56;
             }
-            v58 = ((uint32_t &)__frame.slot[4]) & (*((uint8_t * &)__frame.slot[8]) >> (v57 & 31));
+            v58 = __frame.slot4 & (*__frame.slot8 >> (v57 & 31));
             v59 = *(uint32_t *)&__frame.buf[4 * v58 - 4] == 0;
             __frame.v85 = v57;
             ++v53;
@@ -8058,7 +8078,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
     }
     else if ( v49 * *(int32_t *)&Blockaa_1->f0 )
     {
-      v60 = ((uint8_t * &)__frame.slot[2]);
+      v60 = __frame.slot2;
       v61 = 0;
       do
       {
@@ -8076,11 +8096,11 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
     {
       v50 = 0;
     }
-    rc.encode(v50 - 1, v50, ((uint32_t &)__frame.slot[4]) + 1);
+    rc.encode(v50 - 1, v50, __frame.slot4 + 1);
     v64 = *(int32_t *)&Blockaa_1->f16;
-    if ( v64 <= ((uint32_t &)__frame.slot[4]) )
+    if ( v64 <= __frame.slot4 )
     {
-      __fwd_reduce_alphabet_init_encode_symbol_list((int32_t *)(*(uint64_t (*)[2])((uint8_t *)__frame.v86)), (int32_t)Blockaa_1, ((uint32_t &)__frame.slot[4]) - v64 + 2, 1);
+      __fwd_reduce_alphabet_init_encode_symbol_list((int32_t *)(*(uint64_t (*)[2])((uint8_t *)__frame.v86)), (int32_t)Blockaa_1, __frame.slot4 - v64 + 2, 1);
       __frame.v87 = 19 * LODWORD((*(uint64_t (*)[2])((uint8_t *)__frame.v86))[0]);
       v70 = *(int32_t *)&Blockaa_1->f16;
       if ( v70 )
@@ -8146,27 +8166,27 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
   {
     memset(__frame.buf,0,0x10000);
     *(int32_t *)&Blockaa_1->f16 = 1;
-    *(uint32_t *)__frame.buf = ((uint32_t &)__frame.slot[4]) & *(uint32_t *)a3;
+    *(uint32_t *)__frame.buf = __frame.slot4 & *(uint32_t *)a3;
     *(uint16_t *)Blockaa_1->f1078236 = 0;
     if ( (uint32_t)(Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0) > 1 )
     {
-      ((uint8_t * &)__frame.slot[8]) = a3;
-      ((uint32_t &)__frame.slot[9]) = k_2;
-      ((ModelBlock * &)__frame.slot[7]) = (ModelBlock *)((int32_t)Blockaa_1);
-      v10 = ((uint8_t * &)__frame.slot[2]);
+      __frame.slot8 = a3;
+      __frame.slot9 = k_2;
+      __frame.slot7 = (ModelBlock *)((int32_t)Blockaa_1);
+      v10 = __frame.slot2;
       v11 = 0;
       v12 = 1;
       while ( 1 )
       {
-        v10 += ((uint32_t &)__frame.slot[9]);
-        v13 = (void *)(((uint32_t &)__frame.slot[4]) & *(uint32_t *)v10);
+        v10 += __frame.slot9;
+        v13 = (void *)(__frame.slot4 & *(uint32_t *)v10);
         if ( v13 != *(void **)&__frame.buf[8 * v11] )
         {
           v11 = 0;
           if ( v13 != *(void **)__frame.buf )
           {
-            ((uint32_t &)__frame.slot[3]) = v12;
-            ((uint8_t * &)__frame.slot[2]) = v10;
+            __frame.slot3 = v12;
+            __frame.slot2 = v10;
             while ( 1 )
             {
               n4 = *(uint32_t *)&__frame.buf[8 * v11] < (uint32_t)v13;
@@ -8176,44 +8196,44 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
                 break;
               if ( v13 == *(void **)&__frame.buf[8 * v11] )
               {
-                v12 = ((uint32_t &)__frame.slot[3]);
-                v10 = ((uint8_t * &)__frame.slot[2]);
+                v12 = __frame.slot3;
+                v10 = __frame.slot2;
                 mode_symbol[1] = n4;
                 goto LABEL_12;
               }
             }
             __frame.n0x2000_5 = (int32_t)n0x2000_6;
-            v10 = ((uint8_t * &)__frame.slot[2]);
-            ((int32_t &)__frame.slot[0]) = n4;
+            v10 = __frame.slot2;
+            __frame.slot0 = n4;
             (__frame.slot[1]) = v13;
-            Blockaa_2 = (ModelBlock *)(((ModelBlock * &)__frame.slot[7]));
-            v68 = ((ModelBlock * &)__frame.slot[7])->f16;
+            Blockaa_2 = (ModelBlock *)(__frame.slot7);
+            v68 = __frame.slot7->f16;
             mode_symbol[1] = n4;
             v11 = (uint16_t)v68;
             n0x2000 = v68 + 1;
             *(uint16_t *)(__frame.n0x2000_5 + 2 * n4) = v11;
-            v12 = ((uint32_t &)__frame.slot[3]);
+            v12 = __frame.slot3;
             Blockaa_2->f16 = n0x2000;
             if ( n0x2000 > 0x2000 )
             {
-              v4 = ((uint8_t * &)__frame.slot[8]);
+              v4 = __frame.slot8;
               n0x2000_2 = n0x2000;
-              k_2 = ((uint32_t &)__frame.slot[9]);
-              Blockaa_1 = (ModelBlock *)((int32_t *)((ModelBlock * &)__frame.slot[7]));
+              k_2 = __frame.slot9;
+              Blockaa_1 = (ModelBlock *)((int32_t *)__frame.slot7);
               goto LABEL_14;
             }
             *(void **)&__frame.buf[8 * v11] = (__frame.slot[1]);
           }
         }
 LABEL_12:
-        Blockaa_3 = (ModelBlock *)((uint32_t *)((ModelBlock * &)__frame.slot[7]));
-        *(uint16_t *)(((ModelBlock * &)__frame.slot[7])->f1078236 + 2 * v12++) = v11;
+        Blockaa_3 = (ModelBlock *)((uint32_t *)__frame.slot7);
+        *(uint16_t *)(__frame.slot7->f1078236 + 2 * v12++) = v11;
         if ( v12 >= *(uint32_t *)&Blockaa_3->f4 * Blockaa_3->f0 )
         {
-          v4 = ((uint8_t * &)__frame.slot[8]);
-          k_2 = ((uint32_t &)__frame.slot[9]);
-          Blockaa_1 = (ModelBlock *)((int32_t *)((ModelBlock * &)__frame.slot[7]));
-          n0x2000_2 = ((ModelBlock * &)__frame.slot[7])->f16;
+          v4 = __frame.slot8;
+          k_2 = __frame.slot9;
+          Blockaa_1 = (ModelBlock *)((int32_t *)__frame.slot7);
+          n0x2000_2 = __frame.slot7->f16;
           goto LABEL_14;
         }
       }
@@ -8228,28 +8248,28 @@ LABEL_14:
       v26 = *(int32_t *)&Blockaa_1->f0;
       n4_2 = Blockaa_1->f4;
       __frame.n0x2000_5 = *(int32_t *)&Blockaa_1->f0;
-      ((int32_t &)__frame.slot[0]) = n4_2;
+      __frame.slot0 = n4_2;
       if ( k_2 )
       {
-        ((uint32_t &)__frame.slot[6]) = ((int32_t &)__frame.slot[0]) * v26;
+        __frame.slot6 = __frame.slot0 * v26;
         if ( k_2 >> 1 )
         {
-          v28 = (uint8_t *)(__frame.slot[1]) + ((int32_t &)__frame.slot[0]) * __frame.n0x2000_5;
-          ((uint8_t * &)__frame.slot[8]) = v4;
-          ((uint32_t &)__frame.slot[9]) = k_2;
-          ((ModelBlock * &)__frame.slot[7]) = (ModelBlock *)((int32_t)Blockaa_1);
+          v28 = (uint8_t *)(__frame.slot[1]) + __frame.slot0 * __frame.n0x2000_5;
+          __frame.slot8 = v4;
+          __frame.slot9 = k_2;
+          __frame.slot7 = (ModelBlock *)((int32_t)Blockaa_1);
           v29 = 0;
           do
           {
             v30 = 2 * v29;
-            v31 = 2 * v29++ * ((uint32_t &)__frame.slot[6]);
+            v31 = 2 * v29++ * __frame.slot6;
             __frame.slot[v30 + 2] = (uint8_t *)(__frame.slot[1]) + v31;
             __frame.slot[v30 + 3] = (void *)&v28[v31];
           }
           while ( v29 < k_2 >> 1 );
-          v4 = ((uint8_t * &)__frame.slot[8]);
-          k_2 = ((uint32_t &)__frame.slot[9]);
-          Blockaa_1 = (ModelBlock *)((int32_t *)((ModelBlock * &)__frame.slot[7]));
+          v4 = __frame.slot8;
+          k_2 = __frame.slot9;
+          Blockaa_1 = (ModelBlock *)((int32_t *)__frame.slot7);
           v32 = 2 * v29 + 1;
         }
         else
@@ -8257,19 +8277,19 @@ LABEL_14:
           v32 = 1;
         }
         if ( k_2 > v32 - 1 )
-          __frame.slot[v32 + 1] = (uint8_t *)(__frame.slot[1]) + ((int32_t &)__frame.slot[0]) * -__frame.n0x2000_5 + ((uint32_t &)__frame.slot[6]) * v32;
+          __frame.slot[v32 + 1] = (uint8_t *)(__frame.slot[1]) + __frame.slot0 * -__frame.n0x2000_5 + __frame.slot6 * v32;
       }
       else
       {
-        ((uint32_t &)__frame.slot[6]) = ((int32_t &)__frame.slot[0]) * v26;
+        __frame.slot6 = __frame.slot0 * v26;
       }
-      if ( ((uint32_t &)__frame.slot[6]) )
+      if ( __frame.slot6 )
       {
         v33 = a3;
         if ( k_2 )
         {
-          ((uint32_t &)__frame.slot[9]) = k_2;
-          ((ModelBlock * &)__frame.slot[7]) = (ModelBlock *)((int32_t)Blockaa_1);
+          __frame.slot9 = k_2;
+          __frame.slot7 = (ModelBlock *)((int32_t)Blockaa_1);
           __frame.n0x2000_5 = 0;
           k_3 = k_2;
           v39 = 0;
@@ -8296,28 +8316,28 @@ LABEL_14:
               {
                 v44 = 1;
               }
-              if ( v44 - 1 >= ((uint32_t &)__frame.slot[9]) )
+              if ( v44 - 1 >= __frame.slot9 )
                 break;
               v45 = (uint8_t *)__frame.slot[v44 + 1];
               v4 = &v33[v44];
               *v45 = v33[v44 - 1];
-              v46 = ++v39 < ((uint32_t &)__frame.slot[6]);
+              v46 = ++v39 < __frame.slot6;
               __frame.slot[v44 + 1] = v45 + 1;
               if ( !v46 )
                 goto LABEL_71;
               v33 += v44;
             }
-            if ( ++v39 >= ((uint32_t &)__frame.slot[6]) )
+            if ( ++v39 >= __frame.slot6 )
               break;
             v33 = v4;
           }
 LABEL_71:
-          k_2 = ((uint32_t &)__frame.slot[9]);
-          Blockaa_1 = (ModelBlock *)((int32_t *)((ModelBlock * &)__frame.slot[7]));
+          k_2 = __frame.slot9;
+          Blockaa_1 = (ModelBlock *)((int32_t *)__frame.slot7);
         }
       }
       __frame.v79 = Blockaa_1->f1078236;
-      Blockaa_1->f4 = k_2 * ((int32_t &)__frame.slot[0]);
+      Blockaa_1->f4 = k_2 * __frame.slot0;
       *(int32_t *)&Blockaa_1->f8 = 8;
       free(__frame.v79);
       v34 = bmf_new(2 * Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0);
@@ -8330,7 +8350,7 @@ LABEL_71:
     {
       if ( 4 * k_2 )
       {
-        ((ModelBlock * &)__frame.slot[7]) = (ModelBlock *)((int32_t)Blockaa_1);
+        __frame.slot7 = (ModelBlock *)((int32_t)Blockaa_1);
         v19 = 0;
         do
         {
@@ -8338,8 +8358,8 @@ LABEL_71:
           ++v19;
         }
         while ( v19 < 4 * k_2 );
-        Blockaa_1 = (ModelBlock *)((int32_t *)((ModelBlock * &)__frame.slot[7]));
-        n0x2000_1 = ((ModelBlock * &)__frame.slot[7])->f16;
+        Blockaa_1 = (ModelBlock *)((int32_t *)__frame.slot7);
+        n0x2000_1 = __frame.slot7->f16;
       }
       if ( n0x2000_1 )
       {
@@ -8353,19 +8373,19 @@ LABEL_71:
           if ( k_2 )
           {
             __frame.n0x2000_5 = n0x2000_4;
-            ((uint32_t &)__frame.slot[9]) = k_2;
-            ((ModelBlock * &)__frame.slot[7]) = (ModelBlock *)(Blockaa_4);
-            for ( k = 0; k < ((uint32_t &)__frame.slot[9]); ++k )
+            __frame.slot9 = k_2;
+            __frame.slot7 = (ModelBlock *)(Blockaa_4);
+            for ( k = 0; k < __frame.slot9; ++k )
             {
               __fwd_reduce_alphabet_encode_symbol_list((uint32_t *)&(*(uint64_t (*)[2])((uint8_t *)__frame.v86))[12 * k + 3 * v20], (uint8_t)v24);
               v20 = (uint8_t)v24 >> 6;
               v24 >>= 8;
             }
             n0x2000_4 = __frame.n0x2000_5;
-            k_2 = ((uint32_t &)__frame.slot[9]);
-            Blockaa_4 = (ModelBlock *)(((ModelBlock * &)__frame.slot[7]));
+            k_2 = __frame.slot9;
+            Blockaa_4 = (ModelBlock *)(__frame.slot7);
             v24 = *(uint32_t *)&__frame.buf[8 * __frame.n0x2000_5];
-            n0x2000_3 = ((ModelBlock * &)__frame.slot[7])->f16;
+            n0x2000_3 = __frame.slot7->f16;
           }
           v20 = (uint8_t)v24 >> 7;
           ++n0x2000_4;
