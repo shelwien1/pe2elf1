@@ -11112,8 +11112,12 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         // A sixteen-byte record per bucket, at `+96 + 16 * bucket`: five
         // counts at words 0..4, their total at 5, a scaled weight at 6, and
         // two bytes at 7 -- a level (`<= f16`) and the weight `1 << (5 -
-        // level)` it derives.  The base is the object, so record 0 lands on
-        // `f56[10..13]`; naming it means settling that overlap first.
+        // level)` it derives.  The base is the object and the counter starts
+        // at zero, so record 0 is +96 .. +111 -- which `f56[10..13]` also
+        // claims, and which the `f1051664[k] = f56[10 + k]` copy after this
+        // loop reads back.  Naming this table means re-reading those two
+        // members first; the copy is either four row cursors or record 0's
+        // four dwords, and it cannot be both.
         v13 = (uint16_t *)&((uint32_t *)this_3)[4 * v11];
         v13[49] = 2;
         v13[50] = 2;
@@ -15310,8 +15314,12 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
           // A sixteen-byte record per bucket, at `+96 + 16 * bucket`: five
           // counts at words 0..4, their total at 5, a scaled weight at 6, and
           // two bytes at 7 -- a level (`<= f16`) and the weight `1 << (5 -
-          // level)` it derives.  The base is the object, so record 0 lands on
-          // `f56[10..13]`; naming it means settling that overlap first.
+          // level)` it derives.  The base is the object and the counter starts
+          // at zero, so record 0 is +96 .. +111 -- which `f56[10..13]` also
+          // claims, and which the `f1051664[k] = f56[10 + k]` copy after this
+          // loop reads back.  Naming this table means re-reading those two
+          // members first; the copy is either four row cursors or record 0's
+          // four dwords, and it cannot be both.
           v12 = (uint16_t *)&((uint32_t *)Blocka_2)[4 * v64];
           __model_plane_n2 = 2;
           v12[48] = 2;

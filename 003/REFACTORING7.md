@@ -288,14 +288,17 @@ question. Two of them are, and they are still there.
   value, then a cost, and `alt_p2_model`'s `v508` is a pointer and a strip
   index within one expression. Those do need a liveness argument each, and
   there is no tool shape for it.
-* **The bucket record in `model_plane` and `unmodel_plane_slow`.** Sixteen
+* **The bucket record, and what it says about two other members.** Sixteen
   bytes per context bucket at `ModelBlock + 96 + 16 * bucket`: five counts,
   their total, a scaled weight, and two bytes — a level and the `1 << (5 -
-  level)` it derives. The finding is in the file as a comment rather than as a
-  member, because the grid is anchored at the object and record 0 therefore
-  lands on `f56[10..13]`, four live row cursors. After §6, an overlap that
-  looks like a coincidence is exactly the thing not to declare around until it
-  is settled.
+  level)` it derives. The grid is anchored at the object and the bucket counter
+  starts at zero, so **record 0 is +96 .. +111** — which `f56[10..13]` also
+  claims, and which the `f1051664[k] = f56[10 + k]` copy immediately after the
+  loop reads back. That copy is either four row cursors or record 0's four
+  dwords and it cannot be both, so one of `f56`'s length and `f1051664`'s type
+  is wrong. The finding is in the file as a comment rather than as a member:
+  after §6, an overlap that looks like a coincidence is precisely the thing not
+  to declare around until it is settled.
 * **101 raw offsets, 92 `fNN` members, 560 `vNN` locals, 112 `goto`s.** The
   offsets are down from 1389 over five rounds; what remains is in bases that
   are genuinely computed — a name plus a variable byte offset, with nothing
