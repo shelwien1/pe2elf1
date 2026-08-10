@@ -23,18 +23,29 @@ import sys
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs                                                    # noqa: E402
 
-DECL = re.compile(r'\s*(?:const )?[\w]+ ([\w, *]+);\s*$')
+DECL = re.compile(r'\s*(?:const )?[\w]+ ([\w, *]+)(;)?\s*$')
+# A declaration that runs onto the next line carries no type there, so a scan
+# that only matches whole statements sees the first line's names and none of
+# the rest.  Sixty-eight of MSVC's `int32_t` spills are declared past a line
+# break, and every one of them was invisible here until this carried the state
+# down: ten of them were dead loads in front of a record copy.
+MORE = re.compile(r'\s*([\w, *]+)(;)?\s*$')
 
 
 def writeonly(lines):
     """[(use line, name, decl line)] for every write-only local."""
     out = []
     for a, b, nm, _ in structs.bodies(lines):
-        names = {}
+        names, indecl = {}, False
         for i in range(a, b + 1):
-            m = DECL.match(lines[i].split('//')[0])
-            if m:
-                for d in m.group(1).split(','):
+            code = lines[i].split('//')[0]
+            m = MORE.match(code) if indecl else DECL.match(code)
+            if not m:
+                indecl = False
+                continue
+            indecl = not m.group(2)
+            for d in m.group(1).split(','):
+                if d.strip():
                     names[d.strip().lstrip('* ')] = i
         for v, decl in names.items():
             uses = [i for i in range(a, b + 1) if i != decl
