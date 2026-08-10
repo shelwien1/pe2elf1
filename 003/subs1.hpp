@@ -493,7 +493,7 @@ struct ModelBlock {
   uint32_t f1078224;
   uint8_t _pad22[4];
   uint32_t **f1078232;   // the symbol-list cursor: a walk over uint32_t *
-  int32_t f1078236;
+  uint8_t *f1078236;   // freed by free_workspace: a buffer, not an int
   uint8_t *f1078240;   // a row cursor
   uint8_t _pad25[440];
   uint8_t *f1078684;
@@ -3094,7 +3094,7 @@ void **__free_workspace(ModelBlock *Blocka, int8_t a2)
   void **v8, **v14;
   Blocka_1 = (ModelBlock *)(Blocka);
   free(*(void * *)&Blocka->f1078240);
-  free(*(void**)&Blocka_1->f1078236);
+  free(Blocka_1->f1078236);
   free(Blocka_1->f1078684);
   free(*(void**)&Blocka_1->f1078688);
   v3 = (uint32_t *)Blocka_1->f1078208;
@@ -8033,7 +8033,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
       do
       {
         *(int32_t *)&Blockaa_1->f16 += *(uint32_t *)&__frame.buf[4 * *v60 - 4] == 0;
-        v62 = (uint8_t *)Blockaa_1->f1078236;
+        v62 = Blockaa_1->f1078236;
         v63 = *v60;
         *(uint32_t *)&__frame.buf[4 * v63 - 4] = 1;
         ++v60;
@@ -8177,7 +8177,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
         }
 LABEL_12:
         Blockaa_3 = (ModelBlock *)((uint32_t *)((ModelBlock * &)__frame.slot[7]));
-        *(uint16_t *)(*(uint32_t *)&((ModelBlock * &)__frame.slot[7])->f1078236 + 2 * v12++) = v11;
+        *(uint16_t *)(((ModelBlock * &)__frame.slot[7])->f1078236 + 2 * v12++) = v11;
         if ( v12 >= *(uint32_t *)&Blockaa_3->f4 * Blockaa_3->f0 )
         {
           v4 = ((uint8_t * &)__frame.slot[8]);
@@ -8286,13 +8286,13 @@ LABEL_71:
           Blockaa_1 = (ModelBlock *)((int32_t *)((ModelBlock * &)__frame.slot[7]));
         }
       }
-      __frame.v79 = (void *)Blockaa_1->f1078236;
+      __frame.v79 = Blockaa_1->f1078236;
       Blockaa_1->f4 = k_2 * ((int32_t &)__frame.slot[0]);
       *(int32_t *)&Blockaa_1->f8 = 8;
       free(__frame.v79);
       v34 = bmf_new(2 * Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0);
       __frame.v79 = (__frame.slot[1]);
-      Blockaa_1->f1078236 = (int32_t)v34;
+      Blockaa_1->f1078236 = (uint8_t *)v34;
       __reduce_alphabet((ModelBlock *)Blockaa_1, v35, (uint8_t *)__frame.v79);
       free((__frame.slot[1]));
     }
@@ -11709,7 +11709,7 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
   while ( n8 < 8 );
   n0x18 = 0;
   memset((uint8_t *)a1 + 1051776,0,24576);
-  a1->f1078236 = (int32_t)bmf_new(2 * a1->f4 * a1->f0);
+  a1->f1078236 = (uint8_t *)bmf_new(2 * a1->f4 * a1->f0);
   *(uint16_t *)((uint8_t *)a1 + 1076352) = 4;
   *(uint16_t *)((uint8_t *)a1 + 1076354) = 4;
   *(uint16_t *)((uint8_t *)a1 + 1076356) = 72;
@@ -16224,7 +16224,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int32_t v59;
+  uint8_t *v59;   // a row cursor into f1078236
   ModelBlock *Blocka_5;
   // These shared `__frame.Blocka_5` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
@@ -16521,7 +16521,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
     }
     if ( Blocka_1->f4 > 0 )
     {
-      v59 = *(uint32_t *)&Blocka_1->f1078236;
+      v59 = Blocka_1->f1078236;
       v45 = 0;
       do
       {
