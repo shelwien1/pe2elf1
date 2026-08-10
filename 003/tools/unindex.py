@@ -42,7 +42,7 @@ IDX = re.compile(r'(&?)\(\(\s*(\w+)\s*\*\)\s*(\w+)\)\[([^\]]*?)\+\s*(\d+)\]')
 # into that member's elements, which only works when the scale is a whole
 # number of them.
 BYTE = re.compile(r'\*(?:\((\w+) \*\))?\(\(uint8_t \*\)(\w+) \+ '
-                  r'(?:(\d+) \* (\w+\+*) \+ )?(\d+)\)')
+                  r'(?:(\d+) \* )?(?:(\w+\+*) \+ )?(\d+)\)')
 # `(T *)p + K` only when `K` is the whole offset: `(int32_t *)_this + 2 * v8 +
 # 438` has the same prefix and a different meaning, and taking the 2 for the
 # offset there is a stride error the compiler happens to catch.
@@ -105,6 +105,7 @@ def convert(lines, a, b, sig, tables):
         nonlocal n
         acc, base, scale, var, k = m.groups()
         acc = acc or 'uint8_t'          # `*((uint8_t *)p + …)` casts once
+        scale = scale or ('1' if var else None)
         if base not in ty:
             return m.group(0)
         w = merge.width(acc)

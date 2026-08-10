@@ -2868,7 +2868,7 @@ int32_t __alt_p1_context(AltP1Block *_this, uint32_t *a2, uint32_t *a3)
     v37 = v5[1] + v32[1] + (_this->f176[8])[1] + v33[1] + v3[1] == 0;
   }
   v16 = (v36 + 7) >> 4;
-  v17 = (uint8_t *)*((uint8_t *)_this + v16 + 216);
+  v17 = (uint8_t *)_this->f216[v16];
   v31 = v17;
   v35 = p1_level_step[(uint32_t)v17];
   *(uint8_t **)&_this->f0[3] = v17;
@@ -5938,7 +5938,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
           v68 = __alt_p1_decode_symbol((uint16_t *)&((uint8_t**)v66)[4 * v66->f12[0] + 950], v67, (int32_t)v66->f12[1]);
           v69 = (uint8_t *)(v66->f8);
           v70 = v66->cur[0];
-          v71 = (uint8_t)((uint8_t)(uintptr_t)v69 + *((uint8_t *)v66 + v68 + 1496));
+          v71 = (uint8_t)((uint8_t)(uintptr_t)v69 + v66->f1496[v68]);
           v105 = v71;
           *v70 = v71;
           v66->cur[0][1] = abs32(v71 - (uint32_t)v69);
@@ -5976,7 +5976,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
             v75 = __alt_p1_decode_symbol((uint16_t *)&((uint8_t**)v73)[4 * v73->f12[0] + 950], v74, (int32_t)v73->f12[1]);
             v76 = (uint8_t *)(v73->f8);
             v77 = v73->cur[0];
-            v78 = (uint8_t)((uint8_t)(uintptr_t)v76 + *((uint8_t *)v73 + v75 + 1496));
+            v78 = (uint8_t)((uint8_t)(uintptr_t)v76 + v73->f1496[v75]);
             v92 = v78;
             *v77 = v78;
             v73->cur[0][1] = abs32(v78 - (uint32_t)v76);
@@ -11897,15 +11897,15 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
           __alt_p1_context((AltP1Block *)v102, (uint32_t *)Block_plane[0], (uint32_t *)0);
           v62 = *((uint8_t *)v61 + 8);
           v63 = (uint8_t)(v118 - v62);
-          n5 = *((uint8_t *)v61 + v63 + 984);
+          n5 = v61->f984[v63];
           v64 = *(a2 + v113);
-          v65 = (uint8_t)(*((uint8_t *)v61 + n5 + 1496) + v62);
+          v65 = (uint8_t)(v61->f1496[n5] + v62);
           v111 = (uint8_t)(v65 + *(a2 + v113) - v118);
           n16_1 = v64 - v111;
           n5_3 = n5;
           if ( n16_1 < -16 || n16_1 > 16 )
           {
-            n5_3 = *((uint8_t *)v61 + v63 + 1240);
+            n5_3 = v61->f1240[v63];
           }
           else
           {
@@ -11944,13 +11944,13 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
           __alt_p1_context((AltP1Block *)v103, (uint32_t *)v102, (uint32_t *)(int32_t)Block_plane[0]);
           v71 = *((uint8_t *)v70 + 8);
           v115 = (uint8_t)(v69 - v71);
-          n5_4 = *((uint8_t *)v70 + v115 + 984);
-          v73 = (uint8_t)(*((uint8_t *)v70 + n5_4 + 1496) + v71);
+          n5_4 = v70->f984[v115];
+          v73 = (uint8_t)(v70->f1496[n5_4] + v71);
           v74 = (uint8_t)(v73 + *(v117 + a2) - v69);
           n16_2 = *(v117 + a2) - v74;
           if ( n16_2 < -16 || n16_2 > 16 )
           {
-            n5_4 = *((uint8_t *)v70 + v115 + 1240);
+            n5_4 = v70->f1240[v115];
           }
           else
           {
@@ -11995,14 +11995,14 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
             v81 = *((uint8_t *)v80 + 8);
             n5_5 = *((uint8_t *)v80 + (uint8_t)(v99 - v81) + 984);
             v98 = (uint8_t)(v99 - v81);
-            v83 = *((uint8_t *)v80 + n5_5 + 1496);
+            v83 = v80->f1496[n5_5];
             n5_8 = n5_5;
             v84 = (uint8_t)(v83 + v81);
             n16_3 = *(n3 + a2) - (uint8_t)(v84 + *(n3 + a2) - v99);
             v97 = v84 + *(n3 + a2) - v99;
             if ( n16_3 < -16 || n16_3 > 16 )
             {
-              n5_5 = *((uint8_t *)v80 + v98 + 1240);
+              n5_5 = v80->f1240[v98];
             }
             else
             {
@@ -14460,7 +14460,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v102 = &lpAddress_1->f940072[4 * *&lpAddress_1->f278704];
           v168 = v101;
           v103 = __alt_p2_decode_symbol((uint16_t *)v102, (uint8_t *)((uint32_t *)lpAddress_1 + 69677));
-          v104 = (uint8_t)(v168 + *((uint8_t *)lpAddress_1 + v103 + 280496));
+          v104 = (uint8_t)(v168 + (*(uint8_t *)&lpAddress_1->f280496[v103]));
           __alt_p2_model((AltP2Block *)lpAddress_1, v104, v103, v104 - v168);
           v105 = *(uint32_t *)&lpAddress_1->f278736[0];
           v106 = *(int16_t *)(v105 - 10);
