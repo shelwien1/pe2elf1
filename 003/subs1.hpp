@@ -707,10 +707,13 @@ struct AltP2Block {
       uint64_t f278640;
       uint64_t f278648;
       float (*f278656)[4];   // a weight block: 16 rows of four, `alt_p2_filter`'s `_this`
+      // Four cursors into one `bmf_new(4 * i + 16)` buffer, all stepped in
+      // four-byte units and all dereferenced as words.  The p2 bodies swap
+      // 660 with 664 once a row and re-derive 668 and 672 from them.
       int32_t *f278660;
-      uint8_t *f278664;   // a row cursor
-      uint8_t *f278668;   // a row cursor
-      uint8_t *f278672;   // a row cursor
+      int32_t *f278664;
+      int32_t *f278668;
+      int32_t *f278672;
       int32_t f278676;
       int32_t f278680;
       int32_t f278684;
@@ -4045,11 +4048,11 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
   deadzone_lo = -v8;
   *(uint32_t *)&_this->f278720 = -v9 - 7;
   *(uint32_t *)&_this->f278724 = v9 + 8;
-  *(uint8_t **)&_this->f278660 = (uint8_t *)bmf_new(4 * i + 16);
+  _this->f278660 = (int32_t *)bmf_new(4 * i + 16);
   v10 = bmf_new(4 * i + 16);
   *(uint32_t *)((uint8_t *)_this + 232) = 0x3F800000 /* 1.0f */;
-  *&_this->f278664 = (uint8_t *)v10;
-  *&_this->f278668 = *(uint8_t **)&_this->f278660 + 4 * i + 8;
+  _this->f278664 = (int32_t *)v10;
+  _this->f278668 = _this->f278660 + i + 2;
   if ( i > -4 )
   {
     m_1 = (i + 4) / 2;
@@ -4057,10 +4060,10 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
     {
       for ( m = 0; m < m_1; ++m )
       {
-        *(uint8_t **)(*&_this->f278664 + 8 * m) = (uint8_t *)_this;
-        *(uint8_t **)(*(uint8_t **)&_this->f278660 + 8 * m) = (uint8_t *)_this;
-        *(uint8_t **)(*&_this->f278664 + 8 * m + 4) = (uint8_t *)_this;
-        *(uint8_t **)(*(uint8_t **)&_this->f278660 + 8 * m + 4) = (uint8_t *)_this;
+        *(uint8_t **)&_this->f278664[2 * m] = (uint8_t *)_this;
+        *(uint8_t **)&_this->f278660[2 * m] = (uint8_t *)_this;
+        *(uint8_t **)&_this->f278664[2 * m + 1] = (uint8_t *)_this;
+        *(uint8_t **)&_this->f278660[2 * m + 1] = (uint8_t *)_this;
       }
       v13 = 2 * m + 1;
     }
@@ -4070,8 +4073,8 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
     }
     if ( i + 4 > (uint32_t)(v13 - 1) )
     {
-      *(uint8_t **)(*&_this->f278664 + 4 * v13 - 4) = (uint8_t *)_this;
-      *(uint8_t **)(*(uint8_t **)&_this->f278660 + 4 * v13 - 4) = (uint8_t *)_this;
+      *(uint8_t **)&_this->f278664[v13 - 1] = (uint8_t *)_this;
+      *(uint8_t **)&_this->f278660[v13 - 1] = (uint8_t *)_this;
     }
   }
   n5 = 0;
@@ -6621,9 +6624,9 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
     v281 = (P2Ctx *)(nullptr);
     v282 = (int16_t *)(nullptr);
   }
-  v103 = (int32_t *)*(int32_t *)&v28->f278668;
+  v103 = v28->f278668;
   __frame.sub0 = (float (*)[4])*(v103 - 1);
-  v104 = ((int32_t *)*(int32_t *)&v28->f278672);
+  v104 = v28->f278672;
   __frame.sub1 = (float (*)[4])v104[1];
   __frame.sub2 = (float (*)[4])v104[2];
   __frame.sub3 = (float (*)[4])*(v103 - 2);
@@ -12210,7 +12213,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   *(uint16_t *)(a1->f278736[0] + 6) = (WORD2(v14) ^ v14) - WORD2(v14);
   v15 = a1->f278656;
   v16 = v15[14][1] + 0.000099999997f;
-  v17 = *(float (**)[4])(a1->f278668 - 4);
+  v17 = *(float (**)[4])(a1->f278668 - 1);
   v18 = *(float *)&a1->f278648;
   n2_bias = *(float *)&a1->f278640;
   v19 = sample - v18;
@@ -12282,9 +12285,9 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
     ++*(int32_t *)&v15[15][0];
     v15[14][2] = ms_scale + ((10.0f - ms_scale) * 0.00019999999f);
   }
-  **(uint32_t **)&a1->f278668 = *(uint32_t *)&a1->f278656;
-  a1->f278668 += 4;
-  a1->f278672 += 4;
+  *a1->f278668 = *(uint32_t *)&a1->f278656;
+  ++a1->f278668;
+  ++a1->f278672;
   do
   {
     v75 = ((uint32_t *)v578)[n5 + 69669];
@@ -13780,11 +13783,12 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
   P2Ctx *v80;   // a record cursor
   P2Ctx *v84;   // a record cursor
   P2Ctx *v88;   // a record cursor
-  uintptr_t v21, v28, v48, v58, v66, v76, v78, v82, v86, v90, v93;
+  uintptr_t v21, v28, v58, v66, v76, v78, v82, v86, v90, v93;
+  int32_t *v48, *v51;   // the row cursors, four bytes a step
   bool v17;
   int16_t v14, v24;
   uint8_t *v12;
-  int32_t i_1, v13, v22, v23, v29, v30, v31, v37, v49, *v50, v51, v52, v59,
+  int32_t i_1, v13, v22, v23, v29, v30, v31, v37, v49, *v50, v52, v59,
           v60, v61, v67, v68, v72, v73, v74, v75, v77, v79, v81, v83, v85,
           v87, v89, v92, v94;
   int64_t v16;
@@ -13889,22 +13893,24 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
     v96 = 0;
     do
     {
-      v48 = (uintptr_t)(int32_t *)lpAddress->f278668;
-      v49 = *(uint32_t *)(v48 - 4);
+      // Start the next row: carry the last word of this one forward, swap
+      // the two row buffers, and re-derive the two cursors from them.
+      v48 = lpAddress->f278668;
+      v49 = v48[-1];
       v97 = a5;
-      *(uint32_t *)(v48 + 4) = v49;
-      *(uint32_t *)lpAddress->f278668 = v49;
+      v48[1] = v49;
+      *lpAddress->f278668 = v49;
       v50 = lpAddress->f278660;
-      v51 = (int32_t)(uintptr_t)(int32_t *)lpAddress->f278664;
-      lpAddress->f278660 = (int32_t *)v51;
-      lpAddress->f278664 = (uint8_t *)v50;
-      v51 += 8;
+      v51 = lpAddress->f278664;
+      lpAddress->f278660 = v51;
+      lpAddress->f278664 = v50;
+      v51 += 2;
       v50 += 2;
-      lpAddress->f278668 = (uint8_t *)v51;
-      lpAddress->f278672 = (uint8_t *)v50;
+      lpAddress->f278668 = v51;
+      lpAddress->f278672 = v50;
       v52 = *v50;
-      *(uint32_t *)(v51 - 4) = *v50;
-      *(uint32_t *)(lpAddress->f278668 - 8) = v52;
+      v51[-1] = *v50;
+      lpAddress->f278668[-2] = v52;
       lpAddress->f278528_q = 0;
       lpAddress->f278536 = 0;
       lpAddress->f278540 = 0;
@@ -14076,7 +14082,8 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   P2Ctx *v78;   // a record cursor
   P2Ctx *v89;   // a record cursor
   P2Ctx *v93;   // a record cursor
-  uint8_t *v30, *v38, *v57, *v67, *v75, *v85;
+  uint8_t *v30, *v38, *v67, *v75, *v85;
+  int32_t *v57, *v60;   // the row cursors, four bytes a step
   P2Ctx *v99;   // a record cursor
   P2Ctx *v97;   // a record cursor
   P2Ctx *v95;   // a record cursor
@@ -14089,7 +14096,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   bool v17, v109;
   uint8_t v9;
   int16_t v110;
-  uint8_t *v21, *v22, *v23, *v24, *v60, *v81, *v82, *v83, *v84, *v86, *v88, *v90,
+  uint8_t *v21, *v22, *v23, *v24, *v81, *v82, *v83, *v84, *v86, *v88, *v90,
           *v92, *v94, *v96, *v98;   // row cursors
   int32_t i, v5, n4, n4_1, v15, v16, v31, v32, v33, v39,
           v40, v58, *v59, v61, v68,
@@ -14243,21 +14250,23 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
             v14->f278736[4] = v24;
           }
           v56 = (AltP2Block *)((int32_t)*(v18 - 1));
+          // Start the next row: carry the last word of this one forward, swap
+          // the two row buffers, and re-derive the two cursors from them.
           v57 = v56->f278668;
-          v58 = *(uint32_t *)(v57 - 4);
-          *(uint32_t *)(v57 + 4) = v58;
-          *(uint32_t *)v56->f278668 = v58;
+          v58 = v57[-1];
+          v57[1] = v58;
+          *v56->f278668 = v58;
           v59 = v56->f278660;
           v60 = v56->f278664;
-          v56->f278660 = (int32_t *)v60;
-          v56->f278664 = (uint8_t *)v59;
-          v60 += 8;
+          v56->f278660 = v60;
+          v56->f278664 = v59;
+          v60 += 2;
           v56->f278668 = v60;
           v59 += 2;
-              v56->f278672 = (uint8_t *)v59;
+          v56->f278672 = v59;
           v61 = *v59;
-          *(uint32_t *)(v60 - 4) = *v59;
-          *(uint32_t *)(v56->f278668 - 8) = v61;
+          v60[-1] = *v59;
+          v56->f278668[-2] = v61;
           v56->f278528_q = 0;
           v56->f278536 = 0;
           v56->f278540 = 0;
@@ -14528,7 +14537,8 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
   P2Ctx *v72;   // a record cursor
   uint8_t *v11;
   P2Ctx *v27;   // a record cursor
-  uint8_t *v23, *v30, *v51, *v61, *v69, *v79;
+  uint8_t *v23, *v30, *v61, *v69, *v79;
+  int32_t *v51, *v54;   // the row cursors, four bytes a step
   P2Ctx *v93;   // a record cursor
   P2Ctx *v91;   // a record cursor
   P2Ctx *v89;   // a record cursor
@@ -14539,7 +14549,7 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
   uint8_t v14, v97;
   int16_t v26;
   int32_t v12, v13, n16, v16, v17, v24, v25, v31, v32, v33, v39, Size, v52,
-          *v53, v54, v55, v62, v63, v64, v70, v71, v75, v76, v77, v78, v80,
+          *v53, v55, v62, v63, v64, v70, v71, v75, v76, v77, v78, v80,
           v82, v84, v86, v88, v90, v92, v95, v96, n16_1, v99, v100;
   int64_t v19;
   uint16_t *v18;
@@ -14642,22 +14652,24 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
     v102 = 0;
     do
     {
-      v51 = (uint8_t *)lpAddress->f278668;
-      v52 = *(uint32_t *)(v51 - 4);
+      // Start the next row: carry the last word of this one forward, swap
+      // the two row buffers, and re-derive the two cursors from them.
+      v51 = lpAddress->f278668;
+      v52 = v51[-1];
       v109 = v8;
-      *(uint32_t *)(v51 + 4) = v52;
-      *(uint32_t *)*(int32_t *)&lpAddress->f278668 = v52;
-      v53 = (int32_t *)*(int32_t *)&lpAddress->f278660;
-      v54 = *(int32_t *)&lpAddress->f278664;
-      *(int32_t *)&lpAddress->f278660 = v54;
-      *(int32_t *)&lpAddress->f278664 = (int32_t)v53;
-      v54 += 8;
-      *(int32_t *)&lpAddress->f278668 = v54;
+      v51[1] = v52;
+      *lpAddress->f278668 = v52;
+      v53 = lpAddress->f278660;
+      v54 = lpAddress->f278664;
+      lpAddress->f278660 = v54;
+      lpAddress->f278664 = v53;
+      v54 += 2;
+      lpAddress->f278668 = v54;
       v53 += 2;
-      *(int32_t *)&lpAddress->f278672 = (int32_t)v53;
+      lpAddress->f278672 = v53;
       v55 = *v53;
-      *(uint32_t *)(v54 - 4) = *v53;
-      *(uint32_t *)(*(int32_t *)&lpAddress->f278668 - 8) = v55;
+      v54[-1] = *v53;
+      lpAddress->f278668[-2] = v55;
       lpAddress->f278528_q = 0;
       lpAddress->f278536 = 0;
       lpAddress->f278540 = 0;
@@ -14817,7 +14829,8 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   P2Ctx *v62;   // a record cursor
   P2Ctx *v70;   // a record cursor
   P2Ctx *v77;   // a record cursor
-  uint8_t *v29, *v37, *v56, *v66, *v74, *v84;
+  uint8_t *v29, *v37, *v66, *v74, *v84;
+  int32_t *v56, *v59;   // the row cursors, four bytes a step
   P2Ctx *v98;   // a record cursor
   P2Ctx *v96;   // a record cursor
   P2Ctx *v94;   // a record cursor
@@ -14832,7 +14845,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   bool v16;
   uint8_t v9;
   int16_t v113;
-  uint8_t *v20, *v21, *v22, *v23, *v59, *v80, *v81, *v82, *v83, *v85, *v87, *v89,
+  uint8_t *v20, *v21, *v22, *v23, *v80, *v81, *v82, *v83, *v85, *v87, *v89,
           *v91, *v93, *v95, *v97;   // row cursors
   int32_t i_1, v5, n4, n4_1, v14, v15, v30, v31, v32, v38, v99,
           v39, v57, *v58, v60, v67,
@@ -14986,21 +14999,23 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             v13->f278736[4] = v23;
           }
           v55 = (AltP2Block *)((int32_t)*(v17 - 1));
+          // Start the next row: carry the last word of this one forward, swap
+          // the two row buffers, and re-derive the two cursors from them.
           v56 = v55->f278668;
-          v57 = *(uint32_t *)(v56 - 4);
-          *(uint32_t *)(v56 + 4) = v57;
-          *(uint32_t *)v55->f278668 = v57;
+          v57 = v56[-1];
+          v56[1] = v57;
+          *v55->f278668 = v57;
           v58 = v55->f278660;
           v59 = v55->f278664;
-          v55->f278660 = (int32_t *)v59;
-          v55->f278664 = (uint8_t *)v58;
-          v59 += 8;
+          v55->f278660 = v59;
+          v55->f278664 = v58;
+          v59 += 2;
           v55->f278668 = v59;
           v58 += 2;
-              v55->f278672 = (uint8_t *)v58;
+          v55->f278672 = v58;
           v60 = *v58;
-          *(uint32_t *)(v59 - 4) = *v58;
-          *(uint32_t *)(v55->f278668 - 8) = v60;
+          v59[-1] = *v58;
+          v55->f278668[-2] = v60;
           v55->f278528_q = 0;
           v55->f278536 = 0;
           v55->f278540 = 0;
