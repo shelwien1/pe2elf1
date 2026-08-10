@@ -9613,7 +9613,13 @@ LABEL_19:
         }
       }
       n192 = n255 + 1;
-      plane_desc[HIDWORD(v208) + v205.m128_i32[1] + 1].b3 = n192;
+      // `m128_i32[1]` is `16 * m128_i32[2]`, a byte offset, so the record index
+      // is `[2]`.  This was `__byte_44339F[16 * HIDWORD(v208) + v205.m128_i32[1]]`
+      // and the fold that made it a record access divided the first term by 16
+      // and not the second.  The chosen transform is 0 on all fifteen reference
+      // images -- both spellings agree there, which is why the gate stayed green
+      // -- but it is 1 or 2 for an image that picks another one.
+      plane_desc[HIDWORD(v208) + v205.m128_i32[2] + 1].b3 = n192;
       if ( n4 >= 4 )
       {
         v202 = v21;
