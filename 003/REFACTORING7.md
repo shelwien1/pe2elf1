@@ -296,9 +296,15 @@ question. Two of them are, and they are still there.
   claims, and which the `f1051664[k] = f56[10 + k]` copy immediately after the
   loop reads back. That copy is either four row cursors or record 0's four
   dwords and it cannot be both, so one of `f56`'s length and `f1051664`'s type
-  is wrong. The finding is in the file as a comment rather than as a member:
-  after §6, an overlap that looks like a coincidence is precisely the thing not
-  to declare around until it is settled.
+  is wrong. **That copy is dead** — `f1051664` is written in two places and
+  read nowhere, in this file or in `bmf.cpp` — so the collision costs nothing
+  at run time and the gate will never speak to it. The same sixteen-byte grid
+  also carries `FreqRec`, at record 188 (+3104), so whatever the region from
+  +96 is, the bucket walker and the pixel coders share it. The finding is in
+  the file as a comment rather than as a member: after §6, an overlap that
+  looks like a coincidence is precisely the thing not to declare around until
+  it is settled, and settling this one needs run-time evidence rather than
+  another reading.
 * **101 raw offsets, 92 `fNN` members, 560 `vNN` locals, 112 `goto`s.** The
   offsets are down from 1389 over five rounds; what remains is in bases that
   are genuinely computed — a name plus a variable byte offset, with nothing

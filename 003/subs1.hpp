@@ -542,7 +542,10 @@ struct ModelBlock {
   uint32_t f52;
   uint8_t  *f56[14];   // +56 .. +108, the row cursors: every element is an address
   uint8_t _pad15[1051552];
-  uint8_t  *f1051664[4];   // +1051664 .. +1051676, four more row cursors
+  // Written twice and read nowhere: `init_model_tables` and `model_plane` both
+  // copy `f56[10..13]` into it after the bucket loop, and nothing in the file
+  // or in bmf.cpp reads it back.  Whatever it was for, the copy is dead.
+  uint8_t  *f1051664[4];   // +1051664 .. +1051679
   // What `layout_workspace` seeds, and the boundaries are its own: sixteen
   // three-word records at +1 051 680, a 24 KiB block it `memset`s, one record
   // and 1536 bytes it `memset`s at +1 076 352, and 48 more records at
@@ -11115,9 +11118,11 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         // level)` it derives.  The base is the object and the counter starts
         // at zero, so record 0 is +96 .. +111 -- which `f56[10..13]` also
         // claims, and which the `f1051664[k] = f56[10 + k]` copy after this
-        // loop reads back.  Naming this table means re-reading those two
-        // members first; the copy is either four row cursors or record 0's
-        // four dwords, and it cannot be both.
+        // loop reads back.  That copy is dead -- nothing reads `f1051664` --
+        // so the collision costs nothing at run time, but it does mean one
+        // of `f56`'s length and `f1051664`'s type is wrong.  The same
+        // sixteen-byte grid carries `FreqRec` from record 188 (+3104), so
+        // whatever this region is, the two walkers share it.
         v13 = (uint16_t *)&((uint32_t *)this_3)[4 * v11];
         v13[49] = 2;
         v13[50] = 2;
@@ -15317,9 +15322,11 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
           // level)` it derives.  The base is the object and the counter starts
           // at zero, so record 0 is +96 .. +111 -- which `f56[10..13]` also
           // claims, and which the `f1051664[k] = f56[10 + k]` copy after this
-          // loop reads back.  Naming this table means re-reading those two
-          // members first; the copy is either four row cursors or record 0's
-          // four dwords, and it cannot be both.
+          // loop reads back.  That copy is dead -- nothing reads `f1051664` --
+          // so the collision costs nothing at run time, but it does mean one
+          // of `f56`'s length and `f1051664`'s type is wrong.  The same
+          // sixteen-byte grid carries `FreqRec` from record 188 (+3104), so
+          // whatever this region is, the two walkers share it.
           v12 = (uint16_t *)&((uint32_t *)Blocka_2)[4 * v64];
           __model_plane_n2 = 2;
           v12[48] = 2;
