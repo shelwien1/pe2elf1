@@ -22,10 +22,10 @@ and 3.
 
 ```
                                    round 8   round 9
-subs1.hpp / bmf.cpp lines            17787     17842
+subs1.hpp / bmf.cpp lines            17787     17837
 raw-offset sites                        22        13
 byte offsets on a typed base           121         0
-pointer casts                         2137      1758
+pointer casts                         2137       992
 fNN members / named ones             93/121    44/121
 distinct vNN locals                    554       553
 goto / LABEL_n:                     112/79    112/79
@@ -248,49 +248,62 @@ noticing that a tool's *input* was narrower than the file.
 
 ## 8. What is left
 
-* **`AltP1Block::cursor` and `::buf` are still `uint8_t *`**, though `P1Ctx` is
-  declared and every reach through them is now a subscript rather than a cast.
-  The record is established — the sample at +0 and `abs32(v56 - v54)`, the size
-  of the prediction error, at +1, written one line apart in
-  `alt_model_p1_decode` — and the row-start blocks are record copies:
+* ~~**`AltP1Block::cursor` and `::buf`**~~ Done, on the third attempt, and the
+  third attempt is the only one worth describing because the first two failed
+  the same way and this one could not.
 
-  ```c
-  P1Ctx *const here = (P1Ctx *)_this->cursor[0];
-  here[0] = here[-1];  here[1] = here[-2];  ...  here[5] = here[-6];
+  The two that failed tried to rewrite the *dereferences* by regex, which needs
+  the regex to decide whether `*` is a dereference or a multiplication. It
+  cannot: `16 * v37` and `*v37` differ only in what precedes the star, and one
+  bad substitution is a silent semantic change of exactly the class §5 spent an
+  afternoon on. The third attempt gives that job away. Once the array is
+  `P1Ctx *`, a `P1Ctx` cannot be dereferenced to a scalar, cannot be
+  subscripted to a scalar and cannot be multiplied — so **every** site that is
+  not pure record arithmetic becomes a compile error with the operator named in
+  the message. Ninety-one of them, and not one had to be guessed at.
+
+  What the compiler *cannot* catch is the arithmetic, because `p + 8` compiles
+  either way and means eight times as much. So that half is enumerated first —
+  forty-six distinct forms, every one constant or `2 * v`:
+
+  ```
+   9  X->cursor[0] += 2       21  X->cursor[0][1]      10  X->cursor[4][13]
+   9  X->cursor[1] += 2       10  X->cursor[0][-7]     10  X->cursor[2][-3]
+   ...                         5  X->cursor[0][-2]      1  X->buf[0][2 * v21]
   ```
 
-  which is the row end mirrored into the right margin, the same idiom §3 and §4
-  found in the other two models.
+  — converted in one pass, and then re-derived by a scan that asserts the list
+  is empty. The scan found `v5 += 8`, eight bytes that had become eight
+  records, *before* the gate did.
 
-  Retyping the array itself was attempted twice and reverted twice. What stops
-  it is not the record but the arithmetic: a two-byte stride makes `*p` and
-  `a * b` the same three characters to a regex, and a substitution that turned
-  `16 * v37` into `16 v37->sym` is a silent semantic change of exactly the class
-  §5 spent an afternoon on. It needs a converter that parses expressions rather
-  than matching them. What is left after this round is 41 subscripts of the form
-  `cursor[k][±even]` and `[±odd]`, which are readable against the record above
-  and no longer hidden inside a cast.
+  That is the method, and it is the round's second one: **the compiler finds
+  what changed meaning loudly; a scan you write yourself finds what changed
+  meaning quietly.** §5's bisection is what you need when you have neither.
+
+  What comes out is the p1 neighbourhood in the same vocabulary as the other
+  two models — `cursor[0]->sym` and `->mag`, `cursor[0][-1].mag` for the error
+  one pixel back, `cursor[4][6].mag` for six pixels forward on another plane —
+  and the row start as six record copies mirroring the row end into the right
+  margin. The file's three record types are 2, 8 and 18 bytes and none of them
+  is spelled as a number anywhere.
+
 * ~~**`alt_p1_context` reaches its two neighbour blocks through `int32_t *`.**~~
   Done. Both parameters are `AltP1Block *`, `a2[49]` and `a2[50]` are
   `cursor[0]` and `cursor[1]`, `a2[2]` is `f8`, and fifteen raw offsets became
-  `cursor[0][-1]`, `[-2]` and `[-4]` — which, against §8's record, is the error
-  magnitude one pixel back and the samples one and two pixels back. It needed
-  no stride change, because the cursor stays a byte cursor; only the *base*
-  was mistyped.
-* **49 byte offsets on an `AltP1Block` row cursor**, and eight more on a local
-  that holds one. All are the p1 record: `cursor[0] - 2`, `- 4`, `- 6` are the
-  samples one, two and three pixels back, `cursor[0] + 8` and `+ 10` are two
-  records forward, and `*(uint16_t *)(cursor[0] - 8) = *(uint16_t *)(cursor[1] + 6)`
-  is a whole record copied from the row above into the left margin — the same
-  idiom `f56` and `AltP2Block::cursor` use, still spelled in bytes because §8's
-  first bullet is not done.
+  `cursor[0][-1].mag` and `[-1].sym`, `[-2].sym` — the error magnitude one
+  pixel back and the samples one and two pixels back. This one needed no stride
+  reasoning at all: only the *base* was mistyped, not the element.
+* **Zero byte offsets on a typed base**, from 121 at the start of the round.
+  Every pointer in the file whose target is a record is typed as that record,
+  and the stride scan of §2 reports zero for the third time.
 * **112 gotos and 79 labels**, unchanged for four rounds, and `degoto.py`
   reports nothing reducible. What is left are MSVC's shared tails.
-* **553 `vNN` locals and 44 `fNN` members.** Round eight said this is
-  answerable only by knowing what the values mean; §3 and §4 are what that
-  looks like when it works — thirteen `vNN` in `alt_p2_context` became `P2Ctx`
-  cursors and their reads became field names, and none of it needed a new
-  naming pass.
+* **`vNN` locals and 44 `fNN` members.** Round eight said this is answerable
+  only by knowing what the values mean, and §3, §4 and this section are what
+  that looks like when it works: sixty-odd `vNN` across the three models became
+  record cursors and their reads became field names, without a naming pass.
+  What is left are the ones whose *values* are still unexplained, which is
+  `algorithm_v2.md`'s work and not a sweep's.
 * **1403 conversion warnings.** The ratchet fell 52 this round and every step
   was a by-product: a `match[0]` read through a typed field does not need the
   cast that a raw byte read did.
