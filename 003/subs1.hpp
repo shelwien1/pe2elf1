@@ -11703,7 +11703,8 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
   AltP1Block *v80;
   uint8_t *v29;
   uint8_t *v30;
-  uint8_t *v50, v53, v60, v79;
+  uint8_t v53, v60, v79;
+  AltP1Block *v50;
   void **v89;
   i = *p_i;
   v3 = p_i[1];
@@ -11847,21 +11848,21 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
         v94 = v3;
         do
         {
-          v50 = (uint8_t *)Block_plane[0];
+          v50 = (AltP1Block *)Block_plane[0];
           n5_9 = *(a2 + plane_desc[1].src_plane);
           v114 = plane_desc[1].src_plane;
           n5_6 = n5_9;
           __alt_p1_context((AltP1Block *)(uint8_t **)Block_plane[0], (uint32_t *)nullptr, (uint32_t *)0);
           n5_7 = n5_6;
-          v53 = v50[8];
+          v53 = *(uint8_t *)&v50->f8;
           v112 = (uint8_t)(n5_6 - v53);
-          n5_2 = v50[v112 + 984];
-          n5_1 = (uint8_t)(v50[n5_2 + 1496] + v53);
+          n5_2 = v50->f984[v112];
+          n5_1 = (uint8_t)(v50->f1496[n5_2] + v53);
           v56 = (uint8_t)(n5_1 + *(a2 + v114) - n5_6);
           n16 = *(a2 + v114) - v56;
           if ( n16 < -16 || n16 > 16 )
           {
-            n5_2 = v50[v112 + 1240];
+            n5_2 = v50->f1240[v112];
           }
           else
           {
@@ -11869,25 +11870,25 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
             *(a2 + v114) = v56;
             n5_7 = n5_1;
           }
-          __alt_p1_encode_symbol(&((P1Count *)v50)[*((uint32_t *)v50 + 3) + 237].total, n5_1, *((uint32_t *)v50 + 4), n5_2);
-          v58 = n5_7 - *((uint32_t *)v50 + 2);
-          **((uint8_t **)v50 + 49) = n5_6;
-          *(uint8_t *)(*((uint32_t *)v50 + 49) + 1) = abs32(v58);
-          *(uint32_t *)&v50[4 * *((uint32_t *)v50 + 5) + 24] = *(uint32_t *)&v50[4 * *((uint32_t *)v50 + 5) + 24]
-                                                         + *(uint8_t *)(*((uint32_t *)v50 + 49) + 1)
-                                                         - *(uint8_t *)(*((uint32_t *)v50 + 49) - 7)
-                                                         - (*(uint8_t *)(*((uint32_t *)v50 + 53) - 3)
-                                                          - *(uint8_t *)(*((uint32_t *)v50 + 53) + 13)
-                                                          + *(uint8_t *)(*((uint32_t *)v50 + 51) - 3)
-                                                          - *(uint8_t *)(*((uint32_t *)v50 + 51) + 13));
-          *((uint32_t *)v50 + 5) = *((uint32_t *)v50 + 5) == 0;
-          if ( ((P1Count *)v50)[*((uint32_t *)v50 + 3) + 237].total < 0x4000u )
-            __alt_p1_model((AltP1Block *)v50);
-          *((uint32_t *)v50 + 49) += 2;
-          *((uint32_t *)v50 + 50) += 2;
-          *((uint32_t *)v50 + 51) += 2;
-          *((uint32_t *)v50 + 52) += 2;
-          *((uint32_t *)v50 + 53) += 2;
+          __alt_p1_encode_symbol(&((P1Count *)v50)[v50->f12[0] + 237].total, n5_1, v50->f12[1], n5_2);
+          v58 = n5_7 - v50->f8;
+          **(uint8_t **)&v50->f12[46] = n5_6;
+          *(uint8_t *)(v50->f12[46] + 1) = abs32(v58);
+          v50->f12[v50->f12[2] + 3] = v50->f12[v50->f12[2] + 3]
+                                                         + *(uint8_t *)(v50->f12[46] + 1)
+                                                         - *(uint8_t *)(v50->f12[46] - 7)
+                                                         - (*(uint8_t *)(v50->f12[50] - 3)
+                                                          - *(uint8_t *)(v50->f12[50] + 13)
+                                                          + *(uint8_t *)(v50->f12[48] - 3)
+                                                          - *(uint8_t *)(v50->f12[48] + 13));
+          v50->f12[2] = v50->f12[2] == 0;
+          if ( ((P1Count *)v50)[v50->f12[0] + 237].total < 0x4000u )
+            __alt_p1_model(v50);
+          v50->f12[46] += 2;
+          v50->f12[47] += 2;
+          v50->f12[48] += 2;
+          v50->f12[49] += 2;
+          v50->f12[50] += 2;
           v60 = *(a2 + plane_desc[2].src_plane);
           v113 = plane_desc[2].src_plane;
           if ( v109 )
