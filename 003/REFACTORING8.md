@@ -23,17 +23,17 @@ bytes.
 `python3 tools/shape.py`, verbatim:
 
 ```
-subs1.hpp / bmf.cpp lines          17759 / 358
-raw-offset sites                   26
+subs1.hpp / bmf.cpp lines          17779 / 358
+raw-offset sites                   27
   off `_this`                      1, in 1 functions
-pointer casts                      2329
+pointer casts                      2261
 globals still at a 1997 address    0
 frames                             17, 169180 bytes, 0 aliases
   slots carrying two names         0, 0 extra names, in 0 functions
   member runs walked as arrays     0 sites, 0 bases, 0 functions
   frames that dissolve outright    17, 0 aliases
-structs                            20, 0 still ObjN
-  fNN members / named ones         78 / 87
+structs                            21, 0 still ObjN
+  fNN members / named ones         77 / 89
 distinct vNN locals                559
 goto / LABEL_n:                    112 / 79
 __fwd_* shims                      0
@@ -41,7 +41,8 @@ __fwd_* shims                      0
 
 against 37 raw offsets, 2541 pointer casts and 83 `fNN` members where round
 seven's last commit left them. (§1 of that document quotes 44 / 2822 / 93,
-from earlier in the round.) The conversion-warning ceiling went 1975 → 1442.
+from earlier in the round.) The conversion-warning ceiling went 1975 → 1470,
+and §6.1 is the one place this round it moved the wrong way.
 
 Nothing here was a sweep. Every tool in `tools/` reports zero removals against
 the file at the end of this round, exactly as at the start -- `unwrite` finds
@@ -176,6 +177,40 @@ values.
 
 ---
 
+## 4.1 Where the index lands
+
+`AltP2Block` holds `uint16_t f940072[62208]`, and it was reached four ways:
+`f940072[4 * k + r]`, a `uint16_t *` cursor at `cur[470036 + 4 * d + r]`, a
+`uint32_t` index at `((uint32_t *)block)[2 * k + 235018 + 2 * c]`, and twice
+with the byte offset written out. 470036 · 2, 235018 · 4 and 940072 are one
+number — the table's own offset, folded into whatever unit the surrounding
+index happened to be in. Recognising that is the whole of the change.
+
+`P2Freq` is four counters, and three things say four rather than two or eight:
+`rescale_three_way` halves `c[1 .. 3]` and adjusts `c[0]`, every flat reader
+indexes by `4 * k`, and the allocator writes eight `uint16_t` a pass over
+`0x1E60` = 7776 passes. That last is 15552 records, and §4 has already said
+what 15552 is.
+
+The three cursor constants are records `k - 1`, `k` and `k + 1` — the p2 model
+updates three adjacent records, the way the p1 model updates three adjacent
+nodes. `p2_freq_at` names that relation, and is the one place 940072 still
+appears. Both symbol coders and `rescale_three_way` take a `P2Freq *` now, and
+the two places that compose the index at the call site — one per direction —
+read as four chosen weights plus a constant, which is `alt_p2_context`'s sum
+written out.
+
+**The first attempt divided by zero on every stream**, and the cause is worth
+keeping. `&f940072[4 * a + 4 * b + 4 * c]` became `&freq[a + 4 * b + 4 * c]`:
+the scanner stripped the leading factor and left the others, because it matched
+`4 * ` as a prefix rather than distributing over a sum. The index was wrong by
+four times everything after the first term. A bracket-aware sweep for a stray
+`4 *` anywhere inside a `freq[...]` found exactly one site — which is also the
+only place the encoder composes the index at the call, so the error and the
+interesting statement were the same statement.
+
+---
+
 ## 5. A costume, and the one cast that was not one
 
 `alt_p1_context` writes and reads its selectors through `uint8_t **`:
@@ -243,8 +278,9 @@ caught by reading the result. It is in the check now.
 
 ## 7. What is left
 
-* **26 raw offsets**, from 37. What survives is a name plus a genuinely
-  computed offset. Four of them are the same statement in four coder bodies —
+* **27 raw offsets**, from 37 — one more than §4.1 left, because naming the
+  table turned one folded constant back into an explicit reach. What survives
+  is a name plus a genuinely computed offset. Four of them are the same statement in four coder bodies —
   `*(uint16_t *)(cur - 8) = *(uint16_t *)(other + 6)`, a four-word guard row
   copied backwards — and naming it waits on knowing what the sixteen bytes in
   front of a row are for.
@@ -253,17 +289,24 @@ caught by reading the result. It is in the check now.
   block, 10 whose `goto` is not the whole of an `if`, 8 backward, 5 jumping
   out, 4 whose skipped region something else enters. Every one needs a flag or
   a copy of the body.
-* **78 `fNN` members and 559 `vNN` locals.** The members are concentrated now:
-  the three largest are `f940072` (42 sites), `f6059432` (39) and `f278704`
-  (37). The first is the p2 counter table §4 just sized, so what is left there
-  is not where the index lands but what the four counters in a record *are* —
-  and that is the same question as the 18-byte `P2Ctx` record, not a separate
-  one.
-* **1442 conversion warnings** — 822 `-Wsign-conversion`, 517 `-Wconversion`,
+* **77 `fNN` members and 559 `vNN` locals.** The largest is now `f6059432`
+  (39 sites), then `f278704` (37) — the running context index itself. What is
+  left in the p2 block is not where the index lands, which §4.1 answers, but
+  what the four counters in a record *are*, and that is the same question as
+  the 18-byte `P2Ctx` record rather than a separate one.
+* **1470 conversion warnings** — 844 `-Wsign-conversion`, 523 `-Wconversion`,
   99 `-Wsign-compare`, 4 `-Wuseless-cast`, 5 `-Wint-to-pointer-cast` and one
   `-Wmain`. §5 is the reason to keep holding it there, and this round is the
   first where lowering it was mostly a by-product of typing things correctly
   rather than an aim.
+
+  §4.1 put 28 of those back, and that is the one place the ceiling moved the
+  wrong way. The rise is +26 in `alt_p2_model` and +3 in
+  `alt_p2_d8_decode_body`, the two bodies it rewrote, and nowhere else — and it
+  is the same count whichever way `CtxWeight::w` is signed, so it is arithmetic
+  becoming visible rather than a typing choice left unmade. A ratchet that only
+  ever falls stops being a measurement; what it is for is that a rise has to be
+  accounted for, and this one is.
 * **What the shared record means**, unchanged from round seven §8. The bucket
   table's last record and the frequency table's first are the same sixteen
   bytes; §4 now says what the *index* into such a table is made of, which is

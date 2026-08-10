@@ -525,11 +525,17 @@ an independent fact about the model; it is the context space.
 
 `alt_p2_alloc` does the same with five groups and a unit of 64 — 0, 64·3^g and
 128·3^g, up to 5184 and 10368 — so 3^5 · 64 = 15552, and that number is in its
-own allocator too. `AltP2Block::f940072` is `uint16_t[62208]`, and the loop
-that seeds it runs `0x1E60` = 7776 times writing eight words a pass: 15552
-records of four `uint16_t`, seeded (4096, 2048, 2816, 2816). The p2 coder's
-three-way choice over three counters, §9's last bullet, is a choice inside one
-of those records.
+own allocator too. `AltP2Block::freq` is 15552 four-counter records, seeded
+(4096, 2048, 2816, 2816) by a loop that runs `0x1E60` = 7776 times writing two
+records a pass. The p2 coder's three-way choice over three counters, §9's last
+bullet, is a choice inside one of those records: `alt_p2_encode_symbol` is
+handed `&freq[index]` and picks among `c[1]`, `c[2]` and `c[3]`, with `c[0]` a
+fourth count that the rescale treats differently from the other three.
+
+`alt_p2_model` then updates records `index - 1`, `index` and `index + 1` —
+three adjacent, which is what `alt_p1_model` does to its counter nodes (§9's
+last bullet but one). Both models spread an update over a neighbourhood of the
+context space, not just the context.
 
 So both tables are exactly their context space, and neither size had to be
 guessed at:
