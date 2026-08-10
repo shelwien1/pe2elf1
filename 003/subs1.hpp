@@ -213,7 +213,7 @@ static PlaneDesc plane_desc[5];
 // the number of planes, and no other field is read that way.
 static int32_t &plane_count = *&plane_desc[0].w8;
 static int32_t model_geometry[32];   // was 0x445660 in bmf_bss
-static char __byte_445700;   // was 0x445700 in bmf_bss
+static int8_t __byte_445700;   // was 0x445700 in bmf_bss
 static int32_t __n8_1;   // was 0x44570C in bmf_bss
 static int32_t __n8_0;   // was 0x445710 in bmf_bss
 // The level geometry, and it is a table: eight 4-byte records with three
@@ -301,7 +301,7 @@ static uint8_t *hist_scratch;
 // evidence supports; which side reads across the boundary is still open, and
 // finding it is what would let them separate.
 alignas(16) static uint8_t bss_exclusion[8192 + 544];
-static char    (&exclusion_mask)[8192] = *(char (*)[8192])bss_exclusion;
+static int8_t  (&exclusion_mask)[8192] = *(int8_t (*)[8192])bss_exclusion;
 static uint8_t (&__byte_445440)[544]   = *(uint8_t (*)[544])(bss_exclusion + 8192);
 // The model's counter tables, ALGORITHM.md §8: one allocation, handed out in
 // 254-entry strips.  An int32_t in the data segment holding an address, so a
@@ -932,9 +932,9 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj46 {
-  const char f0;
+  const int8_t f0;
   uint8_t _pad1[3];
-  const char f4;
+  const int8_t f4;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj46, f4) == 4,
@@ -947,9 +947,9 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj47 {
-  const char f0;
+  const int8_t f0;
   uint8_t _pad1[3];
-  const char f4;
+  const int8_t f4;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj47, f4) == 4,
@@ -962,9 +962,9 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj48 {
-  const char f0;
+  const int8_t f0;
   uint8_t _pad1[3];
-  const char f4;
+  const int8_t f4;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj48, f4) == 4,
@@ -977,9 +977,9 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj49 {
-  const char f0;
+  const int8_t f0;
   uint8_t _pad1[3];
-  const char f4;
+  const int8_t f4;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj49, f4) == 4,
@@ -992,9 +992,9 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj50 {
-  const char f0;
+  const int8_t f0;
   uint8_t _pad1[3];
-  const char f4;
+  const int8_t f4;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj50, f4) == 4,
@@ -1007,9 +1007,9 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj51 {
-  const char f0;
+  const int8_t f0;
   uint8_t _pad1[3];
-  const char f4;
+  const int8_t f4;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj51, f4) == 4,
@@ -1022,9 +1022,9 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj52 {
-  const char f0;
+  const int8_t f0;
   uint8_t _pad1[3];
-  const char f4;
+  const int8_t f4;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj52, f4) == 4,
@@ -1316,7 +1316,7 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj102 {
-  const char f0;
+  const int8_t f0;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj102, f0) == 0,
@@ -1329,7 +1329,7 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj103 {
-  const char f0;
+  const int8_t f0;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj103, f0) == 0,
@@ -1342,7 +1342,7 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj104 {
-  const char f0;
+  const int8_t f0;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj104, f0) == 0,
@@ -1355,7 +1355,7 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj105 {
-  const char f0;
+  const int8_t f0;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj105, f0) == 0,
@@ -1368,7 +1368,7 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj106 {
-  const char f0;
+  const int8_t f0;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj106, f0) == 0,
@@ -1381,7 +1381,7 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj107 {
-  const char f0;
+  const int8_t f0;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj107, f0) == 0,
@@ -1394,7 +1394,7 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj108 {
-  const char f0;
+  const int8_t f0;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj108, f0) == 0,
@@ -1407,7 +1407,7 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj109 {
-  const char f0;
+  const int8_t f0;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj109, f0) == 0,
@@ -1420,7 +1420,7 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj110 {
-  const char f0;
+  const int8_t f0;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj110, f0) == 0,
@@ -1433,7 +1433,7 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj111 {
-  const char f0;
+  const int8_t f0;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj111, f0) == 0,
@@ -1446,7 +1446,7 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj112 {
-  const char f0;
+  const int8_t f0;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj112, f0) == 0,
@@ -1548,7 +1548,7 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj124 {
-  const char f0;
+  const int8_t f0;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj124, f0) == 0,
@@ -1561,7 +1561,7 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj125 {
-  const char f0;
+  const int8_t f0;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj125, f0) == 0,
@@ -1574,7 +1574,7 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj126 {
-  const char f0;
+  const int8_t f0;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj126, f0) == 0,
@@ -1587,7 +1587,7 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj127 {
-  const char f0;
+  const int8_t f0;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj127, f0) == 0,
@@ -1712,7 +1712,7 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj2 {
-  const char f0;
+  const int8_t f0;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj2, f0) == 0,
@@ -1755,11 +1755,11 @@ static_assert(sizeof(void *) != 4
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct Obj16 {
-  char f0;
+  int8_t f0;
   uint8_t _pad1[252];
-  char f253;
-  char f254;
-  char f255;
+  int8_t f253;
+  int8_t f254;
+  int8_t f255;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj16, f255) == 255,
@@ -1884,7 +1884,7 @@ static_assert(sizeof(void *) != 4
 // computed index are padding here -- their bounds are not visible.
 struct Obj32 {
   uint16_t f0;
-  char f2;
+  int8_t f2;
 };
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(Obj32, f2) == 2,
@@ -2147,7 +2147,7 @@ FILE *__bmf_close_archive(BmfArc *_this)
 }
 static inline FILE * __fwd_bmf_destroy_archive_bmf_close_archive(void *a0) { return __bmf_close_archive((BmfArc *)a0); }
 
-BmfArc *__bmf_destroy_archive(BmfArc *Block, char a2)
+BmfArc *__bmf_destroy_archive(BmfArc *Block, int8_t a2)
 {
   ;
   __fwd_bmf_destroy_archive_bmf_close_archive(Block);
@@ -2168,7 +2168,7 @@ void __expand_predictor_mode0(uint32_t Src, int32_t i, int32_t a3)
 uint32_t __predict_med(uint8_t *Src, int32_t i, int32_t a3)
 {
   ;
-  char v26;
+  int8_t v26;
   int32_t i_1, v16, v17, v18, v19, v20, v21, v22, v24, v27, v29;
   uint32_t j, n15, v23, v25, n15_1;
   Obj37 *v28;
@@ -2279,7 +2279,7 @@ LABEL_24:
 uint32_t __alt_init_tables(Obj43 *a1, Obj16 *a2)
 {
   ;
-  char v48, v53;
+  int8_t v48, v53;
   uint8_t *v18, *v19;   // `uint8_t *` beside the `char` scalars above
   int32_t n128_1, n128_6, v30, n128_5, v33, n128_3, n128_4, v36, n128_11,
           n128_2;
@@ -2523,7 +2523,7 @@ int32_t __decode_context_bit(uint16_t *_this, uint16_t *a2)
 int32_t __encode_symbol_list(uint32_t *_this, int32_t a2)
 {
   ;
-  char v2, v27, v29, v32, v33;
+  int8_t v2, v27, v29, v32, v33;
   uint8_t *v28, *v36, *v37, *v39, *v40, *v49;   // `uint8_t *` beside the `char` scalars above
   int16_t v51;
   int32_t enc_cum, enc_high, enc_tot, v3, v5, v6, v7, v8, v24, n251, v35, v38,
@@ -2715,7 +2715,7 @@ void __symbol_list_update(Obj6 *_this, int32_t a2, uint32_t a3)
   uint8_t *list;         // the three-byte entries, `_this[5]`
   uint32_t count;     // a symbol's count byte, while it is being compared
   bool v7;
-  char v11, v12, v15, v17, v19, v20;
+  int8_t v11, v12, v15, v17, v19, v20;
   uint8_t *v16, *v23, *v24, *v26, *v27, *v33;   // `uint8_t *` beside the `char` scalars above
   int16_t v10, v34;
   int32_t v8, v9, v22, v25, v28, v30, v32, v35, v36;
@@ -3446,7 +3446,7 @@ void __rc_end_encode()
     free(model_tables);
 }
 
-void **__free_workspace(ModelBlock *Blocka, char a2)
+void **__free_workspace(ModelBlock *Blocka, int8_t a2)
 {
   ;
   int32_t v4, v6, v10, v13, i;
@@ -3612,7 +3612,7 @@ int32_t __init_model_tables(ModelBlock *_this)
   ;
   uint8_t *v8, *v32;   // were int32_t: these hold addresses
   uint8_t *v28, *v29;           // row cursors out of f56
-  char v13, v14;
+  int8_t v13, v14;
   uint8_t *buf;   // `uint8_t *` beside the `char` scalars above
   Obj14 *v11;
   int16_t v6, v12;
@@ -3828,7 +3828,7 @@ LABEL_37:
   return result;
 }
 
-void **__alt_p2_free(void **lpAddress, char a2)
+void **__alt_p2_free(void **lpAddress, int8_t a2)
 {
   ;
   free(*(lpAddress + 69689));
@@ -3844,7 +3844,7 @@ void **__alt_p2_free(void **lpAddress, char a2)
 }
 
 
-void **__alt_p1_free(void **Block, char a2)
+void **__alt_p1_free(void **Block, int8_t a2)
 {
   ;
   free(*(Block + 44));
@@ -4930,12 +4930,12 @@ uint8_t *__rc_begin_encode()
     memset((uint8_t *)model_geometry + v3, 0x05, 16);
     level_geom[6].half = 16;
     v4 = v3 + 2 * (uint8_t)level_geom[5].half;
-    level_geom[6].first = (char)v4;
+    level_geom[6].first = (int8_t)v4;
     level_geom[6].tbl_base = (uint8_t)v4 - 6;
     memset((uint8_t *)model_geometry + v4, 0x06, 32);
     level_geom[7].half = 32;
     v6 = v4 + 2 * (uint8_t)level_geom[6].half;
-    level_geom[7].first = (char)v6;
+    level_geom[7].first = (int8_t)v6;
     level_geom[7].tbl_base = (uint8_t)v6 - 7;
     // 64 bytes of 7, after 16 of 5 and 32 of 6 -- one level per line.  MSVC
     // inlined this third one because the length crossed its threshold, which
@@ -4988,7 +4988,7 @@ void __alt_p1_d8_encode_body(Obj0 *_this, uint8_t *a2, uint8_t *a3)
   ;
   uint8_t *v9;   // were int32_t: these hold addresses
   bool v31;
-  char v33, v35;
+  int8_t v33, v35;
   int32_t v4, v5, v6, v7, v8, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24,
           v25, v26, v27, v28, v29, v30, v34, n5, n16, v38, v40, v42;
   int64_t v39;
@@ -5132,7 +5132,7 @@ void __alt_p1_d8_encode_body(Obj0 *_this, uint8_t *a2, uint8_t *a3)
   }
   __rc_end_encode();
 }
-static inline void ** __fwd_alt_model_p1_d8_encode_alt_p1_free(void *a0, char a1) { return __alt_p1_free((void **)a0, a1); }
+static inline void ** __fwd_alt_model_p1_d8_encode_alt_p1_free(void *a0, int8_t a1) { return __alt_p1_free((void **)a0, a1); }
 static inline void __fwd_alt_model_p1_d8_encode_alt_p1_d8_encode_body(Obj0 *a0, void *a1, void *a2) { __alt_p1_d8_encode_body(a0, (uint8_t *)a1, (uint8_t *)a2); }
 static inline int32_t * __fwd_alt_model_p1_d8_encode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((Obj0 *)a0, a1, a2, a3); }
 
@@ -5561,7 +5561,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   uintptr_t p_i_1;   // were int32_t: addresses, masked and tagged
   FILE *Stream_1, *Stream_2;
   bool v33;
-  char v42, v43, v44, v45, v46, v47, v56;
+  int8_t v42, v43, v44, v45, v46, v47, v56;
   uint8_t *Bufferc_3, *Bufferc_1, *Bufferb_1, *v19, *v24, *buf_1, *v31, *v39, *buf_3, *Bufferc_2;   // `uint8_t *` beside the `char` scalars above
   int32_t v3, i, Buffer_1, n8, v14, v16, v17, v20, v21, v22, v23, v25, v26, v28, n4, n2,
           Buffer_3, Buffer_4, Size, v40, n2_1, v49, Size_1, v55;
@@ -6034,7 +6034,7 @@ uint32_t __init_symbol_list(int32_t *a1, int32_t a2, int32_t a3, int32_t a4)
   return result;
 }
 
-uint8_t * __interleave_plane(uint8_t *p_i, uint8_t *Src, int32_t a3, char a4)
+uint8_t * __interleave_plane(uint8_t *p_i, uint8_t *Src, int32_t a3, int8_t a4)
 {
   ;
   uint8_t *Src_5, *v25;
@@ -6192,10 +6192,10 @@ LABEL_25:
   return p_i;
 }
 
-uint8_t * __colour_transform(uint8_t *Blockb, uint8_t *Src, int32_t a3, char a4)
+uint8_t * __colour_transform(uint8_t *Blockb, uint8_t *Src, int32_t a3, int8_t a4)
 {
   ;
-  char v8, v11;
+  int8_t v8, v11;
   uint8_t *v29;   // `uint8_t *` beside the `char` scalars above
   int32_t v4, n6_2, v7, n6_1, v10, Size, n4, Size_1, v16, Size_2, v18, v19, v21, v22, v23, v24,
           v26, n2, v30, v31, v33, v34, v35, v36, v37, n4_1, n6;
@@ -6311,7 +6311,7 @@ LABEL_4:
       v26 = *Src_4 - v37;
       v27 = v36 * Src_4[v33] + v31 * Src_4[v35] + 40;
       Src_4 += n4_1;
-      *Src++ = (char)(v26 - (v27 >> 7));
+      *Src++ = (int8_t)(v26 - (v27 >> 7));
       --v24;
     }
     while ( v24 );
@@ -6327,7 +6327,7 @@ LABEL_4:
       v22 = v30 * *(Src_5 - 2) + v36 * *(Src_5 - 3);
       v23 = v34 * *(Src_5 - 1);
       Src_5 += n4_1;
-      *Src++ = (char)(v21 - ((uint32_t)(v22 + v23 + 63) >> 7));
+      *Src++ = (int8_t)(v21 - ((uint32_t)(v22 + v23 + 63) >> 7));
       --v19;
     }
     while ( v19 );
@@ -6362,10 +6362,10 @@ __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...)
   exit(Code);
   __builtin_unreachable();
 }
-int32_t __rc_begin_decode(char ArgList_1)
+int32_t __rc_begin_decode(int8_t ArgList_1)
 {
   ;
-  char ArgList;
+  int8_t ArgList;
   int32_t bits_left, v7, v8, v16, v17, v20;
   uint16_t *n256, *tbl;
   uint32_t i, v9, v11;   // offsets into model_geometry, not pointers
@@ -6422,12 +6422,12 @@ int32_t __rc_begin_decode(char ArgList_1)
     memset((uint8_t *)model_geometry + v8, 0x05, 16);
     level_geom[6].half = 16;
     v9 = v8 + 2 * (uint8_t)level_geom[5].half;
-    level_geom[6].first = (char)v9;
+    level_geom[6].first = (int8_t)v9;
     level_geom[6].tbl_base = (uint8_t)v9 - 6;
     memset((uint8_t *)model_geometry + v9, 0x06, 32);
     level_geom[7].half = 32;
     v11 = v9 + 2 * (uint8_t)level_geom[6].half;
-    level_geom[7].first = (char)v11;
+    level_geom[7].first = (int8_t)v11;
     level_geom[7].tbl_base = (uint8_t)v11 - 7;
     memset((uint8_t *)model_geometry + v11, 0x07, 64);
     n256 = (uint16_t *)bmf_new(0x7F000u);
@@ -6476,7 +6476,7 @@ uint8_t *__unpredict_med(uint8_t *Src, int32_t i, int32_t a3)
 {
   ;
   uintptr_t Src_1, v41;   // were int32_t: addresses, masked and tagged
-  char v39, v40;
+  int8_t v39, v40;
   int32_t n256, n128_1, i_1, v42, v45, v46, v47, v48;
   uint32_t j, v36, m_1, m, v44, v50;
   uint8_t *result, *v43;
@@ -6649,11 +6649,11 @@ int32_t __estimate_cost(uint8_t *a1, int32_t n2)
   return (int32_t)((total - entropy) * 1.442695040888963);
 }
 static inline int32_t __fwd_alt_model_p1_d8_decode_alt_p1_decode_symbol(void *a0, int32_t a1, int32_t a2) { return __alt_p1_decode_symbol((uint16_t *)a0, a1, a2); }
-static inline void ** __fwd_alt_model_p1_d8_decode_alt_p1_free(void *a0, char a1) { return __alt_p1_free((void **)a0, a1); }
+static inline void ** __fwd_alt_model_p1_d8_decode_alt_p1_free(void *a0, int8_t a1) { return __alt_p1_free((void **)a0, a1); }
 static inline int32_t __fwd_alt_model_p1_d8_decode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj0 *)a0, (uint32_t *)a1, (Obj91 *)a2); }
 static inline int32_t * __fwd_alt_model_p1_d8_decode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((Obj0 *)a0, a1, a2, a3); }
 
-void ** __alt_model_p1_d8_decode(char ArgList, uint8_t *Src, int32_t i, int32_t a4)
+void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_t a4)
 {
   ;
   uint8_t *v7, *v8, *v9, *v10, *v11;   // the five row cursors of f176
@@ -6793,7 +6793,7 @@ void ** __alt_model_p1_d8_decode(char ArgList, uint8_t *Src, int32_t i, int32_t 
 }
 
 static inline int32_t __fwd_alt_model_p1_decode_alt_p1_decode_symbol(void *a0, int32_t a1, int32_t a2) { return __alt_p1_decode_symbol((uint16_t *)a0, a1, a2); }
-static inline void ** __fwd_alt_model_p1_decode_alt_p1_free(void *a0, char a1) { return __alt_p1_free((void **)a0, a1); }
+static inline void ** __fwd_alt_model_p1_decode_alt_p1_free(void *a0, int8_t a1) { return __alt_p1_free((void **)a0, a1); }
 static inline int32_t __fwd_alt_model_p1_decode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj0 *)a0, (uint32_t *)a1, (Obj91 *)a2); }
 static inline int32_t * __fwd_alt_model_p1_decode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((Obj0 *)a0, a1, a2, a3); }
 
@@ -6837,7 +6837,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
   uintptr_t v61;
   Obj0 *v24;
   uint8_t *v29, *v65;   // row cursors out of Obj0
-  char v11, v12, v13, v58;
+  int8_t v11, v12, v13, v58;
   Obj0 *v6;
   uint8_t *v25, *v26, *v27, *v28;   // row cursors out of Obj0
   int32_t i, v3, i_2, n4, *v7, v8, v9, v10, v14, v15, v16, ArgList, v18, i_3, n4_1, n4_2,
@@ -7425,7 +7425,7 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   int16_t (*v50)[8], (*v53)[8], (*v110)[8], (*v160)[8], (*v173)[8],
           (*v194)[8], (*v204)[8], (*v243)[8];
   bool v26, v58;
-  char v142;
+  int8_t v142;
   float v70, v77, v79, v89, v94, v101, v244;
   int16_t *v102;
   int16_t *v73;
@@ -8275,7 +8275,7 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
 static inline int32_t __fwd_reduce_alphabet_encode_symbol_list(void *a0, int32_t a1) { return __encode_symbol_list((uint32_t *)a0, a1); }
 static inline uint32_t __fwd_reduce_alphabet_init_encode_symbol_list(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __init_symbol_list((int32_t *)a0, a1, a2, a3); }
 
-void __reduce_alphabet(ModelBlock *Blocka, char a2, uint8_t *a3)
+void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
 {
   // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
   // gives every member its own storage and DLRAW aborts while compressing.
@@ -8299,7 +8299,7 @@ void __reduce_alphabet(ModelBlock *Blocka, char a2, uint8_t *a3)
   ModelBlock *Blockaa_2;
   uint8_t *v62;
   bool v46, v48, v59;
-  char v35;
+  int8_t v35;
   uint8_t *v28;   // `uint8_t *` beside the `char` scalars above
   ModelBlock *Blockaa_1;
   ModelBlock *Blockaa_4;
@@ -8318,7 +8318,7 @@ void __reduce_alphabet(ModelBlock *Blocka, char a2, uint8_t *a3)
   n8 = Blocka->f8;
   ((uint8_t * &)__frame.slot[2]) = a3;
   ((ModelBlock * &)__frame.slot[7]) = (ModelBlock *)(Blocka);
-  ((uint32_t &)__frame.slot[4]) = 0xFFFFFFFF >> (-(char)n8 & 31);
+  ((uint32_t &)__frame.slot[4]) = 0xFFFFFFFF >> (-n8 & 31);
   k_2 = (n8 + 7) >> 3;
   for ( i = 0; i < 8; ++i )
   {
@@ -8716,7 +8716,7 @@ LABEL_71:
   }
 }
 
-int32_t __cost_candidate(uint8_t *a1, uint8_t *n2, int32_t a3, char a4, int32_t a5, int32_t a6, int32_t a7, uint8_t *a8)
+int32_t __cost_candidate(uint8_t *a1, uint8_t *n2, int32_t a3, int8_t a4, int32_t a5, int32_t a6, int32_t a7, uint8_t *a8)
 {
   // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
   // gives every member its own storage and altp1 segfaults while compressing.
@@ -8949,9 +8949,9 @@ int32_t __cost_candidate(uint8_t *a1, uint8_t *n2, int32_t a3, char a4, int32_t 
   return __frame.v93 + v70;
 }
 
-static inline int32_t __fwd_choose_plane_coding_cost_candidate(void *a0, void *a1, void *a2, char a3, int32_t a4, int32_t a5, int32_t a6, uint8_t *a7) { return __cost_candidate((uint8_t *)a0, (uint8_t *)a1, (int32_t)(uintptr_t)a2, a3, a4, a5, a6, a7); }
+static inline int32_t __fwd_choose_plane_coding_cost_candidate(void *a0, void *a1, void *a2, int8_t a3, int32_t a4, int32_t a5, int32_t a6, uint8_t *a7) { return __cost_candidate((uint8_t *)a0, (uint8_t *)a1, (int32_t)(uintptr_t)a2, a3, a4, a5, a6, a7); }
 
-int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, char a3)
+int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, int8_t a3)
 {
   // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
   // gives every member its own storage and altp1 segfaults while compressing.
@@ -9029,7 +9029,7 @@ int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, char a3)
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 41456, "frame layout moved");
   ;
   bool v19, n2_4, v42, v106;
-  char v7, v10, v12, v16, v18, n0x100_1, k;
+  int8_t v7, v10, v12, v16, v18, n0x100_1, k;
   uint8_t *v44;   // `uint8_t *` beside the `char` scalars above
   double v65, v66, v68, v69, v70, v72, v73, v74, v75, v76;
   int16_t v92;
@@ -9803,7 +9803,7 @@ int32_t *__read_bmp(char *FileName)
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  char Sizeb;
+  int8_t Sizeb;
   // These shared `__frame.Src_2` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
@@ -9813,7 +9813,7 @@ int32_t *__read_bmp(char *FileName)
   uintptr_t Src_1;   // were int32_t: addresses, masked and tagged
   uint8_t *v7, *v8, *v9;   // were int32_t: these hold addresses
   FILE *Stream_v;
-  char v25, v28, v30;
+  int8_t v25, v28, v30;
   uint8_t *Src_4, *Src_3, *Src_6, *Buffer_4, *Src_5;   // `uint8_t *` beside the `char` scalars above
   BmfImage *v3;
   int32_t Size_1, i, j_3, Sizea_1, v22, n2_1, v26, v31, Offset_2, v35, v38, v40, v41;
@@ -10118,7 +10118,7 @@ int32_t __decode_symbol_list(uint32_t *a1)
   ;
   uint8_t *v3, *v7;   // were int32_t: these hold addresses
   Obj32 *v38;
-  char v23, v34, v40;
+  int8_t v23, v34, v40;
   uint8_t *v36;   // `uint8_t *` beside the `char` scalars above
   int16_t v39;
   int32_t sym_cum, sym_high, v2, v5, v6, v8, n0x2000_5, n0x2000_2, n251, v46,
@@ -10176,7 +10176,7 @@ int32_t __decode_symbol_list(uint32_t *a1)
     v20 = *v21++;
     if ( !v20 )
     {
-      v23 = (char)(uintptr_t)__frame.v68;
+      v23 = (int8_t)(uintptr_t)__frame.v68;
       sym_cum = n0x2000_2;
       n0x2000_3 = __frame.tot;
       sym_high = __frame.tot;
@@ -10353,7 +10353,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   uint8_t *v46, *v66, *n15_17;
   uint8_t *v53, *v54, *v55, *v61, *v108, *n15_10;   // row cursors out of ModelBlock
   bool v19;
-  char v70, v71, v72, v73, v74, v75, v91;
+  int8_t v70, v71, v72, v73, v74, v75, v91;
   uint8_t *v157;   // `uint8_t *` beside the `char` scalars above
   int16_t v14, n4_14, v146, v160, n15_4;
   ModelBlock *this_4;
@@ -11107,7 +11107,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   uint8_t *v20, *v22, *n2_9, *v52, *v109;   // row cursors out of ModelBlock
   uint8_t *v59, *v74, *n15_36, *n15_38, *n15_40;
   bool v11;
-  char v24, v64, v65, v66, v67, v68, v93;
+  int8_t v24, v64, v65, v66, v67, v68, v93;
   uint8_t *v36, *v156;   // `uint8_t *` beside the `char` scalars above
   int16_t v14, n15_10, v147, v158, n15_21, v170;
   ModelBlock *this_3;
@@ -11964,7 +11964,7 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
 {
   ;
   uint8_t *v8;
-  char v12;
+  int8_t v12;
   int16_t v19;
   int32_t i_1, j, v9, v13, k_1, v35, v38;
   uint32_t k, m, n0x2000_1, n, n8, n0x18;
@@ -12609,20 +12609,20 @@ LABEL_76:
   }
 }
 static inline int32_t __fwd_alt_model_p1_encode_alt_p1_encode_symbol(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_encode_symbol((uint16_t *)a0, a1, a2, a3); }
-static inline void ** __fwd_alt_model_p1_encode_alt_p1_free(void *a0, char a1) { return __alt_p1_free((void **)a0, a1); }
+static inline void ** __fwd_alt_model_p1_encode_alt_p1_free(void *a0, int8_t a1) { return __alt_p1_free((void **)a0, a1); }
 static inline int32_t __fwd_alt_model_p1_encode_alt_p1_context(void *a0, void *a1, int32_t a2) { return __alt_p1_context((Obj0 *)a0, (uint32_t *)a1, (Obj91 *)a2); }
 static inline int32_t * __fwd_alt_model_p1_encode_alt_p1_alloc(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __alt_p1_alloc((Obj0 *)a0, a1, a2, a3); }
 
 int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
 {
   struct alignas(16) AltModelP1EncodeFrame {   // 144 bytes, one stack frame
-      uint8_t   _gap0[1];   // was char v90
+      uint8_t   _gap0[1];   // was int8_t v90
       uint8_t _pad0[3];
       uint32_t v91;
       int32_t v93;
       uint8_t   _gap1[4];   // was uint8_t * v95
       uint8_t   _gap2[4];   // was int32_t v96
-      uint8_t   _gap3[1];   // was char v97
+      uint8_t   _gap3[1];   // was int8_t v97
       uint8_t _pad1[3];
       uint8_t   _gap4[4];   // was int32_t v98
       uint8_t   _gap5[4];   // was int32_t v99
@@ -12646,7 +12646,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
       uint8_t _pad2[32];
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 144, "frame layout moved");
-  char v90;
+  int8_t v90;
   // These shared `__frame.v91` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
@@ -12659,7 +12659,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
   int32_t v94;
   uint8_t *v95;
   int32_t v96;
-  char v97;
+  int8_t v97;
   int32_t v98;
   int32_t v99;
   int32_t n5_8;
@@ -12686,7 +12686,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
   uintptr_t n3;   // were int32_t: addresses, masked and tagged
   Obj0 *v23;
   uint8_t *v28;   // a row cursor out of Obj0
-  char v11, v12, v13, v62, v71, v81, v83;
+  int8_t v11, v12, v13, v62, v71, v81, v83;
   Obj0 *v6;
   uint8_t *v24, *v25, *v26, *v27;   // row cursors out of Obj0
   int32_t i, v3, i_2, n4, *v7, v8, v9, v10, v14, v15, v16, v17, i_3, n4_1, n4_2,
@@ -13153,7 +13153,7 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
   float (*v17)[4];
   float v19;
   bool v87, v103, v104, v105;
-  char v114, v116, v312;
+  int8_t v114, v116, v312;
   uint8_t *v90;   // `uint8_t *` beside the `char` scalars above
   Obj15 *v110;
   Obj40 *v94;
@@ -14155,9 +14155,9 @@ LABEL_37:
         if ( LOWORD(((uint32_t *)v385)[2 * n0x10 + 235018]) <= 0x1Au )
           return n0x10;
         v397 = v385->f278760[8];
-        v398 = 2 - (*((uint8_t *)v385 + (uint8_t)-(char)a5 + 279984) & 1);
-        if ( !*((uint8_t *)v385 + (uint8_t)-(char)a5 + 279984) )
-          v398 = *((uint8_t *)v385 + (uint8_t)-(char)a5 + 279984);
+        v398 = 2 - (*((uint8_t *)v385 + (uint8_t)-a5 + 279984) & 1);
+        if ( !*((uint8_t *)v385 + (uint8_t)-a5 + 279984) )
+          v398 = *((uint8_t *)v385 + (uint8_t)-a5 + 279984);
         v399 = v385->f278760[12];
         v400 = v385->f278760[6] + (v385->f278704 & 0x3F);
         v510 = v398;
@@ -14794,7 +14794,7 @@ LABEL_115:
 static inline int32_t __fwd_alt_p2_d8_decode_body_alt_p2_decode_symbol(void *a0, uint8_t *a1) { return __alt_p2_decode_symbol((Obj13 *)a0, a1); }
 static inline int32_t __fwd_alt_p2_d8_decode_body_alt_p2_context(void *a0, void *a3, void *a4) { return __alt_p2_context((Obj11 *)a0, (Obj11 *)a3, (Obj11 *)a4); }
 
-void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, uint8_t *a5, int32_t i, int32_t a7)
+void __alt_p2_d8_decode_body(Obj11 *lpAddress, int8_t ArgList, uint8_t *a5, int32_t i, int32_t a7)
 {
   int32_t v95;
   // These shared `__frame.v95` with the name that still binds it: one
@@ -14890,7 +14890,7 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, uint8_t *a5, int32_
     i_1 = i;
   }
   bmf_copy((void *)(v11), (const void *)((uintptr_t)v11 - 18), 18);
-  v21 = (unsigned int)(lpAddress->f278736[0]);
+  v21 = (uintptr_t)(lpAddress->f278736[0]);
   v22 = *(uint32_t *)(v21 - 10);
   v23 = *(uint32_t *)(v21 - 6);
   *(uint32_t *)(v21 + 18) = *(uint32_t *)(v21 - 18);
@@ -14901,7 +14901,7 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, uint8_t *a5, int32_
   *(uint16_t *)(v21 + 34) = v24;
   v25 = (uint8_t *)(lpAddress->f278736[0]);
   bmf_copy((void *)((uint8_t *)v25 + 36), (const void *)((uintptr_t)v25 - 18), 18);
-  v28 = (unsigned int)(lpAddress->f278736[0]);
+  v28 = (uintptr_t)(lpAddress->f278736[0]);
   v29 = *(uint32_t *)(v28 - 14);
   v30 = *(uint32_t *)(v28 - 10);
   *(uint32_t *)(v28 + 54) = *(uint32_t *)(v28 - 18);
@@ -14913,50 +14913,50 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, uint8_t *a5, int32_
   *(uint16_t *)(v28 + 70) = v29;
   v32 = (uint8_t *)(lpAddress->f278736[0]);
   bmf_copy((void *)((uint8_t *)v32 + 72), (const void *)((uintptr_t)v32 - 18), 18);
-  v36 = (unsigned int)(lpAddress->f278736[0]);
+  v36 = (uintptr_t)(lpAddress->f278736[0]);
   v37 = -18 * i_1;
   *(uint32_t *)(v36 + v37 - 18) = *(uint32_t *)(v36 - 18 * i_1);
   *(uint32_t *)(v36 + v37 - 14) = *(uint32_t *)(v36 - 18 * i_1 + 4);
   *(uint32_t *)(v36 + v37 - 10) = *(uint32_t *)(v36 - 18 * i_1 + 8);
   *(uint32_t *)(v36 + v37 - 6) = *(uint32_t *)(v36 - 18 * i_1 + 12);
   *(uint16_t *)(v36 + v37 - 2) = *(uint16_t *)(v36 - 18 * i_1 + 16);
-  v38 = (unsigned int)(lpAddress->f278736[0]);
+  v38 = (uintptr_t)(lpAddress->f278736[0]);
   *(uint32_t *)(v38 + v37 - 36) = *(uint32_t *)(v38 - 18 * i_1 + 18);
   *(uint32_t *)(v38 + v37 - 32) = *(uint32_t *)(v38 - 18 * i_1 + 22);
   *(uint32_t *)(v38 + v37 - 28) = *(uint32_t *)(v38 - 18 * i_1 + 26);
   *(uint32_t *)(v38 + v37 - 24) = *(uint32_t *)(v38 - 18 * i_1 + 30);
   *(uint16_t *)(v38 + v37 - 20) = *(uint16_t *)(v38 - 18 * i_1 + 34);
-  v39 = (unsigned int)(lpAddress->f278736[0]);
+  v39 = (uintptr_t)(lpAddress->f278736[0]);
   *(uint32_t *)(v39 + v37 - 54) = *(uint32_t *)(v39 - 18 * i_1 + 36);
   *(uint32_t *)(v39 + v37 - 50) = *(uint32_t *)(v39 - 18 * i_1 + 40);
   *(uint32_t *)(v39 + v37 - 46) = *(uint32_t *)(v39 - 18 * i_1 + 44);
   *(uint32_t *)(v39 + v37 - 42) = *(uint32_t *)(v39 - 18 * i_1 + 48);
   *(uint16_t *)(v39 + v37 - 38) = *(uint16_t *)(v39 - 18 * i_1 + 52);
-  v40 = (unsigned int)(lpAddress->f278736[0]);
+  v40 = (uintptr_t)(lpAddress->f278736[0]);
   *(uint32_t *)(v40 + v37 - 72) = *(uint32_t *)(v40 - 18 * i_1 + 54);
   *(uint32_t *)(v40 + v37 - 68) = *(uint32_t *)(v40 - 18 * i_1 + 58);
   *(uint32_t *)(v40 + v37 - 64) = *(uint32_t *)(v40 - 18 * i_1 + 62);
   *(uint32_t *)(v40 + v37 - 60) = *(uint32_t *)(v40 - 18 * i_1 + 66);
   *(uint16_t *)(v40 + v37 - 56) = *(uint16_t *)(v40 - 18 * i_1 + 70);
-  v41 = (unsigned int)(lpAddress->f278736[0]);
+  v41 = (uintptr_t)(lpAddress->f278736[0]);
   *(uint32_t *)(v41 + v37 - 90) = *(uint32_t *)(v41 - 18 * i_1 + 72);
   *(uint32_t *)(v41 + v37 - 86) = *(uint32_t *)(v41 - 18 * i_1 + 76);
   *(uint32_t *)(v41 + v37 - 82) = *(uint32_t *)(v41 - 18 * i_1 + 80);
   *(uint32_t *)(v41 + v37 - 78) = *(uint32_t *)(v41 - 18 * i_1 + 84);
   *(uint16_t *)(v41 + v37 - 74) = *(uint16_t *)(v41 - 18 * i_1 + 88);
-  v42 = (unsigned int)(lpAddress->f278736[0]);
+  v42 = (uintptr_t)(lpAddress->f278736[0]);
   *(uint32_t *)(v42 + v37 - 108) = *(uint32_t *)(v42 - 18 * i_1 + 90);
   *(uint32_t *)(v42 + v37 - 104) = *(uint32_t *)(v42 - 18 * i_1 + 94);
   *(uint32_t *)(v42 + v37 - 100) = *(uint32_t *)(v42 - 18 * i_1 + 98);
   *(uint32_t *)(v42 + v37 - 96) = *(uint32_t *)(v42 - 18 * i_1 + 102);
   *(uint16_t *)(v42 + v37 - 92) = *(uint16_t *)(v42 - 18 * i_1 + 106);
-  v43 = (unsigned int)(lpAddress->f278736[0]);
+  v43 = (uintptr_t)(lpAddress->f278736[0]);
   *(uint32_t *)(v43 + v37 - 126) = *(uint32_t *)(v43 - 18 * i_1 + 108);
   *(uint32_t *)(v43 + v37 - 122) = *(uint32_t *)(v43 - 18 * i_1 + 112);
   *(uint32_t *)(v43 + v37 - 118) = *(uint32_t *)(v43 - 18 * i_1 + 116);
   *(uint32_t *)(v43 + v37 - 114) = *(uint32_t *)(v43 - 18 * i_1 + 120);
   *(uint16_t *)(v43 + v37 - 110) = *(uint16_t *)(v43 - 18 * i_1 + 124);
-  v44 = (unsigned int)(lpAddress->f278736[0]);
+  v44 = (uintptr_t)(lpAddress->f278736[0]);
   *(uint32_t *)(v44 + v37 - 144) = *(uint32_t *)(v44 - 18 * i_1 + 126);
   *(uint32_t *)(v44 + v37 - 140) = *(uint32_t *)(v44 - 18 * i_1 + 130);
   *(uint32_t *)(v44 + v37 - 136) = *(uint32_t *)(v44 - 18 * i_1 + 134);
@@ -14998,7 +14998,7 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, uint8_t *a5, int32_
       __builtin_memset(lpAddress->p2_row, 0, sizeof lpAddress->p2_row);
       v54 = (uint8_t *)(lpAddress->f278736[0]);
       bmf_copy((void *)(v54), (const void *)((uintptr_t)v54 - 18), 18);
-      v58 = (unsigned int)(lpAddress->f278736[0]);
+      v58 = (uintptr_t)(lpAddress->f278736[0]);
       v59 = *(uint32_t *)(v58 - 32);
       v60 = *(uint32_t *)(v58 - 28);
       LOWORD(v51) = *(uint16_t *)(v58 - 20);
@@ -15010,7 +15010,7 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, uint8_t *a5, int32_
       *(uint16_t *)(v58 + 34) = v51;
       v62 = (uint8_t *)(lpAddress->f278736[0]);
       bmf_copy((void *)((uint8_t *)v62 + 36), (const void *)((uintptr_t)v62 - 54), 18);
-      v66 = (unsigned int)(lpAddress->f278736[0]);
+      v66 = (uintptr_t)(lpAddress->f278736[0]);
       v67 = *(uint32_t *)(v66 - 64);
       v68 = *(uint32_t *)(v66 - 60);
       LOWORD(v51) = *(uint16_t *)(v66 - 56);
@@ -15040,25 +15040,25 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, uint8_t *a5, int32_
       lpAddress->f278736[4] = (unsigned uint8_t *)(v72 + 144);
       bmf_copy((void *)(v73 - 18), (const void *)(v76), 18);
       v77 = (int)(lpAddress->f278736[0]);
-      v78 = (unsigned int)(lpAddress->f278736[1]);
+      v78 = (uintptr_t)(lpAddress->f278736[1]);
       bmf_copy((void *)(v77 - 36), (const void *)(v78 + 18), 18);
       v79 = (int)(lpAddress->f278736[0]);
       v80 = (uint8_t *)(lpAddress->f278736[1]);
       bmf_copy((void *)(v79 - 54), (const void *)((uint8_t *)v80 + 36), 18);
       v81 = (int)(lpAddress->f278736[0]);
-      v82 = (unsigned int)(lpAddress->f278736[1]);
+      v82 = (uintptr_t)(lpAddress->f278736[1]);
       bmf_copy((void *)(v81 - 72), (const void *)(v82 + 54), 18);
       v83 = (int)(lpAddress->f278736[0]);
       v84 = (uint8_t *)(lpAddress->f278736[1]);
       bmf_copy((void *)(v83 - 90), (const void *)((uint8_t *)v84 + 72), 18);
       v85 = (int)(lpAddress->f278736[0]);
-      v86 = (unsigned int)(lpAddress->f278736[1]);
+      v86 = (uintptr_t)(lpAddress->f278736[1]);
       bmf_copy((void *)(v85 - 108), (const void *)(v86 + 90), 18);
       v87 = (int)(lpAddress->f278736[0]);
       v88 = (Obj130 *)(lpAddress->f278736[1]);
       bmf_copy((void *)(v87 - 126), (const void *)((uint8_t *)v88 + 108), 18);
       v89 = (int)(lpAddress->f278736[0]);
-      v90 = (unsigned int)(lpAddress->f278736[1]);
+      v90 = (uintptr_t)(lpAddress->f278736[1]);
       bmf_copy((void *)(v89 - 144), (const void *)(v90 + 126), 18);
       *(uint16_t *)(lpAddress->f278736[0] + 2) = 0;
       if ( i > 0 )
@@ -15081,8 +15081,8 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, uint8_t *a5, int32_
   }
   __rc_end_decode();
 }
-static inline void ** __fwd_alt_model_p2_d8_decode_alt_p2_free(void *a0, char a1) { return __alt_p2_free((void **)a0, a1); }
-static inline void __fwd_alt_model_p2_d8_decode_alt_p2_d8_decode_body(int32_t a0, char a1, void *a4, int32_t a5, int32_t a6) { __alt_p2_d8_decode_body((Obj11 *)a0, a1, (uint8_t *)a4, a5, a6); }
+static inline void ** __fwd_alt_model_p2_d8_decode_alt_p2_free(void *a0, int8_t a1) { return __alt_p2_free((void **)a0, a1); }
+static inline void __fwd_alt_model_p2_d8_decode_alt_p2_d8_decode_body(int32_t a0, int8_t a1, void *a4, int32_t a5, int32_t a6) { __alt_p2_d8_decode_body((Obj11 *)a0, a1, (uint8_t *)a4, a5, a6); }
 
 void __alt_model_p2_d8_decode( uint8_t *Src, int32_t i, int32_t a5)
 {
@@ -15098,7 +15098,7 @@ void __alt_model_p2_d8_decode( uint8_t *Src, int32_t i, int32_t a5)
     __fwd_alt_model_p2_d8_decode_alt_p2_free(lpAddress, 1);
 }
 static inline int32_t __fwd_alt_model_p2_decode_alt_p2_decode_symbol(void *a0, uint8_t *a1) { return __alt_p2_decode_symbol((Obj13 *)a0, a1); }
-static inline void ** __fwd_alt_model_p2_decode_alt_p2_free(void *a0, char a1) { return __alt_p2_free((void **)a0, a1); }
+static inline void ** __fwd_alt_model_p2_decode_alt_p2_free(void *a0, int8_t a1) { return __alt_p2_free((void **)a0, a1); }
 static inline int32_t __fwd_alt_model_p2_decode_alt_p2_context(void *a0, void *a3, void *a4) { return __alt_p2_context((Obj11 *)a0, (Obj11 *)a3, (Obj11 *)a4); }
 
 int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
@@ -15178,7 +15178,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   Obj11 *v129;
   Obj11 *v111;
   bool v17, v109;
-  char v9;
+  int8_t v9;
   int16_t v110;
   uint8_t *v47, *v48, *v49, *v50, *v51, *v52, *v53;   // row cursors
   uint8_t *v21, *v22, *v23, *v24, *v60, *v81, *v82, *v83, *v84, *v86, *v88, *v90,
@@ -15610,14 +15610,14 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   }
   return n4_3;
 }
-static inline void ** __fwd_unmodel_plane_free_workspace(void *a0, char a1) { return __free_workspace((ModelBlock *)a0, a1); }
+static inline void ** __fwd_unmodel_plane_free_workspace(void *a0, int8_t a1) { return __free_workspace((ModelBlock *)a0, a1); }
 static inline void __fwd_unmodel_plane_unmodel_plane_slow(void *a0, void *a1) { __unmodel_plane_slow((ModelBlock *)a0, (uint8_t *)a1); }
 static inline void __fwd_unmodel_plane_alt_model_p2_d8_decode( void *a2, int32_t a3, int32_t a4) { __alt_model_p2_d8_decode( (uint8_t *)a2, a3, a4); }
 static inline int32_t __fwd_unmodel_plane_alt_model_p2_decode(void *a0, void *a1) { return __alt_model_p2_decode((uint16_t *)a0, (uint8_t *)a1); }
-static inline void ** __fwd_unmodel_plane_alt_model_p1_d8_decode(char a0, void *a1, int32_t a2, int32_t a3) { return __alt_model_p1_d8_decode(a0, (uint8_t *)a1, a2, a3); }
+static inline void ** __fwd_unmodel_plane_alt_model_p1_d8_decode(int8_t a0, void *a1, int32_t a2, int32_t a3) { return __alt_model_p1_d8_decode(a0, (uint8_t *)a1, a2, a3); }
 static inline int32_t __fwd_unmodel_plane_alt_model_p1_decode(void *a0, uint8_t *a1) { return __alt_model_p1_decode((uint16_t *)a0, a1); }
 
-void __unmodel_plane(char ArgList, uint16_t *p_i, uint8_t *Src)
+void __unmodel_plane(int8_t ArgList, uint16_t *p_i, uint8_t *Src)
 {
   ;
   ModelBlock *v6;
@@ -15670,7 +15670,7 @@ void __alt_p2_d8_encode_body(Obj11 *lpAddress, uint8_t *a4, int32_t i, int32_t a
   // the gate's answer -- nothing writes one of them and reads another.
   uint8_t *v105;
   int8_t *v106;
-  char v107;
+  int8_t v107;
   Obj11 *lpAddress_1;
   uint8_t *v109;
   uint8_t v110;
@@ -15682,7 +15682,7 @@ void __alt_p2_d8_encode_body(Obj11 *lpAddress, uint8_t *a4, int32_t i, int32_t a
   uint8_t *v11;
   uint8_t *v27;
   uint8_t *v23, *v30, *v38, *v40, *v41, *v42, *v43, *v44, *v45, *v46, *v51, *v61, *v69, *v79, *v81, *v83, *v85, *v87, *v89, *v91, *v93;
-  char v14, v97;
+  int8_t v14, v97;
   int16_t v26;
   int32_t v12, v13, n16, v16, v17, v24, v25, v31, v32, v33, v39, Size, v52,
           *v53, v54, v55, v62, v63, v64, v70, v71, v75, v76, v77, v78, v80,
@@ -15960,7 +15960,7 @@ void __alt_p2_d8_encode_body(Obj11 *lpAddress, uint8_t *a4, int32_t i, int32_t a
   }
   __rc_end_encode();
 }
-static inline void ** __fwd_alt_model_p2_d8_encode_alt_p2_free(void *a0, char a1) { return __alt_p2_free((void **)a0, a1); }
+static inline void ** __fwd_alt_model_p2_d8_encode_alt_p2_free(void *a0, int8_t a1) { return __alt_p2_free((void **)a0, a1); }
 static inline void __fwd_alt_model_p2_d8_encode_alt_p2_d8_encode_body(void *a0, void *a3, int32_t a4, int32_t a5, void *a6) { __alt_p2_d8_encode_body((Obj11 *)a0, (uint8_t *)a3, a4, a5, (uint8_t *)a6); }
 
 void __alt_model_p2_d8_encode( uint8_t *a3, int32_t i, int32_t a5, uint8_t *a6)
@@ -15978,7 +15978,7 @@ void __alt_model_p2_d8_encode( uint8_t *a3, int32_t i, int32_t a5, uint8_t *a6)
     __fwd_alt_model_p2_d8_encode_alt_p2_free((void **)lpAddress, 1);
 }
 static inline int32_t __fwd_alt_model_p2_encode_alt_p2_encode_symbol(void *a0, uint8_t *a1, int32_t a2) { return __alt_p2_encode_symbol((Obj7 *)a0, a1, a2); }
-static inline void ** __fwd_alt_model_p2_encode_alt_p2_free(void *a0, char a1) { return __alt_p2_free((void **)a0, a1); }
+static inline void ** __fwd_alt_model_p2_encode_alt_p2_free(void *a0, int8_t a1) { return __alt_p2_free((void **)a0, a1); }
 static inline int32_t __fwd_alt_model_p2_encode_alt_p2_context(void *a0, void *a3, void *a4) { return __alt_p2_context((Obj11 *)a0, (Obj11 *)a3, (Obj11 *)a4); }
 
 int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
@@ -16076,7 +16076,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   Obj11 *v133;
   Obj11 *v114;
   bool v16;
-  char v9;
+  int8_t v9;
   int16_t v113;
   uint8_t *v46, *v47, *v48, *v49, *v50, *v51, *v52;   // row cursors
   uint8_t *v20, *v21, *v22, *v23, *v59, *v80, *v81, *v82, *v83, *v85, *v87, *v89,
@@ -16564,9 +16564,9 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   return n4_3;
 }
 static inline uint32_t __fwd_model_plane_init_encode_symbol_list(void *a0, int32_t a1, int32_t a2, int32_t a3) { return __init_symbol_list((int32_t *)a0, a1, a2, a3); }
-static inline void ** __fwd_model_plane_free_workspace(void *a0, char a1) { return __free_workspace((ModelBlock *)a0, a1); }
+static inline void ** __fwd_model_plane_free_workspace(void *a0, int8_t a1) { return __free_workspace((ModelBlock *)a0, a1); }
 static inline int32_t __fwd_model_plane_code_pixel(void *a0, int32_t a1) { return __code_pixel((ModelBlock *)a0, a1); }
-static inline void __fwd_model_plane_reduce_alphabet(ModelBlock *a0, char a1, void *a2) { __reduce_alphabet(a0, a1, (uint8_t *)a2); }
+static inline void __fwd_model_plane_reduce_alphabet(ModelBlock *a0, int8_t a1, void *a2) { __reduce_alphabet(a0, a1, (uint8_t *)a2); }
 static inline void __fwd_model_plane_alt_model_p2_d8_encode( void *a2, int32_t a3, int32_t a4, void *a5) { __alt_model_p2_d8_encode( (uint8_t *)a2, a3, a4, (uint8_t *)a5); }
 static inline int32_t __fwd_model_plane_alt_model_p2_encode(void *a0, void *a1) { return __alt_model_p2_encode((BmfImage *)a0, (uint8_t *)a1); }
 static inline void __fwd_model_plane_alt_model_p1_d8_encode(void *a0, int32_t a1, int32_t a2, void *a3) { __alt_model_p1_d8_encode((uint8_t *)a0, a1, a2, (uint8_t *)a3); }
@@ -16608,7 +16608,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
   ModelBlock *Blocka_1;
   uint8_t *v46, *v50;   // row cursors out of f56
   bool v43;
-  char v7;
+  int8_t v7;
   uint8_t *buf;   // `uint8_t *` beside the `char` scalars above
   int16_t __model_plane_n2, v22;
   ModelBlock *Blocka_3;
@@ -16959,10 +16959,10 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
     __fwd_model_plane_free_workspace((void **)Blocka_1, 1);
   }
 }
-static inline uint8_t * __fwd_model_planes_colour_transform(void *a0, void *a1, int32_t a2, char a3) { return __colour_transform((uint8_t *)a0, (uint8_t *)a1, a2, a3); }
+static inline uint8_t * __fwd_model_planes_colour_transform(void *a0, void *a1, int32_t a2, int8_t a3) { return __colour_transform((uint8_t *)a0, (uint8_t *)a1, a2, a3); }
 static inline void __fwd_model_planes_model_plane( void *a2, void *a3, void *a4) { __model_plane( (BmfImage *)a2, (uint8_t *)a3, (uint8_t *)a4); }
 
-void __model_planes(uint8_t *Blockb, uint8_t *Srca_3, int32_t a3, char a4)
+void __model_planes(uint8_t *Blockb, uint8_t *Srca_3, int32_t a3, int8_t a4)
 {
   // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
   // gives every member its own storage and med32 divides by zero while compressing.
@@ -16983,7 +16983,7 @@ void __model_planes(uint8_t *Blockb, uint8_t *Srca_3, int32_t a3, char a4)
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 80, "frame layout moved");
   ;
   uint8_t *v12;   // was int32_t: these hold addresses
-  char v8;
+  int8_t v8;
   uint8_t *Srca_1, *Srca_2;   // `uint8_t *` beside the `char` scalars above
   uint8_t *__model_planes_buf;
   int32_t n1008, v17, v18, v19;
@@ -17040,10 +17040,10 @@ void __model_planes(uint8_t *Blockb, uint8_t *Srca_3, int32_t a3, char a4)
   }
 }
 
-static inline uint8_t * __fwd_transform_planes_colour_transform(void *a0, void *a1, int32_t a2, char a3) { return __colour_transform((uint8_t *)a0, (uint8_t *)a1, a2, a3); }
+static inline uint8_t * __fwd_transform_planes_colour_transform(void *a0, void *a1, int32_t a2, int8_t a3) { return __colour_transform((uint8_t *)a0, (uint8_t *)a1, a2, a3); }
 static inline void __fwd_transform_planes_model_plane( void *a2, void *a3, void *a4) { __model_plane( (BmfImage *)a2, (uint8_t *)a3, (uint8_t *)a4); }
 
-void __transform_planes(BmfImage *p_i, int32_t a2, char a3)
+void __transform_planes(BmfImage *p_i, int32_t a2, int8_t a3)
 {
   struct alignas(16) TransformPlanesFrame {   // 76 bytes, one stack frame
       int32_t   v32;
@@ -17071,7 +17071,7 @@ void __transform_planes(BmfImage *p_i, int32_t a2, char a3)
   uint8_t *p_ia;
   uint8_t *Buffer_1;
   ;
-  char v11;
+  int8_t v11;
   uint8_t *__transform_planes_Buffer, *p_ia_1, *Src_1, *Src_3, *Src_2, *v20;   // `uint8_t *` beside the `char` scalars above
   int32_t n4_1, v14, predictor, v16, Size_3, n4_2, v21, i, Size_4,
           v24;
@@ -17162,8 +17162,8 @@ void __transform_planes(BmfImage *p_i, int32_t a2, char a3)
     __fwd_transform_planes_model_plane( p_i, Srca_1, Srca_1);
   }
 }
-static inline uint8_t * __fwd_expand_image_interleave_plane(void *a0, void *a1, int32_t a2, char a3) { return __interleave_plane((uint8_t *)a0, (uint8_t *)a1, a2, a3); }
-static inline void __fwd_expand_image_unmodel_plane(char a0, void *a3, void *a4) { __unmodel_plane(a0, (uint16_t *)a3, (uint8_t *)a4); }
+static inline uint8_t * __fwd_expand_image_interleave_plane(void *a0, void *a1, int32_t a2, int8_t a3) { return __interleave_plane((uint8_t *)a0, (uint8_t *)a1, a2, a3); }
+static inline void __fwd_expand_image_unmodel_plane(int8_t a0, void *a3, void *a4) { __unmodel_plane(a0, (uint16_t *)a3, (uint8_t *)a4); }
 
 uint8_t * __expand_image(uint8_t *a1, int32_t a4, int32_t *p_dwLowDateTime)
 {
@@ -17183,7 +17183,7 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, int32_t *p_dwLowDateTime)
       uint32_t ElementCount_3;
       uint16_t Buffer_2[5];
       uint8_t v91;
-      char v92;
+      int8_t v92;
       uint32_t ElementCount;
       uint8_t   hdr[8];   // the 8-byte member header `fread` takes in one call
       uint32_t __expand_image_Buffer;
@@ -17199,7 +17199,7 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, int32_t *p_dwLowDateTime)
   uint8_t *v5;   // were int32_t: these hold addresses
   FILE *Stream_1, *Stream_v;
   BmfImage *p_i_1;
-  char v10, v17, v18, v20, v34, v35;
+  int8_t v10, v17, v18, v20, v34, v35;
   uint8_t *Buffer_3, *n4_6, *n4_7, *v64;   // `uint8_t *` beside the `char` scalars above
   int32_t Buffer__1, dwLowDateTime, v21, n4, predictor, v27, v28, v29, v30,
           ArgList, v33, n4_4, v37, n2_1, i, Size_4, Size_5, n4_3, v44, Size_2,
@@ -17350,7 +17350,7 @@ LABEL_31:
     v75 = *(uint32_t *)out_cursor;
     out_cursor += 4;
     v76 = v75 << ((packer_free_bits + 4) & 31);
-    ElementCount_2 = v75 >> (-(char)packer_free_bits & 31);
+    ElementCount_2 = v75 >> (-packer_free_bits & 31);
     v21 = packer_acc | v76 & 0xF;
     packer_acc = ElementCount_2;
     packer_free_bits += 32;
@@ -17386,7 +17386,7 @@ LABEL_42:
         v74 = *(uint32_t *)out_cursor;
         out_cursor += 4;
         v23 = packer_acc | (v74 << ((packer_free_bits + 6) & 31)) & 0x3F;
-        packer_acc = v74 >> (-(char)packer_free_bits & 31);
+        packer_acc = v74 >> (-packer_free_bits & 31);
         packer_free_bits += 32;
       }
       else
@@ -17407,7 +17407,7 @@ LABEL_42:
           v70 = *(uint32_t *)out_cursor;
           out_cursor += 4;
           v27 = packer_acc | *(uint32_t *)__frame.p_i & (v70 << ((packer_free_bits + 8) & 31));
-          packer_acc = v70 >> (-(char)packer_free_bits & 31);
+          packer_acc = v70 >> (-packer_free_bits & 31);
           packer_free_bits += 32;
         }
         else
@@ -17424,7 +17424,7 @@ LABEL_42:
             v69 = *(uint32_t *)out_cursor;
             out_cursor += 4;
             v28 = packer_acc | *(uint32_t *)__frame.p_i & (v69 << ((packer_free_bits + 8) & 31));
-            packer_acc = v69 >> (-(char)packer_free_bits & 31);
+            packer_acc = v69 >> (-packer_free_bits & 31);
             packer_free_bits += 32;
           }
           else
@@ -17439,7 +17439,7 @@ LABEL_42:
             v68 = *(uint32_t *)out_cursor;
             out_cursor += 4;
             v29 = packer_acc | *(uint32_t *)__frame.p_i & (v68 << ((packer_free_bits + 8) & 31));
-            packer_acc = v68 >> (-(char)packer_free_bits & 31);
+            packer_acc = v68 >> (-packer_free_bits & 31);
             packer_free_bits += 32;
           }
           else
@@ -17456,7 +17456,7 @@ LABEL_42:
               v67 = *(uint32_t *)out_cursor;
               out_cursor += 4;
               v30 = packer_acc | *(uint32_t *)__frame.p_i & (v67 << ((packer_free_bits + 8) & 31));
-              packer_acc = v67 >> (-(char)packer_free_bits & 31);
+              packer_acc = v67 >> (-packer_free_bits & 31);
               packer_free_bits += 32;
             }
             else
@@ -17625,7 +17625,7 @@ LABEL_107:
 LABEL_109:
   if ( (__frame.v88 & 0x80) != 0 )
   {
-    // `f10 < 0` was a signed char testing its own top bit -- the palette
+    // `f10 < 0` was a signed int8_t testing its own top bit -- the palette
     // flag.  depth is unsigned, so the test has to name the bit; it read as
     // always-false otherwise, which is what the gate caught.
     Buffer_3 = (p_i_1->depth & 0x80) ? &((uint8_t *)p_i_1)[p_i_1->data_size + 16] : nullptr;
@@ -17688,10 +17688,10 @@ LABEL_109:
   return (uint8_t *)p_i_1;
 }
 
-static inline void __fwd_search_filter_model_planes(void *a0, void *a1, int32_t a2, char a3) { __model_planes((uint8_t *)a0, (uint8_t *)a1, a2, a3); }
-static inline void __fwd_search_filter_transform_planes(void *a0, int32_t a1, char a2) { __transform_planes((BmfImage *)a0, a1, a2); }
+static inline void __fwd_search_filter_model_planes(void *a0, void *a1, int32_t a2, int8_t a3) { __model_planes((uint8_t *)a0, (uint8_t *)a1, a2, a3); }
+static inline void __fwd_search_filter_transform_planes(void *a0, int32_t a1, int8_t a2) { __transform_planes((BmfImage *)a0, a1, a2); }
 
-uint32_t __search_filter(BmfImage *p_i, char a2)
+uint32_t __search_filter(BmfImage *p_i, int8_t a2)
 {
   // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
   // gives every member its own storage and five streams move, no signal.
@@ -17724,7 +17724,7 @@ uint32_t __search_filter(BmfImage *p_i, char a2)
   uint8_t *v176;
   ;
   bool v35, v162;
-  char v19, v44, v62, v63, v70, v77, v82, v86, v93, v116;
+  int8_t v19, v44, v62, v63, v70, v77, v82, v86, v93, v116;
   uint8_t *v24, *v26, *v27, *n4_13, *Blockb_2, *Srca_1, *n4_14, *v67, *v74, *n4_17, *v101, *v105, *Blockb_6, *v110, *v111, *v112, *Blockb_7, *v124, *v130, *v136, *Blockb_8, *v141, *v142, *v143, *Blockb_9, *Blockb_4, *Srca_3, *Blockb_5, *Srca_4, *n0x7FFFFFFF_5, *Srca_5, *Blockb_3, *Srca_2, *Blockb_1, *Srca, *n5_6;   // `uint8_t *` beside the `char` scalars above
   int16_t v114, v115, v145, v146;
   int32_t i, i_2, n4, v10, n4_4, v21, v22, v23, Size, n0x7FFFFFFF, v32,
@@ -17998,7 +17998,7 @@ LABEL_43:
       __frame.v181[__frame.v179[1]] = n0x7FFFFFFF;
       v43 = __frame.v182;
       __frame.v189 += v42 != 0;
-      plane_desc[v41 + 1].flags = (char)(uintptr_t)__frame.n5_1;
+      plane_desc[v41 + 1].flags = (uint8_t)(uintptr_t)__frame.n5_1;
       __frame.v182 = v43 + 1;
       if ( v43 + 1 >= ::plane_count )
       {
@@ -18566,9 +18566,9 @@ LABEL_11:
 }
 
 static inline uint8_t * __fwd_compress_image_expand_image(uint8_t *a0, int32_t a3, void *a4) { return __expand_image(a0, a3, (int32_t *)a4); }
-static inline uint32_t __fwd_compress_image_search_filter(void *a0, char a1) { return __search_filter((BmfImage *)a0, a1); }
-static inline void __fwd_compress_image_model_planes(void *a0, void *a1, int32_t a2, char a3) { __model_planes((uint8_t *)a0, (uint8_t *)a1, a2, a3); }
-static inline void __fwd_compress_image_transform_planes(void *a0, int32_t a1, char a2) { __transform_planes((BmfImage *)a0, a1, a2); }
+static inline uint32_t __fwd_compress_image_search_filter(void *a0, int8_t a1) { return __search_filter((BmfImage *)a0, a1); }
+static inline void __fwd_compress_image_model_planes(void *a0, void *a1, int32_t a2, int8_t a3) { __model_planes((uint8_t *)a0, (uint8_t *)a1, a2, a3); }
+static inline void __fwd_compress_image_transform_planes(void *a0, int32_t a1, int8_t a2) { __transform_planes((BmfImage *)a0, a1, a2); }
 static inline void __fwd_compress_image_model_plane( void *a2, void *a3, void *a4) { __model_plane( (BmfImage *)a2, (uint8_t *)a3, (uint8_t *)a4); }
 
 int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
@@ -18601,7 +18601,8 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
   uint8_t *v5;   // were int32_t: these hold addresses
   FILE *i;
   bool v38;
-  char __compress_image_Buffer_1, v12, v13, v15, v17, v21, v36;
+  int8_t v12, v13, v15, v17, v21, v36;
+  uint8_t __compress_image_Buffer_1;   // 0/1, shifted into bit 7 of the header byte
   uint8_t *Buffera_5, *Buffera_6, *Srca, *Buffera_2, *Buffera_3;   // `uint8_t *` beside the `char` scalars above
   int32_t row_bytes, v11, v18, n4_6, bits_left, n4, v27, n8_1,
           acc, n4_1, v40, v41, v43, n4_3, v47, i_1, v50, n4_4, v56;
@@ -18624,7 +18625,7 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
       __fwd_compress_image_expand_image(v5, 1, nullptr);
     }
   }
-  __compress_image_Buffer_1 = (char)(uintptr_t)coded_buf;
+  __compress_image_Buffer_1 = (uint8_t)(uintptr_t)coded_buf;
   p_i_1 = (BmfImage *)(p_i);
   row_bytes = *((uint32_t *)p_i + 1);
   if ( coded_buf )
@@ -18739,7 +18740,7 @@ LABEL_22:
       }
       else
       {
-        ::packer_acc |= v25 << (-(char)bits_left & 31);
+        ::packer_acc |= v25 << (-bits_left & 31);
         bits_left = ::packer_free_bits - 6;
       }
       ::packer_free_bits = bits_left;
@@ -18756,7 +18757,7 @@ LABEL_22:
         }
         else
         {
-          v27 = v26 << (-(char)bits_left & 31);
+          v27 = v26 << (-bits_left & 31);
           bits_left -= 8;
           ::packer_acc |= v27;
         }
@@ -18774,7 +18775,7 @@ LABEL_22:
           }
           else
           {
-            ::packer_acc |= v28 << (-(char)bits_left & 31);
+            ::packer_acc |= v28 << (-bits_left & 31);
             n8_1 = ::packer_free_bits - 8;
           }
           ::packer_free_bits = n8_1;
@@ -18789,7 +18790,7 @@ LABEL_22:
           }
           else
           {
-            v31 = v30 << (-(char)n8_1 & 31);
+            v31 = v30 << (-n8_1 & 31);
             bits_left = n8_1 - 8;
             ::packer_acc |= v31;
           }
@@ -18809,7 +18810,7 @@ LABEL_22:
             }
             else
             {
-              ::packer_acc |= v32 << (-(char)bits_left & 31);
+              ::packer_acc |= v32 << (-bits_left & 31);
               bits_left = ::packer_free_bits - 8;
               ::packer_free_bits -= 8;
             }
@@ -18935,7 +18936,7 @@ static inline BmfArc * __fwd_bmf_bmf_open_archive(void *a0, void *a1, int32_t a2
 static inline int32_t __fwd_bmf_compress_image(uint8_t *a0, void *a3, void *a4) { return __compress_image(a0, (BmfImage *)a3, (void *)a4); }
 static inline uint8_t * __fwd_bmf_expand_image(uint8_t *a0, int32_t a3, void *a4) { return __expand_image(a0, a3, (int32_t *)a4); }
 static inline int32_t __fwd_bmf_write_bmp(int32_t a0, void *a1, int32_t a2) { return __write_bmp(a0, (char *)a1, a2); }
-static inline BmfArc * __fwd_bmf_bmf_destroy_archive(void *a0, char a1) { return __bmf_destroy_archive((BmfArc *)a0, a1); }
+static inline BmfArc * __fwd_bmf_bmf_destroy_archive(void *a0, int8_t a1) { return __bmf_destroy_archive((BmfArc *)a0, a1); }
 
 // ---------------------------------------------------------------------------
 // The two things this program does.
