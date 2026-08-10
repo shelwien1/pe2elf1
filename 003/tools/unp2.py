@@ -39,7 +39,7 @@ import structs                                                    # noqa: E402
 
 RECORD = 4
 RECNAME = 'P2Count' 
-VIEW = re.compile(r'\((Obj\d+) \*\)\(\s*(?:\(int32_t\))?\s*&?\w+\[4 \* ')
+VIEW = re.compile(r'\((Obj\d+) \*\)\(\s*(?:\((?:u?int32_t)\))?\s*&?\w+\[4 \* ')
 DECL = re.compile(r'\b(Obj\d+) \*(\w+)\b')
 SIGNED = {'char': True, 'int8_t': True, 'int16_t': True, 'int32_t': True,
           'uint8_t': False, 'uint16_t': False, 'uint32_t': False}

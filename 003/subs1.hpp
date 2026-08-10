@@ -807,19 +807,6 @@ static_assert(sizeof(void *) != 4
 
 
 
-// Obj41 -- recovered from 12 dereferences over 2 offsets, under 3
-// names.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj41 {
-  uint8_t f0;
-  uint8_t _pad1[1];
-  int16_t f2;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj41, f2) == 2,
-              "Obj41: the layout moved");
 
 
 
@@ -12715,7 +12702,7 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
   P2Count *v513;
   P2Count *v514;
   P2Count *v515;
-  Obj41 *v516;
+  P2Count *v516;
   P2Count *v517;
   P2Count *v518;
   P2Count *v519;
@@ -12765,7 +12752,7 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
   P2Count *v563;
   P2Count *v564;
   P2Count *v565;
-  Obj41 *v566;
+  P2Count *v566;
   P2Count *v567;
   P2Count *v568;
   P2Count *v569;
@@ -12796,7 +12783,7 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
   uint8_t *v90;   // `uint8_t *` beside the `char` scalars above
   P2Count *v110;
   P2Count *v94;
-  Obj41 *v111;
+  P2Count *v111;
   P2Count *v107;
   P2Count *v112;
   P2Count *v91;
@@ -13105,8 +13092,8 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
         v517 = (P2Count *)(v565);
         __builtin_prefetch(v559, 0, 1);
         __builtin_prefetch(v523, 0, 1);
-        v566 = (Obj41 *)((uint32_t)&v90[4 * *(int32_t *)((uint8_t *)p2_ctx_rotate + (v95 & 0xC)) + 284712 + 4 * (v95 & 0xFFFFFFF3)]);
-        v516 = (Obj41 *)(v566);
+        v566 = (P2Count *)((uint32_t)&v90[4 * *(int32_t *)((uint8_t *)p2_ctx_rotate + (v95 & 0xC)) + 284712 + 4 * (v95 & 0xFFFFFFF3)]);
+        v516 = (P2Count *)(v566);
         v567 = (P2Count *)((int32_t)&v90[4 * v96 + 284712]);
         v512 = (P2Count *)(v567);
         v97 = *(int32_t *)((uint8_t *)p2_ctx_rotate + (v96 & 0xC)) + (v96 & 0xFFFFFFF3);
@@ -13136,7 +13123,7 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
         v110 = (P2Count *)(v567);
         LOWORD(v109) = v101 + (v109 >> 2);
         v87 = n3 < 3;
-        v111 = (Obj41 *)((const char *)v566);
+        v111 = (P2Count *)(v566);
         *(uint16_t *)(n2 + 2) = v109;
         v112 = (P2Count *)(v568);
         __builtin_prefetch(v111, 0, 1);
@@ -13288,9 +13275,9 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
           v372 = v550 - ((v371 + (1 << ((v515->b0 + 31) & 31))) >> (v515->b0 & 31));
           *(uint16_t *)&v515->w2 = v371
                                + ((32 * ((v372 > deadzone_hi) - (uint32_t)(v372 < deadzone_lo)) + v372 + 2) >> 2);
-          v373 = v516->f2;
-          v374 = v550 - ((v373 + (1 << ((v516->f0 + 31) & 31))) >> (v516->f0 & 31));
-          *(uint16_t *)&v516->f2 = v373
+          v373 = v516->w2;
+          v374 = v550 - ((v373 + (1 << ((*(uint8_t *)&v516->b0 + 31) & 31))) >> (*(uint8_t *)&v516->b0 & 31));
+          *(uint16_t *)&v516->w2 = v373
                                + ((32 * ((v374 > deadzone_hi) - (uint32_t)(v374 < deadzone_lo)) + v374 + 4) >> 3);
           v375 = v550;
           *(uint16_t *)&v515[1].w2 += (uint32_t)(v550 - ((v515[1].w2 + (1 << ((v515[1].b0 + 31) & 31))) >> (v515[1].b0 & 31)) + 2) >> 2;
@@ -13527,9 +13514,9 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
             v297 = v550 - ((v295 + (1 << ((v515->b0 + 31) & 31))) >> (v515->b0 & 31));
             *(uint16_t *)&v515->w2 = v295
                                  + ((32 * ((v297 > deadzone_hi) - (uint32_t)(v297 < deadzone_lo)) + v297 + 2) >> 2);
-            v298 = v516->f2;
-            v299 = v296 - ((v298 + (1 << ((v516->f0 + 31) & 31))) >> (v516->f0 & 31));
-            *(uint16_t *)&v516->f2 = v298
+            v298 = v516->w2;
+            v299 = v296 - ((v298 + (1 << ((*(uint8_t *)&v516->b0 + 31) & 31))) >> (*(uint8_t *)&v516->b0 & 31));
+            *(uint16_t *)&v516->w2 = v298
                                  + ((32 * ((v299 > deadzone_hi) - (uint32_t)(v299 < deadzone_lo)) + v299 + 4) >> 3);
             *(uint16_t *)&v515[1].w2 += (uint32_t)(v296
                                                  - ((v515[1].w2 + (1 << ((v515[1].b0 + 31) & 31))) >> (v515[1].b0 & 31))
@@ -13716,10 +13703,10 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
             v200 = v550 - ((v198 + (1 << ((v515->b0 + 31) & 31))) >> (v515->b0 & 31));
             *(uint16_t *)&v515->w2 = v198
                                  + ((32 * ((v200 > deadzone_hi) - (uint32_t)(v200 < deadzone_lo)) + v200 + 2) >> 2);
-            v201 = v516->f2;
-            v202 = v199 - ((v201 + (1 << ((v516->f0 + 31) & 31))) >> (v516->f0 & 31));
+            v201 = v516->w2;
+            v202 = v199 - ((v201 + (1 << ((*(uint8_t *)&v516->b0 + 31) & 31))) >> (*(uint8_t *)&v516->b0 & 31));
             v550 = v199;
-            *(uint16_t *)&v516->f2 = v201
+            *(uint16_t *)&v516->w2 = v201
                                  + ((32 * ((v202 > deadzone_hi) - (uint32_t)(v202 < deadzone_lo)) + v202 + 4) >> 3);
             v203 = v515[-1].w2;
             v204 = v199 - ((v203 + (1 << ((v515[-1].b0 + 31) & 31))) >> (v515[-1].b0 & 31));
