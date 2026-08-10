@@ -2,10 +2,12 @@
 
 Round six closed by saying its remaining list "is not a list of sweeps": every
 tool in `tools/` reported zero, and what was left needed a reading of the model
-rather than another pass. This round did that reading. Six of the seven items
-§7 named are done and the seventh is documented as better left alone, but the
-thing that mattered most was not on the list at all: a warning count one above
-its floor caught a byte that had silently become a word.
+rather than another pass. This round did that reading. All seven of the items
+§7 named are done — including the one this document itself argued for leaving
+alone, in an argument built on a layout that turned out to be the artefact.
+Two things mattered more than any of them: a warning count one above its floor
+caught a byte that had silently become a word, and an anomaly that had been
+written down as a curiosity turned out to be the evidence.
 
 ---
 
@@ -14,10 +16,10 @@ its floor caught a byte that had silently become a word.
 `python3 tools/shape.py`, verbatim:
 
 ```
-subs1.hpp / bmf.cpp lines          17680 / 358
-raw-offset sites                   126
-  off `_this`                      10, in 5 functions
-pointer casts                      3149
+subs1.hpp / bmf.cpp lines          17682 / 358
+raw-offset sites                   110
+  off `_this`                      7, in 4 functions
+pointer casts                      3021
 globals still at a 1997 address    0
 frames                             17, 169180 bytes, 0 aliases
   slots carrying two names         0, 0 extra names, in 0 functions
@@ -34,10 +36,10 @@ against round six's close:
 
 | | round six | round seven |
 | --- | --- | --- |
-| lines | 17 833 / 358 | **17 680 / 358** |
-| raw-offset sites | 504 | **126** |
-| — off `_this` | 27 | **10** |
-| pointer casts | 3986 | **3149** |
+| lines | 17 833 / 358 | **17 682 / 358** |
+| raw-offset sites | 504 | **110** |
+| — off `_this` | 27 | **7** |
+| pointer casts | 3986 | **3021** |
 | structs | 16, 3 still `ObjN` | **17, 0 still `ObjN`** |
 | conversion warnings | 2075 | **1994** |
 
@@ -179,6 +181,33 @@ written in a different unit.
 
 ## 6. Counters, strips and rotations
 
+The p1 counter table deserves its own paragraph, because getting it wrong was
+the most instructive thing in the round. `P1Count` put `total` at +8, and
+`16 * 237 + 8` is 3800 — so `((P1Count *)_this)[k + 237].total` lands on the
+right word for the wrong reason. It is the table at +3800 read half a record
+out of phase, and the give-away was in the file the whole time: the old comment
+noted that `w[]` is never read at those indices and `bin[]` never past 2, and
+recorded it as a curiosity rather than as evidence.
+
+`init_counter_node` settles it. `alt_p1_alloc` calls it at
+`(uint16_t *)_this + 8 * k + 1900` — +3800, stride sixteen — for 0x99C60 values
+of k, and the callee writes eight words: `[0] = 22` and `[1..7] = 8, 2, 2, 2,
+2, 3, 3`, where 22 is the sum of the other seven. A node is a total and seven
+counts. So `w[0..3]` at record `k + 237` are node k-1's *last* four counts,
+which is exactly why nothing reads them.
+
+`CounterNode counters[629856]` sits at +3800; the count is the allocator's own
+loop bound and `0x99C60 * 16` fills the object to its last byte. The 251
+subscripts re-base onto it, and the three the code touches at a time stop being
+236, 237 and 238 and become -1, 0 and +1 — a node and its two neighbours, which
+is what they always were. `P1Count` has no users left.
+
+> **This is the round's own correction.** §8 of this document, written three
+> commits earlier, argued that the grid should be left as arithmetic because a
+> member here would have to start at +3792 and contradict the allocator. That
+> argument was built on a layout that was itself the artefact. A reading that
+> explains an anomaly away is worth less than one that explains it.
+
 Three tables whose element size was in the reader's head rather than the
 declaration.
 
@@ -259,17 +288,7 @@ question. Two of them are, and they are still there.
   value, then a cost, and `alt_p2_model`'s `v508` is a pointer and a strip
   index within one expression. Those do need a liveness argument each, and
   there is no tool shape for it.
-* **`AltP1Block`'s counter grid stays as it is, deliberately.** The grid is
-  anchored at the object's base and record 237 begins at +3792, so its first
-  eight bytes are the tail of `f1752` and its `total` is the first word of the
-  table proper at +3800. A member declared here would have to start at +3792 to
-  keep the record boundary, contradicting the +3800 the allocator draws — the
-  declaration would be less true than the arithmetic. What round seven did do
-  is unify the two spellings: `*(P1Count *)&_this->f1752[4 * result + 510]` is
-  the same address as `((P1Count *)_this)[result + 237]`, and only `total` and
-  `bin[]` are ever read at those indices, never `w[]`, which is why the
-  straddle never shows.
-* **126 raw offsets, 92 `fNN` members, 560 `vNN` locals, 112 `goto`s.** The
+* **110 raw offsets, 92 `fNN` members, 560 `vNN` locals, 112 `goto`s.** The
   offsets are down from 1389 over five rounds; what remains is in bases that
   are genuinely computed — a name plus a variable byte offset, with nothing
   either end to say what the stride is. `degoto.py` still reports 0 candidates.
@@ -292,7 +311,7 @@ That is the honest measure of where this round's work was: `unrec`,
 `unoffset`, `uncast`, `unused`, `unwrite`, `unhoist`, `uncursor`, `dedup`,
 `arrayify` and `degoto` are all run against the file at the end of this round
 and all of them report zero, exactly as they did at the end of round six — and
-the file still lost 378 raw offsets and 837 pointer casts in between.
+the file still lost 394 raw offsets and 965 pointer casts in between.
 
 `unrecast`'s addition is worth one line of its own. It dropped
 `*((uint32_t *)p + 1)` when `p` was already a `uint32_t *` but never looked at
