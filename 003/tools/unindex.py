@@ -37,6 +37,12 @@ import structs                                                    # noqa: E402
 import unoffset                                                   # noqa: E402
 
 IDX = re.compile(r'(&?)\(\(\s*(\w+)\s*\*\)\s*(\w+)\)\[([^\]]*?)\+\s*(\d+)\]')
+# `*(T *)((uint8_t *)p + 8 * k + 278944)`: a byte offset with a scaled variable
+# in it.  The constant places the member and the scale converts the variable
+# into that member's elements, which only works when the scale is a whole
+# number of them.
+BYTE = re.compile(r'\*(?:\((\w+) \*\))?\(\(uint8_t \*\)(\w+) \+ '
+                  r'(?:(\d+) \* (\w+\+*) \+ )?(\d+)\)')
 # `(T *)p + K` only when `K` is the whole offset: `(int32_t *)_this + 2 * v8 +
 # 438` has the same prefix and a different meaning, and taking the 2 for the
 # offset there is a stride error the compiler happens to catch.
@@ -95,6 +101,30 @@ def convert(lines, a, b, sig, tables):
     ty = bases(lines, a, b, sig, tables)
     edits, n = {}, 0
 
+    def byte(m):
+        nonlocal n
+        acc, base, scale, var, k = m.groups()
+        acc = acc or 'uint8_t'          # `*((uint8_t *)p + …)` casts once
+        if base not in ty:
+            return m.group(0)
+        w = merge.width(acc)
+        if w is None:
+            return m.group(0)
+        got = place(tables, ty[base], acc, int(k))
+        if not got:
+            return m.group(0)
+        f, j, _ = got
+        ew = merge.width(f['ty'])
+        if var and int(scale) % ew:
+            return m.group(0)
+        idx = '%d * %s' % (int(scale) // ew, var) if var else ''
+        if idx and int(scale) // ew == 1:
+            idx = var
+        idx = '%s + %d' % (idx, j) if idx and j else (idx or str(j))
+        n += 1
+        at = '%s->%s[%s]' % (base, f['name'], idx)
+        return at if unoffset.norm(f['ty']) == acc else '(*(%s *)&%s)' % (acc, at)
+
     def rep(m, kind):
         nonlocal n
         amp = m.group(1) if kind == 'idx' else ''
@@ -130,6 +160,7 @@ def convert(lines, a, b, sig, tables):
         code, sep, com = lines[i].partition('//')
         s = IDX.sub(lambda m: rep(m, 'idx'), code)
         s = ADD.sub(lambda m: rep(m, 'add'), s)
+        s = BYTE.sub(byte, s)
         if s != code:
             edits[i] = s + sep + com
     return edits, n

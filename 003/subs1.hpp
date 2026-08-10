@@ -4050,31 +4050,32 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
   uint32_t j, k, n0x1E60, m_1, m, n5, n0x82, n;
   void *v10;
   _this->f278728 = n4;
+  // Two records a step, which is how MSVC unrolled the seed of all 163 840.
   for ( j = 0; j < 0x14000; ++j )
   {
-    *(uint16_t *)((uint8_t *)_this + 8 * j + 284714) = 0;
-    *(uint16_t *)((uint8_t *)_this + 8 * j + 284718) = 0;
+    _this->f284712[2 * j].w2 = 0;
+    _this->f284712[2 * j + 1].w2 = 0;
   }
   for ( k = 0; k < 0x14000; ++k )
   {
-    *((uint8_t *)_this + 8 * k + 284712) = 5;
-    *((uint8_t *)_this + 8 * k + 284713) = 2;
-    *((uint8_t *)_this + 8 * k + 284716) = 5;
-    *((uint8_t *)_this + 8 * k + 284717) = 2;
+    _this->f284712[2 * k].b0 = 5;
+    _this->f284712[2 * k].b1 = 2;
+    _this->f284712[2 * k + 1].b0 = 5;
+    _this->f284712[2 * k + 1].b1 = 2;
   }
   n0x1E60 = 0;
   do
   {
-    v7 = 16 * n0x1E60;
-    *(uint16_t *)((uint8_t *)_this + v7 + 940074) = 2048;
+    v7 = 8 * n0x1E60;   // two four-lane groups a step
+    _this->f940072[v7 + 1] = 2048;
     ++n0x1E60;
-    *(uint16_t *)((uint8_t *)_this + v7 + 940076) = 2816;
-    *(uint16_t *)((uint8_t *)_this + v7 + 940078) = 2816;
-    *(uint16_t *)((uint8_t *)_this + v7 + 940072) = 4096;
-    *(uint16_t *)((uint8_t *)_this + v7 + 940082) = 2048;
-    *(uint16_t *)((uint8_t *)_this + v7 + 940084) = 2816;
-    *(uint16_t *)((uint8_t *)_this + v7 + 940086) = 2816;
-    *(uint16_t *)((uint8_t *)_this + v7 + 940080) = 4096;
+    _this->f940072[v7 + 2] = 2816;
+    _this->f940072[v7 + 3] = 2816;
+    _this->f940072[v7] = 4096;
+    _this->f940072[v7 + 5] = 2048;
+    _this->f940072[v7 + 6] = 2816;
+    _this->f940072[v7 + 7] = 2816;
+    _this->f940072[v7 + 4] = 4096;
   }
   while ( n0x1E60 < 0x1E60 );
   v8 = 4 * plane_desc[0].w12 + 1;
@@ -4117,7 +4118,7 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
   n5 = 0;
   Size = 18 * i + 234;
   do
-    *(uint8_t **)((uint8_t *)_this + 4 * n5++ + 278756) = (uint8_t *)bmf_new(Size);
+    _this->f278736[5 + n5++] = (uint8_t *)bmf_new(Size);
   while ( n5 < 5 );
   memset(_this->f278756,0,Size);
   v17 = *(uint32_t *)&_this->f278736[5];
@@ -4131,10 +4132,10 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
   do
   {
     v20 = p2_ctx_edges[v18];
-    *(uint32_t *)((uint8_t *)_this + 8 * n0x82 + 278944) = (_this->f278728 << 8) | (16 * v18);
+    *(uint32_t *)&_this->f278944[2 * n0x82] = (_this->f278728 << 8) | (16 * v18);
     v21 = (2 * n0x82 == v20) + v18;
     v22 = p2_ctx_edges[v21];
-    *(uint32_t *)((uint8_t *)_this + 8 * n0x82 + 278948) = (_this->f278728 << 8) | (16 * v21);
+    *(uint32_t *)&_this->f278944[2 * n0x82 + 1] = (_this->f278728 << 8) | (16 * v21);
     v23 = 2 * n0x82++ + 1 == v22;
     v18 = v23 + v21;
   }
@@ -4143,10 +4144,10 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
   for ( n = 0; n < 0x3C; ++n )
   {
     v26 = p2_len_edges[v24];
-    *((uint8_t *)_this + 2 * n + 280752) = v24;
+    _this->f280752[2 * n] = v24;
     v27 = (2 * n == v26) + v24;
     v28 = p2_len_edges[v27];
-    *((uint8_t *)_this + 2 * n + 280753) = v27;
+    _this->f280752[2 * n + 1] = v27;
     v29 = 2 * n + 1 == v28;
     v24 = v29 + v27;
   }
