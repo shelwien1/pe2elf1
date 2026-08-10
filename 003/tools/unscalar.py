@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Delete a struct that is one scalar, and point at the scalar instead.
+"""Delete a struct that is a run of one scalar, and point at the scalar.
 
     python3 tools/unscalar.py subs1.hpp --list
     python3 tools/unscalar.py subs1.hpp Obj13
@@ -16,9 +16,14 @@ dereferences its base gives a struct with one member at offset zero:
 file uses.  The struct, its `static_assert` and its header comment go; `p->f0`
 becomes `*p`, and a cast of the struct becomes a cast of the scalar.
 
-A struct with a *second* member, or with padding before its first, is not this
--- it is a view of something with a layout, and `unp2.py` or `merge.py` is what
-it wants.
+A struct whose members are all the *same* scalar, each at a multiple of its
+width, is the same thing with more than one offset read: `struct Obj9 {
+uint16_t f0; uint8_t _pad1[4]; uint16_t f6; uint8_t _pad3[4]; uint16_t f12; }`
+is `uint16_t *` read at `[0]`, `[3]` and `[6]`.  The subscript is what the
+byte offset was hiding.
+
+A struct with two *different* scalars in it is not this -- it is a view of
+something with a layout, and `unp2.py` or `merge.py` is what it wants.
 
 The `->f0` rewrite is scoped to the declaring body, for the reason `unp2.py`
 gives: a name is a different variable in another function, and `f0` is a
@@ -34,18 +39,25 @@ import unp2                                                       # noqa: E402
 
 
 def singles(src):
-    """{ObjN: type} for every struct that is one scalar at offset zero."""
+    """{ObjN: (type, {member: index})} for every struct that is one scalar run."""
     out = {}
     for name in re.findall(r'^struct (Obj\d+) \{', src, re.M):
         ms, _ = merge.parse(src, name)
-        if ms and len(ms) == 1 and ms[0]['off'] == 0 and ms[0]['count'] == 1 \
-                and ms[0]['name'] == 'f0' and merge.width(ms[0]['ty']):
-            out[name] = ms[0]['ty'].strip()
+        if not ms:
+            continue
+        tys = {f['ty'].strip() for f in ms}
+        if len(tys) != 1:
+            continue
+        ty = tys.pop()
+        w = merge.width(ty)
+        if not w or any(f['off'] % w for f in ms):
+            continue
+        out[name] = (ty, {f['name']: (f['off'] // w, f['count']) for f in ms})
     return out
 
 
-def rewrite(lines, name, ty):
-    """`p->f0` -> `*p` in every body that declares a `name *`.  Returns sites."""
+def rewrite(lines, name, at):
+    """`p->fN` -> `p[i]` in every body that declares a `name *`.  Returns sites."""
     n = 0
     for a, b, _, sig in structs.bodies(lines):
         vs = {m.group(1) for i in range(a, b + 1)
@@ -57,8 +69,23 @@ def rewrite(lines, name, ty):
         for v in vs:
             for i in range(a, b + 1):
                 code, sep, com = lines[i].partition('//')
-                code, k = re.subn(r'(?<![\w.])%s->f0\b' % re.escape(v), '*' + v, code)
-                n += k
+                for mem, (k, count) in at.items():
+                    e = re.escape(v)
+                    if count > 1:
+                        # `p->f0[i]` is element `k + i`, not `(*p)[i]`.
+                        code, c = re.subn(
+                            r'(?<![\w.])%s->%s\[([^\]]*)\]' % (e, mem),
+                            lambda m, v=v, k=k: '%s[%s]' % (
+                                v, m.group(1) if not k else '%d + %s' % (k, m.group(1))),
+                            code)
+                        n += c
+                        code, c = re.subn(r'(?<![\w.])%s->%s\b' % (e, mem),
+                                          v if not k else '%s + %d' % (v, k), code)
+                        n += c
+                        continue
+                    new = ('*' + v) if k == 0 else '%s[%d]' % (v, k)
+                    code, c = re.subn(r'(?<![\w.])%s->%s\b' % (e, mem), new, code)
+                    n += c
                 lines[i] = code + sep + com
     return n
 
@@ -70,18 +97,20 @@ def main():
     found = singles(src)
 
     if '--list' in sys.argv or not (args or '--all' in sys.argv):
-        for n, t in sorted(found.items(), key=lambda kv: int(kv[0][3:])):
-            print('%-8s %-10s %d uses'
-                  % (n, t, len(re.findall(r'\b%s\b' % n, src))))
-        print('%d structs are one scalar' % len(found))
+        for n, (t, at) in sorted(found.items(), key=lambda kv: int(kv[0][3:])):
+            print('%-8s %-10s %d uses, %s'
+                  % (n, t, len(re.findall(r'\b%s\b' % n, src)),
+                     ' '.join('%s=[%d]%s' % (m, k, '..' if c > 1 else '')
+                              for m, (k, c) in sorted(at.items(), key=lambda y: y[1]))))
+        print('%d structs are a run of one scalar' % len(found))
         return 0
 
     want = [n for n in (args or found) if n in found]
     lines = src.split('\n')
     gone = sites = 0
     for n in want:
-        t = found[n]
-        sites += rewrite(lines, n, t)
+        t, at = found[n]
+        sites += rewrite(lines, n, at)
         sep = '' if t.endswith('*') else ' '
         src = '\n'.join(lines)
         src = re.sub(r'\b%s \*' % n, '%s%s*' % (t, sep), src)
