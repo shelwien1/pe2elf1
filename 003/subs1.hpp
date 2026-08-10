@@ -505,11 +505,12 @@ struct ModelBlock {
   // three-word records at +1 051 680, a 24 KiB block it `memset`s, one record
   // and 1536 bytes it `memset`s at +1 076 352, and 48 more records at
   // +1 077 894.  Each record is (40, 16, 512) or (4, 4, 72), which is two
-  // counts and a total.
-  uint16_t f1051680[48];      // +1051680 .. +1051775
-  uint8_t  f1051776[24576];   // +1051776 .. +1076351
-  uint16_t f1076352[771];     // +1076352 .. +1077893
-  uint16_t f1077894[144];     // +1077894 .. +1078181
+  // counts and a total -- the unit `encode_context_bit` takes a pointer to,
+  // which is why every reader of these four indexes them `3 * k`.
+  uint16_t f1051680[48];      // +1051680 .. +1051775, 16 records
+  uint16_t f1051776[12288];   // +1051776 .. +1076351, 4096 records
+  uint16_t f1076352[771];     // +1076352 .. +1077893, 257 records
+  uint16_t f1077894[144];     // +1077894 .. +1078181, 48 records
   uint8_t _pad16[2];   // +1078182 .. +1078183
   // A twenty-fourth symbol list, inside the object rather than in the array
   // beside it: `init_model_tables` initialises `_this + 1078184` and
@@ -528,7 +529,16 @@ struct ModelBlock {
   SymList **f1078232;    // the cursor over `sel`
   uint8_t *f1078236;   // freed by free_workspace: a buffer, not an int
   uint8_t *f1078240;   // a row cursor
-  uint8_t _pad25[440];
+  // Two tables the plane setup fills, and both loops give their own bounds.
+  // `ctx_state` inverts `ctx_group_flags`: it stores `s` at
+  // `ctx_group_flags[s]` for the fifteen states, and the largest entry there
+  // is 63, so it is 64 bytes and ends where the next table starts.
+  // `ctx_bucket` is [5][5][15] -- the two four-way neighbour matches and the
+  // state -- which is why every index into it arrives as
+  // `state + 15 * a + 75 * b` and why the writers step a base by one per state.
+  uint8_t ctx_state[64];     // +1078244 .. +1078307
+  uint8_t ctx_bucket[375];   // +1078308 .. +1078682
+  uint8_t _pad25[1];         // +1078683
   uint8_t *f1078684;
   uint8_t *f1078688;   // the alphabet map, one byte a symbol
   uint8_t f1078692[4];   // +1078692 .. +1078695
@@ -543,9 +553,12 @@ struct ModelBlock {
   // 8102448 -- which is the 0x7BA230 both callers ask `bmf_new` for, so the
   // last one ends exactly at the end of the object.
   uint16_t f6059440[8192];   // +6059440 .. +6075823
-  uint8_t f6075824[385024];   // +6075824 .. +6460847
-  uint8_t f6460848[217600];   // +6460848 .. +6678447
-  uint8_t f6678448[1424000];   // +6678448 .. +8102447
+  // All three are read only through `(uint16_t *)this + k`, and `memset`
+  // does not care: the byte counts are the same and the element type is now
+  // the one the code uses.
+  uint16_t f6075824[192512];   // +6075824 .. +6460847
+  uint16_t f6460848[108800];   // +6460848 .. +6678447
+  uint16_t f6678448[712000];   // +6678448 .. +8102447
 };
 static_assert(sizeof(void *) != 4
               || (__builtin_offsetof(ModelBlock, f6059436) == 6059436
@@ -9261,7 +9274,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
     v13 = (uint16_t)(*((uint16_t *)__frame.sym5 + n4_8 + 3029720) - __frame.sym1);
   }
   __frame.sym5->f6059432 = (uint32_t)&((uint32_t *)__frame.sym5)[4 * v13 + 269674];
-  v15 = *((uint8_t *)this_2 + v12 + 1078244);
+  v15 = this_2->ctx_state[v12];
   this_2->f36 = v15;
   v16 = (uint16_t *)&((uint32_t *)this_2)[0x10000 * v15 + 531818 + v13];
   this_2->f6059436 = (uint8_t *)v16;
@@ -9304,7 +9317,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   }
   v21 = this_2->f56[8];
   __frame.sym3 = (int32_t)n15_9;
-  v22 = *((uint8_t *)this_2 + v15 + __decode_pixel_n15 + 1078308);
+  v22 = this_2->ctx_bucket[v15 + __decode_pixel_n15];
   v23 = this_2->f56[7];
   this_2->f40 = v22;
   n4_11 = *((uint8_t *)n15_9 + 2);
@@ -9329,42 +9342,42 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
       + 32 * (__frame.sym5->f1078692[1] == 0)
       + 16 * (__frame.sym5->f1078692[0] == 0)
       + v29;
-  n0xFFFF = *((uint16_t *)__frame.sym5 + v31 + 3037912);
+  n0xFFFF = __frame.sym5->f6075824[v31];
   if ( n0xFFFF == 0xFFFF )
   {
-    *((uint16_t *)__frame.sym5 + v31 + 3037912) = __frame.sym5->f20;
+    __frame.sym5->f6075824[v31] = __frame.sym5->f20;
     n15_10 = this_3->f56[6];
     v4 = (uint64_t *)((uint16_t *)this_3->f56[5]);
     ++this_3->f20;
-    n0xFFFF = *((uint16_t *)this_3 + v31 + 3037912);
+    n0xFFFF = this_3->f6075824[v31];
     __frame.sym2 = *(n15_10 + 2);
   }
   v33 = *((uint8_t *)v4 - 1) + 4 * *(n15_10 + 13) + 2 * __frame.sym2 + 8 * n0xFFFF;
-  n0xFFFF_1 = *((uint16_t *)this_3 + v33 + 3230424);
+  n0xFFFF_1 = this_3->f6460848[v33];
   if ( n0xFFFF_1 == 0xFFFF )
   {
-    *((uint16_t *)this_3 + v33 + 3230424) = this_3->f24++;
-    n0xFFFF_1 = *((uint16_t *)this_3 + v33 + 3230424);
+    this_3->f6460848[v33] = this_3->f24++;
+    n0xFFFF_1 = this_3->f6460848[v33];
   }
   if ( (int32_t)this_3->f16 < 32 )
   {
     n53248 = this_3->f28;
     __frame.sym1 = 16 * n0xFFFF_1 + (__frame.sym1 & 0xF);
-    v36 = (uint16_t *)((int32_t)this_3 + 2 * __frame.sym1);
-    n0xFFFF_1 = v36[3339224];
+    v36 = &this_3->f6678448[__frame.sym1];
+    n0xFFFF_1 = *v36;
     if ( n0xFFFF_1 == 0xFFFF )
     {
       n4_12 = __frame.sym1;
       if ( n53248 > 53248 )
         n4_12 = __frame.sym1 | 0xF;
-      v36 = (uint16_t *)((int32_t)this_3 + 2 * n4_12);
-      n0xFFFF_1 = v36[3339224];
+      v36 = &this_3->f6678448[n4_12];
+      n0xFFFF_1 = *v36;
     }
     if ( n0xFFFF_1 >= n53248 )
     {
-      v36[3339224] = n53248;
+      *v36 = n53248;
       ++this_3->f28;
-      n0xFFFF_1 = v36[3339224];
+      n0xFFFF_1 = *v36;
     }
   }
   if ( (*(this_3->f56[5] - 5) & *(this_3->f56[5] - 6)) != 0 )
@@ -9401,12 +9414,16 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
       }
 LABEL_42:
       n15_12 = *(this_3->f1078684 + n15_11);
-      v44 = __decode_context_bit((uint16_t *)&((uint32_t *)this_3)[12 * n15_12
-                                        + 269089
-                                        + 6 * (uint8_t)(((uint8_t *)v39)[n8 + 27] & ((uint8_t *)v39)[n8 + 19])
-                                        + 3 * v40]
-            + 3 * *(this_3->f1078688 + __frame.sym0)
-            + 1, this_3->f1076352);
+      // Record `8 * n15_12 + 4 * (two neighbour flags) + 2 * v40 + sym + 1`
+      // of the 257-record grid: `269089 * 4` is +1 076 356, four bytes past
+      // `f1076352`, and every term above it is a multiple of three words.
+      v44 = __decode_context_bit(
+            &this_3->f1076352[3 * (8 * n15_12
+                                   + 4 * (uint8_t)(((uint8_t *)v39)[n8 + 27] & ((uint8_t *)v39)[n8 + 19])
+                                   + 2 * v40
+                                   + *(this_3->f1078688 + __frame.sym0)
+                                   + 1)],
+            this_3->f1076352);
       n4_22 = ::mode_symbol[1];
       v46 = (uint8_t *)this_3->f1078688;
       this_3->f32 = v44;
@@ -9888,7 +9905,7 @@ LABEL_86:
     v127 = __pixel_context((ModelBlock *)this_3, (uint32_t *)__frame.sym);
     if ( v127 >= 0 )
     {
-      v128 = __decode_context_bit((uint16_t *)this_3 + 3 * this_3->f52 + 525888, (uint16_t *)this_3 + 3 * this_3->f48 + 525840);
+      v128 = __decode_context_bit(&this_3->f1051776[3 * this_3->f52], &this_3->f1051680[3 * this_3->f48]);
       *(uint16_t *)this_3->f56[5] = v127;
       if ( v128 )
         return n15_24 + 1;
@@ -9973,7 +9990,8 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   bool v11;
   int8_t v93;
   uint8_t v24, v64, v65, v66, v67, v68;
-  uint8_t *v36, *v156;   // `uint8_t *` beside the `char` scalars above
+  uint8_t *v156;   // `uint8_t *` beside the `char` scalars above
+  uint16_t *v36;   // a cursor into `f6678448`
   int16_t v14, n15_10, v147, v158, n15_21, v170;
   ModelBlock *this_3;
   ModelBlock *this_4;
@@ -10047,7 +10065,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
     v13 = (uint16_t)(*((uint16_t *)__frame.sym7 + __frame.sym8 + 3029720) - __frame.sym10);
   }
   __frame.sym7->f6059432 = (uint32_t)&((int32_t *)__frame.sym7)[4 * v13 + 269674];
-  v15 = *((uint8_t *)this_2 + v10 + 1078244);
+  v15 = this_2->ctx_state[v10];
   *(int32_t *)&this_2->f36 = v15;
   v16 = &((int32_t *)this_2)[0x10000 * v15 + 531818 + v13];
   this_2->f6059436 = (uint8_t *)v16;
@@ -10090,7 +10108,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   }
   v20 = this_2->f56[8];
   __frame.sym1 = (int32_t)n2_7;
-  v21 = *((uint8_t *)this_2 + v15 + n15_5 + 1078308);
+  v21 = this_2->ctx_bucket[v15 + n15_5];
   v22 = this_2->f56[7];
   *(int32_t *)&this_2->f40 = v21;
   p_n15_1 = *((uint8_t *)n2_7 + 2);
@@ -10114,42 +10132,42 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
       + ((uint8_t)(*(uint8_t *)(__frame.sym3 + 3) & *(v20 + 3) & *(v22 + 3) & v24) << 8)
       + (v21 << 10)
       + v27;
-  n0xFFFF = *((uint16_t *)__frame.sym7 + v29 + 3037912);
+  n0xFFFF = __frame.sym7->f6075824[v29];
   n2_9 = (uint8_t *)__frame.sym1;
   if ( n0xFFFF == 0xFFFF )
   {
-    *((uint16_t *)__frame.sym7 + v29 + 3037912) = *(int32_t *)&__frame.sym7->f20;
+    __frame.sym7->f6075824[v29] = *(int32_t *)&__frame.sym7->f20;
     n2_9 = this_3->f56[6];
     n2_8 = (uint16_t *)this_3->f56[5];
     ++*(int32_t *)&this_3->f20;
-    n0xFFFF = *((uint16_t *)this_3 + v29 + 3037912);
+    n0xFFFF = this_3->f6075824[v29];
     __frame.sym0 = *(n2_9 + 2);
   }
   v32 = *((uint8_t *)n2_8 - 1) + 4 * *(n2_9 + 13) + 2 * __frame.sym0 + 8 * n0xFFFF;
-  n0xFFFF_1 = *((uint16_t *)this_3 + v32 + 3230424);
+  n0xFFFF_1 = this_3->f6460848[v32];
   if ( n0xFFFF_1 == 0xFFFF )
   {
-    *((uint16_t *)this_3 + v32 + 3230424) = (*(int32_t *)&this_3->f24)++;
-    n0xFFFF_1 = *((uint16_t *)this_3 + v32 + 3230424);
+    this_3->f6460848[v32] = (*(int32_t *)&this_3->f24)++;
+    n0xFFFF_1 = this_3->f6460848[v32];
   }
   if ( *(int32_t *)&this_3->f16 < 32 )
   {
     n53248 = *(int32_t *)&this_3->f28;
     v35 = 16 * n0xFFFF_1 + (__frame.sym10 & 0xF);
-    v36 = (uint8_t *)this_3 + 2 * v35;
-    n0xFFFF_1 = *((uint16_t *)v36 + 3339224);
+    v36 = &this_3->f6678448[v35];
+    n0xFFFF_1 = *v36;
     if ( n0xFFFF_1 == 0xFFFF )
     {
       if ( n53248 > 53248 )
         v35 |= 0xFu;
-      v36 = (uint8_t *)this_3 + 2 * v35;
-      n0xFFFF_1 = *((uint16_t *)v36 + 3339224);
+      v36 = &this_3->f6678448[v35];
+      n0xFFFF_1 = *v36;
     }
     if ( n0xFFFF_1 >= n53248 )
     {
-      *((uint16_t *)v36 + 3339224) = n53248;
+      *v36 = n53248;
       ++*(int32_t *)&this_3->f28;
-      n0xFFFF_1 = *((uint16_t *)v36 + 3339224);
+      n0xFFFF_1 = *v36;
     }
   }
   v37 = ((uint16_t *)this_3->f56[5]);
@@ -10314,7 +10332,7 @@ LABEL_42:
       *(this_3->f56[5] - 1) = n15_11 == *(uint16_t *)(this_3->f56[6] + 16);
       n15_12 = n15_14;
     }
-    __encode_context_bit((uint16_t *)this_3 + 3 * n15_32 + 538179, this_3->f1076352, __frame.sym6);
+    __encode_context_bit(&this_3->f1076352[3 * (n15_32 + 1)], this_3->f1076352, __frame.sym6);
     n15_13 = __frame.sym6;
     n4_2 = ::mode_symbol[1];
     v74 = (uint8_t *)this_3->f1078688;
@@ -10665,7 +10683,7 @@ LABEL_42:
     if ( v129 >= 0 )
     {
       n15_28 = v129 == *(uint16_t *)this_3->f56[5];
-      __encode_context_bit((uint16_t *)this_3 + 3 * *(int32_t *)&this_3->f52 + 525888, (uint16_t *)this_3 + 3 * *(int32_t *)&this_3->f48 + 525840, n15_28);
+      __encode_context_bit(&this_3->f1051776[3 * *(int32_t *)&this_3->f52], &this_3->f1051680[3 * *(int32_t *)&this_3->f48], n15_28);
       if ( n15_28 )
         return n15_14 + 1;
       exclusion_mask[v129] = exclusion_gen;
@@ -10928,7 +10946,7 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
   }
   while ( n8 < 8 );
   n0x18 = 0;
-  memset(a1->f1051776,0,24576);
+  memset(a1->f1051776,0,sizeof a1->f1051776);
   a1->f1078236 = (uint8_t *)bmf_new(2 * a1->f4 * a1->f0);
   a1->f1076352[0] = 4;
   a1->f1076352[1] = 4;
@@ -10971,7 +10989,6 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   // the gate's answer -- nothing writes one of them and reads another.
   int32_t v82;
   int32_t v84;
-  uint8_t *v85;
   // These shared `__frame.v85` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
@@ -10986,7 +11003,6 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   // the gate's answer -- nothing writes one of them and reads another.
   uint8_t *ArgList_5;
   int32_t n6_3;
-  uint8_t *v92;
   int32_t v93;
   int32_t v94;
   int32_t v95;
@@ -11001,7 +11017,8 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   ModelBlock *this_4;
   uint8_t *v57;   // were int32_t: these hold addresses
   bool v38;
-  uint8_t *ArgList, *v9, *ArgList_2, *buf, *ArgList_3, *ArgList_9, *ArgList_10, *Src_2, *v77, *ArgList_8;
+  uint8_t *ArgList, *ArgList_2, *buf, *ArgList_3, *ArgList_9, *ArgList_10,
+          *Src_2, *v77, *ArgList_8;
   int16_t v20;
   uint8_t *v27, *v28, *v29, *v44, *v45, *v46, *v47, *v48;   // row cursors out of f56
   int32_t v3, v5, v6, v8, n5, v11, v14, v15, v16, v17, v18, v19, n0x10000, v30,
@@ -11026,28 +11043,28 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   {
     v6 = ctx_group_flags[v5];
     this_2 = (ModelBlock *)(this_1);
-    *((uint8_t *)this_1 + v6 + 1078244) = v5;
+    this_1->ctx_state[v6] = v5;
     v100 = 0;
     v82 = v5;
-    v92 = (uint8_t *)this_2 + v5;
+
     v88 = v6 & 4;
     v99 = v6 & 2;
     v95 = v6 & 0x10;
     v8 = 0;
     v93 = v6 & 1;
-    v9 = (uint8_t *)this_2 + v5;
+
     ArgList_4 = v6 & 0x20;
     v94 = v6 & 8;
     do
     {
       v100 = v8;
       n5 = 0;
-      v85 = &v9[15 * v8];
+
       do
       {
         v11 = v102;
         this_3 = (ModelBlock *)(this_1);
-        v85[75 * n5 + 1078308] = v102;
+        this_2->ctx_bucket[v5 + 15 * v8 + 75 * n5] = v102;
         v101 = this_3->f16;
         v13 = (uint16_t *)&((uint32_t *)this_3)[4 * v11];
         v13[49] = 2;
@@ -11137,7 +11154,6 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         ++n5;
       }
       while ( n5 < 5 );
-      v9 = v92;
       v8 = v100 + 1;
     }
     while ( v100 + 1 < 5 );
@@ -15237,7 +15253,6 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
   int32_t v68;
   int32_t v69;
   int32_t v70;
-  uint8_t *v71;
   int32_t v72;
   int32_t v73;
   uint32_t n5;
@@ -15291,7 +15306,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
     do
     {
       v10 = ctx_group_flags[v8];
-      *((uint8_t *)Blocka_2 + v10 + 1078244) = v8;
+      Blocka_2->ctx_state[v10] = v8;
       v11 = 0;
       v58 = v8;
       v69 = v10 & 4;
@@ -15305,10 +15320,9 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
         v72 = v11;
         n5 = 0;
         Blocka_5 = (ModelBlock *)(Blocka_4);
-        v71 = (uint8_t *)((uintptr_t)Blocka_4 + 15 * v11);
         do
         {
-          *(v71 + 75 * n5 + 1078308) = v64;
+          Blocka_2->ctx_bucket[v8 + 15 * v11 + 75 * n5] = v64;
           v73 = Blocka_2->f16;
           v12 = (uint16_t *)&((uint32_t *)Blocka_2)[4 * v64];
           __model_plane_n2 = 2;
