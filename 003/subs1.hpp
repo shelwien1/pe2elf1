@@ -12835,7 +12835,8 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
   int32_t  n2_half;   // gave one slot; the third is the cursor below
   uint8_t *n2;        // a counter-record cursor
   uint16_t *n0xF0;
-  uint32_t n0x10_2;
+  uint32_t n0x10_2;   // a record index in four regions ...
+  uint8_t *p2_rec;    // ... and a record address in the two below
   uint16_t *v508;
   uint32_t n0x10_1;
   int32_t v510;
@@ -13935,7 +13936,7 @@ LABEL_37:
               + ((uint32_t *)v385)[-v397 + 69701]
               + v400;
         n0x10_3 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10];
-        n0x10_2 = (uint32_t)n0x10_3;
+        p2_rec = (uint8_t *)n0x10_3;
         if ( n15 < 15 )
         {
           n2_2 = n0x10_3 + 470040;
@@ -13948,7 +13949,7 @@ LABEL_37:
             __fwd_alt_p2_model_rescale_three_way(n2_2);
             n0x10 = n0x10_1;
           }
-          v405 = *(uint16_t *)(n0x10_2 + 940080) & 0xFFFC;
+          v405 = *(uint16_t *)(p2_rec + 940080) & 0xFFFC;
           v510 *= 2;
           *(uint16_t *)(n2 + v510 + 2) += v405 >> 2;
           if ( n15 <= 0 )
@@ -13958,16 +13959,16 @@ LABEL_37:
         {
           v510 *= 2;
         }
-        v406 = *(uint16_t *)(n0x10_2 + 940066);
-        v407 = *(uint16_t *)(n0x10_2 + 940068);
-        n2 = (uint8_t *)(n0x10_2 + 940064);
-        if ( *(uint16_t *)(n0x10_2 + 940070) + v407 + v406 > 29696 )
+        v406 = *(uint16_t *)(p2_rec + 940066);
+        v407 = *(uint16_t *)(p2_rec + 940068);
+        n2 = p2_rec + 940064;
+        if ( *(uint16_t *)(p2_rec + 940070) + v407 + v406 > 29696 )
         {
           n0x10_1 = n0x10;
-          __fwd_alt_p2_model_rescale_three_way((uint16_t *)(n0x10_2 + 940064));
+          __fwd_alt_p2_model_rescale_three_way((uint16_t *)(p2_rec + 940064));
           n0x10 = n0x10_1;
         }
-        *(uint16_t *)(n2 + v510 + 2) += (uint16_t)(*(uint16_t *)(n0x10_2 + 940064) & 0xFFFC) >> 2;
+        *(uint16_t *)(n2 + v510 + 2) += (uint16_t)(*(uint16_t *)(p2_rec + 940064) & 0xFFFC) >> 2;
 LABEL_48:
         if ( a4 )
         {
@@ -13984,16 +13985,16 @@ LABEL_48:
             n0x10 = n0x10_1;
           }
         }
-        v408 = (uint16_t *)(n0x10_2 + 940072);
-        if ( *(uint16_t *)(n0x10_2 + 940078)
-           + *(uint16_t *)(n0x10_2 + 940076)
-           + *(uint16_t *)(n0x10_2 + 940074) > 29696 )
+        v408 = (uint16_t *)(p2_rec + 940072);
+        if ( *(uint16_t *)(p2_rec + 940078)
+           + *(uint16_t *)(p2_rec + 940076)
+           + *(uint16_t *)(p2_rec + 940074) > 29696 )
         {
           n0x10_1 = n0x10;
-          __fwd_alt_p2_model_rescale_three_way((uint16_t *)(n0x10_2 + 940072));
+          __fwd_alt_p2_model_rescale_three_way((uint16_t *)(p2_rec + 940072));
           n0x10 = n0x10_1;
         }
-        *(uint16_t *)((uint8_t *)v408 + v510 + 2) += (6 * (uint32_t)*(uint16_t *)(n0x10_2 + 940072)) >> 4;
+        *(uint16_t *)((uint8_t *)v408 + v510 + 2) += (6 * (uint32_t)*(uint16_t *)(p2_rec + 940072)) >> 4;
         if ( !v385->f278728 || LOWORD(((uint32_t *)v385)[2 * v385->f278704 + 235018]) > 0x100u )
         {
           v409 = 2 - v511;
@@ -14475,20 +14476,20 @@ LABEL_103:
             v450 = v385->f278704 - v385->f278760[22];
             n0x10_4 = (uint16_t *)&((uint32_t *)v385)[2 * v450 + 2 * v385->f278760[21]];
             n0xF0 = (((uint16_t *)(v385->f278760[23] + v450)));
-            n0x10_2 = (uint32_t)n0x10_4;
+            p2_rec = (uint8_t *)n0x10_4;
             v452 = n0x10_4 + 470036;
             if ( n0x10_4[470039] + n0x10_4[470038] + n0x10_4[470037] > 29696 )
               __fwd_alt_p2_model_rescale_three_way(v452);
-            *(uint16_t *)((uint8_t *)v452 + v511 + 2) += (3 * (uint32_t)*(uint16_t *)(n0x10_2 + 940072)) >> 4;
+            *(uint16_t *)((uint8_t *)v452 + v511 + 2) += (3 * (uint32_t)*(uint16_t *)(p2_rec + 940072)) >> 4;
             if ( n15 >= 15 )
               goto LABEL_128;
-            v453 = *(uint16_t *)(n0x10_2 + 940086);
-            v454 = *(uint16_t *)(n0x10_2 + 940084) + *(uint16_t *)(n0x10_2 + 940082);
-            n2 = (uint8_t *)(n0x10_2 + 940080);
+            v453 = *(uint16_t *)(p2_rec + 940086);
+            v454 = *(uint16_t *)(p2_rec + 940084) + *(uint16_t *)(p2_rec + 940082);
+            n2 = p2_rec + 940080;
             if ( v453 + v454 > 29696 )
-              __fwd_alt_p2_model_rescale_three_way((uint16_t *)(n0x10_2 + 940080));
+              __fwd_alt_p2_model_rescale_three_way((uint16_t *)(p2_rec + 940080));
             n0xF0_5 = (uint16_t *)(n0xF0);
-            *(uint16_t *)(n2 + v511 + 2) += (uint16_t)(*(uint16_t *)(n0x10_2 + 940080) & 0xFFFC) >> 2;
+            *(uint16_t *)(n2 + v511 + 2) += (uint16_t)(*(uint16_t *)(p2_rec + 940080) & 0xFFFC) >> 2;
             v456 = (uint16_t *)&((uint32_t *)v385)[2 * (uint32_t)n0xF0_5 + 235020];
             if ( v456[3] + v456[2] + v456[1] > 29696 )
               __fwd_alt_p2_model_rescale_three_way(v456);
@@ -14497,14 +14498,14 @@ LABEL_103:
             if ( n15 > 2 )
             {
 LABEL_128:
-              v457 = (uint16_t *)(n0x10_2 + 940064);
-              if ( *(uint16_t *)(n0x10_2 + 940070)
-                 + *(uint16_t *)(n0x10_2 + 940068)
-                 + *(uint16_t *)(n0x10_2 + 940066) > 29696 )
-                __fwd_alt_p2_model_rescale_three_way((uint16_t *)(n0x10_2 + 940064));
-              n0x10 = n0x10_2;
+              v457 = (uint16_t *)(p2_rec + 940064);
+              if ( *(uint16_t *)(p2_rec + 940070)
+                 + *(uint16_t *)(p2_rec + 940068)
+                 + *(uint16_t *)(p2_rec + 940066) > 29696 )
+                __fwd_alt_p2_model_rescale_three_way((uint16_t *)(p2_rec + 940064));
+              n0x10 = (uintptr_t)p2_rec;   // the slot's last value, and what this path returns
               *(uint16_t *)((uint8_t *)v457 + v511 + 2) += (6
-                                                               * (uint32_t)*(uint16_t *)(n0x10_2 + 940064)) >> 4;
+                                                               * (uint32_t)*(uint16_t *)(p2_rec + 940064)) >> 4;
             }
           }
           else
