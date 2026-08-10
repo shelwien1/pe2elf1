@@ -750,21 +750,28 @@ and one frame at a time. The four complaints:
 
 | the complaint | round four | round five |
 | --- | --- | --- |
-| `_this+ofs` with typecasts | 1389 sites | **1103** |
+| `_this+ofs` with typecasts | 1389 sites | **1104** |
 | mistyped globals | 4 wrong types, 19 addresses for names | **0 and 0** |
 | context frames | 1857 uses, 538 through a cast | 1857 uses, **0 casts** |
 | non-stdint types | `char` 1056, multi-word 24 | **0 and 0** |
 
 and the gate gained a second ratchet: `BMF_WARN=1 ./build.sh` counts
 `-Wconversion -Wsign-conversion -Wsign-compare -Wuseless-cast`, `test.sh` fails
-when the count rises, and the count went 2338 → **2164**.
+when the count rises, and the count went 2338 → **2160**.
+
+`shape.py` alongside: 5131 pointer casts → 4763, 85 structs → 53, 19 frames →
+17, 19 098 lines of `subs1.hpp` → 18 809 and 746 of `bmf.cpp` → 369.
 
 Four things this round did not finish, each for a reason it can state:
 
-* **§3.3's three shared slots.** `alt_p2_model`'s `n2` and `n0x10_2` hold an
-  address in one region, a count or a record index in another. The retype is
-  one line once the lifetimes are separate; separating them is a read of
-  `alt_p2_model`, not a sweep. 30 of the 80 sites are behind this.
+* **§3.3's last shared slot.** Four of the five variables are done -- 60 of the
+  80 sites -- and `alt_p2_model`'s `n0x10_2` is the one left. It holds an
+  address in two regions and a record *index* in four more:
+  `((uint32_t *)v385)[2 * n0x10_2 + 235020]` is eight times it plus 940 080, not
+  one times it. The regions are each preceded by their own assignment, so a
+  split would be safe, except that the address lifetime ends `n0x10 = n0x10_2`
+  -- writing an address into the variable the function returns as an index.
+  Whether that store is dead is a question about `alt_p2_model`'s exits.
 * **§3.4's scaled indices.** 31 of the 303 land on an array member of the same
   type and would fold today; the other 272 land on an offset the struct spells
   with a different width — `((uint32_t *)v385)[expr + 235020]` is byte 940080,
