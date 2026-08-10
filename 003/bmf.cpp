@@ -360,7 +360,7 @@ static void *bmf_new(size_t n) {
     void *p = malloc(n ? n : 1);       // `n ? n : 1` as the imported shim had it
     if (p)
       return p;
-    void (*handler)() = (void (*)())__pout_of_memory_handler;
+    t_new_handler handler = __pout_of_memory_handler;
     if (!handler)
       return nullptr;
     handler();

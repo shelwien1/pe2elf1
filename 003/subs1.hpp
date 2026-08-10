@@ -158,11 +158,11 @@ static const float bmf_p2_ms_rate = 0.023f;
 // One int32, which is what its typedef says.  It had the 1 968 bytes to the
 // next global because that was the only bound available; poisoning says
 // nothing reads past the first four.
-alignas(16) static int32_t __dwLowDateTime = 0;
+alignas(16) static void *coded_block = nullptr;   // the out-of-band block a member can carry
 alignas(16) static int32_t plane_predictor = 0;
 alignas(16) static int32_t plane_alt_model = 0;
 alignas(16) static int32_t packer_free_bits = 0;
-alignas(16) static int32_t packer_acc = 0;
+alignas(16) static uint32_t packer_acc = 0;   // a bit accumulator: every shift of it is logical
 alignas(16) static int32_t coded_size = 0;
 static int32_t desc_slow_mode;   // was 0x443384 in bmf_bss
 static int32_t __dword_443388;   // was 0x443388 in bmf_bss
@@ -247,9 +247,8 @@ static int32_t deadzone_lo;
 // CRT state because that is how far it was to the next global; one word of it
 // is live -- `set_new_handler` writes it and `bmf_new` reads it (REFACTORING.md
 // §6) -- and the other 10 288 bytes had no reader at all.
-alignas(16) static uint8_t bmf_pout_of_memory_handler[4];
-typedef int32_t t_pout_of_memory_handler;
-static t_pout_of_memory_handler& __pout_of_memory_handler = *(t_pout_of_memory_handler*)bmf_pout_of_memory_handler;
+typedef void (*t_new_handler)();
+static t_new_handler __pout_of_memory_handler = nullptr;
 
 // bmf_addr, bmf_reloc_slots and bmf_data_relocate were here, with
 // bmf_blob_relocate in blob.inc: an address-translation layer that let a global
@@ -4787,10 +4786,10 @@ void __alt_model_p1_d8_encode(uint8_t *a1, int32_t i, int32_t a3, uint8_t *a4)
   if ( v5 )
     __fwd_alt_model_p1_d8_encode_alt_p1_free(v5, 1);
 }
-int32_t __set_new_handler(int32_t __out_of_memory_handler)
+t_new_handler __set_new_handler(t_new_handler __out_of_memory_handler)
 {
   ;
-  int32_t __set_new_handler_pout_of_memory_handler;
+  t_new_handler __set_new_handler_pout_of_memory_handler;
   __set_new_handler_pout_of_memory_handler = ::__pout_of_memory_handler;
   ::__pout_of_memory_handler = __out_of_memory_handler;
   return __set_new_handler_pout_of_memory_handler;
@@ -16809,7 +16808,7 @@ void __transform_planes(BmfImage *p_i, int32_t a2, int8_t a3)
 static inline uint8_t * __fwd_expand_image_interleave_plane(void *a0, void *a1, int32_t a2, int8_t a3) { return __interleave_plane((uint8_t *)a0, (uint8_t *)a1, a2, a3); }
 static inline void __fwd_expand_image_unmodel_plane(int8_t a0, void *a3, void *a4) { __unmodel_plane(a0, (uint16_t *)a3, (uint8_t *)a4); }
 
-uint8_t * __expand_image(uint8_t *a1, int32_t a4, int32_t *p_dwLowDateTime)
+uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
 {
   // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
   // gives every member its own storage and DLRAW exits 3 while decompressing.
@@ -16846,7 +16845,8 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, int32_t *p_dwLowDateTime)
   int8_t v10, v17, v18, v34, v35;
   uint8_t v20;
   uint8_t *Buffer_3, *n4_6, *n4_7, *v64;   // `uint8_t *` beside the `char` scalars above
-  int32_t Buffer__1, dwLowDateTime, v21, n4, predictor, v27, v28, v29, v30,
+  uint8_t has_coded;
+  int32_t Buffer__1, v21, n4, predictor, v27, v28, v29, v30,
           ArgList, v33, n4_4, v37, n2_1, i, Size_4, Size_5, n4_3, v44, Size_2,
           Size_3, n4_2, v48, n2_2, n_planes, v55, Src_2, v58, n4_8, v61, i_1,
           n4_9, v76;
@@ -16857,8 +16857,8 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, int32_t *p_dwLowDateTime)
   uint8_t *Src_1;
   void *Src_3;
   v5 = a1;
-  if ( p_dwLowDateTime )
-    *p_dwLowDateTime = 0;
+  if ( p_coded_buf )
+    *p_coded_buf = nullptr;
   Stream_1 = ((BmfArc *)a1)->fp;
   if ( !Stream_1 )
     return nullptr;
@@ -16895,7 +16895,7 @@ LABEL_15:
   if ( v10 < 0 )
   {
     fread(__frame.hdr, 8u, 1u, ((BmfArc *)v5)->fp);
-    if ( p_dwLowDateTime )
+    if ( p_coded_buf )
     {
       Buffer__1 = (*(int32_t *)&__frame.hdr[0]);
       v12 = ((*(uint32_t *)&__frame.hdr[4]) + ((*(uint32_t *)&__frame.hdr[4]) == 0) + 3) & 0xFFFFFFFC;
@@ -16903,7 +16903,7 @@ LABEL_15:
       *v13 = Buffer__1;
       v13[1] = v12;
       *(uint32_t *)((uint8_t *)v13 + v12 + 4) = 0;
-      *p_dwLowDateTime = (int32_t)v13;
+      *p_coded_buf = v13;
       fread(v13 + 2, (*(uint32_t *)&__frame.hdr[4]), 1u, ((BmfArc *)v5)->fp);
     }
     else
@@ -16923,19 +16923,12 @@ LABEL_15:
   p_i_1 = (BmfImage *)((uint8_t *)__alloc_image(__frame.Buffer_2[0], __frame.Buffer_2[1], __frame.v91 & 0x3F, (uint8_t)(__frame.v91 & 0x80) >> 7, 1));
   __frame.v88 = __frame.v91;
   p_i_1->depth = __frame.v91;
-  if ( p_dwLowDateTime )
-  {
-    dwLowDateTime = *p_dwLowDateTime;
-    if ( *p_dwLowDateTime )
-      LOBYTE(dwLowDateTime) = 1;
-  }
-  else
-  {
-    LOBYTE(dwLowDateTime) = 0;
-  }
+  // The flag is whether there is a block at all; Hex-Rays kept the pointer's
+  // low byte and then overwrote it with 1, which is the same thing said twice.
+  has_coded = p_coded_buf && *p_coded_buf;
   v17 = __frame.v92;
   v18 = __frame.v88;
-  p_i_1->flags |= __frame.v92 & 2 | ((uint8_t)dwLowDateTime << 7);
+  p_i_1->flags |= __frame.v92 & 2 | (has_coded << 7);
   ::plane_count = ((v18 & 0x3Fu) + 7) >> 3;
   if ( (v17 & 0x20) == 0 )
   {
@@ -17003,7 +16996,7 @@ LABEL_31:
   else
   {
     v21 = packer_acc & 0xF;
-    packer_acc = (uint32_t)packer_acc >> 4;
+    packer_acc = packer_acc >> 4;
   }
   // The 4-bit near-lossless field, ALGORITHM.md §4.1.  This build compresses
   // with -E0 and the code that reconstructs a quantised plane is gone with the
@@ -17037,7 +17030,7 @@ LABEL_42:
       else
       {
         v23 = packer_acc & 0x3F;
-        packer_acc = (uint32_t)packer_acc >> 6;
+        packer_acc = packer_acc >> 6;
       }
       v25 = v23 >> 2;
       predictor = v23 & 3;
@@ -17058,7 +17051,7 @@ LABEL_42:
         else
         {
           LOBYTE(v27) = packer_acc & LOBYTE(__frame.p_i[0]);
-          packer_acc = (uint32_t)packer_acc >> 8;
+          packer_acc = packer_acc >> 8;
         }
         plane_desc[n4 + 1].b3 = v27;
         if ( predictor > 1 )
@@ -17075,7 +17068,7 @@ LABEL_42:
           else
           {
             v28 = packer_acc & *(uint32_t *)__frame.p_i;
-            packer_acc = (uint32_t)packer_acc >> 8;
+            packer_acc = packer_acc >> 8;
           }
           plane_desc[n4 + 1].w4 = v28 - 64;
           packer_free_bits -= 8;
@@ -17090,7 +17083,7 @@ LABEL_42:
           else
           {
             v29 = packer_acc & *(uint32_t *)__frame.p_i;
-            packer_acc = (uint32_t)packer_acc >> 8;
+            packer_acc = packer_acc >> 8;
           }
           plane_desc[n4 + 1].w8 = v29 - 64;
           if ( predictor > 2 )
@@ -17107,7 +17100,7 @@ LABEL_42:
             else
             {
               v30 = packer_acc & *(uint32_t *)__frame.p_i;
-              packer_acc = (uint32_t)packer_acc >> 8;
+              packer_acc = packer_acc >> 8;
             }
             plane_desc[n4 + 1].w12 = v30 - 64;
           }
@@ -18151,7 +18144,7 @@ LABEL_63:
   return v45;
 }
 
-static inline uint8_t * __fwd_bmf_open_archive_expand_image(uint8_t *a0, int32_t a3, void *a4) { return __expand_image(a0, a3, (int32_t *)a4); }
+static inline uint8_t * __fwd_bmf_open_archive_expand_image(uint8_t *a0, int32_t a3, void *a4) { return __expand_image(a0, a3, (void **)a4); }
 
 BmfArc *__bmf_open_archive(BmfArc *v2, char *FileName, int32_t a2)
 {
@@ -18211,7 +18204,7 @@ LABEL_11:
   return v5;
 }
 
-static inline uint8_t * __fwd_compress_image_expand_image(uint8_t *a0, int32_t a3, void *a4) { return __expand_image(a0, a3, (int32_t *)a4); }
+static inline uint8_t * __fwd_compress_image_expand_image(uint8_t *a0, int32_t a3, void *a4) { return __expand_image(a0, a3, (void **)a4); }
 static inline uint32_t __fwd_compress_image_search_filter(void *a0, int8_t a1) { return __search_filter((BmfImage *)a0, a1); }
 static inline void __fwd_compress_image_model_planes(void *a0, void *a1, int32_t a2, int8_t a3) { __model_planes((uint8_t *)a0, (uint8_t *)a1, a2, a3); }
 static inline void __fwd_compress_image_transform_planes(void *a0, int32_t a1, int8_t a2) { __transform_planes((BmfImage *)a0, a1, a2); }
@@ -18581,7 +18574,7 @@ LABEL_77:
 static inline int32_t * __fwd_bmf_read_bmp(void *a0) { return __read_bmp((char *)a0); }
 static inline BmfArc * __fwd_bmf_bmf_open_archive(void *a0, void *a1, int32_t a2) { return __bmf_open_archive((BmfArc *)a0, (char *)a1, a2); }
 static inline int32_t __fwd_bmf_compress_image(uint8_t *a0, void *a3, void *a4) { return __compress_image(a0, (BmfImage *)a3, (void *)a4); }
-static inline uint8_t * __fwd_bmf_expand_image(uint8_t *a0, int32_t a3, void *a4) { return __expand_image(a0, a3, (int32_t *)a4); }
+static inline uint8_t * __fwd_bmf_expand_image(uint8_t *a0, int32_t a3, void *a4) { return __expand_image(a0, a3, (void **)a4); }
 static inline int32_t __fwd_bmf_write_bmp(int32_t a0, void *a1, int32_t a2) { return __write_bmp(a0, (char *)a1, a2); }
 static inline BmfArc * __fwd_bmf_bmf_destroy_archive(void *a0, int8_t a1) { return __bmf_destroy_archive((BmfArc *)a0, a1); }
 
@@ -18663,7 +18656,7 @@ void __bmf_compress(
     }
   }
 
-  Size = __fwd_bmf_compress_image((uint8_t *)Arc, (uint16_t *)p_i, (void *)__dwLowDateTime);
+  Size = __fwd_bmf_compress_image((uint8_t *)Arc, (uint16_t *)p_i, coded_block);
   if ( !Size )
     __exit_402E40(5, OutName);
   printf(
@@ -18689,7 +18682,7 @@ void __bmf_decompress(
   Number = 0;
   while ( 1 )
   {
-    p_i = (uint32_t *)__fwd_bmf_expand_image((uint8_t *)Block, 0, (void *)&__dwLowDateTime);
+    p_i = (uint32_t *)__fwd_bmf_expand_image((uint8_t *)Block, 0, &coded_block);
     BmfImage *const p_i_img = (BmfImage *)p_i;
     if ( !p_i )
     {
@@ -18719,8 +18712,8 @@ void __bmf_decompress(
     }
     if ( !__fwd_bmf_write_bmp((int32_t)p_i, (void *)OutName, 1) )
       __exit_402E40(5, OutName);
-    free((void *)(uintptr_t)__dwLowDateTime);
-    __dwLowDateTime = 0;
+    free(coded_block);
+    coded_block = nullptr;
     free(p_i);
   }
 }
@@ -18731,7 +18724,7 @@ int32_t __main(int32_t argc, const char **argv)
   int32_t Mode;
 
   bmf_set_denormal_mode();
-  __set_new_handler((int32_t)__out_of_memory_handler);
+  __set_new_handler(__out_of_memory_handler);
   printf("BMF lossless image compressor, v.2.01 (C) 1998-1999, 2009 by Dmitry Shkarin\n");
 
   Mode = argc == 4 && !argv[1][1] ? toupper(argv[1][0]) : 0;
