@@ -1636,7 +1636,10 @@ int32_t __encode_symbol_list(SymList *_this, int32_t a2)
   // reading the symbol as `*(uint16_t *)p` and the count as `p[2]`.
   SymEntry *v4, *v25, *v28, *v36, *v37, *v39, *v40, *v49;
   uint16_t v51;
-  int32_t enc_cum, enc_high, enc_tot, v3, v5, v6, v7, v8, v24, n251, v35, v38,
+  // A cumulative count, a high count and a total: the three arguments
+  // `RangeCoder::encode` takes, and it takes them unsigned.
+  uint32_t enc_cum, enc_high, enc_tot;
+  int32_t v3, v5, v6, v7, v8, v24, n251, v35, v38,
           v41, v43, v47, v53, v54;
   uint16_t v26, v31;
   uint32_t i_1, i, v34, v42, v44;
@@ -1670,7 +1673,10 @@ int32_t __encode_symbol_list(SymList *_this, int32_t a2)
       }
       while ( v4 >= _this->ent );
       v8 = 0;
-      goto LABEL_9;
+      {
+        rc.encode(enc_cum, enc_high, enc_tot);
+        return v8;
+      }
     }
   }
   enc_high = v5;
@@ -1803,7 +1809,6 @@ LABEL_37:
   {
     v8 = 1;
   }
-LABEL_9:
   rc.encode(enc_cum, enc_high, enc_tot);
   return v8;
 }
@@ -2015,7 +2020,9 @@ int32_t __encode_symbol_tree(uint16_t *_this, int32_t n2) {
   uint8_t *v25;   // were int32_t: these hold addresses
   bool v47;
   int16_t v24, v42;
-  int32_t n4, v8, n0x7F800000_6, n0x800000_5, v27, v28, v46, v56, v59, i, v65,
+  // The cumulative count the range coder takes, which it takes unsigned.
+  uint32_t v8;
+  int32_t n4, n0x7F800000_6, n0x800000_5, v27, v28, v46, v56, v59, i, v65,
           v66, n0x7F800000_7;
   uint16_t *v3, *v26, n0x4000, v39, v41, *v51, *this_2;
   uint32_t n4_2, v38, v40, v43, v44, v45, v48, v52;
@@ -2119,7 +2126,9 @@ int32_t __alt_p1_encode_symbol(uint16_t *a1, int32_t n5, int32_t a3, int32_t n5a
   ;
   bool v29;
   int16_t v4;
-  int32_t n5a_1, n0x2000_2, result, n256, n5a_2;
+  // The cumulative count the range coder takes, which it takes unsigned.
+  uint32_t n0x2000_2;
+  int32_t n5a_1, result, n256, n5a_2;
   uint16_t *v27, *v30, v31, *v35, *v37;
   uint32_t tot, n5a_3, n0x2000_3;
   v4 = *a1;
@@ -2190,7 +2199,9 @@ int32_t __decode_symbol_tree(uint16_t *_this)
 {
   ;
   int16_t v31, v33;
-  int32_t n2_1, v11, v18, v23, v25, v26, v36, v38, v40, n2, v43, v44;
+  // The cumulative count the range coder takes, which it takes unsigned.
+  uint32_t v11;
+  int32_t n2_1, v18, v23, v25, v26, v36, v38, v40, n2, v43, v44;
   uint16_t *v8, v16, *v17, n0x4000, v28, v30, v32, v34, *v37;
   uint32_t v7, v9, v29, v35, v39;
   v39 = *_this;
@@ -2354,7 +2365,9 @@ int32_t __alt_p2_encode_symbol(P2Freq *_this, const uint32_t *a2, int32_t a3)
   ;
   int16_t v18;
   uint16_t *result;
-  int32_t v3, n32;
+  // The cumulative count the range coder takes, which it takes unsigned.
+  uint32_t v3;
+  int32_t n32;
   uint16_t *v25;
   uint32_t tot, tot_1,
            v21, v22, v23;
@@ -2425,7 +2438,9 @@ int32_t __alt_p2_encode_symbol(P2Freq *_this, const uint32_t *a2, int32_t a3)
 int32_t __alt_p2_decode_symbol(P2Freq *_this, const uint32_t *a2)
 {
   ;
-  int32_t v7, v8, v10, n0x4000, n32, v16, v21, v23;
+  // The cumulative count the range coder takes, which it takes unsigned.
+  uint32_t v8;
+  int32_t v7, v10, n0x4000, n32, v16, v21, v23;
   uint16_t *v9, *v24;
   uint32_t v11, v18, v19, v20;
   v23 = _this->f[2];
@@ -9258,7 +9273,9 @@ int32_t __decode_symbol_list(SymList *a1)
   int8_t v23;
   uint8_t v34, v40;
   uint16_t v35, v39;
-  int32_t sym_cum, sym_high, v2, v5, v6, v8, n0x2000_2, n251, v46, v49, v51,
+  // The cumulative count the range coder takes, which it takes unsigned.
+  uint32_t n0x2000_2;
+  int32_t sym_cum, sym_high, v2, v5, v6, v8, n251, v46, v49, v51,
           v53;
   uint32_t v43, v52;   // counts that MSVC spilled into the list's first slot
   SymList *v9, *v32;
@@ -9323,7 +9340,10 @@ int32_t __decode_symbol_list(SymList *a1)
       while ( v25 );
       tot_1 = __frame.tot;
       __frame.list7 = -1;
-      goto LABEL_19;
+      {
+        rc.decode(n0x2000_2, n0x2000_3, tot_1);
+        return __frame.list7;
+      }
     }
   }
   v32 = __frame.v67;
@@ -9461,7 +9481,6 @@ LABEL_30:
     n0x2000_2 = sym_cum;
     n0x2000_3 = sym_high;
   }
-LABEL_19:
   rc.decode(n0x2000_2, n0x2000_3, tot_1);
   return __frame.list7;
 }
@@ -9528,7 +9547,10 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   int16_t v14, n4_14, v146, v160, n15_4;
   ModelBlock *this_4;
   PixRec *v25, *v56;   // row cursors out of f56[9]; were int32_t
-  int32_t arg_cum, arg_high, arg_tot, n4_8, n4_7, n15_6, n15_7, v8, v9, v10,
+  // A cumulative count, a high count and a total: the three arguments the
+  // range coder takes, and it takes them unsigned.
+  uint32_t arg_cum, arg_high, arg_tot;
+  int32_t n4_8, n4_7, n15_6, n15_7, v8, v9, v10,
           v12, v13, v15, n4_9, __decode_pixel_n15, v22, n4_11, v26, v27, v29,
           v31, n0xFFFF, v33, n0xFFFF_1, n53248, n4_12, v40, n15_11, run,
           n15_12, v44, n4_22, n15_14, n15_18, v49, v50, v51, n4_13, *v59, v60,
@@ -10336,7 +10358,10 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   ModelBlock *this_4;
   ModelBlock *this_2;
   CtrPair *v16;   // the group's counter pair for this context
-  int32_t arg_cum, arg_high, arg_tot, n4, n4_1, __code_pixel_n15, n15_1, v8, v9, v10, v13, v15,
+  // A cumulative count, a high count and a total: the three arguments the
+  // range coder takes, and it takes them unsigned.
+  uint32_t arg_cum, arg_high, arg_tot;
+  int32_t n4, n4_1, __code_pixel_n15, n15_1, v8, v9, v10, v13, v15,
           n15_6, n15_5, n15_8, v21, p_n15_1, n15_30, v26, v27, v29, n0xFFFF, v32,
           n0xFFFF_1, n53248, v35, v38, v39, v42, p_n15_2, n15_42, run, v46, n15_32, n15_12,
           n15_9, v50, v53, p_n15_4, n2_10, v61, n15_11, n15_13, n4_2, n15_33, n15_35, n15_34,
@@ -15947,7 +15972,11 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
       Stream_v = ((BmfArc *)v5)->fp;
       if ( feof(Stream_v) )
         return nullptr;
-      goto LABEL_15;
+      {
+        fclose(Stream_v);
+        ((BmfArc *)v5)->fp = 0;
+        return nullptr;
+      }
     }
     __expand_image_Buffer_1 = __frame.__expand_image_Buffer;
     if ( (uint16_t)__frame.__expand_image_Buffer != 0x9081 )
@@ -15963,7 +15992,6 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
     || fread(__frame.Buffer_2, 0x10u, 1u, ((BmfArc *)v5)->fp) != 1 )
   {
     Stream_v = ((BmfArc *)v5)->fp;
-LABEL_15:
     fclose(Stream_v);
     ((BmfArc *)v5)->fp = 0;
     return nullptr;
@@ -16012,7 +16040,11 @@ LABEL_15:
   {
     ElementCount_1 = __frame.ElementCount;
     if ( fread(p_i_1->pixels, 1u, __frame.ElementCount, ((BmfArc *)v5)->fp) != ElementCount_1 )
-      goto LABEL_31;
+      {
+        fclose(((BmfArc *)v5)->fp);
+        ((BmfArc *)v5)->fp = 0;
+        return nullptr;
+      }
     goto LABEL_109;
   }
   plane_desc[0].w12 = 0;
@@ -16037,7 +16069,6 @@ LABEL_15:
   ElementCount_2 = __frame.ElementCount;
   if ( fread(::coded_buf, 1u, __frame.ElementCount, ((BmfArc *)v5)->fp) != ElementCount_2 )
   {
-LABEL_31:
     fclose(((BmfArc *)v5)->fp);
     ((BmfArc *)v5)->fp = 0;
     return nullptr;
@@ -16330,7 +16361,6 @@ LABEL_105:
 LABEL_106:
   if ( ::coded_buf + __frame.ElementCount != out_cursor )
   {
-LABEL_107:
     fclose(((BmfArc *)v5)->fp);
     ((BmfArc *)v5)->fp = 0;
     return nullptr;
@@ -16346,7 +16376,11 @@ LABEL_109:
     Buffer_3 = (p_i_1->depth & 0x80) ? &((uint8_t *)p_i_1)[p_i_1->data_size + 16] : nullptr;
     ElementCount_4 = fread(Buffer_3, 1u, __frame.ElementCount_3, ((BmfArc *)v5)->fp);
     if ( ElementCount_4 != __frame.ElementCount_3 )
-      goto LABEL_107;
+      {
+        fclose(((BmfArc *)v5)->fp);
+        ((BmfArc *)v5)->fp = 0;
+        return nullptr;
+      }
   }
   if ( (p_i_1->flags & 2) != 0 )
   {
@@ -17257,18 +17291,23 @@ BmfArc *__bmf_open_archive(BmfArc *v2, char *FileName, int32_t a2)
   {
 LABEL_10:
     if ( !v9 )
-LABEL_11:
       __exit_402E40(3, FileName);
     return v5;
   }
   if ( !v9 )
-    goto LABEL_11;
+    {
+      __exit_402E40(3, FileName);
+      return v5;
+    }
   if ( !feof(v5->fp) )
   {
     __expand_image((uint8_t *)v5, 1, (void **)nullptr);
     Stream_1 = v5->fp;
     if ( !Stream_1 )
-      goto LABEL_11;
+      {
+        __exit_402E40(3, FileName);
+        return v5;
+      }
     if ( !feof(v5->fp) )
     {
       v5->images = 0;
