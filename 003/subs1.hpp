@@ -18485,11 +18485,9 @@ LABEL_172:
         do
         {
           *(uint64_t *)(bmf_plane_desc(n64 - 8)) = *(uint64_t *)&v179[n64 / 4];
-          a3 = (__m128)*(uint64_t *)&v178[n64 / 4];
-          *(uint64_t *)(bmf_plane_desc(n64 - 16)) = a3.m128_u64[0];
+          *(uint64_t *)(bmf_plane_desc(n64 - 16)) = *(uint64_t *)&v178[n64 / 4];
           *(uint64_t *)(bmf_plane_desc(n64 - 24)) = v177[n64 / 8 + 1];
-          a4 = (uint64_t)v177[n64 / 8];
-          *(uint64_t *)(bmf_plane_desc(n64 - 32)) = a4.m128_u64[0];
+          *(uint64_t *)(bmf_plane_desc(n64 - 32)) = v177[n64 / 8];
           n64 -= 32;
         }
         while ( n64 );
@@ -18597,11 +18595,9 @@ LABEL_172:
               do
               {
                 *(uint64_t *)(bmf_plane_desc(n64_1 - 8)) = *(uint64_t *)&v179[n64_1 / 4];
-                a3 = (__m128)*(uint64_t *)&v178[n64_1 / 4];
-                *(uint64_t *)(bmf_plane_desc(n64_1 - 16)) = a3.m128_u64[0];
+                *(uint64_t *)(bmf_plane_desc(n64_1 - 16)) = *(uint64_t *)&v178[n64_1 / 4];
                 *(uint64_t *)(bmf_plane_desc(n64_1 - 24)) = v177[n64_1 / 8 + 1];
-                a4 = (uint64_t)v177[n64_1 / 8];
-                *(uint64_t *)(bmf_plane_desc(n64_1 - 32)) = a4.m128_u64[0];
+                *(uint64_t *)(bmf_plane_desc(n64_1 - 32)) = v177[n64_1 / 8];
                 n64_1 -= 32;
               }
               while ( n64_1 );
@@ -18615,11 +18611,9 @@ LABEL_172:
           do
           {
             *(uint64_t *)(bmf_plane_desc(n64_2 - 8)) = *(uint64_t *)&v179[n64_2 / 4];
-            a3 = (__m128)*(uint64_t *)&v178[n64_2 / 4];
-            *(uint64_t *)(bmf_plane_desc(n64_2 - 16)) = a3.m128_u64[0];
+            *(uint64_t *)(bmf_plane_desc(n64_2 - 16)) = *(uint64_t *)&v178[n64_2 / 4];
             *(uint64_t *)(bmf_plane_desc(n64_2 - 24)) = v177[n64_2 / 8 + 1];
-            a4 = (uint64_t)v177[n64_2 / 8];
-            *(uint64_t *)(bmf_plane_desc(n64_2 - 32)) = a4.m128_u64[0];
+            *(uint64_t *)(bmf_plane_desc(n64_2 - 32)) = v177[n64_2 / 8];
             n64_2 -= 32;
           }
           while ( n64_2 );
@@ -18674,11 +18668,9 @@ LABEL_63:
       do
       {
         *(uint64_t *)(bmf_plane_desc(n64_3 - 8)) = *(uint64_t *)&v179[n64_3 / 4];
-        a3 = (__m128)*(uint64_t *)&v178[n64_3 / 4];
-        *(uint64_t *)(bmf_plane_desc(n64_3 - 16)) = a3.m128_u64[0];
+        *(uint64_t *)(bmf_plane_desc(n64_3 - 16)) = *(uint64_t *)&v178[n64_3 / 4];
         *(uint64_t *)(bmf_plane_desc(n64_3 - 24)) = v177[n64_3 / 8 + 1];
-        a4 = (uint64_t)v177[n64_3 / 8];
-        *(uint64_t *)(bmf_plane_desc(n64_3 - 32)) = a4.m128_u64[0];
+        *(uint64_t *)(bmf_plane_desc(n64_3 - 32)) = v177[n64_3 / 8];
         n64_3 -= 32;
       }
       while ( n64_3 );
