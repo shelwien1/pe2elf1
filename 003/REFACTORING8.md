@@ -23,17 +23,17 @@ bytes.
 `python3 tools/shape.py`, verbatim:
 
 ```
-subs1.hpp / bmf.cpp lines          17811 / 358
+subs1.hpp / bmf.cpp lines          17851 / 358
 raw-offset sites                   24
   off `_this`                      1, in 1 functions
-pointer casts                      2198
+pointer casts                      2193
 globals still at a 1997 address    0
 frames                             17, 169180 bytes, 0 aliases
   slots carrying two names         0, 0 extra names, in 0 functions
   member runs walked as arrays     0 sites, 0 bases, 0 functions
   frames that dissolve outright    17, 0 aliases
-structs                            21, 0 still ObjN
-  fNN members / named ones         58 / 107
+structs                            22, 0 still ObjN
+  fNN members / named ones         51 / 114
 distinct vNN locals                559
 goto / LABEL_n:                    112 / 79
 __fwd_* shims                      0
@@ -248,6 +248,36 @@ order the work went in, and it is why §4.1 could not have come first.
 
 ---
 
+## 4.3 Three records the comments had already described
+
+Four `ModelBlock` tables are read only as `t[3 * k]`, and the comment beside
+them has said since round five that each triple is two counts and a total.
+`BitCtr` makes that the type: 16, 4096, 257 and 48 records rather than 48,
+12288, 771 and 144 words, with both bit coders taking a `BitCtr *`.
+
+It is `w[3]` and not two named counts and a total, because
+`encode_context_bit` reaches `w[w[0] - 1]` — it steps by the value of the first
+count. That is inside the record only while `w[0]` stays under four, which the
+seeds (40, 16, 512) actively suggest it does not. A `__builtin_trap()` on
+`w[0] > 3` at that site fires on none of the fifteen images, so the three words
+are one addressable run and the record has to admit it.
+
+`AltP2Block`'s `f278640` and `f278648` are `bias[4]`. Nothing reads either as
+an integer — `alt_p2_filter` takes two floats out of the first and
+`alt_p2_context` one out of the second — and the only writes are the four
+`= 0` that clear both at the start of a plane. `uint64_t` was the width of the
+clearing, not of the data.
+
+**The strides went wrong twice here, and both times identically**: an index in
+element units is a third of itself in record units. The seeding loops step
+`6 * n` and had to become `2 * n`; four constant indices — `t[1]`, `t[2]`,
+`t[3]` — are record 0's second and third words and record 1's first, not
+records 1, 2 and 3. `triage.sh` caught both, and the second as a *stream
+difference* rather than a crash, which is the one a less exact check would have
+let through.
+
+---
+
 ## 5. A costume, and the one cast that was not one
 
 `alt_p1_context` writes and reads its selectors through `uint8_t **`:
@@ -325,9 +355,10 @@ caught by reading the result. It is in the check now.
   block, 10 whose `goto` is not the whole of an `if`, 8 backward, 5 jumping
   out, 4 whose skipped region something else enters. Every one needs a flag or
   a copy of the body.
-* **58 `fNN` members and 559 `vNN` locals**, against 93 and 559 at the round's
-  start. The largest left is `f278904` (15 sites), the ten scalars
-  `alt_p2_context` folds its neighbourhood sums into. What is left in the p2
+* **51 `fNN` members and 559 `vNN` locals**, against 93 and 559 at the round's
+  start — 40 distinct names, and the largest is 11 sites. The locals have not
+  moved at all, and will not until the model is read: 503 of the 559 are in
+  `alt_p2_model` and 251 in `alt_p2_context`. What is left in the p2
   block is not where the index lands, which §4.1 answers, but what the four
   counters in a record *are*, and that is the same question as the 18-byte
   `P2Ctx` record rather than a separate one.
