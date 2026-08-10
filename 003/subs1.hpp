@@ -13090,7 +13090,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   n0x10 = v387[470032 + 4];
   if ( n0x10 > 0x10 )
   {
-    v389 = (uint16_t *)((uint32_t *)v385)[(a4 & 1) + 69677];
+    v389 = (uint16_t *)(&v385->f278708)[a4 & 1];
     v511 = a4 & 1;
     n15 = v386 & 0xF;
     v508 = v389;
@@ -14341,7 +14341,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v101 = __alt_p2_context((AltP2Block *)plane[0], (AltP2Block *)plane[2], (AltP2Block *)plane[1]);
           v102 = &lpAddress_1->f940072[4 * *&lpAddress_1->f278704];
           v168 = v101;
-          v103 = __alt_p2_decode_symbol(v102, (uint8_t *)((uint32_t *)lpAddress_1 + 69677));
+          v103 = __alt_p2_decode_symbol(v102, (uint8_t *)&lpAddress_1->f278708);
           v104 = (uint8_t)(v168 + (*(uint8_t *)&lpAddress_1->f280496[v103]));
           __alt_p2_model((AltP2Block *)lpAddress_1, v104, v103, v104 - v168);
           v105 = *(uint32_t *)&lpAddress_1->f278736[0];
