@@ -630,26 +630,30 @@ struct ModelBlock {
   uint8_t _pad16[2];   // +1078182 .. +1078183
   // A twenty-fourth symbol list, inside the object rather than in the array
   // beside it: `init_model_tables` initialises `_this + 1078184` and
-  // `f1078224` holds its address, so the `void *` that used to sit at +1078204
+  // `escape_list` holds its address, so the `void *` that used to sit at +1078204
   // was this list's `ent` -- which is why `free_workspace` frees it on its own.
   SymList escape;      // +1078184 .. +1078207
-  SymList *f1078208;   // the symbol lists, 24 bytes each
-  SymList *f1078212;   // the symbol lists, 24 bytes each
-  // The lists the current context selects -- `sel[0]` out of `f1078212` and
-  // `sel[1]` out of `f1078208`.  Two adjacent members of one type that
-  // `f1078232` walks as an array, which is why the reset is spelled
+  // Two arrays of symbol lists, both indexed by a symbol -- `mode_symbol[1]`,
+  // `mode_symbol[2]` and the pixel at `f56[5]` are what reach them -- and
+  // named for the `sel` slot each feeds, which is the only thing that
+  // distinguishes them here.
+  SymList *sel1_list;   // +1078208, chosen into `sel[1]`
+  SymList *sel0_list;   // +1078212, chosen into `sel[0]`
+  // The lists the current context selects -- `sel[0]` out of `sel0_list` and
+  // `sel[1]` out of `sel1_list`.  Two adjacent members of one type that
+  // `sel_cur` walks as an array, which is why the reset is spelled
   // `_this + 1078216` and the end test compares against the same address.
   SymList *sel[2];       // +1078216, +1078220
-  SymList *f1078224;   // always `&escape`
+  SymList *escape_list;   // always `&escape`
   uint8_t _pad22[4];
-  SymList **f1078232;    // the cursor over `sel`
+  SymList **sel_cur;    // the cursor over `sel`
   // A `uint16_t` per symbol -- `bmf_new(2 * f4 * f8)` -- and every reader
   // indexes it `*(uint16_t *)(p + 2 * k)`.
   uint16_t *f1078236;
   // The alphabet map: one 24-bit symbol code per entry.  `expand_alphabet`
   // builds it as whole words -- `= j`, `+= v20 << 8 * k`, `= v27 + v25` -- and
   // `unmodel_plane_slow` reads a word back per pixel.
-  uint32_t *f1078240;
+  uint32_t *sym_code;
   // Two tables the plane setup fills, and both loops give their own bounds.
   // `ctx_state` inverts `ctx_group_flags`: it stores `s` at
   // `ctx_group_flags[s]` for the fifteen states, and the largest entry there
@@ -661,8 +665,12 @@ struct ModelBlock {
   uint8_t ctx_bucket[375];   // +1078308 .. +1078682
   uint8_t _pad25[1];         // +1078683
   uint8_t *f1078684;
-  uint8_t *f1078688;   // the alphabet map, one byte a symbol
-  uint8_t f1078692[4];   // +1078692 .. +1078695
+  uint8_t *alpha_map;   // the alphabet map, one byte a symbol
+  // Four directional differences of causal neighbours, accumulated a pixel at
+  // a time.  What is established is how they are read: `code_pixel` takes the
+  // four zero-flags as bits 4..7 of a context, so what matters about each is
+  // whether its direction is flat.
+  uint8_t grad[4];   // +1078692 .. +1078695
   // `layout_workspace` seeds this one 0x40000 times, two counters an
   // iteration, both 0x2000.
   uint16_t f1078696[524288];   // +1078696 .. +2127271
@@ -675,10 +683,10 @@ struct ModelBlock {
   CtrPair group_ctr[15][65536];   // +2127272 .. +6059431
   // The symbol cache `code_pixel` promotes through: a cursor into
   // `f1078696`, set to `&f1078696[8 * ctx]` and walked as `[0..6]`.
-  uint16_t *f6059432;
+  uint16_t *sym_cache;
   // A row cursor, and every read and write through it is a `uint16_t`:
   // `[0]` is this position and `[1]` the one ahead.
-  uint16_t *f6059436;
+  uint16_t *pix_cur;
   // The four regions `layout_workspace` ends on.  Each extent is the loop
   // bound or the memset length that fills it, and the four of them run to
   // 8102448 -- which is the 0x7BA230 both callers ask `bmf_new` for, so the
@@ -692,7 +700,7 @@ struct ModelBlock {
   uint16_t f6678448[712000];   // +6678448 .. +8102447
 };
 static_assert(sizeof(void *) != 4
-              || (__builtin_offsetof(ModelBlock, f6059436) == 6059436
+              || (__builtin_offsetof(ModelBlock, pix_cur) == 6059436
                   && __builtin_offsetof(ModelBlock, f1078696) == 1078696
                   && __builtin_offsetof(ModelBlock, f6059440) == 6059440
                   && __builtin_offsetof(ModelBlock, f6075824) == 6075824
@@ -878,7 +886,7 @@ struct AltP2Block {
   //   * all five read sites are the same expression, and `alt_p2_model`
   //     updates the same three fields through raw offsets from +284712;
   //   * five banks of 32768 is 163840, and the last record ends at 940071.
-  P2Count f284712[163840];   // +284712 .. +940071
+  P2Count p2_ctr[163840];   // +284712 .. +940071
   // The frequency records the composed context index selects, one per context.
   // `alt_p2_alloc` seeds 0x1E60 = 7776 pairs of them, eight `uint16_t` a pass,
   // which is 15552 records -- and 15552 is 3^5 * 64, the p2 context space
@@ -917,7 +925,7 @@ static_assert(sizeof(void *) != 4
                   && __builtin_offsetof(AltP2Block, f280496) == 280496
                   && __builtin_offsetof(AltP2Block, f280752) == 280752
                   && __builtin_offsetof(AltP2Block, f280872) == 280872
-                  && __builtin_offsetof(AltP2Block, f284712) == 284712
+                  && __builtin_offsetof(AltP2Block, p2_ctr) == 284712
                   && __builtin_offsetof(AltP2Block, freq) == 940072),
               "AltP2Block: the layout moved");
 
@@ -2439,14 +2447,14 @@ void **__free_workspace(ModelBlock *Blocka, int8_t a2)
   ModelBlock *Blocka_1;
   ModelBlock *Blocka_2;
   Blocka_1 = (ModelBlock *)(Blocka);
-  free(Blocka->f1078240);
+  free(Blocka->sym_code);
   free(Blocka_1->f1078236);
   free(Blocka_1->f1078684);
-  free(*(void**)&Blocka_1->f1078688);
+  free(*(void**)&Blocka_1->alpha_map);
   // Both arrays are allocated as `bmf_new(24 * n + 4)` with the count in the
   // word before the first list, so `n` is `sym_list_count(lists)` and that
   // same word is what gets freed.  Each list owns its entries.
-  v3 = Blocka_1->f1078208;
+  v3 = Blocka_1->sel1_list;
   if ( v3 )
   {
     v4 = sym_list_count(v3);
@@ -2454,7 +2462,7 @@ void **__free_workspace(ModelBlock *Blocka, int8_t a2)
     {
       Blocka_2 = (ModelBlock *)(Blocka_1);
       v6 = v4;
-      v7 = Blocka_1->f1078208;
+      v7 = Blocka_1->sel1_list;
       v8 = &v3[v4];
       do
       {
@@ -2468,14 +2476,14 @@ void **__free_workspace(ModelBlock *Blocka, int8_t a2)
     }
     free(sym_list_block(v3));
   }
-  v9 = Blocka_1->f1078212;
+  v9 = Blocka_1->sel0_list;
   if ( v9 )
   {
     v10 = sym_list_count(v9);
     if ( v10 )
     {
       Blocka_3 = (ModelBlock *)(Blocka_1);
-      v12 = Blocka_1->f1078212;
+      v12 = Blocka_1->sel0_list;
       v13 = v10;
       v14 = &v9[v10];
       do
@@ -2545,7 +2553,7 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
   *(int32_t *)&_this->f52 = v6;
   if ( v5 && n6 > 6 )
     return -1;
-  v7 = _this->f1078212;
+  v7 = _this->sel0_list;
   v16 = v7;
   v8 = v7[mode_symbol[1]].ent;
   v9 = v6 + 8 * sym_in_top(v8, 10, result);
@@ -2588,31 +2596,31 @@ int32_t __init_model_tables(ModelBlock *_this)
   n2_1 = _this->f32;
   if ( !n2_1 )
   {
-    if ( _this->sel == _this->f1078232 )
+    if ( _this->sel == _this->sel_cur )
     {
       if ( _this->sel[0] )
       {
-        __symbol_list_update(&_this->f1078212[mode_symbol[1]], **(uint16_t **)&_this->f56[5], 3u);
-        __symbol_list_update(&_this->f1078212[**(uint16_t **)&_this->f56[5]], mode_symbol[2], 2u);
-        __symbol_list_update(&_this->f1078208[mode_symbol[1]], **(uint16_t **)&_this->f56[5], 4u);
-        __symbol_list_update(&_this->f1078208[**(uint16_t **)&_this->f56[5]], mode_symbol[1], 2u);
+        __symbol_list_update(&_this->sel0_list[mode_symbol[1]], **(uint16_t **)&_this->f56[5], 3u);
+        __symbol_list_update(&_this->sel0_list[**(uint16_t **)&_this->f56[5]], mode_symbol[2], 2u);
+        __symbol_list_update(&_this->sel1_list[mode_symbol[1]], **(uint16_t **)&_this->f56[5], 4u);
+        __symbol_list_update(&_this->sel1_list[**(uint16_t **)&_this->f56[5]], mode_symbol[1], 2u);
       }
       else
       {
-        __symbol_list_update(&_this->f1078212[mode_symbol[2]], **(uint16_t **)&_this->f56[5], (_this->sym_pos > 3) + 2);
+        __symbol_list_update(&_this->sel0_list[mode_symbol[2]], **(uint16_t **)&_this->f56[5], (_this->sym_pos > 3) + 2);
       }
     }
     else
     {
-      __symbol_list_update(&_this->f1078212[mode_symbol[1]], **(uint16_t **)&_this->f56[5], 3u);
-      __symbol_list_update(&_this->f1078212[**(uint16_t **)&_this->f56[5]], mode_symbol[2], 2u);
-      __symbol_list_update(&_this->f1078212[**(uint16_t **)&_this->f56[5]], mode_symbol[1], 1u);
-      __symbol_list_update(&_this->f1078208[**(uint16_t **)&_this->f56[5]], mode_symbol[1], 2u);
-      v3 = _this->f1078232;
+      __symbol_list_update(&_this->sel0_list[mode_symbol[1]], **(uint16_t **)&_this->f56[5], 3u);
+      __symbol_list_update(&_this->sel0_list[**(uint16_t **)&_this->f56[5]], mode_symbol[2], 2u);
+      __symbol_list_update(&_this->sel0_list[**(uint16_t **)&_this->f56[5]], mode_symbol[1], 1u);
+      __symbol_list_update(&_this->sel1_list[**(uint16_t **)&_this->f56[5]], mode_symbol[1], 2u);
+      v3 = _this->sel_cur;
       do
       {
         v4 = v3 - 1;
-        _this->f1078232 = v4;
+        _this->sel_cur = v4;
         // `symbol_list_update`'s insert path, inlined: append the symbol at
         // `live`, evicting the last entry when the list is full, then swap it
         // one place forward.
@@ -2647,7 +2655,7 @@ int32_t __init_model_tables(ModelBlock *_this)
           v11[-1].sym = v12;
           v11[-1].cnt = v13;
         }
-        v3 = _this->f1078232;
+        v3 = _this->sel_cur;
       }
       while ( v3 != _this->sel );
     }
@@ -2680,13 +2688,13 @@ LABEL_19:
     goto LABEL_37;
   if ( mode_symbol[3] != mode_symbol[4] )
   {
-    __symbol_list_update(&_this->f1078212[mode_symbol[2]], **(uint16_t **)&_this->f56[5], 1u);
+    __symbol_list_update(&_this->sel0_list[mode_symbol[2]], **(uint16_t **)&_this->f56[5], 1u);
     n2 = _this->f32;
     goto LABEL_19;
   }
 LABEL_21:
   v19 = **(uint16_t **)&_this->f56[5];
-  v20 = _this->f6059432;
+  v20 = _this->sym_cache;
   v21 = v20[0];
   if ( v19 != v21 )
   {
@@ -2701,7 +2709,7 @@ LABEL_21:
       if ( v19 == v23 )
       {
         v20[2] = v22;
-        _this->f6059432[1] = _this->f6059432[0];
+        _this->sym_cache[1] = _this->sym_cache[0];
       }
       else
       {
@@ -2709,8 +2717,8 @@ LABEL_21:
         if ( v19 == v24 )
         {
           v20[3] = v23;
-          _this->f6059432[2] = _this->f6059432[1];
-          _this->f6059432[1] = _this->f6059432[0];
+          _this->sym_cache[2] = _this->sym_cache[1];
+          _this->sym_cache[1] = _this->sym_cache[0];
         }
         else
         {
@@ -2718,9 +2726,9 @@ LABEL_21:
           if ( v19 == v25 )
           {
             v20[4] = v24;
-            _this->f6059432[3] = _this->f6059432[2];
-            _this->f6059432[2] = _this->f6059432[1];
-            _this->f6059432[1] = _this->f6059432[0];
+            _this->sym_cache[3] = _this->sym_cache[2];
+            _this->sym_cache[2] = _this->sym_cache[1];
+            _this->sym_cache[1] = _this->sym_cache[0];
           }
           else
           {
@@ -2728,10 +2736,10 @@ LABEL_21:
             if ( v19 == v26 )
             {
               v20[5] = v25;
-              _this->f6059432[4] = _this->f6059432[3];
-              _this->f6059432[3] = _this->f6059432[2];
-              _this->f6059432[2] = _this->f6059432[1];
-              _this->f6059432[1] = _this->f6059432[0];
+              _this->sym_cache[4] = _this->sym_cache[3];
+              _this->sym_cache[3] = _this->sym_cache[2];
+              _this->sym_cache[2] = _this->sym_cache[1];
+              _this->sym_cache[1] = _this->sym_cache[0];
             }
             else
             {
@@ -2743,26 +2751,26 @@ LABEL_21:
               else
               {
                 v20[7] = v27;
-                _this->f6059432[6] = _this->f6059432[5];
+                _this->sym_cache[6] = _this->sym_cache[5];
               }
-              _this->f6059432[5] = _this->f6059432[4];
-              _this->f6059432[4] = _this->f6059432[3];
-              _this->f6059432[3] = _this->f6059432[2];
-              _this->f6059432[2] = _this->f6059432[1];
-              _this->f6059432[1] = _this->f6059432[0];
+              _this->sym_cache[5] = _this->sym_cache[4];
+              _this->sym_cache[4] = _this->sym_cache[3];
+              _this->sym_cache[3] = _this->sym_cache[2];
+              _this->sym_cache[2] = _this->sym_cache[1];
+              _this->sym_cache[1] = _this->sym_cache[0];
             }
           }
         }
       }
     }
-    _this->f6059432[0] = v19;
+    _this->sym_cache[0] = v19;
   }
 LABEL_37:
   // The other fourteen sites already spell the 16-bit accesses out --
-  // `*(uint16_t *)(f6059436 + 2) = *(uint16_t *)f6059436` at 11752 is this
+  // `*(uint16_t *)(pix_cur + 2) = *(uint16_t *)pix_cur` at 11752 is this
   // line -- so the field is a byte cursor and these two were the odd ones.
-  _this->f6059436[1] = _this->f6059436[0];
-  _this->f6059436[0] = **(uint16_t **)&_this->f56[5];
+  _this->pix_cur[1] = _this->pix_cur[0];
+  _this->pix_cur[0] = **(uint16_t **)&_this->f56[5];
   // Six neighbours, compared against the symbol just written.
   {
     PixRec *const here = (PixRec *)_this->f56[5];
@@ -2784,11 +2792,11 @@ LABEL_37:
   v29 += 8;
   _this->f56[9] += 8;
   _this->f56[7] = v29;
-  _this->f1078692[0] += *(v28 + 34) - *(v28 - 30);
-  _this->f1078692[1] += *(v29 + 34) - *(v29 - 30);
-  _this->f1078692[2] += *(v30 - 5) - *(v30 - 37);
+  _this->grad[0] += *(v28 + 34) - *(v28 - 30);
+  _this->grad[1] += *(v29 + 34) - *(v29 - 30);
+  _this->grad[2] += *(v30 - 5) - *(v30 - 37);
   result = *(v30 - 6) - *(v30 - 62);
-  _this->f1078692[3] += result;
+  _this->grad[3] += result;
   return result;
 }
 
@@ -4143,15 +4151,15 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
   // Two records a step, which is how MSVC unrolled the seed of all 163 840.
   for ( j = 0; j < 0x14000; ++j )
   {
-    _this->f284712[2 * j].w2 = 0;
-    _this->f284712[2 * j + 1].w2 = 0;
+    _this->p2_ctr[2 * j].w2 = 0;
+    _this->p2_ctr[2 * j + 1].w2 = 0;
   }
   for ( k = 0; k < 0x14000; ++k )
   {
-    _this->f284712[2 * k].b0 = 5;
-    _this->f284712[2 * k].b1 = 2;
-    _this->f284712[2 * k + 1].b0 = 5;
-    _this->f284712[2 * k + 1].b1 = 2;
+    _this->p2_ctr[2 * k].b0 = 5;
+    _this->p2_ctr[2 * k].b1 = 2;
+    _this->p2_ctr[2 * k + 1].b0 = 5;
+    _this->p2_ctr[2 * k + 1].b1 = 2;
   }
   n0x1E60 = 0;
   do
@@ -6847,7 +6855,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   }
   v126 = v125 >> 11;
   v118->f278676 = v126;
-  v127 = p2_pred(v118->f284712[v126].w2, v118->f284712[v126].b0);
+  v127 = p2_pred(v118->p2_ctr[v126].w2, v118->p2_ctr[v126].b0);
   v128 = v290;
   v129 = (P2Ctx *)((int16_t *)v118->cursor[4]);
   v130 = v292;
@@ -6913,8 +6921,8 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   v298 = v136;
   v138 = v137 >> 11;
   v118->f278680 = v138;
-  v139 = v118->f284712[v138 + 32768].b0;
-  v140 = v118->f284712[v138 + 32768].w2;
+  v139 = v118->p2_ctr[v138 + 32768].b0;
+  v140 = v118->p2_ctr[v138 + 32768].w2;
   v141 = 1 << ((v139 + 31) & 31);
   v142 = v139;
   v143 = v295;
@@ -6981,7 +6989,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   v298 = v153;
   v155 = v154 >> 11;
   v118->f278684 = v155;
-  v156 = p2_pred(v118->f284712[v155 + 65536].w2, v118->f284712[v155 + 65536].b0);
+  v156 = p2_pred(v118->p2_ctr[v155 + 65536].w2, v118->p2_ctr[v155 + 65536].b0);
   v157 = v292;
   v158 = v295;
   v118->f278904[5] = v156;
@@ -7018,11 +7026,11 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
              | (((n2896 > 2896) + (n2896 > 1568) + (n2896 > 592)) << 13)
              | ((((uint32_t)(v290 + 37) >> 31) + ((uint32_t)(v290 + 19) >> 31) + (v165 >> 31)) << 11)) >> 11;
   v289->f278688 = v167;
-  v168 = v166->f284712[v167 + 98304].w2;
+  v168 = v166->p2_ctr[v167 + 98304].w2;
   v170 = (P2Ctx *)(v294);
   // The rate reached `>>` through two `LOBYTE` copies, `v163` then `v164`;
   // both masks read only the byte each copy wrote.
-  v171 = p2_pred(v168, v166->f284712[v167 + 98304].b0);
+  v171 = p2_pred(v168, v166->p2_ctr[v167 + 98304].b0);
   v172 = v292;
   v173 = v293;
   v166->f278904[7] = v171;
@@ -7060,7 +7068,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
              | v181
              | v180) >> 11;
   v289->f278692 = v185;
-  v186 = p2_pred(v184->f284712[v185 + 131072].w2, v184->f284712[v185 + 131072].b0);
+  v186 = p2_pred(v184->p2_ctr[v185 + 131072].w2, v184->p2_ctr[v185 + 131072].b0);
   v187 = (uint8_t *)v295;
   v271 = v186;
   v184->f278904[9] = v186;
@@ -9416,7 +9424,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   uint16_t *v36;
   uint8_t *v21, *v23, *v57;   // row cursors out of ModelBlock
   uint8_t *v46, *n15_17;
-  uint16_t *v66;   // a copy of `f6059436`
+  uint16_t *v66;   // a copy of `pix_cur`
   uint8_t *v53, *v54, *v55, *v61, *v108, *n15_10;   // row cursors out of ModelBlock
   bool v19;
   int8_t v74, v91;
@@ -9499,11 +9507,11 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   {
     v13 = (uint16_t)(*((uint16_t *)__frame.sym5 + n4_8 + 3029720) - __frame.sym1);
   }
-  __frame.sym5->f6059432 = &__frame.sym5->f1078696[8 * v13];
+  __frame.sym5->sym_cache = &__frame.sym5->f1078696[8 * v13];
   v15 = this_2->ctx_state[v12];
   this_2->f36 = v15;
   v16 = &this_2->group_ctr[v15][v13];
-  this_2->f6059436 = (uint16_t *)v16;
+  this_2->pix_cur = (uint16_t *)v16;
   n4_9 = v16->f0;
   if ( n4_9 == __frame.sym0 )
   {
@@ -9563,10 +9571,10 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
       + (v22 << 10)
       + v27;
   n15_10 = (uint8_t *)__frame.sym3;
-  v31 = ((__frame.sym5->f1078692[3] == 0) << 7)
-      + ((__frame.sym5->f1078692[2] == 0) << 6)
-      + 32 * (__frame.sym5->f1078692[1] == 0)
-      + 16 * (__frame.sym5->f1078692[0] == 0)
+  v31 = ((__frame.sym5->grad[3] == 0) << 7)
+      + ((__frame.sym5->grad[2] == 0) << 6)
+      + 32 * (__frame.sym5->grad[1] == 0)
+      + 16 * (__frame.sym5->grad[0] == 0)
       + v29;
   n0xFFFF = __frame.sym5->f6075824[v31];
   if ( n0xFFFF == 0xFFFF )
@@ -9647,11 +9655,11 @@ LABEL_42:
             &this_3->f1076352[3 * (8 * n15_12
                                    + 4 * (uint8_t)((v39)[n8 + 27] & (v39)[n8 + 19])
                                    + 2 * v40
-                                   + *(this_3->f1078688 + __frame.sym0)
+                                   + *(this_3->alpha_map + __frame.sym0)
                                    + 1)],
             this_3->f1076352);
       n4_22 = ::mode_symbol[1];
-      v46 = (uint8_t *)this_3->f1078688;
+      v46 = (uint8_t *)this_3->alpha_map;
       this_3->f32 = v44;
       *(v46 + n4_22) = v44;
       n15_14 = this_3->f32;
@@ -9711,13 +9719,13 @@ LABEL_57:
         this_3->f56[9] = v56 + 8 * n15_18 - 8 * n15_14;
         *(uint32_t *)(v57 + 4) = 0x01010101;
         *(uint32_t *)this_3->f56[5] = 0x01010101;
-        v58 = (uint16_t *)this_3->f6059436;
+        v58 = (uint16_t *)this_3->pix_cur;
         LOWORD(v55) = ::mode_symbol[1];
         LOWORD(v54) = *v58;
         __frame.sym1 = ::mode_symbol[1];
         v58[1] = (uint16_t)(uintptr_t)v54;
         *(uint16_t *)this_3->f56[5] = (uint16_t)(uintptr_t)v55;
-        this_3->f6059436[0] = (uint16_t)(uintptr_t)v55;
+        this_3->pix_cur[0] = (uint16_t)(uintptr_t)v55;
         v59 = (int32_t *)this_3->f56[5];
         v60 = v59[1];
         __frame.sym3 = *v59;
@@ -9736,10 +9744,10 @@ LABEL_57:
             n4_15 = __frame.sym2;
             do
             {
-              this_3->f6059436[1] = n4_14;
+              this_3->pix_cur[1] = n4_14;
               *(uint32_t *)this_3->f56[5] = n15_13;
               *(uint32_t *)(this_3->f56[5] + 4) = v60;
-              v66 = this_3->f6059436;
+              v66 = this_3->pix_cur;
               this_3->f56[5] += 8;
               v66[1] = n4_14;
               *(uint32_t *)this_3->f56[5] = n15_13;
@@ -9760,7 +9768,7 @@ LABEL_57:
           if ( n15_18 - n15_14 - 1 > (uint32_t)(v67 - 1) )
           {
             n15_15 = __frame.sym3;
-            this_3->f6059436[1] = __frame.sym1;
+            this_3->pix_cur[1] = __frame.sym1;
             *(uint32_t *)this_3->f56[5] = n15_15;
             *(uint32_t *)(this_3->f56[5] + 4) = v60;
             v61 = this_3->f56[5] + 8;
@@ -9777,8 +9785,8 @@ LABEL_57:
         v74 = v71 + v70;
         v75 = n15_16[34];
         v76 = ((uint8_t *)this_3->f56[7]);
-        this_3->f1078692[0] = v73 + v72 + v74 + v75 - 5;
-        this_3->f1078692[1] = v76[26]
+        this_3->grad[0] = v73 + v72 + v74 + v75 - 5;
+        this_3->grad[1] = v76[26]
                                      + v76[18]
                                      + v76[10]
                                      + v76[2]
@@ -9788,9 +9796,9 @@ LABEL_57:
                                      + v76[34]
                                      - 8;
         n15_17 = (uint8_t *)__frame.sym0;
-        this_3->f1078692[2] = *(v61 - 29) + *(v61 - 21) - 2;
+        this_3->grad[2] = *(v61 - 29) + *(v61 - 21) - 2;
         n4_17 = __frame.sym1;
-        this_3->f1078692[3] = *(v61 - 38)
+        this_3->grad[3] = *(v61 - 38)
                                      + *(v61 - 46)
                                      + *(v61 - 54)
                                      + *(v61 - 30)
@@ -10054,7 +10062,7 @@ LABEL_86:
   n15_24 = n15_18;
   n4_20 = ::mode_symbol[2];
   exclusion_mask[mode_symbol[4]] = exclusion_gen;
-  v95 = (uint16_t *)this_3->f6059436;
+  v95 = (uint16_t *)this_3->pix_cur;
   exclusion_mask[n15_23] = v91;
   exclusion_mask[n4_20] = v91;
   exclusion_mask[n4_19] = v91;
@@ -10062,7 +10070,7 @@ LABEL_86:
   this_3->sel[0] = nullptr;
   n4_5 = v95[1];
   __frame.sym0 = *v95;
-  v97 = this_3->f6059432;
+  v97 = this_3->sym_cache;
   n4_6 = v97[0];
   n15_5 = v97[1];
   v100 = (FreqRec *)v97[2];
@@ -10141,10 +10149,10 @@ LABEL_86:
   while ( n32 < 32 );
   n15_25 = n15_24;
   n4_21 = ::mode_symbol[1];
-  v132 = this_3->f1078208;
-  this_3->sel[0] = &this_3->f1078212[::mode_symbol[2]];
+  v132 = this_3->sel1_list;
+  this_3->sel[0] = &this_3->sel0_list[::mode_symbol[2]];
   v133 = &v132[n4_21];
-  v134 = this_3->f1078232;
+  v134 = this_3->sel_cur;
   this_3->sel[1] = v133;
   while ( 1 )
   {
@@ -10154,9 +10162,9 @@ LABEL_86:
       *(uint16_t *)this_3->f56[5] = v135;
       if ( v135 >= 0 )
         return n15_25 + 1;
-      v134 = this_3->f1078232;
+      v134 = this_3->sel_cur;
     }
-    this_3->f1078232 = ++v134;
+    this_3->sel_cur = ++v134;
   }
 }
 
@@ -10212,7 +10220,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   uint8_t *v20, *v22, *n2_9, *v52, *v109;   // row cursors out of ModelBlock
   uint8_t *v74;
   FreqRec *n15_36, *n15_38, *n15_40;   // the coder's frequency record
-  uint16_t *v59;   // a copy of `f6059436`
+  uint16_t *v59;   // a copy of `pix_cur`
   bool v11;
   int8_t v93;
   uint8_t v24, v64, v65, v66, v67, v68;
@@ -10291,11 +10299,11 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   {
     v13 = (uint16_t)(*((uint16_t *)__frame.sym7 + __frame.sym8 + 3029720) - __frame.sym10);
   }
-  __frame.sym7->f6059432 = &__frame.sym7->f1078696[8 * v13];
+  __frame.sym7->sym_cache = &__frame.sym7->f1078696[8 * v13];
   v15 = this_2->ctx_state[v10];
   *(int32_t *)&this_2->f36 = v15;
   v16 = &this_2->group_ctr[v15][v13];
-  this_2->f6059436 = (uint16_t *)v16;
+  this_2->pix_cur = (uint16_t *)v16;
   n15_6 = v16->f0;
   if ( n15_6 == __frame.sym8 )
   {
@@ -10351,10 +10359,10 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
       + v26
       + 2 * *((uint8_t *)n2_8 - 10);
   this_3 = (ModelBlock *)(__frame.sym7);
-  v29 = ((__frame.sym7->f1078692[3] == 0) << 7)
-      + ((__frame.sym7->f1078692[2] == 0) << 6)
-      + 32 * (__frame.sym7->f1078692[1] == 0)
-      + 16 * (__frame.sym7->f1078692[0] == 0)
+  v29 = ((__frame.sym7->grad[3] == 0) << 7)
+      + ((__frame.sym7->grad[2] == 0) << 6)
+      + 32 * (__frame.sym7->grad[1] == 0)
+      + 16 * (__frame.sym7->grad[0] == 0)
       + ((uint8_t)(*(uint8_t *)(__frame.sym3 + 2) & *(v20 + 2) & __frame.sym0 & *(v22 + 2)) << 9)
       + ((uint8_t)(*(uint8_t *)(__frame.sym3 + 3) & *(v20 + 3) & *(v22 + 3) & v24) << 8)
       + (v21 << 10)
@@ -10447,7 +10455,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
 LABEL_42:
     v46 = (uint8_t)(v41[n8 + 27] & v41[n8 + 19]);
     __frame.sym5 = *(uint8_t *)(*(int32_t *)&this_3->f1078684 + __frame.sym4);
-    n15_32 = *(uint8_t *)(*(int32_t *)&this_3->f1078688 + __frame.sym8) + 8 * __frame.sym5 + 4 * v46 + 2 * v42;
+    n15_32 = *(uint8_t *)(*(int32_t *)&this_3->alpha_map + __frame.sym8) + 8 * __frame.sym5 + 4 * v46 + 2 * v42;
     n15_12 = 0;
     if ( *__frame.sym9 == __frame.sym8 )
     {
@@ -10471,10 +10479,10 @@ LABEL_42:
       *(int32_t *)&this_3->f56[9] = v50 + 8 * n15_12 - 8 * n15_9;
       *((uint32_t *)v51 + 1) = 0x01010101;
       *(uint32_t *)this_3->f56[5] = 0x01010101;
-      this_3->f6059436[1] = this_3->f6059436[0];
+      this_3->pix_cur[1] = this_3->pix_cur[0];
       LOWORD(v51) = __frame.sym8;
       *(uint16_t *)this_3->f56[5] = __frame.sym8;
-      this_3->f6059436[0] = (uint16_t)(uintptr_t)v51;
+      this_3->pix_cur[0] = (uint16_t)(uintptr_t)v51;
       v52 = this_3->f56[5];
       v53 = *(uint32_t *)v52;
       __frame.sym1 = *(uint32_t *)(v52 + 4);
@@ -10494,10 +10502,10 @@ LABEL_42:
           n15_10 = __frame.sym8;
           do
           {
-            this_3->f6059436[1] = n15_10;
+            this_3->pix_cur[1] = n15_10;
             *(uint32_t *)this_3->f56[5] = v53;
             *(uint32_t *)(this_3->f56[5] + 4) = n2_10;
-            v59 = this_3->f6059436;
+            v59 = this_3->pix_cur;
             this_3->f56[5] += 8;
             v59[1] = n15_10;
             *(uint32_t *)this_3->f56[5] = v53;
@@ -10519,7 +10527,7 @@ LABEL_42:
         }
         if ( p_n15_4 > (uint32_t)(v61 - 1) )
         {
-          this_3->f6059436[1] = __frame.sym8;
+          this_3->pix_cur[1] = __frame.sym8;
           *(uint32_t *)this_3->f56[5] = v53;
           *(uint32_t *)(this_3->f56[5] + 4) = __frame.sym1;
           n2_12 = (uint16_t *)(this_3->f56[5] + 8);
@@ -10536,9 +10544,9 @@ LABEL_42:
       n15_14 = n15_12;
       v68 = v63[3].match[0] + v65 + v64 + v67 + v66 - 5;
       v69 = ((uint8_t *)this_3->f56[7]);
-      this_3->f1078692[0] = v68;
+      this_3->grad[0] = v68;
       n2_13 = (uint8_t *)__frame.sym2;
-      this_3->f1078692[1] = v69[26]
+      this_3->grad[1] = v69[26]
                                    + v69[18]
                                    + v69[10]
                                    + v69[2]
@@ -10547,9 +10555,9 @@ LABEL_42:
                                    + *((int8_t *)v69 - 22)
                                    + v69[34]
                                    - 8;
-      this_3->f1078692[2] = n2_13[-29] + n2_13[-21] - 2;
+      this_3->grad[2] = n2_13[-29] + n2_13[-21] - 2;
       n15_11 = __frame.sym8;
-      this_3->f1078692[3] = n2_13[-38]
+      this_3->grad[3] = n2_13[-38]
                                    + n2_13[-46]
                                    + n2_13[-54]
                                    + n2_13[-30]
@@ -10562,7 +10570,7 @@ LABEL_42:
     __encode_context_bit(&this_3->f1076352[3 * (n15_32 + 1)], this_3->f1076352, __frame.sym6);
     n15_13 = __frame.sym6;
     n4_2 = ::mode_symbol[1];
-    v74 = (uint8_t *)this_3->f1078688;
+    v74 = (uint8_t *)this_3->alpha_map;
     *(int32_t *)&this_3->f32 = __frame.sym6;
     *(v74 + n4_2) = n15_13;
     if ( !n15_13 && __frame.sym4 != 1 )
@@ -10832,10 +10840,10 @@ LABEL_42:
   excl_sym_b = ::mode_symbol[1];
   exclusion_mask[mode_symbol[4]] = exclusion_gen;
   exclusion_mask[n15_22] = v93;
-  v97 = (uint16_t *)this_3->f6059436;
+  v97 = (uint16_t *)this_3->pix_cur;
   exclusion_mask[excl_sym_a] = v93;
   exclusion_mask[excl_sym_b] = v93;
-  v98 = this_3->f6059432;
+  v98 = this_3->sym_cache;
   __byte_445440[0] = v93;
   n15_14 = n15_12;
   this_3->sel[0] = nullptr;
@@ -10919,10 +10927,10 @@ LABEL_42:
   while ( n32 < 32 );
   n15_29 = n15_14;
   n4_5 = ::mode_symbol[1];
-  v134 = this_3->f1078208;
-  this_3->sel[0] = &this_3->f1078212[::mode_symbol[2]];
+  v134 = this_3->sel1_list;
+  this_3->sel[0] = &this_3->sel0_list[::mode_symbol[2]];
   v135 = &v134[n4_5];
-  v136 = this_3->f1078232;
+  v136 = this_3->sel_cur;
   this_3->sel[1] = v135;
   while ( 1 )
   {
@@ -10930,9 +10938,9 @@ LABEL_42:
     {
       if ( __encode_symbol_list(*v136, *(uint16_t *)this_3->f56[5]) )
         return n15_29 + 1;
-      v136 = this_3->f1078232;
+      v136 = this_3->sel_cur;
     }
-    this_3->f1078232 = ++v136;
+    this_3->sel_cur = ++v136;
   }
 }
 
@@ -10972,12 +10980,12 @@ void __expand_alphabet(ModelBlock *_this)
   {
     v12 = bmf_new(4 * v8 + 4);
     j_1 = _this->f16;
-    _this->f1078240 = (uint32_t *)v12;
+    _this->sym_code = (uint32_t *)v12;
     if ( j_1 )
     {
       for ( j = 0; j < j_1; ++j )
       {
-        _this->f1078240[j] = j;
+        _this->sym_code[j] = j;
         j_1 = _this->f16;
       }
     }
@@ -10993,7 +11001,7 @@ void __expand_alphabet(ModelBlock *_this)
       }
       if ( j_1 )
       {
-        v16 = _this->f1078240;
+        v16 = _this->sym_code;
         v17 = 0;
         v18 = 0;
         do
@@ -11008,13 +11016,13 @@ void __expand_alphabet(ModelBlock *_this)
               v20 = __decode_symbol_list(&((SymList *)__frame.v28)[4 * v19 + v17]);
               v21 = v20 << ((8 * v19) & 31);
               v17 = v20 >> 6;
-              _this->f1078240[v18] += v21;
+              _this->sym_code[v18] += v21;
               ++v19;
             }
             while ( v19 < __frame.v31[0] );
             v4 = __frame.v31[0];
           }
-          v16 = _this->f1078240;
+          v16 = _this->sym_code;
           v17 = (uint8_t)v16[v18++] >> 7;
         }
         while ( v18 < _this->f16 );
@@ -11032,7 +11040,7 @@ void __expand_alphabet(ModelBlock *_this)
         do
         {
           v27 = __decode_symbol_list((SymList *)__frame.v28);
-          _this->f1078240[v26] = v27 + v25;
+          _this->sym_code[v26] = v27 + v25;
           v25 += v27 + 1;
           ++v26;
         }
@@ -11083,7 +11091,7 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
   a1->f8 = a5;
   a1->f12 = a5;
   a1->escape.ent = nullptr;
-  a1->f1078240 = nullptr;
+  a1->sym_code = nullptr;
   for ( j = 0; j < 5; ++j )
   {
     v8 = (uint8_t *)bmf_new(8 * i_1 + 128);
@@ -11151,7 +11159,7 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
   memset(a1->f6678448,255,sizeof a1->f6678448);
   memset(exclusion_mask,0,8193);
   (*(uint64_t *)&a1->sel[0]) = 0;
-  *(uint64_t *)&a1->f1078224 = 0;
+  *(uint64_t *)&a1->escape_list = 0;
   for ( n = 0; n < 0x40000; ++n )
   {
     a1->f1078696[2 * n] = 0x2000;
@@ -11416,11 +11424,11 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   this_4 = (ModelBlock *)((int32_t)this_1);
   buf = (uint8_t *)bmf_new(this_1->f16);
   Size = this_1->f16;
-  this_1->f1078688 = (uint8_t *)buf;
+  this_1->alpha_map = (uint8_t *)buf;
   memset(buf,1,Size);
-  this_4->f1078224 = &this_4->escape;
+  this_4->escape_list = &this_4->escape;
   __init_symbol_list(&this_4->escape, (int32_t)this_4, this_4->f16, 1);
-  this_4->f1078232 = this_4->sel;
+  this_4->sel_cur = this_4->sel;
   // `24 * n + 4`: the count word, then `n` lists.  `free_workspace` reads the
   // count back from `sym_list_count(lists)`.
   v30 = this_4->f16;
@@ -11437,7 +11445,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
     i = nullptr;
   }
   v34 = this_4->f16;
-  this_4->f1078208 = i;
+  this_4->sel1_list = i;
   v35 = (SymListBlock *)bmf_new(24 * v34 + 4);
   if ( v35 )
   {
@@ -11451,14 +11459,14 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
     j = nullptr;
   }
   v38 = this_4->f16 <= 0;
-  this_4->f1078212 = j;
+  this_4->sel0_list = j;
   if ( !v38 )
   {
     v39 = 0;
     do
     {
-      __init_symbol_list(&this_4->f1078208[v39], (int32_t)this_4, 99, 0);
-      __init_symbol_list(&this_4->f1078212[v39++], (int32_t)this_4, 33, 0);
+      __init_symbol_list(&this_4->sel1_list[v39], (int32_t)this_4, 99, 0);
+      __init_symbol_list(&this_4->sel0_list[v39++], (int32_t)this_4, 33, 0);
     }
     while ( v39 < this_4->f16 );
   }
@@ -11524,14 +11532,14 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
       v50 += 8;
       this_4->f56[7] = v50;
       this_4->f56[9] += 8;
-      this_4->f1078692[0] = v49[26] + v49[18] + v49[10] + v49[2] + v49[34] - 5;
+      this_4->grad[0] = v49[26] + v49[18] + v49[10] + v49[2] + v49[34] - 5;
       // The same five counts as the line above, off the other row.  MSVC
       // spilled each byte into a register whose upper bits were leftovers,
       // and the destination is one byte, so only the low bytes ever counted.
-      this_4->f1078692[3] = 0;
-      this_4->f1078692[2] = 0;
+      this_4->grad[3] = 0;
+      this_4->grad[2] = 0;
       v51 = this_4->f0;
-      this_4->f1078692[1] = v50[26] + v50[18] + v50[10] + v50[2] + v50[34] - 5;
+      this_4->grad[1] = v50[26] + v50[18] + v50[10] + v50[2] + v50[34] - 5;
       v52 = v86;
       if ( v51 <= 0 )
         break;
@@ -11552,7 +11560,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         ArgList_6 = (uint32_t *)ArgList_5;
         v65 = 0;
         do
-          *ArgList_6++ = this_4->f1078240[*(uint16_t *)(this_4->f56[0] + 8 * v65++ + 64)];
+          *ArgList_6++ = this_4->sym_code[*(uint16_t *)(this_4->f56[0] + 8 * v65++ + 64)];
         while ( v65 < this_4->f0 );
         goto LABEL_73;
       }
@@ -11577,7 +11585,7 @@ LABEL_53:
         v56 = 0;
         do
         {
-          v57 = this_4->f1078240;
+          v57 = this_4->sym_code;
           v58 = *(uint16_t *)(this_4->f56[0] + 8 * v56 + 64);
           ArgList_7->sym = (uint16_t)v57[v58];
           ArgList_7->cnt = (uint8_t)(v57[v58] >> 16);
@@ -11599,8 +11607,8 @@ LABEL_53:
           v80 = 0;
           do
             // A byte, not a word: this branch is the 8-bits-per-pixel one, and
-            // `f1078240` was a `uint8_t *` when this dereference was written.
-            *ArgList_8++ = (uint8_t)this_4->f1078240[*(uint16_t *)(this_4->f56[0] + 8 * v80++ + 64)];
+            // `sym_code` was a `uint8_t *` when this dereference was written.
+            *ArgList_8++ = (uint8_t)this_4->sym_code[*(uint16_t *)(this_4->f56[0] + 8 * v80++ + 64)];
           while ( v80 < this_4->f0 );
           ArgList_5 = ArgList_8;
         }
@@ -11618,11 +11626,11 @@ LABEL_53:
           if ( v62 < 0 )
           {
             v62 = 8 - v64;
-            *++ArgList_9 = this_4->f1078240[*(uint16_t *)(this_4->f56[0] + 8 * v61 + 64)] << ((8 - v64) & 31);
+            *++ArgList_9 = this_4->sym_code[*(uint16_t *)(this_4->f56[0] + 8 * v61 + 64)] << ((8 - v64) & 31);
           }
           else
           {
-            *ArgList_9 |= this_4->f1078240[*(uint16_t *)(this_4->f56[0] + 8 * v61 + 64)] << (v62 & 31);
+            *ArgList_9 |= this_4->sym_code[*(uint16_t *)(this_4->f56[0] + 8 * v61 + 64)] << (v62 & 31);
           }
           ++v61;
         }
@@ -11638,7 +11646,7 @@ LABEL_53:
       v60 = 0;
       do
       {
-        *(uint16_t *)ArgList_6 = this_4->f1078240[*(uint16_t *)(this_4->f56[0] + 8 * v60++ + 64)];
+        *(uint16_t *)ArgList_6 = this_4->sym_code[*(uint16_t *)(this_4->f56[0] + 8 * v60++ + 64)];
         ArgList_6 = (uint32_t *)((uint8_t *)ArgList_6 + 2);
       }
       while ( v60 < this_4->f0 );
@@ -12256,7 +12264,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   int32_t v580;
   // The counter this pass updates and its two neighbours: `v581[-1]`,
   // `v581[0]` and `v581[1]` are +284 708, +284 712 and +284 716 off the
-  // row base, which is `f284712` reached through `v76` and `v78`.
+  // row base, which is `p2_ctr` reached through `v76` and `v78`.
   P2Count *v581;
   ;
   uint8_t *v8;   // was int32_t: this holds an address
@@ -12471,7 +12479,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
       if ( !alphabet_reduced )
       {
         __builtin_prefetch(&n2, 0, 1);
-        n2 = (uint16_t *)((uint8_t *)&v578->f284712[(v81 ^ 0x7FF0)] + v78);
+        n2 = (uint16_t *)((uint8_t *)&v578->p2_ctr[(v81 ^ 0x7FF0)] + v78);
         v84 = (*(uint32_t *)&v578->f278904[2 * n5 + 1]) + v77;
         n3 = v81 & 3;
         if ( (uint32_t)n3 >= 3
@@ -15514,11 +15522,11 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
     Blocka_1 = (ModelBlock *)((int32_t)Blocka_2);
     buf = (uint8_t *)bmf_new(Blocka_2->f16);
     Size = Blocka_2->f16;
-    Blocka_2->f1078688 = buf;
+    Blocka_2->alpha_map = buf;
     memset(buf,1,Size);
-    Blocka_2->f1078224 = &Blocka_2->escape;
+    Blocka_2->escape_list = &Blocka_2->escape;
     __init_symbol_list(&Blocka_1->escape, 0, Blocka_1->f16, 1);
-    Blocka_2->f1078232 = Blocka_2->sel;
+    Blocka_2->sel_cur = Blocka_2->sel;
     v31 = Blocka_2->f16;
     v32 = (SymListBlock *)bmf_new(24 * v31 + 4);
     if ( v32 )
@@ -15540,7 +15548,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
       v33 = nullptr;
     }
     v37 = Blocka_1->f16;
-    Blocka_1->f1078208 = v33;
+    Blocka_1->sel1_list = v33;
     v38 = (SymListBlock *)bmf_new(24 * v37 + 4);
     if ( v38 )
     {
@@ -15559,14 +15567,14 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
       v39 = nullptr;
     }
     v43 = Blocka_1->f16 <= 0;
-    Blocka_1->f1078212 = v39;
+    Blocka_1->sel0_list = v39;
     if ( !v43 )
     {
       v44 = 0;
       do
       {
-        __init_symbol_list(&Blocka_1->f1078208[v44], 0, 99, 0);
-        __init_symbol_list(&Blocka_1->f1078212[v44++], 0, 33, 0);
+        __init_symbol_list(&Blocka_1->sel1_list[v44], 0, 99, 0);
+        __init_symbol_list(&Blocka_1->sel0_list[v44++], 0, 33, 0);
       }
       while ( v44 < Blocka_1->f16 );
     }
@@ -15616,13 +15624,13 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
         v52 += 8;
         Blocka_1->f56[7] = v52;
         Blocka_1->f56[9] += 8;
-        Blocka_1->f1078692[0] = v51[26] + v51[18] + v51[10] + v51[2] + v51[34] - 5;
+        Blocka_1->grad[0] = v51[26] + v51[18] + v51[10] + v51[2] + v51[34] - 5;
         // The same five counts as the line above, off the other row.
-        Blocka_1->f1078692[3] = 0;
-        Blocka_1->f1078692[2] = 0;
+        Blocka_1->grad[3] = 0;
+        Blocka_1->grad[2] = 0;
         v45 = v61;
         v53 = Blocka_1->f0;
-        Blocka_1->f1078692[1] = v52[26] + v52[18] + v52[10] + v52[2] + v52[34] - 5;
+        Blocka_1->grad[1] = v52[26] + v52[18] + v52[10] + v52[2] + v52[34] - 5;
         if ( v53 > 0 )
         {
           v54 = 0;
