@@ -23,7 +23,7 @@ bytes.
 `python3 tools/shape.py`, verbatim:
 
 ```
-subs1.hpp / bmf.cpp lines          17907 / 358
+subs1.hpp / bmf.cpp lines          17790 / 358
 raw-offset sites                   22
   off `_this`                      1, in 1 functions
 pointer casts                      2137
@@ -34,14 +34,14 @@ frames                             17, 169180 bytes, 0 aliases
   frames that dissolve outright    17, 0 aliases
 structs                            22, 0 still ObjN
   fNN members / named ones         44 / 121
-distinct vNN locals                559
+distinct vNN locals                554
 goto / LABEL_n:                    112 / 79
 __fwd_* shims                      0
 ```
 
 against 37 raw offsets, 2541 pointer casts and 83 `fNN` members where round
 seven's last commit left them. (§1 of that document quotes 44 / 2822 / 93,
-from earlier in the round.) The conversion-warning ceiling went 1975 → 1461,
+from earlier in the round.) The conversion-warning ceiling went 1975 → 1455,
 and §4.1 is the one place this round it moved the wrong way.
 
 Nothing here was a sweep. Every tool in `tools/` reports zero against the file
@@ -505,8 +505,8 @@ caught by reading the result. It is in the check now.
   block is not where the index lands, which §4.1 answers, but what the four
   counters in a record *are*, and that is the same question as the 18-byte
   `P2Ctx` record rather than a separate one.
-* **1461 conversion warnings** — 845 `-Wsign-conversion`, 513 `-Wconversion`,
-  99 `-Wsign-compare`, 4 `-Wuseless-cast`, 5 `-Wint-to-pointer-cast` and one
+* **1455 conversion warnings** — 834 `-Wsign-conversion`, 513 `-Wconversion`,
+  104 `-Wsign-compare`, 4 `-Wuseless-cast`, 5 `-Wint-to-pointer-cast` and one
   `-Wmain`. §5 is the reason to keep holding it there, and this round is the
   first where lowering it was mostly a by-product of typing things correctly
   rather than an aim.
@@ -531,8 +531,25 @@ caught by reading the result. It is in the check now.
 | --- | --- |
 | `triage.sh` | four images against their reference streams, for bisecting |
 | `unwrite.py` | a call is an identifier followed by `(`, not any `(` |
+| `unaliasvar.py` | a local that is one assignment of another local |
 
-One, and it is not a refactoring tool. Round seven's tools all still report
+`unaliasvar.py` is the round's one new refactoring tool, and what it cost is
+the useful part. The fold is safe on a narrow condition, and the condition took
+three tries — each miss changed a reference stream, and `triage.sh` with a
+per-body bisection found each in minutes:
+
+* `v = ...` is not the only way to write a local. `v += 144`, `++v` and
+  `LOWORD(v) = x` all do, and counting only the first calls a variable
+  single-assignment while three other statements change it.
+* A name assigned once in a body is not therefore a *local*.
+  `plane_alt_model = v16` looks exactly like an alias; folding it hid a write
+  four other functions read.
+* Two aliases can name each other — `a = b` and `b = a` — which is a rotation
+  carried across a loop, not a copy.
+
+67 folded, 51 declarations dropped after them, 117 lines gone.
+
+One of the other two is not a refactoring tool. Round seven's tools all still report
 zero; what this round needed was not another pattern but a faster way to ask
 "did that break it", because §5's failure took a bisection over six changes and
 the gate is minutes per attempt.
