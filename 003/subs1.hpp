@@ -201,7 +201,7 @@ static int32_t __dword_443388;   // was 0x443388 in bmf_bss
 //   * and `alt_model_p2_encode` walks all four plane records in one loop using
 //     four of the record-0 names as its field bases.
 //
-// So `plane_count`, read 154 times as a scalar, is field +8 of record 0.
+// So `plane_count`, read as a scalar throughout, is field +8 of record 0.
 //
 // The union is the one thing here that is still a question rather than a
 // layout: records 1..4 use +0..+3 as four separate bytes, and record 0 has its
@@ -211,24 +211,28 @@ struct PlaneDesc {
     int32_t w0;
     struct {
       uint8_t predictor;   // `v23 & 3`, the plane's predictor number
-      uint8_t src_plane;   // a plane number, fed back as `plane_desc[b1 + 1]`
+      uint8_t src_plane;   // a plane number, fed back as `plane_desc[src_plane + 1]`
       uint8_t flags;       // & 3 predictor, & 4 alt model, & 8 a third mode
       uint8_t b3;
     };
   };
   int32_t w4;
   int32_t w8;
-  int32_t w12;
+  int32_t w12;   // record 0: the near-lossless quantiser, `4 * w12 + 1` wide
 };
 static_assert(sizeof(void *) != 4 || sizeof(PlaneDesc) == 16,
               "PlaneDesc: the layout moved");
 static PlaneDesc plane_desc[5];
 
-// The twenty names the table arrived as, now views of it at their old offsets.
-// Each subscript that steps a whole record -- `[16 * p]` on a byte field,
-// `[4 * p]` on a dword one -- still means what it meant, and reads record p+1.
+// The table arrived as twenty separate globals, one per field per record, and
+// round three bound all twenty to it as views so that the ~221 subscript sites
+// could move a few at a time.  Nineteen of them are folded now; a subscript
+// that stepped a whole record -- `[16 * p]` on a byte field, `[4 * p]` on a
+// dword one -- says `plane_desc[p + 1]` instead.
+//
+// This one stays.  It is record 0's `w8` read as a scalar 149 times, always as
+// the number of planes, and no other field is read that way.
 static int32_t &plane_count = *(int32_t *)&plane_desc[0].w8;
-static char &__n3_0 = *(char *)&plane_desc[4].src_plane;
 static int32_t model_geometry[32];   // was 0x445660 in bmf_bss
 static char __byte_445700;   // was 0x445700 in bmf_bss
 static int32_t __n8_1;   // was 0x44570C in bmf_bss
@@ -5241,7 +5245,7 @@ char *__alt_p2_alloc(Obj11 *_this, int32_t i, int32_t n4)
   while ( n0x1E60 < 0x1E60 );
   v8 = 4 * plane_desc[0].w12 + 1;
   v9 = 16 * plane_desc[0].w12;
-  *(uint32_t *)((char *)_this + 278732) = (uint8_t)(plane_desc[(uint8_t)plane_desc[_this->f278728 + 1].src_plane + 1].flags
+  *(uint32_t *)((char *)_this + 278732) = (uint8_t)(plane_desc[plane_desc[_this->f278728 + 1].src_plane + 1].flags
                                                & 8) >> 3;
   deadzone_hi = v8;
   deadzone_lo = -v8;
@@ -6090,10 +6094,10 @@ char * __interleave_plane(char *p_i, char *Src, int32_t a3, char a4)
   }
   n4_1 = plane_count;
   n6 = *(uint16_t *)p_i * *((uint16_t *)p_i + 1);
-  v29 = (uint8_t)plane_desc[1].src_plane - a3;
-  v31 = (uint8_t)plane_desc[2].src_plane - a3;
-  n2 = (uint8_t)plane_desc[a3 + 1].predictor;
-  v34 = (uint8_t)plane_desc[a3 + 1].b3;
+  v29 = plane_desc[1].src_plane - a3;
+  v31 = plane_desc[2].src_plane - a3;
+  n2 = plane_desc[a3 + 1].predictor;
+  v34 = plane_desc[a3 + 1].b3;
   Src_2 = (uint32_t)&p_i[a3 + 16];
   v4 = plane_desc[a3 + 1].w8;
   v32 = plane_desc[a3 + 1].w4;
@@ -6145,7 +6149,7 @@ LABEL_3:
     }
     goto LABEL_4;
   }
-  v29 = (uint8_t)plane_desc[2].src_plane - a3;
+  v29 = plane_desc[2].src_plane - a3;
 LABEL_4:
   p_i += a3;
   v25 = &p_i[v29];
@@ -6255,10 +6259,10 @@ LABEL_31:
   }
   n4_1 = plane_count;
   n6 = *(uint16_t *)Blockb * *((uint16_t *)Blockb + 1);
-  v33 = (uint8_t)plane_desc[1].src_plane - a3;
-  v35 = (uint8_t)plane_desc[2].src_plane - a3;
-  n2 = (uint8_t)plane_desc[a3 + 1].predictor;
-  v37 = (uint8_t)plane_desc[a3 + 1].b3;
+  v33 = plane_desc[1].src_plane - a3;
+  v35 = plane_desc[2].src_plane - a3;
+  n2 = plane_desc[a3 + 1].predictor;
+  v37 = plane_desc[a3 + 1].b3;
   Src_3 = (uint32_t)&Blockb[a3 + 16];
   v4 = plane_desc[a3 + 1].w8;
   v36 = plane_desc[a3 + 1].w4;
@@ -6269,7 +6273,7 @@ LABEL_31:
       goto LABEL_4;
     if ( !v36 )
     {
-      v33 = (uint8_t)plane_desc[2].src_plane - a3;
+      v33 = plane_desc[2].src_plane - a3;
       goto LABEL_4;
     }
   }
@@ -6880,9 +6884,9 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
   // Records 2, 3 and 4 name a source plane each; each of the three is then
   // read for its flags and its b3.  Record indices now -- they were 16 times
   // these, the byte offsets into the table.
-  v8 = (uint8_t)plane_desc[2].src_plane;
-  v9 = (uint8_t)plane_desc[3].src_plane;
-  v10 = (uint8_t)__n3_0;
+  v8 = plane_desc[2].src_plane;
+  v9 = plane_desc[3].src_plane;
+  v10 = plane_desc[4].src_plane;
   v11 = plane_desc[v8 + 1].flags;
   v12 = plane_desc[v9 + 1].flags;
   v13 = plane_desc[v10 + 1].flags;
@@ -7030,7 +7034,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           v51[52] += 2;
           v51[53] += 2;
           v59 = (Obj0 *)v94;
-          *(uint8_t *)((uint8_t)plane_desc[1].src_plane + Src) = v58;
+          *(uint8_t *)(plane_desc[1].src_plane + Src) = v58;
           __fwd_alt_model_p1_decode_alt_p1_context((uint8_t **)v59, Block_plane[0], 0);
           v61 = __fwd_alt_model_p1_decode_alt_p1_decode_symbol((uint16_t *)((char *)v59 + 16 * v59->f12[0] + 3800), v60, v59->f12[1]);
           v62 = *(uint32_t *)&v59->f8;
@@ -7056,11 +7060,11 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           v59->f12[49] += 2;
           v59->f12[50] += 2;
           if ( v101 )
-            v104 += v97 + *(uint8_t *)((uint8_t)plane_desc[1].src_plane + Src);
+            v104 += v97 + *(uint8_t *)(plane_desc[1].src_plane + Src);
           v66 = (Obj0 *)(v95);
           v84 = Block_plane[0];
           v83 = v94;
-          *(uint8_t *)(Src + (uint8_t)plane_desc[2].src_plane) = v104;
+          *(uint8_t *)(Src + plane_desc[2].src_plane) = v104;
           __fwd_alt_model_p1_decode_alt_p1_context(v66, v83, (int32_t)v84);
           v68 = __fwd_alt_model_p1_decode_alt_p1_decode_symbol(&((uint8_t**)v66)[4 * v66->f12[0] + 950], v67, (int32_t)v66->f12[1]);
           v69 = (unsigned char *)(v66->f8);
@@ -7085,16 +7089,16 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
           v66->f208 += 2;
           v66->f212 += 2;
           if ( ArgList_1 )
-            *(uint8_t *)((uint8_t)plane_desc[3].src_plane + Src) = ((plane_desc[(uint8_t)plane_desc[3].src_plane + 1].w4
-                                                                * *(uint8_t *)((uint8_t)plane_desc[1].src_plane
+            *(uint8_t *)(plane_desc[3].src_plane + Src) = ((plane_desc[plane_desc[3].src_plane + 1].w4
+                                                                * *(uint8_t *)(plane_desc[1].src_plane
                                                                                      + Src)
-                                                                + plane_desc[(uint8_t)plane_desc[3].src_plane + 1].w8
-                                                                * (uint32_t)*(uint8_t *)((uint8_t)plane_desc[2].src_plane + Src)
+                                                                + plane_desc[plane_desc[3].src_plane + 1].w8
+                                                                * (uint32_t)*(uint8_t *)(plane_desc[2].src_plane + Src)
                                                                 + 40) >> 7)
                                                               + v98
                                                               + v105;
           else
-            *(uint8_t *)((uint8_t)plane_desc[3].src_plane + Src) = v105;
+            *(uint8_t *)(plane_desc[3].src_plane + Src) = v105;
           n4_1 = plane_count;
           if ( plane_count >= 4 )
           {
@@ -7123,12 +7127,12 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, char *Src)
             v73->f208 += 2;
             v73->f212 += 2;
             if ( v91 )
-              v92 += ((plane_desc[(uint8_t)__n3_0 + 1].w8 * *(uint8_t *)((uint8_t)__n3_0 + Src - 2)
-                     + plane_desc[(uint8_t)__n3_0 + 1].w4 * *(uint8_t *)((uint8_t)__n3_0 + Src - 3)
-                     + plane_desc[(uint8_t)__n3_0 + 1].w12 * *(uint8_t *)((uint8_t)__n3_0 + Src - 1)
+              v92 += ((plane_desc[plane_desc[4].src_plane + 1].w8 * *(uint8_t *)(plane_desc[4].src_plane + Src - 2)
+                     + plane_desc[plane_desc[4].src_plane + 1].w4 * *(uint8_t *)(plane_desc[4].src_plane + Src - 3)
+                     + plane_desc[plane_desc[4].src_plane + 1].w12 * *(uint8_t *)(plane_desc[4].src_plane + Src - 1)
                      + 64) >> 7)
                    + v85;
-            *(uint8_t *)((uint8_t)__n3_0 + Src) = v92;
+            *(uint8_t *)(plane_desc[4].src_plane + Src) = v92;
             n4_1 = plane_count;
           }
           Src += n4_1;
@@ -9197,9 +9201,9 @@ int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, char a3)
       while ( n16 * 4 );
       v26 = v214[4 * v205.m128_i32[2] + 2];
       v205.m128_i32[1] = 16 * v205.m128_i32[2];
-      LODWORD(v209) = (uint8_t)plane_desc[1].src_plane - v205.m128_i32[2];
+      LODWORD(v209) = plane_desc[1].src_plane - v205.m128_i32[2];
       n128_1 = plane_desc[v205.m128_i32[2] + 1].w8;
-      HIDWORD(v208) = (uint8_t)plane_desc[2].src_plane - v205.m128_i32[2];
+      HIDWORD(v208) = plane_desc[2].src_plane - v205.m128_i32[2];
       n128 = plane_desc[v205.m128_i32[2] + 1].w4;
       // always taken: -S is on.  (The block is kept braced -- LABEL_19 below
       // is jumped to from inside it.)
@@ -12847,9 +12851,9 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
   // The decoder's block, mirrored.  `v10` is read for its record before its
   // low byte is overwritten with that record's b3, and `v90` -- a char -- is
   // the only thing that reads it after, so the byte is all of it.
-  v8 = (uint8_t)plane_desc[2].src_plane;
-  v9 = (uint8_t)plane_desc[3].src_plane;
-  v10 = (uint8_t)__n3_0;
+  v8 = plane_desc[2].src_plane;
+  v9 = plane_desc[3].src_plane;
+  v10 = plane_desc[4].src_plane;
   v11 = plane_desc[v8 + 1].flags;
   v12 = plane_desc[v9 + 1].flags;
   v13 = plane_desc[v10 + 1].flags;
@@ -12969,8 +12973,8 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
         do
         {
           v50 = (uint8_t *)Block_plane[0];
-          n5_9 = *(uint8_t *)(a2 + (uint8_t)plane_desc[1].src_plane);
-          v114 = (uint8_t)plane_desc[1].src_plane;
+          n5_9 = *(uint8_t *)(a2 + plane_desc[1].src_plane);
+          v114 = plane_desc[1].src_plane;
           n5_6 = n5_9;
           __fwd_alt_model_p1_encode_alt_p1_context((uint8_t **)Block_plane[0], nullptr, 0);
           n5_7 = n5_6;
@@ -13010,10 +13014,10 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
           *((uint32_t *)v50 + 51) += 2;
           *((uint32_t *)v50 + 52) += 2;
           *((uint32_t *)v50 + 53) += 2;
-          v60 = *(uint8_t *)(a2 + (uint8_t)plane_desc[2].src_plane);
-          v113 = (uint8_t)plane_desc[2].src_plane;
+          v60 = *(uint8_t *)(a2 + plane_desc[2].src_plane);
+          v113 = plane_desc[2].src_plane;
           if ( v109 )
-            v60 = v60 - v105 - *(uint8_t *)((uint8_t)plane_desc[1].src_plane + a2);
+            v60 = v60 - v105 - *(uint8_t *)(plane_desc[1].src_plane + a2);
           v61 = (Obj0 *)(v102);
           v118 = v60;
           __fwd_alt_model_p1_encode_alt_p1_context(v102, Block_plane[0], 0);
@@ -13053,15 +13057,15 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
           v61->f204 += 2;
           v61->f208 += 2;
           v61->f212 += 2;
-          v69 = *(uint8_t *)((uint8_t)plane_desc[3].src_plane + a2);
-          v117 = (uint8_t)plane_desc[3].src_plane;
+          v69 = *(uint8_t *)(plane_desc[3].src_plane + a2);
+          v117 = plane_desc[3].src_plane;
           if ( v108 )
             v69 = (uint8_t)(v69
                                   - v106
-                                  - ((plane_desc[(uint8_t)plane_desc[3].src_plane + 1].w4
-                                    * *(uint8_t *)((uint8_t)plane_desc[1].src_plane + a2)
-                                    + plane_desc[(uint8_t)plane_desc[3].src_plane + 1].w8
-                                    * (uint32_t)*(uint8_t *)((uint8_t)plane_desc[2].src_plane + a2)
+                                  - ((plane_desc[plane_desc[3].src_plane + 1].w4
+                                    * *(uint8_t *)(plane_desc[1].src_plane + a2)
+                                    + plane_desc[plane_desc[3].src_plane + 1].w8
+                                    * (uint32_t)*(uint8_t *)(plane_desc[2].src_plane + a2)
                                     + 40) >> 7));
           v70 = (Obj0 *)(v103);
           __fwd_alt_model_p1_encode_alt_p1_context(v103, (uint32_t *)v102, (int32_t)Block_plane[0]);
@@ -13102,16 +13106,16 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
           n4_1 = plane_count;
           if ( plane_count >= 4 )
           {
-            n3 = (uint8_t)__n3_0;
+            n3 = plane_desc[4].src_plane;
             if ( v96 )
-              v79 = *(uint8_t *)((uint8_t)__n3_0 + a2)
+              v79 = *(uint8_t *)(plane_desc[4].src_plane + a2)
                   - v90
-                  - ((plane_desc[(uint8_t)__n3_0 + 1].w8 * *(uint8_t *)((uint8_t)__n3_0 + a2 - 2)
-                    + plane_desc[(uint8_t)__n3_0 + 1].w4 * *(uint8_t *)((uint8_t)__n3_0 + a2 - 3)
-                    + plane_desc[(uint8_t)__n3_0 + 1].w12 * *(uint8_t *)((uint8_t)__n3_0 + a2 - 1)
+                  - ((plane_desc[plane_desc[4].src_plane + 1].w8 * *(uint8_t *)(plane_desc[4].src_plane + a2 - 2)
+                    + plane_desc[plane_desc[4].src_plane + 1].w4 * *(uint8_t *)(plane_desc[4].src_plane + a2 - 3)
+                    + plane_desc[plane_desc[4].src_plane + 1].w12 * *(uint8_t *)(plane_desc[4].src_plane + a2 - 1)
                     + 64) >> 7);
             else
-              v79 = *(uint8_t *)((uint8_t)__n3_0 + a2);
+              v79 = *(uint8_t *)(plane_desc[4].src_plane + a2);
             v80 = (Obj0 *)(v104);
             v99 = v79;
             __fwd_alt_model_p1_encode_alt_p1_context(v104, (uint32_t *)v103, (int32_t)v102);
@@ -15372,9 +15376,9 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
     }
     while ( n4 < plane_count );
   }
-  v163 = plane_desc[(uint8_t)plane_desc[2].src_plane + 1].flags & 8;
-  v9 = plane_desc[(uint8_t)__n3_0 + 1].flags;
-  ArgList = plane_desc[(uint8_t)plane_desc[3].src_plane + 1].flags & 8;
+  v163 = plane_desc[plane_desc[2].src_plane + 1].flags & 8;
+  v9 = plane_desc[plane_desc[4].src_plane + 1].flags;
+  ArgList = plane_desc[plane_desc[3].src_plane + 1].flags & 8;
   v153 = v9 & 8;
   __rc_begin_decode(ArgList);
   if ( v5 > 0 )
@@ -15652,11 +15656,11 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           ctx_bias[2] += 32 * v106;
           ctx_bias[3] += 32 * v108;
           v109 = v163 == 0;
-          Src[(uint8_t)plane_desc[1].src_plane] = v104;
+          Src[plane_desc[1].src_plane] = v104;
           if ( v109 )
             v110 = 0;
           else
-            v110 = 16 * Src[(uint8_t)plane_desc[1].src_plane];
+            v110 = 16 * Src[plane_desc[1].src_plane];
           v111 = (Obj11 *)(plane[1]);
           *(uint16_t *)(plane[1]->f278528[13].m128_i32[0] + 2) = v110;
           v112 = __fwd_alt_model_p2_decode_alt_p2_context(v111, v2, v3, plane[0], plane[2]);
@@ -15673,12 +15677,12 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           ctx_bias[2] += 32 * v117;
           ctx_bias[3] += 32 * v118;
           v109 = ArgList == 0;
-          Src[(uint8_t)plane_desc[2].src_plane] = v169;
+          Src[plane_desc[2].src_plane] = v169;
           if ( v109 )
             LOWORD(v119) = 0;
           else
-            v119 = (plane_desc[(uint8_t)plane_desc[3].src_plane + 1].w8 * Src[(uint8_t)plane_desc[2].src_plane]
-                  + plane_desc[(uint8_t)plane_desc[3].src_plane + 1].w4 * Src[(uint8_t)plane_desc[1].src_plane]) >> 3;
+            v119 = (plane_desc[plane_desc[3].src_plane + 1].w8 * Src[plane_desc[2].src_plane]
+                  + plane_desc[plane_desc[3].src_plane + 1].w4 * Src[plane_desc[1].src_plane]) >> 3;
           v120 = (Obj11 *)(plane[2]);
           *(uint16_t *)(plane[2]->f278528[13].m128_i32[0] + 2) = v119;
           v121 = __fwd_alt_model_p2_decode_alt_p2_context(v120, v2, v3, plane[0], plane[1]);
@@ -15694,14 +15698,14 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           ctx_bias[1] += 32 * v125;
           ctx_bias[2] += 32 * v126;
           ctx_bias[3] += 32 * v127;
-          Src[(uint8_t)plane_desc[3].src_plane] = v170;
+          Src[plane_desc[3].src_plane] = v170;
           n4_1 = plane_count;
           if ( plane_count >= 4 )
           {
             if ( v153 )
-              v128 = (plane_desc[(uint8_t)__n3_0 + 1].w12 * Src[2]
-                    + plane_desc[(uint8_t)__n3_0 + 1].w8 * Src[1]
-                    + plane_desc[(uint8_t)__n3_0 + 1].w4 * *Src) >> 3;
+              v128 = (plane_desc[plane_desc[4].src_plane + 1].w12 * Src[2]
+                    + plane_desc[plane_desc[4].src_plane + 1].w8 * Src[1]
+                    + plane_desc[plane_desc[4].src_plane + 1].w4 * *Src) >> 3;
             else
               LOWORD(v128) = 0;
             v129 = (Obj11 *)(plane[3]);
@@ -16307,9 +16311,9 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
     }
     while ( n4 < plane_count );
   }
-  v169 = plane_desc[(uint8_t)plane_desc[2].src_plane + 1].flags & 8;
-  v9 = plane_desc[(uint8_t)__n3_0 + 1].flags;
-  v168 = plane_desc[(uint8_t)plane_desc[3].src_plane + 1].flags & 8;
+  v169 = plane_desc[plane_desc[2].src_plane + 1].flags & 8;
+  v9 = plane_desc[plane_desc[4].src_plane + 1].flags;
+  v168 = plane_desc[plane_desc[3].src_plane + 1].flags & 8;
   v155 = v9 & 8;
   __rc_begin_encode();
   if ( v5 > 0 )
@@ -16567,13 +16571,13 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
         v102 = 0;
         for ( i = 0; i < i_2; ++i )
         {
-          v184 = (uint8_t)plane_desc[1].src_plane;
+          v184 = plane_desc[1].src_plane;
           ctx_bias[0] = v102 >> 3;
           ctx_bias[1] = v101 >> 3;
           ctx_bias[2] = v100 >> 3;
           ctx_bias[3] = v99 >> 3;
           lpAddress_1 = (Obj11 *)(plane[0]);
-          v104 = v166[(uint8_t)plane_desc[1].src_plane];
+          v104 = v166[plane_desc[1].src_plane];
           v178 = __fwd_alt_model_p2_encode_alt_p2_context((__m128 *)plane[0], v2, v3, plane[2], plane[1]);
           v181 = (uint8_t)(v104 - v178);
           v105 = (uint8_t)((uint8_t *)lpAddress_1)[v181 + 279984];
@@ -16604,13 +16608,13 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           ctx_bias[2] += 32 * v111;
           ctx_bias[3] += 32 * v112;
           if ( v169 )
-            v113 = 16 * v166[(uint8_t)plane_desc[1].src_plane];
+            v113 = 16 * v166[plane_desc[1].src_plane];
           else
             v113 = 0;
           v114 = (Obj11 *)(plane[1]);
           *(uint16_t *)(plane[1]->f278528[13].m128_i32[0] + 2) = v113;
-          v176 = (uint8_t)plane_desc[2].src_plane;
-          v115 = v166[(uint8_t)plane_desc[2].src_plane];
+          v176 = plane_desc[2].src_plane;
+          v115 = v166[plane_desc[2].src_plane];
           v179 = __fwd_alt_model_p2_encode_alt_p2_context(v114, v2, v3, plane[0], plane[2]);
           v183 = (uint8_t)(v115 - v179);
           v116 = v114->f279984.m128_u8[v183];
@@ -16638,14 +16642,14 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           ctx_bias[2] += 32 * v122;
           ctx_bias[3] += 32 * v123;
           if ( v168 )
-            v124 = (plane_desc[(uint8_t)plane_desc[3].src_plane + 1].w8 * v166[(uint8_t)plane_desc[2].src_plane]
-                  + plane_desc[(uint8_t)plane_desc[3].src_plane + 1].w4 * v166[(uint8_t)plane_desc[1].src_plane]) >> 3;
+            v124 = (plane_desc[plane_desc[3].src_plane + 1].w8 * v166[plane_desc[2].src_plane]
+                  + plane_desc[plane_desc[3].src_plane + 1].w4 * v166[plane_desc[1].src_plane]) >> 3;
           else
             LOWORD(v124) = 0;
           v125 = (Obj11 *)(plane[2]);
           *(uint16_t *)(plane[2]->f278528[13].m128_i32[0] + 2) = v124;
-          v177 = (uint8_t)plane_desc[3].src_plane;
-          v126 = v166[(uint8_t)plane_desc[3].src_plane];
+          v177 = plane_desc[3].src_plane;
+          v126 = v166[plane_desc[3].src_plane];
           v180 = __fwd_alt_model_p2_encode_alt_p2_context(v125, v2, v3, plane[0], plane[1]);
           v182 = (uint8_t)(v126 - v180);
           v127 = v125->f279984.m128_u8[v182];
@@ -16677,15 +16681,15 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             ctx_bias[2] = v100;
             ctx_bias[3] = v99;
             if ( v155 )
-              v132 = (plane_desc[(uint8_t)__n3_0 + 1].w12 * v166[2]
-                    + plane_desc[(uint8_t)__n3_0 + 1].w8 * v166[1]
-                    + plane_desc[(uint8_t)__n3_0 + 1].w4 * *v166) >> 3;
+              v132 = (plane_desc[plane_desc[4].src_plane + 1].w12 * v166[2]
+                    + plane_desc[plane_desc[4].src_plane + 1].w8 * v166[1]
+                    + plane_desc[plane_desc[4].src_plane + 1].w4 * *v166) >> 3;
             else
               LOWORD(v132) = 0;
             v133 = (Obj11 *)(plane[3]);
             *(uint16_t *)(plane[3]->f278528[13].m128_i32[0] + 2) = v132;
-            n3 = (uint8_t)__n3_0;
-            v134 = v166[(uint8_t)__n3_0];
+            n3 = plane_desc[4].src_plane;
+            v134 = v166[plane_desc[4].src_plane];
             v157 = __fwd_alt_model_p2_encode_alt_p2_context(v133, v2, v3, plane[2], plane[0]);
             v158 = (uint8_t)(v134 - v157);
             v135 = v133->f279984.m128_u8[v158];
@@ -17700,7 +17704,7 @@ LABEL_42:
       ArgList = 0;
       do
       {
-        v33 = (uint8_t)plane_desc[ArgList + 1].src_plane;
+        v33 = plane_desc[ArgList + 1].src_plane;
         ::plane_predictor = plane_desc[v33 + 1].flags & 3;
         plane_alt_model = (uint8_t)(plane_desc[v33 + 1].flags & 4) >> 2;
         // always taken: -S
@@ -18043,7 +18047,7 @@ uint32_t __search_filter(BmfImage *p_i, char a2, const __m128 &a3__ref, const __
     v179[0] *= 8;
     while ( 1 )
     {
-      v179[1] = (uint8_t)plane_desc[v182 + 1].src_plane;
+      v179[1] = plane_desc[v182 + 1].src_plane;
       v180 = v179[1];   // a record index; it was 16 * it, the byte offset
       if ( n4_13 )
       {
@@ -18299,7 +18303,7 @@ LABEL_43:
       v118 = 0;
       while ( 1 )
       {
-        v119 = (uint8_t)plane_desc[v118 + 1].src_plane;
+        v119 = plane_desc[v118 + 1].src_plane;
         v178[0] = (char *)v119;
         __fwd_search_filter_model_planes(Blockb, (char *)Srca_7, v119, v116, a3, a4);
         v120 = 8 * (out_cursor - coded_buf);
@@ -18967,7 +18971,7 @@ LABEL_22:
     n4 = 0;
     do
     {
-      v25 = (4 * (uint8_t)plane_desc[n4 + 1].flags) | (uint8_t)plane_desc[n4 + 1].predictor;
+      v25 = (4 * plane_desc[n4 + 1].flags) | plane_desc[n4 + 1].predictor;
       if ( bits_left < 6 )
       {
         *(uint32_t *)::packer_word = ::packer_acc | (2 * (v25 << ((31 - bits_left) & 31)));
@@ -18984,7 +18988,7 @@ LABEL_22:
       ::packer_free_bits = bits_left;
       if ( (plane_desc[n4 + 1].flags & 8) != 0 )
       {
-        v26 = (uint8_t)plane_desc[n4 + 1].b3;
+        v26 = plane_desc[n4 + 1].b3;
         if ( bits_left < 8 )
         {
           *(uint32_t *)::packer_word = ::packer_acc | (2 * (v26 << ((31 - bits_left) & 31)));
@@ -19000,7 +19004,7 @@ LABEL_22:
           ::packer_acc |= v27;
         }
         ::packer_free_bits = bits_left;
-        if ( (uint8_t)plane_desc[n4 + 1].predictor > 1u )
+        if ( plane_desc[n4 + 1].predictor > 1u )
         {
           v28 = plane_desc[n4 + 1].w4 + 64;
           if ( bits_left < 8 )
@@ -19033,7 +19037,7 @@ LABEL_22:
             ::packer_acc |= v31;
           }
           ::packer_free_bits = bits_left;
-          if ( (uint8_t)plane_desc[n4 + 1].predictor > 2u )
+          if ( plane_desc[n4 + 1].predictor > 2u )
           {
             v32 = plane_desc[n4 + 1].w12 + 64;
             if ( bits_left < 8 )
@@ -19070,7 +19074,7 @@ LABEL_22:
       v66 = v5;
       n4_1 = 0;
       do
-        __fwd_compress_image_model_planes((char *)p_i, Srca, (uint8_t)plane_desc[n4_1++ + 1].src_plane, v36, a2, a3);
+        __fwd_compress_image_model_planes((char *)p_i, Srca, plane_desc[n4_1++ + 1].src_plane, v36, a2, a3);
       while ( n4_1 < ::plane_count );
       v5 = v66;
     }
