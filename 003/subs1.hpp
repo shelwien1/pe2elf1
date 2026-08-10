@@ -926,109 +926,18 @@ static_assert(sizeof(void *) != 4
               "Obj45: the layout moved");
 
 
-// Obj46 -- recovered from 10 dereferences over 2 offsets, under 2
-// names.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj46 {
-  const int8_t f0;
-  uint8_t _pad1[3];
-  const int8_t f4;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj46, f4) == 4,
-              "Obj46: the layout moved");
 
 
-// Obj47 -- recovered from 10 dereferences over 2 offsets, under 2
-// names.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj47 {
-  const int8_t f0;
-  uint8_t _pad1[3];
-  const int8_t f4;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj47, f4) == 4,
-              "Obj47: the layout moved");
 
 
-// Obj48 -- recovered from 10 dereferences over 2 offsets, under 2
-// names.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj48 {
-  const int8_t f0;
-  uint8_t _pad1[3];
-  const int8_t f4;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj48, f4) == 4,
-              "Obj48: the layout moved");
 
 
-// Obj49 -- recovered from 10 dereferences over 2 offsets, under 2
-// names.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj49 {
-  const int8_t f0;
-  uint8_t _pad1[3];
-  const int8_t f4;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj49, f4) == 4,
-              "Obj49: the layout moved");
 
 
-// Obj50 -- recovered from 10 dereferences over 2 offsets, under 2
-// names.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj50 {
-  const int8_t f0;
-  uint8_t _pad1[3];
-  const int8_t f4;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj50, f4) == 4,
-              "Obj50: the layout moved");
 
 
-// Obj51 -- recovered from 10 dereferences over 2 offsets, under 2
-// names.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj51 {
-  const int8_t f0;
-  uint8_t _pad1[3];
-  const int8_t f4;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj51, f4) == 4,
-              "Obj51: the layout moved");
 
 
-// Obj52 -- recovered from 10 dereferences over 2 offsets, under 2
-// names.  The layout is the one the code already assumed: at 32 bits a
-// pointer is four bytes, so naming these fields moves nothing, and the
-// static_assert is what says so.  Offsets the code only reaches with a
-// computed index are padding here -- their bounds are not visible.
-struct Obj52 {
-  const int8_t f0;
-  uint8_t _pad1[3];
-  const int8_t f4;
-};
-static_assert(sizeof(void *) != 4
-              || __builtin_offsetof(Obj52, f4) == 4,
-              "Obj52: the layout moved");
 
 
 
@@ -12905,25 +12814,25 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
   Obj15 *v512;
   Obj42 *v513;
   Obj44 *v514;
-  Obj52 *v515;
+  P2Count *v515;
   Obj41 *v516;
   P2Count *v517;
-  Obj51 *v518;
+  P2Count *v518;
   P2Count *v519;
   P2Count *v520;
-  Obj50 *v521;
+  P2Count *v521;
   P2Count *v522;
   P2Count *v523;
-  Obj49 *v524;
+  P2Count *v524;
   Obj40 *v525;
   P2Count *v526;
-  Obj48 *v527;
+  P2Count *v527;
   P2Count *v528;
   P2Count *v529;
-  Obj47 *v530;
+  P2Count *v530;
   P2Count *v531;
   P2Count *v532;
-  Obj46 *v533;
+  P2Count *v533;
   P2Count *v534;
   P2Count *v535;
   Obj15 *v536;
@@ -12941,20 +12850,20 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
   int32_t v548;
   int32_t v549;
   int32_t v550;
-  Obj46 *v551;
-  Obj47 *v552;
+  P2Count *v551;
+  P2Count *v552;
   P2Count *v553;
-  Obj48 *v554;
+  P2Count *v554;
   P2Count *v555;
-  Obj49 *v556;
+  P2Count *v556;
   P2Count *v557;
   Obj40 *v558;
-  Obj50 *v559;
+  P2Count *v559;
   P2Count *v560;
-  Obj51 *v561;
+  P2Count *v561;
   P2Count *v562;
   P2Count *v563;
-  Obj52 *v564;
+  P2Count *v564;
   P2Count *v565;
   Obj41 *v566;
   Obj15 *v567;
@@ -13235,14 +13144,14 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
                   + 284712
                   + 4 * ((v81 ^ 0x1000) & 0xFFFFFFF3)]);
         __builtin_prefetch(v537, 0, 1);
-        v551 = (Obj46 *)(&v90[4 * (v81 ^ 0x800) + 284712]);
-        v533 = (Obj46 *)(v551);
+        v551 = (P2Count *)(&v90[4 * (v81 ^ 0x800) + 284712]);
+        v533 = (P2Count *)(v551);
         v535 = (P2Count *)(&v90[4 * (v81 ^ 0x77F0) + 284712]);
         v534 = (P2Count *)(&v90[4 * *(int32_t *)((uint8_t *)__dword_439880 + ((v81 ^ 0x800) & 0xC))
                   + 284712
                   + 4 * ((v81 ^ 0x800) & 0xFFFFFFF3)]);
-        v552 = (Obj47 *)(&v90[4 * (v81 ^ 0x400) + 284712]);
-        v530 = (Obj47 *)(v552);
+        v552 = (P2Count *)(&v90[4 * (v81 ^ 0x400) + 284712]);
+        v530 = (P2Count *)(v552);
         __builtin_prefetch(v551, 0, 1);
         __builtin_prefetch(v535, 0, 1);
         __builtin_prefetch(v534, 0, 1);
@@ -13251,8 +13160,8 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
         v531 = (P2Count *)(&v90[4 * *(int32_t *)((uint8_t *)__dword_439880 + ((v81 ^ 0x400) & 0xC))
                   + 284712
                   + 4 * ((v81 ^ 0x400) & 0xFFFFFFF3)]);
-        v554 = (Obj48 *)(&v90[4 * (v81 ^ 0x200) + 284712]);
-        v527 = (Obj48 *)(v554);
+        v554 = (P2Count *)(&v90[4 * (v81 ^ 0x200) + 284712]);
+        v527 = (P2Count *)(v554);
         __builtin_prefetch(v552, 0, 1);
         v555 = (P2Count *)(&v90[4 * (v81 ^ 0x7DF0) + 284712]);
         v529 = (P2Count *)(v555);
@@ -13262,23 +13171,23 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
         __builtin_prefetch(v553, 0, 1);
         __builtin_prefetch(v531, 0, 1);
         v528 = (P2Count *)(v91);
-        v556 = (Obj49 *)(&v90[4 * (v81 ^ 0x100) + 284712]);
-        v524 = (Obj49 *)(v556);
+        v556 = (P2Count *)(&v90[4 * (v81 ^ 0x100) + 284712]);
+        v524 = (P2Count *)(v556);
         v92 = *(int32_t *)((uint8_t *)__dword_439880 + ((v81 ^ 0x100) & 0xC)) + ((v81 ^ 0x100) & 0xFFFFFFF3);
         v557 = (P2Count *)(&v90[4 * (v81 ^ 0x7EF0) + 284712]);
         v526 = (P2Count *)(v557);
         __builtin_prefetch(v554, 0, 1);
         v558 = (Obj40 *)((int32_t)&v90[4 * v92 + 284712]);
         v525 = (Obj40 *)(v558);
-        v559 = (Obj50 *)(&v90[4 * (v81 ^ 0x80) + 284712]);
-        v521 = (Obj50 *)(v559);
+        v559 = (P2Count *)(&v90[4 * (v81 ^ 0x80) + 284712]);
+        v521 = (P2Count *)(v559);
         __builtin_prefetch(v555, 0, 1);
         __builtin_prefetch(v91, 0, 1);
         v523 = (P2Count *)(&v90[4 * (v81 ^ 0x7F70) + 284712]);
         v560 = (P2Count *)(&v90[4 * *(int32_t *)((uint8_t *)__dword_439880 + ((v81 ^ 0x80) & 0xC)) + 284712 + 4 * ((v81 ^ 0x80) & 0xFFFFFFF3)]);
         v522 = (P2Count *)(v560);
-        v561 = (Obj51 *)(&v90[4 * (v81 ^ 0x40) + 284712]);
-        v518 = (Obj51 *)(v561);
+        v561 = (P2Count *)(&v90[4 * (v81 ^ 0x40) + 284712]);
+        v518 = (P2Count *)(v561);
         __builtin_prefetch(v556, 0, 1);
         v562 = (P2Count *)(&v90[4 * (v81 ^ 0x7FB0) + 284712]);
         v520 = (P2Count *)(v562);
@@ -13290,8 +13199,8 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
         v519 = (P2Count *)(v93);
         v95 = v81 ^ 0x20;
         v96 = v81 ^ 0x10;
-        v564 = (Obj52 *)(&v90[4 * v95 + 284712]);
-        v515 = (Obj52 *)(v564);
+        v564 = (P2Count *)(&v90[4 * v95 + 284712]);
+        v515 = (P2Count *)(v564);
         v565 = (P2Count *)(&v90[4 * (v95 ^ 0x7FF0) + 284712]);
         v517 = (P2Count *)(v565);
         __builtin_prefetch(v559, 0, 1);
@@ -13391,100 +13300,100 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
           v332 = v549 - ((v331 + (1 << ((v538->f0 + 31) & 31))) >> (v538->f0 & 31));
           *(uint16_t *)&v538->f2 = v331
                                + ((32 * ((v332 > deadzone_hi) - (uint32_t)(v332 < deadzone_lo)) + v332 + 4) >> 3);
-          v333 = *((int16_t *)v533 + 1);
-          v334 = v550 - ((v333 + (1 << ((v533->f0 + 31) & 31))) >> (v533->f0 & 31));
-          *((uint16_t *)v533 + 1) = v333
+          v333 = v533->w2;
+          v334 = v550 - ((v333 + (1 << ((v533->b0 + 31) & 31))) >> (v533->b0 & 31));
+          *(uint16_t *)&v533->w2 = v333
                                + ((32 * ((v334 > deadzone_hi) - (uint32_t)(v334 < deadzone_lo)) + v334 + 2) >> 2);
           v335 = v534->w2;
           v336 = v550 - ((v335 + (1 << ((v534->b0 + 31) & 31))) >> (v534->b0 & 31));
           *(uint16_t *)&v534->w2 = v335
                                + ((32 * ((v336 > deadzone_hi) - (uint32_t)(v336 < deadzone_lo)) + v336 + 4) >> 3);
-          *((uint16_t *)v533 + 3) += (uint32_t)(v550 - ((*((int16_t *)v533 + 3) + (1 << ((v533->f4 + 31) & 31))) >> (v533->f4 & 31)) + 2) >> 2;
+          *(uint16_t *)&v533[1].w2 += (uint32_t)(v550 - ((v533[1].w2 + (1 << ((v533[1].b0 + 31) & 31))) >> (v533[1].b0 & 31)) + 2) >> 2;
           v337 = v535->w2;
           v338 = v549 - ((v337 + (1 << ((v535->b0 + 31) & 31))) >> (v535->b0 & 31));
           *(uint16_t *)&v535->w2 = v337
                                + ((32 * ((v338 > deadzone_hi) - (uint32_t)(v338 < deadzone_lo)) + v338 + 4) >> 3);
-          v339 = *((int16_t *)v530 + 1);
-          v340 = v550 - ((v339 + (1 << ((v530->f0 + 31) & 31))) >> (v530->f0 & 31));
-          *((uint16_t *)v530 + 1) = v339
+          v339 = v530->w2;
+          v340 = v550 - ((v339 + (1 << ((v530->b0 + 31) & 31))) >> (v530->b0 & 31));
+          *(uint16_t *)&v530->w2 = v339
                                + ((32 * ((v340 > deadzone_hi) - (uint32_t)(v340 < deadzone_lo)) + v340 + 2) >> 2);
           v341 = v531->w2;
           v342 = v550 - ((v341 + (1 << ((v531->b0 + 31) & 31))) >> (v531->b0 & 31));
           *(uint16_t *)&v531->w2 = v341
                                + ((32 * ((v342 > deadzone_hi) - (uint32_t)(v342 < deadzone_lo)) + v342 + 4) >> 3);
           v343 = v550;
-          *((uint16_t *)v530 + 3) += (uint32_t)(v550 - ((*((int16_t *)v530 + 3) + (1 << ((v530->f4 + 31) & 31))) >> (v530->f4 & 31)) + 2) >> 2;
+          *(uint16_t *)&v530[1].w2 += (uint32_t)(v550 - ((v530[1].w2 + (1 << ((v530[1].b0 + 31) & 31))) >> (v530[1].b0 & 31)) + 2) >> 2;
           v344 = v532->w2;
           v549 -= (v344 + (1 << ((v532->b0 + 31) & 31))) >> (v532->b0 & 31);
           v550 = v343;
           *(uint16_t *)&v532->w2 = v344
                                + ((32 * ((v549 > deadzone_hi) - (uint32_t)(v549 < deadzone_lo)) + v549 + 4) >> 3);
-          v345 = *((int16_t *)v527 + 1);
-          v346 = v550 - ((v345 + (1 << ((v527->f0 + 31) & 31))) >> (v527->f0 & 31));
-          *((uint16_t *)v527 + 1) = v345
+          v345 = v527->w2;
+          v346 = v550 - ((v345 + (1 << ((v527->b0 + 31) & 31))) >> (v527->b0 & 31));
+          *(uint16_t *)&v527->w2 = v345
                                + ((32 * ((v346 > deadzone_hi) - (uint32_t)(v346 < deadzone_lo)) + v346 + 2) >> 2);
           v347 = v528->w2;
           v348 = v550 - ((v347 + (1 << ((v528->b0 + 31) & 31))) >> (v528->b0 & 31));
           *(uint16_t *)&v528->w2 = v347
                                + ((32 * ((v348 > deadzone_hi) - (uint32_t)(v348 < deadzone_lo)) + v348 + 4) >> 3);
           v349 = v550;
-          *((uint16_t *)v527 + 3) += (uint32_t)(v550 - ((*((int16_t *)v527 + 3) + (1 << ((v527->f4 + 31) & 31))) >> (v527->f4 & 31)) + 2) >> 2;
+          *(uint16_t *)&v527[1].w2 += (uint32_t)(v550 - ((v527[1].w2 + (1 << ((v527[1].b0 + 31) & 31))) >> (v527[1].b0 & 31)) + 2) >> 2;
           v350 = v529->w2;
           LOBYTE(v345) = v529->b0;
           v548 = -v349;
           v351 = -v349 - ((v350 + (1 << ((v345 + 31) & 31))) >> (v345 & 31));
           *(uint16_t *)&v529->w2 = v350
                                + ((32 * ((v351 > deadzone_hi) - (uint32_t)(v351 < deadzone_lo)) + v351 + 4) >> 3);
-          v352 = *((int16_t *)v524 + 1);
+          v352 = v524->w2;
           v353 = v550;
-          v354 = v550 - ((v352 + (1 << ((v524->f0 + 31) & 31))) >> (v524->f0 & 31));
-          *((uint16_t *)v524 + 1) = v352
+          v354 = v550 - ((v352 + (1 << ((v524->b0 + 31) & 31))) >> (v524->b0 & 31));
+          *(uint16_t *)&v524->w2 = v352
                                + ((32 * ((v354 > deadzone_hi) - (uint32_t)(v354 < deadzone_lo)) + v354 + 2) >> 2);
           v355 = v525->f2;
           v356 = v353 - ((v355 + (1 << ((v525->f0 + 31) & 31))) >> (v525->f0 & 31));
           *(uint16_t *)&v525->f2 = v355
                                + ((32 * ((v356 > deadzone_hi) - (uint32_t)(v356 < deadzone_lo)) + v356 + 4) >> 3);
-          *((uint16_t *)v524 + 3) += (uint32_t)(v353 - ((*((int16_t *)v524 + 3) + (1 << ((v524->f4 + 31) & 31))) >> (v524->f4 & 31)) + 2) >> 2;
+          *(uint16_t *)&v524[1].w2 += (uint32_t)(v353 - ((v524[1].w2 + (1 << ((v524[1].b0 + 31) & 31))) >> (v524[1].b0 & 31)) + 2) >> 2;
           v357 = v526->w2;
           v358 = v548 - ((v357 + (1 << ((v526->b0 + 31) & 31))) >> (v526->b0 & 31));
           *(uint16_t *)&v526->w2 = v357
                                + ((32 * ((v358 > deadzone_hi) - (uint32_t)(v358 < deadzone_lo)) + v358 + 4) >> 3);
-          v359 = *((int16_t *)v521 + 1);
-          v360 = v550 - ((v359 + (1 << ((v521->f0 + 31) & 31))) >> (v521->f0 & 31));
-          *((uint16_t *)v521 + 1) = v359
+          v359 = v521->w2;
+          v360 = v550 - ((v359 + (1 << ((v521->b0 + 31) & 31))) >> (v521->b0 & 31));
+          *(uint16_t *)&v521->w2 = v359
                                + ((32 * ((v360 > deadzone_hi) - (uint32_t)(v360 < deadzone_lo)) + v360 + 2) >> 2);
           v361 = v522->w2;
           v362 = v550 - ((v361 + (1 << ((v522->b0 + 31) & 31))) >> (v522->b0 & 31));
           *(uint16_t *)&v522->w2 = v361
                                + ((32 * ((v362 > deadzone_hi) - (uint32_t)(v362 < deadzone_lo)) + v362 + 4) >> 3);
-          *((uint16_t *)v521 + 3) += (uint32_t)(v550 - ((*((int16_t *)v521 + 3) + (1 << ((v521->f4 + 31) & 31))) >> (v521->f4 & 31)) + 2) >> 2;
+          *(uint16_t *)&v521[1].w2 += (uint32_t)(v550 - ((v521[1].w2 + (1 << ((v521[1].b0 + 31) & 31))) >> (v521[1].b0 & 31)) + 2) >> 2;
           v363 = v523->w2;
           v364 = v548 - ((v363 + (1 << ((v523->b0 + 31) & 31))) >> (v523->b0 & 31));
           *(uint16_t *)&v523->w2 = v363
                                + ((32 * ((v364 > deadzone_hi) - (uint32_t)(v364 < deadzone_lo)) + v364 + 4) >> 3);
-          v365 = *((int16_t *)v518 + 1);
-          v366 = v550 - ((v365 + (1 << ((v518->f0 + 31) & 31))) >> (v518->f0 & 31));
-          *((uint16_t *)v518 + 1) = v365
+          v365 = v518->w2;
+          v366 = v550 - ((v365 + (1 << ((v518->b0 + 31) & 31))) >> (v518->b0 & 31));
+          *(uint16_t *)&v518->w2 = v365
                                + ((32 * ((v366 > deadzone_hi) - (uint32_t)(v366 < deadzone_lo)) + v366 + 2) >> 2);
           v367 = v519->w2;
           v368 = v550 - ((v367 + (1 << ((v519->b0 + 31) & 31))) >> (v519->b0 & 31));
           *(uint16_t *)&v519->w2 = v367
                                + ((32 * ((v368 > deadzone_hi) - (uint32_t)(v368 < deadzone_lo)) + v368 + 4) >> 3);
-          *((uint16_t *)v518 + 3) += (uint32_t)(v550 - ((*((int16_t *)v518 + 3) + (1 << ((v518->f4 + 31) & 31))) >> (v518->f4 & 31)) + 2) >> 2;
+          *(uint16_t *)&v518[1].w2 += (uint32_t)(v550 - ((v518[1].w2 + (1 << ((v518[1].b0 + 31) & 31))) >> (v518[1].b0 & 31)) + 2) >> 2;
           v369 = v520->w2;
           v370 = v548 - ((v369 + (1 << ((v520->b0 + 31) & 31))) >> (v520->b0 & 31));
           *(uint16_t *)&v520->w2 = v369
                                + ((32 * ((v370 > deadzone_hi) - (uint32_t)(v370 < deadzone_lo)) + v370 + 4) >> 3);
-          v371 = *((int16_t *)v515 + 1);
-          v372 = v550 - ((v371 + (1 << ((v515->f0 + 31) & 31))) >> (v515->f0 & 31));
-          *((uint16_t *)v515 + 1) = v371
+          v371 = v515->w2;
+          v372 = v550 - ((v371 + (1 << ((v515->b0 + 31) & 31))) >> (v515->b0 & 31));
+          *(uint16_t *)&v515->w2 = v371
                                + ((32 * ((v372 > deadzone_hi) - (uint32_t)(v372 < deadzone_lo)) + v372 + 2) >> 2);
           v373 = v516->f2;
           v374 = v550 - ((v373 + (1 << ((v516->f0 + 31) & 31))) >> (v516->f0 & 31));
           *(uint16_t *)&v516->f2 = v373
                                + ((32 * ((v374 > deadzone_hi) - (uint32_t)(v374 < deadzone_lo)) + v374 + 4) >> 3);
           v375 = v550;
-          *((uint16_t *)v515 + 3) += (uint32_t)(v550 - ((*((int16_t *)v515 + 3) + (1 << ((v515->f4 + 31) & 31))) >> (v515->f4 & 31)) + 2) >> 2;
+          *(uint16_t *)&v515[1].w2 += (uint32_t)(v550 - ((v515[1].w2 + (1 << ((v515[1].b0 + 31) & 31))) >> (v515[1].b0 & 31)) + 2) >> 2;
           v376 = v517->w2;
           v377 = (v376 + (1 << ((v517->b0 + 31) & 31))) >> (v517->b0 & 31);
           v550 = v375;
@@ -13581,30 +13490,30 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
             v238 = v572 - ((v237 + (1 << ((v538->f0 + 31) & 31))) >> (v538->f0 & 31));
             *(uint16_t *)&v538->f2 = v237
                                  + ((32 * ((v238 > deadzone_hi) - (uint32_t)(v238 < deadzone_lo)) + v238 + 4) >> 3);
-            v239 = *((int16_t *)v533 + 1);
+            v239 = v533->w2;
             v240 = v550;
-            v241 = v550 - ((v239 + (1 << ((v533->f0 + 31) & 31))) >> (v533->f0 & 31));
-            *((uint16_t *)v533 + 1) = v239
+            v241 = v550 - ((v239 + (1 << ((v533->b0 + 31) & 31))) >> (v533->b0 & 31));
+            *(uint16_t *)&v533->w2 = v239
                                  + ((32 * ((v241 > deadzone_hi) - (uint32_t)(v241 < deadzone_lo)) + v241 + 2) >> 2);
             v242 = v534->w2;
             v243 = v240 - ((v242 + (1 << ((v534->b0 + 31) & 31))) >> (v534->b0 & 31));
             *(uint16_t *)&v534->w2 = v242
                                  + ((32 * ((v243 > deadzone_hi) - (uint32_t)(v243 < deadzone_lo)) + v243 + 4) >> 3);
-            *((uint16_t *)v533 + 3) += (uint32_t)(v240
-                                                 - ((*((int16_t *)v533 + 3) + (1 << ((v533->f4 + 31) & 31))) >> (v533->f4 & 31))
+            *(uint16_t *)&v533[1].w2 += (uint32_t)(v240
+                                                 - ((v533[1].w2 + (1 << ((v533[1].b0 + 31) & 31))) >> (v533[1].b0 & 31))
                                                  + 2) >> 2;
-            v244 = *((int16_t *)v533 - 1);
-            v245 = v240 - ((v244 + (1 << ((*((char *)v533 - 4) + 31) & 31))) >> (*((char *)v533 - 4) & 31));
-            *((uint16_t *)v533 - 1) = v244
+            v244 = v533[-1].w2;
+            v245 = v240 - ((v244 + (1 << ((v533[-1].b0 + 31) & 31))) >> (v533[-1].b0 & 31));
+            *(uint16_t *)&v533[-1].w2 = v244
                                  + ((32 * ((v245 > deadzone_hi) - (uint32_t)(v245 < deadzone_lo)) + v245 + 4) >> 3);
             v246 = v535->w2;
             v247 = v572 - ((v246 + (1 << ((v535->b0 + 31) & 31))) >> (v535->b0 & 31));
             *(uint16_t *)&v535->w2 = v246
                                  + ((32 * ((v247 > deadzone_hi) - (uint32_t)(v247 < deadzone_lo)) + v247 + 4) >> 3);
-            v248 = *((int16_t *)v530 + 1);
+            v248 = v530->w2;
             v249 = v550;
-            v250 = v550 - ((v248 + (1 << ((v530->f0 + 31) & 31))) >> (v530->f0 & 31));
-            *((uint16_t *)v530 + 1) = v248
+            v250 = v550 - ((v248 + (1 << ((v530->b0 + 31) & 31))) >> (v530->b0 & 31));
+            *(uint16_t *)&v530->w2 = v248
                                  + ((32 * ((v250 > deadzone_hi) - (uint32_t)(v250 < deadzone_lo)) + v250 + 2) >> 2);
             v251 = v531->w2;
             LOBYTE(v248) = v531->b0;
@@ -13618,12 +13527,12 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
                                    - (v252 >> (v248 & 31))
                                    + 4) >> 3);
             v253 = v550;
-            *((uint16_t *)v530 + 3) += (uint32_t)(v550
-                                                 - ((*((int16_t *)v530 + 3) + (1 << ((v530->f4 + 31) & 31))) >> (v530->f4 & 31))
+            *(uint16_t *)&v530[1].w2 += (uint32_t)(v550
+                                                 - ((v530[1].w2 + (1 << ((v530[1].b0 + 31) & 31))) >> (v530[1].b0 & 31))
                                                  + 2) >> 2;
-            v254 = *((int16_t *)v530 - 1);
-            v255 = v253 - ((v254 + (1 << ((*((char *)v530 - 4) + 31) & 31))) >> (*((char *)v530 - 4) & 31));
-            *((uint16_t *)v530 - 1) = v254
+            v254 = v530[-1].w2;
+            v255 = v253 - ((v254 + (1 << ((v530[-1].b0 + 31) & 31))) >> (v530[-1].b0 & 31));
+            *(uint16_t *)&v530[-1].w2 = v254
                                  + ((32 * ((v255 > deadzone_hi) - (uint32_t)(v255 < deadzone_lo)) + v255 + 4) >> 3);
             v256 = v532->w2;
             LOBYTE(v254) = v532->b0;
@@ -13631,103 +13540,103 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
             v257 = -v253 - ((v256 + (1 << ((v254 + 31) & 31))) >> (v254 & 31));
             *(uint16_t *)&v532->w2 = v256
                                  + ((32 * ((v257 > deadzone_hi) - (uint32_t)(v257 < deadzone_lo)) + v257 + 4) >> 3);
-            v258 = *((int16_t *)v527 + 1);
+            v258 = v527->w2;
             v259 = v550;
-            v260 = v550 - ((v258 + (1 << ((v527->f0 + 31) & 31))) >> (v527->f0 & 31));
-            *((uint16_t *)v527 + 1) = v258
+            v260 = v550 - ((v258 + (1 << ((v527->b0 + 31) & 31))) >> (v527->b0 & 31));
+            *(uint16_t *)&v527->w2 = v258
                                  + ((32 * ((v260 > deadzone_hi) - (uint32_t)(v260 < deadzone_lo)) + v260 + 2) >> 2);
             v261 = v528->w2;
             v262 = v259 - ((v261 + (1 << ((v528->b0 + 31) & 31))) >> (v528->b0 & 31));
             *(uint16_t *)&v528->w2 = v261
                                  + ((32 * ((v262 > deadzone_hi) - (uint32_t)(v262 < deadzone_lo)) + v262 + 4) >> 3);
-            *((uint16_t *)v527 + 3) += (uint32_t)(v259
-                                                 - ((*((int16_t *)v527 + 3) + (1 << ((v527->f4 + 31) & 31))) >> (v527->f4 & 31))
+            *(uint16_t *)&v527[1].w2 += (uint32_t)(v259
+                                                 - ((v527[1].w2 + (1 << ((v527[1].b0 + 31) & 31))) >> (v527[1].b0 & 31))
                                                  + 2) >> 2;
-            v263 = *((int16_t *)v527 - 1);
-            v264 = v259 - ((v263 + (1 << ((*((char *)v527 - 4) + 31) & 31))) >> (*((char *)v527 - 4) & 31));
-            *((uint16_t *)v527 - 1) = v263
+            v263 = v527[-1].w2;
+            v264 = v259 - ((v263 + (1 << ((v527[-1].b0 + 31) & 31))) >> (v527[-1].b0 & 31));
+            *(uint16_t *)&v527[-1].w2 = v263
                                  + ((32 * ((v264 > deadzone_hi) - (uint32_t)(v264 < deadzone_lo)) + v264 + 4) >> 3);
             v265 = v529->w2;
             v266 = v573 - ((v265 + (1 << ((v529->b0 + 31) & 31))) >> (v529->b0 & 31));
             *(uint16_t *)&v529->w2 = v265
                                  + ((32 * ((v266 > deadzone_hi) - (uint32_t)(v266 < deadzone_lo)) + v266 + 4) >> 3);
-            v267 = *((int16_t *)v524 + 1);
+            v267 = v524->w2;
             v268 = v550;
-            v269 = v550 - ((v267 + (1 << ((v524->f0 + 31) & 31))) >> (v524->f0 & 31));
-            *((uint16_t *)v524 + 1) = v267
+            v269 = v550 - ((v267 + (1 << ((v524->b0 + 31) & 31))) >> (v524->b0 & 31));
+            *(uint16_t *)&v524->w2 = v267
                                  + ((32 * ((v269 > deadzone_hi) - (uint32_t)(v269 < deadzone_lo)) + v269 + 2) >> 2);
             v270 = v525->f2;
             v271 = v268 - ((v270 + (1 << ((v525->f0 + 31) & 31))) >> (v525->f0 & 31));
             *(uint16_t *)&v525->f2 = v270
                                  + ((32 * ((v271 > deadzone_hi) - (uint32_t)(v271 < deadzone_lo)) + v271 + 4) >> 3);
-            *((uint16_t *)v524 + 3) += (uint32_t)(v268
-                                                 - ((*((int16_t *)v524 + 3) + (1 << ((v524->f4 + 31) & 31))) >> (v524->f4 & 31))
+            *(uint16_t *)&v524[1].w2 += (uint32_t)(v268
+                                                 - ((v524[1].w2 + (1 << ((v524[1].b0 + 31) & 31))) >> (v524[1].b0 & 31))
                                                  + 2) >> 2;
-            v272 = *((int16_t *)v524 - 1);
-            v273 = v268 - ((v272 + (1 << ((*((char *)v524 - 4) + 31) & 31))) >> (*((char *)v524 - 4) & 31));
-            *((uint16_t *)v524 - 1) = v272
+            v272 = v524[-1].w2;
+            v273 = v268 - ((v272 + (1 << ((v524[-1].b0 + 31) & 31))) >> (v524[-1].b0 & 31));
+            *(uint16_t *)&v524[-1].w2 = v272
                                  + ((32 * ((v273 > deadzone_hi) - (uint32_t)(v273 < deadzone_lo)) + v273 + 4) >> 3);
             v274 = v526->w2;
             v275 = v573 - ((v274 + (1 << ((v526->b0 + 31) & 31))) >> (v526->b0 & 31));
             *(uint16_t *)&v526->w2 = v274
                                  + ((32 * ((v275 > deadzone_hi) - (uint32_t)(v275 < deadzone_lo)) + v275 + 4) >> 3);
-            v276 = *((int16_t *)v521 + 1);
+            v276 = v521->w2;
             v277 = v550;
-            v278 = v550 - ((v276 + (1 << ((v521->f0 + 31) & 31))) >> (v521->f0 & 31));
-            *((uint16_t *)v521 + 1) = v276
+            v278 = v550 - ((v276 + (1 << ((v521->b0 + 31) & 31))) >> (v521->b0 & 31));
+            *(uint16_t *)&v521->w2 = v276
                                  + ((32 * ((v278 > deadzone_hi) - (uint32_t)(v278 < deadzone_lo)) + v278 + 2) >> 2);
             v279 = v522->w2;
             v280 = v277 - ((v279 + (1 << ((v522->b0 + 31) & 31))) >> (v522->b0 & 31));
             *(uint16_t *)&v522->w2 = v279
                                  + ((32 * ((v280 > deadzone_hi) - (uint32_t)(v280 < deadzone_lo)) + v280 + 4) >> 3);
-            *((uint16_t *)v521 + 3) += (uint32_t)(v277
-                                                 - ((*((int16_t *)v521 + 3) + (1 << ((v521->f4 + 31) & 31))) >> (v521->f4 & 31))
+            *(uint16_t *)&v521[1].w2 += (uint32_t)(v277
+                                                 - ((v521[1].w2 + (1 << ((v521[1].b0 + 31) & 31))) >> (v521[1].b0 & 31))
                                                  + 2) >> 2;
-            v281 = *((int16_t *)v521 - 1);
-            v282 = v277 - ((v281 + (1 << ((*((char *)v521 - 4) + 31) & 31))) >> (*((char *)v521 - 4) & 31));
-            *((uint16_t *)v521 - 1) = v281
+            v281 = v521[-1].w2;
+            v282 = v277 - ((v281 + (1 << ((v521[-1].b0 + 31) & 31))) >> (v521[-1].b0 & 31));
+            *(uint16_t *)&v521[-1].w2 = v281
                                  + ((32 * ((v282 > deadzone_hi) - (uint32_t)(v282 < deadzone_lo)) + v282 + 4) >> 3);
             v283 = v523->w2;
             v284 = v573 - ((v283 + (1 << ((v523->b0 + 31) & 31))) >> (v523->b0 & 31));
             *(uint16_t *)&v523->w2 = v283
                                  + ((32 * ((v284 > deadzone_hi) - (uint32_t)(v284 < deadzone_lo)) + v284 + 4) >> 3);
-            v285 = *((int16_t *)v518 + 1);
+            v285 = v518->w2;
             v286 = v550;
-            v287 = v550 - ((v285 + (1 << ((v518->f0 + 31) & 31))) >> (v518->f0 & 31));
-            *((uint16_t *)v518 + 1) = v285
+            v287 = v550 - ((v285 + (1 << ((v518->b0 + 31) & 31))) >> (v518->b0 & 31));
+            *(uint16_t *)&v518->w2 = v285
                                  + ((32 * ((v287 > deadzone_hi) - (uint32_t)(v287 < deadzone_lo)) + v287 + 2) >> 2);
             v288 = v519->w2;
             v289 = v286 - ((v288 + (1 << ((v519->b0 + 31) & 31))) >> (v519->b0 & 31));
             *(uint16_t *)&v519->w2 = v288
                                  + ((32 * ((v289 > deadzone_hi) - (uint32_t)(v289 < deadzone_lo)) + v289 + 4) >> 3);
-            *((uint16_t *)v518 + 3) += (uint32_t)(v286
-                                                 - ((*((int16_t *)v518 + 3) + (1 << ((v518->f4 + 31) & 31))) >> (v518->f4 & 31))
+            *(uint16_t *)&v518[1].w2 += (uint32_t)(v286
+                                                 - ((v518[1].w2 + (1 << ((v518[1].b0 + 31) & 31))) >> (v518[1].b0 & 31))
                                                  + 2) >> 2;
-            v290 = *((int16_t *)v518 - 1);
-            v291 = v286 - ((v290 + (1 << ((*((char *)v518 - 4) + 31) & 31))) >> (*((char *)v518 - 4) & 31));
+            v290 = v518[-1].w2;
+            v291 = v286 - ((v290 + (1 << ((v518[-1].b0 + 31) & 31))) >> (v518[-1].b0 & 31));
             v292 = -v286;
             v574 = v292;
-            *((uint16_t *)v518 - 1) = v290
+            *(uint16_t *)&v518[-1].w2 = v290
                                  + ((32 * ((v291 > deadzone_hi) - (uint32_t)(v291 < deadzone_lo)) + v291 + 4) >> 3);
             v293 = v520->w2;
             v294 = v292 - ((v293 + (1 << ((v520->b0 + 31) & 31))) >> (v520->b0 & 31));
             *(uint16_t *)&v520->w2 = v293
                                  + ((32 * ((v294 > deadzone_hi) - (uint32_t)(v294 < deadzone_lo)) + v294 + 4) >> 3);
-            v295 = *((int16_t *)v515 + 1);
+            v295 = v515->w2;
             v296 = v550;
-            v297 = v550 - ((v295 + (1 << ((v515->f0 + 31) & 31))) >> (v515->f0 & 31));
-            *((uint16_t *)v515 + 1) = v295
+            v297 = v550 - ((v295 + (1 << ((v515->b0 + 31) & 31))) >> (v515->b0 & 31));
+            *(uint16_t *)&v515->w2 = v295
                                  + ((32 * ((v297 > deadzone_hi) - (uint32_t)(v297 < deadzone_lo)) + v297 + 2) >> 2);
             v298 = v516->f2;
             v299 = v296 - ((v298 + (1 << ((v516->f0 + 31) & 31))) >> (v516->f0 & 31));
             *(uint16_t *)&v516->f2 = v298
                                  + ((32 * ((v299 > deadzone_hi) - (uint32_t)(v299 < deadzone_lo)) + v299 + 4) >> 3);
-            *((uint16_t *)v515 + 3) += (uint32_t)(v296
-                                                 - ((*((int16_t *)v515 + 3) + (1 << ((v515->f4 + 31) & 31))) >> (v515->f4 & 31))
+            *(uint16_t *)&v515[1].w2 += (uint32_t)(v296
+                                                 - ((v515[1].w2 + (1 << ((v515[1].b0 + 31) & 31))) >> (v515[1].b0 & 31))
                                                  + 2) >> 2;
-            v300 = *((int16_t *)v515 - 1);
-            v301 = v296 - ((v300 + (1 << ((*((char *)v515 - 4) + 31) & 31))) >> (*((char *)v515 - 4) & 31));
-            *((uint16_t *)v515 - 1) = v300
+            v300 = v515[-1].w2;
+            v301 = v296 - ((v300 + (1 << ((v515[-1].b0 + 31) & 31))) >> (v515[-1].b0 & 31));
+            *(uint16_t *)&v515[-1].w2 = v300
                                  + ((32 * ((v301 > deadzone_hi) - (uint32_t)(v301 < deadzone_lo)) + v301 + 4) >> 3);
             v302 = v517->w2;
             v303 = v574 - ((v302 + (1 << ((v517->b0 + 31) & 31))) >> (v517->b0 & 31));
@@ -13798,123 +13707,123 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
             v143 = v547 - ((v142 + (1 << ((v538->f0 + 31) & 31))) >> (v538->f0 & 31));
             *(uint16_t *)&v538->f2 = v142
                                  + ((32 * ((v143 > deadzone_hi) - (uint32_t)(v143 < deadzone_lo)) + v143 + 4) >> 3);
-            v144 = *((int16_t *)v533 + 1);
+            v144 = v533->w2;
             v145 = v550;
-            v146 = v550 - ((v144 + (1 << ((v533->f0 + 31) & 31))) >> (v533->f0 & 31));
-            *((uint16_t *)v533 + 1) = v144
+            v146 = v550 - ((v144 + (1 << ((v533->b0 + 31) & 31))) >> (v533->b0 & 31));
+            *(uint16_t *)&v533->w2 = v144
                                  + ((32 * ((v146 > deadzone_hi) - (uint32_t)(v146 < deadzone_lo)) + v146 + 2) >> 2);
             v147 = v534->w2;
             v148 = v145 - ((v147 + (1 << ((v534->b0 + 31) & 31))) >> (v534->b0 & 31));
             *(uint16_t *)&v534->w2 = v147
                                  + ((32 * ((v148 > deadzone_hi) - (uint32_t)(v148 < deadzone_lo)) + v148 + 4) >> 3);
-            v149 = *((int16_t *)v533 - 1);
-            v150 = v145 - ((v149 + (1 << ((*((char *)v533 - 4) + 31) & 31))) >> (*((char *)v533 - 4) & 31));
-            *((uint16_t *)v533 - 1) = v149
+            v149 = v533[-1].w2;
+            v150 = v145 - ((v149 + (1 << ((v533[-1].b0 + 31) & 31))) >> (v533[-1].b0 & 31));
+            *(uint16_t *)&v533[-1].w2 = v149
                                  + ((32 * ((v150 > deadzone_hi) - (uint32_t)(v150 < deadzone_lo)) + v150 + 4) >> 3);
             v151 = v535->w2;
             v152 = v547 - ((v151 + (1 << ((v535->b0 + 31) & 31))) >> (v535->b0 & 31));
             *(uint16_t *)&v535->w2 = v151
                                  + ((32 * ((v152 > deadzone_hi) - (uint32_t)(v152 < deadzone_lo)) + v152 + 4) >> 3);
-            v153 = *((int16_t *)v530 + 1);
+            v153 = v530->w2;
             v154 = v550;
-            v155 = v550 - ((v153 + (1 << ((v530->f0 + 31) & 31))) >> (v530->f0 & 31));
-            *((uint16_t *)v530 + 1) = v153
+            v155 = v550 - ((v153 + (1 << ((v530->b0 + 31) & 31))) >> (v530->b0 & 31));
+            *(uint16_t *)&v530->w2 = v153
                                  + ((32 * ((v155 > deadzone_hi) - (uint32_t)(v155 < deadzone_lo)) + v155 + 2) >> 2);
             v156 = v531->w2;
             v157 = v154 - ((v156 + (1 << ((v531->b0 + 31) & 31))) >> (v531->b0 & 31));
             *(uint16_t *)&v531->w2 = v156
                                  + ((32 * ((v157 > deadzone_hi) - (uint32_t)(v157 < deadzone_lo)) + v157 + 4) >> 3);
-            v158 = *((int16_t *)v530 - 1);
-            v159 = v154 - ((v158 + (1 << ((*((char *)v530 - 4) + 31) & 31))) >> (*((char *)v530 - 4) & 31));
-            *((uint16_t *)v530 - 1) = v158
+            v158 = v530[-1].w2;
+            v159 = v154 - ((v158 + (1 << ((v530[-1].b0 + 31) & 31))) >> (v530[-1].b0 & 31));
+            *(uint16_t *)&v530[-1].w2 = v158
                                  + ((32 * ((v159 > deadzone_hi) - (uint32_t)(v159 < deadzone_lo)) + v159 + 4) >> 3);
             v160 = v532->w2;
             v547 -= (v160 + (1 << ((v532->b0 + 31) & 31))) >> (v532->b0 & 31);
             v161 = v550;
             *(uint16_t *)&v532->w2 = v160
                                  + ((32 * ((v547 > deadzone_hi) - (uint32_t)(v547 < deadzone_lo)) + v547 + 4) >> 3);
-            v162 = *((int16_t *)v527 + 1);
-            v163 = v161 - ((v162 + (1 << ((v527->f0 + 31) & 31))) >> (v527->f0 & 31));
-            *((uint16_t *)v527 + 1) = v162
+            v162 = v527->w2;
+            v163 = v161 - ((v162 + (1 << ((v527->b0 + 31) & 31))) >> (v527->b0 & 31));
+            *(uint16_t *)&v527->w2 = v162
                                  + ((32 * ((v163 > deadzone_hi) - (uint32_t)(v163 < deadzone_lo)) + v163 + 2) >> 2);
             v164 = v528->w2;
             v165 = v161 - ((v164 + (1 << ((v528->b0 + 31) & 31))) >> (v528->b0 & 31));
             *(uint16_t *)&v528->w2 = v164
                                  + ((32 * ((v165 > deadzone_hi) - (uint32_t)(v165 < deadzone_lo)) + v165 + 4) >> 3);
-            v166 = *((int16_t *)v527 - 1);
-            v167 = v161 - ((v166 + (1 << ((*((char *)v527 - 4) + 31) & 31))) >> (*((char *)v527 - 4) & 31));
+            v166 = v527[-1].w2;
+            v167 = v161 - ((v166 + (1 << ((v527[-1].b0 + 31) & 31))) >> (v527[-1].b0 & 31));
             v168 = -v161;
             v570 = v168;
-            *((uint16_t *)v527 - 1) = v166
+            *(uint16_t *)&v527[-1].w2 = v166
                                  + ((32 * ((v167 > deadzone_hi) - (uint32_t)(v167 < deadzone_lo)) + v167 + 4) >> 3);
             v169 = v529->w2;
             v170 = v168 - ((v169 + (1 << ((v529->b0 + 31) & 31))) >> (v529->b0 & 31));
             *(uint16_t *)&v529->w2 = v169
                                  + ((32 * ((v170 > deadzone_hi) - (uint32_t)(v170 < deadzone_lo)) + v170 + 4) >> 3);
-            v171 = *((int16_t *)v524 + 1);
+            v171 = v524->w2;
             v172 = v550;
-            v173 = v550 - ((v171 + (1 << ((v524->f0 + 31) & 31))) >> (v524->f0 & 31));
-            *((uint16_t *)v524 + 1) = v171
+            v173 = v550 - ((v171 + (1 << ((v524->b0 + 31) & 31))) >> (v524->b0 & 31));
+            *(uint16_t *)&v524->w2 = v171
                                  + ((32 * ((v173 > deadzone_hi) - (uint32_t)(v173 < deadzone_lo)) + v173 + 2) >> 2);
             v174 = v525->f2;
             v175 = v172 - ((v174 + (1 << ((v525->f0 + 31) & 31))) >> (v525->f0 & 31));
             *(uint16_t *)&v525->f2 = v174
                                  + ((32 * ((v175 > deadzone_hi) - (uint32_t)(v175 < deadzone_lo)) + v175 + 4) >> 3);
-            v176 = *((int16_t *)v524 - 1);
-            v177 = v172 - ((v176 + (1 << ((*((char *)v524 - 4) + 31) & 31))) >> (*((char *)v524 - 4) & 31));
-            *((uint16_t *)v524 - 1) = v176
+            v176 = v524[-1].w2;
+            v177 = v172 - ((v176 + (1 << ((v524[-1].b0 + 31) & 31))) >> (v524[-1].b0 & 31));
+            *(uint16_t *)&v524[-1].w2 = v176
                                  + ((32 * ((v177 > deadzone_hi) - (uint32_t)(v177 < deadzone_lo)) + v177 + 4) >> 3);
             v178 = v526->w2;
             v179 = v570 - ((v178 + (1 << ((v526->b0 + 31) & 31))) >> (v526->b0 & 31));
             *(uint16_t *)&v526->w2 = v178
                                  + ((32 * ((v179 > deadzone_hi) - (uint32_t)(v179 < deadzone_lo)) + v179 + 4) >> 3);
-            v180 = *((int16_t *)v521 + 1);
+            v180 = v521->w2;
             v181 = v550;
-            v182 = v550 - ((v180 + (1 << ((v521->f0 + 31) & 31))) >> (v521->f0 & 31));
-            *((uint16_t *)v521 + 1) = v180
+            v182 = v550 - ((v180 + (1 << ((v521->b0 + 31) & 31))) >> (v521->b0 & 31));
+            *(uint16_t *)&v521->w2 = v180
                                  + ((32 * ((v182 > deadzone_hi) - (uint32_t)(v182 < deadzone_lo)) + v182 + 2) >> 2);
             v183 = v522->w2;
             v184 = v181 - ((v183 + (1 << ((v522->b0 + 31) & 31))) >> (v522->b0 & 31));
             *(uint16_t *)&v522->w2 = v183
                                  + ((32 * ((v184 > deadzone_hi) - (uint32_t)(v184 < deadzone_lo)) + v184 + 4) >> 3);
-            v185 = *((int16_t *)v521 - 1);
-            v186 = v181 - ((v185 + (1 << ((*((char *)v521 - 4) + 31) & 31))) >> (*((char *)v521 - 4) & 31));
-            *((uint16_t *)v521 - 1) = v185
+            v185 = v521[-1].w2;
+            v186 = v181 - ((v185 + (1 << ((v521[-1].b0 + 31) & 31))) >> (v521[-1].b0 & 31));
+            *(uint16_t *)&v521[-1].w2 = v185
                                  + ((32 * ((v186 > deadzone_hi) - (uint32_t)(v186 < deadzone_lo)) + v186 + 4) >> 3);
             v187 = v523->w2;
             v188 = v570 - ((v187 + (1 << ((v523->b0 + 31) & 31))) >> (v523->b0 & 31));
             *(uint16_t *)&v523->w2 = v187
                                  + ((32 * ((v188 > deadzone_hi) - (uint32_t)(v188 < deadzone_lo)) + v188 + 4) >> 3);
-            v189 = *((int16_t *)v518 + 1);
+            v189 = v518->w2;
             v190 = v550;
-            v191 = v550 - ((v189 + (1 << ((v518->f0 + 31) & 31))) >> (v518->f0 & 31));
-            *((uint16_t *)v518 + 1) = v189
+            v191 = v550 - ((v189 + (1 << ((v518->b0 + 31) & 31))) >> (v518->b0 & 31));
+            *(uint16_t *)&v518->w2 = v189
                                  + ((32 * ((v191 > deadzone_hi) - (uint32_t)(v191 < deadzone_lo)) + v191 + 2) >> 2);
             v192 = v519->w2;
             v193 = v190 - ((v192 + (1 << ((v519->b0 + 31) & 31))) >> (v519->b0 & 31));
             *(uint16_t *)&v519->w2 = v192
                                  + ((32 * ((v193 > deadzone_hi) - (uint32_t)(v193 < deadzone_lo)) + v193 + 4) >> 3);
-            v194 = *((int16_t *)v518 - 1);
-            v195 = v190 - ((v194 + (1 << ((*((char *)v518 - 4) + 31) & 31))) >> (*((char *)v518 - 4) & 31));
-            *((uint16_t *)v518 - 1) = v194
+            v194 = v518[-1].w2;
+            v195 = v190 - ((v194 + (1 << ((v518[-1].b0 + 31) & 31))) >> (v518[-1].b0 & 31));
+            *(uint16_t *)&v518[-1].w2 = v194
                                  + ((32 * ((v195 > deadzone_hi) - (uint32_t)(v195 < deadzone_lo)) + v195 + 4) >> 3);
             v196 = v520->w2;
             v197 = v570 - ((v196 + (1 << ((v520->b0 + 31) & 31))) >> (v520->b0 & 31));
             *(uint16_t *)&v520->w2 = v196
                                  + ((32 * ((v197 > deadzone_hi) - (uint32_t)(v197 < deadzone_lo)) + v197 + 4) >> 3);
-            v198 = *((int16_t *)v515 + 1);
+            v198 = v515->w2;
             v199 = v550;
-            v200 = v550 - ((v198 + (1 << ((v515->f0 + 31) & 31))) >> (v515->f0 & 31));
-            *((uint16_t *)v515 + 1) = v198
+            v200 = v550 - ((v198 + (1 << ((v515->b0 + 31) & 31))) >> (v515->b0 & 31));
+            *(uint16_t *)&v515->w2 = v198
                                  + ((32 * ((v200 > deadzone_hi) - (uint32_t)(v200 < deadzone_lo)) + v200 + 2) >> 2);
             v201 = v516->f2;
             v202 = v199 - ((v201 + (1 << ((v516->f0 + 31) & 31))) >> (v516->f0 & 31));
             v550 = v199;
             *(uint16_t *)&v516->f2 = v201
                                  + ((32 * ((v202 > deadzone_hi) - (uint32_t)(v202 < deadzone_lo)) + v202 + 4) >> 3);
-            v203 = *((int16_t *)v515 - 1);
-            v204 = v199 - ((v203 + (1 << ((*((char *)v515 - 4) + 31) & 31))) >> (*((char *)v515 - 4) & 31));
-            *((uint16_t *)v515 - 1) = v203
+            v203 = v515[-1].w2;
+            v204 = v199 - ((v203 + (1 << ((v515[-1].b0 + 31) & 31))) >> (v515[-1].b0 & 31));
+            *(uint16_t *)&v515[-1].w2 = v203
                                  + ((32 * ((v204 > deadzone_hi) - (uint32_t)(v204 < deadzone_lo)) + v204 + 4) >> 3);
             v205 = v517->w2;
             LOBYTE(v203) = v517->b0;
