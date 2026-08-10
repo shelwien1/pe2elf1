@@ -595,7 +595,9 @@ struct ModelBlock {
   SymList *f1078224;   // always `&escape`
   uint8_t _pad22[4];
   SymList **f1078232;    // the cursor over `sel`
-  uint8_t *f1078236;   // freed by free_workspace: a buffer, not an int
+  // A `uint16_t` per symbol -- `bmf_new(2 * f4 * f8)` -- and every reader
+  // indexes it `*(uint16_t *)(p + 2 * k)`.
+  uint16_t *f1078236;
   // The alphabet map: one 24-bit symbol code per entry.  `expand_alphabet`
   // builds it as whole words -- `= j`, `+= v20 << 8 * k`, `= v27 + v25` -- and
   // `unmodel_plane_slow` reads a word back per pixel.
@@ -626,7 +628,9 @@ struct ModelBlock {
   // The symbol cache `code_pixel` promotes through: a cursor into
   // `f1078696`, set to `&f1078696[8 * ctx]` and walked as `[0..6]`.
   uint16_t *f6059432;
-  uint8_t *f6059436;   // a row cursor; `f6059436 + 2` steps two bytes
+  // A row cursor, and every read and write through it is a `uint16_t`:
+  // `[0]` is this position and `[1]` the one ahead.
+  uint16_t *f6059436;
   // The four regions `layout_workspace` ends on.  Each extent is the loop
   // bound or the memset length that fills it, and the four of them run to
   // 8102448 -- which is the 0x7BA230 both callers ask `bmf_new` for, so the
@@ -707,13 +711,16 @@ struct AltP2Block {
       uint64_t f278640;
       uint64_t f278648;
       float (*f278656)[4];   // a weight block: 16 rows of four, `alt_p2_filter`'s `_this`
-      // Four cursors into one `bmf_new(4 * i + 16)` buffer, all stepped in
-      // four-byte units and all dereferenced as words.  The p2 bodies swap
-      // 660 with 664 once a row and re-derive 668 and 672 from them.
-      int32_t *f278660;
-      int32_t *f278664;
-      int32_t *f278668;
-      int32_t *f278672;
+      // Two row buffers out of one `bmf_new(4 * i + 16)`, swapped once a row,
+      // and two cursors into them: `cur` walks the row being written and
+      // `above` the one before it, both re-derived as `row + 2` after the
+      // swap.  The six neighbours `alt_p2_context` reads are `cur[-2 .. 0]`
+      // and `above[0 .. 2]` -- three behind on this row, three at and ahead on
+      // the last.
+      int32_t *row0;    // +278660
+      int32_t *row1;    // +278664
+      int32_t *cur;     // +278668
+      int32_t *above;   // +278672
       int32_t f278676;
       int32_t f278680;
       int32_t f278684;
@@ -2641,8 +2648,8 @@ LABEL_37:
   // The other fourteen sites already spell the 16-bit accesses out --
   // `*(uint16_t *)(f6059436 + 2) = *(uint16_t *)f6059436` at 11752 is this
   // line -- so the field is a byte cursor and these two were the odd ones.
-  *(uint16_t *)(_this->f6059436 + 2) = *(uint16_t *)_this->f6059436;
-  *(uint16_t *)_this->f6059436 = **(uint16_t **)&_this->f56[5];
+  _this->f6059436[1] = _this->f6059436[0];
+  _this->f6059436[0] = **(uint16_t **)&_this->f56[5];
   // Six neighbours, compared against the symbol just written.
   {
     PixRec *const here = (PixRec *)_this->f56[5];
@@ -4045,11 +4052,11 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
   deadzone_lo = -v8;
   *(uint32_t *)&_this->f278720 = -v9 - 7;
   *(uint32_t *)&_this->f278724 = v9 + 8;
-  _this->f278660 = (int32_t *)bmf_new(4 * i + 16);
+  _this->row0 = (int32_t *)bmf_new(4 * i + 16);
   v10 = bmf_new(4 * i + 16);
   *(uint32_t *)((uint8_t *)_this + 232) = 0x3F800000 /* 1.0f */;
-  _this->f278664 = (int32_t *)v10;
-  _this->f278668 = _this->f278660 + i + 2;
+  _this->row1 = (int32_t *)v10;
+  _this->cur = _this->row0 + i + 2;
   if ( i > -4 )
   {
     m_1 = (i + 4) / 2;
@@ -4057,10 +4064,10 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
     {
       for ( m = 0; m < m_1; ++m )
       {
-        *(uint8_t **)&_this->f278664[2 * m] = (uint8_t *)_this;
-        *(uint8_t **)&_this->f278660[2 * m] = (uint8_t *)_this;
-        *(uint8_t **)&_this->f278664[2 * m + 1] = (uint8_t *)_this;
-        *(uint8_t **)&_this->f278660[2 * m + 1] = (uint8_t *)_this;
+        *(uint8_t **)&_this->row1[2 * m] = (uint8_t *)_this;
+        *(uint8_t **)&_this->row0[2 * m] = (uint8_t *)_this;
+        *(uint8_t **)&_this->row1[2 * m + 1] = (uint8_t *)_this;
+        *(uint8_t **)&_this->row0[2 * m + 1] = (uint8_t *)_this;
       }
       v13 = 2 * m + 1;
     }
@@ -4070,8 +4077,8 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
     }
     if ( i + 4 > (uint32_t)(v13 - 1) )
     {
-      *(uint8_t **)&_this->f278664[v13 - 1] = (uint8_t *)_this;
-      *(uint8_t **)&_this->f278660[v13 - 1] = (uint8_t *)_this;
+      *(uint8_t **)&_this->row1[v13 - 1] = (uint8_t *)_this;
+      *(uint8_t **)&_this->row0[v13 - 1] = (uint8_t *)_this;
     }
   }
   n5 = 0;
@@ -6624,9 +6631,9 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
     v281 = (P2Ctx *)(nullptr);
     v282 = (int16_t *)(nullptr);
   }
-  v103 = v28->f278668;
+  v103 = v28->cur;
   __frame.sub0 = (float (*)[4])*(v103 - 1);
-  v104 = v28->f278672;
+  v104 = v28->above;
   __frame.sub1 = (float (*)[4])v104[1];
   __frame.sub2 = (float (*)[4])v104[2];
   __frame.sub3 = (float (*)[4])*(v103 - 2);
@@ -7164,7 +7171,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
                 "buf is not the 64 KiB the memset clears");
   ;
   ModelBlock *Blockaa_2;
-  uint8_t *v62;
+  uint16_t *v62;   // a cursor into `f1078236`
   bool v46, v48, v59;
   int8_t v35;
   uint8_t *v28;   // `uint8_t *` beside the `char` scalars above
@@ -7241,7 +7248,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
             *(uint32_t *)&__frame.buf[4 * v58 - 4] = 1;
             v55 = __frame.v85;
             *(int32_t *)&Blockaa_1->f16 += v59;
-            *(uint16_t *)(Blockaa_1->f1078236 + 2 * v54) = v58;
+            Blockaa_1->f1078236[v54] = v58;
             v51 = *(int32_t *)&Blockaa_1->f0;
             ++v54;
           }
@@ -7264,7 +7271,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
         v63 = *v60;
         *(uint32_t *)&__frame.buf[4 * v63 - 4] = 1;
         ++v60;
-        *(uint16_t *)(v62 + 2 * v61++) = v63;
+        v62[v61++] = v63;
       }
       while ( v61 < Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0 );
       v50 = *(int32_t *)&Blockaa_1->f16;
@@ -7309,8 +7316,8 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
         v75 = 0;
         do
         {
-          *(uint16_t *)(Blockaa_1->f1078236 + 2 * v75) = *(uint32_t *)&__frame.buf[4
-                                                                  * *(uint16_t *)(Blockaa_1->f1078236 + 2 * v75)
+          Blockaa_1->f1078236[v75] = *(uint32_t *)&__frame.buf[4
+                                                                  * Blockaa_1->f1078236[v75]
                                                                   - 4];
           ++v75;
         }
@@ -7344,7 +7351,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
     memset(__frame.buf,0,0x10000);
     *(int32_t *)&Blockaa_1->f16 = 1;
     *(uint32_t *)__frame.buf = __frame.slot4 & *(uint32_t *)a3;
-    *(uint16_t *)Blockaa_1->f1078236 = 0;
+    Blockaa_1->f1078236[0] = 0;
     if ( (uint32_t)(Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0) > 1 )
     {
       __frame.slot8 = a3;
@@ -7404,7 +7411,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
         }
 LABEL_12:
         Blockaa_3 = (ModelBlock *)((uint32_t *)__frame.slot7);
-        *(uint16_t *)(__frame.slot7->f1078236 + 2 * v12++) = v11;
+        __frame.slot7->f1078236[v12++] = v11;
         if ( v12 >= *(uint32_t *)&Blockaa_3->f4 * Blockaa_3->f0 )
         {
           v4 = __frame.slot8;
@@ -7519,7 +7526,7 @@ LABEL_71:
       free(__frame.v79);
       v34 = bmf_new(2 * Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0);
       __frame.v79 = (__frame.slot[1]);
-      Blockaa_1->f1078236 = (uint8_t *)v34;
+      Blockaa_1->f1078236 = (uint16_t *)v34;
       __reduce_alphabet((ModelBlock *)Blockaa_1, v35, (uint8_t *)__frame.v79);
       free((__frame.slot[1]));
     }
@@ -9284,7 +9291,8 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   uint64_t *v80;
   uint16_t *v36;
   uint8_t *v21, *v23, *v57;   // row cursors out of ModelBlock
-  uint8_t *v46, *v66, *n15_17;
+  uint8_t *v46, *n15_17;
+  uint16_t *v66;   // a copy of `f6059436`
   uint8_t *v53, *v54, *v55, *v61, *v108, *n15_10;   // row cursors out of ModelBlock
   bool v19;
   int8_t v74, v91;
@@ -9370,7 +9378,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   v15 = this_2->ctx_state[v12];
   this_2->f36 = v15;
   v16 = &this_2->group_ctr[v15][v13];
-  this_2->f6059436 = (uint8_t *)v16;
+  this_2->f6059436 = (uint16_t *)v16;
   n4_9 = v16->f0;
   if ( n4_9 == __frame.sym0 )
   {
@@ -9584,7 +9592,7 @@ LABEL_57:
         __frame.sym1 = ::mode_symbol[1];
         v58[1] = (uint16_t)(uintptr_t)v54;
         *(uint16_t *)this_3->f56[5] = (uint16_t)(uintptr_t)v55;
-        *(uint16_t *)this_3->f6059436 = (uint16_t)(uintptr_t)v55;
+        this_3->f6059436[0] = (uint16_t)(uintptr_t)v55;
         v59 = (int32_t *)this_3->f56[5];
         v60 = v59[1];
         __frame.sym3 = *v59;
@@ -9603,12 +9611,12 @@ LABEL_57:
             n4_15 = __frame.sym2;
             do
             {
-              *(uint16_t *)(this_3->f6059436 + 2) = n4_14;
+              this_3->f6059436[1] = n4_14;
               *(uint32_t *)this_3->f56[5] = n15_13;
               *(uint32_t *)(this_3->f56[5] + 4) = v60;
-              v66 = (uint8_t *)(uint32_t)this_3->f6059436;
+              v66 = this_3->f6059436;
               this_3->f56[5] += 8;
-              *(uint16_t *)(v66 + 2) = n4_14;
+              v66[1] = n4_14;
               *(uint32_t *)this_3->f56[5] = n15_13;
               *(uint32_t *)(this_3->f56[5] + 4) = v60;
               v61 = this_3->f56[5] + 8;
@@ -9627,7 +9635,7 @@ LABEL_57:
           if ( n15_18 - n15_14 - 1 > (uint32_t)(v67 - 1) )
           {
             n15_15 = __frame.sym3;
-            *(uint16_t *)(this_3->f6059436 + 2) = __frame.sym1;
+            this_3->f6059436[1] = __frame.sym1;
             *(uint32_t *)this_3->f56[5] = n15_15;
             *(uint32_t *)(this_3->f56[5] + 4) = v60;
             v61 = this_3->f56[5] + 8;
@@ -10077,7 +10085,8 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   ;
   PixRec *v63;
   uint8_t *v20, *v22, *n2_9, *v52, *v109;   // row cursors out of ModelBlock
-  uint8_t *v59, *v74, *n15_36, *n15_38, *n15_40;
+  uint8_t *v74, *n15_36, *n15_38, *n15_40;
+  uint16_t *v59;   // a copy of `f6059436`
   bool v11;
   int8_t v93;
   uint8_t v24, v64, v65, v66, v67, v68;
@@ -10161,7 +10170,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   v15 = this_2->ctx_state[v10];
   *(int32_t *)&this_2->f36 = v15;
   v16 = &this_2->group_ctr[v15][v13];
-  this_2->f6059436 = (uint8_t *)v16;
+  this_2->f6059436 = (uint16_t *)v16;
   n15_6 = v16->f0;
   if ( n15_6 == __frame.sym8 )
   {
@@ -10337,10 +10346,10 @@ LABEL_42:
       *(int32_t *)&this_3->f56[9] = v50 + 8 * n15_12 - 8 * n15_9;
       *((uint32_t *)v51 + 1) = 0x01010101;
       *(uint32_t *)this_3->f56[5] = 0x01010101;
-      *(uint16_t *)(this_3->f6059436 + 2) = *(uint16_t *)this_3->f6059436;
+      this_3->f6059436[1] = this_3->f6059436[0];
       LOWORD(v51) = __frame.sym8;
       *(uint16_t *)this_3->f56[5] = __frame.sym8;
-      *(uint16_t *)this_3->f6059436 = (uint16_t)(uintptr_t)v51;
+      this_3->f6059436[0] = (uint16_t)(uintptr_t)v51;
       v52 = this_3->f56[5];
       v53 = *(uint32_t *)v52;
       __frame.sym1 = *(uint32_t *)(v52 + 4);
@@ -10360,12 +10369,12 @@ LABEL_42:
           n15_10 = __frame.sym8;
           do
           {
-            *(uint16_t *)(this_3->f6059436 + 2) = n15_10;
+            this_3->f6059436[1] = n15_10;
             *(uint32_t *)this_3->f56[5] = v53;
             *(uint32_t *)(this_3->f56[5] + 4) = n2_10;
-            v59 = (uint8_t *)this_3->f6059436;
+            v59 = this_3->f6059436;
             this_3->f56[5] += 8;
-            *(uint16_t *)(v59 + 2) = n15_10;
+            v59[1] = n15_10;
             *(uint32_t *)this_3->f56[5] = v53;
             *(uint32_t *)(this_3->f56[5] + 4) = n2_10;
             n2_11 = (uint16_t *)(this_3->f56[5] + 8);
@@ -10385,7 +10394,7 @@ LABEL_42:
         }
         if ( p_n15_4 > (uint32_t)(v61 - 1) )
         {
-          *(uint16_t *)(this_3->f6059436 + 2) = __frame.sym8;
+          this_3->f6059436[1] = __frame.sym8;
           *(uint32_t *)this_3->f56[5] = v53;
           *(uint32_t *)(this_3->f56[5] + 4) = __frame.sym1;
           n2_12 = (uint16_t *)(this_3->f56[5] + 8);
@@ -11039,7 +11048,7 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
   while ( n8 < 8 );
   n0x18 = 0;
   memset(a1->f1051776,0,sizeof a1->f1051776);
-  a1->f1078236 = (uint8_t *)bmf_new(2 * a1->f4 * a1->f0);
+  a1->f1078236 = (uint16_t *)bmf_new(2 * a1->f4 * a1->f0);
   a1->f1076352[0] = 4;
   a1->f1076352[1] = 4;
   a1->f1076352[2] = 72;
@@ -12215,7 +12224,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   *(uint16_t *)(a1->f278736[0] + 6) = (WORD2(v14) ^ v14) - WORD2(v14);
   v15 = a1->f278656;
   v16 = v15[14][1] + 0.000099999997f;
-  v17 = *(float (**)[4])(a1->f278668 - 1);
+  v17 = *(float (**)[4])(a1->cur - 1);
   v18 = *(float *)&a1->f278648;
   n2_bias = *(float *)&a1->f278640;
   v19 = sample - v18;
@@ -12287,9 +12296,9 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
     ++*(int32_t *)&v15[15][0];
     v15[14][2] = ms_scale + ((10.0f - ms_scale) * 0.00019999999f);
   }
-  *a1->f278668 = *(uint32_t *)&a1->f278656;
-  ++a1->f278668;
-  ++a1->f278672;
+  *a1->cur = *(uint32_t *)&a1->f278656;
+  ++a1->cur;
+  ++a1->above;
   do
   {
     v75 = ((uint32_t *)v578)[n5 + 69669];
@@ -13897,22 +13906,22 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
     {
       // Start the next row: carry the last word of this one forward, swap
       // the two row buffers, and re-derive the two cursors from them.
-      v48 = lpAddress->f278668;
+      v48 = lpAddress->cur;
       v49 = v48[-1];
       v97 = a5;
       v48[1] = v49;
-      *lpAddress->f278668 = v49;
-      v50 = lpAddress->f278660;
-      v51 = lpAddress->f278664;
-      lpAddress->f278660 = v51;
-      lpAddress->f278664 = v50;
+      *lpAddress->cur = v49;
+      v50 = lpAddress->row0;
+      v51 = lpAddress->row1;
+      lpAddress->row0 = v51;
+      lpAddress->row1 = v50;
       v51 += 2;
       v50 += 2;
-      lpAddress->f278668 = v51;
-      lpAddress->f278672 = v50;
+      lpAddress->cur = v51;
+      lpAddress->above = v50;
       v52 = *v50;
       v51[-1] = *v50;
-      lpAddress->f278668[-2] = v52;
+      lpAddress->cur[-2] = v52;
       lpAddress->f278528_q = 0;
       lpAddress->f278536 = 0;
       lpAddress->f278540 = 0;
@@ -14254,21 +14263,21 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v56 = (AltP2Block *)((int32_t)*(v18 - 1));
           // Start the next row: carry the last word of this one forward, swap
           // the two row buffers, and re-derive the two cursors from them.
-          v57 = v56->f278668;
+          v57 = v56->cur;
           v58 = v57[-1];
           v57[1] = v58;
-          *v56->f278668 = v58;
-          v59 = v56->f278660;
-          v60 = v56->f278664;
-          v56->f278660 = v60;
-          v56->f278664 = v59;
+          *v56->cur = v58;
+          v59 = v56->row0;
+          v60 = v56->row1;
+          v56->row0 = v60;
+          v56->row1 = v59;
           v60 += 2;
-          v56->f278668 = v60;
+          v56->cur = v60;
           v59 += 2;
-          v56->f278672 = v59;
+          v56->above = v59;
           v61 = *v59;
           v60[-1] = *v59;
-          v56->f278668[-2] = v61;
+          v56->cur[-2] = v61;
           v56->f278528_q = 0;
           v56->f278536 = 0;
           v56->f278540 = 0;
@@ -14656,22 +14665,22 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
     {
       // Start the next row: carry the last word of this one forward, swap
       // the two row buffers, and re-derive the two cursors from them.
-      v51 = lpAddress->f278668;
+      v51 = lpAddress->cur;
       v52 = v51[-1];
       v109 = v8;
       v51[1] = v52;
-      *lpAddress->f278668 = v52;
-      v53 = lpAddress->f278660;
-      v54 = lpAddress->f278664;
-      lpAddress->f278660 = v54;
-      lpAddress->f278664 = v53;
+      *lpAddress->cur = v52;
+      v53 = lpAddress->row0;
+      v54 = lpAddress->row1;
+      lpAddress->row0 = v54;
+      lpAddress->row1 = v53;
       v54 += 2;
-      lpAddress->f278668 = v54;
+      lpAddress->cur = v54;
       v53 += 2;
-      lpAddress->f278672 = v53;
+      lpAddress->above = v53;
       v55 = *v53;
       v54[-1] = *v53;
-      lpAddress->f278668[-2] = v55;
+      lpAddress->cur[-2] = v55;
       lpAddress->f278528_q = 0;
       lpAddress->f278536 = 0;
       lpAddress->f278540 = 0;
@@ -15003,21 +15012,21 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           v55 = (AltP2Block *)((int32_t)*(v17 - 1));
           // Start the next row: carry the last word of this one forward, swap
           // the two row buffers, and re-derive the two cursors from them.
-          v56 = v55->f278668;
+          v56 = v55->cur;
           v57 = v56[-1];
           v56[1] = v57;
-          *v55->f278668 = v57;
-          v58 = v55->f278660;
-          v59 = v55->f278664;
-          v55->f278660 = v59;
-          v55->f278664 = v58;
+          *v55->cur = v57;
+          v58 = v55->row0;
+          v59 = v55->row1;
+          v55->row0 = v59;
+          v55->row1 = v58;
           v59 += 2;
-          v55->f278668 = v59;
+          v55->cur = v59;
           v58 += 2;
-          v55->f278672 = v58;
+          v55->above = v58;
           v60 = *v58;
           v59[-1] = *v58;
-          v55->f278668[-2] = v60;
+          v55->cur[-2] = v60;
           v55->f278528_q = 0;
           v55->f278536 = 0;
           v55->f278540 = 0;
@@ -15286,7 +15295,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  uint8_t *v59;   // a row cursor into f1078236
+  uint16_t *v59;   // a row cursor into f1078236
   ModelBlock *Blocka_5;
   // These shared `__frame.Blocka_5` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
@@ -15618,11 +15627,11 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
           do
           {
             ++v54;
-            *(uint16_t *)(Blocka_1->f56[5] + 8 * v54 - 8) = *(uint16_t *)(v59 + 2 * v54 - 2);
+            *(uint16_t *)(Blocka_1->f56[5] + 8 * v54 - 8) = v59[v54 - 1];
             v53 = Blocka_1->f0;
           }
           while ( v54 < Blocka_1->f0 );
-          v59 += 2 * v54;
+          v59 += v54;
         }
         if ( v53 > 0 )
         {
