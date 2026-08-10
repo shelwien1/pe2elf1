@@ -15738,10 +15738,19 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
   // gives every member its own storage and DLRAW exits 3 while decompressing.
   struct alignas(16) ExpandImageFrame {   // 104 bytes, one stack frame
       uint8_t *Block;
-      uint16_t p_i[2];
-      int32_t v81;
-      int32_t n4_10;
-      uint32_t Size;
+      // Four words with three roles, in three phases of the function.  MSVC
+      // gave one stack slot to locals whose live ranges do not overlap and
+      // Hex-Rays named every use; these are the roles rather than the names.
+      union {
+          BmfImage img;      // the image header `unmodel_plane` is handed
+          uint32_t mask;     // before that: the packer's byte mask, word 0
+          struct {           // after it: scratch, saved and restored
+            uint32_t s0;
+            int32_t  s4;
+            int32_t  s8;
+            uint32_t s12;
+          };
+      };
       int32_t n4_1;
       void *Src;
       uint8_t *v86;
@@ -15936,7 +15945,7 @@ LABEL_42:
   if ( ::plane_count > 0 )
   {
     LOBYTE(ElementCount_2) = 63;
-    *(uint32_t *)__frame.p_i = 255;
+    __frame.mask = 255;
     __frame.p_i_2 = p_i_1;
     __frame.v86 = v5;
     n4 = 0;
@@ -15968,13 +15977,13 @@ LABEL_42:
         {
           v70 = *(uint32_t *)out_cursor;
           out_cursor += 4;
-          v27 = packer_acc | *(uint32_t *)__frame.p_i & (v70 << ((packer_free_bits + 8) & 31));
+          v27 = packer_acc | __frame.mask & (v70 << ((packer_free_bits + 8) & 31));
           packer_acc = v70 >> (-packer_free_bits & 31);
           packer_free_bits += 32;
         }
         else
         {
-          LOBYTE(v27) = packer_acc & LOBYTE(__frame.p_i[0]);
+          LOBYTE(v27) = packer_acc & (uint8_t)__frame.mask;
           packer_acc = packer_acc >> 8;
         }
         plane_desc[n4 + 1].b3 = v27;
@@ -15985,13 +15994,13 @@ LABEL_42:
           {
             v69 = *(uint32_t *)out_cursor;
             out_cursor += 4;
-            v28 = packer_acc | *(uint32_t *)__frame.p_i & (v69 << ((packer_free_bits + 8) & 31));
+            v28 = packer_acc | __frame.mask & (v69 << ((packer_free_bits + 8) & 31));
             packer_acc = v69 >> (-packer_free_bits & 31);
             packer_free_bits += 32;
           }
           else
           {
-            v28 = packer_acc & *(uint32_t *)__frame.p_i;
+            v28 = packer_acc & __frame.mask;
             packer_acc = packer_acc >> 8;
           }
           plane_desc[n4 + 1].w4 = v28 - 64;
@@ -16000,13 +16009,13 @@ LABEL_42:
           {
             v68 = *(uint32_t *)out_cursor;
             out_cursor += 4;
-            v29 = packer_acc | *(uint32_t *)__frame.p_i & (v68 << ((packer_free_bits + 8) & 31));
+            v29 = packer_acc | __frame.mask & (v68 << ((packer_free_bits + 8) & 31));
             packer_acc = v68 >> (-packer_free_bits & 31);
             packer_free_bits += 32;
           }
           else
           {
-            v29 = packer_acc & *(uint32_t *)__frame.p_i;
+            v29 = packer_acc & __frame.mask;
             packer_acc = packer_acc >> 8;
           }
           plane_desc[n4 + 1].w8 = v29 - 64;
@@ -16017,13 +16026,13 @@ LABEL_42:
             {
               v67 = *(uint32_t *)out_cursor;
               out_cursor += 4;
-              v30 = packer_acc | *(uint32_t *)__frame.p_i & (v67 << ((packer_free_bits + 8) & 31));
+              v30 = packer_acc | __frame.mask & (v67 << ((packer_free_bits + 8) & 31));
               packer_acc = v67 >> (-packer_free_bits & 31);
               packer_free_bits += 32;
             }
             else
             {
-              v30 = packer_acc & *(uint32_t *)__frame.p_i;
+              v30 = packer_acc & __frame.mask;
               packer_acc = packer_acc >> 8;
             }
             plane_desc[n4 + 1].w12 = v30 - 64;
@@ -16039,11 +16048,10 @@ LABEL_42:
   Src_1 = (uint8_t *)bmf_new(*(uint16_t *)p_i_1 * p_i_1->height);
   if ( (__frame.v92 & 8) != 0 )
   {
-    *(uint32_t *)__frame.p_i = *(uint32_t *)&p_i_1->width;
-    __frame.v81 = p_i_1->stride;
-    __frame.n4_10 = *((uint32_t *)p_i_1 + 2);
-    __frame.Size = p_i_1->data_size;
-    BYTE2(__frame.n4_10) = 72;
+    // The caller's header with the depth byte replaced, exactly as
+    // `model_planes` does it: 72 is 8 bits plus the 0x40 flag.
+    __frame.img = *p_i_1;
+    __frame.img.depth = 72;
     if ( ::plane_count > 0 )
     {
       __frame.v86 = v5;
@@ -16054,7 +16062,7 @@ LABEL_42:
         ::plane_predictor = plane_desc[v33 + 1].flags & 3;
         plane_alt_model = (uint8_t)(plane_desc[v33 + 1].flags & 4) >> 2;
         // always taken: -S
-          __unmodel_plane(ArgList, (uint16_t *)__frame.p_i, (uint8_t *)Src_1);
+          __unmodel_plane(ArgList, (uint16_t *)&__frame.img, (uint8_t *)Src_1);
         if ( ::plane_predictor )
         {
           if ( ::plane_predictor == 1 )
@@ -16103,24 +16111,24 @@ LABEL_104:
           __frame.Src = &((uint8_t *)p_i_1)[v37 + 16];
           Size_1 = i * p_i_1->height;
           __frame.n4_1 = ::plane_count;
-          __frame.Size = Size_1;
+          __frame.s12 = Size_1;
           if ( ::plane_count == 1 )
           {
-            memcpy((uint8_t *)Src_1,(uint8_t *)__frame.Src,__frame.Size);
+            memcpy((uint8_t *)Src_1,(uint8_t *)__frame.Src,__frame.s12);
             n2_2 = ::plane_predictor;
           }
           else
           {
             __frame.Block = &((uint8_t *)p_i_1)[v37];
-            if ( (int32_t)__frame.Size <= 6
+            if ( (int32_t)__frame.s12 <= 6
               || __frame.n4_1 <= 0
-              || (__frame.n4_1 > 1 || Src_1 <= __frame.Src || Src_1 - (uint8_t *)__frame.Src < __frame.Size * ::plane_count)
-              && (Src_1 >= __frame.Src || (uint8_t *)__frame.Src - Src_1 < __frame.Size) )
+              || (__frame.n4_1 > 1 || Src_1 <= __frame.Src || Src_1 - (uint8_t *)__frame.Src < __frame.s12 * ::plane_count)
+              && (Src_1 >= __frame.Src || (uint8_t *)__frame.Src - Src_1 < __frame.s12) )
             {
-              *(uint32_t *)__frame.p_i = n2_1;
-              __frame.v81 = v37;
-              __frame.n4_10 = n4_4;
-              Size_2 = __frame.Size;
+              __frame.s0 = n2_1;
+              __frame.s4 = v37;
+              __frame.s8 = n4_4;
+              Size_2 = __frame.s12;
               __frame.p_i_2 = p_i_1;
               Size_3 = 0;
               n4_2 = __frame.n4_1;
@@ -16135,10 +16143,10 @@ LABEL_104:
             }
             else
             {
-              *(uint32_t *)__frame.p_i = n2_1;
-              __frame.v81 = v37;
-              __frame.n4_10 = n4_4;
-              Size_4 = __frame.Size;
+              __frame.s0 = n2_1;
+              __frame.s4 = v37;
+              __frame.s8 = n4_4;
+              Size_4 = __frame.s12;
               __frame.p_i_2 = p_i_1;
               Size_5 = 0;
               n4_3 = __frame.n4_1;
@@ -16151,9 +16159,9 @@ LABEL_104:
               }
               while ( Size_5 < Size_4 );
             }
-            n2_2 = *(uint32_t *)__frame.p_i;
-            v37 = __frame.v81;
-            n4_4 = __frame.n4_10;
+            n2_2 = __frame.s0;
+            v37 = __frame.s4;
+            n4_4 = __frame.s8;
             p_i_1 = __frame.p_i_2;
           }
           if ( n2_2 )
@@ -16240,11 +16248,14 @@ LABEL_109:
       while ( __frame.v86 + 1 < (uint8_t *)(uintptr_t)v58 );
       n4_6 = Blocka;
     }
-    i_2 = *(uint16_t *)p_i_1;
-    *(uint16_t *)p_i_1 = v58;
+    // The deinterleave swaps width and height and rewrites the stride; only
+    // the low half of `stride` is touched, which is what `(uint16_t *)p_i + 2`
+    // was addressing.
+    i_2 = p_i_1->width;
+    p_i_1->width = v58;
     p_i_1->flags ^= 2u;
     p_i_1->height = i_2;
-    *((uint16_t *)p_i_1 + 2) = v58 * n_planes;
+    *(uint16_t *)&p_i_1->stride = v58 * n_planes;
     free(n4_6);
   }
   return (uint8_t *)p_i_1;
@@ -17134,7 +17145,19 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
       uint8_t *Buffera_4;
       uint8_t _pad0[12];
       uint32_t ElementCount;
-      uint8_t   hdr[16];   // the 16-byte archive member header `fwrite` sends in one call
+      union {
+          // The 16-byte archive member header `fwrite` sends in one call, and
+          // the scratch MSVC put in the same bytes afterwards.  The two live in
+          // mutually exclusive branches: everything below `if ( v38 )` returns,
+          // so the header is finished with before the deinterleave starts.
+          BmfImage hdr;
+          struct {
+            uint8_t  _scratch0[4];
+            int32_t  plane_n;    // +4   `plane_count`, the deinterleave stride
+            uint8_t *row;        // +8   the source cursor, then the row index
+            int32_t  row_step;   // +12  `plane_count * (height - 1)`
+          };
+      };
       int32_t v65;
       uint8_t *v66;
       void *Buffer_2;
@@ -17159,7 +17182,8 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
   int8_t v13, v21, v36;
   uint8_t v12, v15, v17;
   uint8_t __compress_image_Buffer_1;   // 0/1, shifted into bit 7 of the header byte
-  uint8_t *Buffera_5, *Buffera_6, *Srca, *Buffera_2, *Buffera_3;   // `uint8_t *` beside the `char` scalars above
+  uint8_t *Srca, *Buffera_2, *Buffera_3;   // `uint8_t *` beside the `char` scalars above
+  uint32_t Buffera_5, Buffera_6;   // the header's pad/depth/flags word, not an address
   int32_t row_bytes, v11, v18, n4_6, bits_left, n4, v27, n8_1,
           acc, n4_1, v40, v41, v43, n4_3, v47, i_1, v50, n4_4, v56;
   BmfImage *p_i_1;
@@ -17186,16 +17210,17 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
   row_bytes = p_i->stride;
   if ( coded_buf )
     __compress_image_Buffer_1 = 1;
-  (*(uint32_t *)&__frame.hdr[0]) = *(uint32_t *)&p_i->width;
+  __frame.hdr.width = p_i->width;
+  __frame.hdr.height = p_i->height;
   p_i->flags |= __compress_image_Buffer_1 << 7;
-  Buffera_5 = *((uint8_t **)p_i + 2);
+  Buffera_5 = *(uint32_t *)&p_i->_pad8;
   v11 = p_i->data_size;
-  (*(int32_t *)&__frame.hdr[4]) = row_bytes;
+  __frame.hdr.stride = (uint32_t)row_bytes;
   plane_desc[0].w4 = 512;
   v12 = p_i->depth;
   plane_desc[0].w12 = 0;
-  (*(uint8_t **)&__frame.hdr[8]) = Buffera_5;
-  (*(int32_t *)&__frame.hdr[12]) = v11;
+  *(uint32_t *)&__frame.hdr._pad8 = Buffera_5;
+  __frame.hdr.data_size = (uint32_t)v11;
   ::plane_count = ((v12 & 0x3Fu) + 7) >> 3;
   if ( fwrite("\x81\x8A""20\x81\x90""20a+b", 4u, 1u, ((BmfArc *)v5)->fp) != 1 )
     return 0;
@@ -17208,7 +17233,7 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
     goto LABEL_76;
   desc_slow_mode = 1;               // -S
   v17 = p_i->depth;
-  HIBYTE(*(uint8_t **)&__frame.hdr[8]) |= 0x24;        // -S in bit 2, and bit 5 always set
+  __frame.hdr.flags |= 0x24;        // -S in bit 2, and bit 5 always set
   if ( (v17 & 0x3Fu) <= 4 )         // -F is on, so only the depth decides
   {
     coded_size = p_i->data_size + 0x20000;
@@ -17226,17 +17251,18 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
     goto LABEL_57;
   }
   __frame.ElementCount = __search_filter((BmfImage *)p_i, v13);
-  HIBYTE(*(uint8_t **)&__frame.hdr[8]) |= 0x10u;
+  __frame.hdr.flags |= 0x10u;
   if ( (p_i->flags & 2) != 0 )
   {
     n4_6 = p_i->stride;
-    Buffera_6 = *((uint8_t **)p_i + 2);
-    (*(uint32_t *)&__frame.hdr[0]) = *(uint32_t *)&p_i->width;
+    Buffera_6 = *(uint32_t *)&p_i->_pad8;
+    __frame.hdr.width = p_i->width;
+    __frame.hdr.height = p_i->height;
     v18 = p_i->data_size;
-    (*(int32_t *)&__frame.hdr[4]) = n4_6;
-    (*(uint8_t **)&__frame.hdr[8]) = Buffera_6;
-    (*(int32_t *)&__frame.hdr[12]) = v18;
-    HIBYTE(*(uint8_t **)&__frame.hdr[8]) = 0x34 | HIBYTE(Buffera_6);   // -S in bit 2
+    __frame.hdr.stride = (uint32_t)n4_6;
+    *(uint32_t *)&__frame.hdr._pad8 = Buffera_6;
+    __frame.hdr.data_size = (uint32_t)v18;
+    __frame.hdr.flags = 0x34 | (uint8_t)(Buffera_6 >> 24);   // -S in bit 2
   }
   else
   {
@@ -17380,7 +17406,7 @@ LABEL_22:
   if ( __frame.ElementCount )
   {
     Size = p_i->width * p_i->height;
-    HIBYTE(*(uint8_t **)&__frame.hdr[8]) |= 8u;
+    __frame.hdr.flags |= 8u;
     Srca = (uint8_t *)bmf_new(Size);
     if ( ::plane_count > 0 )
     {
@@ -17401,10 +17427,10 @@ LABEL_57:
   *(uint32_t *)::packer_word = ::packer_acc;
   v38 = (uint32_t)(out_cursor - (uint32_t)::coded_buf) < p_i->data_size;
   ElementCounta = out_cursor - ::coded_buf;
-  (*(int32_t *)&__frame.hdr[12]) = out_cursor - ::coded_buf;
+  __frame.hdr.data_size = (uint32_t)(out_cursor - ::coded_buf);
   if ( v38 )
   {
-    v39 = fwrite(__frame.hdr, 1u, 0x10u, ((BmfArc *)v5)->fp) == 16;
+    v39 = fwrite(&__frame.hdr, 1u, 0x10u, ((BmfArc *)v5)->fp) == 16;
     if ( coded_buf )
       v39 &= fwrite(coded_buf, 1u, *((uint32_t *)coded_buf + 1) + 8, ((BmfArc *)v5)->fp) == *((uint32_t *)coded_buf + 1) + 8;
     v40 = (fwrite(::coded_buf, 1u, ElementCounta, ((BmfArc *)v5)->fp) == ElementCounta) & v39;
@@ -17413,7 +17439,7 @@ LABEL_57:
       fwrite((uint8_t *)p_i + p_i->data_size + 16, 1u, ElementCount_1, ((BmfArc *)v5)->fp);
     fflush(((BmfArc *)v5)->fp);
     if ( v40 )
-      return (*(int32_t *)&__frame.hdr[12]);
+      return (int32_t)__frame.hdr.data_size;
     return v40;
   }
   free(::coded_buf);
@@ -17421,17 +17447,17 @@ LABEL_57:
   {
     Buffer_copy = (uint8_t *)bmf_new(p_i->data_size);
     v41 = p_i->height;
-    (*(int32_t *)&__frame.hdr[4]) = ::plane_count;
-    (*(uint8_t **)&__frame.hdr[8]) = Buffer_copy;
-    (*(int32_t *)&__frame.hdr[12]) = ::plane_count * (v41 - 1);
+    __frame.plane_n = ::plane_count;
+    __frame.row = Buffer_copy;
+    __frame.row_step = ::plane_count * (v41 - 1);
     __frame.Buffer_2 = (uint16_t *)p_i + 8;
     memcpy(Buffer_copy,(uint8_t *)p_i + 16,p_i->data_size);
     LOWORD(v43) = p_i->height;
     if ( (uint16_t)v43 )
     {
-      n4_3 = (*(int32_t *)&__frame.hdr[4]);
+      n4_3 = __frame.plane_n;
       ElementCountb = ElementCount_1;
-      Buffera_2 = (*(uint8_t **)&__frame.hdr[8]);
+      Buffera_2 = __frame.row;
       Buffera_3 = nullptr;
       v47 = 0;
       __frame.v66 = v5;
@@ -17439,9 +17465,9 @@ LABEL_57:
       {
         i_1 = p_i_1->width;
         __frame.v65 = v47;
-        (*(uint8_t **)&__frame.hdr[8]) = Buffera_3;
+        __frame.row = Buffera_3;
         v49 = (uint8_t *)p_i_1 + v47 + 16;
-        v50 = (*(int32_t *)&__frame.hdr[12]);
+        v50 = __frame.row_step;
         do
         {
           n4_4 = n4_3;
@@ -17458,15 +17484,15 @@ LABEL_57:
         p_i_1 = (BmfImage *)(p_i);
         v43 = p_i->height;
         v47 = n4_3 + __frame.v65;
-        Buffera_3 = (*(uint8_t **)&__frame.hdr[8]) + 1;
+        Buffera_3 = __frame.row + 1;
       }
-      while ( (int32_t)((*(uint8_t **)&__frame.hdr[8]) + 1) < v43 );
+      while ( (int32_t)(__frame.row + 1) < v43 );
       ElementCount_1 = ElementCountb;
       v5 = __frame.v66;
     }
     __frame.Buffera_4 = Buffer_copy;
     i_2 = p_i_1->width;
-    v53 = v43 * (*(int32_t *)&__frame.hdr[4]);
+    v53 = v43 * __frame.plane_n;
     p_i_1->width = v43;
     p_i_1->height = i_2;
     p_i_1->flags ^= 2u;
