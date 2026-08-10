@@ -7952,7 +7952,12 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
       uint32_t v78[15];
       void *v79;
       int32_t n0x2000_5;
-      char buf[4];
+      // 64 KiB: `memset(buf, 0, 0x10000)` clears it and the body walks it as
+      // 8192 eight-byte records, so `v82`, `v83`, `v84`, `v85` and `_pad0` are
+      // inside it -- the same bytes under other names at other times.  It stays
+      // four bytes here because `v82` wants eight-byte alignment and `buf` does
+      // not, and a union of the two would move the whole frame four bytes.
+      uint8_t buf[4];
       uint64_t v82[127];
       int32_t v83;
       int32_t v84;
@@ -7984,6 +7989,10 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
       };
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 66064, "frame layout moved");
+  static_assert(sizeof(void *) != 4
+                || __builtin_offsetof(__typeof__(__frame), v86)
+                   - __builtin_offsetof(__typeof__(__frame), buf) == 0x10000,
+                "buf is not the 64 KiB the memset clears");
   ;
   ModelBlock *Blockaa_2;
   uint8_t *v62;
@@ -8649,36 +8658,46 @@ int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, int8_t a3)
       int32_t v175;
       int32_t v176;
       uint8_t _pad0[4];
-      char buf[4];
-      uint8_t _pad1[4092];
-      int32_t v178[1024];
-      int32_t v179[1024];
-      int32_t v180[5120];
-      char buf_3[4];
-      uint8_t _pad2[2044];
-      char buf_1[4];
-      int32_t v183;
-      int32_t v184;
-      int32_t v185;
-      uint8_t *v186;
-      uint8_t *v187;
-      int32_t v188;
-      int32_t v189;
-      uint8_t *v190;
-      int32_t v191;
-      int32_t v192;
-      int32_t v193;
-      uint8_t *v194;
-      uint8_t *v195;
-      int32_t v196;
-      int32_t v197;
-      uint8_t *v198;
-      int32_t v199;
-      uint8_t _pad3[1976];
-      char buf_4[4];
-      uint8_t _pad4[2044];
-      char buf_2[4];
-      uint8_t _pad5[2044];
+      // 32 KiB, which is what `memset(buf, 0, 0x8000)` says and what
+      // `buf[4096 * n2_1]` walks; `char buf[4]` was the first four bytes of it.
+      union {
+          uint8_t buf[32768];
+          struct {
+            uint8_t _buf_head[4096];
+            int32_t v178[1024];
+            int32_t v179[1024];
+            int32_t v180[5120];
+          };
+      };
+      uint8_t buf_3[2048];   // `memset(buf_3, 0, 2048)`, 512 counters
+      // The same 2 KiB twice: `buf_1` is 512 counters while the seventeen
+      // locals below are dead, and they are live while it is not.
+      union {
+          uint8_t buf_1[2048];
+          struct {
+            uint8_t _buf_1_head[4];
+            int32_t v183;
+            int32_t v184;
+            int32_t v185;
+            uint8_t *v186;
+            uint8_t *v187;
+            int32_t v188;
+            int32_t v189;
+            uint8_t *v190;
+            int32_t v191;
+            int32_t v192;
+            int32_t v193;
+            uint8_t *v194;
+            uint8_t *v195;
+            int32_t v196;
+            int32_t v197;
+            uint8_t *v198;
+            int32_t v199;
+            uint8_t _pad3[1976];
+          };
+      };
+      uint8_t buf_4[2048];   // `memset(buf_4, 0, 2048)`, 512 counters
+      uint8_t buf_2[2048];   // `memset(buf_2, 0, 2048)`, 512 counters
       // Six sixteen-byte spill slots -- XMM0..XMM5 as the original used them.
       // The body reads each 157 times as four `int32_t`, 48 times as the two
       // `double` halves the 3x3 solve below works in, and four times as an
@@ -9169,7 +9188,7 @@ LABEL_19:
       }
       plane_desc[__frame.v205[2] + 1].w4 = n128;
       plane_desc[v43 + 1].w8 = n128_1;
-      v44 = (uint8_t *)&__frame.buf[4096 * n2_1];
+      v44 = &__frame.buf[4096 * n2_1];
       n0x100 = (uint8_t)(uintptr_t)v44 & 0xF;
       // The first 256-wide window over these 1024 counters.  Where it starts
       // is the pointer's low four bits, which the frame's alignas(16) makes
