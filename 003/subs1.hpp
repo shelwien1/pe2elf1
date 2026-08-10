@@ -458,6 +458,31 @@ static_assert(sizeof(void *) != 4
 // pointer is four bytes, so naming these fields moves nothing, and the
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
+// A symbol list.  `init_symbol_list` allocates `3 * n` bytes for the entries
+// and fills them with (symbol, 1); `symbol_list_update` promotes one entry
+// towards the front and halves the counts when they run out.  The header is 24
+// bytes, which is what every caller's `+ 24 * k` says.
+#pragma pack(push, 1)
+struct SymEntry {
+  uint16_t sym;
+  uint8_t  cnt;
+};
+#pragma pack(pop)
+static_assert(sizeof(SymEntry) == 3, "SymEntry: the record is three bytes");
+
+struct SymList {
+  // Unsigned because `symbol_list_update` read them through a `uint32_t *` and
+  // every one of them counts something; `init_symbol_list` took the same bytes
+  // as `int32_t *` and its comparisons are unsigned either way.
+  uint32_t  n;        // +0   the alphabet size
+  uint32_t  live;     // +4   entries in use
+  uint32_t  f8;       // +8
+  uint32_t  f12;      // +12  12 * n at init; `symbol_list_update`'s `a3` adds here
+  uint32_t  f16;      // +16  8 * n at init
+  SymEntry *ent;      // +20
+};
+static_assert(sizeof(SymList) == 24, "SymList: the header is 24 bytes");
+
 struct ModelBlock {
   uint32_t f0;
   int32_t f4;
@@ -485,15 +510,22 @@ struct ModelBlock {
   uint8_t  f1051776[24576];   // +1051776 .. +1076351
   uint16_t f1076352[771];     // +1076352 .. +1077893
   uint16_t f1077894[144];     // +1077894 .. +1078181
-  uint8_t _pad16[22];
-  void*f1078204;
-  uint8_t *f1078208;   // the symbol lists, 24 bytes each
-  uint8_t *f1078212;   // the symbol lists, 24 bytes each
-  uint8_t *f1078216;   // where the symbol lists end
-  uint8_t *f1078220;   // where the symbol lists end
-  uint32_t f1078224;
+  uint8_t _pad16[2];   // +1078182 .. +1078183
+  // A twenty-fourth symbol list, inside the object rather than in the array
+  // beside it: `init_model_tables` initialises `_this + 1078184` and
+  // `f1078224` holds its address, so the `void *` that used to sit at +1078204
+  // was this list's `ent` -- which is why `free_workspace` frees it on its own.
+  SymList escape;      // +1078184 .. +1078207
+  SymList *f1078208;   // the symbol lists, 24 bytes each
+  SymList *f1078212;   // the symbol lists, 24 bytes each
+  // The lists the current context selects -- `sel[0]` out of `f1078212` and
+  // `sel[1]` out of `f1078208`.  Two adjacent members of one type that
+  // `f1078232` walks as an array, which is why the reset is spelled
+  // `_this + 1078216` and the end test compares against the same address.
+  SymList *sel[2];       // +1078216, +1078220
+  SymList *f1078224;   // always `&escape`
   uint8_t _pad22[4];
-  uint32_t **f1078232;   // the symbol-list cursor: a walk over uint32_t *
+  SymList **f1078232;    // the cursor over `sel`
   uint8_t *f1078236;   // freed by free_workspace: a buffer, not an int
   uint8_t *f1078240;   // a row cursor
   uint8_t _pad25[440];
@@ -553,31 +585,6 @@ struct P2Ctx {
   int16_t lane[9];
 };
 static_assert(sizeof(P2Ctx) == 18, "P2Ctx: the record is eighteen bytes");
-
-// A symbol list.  `init_symbol_list` allocates `3 * n` bytes for the entries
-// and fills them with (symbol, 1); `symbol_list_update` promotes one entry
-// towards the front and halves the counts when they run out.  The header is 24
-// bytes, which is what every caller's `+ 24 * k` says.
-#pragma pack(push, 1)
-struct SymEntry {
-  uint16_t sym;
-  uint8_t  cnt;
-};
-#pragma pack(pop)
-static_assert(sizeof(SymEntry) == 3, "SymEntry: the record is three bytes");
-
-struct SymList {
-  // Unsigned because `symbol_list_update` read them through a `uint32_t *` and
-  // every one of them counts something; `init_symbol_list` took the same bytes
-  // as `int32_t *` and its comparisons are unsigned either way.
-  uint32_t  n;        // +0   the alphabet size
-  uint32_t  live;     // +4   entries in use
-  uint32_t  f8;       // +8
-  uint32_t  f12;      // +12  12 * n at init; `symbol_list_update`'s `a3` adds here
-  uint32_t  f16;      // +16  8 * n at init
-  SymEntry *ent;      // +20
-};
-static_assert(sizeof(SymList) == 24, "SymList: the header is 24 bytes");
 
 // AltP2Block -- recovered from 353 dereferences over 39 offsets, under 23
 // names.  The layout is the one the code already assumed: at 32 bits a
@@ -717,20 +724,6 @@ static_assert(sizeof(void *) != 4
               "P2Weights: the layout moved");
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // The pixel model's per-pixel record.  Eight bytes, which is what every cursor
 // in `ModelBlock::f56` steps: `f56[5] += 8`, `f56[8] += 8`, `f56[6] += 8 * n`,
 // and `f56[7] = v49 + 56` is seven of them.
@@ -746,102 +739,6 @@ struct PixRec {
 static_assert(sizeof(PixRec) == 8, "PixRec: the record is eight bytes");
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // The p1 model's counter table: 16-byte records, and `alt_p1_model` reaches
 // three of them at a time -- 236, 237 and 238 past the record its caller
 // picked -- bumping a total and one of three bins in each.  The first four
@@ -852,28 +749,6 @@ struct P1Count {
   uint16_t bin[3];    // +10 .. +15
 };
 static_assert(sizeof(P1Count) == 16, "P1Count: the record is sixteen bytes");
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 struct RangeCoder {
@@ -2361,78 +2236,88 @@ void **__free_workspace(ModelBlock *Blocka, int8_t a2)
 {
   ;
   int32_t v4, v6, v10, v13, i;
-  uint32_t *v3, *v7, *v9, *v12;
+  SymList *v3, *v7, *v8, *v9, *v12, *v14;
   ModelBlock *Blocka_3;
   ModelBlock *Blocka_1;
   ModelBlock *Blocka_2;
-  void **v8, **v14;
   Blocka_1 = (ModelBlock *)(Blocka);
   free(*(void **)&Blocka->f1078240);
   free(Blocka_1->f1078236);
   free(Blocka_1->f1078684);
   free(*(void**)&Blocka_1->f1078688);
-  v3 = (uint32_t *)Blocka_1->f1078208;
+  // Both arrays are allocated as `bmf_new(24 * n + 4)` with the count in the
+  // word before the first list, so `n` is `((uint32_t *)lists)[-1]` and that
+  // same word is what gets freed.  Each list owns its entries.
+  v3 = Blocka_1->f1078208;
   if ( v3 )
   {
-    v4 = *(v3 - 1);
+    v4 = ((uint32_t *)v3)[-1];
     if ( v4 )
     {
       Blocka_2 = (ModelBlock *)(Blocka_1);
-      v6 = *(v3 - 1);
-      v7 = (uint32_t *)Blocka_1->f1078208;
-      v8 = (void **)&v3[6 * v4];
+      v6 = v4;
+      v7 = Blocka_1->f1078208;
+      v8 = &v3[v4];
       do
       {
-        v8 -= 6;
-        free(v8[5]);
+        --v8;
+        free(v8->ent);
         --v6;
       }
       while ( v6 );
       v3 = v7;
       Blocka_1 = (ModelBlock *)(Blocka_2);
     }
-    free(v3 - 1);
+    free((uint32_t *)v3 - 1);
   }
-  v9 = (uint32_t *)Blocka_1->f1078212;
+  v9 = Blocka_1->f1078212;
   if ( v9 )
   {
-    v10 = *(v9 - 1);
+    v10 = ((uint32_t *)v9)[-1];
     if ( v10 )
     {
       Blocka_3 = (ModelBlock *)(Blocka_1);
-      v12 = (uint32_t *)Blocka_1->f1078212;
-      v13 = *(v9 - 1);
-      v14 = (void **)&v9[6 * v10];
+      v12 = Blocka_1->f1078212;
+      v13 = v10;
+      v14 = &v9[v10];
       do
       {
-        v14 -= 6;
-        free(v14[5]);
+        --v14;
+        free(v14->ent);
         --v13;
       }
       while ( v13 );
       v9 = v12;
       Blocka_1 = (ModelBlock *)(Blocka_3);
     }
-    free(v9 - 1);
+    free((uint32_t *)v9 - 1);
   }
   for ( i = 0; i < 5; ++i )
     free(((void**)Blocka_1)[i + 14]);
-  free(Blocka_1->f1078204);
+  free(Blocka_1->escape.ent);
   if ( (a2 & 1) != 0 )
     free(Blocka_1);
   return (void **)Blocka_1;
 }
 
+// Is `sym` one of the list's `n` most-used symbols?  The list is kept sorted by
+// count, so entry 0 is the most used; each of the four tests below walks its
+// window from the far end back to entry 0 and stops at the first match, which
+// is the order and the early exit MSVC unrolled.
+static inline bool sym_in_top(const SymEntry *ent, int32_t n, int32_t sym) {
+  while ( n-- )
+    if ( ent[n].sym == sym )
+      return true;
+  return false;
+}
+
 int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
 {
   ;
-  uint8_t *v7, *v16;   // was int32_t: these hold addresses
+  SymList *v7, *v16;
   bool v5;
   int32_t result, v3, v4, v6, v9, v13, v14, n6;
-  uint16_t *v8;
-  uint16_t *v11;
-  uint16_t *v12;
-  uint16_t *v10;
+  SymEntry *v8, *v10, *v11, *v12;
   n6 = *(int32_t *)&_this->sym_pos;
   result = ((uint32_t *)p_n15)[n6];
   if ( exclusion_mask[result] == exclusion_gen )
@@ -2462,47 +2347,17 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
   *(int32_t *)&_this->f52 = v6;
   if ( v5 && n6 > 6 )
     return -1;
-  v7 = (uint8_t *)*(int32_t *)&_this->f1078212;
+  v7 = _this->f1078212;
   v16 = v7;
-  v8 = (uint16_t *)(*(uint16_t **)(v7 + 24 * mode_symbol[1] + 20));
-  v9 = v6
-     + 8
-     * (result == *(uint16_t *)((uint8_t *)v8 + 27)
-     || result == v8[12]
-     || result == *(uint16_t *)((uint8_t *)v8 + 21)
-     || result == v8[9]
-     || result == *(uint16_t *)((uint8_t *)v8 + 15)
-     || result == v8[6]
-     || result == *(uint16_t *)((uint8_t *)v8 + 9)
-     || result == v8[3]
-     || result == *(uint16_t *)((uint8_t *)v8 + 3)
-     || result == v8[0]);
+  v8 = v7[mode_symbol[1]].ent;
+  v9 = v6 + 8 * sym_in_top(v8, 10, result);
   *(int32_t *)&_this->f52 = v9;
-  v10 = (uint16_t *)(*(uint16_t **)(v7 + 24 * mode_symbol[2] + 20));
-  v11 = (uint16_t *)(*(uint16_t **)(v7 + 24 * result + 20));
-  v12 = (uint16_t *)(*(uint16_t **)(v16 + 24 * mode_symbol[3] + 20));
-  v13 = (result == *(uint16_t *)((uint8_t *)v12 + 15)
-      || result == v12[6]
-      || result == *(uint16_t *)((uint8_t *)v12 + 9)
-      || result == v12[3]
-      || result == *(uint16_t *)((uint8_t *)v12 + 3)
-      || result == *v12)
-      + 2
-      * (mode_symbol[2] == *(uint16_t *)((uint8_t *)v11 + 27)
-      || mode_symbol[2] == v11[12]
-      || mode_symbol[2] == *(uint16_t *)((uint8_t *)v11 + 21)
-      || mode_symbol[2] == v11[9]
-      || mode_symbol[2] == *(uint16_t *)((uint8_t *)v11 + 15)
-      || mode_symbol[2] == v11[6]
-      || mode_symbol[2] == *(uint16_t *)((uint8_t *)v11 + 9)
-      || mode_symbol[2] == v11[3]
-      || mode_symbol[2] == *(uint16_t *)((uint8_t *)v11 + 3)
-      || mode_symbol[2] == v11[0])
-      + 4
-      * (result == *(uint16_t *)((uint8_t *)v10 + 9)
-      || result == v10[3]
-      || result == *(uint16_t *)((uint8_t *)v10 + 3)
-      || result == *v10);
+  v10 = v7[mode_symbol[2]].ent;
+  v11 = v7[result].ent;
+  v12 = v16[mode_symbol[3]].ent;
+  v13 = sym_in_top(v12, 6, result)
+      + 2 * sym_in_top(v11, 10, mode_symbol[2])
+      + 4 * sym_in_top(v10, 4, result);
   v14 = v13 + v9;
   if ( n6 <= 14 || (v14 & 0xB) != 0 )
   {
@@ -2520,81 +2375,83 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
 int32_t __init_model_tables(ModelBlock *_this)
 {
   ;
-  uint8_t *v8, *v32;   // were int32_t: these hold addresses
+  SymEntry *v8, *v11, *v32;
   uint8_t *v28, *v29;           // row cursors out of f56
   uint8_t v13, v14;
   uint8_t *buf;   // `uint8_t *` beside the `char` scalars above
-  int16_t *v11;
-  int16_t v6, v12;
-  uint32_t **v3;
+  uint16_t v6, v12;
+  SymList **v3;
   uint8_t *v30;
   int32_t n2_1, v7, v9, v10, v15, v17, n2, v19, v21, v22, v23, v24, v25, v26, v27,
           result;
   uint16_t *v20;
-  uint32_t *v5;
-  uint32_t **v4;
+  SymList *v5;
+  SymList **v4;
   n2_1 = _this->f32;
   if ( !n2_1 )
   {
-    if ( (uint32_t **)((uint8_t *)_this + 1078216) == _this->f1078232 )
+    if ( _this->sel == _this->f1078232 )
     {
-      if ( _this->f1078216 )
+      if ( _this->sel[0] )
       {
-        __symbol_list_update((SymList *)(_this->f1078212 + 24 * mode_symbol[1]), **(uint16_t **)&_this->f56[5], 3u);
-        __symbol_list_update((SymList *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f56[5]), mode_symbol[2], 2u);
-        __symbol_list_update((SymList *)(_this->f1078208 + 24 * mode_symbol[1]), **(uint16_t **)&_this->f56[5], 4u);
-        __symbol_list_update((SymList *)(_this->f1078208 + 24 * **(uint16_t **)&_this->f56[5]), mode_symbol[1], 2u);
+        __symbol_list_update(&_this->f1078212[mode_symbol[1]], **(uint16_t **)&_this->f56[5], 3u);
+        __symbol_list_update(&_this->f1078212[**(uint16_t **)&_this->f56[5]], mode_symbol[2], 2u);
+        __symbol_list_update(&_this->f1078208[mode_symbol[1]], **(uint16_t **)&_this->f56[5], 4u);
+        __symbol_list_update(&_this->f1078208[**(uint16_t **)&_this->f56[5]], mode_symbol[1], 2u);
       }
       else
       {
-        __symbol_list_update((SymList *)(_this->f1078212 + 24 * mode_symbol[2]), **(uint16_t **)&_this->f56[5], (_this->sym_pos > 3) + 2);
+        __symbol_list_update(&_this->f1078212[mode_symbol[2]], **(uint16_t **)&_this->f56[5], (_this->sym_pos > 3) + 2);
       }
     }
     else
     {
-      __symbol_list_update((SymList *)(_this->f1078212 + 24 * mode_symbol[1]), **(uint16_t **)&_this->f56[5], 3u);
-      __symbol_list_update((SymList *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f56[5]), mode_symbol[2], 2u);
-      __symbol_list_update((SymList *)(_this->f1078212 + 24 * **(uint16_t **)&_this->f56[5]), mode_symbol[1], 1u);
-      __symbol_list_update((SymList *)(_this->f1078208 + 24 * **(uint16_t **)&_this->f56[5]), mode_symbol[1], 2u);
+      __symbol_list_update(&_this->f1078212[mode_symbol[1]], **(uint16_t **)&_this->f56[5], 3u);
+      __symbol_list_update(&_this->f1078212[**(uint16_t **)&_this->f56[5]], mode_symbol[2], 2u);
+      __symbol_list_update(&_this->f1078212[**(uint16_t **)&_this->f56[5]], mode_symbol[1], 1u);
+      __symbol_list_update(&_this->f1078208[**(uint16_t **)&_this->f56[5]], mode_symbol[1], 2u);
       v3 = _this->f1078232;
       do
       {
         v4 = v3 - 1;
         _this->f1078232 = v4;
-        v5 = (uint32_t *)(*v4);
+        // `symbol_list_update`'s insert path, inlined: append the symbol at
+        // `live`, evicting the last entry when the list is full, then swap it
+        // one place forward.
+        v5 = *v4;
         v6 = **(uint16_t **)&_this->f56[5];
-        v7 = v5[1];
-        v32 = (uint8_t *)(int32_t)v5[5];
-        if ( v7 == v5[0] )
+        v7 = v5->live;
+        v32 = v5->ent;
+        if ( v7 == (int32_t)v5->n )
         {
-          v8 = (uint8_t *)(int32_t)v5[5];
-          v5[1] = --v7;
-          v9 = *(v8 + 3 * v7 + 2);
+          v8 = v5->ent;
+          v5->live = --v7;
+          v9 = v8[v7].cnt;
         }
         else
         {
           v9 = 1;
         }
-        v10 = v5[2];
-        v11 = ((int16_t *)(v32 + 3 * v7));
-        v5[1] = v7 + 1;
-        v5[2] = v9 + v10 + 1;
-        *v11 = v6;
-        *((uint8_t *)v11 + 2) = 2;
-        v5[3] += 4;
-        if ((int16_t *)v11 != (int16_t *)v5[5] )
+        v10 = v5->f8;
+        v11 = &v32[v7];
+        v5->live = v7 + 1;
+        v5->f8 = v9 + v10 + 1;
+        v11->sym = v6;
+        v11->cnt = 2;
+        v5->f12 += 4;
+        if ( v11 != v5->ent )
         {
-          v12 = *v11;
-          v13 = *((uint8_t *)v11 + 2);
-          v14 = *((uint8_t *)v11 - 1);
-          *v11 = *(int16_t *)((uint8_t *)v11 - 3);
-          *((uint8_t *)v11 + 2) = v14;
-          *(int16_t *)((uint8_t *)v11 - 3) = v12;
-          *((uint8_t *)v11 - 1) = v13;
+          v12 = v11->sym;
+          v13 = v11->cnt;
+          v14 = v11[-1].cnt;
+          v11->sym = v11[-1].sym;
+          v11->cnt = v14;
+          v11[-1].sym = v12;
+          v11[-1].cnt = v13;
         }
         v3 = _this->f1078232;
       }
-      while ( v3 != (uint32_t **)((uint8_t *)_this + 1078216) );
+      while ( v3 != _this->sel );
     }
     if ( exclusion_gen == -1 )
     {
@@ -2628,7 +2485,7 @@ LABEL_19:
     goto LABEL_37;
   if ( mode_symbol[3] != mode_symbol[4] )
   {
-    __symbol_list_update((SymList *)(_this->f1078212 + 24 * mode_symbol[2]), **(uint16_t **)&_this->f56[5], 1u);
+    __symbol_list_update(&_this->f1078212[mode_symbol[2]], **(uint16_t **)&_this->f56[5], 1u);
     n2 = _this->f32;
     goto LABEL_19;
   }
@@ -9341,7 +9198,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
           n4_13, *v59, v60, n15_13, v67, n15_15, n4_17, v81, v83, v84,
           v85, n4, n256_2, n15_1, n256_1, n15_23, n4_19, n4_20, n4_5, n4_6, n15_5, v102, v103,
           v104, v105, v107, v109, v111, v112, v113, v114, v115, v116, v117, v118, v119,
-          v120, v122, v123, v124, v125, v126, v127, v128, n32, n15_25, n4_21, v132, v133, v135,
+          v120, v122, v123, v124, v125, v126, v127, v128, n32, n15_25, n4_21, v135,
           n256, v143, n4_18, n15_19, n15_20, v148, v149, v150, v151, v152, v153, v155, n15_21,
           v158, v159, v161, v163, v164, n4_2, n15_22, n256_4, n256_5, n256_3, n15_2;
   uint64_t *v170;
@@ -9355,7 +9212,9 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
            v174;
   ModelBlock *this_3;
   ModelBlock *this_2;
-  uint32_t bin_tot, n4_16, n4_15, **v134, v136, v137, v138, v139, v140, v172, v173, v175, v176,
+  SymList *v132, *v133;
+  SymList **v134;
+  uint32_t bin_tot, n4_16, n4_15, v136, v137, v138, v139, v140, v172, v173, v175, v176,
            v177;
   uint64_t *v142;
   uint8_t *v39;
@@ -9959,7 +9818,7 @@ LABEL_86:
   exclusion_mask[n4_20] = v91;
   exclusion_mask[n4_19] = v91;
   __byte_445440[0] = v91;
-  this_3->f1078216 = 0;
+  this_3->sel[0] = nullptr;
   n4_5 = v95[1];
   __frame.sym0 = *v95;
   v97 = ((uint16_t *)this_3->f6059432);
@@ -10041,20 +9900,20 @@ LABEL_86:
   while ( n32 < 32 );
   n15_25 = n15_24;
   n4_21 = ::mode_symbol[1];
-  v132 = (int32_t)(uintptr_t)this_3->f1078208;
-  this_3->f1078216 = this_3->f1078212 + 24 * ::mode_symbol[2];
-  v133 = v132 + 24 * n4_21;
-  v134 = (uint32_t **)this_3->f1078232;
-  this_3->f1078220 = (uint8_t *)v133;
+  v132 = this_3->f1078208;
+  this_3->sel[0] = &this_3->f1078212[::mode_symbol[2]];
+  v133 = &v132[n4_21];
+  v134 = this_3->f1078232;
+  this_3->sel[1] = v133;
   while ( 1 )
   {
-    if ( (*v134)[1] )
+    if ( (*v134)->live )
     {
-      v135 = __decode_symbol_list((SymList *)*v134);
+      v135 = __decode_symbol_list(*v134);
       *(uint16_t *)this_3->f56[5] = v135;
       if ( v135 >= 0 )
         return n15_25 + 1;
-      v134 = (uint32_t **)this_3->f1078232;
+      v134 = this_3->f1078232;
     }
     this_3->f1078232 = ++v134;
   }
@@ -10126,7 +9985,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
           n15_15, n2_15, v82, __code_pixel_n0x2000, n15_16, v87, n2, p_n15_5, p_n15_7,
           n15_17, n15_22, excl_sym_a, excl_sym_b, p_n15_11, n2_5, n15_41, n15_23,
           n15_24, n15_25, n15_26, n15_27, v112, v114, v115, v116, v117, v118, v119, v120,
-          v121, v122, v123, v125, v126, v127, v128, v129, n15_28, n32, n15_29, n4_5, v134, v135,
+          v121, v122, v123, v125, v126, v127, v128, v129, n15_28, n32, n15_29, n4_5,
           p_n15_6, *v143, v144, n2_16, n2_17, n15_37, v149, v150, v151, v152, v154, v155, v157,
           n15_18, v161, n2_2, p_n15_10, p_n15_8, p_n15_9, n15_19;
   uint16_t *n2_3;   // was int32_t *, read only as uint16_t
@@ -10138,7 +9997,9 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   uint16_t *n2_7, *n2_8, *n2_11, *n2_12, *n2_14, *v97, *v98, *n2_6, *v113, *v124, v153,
            *n15_39;
   uint8_t *n2_13;   // was uint16_t *, read only as uint8_t
-  uint32_t bin_tot, v55, v57, **v136, v137, p_n15_12, v139, v140, v141, v168, v169, v171, v172,
+  SymList *v134, *v135;
+  SymList **v136;
+  uint32_t bin_tot, v55, v57, v137, p_n15_12, v139, v140, v141, v168, v169, v171, v172,
           v173;
   uint8_t *v69;
   uint8_t *p_n15_3, *v41;
@@ -10734,7 +10595,7 @@ LABEL_42:
   v98 = (uint16_t *)*(int32_t *)&this_3->f6059432;
   __byte_445440[0] = v93;
   n15_14 = n15_12;
-  *(int32_t *)&this_3->f1078216 = 0;
+  this_3->sel[0] = nullptr;
   p_n15_11 = *v97;
   n2_5 = v97[1];
   n2_6 = (uint16_t *)*v98;
@@ -10815,20 +10676,20 @@ LABEL_42:
   while ( n32 < 32 );
   n15_29 = n15_14;
   n4_5 = ::mode_symbol[1];
-  v134 = *(int32_t *)&this_3->f1078208;
-  *(int32_t *)&this_3->f1078216 = *(int32_t *)&this_3->f1078212 + 24 * ::mode_symbol[2];
-  v135 = v134 + 24 * n4_5;
-  v136 = (uint32_t **)*(int32_t *)&this_3->f1078232;
-  *(int32_t *)&this_3->f1078220 = v135;
+  v134 = this_3->f1078208;
+  this_3->sel[0] = &this_3->f1078212[::mode_symbol[2]];
+  v135 = &v134[n4_5];
+  v136 = this_3->f1078232;
+  this_3->sel[1] = v135;
   while ( 1 )
   {
-    if ( (*v136)[1] )
+    if ( (*v136)->live )
     {
-      if ( __encode_symbol_list((SymList *)*v136, *(uint16_t *)this_3->f56[5]) )
+      if ( __encode_symbol_list(*v136, *(uint16_t *)this_3->f56[5]) )
         return n15_29 + 1;
-      v136 = (uint32_t **)*(int32_t *)&this_3->f1078232;
+      v136 = this_3->f1078232;
     }
-    *(int32_t *)&this_3->f1078232 = (int32_t)++v136;
+    this_3->f1078232 = ++v136;
   }
 }
 
@@ -10978,7 +10839,7 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
   *(uint32_t *)&a1->f4 = a4;
   a1->f8 = a5;
   a1->f12 = a5;
-  *(uint32_t *)&a1->f1078204 = 0;
+  a1->escape.ent = nullptr;
   *(uint32_t *)&a1->f1078240 = 0;
   for ( j = 0; j < 5; ++j )
   {
@@ -11046,7 +10907,7 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
   memset(a1->f6460848,255,sizeof a1->f6460848);
   memset(a1->f6678448,255,sizeof a1->f6678448);
   memset(exclusion_mask,0,8193);
-  *(uint64_t *)((uint8_t *)a1 + 1078216) = 0;
+  (*(uint64_t *)&a1->sel[0]) = 0;
   *(uint64_t *)((uint8_t *)a1 + 1078224) = 0;
   for ( n = 0; n < 0x40000; ++n )
   {
@@ -11148,7 +11009,8 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
           v64, v65, v66, n6, v68, v69, n6_4, n6_1, v73, n6_2, v76, v78, v80;
   ModelBlock *this_3;
   ModelBlock *this_2;
-  uint32_t *v22, *v31, *i_1, *i, *v35, *j_1, *j, *ArgList_7, *ArgList_6;
+  uint32_t *v22, *v31, *v35, *ArgList_7, *ArgList_6;
+  SymList *i_1, *i, *j_1, *j;
   uint16_t *v13;   // was uint32_t *, read only as uint16_t
   uint8_t *v49, *v50;
   v3 = _this->f8 < 8;
@@ -11303,51 +11165,47 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   this_4->f1051664[1] = v27;
   this_4->f1051664[2] = v28;
   this_4->f1051664[3] = v29;
-  this_4->f1078224 = (uintptr_t)this_4 + 1078184;
-  __init_symbol_list((SymList *)((uintptr_t)this_4 + 1078184), (int32_t)this_4, this_4->f16, 1);
-  this_4->f1078232 = (uint32_t **)((uint8_t *)this_4 + 1078216);
+  this_4->f1078224 = &this_4->escape;
+  __init_symbol_list(&this_4->escape, (int32_t)this_4, this_4->f16, 1);
+  this_4->f1078232 = this_4->sel;
+  // `24 * n + 4`: the count word, then `n` lists.  `free_workspace` reads the
+  // count back from `((uint32_t *)lists)[-1]`.
   v30 = this_4->f16;
   v31 = (uint32_t *)bmf_new(24 * v30 + 4);
   if ( v31 )
   {
     *v31 = v30;
-    i_1 = v31 + 1;
+    i_1 = (SymList *)(v31 + 1);
     for ( i = i_1; v30; --v30 )
-    {
-      i_1[5] = 0;
-      i_1 += 6;
-    }
+      (i_1++)->ent = nullptr;
   }
   else
   {
     i = nullptr;
   }
   v34 = this_4->f16;
-  this_4->f1078208 = (uint8_t *)i;
+  this_4->f1078208 = i;
   v35 = (uint32_t *)bmf_new(24 * v34 + 4);
   if ( v35 )
   {
     *v35 = v34;
-    j_1 = v35 + 1;
+    j_1 = (SymList *)(v35 + 1);
     for ( j = j_1; v34; --v34 )
-    {
-      j_1[5] = 0;
-      j_1 += 6;
-    }
+      (j_1++)->ent = nullptr;
   }
   else
   {
     j = nullptr;
   }
   v38 = this_4->f16 <= 0;
-  this_4->f1078212 = (uint8_t *)j;
+  this_4->f1078212 = j;
   if ( !v38 )
   {
     v39 = 0;
     do
     {
-      __init_symbol_list((SymList *)(this_4->f1078208 + 24 * v39), (int32_t)this_4, 99, 0);
-      __init_symbol_list((SymList *)(this_4->f1078212 + 24 * v39++), (int32_t)this_4, 33, 0);
+      __init_symbol_list(&this_4->f1078208[v39], (int32_t)this_4, 99, 0);
+      __init_symbol_list(&this_4->f1078212[v39++], (int32_t)this_4, 33, 0);
     }
     while ( v39 < this_4->f16 );
   }
@@ -12202,7 +12060,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
            *v485, *v488, *v491, *n2_3, *v502;
   AltP2Block *v385;
   uint32_t *v76, v78, v92, v97, v109, n0x10, v393, v396, v405, v414, v499;
-  uint8_t *v82, v83;
+  uint8_t v83;
   v6 = a1->f278704 & 0xF;
   v7 = *(uint16_t **)&a1->f278736[0];
   v577 = 16 * a3;
@@ -15363,7 +15221,6 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
   int32_t v61;
-  ModelBlock *Blocka;
   // These shared `__frame.Blocka_2` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
@@ -15389,10 +15246,11 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
   int16_t __model_plane_n2, v22;
   ModelBlock *Blocka_3;
   ModelBlock *Blocka_4;
-  int32_t v8, v10, v11, v14, n2_1, n2_2, v17, v18, v19, v20, v21, v35, v36, v41, v42, v44, v45,
+  int32_t v8, v10, v11, v14, n2_1, n2_2, v17, v18, v19, v20, v21, v44, v45,
           v53, v54, v55, v56;
   uint8_t *v28, *v29, *v30, *v47, *v48, *v49;   // row cursors out of f56
-  uint32_t n0x10000, *v24, v31, *v32, *v33, v34, v37, *v38, *v39, v40;
+  uint32_t n0x10000, *v24, v31, *v32, v34, v37, *v38, v40;
+  SymList *v33, *v39;
   uint16_t *v12;   // was uint32_t *, read only as uint16_t
   uint8_t *v51, *v52;
   void *v5;
@@ -15567,37 +15425,23 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
     Blocka_2->f1051664[1] = v28;
     Blocka_2->f1051664[2] = v29;
     Blocka_2->f1051664[3] = v30;
-    Blocka_2->f1078224 = (uint32_t)((uint32_t *)Blocka_2 + 269546);
-    __init_symbol_list((SymList *)((uint8_t *)Blocka_1 + 1078184), 0, Blocka_1->f16, 1);
-    Blocka_2->f1078232 = (uint32_t **)((uint32_t *)Blocka_2 + 269554);
+    Blocka_2->f1078224 = &Blocka_2->escape;
+    __init_symbol_list(&Blocka_1->escape, 0, Blocka_1->f16, 1);
+    Blocka_2->f1078232 = Blocka_2->sel;
     v31 = Blocka_2->f16;
     v32 = (uint32_t *)bmf_new(24 * v31 + 4);
     if ( v32 )
     {
       *v32 = v31;
-      v33 = v32 + 1;
+      v33 = (SymList *)(v32 + 1);
       if ( v31 )
       {
-        if ( v31 >> 1 )
-        {
-          v34 = 0;
-          do
-          {
-            v35 = 12 * v34;
-            v32[v35 + 6] = 0;
-            ++v34;
-            v32[v35 + 12] = 0;
-          }
-          while ( v34 < v31 >> 1 );
+        // MSVC unrolled this two lists at a time and left a scalar tail; both
+        // halves write `ent`, and between them they cover 0 .. v31 - 1.
+        for ( v34 = 0; v34 < v31; ++v34 )
+          v33[v34].ent = nullptr;
+        if ( v31 >> 1 )   // the register the unrolled loop clobbered
           Blocka_1 = (ModelBlock *)((int32_t)Blocka_2);
-          v36 = 2 * v34 + 1;
-        }
-        else
-        {
-          v36 = 1;
-        }
-        if ( v31 > v36 - 1 )
-          v32[6 * v36] = 0;
       }
     }
     else
@@ -15605,35 +15449,18 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
       v33 = nullptr;
     }
     v37 = Blocka_1->f16;
-    Blocka_1->f1078208 = (uint8_t *)v33;
+    Blocka_1->f1078208 = v33;
     v38 = (uint32_t *)bmf_new(24 * v37 + 4);
     if ( v38 )
     {
       *v38 = v37;
-      v39 = v38 + 1;
+      v39 = (SymList *)(v38 + 1);
       if ( v37 )
       {
-        if ( v37 >> 1 )
-        {
-          Blocka = (ModelBlock *)((void *)Blocka_1);
-          v40 = 0;
-          do
-          {
-            v41 = 12 * v40;
-            v38[v41 + 6] = 0;
-            ++v40;
-            v38[v41 + 12] = 0;
-          }
-          while ( v40 < v37 >> 1 );
-          Blocka_1 = (ModelBlock *)((int32_t)Blocka);
-          v42 = 2 * v40 + 1;
-        }
-        else
-        {
-          v42 = 1;
-        }
-        if ( v37 > v42 - 1 )
-          v38[6 * v42] = 0;
+        // MSVC unrolled this two lists at a time and left a scalar tail; both
+        // halves write `ent`, and between them they cover 0 .. v37 - 1.
+        for ( v40 = 0; v40 < v37; ++v40 )
+          v39[v40].ent = nullptr;
       }
     }
     else
@@ -15641,14 +15468,14 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
       v39 = nullptr;
     }
     v43 = Blocka_1->f16 <= 0;
-    Blocka_1->f1078212 = (uint8_t *)v39;
+    Blocka_1->f1078212 = v39;
     if ( !v43 )
     {
       v44 = 0;
       do
       {
-        __init_symbol_list((SymList *)(Blocka_1->f1078208 + 24 * v44), 0, 99, 0);
-        __init_symbol_list((SymList *)(Blocka_1->f1078212 + 24 * v44++), 0, 33, 0);
+        __init_symbol_list(&Blocka_1->f1078208[v44], 0, 99, 0);
+        __init_symbol_list(&Blocka_1->f1078212[v44++], 0, 33, 0);
       }
       while ( v44 < Blocka_1->f16 );
     }
