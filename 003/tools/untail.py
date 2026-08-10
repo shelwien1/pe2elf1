@@ -22,9 +22,10 @@ by *copying* it, and for the smallest ones that is plainly worth it:
 
 The condition is narrow enough that the copy cannot change anything:
 
-  * the label is followed by a run of statements that are not `if`, `else`,
-    `for`, `while`, `do`, `switch`, `case`, a brace, another label or another
-    `goto` -- so control cannot leave the run except by finishing it;
+  * the label is followed by a run of statements that are not `else`, a loop,
+    a brace, another label or another `goto` -- so control cannot leave the run
+    except by finishing it.  A braceless `if ( c )` is allowed, because its one
+    statement is inside the run too;
   * that run ends in an unconditional `return`, so it never falls out of the
     bottom either;
   * the run is at most `--max` statements, five by default.
@@ -45,10 +46,16 @@ import sys
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs                                                    # noqa: E402
 
-KEYWORD = re.compile(r'^\s*(?:if|else|for|while|do|switch|case|default'
+# `if` is allowed inside the run and the others are not, which sounds
+# inconsistent and is not: a braceless `if ( c )` with its statement on the next
+# line adds no exit -- control still leaves the run only by finishing it -- while
+# `else`, a loop or a brace means the run is not a run.  The check for `{` and
+# `}` below is what keeps the `if` braceless.
+KEYWORD = re.compile(r'^\s*(?:else|for|while|do|switch|case|default'
                      r'|LABEL_\d+:|\}|\{)')
 LABEL = re.compile(r'^(\s*)(LABEL_\d+):\s*$')
 RETURN = re.compile(r'^\s*return\b')
+IFLINE = re.compile(r'^\s*if \(')
 
 
 def tails(lines, a, b, max_stmts):
@@ -61,11 +68,17 @@ def tails(lines, a, b, max_stmts):
         body = []
         for j in range(i + 1, min(i + 2 + max_stmts, len(lines))):
             t = lines[j]
-            if KEYWORD.match(t) or 'goto ' in t or not t.strip():
+            if KEYWORD.match(t) or 'goto ' in t or not t.strip() \
+                    or '{' in t or '}' in t:
                 body = None
                 break
             body.append(t)
-            if RETURN.match(t):
+            # A `return` ends the run only when it is unconditional.  The line
+            # after a braceless `if ( c )` is that `if`'s consequent, and three
+            # of the four candidates the first version of this rule produced
+            # were exactly that: a run that looked terminated at
+            # `if (fwrite(...) != n) return 0;` and in fact carried straight on.
+            if RETURN.match(t) and not IFLINE.match(body[-2] if len(body) > 1 else ''):
                 break
         else:
             body = None

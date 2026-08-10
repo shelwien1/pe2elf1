@@ -4866,50 +4866,50 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
                 break;
               if ( n2_2 < n2_1 )
                 n2_1 = n2_2;
-              if ( !Size )
-                goto LABEL_70;
-              if ( v75 )
+              if ( Size )
               {
-                if ( Size != 1 )
+                if ( v75 )
                 {
-LABEL_67:
-                  *buf_2 = 0;
-                  v72 = buf_2 + 2;
-                  buf_2[1] = Size << (v75 & 31);
-                  memcpy(buf_2 + 2,&v31[-Size],Size);
-                  buf_2 += Size + 2;
-                  if ( (Size & 1) != 0 )
+                  if ( Size != 1 )
                   {
-                    v72[Size] = 0;
-                    ++buf_2;
+  LABEL_67:
+                    *buf_2 = 0;
+                    v72 = buf_2 + 2;
+                    buf_2[1] = Size << (v75 & 31);
+                    memcpy(buf_2 + 2,&v31[-Size],Size);
+                    buf_2 += Size + 2;
+                    if ( (Size & 1) != 0 )
+                    {
+                      v72[Size] = 0;
+                      ++buf_2;
+                    }
+                    goto LABEL_69;
                   }
-                  goto LABEL_69;
-                }
-                v47 = *(v31 - 1);
-                *buf_2 = 2;
-                buf_2[1] = v47;
-                buf_2 += 2;
-              }
-              else
-              {
-                if ( Size >= 3 )
-                  goto LABEL_67;
-                if ( Size == 2 )
-                {
-                  v45 = *(v31 - 2);
-                  *buf_2 = 1;
-                  buf_2[1] = v45;
+                  v47 = *(v31 - 1);
+                  *buf_2 = 2;
+                  buf_2[1] = v47;
                   buf_2 += 2;
                 }
-                v46 = *(v31 - 1);
-                *buf_2 = 1;
-                buf_2[1] = v46;
-                buf_2 += 2;
+                else
+                {
+                  if ( Size >= 3 )
+                    goto LABEL_67;
+                  if ( Size == 2 )
+                  {
+                    v45 = *(v31 - 2);
+                    *buf_2 = 1;
+                    buf_2[1] = v45;
+                    buf_2 += 2;
+                  }
+                  v46 = *(v31 - 1);
+                  *buf_2 = 1;
+                  buf_2[1] = v46;
+                  buf_2 += 2;
+                }
+  LABEL_69:
+                Size = 0;
+                LOBYTE(v40) = *v31;
               }
-LABEL_69:
-              Size = 0;
-              LOBYTE(v40) = *v31;
-LABEL_70:
               buf_2[1] = v40;
               v31 += n2_1;
               *buf_2 = n2_1 << (v75 & 31);
@@ -5676,8 +5676,7 @@ LABEL_29:
             goto LABEL_41;
           }
           if ( v47 <= v46 )
-LABEL_40:
-            LOBYTE(v45) = v46 + v45 - v47;
+            LOBYTE(v45) = (uint8_t)(v46 + v45 - v47);
         }
         else
         {
@@ -5686,8 +5685,12 @@ LABEL_40:
             LOBYTE(v45) = *v43;
             goto LABEL_41;
           }
+          // The `goto` here entered the branch above to reach this one
+          // statement; both arms then fall to `LABEL_41`, so a copy says the
+          // same thing.  `v45 + v46 - v47` against the two bounds is the
+          // median of three, which is what `predict_med` is named for.
           if ( v47 >= v46 )
-            goto LABEL_40;
+            LOBYTE(v45) = (uint8_t)(v46 + v45 - v47);
         }
 LABEL_41:
         *result = v45 + v52[(uint8_t)*result];
@@ -17289,7 +17292,6 @@ BmfArc *__bmf_open_archive(BmfArc *v2, char *FileName, int32_t a2)
   v9 = v5->fp != nullptr;
   if ( v8 )
   {
-LABEL_10:
     if ( !v9 )
       __exit_402E40(3, FileName);
     return v5;
@@ -17313,7 +17315,11 @@ LABEL_10:
       v5->images = 0;
       fseek(Stream_1, 0, 0);
       v9 = v5->fp != nullptr;
-      goto LABEL_10;
+      {
+        if ( !v9 )
+        __exit_402E40(3, FileName);
+        return v5;
+      }
     }
   }
   return v5;

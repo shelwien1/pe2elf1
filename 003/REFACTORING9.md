@@ -28,8 +28,8 @@ byte offsets on a typed base           121         0
 pointer casts                         2137       992
 fNN members / named ones             93/121    44/121
 distinct vNN locals                    554       553
-goto / LABEL_n:                     112/79    112/79
-conversion warnings (ratchet)         1455      1403
+goto / LABEL_n:                     112/79     92/62
+conversion warnings (ratchet)         1455      1393
 ```
 
 Every tool reports zero: `unused.py`, `unwrite.py`, `unaliasvar.py`,
@@ -296,15 +296,36 @@ noticing that a tool's *input* was narrower than the file.
 * **Zero byte offsets on a typed base**, from 121 at the start of the round.
   Every pointer in the file whose target is a record is typed as that record,
   and the stride scan of §2 reports zero for the third time.
-* **112 gotos and 79 labels**, unchanged for four rounds, and `degoto.py`
-  reports nothing reducible. What is left are MSVC's shared tails.
+* **92 gotos and 62 labels**, from 112 and 79. Three rules did it, and each
+  came from reading `degoto.py --why` rather than the file:
+
+  | rule | tool | gotos |
+  | --- | --- | --- |
+  | a shared tail small enough to copy | `untail.py` | 8 |
+  | a jump into a block is a disjunction | `unjump.py` | 10 |
+  | a forward jump over a region | `degoto.py` | 1 |
+  | one statement duplicated by hand | — | 1 |
+
+  `untail.py` and `unjump.py` are the round's two new tools and both were wrong
+  on their first run in a way the file has taught before: `untail` copied one
+  function's tail onto another function's `goto`, because `LABEL_19` exists in
+  seven bodies and the search was not scoped to one; and its first relaxation
+  — allowing a braceless `if` inside the run — made three runs look terminated
+  at `if ( fwrite(...) != n ) return 0;` when control carries straight on. A
+  `return` ends a run only when it is unconditional.
+
+  What is left is 44 labels and it is genuinely structural: 20 shared tails too
+  big to copy, 8 where the `goto` is not the whole of an `if`, 6 backward, 5
+  that leave a block, 3 whose skipped region something else enters, and 2 more
+  that enter one. Removing any of those needs a flag or a duplicated body large
+  enough that the duplication is the cost.
 * **`vNN` locals and 44 `fNN` members.** Round eight said this is answerable
   only by knowing what the values mean, and §3, §4 and this section are what
   that looks like when it works: sixty-odd `vNN` across the three models became
   record cursors and their reads became field names, without a naming pass.
   What is left are the ones whose *values* are still unexplained, which is
   `algorithm_v2.md`'s work and not a sweep's.
-* **1403 conversion warnings.** The ratchet fell 52 this round and every step
+* **1393 conversion warnings.** The ratchet fell 62 this round and every step
   was a by-product: a `match[0]` read through a typed field does not need the
   cast that a raw byte read did.
 
