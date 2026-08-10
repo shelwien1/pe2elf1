@@ -750,43 +750,50 @@ and one frame at a time. The four complaints:
 
 | the complaint | round four | round five |
 | --- | --- | --- |
-| `_this+ofs` with typecasts | 1389 sites | **1104** |
+| `_this+ofs` with typecasts | 1389 sites | **1089** |
 | mistyped globals | 4 wrong types, 19 addresses for names | **0 and 0** |
 | context frames | 1857 uses, 538 through a cast | 1857 uses, **0 casts** |
 | non-stdint types | `char` 1056, multi-word 24 | **0 and 0** |
 
 and the gate gained a second ratchet: `BMF_WARN=1 ./build.sh` counts
 `-Wconversion -Wsign-conversion -Wsign-compare -Wuseless-cast`, `test.sh` fails
-when the count rises, and the count went 2338 → **2160**.
+when the count rises, and the count went 2338 → **2158**.
 
-`shape.py` alongside: 5131 pointer casts → 4763, 85 structs → 53, 19 frames →
-17, 19 098 lines of `subs1.hpp` → 18 809 and 746 of `bmf.cpp` → 369.
+`shape.py` alongside: 5131 pointer casts → 4700, 85 structs → 53, 19 frames →
+17, 19 098 lines of `subs1.hpp` → 18 810 and 746 of `bmf.cpp` → 369.
 
-Four things this round did not finish, each for a reason it can state:
+All four things this plan deferred were finished after it was written:
 
-* **§3.3's last shared slot.** Four of the five variables are done -- 60 of the
-  80 sites -- and `alt_p2_model`'s `n0x10_2` is the one left. It holds an
-  address in two regions and a record *index* in four more:
-  `((uint32_t *)v385)[2 * n0x10_2 + 235020]` is eight times it plus 940 080, not
-  one times it. The regions are each preceded by their own assignment, so a
-  split would be safe, except that the address lifetime ends `n0x10 = n0x10_2`
-  -- writing an address into the variable the function returns as an index.
-  Whether that store is dead is a question about `alt_p2_model`'s exits.
-* **§3.4's scaled indices.** 31 of the 303 land on an array member of the same
-  type and would fold today; the other 272 land on an offset the struct spells
-  with a different width — `((uint32_t *)v385)[expr + 235020]` is byte 940080,
-  inside `uint16_t f940072[62208]`, so it reads a *pair* of elements. Folding
-  those means saying so, and the tool cannot say it without being told the pair
-  is a record.
-* **§3.2's variable byte offsets.** 50 of `alt_p1_model`'s raw offsets became
-  `P1Count` records; what is left is `*(uint16_t *)((uint8_t *)_this + (v39 +
-  3800))`, where `v39` is `16 * something` computed several lines earlier. That
-  needs the multiplication traced to its source.
-* **`alt_p2_context`'s `sub`.** Its six slots got names, but `sub0` keeps
-  `void *`: its readers spell the type `int16_t (*)[8]`, which is the one shape
-  `unspill.py`'s cast regex does not parse, and `alt_p2_filter` reads all six as
-  `float (*)[4]`. Which of the two is the slot's type is a question about
-  `alt_p2_filter`, and §9 of `algorithm_v2.md` is where it belongs.
+* **§3.3's shared slots.** All five variables, 80 sites. Four were slots MSVC
+  gave one word each -- `alt_p2_context`'s `v292` (a cost and a row cursor),
+  `alt_p2_model`'s `n2` (a float bias, a halved count and a record cursor) and
+  its `n0x10_2` (a record index and a record address). One store survives the
+  split deliberately: LABEL_128 writes the address into the variable the
+  function returns, and the mirror of that block writes a counter value there,
+  so both are what the register held.
+* **§3.4's scaled indices.** `tools/unindex.py` places the constant's byte
+  offset inside an array member and rescales the variable part into that
+  member's elements. 62 sites. The 262 left land on an offset that is not
+  inside any array member -- `((uint8_t *)_this)[v + 16]` on `Obj0`, 49 times --
+  which is the walked extent §5.3 found in the frames, in a struct instead.
+* **§3.2's variable byte offsets.** All nine. Six were fed by a `LODWORD(v) =
+  16 * idx` store one line above the read and nowhere else; with the read
+  saying `[idx + 237].total` the store has no reader. Nothing in the file
+  spells 3784, 3800 or 3816 any more.
+* **`alt_p2_context`'s `sub`.** The six slots hold six `float (*)[4]` weight
+  blocks by the time `alt_p2_filter` is called, and everything the body wrote
+  into them before that is scratch. The scratch is six locals now and the frame
+  keeps the type the call gives.
+
+What is left for a round six, in the order the file makes them visible:
+
+* **262 scaled indices into a struct's unnamed body**, led by `Obj0` (49 at
+  byte 16) and `BmfImage` (14, also at 16). The same finding as §5.3 and the
+  same fix: declare the extent the walk covers.
+* **44 of the 53 structs are still `ObjN`**, and 185 of their 248 members are
+  still `fNN`.
+* **112 `goto`s over 79 labels**, and 94 `__fwd_*` shims that take `void *` and
+  cast on the way in.
 
 The standing warning from REFACTORING3.md's Appendix B held again: of this
 plan's own measurements, **five were wrong** and every one of them was wrong in
