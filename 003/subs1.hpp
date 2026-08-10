@@ -7262,6 +7262,8 @@ static inline int32_t __fwd_alt_p2_context_alt_p2_filter(void *a0, void *a1, voi
 // question, and it is still open -- this names the role, not the algorithm.
 int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
 {
+  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
+  // gives every member its own storage and altp1 segfaults while compressing.
   struct alignas(16) AltP2ContextFrame {   // 208 bytes, one stack frame
       uint8_t v246[4];
       uint8_t v256[4];
@@ -8280,6 +8282,8 @@ static inline uint32_t __fwd_reduce_alphabet_init_encode_symbol_list(void *a0, i
 
 void __reduce_alphabet(ModelBlock *Blocka, char a2, uint8_t *a3)
 {
+  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
+  // gives every member its own storage and DLRAW aborts while compressing.
   struct alignas(16) ReduceAlphabetFrame {   // 66064 bytes, one stack frame
       uint32_t v78[15];
       void *v79;
@@ -8739,6 +8743,8 @@ LABEL_71:
 
 int32_t __cost_candidate(uint8_t *a1, uint8_t *n2, int32_t a3, char a4, int32_t a5, int32_t a6, int32_t a7, char *a8)
 {
+  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
+  // gives every member its own storage and altp1 segfaults while compressing.
   struct alignas(16) CostCandidateFrame {   // 26712 bytes, one stack frame
       char buf[4096];
       int32_t v72[1024];
@@ -9003,6 +9009,8 @@ static inline int32_t __fwd_choose_plane_coding_cost_candidate(void *a0, void *a
 
 int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, char a3)
 {
+  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
+  // gives every member its own storage and altp1 segfaults while compressing.
   struct alignas(16) ChoosePlaneCodingFrame {   // 41456 bytes, one stack frame
       int32_t v174;
       int32_t v175;
@@ -9864,6 +9872,8 @@ LABEL_19:
 
 int32_t *__read_bmp(char *FileName)
 {
+  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
+  // gives every member its own storage and DLRAW aborts while compressing.
   struct alignas(16) ReadBmpFrame {   // 128 bytes, one stack frame
       uint8_t Size_4[4];
       uint8_t Size[4];
@@ -10216,6 +10226,8 @@ LABEL_61:
 
 int32_t __decode_symbol_list(uint32_t *a1)
 {
+  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
+  // gives every member its own storage and DLRAW segfaults while decompressing.
   struct alignas(16) DecodeSymbolListFrame {   // 32824 bytes, one stack frame
       uint16_t *list[8192];   // the symbol list: 8 named slots and 32736 bytes of tail, one array
       uint32_t n0x7F800000_1;
@@ -10460,6 +10472,8 @@ static inline int32_t __fwd_decode_pixel_pixel_context(void *a0, void *a1) { ret
 
 int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
 {
+  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
+  // gives every member its own storage and DLRAW segfaults while decompressing.
   struct alignas(16) DecodePixelFrame {   // 164 bytes, one stack frame
       uint32_t  sym[32];   // pixel_context reads sym[0..31]; `sym_pos` runs 0..31 (was n15_8 .. v211)
       uint8_t   _gap0[4];   // was int32_t n15_24
@@ -11245,6 +11259,8 @@ static inline int32_t __fwd_code_pixel_pixel_context(void *a0, void *a1) { retur
 
 int32_t __code_pixel(ModelBlock *_this, int32_t a2)
 {
+  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
+  // gives every member its own storage and DLRAW segfaults while compressing.
   struct alignas(16) CodePixelFrame {   // 164 bytes, one stack frame
       uint32_t  sym[32];   // pixel_context reads sym[0..31]; `sym_pos` runs 0..31 (was p_n15 .. v207)
       uint8_t   _gap0[4];   // was int32_t n15_14
@@ -12012,6 +12028,8 @@ static inline uint32_t __fwd_expand_alphabet_init_encode_symbol_list(void *a0, i
 
 void __expand_alphabet(ModelBlock *_this)
 {
+  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
+  // gives every member its own storage and DLRAW aborts while decompressing.
   struct alignas(16) ExpandAlphabetFrame {   // 420 bytes, one stack frame
       uint64_t v28[2];
       int32_t v29;
@@ -17150,6 +17168,8 @@ static inline void __fwd_model_planes_model_plane( void *a2, void *a3, void *a4)
 
 void __model_planes(char *Blockb, char *Srca_3, int32_t a3, char a4)
 {
+  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
+  // gives every member its own storage and med32 divides by zero while compressing.
   struct alignas(16) ModelPlanesFrame {   // 76 bytes, one stack frame
       uint8_t slot0[4];
       uint8_t slot4[4];
@@ -17355,6 +17375,8 @@ static inline void __fwd_expand_image_unmodel_plane(char a0, void *a3, void *a4)
 
 char * __expand_image(char *a1, int32_t a4, int32_t *p_dwLowDateTime)
 {
+  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
+  // gives every member its own storage and DLRAW exits 3 while decompressing.
   struct alignas(16) ExpandImageFrame {   // 104 bytes, one stack frame
       uint8_t Block[4];
       uint16_t p_i[2];
@@ -17896,6 +17918,8 @@ static inline void __fwd_search_filter_transform_planes(void *a0, int32_t a1, ch
 
 uint32_t __search_filter(BmfImage *p_i, char a2)
 {
+  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
+  // gives every member its own storage and five streams move, no signal.
   struct alignas(16) SearchFilterFrame {   // 164 bytes, one stack frame
       uint8_t v175[4];
       uint8_t v177[16];
@@ -18795,6 +18819,8 @@ static inline void __fwd_compress_image_model_plane( void *a2, void *a3, void *a
 
 int32_t __compress_image(char *a1, BmfImage *p_i, void *coded_buf)
 {
+  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
+  // gives every member its own storage and the two-member archive fails to decompress.
   struct alignas(16) CompressImageFrame {   // 80 bytes, one stack frame
       char *Buffera_4;
       uint8_t _pad0[12];
