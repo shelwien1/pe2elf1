@@ -1,4 +1,4 @@
-In file included from bmf.cpp:356:
+In file included from bmf.cpp:345:
 subs1.hpp: In function 'int32_t __alt_p1_context(AltP1Block*, uint32_t*, uint32_t*)':
 subs1.hpp:2760:8: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp:2770:12: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]

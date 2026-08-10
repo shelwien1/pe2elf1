@@ -2,7 +2,7 @@ bmf.cpp: In function 'int8_t __OFSUB__(int32_t, int32_t)':
 bmf.cpp:134:59: warning: useless cast to type 'int32_t' {aka 'int'} [-Wuseless-cast]
 bmf.cpp: In function 'void* bmf_page_alloc(size_t)':
 bmf.cpp:284:48: warning: useless cast to type 'uintptr_t' {aka 'unsigned int'} [-Wuseless-cast]
-In file included from bmf.cpp:356:
+In file included from bmf.cpp:345:
 subs1.hpp: In function 'uint32_t __predict_med(uint8_t*, int32_t, int32_t)':
 subs1.hpp:1104:35: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
 subs1.hpp:1118:13: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]

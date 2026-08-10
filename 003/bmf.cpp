@@ -330,28 +330,17 @@ static void *bmf_new(size_t n);
 // ---------------------------------------------------------------------------
 // The block copies MSVC unrolled.
 //
-// Twenty-seven places in the bodies copy an 18-byte record as four dwords and a
+// Fifty-six places in the bodies copied an 18-byte record as four dwords and a
 // word, ascending, which is what the compiler made of `memcpy(d, s, 18)` and
-// all Hex-Rays could give back.  `tools/uncopy.py` folds each run into one call
-// through here.
+// all Hex-Rays could give back.  Round three folded each run into a
+// `bmf_copy(d, s, 18)`; round six gave the thing being copied a type, so every
+// one of them is now `((P2Ctx *)p)[i] = ((P2Ctx *)p)[j]` and the helper has no
+// callers left.
 //
-// A store sequence and a `memcpy` differ in exactly one case -- overlapping
-// regions -- so that is checked rather than argued.  `BMF_COPY_CHECK=1
-// ./build.sh` makes this abort when the regions touch, and the gate is run
-// against it; none of the twenty-seven does.  They are rows of a table 144
-// bytes apart, which is why.
+// The overlap question `bmf_copy`'s `BMF_COPY_CHECK` answered at run time is
+// answered by the types now: two distinct records are `sizeof(P2Ctx)` apart at
+// the least, so a record assignment cannot overlap itself.
 // ---------------------------------------------------------------------------
-static inline void bmf_copy(void *d, const void *s, size_t n) {
-#ifdef BMF_COPY_CHECK
-  const char *dp = (const char *)d, *sp = (const char *)s;
-  if (dp < sp + n && sp < dp + n) {
-    fprintf(stderr, "bmf: overlapping copy, %p <- %p, %u bytes\n",
-            d, s, (uint32_t)n);
-    abort();
-  }
-#endif
-  memcpy(d, s, n);
-}
 
 #include "subs1.hpp"
 
