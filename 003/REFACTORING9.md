@@ -24,7 +24,7 @@ and 3.
                                    round 8   round 9
 subs1.hpp / bmf.cpp lines            17787     17782
 raw-offset sites                        22        17
-byte offsets on a typed base           121        23
+byte offsets on a typed base           121         8
 pointer casts                         2137      1758
 fNN members / named ones             93/121    44/121
 distinct vNN locals                    554       553
@@ -272,7 +272,13 @@ noticing that a tool's *input* was narrower than the file.
   magnitude one pixel back and the samples one and two pixels back. It needed
   no stride change, because the cursor stays a byte cursor; only the *base*
   was mistyped.
-* **23 raw byte offsets**, down from 121. All are the p1 record sites above.
+* **49 byte offsets on an `AltP1Block` row cursor**, and eight more on a local
+  that holds one. All are the p1 record: `cursor[0] - 2`, `- 4`, `- 6` are the
+  samples one, two and three pixels back, `cursor[0] + 8` and `+ 10` are two
+  records forward, and `*(uint16_t *)(cursor[0] - 8) = *(uint16_t *)(cursor[1] + 6)`
+  is a whole record copied from the row above into the left margin — the same
+  idiom `f56` and `AltP2Block::cursor` use, still spelled in bytes because §8's
+  first bullet is not done.
 * **112 gotos and 79 labels**, unchanged for four rounds, and `degoto.py`
   reports nothing reducible. What is left are MSVC's shared tails.
 * **553 `vNN` locals and 44 `fNN` members.** Round eight said this is

@@ -5720,13 +5720,14 @@ int32_t __estimate_cost(uint8_t *a1, int32_t n2)
 
 void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_t a4)
 {
+  uint8_t *v29;   // `cursor[0]`, the row being written
   ;
   uint8_t *v7, *v8, *v9, *v10, *v11;   // the five row cursors of f176
   bool v33;
   AltP1Block *v5;
   AltP1Block *v4;
   int32_t v6, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26,
-          v27, v28, v29, v30, v31, v32, v35, v36, v39, v41;
+          v27, v28, v30, v31, v32, v35, v36, v39, v41;
   int64_t v37;
   uint8_t *v12, *v13, *Src_1;
   v4 = (AltP1Block *)((int32_t *)bmf_new(0x99D4D8u));
@@ -5802,17 +5803,17 @@ void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_
       v27 = v12[11] + v25;
       v5->f12[4] = v27;
       v28 = v13[9] + v26;
-      v29 = (int32_t)(uintptr_t)v5->cursor[0];
+      v29 = v5->cursor[0];
       v5->f12[3] = v28;
       v30 = v13[11] + v27;
       v5->f12[4] = v30;
-      v31 = *(uint8_t *)(v29 - 7) + v28;
+      v31 = v29[-7] + v28;
       v5->f12[3] = v31;
-      v32 = *(uint8_t *)(v29 - 5) + v30;
+      v32 = v29[-5] + v30;
       v5->f12[4] = v32;
-      v5->f12[3] = *(uint8_t *)(v29 - 3) + v31;
+      v5->f12[3] = v29[-3] + v31;
       v33 = v5->f0 <= 0;
-      v5->f12[4] = *(uint8_t *)(v29 - 1) + v32;
+      v5->f12[4] = v29[-1] + v32;
       if ( !v33 )
       {
         Src_1 = Src;
@@ -5859,6 +5860,7 @@ void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_
 
 int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
 {
+  uint8_t *v47;   // `cursor[0]`, the row being written
   // Phase 2 split this frame into plain locals, which is what the other eight
   // frames took -- and it is wrong here.  The frame was 116 bytes and its
   // aliases only reach offset 84; the code writes into the 32 bytes of slack
@@ -5894,7 +5896,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
   uint8_t *v25, *v26, *v27, *v28;   // row cursors out of AltP1Block
   int32_t i, v3, n4, *v7, v8, v9, v10, v14, v15, v16, ArgList, v18, i_3, n4_1,
           n4_2, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43,
-          v44, v45, v46, v47, v48, v49, v50, v52, v53, v54, v56, v57, v60,
+          v44, v45, v46, v48, v49, v50, v52, v53, v54, v56, v57, v60,
           v62, v64, v67, v68, v71, v72, v74, v75, v78, v79, n4_3, n4_4;
   uint32_t v20, *v51;
   AltP1Block *v66;
@@ -6015,16 +6017,16 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
           v45 = v30[11] + v43;
           v24->f12[4] = v45;
           v46 = v31[9] + v44;
-          v47 = (int32_t)(uintptr_t)v24->cursor[0];
+          v47 = v24->cursor[0];
           v24->f12[3] = v46;
           v48 = v31[11] + v45;
           v24->f12[4] = v48;
-          v49 = *(uint8_t *)(v47 - 7) + v46;
+          v49 = v47[-7] + v46;
           v24->f12[3] = v49;
-          v50 = *(uint8_t *)(v47 - 5) + v48;
+          v50 = v47[-5] + v48;
           v24->f12[4] = v50;
-          v24->f12[3] = *(uint8_t *)(v47 - 3) + v49;
-          v24->f12[4] = *(uint8_t *)(v47 - 1) + v50;
+          v24->f12[3] = v47[-3] + v49;
+          v24->f12[4] = v47[-1] + v50;
           n4_1 = plane_count;
         }
         while ( n4_2 < plane_count );
@@ -6044,17 +6046,23 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
           __alt_p1_context((AltP1Block *)(uint8_t **)Block_plane[0], (AltP1Block *)nullptr, (AltP1Block *)0);
           v53 = __alt_p1_decode_symbol((uint16_t *)&v51[4 * v51[3] + 950], v52, v51[4]);
           v54 = v51[2];
-          v55 = (uint8_t *)v51[49];
-          v56 = (uint8_t)(v54 + ((const AltP1Block *)v51)->unfold[v53]);
+          AltP1Block *const blk = (AltP1Block *)v51;
+          v55 = blk->cursor[0];
+          v56 = (uint8_t)(v54 + blk->unfold[v53]);
+          // The row record is two bytes: the reconstructed sample at +0 and the
+          // size of the prediction error at +1.  `[1]` is this pixel's error,
+          // `[-7]` is the one four pixels back, and the four terms off
+          // `cursor[2]` and `cursor[4]` are two records back and six forward on
+          // the other two planes.
           *v55 = v56;
-          *(uint8_t *)(v51[49] + 1) = abs32(v56 - v54);
+          blk->cursor[0][1] = abs32(v56 - v54);
           v51[v51[5] + 6] = v51[v51[5] + 6]
-                          + *(uint8_t *)(v51[49] + 1)
-                          - *(uint8_t *)(v51[49] - 7)
-                          - (*(uint8_t *)(v51[53] - 3)
-                           - *(uint8_t *)(v51[53] + 13)
-                           + *(uint8_t *)(v51[51] - 3)
-                           - *(uint8_t *)(v51[51] + 13));
+                          + blk->cursor[0][1]
+                          - blk->cursor[0][-7]
+                          - (blk->cursor[4][-3]
+                           - blk->cursor[4][13]
+                           + blk->cursor[2][-3]
+                           - blk->cursor[2][13]);
           v57 = 4 * v51[3];
           v51[5] = v51[5] == 0;
           if ( LOWORD(v51[v57 + 950]) < 0x4000u )
@@ -11799,6 +11807,7 @@ LABEL_76:
 
 int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
 {
+  uint8_t *v46;   // `cursor[0]`, the row being written
   struct alignas(16) AltModelP1EncodeFrame {   // 144 bytes, one stack frame
       uint8_t   _gap0[1];   // was int8_t v90
       uint8_t _pad0[3];
@@ -11869,7 +11878,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
   uint8_t *v24, *v25, *v26, *v27;   // row cursors out of AltP1Block
   int32_t i, v3, n4, *v7, v8, v9, v10, v14, v15, v16, v17, i_3, n4_1, n4_2,
           v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43,
-          v44, v45, v46, v47, v48, v49, n5_9, n5_7, n5_2, n5_1, v56, n16, v58,
+          v44, v45, v47, v48, v49, n5_9, n5_7, n5_2, n5_1, v56, n16, v58,
           v63, v64, v65, n16_1, n5_3, v69, n5_4, v73, v74, n16_2, v77, n5_5,
           v84, n16_3, n4_3, n4_4;
   int64_t v68, v76, v86;
@@ -11993,16 +12002,16 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
           v44 = v29[11] + v42;
           v23->f12[4] = v44;
           v45 = v30[9] + v43;
-          v46 = (int32_t)(uintptr_t)v23->cursor[0];
+          v46 = v23->cursor[0];
           v23->f12[3] = v45;
           v47 = v30[11] + v44;
           v23->f12[4] = v47;
-          v48 = *(uint8_t *)(v46 - 7) + v45;
+          v48 = v46[-7] + v45;
           v23->f12[3] = v48;
-          v49 = *(uint8_t *)(v46 - 5) + v47;
+          v49 = v46[-5] + v47;
           v23->f12[4] = v49;
-          v23->f12[3] = *(uint8_t *)(v46 - 3) + v48;
-          v23->f12[4] = *(uint8_t *)(v46 - 1) + v49;
+          v23->f12[3] = v46[-3] + v48;
+          v23->f12[4] = v46[-1] + v49;
           n4_1 = plane_count;
         }
         while ( n4_2 < plane_count );
