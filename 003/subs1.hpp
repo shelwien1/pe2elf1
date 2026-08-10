@@ -409,6 +409,16 @@ __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...);
 // pointer is four bytes, so naming these fields moves nothing, and the
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
+// One counter node: a total and seven counts, the thing `init_counter_node`
+// seeds with (22; 8, 2, 2, 2, 2, 3, 3) -- 22 being the sum of the other seven.
+// `alt_p1_alloc` writes 0x99C60 of them at `_this + 8 * k + 1900` in
+// `uint16_t`, which is +3800 and a stride of sixteen bytes.
+struct CounterNode {
+  uint16_t total;   // +0
+  uint16_t c[7];    // +2 .. +15
+};
+static_assert(sizeof(CounterNode) == 16, "CounterNode: the record is sixteen bytes");
+
 struct AltP1Block {
   union {   // the same bytes, 4 recoveries
     struct {
@@ -445,16 +455,14 @@ struct AltP1Block {
   uint8_t f1240[256];    // +1240 .. +1495
   uint8_t f1496[256];    // +1496 .. +1751
   int32_t f1752[512];    // +1752 .. +3799
-  // The counter table starts here, and the code reaches it as
-  // `((P1Count *)_this)[k + 237]` -- a record grid anchored at the object's
-  // base.  Record 237 begins at +3792, so its first eight bytes are the tail
-  // of `f1752` and its `total` is the first word of the table proper at +3800.
-  // Only `total` and `bin[]` are ever read at these indices, never `w[]`,
-  // which is why the straddle never shows: 251 subscripts, always record
-  // `k + 237` and its two neighbours.  A member declared here would have to
-  // start at +3792 to keep the record boundary, contradicting the +3800 the
-  // allocator draws, so the extent is pinned instead.
-  uint8_t _pad3800[10077696];   // +3800 .. +10081495
+  // The counter table.  Hex-Rays read it as a `P1Count` grid anchored at the
+  // object's base -- `_this->counters[k]` -- which is the right bytes
+  // at the wrong phase: `P1Count::total` sits at +8, and 16 * 237 + 8 is 3800,
+  // so record `k + 237`'s `total` and `bin[0..2]` are node k's four words and
+  // its `w[0..3]` are node k-1's last four.  That is why `w[]` is never read
+  // at those indices and `bin[]` never past 2.  The extent is the allocator's
+  // own loop bound, `n0x99C60 < 0x99C60`, and 0x99C60 * 16 fills the object.
+  CounterNode counters[629856];   // +3800 .. +10081495
 };
 static_assert(sizeof(void *) != 4 || sizeof(AltP1Block) == 0x99D4D8,
               "AltP1Block is not what alt_p1_alloc's callers allocate");
@@ -787,18 +795,6 @@ struct PixRec {
   uint8_t  match[6];   // +2 .. +7
 };
 static_assert(sizeof(PixRec) == 8, "PixRec: the record is eight bytes");
-
-
-// The p1 model's counter table: 16-byte records, and `alt_p1_model` reaches
-// three of them at a time -- 236, 237 and 238 past the record its caller
-// picked -- bumping a total and one of three bins in each.  The first four
-// lanes have no reader in this file.
-struct P1Count {
-  uint16_t w[4];      // +0 .. +7
-  uint16_t total;     // +8
-  uint16_t bin[3];    // +10 .. +15
-};
-static_assert(sizeof(P1Count) == 16, "P1Count: the record is sixteen bytes");
 
 
 struct RangeCoder {
@@ -2870,51 +2866,52 @@ int32_t __update_binary_pair(uint16_t *_this, int32_t symbol)
 int32_t __alt_p1_model(AltP1Block *_this)
 {
   ;
-  uintptr_t result;   // were int32_t: addresses, masked and tagged
-  P1Count *v111;
-  P1Count *v9;
-  P1Count *v11;
-  P1Count *v13;
-  uint8_t *v17, *v23, *v31, *v39, *v47, *v55, *v63, *v71, *v79;
+  uintptr_t result;   // an index into the counter table, and the return value
+  CounterNode *node;  // was `result` too: the address role, under its own name
+  CounterNode *v111;
+  CounterNode *v9;
+  CounterNode *v11;
+  CounterNode *v13;
+  CounterNode *v17, *v23, *v31, *v39, *v47, *v55, *v63, *v71, *v79;
   int16_t v12, v15;
   int32_t v3, n5_1, v5, n5_2, n5_3, v8, v14, v16, v18, v21, v22, v24, v25, v26, v29, v30, v32,
           v33, v34, v37, v38, v40, v41, v42, v45, v46, v48, v49, v50, v53, v54, v56, v57, v58,
           v61, v62, v64, v65, v66, v69, v70, v72, v73, v74, v77, v78, v80, v82, v83, v85, v86,
           v89, v92, v95, v98, v101, v104, v107, n2, n5_4;
-  P1Count *v108;
-  P1Count *v109;
-  P1Count *v19;
-  P1Count *v20;
-  P1Count *v105;
-  P1Count *v106;
-  P1Count *v27;
-  P1Count *v28;
-  P1Count *v102;
-  P1Count *v103;
-  P1Count *v35;
-  P1Count *v36;
-  P1Count *v99;
-  P1Count *v100;
-  P1Count *v43;
-  P1Count *v44;
-  P1Count *v96;
-  P1Count *v97;
-  P1Count *v51;
-  P1Count *v52;
-  P1Count *v93;
-  P1Count *v94;
-  P1Count *v59;
-  P1Count *v60;
-  P1Count *v90;
-  P1Count *v91;
-  P1Count *v67;
-  P1Count *v68;
-  P1Count *v87;
-  P1Count *v88;
-  P1Count *v75;
-  P1Count *v76;
-  P1Count *v84;
-  P1Count *v81;
+  CounterNode *v108;
+  CounterNode *v109;
+  CounterNode *v19;
+  CounterNode *v20;
+  CounterNode *v105;
+  CounterNode *v106;
+  CounterNode *v27;
+  CounterNode *v28;
+  CounterNode *v102;
+  CounterNode *v103;
+  CounterNode *v35;
+  CounterNode *v36;
+  CounterNode *v99;
+  CounterNode *v100;
+  CounterNode *v43;
+  CounterNode *v44;
+  CounterNode *v96;
+  CounterNode *v97;
+  CounterNode *v51;
+  CounterNode *v52;
+  CounterNode *v93;
+  CounterNode *v94;
+  CounterNode *v59;
+  CounterNode *v60;
+  CounterNode *v90;
+  CounterNode *v91;
+  CounterNode *v67;
+  CounterNode *v68;
+  CounterNode *v87;
+  CounterNode *v88;
+  CounterNode *v75;
+  CounterNode *v76;
+  CounterNode *v84;
+  CounterNode *v81;
   uint32_t n5, v110, v112;
   n5 = *((uint8_t)(**(uint8_t **)&_this->f12[46] - *(uint8_t *)&_this->f8) + _this->f984);
   v3 = _this->f12[9];
@@ -2938,74 +2935,74 @@ int32_t __alt_p1_model(AltP1Block *_this)
      + _this->f12[12 - v3]
      + _this->f12[7]
      + (_this->f12[0] & 0x1F);
-  v9 = &((P1Count *)_this)[v8];
-  v111 = (P1Count *)(v9);
-  ((P1Count *)v9)[237].bin[n5_3] += 17;
-  v9[237].total += 17;
+  v9 = &_this->counters[v8];
+  v111 = v9;
+  v9[0].c[n5_3] += 17;
+  v9[0].total += 17;
   result = _this->f12[0];
   if ( (result & 7) != 7 )
   {
-    v11 = &((P1Count *)_this)[result];
+    v11 = &_this->counters[result];
     v110 = (((_this->f12[1] & 7u) - 7) >> 31) + _this->f12[1];
-    ((P1Count *)v11)[238].bin[n5_2] += 11;
-    v12 = v11[238].total + 11;
-    v11[238].total = v12;
+    v11[1].c[n5_2] += 11;
+    v12 = v11[1].total + 11;
+    v11[1].total = v12;
     if ( n5_2 >= 5 )
       __update_binary_pair(model_strip(
         128 * (n5_2 & 1)
         + v110
         + (((((v12 & 0x7FFF)
-            + v11[238].bin[0]
-            - 2 * (uint32_t)((P1Count *)v11)[238].bin[n5_2]) >> 25)
+            + v11[1].c[0]
+            - 2 * (uint32_t)v11[1].c[n5_2]) >> 25)
           & 0xFFFFFFC0))), (int32_t)(n5 - 5) >> 1);
     result = _this->f12[0];
   }
   if ( (result & 7) != 0 )
   {
-    v13 = &((P1Count *)_this)[result];
+    v13 = &_this->counters[result];
     v14 = _this->f12[1] - ((_this->f12[1] & 7) != 0);
-    ((P1Count *)v13)[236].bin[n5_2] += 13;
-    v15 = v13[236].total + 13;
-    v13[236].total = v15;
+    v13[-1].c[n5_2] += 13;
+    v15 = v13[-1].total + 13;
+    v13[-1].total = v15;
     if ( n5_2 >= 5 )
       __update_binary_pair(model_strip(
         128 * (uint32_t)(n5_2 & 1)
         + (uint32_t)v14
         + (((((v15 & 0x7FFF)
-            + v13[236].bin[0]
-            - 2 * (uint32_t)((P1Count *)v13)[236].bin[n5_2]) >> 25)
+            + v13[-1].c[0]
+            - 2 * (uint32_t)v13[-1].c[n5_2]) >> 25)
           & 0xFFFFFFC0))), n2);
     result = _this->f12[0];
   }
-  if ( (*(P1Count *)&_this->f1752[4 * result + 510]).total < 0xCCCu )
+  if ( _this->counters[result].total < 0xCCCu )
   {
     if ( (result & 7u) < 7 )
     {
-      ((P1Count *)v111)[238].bin[n5_4] += 7;
-      v111[238].total += 7;
+      v111[1].c[n5_4] += 7;
+      v111[1].total += 7;
       result = _this->f12[0];
     }
     if ( (result & 7) != 0 )
     {
-      ((P1Count *)v111)[236].bin[n5_4] += 5;
-      v111[236].total += 5;
+      v111[-1].c[n5_4] += 5;
+      v111[-1].total += 5;
       result = _this->f12[0];
     }
     if ( n5_2 >= 5 )
     {
       v112 = _this->f12[1]
-           + ((((*(P1Count *)&_this->f1752[4 * result + 510]).bin[0]
-              + ((*(P1Count *)&_this->f1752[4 * result + 510]).total & 0x7FFF)
-              - 2 * (uint32_t)(*(P1Count *)&_this->f1752[4 * result + 510]).bin[n5_2]) >> 25)
+           + (((_this->counters[result].c[0]
+              + (_this->counters[result].total & 0x7FFF)
+              - 2 * (uint32_t)_this->counters[result].c[n5_2]) >> 25)
             & 0xFFFFFFC0)
            + ((n5_2 & 1) << 7);
       if ( (v112 & 0x38) >= 0x38
         || (__update_binary_pair(model_strip(
               128 * (n5_2 & 1)
               + _this->f12[1]
-              + (((((*(P1Count *)&_this->f1752[4 * result + 510]).bin[0]
-                  + ((*(P1Count *)&_this->f1752[4 * result + 510]).total & 0x7FFF)
-                  - 2 * (uint32_t)(*(P1Count *)&_this->f1752[4 * result + 510]).bin[n5_2]) >> 25)
+              + ((((_this->counters[result].c[0]
+                  + (_this->counters[result].total & 0x7FFF)
+                  - 2 * (uint32_t)_this->counters[result].c[n5_2]) >> 25)
                 & 0xFFFFFFC0))
               + 8), n2),
             (v112 & 0x38) != 0) )
@@ -3018,61 +3015,57 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( v16 == 1 )
     {
       v107 = result - _this->f12[7];
-      v108 = &((P1Count *)_this)[v107 + _this->f12[6]];
-      v109 = &((P1Count *)_this)[_this->f12[8] + v107];
-      v108[237].bin[n5_2] += 6;
-      v108[237].total += 6;
-      v109[237].bin[n5_2] += 6;
-      v109[237].total += 6;
+      v108 = &_this->counters[v107 + _this->f12[6]];
+      v109 = &_this->counters[_this->f12[8] + v107];
+      v108[0].c[n5_2] += 6;
+      v108[0].total += 6;
+      v109[0].c[n5_2] += 6;
+      v109[0].total += 6;
       v21 = _this->f12[0];
       if ( (v21 & 7) != 7 )
       {
-        v108[238].bin[n5_2] += 4;
-        v108[238].total += 4;
-        v109[238].bin[n5_2] += 4;
-        v109[238].total += 4;
+        v108[1].c[n5_2] += 4;
+        v108[1].total += 4;
+        v109[1].c[n5_2] += 4;
+        v109[1].total += 4;
         v21 = _this->f12[0];
       }
       if ( (v21 & 7) != 0 )
       {
-        v108[236].bin[n5_2] += 3;
-        v108[236].total += 3;
-        v109[236].bin[n5_2] += 3;
-        v109[236].total += 3;
+        v108[-1].c[n5_2] += 3;
+        v108[-1].total += 3;
+        v109[-1].c[n5_2] += 3;
+        v109[-1].total += 3;
         v21 = _this->f12[0];
       }
     }
     else
     {
-      v17 = (uint8_t *)_this + 16 * (_this->f12[8 - v16] + result - _this->f12[6 + v16]);
-      ((P1Count *)v17)[237].bin[n5_2] += 7;
-      ((P1Count *)v17)[237].total += 7;
+      v17 = &_this->counters[_this->f12[8 - v16] + result - _this->f12[6 + v16]];
+      v17[0].c[n5_2] += 7;
+      v17[0].total += 7;
       v18 = v8 + _this->f12[6] - _this->f12[7];
-      v19 = (P1Count *)((uint16_t *)((uint8_t *)_this
-                    + 16
-                    * (_this->f12[7]
-                     + _this->f12[0]
-                     - _this->f12[6 + _this->f12[5]])));
-      v19[237].bin[n5_2] += 6;
-      v19[237].total += 6;
-      v20 = &((P1Count *)_this)[v18];
-      v20[237].bin[n5_4] += 4;
-      v20[237].total += 4;
+      v19 = &_this->counters[_this->f12[7] + _this->f12[0] - _this->f12[6 + _this->f12[5]]];
+      v19[0].c[n5_2] += 6;
+      v19[0].total += 6;
+      v20 = &_this->counters[v18];
+      v20[0].c[n5_4] += 4;
+      v20[0].total += 4;
       v21 = _this->f12[0];
       if ( (v21 & 7) != 7 )
       {
-        v19[238].bin[n5_2] += 4;
-        v19[238].total += 4;
-        v20[238].bin[n5_4] += 2;
-        v20[238].total += 2;
+        v19[1].c[n5_2] += 4;
+        v19[1].total += 4;
+        v20[1].c[n5_4] += 2;
+        v20[1].total += 2;
         v21 = _this->f12[0];
       }
       if ( (v21 & 7) != 0 )
       {
-        v19[236].bin[n5_2] += 3;
-        v19[236].total += 3;
-        v20[236].bin[n5_4] += 2;
-        v20[236].total += 2;
+        v19[-1].c[n5_2] += 3;
+        v19[-1].total += 3;
+        v20[-1].c[n5_4] += 2;
+        v20[-1].total += 2;
         v21 = _this->f12[0];
       }
     }
@@ -3080,59 +3073,59 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( v22 == 1 )
     {
       v104 = v21 - _this->f12[11];
-      v105 = &((P1Count *)_this)[v104 + _this->f12[10]];
-      v106 = &((P1Count *)_this)[_this->f12[12] + v104];
-      v105[237].bin[n5_2] += 6;
-      v105[237].total += 6;
-      v106[237].bin[n5_2] += 6;
-      v106[237].total += 6;
+      v105 = &_this->counters[v104 + _this->f12[10]];
+      v106 = &_this->counters[_this->f12[12] + v104];
+      v105[0].c[n5_2] += 6;
+      v105[0].total += 6;
+      v106[0].c[n5_2] += 6;
+      v106[0].total += 6;
       v29 = _this->f12[0];
       if ( (v29 & 7) != 7 )
       {
-        v105[238].bin[n5_2] += 4;
-        v105[238].total += 4;
-        v106[238].bin[n5_2] += 4;
-        v106[238].total += 4;
+        v105[1].c[n5_2] += 4;
+        v105[1].total += 4;
+        v106[1].c[n5_2] += 4;
+        v106[1].total += 4;
         v29 = _this->f12[0];
       }
       if ( (v29 & 7) != 0 )
       {
-        v105[236].bin[n5_2] += 3;
-        v105[236].total += 3;
-        v106[236].bin[n5_2] += 3;
-        v106[236].total += 3;
+        v105[-1].c[n5_2] += 3;
+        v105[-1].total += 3;
+        v106[-1].c[n5_2] += 3;
+        v106[-1].total += 3;
         v29 = _this->f12[0];
       }
     }
     else
     {
-      v23 = (uint8_t *)_this + 16 * (_this->f12[12 - v22] + v21 - _this->f12[10 + v22]);
-      ((P1Count *)v23)[237].bin[n5_2] += 7;
-      ((P1Count *)v23)[237].total += 7;
+      v23 = &_this->counters[_this->f12[12 - v22] + v21 - _this->f12[10 + v22]];
+      v23[0].c[n5_2] += 7;
+      v23[0].total += 7;
       v24 = _this->f12[11];
       v25 = v24 + _this->f12[0] - _this->f12[10 + _this->f12[9]];
       v26 = v8 + v24 - _this->f12[12 - _this->f12[9]];
-      v27 = &((P1Count *)_this)[v25];
-      v27[237].bin[n5_2] += 6;
-      v27[237].total += 6;
-      v28 = &((P1Count *)_this)[v26];
-      v28[237].bin[n5_4] += 4;
-      v28[237].total += 4;
+      v27 = &_this->counters[v25];
+      v27[0].c[n5_2] += 6;
+      v27[0].total += 6;
+      v28 = &_this->counters[v26];
+      v28[0].c[n5_4] += 4;
+      v28[0].total += 4;
       v29 = _this->f12[0];
       if ( (v29 & 7) != 7 )
       {
-        v27[238].bin[n5_2] += 4;
-        v27[238].total += 4;
-        v28[238].bin[n5_4] += 2;
-        v28[238].total += 2;
+        v27[1].c[n5_2] += 4;
+        v27[1].total += 4;
+        v28[1].c[n5_4] += 2;
+        v28[1].total += 2;
         v29 = _this->f12[0];
       }
       if ( (v29 & 7) != 0 )
       {
-        v27[236].bin[n5_2] += 3;
-        v27[236].total += 3;
-        v28[236].bin[n5_4] += 2;
-        v28[236].total += 2;
+        v27[-1].c[n5_2] += 3;
+        v27[-1].total += 3;
+        v28[-1].c[n5_4] += 2;
+        v28[-1].total += 2;
         v29 = _this->f12[0];
       }
     }
@@ -3140,59 +3133,59 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( v30 == 1 )
     {
       v101 = v29 - _this->f12[15];
-      v102 = &((P1Count *)_this)[v101 + _this->f12[14]];
-      v103 = &((P1Count *)_this)[_this->f12[16] + v101];
-      v102[237].bin[n5_2] += 6;
-      v102[237].total += 6;
-      v103[237].bin[n5_2] += 6;
-      v103[237].total += 6;
+      v102 = &_this->counters[v101 + _this->f12[14]];
+      v103 = &_this->counters[_this->f12[16] + v101];
+      v102[0].c[n5_2] += 6;
+      v102[0].total += 6;
+      v103[0].c[n5_2] += 6;
+      v103[0].total += 6;
       v37 = _this->f12[0];
       if ( (v37 & 7) != 7 )
       {
-        v102[238].bin[n5_2] += 4;
-        v102[238].total += 4;
-        v103[238].bin[n5_2] += 4;
-        v103[238].total += 4;
+        v102[1].c[n5_2] += 4;
+        v102[1].total += 4;
+        v103[1].c[n5_2] += 4;
+        v103[1].total += 4;
         v37 = _this->f12[0];
       }
       if ( (v37 & 7) != 0 )
       {
-        v102[236].bin[n5_2] += 3;
-        v102[236].total += 3;
-        v103[236].bin[n5_2] += 3;
-        v103[236].total += 3;
+        v102[-1].c[n5_2] += 3;
+        v102[-1].total += 3;
+        v103[-1].c[n5_2] += 3;
+        v103[-1].total += 3;
         v37 = _this->f12[0];
       }
     }
     else
     {
-      v31 = (uint8_t *)_this + 16 * (_this->f12[16 - v30] + v29 - _this->f12[14 + v30]);
-      ((P1Count *)v31)[237].bin[n5_2] += 7;
-      ((P1Count *)v31)[237].total += 7;
+      v31 = &_this->counters[_this->f12[16 - v30] + v29 - _this->f12[14 + v30]];
+      v31[0].c[n5_2] += 7;
+      v31[0].total += 7;
       v32 = _this->f12[15];
       v33 = v32 + _this->f12[0] - _this->f12[14 + _this->f12[13]];
       v34 = v8 + v32 - _this->f12[16 - _this->f12[13]];
-      v35 = &((P1Count *)_this)[v33];
-      v35[237].bin[n5_2] += 6;
-      v35[237].total += 6;
-      v36 = &((P1Count *)_this)[v34];
-      v36[237].bin[n5_4] += 4;
-      v36[237].total += 4;
+      v35 = &_this->counters[v33];
+      v35[0].c[n5_2] += 6;
+      v35[0].total += 6;
+      v36 = &_this->counters[v34];
+      v36[0].c[n5_4] += 4;
+      v36[0].total += 4;
       v37 = _this->f12[0];
       if ( (v37 & 7) != 7 )
       {
-        v35[238].bin[n5_2] += 4;
-        v35[238].total += 4;
-        v36[238].bin[n5_4] += 2;
-        v36[238].total += 2;
+        v35[1].c[n5_2] += 4;
+        v35[1].total += 4;
+        v36[1].c[n5_4] += 2;
+        v36[1].total += 2;
         v37 = _this->f12[0];
       }
       if ( (v37 & 7) != 0 )
       {
-        v35[236].bin[n5_2] += 3;
-        v35[236].total += 3;
-        v36[236].bin[n5_4] += 2;
-        v36[236].total += 2;
+        v35[-1].c[n5_2] += 3;
+        v35[-1].total += 3;
+        v36[-1].c[n5_4] += 2;
+        v36[-1].total += 2;
         v37 = _this->f12[0];
       }
     }
@@ -3200,59 +3193,59 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( v38 == 1 )
     {
       v98 = v37 - _this->f12[19];
-      v99 = &((P1Count *)_this)[v98 + _this->f12[18]];
-      v100 = &((P1Count *)_this)[_this->f12[20] + v98];
-      v99[237].bin[n5_2] += 6;
-      v99[237].total += 6;
-      v100[237].bin[n5_2] += 6;
-      v100[237].total += 6;
+      v99 = &_this->counters[v98 + _this->f12[18]];
+      v100 = &_this->counters[_this->f12[20] + v98];
+      v99[0].c[n5_2] += 6;
+      v99[0].total += 6;
+      v100[0].c[n5_2] += 6;
+      v100[0].total += 6;
       v45 = _this->f12[0];
       if ( (v45 & 7) != 7 )
       {
-        v99[238].bin[n5_2] += 4;
-        v99[238].total += 4;
-        v100[238].bin[n5_2] += 4;
-        v100[238].total += 4;
+        v99[1].c[n5_2] += 4;
+        v99[1].total += 4;
+        v100[1].c[n5_2] += 4;
+        v100[1].total += 4;
         v45 = _this->f12[0];
       }
       if ( (v45 & 7) != 0 )
       {
-        v99[236].bin[n5_2] += 3;
-        v99[236].total += 3;
-        v100[236].bin[n5_2] += 3;
-        v100[236].total += 3;
+        v99[-1].c[n5_2] += 3;
+        v99[-1].total += 3;
+        v100[-1].c[n5_2] += 3;
+        v100[-1].total += 3;
         v45 = _this->f12[0];
       }
     }
     else
     {
-      v39 = (uint8_t *)_this + 16 * (_this->f12[20 - v38] + v37 - _this->f12[18 + v38]);
-      ((P1Count *)v39)[237].bin[n5_2] += 7;
-      ((P1Count *)v39)[237].total += 7;
+      v39 = &_this->counters[_this->f12[20 - v38] + v37 - _this->f12[18 + v38]];
+      v39[0].c[n5_2] += 7;
+      v39[0].total += 7;
       v40 = _this->f12[19];
       v41 = v40 + _this->f12[0] - _this->f12[18 + _this->f12[17]];
       v42 = v8 + v40 - _this->f12[20 - _this->f12[17]];
-      v43 = &((P1Count *)_this)[v41];
-      v43[237].bin[n5_2] += 6;
-      v43[237].total += 6;
-      v44 = &((P1Count *)_this)[v42];
-      v44[237].bin[n5_4] += 4;
-      v44[237].total += 4;
+      v43 = &_this->counters[v41];
+      v43[0].c[n5_2] += 6;
+      v43[0].total += 6;
+      v44 = &_this->counters[v42];
+      v44[0].c[n5_4] += 4;
+      v44[0].total += 4;
       v45 = _this->f12[0];
       if ( (v45 & 7) != 7 )
       {
-        v43[238].bin[n5_2] += 4;
-        v43[238].total += 4;
-        v44[238].bin[n5_4] += 2;
-        v44[238].total += 2;
+        v43[1].c[n5_2] += 4;
+        v43[1].total += 4;
+        v44[1].c[n5_4] += 2;
+        v44[1].total += 2;
         v45 = _this->f12[0];
       }
       if ( (v45 & 7) != 0 )
       {
-        v43[236].bin[n5_2] += 3;
-        v43[236].total += 3;
-        v44[236].bin[n5_4] += 2;
-        v44[236].total += 2;
+        v43[-1].c[n5_2] += 3;
+        v43[-1].total += 3;
+        v44[-1].c[n5_4] += 2;
+        v44[-1].total += 2;
         v45 = _this->f12[0];
       }
     }
@@ -3260,59 +3253,59 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( v46 == 1 )
     {
       v95 = v45 - _this->f12[23];
-      v96 = &((P1Count *)_this)[v95 + _this->f12[22]];
-      v97 = &((P1Count *)_this)[_this->f12[24] + v95];
-      v96[237].bin[n5_2] += 6;
-      v96[237].total += 6;
-      v97[237].bin[n5_2] += 6;
-      v97[237].total += 6;
+      v96 = &_this->counters[v95 + _this->f12[22]];
+      v97 = &_this->counters[_this->f12[24] + v95];
+      v96[0].c[n5_2] += 6;
+      v96[0].total += 6;
+      v97[0].c[n5_2] += 6;
+      v97[0].total += 6;
       v53 = _this->f12[0];
       if ( (v53 & 7) != 7 )
       {
-        v96[238].bin[n5_2] += 4;
-        v96[238].total += 4;
-        v97[238].bin[n5_2] += 4;
-        v97[238].total += 4;
+        v96[1].c[n5_2] += 4;
+        v96[1].total += 4;
+        v97[1].c[n5_2] += 4;
+        v97[1].total += 4;
         v53 = _this->f12[0];
       }
       if ( (v53 & 7) != 0 )
       {
-        v96[236].bin[n5_2] += 3;
-        v96[236].total += 3;
-        v97[236].bin[n5_2] += 3;
-        v97[236].total += 3;
+        v96[-1].c[n5_2] += 3;
+        v96[-1].total += 3;
+        v97[-1].c[n5_2] += 3;
+        v97[-1].total += 3;
         v53 = _this->f12[0];
       }
     }
     else
     {
-      v47 = (uint8_t *)_this + 16 * (_this->f12[24 - v46] + v45 - _this->f12[22 + v46]);
-      ((P1Count *)v47)[237].bin[n5_2] += 7;
-      ((P1Count *)v47)[237].total += 7;
+      v47 = &_this->counters[_this->f12[24 - v46] + v45 - _this->f12[22 + v46]];
+      v47[0].c[n5_2] += 7;
+      v47[0].total += 7;
       v48 = _this->f12[23];
       v49 = v48 + _this->f12[0] - _this->f12[22 + _this->f12[21]];
       v50 = v8 + v48 - _this->f12[24 - _this->f12[21]];
-      v51 = &((P1Count *)_this)[v49];
-      v51[237].bin[n5_2] += 6;
-      v51[237].total += 6;
-      v52 = &((P1Count *)_this)[v50];
-      v52[237].bin[n5_4] += 4;
-      v52[237].total += 4;
+      v51 = &_this->counters[v49];
+      v51[0].c[n5_2] += 6;
+      v51[0].total += 6;
+      v52 = &_this->counters[v50];
+      v52[0].c[n5_4] += 4;
+      v52[0].total += 4;
       v53 = _this->f12[0];
       if ( (v53 & 7) != 7 )
       {
-        v51[238].bin[n5_2] += 4;
-        v51[238].total += 4;
-        v52[238].bin[n5_4] += 2;
-        v52[238].total += 2;
+        v51[1].c[n5_2] += 4;
+        v51[1].total += 4;
+        v52[1].c[n5_4] += 2;
+        v52[1].total += 2;
         v53 = _this->f12[0];
       }
       if ( (v53 & 7) != 0 )
       {
-        v51[236].bin[n5_2] += 3;
-        v51[236].total += 3;
-        v52[236].bin[n5_4] += 2;
-        v52[236].total += 2;
+        v51[-1].c[n5_2] += 3;
+        v51[-1].total += 3;
+        v52[-1].c[n5_4] += 2;
+        v52[-1].total += 2;
         v53 = _this->f12[0];
       }
     }
@@ -3320,59 +3313,59 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( v54 == 1 )
     {
       v92 = v53 - _this->f12[27];
-      v93 = &((P1Count *)_this)[v92 + _this->f12[26]];
-      v94 = &((P1Count *)_this)[_this->f12[28] + v92];
-      v93[237].bin[n5_2] += 6;
-      v93[237].total += 6;
-      v94[237].bin[n5_2] += 6;
-      v94[237].total += 6;
+      v93 = &_this->counters[v92 + _this->f12[26]];
+      v94 = &_this->counters[_this->f12[28] + v92];
+      v93[0].c[n5_2] += 6;
+      v93[0].total += 6;
+      v94[0].c[n5_2] += 6;
+      v94[0].total += 6;
       v61 = _this->f12[0];
       if ( (v61 & 7) != 7 )
       {
-        v93[238].bin[n5_2] += 4;
-        v93[238].total += 4;
-        v94[238].bin[n5_2] += 4;
-        v94[238].total += 4;
+        v93[1].c[n5_2] += 4;
+        v93[1].total += 4;
+        v94[1].c[n5_2] += 4;
+        v94[1].total += 4;
         v61 = _this->f12[0];
       }
       if ( (v61 & 7) != 0 )
       {
-        v93[236].bin[n5_2] += 3;
-        v93[236].total += 3;
-        v94[236].bin[n5_2] += 3;
-        v94[236].total += 3;
+        v93[-1].c[n5_2] += 3;
+        v93[-1].total += 3;
+        v94[-1].c[n5_2] += 3;
+        v94[-1].total += 3;
         v61 = _this->f12[0];
       }
     }
     else
     {
-      v55 = (uint8_t *)_this + 16 * (_this->f12[28 - v54] + v53 - _this->f12[26 + v54]);
-      ((P1Count *)v55)[237].bin[n5_2] += 7;
-      ((P1Count *)v55)[237].total += 7;
+      v55 = &_this->counters[_this->f12[28 - v54] + v53 - _this->f12[26 + v54]];
+      v55[0].c[n5_2] += 7;
+      v55[0].total += 7;
       v56 = _this->f12[27];
       v57 = v56 + _this->f12[0] - _this->f12[26 + _this->f12[25]];
       v58 = v8 + v56 - _this->f12[28 - _this->f12[25]];
-      v59 = &((P1Count *)_this)[v57];
-      v59[237].bin[n5_2] += 6;
-      v59[237].total += 6;
-      v60 = &((P1Count *)_this)[v58];
-      v60[237].bin[n5_4] += 4;
-      v60[237].total += 4;
+      v59 = &_this->counters[v57];
+      v59[0].c[n5_2] += 6;
+      v59[0].total += 6;
+      v60 = &_this->counters[v58];
+      v60[0].c[n5_4] += 4;
+      v60[0].total += 4;
       v61 = _this->f12[0];
       if ( (v61 & 7) != 7 )
       {
-        v59[238].bin[n5_2] += 4;
-        v59[238].total += 4;
-        v60[238].bin[n5_4] += 2;
-        v60[238].total += 2;
+        v59[1].c[n5_2] += 4;
+        v59[1].total += 4;
+        v60[1].c[n5_4] += 2;
+        v60[1].total += 2;
         v61 = _this->f12[0];
       }
       if ( (v61 & 7) != 0 )
       {
-        v59[236].bin[n5_2] += 3;
-        v59[236].total += 3;
-        v60[236].bin[n5_4] += 2;
-        v60[236].total += 2;
+        v59[-1].c[n5_2] += 3;
+        v59[-1].total += 3;
+        v60[-1].c[n5_4] += 2;
+        v60[-1].total += 2;
         v61 = _this->f12[0];
       }
     }
@@ -3380,59 +3373,59 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( v62 == 1 )
     {
       v89 = v61 - _this->f12[31];
-      v90 = &((P1Count *)_this)[v89 + _this->f12[30]];
-      v91 = &((P1Count *)_this)[_this->f12[32] + v89];
-      v90[237].bin[n5_2] += 6;
-      v90[237].total += 6;
-      v91[237].bin[n5_2] += 6;
-      v91[237].total += 6;
+      v90 = &_this->counters[v89 + _this->f12[30]];
+      v91 = &_this->counters[_this->f12[32] + v89];
+      v90[0].c[n5_2] += 6;
+      v90[0].total += 6;
+      v91[0].c[n5_2] += 6;
+      v91[0].total += 6;
       v69 = _this->f12[0];
       if ( (v69 & 7) != 7 )
       {
-        v90[238].bin[n5_2] += 4;
-        v90[238].total += 4;
-        v91[238].bin[n5_2] += 4;
-        v91[238].total += 4;
+        v90[1].c[n5_2] += 4;
+        v90[1].total += 4;
+        v91[1].c[n5_2] += 4;
+        v91[1].total += 4;
         v69 = _this->f12[0];
       }
       if ( (v69 & 7) != 0 )
       {
-        v90[236].bin[n5_2] += 3;
-        v90[236].total += 3;
-        v91[236].bin[n5_2] += 3;
-        v91[236].total += 3;
+        v90[-1].c[n5_2] += 3;
+        v90[-1].total += 3;
+        v91[-1].c[n5_2] += 3;
+        v91[-1].total += 3;
         v69 = _this->f12[0];
       }
     }
     else
     {
-      v63 = (uint8_t *)_this + 16 * (_this->f12[32 - v62] + v61 - _this->f12[30 + v62]);
-      ((P1Count *)v63)[237].bin[n5_2] += 7;
-      ((P1Count *)v63)[237].total += 7;
+      v63 = &_this->counters[_this->f12[32 - v62] + v61 - _this->f12[30 + v62]];
+      v63[0].c[n5_2] += 7;
+      v63[0].total += 7;
       v64 = _this->f12[31];
       v65 = v64 + _this->f12[0] - _this->f12[30 + _this->f12[29]];
       v66 = v8 + v64 - _this->f12[32 - _this->f12[29]];
-      v67 = &((P1Count *)_this)[v65];
-      v67[237].bin[n5_2] += 6;
-      v67[237].total += 6;
-      v68 = &((P1Count *)_this)[v66];
-      v68[237].bin[n5_4] += 4;
-      v68[237].total += 4;
+      v67 = &_this->counters[v65];
+      v67[0].c[n5_2] += 6;
+      v67[0].total += 6;
+      v68 = &_this->counters[v66];
+      v68[0].c[n5_4] += 4;
+      v68[0].total += 4;
       v69 = _this->f12[0];
       if ( (v69 & 7) != 7 )
       {
-        v67[238].bin[n5_2] += 4;
-        v67[238].total += 4;
-        v68[238].bin[n5_4] += 2;
-        v68[238].total += 2;
+        v67[1].c[n5_2] += 4;
+        v67[1].total += 4;
+        v68[1].c[n5_4] += 2;
+        v68[1].total += 2;
         v69 = _this->f12[0];
       }
       if ( (v69 & 7) != 0 )
       {
-        v67[236].bin[n5_2] += 3;
-        v67[236].total += 3;
-        v68[236].bin[n5_4] += 2;
-        v68[236].total += 2;
+        v67[-1].c[n5_2] += 3;
+        v67[-1].total += 3;
+        v68[-1].c[n5_4] += 2;
+        v68[-1].total += 2;
         v69 = _this->f12[0];
       }
     }
@@ -3440,59 +3433,59 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( v70 == 1 )
     {
       v86 = v69 - _this->f12[35];
-      v87 = &((P1Count *)_this)[v86 + _this->f12[34]];
-      v88 = &((P1Count *)_this)[_this->f12[36] + v86];
-      v87[237].bin[n5_2] += 6;
-      v87[237].total += 6;
-      v88[237].bin[n5_2] += 6;
-      v88[237].total += 6;
+      v87 = &_this->counters[v86 + _this->f12[34]];
+      v88 = &_this->counters[_this->f12[36] + v86];
+      v87[0].c[n5_2] += 6;
+      v87[0].total += 6;
+      v88[0].c[n5_2] += 6;
+      v88[0].total += 6;
       v77 = _this->f12[0];
       if ( (v77 & 7) != 7 )
       {
-        v87[238].bin[n5_2] += 4;
-        v87[238].total += 4;
-        v88[238].bin[n5_2] += 4;
-        v88[238].total += 4;
+        v87[1].c[n5_2] += 4;
+        v87[1].total += 4;
+        v88[1].c[n5_2] += 4;
+        v88[1].total += 4;
         v77 = _this->f12[0];
       }
       if ( (v77 & 7) != 0 )
       {
-        v87[236].bin[n5_2] += 3;
-        v87[236].total += 3;
-        v88[236].bin[n5_2] += 3;
-        v88[236].total += 3;
+        v87[-1].c[n5_2] += 3;
+        v87[-1].total += 3;
+        v88[-1].c[n5_2] += 3;
+        v88[-1].total += 3;
         v77 = _this->f12[0];
       }
     }
     else
     {
-      v71 = (uint8_t *)_this + 16 * (_this->f12[36 - v70] + v69 - _this->f12[34 + v70]);
-      ((P1Count *)v71)[237].bin[n5_2] += 7;
-      ((P1Count *)v71)[237].total += 7;
+      v71 = &_this->counters[_this->f12[36 - v70] + v69 - _this->f12[34 + v70]];
+      v71[0].c[n5_2] += 7;
+      v71[0].total += 7;
       v72 = _this->f12[35];
       v73 = v72 + _this->f12[0] - _this->f12[34 + _this->f12[33]];
       v74 = v8 + v72 - _this->f12[36 - _this->f12[33]];
-      v75 = &((P1Count *)_this)[v73];
-      v75[237].bin[n5_2] += 6;
-      v75[237].total += 6;
-      v76 = &((P1Count *)_this)[v74];
-      v76[237].bin[n5_4] += 4;
-      v76[237].total += 4;
+      v75 = &_this->counters[v73];
+      v75[0].c[n5_2] += 6;
+      v75[0].total += 6;
+      v76 = &_this->counters[v74];
+      v76[0].c[n5_4] += 4;
+      v76[0].total += 4;
       v77 = _this->f12[0];
       if ( (v77 & 7) != 7 )
       {
-        v75[238].bin[n5_2] += 4;
-        v75[238].total += 4;
-        v76[238].bin[n5_4] += 2;
-        v76[238].total += 2;
+        v75[1].c[n5_2] += 4;
+        v75[1].total += 4;
+        v76[1].c[n5_4] += 2;
+        v76[1].total += 2;
         v77 = _this->f12[0];
       }
       if ( (v77 & 7) != 0 )
       {
-        v75[236].bin[n5_2] += 3;
-        v75[236].total += 3;
-        v76[236].bin[n5_4] += 2;
-        v76[236].total += 2;
+        v75[-1].c[n5_2] += 3;
+        v75[-1].total += 3;
+        v76[-1].c[n5_4] += 2;
+        v76[-1].total += 2;
         v77 = _this->f12[0];
       }
     }
@@ -3500,57 +3493,57 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( v78 == 1 )
     {
       v83 = v77 - _this->f12[39];
-      v84 = &((P1Count *)_this)[v83 + _this->f12[38]];
-      result = (uintptr_t)((uint8_t *)_this + 16 * (_this->f12[40] + v83));
-      v84[237].bin[n5_2] += 6;
-      v84[237].total += 6;
-      ((P1Count *)result)[237].bin[n5_2] += 6;
-      ((P1Count *)result)[237].total += 6;
+      v84 = &_this->counters[v83 + _this->f12[38]];
+      node = &_this->counters[_this->f12[40] + v83];
+      v84[0].c[n5_2] += 6;
+      v84[0].total += 6;
+      node[0].c[n5_2] += 6;
+      node[0].total += 6;
       v85 = _this->f12[0];
       if ( (v85 & 7) != 7 )
       {
-        v84[238].bin[n5_2] += 4;
-        v84[238].total += 4;
-        ((P1Count *)result)[238].bin[n5_2] += 4;
-        ((P1Count *)result)[238].total += 4;
+        v84[1].c[n5_2] += 4;
+        v84[1].total += 4;
+        node[1].c[n5_2] += 4;
+        node[1].total += 4;
         v85 = _this->f12[0];
       }
       if ( (v85 & 7) != 0 )
       {
-        v84[236].bin[n5_2] += 3;
-        v84[236].total += 3;
-        ((P1Count *)result)[236].bin[n5_2] += 3;
-        ((P1Count *)result)[236].total += 3;
+        v84[-1].c[n5_2] += 3;
+        v84[-1].total += 3;
+        node[-1].c[n5_2] += 3;
+        node[-1].total += 3;
       }
     }
     else
     {
-      v79 = (uint8_t *)_this + 16 * (_this->f12[40 - v78] + v77 - _this->f12[38 + v78]);
-      ((P1Count *)v79)[237].bin[n5_2] += 7;
-      ((P1Count *)v79)[237].total += 7;
+      v79 = &_this->counters[_this->f12[40 - v78] + v77 - _this->f12[38 + v78]];
+      v79[0].c[n5_2] += 7;
+      v79[0].total += 7;
       v80 = _this->f12[39];
-      result = (uintptr_t)((uint8_t *)_this + 16 * (v80 + _this->f12[0] - _this->f12[38 + _this->f12[37]]));
-      v81 = &((P1Count *)_this)[v80 - _this->f12[40 - _this->f12[37]] + v8];
-      ((P1Count *)result)[237].bin[n5_2] += 6;
-      ((P1Count *)result)[237].total += 6;
-      v81[237].bin[n5_4] += 4;
-      v81[237].total += 4;
+      node = &_this->counters[v80 + _this->f12[0] - _this->f12[38 + _this->f12[37]]];
+      v81 = &_this->counters[v80 - _this->f12[40 - _this->f12[37]] + v8];
+      node[0].c[n5_2] += 6;
+      node[0].total += 6;
+      v81[0].c[n5_4] += 4;
+      v81[0].total += 4;
       v82 = _this->f12[0];
       if ( (v82 & 7) != 7 )
       {
-        ((P1Count *)result)[238].bin[n5_2] += 4;
-        ((P1Count *)result)[238].total += 4;
-        v81[238].bin[n5_4] += 2;
-        v81[238].total += 2;
+        node[1].c[n5_2] += 4;
+        node[1].total += 4;
+        v81[1].c[n5_4] += 2;
+        v81[1].total += 2;
         v82 = _this->f12[0];
       }
       if ( (v82 & 7) != 0 )
       {
-        ((P1Count *)result)[236].bin[n5_2] += 3;
-        ((P1Count *)result)[236].total += 3;
-        result = (uint16_t)v81[236].bin[n5_4] + 2;
-        v81[236].bin[n5_4] = result;
-        v81[236].total += 2;
+        node[-1].c[n5_2] += 3;
+        node[-1].total += 3;
+        result = (uint16_t)v81[-1].c[n5_4] + 2;
+        v81[-1].c[n5_4] = result;
+        v81[-1].total += 2;
       }
     }
   }
@@ -3568,7 +3561,7 @@ int32_t *__alt_p1_alloc(AltP1Block *_this, int32_t i, int32_t a3, int32_t n4)
   _this->f0[0] = i;
   _this->f4 = a3;
   do
-    __init_counter_node((uint16_t *)_this + 8 * n0x99C60++ + 1900);
+    __init_counter_node((uint16_t *)&_this->counters[n0x99C60++]);
   while ( n0x99C60 < 0x99C60 );
   _this->f8 = 0;
   v6 = 0;
@@ -3898,7 +3891,7 @@ void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
           {
             *v32 = v35;
           }
-          __alt_p1_encode_symbol(&((P1Count *)_this)[_this->f12[0] + 237].total, 16 * _this->f12[0], _this->f12[1], n5);
+          __alt_p1_encode_symbol(&_this->counters[_this->f12[0]].total, 16 * _this->f12[0], _this->f12[1], n5);
           v38 = (uint8_t)*v32;
           v39 = v38 - _this->f8;
           **(uint8_t **)&_this->f12[46] = v38;
@@ -3911,7 +3904,7 @@ void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
                                                                + *(uint8_t *)(_this->f12[48] - 3)
                                                                - *(uint8_t *)(_this->f12[48] + 13));
                   _this->f12[2] = _this->f12[2] == 0;
-          if ( ((P1Count *)_this)[_this->f12[0] + 237].total < 0x4000u )
+          if ( _this->counters[_this->f12[0]].total < 0x4000u )
             __alt_p1_model(_this);
           _this->f12[46] += 2;
           ++v32;
@@ -5570,7 +5563,7 @@ void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_
                          + *(v5->f176[7] - 3)
                          - *(v5->f176[7] + 13));
             v5->f0[5] = v5->f0[5] == 0;
-          if ( ((P1Count *)v5)[v5->f0[3] + 237].total < 0x4000u )
+          if ( v5->counters[v5->f0[3]].total < 0x4000u )
             __alt_p1_model((AltP1Block *)v5);
           v5->f176[5] += 2;
           ++Src_1;
@@ -5818,7 +5811,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
           v59 = (AltP1Block *)v94;
           *(plane_desc[1].src_plane + Src) = v58;
           __alt_p1_context((AltP1Block *)(uint8_t **)v59, (uint32_t *)Block_plane[0], (uint32_t *)0);
-          v61 = __alt_p1_decode_symbol(&((P1Count *)v59)[v59->f12[0] + 237].total, v60, v59->f12[1]);
+          v61 = __alt_p1_decode_symbol(&v59->counters[v59->f12[0]].total, v60, v59->f12[1]);
           v62 = *(uint32_t *)&v59->f8;
           v63 = *(uint8_t **)&v59->f12[46];
           v64 = (uint8_t)(v62 + v59->f1496[v61]);
@@ -5833,7 +5826,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
                                                              + *(uint8_t *)(v59->f12[48] - 3)
                                                              - *(uint8_t *)(v59->f12[48] + 13));
           v59->f12[2] = v59->f12[2] == 0;
-          if ( ((P1Count *)v59)[v59->f12[0] + 237].total < 0x4000u )
+          if ( v59->counters[v59->f12[0]].total < 0x4000u )
             __alt_p1_model(v59);
           v59->f12[46] += 2;
           v59->f12[47] += 2;
@@ -11787,7 +11780,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
             *(a2 + v114) = v56;
             n5_7 = n5_1;
           }
-          __alt_p1_encode_symbol(&((P1Count *)v50)[v50->f12[0] + 237].total, n5_1, v50->f12[1], n5_2);
+          __alt_p1_encode_symbol(&v50->counters[v50->f12[0]].total, n5_1, v50->f12[1], n5_2);
           v58 = n5_7 - v50->f8;
           **(uint8_t **)&v50->f12[46] = n5_6;
           *(uint8_t *)(v50->f12[46] + 1) = abs32(v58);
@@ -11799,7 +11792,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
                                                           + *(uint8_t *)(v50->f12[48] - 3)
                                                           - *(uint8_t *)(v50->f12[48] + 13));
           v50->f12[2] = v50->f12[2] == 0;
-          if ( ((P1Count *)v50)[v50->f12[0] + 237].total < 0x4000u )
+          if ( v50->counters[v50->f12[0]].total < 0x4000u )
             __alt_p1_model(v50);
           v50->f12[46] += 2;
           v50->f12[47] += 2;
@@ -11841,7 +11834,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
                                                            - (*(v61->f204 - 3)
                                                             - v61->f204[13])];
           v61->f12[2] = v61->f12[2] == 0;
-          if ( ((P1Count *)v61)[v61->f12[0] + 237].total < 0x4000u )
+          if ( v61->counters[v61->f12[0]].total < 0x4000u )
             __alt_p1_model((AltP1Block *)v61);
           v61->cur[0] += 2;
           v61->f200 += 2;
@@ -11937,7 +11930,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
                                                              - (*(v80->f204 - 3)
                                                               - v80->f204[13])];
             v80->f12[2] = v80->f12[2] == 0;
-            if ( ((P1Count *)v80)[v80->f12[0] + 237].total < 0x4000u )
+            if ( v80->counters[v80->f12[0]].total < 0x4000u )
               __alt_p1_model((AltP1Block *)v80);
             v80->cur[0] += 2;
             v80->f200 += 2;
