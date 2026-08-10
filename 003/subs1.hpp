@@ -423,7 +423,26 @@ struct AltP1Block {
       uint8_t *f212;
     };
   };
+  // `alt_p1_alloc` seeds five tables between +216 and +3800 and they tile the
+  // range exactly, which is what says where each one ends: 216 + 512 = 728,
+  // + 256 = 984, + 256 = 1240, + 256 = 1496, + 256 = 1752, + 2048 = 3800.
+  // The first is a level map indexed by a byte, the second a slot map indexed
+  // by seven bits, and the fourth `int32_t` pair holds a level and a group.
+  uint8_t f216[512];     // +216  .. +727
+  uint8_t f728[256];     // +728  .. +983
+  uint8_t f984[256];     // +984  .. +1239
+  uint8_t f1240[256];    // +1240 .. +1495
+  uint8_t f1496[256];    // +1496 .. +1751
+  int32_t f1752[512];    // +1752 .. +3799
+  // The counter table starts here, and the code reaches it as
+  // `((P1Count *)_this)[k + 237]` -- a record grid anchored at the object's
+  // base, so record 237's own fields begin at +3800 and its first eight bytes
+  // are the tail of `f1752`.  Naming it would have to re-base all 208 of those
+  // subscripts, so the extent is pinned instead.
+  uint8_t _pad3800[10077696];   // +3800 .. +10081495
 };
+static_assert(sizeof(void *) != 4 || sizeof(AltP1Block) == 0x99D4D8,
+              "AltP1Block is not what alt_p1_alloc's callers allocate");
 static_assert(sizeof(void *) != 4
               || __builtin_offsetof(AltP1Block, f212) == 212,
               "AltP1Block: the layout moved");
@@ -2993,14 +3012,14 @@ int32_t __alt_p1_model(AltP1Block *_this)
   P1Count *v84;
   P1Count *v81;
   uint32_t n5, v110, v112;
-  n5 = *((uint8_t)(**(uint8_t **)&_this->f12[46] - *(uint8_t *)&_this->f8) + (uint8_t *)_this + 984);
+  n5 = *((uint8_t)(**(uint8_t **)&_this->f12[46] - *(uint8_t *)&_this->f8) + _this->f984);
   v3 = _this->f12[9];
-  n5_1 = *((uint8_t)(*(uint8_t *)&_this->f8 - **(uint8_t **)&_this->f12[46]) + (uint8_t *)_this + 984);
+  n5_1 = *((uint8_t)(*(uint8_t *)&_this->f8 - **(uint8_t **)&_this->f12[46]) + _this->f984);
   v5 = _this->f12[13];
   n2 = (int32_t)(n5 - 5) >> 1;
   n5_2 = 6 - (n5 & 1);
   if ( n5 < 5 )
-    n5_2 = *((uint8_t)(**(uint8_t **)&_this->f12[46] - *(uint8_t *)&_this->f8) + (uint8_t *)_this + 984);
+    n5_2 = *((uint8_t)(**(uint8_t **)&_this->f12[46] - *(uint8_t *)&_this->f8) + _this->f984);
   n5_3 = 6 - (n5_1 & 1);
   if ( n5_1 < 5 )
     n5_3 = n5_1;
@@ -3056,7 +3075,7 @@ int32_t __alt_p1_model(AltP1Block *_this)
        & 0xFFFFFFC0), n2);
     result = _this->f12[0];
   }
-  if ( ((P1Count *)_this)[result + 237].total < 0xCCCu )
+  if ( (*(P1Count *)&_this->f1752[4 * result + 510]).total < 0xCCCu )
   {
     if ( (result & 7u) < 7 )
     {
@@ -3073,9 +3092,9 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( n5_2 >= 5 )
     {
       v112 = _this->f12[1]
-           + (((((P1Count *)_this)[result + 237].bin[0]
-              + (((P1Count *)_this)[result + 237].total & 0x7FFF)
-              - 2 * (uint32_t)((P1Count *)_this)[result + 237].bin[n5_2]) >> 25)
+           + ((((*(P1Count *)&_this->f1752[4 * result + 510]).bin[0]
+              + ((*(P1Count *)&_this->f1752[4 * result + 510]).total & 0x7FFF)
+              - 2 * (uint32_t)(*(P1Count *)&_this->f1752[4 * result + 510]).bin[n5_2]) >> 25)
             & 0xFFFFFFC0)
            + ((n5_2 & 1) << 7);
       if ( (v112 & 0x38) >= 0x38
@@ -3083,9 +3102,9 @@ int32_t __alt_p1_model(AltP1Block *_this)
             + 32512 * (n5_2 & 1)
             + 254 * _this->f12[1]
             + 254
-            * (((((P1Count *)_this)[result + 237].bin[0]
-               + (((P1Count *)_this)[result + 237].total & 0x7FFF)
-               - 2 * (uint32_t)((P1Count *)_this)[result + 237].bin[n5_2]) >> 25)
+            * ((((*(P1Count *)&_this->f1752[4 * result + 510]).bin[0]
+               + ((*(P1Count *)&_this->f1752[4 * result + 510]).total & 0x7FFF)
+               - 2 * (uint32_t)(*(P1Count *)&_this->f1752[4 * result + 510]).bin[n5_2]) >> 25)
              & 0xFFFFFFC0)
             + 2032, n2),
             (v112 & 0x38) != 0) )
@@ -3659,11 +3678,11 @@ int32_t *__alt_p1_alloc(AltP1Block *_this, int32_t i, int32_t a3, int32_t n4)
   {
     v9 = p1_level_edges[v6];
     v28 = v8;
-    *((uint8_t *)_this + 2 * v8 + 216) = v6;
+    _this->f216[2 * v8] = v6;
     v10 = (2 * v8 == v9) + v6;
     *((int32_t *)_this + 2 * v8 + 438) = v27 | v7;
     v11 = 2 * v8 == p1_group_edges[v7];
-    *((uint8_t *)_this + 2 * v8 + 217) = v10;
+    _this->f216[2 * v8 + 1] = v10;
     v12 = 2 * v8 + 1;
     v13 = v11 + v7;
     v6 = (v12 == p1_level_edges[v10]) + v10;
@@ -3677,9 +3696,9 @@ int32_t *__alt_p1_alloc(AltP1Block *_this, int32_t i, int32_t a3, int32_t n4)
   do
   {
     v16 = p1_slot_edges[v15];
-    *((uint8_t *)_this + 2 * n0x80 + 728) = 8 * v15;
+    _this->f728[2 * n0x80] = 8 * v15;
     v17 = (2 * n0x80 == v16) + v15;
-    *((uint8_t *)_this + 2 * n0x80 + 729) = 8 * v17;
+    _this->f728[2 * n0x80 + 1] = 8 * v17;
     v18 = 2 * n0x80++ + 1 == p1_slot_edges[v17];
     v15 = v18 + v17;
   }
@@ -3715,7 +3734,7 @@ int32_t *__alt_p1_alloc(AltP1Block *_this, int32_t i, int32_t a3, int32_t n4)
   do
     *((int32_t *)_this + n5++ + 44) = (int32_t)bmf_new(2 * _this->f0[0] + 20);
   while ( n5 < 5 );
-  __alt_init_tables((uint8_t *)_this + 984, (int8_t *)(uint8_t *)_this + 1496);
+  __alt_init_tables(_this->f984, (int8_t *)_this->f1496);
   v20 = _this->f0[0];
   if ( _this->f0[0] > -10 )
   {
@@ -3963,7 +3982,7 @@ void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
           __alt_p1_context((AltP1Block *)(uint8_t **)_this, (uint32_t *)nullptr, (uint32_t *)0);
           v33 = *(uint8_t *)&_this->f8;
           v34 = (uint8_t)(*a2 - v33);
-          v35 = *(*((uint8_t *)_this + (v34 + 984)) + (uint8_t *)_this + 1496) + v33;
+          v35 = *(*((uint8_t *)_this + (v34 + 984)) + _this->f1496) + v33;
           n5 = *((uint8_t *)_this + (v34 + 984));
           n16 = (uint8_t)*v32 - (uint8_t)(v35 + *v32 - *a2);
           if ( n16 < -16 || n16 > 16 )
@@ -9533,7 +9552,7 @@ LABEL_42:
                                         + 6 * (uint8_t)(((uint8_t *)v39)[n8 + 27] & ((uint8_t *)v39)[n8 + 19])
                                         + 3 * v40]
             + 3 * *(this_3->f1078688 + __frame.sym0)
-            + 1, (uint16_t *)this_3 + 538176);
+            + 1, this_3->f1076352);
       n4_22 = ::mode_symbol[1];
       v46 = (uint8_t *)this_3->f1078688;
       this_3->f32 = v44;
@@ -10439,7 +10458,7 @@ LABEL_42:
       *(this_3->f56[5] - 1) = n15_11 == *(uint16_t *)(this_3->f56[6] + 16);
       n15_12 = n15_14;
     }
-    __encode_context_bit((uint16_t *)this_3 + 3 * n15_32 + 538179, (uint16_t *)this_3 + 538176, __frame.sym6);
+    __encode_context_bit((uint16_t *)this_3 + 3 * n15_32 + 538179, this_3->f1076352, __frame.sym6);
     n15_13 = __frame.sym6;
     n4_2 = ::mode_symbol[1];
     v74 = (uint8_t *)this_3->f1078688;
