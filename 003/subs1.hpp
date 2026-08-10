@@ -4914,7 +4914,7 @@ uint8_t *__alt_p2_alloc(Obj11 *_this, int32_t i, int32_t n4)
     v24 = v29 + v27;
   }
   _this->f278704 = 15;
-  __fwd_alt_p2_alloc_alt_init_tables(((uint8_t *)_this + 279984), ((uint8_t *)_this + 280496));
+  __fwd_alt_p2_alloc_alt_init_tables((_this->f279984), ((uint8_t *)&_this->f280496[0]));
   _this->f278760[21] = 0;
   _this->f278760[6] = 64;
   _this->f278760[17] = 0;
@@ -10462,7 +10462,7 @@ LABEL_57:
       goto LABEL_86;
     }
   }
-  v80 = (Obj18 *)((int32_t)&((uint32_t *)this_3)[4 * this_3->f40 + 24]);
+  v80 = (Obj18 *)((int32_t)(uint32_t *)&this_3->f56[4 * this_3->f40 + 10]);
   __frame.sym4 = (Obj18 *)((uint16_t *)v80);
   v81 = 4 * n0xFFFF_1;
   freq_tbl = (uint16_t *)&((uint32_t *)this_3)[v81 + 776];
@@ -11262,7 +11262,7 @@ LABEL_42:
   else
   {
     v82 = 4 * *(int32_t *)&this_3->f40;
-    n15_36 = (uint8_t *)&((int32_t *)this_3)[v82 + 24];
+    n15_36 = (uint8_t *)&this_3->f56[v82 + 10];
     __frame.sym4 = (int32_t)(uintptr_t)n15_36;
     n2_3 = &((int32_t *)this_3)[4 * n0xFFFF_1 + 776];
     __code_pixel_n0x2000 = HIWORD(((int32_t *)this_3)[4 * n0xFFFF_1 + 778]);
@@ -11270,7 +11270,7 @@ LABEL_42:
     {
       if ( __code_pixel_n0x2000 == 1 )
       {
-        v143 = &((int32_t *)this_3)[v82 + 24];
+        v143 = (int32_t *)&this_3->f56[v82 + 10];
         v144 = *(n15_36 + 15);
         n2_16 = v144 * *((uint16_t *)n2_3 + 2);
         n2_17 = v144 * *((uint16_t *)n2_3 + 3);
@@ -11397,7 +11397,7 @@ LABEL_42:
     }
     else
     {
-      v159 = (Obj66 *)((uint16_t *)&((int32_t *)this_3)[v82 + 24]);
+      v159 = (Obj66 *)((uint16_t *)&this_3->f56[v82 + 10]);
       n15_18 = __frame.sym9->f0;
       arg_tot = *(uint16_t *)(n15_36 + 10);
       if ( n15_18 == __frame.sym8 )
@@ -13088,7 +13088,7 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
   {
     v75 = ((uint32_t *)v578)[n5 + 69669];
     v76 = &((uint32_t *)v578)[v75];
-    v77 = v577 - ((uint32_t *)v578)[2 * n5 + 69726];
+    v77 = v577 - (*(uint32_t *)&v578->f278904[2 * n5]);
     v581 = v76;
     v78 = n5 << 17;
     v79 = v77 + HIWORD(v76[0x8000 * n5 + 71178]);
@@ -13126,8 +13126,8 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
       if ( !alphabet_reduced )
       {
         __builtin_prefetch(&n2, 0, 1);
-        n2 = (uint8_t *)&((uint32_t *)v578)[(v81 ^ 0x7FF0) + 71178] + v78;
-        v84 = ((uint32_t *)v578)[2 * n5 + 69727] + v77;
+        n2 = (uint8_t *)&v578->f284712[(v81 ^ 0x7FF0)] + v78;
+        v84 = (*(uint32_t *)&v578->f278904[2 * n5 + 1]) + v77;
         n3 = v81 & 3;
         if ( (uint32_t)n3 >= 3
           || (v545 = v78,
@@ -13909,9 +13909,9 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
     {
       v391 = v387->f940080[1];
       v392 = v387->f940080[2];
-      n2 = (uint8_t *)((uint16_t *)v387 + 470040);
+      n2 = (uint8_t *)(v387->f940080);
       if ( v387->f940080[3] + v392 + v391 > 29696 )
-        __fwd_alt_p2_model_rescale_three_way((uint16_t *)v387 + 470040);
+        __fwd_alt_p2_model_rescale_three_way(v387->f940080);
       v393 = (10 * (uint32_t)v387->f940080[0]) >> 4;
       if ( a4 )
       {
@@ -13926,7 +13926,7 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
       {
 LABEL_37:
         n0x10 = v385->f278704;
-        if ( LOWORD(((uint32_t *)v385)[2 * n0x10 + 235018]) <= 0x1Au )
+        if ( LOWORD((*(uint32_t *)&v385->f940072[4 * n0x10])) <= 0x1Au )
           return n0x10;
         v397 = v385->f278760[8];
         v398 = 2 - (*((uint8_t *)v385 + (uint8_t)-a5 + 279984) & 1);
@@ -13937,8 +13937,8 @@ LABEL_37:
         v510 = v398;
         n0x10 = ((uint32_t *)v385)[-v385->f278760[20] + 69713]
               + ((uint32_t *)v385)[-v385->f278760[16] + 69709]
-              + ((uint32_t *)v385)[-v399 + 69705]
-              + ((uint32_t *)v385)[-v397 + 69701]
+              + v385->f278760[-v399 + 15]
+              + v385->f278760[-v397 + 11]
               + v400;
         n0x10_3 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10];
         p2_rec = (uint8_t *)n0x10_3;
@@ -14000,7 +14000,7 @@ LABEL_48:
           n0x10 = n0x10_1;
         }
         *(uint16_t *)((uint8_t *)v408 + v510 + 2) += (6 * (uint32_t)*(uint16_t *)(p2_rec + 940072)) >> 4;
-        if ( !v385->f278728 || LOWORD(((uint32_t *)v385)[2 * v385->f278704 + 235018]) > 0x100u )
+        if ( !v385->f278728 || LOWORD((*(uint32_t *)&v385->f940072[4 * v385->f278704])) > 0x100u )
         {
           v409 = 2 - v511;
           if ( !a4 )
@@ -14049,13 +14049,13 @@ LABEL_48:
               n0x10 = n0x10_1;
             }
             *(uint16_t *)(n2 + v511 + 2) += (uint16_t)(n0xF0[470040] & 0xFFFC) >> 2;
-            v502 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10_2 + 235020];
-            if ( HIWORD(((uint32_t *)v385)[2 * n0x10_2 + 235021])
-               + LOWORD(((uint32_t *)v385)[2 * n0x10_2 + 235021])
-               + HIWORD(((uint32_t *)v385)[2 * n0x10_2 + 235020]) > 29696 )
+            v502 = &v385->f940072[4 * n0x10_2 + 4];
+            if ( HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
+               + LOWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
+               + HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 4])) > 29696 )
             {
               n0x10_1 = n0x10;
-              __fwd_alt_p2_model_rescale_three_way((uint16_t *)&((uint32_t *)v385)[2 * n0x10_2 + 235020]);
+              __fwd_alt_p2_model_rescale_three_way(&v385->f940072[4 * n0x10_2 + 4]);
               n0x10 = n0x10_1;
             }
             *(uint16_t *)((uint8_t *)v502 + v511 + 2) += (uint16_t)(*v502 & 0xFFF8) >> 3;
@@ -14076,10 +14076,10 @@ LABEL_180:
           }
           else
           {
-            v411 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[6] - ((uint32_t *)v385)[-v410 + 69697])];
-            if ( HIWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[6] - ((uint32_t *)v385)[-v410 + 69697])])
-               + LOWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[6] - ((uint32_t *)v385)[-v410 + 69697])])
-               + HIWORD(((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[6] - ((uint32_t *)v385)[-v410 + 69697])]) > 29696 )
+            v411 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[6] - v385->f278760[-v410 + 7])];
+            if ( HIWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[6] - v385->f278760[-v410 + 7])])
+               + LOWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[6] - v385->f278760[-v410 + 7])])
+               + HIWORD(((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[6] - v385->f278760[-v410 + 7])]) > 29696 )
             {
               n0x10_1 = n0x10;
               __fwd_alt_p2_model_rescale_three_way(v411);
@@ -14166,13 +14166,13 @@ LABEL_67:
               n0x10 = n0x10_1;
             }
             *(uint16_t *)(n2 + v511 + 2) += (uint16_t)(n0xF0[470040] & 0xFFFC) >> 2;
-            v488 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10_2 + 235020];
-            if ( HIWORD(((uint32_t *)v385)[2 * n0x10_2 + 235021])
-               + LOWORD(((uint32_t *)v385)[2 * n0x10_2 + 235021])
-               + HIWORD(((uint32_t *)v385)[2 * n0x10_2 + 235020]) > 29696 )
+            v488 = &v385->f940072[4 * n0x10_2 + 4];
+            if ( HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
+               + LOWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
+               + HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 4])) > 29696 )
             {
               n0x10_1 = n0x10;
-              __fwd_alt_p2_model_rescale_three_way((uint16_t *)&((uint32_t *)v385)[2 * n0x10_2 + 235020]);
+              __fwd_alt_p2_model_rescale_three_way(&v385->f940072[4 * n0x10_2 + 4]);
               n0x10 = n0x10_1;
             }
             *(uint16_t *)((uint8_t *)v488 + v511 + 2) += (uint16_t)(*v488 & 0xFFF8) >> 3;
@@ -14193,10 +14193,10 @@ LABEL_167:
           }
           else
           {
-            v420 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[10] - ((uint32_t *)v385)[-v419 + 69701])];
-            if ( HIWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[10] - ((uint32_t *)v385)[-v419 + 69701])])
-               + LOWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[10] - ((uint32_t *)v385)[-v419 + 69701])])
-               + HIWORD(((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[10] - ((uint32_t *)v385)[-v419 + 69701])]) > 29696 )
+            v420 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[10] - v385->f278760[-v419 + 11])];
+            if ( HIWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[10] - v385->f278760[-v419 + 11])])
+               + LOWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[10] - v385->f278760[-v419 + 11])])
+               + HIWORD(((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[10] - v385->f278760[-v419 + 11])]) > 29696 )
             {
               n0x10_1 = n0x10;
               __fwd_alt_p2_model_rescale_three_way(v420);
@@ -14279,13 +14279,13 @@ LABEL_79:
               n0x10 = n0x10_1;
             }
             *(uint16_t *)(n2 + v511 + 2) += (uint16_t)(n0xF0[470040] & 0xFFFC) >> 2;
-            v477 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10_2 + 235020];
-            if ( HIWORD(((uint32_t *)v385)[2 * n0x10_2 + 235021])
-               + LOWORD(((uint32_t *)v385)[2 * n0x10_2 + 235021])
-               + HIWORD(((uint32_t *)v385)[2 * n0x10_2 + 235020]) > 29696 )
+            v477 = &v385->f940072[4 * n0x10_2 + 4];
+            if ( HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
+               + LOWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
+               + HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 4])) > 29696 )
             {
               n0x10_1 = n0x10;
-              __fwd_alt_p2_model_rescale_three_way((uint16_t *)&((uint32_t *)v385)[2 * n0x10_2 + 235020]);
+              __fwd_alt_p2_model_rescale_three_way(&v385->f940072[4 * n0x10_2 + 4]);
               n0x10 = n0x10_1;
             }
             *(uint16_t *)((uint8_t *)v477 + v511 + 2) += (uint16_t)(*v477 & 0xFFF8) >> 3;
@@ -14306,10 +14306,10 @@ LABEL_154:
           }
           else
           {
-            v428 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[14] - ((uint32_t *)v385)[-v427 + 69705])];
-            if ( HIWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[14] - ((uint32_t *)v385)[-v427 + 69705])])
-               + LOWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[14] - ((uint32_t *)v385)[-v427 + 69705])])
-               + HIWORD(((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[14] - ((uint32_t *)v385)[-v427 + 69705])]) > 29696 )
+            v428 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[14] - v385->f278760[-v427 + 15])];
+            if ( HIWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[14] - v385->f278760[-v427 + 15])])
+               + LOWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[14] - v385->f278760[-v427 + 15])])
+               + HIWORD(((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[14] - v385->f278760[-v427 + 15])]) > 29696 )
             {
               n0x10_1 = n0x10;
               __fwd_alt_p2_model_rescale_three_way(v428);
@@ -14392,13 +14392,13 @@ LABEL_91:
               n0x10 = n0x10_1;
             }
             *(uint16_t *)(n2 + v511 + 2) += (uint16_t)(n0xF0[470040] & 0xFFFC) >> 2;
-            v466 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10_2 + 235020];
-            if ( HIWORD(((uint32_t *)v385)[2 * n0x10_2 + 235021])
-               + LOWORD(((uint32_t *)v385)[2 * n0x10_2 + 235021])
-               + HIWORD(((uint32_t *)v385)[2 * n0x10_2 + 235020]) > 29696 )
+            v466 = &v385->f940072[4 * n0x10_2 + 4];
+            if ( HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
+               + LOWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 6]))
+               + HIWORD((*(uint32_t *)&v385->f940072[4 * n0x10_2 + 4])) > 29696 )
             {
               n0x10_1 = n0x10;
-              __fwd_alt_p2_model_rescale_three_way((uint16_t *)&((uint32_t *)v385)[2 * n0x10_2 + 235020]);
+              __fwd_alt_p2_model_rescale_three_way(&v385->f940072[4 * n0x10_2 + 4]);
               n0x10 = n0x10_1;
             }
             *(uint16_t *)((uint8_t *)v466 + v511 + 2) += (uint16_t)(*v466 & 0xFFF8) >> 3;
@@ -14419,10 +14419,10 @@ LABEL_141:
           }
           else
           {
-            v436 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[18] - ((uint32_t *)v385)[-v435 + 69709])];
-            if ( HIWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[18] - ((uint32_t *)v385)[-v435 + 69709])])
-               + LOWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[18] - ((uint32_t *)v385)[-v435 + 69709])])
-               + HIWORD(((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[18] - ((uint32_t *)v385)[-v435 + 69709])]) > 29696 )
+            v436 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[18] - v385->f278760[-v435 + 19])];
+            if ( HIWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[18] - v385->f278760[-v435 + 19])])
+               + LOWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[18] - v385->f278760[-v435 + 19])])
+               + HIWORD(((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[18] - v385->f278760[-v435 + 19])]) > 29696 )
             {
               n0x10_1 = n0x10;
               __fwd_alt_p2_model_rescale_three_way(v436);
@@ -14495,7 +14495,7 @@ LABEL_103:
               __fwd_alt_p2_model_rescale_three_way((uint16_t *)(p2_rec + 940080));
             n0xF0_5 = (uint16_t *)(n0xF0);
             *(uint16_t *)(n2 + v511 + 2) += (uint16_t)(*(uint16_t *)(p2_rec + 940080) & 0xFFFC) >> 2;
-            v456 = (uint16_t *)&((uint32_t *)v385)[2 * (uint32_t)n0xF0_5 + 235020];
+            v456 = &v385->f940072[4 * (uint32_t)n0xF0_5 + 4];
             if ( v456[3] + v456[2] + v456[1] > 29696 )
               __fwd_alt_p2_model_rescale_three_way(v456);
             n0x10 = (uint16_t)(*v456 & 0xFFF8) >> 3;
@@ -14515,10 +14515,10 @@ LABEL_128:
           }
           else
           {
-            v444 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[22] - ((uint32_t *)v385)[-v443 + 69713])];
-            if ( HIWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[22] - ((uint32_t *)v385)[-v443 + 69713])])
-               + LOWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[22] - ((uint32_t *)v385)[-v443 + 69713])])
-               + HIWORD(((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[22] - ((uint32_t *)v385)[-v443 + 69713])]) > 29696 )
+            v444 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[22] - v385->f278760[-v443 + 23])];
+            if ( HIWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[22] - v385->f278760[-v443 + 23])])
+               + LOWORD(((uint32_t *)v385)[2 * n0x10 + 235019 + 2 * (v385->f278760[22] - v385->f278760[-v443 + 23])])
+               + HIWORD(((uint32_t *)v385)[2 * n0x10 + 235018 + 2 * (v385->f278760[22] - v385->f278760[-v443 + 23])]) > 29696 )
               __fwd_alt_p2_model_rescale_three_way(v444);
             *(uint16_t *)((uint8_t *)v444 + v510 + 2) += (7 * (uint32_t)*v444) >> 4;
             v445 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->f278760[22] + 2 * (v385->f278704 - ((uint32_t *)v385)[v385->f278760[20] + 69711])]));
@@ -14547,9 +14547,9 @@ LABEL_115:
     }
     v394 = v387->f940064[1];
     v395 = v387->f940064[2];
-    n2 = (uint8_t *)((uint16_t *)v387 + 470032);
+    n2 = (uint8_t *)(v387->f940064);
     if ( v387->f940064[3] + v395 + v394 > 29696 )
-      __fwd_alt_p2_model_rescale_three_way((uint16_t *)v387 + 470032);
+      __fwd_alt_p2_model_rescale_three_way(v387->f940064);
     v396 = (13 * (uint32_t)v387->f940064[0]) >> 4;
     if ( a4 )
     {
@@ -15268,7 +15268,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           ctx_bias[3] >>= 3;
           lpAddress_1 = (Obj11 *)(plane[0]);
           v101 = __fwd_alt_model_p2_decode_alt_p2_context(plane[0], plane[2], plane[1]);
-          v102 = (uint16_t *)&((uint32_t *)lpAddress_1)[2 * *&lpAddress_1->f278704 + 235018];
+          v102 = &lpAddress_1->f940072[4 * *&lpAddress_1->f278704];
           v168 = v101;
           v103 = __fwd_alt_model_p2_decode_alt_p2_decode_symbol(v102, (uint8_t *)((uint32_t *)lpAddress_1 + 69677));
           v104 = (uint8_t)(v168 + *((uint8_t *)lpAddress_1 + v103 + 280496));
@@ -16125,14 +16125,14 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           v104 = v166[plane_desc[1].src_plane];
           v178 = __fwd_alt_model_p2_encode_alt_p2_context(plane[0], plane[2], plane[1]);
           v181 = (uint8_t)(v104 - v178);
-          v105 = (uint8_t)((uint8_t *)lpAddress_1)[v181 + 279984];
+          v105 = (uint8_t)lpAddress_1->f279984[v181];
           v106 = v166[v184];
-          v173 = (uint8_t)(v178 + ((uint8_t *)lpAddress_1)[v105 + 280496]);
+          v173 = (uint8_t)(v178 + (*(uint8_t *)&lpAddress_1->f280496[v105]));
           v107 = (uint8_t)(v173 + v106 - v104);
           n16 = v106 - v107;
           if ( n16 < -16 || n16 > 16 )
           {
-            v105 = (uint8_t)((uint8_t *)lpAddress_1)[v181 + 280240];
+            v105 = (uint8_t)lpAddress_1->f280240[v181];
           }
           else
           {
