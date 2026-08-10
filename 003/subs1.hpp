@@ -409,8 +409,8 @@ __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...);
 // The encoder adds `w[sel]` and the decoder `w[2 - sel]`; the two are the same
 // slot only when `sel` is 1, so the direction is each side's, not a symmetry.
 struct CtxWeight {
-  int32_t  sel;
-  uint32_t w[3];
+  int32_t sel;
+  int32_t w[3];
 };
 static_assert(sizeof(CtxWeight) == 16, "CtxWeight: a selector and three weights");
 
@@ -449,7 +449,7 @@ struct AltP1Block {
       uint8_t  _u0_1_0[4];
       int32_t  f4;      // +4
       int32_t  f8;      // +8
-      uint32_t f12[5];  // +12 .. +31
+      int32_t  f12[5];  // +12 .. +31
     };
   };
   // Nine weight groups, the shape `CtxWeight` describes.  Hex-Rays had them as
@@ -2812,32 +2812,37 @@ int32_t __alt_p1_context(AltP1Block *_this, uint32_t *a2, uint32_t *a3)
   int32_t v6, v7, v11, v12, v13, v14, v15, v16, v18, v21, v22, v23, v24, v25, v26, v27, v28,
           v29, result, v35, v36, v39, v40, v41, v42;
   uint32_t v37, v38;
-  uint8_t *v3, *v4, *v8, *v10, *v17, *v31, *v33;
+  uint8_t *v3, *v33;
+  // Byte values Hex-Rays gave a pointer type: none is dereferenced here,
+  // and `&v4[k]` on a `uint8_t *` is the addition it looks like.  The
+  // `(uint32_t)` casts on them stay: `(216 - (uint32_t)v4) >> 31` is a
+  // logical shift, and it is a selector -- signed it would be -1, not 1.
+  int32_t v4, v8, v10, v17, v31;
   v3 = _this->cursor[1];
-  v4 = (uint8_t *)*v3;
+  v4 = *v3;
   v5 = (uint8_t *)((int32_t)_this->cursor[0]);
   v6 = v5[-2];
   v7 = *(v3 - 2);
-  if ( v6 < (int32_t)v4 )
+  if ( v6 < v4 )
   {
     if ( v7 >= v6 )
     {
-      v10 = &v4[v6 - v7];
-      v9 = v7 < (int32_t)v4;
-      v4 = (uint8_t *)v5[-2];
+      v10 = v4 + v6 - v7;
+      v9 = v7 < v4;
+      v4 = v5[-2];
       if ( v9 )
         v4 = v10;
     }
   }
   else if ( v7 <= v6 )
   {
-    v8 = &v4[v6 - v7];
-    v9 = v7 <= (int32_t)v4;
-    v4 = (uint8_t *)v5[-2];
+    v8 = v4 + v6 - v7;
+    v9 = v7 <= v4;
+    v4 = v5[-2];
     if ( !v9 )
       v4 = v8;
   }
-  *(uint8_t **)&_this->f0[2] = v4;
+  _this->f8 = v4;
   v33 = _this->cursor[2];
   v11 = *(v3 - 1)
       + v5[-5]
@@ -2852,7 +2857,7 @@ int32_t __alt_p1_context(AltP1Block *_this, uint32_t *a2, uint32_t *a3)
       v34 = (uint8_t *)(v5);
       v12 = a2[49];
       v36 = v11 + 2 * (*(uint8_t *)(a3[49] - 1) + *(uint8_t *)(v12 - 1));
-      *(uint8_t **)&_this->ctx_w[5].sel = (uint8_t *)(*v3
+      _this->ctx_w[5].sel = (*v3
                                        - (uint32_t)v4
                                        + *(uint8_t *)(v12 - 2)
                                        - *(uint8_t *)(a2[50] - 2));
@@ -2860,26 +2865,26 @@ int32_t __alt_p1_context(AltP1Block *_this, uint32_t *a2, uint32_t *a3)
       v14 = *(uint8_t *)(v13 - 2);
       v15 = *(uint8_t *)(v13 - 4);
       v5 = (uint8_t *)(v34);
-      *(uint8_t **)&_this->ctx_w[6].sel = (uint8_t *)(*(uint8_t *)((uintptr_t)v34 - 2) - (uint32_t)v4 + v14 - v15);
-      *(uint8_t **)&_this->ctx_w[7].sel = (uint8_t *)(*(uint8_t *)((uintptr_t)v34 - 2)
+      _this->ctx_w[6].sel = (*(uint8_t *)((uintptr_t)v34 - 2) - (uint32_t)v4 + v14 - v15);
+      _this->ctx_w[7].sel = (*(uint8_t *)((uintptr_t)v34 - 2)
                                        - (uint32_t)v4
                                        + *(uint8_t *)(a3[49] - 2)
                                        - *(uint8_t *)(a3[49] - 4));
-      *(uint8_t **)&_this->ctx_w[8].sel = (uint8_t *)(*(uint8_t *)(a3[49] - 2) - a3[2]);
-      *(uint8_t **)&_this->ctx_w[3].sel = (uint8_t *)(*(uint8_t *)(a2[49] - 2) - a2[2]);
+      _this->ctx_w[8].sel = (*(uint8_t *)(a3[49] - 2) - a3[2]);
+      _this->ctx_w[3].sel = (*(uint8_t *)(a2[49] - 2) - a2[2]);
       v37 = (*(uint8_t *)(a3[49] - 1) + (uint32_t)*(uint8_t *)(a2[49] - 1) - 16) >> 31;
     }
     else
     {
       v36 = v3[7] + v11 + 3 * *(uint8_t *)(a2[49] - 1);
-      *(uint8_t **)&_this->ctx_w[5].sel = (uint8_t *)(2 * v5[-2] - v5[-4] - (uint32_t)v4);
-      *(uint8_t **)&_this->ctx_w[6].sel = (uint8_t *)(2 * v5[-2] - v5[-4] - (uint32_t)v4);
-      *(uint8_t **)&_this->ctx_w[7].sel = (uint8_t *)(-(int32_t)v4 - *v3 + v3[2] + v5[-2]);
-      *(uint8_t **)&_this->ctx_w[8].sel = (uint8_t *)(v5[-2]
+      _this->ctx_w[5].sel = (2 * v5[-2] - v5[-4] - (uint32_t)v4);
+      _this->ctx_w[6].sel = (2 * v5[-2] - v5[-4] - (uint32_t)v4);
+      _this->ctx_w[7].sel = (-v4 - *v3 + v3[2] + v5[-2]);
+      _this->ctx_w[8].sel = (v5[-2]
                                        - (uint32_t)v4
                                        + *(uint8_t *)(a2[49] - 2)
                                        - *(uint8_t *)(a2[49] - 4));
-      *(uint8_t **)&_this->ctx_w[3].sel = (uint8_t *)(*(uint8_t *)(a2[49] - 2) - a2[2]);
+      _this->ctx_w[3].sel = (*(uint8_t *)(a2[49] - 2) - a2[2]);
       v37 = ((uint32_t)*(uint8_t *)(a2[49] - 1) - 8) >> 31;
     }
   }
@@ -2887,60 +2892,62 @@ int32_t __alt_p1_context(AltP1Block *_this, uint32_t *a2, uint32_t *a3)
   {
     v32 = (uint8_t *)((int32_t)_this->cursor[4]);
     v36 = v32[1] + *(v33 - 3) + v3[7] + v11 + v32[5];
-    *(uint8_t **)&_this->ctx_w[5].sel = (uint8_t *)(2 * v5[-2] - v5[-4] - (uint32_t)v4);
-    *(uint8_t **)&_this->ctx_w[6].sel = (uint8_t *)(2 * *v3 - *v33 - (uint32_t)v4);
-    *(uint8_t **)&_this->ctx_w[7].sel = (uint8_t *)(-(int32_t)v4 - *v3 + v3[2] + v5[-2]);
-    *(uint8_t **)&_this->ctx_w[8].sel = (uint8_t *)(-3 * (v5[-4] - v5[-2])
+    _this->ctx_w[5].sel = (2 * v5[-2] - v5[-4] - (uint32_t)v4);
+    _this->ctx_w[6].sel = (2 * *v3 - *v33 - (uint32_t)v4);
+    _this->ctx_w[7].sel = (-v4 - *v3 + v3[2] + v5[-2]);
+    _this->ctx_w[8].sel = (-3 * (v5[-4] - v5[-2])
                                      + v5[-6]
                                      - (uint32_t)v4);
-    *(uint8_t **)&_this->ctx_w[3].sel = (uint8_t *)(v3[4] - (uint32_t)v4);
+    _this->ctx_w[3].sel = (v3[4] - (uint32_t)v4);
     v37 = v5[1] + v32[1] + (_this->cursor[3])[1] + v33[1] + v3[1] == 0;
   }
   v16 = (v36 + 7) >> 4;
-  v17 = (uint8_t *)_this->f216[v16];
+  v17 = _this->f216[v16];
   v31 = v17;
   v35 = p1_level_step[(uint32_t)v17];
-  *(uint8_t **)&_this->f0[3] = v17;
-  *(uint8_t **)&_this->f0[4] = &(*(uint8_t **)&_this->f1752[v16])[*((uint8_t *)_this + (uint32_t)v4 + 728)];
-  *(uint8_t **)&_this->ctx_w[0].sel = (uint8_t *)(((216 - (uint32_t)v4) >> 31) + ((22 - (uint32_t)v4) >> 31));
+  _this->f12[0] = v17;
+  _this->f12[1] = _this->f1752[v16] + _this->f728[(uint32_t)v4];
+  _this->ctx_w[0].sel = (((216 - (uint32_t)v4) >> 31) + ((22 - (uint32_t)v4) >> 31));
   v38 = ((216 - (uint32_t)v4) >> 31) + ((22 - (uint32_t)v4) >> 31);
   v18 = (*(v3 - 2) - *v3 >= 0) + (*(v3 - 2) > (int32_t)*v3);
-  *(uint8_t **)&_this->ctx_w[1].sel = (uint8_t *)v18;
+  _this->ctx_w[1].sel = v18;
   v39 = (*(v3 - 2) - v5[-2] >= 0) + (*(v3 - 2) > (int32_t)v5[-2]);
-  *(uint8_t **)&_this->ctx_w[2].sel = (uint8_t *)v39;
+  _this->ctx_w[2].sel = v39;
   v19 = *(uint8_t **)&_this->ctx_w[3].sel == nullptr;
   v20 = (int32_t)*(uint8_t **)&_this->ctx_w[3].sel < 0;
-  v40 = (v3[2] - (int32_t)v4 >= -v35) + (v3[2] - (int32_t)v4 > v35);
-  *(uint8_t **)&_this->ctx_w[4].sel = (uint8_t *)v40;
+  v40 = (v3[2] - v4 >= -v35) + (v3[2] - v4 > v35);
+  _this->ctx_w[4].sel = v40;
   v21 = v35 < (int32_t)*(uint8_t **)&_this->ctx_w[5].sel;
   v22 = -v35 <= (int32_t)*(uint8_t **)&_this->ctx_w[5].sel;
   v23 = !v20 + (!v20 && !v19);
-  *(uint8_t **)&_this->ctx_w[3].sel = (uint8_t *)v23;
+  _this->ctx_w[3].sel = v23;
   v24 = v22 + v21;
   v19 = *(uint8_t **)&_this->ctx_w[6].sel == nullptr;
   v20 = (int32_t)*(uint8_t **)&_this->ctx_w[6].sel < 0;
-  *(uint8_t **)&_this->ctx_w[5].sel = (uint8_t *)v24;
+  _this->ctx_w[5].sel = v24;
   v25 = !v20 && !v19;
   v26 = !v20;
   v19 = *(uint8_t **)&_this->ctx_w[7].sel == nullptr;
   v20 = (int32_t)*(uint8_t **)&_this->ctx_w[7].sel < 0;
   v41 = v26 + v25;
-  *(uint8_t **)&_this->ctx_w[6].sel = (uint8_t *)(v26 + v25);
+  _this->ctx_w[6].sel = (v26 + v25);
   v27 = !v20 && !v19;
   v28 = !v20;
   v19 = *(uint8_t **)&_this->ctx_w[8].sel == nullptr;
   v20 = (int32_t)*(uint8_t **)&_this->ctx_w[8].sel < 0;
   v42 = v28 + v27;
-  *(uint8_t **)&_this->ctx_w[7].sel = (uint8_t *)(v28 + v27);
+  _this->ctx_w[7].sel = (v28 + v27);
   v29 = !v20 + (!v20 && !v19);
-  *(uint8_t **)&_this->ctx_w[8].sel = (uint8_t *)v29;
-  result = (int32_t)&(*(uint8_t **)&_this->ctx_w[8].w[v29])[16 * v37
-                                    + 8 * (*((uint8_t **)_this + (uint32_t)*(uint8_t **)&_this->f0[5] + 6) == nullptr)
-                                    + (uint32_t)&(*(uint8_t **)&_this->ctx_w[6].w[v41])[(uint32_t)(*(uint8_t **)&_this->ctx_w[7].w[v42])
-                                                                        + (uint32_t)&(*(uint8_t **)&_this->ctx_w[4].w[v40])[(uint32_t)(*(uint8_t **)&_this->ctx_w[5].w[v24])]
-                                                                        + (uint32_t)&(*(uint8_t **)&_this->ctx_w[2].w[v39])[(uint32_t)(*(uint8_t **)&_this->ctx_w[3].w[v23]) + (uint32_t)&(*(uint8_t **)&_this->ctx_w[0].w[v38])[(uint32_t)(*(uint8_t **)&_this->ctx_w[1].w[v18])]]]
-                                    + (uint32_t)v31];
-  *(uint8_t **)&_this->f0[3] = (uint8_t *)result;
+  _this->ctx_w[8].sel = v29;
+  result = _this->ctx_w[0].w[v38] + _this->ctx_w[1].w[v18]
+         + _this->ctx_w[2].w[v39] + _this->ctx_w[3].w[v23]
+         + _this->ctx_w[4].w[v40] + _this->ctx_w[5].w[v24]
+         + _this->ctx_w[6].w[v41] + _this->ctx_w[7].w[v42]
+         + _this->ctx_w[8].w[v29]
+         + 16 * v37
+         + 8 * (_this->f12[3 + _this->f12[2]] == 0)
+         + v31;
+  _this->f12[0] = result;
   return result;
 }
 
