@@ -312,6 +312,41 @@ them.
 
 ---
 
+## 4.5 The three records the round was for
+
+Two of these had been "the question" in `algorithm_v2.md` since round six, and
+they answer once the layout stops lying about them.
+
+**`P2Ctx`** was `int16_t lane[9]`, and the last two bytes are not a lane. Both
+pixel bodies end a record with the same block, and it is a complete
+description: `lane[0]` is the pixel scaled by 16, `lane[2]` is its horizontal
+gradient, `lane[3] = lane[5] = lane[6] = lane[7] = |lane[2]|` with
+`lane[4] = |lane[2]| / 2`, byte 16 is the three-way sign of the gradient and
+byte 17 is 2. The `|x|` arrives as `(WORD2(x) ^ x) - WORD2(x)` — the branchless
+absolute value — which is what made lanes 3..7 look like five unrelated
+quantities: they are one quantity, five times. All 32 reads of the last two
+bytes are the byte at +17, so `mag` has readers and `sign` has none.
+
+**`P2Freq`**'s fourth counter is not a count. `alt_p2_encode_symbol` codes a
+three-way alphabet out of `f[0..2]` and ends `*chosen = step + *chosen`, so
+`step` is the size of an update — and the rescale *lowers* it, by half above
+256 and by 32 above 32. A learning rate that decays as the record matures,
+seeded at 4096 against frequencies summing to 7680.
+
+**`BitCtr`** adapts its forgetting instead: `n[bit] += 8` always, and passing
+`limit` halves the pair and raises `limit` by 64 to a ceiling of 0x4000. Its
+`n[n[0] - 1] += 4` — which §4.3 could only justify by measuring that it stayed
+in range — turns out to be reachable only from a half-initialised state where
+`n[0]` is not a count at all but the first bit the record ever saw, plus one.
+
+Three probes carry these: the addend differing from `step`, the halving branch
+failing to lower it, and `n[0] > 2` at the half-warm site. None fires on any of
+the fifteen images. The first two matter because `LOWORD(n32) = step` leaves
+the high half of `n32` alone, so "the addend is `step`" is a claim about what
+is in those bits and not about where they came from.
+
+---
+
 ## 5. A costume, and the one cast that was not one
 
 `alt_p1_context` writes and reads its selectors through `uint8_t **`:

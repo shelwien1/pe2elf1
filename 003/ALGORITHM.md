@@ -844,8 +844,18 @@ Stated plainly, so the rest can be trusted:
   model. It says the context space is 3^9 (or 3^5) sign patterns, which is a
   bound on what the rest can be.
 
-  What none of that says is what an 18-byte record *holds*, which is the
-  question. The five fields are four `uint32_t` and a `uint16_t`, and
+  **And what an 18-byte record holds is settled too, which it was not when the
+  paragraph above was written.** Both pixel bodies end a record with the same
+  block: `lane[0]` is the pixel scaled by 16, `lane[2]` is its horizontal
+  gradient, `lane[3..7]` are five copies of that gradient's magnitude which
+  then diverge, and the last two bytes are a three-way sign with no reader and
+  a magnitude that the neighbourhood sums. `algorithm_v2.md` §9.2 has the
+  block; §9.3 has the counters, where the fourth word of a frequency record
+  turns out to be the size of the update rather than a count.
+
+  What is left is not the layout but the *use*: which of the five magnitude
+  lanes feeds which of the five weight groups, and what the eight lanes mean
+  once `alt_p2_model` has written them separately for a few thousand pixels. The five fields are four `uint32_t` and a `uint16_t`, and
   `alt_p2_context` computes the values that go into them — that is where a
   reading would start.
 

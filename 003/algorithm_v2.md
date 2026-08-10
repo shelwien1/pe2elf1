@@ -472,14 +472,15 @@ them is open work. What *is* established, from their own code:
 * The p2 family's working memory is a table of **18-byte records** with rows
   **144 bytes apart** — eight records to a row. Fifty-six places copy one record;
   the compiler unrolled every one into four dwords and a word, which is what
-  made them findable. The five fields are four `uint32_t` and a `uint16_t`.
+  made them findable. What the eighteen bytes hold is §9.2.
 * `alt_model_p1_decode` keeps a **five-deep ring of row pointers**, rotated one
   place per pass, and derives five working cursors from it with three of them
   offset by eight.
 * `alt_p1_encode_symbol` / `alt_p1_decode_symbol` and their p2 counterparts code
   a symbol from a cumulative-frequency table with a halving rescale at 0x4000,
   through `encode_symbol_tree` / `decode_symbol_tree`. The p2 pair starts with a
-  three-way choice over three counters before descending.
+  three-way choice over three counters before descending — §9.3 says what the
+  fourth counter beside those three is.
 * The p1 side's working memory is **0x99C60 nodes of sixteen bytes** starting at
   `AltP1Block + 3800` — a total and seven counts, seeded (22; 8, 2, 2, 2, 2, 3,
   3), where 22 is the sum. `alt_p1_model` updates **three adjacent nodes per
@@ -552,10 +553,59 @@ carries three terms past the nine digits: `16 · v37`, eight more when the pair
 `f12[2]` selects between is null, and a byte from the level map — bits below
 the ternary place values, inside the 32 counters a context owns.
 
+### 9.2 What a `P2Ctx` record holds
+
+Both pixel bodies end a record the same way, in the block that steps the cursor
+on by eighteen:
+
+    lane[0] = pixel * 16
+    lane[1] = the same, and zeroed again at the start of the next row
+    lane[2] = lane[0] − the previous record's lane[0], signed
+    lane[3] = lane[5] = lane[6] = lane[7] = |lane[2]|
+    lane[4] = |lane[2]| / 2
+    byte 16 = (lane[2] <= 0) + (lane[2] < 0)
+    byte 17 = 2
+
+So a fresh record is **a pixel, its horizontal gradient, and five copies of
+that gradient's magnitude** — which then diverge, because `alt_p2_model` writes
+lanes 1..7 separately afterwards and overwrites byte 17 with `abs32(err)`. The
+`|x|` arrives as `(WORD2(x) ^ x) − WORD2(x)`, the branchless absolute value,
+and that is what made lanes 3..7 look like five unrelated quantities: they are
+one quantity, five times.
+
+The last two bytes are not a ninth lane. They are written as bytes at both
+sites, and all 32 reads are the byte at +17 — summed across the neighbourhood
+— so `mag` has readers and `sign` has none in this build, the shape
+`P2Count::b1` also has.
+
+Five copies, five weight groups (§9.1), five planes and five `bank_ctx`
+entries. Whether those fives are the same five is not established.
+
+### 9.3 What the fourth counter of a `P2Freq` is
+
+Three of the four are a three-way alphabet: `alt_p2_encode_symbol` hands
+`rc.encode` a cumulative pair out of `f[0..2]` with their sum as the total, and
+its argument picks which — zero the first, odd the second, even-and-nonzero the
+third. It then ends with `*chosen = step + *chosen`.
+
+So `step` is not a fourth count; it is **the amount an update adds**. The
+rescale that fires when a count passes 0x4000 halves the three frequencies and
+*lowers* `step` — by half above 256, by 32 above 32, by 2 or 0 below that.
+Seeded at 4096 against frequencies summing to 7680, so the first update moves
+the distribution hard and later ones barely at all: a learning rate that decays
+as the record matures.
+
+`BitCtr`, the binary counter the default model uses, is built the same way but
+adapts its *forgetting* rather than its step: `n[bit] += 8` always, and when
+`n[0] + n[1]` passes `limit` both are halved and `limit` grows by 64, to a
+ceiling of 0x4000. A record has three states — cold (`n[0] == 0`, code from the
+fallback counter and remember the bit as `n[0] = bit + 1`), half-warm
+(`n[1] == 0`, seed the pair from the fallback's ratio and bump the remembered
+bit), and live.
+
 So: a context model with its own neighbourhood statistics and its own
-frequency tables, on a sliding window of rows. What the eighteen bytes of a
-record hold is the question, and `alt_p2_context` — which computes the values
-that go into them — is where a reading would start.
+frequency tables, on a sliding window of rows, with the adaptation rate itself
+stored per record.
 
 ---
 
