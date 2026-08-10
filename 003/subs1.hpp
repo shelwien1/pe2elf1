@@ -481,12 +481,17 @@ static_assert(sizeof(void *) != 4
 // pointer is four bytes, so naming these fields moves nothing, and the
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
-// A frequency record: eight words, of which the last is two bytes.
-// `code_pixel` and `decode_pixel` both reach one as
-// `&((uint32_t *)this)[4 * k + 776]` and copy it whole with two 64-bit moves,
-// which is what fixes it at sixteen bytes.  The union is not a choice between
-// two readings: word 7 is only ever touched as `+14` and `+15`, and the two
-// spellings sit on the same bytes because the code uses both.
+// Sixteen bytes: eight words, of which the last is only ever two bytes.  The
+// union is not a choice between two readings -- word 7 is touched as `+14` and
+// `+15` and never as a word, and the two spellings sit on the same bytes
+// because the code uses both.
+//
+// One record type, two roles, one array.  `code_pixel` and `decode_pixel` copy
+// a whole record with two 64-bit moves, which is what fixes the size; they
+// reach it as `&((uint32_t *)this)[4 * k + 776]`, grid record k + 188.
+// `model_plane` and `unmodel_plane_slow` fill records 0..188 as context
+// buckets -- five counts in `w[0..4]`, their total in `w[5]`, a scaled weight
+// in `w[6]`, and the level and its weight in the two bytes.
 struct FreqRec {
   union {
     uint16_t w[8];   // +0 .. +15
@@ -540,12 +545,22 @@ struct ModelBlock {
   uint32_t sym_pos;   // 0..31; the index pixel_context reads sym[] with
   uint32_t f48;
   uint32_t f52;
-  uint8_t  *f56[14];   // +56 .. +108, the row cursors: every element is an address
-  uint8_t _pad15[1051552];
-  // Written twice and read nowhere: `init_model_tables` and `model_plane` both
-  // copy `f56[10..13]` into it after the bucket loop, and nothing in the file
-  // or in bmf.cpp reads it back.  Whatever it was for, the copy is dead.
-  uint8_t  *f1051664[4];   // +1051664 .. +1051679
+  uint8_t  *f56[10];   // +56 .. +95, the row cursors: every element is an address
+  // One grid of sixteen-byte records, and two walkers over it.  Records 0..188
+  // are the context buckets `model_plane` and `unmodel_plane_slow` fill -- five
+  // counts, their total, a scaled weight, and two bytes -- and records 188 and
+  // up are the frequency records `code_pixel` and `decode_pixel` walk, reached
+  // as `(FreqRec *)&((uint32_t *)this)[4 * k + 776]`, which is +3104 + 16k.
+  // Record 188 is both: the bucket loop's last iteration seeds the frequency
+  // table's first record.  The bucket count is measured -- a `__builtin_trap`
+  // on `>= 188` fires on fourteen of the gate's streams and one on `>= 189`
+  // fires on none -- and the extent runs to the next declared member.
+  FreqRec  grid[65723];   // +96 .. +1051663
+  // Two functions copied `f56[10..13]` here after the bucket loop and nothing
+  // ever read it back -- and `f56[10..13]` was `grid[0]`, so the copy was
+  // moving a bucket record into a slot with no reader.  Both are gone; the
+  // sixteen bytes stay to hold the layout.
+  uint8_t  _pad1051664[16];   // +1051664 .. +1051679
   // What `layout_workspace` seeds, and the boundaries are its own: sixteen
   // three-word records at +1 051 680, a 24 KiB block it `memset`s, one record
   // and 1536 bytes it `memset`s at +1 076 352, and 48 more records at
@@ -9251,15 +9266,17 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   int16_t v14, n4_14, v146, v160, n15_4;
   ModelBlock *this_4;
   uint8_t *v25, *v56;   // row cursors out of f56[9]; were int32_t
-  int32_t arg_cum, arg_high, arg_tot, n4_8, n4_7, n15_6, n15_7, v8, v9, v10, v12, v13, v15,
-          n4_9, __decode_pixel_n15, v22, n4_11, v26, v27, v29, v31, n0xFFFF, v33, n0xFFFF_1,
-          n53248, n4_12, v40, n15_11, n8, n15_12, v44, n4_22, n15_14, n15_18, v49, v50, v51,
-          n4_13, *v59, v60, n15_13, v67, n15_15, n4_17, v81, v83, v84,
-          v85, n4, n256_2, n15_1, n256_1, n15_23, n4_19, n4_20, n4_5, n4_6, n15_5, v102, v103,
-          v104, v105, v107, v109, v111, v112, v113, v114, v115, v116, v117, v118, v119,
-          v120, v122, v123, v124, v125, v126, v127, v128, n32, n15_25, n4_21, v135,
-          n256, v143, n4_18, n15_19, n15_20, v148, v149, v150, v151, v152, v153, v155, n15_21,
-          v158, v159, v161, v163, v164, n4_2, n15_22, n256_4, n256_5, n256_3, n15_2;
+  int32_t arg_cum, arg_high, arg_tot, n4_8, n4_7, n15_6, n15_7, v8, v9, v10,
+          v12, v13, v15, n4_9, __decode_pixel_n15, v22, n4_11, v26, v27, v29,
+          v31, n0xFFFF, v33, n0xFFFF_1, n53248, n4_12, v40, n15_11, n8,
+          n15_12, v44, n4_22, n15_14, n15_18, v49, v50, v51, n4_13, *v59, v60,
+          n15_13, v67, n15_15, n4_17, v83, v84, v85, n4, n256_2, n15_1,
+          n256_1, n15_23, n4_19, n4_20, n4_5, n4_6, n15_5, v102, v103, v104,
+          v105, v107, v109, v111, v112, v113, v114, v115, v116, v117, v118,
+          v119, v120, v122, v123, v124, v125, v126, v127, v128, n32, n15_25,
+          n4_21, v135, n256, v143, n4_18, n15_19, n15_20, v148, v149, v150,
+          v151, v152, v153, v155, n15_21, v158, v159, v161, v163, v164, n4_2,
+          n15_22, n256_4, n256_5, n256_3, n15_2;
   uint64_t *v170;
   uint64_t *v100;
   uint64_t *v171;
@@ -9628,16 +9645,15 @@ LABEL_57:
   }
   v80 = (uint64_t *)((int32_t)(uint32_t *)&this_3->f56[4 * this_3->f40 + 10]);
   __frame.sym4 = (uint64_t *)((uint16_t *)v80);
-  v81 = 4 * n0xFFFF_1;
-  freq_tbl = (FreqRec *)&((uint32_t *)this_3)[v81 + 776];
-  v83 = HIWORD(((uint32_t *)this_3)[v81 + 778]);
-  if ( HIWORD(((uint32_t *)this_3)[v81 + 778]) )
+  freq_tbl = &this_3->grid[n0xFFFF_1 + 188];
+  v83 = freq_tbl->w[5];
+  if ( freq_tbl->w[5] )
   {
     if ( v83 == 1 )
     {
       v142 = (uint64_t *)(v80);
       v143 = *((uint8_t *)&v80[1] + 7);
-      n4_18 = v143 * LOWORD(((uint32_t *)this_3)[v81 + 777]);
+      n4_18 = v143 * freq_tbl->w[2];
       n15_19 = v143 * freq_tbl->w[3];
       __frame.sym1 = v143 * freq_tbl->w[0];
       v146 = v143 * freq_tbl->w[1];
@@ -10426,7 +10442,7 @@ LABEL_42:
     v82 = 4 * *(int32_t *)&this_3->f40;
     n15_36 = (uint8_t *)&this_3->f56[v82 + 10];
     __frame.sym4 = (int32_t)(uintptr_t)n15_36;
-    n2_3 = (FreqRec *)&((int32_t *)this_3)[4 * n0xFFFF_1 + 776];
+    n2_3 = &this_3->grid[n0xFFFF_1 + 188];
     __code_pixel_n0x2000 = HIWORD(((int32_t *)this_3)[4 * n0xFFFF_1 + 778]);
     if ( __code_pixel_n0x2000 )
     {
@@ -11065,7 +11081,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   uint8_t *ArgList, *ArgList_2, *buf, *ArgList_3, *ArgList_9, *ArgList_10,
           *Src_2, *v77, *ArgList_8;
   int16_t v20;
-  uint8_t *v27, *v28, *v29, *v44, *v45, *v46, *v47, *v48;   // row cursors out of f56
+  uint8_t *v44, *v45, *v46, *v47, *v48;
   int32_t v3, v5, v6, v8, n5, v11, v14, v15, v16, v17, v18, v19, n0x10000, v30,
           v34, v39, v40, n4_1, v43, v51, v52, v53, v54, v56, v58, v60, v61, v62,
           v64, v65, v66, n6, v68, v69, n6_4, n6_1, v73, n6_2, v76, v78, v80;
@@ -11074,7 +11090,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   uint32_t *v22, *v31, *v35, *ArgList_6;
   SymEntry *ArgList_7;
   SymList *i_1, *i, *j_1, *j;
-  uint16_t *v13;   // was uint32_t *, read only as uint16_t
+  FreqRec *v13;   // a bucket record: `grid[bucket]`
   uint8_t *v49, *v50;
   v3 = _this->f8 < 8;
   Src_1 = Src;
@@ -11128,85 +11144,85 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         // +3119.  `FreqRec` is on the same grid from record 188 (+3104),
         // which makes the last bucket record and the first frequency record
         // the same sixteen bytes -- the two tables abut and share one.
-        v13 = (uint16_t *)&((uint32_t *)this_3)[4 * v11];
-        v13[49] = 2;
-        v13[50] = 2;
-        v13[51] = 2;
-        v13[52] = 2;
+        v13 = &this_3->grid[v11];
+        v13->w[1] = 2;
+        v13->w[2] = 2;
+        v13->w[3] = 2;
+        v13->w[4] = 2;
         if ( v88 )
         {
-          v14 = (uint16_t)(v13[52] + v13[51]);
-          v13[51] = v14;
+          v14 = (uint16_t)(v13->w[4] + v13->w[3]);
+          v13->w[3] = v14;
           v15 = 0;
-          v13[52] = 0;
+          v13->w[4] = 0;
         }
         else
         {
-          v14 = v13[51];
-          v15 = v13[52];
+          v14 = v13->w[3];
+          v15 = v13->w[4];
         }
         if ( v99 )
         {
-          v16 = (uint16_t)(v15 + v13[50]);
-          v13[50] = v16;
+          v16 = (uint16_t)(v15 + v13->w[2]);
+          v13->w[2] = v16;
           v15 = 0;
-          v13[52] = 0;
+          v13->w[4] = 0;
         }
         else
         {
-          v16 = v13[50];
+          v16 = v13->w[2];
         }
         if ( v95 )
         {
           v16 = (uint16_t)(v14 + v16);
-          v13[50] = v16;
+          v13->w[2] = v16;
           v14 = 0;
-          v13[51] = 0;
+          v13->w[3] = 0;
         }
         if ( v93 )
         {
-          v13[49] += v15;
+          v13->w[1] += v15;
           v15 = 0;
-          v13[52] = 0;
+          v13->w[4] = 0;
         }
         if ( v94 )
         {
-          v13[49] += v14;
+          v13->w[1] += v14;
           v14 = 0;
-          v13[51] = 0;
+          v13->w[3] = 0;
         }
         if ( ArgList_4 )
         {
-          v13[49] += v16;
+          v13->w[1] += v16;
           v16 = 0;
-          v13[50] = 0;
+          v13->w[2] = 0;
         }
         v17 = (v14 != 0) + (v16 != 0) + (v15 != 0) + 2;
         if ( v17 <= v101 )
         {
-          *(uint8_t *)&v13[55] = v17;
-          v13[48] = 2;
+          v13->b14 = v17;
+          v13->w[0] = 2;
         }
         else
         {
           LOBYTE(v17) = v17 - 1;
-          *(uint8_t *)&v13[55] = v17;
-          v13[48] = 0;
+          v13->b14 = v17;
+          v13->w[0] = 0;
         }
-        if ( v13[v100 + 48] && v13[n5 + 48] && (uint8_t)v17 <= v101 )
+        if ( v13->w[v100] && v13->w[n5] && (uint8_t)v17 <= v101 )
         {
           v19 = v100;
           v18 = 1;
           v20 = (uint8_t)(1 << ((5 - v17) & 31));
-          ((uint8_t *)&v13[55])[1] = v20;
-          v13[54] = v20 << 6;
-          v13[v19 + 48] += v20;
-          v13[n5 + 48] += ((uint8_t *)&v13[55])[1];
-          v13[53] = v13[48]
-                               + v13[52]
-                               + v13[51]
-                               + v13[50]
-                               + v13[49];
+          v13->b15 = v20;
+          v13->w[6] = v20 << 6;
+          v13->w[v19] += v20;
+          v13->w[n5] += v13->b15;
+          v13->w[5] = v13->w[0]
+                               + v13->w[4]
+                               + v13->w[3]
+                               + v13->w[2]
+                               + v13->w[1];
         }
         else
         {
@@ -11236,13 +11252,6 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   Size = this_1->f16;
   this_1->f1078688 = (uint8_t *)buf;
   memset(buf,1,Size);
-  v27 = this_4->f56[11];
-  v28 = this_4->f56[12];
-  this_4->f1051664[0] = this_4->f56[10];
-  v29 = this_4->f56[13];
-  this_4->f1051664[1] = v27;
-  this_4->f1051664[2] = v28;
-  this_4->f1051664[3] = v29;
   this_4->f1078224 = &this_4->escape;
   __init_symbol_list(&this_4->escape, (int32_t)this_4, this_4->f16, 1);
   this_4->f1078232 = this_4->sel;
@@ -15264,10 +15273,10 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
   ModelBlock *Blocka_4;
   int32_t v8, v10, v11, v14, n2_1, n2_2, v17, v18, v19, v20, v21, v44, v45,
           v53, v54, v55, v56;
-  uint8_t *v28, *v29, *v30, *v47, *v48, *v49;   // row cursors out of f56
+  uint8_t *v47, *v48, *v49;
   uint32_t n0x10000, *v24, v31, *v32, v34, v37, *v38, v40;
   SymList *v33, *v39;
-  uint16_t *v12;   // was uint32_t *, read only as uint16_t
+  FreqRec *v12;   // a bucket record: `grid[bucket]`
   uint8_t *v51, *v52;
   void *v5;
   if ( plane_alt_model )
@@ -15337,9 +15346,9 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
           // +3119.  `FreqRec` is on the same grid from record 188 (+3104),
           // which makes the last bucket record and the first frequency record
           // the same sixteen bytes -- the two tables abut and share one.
-          v12 = (uint16_t *)&((uint32_t *)Blocka_2)[4 * v64];
+          v12 = &Blocka_2->grid[v64];
           __model_plane_n2 = 2;
-          v12[48] = 2;
+          v12->w[0] = 2;
           LOWORD(v14) = 2;
           n2_1 = 2;
           n2_2 = 2;
@@ -15362,32 +15371,32 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
           {
             __model_plane_n2 = n2_2 + 2;
             n2_2 = 0;
-            v12[52] = 0;
+            v12->w[4] = 0;
           }
           else
           {
-            v12[52] = n2_2;
+            v12->w[4] = n2_2;
           }
           if ( v65 )
           {
             __model_plane_n2 += n2_1;
             n2_1 = 0;
-            v12[51] = 0;
+            v12->w[3] = 0;
           }
           else
           {
-            v12[51] = n2_1;
+            v12->w[3] = n2_1;
           }
           if ( v70 )
           {
-            v12[49] = v14 + __model_plane_n2;
+            v12->w[1] = v14 + __model_plane_n2;
             LOWORD(v14) = 0;
-            v12[50] = 0;
+            v12->w[2] = 0;
           }
           else
           {
-            v12[50] = v14;
-            v12[49] = __model_plane_n2;
+            v12->w[2] = v14;
+            v12->w[1] = __model_plane_n2;
           }
           v17 = n2_1 != 0;
           v18 = n2_2 != 0;
@@ -15397,28 +15406,28 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
           v19 = v18 + v17 + v14 + 2;
           if ( v19 <= v73 )
           {
-            *(uint8_t *)&v12[55] = v19;
+            v12->b14 = v19;
           }
           else
           {
-            *(uint8_t *)&v12[55] = v18 + v17 + v14 + 1;
-            v12[48] = 0;
+            v12->b14 = v18 + v17 + v14 + 1;
+            v12->w[0] = 0;
           }
-          if ( v12[v72 + 48]
-            && v12[n5 + 48]
-            && (v20 = *(uint8_t *)&v12[55], v20 <= v73) )
+          if ( v12->w[v72]
+            && v12->w[n5]
+            && (v20 = v12->b14, v20 <= v73) )
           {
             v21 = 1;
             v22 = (uint8_t)(1 << ((5 - v20) & 31));
-            ((uint8_t *)&v12[55])[1] = v22;
-            v12[54] = v22 << 6;
-            v12[v72 + 48] += v22;
-            v12[n5 + 48] += ((uint8_t *)&v12[55])[1];
-            v12[53] = v12[48]
-                                 + v12[52]
-                                 + v12[51]
-                                 + v12[50]
-                                 + v12[49];
+            v12->b15 = v22;
+            v12->w[6] = v22 << 6;
+            v12->w[v72] += v22;
+            v12->w[n5] += v12->b15;
+            v12->w[5] = v12->w[0]
+                                 + v12->w[4]
+                                 + v12->w[3]
+                                 + v12->w[2]
+                                 + v12->w[1];
           }
           else
           {
@@ -15449,13 +15458,6 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
     Size = Blocka_2->f16;
     Blocka_2->f1078688 = buf;
     memset(buf,1,Size);
-    v28 = Blocka_2->f56[11];
-    v29 = Blocka_2->f56[12];
-    Blocka_2->f1051664[0] = Blocka_2->f56[10];
-    v30 = Blocka_2->f56[13];
-    Blocka_2->f1051664[1] = v28;
-    Blocka_2->f1051664[2] = v29;
-    Blocka_2->f1051664[3] = v30;
     Blocka_2->f1078224 = &Blocka_2->escape;
     __init_symbol_list(&Blocka_1->escape, 0, Blocka_1->f16, 1);
     Blocka_2->f1078232 = Blocka_2->sel;
