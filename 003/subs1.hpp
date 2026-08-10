@@ -5493,7 +5493,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   // with x the size and p_i the descriptor is `p_i + data_size`, which is where
   // alloc_image put the palette.
   BmfImage *const img = (BmfImage *)p_i;
-  struct alignas(16) {   // 96 bytes, the frame Hex-Rays could not name
+  struct alignas(16) WriteBmpFrame {   // 96 bytes, one stack frame
       uint32_t  Buffera;
       uint32_t  v62;
       uint8_t   _gap0[4];   // was char * v65
@@ -7246,7 +7246,7 @@ static inline int32_t __fwd_alt_p2_context_alt_p2_filter(void *a0, void *a1, voi
 // question, and it is still open -- this names the role, not the algorithm.
 int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
 {
-  struct alignas(16) {   // 208 bytes, the frame Hex-Rays could not name
+  struct alignas(16) AltP2ContextFrame {   // 208 bytes, one stack frame
       uint8_t slot0[4];
       uint8_t slot4[4];
       uint8_t slot8[4];
@@ -8232,7 +8232,7 @@ static inline uint32_t __fwd_reduce_alphabet_init_encode_symbol_list(void *a0, i
 
 void __reduce_alphabet(ModelBlock *Blocka, char a2, uint8_t *a3)
 {
-  struct alignas(16) {   // 66064 bytes, the frame Hex-Rays could not name
+  struct alignas(16) ReduceAlphabetFrame {   // 66064 bytes, one stack frame
       uint32_t v78[15];
       void *v79;
       int32_t n0x2000_5;
@@ -8691,7 +8691,7 @@ LABEL_71:
 
 int32_t __cost_candidate(uint8_t *a1, uint8_t *n2, int32_t a3, char a4, int32_t a5, int32_t a6, int32_t a7, char *a8)
 {
-  struct alignas(16) {   // 26712 bytes, the frame Hex-Rays could not name
+  struct alignas(16) CostCandidateFrame {   // 26712 bytes, one stack frame
       char buf[4096];
       int32_t v72[1024];
       int32_t v73[1024];
@@ -8955,7 +8955,7 @@ static inline int32_t __fwd_choose_plane_coding_cost_candidate(void *a0, void *a
 
 int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, char a3)
 {
-  struct alignas(16) {   // 41456 bytes, the frame Hex-Rays could not name
+  struct alignas(16) ChoosePlaneCodingFrame {   // 41456 bytes, one stack frame
       int32_t v174;
       int32_t v175;
       int32_t v176;
@@ -9816,7 +9816,7 @@ LABEL_19:
 
 int32_t *__read_bmp(char *FileName)
 {
-  struct alignas(16) {   // 128 bytes, the frame Hex-Rays could not name
+  struct alignas(16) ReadBmpFrame {   // 128 bytes, one stack frame
       uint8_t slot0[4];
       uint8_t slot4[4];
       int32_t *v52;
@@ -10152,7 +10152,7 @@ LABEL_61:
 
 int32_t __decode_symbol_list(uint32_t *a1)
 {
-  struct alignas(16) {   // 32824 bytes, the frame Hex-Rays could not name
+  struct alignas(16) DecodeSymbolListFrame {   // 32824 bytes, one stack frame
       uint16_t *list[8192];   // the symbol list: 8 named slots and 32736 bytes of tail, one array
       uint32_t n0x7F800000_1;
       int32_t tot;
@@ -10396,7 +10396,7 @@ static inline int32_t __fwd_decode_pixel_pixel_context(void *a0, void *a1) { ret
 
 int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
 {
-  struct alignas(16) {   // 164 bytes, the frame Hex-Rays could not name
+  struct alignas(16) DecodePixelFrame {   // 164 bytes, one stack frame
       uint32_t  sym[32];   // pixel_context reads sym[0..31]; `sym_pos` runs 0..31 (was n15_8 .. v211)
       uint8_t   _gap0[4];   // was int32_t n15_24
       uint8_t _pad0[32];
@@ -11181,7 +11181,7 @@ static inline int32_t __fwd_code_pixel_pixel_context(void *a0, void *a1) { retur
 
 int32_t __code_pixel(ModelBlock *_this, int32_t a2)
 {
-  struct alignas(16) {   // 164 bytes, the frame Hex-Rays could not name
+  struct alignas(16) CodePixelFrame {   // 164 bytes, one stack frame
       uint32_t  sym[32];   // pixel_context reads sym[0..31]; `sym_pos` runs 0..31 (was p_n15 .. v207)
       uint8_t   _gap0[4];   // was int32_t n15_14
       uint8_t _pad0[32];
@@ -11948,7 +11948,7 @@ static inline uint32_t __fwd_expand_alphabet_init_encode_symbol_list(void *a0, i
 
 void __expand_alphabet(ModelBlock *_this)
 {
-  struct alignas(16) {   // 420 bytes, the frame Hex-Rays could not name
+  struct alignas(16) ExpandAlphabetFrame {   // 420 bytes, one stack frame
       uint64_t v28[2];
       int32_t v29;
       uint32_t v30[91];
@@ -12209,7 +12209,7 @@ static inline void __fwd_unmodel_plane_slow_expand_alphabet(void *a0) { __expand
 
 void __unmodel_plane_slow(ModelBlock *_this, char *Src)
 {
-  struct alignas(16) {   // 100 bytes, the frame Hex-Rays could not name
+  struct alignas(16) UnmodelPlaneSlowFrame {   // 100 bytes, one stack frame
       uint8_t   _gap0[4];   // was int32_t Size
       uint8_t   _pad1[4];
       int32_t   v82;
@@ -12723,7 +12723,7 @@ static inline int32_t * __fwd_alt_model_p1_encode_alt_p1_alloc(void *a0, int32_t
 
 int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
 {
-  struct alignas(16) {   // 144 bytes, the frame Hex-Rays could not name
+  struct alignas(16) AltModelP1EncodeFrame {   // 144 bytes, one stack frame
       uint8_t   _gap0[1];   // was char v90
       uint8_t _pad0[3];
       uint8_t slot4[4];
@@ -14897,7 +14897,7 @@ static inline int32_t __fwd_alt_p2_d8_decode_body_alt_p2_context(void *a0, void 
 
 void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, uint8_t *a5, int32_t i, int32_t a7)
 {
-  struct alignas(16) {   // 44 bytes, the frame Hex-Rays could not name
+  struct alignas(16) AltP2D8DecodeBodyFrame {   // 44 bytes, one stack frame
       int32_t   v95;
       uint8_t   _pad1[4];
       uint8_t   _gap0[4];   // was uint8_t * v97
@@ -15212,7 +15212,7 @@ static inline int32_t __fwd_alt_model_p2_decode_alt_p2_context(void *a0, void *a
 
 int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
 {
-  struct alignas(16) {   // 276 bytes, the frame Hex-Rays could not name
+  struct alignas(16) AltModelP2DecodeFrame {   // 276 bytes, one stack frame
       uint8_t   _gap0[4];   // was uint32_t Size_1
       uint8_t slot4[16];
       uint8_t slot20[16];
@@ -15762,7 +15762,7 @@ static inline int32_t __fwd_alt_p2_d8_encode_body_alt_p2_context(void *a0, void 
 
 void __alt_p2_d8_encode_body(Obj11 *lpAddress, uint8_t *a4, int32_t i, int32_t a6, uint8_t *a7)
 {
-  struct alignas(16) {   // 68 bytes, the frame Hex-Rays could not name
+  struct alignas(16) AltP2D8EncodeBodyFrame {   // 68 bytes, one stack frame
       int32_t   j;
       uint8_t   _gap0[4];   // was uint8_t * v103
       int32_t   v104;
@@ -16101,7 +16101,7 @@ static inline int32_t __fwd_alt_model_p2_encode_alt_p2_context(void *a0, void *a
 
 int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
 {
-  struct alignas(16) {   // 324 bytes, the frame Hex-Rays could not name
+  struct alignas(16) AltModelP2EncodeFrame {   // 324 bytes, one stack frame
       uint8_t   _gap0[4];   // was uint32_t Size_1
       uint8_t slot4[16];
       uint8_t slot20[16];
@@ -16692,7 +16692,7 @@ static inline int32_t __fwd_model_plane_alt_model_p1_encode(void *a0, char *a1) 
 
 void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
 {
-  struct alignas(16) {   // 96 bytes, the frame Hex-Rays could not name
+  struct alignas(16) ModelPlaneFrame {   // 96 bytes, one stack frame
       uint8_t   _gap0[4];   // was int32_t Size
       uint8_t   _pad1[4];
       int32_t   v58;
@@ -17093,7 +17093,7 @@ static inline void __fwd_model_planes_model_plane( void *a2, void *a3, void *a4)
 
 void __model_planes(char *Blockb, char *Srca_3, int32_t a3, char a4)
 {
-  struct alignas(16) {   // 76 bytes, the frame Hex-Rays could not name
+  struct alignas(16) ModelPlanesFrame {   // 76 bytes, one stack frame
       uint8_t slot0[4];
       uint8_t slot4[4];
       uint8_t slot8[4];
@@ -17177,7 +17177,7 @@ static inline void __fwd_transform_planes_model_plane( void *a2, void *a3, void 
 
 void __transform_planes(BmfImage *p_i, int32_t a2, char a3)
 {
-  struct alignas(16) {   // 76 bytes, the frame Hex-Rays could not name
+  struct alignas(16) TransformPlanesFrame {   // 76 bytes, one stack frame
       int32_t   v32;
       int32_t   v33;
       int32_t   Size;
@@ -17298,7 +17298,7 @@ static inline void __fwd_expand_image_unmodel_plane(char a0, void *a3, void *a4)
 
 char * __expand_image(char *a1, int32_t a4, int32_t *p_dwLowDateTime)
 {
-  struct alignas(16) {   // 104 bytes, the frame Hex-Rays could not name
+  struct alignas(16) ExpandImageFrame {   // 104 bytes, one stack frame
       uint8_t slot0[4];
       uint16_t p_i[2];
       int32_t v81;
@@ -17835,7 +17835,7 @@ static inline void __fwd_search_filter_transform_planes(void *a0, int32_t a1, ch
 
 uint32_t __search_filter(BmfImage *p_i, char a2)
 {
-  struct alignas(16) {   // 164 bytes, the frame Hex-Rays could not name
+  struct alignas(16) SearchFilterFrame {   // 164 bytes, one stack frame
       uint8_t slot0[4];
       uint8_t slot4[16];
       char *v178[2];
@@ -18730,7 +18730,7 @@ static inline void __fwd_compress_image_model_plane( void *a2, void *a3, void *a
 
 int32_t __compress_image(char *a1, BmfImage *p_i, void *coded_buf)
 {
-  struct alignas(16) {   // 80 bytes, the frame Hex-Rays could not name
+  struct alignas(16) CompressImageFrame {   // 80 bytes, one stack frame
       char *Buffera_4;
       uint8_t _pad0[12];
       uint8_t slot16[4];
