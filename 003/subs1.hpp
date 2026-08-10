@@ -2868,7 +2868,7 @@ int32_t __alt_p1_context(AltP1Block *_this, uint32_t *a2, uint32_t *a3)
   v31 = v17;
   v35 = p1_level_step[(uint32_t)v17];
   *(uint8_t **)&_this->f0[3] = v17;
-  *(uint8_t **)&_this->f0[4] = &(*((uint8_t **)_this + v16 + 438))[*((uint8_t *)_this + (uint32_t)v4 + 728)];
+  *(uint8_t **)&_this->f0[4] = &(*(uint8_t **)&_this->f1752[v16])[*((uint8_t *)_this + (uint32_t)v4 + 728)];
   *(uint8_t **)&_this->f12[5] = (uint8_t *)(((216 - (uint32_t)v4) >> 31) + ((22 - (uint32_t)v4) >> 31));
   v38 = ((216 - (uint32_t)v4) >> 31) + ((22 - (uint32_t)v4) >> 31);
   v18 = (*(v3 - 2) - *v3 >= 0) + (*(v3 - 2) > (int32_t)*v3);
@@ -2901,11 +2901,11 @@ int32_t __alt_p1_context(AltP1Block *_this, uint32_t *a2, uint32_t *a3)
   *(uint8_t **)&_this->f12[33] = (uint8_t *)(v28 + v27);
   v29 = !v20 + (!v20 && !v19);
   *(uint8_t **)&_this->f12[37] = (uint8_t *)v29;
-  result = (int32_t)&(*((uint8_t **)_this + v29 + 41))[16 * v37
+  result = (int32_t)&(*(uint8_t **)&_this->f12[v29 + 38])[16 * v37
                                     + 8 * (*((uint8_t **)_this + (uint32_t)*(uint8_t **)&_this->f0[5] + 6) == nullptr)
-                                    + (uint32_t)&(*((uint8_t **)_this + v41 + 33))[(uint32_t)*((uint8_t **)_this + v42 + 37)
-                                                                        + (uint32_t)&(*((uint8_t **)_this + v40 + 25))[(uint32_t)*((uint8_t **)_this + v24 + 29)]
-                                                                        + (uint32_t)&(*((uint8_t **)_this + v39 + 17))[(uint32_t)*((uint8_t **)_this + v23 + 21) + (uint32_t)&(*((uint8_t **)_this + v38 + 9))[(uint32_t)*((uint8_t **)_this + v18 + 13)]]]
+                                    + (uint32_t)&(*(uint8_t **)&_this->f12[v41 + 30])[(uint32_t)(*(uint8_t **)&_this->f12[v42 + 34])
+                                                                        + (uint32_t)&(*(uint8_t **)&_this->f12[v40 + 22])[(uint32_t)(*(uint8_t **)&_this->f12[v24 + 26])]
+                                                                        + (uint32_t)&(*(uint8_t **)&_this->f12[v39 + 14])[(uint32_t)(*(uint8_t **)&_this->f12[v23 + 18]) + (uint32_t)&(*(uint8_t **)&_this->f12[v38 + 6])[(uint32_t)(*(uint8_t **)&_this->f12[v18 + 10])]]]
                                     + (uint32_t)v31];
   *(uint8_t **)&_this->f0[3] = (uint8_t *)result;
   return result;
@@ -17380,7 +17380,7 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
     goto LABEL_76;
   desc_slow_mode = 1;               // -S
   v17 = p_i->depth;
-  HIBYTE((*(uint8_t **)&__frame.hdr[8])) |= 0x24;        // -S in bit 2, and bit 5 always set
+  HIBYTE(*(uint8_t **)&__frame.hdr[8]) |= 0x24;        // -S in bit 2, and bit 5 always set
   if ( (v17 & 0x3Fu) <= 4 )         // -F is on, so only the depth decides
   {
     coded_size = p_i->data_size + 0x20000;
@@ -17398,7 +17398,7 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
     goto LABEL_57;
   }
   __frame.ElementCount = __search_filter((BmfImage *)p_i, v13);
-  HIBYTE((*(uint8_t **)&__frame.hdr[8])) |= 0x10u;
+  HIBYTE(*(uint8_t **)&__frame.hdr[8]) |= 0x10u;
   if ( (p_i->flags & 2) != 0 )
   {
     n4_6 = p_i->stride;
@@ -17408,7 +17408,7 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
     (*(int32_t *)&__frame.hdr[4]) = n4_6;
     (*(uint8_t **)&__frame.hdr[8]) = Buffera_6;
     (*(int32_t *)&__frame.hdr[12]) = v18;
-    HIBYTE((*(uint8_t **)&__frame.hdr[8])) = 0x34 | HIBYTE(Buffera_6);   // -S in bit 2
+    HIBYTE(*(uint8_t **)&__frame.hdr[8]) = 0x34 | HIBYTE(Buffera_6);   // -S in bit 2
   }
   else
   {
@@ -17552,7 +17552,7 @@ LABEL_22:
   if ( __frame.ElementCount )
   {
     Size = p_i->width * p_i->height;
-    HIBYTE((*(uint8_t **)&__frame.hdr[8])) |= 8u;
+    HIBYTE(*(uint8_t **)&__frame.hdr[8]) |= 8u;
     Srca = (uint8_t *)bmf_new(Size);
     if ( ::plane_count > 0 )
     {

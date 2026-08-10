@@ -36,7 +36,10 @@ import merge                                                      # noqa: E402
 import structs                                                    # noqa: E402
 import unoffset                                                   # noqa: E402
 
-IDX = re.compile(r'(&?)\(\(\s*(\w+)\s*\*\)\s*(\w+)\)\[([^\]]*?)\+\s*(\d+)\]')
+IDX = re.compile(r'(&?)\(\(\s*(\w+ \*?)\s*\*\)\s*(\w+)\)\[([^\]]*?)\+\s*(\d+)\]')
+# `*((uint8_t **)p + k)` is a scaled read of a pointer-wide member; the access
+# type is `uint8_t *` and `merge.width` already gives 4 for anything starred.
+STAR = re.compile(r'\*\(\((\w+) \*\*\)(\w+) \+ (?:(\w+) \+ )?(\d+)\)')
 # `*(T *)((uint8_t *)p + 8 * k + 278944)`: a byte offset with a scaled variable
 # in it.  The constant places the member and the scale converts the variable
 # into that member's elements, which only works when the scale is a whole
@@ -126,11 +129,29 @@ def convert(lines, a, b, sig, tables):
         at = '%s->%s[%s]' % (base, f['name'], idx)
         return at if unoffset.norm(f['ty']) == acc else '(*(%s *)&%s)' % (acc, at)
 
+    def star(m):
+        """`*((T **)p + v + K)`: a scaled read of a pointer-wide member."""
+        nonlocal n
+        acc, base, var, k = m.groups()
+        if base not in ty:
+            return m.group(0)
+        acc += ' *'
+        got = place(tables, ty[base], acc, 4 * int(k))
+        if not got:
+            return m.group(0)
+        f, j, _ = got
+        if merge.width(f['ty']) != 4:
+            return m.group(0)
+        n += 1
+        idx = '%s + %d' % (var, j) if var and j else (var or str(j))
+        at = '%s->%s[%s]' % (base, f['name'], idx)
+        return at if unoffset.norm(f['ty']) == acc.strip() else '(*(%s *)&%s)' % (acc, at)
+
     def rep(m, kind):
         nonlocal n
         amp = m.group(1) if kind == 'idx' else ''
         g = m.groups()[1:] if kind == 'idx' else m.groups()
-        acc, base = g[0], g[1]
+        acc, base = g[0].strip(), g[1]
         k = int(g[3] if kind == 'idx' else g[2])
         if base not in ty:
             return m.group(0)
@@ -144,6 +165,9 @@ def convert(lines, a, b, sig, tables):
         n += 1
         same = unoffset.norm(f['ty']) == acc
         if kind == 'add':
+            if m.group(0).startswith('*('):        # STAR: a dereference
+                at = '%s->%s[%d]' % (base, f['name'], j)
+                return at if same else '(*(%s *)&%s)' % (acc, at)
             if same:
                 return '%s->%s' % (base, f['name']) if j == 0 \
                     else '%s->%s + %d' % (base, f['name'], j)
@@ -162,6 +186,7 @@ def convert(lines, a, b, sig, tables):
         s = IDX.sub(lambda m: rep(m, 'idx'), code)
         s = ADD.sub(lambda m: rep(m, 'add'), s)
         s = BYTE.sub(byte, s)
+        s = STAR.sub(star, s)
         if s != code:
             edits[i] = s + sep + com
     return edits, n
