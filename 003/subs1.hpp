@@ -469,9 +469,27 @@ struct AltP1Block {
   // by seven bits, and the fourth `int32_t` pair holds a level and a group.
   uint8_t f216[512];     // +216  .. +727
   uint8_t f728[256];     // +728  .. +983
-  uint8_t f984[256];     // +984  .. +1239
-  uint8_t f1240[256];    // +1240 .. +1495
-  uint8_t f1496[256];    // +1496 .. +1751
+  // A pair of inverse maps, the same pair in both blocks -- `alt_init_tables`
+  // is handed `(fold, unfold)` by each allocator.
+  //
+  // `unfold` is built as 0, -1, 1, -2, 2, ... : `unfold[0] = 0`,
+  // `unfold[4i + 1] = -(2i + 1)`, `unfold[4i + 2] = 2i + 1`, and the same one
+  // further out for the even pair, ending at `unfold[253] = -127`,
+  // `unfold[254] = 127`.  That is the zigzag that turns a signed residual into
+  // a non-negative symbol, and `fold` is the way back: the coders read
+  // `n = fold[residual]`, code `n`, and reconstruct with `unfold[n] +
+  // predictor`.  Neither table's name says more than that pairing.
+  //
+  // `fold_hi` is the 256 bytes after `fold`, and the two are filled by one
+  // call: a sentinel written over `fold_hi` immediately before
+  // `alt_init_tables` is gone immediately after, at both ends of the range and
+  // in both blocks.  So the write extent is 512 bytes and the split is the
+  // readers' -- some index `fold`, some `fold_hi`, none crosses.  What
+  // separates the two index spaces is not established, which is why this is
+  // two members and not `fold[512]`.
+  uint8_t fold[256];     // +984  .. +1239
+  uint8_t fold_hi[256];    // +1240 .. +1495
+  uint8_t unfold[256];   // +1496 .. +1751
   int32_t f1752[512];    // +1752 .. +3799
   // The counter table.  Hex-Rays read it as a `P1Count` grid anchored at the
   // object's base -- `_this->counters[k]` -- which is the right bytes
@@ -861,11 +879,12 @@ struct AltP2Block {
   // registers.  `n` is capped at 255 one line above each read, and 255 + 4 is
   // the last element.
   int32_t f278944[260];   // +278944 .. +279983
-  // Three 256-entry maps over a byte value, and `f280496` is indexed by what
-  // `f279984` returns.
-  uint8_t f279984[256];   // +279984 .. +280239
-  uint8_t f280240[256];   // +280240 .. +280495
-  int8_t f280496[256];   // +280496 .. +280751
+  // Three 256-entry maps over a byte value.  `fold` and `unfold` are the pair
+  // `AltP1Block` has, built by the same `alt_init_tables` call; what
+  // `fold_hi` between them holds has no writer in this binary.
+  uint8_t fold[256];   // +279984 .. +280239
+  uint8_t fold_hi[256];   // +280240 .. +280495
+  int8_t unfold[256];   // +280496 .. +280751
   // 120 = 960 / 8, and the reader caps at 960 before shifting: the guard is
   // the extent.  Hex-Rays' 16-byte view of this ran into the next table, whose
   // real base is +280872 -- which is why every read of that one said `+ 4`.
@@ -920,9 +939,9 @@ static_assert(sizeof(void *) != 4 || sizeof(AltP2Block) == 0x103E30,
 static_assert(sizeof(void *) != 4
               || (__builtin_offsetof(AltP2Block, f278904) == 278904
                   && __builtin_offsetof(AltP2Block, f278944) == 278944
-                  && __builtin_offsetof(AltP2Block, f279984) == 279984
-                  && __builtin_offsetof(AltP2Block, f280240) == 280240
-                  && __builtin_offsetof(AltP2Block, f280496) == 280496
+                  && __builtin_offsetof(AltP2Block, fold) == 279984
+                  && __builtin_offsetof(AltP2Block, fold_hi) == 280240
+                  && __builtin_offsetof(AltP2Block, unfold) == 280496
                   && __builtin_offsetof(AltP2Block, f280752) == 280752
                   && __builtin_offsetof(AltP2Block, f280872) == 280872
                   && __builtin_offsetof(AltP2Block, p2_ctr) == 284712
@@ -3082,14 +3101,14 @@ int32_t __alt_p1_model(AltP1Block *_this)
   CounterNode *v84;
   CounterNode *v81;
   uint32_t n5, v110, v112;
-  n5 = *((uint8_t)(*_this->cursor[0] - (uint8_t)_this->f8) + _this->f984);
+  n5 = *((uint8_t)(*_this->cursor[0] - (uint8_t)_this->f8) + _this->fold);
   v3 = _this->ctx_w[1].sel;
-  n5_1 = *((uint8_t)((uint8_t)_this->f8 - *_this->cursor[0]) + _this->f984);
+  n5_1 = *((uint8_t)((uint8_t)_this->f8 - *_this->cursor[0]) + _this->fold);
   v5 = _this->ctx_w[2].sel;
   n2 = (int32_t)(n5 - 5) >> 1;
   n5_2 = 6 - (n5 & 1);
   if ( n5 < 5 )
-    n5_2 = *((uint8_t)(*_this->cursor[0] - (uint8_t)_this->f8) + _this->f984);
+    n5_2 = *((uint8_t)(*_this->cursor[0] - (uint8_t)_this->f8) + _this->fold);
   n5_3 = 6 - (n5_1 & 1);
   if ( n5_1 < 5 )
     n5_3 = n5_1;
@@ -3798,7 +3817,7 @@ int32_t *__alt_p1_alloc(AltP1Block *_this, int32_t i, int32_t a3, int32_t n4)
   do
     *(int32_t *)&_this->buf[n5++] = (int32_t)bmf_new(2 * _this->f0 + 20);
   while ( n5 < 5 );
-  __alt_init_tables(_this->f984, (int8_t *)_this->f1496);
+  __alt_init_tables(_this->fold, (int8_t *)_this->unfold);
   v20 = _this->f0;
   if ( _this->f0 > -10 )
   {
@@ -4052,13 +4071,13 @@ void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
           __alt_p1_context((AltP1Block *)(uint8_t **)_this, (uint32_t *)nullptr, (uint32_t *)0);
           v33 = (uint8_t)_this->f8;
           v34 = (uint8_t)(*a2 - v33);
-          v35 = *(_this->f984[v34] + _this->f1496) + v33;
-          n5 = _this->f984[v34];
+          v35 = *(_this->fold[v34] + _this->unfold) + v33;
+          n5 = _this->fold[v34];
           n16 = (uint8_t)*v32 - (uint8_t)(v35 + *v32 - *a2);
           if ( n16 < -16 || n16 > 16 )
           {
             *v32 = *a2;
-            n5 = _this->f1240[v34];
+            n5 = _this->fold_hi[v34];
           }
           else
           {
@@ -4251,7 +4270,7 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
     v24 = v29 + v27;
   }
   _this->ctx = 15;
-  __alt_init_tables(_this->f279984, _this->f280496);
+  __alt_init_tables(_this->fold, _this->unfold);
   _this->ctx_w[4].w[0] = 0;
   _this->ctx_w[0].w[1] = 64;
   _this->ctx_w[3].w[0] = 0;
@@ -5962,7 +5981,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
           v53 = __alt_p1_decode_symbol((uint16_t *)&v51[4 * v51[3] + 950], v52, v51[4]);
           v54 = v51[2];
           v55 = (uint8_t *)v51[49];
-          v56 = (uint8_t)(v54 + ((const AltP1Block *)v51)->f1496[v53]);
+          v56 = (uint8_t)(v54 + ((const AltP1Block *)v51)->unfold[v53]);
           v103 = v56;
           *v55 = v56;
           *(uint8_t *)(v51[49] + 1) = abs32(v56 - v54);
@@ -5989,7 +6008,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
           v61 = __alt_p1_decode_symbol(&v59->counters[v59->f12[0]].total, v60, v59->f12[1]);
           v62 = *(uint32_t *)&v59->f8;
           v63 = v59->cursor[0];
-          v64 = (uint8_t)(v62 + v59->f1496[v61]);
+          v64 = (uint8_t)(v62 + v59->unfold[v61]);
           v104 = v64;
           *v63 = v64;
           v59->cursor[0][1] = abs32(v64 - v62);
@@ -6018,7 +6037,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
           v68 = __alt_p1_decode_symbol((uint16_t *)&((uint8_t**)v66)[4 * v66->f12[0] + 950], v67, (int32_t)v66->f12[1]);
           v69 = (uint8_t *)(v66->f8);
           v70 = v66->cursor[0];
-          v71 = (uint8_t)((uint8_t)(uintptr_t)v69 + v66->f1496[v68]);
+          v71 = (uint8_t)((uint8_t)(uintptr_t)v69 + v66->unfold[v68]);
           v105 = v71;
           *v70 = v71;
           v66->cursor[0][1] = abs32(v71 - (uint32_t)v69);
@@ -6056,7 +6075,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
             v75 = __alt_p1_decode_symbol((uint16_t *)&((uint8_t**)v73)[4 * v73->f12[0] + 950], v74, (int32_t)v73->f12[1]);
             v76 = (uint8_t *)(v73->f8);
             v77 = v73->cursor[0];
-            v78 = (uint8_t)((uint8_t)(uintptr_t)v76 + v73->f1496[v75]);
+            v78 = (uint8_t)((uint8_t)(uintptr_t)v76 + v73->unfold[v75]);
             v92 = v78;
             *v77 = v78;
             v73->cursor[0][1] = abs32(v78 - (uint32_t)v76);
@@ -11968,13 +11987,13 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
           n5_7 = n5_6;
           v53 = (uint8_t)v50->f8;
           v112 = (uint8_t)(n5_6 - v53);
-          n5_2 = v50->f984[v112];
-          n5_1 = (uint8_t)(v50->f1496[n5_2] + v53);
+          n5_2 = v50->fold[v112];
+          n5_1 = (uint8_t)(v50->unfold[n5_2] + v53);
           v56 = (uint8_t)(n5_1 + *(a2 + v114) - n5_6);
           n16 = *(a2 + v114) - v56;
           if ( n16 < -16 || n16 > 16 )
           {
-            n5_2 = v50->f1240[v112];
+            n5_2 = v50->fold_hi[v112];
           }
           else
           {
@@ -12010,15 +12029,15 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
           __alt_p1_context((AltP1Block *)v102, (uint32_t *)Block_plane[0], (uint32_t *)0);
           v62 = (uint8_t)v61->f8;
           v63 = (uint8_t)(v118 - v62);
-          n5 = v61->f984[v63];
+          n5 = v61->fold[v63];
           v64 = *(a2 + v113);
-          v65 = (uint8_t)(v61->f1496[n5] + v62);
+          v65 = (uint8_t)(v61->unfold[n5] + v62);
           v111 = (uint8_t)(v65 + *(a2 + v113) - v118);
           n16_1 = v64 - v111;
           n5_3 = n5;
           if ( n16_1 < -16 || n16_1 > 16 )
           {
-            n5_3 = v61->f1240[v63];
+            n5_3 = v61->fold_hi[v63];
           }
           else
           {
@@ -12057,13 +12076,13 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
           __alt_p1_context((AltP1Block *)v103, (uint32_t *)v102, (uint32_t *)(int32_t)Block_plane[0]);
           v71 = (uint8_t)v70->f8;
           v115 = (uint8_t)(v69 - v71);
-          n5_4 = v70->f984[v115];
-          v73 = (uint8_t)(v70->f1496[n5_4] + v71);
+          n5_4 = v70->fold[v115];
+          v73 = (uint8_t)(v70->unfold[n5_4] + v71);
           v74 = (uint8_t)(v73 + *(v117 + a2) - v69);
           n16_2 = *(v117 + a2) - v74;
           if ( n16_2 < -16 || n16_2 > 16 )
           {
-            n5_4 = v70->f1240[v115];
+            n5_4 = v70->fold_hi[v115];
           }
           else
           {
@@ -12106,15 +12125,15 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
             v99 = v79;
             __alt_p1_context((AltP1Block *)v104, (uint32_t *)v103, (uint32_t *)(int32_t)v102);
             v81 = (uint8_t)v80->f8;
-            n5_5 = v80->f984[(uint8_t)(v99 - v81)];
+            n5_5 = v80->fold[(uint8_t)(v99 - v81)];
             v98 = (uint8_t)(v99 - v81);
-            v83 = v80->f1496[n5_5];
+            v83 = v80->unfold[n5_5];
             v84 = (uint8_t)(v83 + v81);
             n16_3 = *(n3 + a2) - (uint8_t)(v84 + *(n3 + a2) - v99);
             v97 = v84 + *(n3 + a2) - v99;
             if ( n16_3 < -16 || n16_3 > 16 )
             {
-              n5_5 = v80->f1240[v98];
+              n5_5 = v80->fold_hi[v98];
             }
             else
             {
@@ -13156,9 +13175,9 @@ LABEL_37:
         if ( v385->freq[n0x10].c[0] <= 0x1Au )
           return n0x10;
         v397 = v385->ctx_w[1].sel;
-        v398 = 2 - (v385->f279984[(uint8_t)-a5] & 1);
-        if ( !v385->f279984[(uint8_t)-a5] )
-          v398 = v385->f279984[(uint8_t)-a5];
+        v398 = 2 - (v385->fold[(uint8_t)-a5] & 1);
+        if ( !v385->fold[(uint8_t)-a5] )
+          v398 = v385->fold[(uint8_t)-a5];
         v399 = v385->ctx_w[2].sel;
         v400 = v385->ctx_w[0].w[1] + (v385->ctx & 0x3F);
         v510 = v398;
@@ -14002,7 +14021,7 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
         {
           v92 = __alt_p2_context((AltP2Block *)lpAddress, (AltP2Block *)nullptr, (AltP2Block *)nullptr);
           v93 = __alt_p2_decode_symbol(&lpAddress->freq[lpAddress->ctx], lpAddress->ctx_pair);
-          v94 = (uint8_t)(v92 + (*(uint8_t *)&lpAddress->f280496[v93]));
+          v94 = (uint8_t)(v92 + (*(uint8_t *)&lpAddress->unfold[v93]));
           v97[j] = v94;
           __alt_p2_model(lpAddress, v94, v93, v94 - v92);
           a5 = &v97[j + 1];
@@ -14379,7 +14398,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v102 = &lpAddress_1->freq[lpAddress_1->ctx];
           v168 = v101;
           v103 = __alt_p2_decode_symbol(v102, lpAddress_1->ctx_pair);
-          v104 = (uint8_t)(v168 + (*(uint8_t *)&lpAddress_1->f280496[v103]));
+          v104 = (uint8_t)(v168 + (*(uint8_t *)&lpAddress_1->unfold[v103]));
           __alt_p2_model((AltP2Block *)lpAddress_1, v104, v103, v104 - v168);
           v105 = *(uint32_t *)&lpAddress_1->cursor[0];
           v106 = *(int16_t *)(v105 - 10);
@@ -14399,7 +14418,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           *(uint16_t *)(plane[1]->cursor[0] + 2) = v110;
           v112 = __alt_p2_context((AltP2Block *)v111, (AltP2Block *)plane[0], (AltP2Block *)plane[2]);
           v113 = __alt_p2_decode_symbol(&v111->freq[v111->ctx], v111->ctx_pair);
-          v114 = (uint8_t)(v112 + v111->f280496[v113]);
+          v114 = (uint8_t)(v112 + v111->unfold[v113]);
           v169 = v114;
           __alt_p2_model((AltP2Block *)v111, v114, v113, v114 - v112);
           v115 = *(int32_t *)&v111->cursor[0];
@@ -14421,7 +14440,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           *(uint16_t *)(plane[2]->cursor[0] + 2) = v119;
           v121 = __alt_p2_context((AltP2Block *)v120, (AltP2Block *)plane[0], (AltP2Block *)plane[1]);
           v122 = __alt_p2_decode_symbol(&v120->freq[v120->ctx], v120->ctx_pair);
-          v123 = (uint8_t)(v121 + v120->f280496[v122]);
+          v123 = (uint8_t)(v121 + v120->unfold[v122]);
           v170 = v123;
           __alt_p2_model((AltP2Block *)v120, v123, v122, v123 - v121);
           v124 = *(int32_t *)&v120->cursor[0];
@@ -14446,7 +14465,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
             *(uint16_t *)(plane[3]->cursor[0] + 2) = v128;
             v130 = __alt_p2_context((AltP2Block *)v129, (AltP2Block *)plane[2], (AltP2Block *)plane[0]);
             v131 = __alt_p2_decode_symbol(&v129->freq[v129->ctx], v129->ctx_pair);
-            v154 = (uint8_t)(v130 + v129->f280496[v131]);
+            v154 = (uint8_t)(v130 + v129->unfold[v131]);
             __alt_p2_model((AltP2Block *)v129, v154, v131, v154 - v130);
             v132 = *(int32_t *)&v129->cursor[0];
             v133 = *(int16_t *)(v132 - 4);
@@ -14583,13 +14602,13 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
     {
       v12 = *(uint16_t *)(v11 - 18) >> 4;
       v13 = (uint8_t)(*v103 - v12);
-      v104 = lpAddress->f279984[v13];
-      v14 = lpAddress->f280496[v104] + v12;
+      v104 = lpAddress->fold[v13];
+      v14 = lpAddress->unfold[v104] + v12;
       n16 = (uint8_t)*a7 - (uint8_t)(v14 + *a7 - *v103);
       if ( n16 < -16 || n16 > 16 )
       {
         *a7 = *v103;
-        v104 = lpAddress->f280240[v13];
+        v104 = lpAddress->fold_hi[v13];
       }
       else
       {
@@ -14763,13 +14782,13 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
           v95 = __alt_p2_context((AltP2Block *)lpAddress_1, (AltP2Block *)nullptr, (AltP2Block *)nullptr);
           v107 = v109[k];
           v96 = (uint8_t)(v107 - v95);
-          v97 = v95 + lpAddress_1->f280496[lpAddress_1->f279984[v96]];
+          v97 = v95 + lpAddress_1->unfold[lpAddress_1->fold[v96]];
           n16_1 = (uint8_t)v105[k] - (uint8_t)(v97 + v105[k] - v107);
-          v99 = lpAddress_1->f279984[v96];
+          v99 = lpAddress_1->fold[v96];
           if ( n16_1 < -16 || n16_1 > 16 )
           {
             v105[k] = v107;
-            v99 = lpAddress_1->f280240[(uint8_t)(v107 - v95)];
+            v99 = lpAddress_1->fold_hi[(uint8_t)(v107 - v95)];
           }
           else
           {
@@ -15131,14 +15150,14 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           v104 = v166[plane_desc[1].src_plane];
           v178 = __alt_p2_context((AltP2Block *)plane[0], (AltP2Block *)plane[2], (AltP2Block *)plane[1]);
           v181 = (uint8_t)(v104 - v178);
-          v105 = (uint8_t)lpAddress_1->f279984[v181];
+          v105 = (uint8_t)lpAddress_1->fold[v181];
           v106 = v166[v184];
-          v173 = (uint8_t)(v178 + (*(uint8_t *)&lpAddress_1->f280496[v105]));
+          v173 = (uint8_t)(v178 + (*(uint8_t *)&lpAddress_1->unfold[v105]));
           v107 = (uint8_t)(v173 + v106 - v104);
           n16 = v106 - v107;
           if ( n16 < -16 || n16 > 16 )
           {
-            v105 = (uint8_t)lpAddress_1->f280240[v181];
+            v105 = (uint8_t)lpAddress_1->fold_hi[v181];
           }
           else
           {
@@ -15165,14 +15184,14 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           v115 = v166[plane_desc[2].src_plane];
           v179 = __alt_p2_context((AltP2Block *)v114, (AltP2Block *)plane[0], (AltP2Block *)plane[2]);
           v183 = (uint8_t)(v115 - v179);
-          v116 = v114->f279984[v183];
+          v116 = v114->fold[v183];
           v117 = v166[v176];
-          v175 = (uint8_t)(v179 + v114->f280496[v116]);
+          v175 = (uint8_t)(v179 + v114->unfold[v116]);
           v118 = (uint8_t)(v175 + v117 - v115);
           n16_1 = v117 - v118;
           if ( n16_1 < -16 || n16_1 > 16 )
           {
-            v116 = v114->f280240[v183];
+            v116 = v114->fold_hi[v183];
           }
           else
           {
@@ -15200,14 +15219,14 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           v126 = v166[plane_desc[3].src_plane];
           v180 = __alt_p2_context((AltP2Block *)v125, (AltP2Block *)plane[0], (AltP2Block *)plane[1]);
           v182 = (uint8_t)(v126 - v180);
-          v127 = v125->f279984[v182];
+          v127 = v125->fold[v182];
           v128 = v166[v177];
-          v174 = (uint8_t)(v180 + v125->f280496[v127]);
+          v174 = (uint8_t)(v180 + v125->unfold[v127]);
           v129 = (uint8_t)(v174 + v128 - v126);
           n16_2 = v128 - v129;
           if ( n16_2 < -16 || n16_2 > 16 )
           {
-            v127 = v125->f280240[v182];
+            v127 = v125->fold_hi[v182];
           }
           else
           {
@@ -15240,17 +15259,17 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             v134 = v166[plane_desc[4].src_plane];
             v157 = __alt_p2_context((AltP2Block *)v133, (AltP2Block *)plane[2], (AltP2Block *)plane[0]);
             v158 = (uint8_t)(v134 - v157);
-            v135 = v133->f279984[v158];
+            v135 = v133->fold[v158];
             v136 = v166[n3];
-            v137 = (uint8_t)(v157 + v133->f280496[v135] + v136 - v134);
+            v137 = (uint8_t)(v157 + v133->unfold[v135] + v136 - v134);
             n16_3 = v136 - v137;
             if ( n16_3 < -16 || n16_3 > 16 )
             {
-              v135 = v133->f280240[v158];
+              v135 = v133->fold_hi[v158];
             }
             else
             {
-              v134 = (uint8_t)(v157 + v133->f280496[v135]);
+              v134 = (uint8_t)(v157 + v133->unfold[v135]);
               v166[n3] = v137;
             }
             __alt_p2_encode_symbol(&v133->freq[v133->ctx], v133->ctx_pair, v135);
