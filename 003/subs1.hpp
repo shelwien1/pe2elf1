@@ -6498,7 +6498,11 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   // All eight were `int16_t (*)[8]`, a sixteen-byte stride over eighteen-byte
   // records.  Every reach through them decodes onto a field boundary, which is
   // what says the stride was Hex-Rays' and not the table's.
-  P2Ctx *v50, *v53, *v110, *v160, *v173, *v194, *v204, *v243;
+  // `cursor[1]`, under one name where Hex-Rays had six.
+  // `cursor[3]`, under one name where Hex-Rays had four -- `sub0_row`
+  // is the third of them, and keeps only its first lifetime as
+  // `cursor[2]` above.
+  P2Ctx *v50;
   bool v26, v58;
   int8_t v142;
   float v70, v77, v79, v89, v94, v101, v244;
@@ -6683,20 +6687,18 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   v50 = (P2Ctx *)*(int32_t *)&v28->cursor[3];
   v28->p2_row[1][0] = (float)(v45[-1].lane[1] + v45->lane[1] - v49[-1].lane[1]);
   v51 = v50->lane[1];
-  sub0_row = v50;
   v28->p2_row[1][1] = (float)(-3 * (v49->lane[1] - v45->lane[1]) + v51);
   v28->p2_row[1][2] = (float)(v46[-1].lane[1] + v45[2].lane[1] - v45[1].lane[1]);
   v28->p2_row[1][3] = (float)(v46[-2].lane[1] + v45[1].lane[1] - v45[-1].lane[1]);
   v28->p2_row[2][0] = (float)(2 * v46[-1].lane[1] - v46[-2].lane[1]);
   v52 = (P2Ctx *)(sub1_nb);
   v28->p2_row[2][1] = (float)(v46[-3].lane[1] + v45->lane[1] - v45[-3].lane[1]);
-  v28->p2_row[2][2] = (float)(v52->lane[1] + v45[1].lane[1] - sub0_row[1].lane[1]);
+  v28->p2_row[2][2] = (float)(v52->lane[1] + v45[1].lane[1] - v50[1].lane[1]);
   v28->p2_row[2][3] = (float)v46[-3].lane[1];
   v28->p2_row[3][0] = (float)(v45[-2].lane[1] + v45->lane[1] - v52[-2].lane[1]);
   v28->p2_row[3][1] = (float)(v46[-2].lane[1] + v45[-1].lane[1] - v45[-3].lane[1]);
-  v53 = sub0_row;
   v28->p2_row[3][2] = (float)(v45[1].lane[1] + ((v45[2].lane[1] + v45->lane[1]) >> 1) - v52[2].lane[1]);
-  v28->p2_row[3][3] = (float)v53->lane[1];
+  v28->p2_row[3][3] = (float)v50->lane[1];
   if ( a4 )
   {
     v282 = ((int16_t *)(*(uint32_t *)&a4->cursor[0] - 18));
@@ -6837,16 +6839,15 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
     v28->p2_row[4][1] = (float)(v46[-4].lane[0] + v239 - v240);
     v241 = v52->lane[0] + 3 * v45[1].lane[0] - 4 * v52[1].lane[0];
     v242 = v45[2].lane[0] - v45->lane[0];
-    v243 = sub0_row;
-    v244 = (float)(v241 - (((v242 - (sub0_row[2].lane[0] - sub0_row->lane[0])) >> 1) - sub0_row[1].lane[0]));
+    v244 = (float)(v241 - (((v242 - (v50[2].lane[0] - v50->lane[0])) >> 1) - v50[1].lane[0]));
     v245 = sub1_nb;
     v28->p2_row[4][2] = v244;
     v255 = (P2Ctx *)v28->cursor[4];
-    v28->p2_row[4][3] = (float)(v245[-1].lane[0] + v274[1].lane[0] - v243->lane[0]);
-    v28->p2_row[5][0] = (float)(v243[1].lane[0] + v274->lane[0] - v255[1].lane[0]);
+    v28->p2_row[4][3] = (float)(v245[-1].lane[0] + v274[1].lane[0] - v50->lane[0]);
+    v28->p2_row[5][0] = (float)(v50[1].lane[0] + v274->lane[0] - v255[1].lane[0]);
     v28->p2_row[5][1] = (float)v274[3].lane[0];
     v28->p2_row[5][2] = (float)(v46[-3].lane[0] + v46[-1].lane[0] - v46[-4].lane[0]);
-    v28->p2_row[5][3] = (float)(v46[-1].lane[0] + v243->lane[0] - v243[-1].lane[0]);
+    v28->p2_row[5][3] = (float)(v46[-1].lane[0] + v50->lane[0] - v50[-1].lane[0]);
     v28->p2_row[6][0] = (float)(v46[-5].lane[0] + v274->lane[0] - v274[-5].lane[0]);
     v28->p2_row[6][1] = (float)v255->lane[0];
     v28->p2_row[6][2] = (float)(v46[-5].lane[0] + v46[-1].lane[0] - v46[-6].lane[0]);
@@ -6882,12 +6883,12 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
     n2 = 3;
   n3536_5 = __alt_p2_filter((float (*)[4])(void *)*(int32_t *)&v28->f278656, (float (*)[4])v28->p2_row, (CtxWeights *)__frame.sub, n2);
   v109 = (P2Ctx *)v28->cursor[0];
-  v110 = (P2Ctx *)v28->cursor[1];
+  v293 = (P2Ctx *)v28->cursor[1];
   *(int32_t *)&v28->f278700 = n3536_5;
-  v111 = v110->lane[3];
+  v111 = v293->lane[3];
   v292 = v109;
   v112 = v109[-1].lane[3];
-  v293 = v110;
+  v293 = v293;
   v269 = v112 + v111;
   if ( a4 )
     v269 += (v284[3] + v282[3]) >> 1;
@@ -7088,9 +7089,8 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   v158 = v295;
   v118->nb_sum[5] = v156;
   n2896 = v156 + n2576;
-  v160 = v293;
   v118->nb_sum[4] = n2896;
-  v161 = v160->lane[1];
+  v161 = v293->lane[1];
   v162 = v157[-2].lane[0];
   v250 = v157[0].lane[1];
   v263 = v161;
@@ -7126,18 +7126,17 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   // both masks read only the byte each copy wrote.
   v171 = p2_pred(v168, v166->p2_ctr[v167 + 98304].b0);
   v172 = v292;
-  v173 = v293;
   v166->nb_sum[7] = v171;
   n3536_2 = v171 + n2896;
   n3536 = n3536_2;
   v166->nb_sum[6] = n3536_2;
-  v175 = v173->lane[0];
+  v175 = v293->lane[0];
   v176 = v170->lane[0];
   v307 = v172[0].lane[1];
   v308 = v175;
   v177 = v172[-4].lane[1];
-  v178 = v173[1].lane[0];
-  v179 = v173[-1].lane[0];
+  v178 = v293[1].lane[0];
+  v179 = v293[-1].lane[0];
   v309 = v177;
   v310 = v178;
   v311 = v179;
@@ -7190,7 +7189,6 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
        + v187[71]
        + v192
        + *(v187 - 37);
-  v194 = v293;
   n1840_14 = n1840;
   n960_1 = v293[5].mag
          + v293[4].mag
@@ -7215,7 +7213,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   v196 = (AltP2Block *)(v289);
   n1840_15 = v289->band_lo;
   v289->ctx_w[0].sel = (n1840 < 1840) + (n1840 < 272);
-  v198 = v194->lane[0];
+  v198 = v293->lane[0];
   n1840_16 = v196->band_hi;
   n1840_1 = n1840_15;
   n1840_2 = n1840_16;
@@ -7225,17 +7223,16 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   n1840_17 = n1840_14 - v201[-1].lane[0];
   v203 = n1840_17 < n1840_1;
   v26 = n1840_17 <= n1840_16;
-  v204 = v293;
   v205 = v295;
   v196->ctx_w[2].sel = v26 + v203;
-  v196->ctx_w[3].sel = v204->sign;
+  v196->ctx_w[3].sel = v293->sign;
   // The previous record's stored sign digit, straight into the fifth
   // group's selector.  Hex-Rays read it as `(uint8_t)lane[8]` -- one past
   // the eight lanes, whose low byte is `sign`.
   v196->ctx_w[4].sel = v201[-1].sign;
   v206 = v201[-2].mag;
   v207 = v201[-1].mag;
-  v208 = v205[0].mag + v204->mag;
+  v208 = v205[0].mag + v293->mag;
   n960 = n960_1;
   v302 = v208;
   n3536_4 = n3536;
