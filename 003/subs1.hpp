@@ -632,6 +632,26 @@ struct BitCtr {
 static_assert(sizeof(BitCtr) == 6, "BitCtr: two counts and a rescale limit");
 static_assert(__builtin_offsetof(BitCtr, limit) == 4, "BitCtr: the limit is last");
 
+
+// The pixel model's per-pixel record, and the unit every pointer in
+// `ModelBlock::f56` steps.
+//
+// `code_pixel` writes the symbol at +0 and then six comparisons of it against
+// six neighbours' symbols at +2..+7 -- the match state `ALGORITHM.md` §8.2
+// describes.  All six have readers now that the row pointers count records.
+// `match[0]` -- "same as the pixel above" -- is what `grad[0]`, `grad[1]` and
+// `grad[3]` slide an eight-record window over, off `f56[6]`, `f56[7]` and the
+// current row.  `match[1]` -- "same as the pixel to the left" -- is `grad[2]`'s
+// four-record window, and it is also what both coders scan record by record to
+// find how far a run of one colour reaches.  `match[2..5]`, the up-left,
+// up-right and two-away comparisons, are read one record and two records back
+// and weighted 2, 4, 8, 16 and 32 into the context indices the coders build.
+struct PixRec {
+  uint16_t sym;        // +0
+  uint8_t  match[6];   // +2 .. +7
+};
+static_assert(sizeof(PixRec) == 8, "PixRec: the record is eight bytes");
+
 struct ModelBlock {
   uint32_t f0;
   int32_t f4;
@@ -647,7 +667,16 @@ struct ModelBlock {
   uint32_t sym_pos;   // 0..31; the index pixel_context reads sym[] with
   uint32_t f48;
   uint32_t f52;
-  uint8_t  *f56[10];   // +56 .. +95, the row cursors: every element is an address
+  // Ten pointers into the plane's five row buffers.  `f56[0..4]` are the
+  // buffers, rotated one step per row -- what was the current row becomes
+  // the row above -- and `f56[5..9]` are the cursors the coders walk: the
+  // current row and the four above it.  Each buffer opens with an eight-
+  // record left margin -- `layout_workspace` sets `f56[j + 5] = f56[j] + 8`
+  // -- which is why the rotation sets every cursor to `buffer + 7` and then
+  // steps it once more before the row starts.  Nothing reaches
+  // through these as bytes: every offset that looked raw -- 56, `8 * k`,
+  // -16, 27, 19, 11, 3, -5, -21, -29 -- is a record and a field in it.
+  PixRec   *f56[10];   // +56 .. +95
   // One grid of sixteen-byte records, and two walkers over it.  Records 0..188
   // are the context buckets `model_plane` and `unmodel_plane_slow` fill -- five
   // counts, their total, a scaled weight, and two bytes -- and records 188 and
@@ -1043,20 +1072,6 @@ static_assert(sizeof(void *) != 4
               || __builtin_offsetof(CtxWeights, f0[5]) == 20,
               "CtxWeights: the layout moved");
 
-
-// The pixel model's per-pixel record.  Eight bytes, which is what every cursor
-// in `ModelBlock::f56` steps: `f56[5] += 8`, `f56[8] += 8`, `f56[6] += 8 * n`,
-// and `f56[7] = v49 + 56` is seven of them.
-//
-// `code_pixel` writes the symbol at +0 and then six comparisons of it against
-// six neighbours' symbols at +2..+7 -- the match state `ALGORITHM.md` §8.2
-// describes -- and its five-tap predictor sums `match[0]` of records -3, -2,
-// +2, +3 and +4.  What the other five flags feed is not established.
-struct PixRec {
-  uint16_t sym;        // +0
-  uint8_t  match[6];   // +2 .. +7
-};
-static_assert(sizeof(PixRec) == 8, "PixRec: the record is eight bytes");
 
 
 struct RangeCoder {
@@ -2671,7 +2686,7 @@ int32_t __init_model_tables(ModelBlock *_this)
   uint8_t *buf;   // `uint8_t *` beside the `char` scalars above
   uint16_t v6, v12;
   SymList **v3;
-  uint8_t *v30;
+  PixRec *v30;   // the current row, one record past the pixel just written
   int32_t n2_1, v7, v9, v10, v15, v17, n2, v19, v21, v22, v23, v24, v25, v26, v27,
           result;
   uint16_t *v20;
@@ -2684,22 +2699,22 @@ int32_t __init_model_tables(ModelBlock *_this)
     {
       if ( _this->sel[0] )
       {
-        __symbol_list_update(&_this->sel0_list[mode_symbol[1]], **(uint16_t **)&_this->f56[5], 3u);
-        __symbol_list_update(&_this->sel0_list[**(uint16_t **)&_this->f56[5]], mode_symbol[2], 2u);
-        __symbol_list_update(&_this->sel1_list[mode_symbol[1]], **(uint16_t **)&_this->f56[5], 4u);
-        __symbol_list_update(&_this->sel1_list[**(uint16_t **)&_this->f56[5]], mode_symbol[1], 2u);
+        __symbol_list_update(&_this->sel0_list[mode_symbol[1]], _this->f56[5]->sym, 3u);
+        __symbol_list_update(&_this->sel0_list[_this->f56[5]->sym], mode_symbol[2], 2u);
+        __symbol_list_update(&_this->sel1_list[mode_symbol[1]], _this->f56[5]->sym, 4u);
+        __symbol_list_update(&_this->sel1_list[_this->f56[5]->sym], mode_symbol[1], 2u);
       }
       else
       {
-        __symbol_list_update(&_this->sel0_list[mode_symbol[2]], **(uint16_t **)&_this->f56[5], (_this->sym_pos > 3) + 2);
+        __symbol_list_update(&_this->sel0_list[mode_symbol[2]], _this->f56[5]->sym, (_this->sym_pos > 3) + 2);
       }
     }
     else
     {
-      __symbol_list_update(&_this->sel0_list[mode_symbol[1]], **(uint16_t **)&_this->f56[5], 3u);
-      __symbol_list_update(&_this->sel0_list[**(uint16_t **)&_this->f56[5]], mode_symbol[2], 2u);
-      __symbol_list_update(&_this->sel0_list[**(uint16_t **)&_this->f56[5]], mode_symbol[1], 1u);
-      __symbol_list_update(&_this->sel1_list[**(uint16_t **)&_this->f56[5]], mode_symbol[1], 2u);
+      __symbol_list_update(&_this->sel0_list[mode_symbol[1]], _this->f56[5]->sym, 3u);
+      __symbol_list_update(&_this->sel0_list[_this->f56[5]->sym], mode_symbol[2], 2u);
+      __symbol_list_update(&_this->sel0_list[_this->f56[5]->sym], mode_symbol[1], 1u);
+      __symbol_list_update(&_this->sel1_list[_this->f56[5]->sym], mode_symbol[1], 2u);
       v3 = _this->sel_cur;
       do
       {
@@ -2709,7 +2724,7 @@ int32_t __init_model_tables(ModelBlock *_this)
         // `live`, evicting the last entry when the list is full, then swap it
         // one place forward.
         v5 = *v4;
-        v6 = **(uint16_t **)&_this->f56[5];
+        v6 = _this->f56[5]->sym;
         v7 = v5->live;
         v32 = v5->ent;
         if ( v7 == (int32_t)v5->n )
@@ -2772,12 +2787,12 @@ LABEL_19:
     goto LABEL_37;
   if ( mode_symbol[3] != mode_symbol[4] )
   {
-    __symbol_list_update(&_this->sel0_list[mode_symbol[2]], **(uint16_t **)&_this->f56[5], 1u);
+    __symbol_list_update(&_this->sel0_list[mode_symbol[2]], _this->f56[5]->sym, 1u);
     n2 = _this->f32;
     goto LABEL_19;
   }
 LABEL_21:
-  v19 = **(uint16_t **)&_this->f56[5];
+  v19 = _this->f56[5]->sym;
   v20 = _this->sym_cache;
   v21 = v20[0];
   if ( v19 != v21 )
@@ -2854,11 +2869,11 @@ LABEL_37:
   // `*(uint16_t *)(pix_cur + 2) = *(uint16_t *)pix_cur` at 11752 is this
   // line -- so the field is a byte cursor and these two were the odd ones.
   _this->pix_cur[1] = _this->pix_cur[0];
-  _this->pix_cur[0] = **(uint16_t **)&_this->f56[5];
+  _this->pix_cur[0] = _this->f56[5]->sym;
   // Six neighbours, compared against the symbol just written.
   {
-    PixRec *const here = (PixRec *)_this->f56[5];
-    PixRec *const up   = (PixRec *)_this->f56[6];
+    PixRec *const here = _this->f56[5];
+    PixRec *const up   = _this->f56[6];
     here->match[0] = here->sym == up->sym;
     here->match[1] = here->sym == here[-1].sym;
     here->match[2] = here->sym == up[1].sym;
@@ -2866,20 +2881,20 @@ LABEL_37:
     here->match[4] = here->sym == up[2].sym;
     here->match[5] = here->sym == up[3].sym;
   }
-  v28 = (PixRec *)_this->f56[6];
-  v29 = (PixRec *)_this->f56[7];
-  v30 = _this->f56[5] + 8;
+  v28 = _this->f56[6];
+  v29 = _this->f56[7];
+  v30 = _this->f56[5] + 1;
   _this->f56[5] = v30;
-  _this->f56[8] += 8;
+  ++_this->f56[8];
   ++v28;
-  _this->f56[6] = (uint8_t *)v28;
+  _this->f56[6] = v28;
   ++v29;
-  _this->f56[9] += 8;
-  _this->f56[7] = (uint8_t *)v29;
+  ++_this->f56[9];
+  _this->f56[7] = v29;
   _this->grad[0] += v28[4].match[0] - v28[-4].match[0];
   _this->grad[1] += v29[4].match[0] - v29[-4].match[0];
-  _this->grad[2] += *(v30 - 5) - *(v30 - 37);
-  result = *(v30 - 6) - *(v30 - 62);
+  _this->grad[2] += v30[-1].match[1] - v30[-5].match[1];
+  result = v30[-1].match[0] - v30[-8].match[0];
   _this->grad[3] += result;
   return result;
 }
@@ -9449,20 +9464,21 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   ;
   FreqRec *v80;
   uint16_t *v36;
-  uint8_t *v21, *v23, *v57;   // row cursors out of ModelBlock
-  uint8_t *v46, *n15_17;
+  PixRec *v21, *v23, *v57;   // row cursors out of ModelBlock
+  uint8_t *v46;
+  PixRec *n15_17;   // `f56[6]`, the row above
   uint16_t *v66;   // a copy of `pix_cur`
-  uint8_t *v53, *v54, *v55, *v61, *v108, *n15_10;   // row cursors out of ModelBlock
+  PixRec *v53, *v54, *v55, *v61, *v108, *n15_10;   // row cursors out of ModelBlock
   bool v19;
   int8_t v74, v91;
   uint8_t v70, v71, v72, v73, v75;
   uint8_t *v157;   // `uint8_t *` beside the `char` scalars above
   int16_t v14, n4_14, v146, v160, n15_4;
   ModelBlock *this_4;
-  uint8_t *v25, *v56;   // row cursors out of f56[9]; were int32_t
+  PixRec *v25, *v56;   // row cursors out of f56[9]; were int32_t
   int32_t arg_cum, arg_high, arg_tot, n4_8, n4_7, n15_6, n15_7, v8, v9, v10,
           v12, v13, v15, n4_9, __decode_pixel_n15, v22, n4_11, v26, v27, v29,
-          v31, n0xFFFF, v33, n0xFFFF_1, n53248, n4_12, v40, n15_11, n8,
+          v31, n0xFFFF, v33, n0xFFFF_1, n53248, n4_12, v40, n15_11, run,
           n15_12, v44, n4_22, n15_14, n15_18, v49, v50, v51, n4_13, *v59, v60,
           n15_13, v67, n15_15, n4_17, v83, v84, v85, n4, n256_2, n15_1,
           n256_1, n15_23, n4_19, n4_20, n4_5, n4_6, n15_5, v102, v103, v104,
@@ -9474,7 +9490,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   FreqRec *v170;
   FreqRec *v100;
   FreqRec *v171;
-  uint64_t *v4;
+  PixRec *v4;      // `f56[5]`, the current row
   FreqRec *v90;
   uint16_t *v97;
   // `f56[6]`, the row above: every reach through it is a multiple of
@@ -9484,7 +9500,8 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   CtrPair *v16;   // the group's counter pair for this context
   PixRec *n15_9;   // `f56[6]`, the row above
   uint16_t n4_10;   // a symbol, compared against four others
-  uint16_t *v58, *v95, *v110, *v121, v154, v162,
+  PixRec *v110, *v121;   // `f56[7]` and `f56[8]`
+  uint16_t *v58, *v95, v154, v162,
            v174;
   ModelBlock *this_3;
   ModelBlock *this_2;
@@ -9492,14 +9509,14 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   SymList **v134;
   uint32_t bin_tot, n4_16, n4_15, v136, v137, v138, v139, v140, v172, v173, v175, v176,
            v177;
-  uint8_t *v39;
-  uint8_t *v38;
+  PixRec *v39;     // `f56[7]`, two rows above
+  PixRec *v38;     // `f56[6]`, the row above
   PixRec *v76;      // `f56[7]`, two rows above
   PixRec *n15_16;   // `f56[6]`, the row above
   n15_9 = (PixRec *)_this->f56[6];
   n4_8 = n15_9->sym;
-  v4 = (uint64_t *)((uint16_t *)*(uint32_t *)&_this->f56[5]);
-  n4_7 = *((uint16_t *)v4 - 4);
+  v4 = _this->f56[5];
+  n4_7 = v4[-1].sym;
   n15_6 = n15_9[1].sym;
   __frame.sym5 = (ModelBlock *)(_this);
   n15_7 = n15_9[-1].sym;
@@ -9513,16 +9530,16 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   v9 = n15_9[1].match[1];
   __frame.sym2 = n15_7;
   mode_symbol[4] = n15_7;
-  v10 = 2 * *((uint8_t *)v4 - 6) + 8 * v9 + v8;
+  v10 = 2 * v4[-1].match[0] + 8 * v9 + v8;
   this_2 = (ModelBlock *)(__frame.sym5);
-  v12 = 32 * *((uint8_t *)v4 - 4) + 16 * *((uint8_t *)v4 - 2) + v10;
+  v12 = 32 * v4[-1].match[2] + 16 * v4[-1].match[4] + v10;
   if ( n4_8 == n4_7 )
   {
     if ( __frame.sym3 == __frame.sym0 )
     {
       v14 = *((uint16_t *)__frame.sym5 + n4_8 + 3029720);
       if ( n4_8 == __frame.sym2 )
-        v13 = (uint16_t)(v14 - *((uint16_t *)v4 - 8));
+        v13 = (uint16_t)(v14 - v4[-2].sym);
       else
         v13 = (uint16_t)(v14 - __frame.sym2);
     }
@@ -9587,18 +9604,18 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   __frame.sym5 = (ModelBlock *)(this_2);
   __frame.sym2 = n4_11;
   v25 = this_2->f56[9];
-  v26 = *((uint8_t *)v4 - 5);
+  v26 = v4[-1].match[1];
   // `v186` is one stack slot with two roles: a row cursor here, and the
   // `uint16_t` value out of `v97[4]` at 11290.  Splitting it needs the frame
   // to dissolve first, so the cast records the double booking (§4.2).
   __frame.sym6 = (int32_t)v25;
-  v27 = 8 * *((uint8_t *)v4 - 12) + 4 * *((uint8_t *)v4 - 9) + v26 + 2 * *((uint8_t *)v4 - 10);
+  v27 = 8 * v4[-2].match[2] + 4 * v4[-2].match[5] + v26 + 2 * v4[-2].match[4];
   this_3 = (ModelBlock *)(__frame.sym5);
-  v29 = ((uint8_t)(*(uint8_t *)(__frame.sym6 + 2) & *(v21 + 2) & __frame.sym2 & *(v23 + 2)) << 9)
-      + ((uint8_t)(*(uint8_t *)(__frame.sym6 + 3) & *(v21 + 3) & *(v23 + 3) & n15_9->match[1]) << 8)
+  v29 = ((uint8_t)(((PixRec *)__frame.sym6)->match[0] & v21->match[0] & __frame.sym2 & v23->match[0]) << 9)
+      + ((uint8_t)(((PixRec *)__frame.sym6)->match[1] & v21->match[1] & v23->match[1] & n15_9->match[1]) << 8)
       + (v22 << 10)
       + v27;
-  n15_10 = (uint8_t *)__frame.sym3;
+  n15_10 = (PixRec *)__frame.sym3;
   v31 = ((__frame.sym5->grad[3] == 0) << 7)
       + ((__frame.sym5->grad[2] == 0) << 6)
       + 32 * (__frame.sym5->grad[1] == 0)
@@ -9609,12 +9626,12 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   {
     __frame.sym5->f6075824[v31] = __frame.sym5->f20;
     n15_10 = this_3->f56[6];
-    v4 = (uint64_t *)((uint16_t *)this_3->f56[5]);
+    v4 = this_3->f56[5];
     ++this_3->f20;
     n0xFFFF = this_3->f6075824[v31];
-    __frame.sym2 = *(n15_10 + 2);
+    __frame.sym2 = n15_10->match[0];
   }
-  v33 = *((uint8_t *)v4 - 1) + 4 * *(n15_10 + 13) + 2 * __frame.sym2 + 8 * n0xFFFF;
+  v33 = v4[-1].match[5] + 4 * n15_10[1].match[3] + 2 * __frame.sym2 + 8 * n0xFFFF;
   n0xFFFF_1 = this_3->f6460848[v33];
   if ( n0xFFFF_1 == 0xFFFF )
   {
@@ -9642,18 +9659,21 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
       n0xFFFF_1 = *v36;
     }
   }
-  if ( (*(this_3->f56[5] - 5) & *(this_3->f56[5] - 6)) != 0 )
+  if ( (this_3->f56[5][-1].match[1] & this_3->f56[5][-1].match[0]) != 0 )
   {
-    v38 = (uint8_t *)((uint8_t *)this_3->f56[6]);
-    v39 = (uint8_t *)((uint8_t *)this_3->f56[7]);
-    if ( ((uint8_t)(v39[19] & v39[11] & v39[3] & v38[27] & v38[19] & v38[11] & v38[3] & v38[2] & *((int8_t *)v38 - 5))
-        & v39[27]) != 0 )
+    v38 = this_3->f56[6];
+    v39 = this_3->f56[7];
+    // Nine "matches the pixel to the left" flags and one "matches the pixel
+    // above": the run about to be coded is the same colour all the way back.
+    if ( ((uint8_t)(v39[2].match[1] & v39[1].match[1] & v39[0].match[1] & v38[3].match[1] & v38[2].match[1]
+                  & v38[1].match[1] & v38[0].match[1] & v38[0].match[0] & (int8_t)v38[-1].match[1])
+        & v39[3].match[1]) != 0 )
     {
-      v40 = v39[2];
+      v40 = v39[0].match[0];
       n15_11 = 1;
       if ( this_3->f0 - a2 <= 1 )
       {
-        n8 = 8;
+        run = 1;
       }
       else
       {
@@ -9661,14 +9681,14 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
         __frame.sym5 = (ModelBlock *)(this_3);
         while ( 1 )
         {
-          n8 = 8 * n15_11;
-          if ( ((v38)[8 * n15_11 + 19] & (v38)[8 * n15_11 + 18]) == 0 )
+          run = n15_11;
+          if ( (v38[n15_11 + 2].match[1] & v38[n15_11 + 2].match[0]) == 0 )
             break;
-          v40 = (uint8_t)((v39)[n8 + 2] & v40);
+          v40 = (uint8_t)(v39[run].match[0] & v40);
           if ( ++n15_11 >= __frame.sym1 )
           {
             this_3 = (ModelBlock *)(__frame.sym5);
-            n8 = 8 * n15_11;
+            run = n15_11;
             goto LABEL_42;
           }
         }
@@ -9681,7 +9701,7 @@ LABEL_42:
       // `f1076352`, and every term above it is a multiple of three words.
       v44 = __decode_context_bit(
             &this_3->f1076352[(8 * n15_12
-                                   + 4 * (uint8_t)((v39)[n8 + 27] & (v39)[n8 + 19])
+                                   + 4 * (uint8_t)(v39[run + 3].match[1] & v39[run + 2].match[1])
                                    + 2 * v40
                                    + *(this_3->alpha_map + __frame.sym0)
                                    + 1)],
@@ -9731,33 +9751,33 @@ LABEL_42:
         this_3 = (ModelBlock *)(__frame.sym5);
       }
       if ( n15_18 )
-        *(uint16_t *)(this_3->f56[5] + 8 * n15_18 - 8) = *(uint16_t *)(this_3->f56[5] - 8);
+        this_3->f56[5][n15_18 - 1].sym = this_3->f56[5][-1].sym;
       n15_14 = this_3->f32;
 LABEL_57:
       if ( n15_18 > n15_14 )
       {
         v53 = this_3->f56[7];
-        this_3->f56[6] = this_3->f56[6] + 8 * n15_18 - 8 * n15_14;
+        this_3->f56[6] = this_3->f56[6] + n15_18 - n15_14;
         v54 = this_3->f56[8];
-        v55 = v53 + 8 * n15_18;
+        v55 = v53 + n15_18;
         v56 = this_3->f56[9];
-        this_3->f56[7] = v55 - 8 * n15_14;
-        this_3->f56[8] = v54 + 8 * n15_18 - 8 * n15_14;
+        this_3->f56[7] = v55 - n15_14;
+        this_3->f56[8] = v54 + n15_18 - n15_14;
         v57 = this_3->f56[5];
-        this_3->f56[9] = v56 + 8 * n15_18 - 8 * n15_14;
-        *(uint32_t *)(v57 + 4) = 0x01010101;
+        this_3->f56[9] = v56 + n15_18 - n15_14;
+        *(uint32_t *)&v57->match[2] = 0x01010101;
         *(uint32_t *)this_3->f56[5] = 0x01010101;
         v58 = (uint16_t *)this_3->pix_cur;
         LOWORD(v55) = ::mode_symbol[1];
         LOWORD(v54) = *v58;
         __frame.sym1 = ::mode_symbol[1];
         v58[1] = (uint16_t)(uintptr_t)v54;
-        *(uint16_t *)this_3->f56[5] = (uint16_t)(uintptr_t)v55;
+        this_3->f56[5]->sym = (uint16_t)(uintptr_t)v55;
         this_3->pix_cur[0] = (uint16_t)(uintptr_t)v55;
         v59 = (int32_t *)this_3->f56[5];
         v60 = v59[1];
         __frame.sym3 = *v59;
-        v61 = (uint8_t *)(int32_t)(v59 + 2);
+        v61 = (PixRec *)(v59 + 2);
         this_3->f56[5] = v61;
         if ( n15_18 - n15_14 != 1 )
         {
@@ -9774,13 +9794,13 @@ LABEL_57:
             {
               this_3->pix_cur[1] = n4_14;
               *(uint32_t *)this_3->f56[5] = n15_13;
-              *(uint32_t *)(this_3->f56[5] + 4) = v60;
+              *(uint32_t *)&this_3->f56[5]->match[2] = v60;
               v66 = this_3->pix_cur;
-              this_3->f56[5] += 8;
+              ++this_3->f56[5];
               v66[1] = n4_14;
               *(uint32_t *)this_3->f56[5] = n15_13;
-              *(uint32_t *)(this_3->f56[5] + 4) = v60;
-              v61 = this_3->f56[5] + 8;
+              *(uint32_t *)&this_3->f56[5]->match[2] = v60;
+              v61 = this_3->f56[5] + 1;
               this_3->f56[5] = v61;
               ++n4_16;
             }
@@ -9798,8 +9818,8 @@ LABEL_57:
             n15_15 = __frame.sym3;
             this_3->pix_cur[1] = __frame.sym1;
             *(uint32_t *)this_3->f56[5] = n15_15;
-            *(uint32_t *)(this_3->f56[5] + 4) = v60;
-            v61 = this_3->f56[5] + 8;
+            *(uint32_t *)&this_3->f56[5]->match[2] = v60;
+            v61 = this_3->f56[5] + 1;
             this_3->f56[5] = v61;
           }
         }
@@ -9829,17 +9849,17 @@ LABEL_57:
                                      + (int8_t)v76[-3].match[0]
                                      + v76[4].match[0]
                                      - 8;
-        n15_17 = (uint8_t *)__frame.sym0;
-        this_3->grad[2] = *(v61 - 29) + *(v61 - 21) - 2;
+        n15_17 = (PixRec *)__frame.sym0;
+        this_3->grad[2] = v61[-4].match[1] + v61[-3].match[1] - 2;
         n4_17 = __frame.sym1;
-        this_3->grad[3] = *(v61 - 38)
-                                     + *(v61 - 46)
-                                     + *(v61 - 54)
-                                     + *(v61 - 30)
+        this_3->grad[3] = v61[-5].match[0]
+                                     + v61[-6].match[0]
+                                     + v61[-7].match[0]
+                                     + v61[-4].match[0]
                                      - 4;
-        *(v61 - 2) = n4_17 == *(uint16_t *)(n15_17 + 8);
+        v61[-1].match[4] = n4_17 == n15_17[1].sym;
         n15_18 = n15_24;
-        *(this_3->f56[5] - 1) = n4_17 == *(uint16_t *)(this_3->f56[6] + 16);
+        this_3->f56[5][-1].match[5] = n4_17 == this_3->f56[6][2].sym;
         n15_14 = this_3->f32;
       }
       if ( n15_14 )
@@ -10084,7 +10104,7 @@ LABEL_57:
   }
   if ( n4 )
   {
-    *(uint16_t *)this_3->f56[5] = mode_symbol[n4];
+    this_3->f56[5]->sym = mode_symbol[n4];
     return 1;
   }
   n15_18 = 0;
@@ -10123,45 +10143,45 @@ LABEL_86:
   __frame.sym7 = v103;
   v108 = this_3->f56[5];
   __frame.sym8 = v104;
-  v109 = *(uint16_t *)(v108 - 16);
+  v109 = v108[-2].sym;
   __frame.sym9 = v105;
   __frame.sym10 = v109;
-  v110 = (uint16_t *)this_3->f56[7];
-  v111 = v110[4];
+  v110 = this_3->f56[7];
+  v111 = v110[1].sym;
   __frame.sym11 = v107;
-  v112 = *v110;
+  v112 = v110->sym;
   __frame.sym12 = v111;
   v113 = v106[-2].sym;
   __frame.sym13 = v112;
-  v114 = *(v110 - 4);
+  v114 = v110[-1].sym;
   __frame.sym14 = v113;
-  v115 = *(uint16_t *)(v108 - 24);
+  v115 = v108[-3].sym;
   __frame.sym15 = v114;
   v116 = v106[3].sym;
   __frame.sym16 = v115;
   v117 = v106[4].sym;
   __frame.sym17 = v116;
-  v118 = *(uint16_t *)(v108 - 32);
+  v118 = v108[-4].sym;
   __frame.sym18 = v117;
   v119 = v106[-3].sym;
   __frame.sym19 = v118;
-  v120 = v110[8];
+  v120 = v110[2].sym;
   __frame.sym20 = v119;
   __frame.sym21 = v120;
-  v121 = (uint16_t *)this_3->f56[8];
-  __frame.sym22 = *v121;
-  __frame.sym23 = *(v110 - 8);
-  v122 = *(uint16_t *)(v108 - 40);
-  v123 = *(uint16_t *)(v108 - 56);
+  v121 = this_3->f56[8];
+  __frame.sym22 = v121->sym;
+  __frame.sym23 = v110[-2].sym;
+  v122 = v108[-5].sym;
+  v123 = v108[-7].sym;
   __frame.sym24 = v122;
-  __frame.sym25 = v121[4];
+  __frame.sym25 = v121[1].sym;
   v124 = v106[5].sym;
   v125 = v106[7].sym;
   __frame.sym26 = v124;
-  __frame.sym27 = *(uint16_t *)this_3->f56[9];
+  __frame.sym27 = this_3->f56[9]->sym;
   __frame.sym28 = v123;
-  __frame.sym29 = *(v121 - 4);
-  v126 = v110[12];
+  __frame.sym29 = v121[-1].sym;
+  v126 = v110[3].sym;
   this_3->sym_pos = 0;
   __frame.sym30 = v125;
   __frame.sym31 = v126;
@@ -10171,7 +10191,7 @@ LABEL_86:
     if ( v127 >= 0 )
     {
       v128 = __decode_context_bit(&this_3->f1051776[this_3->f52], &this_3->f1051680[this_3->f48]);
-      *(uint16_t *)this_3->f56[5] = v127;
+      this_3->f56[5]->sym = v127;
       if ( v128 )
         return n15_24 + 1;
       exclusion_mask[v127] = exclusion_gen;
@@ -10192,7 +10212,7 @@ LABEL_86:
     if ( (*v134)->live )
     {
       v135 = __decode_symbol_list(*v134);
-      *(uint16_t *)this_3->f56[5] = v135;
+      this_3->f56[5]->sym = v135;
       if ( v135 >= 0 )
         return n15_25 + 1;
       v134 = this_3->sel_cur;
@@ -10218,7 +10238,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
             int32_t sym6;
             ModelBlock *sym7;
             int32_t sym8;
-            uint16_t *sym9;
+            PixRec *sym9;
             int32_t sym10;
             int32_t sym11;
             int32_t sym12;
@@ -10250,7 +10270,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   int32_t n15_14;
   ;
   PixRec *v63;
-  uint8_t *v20, *v22, *n2_9, *v52, *v109;   // row cursors out of ModelBlock
+  PixRec *v20, *v22, *n2_9, *v52, *v109;   // row cursors out of ModelBlock
   uint8_t *v74;
   FreqRec *n15_36, *n15_38, *n15_40;   // the coder's frequency record
   uint16_t *v59;   // a copy of `pix_cur`
@@ -10266,7 +10286,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   CtrPair *v16;   // the group's counter pair for this context
   int32_t arg_cum, arg_high, arg_tot, n4, n4_1, __code_pixel_n15, n15_1, v8, v9, v10, v13, v15,
           n15_6, n15_5, n15_8, v21, p_n15_1, n15_30, v26, v27, v29, n0xFFFF, v32,
-          n0xFFFF_1, n53248, v35, v38, v39, v42, p_n15_2, n15_42, n8, v46, n15_32, n15_12,
+          n0xFFFF_1, n53248, v35, v38, v39, v42, p_n15_2, n15_42, run, v46, n15_32, n15_12,
           n15_9, v50, v53, p_n15_4, n2_10, v61, n15_11, n15_13, n4_2, n15_33, n15_35, n15_34,
           n15_15, n2_15, v82, __code_pixel_n0x2000, n15_16, v87, n2, p_n15_5, p_n15_7,
           n15_17, n15_22, excl_sym_a, excl_sym_b, p_n15_11, n2_5, n15_41, n15_23,
@@ -10280,21 +10300,22 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   // four `uint16_t`, which is one `PixRec`, and every one is `sym`.
   PixRec *v111;
   uint16_t *v51;
-  uint16_t *v37;
+  PixRec *v37;   // `f56[5]`, the current row
   uint16_t *v108;
   PixRec *n2_7;   // `f56[6]`, the row above
-  uint16_t *n2_8, *n2_11, *n2_12, *n2_14, *v97, *v98, *n2_6, *v113, *v124, v153;
-  uint8_t *n2_13;   // was uint16_t *, read only as uint8_t
+  PixRec *n2_8, *n2_11, *n2_12, *v113, *v124;   // row cursors out of ModelBlock
+  uint16_t *n2_14, *v97, *v98, *n2_6, v153;
+  PixRec *n2_13;   // `f56[5]`, one record past the pixel just written
   SymList *v134, *v135;
   SymList **v136;
   uint32_t bin_tot, v55, v57, v137, p_n15_12, v139, v140, v141, v168, v169, v171, v172,
           v173;
   PixRec *v69;      // `f56[7]`, two rows above
-  uint8_t *p_n15_3, *v41;
+  PixRec *p_n15_3, *v41;   // `f56[6]` and `f56[7]`, the two rows above
   n2_7 = (PixRec *)_this->f56[6];
   n4 = n2_7->sym;
-  n2_8 = (uint16_t *)*(int32_t *)&_this->f56[5];
-  n4_1 = (uint16_t)*(n2_8 - 4);
+  n2_8 = _this->f56[5];
+  n4_1 = n2_8[-1].sym;
   __code_pixel_n15 = n2_7[1].sym;
   __frame.sym7 = (ModelBlock *)(_this);
   n15_1 = n2_7[-1].sym;
@@ -10308,9 +10329,9 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   v9 = n2_7[1].match[1];
   __frame.sym5 = n15_1;
   mode_symbol[4] = n15_1;
-  v10 = 32 * *((uint8_t *)n2_8 - 4)
-      + 16 * *((uint8_t *)n2_8 - 2)
-      + 2 * *((uint8_t *)n2_8 - 6)
+  v10 = 32 * n2_8[-1].match[2]
+      + 16 * n2_8[-1].match[4]
+      + 2 * n2_8[-1].match[0]
       + 8 * v9
       + v8;
   v11 = n4 == n4_1;
@@ -10321,7 +10342,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
     {
       v14 = *((uint16_t *)__frame.sym7 + __frame.sym8 + 3029720);
       if ( __frame.sym8 == __frame.sym5 )
-        v13 = (uint16_t)(v14 - *(n2_8 - 8));
+        v13 = (uint16_t)(v14 - n2_8[-2].sym);
       else
         v13 = (uint16_t)(v14 - __frame.sym5);
     }
@@ -10383,37 +10404,37 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   *(int32_t *)&this_2->f40 = v21;
   p_n15_1 = n2_7->match[0];
   v24 = n2_7->match[1];
-  __frame.sym2 = n2_8;
+  __frame.sym2 = (uint16_t *)n2_8;
   __frame.sym7 = (ModelBlock *)(this_2);
   __frame.sym0 = p_n15_1;
-  n15_30 = *(int32_t *)&this_2->f56[9];
-  v26 = *((uint8_t *)n2_8 - 5);
+  n15_30 = (int32_t)this_2->f56[9];
+  v26 = n2_8[-1].match[1];
   __frame.sym3 = n15_30;
-  v27 = 8 * *((uint8_t *)n2_8 - 12)
-      + 4 * *((uint8_t *)n2_8 - 9)
+  v27 = 8 * n2_8[-2].match[2]
+      + 4 * n2_8[-2].match[5]
       + v26
-      + 2 * *((uint8_t *)n2_8 - 10);
+      + 2 * n2_8[-2].match[4];
   this_3 = (ModelBlock *)(__frame.sym7);
   v29 = ((__frame.sym7->grad[3] == 0) << 7)
       + ((__frame.sym7->grad[2] == 0) << 6)
       + 32 * (__frame.sym7->grad[1] == 0)
       + 16 * (__frame.sym7->grad[0] == 0)
-      + ((uint8_t)(*(uint8_t *)(__frame.sym3 + 2) & *(v20 + 2) & __frame.sym0 & *(v22 + 2)) << 9)
-      + ((uint8_t)(*(uint8_t *)(__frame.sym3 + 3) & *(v20 + 3) & *(v22 + 3) & v24) << 8)
+      + ((uint8_t)(((PixRec *)__frame.sym3)->match[0] & v20->match[0] & __frame.sym0 & v22->match[0]) << 9)
+      + ((uint8_t)(((PixRec *)__frame.sym3)->match[1] & v20->match[1] & v22->match[1] & v24) << 8)
       + (v21 << 10)
       + v27;
   n0xFFFF = __frame.sym7->f6075824[v29];
-  n2_9 = (uint8_t *)__frame.sym1;
+  n2_9 = (PixRec *)__frame.sym1;
   if ( n0xFFFF == 0xFFFF )
   {
     __frame.sym7->f6075824[v29] = *(int32_t *)&__frame.sym7->f20;
     n2_9 = this_3->f56[6];
-    n2_8 = (uint16_t *)this_3->f56[5];
+    n2_8 = this_3->f56[5];
     ++*(int32_t *)&this_3->f20;
     n0xFFFF = this_3->f6075824[v29];
-    __frame.sym0 = *(n2_9 + 2);
+    __frame.sym0 = n2_9->match[0];
   }
-  v32 = *((uint8_t *)n2_8 - 1) + 4 * *(n2_9 + 13) + 2 * __frame.sym0 + 8 * n0xFFFF;
+  v32 = n2_8[-1].match[5] + 4 * n2_9[1].match[3] + 2 * __frame.sym0 + 8 * n0xFFFF;
   n0xFFFF_1 = this_3->f6460848[v32];
   if ( n0xFFFF_1 == 0xFFFF )
   {
@@ -10440,30 +10461,30 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
       n0xFFFF_1 = *v36;
     }
   }
-  v37 = ((uint16_t *)this_3->f56[5]);
-  v38 = *((uint8_t *)v37 - 5);
-  v39 = *((uint8_t *)v37 - 6);
-  __frame.sym9 = (uint16_t *)(v37);
+  v37 = this_3->f56[5];
+  v38 = v37[-1].match[1];
+  v39 = v37[-1].match[0];
+  __frame.sym9 = v37;
   if ( (v38 & v39) != 0
-    && (p_n15_3 = (uint8_t *)this_3->f56[6],
-        v41 = (uint8_t *)this_3->f56[7],
-        ((uint8_t)(v41[19]
-                         & v41[11]
-                         & v41[3]
-                         & p_n15_3[27]
-                         & p_n15_3[19]
-                         & p_n15_3[11]
-                         & p_n15_3[3]
-                         & p_n15_3[2]
-                         & *(p_n15_3 - 5))
-       & v41[27]) != 0) )
+    && (p_n15_3 = this_3->f56[6],
+        v41 = this_3->f56[7],
+        ((uint8_t)(v41[2].match[1]
+                         & v41[1].match[1]
+                         & v41[0].match[1]
+                         & p_n15_3[3].match[1]
+                         & p_n15_3[2].match[1]
+                         & p_n15_3[1].match[1]
+                         & p_n15_3[0].match[1]
+                         & p_n15_3[0].match[0]
+                         & p_n15_3[-1].match[1])
+       & v41[3].match[1]) != 0) )
   {
-    v42 = v41[2];
+    v42 = v41[0].match[0];
     p_n15_2 = *(int32_t *)&this_3->f0 - a2;
     __frame.sym4 = 1;
     if ( p_n15_2 <= 1 )
     {
-      n8 = 8;
+      run = 1;
     }
     else
     {
@@ -10472,15 +10493,15 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
       __frame.sym7 = (ModelBlock *)(this_3);
       while ( 1 )
       {
-        n8 = 8 * n15_42;
-        if ( (p_n15_3[8 * n15_42 + 19] & p_n15_3[8 * n15_42 + 18]) == 0 )
+        run = n15_42;
+        if ( (p_n15_3[n15_42 + 2].match[1] & p_n15_3[n15_42 + 2].match[0]) == 0 )
           break;
-        v42 = (uint8_t)(v41[n8 + 2] & v42);
+        v42 = (uint8_t)(v41[run].match[0] & v42);
         if ( ++n15_42 >= __frame.sym0 )
         {
           this_3 = (ModelBlock *)(__frame.sym7);
           __frame.sym4 = n15_42;
-          n8 = 8 * n15_42;
+          run = n15_42;
           goto LABEL_42;
         }
       }
@@ -10488,41 +10509,41 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
       __frame.sym4 = n15_42;
     }
 LABEL_42:
-    v46 = (uint8_t)(v41[n8 + 27] & v41[n8 + 19]);
+    v46 = (uint8_t)(v41[run + 3].match[1] & v41[run + 2].match[1]);
     __frame.sym5 = *(uint8_t *)(*(int32_t *)&this_3->f1078684 + __frame.sym4);
     n15_32 = *(uint8_t *)(*(int32_t *)&this_3->alpha_map + __frame.sym8) + 8 * __frame.sym5 + 4 * v46 + 2 * v42;
     n15_12 = 0;
-    if ( *__frame.sym9 == __frame.sym8 )
+    if ( __frame.sym9->sym == __frame.sym8 )
     {
       __frame.sym0 = (int32_t)p_n15_3;
       __frame.sym7 = (ModelBlock *)(this_3);
       do
         ++n15_12;
-      while ( n15_12 < __frame.sym4 && ((uint16_t *)__frame.sym9)[4 * n15_12] == __frame.sym8 );
+      while ( n15_12 < __frame.sym4 && __frame.sym9[n15_12].sym == __frame.sym8 );
       this_3 = (ModelBlock *)(__frame.sym7);
-      p_n15_3 = (uint8_t *)__frame.sym0;
+      p_n15_3 = (PixRec *)__frame.sym0;
     }
     n15_9 = n15_12 == __frame.sym4;
     __frame.sym6 = n15_9;
     if ( n15_12 > n15_9 )
     {
-      this_3->f56[6] = &p_n15_3[8 * n15_12 + -8 * n15_9];
-      this_3->f56[7] = &v41[8 * n15_12 + -8 * n15_9];
-      v50 = *(int32_t *)&this_3->f56[9];
-      this_3->f56[8] = this_3->f56[8] + 8 * n15_12 - 8 * n15_9;
-      v51 = (uint16_t *)(__frame.sym9);
-      *(int32_t *)&this_3->f56[9] = v50 + 8 * n15_12 - 8 * n15_9;
+      this_3->f56[6] = &p_n15_3[n15_12 - n15_9];
+      this_3->f56[7] = &v41[n15_12 - n15_9];
+      v50 = (int32_t)this_3->f56[9];
+      this_3->f56[8] = this_3->f56[8] + n15_12 - n15_9;
+      v51 = (uint16_t *)__frame.sym9;
+      this_3->f56[9] = (PixRec *)v50 + n15_12 - n15_9;
       *((uint32_t *)v51 + 1) = 0x01010101;
       *(uint32_t *)this_3->f56[5] = 0x01010101;
       this_3->pix_cur[1] = this_3->pix_cur[0];
       LOWORD(v51) = __frame.sym8;
-      *(uint16_t *)this_3->f56[5] = __frame.sym8;
+      this_3->f56[5]->sym = __frame.sym8;
       this_3->pix_cur[0] = (uint16_t)(uintptr_t)v51;
       v52 = this_3->f56[5];
       v53 = *(uint32_t *)v52;
-      __frame.sym1 = *(uint32_t *)(v52 + 4);
-      __frame.sym2 = (uint16_t *)(v52 + 8);
-      this_3->f56[5] = v52 + 8;
+      __frame.sym1 = *(uint32_t *)&v52->match[2];
+      __frame.sym2 = (uint16_t *)(v52 + 1);
+      this_3->f56[5] = v52 + 1;
       if ( n15_12 - n15_9 != 1 )
       {
         p_n15_4 = n15_12 - n15_9 - 1;
@@ -10539,20 +10560,20 @@ LABEL_42:
           {
             this_3->pix_cur[1] = n15_10;
             *(uint32_t *)this_3->f56[5] = v53;
-            *(uint32_t *)(this_3->f56[5] + 4) = n2_10;
+            *(uint32_t *)&this_3->f56[5]->match[2] = n2_10;
             v59 = this_3->pix_cur;
-            this_3->f56[5] += 8;
+            ++this_3->f56[5];
             v59[1] = n15_10;
             *(uint32_t *)this_3->f56[5] = v53;
-            *(uint32_t *)(this_3->f56[5] + 4) = n2_10;
-            n2_11 = (uint16_t *)(this_3->f56[5] + 8);
-            this_3->f56[5] = (uint8_t *)n2_11;
+            *(uint32_t *)&this_3->f56[5]->match[2] = n2_10;
+            n2_11 = this_3->f56[5] + 1;
+            this_3->f56[5] = n2_11;
             ++v57;
           }
           while ( v57 < v55 );
           p_n15_4 = __frame.sym0;
           n15_32 = __frame.sym3;
-          __frame.sym2 = n2_11;
+          __frame.sym2 = (uint16_t *)n2_11;
           n15_12 = n15_14;
           v61 = 2 * v57 + 1;
         }
@@ -10564,10 +10585,10 @@ LABEL_42:
         {
           this_3->pix_cur[1] = __frame.sym8;
           *(uint32_t *)this_3->f56[5] = v53;
-          *(uint32_t *)(this_3->f56[5] + 4) = __frame.sym1;
-          n2_12 = (uint16_t *)(this_3->f56[5] + 8);
-          this_3->f56[5] = (uint8_t *)n2_12;
-          __frame.sym2 = n2_12;
+          *(uint32_t *)&this_3->f56[5]->match[2] = __frame.sym1;
+          n2_12 = this_3->f56[5] + 1;
+          this_3->f56[5] = n2_12;
+          __frame.sym2 = (uint16_t *)n2_12;
         }
       }
       v63 = (PixRec *)this_3->f56[6];
@@ -10580,7 +10601,7 @@ LABEL_42:
       v68 = v63[3].match[0] + v65 + v64 + v67 + v66 - 5;
       v69 = (PixRec *)this_3->f56[7];
       this_3->grad[0] = v68;
-      n2_13 = (uint8_t *)__frame.sym2;
+      n2_13 = (PixRec *)__frame.sym2;
       // Eight records of the row two above, `match[0]` in each: the
       // byte offsets 2, 10, 18, 26, 34 and -6, -14, -22 were records
       // 0..4 and -1..-3.  Three of the eight loads are `movsx` in the
@@ -10596,16 +10617,16 @@ LABEL_42:
                                    + (int8_t)v69[-3].match[0]
                                    + v69[4].match[0]
                                    - 8;
-      this_3->grad[2] = n2_13[-29] + n2_13[-21] - 2;
+      this_3->grad[2] = n2_13[-4].match[1] + n2_13[-3].match[1] - 2;
       n15_11 = __frame.sym8;
-      this_3->grad[3] = n2_13[-38]
-                                   + n2_13[-46]
-                                   + n2_13[-54]
-                                   + n2_13[-30]
+      this_3->grad[3] = n2_13[-5].match[0]
+                                   + n2_13[-6].match[0]
+                                   + n2_13[-7].match[0]
+                                   + n2_13[-4].match[0]
                                    - 4;
-      n2_13[-2] = n15_11 == v63[1].sym;
+      n2_13[-1].match[4] = n15_11 == v63[1].sym;
       n15_32 = __frame.sym3;
-      *(this_3->f56[5] - 1) = n15_11 == *(uint16_t *)(this_3->f56[6] + 16);
+      this_3->f56[5][-1].match[5] = n15_11 == this_3->f56[6][2].sym;
       n15_12 = n15_14;
     }
     __encode_context_bit(&this_3->f1076352[(n15_32 + 1)], this_3->f1076352, __frame.sym6);
@@ -10697,9 +10718,9 @@ LABEL_42:
         n2_3->w[4] = v149;
         __code_pixel_n0x2000 = (uint16_t)(__frame.sym0 + v149 + v158);
         n2_3->w[5] = __code_pixel_n0x2000;
-        __frame.sym9 = ((uint16_t *)this_3->f56[5]);
+        __frame.sym9 = this_3->f56[5];
       }
-      n15_16 = *__frame.sym9;
+      n15_16 = __frame.sym9->sym;
       arg_tot = __code_pixel_n0x2000;
       if ( n15_16 == __frame.sym8 )
       {
@@ -10789,7 +10810,7 @@ LABEL_42:
     else
     {
       v159 = ((uint16_t *)&this_3->f56[v82 + 10]);
-      n15_18 = *__frame.sym9;
+      n15_18 = __frame.sym9->sym;
       arg_tot = n15_36->w[5];
       if ( n15_18 == __frame.sym8 )
       {
@@ -10906,57 +10927,57 @@ LABEL_42:
   __frame.sym5 = n15_24;
   v109 = this_3->f56[5];
   __frame.sym6 = n15_25;
-  n15_27 = *(uint16_t *)(v109 - 16);
+  n15_27 = v109[-2].sym;
   __frame.sym7 = (ModelBlock *)(this_4);
   v111 = (PixRec *)this_3->f56[6];
   __frame.sym8 = n15_26;
   v112 = v111[2].sym;
-  __frame.sym9 = (uint16_t *)(v108);
+  __frame.sym9 = (PixRec *)v108;
   __frame.sym10 = n15_27;
-  v113 = (uint16_t *)this_3->f56[7];
-  v114 = v113[4];
+  v113 = this_3->f56[7];
+  v114 = v113[1].sym;
   __frame.sym11 = v112;
-  v115 = *v113;
+  v115 = v113->sym;
   __frame.sym12 = v114;
   v116 = v111[-2].sym;
   __frame.sym13 = v115;
-  v117 = *(v113 - 4);
+  v117 = v113[-1].sym;
   __frame.sym14 = v116;
-  v118 = *(uint16_t *)(v109 - 24);
+  v118 = v109[-3].sym;
   __frame.sym15 = v117;
   v119 = v111[3].sym;
   __frame.sym16 = v118;
   v120 = v111[4].sym;
   __frame.sym17 = v119;
-  v121 = *(uint16_t *)(v109 - 32);
+  v121 = v109[-4].sym;
   __frame.sym18 = v120;
   v122 = v111[-3].sym;
   __frame.sym19 = v121;
-  v123 = v113[8];
+  v123 = v113[2].sym;
   __frame.sym20 = v122;
   __frame.sym21 = v123;
-  v124 = (uint16_t *)this_3->f56[8];
-  __frame.sym22 = *v124;
-  __frame.sym23 = *(v113 - 8);
-  v125 = *(uint16_t *)(v109 - 40);
-  v126 = *(uint16_t *)(v109 - 56);
+  v124 = this_3->f56[8];
+  __frame.sym22 = v124->sym;
+  __frame.sym23 = v113[-2].sym;
+  v125 = v109[-5].sym;
+  v126 = v109[-7].sym;
   __frame.sym24 = v125;
-  __frame.sym25 = v124[4];
+  __frame.sym25 = v124[1].sym;
   v127 = v111[5].sym;
   v128 = v111[7].sym;
   __frame.sym26 = v127;
-  __frame.sym27 = *(uint16_t *)*(int32_t *)&this_3->f56[9];
+  __frame.sym27 = this_3->f56[9]->sym;
   __frame.sym28 = v126;
-  __frame.sym29 = *(v124 - 4);
+  __frame.sym29 = v124[-1].sym;
   __frame.sym30 = v128;
-  __frame.sym31 = v113[12];
+  __frame.sym31 = v113[3].sym;
   *(int32_t *)&this_3->sym_pos = 0;
   do
   {
     v129 = __pixel_context((ModelBlock *)this_3, (uint32_t *)__frame.sym);
     if ( v129 >= 0 )
     {
-      n15_28 = v129 == *(uint16_t *)this_3->f56[5];
+      n15_28 = v129 == this_3->f56[5]->sym;
       __encode_context_bit(&this_3->f1051776[*(int32_t *)&this_3->f52], &this_3->f1051680[*(int32_t *)&this_3->f48], n15_28);
       if ( n15_28 )
         return n15_14 + 1;
@@ -10977,7 +10998,7 @@ LABEL_42:
   {
     if ( (*v136)->live )
     {
-      if ( __encode_symbol_list(*v136, *(uint16_t *)this_3->f56[5]) )
+      if ( __encode_symbol_list(*v136, this_3->f56[5]->sym) )
         return n15_29 + 1;
       v136 = this_3->sel_cur;
     }
@@ -11119,7 +11140,7 @@ void __expand_alphabet(ModelBlock *_this)
 ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4, int32_t a5)
 {
   ;
-  uint8_t *v8;
+  PixRec *v8;   // one of the five row buffers
   uint8_t v12;
   int16_t v19;
   int32_t i_1, j, v9, v13, k_1, v35, v38;
@@ -11135,22 +11156,27 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
   a1->sym_code = nullptr;
   for ( j = 0; j < 5; ++j )
   {
-    v8 = (uint8_t *)bmf_new(8 * i_1 + 128);
+    // `8 * i_1 + 128` is the plane's width plus sixteen records: eight of
+    // left margin, which is what the cursor starts past, and eight of right.
+    // Every record is seeded "matches all six neighbours", so a margin read
+    // off either end of the row contributes 1 and not whatever `bmf_new`
+    // left there.
+    v8 = (PixRec *)bmf_new(8 * i_1 + 128);
     a1->f56[j] = v8;
-    a1->f56[j + 5] = v8 + 64;
+    a1->f56[j + 5] = v8 + 8;
     i_1 = a1->f0;
     if ( (int32_t)a1->f0 > -16 )
     {
       v9 = 0;
       do
       {
-        *(uint16_t *)(a1->f56[j] + 8 * v9) = 0;
-        *(a1->f56[j] + 8 * v9 + 7) = 1;
-        *(a1->f56[j] + 8 * v9 + 6) = 1;
-        *(a1->f56[j] + 8 * v9 + 5) = 1;
-        *(a1->f56[j] + 8 * v9 + 4) = 1;
-        *(a1->f56[j] + 8 * v9 + 3) = 1;
-        *(a1->f56[j] + 8 * v9 + 2) = 1;
+        a1->f56[j][v9].sym = 0;
+        a1->f56[j][v9].match[5] = 1;
+        a1->f56[j][v9].match[4] = 1;
+        a1->f56[j][v9].match[3] = 1;
+        a1->f56[j][v9].match[2] = 1;
+        a1->f56[j][v9].match[1] = 1;
+        a1->f56[j][v9].match[0] = 1;
         i_1 = a1->f0;
         ++v9;
       }
@@ -11292,7 +11318,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   uint8_t *ArgList, *ArgList_2, *buf, *ArgList_3, *ArgList_9, *ArgList_10,
           *Src_2, *v77, *ArgList_8;
   int16_t v20;
-  uint8_t *v44, *v45, *v46, *v47, *v48;
+  PixRec *v44, *v45, *v46, *v47, *v48;   // the five row buffers, rotated
   int32_t v3, v5, v6, v8, n5, v11, v14, v15, v16, v17, v18, v19, n0x10000, v30,
           v34, v39, v40, n4_1, v43, v51, v52, v53, v54, v56, v58, v60, v61, v62,
           v64, v65, v66, n6, v68, v69, n6_4, n6_1, v73, n6_2, v76, v78, v80;
@@ -11528,8 +11554,8 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
     while ( 1 )
     {
       v86 = v43;
-      *(this_4->f56[5] + 3) = *(uint16_t *)(this_4->f56[5] - 8) == 0;
-      *(this_4->f56[5] + 5) = *(uint16_t *)(this_4->f56[6] - 8) == 0;
+      this_4->f56[5]->match[1] = this_4->f56[5][-1].sym == 0;
+      this_4->f56[5]->match[3] = this_4->f56[6][-1].sym == 0;
       v44 = this_4->f56[4];
       v45 = this_4->f56[3];
       v46 = this_4->f56[2];
@@ -11540,35 +11566,35 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
       this_4->f56[2] = v47;
       this_4->f56[1] = v48;
       this_4->f56[0] = v44;
-      v44 += 56;
+      v44 += 7;
       this_4->f56[5] = v44;
-      v48 += 56;
+      v48 += 7;
       this_4->f56[6] = v48;
-      this_4->f56[7] = v47 + 56;
-      this_4->f56[8] = v46 + 56;
-      this_4->f56[9] = v45 + 56;
+      this_4->f56[7] = v47 + 7;
+      this_4->f56[8] = v46 + 7;
+      this_4->f56[9] = v45 + 7;
       // Two "is this count zero" flags, written to three and two places.
       // MSVC put each in the low byte of a register that held a cursor, which
       // is where `LOBYTE(v48) = ...` came from; neither cursor is read again.
       {
-        uint8_t zero = *(uint16_t *)(v48 + 8) == 0;
-        *(v44 + 4) = zero;
-        *(this_4->f56[5] - 2) = zero;
-        *(this_4->f56[5] - 9) = zero;
-        zero = *(uint16_t *)(this_4->f56[6] + 16) == 0;
-        *(this_4->f56[5] + 6) = zero;
-        *(this_4->f56[5] - 1) = zero;
+        uint8_t zero = v48[1].sym == 0;
+        v44->match[2] = zero;
+        this_4->f56[5][-1].match[4] = zero;
+        this_4->f56[5][-2].match[5] = zero;
+        zero = this_4->f56[6][2].sym == 0;
+        this_4->f56[5]->match[4] = zero;
+        this_4->f56[5][-1].match[5] = zero;
       }
-      *(this_4->f56[5] + 7) = *(uint16_t *)(this_4->f56[6] + 24) == 0;
-      v49 = (PixRec *)this_4->f56[6];
-      v50 = (PixRec *)this_4->f56[7];
-      this_4->f56[5] += 8;
+      this_4->f56[5]->match[5] = this_4->f56[6][3].sym == 0;
+      v49 = this_4->f56[6];
+      v50 = this_4->f56[7];
+      ++this_4->f56[5];
       ++v49;
-      this_4->f56[8] += 8;
-      this_4->f56[6] = (uint8_t *)v49;
+      ++this_4->f56[8];
+      this_4->f56[6] = v49;
       ++v50;
-      this_4->f56[7] = (uint8_t *)v50;
-      this_4->f56[9] += 8;
+      this_4->f56[7] = v50;
+      ++this_4->f56[9];
       this_4->grad[0] = v49[3].match[0] + v49[2].match[0] + v49[1].match[0] + v49[0].match[0] + v49[4].match[0] - 5;
       // The same five counts as the line above, off the other row.  MSVC
       // spilled each byte into a register whose upper bits were leftovers,
@@ -11597,7 +11623,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         ArgList_6 = (uint32_t *)ArgList_5;
         v65 = 0;
         do
-          *ArgList_6++ = this_4->sym_code[*(uint16_t *)(this_4->f56[0] + 8 * v65++ + 64)];
+          *ArgList_6++ = this_4->sym_code[this_4->f56[0][v65++ + 8].sym];
         while ( v65 < this_4->f0 );
         goto LABEL_73;
       }
@@ -11623,7 +11649,7 @@ LABEL_53:
         do
         {
           v57 = this_4->sym_code;
-          v58 = *(uint16_t *)(this_4->f56[0] + 8 * v56 + 64);
+          v58 = this_4->f56[0][v56 + 8].sym;
           ArgList_7->sym = (uint16_t)v57[v58];
           ArgList_7->cnt = (uint8_t)(v57[v58] >> 16);
           ++v56;
@@ -11645,7 +11671,7 @@ LABEL_53:
           do
             // A byte, not a word: this branch is the 8-bits-per-pixel one, and
             // `sym_code` was a `uint8_t *` when this dereference was written.
-            *ArgList_8++ = (uint8_t)this_4->sym_code[*(uint16_t *)(this_4->f56[0] + 8 * v80++ + 64)];
+            *ArgList_8++ = (uint8_t)this_4->sym_code[this_4->f56[0][v80++ + 8].sym];
           while ( v80 < this_4->f0 );
           ArgList_5 = ArgList_8;
         }
@@ -11663,11 +11689,11 @@ LABEL_53:
           if ( v62 < 0 )
           {
             v62 = 8 - v64;
-            *++ArgList_9 = this_4->sym_code[*(uint16_t *)(this_4->f56[0] + 8 * v61 + 64)] << ((8 - v64) & 31);
+            *++ArgList_9 = this_4->sym_code[this_4->f56[0][v61 + 8].sym] << ((8 - v64) & 31);
           }
           else
           {
-            *ArgList_9 |= this_4->sym_code[*(uint16_t *)(this_4->f56[0] + 8 * v61 + 64)] << (v62 & 31);
+            *ArgList_9 |= this_4->sym_code[this_4->f56[0][v61 + 8].sym] << (v62 & 31);
           }
           ++v61;
         }
@@ -11683,7 +11709,7 @@ LABEL_53:
       v60 = 0;
       do
       {
-        *(uint16_t *)ArgList_6 = this_4->sym_code[*(uint16_t *)(this_4->f56[0] + 8 * v60++ + 64)];
+        *(uint16_t *)ArgList_6 = this_4->sym_code[this_4->f56[0][v60++ + 8].sym];
         ArgList_6 = (uint32_t *)((uint8_t *)ArgList_6 + 2);
       }
       while ( v60 < this_4->f0 );
@@ -15345,7 +15371,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
   uint32_t n5;
   ;
   ModelBlock *Blocka_1;
-  uint8_t *v46, *v50;   // row cursors out of f56
+  PixRec *v46, *v50;   // row cursors out of f56
   bool v43;
   int8_t v7;
   uint8_t *buf;   // `uint8_t *` beside the `char` scalars above
@@ -15354,7 +15380,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
   ModelBlock *Blocka_4;
   int32_t v8, v10, v11, v14, n2_1, n2_2, v17, v18, v19, v20, v21, v44, v45,
           v53, v54, v55, v56;
-  uint8_t *v47, *v48, *v49;
+  PixRec *v47, *v48, *v49;   // three of the five row buffers
   uint32_t n0x10000, v31, v34, v37, v40;
   SymListBlock *v32, *v38;
   CtrPair *v24;   // one group's row of counter pairs
@@ -15602,8 +15628,8 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
       do
       {
         v61 = v45 + 1;
-        *(Blocka_1->f56[5] + 3) = *(uint16_t *)(Blocka_1->f56[5] - 8) == 0;
-        *(Blocka_1->f56[5] + 5) = *(uint16_t *)(Blocka_1->f56[6] - 8) == 0;
+        Blocka_1->f56[5]->match[1] = Blocka_1->f56[5][-1].sym == 0;
+        Blocka_1->f56[5]->match[3] = Blocka_1->f56[6][-1].sym == 0;
         v46 = Blocka_1->f56[4];
         v47 = Blocka_1->f56[3];
         v48 = Blocka_1->f56[2];
@@ -15614,33 +15640,33 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
         Blocka_1->f56[2] = v49;
         Blocka_1->f56[1] = v50;
         Blocka_1->f56[0] = v46;
-        v46 += 56;
+        v46 += 7;
         Blocka_1->f56[5] = v46;
-        v50 += 56;
+        v50 += 7;
         Blocka_1->f56[6] = v50;
-        Blocka_1->f56[7] = v49 + 56;
-        Blocka_1->f56[8] = v48 + 56;
-        Blocka_1->f56[9] = v47 + 56;
+        Blocka_1->f56[7] = v49 + 7;
+        Blocka_1->f56[8] = v48 + 7;
+        Blocka_1->f56[9] = v47 + 7;
         // The same two flags, on the encoding side.
         {
-          uint8_t zero = *(uint16_t *)(v50 + 8) == 0;
-          *(v46 + 4) = zero;
-          *(Blocka_1->f56[5] - 2) = zero;
-          *(Blocka_1->f56[5] - 9) = zero;
-          zero = *(uint16_t *)(Blocka_1->f56[6] + 16) == 0;
-          *(Blocka_1->f56[5] + 6) = zero;
-          *(Blocka_1->f56[5] - 1) = zero;
+          uint8_t zero = v50[1].sym == 0;
+          v46->match[2] = zero;
+          Blocka_1->f56[5][-1].match[4] = zero;
+          Blocka_1->f56[5][-2].match[5] = zero;
+          zero = Blocka_1->f56[6][2].sym == 0;
+          Blocka_1->f56[5]->match[4] = zero;
+          Blocka_1->f56[5][-1].match[5] = zero;
         }
-        *(Blocka_1->f56[5] + 7) = *(uint16_t *)(Blocka_1->f56[6] + 24) == 0;
-        v51 = (PixRec *)Blocka_1->f56[6];
-        v52 = (PixRec *)Blocka_1->f56[7];
-        Blocka_1->f56[5] += 8;
+        Blocka_1->f56[5]->match[5] = Blocka_1->f56[6][3].sym == 0;
+        v51 = Blocka_1->f56[6];
+        v52 = Blocka_1->f56[7];
+        ++Blocka_1->f56[5];
         ++v51;
-        Blocka_1->f56[6] = (uint8_t *)v51;
-        Blocka_1->f56[8] += 8;
+        Blocka_1->f56[6] = v51;
+        ++Blocka_1->f56[8];
         ++v52;
-        Blocka_1->f56[7] = (uint8_t *)v52;
-        Blocka_1->f56[9] += 8;
+        Blocka_1->f56[7] = v52;
+        ++Blocka_1->f56[9];
         Blocka_1->grad[0] = v51[3].match[0] + v51[2].match[0] + v51[1].match[0] + v51[0].match[0] + v51[4].match[0] - 5;
         // The same five counts as the line above, off the other row.
         Blocka_1->grad[3] = 0;
@@ -15654,7 +15680,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
           do
           {
             ++v54;
-            *(uint16_t *)(Blocka_1->f56[5] + 8 * v54 - 8) = v59[v54 - 1];
+            Blocka_1->f56[5][v54 - 1].sym = v59[v54 - 1];
             v53 = Blocka_1->f0;
           }
           while ( v54 < Blocka_1->f0 );
