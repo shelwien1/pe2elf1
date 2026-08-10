@@ -530,6 +530,28 @@ struct SymList {
 };
 static_assert(sizeof(SymList) == 24, "SymList: the header is 24 bytes");
 
+// What `bmf_new(24 * n + 4)` returns: the count, then `n` lists.  Four sites
+// build one and step past the count with `(SymList *)(p + 1)`; `free_workspace`
+// reads the count back from the word before the first list and frees that word.
+// Only the allocating end holds the block; everything downstream is handed
+// `list`, which is why the count is reached backwards there rather than named.
+struct SymListBlock {
+  uint32_t n;         // +0
+  SymList  list[0];   // +4
+};
+static_assert(__builtin_offsetof(SymListBlock, list) == 4,
+              "SymListBlock: the count word comes first");
+
+// The count that `bmf_new` left in the word before `list[0]`.
+static inline uint32_t sym_list_count(const SymList *list) {
+  return ((const uint32_t *)list)[-1];
+}
+
+// The block a `SymList *` came out of -- what `free` is given.
+static inline SymListBlock *sym_list_block(SymList *list) {
+  return (SymListBlock *)((uint32_t *)list - 1);
+}
+
 // A binary counter pair: two `uint16_t`, both seeded 0x2000 -- p = 1/2 for a
 // fresh counter.  `layout_workspace` writes 0x10000 of them per context group.
 struct CtrPair {
@@ -2387,12 +2409,12 @@ void **__free_workspace(ModelBlock *Blocka, int8_t a2)
   free(Blocka_1->f1078684);
   free(*(void**)&Blocka_1->f1078688);
   // Both arrays are allocated as `bmf_new(24 * n + 4)` with the count in the
-  // word before the first list, so `n` is `((uint32_t *)lists)[-1]` and that
+  // word before the first list, so `n` is `sym_list_count(lists)` and that
   // same word is what gets freed.  Each list owns its entries.
   v3 = Blocka_1->f1078208;
   if ( v3 )
   {
-    v4 = ((uint32_t *)v3)[-1];
+    v4 = sym_list_count(v3);
     if ( v4 )
     {
       Blocka_2 = (ModelBlock *)(Blocka_1);
@@ -2409,12 +2431,12 @@ void **__free_workspace(ModelBlock *Blocka, int8_t a2)
       v3 = v7;
       Blocka_1 = (ModelBlock *)(Blocka_2);
     }
-    free((uint32_t *)v3 - 1);
+    free(sym_list_block(v3));
   }
   v9 = Blocka_1->f1078212;
   if ( v9 )
   {
-    v10 = ((uint32_t *)v9)[-1];
+    v10 = sym_list_count(v9);
     if ( v10 )
     {
       Blocka_3 = (ModelBlock *)(Blocka_1);
@@ -2431,7 +2453,7 @@ void **__free_workspace(ModelBlock *Blocka, int8_t a2)
       v9 = v12;
       Blocka_1 = (ModelBlock *)(Blocka_3);
     }
-    free((uint32_t *)v9 - 1);
+    free(sym_list_block(v9));
   }
   for ( i = 0; i < 5; ++i )
     free(((void**)Blocka_1)[i + 14]);
@@ -11182,7 +11204,8 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
           v64, v65, v66, n6, v68, v69, n6_4, n6_1, v73, n6_2, v76, v78, v80;
   ModelBlock *this_3;
   ModelBlock *this_2;
-  uint32_t *v31, *v35, *ArgList_6;
+  uint32_t *ArgList_6;
+  SymListBlock *v31, *v35;
   CtrPair *v22;   // one group's row of counter pairs
   SymEntry *ArgList_7;
   SymList *i_1, *i, *j_1, *j;
@@ -11352,13 +11375,13 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   __init_symbol_list(&this_4->escape, (int32_t)this_4, this_4->f16, 1);
   this_4->f1078232 = this_4->sel;
   // `24 * n + 4`: the count word, then `n` lists.  `free_workspace` reads the
-  // count back from `((uint32_t *)lists)[-1]`.
+  // count back from `sym_list_count(lists)`.
   v30 = this_4->f16;
-  v31 = (uint32_t *)bmf_new(24 * v30 + 4);
+  v31 = (SymListBlock *)bmf_new(24 * v30 + 4);
   if ( v31 )
   {
-    *v31 = v30;
-    i_1 = (SymList *)(v31 + 1);
+    v31->n = v30;
+    i_1 = v31->list;
     for ( i = i_1; v30; --v30 )
       (i_1++)->ent = nullptr;
   }
@@ -11368,11 +11391,11 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   }
   v34 = this_4->f16;
   this_4->f1078208 = i;
-  v35 = (uint32_t *)bmf_new(24 * v34 + 4);
+  v35 = (SymListBlock *)bmf_new(24 * v34 + 4);
   if ( v35 )
   {
-    *v35 = v34;
-    j_1 = (SymList *)(v35 + 1);
+    v35->n = v34;
+    j_1 = v35->list;
     for ( j = j_1; v34; --v34 )
       (j_1++)->ent = nullptr;
   }
@@ -15263,7 +15286,8 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
   int32_t v8, v10, v11, v14, n2_1, n2_2, v17, v18, v19, v20, v21, v44, v45,
           v53, v54, v55, v56;
   uint8_t *v47, *v48, *v49;
-  uint32_t n0x10000, v31, *v32, v34, v37, *v38, v40;
+  uint32_t n0x10000, v31, v34, v37, v40;
+  SymListBlock *v32, *v38;
   CtrPair *v24;   // one group's row of counter pairs
   SymList *v33, *v39;
   FreqRec *v12;   // a bucket record: `grid[bucket]`
@@ -15452,11 +15476,11 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
     __init_symbol_list(&Blocka_1->escape, 0, Blocka_1->f16, 1);
     Blocka_2->f1078232 = Blocka_2->sel;
     v31 = Blocka_2->f16;
-    v32 = (uint32_t *)bmf_new(24 * v31 + 4);
+    v32 = (SymListBlock *)bmf_new(24 * v31 + 4);
     if ( v32 )
     {
-      *v32 = v31;
-      v33 = (SymList *)(v32 + 1);
+      v32->n = v31;
+      v33 = v32->list;
       if ( v31 )
       {
         // MSVC unrolled this two lists at a time and left a scalar tail; both
@@ -15473,11 +15497,11 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
     }
     v37 = Blocka_1->f16;
     Blocka_1->f1078208 = v33;
-    v38 = (uint32_t *)bmf_new(24 * v37 + 4);
+    v38 = (SymListBlock *)bmf_new(24 * v37 + 4);
     if ( v38 )
     {
-      *v38 = v37;
-      v39 = (SymList *)(v38 + 1);
+      v38->n = v37;
+      v39 = v38->list;
       if ( v37 )
       {
         // MSVC unrolled this two lists at a time and left a scalar tail; both
