@@ -1320,7 +1320,7 @@ uint32_t __alt_init_tables(uint8_t *a1, int8_t *a2)
   uint8_t *v18, *v19;   // `uint8_t *` beside the `char` scalars above
   int32_t n128_1, n128_6, v30, n128_5, v33, n128_3, n128_4, v36, n128_11,
           n128_2;
-  uint32_t j, k, i, v32, n0x80, v49, v52;
+  uint32_t i, v32, n0x80, v49, v52;
   uint8_t *v50, *v51;
   n128_1 = 2 * plane_desc[0].w12 + 1;
   // The predictor-mode-0 branch was here: 111 lines building a 256-entry
@@ -1336,33 +1336,25 @@ uint32_t __alt_init_tables(uint8_t *a1, int8_t *a2)
   v18 = (uint8_t *)a2 + 2;
   v19 = (uint8_t *)a2 + 1;
   a2[255] = 0x80;
-  if ( ((uint8_t *)a2 + 1 <= (uint8_t *)a2 + 2 || (uint32_t)(v19 - v18) < 0xFE) && (v18 <= v19 || (uint32_t)(v18 - v19) < 0xFE) )
+  // MSVC's overlap check for the loop below, and it is always true:
+  // `a2 + 1 <= a2 + 2` settles the first half, and the second falls to
+  // `(uint32_t)(v18 - v19) < 0xFE`, which is `1 < 254`.  Both `v18` and
+  // `v19` are constants of `a2`, so nothing at run time can change it.
+  // Kept as a comment for the same reason the other always-taken tests in
+  // this function are: the branch is the artefact, the body is the code.
+  for ( i = 0; i < 0x3F; ++i )
   {
-    for ( i = 0; i < 0x3F; ++i )
-    {
-      ((uint8_t *)a2)[4 * i + 2] = 2 * i + 1;
-      ((uint8_t *)a2)[4 * i + 1] = -2 * i - 1;
-      ((uint8_t *)a2)[4 * i + 4] = 2 * i + 2;
-      ((uint8_t *)a2)[4 * i + 3] = -2 * i - 2;
-    }
-    a2[254] = 127;
-    a2[253] = -127;
+    ((uint8_t *)a2)[4 * i + 2] = 2 * i + 1;
+    ((uint8_t *)a2)[4 * i + 1] = -2 * i - 1;
+    ((uint8_t *)a2)[4 * i + 4] = 2 * i + 2;
+    ((uint8_t *)a2)[4 * i + 3] = -2 * i - 2;
   }
-  else
-  {
-    for ( j = 0; j < 0x3F; ++j )
-    {
-      ((uint8_t *)a2)[4 * j + 2] = 2 * j + 1;
-      ((uint8_t *)a2)[4 * j + 4] = 2 * j + 2;
-    }
-    a2[254] = 127;
-    for ( k = 0; k < 0x3F; ++k )
-    {
-      ((uint8_t *)a2)[4 * k + 1] = -2 * k - 1;
-      ((uint8_t *)a2)[4 * k + 3] = -2 * k - 2;
-    }
-    a2[253] = -127;
-  }
+  a2[254] = 127;
+  a2[253] = -127;
+  // The `else` that stood here is gone with the test: it wrote the same
+  // 256 values in two passes instead of one, which is what an overlap
+  // fallback does, and it is what says the branch was MSVC's and not the
+  // program's.
   // never taken: -E is 0
   // The test here was `if ( plane_predictor )`, with an else for predictor
   // mode 0.  This function is called only by alt_p1_alloc and alt_p2_alloc,
@@ -6485,18 +6477,17 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   int32_t *v104;
   int32_t v6, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20,
           v21, v23, v25, v27, v29, v30, v47, v48, v51, v55, v56, v57, v65,
-          v68, v74, v75, v85, v88, *v103, v105, n2, v107, n3536_5, v111,
-          v112, v113, v114, v116, v117, n3536_1, v121, v122, v123, v124, v125,
-          v126, v127, v128, n2256, v132, v134, v137, v138, v140, v141,
-          v144, n2576, n1840_13, v147, v148, v149, v151, v154, v155, v156,
-          n2896, v161, v162, v163, v164, v167, v168, v169, v171, n3536_2,
-          v175, v176, v177, v178, v179, v181, v182, n3536_3, v185, v186, v188,
-          v189, v190, v191, v192, v193, n1840_14, n1840_15, v198, n1840_16,
-          v200, n1840_17, v203, v206, v207, v208, n960, n3536_4, v211,
-          v212, v213, v214, v215, n1840_3, n1840_8, n1840_7, n1840_10,
-          n1840_9, v222, v224, n1840_11, n1840_12, n255, v228, n1840_5,
-          n1840_4, n1840_6, v234, v235, v236, v237, v238, v239, v240, v241,
-          v242;
+          v68, v74, v75, v85, v88, *v103, v105, n2, v107, n3536_5, v111, v112,
+          v113, v114, v116, v117, n3536_1, v121, v122, v123, v124, v125, v126,
+          v127, v128, n2256, v132, v134, v137, v138, v140, v141, v144, n2576,
+          n1840_13, v147, v148, v149, v151, v154, v155, v156, n2896, v161,
+          v162, v163, v164, v167, v168, v171, n3536_2, v175, v176, v177, v178,
+          v179, v181, v182, n3536_3, v185, v186, v188, v189, v190, v191, v192,
+          v193, n1840_14, n1840_15, v198, n1840_16, v200, n1840_17, v203,
+          v206, v207, v208, n960, n3536_4, v211, v212, v213, v214, v215,
+          n1840_3, n1840_8, n1840_7, n1840_10, n1840_9, v222, v224, n1840_11,
+          n1840_12, n255, v228, n1840_5, n1840_4, n1840_6, v234, v235, v236,
+          v237, v238, v239, v240, v241, v242;
   int8_t v139;
   uint32_t v120, v133, v135, v136, v152, v153, v165, v180;
   uint8_t *v187;
