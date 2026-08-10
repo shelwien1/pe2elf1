@@ -1079,9 +1079,6 @@ BmfArc *__bmf_destroy_archive(BmfArc *Block, int8_t a2)
 void __expand_predictor_mode0(uint32_t Src, int32_t i, int32_t a3)
 {
   ;
-  int32_t n256, n256_1;
-  n256 = plane_desc[0].w12;
-  n256_1 = plane_desc[0].w12;
   // never taken: -E is 0
 }
 
@@ -1822,10 +1819,10 @@ int32_t __encode_symbol_tree(uint16_t *_this, int32_t n2) {
   uint8_t *v25;   // were int32_t: these hold addresses
   bool v47;
   int16_t v24, v42;
-  int32_t n4, v8, n0x800000_6, n0x7F800000_6, n0x800000_5, v27, v28, v46, v50,
-          v56, v59, i, v65, v66, n0x7F800000_5, n0x7F800000_7;
+  int32_t n4, v8, n0x7F800000_6, n0x800000_5, v27, v28, v46, v50, v56, v59, i,
+          v65, v66, n0x7F800000_5, n0x7F800000_7;
   uint16_t *v3, *v26, n0x4000, v39, v41, *v51, *this_2;
-  uint32_t n4_2, v38, v40, v43, v44, v45, v48, v52, n4_1, n0x800000_3;
+  uint32_t n4_2, v38, v40, v43, v44, v45, v48, v52, n4_1;
   n4 = *((uint8_t *)model_geometry + n2);
   n4_1 = n4;
   v3 = _this + 2;
@@ -1897,7 +1894,6 @@ int32_t __encode_symbol_tree(uint16_t *_this, int32_t n2) {
     v66 = level_geom[n4_1].half;
     v56 = n2 - level_geom[n4_1].first;
     v59 = 0;
-    n0x800000_3 = n0x800000_6;
     this_2 = _this;
     for ( i = 1; ; i *= 2 )
     {
@@ -5256,7 +5252,6 @@ __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...)
 int32_t __rc_begin_decode(int8_t ArgList_1)
 {
   ;
-  int8_t ArgList;
   int32_t bits_left, v7, v8, v16, v17, v20;
   uint16_t *n256, *tbl;
   uint32_t i, v9, v11;   // offsets into model_geometry, not pointers
@@ -5324,7 +5319,6 @@ int32_t __rc_begin_decode(int8_t ArgList_1)
     n256 = (uint16_t *)bmf_new(0x7F000u);
     if ( n256 )
     {
-      ArgList = ArgList_1;
       tbl = n256;
       v16 = 0;
       v17 = 0;
@@ -5368,14 +5362,12 @@ uint8_t *__unpredict_med(uint8_t *Src, int32_t i, int32_t a3)
   ;
   uintptr_t Src_1, v41;   // were int32_t: addresses, masked and tagged
   uint8_t v39, v40;
-  int32_t n256, n128_1, i_1, v42, v45, v46, v47, v48;
+  int32_t i_1, v42, v45, v46, v47, v48;
   uint32_t j, v36, m_1, m, v44, v50;
   uint8_t *result, *v43;
   alignas(16) uint8_t v52[255];
   Src_1 = (uintptr_t)Src;
-  n256 = plane_desc[0].w12;
   result = (Src + 1);
-  n128_1 = 2 * plane_desc[0].w12 + 1;
   // The test here was `if ( plane_predictor )`, with a 45-line else building
   // a table for predictor mode 0.  Nothing reaches it: expand_image calls
   // this from two places and both are guarded by the predictor being 1 --
@@ -7235,9 +7227,8 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
            v73, v75;
   uint16_t *n0x2000_6;   // was uint64_t *, read only as uint16_t
   uint8_t *v4, *v10, *v33, *v42, *v43, *v45, *v60;
-  void *v3, *v13, *v34;
+  void *v13, *v34;
   __frame.slot11 = (ModelBlock *)(Blocka);
-  v3 = alloca(65968);
   v4 = a3;
   n8 = Blocka->f8;
   __frame.slot2 = a3;
@@ -7690,11 +7681,9 @@ int32_t __cost_candidate(uint8_t *a1, uint8_t *n2, int32_t a3, int8_t a4, int32_
           v60, n191_6, n191_7;
   uint32_t v69, v70;
   uint8_t *n2_3, *v15, *v21, *v29, *v42, *n2_4, *v44, *v65, *v66;
-  void *v8;
   __frame.v101 = a3;
   __frame.n2_1 = n2;
   __frame.v99 = a1;
-  v8 = alloca(26672);
   __frame.v88 = a3;
   __frame.n4 = plane_count;
   v9 = *((uint16_t *)a1 + 2);
@@ -7978,9 +7967,7 @@ int32_t __choose_plane_coding(BmfImage *a1, int32_t n3, int8_t a3)
   uint32_t v9, v15, v17, v26, v36, v38, v39, v67, v80, v103, v104, v105, v108, v110, v129, v142,
            v159, v172;
   uint8_t *v29, *v64, *v97, *v121, *v122, *v123, *v134, *v135, *v136, *v151, *v153, *v164, *v166;
-  void *v3;
   __frame.v228 = (BmfImage *)(a1);
-  v3 = alloca(41424);
   n4 = plane_count;
   v5 = (uint16_t)a1->stride;
   v6 = a1->data_size;
@@ -9077,9 +9064,7 @@ int32_t __decode_symbol_list(uint32_t *a1)
   uint32_t *v9, __decode_symbol_list_n0x800000, n0x2000_6, n0x2000_4,
            n0x2000_3, tot_1, *v32, v41, v42, v50,
            v54;
-  void *v1;
   __frame.v68 = a1;
-  v1 = alloca(32788);
   v2 = a1[1];
   v3 = (uint8_t *)a1[5];
   v4 = __frame.list;
@@ -11664,7 +11649,6 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
   uint8_t v97;
   int32_t v98;
   int32_t v99;
-  int32_t n5_8;
   void * Block_plane[4];
   AltP1Block * &v102 = (AltP1Block * &)Block_plane[1];
   AltP1Block * &v103 = (AltP1Block * &)Block_plane[2];
@@ -11997,7 +11981,6 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
             n5_5 = *((uint8_t *)v80 + (uint8_t)(v99 - v81) + 984);
             v98 = (uint8_t)(v99 - v81);
             v83 = v80->f1496[n5_5];
-            n5_8 = n5_5;
             v84 = (uint8_t)(v83 + v81);
             n16_3 = *(n3 + a2) - (uint8_t)(v84 + *(n3 + a2) - v99);
             v97 = v84 + *(n3 + a2) - v99;
@@ -13813,8 +13796,7 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
   P2Ctx *v80;   // a record cursor
   P2Ctx *v84;   // a record cursor
   P2Ctx *v88;   // a record cursor
-  uintptr_t v21, v28, v36, v38, v39, v40, v41, v42, v43, v44, v48, v58, v66, v76, v78, v82, v86,
-            v90, v93;
+  uintptr_t v21, v28, v48, v58, v66, v76, v78, v82, v86, v90, v93;
   bool v17;
   int16_t v14, v24;
   uint8_t *v12;
@@ -13911,23 +13893,18 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
   *(uint16_t *)(v28 + 70) = v29;
   v32 = (P2Ctx *)(uint8_t *)(lpAddress->f278736[0]);
   v32[4] = v32[-1];
-  v36 = (uintptr_t)(lpAddress->f278736[0]);
   v37 = -18 * i_1;
-  ((P2Ctx *)(v36 + v37))[-1] = ((P2Ctx *)(v36 + v37))[0];
-  v38 = (uintptr_t)(lpAddress->f278736[0]);
-  ((P2Ctx *)(v37 + v38))[-2] = ((P2Ctx *)(v37 + v38))[1];
-  v39 = (uintptr_t)(lpAddress->f278736[0]);
-  ((P2Ctx *)(v37 + v39))[-3] = ((P2Ctx *)(v37 + v39))[2];
-  v40 = (uintptr_t)(lpAddress->f278736[0]);
-  ((P2Ctx *)(v37 + v40))[-4] = ((P2Ctx *)(v37 + v40))[3];
-  v41 = (uintptr_t)(lpAddress->f278736[0]);
-  ((P2Ctx *)(v37 + v41))[-5] = ((P2Ctx *)(v37 + v41))[4];
-  v42 = (uintptr_t)(lpAddress->f278736[0]);
-  ((P2Ctx *)(v37 + v42))[-6] = ((P2Ctx *)(v37 + v42))[5];
-  v43 = (uintptr_t)(lpAddress->f278736[0]);
-  ((P2Ctx *)(v37 + v43))[-7] = ((P2Ctx *)(v37 + v43))[6];
-  v44 = (uintptr_t)(lpAddress->f278736[0]);
-  ((P2Ctx *)(v37 + v44))[-8] = ((P2Ctx *)(v37 + v44))[7];
+  // One cursor for the 8 records this shifts; MSVC reloaded the base
+  // between every pair and nothing here writes it.
+  P2Ctx *const rec1 = (P2Ctx *)((uint8_t *)(lpAddress->f278736[0]) + v37);
+  rec1[-1] = rec1[0];
+  rec1[-2] = rec1[1];
+  rec1[-3] = rec1[2];
+  rec1[-4] = rec1[3];
+  rec1[-5] = rec1[4];
+  rec1[-6] = rec1[5];
+  rec1[-7] = rec1[6];
+  rec1[-8] = rec1[7];
   memcpy(*(uint8_t **)&lpAddress->f278760[0],lpAddress->f278756,18 * i_1 + 234);
   memcpy(*(uint8_t **)&lpAddress->f278760[1],lpAddress->f278756,18 * i_1 + 234);
   memcpy(*(uint8_t **)&lpAddress->f278760[2],lpAddress->f278756,18 * i_1 + 234);
@@ -14131,7 +14108,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   P2Ctx *v78;   // a record cursor
   P2Ctx *v89;   // a record cursor
   P2Ctx *v93;   // a record cursor
-  uint8_t *v30, *v38, *v45, *v57, *v67, *v75, *v85;
+  uint8_t *v30, *v38, *v57, *v67, *v75, *v85;
   P2Ctx *v99;   // a record cursor
   P2Ctx *v97;   // a record cursor
   P2Ctx *v95;   // a record cursor
@@ -14144,7 +14121,6 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   bool v17, v109;
   uint8_t v9;
   int16_t v110;
-  uint8_t *v47, *v48, *v49, *v50, *v51, *v52, *v53;   // row cursors
   uint8_t *v21, *v22, *v23, *v24, *v60, *v81, *v82, *v83, *v84, *v86, *v88, *v90,
           *v92, *v94, *v96, *v98;   // row cursors
   int32_t i, v5, n4, n4_1, v15, v16, v31, v32, v33, v39,
@@ -14253,24 +14229,19 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
               *(uint16_t *)(v38 + 70) = (uint16_t)(uintptr_t)v34;
               v41 = (P2Ctx *)(uint8_t *)(v25->f278736[0]);
               v41[4] = v41[-1];
-              v45 = v25->f278736[0];
               v46 = v160;
               Size_1 = Size;
-              ((P2Ctx *)(v160 + v45))[-1] = ((P2Ctx *)(v160 + v45))[0];
-              v47 = v25->f278736[0];
-              ((P2Ctx *)(v46 + v47))[-2] = ((P2Ctx *)(v46 + v47))[1];
-              v48 = v25->f278736[0];
-              ((P2Ctx *)(v46 + v48))[-3] = ((P2Ctx *)(v46 + v48))[2];
-              v49 = v25->f278736[0];
-              ((P2Ctx *)(v46 + v49))[-4] = ((P2Ctx *)(v46 + v49))[3];
-              v50 = v25->f278736[0];
-              ((P2Ctx *)(v46 + v50))[-5] = ((P2Ctx *)(v46 + v50))[4];
-              v51 = v25->f278736[0];
-              ((P2Ctx *)(v46 + v51))[-6] = ((P2Ctx *)(v46 + v51))[5];
-              v52 = v25->f278736[0];
-              ((P2Ctx *)(v46 + v52))[-7] = ((P2Ctx *)(v46 + v52))[6];
-              v53 = v25->f278736[0];
-              ((P2Ctx *)(v46 + v53))[-8] = ((P2Ctx *)(v46 + v53))[7];
+              // One cursor for the 8 records this shifts; MSVC reloaded the base
+              // between every pair and nothing here writes it.
+              P2Ctx *const rec2 = (P2Ctx *)((uint8_t *)(v25->f278736[0]) + v46);
+              rec2[-1] = rec2[0];
+              rec2[-2] = rec2[1];
+              rec2[-3] = rec2[2];
+              rec2[-4] = rec2[3];
+              rec2[-5] = rec2[4];
+              rec2[-6] = rec2[5];
+              rec2[-7] = rec2[6];
+              rec2[-8] = rec2[7];
               memcpy(v25->f278760_p,v25->f278756,Size_1);
               memcpy(v25->f278764,v25->f278756,Size);
               memcpy(v25->f278768,v25->f278756,Size);
@@ -14605,7 +14576,7 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
   P2Ctx *v72;   // a record cursor
   uint8_t *v11;
   P2Ctx *v27;   // a record cursor
-  uint8_t *v23, *v30, *v38, *v40, *v41, *v42, *v43, *v44, *v45, *v46, *v51, *v61, *v69, *v79;
+  uint8_t *v23, *v30, *v51, *v61, *v69, *v79;
   P2Ctx *v93;   // a record cursor
   P2Ctx *v91;   // a record cursor
   P2Ctx *v89;   // a record cursor
@@ -14704,23 +14675,18 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
   *(uint16_t *)(v30 + 70) = v31;
   v34 = (P2Ctx *)(uint8_t *)(*(int32_t *)&lpAddress->f278736[0]);
   v34[4] = v34[-1];
-  v38 = (uint8_t *)lpAddress->f278736[0];
   v39 = -18 * i;
-  ((P2Ctx *)(v38 + v39))[-1] = ((P2Ctx *)(v38 + v39))[0];
-  v40 = (uint8_t *)lpAddress->f278736[0];
-  ((P2Ctx *)(v39 + v40))[-2] = ((P2Ctx *)(v39 + v40))[1];
-  v41 = (uint8_t *)lpAddress->f278736[0];
-  ((P2Ctx *)(v39 + v41))[-3] = ((P2Ctx *)(v39 + v41))[2];
-  v42 = (uint8_t *)lpAddress->f278736[0];
-  ((P2Ctx *)(v39 + v42))[-4] = ((P2Ctx *)(v39 + v42))[3];
-  v43 = (uint8_t *)lpAddress->f278736[0];
-  ((P2Ctx *)(v39 + v43))[-5] = ((P2Ctx *)(v39 + v43))[4];
-  v44 = (uint8_t *)lpAddress->f278736[0];
-  ((P2Ctx *)(v39 + v44))[-6] = ((P2Ctx *)(v39 + v44))[5];
-  v45 = (uint8_t *)lpAddress->f278736[0];
-  ((P2Ctx *)(v39 + v45))[-7] = ((P2Ctx *)(v39 + v45))[6];
-  v46 = (uint8_t *)lpAddress->f278736[0];
-  ((P2Ctx *)(v39 + v46))[-8] = ((P2Ctx *)(v39 + v46))[7];
+  // One cursor for the 8 records this shifts; MSVC reloaded the base
+  // between every pair and nothing here writes it.
+  P2Ctx *const rec3 = (P2Ctx *)((uint8_t *)(lpAddress->f278736[0]) + v39);
+  rec3[-1] = rec3[0];
+  rec3[-2] = rec3[1];
+  rec3[-3] = rec3[2];
+  rec3[-4] = rec3[3];
+  rec3[-5] = rec3[4];
+  rec3[-6] = rec3[5];
+  rec3[-7] = rec3[6];
+  rec3[-8] = rec3[7];
   Size = 18 * i + 234;
   memcpy((uint8_t *)lpAddress->f278736[6],(uint8_t *)lpAddress->f278736[5],Size);
   memcpy((uint8_t *)lpAddress->f278736[7],(uint8_t *)lpAddress->f278736[5],Size);
@@ -14907,7 +14873,6 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   uint32_t v185;
   ;
   AltP2Block *v55;
-  uint8_t *v44;
   AltP2Block *v13;
   AltP2Block *v24;
   P2Ctx *v25;   // a record cursor
@@ -14931,7 +14896,6 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   bool v16;
   uint8_t v9;
   int16_t v113;
-  uint8_t *v46, *v47, *v48, *v49, *v50, *v51, *v52;   // row cursors
   uint8_t *v20, *v21, *v22, *v23, *v59, *v80, *v81, *v82, *v83, *v85, *v87, *v89,
           *v91, *v93, *v95, *v97;   // row cursors
   int32_t i_1, v5, n4, n4_1, v14, v15, v30, v31, v32, v38, v99,
@@ -15040,24 +15004,19 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
               *(uint16_t *)(v37 + 70) = (uint16_t)(uintptr_t)v33;
               v40 = (P2Ctx *)(uint8_t *)(v24->f278736[0]);
               v40[4] = v40[-1];
-              v44 = v24->f278736[0];
               v45 = v164;
               Size_1 = Size;
-              ((P2Ctx *)(v164 + v44))[-1] = ((P2Ctx *)(v164 + v44))[0];
-              v46 = v24->f278736[0];
-              ((P2Ctx *)(v45 + v46))[-2] = ((P2Ctx *)(v45 + v46))[1];
-              v47 = v24->f278736[0];
-              ((P2Ctx *)(v45 + v47))[-3] = ((P2Ctx *)(v45 + v47))[2];
-              v48 = v24->f278736[0];
-              ((P2Ctx *)(v45 + v48))[-4] = ((P2Ctx *)(v45 + v48))[3];
-              v49 = v24->f278736[0];
-              ((P2Ctx *)(v45 + v49))[-5] = ((P2Ctx *)(v45 + v49))[4];
-              v50 = v24->f278736[0];
-              ((P2Ctx *)(v45 + v50))[-6] = ((P2Ctx *)(v45 + v50))[5];
-              v51 = v24->f278736[0];
-              ((P2Ctx *)(v45 + v51))[-7] = ((P2Ctx *)(v45 + v51))[6];
-              v52 = v24->f278736[0];
-              ((P2Ctx *)(v45 + v52))[-8] = ((P2Ctx *)(v45 + v52))[7];
+              // One cursor for the 8 records this shifts; MSVC reloaded the base
+              // between every pair and nothing here writes it.
+              P2Ctx *const rec4 = (P2Ctx *)((uint8_t *)(v24->f278736[0]) + v45);
+              rec4[-1] = rec4[0];
+              rec4[-2] = rec4[1];
+              rec4[-3] = rec4[2];
+              rec4[-4] = rec4[3];
+              rec4[-5] = rec4[4];
+              rec4[-6] = rec4[5];
+              rec4[-7] = rec4[6];
+              rec4[-8] = rec4[7];
               memcpy(v24->f278760_p,v24->f278756,Size_1);
               memcpy(v24->f278764,v24->f278756,Size);
               memcpy(v24->f278768,v24->f278756,Size);
@@ -15856,7 +15815,6 @@ void __transform_planes(BmfImage *p_i, int32_t a2, int8_t a3)
   uint8_t *Src;
   uint16_t *Srca_3;
   uint8_t *p_ia;
-  uint8_t *Buffer_1;
   ;
   int8_t v11;
   uint8_t *__transform_planes_Buffer, *p_ia_1, *Src_1, *Src_3, *Src_2, *v20;   // `uint8_t *` beside the `char` scalars above
@@ -15879,7 +15837,6 @@ void __transform_planes(BmfImage *p_i, int32_t a2, int8_t a3)
     Src = Src_1;
     Srca_3 = (uint16_t *)p_i + 8;
     p_ia = p_ia_1;
-    Buffer_1 = __transform_planes_Buffer;
     n4_1 = 0;
     do
     {
@@ -17382,7 +17339,7 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
           acc, n4_1, v40, v41, v43, n4_3, v47, i_1, v50, n4_4, v56;
   BmfImage *p_i_1;
   uint16_t i_2, v53;
-  uint32_t ElementCount_1, n7, v25, v26, v28, v30, v31, v32, Size, v55;
+  uint32_t ElementCount_1, v25, v26, v28, v30, v31, v32, Size, v55;
   uint8_t v39, *v49, v54;
   v5 = a1;
   if ( !((BmfArc *)a1)->fp )
@@ -17475,7 +17432,6 @@ LABEL_22:
       // The 4-bit near-lossless field -- ALGORITHM.md §4.1's bit packer writing
       // -E into the header.  -E is 0, so the bits are zero and only the
       // packer's cursor moves; what is left is that cursor arithmetic.
-      n7 = 0;
       plane_desc[0].w12 = 0;
       if ( ::packer_free_bits < 4 )
       {
