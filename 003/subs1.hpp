@@ -7940,7 +7940,7 @@ int32_t __choose_plane_coding(BmfImage *a1, int32_t n3, int8_t a3)
   __frame.v226 = (BmfImage *)((uint8_t *)a1);
   alphabet_reduced = 1;
   LODWORD(__frame.v208) = v5;
-  __frame.v227 = (uintptr_t)((uint8_t *)a1 + v6 + 16);
+  __frame.v227 = (uintptr_t)&a1->pixels[v6];
   memset(__frame.buf,0,0x8000);
   n192 = 192;
   do
@@ -9316,7 +9316,8 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   uint16_t *v106;
   FreqRec *freq_tbl;
   CtrPair *v16;   // the group's counter pair for this context
-  uint16_t *n15_9, *n4_10, *v58, *v95, *v110, *v121, v154, v162,
+  PixRec *n15_9;   // `f56[6]`, the row above
+  uint16_t *n4_10, *v58, *v95, *v110, *v121, v154, v162,
            v174;
   ModelBlock *this_3;
   ModelBlock *this_2;
@@ -9329,21 +9330,21 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   uint8_t *v38;
   uint8_t *v76;
   uint8_t *n15_16;
-  n15_9 = (uint16_t *)*(uint32_t *)&_this->f56[6];
-  n4_8 = *n15_9;
+  n15_9 = (PixRec *)_this->f56[6];
+  n4_8 = n15_9->sym;
   v4 = (uint64_t *)((uint16_t *)*(uint32_t *)&_this->f56[5]);
   n4_7 = *((uint16_t *)v4 - 4);
-  n15_6 = n15_9[4];
+  n15_6 = n15_9[1].sym;
   __frame.sym5 = (ModelBlock *)(_this);
-  n15_7 = *(n15_9 - 4);
+  n15_7 = n15_9[-1].sym;
   __frame.sym0 = n4_8;
   ::mode_symbol[1] = n4_8;
   __frame.sym1 = n4_7;
   ::mode_symbol[2] = n4_7;
   __frame.sym3 = n15_6;
   ::mode_symbol[3] = n15_6;
-  v8 = *((uint8_t *)n15_9 + 3) + 4 * (n15_6 == n15_7);
-  v9 = *((uint8_t *)n15_9 + 11);
+  v8 = n15_9->match[1] + 4 * (n15_6 == n15_7);
+  v9 = n15_9[1].match[1];
   __frame.sym2 = n15_7;
   mode_symbol[4] = n15_7;
   v10 = 2 * *((uint8_t *)v4 - 6) + 8 * v9 + v8;
@@ -9415,7 +9416,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   v22 = this_2->ctx_bucket[v15 + __decode_pixel_n15];
   v23 = this_2->f56[7];
   this_2->f40 = v22;
-  n4_11 = *((uint8_t *)n15_9 + 2);
+  n4_11 = n15_9->match[0];
   __frame.sym4 = (uint64_t *)(v4);
   __frame.sym5 = (ModelBlock *)(this_2);
   __frame.sym2 = n4_11;
@@ -9428,7 +9429,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   v27 = 8 * *((uint8_t *)v4 - 12) + 4 * *((uint8_t *)v4 - 9) + v26 + 2 * *((uint8_t *)v4 - 10);
   this_3 = (ModelBlock *)(__frame.sym5);
   v29 = ((uint8_t)(*(uint8_t *)(__frame.sym6 + 2) & *(v21 + 2) & __frame.sym2 & *(v23 + 2)) << 9)
-      + ((uint8_t)(*(uint8_t *)(__frame.sym6 + 3) & *(v21 + 3) & *(v23 + 3) & *((uint8_t *)n15_9 + 3)) << 8)
+      + ((uint8_t)(*(uint8_t *)(__frame.sym6 + 3) & *(v21 + 3) & *(v23 + 3) & n15_9->match[1]) << 8)
       + (v22 << 10)
       + v27;
   n15_10 = (uint8_t *)__frame.sym3;
@@ -10106,7 +10107,8 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   uint16_t *v51;
   uint16_t *v37;
   uint16_t *v108;
-  uint16_t *n2_7, *n2_8, *n2_11, *n2_12, *n2_14, *v97, *v98, *n2_6, *v113, *v124, v153,
+  PixRec *n2_7;   // `f56[6]`, the row above
+  uint16_t *n2_8, *n2_11, *n2_12, *n2_14, *v97, *v98, *n2_6, *v113, *v124, v153,
            *n15_39;
   uint8_t *n2_13;   // was uint16_t *, read only as uint8_t
   SymList *v134, *v135;
@@ -10115,21 +10117,21 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
           v173;
   uint8_t *v69;
   uint8_t *p_n15_3, *v41;
-  n2_7 = (uint16_t *)*(int32_t *)&_this->f56[6];
-  n4 = *n2_7;
+  n2_7 = (PixRec *)_this->f56[6];
+  n4 = n2_7->sym;
   n2_8 = (uint16_t *)*(int32_t *)&_this->f56[5];
   n4_1 = (uint16_t)*(n2_8 - 4);
-  __code_pixel_n15 = n2_7[4];
+  __code_pixel_n15 = n2_7[1].sym;
   __frame.sym7 = (ModelBlock *)(_this);
-  n15_1 = *(n2_7 - 4);
+  n15_1 = n2_7[-1].sym;
   __frame.sym8 = n4;
   ::mode_symbol[1] = n4;
   __frame.sym10 = n4_1;
   ::mode_symbol[2] = n4_1;
   __frame.sym6 = __code_pixel_n15;
   ::mode_symbol[3] = __code_pixel_n15;
-  v8 = *((uint8_t *)n2_7 + 3) + 4 * (__code_pixel_n15 == n15_1);
-  v9 = *((uint8_t *)n2_7 + 11);
+  v8 = n2_7->match[1] + 4 * (__code_pixel_n15 == n15_1);
+  v9 = n2_7[1].match[1];
   __frame.sym5 = n15_1;
   mode_symbol[4] = n15_1;
   v10 = 32 * *((uint8_t *)n2_8 - 4)
@@ -10205,8 +10207,8 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   v21 = this_2->ctx_bucket[v15 + n15_5];
   v22 = this_2->f56[7];
   *(int32_t *)&this_2->f40 = v21;
-  p_n15_1 = *((uint8_t *)n2_7 + 2);
-  v24 = *((uint8_t *)n2_7 + 3);
+  p_n15_1 = n2_7->match[0];
+  v24 = n2_7->match[1];
   __frame.sym2 = n2_8;
   __frame.sym7 = (ModelBlock *)(this_2);
   __frame.sym0 = p_n15_1;
@@ -15770,7 +15772,7 @@ void __transform_planes(BmfImage *p_i, int32_t a2, int8_t a3)
         Src_2 = (uint8_t *)p_i + v14 + 16;
         if ( plane_count == 1 )
         {
-          memcpy((uint8_t *)p_i + v14 + 16,Src,Size_3);
+          memcpy(&p_i->pixels[v14],Src,Size_3);
         }
         else
         {
@@ -17259,6 +17261,7 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
   // the gate's answer -- nothing writes one of them and reads another.
   uint8_t *Buffer_copy;
   ;
+  uint32_t coded_len;   // word 1 of the coded block, its length
   uint8_t *v5;   // were int32_t: these hold addresses
   FILE *i;
   bool v38;
@@ -17515,7 +17518,12 @@ LABEL_57:
   {
     v39 = fwrite(&__frame.hdr, 1u, 0x10u, ((BmfArc *)v5)->fp) == 16;
     if ( coded_buf )
-      v39 &= fwrite(coded_buf, 1u, *((uint32_t *)coded_buf + 1) + 8, ((BmfArc *)v5)->fp) == *((uint32_t *)coded_buf + 1) + 8;
+    {
+      // Word 1 of the coded block is its length; the eight is the header in
+      // front of it.
+      coded_len = ((const uint32_t *)coded_buf)[1];
+      v39 &= fwrite(coded_buf, 1u, coded_len + 8, ((BmfArc *)v5)->fp) == coded_len + 8;
+    }
     v40 = (fwrite(::coded_buf, 1u, ElementCounta, ((BmfArc *)v5)->fp) == ElementCounta) & v39;
     free(::coded_buf);
     if ( v40 && (p_i->depth & 0x80) != 0 )
@@ -17588,7 +17596,10 @@ LABEL_76:
 LABEL_77:
   v54 = fwrite(p_i_1, 1u, 0x10u, ((BmfArc *)v5)->fp) == 16;
   if ( coded_buf )
-    v54 &= fwrite(coded_buf, 1u, *((uint32_t *)coded_buf + 1) + 8, ((BmfArc *)v5)->fp) == *((uint32_t *)coded_buf + 1) + 8;
+  {
+    coded_len = ((const uint32_t *)coded_buf)[1];
+    v54 &= fwrite(coded_buf, 1u, coded_len + 8, ((BmfArc *)v5)->fp) == coded_len + 8;
+  }
   v55 = fwrite(__frame.Buffer_2, 1u, ElementCount_1 + p_i_1->data_size, ((BmfArc *)v5)->fp);
   v56 = p_i_1->data_size;
   if ( (v54 & (v55 == v56 + ElementCount_1)) == 0 )
@@ -17705,7 +17716,7 @@ void __bmf_decompress(
     if ( !p_i )
     {
       printf("\n");
-      if ( !*((uint32_t *)Block + 1) )
+      if ( !((BmfArc *)Block)->fp )
         __exit_402E40(3, InName);
       __bmf_destroy_archive((BmfArc *)(FILE **)Block, 1);
       return;
