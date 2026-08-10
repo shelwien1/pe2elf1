@@ -34,9 +34,10 @@ import structs                                                    # noqa: E402
 
 # `T *p` in a signature or a declaration, for the struct `p` points at
 PARAM = re.compile(r'\b([A-Z]\w+)\s*\*\s*&?\s*(\w+)\b')
+BYTEP = r'(?:char|int8_t|uint8_t)'      # §2.2 retyped the byte pointer
 FORMS = [
     # (regex, how to read the offset from the match)
-    (re.compile(r'\*\(([\w ]+?\s*\*?)\s*\*\)\(\(char \*\)(\w+) \+ (\d+)\)'), 'byte'),
+    (re.compile(r'\*\(([\w ]+?\s*\*?)\s*\*\)\(\(%s \*\)(\w+) \+ (\d+)\)' % BYTEP), 'byte'),
     (re.compile(r'\*\(\(([\w ]+?\s*\*?)\s*\*\)(\w+) \+ (\d+)\)'), 'scaled'),
     (re.compile(r'\*\(([\w ]+?\s*\*?)\s*\*\)\((\w+) \+ (\d+)\)'), 'byte'),
 ]

@@ -5218,12 +5218,12 @@ uint8_t *__alt_p2_alloc(Obj11 *_this, int32_t i, int32_t n4)
   while ( n0x1E60 < 0x1E60 );
   v8 = 4 * plane_desc[0].w12 + 1;
   v9 = 16 * plane_desc[0].w12;
-  *(uint32_t *)((uint8_t *)_this + 278732) = (uint8_t)(plane_desc[plane_desc[_this->f278728 + 1].src_plane + 1].flags
+  *(uint32_t *)&_this->f278732 = (uint8_t)(plane_desc[plane_desc[_this->f278728 + 1].src_plane + 1].flags
                                                & 8) >> 3;
   deadzone_hi = v8;
   deadzone_lo = -v8;
-  *(uint32_t *)((uint8_t *)_this + 278720) = -v9 - 7;
-  *(uint32_t *)((uint8_t *)_this + 278724) = v9 + 8;
+  *(uint32_t *)&_this->f278720 = -v9 - 7;
+  *(uint32_t *)&_this->f278724 = v9 + 8;
   *(uint8_t * *)&_this->f278660 = (uint8_t *)bmf_new(4 * i + 16);
   v10 = bmf_new(4 * i + 16);
   *(uint32_t *)((uint8_t *)_this + 232) = 0x3F800000 /* 1.0f */;
@@ -5266,7 +5266,7 @@ uint8_t *__alt_p2_alloc(Obj11 *_this, int32_t i, int32_t n4)
   ctx_bias[1] = 0;
   n0x82 = 0;
   ctx_bias[0] = 0;
-  *(uint32_t *)((uint8_t *)_this + 278736) = v17 + 144;
+  *(uint32_t *)&_this->f278736[0] = v17 + 144;
   do
   {
     v20 = (uint8_t)__byte_439890[v18];
@@ -5292,19 +5292,19 @@ uint8_t *__alt_p2_alloc(Obj11 *_this, int32_t i, int32_t n4)
   _this->f278704 = 15;
   __fwd_alt_p2_alloc_alt_init_tables(((uint8_t *)_this + 279984), ((uint8_t *)_this + 280496));
   _this->f278760[21] = 0;
-  *(uint32_t *)((uint8_t *)_this + 278784) = 64;
+  _this->f278760[6] = 64;
   _this->f278760[17] = 0;
   _this->f278760[7] = 128;
   _this->f278760[13] = 0;
-  *(uint32_t *)((uint8_t *)_this + 278800) = 192;
+  _this->f278760[10] = 192;
   _this->f278760[9] = 0;
   _this->f278760[11] = 384;
   _this->f278760[5] = 0;
-  *(uint32_t *)((uint8_t *)_this + 278816) = 576;
+  _this->f278760[14] = 576;
   _this->f278760[15] = 1152;
-  *(uint32_t *)((uint8_t *)_this + 278832) = 1728;
+  _this->f278760[18] = 1728;
   _this->f278760[19] = 3456;
-  *(uint32_t *)((uint8_t *)_this + 278848) = 5184;
+  _this->f278760[22] = 5184;
   _this->f278760[23] = 10368;
   return (uint8_t *)_this;
 }
@@ -16417,11 +16417,11 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             v166[v184] = v107;
           }
           __fwd_alt_model_p2_encode_alt_p2_encode_symbol(
-            (uint16_t *)&((uint8_t *)lpAddress_1)[8 * *((uint32_t *)lpAddress_1 + 69676) + 940072],
+            (uint16_t *)&((uint8_t *)lpAddress_1)[8 * lpAddress_1->f278704 + 940072],
             (uint8_t *)lpAddress_1 + 278708,
             v105);
           __alt_p2_model((Obj11 *)lpAddress_1, v104, v105, v104 - v178);
-          v109 = *((uint32_t *)lpAddress_1 + 69684);
+          v109 = *(uint32_t *)&lpAddress_1->f278736[0];
           v110 = *(int16_t *)(v109 - 4);
           v111 = *(int16_t *)(v109 - 10);
           v112 = *(int16_t *)(v109 - 8);
@@ -17086,11 +17086,11 @@ void __transform_planes(BmfImage *p_i, int32_t a2, int8_t a3)
   __transform_planes_Buffer = (uint8_t *)::coded_buf;
   p_ia_1 = (uint8_t *)::coded_buf + 16;
   *((uint32_t *)::coded_buf + 4) = *(uint32_t *)&p_i->width;
-  *((uint32_t *)p_ia_1 + 1) = *((uint32_t *)p_i + 1);
+  *((uint32_t *)p_ia_1 + 1) = p_i->stride;
   *((uint32_t *)p_ia_1 + 2) = *((uint32_t *)p_i + 2);
-  *((uint32_t *)p_ia_1 + 3) = *((uint32_t *)p_i + 3);
+  *((uint32_t *)p_ia_1 + 3) = p_i->data_size;
   Srca_1 = (uint8_t *)((uint16_t *)p_i + 8);
-  memcpy(__transform_planes_Buffer + 32,(uint8_t *)p_i + 16,*((uint32_t *)p_i + 3));
+  memcpy(__transform_planes_Buffer + 32,(uint8_t *)p_i + 16,p_i->data_size);
   Src_1 = (uint8_t *)bmf_new(p_i->width * p_i->height);
   Src_3 = Src_1;
   if ( plane_count > 0 )
@@ -17481,11 +17481,11 @@ LABEL_42:
     p_i_1 = __frame.p_i_2;
     v5 = __frame.v86;
   }
-  Src_1 = (uint8_t *)bmf_new(*(uint16_t *)p_i_1 * *((uint16_t *)p_i_1 + 1));
+  Src_1 = (uint8_t *)bmf_new(*(uint16_t *)p_i_1 * p_i_1->height);
   if ( (__frame.v92 & 8) != 0 )
   {
     *(uint32_t *)__frame.p_i = *(uint32_t *)&p_i_1->width;
-    __frame.v81 = *((uint32_t *)p_i_1 + 1);
+    __frame.v81 = p_i_1->stride;
     __frame.n4_10 = *((uint32_t *)p_i_1 + 2);
     __frame.Size = p_i_1->data_size;
     BYTE2(__frame.n4_10) = 72;
@@ -17505,14 +17505,14 @@ LABEL_42:
           if ( ::plane_predictor == 1 )
           {
             if ( !plane_alt_model )
-              __unpredict_med((uint8_t *)Src_1, *(uint16_t *)p_i_1, *((uint16_t *)p_i_1 + 1));
+              __unpredict_med((uint8_t *)Src_1, *(uint16_t *)p_i_1, p_i_1->height);
           }
           // `else if ( !desc_slow_mode && ::plane_predictor == 2 )` -- the fast-mode
           // predictor-2 expander, never reached: -S is on.
         }
         else
         {
-          __expand_predictor_mode0((uint32_t)Src_1, *(uint16_t *)p_i_1, *((uint16_t *)p_i_1 + 1));
+          __expand_predictor_mode0((uint32_t)Src_1, *(uint16_t *)p_i_1, p_i_1->height);
         }
         __fwd_expand_image_interleave_plane(p_i_1, (uint8_t *)Src_1, v33, v34);
         ++ArgList;
@@ -17546,7 +17546,7 @@ LABEL_104:
         {
           i = *(uint16_t *)p_i_1;
           __frame.Src = &((uint8_t *)p_i_1)[v37 + 16];
-          Size_1 = i * *((uint16_t *)p_i_1 + 1);
+          Size_1 = i * p_i_1->height;
           __frame.n4_1 = ::plane_count;
           __frame.Size = Size_1;
           if ( ::plane_count == 1 )
@@ -17604,11 +17604,11 @@ LABEL_104:
           if ( n2_2 )
           {
             if ( n2_2 == 1 )
-              __unpredict_med((uint8_t *)Src_1, *(uint16_t *)p_i_1, *((uint16_t *)p_i_1 + 1));
+              __unpredict_med((uint8_t *)Src_1, *(uint16_t *)p_i_1, p_i_1->height);
           }
           else
           {
-            __expand_predictor_mode0((uint32_t)Src_1, *(uint16_t *)p_i_1, *((uint16_t *)p_i_1 + 1));
+            __expand_predictor_mode0((uint32_t)Src_1, *(uint16_t *)p_i_1, p_i_1->height);
           }
           __fwd_expand_image_interleave_plane(p_i_1, (uint8_t *)Src_1, v37, v35);
         }
@@ -17644,11 +17644,11 @@ LABEL_109:
   {
     n4_6 = (uint8_t *)bmf_new(p_i_1->data_size);
     n_planes = ::plane_count;
-    v55 = *((uint16_t *)p_i_1 + 1);
+    v55 = p_i_1->height;
     __frame.n4_1 = (int32_t)n4_6;
     Src_2 = ::plane_count * (v55 - 1);
     memcpy(n4_6,(uint8_t *)p_i_1 + 16,p_i_1->data_size);
-    LOWORD(v58) = *((uint16_t *)p_i_1 + 1);
+    LOWORD(v58) = p_i_1->height;
     if ( (uint16_t)v58 )
     {
       __frame.Src = (void *)Src_2;
@@ -17688,7 +17688,7 @@ LABEL_109:
     i_2 = *(uint16_t *)p_i_1;
     *(uint16_t *)p_i_1 = v58;
     p_i_1->flags ^= 2u;
-    *((uint16_t *)p_i_1 + 1) = i_2;
+    p_i_1->height = i_2;
     *((uint16_t *)p_i_1 + 2) = v58 * n_planes;
     free(n4_6);
   }
@@ -18160,12 +18160,12 @@ LABEL_172:
     else
     {
       __frame.n4_15 = (uint8_t *)n4_19;
-      __frame.v178[0] = (uint8_t *)bmf_new(*((uint32_t *)p_i_1 + 3));
+      __frame.v178[0] = (uint8_t *)bmf_new(p_i_1->data_size);
       v121 = p_i_1->height;
       __frame.v178[1] = (uint8_t *)::plane_count;
       __frame.v179[0] = (int32_t)__frame.v178[0];
       __frame.v181[0] = ::plane_count * (v121 - 1);
-      memcpy(__frame.v178[0],(uint8_t *)p_i_1 + 16,*((uint32_t *)p_i_1 + 3));
+      memcpy(__frame.v178[0],(uint8_t *)p_i_1 + 16,p_i_1->data_size);
       LOWORD(v123) = p_i_1->height;
       if ( (uint16_t)v123 )
       {
@@ -18206,7 +18206,7 @@ LABEL_172:
       v132 = v123 * LOWORD(__frame.v178[1]);
       p_i_1->width = v123;
       p_i_1->height = i_7;
-      *((uint8_t *)p_i_1 + 11) ^= 2u;
+      p_i_1->flags ^= 2u;
       p_i_1->stride = v132;
       free(__frame.v175);
     }
@@ -18636,35 +18636,35 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
   }
   __compress_image_Buffer_1 = (uint8_t)(uintptr_t)coded_buf;
   p_i_1 = (BmfImage *)(p_i);
-  row_bytes = *((uint32_t *)p_i + 1);
+  row_bytes = p_i->stride;
   if ( coded_buf )
     __compress_image_Buffer_1 = 1;
   (*(uint32_t *)&__frame.hdr[0]) = *(uint32_t *)&p_i->width;
-  *((uint8_t *)p_i + 11) |= __compress_image_Buffer_1 << 7;
+  p_i->flags |= __compress_image_Buffer_1 << 7;
   Buffera_5 = *((uint8_t **)p_i + 2);
-  v11 = *((uint32_t *)p_i + 3);
+  v11 = p_i->data_size;
   (*(int32_t *)&__frame.hdr[4]) = row_bytes;
   plane_desc[0].w4 = 512;
-  v12 = *((uint8_t *)p_i + 10);
+  v12 = p_i->depth;
   plane_desc[0].w12 = 0;
   (*(uint8_t * *)&__frame.hdr[8]) = Buffera_5;
   (*(int32_t *)&__frame.hdr[12]) = v11;
   ::plane_count = ((v12 & 0x3Fu) + 7) >> 3;
   if ( fwrite("\x81\x8A""20\x81\x90""20a+b", 4u, 1u, ((BmfArc *)v5)->fp) != 1 )
     return 0;
-  v15 = *((uint8_t *)p_i + 10);
+  v15 = p_i->depth;
   ++*(uint32_t *)v5;
   ElementCount_1 = v15 & 0x80;
   if ( (v15 & 0x80) != 0 )   // bit 7 is the palette flag, not a sign
     ElementCount_1 = 3 << (v15 & 31);
-  if ( *((uint32_t *)p_i + 3) < 0x10u )   // -N is on, so only the size decides
+  if ( p_i->data_size < 0x10u )   // -N is on, so only the size decides
     goto LABEL_76;
   desc_slow_mode = 1;               // -S
-  v17 = *((uint8_t *)p_i + 10);
+  v17 = p_i->depth;
   HIBYTE((*(uint8_t * *)&__frame.hdr[8])) |= 0x24;        // -S in bit 2, and bit 5 always set
   if ( (v17 & 0x3Fu) <= 4 )         // -F is on, so only the depth decides
   {
-    coded_size = *((uint32_t *)p_i + 3) + 0x20000;
+    coded_size = p_i->data_size + 0x20000;
     ::coded_buf = (uint8_t *)bmf_new(coded_size);
     ::packer_free_bits = 0;
     ::packer_acc = 0;
@@ -18680,12 +18680,12 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
   }
   __frame.ElementCount = __fwd_compress_image_search_filter(p_i, v13);
   HIBYTE((*(uint8_t * *)&__frame.hdr[8])) |= 0x10u;
-  if ( (*((uint8_t *)p_i + 11) & 2) != 0 )
+  if ( (p_i->flags & 2) != 0 )
   {
-    n4_6 = *((uint32_t *)p_i + 1);
+    n4_6 = p_i->stride;
     Buffera_6 = *((uint8_t **)p_i + 2);
     (*(uint32_t *)&__frame.hdr[0]) = *(uint32_t *)&p_i->width;
-    v18 = *((uint32_t *)p_i + 3);
+    v18 = p_i->data_size;
     (*(int32_t *)&__frame.hdr[4]) = n4_6;
     (*(uint8_t * *)&__frame.hdr[8]) = Buffera_6;
     (*(int32_t *)&__frame.hdr[12]) = v18;
@@ -18693,7 +18693,7 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
   }
   else
   {
-    v18 = *((uint32_t *)p_i + 3);
+    v18 = p_i->data_size;
   }
   coded_size = v18 + 0x20000;
   ::coded_buf = (uint8_t *)bmf_new(v18 + 0x20000);
@@ -18853,7 +18853,7 @@ LABEL_22:
   }
 LABEL_57:
   *(uint32_t *)::packer_word = ::packer_acc;
-  v38 = (uint32_t)(out_cursor - (uint32_t)::coded_buf) < *((uint32_t *)p_i + 3);
+  v38 = (uint32_t)(out_cursor - (uint32_t)::coded_buf) < p_i->data_size;
   ElementCounta = out_cursor - ::coded_buf;
   (*(int32_t *)&__frame.hdr[12]) = out_cursor - ::coded_buf;
   if ( v38 )
@@ -18864,22 +18864,22 @@ LABEL_57:
     v40 = (fwrite(::coded_buf, 1u, ElementCounta, ((BmfArc *)v5)->fp) == ElementCounta) & v39;
     free(::coded_buf);
     if ( v40 && (p_i->depth & 0x80) != 0 )
-      fwrite((uint8_t *)p_i + *((uint32_t *)p_i + 3) + 16, 1u, ElementCount_1, ((BmfArc *)v5)->fp);
+      fwrite((uint8_t *)p_i + p_i->data_size + 16, 1u, ElementCount_1, ((BmfArc *)v5)->fp);
     fflush(((BmfArc *)v5)->fp);
     if ( v40 )
       return (*(int32_t *)&__frame.hdr[12]);
     return v40;
   }
   free(::coded_buf);
-  if ( (*((uint8_t *)p_i + 11) & 2) != 0 )
+  if ( (p_i->flags & 2) != 0 )
   {
-    Buffer_copy = (uint8_t *)bmf_new(*((uint32_t *)p_i + 3));
+    Buffer_copy = (uint8_t *)bmf_new(p_i->data_size);
     v41 = p_i->height;
     (*(int32_t *)&__frame.hdr[4]) = ::plane_count;
     (*(uint8_t * *)&__frame.hdr[8]) = Buffer_copy;
     (*(int32_t *)&__frame.hdr[12]) = ::plane_count * (v41 - 1);
     __frame.Buffer_2 = (uint16_t *)p_i + 8;
-    memcpy(Buffer_copy,(uint8_t *)p_i + 16,*((uint32_t *)p_i + 3));
+    memcpy(Buffer_copy,(uint8_t *)p_i + 16,p_i->data_size);
     LOWORD(v43) = p_i->height;
     if ( (uint16_t)v43 )
     {
@@ -18923,7 +18923,7 @@ LABEL_57:
     v53 = v43 * (*(int32_t *)&__frame.hdr[4]);
     p_i_1->width = v43;
     p_i_1->height = i_2;
-    *((uint8_t *)p_i_1 + 11) ^= 2u;
+    p_i_1->flags ^= 2u;
     p_i_1->stride = v53;
     free(__frame.Buffera_4);
     goto LABEL_77;
@@ -18934,8 +18934,8 @@ LABEL_77:
   v54 = fwrite(p_i_1, 1u, 0x10u, ((BmfArc *)v5)->fp) == 16;
   if ( coded_buf )
     v54 &= fwrite(coded_buf, 1u, *((uint32_t *)coded_buf + 1) + 8, ((BmfArc *)v5)->fp) == *((uint32_t *)coded_buf + 1) + 8;
-  v55 = fwrite(__frame.Buffer_2, 1u, ElementCount_1 + *((uint32_t *)p_i_1 + 3), ((BmfArc *)v5)->fp);
-  v56 = *((uint32_t *)p_i_1 + 3);
+  v55 = fwrite(__frame.Buffer_2, 1u, ElementCount_1 + p_i_1->data_size, ((BmfArc *)v5)->fp);
+  v56 = p_i_1->data_size;
   if ( (v54 & (v55 == v56 + ElementCount_1)) == 0 )
     return 0;
   return v56;

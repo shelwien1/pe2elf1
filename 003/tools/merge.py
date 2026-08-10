@@ -36,22 +36,77 @@ from structs import bodies                                        # noqa: E402
 WIDTH = {'char': 1, 'int8_t': 1, 'uint8_t': 1, 'int16_t': 2, 'uint16_t': 2,
          'int32_t': 4, 'uint32_t': 4, 'int64_t': 8, 'uint64_t': 8,
          'float': 4, 'double': 8, '__m128': 16, '__m128i': 16, '__m128d': 16,
-         'void': 1}
+         'bool': 1, 'uintptr_t': 4, 'size_t': 4, 'void': 1}
 MEMBER = re.compile(r'^\s*([A-Za-z_][\w ]*?\s*\**)\s*(\w+)\s*(?:\[(\d+)\])?\s*;'
                     r'\s*(//.*)?$')
+DECL = re.compile(r'^struct (\w+) \{$', re.M)
+
+# A member whose type is another struct.  `sizes()` fills this from the source
+# the first time anything asks; until then `width('P2Count')` is `None` and
+# `parse` gives up on the whole struct, which is what kept `unoffset.py` from
+# seeing a single `Obj11` member -- `Obj11` declares `P2Count f284712[163840]`.
+_SIZE = {}
 
 
 def width(ty):
-    ty = ty.strip()
-    return 4 if ty.endswith('*') else WIDTH.get(ty)
+    ty = re.sub(r'^(?:const|volatile) ', '', ty.strip())
+    return 4 if ty.endswith('*') else WIDTH.get(ty, _SIZE.get(ty))
+
+
+def sizes(src):
+    """Fill `_SIZE` with `sizeof` for every plain struct in `src`.
+
+    Size is the last member's end rounded up to the widest member's alignment,
+    which is what the i386 ABI says for the shapes this file has: scalars,
+    pointers, arrays of those, and structs of those.  A struct the rule cannot
+    size -- one with a method, a base, a bitfield or an `alignas` -- is left
+    out, so `width` keeps returning `None` for it and `parse` keeps refusing.
+    """
+    if _SIZE:
+        return _SIZE
+    raw = {}
+    for m in DECL.finditer(src):
+        i = src.index('\n', m.end()) + 1
+        j = re.compile(r'^\};', re.M).search(src, i)
+        raw[m.group(1)] = src[i:j.start()] if j else None
+    pending, guard = set(raw), len(raw) + 1
+    while pending and guard:
+        guard -= 1
+        for name in sorted(pending):
+            body, end, align, ok = raw[name], 0, 1, True
+            if body is None or re.search(r'\(|:|\balignas\b|\bunion\b', body):
+                pending.discard(name)        # a method, a bitfield, an overlay
+                continue
+            for line in body.split('\n'):
+                t = line.strip()
+                if not t or t.startswith('//'):
+                    continue
+                f = MEMBER.match(line)
+                if not f:
+                    ok = False
+                    break
+                ty = ' '.join(f.group(1).split()).replace(' *', '*').replace('*', ' *', 1)
+                w = width(ty)
+                if w is None:
+                    ok = False
+                    break
+                end += w * (int(f.group(3)) if f.group(3) else 1)
+                align = max(align, min(w, 4))
+            if ok:
+                _SIZE[name] = (end + align - 1) // align * align
+                pending.discard(name)
+    return _SIZE
 
 
 def parse(src, name):
     """[(offset, type, member, count, comment)] plus the struct's line span."""
-    m = re.search(r'^struct %s \{\n(.*?)^\};\n' % re.escape(name), src,
+    # `^\};\n` alone missed `BmfImage`, which closes `};  // +16  pixels`, and
+    # the search ran on to the next struct's brace with two bodies inside it.
+    m = re.search(r'^struct %s \{\n(.*?)^\};.*\n' % re.escape(name), src,
                   re.S | re.M)
     if not m:
         return None, None
+    sizes(src)
     # Union-aware, because this has to read structs it wrote: inside a
     # `union { ... }` every `struct { ... }` layer restarts at the union's own
     # offset and the union ends at the widest layer.  Walking it as a flat list
