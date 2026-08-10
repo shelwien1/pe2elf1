@@ -502,6 +502,23 @@ static_assert(sizeof(void *) != 4
               "ModelBlock: the layout moved");
 
 
+// One p2 counter.  `alt_p2_alloc` resets every one of them to b0 = 5, b1 = 2,
+// w2 = 0; `alt_p2_model` raises b0 by one per update while it is under 8, sets
+// b1 from `__dword_439B7C` by the new b0, and rescales w2.  The five readers
+// all say the same thing:
+//
+//   ((1 << ((b0 + 31) & 31)) + w2) >> (b0 & 31)
+//
+// so b0 is a shift and w2 is what it scales.  Nothing in this build reads b1.
+// The signedness is each site's: b0 and w2 are read signed, b1 is written
+// unsigned and never read.
+struct P2Count {
+  int8_t b0;
+  uint8_t b1;
+  int16_t w2;
+};
+static_assert(sizeof(P2Count) == 4, "P2Count: the record is four bytes");
+
 // Obj11 -- recovered from 353 dereferences over 39 offsets, under 23
 // names.  The layout is the one the code already assumed: at 32 bits a
 // pointer is four bytes, so naming these fields moves nothing, and the
@@ -574,18 +591,30 @@ struct Obj11 {
   // real base is +280872 -- which is why every read of that one said `+ 4`.
   uint8_t f280752[120];   // +280752 .. +280871
   int16_t f280872[1916];   // +280872 .. +284703
-  __m128 f284704;
-  uint8_t _pad8[131056];
-  __m128 f415776;
-  uint8_t _pad9[131056];
-  __m128 f546848;
-  uint8_t _pad10[131056];
-  __m128 f677920;
-  uint8_t _pad11[131056];
-  __m128 f808992;
-  uint8_t _pad12[131056];
-  __m128 f940064;
+  uint8_t _pad2[8];   // +284704 .. +284711
+  // The p2 counter table: five banks of 32768 records.  Hex-Rays named the
+  // first sixteen bytes of each bank -- f284704, f415776, f546848, f677920,
+  // f808992, 131072 bytes apart -- and every read of one said `+ 8`, because
+  // the records start eight bytes past the name.  Four things agree on the
+  // shape:
+  //
+  //   * `alt_p2_alloc` resets all of it in one loop of 0x14000 iterations
+  //     eight bytes wide, two records at a time, and 284712 + 0x14000 * 8 is
+  //     940072 -- exactly where the next table starts;
+  //   * 131072 bytes is 32768 records, and every index is a context word
+  //     shifted right by 11, which is 0..32767;
+  //   * all five read sites are the same expression, and `alt_p2_model`
+  //     updates the same three fields through raw offsets from +284712;
+  //   * five banks of 32768 is 163840, and the last record ends at 940071.
+  P2Count f284712[163840];   // +284712 .. +940071
+  // The three-way frequency counters, in 8-byte groups.  `alt_p2_alloc` seeds
+  // 0x1E60 sixteen-byte pairs of them; `alt_p2_model` rescales a group when
+  // its three add past 29696.  The extent is the allocation's.
+  uint16_t f940072[62208];   // +940072 .. +1064487
+  uint8_t _pad3[8];   // +1064488 .. +1064495
 };
+static_assert(sizeof(void *) != 4 || sizeof(Obj11) == 0x103E30,
+              "Obj11: bmf_page_alloc asks for 0x103E30 and this is it");
 static_assert(sizeof(void *) != 4
               || (__builtin_offsetof(Obj11, f278904) == 278904
                   && __builtin_offsetof(Obj11, f278944) == 278944
@@ -594,8 +623,8 @@ static_assert(sizeof(void *) != 4
                   && __builtin_offsetof(Obj11, f280496) == 280496
                   && __builtin_offsetof(Obj11, f280752) == 280752
                   && __builtin_offsetof(Obj11, f280872) == 280872
-                  && __builtin_offsetof(Obj11, f284704) == 284704
-                  && __builtin_offsetof(Obj11, f940064) == 940064),
+                  && __builtin_offsetof(Obj11, f284712) == 284712
+                  && __builtin_offsetof(Obj11, f940072) == 940072),
               "Obj11: the layout moved");
 
 
@@ -7856,7 +7885,7 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   }
   v126 = v125 >> 11;
   v118->f278528[9].m128_i32[1] = v126;
-  v127 = ((1 << ((v118->f284704.m128_i8[4 * v126 + 8] + 31) & 31)) + v118->f284704.m128_i16[2 * v126 + 5]) >> (v118->f284704.m128_i8[4 * v126 + 8] & 31);
+  v127 = ((1 << ((v118->f284712[v126].b0 + 31) & 31)) + v118->f284712[v126].w2) >> (v118->f284712[v126].b0 & 31);
   v128 = v290;
   v129 = (Obj117 *)((int16_t *)v118->f278528[14].m128_i32[0]);
   v130 = v292;
@@ -7922,8 +7951,8 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   v298 = v136;
   v138 = v137 >> 11;
   v118->f278528[9].m128_i32[2] = v138;
-  v139 = v118->f415776.m128_i8[4 * v138 + 8];
-  v140 = v118->f415776.m128_i16[2 * v138 + 5];
+  v139 = v118->f284712[v138 + 32768].b0;
+  v140 = v118->f284712[v138 + 32768].w2;
   v141 = 1 << ((v139 + 31) & 31);
   v142 = v139;
   v143 = v295;
@@ -7990,7 +8019,7 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   v298 = v153;
   v155 = v154 >> 11;
   v118->f278528[9].m128_i32[3] = v155;
-  v156 = ((1 << ((v118->f546848.m128_i8[4 * v155 + 8] + 31) & 31)) + v118->f546848.m128_i16[2 * v155 + 5]) >> (v118->f546848.m128_i8[4 * v155 + 8] & 31);
+  v156 = ((1 << ((v118->f284712[v155 + 65536].b0 + 31) & 31)) + v118->f284712[v155 + 65536].w2) >> (v118->f284712[v155 + 65536].b0 & 31);
   v157 = (char *)v292;
   v158 = v295;
   v118->f278904[5] = v156;
@@ -8027,8 +8056,8 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
              | (((n2896 > 2896) + (n2896 > 1568) + (n2896 > 592)) << 13)
              | ((((uint32_t)(v290 + 37) >> 31) + ((uint32_t)(v290 + 19) >> 31) + (v165 >> 31)) << 11)) >> 11;
   v289->f278528[10].m128_i32[0] = v167;
-  LOBYTE(v163) = v166->f677920.m128_i8[4 * v167 + 8];
-  v168 = v166->f677920.m128_i16[2 * v167 + 5];
+  LOBYTE(v163) = v166->f284712[v167 + 98304].b0;
+  v168 = v166->f284712[v167 + 98304].w2;
   v169 = 1 << ((v163 + 31) & 31);
   LOBYTE(v164) = v163;
   v170 = (Obj64 *)(v294);
@@ -8070,7 +8099,7 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
              | v181
              | v180) >> 11;
   v289->f278528[10].m128_i32[1] = v185;
-  v186 = ((1 << ((v184->f808992.m128_i8[4 * v185 + 8] + 31) & 31)) + v184->f808992.m128_i16[2 * v185 + 5]) >> (v184->f808992.m128_i8[4 * v185 + 8] & 31);
+  v186 = ((1 << ((v184->f284712[v185 + 131072].b0 + 31) & 31)) + v184->f284712[v185 + 131072].w2) >> (v184->f284712[v185 + 131072].b0 & 31);
   v187 = (uint8_t *)v295;
   v271 = v186;
   v184->f278904[9] = v186;
@@ -15657,7 +15686,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v111 = (Obj11 *)(plane[1]);
           *(uint16_t *)(plane[1]->f278528[13].m128_i32[0] + 2) = v110;
           v112 = __fwd_alt_model_p2_decode_alt_p2_context(v111, plane[0], plane[2]);
-          v113 = __fwd_alt_model_p2_decode_alt_p2_decode_symbol(&v111->f940064.m128_u16[4 * v111->f278528[11].m128_i32[0] + 4], (char *)&v111->f278528[11].m128_i32[1]);
+          v113 = __fwd_alt_model_p2_decode_alt_p2_decode_symbol(&v111->f940072[4 * v111->f278528[11].m128_i32[0]], (char *)&v111->f278528[11].m128_i32[1]);
           v114 = (uint8_t)(v112 + v111->f280496[v113]);
           v169 = v114;
           __alt_p2_model((Obj11 *)v111, v114, v113, v114 - v112);
@@ -15679,7 +15708,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v120 = (Obj11 *)(plane[2]);
           *(uint16_t *)(plane[2]->f278528[13].m128_i32[0] + 2) = v119;
           v121 = __fwd_alt_model_p2_decode_alt_p2_context(v120, plane[0], plane[1]);
-          v122 = __fwd_alt_model_p2_decode_alt_p2_decode_symbol(&v120->f940064.m128_u16[4 * v120->f278528[11].m128_i32[0] + 4], (char *)&v120->f278528[11].m128_i32[1]);
+          v122 = __fwd_alt_model_p2_decode_alt_p2_decode_symbol(&v120->f940072[4 * v120->f278528[11].m128_i32[0]], (char *)&v120->f278528[11].m128_i32[1]);
           v123 = (uint8_t)(v121 + v120->f280496[v122]);
           v170 = v123;
           __alt_p2_model((Obj11 *)v120, v123, v122, v123 - v121);
@@ -15704,7 +15733,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
             v129 = (Obj11 *)(plane[3]);
             *(uint16_t *)(plane[3]->f278528[13].m128_i32[0] + 2) = v128;
             v130 = __fwd_alt_model_p2_decode_alt_p2_context(v129, plane[2], plane[0]);
-            v131 = __fwd_alt_model_p2_decode_alt_p2_decode_symbol(&v129->f940064.m128_u16[4 * v129->f278528[11].m128_i32[0] + 4], (char *)&v129->f278528[11].m128_i32[1]);
+            v131 = __fwd_alt_model_p2_decode_alt_p2_decode_symbol(&v129->f940072[4 * v129->f278528[11].m128_i32[0]], (char *)&v129->f278528[11].m128_i32[1]);
             v154 = (uint8_t)(v130 + v129->f280496[v131]);
             __alt_p2_model((Obj11 *)v129, v154, v131, v154 - v130);
             v132 = v129->f278528[13].m128_i32[0];
@@ -15873,8 +15902,7 @@ void __alt_p2_d8_encode_body(Obj11 *lpAddress, uint8_t *a4, int32_t i, int32_t a
       lpAddress->f278528[11].m128_i32[1] = lpAddress->f278528[11].m128_i32[0] + lpAddress->f278944[v17 + 4];
       lpAddress->f278528[11].m128_i32[2] = lpAddress->f278528[11].m128_i32[0] + lpAddress->f278944[v17];
       __fwd_alt_p2_d8_encode_body_alt_p2_encode_symbol(
-        &lpAddress->f940064.m128_u16[4 * lpAddress->f278528[11].m128_i32[0]
-                                 + 4
+        &lpAddress->f940072[4 * lpAddress->f278528[11].m128_i32[0]
                                  + 4
                                  * lpAddress->f278528[18].m128_i32[(*(int16_t *)(v16 - 18) <= *(int16_t *)(v16 - 36))
                                                            + 3
@@ -16109,7 +16137,7 @@ void __alt_p2_d8_encode_body(Obj11 *lpAddress, uint8_t *a4, int32_t i, int32_t a
             v105[k] = v97;
           }
           v110 = v99;
-          __fwd_alt_p2_d8_encode_body_alt_p2_encode_symbol(&lpAddress_1->f940064.m128_u16[4 * lpAddress_1->f278528[11].m128_i32[0] + 4], (char *)v106, v99);
+          __fwd_alt_p2_d8_encode_body_alt_p2_encode_symbol(&lpAddress_1->f940072[4 * lpAddress_1->f278528[11].m128_i32[0]], (char *)v106, v99);
           __alt_p2_model((Obj11 *)lpAddress_1, (uint8_t)v105[k], v110, (uint8_t)v105[k] - v95);
           v8 = &v109[k + 1];
           v100 = (int32_t)&v105[k + 1];
@@ -16616,7 +16644,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             v115 = v175;
             v166[v176] = v118;
           }
-          __fwd_alt_model_p2_encode_alt_p2_encode_symbol(&v114->f940064.m128_u16[4 * v114->f278528[11].m128_i32[0] + 4], (char *)&v114->f278528[11].m128_i32[1], v116);
+          __fwd_alt_model_p2_encode_alt_p2_encode_symbol(&v114->f940072[4 * v114->f278528[11].m128_i32[0]], (char *)&v114->f278528[11].m128_i32[1], v116);
           __alt_p2_model((Obj11 *)v114, v115, v116, v115 - v179);
           v120 = v114->f278528[13].m128_i32[0];
           v121 = *(int16_t *)(v120 - 4);
@@ -16651,7 +16679,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             v126 = v174;
             v166[v177] = v129;
           }
-          __fwd_alt_model_p2_encode_alt_p2_encode_symbol(&v125->f940064.m128_u16[4 * v125->f278528[11].m128_i32[0] + 4], (char *)&v125->f278528[11].m128_i32[1], v127);
+          __fwd_alt_model_p2_encode_alt_p2_encode_symbol(&v125->f940072[4 * v125->f278528[11].m128_i32[0]], (char *)&v125->f278528[11].m128_i32[1], v127);
           __alt_p2_model((Obj11 *)v125, v126, v127, v126 - v180);
           v131 = v125->f278528[13].m128_i32[0];
           n4_1 = plane_count;
@@ -16690,7 +16718,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
               v134 = (uint8_t)(v157 + v133->f280496[v135]);
               v166[n3] = v137;
             }
-            __fwd_alt_model_p2_encode_alt_p2_encode_symbol(&v133->f940064.m128_u16[4 * v133->f278528[11].m128_i32[0] + 4], (char *)&v133->f278528[11].m128_i32[1], v135);
+            __fwd_alt_model_p2_encode_alt_p2_encode_symbol(&v133->f940072[4 * v133->f278528[11].m128_i32[0]], (char *)&v133->f278528[11].m128_i32[1], v135);
             __alt_p2_model((Obj11 *)v133, v134, v135, v134 - v157);
             v139 = v133->f278528[13].m128_i32[0];
             n4_1 = plane_count;
