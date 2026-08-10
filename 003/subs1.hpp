@@ -530,6 +530,14 @@ struct SymList {
 };
 static_assert(sizeof(SymList) == 24, "SymList: the header is 24 bytes");
 
+// A binary counter pair: two `uint16_t`, both seeded 0x2000 -- p = 1/2 for a
+// fresh counter.  `layout_workspace` writes 0x10000 of them per context group.
+struct CtrPair {
+  uint16_t f0;
+  uint16_t f1;
+};
+static_assert(sizeof(CtrPair) == 4, "CtrPair: the record is four bytes");
+
 struct ModelBlock {
   uint32_t f0;
   int32_t f4;
@@ -608,8 +616,16 @@ struct ModelBlock {
   // `layout_workspace` seeds this one 0x40000 times, two counters an
   // iteration, both 0x2000.
   uint16_t f1078696[524288];   // +1078696 .. +2127271
-  uint8_t _pad28[3932160];
-  uint32_t f6059432;
+  // Fifteen context groups of 0x10000 counter pairs.  `model_plane` and
+  // `unmodel_plane_slow` seed every one to (0x2000, 0x2000) through a base of
+  // `&((uint32_t *)this)[0x10000 * group]` and an index of `entry + 531818`,
+  // which is +2 127 272 -- and 15 * 0x10000 * 4 is 3 932 160, this member's
+  // whole extent.  The entry is the 16-bit context `code_pixel` derives from
+  // the neighbourhood; the group is `ctx_state[flags]`.
+  CtrPair group_ctr[15][65536];   // +2127272 .. +6059431
+  // The symbol cache `code_pixel` promotes through: a cursor into
+  // `f1078696`, set to `&f1078696[8 * ctx]` and walked as `[0..6]`.
+  uint16_t *f6059432;
   uint8_t *f6059436;   // a row cursor; `f6059436 + 2` steps two bytes
   // The four regions `layout_workspace` ends on.  Each extent is the loop
   // bound or the memset length that fills it, and the four of them run to
@@ -2550,7 +2566,7 @@ LABEL_19:
   }
 LABEL_21:
   v19 = **(uint16_t **)&_this->f56[5];
-  v20 = (uint16_t *)(*(uint16_t **)&_this->f6059432);
+  v20 = _this->f6059432;
   v21 = v20[0];
   if ( v19 != v21 )
   {
@@ -2565,7 +2581,7 @@ LABEL_21:
       if ( v19 == v23 )
       {
         v20[2] = v22;
-        *(uint16_t *)(_this->f6059432 + 2) = **(uint16_t **)&_this->f6059432;
+        _this->f6059432[1] = _this->f6059432[0];
       }
       else
       {
@@ -2573,8 +2589,8 @@ LABEL_21:
         if ( v19 == v24 )
         {
           v20[3] = v23;
-          *(uint16_t *)(_this->f6059432 + 4) = *(uint16_t *)(_this->f6059432 + 2);
-          *(uint16_t *)(_this->f6059432 + 2) = **(uint16_t **)&_this->f6059432;
+          _this->f6059432[2] = _this->f6059432[1];
+          _this->f6059432[1] = _this->f6059432[0];
         }
         else
         {
@@ -2582,9 +2598,9 @@ LABEL_21:
           if ( v19 == v25 )
           {
             v20[4] = v24;
-            *(uint16_t *)(_this->f6059432 + 6) = *(uint16_t *)(_this->f6059432 + 4);
-            *(uint16_t *)(_this->f6059432 + 4) = *(uint16_t *)(_this->f6059432 + 2);
-            *(uint16_t *)(_this->f6059432 + 2) = **(uint16_t **)&_this->f6059432;
+            _this->f6059432[3] = _this->f6059432[2];
+            _this->f6059432[2] = _this->f6059432[1];
+            _this->f6059432[1] = _this->f6059432[0];
           }
           else
           {
@@ -2592,10 +2608,10 @@ LABEL_21:
             if ( v19 == v26 )
             {
               v20[5] = v25;
-              *(uint16_t *)(_this->f6059432 + 8) = *(uint16_t *)(_this->f6059432 + 6);
-              *(uint16_t *)(_this->f6059432 + 6) = *(uint16_t *)(_this->f6059432 + 4);
-              *(uint16_t *)(_this->f6059432 + 4) = *(uint16_t *)(_this->f6059432 + 2);
-              *(uint16_t *)(_this->f6059432 + 2) = **(uint16_t **)&_this->f6059432;
+              _this->f6059432[4] = _this->f6059432[3];
+              _this->f6059432[3] = _this->f6059432[2];
+              _this->f6059432[2] = _this->f6059432[1];
+              _this->f6059432[1] = _this->f6059432[0];
             }
             else
             {
@@ -2607,19 +2623,19 @@ LABEL_21:
               else
               {
                 v20[7] = v27;
-                *(uint16_t *)(_this->f6059432 + 12) = *(uint16_t *)(_this->f6059432 + 10);
+                _this->f6059432[6] = _this->f6059432[5];
               }
-              *(uint16_t *)(_this->f6059432 + 10) = *(uint16_t *)(_this->f6059432 + 8);
-              *(uint16_t *)(_this->f6059432 + 8) = *(uint16_t *)(_this->f6059432 + 6);
-              *(uint16_t *)(_this->f6059432 + 6) = *(uint16_t *)(_this->f6059432 + 4);
-              *(uint16_t *)(_this->f6059432 + 4) = *(uint16_t *)(_this->f6059432 + 2);
-              *(uint16_t *)(_this->f6059432 + 2) = **(uint16_t **)&_this->f6059432;
+              _this->f6059432[5] = _this->f6059432[4];
+              _this->f6059432[4] = _this->f6059432[3];
+              _this->f6059432[3] = _this->f6059432[2];
+              _this->f6059432[2] = _this->f6059432[1];
+              _this->f6059432[1] = _this->f6059432[0];
             }
           }
         }
       }
     }
-    **(uint16_t **)&_this->f6059432 = v19;
+    _this->f6059432[0] = v19;
   }
 LABEL_37:
   // The other fourteen sites already spell the 16-bit accesses out --
@@ -9285,7 +9301,8 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   uint16_t *v97;
   uint16_t *v106;
   FreqRec *freq_tbl;
-  uint16_t *n15_9, *v16, *n4_10, *v58, *v95, *v110, *v121, v154, v162,
+  CtrPair *v16;   // the group's counter pair for this context
+  uint16_t *n15_9, *n4_10, *v58, *v95, *v110, *v121, v154, v162,
            v174;
   ModelBlock *this_3;
   ModelBlock *this_2;
@@ -9337,12 +9354,12 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   {
     v13 = (uint16_t)(*((uint16_t *)__frame.sym5 + n4_8 + 3029720) - __frame.sym1);
   }
-  __frame.sym5->f6059432 = (uint32_t)&((uint32_t *)__frame.sym5)[4 * v13 + 269674];
+  __frame.sym5->f6059432 = &__frame.sym5->f1078696[8 * v13];
   v15 = this_2->ctx_state[v12];
   this_2->f36 = v15;
-  v16 = (uint16_t *)&((uint32_t *)this_2)[0x10000 * v15 + 531818 + v13];
+  v16 = &this_2->group_ctr[v15][v13];
   this_2->f6059436 = (uint8_t *)v16;
-  n4_9 = *v16;
+  n4_9 = v16->f0;
   if ( n4_9 == __frame.sym0 )
   {
     __decode_pixel_n15 = 15;
@@ -9362,7 +9379,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
     if ( !v19 )
       __decode_pixel_n15 = 0;
   }
-  n4_10 = (uint16_t *)v16[1];
+  n4_10 = (uint16_t *)v16->f1;
   if ( n4_10 == (uint16_t *)__frame.sym0 )
   {
     __decode_pixel_n15 += 75;
@@ -9900,7 +9917,7 @@ LABEL_86:
   this_3->sel[0] = nullptr;
   n4_5 = v95[1];
   __frame.sym0 = *v95;
-  v97 = ((uint16_t *)this_3->f6059432);
+  v97 = this_3->f6059432;
   n4_6 = v97[0];
   n15_5 = v97[1];
   v100 = (uint64_t *)((uint16_t *)v97[2]);
@@ -10058,8 +10075,9 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   ModelBlock *this_3;
   ModelBlock *this_4;
   ModelBlock *this_2;
+  CtrPair *v16;   // the group's counter pair for this context
   int32_t arg_cum, arg_high, arg_tot, n4, n4_1, __code_pixel_n15, n15_1, v8, v9, v10, v13, v15,
-          *v16, n15_6, n15_5, n15_8, v21, p_n15_1, n15_30, v26, v27, v29, n0xFFFF, v32,
+          n15_6, n15_5, n15_8, v21, p_n15_1, n15_30, v26, v27, v29, n0xFFFF, v32,
           n0xFFFF_1, n53248, v35, v38, v39, v42, p_n15_2, n15_42, n8, v46, n15_32, n15_12,
           n15_9, v50, v53, p_n15_4, n2_10, v61, n15_11, n15_13, n4_2, n15_33, n15_35, n15_34,
           n15_15, n2_15, v82, __code_pixel_n0x2000, n15_16, v87, n2, p_n15_5, p_n15_7,
@@ -10126,12 +10144,12 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   {
     v13 = (uint16_t)(*((uint16_t *)__frame.sym7 + __frame.sym8 + 3029720) - __frame.sym10);
   }
-  __frame.sym7->f6059432 = (uint32_t)&((int32_t *)__frame.sym7)[4 * v13 + 269674];
+  __frame.sym7->f6059432 = &__frame.sym7->f1078696[8 * v13];
   v15 = this_2->ctx_state[v10];
   *(int32_t *)&this_2->f36 = v15;
-  v16 = &((int32_t *)this_2)[0x10000 * v15 + 531818 + v13];
+  v16 = &this_2->group_ctr[v15][v13];
   this_2->f6059436 = (uint8_t *)v16;
-  n15_6 = *(uint16_t *)v16;
+  n15_6 = v16->f0;
   if ( n15_6 == __frame.sym8 )
   {
     n15_5 = 15;
@@ -10151,7 +10169,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
     if ( !v11 )
       n15_5 = 0;
   }
-  n15_8 = *((uint16_t *)v16 + 1);
+  n15_8 = v16->f1;
   if ( n15_8 == __frame.sym8 )
   {
     n15_5 += 75;
@@ -10671,7 +10689,7 @@ LABEL_42:
   v97 = (uint16_t *)this_3->f6059436;
   exclusion_mask[excl_sym_a] = v93;
   exclusion_mask[excl_sym_b] = v93;
-  v98 = (uint16_t *)*(int32_t *)&this_3->f6059432;
+  v98 = this_3->f6059432;
   __byte_445440[0] = v93;
   n15_14 = n15_12;
   this_3->sel[0] = nullptr;
@@ -11087,7 +11105,8 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
           v64, v65, v66, n6, v68, v69, n6_4, n6_1, v73, n6_2, v76, v78, v80;
   ModelBlock *this_3;
   ModelBlock *this_2;
-  uint32_t *v22, *v31, *v35, *ArgList_6;
+  uint32_t *v31, *v35, *ArgList_6;
+  CtrPair *v22;   // one group's row of counter pairs
   SymEntry *ArgList_7;
   SymList *i_1, *i, *j_1, *j;
   FreqRec *v13;   // a bucket record: `grid[bucket]`
@@ -11236,11 +11255,11 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
     }
     while ( v100 + 1 < 5 );
     n0x10000 = 0;
-    v22 = &((uint32_t *)this_1)[0x10000 * v82];
+    v22 = this_1->group_ctr[v82];
     do
     {
-      LOWORD(v22[n0x10000 + 531818]) = 0x2000;
-      HIWORD(v22[n0x10000++ + 531818]) = 0x2000;
+      v22[n0x10000].f0 = 0x2000;
+      v22[n0x10000++].f1 = 0x2000;
     }
     while ( n0x10000 < 0x10000 );
     v5 = v82 + 1;
@@ -15274,7 +15293,8 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
   int32_t v8, v10, v11, v14, n2_1, n2_2, v17, v18, v19, v20, v21, v44, v45,
           v53, v54, v55, v56;
   uint8_t *v47, *v48, *v49;
-  uint32_t n0x10000, *v24, v31, *v32, v34, v37, *v38, v40;
+  uint32_t n0x10000, v31, *v32, v34, v37, *v38, v40;
+  CtrPair *v24;   // one group's row of counter pairs
   SymList *v33, *v39;
   FreqRec *v12;   // a bucket record: `grid[bucket]`
   uint8_t *v51, *v52;
@@ -15442,11 +15462,11 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
       }
       while ( (uint32_t)(v72 + 1) < 5 );
       n0x10000 = 0;
-      v24 = &((uint32_t *)Blocka_2)[0x10000 * v58];
+      v24 = Blocka_2->group_ctr[v58];
       do
       {
-        LOWORD(v24[n0x10000 + 531818]) = 0x2000;
-        HIWORD(v24[n0x10000++ + 531818]) = 0x2000;
+        v24[n0x10000].f0 = 0x2000;
+        v24[n0x10000++].f1 = 0x2000;
       }
       while ( n0x10000 < 0x10000 );
       Blocka_4 = (ModelBlock *)((uintptr_t)Blocka_5 + 1);
