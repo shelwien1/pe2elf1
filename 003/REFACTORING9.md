@@ -22,13 +22,13 @@ and 3.
 
 ```
                                    round 8   round 9
-subs1.hpp / bmf.cpp lines            17787     17837
+subs1.hpp / bmf.cpp lines            17787     17882
 raw-offset sites                        22        13
 byte offsets on a typed base           121         0
 pointer casts                         2137       992
 fNN members / named ones             93/121    44/121
 distinct vNN locals                    554       553
-goto / LABEL_n:                     112/79     92/62
+goto / LABEL_n:                     112/79     92/58
 conversion warnings (ratchet)         1455      1393
 ```
 
@@ -296,7 +296,7 @@ noticing that a tool's *input* was narrower than the file.
 * **Zero byte offsets on a typed base**, from 121 at the start of the round.
   Every pointer in the file whose target is a record is typed as that record,
   and the stride scan of §2 reports zero for the third time.
-* **92 gotos and 62 labels**, from 112 and 79. Three rules did it, and each
+* **92 gotos and 58 labels**, from 112 and 79. Three rules did it, and each
   came from reading `degoto.py --why` rather than the file:
 
   | rule | tool | gotos |
