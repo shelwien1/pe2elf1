@@ -519,8 +519,8 @@ which.
 
 | | before | after |
 | --- | --- | --- |
-| `__m128` occurrences | 160 | **1**, and it is a sentence in a comment |
-| `.m128_` lane accesses | 562 (§2.1's four) | 209, every one in `choose_plane_coding` |
+| `__m128` / `M128` occurrences | 160 | **4**, and all four are prose |
+| `.m128_` lane accesses | 562 (§2.1's four) | **0** |
 | reference declarations | 384 | 274 |
 | `plane_desc` views | 20 | 1 |
 | file-scope tables said three times | 20 | 1 |
@@ -530,12 +530,20 @@ which.
 | raw-offset sites | 1514 | 1462 |
 | `BMF_STRICT` conversions | 0 | 0, and the gate checks it now |
 
-**Phase A is finished.** The 29-parameter thread, its 21 shims, the four
-`__xmmword_*` broadcasts, `Obj11`'s eighteen `__m128` members and the union
-layer that reached 336 bytes of it are all gone, and so are `__m128`, `__m128d`,
-`__int128`, `_OWORD` and `_LONGLONG`. What survives is `choose_plane_coding`'s
-six sixteen-byte spill slots, which really are one slot each holding four ints
-or two doubles depending on the statement.
+**Phase A is finished, including its last line.** The 29-parameter thread, its
+21 shims, the four `__xmmword_*` broadcasts, `Obj11`'s eighteen `__m128` members
+and the union layer that reached 336 bytes of it are all gone, and so are
+`__m128`, `__m128d`, `__int128`, `_OWORD`, `_LONGLONG` and the `M128` union
+itself. `choose_plane_coding`'s six spill slots are `alignas(16) int32_t[4]`,
+with `*(int64_t *)` and `*(double *)` at the sites that read the halves.
+
+The order of *that* rewrite is worth keeping: doing `m128_i32[k]` before
+`m128_i64[k]` collapses lane 2 of one view and lane 1 of the other onto the
+same `[2]`, and a rule that widens what it finds there turns a 32-bit store
+into a 64-bit one. That is one stream on `x_ep` and nothing else -- fifteen
+images, the archive, the malformed set and the out-of-memory ladder all pass --
+which is the §7 hazard "a rewrite that keeps the offset can still change the
+width", caught by the gate on its first run.
 
 **Phase C is finished.** `untable.py` converted fifteen; four of the remaining
 five were the `__xmmword_*` broadcasts, which Phase A deleted outright. The one
