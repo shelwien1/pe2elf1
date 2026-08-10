@@ -67,28 +67,20 @@
 // §3.6 is for; keeping one object is what makes it safe not to have done it
 // yet.
 
-alignas(16) static uint8_t bmf_ctx_group_flags[32] = {   // 0x439860
-  0x00,0x01,0x02,0x04,0x08,0x0a,0x0d,0x10,0x11,0x16,0x20,0x23,0x24,0x38,0x3f,0x00,0x00,0x00,
-  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+alignas(16) static uint8_t ctx_group_flags[32] = {   // 0x439860
+  0, 1, 2, 4, 8, 10, 13, 16, 17, 22, 32, 35, 36, 56, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0,
 };
-typedef uint8_t t_byte_439860[32];
-static t_byte_439860& ctx_group_flags = *(t_byte_439860*)bmf_ctx_group_flags;
-alignas(16) static uint8_t bmf_dword_439880[16] = {   // 0x439880
-  0x04,0x00,0x00,0x00,0x08,0x00,0x00,0x00,0x0c,0x00,0x00,0x00,0x08,0x00,0x00,0x00,
+alignas(16) static int32_t __dword_439880[4] = {   // 0x439880
+  4, 8, 12, 8,
 };
-typedef int32_t t_dword_439880[4];
-static t_dword_439880& __dword_439880 = *(t_dword_439880*)bmf_dword_439880;
-alignas(16) static uint8_t bmf_byte_439890[16] = {   // 0x439890
-  0x11,0x14,0x1b,0x25,0x31,0x46,0x5d,0x7c,0x9d,0xbf,0xcd,0xe4,0xeb,0xec,0xed,0x00,
+alignas(16) static uint8_t __byte_439890[16] = {   // 0x439890
+  17, 20, 27, 37, 49, 70, 93, 124, 157, 191, 205, 228, 235, 236, 237, 0,
 };
-typedef uint8_t t_byte_439890[16];
-static t_byte_439890& __byte_439890 = *(t_byte_439890*)bmf_byte_439890;
-alignas(16) static uint8_t bmf_byte_4398A0[32] = {   // 0x4398A0
-  0x04,0x06,0x08,0x0b,0x0e,0x11,0x15,0x19,0x1e,0x25,0x2d,0x37,0x43,0x57,0x78,0x00,0x00,0x00,
-  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+alignas(16) static uint8_t __byte_4398A0[32] = {   // 0x4398A0
+  4, 6, 8, 11, 14, 17, 21, 25, 30, 37, 45, 55, 67, 87, 120, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0,
 };
-typedef uint8_t t_byte_4398A0[32];
-static t_byte_4398A0& __byte_4398A0 = *(t_byte_4398A0*)bmf_byte_4398A0;
 // alt_p2_context's context thresholds: six rows of thirteen, chosen by how
 // far the coded length has run past the plane's size.  BMF.exe kept them at
 // 0x4398C0..0x4399F7 and Hex-Rays split the first twelve columns into twelve
@@ -127,38 +119,27 @@ alignas(16) static uint8_t bmf_xmmword_439B60[28] = {   // 0x439B60
 };
 typedef __m128i t_xmmword_439B60;
 static t_xmmword_439B60& __xmmword_439B60 = *(t_xmmword_439B60*)bmf_xmmword_439B60;
-alignas(16) static uint8_t bmf_dword_439B7C[68] = {   // 0x439B7C
-  0x33,0x33,0x29,0x43,0x00,0x00,0x80,0x3f,0x02,0x07,0x2e,0xc5,0x6f,0x12,0x83,0x3a,0x17,0xb7,
-  0xd1,0x38,0xcd,0xcc,0xcc,0x3d,0x00,0x00,0x00,0x40,0x00,0x00,0x10,0x44,0x66,0x66,0x26,0x40,
-  0x00,0x20,0xd2,0x46,0xf4,0xfd,0x54,0x3c,0x00,0x88,0x9d,0x45,0x00,0x40,0x04,0x44,0x17,0xb7,
-  0x51,0x39,0x00,0x00,0x20,0x41,0x00,0x00,0x80,0x3f,0x00,0x00,0x80,0x3f,
+alignas(16) static int32_t __dword_439B7C[17] = {   // 0x439B7C
+  1126773555, 1065353216, -986839294, 981668463, 953267991, 1036831949, 1073741824,
+  1141899264, 1076258406, 1188175872, 1012202996, 1167951872, 1141129216, 961656599,
+  1092616192, 1065353216, 1065353216,
 };
-typedef int32_t t_dword_439B7C;
-static t_dword_439B7C& __dword_439B7C = *(t_dword_439B7C*)bmf_dword_439B7C;
-alignas(16) static uint8_t bmf_byte_439BC0[8] = {   // 0x439BC0
-  0x01,0x02,0x04,0x08,0x0e,0x23,0x67,0x00,
+alignas(16) static uint8_t __byte_439BC0[8] = {   // 0x439BC0
+  1, 2, 4, 8, 14, 35, 103, 0,
 };
-typedef uint8_t t_byte_439BC0[8];
-static t_byte_439BC0& __byte_439BC0 = *(t_byte_439BC0*)bmf_byte_439BC0;
-alignas(16) static uint8_t bmf_byte_439BC8[8] = {   // 0x439BC8
-  0x01,0x03,0x06,0x0a,0x10,0x1b,0x34,0x00,
+alignas(16) static uint8_t __byte_439BC8[8] = {   // 0x439BC8
+  1, 3, 6, 10, 16, 27, 52, 0,
 };
-typedef uint8_t t_byte_439BC8[8];
-static t_byte_439BC8& __byte_439BC8 = *(t_byte_439BC8*)bmf_byte_439BC8;
-alignas(16) static uint8_t bmf_byte_439BD0[8] = {   // 0x439BD0
-  0x05,0x0a,0x24,0x62,0x9a,0xec,0xf8,0x00,
+alignas(16) static uint8_t __byte_439BD0[8] = {   // 0x439BD0
+  5, 10, 36, 98, 154, 236, 248, 0,
 };
-typedef uint8_t t_byte_439BD0[8];
-static t_byte_439BD0& __byte_439BD0 = *(t_byte_439BD0*)bmf_byte_439BD0;
 // The eight int32 its typedef always said it was.  deblob.py gave it the
 // 30 024 bytes to the next global because that is the only upper bound the
 // source offers; poisoning says the other 29 992 have no reader -- they were
 // the string-table pointers the relocation layer used to rebase.
-alignas(16) static uint8_t bmf_dword_439BD8[32] = {
-  0x01,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x02,0x00,0x00,0x00,0x02,0x00,0x00,0x00,0x02,0x00,0x00,0x00,0x04,0x00,0x00,0x00,0x04,0x00,0x00,0x00,0x04,0x00,0x00,0x00,
+alignas(16) static int32_t __dword_439BD8[8] = {
+  1, 1, 2, 2, 2, 4, 4, 4,
 };
-typedef int32_t t_dword_439BD8[8];
-static t_dword_439BD8& __dword_439BD8 = *(t_dword_439BD8*)bmf_dword_439BD8;
 // The p2 filter's seven coefficient rows.  BMF.exe kept them at
 // 0x441120..0x44118F, one xmmword each, and they are not constants: on the way
 // into a run `alt_model_p2_decode`/`_encode` save all seven, fold rows 4..6
@@ -199,35 +180,12 @@ static const float bmf_p2_ms_rate = 0.023f;
 // One int32, which is what its typedef says.  It had the 1 968 bytes to the
 // next global because that was the only bound available; poisoning says
 // nothing reads past the first four.
-alignas(16) static uint8_t bmf_dwLowDateTime[4] = { 0x00,0x00,0x00,0x00 };
-typedef int32_t t_dwLowDateTime;
-static t_dwLowDateTime& __dwLowDateTime = *(t_dwLowDateTime*)bmf_dwLowDateTime;
-alignas(16) static uint8_t bmf_plane_predictor[4] = {   // 0x443360
-  0x00,0x00,0x00,0x00,
-};
-typedef int32_t t_n2;
-static t_n2& plane_predictor = *(t_n2*)bmf_plane_predictor;
-alignas(16) static uint8_t bmf_plane_alt_model[4] = {   // 0x443364
-  0x00,0x00,0x00,0x00,
-};
-typedef int32_t t_dword_443364;
-static t_dword_443364& plane_alt_model = *(t_dword_443364*)bmf_plane_alt_model;
-alignas(16) static uint8_t bmf_packer_free_bits[4] = {   // 0x443368
-  0x00,0x00,0x00,0x00,
-};
-typedef int32_t t_n8;
-static t_n8& packer_free_bits = *(t_n8*)bmf_packer_free_bits;
-alignas(16) static uint8_t bmf_packer_acc[4] = {   // 0x44336C
-  0x00,0x00,0x00,0x00,
-};
-typedef int32_t t_n256;
-static t_n256& packer_acc = *(t_n256*)bmf_packer_acc;
-alignas(16) static uint8_t bmf_coded_size[20] = {   // 0x443370
-  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-  0x00,0x00,
-};
-typedef int32_t t_ElementCount_0;
-static t_ElementCount_0& coded_size = *(t_ElementCount_0*)bmf_coded_size;
+alignas(16) static int32_t __dwLowDateTime = 0;
+alignas(16) static int32_t plane_predictor = 0;
+alignas(16) static int32_t plane_alt_model = 0;
+alignas(16) static int32_t packer_free_bits = 0;
+alignas(16) static int32_t packer_acc = 0;
+alignas(16) static int32_t coded_size = 0;
 static int32_t desc_slow_mode;   // was 0x443384 in bmf_bss
 static int32_t __dword_443388;   // was 0x443388 in bmf_bss
 // The plane-descriptor table: five 16-byte records, based at what used to be
