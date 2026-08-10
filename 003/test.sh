@@ -253,5 +253,18 @@ if [ "${BMF_OOM:-1}" = 1 ] && [ -z "$RUN" ] &&
   ) || fail=1
 fi
 
+# The strict build, which is a property of the source and not of any stream, so
+# nothing above can see it drift.  REFACTORING3.md lost its zero twice and found
+# out late both times; REFACTORING4.md §8 says it belongs in the gate, so here
+# it is.  BMF_STRICT=0 skips it -- for a tree that is mid-refactor on purpose.
+if [ "${BMF_STRICT_GATE:-1}" = 1 ] && [ -x ./build.sh ]; then
+  n=$(BMF_STRICT=1 ./build.sh >/dev/null 2>&1; grep -c 'error:' strict.log)
+  if [ "$n" = 0 ]; then
+    printf '%-12s ok  0 conversions need -fpermissive\n' 'strict'
+  else
+    echo "strict: $n conversions need -fpermissive (see strict.log)"; fail=1
+  fi
+fi
+
 [ $fail -eq 0 ] || { echo "FAIL"; exit 1; }
 echo "PASS"
