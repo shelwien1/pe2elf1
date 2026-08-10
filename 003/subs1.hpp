@@ -328,6 +328,12 @@ static int32_t tbl44573C[5];
 // on where four unrelated globals sit is gone.  REFACTORING.md §4.1.
 //
 // `off` runs 0..56, the 64 bytes of records 1..4, eight at a time.
+// Sixteen zero bytes.  MSVC unrolled `memset(p, 0, n)` into aligned SSE stores
+// and Hex-Rays wrote each one as `*(__m128i *)p = 0`; three loops in this file
+// are that, four to seven stores at a time.  The width is the store's, not a
+// vector's -- nothing here reads sixteen bytes at once.
+static inline void bmf_zero16(void *p) { __builtin_memset(p, 0, 16); }
+
 static inline char *bmf_plane_desc(int32_t off)
 {
   return (char *)&plane_desc[1] + off;
@@ -7816,7 +7822,7 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
     v107 = v105;
   if ( v107 > 11 * n1840_1 )
     n2 = 3;
-  n3536_5 = __fwd_alt_p2_context_alt_p2_filter((__m128 *)v28->f278528[8].m128_i32[0], v293, (Obj12 *)__frame.sub, n2);
+  n3536_5 = __fwd_alt_p2_context_alt_p2_filter((void *)v28->f278528[8].m128_i32[0], v293, (Obj12 *)__frame.sub, n2);
   v109 = v28->f278528[13].m128_i32[0];
   v110 = (__m128 *)v28->f278528[13].m128_i32[1];
   v28->f278528[10].m128_i32[3] = n3536_5;
@@ -8360,10 +8366,10 @@ void __reduce_alphabet(ModelBlock *Blocka, char a2, uint8_t *a3)
     n256 = 256;
     do
     {
-      *(__m128i *)&v78[n256 + 12] = 0;
-      *(__m128i *)&v78[n256 + 8] = 0;
-      *(__m128i *)&v78[n256 + 4] = 0;
-      *(__m128i *)&v78[n256] = 0;
+      bmf_zero16(&v78[n256 + 12]);
+      bmf_zero16(&v78[n256 + 8]);
+      bmf_zero16(&v78[n256 + 4]);
+      bmf_zero16(&v78[n256]);
       n256 -= 16;
     }
     while ( n256 * 4 );
@@ -9162,10 +9168,10 @@ int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, char a3)
   n192 = 192;
   do
   {
-    *(__m128i *)((char *)&v215[4] + n192) = 0;
-    *(__m128i *)((char *)&v215[2] + n192) = 0;
-    *(__m128i *)((char *)v215 + n192) = 0;
-    *(__m128i *)((char *)v214 + n192) = 0;
+    bmf_zero16(((char *)&v215[4] + n192));
+    bmf_zero16(((char *)&v215[2] + n192));
+    bmf_zero16(((char *)v215 + n192));
+    bmf_zero16(((char *)v214 + n192));
     n192 -= 64;
   }
   while ( n192 );
@@ -15232,7 +15238,7 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, uint8_t *a5, int32_
       {
         for ( j = 0; j < i; ++j )
         {
-          v92 = __fwd_alt_p2_d8_decode_body_alt_p2_context((__m128 *)lpAddress, nullptr, nullptr);
+          v92 = __fwd_alt_p2_d8_decode_body_alt_p2_context(lpAddress, nullptr, nullptr);
           v93 = __fwd_alt_p2_d8_decode_body_alt_p2_decode_symbol(
                   (uint16_t *)((uintptr_t)lpAddress + 8 * lpAddress->f278704 + 940072),
                   (char *)lpAddress + 278708);
@@ -15663,7 +15669,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           ctx_bias[2] >>= 3;
           ctx_bias[3] >>= 3;
           lpAddress_1 = (Obj11 *)(plane[0]);
-          v101 = __fwd_alt_model_p2_decode_alt_p2_context((__m128 *)plane[0], plane[2], plane[1]);
+          v101 = __fwd_alt_model_p2_decode_alt_p2_context(plane[0], plane[2], plane[1]);
           v102 = (uint16_t *)&((uint32_t *)lpAddress_1)[2 * *(uint32_t *)&lpAddress_1->f278528[11] + 235018];
           v168 = v101;
           v103 = __fwd_alt_model_p2_decode_alt_p2_decode_symbol(v102, (char *)((uint32_t *)lpAddress_1 + 69677));
@@ -16162,7 +16168,7 @@ void __alt_model_p2_d8_encode( uint8_t *a3, int32_t i, int32_t a5, uint8_t *a6)
   Obj11 *lpAddress;
   v6 = bmf_page_alloc(0x103E30u);
   if ( v6 )
-    lpAddress = (Obj11 *)((__m128 *)__alt_p2_alloc((Obj11 *)v6, i, 0));
+    lpAddress = (Obj11 *)__alt_p2_alloc((Obj11 *)v6, i, 0);
   else
     lpAddress = (Obj11 *)(nullptr);
   __fwd_alt_model_p2_d8_encode_alt_p2_d8_encode_body(lpAddress, a3, i, a5, a6);
@@ -16591,7 +16597,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           ctx_bias[3] = v99 >> 3;
           lpAddress_1 = (Obj11 *)(plane[0]);
           v104 = v166[plane_desc[1].src_plane];
-          v178 = __fwd_alt_model_p2_encode_alt_p2_context((__m128 *)plane[0], plane[2], plane[1]);
+          v178 = __fwd_alt_model_p2_encode_alt_p2_context(plane[0], plane[2], plane[1]);
           v181 = (uint8_t)(v104 - v178);
           v105 = (uint8_t)((uint8_t *)lpAddress_1)[v181 + 279984];
           v106 = v166[v184];
@@ -17217,13 +17223,13 @@ void __model_planes(char *Blockb, char *Srca_3, int32_t a3, char a4)
   n1008 = 1008;
   do
   {
-    *(__m128i *)(v12 + n1008 - 16) = 0;
-    *(__m128i *)(v12 + n1008 - 32) = 0;
-    *(__m128i *)(v12 + n1008 - 48) = 0;
-    *(__m128i *)(v12 + n1008 - 64) = 0;
-    *(__m128i *)(v12 + n1008 - 80) = 0;
-    *(__m128i *)(v12 + n1008 - 96) = 0;
-    *(__m128i *)(v12 + n1008 - 112) = 0;
+    bmf_zero16((v12 + n1008 - 16));
+    bmf_zero16((v12 + n1008 - 32));
+    bmf_zero16((v12 + n1008 - 48));
+    bmf_zero16((v12 + n1008 - 64));
+    bmf_zero16((v12 + n1008 - 80));
+    bmf_zero16((v12 + n1008 - 96));
+    bmf_zero16((v12 + n1008 - 112));
     n1008 -= 112;
   }
   while ( n1008 );
