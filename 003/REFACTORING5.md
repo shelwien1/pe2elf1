@@ -227,7 +227,16 @@ which is `((1 << ((b0 + 31) & 31)) + w2) >> (b0 & 31)`, the same five-bank read
 `alt_p2_context` does.
 
 **So the deliverable is: 22 structs deleted, their pointers become
-`P2Count *`, and 24 sites say which counter they mean.** The XOR is the
+`P2Count *`, and 24 sites say which counter they mean.**
+
+> *Implemented, and it is 30 rather than 22.* Appendix B's regex counts a cast
+> whose *own line* also carries the `[4 * … + 284712]` index; eight more views
+> are cast from a variable that was assigned that expression a line earlier.
+> `tools/unp2.py` reads a cursor by the byte offset each of its uses reaches
+> and takes it only when it can read every one: 30 structs, 57 cursors, 546
+> accesses. `Obj15`'s four fields are two whole records, and seven of the
+> thirty also read record −1, which is the counter before the one the context
+> picked. The XOR is the
 context-perturbation the model uses to reach a neighbouring counter, and naming
 it is the first thing in this file that would say what the p2 model *does*.
 
@@ -270,6 +279,18 @@ mechanical once the type is right.
 
 Nine functions, and four of them account for 258: `alt_model_p2_decode` (75),
 `alt_model_p2_encode` (75), `alt_p2_model` (58), `alt_p2_context` (50).
+
+> *Correction from the implementation: 289 is too high.* Appendix B's regex
+> takes the **first** identifier inside a dereference's parentheses, and in
+> `*(uint32_t *)(v45 + v46 - 36)` that is the offset, not the base — `v46` is
+> already a `uint8_t *`. Reading the whole expression instead, and counting
+> only a dereference whose *sole* name is an integer local, gives **80** in
+> five variables. `alt_p2_context`'s 50 are done: `v109`, `v292`, `v130` and
+> `v201` were four names for `f278736[0]`, and `v292` was also a cost in an
+> earlier lifetime, so the split came first. Of the five, three are shared
+> slots of that kind — `alt_p2_model`'s `n2` is an address in one region and
+> `(a4 - 1) >> 1` in another, and its `n0x10_2` is an address in two regions
+> and a record *index* in four more. Those need the split before the retype.
 
 Every one of these forces two casts — one to get the address into the integer
 and one to get it back out — so this is 289 sites generating ~578 of the 5253
@@ -323,11 +344,24 @@ tables round four named, and the other 17 land on `+232`, `+278720`, `+278724`,
 `Obj11` today.
 
 > **So the blocker is the tool, not the code.** `merge.parse` returns `None`
-> for `Obj11` because `Obj11` has a union, so `unoffset.py` sees *zero* `Obj11`
-> members and folds nothing in any of the eleven functions that take one.
-> Teaching `merge.parse` to walk a union — each layer at the union's own offset,
-> the first layer to name a byte wins — is the smallest change in this plan with
-> the largest reach.
+> for `Obj11`, so `unoffset.py` sees *zero* `Obj11` members and folds nothing in
+> any of the eleven functions that take one.
+
+*It is not the union.* The walk has been union-aware since round three; the
+`None` comes from `width('P2Count')`, because `WIDTH` knows only scalars and
+`Obj11` declares `P2Count f284712[163840]`. One unknown member makes `parse`
+refuse the whole struct. `width` now sizes a plain struct from its own members
+— last end rounded up to the widest member's alignment — and leaves anything
+with a method, a bitfield, an `alignas` or a union unsized, so `parse` refuses
+exactly what it refused before.
+
+Two smaller blockers sat behind it, and the reach is smaller than this section
+expected: `parse`'s closing brace had to be `};` alone, so `BmfImage` — which
+closes `};  // +16  pixels` — matched on to the next struct's brace and arrived
+with two bodies in it; and `unoffset.py`'s byte-offset form still spelled the
+base cast `(char *)`, which §2.2 had just finished renaming. All three
+together fold **47** offsets, not 161: most of the rest are §3.4's shape, where
+the index is a variable and the base is a local rather than the parameter.
 
 One of the 17 is worth a second look on its own: `*(uint32_t *)((char *)_this +
 232) = 0x3F800000` writes a `1.0f` at offset 232, which is inside the
@@ -356,7 +390,7 @@ Four are mistyped rather than misnamed:
 | global | declared | what it is |
 | --- | --- | --- |
 | `packer_acc` | `int32_t` | a bit accumulator: six of its 79 uses cast it to `uint32_t` to shift it right |
-| `packer_free_bits` | `int32_t` | a shift count: six uses cast it to `char` for the `-x & 31` idiom of §2.3 |
+| ~~`packer_free_bits`~~ | `int32_t` | **not mistyped.** Every `-= 8` is followed by `if (… < 0)`, which is what makes it signed; the `char` casts were §2.3's `-(char)x & 31` and are already gone |
 | `__dwLowDateTime` | `int32_t` | holds a pointer — `(void *)__dwLowDateTime` twice, `(uintptr_t)` once |
 | `bmf_pout_of_memory_handler` | `uint8_t[4]` | a function pointer, and the last of round three's triple-declared tables |
 
@@ -375,6 +409,14 @@ thing, two sites each — 29 in all.
 
 So this class needs a regex and the 43 need the compiler, and they are two jobs
 rather than one. Both are cheap; neither checks the other.
+
+> *Implemented.* The regex found all 29. The 43 were already gone —
+> `tools/uncast.py` has been run after every retype since round four, and a
+> retype is what creates them. Four are left, all in `bmf.cpp` and all inside a
+> macro or a helper where the cast is useless *at this expansion* and
+> load-bearing at another: `__PAIR64__`'s `(uint32_t)(low)`, `__OFSUB__`'s
+> `(int32_t)(x - y)`, `bmf_page_alloc`'s `~(uintptr_t)(BMF_PAGE - 1)`. Those
+> are the documented floor §2.5 asks for rather than work.
 
 ---
 
@@ -447,6 +489,18 @@ is 66 064 bytes and the four in `buf` are the only ones with a number attached,
 so the walk is into whatever follows. Round three's rule applies — *when a walk
 looks unbounded, the frame usually knows the bound* — and here the bound is the
 next declared member.
+
+> *Correction from the implementation: the bound is not the next member.* The
+> walks run **past** several named ones, because MSVC gave the histogram and the
+> locals behind it the same stack. `choose_plane_coding`'s `buf` is 32 KiB and
+> covers `v178`, `v179` and `v180`; its `buf_1` is 2 KiB and covers seventeen
+> locals. Those two take §5.1's union, and `buf_2`, `buf_3` and `buf_4` — 2 KiB
+> of counters with nothing but padding behind them — just say their size.
+> `reduce_alphabet`'s cannot have a union: `buf` sits on a four-byte boundary
+> and the `uint64_t v82` inside it wants eight, so the union would take the
+> frame's alignment and move every member after it. It keeps the four-byte
+> declaration and gains a `static_assert` on the distance to the next member
+> outside the walk, which is the `0x10000` the `memset` clears.
 
 ---
 
@@ -686,3 +740,53 @@ disproved — two guesses a neighbouring line settled, one miscount, one
 instruction the tree appeared to disprove and did not, and one prediction the
 sweep beat — and the ones that survived were the ones with an experiment
 attached.
+
+---
+
+## 9. What round five did, and what it left
+
+Every section above was implemented against the gate, one function, one struct
+and one frame at a time. The four complaints:
+
+| the complaint | round four | round five |
+| --- | --- | --- |
+| `_this+ofs` with typecasts | 1389 sites | **1103** |
+| mistyped globals | 4 wrong types, 19 addresses for names | **0 and 0** |
+| context frames | 1857 uses, 538 through a cast | 1857 uses, **0 casts** |
+| non-stdint types | `char` 1056, multi-word 24 | **0 and 0** |
+
+and the gate gained a second ratchet: `BMF_WARN=1 ./build.sh` counts
+`-Wconversion -Wsign-conversion -Wsign-compare -Wuseless-cast`, `test.sh` fails
+when the count rises, and the count went 2338 → **2164**.
+
+Four things this round did not finish, each for a reason it can state:
+
+* **§3.3's three shared slots.** `alt_p2_model`'s `n2` and `n0x10_2` hold an
+  address in one region, a count or a record index in another. The retype is
+  one line once the lifetimes are separate; separating them is a read of
+  `alt_p2_model`, not a sweep. 30 of the 80 sites are behind this.
+* **§3.4's scaled indices.** 31 of the 303 land on an array member of the same
+  type and would fold today; the other 272 land on an offset the struct spells
+  with a different width — `((uint32_t *)v385)[expr + 235020]` is byte 940080,
+  inside `uint16_t f940072[62208]`, so it reads a *pair* of elements. Folding
+  those means saying so, and the tool cannot say it without being told the pair
+  is a record.
+* **§3.2's variable byte offsets.** 50 of `alt_p1_model`'s raw offsets became
+  `P1Count` records; what is left is `*(uint16_t *)((uint8_t *)_this + (v39 +
+  3800))`, where `v39` is `16 * something` computed several lines earlier. That
+  needs the multiplication traced to its source.
+* **`alt_p2_context`'s `sub`.** Its six slots got names, but `sub0` keeps
+  `void *`: its readers spell the type `int16_t (*)[8]`, which is the one shape
+  `unspill.py`'s cast regex does not parse, and `alt_p2_filter` reads all six as
+  `float (*)[4]`. Which of the two is the slot's type is a question about
+  `alt_p2_filter`, and §9 of `algorithm_v2.md` is where it belongs.
+
+The standing warning from REFACTORING3.md's Appendix B held again: of this
+plan's own measurements, **five were wrong** and every one of them was wrong in
+the same way — a regex that counted a proxy for the thing rather than the thing.
+289 integers holding addresses were 80, because the regex read the first name in
+the parentheses. 22 counter views were 30, because the regex wanted the index on
+the same line. The union was not the blocker, `packer_free_bits` was not
+mistyped, and the walked buffers' bound was not the next member. The four counts
+that survived intact — 1389, 538, 1056, 43 — are the four that were counted by
+grepping for the thing itself.
