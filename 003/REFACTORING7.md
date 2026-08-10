@@ -14,17 +14,17 @@ its floor caught a byte that had silently become a word.
 `python3 tools/shape.py`, verbatim:
 
 ```
-subs1.hpp / bmf.cpp lines          17653 / 358
-raw-offset sites                   152
-  off `_this`                      15, in 7 functions
-pointer casts                      3355
+subs1.hpp / bmf.cpp lines          17680 / 358
+raw-offset sites                   126
+  off `_this`                      10, in 5 functions
+pointer casts                      3149
 globals still at a 1997 address    0
 frames                             17, 169180 bytes, 0 aliases
   slots carrying two names         0, 0 extra names, in 0 functions
   member runs walked as arrays     0 sites, 0 bases, 0 functions
   frames that dissolve outright    17, 0 aliases
-structs                            16, 0 still ObjN
-  fNN members / named ones         92 / 75
+structs                            17, 0 still ObjN
+  fNN members / named ones         92 / 79
 distinct vNN locals                560
 goto / LABEL_n:                    112 / 79
 __fwd_* shims                        0
@@ -34,12 +34,12 @@ against round six's close:
 
 | | round six | round seven |
 | --- | --- | --- |
-| lines | 17 833 / 358 | **17 653 / 358** |
-| raw-offset sites | 504 | **152** |
-| — off `_this` | 27 | **15** |
-| pointer casts | 3986 | **3355** |
-| structs | 16, 3 still `ObjN` | **16, 0 still `ObjN`** |
-| conversion warnings | 2075 | **1999** |
+| lines | 17 833 / 358 | **17 680 / 358** |
+| raw-offset sites | 504 | **126** |
+| — off `_this` | 27 | **10** |
+| pointer casts | 3986 | **3149** |
+| structs | 16, 3 still `ObjN` | **17, 0 still `ObjN`** |
+| conversion warnings | 2075 | **1994** |
 
 `ObjN` is zero. Every recovered struct in the file has a name that says what it
 is, which is the end of a thread round two opened with 77 of them.
@@ -47,7 +47,7 @@ is, which is the end of a thread round two opened with 77 of them.
 The gate is unchanged and green at every commit: 15 reference streams
 byte-identical, a lossless round trip, a two-member archive, 15 refused
 malformed inputs, the `ulimit -v` ladder exiting 7, `BMF_STRICT` at 0 and the
-`BMF_WARN` ratchet, which moved down seven times this round and up none.
+`BMF_WARN` ratchet, which moved down nine times this round and up none.
 
 ---
 
@@ -250,10 +250,15 @@ question. Two of them are, and they are still there.
 
 * **Frame slots with two meanings.** `shape.py` reports 0 for "slots carrying
   two names" because these are one name with two *roles*, which it does not
-  measure. `cost_candidate`'s `v91` holds an address, then a scratch value,
-  then a cost; `alt_p2_model`'s `v508` is a pointer and a strip index.
-  Separating them needs a liveness argument per slot, and there is no tool
-  shape here — each one is its own reading.
+  measure. Three of them are done: `compress_image`'s header slot is a
+  `BmfImage` and then deinterleave scratch, in branches separated by a return;
+  `expand_image`'s four words are a packer mask, then a header, then scratch,
+  in three phases; and both are modelled as a union with one arm per role,
+  which needs no liveness proof because it claims none. What is left is the
+  harder kind — `cost_candidate`'s `v91` holds an address, then a scratch
+  value, then a cost, and `alt_p2_model`'s `v508` is a pointer and a strip
+  index within one expression. Those do need a liveness argument each, and
+  there is no tool shape for it.
 * **`AltP1Block`'s counter grid stays as it is, deliberately.** The grid is
   anchored at the object's base and record 237 begins at +3792, so its first
   eight bytes are the tail of `f1752` and its `total` is the first word of the
@@ -264,11 +269,11 @@ question. Two of them are, and they are still there.
   the same address as `((P1Count *)_this)[result + 237]`, and only `total` and
   `bin[]` are ever read at those indices, never `w[]`, which is why the
   straddle never shows.
-* **152 raw offsets, 92 `fNN` members, 560 `vNN` locals, 112 `goto`s.** The
+* **126 raw offsets, 92 `fNN` members, 560 `vNN` locals, 112 `goto`s.** The
   offsets are down from 1389 over five rounds; what remains is in bases that
   are genuinely computed — a name plus a variable byte offset, with nothing
   either end to say what the stride is. `degoto.py` still reports 0 candidates.
-* **1999 conversion warnings** — 1261 `-Wsign-conversion`, 635 `-Wconversion`,
+* **1994 conversion warnings** — 1256 `-Wsign-conversion`, 635 `-Wconversion`,
   99 `-Wsign-compare`, 10 `-Wint-to-pointer-cast`, 4 `-Wuseless-cast` and one
   `-Wmain`. §2 is the reason to keep holding it there.
 
@@ -279,10 +284,20 @@ question. Two of them are, and they are still there.
 | tool | what it does |
 | --- | --- |
 | `unrechoist.py` | an 18-byte record copy whose loads MSVC hoisted above its stores |
+| `unrecast.py --bare` | the cast with no dereference behind it, to a fixed point |
 
-One. That is the honest measure of where this round's work was: `unrec`,
+One new tool and one existing one taught a shape it had been walking past.
+That is the honest measure of where this round's work was: `unrec`,
 `uncopyrec`, `unp2`, `unscalar`, `unshim`, `unindex`, `unrecast`, `unwiden`,
 `unoffset`, `uncast`, `unused`, `unwrite`, `unhoist`, `uncursor`, `dedup`,
 `arrayify` and `degoto` are all run against the file at the end of this round
 and all of them report zero, exactly as they did at the end of round six — and
-the file still lost 352 raw offsets and 631 pointer casts in between.
+the file still lost 378 raw offsets and 837 pointer casts in between.
+
+`unrecast`'s addition is worth one line of its own. It dropped
+`*((uint32_t *)p + 1)` when `p` was already a `uint32_t *` but never looked at
+the bare `(uint16_t *)p + 2`, and there were 136 of those. They arrive stacked
+— `(uint16_t *)(uint16_t *)n0xF0` — so removing the inner one leaves the outer
+one matching a pattern it did not match a moment earlier. It repeats until it
+stops changing now, which is the difference between a report of zero meaning
+*none left* and meaning *none this pass*.
