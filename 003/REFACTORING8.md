@@ -324,8 +324,15 @@ gradient, `lane[3] = lane[5] = lane[6] = lane[7] = |lane[2]|` with
 `lane[4] = |lane[2]| / 2`, byte 16 is the three-way sign of the gradient and
 byte 17 is 2. The `|x|` arrives as `(WORD2(x) ^ x) - WORD2(x)` — the branchless
 absolute value — which is what made lanes 3..7 look like five unrelated
-quantities: they are one quantity, five times. All 32 reads of the last two
-bytes are the byte at +17, so `mag` has readers and `sign` has none.
+quantities: they are one quantity, five times.
+
+`mag` is read 32 times and `sign` exactly once, and finding that one read is
+what the retype was for. It was spelled `(uint8_t)lane[8]` — one past the eight
+lanes — so it compiled, and read the right two bytes, only because the
+declaration claimed nine. It assigns to `ctx_w[4].sel`: the three-way sign of a
+record's gradient *is* the fifth base-3 digit of the next context. **The commit
+before this one said `sign` had no readers**, on a survey that could not see a
+reach the declaration was hiding; shrinking the array is what turned it up.
 
 **`P2Freq`**'s fourth counter is not a count. `alt_p2_encode_symbol` codes a
 three-way alphabet out of `f[0..2]` and ends `*chosen = step + *chosen`, so

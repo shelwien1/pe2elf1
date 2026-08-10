@@ -828,10 +828,15 @@ static inline int16_t p2_bump(int32_t w2, int32_t err, int32_t shift) {
 // of the cursor it is given.
 //
 // The last two bytes are not a ninth lane.  Both pixel bodies end a record
-// with `cursor[17] = 2` and `cursor[16] = (lane[2] <= 0) + (lane[2] < 0)`,
-// and `alt_p2_model` overwrites them with `abs32(err)` and a comparison; every
-// one of the 32 reads is the byte at +17, so `mag` has readers and `sign` has
-// none in this build -- the same shape as `P2Count::b1`.
+// with `cursor[17] = 2` and `cursor[16] = (lane[2] <= 0) + (lane[2] < 0)`, and
+// `alt_p2_model` overwrites them with `abs32(err)` and a comparison.
+//
+// `mag` is read 32 times, always summed over a neighbourhood.  `sign` is read
+// exactly once, and that once is the thing worth having: `alt_p2_context`
+// assigns it to `ctx_w[4].sel`, so the three-way sign of a record's gradient
+// *is* the fifth base-3 digit of the next context (§9.1).  Hex-Rays had that
+// read as `(uint8_t)lane[8]` -- one past the eight lanes -- which is how it
+// stayed hidden while the record claimed nine of them.
 //
 // What the eight lanes hold is what the decoder writes as it emits a pixel:
 //
@@ -7210,7 +7215,10 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   v205 = v295;
   v196->ctx_w[2].sel = v26 + v203;
   v196->ctx_w[3].sel = ((uint8_t *)v204[1])[0];
-  v196->ctx_w[4].sel = (uint8_t)v201[-1].lane[8];
+  // The previous record's stored sign digit, straight into the fifth
+  // group's selector.  Hex-Rays read it as `(uint8_t)lane[8]` -- one past
+  // the eight lanes, whose low byte is `sign`.
+  v196->ctx_w[4].sel = v201[-1].sign;
   v206 = v201[-2].mag;
   v207 = v201[-1].mag;
   v208 = v205[0].mag + ((uint8_t *)v204[1])[1];

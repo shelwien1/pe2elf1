@@ -573,13 +573,20 @@ lanes 1..7 separately afterwards and overwrites byte 17 with `abs32(err)`. The
 and that is what made lanes 3..7 look like five unrelated quantities: they are
 one quantity, five times.
 
-The last two bytes are not a ninth lane. They are written as bytes at both
-sites, and all 32 reads are the byte at +17 — summed across the neighbourhood
-— so `mag` has readers and `sign` has none in this build, the shape
-`P2Count::b1` also has.
+The last two bytes are not a ninth lane. `mag` is read 32 times, always summed
+over a neighbourhood. `sign` is read exactly once — and that once closes a
+loop: `alt_p2_context` assigns it straight to `ctx_w[4].sel`, so **the
+three-way sign of a record's gradient is the fifth base-3 digit of the next
+context** (§9.1). The model stores a digit in the plane and reads it back as a
+digit.
 
-Five copies, five weight groups (§9.1), five planes and five `bank_ctx`
-entries. Whether those fives are the same five is not established.
+That read had been hiding in plain sight as `(uint8_t)lane[8]` — one past the
+eight lanes — which compiles, and reads the right two bytes, only because the
+declaration claimed nine.
+
+Five copies, five weight groups, five planes and five `bank_ctx` entries. One
+of the fives is now tied to another; whether the remaining three are the same
+five is not established.
 
 ### 9.3 What the fourth counter of a `P2Freq` is
 
