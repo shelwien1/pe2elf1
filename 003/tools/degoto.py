@@ -26,12 +26,21 @@ The conditions are checked, not assumed:
 Anything else is left alone.  A `goto` that jumps backwards is a loop the
 decompiler could not name, and a forward one over a region with its own entries
 is genuine irreducible flow; neither is improved by being rewritten blind.
+
+`--why` says which condition each rejected label fails.  A count of zero
+candidates is a statement about *this* rule, not about the `goto`s; the
+breakdown is what turns "irreducible" into a measurement.  As of round seven
+the 60 rejected labels are 22 shared tails, 16 that jump into or out of a
+block, 10 whose `goto` is not the whole of an `if`, 8 backward, and 4 whose
+skipped region something else enters.  Every one of those needs a flag or a
+copy of the body to remove -- a change to the control structure rather than a
+spelling of it.
 """
 import re
 import sys
 
 
-def analyse(lines):
+def analyse(lines, why=None):
     lab = {}
     for i, l in enumerate(lines):
         m = re.match(r'^(\s*)(LABEL_\d+):\s*$', l)
@@ -46,10 +55,15 @@ def analyse(lines):
     out = []
     for n, sites in gotos.items():
         j = lab.get(n)
-        if j is None or len(sites) != 1:
+        if j is None:
+            note(why, 'no label of that name', n)
+            continue
+        if len(sites) != 1:
+            note(why, 'more than one goto reaches it', n)
             continue
         i = sites[0]
         if j <= i:
+            note(why, 'backward: a loop the decompiler could not name', n)
             continue
         line = lines[i].strip()
         cond, head = None, i
@@ -61,16 +75,26 @@ def analyse(lines):
             if m:
                 cond, head = m.group(1), i - 1
         if cond is None:
+            note(why, 'the goto is not the whole of an if', n)
             continue
         region = lines[i + 1:j]
-        if sum(l.count('{') - l.count('}') for l in region) != 0:
+        d = sum(l.count('{') - l.count('}') for l in region)
+        if d:
+            note(why, 'jumps %s a block, depth %+d'
+                 % ('into' if d > 0 else 'out of', d), n)
             continue
         inner = [m2.group(1) for l2 in region
                  for m2 in [re.match(r'^\s*(LABEL_\d+):', l2)] if m2]
         if any(any(k < i or k > j for k in gotos.get(x, [])) for x in inner):
+            note(why, 'something else enters the region it skips', n)
             continue
         out.append((head, i, j, n, cond))
     return sorted(out)
+
+
+def note(why, reason, name):
+    if why is not None:
+        why.setdefault(reason, []).append(name)
 
 
 def invert(cond):
@@ -99,6 +123,22 @@ def invert(cond):
 def main():
     path = sys.argv[1]
     lines = open(path).read().split('\n')
+
+    if '--why' in sys.argv:
+        # A count of zero says nothing about whether the rest could be
+        # rewritten by some other rule.  This says which rule each one fails
+        # and by how much, so "irreducible" is a measurement rather than a
+        # tool's silence.
+        why = {}
+        analyse(lines, why)
+        for reason, names in sorted(why.items(), key=lambda kv: -len(kv[1])):
+            print('%3d  %s' % (len(names), reason))
+            print('     %s' % ', '.join(sorted(names)[:8]))
+        print('%d labels rejected, %d gotos in the file'
+              % (sum(len(v) for v in why.values()),
+                 sum(1 for l in lines if 'goto LABEL_' in l)))
+        return 0
+
     cands = analyse(lines)
 
     if '--list' in sys.argv or len(sys.argv) < 3:

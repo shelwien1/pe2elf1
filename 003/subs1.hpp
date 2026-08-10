@@ -7649,7 +7649,7 @@ int32_t __cost_candidate(uint8_t *a1, int32_t n2, uint8_t *a3, int8_t a4, int32_
   __frame.v99 = a1;
   __frame.v88 = a3;
   __frame.n4 = plane_count;
-  v9 = *((uint16_t *)a1 + 2);
+  v9 = *(const uint16_t *)&((const BmfImage *)a1)->stride;   // the low half of the stride
   __frame.n2_2 = n2;
   __frame.v89 = a1;
   __frame.v92 = (int32_t)(__frame.n2_1 + 1) % 3 - (uint32_t)__frame.n2_1;

@@ -22,18 +22,18 @@ in `ModelBlock` is sixteen bytes.
 `python3 tools/shape.py`, verbatim:
 
 ```
-subs1.hpp / bmf.cpp lines          17739 / 358
-raw-offset sites                   99
-  off `_this`                      7, in 4 functions
-pointer casts                      2955
+subs1.hpp / bmf.cpp lines          17773 / 358
+raw-offset sites                   44
+  off `_this`                      3, in 2 functions
+pointer casts                      2822
 globals still at a 1997 address    0
 frames                             17, 169180 bytes, 0 aliases
   slots carrying two names         0, 0 extra names, in 0 functions
   member runs walked as arrays     0 sites, 0 bases, 0 functions
   frames that dissolve outright    17, 0 aliases
 structs                            18, 0 still ObjN
-  fNN members / named ones         93 / 80
-distinct vNN locals                560
+  fNN members / named ones         93 / 81
+distinct vNN locals                559
 goto / LABEL_n:                    112 / 79
 __fwd_* shims                        0
 ```
@@ -42,12 +42,12 @@ against round six's close:
 
 | | round six | round seven |
 | --- | --- | --- |
-| lines | 17 833 / 358 | **17 739 / 358** |
-| raw-offset sites | 504 | **99** |
-| — off `_this` | 27 | **7** |
-| pointer casts | 3986 | **2955** |
+| lines | 17 833 / 358 | **17 773 / 358** |
+| raw-offset sites | 504 | **44** |
+| — off `_this` | 27 | **3** |
+| pointer casts | 3986 | **2822** |
 | structs | 16, 3 still `ObjN` | **18, 0 still `ObjN`** |
-| conversion warnings | 2075 | **1994** |
+| conversion warnings | 2075 | **1975** |
 
 `ObjN` is zero. Every recovered struct in the file has a name that says what it
 is, which is the end of a thread round two opened with 77 of them.
@@ -55,7 +55,7 @@ is, which is the end of a thread round two opened with 77 of them.
 The gate is unchanged and green at every commit: 15 reference streams
 byte-identical, a lossless round trip, a two-member archive, 15 refused
 malformed inputs, the `ulimit -v` ladder exiting 7, `BMF_STRICT` at 0 and the
-`BMF_WARN` ratchet, which moved down nine times this round and up none.
+`BMF_WARN` ratchet, which moved down eleven times this round and up none.
 
 ---
 
@@ -310,24 +310,28 @@ question. Two of them are, and they are still there.
 
 ## 8. What is left
 
-* **Frame slots with two meanings.** `shape.py` reports 0 for "slots carrying
-  two names" because these are one name with two *roles*, which it does not
-  measure. Three of them are done: `compress_image`'s header slot is a
-  `BmfImage` and then deinterleave scratch, in branches separated by a return;
-  `expand_image`'s four words are a packer mask, then a header, then scratch,
-  in three phases; and both are modelled as a union with one arm per role,
-  which needs no liveness proof because it claims none. What is left is the
-  harder kind — `cost_candidate`'s `v91` holds an address, then a scratch
-  value, then a cost, and `alt_p2_model`'s `v508` is a pointer and a strip
-  index within one expression. Those do need a liveness argument each, and
-  there is no tool shape for it.
-* **99 raw offsets, 93 `fNN` members, 560 `vNN` locals, 112 `goto`s.** The
-  offsets are down from 1389 over five rounds; what remains is in bases that
-  are genuinely computed — a name plus a variable byte offset, with nothing
-  either end to say what the stride is. `degoto.py` still reports 0 candidates.
-* **1994 conversion warnings** — 1256 `-Wsign-conversion`, 635 `-Wconversion`,
+* **44 raw offsets.** Down from 1389 over five rounds and from 504 this one.
+  What survives is a name plus a genuinely computed offset — `model_strip(*(uint32_t
+  *)(a2 + 4 * (a3 & 1)))`, `(uint16_t *)(v25 + 4 * (i + v59))`, the four `SymList
+  *` cursors that step over an allocation's count word. `shape.py`'s own
+  docstring says the number is a counter and not a target; this is the part it
+  was warning about.
+* **112 `goto`s over 79 labels, and now a measurement rather than a silence.**
+  `degoto.py --why` says which condition each rejected label fails: 22 are
+  shared tails with more than one `goto`, 16 jump into or out of a block, 10
+  have a `goto` that is not the whole of an `if`, 8 are backward — a loop the
+  decompiler could not name — and 4 skip a region something else enters.
+  Removing any of them needs a flag or a copy of the body, which is a change to
+  the control structure rather than a spelling of it. A count of zero
+  candidates was never evidence about the `goto`s; this is.
+* **93 `fNN` members and 559 `vNN` locals.** Both are answerable only by
+  knowing what the values mean, which is `algorithm_v2.md`'s work.
+* **1975 conversion warnings** — 1237 `-Wsign-conversion`, 635 `-Wconversion`,
   99 `-Wsign-compare`, 10 `-Wint-to-pointer-cast`, 4 `-Wuseless-cast` and one
   `-Wmain`. §2 is the reason to keep holding it there.
+* **What the shared record means.** The bucket table's last record and the
+  frequency table's first are the same sixteen bytes (§5). That is measured;
+  what it is *for* is the open question, and it belongs to `algorithm_v2.md`.
 
 ---
 
@@ -337,14 +341,20 @@ question. Two of them are, and they are still there.
 | --- | --- |
 | `unrechoist.py` | an 18-byte record copy whose loads MSVC hoisted above its stores |
 | `unrecast.py --bare` | the cast with no dereference behind it, to a fixed point |
+| `degoto.py --why` | which condition each rejected label fails, and by how much |
 
-One new tool and one existing one taught a shape it had been walking past.
+One new tool and two existing ones taught something they had been walking past.
 That is the honest measure of where this round's work was: `unrec`,
 `uncopyrec`, `unp2`, `unscalar`, `unshim`, `unindex`, `unrecast`, `unwiden`,
 `unoffset`, `uncast`, `unused`, `unwrite`, `unhoist`, `uncursor`, `dedup`,
 `arrayify` and `degoto` are all run against the file at the end of this round
 and all of them report zero, exactly as they did at the end of round six — and
-the file still lost 405 raw offsets and 1031 pointer casts in between.
+the file still lost 460 raw offsets and 1164 pointer casts in between.
+
+`degoto --why` is the smaller of the two additions and the more useful. It
+reports nothing new about the file; it reports what the tool's zero *means*,
+which is the difference between "no candidates for this rule" and "irreducible".
+§8 quotes it.
 
 `unrecast`'s addition is worth one line of its own. It dropped
 `*((uint32_t *)p + 1)` when `p` was already a `uint32_t *` but never looked at
