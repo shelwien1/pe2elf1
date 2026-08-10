@@ -12831,7 +12831,9 @@ static inline uint32_t __fwd_alt_p2_model_rescale_three_way(void *a0) { return _
 
 uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
 {
-  int32_t n2;
+  float    n2_bias;   // the p2 filter's bias term, one of three lifetimes MSVC
+  int32_t  n2_half;   // gave one slot; the third is the cursor below
+  uint8_t *n2;        // a counter-record cursor
   uint16_t *n0xF0;
   uint32_t n0x10_2;
   uint16_t *v508;
@@ -13002,7 +13004,7 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
   v16 = v15[14][1] + 0.000099999997f;
   v17 = *(float (**)[4])(a1->f278668 - 4);
   v18 = *(float *)&a1->f278648;
-  n2 = *(int32_t *)&a1->f278640;
+  n2_bias = *(float *)&a1->f278640;
   v19 = sample - v18;
   v20 = *(float *)((uint8_t *)&a1->f278640 + 4);
   v21 = v20 - v18;
@@ -13061,7 +13063,7 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
       for ( j = 1; j < 7; ++j )
         acc[k] += v15[j][k] * a1->p2_row[j][k];
     }
-    pred     = *(float *)&n2 + bmf_hsum4(acc);
+    pred     = n2_bias + bmf_hsum4(acc);
     err      = sample - pred;
     ms_scale = v15[14][2];
 
@@ -13117,8 +13119,8 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
       }
       if ( !alphabet_reduced )
       {
-        __builtin_prefetch((const char *)&n2, 0, 1);
-        n2 = (int32_t)&((uint32_t *)v578)[(v81 ^ 0x7FF0) + 71178] + v78;
+        __builtin_prefetch(&n2, 0, 1);
+        n2 = (uint8_t *)&((uint32_t *)v578)[(v81 ^ 0x7FF0) + 71178] + v78;
         v84 = ((uint32_t *)v578)[2 * n5 + 69727] + v77;
         n3 = v81 & 3;
         if ( (uint32_t)n3 >= 3
@@ -13241,7 +13243,7 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
         v514 = (P2Count *)(v568);
         __builtin_prefetch(v560, 0, 1);
         v98 = (P2Count *)((int32_t)&v90[4 * v97 + 284712]);
-        n2_1 = (uint8_t *)n2;
+        n2_1 = n2;
         v569 = (P2Count *)((const char *)v98);
         v100 = -v550;
         v513 = (P2Count *)(v98);
@@ -13272,7 +13274,7 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
         __builtin_prefetch(v107, 0, 1);
         if ( v87
           && (v113 = *(int16_t *)(n2 + 6),
-              v114 = *(uint8_t *)(n2 + 4),
+              v114 = *(n2 + 4),
               v550 = v108,
               v87 = n3 <= 0,
               *(uint16_t *)(n2 + 6) = ((uint32_t)(-v108 - ((v113 + (1 << ((v114 + 31) & 31))) >> (v114 & 31)) + 2) >> 2) + v113,
@@ -13449,7 +13451,7 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
         else
         {
           v115 = *(int16_t *)(n2 - 2);
-          v116 = *(uint8_t *)(n2 - 4);
+          v116 = *(n2 - 4);
           v550 = v108;
           *(uint16_t *)(n2 - 2) = ((uint32_t)(-v108 - ((v115 + (1 << ((v116 + 31) & 31))) >> (v116 & 31)) + 4) >> 3) + v115;
           v117 = v542->w2;
@@ -13901,7 +13903,7 @@ uint32_t __alt_p2_model(Obj11 *a1, int32_t a3, uint8_t a4, int32_t a5)
     {
       v391 = v387->f940080[1];
       v392 = v387->f940080[2];
-      n2 = (int32_t)((uint16_t *)v387 + 470040);
+      n2 = (uint8_t *)((uint16_t *)v387 + 470040);
       if ( v387->f940080[3] + v392 + v391 > 29696 )
         __fwd_alt_p2_model_rescale_three_way((uint16_t *)v387 + 470040);
       v393 = (10 * (uint32_t)v387->f940080[0]) >> 4;
@@ -13939,7 +13941,7 @@ LABEL_37:
           n2_2 = n0x10_3 + 470040;
           v403 = n0x10_3[470041];
           v404 = n0x10_3[470042];
-          n2 = (int32_t)n2_2;
+          n2 = (uint8_t *)n2_2;
           if ( n2_2[3] + v404 + v403 > 29696 )
           {
             n0x10_1 = n0x10;
@@ -13958,7 +13960,7 @@ LABEL_37:
         }
         v406 = *(uint16_t *)(n0x10_2 + 940066);
         v407 = *(uint16_t *)(n0x10_2 + 940068);
-        n2 = n0x10_2 + 940064;
+        n2 = (uint8_t *)(n0x10_2 + 940064);
         if ( *(uint16_t *)(n0x10_2 + 940070) + v407 + v406 > 29696 )
         {
           n0x10_1 = n0x10;
@@ -13969,16 +13971,16 @@ LABEL_37:
 LABEL_48:
         if ( a4 )
         {
-          n2 = (a4 - 1) >> 1;
+          n2_half = (a4 - 1) >> 1;
           n0xF0 = (((uint16_t *)((uint8_t)(uintptr_t)v508 & 0xF0)));
           if ( (uint32_t)n0xF0 >= 0xF0
             || (n0x10_1 = n0x10,
-                __fwd_alt_p2_model_update_binary_pair(model_tables + 254 * (uint32_t)v508 + 4064, n2),
+                __fwd_alt_p2_model_update_binary_pair(model_tables + 254 * (uint32_t)v508 + 4064, n2_half),
                 n0x10 = n0x10_1,
                 (int32_t)n0xF0 > 0) )
           {
             n0x10_1 = n0x10;
-            __fwd_alt_p2_model_update_binary_pair(model_tables + 254 * (uint32_t)v508 - 4064, n2);
+            __fwd_alt_p2_model_update_binary_pair(model_tables + 254 * (uint32_t)v508 - 4064, n2_half);
             n0x10 = n0x10_1;
           }
         }
@@ -14019,7 +14021,7 @@ LABEL_48:
             n2_3 = (uint16_t *)n0xF0_1 + 470036;
             v497 = n2_3[2] + n2_3[1];
             v498 = n2_3[3];
-            n2 = (int32_t)n2_3;
+            n2 = (uint8_t *)n2_3;
             if ( v498 + v497 > 29696 )
             {
               n0x10_1 = n0x10;
@@ -14033,7 +14035,7 @@ LABEL_48:
               goto LABEL_180;
             v500 = n0xF0[470041];
             v501 = n0xF0[470042];
-            n2 = (int32_t)((uint16_t *)n0xF0 + 470040);
+            n2 = (uint8_t *)((uint16_t *)n0xF0 + 470040);
             if ( n0xF0[470043] + v501 + v500 > 29696 )
             {
               n0x10_1 = n0x10;
@@ -14056,7 +14058,7 @@ LABEL_48:
 LABEL_180:
               v503 = n0xF0[470033];
               v504 = n0xF0[470034];
-              n2 = (int32_t)((uint16_t *)n0xF0 + 470032);
+              n2 = (uint8_t *)((uint16_t *)n0xF0 + 470032);
               if ( n0xF0[470035] + v504 + v503 > 29696 )
               {
                 n0x10_1 = n0x10;
@@ -14081,7 +14083,7 @@ LABEL_180:
             n0xF0 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->f278760[6] + 2 * (v385->f278704 - ((uint32_t *)v385)[v385->f278760[4] + 69695])]));
             v412 = n0xF0[470037];
             v413 = n0xF0[470038];
-            n2 = (int32_t)((uint16_t *)n0xF0 + 470036);
+            n2 = (uint8_t *)((uint16_t *)n0xF0 + 470036);
             if ( n0xF0[470039] + v413 + v412 > 29696 )
             {
               n0x10_1 = n0x10;
@@ -14095,7 +14097,7 @@ LABEL_180:
               goto LABEL_67;
             v415 = n0xF0[470041];
             v416 = n0xF0[470042];
-            n2 = (int32_t)((uint16_t *)n0xF0 + 470040);
+            n2 = (uint8_t *)((uint16_t *)n0xF0 + 470040);
             if ( n0xF0[470043] + v416 + v415 > 29696 )
             {
               n0x10_1 = n0x10;
@@ -14110,7 +14112,7 @@ LABEL_180:
 LABEL_67:
               v417 = n0xF0[470033];
               v418 = n0xF0[470034];
-              n2 = (int32_t)((uint16_t *)n0xF0 + 470032);
+              n2 = (uint8_t *)((uint16_t *)n0xF0 + 470032);
               if ( n0xF0[470035] + v418 + v417 > 29696 )
               {
                 n0x10_1 = n0x10;
@@ -14126,7 +14128,7 @@ LABEL_67:
             n2_4 = (uint16_t *)&((uint32_t *)v385)[2 * v385->f278760[9] + 235018 + 2 * (n0x10 - v385->f278760[10])];
             v481 = HIWORD(((uint32_t *)v385)[2 * v385->f278760[9] + 235018 + 2 * (n0x10 - v385->f278760[10])]);
             v482 = LOWORD(((uint32_t *)v385)[2 * v385->f278760[9] + 235019 + 2 * (n0x10 - v385->f278760[10])]);
-            n2 = (int32_t)n2_4;
+            n2 = (uint8_t *)n2_4;
             if ( n2_4[3] + v482 + v481 > 29696 )
             {
               n0x10_1 = n0x10;
@@ -14150,7 +14152,7 @@ LABEL_67:
               goto LABEL_167;
             v486 = n0xF0[470041];
             v487 = n0xF0[470042];
-            n2 = (int32_t)((uint16_t *)n0xF0 + 470040);
+            n2 = (uint8_t *)((uint16_t *)n0xF0 + 470040);
             if ( n0xF0[470043] + v487 + v486 > 29696 )
             {
               n0x10_1 = n0x10;
@@ -14173,7 +14175,7 @@ LABEL_67:
 LABEL_167:
               v489 = n0xF0[470033];
               v490 = n0xF0[470034];
-              n2 = (int32_t)((uint16_t *)n0xF0 + 470032);
+              n2 = (uint8_t *)((uint16_t *)n0xF0 + 470032);
               if ( n0xF0[470035] + v490 + v489 > 29696 )
               {
                 n0x10_1 = n0x10;
@@ -14198,7 +14200,7 @@ LABEL_167:
             n0xF0 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->f278760[10] + 2 * (v385->f278704 - ((uint32_t *)v385)[v385->f278760[8] + 69699])]));
             v421 = n0xF0[470037];
             v422 = n0xF0[470038];
-            n2 = (int32_t)((uint16_t *)n0xF0 + 470036);
+            n2 = (uint8_t *)((uint16_t *)n0xF0 + 470036);
             if ( n0xF0[470039] + v422 + v421 > 29696 )
             {
               n0x10_1 = n0x10;
@@ -14210,7 +14212,7 @@ LABEL_167:
               goto LABEL_79;
             v423 = n0xF0[470041];
             v424 = n0xF0[470042];
-            n2 = (int32_t)((uint16_t *)n0xF0 + 470040);
+            n2 = (uint8_t *)((uint16_t *)n0xF0 + 470040);
             if ( n0xF0[470043] + v424 + v423 > 29696 )
             {
               n0x10_1 = n0x10;
@@ -14223,7 +14225,7 @@ LABEL_167:
 LABEL_79:
               v425 = n0xF0[470033];
               v426 = n0xF0[470034];
-              n2 = (int32_t)((uint16_t *)n0xF0 + 470032);
+              n2 = (uint8_t *)((uint16_t *)n0xF0 + 470032);
               if ( n0xF0[470035] + v426 + v425 > 29696 )
               {
                 n0x10_1 = n0x10;
@@ -14239,7 +14241,7 @@ LABEL_79:
             n2_5 = (uint16_t *)&((uint32_t *)v385)[2 * v385->f278760[13] + 235018 + 2 * (n0x10 - v385->f278760[14])];
             v470 = HIWORD(((uint32_t *)v385)[2 * v385->f278760[13] + 235018 + 2 * (n0x10 - v385->f278760[14])]);
             v471 = LOWORD(((uint32_t *)v385)[2 * v385->f278760[13] + 235019 + 2 * (n0x10 - v385->f278760[14])]);
-            n2 = (int32_t)n2_5;
+            n2 = (uint8_t *)n2_5;
             if ( n2_5[3] + v471 + v470 > 29696 )
             {
               n0x10_1 = n0x10;
@@ -14263,7 +14265,7 @@ LABEL_79:
               goto LABEL_154;
             v475 = n0xF0[470041];
             v476 = n0xF0[470042];
-            n2 = (int32_t)((uint16_t *)n0xF0 + 470040);
+            n2 = (uint8_t *)((uint16_t *)n0xF0 + 470040);
             if ( n0xF0[470043] + v476 + v475 > 29696 )
             {
               n0x10_1 = n0x10;
@@ -14286,7 +14288,7 @@ LABEL_79:
 LABEL_154:
               v478 = n0xF0[470033];
               v479 = n0xF0[470034];
-              n2 = (int32_t)((uint16_t *)n0xF0 + 470032);
+              n2 = (uint8_t *)((uint16_t *)n0xF0 + 470032);
               if ( n0xF0[470035] + v479 + v478 > 29696 )
               {
                 n0x10_1 = n0x10;
@@ -14311,7 +14313,7 @@ LABEL_154:
             n0xF0 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->f278760[14] + 2 * (v385->f278704 - ((uint32_t *)v385)[v385->f278760[12] + 69703])]));
             v429 = n0xF0[470037];
             v430 = n0xF0[470038];
-            n2 = (int32_t)((uint16_t *)n0xF0 + 470036);
+            n2 = (uint8_t *)((uint16_t *)n0xF0 + 470036);
             if ( n0xF0[470039] + v430 + v429 > 29696 )
             {
               n0x10_1 = n0x10;
@@ -14323,7 +14325,7 @@ LABEL_154:
               goto LABEL_91;
             v431 = n0xF0[470041];
             v432 = n0xF0[470042];
-            n2 = (int32_t)((uint16_t *)n0xF0 + 470040);
+            n2 = (uint8_t *)((uint16_t *)n0xF0 + 470040);
             if ( n0xF0[470043] + v432 + v431 > 29696 )
             {
               n0x10_1 = n0x10;
@@ -14336,7 +14338,7 @@ LABEL_154:
 LABEL_91:
               v433 = n0xF0[470033];
               v434 = n0xF0[470034];
-              n2 = (int32_t)((uint16_t *)n0xF0 + 470032);
+              n2 = (uint8_t *)((uint16_t *)n0xF0 + 470032);
               if ( n0xF0[470035] + v434 + v433 > 29696 )
               {
                 n0x10_1 = n0x10;
@@ -14352,7 +14354,7 @@ LABEL_91:
             n2_6 = (uint16_t *)&((uint32_t *)v385)[2 * v385->f278760[17] + 235018 + 2 * (n0x10 - v385->f278760[18])];
             v459 = HIWORD(((uint32_t *)v385)[2 * v385->f278760[17] + 235018 + 2 * (n0x10 - v385->f278760[18])]);
             v460 = LOWORD(((uint32_t *)v385)[2 * v385->f278760[17] + 235019 + 2 * (n0x10 - v385->f278760[18])]);
-            n2 = (int32_t)n2_6;
+            n2 = (uint8_t *)n2_6;
             if ( n2_6[3] + v460 + v459 > 29696 )
             {
               n0x10_1 = n0x10;
@@ -14376,7 +14378,7 @@ LABEL_91:
               goto LABEL_141;
             v464 = n0xF0[470041];
             v465 = n0xF0[470042];
-            n2 = (int32_t)((uint16_t *)n0xF0 + 470040);
+            n2 = (uint8_t *)((uint16_t *)n0xF0 + 470040);
             if ( n0xF0[470043] + v465 + v464 > 29696 )
             {
               n0x10_1 = n0x10;
@@ -14399,7 +14401,7 @@ LABEL_91:
 LABEL_141:
               v467 = n0xF0[470033];
               v468 = n0xF0[470034];
-              n2 = (int32_t)((uint16_t *)n0xF0 + 470032);
+              n2 = (uint8_t *)((uint16_t *)n0xF0 + 470032);
               if ( n0xF0[470035] + v468 + v467 > 29696 )
               {
                 n0x10_1 = n0x10;
@@ -14424,7 +14426,7 @@ LABEL_141:
             n0xF0 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->f278760[18] + 2 * (v385->f278704 - ((uint32_t *)v385)[v385->f278760[16] + 69707])]));
             v437 = n0xF0[470037];
             v438 = n0xF0[470038];
-            n2 = (int32_t)((uint16_t *)n0xF0 + 470036);
+            n2 = (uint8_t *)((uint16_t *)n0xF0 + 470036);
             if ( n0xF0[470039] + v438 + v437 > 29696 )
             {
               n0x10_1 = n0x10;
@@ -14436,7 +14438,7 @@ LABEL_141:
               goto LABEL_103;
             v439 = n0xF0[470041];
             v440 = n0xF0[470042];
-            n2 = (int32_t)((uint16_t *)n0xF0 + 470040);
+            n2 = (uint8_t *)((uint16_t *)n0xF0 + 470040);
             if ( n0xF0[470043] + v440 + v439 > 29696 )
             {
               n0x10_1 = n0x10;
@@ -14449,7 +14451,7 @@ LABEL_141:
 LABEL_103:
               v441 = n0xF0[470033];
               v442 = n0xF0[470034];
-              n2 = (int32_t)((uint16_t *)n0xF0 + 470032);
+              n2 = (uint8_t *)((uint16_t *)n0xF0 + 470032);
               if ( n0xF0[470035] + v442 + v441 > 29696 )
               {
                 n0x10_1 = n0x10;
@@ -14466,7 +14468,7 @@ LABEL_103:
             v447 = HIWORD(((uint32_t *)v385)[2 * v385->f278760[21] + 235018 + 2 * (n0x10 - v385->f278760[22])]);
             v448 = LOWORD(((uint32_t *)v385)[2 * v385->f278760[21] + 235019 + 2 * (n0x10 - v385->f278760[22])]);
             v449 = n2_7[3];
-            n2 = (int32_t)n2_7;
+            n2 = (uint8_t *)n2_7;
             if ( v449 + v448 + v447 > 29696 )
               __fwd_alt_p2_model_rescale_three_way(n2_7);
             *(uint16_t *)(n2 + v510 + 2) += (uint16_t)(*(uint16_t *)n2 & 0xFFFC) >> 2;
@@ -14482,7 +14484,7 @@ LABEL_103:
               goto LABEL_128;
             v453 = *(uint16_t *)(n0x10_2 + 940086);
             v454 = *(uint16_t *)(n0x10_2 + 940084) + *(uint16_t *)(n0x10_2 + 940082);
-            n2 = n0x10_2 + 940080;
+            n2 = (uint8_t *)(n0x10_2 + 940080);
             if ( v453 + v454 > 29696 )
               __fwd_alt_p2_model_rescale_three_way((uint16_t *)(n0x10_2 + 940080));
             n0xF0_5 = (uint16_t *)(n0xF0);
@@ -14539,7 +14541,7 @@ LABEL_115:
     }
     v394 = v387->f940064[1];
     v395 = v387->f940064[2];
-    n2 = (int32_t)((uint16_t *)v387 + 470032);
+    n2 = (uint8_t *)((uint16_t *)v387 + 470032);
     if ( v387->f940064[3] + v395 + v394 > 29696 )
       __fwd_alt_p2_model_rescale_three_way((uint16_t *)v387 + 470032);
     v396 = (13 * (uint32_t)v387->f940064[0]) >> 4;
