@@ -6744,7 +6744,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   if ( a4 )
   {
     v282 = (P2Ctx *)a4->cursor[0] - 1;
-    v54 = (P2Ctx *)(a4->cursor[2] - 1);
+    v54 = a4->cursor[2] - 1;
     v281 = (P2Ctx *)((int16_t *)(a4->cursor[1] - 1));
     v55 = a5->cursor[0];
     v286 = (P2Ctx *)((int16_t *)v54);
@@ -14014,7 +14014,7 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
   v37 = -i_1;
   // One cursor for the 8 records this shifts; MSVC reloaded the base
   // between every pair and nothing here writes it.
-  P2Ctx *const rec1 = (P2Ctx *)(lpAddress->cursor[0] + v37);
+  P2Ctx *const rec1 = lpAddress->cursor[0] + v37;
   rec1[-1] = rec1[0];
   rec1[-2] = rec1[1];
   rec1[-3] = rec1[2];
@@ -14323,7 +14323,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
               v41[4] = v41[-1];
               // One cursor for the 8 records this shifts; MSVC reloaded the base
               // between every pair and nothing here writes it.
-              P2Ctx *const rec2 = (P2Ctx *)(v25->cursor[0] + v160);
+              P2Ctx *const rec2 = v25->cursor[0] + v160;
               rec2[-1] = rec2[0];
               rec2[-2] = rec2[1];
               rec2[-3] = rec2[2];
@@ -14746,7 +14746,7 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
   v39 = -i;
   // One cursor for the 8 records this shifts; MSVC reloaded the base
   // between every pair and nothing here writes it.
-  P2Ctx *const rec3 = (P2Ctx *)(lpAddress->cursor[0] + v39);
+  P2Ctx *const rec3 = lpAddress->cursor[0] + v39;
   rec3[-1] = rec3[0];
   rec3[-2] = rec3[1];
   rec3[-3] = rec3[2];
@@ -15045,7 +15045,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
               v40[4] = v40[-1];
               // One cursor for the 8 records this shifts; MSVC reloaded the base
               // between every pair and nothing here writes it.
-              P2Ctx *const rec4 = (P2Ctx *)(v24->cursor[0] + v164);
+              P2Ctx *const rec4 = v24->cursor[0] + v164;
               rec4[-1] = rec4[0];
               rec4[-2] = rec4[1];
               rec4[-3] = rec4[2];
