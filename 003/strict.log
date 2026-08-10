@@ -1,15 +1,15 @@
 In file included from bmf.cpp:345:
 subs1.hpp: In function 'int32_t __alt_p1_context(AltP1Block*, uint32_t*, uint32_t*)':
-subs1.hpp:2757:8: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:2767:12: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:2776:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:2840:9: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:2785:8: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:2795:12: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:2804:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:2868:9: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp: In function 'int32_t __decode_pixel(ModelBlock*, int32_t)':
-subs1.hpp:9971:23: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:9973:12: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:9999:23: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:10001:12: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp: In function 'int32_t __code_pixel(ModelBlock*, int32_t)':
-subs1.hpp:10748:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:10757:27: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:10760:11: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:10776:10: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:10785:27: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:10788:11: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp: At global scope:
-subs1.hpp:17683:9: warning: second argument of 'int32_t main(int32_t, uint8_t**)' should be 'char **' [-Wmain]
+subs1.hpp:17715:9: warning: second argument of 'int32_t main(int32_t, uint8_t**)' should be 'char **' [-Wmain]
