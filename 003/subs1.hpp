@@ -3958,9 +3958,9 @@ int32_t __alt_p1_context(Obj0 *_this, uint32_t *a2, Obj91 *a3)
           v29, result, v35, v36, v39, v40, v41, v42;
   uint32_t v37, v38;
   uint8_t *v3, *v4, *v8, *v10, *v17, *v31, *v33;
-  v3 = *((uint8_t **)_this + 50);
+  v3 = _this->f176[6];
   v4 = (uint8_t *)*v3;
-  v5 = (Obj22 *)((int32_t)*((uint8_t **)_this + 49));
+  v5 = (Obj22 *)((int32_t)_this->f176[5]);
   v6 = *(uint8_t *)((char *)v5 - 2);
   v7 = *(v3 - 2);
   if ( v6 < (int32_t)v4 )
@@ -3983,7 +3983,7 @@ int32_t __alt_p1_context(Obj0 *_this, uint32_t *a2, Obj91 *a3)
       v4 = v8;
   }
   *((uint8_t **)_this + 2) = v4;
-  v33 = *((uint8_t **)_this + 51);
+  v33 = _this->f176[7];
   v11 = *(v3 - 1)
       + *(uint8_t *)((char *)v5 - 5)
       + 3 * (v3[3] + v33[1])
@@ -4030,7 +4030,7 @@ int32_t __alt_p1_context(Obj0 *_this, uint32_t *a2, Obj91 *a3)
   }
   else
   {
-    v32 = (Obj17 *)((int32_t)*((uint8_t **)_this + 53));
+    v32 = (Obj17 *)((int32_t)_this->f176[9]);
     v36 = v32->f1 + *(v33 - 3) + v3[7] + v11 + v32->f5;
     *((uint8_t **)_this + 28) = (uint8_t *)(2 * *(uint8_t *)((char *)v5 - 2) - *(uint8_t *)((char *)v5 - 4) - (uint32_t)v4);
     *((uint8_t **)_this + 32) = (uint8_t *)(2 * *v3 - *v33 - (uint32_t)v4);
@@ -4039,7 +4039,7 @@ int32_t __alt_p1_context(Obj0 *_this, uint32_t *a2, Obj91 *a3)
                                      + *(uint8_t *)((char *)v5 - 6)
                                      - (uint32_t)v4);
     *((uint8_t **)_this + 20) = (uint8_t *)(v3[4] - (uint32_t)v4);
-    v37 = v5->f1 + v32->f1 + (*((uint8_t **)_this + 52))[1] + v33[1] + v3[1] == 0;
+    v37 = v5->f1 + v32->f1 + (_this->f176[8])[1] + v33[1] + v3[1] == 0;
   }
   v16 = (v36 + 7) >> 4;
   v17 = (uint8_t *)*((uint8_t *)_this + v16 + 216);
@@ -5374,21 +5374,21 @@ char *__alt_p2_alloc(Obj11 *_this, int32_t i, int32_t n4)
   }
   _this->f278704 = 15;
   __fwd_alt_p2_alloc_alt_init_tables((uint8_t *)((char *)_this + 279984), ((char *)_this + 280496));
-  *(uint32_t *)((char *)_this + 278844) = 0;
+  _this->f278760[21] = 0;
   *(uint32_t *)((char *)_this + 278784) = 64;
-  *(uint32_t *)((char *)_this + 278828) = 0;
-  *(uint32_t *)((char *)_this + 278788) = 128;
-  *(uint32_t *)((char *)_this + 278812) = 0;
+  _this->f278760[17] = 0;
+  _this->f278760[7] = 128;
+  _this->f278760[13] = 0;
   *(uint32_t *)((char *)_this + 278800) = 192;
-  *(uint32_t *)((char *)_this + 278796) = 0;
-  *(uint32_t *)((char *)_this + 278804) = 384;
-  *(uint32_t *)((char *)_this + 278780) = 0;
+  _this->f278760[9] = 0;
+  _this->f278760[11] = 384;
+  _this->f278760[5] = 0;
   *(uint32_t *)((char *)_this + 278816) = 576;
-  *(uint32_t *)((char *)_this + 278820) = 1152;
+  _this->f278760[15] = 1152;
   *(uint32_t *)((char *)_this + 278832) = 1728;
-  *(uint32_t *)((char *)_this + 278836) = 3456;
+  _this->f278760[19] = 3456;
   *(uint32_t *)((char *)_this + 278848) = 5184;
-  *(uint32_t *)((char *)_this + 278852) = 10368;
+  _this->f278760[23] = 10368;
   return (char *)_this;
 }
 
@@ -9310,7 +9310,7 @@ int32_t __choose_plane_coding(Obj97 *a1, int32_t n3, char a3)
                   v202.m128_i32[2] = n192_3;
                   memset(buf_1,0,2048);
                   v148 = v226->f0 * (*((uint16_t *)v226 + 1) - 1);
-                  v149 = *((uint16_t *)v226 + 2);
+                  v149 = v226->f4;
                   v205.m128_i32[3] = n192_2;
                   v203.m128_i32[0] = n192_1;
                   v203.m128_i32[1] = v148 - 1;
@@ -9372,7 +9372,7 @@ LABEL_109:
                     v202.m128_i32[3] = n192_4;
                     memset(buf_2,0,2048);
                     v161 = v226->f0 * (*((uint16_t *)v226 + 1) - 1);
-                    v162 = *((uint16_t *)v226 + 2);
+                    v162 = v226->f4;
                     v205.m128_i32[3] = n192_2;
                     v203.m128_i32[0] = n192_1;
                     v206.m128_i32[0] = v161 - 1;
@@ -9439,7 +9439,7 @@ LABEL_109:
             *(uint32_t *)buf_1 = v62;
             memset(buf_3,0,2048);
             v118 = v226->f0 * (*((uint16_t *)v226 + 1) - 1);
-            v119 = *((uint16_t *)v226 + 2);
+            v119 = v226->f4;
             v192 = v59;
             v184 = v57;
             v185 = v118 - 1;
@@ -9497,7 +9497,7 @@ LABEL_55:
               v183 = v61;
               memset(buf_4,0,2048);
               v131 = v226->f0 * (*((uint16_t *)v226 + 1) - 1);
-              v132 = *((uint16_t *)v226 + 2);
+              v132 = v226->f4;
               v192 = v59;
               v184 = v57;
               v193 = v131 - 1;
@@ -10650,10 +10650,10 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
       + (v22 << 10)
       + v27;
   n15_10 = (uint8_t *)n15_3;
-  v31 = ((*((uint8_t *)this_1 + 1078695) == 0) << 7)
-      + ((*((uint8_t *)this_1 + 1078694) == 0) << 6)
-      + 32 * (*((uint8_t *)this_1 + 1078693) == 0)
-      + 16 * (*((uint8_t *)this_1 + 1078692) == 0)
+  v31 = ((this_1->f1078692[3] == 0) << 7)
+      + ((this_1->f1078692[2] == 0) << 6)
+      + 32 * (this_1->f1078692[1] == 0)
+      + 16 * (this_1->f1078692[0] == 0)
       + v29;
   n0xFFFF = *((uint16_t *)this_1 + v31 + 3037912);
   if ( n0xFFFF == 0xFFFF )
@@ -10862,8 +10862,8 @@ LABEL_57:
         v74 = v71 + v70;
         v75 = n15_16[34];
         v76 = ((uint8_t *)this_3->f56[7]);
-        *((uint8_t *)this_3 + 1078692) = v73 + v72 + v74 + v75 - 5;
-        *((uint8_t *)this_3 + 1078693) = v76[26]
+        this_3->f1078692[0] = v73 + v72 + v74 + v75 - 5;
+        this_3->f1078692[1] = v76[26]
                                      + v76[18]
                                      + v76[10]
                                      + v76[2]
@@ -10873,9 +10873,9 @@ LABEL_57:
                                      + v76[34]
                                      - 8;
         n15_17 = (char *)n15_8;
-        *((uint8_t *)this_3 + 1078694) = *(v61 - 29) + *(v61 - 21) - 2;
+        this_3->f1078692[2] = *(v61 - 29) + *(v61 - 21) - 2;
         n4_17 = n4_1;
-        *((uint8_t *)this_3 + 1078695) = *(v61 - 38)
+        this_3->f1078692[3] = *(v61 - 38)
                                      + *(v61 - 46)
                                      + *(v61 - 54)
                                      + *(v61 - 30)
@@ -11428,10 +11428,10 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
       + v26
       + 2 * *((uint8_t *)n2_8 - 10);
   this_3 = (ModelBlock *)(this_1);
-  v29 = ((*((uint8_t *)this_1 + 1078695) == 0) << 7)
-      + ((*((uint8_t *)this_1 + 1078694) == 0) << 6)
-      + 32 * (*((uint8_t *)this_1 + 1078693) == 0)
-      + 16 * (*((uint8_t *)this_1 + 1078692) == 0)
+  v29 = ((this_1->f1078692[3] == 0) << 7)
+      + ((this_1->f1078692[2] == 0) << 6)
+      + 32 * (this_1->f1078692[1] == 0)
+      + 16 * (this_1->f1078692[0] == 0)
       + ((uint8_t)(*(uint8_t *)(n15_20 + 2) & *(v20 + 2) & p_n15 & *(v22 + 2)) << 9)
       + ((uint8_t)(*(uint8_t *)(n15_20 + 3) & *(v20 + 3) & *(v22 + 3) & v24) << 8)
       + (v21 << 10)
@@ -11613,9 +11613,9 @@ LABEL_42:
       n15_14 = n15_12;
       v68 = v63->f26 + v65 + v64 + v67 + v66 - 5;
       v69 = ((uint8_t *)this_3->f56[7]);
-      *((uint8_t *)this_3 + 1078692) = v68;
+      this_3->f1078692[0] = v68;
       n2_13 = n2_4;
-      *((uint8_t *)this_3 + 1078693) = v69[26]
+      this_3->f1078692[1] = v69[26]
                                    + v69[18]
                                    + v69[10]
                                    + v69[2]
@@ -11624,9 +11624,9 @@ LABEL_42:
                                    + *((char *)v69 - 22)
                                    + v69[34]
                                    - 8;
-      *((uint8_t *)this_3 + 1078694) = *((uint8_t *)n2_13 - 29) + *((uint8_t *)n2_13 - 21) - 2;
+      this_3->f1078692[2] = *((uint8_t *)n2_13 - 29) + *((uint8_t *)n2_13 - 21) - 2;
       n15_11 = n15_3;
-      *((uint8_t *)this_3 + 1078695) = *((uint8_t *)n2_13 - 38)
+      this_3->f1078692[3] = *((uint8_t *)n2_13 - 38)
                                    + *((uint8_t *)n2_13 - 46)
                                    + *((uint8_t *)n2_13 - 54)
                                    + *((uint8_t *)n2_13 - 30)
@@ -12040,7 +12040,7 @@ void __expand_alphabet(ModelBlock *_this)
   int32_t n8, v4, v6, v9, n16_1, n16, v25, v27;
   uint32_t j_2, i, n8193, v8, *v10, j_1, j, v15, v17, v18, v19, v20, v21, *v22, v26;
   void *v12;
-  n8 = *((uint32_t *)_this + 2);
+  n8 = _this->f8;
   j_2 = 0xFFFFFFFF >> (-*((uint8_t *)_this + 8) & 31);
   v4 = (n8 + 7) >> 3;
   for ( i = 0; i < 8; ++i )
@@ -12053,21 +12053,21 @@ void __expand_alphabet(ModelBlock *_this)
   if ( n8 > 8 )
     n8193 = 8193;
   v8 = __rc_decode_flat(n8193);
-  *((uint32_t *)_this + 4) = v8 + 1;
+  _this->f16 = v8 + 1;
   if ( (int32_t)(v8 + 1) <= 0x2000 )
   {
     v12 = bmf_new(4 * v8 + 4);
-    j_1 = *((uint32_t *)_this + 4);
+    j_1 = _this->f16;
     *((void **)_this + 269560) = v12;
     if ( j_1 )
     {
       for ( j = 0; j < j_1; ++j )
       {
         *(uint32_t *)(*((uint32_t *)_this + 269560) + 4 * j) = j;
-        j_1 = *((uint32_t *)_this + 4);
+        j_1 = _this->f16;
       }
     }
-    if ( (int32_t)*((uint32_t *)_this + 2) > 8 )
+    if ( (int32_t)_this->f8 > 8 )
     {
       if ( 4 * v4 )
       {
@@ -12075,7 +12075,7 @@ void __expand_alphabet(ModelBlock *_this)
         do
           __fwd_expand_alphabet_init_encode_symbol_list((int32_t *)&v28[3 * v15++], (int32_t)_this, 256, 1);
         while ( v15 < 4 * v4 );
-        j_1 = *((uint32_t *)_this + 4);
+        j_1 = _this->f16;
       }
       if ( j_1 )
       {
@@ -12103,13 +12103,13 @@ void __expand_alphabet(ModelBlock *_this)
           v16 = (char *)*((void **)_this + 269560);
           v17 = *(uint8_t *)(v16 + 4 * v18++) >> 7;
         }
-        while ( v18 < *((uint32_t *)_this + 4) );
+        while ( v18 < _this->f16 );
       }
     }
     else if ( j_1 <= j_2 )
     {
       __fwd_expand_alphabet_init_encode_symbol_list((int32_t *)v28, (int32_t)_this, j_2 - j_1 + 2, 1);
-      v24 = *((uint32_t *)_this + 4) == 0;
+      v24 = _this->f16 == 0;
       v29 = 19 * LODWORD(v28[0]);
       if ( !v24 )
       {
@@ -12122,7 +12122,7 @@ void __expand_alphabet(ModelBlock *_this)
           v25 += v27 + 1;
           ++v26;
         }
-        while ( v26 < *((uint32_t *)_this + 4) );
+        while ( v26 < _this->f16 );
       }
     }
     v22 = v31;
@@ -12138,7 +12138,7 @@ void __expand_alphabet(ModelBlock *_this)
   else
   {
     v9 = *((uint32_t *)_this + 1) * v4;
-    *((uint32_t *)_this + 2) = 8;
+    _this->f8 = 8;
     *((uint32_t *)_this + 1) = v9;
     __expand_alphabet(_this);
     v10 = v31;
@@ -12331,7 +12331,7 @@ void __unmodel_plane_slow(ModelBlock *_this, char *Src)
   ModelBlock *this_2;
   uint32_t *v13, *v22, *v31, *i_1, *i, *v35, *j_1, *j, *ArgList_7, *ArgList_6;
   uint8_t *v49, *v50;
-  v3 = *((uint32_t *)_this + 2) < 8;
+  v3 = _this->f8 < 8;
   Src_1 = (char *)Src;
   ArgList = &Src[-v3];
   __rc_begin_decode(0);
