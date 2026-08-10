@@ -3,9 +3,9 @@
 Round six closed by saying its remaining list "is not a list of sweeps": every
 tool in `tools/` reported zero, and what was left needed a reading of the model
 rather than another pass. This round did that reading. Six of the seven items
-§7 named are done, one is documented as not worth doing, and the thing that
-mattered most was not on the list at all — a warning count one above its floor
-caught a byte that had silently become a word.
+§7 named are done and the seventh is documented as better left alone, but the
+thing that mattered most was not on the list at all: a warning count one above
+its floor caught a byte that had silently become a word.
 
 ---
 
@@ -14,10 +14,10 @@ caught a byte that had silently become a word.
 `python3 tools/shape.py`, verbatim:
 
 ```
-subs1.hpp / bmf.cpp lines          17635 / 358
-raw-offset sites                   167
+subs1.hpp / bmf.cpp lines          17653 / 358
+raw-offset sites                   152
   off `_this`                      15, in 7 functions
-pointer casts                      3371
+pointer casts                      3355
 globals still at a 1997 address    0
 frames                             17, 169180 bytes, 0 aliases
   slots carrying two names         0, 0 extra names, in 0 functions
@@ -34,10 +34,10 @@ against round six's close:
 
 | | round six | round seven |
 | --- | --- | --- |
-| lines | 17 833 / 358 | **17 635 / 358** |
-| raw-offset sites | 504 | **167** |
+| lines | 17 833 / 358 | **17 653 / 358** |
+| raw-offset sites | 504 | **152** |
 | — off `_this` | 27 | **15** |
-| pointer casts | 3986 | **3371** |
+| pointer casts | 3986 | **3355** |
 | structs | 16, 3 still `ObjN` | **16, 0 still `ObjN`** |
 | conversion warnings | 2075 | **1999** |
 
@@ -191,6 +191,13 @@ declaration.
   order to add byte offsets back on. Two reads are genuinely not `uint16_t`:
   `*(n2 ± 4)` fetches a shift count, four bytes away being the neighbouring
   record's first byte, and those stay explicit.
+* **The two pixel coders' record** is sixteen bytes: eight words, of which the
+  last is only ever touched as `+14` and `+15`. `FreqRec` declares both
+  spellings on the same bytes, because the code uses both, and the two 64-bit
+  moves that copy one become an assignment. The reload that made this look
+  impossible — `__frame.sym1 = (int32_t)freq_tbl` and back twenty lines later
+  — is a save and restore of the *same* pointer with nothing writing the slot
+  in between, so it is one cursor after all.
 * **`model_tables`** has said "handed out in 254-entry strips" since round
   three; twelve sites still spelled the multiply, with the strip count hidden
   inside constants that had to be divided first. `model_strip(k)` writes it
@@ -241,12 +248,6 @@ question. Two of them are, and they are still there.
 
 ## 8. What is left
 
-* **The two pixel coders' sixteen-byte record.** Seven counts and two bytes
-  fits every access in `code_pixel` and `decode_pixel` — indices 0 to 6 are
-  read as words, +14 and +15 only as bytes, and the record is copied whole by
-  two 64-bit moves. It is not typed here because **both functions reload the
-  cursor from a spill slot mid-body**, so it is not one pointer throughout; the
-  slot has to be split first. The attempt is documented rather than committed.
 * **Frame slots with two meanings.** `shape.py` reports 0 for "slots carrying
   two names" because these are one name with two *roles*, which it does not
   measure. `cost_candidate`'s `v91` holds an address, then a scratch value,
@@ -263,10 +264,10 @@ question. Two of them are, and they are still there.
   the same address as `((P1Count *)_this)[result + 237]`, and only `total` and
   `bin[]` are ever read at those indices, never `w[]`, which is why the
   straddle never shows.
-* **167 raw offsets, 92 `fNN` members, 560 `vNN` locals, 112 `goto`s.** The
-  offsets are down from 1389 over five rounds; what remains is concentrated in
-  `code_pixel` and `decode_pixel` (34 between them) and in bases that are
-  genuinely computed. `degoto.py` still reports 0 candidates.
+* **152 raw offsets, 92 `fNN` members, 560 `vNN` locals, 112 `goto`s.** The
+  offsets are down from 1389 over five rounds; what remains is in bases that
+  are genuinely computed — a name plus a variable byte offset, with nothing
+  either end to say what the stride is. `degoto.py` still reports 0 candidates.
 * **1999 conversion warnings** — 1261 `-Wsign-conversion`, 635 `-Wconversion`,
   99 `-Wsign-compare`, 10 `-Wint-to-pointer-cast`, 4 `-Wuseless-cast` and one
   `-Wmain`. §2 is the reason to keep holding it there.
@@ -284,4 +285,4 @@ One. That is the honest measure of where this round's work was: `unrec`,
 `unoffset`, `uncast`, `unused`, `unwrite`, `unhoist`, `uncursor`, `dedup`,
 `arrayify` and `degoto` are all run against the file at the end of this round
 and all of them report zero, exactly as they did at the end of round six — and
-the file still lost 337 raw offsets and 615 pointer casts in between.
+the file still lost 352 raw offsets and 631 pointer casts in between.
