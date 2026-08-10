@@ -971,8 +971,8 @@ struct AltP2Block {
       // `buf[1]`, `buf[2]`, `buf[3]`, `buf[4]`.  The same three
       // `memcpy`s from `buf[0]` and the same five-way rotation appear in each,
       // which is what says the three are one array and not three.
-      uint8_t *cursor[5];   // +278736 .. +278755
-      uint8_t *buf[5];      // +278756 .. +278775
+      P2Ctx *cursor[5];   // +278736 .. +278755
+      P2Ctx *buf[5];      // +278756 .. +278775
       CtxWeight ctx_w[5];    // +278776 .. +278855
       uint8_t _u0_0_tail[8];   // +278856 .. +278863, to the end of the 336
     };
@@ -4238,8 +4238,9 @@ static void bmf_set_denormal_mode()
 
 uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
 {
+  P2Ctx *v17;
   ;
-  int32_t v7, v8, v9, v13, Size, v17, v18, v20, v21, v22, v23, v24, v26, v27, v28, v29;
+  int32_t v7, v8, v9, v13, Size, v18, v20, v21, v22, v23, v24, v26, v27, v28, v29;
   uint32_t j, k, n0x1E60, m_1, m, n5, n0x82, n;
   void *v10;
   _this->plane_idx = n4;
@@ -4312,17 +4313,17 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
   n5 = 0;
   Size = 18 * i + 234;
   do
-    _this->buf[n5++] = (uint8_t *)bmf_new(Size);
+    _this->buf[n5++] = (P2Ctx *)bmf_new(Size);
   while ( n5 < 5 );
   memset(_this->buf[0],0,Size);
-  v17 = *(uint32_t *)&_this->buf[0];
+  v17 = _this->buf[0];
   ctx_bias[3] = 0;
   v18 = 0;
   ctx_bias[2] = 0;
   ctx_bias[1] = 0;
   n0x82 = 0;
   ctx_bias[0] = 0;
-  *(uint32_t *)&_this->cursor[0] = v17 + 144;
+  _this->cursor[0] = v17 + 8;
   do
   {
     v20 = p2_ctx_edges[v18];
@@ -6297,10 +6298,11 @@ int32_t __alt_p2_filter(float (*_this)[4], float (*a2)[4], CtxWeights *a3, int32
 // question, and it is still open -- this names the role, not the algorithm.
 int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
 {
+  P2Ctx *v55, *v56, *v57, *v6;
   // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
   // gives every member its own storage and altp1 segfaults while compressing.
   struct alignas(16) AltP2ContextFrame {   // 208 bytes, one stack frame
-      int32_t v246;
+      P2Ctx *v246;   // `cursor[0]`, the current row
       int32_t v256;
       int16_t *v268;
       // `alt_p2_filter`'s six sub-model weight blocks, which is what `CtxWeights`
@@ -6514,30 +6516,28 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   P2Ctx *v54;
   P2Ctx *v22;
   int32_t *v104;
-  int32_t v6, v8, v9, v10, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21,
-          v23, v25, v27, v29, v30, v47, v48, v51, v55, v56, v57, v65, v68,
-          v74, v75, v85, v88, *v103, v105, n2, v107, n3536_5, v111, v112,
-          v113, v114, v116, v117, n3536_1, v121, v122, v123, v124, v125, v126,
-          v127, v128, n2256, v132, v134, v137, v138, v140, v141, v144, n2576,
-          n1840_13, v147, v148, v149, v151, v154, v155, v156, n2896, v161,
-          v162, v163, v164, v167, v168, v171, n3536_2, v175, v176, v177, v178,
-          v179, v181, v182, n3536_3, v185, v186, v188, v189, v190, v191, v192,
-          v193, n1840_14, n1840_15, v198, n1840_16, v200, n1840_17, v203,
-          v206, v207, v208, n960, n3536_4, v211, v212, v213, v214, v215,
-          n1840_3, n1840_8, n1840_7, n1840_10, n1840_9, v222, v224, n1840_11,
-          n1840_12, n255, v228, n1840_5, n1840_4, n1840_6, v234, v235, v236,
-          v237, v238, v239, v240, v241, v242;
+  int32_t v8, v9, v10, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v23, v25, v27,
+          v29, v30, v47, v48, v51, v65, v68, v74, v75, v85, v88, *v103, v105, n2, v107,
+          n3536_5, v111, v112, v113, v114, v116, v117, n3536_1, v121, v122, v123, v124,
+          v125, v126, v127, v128, n2256, v132, v134, v137, v138, v140, v141, v144,
+          n2576, n1840_13, v147, v148, v149, v151, v154, v155, v156, n2896, v161, v162,
+          v163, v164, v167, v168, v171, n3536_2, v175, v176, v177, v178, v179, v181,
+          v182, n3536_3, v185, v186, v188, v189, v190, v191, v192, v193, n1840_14,
+          n1840_15, v198, n1840_16, v200, n1840_17, v203, v206, v207, v208, n960,
+          n3536_4, v211, v212, v213, v214, v215, n1840_3, n1840_8, n1840_7, n1840_10,
+          n1840_9, v222, v224, n1840_11, n1840_12, n255, v228, n1840_5, n1840_4,
+          n1840_6, v234, v235, v236, v237, v238, v239, v240, v241, v242;
   int8_t v139;
   uint32_t v120, v133, v135, v136, v152, v153, v165, v180;
   uint8_t *v187;
-  v6 = *(int32_t *)&a1->cursor[0];
-  v7 = (P2Ctx *)a1->cursor[1];
-  v8 = *(int16_t *)(v6 - 24);
-  v9 = 23 * *(int16_t *)(v6 - 6);
+  v6 = a1->cursor[0];
+  v7 = a1->cursor[1];
+  v8 = v6[-2].lane[6];
+  v9 = 23 * v6[-1].lane[6];
   v289 = (AltP2Block *)(a1);
   __frame.v246 = v6;
   __frame.v268 = (int16_t *)v7;
-  sub0_row = (P2Ctx *)*(int32_t *)&a1->cursor[2];
+  sub0_row = (P2Ctx *)a1->cursor[2];
   v10 = sub0_row[-2].lane[7];
   n1840_1 = 21 * sub0_row[-1].lane[6]
           + 12 * v7[3].lane[6]
@@ -6552,21 +6552,21 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
           + 15 * v7[1].lane[7]
           + 25 * v7->lane[7]
           + 9 * v7[-1].lane[7]
-          + 22 * *(int16_t *)(v6 - 4)
+          + 22 * v6[-1].lane[7]
           + ctx_bias[1]
-          + 19 * *(int16_t *)(v6 - 22);
+          + 19 * v6[-2].lane[7];
   v12 = 17 * v7[3].lane[4]
       + 15 * v7[2].lane[4]
       + 21 * v7[1].lane[4]
       + 18 * v7->lane[4]
       + 16 * v7[-1].lane[4]
-      + 22 * *(int16_t *)(v6 - 10)
+      + 22 * v6[-1].lane[4]
       + ctx_bias[2]
-      + 19 * *(int16_t *)(v6 - 28);
+      + 19 * v6[-2].lane[4];
   v13 = sub0_row->lane[5];
-  v14 = *(int16_t *)(v289->cursor[3] + 10);
-  v15 = *(int16_t *)(v6 - 26);
-  v16 = *(int16_t *)(v6 - 8);
+  v14 = v289->cursor[3]->lane[5];
+  v15 = v6[-2].lane[5];
+  v16 = v6[-1].lane[5];
   v292_cost = v12;
   n3536 = 14 * __frame.v268[32] + 23 * __frame.v268[14] + 19 * __frame.v268[5] + 25 * v16 + ctx_bias[3] + 17 * v15 + 15 * (v14 + v13);
   v17 = sub0_row[-1].lane[0];
@@ -6574,8 +6574,8 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   v290 = v12 + n3536 + n1840_1 + n1840_2;
   v19 = __frame.v268[9];
   v20 = v18 + v19 + v17;
-  v21 = *(int16_t *)(__frame.v246 - 18);
-  v22 = (P2Ctx *)(2 * *(int16_t *)(__frame.v246 - 36) + 2 * v21);
+  v21 = __frame.v246[-1].lane[0];
+  v22 = (P2Ctx *)(2 * __frame.v246[-2].lane[0] + 2 * v21);
   v23 = *__frame.v268 + 2 * v21;
   sub1_nb = (P2Ctx *)v22;
   sub2_n = v19 + v23;
@@ -6622,7 +6622,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
         for ( j = 1; j < 7; ++j )
           acc[k] += v31[j][k] * v28->p2_row[j][k];
       }
-      err = ((float)*(int16_t *)(__frame.v246 - 18)
+      err = ((float)__frame.v246[-1].lane[0]
              - (bmf_hsum4(acc) + v28->bias[0])) * 2.0999999f;
       floor_ = 7744.0f * v31[14][2];
 
@@ -6654,7 +6654,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   sub1_nb = (P2Ctx *)v28->cursor[2];
   v49 = (P2Ctx *)(sub1_nb);
   v28->p2_row[0][3] = (float)(v47 + v48);
-  v50 = (P2Ctx *)*(int32_t *)&v28->cursor[3];
+  v50 = (P2Ctx *)v28->cursor[3];
   v28->p2_row[1][0] = (float)(v45[-1].lane[1] + v45->lane[1] - v49[-1].lane[1]);
   v51 = v50->lane[1];
   v28->p2_row[1][1] = (float)(-3 * (v49->lane[1] - v45->lane[1]) + v51);
@@ -6672,16 +6672,16 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   if ( a4 )
   {
     v282 = (P2Ctx *)a4->cursor[0] - 1;
-    v54 = (P2Ctx *)(*(uint32_t *)&a4->cursor[2] - 18);
-    v281 = (P2Ctx *)((int16_t *)(*(uint32_t *)&a4->cursor[1] - 18));
-    v55 = *(uint32_t *)&a5->cursor[0];
+    v54 = (P2Ctx *)(a4->cursor[2] - 1);
+    v281 = (P2Ctx *)((int16_t *)(a4->cursor[1] - 1));
+    v55 = a5->cursor[0];
     v286 = (P2Ctx *)((int16_t *)v54);
-    v56 = *(uint32_t *)&a5->cursor[1];
-    v57 = *(uint32_t *)&a5->cursor[2];
+    v56 = a5->cursor[1];
+    v57 = a5->cursor[2];
     v284 = (P2Ctx *)v55 - 1;
     v58 = v28->f278732 == 0;
-    v283 = (P2Ctx *)((int16_t *)(v56 - 18));
-    v285 = (P2Ctx *)((int16_t *)(v57 - 18));
+    v283 = v56 - 1;
+    v285 = v57 - 1;
     if ( !v58 )
     {
       // One number added to all sixteen floats of the first four rows.
@@ -6770,7 +6770,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
     {
       v28->p2_row[4][0] = (float)(v46[-3].lane[0] + v46[-1].lane[0] - v46[-4].lane[0]);
       v258 = v46;
-      v66 = (P2Ctx *)((int16_t *)v28->cursor[3]);
+      v66 = v28->cursor[3];
       v28->p2_row[4][1] = (float)(v46[-5].lane[0] + v45->lane[0] - v45[-5].lane[0]);
       v67 = (P2Ctx *)v28->cursor[2];
       v28->p2_row[4][2] = (float)(v46[-4].lane[0] + v45->lane[0] - v45[-4].lane[0]);
@@ -6863,7 +6863,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   v113 = v109[-2].lane[3];
   v114 = v109[-3].lane[3];
   v289 = (AltP2Block *)(v28);
-  v115 = (P2Ctx *)((int16_t *)v28->cursor[3]);
+  v115 = v28->cursor[3];
   n3536 = n3536_5;
   v116 = v109[-4].lane[3];
   v294 = (P2Ctx *)(v115);
@@ -6920,7 +6920,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   v118->bank_ctx[0] = v126;
   v127 = p2_pred(v118->p2_ctr[v126].w2, v118->p2_ctr[v126].b0);
   v128 = v290;
-  v129 = (P2Ctx *)((int16_t *)v118->cursor[4]);
+  v129 = v118->cursor[4];
   v118->nb_sum[1] = v127;
   n2256 = v127 + n3536_1;
   v118->nb_sum[0] = n2256;
@@ -12225,6 +12225,7 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
 
 uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
 {
+  P2Ctx *v7, *v8;
   float    n2_bias;   // the p2 filter's bias term, one of three lifetimes MSVC
   int32_t  n2_half;   // gave one slot; the third is the cursor below
   // Lanes of the counter table.  Every read through this is a `uint16_t`
@@ -12312,7 +12313,6 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   // row base, which is `p2_ctr` reached through `v78`.
   P2Count *v581;
   ;
-  uint8_t *v8;   // was int32_t: this holds an address
   uint16_t *n2_1;   // a second name for `n2`
   // The parameter this used to copy is never read: `sample` is written from
   // `v577` below before any of its four readers, and lanes 1..3 were never
@@ -12368,7 +12368,6 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   P2Freq *n0xF0_4;
   P2Freq *v445;
   P2Freq *v387;
-  uint16_t *v7;
   // Every one of these is a record: `alt_p2_model` walks the table by the
   // context index and its two neighbours.
   P2Freq *n0x10_3, *n0x10_4;
@@ -12380,32 +12379,32 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   uint32_t v78, v92, v97, v109, n0x10, v393, v396, v405, v414, v499;
   uint8_t v83;
   v6 = a1->ctx & 0xF;
-  v7 = *(uint16_t **)&a1->cursor[0];
+  v7 = a1->cursor[0];
   v577 = 16 * a3;
-  *v7 = 16 * a3;
-  *(uint16_t *)(a1->cursor[0] + 2) = **(uint16_t **)&a1->cursor[0] - *(uint16_t *)(a1->cursor[0] + 2);
-  *(uint16_t *)(a1->cursor[0] + 20) = 0;
-  a1->cursor[0][16] = (a5 <= (int32_t)(((uint32_t)(6 - v6) >> 31)
+  v7->lane[0] = 16 * a3;
+  a1->cursor[0]->lane[1] = a1->cursor[0]->lane[0] - a1->cursor[0]->lane[1];
+  a1->cursor[0][1].lane[1] = 0;
+  a1->cursor[0]->sign = (a5 <= (int32_t)(((uint32_t)(6 - v6) >> 31)
                                                          + ((uint32_t)(4 - v6) >> 31)
                                                          + 2 * ((uint32_t)(9 - v6) >> 31)))
                                             + (a5 < (int32_t)-(((uint32_t)(6 - v6) >> 31)
                                                                 + ((uint32_t)(4 - v6) >> 31)
                                                                 + 2 * ((uint32_t)(9 - v6) >> 31)));
-  a1->cursor[0][17] = abs32(a5);
+  a1->cursor[0]->mag = abs32(a5);
   v8 = a1->cursor[0];
   v9 = v577;
   sample = (float)v577;
-  v10 = v577 - *(int16_t *)(v8 - 18);
-  *(uint16_t *)(v8 + 8) = (WORD2(v10) ^ v10) - WORD2(v10);
-  v11 = v9 - **(int16_t **)&a1->cursor[1];
-  *(uint16_t *)(a1->cursor[0] + 10) = (WORD2(v11) ^ v11) - WORD2(v11);
-  v12 = v9 - *(int16_t *)(a1->cursor[1] - 18);
-  *(uint16_t *)(a1->cursor[0] + 12) = (WORD2(v12) ^ v12) - WORD2(v12);
-  v13 = v9 - *(int16_t *)(a1->cursor[1] + 18);
-  *(uint16_t *)(a1->cursor[0] + 14) = (WORD2(v13) ^ v13) - WORD2(v13);
+  v10 = v577 - v8[-1].lane[0];
+  v8->lane[4] = (WORD2(v10) ^ v10) - WORD2(v10);
+  v11 = v9 - a1->cursor[1]->lane[0];
+  a1->cursor[0]->lane[5] = (WORD2(v11) ^ v11) - WORD2(v11);
+  v12 = v9 - a1->cursor[1][-1].lane[0];
+  a1->cursor[0]->lane[6] = (WORD2(v12) ^ v12) - WORD2(v12);
+  v13 = v9 - a1->cursor[1][1].lane[0];
+  a1->cursor[0]->lane[7] = (WORD2(v13) ^ v13) - WORD2(v13);
   v14 = (int16_t)(v9 - a1->f278700);
-  *(uint16_t *)(a1->cursor[0] + 4) = v14;
-  *(uint16_t *)(a1->cursor[0] + 6) = (WORD2(v14) ^ v14) - WORD2(v14);
+  a1->cursor[0]->lane[2] = v14;
+  a1->cursor[0]->lane[3] = (WORD2(v14) ^ v14) - WORD2(v14);
   v15 = a1->f278656;
   v16 = v15[14][1] + 0.000099999997f;
   v17 = *(float (**)[4])(a1->cur - 1);
@@ -13161,12 +13160,12 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   while ( n5 < 5 );
   v385 = (AltP2Block *)(v578);
   v386 = v578->ctx;
-  v578->cursor[0] += 18;
+  ++v578->cursor[0];
   v387 = (&v385->freq[v386]);
-  v385->cursor[1] += 18;
-  v385->cursor[2] += 18;
-  v385->cursor[3] += 18;
-  v385->cursor[4] += 18;
+  ++v385->cursor[1];
+  ++v385->cursor[2];
+  ++v385->cursor[3];
+  ++v385->cursor[4];
   n0x10 = v387[0].step;
   if ( n0x10 > 0x10 )
   {
@@ -13834,6 +13833,7 @@ LABEL_115:
 
 void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5, int32_t i, int32_t a7)
 {
+  P2Ctx *v11, *v12, *v15, *v72, *v73, *v74, *v75, *v76;
   int32_t v95;
   // These shared `__frame.v95` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
@@ -13842,7 +13842,6 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
   uint32_t v96;
   uint8_t *v97;
   ;
-  uint8_t *v11;
   P2Ctx *v25;   // a record cursor
   P2Ctx *v32;   // a record cursor
   P2Ctx *v54;   // a record cursor
@@ -13855,32 +13854,29 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
   int32_t *v48, *v51;   // the row cursors, four bytes a step
   bool v17;
   int16_t v14;
-  uint8_t *v12;
   // The five planes, held across the rotation that ends a row.
-  uint8_t *v72, *v73, *v74, *v75, *v76;
   int32_t i_1, v13, v29, v37, v49, *v50, v52, v77, v79, v81, v83, v85, v87,
           v89, v92, v94;
   int64_t v16;
-  uint16_t *v15;
   uint32_t j;
   __rc_begin_decode(ArgList);
   i_1 = i;
   v11 = lpAddress->cursor[0];
-  v12 = (uint8_t *)(v11);
+  v12 = v11;
   if ( i > 0 )
   {
     v95 = 0;
     while ( 1 )
     {
-      v13 = *(int16_t *)((uintptr_t)v11 - 18) >> 4;
+      v13 = v11[-1].lane[0] >> 4;
       lpAddress->ctx_pair[0] = lpAddress->ctx + (*(uint32_t *)&lpAddress->ctx_delta[v13 + 4]);
       lpAddress->ctx_pair[1] = lpAddress->ctx + (*(uint32_t *)&lpAddress->ctx_delta[v13]);
-      v14 = (uint8_t)((*(uint16_t *)(lpAddress->cursor[0] - 18) >> 4)
+      v14 = (uint8_t)(((uint16_t)lpAddress->cursor[0][-1].lane[0] >> 4)
                             + *(uint8_t *)(__alt_p2_decode_symbol(&lpAddress->freq[lpAddress->ctx
-                                                               + lpAddress->ctx_w[3].w[((*(int16_t *)((uintptr_t)v12 - 18) <= *(int16_t *)((uintptr_t)v12 - 36))
-                                                                            + (*(int16_t *)((uintptr_t)v12 - 18) < *(int16_t *)((uintptr_t)v12 - 36)))]
-                                                               + lpAddress->ctx_w[2].w[*(uint8_t *)((uintptr_t)v12 - 20)]
-                                                               + lpAddress->ctx_w[1].w[*(uint8_t *)((uintptr_t)v12 - 2)]
+                                                               + lpAddress->ctx_w[3].w[(v12[-1].lane[0] <= v12[-2].lane[0])
+                                                                            + (v12[-1].lane[0] < v12[-2].lane[0])]
+                                                               + lpAddress->ctx_w[2].w[v12[-2].sign]
+                                                               + lpAddress->ctx_w[1].w[v12[-1].sign]
                                                                + lpAddress->ctx_w[0].w[(((uint32_t)(v13 - 115) >> 31)
                                                                             + ((uint32_t)(v13 - 17) >> 31))]
                                                                + lpAddress->ctx_w[4].w[1]], lpAddress->ctx_pair)
@@ -13888,22 +13884,22 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
                                        + 280496));
       *a5 = v14;
       v14 *= 16;
-      **(uint16_t **)&lpAddress->cursor[0] = v14;
+      lpAddress->cursor[0]->lane[0] = v14;
       ++a5;
-      *(uint16_t *)(lpAddress->cursor[0] + 2) = v14;
-      v15 = *(uint16_t **)&lpAddress->cursor[0];
-      v16 = (int16_t)(*v15 - *(v15 - 9));
-      v15[2] = v16;
+      lpAddress->cursor[0]->lane[1] = v14;
+      v15 = lpAddress->cursor[0];
+      v16 = (int16_t)(v15->lane[0] - v15[-1].lane[0]);
+      v15->lane[2] = v16;
       LOWORD(v16) = (WORD2(v16) ^ v16) - WORD2(v16);
-      *(uint16_t *)(lpAddress->cursor[0] + 6) = v16;
-      *(uint16_t *)(lpAddress->cursor[0] + 14) = v16;
-      *(uint16_t *)(lpAddress->cursor[0] + 12) = v16;
-      *(uint16_t *)(lpAddress->cursor[0] + 10) = v16;
-      *(uint16_t *)(lpAddress->cursor[0] + 8) = (uint32_t)*(int16_t *)(lpAddress->cursor[0] + 10) >> 1;
-      lpAddress->cursor[0][17] = 2;
-      lpAddress->cursor[0][16] = (*(int16_t *)(lpAddress->cursor[0] + 4) <= 0)
-                                                       + (*(int16_t *)(lpAddress->cursor[0] + 4) < 0);
-      v11 = (lpAddress->cursor[0] + 18);
+      lpAddress->cursor[0]->lane[3] = v16;
+      lpAddress->cursor[0]->lane[7] = v16;
+      lpAddress->cursor[0]->lane[6] = v16;
+      lpAddress->cursor[0]->lane[5] = v16;
+      lpAddress->cursor[0]->lane[4] = (uint32_t)lpAddress->cursor[0]->lane[5] >> 1;
+      lpAddress->cursor[0]->mag = 2;
+      lpAddress->cursor[0]->sign = (lpAddress->cursor[0]->lane[2] <= 0)
+                                                       + (lpAddress->cursor[0]->lane[2] < 0);
+      v11 = (lpAddress->cursor[0] + 1);
       v17 = v95 + 1 < i;
       lpAddress->cursor[0] = v11;
       ++v95;
@@ -13924,7 +13920,7 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
   LOWORD(v29) = *(uint16_t *)(v28 - 2);
   v32 = (P2Ctx *)lpAddress->cursor[0];
   v32[4] = v32[-1];
-  v37 = -18 * i_1;
+  v37 = -i_1;
   // One cursor for the 8 records this shifts; MSVC reloaded the base
   // between every pair and nothing here writes it.
   P2Ctx *const rec1 = (P2Ctx *)(lpAddress->cursor[0] + v37);
@@ -14001,13 +13997,13 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
       lpAddress->buf[2] = v75;
       lpAddress->buf[0] = v73;
       lpAddress->buf[1] = v76;
-      v73 += 144;
+      v73 += 8;
       lpAddress->cursor[0] = v73;
-      v76 += 144;
+      v76 += 8;
       lpAddress->cursor[1] = v76;
-      lpAddress->cursor[2] = v75 + 144;
-      lpAddress->cursor[3] = v74 + 144;
-      lpAddress->cursor[4] = v72 + 144;
+      lpAddress->cursor[2] = v75 + 8;
+      lpAddress->cursor[3] = v74 + 8;
+      lpAddress->cursor[4] = v72 + 8;
       ((P2Ctx *)v73)[-1] = ((P2Ctx *)v76)[0];
       v77 = (int32_t)(lpAddress->cursor[0]);
       v78 = (uintptr_t)(lpAddress->cursor[1]);
@@ -14030,7 +14026,7 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
       v89 = (int32_t)(lpAddress->cursor[0]);
       v90 = (uintptr_t)(lpAddress->cursor[1]);
       ((P2Ctx *)v89)[-8] = ((P2Ctx *)v90)[7];
-      *(uint16_t *)(lpAddress->cursor[0] + 2) = 0;
+      lpAddress->cursor[0]->lane[1] = 0;
       if ( i > 0 )
       {
         for ( j = 0; j < i; ++j )
@@ -14066,6 +14062,8 @@ void __alt_model_p2_d8_decode( uint8_t *Src, int32_t i, int32_t a5)
 
 int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
 {
+  P2Ctx *v105, *v115, *v124, *v132, *v21, *v22, *v23, *v24, *v30, *v34, *v38, *v67,
+          *v75, *v81, *v82, *v83, *v84, *v85, *v86, *v88, *v90, *v92, *v94, *v96, *v98;
   struct alignas(16) AltModelP2DecodeFrame {   // 276 bytes, one stack frame
       uint8_t   _gap0[4];   // was uint32_t Size_1
       uint8_t slot4[16];
@@ -14124,14 +14122,12 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   AltP2Block *v14;
   AltP2Block *v25;
   P2Ctx *v26;   // a record cursor
-  uint8_t *v34;
   P2Ctx *v41;   // a record cursor
   P2Ctx *v63;   // a record cursor
   P2Ctx *v71;   // a record cursor
   P2Ctx *v78;   // a record cursor
   P2Ctx *v89;   // a record cursor
   P2Ctx *v93;   // a record cursor
-  uint8_t *v30, *v38, *v67, *v75, *v85;
   int32_t *v57, *v60;   // the row cursors, four bytes a step
   P2Ctx *v99;   // a record cursor
   P2Ctx *v97;   // a record cursor
@@ -14144,12 +14140,9 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   bool v17, v109;
   uint8_t v9;
   int16_t v110;
-  uint8_t *v21, *v22, *v23, *v24, *v81, *v82, *v83, *v84, *v86, *v88, *v90,
-          *v92, *v94, *v96, *v98;   // row cursors
-  int32_t i, v5, n4, n4_1, v15, v16, v31, v58, *v59, v61, v101, v103, v104,
-          v105, v106, v107, v108, v112, v113, v114, v115, v116, v117, v118,
-          v119, v121, v122, v123, v124, v125, v126, v127, v128, v130, v131,
-          v132, v133, v134, v135, n4_3, n4_4;
+  int32_t i, v5, n4, n4_1, v15, v16, v31, v58, *v59, v61, v101, v103, v104, v106, v107,
+          v108, v112, v113, v114, v116, v117, v118, v119, v121, v122, v123, v125, v126,
+          v127, v128, v130, v131, v133, v134, v135, n4_3, n4_4;
   P2Freq *v102;
   AltP2Block *lpAddress_1;
   uint32_t v11;
@@ -14203,8 +14196,8 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   if ( v5 > 0 )
   {
     v11 = 0;
-    v149 = 9 * i;
-    v160 = -18 * i;
+    v149 = i;
+    v160 = -i;
     n4_1 = plane_count;
     Size = 18 * i + 234;
     v171 = i + 13;
@@ -14229,14 +14222,14 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
               v26 = (P2Ctx *)v25->cursor[0];
               v26[0] = v26[-1];
               v30 = v25->cursor[0];
-              v31 = *(uint32_t *)(v30 - 14);
+              v31 = *(uint32_t *)&v30[-1].lane[2];
               ((P2Ctx *)v30)[1] = ((P2Ctx *)v30)[-1];
-              LOWORD(v31) = *(uint16_t *)(v30 - 2);
+              LOWORD(v31) = *(uint16_t *)&v30[-1].sign;
               v34 = v25->cursor[0];
               ((P2Ctx *)v34)[2] = ((P2Ctx *)v34)[-1];
               v38 = v25->cursor[0];
               ((P2Ctx *)v38)[3] = ((P2Ctx *)v38)[-1];
-              LOWORD(v34) = *(uint16_t *)(v38 - 2);
+              LOWORD(v34) = *(uint16_t *)&v38[-1].sign;
               v41 = (P2Ctx *)v25->cursor[0];
               v41[4] = v41[-1];
               // One cursor for the 8 records this shifts; MSVC reloaded the base
@@ -14262,32 +14255,32 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
             v15 = 0;
             do
             {
-              v16 = 9 * v15;
-              *(uint16_t *)(v14->buf[0] + 2 * v16) = 256;
+              v16 = v15;
+              v14->buf[0][v16].lane[0] = 256;
               v17 = ++v15 < v171;
-              *(uint16_t *)(v14->buf[0] + 2 * v16 + 2) = 256;
-              *(uint16_t *)(v14->buf[0] + 2 * v16 + 4) = -16;
-              v14->buf[0][2 * v16 + 16] = 1;
-              v14->buf[0][2 * v16 + 17] = 3;
-              *(uint16_t *)(v14->buf[0] + 2 * v16 + 6) = 512;
-              *(uint16_t *)(v14->buf[0] + 2 * v16 + 14) = 512;
-              *(uint16_t *)(v14->buf[0] + 2 * v16 + 12) = 512;
-              *(uint16_t *)(v14->buf[0] + 2 * v16 + 10) = 1024;
-              *(uint16_t *)(v14->buf[0] + 2 * v16 + 8) = 256;
+              v14->buf[0][v16].lane[1] = 256;
+              v14->buf[0][v16].lane[2] = -16;
+              v14->buf[0][v16].sign = 1;
+              v14->buf[0][v16].mag = 3;
+              v14->buf[0][v16].lane[3] = 512;
+              v14->buf[0][v16].lane[7] = 512;
+              v14->buf[0][v16].lane[6] = 512;
+              v14->buf[0][v16].lane[5] = 1024;
+              v14->buf[0][v16].lane[4] = 256;
             }
             while ( v17 );
             v18 = (AltP2Block **)v159;
             memcpy(v14->buf[1],v14->buf[0],Size);
             memcpy(v14->buf[2],v14->buf[0],Size);
             memcpy(v14->buf[3],v14->buf[0],Size);
-            v21 = v14->buf[1] + 2 * v149 + 144;
-            v14->cursor[0] = v14->buf[0] + 2 * v149 + 144;
+            v21 = v14->buf[1] + v149 + 8;
+            v14->cursor[0] = v14->buf[0] + v149 + 8;
             v22 = v14->buf[2];
             v14->cursor[1] = v21;
             v23 = v14->buf[3];
-            v14->cursor[2] = v22 + 2 * v149 + 144;
-            v24 = v14->buf[4] + 2 * v149 + 144;
-            v14->cursor[3] = v23 + 2 * v149 + 144;
+            v14->cursor[2] = v22 + v149 + 8;
+            v24 = v14->buf[4] + v149 + 8;
+            v14->cursor[3] = v23 + v149 + 8;
             v14->cursor[4] = v24;
           }
           v56 = (AltP2Block *)((int32_t)*(v18 - 1));
@@ -14343,13 +14336,13 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v56->buf[2] = v84;
           v56->buf[0] = v82;
           v56->buf[1] = v85;
-          v82 += 144;
+          v82 += 8;
           v56->cursor[0] = v82;
-          v85 += 144;
+          v85 += 8;
           v56->cursor[1] = v85;
-          v56->cursor[2] = v84 + 144;
-          v56->cursor[3] = v83 + 144;
-          v56->cursor[4] = v81 + 144;
+          v56->cursor[2] = v84 + 8;
+          v56->cursor[3] = v83 + 8;
+          v56->cursor[4] = v81 + 8;
           ((P2Ctx *)v82)[-1] = ((P2Ctx *)v85)[0];
           v86 = v56->cursor[0];
           v87 = (P2Ctx *)v56->cursor[1];
@@ -14372,7 +14365,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v98 = v56->cursor[0];
           v99 = (P2Ctx *)v56->cursor[1];
           ((P2Ctx *)v98)[-8] = v99[7];
-          *(uint16_t *)(v56->cursor[0] + 2) = 0;
+          v56->cursor[0]->lane[1] = 0;
           n4_1 = plane_count;
         }
         while ( plane_count > n4_2 );
@@ -14403,11 +14396,11 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v103 = __alt_p2_decode_symbol(v102, lpAddress_1->ctx_pair);
           v104 = (uint8_t)(v101 + (*(uint8_t *)&lpAddress_1->unfold[v103]));
           __alt_p2_model((AltP2Block *)lpAddress_1, v104, v103, v104 - v101);
-          v105 = *(uint32_t *)&lpAddress_1->cursor[0];
-          v106 = *(int16_t *)(v105 - 10);
-          v107 = 32 * *(int16_t *)(v105 - 4);
-          ctx_bias[0] += 32 * *(int16_t *)(v105 - 6);
-          v108 = *(int16_t *)(v105 - 8);
+          v105 = lpAddress_1->cursor[0];
+          v106 = v105[-1].lane[4];
+          v107 = 32 * v105[-1].lane[7];
+          ctx_bias[0] += 32 * v105[-1].lane[6];
+          v108 = v105[-1].lane[5];
           ctx_bias[1] += v107;
           ctx_bias[2] += 32 * v106;
           ctx_bias[3] += 32 * v108;
@@ -14418,16 +14411,16 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           else
             v110 = 16 * Src[plane_desc[1].src_plane];
           v111 = (AltP2Block *)(plane[1]);
-          *(uint16_t *)(plane[1]->cursor[0] + 2) = v110;
+          plane[1]->cursor[0]->lane[1] = v110;
           v112 = __alt_p2_context((AltP2Block *)v111, (AltP2Block *)plane[0], (AltP2Block *)plane[2]);
           v113 = __alt_p2_decode_symbol(&v111->freq[v111->ctx], v111->ctx_pair);
           v114 = (uint8_t)(v112 + v111->unfold[v113]);
           __alt_p2_model((AltP2Block *)v111, v114, v113, v114 - v112);
-          v115 = *(int32_t *)&v111->cursor[0];
-          v116 = *(int16_t *)(v115 - 4);
-          v117 = *(int16_t *)(v115 - 10);
-          ctx_bias[0] += 32 * *(int16_t *)(v115 - 6);
-          v118 = *(int16_t *)(v115 - 8);
+          v115 = v111->cursor[0];
+          v116 = v115[-1].lane[7];
+          v117 = v115[-1].lane[4];
+          ctx_bias[0] += 32 * v115[-1].lane[6];
+          v118 = v115[-1].lane[5];
           ctx_bias[1] += 32 * v116;
           ctx_bias[2] += 32 * v117;
           ctx_bias[3] += 32 * v118;
@@ -14439,16 +14432,16 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
             v119 = (plane_desc[plane_desc[3].src_plane + 1].w8 * Src[plane_desc[2].src_plane]
                   + plane_desc[plane_desc[3].src_plane + 1].w4 * Src[plane_desc[1].src_plane]) >> 3;
           v120 = (AltP2Block *)(plane[2]);
-          *(uint16_t *)(plane[2]->cursor[0] + 2) = v119;
+          plane[2]->cursor[0]->lane[1] = v119;
           v121 = __alt_p2_context((AltP2Block *)v120, (AltP2Block *)plane[0], (AltP2Block *)plane[1]);
           v122 = __alt_p2_decode_symbol(&v120->freq[v120->ctx], v120->ctx_pair);
           v123 = (uint8_t)(v121 + v120->unfold[v122]);
           __alt_p2_model((AltP2Block *)v120, v123, v122, v123 - v121);
-          v124 = *(int32_t *)&v120->cursor[0];
-          v125 = *(int16_t *)(v124 - 4);
-          v126 = *(int16_t *)(v124 - 10);
-          ctx_bias[0] += 32 * *(int16_t *)(v124 - 6);
-          v127 = *(int16_t *)(v124 - 8);
+          v124 = v120->cursor[0];
+          v125 = v124[-1].lane[7];
+          v126 = v124[-1].lane[4];
+          ctx_bias[0] += 32 * v124[-1].lane[6];
+          v127 = v124[-1].lane[5];
           ctx_bias[1] += 32 * v125;
           ctx_bias[2] += 32 * v126;
           ctx_bias[3] += 32 * v127;
@@ -14463,16 +14456,16 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
             else
               LOWORD(v128) = 0;
             v129 = (AltP2Block *)(plane[3]);
-            *(uint16_t *)(plane[3]->cursor[0] + 2) = v128;
+            plane[3]->cursor[0]->lane[1] = v128;
             v130 = __alt_p2_context((AltP2Block *)v129, (AltP2Block *)plane[2], (AltP2Block *)plane[0]);
             v131 = __alt_p2_decode_symbol(&v129->freq[v129->ctx], v129->ctx_pair);
             v154 = (uint8_t)(v130 + v129->unfold[v131]);
             __alt_p2_model((AltP2Block *)v129, v154, v131, v154 - v130);
-            v132 = *(int32_t *)&v129->cursor[0];
-            v133 = *(int16_t *)(v132 - 4);
-            v134 = *(int16_t *)(v132 - 10);
-            v135 = *(int16_t *)(v132 - 8);
-            ctx_bias[0] += 32 * *(int16_t *)(v132 - 6);
+            v132 = v129->cursor[0];
+            v133 = v132[-1].lane[7];
+            v134 = v132[-1].lane[4];
+            v135 = v132[-1].lane[5];
+            ctx_bias[0] += 32 * v132[-1].lane[6];
             ctx_bias[1] += 32 * v133;
             ctx_bias[2] += 32 * v134;
             ctx_bias[3] += 32 * v135;
@@ -14550,6 +14543,8 @@ void __unmodel_plane(int8_t ArgList, uint16_t *p_i, uint8_t *Src)
 
 void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int32_t a6, uint8_t *a7)
 {
+  int32_t v20;   // the symbol MSVC kept in the low half of `v16`
+  P2Ctx *v11, *v16, *v23, *v30, *v61, *v69, *v75, *v76, *v77, *v78, *v79, *v80, *v82, *v84, *v86, *v88, *v90, *v92;
   int32_t j;
   // These shared `__frame.j` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
@@ -14573,9 +14568,7 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
   P2Ctx *v57;   // a record cursor
   P2Ctx *v65;   // a record cursor
   P2Ctx *v72;   // a record cursor
-  uint8_t *v11;
   P2Ctx *v27;   // a record cursor
-  uint8_t *v23, *v30, *v61, *v69, *v79;
   int32_t *v51, *v54;   // the row cursors, four bytes a step
   P2Ctx *v93;   // a record cursor
   P2Ctx *v91;   // a record cursor
@@ -14585,22 +14578,20 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
   P2Ctx *v83;   // a record cursor
   P2Ctx *v81;   // a record cursor
   uint8_t v14, v97;
-  int32_t v12, v13, n16, v16, v17, v31, v39, Size, v52, *v53, v55, v75, v76,
-          v77, v78, v80, v82, v84, v86, v88, v90, v92, v95, v96, n16_1, v99,
-          v100;
+  int32_t v12, v13, n16, v17, v31, v39, Size, v52, *v53, v55, v95, v96, n16_1, v99, v100;
   int64_t v19;
-  uint16_t *v18;
+  P2Ctx *v18;
   uint32_t k;
   uint8_t *v8;
   v8 = a4;
   __rc_begin_encode();
-  v11 = (uint8_t *)(*(int32_t *)&lpAddress->cursor[0]);
+  v11 = lpAddress->cursor[0];
   if ( i > 0 )
   {
     v103 = a4;
     for ( j = 0; j < i; ++j )
     {
-      v12 = *(uint16_t *)(v11 - 18) >> 4;
+      v12 = (uint16_t)v11[-1].lane[0] >> 4;
       v13 = (uint8_t)(*v103 - v12);
       v104 = lpAddress->fold[v13];
       v14 = lpAddress->unfold[v104] + v12;
@@ -14614,40 +14605,40 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
       {
         *a7 = v14;
       }
-      v16 = *(int32_t *)&lpAddress->cursor[0];
-      v17 = *(int16_t *)(v16 - 18) >> 4;
+      v16 = lpAddress->cursor[0];
+      v17 = v16[-1].lane[0] >> 4;
       lpAddress->ctx_pair[0] = lpAddress->ctx + lpAddress->ctx_delta[v17 + 4];
       lpAddress->ctx_pair[1] = lpAddress->ctx + lpAddress->ctx_delta[v17];
       // The composed index, the encoder's own copy of `alt_p2_context`'s sum:
       // four selected weights, one constant, and the running context.
       __alt_p2_encode_symbol(
           &lpAddress->freq[lpAddress->ctx
-                         + lpAddress->ctx_w[3].w[(*(int16_t *)(v16 - 18) <= *(int16_t *)(v16 - 36))
-                                               + (*(int16_t *)(v16 - 18) < *(int16_t *)(v16 - 36))]
-                         + lpAddress->ctx_w[2].w[*(uint8_t *)(v16 - 20)]
-                         + lpAddress->ctx_w[1].w[*(uint8_t *)(v16 - 2)]
+                         + lpAddress->ctx_w[3].w[(v16[-1].lane[0] <= v16[-2].lane[0])
+                                               + (v16[-1].lane[0] < v16[-2].lane[0])]
+                         + lpAddress->ctx_w[2].w[v16[-2].sign]
+                         + lpAddress->ctx_w[1].w[v16[-1].sign]
                          + lpAddress->ctx_w[0].w[((uint32_t)(v17 - 115) >> 31)
                                                + ((uint32_t)(v17 - 17) >> 31)]
                          + lpAddress->ctx_w[4].w[1]],
           lpAddress->ctx_pair, v104);
       ++v103;
-      LOWORD(v16) = 16 * (uint8_t)*a7;
-      *(uint16_t *)lpAddress->cursor[0] = v16;
-      *(uint16_t *)(lpAddress->cursor[0] + 2) = v16;
+      v20 = 16 * (uint8_t)*a7;
+      lpAddress->cursor[0]->lane[0] = v20;
+      lpAddress->cursor[0]->lane[1] = v20;
       ++a7;
-      v18 = (uint16_t *)lpAddress->cursor[0];
-      v19 = (int16_t)(*v18 - *(v18 - 9));
-      v18[2] = v19;
+      v18 = lpAddress->cursor[0];
+      v19 = (int16_t)(v18->lane[0] - v18[-1].lane[0]);
+      v18->lane[2] = v19;
       LOWORD(v19) = (WORD2(v19) ^ v19) - WORD2(v19);
-      *(uint16_t *)(lpAddress->cursor[0] + 6) = v19;
-      *(uint16_t *)(lpAddress->cursor[0] + 14) = v19;
-      *(uint16_t *)(lpAddress->cursor[0] + 12) = v19;
-      *(uint16_t *)(lpAddress->cursor[0] + 10) = v19;
-      *(uint16_t *)(lpAddress->cursor[0] + 8) = (uint32_t)*(int16_t *)(lpAddress->cursor[0] + 10) >> 1;
-      lpAddress->cursor[0][17] = 2;
-      lpAddress->cursor[0][16] = (*(int16_t *)(lpAddress->cursor[0] + 4) <= 0)
-                                                    + (*(int16_t *)(lpAddress->cursor[0] + 4) < 0);
-      v11 = (lpAddress->cursor[0] + 18);
+      lpAddress->cursor[0]->lane[3] = v19;
+      lpAddress->cursor[0]->lane[7] = v19;
+      lpAddress->cursor[0]->lane[6] = v19;
+      lpAddress->cursor[0]->lane[5] = v19;
+      lpAddress->cursor[0]->lane[4] = (uint32_t)lpAddress->cursor[0]->lane[5] >> 1;
+      lpAddress->cursor[0]->mag = 2;
+      lpAddress->cursor[0]->sign = (lpAddress->cursor[0]->lane[2] <= 0)
+                                                    + (lpAddress->cursor[0]->lane[2] < 0);
+      v11 = (lpAddress->cursor[0] + 1);
       lpAddress->cursor[0] = v11;
     }
     v8 = v103;
@@ -14655,15 +14646,15 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
   ((P2Ctx *)v11)[0] = ((P2Ctx *)v11)[-1];
   v23 = lpAddress->cursor[0];
   ((P2Ctx *)v23)[1] = ((P2Ctx *)v23)[-1];
-  v27 = (P2Ctx *)(uint8_t *)(*(int32_t *)&lpAddress->cursor[0]);
+  v27 = lpAddress->cursor[0];
   v27[2] = v27[-1];
   v30 = lpAddress->cursor[0];
-  v31 = *(uint32_t *)(v30 - 14);
+  v31 = *(uint32_t *)&v30[-1].lane[2];
   ((P2Ctx *)v30)[3] = ((P2Ctx *)v30)[-1];
-  LOWORD(v31) = *(uint16_t *)(v30 - 2);
-  v34 = (P2Ctx *)(uint8_t *)(*(int32_t *)&lpAddress->cursor[0]);
+  LOWORD(v31) = *(uint16_t *)&v30[-1].sign;
+  v34 = lpAddress->cursor[0];
   v34[4] = v34[-1];
-  v39 = -18 * i;
+  v39 = -i;
   // One cursor for the 8 records this shifts; MSVC reloaded the base
   // between every pair and nothing here writes it.
   P2Ctx *const rec3 = (P2Ctx *)(lpAddress->cursor[0] + v39);
@@ -14719,56 +14710,56 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
       // and the object comes from `bmf_page_alloc`, so the round-up is a no-op.
       // Seven sixteen-byte stores are the 112 bytes of the seven rows.
       __builtin_memset(lpAddress->p2_row, 0, sizeof lpAddress->p2_row);
-      v57 = (P2Ctx *)(uint8_t *)(*(int32_t *)&lpAddress->cursor[0]);
+      v57 = lpAddress->cursor[0];
       v57[0] = v57[-1];
       v61 = lpAddress->cursor[0];
       ((P2Ctx *)v61)[1] = ((P2Ctx *)v61)[-2];
-      v65 = (P2Ctx *)(uint8_t *)(*(int32_t *)&lpAddress->cursor[0]);
+      v65 = lpAddress->cursor[0];
       v65[2] = v65[-3];
       v69 = lpAddress->cursor[0];
       ((P2Ctx *)v69)[3] = ((P2Ctx *)v69)[-4];
-      v72 = (P2Ctx *)(uint8_t *)(*(int32_t *)&lpAddress->cursor[0]);
+      v72 = lpAddress->cursor[0];
       v72[4] = v72[-5];
-      v75 = *(int32_t *)&lpAddress->buf[3];
-      v76 = *(int32_t *)&lpAddress->buf[4];
-      v77 = *(int32_t *)&lpAddress->buf[2];
-      v78 = *(int32_t *)&lpAddress->buf[1];
+      v75 = lpAddress->buf[3];
+      v76 = lpAddress->buf[4];
+      v77 = lpAddress->buf[2];
+      v78 = lpAddress->buf[1];
       v79 = lpAddress->buf[0];
-      *(int32_t *)&lpAddress->buf[4] = v75;
-      *(int32_t *)&lpAddress->buf[3] = v77;
-      *(int32_t *)&lpAddress->buf[2] = v78;
-      *(int32_t *)&lpAddress->buf[0] = v76;
+      lpAddress->buf[4] = v75;
+      lpAddress->buf[3] = v77;
+      lpAddress->buf[2] = v78;
+      lpAddress->buf[0] = v76;
       lpAddress->buf[1] = v79;
-      v76 += 144;
-      *(int32_t *)&lpAddress->cursor[0] = v76;
-      v79 += 144;
+      v76 += 8;
+      lpAddress->cursor[0] = v76;
+      v79 += 8;
       lpAddress->cursor[1] = v79;
-      *(int32_t *)&lpAddress->cursor[2] = v78 + 144;
-      *(int32_t *)&lpAddress->cursor[3] = v77 + 144;
-      *(int32_t *)&lpAddress->cursor[4] = v75 + 144;
+      lpAddress->cursor[2] = v78 + 8;
+      lpAddress->cursor[3] = v77 + 8;
+      lpAddress->cursor[4] = v75 + 8;
       ((P2Ctx *)v76)[-1] = ((P2Ctx *)v79)[0];
-      v80 = *(int32_t *)&lpAddress->cursor[0];
+      v80 = lpAddress->cursor[0];
       v81 = (P2Ctx *)lpAddress->cursor[1];
       ((P2Ctx *)v80)[-2] = v81[1];
-      v82 = *(int32_t *)&lpAddress->cursor[0];
+      v82 = lpAddress->cursor[0];
       v83 = (P2Ctx *)lpAddress->cursor[1];
       ((P2Ctx *)v82)[-3] = v83[2];
-      v84 = *(int32_t *)&lpAddress->cursor[0];
+      v84 = lpAddress->cursor[0];
       v85 = (P2Ctx *)lpAddress->cursor[1];
       ((P2Ctx *)v84)[-4] = v85[3];
-      v86 = *(int32_t *)&lpAddress->cursor[0];
+      v86 = lpAddress->cursor[0];
       v87 = (P2Ctx *)lpAddress->cursor[1];
       ((P2Ctx *)v86)[-5] = v87[4];
-      v88 = *(int32_t *)&lpAddress->cursor[0];
+      v88 = lpAddress->cursor[0];
       v89 = (P2Ctx *)lpAddress->cursor[1];
       ((P2Ctx *)v88)[-6] = v89[5];
-      v90 = *(int32_t *)&lpAddress->cursor[0];
+      v90 = lpAddress->cursor[0];
       v91 = (P2Ctx *)lpAddress->cursor[1];
       ((P2Ctx *)v90)[-7] = v91[6];
-      v92 = *(int32_t *)&lpAddress->cursor[0];
+      v92 = lpAddress->cursor[0];
       v93 = (P2Ctx *)lpAddress->cursor[1];
       ((P2Ctx *)v92)[-8] = v93[7];
-      *(uint16_t *)(lpAddress->cursor[0] + 2) = 0;
+      lpAddress->cursor[0]->lane[1] = 0;
       if ( i > 0 )
       {
         lpAddress_1 = (AltP2Block *)(lpAddress);
@@ -14822,6 +14813,8 @@ void __alt_model_p2_d8_encode( uint8_t *a3, int32_t i, int32_t a5, uint8_t *a6)
 
 int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
 {
+  P2Ctx *v109, *v120, *v131, *v139, *v20, *v21, *v22, *v23, *v29, *v33, *v37, *v66,
+          *v74, *v80, *v81, *v82, *v83, *v84, *v85, *v87, *v89, *v91, *v93, *v95, *v97;
   uint32_t Size_1;
   int32_t v153;
   int32_t v155;
@@ -14856,12 +14849,10 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   AltP2Block *v13;
   AltP2Block *v24;
   P2Ctx *v25;   // a record cursor
-  uint8_t *v33;
   P2Ctx *v40;   // a record cursor
   P2Ctx *v62;   // a record cursor
   P2Ctx *v70;   // a record cursor
   P2Ctx *v77;   // a record cursor
-  uint8_t *v29, *v37, *v66, *v74, *v84;
   int32_t *v56, *v59;   // the row cursors, four bytes a step
   P2Ctx *v98;   // a record cursor
   P2Ctx *v96;   // a record cursor
@@ -14876,13 +14867,10 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   bool v16;
   uint8_t v9;
   int16_t v113;
-  uint8_t *v20, *v21, *v22, *v23, *v80, *v81, *v82, *v83, *v85, *v87, *v89,
-          *v91, *v93, *v95, *v97;   // row cursors
-  int32_t i_1, v5, n4, n4_1, v14, v15, v30, v99, v57, *v58, v60, v100, v101,
-          v102, v104, v105, v106, v107, n16, v109, v110, v111, v112, v115,
-          v116, v117, v118, n16_1, v120, v121, v122, v123, v124, v126, v127,
-          v128, v129, n16_2, v131, v132, v134, v135, v136, v137, n16_3, v139,
-          n4_3, n4_4;
+  int32_t i_1, v5, n4, n4_1, v14, v15, v30, v99, v57, *v58, v60, v100, v101, v102,
+          v104, v105, v106, v107, n16, v110, v111, v112, v115, v116, v117, v118, n16_1,
+          v121, v122, v123, v124, v126, v127, v128, v129, n16_2, v132, v134, v135,
+          v136, v137, n16_3, n4_3, n4_4;
   uint32_t v11;
   AltP2Block *lpAddress_1;
   void *v7, *v8, **lpAddress_2;
@@ -14936,8 +14924,8 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
   if ( v5 > 0 )
   {
     v11 = 0;
-    v153 = 9 * i_1;
-    v164 = -18 * i_1;
+    v153 = i_1;
+    v164 = -i_1;
     Size = 18 * i_1 + 234;
     v185 = i_1 + 13;
     n4_1 = plane_count;
@@ -14959,14 +14947,14 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
               v25 = (P2Ctx *)v24->cursor[0];
               v25[0] = v25[-1];
               v29 = v24->cursor[0];
-              v30 = *(uint32_t *)(v29 - 14);
+              v30 = *(uint32_t *)&v29[-1].lane[2];
               ((P2Ctx *)v29)[1] = ((P2Ctx *)v29)[-1];
-              LOWORD(v30) = *(uint16_t *)(v29 - 2);
+              LOWORD(v30) = *(uint16_t *)&v29[-1].sign;
               v33 = v24->cursor[0];
               ((P2Ctx *)v33)[2] = ((P2Ctx *)v33)[-1];
               v37 = v24->cursor[0];
               ((P2Ctx *)v37)[3] = ((P2Ctx *)v37)[-1];
-              LOWORD(v33) = *(uint16_t *)(v37 - 2);
+              LOWORD(v33) = *(uint16_t *)&v37[-1].sign;
               v40 = (P2Ctx *)v24->cursor[0];
               v40[4] = v40[-1];
               // One cursor for the 8 records this shifts; MSVC reloaded the base
@@ -14992,32 +14980,32 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             v14 = 0;
             do
             {
-              v15 = 9 * v14;
-              *(uint16_t *)(v13->buf[0] + 2 * v15) = 256;
+              v15 = v14;
+              v13->buf[0][v15].lane[0] = 256;
               v16 = ++v14 < v185;
-              *(uint16_t *)(v13->buf[0] + 2 * v15 + 2) = 256;
-              *(uint16_t *)(v13->buf[0] + 2 * v15 + 4) = -16;
-              v13->buf[0][2 * v15 + 16] = 1;
-              v13->buf[0][2 * v15 + 17] = 3;
-              *(uint16_t *)(v13->buf[0] + 2 * v15 + 6) = 512;
-              *(uint16_t *)(v13->buf[0] + 2 * v15 + 14) = 512;
-              *(uint16_t *)(v13->buf[0] + 2 * v15 + 12) = 512;
-              *(uint16_t *)(v13->buf[0] + 2 * v15 + 10) = 1024;
-              *(uint16_t *)(v13->buf[0] + 2 * v15 + 8) = 256;
+              v13->buf[0][v15].lane[1] = 256;
+              v13->buf[0][v15].lane[2] = -16;
+              v13->buf[0][v15].sign = 1;
+              v13->buf[0][v15].mag = 3;
+              v13->buf[0][v15].lane[3] = 512;
+              v13->buf[0][v15].lane[7] = 512;
+              v13->buf[0][v15].lane[6] = 512;
+              v13->buf[0][v15].lane[5] = 1024;
+              v13->buf[0][v15].lane[4] = 256;
             }
             while ( v16 );
             v17 = (AltP2Block **)v163;
             memcpy(v13->buf[1],v13->buf[0],Size);
             memcpy(v13->buf[2],v13->buf[0],Size);
             memcpy(v13->buf[3],v13->buf[0],Size);
-            v20 = v13->buf[1] + 2 * v153 + 144;
-            v13->cursor[0] = v13->buf[0] + 2 * v153 + 144;
+            v20 = v13->buf[1] + v153 + 8;
+            v13->cursor[0] = v13->buf[0] + v153 + 8;
             v21 = v13->buf[2];
             v13->cursor[1] = v20;
             v22 = v13->buf[3];
-            v13->cursor[2] = v21 + 2 * v153 + 144;
-            v23 = v13->buf[4] + 2 * v153 + 144;
-            v13->cursor[3] = v22 + 2 * v153 + 144;
+            v13->cursor[2] = v21 + v153 + 8;
+            v23 = v13->buf[4] + v153 + 8;
+            v13->cursor[3] = v22 + v153 + 8;
             v13->cursor[4] = v23;
           }
           v55 = (AltP2Block *)((int32_t)*(v17 - 1));
@@ -15073,13 +15061,13 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           v55->buf[2] = v83;
           v55->buf[0] = v81;
           v55->buf[1] = v84;
-          v81 += 144;
+          v81 += 8;
           v55->cursor[0] = v81;
-          v84 += 144;
+          v84 += 8;
           v55->cursor[1] = v84;
-          v55->cursor[2] = v83 + 144;
-          v55->cursor[3] = v82 + 144;
-          v55->cursor[4] = v80 + 144;
+          v55->cursor[2] = v83 + 8;
+          v55->cursor[3] = v82 + 8;
+          v55->cursor[4] = v80 + 8;
           ((P2Ctx *)v81)[-1] = ((P2Ctx *)v84)[0];
           v85 = v55->cursor[0];
           v86 = (P2Ctx *)v55->cursor[1];
@@ -15102,7 +15090,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           v97 = v55->cursor[0];
           v98 = (P2Ctx *)v55->cursor[1];
           ((P2Ctx *)v97)[-8] = v98[7];
-          *(uint16_t *)(v55->cursor[0] + 2) = 0;
+          v55->cursor[0]->lane[1] = 0;
           n4_1 = plane_count;
         }
         while ( plane_count > n4_2 );
@@ -15149,11 +15137,11 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           }
           __alt_p2_encode_symbol(&lpAddress_1->freq[lpAddress_1->ctx], lpAddress_1->ctx_pair, v105);
           __alt_p2_model((AltP2Block *)lpAddress_1, v104, v105, v104 - v178);
-          v109 = *(uint32_t *)&lpAddress_1->cursor[0];
-          v110 = *(int16_t *)(v109 - 4);
-          v111 = *(int16_t *)(v109 - 10);
-          v112 = *(int16_t *)(v109 - 8);
-          ctx_bias[0] += 32 * *(int16_t *)(v109 - 6);
+          v109 = lpAddress_1->cursor[0];
+          v110 = v109[-1].lane[7];
+          v111 = v109[-1].lane[4];
+          v112 = v109[-1].lane[5];
+          ctx_bias[0] += 32 * v109[-1].lane[6];
           ctx_bias[1] += 32 * v110;
           ctx_bias[2] += 32 * v111;
           ctx_bias[3] += 32 * v112;
@@ -15162,7 +15150,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           else
             v113 = 0;
           v114 = (AltP2Block *)(plane[1]);
-          *(uint16_t *)(plane[1]->cursor[0] + 2) = v113;
+          plane[1]->cursor[0]->lane[1] = v113;
           v176 = plane_desc[2].src_plane;
           v115 = v166[plane_desc[2].src_plane];
           v179 = __alt_p2_context((AltP2Block *)v114, (AltP2Block *)plane[0], (AltP2Block *)plane[2]);
@@ -15183,11 +15171,11 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           }
           __alt_p2_encode_symbol(&v114->freq[v114->ctx], v114->ctx_pair, v116);
           __alt_p2_model((AltP2Block *)v114, v115, v116, v115 - v179);
-          v120 = *(int32_t *)&v114->cursor[0];
-          v121 = *(int16_t *)(v120 - 4);
-          v122 = *(int16_t *)(v120 - 10);
-          v123 = *(int16_t *)(v120 - 8);
-          ctx_bias[0] += 32 * *(int16_t *)(v120 - 6);
+          v120 = v114->cursor[0];
+          v121 = v120[-1].lane[7];
+          v122 = v120[-1].lane[4];
+          v123 = v120[-1].lane[5];
+          ctx_bias[0] += 32 * v120[-1].lane[6];
           ctx_bias[1] += 32 * v121;
           ctx_bias[2] += 32 * v122;
           ctx_bias[3] += 32 * v123;
@@ -15197,7 +15185,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           else
             LOWORD(v124) = 0;
           v125 = (AltP2Block *)(plane[2]);
-          *(uint16_t *)(plane[2]->cursor[0] + 2) = v124;
+          plane[2]->cursor[0]->lane[1] = v124;
           v177 = plane_desc[3].src_plane;
           v126 = v166[plane_desc[3].src_plane];
           v180 = __alt_p2_context((AltP2Block *)v125, (AltP2Block *)plane[0], (AltP2Block *)plane[1]);
@@ -15218,15 +15206,15 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           }
           __alt_p2_encode_symbol(&v125->freq[v125->ctx], v125->ctx_pair, v127);
           __alt_p2_model((AltP2Block *)v125, v126, v127, v126 - v180);
-          v131 = *(int32_t *)&v125->cursor[0];
+          v131 = v125->cursor[0];
           n4_1 = plane_count;
-          v102 = ctx_bias[0] + 32 * *(int16_t *)(v131 - 6);
-          v101 = ctx_bias[1] + 32 * *(int16_t *)(v131 - 4);
-          v100 = ctx_bias[2] + 32 * *(int16_t *)(v131 - 10);
-          v99 = ctx_bias[3] + 32 * *(int16_t *)(v131 - 8);
+          v102 = ctx_bias[0] + 32 * v131[-1].lane[6];
+          v101 = ctx_bias[1] + 32 * v131[-1].lane[7];
+          v100 = ctx_bias[2] + 32 * v131[-1].lane[4];
+          v99 = ctx_bias[3] + 32 * v131[-1].lane[5];
           if ( plane_count >= 4 )
           {
-            ctx_bias[0] += 32 * *(int16_t *)(v131 - 6);
+            ctx_bias[0] += 32 * v131[-1].lane[6];
             ctx_bias[1] = v101;
             ctx_bias[2] = v100;
             ctx_bias[3] = v99;
@@ -15237,7 +15225,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             else
               LOWORD(v132) = 0;
             v133 = (AltP2Block *)(plane[3]);
-            *(uint16_t *)(plane[3]->cursor[0] + 2) = v132;
+            plane[3]->cursor[0]->lane[1] = v132;
             n3 = plane_desc[4].src_plane;
             v134 = v166[plane_desc[4].src_plane];
             v157 = __alt_p2_context((AltP2Block *)v133, (AltP2Block *)plane[2], (AltP2Block *)plane[0]);
@@ -15257,12 +15245,12 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
             }
             __alt_p2_encode_symbol(&v133->freq[v133->ctx], v133->ctx_pair, v135);
             __alt_p2_model((AltP2Block *)v133, v134, v135, v134 - v157);
-            v139 = *(int32_t *)&v133->cursor[0];
+            v139 = v133->cursor[0];
             n4_1 = plane_count;
-            v102 = ctx_bias[0] + 32 * *(int16_t *)(v139 - 6);
-            v101 = ctx_bias[1] + 32 * *(int16_t *)(v139 - 4);
-            v100 = ctx_bias[2] + 32 * *(int16_t *)(v139 - 10);
-            v99 = ctx_bias[3] + 32 * *(int16_t *)(v139 - 8);
+            v102 = ctx_bias[0] + 32 * v139[-1].lane[6];
+            v101 = ctx_bias[1] + 32 * v139[-1].lane[7];
+            v100 = ctx_bias[2] + 32 * v139[-1].lane[4];
+            v99 = ctx_bias[3] + 32 * v139[-1].lane[5];
           }
           v166 += n4_1;
         }
