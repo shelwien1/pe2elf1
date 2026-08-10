@@ -480,6 +480,14 @@ them is open work. What *is* established, from their own code:
   a symbol from a cumulative-frequency table with a halving rescale at 0x4000,
   through `encode_symbol_tree` / `decode_symbol_tree`. The p2 pair starts with a
   three-way choice over three counters before descending.
+* The p1 side's working memory is **0x99C60 nodes of sixteen bytes** starting at
+  `AltP1Block + 3800` — a total and seven counts, seeded (22; 8, 2, 2, 2, 2, 3,
+  3), where 22 is the sum. `alt_p1_model` updates **three adjacent nodes per
+  symbol**: the one its context picks and both neighbours, bumping the total and
+  one of the first three counts in each by amounts that fall off with distance
+  (17 for the centre in one arm, 11 and 13 for the neighbours; 7 / 4 / 3 in
+  another). Only counts 0..2 are ever read; what 3..6 hold has no reader in this
+  binary.
 
 So: a context model with its own neighbourhood statistics and its own
 frequency tables, on a sliding window of rows. What the eighteen bytes of a
