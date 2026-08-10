@@ -327,6 +327,11 @@ static uint8_t (&__byte_445440)[544]   = *(uint8_t (*)[544])(bss_exclusion + 819
 // 254-entry strips.  An int32_t in the data segment holding an address, so a
 // pointer here, and out of the blob.  BMF.exe had it at 0x00445708.
 static uint16_t *model_tables;
+// One 254-entry strip of `model_tables`.  Every reader indexes it in whole
+// strips: the constants 254, 2032, 4064 and 32512 are 1, 8, 16 and 128 of
+// them, and writing the multiply once is what makes that visible.
+static inline uint16_t *model_strip(uint32_t k) { return model_tables + 254 * k; }
+
 // A five-entry table, and the extent is measured rather than assumed: the one
 // site that subscripts it -- `*(uint16_t *)f56[5] = mode_symbol[n4]`, with `n4`
 // out of `ModelBlock::f32` -- steps four bytes, and the four globals after
@@ -1874,10 +1879,10 @@ int32_t __alt_p1_encode_symbol(uint16_t *a1, int32_t n5, int32_t a3, int32_t n5a
   result = *a1 + 32;
   *a1 = result;
   if ( n5a_2 >= 5 )
-    return __encode_symbol_tree((uint16_t *)model_tables
-           + 32512 * (n5a_2 & 1)
-           + 254 * (((a1[1] + (result & 0x7FFF) + 96 - 2 * (uint32_t)a1[n5a_2 + 1]) >> 25) & 0xFFFFFFC0)
-           + 254 * a3, (n5a - 5) >> 1);
+    return __encode_symbol_tree(model_strip(
+             128 * (uint32_t)(n5a_2 & 1)
+             + ((((a1[1] + (result & 0x7FFF) + 96 - 2 * (uint32_t)a1[n5a_2 + 1]) >> 25) & 0xFFFFFFC0)
+             + (uint32_t)a3)), (n5a - 5) >> 1);
   return result;
 }
 
@@ -2041,12 +2046,11 @@ int32_t __alt_p1_decode_symbol(uint16_t *a1, int32_t a2, int32_t a3)
   n5 = (int32_t)((int32_t)v11 - v24) >> 1;
   if ( n5 >= 5 )
     n5 += 2
-        * __decode_symbol_tree((uint16_t *)model_tables
-          + 32512 * (n5 & 1)
-          + 254
-          * ((((uint16_t)a1[1] + (v16 & 0x7FFF) + 96 - 2 * (uint32_t)(uint16_t)a1[n5 + 1]) >> 25)
-           & 0xFFFFFFC0)
-          + 254 * a3);
+        * __decode_symbol_tree(model_strip(
+            128 * (uint32_t)(n5 & 1)
+            + (((((uint16_t)a1[1] + (v16 & 0x7FFF) + 96 - 2 * (uint32_t)(uint16_t)a1[n5 + 1]) >> 25)
+              & 0xFFFFFFC0)
+            + (uint32_t)a3)));
   return n5;
 }
 
@@ -2117,7 +2121,7 @@ int32_t __alt_p2_encode_symbol(uint16_t *_this, uint8_t *a2, int32_t a3)
   result = (uint16_t *)((int32_t)v25);
   *v25 = n32 + v18;
   if ( a3 > 0 )
-    return __encode_symbol_tree((uint16_t *)model_tables + 254 * *(uint32_t *)(a2 + 4 * (a3 & 1)), (a3 - 1) >> 1);
+    return __encode_symbol_tree(model_strip(*(uint32_t *)(a2 + 4 * (a3 & 1))), (a3 - 1) >> 1);
   return (int32_t)result;
 }
 
@@ -2193,7 +2197,7 @@ int32_t __alt_p2_decode_symbol(uint16_t *_this, uint8_t *a2)
   *v9 = n32 + n0x4000;
   v16 = v9 - v24;
   if ( v16 )
-    return v16 + 2 * __decode_symbol_tree((uint16_t *)model_tables + 254 * *(uint32_t *)(a2 + 4 * (v16 & 1)));
+    return v16 + 2 * __decode_symbol_tree(model_strip(*(uint32_t *)(a2 + 4 * (v16 & 1))));
   else
     return 0;
 }
@@ -2923,14 +2927,13 @@ int32_t __alt_p1_model(AltP1Block *_this)
     v12 = v11[238].total + 11;
     v11[238].total = v12;
     if ( n5_2 >= 5 )
-      __update_binary_pair((uint16_t *)model_tables
-      + 32512 * (n5_2 & 1)
-      + 254 * v110
-      + 254
-      * ((((v12 & 0x7FFF)
-         + v11[238].bin[0]
-         - 2 * (uint32_t)((P1Count *)v11)[238].bin[n5_2]) >> 25)
-       & 0xFFFFFFC0), (int32_t)(n5 - 5) >> 1);
+      __update_binary_pair(model_strip(
+        128 * (n5_2 & 1)
+        + v110
+        + (((((v12 & 0x7FFF)
+            + v11[238].bin[0]
+            - 2 * (uint32_t)((P1Count *)v11)[238].bin[n5_2]) >> 25)
+          & 0xFFFFFFC0))), (int32_t)(n5 - 5) >> 1);
     result = _this->f12[0];
   }
   if ( (result & 7) != 0 )
@@ -2941,17 +2944,16 @@ int32_t __alt_p1_model(AltP1Block *_this)
     v15 = v13[236].total + 13;
     v13[236].total = v15;
     if ( n5_2 >= 5 )
-      __update_binary_pair((uint16_t *)model_tables
-      + 32512 * (n5_2 & 1)
-      + 254 * v14
-      + 254
-      * ((((v15 & 0x7FFF)
-         + v13[236].bin[0]
-         - 2 * (uint32_t)((P1Count *)v13)[236].bin[n5_2]) >> 25)
-       & 0xFFFFFFC0), n2);
+      __update_binary_pair(model_strip(
+        128 * (uint32_t)(n5_2 & 1)
+        + (uint32_t)v14
+        + (((((v15 & 0x7FFF)
+            + v13[236].bin[0]
+            - 2 * (uint32_t)((P1Count *)v13)[236].bin[n5_2]) >> 25)
+          & 0xFFFFFFC0))), n2);
     result = _this->f12[0];
   }
-  if ( ((P1Count *)_this)[result + 237].total < 0xCCCu )
+  if ( (*(P1Count *)&_this->f1752[4 * result + 510]).total < 0xCCCu )
   {
     if ( (result & 7u) < 7 )
     {
@@ -2968,24 +2970,23 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( n5_2 >= 5 )
     {
       v112 = _this->f12[1]
-           + (((((P1Count *)_this)[result + 237].bin[0]
-              + (((P1Count *)_this)[result + 237].total & 0x7FFF)
-              - 2 * (uint32_t)((P1Count *)_this)[result + 237].bin[n5_2]) >> 25)
+           + ((((*(P1Count *)&_this->f1752[4 * result + 510]).bin[0]
+              + ((*(P1Count *)&_this->f1752[4 * result + 510]).total & 0x7FFF)
+              - 2 * (uint32_t)(*(P1Count *)&_this->f1752[4 * result + 510]).bin[n5_2]) >> 25)
             & 0xFFFFFFC0)
            + ((n5_2 & 1) << 7);
       if ( (v112 & 0x38) >= 0x38
-        || (__update_binary_pair((uint16_t *)model_tables
-            + 32512 * (n5_2 & 1)
-            + 254 * _this->f12[1]
-            + 254
-            * (((((P1Count *)_this)[result + 237].bin[0]
-               + (((P1Count *)_this)[result + 237].total & 0x7FFF)
-               - 2 * (uint32_t)((P1Count *)_this)[result + 237].bin[n5_2]) >> 25)
-             & 0xFFFFFFC0)
-            + 2032, n2),
+        || (__update_binary_pair(model_strip(
+              128 * (n5_2 & 1)
+              + _this->f12[1]
+              + (((((*(P1Count *)&_this->f1752[4 * result + 510]).bin[0]
+                  + ((*(P1Count *)&_this->f1752[4 * result + 510]).total & 0x7FFF)
+                  - 2 * (uint32_t)(*(P1Count *)&_this->f1752[4 * result + 510]).bin[n5_2]) >> 25)
+                & 0xFFFFFFC0))
+              + 8), n2),
             (v112 & 0x38) != 0) )
       {
-        __update_binary_pair((uint16_t *)model_tables + 254 * v112 - 2032, n2);
+        __update_binary_pair(model_strip(v112 - 8), n2);
       }
       result = _this->f12[0];
     }
@@ -12269,7 +12270,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
         v542 = (P2Count *)((int32_t)&v90[4 * (v81 ^ 0x4000) + 284712]);
         v544 = (P2Count *)(&v90[4 * (v81 ^ 0x3FF0) + 284712]);
         __builtin_prefetch(v544, 0, 1);
-        v543 = (P2Count *)(&v90[4 * *(int32_t *)((uint8_t *)p2_ctx_rotate + ((v81 ^ 0x4000) & 0xC))
+        v543 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x4000) >> 2) & 3]
                   + 284712
                   + 4 * ((v81 ^ 0x4000) & 0xFFFFFFF3)]);
         __builtin_prefetch(v543, 0, 1);
@@ -12277,7 +12278,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
         v539 = (P2Count *)((int32_t)&v90[4 * (v81 ^ 0x2000) + 284712]);
         __builtin_prefetch(&v90[4 * (v81 ^ 0x5FF0) + 284712], 0, 1);
         v541 = (P2Count *)((int32_t)&v90[4 * (v81 ^ 0x5FF0) + 284712]);
-        v540 = (P2Count *)(&v90[4 * *(int32_t *)((uint8_t *)p2_ctx_rotate + ((v81 ^ 0x2000) & 0xC))
+        v540 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x2000) >> 2) & 3]
                   + 284712
                   + 4 * ((v81 ^ 0x2000) & 0xFFFFFFF3)]);
         __builtin_prefetch(v540, 0, 1);
@@ -12285,14 +12286,14 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
         v536 = (P2Count *)((int32_t)&v90[4 * (v81 ^ 0x1000) + 284712]);
         __builtin_prefetch(&v90[4 * (v81 ^ 0x6FF0) + 284712], 0, 1);
         v538 = (P2Count *)((int32_t)&v90[4 * (v81 ^ 0x6FF0) + 284712]);
-        v537 = (P2Count *)(&v90[4 * *(int32_t *)((uint8_t *)p2_ctx_rotate + ((v81 ^ 0x1000) & 0xC))
+        v537 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x1000) >> 2) & 3]
                   + 284712
                   + 4 * ((v81 ^ 0x1000) & 0xFFFFFFF3)]);
         __builtin_prefetch(v537, 0, 1);
         v551 = (P2Count *)(&v90[4 * (v81 ^ 0x800) + 284712]);
         v533 = (P2Count *)(v551);
         v535 = (P2Count *)(&v90[4 * (v81 ^ 0x77F0) + 284712]);
-        v534 = (P2Count *)(&v90[4 * *(int32_t *)((uint8_t *)p2_ctx_rotate + ((v81 ^ 0x800) & 0xC))
+        v534 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x800) >> 2) & 3]
                   + 284712
                   + 4 * ((v81 ^ 0x800) & 0xFFFFFFF3)]);
         v552 = (P2Count *)(&v90[4 * (v81 ^ 0x400) + 284712]);
@@ -12302,7 +12303,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
         __builtin_prefetch(v534, 0, 1);
         v553 = (P2Count *)(&v90[4 * (v81 ^ 0x7BF0) + 284712]);
         v532 = (P2Count *)(v553);
-        v531 = (P2Count *)(&v90[4 * *(int32_t *)((uint8_t *)p2_ctx_rotate + ((v81 ^ 0x400) & 0xC))
+        v531 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x400) >> 2) & 3]
                   + 284712
                   + 4 * ((v81 ^ 0x400) & 0xFFFFFFF3)]);
         v554 = (P2Count *)(&v90[4 * (v81 ^ 0x200) + 284712]);
@@ -12310,7 +12311,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
         __builtin_prefetch(v552, 0, 1);
         v555 = (P2Count *)(&v90[4 * (v81 ^ 0x7DF0) + 284712]);
         v529 = (P2Count *)(v555);
-        v91 = (P2Count *)(&v90[4 * *(int32_t *)((uint8_t *)p2_ctx_rotate + ((v81 ^ 0x200) & 0xC))
+        v91 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x200) >> 2) & 3]
                  + 284712
                  + 4 * ((v81 ^ 0x200) & 0xFFFFFFF3)]);
         __builtin_prefetch(v553, 0, 1);
@@ -12318,7 +12319,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
         v528 = (P2Count *)(v91);
         v556 = (P2Count *)(&v90[4 * (v81 ^ 0x100) + 284712]);
         v524 = (P2Count *)(v556);
-        v92 = *(int32_t *)((uint8_t *)p2_ctx_rotate + ((v81 ^ 0x100) & 0xC)) + ((v81 ^ 0x100) & 0xFFFFFFF3);
+        v92 = p2_ctx_rotate[((v81 ^ 0x100) >> 2) & 3] + ((v81 ^ 0x100) & 0xFFFFFFF3);
         v557 = (P2Count *)(&v90[4 * (v81 ^ 0x7EF0) + 284712]);
         v526 = (P2Count *)(v557);
         __builtin_prefetch(v554, 0, 1);
@@ -12329,14 +12330,14 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
         __builtin_prefetch(v555, 0, 1);
         __builtin_prefetch(v91, 0, 1);
         v523 = (P2Count *)(&v90[4 * (v81 ^ 0x7F70) + 284712]);
-        v560 = (P2Count *)(&v90[4 * *(int32_t *)((uint8_t *)p2_ctx_rotate + ((v81 ^ 0x80) & 0xC)) + 284712 + 4 * ((v81 ^ 0x80) & 0xFFFFFFF3)]);
+        v560 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x80) >> 2) & 3] + 284712 + 4 * ((v81 ^ 0x80) & 0xFFFFFFF3)]);
         v522 = (P2Count *)(v560);
         v561 = (P2Count *)(&v90[4 * (v81 ^ 0x40) + 284712]);
         v518 = (P2Count *)(v561);
         __builtin_prefetch(v556, 0, 1);
         v562 = (P2Count *)(&v90[4 * (v81 ^ 0x7FB0) + 284712]);
         v520 = (P2Count *)(v562);
-        v93 = (P2Count *)(&v90[4 * *(int32_t *)((uint8_t *)p2_ctx_rotate + ((v81 ^ 0x40) & 0xC)) + 284712 + 4 * ((v81 ^ 0x40) & 0xFFFFFFF3)]);
+        v93 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x40) >> 2) & 3] + 284712 + 4 * ((v81 ^ 0x40) & 0xFFFFFFF3)]);
         v94 = (P2Count *)(v558);
         __builtin_prefetch(v557, 0, 1);
         __builtin_prefetch(v94, 0, 1);
@@ -12350,11 +12351,11 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
         v517 = (P2Count *)(v565);
         __builtin_prefetch(v559, 0, 1);
         __builtin_prefetch(v523, 0, 1);
-        v566 = (P2Count *)((uint32_t)&v90[4 * *(int32_t *)((uint8_t *)p2_ctx_rotate + (v95 & 0xC)) + 284712 + 4 * (v95 & 0xFFFFFFF3)]);
+        v566 = (P2Count *)((uint32_t)&v90[4 * p2_ctx_rotate[(v95 >> 2) & 3] + 284712 + 4 * (v95 & 0xFFFFFFF3)]);
         v516 = (P2Count *)(v566);
         v567 = (P2Count *)((int32_t)&v90[4 * v96 + 284712]);
         v512 = (P2Count *)(v567);
-        v97 = *(int32_t *)((uint8_t *)p2_ctx_rotate + (v96 & 0xC)) + (v96 & 0xFFFFFFF3);
+        v97 = p2_ctx_rotate[(v96 >> 2) & 3] + (v96 & 0xFFFFFFF3);
         v568 = (P2Count *)((int32_t)&v90[4 * (v96 ^ 0x7FF0) + 284712]);
         v514 = (P2Count *)(v568);
         __builtin_prefetch(v560, 0, 1);
@@ -13021,12 +13022,12 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
       v392 = v387[470040 + 2];
       n2 = v387 + 470040;
       if ( v387[470040 + 3] + v392 + v391 > 29696 )
-        __rescale_three_way((uint16_t *)v387 + 470040);
+        __rescale_three_way(v387 + 470040);
       v393 = (10 * (uint32_t)v387[470040 + 0]) >> 4;
       if ( a4 )
       {
         n2[3 - v511] += v393;
-        __update_binary_pair((uint16_t *)model_tables + 254 * (uint32_t)v508 + 254, (a4 - 1) >> 1);
+        __update_binary_pair(model_strip((uint32_t)v508 + 1), (a4 - 1) >> 1);
       }
       else
       {
@@ -13039,9 +13040,9 @@ LABEL_37:
         if ( LOWORD((*(uint32_t *)&v385->f940072[4 * n0x10])) <= 0x1Au )
           return n0x10;
         v397 = v385->f278760[8];
-        v398 = 2 - (*((uint8_t *)v385 + (uint8_t)-a5 + 279984) & 1);
-        if ( !*((uint8_t *)v385 + (uint8_t)-a5 + 279984) )
-          v398 = *((uint8_t *)v385 + (uint8_t)-a5 + 279984);
+        v398 = 2 - (v385->f279984[(uint8_t)-a5] & 1);
+        if ( !v385->f279984[(uint8_t)-a5] )
+          v398 = v385->f279984[(uint8_t)-a5];
         v399 = v385->f278760[12];
         v400 = v385->f278760[6] + (v385->f278704 & 0x3F);
         v510 = v398;
@@ -13089,12 +13090,12 @@ LABEL_48:
           n0xF0 = (((uint16_t *)((uint8_t)(uintptr_t)v508 & 0xF0)));
           if ( (uint32_t)n0xF0 >= 0xF0
             || (n0x10_1 = n0x10,
-                __update_binary_pair((uint16_t *)model_tables + 254 * (uint32_t)v508 + 4064, n2_half),
+                __update_binary_pair(model_strip((uint32_t)v508 + 16), n2_half),
                 n0x10 = n0x10_1,
                 (int32_t)n0xF0 > 0) )
           {
             n0x10_1 = n0x10;
-            __update_binary_pair((uint16_t *)model_tables + 254 * (uint32_t)v508 - 4064, n2_half);
+            __update_binary_pair(model_strip((uint32_t)v508 - 16), n2_half);
             n0x10 = n0x10_1;
           }
         }
@@ -13655,12 +13656,12 @@ LABEL_115:
     v395 = v387[470032 + 2];
     n2 = v387 + 470032;
     if ( v387[470032 + 3] + v395 + v394 > 29696 )
-      __rescale_three_way((uint16_t *)v387 + 470032);
+      __rescale_three_way(v387 + 470032);
     v396 = (13 * (uint32_t)v387[470032 + 0]) >> 4;
     if ( a4 )
     {
       n2[3 - v511] += v396;
-      __update_binary_pair((uint16_t *)model_tables + 254 * (uint32_t)v508 - 254, (a4 - 1) >> 1);
+      __update_binary_pair(model_strip((uint32_t)v508 - 1), (a4 - 1) >> 1);
     }
     else
     {
