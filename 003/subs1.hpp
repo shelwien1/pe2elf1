@@ -436,9 +436,13 @@ struct AltP1Block {
   int32_t f1752[512];    // +1752 .. +3799
   // The counter table starts here, and the code reaches it as
   // `((P1Count *)_this)[k + 237]` -- a record grid anchored at the object's
-  // base, so record 237's own fields begin at +3800 and its first eight bytes
-  // are the tail of `f1752`.  Naming it would have to re-base all 208 of those
-  // subscripts, so the extent is pinned instead.
+  // base.  Record 237 begins at +3792, so its first eight bytes are the tail
+  // of `f1752` and its `total` is the first word of the table proper at +3800.
+  // Only `total` and `bin[]` are ever read at these indices, never `w[]`,
+  // which is why the straddle never shows: 251 subscripts, always record
+  // `k + 237` and its two neighbours.  A member declared here would have to
+  // start at +3792 to keep the record boundary, contradicting the +3800 the
+  // allocator draws, so the extent is pinned instead.
   uint8_t _pad3800[10077696];   // +3800 .. +10081495
 };
 static_assert(sizeof(void *) != 4 || sizeof(AltP1Block) == 0x99D4D8,
@@ -2947,7 +2951,7 @@ int32_t __alt_p1_model(AltP1Block *_this)
        & 0xFFFFFFC0), n2);
     result = _this->f12[0];
   }
-  if ( (*(P1Count *)&_this->f1752[4 * result + 510]).total < 0xCCCu )
+  if ( ((P1Count *)_this)[result + 237].total < 0xCCCu )
   {
     if ( (result & 7u) < 7 )
     {
@@ -2964,9 +2968,9 @@ int32_t __alt_p1_model(AltP1Block *_this)
     if ( n5_2 >= 5 )
     {
       v112 = _this->f12[1]
-           + ((((*(P1Count *)&_this->f1752[4 * result + 510]).bin[0]
-              + ((*(P1Count *)&_this->f1752[4 * result + 510]).total & 0x7FFF)
-              - 2 * (uint32_t)(*(P1Count *)&_this->f1752[4 * result + 510]).bin[n5_2]) >> 25)
+           + (((((P1Count *)_this)[result + 237].bin[0]
+              + (((P1Count *)_this)[result + 237].total & 0x7FFF)
+              - 2 * (uint32_t)((P1Count *)_this)[result + 237].bin[n5_2]) >> 25)
             & 0xFFFFFFC0)
            + ((n5_2 & 1) << 7);
       if ( (v112 & 0x38) >= 0x38
@@ -2974,9 +2978,9 @@ int32_t __alt_p1_model(AltP1Block *_this)
             + 32512 * (n5_2 & 1)
             + 254 * _this->f12[1]
             + 254
-            * ((((*(P1Count *)&_this->f1752[4 * result + 510]).bin[0]
-               + ((*(P1Count *)&_this->f1752[4 * result + 510]).total & 0x7FFF)
-               - 2 * (uint32_t)(*(P1Count *)&_this->f1752[4 * result + 510]).bin[n5_2]) >> 25)
+            * (((((P1Count *)_this)[result + 237].bin[0]
+               + (((P1Count *)_this)[result + 237].total & 0x7FFF)
+               - 2 * (uint32_t)((P1Count *)_this)[result + 237].bin[n5_2]) >> 25)
              & 0xFFFFFFC0)
             + 2032, n2),
             (v112 & 0x38) != 0) )
@@ -13758,24 +13762,16 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
   v21 = (uintptr_t)(lpAddress->f278736[0]);
   v22 = *(uint32_t *)(v21 - 10);
   v23 = *(uint32_t *)(v21 - 6);
-  *(uint32_t *)(v21 + 18) = *(uint32_t *)(v21 - 18);
-  *(uint32_t *)(v21 + 22) = *(uint32_t *)(v21 - 14);
+  ((P2Ctx *)v21)[1] = ((P2Ctx *)v21)[-1];
   v24 = *(uint16_t *)(v21 - 2);
-  *(uint32_t *)(v21 + 26) = v22;
-  *(uint32_t *)(v21 + 30) = v23;
-  *(uint16_t *)(v21 + 34) = v24;
   v25 = (P2Ctx *)(uint8_t *)(lpAddress->f278736[0]);
   v25[2] = v25[-1];
   v28 = (uintptr_t)(lpAddress->f278736[0]);
   v29 = *(uint32_t *)(v28 - 14);
   v30 = *(uint32_t *)(v28 - 10);
-  *(uint32_t *)(v28 + 54) = *(uint32_t *)(v28 - 18);
+  ((P2Ctx *)v28)[3] = ((P2Ctx *)v28)[-1];
   v31 = *(uint32_t *)(v28 - 6);
-  *(uint32_t *)(v28 + 58) = v29;
   LOWORD(v29) = *(uint16_t *)(v28 - 2);
-  *(uint32_t *)(v28 + 62) = v30;
-  *(uint32_t *)(v28 + 66) = v31;
-  *(uint16_t *)(v28 + 70) = v29;
   v32 = (P2Ctx *)(uint8_t *)(lpAddress->f278736[0]);
   v32[4] = v32[-1];
   v37 = -18 * i_1;
@@ -13830,23 +13826,15 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
       v59 = *(uint32_t *)(v58 - 32);
       v60 = *(uint32_t *)(v58 - 28);
       LOWORD(v51) = *(uint16_t *)(v58 - 20);
-      *(uint32_t *)(v58 + 18) = *(uint32_t *)(v58 - 36);
+      ((P2Ctx *)v58)[1] = ((P2Ctx *)v58)[-2];
       v61 = *(uint32_t *)(v58 - 24);
-      *(uint32_t *)(v58 + 22) = v59;
-      *(uint32_t *)(v58 + 26) = v60;
-      *(uint32_t *)(v58 + 30) = v61;
-      *(uint16_t *)(v58 + 34) = v51;
       v62 = (P2Ctx *)(uint8_t *)(lpAddress->f278736[0]);
       v62[2] = v62[-3];
       v66 = (uintptr_t)(lpAddress->f278736[0]);
       v67 = *(uint32_t *)(v66 - 64);
       v68 = *(uint32_t *)(v66 - 60);
       LOWORD(v51) = *(uint16_t *)(v66 - 56);
-      *(uint32_t *)(v66 + 54) = *(uint32_t *)(v66 - 72);
-      *(uint32_t *)(v66 + 58) = *(uint32_t *)(v66 - 68);
-      *(uint32_t *)(v66 + 62) = v67;
-      *(uint32_t *)(v66 + 66) = v68;
-      *(uint16_t *)(v66 + 70) = v51;
+      ((P2Ctx *)v66)[3] = ((P2Ctx *)v66)[-4];
       v69 = (P2Ctx *)(uint8_t *)(lpAddress->f278736[0]);
       v69[4] = v69[-5];
       v72 = lpAddress->f278760[2];
@@ -14094,24 +14082,16 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
               v30 = v25->f278736[0];
               v31 = *(uint32_t *)(v30 - 14);
               v32 = *(uint32_t *)(v30 - 10);
-              *(uint32_t *)(v30 + 18) = *(uint32_t *)(v30 - 18);
+              ((P2Ctx *)v30)[1] = ((P2Ctx *)v30)[-1];
               v33 = *(uint32_t *)(v30 - 6);
-              *(uint32_t *)(v30 + 22) = v31;
               LOWORD(v31) = *(uint16_t *)(v30 - 2);
-              *(uint32_t *)(v30 + 26) = v32;
-              *(uint32_t *)(v30 + 30) = v33;
-              *(uint16_t *)(v30 + 34) = v31;
               v34 = (uint8_t *)(v25->f278736[0]);
               ((P2Ctx *)v34)[2] = ((P2Ctx *)v34)[-1];
               v38 = v25->f278736[0];
               v39 = *(uint32_t *)(v38 - 10);
               v40 = *(uint32_t *)(v38 - 6);
-              *(uint32_t *)(v38 + 54) = *(uint32_t *)(v38 - 18);
-              *(uint32_t *)(v38 + 58) = *(uint32_t *)(v38 - 14);
+              ((P2Ctx *)v38)[3] = ((P2Ctx *)v38)[-1];
               LOWORD(v34) = *(uint16_t *)(v38 - 2);
-              *(uint32_t *)(v38 + 62) = v39;
-              *(uint32_t *)(v38 + 66) = v40;
-              *(uint16_t *)(v38 + 70) = (uint16_t)(uintptr_t)v34;
               v41 = (P2Ctx *)(uint8_t *)(v25->f278736[0]);
               v41[4] = v41[-1];
               v46 = v160;
@@ -14198,22 +14178,14 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
           v67 = v56->f278736[0];
           v68 = *(uint32_t *)(v67 - 32);
           v69 = *(uint32_t *)(v67 - 28);
-          *(uint32_t *)(v67 + 18) = *(uint32_t *)(v67 - 36);
+          ((P2Ctx *)v67)[1] = ((P2Ctx *)v67)[-2];
           v70 = *(uint32_t *)(v67 - 24);
-          *(uint32_t *)(v67 + 22) = v68;
-          *(uint32_t *)(v67 + 26) = v69;
-          *(uint32_t *)(v67 + 30) = v70;
-          *(uint16_t *)(v67 + 34) = *(uint16_t *)(v67 - 20);
           v71 = (P2Ctx *)(uint8_t *)(v56->f278736[0]);
           v71[2] = v71[-3];
           v75 = v56->f278736[0];
           v76 = *(uint32_t *)(v75 - 64);
           v77 = *(uint32_t *)(v75 - 60);
-          *(uint32_t *)(v75 + 54) = *(uint32_t *)(v75 - 72);
-          *(uint32_t *)(v75 + 58) = *(uint32_t *)(v75 - 68);
-          *(uint32_t *)(v75 + 62) = v76;
-          *(uint32_t *)(v75 + 66) = v77;
-          *(uint16_t *)(v75 + 70) = *(uint16_t *)(v75 - 56);
+          ((P2Ctx *)v75)[3] = ((P2Ctx *)v75)[-4];
           v78 = (P2Ctx *)(uint8_t *)(v56->f278736[0]);
           v78[4] = v78[-5];
           v81 = v56->f278736[8];
@@ -14540,24 +14512,16 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
   v23 = (uint8_t *)lpAddress->f278736[0];
   v24 = *(uint32_t *)(v23 - 10);
   v25 = *(uint32_t *)(v23 - 6);
-  *(uint32_t *)(v23 + 18) = *(uint32_t *)(v23 - 18);
-  *(uint32_t *)(v23 + 22) = *(uint32_t *)(v23 - 14);
+  ((P2Ctx *)v23)[1] = ((P2Ctx *)v23)[-1];
   v26 = *(uint16_t *)(v23 - 2);
-  *(uint32_t *)(v23 + 26) = v24;
-  *(uint32_t *)(v23 + 30) = v25;
-  *(uint16_t *)(v23 + 34) = v26;
   v27 = (P2Ctx *)(uint8_t *)(*(int32_t *)&lpAddress->f278736[0]);
   v27[2] = v27[-1];
   v30 = (uint8_t *)lpAddress->f278736[0];
   v31 = *(uint32_t *)(v30 - 14);
   v32 = *(uint32_t *)(v30 - 10);
-  *(uint32_t *)(v30 + 54) = *(uint32_t *)(v30 - 18);
+  ((P2Ctx *)v30)[3] = ((P2Ctx *)v30)[-1];
   v33 = *(uint32_t *)(v30 - 6);
-  *(uint32_t *)(v30 + 58) = v31;
   LOWORD(v31) = *(uint16_t *)(v30 - 2);
-  *(uint32_t *)(v30 + 62) = v32;
-  *(uint32_t *)(v30 + 66) = v33;
-  *(uint16_t *)(v30 + 70) = v31;
   v34 = (P2Ctx *)(uint8_t *)(*(int32_t *)&lpAddress->f278736[0]);
   v34[4] = v34[-1];
   v39 = -18 * i;
@@ -14614,22 +14578,14 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
       v61 = (uint8_t *)lpAddress->f278736[0];
       v62 = *(uint32_t *)(v61 - 32);
       v63 = *(uint32_t *)(v61 - 28);
-      *(uint32_t *)(v61 + 18) = *(uint32_t *)(v61 - 36);
+      ((P2Ctx *)v61)[1] = ((P2Ctx *)v61)[-2];
       v64 = *(uint32_t *)(v61 - 24);
-      *(uint32_t *)(v61 + 22) = v62;
-      *(uint32_t *)(v61 + 26) = v63;
-      *(uint32_t *)(v61 + 30) = v64;
-      *(uint16_t *)(v61 + 34) = *(uint16_t *)(v61 - 20);
       v65 = (P2Ctx *)(uint8_t *)(*(int32_t *)&lpAddress->f278736[0]);
       v65[2] = v65[-3];
       v69 = (uint8_t *)lpAddress->f278736[0];
       v70 = *(uint32_t *)(v69 - 64);
       v71 = *(uint32_t *)(v69 - 60);
-      *(uint32_t *)(v69 + 54) = *(uint32_t *)(v69 - 72);
-      *(uint32_t *)(v69 + 58) = *(uint32_t *)(v69 - 68);
-      *(uint32_t *)(v69 + 62) = v70;
-      *(uint32_t *)(v69 + 66) = v71;
-      *(uint16_t *)(v69 + 70) = *(uint16_t *)(v69 - 56);
+      ((P2Ctx *)v69)[3] = ((P2Ctx *)v69)[-4];
       v72 = (P2Ctx *)(uint8_t *)(*(int32_t *)&lpAddress->f278736[0]);
       v72[4] = v72[-5];
       v75 = *(int32_t *)&lpAddress->f278736[8];
@@ -14869,24 +14825,16 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
               v29 = v24->f278736[0];
               v30 = *(uint32_t *)(v29 - 14);
               v31 = *(uint32_t *)(v29 - 10);
-              *(uint32_t *)(v29 + 18) = *(uint32_t *)(v29 - 18);
+              ((P2Ctx *)v29)[1] = ((P2Ctx *)v29)[-1];
               v32 = *(uint32_t *)(v29 - 6);
-              *(uint32_t *)(v29 + 22) = v30;
               LOWORD(v30) = *(uint16_t *)(v29 - 2);
-              *(uint32_t *)(v29 + 26) = v31;
-              *(uint32_t *)(v29 + 30) = v32;
-              *(uint16_t *)(v29 + 34) = v30;
               v33 = (uint8_t *)(v24->f278736[0]);
               ((P2Ctx *)v33)[2] = ((P2Ctx *)v33)[-1];
               v37 = v24->f278736[0];
               v38 = *(uint32_t *)(v37 - 10);
               v39 = *(uint32_t *)(v37 - 6);
-              *(uint32_t *)(v37 + 54) = *(uint32_t *)(v37 - 18);
-              *(uint32_t *)(v37 + 58) = *(uint32_t *)(v37 - 14);
+              ((P2Ctx *)v37)[3] = ((P2Ctx *)v37)[-1];
               LOWORD(v33) = *(uint16_t *)(v37 - 2);
-              *(uint32_t *)(v37 + 62) = v38;
-              *(uint32_t *)(v37 + 66) = v39;
-              *(uint16_t *)(v37 + 70) = (uint16_t)(uintptr_t)v33;
               v40 = (P2Ctx *)(uint8_t *)(v24->f278736[0]);
               v40[4] = v40[-1];
               v45 = v164;
@@ -14973,22 +14921,14 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2)
           v66 = v55->f278736[0];
           v67 = *(uint32_t *)(v66 - 32);
           v68 = *(uint32_t *)(v66 - 28);
-          *(uint32_t *)(v66 + 18) = *(uint32_t *)(v66 - 36);
+          ((P2Ctx *)v66)[1] = ((P2Ctx *)v66)[-2];
           v69 = *(uint32_t *)(v66 - 24);
-          *(uint32_t *)(v66 + 22) = v67;
-          *(uint32_t *)(v66 + 26) = v68;
-          *(uint32_t *)(v66 + 30) = v69;
-          *(uint16_t *)(v66 + 34) = *(uint16_t *)(v66 - 20);
           v70 = (P2Ctx *)(uint8_t *)(v55->f278736[0]);
           v70[2] = v70[-3];
           v74 = v55->f278736[0];
           v75 = *(uint32_t *)(v74 - 64);
           v76 = *(uint32_t *)(v74 - 60);
-          *(uint32_t *)(v74 + 54) = *(uint32_t *)(v74 - 72);
-          *(uint32_t *)(v74 + 58) = *(uint32_t *)(v74 - 68);
-          *(uint32_t *)(v74 + 62) = v75;
-          *(uint32_t *)(v74 + 66) = v76;
-          *(uint16_t *)(v74 + 70) = *(uint16_t *)(v74 - 56);
+          ((P2Ctx *)v74)[3] = ((P2Ctx *)v74)[-4];
           v77 = (P2Ctx *)(uint8_t *)(v55->f278736[0]);
           v77[4] = v77[-5];
           v80 = v55->f278736[8];
