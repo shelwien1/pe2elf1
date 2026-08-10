@@ -229,7 +229,6 @@ static PlaneDesc plane_desc[5];
 // Each subscript that steps a whole record -- `[16 * p]` on a byte field,
 // `[4 * p]` on a dword one -- still means what it meant, and reads record p+1.
 static int32_t (&__n256_2)[20] = *(int32_t (*)[20])((uint8_t *)plane_desc + 0);
-static int32_t (&__n512)[19] = *(int32_t (*)[19])((uint8_t *)plane_desc + 4);
 static int32_t &plane_count = *(int32_t *)&plane_desc[0].w8;
 static int32_t (&near_lossless_max)[17] = *(int32_t (*)[17])((uint8_t *)plane_desc + 12);
 static uint8_t (&__byte_44339C)[64] = *(uint8_t (*)[64])((uint8_t *)plane_desc + 16);
@@ -239,9 +238,7 @@ static uint8_t (&__byte_44339F)[61] = *(uint8_t (*)[61])((uint8_t *)plane_desc +
 static int32_t (&__dword_4433A0)[15] = *(int32_t (*)[15])((uint8_t *)plane_desc + 20);
 static int32_t (&__dword_4433A4)[14] = *(int32_t (*)[14])((uint8_t *)plane_desc + 24);
 static int32_t (&__dword_4433A8)[13] = *(int32_t (*)[13])((uint8_t *)plane_desc + 28);
-static uint8_t (&__byte_4433AC)[48] = *(uint8_t (*)[48])((uint8_t *)plane_desc + 32);
 static uint8_t (&__byte_4433AD)[47] = *(uint8_t (*)[47])((uint8_t *)plane_desc + 33);
-static uint8_t (&__byte_4433BD)[31] = *(uint8_t (*)[31])((uint8_t *)plane_desc + 49);
 static char &__n3_1 = *(char *)&plane_desc[4].predictor;
 static char &__n3_0 = *(char *)&plane_desc[4].src_plane;
 static char &__byte_4433CF = *(char *)&plane_desc[4].b3;
