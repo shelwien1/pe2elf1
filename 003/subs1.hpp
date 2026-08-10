@@ -3982,13 +3982,13 @@ void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
           __alt_p1_context((AltP1Block *)(uint8_t **)_this, (uint32_t *)nullptr, (uint32_t *)0);
           v33 = *(uint8_t *)&_this->f8;
           v34 = (uint8_t)(*a2 - v33);
-          v35 = *(*((uint8_t *)_this + (v34 + 984)) + _this->f1496) + v33;
-          n5 = *((uint8_t *)_this + (v34 + 984));
+          v35 = *(_this->f984[v34] + _this->f1496) + v33;
+          n5 = _this->f984[v34];
           n16 = (uint8_t)*v32 - (uint8_t)(v35 + *v32 - *a2);
           if ( n16 < -16 || n16 > 16 )
           {
             *v32 = *a2;
-            n5 = *((uint8_t *)_this + (v34 + 1240));
+            n5 = _this->f1240[v34];
           }
           else
           {
@@ -5909,7 +5909,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src)
           v61 = __alt_p1_decode_symbol(&((P1Count *)v59)[v59->f12[0] + 237].total, v60, v59->f12[1]);
           v62 = *(uint32_t *)&v59->f8;
           v63 = *(uint8_t **)&v59->f12[46];
-          v64 = (uint8_t)(v62 + *((uint8_t *)v59 + (v61 + 1496)));
+          v64 = (uint8_t)(v62 + v59->f1496[v61]);
           v104 = v64;
           *v63 = v64;
           *(uint8_t *)(v59->f12[46] + 1) = abs32(v64 - v62);
@@ -13834,8 +13834,8 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
     while ( 1 )
     {
       v13 = *(int16_t *)((uintptr_t)v11 - 18) >> 4;
-      lpAddress->f278708 = lpAddress->f278704 + *(uint32_t *)((uint8_t *)lpAddress + (4 * v13 + 278960));
-      lpAddress->f278712 = lpAddress->f278704 + *(uint32_t *)((uint8_t *)lpAddress + (4 * v13 + 278944));
+      lpAddress->f278708 = lpAddress->f278704 + (*(uint32_t *)&lpAddress->f278944[v13 + 4]);
+      lpAddress->f278712 = lpAddress->f278704 + (*(uint32_t *)&lpAddress->f278944[v13]);
       v14 = (uint8_t)((*(uint16_t *)(lpAddress->f278736[0] - 18) >> 4)
                             + *(uint8_t *)(__alt_p2_decode_symbol((uint16_t *)((uintptr_t)lpAddress
                                                               + 8
@@ -14065,7 +14065,7 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
         {
           v92 = __alt_p2_context((AltP2Block *)lpAddress, (AltP2Block *)nullptr, (AltP2Block *)nullptr);
           v93 = __alt_p2_decode_symbol((uint16_t *)((uintptr_t)lpAddress + 8 * lpAddress->f278704 + 940072), (uint8_t *)lpAddress + 278708);
-          v94 = (uint8_t)(v92 + *((uint8_t *)lpAddress + (v93 + 280496)));
+          v94 = (uint8_t)(v92 + (*(uint8_t *)&lpAddress->f280496[v93]));
           v97[j] = v94;
           __alt_p2_model(lpAddress, v94, v93, v94 - v92);
           a5 = &v97[j + 1];

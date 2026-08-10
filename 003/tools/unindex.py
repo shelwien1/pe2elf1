@@ -41,8 +41,8 @@ IDX = re.compile(r'(&?)\(\(\s*(\w+)\s*\*\)\s*(\w+)\)\[([^\]]*?)\+\s*(\d+)\]')
 # in it.  The constant places the member and the scale converts the variable
 # into that member's elements, which only works when the scale is a whole
 # number of them.
-BYTE = re.compile(r'\*(?:\((\w+) \*\))?\(\(uint8_t \*\)(\w+) \+ '
-                  r'(?:(\d+) \* )?(?:(\w+\+*) \+ )?(\d+)\)')
+BYTE = re.compile(r'\*(?:\((\w+) \*\))?\(\(uint8_t \*\)(\w+) \+ \(?'
+                  r'(?:(\d+) \* )?(?:(\w+\+*) \+ )?(\d+)\)\)?')
 # `(T *)p + K` only when `K` is the whole offset: `(int32_t *)_this + 2 * v8 +
 # 438` has the same prefix and a different meaning, and taking the 2 for the
 # offset there is a stride error the compiler happens to catch.
