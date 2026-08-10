@@ -551,11 +551,15 @@ five are the same test against one pair of numbers:
 
 | group | what it classifies |
 | --- | --- |
-| 0 | a weighted sum of the neighbourhood's `mag` — nine records, the one behind weighted 8 — against the fixed 272 and 1840 |
-| 1 | a prediction error, against the band |
+| 0 | `n1840`, against the fixed 272 and 1840 — a running value plus `p2_pred` of the counter `bank_ctx[4]` selects, so a predicted level rather than a difference |
+| 1 | a difference, against the band |
 | 2 | the difference from the previous record's `lane[0]`, against the band |
 | 3 | a third difference, against the band |
 | 4 | the previous record's stored `sign` (§9.2) — already a digit, taken as one |
+
+A weighted sum of the neighbourhood's `mag` — nine records, the one behind
+weighted 8 — is computed a few lines above these, but it feeds `n960` and the
+row arithmetic, not a selector.
 
 The band is `band_lo .. band_hi`, which `alt_p2_alloc` sets to
 −(16q + 7) .. 16q + 8 for `q = plane_desc[0].w12`, and the test is

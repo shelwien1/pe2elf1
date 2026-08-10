@@ -858,10 +858,9 @@ Stated plainly, so the rest can be trusted:
   base-3 digit of the next context. The model writes a digit into the plane and
   reads it back as a digit.
 
-  And the five digits themselves are readable: group 0 buckets a weighted sum
-  of the neighbourhood's magnitudes against two fixed thresholds, groups 1–3
-  each classify a different prediction difference against one adaptive band,
-  and group 4 is the stored sign. The band is ±(16q + 7..8) and the counter
+  And the five digits themselves are readable: group 0 buckets a predicted
+  level against two fixed thresholds, groups 1–3 each classify a different
+  difference against one adaptive band, and group 4 is the stored sign. The band is ±(16q + 7..8) and the counter
   dead zone is ±(4q + 1) for the same `q` — one tolerance at two scales.
   `algorithm_v2.md` §9.1 has the table.
 
