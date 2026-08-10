@@ -11,31 +11,23 @@ what Hex-Rays called it:
     int32_t (&v72)[1024] = __frame.v72;
     int32_t &v57 = (int32_t &)__frame.list[2];
 
-The declaration goes and the body says the member.  Two passes, because the
-second is only mechanical after the first:
+The declaration goes and the body says the member: `v72` becomes `__frame.v72`,
+and an alias that carries a cast becomes the parenthesised cast, because `->`
+and `[]` bind tighter than a cast-expression and a bare substitution would
+change what the line means.
 
-**A. The member takes the alias's type.**  A cast in the alias -- `(int32_t &)`
-over a `uint8_t[4]` member -- exists because round three declared the member as
-storage and the body reads a type.  Where a member is a scalar with exactly one
-alias and the two are the same width, the member becomes that type and the cast
-has nothing left to do.  Width is the rule and the `static_assert` on
-`sizeof(__frame)` is the check: a retype that moves a byte fails the build.
+A rename is answerable to the compiler rather than to the gate, which is what
+makes 1828 sites in one pass reasonable: a type that stops matching is an error.
 
-**B. The alias becomes its right-hand side.**  `v72` is `__frame.v72`; an alias
-that still carries a cast becomes the parenthesised cast, because `->` and `[]`
-bind tighter than `*` and a bare substitution would change what the line means.
-
-A rename is answerable to the compiler, so an arity or type that stops matching
-is an error rather than a moved stream -- but the gate runs anyway, because
-pass A changes declared types and §7's third hazard is that signedness is part
-of one.
+The casts this leaves are `unmemcast.py`'s: where every reader of a member
+agrees on one type of its width, the member can be that type instead.  That one
+goes a member at a time, because retyping is a semantic change and §7's list of
+what it can cost is three items long.
 """
-import collections
 import re
 import sys
 
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
-import merge                                                    # noqa: E402
 import shape                                                    # noqa: E402
 import structs                                                  # noqa: E402
 
@@ -67,51 +59,6 @@ def aliases(lines, a, b, close):
         mem = re.search(r'__frame\.(\w+(?:\[\d+\])?)', m.group(5))
         out.append((i, m.group(3), mem.group(1), m.group(2).strip(), m.group(5)))
     return out
-
-
-def align(ty):
-    """What i386 aligns this to: its width, capped at four."""
-    w = merge.width(ty)
-    return None if w is None else min(w, 4)
-
-
-def retype(lines, a, close, al):
-    """Pass A: a scalar member with one alias takes the alias's type.
-
-    Only where the member is already aligned for it.  `read_bmp`'s
-    `bmp_off_bits` is four bytes at offset 86, behind an `int16_t[5]`; making
-    it an `int32_t` pushes two bytes of padding in front and moves the whole
-    tail.  The `static_assert` catches that, but the offset says it first.
-    """
-    count = collections.Counter(x[2] for x in al)
-    members, off, at = {}, 0, {}
-    for i in range(a, close):
-        m = MEMBER.match(lines[i])
-        if not m:
-            continue
-        w = merge.width(m.group(2).strip())
-        if w is None:
-            return 0                          # a member this cannot size
-        al_ = align(m.group(2).strip())
-        off += (-off) % al_
-        if not m.group(3).startswith('_'):
-            members[m.group(3)] = (i, m.group(2).strip(), m.group(5))
-            at[m.group(3)] = off
-        off += w * int(m.group(5) or 1)
-    n = 0
-    for _, name, mem, ty, rhs in al:
-        if count[mem] != 1 or mem not in members or PLAIN.match(rhs):
-            continue
-        i, mty, mcount = members[mem]
-        w, wnew = merge.width(mty), merge.width(ty)
-        if w is None or wnew is None or w * int(mcount or 1) != wnew:
-            continue
-        if at[mem] % align(ty):
-            continue
-        ind = MEMBER.match(lines[i]).group(1)
-        lines[i] = '%s%s%s%s;' % (ind, ty, '' if ty.endswith('*') else ' ', mem)
-        n += 1
-    return n
 
 
 def fold(lines, a, b, al, keep):
@@ -152,9 +99,6 @@ def run(lines, want):
         al = aliases(lines, a, b, fr[1])
         if not al:
             continue
-        if '--no-retype' not in sys.argv:
-            total[0] += retype(lines, fr[0], fr[1], al)
-        al = aliases(lines, a, b, fr[1])            # types may have changed
         total[2] += fold(lines, a, b, al, fr)
         total[1] += len(al)
     return total
@@ -176,8 +120,8 @@ def main():
                 print('%-24s %3d aliases, %d carry a cast' % (nm.lstrip('_'), len(al), cast))
         return 0
 
-    retyped, folded, sites = run(lines, set(args))
-    print('%d members retyped, %d aliases folded, %d sites' % (retyped, folded, sites))
+    _, folded, sites = run(lines, set(args))
+    print('%d aliases folded, %d sites' % (folded, sites))
     open(path, 'w').write('\n'.join(lines))
     return 0
 
