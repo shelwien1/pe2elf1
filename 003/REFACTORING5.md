@@ -114,17 +114,22 @@ a fourth.
 already has 641 `uint8_t *` casts spelling the same address, so which one a
 site uses is not a distinction the code makes.
 
-The reason a wholesale retype is *safe* is worth measuring rather than
-asserting, because `char` is signed on this target and the two types differ the
-moment an element is read as a value:
+The reason a wholesale retype is *not* safe everywhere is worth measuring
+rather than asserting, because `char` is signed on this target and the two
+types differ the moment an element is read as a value:
 
-> **There are zero `*(char *)` dereferences in the file.** Every `char *` is
-> re-cast to a width before anything is read through it. 75 sites subscript a
-> `char *` local directly, and those are the ones to look at one at a time —
-> most are stores of a value the `uint8_t` type describes better than `char`
-> does.
+> **47 sites dereference a `char *`**, every one spelled `*((char *)x ...)`.
+> One of them is `else if ( (*((char *)&__frame.Buffera)) < 0 )` — a sign test,
+> which `uint8_t` makes dead. 75 more subscript a `char *` local directly, and
+> those are almost all stores.
 
-`-Wsign-conversion` fires 1578 times and this is a large part of it.
+*(An earlier draft of this section said there are **zero** such dereferences,
+from a regex that did not allow for the inner paren. The retype went ahead on
+that basis and cost `f05_200` its round trip; the gate caught it and a
+delta-debug over the sweep's 667 hunks found the line. Those 47 keep `char`.)*
+
+`-Wsign-conversion` fires 1578 times and the byte pointers are a large part of
+it.
 
 The exception is real and should stay: **`bmf.cpp` hands `char *` to the CRT.**
 `strcpy`, `strrchr`, `fopen`'s name, `printf`'s format — those are `char *`
@@ -541,7 +546,7 @@ model; §3.3's four functions are the p2 encoder and decoder;
 | the four warning families | `-Wconversion -Wsign-conversion -Wsign-compare -Wuseless-cast`, counted per `[-Wname]` tag |
 | type spellings in code | strip `//` first, then count — `char` inside a comment is not a type |
 | `char` by star count | `re.finditer(r'\bchar\b(\s*\**)')` and bucket on `count('*')`: 142 / 893 / 21 |
-| `*(char *)` dereferences | `grep -c '\*(char \*)'` — 0, which is why §2.2's retype is safe |
+| `char *` dereferences | `grep -oE '\*\(+\s*(const )?char \*\)'` — **47**, and the inner paren is why an earlier count said 0 |
 | whether `-(char)x & 31` is `(-x) & 31` | a four-line program over −100000…100000, not an argument |
 | whether `-Wuseless-cast` sees a `(uint8_t)` on a `uint8_t` | a four-line program; it does not |
 | what `-Wuseless-cast` does see | `sed -E "s/.*to type '([^']*)'.*/\1/"` over its output: all 43 are pointer casts |
