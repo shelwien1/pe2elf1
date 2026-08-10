@@ -725,16 +725,6 @@ struct P2Freq {
 };
 static_assert(sizeof(P2Freq) == 8, "P2Freq: four counters");
 
-// `alt_p2_model` reaches the table through a `uint16_t *` cursor at
-// `block + 8 * idx`, so record `idx + d` is at `cur[470036 + 4 * d + k]`:
-// 470036 * 2 is 940072, the table's own offset, which the compiler folded into
-// the index because the cursor already carried the 8 * idx.  The three
-// constants that appear are 470032, 470036 and 470040 -- records `idx - 1`,
-// `idx` and `idx + 1`, three adjacent, the way the p1 model updates three
-// adjacent nodes.
-static inline P2Freq *p2_freq_at(uint16_t *cur, int32_t d) {
-  return (P2Freq *)((uint8_t *)cur + 940072) + d;
-}
 
 // A counter's prediction: `w2` rounded and shifted right by its own rate.
 // `1 << ((rate + 31) & 31)` is the rounding half-step written the way MSVC
@@ -896,6 +886,14 @@ struct AltP2Block {
   // `alt_p2_encode_symbol` is handed `&freq[f278704]`, `f278704` being that
   // index, and `alt_p2_model` updates records `k - 1`, `k` and `k + 1` --
   // three adjacent, the way the p1 model does.
+  //
+  // `alt_p2_model` reached all of that through `uint16_t *` cursors at
+  // `block + 8 * k`, so the table's offset arrived folded into the index in
+  // whatever unit was to hand: 470036 as a `uint16_t` index, 235018 as a
+  // `uint32_t` one, 940072 written out.  The three cursor constants 470032,
+  // 470036 and 470040 are the three adjacent records.  Nothing spells it that
+  // way now -- the cursors are `P2Freq *` and the neighbours are `[-1]` and
+  // `[1]` -- which is why none of those numbers is left in the file.
   P2Freq freq[15552];   // +940072 .. +1064487
   uint8_t _pad3[8];   // +1064488 .. +1064495
 };
@@ -12173,9 +12171,11 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   // except the two shift counts at +-4, which are the low byte of the
   // neighbouring record; the byte offsets it carried were all even.
   uint16_t *n2;
-  uint16_t *n0xF0;
+  P2Freq *n0xF0;
+  // Two more things MSVC kept in the register `n0xF0` names.
+  int32_t hi_nibble, rec_idx;
   uint32_t n0x10_2;   // a record index in four regions ...
-  uint16_t *p2_rec;   // element units: every offset through it is even    // ... and a record address in the two below
+  P2Freq *p2_rec;
   // Two things in one slot, and both are read as numbers: the strip index
   // out of `f278708` or `f278712`, and later an address.  It is neither a
   // `uint16_t *` nor an index -- it is the register MSVC put both in.
@@ -12307,15 +12307,16 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
           v482, v483, v486, v487, v489, v490, v492, v493, v494, v497, v498, v500, v501, v503,
           v504;
   int64_t v10, v11, v12, v13, v14;
-  uint16_t *n0xF0_3;
-  uint16_t *n0xF0_2;
-  uint16_t *n0xF0_1;
-  uint16_t *n0xF0_5;
-  uint16_t *n0xF0_4;
-  uint16_t *v445;
-  uint16_t *v387;
-  // Cursors at `block + 8 * idx`; `p2_freq_at` is how they reach the table.
-  uint16_t *v7, *n0x10_3, *n0x10_4;
+  P2Freq *n0xF0_3;
+  P2Freq *n0xF0_2;
+  P2Freq *n0xF0_1;
+  P2Freq *n0xF0_4;
+  P2Freq *v445;
+  P2Freq *v387;
+  uint16_t *v7;
+  // Every one of these is a record: `alt_p2_model` walks the table by the
+  // context index and its two neighbours.
+  P2Freq *n0x10_3, *n0x10_4;
   // Records: the one the composed index selects, and its two neighbours.
   P2Freq *n2_2, *n2_3, *n2_4, *n2_5, *n2_6, *n2_7, *v408, *v411, *v420,
          *v428, *v436, *v444, *v452, *v456, *v457, *v463, *v466, *v474,
@@ -13110,12 +13111,12 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   v385 = (AltP2Block *)(v578);
   v386 = v578->f278704;
   v578->cursor[0] += 18;
-  v387 = ((uint16_t *)&((uint32_t *)v385)[2 * v386]);
+  v387 = (&v385->freq[v386]);
   v385->cursor[1] += 18;
   v385->cursor[2] += 18;
   v385->cursor[3] += 18;
   v385->cursor[4] += 18;
-  n0x10 = p2_freq_at(v387, 0)->c[0];
+  n0x10 = v387[0].c[0];
   if ( n0x10 > 0x10 )
   {
     v511 = a4 & 1;
@@ -13123,12 +13124,12 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
     v508 = (&v385->f278708)[a4 & 1];
     if ( n15 < 15 )
     {
-      v391 = p2_freq_at(v387, 1)->c[1];
-      v392 = p2_freq_at(v387, 1)->c[2];
-      n2 = (uint16_t *)p2_freq_at(v387, 1);
-      if ( p2_freq_at(v387, 1)->c[3] + v392 + v391 > 29696 )
-        __rescale_three_way(p2_freq_at(v387, 1));
-      v393 = (10 * (uint32_t)p2_freq_at(v387, 1)->c[0]) >> 4;
+      v391 = v387[1].c[1];
+      v392 = v387[1].c[2];
+      n2 = (uint16_t *)&v387[1];
+      if ( v387[1].c[3] + v392 + v391 > 29696 )
+        __rescale_three_way(&v387[1]);
+      v393 = (10 * (uint32_t)v387[1].c[0]) >> 4;
       if ( a4 )
       {
         n2[3 - v511] += v393;
@@ -13156,13 +13157,13 @@ LABEL_37:
               + v385->ctx_w[2].w[2 - v399]
               + v385->ctx_w[1].w[2 - v397]
               + v400;
-        n0x10_3 = (uint16_t *)&((uint32_t *)v385)[2 * n0x10];
+        n0x10_3 = &v385->freq[n0x10];
         p2_rec = n0x10_3;
         if ( n15 < 15 )
         {
-          n2_2 = p2_freq_at(n0x10_3, 1);
-          v403 = p2_freq_at(n0x10_3, 1)->c[1];
-          v404 = p2_freq_at(n0x10_3, 1)->c[2];
+          n2_2 = &n0x10_3[1];
+          v403 = n0x10_3[1].c[1];
+          v404 = n0x10_3[1].c[2];
           n2 = (uint16_t *)n2_2;
           if ( n2_2->c[3] + v404 + v403 > 29696 )
           {
@@ -13170,7 +13171,7 @@ LABEL_37:
             __rescale_three_way(n2_2);
             n0x10 = n0x10_1;
           }
-          v405 = p2_freq_at(p2_rec, 1)->c[0] & 0xFFFC;
+          v405 = p2_rec[1].c[0] & 0xFFFC;
           n2[v510 + 1] += v405 >> 2;
           if ( n15 <= 0 )
             goto LABEL_48;
@@ -13178,42 +13179,44 @@ LABEL_37:
         else
         {
         }
-        v406 = p2_freq_at(p2_rec, -1)->c[1];
-        v407 = p2_freq_at(p2_rec, -1)->c[2];
-        n2 = (uint16_t *)p2_freq_at(p2_rec, -1);
-        if ( p2_freq_at(p2_rec, -1)->c[3] + v407 + v406 > 29696 )
+        v406 = p2_rec[-1].c[1];
+        v407 = p2_rec[-1].c[2];
+        n2 = (uint16_t *)&p2_rec[-1];
+        if ( p2_rec[-1].c[3] + v407 + v406 > 29696 )
         {
           n0x10_1 = n0x10;
-          __rescale_three_way(p2_freq_at(p2_rec, -1));
+          __rescale_three_way(&p2_rec[-1]);
           n0x10 = n0x10_1;
         }
-        n2[v510 + 1] += (uint16_t)(p2_freq_at(p2_rec, -1)->c[0] & 0xFFFC) >> 2;
+        n2[v510 + 1] += (uint16_t)(p2_rec[-1].c[0] & 0xFFFC) >> 2;
 LABEL_48:
         if ( a4 )
         {
           n2_half = (a4 - 1) >> 1;
-          n0xF0 = (uint16_t *)((uint8_t)v508 & 0xF0);
-          if ( (uint32_t)n0xF0 >= 0xF0
+          // Not the record: `n0xF0` is the high nibble here, and a record
+          // address from the next assignment on.  MSVC gave both one register.
+          hi_nibble = (uint8_t)v508 & 0xF0;
+          if ( hi_nibble >= 0xF0
             || (n0x10_1 = n0x10,
                 __update_binary_pair(model_strip((uint32_t)v508 + 16), n2_half),
                 n0x10 = n0x10_1,
-                (int32_t)n0xF0 > 0) )
+                hi_nibble > 0) )
           {
             n0x10_1 = n0x10;
             __update_binary_pair(model_strip((uint32_t)v508 - 16), n2_half);
             n0x10 = n0x10_1;
           }
         }
-        v408 = p2_freq_at(p2_rec, 0);
-        if ( p2_freq_at(p2_rec, 0)->c[3]
-           + p2_freq_at(p2_rec, 0)->c[2]
-           + p2_freq_at(p2_rec, 0)->c[1] > 29696 )
+        v408 = &p2_rec[0];
+        if ( p2_rec[0].c[3]
+           + p2_rec[0].c[2]
+           + p2_rec[0].c[1] > 29696 )
         {
           n0x10_1 = n0x10;
-          __rescale_three_way(p2_freq_at(p2_rec, 0));
+          __rescale_three_way(&p2_rec[0]);
           n0x10 = n0x10_1;
         }
-        v408->c[v510 + 1] += (6 * (uint32_t)p2_freq_at(p2_rec, 0)->c[0]) >> 4;
+        v408->c[v510 + 1] += (6 * (uint32_t)p2_rec[0].c[0]) >> 4;
         if ( !v385->f278728 || v385->freq[v385->f278704].c[0] > 0x100u )
         {
           v409 = 2 - v511;
@@ -13235,10 +13238,10 @@ LABEL_48:
             }
             v491->c[v510 + 1] += (uint16_t)(v491->c[0] & 0xFFFC) >> 2;
             v494 = v385->f278704 - v385->ctx_w[0].w[1];
-            n0xF0_1 = ((uint16_t *)&((uint32_t *)v385)[2 * v494 + 2 * v385->ctx_w[0].w[0]]);
+            n0xF0_1 = (&v385->freq[v494 + v385->ctx_w[0].w[0]]);
             n0x10_2 = v385->ctx_w[0].w[2] + v494;
             n0xF0 = n0xF0_1;
-            n2_3 = p2_freq_at(n0xF0_1, 0);
+            n2_3 = &n0xF0_1[0];
             v497 = n2_3->c[2] + n2_3->c[1];
             v498 = n2_3->c[3];
             n2 = (uint16_t *)n2_3;
@@ -13248,20 +13251,20 @@ LABEL_48:
               __rescale_three_way(n2_3);
               n0x10 = n0x10_1;
             }
-            v499 = 3 * p2_freq_at(n0xF0, 0)->c[0];
+            v499 = 3 * n0xF0[0].c[0];
             n2[v511 + 1] += v499 >> 4;
             if ( n15 >= 15 )
               goto LABEL_180;
-            v500 = p2_freq_at(n0xF0, 1)->c[1];
-            v501 = p2_freq_at(n0xF0, 1)->c[2];
-            n2 = (uint16_t *)p2_freq_at(n0xF0, 1);
-            if ( p2_freq_at(n0xF0, 1)->c[3] + v501 + v500 > 29696 )
+            v500 = n0xF0[1].c[1];
+            v501 = n0xF0[1].c[2];
+            n2 = (uint16_t *)&n0xF0[1];
+            if ( n0xF0[1].c[3] + v501 + v500 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(p2_freq_at(n0xF0, 1));
+              __rescale_three_way(&n0xF0[1]);
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (uint16_t)(p2_freq_at(n0xF0, 1)->c[0] & 0xFFFC) >> 2;
+            n2[v511 + 1] += (uint16_t)(n0xF0[1].c[0] & 0xFFFC) >> 2;
             v502 = &v385->freq[n0x10_2 + 1];
             if ( v385->freq[n0x10_2 + 1].c[3]
                + v385->freq[n0x10_2 + 1].c[2]
@@ -13275,16 +13278,16 @@ LABEL_48:
             if ( n15 > 2 )
             {
 LABEL_180:
-              v503 = p2_freq_at(n0xF0, -1)->c[1];
-              v504 = p2_freq_at(n0xF0, -1)->c[2];
-              n2 = (uint16_t *)p2_freq_at(n0xF0, -1);
-              if ( p2_freq_at(n0xF0, -1)->c[3] + v504 + v503 > 29696 )
+              v503 = n0xF0[-1].c[1];
+              v504 = n0xF0[-1].c[2];
+              n2 = (uint16_t *)&n0xF0[-1];
+              if ( n0xF0[-1].c[3] + v504 + v503 > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(p2_freq_at(n0xF0, -1));
+                __rescale_three_way(&n0xF0[-1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)p2_freq_at(n0xF0, -1)->c[0]) >> 4;
+              n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].c[0]) >> 4;
             }
           }
           else
@@ -13299,45 +13302,45 @@ LABEL_180:
               n0x10 = n0x10_1;
             }
             v411->c[v510 + 1] += (7 * (uint32_t)v411->c[0]) >> 4;
-            n0xF0 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->ctx_w[0].w[1] + 2 * (v385->f278704 - v385->ctx_w[0].w[v385->ctx_w[0].sel])]));
-            v412 = p2_freq_at(n0xF0, 0)->c[1];
-            v413 = p2_freq_at(n0xF0, 0)->c[2];
-            n2 = (uint16_t *)p2_freq_at(n0xF0, 0);
-            if ( p2_freq_at(n0xF0, 0)->c[3] + v413 + v412 > 29696 )
+            n0xF0 = ((&v385->freq[v385->ctx_w[0].w[1] + (v385->f278704 - v385->ctx_w[0].w[v385->ctx_w[0].sel])]));
+            v412 = n0xF0[0].c[1];
+            v413 = n0xF0[0].c[2];
+            n2 = (uint16_t *)&n0xF0[0];
+            if ( n0xF0[0].c[3] + v413 + v412 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(p2_freq_at(n0xF0, 0));
+              __rescale_three_way(&n0xF0[0]);
               n0x10 = n0x10_1;
             }
-            v414 = 7 * p2_freq_at(n0xF0, 0)->c[0];
+            v414 = 7 * n0xF0[0].c[0];
             n2[v511 + 1] += v414 >> 4;
             if ( n15 >= 15 )
               goto LABEL_67;
-            v415 = p2_freq_at(n0xF0, 1)->c[1];
-            v416 = p2_freq_at(n0xF0, 1)->c[2];
-            n2 = (uint16_t *)p2_freq_at(n0xF0, 1);
-            if ( p2_freq_at(n0xF0, 1)->c[3] + v416 + v415 > 29696 )
+            v415 = n0xF0[1].c[1];
+            v416 = n0xF0[1].c[2];
+            n2 = (uint16_t *)&n0xF0[1];
+            if ( n0xF0[1].c[3] + v416 + v415 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(p2_freq_at(n0xF0, 1));
+              __rescale_three_way(&n0xF0[1]);
               n0x10 = n0x10_1;
             }
             n0x10_1 = n0x10;
-            n2[v511 + 1] = n2[v511 + 1] + ((5 * (uint32_t)p2_freq_at(n0xF0, 1)->c[0]) >> 4);
+            n2[v511 + 1] = n2[v511 + 1] + ((5 * (uint32_t)n0xF0[1].c[0]) >> 4);
             n0x10 = n0x10_1;
             if ( n15 > 0 )
             {
 LABEL_67:
-              v417 = p2_freq_at(n0xF0, -1)->c[1];
-              v418 = p2_freq_at(n0xF0, -1)->c[2];
-              n2 = (uint16_t *)p2_freq_at(n0xF0, -1);
-              if ( p2_freq_at(n0xF0, -1)->c[3] + v418 + v417 > 29696 )
+              v417 = n0xF0[-1].c[1];
+              v418 = n0xF0[-1].c[2];
+              n2 = (uint16_t *)&n0xF0[-1];
+              if ( n0xF0[-1].c[3] + v418 + v417 > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(p2_freq_at(n0xF0, -1));
+                __rescale_three_way(&n0xF0[-1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)p2_freq_at(n0xF0, -1)->c[0]) >> 4;
+              n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].c[0]) >> 4;
             }
           }
           v419 = v385->ctx_w[1].sel;
@@ -13355,29 +13358,29 @@ LABEL_67:
             }
             n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
             v483 = v385->f278704 - v385->ctx_w[1].w[1];
-            n0xF0_2 = ((uint16_t *)&((uint32_t *)v385)[2 * v483 + 2 * v385->ctx_w[1].w[0]]);
+            n0xF0_2 = (&v385->freq[v483 + v385->ctx_w[1].w[0]]);
             n0x10_2 = v385->ctx_w[1].w[2] + v483;
             n0xF0 = n0xF0_2;
-            v485 = p2_freq_at(n0xF0_2, 0);
+            v485 = &n0xF0_2[0];
             if ( v485->c[3] + v485->c[2] + v485->c[1] > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way(v485);
               n0x10 = n0x10_1;
             }
-            v485->c[v511 + 1] += (3 * (uint32_t)p2_freq_at(n0xF0, 0)->c[0]) >> 4;
+            v485->c[v511 + 1] += (3 * (uint32_t)n0xF0[0].c[0]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_167;
-            v486 = p2_freq_at(n0xF0, 1)->c[1];
-            v487 = p2_freq_at(n0xF0, 1)->c[2];
-            n2 = (uint16_t *)p2_freq_at(n0xF0, 1);
-            if ( p2_freq_at(n0xF0, 1)->c[3] + v487 + v486 > 29696 )
+            v486 = n0xF0[1].c[1];
+            v487 = n0xF0[1].c[2];
+            n2 = (uint16_t *)&n0xF0[1];
+            if ( n0xF0[1].c[3] + v487 + v486 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(p2_freq_at(n0xF0, 1));
+              __rescale_three_way(&n0xF0[1]);
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (uint16_t)(p2_freq_at(n0xF0, 1)->c[0] & 0xFFFC) >> 2;
+            n2[v511 + 1] += (uint16_t)(n0xF0[1].c[0] & 0xFFFC) >> 2;
             v488 = &v385->freq[n0x10_2 + 1];
             if ( v385->freq[n0x10_2 + 1].c[3]
                + v385->freq[n0x10_2 + 1].c[2]
@@ -13391,16 +13394,16 @@ LABEL_67:
             if ( n15 > 2 )
             {
 LABEL_167:
-              v489 = p2_freq_at(n0xF0, -1)->c[1];
-              v490 = p2_freq_at(n0xF0, -1)->c[2];
-              n2 = (uint16_t *)p2_freq_at(n0xF0, -1);
-              if ( p2_freq_at(n0xF0, -1)->c[3] + v490 + v489 > 29696 )
+              v489 = n0xF0[-1].c[1];
+              v490 = n0xF0[-1].c[2];
+              n2 = (uint16_t *)&n0xF0[-1];
+              if ( n0xF0[-1].c[3] + v490 + v489 > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(p2_freq_at(n0xF0, -1));
+                __rescale_three_way(&n0xF0[-1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)p2_freq_at(n0xF0, -1)->c[0]) >> 4;
+              n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].c[0]) >> 4;
             }
           }
           else
@@ -13415,42 +13418,42 @@ LABEL_167:
               n0x10 = n0x10_1;
             }
             v420->c[v510 + 1] += (7 * (uint32_t)v420->c[0]) >> 4;
-            n0xF0 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->ctx_w[1].w[1] + 2 * (v385->f278704 - v385->ctx_w[1].w[v385->ctx_w[1].sel])]));
-            v421 = p2_freq_at(n0xF0, 0)->c[1];
-            v422 = p2_freq_at(n0xF0, 0)->c[2];
-            n2 = (uint16_t *)p2_freq_at(n0xF0, 0);
-            if ( p2_freq_at(n0xF0, 0)->c[3] + v422 + v421 > 29696 )
+            n0xF0 = ((&v385->freq[v385->ctx_w[1].w[1] + (v385->f278704 - v385->ctx_w[1].w[v385->ctx_w[1].sel])]));
+            v421 = n0xF0[0].c[1];
+            v422 = n0xF0[0].c[2];
+            n2 = (uint16_t *)&n0xF0[0];
+            if ( n0xF0[0].c[3] + v422 + v421 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(p2_freq_at(n0xF0, 0));
+              __rescale_three_way(&n0xF0[0]);
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (7 * (uint32_t)p2_freq_at(n0xF0, 0)->c[0]) >> 4;
+            n2[v511 + 1] += (7 * (uint32_t)n0xF0[0].c[0]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_79;
-            v423 = p2_freq_at(n0xF0, 1)->c[1];
-            v424 = p2_freq_at(n0xF0, 1)->c[2];
-            n2 = (uint16_t *)p2_freq_at(n0xF0, 1);
-            if ( p2_freq_at(n0xF0, 1)->c[3] + v424 + v423 > 29696 )
+            v423 = n0xF0[1].c[1];
+            v424 = n0xF0[1].c[2];
+            n2 = (uint16_t *)&n0xF0[1];
+            if ( n0xF0[1].c[3] + v424 + v423 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(p2_freq_at(n0xF0, 1));
+              __rescale_three_way(&n0xF0[1]);
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (5 * (uint32_t)p2_freq_at(n0xF0, 1)->c[0]) >> 4;
+            n2[v511 + 1] += (5 * (uint32_t)n0xF0[1].c[0]) >> 4;
             if ( n15 > 0 )
             {
 LABEL_79:
-              v425 = p2_freq_at(n0xF0, -1)->c[1];
-              v426 = p2_freq_at(n0xF0, -1)->c[2];
-              n2 = (uint16_t *)p2_freq_at(n0xF0, -1);
-              if ( p2_freq_at(n0xF0, -1)->c[3] + v426 + v425 > 29696 )
+              v425 = n0xF0[-1].c[1];
+              v426 = n0xF0[-1].c[2];
+              n2 = (uint16_t *)&n0xF0[-1];
+              if ( n0xF0[-1].c[3] + v426 + v425 > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(p2_freq_at(n0xF0, -1));
+                __rescale_three_way(&n0xF0[-1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)p2_freq_at(n0xF0, -1)->c[0]) >> 4;
+              n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].c[0]) >> 4;
             }
           }
           v427 = v385->ctx_w[2].sel;
@@ -13468,29 +13471,29 @@ LABEL_79:
             }
             n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
             v472 = v385->f278704 - v385->ctx_w[2].w[1];
-            n0xF0_3 = ((uint16_t *)&((uint32_t *)v385)[2 * v472 + 2 * v385->ctx_w[2].w[0]]);
+            n0xF0_3 = (&v385->freq[v472 + v385->ctx_w[2].w[0]]);
             n0x10_2 = v385->ctx_w[2].w[2] + v472;
             n0xF0 = n0xF0_3;
-            v474 = p2_freq_at(n0xF0_3, 0);
+            v474 = &n0xF0_3[0];
             if ( v474->c[3] + v474->c[2] + v474->c[1] > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way(v474);
               n0x10 = n0x10_1;
             }
-            v474->c[v511 + 1] += (3 * (uint32_t)p2_freq_at(n0xF0, 0)->c[0]) >> 4;
+            v474->c[v511 + 1] += (3 * (uint32_t)n0xF0[0].c[0]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_154;
-            v475 = p2_freq_at(n0xF0, 1)->c[1];
-            v476 = p2_freq_at(n0xF0, 1)->c[2];
-            n2 = (uint16_t *)p2_freq_at(n0xF0, 1);
-            if ( p2_freq_at(n0xF0, 1)->c[3] + v476 + v475 > 29696 )
+            v475 = n0xF0[1].c[1];
+            v476 = n0xF0[1].c[2];
+            n2 = (uint16_t *)&n0xF0[1];
+            if ( n0xF0[1].c[3] + v476 + v475 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(p2_freq_at(n0xF0, 1));
+              __rescale_three_way(&n0xF0[1]);
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (uint16_t)(p2_freq_at(n0xF0, 1)->c[0] & 0xFFFC) >> 2;
+            n2[v511 + 1] += (uint16_t)(n0xF0[1].c[0] & 0xFFFC) >> 2;
             v477 = &v385->freq[n0x10_2 + 1];
             if ( v385->freq[n0x10_2 + 1].c[3]
                + v385->freq[n0x10_2 + 1].c[2]
@@ -13504,16 +13507,16 @@ LABEL_79:
             if ( n15 > 2 )
             {
 LABEL_154:
-              v478 = p2_freq_at(n0xF0, -1)->c[1];
-              v479 = p2_freq_at(n0xF0, -1)->c[2];
-              n2 = (uint16_t *)p2_freq_at(n0xF0, -1);
-              if ( p2_freq_at(n0xF0, -1)->c[3] + v479 + v478 > 29696 )
+              v478 = n0xF0[-1].c[1];
+              v479 = n0xF0[-1].c[2];
+              n2 = (uint16_t *)&n0xF0[-1];
+              if ( n0xF0[-1].c[3] + v479 + v478 > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(p2_freq_at(n0xF0, -1));
+                __rescale_three_way(&n0xF0[-1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)p2_freq_at(n0xF0, -1)->c[0]) >> 4;
+              n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].c[0]) >> 4;
             }
           }
           else
@@ -13528,42 +13531,42 @@ LABEL_154:
               n0x10 = n0x10_1;
             }
             v428->c[v510 + 1] += (7 * (uint32_t)v428->c[0]) >> 4;
-            n0xF0 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->ctx_w[2].w[1] + 2 * (v385->f278704 - v385->ctx_w[2].w[v385->ctx_w[2].sel])]));
-            v429 = p2_freq_at(n0xF0, 0)->c[1];
-            v430 = p2_freq_at(n0xF0, 0)->c[2];
-            n2 = (uint16_t *)p2_freq_at(n0xF0, 0);
-            if ( p2_freq_at(n0xF0, 0)->c[3] + v430 + v429 > 29696 )
+            n0xF0 = ((&v385->freq[v385->ctx_w[2].w[1] + (v385->f278704 - v385->ctx_w[2].w[v385->ctx_w[2].sel])]));
+            v429 = n0xF0[0].c[1];
+            v430 = n0xF0[0].c[2];
+            n2 = (uint16_t *)&n0xF0[0];
+            if ( n0xF0[0].c[3] + v430 + v429 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(p2_freq_at(n0xF0, 0));
+              __rescale_three_way(&n0xF0[0]);
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (7 * (uint32_t)p2_freq_at(n0xF0, 0)->c[0]) >> 4;
+            n2[v511 + 1] += (7 * (uint32_t)n0xF0[0].c[0]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_91;
-            v431 = p2_freq_at(n0xF0, 1)->c[1];
-            v432 = p2_freq_at(n0xF0, 1)->c[2];
-            n2 = (uint16_t *)p2_freq_at(n0xF0, 1);
-            if ( p2_freq_at(n0xF0, 1)->c[3] + v432 + v431 > 29696 )
+            v431 = n0xF0[1].c[1];
+            v432 = n0xF0[1].c[2];
+            n2 = (uint16_t *)&n0xF0[1];
+            if ( n0xF0[1].c[3] + v432 + v431 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(p2_freq_at(n0xF0, 1));
+              __rescale_three_way(&n0xF0[1]);
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (5 * (uint32_t)p2_freq_at(n0xF0, 1)->c[0]) >> 4;
+            n2[v511 + 1] += (5 * (uint32_t)n0xF0[1].c[0]) >> 4;
             if ( n15 > 0 )
             {
 LABEL_91:
-              v433 = p2_freq_at(n0xF0, -1)->c[1];
-              v434 = p2_freq_at(n0xF0, -1)->c[2];
-              n2 = (uint16_t *)p2_freq_at(n0xF0, -1);
-              if ( p2_freq_at(n0xF0, -1)->c[3] + v434 + v433 > 29696 )
+              v433 = n0xF0[-1].c[1];
+              v434 = n0xF0[-1].c[2];
+              n2 = (uint16_t *)&n0xF0[-1];
+              if ( n0xF0[-1].c[3] + v434 + v433 > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(p2_freq_at(n0xF0, -1));
+                __rescale_three_way(&n0xF0[-1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)p2_freq_at(n0xF0, -1)->c[0]) >> 4;
+              n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].c[0]) >> 4;
             }
           }
           v435 = v385->ctx_w[3].sel;
@@ -13581,29 +13584,29 @@ LABEL_91:
             }
             n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
             v461 = v385->f278704 - v385->ctx_w[3].w[1];
-            n0xF0_4 = ((uint16_t *)&((uint32_t *)v385)[2 * v461 + 2 * v385->ctx_w[3].w[0]]);
+            n0xF0_4 = (&v385->freq[v461 + v385->ctx_w[3].w[0]]);
             n0x10_2 = v385->ctx_w[3].w[2] + v461;
             n0xF0 = n0xF0_4;
-            v463 = p2_freq_at(n0xF0_4, 0);
+            v463 = &n0xF0_4[0];
             if ( v463->c[3] + v463->c[2] + v463->c[1] > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way(v463);
               n0x10 = n0x10_1;
             }
-            v463->c[v511 + 1] += (3 * (uint32_t)p2_freq_at(n0xF0, 0)->c[0]) >> 4;
+            v463->c[v511 + 1] += (3 * (uint32_t)n0xF0[0].c[0]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_141;
-            v464 = p2_freq_at(n0xF0, 1)->c[1];
-            v465 = p2_freq_at(n0xF0, 1)->c[2];
-            n2 = (uint16_t *)p2_freq_at(n0xF0, 1);
-            if ( p2_freq_at(n0xF0, 1)->c[3] + v465 + v464 > 29696 )
+            v464 = n0xF0[1].c[1];
+            v465 = n0xF0[1].c[2];
+            n2 = (uint16_t *)&n0xF0[1];
+            if ( n0xF0[1].c[3] + v465 + v464 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(p2_freq_at(n0xF0, 1));
+              __rescale_three_way(&n0xF0[1]);
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (uint16_t)(p2_freq_at(n0xF0, 1)->c[0] & 0xFFFC) >> 2;
+            n2[v511 + 1] += (uint16_t)(n0xF0[1].c[0] & 0xFFFC) >> 2;
             v466 = &v385->freq[n0x10_2 + 1];
             if ( v385->freq[n0x10_2 + 1].c[3]
                + v385->freq[n0x10_2 + 1].c[2]
@@ -13617,16 +13620,16 @@ LABEL_91:
             if ( n15 > 2 )
             {
 LABEL_141:
-              v467 = p2_freq_at(n0xF0, -1)->c[1];
-              v468 = p2_freq_at(n0xF0, -1)->c[2];
-              n2 = (uint16_t *)p2_freq_at(n0xF0, -1);
-              if ( p2_freq_at(n0xF0, -1)->c[3] + v468 + v467 > 29696 )
+              v467 = n0xF0[-1].c[1];
+              v468 = n0xF0[-1].c[2];
+              n2 = (uint16_t *)&n0xF0[-1];
+              if ( n0xF0[-1].c[3] + v468 + v467 > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(p2_freq_at(n0xF0, -1));
+                __rescale_three_way(&n0xF0[-1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)p2_freq_at(n0xF0, -1)->c[0]) >> 4;
+              n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].c[0]) >> 4;
             }
           }
           else
@@ -13641,42 +13644,42 @@ LABEL_141:
               n0x10 = n0x10_1;
             }
             v436->c[v510 + 1] += (7 * (uint32_t)v436->c[0]) >> 4;
-            n0xF0 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->ctx_w[3].w[1] + 2 * (v385->f278704 - v385->ctx_w[3].w[v385->ctx_w[3].sel])]));
-            v437 = p2_freq_at(n0xF0, 0)->c[1];
-            v438 = p2_freq_at(n0xF0, 0)->c[2];
-            n2 = (uint16_t *)p2_freq_at(n0xF0, 0);
-            if ( p2_freq_at(n0xF0, 0)->c[3] + v438 + v437 > 29696 )
+            n0xF0 = ((&v385->freq[v385->ctx_w[3].w[1] + (v385->f278704 - v385->ctx_w[3].w[v385->ctx_w[3].sel])]));
+            v437 = n0xF0[0].c[1];
+            v438 = n0xF0[0].c[2];
+            n2 = (uint16_t *)&n0xF0[0];
+            if ( n0xF0[0].c[3] + v438 + v437 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(p2_freq_at(n0xF0, 0));
+              __rescale_three_way(&n0xF0[0]);
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (7 * (uint32_t)p2_freq_at(n0xF0, 0)->c[0]) >> 4;
+            n2[v511 + 1] += (7 * (uint32_t)n0xF0[0].c[0]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_103;
-            v439 = p2_freq_at(n0xF0, 1)->c[1];
-            v440 = p2_freq_at(n0xF0, 1)->c[2];
-            n2 = (uint16_t *)p2_freq_at(n0xF0, 1);
-            if ( p2_freq_at(n0xF0, 1)->c[3] + v440 + v439 > 29696 )
+            v439 = n0xF0[1].c[1];
+            v440 = n0xF0[1].c[2];
+            n2 = (uint16_t *)&n0xF0[1];
+            if ( n0xF0[1].c[3] + v440 + v439 > 29696 )
             {
               n0x10_1 = n0x10;
-              __rescale_three_way(p2_freq_at(n0xF0, 1));
+              __rescale_three_way(&n0xF0[1]);
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (5 * (uint32_t)p2_freq_at(n0xF0, 1)->c[0]) >> 4;
+            n2[v511 + 1] += (5 * (uint32_t)n0xF0[1].c[0]) >> 4;
             if ( n15 > 0 )
             {
 LABEL_103:
-              v441 = p2_freq_at(n0xF0, -1)->c[1];
-              v442 = p2_freq_at(n0xF0, -1)->c[2];
-              n2 = (uint16_t *)p2_freq_at(n0xF0, -1);
-              if ( p2_freq_at(n0xF0, -1)->c[3] + v442 + v441 > 29696 )
+              v441 = n0xF0[-1].c[1];
+              v442 = n0xF0[-1].c[2];
+              n2 = (uint16_t *)&n0xF0[-1];
+              if ( n0xF0[-1].c[3] + v442 + v441 > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(p2_freq_at(n0xF0, -1));
+                __rescale_three_way(&n0xF0[-1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)p2_freq_at(n0xF0, -1)->c[0]) >> 4;
+              n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].c[0]) >> 4;
             }
           }
           v443 = v385->ctx_w[4].sel;
@@ -13691,23 +13694,23 @@ LABEL_103:
               __rescale_three_way(n2_7);
             n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
             v450 = v385->f278704 - v385->ctx_w[4].w[1];
-            n0x10_4 = (uint16_t *)&((uint32_t *)v385)[2 * v450 + 2 * v385->ctx_w[4].w[0]];
-            n0xF0 = (((uint16_t *)(v385->ctx_w[4].w[2] + v450)));
+            n0x10_4 = &v385->freq[v450 + v385->ctx_w[4].w[0]];
+            // An index, not an address -- the same register again.
+            rec_idx = v385->ctx_w[4].w[2] + v450;
             p2_rec = n0x10_4;
-            v452 = p2_freq_at(n0x10_4, 0);
-            if ( p2_freq_at(n0x10_4, 0)->c[3] + p2_freq_at(n0x10_4, 0)->c[2] + p2_freq_at(n0x10_4, 0)->c[1] > 29696 )
+            v452 = &n0x10_4[0];
+            if ( n0x10_4[0].c[3] + n0x10_4[0].c[2] + n0x10_4[0].c[1] > 29696 )
               __rescale_three_way(v452);
-            v452->c[v511 + 1] += (3 * (uint32_t)p2_freq_at(p2_rec, 0)->c[0]) >> 4;
+            v452->c[v511 + 1] += (3 * (uint32_t)p2_rec[0].c[0]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_128;
-            v453 = p2_freq_at(p2_rec, 1)->c[3];
-            v454 = p2_freq_at(p2_rec, 1)->c[2] + p2_freq_at(p2_rec, 1)->c[1];
-            n2 = (uint16_t *)p2_freq_at(p2_rec, 1);
+            v453 = p2_rec[1].c[3];
+            v454 = p2_rec[1].c[2] + p2_rec[1].c[1];
+            n2 = (uint16_t *)&p2_rec[1];
             if ( v453 + v454 > 29696 )
-              __rescale_three_way(p2_freq_at(p2_rec, 1));
-            n0xF0_5 = (uint16_t *)(n0xF0);
-            n2[v511 + 1] += (uint16_t)(p2_freq_at(p2_rec, 1)->c[0] & 0xFFFC) >> 2;
-            v456 = &v385->freq[(uint32_t)n0xF0_5 + 1];
+              __rescale_three_way(&p2_rec[1]);
+            n2[v511 + 1] += (uint16_t)(p2_rec[1].c[0] & 0xFFFC) >> 2;
+            v456 = &v385->freq[rec_idx + 1];
             if ( v456->c[3] + v456->c[2] + v456->c[1] > 29696 )
               __rescale_three_way(v456);
             n0x10 = (v456->c[0] & 0xFFF8) >> 3;
@@ -13715,14 +13718,14 @@ LABEL_103:
             if ( n15 > 2 )
             {
 LABEL_128:
-              v457 = p2_freq_at(p2_rec, -1);
-              if ( p2_freq_at(p2_rec, -1)->c[3]
-                 + p2_freq_at(p2_rec, -1)->c[2]
-                 + p2_freq_at(p2_rec, -1)->c[1] > 29696 )
-                __rescale_three_way(p2_freq_at(p2_rec, -1));
+              v457 = &p2_rec[-1];
+              if ( p2_rec[-1].c[3]
+                 + p2_rec[-1].c[2]
+                 + p2_rec[-1].c[1] > 29696 )
+                __rescale_three_way(&p2_rec[-1]);
               n0x10 = (uintptr_t)p2_rec;   // the slot's last value, and what this path returns
               v457->c[v511 + 1] += (6
-                                                               * (uint32_t)p2_freq_at(p2_rec, -1)->c[0]) >> 4;
+                                                               * (uint32_t)p2_rec[-1].c[0]) >> 4;
             }
           }
           else
@@ -13733,36 +13736,36 @@ LABEL_128:
                + v385->freq[n0x10 + v385->ctx_w[4].w[1] - v385->ctx_w[4].w[2 - v443]].c[1] > 29696 )
               __rescale_three_way(v444);
             v444->c[v510 + 1] += (7 * (uint32_t)v444->c[0]) >> 4;
-            v445 = (((uint16_t *)&((uint32_t *)v385)[2 * v385->ctx_w[4].w[1] + 2 * (v385->f278704 - v385->ctx_w[4].w[v385->ctx_w[4].sel])]));
-            if ( p2_freq_at(v445, 0)->c[3] + p2_freq_at(v445, 0)->c[2] + p2_freq_at(v445, 0)->c[1] > 29696 )
-              __rescale_three_way(p2_freq_at(v445, 0));
-            p2_freq_at(v445, 0)->c[v511 + 1] += (7 * (uint32_t)p2_freq_at(v445, 0)->c[0]) >> 4;
+            v445 = ((&v385->freq[v385->ctx_w[4].w[1] + (v385->f278704 - v385->ctx_w[4].w[v385->ctx_w[4].sel])]));
+            if ( v445[0].c[3] + v445[0].c[2] + v445[0].c[1] > 29696 )
+              __rescale_three_way(&v445[0]);
+            v445[0].c[v511 + 1] += (7 * (uint32_t)v445[0].c[0]) >> 4;
             if ( n15 >= 15 )
               goto LABEL_115;
-            if ( p2_freq_at(v445, 1)->c[3] + p2_freq_at(v445, 1)->c[2] + p2_freq_at(v445, 1)->c[1] > 29696 )
-              __rescale_three_way(p2_freq_at(v445, 1));
-            n0x10 = p2_freq_at(v445, 1)->c[0];
-            p2_freq_at(v445, 1)->c[v511 + 1] += (5 * n0x10) >> 4;
+            if ( v445[1].c[3] + v445[1].c[2] + v445[1].c[1] > 29696 )
+              __rescale_three_way(&v445[1]);
+            n0x10 = v445[1].c[0];
+            v445[1].c[v511 + 1] += (5 * n0x10) >> 4;
             if ( n15 > 0 )
             {
 LABEL_115:
-              if ( p2_freq_at(v445, -1)->c[3] + p2_freq_at(v445, -1)->c[2] + p2_freq_at(v445, -1)->c[1] > 29696 )
-                __rescale_three_way(p2_freq_at(v445, -1));
-              n0x10 = p2_freq_at(v445, -1)->c[0];
-              p2_freq_at(v445, -1)->c[v511 + 1] += (6 * n0x10) >> 4;
+              if ( v445[-1].c[3] + v445[-1].c[2] + v445[-1].c[1] > 29696 )
+                __rescale_three_way(&v445[-1]);
+              n0x10 = v445[-1].c[0];
+              v445[-1].c[v511 + 1] += (6 * n0x10) >> 4;
             }
           }
         }
         return n0x10;
       }
-      v387 = ((uint16_t *)&((uint32_t *)v385)[2 * v385->f278704]);
+      v387 = (&v385->freq[v385->f278704]);
     }
-    v394 = p2_freq_at(v387, -1)->c[1];
-    v395 = p2_freq_at(v387, -1)->c[2];
-    n2 = (uint16_t *)p2_freq_at(v387, -1);
-    if ( p2_freq_at(v387, -1)->c[3] + v395 + v394 > 29696 )
-      __rescale_three_way(p2_freq_at(v387, -1));
-    v396 = (13 * (uint32_t)p2_freq_at(v387, -1)->c[0]) >> 4;
+    v394 = v387[-1].c[1];
+    v395 = v387[-1].c[2];
+    n2 = (uint16_t *)&v387[-1];
+    if ( v387[-1].c[3] + v395 + v394 > 29696 )
+      __rescale_three_way(&v387[-1]);
+    v396 = (13 * (uint32_t)v387[-1].c[0]) >> 4;
     if ( a4 )
     {
       n2[3 - v511] += v396;
