@@ -824,15 +824,36 @@ static inline int16_t p2_bump(int32_t w2, int32_t err, int32_t shift) {
 }
 
 // The p2 model's neighbourhood table: eighteen bytes a record, rows 144 bytes
-// apart -- eight records to a row -- which `algorithm_v2.md` §9 established
-// from the 56 places that copy one.  Every reader takes it as `int16_t`, so
-// nine lanes is what a record is here; what the lanes hold is not established,
-// which is why they are numbered rather than named.  `alt_p2_context` reaches
-// records -2 .. +4 of the cursor it is given.
+// apart -- eight records to a row.  `alt_p2_context` reaches records -2 .. +4
+// of the cursor it is given.
+//
+// The last two bytes are not a ninth lane.  Both pixel bodies end a record
+// with `cursor[17] = 2` and `cursor[16] = (lane[2] <= 0) + (lane[2] < 0)`,
+// and `alt_p2_model` overwrites them with `abs32(err)` and a comparison; every
+// one of the 32 reads is the byte at +17, so `mag` has readers and `sign` has
+// none in this build -- the same shape as `P2Count::b1`.
+//
+// What the eight lanes hold is what the decoder writes as it emits a pixel:
+//
+//   lane[0] = pixel * 16
+//   lane[1] = the same, and zeroed again at the start of the next row
+//   lane[2] = lane[0] - the previous record's lane[0], signed
+//   lane[3] = lane[5] = lane[6] = lane[7] = |lane[2]|
+//   lane[4] = |lane[2]| / 2
+//   sign    = the three-way sign of lane[2], 0 / 1 / 2
+//   mag     = 2
+//
+// so a fresh record is a pixel, its gradient, and five copies of that
+// gradient's magnitude that then diverge -- `alt_p2_model` writes lanes 1..7
+// separately afterwards.  Five is `bank_ctx`'s five and the five planes' five;
+// whether those threes are the same five is not established.
 struct P2Ctx {
-  int16_t lane[9];
+  int16_t lane[8];   // +0 .. +15
+  uint8_t sign;      // +16
+  uint8_t mag;       // +17
 };
 static_assert(sizeof(P2Ctx) == 18, "P2Ctx: the record is eighteen bytes");
+static_assert(__builtin_offsetof(P2Ctx, mag) == 17, "P2Ctx: mag is the last byte");
 
 
 // AltP2Block -- recovered from 353 dereferences over 39 offsets, under 23
@@ -7132,19 +7153,19 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   v189 = v187[17];
   v314 = ((uint8_t *)v293[-2])[13]
        + ((uint8_t *)v293[4])[7]
-       + ((uint8_t *)&v292[-3].lane[8])[1]
-       + *((uint8_t *)&v294->lane[8] + 1)
+       + v292[-3].mag
+       + v294->mag
        + *(v187 - 1)
        + v187[53];
   v190 = v187[89];
-  v191 = v188 + ((uint8_t *)&v292[-2].lane[8])[1] + v189;
+  v191 = v188 + v292[-2].mag + v189;
   v192 = *(v187 - 19);
   v315 = v191;
-  v193 = *((uint8_t *)&v294[2].lane[8] + 1)
-       + *((uint8_t *)&v294[1].lane[8] + 1)
-       + *((uint8_t *)&v294[-1].lane[8] + 1)
-       + *((uint8_t *)&v294[-2].lane[8] + 1)
-       + *((uint8_t *)&v296[-2].lane[8] + 1)
+  v193 = v294[2].mag
+       + v294[1].mag
+       + v294[-1].mag
+       + v294[-2].mag
+       + v296[-2].mag
        + v187[107]
        + v190
        + v187[71]
@@ -7156,19 +7177,19 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
          + ((uint8_t *)v293[5])[9]
          + ((uint8_t *)v293[-3])[11]
          + ((uint8_t *)v293[-4])[9]
-         + 3 * (((uint8_t *)v293[3])[5] + ((uint8_t *)&v295[1].lane[8])[1])
+         + 3 * (((uint8_t *)v293[3])[5] + v295[1].mag)
          + 7 * ((uint8_t *)v293[1])[1]
          + 6 * ((uint8_t *)v293[2])[3]
-         + ((uint8_t *)&v292[-6].lane[8])[1]
-         + ((uint8_t *)&v292[-7].lane[8])[1]
-         + ((uint8_t *)&v292[-8].lane[8])[1]
-         + 8 * ((uint8_t *)&v292[-1].lane[8])[1]
-         + *((uint8_t *)&v296[2].lane[8] + 1)
-         + *((uint8_t *)&v296[1].lane[8] + 1)
-         + *((uint8_t *)&v296->lane[8] + 1)
-         + *((uint8_t *)&v296[-1].lane[8] + 1)
-         + ((uint8_t *)&v292[-4].lane[8])[1]
-         + ((uint8_t *)&v292[-5].lane[8])[1]
+         + v292[-6].mag
+         + v292[-7].mag
+         + v292[-8].mag
+         + 8 * v292[-1].mag
+         + v296[2].mag
+         + v296[1].mag
+         + v296->mag
+         + v296[-1].mag
+         + v292[-4].mag
+         + v292[-5].mag
          + v193
          + 4 * v315
          + 2 * v314;
@@ -7190,9 +7211,9 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   v196->ctx_w[2].sel = v26 + v203;
   v196->ctx_w[3].sel = ((uint8_t *)v204[1])[0];
   v196->ctx_w[4].sel = (uint8_t)v201[-1].lane[8];
-  v206 = ((uint8_t *)&v201[-2].lane[8])[1];
-  v207 = ((uint8_t *)&v201[-1].lane[8])[1];
-  v208 = ((uint8_t *)&v205[0].lane[8])[1] + ((uint8_t *)v204[1])[1];
+  v206 = v201[-2].mag;
+  v207 = v201[-1].mag;
+  v208 = v205[0].mag + ((uint8_t *)v204[1])[1];
   n960 = n960_1;
   v302 = v208;
   n3536_4 = n3536;
@@ -7203,7 +7224,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
     v212 = *((uint8_t *)v284 - 1);
     v289 = (AltP2Block *)(v196);
     v213 = *((uint8_t *)v282 - 1);
-    v251 = *((uint8_t *)&v283->lane[8] + 1) + *((uint8_t *)&v281->lane[8] + 1);
+    v251 = v283->mag + v281->mag;
     v264 = v211 + ((uint8_t *)&v282[8])[1];
     n960 = v251 + n960_1 + 4 * v264 + 2 * (v213 + v212);
     v214 = v264 + v301 + *((uint8_t *)v284 - 19) + v212 + *((uint8_t *)v282 - 19) + v213;
@@ -7223,7 +7244,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
     }
     else
     {
-      v215 = v251 + v264 + v302 + *((uint8_t *)&v285->lane[8] + 1) + *((uint8_t *)&v286->lane[8] + 1);
+      v215 = v251 + v264 + v302 + v285->mag + v286->mag;
     }
     if ( *(int32_t *)&v289->plane_idx == 1 )
     {
@@ -7273,8 +7294,8 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5)
   }
   else
   {
-    v214 = v301 + ((uint8_t *)&v292[-3].lane[8])[1] + ((uint8_t *)&v292[-4].lane[8])[1] + ((uint8_t *)&v292[-5].lane[8])[1];
-    v215 = *((uint8_t *)&v296->lane[8] + 1) + *((uint8_t *)&v294->lane[8] + 1) + v302 + ((uint8_t *)&v292[0].lane[8])[1];
+    v214 = v301 + v292[-3].mag + v292[-4].mag + v292[-5].mag;
+    v215 = v296->mag + v294->mag + v302 + v292[0].mag;
   }
   if ( n960 >= 960 )
   {
