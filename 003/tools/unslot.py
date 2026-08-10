@@ -27,8 +27,13 @@ import sys
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs                                                  # noqa: E402
 
-ALIAS = re.compile(r'^  ([\w ]+?) ?&(\w+) = '
-                   r'(?:\*\(([\w ]+) \*\)\(\(char \*\)__frame\.(\w+)\)|__frame\.(\w+));$')
+# Every alias spelling round three left, because the extra names on one slot
+# rarely share a type: `T &x = __frame.m;`, `T *&x = *(T **)((char *)&__frame.m);`
+# and `T &x = *(T *)&__frame.m[0];` are all one name bound to one member.  The
+# reference declaration's own type is the one to keep -- it is what the body
+# reads through.
+ALIAS = re.compile(r'^  ((?:const )?[\w]+(?: ?\*)*) ?& ?(\w+) = '
+                   r'[^;]*__frame\.(\w+(?:\[\d+\])?)[^;]*;\s*(?://.*)?$')
 
 
 def slots(lines):
@@ -39,8 +44,7 @@ def slots(lines):
         for i in range(a, b + 1):
             m = ALIAS.match(lines[i])
             if m:
-                g[m.group(4) or m.group(5)].append(
-                    (m.group(2), m.group(3) or m.group(1), i))
+                g[m.group(3)].append((m.group(2), m.group(1).rstrip(), i))
         g = {k: v for k, v in g.items() if len(v) > 1}
         if g:
             out[nm.lstrip('_')] = g
@@ -69,7 +73,8 @@ def main():
         print('no such slot')
         return 1
     for name, ty, i in al[1:]:                 # the first keeps the slot
-        lines[i] = '  %s %s;   // was a second name for __frame.%s' % (ty, name, slot)
+        sep = '' if ty.endswith('*') else ' '
+        lines[i] = '  %s%s%s;   // was a second name for __frame.%s' % (ty, sep, name, slot)
     open(path, 'w').write('\n'.join(lines))
     print('%s %s: %d names got their own storage' % (fn, slot, len(al) - 1))
     return 0

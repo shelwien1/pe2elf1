@@ -5518,25 +5518,33 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
                 || __builtin_offsetof(__typeof__(__frame), _pad16) == 64,
                 "the named part of the frame moved");
   char &Buffer = *((char *)&__frame.Buffera);
-  uint32_t &Buffera = __frame.Buffera;
-  char * &Bufferb = *(char * *)((char *)&__frame.Buffera);
-  char * &Bufferc = *(char * *)((char *)&__frame.Buffera);
-  char * &Bufferd = *(char * *)((char *)&__frame.Buffera);
+  // These shared `__frame.Buffera` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
+  uint32_t Buffera;
+  char *Bufferb;
+  char *Bufferc;
+  char *Bufferd;
   uint32_t &Size_2 = __frame.v62;
-  // 3 locals with disjoint live ranges, which is why MSVC gave them one
-  // stack slot and Hex-Rays gave the slot 3 names.  Splitting them back is
-  // the whole gate: nothing writes one and reads another.  `__frame.v62`
-  // keeps the first of the 3.
+  // These shared `__frame.v62` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
   uint32_t v62;
   uint32_t v63;
   char *v65;
   int32_t &v66 = __frame.v66;
-  // 2 locals with disjoint live ranges, which is why MSVC gave them one
-  // stack slot and Hex-Rays gave the slot 2 names.  Splitting them back is
-  // the whole gate: nothing writes one and reads another.  `__frame.v66`
-  // keeps the first of the 2.
+  // These shared `__frame.v66` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
   int32_t v67;
-  uint8_t * &v68 = *(uint8_t * *)((char *)&__frame.v66);
+  // These shared `__frame.v66` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
+  uint8_t *v68;
   FILE *Stream_v;
   int32_t Buffer_2;
   char *buf;
@@ -7302,11 +7310,15 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 208, "frame layout moved");
   int32_t &v246 = *(int32_t *)((char *)__frame.slot0);
-  int16_t *&v247 = *(int16_t **)((char *)__frame.slot0);
-  // 8 locals with disjoint live ranges, which is why MSVC gave them one
-  // stack slot and Hex-Rays gave the slot 8 names.  Splitting them back is
-  // the whole gate: nothing writes one and reads another.  `__frame.slot0`
-  // keeps the first of the 8.
+  // These shared `__frame.slot0` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
+  int16_t *v247;
+  // These shared `__frame.slot0` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
   int32_t v248;
   int32_t v249;
   int32_t v250;
@@ -7314,13 +7326,21 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   int32_t n15;
   int32_t v253;
   int32_t v254;
-  int16_t *&v255 = *(int16_t **)((char *)__frame.slot0);
+  // These shared `__frame.slot0` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
+  int16_t *v255;
   int32_t &v256 = *(int32_t *)((char *)__frame.slot4);
-  char *&v257 = *(char **)((char *)__frame.slot4);
-  // 11 locals with disjoint live ranges, which is why MSVC gave them one
-  // stack slot and Hex-Rays gave the slot 11 names.  Splitting them back is
-  // the whole gate: nothing writes one and reads another.  `__frame.slot4`
-  // keeps the first of the 11.
+  // These shared `__frame.slot4` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
+  char *v257;
+  // These shared `__frame.slot4` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
   int32_t v258;
   int32_t v259;
   int32_t v260;
@@ -7332,16 +7352,24 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   int32_t v266;
   int32_t v267;
   int16_t *&v268 = *(int16_t **)((char *)__frame.slot8);
-  int32_t &v269 = *(int32_t *)((char *)__frame.slot8);
-  // 5 locals with disjoint live ranges, which is why MSVC gave them one
-  // stack slot and Hex-Rays gave the slot 5 names.  Splitting them back is
-  // the whole gate: nothing writes one and reads another.  `__frame.slot8`
-  // keeps the first of the 5.
+  // These shared `__frame.slot8` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
+  int32_t v269;
+  // These shared `__frame.slot8` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
   int32_t v270;
   int32_t v271;
   int32_t v272;
   int32_t v273;
-  int16_t *&v274 = *(int16_t **)((char *)__frame.slot8);
+  // These shared `__frame.slot8` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
+  int16_t *v274;
   int16_t (*&v275)[8] = (int16_t (*&)[8])__frame.sub[0];
   Obj95 * &v276 = (Obj95 * &)__frame.sub[1];
   int32_t &v277 = (int32_t &)__frame.sub[2];
@@ -9860,26 +9888,30 @@ int32_t *__read_bmp(char *FileName)
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 128, "frame layout moved");
   uint32_t &Size_4 = *(uint32_t *)((char *)__frame.slot0);
-  // 4 locals with disjoint live ranges, which is why MSVC gave them one
-  // stack slot and Hex-Rays gave the slot 4 names.  Splitting them back is
-  // the whole gate: nothing writes one and reads another.  `__frame.slot0`
-  // keeps the first of the 4.
+  // These shared `__frame.slot0` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
   int32_t v46;
   int32_t v47;
   int32_t Offset_1;
   int32_t &Size = *(int32_t *)((char *)__frame.slot4);
-  // 2 locals with disjoint live ranges, which is why MSVC gave them one
-  // stack slot and Hex-Rays gave the slot 2 names.  Splitting them back is
-  // the whole gate: nothing writes one and reads another.  `__frame.slot4`
-  // keeps the first of the 2.
+  // These shared `__frame.slot4` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
   uint32_t Sizea;
-  char &Sizeb = *((char *)__frame.slot4);
+  // These shared `__frame.slot4` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
+  char Sizeb;
   BmfImage *&v52 = (BmfImage *&)__frame.v52;
   int32_t &Src_2 = *(int32_t *)((char *)__frame.slot12);
-  // 2 locals with disjoint live ranges, which is why MSVC gave them one
-  // stack slot and Hex-Rays gave the slot 2 names.  Splitting them back is
-  // the whole gate: nothing writes one and reads another.  `__frame.slot12`
-  // keeps the first of the 2.
+  // These shared `__frame.slot12` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
   int32_t v54;
   void *&Buffer_3 = __frame.Buffer_3;
   char *&Src = __frame.Src;
@@ -12255,19 +12287,27 @@ void __unmodel_plane_slow(ModelBlock *_this, char *Src)
                 "frame layout moved");
   int32_t Size;
   int32_t &n4 = __frame.v82;
-  // 3 locals with disjoint live ranges, which is why MSVC gave them one
-  // stack slot and Hex-Rays gave the slot 3 names.  Splitting them back is
-  // the whole gate: nothing writes one and reads another.  `__frame.v82`
-  // keeps the first of the 3.
+  // These shared `__frame.v82` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
   int32_t v82;
   int32_t v84;
   char * &v85 = __frame.v85;
-  int32_t &v86 = *(int32_t *)((char *)&__frame.v85);
-  int32_t &v87 = *(int32_t *)((char *)&__frame.v85);
+  // These shared `__frame.v85` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
+  int32_t v86;
+  int32_t v87;
   int32_t v88;
   char * &ArgList_1 = __frame.ArgList_1;
-  char * &ArgList_5 = __frame.ArgList_1;
-  int32_t &n6_3 = *(int32_t *)((char *)&__frame.ArgList_1);
+  // These shared `__frame.ArgList_1` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
+  char *ArgList_5;
+  int32_t n6_3;
   char *v92;
   int32_t v93;
   int32_t v94;
@@ -12792,16 +12832,16 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, char *a2)
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 144, "frame layout moved");
   char v90;
   uint32_t &v91 = *(uint32_t *)((char *)__frame.slot4);
-  // 2 locals with disjoint live ranges, which is why MSVC gave them one
-  // stack slot and Hex-Rays gave the slot 2 names.  Splitting them back is
-  // the whole gate: nothing writes one and reads another.  `__frame.slot4`
-  // keeps the first of the 2.
+  // These shared `__frame.slot4` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
   uint32_t v92;
   int32_t &v93 = *(int32_t *)((char *)__frame.slot8);
-  // 2 locals with disjoint live ranges, which is why MSVC gave them one
-  // stack slot and Hex-Rays gave the slot 2 names.  Splitting them back is
-  // the whole gate: nothing writes one and reads another.  `__frame.slot8`
-  // keeps the first of the 2.
+  // These shared `__frame.slot8` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
   int32_t v94;
   char *v95;
   int32_t v96;
@@ -14954,7 +14994,11 @@ void __alt_p2_d8_decode_body(Obj11 *lpAddress, char ArgList, uint8_t *a5, int32_
                 || __builtin_offsetof(__typeof__(__frame), _pad3) == 12,
                 "the named part of the frame moved");
   int32_t &v95 = __frame.v95;
-  uint32_t &v96 = *(uint32_t *)((char *)&__frame.v95);
+  // These shared `__frame.v95` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
+  uint32_t v96;
   uint8_t *v97;
   ;
   char *v11;
@@ -15292,10 +15336,10 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src)
   uint32_t Size_1;
   int32_t v149;
   int32_t &v150 = *(int32_t *)((char *)__frame.slot152);
-  // 2 locals with disjoint live ranges, which is why MSVC gave them one
-  // stack slot and Hex-Rays gave the slot 2 names.  Splitting them back is
-  // the whole gate: nothing writes one and reads another.  `__frame.slot152`
-  // keeps the first of the 2.
+  // These shared `__frame.slot152` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
   int32_t v151;
   uint8_t *Src_1;
   int32_t v153;
@@ -15830,10 +15874,18 @@ void __alt_p2_d8_encode_body(Obj11 *lpAddress, uint8_t *a4, int32_t i, int32_t a
                 || __builtin_offsetof(__typeof__(__frame), _pad10) == 33,
                 "the named part of the frame moved");
   int32_t &j = __frame.j;
-  uint32_t &v102 = *(uint32_t *)((char *)&__frame.j);
+  // These shared `__frame.j` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
+  uint32_t v102;
   uint8_t *v103;
   int32_t &v104 = __frame.v104;
-  uint8_t * &v105 = *(uint8_t * *)((char *)&__frame.v104);
+  // These shared `__frame.v104` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
+  uint8_t *v105;
   int8_t *v106;
   char v107;
   Obj11 *lpAddress_1;
@@ -16766,15 +16818,23 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
                 "the named part of the frame moved");
   int32_t Size;
   int32_t &v58 = __frame.v58;
-  // 2 locals with disjoint live ranges, which is why MSVC gave them one
-  // stack slot and Hex-Rays gave the slot 2 names.  Splitting them back is
-  // the whole gate: nothing writes one and reads another.  `__frame.v58`
-  // keeps the first of the 2.
+  // These shared `__frame.v58` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
   int32_t v59;
   ModelBlock * &Blocka_5 = __frame.Blocka_5;
-  int32_t &v61 = *(int32_t *)((char *)&__frame.Blocka_5);
+  // These shared `__frame.Blocka_5` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
+  int32_t v61;
   ModelBlock * &Blocka = __frame.Blocka_2;
-  ModelBlock * &Blocka_2 = __frame.Blocka_2;
+  // These shared `__frame.Blocka_2` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
+  ModelBlock *Blocka_2;
   int32_t v64;
   int32_t v65;
   int32_t v66;
@@ -17372,7 +17432,11 @@ char * __expand_image(char *a1, int32_t a4, int32_t *p_dwLowDateTime)
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 112, "frame layout moved");
   char *&Block = *(char **)((char *)__frame.slot0);
-  char *&Blocka = *(char **)((char *)__frame.slot0);
+  // These shared `__frame.slot0` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
+  char *Blocka;
   uint16_t (&p_i)[2] = __frame.p_i;
   int32_t &v81 = __frame.v81;
   int32_t &n4_10 = __frame.n4_10;
@@ -17910,7 +17974,11 @@ uint32_t __search_filter(BmfImage *p_i, char a2)
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 176, "frame layout moved");
   char *&v175 = *(char **)((char *)__frame.slot0);
-  char *&v176 = *(char **)((char *)__frame.slot0);
+  // These shared `__frame.slot0` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
+  char *v176;
   uint64_t (&v177)[2] = *(uint64_t (*)[2])((char *)__frame.slot4);
   char *(&v178)[2] = __frame.v178;
   int32_t (&v179)[2] = __frame.v179;
@@ -18795,14 +18863,18 @@ int32_t __compress_image(char *a1, BmfImage *p_i, void *coded_buf)
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 80, "frame layout moved");
   char *&Buffera_4 = __frame.Buffera_4;
   uint32_t &ElementCount = *(uint32_t *)((char *)__frame.slot16);
-  // 3 locals with disjoint live ranges, which is why MSVC gave them one
-  // stack slot and Hex-Rays gave the slot 3 names.  Splitting them back is
-  // the whole gate: nothing writes one and reads another.  `__frame.slot16`
-  // keeps the first of the 3.
+  // These shared `__frame.slot16` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
   int32_t ElementCounta;
   uint32_t ElementCountb;
   uint32_t &Buffera = *(uint32_t *)&__frame.hdr[0];
-  char *&Buffer_copy = *(char **)&__frame.hdr[0];   // the same slot, the other role
+  // These shared `__frame.hdr[0]` with the name that still binds it: one
+  // stack slot MSVC gave to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is
+  // the gate's answer -- nothing writes one of them and reads another.
+  char *Buffer_copy;
   int32_t &n4_2 = *(int32_t *)&__frame.hdr[4];
   char * &Buffera_1 = *(char * *)&__frame.hdr[8];
   int32_t &v64 = *(int32_t *)&__frame.hdr[12];
