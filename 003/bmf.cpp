@@ -38,9 +38,9 @@
 #include <cmath>
 #include <cctype>     // isspace/isdigit/toupper — §6.5 lets these fall through
 #include <cstdarg>
-// The last intrinsic is gone; M128 below is a plain union and needs no header.
-// These two are still here for the MXCSR mode bits alone -- flush-to-zero and
-// denormals-are-zero, which main sets and the float results depend on.
+// No intrinsic and no 16-byte type is left in the file.  These two headers are
+// here for the MXCSR mode bits alone -- flush-to-zero and denormals-are-zero,
+// which main sets and the float results depend on.
 #include <xmmintrin.h>   // _MM_SET_FLUSH_ZERO_MODE
 #include <pmmintrin.h>   // _MM_SET_DENORMALS_ZERO_MODE
 
@@ -521,47 +521,24 @@ void __noreturn __break(uint16 code, uint16 subcode);
 #define SDWORD3(x) SDWORDn(x, 3)
 
 // ---------------------------------------------------------------------------
-// Sixteen bytes, read as whatever reads them.
+// Sixteen bytes are just sixteen bytes now.
 //
 // Hex-Rays wrote MSVC's spelling for the halves of an SSE register --
 // `v.m128i_i32[1]`, `q.m128_f32[0]` -- because on Windows __m128i, __m128 and
 // __m128d are *unions* with those members, and GCC's are bare vector types
-// with none.  The bodies used to need the vector types themselves, so there
-// were four wrappers -- one per MSVC union, each with its own member prefix --
-// with conversions between them and target attributes to carry them through
-// the intrinsics.
+// with none.  The bodies needed the vector types themselves, so there were
+// four wrappers, one per MSVC union, with conversions between them and target
+// attributes to carry them through the intrinsics.  Round two removed the
+// intrinsics and left one union with every lane name in it; round four removed
+// the last thing that read a lane.
 //
-// There are no intrinsics left, and almost nothing is spelled this way any
-// more: the rows are `float[4]`, the tables are tables, the parameter thread
-// that carried a 16-byte type through fifteen functions is gone.  What is left
-// is `choose_plane_coding`'s six spill slots, which really are one slot each
-// holding four ints or two doubles depending on the statement -- XMM0..XMM5 as
-// the original used them.
+// What each of them turned out to be is in REFACTORING4.md §9: rows of four
+// floats, tables with their own element types, a dead parameter thread, and
+// `choose_plane_coding`'s six stack slots, which are `alignas(16) int32_t[4]`
+// and say `*(int64_t *)` and `*(double *)` at the sites that want the halves.
 //
-// The alignment is stated rather than inherited: `*(M128 *)ptr` still has to
-// address a sixteen-byte-aligned object, and several globals are declared
-// alignas(16) on the strength of it.
+// The `alignas(16)` that used to live on the union lives on those six now.
 // ---------------------------------------------------------------------------
-union alignas(16) M128 {
-  // Three members, because three are read.  This had ten -- one per MSVC lane
-  // name -- while the objects and the globals were still reached through it;
-  // they are members and tables of their own now, and what is left is
-  // `choose_plane_coding`'s six spill slots.
-  short              m128_i16[8];
-  int                m128_i32[4];
-  long long          m128_i64[2];
-  M128() = default;
-  // Hex-Rays writes "zero the register" as `x = 0` / `(__m128)0LL` even for a
-  // 16-byte object; a non-zero scalar zero-extends, which is what the
-  // corresponding MOVD/MOVQ does.
-  M128(long long z) { __builtin_memset(this, 0, 16); m128_i64[0] = z; }
-};
-
-static_assert(sizeof(M128) == 16 && alignof(M128) == 16, "M128 layout");
-
-// `__m128`, `__m128d`, `__int128` and `_OWORD` were four more spellings of the
-// same sixteen bytes.  Nothing spells it any of those ways now, and nothing
-// spells it `__m128i` either -- the six places left say `M128`.
 
 //--- #include "crt.cpp"      // what is left of the runtime BMF got from the PE
 // crt.cpp — the runtime BMF used to get from the PE.
