@@ -6819,7 +6819,7 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int16_t *v247;
+  P2Ctx *v247;   // row cursors into the neighbourhood table
   // These shared `__frame.v246` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
@@ -6835,7 +6835,7 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int16_t *v255;
+  P2Ctx *v255;   // row cursors into the neighbourhood table
   // These shared `__frame.v256` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
@@ -6872,7 +6872,7 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int16_t *v274;
+  P2Ctx *v274;   // row cursors into the neighbourhood table
   P2Ctx *v281;
   int16_t *v282;
   P2Ctx *v283;
@@ -6895,7 +6895,7 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   uint8_t *v292;       // the p2 row cursor, `f278736[0]`
   int16_t (*v293)[8];
   P2Ctx *v294;
-  int16_t *v295;
+  P2Ctx *v295;   // row cursors into the neighbourhood table
   P2Ctx *v296;
   uint32_t v297;
   uint32_t v298;
@@ -6967,7 +6967,8 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   P2Ctx *v84;
   P2Ctx *v129;
   P2Ctx *v66;
-  int16_t *v7, *v45, *v67, *v90, *v99, *v143, v150, *v158, *v205;
+  int16_t *v90, *v99, v150;
+  P2Ctx *v7, *v45, *v67, *v143, *v158, *v205;   // row cursors into the neighbourhood table
   P2Ctx *v54;
   P2Ctx *v22;
   Obj30 *v104;
@@ -6989,36 +6990,36 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   uint32_t v120, v133, v135, v136, v152, v153, v165, v180;
   uint8_t *v187;
   v6 = *(int32_t *)&a1->f278736[0];
-  v7 = (int16_t *)a1->f278736[1];
+  v7 = (P2Ctx *)a1->f278736[1];
   v8 = *(int16_t *)(v6 - 24);
   v9 = 23 * *(int16_t *)(v6 - 6);
   v289 = (Obj11 *)(a1);
   __frame.v246 = v6;
-  __frame.v268 = v7;
+  __frame.v268 = (int16_t *)v7;
   sub0_row = (int16_t (*)[8])*(int32_t *)&a1->f278736[2];
   v10 = sub0_row[-2][5];
   n1840_1 = 21 * sub0_row[-1][5]
-          + 12 * v7[33]
-          + 16 * v7[24]
-          + 22 * v7[15]
+          + 12 * v7[3].lane[6]
+          + 16 * v7[2].lane[6]
+          + 22 * v7[1].lane[6]
           + v9
-          + 20 * v7[6]
+          + 20 * v7->lane[6]
           + ctx_bias[0]
           + 14 * v8;
   n1840_2 = 17 * v10
-          + 21 * v7[25]
-          + 15 * v7[16]
-          + 25 * v7[7]
-          + 9 * *(v7 - 2)
+          + 21 * v7[2].lane[7]
+          + 15 * v7[1].lane[7]
+          + 25 * v7->lane[7]
+          + 9 * v7[-1].lane[7]
           + 22 * *(int16_t *)(v6 - 4)
           + ctx_bias[1]
           + 19 * *(int16_t *)(v6 - 22);
   v11 = v6;
-  v12 = 17 * v7[31]
-      + 15 * v7[22]
-      + 21 * v7[13]
-      + 18 * v7[4]
-      + 16 * *(v7 - 5)
+  v12 = 17 * v7[3].lane[4]
+      + 15 * v7[2].lane[4]
+      + 21 * v7[1].lane[4]
+      + 18 * v7->lane[4]
+      + 16 * v7[-1].lane[4]
       + 22 * *(int16_t *)(v6 - 10)
       + ctx_bias[2]
       + 19 * *(int16_t *)(v6 - 28);
@@ -7103,32 +7104,32 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
     v28->f280872[(uint32_t)v257] = v30;
     *(int32_t *)&v28->f278656 = (int32_t)&((float (*)[4])v28)[16 * (int16_t)v30];
   }
-  v45 = (int16_t *)v28->f278736[1];
-  v28->p2_row[0][0] = (float)v45[1];
+  v45 = (P2Ctx *)v28->f278736[1];
+  v28->p2_row[0][0] = (float)v45->lane[1];
   v46 = (Obj3 *)v28->f278736[0];
-  v28->p2_row[0][1] = (float)v45[10];
-  v28->p2_row[0][2] = (float)(*(int16_t *)((uint8_t *)v46 - 16) + v45[1] - *(v45 - 8));
+  v28->p2_row[0][1] = (float)v45[1].lane[1];
+  v28->p2_row[0][2] = (float)(*(int16_t *)((uint8_t *)v46 - 16) + v45->lane[1] - v45[-1].lane[1]);
   v47 = *(int16_t *)((uint8_t *)v46 - 34);
-  v48 = v45[1] - *(v45 - 17);
+  v48 = v45->lane[1] - v45[-2].lane[1];
   sub1_nb = (P2Ctx *)v28->f278736[2];
   v49 = (P2Ctx *)(sub1_nb);
   v28->p2_row[0][3] = (float)(v47 + v48);
   v50 = (int16_t (*)[8])*(int32_t *)&v28->f278736[3];
-  v28->p2_row[1][0] = (float)(*(v45 - 8) + v45[1] - v49[-1].lane[1]);
+  v28->p2_row[1][0] = (float)(v45[-1].lane[1] + v45->lane[1] - v49[-1].lane[1]);
   v51 = v50[0][1];
   sub0_row = v50;
-  v28->p2_row[1][1] = (float)(-3 * (v49->lane[1] - v45[1]) + v51);
-  v28->p2_row[1][2] = (float)(*(int16_t *)((uint8_t *)v46 - 16) + v45[19] - v45[10]);
-  v28->p2_row[1][3] = (float)(*(int16_t *)((uint8_t *)v46 - 34) + v45[10] - *(v45 - 8));
+  v28->p2_row[1][1] = (float)(-3 * (v49->lane[1] - v45->lane[1]) + v51);
+  v28->p2_row[1][2] = (float)(*(int16_t *)((uint8_t *)v46 - 16) + v45[2].lane[1] - v45[1].lane[1]);
+  v28->p2_row[1][3] = (float)(*(int16_t *)((uint8_t *)v46 - 34) + v45[1].lane[1] - v45[-1].lane[1]);
   v28->p2_row[2][0] = (float)(2 * *(int16_t *)((uint8_t *)v46 - 16) - *(int16_t *)((uint8_t *)v46 - 34));
   v52 = (P2Ctx *)(sub1_nb);
-  v28->p2_row[2][1] = (float)(*(int16_t *)((uint8_t *)v46 - 52) + v45[1] - *(v45 - 26));
-  v28->p2_row[2][2] = (float)(v52->lane[1] + v45[10] - sub0_row[1][2]);
+  v28->p2_row[2][1] = (float)(*(int16_t *)((uint8_t *)v46 - 52) + v45->lane[1] - v45[-3].lane[1]);
+  v28->p2_row[2][2] = (float)(v52->lane[1] + v45[1].lane[1] - sub0_row[1][2]);
   v28->p2_row[2][3] = (float)*(int16_t *)((uint8_t *)v46 - 52);
-  v28->p2_row[3][0] = (float)(*(v45 - 17) + v45[1] - v52[-2].lane[1]);
-  v28->p2_row[3][1] = (float)(*(int16_t *)((uint8_t *)v46 - 34) + *(v45 - 8) - *(v45 - 26));
+  v28->p2_row[3][0] = (float)(v45[-2].lane[1] + v45->lane[1] - v52[-2].lane[1]);
+  v28->p2_row[3][1] = (float)(*(int16_t *)((uint8_t *)v46 - 34) + v45[-1].lane[1] - v45[-3].lane[1]);
   v53 = sub0_row;
-  v28->p2_row[3][2] = (float)(v45[10] + ((v45[19] + v45[1]) >> 1) - v52[2].lane[1]);
+  v28->p2_row[3][2] = (float)(v45[1].lane[1] + ((v45[2].lane[1] + v45->lane[1]) >> 1) - v52[2].lane[1]);
   v28->p2_row[3][3] = (float)v53[0][1];
   if ( a4 )
   {
@@ -7154,7 +7155,7 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
             v28->p2_row[j][k] += bias;
       }
       v46 = (Obj3 *)v28->f278736[0];
-      v45 = (int16_t *)v28->f278736[1];
+      v45 = (P2Ctx *)v28->f278736[1];
     }
     v65 = *(int32_t *)&v28->f278728;
     if ( v65 )
@@ -7162,19 +7163,19 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
       if ( v65 == 1 )
       {
         v81 = (P2Ctx *)(v281);
-        v28->p2_row[4][0] = (float)(v46->f2 + v45[28]);
+        v28->p2_row[4][0] = (float)(v46->f2 + v45[3].lane[1]);
         v82 = (int16_t *)(v282);
         v28->p2_row[4][1] = (float)(*(int16_t *)((uint8_t *)v46 - 36) + v81[2].lane[0] - v81->lane[0]);
-        v28->p2_row[4][2] = (float)(v45[9] + *((int16_t *)v82 - 9) - v81->lane[0]);
+        v28->p2_row[4][2] = (float)(v45[1].lane[0] + *((int16_t *)v82 - 9) - v81->lane[0]);
         v83 = (P2Ctx *)(v283);
         v84 = (P2Ctx *)(v285);
         v28->p2_row[4][3] = (float)(*(int16_t *)((uint8_t *)v46 - 18) + v81->lane[0] - v81[-1].lane[0]);
         v85 = v83[2].lane[0] - v84[3].lane[0];
         v86 = (int16_t *)(v284);
-        v28->p2_row[5][0] = (float)(v45[9] + v85);
+        v28->p2_row[5][0] = (float)(v45[1].lane[0] + v85);
         v87 = (P2Ctx *)((int16_t *)(v282));
         v28->p2_row[5][1] = (float)(*(int16_t *)((uint8_t *)v46 - 36) + v86[0] - *((int16_t *)v86 - 18));
-        v28->p2_row[5][2] = (float)(*v45 + v86[0] - v83->lane[0]);
+        v28->p2_row[5][2] = (float)(v45->lane[0] + v86[0] - v83->lane[0]);
         v58 = v28->f278732 == 0;
         v28->p2_row[5][3] = (float)(*(int16_t *)((uint8_t *)v46 - 36) + v87->lane[2]);
         if ( v58 )
@@ -7186,12 +7187,12 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
           v28->p2_row[6][0] = v89;
           v92 = (P2Ctx *)(v281);
           v28->p2_row[6][1] = (float)(*v90 + v87->lane[0] - v91->lane[0]);
-          v28->p2_row[6][2] = (float)(v286->lane[0] + v87->lane[0] - *v90 + 2 * (*v45 - v92->lane[0]));
-          v88 = *(int16_t *)((uint8_t *)v259 - 18) + *(v45 - 9) + v281[-2].lane[0] + v87->lane[0] - v87[-1].lane[0] - v281[-1].lane[0] - *(v45 - 18);
+          v28->p2_row[6][2] = (float)(v286->lane[0] + v87->lane[0] - *v90 + 2 * (v45->lane[0] - v92->lane[0]));
+          v88 = *(int16_t *)((uint8_t *)v259 - 18) + v45[-1].lane[0] + v281[-2].lane[0] + v87->lane[0] - v87[-1].lane[0] - v281[-1].lane[0] - v45[-2].lane[0];
         }
         else
         {
-          v28->p2_row[6][0] = (float)*v45;
+          v28->p2_row[6][0] = (float)v45->lane[0];
           v28->p2_row[6][1] = (float)*(int16_t *)((uint8_t *)v46 - 54);
           v28->p2_row[6][2] = (float)(*(int16_t *)((uint8_t *)v46 - 18) + v87[-1].lane[0] - v87[-2].lane[0]);
           v88 = *(int16_t *)((uint8_t *)v46 - 54) + *(int16_t *)((uint8_t *)v46 - 18) - *(int16_t *)((uint8_t *)v46 - 72);
@@ -7206,11 +7207,11 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
         v95 = (P2Ctx *)(v281);
         v96 = (P2Ctx *)(v286);
         v28->p2_row[4][1] = v94;
-        v28->p2_row[4][2] = (float)(v45[9] + v95->lane[0] - v96[1].lane[0]);
+        v28->p2_row[4][2] = (float)(v45[1].lane[0] + v95->lane[0] - v96[1].lane[0]);
         v97 = (int16_t *)(v282);
         v28->p2_row[4][3] = (float)(*(int16_t *)((uint8_t *)v46 - 36) + v95[2].lane[0] - v95->lane[0]);
-        v28->p2_row[5][0] = (float)(*v45 + *((int16_t *)v97 - 18) - v95[-2].lane[0]);
-        v28->p2_row[5][1] = (float)(*v45 + v97[0] - v95->lane[0]);
+        v28->p2_row[5][0] = (float)(v45->lane[0] + *((int16_t *)v97 - 18) - v95[-2].lane[0]);
+        v28->p2_row[5][1] = (float)(v45->lane[0] + v97[0] - v95->lane[0]);
         v98 = (P2Ctx *)((int16_t *)(v284));
         v28->p2_row[5][2] = (float)(*(int16_t *)((uint8_t *)v46 - 36) + v97[0] - *((int16_t *)v97 - 18));
         v99 = (int16_t *)v28->f278736[2];
@@ -7232,58 +7233,58 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
       v28->p2_row[4][0] = (float)(*(int16_t *)((uint8_t *)v46 - 54) + *(int16_t *)((uint8_t *)v46 - 18) - *(int16_t *)((uint8_t *)v46 - 72));
       v258 = (int32_t)(uintptr_t)v46;
       v66 = (P2Ctx *)((int16_t *)v28->f278736[3]);
-      v28->p2_row[4][1] = (float)(*(int16_t *)((uint8_t *)v46 - 90) + *v45 - *(v45 - 45));
-      v67 = (int16_t *)v28->f278736[2];
-      v28->p2_row[4][2] = (float)(*(int16_t *)((uint8_t *)v46 - 72) + *v45 - *(v45 - 36));
+      v28->p2_row[4][1] = (float)(*(int16_t *)((uint8_t *)v46 - 90) + v45->lane[0] - v45[-5].lane[0]);
+      v67 = (P2Ctx *)v28->f278736[2];
+      v28->p2_row[4][2] = (float)(*(int16_t *)((uint8_t *)v46 - 72) + v45->lane[0] - v45[-4].lane[0]);
       v247 = v67;
-      v68 = *v67 + 3 * v45[9] - 4 * v67[9];
+      v68 = v67->lane[0] + 3 * v45[1].lane[0] - 4 * v67[1].lane[0];
       v69 = (P2Ctx *)(v281);
-      v70 = (float)(v68 - (((v45[18] - *v45 - (v66[2].lane[0] - v66->lane[0])) >> 1) - v66[1].lane[0]));
+      v70 = (float)(v68 - (((v45[2].lane[0] - v45->lane[0] - (v66[2].lane[0] - v66->lane[0])) >> 1) - v66[1].lane[0]));
       v71 = (int16_t *)(v282);
       v28->p2_row[4][3] = v70;
       v72 = (P2Ctx *)(v286);
       v28->p2_row[5][0] = (float)(*(int16_t *)((uint8_t *)v258 - 36) + v71[0] - *((int16_t *)v71 - 18));
-      v28->p2_row[5][1] = (float)(v45[9] + v69[1].lane[0] - v72[2].lane[0]);
+      v28->p2_row[5][1] = (float)(v45[1].lane[0] + v69[1].lane[0] - v72[2].lane[0]);
       v73 = (int16_t *)(v282);
-      v28->p2_row[5][2] = (float)(*(v45 - 18) + v69[2].lane[0] - v72->lane[0]);
+      v28->p2_row[5][2] = (float)(v45[-2].lane[0] + v69[2].lane[0] - v72->lane[0]);
       v74 = *(int16_t *)((uint8_t *)v258 - 18) - *((int16_t *)v73 - 9);
       v75 = *((int16_t *)v73 - 18) + v73[0] - *(int16_t *)((uint8_t *)v258 - 36);
       v76 = (int16_t *)(v284);
       v77 = (float)(v75 + 2 * v74);
       v78 = (P2Ctx *)(v285);
       v28->p2_row[5][3] = v77;
-      v28->p2_row[6][0] = (float)(v247[9] + v76[0] - v78[1].lane[0]);
+      v28->p2_row[6][0] = (float)(v247[1].lane[0] + v76[0] - v78[1].lane[0]);
       v79 = (float)(*(int16_t *)((uint8_t *)v258 - 36) + v76[0] - *((int16_t *)v76 - 18));
       v80 = (P2Ctx *)(v283);
       v28->p2_row[6][1] = v79;
       v28->p2_row[6][2] = (float)(*(int16_t *)((uint8_t *)v258 - 18) + v80[1].lane[0] - v80->lane[0]);
-      v28->p2_row[6][3] = (float)(v45[9] + v80[2].lane[0] - v78[3].lane[0]);
+      v28->p2_row[6][3] = (float)(v45[1].lane[0] + v80[2].lane[0] - v78[3].lane[0]);
     }
   }
   else
   {
     v274 = v45;
-    v28->p2_row[4][0] = (float)(v45[27] + *v45 - v52[3].lane[0]);
-    v239 = *v45;
-    v240 = *(v45 - 36);
+    v28->p2_row[4][0] = (float)(v45[3].lane[0] + v45->lane[0] - v52[3].lane[0]);
+    v239 = v45->lane[0];
+    v240 = v45[-4].lane[0];
     sub1_nb = v52;
     v28->p2_row[4][1] = (float)(*(int16_t *)((uint8_t *)v46 - 72) + v239 - v240);
-    v241 = v52->lane[0] + 3 * v45[9] - 4 * v52[1].lane[0];
-    v242 = v45[18] - *v45;
+    v241 = v52->lane[0] + 3 * v45[1].lane[0] - 4 * v52[1].lane[0];
+    v242 = v45[2].lane[0] - v45->lane[0];
     v243 = sub0_row;
     v244 = (float)(v241 - (((v242 - (sub0_row[2][2] - sub0_row[0][0])) >> 1) - sub0_row[1][1]));
     v245 = sub1_nb;
     v28->p2_row[4][2] = v244;
-    v255 = (int16_t *)v28->f278736[4];
-    v28->p2_row[4][3] = (float)(v245[-1].lane[0] + v274[9] - v243[0][0]);
-    v28->p2_row[5][0] = (float)(v243[1][1] + *v274 - v255[9]);
-    v28->p2_row[5][1] = (float)v274[27];
+    v255 = (P2Ctx *)v28->f278736[4];
+    v28->p2_row[4][3] = (float)(v245[-1].lane[0] + v274[1].lane[0] - v243[0][0]);
+    v28->p2_row[5][0] = (float)(v243[1][1] + v274->lane[0] - v255[1].lane[0]);
+    v28->p2_row[5][1] = (float)v274[3].lane[0];
     v28->p2_row[5][2] = (float)(*(int16_t *)((uint8_t *)v46 - 54) + *(int16_t *)((uint8_t *)v46 - 18) - *(int16_t *)((uint8_t *)v46 - 72));
     v28->p2_row[5][3] = (float)(*(int16_t *)((uint8_t *)v46 - 18) + v243[0][0] - v243[-2][7]);
-    v28->p2_row[6][0] = (float)(*(int16_t *)((uint8_t *)v46 - 90) + *v274 - *(v274 - 45));
-    v28->p2_row[6][1] = (float)*v255;
+    v28->p2_row[6][0] = (float)(*(int16_t *)((uint8_t *)v46 - 90) + v274->lane[0] - v274[-5].lane[0]);
+    v28->p2_row[6][1] = (float)v255->lane[0];
     v28->p2_row[6][2] = (float)(*(int16_t *)((uint8_t *)v46 - 90) + *(int16_t *)((uint8_t *)v46 - 18) - *(int16_t *)((uint8_t *)v46 - 108));
-    v28->p2_row[6][3] = (float)*(v274 - 54);
+    v28->p2_row[6][3] = (float)v274[-6].lane[0];
     v285 = (P2Ctx *)(nullptr);
     v283 = (P2Ctx *)(nullptr);
     v284 = (int16_t *)(nullptr);
@@ -7363,7 +7364,7 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
          | v122 & 0x100000
          | v261;
     v118 = (Obj11 *)(v289);
-    v295 = (int16_t *)v289->f278736[2];
+    v295 = (P2Ctx *)v289->f278736[2];
   }
   else
   {
@@ -7372,9 +7373,9 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
     v238 = *(int16_t *)(v292 - 122);
     v289 = (Obj11 *)(v118);
     n3536 = n3536_1;
-    v295 = (int16_t *)v118->f278736[2];
+    v295 = (P2Ctx *)v118->f278736[2];
     v125 = (v293[3][5] + *(int16_t *)(v292 - 50) + v238 + v237) & 0x2000000
-         | (v295[11] + v295[2] + v236 + *(int16_t *)(v292 - 140)) & 0x1000000
+         | (v295[1].lane[2] + v295->lane[2] + v236 + *(int16_t *)(v292 - 140)) & 0x1000000
          | (v236 + *(int16_t *)(v292 - 104)) & 0x800000
          | v236 & 0x400000
          | v237 & 0x200000
@@ -7411,7 +7412,7 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
          | (v248 + *(int16_t *)(v292 - 88) - n2256) & 0x400000
          | (v248 + v293[0][1] + v283[2].lane[1] - v285[2].lane[1] - n2256) & 0x200000
          | (v248 + *(int16_t *)(v292 - 16) + v284[1] - *((int16_t *)v284 - 8) - n2256) & 0x100000
-         | (*(v295 - 8) + v248 + v134 - v286[-1].lane[1] - n2256) & 0x80000
+         | (v295[-1].lane[1] + v248 + v134 - v286[-1].lane[1] - n2256) & 0x80000
          | (v248 + v270 + v134 - v281[2].lane[1] - n2256) & 0x40000
          | n1840_2 & 0x20000
          | n1840_1 & 0x10000
@@ -7433,7 +7434,7 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
     v273 = v293[2][2];
     v137 = (v293[-6][3] - v293[-3][6] + v267) & 0x1000000
          | (v267 + v273 - v301) & 0x800000
-         | (v296[3].lane[0] - v295[18] + n2256 - v295[9]) & 0x400000
+         | (v296[3].lane[0] - v295[2].lane[0] + n2256 - v295[1].lane[0]) & 0x400000
          | (v296[-1].lane[0] - v254 + n2256 - v293[-2][7]) & 0x200000
          | (v293[0][0] - v273 + n2256 - *(int16_t *)(v292 - 36)) & 0x100000
          | -n1840_2 & 0x80000
@@ -7458,7 +7459,7 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   n2576 = v144 + n2256;
   v118->f278904[2] = n2576;
   v118->f278904[3] = v144;
-  n1840_13 = *v143;
+  n1840_13 = v143->lane[0];
   n960_1 = v293[0][0];
   v147 = *(int16_t *)(v292 - 36);
   n1840 = n1840_13;
@@ -7485,7 +7486,7 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
          | (((n2576 > 2576) + (n2576 > 1280) + (n2576 > 640)) << 13)
          | ((((uint32_t)(33 - v290) >> 31) + ((uint32_t)(12 - v290) >> 31) + ((uint32_t)(4 - v290) >> 31)) << 11);
     v153 = v298;
-    v154 = (v249 + v293[-1][0] - n2576 - (v295[1] - n1840_2)) & 0x2000000
+    v154 = (v249 + v293[-1][0] - n2576 - (v295->lane[1] - n1840_2)) & 0x2000000
          | (v249 + v149 - n2576 - (v293[0][1] - n1840_2)) & 0x1000000
          | (v262 - n2576 + n1840 - v285->lane[0]) & 0x800000
          | (n1840_1 + n1840 - v286->lane[0]) & 0x400000
@@ -7500,8 +7501,8 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
     v266 = v296->lane[0];
     v272 = v294[1].lane[0];
     v154 = (n2576 + 3 * (n1840 - n960_1) - v235) & 0x2000000
-         | (n2576 + v266 - (v295[18] + *(v295 - 18))) & 0x1000000
-         | (v294[2].lane[0] - *(v295 - 9) + n2576 - v293[3][3]) & 0x800000
+         | (n2576 + v266 - (v295[2].lane[0] + v295[-2].lane[0])) & 0x1000000
+         | (v294[2].lane[0] - v295[-1].lane[0] + n2576 - v293[3][3]) & 0x800000
          | (v272 - v293[1][1] - v303) & 0x400000
          | (v235 - n960_1 - v303) & 0x200000
          | v301 & 0x100000
@@ -7529,7 +7530,7 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
   v250 = *(int16_t *)(v157 + 2);
   v263 = v161;
   v163 = *(int16_t *)(v157 - 54);
-  v164 = v158[10];
+  v164 = v158[1].lane[1];
   v304 = v162;
   v305 = v164;
   v303 = n2896 - v163;
@@ -7542,8 +7543,8 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
               - ((uint32_t)(v293[1][2] + v293[2][3] + v293[-1][0] + v263) >> 1)
               + v306)
              & 0x1000000
-             | (*(v295 - 27) - v293[-3][6] + n2896 - v293[-2][7]) & 0x800000
-             | -(v295[18] + n2896 - 2 * v293[1][1]) & 0x400000
+             | (v295[-3].lane[0] - v293[-3][6] + n2896 - v293[-2][7]) & 0x800000
+             | -(v295[2].lane[0] + n2896 - 2 * v293[1][1]) & 0x400000
              | (v293[-3][7] - v304 + n2896 - v263) & 0x200000
              | (n2896 - v293[3][3]) & 0x100000
              | (v306 - v305) & 0x80000
@@ -7588,9 +7589,9 @@ int32_t __alt_p2_context(Obj11 *a1, Obj11 *a4, Obj11 *a5)
              | (v313 - *(int16_t *)(v292 - 36) - (v294[2].lane[1] + v307)) & 0x1000000
              | (n3536 - 2 * *(int16_t *)(v292 - 34) - (v307 - v309)) & 0x800000
              | (n3536 - *(int16_t *)(v292 - 52) - v307 - (v308 - v293[-4][5])) & 0x400000
-             | (v313 - v307 - (v310 + *(v295 - 8))) & 0x200000
-             | (*(v295 - 18) + n3536 - 2 * v311) & 0x100000
-             | (v295[1] - 2 * v293[0][1] + v312) & 0x80000
+             | (v313 - v307 - (v310 + v295[-1].lane[1])) & 0x200000
+             | (v295[-2].lane[0] + n3536 - 2 * v311) & 0x100000
+             | (v295->lane[1] - 2 * v293[0][1] + v312) & 0x80000
              | (v182 - (v308 - v311)) & 0x40000
              | (v312 - v293[4][5]) & 0x20000
              | (v312 - v293[-3][7]) & 0x10000
