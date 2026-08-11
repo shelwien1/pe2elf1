@@ -2568,67 +2568,67 @@ int32_t __alt_p1_decode_symbol(uint16_t *a1, int32_t a2, int32_t a3)
 int32_t __alt_p2_encode_symbol(P2Freq *_this, const uint32_t *a2, int32_t a3)
 {
   ;
-  int16_t v18;
+  int16_t f_before;
   uint16_t *result;
   // The cumulative count the range coder takes, which it takes unsigned.
-  uint32_t v3;
-  int32_t n32;
-  uint16_t *v25;
+  uint32_t cum;
+  int32_t st;
+  uint16_t *slot;
   uint32_t tot, tot_1,
-           f1, f2, v23;
-  v3 = _this->f[1] + _this->f[0];
-  tot = v3 + _this->f[2];
+           f1_old, f2_old, down;
+  cum = _this->f[1] + _this->f[0];
+  tot = cum + _this->f[2];
   if ( a3 )
   {
     if ( (a3 & 1) != 0 )
     {
-      v3 = _this->f[0];
-      v25 = &_this->f[1];
+      cum = _this->f[0];
+      slot = &_this->f[1];
     }
     else
     {
-      v25 = &_this->f[2];
+      slot = &_this->f[2];
     }
   }
   else
   {
-    v3 = 0;
-    v25 = &_this->f[0];
+    cum = 0;
+    slot = &_this->f[0];
   }
-  tot_1 = v3 + *v25;
-  rc.encode(v3, tot_1, tot);
-  v18 = *v25;
-  if ( *v25 > 0x4000u )
+  tot_1 = cum + *slot;
+  rc.encode(cum, tot_1, tot);
+  f_before = *slot;
+  if ( *slot > 0x4000u )
   {
-    f1 = _this->f[1];
-    f2 = _this->f[2];
+    f1_old = _this->f[1];
+    f2_old = _this->f[2];
     _this->f[0] -= _this->f[0] >> 1;
-    n32 = _this->step;
-    _this->f[1] = f1 - (f1 >> 1);
-    _this->f[2] = f2 - (f2 >> 1);
-    if ( n32 <= 256 )
+    st = _this->step;
+    _this->f[1] = f1_old - (f1_old >> 1);
+    _this->f[2] = f2_old - (f2_old >> 1);
+    if ( st <= 256 )
     {
-      if ( n32 <= 32 )
-        v23 = ((uint32_t)(16 - n32) >> 30) & 0xFFFFFFFE;
+      if ( st <= 32 )
+        down = ((uint32_t)(16 - st) >> 30) & 0xFFFFFFFE;
       else
-        LOWORD(v23) = 32;
-      LOWORD(n32) = n32 - v23;
-      _this->step = n32;
-      v18 = *v25;
+        LOWORD(down) = 32;
+      LOWORD(st) = st - down;
+      _this->step = st;
+      f_before = *slot;
     }
     else
     {
-      n32 = (uint32_t)n32 >> 1;
-      _this->step = n32;
-      v18 = *v25;
+      st = (uint32_t)st >> 1;
+      _this->step = st;
+      f_before = *slot;
     }
   }
   else
   {
-    LOWORD(n32) = _this->step;
+    LOWORD(st) = _this->step;
   }
-  result = v25;
-  *v25 = n32 + v18;
+  result = slot;
+  *slot = st + f_before;
   if ( a3 > 0 )
     return __encode_symbol_tree(model_strip(a2[a3 & 1]), (a3 - 1) >> 1);
   return (int32_t)result;
@@ -4630,76 +4630,76 @@ static_assert(__builtin_offsetof(BmfImage, stride) == 4
               && __builtin_offsetof(BmfImage, data_size) == 12,
               "BmfImage fields are not where alloc_image puts them");
 
-int32_t *__alloc_image(int32_t a1, int32_t a2, int32_t n5, int32_t a4, int32_t a5)
+int32_t *__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette, int32_t packed)
 {
   ;
   uint8_t *buf;
   int32_t *result;
   int32_t *v15;
-  int32_t n4, v7, v8, v9, v10, Size;
-  uint32_t v5;
-  LOWORD(v5) = a1;
-  n4 = n5;
-  v7 = (uint8_t)n5 << 16;
-  if ( n5 >= 5 && n5 <= 7 )
+  int32_t bits, word2, row_pack, row_bytes, data_bytes, Size;
+  uint32_t row16;
+  LOWORD(row16) = img_w;
+  bits = bpp;
+  word2 = (uint8_t)bpp << 16;
+  if ( bpp >= 5 && bpp <= 7 )
     goto LABEL_19;
-  if ( n5 == 3 )
+  if ( bpp == 3 )
   {
-    n4 = 4;
+    bits = 4;
   }
   else
   {
-    if ( !a5 )
+    if ( !packed )
     {
-      n4 = 4;
-      if ( n5 > 4 )
-        n4 = n5;
+      bits = 4;
+      if ( bpp > 4 )
+        bits = bpp;
     }
-    if ( n4 >= 8 )
+    if ( bits >= 8 )
       goto LABEL_18;
   }
-  if ( !a5 )
+  if ( !packed )
   {
-    if ( n4 == 4 )
+    if ( bits == 4 )
     {
-      v5 = ((a1 + 7) >> 1) & 0xFFFFFFFC;
+      row16 = ((img_w + 7) >> 1) & 0xFFFFFFFC;
 LABEL_19:
-      v9 = (uint16_t)v5;
+      row_bytes = (uint16_t)row16;
       goto LABEL_20;
     }
 LABEL_18:
-    LOWORD(v5) = ((n4 + 7) >> 3) * a1;
+    LOWORD(row16) = ((bits + 7) >> 3) * img_w;
     goto LABEL_19;
   }
-  if ( n4 == 1 )
+  if ( bits == 1 )
   {
-    v8 = (int32_t)(((uint32_t)((a1 + 7) >> 2) >> 29) + a1 + 7) >> 3;
+    row_pack = (int32_t)(((uint32_t)((img_w + 7) >> 2) >> 29) + img_w + 7) >> 3;
   }
-  else if ( n4 == 2 )
+  else if ( bits == 2 )
   {
-    v8 = (int32_t)(((uint32_t)((a1 + 3) >> 1) >> 30) + a1 + 3) >> 2;
+    row_pack = (int32_t)(((uint32_t)((img_w + 3) >> 1) >> 30) + img_w + 3) >> 2;
   }
   else
   {
-    v8 = (int32_t)(a1 + ((uint32_t)(a1 + 1) >> 31) + 1) >> 1;
+    row_pack = (int32_t)(img_w + ((uint32_t)(img_w + 1) >> 31) + 1) >> 1;
   }
-  v7 = ((uint8_t)n5 << 16) | 0x40000000;
-  v9 = (uint16_t)v8;
+  word2 = ((uint8_t)bpp << 16) | 0x40000000;
+  row_bytes = (uint16_t)row_pack;
 LABEL_20:
-  v10 = v9 * a2;
-  if ( a4 )
+  data_bytes = row_bytes * img_h;
+  if ( palette )
   {
-    Size = 3 << (n5 & 31);
-    if ( n5 > 8 )
+    Size = 3 << (bpp & 31);
+    if ( bpp > 8 )
       Size = 0;
     else
-      v7 = ((BYTE2(v7) | 0xFFFF0080) << 16) | v7 & 0xFF00FFFF;
+      word2 = ((BYTE2(word2) | 0xFFFF0080) << 16) | word2 & 0xFF00FFFF;
   }
   else
   {
     Size = 0;
   }
-  result = ((int32_t *)bmf_new(v10 + Size + 19));
+  result = ((int32_t *)bmf_new(data_bytes + Size + 19));
   if ( !result )
     return nullptr;
   // The descriptor, and the reason BmfImage looks the way it does.  Three of
@@ -4708,11 +4708,11 @@ LABEL_20:
   // +8 are zero only because they are written as part of it.  Splitting it
   // would mean zeroing them separately, which is more code saying less.
   BmfImage *const img = (BmfImage *)result;
-  img->width = a1;
-  img->height = a2;
-  img->stride = v9;
-  result[2] = v7;                 // +8 and +9 zero, depth at +10, flags at +11
-  img->data_size = v10;
+  img->width = img_w;
+  img->height = img_h;
+  img->stride = row_bytes;
+  result[2] = word2;                 // +8 and +9 zero, depth at +10, flags at +11
+  img->data_size = data_bytes;
   if ( Size )
   {
     if ( (((const BmfImage *)result)->depth & 0x80) != 0 )
@@ -15780,95 +15780,79 @@ void __model_planes(uint8_t *Blockb, uint8_t *Srca_3, int32_t a3, int8_t a4)
 
 void __transform_planes(BmfImage *p_i, int32_t a2, int8_t a3)
 {
-  int32_t n4_3;
-  uint16_t *Srca_3;
-  uint8_t *p_ia;
   ;
-  int8_t v11;
-  uint8_t *__transform_planes_Buffer, *p_ia_1, *Src_1, *Src_3, *Src_2, *v20;   // `uint8_t *` beside the `char` scalars above
-  int32_t n4_1, v14, predictor, v16, Size_3, n4_2, v21, i, Size_4,
-          v24;
-  uint8_t *Srca_1;
+  uint8_t *arc, *hdr, *tmp, *dst;   // `uint8_t *` beside the `char` scalars above
+  int32_t k, plane, predictor, alt, n, stride, ofs, i;
+  uint8_t *src_pixels;
   memset(hist_scratch,0,4096);
-  __transform_planes_Buffer = (uint8_t *)::coded_buf;
-  p_ia_1 = (uint8_t *)::coded_buf + 16;
+  arc = (uint8_t *)::coded_buf;
+  hdr = (uint8_t *)::coded_buf + 16;
   // The whole sixteen-byte header, which MSVC moved a word at a time.
-  *(BmfImage *)p_ia_1 = *p_i;
-  Srca_1 = (uint8_t *)((uint16_t *)p_i->pixels);
-  memcpy(__transform_planes_Buffer + 32,p_i->pixels,p_i->data_size);
-  Src_1 = (uint8_t *)bmf_new(p_i->width * p_i->height);
-  Src_3 = Src_1;
+  *(BmfImage *)hdr = *p_i;
+  src_pixels = (uint8_t *)((uint16_t *)p_i->pixels);
+  memcpy(arc + 32,p_i->pixels,p_i->data_size);
+  tmp = (uint8_t *)bmf_new(p_i->width * p_i->height);
   if ( plane_count > 0 )
   {
-    Srca_3 = (uint16_t *)p_i->pixels;
-    p_ia = p_ia_1;
-    n4_1 = 0;
+    k = 0;
     do
     {
-      ++n4_1;
-      v14 = BYTE1(plane_desc[n4_1].w0);
-      predictor = plane_desc[v14 + 1].flags & 3;
+      ++k;
+      plane = BYTE1(plane_desc[k].w0);
+      predictor = plane_desc[plane + 1].flags & 3;
       ::plane_predictor = predictor;
-      v16 = (uint8_t)(plane_desc[v14 + 1].flags & 4) >> 2;
-      plane_alt_model = v16;
-      if ( ((plane_desc[v14 + 1].flags & 8) != 0 || predictor) && !v16 )
+      alt = (uint8_t)(plane_desc[plane + 1].flags & 4) >> 2;
+      plane_alt_model = alt;
+      if ( ((plane_desc[plane + 1].flags & 8) != 0 || predictor) && !alt )
       {
-        __colour_transform(p_ia, Src_1, v14, v11);
+        // `v11` was declared and never assigned: an uninitialised byte read into
+        // a parameter neither `colour_transform` nor `interleave_plane` looks at.
+        // Zero says the same thing without the undefined read.
+        __colour_transform(hdr, tmp, plane, 0);
         if ( ::plane_predictor != 2 )
         {
           // never taken: -E is 0
           if ( ::plane_predictor == 1 )
           {
-            __predict_med(Src_1, p_i->width, p_i->height);
+            __predict_med(tmp, p_i->width, p_i->height);
           }
         }
-        Size_3 = p_i->width * p_i->height;
-        n4_2 = plane_count;
-        Src_2 = (uint8_t *)p_i + v14 + 16;
+        n = p_i->width * p_i->height;
+        stride = plane_count;
         if ( plane_count == 1 )
         {
-          memcpy(&p_i->pixels[v14],Src_1,Size_3);
+          memcpy(&p_i->pixels[plane],tmp,n);
         }
         else
         {
-          v20 = (uint8_t *)p_i + v14;
-          if ( Size_3 <= 6
-            || plane_count <= 0
-            || (Src_2 <= Src_1 || Size_3 > (uint32_t)(Src_2 - Src_1))
-            && (plane_count > 1 || Src_2 >= Src_1 || Src_1 - Src_2 < (uint32_t)(Size_3 * plane_count)) )
+          dst = (uint8_t *)p_i + plane;
+          // The third of MSVC's aliasing proofs, and the only one whose two
+          // arms are not the same code: the `if` side was a `do`/`while` and
+          // the `else` side a `for`, so they disagree when `n` is zero --
+          // the `do`/`while` writes one byte first and asks afterwards.  Both
+          // are otherwise the same six lines, with the `else` carrying a save
+          // and restore of `k` around a loop that never touched it.
+          //
+          // The `for` is the one kept, which is a choice and not a
+          // transcription: a zero-pixel plane cannot reach here through any
+          // input the gate has, so the difference is unobservable, and between
+          // two arms that disagree the right one to keep is the one that is
+          // correct rather than the one that came first.
+          ofs = 0;
+          for ( i = 0; i < n; ++i )
           {
-            Size_4 = 0;
-            v24 = 0;
-            do
-            {
-              v20[v24 + 16] = Src_1[Size_4];
-              v24 += n4_2;
-              ++Size_4;
-            }
-            while ( Size_4 < Size_3 );
-          }
-          else
-          {
-            n4_3 = n4_1;
-            v21 = 0;
-            for ( i = 0; i < Size_3; ++i )
-            {
-              v20[v21 + 16] = Src_1[i];
-              v21 += n4_2;
-            }
-            n4_1 = n4_3;
+            dst[ofs + 16] = tmp[i];
+            ofs += stride;
           }
         }
       }
     }
-    while ( n4_1 < plane_count );
-    Src_3 = Src_1;
-    Srca_1 = (uint8_t *)Srca_3;
+    while ( k < plane_count );
   }
-  free(Src_3);
+  free(tmp);
   // always taken: -S
   {
-    __model_plane((BmfImage *)p_i, Srca_1, Srca_1);
+    __model_plane((BmfImage *)p_i, src_pixels, src_pixels);
   }
 }
 
@@ -17196,14 +17180,14 @@ LABEL_63:
 }
 
 
-BmfArc *__bmf_open_archive(BmfArc *v2, char *FileName, int32_t a2)
+BmfArc *__bmf_open_archive(BmfArc *out, char *FileName, int32_t read_only)
 {
   ;
-  BmfArc *v5;
+  BmfArc *arc;
   FILE *Stream_v, *Stream_1;
   const char *a_b;   // an fopen mode string, so `char` and not a byte
-  int32_t v8, v9;
-  v5 = v2;
+  int32_t rc, live;
+  arc = out;
   // "a+b", as the original had it, and not "w+b".  An earlier pass here
   // reasoned that since the command line writes one image per run, appending
   // only meant that compressing twice to the same name grew the file instead
@@ -17217,49 +17201,49 @@ BmfArc *__bmf_open_archive(BmfArc *v2, char *FileName, int32_t a2)
   // walking the images already in the file -- it also sets up state the writer
   // goes on to use.
   a_b = "a+b";
-  if ( a2 )
+  if ( read_only )
     a_b = "rb";
-  v2->images = 0;
+  out->images = 0;
   Stream_v = fopen(FileName, a_b);
-  v5->fp = Stream_v;
+  arc->fp = Stream_v;
   if ( !Stream_v )
     __exit_402E40(6, FileName);
-  v5->images = 0;
-  v8 = fseek(Stream_v, 0, 0);
-  v9 = v5->fp != nullptr;
-  if ( v8 )
+  arc->images = 0;
+  rc = fseek(Stream_v, 0, 0);
+  live = arc->fp != nullptr;
+  if ( rc )
   {
-    if ( !v9 )
+    if ( !live )
       __exit_402E40(3, FileName);
-    return v5;
+    return arc;
   }
-  if ( !v9 )
+  if ( !live )
     {
       __exit_402E40(3, FileName);
-      return v5;
+      return arc;
     }
-  if ( !feof(v5->fp) )
+  if ( !feof(arc->fp) )
   {
-    __expand_image((uint8_t *)v5, 1, (void **)nullptr);
-    Stream_1 = v5->fp;
+    __expand_image((uint8_t *)arc, 1, (void **)nullptr);
+    Stream_1 = arc->fp;
     if ( !Stream_1 )
       {
         __exit_402E40(3, FileName);
-        return v5;
+        return arc;
       }
-    if ( !feof(v5->fp) )
+    if ( !feof(arc->fp) )
     {
-      v5->images = 0;
+      arc->images = 0;
       fseek(Stream_1, 0, 0);
-      v9 = v5->fp != nullptr;
+      live = arc->fp != nullptr;
       {
-        if ( !v9 )
+        if ( !live )
         __exit_402E40(3, FileName);
-        return v5;
+        return arc;
       }
     }
   }
-  return v5;
+  return arc;
 }
 
 
