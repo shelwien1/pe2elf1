@@ -70,13 +70,20 @@ echo
 # and re-reading the working file per tool means an edit made while it runs
 # lands in the middle of the answers -- half the tools compared against one
 # file and half against another, with nothing in the output to say so.
+#
+# `tools/` is snapshotted with it.  The file was pinned and the *tools* were
+# not, so a run that took ten minutes read each tool off disk as it reached it:
+# the answers at the top came from one version of the directory and the ones at
+# the bottom from another.  It showed: `explicitcmp.py` was reported as reading
+# `warn.log, cksum` in a run that started before `cksum` was in it.
 mkdir -p "$tmp/now" "$tmp/rev" "$tmp/base"
 cp subs1.hpp "$tmp/base/subs1.hpp"
+cp -r tools "$tmp/tools"
 ans() { timeout 180 python3 "$1" "$2" 2>&1 | tail -1; }
 
 flat_tools=()
 seen=0
-for t in tools/*.py; do
+for t in "$tmp"/tools/*.py; do
   base=$(basename "$t")
   case $base in structs.py|outpath.py|mk*.py) continue ;; esac
   cp "$tmp/base/subs1.hpp" "$tmp/now/subs1.hpp"
@@ -102,7 +109,7 @@ echo "What each of those actually reads, from tools/reads.py:"
 echo
 spoken=0
 for t in "${flat_tools[@]}"; do
-  line=$(timeout 300 python3 tools/reads.py "$t" "$tmp/base/subs1.hpp" 2>&1 | tail -1)
+  line=$(timeout 300 python3 "$tmp/tools/reads.py" "$t" "$tmp/base/subs1.hpp" 2>&1 | tail -1)
   printf '  %s\n' "$line"
   case $line in *'reads only what it is given') spoken=$((spoken + 1)) ;; esac
 done

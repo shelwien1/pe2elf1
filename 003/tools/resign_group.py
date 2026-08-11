@@ -51,6 +51,7 @@ import re
 import sys
 
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
+import buildlog                                                   # noqa: E402
 import resign                                                     # noqa: E402
 
 # Only the signedness of a type may change here, never its width.
@@ -67,17 +68,7 @@ def components(lines, log='warn.log'):
         bodies[nm] = (a, b, sig)
         for i in range(a, b + 1):
             fn[i] = nm
-    try:
-        rows = open(log).read().split('\n')
-    except OSError:
-        return []
-    stamp = next((r for r in rows if r.startswith('# subs1.hpp ')), None)
-    import os
-    have = os.popen('cksum < %s' % sys.argv[1]).read().strip()
-    if stamp is None or stamp[len('# subs1.hpp '):].strip() != have:
-        print('nothing to say about %s: %s describes another file'
-              % (sys.argv[1], log))
-        raise SystemExit(0)
+    rows = buildlog.rows(log, sys.argv[1])
 
     types = {}
     edges = collections.defaultdict(set)

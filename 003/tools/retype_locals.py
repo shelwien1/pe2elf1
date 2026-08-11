@@ -31,16 +31,28 @@ import re
 import sys
 
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
+import buildlog                                                 # noqa: E402
+
+# See explicitcmp.py: the reason for an empty worklist belongs in the summary.
+NOTE = ['']
 import structs                                                  # noqa: E402
 
 # The declaration forms extract.py emits: `int32_t a, *b, c;` and friends.
 DECL = re.compile(r'^(\s+)([A-Za-z_][A-Za-z0-9_]*)\s+(.+);$')
 
 
-def complaints(log):
-    """{(line, name): source type} for every conversion into a plain local."""
+def complaints(log, path):
+    """{(line, name): source type} for every conversion into a plain local.
+
+    The log's line numbers belong to the file it was built from.  This used to
+    match `^subs1\\.hpp:` as a literal and never ask *which* `subs1.hpp`, so a
+    stale `strict.log` would have retyped whatever now sits on those lines --
+    `tools/buildlog.py` has what that cost `resign.py`.
+    """
     out = {}
-    for l in open(log):
+    rows, note = buildlog.read(log, path)
+    NOTE[:] = [note]
+    for l in rows:
         m = re.match(r"^subs1\.hpp:(\d+):\d+: error: invalid conversion from "
                      r"'([^']*)'(?: \{aka '([^']*)'\})? to "
                      r"'([^']*)'(?: \{aka '[^']*'\})?", l)
@@ -53,7 +65,7 @@ def complaints(log):
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else 'subs1.hpp'
     lines = open(path).read().split('\n')
-    errs = complaints('strict.log')
+    errs = complaints('strict.log', path)
 
     # group by (function, local), and only keep the ones that agree
     want, seen = {}, {}
@@ -87,7 +99,8 @@ def main():
     if '--apply' not in sys.argv:
         for ln, nm, var, ind, ty, names, src, dst in moves:
             print('%-26s %-10s %-22s -> %s' % (nm, var, dst, src))
-        print('%d locals can take the type their assignments have' % len(moves))
+        print('%d locals can take the type their assignments have%s'
+              % (len(moves), NOTE[0] and ' (%s)' % NOTE[0]))
         return 0
 
     # rewrite back to front so earlier line numbers stay valid
@@ -100,7 +113,7 @@ def main():
         new.append('%s%s %s;' % (ind, src.replace('*', ' *').rstrip(), var))
         lines[ln - 1:ln] = new
     open(path, 'w').write('\n'.join(lines))
-    print('%d locals retyped' % len(moves))
+    print('%d locals retyped%s' % (len(moves), NOTE[0] and ' (%s)' % NOTE[0]))
     return 0
 
 

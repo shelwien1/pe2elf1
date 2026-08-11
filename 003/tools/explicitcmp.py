@@ -31,6 +31,14 @@ inside an argument list.
 import re
 import sys
 
+sys.path.insert(0, __file__.rsplit('/', 1)[0])
+import buildlog                                                 # noqa: E402
+
+# Why the site list is empty, when it is empty for a reason other than the
+# file.  It goes in the summary line: `sweep.sh` wants a zero there, and a
+# bare zero against a stale log is the lie this guards against.
+NOTE = ['']
+
 WARN = re.compile(r'^(\S+):(\d+):(\d+): warning: comparison of integer '
                   r"expressions of different signedness: '(\w+)'.*?and '(\w+)'")
 OPS = ('<=', '>=', '==', '!=', '<', '>')
@@ -67,11 +75,13 @@ def operand(line, at, right):
 
 
 def sites(path):
+    # The log's line numbers are about the file it was built from and nothing
+    # else.  Matching on the path's *basename*, which is all this used to do,
+    # a copy of `subs1.hpp` satisfies it whatever the copy contains --
+    # `tools/buildlog.py` has what that costs.
     out = []
-    try:
-        log = open('warn.log').read().split('\n')
-    except OSError:
-        return out
+    log, note = buildlog.read('warn.log', path)
+    NOTE[:] = [note]
     for l in log:
         m = WARN.match(l)
         if not m or not path.endswith(m.group(1)):
@@ -133,7 +143,8 @@ def main():
     if '--all' not in sys.argv:
         for ln, new in sorted(found):
             print('%6d  %s' % (ln, new.strip()[:96]))
-        print('%d signed/unsigned comparisons whose conversion is implicit' % len(found))
+        print('%d signed/unsigned comparisons whose conversion is implicit%s'
+              % (len(found), NOTE[0] and ' (%s)' % NOTE[0]))
         return 0
     open(path, 'w').write('\n'.join(lines))
     print('%d conversions written out' % len(found))

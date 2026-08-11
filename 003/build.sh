@@ -59,6 +59,9 @@ if [ "${BMF_STRICT:-0}" = 1 ]; then
   "$CXX" "${opts[@]}" -O2 "${incs[@]}" -fsyntax-only -fdiagnostics-plain-output \
       bmf.cpp "$@" 2>&1 | tee strict.log | grep -c 'error:' || true
   set +x
+  # Stamped like warn.log below, and for the same reason: retype_locals.py
+  # reads these line numbers and applies them to whatever now sits on them.
+  printf '# subs1.hpp %s\n' "$(cksum < subs1.hpp)" >> strict.log
   echo "^ conversions still needing -fpermissive (see strict.log)"
   exit 0
 fi

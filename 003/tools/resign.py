@@ -51,6 +51,7 @@ import re
 import sys
 
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
+import buildlog                                                   # noqa: E402
 import structs                                                    # noqa: E402
 import unreload                                                   # noqa: E402
 
@@ -90,29 +91,13 @@ def candidates(lines, log='warn.log'):
             fn[i] = nm
 
     seen = collections.defaultdict(list)
-    try:
-        rows = open(log).read().split('\n')
-    except OSError:
-        return []
     # The line numbers in the log are only about the file the log was built
     # from.  Running against a stale one retypes whatever now sits on those
     # lines: it applied 17 changes to the wrong locals and put the warning
     # count *up* by 43, which the ratchet caught and the streams did not.
-    #
-    # `build.sh` stamps the log with the source's checksum, because mtime is
-    # not the check: a `cp` of the source is newer than a log that describes it
-    # exactly, and a rebuild for any other reason makes a stale log look fresh.
-    # The first version used mtime and silently did nothing through an entire
-    # bisection, which reported the change innocent twice.
-    stamp = next((r for r in rows if r.startswith('# subs1.hpp ')), None)
-    have = os.popen('cksum < %s' % SRC[0]).read().strip()
-    if stamp is None or stamp[len('# subs1.hpp '):].strip() != have:
-        # Not an error when the file simply is not the one the log is about --
-        # `sweep.sh` runs every tool against a copy, and a tool that has
-        # nothing to say should say so rather than exit non-zero.
-        print('nothing to say about %s: %s describes another file' % (SRC[0], log))
-        raise SystemExit(0)
-    for l in rows:
+    # `tools/buildlog.py` is that check, in one place -- it was in two here and
+    # missing from the two other tools that read the same logs.
+    for l in buildlog.rows(log, SRC[0]):
         m = WARN.match(l)
         if not m:
             continue

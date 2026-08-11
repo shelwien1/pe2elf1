@@ -2787,3 +2787,58 @@ fast back end that is deleted, an English word in backticks — on the same
 footing as `liftframe.PROVEN` and `unnamed.KEPT`. Adding a name to it is a
 claim that the document means it historically. Not finding one there is the
 finding.
+
+## 35. One check in four places, missing from two of them
+
+`resign.py` reads `warn.log`'s line numbers and retypes what sits on them. Its
+own comment says what a stale log costs:
+
+> Running against a stale one retypes whatever now sits on those lines: it
+> applied 17 changes to the wrong locals and put the warning count *up* by 43,
+> which the ratchet caught and the streams did not.
+
+`build.sh` stamps `warn.log` with `cksum` of the source it was built from, and
+`resign.py` checks the stamp. `resign_group.py` checks it too, with its own
+copy of the code. Three other things read the same logs:
+
+* `explicitcmp.py` filtered warnings by whether the path it was given *ends
+  with* the log's filename — which a copy of `subs1.hpp` satisfies whatever the
+  copy contains;
+* `retype_locals.py` matched `^subs1\.hpp:` as a literal, so it never asked
+  which `subs1.hpp`;
+* `strict.log` had no stamp at all. `build.sh` wrote `warn.log`'s and not its.
+
+Both would have applied a stale log's line numbers to whatever now sits on
+them, which is `resign.py`'s seventeen wrong locals with nothing to catch it —
+`retype_locals.py` writes the file. One implementation checked in two places
+is how the third and fourth come to be missing, so it is `tools/buildlog.py`
+now, and all four use it.
+
+### Where the note goes
+
+The obvious shape is what `resign.py` did: print "nothing to say about X: the
+log describes another file" and exit 0. That is wrong for the counting tools.
+`sweep.sh` requires every counting tool's last line to contain a zero, so a
+tool that prints a sentence and exits fails the sweep for a reason that has
+nothing to do with the file — and one that prints a bare `0 sites` against a
+stale log has told exactly the lie this is here to stop.
+
+So `buildlog.read` returns the reason rather than printing it, and the caller
+puts it in the summary:
+
+```
+0 signed/unsigned comparisons whose conversion is implicit (warn.log describes another file)
+0 locals can take the type their assignments have (strict.log describes another file)
+```
+
+Both a zero and the reason for it. `buildlog.rows` is the exiting form, for
+the two tools that report rather than count.
+
+### The tools moved under the run
+
+`proven.sh` pins `subs1.hpp` at the start — §33 — and did not pin `tools/`. A
+run takes ten minutes and reads each tool off disk as it reaches it, so the
+answers at the top come from one version of the directory and the ones at the
+bottom from another. It showed in its own output: `explicitcmp.py` was
+reported as reading `warn.log, cksum` by a run that had started before `cksum`
+was anywhere in it. The directory is copied with the file now.
