@@ -22,7 +22,7 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp / bmf.cpp lines            17787     17616         17548
+subs1.hpp / bmf.cpp lines            17787     17616         17539
 raw-offset sites                        22        12             5
   off `_this`                            —         1             0
 byte offsets on a typed base           121         0             0
@@ -31,8 +31,8 @@ fNN members / named ones             93/121     5/162         0/171
 distinct unexplained locals            554       591             0
   bodies still carrying one              —    8/102         0/103
   uses                                    —      6302             0
-locals named for a callee parameter      —         —            71
-  declarations / bodies                   —         —        127/27
+locals named for a callee parameter      —         —             0
+  declarations / bodies                   —         —           0/0
 goto / LABEL_n:                     112/79     81/55         49/33
   restart a loop / exit N blocks         —         —         15/32
   sideways to a join / to neither        —         —           2/0
@@ -1674,3 +1674,50 @@ the test: `InName` and `OutName` in `bmf_compress` are names somebody chose,
 `alt_p2_context` were named by §4. Counting every capitalised local would have
 put those in the row and made it a measure of typography. Counting the CRT
 vocabulary counts the names Hex-Rays wrote and nothing else.
+
+### And then named
+
+All 127, in all 27 bodies. Most of it is what the names always were once
+somebody looked: `Stream_v` is a `FILE *` and is `fp`, `ElementCount` is a
+`fread` count and is what is being counted, `Sizea_1` in `read_bmp` is the byte
+an RLE8 run repeats. Three parameters turn out never to be read at all —
+`rc_begin_decode`'s flag and the two that pass it one — and say so now, which
+is a fact about the program and not a naming choice.
+
+Two of the bodies had more than names in them.
+
+**`search_filter` had eleven copies of two frame members.** `Blockb_1` …
+`Blockb_9` are nine reloads of `__frame.Blockb` and `Srca` … `Srca_5` five of
+`__frame.Srca_7`, each assigned and used a line or two later with nothing
+writing the member in between — and one of the six call sites *already* passed
+the member directly, which is exactly what the other five look like now.
+`uncopy.py` does not see these: it looks for a local that copies another
+*local*, and a copy of a member needs the member proved unchanged across the
+gap, which is not decidable from its text. The four with several dereferences
+keep a local, because four repetitions of `__frame.tile_img` is a reload
+written out rather than removed.
+
+**`compress_image`'s masks were the fifth naming trap**, and `write_bmp` was
+the sixth: `rename.py` had to be corrected twice more before this section could
+be finished, which is a rate worth recording rather than hiding.
+
+### `rename.py`, three defects deep
+
+Renaming is the operation this project performs most and its tool had three
+things wrong with it, each found by a stopped build rather than by reading:
+
+1. **A whole-file rename of a name some frame declares** moves the member's
+   declaration and leaves its `__frame.X` uses behind — §20's `m1`.
+   `frames_declaring` refuses it now and names the frames.
+2. **`--member` was rejected as a malformed `OLD=NEW`.** The flag is read off
+   `sys.argv` where it is used but was left in the positional list, so the one
+   documented way out of defect 1 did not run.
+3. **A body with both a local and a frame member of one name** — `write_bmp`
+   has a local `Buffera` and a `WriteBmpFrame::Buffera` — renamed the member's
+   declaration along with the local, because a member's declaration is a bare
+   identifier even though its uses are not. Lines inside a frame struct are
+   skipped now unless `--member` says the member is the target.
+
+All three are the same shape: `__frame.X` is deliberately *not* a use of `X`,
+and every place that fact matters had to be told separately. The pattern is
+right and the exception list around it was three entries short.

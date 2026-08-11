@@ -97,7 +97,15 @@ def rename_in(path, fn, pairs):
         # without the flag a frame member's declaration renames and its uses do
         # not, and the build stops.
         pat = (r'\b%s\b' if '--member' in sys.argv else NAMED)
-        text, k = re.subn(pat % re.escape(old), new, text)
+        rx = re.compile(pat % re.escape(old))
+        skip = set() if '--member' in sys.argv else frame_lines(text)
+        rows, k = text.split('\n'), 0
+        for i, l in enumerate(rows):
+            if i in skip:
+                continue
+            rows[i], n = rx.subn(new, l)
+            k += n
+        text = '\n'.join(rows)
         print('%-22s -> %-22s %4d' % (old, new, k))
         total += k
     lines[a:b + 1] = text.split('\n')
@@ -111,6 +119,30 @@ def locals_named(text, name):
                      r'[\s*&]+(?:[A-Za-z_][A-Za-z0-9_]*\s*,\s*)*\**%s\b'
                      % re.escape(name), re.M)
     return len(pat.findall(text))
+
+
+def frame_lines(text):
+    """Line indexes inside a frame struct's body.
+
+    A frame member is reached as `__frame.X`, which the member-safe pattern
+    excludes -- but its *declaration* is a bare `X` and gets renamed anyway.
+    So a body that has both a local and a frame member called `Buffera` had the
+    member's declaration moved and its uses left, and the build stopped.  These
+    lines are skipped unless `--member` says the member is the target.
+    """
+    out, depth, inside = set(), 0, False
+    for i, l in enumerate(text.split('\n')):
+        c = l.split('//')[0]
+        if not inside and re.match(r'\s*struct\s+(?:alignas\([^)]*\)\s*)?\w*\s*\{', c):
+            inside, depth = True, c.count('{') - c.count('}')
+            out.add(i)
+            continue
+        if inside:
+            out.add(i)
+            depth += c.count('{') - c.count('}')
+            if depth <= 0:
+                inside = False
+    return out
 
 
 def frames_declaring(text, name):

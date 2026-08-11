@@ -4914,7 +4914,7 @@ static_assert(__builtin_offsetof(BmpHeader, bfOffBits) == 10
               && __builtin_offsetof(BmpHeader, biClrImportant) == 50,
               "BmpHeader fields are not where the format puts them");
 
-int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
+int32_t __write_bmp(uintptr_t p_i, char *path, int32_t a3)
 {
   // p_i, p_i_1 and p_i_2 are the same descriptor -- `p_i_1 = p_i` and
   // `p_i_2 = (uint16_t *)p_i`, and none is stepped -- so one view serves all
@@ -4951,10 +4951,10 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  uint32_t Buffera;
-  uint8_t *Bufferb;
-  uint8_t *Bufferc;
-  uint32_t Size_2;
+  uint32_t levels;
+  uint8_t *data_ofs;
+  uint8_t *out;
+  uint32_t stride;
   // These shared `__frame.pairs` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
@@ -4973,67 +4973,67 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
   uint8_t *abs_end;
-  int32_t Buffer_2;
+  int32_t rows2;
   uint8_t *buf;
   uint8_t *abs_end2;
-  int32_t Buffer_5;
+  int32_t row_i2;
   int32_t run_max;
   int32_t nib;
   uint8_t *buf_2;
   uint32_t end;
   ;
   uintptr_t p_i_1;   // were int32_t: addresses, masked and tagged
-  FILE *Stream_1, *Stream_2;
+  FILE *fp, *fp2;
   bool can_rle;
-  uint8_t *Bufferc_3, *Bufferb_1, *pal, *pal2, *buf_1, *p, *q, *buf_3,
-          *Bufferc_2;
-  uint32_t Size_1;
+  uint8_t *out_buf, *data_ofs2, *pal, *pal2, *buf_1, *p, *q, *buf_3,
+          *out2;
+  uint32_t stride1;
   uint32_t at;
   uint32_t at2;
   uint32_t slot;
-  int32_t rle_on, i, Buffer_1, bits, ncolours, grey, bgr, r, bgr2, rle_mode,
-          src_bits, rle_kind, Buffer_3, Buffer_4, Size, byte, run, coded_bytes, y;
+  int32_t rle_on, i, rows, bits, ncolours, grey, bgr, r, bgr2, rle_mode,
+          src_bits, rle_kind, rows3, row_i, lit_len, byte, run, coded_bytes, y;
   uint16_t *p_i_2;
-  uint32_t k, j, Bufferb_2, Size_3, ElementCount, pad;
+  uint32_t k, j, data_len, stride3, n_bytes, pad;
   rle_on = a3;
-  Stream_1 = fopen(FileName, "wb");
-  if ( !Stream_1 )
+  fp = fopen(path, "wb");
+  if ( !fp )
     return 0;
-  Bufferc_3 = (uint8_t *)bmf_new(img->data_size
+  out_buf = (uint8_t *)bmf_new(img->data_size
                                  + 8 * img->height
                                  + (img->data_size >> 5) + 2048);
   p_i_1 = p_i;
-  // Bufferc, Bufferc_3, Bufferc_2 and Bufferc_3 are one allocation: the chain
-  // is Bufferc_3 = Bufferc_3, Bufferc = Bufferc_3, Bufferc_2 = Bufferc, and
+  // out, out_buf, out2 and out_buf are one allocation: the chain
+  // is out_buf = out_buf, out = out_buf, out2 = out, and
   // none of them is ever stepped.  So one view of the header serves all four,
-  // and the pixel writes through Bufferc_3[k + 54] keep the spelling they had.
-  BmpHeader *bmp = (BmpHeader *)Bufferc_3;
+  // and the pixel writes through out_buf[k + 54] keep the spelling they had.
+  BmpHeader *bmp = (BmpHeader *)out_buf;
   i = img->width;
   bmp->biSize = 40;
   bmp->bfType = 0x4D42 /* 'BM' */;
-  Buffer_1 = img->height;
-  Buffer_2 = Buffer_1;
+  rows = img->height;
+  rows2 = rows;
   bmp->bfReserved2 = 0;
   bmp->bfReserved1 = 0;
   bmp->biWidth = i;
-  bmp->biHeight = Buffer_1;
-  LOBYTE(Buffer_1) = img->depth;
-  (*((int8_t *)&__frame.Buffera)) = Buffer_1;
+  bmp->biHeight = rows;
+  LOBYTE(rows) = img->depth;
+  (*((int8_t *)&__frame.Buffera)) = rows;
   bmp->biPlanes = 1;
-  bits = Buffer_1 & 0x3F;
+  bits = rows & 0x3F;
   bmp->biBitCount = bits;
   bmp->biClrImportant = 0;
   bmp->biClrUsed = 0;
   bmp->biYPelsPerMeter = 0;
   bmp->biXPelsPerMeter = 0;
-  buf = Bufferc_3 + 54;
+  buf = out_buf + 54;
   if ( bits <= 8 )
   {
     ncolours = 1 << (bits & 31);
     ncol = 1 << (bits & 31);
     if ( ((*((int8_t *)&__frame.Buffera)) & 0x40) != 0 )
     {
-      Buffera = 0x100u >> (bits & 31);
+      levels = 0x100u >> (bits & 31);
       if ( ncol > 0 )
       {
         if ( ncol / 2 )
@@ -5042,13 +5042,13 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
           grey = 0;
           do
           {
-            *(uint32_t *)&Bufferc_3[8 * k + 54] = ((uint8_t)grey << 16)
+            *(uint32_t *)&out_buf[8 * k + 54] = ((uint8_t)grey << 16)
                                                 | (uint8_t)grey
                                                 | ((uint8_t)grey << 8);
-            *(uint32_t *)&Bufferc_3[8 * k + 58] = ((uint8_t)(grey - Buffera + 2 * Buffera) << 16)
-                                                | (uint8_t)(grey - Buffera + 2 * Buffera)
-                                                | ((uint8_t)(grey - Buffera + 2 * Buffera) << 8);
-            grey += 2 * Buffera;
+            *(uint32_t *)&out_buf[8 * k + 58] = ((uint8_t)(grey - levels + 2 * levels) << 16)
+                                                | (uint8_t)(grey - levels + 2 * levels)
+                                                | ((uint8_t)(grey - levels + 2 * levels) << 8);
+            grey += 2 * levels;
             ++k;
           }
           while ( k < (uint32_t)(ncol / 2) );
@@ -5060,16 +5060,16 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
           at = 1;
         }
         if ( (at - 1) < (uint32_t)ncol )
-          *(uint32_t *)&Bufferc_3[4 * at + 50] = ((uint8_t)(Buffera * (at - 1)) << 16)
-                                              | (uint8_t)(Buffera * (at - 1))
-                                              | ((uint8_t)(Buffera * (at - 1)) << 8);
+          *(uint32_t *)&out_buf[4 * at + 50] = ((uint8_t)(levels * (at - 1)) << 16)
+                                              | (uint8_t)(levels * (at - 1))
+                                              | ((uint8_t)(levels * (at - 1)) << 8);
       }
-      Bufferb_1 = (uint8_t *)(uintptr_t)img->data_size;
+      data_ofs2 = (uint8_t *)(uintptr_t)img->data_size;
       pal_bytes = 4 * ncol;
     }
     else if ( (*((int8_t *)&__frame.Buffera)) < 0 )
     {
-      Bufferb_1 = (uint8_t *)(uintptr_t)img->data_size;
+      data_ofs2 = (uint8_t *)(uintptr_t)img->data_size;
       if ( ncol <= 0 )
       {
         pal_bytes = 4 * ncolours;
@@ -5079,21 +5079,21 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
         pairs = ncolours / 2;
         if ( ncolours / 2 )
         {
-          Bufferb = (uint8_t *)(uintptr_t)img->data_size;
+          data_ofs = (uint8_t *)(uintptr_t)img->data_size;
           j = 0;
-          pal = &Bufferb_1[p_i];
+          pal = &data_ofs2[p_i];
           do
           {
             slot = 2 * j;
             bgr = *(uint16_t *)&pal[6 * j + 19];
             r = (uint8_t)pal[6 * j + 21];
-            *(uint32_t *)&Bufferc_3[4 * slot + 54] = ((uint8_t)pal[6 * j + 18] << 16)
+            *(uint32_t *)&out_buf[4 * slot + 54] = ((uint8_t)pal[6 * j + 18] << 16)
                                                 | *(uint16_t *)&pal[6 * j + 16];
-            *(uint32_t *)&Bufferc_3[4 * slot + 58] = (r << 16) | bgr;
+            *(uint32_t *)&out_buf[4 * slot + 58] = (r << 16) | bgr;
             ++j;
           }
           while ( j < pairs );
-          Bufferb_1 = Bufferb;
+          data_ofs2 = data_ofs;
           p_i_1 = p_i;
           rle_on = a3;
           at2 = 2 * j + 1;
@@ -5106,9 +5106,9 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
         }
         if ( (at2 - 1) < (uint32_t)ncol )
         {
-          pal2 = &Bufferb_1[p_i_1];
+          pal2 = &data_ofs2[p_i_1];
           bgr2 = *(uint16_t *)&pal2[3 * done + 13];
-          *(uint32_t *)&Bufferc_3[4 * done + 50] = (((uint8_t)pal2[3 * done + 15]) << 16) | bgr2;
+          *(uint32_t *)&out_buf[4 * done + 50] = (((uint8_t)pal2[3 * done + 15]) << 16) | bgr2;
           p_i_1 = p_i;
         }
         pal_bytes = 4 * ncol;
@@ -5119,25 +5119,25 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
       pal_bytes = 4 * ncolours;
       memset(buf,0,4 * ncolours);
       p_i_1 = p_i;
-      Bufferb_1 = (uint8_t *)(uintptr_t)img->data_size;
-      Buffer_2 = img->height;
+      data_ofs2 = (uint8_t *)(uintptr_t)img->data_size;
+      rows2 = img->height;
     }
-    buf = &Bufferc_3[pal_bytes + 54];
+    buf = &out_buf[pal_bytes + 54];
   }
   else
   {
-    Bufferb_1 = (uint8_t *)(uintptr_t)img->data_size;
+    data_ofs2 = (uint8_t *)(uintptr_t)img->data_size;
   }
-  Size_2 = img->stride;
-  Bufferc = Bufferc_3;
-  off_bits = (uint8_t *)(buf - Bufferc_3);
+  stride = img->stride;
+  out = out_buf;
+  off_bits = (uint8_t *)(buf - out_buf);
   p_i_2 = (uint16_t *)p_i_1;
   rle_mode = rle_on;
-  Bufferb_2 = (uint32_t)Bufferb_1;
+  data_len = (uint32_t)data_ofs2;
   while ( 1 )
   {
     buf_1 = buf;
-    p = (uint8_t *)p_i_2 + Bufferb_2 - Size_2 + 16;
+    p = (uint8_t *)p_i_2 + data_len - stride + 16;
     bmp->bfOffBits = (uintptr_t)off_bits;
     if ( !rle_mode )
       break;
@@ -5155,19 +5155,19 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
     bmp->biCompression = rle_kind;
     nib = rle_kind - 1;
     run_max = (0x100u >> ((rle_kind - 1) & 31)) - 1;
-    if ( Buffer_2 > 0 )
+    if ( rows2 > 0 )
     {
-      Buffer_3 = Buffer_2;
-      Size_3 = Size_2;
-      Buffer_4 = 0;
+      rows3 = rows2;
+      stride3 = stride;
+      row_i = 0;
       while ( 1 )
       {
-        if ( p >= &p[Size_3] )
+        if ( p >= &p[stride3] )
           goto LABEL_72;
         buf_2 = buf_1;
-        end = (uint32_t)&p[Size_3];
-        Buffer_5 = Buffer_4;
-        Size = 0;
+        end = (uint32_t)&p[stride3];
+        row_i2 = row_i;
+        lit_len = 0;
         do
         {
           while ( 1 )
@@ -5186,28 +5186,28 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
                 ++run;
               }
               while ( end > (uint32_t)&p[run] );
-              if ( run <= 2 && (run != 2 || Size) )
+              if ( run <= 2 && (run != 2 || lit_len) )
                 break;
               if ( run_max < run )
                 run = run_max;
-              if ( Size )
+              if ( lit_len )
               {
                 // Flush the literals collected so far.  An absolute run is
                 // worth its two-byte header from two literals in 4-bit mode
                 // and three in 8-bit, and below that the literals go out as
                 // one- or two-pixel encoded runs instead.  `LABEL_67` was
                 // that one condition written as a jump from inside the other
-                // arm; the two spellings of it are `Size != 1` and `Size >= 3`.
-                if ( nib ? Size != 1 : Size >= 3 )
+                // arm; the two spellings of it are `lit_len != 1` and `lit_len >= 3`.
+                if ( nib ? lit_len != 1 : lit_len >= 3 )
                 {
                   *buf_2 = 0;
                   abs_end2 = buf_2 + 2;
-                  buf_2[1] = Size << (nib & 31);
-                  memcpy(buf_2 + 2,&p[-Size],Size);
-                  buf_2 += Size + 2;
-                  if ( (Size & 1) != 0 )
+                  buf_2[1] = lit_len << (nib & 31);
+                  memcpy(buf_2 + 2,&p[-lit_len],lit_len);
+                  buf_2 += lit_len + 2;
+                  if ( (lit_len & 1) != 0 )
                   {
-                    abs_end2[Size] = 0;
+                    abs_end2[lit_len] = 0;
                     ++buf_2;
                   }
                 }
@@ -5219,7 +5219,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
                 }
                 else
                 {
-                  if ( Size == 2 )
+                  if ( lit_len == 2 )
                   {
                     *buf_2 = 1;
                     buf_2[1] = *(p - 2);
@@ -5229,7 +5229,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
                   buf_2[1] = *(p - 1);
                   buf_2 += 2;
                 }
-                Size = 0;
+                lit_len = 0;
                 LOBYTE(byte) = *p;
               }
               buf_2[1] = byte;
@@ -5240,28 +5240,28 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
               if ( (uint32_t)p >= end )
               {
                 buf_1 = buf_3;
-                Buffer_4 = Buffer_5;
-                Buffer_3 = img->height;
-                Size_3 = img->stride;
+                row_i = row_i2;
+                rows3 = img->height;
+                stride3 = img->stride;
                 goto LABEL_72;
               }
             }
             ++p;
-            if ( ++Size != run_max )
+            if ( ++lit_len != run_max )
               break;
             // The same flush as above, at the point where a literal run hits
             // its length cap, and the same one condition: two literals pay for
             // an absolute run in 4-bit mode, three in 8-bit.
-            if ( nib ? Size != 1 : Size >= 3 )
+            if ( nib ? lit_len != 1 : lit_len >= 3 )
             {
               *buf_2 = 0;
               abs_end = buf_2 + 2;
-              buf_2[1] = Size << (nib & 31);
-              memcpy(buf_2 + 2,&q[-Size],Size);
-              buf_2 += Size + 2;
-              if ( (Size & 1) != 0 )
+              buf_2[1] = lit_len << (nib & 31);
+              memcpy(buf_2 + 2,&q[-lit_len],lit_len);
+              buf_2 += lit_len + 2;
+              if ( (lit_len & 1) != 0 )
               {
-                abs_end[Size] = 0;
+                abs_end[lit_len] = 0;
                 ++buf_2;
               }
             }
@@ -5273,7 +5273,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
             }
             else
             {
-              if ( Size == 2 )
+              if ( lit_len == 2 )
               {
                 *buf_2 = 1;
                 buf_2[1] = *(q - 2);
@@ -5286,43 +5286,43 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
             if ( (uint32_t)q >= end )
             {
               buf_1 = buf_2;
-              Buffer_4 = Buffer_5;
-              Buffer_3 = img->height;
-              Size_3 = img->stride;
+              row_i = row_i2;
+              rows3 = img->height;
+              stride3 = img->stride;
               goto LABEL_72;
             }
-            Size = 0;
+            lit_len = 0;
           }
         }
         while ( (uint32_t)q < end );
         buf_1 = buf_2;
-        Buffer_4 = Buffer_5;
+        row_i = row_i2;
         // End of the row: flush whatever literals are left, by the same rule
         // once more.  `LABEL_89` and `LABEL_97` were this written as four
         // entries into two blocks; every one of them ends by loading the
         // image geometry and falling into the row terminator below.
-        if ( Size && (nib ? Size != 1 : Size >= 3) )
+        if ( lit_len && (nib ? lit_len != 1 : lit_len >= 3) )
         {
           *buf_2 = 0;
-          buf_2[1] = Size << (nib & 31);
-          memcpy(buf_2 + 2,&q[-Size],Size);
-          Buffer_4 = Buffer_5;
-          buf_1 = &buf_2[Size + 2];
-          if ( (Size & 1) != 0 )
+          buf_2[1] = lit_len << (nib & 31);
+          memcpy(buf_2 + 2,&q[-lit_len],lit_len);
+          row_i = row_i2;
+          buf_1 = &buf_2[lit_len + 2];
+          if ( (lit_len & 1) != 0 )
           {
-            buf_2[Size + 2] = 0;
+            buf_2[lit_len + 2] = 0;
             ++buf_1;
           }
         }
-        else if ( Size && nib )
+        else if ( lit_len && nib )
         {
           buf_2[1] = *(q - 1);
           *buf_2 = 2;
           buf_1 = buf_2 + 2;
         }
-        else if ( Size )
+        else if ( lit_len )
         {
-          if ( Size == 2 )
+          if ( lit_len == 2 )
           {
             *buf_2 = 1;
             buf_2[1] = *(q - 2);
@@ -5332,8 +5332,8 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
           *buf_1 = 1;
           buf_1 += 2;
         }
-        Buffer_3 = img->height;
-        Size_3 = img->stride;
+        rows3 = img->height;
+        stride3 = img->stride;
         // The row terminator, and the one place five paths above jump to.
         // It stays a label: they are early exits out of three nested loops,
         // which is the shape a forward jump to a single join is for.
@@ -5341,14 +5341,14 @@ LABEL_72:
         *buf_1 = 0;
         buf_1[1] = 0;
         buf_1 += 2;
-        ++Buffer_4;
-        p -= 2 * Size_3;
-        if ( Buffer_4 >= Buffer_3 )
+        ++row_i;
+        p -= 2 * stride3;
+        if ( row_i >= rows3 )
         {
-          Buffer_2 = Buffer_3;
-          Size_2 = Size_3;
+          rows2 = rows3;
+          stride = stride3;
           p_i_2 = (uint16_t *)p_i;
-          Bufferb_2 = img->data_size;
+          data_len = img->data_size;
           break;
         }
       }
@@ -5357,40 +5357,40 @@ LABEL_72:
     buf_1[1] = 1;
     buf_1 += 2;
     coded_bytes = buf_1 - buf;
-    if ( Bufferb_2 > (uint32_t)(buf_1 - buf) )
+    if ( data_len > (uint32_t)(buf_1 - buf) )
     {
       // The shared tail, copied here: the two assignments it used to reach it
-      // through are gone with the `goto`, so it names `Bufferc` and `Stream_1`
+      // through are gone with the `goto`, so it names `out` and `fp`
       // directly.
       bmp->biSizeImage = (uint32_t)coded_bytes;
-      ElementCount = (uint32_t)(buf_1 - Bufferc);
-      bmp->bfSize = ElementCount;
-      if ( fwrite(Bufferc, 1u, ElementCount, Stream_1) != bmp->bfSize )
+      n_bytes = (uint32_t)(buf_1 - out);
+      bmp->bfSize = n_bytes;
+      if ( fwrite(out, 1u, n_bytes, fp) != bmp->bfSize )
         return 0;
-      free(Bufferc);
-      fclose(Stream_1);
+      free(out);
+      fclose(fp);
       return 1;
     }
     rle_mode = 0;
   }
-  Stream_2 = Stream_1;
-  Bufferc_2 = Bufferc;
+  fp2 = fp;
+  out2 = out;
   bmp->biCompression = 0;
-  if ( Buffer_2 <= 0 )
+  if ( rows2 <= 0 )
   {
     coded_bytes = 0;
   }
   else
   {
-    pad = ((Size_2 + 3) & 0xFFFFFFFC) - Size_2;
-    Size_1 = Size_2;
+    pad = ((stride + 3) & 0xFFFFFFFC) - stride;
+    stride1 = stride;
     y = 0;
     do
     {
-      memcpy(buf_1,p,Size_1);
-      Size_1 = img->stride;
-      buf_1 += Size_1;
-      p -= Size_1;
+      memcpy(buf_1,p,stride1);
+      stride1 = img->stride;
+      buf_1 += stride1;
+      p -= stride1;
       if ( pad )
       {
         *(uint32_t *)buf_1 = 0;
@@ -5399,17 +5399,17 @@ LABEL_72:
       ++y;
     }
     while ( y < img->height );
-    Bufferc_2 = Bufferc;
-    Stream_2 = Stream_1;
+    out2 = out;
+    fp2 = fp;
     coded_bytes = buf_1 - buf;
   }
   bmp->biSizeImage = (uint32_t)coded_bytes;
-  ElementCount = (uint32_t)(buf_1 - Bufferc_2);
-  bmp->bfSize = ElementCount;
-  if ( fwrite(Bufferc_2, 1u, ElementCount, Stream_2) != bmp->bfSize )
+  n_bytes = (uint32_t)(buf_1 - out2);
+  bmp->bfSize = n_bytes;
+  if ( fwrite(out2, 1u, n_bytes, fp2) != bmp->bfSize )
     return 0;
-  free(Bufferc_2);
-  fclose(Stream_2);
+  free(out2);
+  fclose(fp2);
   return 1;
 }
 uint32_t __init_symbol_list(SymList *list, int32_t a2, int32_t n_syms, int32_t dense)
@@ -8939,18 +8939,18 @@ LABEL_19:
   return result;
 }
 
-int32_t *__read_bmp(char *FileName)
+int32_t *__read_bmp(char *path)
 {
   // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
   // gives every member its own storage and DLRAW aborts while compressing.
   struct alignas(16) ReadBmpFrame {   // 128 bytes, one stack frame
       uint32_t Size_4;
-      int32_t Size;
+      int32_t pal_bytes;
       BmfImage *img_f;
-      int32_t Src_2;
-      void *Buffer_3;
+      int32_t row_ofs;
+      void *pal_buf;
       uint8_t _pad0[4];
-      uint8_t *Src;
+      uint8_t *row;
       uint8_t _pad1[4];
       uint8_t bmp_bgra[4];
       uint32_t bmp_info_hdr[2];
@@ -8972,28 +8972,28 @@ int32_t *__read_bmp(char *FileName)
   // the gate's answer -- nothing writes one of them and reads another.
   int32_t y4;
   int32_t y8;
-  // These shared `__frame.Size` with the name that still binds it: one
+  // These shared `__frame.pal_bytes` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  uint8_t Sizeb;
-  // These shared `__frame.Src_2` with the name that still binds it: one
+  uint8_t pix;
+  // These shared `__frame.row_ofs` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
   int32_t run4;
   ;
-  uintptr_t Src_1;   // were int32_t: addresses, masked and tagged
+  uintptr_t row_at;   // were int32_t: addresses, masked and tagged
   uint8_t *pal, *pal2, *pal3;   // were int32_t: these hold addresses
-  FILE *Stream_v;
+  FILE *fp;
   uint8_t lo;
   uint8_t cur, lo16;
-  uint8_t *Src_4, *Src_3, *Src_6, *Buffer_4, *Src_5;   // `uint8_t *` beside the `char` scalars above
+  uint8_t *row4, *row3, *row6, *pal_at, *row5;   // `uint8_t *` beside the `char` scalars above
   BmfImage *img;
-  uint32_t Offset_2;
+  uint32_t row_pad;
   uint32_t byte;
-  int32_t Size_1, i, j_3, Sizea_1, hi_nibble, left4, left4b, y, dx, dxy, step;
-  uint32_t Size_2, pair, hi, ElementCount, ElementCount_1, left;
+  int32_t pal_n, i, j_3, run_val, hi_nibble, left4, left4b, y, dx, dxy, step;
+  uint32_t stride_pad, pair, hi, stride, got, left;
   // These two freads land in the frame, and each writes across several of the
   // slots Hex-Rays split it into -- which is why the fields do not look like
   // fields.  `bmp_info_hdr` is declared `uint32_t[2]` and the read is 40 bytes:
@@ -9015,30 +9015,30 @@ int32_t *__read_bmp(char *FileName)
   // bmp_clr_used overrides `1 << bmp_bits` as the palette size, bmp_height goes
   // to alloc_image as the height.  The struct that says the same thing in one
   // piece is `BmpHeader`, above write_bmp, which builds this on the way out.
-  Stream_v = fopen(FileName, "rb");
-  if ( !Stream_v
-    || fread(__frame.bmp_file_hdr, 0xEu, 1u, Stream_v) != 1
+  fp = fopen(path, "rb");
+  if ( !fp
+    || fread(__frame.bmp_file_hdr, 0xEu, 1u, fp) != 1
     || __frame.bmp_file_hdr[0] != 0x4D42 /* 'BM' */
-    || fread(__frame.bmp_info_hdr, 0x28u, 1u, Stream_v) != 1
+    || fread(__frame.bmp_info_hdr, 0x28u, 1u, fp) != 1
     || __frame.bmp_info_hdr[0] != 40
     || __frame.bmp_planes != 1 )
   {
     return nullptr;
   }
   img = (BmfImage *)(__alloc_image(__frame.bmp_info_hdr[1], __frame.bmp_height, __frame.bmp_bits, __frame.bmp_bits <= 8u, 1));
-  Size_2 = (img->stride + 3) & 0xFFFFFFFC;
+  stride_pad = (img->stride + 3) & 0xFFFFFFFC;
   if ( __frame.bmp_bits <= 8u )
   {
-    Size_1 = 1 << (__frame.bmp_bits & 31);
+    pal_n = 1 << (__frame.bmp_bits & 31);
     if ( __frame.bmp_clr_used )
-      Size_1 = __frame.bmp_clr_used;
-    if ( Size_1 > 0 )
+      pal_n = __frame.bmp_clr_used;
+    if ( pal_n > 0 )
     {
       __frame.Size_4 = (img->stride + 3) & 0xFFFFFFFC;
-      __frame.Size = Size_1;
-      for ( i = 0; i < __frame.Size; ++i )
+      __frame.pal_bytes = pal_n;
+      for ( i = 0; i < __frame.pal_bytes; ++i )
       {
-        fread(__frame.bmp_bgra, 4u, 1u, Stream_v);
+        fread(__frame.bmp_bgra, 4u, 1u, fp);
         if ( (img->depth & 0x80) != 0 )
           pal = (uint8_t *)(uintptr_t)img + img->data_size + 16;
         else
@@ -9055,27 +9055,27 @@ int32_t *__read_bmp(char *FileName)
           pal3 = 0;
         *(pal3 + 3 * i) = __frame.bmp_bgra[0];
       }
-      Size_2 = __frame.Size_4;
+      stride_pad = __frame.Size_4;
     }
   }
-  __frame.Buffer_3 = bmf_new(Size_2);
-  __frame.Src = (uint8_t *)img + img->data_size - img->stride + 16;
-  fseek(Stream_v, (*(int32_t *)((uint8_t *)__frame.bmp_off_bits)), 0);
+  __frame.pal_buf = bmf_new(stride_pad);
+  __frame.row = (uint8_t *)img + img->data_size - img->stride + 16;
+  fseek(fp, (*(int32_t *)((uint8_t *)__frame.bmp_off_bits)), 0);
   if ( __frame.bmp_compression )
   {
     if ( __frame.bmp_compression == 1 )
     {
       memset(img->pixels,0,img->data_size);
-      Src_1 = (int32_t)__frame.Src;
+      row_at = (int32_t)__frame.row;
       __frame.img_f = img;
       y4 = img->height - 1;
       while ( 1 )
       {
-        __frame.Src_2 = Src_1;
-        if ( ferror(Stream_v) )
+        __frame.row_ofs = row_at;
+        if ( ferror(fp) )
           return nullptr;
-        j_3 = fgetc(Stream_v);
-        Sizea_1 = fgetc(Stream_v);
+        j_3 = fgetc(fp);
+        run_val = fgetc(fp);
         if ( j_3 )
         {
           // An RLE8 run: `j_3` copies of one byte.  What was here instead was
@@ -9088,30 +9088,30 @@ int32_t *__read_bmp(char *FileName)
           // ends mid-run keeps writing.  That is a real defect, recorded
           // rather than repaired (REFACTORING.md §6), and it is why the
           // malformed-input check truncates an uncompressed BMP instead.
-          __builtin_memset((void *)__frame.Src_2, Sizea_1, j_3);
-          Src_1 = __frame.Src_2 + j_3;
+          __builtin_memset((void *)__frame.row_ofs, run_val, j_3);
+          row_at = __frame.row_ofs + j_3;
         }
-        else if ( Sizea_1 )
+        else if ( run_val )
         {
-          if ( Sizea_1 == 1 )
+          if ( run_val == 1 )
             goto LABEL_61;
-          if ( Sizea_1 == 2 )
+          if ( run_val == 2 )
           {
-            dx = fgetc(Stream_v);
-            Src_1 = dx + Src_1 - fgetc(Stream_v) * *((uint16_t *)__frame.img_f + 2);
+            dx = fgetc(fp);
+            row_at = dx + row_at - fgetc(fp) * *((uint16_t *)__frame.img_f + 2);
           }
           else
           {
-            fread(__frame.Buffer_3, (Sizea_1 + 1) & 0xFFFFFFFE, 1u, Stream_v);
-            memcpy((uint8_t *)Src_1,(uint8_t *)__frame.Buffer_3,Sizea_1);
-            Src_1 += Sizea_1;
+            fread(__frame.pal_buf, (run_val + 1) & 0xFFFFFFFE, 1u, fp);
+            memcpy((uint8_t *)row_at,(uint8_t *)__frame.pal_buf,run_val);
+            row_at += run_val;
           }
         }
         else
         {
           if ( --y4 < 0 )
             goto LABEL_61;
-          Src_1 = (int32_t)__frame.img_f + y4 * *((uint16_t *)__frame.img_f + 2) + 16;
+          row_at = (int32_t)__frame.img_f + y4 * *((uint16_t *)__frame.img_f + 2) + 16;
         }
       }
     }
@@ -9128,10 +9128,10 @@ int32_t *__read_bmp(char *FileName)
         while ( 1 )
         {
 LABEL_44:
-          if ( ferror(Stream_v) )
+          if ( ferror(fp) )
             return nullptr;
-          run4 = fgetc(Stream_v);
-          byte = fgetc(Stream_v);
+          run4 = fgetc(fp);
+          byte = fgetc(fp);
           pair = byte;
           if ( !run4 )
             break;
@@ -9139,45 +9139,45 @@ LABEL_44:
           if ( hi_nibble )
           {
             left4b = run4;
-            Src_3 = __frame.Src;
+            row3 = __frame.row;
             while ( left4b != 1 )
             {
-              *Src_3++ = pair;
+              *row3++ = pair;
               left4b -= 2;
               if ( !left4b )
               {
-                __frame.Src = Src_3;
+                __frame.row = row3;
                 hi_nibble = 1;
                 goto LABEL_44;
               }
             }
-            __frame.Src = Src_3;
-            *Src_3 = pair & 0xF0;
+            __frame.row = row3;
+            *row3 = pair & 0xF0;
             hi_nibble = 0;
           }
           else
           {
             left4 = run4;
-            Src_4 = __frame.Src;
-            cur = *__frame.Src;
+            row4 = __frame.row;
+            cur = *__frame.row;
             hi = pair >> 4;
             lo16 = 16 * lo;
             while ( 1 )
             {
-              *Src_4++ = hi | cur;
+              *row4++ = hi | cur;
               if ( left4 == 1 )
                 break;
               cur = lo16;
               left4 -= 2;
               if ( !left4 )
               {
-                __frame.Src = Src_4;
-                *Src_4 = lo16;
+                __frame.row = row4;
+                *row4 = lo16;
                 hi_nibble = 0;
                 goto LABEL_44;
               }
             }
-            __frame.Src = Src_4;
+            __frame.row = row4;
             hi_nibble = 1;
           }
         }
@@ -9185,82 +9185,82 @@ LABEL_44:
           break;
         if ( --y8 < 0 )
           goto LABEL_61;
-        __frame.Src = (uint8_t *)__frame.img_f + y8 * *((uint16_t *)__frame.img_f + 2) + 16;
+        __frame.row = (uint8_t *)__frame.img_f + y8 * *((uint16_t *)__frame.img_f + 2) + 16;
       }
       if ( byte == 1 )
         goto LABEL_61;
       if ( byte != 2 )
         break;
-      dxy = fgetc(Stream_v);
-      step = (dxy >> 1) - fgetc(Stream_v) * *((uint16_t *)__frame.img_f + 2);
+      dxy = fgetc(fp);
+      step = (dxy >> 1) - fgetc(fp) * *((uint16_t *)__frame.img_f + 2);
       if ( (dxy & 1) == 1 )
       {
         if ( !hi_nibble )
           ++step;
         hi_nibble = !hi_nibble;
       }
-      __frame.Src += step;
+      __frame.row += step;
     }
-    fread(__frame.Buffer_3, (((byte + 1) >> 1) + 1) & 0xFFFFFFFE, 1u, Stream_v);
-    Buffer_4 = (uint8_t *)__frame.Buffer_3;
-    Src_5 = __frame.Src;
+    fread(__frame.pal_buf, (((byte + 1) >> 1) + 1) & 0xFFFFFFFE, 1u, fp);
+    pal_at = (uint8_t *)__frame.pal_buf;
+    row5 = __frame.row;
     while ( 1 )
     {
-      Sizeb = *Buffer_4;
+      pix = *pal_at;
       if ( hi_nibble )
       {
         left = pair - 1;
         if ( !left )
         {
-          __frame.Src = Src_5;
-          *Src_5 = *Buffer_4 & 0xF0;
+          __frame.row = row5;
+          *row5 = *pal_at & 0xF0;
           hi_nibble = 0;
           goto LABEL_44;
         }
-        *Src_5++ = Sizeb;
+        *row5++ = pix;
         hi_nibble = 1;
       }
       else
       {
-        *Src_5++ |= (uint8_t)*Buffer_4 >> 4;
+        *row5++ |= (uint8_t)*pal_at >> 4;
         left = pair - 1;
         if ( !left )
         {
-          __frame.Src = Src_5;
+          __frame.row = row5;
           hi_nibble = 1;
           goto LABEL_44;
         }
-        *Src_5 = 16 * (Sizeb & 0xF);
+        *row5 = 16 * (pix & 0xF);
         hi_nibble = 0;
       }
-      ++Buffer_4;
+      ++pal_at;
       pair = left - 1;
       if ( !pair )
       {
-        __frame.Src = Src_5;
+        __frame.row = row5;
         goto LABEL_44;
       }
     }
   }
-  ElementCount = img->stride;
-  Offset_2 = Size_2 - ElementCount;
+  stride = img->stride;
+  row_pad = stride_pad - stride;
   if ( __frame.bmp_height - 1 >= 0 )
   {
     y = __frame.bmp_height - 1;
     __frame.img_f = img;
-    Src_6 = __frame.Src;
+    row6 = __frame.row;
     while ( 1 )
     {
-      ElementCount_1 = fread(Src_6, 1u, ElementCount, Stream_v);
-      ElementCount = *((uint16_t *)__frame.img_f + 2);
-      if ( ElementCount_1 != ElementCount )
+      got = fread(row6, 1u, stride, fp);
+      stride = *((uint16_t *)__frame.img_f + 2);
+      if ( got != stride )
         return nullptr;
-      if ( Offset_2 )
+      if ( row_pad )
       {
-        fseek(Stream_v, Offset_2, 1);
-        ElementCount = *((uint16_t *)__frame.img_f + 2);
+        fseek(fp, row_pad, 1);
+        stride = *((uint16_t *)__frame.img_f + 2);
       }
-      Src_6 -= ElementCount;
+      row6 -= stride;
       if ( --y < 0 )
         goto LABEL_61;
     }
@@ -9277,8 +9277,8 @@ LABEL_44:
   // `img`.  With the reload gone the label is the function's success exit and
   // says so by where it is.
 LABEL_61:
-  fclose(Stream_v);
-  free(__frame.Buffer_3);
+  fclose(fp);
+  free(__frame.pal_buf);
   return (int32_t *)img;
 }
 
@@ -15598,15 +15598,15 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
           };
       };
       int32_t nplanes_s;
-      void *Src;
+      void *row_step;
       uint8_t *arc_f;
       BmfImage *p_i_2;
       int32_t depth_f;
-      uint32_t ElementCount_3;
-      uint16_t Buffer_2[5];
+      uint32_t pal_len;
+      uint16_t hdr_words[5];
       uint8_t depth_b;
       int8_t flags_b;
-      uint32_t ElementCount;
+      uint32_t data_len;
       uint8_t   hdr[8];   // the 8-byte member header `fread` takes in one call
       uint32_t __expand_image_Buffer;
       uint8_t _pad0[32];
@@ -15618,11 +15618,11 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
   // the gate's answer -- nothing writes one of them and reads another.
   ;
   uint8_t *arc;   // were int32_t: these hold addresses
-  FILE *Stream_1, *Stream_v;
+  FILE *fp1, *fp;
   BmfImage *p_i_1;
   int8_t hdr_flags;
   uint8_t bpp;
-  uint8_t *Buffer_3, *copy, *srcp, *dst;   // `uint8_t *` beside the `char` scalars above
+  uint8_t *pal_at, *copy, *srcp, *dst;   // `uint8_t *` beside the `char` scalars above
   uint8_t has_coded;
   uint8_t dc_v;
   uint32_t near_lossless;
@@ -15630,31 +15630,31 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
   uint32_t w12_v;
   uint32_t w4_v;
   uint32_t w8_v;
-  int32_t Buffer__1, pl, predictor, ArgList, plane,
-          pl2, plane2, pred, i, Size_2, Size_3, nplanes_c, i2, n_planes,
-          Src_2, img_h, at, y, i_1, left;
+  int32_t hdr_word, pl, predictor, plane_i, plane,
+          pl2, plane2, pred, i, n_pix2, pix_at, nplanes_c, i2, n_planes,
+          last_row, img_h, at, y, i_1, left;
   uint16_t i_2;
-  int32_t Size_1;
-  uint32_t __expand_image_Buffer_1, pad_len, *blk, ElementCount_5, ElementCount_2,
-           desc, desc_flags, ElementCount_1, ElementCount_4, word12, word8, word4,
+  int32_t n_pix;
+  uint32_t __expand_image_Buffer_1, pad_len, *blk, pal_bytes, want2,
+           desc, desc_flags, want, got, word12, word8, word4,
            worddc, word6, word4b;
-  uint8_t *Src_1;
-  void *Src_3;
+  uint8_t *plane_buf;
+  void *last_row2;
   arc = a1;
   if ( p_coded_buf )
     *p_coded_buf = nullptr;
-  Stream_1 = ((BmfArc *)a1)->fp;
-  if ( !Stream_1 )
+  fp1 = ((BmfArc *)a1)->fp;
+  if ( !fp1 )
     return nullptr;
   while ( 1 )
   {
-    if ( fread(&__frame.__expand_image_Buffer, 4u, 1u, Stream_1) != 1 )
+    if ( fread(&__frame.__expand_image_Buffer, 4u, 1u, fp1) != 1 )
     {
-      Stream_v = ((BmfArc *)arc)->fp;
-      if ( feof(Stream_v) )
+      fp = ((BmfArc *)arc)->fp;
+      if ( feof(fp) )
         return nullptr;
       {
-        fclose(Stream_v);
+        fclose(fp);
         ((BmfArc *)arc)->fp = 0;
         return nullptr;
       }
@@ -15666,14 +15666,14 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
     if ( plane_desc[0].w4 != 512 || fread(__frame.hdr, 8u, 1u, ((BmfArc *)arc)->fp) != 1 )
       break;
     fseek(((BmfArc *)arc)->fp, (*(uint32_t *)&__frame.hdr[4]), 1);
-    Stream_1 = ((BmfArc *)arc)->fp;
+    fp1 = ((BmfArc *)arc)->fp;
   }
   if ( (uint16_t)__expand_image_Buffer_1 != 0x8A81
     || (plane_desc[0].w4 = ((BYTE2(__expand_image_Buffer_1) << 8) - 12288) | (HIBYTE(__expand_image_Buffer_1) - 48), plane_desc[0].w4 != 512)
-    || fread(__frame.Buffer_2, 0x10u, 1u, ((BmfArc *)arc)->fp) != 1 )
+    || fread(__frame.hdr_words, 0x10u, 1u, ((BmfArc *)arc)->fp) != 1 )
   {
-    Stream_v = ((BmfArc *)arc)->fp;
-    fclose(Stream_v);
+    fp = ((BmfArc *)arc)->fp;
+    fclose(fp);
     ((BmfArc *)arc)->fp = 0;
     return nullptr;
   }
@@ -15683,10 +15683,10 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
     fread(__frame.hdr, 8u, 1u, ((BmfArc *)arc)->fp);
     if ( p_coded_buf )
     {
-      Buffer__1 = (*(int32_t *)&__frame.hdr[0]);
+      hdr_word = (*(int32_t *)&__frame.hdr[0]);
       pad_len = ((*(uint32_t *)&__frame.hdr[4]) + ((*(uint32_t *)&__frame.hdr[4]) == 0) + 3) & 0xFFFFFFFC;
       blk = (uint32_t *)bmf_new(pad_len + 8);
-      *blk = Buffer__1;
+      *blk = hdr_word;
       blk[1] = pad_len;
       *(uint32_t *)((uint8_t *)blk + pad_len + 4) = 0;
       *p_coded_buf = blk;
@@ -15697,16 +15697,16 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
       fseek(((BmfArc *)arc)->fp, (*(uint32_t *)&__frame.hdr[4]), 1);
     }
   }
-  ElementCount_5 = 3 << (__frame.depth_b & 31);
+  pal_bytes = 3 << (__frame.depth_b & 31);
   if ( (__frame.depth_b & 0x80) == 0 )
-    ElementCount_5 = __frame.depth_b & 0x80;
-  __frame.ElementCount_3 = ElementCount_5;
+    pal_bytes = __frame.depth_b & 0x80;
+  __frame.pal_len = pal_bytes;
   if ( a4 )
   {
-    fseek(((BmfArc *)arc)->fp, __frame.ElementCount_3 + __frame.ElementCount, 1);
+    fseek(((BmfArc *)arc)->fp, __frame.pal_len + __frame.data_len, 1);
     return nullptr;
   }
-  p_i_1 = (BmfImage *)((uint8_t *)__alloc_image(__frame.Buffer_2[0], __frame.Buffer_2[1], __frame.depth_b & 0x3F, (uint8_t)(__frame.depth_b & 0x80) >> 7, 1));
+  p_i_1 = (BmfImage *)((uint8_t *)__alloc_image(__frame.hdr_words[0], __frame.hdr_words[1], __frame.depth_b & 0x3F, (uint8_t)(__frame.depth_b & 0x80) >> 7, 1));
   __frame.depth_f = __frame.depth_b;
   p_i_1->depth = __frame.depth_b;
   // The flag is whether there is a block at all; Hex-Rays kept the pointer's
@@ -15717,8 +15717,8 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
   ::plane_count = ((__frame.depth_f & 0x3Fu) + 7) >> 3;
   if ( (hdr_flags & 0x20) == 0 )
   {
-    ElementCount_1 = __frame.ElementCount;
-    if ( fread(p_i_1->pixels, 1u, __frame.ElementCount, ((BmfArc *)arc)->fp) != ElementCount_1 )
+    want = __frame.data_len;
+    if ( fread(p_i_1->pixels, 1u, __frame.data_len, ((BmfArc *)arc)->fp) != want )
       {
         fclose(((BmfArc *)arc)->fp);
         ((BmfArc *)arc)->fp = 0;
@@ -15738,15 +15738,15 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
     exit(3);
   }
   desc_slow_mode = 1;
-  coded_size = __frame.ElementCount;
-  ::coded_buf = (uint8_t *)bmf_new(__frame.ElementCount);
+  coded_size = __frame.data_len;
+  ::coded_buf = (uint8_t *)bmf_new(__frame.data_len);
   out_cursor = ::coded_buf;
   packer_free_bits = 0;
   packer_acc = 0;
   ::packer_word = (uint32_t *)::coded_buf;
   hist_scratch = ::coded_buf + coded_size - 4096;
-  ElementCount_2 = __frame.ElementCount;
-  if ( fread(::coded_buf, 1u, __frame.ElementCount, ((BmfArc *)arc)->fp) != ElementCount_2 )
+  want2 = __frame.data_len;
+  if ( fread(::coded_buf, 1u, __frame.data_len, ((BmfArc *)arc)->fp) != want2 )
   {
     fclose(((BmfArc *)arc)->fp);
     ((BmfArc *)arc)->fp = 0;
@@ -15758,7 +15758,7 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
     ::plane_predictor = 0;
     plane_alt_model = 0;
     // always taken: -S
-      __unmodel_plane(ElementCount_2, (uint16_t *)p_i_1, p_i_1->pixels);
+      __unmodel_plane(want2, (uint16_t *)p_i_1, p_i_1->pixels);
     goto LABEL_106;
   }
   if ( ::plane_count == 1 )
@@ -15775,9 +15775,9 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
   {
     word4b = *(uint32_t *)out_cursor;
     out_cursor += 4;
-    ElementCount_2 = word4b >> (-packer_free_bits & 31);
+    want2 = word4b >> (-packer_free_bits & 31);
     near_lossless = packer_acc | (word4b << ((packer_free_bits + 4) & 31)) & 0xF;
-    packer_acc = ElementCount_2;
+    packer_acc = want2;
     packer_free_bits += 32;
   }
   else
@@ -15798,7 +15798,7 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
 LABEL_42:
   if ( ::plane_count > 0 )
   {
-    LOBYTE(ElementCount_2) = 63;
+    LOBYTE(want2) = 63;
     __frame.mask = 255;
     __frame.p_i_2 = p_i_1;
     __frame.arc_f = arc;
@@ -15899,7 +15899,7 @@ LABEL_42:
     p_i_1 = __frame.p_i_2;
     arc = __frame.arc_f;
   }
-  Src_1 = (uint8_t *)bmf_new(p_i_1->width * p_i_1->height);
+  plane_buf = (uint8_t *)bmf_new(p_i_1->width * p_i_1->height);
   if ( (__frame.flags_b & 8) != 0 )
   {
     // The caller's header with the depth byte replaced, exactly as
@@ -15909,34 +15909,34 @@ LABEL_42:
     if ( ::plane_count > 0 )
     {
       __frame.arc_f = arc;
-      ArgList = 0;
+      plane_i = 0;
       do
       {
-        plane = plane_desc[ArgList + 1].src_plane;
+        plane = plane_desc[plane_i + 1].src_plane;
         ::plane_predictor = plane_desc[plane + 1].flags & 3;
         plane_alt_model = (uint8_t)(plane_desc[plane + 1].flags & 4) >> 2;
         // always taken: -S
-          __unmodel_plane(ArgList, (uint16_t *)&__frame.img, Src_1);
+          __unmodel_plane(plane_i, (uint16_t *)&__frame.img, plane_buf);
         if ( ::plane_predictor )
         {
           if ( ::plane_predictor == 1 )
           {
             if ( !plane_alt_model )
-              __unpredict_med(Src_1, p_i_1->width, p_i_1->height);
+              __unpredict_med(plane_buf, p_i_1->width, p_i_1->height);
           }
           // `else if ( !desc_slow_mode && ::plane_predictor == 2 )` -- the fast-mode
           // predictor-2 expander, never reached: -S is on.
         }
         else
         {
-          __expand_predictor_mode0((uint32_t)Src_1, p_i_1->width, p_i_1->height);
+          __expand_predictor_mode0((uint32_t)plane_buf, p_i_1->width, p_i_1->height);
         }
         // `v34` here and `v35` below were declared and never assigned: two more
         // uninitialised bytes into a parameter `interleave_plane` does not read.
-        __interleave_plane((uint8_t *)p_i_1, Src_1, plane, 0);
-        ++ArgList;
+        __interleave_plane((uint8_t *)p_i_1, plane_buf, plane, 0);
+        ++plane_i;
       }
-      while ( ArgList < ::plane_count );
+      while ( plane_i < ::plane_count );
 LABEL_104:
       arc = __frame.arc_f;
     }
@@ -15947,7 +15947,7 @@ LABEL_104:
     plane_alt_model = (uint8_t)(plane_desc[1].flags & 4) >> 2;
     // always taken: -S
     {
-      __unmodel_plane(ElementCount_2, (uint16_t *)p_i_1, p_i_1->pixels);
+      __unmodel_plane(want2, (uint16_t *)p_i_1, p_i_1->pixels);
       if ( plane_alt_model )
         goto LABEL_105;
     }
@@ -15964,13 +15964,13 @@ LABEL_104:
         if ( (plane_desc[plane2 + 1].flags & 8) != 0 || pred )
         {
           i = p_i_1->width;
-          __frame.Src = &((uint8_t *)p_i_1)[plane2 + 16];
-          Size_1 = i * p_i_1->height;
+          __frame.row_step = &((uint8_t *)p_i_1)[plane2 + 16];
+          n_pix = i * p_i_1->height;
           __frame.nplanes_s = ::plane_count;
-          __frame.s12 = Size_1;
+          __frame.s12 = n_pix;
           if ( ::plane_count == 1 )
           {
-            memcpy(Src_1,(uint8_t *)__frame.Src,__frame.s12);
+            memcpy(plane_buf,(uint8_t *)__frame.row_step,__frame.s12);
             pred_s = ::plane_predictor;
           }
           else
@@ -15979,18 +15979,18 @@ LABEL_104:
             __frame.s0 = pred;
             __frame.s4 = plane2;
             __frame.s8 = pl2;
-            Size_2 = __frame.s12;
+            n_pix2 = __frame.s12;
             __frame.p_i_2 = p_i_1;
-            Size_3 = 0;
+            pix_at = 0;
             nplanes_c = __frame.nplanes_s;
             i2 = 0;
             do
             {
-              Src_1[Size_3] = __frame.Block[i2 + 16];
+              plane_buf[pix_at] = __frame.Block[i2 + 16];
               i2 += nplanes_c;
-              ++Size_3;
+              ++pix_at;
             }
-            while ( Size_3 < Size_2 );
+            while ( pix_at < n_pix2 );
             pred_s = __frame.s0;
             plane2 = __frame.s4;
             pl2 = __frame.s8;
@@ -15999,13 +15999,13 @@ LABEL_104:
           if ( pred_s )
           {
             if ( pred_s == 1 )
-              __unpredict_med(Src_1, p_i_1->width, p_i_1->height);
+              __unpredict_med(plane_buf, p_i_1->width, p_i_1->height);
           }
           else
           {
-            __expand_predictor_mode0((uint32_t)Src_1, p_i_1->width, p_i_1->height);
+            __expand_predictor_mode0((uint32_t)plane_buf, p_i_1->width, p_i_1->height);
           }
-          __interleave_plane((uint8_t *)p_i_1, Src_1, plane2, 0);
+          __interleave_plane((uint8_t *)p_i_1, plane_buf, plane2, 0);
         }
       }
       while ( pl2 < ::plane_count );
@@ -16013,9 +16013,9 @@ LABEL_104:
     }
   }
 LABEL_105:
-  free(Src_1);
+  free(plane_buf);
 LABEL_106:
-  if ( ::coded_buf + __frame.ElementCount != out_cursor )
+  if ( ::coded_buf + __frame.data_len != out_cursor )
   {
     fclose(((BmfArc *)arc)->fp);
     ((BmfArc *)arc)->fp = 0;
@@ -16029,9 +16029,9 @@ LABEL_109:
     // `f10 < 0` was a signed int8_t testing its own top bit -- the palette
     // flag.  depth is unsigned, so the test has to name the bit; it read as
     // always-false otherwise, which is what the gate caught.
-    Buffer_3 = (p_i_1->depth & 0x80) ? &((uint8_t *)p_i_1)[p_i_1->data_size + 16] : nullptr;
-    ElementCount_4 = fread(Buffer_3, 1u, __frame.ElementCount_3, ((BmfArc *)arc)->fp);
-    if ( ElementCount_4 != __frame.ElementCount_3 )
+    pal_at = (p_i_1->depth & 0x80) ? &((uint8_t *)p_i_1)[p_i_1->data_size + 16] : nullptr;
+    got = fread(pal_at, 1u, __frame.pal_len, ((BmfArc *)arc)->fp);
+    if ( got != __frame.pal_len )
       {
         fclose(((BmfArc *)arc)->fp);
         ((BmfArc *)arc)->fp = 0;
@@ -16043,12 +16043,12 @@ LABEL_109:
     copy = (uint8_t *)bmf_new(p_i_1->data_size);
     n_planes = ::plane_count;
     __frame.nplanes_s = (int32_t)copy;
-    Src_2 = ::plane_count * (p_i_1->height - 1);
+    last_row = ::plane_count * (p_i_1->height - 1);
     memcpy(copy,p_i_1->pixels,p_i_1->data_size);
     LOWORD(img_h) = p_i_1->height;
     if ( (uint16_t)img_h )
     {
-      __frame.Src = (void *)Src_2;
+      __frame.row_step = (void *)last_row;
       srcp = (uint8_t *)__frame.nplanes_s;
       at = 0;
       y = 0;
@@ -16057,7 +16057,7 @@ LABEL_109:
         i_1 = p_i_1->width;
         __frame.nplanes_s = at;
         __frame.arc_f = (uint8_t *)y;
-        Src_3 = __frame.Src;
+        last_row2 = __frame.row_step;
         __frame.p_i_2 = p_i_1;
         dst = &((uint8_t *)p_i_1)[at + 16];
         do
@@ -16069,7 +16069,7 @@ LABEL_109:
             --left;
           }
           while ( left );
-          dst = &dst[(uint32_t)Src_3];
+          dst = &dst[(uint32_t)last_row2];
           --i_1;
         }
         while ( i_1 );
@@ -16990,9 +16990,9 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
   // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
   // gives every member its own storage and the two-member archive fails to decompress.
   struct alignas(16) CompressImageFrame {   // 80 bytes, one stack frame
-      uint8_t *Buffera_4;
+      uint8_t *owned;
       uint8_t _pad0[12];
-      uint32_t ElementCount;
+      uint32_t filtered;
       union {
           // The 16-byte archive member header `fwrite` sends in one call, and
           // the scratch MSVC put in the same bytes afterwards.  The two live in
@@ -17008,15 +17008,15 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
       };
       int32_t y0;
       uint8_t *arc_f;
-      void *Buffer_2;
+      void *pixels;
       uint8_t _pad1[32];
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 80, "frame layout moved");
-  // These shared `__frame.ElementCount` with the name that still binds it: one
+  // These shared `__frame.filtered` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int32_t ElementCounta;
+  int32_t coded_bytes;
   // These shared `__frame.hdr[0]` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
@@ -17029,8 +17029,8 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
   bool fits;
   uint8_t bpp;
   uint8_t __compress_image_Buffer_1;   // 0/1, shifted into bit 7 of the header byte
-  uint8_t *Srca, *Buffera_2, *Buffera_3;   // `uint8_t *` beside the `char` scalars above
-  uint32_t Buffera_5, Buffera_6;   // the header's pad/depth/flags word, not an address
+  uint8_t *plane_buf, *row_at, *row_next;   // `uint8_t *` beside the `char` scalars above
+  uint32_t hdr_pad8, hdr_pad8b;   // the header's pad/depth/flags word, not an address
   uint32_t acc;
   uint32_t data_bytes;
   uint32_t img_stride;
@@ -17040,7 +17040,7 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
           rows_left, y, i_1, step, countdown, data_size;
   BmfImage *p_i_1;
   uint16_t i_2;
-  uint32_t ElementCount_1, word_flags, word_dc, word_w4, word_w8, word_w12, Size, written;
+  uint32_t pal_bytes, word_flags, word_dc, word_w4, word_w8, word_w12, n_pix, written;
   uint8_t ok, *dst, ok_raw;
   arc = a1;
   if ( !((BmfArc *)a1)->fp )
@@ -17065,20 +17065,20 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
   __frame.hdr.width = p_i->width;
   __frame.hdr.height = p_i->height;
   p_i->flags |= __compress_image_Buffer_1 << 7;
-  Buffera_5 = *(uint32_t *)&p_i->_pad8;
+  hdr_pad8 = *(uint32_t *)&p_i->_pad8;
   __frame.hdr.stride = (uint32_t)row_bytes;
   plane_desc[0].w4 = 512;
   plane_desc[0].w12 = 0;
-  *(uint32_t *)&__frame.hdr._pad8 = Buffera_5;
+  *(uint32_t *)&__frame.hdr._pad8 = hdr_pad8;
   __frame.hdr.data_size = (uint32_t)p_i->data_size;
   ::plane_count = ((p_i->depth & 0x3Fu) + 7) >> 3;
   if ( fwrite("\x81\x8A""20\x81\x90""20a+b", 4u, 1u, ((BmfArc *)arc)->fp) != 1 )
     return 0;
   bpp = p_i->depth;
   ++*(uint32_t *)arc;
-  ElementCount_1 = bpp & 0x80;
+  pal_bytes = bpp & 0x80;
   if ( (bpp & 0x80) != 0 )   // bit 7 is the palette flag, not a sign
-    ElementCount_1 = 3 << (bpp & 31);
+    pal_bytes = 3 << (bpp & 31);
   if ( p_i->data_size < 0x10u )   // -N is on, so only the size decides
     goto LABEL_76;
   desc_slow_mode = 1;               // -S
@@ -17099,19 +17099,19 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
       __model_plane((BmfImage *)p_i, p_i->pixels, p_i->pixels);
     goto LABEL_57;
   }
-  __frame.ElementCount = __search_filter((BmfImage *)p_i, 0);
+  __frame.filtered = __search_filter((BmfImage *)p_i, 0);
   __frame.hdr.flags |= 0x10u;
   if ( (p_i->flags & 2) != 0 )
   {
     img_stride = p_i->stride;
-    Buffera_6 = *(uint32_t *)&p_i->_pad8;
+    hdr_pad8b = *(uint32_t *)&p_i->_pad8;
     __frame.hdr.width = p_i->width;
     __frame.hdr.height = p_i->height;
     data_bytes = p_i->data_size;
     __frame.hdr.stride = (uint32_t)img_stride;
-    *(uint32_t *)&__frame.hdr._pad8 = Buffera_6;
+    *(uint32_t *)&__frame.hdr._pad8 = hdr_pad8b;
     __frame.hdr.data_size = (uint32_t)data_bytes;
-    __frame.hdr.flags = 0x34 | (uint8_t)(Buffera_6 >> 24);   // -S in bit 2
+    __frame.hdr.flags = 0x34 | (uint8_t)(hdr_pad8b >> 24);   // -S in bit 2
   }
   else
   {
@@ -17251,21 +17251,21 @@ LABEL_22:
     while ( pl < ::plane_count );
     arc = __frame.arc_f;
   }
-  if ( __frame.ElementCount )
+  if ( __frame.filtered )
   {
-    Size = p_i->width * p_i->height;
+    n_pix = p_i->width * p_i->height;
     __frame.hdr.flags |= 8u;
-    Srca = (uint8_t *)bmf_new(Size);
+    plane_buf = (uint8_t *)bmf_new(n_pix);
     if ( ::plane_count > 0 )
     {
       __frame.arc_f = arc;
       pl2 = 0;
       do
-        __model_planes((uint8_t *)p_i, Srca, plane_desc[pl2++ + 1].src_plane, 0);
+        __model_planes((uint8_t *)p_i, plane_buf, plane_desc[pl2++ + 1].src_plane, 0);
       while ( pl2 < ::plane_count );
       arc = __frame.arc_f;
     }
-    free(Srca);
+    free(plane_buf);
   }
   else
   {
@@ -17274,7 +17274,7 @@ LABEL_22:
 LABEL_57:
   *(uint32_t *)::packer_word = ::packer_acc;
   fits = (uint32_t)(out_cursor - (uint32_t)::coded_buf) < p_i->data_size;
-  ElementCounta = out_cursor - ::coded_buf;
+  coded_bytes = out_cursor - ::coded_buf;
   __frame.hdr.data_size = (uint32_t)(out_cursor - ::coded_buf);
   if ( fits )
   {
@@ -17286,10 +17286,10 @@ LABEL_57:
       coded_len = ((const uint32_t *)coded_buf)[1];
       ok &= fwrite(coded_buf, 1u, coded_len + 8, ((BmfArc *)arc)->fp) == coded_len + 8;
     }
-    ok_all = (fwrite(::coded_buf, 1u, ElementCounta, ((BmfArc *)arc)->fp) == (uint32_t)ElementCounta) & ok;
+    ok_all = (fwrite(::coded_buf, 1u, coded_bytes, ((BmfArc *)arc)->fp) == (uint32_t)coded_bytes) & ok;
     free(::coded_buf);
     if ( ok_all && (p_i->depth & 0x80) != 0 )
-      fwrite(&p_i->pixels[p_i->data_size], 1u, ElementCount_1, ((BmfArc *)arc)->fp);
+      fwrite(&p_i->pixels[p_i->data_size], 1u, pal_bytes, ((BmfArc *)arc)->fp);
     fflush(((BmfArc *)arc)->fp);
     if ( ok_all )
       return (int32_t)__frame.hdr.data_size;
@@ -17302,21 +17302,21 @@ LABEL_57:
     __frame.plane_n = ::plane_count;
     __frame.row = Buffer_copy;
     __frame.row_step = ::plane_count * (p_i->height - 1);
-    __frame.Buffer_2 = (uint16_t *)p_i->pixels;
+    __frame.pixels = (uint16_t *)p_i->pixels;
     memcpy(Buffer_copy,p_i->pixels,p_i->data_size);
     LOWORD(img_h) = p_i->height;
     if ( (uint16_t)img_h )
     {
       rows_left = __frame.plane_n;
-      Buffera_2 = __frame.row;
-      Buffera_3 = nullptr;
+      row_at = __frame.row;
+      row_next = nullptr;
       y = 0;
       __frame.arc_f = arc;
       do
       {
         i_1 = p_i_1->width;
         __frame.y0 = y;
-        __frame.row = Buffera_3;
+        __frame.row = row_next;
         dst = (uint8_t *)p_i_1 + y + 16;
         step = __frame.row_step;
         do
@@ -17324,7 +17324,7 @@ LABEL_57:
           countdown = rows_left;
           do
           {
-            *dst++ = *Buffera_2++;
+            *dst++ = *row_at++;
             --countdown;
           }
           while ( countdown );
@@ -17335,22 +17335,22 @@ LABEL_57:
         p_i_1 = (BmfImage *)(p_i);
         img_h = p_i->height;
         y = rows_left + __frame.y0;
-        Buffera_3 = __frame.row + 1;
+        row_next = __frame.row + 1;
       }
       while ( (int32_t)(__frame.row + 1) < img_h );
       arc = __frame.arc_f;
     }
-    __frame.Buffera_4 = Buffer_copy;
+    __frame.owned = Buffer_copy;
     i_2 = p_i_1->width;
     p_i_1->width = img_h;
     p_i_1->height = i_2;
     p_i_1->flags ^= 2u;
     p_i_1->stride = (img_h * __frame.plane_n);
-    free(__frame.Buffera_4);
+    free(__frame.owned);
     goto LABEL_77;
   }
 LABEL_76:
-  __frame.Buffer_2 = (uint16_t *)p_i->pixels;
+  __frame.pixels = (uint16_t *)p_i->pixels;
 LABEL_77:
   ok_raw = fwrite(p_i_1, 1u, 0x10u, ((BmfArc *)arc)->fp) == 16;
   if ( coded_buf )
@@ -17358,9 +17358,9 @@ LABEL_77:
     coded_len = ((const uint32_t *)coded_buf)[1];
     ok_raw &= fwrite(coded_buf, 1u, coded_len + 8, ((BmfArc *)arc)->fp) == coded_len + 8;
   }
-  written = fwrite(__frame.Buffer_2, 1u, ElementCount_1 + p_i_1->data_size, ((BmfArc *)arc)->fp);
+  written = fwrite(__frame.pixels, 1u, pal_bytes + p_i_1->data_size, ((BmfArc *)arc)->fp);
   data_size = p_i_1->data_size;
-  if ( (ok_raw & (written == data_size + ElementCount_1)) == 0 )
+  if ( (ok_raw & (written == data_size + pal_bytes)) == 0 )
     return 0;
   return data_size;
 }
