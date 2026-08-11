@@ -3464,8 +3464,9 @@ int32_t __alt_p1_model(AltP1Block *_this)
   uint32_t w18;
   uint32_t alti1;
   uint32_t ctx_alt;
+  uint32_t alti0;
   int32_t sel1_top, code_r, sel2_top, slot_f, slot_r, ctx_dn, sel0,
-          alti0, ctx0, sel1, ctx1, sel2, x2, alti2, ctx2,
+          ctx0, sel1, ctx1, sel2, x2, alti2, ctx2,
           sel3, x3, alti3, ctx3, sel4, x4, alti4, ctx4, sel5, 
           x5, alti5, ctx5, sel6, x6, alti6, ctx6, sel7, x7, alti7,
           ctx7, sel8, alti8, midn8, ctx8, mid7, mid6, mid5, mid4, mid3,
@@ -9257,7 +9258,7 @@ int32_t __decode_symbol_list(SymList *a1)
   int32_t live, cum, i, c, top, half, back_cnt, last_cnt;
   uint32_t n_left, zeros;   // counts that MSVC spilled into the list's first slot
   SymList *owner0, *owner1;
-  uint32_t cum_hi;
+  int32_t cum_hi;
   int32_t tot_1;
   int32_t tot_all;
   int32_t target;
@@ -12282,7 +12283,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   P2Count *m0010;
   int32_t nres4;
   int32_t nres5;
-  int32_t ctxw_s;
+  uint32_t ctxw_s;
   int32_t sample16;
   uint32_t bank;
   int32_t countdown;

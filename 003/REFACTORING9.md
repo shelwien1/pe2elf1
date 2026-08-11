@@ -34,7 +34,7 @@ distinct unexplained locals            554       591             0
 goto / LABEL_n:                     112/79     81/55         49/34
   restart a loop / exit N blocks         —         —         16/29
   jump into a block / sideways           —         —           1/3
-conversion warnings (ratchet)         1455      1331          1092
+conversion warnings (ratchet)         1455      1331          1090
 ```
 
 **Not one Hex-Rays name is left in either file.** Checked by running the
@@ -969,14 +969,14 @@ at the operator. 62 sites, no semantic change, and the two claims it does
 *not* make are in its docstring — it does not decide whether a comparison is
 right, which is a question about whether the signed side can go negative.
 
-What is left is 1092, and `shape.py` now says what they are made of rather
+What is left is 1090, and `shape.py` now says what they are made of rather
 than only how many there are — the same defect the `goto` row had:
 
 ```
-conversion warnings                1116
-  signedness, same width            612
+conversion warnings                1090
+  signedness, same width            588
   narrowing 32 -> 16                305
-  narrowing 32 -> 8                 167
+  narrowing 32 -> 8                 165
   narrowing 64 -> 16                 18
   a negative constant into an unsigned type    5
   narrowing 64 -> 8                   5
@@ -994,17 +994,20 @@ bits: `freq_tbl->w[0] = ...` where `w` is `uint16_t[8]` because the record is
 sixteen bytes. No declaration can fix those; only a cast, and §15's argument
 applies.
 
-The 612 same-width ones are where the destination is not a local the rule can
-reach, or where it can and the flip has been *measured* and does not pay.
-Twenty-three candidates are left and not one of them reduces the count on its
-own — which is a measurement and not an opinion, and the difference is
-`tools/resign-drive.sh`.
+The 588 same-width ones are where the destination is not a local either rule
+can reach, or where one can and the flip has been *measured* not to pay.
 
-Reaching that took the rule looking in both directions, at every width, and
-past an ordering comparison whose other side is already cast. What is left
-under it is the shape it cannot see through: a local that converts on the way
-in *and* on the way out, where the flip moves which end warns rather than
-removing either.
+Getting there took four extensions, each from watching the rule stop: both
+directions of flow, every width rather than the 32-bit pair, past an ordering
+comparison whose other side is already cast, and finally whole components at
+once. The two rules feed each other — a group flip creates single candidates
+and vice versa — so they were alternated until both stopped, which took
+1238 down to 1090.
+
+The rate is what says where to stop rather than any argument about it: the last
+rounds cost fifteen minutes of rebuilds each and returned one or two warnings.
+The rules are still correct and still find candidates; what has run out is the
+supply of candidates that pay.
 
 Retyping struct members was tried and abandoned, which is worth recording so
 the next round does not try it again: the member clusters are mixed-direction.
@@ -1020,7 +1023,7 @@ knowing the conversion rules. A cast on an assignment adds nothing — `x = y`
 with the two declared types visible already says the value is being narrowed,
 and writing `(uint16_t)` in front of it moves no information anywhere. It would
 move the number, which is the entire objection: §10 is about measures you can
-satisfy without doing the work, and putting 1092 casts in this file to make a
+satisfy without doing the work, and putting 1090 casts in this file to make a
 scoreboard read zero is the purest example of one this project could produce.
 
 The number goes down when the *types* are right, and §16 is 64 of them.
