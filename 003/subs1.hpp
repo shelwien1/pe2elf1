@@ -6448,8 +6448,8 @@ int32_t __alt_p2_filter(float (*_this)[4], float (*a2)[4], CtxWeights *a3, int32
 // neighbourhood sums into three context words and returning the 0..255 index
 // they are read with.  What the individual terms *mean* is ALGORITHM.md §9's
 // question, and it is still open -- this names the role, not the algorithm.
-int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2Ctx *v55,
-        *v6;
+int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) {   P2Ctx *unused_p,
+        *row0;
   // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
   // gives every member its own storage and altp1 segfaults while compressing.
   struct alignas(16) AltP2ContextFrame {   // 208 bytes, one stack frame
@@ -6474,24 +6474,24 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
             float (*sub5)[4];
           };
       };
-      uint8_t   _gap0[4];   // was int16_t * v281
-      uint8_t   _gap1[4];   // was int16_t * v282
-      uint8_t   _gap2[4];   // was int16_t * v283
-      uint8_t   _gap3[4];   // was int16_t * v284
-      uint8_t   _gap4[4];   // was int16_t * v285
-      uint8_t   _gap5[4];   // was int16_t * v286
+      uint8_t   _gap0[4];   // was int16_t * ra1
+      uint8_t   _gap1[4];   // was int16_t * ra0
+      uint8_t   _gap2[4];   // was int16_t * rb1
+      uint8_t   _gap3[4];   // was int16_t * rb0
+      uint8_t   _gap4[4];   // was int16_t * rb2
+      uint8_t   _gap5[4];   // was int16_t * ra2
       uint8_t   _gap6[4];   // was int32_t n1840_2
       uint8_t   _gap7[4];   // was int32_t n1840_1
-      uint8_t   _gap8[4];   // was AltP2Block * a1
-      uint8_t   _gap9[4];   // was int32_t v290
+      uint8_t   _gap8[4];   // was AltP2Block * blk
+      uint8_t   _gap9[4];   // was int32_t sum_all
       uint8_t   _gap10[4];   // was int32_t n3536
       uint8_t   _gap11[4];   // was int32_t v292
-      uint8_t   _gap12[4];   // was P2Ctx *v293, now a `P2Ctx *`
-      uint8_t   _gap13[4];   // was int16_t * v294
-      uint8_t   _gap14[4];   // was int16_t * v295
+      uint8_t   _gap12[4];   // was P2Ctx *cx1, now a `P2Ctx *`
+      uint8_t   _gap13[4];   // was int16_t * cx3
+      uint8_t   _gap14[4];   // was int16_t * cx2
       uint8_t   _gap15[4];   // was int16_t * v296
-      uint8_t   _gap16[4];   // was uint32_t v297
-      uint8_t   _gap17[4];   // was uint32_t v298
+      uint8_t   _gap16[4];   // was uint32_t q39
+      uint8_t   _gap17[4];   // was uint32_t q10
       uint8_t   _gap18[4];   // was int32_t n960_1
       uint8_t   _gap19[4];   // was int32_t n1840
       uint8_t   _gap20[4];   // was int32_t v301
@@ -6522,22 +6522,22 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
   int32_t v251;
   int32_t n15;
   int32_t v254;
-  P2Ctx *v255;   // row cursors into the neighbourhood table
-  int32_t v259;
+  P2Ctx *nb4;   // row cursors into the neighbourhood table
+  int32_t row0_i;
   int32_t v260;
   int32_t v264;
   int32_t v266;
   int32_t v267;
-  int32_t v269;
+  int32_t g3pair;
   int32_t v270;
   int32_t v272;
   int32_t v273;
-  P2Ctx *v281;
-  P2Ctx *v282;
-  P2Ctx *v283;
-  P2Ctx *v284;
-  P2Ctx *v285;
-  P2Ctx *v286;
+  P2Ctx *ra1;
+  P2Ctx *ra0;
+  P2Ctx *rb1;
+  P2Ctx *rb0;
+  P2Ctx *rb2;
+  P2Ctx *ra2;
   int32_t n1840_2;
   int32_t n1840_1;
   // The six spill slots before `alt_p2_filter`'s six weight pointers are
@@ -6548,9 +6548,9 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
   int32_t  num_b, band, num_d;
   // The five digits of the neighbourhood index and the index itself.
   int32_t  gA, gB, gC, gD, den_d, nb_slot;
-  int32_t v290;
+  int32_t sum_all;
   int32_t n3536;
-  P2Ctx *v109;   // the p2 row cursor, `cursor[0]`
+  P2Ctx *cx0;   // the p2 row cursor, `cursor[0]`
   // The p2 row cursor and its copies.  Every dereference is a lane of the
   // 18-byte record or the high byte of one, so the byte offsets divide into
   // a record and a lane -- `-37` is record -3, lane 8, high byte.
@@ -6559,11 +6559,11 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
   // phase with the grid.  All 48 reaches through it land on a field
   // boundary once the byte offsets are decoded against the real size,
   // which is what says the stride was the artefact and not the table.
-  P2Ctx *v293;
-  P2Ctx *v294;
-  P2Ctx *v295;   // row cursors into the neighbourhood table
-  uint32_t v297;
-  uint32_t v298;
+  P2Ctx *cx1;
+  P2Ctx *cx3;
+  P2Ctx *cx2;   // row cursors into the neighbourhood table
+  uint32_t q39;
+  uint32_t q10;
   int32_t n960_1;
   int32_t n1840;
   int32_t v301;
@@ -6573,12 +6573,11 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
   int32_t v307;
   int32_t v312;
   int32_t v313;
-  int32_t v314;
   ;
   // `cursor[0]` again: 45 reaches, all of them records -6 .. 0 at
   // lanes 0 and 1, which is the row this pass is writing.
-  P2Ctx *v46;
-  float (*v31)[4];
+  P2Ctx *nb0;
+  float (*wrow)[4];
   // Row cursors: sixteen bytes a step over an int16 plane.  Hex-Rays wrote
   // the stride as a 16-byte pointer and every read as a lane of it; eight
   // int16 is the same sixteen bytes and says which element.  Twelve of the
@@ -6591,61 +6590,57 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
   // `cursor[3]`, under one name where Hex-Rays had four -- `sub0_row`
   // is the third of them, and keeps only its first lifetime as
   // `cursor[2]` above.
-  P2Ctx *v50;
-  bool v26, v58;
-  float v70, v244;
-  P2Ctx *v52;
-  P2Ctx *v129;
-  P2Ctx *v66;
-  int16_t *v90, *v99;
-  P2Ctx *cursor1, *v45, *v67;
-  int32_t *v104;
-  int32_t v12, lane5, v14, v15, v16, v17, v18, v19, v21, v25, nb_id, v30, v65,
-          v68, v74, v75, v85, v88, *cur, v105, n2, v107, n3536_5, lane3, v112,
-          v113, v114, v116, v117, n3536_1, v121, v122, lane2, v124, v125, v126,
-          v127, v128, n2256, v132, v134, v137, v138, v140, v141, v144, n2576,
-          n1840_13, v147, v148, v149, v151, v154, v155, v156, n2896, v161,
-          v162, v163, v164, v167, v168, v171, n3536_2, v175, v176, v177, v178,
-          v179, v181, v182, n3536_3, v185, v186, v188, v189, v190, v191, v192,
-          v193, n1840_14, n1840_15, v198, n1840_16, v200, n1840_17, v203,
-          v206, v207, v208, n960, n3536_4, mag, v212, v213, v214, v215,
-          n1840_3, n1840_8, n1840_7, n1840_10, n1840_9, v222, v224, n1840_11,
-          n1840_12, n255, v228, n1840_5, n1840_4, n1840_6, v234, v235, v236,
-          v237, v238, v239, v240, v241, v242;
-  int8_t v139;
-  uint32_t v120, v133, v135, v136, v152, v153, v165, v180;
-  uint8_t *v187;
-  v6 = a1->cursor[0];
-  cursor1 = a1->cursor[1];
-  sub0_row = (P2Ctx *)a1->cursor[2];
+  P2Ctx *nb3;
+  bool v26, no_ref;
+  P2Ctx *nb2;
+  P2Ctx *cx4;
+  P2Ctx *nb3x;
+  int16_t *nb2w, *nb2w2;
+  P2Ctx *cursor1, *nb1, *nb2x;
+  int32_t *up_row;
+  int32_t sum4, lane5, v19, v21, nb_id, next_id, plane, v68, v74, v75, v85,
+          in63, *cur, c_lo, n2, c_mid, n3536_5, lane3, v112, v113, v114, v116,
+          g3sum, n3536_1, v121, v122, lane2, v124, ctx0, bank0, pred0, sum_c,
+          n2256, v132, v134, ctx1, bank1, w1c, one1, pred1, n2576, n1840_13,
+          v147, v148, v149, v151, ctx2, bank2, pred2, n2896, v161, v162, v163,
+          v164, bank3, w3c, pred3, n3536_2, v175, v176, v177, v178, v179,
+          v181, v182, n3536_3, v185, v186, v188, v189, v190, v191, v192, v193,
+          n1840_14, n1840_15, v198, n1840_16, v200, n1840_17, v203, v206,
+          v207, v208, n960, n3536_4, mag, v212, v213, v214, v215, n1840_3,
+          n1840_8, n1840_7, n1840_10, n1840_9, v222, v224, n1840_11, n1840_12,
+          n255, v228, n1840_5, n1840_4, n1840_6, v234, v235, v236, v237, v238,
+          v239, v240, v241, v242;
+  int8_t rate1;
+  uint32_t ctx0_lo, q24, q10a, q10b, q9;
+  uint8_t *cx2p;
+  row0 = blk->cursor[0];
+  cursor1 = blk->cursor[1];
+  sub0_row = (P2Ctx *)blk->cursor[2];
   n1840_1 = 21 * sub0_row[-1].lane[6]
           + 12 * cursor1[3].lane[6]
           + 16 * cursor1[2].lane[6]
           + 22 * cursor1[1].lane[6]
-          + (23 * v6[-1].lane[6])
+          + (23 * row0[-1].lane[6])
           + 20 * cursor1->lane[6]
           + ctx_bias[0]
-          + 14 * v6[-2].lane[6];
+          + 14 * row0[-2].lane[6];
   n1840_2 = 17 * sub0_row[-2].lane[7]
           + 21 * cursor1[2].lane[7]
           + 15 * cursor1[1].lane[7]
           + 25 * cursor1->lane[7]
           + 9 * cursor1[-1].lane[7]
-          + 22 * v6[-1].lane[7]
+          + 22 * row0[-1].lane[7]
           + ctx_bias[1]
-          + 19 * v6[-2].lane[7];
-  v12 = 17 * cursor1[3].lane[4]
+          + 19 * row0[-2].lane[7];
+  sum4 = 17 * cursor1[3].lane[4]
       + 15 * cursor1[2].lane[4]
       + 21 * cursor1[1].lane[4]
       + 18 * cursor1->lane[4]
       + 16 * cursor1[-1].lane[4]
-      + 22 * v6[-1].lane[4]
+      + 22 * row0[-1].lane[4]
       + ctx_bias[2]
-      + 19 * v6[-2].lane[4];
+      + 19 * row0[-2].lane[4];
   lane5 = sub0_row->lane[5];
-  v14 = a1->cursor[3]->lane[5];
-  v15 = v6[-2].lane[5];
-  v16 = v6[-1].lane[5];
   // The same seven taps as the three above, on lane 5.  Hex-Rays reached
   // three of them through `(int16_t *)cursor1`, whose subscripts are byte
   // offsets 64, 28 and 10 -- records 3, 1 and 0 at lane 5 of an 18-byte
@@ -6653,23 +6648,21 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
   n3536 = 14 * cursor1[3].lane[5]
         + 23 * cursor1[1].lane[5]
         + 19 * cursor1->lane[5]
-        + 25 * v16
+        + 25 * row0[-1].lane[5]
         + ctx_bias[3]
-        + 17 * v15
-        + 15 * (v14 + lane5);
-  v17 = sub0_row[-1].lane[0];
-  v18 = sub0_row[2].lane[0] + sub0_row->lane[0];
-  v290 = v12 + n3536 + n1840_1 + n1840_2;
+        + 17 * row0[-2].lane[5]
+        + 15 * (blk->cursor[3]->lane[5] + lane5);
+  sum_all = sum4 + n3536 + n1840_1 + n1840_2;
   v19 = cursor1[1].lane[0];
-  v21 = v6[-1].lane[0];
+  v21 = row0[-1].lane[0];
   // Which row of the threshold table: how many of five ratios the coded
   // length has passed.  This was `13 * <the same sum>` used as a flat
   // subscript, with the sum itself recomputed two statements later.
-  band = (8 * v12 > 43 * n3536)
-       + (8 * v12 > 17 * n3536)
-       + (8 * v12 > 9 * n3536)
-       + (8 * v12 > 5 * n3536)
-       + (8 * v12 > 2 * n3536);
+  band = (8 * sum4 > 43 * n3536)
+       + (8 * sum4 > 17 * n3536)
+       + (8 * sum4 > 9 * n3536)
+       + (8 * sum4 > 5 * n3536)
+       + (8 * sum4 > 2 * n3536);
   // Which neighbourhood the plane is in, as a mixed-radix index: the band
   // above, then four more ratios each counting how many of their own
   // thresholds this plane has passed.
@@ -6682,13 +6675,14 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
   // arrived in different disguises -- `gB` as a `P2Ctx *` holding `16 * gB`
   // and nothing else, the band and `gC` as an `int16_t` subscript on it,
   // `gA` through a stack slot, and the whole index as a `uint8_t *`.
-  den_d = 2 * v6[-2].lane[0] + 2 * v21;
+  den_d = 2 * row0[-2].lane[0] + 2 * v21;
   num_b = v19 + (cursor1->lane[0] + 2 * v21);
-  num_d = 16 * (v18 + v19 + v17);
-  gA = (v290 > bmf_p2_thresholds[band][12])
-     + (v290 > bmf_p2_thresholds[band][11])
-     + (v290 > bmf_p2_thresholds[band][10])
-     + (v290 > bmf_p2_thresholds[band][9]);
+  num_d = 16 * (sub0_row[2].lane[0] + sub0_row->lane[0]
+              + v19 + sub0_row[-1].lane[0]);
+  gA = (sum_all > bmf_p2_thresholds[band][12])
+     + (sum_all > bmf_p2_thresholds[band][11])
+     + (sum_all > bmf_p2_thresholds[band][10])
+     + (sum_all > bmf_p2_thresholds[band][9]);
   gB = (num_b > bmf_p2_thresholds[band][8])
      + (num_b > bmf_p2_thresholds[band][7])
      + (num_b > bmf_p2_thresholds[band][6]);
@@ -6699,11 +6693,11 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
      + (num_d > den_d * bmf_p2_thresholds[band][1])
      + (num_d > den_d * bmf_p2_thresholds[band][0]);
   nb_slot = 320 * band + 64 * gA + 16 * gB + 4 * gC + gD;
-  nb_id = a1->nb_id[(uint32_t)nb_slot];
-  if ( a1->nb_id[(uint32_t)nb_slot] )
+  nb_id = blk->nb_id[(uint32_t)nb_slot];
+  if ( blk->nb_id[(uint32_t)nb_slot] )
   {
-    v31 = &((float (*)[4])a1)[16 * nb_id];
-    *(int32_t *)&a1->f278656 = (int32_t)v31;
+    wrow = &((float (*)[4])blk)[16 * nb_id];
+    *(int32_t *)&blk->f278656 = (int32_t)wrow;
     // Normalised LMS.  Predict from the seven weight rows against the seven
     // inputs, take the error against what actually came, and step every weight
     // by  rate * error * input / (that input's running mean square + a floor).
@@ -6715,533 +6709,504 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
 
       for ( k = 0; k < 4; ++k )
       {
-        acc[k] = v31[0][k] * a1->p2_row[0][k];
+        acc[k] = wrow[0][k] * blk->p2_row[0][k];
         for ( j = 1; j < 7; ++j )
-          acc[k] += v31[j][k] * a1->p2_row[j][k];
+          acc[k] += wrow[j][k] * blk->p2_row[j][k];
       }
-      err = ((float)v6[-1].lane[0]
-             - (bmf_hsum4(acc) + a1->bias[0])) * 2.0999999f;
-      floor_ = 7744.0f * v31[14][2];
+      err = ((float)row0[-1].lane[0]
+             - (bmf_hsum4(acc) + blk->bias[0])) * 2.0999999f;
+      floor_ = 7744.0f * wrow[14][2];
 
       for ( j = 0; j < 7; ++j )
         for ( k = 0; k < 4; ++k )
         {
-          float x  = a1->p2_row[j][k];
-          float ms = v31[7 + j][k]
-                   + (x * x - v31[7 + j][k]) * bmf_p2_ms_rate;
-          v31[7 + j][k] = ms;
-          v31[j][k] += bmf_p2_rate[j][k] * err * x / (ms + floor_);
+          float x  = blk->p2_row[j][k];
+          float ms = wrow[7 + j][k]
+                   + (x * x - wrow[7 + j][k]) * bmf_p2_ms_rate;
+          wrow[7 + j][k] = ms;
+          wrow[j][k] += bmf_p2_rate[j][k] * err * x / (ms + floor_);
         }
     }
   }
   else
   {
-    v30 = a1->nb_id_used;
-    a1->nb_id_used = ++v30;
-    a1->nb_id[(uint32_t)nb_slot] = v30;
-    *(int32_t *)&a1->f278656 = (int32_t)&((float (*)[4])a1)[16 * (int16_t)v30];
+    next_id = blk->nb_id_used;
+    blk->nb_id_used = ++next_id;
+    blk->nb_id[(uint32_t)nb_slot] = next_id;
+    *(int32_t *)&blk->f278656 = (int32_t)&((float (*)[4])blk)[16 * (int16_t)next_id];
   }
-  v45 = (P2Ctx *)a1->cursor[1];
-  a1->p2_row[0][0] = (float)v45->lane[1];
-  v46 = (P2Ctx *)a1->cursor[0];
-  a1->p2_row[0][1] = (float)v45[1].lane[1];
-  a1->p2_row[0][2] = (float)(v46[-1].lane[1] + v45->lane[1] - v45[-1].lane[1]);
-  row2c = (P2Ctx *)a1->cursor[2];
-  a1->p2_row[0][3] = (float)(v46[-2].lane[1] + (v45->lane[1] - v45[-2].lane[1]));
-  v50 = (P2Ctx *)a1->cursor[3];
-  a1->p2_row[1][0] = (float)(v45[-1].lane[1] + v45->lane[1] - row2c[-1].lane[1]);
-  a1->p2_row[1][1] = (float)(-3 * (row2c->lane[1] - v45->lane[1]) + v50->lane[1]);
-  a1->p2_row[1][2] = (float)(v46[-1].lane[1] + v45[2].lane[1] - v45[1].lane[1]);
-  a1->p2_row[1][3] = (float)(v46[-2].lane[1] + v45[1].lane[1] - v45[-1].lane[1]);
-  a1->p2_row[2][0] = (float)(2 * v46[-1].lane[1] - v46[-2].lane[1]);
-  v52 = (P2Ctx *)(row2c);
-  a1->p2_row[2][1] = (float)(v46[-3].lane[1] + v45->lane[1] - v45[-3].lane[1]);
-  a1->p2_row[2][2] = (float)(v52->lane[1] + v45[1].lane[1] - v50[1].lane[1]);
-  a1->p2_row[2][3] = (float)v46[-3].lane[1];
-  a1->p2_row[3][0] = (float)(v45[-2].lane[1] + v45->lane[1] - v52[-2].lane[1]);
-  a1->p2_row[3][1] = (float)(v46[-2].lane[1] + v45[-1].lane[1] - v45[-3].lane[1]);
-  a1->p2_row[3][2] = (float)(v45[1].lane[1] + ((v45[2].lane[1] + v45->lane[1]) >> 1) - v52[2].lane[1]);
-  a1->p2_row[3][3] = (float)v50->lane[1];
-  if ( a4 )
+  nb1 = (P2Ctx *)blk->cursor[1];
+  blk->p2_row[0][0] = (float)nb1->lane[1];
+  nb0 = (P2Ctx *)blk->cursor[0];
+  blk->p2_row[0][1] = (float)nb1[1].lane[1];
+  blk->p2_row[0][2] = (float)(nb0[-1].lane[1] + nb1->lane[1] - nb1[-1].lane[1]);
+  row2c = (P2Ctx *)blk->cursor[2];
+  blk->p2_row[0][3] = (float)(nb0[-2].lane[1] + (nb1->lane[1] - nb1[-2].lane[1]));
+  nb3 = (P2Ctx *)blk->cursor[3];
+  blk->p2_row[1][0] = (float)(nb1[-1].lane[1] + nb1->lane[1] - row2c[-1].lane[1]);
+  blk->p2_row[1][1] = (float)(-3 * (row2c->lane[1] - nb1->lane[1]) + nb3->lane[1]);
+  blk->p2_row[1][2] = (float)(nb0[-1].lane[1] + nb1[2].lane[1] - nb1[1].lane[1]);
+  blk->p2_row[1][3] = (float)(nb0[-2].lane[1] + nb1[1].lane[1] - nb1[-1].lane[1]);
+  blk->p2_row[2][0] = (float)(2 * nb0[-1].lane[1] - nb0[-2].lane[1]);
+  nb2 = (P2Ctx *)(row2c);
+  blk->p2_row[2][1] = (float)(nb0[-3].lane[1] + nb1->lane[1] - nb1[-3].lane[1]);
+  blk->p2_row[2][2] = (float)(nb2->lane[1] + nb1[1].lane[1] - nb3[1].lane[1]);
+  blk->p2_row[2][3] = (float)nb0[-3].lane[1];
+  blk->p2_row[3][0] = (float)(nb1[-2].lane[1] + nb1->lane[1] - nb2[-2].lane[1]);
+  blk->p2_row[3][1] = (float)(nb0[-2].lane[1] + nb1[-1].lane[1] - nb1[-3].lane[1]);
+  blk->p2_row[3][2] = (float)(nb1[1].lane[1] + ((nb1[2].lane[1] + nb1->lane[1]) >> 1) - nb2[2].lane[1]);
+  blk->p2_row[3][3] = (float)nb3->lane[1];
+  if ( refa )
   {
-    v282 = (P2Ctx *)a4->cursor[0] - 1;
-    v281 = (P2Ctx *)((int16_t *)(a4->cursor[1] - 1));
-    v286 = (P2Ctx *)((int16_t *)(a4->cursor[2] - 1));
-    v284 = (P2Ctx *)a5->cursor[0] - 1;
-    v58 = a1->has_ref == 0;
-    v283 = a5->cursor[1] - 1;
-    v285 = a5->cursor[2] - 1;
-    if ( !v58 )
+    ra0 = (P2Ctx *)refa->cursor[0] - 1;
+    ra1 = (P2Ctx *)((int16_t *)(refa->cursor[1] - 1));
+    ra2 = (P2Ctx *)((int16_t *)(refa->cursor[2] - 1));
+    rb0 = (P2Ctx *)refb->cursor[0] - 1;
+    no_ref = blk->has_ref == 0;
+    rb1 = refb->cursor[1] - 1;
+    rb2 = refb->cursor[2] - 1;
+    if ( !no_ref )
     {
       // One number added to all sixteen floats of the first four rows.
       {
-        float bias = (float)v46->lane[1];
+        float bias = (float)nb0->lane[1];
         int32_t j, k;
         for ( j = 0; j < 4; ++j )
           for ( k = 0; k < 4; ++k )
-            a1->p2_row[j][k] += bias;
+            blk->p2_row[j][k] += bias;
       }
-      v46 = (P2Ctx *)a1->cursor[0];
-      v45 = (P2Ctx *)a1->cursor[1];
+      nb0 = (P2Ctx *)blk->cursor[0];
+      nb1 = (P2Ctx *)blk->cursor[1];
     }
-    v65 = *(int32_t *)&a1->plane_idx;
-    if ( v65 )
+    plane = *(int32_t *)&blk->plane_idx;
+    if ( plane )
     {
-      if ( v65 == 1 )
+      if ( plane == 1 )
       {
-        a1->p2_row[4][0] = (float)(v46->lane[1] + v45[3].lane[1]);
-        a1->p2_row[4][1] = (float)(v46[-2].lane[0] + v281[2].lane[0] - v281->lane[0]);
-        a1->p2_row[4][2] = (float)(v45[1].lane[0] + v282[-1].lane[0] - v281->lane[0]);
-        a1->p2_row[4][3] = (float)(v46[-1].lane[0] + v281->lane[0] - v281[-1].lane[0]);
-        v85 = v283[2].lane[0] - ((P2Ctx *)(v285))[3].lane[0];
-        a1->p2_row[5][0] = (float)(v45[1].lane[0] + v85);
-        a1->p2_row[5][1] = (float)(v46[-2].lane[0] + v284->lane[0] - v284[-2].lane[0]);
-        a1->p2_row[5][2] = (float)(v45->lane[0] + v284->lane[0] - v283->lane[0]);
-        v58 = a1->has_ref == 0;
-        a1->p2_row[5][3] = (float)(v46[-2].lane[0] + v282->lane[2]);
-        if ( v58 )
+        blk->p2_row[4][0] = (float)(nb0->lane[1] + nb1[3].lane[1]);
+        blk->p2_row[4][1] = (float)(nb0[-2].lane[0] + ra1[2].lane[0] - ra1->lane[0]);
+        blk->p2_row[4][2] = (float)(nb1[1].lane[0] + ra0[-1].lane[0] - ra1->lane[0]);
+        blk->p2_row[4][3] = (float)(nb0[-1].lane[0] + ra1->lane[0] - ra1[-1].lane[0]);
+        v85 = rb1[2].lane[0] - ((P2Ctx *)(rb2))[3].lane[0];
+        blk->p2_row[5][0] = (float)(nb1[1].lane[0] + v85);
+        blk->p2_row[5][1] = (float)(nb0[-2].lane[0] + rb0->lane[0] - rb0[-2].lane[0]);
+        blk->p2_row[5][2] = (float)(nb1->lane[0] + rb0->lane[0] - rb1->lane[0]);
+        no_ref = blk->has_ref == 0;
+        blk->p2_row[5][3] = (float)(nb0[-2].lane[0] + ra0->lane[2]);
+        if ( no_ref )
         {
-          v259 = (int32_t)(uintptr_t)v46;
-          v90 = (int16_t *)a1->cursor[2];
-          a1->p2_row[6][0] = ((float)(v46[-2].lane[0] + v282->lane[0] - v282[-2].lane[0]));
-          a1->p2_row[6][1] = (float)(*v90 + v282->lane[0] - ((P2Ctx *)(v286))->lane[0]);
-          a1->p2_row[6][2] = (float)(v286->lane[0] + v282->lane[0] - *v90 + 2 * (v45->lane[0] - v281->lane[0]));
-          v88 = *(int16_t *)((uint8_t *)v259 - 18) + v45[-1].lane[0] + v281[-2].lane[0] + v282->lane[0] - v282[-1].lane[0] - v281[-1].lane[0] - v45[-2].lane[0];
+          row0_i = (int32_t)(uintptr_t)nb0;
+          nb2w = (int16_t *)blk->cursor[2];
+          blk->p2_row[6][0] = ((float)(nb0[-2].lane[0] + ra0->lane[0] - ra0[-2].lane[0]));
+          blk->p2_row[6][1] = (float)(*nb2w + ra0->lane[0] - ((P2Ctx *)(ra2))->lane[0]);
+          blk->p2_row[6][2] = (float)(ra2->lane[0] + ra0->lane[0] - *nb2w + 2 * (nb1->lane[0] - ra1->lane[0]));
+          in63 = *(int16_t *)((uint8_t *)row0_i - 18) + nb1[-1].lane[0] + ra1[-2].lane[0] + ra0->lane[0] - ra0[-1].lane[0] - ra1[-1].lane[0] - nb1[-2].lane[0];
         }
         else
         {
-          a1->p2_row[6][0] = (float)v45->lane[0];
-          a1->p2_row[6][1] = (float)v46[-3].lane[0];
-          a1->p2_row[6][2] = (float)(v46[-1].lane[0] + v282[-1].lane[0] - v282[-2].lane[0]);
-          v88 = v46[-3].lane[0] + v46[-1].lane[0] - v46[-4].lane[0];
+          blk->p2_row[6][0] = (float)nb1->lane[0];
+          blk->p2_row[6][1] = (float)nb0[-3].lane[0];
+          blk->p2_row[6][2] = (float)(nb0[-1].lane[0] + ra0[-1].lane[0] - ra0[-2].lane[0]);
+          in63 = nb0[-3].lane[0] + nb0[-1].lane[0] - nb0[-4].lane[0];
         }
-        a1->p2_row[6][3] = (float)v88;
+        blk->p2_row[6][3] = (float)in63;
       }
       else
       {
-        a1->p2_row[4][0] = (float)(v46[-3].lane[0] + v46[-1].lane[0] - v46[-4].lane[0]);
-        a1->p2_row[4][1] = ((float)(v46[-1].lane[0] + v282[-1].lane[0] - v282[-2].lane[0]));
-        a1->p2_row[4][2] = (float)(v45[1].lane[0] + v281->lane[0] - v286[1].lane[0]);
-        a1->p2_row[4][3] = (float)(v46[-2].lane[0] + v281[2].lane[0] - v281->lane[0]);
-        a1->p2_row[5][0] = (float)(v45->lane[0] + v282[-2].lane[0] - v281[-2].lane[0]);
-        a1->p2_row[5][1] = (float)(v45->lane[0] + v282->lane[0] - v281->lane[0]);
-        a1->p2_row[5][2] = (float)(v46[-2].lane[0] + v282->lane[0] - v282[-2].lane[0]);
-        v99 = (int16_t *)a1->cursor[2];
-        a1->p2_row[5][3] = (float)(v46[-2].lane[0] + v284->lane[0] - v284[-2].lane[0]);
-        a1->p2_row[6][0] = (float)(*v99 + v284->lane[0] - ((P2Ctx *)(v285))->lane[0]);
-        a1->p2_row[6][1] = (float)(v284[-2].lane[0]
-                                       + v284->lane[0]
-                                       - v46[-2].lane[0]
-                                       + 2 * (v46[-1].lane[0] - v284[-1].lane[0]));
-        a1->p2_row[6][2] = ((float)(v46[-2].lane[0] + v284->lane[2]));
-        a1->p2_row[6][3] = (float)(*v99 + v282->lane[2]);
+        blk->p2_row[4][0] = (float)(nb0[-3].lane[0] + nb0[-1].lane[0] - nb0[-4].lane[0]);
+        blk->p2_row[4][1] = ((float)(nb0[-1].lane[0] + ra0[-1].lane[0] - ra0[-2].lane[0]));
+        blk->p2_row[4][2] = (float)(nb1[1].lane[0] + ra1->lane[0] - ra2[1].lane[0]);
+        blk->p2_row[4][3] = (float)(nb0[-2].lane[0] + ra1[2].lane[0] - ra1->lane[0]);
+        blk->p2_row[5][0] = (float)(nb1->lane[0] + ra0[-2].lane[0] - ra1[-2].lane[0]);
+        blk->p2_row[5][1] = (float)(nb1->lane[0] + ra0->lane[0] - ra1->lane[0]);
+        blk->p2_row[5][2] = (float)(nb0[-2].lane[0] + ra0->lane[0] - ra0[-2].lane[0]);
+        nb2w2 = (int16_t *)blk->cursor[2];
+        blk->p2_row[5][3] = (float)(nb0[-2].lane[0] + rb0->lane[0] - rb0[-2].lane[0]);
+        blk->p2_row[6][0] = (float)(*nb2w2 + rb0->lane[0] - ((P2Ctx *)(rb2))->lane[0]);
+        blk->p2_row[6][1] = (float)(rb0[-2].lane[0]
+                                       + rb0->lane[0]
+                                       - nb0[-2].lane[0]
+                                       + 2 * (nb0[-1].lane[0] - rb0[-1].lane[0]));
+        blk->p2_row[6][2] = ((float)(nb0[-2].lane[0] + rb0->lane[2]));
+        blk->p2_row[6][3] = (float)(*nb2w2 + ra0->lane[2]);
       }
     }
     else
     {
-      a1->p2_row[4][0] = (float)(v46[-3].lane[0] + v46[-1].lane[0] - v46[-4].lane[0]);
-      v66 = a1->cursor[3];
-      a1->p2_row[4][1] = (float)(v46[-5].lane[0] + v45->lane[0] - v45[-5].lane[0]);
-      v67 = (P2Ctx *)a1->cursor[2];
-      a1->p2_row[4][2] = (float)(v46[-4].lane[0] + v45->lane[0] - v45[-4].lane[0]);
-      v68 = v67->lane[0] + 3 * v45[1].lane[0] - 4 * v67[1].lane[0];
-      v70 = (float)(v68 - (((v45[2].lane[0] - v45->lane[0] - (v66[2].lane[0] - v66->lane[0])) >> 1) - v66[1].lane[0]));
-      a1->p2_row[4][3] = v70;
-      a1->p2_row[5][0] = (float)(v46[-2].lane[0] + v282->lane[0] - v282[-2].lane[0]);
-      a1->p2_row[5][1] = (float)(v45[1].lane[0] + v281[1].lane[0] - v286[2].lane[0]);
-      a1->p2_row[5][2] = (float)(v45[-2].lane[0] + v281[2].lane[0] - v286->lane[0]);
-      v74 = v46[-1].lane[0] - v282[-1].lane[0];
-      v75 = v282[-2].lane[0] + v282->lane[0] - v46[-2].lane[0];
-      a1->p2_row[5][3] = ((float)(v75 + 2 * v74));
-      a1->p2_row[6][0] = (float)(v67[1].lane[0] + v284->lane[0] - v285[1].lane[0]);
-      a1->p2_row[6][1] = ((float)(v46[-2].lane[0] + v284->lane[0] - v284[-2].lane[0]));
-      a1->p2_row[6][2] = (float)(v46[-1].lane[0] + v283[1].lane[0] - v283->lane[0]);
-      a1->p2_row[6][3] = (float)(v45[1].lane[0] + v283[2].lane[0] - v285[3].lane[0]);
+      blk->p2_row[4][0] = (float)(nb0[-3].lane[0] + nb0[-1].lane[0] - nb0[-4].lane[0]);
+      nb3x = blk->cursor[3];
+      blk->p2_row[4][1] = (float)(nb0[-5].lane[0] + nb1->lane[0] - nb1[-5].lane[0]);
+      nb2x = (P2Ctx *)blk->cursor[2];
+      blk->p2_row[4][2] = (float)(nb0[-4].lane[0] + nb1->lane[0] - nb1[-4].lane[0]);
+      v68 = nb2x->lane[0] + 3 * nb1[1].lane[0] - 4 * nb2x[1].lane[0];
+      blk->p2_row[4][3] = ((float)(v68 - (((nb1[2].lane[0] - nb1->lane[0] - (nb3x[2].lane[0] - nb3x->lane[0])) >> 1) - nb3x[1].lane[0])));
+      blk->p2_row[5][0] = (float)(nb0[-2].lane[0] + ra0->lane[0] - ra0[-2].lane[0]);
+      blk->p2_row[5][1] = (float)(nb1[1].lane[0] + ra1[1].lane[0] - ra2[2].lane[0]);
+      blk->p2_row[5][2] = (float)(nb1[-2].lane[0] + ra1[2].lane[0] - ra2->lane[0]);
+      v74 = nb0[-1].lane[0] - ra0[-1].lane[0];
+      v75 = ra0[-2].lane[0] + ra0->lane[0] - nb0[-2].lane[0];
+      blk->p2_row[5][3] = ((float)(v75 + 2 * v74));
+      blk->p2_row[6][0] = (float)(nb2x[1].lane[0] + rb0->lane[0] - rb2[1].lane[0]);
+      blk->p2_row[6][1] = ((float)(nb0[-2].lane[0] + rb0->lane[0] - rb0[-2].lane[0]));
+      blk->p2_row[6][2] = (float)(nb0[-1].lane[0] + rb1[1].lane[0] - rb1->lane[0]);
+      blk->p2_row[6][3] = (float)(nb1[1].lane[0] + rb1[2].lane[0] - rb2[3].lane[0]);
     }
   }
   else
   {
-    a1->p2_row[4][0] = (float)(v45[3].lane[0] + v45->lane[0] - v52[3].lane[0]);
-    v239 = v45->lane[0];
-    v240 = v45[-4].lane[0];
-    row2c = v52;
-    a1->p2_row[4][1] = (float)(v46[-4].lane[0] + v239 - v240);
-    v241 = v52->lane[0] + 3 * v45[1].lane[0] - 4 * v52[1].lane[0];
-    v242 = v45[2].lane[0] - v45->lane[0];
-    v244 = (float)(v241 - (((v242 - (v50[2].lane[0] - v50->lane[0])) >> 1) - v50[1].lane[0]));
-    a1->p2_row[4][2] = v244;
-    v255 = (P2Ctx *)a1->cursor[4];
-    a1->p2_row[4][3] = (float)(row2c[-1].lane[0] + v45[1].lane[0] - v50->lane[0]);
-    a1->p2_row[5][0] = (float)(v50[1].lane[0] + v45->lane[0] - v255[1].lane[0]);
-    a1->p2_row[5][1] = (float)v45[3].lane[0];
-    a1->p2_row[5][2] = (float)(v46[-3].lane[0] + v46[-1].lane[0] - v46[-4].lane[0]);
-    a1->p2_row[5][3] = (float)(v46[-1].lane[0] + v50->lane[0] - v50[-1].lane[0]);
-    a1->p2_row[6][0] = (float)(v46[-5].lane[0] + v45->lane[0] - v45[-5].lane[0]);
-    a1->p2_row[6][1] = (float)v255->lane[0];
-    a1->p2_row[6][2] = (float)(v46[-5].lane[0] + v46[-1].lane[0] - v46[-6].lane[0]);
-    a1->p2_row[6][3] = (float)v45[-6].lane[0];
-    v285 = (P2Ctx *)(nullptr);
-    v283 = (P2Ctx *)(nullptr);
-    v284 = nullptr;
-    v286 = (P2Ctx *)(nullptr);
-    v281 = (P2Ctx *)(nullptr);
-    v282 = nullptr;
+    blk->p2_row[4][0] = (float)(nb1[3].lane[0] + nb1->lane[0] - nb2[3].lane[0]);
+    v239 = nb1->lane[0];
+    v240 = nb1[-4].lane[0];
+    row2c = nb2;
+    blk->p2_row[4][1] = (float)(nb0[-4].lane[0] + v239 - v240);
+    v241 = nb2->lane[0] + 3 * nb1[1].lane[0] - 4 * nb2[1].lane[0];
+    v242 = nb1[2].lane[0] - nb1->lane[0];
+    blk->p2_row[4][2] = ((float)(v241 - (((v242 - (nb3[2].lane[0] - nb3->lane[0])) >> 1) - nb3[1].lane[0])));
+    nb4 = (P2Ctx *)blk->cursor[4];
+    blk->p2_row[4][3] = (float)(row2c[-1].lane[0] + nb1[1].lane[0] - nb3->lane[0]);
+    blk->p2_row[5][0] = (float)(nb3[1].lane[0] + nb1->lane[0] - nb4[1].lane[0]);
+    blk->p2_row[5][1] = (float)nb1[3].lane[0];
+    blk->p2_row[5][2] = (float)(nb0[-3].lane[0] + nb0[-1].lane[0] - nb0[-4].lane[0]);
+    blk->p2_row[5][3] = (float)(nb0[-1].lane[0] + nb3->lane[0] - nb3[-1].lane[0]);
+    blk->p2_row[6][0] = (float)(nb0[-5].lane[0] + nb1->lane[0] - nb1[-5].lane[0]);
+    blk->p2_row[6][1] = (float)nb4->lane[0];
+    blk->p2_row[6][2] = (float)(nb0[-5].lane[0] + nb0[-1].lane[0] - nb0[-6].lane[0]);
+    blk->p2_row[6][3] = (float)nb1[-6].lane[0];
+    rb2 = (P2Ctx *)(nullptr);
+    rb1 = (P2Ctx *)(nullptr);
+    rb0 = nullptr;
+    ra2 = (P2Ctx *)(nullptr);
+    ra1 = (P2Ctx *)(nullptr);
+    ra0 = nullptr;
   }
-  cur = a1->cur;
+  cur = blk->cur;
   __frame.sub0 = (float (*)[4])*(cur - 1);
-  v104 = a1->above;
-  __frame.sub1 = (float (*)[4])v104[1];
-  __frame.sub2 = (float (*)[4])v104[2];
+  up_row = blk->above;
+  __frame.sub1 = (float (*)[4])up_row[1];
+  __frame.sub2 = (float (*)[4])up_row[2];
   __frame.sub3 = (float (*)[4])*(cur - 2);
-  __frame.sub4 = (float (*)[4])*v104;
+  __frame.sub4 = (float (*)[4])*up_row;
   __frame.sub5 = (float (*)[4])*cur;
-  v105 = 14 * n3536;
+  c_lo = 14 * n3536;
   n2 = 1;
-  v107 = 13 * n1840_2;
-  if ( 16 * v12 <= 14 * n3536 )
+  c_mid = 13 * n1840_2;
+  if ( 16 * sum4 <= 14 * n3536 )
   {
-    v105 = 16 * v12;
+    c_lo = 16 * sum4;
     n2 = 0;
   }
-  if ( v105 > v107 )
+  if ( c_lo > c_mid )
     n2 = 2;
   else
-    v107 = v105;
-  if ( v107 > 11 * n1840_1 )
+    c_mid = c_lo;
+  if ( c_mid > 11 * n1840_1 )
     n2 = 3;
-  n3536_5 = __alt_p2_filter((float (*)[4])(void *)*(int32_t *)&a1->f278656, (float (*)[4])a1->p2_row, (CtxWeights *)__frame.sub, n2);
-  v109 = (P2Ctx *)a1->cursor[0];
-  v293 = (P2Ctx *)a1->cursor[1];
-  *(int32_t *)&a1->pred_prev = n3536_5;
-  lane3 = v293->lane[3];
-  v112 = v109[-1].lane[3];
-  v293 = v293;
-  v269 = v112 + lane3;
-  if ( a4 )
-    v269 += (v284->lane[3] + v282->lane[3]) >> 1;
-  v113 = v109[-2].lane[3];
-  v114 = v109[-3].lane[3];
+  n3536_5 = __alt_p2_filter((float (*)[4])(void *)*(int32_t *)&blk->f278656, (float (*)[4])blk->p2_row, (CtxWeights *)__frame.sub, n2);
+  cx0 = (P2Ctx *)blk->cursor[0];
+  cx1 = (P2Ctx *)blk->cursor[1];
+  *(int32_t *)&blk->pred_prev = n3536_5;
+  lane3 = cx1->lane[3];
+  v112 = cx0[-1].lane[3];
+  cx1 = cx1;
+  g3pair = v112 + lane3;
+  if ( refa )
+    g3pair += (rb0->lane[3] + ra0->lane[3]) >> 1;
+  v113 = cx0[-2].lane[3];
+  v114 = cx0[-3].lane[3];
   n3536 = n3536_5;
-  v116 = v109[-4].lane[3];
-  v294 = (P2Ctx *)(a1->cursor[3]);
-  v117 = v293[3].lane[3] + v293[-1].lane[3] + v112 + v114 + v116 + v113;
+  v116 = cx0[-4].lane[3];
+  cx3 = (P2Ctx *)(blk->cursor[3]);
+  g3sum = cx1[3].lane[3] + cx1[-1].lane[3] + v112 + v114 + v116 + v113;
   n3536_1 = n3536;
-  v260 = v109[-1].lane[2];
-  v120 = (v293[1].lane[2] + v293->lane[2] + v293[-1].lane[2] + v260) & 0x80000
-       | (v294->lane[2] + v109[-2].lane[2] + 2 * v109[-4].lane[2]) & 0x40000
-       | (v293[-3].lane[2] + v109[-3].lane[2] + v109[-5].lane[2] + v109[-7].lane[2]) & 0x20000
+  v260 = cx0[-1].lane[2];
+  ctx0_lo = (cx1[1].lane[2] + cx1->lane[2] + cx1[-1].lane[2] + v260) & 0x80000
+       | (cx3->lane[2] + cx0[-2].lane[2] + 2 * cx0[-4].lane[2]) & 0x40000
+       | (cx1[-3].lane[2] + cx0[-3].lane[2] + cx0[-5].lane[2] + cx0[-7].lane[2]) & 0x20000
        | v260 & 0x10000
-       | (uint16_t)v109[-3].lane[2] & 0x8000
+       | (uint16_t)cx0[-3].lane[2] & 0x8000
        | (((n3536 > 3536) + (n3536 > 720) + (n3536 > 288)) << 13)
-       | ((((uint32_t)(752 - (v269 + v117)) >> 31)
-         + ((uint32_t)(400 - (v269 + v117)) >> 31)
-         + ((uint32_t)(240 - (v269 + v117)) >> 31)) << 11);
-  a1->bank_ctx[0] = v120;
-  if ( a4 )
+       | ((((uint32_t)(752 - (g3pair + g3sum)) >> 31)
+         + ((uint32_t)(400 - (g3pair + g3sum)) >> 31)
+         + ((uint32_t)(240 - (g3pair + g3sum)) >> 31)) << 11);
+  blk->bank_ctx[0] = ctx0_lo;
+  if ( refa )
   {
-    v121 = v282[-2].lane[2];
-    v122 = v109[-2].lane[2];
-    lane2 = v282->lane[2];
-    v124 = v282[-1].lane[2];
+    v121 = ra0[-2].lane[2];
+    v122 = cx0[-2].lane[2];
+    lane2 = ra0->lane[2];
+    v124 = ra0[-1].lane[2];
     n3536 = n3536_1;
-    v125 = v284[-1].lane[2] & 0x2000000
-         | v284->lane[2] & 0x1000000
+    ctx0 = rb0[-1].lane[2] & 0x2000000
+         | rb0->lane[2] & 0x1000000
          | v124 & 0x800000
-         | (v284->lane[2] + v284[-2].lane[2]) & 0x400000
+         | (rb0->lane[2] + rb0[-2].lane[2]) & 0x400000
          | (v121 + lane2) & 0x200000
          | v122 & 0x100000
-         | v120;
-    v295 = (P2Ctx *)a1->cursor[2];
+         | ctx0_lo;
+    cx2 = (P2Ctx *)blk->cursor[2];
   }
   else
   {
-    v236 = v109[-4].lane[2];
-    v237 = v109[-5].lane[2];
-    v238 = v109[-7].lane[2];
+    v236 = cx0[-4].lane[2];
+    v237 = cx0[-5].lane[2];
+    v238 = cx0[-7].lane[2];
     n3536 = n3536_1;
-    v295 = (P2Ctx *)a1->cursor[2];
-    v125 = (v293[3].lane[2] + v109[-3].lane[2] + v238 + v237) & 0x2000000
-         | (v295[1].lane[2] + v295->lane[2] + v236 + v109[-8].lane[2]) & 0x1000000
-         | (v236 + v109[-6].lane[2]) & 0x800000
+    cx2 = (P2Ctx *)blk->cursor[2];
+    ctx0 = (cx1[3].lane[2] + cx0[-3].lane[2] + v238 + v237) & 0x2000000
+         | (cx2[1].lane[2] + cx2->lane[2] + v236 + cx0[-8].lane[2]) & 0x1000000
+         | (v236 + cx0[-6].lane[2]) & 0x800000
          | v236 & 0x400000
          | v237 & 0x200000
          | v238 & 0x100000
-         | v120;
+         | ctx0_lo;
   }
-  v126 = v125 >> 11;
-  a1->bank_ctx[0] = v126;
-  v127 = p2_pred(a1->p2_ctr[v126].w2, a1->p2_ctr[v126].b0);
-  v128 = v290;
-  v129 = a1->cursor[4];
-  a1->nb_sum[1] = v127;
-  n2256 = v127 + n3536_1;
-  a1->nb_sum[0] = n2256;
-  v132 = v109[-5].lane[0];
-  n1840 = v129[4].lane[0];
-  v290 = ((v269 << 9) + v128) >> 13;
+  bank0 = ctx0 >> 11;
+  blk->bank_ctx[0] = bank0;
+  pred0 = p2_pred(blk->p2_ctr[bank0].w2, blk->p2_ctr[bank0].b0);
+  sum_c = sum_all;
+  cx4 = blk->cursor[4];
+  blk->nb_sum[1] = pred0;
+  n2256 = pred0 + n3536_1;
+  blk->nb_sum[0] = n2256;
+  v132 = cx0[-5].lane[0];
+  n1840 = cx4[4].lane[0];
+  sum_all = ((g3pair << 9) + sum_c) >> 13;
   n960_1 = v132 - n2256;
-  v133 = ((uint32_t)(24 - v290) >> 20) & 0xFFFFF800;
+  q24 = ((uint32_t)(24 - sum_all) >> 20) & 0xFFFFF800;
   n1840_1 = n1840 - n2256;
-  v301 = v293[5].lane[0];
+  v301 = cx1[5].lane[0];
   n1840_2 = v301 - n2256;
-  v297 = ((uint32_t)(39 - v290) >> 20) & 0xFFFFF800;
-  if ( a4 )
+  q39 = ((uint32_t)(39 - sum_all) >> 20) & 0xFFFFF800;
+  if ( refa )
   {
-    v298 = ((uint32_t)(10 - v290) >> 20) & 0xFFFFF800;
-    v134 = v282->lane[1];
-    v248 = v109[0].lane[1];
-    v270 = v293[2].lane[1];
-    v135 = (v248 + v109[-3].lane[1] - n2256 - (v270 - v293[5].lane[1])) & 0x800000
-         | (v248 + v109[-5].lane[1] - n2256) & 0x400000
-         | (v248 + v293->lane[1] + v283[2].lane[1] - v285[2].lane[1] - n2256) & 0x200000
-         | (v248 + v109[-1].lane[1] + v284->lane[1] - v284[-1].lane[1] - n2256) & 0x100000
-         | (v295[-1].lane[1] + v248 + v134 - v286[-1].lane[1] - n2256) & 0x80000
-         | (v248 + v270 + v134 - v281[2].lane[1] - n2256) & 0x40000
-         | n1840_2 & 0x20000
-         | n1840_1 & 0x10000
-         | n960_1 & 0x8000
-         | (((n2256 > 2256) + (n2256 > 1056) + (n2256 > 144)) << 13)
-         | ((((uint32_t)(55 - v290) >> 20) & 0xFFFFF800) + v298 + v133);
-    v136 = v298;
-    v137 = (v109[-1].lane[0] + v282->lane[0] - v282[-1].lane[0] - n2256) & 0x2000000
-         | (v286->lane[1] + v281->lane[1] - 2 * v282->lane[1]) & 0x1000000
-         | v135;
+    q10 = ((uint32_t)(10 - sum_all) >> 20) & 0xFFFFF800;
+    v134 = ra0->lane[1];
+    v248 = cx0[0].lane[1];
+    v270 = cx1[2].lane[1];
+    q10a = q10;
+    ctx1 = (cx0[-1].lane[0] + ra0->lane[0] - ra0[-1].lane[0] - n2256) & 0x2000000
+         | (ra2->lane[1] + ra1->lane[1] - 2 * ra0->lane[1]) & 0x1000000
+         | ((v248 + cx0[-3].lane[1] - n2256 - (v270 - cx1[5].lane[1])) & 0x800000 | (v248 + cx0[-5].lane[1] - n2256) & 0x400000 | (v248 + cx1->lane[1] + rb1[2].lane[1] - rb2[2].lane[1] - n2256) & 0x200000 | (v248 + cx0[-1].lane[1] + rb0->lane[1] - rb0[-1].lane[1] - n2256) & 0x100000 | (cx2[-1].lane[1] + v248 + v134 - ra2[-1].lane[1] - n2256) & 0x80000 | (v248 + v270 + v134 - ra1[2].lane[1] - n2256) & 0x40000 | n1840_2 & 0x20000 | n1840_1 & 0x10000 | n960_1 & 0x8000 | (((n2256 > 2256) + (n2256 > 1056) + (n2256 > 144)) << 13) | ((((uint32_t)(55 - sum_all) >> 20) & 0xFFFFF800) + q10 + q24));
   }
   else
   {
-    v298 = ((uint32_t)(10 - v290) >> 20) & 0xFFFFF800;
-    v254 = v294->lane[0];
-    v267 = n2256 - v109[-3].lane[0];
-    v273 = v293[2].lane[0];
-    v137 = (v293[-5].lane[0] - v293[-2].lane[0] + v267) & 0x1000000
+    q10 = ((uint32_t)(10 - sum_all) >> 20) & 0xFFFFF800;
+    v254 = cx3->lane[0];
+    v267 = n2256 - cx0[-3].lane[0];
+    v273 = cx1[2].lane[0];
+    ctx1 = (cx1[-5].lane[0] - cx1[-2].lane[0] + v267) & 0x1000000
          | (v267 + v273 - v301) & 0x800000
-         | (v129[3].lane[0] - v295[2].lane[0] + n2256 - v295[1].lane[0]) & 0x400000
-         | (v129[-1].lane[0] - v254 + n2256 - v293[-1].lane[0]) & 0x200000
-         | (v293->lane[0] - v273 + n2256 - v109[-2].lane[0]) & 0x100000
+         | (cx4[3].lane[0] - cx2[2].lane[0] + n2256 - cx2[1].lane[0]) & 0x400000
+         | (cx4[-1].lane[0] - v254 + n2256 - cx1[-1].lane[0]) & 0x200000
+         | (cx1->lane[0] - v273 + n2256 - cx0[-2].lane[0]) & 0x100000
          | -n1840_2 & 0x80000
          | -n1840_1 & 0x40000
-         | (n2256 - v129[2].lane[0]) & 0x20000
-         | (n2256 - v129[-3].lane[0]) & 0x10000
+         | (n2256 - cx4[2].lane[0]) & 0x20000
+         | (n2256 - cx4[-3].lane[0]) & 0x10000
          | -n960_1 & 0x8000
          | (((n2256 > 2400) + (n2256 > 1024) + (n2256 > 240)) << 13)
-         | (v297 + v133 + (((uint32_t)(11 - v290) >> 20) & 0xFFFFF800))
-         | (n1840 - v254 + n2256 - v293[4].lane[0]) & 0x2000000;
-    v136 = v298;
+         | (q39 + q24 + (((uint32_t)(11 - sum_all) >> 20) & 0xFFFFF800))
+         | (n1840 - v254 + n2256 - cx1[4].lane[0]) & 0x2000000;
+    q10a = q10;
   }
-  v298 = v136;
-  v138 = v137 >> 11;
-  a1->bank_ctx[1] = v138;
-  v139 = a1->p2_ctr[v138 + 32768].b0;
-  v140 = a1->p2_ctr[v138 + 32768].w2;
-  v141 = 1 << ((v139 + 31) & 31);
-  v144 = (v141 + v140) >> (v139 & 31);
-  n2576 = v144 + n2256;
-  a1->nb_sum[2] = n2576;
-  a1->nb_sum[3] = v144;
-  n1840_13 = v295->lane[0];
-  n960_1 = v293->lane[0];
-  v147 = v109[-2].lane[0];
+  q10 = q10a;
+  bank1 = ctx1 >> 11;
+  blk->bank_ctx[1] = bank1;
+  rate1 = blk->p2_ctr[bank1 + 32768].b0;
+  w1c = blk->p2_ctr[bank1 + 32768].w2;
+  one1 = 1 << ((rate1 + 31) & 31);
+  pred1 = (one1 + w1c) >> (rate1 & 31);
+  n2576 = pred1 + n2256;
+  blk->nb_sum[2] = n2576;
+  blk->nb_sum[3] = pred1;
+  n1840_13 = cx2->lane[0];
+  n960_1 = cx1->lane[0];
+  v147 = cx0[-2].lane[0];
   n1840 = n1840_13;
   v302 = v147 - n2576;
-  v301 = v147 + n2576 - 2 * v109[-1].lane[0];
+  v301 = v147 + n2576 - 2 * cx0[-1].lane[0];
   v303 = n1840_13 - n2576;
-  if ( a4 )
+  if ( refa )
   {
-    v148 = v109[0].lane[1];
-    v149 = v109[-1].lane[1];
-    v151 = v282->lane[0];
-    n1840_2 = v293[1].lane[1];
+    v148 = cx0[0].lane[1];
+    v149 = cx0[-1].lane[1];
+    v151 = ra0->lane[0];
+    n1840_2 = cx1[1].lane[1];
     n1840_1 = v151 - n2576;
-    v152 = (v148 - v109[-2].lane[1] + 2 * v149 - n2576) & 0x100000
-         | (2 * n960_1 - n2576 - n1840) & 0x80000
-         | -v301 & 0x40000
-         | v303 & 0x20000
-         | v302 & 0x10000
-         | (208 - v284->lane[0]) & 0x8000
-         | (((n2576 > 2576) + (n2576 > 1280) + (n2576 > 640)) << 13)
-         | ((((uint32_t)(33 - v290) >> 31) + ((uint32_t)(12 - v290) >> 31) + ((uint32_t)(4 - v290) >> 31)) << 11);
-    v153 = v298;
-    v154 = (v148 + v293[-1].lane[1] - n2576 - (v295->lane[1] - n1840_2)) & 0x2000000
-         | (v148 + v149 - n2576 - (v293->lane[1] - n1840_2)) & 0x1000000
-         | (v284->lane[0] - n2576 + n1840 - v285->lane[0]) & 0x800000
-         | (n1840_1 + n1840 - v286->lane[0]) & 0x400000
-         | (n1840_1 + v293[-1].lane[0] - v281[-1].lane[0]) & 0x200000
-         | v152;
+    q10b = q10;
+    ctx2 = (v148 + cx1[-1].lane[1] - n2576 - (cx2->lane[1] - n1840_2)) & 0x2000000
+         | (v148 + v149 - n2576 - (cx1->lane[1] - n1840_2)) & 0x1000000
+         | (rb0->lane[0] - n2576 + n1840 - rb2->lane[0]) & 0x800000
+         | (n1840_1 + n1840 - ra2->lane[0]) & 0x400000
+         | (n1840_1 + cx1[-1].lane[0] - ra1[-1].lane[0]) & 0x200000
+         | ((v148 - cx0[-2].lane[1] + 2 * v149 - n2576) & 0x100000 | (2 * n960_1 - n2576 - n1840) & 0x80000 | -v301 & 0x40000 | v303 & 0x20000 | v302 & 0x10000 | (208 - rb0->lane[0]) & 0x8000 | (((n2576 > 2576) + (n2576 > 1280) + (n2576 > 640)) << 13) | ((((uint32_t)(33 - sum_all) >> 31) + ((uint32_t)(12 - sum_all) >> 31) + ((uint32_t)(4 - sum_all) >> 31)) << 11));
   }
   else
   {
-    v235 = v294->lane[0];
-    v153 = v298;
-    v266 = v129->lane[0];
-    v272 = v294[1].lane[0];
-    v154 = (n2576 + 3 * (n1840 - n960_1) - v235) & 0x2000000
-         | (n2576 + v266 - (v295[2].lane[0] + v295[-2].lane[0])) & 0x1000000
-         | (v294[2].lane[0] - v295[-1].lane[0] + n2576 - v293[3].lane[0]) & 0x800000
-         | (v272 - v293[1].lane[0] - v303) & 0x400000
+    v235 = cx3->lane[0];
+    q10b = q10;
+    v266 = cx4->lane[0];
+    v272 = cx3[1].lane[0];
+    ctx2 = (n2576 + 3 * (n1840 - n960_1) - v235) & 0x2000000
+         | (n2576 + v266 - (cx2[2].lane[0] + cx2[-2].lane[0])) & 0x1000000
+         | (cx3[2].lane[0] - cx2[-1].lane[0] + n2576 - cx1[3].lane[0]) & 0x800000
+         | (v272 - cx1[1].lane[0] - v303) & 0x400000
          | (v235 - n960_1 - v303) & 0x200000
          | v301 & 0x100000
-         | (n2576 - v129[3].lane[0]) & 0x80000
+         | (n2576 - cx4[3].lane[0]) & 0x80000
          | (v272 - n2576) & 0x40000
          | (n2576 - v266) & 0x20000
-         | (n2576 - v294[-2].lane[0]) & 0x10000
+         | (n2576 - cx3[-2].lane[0]) & 0x10000
          | -v302 & 0x8000
          | (((n2576 > 2464) + (n2576 > 1216) + (n2576 > 688)) << 13)
-         | ((((uint32_t)(58 - v290) >> 31) + ((uint32_t)(25 - v290) >> 31) + ((uint32_t)(13 - v290) >> 31)) << 11);
+         | ((((uint32_t)(58 - sum_all) >> 31) + ((uint32_t)(25 - sum_all) >> 31) + ((uint32_t)(13 - sum_all) >> 31)) << 11);
   }
-  v298 = v153;
-  v155 = v154 >> 11;
-  a1->bank_ctx[2] = v155;
-  v156 = p2_pred(a1->p2_ctr[v155 + 65536].w2, a1->p2_ctr[v155 + 65536].b0);
-  a1->nb_sum[5] = v156;
-  n2896 = v156 + n2576;
-  a1->nb_sum[4] = n2896;
-  v161 = v293->lane[1];
-  v162 = v109[-2].lane[0];
-  v250 = v109[0].lane[1];
-  v163 = v109[-3].lane[0];
-  v164 = v295[1].lane[1];
+  q10 = q10b;
+  bank2 = ctx2 >> 11;
+  blk->bank_ctx[2] = bank2;
+  pred2 = p2_pred(blk->p2_ctr[bank2 + 65536].w2, blk->p2_ctr[bank2 + 65536].b0);
+  blk->nb_sum[5] = pred2;
+  n2896 = pred2 + n2576;
+  blk->nb_sum[4] = n2896;
+  v161 = cx1->lane[1];
+  v162 = cx0[-2].lane[0];
+  v250 = cx0[0].lane[1];
+  v163 = cx0[-3].lane[0];
+  v164 = cx2[1].lane[1];
   v303 = n2896 - v163;
   v306 = n2896 - v250;
-  v165 = 9 - v290;
-  v290 = -v290;
-  v167 = (int32_t)((3 * (v162 - v109[-1].lane[0]) + n2896 - v163) & 0x2000000
+  q9 = 9 - sum_all;
+  sum_all = -sum_all;
+  bank3 = (int32_t)((3 * (v162 - cx0[-1].lane[0]) + n2896 - v163) & 0x2000000
              | (v164
-              - ((uint32_t)(v293[1].lane[1] + v293[2].lane[1] + v293[-1].lane[1] + v161) >> 1)
+              - ((uint32_t)(cx1[1].lane[1] + cx1[2].lane[1] + cx1[-1].lane[1] + v161) >> 1)
               + v306)
              & 0x1000000
-             | (v295[-3].lane[0] - v293[-2].lane[0] + n2896 - v293[-1].lane[0]) & 0x800000
-             | -(v295[2].lane[0] + n2896 - 2 * v293[1].lane[0]) & 0x400000
-             | (v293[-2].lane[1] - v162 + n2896 - v161) & 0x200000
-             | (n2896 - v293[3].lane[0]) & 0x100000
+             | (cx2[-3].lane[0] - cx1[-2].lane[0] + n2896 - cx1[-1].lane[0]) & 0x800000
+             | -(cx2[2].lane[0] + n2896 - 2 * cx1[1].lane[0]) & 0x400000
+             | (cx1[-2].lane[1] - v162 + n2896 - v161) & 0x200000
+             | (n2896 - cx1[3].lane[0]) & 0x100000
              | (v306 - v164) & 0x80000
-             | (n2896 - v294->lane[0]) & 0x40000
-             | (2 * n2896 - v161 - (v293->lane[0] + v250)) & 0x20000
-             | (n2896 - v109[-1].lane[1] - v250) & 0x10000
+             | (n2896 - cx3->lane[0]) & 0x40000
+             | (2 * n2896 - v161 - (cx1->lane[0] + v250)) & 0x20000
+             | (n2896 - cx0[-1].lane[1] - v250) & 0x10000
              | (n2896 - v163) & 0x8000
              | (((n2896 > 2896) + (n2896 > 1568) + (n2896 > 592)) << 13)
-             | ((((uint32_t)(v290 + 37) >> 31) + ((uint32_t)(v290 + 19) >> 31) + (v165 >> 31)) << 11)) >> 11;
-  a1->bank_ctx[3] = v167;
-  v168 = a1->p2_ctr[v167 + 98304].w2;
+             | ((((uint32_t)(sum_all + 37) >> 31) + ((uint32_t)(sum_all + 19) >> 31) + (q9 >> 31)) << 11)) >> 11;
+  blk->bank_ctx[3] = bank3;
+  w3c = blk->p2_ctr[bank3 + 98304].w2;
   // The rate reached `>>` through two `LOBYTE` copies, `v163` then `v164`;
   // both masks read only the byte each copy wrote.
-  v171 = p2_pred(v168, a1->p2_ctr[v167 + 98304].b0);
-  a1->nb_sum[7] = v171;
-  n3536_2 = v171 + n2896;
+  pred3 = p2_pred(w3c, blk->p2_ctr[bank3 + 98304].b0);
+  blk->nb_sum[7] = pred3;
+  n3536_2 = pred3 + n2896;
   n3536 = n3536_2;
-  a1->nb_sum[6] = n3536_2;
-  v175 = v293->lane[0];
-  v176 = v294->lane[0];
-  v307 = v109[0].lane[1];
-  v177 = v109[-4].lane[1];
-  v178 = v293[1].lane[0];
-  v179 = v293[-1].lane[0];
+  blk->nb_sum[6] = n3536_2;
+  v175 = cx1->lane[0];
+  v176 = cx3->lane[0];
+  v307 = cx0[0].lane[1];
+  v177 = cx0[-4].lane[1];
+  v178 = cx1[1].lane[0];
+  v179 = cx1[-1].lane[0];
   v312 = n3536_2 - v307;
   v313 = n3536_2 + v176;
-  v180 = (((n3536_2 > 3056) + (n3536_2 > 1952) + (n3536_2 > 368)) << 13)
-       | (v297 + (((uint32_t)(v290 + 21) >> 20) & 0xFFFFF800) + v298);
   v181 = ((uint16_t)n3536_2 - (uint16_t)v177 - (uint16_t)v307) & 0x8000;
-  v182 = n3536_2 - v109[-1].lane[0];
+  v182 = n3536_2 - cx0[-1].lane[0];
   n3536_3 = n3536;
   v185 = (int32_t)((n3536 - ((uint32_t)(v178 + v179 + 2 * v175) >> 2)) & 0x2000000
-             | (v313 - v109[-2].lane[0] - (v294[2].lane[1] + v307)) & 0x1000000
-             | (n3536 - 2 * v109[-2].lane[1] - (v307 - v177)) & 0x800000
-             | (n3536 - v109[-3].lane[1] - v307 - (v175 - v293[-3].lane[0])) & 0x400000
-             | (v313 - v307 - (v178 + v295[-1].lane[1])) & 0x200000
-             | (v295[-2].lane[0] + n3536 - 2 * v179) & 0x100000
-             | (v295->lane[1] - 2 * v293->lane[1] + v312) & 0x80000
+             | (v313 - cx0[-2].lane[0] - (cx3[2].lane[1] + v307)) & 0x1000000
+             | (n3536 - 2 * cx0[-2].lane[1] - (v307 - v177)) & 0x800000
+             | (n3536 - cx0[-3].lane[1] - v307 - (v175 - cx1[-3].lane[0])) & 0x400000
+             | (v313 - v307 - (v178 + cx2[-1].lane[1])) & 0x200000
+             | (cx2[-2].lane[0] + n3536 - 2 * v179) & 0x100000
+             | (cx2->lane[1] - 2 * cx1->lane[1] + v312) & 0x80000
              | (v182 - (v175 - v179)) & 0x40000
-             | (v312 - v293[4].lane[1]) & 0x20000
-             | (v312 - v293[-2].lane[1]) & 0x10000
+             | (v312 - cx1[4].lane[1]) & 0x20000
+             | (v312 - cx1[-2].lane[1]) & 0x10000
              | v181
-             | v180) >> 11;
-  a1->bank_ctx[4] = v185;
-  v186 = p2_pred(a1->p2_ctr[v185 + 131072].w2, a1->p2_ctr[v185 + 131072].b0);
-  v187 = (uint8_t *)v295;
-  a1->nb_sum[9] = v186;
+             | ((((n3536_2 > 3056) + (n3536_2 > 1952) + (n3536_2 > 368)) << 13) | (q39 + (((uint32_t)(sum_all + 21) >> 20) & 0xFFFFF800) + q10))) >> 11;
+  blk->bank_ctx[4] = v185;
+  v186 = p2_pred(blk->p2_ctr[v185 + 131072].w2, blk->p2_ctr[v185 + 131072].b0);
+  cx2p = (uint8_t *)cx2;
+  blk->nb_sum[9] = v186;
   n1840 = n3536_3 + v186;
-  a1->nb_sum[8] = n3536_3 + v186;
-  v188 = v293[-1].mag;
-  v189 = v187[17];
-  v314 = v293[-2].mag
-       + v293[3].mag
-       + v109[-3].mag
-       + v294->mag
-       + *(v187 - 1)
-       + v187[53];
-  v190 = v187[89];
-  v191 = v188 + v109[-2].mag + v189;
-  v192 = *(v187 - 19);
-  v193 = v294[2].mag
-       + v294[1].mag
-       + v294[-1].mag
-       + v294[-2].mag
-       + v129[-2].mag
-       + v187[107]
+  blk->nb_sum[8] = n3536_3 + v186;
+  v188 = cx1[-1].mag;
+  v189 = cx2p[17];
+  v190 = cx2p[89];
+  v191 = v188 + cx0[-2].mag + v189;
+  v192 = *(cx2p - 19);
+  v193 = cx3[2].mag
+       + cx3[1].mag
+       + cx3[-1].mag
+       + cx3[-2].mag
+       + cx4[-2].mag
+       + cx2p[107]
        + v190
-       + v187[71]
+       + cx2p[71]
        + v192
-       + *(v187 - 37);
+       + *(cx2p - 37);
   n1840_14 = n1840;
-  n960_1 = v293[5].mag
-         + v293[4].mag
-         + v293[-3].mag
-         + v293[-4].mag
-         + 3 * (v293[2].mag + v295[1].mag)
-         + 7 * v293->mag
-         + 6 * v293[1].mag
-         + v109[-6].mag
-         + v109[-7].mag
-         + v109[-8].mag
-         + 8 * v109[-1].mag
-         + v129[2].mag
-         + v129[1].mag
-         + v129->mag
-         + v129[-1].mag
-         + v109[-4].mag
-         + v109[-5].mag
+  n960_1 = cx1[5].mag
+         + cx1[4].mag
+         + cx1[-3].mag
+         + cx1[-4].mag
+         + 3 * (cx1[2].mag + cx2[1].mag)
+         + 7 * cx1->mag
+         + 6 * cx1[1].mag
+         + cx0[-6].mag
+         + cx0[-7].mag
+         + cx0[-8].mag
+         + 8 * cx0[-1].mag
+         + cx4[2].mag
+         + cx4[1].mag
+         + cx4->mag
+         + cx4[-1].mag
+         + cx0[-4].mag
+         + cx0[-5].mag
          + v193
          + 4 * v191
-         + 2 * v314;
-  n1840_15 = a1->band_lo;
-  a1->ctx_w[0].sel = (n1840 < 1840) + (n1840 < 272);
-  v198 = v293->lane[0];
-  n1840_16 = a1->band_hi;
+         + 2 * (cx1[-2].mag + cx1[3].mag + cx0[-3].mag + cx3->mag + *(cx2p - 1) + cx2p[53]);
+  n1840_15 = blk->band_lo;
+  blk->ctx_w[0].sel = (n1840 < 1840) + (n1840 < 272);
+  v198 = cx1->lane[0];
+  n1840_16 = blk->band_hi;
   n1840_1 = n1840_15;
   n1840_2 = n1840_16;
   v200 = (n1840_14 - v198 <= n1840_16) + (n1840_14 - v198 < n1840_15);
-  a1->ctx_w[1].sel = v200;
-  n1840_17 = n1840_14 - v109[-1].lane[0];
+  blk->ctx_w[1].sel = v200;
+  n1840_17 = n1840_14 - cx0[-1].lane[0];
   v203 = n1840_17 < n1840_1;
   v26 = n1840_17 <= n1840_16;
-  a1->ctx_w[2].sel = v26 + v203;
-  a1->ctx_w[3].sel = v293->sign;
+  blk->ctx_w[2].sel = v26 + v203;
+  blk->ctx_w[3].sel = cx1->sign;
   // The previous record's stored sign digit, straight into the fifth
   // group's selector.  Hex-Rays read it as `(uint8_t)lane[8]` -- one past
   // the eight lanes, whose low byte is `sign`.
-  a1->ctx_w[4].sel = v109[-1].sign;
-  v206 = v109[-2].mag;
-  v207 = v109[-1].mag;
-  v208 = v295[0].mag + v293->mag;
+  blk->ctx_w[4].sel = cx0[-1].sign;
+  v206 = cx0[-2].mag;
+  v207 = cx0[-1].mag;
+  v208 = cx2[0].mag + cx1->mag;
   n960 = n960_1;
   v302 = v208;
   n3536_4 = n3536;
   v301 = v207 + v206;
-  if ( a4 )
+  if ( refa )
   {
-    mag = v284->mag;
-    v212 = v284[-1].mag;
-    v213 = v282[-1].mag;
-    v251 = v283->mag + v281->mag;
-    v264 = mag + v282->mag;
+    mag = rb0->mag;
+    v212 = rb0[-1].mag;
+    v213 = ra0[-1].mag;
+    v251 = rb1->mag + ra1->mag;
+    v264 = mag + ra0->mag;
     n960 = v251 + n960_1 + 4 * v264 + 2 * (v213 + v212);
-    v214 = v264 + v301 + v284[-2].mag + v212 + v282[-2].mag + v213;
+    v214 = v264 + v301 + rb0[-2].mag + v212 + ra0[-2].mag + v213;
     n3536_4 = n3536;
-    if ( a1->has_ref )
+    if ( blk->has_ref )
     {
-      n1840_3 = n1840 - v293->lane[1] - v109[0].lane[1];
+      n1840_3 = n1840 - cx1->lane[1] - cx0[0].lane[1];
       if ( n1840_3 < n1840_1 || n1840_3 > n1840_2 )
       {
-        n1840 = n1840 - v109[-1].lane[1] - v109[0].lane[1];
+        n1840 = n1840 - cx0[-1].lane[1] - cx0[0].lane[1];
         v215 = n1840 >= n1840_1 && n1840_2 >= n1840;
       }
       else
@@ -7251,36 +7216,36 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
     }
     else
     {
-      v215 = v251 + v264 + v302 + v285->mag + v286->mag;
+      v215 = v251 + v264 + v302 + rb2->mag + ra2->mag;
     }
-    if ( *(int32_t *)&a1->plane_idx == 1 )
+    if ( *(int32_t *)&blk->plane_idx == 1 )
     {
       n960_1 = n960;
       n1840_4 = n1840_2;
-      n1840_5 = v282->lane[0] - v281->lane[0];
-      a1->ctx_w[3].sel = (n1840_5 <= n1840_2) + (n1840_5 < n1840_1);
-      n1840_6 = v282->lane[0] - v282[-1].lane[0];
+      n1840_5 = ra0->lane[0] - ra1->lane[0];
+      blk->ctx_w[3].sel = (n1840_5 <= n1840_2) + (n1840_5 < n1840_1);
+      n1840_6 = ra0->lane[0] - ra0[-1].lane[0];
       v234 = (n1840_6 <= n1840_4) + (n1840_6 < n1840_1);
       v214 = v214;
       n960 = n960_1;
       n3536_4 = n3536;
-      a1->ctx_w[4].sel = v234;
+      blk->ctx_w[4].sel = v234;
     }
-    else if ( *(int32_t *)&a1->plane_idx > 1 )
+    else if ( *(int32_t *)&blk->plane_idx > 1 )
     {
       n960_1 = n960;
       n1840_7 = n1840_2;
-      n1840_8 = v284->lane[0] - v283->lane[0];
-      a1->ctx_w[3].sel = (n1840_8 <= n1840_2) + (n1840_8 < n1840_1);
-      n1840_10 = v284->lane[0] - v284[-1].lane[0];
+      n1840_8 = rb0->lane[0] - rb1->lane[0];
+      blk->ctx_w[3].sel = (n1840_8 <= n1840_2) + (n1840_8 < n1840_1);
+      n1840_10 = rb0->lane[0] - rb0[-1].lane[0];
       n1840_9 = n1840_1;
       v222 = n1840_10 < n1840_1;
       v26 = n1840_10 <= n1840_7;
       v215 = v215;
       n960 = n960_1;
-      a1->ctx_w[4].sel = v26 + v222;
-      v224 = v282->lane[0];
-      n1840_11 = v224 - ((P2Ctx *)(v281))->lane[0];
+      blk->ctx_w[4].sel = v26 + v222;
+      v224 = ra0->lane[0];
+      n1840_11 = v224 - ((P2Ctx *)(ra1))->lane[0];
       v26 = n1840_9 <= n1840_11;
       n3536_4 = n3536;
       if ( v26 && n1840_11 <= n1840_2 )
@@ -7289,42 +7254,42 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
       }
       else
       {
-        n1840_12 = v224 - v282[-1].lane[0];
+        n1840_12 = v224 - ra0[-1].lane[0];
         v214 = n1840_12 >= n1840_1 && n1840_12 <= n1840_2;
       }
     }
   }
   else
   {
-    v214 = v301 + v109[-3].mag + v109[-4].mag + v109[-5].mag;
-    v215 = v129->mag + v294->mag + v302 + v109[0].mag;
+    v214 = v301 + cx0[-3].mag + cx0[-4].mag + cx0[-5].mag;
+    v215 = cx4->mag + cx3->mag + v302 + cx0[0].mag;
   }
   if ( n960 >= 960 )
   {
     n15 = 15;
-    a1->ctx = 15;
+    blk->ctx = 15;
   }
   else
   {
-    n15 = a1->nb_ctx[n960 >> 3];
-    a1->ctx = n15;
+    n15 = blk->nb_ctx[n960 >> 3];
+    blk->ctx = n15;
   }
   n255 = (n3536_4 + v186 + 7) >> 4;
   if ( n255 >= 255 )
     n255 = 255;
   if ( n255 < 0 )
     n255 = 0;
-  a1->ctx_pair[0] = a1->ctx_delta[n255 + 4] + n15;
-  v228 = a1->ctx_w[0].sel;
-  a1->ctx_pair[1] = n15 + a1->ctx_delta[n255];
-  a1->ctx = n15
+  blk->ctx_pair[0] = blk->ctx_delta[n255 + 4] + n15;
+  v228 = blk->ctx_w[0].sel;
+  blk->ctx_pair[1] = n15 + blk->ctx_delta[n255];
+  blk->ctx = n15
                           + 32 * (v215 == 0)
                           + 16 * (v214 == 0)
-                          + a1->ctx_w[4].w[a1->ctx_w[4].sel]
-                          + a1->ctx_w[3].w[a1->ctx_w[3].sel]
-                          + a1->ctx_w[2].w[a1->ctx_w[2].sel]
-                          + a1->ctx_w[1].w[a1->ctx_w[1].sel]
-                          + a1->ctx_w[0].w[v228];
+                          + blk->ctx_w[4].w[blk->ctx_w[4].sel]
+                          + blk->ctx_w[3].w[blk->ctx_w[3].sel]
+                          + blk->ctx_w[2].w[blk->ctx_w[2].sel]
+                          + blk->ctx_w[1].w[blk->ctx_w[1].sel]
+                          + blk->ctx_w[0].w[v228];
   return n255;
 }
 
