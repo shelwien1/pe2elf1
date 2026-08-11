@@ -958,9 +958,20 @@ right, which is a question about whether the signed side can go negative.
 
 What is left is 502 `-Wconversion` and 736 `-Wsign-conversion`, which are the
 decompilation's type mixture proper — a value narrowed or resigned on
-assignment, several hundred times. The ratchet exists so the number cannot go
-up, and §1 has always described it as a ratchet and not a target; each of these
-is one site and wants a retyping round rather than a sweep.
+assignment, several hundred times.
+
+The same tool would zero those too, and it is not going to, which is worth
+being explicit about because the distinction is thin and the temptation is not.
+A cast on a comparison *adds* something: `x < width` and `x < (uint32_t)width`
+look like the same operator and are not, and no reader recovers that without
+knowing the conversion rules. A cast on an assignment adds nothing — `x = y`
+with the two declared types visible already says the value is being narrowed,
+and writing `(uint16_t)` in front of it moves no information anywhere. It would
+move the number, which is the entire objection: §10 is about measures you can
+satisfy without doing the work, and putting 1238 casts in this file to make a
+scoreboard read zero is the purest example of one this project could produce.
+
+The number goes down when the types are right, and that is a round of its own.
 
 **49 jumps, 45 of which are what `goto` is for.** The breakdown row in §1 is
 there so a later round can see whether the other four have grown.
