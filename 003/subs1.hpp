@@ -6003,8 +6003,8 @@ void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_
 }
 
 
-int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src) {   P1Ctx *v25,
-        *buf3, *buf2, *buf1, *v29, *cursor0;
+int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
+        *buf3, *buf2, *buf1, *b0, *cursor0;
   // Phase 2 split this frame into plain locals, which is what the other eight
   // frames took -- and it is wrong here.  The frame was 116 bytes and its
   // aliases only reach offset 84; the code writes into the 32 bytes of slack
@@ -6015,79 +6015,79 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src) {   P1Ctx *v25,
   // Nothing caught it because nothing reached it: this is the body
   // REFACTORING.md section 2.3 lists as unexercised.  testfiles/altp1.bmp
   // reaches it now.
-  void *v84;
-  int32_t v92;
+  void *p0v;
+  int32_t val3x;
   void * Block_plane[4];
-  AltP1Block * &v94 = (AltP1Block * &)Block_plane[1];
-  AltP1Block * &v95 = (AltP1Block * &)Block_plane[2];
-  AltP1Block * &v96 = (AltP1Block * &)Block_plane[3];
-  int32_t v97;
-  uint32_t i_4;
-  int32_t v104;
+  AltP1Block * &plane1 = (AltP1Block * &)Block_plane[1];
+  AltP1Block * &plane2 = (AltP1Block * &)Block_plane[2];
+  AltP1Block * &plane3 = (AltP1Block * &)Block_plane[3];
+  int32_t dc1;
+  uint32_t x;
+  int32_t val1x;
   ;
-  AltP1Block *v59;
-  uintptr_t v61;
-  AltP1Block *v24;
-  AltP1Block *v6;
-  int32_t i, v3, n4, *v7, v8, v9, v10, v14, v15, v16, ArgList, v18, i_3, n4_1,
-          n4_2, v52, v53, v54, v56, v57, v60, v62, v64, v67, v68, v71, v72,
-          v74, v75, v78, v79, n4_3, n4_4;
-  uint32_t v20, *v51;
-  AltP1Block *v66;
-  AltP1Block *v73;
-  P1Ctx *v30;
-  P1Ctx *v31;
-  uint8_t *v69, *v76;
-  void **v82;
-  i = *p_i;
-  v3 = p_i[1];
+  AltP1Block *blk1;
+  uintptr_t code1;
+  AltP1Block *blk_k;
+  AltP1Block *raw;
+  int32_t width, height, k, *made, src1, src2, src3, dc2, dc3, xf1, xf2, xf3, w, n_planes,
+          p, code0, pred0, val0, at0, pred1, val1, code2, val2, at2,
+          code3, val3, at3, np, f;
+  uint32_t y, *p0;
+  AltP1Block *blk2;
+  AltP1Block *blk3;
+  P1Ctx *cursor2;
+  P1Ctx *cursor4;
+  uint8_t *pred2, *pred3;
+  void **q;
+  width = *hdr;
+  height = hdr[1];
   if ( plane_count > 0 )
   {
-    n4 = 0;
+    k = 0;
     do
     {
-      v6 = (AltP1Block *)((int32_t *)bmf_new(0x99D4D8u));
-      if ( v6 )
-        v7 = __alt_p1_alloc((AltP1Block *)v6, i, v3, n4);
+      raw = (AltP1Block *)((int32_t *)bmf_new(0x99D4D8u));
+      if ( raw )
+        made = __alt_p1_alloc((AltP1Block *)raw, width, height, k);
       else
-        v7 = nullptr;
-      Block_plane[n4++] = v7;
+        made = nullptr;
+      Block_plane[k++] = made;
     }
-    while ( n4 < plane_count );
+    while ( k < plane_count );
   }
   // Records 2, 3 and 4 name a source plane each; each of the three is then
   // read for its flags and its b3.  Record indices now -- they were 16 times
   // these, the byte offsets into the table.
-  v8 = plane_desc[2].src_plane;
-  v9 = plane_desc[3].src_plane;
-  v10 = plane_desc[4].src_plane;
-  v14 = plane_desc[v9 + 1].b3;
-  v15 = plane_desc[v10 + 1].b3;
-  v97 = plane_desc[v8 + 1].b3;
-  v16 = plane_desc[v8 + 1].flags & 8;
-  ArgList = plane_desc[v9 + 1].flags & 8;
-  v18 = plane_desc[v10 + 1].flags & 8;
-  __rc_begin_decode(ArgList);
-  if ( v3 > 0 )
+  src1 = plane_desc[2].src_plane;
+  src2 = plane_desc[3].src_plane;
+  src3 = plane_desc[4].src_plane;
+  dc2 = plane_desc[src2 + 1].b3;
+  dc3 = plane_desc[src3 + 1].b3;
+  dc1 = plane_desc[src1 + 1].b3;
+  xf1 = plane_desc[src1 + 1].flags & 8;
+  xf2 = plane_desc[src2 + 1].flags & 8;
+  xf3 = plane_desc[src3 + 1].flags & 8;
+  __rc_begin_decode(xf2);
+  if ( height > 0 )
   {
-    v20 = 0;
-    i_3 = i;
-    n4_1 = plane_count;
+    y = 0;
+    w = width;
+    n_planes = plane_count;
     do
     {
-      if ( n4_1 > 0 )
+      if ( n_planes > 0 )
       {
-        n4_2 = 0;
+        p = 0;
         do
         {
-          ++n4_2;
-          // `&v92 + n` is `Block_plane[n - 1]`: v92 is the member
+          ++p;
+          // `&val3x + n` is `Block_plane[n - 1]`: val3x is the member
           // before the array, and this loop pre-increments from 0.
-          v24 = (AltP1Block *)Block_plane[n4_2 - 1];
+          blk_k = (AltP1Block *)Block_plane[p - 1];
           // The row end mirrored into the right margin: records 0..5 take -1..-6.
           // Two bytes each, which is what the twelve even offsets were.
           {
-            P1Ctx *const here = (P1Ctx *)v24->cursor[0];
+            P1Ctx *const here = (P1Ctx *)blk_k->cursor[0];
             here[0] = here[-1];
             here[1] = here[-2];
             here[2] = here[-3];
@@ -6095,36 +6095,36 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src) {   P1Ctx *v25,
             here[4] = here[-5];
             here[5] = here[-6];
           }
-          v25 = v24->buf[4];
-          buf3 = v24->buf[3];
-          buf2 = v24->buf[2];
-          buf1 = v24->buf[1];
-          v29 = v24->buf[0];
-          v24->buf[4] = buf3;
-          v24->buf[3] = buf2;
-          v24->buf[2] = buf1;
-          v24->buf[1] = v29;
-          v24->buf[0] = v25;
-          v25 += 4;
-          v24->cursor[0] = v25;
-          v29 += 4;
-          v24->cursor[1] = v29;
-          v24->cursor[2] = buf1 + 4;
-          v24->cursor[3] = buf2 + 4;
-          v24->cursor[4] = buf3 + 4;
-          ((P1Ctx *)v25)[-4] = ((P1Ctx *)v29)[3];
+          b4 = blk_k->buf[4];
+          buf3 = blk_k->buf[3];
+          buf2 = blk_k->buf[2];
+          buf1 = blk_k->buf[1];
+          b0 = blk_k->buf[0];
+          blk_k->buf[4] = buf3;
+          blk_k->buf[3] = buf2;
+          blk_k->buf[2] = buf1;
+          blk_k->buf[1] = b0;
+          blk_k->buf[0] = b4;
+          b4 += 4;
+          blk_k->cursor[0] = b4;
+          b0 += 4;
+          blk_k->cursor[1] = b0;
+          blk_k->cursor[2] = buf1 + 4;
+          blk_k->cursor[3] = buf2 + 4;
+          blk_k->cursor[4] = buf3 + 4;
+          ((P1Ctx *)b4)[-4] = ((P1Ctx *)b0)[3];
           // And the rest of the new row's left margin, from the row above.
           {
-            P1Ctx *const here = (P1Ctx *)v24->cursor[0];
-            P1Ctx *const up   = (P1Ctx *)v24->cursor[1];
+            P1Ctx *const here = (P1Ctx *)blk_k->cursor[0];
+            P1Ctx *const up   = (P1Ctx *)blk_k->cursor[1];
             here[-3] = up[2];
             here[-2] = up[1];
             here[-1] = up[0];
           }
-          v30 = v24->cursor[2];
-          v31 = v24->cursor[4];
-          cursor0 = v24->cursor[0];
-          v24->ctx[2] = 0;
+          cursor2 = blk_k->cursor[2];
+          cursor4 = blk_k->cursor[4];
+          cursor0 = blk_k->cursor[0];
+          blk_k->ctx[2] = 0;
           // The same twenty terms `alt_p1_d8_encode_body` sums, arriving here
           // as byte offsets on a `uint8_t *`: a record is `sym` then `mag`, so
           // every odd offset is a `mag` and byte 2k+1 is record k.
@@ -6146,179 +6146,179 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src) {   P1Ctx *v25,
           //
           // The `_d8` pair reads all twenty unsigned, which is the same source
           // compiled differently.
-          v24->ctx[3] = (int8_t)v30[-2].mag + (int8_t)v31[-2].mag
-                      + v30[0].mag  + v31[0].mag
-                      + v30[2].mag  + v31[2].mag
-                      + v30[4].mag  + v31[4].mag
+          blk_k->ctx[3] = (int8_t)cursor2[-2].mag + (int8_t)cursor4[-2].mag
+                      + cursor2[0].mag  + cursor4[0].mag
+                      + cursor2[2].mag  + cursor4[2].mag
+                      + cursor2[4].mag  + cursor4[4].mag
                       + cursor0[-4].mag + cursor0[-2].mag;
-          v24->ctx[4] = (int8_t)v30[-1].mag + (int8_t)v31[-1].mag
-                      + v30[1].mag  + v31[1].mag
-                      + v30[3].mag  + v31[3].mag
-                      + v30[5].mag  + v31[5].mag
+          blk_k->ctx[4] = (int8_t)cursor2[-1].mag + (int8_t)cursor4[-1].mag
+                      + cursor2[1].mag  + cursor4[1].mag
+                      + cursor2[3].mag  + cursor4[3].mag
+                      + cursor2[5].mag  + cursor4[5].mag
                       + cursor0[-3].mag + cursor0[-1].mag;
-          n4_1 = plane_count;
+          n_planes = plane_count;
         }
-        while ( n4_2 < plane_count );
-        i_3 = i;
+        while ( p < plane_count );
+        w = width;
       }
-      if ( i_3 > 0 )
+      if ( w > 0 )
       {
-        i_4 = 0;
+        x = 0;
         do
         {
-          v51 = (uint32_t *)Block_plane[0];
+          p0 = (uint32_t *)Block_plane[0];
           __alt_p1_context((AltP1Block *)(uint8_t **)Block_plane[0], (AltP1Block *)nullptr, (AltP1Block *)0);
-          v53 = __alt_p1_decode_symbol((uint16_t *)&v51[4 * v51[3] + 950], v52, v51[4]);
-          v54 = v51[2];
-          AltP1Block *const blk = (AltP1Block *)v51;
-          v56 = (uint8_t)(v54 + blk->unfold[v53]);
+          code0 = __alt_p1_decode_symbol((uint16_t *)&p0[4 * p0[3] + 950], 0, p0[4]);
+          pred0 = p0[2];
+          AltP1Block *const blk = (AltP1Block *)p0;
+          val0 = (uint8_t)(pred0 + blk->unfold[code0]);
           // The row record is two bytes: the reconstructed sample at +0 and the
           // size of the prediction error at +1.  `[1]` is this pixel's error,
           // `[-7]` is the one four pixels back, and the four terms off
           // `cursor[2]` and `cursor[4]` are two records back and six forward on
           // the other two planes.
-          blk->cursor[0]->sym = v56;
-          blk->cursor[0]->mag = abs32(v56 - v54);
-          v51[v51[5] + 6] = v51[v51[5] + 6]
+          blk->cursor[0]->sym = val0;
+          blk->cursor[0]->mag = abs32(val0 - pred0);
+          p0[p0[5] + 6] = p0[p0[5] + 6]
                           + blk->cursor[0]->mag
                           - blk->cursor[0][-4].mag
                           - (blk->cursor[4][-2].mag
                            - blk->cursor[4][6].mag
                            + blk->cursor[2][-2].mag
                            - blk->cursor[2][6].mag);
-          v57 = 4 * v51[3];
-          v51[5] = v51[5] == 0;
-          if ( LOWORD(v51[v57 + 950]) < 0x4000u )
-            __alt_p1_model((AltP1Block *)v51);
-          v51[49] += 2;
-          v51[50] += 2;
-          v51[51] += 2;
-          v51[52] += 2;
-          v51[53] += 2;
-          v59 = (AltP1Block *)v94;
-          *(plane_desc[1].src_plane + Src) = v56;
-          __alt_p1_context((AltP1Block *)(uint8_t **)v59, (AltP1Block *)Block_plane[0], (AltP1Block *)0);
-          v61 = __alt_p1_decode_symbol(&v59->counters[v59->ctx[0]].total, v60, v59->ctx[1]);
-          v62 = *(uint32_t *)&v59->pred;
-          v64 = (uint8_t)(v62 + v59->unfold[v61]);
-          v104 = v64;
-          v59->cursor[0]->sym = v64;
-          v59->cursor[0]->mag = abs32(v64 - v62);
-          v59->ctx[3 + v59->ctx[2]] = v59->ctx[3 + v59->ctx[2]]
-                                                            + v59->cursor[0]->mag
-                                                            - v59->cursor[0][-4].mag
-                                                            - (v59->cursor[4][-2].mag
-                                                             - v59->cursor[4][6].mag
-                                                             + v59->cursor[2][-2].mag
-                                                             - v59->cursor[2][6].mag);
-          v59->ctx[2] = v59->ctx[2] == 0;
-          if ( v59->counters[v59->ctx[0]].total < 0x4000u )
-            __alt_p1_model(v59);
-          ++v59->cursor[0];
-          ++v59->cursor[1];
-          ++v59->cursor[2];
-          ++v59->cursor[3];
-          ++v59->cursor[4];
-          if ( v16 )
-            v104 += v97 + *(plane_desc[1].src_plane + Src);
-          v66 = (AltP1Block *)(v95);
-          v84 = Block_plane[0];
-          *(Src + plane_desc[2].src_plane) = v104;
-          __alt_p1_context((AltP1Block *)v66, (AltP1Block *)v94, (AltP1Block *)(int32_t)v84);
-          v68 = __alt_p1_decode_symbol((uint16_t *)&((uint8_t**)v66)[4 * v66->ctx[0] + 950], v67, (int32_t)v66->ctx[1]);
-          v69 = (uint8_t *)(v66->pred);
-          v71 = (uint8_t)((uint8_t)(uintptr_t)v69 + v66->unfold[v68]);
-          v66->cursor[0]->sym = v71;
-          v66->cursor[0]->mag = abs32(v71 - (uint32_t)v69);
-          ((uint8_t**)v66)[v66->ctx[2] + 6] = &((uint8_t**)v66)[v66->ctx[2] + 6][v66->cursor[0]->mag
-                                                           - v66->cursor[0][-4].mag
-                                                           - (v66->cursor[4][-2].mag
-                                                            - v66->cursor[4][6].mag)
-                                                           - (v66->cursor[2][-2].mag
-                                                            - v66->cursor[2][6].mag)];
-          v72 = 4 * v66->ctx[0];
-          v66->ctx[2] = v66->ctx[2] == 0;
-          if ( LOWORD(((uint8_t**)v66)[v72 + 950]) < 0x4000u )
-            __alt_p1_model((AltP1Block *)v66);
-          ++v66->cursor[0];
-          ++v66->cursor[1];
-          ++v66->cursor[2];
-          ++v66->cursor[3];
-          ++v66->cursor[4];
-          if ( ArgList )
-            *(plane_desc[3].src_plane + Src) = ((plane_desc[plane_desc[3].src_plane + 1].w4
+          at0 = 4 * p0[3];
+          p0[5] = p0[5] == 0;
+          if ( LOWORD(p0[at0 + 950]) < 0x4000u )
+            __alt_p1_model((AltP1Block *)p0);
+          p0[49] += 2;
+          p0[50] += 2;
+          p0[51] += 2;
+          p0[52] += 2;
+          p0[53] += 2;
+          blk1 = (AltP1Block *)plane1;
+          *(plane_desc[1].src_plane + out) = val0;
+          __alt_p1_context((AltP1Block *)(uint8_t **)blk1, (AltP1Block *)Block_plane[0], (AltP1Block *)0);
+          code1 = __alt_p1_decode_symbol(&blk1->counters[blk1->ctx[0]].total, 0, blk1->ctx[1]);
+          pred1 = *(uint32_t *)&blk1->pred;
+          val1 = (uint8_t)(pred1 + blk1->unfold[code1]);
+          val1x = val1;
+          blk1->cursor[0]->sym = val1;
+          blk1->cursor[0]->mag = abs32(val1 - pred1);
+          blk1->ctx[3 + blk1->ctx[2]] = blk1->ctx[3 + blk1->ctx[2]]
+                                                            + blk1->cursor[0]->mag
+                                                            - blk1->cursor[0][-4].mag
+                                                            - (blk1->cursor[4][-2].mag
+                                                             - blk1->cursor[4][6].mag
+                                                             + blk1->cursor[2][-2].mag
+                                                             - blk1->cursor[2][6].mag);
+          blk1->ctx[2] = blk1->ctx[2] == 0;
+          if ( blk1->counters[blk1->ctx[0]].total < 0x4000u )
+            __alt_p1_model(blk1);
+          ++blk1->cursor[0];
+          ++blk1->cursor[1];
+          ++blk1->cursor[2];
+          ++blk1->cursor[3];
+          ++blk1->cursor[4];
+          if ( xf1 )
+            val1x += dc1 + *(plane_desc[1].src_plane + out);
+          blk2 = (AltP1Block *)(plane2);
+          p0v = Block_plane[0];
+          *(out + plane_desc[2].src_plane) = val1x;
+          __alt_p1_context((AltP1Block *)blk2, (AltP1Block *)plane1, (AltP1Block *)(int32_t)p0v);
+          code2 = __alt_p1_decode_symbol((uint16_t *)&((uint8_t**)blk2)[4 * blk2->ctx[0] + 950], 0, (int32_t)blk2->ctx[1]);
+          pred2 = (uint8_t *)(blk2->pred);
+          val2 = (uint8_t)((uint8_t)(uintptr_t)pred2 + blk2->unfold[code2]);
+          blk2->cursor[0]->sym = val2;
+          blk2->cursor[0]->mag = abs32(val2 - (uint32_t)pred2);
+          ((uint8_t**)blk2)[blk2->ctx[2] + 6] = &((uint8_t**)blk2)[blk2->ctx[2] + 6][blk2->cursor[0]->mag
+                                                           - blk2->cursor[0][-4].mag
+                                                           - (blk2->cursor[4][-2].mag
+                                                            - blk2->cursor[4][6].mag)
+                                                           - (blk2->cursor[2][-2].mag
+                                                            - blk2->cursor[2][6].mag)];
+          at2 = 4 * blk2->ctx[0];
+          blk2->ctx[2] = blk2->ctx[2] == 0;
+          if ( LOWORD(((uint8_t**)blk2)[at2 + 950]) < 0x4000u )
+            __alt_p1_model((AltP1Block *)blk2);
+          ++blk2->cursor[0];
+          ++blk2->cursor[1];
+          ++blk2->cursor[2];
+          ++blk2->cursor[3];
+          ++blk2->cursor[4];
+          if ( xf2 )
+            *(plane_desc[3].src_plane + out) = ((plane_desc[plane_desc[3].src_plane + 1].w4
                                                                 * *(plane_desc[1].src_plane
-                                                                                     + Src)
+                                                                                     + out)
                                                                 + plane_desc[plane_desc[3].src_plane + 1].w8
-                                                                * (uint32_t)*(plane_desc[2].src_plane + Src)
+                                                                * (uint32_t)*(plane_desc[2].src_plane + out)
                                                                 + 40) >> 7)
-                                                              + v14
-                                                              + v71;
+                                                              + dc2
+                                                              + val2;
           else
-            *(plane_desc[3].src_plane + Src) = v71;
-          n4_1 = plane_count;
+            *(plane_desc[3].src_plane + out) = val2;
+          n_planes = plane_count;
           if ( plane_count >= 4 )
           {
-            v73 = (AltP1Block *)(v96);
-            __alt_p1_context((AltP1Block *)v96, (AltP1Block *)v95, (AltP1Block *)(int32_t)v94);
-            v75 = __alt_p1_decode_symbol((uint16_t *)&((uint8_t**)v73)[4 * v73->ctx[0] + 950], v74, (int32_t)v73->ctx[1]);
-            v76 = (uint8_t *)(v73->pred);
-            v78 = (uint8_t)((uint8_t)(uintptr_t)v76 + v73->unfold[v75]);
-            v92 = v78;
-            v73->cursor[0]->sym = v78;
-            v73->cursor[0]->mag = abs32(v78 - (uint32_t)v76);
-            ((uint8_t**)v73)[v73->ctx[2] + 6] = &((uint8_t**)v73)[v73->ctx[2] + 6][v73->cursor[0]->mag
-                                                             - v73->cursor[0][-4].mag
-                                                             - (v73->cursor[4][-2].mag
-                                                              - v73->cursor[4][6].mag)
-                                                             - (v73->cursor[2][-2].mag
-                                                              - v73->cursor[2][6].mag)];
-            v79 = 4 * v73->ctx[0];
-            v73->ctx[2] = v73->ctx[2] == 0;
-            if ( LOWORD(((uint8_t**)v73)[v79 + 950]) < 0x4000u )
-              __alt_p1_model((AltP1Block *)v73);
-            ++v73->cursor[0];
-            ++v73->cursor[1];
-            ++v73->cursor[2];
-            ++v73->cursor[3];
-            ++v73->cursor[4];
-            if ( v18 )
-              v92 += ((plane_desc[plane_desc[4].src_plane + 1].w8 * *(plane_desc[4].src_plane + Src - 2)
-                     + plane_desc[plane_desc[4].src_plane + 1].w4 * *(plane_desc[4].src_plane + Src - 3)
-                     + plane_desc[plane_desc[4].src_plane + 1].w12 * *(plane_desc[4].src_plane + Src - 1)
+            blk3 = (AltP1Block *)(plane3);
+            __alt_p1_context((AltP1Block *)plane3, (AltP1Block *)plane2, (AltP1Block *)(int32_t)plane1);
+            code3 = __alt_p1_decode_symbol((uint16_t *)&((uint8_t**)blk3)[4 * blk3->ctx[0] + 950], 0, (int32_t)blk3->ctx[1]);
+            pred3 = (uint8_t *)(blk3->pred);
+            val3 = (uint8_t)((uint8_t)(uintptr_t)pred3 + blk3->unfold[code3]);
+            val3x = val3;
+            blk3->cursor[0]->sym = val3;
+            blk3->cursor[0]->mag = abs32(val3 - (uint32_t)pred3);
+            ((uint8_t**)blk3)[blk3->ctx[2] + 6] = &((uint8_t**)blk3)[blk3->ctx[2] + 6][blk3->cursor[0]->mag
+                                                             - blk3->cursor[0][-4].mag
+                                                             - (blk3->cursor[4][-2].mag
+                                                              - blk3->cursor[4][6].mag)
+                                                             - (blk3->cursor[2][-2].mag
+                                                              - blk3->cursor[2][6].mag)];
+            at3 = 4 * blk3->ctx[0];
+            blk3->ctx[2] = blk3->ctx[2] == 0;
+            if ( LOWORD(((uint8_t**)blk3)[at3 + 950]) < 0x4000u )
+              __alt_p1_model((AltP1Block *)blk3);
+            ++blk3->cursor[0];
+            ++blk3->cursor[1];
+            ++blk3->cursor[2];
+            ++blk3->cursor[3];
+            ++blk3->cursor[4];
+            if ( xf3 )
+              val3x += ((plane_desc[plane_desc[4].src_plane + 1].w8 * *(plane_desc[4].src_plane + out - 2)
+                     + plane_desc[plane_desc[4].src_plane + 1].w4 * *(plane_desc[4].src_plane + out - 3)
+                     + plane_desc[plane_desc[4].src_plane + 1].w12 * *(plane_desc[4].src_plane + out - 1)
                      + 64) >> 7)
-                   + v15;
-            *(plane_desc[4].src_plane + Src) = v92;
-            n4_1 = plane_count;
+                   + dc3;
+            *(plane_desc[4].src_plane + out) = val3x;
+            n_planes = plane_count;
           }
-          Src += n4_1;
-          ++i_4;
+          out += n_planes;
+          ++x;
         }
-        while ( i_4 < i );
-        i_3 = i;
+        while ( x < width );
+        w = width;
       }
-      ++v20;
+      ++y;
     }
-    while ( v20 < v3 );
+    while ( y < height );
   }
   __rc_end_decode();
-  n4_3 = plane_count;
+  np = plane_count;
   if ( plane_count > 0 )
   {
-    n4_4 = 0;
+    f = 0;
     do
     {
-      v82 = (void **)Block_plane[n4_4];
-      if ( v82 )
+      q = (void **)Block_plane[f];
+      if ( q )
       {
-        __alt_p1_free((void **)v82, 1);
-        n4_3 = plane_count;
+        __alt_p1_free((void **)q, 1);
+        np = plane_count;
       }
-      ++n4_4;
+      ++f;
     }
-    while ( n4_4 < n4_3 );
+    while ( f < np );
   }
-  return n4_3;
+  return np;
 }
 
 // The fixed-coefficient weighted sum `alt_p2_context` calls, and its only
