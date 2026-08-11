@@ -56,7 +56,9 @@ import structs                                                    # noqa: E402
 import undup                                                      # noqa: E402
 import unreload                                                   # noqa: E402
 
-COPY = re.compile(r'^\s*([A-Za-z_]\w*) = (?:\(([\w\s*]+?)\s*\)\s*)?\(?([A-Za-z_]\w*)\)?;\s*$')
+COPY = re.compile(r'^\s*([A-Za-z_]\w*) = (.*);\s*$')
+CAST = re.compile(r'^\(([A-Za-z_][\w\s*]*?)\s*\)\s*(.*)$')
+NAME = re.compile(r'^[A-Za-z_]\w*$')
 LABEL = re.compile(r'^\s*LABEL_\d+:')
 WRITE = [r'\b%s\s*(?:\+\+|--)', r'(?:\+\+|--)\s*%s\b', r'\b%s\s*[-+*/|&^%%]?=(?!=)',
          r'\b(?:LO|HI)(?:BYTE|WORD|DWORD)\d?\s*\(\s*%s\s*\)',
@@ -65,7 +67,34 @@ WRITE = [r'\b%s\s*(?:\+\+|--)', r'(?:\+\+|--)\s*%s\b', r'\b%s\s*[-+*/|&^%%]?=(?!
 
 def spelled(ty):
     """A declared type as a comparable string: `P2Ctx` + one star is `P2Ctx *`."""
-    return '%s %s' % (ty[0], '*' * ty[1])
+    return re.sub(r'\s+', ' ', '%s %s' % (ty[0], '*' * ty[1])).strip()
+
+
+def wrapped(s):
+    """True when the whole of `s` sits inside one pair of parentheses."""
+    if not s.startswith('(') or not s.endswith(')'):
+        return False
+    depth = 0
+    for i, c in enumerate(s):
+        depth += (c == '(') - (c == ')')
+        if depth == 0:
+            return i == len(s) - 1
+    return False
+
+
+def peel(rhs):
+    """(casts outermost first, bare name) for `(A *)((B *)x)`, else (_, None)."""
+    casts = []
+    while True:
+        rhs = rhs.strip()
+        while wrapped(rhs):
+            rhs = rhs[1:-1].strip()
+        m = CAST.match(rhs)
+        if not m or not m.group(2).strip():
+            break
+        casts.append(re.sub(r'\s+', ' ', m.group(1)).strip())
+        rhs = m.group(2)
+    return casts, rhs if NAME.match(rhs) else None
 
 
 def candidates(lines):
@@ -77,15 +106,22 @@ def candidates(lines):
             m = COPY.match(l)
             if not m:
                 continue
-            dst, cast, src = m.group(1), m.group(2), m.group(3)
-            if dst == src or dst not in ty or src not in ty:
+            dst = m.group(1)
+            casts, src = peel(m.group(2))
+            if src is None or dst == src or dst not in ty or src not in ty:
                 continue
             if ty[dst] != ty[src]:
                 continue
-            # A cast is allowed only when it names the type the value already
-            # has -- anything else is a width question this cannot answer.
-            if cast is not None and re.sub(r'\s+', ' ', cast).strip() != spelled(ty[dst]).strip():
-                continue
+            # The outermost cast has to name the type the value already has --
+            # anything else is a width question this cannot answer.  Casts
+            # inside it are allowed only between pointers, where the round trip
+            # is the identity on a target whose pointers are all one width;
+            # this file pins that with `sizeof(void *) != 4 ||` asserts.
+            if casts:
+                if casts[0] != spelled(ty[dst]):
+                    continue
+                if not all('*' in c for c in casts) or not ty[dst][1]:
+                    continue
             uses = [k for k, r in enumerate(code)
                     if re.search(r'\b%s\b' % re.escape(dst), r)
                     and not undup.declaration(r)]

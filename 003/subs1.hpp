@@ -6616,8 +6616,6 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
   P2Ctx *v50;
   bool v26, v58;
   float v70, v244;
-  P2Ctx *v87;
-  P2Ctx *v98;
   P2Ctx *v52;
   P2Ctx *v129;
   P2Ctx *v66;
@@ -6797,25 +6795,24 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
         a1->p2_row[4][3] = (float)(v46[-1].lane[0] + v281->lane[0] - v281[-1].lane[0]);
         v85 = v283[2].lane[0] - ((P2Ctx *)(v285))[3].lane[0];
         a1->p2_row[5][0] = (float)(v45[1].lane[0] + v85);
-        v87 = (P2Ctx *)((int16_t *)(v282));
         a1->p2_row[5][1] = (float)(v46[-2].lane[0] + v284->lane[0] - v284[-2].lane[0]);
         a1->p2_row[5][2] = (float)(v45->lane[0] + v284->lane[0] - v283->lane[0]);
         v58 = a1->has_ref == 0;
-        a1->p2_row[5][3] = (float)(v46[-2].lane[0] + v87->lane[2]);
+        a1->p2_row[5][3] = (float)(v46[-2].lane[0] + v282->lane[2]);
         if ( v58 )
         {
           v259 = (int32_t)(uintptr_t)v46;
           v90 = (int16_t *)a1->cursor[2];
-          a1->p2_row[6][0] = ((float)(v46[-2].lane[0] + v87->lane[0] - v87[-2].lane[0]));
-          a1->p2_row[6][1] = (float)(*v90 + v87->lane[0] - ((P2Ctx *)(v286))->lane[0]);
-          a1->p2_row[6][2] = (float)(v286->lane[0] + v87->lane[0] - *v90 + 2 * (v45->lane[0] - v281->lane[0]));
-          v88 = *(int16_t *)((uint8_t *)v259 - 18) + v45[-1].lane[0] + v281[-2].lane[0] + v87->lane[0] - v87[-1].lane[0] - v281[-1].lane[0] - v45[-2].lane[0];
+          a1->p2_row[6][0] = ((float)(v46[-2].lane[0] + v282->lane[0] - v282[-2].lane[0]));
+          a1->p2_row[6][1] = (float)(*v90 + v282->lane[0] - ((P2Ctx *)(v286))->lane[0]);
+          a1->p2_row[6][2] = (float)(v286->lane[0] + v282->lane[0] - *v90 + 2 * (v45->lane[0] - v281->lane[0]));
+          v88 = *(int16_t *)((uint8_t *)v259 - 18) + v45[-1].lane[0] + v281[-2].lane[0] + v282->lane[0] - v282[-1].lane[0] - v281[-1].lane[0] - v45[-2].lane[0];
         }
         else
         {
           a1->p2_row[6][0] = (float)v45->lane[0];
           a1->p2_row[6][1] = (float)v46[-3].lane[0];
-          a1->p2_row[6][2] = (float)(v46[-1].lane[0] + v87[-1].lane[0] - v87[-2].lane[0]);
+          a1->p2_row[6][2] = (float)(v46[-1].lane[0] + v282[-1].lane[0] - v282[-2].lane[0]);
           v88 = v46[-3].lane[0] + v46[-1].lane[0] - v46[-4].lane[0];
         }
         a1->p2_row[6][3] = (float)v88;
@@ -6828,16 +6825,15 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
         a1->p2_row[4][3] = (float)(v46[-2].lane[0] + v281[2].lane[0] - v281->lane[0]);
         a1->p2_row[5][0] = (float)(v45->lane[0] + v282[-2].lane[0] - v281[-2].lane[0]);
         a1->p2_row[5][1] = (float)(v45->lane[0] + v282->lane[0] - v281->lane[0]);
-        v98 = (P2Ctx *)((int16_t *)(v284));
         a1->p2_row[5][2] = (float)(v46[-2].lane[0] + v282->lane[0] - v282[-2].lane[0]);
         v99 = (int16_t *)a1->cursor[2];
-        a1->p2_row[5][3] = (float)(v46[-2].lane[0] + v98->lane[0] - v98[-2].lane[0]);
-        a1->p2_row[6][0] = (float)(*v99 + v98->lane[0] - ((P2Ctx *)(v285))->lane[0]);
-        a1->p2_row[6][1] = (float)(v98[-2].lane[0]
-                                       + v98->lane[0]
+        a1->p2_row[5][3] = (float)(v46[-2].lane[0] + v284->lane[0] - v284[-2].lane[0]);
+        a1->p2_row[6][0] = (float)(*v99 + v284->lane[0] - ((P2Ctx *)(v285))->lane[0]);
+        a1->p2_row[6][1] = (float)(v284[-2].lane[0]
+                                       + v284->lane[0]
                                        - v46[-2].lane[0]
-                                       + 2 * (v46[-1].lane[0] - v98[-1].lane[0]));
-        a1->p2_row[6][2] = ((float)(v46[-2].lane[0] + v98->lane[2]));
+                                       + 2 * (v46[-1].lane[0] - v284[-1].lane[0]));
+        a1->p2_row[6][2] = ((float)(v46[-2].lane[0] + v284->lane[2]));
         a1->p2_row[6][3] = (float)(*v99 + v282->lane[2]);
       }
     }
