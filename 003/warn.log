@@ -396,7 +396,6 @@ subs1.hpp:6073:52: warning: conversion from 'int64_t' {aka 'long long int'} to '
 subs1.hpp: In function 'int32_t __alt_model_p1_decode(uint16_t*, uint8_t*)':
 subs1.hpp:6170:21: warning: conversion from 'int32_t' {aka 'int'} to 'int8_t' {aka 'signed char'} may change value [-Wconversion]
 subs1.hpp:6271:83: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
-subs1.hpp:6271:41: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:6280:33: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
 subs1.hpp:6281:39: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:6281:44: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
@@ -642,8 +641,8 @@ subs1.hpp:9268:14: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' 
 subs1.hpp:9295:26: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:9297:24: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:9297:23: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
+subs1.hpp:9314:24: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:9315:26: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
-subs1.hpp:9327:27: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:9327:35: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:9400:23: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:9400:51: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
@@ -652,9 +651,6 @@ subs1.hpp:9410:30: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {
 subs1.hpp:9422:25: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
 subs1.hpp:9429:29: warning: conversion from 'int32_t' {aka 'int'} to 'uint16_t' {aka 'short unsigned int'} may change value [-Wconversion]
 subs1.hpp:9430:21: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
-subs1.hpp:9456:14: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
-subs1.hpp:9464:14: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
-subs1.hpp:9466:21: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:9466:29: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp: In function 'int32_t __decode_pixel(ModelBlock*, int32_t)':
 subs1.hpp:9603:45: warning: conversion to 'int16_t' {aka 'short int'} from 'uint16_t' {aka 'short unsigned int'} may change the sign of the result [-Wsign-conversion]
@@ -1161,4 +1157,4 @@ subs1.hpp:17348:30: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' 
 subs1.hpp:17363:41: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
 subs1.hpp: In function 'void __bmf_decompress(const char*, const char*)':
 subs1.hpp:17421:23: warning: conversion to 'uintptr_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
-# subs1.hpp 1221659199 633401
+# subs1.hpp 32923318 633401

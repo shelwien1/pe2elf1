@@ -303,6 +303,14 @@ def main():
     if only:
         k = int(only.split('=')[1])
         found = found[k:k + 1]
+    # `--pick=a,b,c` applies several at once.  Some candidates are siblings --
+    # `alti2`..`alti7` are six registers holding one quantity -- and each of
+    # them converts against the others until they all move, so no single one
+    # of them ever pays.
+    pick = next((a for a in sys.argv if a.startswith('--pick=')), None)
+    if pick:
+        want = {int(x) for x in pick.split('=')[1].split(',')}
+        found = [f for i, f in enumerate(found) if i in want]
 
     if '--all' not in sys.argv:
         for nm, _a, _b, name, cur, want, n in found:

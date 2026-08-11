@@ -15,12 +15,21 @@ all three removes every conversion between them.
 
 So: build the graph whose nodes are locals and whose edges are the signedness
 conversions between two locals of one body, take its connected components, and
-propose making each component agree. 167 locals in 59 groups, in a file where
+propose making each component agree.
+
+Two locals are also joined when their names are the same stem with a different
+trailing number. `alti2`..`alti7` in `alt_p1_model` are six registers holding
+one quantity and *none* of them is assigned from any other, so there is no
+conversion edge between them -- and each keeps converting against the ones
+still declared the old way, so no single flip among them can ever pay. Six
+together are worth six warnings. 167 locals in 59 groups, in a file where
 flipping any of them alone had been measured not to pay.
 
-The target is whichever signedness is already the majority of the component --
-the minority is what Hex-Rays got wrong, and a tie goes to unsigned, which is
-what the counts and cumulative frequencies in this codec mostly are.
+Both directions are offered, as two candidates, and the driver measures which
+pays. The first version took the component's majority signedness, which is not
+a majority question: `alti0` and `alti1` had already been flipped to `uint32_t`
+because that direction pays, so a headcount over `alti0`..`alti7` said
+`int32_t` and proposed flipping the two right ones back.
 
 Signedness only, never width. A component whose members are not all the same
 width has no single signedness to agree on, and the majority vote proposes a
@@ -97,6 +106,32 @@ def components(lines, log='warn.log'):
                 edges[(nm, dst)].add((nm, w))
                 edges[(nm, w)].add((nm, dst))
 
+    # Siblings by name.  `alti2`..`alti7` are six registers holding one
+    # quantity, and none of them is assigned from any other -- so there is no
+    # conversion edge between them and each keeps converting against the ones
+    # still declared the old way.  No single flip among them can ever pay, and
+    # the six together are worth six warnings.
+    #
+    # A sibling is a local of the same body whose name is the same stem with a
+    # different trailing number, and whose declared type is the same or its
+    # flip.  The stem has to be at least two characters, so `n2` and `n5` are
+    # not siblings of each other by accident.
+    bystem = collections.defaultdict(list)
+    for nm, ty in types.items():
+        for v, t in ty.items():
+            if t[1] or t[0] not in resign.FLIP:
+                continue
+            m = re.fullmatch(r'([A-Za-z_]\w*?[A-Za-z_])(\d+)', v)
+            if m and len(m.group(1)) >= 2:
+                bystem[(nm, m.group(1), WIDTH[t[0]])].append(v)
+    for (nm, _stem, _w), names in bystem.items():
+        if len(names) < 2:
+            continue
+        for a_name in names:
+            for b_name in names:
+                if a_name != b_name:
+                    edges[(nm, a_name)].add((nm, b_name))
+
     seen, out = set(), []
     for node in edges:
         if node in seen:
@@ -123,19 +158,22 @@ def components(lines, log='warn.log'):
             continue
         votes = collections.Counter(ty[v][0] for _n, v in comp)
         top = votes.most_common()
-        # A tie goes to unsigned: the counts and cumulative frequencies this
-        # codec is full of are unsigned, and a component with no unsigned
-        # member at all is not tied -- it is already agreed.
-        want = (top[0][0] if len(top) == 1 or top[0][1] != top[1][1]
-                else next((t for t in votes if t.startswith('u')), top[0][0]))
-        flips = {v: want for _n, v in comp if ty[v][0] != want}
-        if not flips:
-            continue
+        # Both directions, as two candidates.  The first version took the
+        # component's majority signedness and it is not a majority question:
+        # `alti0` and `alti1` had already been flipped to `uint32_t` because
+        # that direction pays, so a headcount of `alti0`..`alti7` said
+        # `int32_t` and proposed flipping the two right ones back.  Which way
+        # a component should go is the compiler's answer, like everything else
+        # here, so the rule offers both and the driver measures.
         a, b, sig = bodies[nm]
         code = [x.split('//')[0] for x in lines[a:b + 1]]
-        if not all(resign.safe(v, ty[v][0], want, code, sig) for v in flips):
-            continue
-        out.append((nm, a, b, flips, {v: ty[v][0] for v in flips}))
+        for want in votes:
+            flips = {v: want for _n, v in comp if ty[v][0] != want}
+            if not flips:
+                continue
+            if not all(resign.safe(v, ty[v][0], want, code, sig) for v in flips):
+                continue
+            out.append((nm, a, b, flips, {v: ty[v][0] for v in flips}))
     return sorted(out, key=lambda g: (g[0], sorted(g[3])))
 
 

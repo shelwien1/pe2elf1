@@ -6126,7 +6126,7 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
   AltP1Block *blk_k;
   AltP1Block *raw;
   uint32_t at0;
-  uint32_t code0;
+  int32_t code0;
   uint32_t pred0;
   uint32_t pred1;
   int32_t width, height, k, *made, src1, src2, src3, dc2, dc3, xf1, xf2, xf3, w, n_planes,
@@ -9258,7 +9258,7 @@ int32_t __decode_symbol_list(SymList *a1)
   int32_t live, cum, i, c, top, half, back_cnt, last_cnt;
   uint32_t n_left, zeros;   // counts that MSVC spilled into the list's first slot
   SymList *owner0, *owner1;
-  int32_t cum_hi;
+  uint32_t cum_hi;
   int32_t tot_1;
   int32_t tot_all;
   int32_t target;
