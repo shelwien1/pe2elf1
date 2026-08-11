@@ -22,7 +22,7 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17080
+subs1.hpp lines                      17787     17616         17066
 bmf.cpp lines                            —         —           365
 raw-offset sites                        22        12             18
   off `_this`                            —         1             0
@@ -2652,3 +2652,66 @@ its answer changed. Every one of them "ignored its argument". It was a useless
 test: a tool that finds nothing in `subs1.hpp` prints `0 …` for an empty file
 too, so identical output is the *expected* result whether it read the file or
 not. A control has to be able to fail.
+
+## 33. The script that was never run, and what mode 1 was really doing
+
+`compact_locals.py` had one calling convention:
+
+```
+python3 tools/compact_locals.py input.hpp output.hpp funcname [mode]
+```
+
+Three arguments and a function name means the only way to ask "is there
+anything left to merge?" is a shell loop over all 104 bodies, which is not a
+thing anyone runs, and therefore not a thing `sweep.sh` can check. It sat in
+`tools/` outside the sweep, and the loop — written by hand once, here — found
+fourteen mergeable lines in two bodies:
+
+```
+    13  choose_plane_coding
+     1  decode_symbol_list
+```
+
+With one argument it reports instead of rewriting, so its zero is in the sweep
+beside the others and gets replayed by `proven.sh` like the rest.
+
+### Mode 1 was mode 2 with extra steps
+
+The docstring divides the two modes on order:
+
+> mode 1 (the default) merges *runs* of adjacent declarations that share a
+> type, so the order the decompiler chose is preserved
+
+It did not. Every merged group was emitted at the **segment's** first line,
+not its own, so a declaration separated from its neighbours by anything the
+tool steps over — a documented declaration, an existing comma list, Hex-Rays'
+bare `;` — was hoisted past all of them. Running it on `choose_plane_coding`
+moved `int16_t g1_lo;` nineteen lines up and across the `;`, into the middle
+of a block it had nothing to do with.
+
+Nothing breaks: none of these has an initialiser, and the docstring's own
+closing paragraph — "sorting is by type name, and stable … it does change the
+order the compiler assigns stack slots in" — describes mode 2, which is
+supposed to relocate. The defect is that mode 1 was doing it too, silently,
+while promising not to. Each group is laid at its own first line now; the
+merge count on `choose_plane_coding` is the same thirteen and `g1_lo` stays
+where it was, which is the control.
+
+### `addrmap.py` could not read a copy
+
+`sweep.sh` and `proven.sh` both hand every tool a copy in a temp directory.
+`addrmap.py` resolves the repository root from the *path's* directory, so a
+copy got `subprocess.CalledProcessError` where a map should have been — and
+`proven.sh` read that traceback as an answer, identical for every revision,
+and filed it under "same answer throughout". The names come from the file it
+is given and the history from the tree it is running in, which is what the
+join needs, so the root falls back to the working directory. `unnamed.py`
+joins through it and had the same reach.
+
+### And the snapshot
+
+`proven.sh` re-read the working `subs1.hpp` for each tool's current answer. A
+run takes ten minutes; an edit made while it runs lands in the middle of the
+answers, half the tools compared against one file and half against another,
+with nothing in the output to say so. That happened twice while this section
+was being written. The snapshot is taken once now, at the start.

@@ -2,6 +2,7 @@
 """Compact one decompiled function's block of local declarations.
 
     python3 tools/compact_locals.py input.hpp output.hpp funcname [mode]
+    python3 tools/compact_locals.py subs1.hpp [mode]     # report, write nothing
 
 Hex-Rays emits every local on its own line, which for a body of any size is a
 screenful of noise before the code starts:
@@ -14,7 +15,7 @@ screenful of noise before the code starts:
     FILE *Stream_1;
 
 mode 1 (the default) merges *runs* of adjacent declarations that share a type,
-so the order the decompiler chose is preserved:
+in place, so the order the decompiler chose is preserved:
 
     int32_t v5;
     const char *a_b;
@@ -271,30 +272,54 @@ def compact(text, funcname, mode=1):
     for seg in segments:
         if mode == 2:
             order, seen = [], {}
-            for t, d, _ in seg:                      # stable: first use wins
+            for t, d, i in seg:                      # stable: first use wins
                 if t not in seen:
                     seen[t] = []
                     order.append(t)
-                seen[t].append(d)
-            groups = [(t, seen[t]) for t in sorted(order)]
+                seen[t].append((d, i))
+            groups = [(t, [d for d, _ in seen[t]], [i for _, i in seen[t]])
+                      for t in sorted(order)]
         else:
             groups, prev = [], None
-            for t, d, _ in seg:
+            for t, d, i in seg:
                 if prev == t:
                     groups[-1][1].append(d)
+                    groups[-1][2].append(i)
                 else:
-                    groups.append((t, [d]))
+                    groups.append((t, [d], [i]))
                     prev = t
 
         indent = re.match(r'^( +)', lines[seg[0][2]]).group(1)
-        out = []
-        for t, ds in groups:
-            out.extend(render(indent, t, ds))
-        if len(out) >= len(seg):                     # wrapping ate the gain
+        if mode == 2:
+            # Sorting *is* relocation, so the whole segment is re-laid at its
+            # first line.
+            out = []
+            for t, ds, _ in groups:
+                out.extend(render(indent, t, ds))
+            if len(out) >= len(seg):                 # wrapping ate the gain
+                continue
+            merged += len(seg) - len(out)
+            replace[seg[0][2]] = out
+            drop.update(e[2] for e in seg[1:])
             continue
-        merged += len(seg) - len(out)
-        replace[seg[0][2]] = out                     # merged block sits first
-        drop.update(e[2] for e in seg[1:])
+        # Mode 1 promises the order the decompiler chose, and for a long time
+        # it did not keep that promise: every group was re-emitted at the
+        # *segment's* first line, so a declaration separated from its
+        # neighbours by a comment, a comma list or Hex-Rays' bare `;` was
+        # pulled up past all of them -- `choose_plane_coding`'s `int16_t
+        # g1_lo;` moved nineteen lines and across the `;`.  Nothing breaks,
+        # because none of these has an initialiser; the docstring was simply
+        # describing mode 2.  Each group is laid at its own first line now, so
+        # a run merges where it stands and everything else keeps its place.
+        for t, ds, idx in groups:
+            if len(ds) < 2:
+                continue
+            out = render(indent, t, ds)
+            if len(out) >= len(ds):                  # wrapping ate the gain
+                continue
+            merged += len(ds) - len(out)
+            replace[idx[0]] = out
+            drop.update(idx[1:])
 
     if not merged:
         return text, 0
@@ -308,7 +333,36 @@ def compact(text, funcname, mode=1):
     return '\n'.join(lines[:start] + body + lines[end:]), merged
 
 
+def survey(path, mode=1):
+    """Every body this could still merge, without writing anything.
+
+    Asking "is there anything left?" used to mean a shell loop over every
+    function name, which is not a thing anyone runs and so is not a thing
+    `sweep.sh` can check.  With one argument this reports instead of rewriting,
+    which puts its zero in the sweep beside the others.
+    """
+    sys.path.insert(0, __file__.rsplit('/', 1)[0])
+    import structs
+    text = open(path).read()
+    lines = text.split('\n')
+    out = []
+    for _a, _b, name, _sig in structs.bodies(lines):
+        _, n = compact(text, name, mode)
+        if n:
+            out.append((name, n))
+    return out
+
+
 def main():
+    if len(sys.argv) == 2 or (len(sys.argv) == 3 and sys.argv[2] in ('1', '2')):
+        path = sys.argv[1]
+        mode = int(sys.argv[2]) if len(sys.argv) > 2 else 1
+        found = survey(path, mode)
+        for name, n in found:
+            print('%6d  %s' % (n, name.lstrip('_')))
+        print('%d declaration lines mergeable in %d bodies (mode %d)'
+              % (sum(n for _, n in found), len(found), mode))
+        return
     if len(sys.argv) < 4:
         sys.exit(__doc__.strip().split('\n\n')[1].strip())
     src, dst, func = sys.argv[1:4]

@@ -65,8 +65,13 @@ echo
 #     replay through `$tmp/s.hpp` matched nothing and answered "no useless
 #     casts" for every revision including the current one.  Same basename, same
 #     question.
-mkdir -p "$tmp/now" "$tmp/rev"
-cp subs1.hpp "$tmp/now/subs1.hpp"
+#
+# The snapshot is taken once, at the start.  A run takes ten minutes or more,
+# and re-reading the working file per tool means an edit made while it runs
+# lands in the middle of the answers -- half the tools compared against one
+# file and half against another, with nothing in the output to say so.
+mkdir -p "$tmp/now" "$tmp/rev" "$tmp/base"
+cp subs1.hpp "$tmp/base/subs1.hpp"
 ans() { timeout 180 python3 "$1" "$2" 2>&1 | tail -1; }
 
 flat_tools=()
@@ -74,7 +79,7 @@ seen=0
 for t in tools/*.py; do
   base=$(basename "$t")
   case $base in structs.py|outpath.py|mk*.py) continue ;; esac
-  cp subs1.hpp "$tmp/now/subs1.hpp"
+  cp "$tmp/base/subs1.hpp" "$tmp/now/subs1.hpp"
   now=$(ans "$t" "$tmp/now/subs1.hpp")
   case $now in *'python3 '*) continue ;; esac      # needs more arguments
   seen=$((seen + 1))
@@ -97,7 +102,7 @@ echo "What each of those actually reads, from tools/reads.py:"
 echo
 spoken=0
 for t in "${flat_tools[@]}"; do
-  line=$(timeout 300 python3 tools/reads.py "$t" subs1.hpp 2>&1 | tail -1)
+  line=$(timeout 300 python3 tools/reads.py "$t" "$tmp/base/subs1.hpp" 2>&1 | tail -1)
   printf '  %s\n' "$line"
   case $line in *'reads only what it is given') spoken=$((spoken + 1)) ;; esac
 done
