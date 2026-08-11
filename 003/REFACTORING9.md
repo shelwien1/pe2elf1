@@ -22,11 +22,11 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp / bmf.cpp lines            17787     17616         17334
+subs1.hpp / bmf.cpp lines            17787     17616         17343
 raw-offset sites                        22        12            11
   off `_this`                            —         1             0
 byte offsets on a typed base           121         0             0
-pointer casts                         2137      1545          1389
+pointer casts                         2137      1545          1387
 fNN members / named ones             93/121     5/162         0/171
 distinct unexplained locals            554       591             0
   bodies still carrying one              —    8/102         0/102
@@ -34,7 +34,7 @@ distinct unexplained locals            554       591             0
 goto / LABEL_n:                     112/79     81/55         49/34
   restart a loop / exit N blocks         —         —         16/29
   jump into a block / sideways           —         —           1/3
-conversion warnings (ratchet)         1455      1331          1322
+conversion warnings (ratchet)         1455      1331          1300
 ```
 
 **Not one Hex-Rays name is left in either file.** Checked by running the
@@ -923,4 +923,35 @@ exists so that a later round can tell at a glance whether it has grown.
 One thing worth recording: removing a `goto` duplicates the statement it jumped
 over, and in `predict_med` that took the conversion count *up* by three. The
 ratchet caught it before I did. Casting the four `LOBYTE` assignments
-explicitly took it to 1323 instead, below where it started.
+explicitly took it to 1323 instead, below where it started. It happened again
+in `alloc_image`, which is enough to call it a rule: **a `goto` you delete is a
+statement you copy, and the ratchet is what tells you which.**
+
+---
+
+## 15. What is left
+
+Everything with a target is at it. What remains has no target, and saying so
+precisely is the point of this section rather than leaving the reader to infer
+it from a table of zeros.
+
+**62 `-Wsign-compare` and 1238 conversion warnings.** These are the
+decompilation's type mixture — `uint32_t x` counting to an `int32_t width`,
+several hundred times. The ratchet exists so the number cannot go up, and
+§1 has always described it as a ratchet and not a target. The one cluster
+worth collapsing was `pixel_context`'s twenty-one unrolled band comparisons,
+which was a readability fix that happened to be worth 22 warnings; the rest are
+one site each and want a retyping round, not a sweep.
+
+**49 jumps, 45 of which are what `goto` is for.** The breakdown row in §1 is
+there so a later round can see whether the other four have grown.
+
+**11 raw-offset sites**, all of them a byte buffer being indexed — the counter
+has said since round three that it is a counter and not a target, and
+`exclusion_mask[symbol]` will never become a member.
+
+**1387 pointer casts**, none of which the compiler thinks is useless.
+
+What is *not* left: a Hex-Rays name, anywhere in either file; an `fNN` member;
+a raw offset off `_this`; a frame that carries two names in one slot; a rule in
+`tools/` that finds anything.
