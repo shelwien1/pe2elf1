@@ -45,6 +45,20 @@ A hoist qualifies when:
 `.`, `->` and `[...]` on it -- so a hoisted sum landing under a `*` keeps its
 own precedence.
 
+The write check has two halves.  A name in the expression may not be
+reassigned, and it may not be written *through*: `cx0[-4].err = ...` changes
+what `v = cx0[-4].err` reads, and the reassignment patterns match neither --
+they stop at the first `[` or `->`.  That second half is about the value the
+expression has; `uncopy` and `unsave` ask whether a pointer changed, and
+writing through a pointer does not change it, so they do not need it.
+
+It is deliberately blunt: any write reached through any name the expression
+mentions disqualifies it, so `blk->ctx_pair[1] = ...` blocks a load of
+`blk->ctx_w[0].sel` although the two members cannot alias.  Replayed over every
+revision where this rule fired, that costs exactly one true site and refuses
+nothing that was wrong -- which is the trade a rule that rewrites code should
+take.
+
 This is deliberately narrower than "inline any single-use temporary". An
 expression with work in it stays behind its name the moment it is read twice:
 duplicating it is copying logic, not putting a load back. A primary -- a name
@@ -77,6 +91,8 @@ KEYWORD = {'if', 'else', 'while', 'do', 'for', 'return', 'switch', 'case',
 # "address taken" and disqualified the local, which is thirteen of the counter
 # pointers in `alt_p2_model` alone.
 ADDR = r'&\s*%s\b(?!\s*(?:->|\.|\[))'
+REACH = (r'\b%s\b(?:\s*(?:->|\.)\s*\w+|\s*\[[^\]]*\])+'
+         r'\s*(?:\+\+|--|[-+*/|&^%%]?=(?!=))')
 WRITE = [r'\b%s\s*(?:\+\+|--)', r'(?:\+\+|--)\s*%s\b', r'\b%s\s*[-+*/|&^%%]?=(?!=)',
          ADDR,
          r'\b(?:LO|HI)(?:BYTE|WORD|DWORD)\d?\s*\(\s*%s\s*\)',
@@ -201,6 +217,17 @@ def candidates(lines):
                          if w not in KEYWORD}
                 body = '\n'.join(span)
                 if any(re.search(p % re.escape(w), body) for w in names for p in WRITE):
+                    continue
+                # A hoisted load reads memory, so a write *through* one of its
+                # names counts too: `cx0[-4].err = ...` and `blk->ctx = ...`
+                # both change what `v = cx0[-4].err` would read, and the plain
+                # WRITE patterns above match neither -- they stop at the first
+                # `[` or `->`.  This is about the value the expression has, not
+                # about whether a variable was reassigned, which is why
+                # `uncopy` and `unsave` do not need it: there the question is
+                # whether a *pointer* changed, and writing through it does not
+                # change it.
+                if any(re.search(REACH % re.escape(w), body) for w in names):
                     continue
                 out.append((nm, a + lo, a + hi, a + stmts[reads[0][0]][0],
                             a + stmts[use][1], dst, expr, m.group(1)))
