@@ -58,9 +58,14 @@ DECL = re.compile(r'^(?P<indent> +)'
 # `  <type> <declarator> = ...;` -- a declaration this leaves alone, but which
 # still belongs to the block.  Two tokens before the `=` is what separates it
 # from a plain assignment.
+# The `const` may sit *after* the stars -- `BmfImage *const img = ...` is how
+# this file writes a view bound once -- and a frame alias is `AltP1Block *&p =
+# ...`, a reference.  Leaving either out ended the block at the first one, which
+# in the framed bodies is before any local has been seen.
 INIT = re.compile(r'^ +(?:const\s+|volatile\s+|unsigned\s+|signed\s+)*'
                   r'[A-Za-z_][A-Za-z0-9_:]*'
-                  r'\s+\**\s*[A-Za-z_][A-Za-z0-9_]*(?:\[[^\]\n]*\])*\s*=.*;$')
+                  r'\s*[\*&]*\s*(?:const\s+|volatile\s+)*[\*&]*\s*'
+                  r'[A-Za-z_][A-Za-z0-9_]*(?:\[[^\]\n]*\])*\s*=.*;$')
 KEYWORDS = {'return', 'if', 'while', 'for', 'do', 'else', 'switch', 'case',
             'goto', 'break', 'continue', 'default', 'sizeof', 'typedef',
             'static', 'alignas'}
@@ -92,6 +97,53 @@ def split_block(lines, start):
         if not line.strip():
             i += 1
             continue
+        # A trailing comment is not the end of the declaration block, and
+        # treating it as one is why this reported zero on every body whose
+        # first local is documented -- which after the naming rounds is most of
+        # them.  The line is matched without its comment; a documented
+        # declaration is then stepped over rather than merged, because the
+        # comment belongs to the name it follows and a comma list has nowhere
+        # to put it.
+        bare = line.split('//')[0].rstrip()
+        # Hex-Rays' bare `;`, the empty statement it puts at the top of a body.
+        # In the framed bodies it sits *after* the frame and its aliases, with
+        # twenty more locals below it, and treating it as the first statement
+        # put all of them out of reach.
+        if bare.strip() == ';':
+            i += 1
+            continue
+        # The frame struct is a declaration too, and it sits in the middle of
+        # the block with the locals that outlived it on both sides.  Stepped
+        # over as one unit, braces and all: it is `struct alignas(16) …{ … }
+        # __frame;` and nothing inside it is a local.
+        if re.match(r'\s*(?:struct|union)\b', bare):
+            depth = 0
+            while i < len(lines):
+                c = lines[i].split('//')[0]
+                depth += c.count('{') - c.count('}')
+                i += 1
+                if depth <= 0 and ';' in c:
+                    break
+            segments.append([])
+            continue
+        # A `static_assert` is a declaration, not a statement, and it is how
+        # this file pins a frame's layout -- so it sits in the middle of the
+        # declaration block and used to end it, leaving everything below out of
+        # reach.  Stepped over, however many lines it wraps to.
+        if bare.lstrip().startswith('static_assert'):
+            while i < len(lines) and ';' not in lines[i].split('//')[0]:
+                i += 1
+            i += 1
+            continue
+        if bare != line.rstrip():
+            # A comment on its own line is not the end of the block either --
+            # after the naming rounds these blocks are half prose, and treating
+            # the first paragraph as the first statement stopped this at the
+            # top of every body worth running it on.
+            if not bare.strip() or is_decl(bare):
+                i += 1
+                continue
+            break
         m = DECL.match(line)
         if m and m.group('type') not in KEYWORDS:
             segments[-1].append(
@@ -99,6 +151,19 @@ def split_block(lines, start):
             i += 1
             continue
         if is_decl(line):                       # declaration, just not one to merge
+            i += 1
+            continue
+        # A declaration this tool already wrapped over several lines.  Its
+        # continuations end in `,` rather than `;`, so neither branch above
+        # matches and the block used to end at the first one -- which meant a
+        # second run stopped at whatever the first had merged, and the file
+        # kept 274 mergeable lines while this reported nothing left to do.
+        # Stepped over, not merged: unpicking a comma list to re-lay it is a
+        # different job from joining single declarations.
+        if bare.endswith(',') and len(bare.split()) >= 2 \
+                and bare.split()[0] not in KEYWORDS and '=' not in bare:
+            while i < len(lines) and ';' not in lines[i].split('//')[0]:
+                i += 1
             i += 1
             continue
         # An initialised declaration -- `int v3 = a1;`, a frame alias -- still
@@ -156,15 +221,46 @@ def compact(text, funcname, mode=1):
     if sig is None:
         return text, 0
 
+    # Where the declarations start.  This used to look for the bare `;`
+    # Hex-Rays puts at the top of a body and give up if a blank line or a `}`
+    # came first -- which is every body with a frame, because the frame struct
+    # sits between the `{` and that `;`.  Those are the seventeen largest
+    # bodies in the file, so the tool had never run on the code that needed it
+    # most: it reported success on `alt_p1_model` and nothing at all on
+    # `alt_p2_model`, `decode_pixel` and `code_pixel`.
+    #
+    # So step over what is known to sit there instead: comments, blank lines,
+    # the bare `;`, a `struct`/`union` frame declaration, and the
+    # `static_assert`s that pin its layout.  The first thing that is none of
+    # those is where the declarations begin.
     start = sig + 1
-    while start < len(lines) and lines[start].strip() != ';':
-        # frame aliases and blank lines sit between `{` and the `;`
-        if lines[start].strip() in ('', '}') or start > sig + 400:
-            break
+    # Some signatures carry the `{` *and* the first declaration on one line:
+    # `int32_t __alt_p2_context(...) {   P2Ctx *unused_p,` continues onto the
+    # next.  Starting the block at that continuation puts it in the middle of a
+    # declaration, where nothing matches and everything below is lost.  Step to
+    # the end of it first.
+    tail = lines[sig].split('//')[0].split('{', 1)[-1].strip()
+    if tail:
+        while start < len(lines) and ';' not in lines[start].split('//')[0]:
+            start += 1
         start += 1
-    if start >= len(lines) or lines[start].strip() != ';':
+    while start < len(lines):
+        bare = lines[start].split('//')[0].strip()
+        if bare in ('', ';'):
+            start += 1
+            continue
+        if re.match(r'(?:struct|union)\b', bare) or bare.startswith('static_assert'):
+            depth = 0
+            while start < len(lines):
+                c = lines[start].split('//')[0]
+                depth += c.count('{') - c.count('}')
+                start += 1
+                if depth <= 0 and ';' in c:
+                    break
+            continue
+        break
+    if start >= len(lines):
         return text, 0
-    start += 1
 
     end, segments = split_block(lines, start)
     segments = [s for s in segments if len(s) >= 2]

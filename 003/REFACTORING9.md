@@ -22,8 +22,8 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17544
-bmf.cpp lines                            —         —           366
+subs1.hpp lines                      17787     17616         17262
+bmf.cpp lines                            —         —           363
 raw-offset sites                        22        12             5
   off `_this`                            —         1             0
   in functions                           —         1             0
@@ -1938,3 +1938,71 @@ What `tools/unlayer.py` will not touch is a cast with anything between it and
 the next — an inner cast whose result is indexed or dereferenced is doing work,
 and the absence of anything between the two closing parens is what says it is
 not.
+
+---
+
+## 23. Two tools that had been reporting success on the code they never reached
+
+### `compact_locals.py`, six blind spots deep
+
+Hex-Rays gives every local its own line, and `compact_locals.py` has existed
+since round four to merge runs that share a type. Asked how much it had left
+to do, the file had **368 pairs of adjacent same-type declarations** still on
+separate lines — and running the tool over every body removed **zero**.
+
+It was not broken. It was stopping early, six different ways, and each way it
+stopped it reported "0 declaration lines removed", which reads exactly like
+nothing left to do:
+
+1. **A trailing comment.** `is_decl` tested `line.endswith(';')` on the raw
+   line, so `uintptr_t result;   // the return value` was not a declaration and
+   ended the block. After the naming rounds the *first* local in most bodies
+   is documented, so most bodies ended at their first line.
+2. **A comment on its own line.** These blocks are half prose now; the first
+   paragraph was the first statement.
+3. **Its own wrapped output.** A merged declaration continues onto more lines
+   ending in `,`; neither branch matched one, so a second run stopped at
+   whatever the first had merged.
+4. **The frame struct.** `struct alignas(16) …{ … } __frame;` sits in the
+   middle of the declaration block with locals above and below it. The seventeen
+   framed bodies are the largest in the file, so the tool had never run on the
+   code that most needed it.
+5. **`static_assert`.** A declaration, not a statement, and how this file pins a
+   frame's layout — so it sits between the frame and the locals below it.
+6. **Hex-Rays' bare `;`.** The empty statement at the top of a body. In a framed
+   body it sits *after* the frame and its aliases, with twenty more locals under
+   it.
+
+Plus two narrower ones in the same pass: `INIT` did not allow `const` after the
+stars (`BmfImage *const img = …`) or a reference (`AltP1Block *&plane1 = …`),
+both of which are how this file writes a view bound once — and a signature that
+carries the `{` *and* the first declaration on one line, which started the block
+in the middle of a declaration.
+
+**282 declaration lines removed**, and nothing outside the frame structs is
+mergeable now. Every one of those eight was found by asking a question the tool
+does not answer — "how many adjacent same-type declarations are left?" — and
+comparing it against what the tool said it had done. A tool that reports zero
+is making a claim about the file, and the only way to check it is a second
+measure that does not share its blind spots.
+
+The frame structs are deliberately excluded from the residual: a frame's member
+order *is* its layout, and merging two members would be a change to the program
+rather than to how it reads.
+
+### `bmf.cpp` had eight definitions nothing used
+
+`deadcheck.py` asks this of `subs1.hpp`'s bodies. Nothing asked it of the
+header half, and eight had gone dead there: `BMF_STANDALONE` and `_WINDOWS_`,
+both switches for `#include`s that are commented out, and `DWORD1`..`DWORD3`
+with `SDWORD1`..`SDWORD3`.
+
+Those last six are the argument for the rule. The comment above them says the
+bodies "also index DWORD lanes directly" — no body does any more, and **the
+three signed ones never could have**: they expand to `SDWORDn`, which this file
+has never defined. Three macros that would not compile if anyone used them,
+under a comment explaining why they were needed. An unused definition is not
+just clutter; it is a claim about the program that nobody has had to keep true.
+
+`tools/undef.py` reports zero now, and reports eight against the revision
+before.

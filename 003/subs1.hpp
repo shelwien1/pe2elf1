@@ -1663,8 +1663,7 @@ uint32_t __alt_init_tables(uint8_t *fold, int8_t *unfold)
 {
   ;
   uint8_t even, odd;
-  uint32_t done;
-  uint32_t lo;
+  uint32_t done, lo;
   int32_t bucket_size, half, in_bucket, ofs, bucket, bucket_1;
   uint32_t i, k, b, span, pairs;
   uint8_t *pos, *neg;
@@ -1786,12 +1785,9 @@ uint32_t __rc_decode_flat(uint32_t tot)
 int32_t __encode_context_bit(BitCtr *_this, BitCtr *a2, int32_t bit)
 {
   ;
-  uint32_t c1;
-  uint32_t p0;
-  uint32_t p1;
-  uint32_t c0;
-  int32_t cap, result, p_cap, par0, par_n;
+  uint32_t c1, p0, p1, c0;
   int32_t par_tot;
+  int32_t cap, result, p_cap, par0, par_n;
   uint32_t tot, p_tot, n1_old, p1_old;
   c0 = _this->n[0];
   if ( _this->n[0] )
@@ -1848,12 +1844,9 @@ int32_t __encode_context_bit(BitCtr *_this, BitCtr *a2, int32_t bit)
 int32_t __decode_context_bit(BitCtr *_this, BitCtr *a2)
 {
   ;
-  uint32_t c0;
-  uint32_t c1;
-  uint32_t p0;
-  uint32_t p1;
-  int32_t result, cap, p_cap, par0, par_n;
+  uint32_t c0, c1, p0, p1;
   int32_t par_tot;
+  int32_t result, cap, p_cap, par0, par_n;
   uint32_t tot, p_tot, n1_old, p1_old;
   c0 = _this->n[0];
   if ( _this->n[0] )
@@ -1911,18 +1904,15 @@ int32_t __encode_symbol_list(SymList *_this, int32_t want)
 {
   ;
   int8_t gen;
+  uint16_t keep;
+  int32_t enc_cum, enc_high, enc_tot;
+  uint32_t left, n_left;
   uint8_t c_a, c_b;
   // Every one of these walked `_this[5]`'s entries three bytes at a time,
   // reading the symbol as `*(uint16_t *)p` and the count as `p[2]`.
   SymEntry *p, *head, *q, *cur, *prev, *up, *back;
-  uint16_t keep;
   // A cumulative count, a high count and a total: the three arguments
   // `RangeCoder::encode` takes, and it takes them unsigned.
-  int32_t enc_cum;
-  int32_t enc_high;
-  int32_t enc_tot;
-  uint32_t left;
-  uint32_t n_left;
   int32_t cum, s, c, result, c2, top, half, back_cnt, last_cnt, up_cnt, bias;
   uint16_t s_a, s_b;
   uint32_t rest, i, rescale_at, running, since_rescale;
@@ -2650,8 +2640,7 @@ int32_t __alt_p1_decode_symbol(uint16_t *freq, int32_t unread_arg, int32_t ctx)
 int32_t __alt_p2_encode_symbol(P2Freq *_this, const uint32_t *ctx_pair, int32_t sym)
 {
   ;
-  uint16_t f_before;
-  uint16_t *result;
+  uint16_t f_before, *result;
   // The cumulative count the range coder takes, which it takes unsigned.
   uint32_t cum;
   int32_t st;
@@ -2846,8 +2835,7 @@ void __rc_end_encode()
 void **__free_workspace(ModelBlock *blk, int8_t do_free)
 {
   ;
-  uint32_t n;
-  uint32_t left;
+  uint32_t n, left;
   int32_t i;
   SymList *lists, *p;
   free(blk->sym_code);
@@ -2978,19 +2966,16 @@ int32_t __init_model_tables(ModelBlock *_this)
   // adding the record entering on the right and dropping the one leaving.
   PixRec *up1, *up2;            // row cursors out of row_cur
   uint8_t cnt;
+  SymList **cur;
+  bool promoted;
+  uint16_t *sym_cache;
+  SymList *list, **prev;
+  uint32_t blocks, n_live, hit0;
   uint8_t *buf;   // `uint8_t *` beside the `char` scalars above
   uint16_t want, sym;
-  SymList **cur;
   PixRec *row;   // the current row, one record past the pixel just written
-  bool promoted;
-  uint32_t blocks;
-  uint32_t n_live;
-  uint32_t hit0;
   int32_t recycled, hit1, just, c0, c1, c2, c3, c4, c5, c6,
           result;
-  uint16_t *sym_cache;
-  SymList *list;
-  SymList **prev;
   hit0 = _this->hit;
   if ( !hit0 )
   {
@@ -3261,10 +3246,9 @@ int32_t __alt_p1_context(AltP1Block *_this, AltP1Block *nb0, AltP1Block *nb1)
 {
   P1Ctx *nb0_row, *nb0_row2, *cursor1, *cursor2;
   ;
-  P1Ctx *cur;
-  P1Ctx *cursor4;
-  bool pick, is_zero, is_neg;
+  P1Ctx *cur, *cursor4;
   uint32_t nb0_b;
+  bool pick, is_zero, is_neg;
   int32_t west, northwest, act, nb0_a, act_q, s1, hi, lo, s3, s5, g6, h6, g7, h7,
           s8, result, step, act_all, s2, s4, s6, s7;
   uint32_t quiet, s0;
@@ -3491,75 +3475,20 @@ int32_t __alt_p1_model(AltP1Block *_this)
   ;
   uintptr_t result;   // an index into the counter table, and the return value
   CounterNode *node;  // was `result` too: the address role, under its own name
-  CounterNode *node_alt;
-  CounterNode *node_up;
-  CounterNode *node_dn;
+  CounterNode *node_alt, *node_up, *node_dn;
+  uint32_t w11, w12, w13, w14, w15, w16, w17, w18, alti1, ctx_alt, alti0, alti2, alti3, alti4,
+           alti5, alti6, alti7, alti8, x2, x3, x4, x5, x6, x7;
   CounterNode *opp0, *opp1, *opp2, *opp3, *opp4, *opp5, *opp6, *opp7, *opp8;
   int16_t tot_up, tot_dn;
-  uint32_t w11;
-  uint32_t w12;
-  uint32_t w13;
-  uint32_t w14;
-  uint32_t w15;
-  uint32_t w16;
-  uint32_t w17;
-  uint32_t w18;
-  uint32_t alti1;
-  uint32_t ctx_alt;
-  uint32_t alti0;
-  uint32_t alti2;
-  uint32_t alti3;
-  uint32_t alti4;
-  uint32_t alti5;
-  uint32_t alti6;
-  uint32_t alti7;
-  uint32_t alti8;
-  uint32_t x2;
-  uint32_t x3;
-  uint32_t x4;
-  uint32_t x5;
-  uint32_t x6;
-  uint32_t x7;
   int32_t sel1_top, code_r, sel2_top, slot_f, slot_r, ctx_dn, sel0,
           ctx0, sel1, ctx1, sel2, ctx2,
           sel3, ctx3, sel4, ctx4, sel5, 
           ctx5, sel6, ctx6, sel7, 
           ctx7, sel8, midn8, ctx8, mid7, mid6, mid5, mid4, mid3,
           mid2, mid1, mid0, tree_sym;
-  CounterNode *lo0;
-  CounterNode *hi0;
-  CounterNode *midn0;
-  CounterNode *altn0;
-  CounterNode *lo1;
-  CounterNode *hi1;
-  CounterNode *midn1;
-  CounterNode *altn1;
-  CounterNode *lo2;
-  CounterNode *hi2;
-  CounterNode *midn2;
-  CounterNode *altn2;
-  CounterNode *lo3;
-  CounterNode *hi3;
-  CounterNode *midn3;
-  CounterNode *altn3;
-  CounterNode *lo4;
-  CounterNode *hi4;
-  CounterNode *midn4;
-  CounterNode *altn4;
-  CounterNode *lo5;
-  CounterNode *hi5;
-  CounterNode *midn5;
-  CounterNode *altn5;
-  CounterNode *lo6;
-  CounterNode *hi6;
-  CounterNode *midn6;
-  CounterNode *altn6;
-  CounterNode *lo7;
-  CounterNode *hi7;
-  CounterNode *midn7;
-  CounterNode *altn7;
-  CounterNode *altn8;
-  CounterNode *x8;
+  CounterNode *lo0, *hi0, *midn0, *altn0, *lo1, *hi1, *midn1, *altn1, *lo2, *hi2, *midn2, *altn2,
+              *lo3, *hi3, *midn3, *altn3, *lo4, *hi4, *midn4, *altn4, *lo5, *hi5, *midn5, *altn5,
+              *lo6, *hi6, *midn6, *altn6, *lo7, *hi7, *midn7, *altn7, *altn8, *x8;
   uint32_t key;
   uint32_t code_f, ctx_up;
   code_f = *((uint8_t)(_this->cursor[0]->sym - (uint8_t)_this->pred) + _this->fold);
@@ -4306,8 +4235,7 @@ uint16_t *__rc_begin_encode()
   int32_t at4, at5, k;
   int32_t bits;          // the same slot as the buffer pointer below, in a
   uint8_t *at;       // register MSVC reused; two roles, two names
-  int32_t at6;
-  int32_t at7;
+  int32_t at6, at7;
   uint32_t i;   // offsets into model_geometry, not pointers
   *packer_word = ::packer_acc;
   at = out_cursor;
@@ -4599,11 +4527,10 @@ static void bmf_set_denormal_mode()
 uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t img_w, int32_t plane)
 {
   ;
-  uint32_t done;
-  uint32_t e;
+  uint32_t done, e;
+  void *buf1;
   int32_t dz, band, row_bytes, lvl, lvl1, bump, len, len1;
   uint32_t j, k, ctr, pairs, p, row, pair, n;
-  void *buf1;
   _this->plane_idx = plane;
   // Two records a step, which is how MSVC unrolled the seed of all 163 840.
   for ( j = 0; j < 0x14000; ++j )
@@ -4957,48 +4884,37 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
   uint32_t levels;
-  uint8_t *data_ofs;
-  uint8_t *out;
-  uint32_t stride;
+  uint8_t *off_bits, *abs_end;
+  int32_t rows2;
+  uint8_t *buf_2;
+  uint32_t end;
+  uint8_t *data_ofs, *out;
+  uint32_t stride, pairs, done;
+  int32_t ncol, pal_bytes;
+  uint8_t *buf, *abs_end2;
+  int32_t row_i2, run_max, nib;
   // These shared `__frame.pairs` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  uint32_t pairs;
-  uint32_t done;
-  uint8_t *off_bits;
-  int32_t ncol;
   // These shared `__frame.ncol` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int32_t pal_bytes;
   // These shared `__frame.ncol` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  uint8_t *abs_end;
-  int32_t rows2;
-  uint8_t *buf;
-  uint8_t *abs_end2;
-  int32_t row_i2;
-  int32_t run_max;
-  int32_t nib;
-  uint8_t *buf_2;
-  uint32_t end;
   ;
   uintptr_t img_at;   // were int32_t: addresses, masked and tagged
   FILE *fp, *fp2;
   bool can_rle;
+  uint32_t stride1, at, at2, slot;
+  uint16_t *pix;
   uint8_t *out_buf, *data_ofs2, *pal, *pal2, *out_at, *p, *q, *out_end,
           *out2;
-  uint32_t stride1;
-  uint32_t at;
-  uint32_t at2;
-  uint32_t slot;
   int32_t rle_on, i, rows, bits, ncolours, grey, bgr, r, bgr2, rle_mode,
           src_bits, rle_kind, rows3, row_i, lit_len, byte, run, coded_bytes, y;
-  uint16_t *pix;
   uint32_t k, j, data_len, stride3, n_bytes, pad;
   rle_on = want_rle;
   fp = fopen(path, "wb");
@@ -5752,10 +5668,9 @@ int32_t __rc_begin_decode(int8_t unread_flag)
   int32_t bits_left, at4, at5, k;
   uint16_t *tbl0, *row;
   FreqPair *seed;   // the row's tree of counter pairs, seeded (60, 36)
-  int32_t at6;
-  int32_t at7;
-  uint32_t i;   // offsets into model_geometry, not pointers
+  int32_t at6, at7;
   uint8_t *cursor;
+  uint32_t i;   // offsets into model_geometry, not pointers
   cursor = out_cursor;
   if ((uint32_t *)out_cursor != packer_word)
   {
@@ -6047,12 +5962,11 @@ void ** __alt_model_p1_d8_decode(int8_t unread_flag, uint8_t *out, int32_t i, in
 {
   P1Ctx *buf1, *b0, *cursor0, *b4, *buf3, *buf2;
   ;
-  AltP1Block *blk;
-  AltP1Block *raw;
-  int32_t y, val, x;
+  AltP1Block *blk, *raw;
   int64_t err;
-  P1Ctx *cursor2, *cursor4;
   uint8_t *out_at;
+  int32_t y, val, x;
+  P1Ctx *cursor2, *cursor4;
   raw = (AltP1Block *)((int32_t *)bmf_new(0x99D4D8u));
   if ( raw )
     blk = (AltP1Block *)(__alt_p1_alloc((AltP1Block *)raw, i, height, 0));
@@ -6187,25 +6101,21 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
   int32_t dc1;
   uint32_t x;
   int32_t val1x;
-  ;
   AltP1Block *blk1;
   uintptr_t code1;
-  AltP1Block *blk_k;
-  AltP1Block *raw;
+  AltP1Block *blk_k, *raw;
   uint32_t at0;
   int32_t code0;
-  uint32_t pred0;
-  uint32_t pred1;
+  uint32_t pred0, pred1;
+  AltP1Block *blk2, *blk3;
+  P1Ctx *cursor2, *cursor4;
+  void **q;
+  ;
   int32_t width, height, k, *made, src1, src2, src3, dc2, dc3, xf1, xf2, xf3, w, n_planes,
           p, val0, val1, code2, val2, at2,
           code3, val3, at3, np, f;
   uint32_t y, *p0;
-  AltP1Block *blk2;
-  AltP1Block *blk3;
-  P1Ctx *cursor2;
-  P1Ctx *cursor4;
   uint8_t *pred2, *pred3;
-  void **q;
   width = *hdr;
   height = hdr[1];
   if ( plane_count > 0 )
@@ -6665,29 +6575,21 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   // Hex-Rays named every use.  That they can have storage of their own is the
   // gate's answer -- nothing writes one of them and reads another.  The three
   // slots are `_gapA`..`_gapC` above now; nothing is left to share.
-  int32_t dv_now;
-  int32_t mag_ref1;
-  int32_t ctx15;
+  int32_t dv_now, mag_ref1, ctx15, row0_i, mag_ref0, d_run0b, g3pair;
+  P2Ctx *ra1, *ra0, *rb1, *rb0, *rb2, *ra2, *sub0_row, *row2c;
+  int32_t sum_all;
+  P2Ctx *cx1, *cx3;
+  uint32_t q39, q10;
+  int32_t dtop2, run_dv3, dv_now4, run_dv4, run_up4, *up_row;
+  int8_t rate1;
+  uint8_t *cx2p;
   P2Ctx *nb4;   // row cursors into the neighbourhood table
-  int32_t row0_i;
-  int32_t mag_ref0;
-  int32_t d_run0b;
-  int32_t g3pair;
-  P2Ctx *ra1;
-  P2Ctx *ra0;
-  P2Ctx *rb1;
-  P2Ctx *rb0;
-  P2Ctx *rb2;
-  P2Ctx *ra2;
   // The six spill slots before `alt_p2_filter`'s six weight pointers are
   // loaded into them: a row cursor, a neighbour, a threshold-row index and
   // three counts.  Both lifetimes were `__frame.sub[0..5]`.
-  P2Ctx *sub0_row;
-  P2Ctx   *row2c;
   int32_t  num_b, band, num_d;
   // The five digits of the neighbourhood index and the index itself.
   int32_t  gA, gB, gC, gD, den_d, nb_slot;
-  int32_t sum_all;
   P2Ctx *cx0;   // the p2 row cursor, `cursor[0]`
   // The p2 row cursor and its copies.  Every dereference is a lane of the
   // 18-byte record or the high byte of one, so the byte offsets divide into
@@ -6697,24 +6599,15 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   // phase with the grid.  All 48 reaches through it land on a field
   // boundary once the byte offsets are decoded against the real size,
   // which is what says the stride was the artefact and not the table.
-  P2Ctx *cx1;
-  P2Ctx *cx3;
   P2Ctx *cx2;   // row cursors into the neighbourhood table
-  uint32_t q39;
-  uint32_t q10;
   // Three slots MSVC reused between the bank stages: each held one term
   // of the stage-2 context word and then a magnitude sum at the end.
   int32_t up5, lap, magl;
   int32_t dvsum2, magu;
-  int32_t dtop2;
-  int32_t run_dv3;
-  int32_t dv_now4;
-  int32_t run_dv4;
-  int32_t run_up4;
   ;
   // `cursor[0]` again: 45 reaches, all of them records -6 .. 0 at
   // lanes 0 and 1, which is the row this pass is writing.
-  P2Ctx *nb0;
+  P2Ctx *nb0, *nb3, *nb2, *cx4, *nb3x;
   float (*wrow)[4];
   // Row cursors: sixteen bytes a step over an int16 plane.  Hex-Rays wrote
   // the stride as a 16-byte pointer and every read as a lane of it; eight
@@ -6728,14 +6621,9 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   // `cursor[3]`, under one name where Hex-Rays had four -- `sub0_row`
   // is the third of them, and keeps only its first lifetime as
   // `cursor[2]` above.
-  P2Ctx *nb3;
   bool in_band, no_ref;
-  P2Ctx *nb2;
-  P2Ctx *cx4;
-  P2Ctx *nb3x;
   int16_t *nb2w, *nb2w2;
   P2Ctx *cursor1, *nb1, *nb2x;
-  int32_t *up_row;
   int32_t sum4, lane5, nb_id, next_id, plane, in63, *cur, c_lo, mode, c_mid,
           filt, lane3, g3sum, run_s, lane2, ctx0, bank0, pred0, sum_c, run0,
           ctx1, bank1, w1c, one1, pred1, run1, cx2_val0, ctx2, bank2, pred2,
@@ -6743,9 +6631,7 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
           d_run4, magsum, run_s2, mag, flat_a, flat_b, d_run4b, d_rb_rb1,
           d_rb_left, ra0_val, d_ra_ra1b, d_ra_leftb, ctx_idx, d_ra_ra1,
           d_ra_left;
-  int8_t rate1;
   uint32_t ctx0_lo, q24, q10a, q10b, q9;
-  uint8_t *cx2p;
   // One name per lifetime.  MSVC gave each of these slots two, three or
   // four unrelated jobs -- a context sum, then a difference term, then a
   // band bound -- and Hex-Rays named the slot after the first constant it
@@ -7430,18 +7316,11 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
                 "buf is not the 64 KiB the memset clears");
   ;
   ModelBlock *blk2;
-  bool more, packed, first;
   int8_t mode;
+  ModelBlock *blk1, *blk4;
+  uint32_t alpha_n, done, done2, off, slot_a, sym, depth_bits;
+  bool more, packed, first;
   uint8_t *half;   // `uint8_t *` beside the `char` scalars above
-  ModelBlock *blk1;
-  ModelBlock *blk4;
-  uint32_t alpha_n;
-  uint32_t done;
-  uint32_t done2;
-  uint32_t off;
-  uint32_t slot_a;
-  uint32_t sym;
-  uint32_t depth_bits;
   int32_t node, side, alpha_m, carry, img_w, img_h, *slotp, z2,
           n_moved, zoff, height, n_distinct, row_w, y, at, bits, bpp, shift, sym2, *slotp2, z1, alphabet,
           alpha, prev, s, s_next, *slotp1, z0;
@@ -7930,9 +7809,8 @@ int32_t __cost_candidate(uint8_t *img, int32_t cand, uint8_t *desc, int8_t unrea
   int32_t off;      // a byte offset into `descp`, which is the address
   uint8_t *descp;
   bool deep;
+  uint32_t row_b2, swap;
   double syz, syy, sxz, sxy, sxx, inv, w1f, w2f;
-  uint32_t row_b2;
-  uint32_t swap;
   int32_t row_b, d1, d2, dx, o1, dy, o2, diag, west, dz, bin, w1,
           w2, img_w, nstep, at, at1, e0, e1, e2, left, bin2, pick, c0, rec,
           c2, lo1, s1, s2, c2b, tmp, w2s, w1s;
@@ -8215,10 +8093,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
   uint8_t *hist;   // `uint8_t *` beside the `char` scalars above
   double sum22, sum11, dv0, dv1, dv2, sum01, sum02, sum12, sum02_c, inv;
   int16_t g1_lo;
-  uint32_t n_quads;
-  uint32_t next_plane;
-  uint32_t row;
-  uint32_t slack;
+  uint32_t n_quads, next_plane, row, slack;
   int32_t n_planes, data_size, result, pick01, xform, dw, *win_row,
           wt8, wt4, c2, c2w, c1, c1w, c0, bin0, pred, xform_row, win,
           sum, best_sum, i, pos2, best_sum2, sum2, wt4_dn, wt8_dn, wt4_dn_end,
@@ -8975,28 +8850,26 @@ int32_t *__read_bmp(char *path)
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int32_t y4;
-  int32_t y8;
+  int32_t y4, y8;
+  uint8_t pix;
+  int32_t run4;
   // These shared `__frame.pal_bytes` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  uint8_t pix;
   // These shared `__frame.row_ofs` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int32_t run4;
   ;
   uintptr_t row_at;   // were int32_t: addresses, masked and tagged
   uint8_t *pal, *pal2, *pal3;   // were int32_t: these hold addresses
   FILE *fp;
   uint8_t lo;
+  BmfImage *img;
+  uint32_t row_pad, byte;
   uint8_t cur, lo16;
   uint8_t *row4, *row3, *row6, *pal_at, *row5;   // `uint8_t *` beside the `char` scalars above
-  BmfImage *img;
-  uint32_t row_pad;
-  uint32_t byte;
   int32_t pal_n, i, run, run_val, hi_nibble, left4, left4b, y, dx, dxy, step;
   uint32_t stride_pad, pair, hi, stride, got, left;
   // These two freads land in the frame, and each writes across several of the
@@ -9324,19 +9197,14 @@ int32_t __decode_symbol_list(SymList *syms)
   SymEntry *ent, *e, *p, *q, *head, *q2, *r, *cur, *prev, *up, *back;
   SymEntry **w, **rd, **rd2;
   int8_t gen_b;
+  uint32_t cum_lo, sym_cum, sym_high, cum_hi;
+  int32_t tot_1, tot_all, target;
   uint8_t c_a, c_b;
   uint16_t s_a, s_b;
   // The cumulative count the range coder takes, which it takes unsigned.
-  uint32_t cum_lo;
-  uint32_t sym_cum;
-  uint32_t sym_high;
   int32_t live, cum, i, c, top, half, back_cnt, last_cnt;
   uint32_t n_left, zeros;   // counts that MSVC spilled into the list's first slot
   SymList *owner0, *owner1;
-  uint32_t cum_hi;
-  int32_t tot_1;
-  int32_t tot_all;
-  int32_t target;
   uint32_t list5_s, 
            rescale_at, limit20, running,
            since_rescale;
@@ -9592,24 +9460,26 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t x)
   ;
   FreqRec *freq;
   uint16_t *id3p;
+  uint8_t g_ab;
+  int8_t gen;
+  ModelBlock *blk;
+  FreqRec *freq3, *freq2;
+  uint16_t *sym_cache;
+  PixRec *up4;
+  FreqRec *freq_tbl;
+  SymList *sel1_list, **sel_p;
+  int32_t bin_tot;
+  int32_t arg_cum, arg_high, arg_tot;
+  uint32_t done, lvl_a, pos1;
   PixRec *r8, *r7, *rec;   // row cursors out of ModelBlock
   PixRec *s0p;   // `row_cur[6]`, the row above
   uint16_t *pixq;   // a copy of `pix_cur`
   PixRec *r8b, *r7b, *next, *r5, *cur6b;
-  uint8_t g_ab;
-  int8_t gen;
   uint8_t g_a, g_b, g_c, g_d, g_e;
   uint8_t *n2r;   // `uint8_t *` beside the `char` scalars above
   int16_t sym_rev, s1c, w1s, s3b;
-  ModelBlock *blk;
   // A cumulative count, a high count and a total: the three arguments the
   // range coder takes, and it takes them unsigned.
-  int32_t arg_cum;
-  int32_t arg_high;
-  int32_t arg_tot;
-  uint32_t done;
-  uint32_t lvl_a;
-  uint32_t pos1;
   int32_t up_sym, left_sym, up_p1_sym, up_m1_sym, m_lo, m_up, nb, key, ctx_state, pair_last,
           cap, ctx_bucket, up_m0, m_w1, nb2, all_up, sig1,
           id1, sig2, id2, id3_used, s1a, m_up0, idx1, run, bucket,
@@ -9621,23 +9491,15 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t x)
           b15, w2t, w3t, w4t, w5, w0r, w1r, q1, w2r, w3, w3r, s0a,
           span, w4r, n4r, target2, cum2, lvl_b, b15b, w5b, w6b, s0c,
           s3a;
-  FreqRec *freq3;
   PixRec *row;      // `row_cur[5]`, the current row
-  FreqRec *freq2;
-  uint16_t *sym_cache;
   // `row_cur[6]`, the row above: every reach through it is a multiple of
   // four `uint16_t`, which is one `PixRec`, and every one is `sym`.
-  PixRec *up4;
-  FreqRec *freq_tbl;
   SymPair *pair;   // the group's counter pair for this context
   PixRec *cur6;   // `row_cur[6]`, the row above
   uint16_t pair_prev;   // a symbol, compared against four others
   PixRec *up5, *r8c;   // `row_cur[7]` and `row_cur[8]`
   uint16_t *pixp, *pixr, q1w, tot2,
            k0;
-  SymList *sel1_list;
-  SymList **sel_p;
-  int32_t bin_tot;
   uint32_t si, s2a, g2, g1, g0, g3, g4, k1, k2, k2h, k3,
            k4;
   PixRec *up2;     // `row_cur[7]`, two rows above
@@ -10396,27 +10258,28 @@ int32_t __code_pixel(ModelBlock *_this, int32_t x)
   int32_t runlen_s;
   ;
   PixRec *r4;
-  PixRec *r1, *r2, *cur6b, *r3, *r5;   // row cursors out of ModelBlock
   uint8_t *alpha_map;
-  FreqRec *binp, *binp_s;
-  uint16_t *pixp;   // a copy of `pix_cur`
   bool up_eq_west;
   int8_t mode;
+  uint16_t rev;
+  ModelBlock *blk;
+  int32_t arg_cum;
+  FreqRec *frec;
+  uint16_t *wr;
+  PixRec *up4;
+  uint16_t wp;
+  SymList *sel1_list, **sel_p;
+  uint32_t arg_tot, arg_high, done, rec_word, grid_kind;
+  PixRec *r1, *r2, *cur6b, *r3, *r5;   // row cursors out of ModelBlock
+  FreqRec *binp, *binp_s;
+  uint16_t *pixp;   // a copy of `pix_cur`
   uint8_t match1, m0, m1, m2, m3;
   uint8_t *bp;   // `uint8_t *` beside the `char` scalars above
   uint16_t *id3p;   // a cursor into `ctx_id3`
-  uint16_t rev;
   int16_t s8, w1s, acc2, s3, g0;
-  ModelBlock *blk;
   SymPair *pair;   // the group's counter pair for this context
   // A cumulative count, a high count and a total: the three arguments the
   // range coder takes, and it takes them unsigned.
-  int32_t arg_cum;
-  uint32_t arg_tot;
-  uint32_t arg_high;
-  uint32_t done;
-  uint32_t rec_word;
-  uint32_t grid_kind;
   int32_t up_sym, left_sym, up_next_sym, upleft_sym, nb, key, ctx_state, pair_last, cap,
           pair_prev, ctx_bucket, up_match0, cur9v, m_w1, nb2, sig1, id1, sig2,
           id2, id3_used, sig3, m_w1b, m_w0, m_up0, to_edge, one, run,
@@ -10428,19 +10291,13 @@ int32_t __code_pixel(ModelBlock *_this, int32_t x)
           h16, h17, h18, h19, h20, h21, h24, h28, h26, h30, esym, up_hit, pos1,
           msym1b, w6b, *ip, b15, w2t, w3t, w4t, w5, acc, q1, w2s, q2,
           w3s, w4s, s9b, cum2, lvl_b, w5c, w6c, w5b, s3b;
-  FreqRec *frec;
-  uint16_t *wr;
   // `row_cur[6]`, the row above: every reach through it is a multiple of
   // four `uint16_t`, which is one `PixRec`, and every one is `sym`.
-  PixRec *up4;
-  uint16_t wp;
   PixRec *row;   // `row_cur[5]`, the current row
   PixRec *cur6;   // `row_cur[6]`, the row above
   PixRec *cur5, *cur5p1, *cur5p1b, *r6, *r7;   // row cursors out of ModelBlock
   uint16_t *runp, *wq, *sym_cache, *cache0p, w6;
   PixRec *cur2;   // `row_cur[5]`, one record past the pixel just written
-  SymList *sel1_list;
-  SymList **sel_p;
   uint32_t bin_tot, half, k, h2, w1a, w0, h3, h4, w1, g2, g2h, g3,
           g4;
   PixRec *up3;      // `row_cur[7]`, two rows above
@@ -11152,11 +11009,10 @@ void __expand_alphabet(ModelBlock *_this)
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 432, "frame layout moved");
   ;
   uint32_t *codes_p;   // was int32_t: this holds an address
-  uint32_t nbytes;
-  uint32_t bits;
+  uint32_t nbytes, bits;
+  void *codes;
   int32_t left2, left, run, gap;
   uint32_t mask, i, cap, n_1, n_syms, j, k, carry, s, b, piece, s2;
-  void *codes;
   bits = _this->depth;
   mask = 0xFFFFFFFF >> (-(uint8_t)_this->depth & 31);
   nbytes = (bits + 7) >> 3;
@@ -11262,12 +11118,10 @@ ModelBlock *__layout_workspace(ModelBlock *blk, int32_t unread_flag, int32_t img
   PixRec *buf;   // one of the five row buffers
   uint8_t bucket;
   uint16_t rev;
-  uint32_t e0;
-  uint32_t e1;
-  uint32_t w;
+  uint32_t e0, e1, w;
+  uint8_t *runs;
   int32_t j, r, x, bits;
   uint32_t k, m, s, n, i8, i24;
-  uint8_t *runs;
   w = img_w;
   exclusion_gen = 1;
   blk->width = img_w;
@@ -11404,16 +11258,23 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *dst)
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 112,
                 "frame layout moved");
   uint32_t alpha_n;
+  ModelBlock *this_1, *blk;
+  int16_t lvl;
+  uint32_t has4, jj, wt, nbytes, row_w, *out32;
+  uint16_t *out16;
+  SymEntry *out_ent;
+  uint8_t *out_at, *dst_keep;
+  int32_t g0, y0;
+  int32_t done, f_b0, f_b3, f_b4, f_b5;
+  int32_t f_b1, lo1, m5, g1;
   // These shared `__frame.g0` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int32_t g0;
   // These shared `__frame.v85` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int32_t y0;
   // These ten shared `__frame.ArgList`: one stack slot MSVC gave to locals
   // whose live ranges do not overlap, and Hex-Rays named every use after it.
   // That they can have storage of their own is the gate's answer -- nothing
@@ -11426,34 +11287,14 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *dst)
   // `out_bits`.  `out_at` is where the next one starts and where the last one
   // left off, which is why every branch begins by casting it and ends by
   // casting back.
-  uint8_t *out_at;
-  int32_t done;
-  int32_t f_b0;
-  int32_t f_b3;
-  int32_t f_b4;
-  int32_t f_b5;
-  uint8_t *dst_keep;
-  ModelBlock *this_1;
-  int32_t f_b1;
-  int32_t lo1;
-  int32_t m5;
-  int32_t g1;
   ;
-  ModelBlock *blk;
   uint32_t *x6;   // the alphabet map again
   uint8_t *dst_base, *dst_buf, *buf, *expand_buf, *out_bits, *row_at,
           *interleave_at, *p, *out8;
-  int16_t lvl;
   PixRec *kk, *row_cur3, *row_cur2, *row_cur1, *n_syms;   // the five row buffers, rotated
-  uint32_t has4;
-  uint32_t jj;
-  uint32_t wt;
-  uint32_t nbytes;
-  uint32_t row_w;
   int32_t g, flags, lo, k, w2, w4, w2n, lvl_n, live, gi, s,
           bucket, x, x2, y, step, x7, x3, x4, bits, depth,
           y2, depth_raw, nchunk, n_pix, chunk, q5, q1, at, q2, written, n_pix2, x5;
-  uint32_t *out32;
   // `out32` was one register carrying two cursors: four bytes per pixel in
   // the 32-bit branch and two in the 16-bit one, which is why every store
   // through it in the second loop had to cast the width back down.  The two
@@ -11461,10 +11302,8 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *dst)
   // into the middle of the second block was how they shared it -- the only
   // jump into a block left in the file.  Duplicating two lines separates the
   // lifetimes, and the second one can then say what it points at.
-  uint16_t *out16;
   SymListBlock *has3, *alpha;
   SymPair *group_ctr;   // one group's row of counter pairs
-  SymEntry *out_ent;
   SymList *list_a, *i, *list_b, *j;
   FreqRec *rec;   // a bucket record: `grid[bucket]`
   PixRec *lists, *t;   // `row_cur[6]` and `row_cur[7]`, the two rows above
@@ -11947,47 +11786,33 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 144, "frame layout moved");
   int8_t dc3;
+  uint8_t out3;
+  int32_t resid3, cur3;
+  void *plane[4];
   // These shared `__frame.m1` and `__frame.m2` with the names that still
   // bind them: one stack slot MSVC gave to locals whose live ranges do not
   // overlap, and Hex-Rays named every use.  That they can have storage of
   // their own is the gate's answer -- nothing writes one of them and reads
   // another.
-  uint8_t out3;
-  int32_t resid3;
-  int32_t cur3;
-  void * plane[4];
   AltP1Block * &plane1 = (AltP1Block * &)plane[1];
   AltP1Block * &plane2 = (AltP1Block * &)plane[2];
   AltP1Block * &plane3 = (AltP1Block * &)plane[3];
   int32_t dc1;
-  uint32_t x;
-  int32_t out1;
-  int32_t resid0;
-  int32_t off1;
-  int32_t off0;
-  int32_t resid2;
-  int32_t cur0;
-  int32_t off2;
-  int32_t cur1;
-  int32_t code1;
+  uint32_t x, y;
+  AltP1Block *blk0;
+  void **q;
+  int32_t out1, resid0, off1, off0, resid2, cur0, off2, cur1, code1;
   ;
   uintptr_t off3;   // were int32_t: addresses, masked and tagged
-  AltP1Block *blk_k;
+  AltP1Block *blk_k, *raw;
   uint8_t fl1, fl2, fl3, pred1, pred2, pred3;
-  AltP1Block *raw;
   int32_t width, height, k, *made, src1, src2, src3, dc2, xf1, xf2, xf3, w, n_planes, p,
           want0, keep0, code0, recon0, out0, drift0, err0, resid1, at1, recon1, drift1, code1x,
           want2, code2, recon2, out2, drift2, at2, code3, recon3, drift3, np, f;
   int64_t err1, err2, err3;
-  uint32_t y;
-  AltP1Block *blk1;
-  AltP1Block *blk2;
-  AltP1Block *blk3;
-  P1Ctx *cursor2;
-  P1Ctx *cursor4;
+  AltP1Block *blk1, *blk2, *blk3;
+  P1Ctx *cursor2, *cursor4;
   uint8_t pred0, want1, want3;
-  AltP1Block *blk0;
-  void **q;
   width = *hdr;
   height = hdr[1];
   if ( plane_count > 0 )
@@ -12322,87 +12147,46 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
   // neighbouring record; the byte offsets it carried were all even.
   uint16_t *mir_top;
   P2Freq *grp;
-  // Two more things MSVC kept in the register `grp` names.
   uint32_t rec_idx;
   int32_t hi_nibble;
-  uint32_t idx0;   // a record index in four regions ...
   P2Freq *p2_rec;
-  // Two things in one slot, and both are read as numbers: the strip index
-  // out of `ctx_pair[0]` or `ctx_pair[1]`, and later an address.  It is neither a
-  // `uint16_t *` nor an index -- it is the register MSVC put both in.
   uintptr_t pair_ctx;
-  uint32_t step_s;
-  int32_t fold_sel2;
-  int32_t is_dec;
-  P2Count *m0080;
-  P2Count *r0400;
-  P2Count *r0800;
-  P2Count *m0800;
-  P2Count *d1000;
-  P2Count *r1000;
-  P2Count *m1000;
-  P2Count *d2000;
-  P2Count *r2000;
-  P2Count *m2000;
-  P2Count *d4000;
-  P2Count *r4000;
-  P2Count *m4000;
-  uint32_t bank_off2;
-  int32_t lowbits;
-  int32_t nres1;
-  int32_t nres2;
-  int32_t nres3;
-  int32_t res_c;
-  P2Count *d0800;
-  P2Count *d0400;
-  P2Count *m0400;
-  P2Count *d0200;
-  P2Count *m0200;
-  P2Count *d0100;
-  P2Count *m0100;
-  P2Count *r0100;
-  P2Count *d0080;
-  P2Count *r0080;
-  P2Count *d0040;
-  P2Count *m0040;
-  P2Count *d0020;
-  P2Count *m0020;
-  P2Count *r0020;
-  P2Count *d0010;
-  P2Count *m0010;
-  int32_t nres4;
-  int32_t nres5;
-  uint32_t ctxw_s;
+  uint32_t step_s, bank_off2, ctxw_s;
   int32_t sample16;
   uint32_t bank;
   int32_t countdown;
+  P2Count *node0;
+  int32_t fold_sel2, is_dec;
+  P2Count *m0080, *r0400, *r0800, *m0800, *d1000, *r1000, *m1000, *d2000, *r2000, *m2000, *d4000,
+          *r4000, *m4000;
+  int32_t lowbits, nres1, nres2, nres3, res_c;
+  P2Count *d0800, *d0400, *m0400, *d0200, *m0200, *d0100, *m0100, *r0100, *d0080, *r0080, *d0040,
+          *m0040, *d0020, *m0020, *r0020, *d0010, *m0010;
+  int32_t nres4, nres5;
+  // Two more things MSVC kept in the register `grp` names.
+  uint32_t idx0;   // a record index in four regions ...
+  // Two things in one slot, and both are read as numbers: the strip index
+  // out of `ctx_pair[0]` or `ctx_pair[1]`, and later an address.  It is neither a
+  // `uint16_t *` nor an index -- it is the register MSVC put both in.
   // The counter this pass updates and its two neighbours: `node0[-1]`,
   // `node0[0]` and `node0[1]` are +284 708, +284 712 and +284 716 off the
   // row base, which is `p2_ctr` reached through `bank_off`.
-  P2Count *node0;
   ;
   uint16_t *mir_top2;   // a second name for `mir_top`
   // The parameter this used to copy is never read: `sample` is written from
   // `sample16` below before any of its four readers, and lanes 1..3 were never
   // touched at all.  It is XMM0 being reused as a scratch register, which is
   // what MSVC did and what Hex-Rays recorded.  `d_bias2` is the same, one lane.
-  float sample;
+  float sample, d_bias2;
+  uint8_t b_top3, b0n;
+  P2Freq *frecg2, *frecg1, *frecg0, *frecg3, *gtop, *frec;
+  P2Count *r0200, *r0040, *r0010;
+  uint32_t off0, off1, off2, off3, off4, ctxw;
   float (*f278656)[4];
   float (*wrow_b)[4];
-  float d_bias2;
   bool go, eq_hi, lt_hi, ovf;
-  uint8_t b_top3;
   uint8_t *bankp;   // `uint8_t *` beside the `char` scalars above
-  P2Count *r0200;
-  P2Count *r0040;
   float ms1, bias2, bias1, d_bias, ms_a, ms_b, ms_b10, conf;
-  P2Count *r0010;
-  uint32_t off0;
-  uint32_t off1;
-  uint32_t off2;
-  uint32_t off3;
-  uint32_t off4;
-  uint32_t ctxw;
   int32_t ctx_lo, bank_ctx, res, w0, w0b, res2, w1, e1, wnode0m1a, enode0m1a, x0020, x0010,
           neg, w_top, e_top, bump, res_s, w_top3, w_topm1, wd4000a, ed4000a, wr4000b, er4000b,
           wd4000m1b, ed4000m1b, wm4000c, em4000c, wd2000c, ed2000c, wr2000c, er2000c, wd2000m1b, ed2000m1b, wm2000c,
@@ -12429,12 +12213,6 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
           ed0010a, wr0010a, er0010a, wm0010a, em0010a, ctx, ctx15, fold_sel, sel_alt, sel0, sel1,
           sel2, sel3, sel4;
   int64_t dl, du, dul, dur, resid;
-  P2Freq *frecg2;
-  P2Freq *frecg1;
-  P2Freq *frecg0;
-  P2Freq *frecg3;
-  P2Freq *gtop;
-  P2Freq *frec;
   // Every one of these is a record: `alt_p2_model` walks the table by the
   // context index and its two neighbours.
   P2Freq *frec_step, *frec4c;
@@ -12443,7 +12221,6 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
          *g2, *g3, *g4, *h4, *nxt4, *prec_m1, *h3, *nxt3, *h2,
          *nxt2, *h1, *nxt1, *h0, *nxt0;
   uint32_t bank_off, ri0100, ri0010, w_new, step_v, step10, step13;
-  uint8_t b0n;
   ctx_lo = blk->ctx & 0xF;
   sample16 = 16 * sample_in;
   blk->cursor[0]->val = 16 * sample_in;
@@ -14009,44 +13786,32 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *out) {   P2Ctx *cur0,
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int32_t xf4;
-  int32_t val3;
-  AltP2Block * plane[4];
-  int32_t w;
-  uint32_t back;
-  uint32_t row_bytes;
-  int32_t dc_flag;
-  int32_t xf0;
-  uint32_t i_1;
-  uint32_t first;
-  int32_t pl2;
-  uint32_t i_2;
-  uint32_t np;
+  int32_t xf4, val3;
+  AltP2Block *plane[4];
+  int32_t w, pl2;
+  uint32_t back, row_bytes;
+  int32_t dc_flag, xf0;
+  uint32_t i_1, first;
+  uint32_t i_2, np;
   ;
-  AltP2Block *blk_r;
-  AltP2Block *src3;
-  AltP2Block *blk_k;
-  int32_t *cur, *r1;   // the row cursors, four bytes a step
-  AltP2Block *blk2;
-  AltP2Block *blk3;
-  AltP2Block *blk1;
-  bool xf3, off;
+  AltP2Block *blk_r, *src3, *blk_k, *blk2, *blk3, *blk1;
   int16_t seed1;
   uint32_t i;
-  int32_t raw, pl, nplanes, xf1, xf2, b4, *b0, pred0, code0, val0, pred1, code1,
-          val1, l7a, l4a, l5a, pred2, code2, val2, l7b, l4b, l5b,
-          pred3, code3, l7c, l4c, l5c, nplanes2, pl3;
-  int16_t seed3;
-  int16_t seed2;
+  int16_t seed3, seed2;
   P2Freq *freq;
   AltP2Block *blk0;
   uint32_t src2;
-  void *made, *src1, **plane_p;
   AltP2Block **planep;
+  float saved_p2_coef[7][4];
+  int32_t *cur, *r1;   // the row cursors, four bytes a step
+  bool xf3, off;
+  int32_t raw, pl, nplanes, xf1, xf2, b4, *b0, pred0, code0, val0, pred1, code1,
+          val1, l7a, l4a, l5a, pred2, code2, val2, l7b, l4b, l5b,
+          pred3, code3, l7c, l4c, l5c, nplanes2, pl3;
+  void *made, *src1, **plane_p;
   // The p2 filter coefficients drift over a run: rows 4..6 are folded into
   // rows 0..2 here and then zeroed, and the whole table goes back on the way
   // out, so a run starts from the same place the last one did.
-  float saved_p2_coef[7][4];
   __builtin_memcpy(saved_p2_coef, bmf_p2_coef, sizeof saved_p2_coef);
   for ( int32_t k = 0; k < 4; k++ )
   {
@@ -14412,22 +14177,19 @@ void __alt_p2_d8_encode_body(AltP2Block *blk, uint8_t *src, int32_t width, int32
   int32_t val;   // the symbol MSVC kept in the low half of `rec`
   P2Ctx *pix, *rec, *buf3, *b4, *buf2, *buf1, *b0;
   int32_t j;
+  uint32_t y;
+  uint8_t *p;
+  int32_t code0;
+  uint8_t *outp, want, *srcp, code2;
   // These shared `__frame.j` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  uint32_t y;
-  uint8_t *p;
-  int32_t code0;
   // These shared `__frame.code0` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  uint8_t *outp;
   uint32_t *pair;   // the block's `ctx_pair`
-  uint8_t want;
-  uint8_t *srcp;
-  uint8_t code2;
   ;
   int32_t *cur, *r1;   // the row cursors, four bytes a step
   uint8_t recon, recon2;
@@ -14650,53 +14412,29 @@ void __alt_model_p2_d8_encode( uint8_t *src, int32_t i, int32_t height, uint8_t 
 
 int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
         *rec1, *rec2, *rec3, *buf3, *bb4, *buf2, *buf1, *bb0;
-  int32_t y;
-  int32_t alpha_src;
-  int32_t x;
-  int32_t w;
-  AltP2Block * plane[4];
-  int32_t back;
-  int32_t first;
+  int32_t y, alpha_src, x, w;
+  AltP2Block *plane[4];
   uint32_t row_bytes;
   uint8_t *out;
-  int32_t np;
-  int32_t xf0;
   uint32_t xf4;
   int32_t pl2;
-  uint32_t i;
-  int32_t recon0b;
-  int32_t code2b;
-  int32_t recon1b;
-  int32_t off1;
-  int32_t off2;
-  int32_t pred0;
-  int32_t pred1;
-  int32_t pred2;
-  int32_t resid0;
-  int32_t resid2;
-  int32_t resid1;
-  int32_t off0b;
-  uint32_t code3;
+  uint32_t i, code3;
+  int32_t back, first;
+  int32_t np, xf0;
+  int32_t recon0b, code2b, recon1b, off1, off2, pred0, pred1, pred2, resid0, resid2, resid1,
+          off0b;
   ;
-  AltP2Block *blk_r;
-  AltP2Block *src2;
-  AltP2Block *blk_k;
-  int32_t *cur, *r1;   // the row cursors, four bytes a step
-  AltP2Block *blk2;
-  AltP2Block *l4c;
-  AltP2Block *blk1;
+  AltP2Block *blk_r, *src2, *blk_k, *blk2, *l4c, *blk1;
   bool xf2;
-  int16_t seed1;
+  int16_t seed1, l7c, seed2;
+  uint32_t src1;
+  AltP2Block *blk0, **xf3;
+  int32_t *cur, *r1;   // the row cursors, four bytes a step
   int32_t row_i, height, pl, nplanes, src3, xf1, want0, b4, *b0, off0, seed0, at0,
           cur0, code0, out0, recon0, drift0, l7a, l4a, l5a, cur1, code1, out1,
           recon1, drift1, l7b, l4b, l5b, cur2, code2, out2, recon2, drift2,
           l5c, seed3, blk3, cur3, drift3, nplanes2, pl3;
-  int16_t l7c;
-  int16_t seed2;
-  uint32_t src1;
-  AltP2Block *blk0;
   void *raw, *made, **plane_p;
-  AltP2Block **xf3;
   out = a2;
   // The p2 filter coefficients drift over a run: rows 4..6 are folded into
   // rows 0..2 here and then zeroed, and the whole table goes back on the way
@@ -15088,7 +14826,8 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
 
 void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
 {
-  uint32_t alpha_n;
+  uint32_t alpha_n, hi;
+  int32_t y1, bucket, f_b3, f_b0, f_b4, f_b1, f_b2, f_b5, alpha;
   // These three shared a stack slot each with a local the main declaration
   // below still names: MSVC gave one slot to locals whose live ranges do not
   // overlap, and Hex-Rays named every use.  That they can have storage of
@@ -15097,16 +14836,6 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
   // `Blocka_2`, are gone: the first was the outer loop's counter written
   // twice and the second was a second name for the block.
   uint16_t *word;   // a row cursor into sym_word
-  int32_t y1;
-  int32_t bucket;
-  int32_t f_b3;
-  int32_t f_b0;
-  int32_t f_b4;
-  int32_t f_b1;
-  int32_t f_b2;
-  int32_t f_b5;
-  int32_t alpha;
-  uint32_t hi;
   ;
   ModelBlock *blk;
   PixRec *r4, *r0;   // row cursors out of row_cur
@@ -15626,15 +15355,9 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
   FILE *fp1, *fp;
   BmfImage *img_at;
   int8_t hdr_flags;
-  uint8_t bpp;
+  uint8_t bpp, has_coded, dc_v;
+  uint32_t near_lossless, pred_s, w12_v, w4_v, w8_v;
   uint8_t *pal_at, *copy, *srcp, *dst;   // `uint8_t *` beside the `char` scalars above
-  uint8_t has_coded;
-  uint8_t dc_v;
-  uint32_t near_lossless;
-  uint32_t pred_s;
-  uint32_t w12_v;
-  uint32_t w4_v;
-  uint32_t w8_v;
   int32_t hdr_word, pl, predictor, plane_i, plane,
           pl2, plane2, pred, i, n_pix2, pix_at, nplanes_c, i2, n_planes,
           last_row, img_h, at, y, pl_i, left;
@@ -16151,12 +15874,12 @@ uint32_t __search_filter(BmfImage *img, int8_t mode)
   // `transform_planes` -- which neither reads.  Nine more uninitialised
   // bytes travelling to be dropped, on top of section 11's six.
   int8_t f4;
+  uint16_t w_a, w_d;
+  BmfImage *img_c;
   uint8_t f0, f1, f2, f3;
   uint8_t *srcp, *y, *dstp, *hard, *bits_a, *p0, *p1, *bits_b, *p2, *p3,
           *tile_a, *p4, *p5, *p6, *tile_b, *p7, *p10, *p11, *tile_c,
           *p12, *p13, *p14, *tile_d, *cost_f13, *flags_s;   // `uint8_t *` beside the `char` scalars above
-  uint16_t w_a;
-  uint16_t w_d;
   int16_t w_b, w_e;
   int32_t tile_w, tile_h, pl, nplanes, y0, dx, off_y, row_bytes, best_cost, bits_f5,
           cost_f5, f5, pred, c0, c1, c2, c3, cand, sv1, nplanes_c, pl_a,
@@ -16166,7 +15889,6 @@ uint32_t __search_filter(BmfImage *img, int8_t mode)
           y2, off2, x2, pl2, bits_f8, cost_f8, f8, pl3,
           bits_f13, f13, pl4, cost_f14, f14, pl0,
           bits_f6, cost_f6, f6, pl1, bits_f0;
-  BmfImage *img_c;
   uint16_t w16, w_c;
   uint32_t rs2, rs1, rs0, rs3, rs4;
   uint8_t *p8, *p9;
@@ -17033,14 +16755,10 @@ int32_t __compress_image(uint8_t *arc_in, BmfImage *p_i, void *coded_buf)
   FILE *i;
   bool fits;
   uint8_t bpp;
+  uint32_t acc, data_bytes, img_stride, row_bytes, shifted;
   uint8_t has_coded;   // 0/1, shifted into bit 7 of the header byte
   uint8_t *plane_buf, *row_at, *row_next;   // `uint8_t *` beside the `char` scalars above
   uint32_t hdr_pad8, hdr_pad8b;   // the header's pad/depth/flags word, not an address
-  uint32_t acc;
-  uint32_t data_bytes;
-  uint32_t img_stride;
-  uint32_t row_bytes;
-  uint32_t shifted;
   int32_t bits_left, pl, free_bits, pl2, ok_all, img_h,
           rows_left, y, pl_i, step, countdown, data_size;
   BmfImage *img;
