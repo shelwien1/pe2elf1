@@ -1504,15 +1504,15 @@ uint32_t __predict_med(uint8_t *pixels, int32_t width, int32_t height)
     fold[128 + j] = (uint8_t)(-1 - 2 * (int32_t)j);
   }
   rows_left = height - 1;
-  if ( height == 1 )
-    goto LABEL_24;
-  do
+  if ( height != 1 )
   {
+   do
+   {
     x_left = width - 1;
-    if ( width == 1 )
-      goto LABEL_23;
-    do
+    if ( width != 1 )
     {
+     do
+     {
       // `up` trails `p` by exactly one row and the two step together, so
       // these three are the neighbourhood of the pixel at `*p`:
       //
@@ -1527,35 +1527,32 @@ uint32_t __predict_med(uint8_t *pixels, int32_t width, int32_t height)
       // MED: northwest above both neighbours predicts the smaller, below both
       // predicts the larger, between them predicts the plane through all three.
       // An edge through the corner therefore predicts across it, not along it.
+      // MED as one shape rather than four jumps: northwest outside the
+      // interval [min(west, north), max(west, north)] predicts the far end of
+      // it, northwest inside predicts the plane through all three.  The two
+      // arms differ only in which way round the comparisons go, because which
+      // of west and north is the min depends on the arm.
       if ( pred < north )
       {
         if ( northwest < pred )
-        {
-          LOBYTE(pred) = *up;
-          goto LABEL_21;
-        }
-        if ( northwest <= north )
-LABEL_20:
-          LOBYTE(pred) = north + pred - northwest;
+          LOBYTE(pred) = (uint8_t)north;
+        else if ( northwest <= north )
+          LOBYTE(pred) = (uint8_t)(north + pred - northwest);
       }
       else
       {
         if ( northwest > pred )
-        {
-          LOBYTE(pred) = *up;
-          goto LABEL_21;
-        }
-        if ( northwest >= north )
-          goto LABEL_20;
+          LOBYTE(pred) = (uint8_t)north;
+        else if ( northwest >= north )
+          LOBYTE(pred) = (uint8_t)(north + pred - northwest);
       }
-LABEL_21:
       code = (uint8_t)fold[(uint8_t)(*p - pred)];
       *p = code;
       ++*(uint32_t *)&hist_scratch[4 * code];
       --x_left;
+     }
+     while ( x_left );
     }
-    while ( x_left );
-LABEL_23:
     // The first column of the row: no west neighbour, so predict from north
     // alone.  This is also where a width of 1 lands, which is why the inner
     // loop is skipped rather than entered zero times.
@@ -1565,9 +1562,9 @@ LABEL_23:
     *p = last;
     ++*(uint32_t *)&hist_scratch[4 * last];
     --rows_left;
+   }
+   while ( rows_left );
   }
-  while ( rows_left );
-LABEL_24:
   // The first row, which has no north neighbour: predict each pixel from the
   // one to its left.  MSVC unrolled it two pixels at a time, so `left` is the
   // one value both halves of a pair need and `ofs` walks back in twos; `done`
@@ -5773,8 +5770,9 @@ uint8_t *__unpredict_med(uint8_t *pixels, int32_t width, int32_t height)
     if ( height == 1 )
       return p;
     row_rest = 0;
-    goto LABEL_29;
   }
+  else
+  {
   // The first row: each pixel is its west neighbour plus its residual, and
   // MSVC unrolled it two at a time -- `cur` is the first of the pair, needed
   // whole before the second can use it.  `done` is where the unrolled part
@@ -5800,15 +5798,15 @@ uint8_t *__unpredict_med(uint8_t *pixels, int32_t width, int32_t height)
   {
     pixels[done] = pixels[done - 1] + unfold[pixels[done]];
     p = &pixels[done + 1];
-    rows_left = height - 1;
-    if ( height == 1 )
-      return p;
-    goto LABEL_29;
   }
   rows_left = height - 1;
-  if ( height != 1 )
+  if ( height == 1 )
+    return p;
+  }
+  // Every path into here has set `rows_left` and returned already if there is
+  // only one row.  `LABEL_29` was that join written as a jump: three
+  // predecessors, all of them doing exactly this first.
   {
-LABEL_29:
     up = &p[-width];
     do
     {
@@ -5832,31 +5830,23 @@ LABEL_29:
         pred = (uint8_t)*(p - 1);
         north = (uint8_t)*up;
         northwest = (uint8_t)p[-width - 1];
+        // The same MED shape as `predict_med`, and the same reading: the
+        // `goto`s were the two `pred = north` arms jumping over the gradient
+        // case, which an `else if` says without them.
         if ( pred < north )
         {
           if ( northwest < pred )
-          {
-            LOBYTE(pred) = *up;
-            goto LABEL_41;
-          }
-          if ( northwest <= north )
+            LOBYTE(pred) = (uint8_t)north;
+          else if ( northwest <= north )
             LOBYTE(pred) = (uint8_t)(north + pred - northwest);
         }
         else
         {
           if ( northwest > pred )
-          {
-            LOBYTE(pred) = *up;
-            goto LABEL_41;
-          }
-          // The `goto` here entered the branch above to reach this one
-          // statement; both arms then fall to `LABEL_41`, so a copy says the
-          // same thing.  `pred + north - northwest` against the two bounds is the
-          // median of three, which is what `predict_med` is named for.
-          if ( northwest >= north )
+            LOBYTE(pred) = (uint8_t)north;
+          else if ( northwest >= north )
             LOBYTE(pred) = (uint8_t)(north + pred - northwest);
         }
-LABEL_41:
         *p = pred + unfold[(uint8_t)*p];
         ++up;
         ++p;
