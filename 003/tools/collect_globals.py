@@ -107,6 +107,15 @@ def main(path):
           % (len(typedefs), len(entries), len(hand)))
     assert len(typedefs) == len(entries), 'typedef/declaration count mismatch'
 
+    # Nothing scattered left to gather -- which is the state the file has been
+    # in since the collected block went to the top of it.  Say so and stop:
+    # carrying on would rewrite the file with a header announcing "0
+    # declarations for 0 objects" *above* the real one, and a tool that damages
+    # a file by being run twice cannot be run to ask a question.
+    if not entries and not hand:
+        print('nothing scattered left to collect in %s' % path)
+        return 0
+
     # ---- 2. canonical name per address ------------------------------------
     by_addr = collections.defaultdict(list)
     for e in entries:

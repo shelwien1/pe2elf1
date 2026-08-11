@@ -37,8 +37,11 @@ SUBS = [
     ('50529027', '0x03030303', 2),
     ('16843009', '0x01010101', 4),
 
-    # IEEE-754 single-precision, stored through an int pointer.
-    ('1065353216', '0x3F800000 /* 1.0f */', 2),
+    # IEEE-754 single-precision, stored through an int pointer.  The three 1.0f
+    # and the 169.2f are elements of `p2_b1_seed`, which arrived as int32_t
+    # because a byte-at-a-time read is the only thing that touches it; the
+    # table's own comment carries the rest of the decode.
+    ('1065353216', '0x3F800000 /* 1.0f */', 3),
     ('1111228416', '0x423C0000 /* 47.0f */', 1),
     ('1126773555', '0x43293333 /* 169.2f */', 1),
 
@@ -69,6 +72,14 @@ def main():
     for dec, hexed, want in SUBS:
         pat = re.compile(r'(?<![0-9A-Za-z_.])%s(?![0-9A-Za-z_])' % dec)
         found = len(pat.findall(text))
+        # Zero is not a mismatch: it is this constant already being hex, which
+        # is the state most of them are in and the state all of them reach.
+        # Demanding `want` unconditionally made the tool die on the first
+        # already-applied entry, so it could never report the ones that were
+        # not -- which is how four float bit patterns in `p2_b1_seed` stayed
+        # decimal after every other constant in the file had been converted.
+        if found == 0:
+            continue
         if found != want:
             sys.exit('%s: expected %d sites for %s, found %d'
                      % (path, want, dec, found))

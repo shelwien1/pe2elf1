@@ -36,6 +36,8 @@ def block_end(lines, i):
 
 
 def main():
+    if len(sys.argv) < 4:
+        sys.exit(__doc__.strip().split('\n\n')[1].strip())
     path, line, truth = sys.argv[1], int(sys.argv[2]), sys.argv[3]
     note = sys.argv[4] if len(sys.argv) > 4 else None
     lines = open(path).read().split('\n')

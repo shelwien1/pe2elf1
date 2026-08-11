@@ -22,11 +22,14 @@ broken since Phase 2 and no test could see it.
 import struct
 import sys
 
+sys.path.insert(0, __file__.rsplit('/', 1)[0])
+import outpath                                                    # noqa: E402
+
 W = H = 96
 
 
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else 'testfiles/altp1.bmp'
+    path = outpath.bmp(sys.argv, 'testfiles/altp1.bmp')
     px = bytearray()
     for y in range(H - 1, -1, -1):
         for x in range(W):

@@ -104,13 +104,47 @@ alignas(16) static int32_t bmf_p2_thresholds[6][13] = {
   {       0,      11,      30,       7,      13,      22,    4352,    8448,   14848,   16384,   38912,   57344,   94208 },
   {       7,      10,      31,      -1,      11,      21,    -256,    1024,    5888,   -2048,   -2048,   -2048,  145408 },
 };
-// `b1` for a counter that has just reached count `b0`, read a byte at a time
-// at `b0 + 3`, so only bytes 4..11 are ever touched.  It is `int32_t[17]`
-// because that is the width `deblob.py` measured, not the width of a read.
-alignas(16) static int32_t p2_b1_seed[17] = {   // 0x439B7C
-  1126773555, 1065353216, -986839294, 981668463, 953267991, 1036831949, 1073741824,
-  1141899264, 1076258406, 1188175872, 1012202996, 1167951872, 1141129216, 961656599,
-  1092616192, 1065353216, 1065353216,
+// `alt_p2_model`'s float constant pool: seventeen IEEE-754 single-precision
+// bit patterns, which is what every one of these decodes to and what fifteen of
+// them are also written as, verbatim, a few hundred lines below --
+//
+//     _this[14][1] = 169.2f;                                 // [ 0]
+//     v26 = (1.0f - (v24 / (v23 + 576.0f))) * 2.0f;          // [ 1] [ 7] [ 6]
+//     const float floor_a = 26896.0f * f278656[14][2];       // [ 9]
+//     ... / (f278656[7 + j][k] + ms_scale * 529.0f);         // [12]
+//
+// MSVC pooled the literals into .rdata and loaded them from here; Hex-Rays put
+// them back inline, so nothing reads the pool as floats any more.  Only
+// [ 2] -2784.44f and [ 8] 2.6f have no surviving literal, which is what the
+// compression mode being a constant leaves behind -- the arithmetic that used
+// them is in a branch this build folds away.
+//
+// It stays `int32_t` and keeps its address, because the one thing that still
+// touches it does so a byte at a time and must keep reading the same bytes:
+// `alt_p2_model` seeds `P2Count::b1` from `*((uint8_t *)&p2_float_pool + b0 + 3)`
+// for a `b0` of 1..8, which is bytes 4..11 -- the low halves of [ 1] and [ 2],
+// `00 00 80 3F 02 07 2E C5`.  Those are not counter seeds and were never meant
+// to be; they are two floats read sideways.  It does not matter, and that is
+// the point: `P2Count::b1` is written here and read nowhere, so the only use
+// of this table in the whole program is a store that no one loads.
+alignas(16) static int32_t p2_float_pool[17] = {   // 0x439B7C
+  0x43293333,   // [ 0]   169.2f
+  0x3F800000,   // [ 1]     1.0f
+  (int32_t)0xC52E0702,   // [ 2] -2784.44f
+  0x3A83126F,   // [ 3]   0.001f
+  0x38D1B717,   // [ 4]   0.0001f
+  0x3DCCCCCD,   // [ 5]   0.1f
+  0x40000000,   // [ 6]   2.0f
+  0x44100000,   // [ 7]   576.0f
+  0x40266666,   // [ 8]     2.6f
+  0x46D22000,   // [ 9] 26896.0f
+  0x3C54FDF4,   // [10]   0.013f
+  0x459D8800,   // [11]  5041.0f
+  0x44044000,   // [12]   529.0f
+  0x3951B717,   // [13]   0.0002f
+  0x41200000,   // [14]    10.0f
+  0x3F800000,   // [15]     1.0f
+  0x3F800000,   // [16]     1.0f
 };
 // The p1 model's three quantiser edge lists, read the same way as
 // `p2_ctx_edges`: `alt_p1_alloc` fills a 256-entry level map and a 256-entry
@@ -888,11 +922,16 @@ static_assert(sizeof(void *) != 4
 
 
 // One p2 counter.  `alt_p2_alloc` resets every one of them to b0 = 5, b1 = 2,
-// w2 = 0; `alt_p2_model` raises b0 by one per update while it is under 8, sets
-// b1 from `p2_b1_seed` by the new b0, and rescales w2.  Every reader says the
-// same thing -- `p2_pred` below -- so b0 is a shift and w2 is what it scales.
-// Nothing in this build reads b1.  The signedness is each site's: b0 and w2
+// w2 = 0; `alt_p2_model` raises b0 by one per update while it is under 8 and
+// rescales w2.  Every reader says the same thing -- `p2_pred` below -- so b0 is
+// a shift and w2 is what it scales.  The signedness is each site's: b0 and w2
 // are read signed, b1 is written unsigned and never read.
+//
+// b1 is the odd one.  It is written on every update, from a byte of
+// `p2_float_pool` indexed by the new b0 -- which is the middle of a float
+// constant, not a table of seeds -- and nothing in the program reads it back.
+// A store whose source is meaningless and whose value is never loaded is not a
+// puzzle to solve; it is a field this build does not use.
 struct P2Count {
   int8_t b0;
   uint8_t b1;
@@ -12568,7 +12607,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
           {
             v83 = *(uint8_t *)&v581->b0 + 1;
             *(uint8_t *)&v581->b0 = v83;
-            v581->b1 = *((uint8_t *)&p2_b1_seed + v83 + 3);
+            v581->b1 = *((uint8_t *)&p2_float_pool + v83 + 3);   // two floats read sideways
             *(uint16_t *)&v581->w2 = 2 * v80;
           }
           else

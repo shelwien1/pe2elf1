@@ -51,6 +51,8 @@ def globals_of(text):
 
 
 def main():
+    if len(sys.argv) < 3:
+        sys.exit(__doc__.strip().split('\n\n')[1].strip())
     src, inc = sys.argv[1], sys.argv[2]
     apply_ = '--apply' in sys.argv
     text = open(src).read()

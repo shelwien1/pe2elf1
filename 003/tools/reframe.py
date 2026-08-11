@@ -151,6 +151,8 @@ def build(size, slots, types, used):
 
 
 def main():
+    if len(sys.argv) < 3:
+        sys.exit(__doc__.strip().split('\n\n')[1].strip())
     now = open(sys.argv[1]).read().split('\n')
     pre = open(sys.argv[2]).read().split('\n')
     amap = {}

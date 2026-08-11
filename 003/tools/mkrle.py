@@ -26,6 +26,9 @@ that when it is present.
 import struct
 import sys
 
+sys.path.insert(0, __file__.rsplit('/', 1)[0])
+import outpath                                                    # noqa: E402
+
 W, H = 64, 48
 
 
@@ -91,7 +94,7 @@ def stream(index, pack, delta):
 
 
 def main():
-    d = sys.argv[1] if len(sys.argv) > 1 else 'testfiles'
+    d = outpath.outdir(sys.argv, 'testfiles')
     grey = b''.join(bytes((i * 17, i * 17, i * 17, 0)) for i in range(16))
     colour = b''.join(bytes((i * 17, 255 - i * 17, i * 9, 0)) for i in range(16))
 

@@ -197,6 +197,8 @@ def retype(body, names):
 
 
 def main():
+    if len(sys.argv) < 3:
+        sys.exit(__doc__.strip().split('\n\n')[1].strip())
     path = sys.argv[1]
     lines = open(path).read().split('\n')
     what = sys.argv[2]

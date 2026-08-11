@@ -89,7 +89,21 @@ def parse(src):
         # before it; comments and blank lines in between are not part of it.
         cut = max(head.rfind(';'), head.rfind('}'), head.rfind('\n\n'))
         sig = head[cut + 1:]
-        m = SIGNAME.search(strip_attributes(re.sub(r'//[^\n]*', '', sig)))
+        # A preprocessor line is never part of a signature, and leaving it in
+        # made `#pragma pack(push, 1)` above `struct BITMAPFILEHEADER {` the
+        # definition of a function called `pack`.
+        clean = strip_attributes(re.sub(r'^[ \t]*#[^\n]*', '',
+                                        re.sub(r'//[^\n]*', '', sig), flags=re.M))
+        # A brace that follows an `=` opens an initializer, not a body.  Without
+        # this the tool read `alignas(16) static uint8_t ctx_group_flags[32] = {`
+        # as a definition of a function called `alignas` -- SIGNAME asks for the
+        # last `name(` with no `;` or `{` after it, and `alignas(16)` is one --
+        # and there are eight of those, so it died on the second before it could
+        # report anything at all.
+        if clean.rstrip().endswith('='):
+            prev = end
+            continue
+        m = SIGNAME.search(clean)
         if m:
             funcs.append({'name': m.group(1), 'sig_at': prev + cut + 1,
                           'end': end, 'text': sig + src[start:end]})
