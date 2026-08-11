@@ -22,17 +22,17 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp / bmf.cpp lines            17787     17616         17343
-raw-offset sites                        22        12            11
+subs1.hpp / bmf.cpp lines            17787     17616         17488
+raw-offset sites                        22        12             6
   off `_this`                            —         1             0
 byte offsets on a typed base           121         0             0
-pointer casts                         2137      1545          1387
+pointer casts                         2137      1545          1382
 fNN members / named ones             93/121     5/162         0/171
 distinct unexplained locals            554       591             0
   bodies still carrying one              —    8/102         0/102
   uses                                    —      6302             0
-goto / LABEL_n:                     112/79     81/55         49/34
-  restart a loop / exit N blocks         —         —         16/29
+goto / LABEL_n:                     112/79     81/55         48/33
+  restart a loop / exit N blocks         —         —         15/29
   jump into a block / sideways           —         —           1/3
 conversion warnings (ratchet)         1455      1331          1070
 ```
@@ -974,8 +974,8 @@ than only how many there are — the same defect the `goto` row had:
 
 ```
 conversion warnings                1070
-  signedness, same width            568
-  narrowing 32 -> 16                305
+  signedness, same width            567
+  narrowing 32 -> 16                306
   narrowing 32 -> 8                 165
   narrowing 64 -> 16                 18
   a negative constant into an unsigned type    5
@@ -994,7 +994,7 @@ bits: `freq_tbl->w[0] = ...` where `w` is `uint16_t[8]` because the record is
 sixteen bytes. No declaration can fix those; only a cast, and §15's argument
 applies.
 
-The 568 same-width ones are where the destination is not a local either rule
+The 567 same-width ones are where the destination is not a local either rule
 can reach, or where one can and the flip has been *measured* not to pay.
 
 Getting there took six extensions, each from watching the rule stop: both
@@ -1189,3 +1189,147 @@ that do not. So its list is a list of things to try, the ratchet is what says
 whether trying them worked, and a non-empty list is not a defect. That is a different kind of
 tool from `uncopy` and `unhoist`, whose conditions are decidable from the text,
 and the sweep should not pretend otherwise.
+
+---
+
+## 17. Eleven raw offsets, and a register wider than anything read it
+
+§1's `raw-offset sites` row had sat at eleven since the round began, and the
+reason it never moved is that eleven is small enough to read and each one is a
+different judgement — so no rule fires and the row looks permanent. Reading
+them turned out to be worth it: six were spellings, one was hiding a jump into
+a block, and three were a shape with a rule in it.
+
+### The six spellings
+
+`*((uint16_t *)row + 1) = 24 * alt_freq_limit` sat between five lines of the
+form `*(uint16_t *)&row[4] = 205`. One header field of six written in a
+different idiom from its neighbours is not a distinction, it is a scheduling
+accident, and `&row[2]` makes the six read as one block.
+
+`__frame.slot[2 * j + 3] = (void *)(dst_b + 1)` had `__frame.slot[2 * j + 2] =
+dst_a + 1` directly above it. The cast is to the type the assignment already
+converts to, so it does nothing but make two adjacent lines look like two
+different operations.
+
+`next = (PixRec *)(recw + 2)` steps eight bytes through an `int32_t *` view of
+a record that `static_assert` fixes at eight, which is `_this->row_cur[5] + 1`
+with the arithmetic done by the type instead of by hand. And
+`*((uint32_t *)wp + 1) = 0x01010101` writes four bytes at offset four of a
+`PixRec`, which is `match[2]` — the same store the decoder writes as
+`*(uint32_t *)&rec->match[2]`, so the encoder and decoder now say it the same
+way.
+
+### The one that was a goto
+
+`ArgList_6` was one register carrying two cursors. `unmodel_plane_slow`
+reconstructs a plane at one, two, three or four bytes per pixel, and the
+four-byte branch walks the output with `*ArgList_6++` while the two-byte branch
+walks it with `*(uint16_t *)ArgList_6` and then puts the pointer back by hand:
+
+```c
+ArgList_6 = (uint32_t *)((uint8_t *)ArgList_6 + 2);
+```
+
+That line is the declared element size being wrong, which is §2's lens pointed
+at a cursor that never had a chance — the same name is a `uint32_t *` twenty
+lines earlier and genuinely is one there.
+
+What kept them one name is that the two branches shared a two-line tail —
+`ArgList_5 = (uint8_t *)ArgList_6; goto LABEL_74;` — and the four-byte branch
+reached it with a `goto` into the middle of the two-byte branch's block. That
+was **the last jump into a block in the file**, and it existed to save two
+lines. Duplicating them separates the lifetimes, and the second cursor can
+then be a `uint16_t *` that walks with `*out16++`. One `goto` and one label
+went with it, and the `restart a loop` count fell by one as well: the tail's
+own `goto LABEL_74` was a backward jump that the duplication made forward.
+
+### `LOWORD(x) = e` is a local that is not 32 bits
+
+The three left over were a shape, and it is the same shape three times:
+
+```c
+uint32_t row16;
+if ( !byte_rows && bits == 4 )
+  row16 = ((img_w + 7) >> 1) & 0xFFFFFFFC;
+else
+  LOWORD(row16) = (uint16_t)(((bits + 7) >> 3) * img_w);
+row_bytes = (uint16_t)row16;
+```
+
+Both arms assign one sixteen-bit quantity. MSVC wrote one of them through the
+whole register and the other through its low half because it knew the top half
+was dead, and Hex-Rays wrote the half-write as a macro and every read back as a
+mask. So the local is a `uint16_t`, and saying so removes the macro, the masks
+and the question of which half is live. `tools/unloword.py` is the rule;
+seven locals in six bodies, and it reports zero now.
+
+Signedness comes from where the value lands, not from a default.
+`plane[3]->cursor[0]->dval = l7c` puts it in an `int16_t`, so `l7c` is one too
+and the store stops converting — picking unsigned everywhere would have traded
+a narrowing warning for a signedness one and counted it as progress.
+
+The hazard is a local whose value is *used* at full width, and there is one in
+the file: `LOWORD(w_new) = w_top + (w_new >> 2)` reads all thirty-two bits to
+compute the sixteen it stores, and narrowing `w_new` would change the shift.
+So a read the rule cannot account for disqualifies the local rather than being
+ignored, which is the opposite of the reflex §12 is about.
+
+### Three corrections, and where each came from
+
+**Five of the eight were invisible.** The rule skipped any local declared in a
+continuation line — `int32_t val1, l7a, l4a, l5a,` on one line and `seed2` on
+the next — because it asked whether *that* line starts a declaration, and a
+continuation does not. It read the name as a use, decided the local was read
+at full width, and refused it silently. Scanning declaration *runs* took the
+find from three to eight, and those five are `seed2`, `seed3`, `l7c` and two
+more of the same pair-of-arms shape. A rule that is wrong about what a
+declaration is will always be wrong quietly, because its output is a shorter
+list and not an error.
+
+**One was arithmetic wearing a store's clothes.** `LOWORD(st) = st - down`
+ends in a semicolon and has an `=` before it, which was the whole of the first
+version's test for "the entire right-hand side" — so `down` was taken for a
+local whose only read is a sixteen-bit store, when it is read at full width to
+compute one. It happens that narrowing it would have been harmless, because the
+low sixteen bits of a difference depend only on the low sixteen bits of its
+operands; that argument is not one the rule makes, so it now requires the `=`
+to be the last thing before the name and refuses `down`. A false rejection with
+a reason beats an acceptance with a coincidence.
+
+**And one the gate caught rather than the rule.** `wp` in `code_pixel` is a
+register holding an address in one lifetime and a symbol in the next, and
+narrowing it around the address produced `uint16_t x = (uint16_t *)p` — which
+compiles under `-fpermissive` and nowhere else, so the strict pass failed while
+all fifteen streams stayed byte-identical. The rule declines a local with a
+pointer-valued full write now. `wp`'s pointer lifetime had become dead two
+edits earlier, when the store through it moved to `__frame.sym9->match[2]`, so
+deleting it is what makes the local narrow — but that is a deadness argument
+and this rule does not make those either.
+
+Replaying the guarded rule against the file that still had the live pointer
+store refuses exactly `wp` and keeps the other six, which is the check §12 asks
+for: a rule reporting zero on the file it just changed proves nothing, and the
+file from *before* the change is the only place the guard can be seen working.
+
+### One mask that had to move with the local
+
+Narrowing `row16` moved its truncation from the read to the write, and the
+compiler said so — `((img_w + 7) >> 1) & 0xFFFFFFFC` may change value on the
+way into sixteen bits. The answer is not a cast. The mask rounds down to a
+multiple of four and was written thirty-two bits wide because the register was;
+at the width the value actually lands, it is `& 0xFFFC`, the two spellings
+agree bit for bit, and the compiler can then see the value fits instead of
+warning that it might not. The ratchet held at 1070 without being asked to.
+
+### What the last six are
+
+Two are a variable byte offset into a block whose layout at that offset depends
+on a length computed at run time — `*(uint32_t *)((uint8_t *)blk + pad_len + 4)`
+— and no declaration expresses that. Three are `(uint8_t *)(at + 16)` in
+`cost_candidate`, where `at` is a signed pixel offset and the base is an image
+row, so the arithmetic is deliberately in bytes. The last is
+`(uint16_t *)(tbl + 4 * (node + span))`, a counter table indexed in pairs,
+which §13's binary-tree walk describes and which a `struct { uint16_t f[2]; }`
+would express — that one is a candidate for a later round rather than a thing
+that cannot be done.
