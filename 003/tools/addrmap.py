@@ -31,7 +31,15 @@ import structs                                                  # noqa: E402
 
 # a closing brace with a definition glued to it -- `}int32_t __f(...)` --
 # is a definition, and older revisions of the file are full of them
-DEF = re.compile(r'^\}?\s?[A-Za-z_].*?\b__([A-Za-z_][A-Za-z0-9_]*)\s*\(')
+# A definition, by the name it answers to.  Two spellings now: `__name(` for
+# every body recovered from the binary, and `Type::name(` for the sixteen that
+# have since become methods of the record their `_this` pointed at.  Missing
+# the second made `real_bodies` return a shorter list after the methodising
+# commit than before it, which is exactly the "the commit did more than rename"
+# case below -- so the chain broke and five bodies were reported as having no
+# recorded address, which `unnamed.py` would then have stopped checking.
+DEF = re.compile(r'^\}?\s?[A-Za-z_].*?(?:\b__|\b[A-Za-z_]\w*::)'
+                 r'([A-Za-z_][A-Za-z0-9_]*)\s*\(')
 def git(args, root=None):
     return subprocess.check_output(['git'] + args, cwd=root,
                                    stderr=subprocess.DEVNULL).decode('utf8',
@@ -91,6 +99,8 @@ def walk(name, root, rel, seen):
         try:
             revs = git(['log', '--format=%H', '-S', '__%s(' % name, '--',
                         rel], root).split()
+            revs += git(['log', '--format=%H', '-S', '::%s(' % name, '--',
+                         rel], root).split()
         except subprocess.CalledProcessError:
             return {}
         for rev in reversed(revs):

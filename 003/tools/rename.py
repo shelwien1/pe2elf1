@@ -243,7 +243,13 @@ def main():
             pairs.append((old, new))
 
     text = open(path).read()
-    pat = (lambda s: re.escape(s)) if funcs else (lambda s: NAMED % re.escape(s))
+    # `--member` rewrites through `->` and `.`; the checks below have to look
+    # the same way or a name that only ever appears as `x->name(...)` -- every
+    # method in this file -- is reported as "no such identifier".
+    member = '--member' in sys.argv
+    pat = ((lambda s: re.escape(s)) if funcs else
+           (lambda s: r'\b%s\b' % re.escape(s)) if member else
+           (lambda s: NAMED % re.escape(s)))
     for old, new in pairs:
         if not re.search(pat(old), text):
             sys.exit('%s: no such identifier' % old)
