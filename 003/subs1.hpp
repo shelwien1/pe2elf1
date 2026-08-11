@@ -578,9 +578,17 @@ struct SymList {
   // as `int32_t *` and its comparisons are unsigned either way.
   uint32_t  n;        // +0   the alphabet size
   uint32_t  live;     // +4   entries in use
-  uint32_t  f8;       // +8
-  uint32_t  f12;      // +12  12 * n at init; `symbol_list_update`'s `a3` adds here
-  uint32_t  f16;      // +16  8 * n at init
+  // The three numbers the list's own rescale runs on.  `tot` is the sum of
+  // every entry's count -- it is what the range coder is handed as its total,
+  // and `symbol_list_update` adds to it on every new entry and adds back one
+  // for each zero-count entry it prunes.  `since_rescale` accumulates the
+  // weight each update carries (`a3`, plus 4 for a new entry) and `rescale_at`
+  // is the ceiling it is tested against; when it is passed, every count is
+  // halved and so are these two.  `rescale_at` is `8 * n` or `20 * n` at init,
+  // and which of the two also decides whether the halving rounds up.
+  uint32_t  tot;           // +8
+  uint32_t  since_rescale; // +12  12 * n at init
+  uint32_t  rescale_at;    // +16  8 * n at init
   SymEntry *ent;      // +20
 };
 static_assert(sizeof(SymList) == 24, "SymList: the header is 24 bytes");
@@ -664,11 +672,21 @@ struct PixRec {
 static_assert(sizeof(PixRec) == 8, "PixRec: the record is eight bytes");
 
 struct ModelBlock {
-  uint32_t f0;
-  int32_t f4;
-  uint32_t f8;
-  uint32_t f12;
-  uint32_t f16;
+  // The plane's geometry.  `reduce_alphabet` sizes every buffer it takes as
+  // `height * width` and `layout_workspace` is called with both.
+  uint32_t width;
+  int32_t height;
+  // The plane's bit depth, twice, and the alphabet that survived reduction.
+  // `layout_workspace` seeds both depths from the header; `reduce_alphabet`
+  // and `expand_alphabet` then set `depth` to 8 when the symbols fit in a byte
+  // and leave `depth_raw` alone, which is what `v66 != depth` and
+  // `v40 == depth_raw` are comparing.  `alphabet` is the count `reduce_alphabet`
+  // arrives at -- `bmf_new(alphabet)` and `while (k < alphabet)` size the map,
+  // `(alphabet + 15) >> 4` is how many sixteen-symbol blocks it takes, and
+  // `alphabet < 32` is what gates the third level of `ctx_id`.
+  uint32_t depth;
+  uint32_t depth_raw;
+  uint32_t alphabet;
   uint32_t ctx_id1_used;
   uint32_t ctx_id2_used;
   uint32_t ctx_id3_used;
@@ -1697,7 +1715,7 @@ int32_t __encode_symbol_list(SymList *_this, int32_t a2)
       if ( !v5 )
         return 0;
       enc_cum = v5;
-      enc_tot = _this->f8 + v5;
+      enc_tot = _this->tot + v5;
       enc_high = enc_tot;
       do
       {
@@ -1728,10 +1746,10 @@ int32_t __encode_symbol_list(SymList *_this, int32_t a2)
     }
     _this = this_1;
   }
-  enc_tot = _this->f8 + v5;
+  enc_tot = _this->tot + v5;
   v4->cnt += 4;
   v25 = _this->ent;
-  _this->f12 += 4;
+  _this->since_rescale += 4;
   if ( v4 == v25 )
   {
 LABEL_37:
@@ -1772,8 +1790,8 @@ LABEL_37:
       }
     }
   }
-  v34 = _this->f16;
-  if ( n251 > 251 || v34 < _this->f12 )
+  v34 = _this->rescale_at;
+  if ( n251 > 251 || v34 < _this->since_rescale )
   {
     v35 = _this->live;
     v54 = v34 < 20 * _this->n;
@@ -1818,22 +1836,22 @@ LABEL_37:
       --v35;
     }
     while ( v35 );
-    v42 = _this->f8;
+    v42 = _this->tot;
     if ( !v36->cnt )
     {
       do
       {
         ++v35;
-        _this->f8 = ++v42;
+        _this->tot = ++v42;
         v43 = v37->cnt;
         --v37;
       }
       while ( !v43 );
       _this->live -= v35;
     }
-    v44 = _this->f12;
-    _this->f8 = v42 - (v42 >> 1);
-    _this->f12 = v44 - (v44 >> 1);
+    v44 = _this->since_rescale;
+    _this->tot = v42 - (v42 >> 1);
+    _this->since_rescale = v44 - (v44 >> 1);
     v8 = 1;
   }
   else
@@ -1882,7 +1900,7 @@ void __symbol_list_update(SymList *_this, int32_t a2, uint32_t a3)
         goto LABEL_4;
     }
     n251_1->cnt += a3;
-    _this->f12 += a3;
+    _this->since_rescale += a3;
     n251_2 = _this->ent;
     if ( n251_1 == n251_2 )
     {
@@ -1925,8 +1943,8 @@ LABEL_16:
         }
       }
     }
-    v21 = _this->f16;
-    if ( count > 251 || v21 < _this->f12 )
+    v21 = _this->rescale_at;
+    if ( count > 251 || v21 < _this->since_rescale )
     {
       v22 = _this->live;
       v36 = v21 < 20 * _this->n;
@@ -1971,22 +1989,22 @@ LABEL_16:
         --v22;
       }
       while ( v22 );
-      v29 = _this->f8;
+      v29 = _this->tot;
       if ( !v23->cnt )
       {
         do
         {
           ++v22;
-          _this->f8 = ++v29;
+          _this->tot = ++v29;
           v30 = v24->cnt;
           --v24;
         }
         while ( !v30 );
         _this->live -= v22;
       }
-      v31 = _this->f12;
-      _this->f8 = v29 - (v29 >> 1);
-      _this->f12 = v31 - (v31 >> 1);
+      v31 = _this->since_rescale;
+      _this->tot = v29 - (v29 >> 1);
+      _this->since_rescale = v31 - (v31 >> 1);
       return;
     }
   }
@@ -2011,10 +2029,10 @@ LABEL_4:
     }
     list += v4;
     _this->live = v4 + 1;
-    _this->f8 = v8 + _this->f8 + 1;
+    _this->tot = v8 + _this->tot + 1;
     list->cnt = 2;
     list->sym = a2;
-    _this->f12 += 4;
+    _this->since_rescale += 4;
     if ( list != _this->ent )
     {
       // The new entry starts one place forward, same swap as above.
@@ -2776,10 +2794,10 @@ int32_t __init_model_tables(ModelBlock *_this)
         }
         v11 = &v32[v7];
         v5->live = v7 + 1;
-        v5->f8 = v9 + v5->f8 + 1;
+        v5->tot = v9 + v5->tot + 1;
         v11->sym = v6;
         v11->cnt = 2;
-        v5->f12 += 4;
+        v5->since_rescale += 4;
         if ( v11 != v5->ent )
         {
           v12 = v11->sym;
@@ -2797,7 +2815,7 @@ int32_t __init_model_tables(ModelBlock *_this)
     {
       exclusion_gen = 1;
       buf = (uint8_t *)exclusion_mask;
-      v17 = (_this->f16 + 15) >> 4;
+      v17 = (_this->alphabet + 15) >> 4;
       do
       {
         bmf_zero16(buf);
@@ -5083,11 +5101,11 @@ uint32_t __init_symbol_list(SymList *a1, int32_t a2, int32_t a3, int32_t a4)
   if ( a4 )
   {
     v7 = a1->n;
-    a1->f8 = 0;
+    a1->tot = 0;
     a1->live = v7;
     result = 12 * v7;
-    a1->f12 = 12 * v7;
-    a1->f16 = 8 * v7;
+    a1->since_rescale = 12 * v7;
+    a1->rescale_at = 8 * v7;
     if ( v7 )
     {
       result = 0;
@@ -5103,10 +5121,10 @@ uint32_t __init_symbol_list(SymList *a1, int32_t a2, int32_t a3, int32_t a4)
   else
   {
     v10 = a1->n;
-    a1->f8 = 2;
-    a1->f16 = 20 * v10;
+    a1->tot = 2;
+    a1->rescale_at = 20 * v10;
     a1->live = 0;
-    a1->f12 = 18 * v10;
+    a1->since_rescale = 18 * v10;
     return (uint32_t)memset(buf,0,3 * v10);
   }
   return result;
@@ -7355,7 +7373,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
   void *v13, *v34;
   __frame.slot11 = (ModelBlock *)(Blocka);
   v4 = a3;
-  n8 = Blocka->f8;
+  n8 = Blocka->depth;
   __frame.slot2 = a3;
   __frame.slot7 = (ModelBlock *)(Blocka);
   __frame.slot4 = 0xFFFFFFFF >> (-n8 & 31);
@@ -7379,15 +7397,15 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
       n256 -= 16;
     }
     while ( n256 * 4 );
-    v48 = *(int32_t *)&Blockaa_1->f8 < 8;
-    v49 = Blockaa_1->f4;
-    *(int32_t *)&Blockaa_1->f16 = 0;
+    v48 = *(int32_t *)&Blockaa_1->depth < 8;
+    v49 = Blockaa_1->height;
+    *(int32_t *)&Blockaa_1->alphabet = 0;
     if ( v48 )
     {
       v50 = 0;
       if ( v49 )
       {
-        v51 = *(int32_t *)&Blockaa_1->f0;
+        v51 = *(int32_t *)&Blockaa_1->width;
         __frame.slot8 = a3 - 1;
         __frame.v84 = 0;
         v52 = 0;
@@ -7401,7 +7419,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
           v55 = 0;
           do
           {
-            v56 = *(int32_t *)&Blockaa_1->f8;
+            v56 = *(int32_t *)&Blockaa_1->depth;
             v57 = v55 - v56;
             if ( v57 < 0 )
             {
@@ -7414,45 +7432,45 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
             ++v53;
             *(uint32_t *)&__frame.buf[4 * v58 - 4] = 1;
             v55 = __frame.v85;
-            *(int32_t *)&Blockaa_1->f16 += v59;
+            *(int32_t *)&Blockaa_1->alphabet += v59;
             Blockaa_1->sym_word[v54] = v58;
-            v51 = *(int32_t *)&Blockaa_1->f0;
+            v51 = *(int32_t *)&Blockaa_1->width;
             ++v54;
           }
-          while ( v53 < *(int32_t *)&Blockaa_1->f0 );
-          v50 = *(int32_t *)&Blockaa_1->f16;
+          while ( v53 < *(int32_t *)&Blockaa_1->width );
+          v50 = *(int32_t *)&Blockaa_1->alphabet;
           __frame.v84 = v54;
           v52 = __frame.v83 + 1;
         }
-        while ( __frame.v83 + 1 < (uint32_t)Blockaa_1->f4 );
+        while ( __frame.v83 + 1 < (uint32_t)Blockaa_1->height );
       }
     }
-    else if ( v49 * *(int32_t *)&Blockaa_1->f0 )
+    else if ( v49 * *(int32_t *)&Blockaa_1->width )
     {
       v60 = __frame.slot2;
       v61 = 0;
       do
       {
-        *(int32_t *)&Blockaa_1->f16 += *(uint32_t *)&__frame.buf[4 * *v60 - 4] == 0;
+        *(int32_t *)&Blockaa_1->alphabet += *(uint32_t *)&__frame.buf[4 * *v60 - 4] == 0;
         v63 = *v60;
         *(uint32_t *)&__frame.buf[4 * v63 - 4] = 1;
         ++v60;
         Blockaa_1->sym_word[v61++] = v63;
       }
-      while ( v61 < Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0 );
-      v50 = *(int32_t *)&Blockaa_1->f16;
+      while ( v61 < Blockaa_1->height * *(int32_t *)&Blockaa_1->width );
+      v50 = *(int32_t *)&Blockaa_1->alphabet;
     }
     else
     {
       v50 = 0;
     }
     rc.encode(v50 - 1, v50, __frame.slot4 + 1);
-    v64 = *(int32_t *)&Blockaa_1->f16;
+    v64 = *(int32_t *)&Blockaa_1->alphabet;
     if ( v64 <= __frame.slot4 )
     {
       __init_symbol_list((SymList *)__frame.v86, (int32_t)Blockaa_1, __frame.slot4 - v64 + 2, 1);
       __frame.v87 = 19 * ((SymList *)__frame.v86)->n;
-      v70 = *(int32_t *)&Blockaa_1->f16;
+      v70 = *(int32_t *)&Blockaa_1->alphabet;
       if ( v70 )
       {
         v71 = 0;
@@ -7463,7 +7481,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
           if ( *(uint32_t *)&__frame.buf[4 * v72 - 4] )
           {
             __encode_symbol_list((SymList *)__frame.v86, v72 - v71);
-            v70 = *(int32_t *)&Blockaa_1->f16;
+            v70 = *(int32_t *)&Blockaa_1->alphabet;
             *(uint32_t *)&__frame.buf[4 * v72 - 4] = v73;
             v74 = v72 + 1;
             v71 = v72 + 1;
@@ -7477,7 +7495,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
         }
         while ( v73 < v70 );
       }
-      if ( Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0 )
+      if ( Blockaa_1->height * *(int32_t *)&Blockaa_1->width )
       {
         v75 = 0;
         do
@@ -7487,7 +7505,7 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
                                                                   - 4];
           ++v75;
         }
-        while ( v75 < Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0 );
+        while ( v75 < Blockaa_1->height * *(int32_t *)&Blockaa_1->width );
       }
       p_n4_1 = (int32_t *)__frame.slot;
       n16 = 16;
@@ -7515,10 +7533,10 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
   else
   {
     memset(__frame.buf,0,0x10000);
-    *(int32_t *)&Blockaa_1->f16 = 1;
+    *(int32_t *)&Blockaa_1->alphabet = 1;
     *(uint32_t *)__frame.buf = __frame.slot4 & *(uint32_t *)a3;
     Blockaa_1->sym_word[0] = 0;
-    if ( (uint32_t)(Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0) > 1 )
+    if ( (uint32_t)(Blockaa_1->height * *(int32_t *)&Blockaa_1->width) > 1 )
     {
       __frame.slot8 = a3;
       __frame.slot9 = k_2;
@@ -7557,13 +7575,13 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
             __frame.slot0 = n4;
             (__frame.slot[1]) = v13;
             Blockaa_2 = (ModelBlock *)(__frame.slot7);
-            v68 = __frame.slot7->f16;
+            v68 = __frame.slot7->alphabet;
             mode_symbol[1] = n4;
             v11 = (uint16_t)v68;
             n0x2000 = v68 + 1;
             *(uint16_t *)(__frame.n0x2000_5 + 2 * n4) = v11;
             v12 = __frame.slot3;
-            Blockaa_2->f16 = n0x2000;
+            Blockaa_2->alphabet = n0x2000;
             if ( n0x2000 > 0x2000 )
             {
               v4 = __frame.slot8;
@@ -7578,26 +7596,26 @@ void __reduce_alphabet(ModelBlock *Blocka, int8_t a2, uint8_t *a3)
 LABEL_12:
         Blockaa_3 = (ModelBlock *)((uint32_t *)__frame.slot7);
         __frame.slot7->sym_word[v12++] = v11;
-        if ( v12 >= *(uint32_t *)&Blockaa_3->f4 * Blockaa_3->f0 )
+        if ( v12 >= *(uint32_t *)&Blockaa_3->height * Blockaa_3->width )
         {
           v4 = __frame.slot8;
           k_2 = __frame.slot9;
           Blockaa_1 = (ModelBlock *)((int32_t *)__frame.slot7);
-          n0x2000_2 = __frame.slot7->f16;
+          n0x2000_2 = __frame.slot7->alphabet;
           goto LABEL_14;
         }
       }
     }
-    n0x2000_2 = *(int32_t *)&Blockaa_1->f16;
+    n0x2000_2 = *(int32_t *)&Blockaa_1->alphabet;
 LABEL_14:
     rc.encode(n0x2000_2 - 1, n0x2000_2, 0x2001u);
-    n0x2000_1 = *(int32_t *)&Blockaa_1->f16;
+    n0x2000_1 = *(int32_t *)&Blockaa_1->alphabet;
     if ( n0x2000_1 > 0x2000 )
     {
-      (__frame.slot[1]) = bmf_new(Blockaa_1->f4 * k_2 * *(int32_t *)&Blockaa_1->f0);
-      v26 = *(int32_t *)&Blockaa_1->f0;
-      n4_2 = Blockaa_1->f4;
-      __frame.n0x2000_5 = *(int32_t *)&Blockaa_1->f0;
+      (__frame.slot[1]) = bmf_new(Blockaa_1->height * k_2 * *(int32_t *)&Blockaa_1->width);
+      v26 = *(int32_t *)&Blockaa_1->width;
+      n4_2 = Blockaa_1->height;
+      __frame.n0x2000_5 = *(int32_t *)&Blockaa_1->width;
       __frame.slot0 = n4_2;
       if ( k_2 )
       {
@@ -7687,10 +7705,10 @@ LABEL_71:
         }
       }
       __frame.v79 = Blockaa_1->sym_word;
-      Blockaa_1->f4 = k_2 * __frame.slot0;
-      *(int32_t *)&Blockaa_1->f8 = 8;
+      Blockaa_1->height = k_2 * __frame.slot0;
+      *(int32_t *)&Blockaa_1->depth = 8;
       free(__frame.v79);
-      v34 = bmf_new(2 * Blockaa_1->f4 * *(int32_t *)&Blockaa_1->f0);
+      v34 = bmf_new(2 * Blockaa_1->height * *(int32_t *)&Blockaa_1->width);
       __frame.v79 = (__frame.slot[1]);
       Blockaa_1->sym_word = (uint16_t *)v34;
       __reduce_alphabet((ModelBlock *)Blockaa_1, v35, (uint8_t *)__frame.v79);
@@ -7709,7 +7727,7 @@ LABEL_71:
         }
         while ( v19 < 4 * k_2 );
         Blockaa_1 = (ModelBlock *)((int32_t *)__frame.slot7);
-        n0x2000_1 = __frame.slot7->f16;
+        n0x2000_1 = __frame.slot7->alphabet;
       }
       if ( n0x2000_1 )
       {
@@ -7735,7 +7753,7 @@ LABEL_71:
             k_2 = __frame.slot9;
             Blockaa_4 = (ModelBlock *)(__frame.slot7);
             v24 = *(uint32_t *)&__frame.buf[8 * __frame.n0x2000_5];
-            n0x2000_3 = __frame.slot7->f16;
+            n0x2000_3 = __frame.slot7->alphabet;
           }
           v20 = (uint8_t)v24 >> 7;
           ++n0x2000_4;
@@ -9223,7 +9241,7 @@ int32_t __decode_symbol_list(SymList *a1)
   if ( !v5 )
     return -1;
   *v4 = nullptr;
-  __frame.v65 = v9->f8;
+  __frame.v65 = v9->tot;
   n0x2000_6 = v5 + __frame.v65;
   n0x2000_4 = rc.get_freq(n0x2000_6);
   __frame.tot = v5 + __frame.v65;
@@ -9266,7 +9284,7 @@ int32_t __decode_symbol_list(SymList *a1)
   __frame.list7 = v20->sym;
   v20->cnt += 4;
   v33 = v32->ent;
-  v32->f12 += 4;
+  v32->since_rescale += 4;
   if ( v20 == v33 )
   {
     n251 = v20->cnt;
@@ -9315,8 +9333,8 @@ int32_t __decode_symbol_list(SymList *a1)
     }
   }
 LABEL_30:
-  v41 = v32->f16;
-  if ( n251 > 251 || v41 < v32->f12 )
+  v41 = v32->rescale_at;
+  if ( n251 > 251 || v41 < v32->since_rescale )
   {
     __frame.list0 = v32->live;
     v42 = 20 * v32->n;
@@ -9365,7 +9383,7 @@ LABEL_30:
     }
     while ( v43 );
     __decode_symbol_list_n0x800000 = __frame.list5;
-    v50 = v32->f8;
+    v50 = v32->tot;
     __frame.list0 = 0;
     if ( !v44->cnt )
     {
@@ -9373,7 +9391,7 @@ LABEL_30:
       do
       {
         ++v52;
-        v32->f8 = ++v50;
+        v32->tot = ++v50;
         v53 = v45->cnt;
         --v45;
       }
@@ -9381,12 +9399,12 @@ LABEL_30:
       __frame.list0 = v52;
       v32->live -= v52;
     }
-    v54 = v32->f12;
-    v32->f8 = v50 - (v50 >> 1);
+    v54 = v32->since_rescale;
+    v32->tot = v50 - (v50 >> 1);
     n0x2000_2 = sym_cum;
     n0x2000_3 = sym_high;
     tot_1 = n0x2000_6;
-    v32->f12 = v54 - (v54 >> 1);
+    v32->since_rescale = v54 - (v54 >> 1);
   }
   else
   {
@@ -9617,7 +9635,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
     this_3->ctx_id2[v33] = this_3->ctx_id2_used++;
     n0xFFFF_1 = this_3->ctx_id2[v33];
   }
-  if ( (int32_t)this_3->f16 < 32 )
+  if ( (int32_t)this_3->alphabet < 32 )
   {
     n53248 = this_3->ctx_id3_used;
     __frame.sym1 = 16 * n0xFFFF_1 + (__frame.sym1 & 0xF);
@@ -9650,13 +9668,13 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
     {
       v40 = v39[0].match[0];
       n15_11 = 1;
-      if ( this_3->f0 - a2 <= 1 )
+      if ( this_3->width - a2 <= 1 )
       {
         run = 1;
       }
       else
       {
-        __frame.sym1 = this_3->f0 - a2;
+        __frame.sym1 = this_3->width - a2;
         __frame.sym5 = (ModelBlock *)(this_3);
         while ( 1 )
         {
@@ -10415,7 +10433,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
     this_3->ctx_id2[v32] = (*(int32_t *)&this_3->ctx_id2_used)++;
     n0xFFFF_1 = this_3->ctx_id2[v32];
   }
-  if ( *(int32_t *)&this_3->f16 < 32 )
+  if ( *(int32_t *)&this_3->alphabet < 32 )
   {
     n53248 = *(int32_t *)&this_3->ctx_id3_used;
     v35 = 16 * n0xFFFF_1 + (__frame.sym10 & 0xF);
@@ -10454,7 +10472,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
        & v41[3].match[1]) != 0) )
   {
     v42 = v41[0].match[0];
-    p_n15_2 = *(int32_t *)&this_3->f0 - a2;
+    p_n15_2 = *(int32_t *)&this_3->width - a2;
     __frame.sym4 = 1;
     if ( p_n15_2 <= 1 )
     {
@@ -10995,8 +11013,8 @@ void __expand_alphabet(ModelBlock *_this)
   uint32_t j_2, i, n8193, v8, *v10, j_1, j, v15, v17, v18, v19, v20, *v22,
            v26;
   void *v12;
-  n8 = _this->f8;
-  j_2 = 0xFFFFFFFF >> (-(uint8_t)_this->f8 & 31);
+  n8 = _this->depth;
+  j_2 = 0xFFFFFFFF >> (-(uint8_t)_this->depth & 31);
   v4 = (n8 + 7) >> 3;
   for ( i = 0; i < 8; ++i )
   {
@@ -11008,21 +11026,21 @@ void __expand_alphabet(ModelBlock *_this)
   if ( n8 > 8 )
     n8193 = 8193;
   v8 = __rc_decode_flat(n8193);
-  _this->f16 = v8 + 1;
+  _this->alphabet = v8 + 1;
   if ( (int32_t)(v8 + 1) <= 0x2000 )
   {
     v12 = bmf_new(4 * v8 + 4);
-    j_1 = _this->f16;
+    j_1 = _this->alphabet;
     _this->sym_code = (uint32_t *)v12;
     if ( j_1 )
     {
       for ( j = 0; j < j_1; ++j )
       {
         _this->sym_code[j] = j;
-        j_1 = _this->f16;
+        j_1 = _this->alphabet;
       }
     }
-    if ( (int32_t)_this->f8 > 8 )
+    if ( (int32_t)_this->depth > 8 )
     {
       if ( 4 * v4 )
       {
@@ -11030,7 +11048,7 @@ void __expand_alphabet(ModelBlock *_this)
         do
           __init_symbol_list(&((SymList *)__frame.v28)[v15++], (int32_t)_this, 256, 1);
         while ( v15 < 4 * v4 );
-        j_1 = _this->f16;
+        j_1 = _this->alphabet;
       }
       if ( j_1 )
       {
@@ -11057,14 +11075,14 @@ void __expand_alphabet(ModelBlock *_this)
           v16 = _this->sym_code;
           v17 = (uint8_t)v16[v18++] >> 7;
         }
-        while ( v18 < _this->f16 );
+        while ( v18 < _this->alphabet );
       }
     }
     else if ( j_1 <= j_2 )
     {
       __init_symbol_list((SymList *)__frame.v28, (int32_t)_this, j_2 - j_1 + 2, 1);
       __frame.v29 = 19 * ((SymList *)__frame.v28)->n;
-      if ( !(_this->f16 == 0) )
+      if ( !(_this->alphabet == 0) )
       {
         v25 = 0;
         v26 = 0;
@@ -11075,7 +11093,7 @@ void __expand_alphabet(ModelBlock *_this)
           v25 += v27 + 1;
           ++v26;
         }
-        while ( v26 < _this->f16 );
+        while ( v26 < _this->alphabet );
       }
     }
     v22 = __frame.v31;
@@ -11090,8 +11108,8 @@ void __expand_alphabet(ModelBlock *_this)
   }
   else
   {
-    _this->f8 = 8;
-    *(uint32_t *)&_this->f4 = (*(uint32_t *)&_this->f4 * v4);
+    _this->depth = 8;
+    *(uint32_t *)&_this->height = (*(uint32_t *)&_this->height * v4);
     __expand_alphabet(_this);
     v10 = __frame.v31;
     n16_1 = 16;
@@ -11116,10 +11134,10 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
   uint8_t *v10;
   i_1 = i;
   exclusion_gen = 1;
-  a1->f0 = i;
-  *(uint32_t *)&a1->f4 = a4;
-  a1->f8 = a5;
-  a1->f12 = a5;
+  a1->width = i;
+  *(uint32_t *)&a1->height = a4;
+  a1->depth = a5;
+  a1->depth_raw = a5;
   a1->escape.ent = nullptr;
   a1->sym_code = nullptr;
   for ( j = 0; j < 5; ++j )
@@ -11132,8 +11150,8 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
     v8 = (PixRec *)bmf_new(8 * i_1 + 128);
     a1->f56[j] = v8;
     a1->f56[j + 5] = v8 + 8;
-    i_1 = a1->f0;
-    if ( (int32_t)a1->f0 > -16 )
+    i_1 = a1->width;
+    if ( (int32_t)a1->width > -16 )
     {
       v9 = 0;
       do
@@ -11145,16 +11163,16 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
         a1->f56[j][v9].match[2] = 1;
         a1->f56[j][v9].match[1] = 1;
         a1->f56[j][v9].match[0] = 1;
-        i_1 = a1->f0;
+        i_1 = a1->width;
         ++v9;
       }
-      while ( v9 < a1->f0 + 16 );
+      while ( v9 < a1->width + 16 );
     }
   }
   v10 = (uint8_t *)bmf_new(i_1 + 1);
   a1->run_bucket = v10;
   *v10 = 0;
-  if ( (int32_t)a1->f0 > 0 )
+  if ( (int32_t)a1->width > 0 )
   {
     v12 = 0;
     v13 = 0;
@@ -11163,7 +11181,7 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
       v12 += v13 == 2 << (v12 & 31);
       *(uint8_t *)(*(uint32_t *)&a1->run_bucket + v13++ + 1) = v12;
     }
-    while ( v13 < a1->f0 );
+    while ( v13 < a1->width );
   }
   // 0x2000 sixteen-bit counters cleared.  What was here instead was the same
   // range in three passes -- a scalar head to reach sixteen-byte alignment,
@@ -11215,7 +11233,7 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
   while ( n8 < 8 );
   n0x18 = 0;
   memset(a1->f1051776,0,sizeof a1->f1051776);
-  a1->sym_word = (uint16_t *)bmf_new(2 * a1->f4 * a1->f0);
+  a1->sym_word = (uint16_t *)bmf_new(2 * a1->height * a1->width);
   a1->f1076352[0].n[0] = 4;
   a1->f1076352[0].n[1] = 4;
   a1->f1076352[0].limit = 72;
@@ -11299,7 +11317,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   FreqRec *v13;   // a bucket record: `grid[bucket]`
   PixRec *v49, *v50;   // `f56[6]` and `f56[7]`, the two rows above
   Src_1 = Src;
-  ArgList = &Src[-(_this->f8 < 8)];
+  ArgList = &Src[-(_this->depth < 8)];
   __rc_begin_decode(0);
   __expand_alphabet((ModelBlock *)_this);
   this_1 = (ModelBlock *)(_this);
@@ -11330,7 +11348,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
       {
         this_3 = (ModelBlock *)(this_1);
         this_2->ctx_bucket[v5 + 15 * v8 + 75 * n5] = v102;
-        v101 = this_3->f16;
+        v101 = this_3->alphabet;
         // A sixteen-byte record per bucket, at `+96 + 16 * bucket`: five
         // counts at words 0..4, their total at 5, a scaled weight at 6, and
         // two bytes at 7 -- a level (`<= f16`) and the weight `1 << (5 -
@@ -11450,16 +11468,16 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   while ( v82 + 1 < 15 );
   ArgList_2 = ArgList;
   this_4 = (ModelBlock *)((int32_t)this_1);
-  buf = (uint8_t *)bmf_new(this_1->f16);
-  Size = this_1->f16;
+  buf = (uint8_t *)bmf_new(this_1->alphabet);
+  Size = this_1->alphabet;
   this_1->alpha_map = (uint8_t *)buf;
   memset(buf,1,Size);
   this_4->escape_list = &this_4->escape;
-  __init_symbol_list(&this_4->escape, (int32_t)this_4, this_4->f16, 1);
+  __init_symbol_list(&this_4->escape, (int32_t)this_4, this_4->alphabet, 1);
   this_4->sel_cur = this_4->sel;
   // `24 * n + 4`: the count word, then `n` lists.  `free_workspace` reads the
   // count back from `sym_list_count(lists)`.
-  v30 = this_4->f16;
+  v30 = this_4->alphabet;
   v31 = (SymListBlock *)bmf_new(24 * v30 + 4);
   if ( v31 )
   {
@@ -11472,7 +11490,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   {
     i = nullptr;
   }
-  v34 = this_4->f16;
+  v34 = this_4->alphabet;
   this_4->sel1_list = i;
   v35 = (SymListBlock *)bmf_new(24 * v34 + 4);
   if ( v35 )
@@ -11487,7 +11505,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
     j = nullptr;
   }
   this_4->sel0_list = j;
-  if ( !(this_4->f16 <= 0) )
+  if ( !(this_4->alphabet <= 0) )
   {
     v39 = 0;
     do
@@ -11495,21 +11513,21 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
       __init_symbol_list(&this_4->sel1_list[v39], (int32_t)this_4, 99, 0);
       __init_symbol_list(&this_4->sel0_list[v39++], (int32_t)this_4, 33, 0);
     }
-    while ( v39 < this_4->f16 );
+    while ( v39 < this_4->alphabet );
   }
-  v40 = this_4->f8;
-  if ( v40 == this_4->f12 )
+  v40 = this_4->depth;
+  if ( v40 == this_4->depth_raw )
   {
     ArgList_3 = nullptr;
   }
   else
   {
-    ArgList_2 = (uint8_t *)bmf_new(*(uint32_t *)&this_4->f4 * this_4->f0 + 3);
-    v40 = this_4->f8;
+    ArgList_2 = (uint8_t *)bmf_new(*(uint32_t *)&this_4->height * this_4->width + 3);
+    v40 = this_4->depth;
     ArgList_3 = ArgList_2;
   }
   n4_1 = (v40 + 7) >> 3;
-  if ( this_4->f4 > 0 )
+  if ( this_4->height > 0 )
   {
     ArgList_4 = (int32_t)ArgList_3;
     ArgList_5 = ArgList_2;
@@ -11564,7 +11582,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
       // and the destination is one byte, so only the low bytes ever counted.
       this_4->grad[3] = 0;
       this_4->grad[2] = 0;
-      v51 = this_4->f0;
+      v51 = this_4->width;
       this_4->grad[1] = v50[3].match[0] + v50[2].match[0] + v50[1].match[0] + v50[0].match[0] + v50[4].match[0] - 5;
       v52 = v86;
       if ( v51 <= 0 )
@@ -11574,10 +11592,10 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
       {
         v54 = __decode_pixel((ModelBlock *)(uint32_t *)this_4, v53);
         __init_model_tables(this_4);
-        v51 = this_4->f0;
+        v51 = this_4->width;
         v53 += v54;
       }
-      while ( v53 < this_4->f0 );
+      while ( v53 < this_4->width );
       v52 = v86;
       if ( n4_1 != 4 )
         goto LABEL_53;
@@ -11587,12 +11605,12 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         v65 = 0;
         do
           *ArgList_6++ = this_4->sym_code[this_4->f56[0][v65++ + 8].sym];
-        while ( v65 < this_4->f0 );
+        while ( v65 < this_4->width );
         goto LABEL_73;
       }
 LABEL_74:
       v43 = v52 + 1;
-      if ( v43 >= *(uint32_t *)&this_4->f4 )
+      if ( v43 >= *(uint32_t *)&this_4->height )
       {
         ArgList_3 = (uint8_t *)ArgList_4;
         goto LABEL_76;
@@ -11618,14 +11636,14 @@ LABEL_53:
           ++v56;
           ++ArgList_7;
         }
-        while ( v56 < this_4->f0 );
+        while ( v56 < this_4->width );
         ArgList_5 = (uint8_t *)ArgList_7;
       }
       goto LABEL_74;
     }
     if ( n4_1 != 2 )
     {
-      if ( this_4->f8 == 8 )
+      if ( this_4->depth == 8 )
       {
         if ( v51 > 0 )
         {
@@ -11635,7 +11653,7 @@ LABEL_53:
             // A byte, not a word: this branch is the 8-bits-per-pixel one, and
             // `sym_code` was a `uint8_t *` when this dereference was written.
             *ArgList_8++ = (uint8_t)this_4->sym_code[this_4->f56[0][v80++ + 8].sym];
-          while ( v80 < this_4->f0 );
+          while ( v80 < this_4->width );
           ArgList_5 = ArgList_8;
         }
       }
@@ -11647,7 +11665,7 @@ LABEL_53:
         ArgList_9 = ArgList_5;
         do
         {
-          v64 = this_4->f8;
+          v64 = this_4->depth;
           v62 -= v64;
           if ( v62 < 0 )
           {
@@ -11660,7 +11678,7 @@ LABEL_53:
           }
           ++v61;
         }
-        while ( v61 < this_4->f0 );
+        while ( v61 < this_4->width );
         v52 = v87;
         ArgList_5 = ArgList_9;
       }
@@ -11675,7 +11693,7 @@ LABEL_53:
         *(uint16_t *)ArgList_6 = this_4->sym_code[this_4->f56[0][v60++ + 8].sym];
         ArgList_6 = (uint32_t *)((uint8_t *)ArgList_6 + 2);
       }
-      while ( v60 < this_4->f0 );
+      while ( v60 < this_4->width );
 LABEL_73:
       ArgList_5 = (uint8_t *)ArgList_6;
       goto LABEL_74;
@@ -11684,22 +11702,22 @@ LABEL_73:
   }
 LABEL_76:
   __rc_end_decode();
-  v66 = this_4->f12;
-  if ( v66 != this_4->f8 )
+  v66 = this_4->depth_raw;
+  if ( v66 != this_4->depth )
   {
     n6 = (v66 + 7) >> 3;
     if ( n6 <= 0 )
     {
-      v68 = *(uint32_t *)&this_4->f4 * this_4->f0;
+      v68 = *(uint32_t *)&this_4->height * this_4->width;
     }
     else
     {
       n6_3 = 0;
-      v68 = *(uint32_t *)&this_4->f4 * this_4->f0;
+      v68 = *(uint32_t *)&this_4->height * this_4->width;
       v69 = v68 / n6;
       if ( n6 >= 6 )
       {
-        v84 = *(uint32_t *)&this_4->f4 * this_4->f0;
+        v84 = *(uint32_t *)&this_4->height * this_4->width;
         n6_4 = 0;
         this_1 = (ModelBlock *)((uint32_t *)this_4);
         ArgList_10 = ArgList_3;
@@ -11740,7 +11758,7 @@ LABEL_76:
       {
         v77 = __frame.row[n6_2];
         *Src_2 = *v77;
-        v78 = *(uint32_t *)&this_4->f4 * this_4->f0;
+        v78 = *(uint32_t *)&this_4->height * this_4->width;
         ++Src_2;
         __frame.row[n6_2++] = v77 + 1;
         if ( n6_2 == n6 )
@@ -15293,7 +15311,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
         do
         {
           Blocka_2->ctx_bucket[v8 + 15 * v11 + 75 * n5] = v64;
-          v73 = Blocka_2->f16;
+          v73 = Blocka_2->alphabet;
           // A sixteen-byte record per bucket, at `+96 + 16 * bucket`: five
           // counts at words 0..4, their total at 5, a scaled weight at 6, and
           // two bytes at 7 -- a level (`<= f16`) and the weight `1 << (5 -
@@ -15418,14 +15436,14 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
     }
     while ( (uint32_t)(v58 + 1) < 0xF );
     Blocka_1 = (ModelBlock *)((int32_t)Blocka_2);
-    buf = (uint8_t *)bmf_new(Blocka_2->f16);
-    Size = Blocka_2->f16;
+    buf = (uint8_t *)bmf_new(Blocka_2->alphabet);
+    Size = Blocka_2->alphabet;
     Blocka_2->alpha_map = buf;
     memset(buf,1,Size);
     Blocka_2->escape_list = &Blocka_2->escape;
-    __init_symbol_list(&Blocka_1->escape, 0, Blocka_1->f16, 1);
+    __init_symbol_list(&Blocka_1->escape, 0, Blocka_1->alphabet, 1);
     Blocka_2->sel_cur = Blocka_2->sel;
-    v31 = Blocka_2->f16;
+    v31 = Blocka_2->alphabet;
     v32 = (SymListBlock *)bmf_new(24 * v31 + 4);
     if ( v32 )
     {
@@ -15445,7 +15463,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
     {
       v33 = nullptr;
     }
-    v37 = Blocka_1->f16;
+    v37 = Blocka_1->alphabet;
     Blocka_1->sel1_list = v33;
     v38 = (SymListBlock *)bmf_new(24 * v37 + 4);
     if ( v38 )
@@ -15465,7 +15483,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
       v39 = nullptr;
     }
     Blocka_1->sel0_list = v39;
-    if ( !(Blocka_1->f16 <= 0) )
+    if ( !(Blocka_1->alphabet <= 0) )
     {
       v44 = 0;
       do
@@ -15473,9 +15491,9 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
         __init_symbol_list(&Blocka_1->sel1_list[v44], 0, 99, 0);
         __init_symbol_list(&Blocka_1->sel0_list[v44++], 0, 33, 0);
       }
-      while ( v44 < Blocka_1->f16 );
+      while ( v44 < Blocka_1->alphabet );
     }
-    if ( Blocka_1->f4 > 0 )
+    if ( Blocka_1->height > 0 )
     {
       v59 = Blocka_1->sym_word;
       v45 = 0;
@@ -15526,7 +15544,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
         Blocka_1->grad[3] = 0;
         Blocka_1->grad[2] = 0;
         v45 = v61;
-        v53 = Blocka_1->f0;
+        v53 = Blocka_1->width;
         Blocka_1->grad[1] = v52[3].match[0] + v52[2].match[0] + v52[1].match[0] + v52[0].match[0] + v52[4].match[0] - 5;
         if ( v53 > 0 )
         {
@@ -15535,9 +15553,9 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
           {
             ++v54;
             Blocka_1->f56[5][v54 - 1].sym = v59[v54 - 1];
-            v53 = Blocka_1->f0;
+            v53 = Blocka_1->width;
           }
-          while ( v54 < Blocka_1->f0 );
+          while ( v54 < Blocka_1->width );
           v59 += v54;
         }
         if ( v53 > 0 )
@@ -15549,11 +15567,11 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
             __init_model_tables(Blocka_1);
             v55 += v56;
           }
-          while ( v55 < Blocka_1->f0 );
+          while ( v55 < Blocka_1->width );
           v45 = v61;
         }
       }
-      while ( v45 < *(uint32_t *)&Blocka_1->f4 );
+      while ( v45 < *(uint32_t *)&Blocka_1->height );
     }
     __rc_end_encode();
     __free_workspace((ModelBlock *)(void **)Blocka_1, 1);
