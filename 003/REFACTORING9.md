@@ -33,6 +33,8 @@ distinct unexplained locals            554       591             0
   uses                                    —      6302             0
 locals named for a callee parameter      —         —             0
   declarations / bodies                   —         —           0/0
+names Hex-Rays chose, nobody changed     —         —             0
+  conventional ones kept on purpose      —         —         66/74
 goto / LABEL_n:                     112/79     81/55         49/33
   restart a loop / exit N blocks         —         —         15/32
   sideways to a join / to neither        —         —           2/0
@@ -1743,3 +1745,65 @@ than any of the four: **a row whose test is a spelling will be defeated by a
 spelling.** The two rows that have never had to be corrected — the ratchet and
 the stream comparison — are the two that ask the compiler and the output rather
 than the text.
+
+---
+
+## 21. Stop testing the spelling
+
+Four rounds of "no Hex-Rays names are left" were followed by four findings that
+the row could not see, the last of them on the day its own pattern was written.
+The conclusion at the end of §20 — *a row whose test is a spelling will be
+defeated by a spelling* — has an answer, and it was in the repository the whole
+time.
+
+**The first commit of `subs1.hpp` is the Hex-Rays output.** `addrmap.py` maps
+every current body to the address in `BMF.exe` it was decompiled from, and the
+original's bodies are still called `sub_<address>`. So the two join, and a
+local declared under the same name in both is *by construction* a name nobody
+here has chosen. No pattern, nothing to hide behind a prefix, and the answer
+is exact and finite rather than a guess that has to be corrected when the next
+disguise turns up. `tools/unnamed.py`.
+
+Asked the first time, it said **21 names, 65 declarations** — in a file whose
+table had just been made to read zero twice over.
+
+### What every spelling had missed
+
+Forty-two of the sixty-five were `a1` through `a7`: Hex-Rays' name for a
+parameter it could not name, which is the single most recognisable thing the
+decompiler does and which no row had ever counted. `alt_p2_model(AltP2Block
+*a1, int32_t a3, uint8_t a4, int32_t a5)` had 131 uses of `a1` alone. The rest
+were numbered copies — `i_1`, `i_2`, `j_1`, `j_3`, `k_2`, `p_i_1`, `p_i_2`,
+`this_4`, `buf_1`, `buf_3` — where MSVC spilled one quantity twice and
+Hex-Rays numbered the halves.
+
+Naming them is mostly reading the one call site. `alt_model_p2_d8_encode`'s
+`a3`, `a5` and `a6` are `src`, `height` and `out`; `alt_p2_encode_symbol`'s
+`a2` and `a3` are the context pair and the symbol, which the caller already
+spells `pair` and `code`. `alt_p2_model`'s three are the block, the sample and
+the residual — `(AltP2Block *)blk2, val2, code2, val2 - pred2` at the call.
+
+**Fourteen parameters are never read at all.** Four of those are one thing: an
+`int8_t` second parameter tested as `(a2 & 1) != 0` in `bmf_destroy_archive`,
+`free_workspace`, `alt_p2_free` and `alt_p1_free` — MSVC's scalar-deleting
+destructor flag, "and free the object too", which the 1997 compiler emitted for
+every class with a virtual destructor. That is now `do_free` in all four, and
+saying it once is worth more than the four names it replaces.
+
+### The row that reports what it kept
+
+Sixty-six declarations *are* still Hex-Rays' spelling and stay: `i`, `j`, `k`,
+`m`, `n`, `result`, `buf`, `_this`. The decompiler wrote what anyone would
+have, and changing them would be churn.
+
+They are counted and reported rather than filtered out of the total, and the
+list is in the tool where a reader can see it. A measure that quietly excuses
+part of what it measures is §10's subject, and "0, plus 66 I decided not to
+count" is a different claim from "0" — the row makes both.
+
+That leaves five rows in §1 that ask something other than a pattern: the
+ratchet asks the compiler, the stream comparison asks the output, the sweep
+asks every rule, `triage.sh` asks which stream moved, and this one asks the
+decompiler's own file. None of the five has ever needed correcting. Every row
+that has needed correcting — four times, on one line — asked the text what it
+looked like.

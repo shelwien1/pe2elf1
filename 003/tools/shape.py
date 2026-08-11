@@ -310,12 +310,28 @@ def summary():
         for name in structs.decl_types(sig, lines, a, b):
             if re.fullmatch(crt, name):
                 hits[name] += 1
+    # And the row that is not a spelling at all.  `unnamed.py` joins the file
+    # against the first commit -- which *is* the Hex-Rays output -- through
+    # `addrmap.py`'s address map, so a local declared under one name in both is
+    # by construction a name nobody here has chosen.  Four spelling rows, four
+    # corrections; this one has nothing to get wrong.
+    try:
+        import unnamed
+        live, on_purpose, joined = unnamed.survey(SRC)
+    except Exception:
+        live = None
     row('locals named for a callee parameter', len(hits))
     row('  declarations / bodies', '%d / %d' % (
         sum(hits.values()),
         sum(1 for a, b, nm, sig in structs.bodies(lines)
             if any(re.fullmatch(crt, n)
                    for n in structs.decl_types(sig, lines, a, b)))))
+    if live is not None:
+        row('names Hex-Rays chose and nobody changed',
+            '%d' % sum(len(v) for v in live.values()))
+        row('  conventional ones kept on purpose',
+            '%d, over %d bodies joined by address'
+            % (sum(len(v) for v in on_purpose.values()), joined))
     # Both halves used to be wrong, in opposite directions: `src.count('goto ')`
     # counted two comments that mention a `goto` that is no longer there, and
     # `^LABEL_\d+:` missed the two labels that are indented.  Strip the comments
