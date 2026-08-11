@@ -111,7 +111,12 @@ def main():
     path = sys.argv[1]
     src = open(path).read()
     new = rewrite(src)
-    open(path, 'w').write(new)
+    # Only when there is something to change.  Writing unconditionally makes a
+    # read-only survey fail its own check that the file did not move, which is
+    # exactly what `sweep.sh` exists to notice -- and it did, the first time a
+    # `size_t` was introduced anywhere in the file.
+    if new != src:
+        open(path, 'w').write(new)
 
     # Report what is left, so anything unmapped shows up rather than hiding.
     kw = (r'unsigned|signed|long|short|int|char|__int8|__int16|__int32|__int64'

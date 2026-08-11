@@ -1590,14 +1590,14 @@ uint32_t __predict_med(uint8_t *pixels, int32_t width, int32_t height)
         p[ofs - 2] = fold[(uint8_t)(left - p[ofs - 3])];
         ofs -= 2;
       }
-      while ( k < pairs );
+      while ( k < (uint32_t)pairs );
       done = 2 * k + 1;
     }
     else
     {
       done = 1;
     }
-    if ( last > done - 1 )
+    if ( last > (uint32_t)(done - 1) )
     {
       q = (&p[-done]);
       last = (uint8_t)(*q - *((int8_t *)q - 1));
@@ -1720,7 +1720,7 @@ uint32_t __alt_init_tables(uint8_t *fold, int8_t *unfold)
     {
       done = 1;
     }
-    if ( done - 1 < span )
+    if ( (uint32_t)(done - 1) < span )
     {
       if ( in_bucket == 1 )
         LOBYTE(half) = half + 1;
@@ -1772,7 +1772,7 @@ int32_t __encode_context_bit(BitCtr *_this, BitCtr *a2, int32_t bit)
     tot = c0 + c1;
     rc.encode_bit(c0, c1, bit);
     cap = _this->limit;
-    if ( tot > cap )
+    if ( tot > (uint32_t)cap )
     {
       n1_old = _this->n[1];
       _this->n[0] -= _this->n[0] >> 1;
@@ -1790,7 +1790,7 @@ int32_t __encode_context_bit(BitCtr *_this, BitCtr *a2, int32_t bit)
   p_tot = p0 + p1;
   rc.encode_bit(p0, p1, bit);
   p_cap = a2->limit;
-  if ( p_tot > p_cap )
+  if ( p_tot > (uint32_t)p_cap )
   {
     p1_old = a2->n[1];
     a2->n[0] -= a2->n[0] >> 1;
@@ -1829,7 +1829,7 @@ int32_t __decode_context_bit(BitCtr *_this, BitCtr *a2)
     tot = c0 + c1;
     result = rc.decode_bit(c0, c1);
     cap = _this->limit;
-    if ( tot > cap )
+    if ( tot > (uint32_t)cap )
     {
       n1_old = _this->n[1];
       _this->n[0] -= _this->n[0] >> 1;
@@ -1847,7 +1847,7 @@ int32_t __decode_context_bit(BitCtr *_this, BitCtr *a2)
     p_tot = p0 + p1;
     result = rc.decode_bit(p0, p1);
     p_cap = a2->limit;
-    if ( p_tot > p_cap )
+    if ( p_tot > (uint32_t)p_cap )
     {
       p1_old = a2->n[1];
       a2->n[0] -= a2->n[0] >> 1;
@@ -2265,7 +2265,7 @@ int32_t __encode_symbol_tree(uint16_t *freq, int32_t sym)
   // Four at a time in SSE, then a scalar tail; integer addition does not care
   // about the order, so it is one loop.
   cum = 0;
-  for ( j = 0; j < lvl; j++ )
+  for ( j = 0; j < (uint32_t)lvl; j++ )
     cum += f0[j];
   slot = &f0[lvl];
   cum_hi = cum + *slot;
@@ -2369,7 +2369,7 @@ int32_t __alt_p1_encode_symbol(uint16_t *freq, int32_t unread_ctx, int32_t ctx, 
   tot = tot0 & 0x7FFF;
   // The counts below the symbol, same shape as `encode_symbol_tree`'s.
   cum = 0;
-  for ( k = 0; k < slot; k++ )
+  for ( k = 0; k < (uint32_t)slot; k++ )
     cum += base[k];
   cur = &base[slot];
   cum_hi = cum + *cur;
@@ -2676,7 +2676,7 @@ int32_t __alt_p2_decode_symbol(P2Freq *_this, const uint32_t *a2)
   tot = _this->f[2] + c01;
   target = rc.get_freq(tot);
   cum = _this->f[0];
-  if ( target >= cum )
+  if ( (uint32_t)target >= cum )
   {
     if ( target >= c01 )
     {
@@ -4450,7 +4450,7 @@ void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *src, uint8_t *out)
         out = q;
       }
     }
-    while ( y < *(uint32_t *)&_this->height );
+    while ( (uint32_t)y < *(uint32_t *)&_this->height );
   }
   __rc_end_encode();
 }
@@ -4570,7 +4570,7 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t img_w, int32_t plane)
     {
       done = 1;
     }
-    if ( img_w + 4 > (uint32_t)(done - 1) )
+    if ( (uint32_t)(img_w + 4) > (uint32_t)(done - 1) )
     {
       *(uint8_t **)&_this->row1[done - 1] = (uint8_t *)_this;
       *(uint8_t **)&_this->row0[done - 1] = (uint8_t *)_this;
@@ -4949,7 +4949,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
             grey += 2 * Buffera;
             ++k;
           }
-          while ( k < ncol / 2 );
+          while ( k < (uint32_t)(ncol / 2) );
           p_i_1 = p_i;
           at = 2 * k + 1;
         }
@@ -4957,7 +4957,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
         {
           at = 1;
         }
-        if ( at - 1 < (uint32_t)ncol )
+        if ( (uint32_t)(at - 1) < (uint32_t)ncol )
           *(uint32_t *)&Bufferc_3[4 * at + 50] = ((uint8_t)(Buffera * (at - 1)) << 16)
                                               | (uint8_t)(Buffera * (at - 1))
                                               | ((uint8_t)(Buffera * (at - 1)) << 8);
@@ -5002,7 +5002,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
           at2 = 1;
           done = 1;
         }
-        if ( at2 - 1 < (uint32_t)ncol )
+        if ( (uint32_t)(at2 - 1) < (uint32_t)ncol )
         {
           pal2 = &Bufferb_1[p_i_1];
           bgr2 = *(uint16_t *)&pal2[3 * done + 13];
@@ -5255,7 +5255,7 @@ LABEL_72:
     buf_1[1] = 1;
     buf_1 += 2;
     coded_bytes = buf_1 - buf;
-    if ( Bufferb_2 > buf_1 - buf )
+    if ( Bufferb_2 > (uint32_t)(buf_1 - buf) )
     {
       // The shared tail, copied here: the two assignments it used to reach it
       // through are gone with the `goto`, so it names `Bufferc` and `Stream_1`
@@ -6344,12 +6344,12 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
           out += n_planes;
           ++x;
         }
-        while ( x < width );
+        while ( x < (uint32_t)width );
         w = width;
       }
       ++y;
     }
-    while ( y < height );
+    while ( y < (uint32_t)height );
   }
   __rc_end_decode();
   np = plane_count;
@@ -7397,12 +7397,12 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
             row_w = *(int32_t *)&Blockaa_1->width;
             ++at;
           }
-          while ( x < *(int32_t *)&Blockaa_1->width );
+          while ( x < (uint32_t)(*(int32_t *)&Blockaa_1->width) );
           n_distinct = *(int32_t *)&Blockaa_1->alphabet;
           __frame.at_spill = at;
           y = __frame.y_spill + 1;
         }
-        while ( __frame.y_spill + 1 < (uint32_t)Blockaa_1->height );
+        while ( (uint32_t)(__frame.y_spill + 1) < (uint32_t)Blockaa_1->height );
       }
     }
     else if ( height * *(int32_t *)&Blockaa_1->width )
@@ -7417,7 +7417,7 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
         ++q;
         Blockaa_1->sym_word[idx++] = sym2;
       }
-      while ( idx < Blockaa_1->height * *(int32_t *)&Blockaa_1->width );
+      while ( idx < (uint32_t)(Blockaa_1->height * *(int32_t *)&Blockaa_1->width) );
       n_distinct = *(int32_t *)&Blockaa_1->alphabet;
     }
     else
@@ -7465,7 +7465,7 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
                                                                   - 4];
           ++m;
         }
-        while ( m < Blockaa_1->height * *(int32_t *)&Blockaa_1->width );
+        while ( m < (uint32_t)(Blockaa_1->height * *(int32_t *)&Blockaa_1->width) );
       }
       p_n4_1 = (int32_t *)__frame.slot;
       z0 = 16;
@@ -7604,7 +7604,7 @@ LABEL_14:
         {
           done = 1;
         }
-        if ( k_2 > done - 1 )
+        if ( k_2 > (uint32_t)(done - 1) )
           __frame.slot[done + 1] = (uint8_t *)(__frame.slot[1]) + __frame.slot0 * -__frame.kids_i + __frame.slot6 * done;
       }
       else
@@ -7643,18 +7643,18 @@ LABEL_14:
               {
                 done2 = 1;
               }
-              if ( done2 - 1 >= __frame.slot9 )
+              if ( (uint32_t)(done2 - 1) >= __frame.slot9 )
                 break;
               dst_c = (uint8_t *)__frame.slot[done2 + 1];
               srcp = &rp[done2];
               *dst_c = rp[done2 - 1];
-              more = ++n_moved < __frame.slot6;
+              more = (uint32_t)(++n_moved) < __frame.slot6;
               __frame.slot[done2 + 1] = dst_c + 1;
               if ( !more )
                 goto LABEL_71;
               rp += done2;
             }
-            if ( ++n_moved >= __frame.slot6 )
+            if ( (uint32_t)(++n_moved) >= __frame.slot6 )
               break;
             rp = srcp;
           }
@@ -8135,7 +8135,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
         plane_desc[row + 2].src_plane = pl_odd;
         plane_desc[row + 2].predictor = pl_odd;
       }
-      while ( pair < n_planes / 2 );
+      while ( pair < (uint32_t)(n_planes / 2) );
       next_plane = 2 * pair + 1;
     }
     else
@@ -8143,7 +8143,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
       next_plane = 1;
     }
     result = next_plane - 1;
-    if ( n_planes > (uint32_t)(next_plane - 1) )
+    if ( (uint32_t)n_planes > (uint32_t)(next_plane - 1) )
     {
       plane_desc[next_plane].src_plane = result;
       plane_desc[next_plane].predictor = result;
@@ -8157,7 +8157,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
         cost1 = cost0;
       pick01 = !keep0;
       __frame.x3[2] = pick01;
-      cheaper = __cost_candidate((uint8_t *)__frame.img_a, 2, __frame.tbl64b, unread2, __frame.best0, __frame.best1, __frame.best2, (uint32_t *)&__frame.acc0[2]) < cost1;
+      cheaper = (uint32_t)(__cost_candidate((uint8_t *)__frame.img_a, 2, __frame.tbl64b, unread2, __frame.best0, __frame.best1, __frame.best2, (uint32_t *)&__frame.acc0[2])) < cost1;
       xform = pick01;
       if ( cheaper )
         xform = 2;
@@ -9233,7 +9233,7 @@ int32_t __decode_symbol_list(SymList *a1)
   while ( 1 )
   {
     cum_lo += p->cnt;
-    if ( cum_lo > (int32_t)target )
+    if ( cum_lo > (uint32_t)(int32_t)target )
       break;
     p = *rd++;
     if ( !p )
@@ -9789,7 +9789,7 @@ LABEL_57:
           {
             done = 1;
           }
-          if ( idx_s - hit_a - 1 > (uint32_t)(done - 1) )
+          if ( (uint32_t)(idx_s - hit_a - 1) > (uint32_t)(done - 1) )
           {
             s3d = __frame.sym3;
             _this->pix_cur[1] = __frame.sym1;
@@ -10554,7 +10554,7 @@ LABEL_42:
         {
           done = 1;
         }
-        if ( p_n15_4 > (uint32_t)(done - 1) )
+        if ( (uint32_t)p_n15_4 > (uint32_t)(done - 1) )
         {
           _this->pix_cur[1] = __frame.sym8;
           *(uint32_t *)_this->row_cur[5] = rec_word;
@@ -11031,7 +11031,7 @@ void __expand_alphabet(ModelBlock *_this)
         k = 0;
         do
           __init_symbol_list(&__frame.lists[k++], (int32_t)_this, 256, 1);
-        while ( k < 4 * nbytes );
+        while ( k < (uint32_t)(4 * nbytes) );
         n_syms = _this->alphabet;
       }
       if ( n_syms )
@@ -11139,7 +11139,7 @@ ModelBlock *__layout_workspace(ModelBlock *blk, int32_t a2, int32_t img_w, int32
         w = blk->width;
         ++r;
       }
-      while ( r < blk->width + 16 );
+      while ( (uint32_t)r < blk->width + 16 );
     }
   }
   runs = (uint8_t *)bmf_new(w + 1);
@@ -11154,7 +11154,7 @@ ModelBlock *__layout_workspace(ModelBlock *blk, int32_t a2, int32_t img_w, int32
       bucket += x == 2 << (bucket & 31);
       *(uint8_t *)(*(uint32_t *)&blk->run_bucket + x++ + 1) = bucket;
     }
-    while ( x < blk->width );
+    while ( (uint32_t)x < blk->width );
   }
   // 0x2000 sixteen-bit counters cleared.  What was here instead was the same
   // range in three passes -- a scalar head to reach sixteen-byte alignment,
@@ -11479,10 +11479,10 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
       __init_symbol_list(&this_4->sel1_list[s], (int32_t)this_4, 99, 0);
       __init_symbol_list(&this_4->sel0_list[s++], (int32_t)this_4, 33, 0);
     }
-    while ( s < this_4->alphabet );
+    while ( (uint32_t)s < this_4->alphabet );
   }
   jj = this_4->depth;
-  if ( jj == this_4->depth_raw )
+  if ( (uint32_t)jj == this_4->depth_raw )
   {
     ArgList_3 = nullptr;
   }
@@ -11560,7 +11560,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         row_w = this_4->width;
         x2 += y;
       }
-      while ( x2 < this_4->width );
+      while ( (uint32_t)x2 < this_4->width );
       x = bucket;
       if ( nbytes != 4 )
         goto LABEL_53;
@@ -11570,12 +11570,12 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         y2 = 0;
         do
           *ArgList_6++ = this_4->sym_code[this_4->row_cur[0][y2++ + 8].sym];
-        while ( y2 < this_4->width );
+        while ( (uint32_t)y2 < this_4->width );
         goto LABEL_73;
       }
 LABEL_74:
       bucket = x + 1;
-      if ( bucket >= *(uint32_t *)&this_4->height )
+      if ( (uint32_t)bucket >= *(uint32_t *)&this_4->height )
       {
         ArgList_3 = (uint8_t *)ArgList_4;
         goto LABEL_76;
@@ -11601,7 +11601,7 @@ LABEL_53:
           ++step;
           ++ArgList_7;
         }
-        while ( step < this_4->width );
+        while ( (uint32_t)step < this_4->width );
         ArgList_5 = (uint8_t *)ArgList_7;
       }
       goto LABEL_74;
@@ -11618,7 +11618,7 @@ LABEL_53:
             // A byte, not a word: this branch is the 8-bits-per-pixel one, and
             // `sym_code` was a `uint8_t *` when this dereference was written.
             *ArgList_8++ = (uint8_t)this_4->sym_code[this_4->row_cur[0][x5++ + 8].sym];
-          while ( x5 < this_4->width );
+          while ( (uint32_t)x5 < this_4->width );
           ArgList_5 = ArgList_8;
         }
       }
@@ -11642,7 +11642,7 @@ LABEL_53:
           }
           ++x4;
         }
-        while ( x4 < this_4->width );
+        while ( (uint32_t)x4 < this_4->width );
         ArgList_5 = ArgList_9;
       }
       goto LABEL_74;
@@ -11656,7 +11656,7 @@ LABEL_53:
         *(uint16_t *)ArgList_6 = this_4->sym_code[this_4->row_cur[0][x3++ + 8].sym];
         ArgList_6 = (uint32_t *)((uint8_t *)ArgList_6 + 2);
       }
-      while ( x3 < this_4->width );
+      while ( (uint32_t)x3 < this_4->width );
 LABEL_73:
       ArgList_5 = (uint8_t *)ArgList_6;
       goto LABEL_74;
@@ -11666,7 +11666,7 @@ LABEL_73:
 LABEL_76:
   __rc_end_decode();
   depth_raw = this_4->depth_raw;
-  if ( depth_raw != this_4->depth )
+  if ( (uint32_t)depth_raw != this_4->depth )
   {
     nchunk = (depth_raw + 7) >> 3;
     if ( nchunk <= 0 )
@@ -12102,12 +12102,12 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
           src += n_planes;
           ++x;
         }
-        while ( x < width );
+        while ( x < (uint32_t)width );
         w = width;
       }
       ++y;
     }
-    while ( y < height );
+    while ( y < (uint32_t)height );
   }
   __rc_end_encode();
   np = plane_count;
@@ -13749,7 +13749,7 @@ void __alt_p2_d8_decode_body(AltP2Block *blk, int8_t ArgList, uint8_t *out, int3
       blk->cursor[0]->dval = 0;
       if ( width > 0 )
       {
-        for ( j = 0; j < width; ++j )
+        for ( j = 0; j < (uint32_t)width; ++j )
         {
           pred = __alt_p2_context((AltP2Block *)blk, (AltP2Block *)nullptr, (AltP2Block *)nullptr);
           code = __alt_p2_decode_symbol(&blk->freq[blk->ctx], blk->ctx_pair);
@@ -13761,7 +13761,7 @@ void __alt_p2_d8_decode_body(AltP2Block *blk, int8_t ArgList, uint8_t *out, int3
       }
       ++y;
     }
-    while ( y < height - 1 );
+    while ( y < (uint32_t)(height - 1) );
   }
   __rc_end_decode();
 }
@@ -13954,7 +13954,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *cur0,
             {
               xf2 = xf1;
               src3->buf[0][xf2].val = 256;
-              xf3 = ++xf1 < np;
+              xf3 = (uint32_t)(++xf1) < np;
               src3->buf[0][xf2].dval = 256;
               src3->buf[0][xf2].err = -16;
               src3->buf[0][xf2].sign = 1;
@@ -14155,7 +14155,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *cur0,
       }
       ++src2;
     }
-    while ( src2 < raw );
+    while ( src2 < (uint32_t)raw );
   }
   __rc_end_decode();
   __builtin_memcpy(bmf_p2_coef, saved_p2_coef, sizeof saved_p2_coef);
@@ -14407,7 +14407,7 @@ void __alt_p2_d8_encode_body(AltP2Block *blk, uint8_t *src, int32_t width, int32
       blk->cursor[0]->dval = 0;
       if ( width > 0 )
       {
-        for ( k = 0; k < width; ++k )
+        for ( k = 0; k < (uint32_t)width; ++k )
         {
           pred = __alt_p2_context((AltP2Block *)blk, (AltP2Block *)nullptr, (AltP2Block *)nullptr);
           want = srcp[k];
@@ -14435,7 +14435,7 @@ void __alt_p2_d8_encode_body(AltP2Block *blk, uint8_t *src, int32_t width, int32
       }
       ++y;
     }
-    while ( y < height - 1 );
+    while ( y < (uint32_t)(height - 1) );
   }
   __rc_end_encode();
 }
@@ -14605,7 +14605,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
             {
               xf1 = src3;
               src2->buf[0][xf1].val = 256;
-              xf2 = ++src3 < code3;
+              xf2 = (uint32_t)(++src3) < code3;
               src2->buf[0][xf1].dval = 256;
               src2->buf[0][xf1].err = -16;
               src2->buf[0][xf1].sign = 1;
@@ -14715,7 +14715,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
         off0 = 0;
         seed0 = 0;
         at0 = 0;
-        for ( i = 0; i < i_1; ++i )
+        for ( i = 0; i < (uint32_t)i_1; ++i )
         {
           off0b = plane_desc[1].src_plane;
           ctx_bias[0] = at0 >> 3;
@@ -14867,7 +14867,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
       }
       ++src1;
     }
-    while ( src1 < height );
+    while ( src1 < (uint32_t)height );
   }
   __rc_end_encode();
   __builtin_memcpy(bmf_p2_coef, saved_p2_coef, sizeof saved_p2_coef);
@@ -15154,7 +15154,7 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
         __init_symbol_list(&blk->sel1_list[s], 0, 99, 0);
         __init_symbol_list(&blk->sel0_list[s++], 0, 33, 0);
       }
-      while ( s < blk->alphabet );
+      while ( (uint32_t)s < blk->alphabet );
     }
     if ( blk->height > 0 )
     {
@@ -15218,7 +15218,7 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
             blk->row_cur[5][x - 1].sym = word[x - 1];
             row_w = blk->width;
           }
-          while ( x < blk->width );
+          while ( (uint32_t)x < blk->width );
           word += x;
         }
         if ( row_w > 0 )
@@ -15230,11 +15230,11 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
             __init_model_tables(blk);
             x2 += step;
           }
-          while ( x2 < blk->width );
+          while ( (uint32_t)x2 < blk->width );
           y = y1;
         }
       }
-      while ( y < *(uint32_t *)&blk->height );
+      while ( (uint32_t)y < *(uint32_t *)&blk->height );
     }
     __rc_end_encode();
     __free_workspace((ModelBlock *)(void **)blk, 1);
@@ -16304,7 +16304,7 @@ LABEL_43:
         out_cursor = coded_buf;
         packer_word = (uint32_t *)coded_buf;
         hist_scratch = coded_buf + coded_size - 4096;
-        if ( bits - (bits >> 8) > __frame.costs[(int32_t)__frame.rows[0]] )
+        if ( (uint32_t)(bits - (bits >> 8)) > __frame.costs[(int32_t)__frame.rows[0]] )
           break;
         if ( ++pk >= ::plane_count )
         {
@@ -17090,7 +17090,7 @@ LABEL_57:
       coded_len = ((const uint32_t *)coded_buf)[1];
       ok &= fwrite(coded_buf, 1u, coded_len + 8, ((BmfArc *)arc)->fp) == coded_len + 8;
     }
-    ok_all = (fwrite(::coded_buf, 1u, ElementCounta, ((BmfArc *)arc)->fp) == ElementCounta) & ok;
+    ok_all = (fwrite(::coded_buf, 1u, ElementCounta, ((BmfArc *)arc)->fp) == (uint32_t)ElementCounta) & ok;
     free(::coded_buf);
     if ( ok_all && (p_i->depth & 0x80) != 0 )
       fwrite(&p_i->pixels[p_i->data_size], 1u, ElementCount_1, ((BmfArc *)arc)->fp);

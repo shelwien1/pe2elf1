@@ -34,7 +34,7 @@ distinct unexplained locals            554       591             0
 goto / LABEL_n:                     112/79     81/55         49/34
   restart a loop / exit N blocks         —         —         16/29
   jump into a block / sideways           —         —           1/3
-conversion warnings (ratchet)         1455      1331          1300
+conversion warnings (ratchet)         1455      1331          1238
 ```
 
 **Not one Hex-Rays name is left in either file.** Checked by running the
@@ -445,6 +445,8 @@ now zero:
 | `unreload.py` | new: one member, loaded five times (§11) |
 | `uncopy.py` | new: a local that is only a copy of another is not a local (§12) |
 | `unhoist.py` | new: put back the load the scheduler moved (§12) |
+| `explicitcmp.py` | new: write out the conversion a comparison already performs (§15) |
+| `unify_types.py` | write only when there is something to change (§15) |
 | `proven.sh` | new: which tools' answers depend on the file at all (§10) |
 | `outpath.py` | new: a generator's argument is the file to write, and must look like one |
 | `sweep.sh` | new: run every tool, and fail if the file moved (§10) |
@@ -794,6 +796,13 @@ by accident. Verified against the file as it stood fourteen commits earlier,
 where it exits 1 and names `unaliasvar`, `uncopy`, `unhoist` and `unsave` —
 because a check that has never failed is a claim.
 
+The check earned itself immediately. Introducing one `(size_t)` cast made
+`unify_types.py` -- which maps `size_t` onto `uint32_t` like every other
+spelling -- rewrite the file during the next sweep, and the sweep failed rather
+than reporting a quiet zero. Two things were wrong and it found both: the cast
+should have used the project's spelling, and a survey tool should not write when
+it has nothing to change.
+
 The sweep also runs every tool against a *copy* now, beside the real file rather
 than in `/tmp` (`addrmap.py` resolves the repository from the path it is given).
 That closes a window: one sweep failed with "a tool wrote to the file it was
@@ -935,13 +944,23 @@ Everything with a target is at it. What remains has no target, and saying so
 precisely is the point of this section rather than leaving the reader to infer
 it from a table of zeros.
 
-**62 `-Wsign-compare` and 1238 conversion warnings.** These are the
-decompilation's type mixture — `uint32_t x` counting to an `int32_t width`,
-several hundred times. The ratchet exists so the number cannot go up, and
-§1 has always described it as a ratchet and not a target. The one cluster
-worth collapsing was `pixel_context`'s twenty-one unrolled band comparisons,
-which was a readability fix that happened to be worth 22 warnings; the rest are
-one site each and want a retyping round, not a sweep.
+**1238 conversion warnings, and no `-Wsign-compare` at all.** The sign
+comparisons are gone, and not by retyping anything. `while ( x < width )` with
+`x` unsigned and `width` signed does not compare a signed value with an
+unsigned one — C converts `width` to unsigned first, and the comparison is
+between two unsigned values. That conversion is the entire content of the
+warning: the code means something a reader has to know the usual arithmetic
+conversions to see. `tools/explicitcmp.py` writes it where it happens, taking
+its sites from `warn.log` and the operand's extent from the column GCC points
+at the operator. 62 sites, no semantic change, and the two claims it does
+*not* make are in its docstring — it does not decide whether a comparison is
+right, which is a question about whether the signed side can go negative.
+
+What is left is 502 `-Wconversion` and 736 `-Wsign-conversion`, which are the
+decompilation's type mixture proper — a value narrowed or resigned on
+assignment, several hundred times. The ratchet exists so the number cannot go
+up, and §1 has always described it as a ratchet and not a target; each of these
+is one site and wants a retyping round rather than a sweep.
 
 **49 jumps, 45 of which are what `goto` is for.** The breakdown row in §1 is
 there so a later round can see whether the other four have grown.
