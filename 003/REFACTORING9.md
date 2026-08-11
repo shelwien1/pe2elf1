@@ -998,10 +998,26 @@ The rows add up to the ratchet by construction, including rows for
 that quietly drops two of what it is breaking down is exactly what §10 is
 about, and the first version of this dropped two.
 
-The 504 narrowings are into fields the 1997 layout fixes at eight or sixteen
-bits: `freq_tbl->w[0] = ...` where `w` is `uint16_t[8]` because the record is
-sixteen bytes. No declaration can fix those; only a cast, and §15's argument
-applies.
+The narrowings were described here as "into fields the 1997 layout fixes at
+eight or sixteen bits", and half of that is true. `shape.py --narrow` asks
+where each one lands rather than asserting it:
+
+```
+  247  into a struct member
+   97  through a pointer or subscript
+   53  another store, mostly LOWORD/LOBYTE
+   51  into a local
+   50  not a store on this line
+```
+
+Under half land in a struct member — `freq_tbl->w[0] = …` where `w` is
+`uint16_t[8]` because the record is sixteen bytes, and no declaration can fix
+those. The rest are a store through a pointer, a `LOWORD(x) = …` on a local
+that *cannot* narrow because something else reads it whole (§17's hazard, from
+the other side), a store into a local that is deliberately narrow, and
+expressions that are not a store at all. None of those is a declaration's
+mistake either — but they are not one group, and saying they were was a guess
+that the measurement contradicts.
 
 The 567 same-width ones are where the destination is not a local either rule
 can reach, or where one can and the flip has been *measured* not to pay.

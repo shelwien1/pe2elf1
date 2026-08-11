@@ -423,8 +423,63 @@ def summary():
     row('__fwd_* shims', len(set(re.findall(r'\b__fwd_\w+', src))))
 
 
+def narrowings():
+    """Where each narrowing conversion lands, which the width rows cannot say.
+
+    §15 said the narrowings are "into fields the 1997 layout fixes at eight or
+    sixteen bits" and that no declaration can fix them.  Half of that is true.
+    Measured rather than asserted, under half of them land in a struct member;
+    the rest are stores through a pointer, `LOWORD(x) = …` on a local that
+    cannot narrow because something reads it whole, stores into a local that is
+    deliberately narrow, and expressions that are not a store at all.  None of
+    those is a declaration's mistake either, but they are not one group and
+    saying they were was a guess.
+    """
+    lines = open(SRC).read().split('\n')
+    out, ex = collections.Counter(), collections.defaultdict(list)
+    for l in open('warn.log'):
+        m = re.match(r'%s:(\d+):(\d+): (.*)' % re.escape(SRC), l)
+        if not m:
+            continue
+        c = CONV.search(m.group(3))
+        if not c:
+            continue
+        # `CONV` matches both orders -- "conversion from 'X' to 'Y'" and
+        # "conversion to 'Y' from 'X'" -- and group 1 says which.
+        src_t, dst_t = ((c.group(2), c.group(3)) if c.group(1) == 'from'
+                        else (c.group(3), c.group(2)))
+        a, b = WIDTH.get(src_t), WIDTH.get(dst_t)
+        if not a or not b or b >= a:
+            continue
+        src = lines[int(m.group(1)) - 1].split('//')[0]
+        mm = re.match(r'\s*(.+?)\s*(?:[-+*/|&^]|>>|<<)?=(?!=)\s*(.+);\s*$', src)
+        if not mm:
+            k = 'not a store on this line'
+        else:
+            lhs = mm.group(1)
+            if re.search(r'(?:->|\.)\w+\s*(?:\[[^\]]*\])?$', lhs):
+                k = 'into a struct member'
+            elif lhs.startswith('*') or lhs.endswith(']'):
+                k = 'through a pointer or subscript'
+            elif re.fullmatch(r'\w+', lhs):
+                k = 'into a local'
+            else:
+                k = 'another store, mostly LOWORD/LOBYTE'
+        out[k] += 1
+        if len(ex[k]) < 2:
+            ex[k].append((m.group(1), src.strip()[:66]))
+    return out, ex
+
+
 def main():
-    if '--this' in sys.argv:
+    if '--narrow' in sys.argv:
+        out, ex = narrowings()
+        for k, v in out.most_common():
+            print('%5d  %s' % (v, k))
+            for ln, t in ex[k]:
+                print('         %6s  %s' % (ln, t))
+        print('%5d  narrowings in all' % sum(out.values()))
+    elif '--this' in sys.argv:
         lines, span, sigs = load()
         this = collections.Counter(r[1] for r in rawoffsets(lines, span)
                                    if r[2] == '_this')
