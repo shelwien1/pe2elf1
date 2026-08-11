@@ -12333,7 +12333,6 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   int32_t v573;
   int32_t v576;
   int32_t v577;
-  AltP2Block *v578;
   uint32_t n5;
   int32_t v580;
   // The counter this pass updates and its two neighbours: `v581[-1]`,
@@ -12408,7 +12407,6 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   P2Freq *n2_2, *n2_3, *n2_4, *n2_5, *n2_6, *n2_7, *v408, *v411, *v420,
          *v428, *v436, *v444, *v452, *v456, *v457, *v463, *v466, *v474,
          *v477, *v485, *v488, *v491, *v502;
-  AltP2Block *v385;
   uint32_t v78, v92, v97, v109, n0x10, v393, v396;
   uint8_t v83;
   v6 = a1->ctx & 0xF;
@@ -12458,7 +12456,6 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   // different floors.
   v26 = (1.0f - (v24 / (v23 + 576.0f))) * 2.0f;
   n5 = 0;
-  v578 = (AltP2Block *)((uint32_t *)a1);
   {
     const float err_a     = (sample - bias1) * 2.5999999f;
     const float err_b     = v19 * v26;
@@ -12514,12 +12511,12 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   ++a1->above;
   do
   {
-    bank_ctx = (uint32_t)v578->bank_ctx[n5];
-    v77 = v577 - (*(uint32_t *)&v578->nb_sum[2 * n5]);
+    bank_ctx = (uint32_t)a1->bank_ctx[n5];
+    v77 = v577 - (*(uint32_t *)&a1->nb_sum[2 * n5]);
     v78 = n5 << 17;
     // 71178 records is +284712, `p2_ctr`, and `v78` is `n5 << 17` --
     // 32768 records a bank, which is what the five banks are.
-    v581 = &v578->p2_ctr[32768 * n5 + bank_ctx];
+    v581 = &a1->p2_ctr[32768 * n5 + bank_ctx];
     v79 = v77 + (uint16_t)v581->w2;
     *(uint16_t *)&v581->w2 = v79;
     v580 = v581->b1;
@@ -12553,8 +12550,8 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
       if ( !alphabet_reduced )
       {
         __builtin_prefetch(&n2, 0, 1);
-        n2 = (uint16_t *)((uint8_t *)&v578->p2_ctr[(v81 ^ 0x7FF0)] + v78);
-        v84 = (*(uint32_t *)&v578->nb_sum[2 * n5 + 1]) + v77;
+        n2 = (uint16_t *)((uint8_t *)&a1->p2_ctr[(v81 ^ 0x7FF0)] + v78);
+        v84 = (*(uint32_t *)&a1->nb_sum[2 * n5 + 1]) + v77;
         n3 = v81 & 3;
         if ( (uint32_t)n3 >= 3
           || (v545 = v78,
@@ -12580,7 +12577,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
                                                     + 2) >> 2);
           v81 = v576;
         }
-        v90 = (uint8_t *)v578 + v78;
+        v90 = (uint8_t *)a1 + v78;
         v550 = v84;
         __builtin_prefetch(&v90[4 * (v81 ^ 0x4000) + 284712], 0, 1);
         v542 = (P2Count *)((int32_t)&v90[4 * (v81 ^ 0x4000) + 284712]);
@@ -13179,20 +13176,19 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
     ++n5;
   }
   while ( n5 < 5 );
-  v385 = (AltP2Block *)(v578);
-  ctx = v578->ctx;
-  ++v578->cursor[0];
-  v387 = (&v385->freq[ctx]);
-  ++v385->cursor[1];
-  ++v385->cursor[2];
-  ++v385->cursor[3];
-  ++v385->cursor[4];
+  ctx = a1->ctx;
+  ++a1->cursor[0];
+  v387 = (&a1->freq[ctx]);
+  ++a1->cursor[1];
+  ++a1->cursor[2];
+  ++a1->cursor[3];
+  ++a1->cursor[4];
   n0x10 = v387[0].step;
   if ( n0x10 > 0x10 )
   {
     v511 = a4 & 1;
     n15 = ctx & 0xF;
-    v508 = v385->ctx_pair[a4 & 1];
+    v508 = a1->ctx_pair[a4 & 1];
     if ( n15 < 15 )
     {
       v391 = v387[1].f[0];
@@ -13213,22 +13209,22 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
       if ( n15 <= 0 )
       {
 LABEL_37:
-        n0x10 = v385->ctx;
-        if ( v385->freq[n0x10].step <= 0x1Au )
+        n0x10 = a1->ctx;
+        if ( a1->freq[n0x10].step <= 0x1Au )
           return n0x10;
-        v397 = v385->ctx_w[1].sel;
-        v398 = 2 - (v385->fold[(uint8_t)-a5] & 1);
-        if ( !v385->fold[(uint8_t)-a5] )
-          v398 = v385->fold[(uint8_t)-a5];
-        v399 = v385->ctx_w[2].sel;
-        v400 = v385->ctx_w[0].w[1] + (v385->ctx & 0x3F);
+        v397 = a1->ctx_w[1].sel;
+        v398 = 2 - (a1->fold[(uint8_t)-a5] & 1);
+        if ( !a1->fold[(uint8_t)-a5] )
+          v398 = a1->fold[(uint8_t)-a5];
+        v399 = a1->ctx_w[2].sel;
+        v400 = a1->ctx_w[0].w[1] + (a1->ctx & 0x3F);
         v510 = v398;
-        n0x10 = v385->ctx_w[4].w[2 - v385->ctx_w[4].sel]
-              + v385->ctx_w[3].w[2 - v385->ctx_w[3].sel]
-              + v385->ctx_w[2].w[2 - v399]
-              + v385->ctx_w[1].w[2 - v397]
+        n0x10 = a1->ctx_w[4].w[2 - a1->ctx_w[4].sel]
+              + a1->ctx_w[3].w[2 - a1->ctx_w[3].sel]
+              + a1->ctx_w[2].w[2 - v399]
+              + a1->ctx_w[1].w[2 - v397]
               + v400;
-        n0x10_3 = &v385->freq[n0x10];
+        n0x10_3 = &a1->freq[n0x10];
         p2_rec = n0x10_3;
         if ( n15 < 15 )
         {
@@ -13287,18 +13283,18 @@ LABEL_48:
           n0x10 = n0x10_1;
         }
         v408->f[v510] += (6 * (uint32_t)p2_rec[0].step) >> 4;
-        if ( !v385->plane_idx || v385->freq[v385->ctx].step > 0x100u )
+        if ( !a1->plane_idx || a1->freq[a1->ctx].step > 0x100u )
         {
           v409 = 2 - v511;
           if ( !a4 )
             v409 = 0;
-          v410 = v385->ctx_w[0].sel;
+          v410 = a1->ctx_w[0].sel;
           v511 = v409;
           if ( v410 == 1 )
           {
-            v491 = &v385->freq[v385->ctx_w[0].w[0] + n0x10 - v385->ctx_w[0].w[1]];
-            v492 = v385->freq[v385->ctx_w[0].w[0] + n0x10 - v385->ctx_w[0].w[1]].f[0];
-            v493 = v385->freq[v385->ctx_w[0].w[0] + n0x10 - v385->ctx_w[0].w[1]].f[1];
+            v491 = &a1->freq[a1->ctx_w[0].w[0] + n0x10 - a1->ctx_w[0].w[1]];
+            v492 = a1->freq[a1->ctx_w[0].w[0] + n0x10 - a1->ctx_w[0].w[1]].f[0];
+            v493 = a1->freq[a1->ctx_w[0].w[0] + n0x10 - a1->ctx_w[0].w[1]].f[1];
             v508 = (uintptr_t)v491;
             if ( v491->f[2] + v493 + v492 > 29696 )
             {
@@ -13307,9 +13303,9 @@ LABEL_48:
               n0x10 = n0x10_1;
             }
             v491->f[v510] += (uint16_t)(v491->step & 0xFFFC) >> 2;
-            v494 = v385->ctx - v385->ctx_w[0].w[1];
-            n0xF0_1 = (&v385->freq[v494 + v385->ctx_w[0].w[0]]);
-            n0x10_2 = v385->ctx_w[0].w[2] + v494;
+            v494 = a1->ctx - a1->ctx_w[0].w[1];
+            n0xF0_1 = (&a1->freq[v494 + a1->ctx_w[0].w[0]]);
+            n0x10_2 = a1->ctx_w[0].w[2] + v494;
             n0xF0 = n0xF0_1;
             n2_3 = &n0xF0_1[0];
             v497 = n2_3->f[1] + n2_3->f[0];
@@ -13334,13 +13330,13 @@ LABEL_48:
                 n0x10 = n0x10_1;
               }
               n2[v511 + 1] += (uint16_t)(n0xF0[1].step & 0xFFFC) >> 2;
-              v502 = &v385->freq[n0x10_2 + 1];
-              if ( v385->freq[n0x10_2 + 1].f[2]
-                 + v385->freq[n0x10_2 + 1].f[1]
-                 + v385->freq[n0x10_2 + 1].f[0] > 29696 )
+              v502 = &a1->freq[n0x10_2 + 1];
+              if ( a1->freq[n0x10_2 + 1].f[2]
+                 + a1->freq[n0x10_2 + 1].f[1]
+                 + a1->freq[n0x10_2 + 1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(&v385->freq[n0x10_2 + 1]);
+                __rescale_three_way(&a1->freq[n0x10_2 + 1]);
                 n0x10 = n0x10_1;
               }
               v502->f[v511] += (v502->step & 0xFFF8) >> 3;
@@ -13361,17 +13357,17 @@ LABEL_48:
           }
           else
           {
-            v411 = &v385->freq[n0x10 + v385->ctx_w[0].w[1] - v385->ctx_w[0].w[2 - v410]];
-            if ( v385->freq[n0x10 + v385->ctx_w[0].w[1] - v385->ctx_w[0].w[2 - v410]].f[2]
-               + v385->freq[n0x10 + v385->ctx_w[0].w[1] - v385->ctx_w[0].w[2 - v410]].f[1]
-               + v385->freq[n0x10 + v385->ctx_w[0].w[1] - v385->ctx_w[0].w[2 - v410]].f[0] > 29696 )
+            v411 = &a1->freq[n0x10 + a1->ctx_w[0].w[1] - a1->ctx_w[0].w[2 - v410]];
+            if ( a1->freq[n0x10 + a1->ctx_w[0].w[1] - a1->ctx_w[0].w[2 - v410]].f[2]
+               + a1->freq[n0x10 + a1->ctx_w[0].w[1] - a1->ctx_w[0].w[2 - v410]].f[1]
+               + a1->freq[n0x10 + a1->ctx_w[0].w[1] - a1->ctx_w[0].w[2 - v410]].f[0] > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way(v411);
               n0x10 = n0x10_1;
             }
             v411->f[v510] += (7 * (uint32_t)v411->step) >> 4;
-            n0xF0 = ((&v385->freq[v385->ctx_w[0].w[1] + (v385->ctx - v385->ctx_w[0].w[v385->ctx_w[0].sel])]));
+            n0xF0 = ((&a1->freq[a1->ctx_w[0].w[1] + (a1->ctx - a1->ctx_w[0].w[a1->ctx_w[0].sel])]));
             v412 = n0xF0[0].f[0];
             v413 = n0xF0[0].f[1];
             n2 = (uint16_t *)&n0xF0[0];
@@ -13411,12 +13407,12 @@ LABEL_48:
               n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
             }
           }
-          v419 = v385->ctx_w[1].sel;
+          v419 = a1->ctx_w[1].sel;
           if ( v419 == 1 )
           {
-            n2_4 = &v385->freq[v385->ctx_w[1].w[0] + n0x10 - v385->ctx_w[1].w[1]];
-            v481 = v385->freq[v385->ctx_w[1].w[0] + n0x10 - v385->ctx_w[1].w[1]].f[0];
-            v482 = v385->freq[v385->ctx_w[1].w[0] + n0x10 - v385->ctx_w[1].w[1]].f[1];
+            n2_4 = &a1->freq[a1->ctx_w[1].w[0] + n0x10 - a1->ctx_w[1].w[1]];
+            v481 = a1->freq[a1->ctx_w[1].w[0] + n0x10 - a1->ctx_w[1].w[1]].f[0];
+            v482 = a1->freq[a1->ctx_w[1].w[0] + n0x10 - a1->ctx_w[1].w[1]].f[1];
             n2 = (uint16_t *)n2_4;
             if ( n2_4->f[2] + v482 + v481 > 29696 )
             {
@@ -13425,9 +13421,9 @@ LABEL_48:
               n0x10 = n0x10_1;
             }
             n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
-            v483 = v385->ctx - v385->ctx_w[1].w[1];
-            n0xF0_2 = (&v385->freq[v483 + v385->ctx_w[1].w[0]]);
-            n0x10_2 = v385->ctx_w[1].w[2] + v483;
+            v483 = a1->ctx - a1->ctx_w[1].w[1];
+            n0xF0_2 = (&a1->freq[v483 + a1->ctx_w[1].w[0]]);
+            n0x10_2 = a1->ctx_w[1].w[2] + v483;
             n0xF0 = n0xF0_2;
             v485 = &n0xF0_2[0];
             if ( v485->f[2] + v485->f[1] + v485->f[0] > 29696 )
@@ -13449,13 +13445,13 @@ LABEL_48:
                 n0x10 = n0x10_1;
               }
               n2[v511 + 1] += (uint16_t)(n0xF0[1].step & 0xFFFC) >> 2;
-              v488 = &v385->freq[n0x10_2 + 1];
-              if ( v385->freq[n0x10_2 + 1].f[2]
-                 + v385->freq[n0x10_2 + 1].f[1]
-                 + v385->freq[n0x10_2 + 1].f[0] > 29696 )
+              v488 = &a1->freq[n0x10_2 + 1];
+              if ( a1->freq[n0x10_2 + 1].f[2]
+                 + a1->freq[n0x10_2 + 1].f[1]
+                 + a1->freq[n0x10_2 + 1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(&v385->freq[n0x10_2 + 1]);
+                __rescale_three_way(&a1->freq[n0x10_2 + 1]);
                 n0x10 = n0x10_1;
               }
               v488->f[v511] += (v488->step & 0xFFF8) >> 3;
@@ -13476,17 +13472,17 @@ LABEL_48:
           }
           else
           {
-            v420 = &v385->freq[n0x10 + v385->ctx_w[1].w[1] - v385->ctx_w[1].w[2 - v419]];
-            if ( v385->freq[n0x10 + v385->ctx_w[1].w[1] - v385->ctx_w[1].w[2 - v419]].f[2]
-               + v385->freq[n0x10 + v385->ctx_w[1].w[1] - v385->ctx_w[1].w[2 - v419]].f[1]
-               + v385->freq[n0x10 + v385->ctx_w[1].w[1] - v385->ctx_w[1].w[2 - v419]].f[0] > 29696 )
+            v420 = &a1->freq[n0x10 + a1->ctx_w[1].w[1] - a1->ctx_w[1].w[2 - v419]];
+            if ( a1->freq[n0x10 + a1->ctx_w[1].w[1] - a1->ctx_w[1].w[2 - v419]].f[2]
+               + a1->freq[n0x10 + a1->ctx_w[1].w[1] - a1->ctx_w[1].w[2 - v419]].f[1]
+               + a1->freq[n0x10 + a1->ctx_w[1].w[1] - a1->ctx_w[1].w[2 - v419]].f[0] > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way(v420);
               n0x10 = n0x10_1;
             }
             v420->f[v510] += (7 * (uint32_t)v420->step) >> 4;
-            n0xF0 = ((&v385->freq[v385->ctx_w[1].w[1] + (v385->ctx - v385->ctx_w[1].w[v385->ctx_w[1].sel])]));
+            n0xF0 = ((&a1->freq[a1->ctx_w[1].w[1] + (a1->ctx - a1->ctx_w[1].w[a1->ctx_w[1].sel])]));
             v421 = n0xF0[0].f[0];
             v422 = n0xF0[0].f[1];
             n2 = (uint16_t *)&n0xF0[0];
@@ -13524,12 +13520,12 @@ LABEL_48:
               n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
             }
           }
-          v427 = v385->ctx_w[2].sel;
+          v427 = a1->ctx_w[2].sel;
           if ( v427 == 1 )
           {
-            n2_5 = &v385->freq[v385->ctx_w[2].w[0] + n0x10 - v385->ctx_w[2].w[1]];
-            v470 = v385->freq[v385->ctx_w[2].w[0] + n0x10 - v385->ctx_w[2].w[1]].f[0];
-            v471 = v385->freq[v385->ctx_w[2].w[0] + n0x10 - v385->ctx_w[2].w[1]].f[1];
+            n2_5 = &a1->freq[a1->ctx_w[2].w[0] + n0x10 - a1->ctx_w[2].w[1]];
+            v470 = a1->freq[a1->ctx_w[2].w[0] + n0x10 - a1->ctx_w[2].w[1]].f[0];
+            v471 = a1->freq[a1->ctx_w[2].w[0] + n0x10 - a1->ctx_w[2].w[1]].f[1];
             n2 = (uint16_t *)n2_5;
             if ( n2_5->f[2] + v471 + v470 > 29696 )
             {
@@ -13538,9 +13534,9 @@ LABEL_48:
               n0x10 = n0x10_1;
             }
             n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
-            v472 = v385->ctx - v385->ctx_w[2].w[1];
-            n0xF0_3 = (&v385->freq[v472 + v385->ctx_w[2].w[0]]);
-            n0x10_2 = v385->ctx_w[2].w[2] + v472;
+            v472 = a1->ctx - a1->ctx_w[2].w[1];
+            n0xF0_3 = (&a1->freq[v472 + a1->ctx_w[2].w[0]]);
+            n0x10_2 = a1->ctx_w[2].w[2] + v472;
             n0xF0 = n0xF0_3;
             v474 = &n0xF0_3[0];
             if ( v474->f[2] + v474->f[1] + v474->f[0] > 29696 )
@@ -13562,13 +13558,13 @@ LABEL_48:
                 n0x10 = n0x10_1;
               }
               n2[v511 + 1] += (uint16_t)(n0xF0[1].step & 0xFFFC) >> 2;
-              v477 = &v385->freq[n0x10_2 + 1];
-              if ( v385->freq[n0x10_2 + 1].f[2]
-                 + v385->freq[n0x10_2 + 1].f[1]
-                 + v385->freq[n0x10_2 + 1].f[0] > 29696 )
+              v477 = &a1->freq[n0x10_2 + 1];
+              if ( a1->freq[n0x10_2 + 1].f[2]
+                 + a1->freq[n0x10_2 + 1].f[1]
+                 + a1->freq[n0x10_2 + 1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(&v385->freq[n0x10_2 + 1]);
+                __rescale_three_way(&a1->freq[n0x10_2 + 1]);
                 n0x10 = n0x10_1;
               }
               v477->f[v511] += (v477->step & 0xFFF8) >> 3;
@@ -13589,17 +13585,17 @@ LABEL_48:
           }
           else
           {
-            v428 = &v385->freq[n0x10 + v385->ctx_w[2].w[1] - v385->ctx_w[2].w[2 - v427]];
-            if ( v385->freq[n0x10 + v385->ctx_w[2].w[1] - v385->ctx_w[2].w[2 - v427]].f[2]
-               + v385->freq[n0x10 + v385->ctx_w[2].w[1] - v385->ctx_w[2].w[2 - v427]].f[1]
-               + v385->freq[n0x10 + v385->ctx_w[2].w[1] - v385->ctx_w[2].w[2 - v427]].f[0] > 29696 )
+            v428 = &a1->freq[n0x10 + a1->ctx_w[2].w[1] - a1->ctx_w[2].w[2 - v427]];
+            if ( a1->freq[n0x10 + a1->ctx_w[2].w[1] - a1->ctx_w[2].w[2 - v427]].f[2]
+               + a1->freq[n0x10 + a1->ctx_w[2].w[1] - a1->ctx_w[2].w[2 - v427]].f[1]
+               + a1->freq[n0x10 + a1->ctx_w[2].w[1] - a1->ctx_w[2].w[2 - v427]].f[0] > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way(v428);
               n0x10 = n0x10_1;
             }
             v428->f[v510] += (7 * (uint32_t)v428->step) >> 4;
-            n0xF0 = ((&v385->freq[v385->ctx_w[2].w[1] + (v385->ctx - v385->ctx_w[2].w[v385->ctx_w[2].sel])]));
+            n0xF0 = ((&a1->freq[a1->ctx_w[2].w[1] + (a1->ctx - a1->ctx_w[2].w[a1->ctx_w[2].sel])]));
             v429 = n0xF0[0].f[0];
             v430 = n0xF0[0].f[1];
             n2 = (uint16_t *)&n0xF0[0];
@@ -13637,12 +13633,12 @@ LABEL_48:
               n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
             }
           }
-          v435 = v385->ctx_w[3].sel;
+          v435 = a1->ctx_w[3].sel;
           if ( v435 == 1 )
           {
-            n2_6 = &v385->freq[v385->ctx_w[3].w[0] + n0x10 - v385->ctx_w[3].w[1]];
-            v459 = v385->freq[v385->ctx_w[3].w[0] + n0x10 - v385->ctx_w[3].w[1]].f[0];
-            v460 = v385->freq[v385->ctx_w[3].w[0] + n0x10 - v385->ctx_w[3].w[1]].f[1];
+            n2_6 = &a1->freq[a1->ctx_w[3].w[0] + n0x10 - a1->ctx_w[3].w[1]];
+            v459 = a1->freq[a1->ctx_w[3].w[0] + n0x10 - a1->ctx_w[3].w[1]].f[0];
+            v460 = a1->freq[a1->ctx_w[3].w[0] + n0x10 - a1->ctx_w[3].w[1]].f[1];
             n2 = (uint16_t *)n2_6;
             if ( n2_6->f[2] + v460 + v459 > 29696 )
             {
@@ -13651,9 +13647,9 @@ LABEL_48:
               n0x10 = n0x10_1;
             }
             n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
-            v461 = v385->ctx - v385->ctx_w[3].w[1];
-            n0xF0_4 = (&v385->freq[v461 + v385->ctx_w[3].w[0]]);
-            n0x10_2 = v385->ctx_w[3].w[2] + v461;
+            v461 = a1->ctx - a1->ctx_w[3].w[1];
+            n0xF0_4 = (&a1->freq[v461 + a1->ctx_w[3].w[0]]);
+            n0x10_2 = a1->ctx_w[3].w[2] + v461;
             n0xF0 = n0xF0_4;
             v463 = &n0xF0_4[0];
             if ( v463->f[2] + v463->f[1] + v463->f[0] > 29696 )
@@ -13675,13 +13671,13 @@ LABEL_48:
                 n0x10 = n0x10_1;
               }
               n2[v511 + 1] += (uint16_t)(n0xF0[1].step & 0xFFFC) >> 2;
-              v466 = &v385->freq[n0x10_2 + 1];
-              if ( v385->freq[n0x10_2 + 1].f[2]
-                 + v385->freq[n0x10_2 + 1].f[1]
-                 + v385->freq[n0x10_2 + 1].f[0] > 29696 )
+              v466 = &a1->freq[n0x10_2 + 1];
+              if ( a1->freq[n0x10_2 + 1].f[2]
+                 + a1->freq[n0x10_2 + 1].f[1]
+                 + a1->freq[n0x10_2 + 1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
-                __rescale_three_way(&v385->freq[n0x10_2 + 1]);
+                __rescale_three_way(&a1->freq[n0x10_2 + 1]);
                 n0x10 = n0x10_1;
               }
               v466->f[v511] += (v466->step & 0xFFF8) >> 3;
@@ -13702,17 +13698,17 @@ LABEL_48:
           }
           else
           {
-            v436 = &v385->freq[n0x10 + v385->ctx_w[3].w[1] - v385->ctx_w[3].w[2 - v435]];
-            if ( v385->freq[n0x10 + v385->ctx_w[3].w[1] - v385->ctx_w[3].w[2 - v435]].f[2]
-               + v385->freq[n0x10 + v385->ctx_w[3].w[1] - v385->ctx_w[3].w[2 - v435]].f[1]
-               + v385->freq[n0x10 + v385->ctx_w[3].w[1] - v385->ctx_w[3].w[2 - v435]].f[0] > 29696 )
+            v436 = &a1->freq[n0x10 + a1->ctx_w[3].w[1] - a1->ctx_w[3].w[2 - v435]];
+            if ( a1->freq[n0x10 + a1->ctx_w[3].w[1] - a1->ctx_w[3].w[2 - v435]].f[2]
+               + a1->freq[n0x10 + a1->ctx_w[3].w[1] - a1->ctx_w[3].w[2 - v435]].f[1]
+               + a1->freq[n0x10 + a1->ctx_w[3].w[1] - a1->ctx_w[3].w[2 - v435]].f[0] > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way(v436);
               n0x10 = n0x10_1;
             }
             v436->f[v510] += (7 * (uint32_t)v436->step) >> 4;
-            n0xF0 = ((&v385->freq[v385->ctx_w[3].w[1] + (v385->ctx - v385->ctx_w[3].w[v385->ctx_w[3].sel])]));
+            n0xF0 = ((&a1->freq[a1->ctx_w[3].w[1] + (a1->ctx - a1->ctx_w[3].w[a1->ctx_w[3].sel])]));
             v437 = n0xF0[0].f[0];
             v438 = n0xF0[0].f[1];
             n2 = (uint16_t *)&n0xF0[0];
@@ -13750,21 +13746,21 @@ LABEL_48:
               n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
             }
           }
-          v443 = v385->ctx_w[4].sel;
+          v443 = a1->ctx_w[4].sel;
           if ( v443 == 1 )
           {
-            n2_7 = &v385->freq[v385->ctx_w[4].w[0] + n0x10 - v385->ctx_w[4].w[1]];
-            v447 = v385->freq[v385->ctx_w[4].w[0] + n0x10 - v385->ctx_w[4].w[1]].f[0];
-            v448 = v385->freq[v385->ctx_w[4].w[0] + n0x10 - v385->ctx_w[4].w[1]].f[1];
+            n2_7 = &a1->freq[a1->ctx_w[4].w[0] + n0x10 - a1->ctx_w[4].w[1]];
+            v447 = a1->freq[a1->ctx_w[4].w[0] + n0x10 - a1->ctx_w[4].w[1]].f[0];
+            v448 = a1->freq[a1->ctx_w[4].w[0] + n0x10 - a1->ctx_w[4].w[1]].f[1];
             v449 = n2_7->f[2];
             n2 = (uint16_t *)n2_7;
             if ( v449 + v448 + v447 > 29696 )
               __rescale_three_way(n2_7);
             n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
-            v450 = v385->ctx - v385->ctx_w[4].w[1];
-            n0x10_4 = &v385->freq[v450 + v385->ctx_w[4].w[0]];
+            v450 = a1->ctx - a1->ctx_w[4].w[1];
+            n0x10_4 = &a1->freq[v450 + a1->ctx_w[4].w[0]];
             // An index, not an address -- the same register again.
-            rec_idx = v385->ctx_w[4].w[2] + v450;
+            rec_idx = a1->ctx_w[4].w[2] + v450;
             p2_rec = n0x10_4;
             v452 = &n0x10_4[0];
             if ( n0x10_4[0].f[2] + n0x10_4[0].f[1] + n0x10_4[0].f[0] > 29696 )
@@ -13778,7 +13774,7 @@ LABEL_48:
               if ( v453 + v454 > 29696 )
                 __rescale_three_way(&p2_rec[1]);
               n2[v511 + 1] += (uint16_t)(p2_rec[1].step & 0xFFFC) >> 2;
-              v456 = &v385->freq[rec_idx + 1];
+              v456 = &a1->freq[rec_idx + 1];
               if ( v456->f[2] + v456->f[1] + v456->f[0] > 29696 )
                 __rescale_three_way(v456);
               n0x10 = (v456->step & 0xFFF8) >> 3;
@@ -13798,13 +13794,13 @@ LABEL_48:
           }
           else
           {
-            v444 = &v385->freq[n0x10 + v385->ctx_w[4].w[1] - v385->ctx_w[4].w[2 - v443]];
-            if ( v385->freq[n0x10 + v385->ctx_w[4].w[1] - v385->ctx_w[4].w[2 - v443]].f[2]
-               + v385->freq[n0x10 + v385->ctx_w[4].w[1] - v385->ctx_w[4].w[2 - v443]].f[1]
-               + v385->freq[n0x10 + v385->ctx_w[4].w[1] - v385->ctx_w[4].w[2 - v443]].f[0] > 29696 )
+            v444 = &a1->freq[n0x10 + a1->ctx_w[4].w[1] - a1->ctx_w[4].w[2 - v443]];
+            if ( a1->freq[n0x10 + a1->ctx_w[4].w[1] - a1->ctx_w[4].w[2 - v443]].f[2]
+               + a1->freq[n0x10 + a1->ctx_w[4].w[1] - a1->ctx_w[4].w[2 - v443]].f[1]
+               + a1->freq[n0x10 + a1->ctx_w[4].w[1] - a1->ctx_w[4].w[2 - v443]].f[0] > 29696 )
               __rescale_three_way(v444);
             v444->f[v510] += (7 * (uint32_t)v444->step) >> 4;
-            v445 = ((&v385->freq[v385->ctx_w[4].w[1] + (v385->ctx - v385->ctx_w[4].w[v385->ctx_w[4].sel])]));
+            v445 = ((&a1->freq[a1->ctx_w[4].w[1] + (a1->ctx - a1->ctx_w[4].w[a1->ctx_w[4].sel])]));
             if ( v445[0].f[2] + v445[0].f[1] + v445[0].f[0] > 29696 )
               __rescale_three_way(&v445[0]);
             v445[0].f[v511] += (7 * (uint32_t)v445[0].step) >> 4;
@@ -13826,7 +13822,7 @@ LABEL_48:
         }
         return n0x10;
       }
-      v387 = (&v385->freq[v385->ctx]);
+      v387 = (&a1->freq[a1->ctx]);
     }
     v394 = v387[-1].f[0];
     v395 = v387[-1].f[1];
