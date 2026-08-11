@@ -193,7 +193,17 @@ def summary():
                                               if re.fullmatch(r'Obj\d+', k))))
     row('  fNN members / named ones',
         '%d / %d' % (sum(len(v[0]) for v in members.values()), named))
+    # `distinct` counts spellings across the whole file, so it cannot move until
+    # a name is gone from all 59 bodies -- naming every local in one function
+    # leaves it unchanged.  The two rows under it are the ones that measure
+    # that work: bodies still carrying any, and how many uses in total.
+    bodyv = [len(re.findall(r'\bv\d+\b',
+                            '\n'.join(l.split('//')[0] for l in lines[a:b + 1])))
+             for a, b, _, _ in structs.bodies(lines)]
     row('distinct vNN locals', len(set(re.findall(r'\bv\d+\b', src))))
+    row('  bodies still carrying one', '%d of %d' % (sum(1 for n in bodyv if n),
+                                                     len(bodyv)))
+    row('  vNN uses', sum(bodyv))
     # Both halves used to be wrong, in opposite directions: `src.count('goto ')`
     # counted two comments that mention a `goto` that is no longer there, and
     # `^LABEL_\d+:` missed the two labels that are indented.  Strip the comments

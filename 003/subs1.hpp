@@ -5721,18 +5721,29 @@ int32_t __rc_begin_decode(int8_t ArgList_1)
   return (int32_t)(uintptr_t)out_cursor;
 }
 
-uint8_t *__unpredict_med(uint8_t *Src, int32_t i, int32_t a3)
+// The inverse of `predict_med`, and the direction that actually runs: this is
+// what `testfiles/med32.bmp` exercises.  It walks *forwards*, the opposite way,
+// for the same reason -- a residual can only be added to neighbours that have
+// already been reconstructed, and forwards is where those are.
+//
+// So the peeled cases are the mirror image.  Pixel 0 is stored raw and is
+// already correct, which is why `p` starts one past it; the rest of the first
+// row has only a west neighbour; the first column of every later row has only
+// a north one; and everything else gets the full MED tree, identical to the
+// one in `predict_med` because it must reproduce the same prediction from the
+// same three neighbours.
+//
+// Returns one past the last byte it wrote.
+uint8_t *__unpredict_med(uint8_t *pixels, int32_t width, int32_t height)
 {
   ;
-  uint8_t *Src_1;   // `Src` again: every use of it is a subscript
-  uint32_t v41;     // an index into it, not an address
-  uint8_t v39;
-  int32_t i_1, v42, v45, v46, v47, v48;
-  uint32_t j, v36, m_1, m, v44, v50;
-  uint8_t *result, *v43;
-  alignas(16) uint8_t v52[255];
-  Src_1 = Src;
-  result = (Src + 1);
+  uint32_t done;     // how far the unrolled first row got: an index, not an address
+  uint8_t cur;
+  int32_t rows_left, pred, north, northwest;
+  uint32_t j, row_rest, pairs, k, x_left;
+  uint8_t *p, *up;
+  alignas(16) uint8_t unfold[255];
+  p = (pixels + 1);
   // The test here was `if ( plane_predictor )`, with a 45-line else building
   // a table for predictor mode 0.  Nothing reaches it: expand_image calls
   // this from two places and both are guarded by the predictor being 1 --
@@ -5743,112 +5754,113 @@ uint8_t *__unpredict_med(uint8_t *Src, int32_t i, int32_t a3)
   // The unfolding table, code -> residual: code 0 is no change and the rest
   // alternate -1, +1, -2, +2 ... out to +-127.  `predict_med` builds the
   // inverse.
-  v52[0] = 0;
+  unfold[0] = 0;
   for ( j = 0; j < 127; ++j )
   {
-    v52[2 * j + 1] = (uint8_t)(-1 - (int32_t)j);
-    v52[2 * j + 2] = (uint8_t)(1 + j);
+    unfold[2 * j + 1] = (uint8_t)(-1 - (int32_t)j);
+    unfold[2 * j + 2] = (uint8_t)(1 + j);
   }
-  Src_1 = Src;
-  // never taken: -E is 0
-  i_1 = i;
-  if ( i == 1 )
+  if ( width == 1 )
   {
-    v42 = a3 - 1;
-    if ( a3 == 1 )
-      return result;
-    v36 = 0;
+    rows_left = height - 1;
+    if ( height == 1 )
+      return p;
+    row_rest = 0;
     goto LABEL_29;
   }
-  v36 = i - 1;
-  m_1 = (i - 1) / 2;
-  if ( m_1 )
+  // The first row: each pixel is its west neighbour plus its residual, and
+  // MSVC unrolled it two at a time -- `cur` is the first of the pair, needed
+  // whole before the second can use it.  `done` is where the unrolled part
+  // stopped and the `if` below finishes the odd pixel.
+  row_rest = width - 1;
+  pairs = (width - 1) / 2;
+  if ( pairs )
   {
-    for ( m = 0; m < m_1; ++m )
+    for ( k = 0; k < pairs; ++k )
     {
-      v39 = Src_1[2 * m] + v52[Src_1[2 * m + 1]];
-      Src_1[2 * m + 1] = v39;
-      Src_1[2 * m + 2] = v39 + (v52[Src_1[2 * m + 2]]);
-      result = &Src_1[2 * m + 3];
+      cur = pixels[2 * k] + unfold[pixels[2 * k + 1]];
+      pixels[2 * k + 1] = cur;
+      pixels[2 * k + 2] = cur + (unfold[pixels[2 * k + 2]]);
+      p = &pixels[2 * k + 3];
     }
-    i_1 = i;
-    v41 = 2 * m + 1;
+    done = 2 * k + 1;
   }
   else
   {
-    v41 = 1;
+    done = 1;
   }
-  if ( v36 > v41 - 1 )
+  if ( row_rest > done - 1 )
   {
-    Src_1[v41] = Src_1[v41 - 1] + v52[Src_1[v41]];
-    result = &Src_1[v41 + 1];
-    v42 = a3 - 1;
-    if ( a3 == 1 )
-      return result;
+    pixels[done] = pixels[done - 1] + unfold[pixels[done]];
+    p = &pixels[done + 1];
+    rows_left = height - 1;
+    if ( height == 1 )
+      return p;
     goto LABEL_29;
   }
-  v42 = a3 - 1;
-  if ( a3 != 1 )
+  rows_left = height - 1;
+  if ( height != 1 )
   {
 LABEL_29:
-    v50 = v36;
-    v43 = &result[-i_1];
+    up = &p[-width];
     do
     {
+      // The first column of a row: north is the only neighbour.  For a plane
+      // one pixel wide that is every pixel, which is what the loop is for --
+      // it spins here and never reaches the MED tree below.  For any other
+      // width it runs exactly once and breaks.
       while ( 1 )
       {
-        ++v43;
-        *result = v52[(uint8_t)*result] + result[-i_1];
-        v44 = v50;
-        ++result;
-        if ( i_1 != 1 )
+        ++up;
+        *p = unfold[(uint8_t)*p] + p[-width];
+        x_left = row_rest;
+        ++p;
+        if ( width != 1 )
           break;
-        if ( !--v42 )
-          return result;
+        if ( !--rows_left )
+          return p;
       }
-      v48 = v42;
       do
       {
-        v45 = (uint8_t)*(result - 1);
-        v46 = (uint8_t)*v43;
-        v47 = (uint8_t)result[-i - 1];
-        if ( v45 < v46 )
+        pred = (uint8_t)*(p - 1);
+        north = (uint8_t)*up;
+        northwest = (uint8_t)p[-width - 1];
+        if ( pred < north )
         {
-          if ( v47 < v45 )
+          if ( northwest < pred )
           {
-            LOBYTE(v45) = *v43;
+            LOBYTE(pred) = *up;
             goto LABEL_41;
           }
-          if ( v47 <= v46 )
-            LOBYTE(v45) = (uint8_t)(v46 + v45 - v47);
+          if ( northwest <= north )
+            LOBYTE(pred) = (uint8_t)(north + pred - northwest);
         }
         else
         {
-          if ( v47 > v45 )
+          if ( northwest > pred )
           {
-            LOBYTE(v45) = *v43;
+            LOBYTE(pred) = *up;
             goto LABEL_41;
           }
           // The `goto` here entered the branch above to reach this one
           // statement; both arms then fall to `LABEL_41`, so a copy says the
-          // same thing.  `v45 + v46 - v47` against the two bounds is the
+          // same thing.  `pred + north - northwest` against the two bounds is the
           // median of three, which is what `predict_med` is named for.
-          if ( v47 >= v46 )
-            LOBYTE(v45) = (uint8_t)(v46 + v45 - v47);
+          if ( northwest >= north )
+            LOBYTE(pred) = (uint8_t)(north + pred - northwest);
         }
 LABEL_41:
-        *result = v45 + v52[(uint8_t)*result];
-        ++v43;
-        ++result;
-        --v44;
+        *p = pred + unfold[(uint8_t)*p];
+        ++up;
+        ++p;
+        --x_left;
       }
-      while ( v44 );
-      i_1 = i;
-      v42 = v48 - 1;
+      while ( x_left );
+      --rows_left;
     }
-    while ( v48 != 1 );
+    while ( rows_left );
   }
-  return result;
+  return p;
 }
 
 // The zeroth-order cost of a histogram, in bits: `total*log(total) - sum(n*log n)`
