@@ -7885,238 +7885,259 @@ LABEL_71:
 // `n2` is the candidate index 0, 1 or 2 -- the callers pass those three
 // literals -- and `a8` is an array of four-word cost records, one per
 // candidate.  Both arrived as `uint8_t *` and neither is an address.
-int32_t __cost_candidate(uint8_t *a1, int32_t n2, uint8_t *a3, int8_t a4, int32_t a5, int32_t a6, int32_t a7, uint32_t *a8)
+// Price one candidate plane pairing, in bits, for `choose_plane_coding`'s
+// search.  Six histograms and two least-squares weights.
+//
+// The first loop walks the plane once and bins five differences per pixel:
+// `dx` and `dy` are the two-dimensional gradients of the two planes being
+// paired, `dz` is the third plane's, and the last two bins are `dz - dx`,
+// `dz - dy` and `dz` against the average of `dx` and `dy`.  It accumulates the
+// five products a two-variable least-squares fit needs -- `sxx`, `syy`, `sxy`,
+// `sxz`, `syz` -- in `double`, which is the only floating-point arithmetic in
+// the encoder's search.
+//
+// `w1` and `w2` come out of that fit, clamped to [-64, 191] and used as
+// sevenths-of-a-bit fixed point: the second loop bins `dz` minus the weighted
+// blend `(w1 * dx + w2 * dy + 40) >> 7`, which is exactly the residual
+// `colour_transform`'s predictor 2 would leave.  `estimate_cost` turns each
+// histogram into bits.
+//
+// The tail picks the cheaper of two pairings, swapping the two weights and the
+// two cost words with it, and writes the winner into the descriptor.
+//
+// `a4`, `a5`, `a6` and `a7` are unread.
+int32_t __cost_candidate(uint8_t *img, int32_t cand, uint8_t *desc, int8_t a4, int32_t a5, int32_t a6, int32_t a7, uint32_t *costs)
 {
   // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
   // gives every member its own storage and altp1 segfaults while compressing.
   struct alignas(16) CostCandidateFrame {   // 26712 bytes, one stack frame
       uint8_t buf[4096];
-      int32_t v72[1024];
-      int32_t v73[1024];
-      int32_t v74[1024];
-      int32_t v75[1024];
-      int32_t v76[1024];
+      int32_t hist_y[1024];
+      int32_t hist_yx[1024];
+      int32_t hist_zx[1024];
+      int32_t hist_zy[1024];
+      int32_t hist_zp[1024];
       uint8_t buf_1[4];
-      uint32_t v78;
-      int32_t v79;
-      int32_t v80;
-      int32_t v81;
-      int32_t v82;
-      int32_t v83;
+      uint32_t img_end;
+      int32_t step_d;
+      int32_t off_b0;
+      int32_t off_b1;
+      int32_t off_a0;
+      int32_t off_a1;
       int32_t n4;
-      int32_t v85;
-      int32_t v86;
+      int32_t off_a2;
+      int32_t off_b2;
       uint8_t _pad0[2008];
       int32_t n2_2;
-      uint8_t *v88;
-      uint8_t *v89;
-      int32_t v90;
+      uint8_t *desc_f;
+      uint8_t *img_f;
+      int32_t rec_off;
       // `v91` held three unrelated `int32_t` here in three phases -- a base
       // address, a pixel difference inside the inner loop, and a cost -- with
       // no overlap between them.  All three are locals now and the slot is
       // dead; it stays to hold the layout.
       int32_t _pad91;
-      int32_t v92;
-      int32_t v93;
-      int32_t v94;
-      int32_t v95;
+      int32_t d1_f;
+      int32_t best;
+      int32_t rows;
+      int32_t d2_f;
       int32_t n191_5;
       int32_t n191_2;
-      uint8_t *v98;
-      uint8_t *v99;
+      uint8_t *r1_f;
+      uint8_t *r0_f;
       uint8_t *n2_1;
-      int32_t v101;
+      int32_t off_up;
       uint8_t _pad1[28];
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 26720, "frame layout moved");
   ;
-  int32_t cand_base;   // was `__frame.v91`, phase one: `&v15[n2_3]` as a number
+  int32_t cand_base;   // was `__frame.v91`, phase one: `&base[cand2]` as a number
   int32_t cost;        // was `__frame.v91`, phase three: an `estimate_cost`
-  int32_t v63;      // a byte offset into `v64`, which is the address
-  uint8_t *v64;
-  bool v67;
-  double v16, v17, v18, v19, v20, v32, n191_1, n191_4;
-  int32_t v9, v10, v12, v22, v23, v24, v25, v26, v27, v28, v30, v31, n191,
-          n191_3, v37, v39, v40, v41, v45, v46, v47, v48, v49, v50, v51, v52,
-          v53, v54, v55, v56, v58, v59, v60, n191_6, n191_7;
-  uint32_t v69, v70;
-  uint8_t *v15, *v21, *v29, *v42, *n2_4, *v44;
-  int32_t n2_3, v65, v66;   // candidate indices, not addresses
-  __frame.v101 = (int32_t)(uintptr_t)a3;
-  __frame.n2_1 = (uint8_t *)n2;   // the slot is reused as an address below
-  __frame.v99 = a1;
-  __frame.v88 = a3;
+  int32_t off;      // a byte offset into `descp`, which is the address
+  uint8_t *descp;
+  bool deep;
+  double syz, syy, sxz, sxy, sxx, inv, w1f, w2f;
+  int32_t row_b, d1, row_b2, d2, dx, o1, dy, o2, t1, t2, dz, bin, w1,
+          w2, img_w, nstep, at, at1, e0, e1, e2, left, bin2, pick, c0, rec,
+          c2, lo1, s1, s2, c2b, tmp, swap, w2s, w1s;
+  uint32_t lo2, lo3;
+  uint8_t *base, *p, *q, *r0, *r2, *r1;
+  int32_t cand2, idx1, idx2;   // candidate indices, not addresses
+  __frame.off_up = (int32_t)(uintptr_t)desc;
+  __frame.n2_1 = (uint8_t *)cand;   // the slot is reused as an address below
+  __frame.r0_f = img;
+  __frame.desc_f = desc;
   __frame.n4 = plane_count;
-  v9 = *(const uint16_t *)&((const BmfImage *)a1)->stride;   // the low half of the stride
-  __frame.n2_2 = n2;
-  __frame.v89 = a1;
-  __frame.v92 = (int32_t)(__frame.n2_1 + 1) % 3 - (uint32_t)__frame.n2_1;
-  __frame.v95 = (int32_t)(__frame.n2_1 + 2) % 3 - (uint32_t)__frame.n2_1;
-  __frame.v78 = (uint32_t)&__frame.v99[*((uint32_t *)__frame.v99 + 3) + 16];
-  v10 = __frame.v92;
-  *(uint32_t *)__frame.buf_1 = v9;
+  row_b = *(const uint16_t *)&((const BmfImage *)img)->stride;   // the low half of the stride
+  __frame.n2_2 = cand;
+  __frame.img_f = img;
+  __frame.d1_f = (int32_t)(__frame.n2_1 + 1) % 3 - (uint32_t)__frame.n2_1;
+  __frame.d2_f = (int32_t)(__frame.n2_1 + 2) % 3 - (uint32_t)__frame.n2_1;
+  __frame.img_end = (uint32_t)&__frame.r0_f[*((uint32_t *)__frame.r0_f + 3) + 16];
+  d1 = __frame.d1_f;
+  *(uint32_t *)__frame.buf_1 = row_b;
   memset(__frame.buf,0,24576);
-  v12 = *(uint32_t *)__frame.buf_1;
-  n2_3 = __frame.n2_2;
-  v15 = __frame.v89;
-  v16 = 0;
-  v17 = 0.0;
-  v18 = 0.0;
-  v19 = 0.0;
-  v20 = 0.0;
-  __frame.v90 = 16 * __frame.n2_2;
-  __frame.v88[16 * __frame.n2_2] = 2;
-  __frame.v88[33] = (uint8_t)n2_3;
-  cand_base = (int32_t)&v15[n2_3];
-  v21 = &v15[n2_3 + 16 + v12 + __frame.n4];
-  if ( (uint32_t)v21 < __frame.v78 )
+  row_b2 = *(uint32_t *)__frame.buf_1;
+  cand2 = __frame.n2_2;
+  base = __frame.img_f;
+  syz = 0;
+  syy = 0.0;
+  sxz = 0.0;
+  sxy = 0.0;
+  sxx = 0.0;
+  __frame.rec_off = 16 * __frame.n2_2;
+  __frame.desc_f[16 * __frame.n2_2] = 2;
+  __frame.desc_f[33] = (uint8_t)cand2;
+  cand_base = (int32_t)&base[cand2];
+  p = &base[cand2 + 16 + row_b2 + __frame.n4];
+  if ( (uint32_t)p < __frame.img_end )
   {
-    __frame.v92 = v10;
-    *(uint32_t *)__frame.buf_1 = v12;
-    __frame.v85 = v10 - v12;
-    __frame.v83 = v10 - v12 - __frame.n4;
-    __frame.v82 = v10 - __frame.n4;
-    __frame.v86 = __frame.v95 - v12;
-    __frame.v81 = __frame.v95 - v12 - __frame.n4;
-    __frame.v80 = __frame.v95 - __frame.n4;
-    __frame.v79 = v12 + __frame.n4;
+    __frame.d1_f = d1;
+    *(uint32_t *)__frame.buf_1 = row_b2;
+    __frame.off_a2 = d1 - row_b2;
+    __frame.off_a1 = d1 - row_b2 - __frame.n4;
+    __frame.off_a0 = d1 - __frame.n4;
+    __frame.off_b2 = __frame.d2_f - row_b2;
+    __frame.off_b1 = __frame.d2_f - row_b2 - __frame.n4;
+    __frame.off_b0 = __frame.d2_f - __frame.n4;
+    __frame.step_d = row_b2 + __frame.n4;
     do
     {
-      v22 = __frame.v95;
-      v23 = v21[__frame.v83] + v21[__frame.v92] - (v21[__frame.v85] + v21[__frame.v82]);
-      v24 = __frame.v81;
-      ++*(uint32_t *)&__frame.buf[4 * v23 + 2048];
-      v25 = v21[v24] + v21[v22] - (v21[__frame.v86] + v21[__frame.v80]);
-      v26 = __frame.v79;
-      v20 = v20 + (double)v23 * (double)v23;
-      ++__frame.v72[v25 + 512];
-      v17 = v17 + (double)v25 * (double)v25;
-      v19 = v19 + (double)v23 * (double)v25;
-      ++__frame.v73[((uint16_t)v25 - (uint16_t)v23 - 512) & 0x3FF];
-      v27 = v21[-v26] + *v21;
-      v28 = v21[-__frame.n4];
-      v29 = &v21[-*(uint32_t *)__frame.buf_1];
-      v21 += __frame.n4;
-      v30 = v27 - (*v29 + v28);
-      v18 = v18 + (double)v23 * (double)v30;
-      ++__frame.v74[((uint16_t)v30 - (uint16_t)v23 - 512) & 0x3FF];
-      v16 = v16 + (double)v25 * (double)v30;
-      ++__frame.v75[((uint16_t)v30 - (uint16_t)v25 - 512) & 0x3FF];
-      v31 = ((uint16_t)v30 - (uint16_t)((uint32_t)(((v23 + v25) << 6) + 40) >> 7) - 512) & 0x3FF;
-      ++__frame.v76[v31];
+      d2 = __frame.d2_f;
+      dx = p[__frame.off_a1] + p[__frame.d1_f] - (p[__frame.off_a2] + p[__frame.off_a0]);
+      o1 = __frame.off_b1;
+      ++*(uint32_t *)&__frame.buf[4 * dx + 2048];
+      dy = p[o1] + p[d2] - (p[__frame.off_b2] + p[__frame.off_b0]);
+      o2 = __frame.step_d;
+      sxx = sxx + (double)dx * (double)dx;
+      ++__frame.hist_y[dy + 512];
+      syy = syy + (double)dy * (double)dy;
+      sxy = sxy + (double)dx * (double)dy;
+      ++__frame.hist_yx[((uint16_t)dy - (uint16_t)dx - 512) & 0x3FF];
+      t1 = p[-o2] + *p;
+      t2 = p[-__frame.n4];
+      q = &p[-*(uint32_t *)__frame.buf_1];
+      p += __frame.n4;
+      dz = t1 - (*q + t2);
+      sxz = sxz + (double)dx * (double)dz;
+      ++__frame.hist_zx[((uint16_t)dz - (uint16_t)dx - 512) & 0x3FF];
+      syz = syz + (double)dy * (double)dz;
+      ++__frame.hist_zy[((uint16_t)dz - (uint16_t)dy - 512) & 0x3FF];
+      bin = ((uint16_t)dz - (uint16_t)((uint32_t)(((dx + dy) << 6) + 40) >> 7) - 512) & 0x3FF;
+      ++__frame.hist_zp[bin];
     }
-    while ( (uint32_t)v21 < __frame.v78 );
-    v10 = __frame.v92;
+    while ( (uint32_t)p < __frame.img_end );
+    d1 = __frame.d1_f;
   }
-  v32 = 128.0 / (0.1 - v19 * v19 + v20 * v17);
-  n191_1 = (v17 * v18 - v19 * v16) * v32;
-  n191_4 = v32 * (v20 * v16 - v19 * v18);
-  n191 = (int32_t)n191_1;
-  if ( (int32_t)n191_1 >= 191 )
-    n191 = 191;
-  if ( n191 < -64 )
-    n191 = -64;
-  __frame.n191_2 = n191;
-  n191_3 = (int32_t)n191_4;
-  if ( (int32_t)n191_4 >= 191 )
-    n191_3 = 191;
-  if ( n191_3 < -64 )
-    n191_3 = -64;
-  __frame.n191_5 = n191_3;
+  inv = 128.0 / (0.1 - sxy * sxy + sxx * syy);
+  w1f = (syy * sxz - sxy * syz) * inv;
+  w2f = inv * (sxx * syz - sxy * sxz);
+  w1 = (int32_t)w1f;
+  if ( (int32_t)w1f >= 191 )
+    w1 = 191;
+  if ( w1 < -64 )
+    w1 = -64;
+  __frame.n191_2 = w1;
+  w2 = (int32_t)w2f;
+  if ( (int32_t)w2f >= 191 )
+    w2 = 191;
+  if ( w2 < -64 )
+    w2 = -64;
+  __frame.n191_5 = w2;
   memset(__frame.buf_1,0,2048);
-  v37 = *((uint16_t *)__frame.v89 + 2);
-  __frame.v92 = v10;
-  __frame.v94 = ((*((uint16_t *)__frame.v89 + 1) - 1) * *(uint16_t *)__frame.v89) - 1;
-  __frame.v93 = -v37;
-  v39 = -plane_count;
-  v40 = cand_base - (-v37 - plane_count);
-  __frame.v101 = -v37 - plane_count;
-  __frame.v99 = (uint8_t *)(v40 + 16);
-  v41 = v10 + v40 + 16;
-  v42 = (uint8_t *)(v40 + 16);
-  __frame.v98 = (uint8_t *)v41;
-  __frame.n2_1 = (uint8_t *)(__frame.v95 + v40 + 16);
-  n2_4 = __frame.n2_1;
-  v44 = (uint8_t *)v41;
+  img_w = *((uint16_t *)__frame.img_f + 2);
+  __frame.d1_f = d1;
+  __frame.rows = ((*((uint16_t *)__frame.img_f + 1) - 1) * *(uint16_t *)__frame.img_f) - 1;
+  __frame.best = -img_w;
+  nstep = -plane_count;
+  at = cand_base - (-img_w - plane_count);
+  __frame.off_up = -img_w - plane_count;
+  __frame.r0_f = (uint8_t *)(at + 16);
+  at1 = d1 + at + 16;
+  r0 = (uint8_t *)(at + 16);
+  __frame.r1_f = (uint8_t *)at1;
+  __frame.n2_1 = (uint8_t *)(__frame.d2_f + at + 16);
+  r2 = __frame.n2_1;
+  r1 = (uint8_t *)at1;
   do
   {
-    v45 = v42[__frame.v101];
-    __frame.v98 = v44;
-    __frame.v99 = v42;
-    __frame.n2_1 = n2_4;
-    v46 = v45 + *v42 - v42[__frame.v93] - v42[v39];
-    v47 = *v44;
-    v48 = __frame.v94;
-    n2_4 = &__frame.n2_1[-v39];
-    v49 = ((uint16_t)v46
-         - (uint16_t)((__frame.n191_2 * (v44[__frame.v101] + v47 - v44[__frame.v93] - v44[v39])
-                             + __frame.n191_5 * (__frame.n2_1[__frame.v101] + *__frame.n2_1 - __frame.n2_1[__frame.v93] - (uint32_t)__frame.n2_1[v39])
+    e0 = r0[__frame.off_up];
+    __frame.r1_f = r1;
+    __frame.r0_f = r0;
+    __frame.n2_1 = r2;
+    e1 = e0 + *r0 - r0[__frame.best] - r0[nstep];
+    e2 = *r1;
+    left = __frame.rows;
+    r2 = &__frame.n2_1[-nstep];
+    bin2 = ((uint16_t)e1
+         - (uint16_t)((__frame.n191_2 * (r1[__frame.off_up] + e2 - r1[__frame.best] - r1[nstep])
+                             + __frame.n191_5 * (__frame.n2_1[__frame.off_up] + *__frame.n2_1 - __frame.n2_1[__frame.best] - (uint32_t)__frame.n2_1[nstep])
                              + 40) >> 7)
          - 256)
         & 0x1FF;
-    v44 -= v39;
-    ++*(uint32_t *)&__frame.buf_1[4 * v49];
-    v42 = &__frame.v99[-v39];
-    __frame.v94 = v48 - 1;
+    r1 -= nstep;
+    ++*(uint32_t *)&__frame.buf_1[4 * bin2];
+    r0 = &__frame.r0_f[-nstep];
+    __frame.rows = left - 1;
   }
-  while ( v48 != 1 );
-  v50 = __frame.v92;
-  v51 = __estimate_cost((uint8_t *)__frame.buf_1, 512);
-  v52 = 4 * __frame.n2_2;   // this candidate's four-word record
-  a8[v52] = v51;
-  a8[v52 + 1] = __estimate_cost((uint8_t *)__frame.v74, 1024);
-  a8[v52 + 2] = __estimate_cost((uint8_t *)__frame.v75, 1024);
-  a8[v52 + 3] = __estimate_cost((uint8_t *)__frame.v76, 1024);
+  while ( left != 1 );
+  pick = __frame.d1_f;
+  c0 = __estimate_cost((uint8_t *)__frame.buf_1, 512);
+  rec = 4 * __frame.n2_2;   // this candidate's four-word record
+  costs[rec] = c0;
+  costs[rec + 1] = __estimate_cost((uint8_t *)__frame.hist_zx, 1024);
+  costs[rec + 2] = __estimate_cost((uint8_t *)__frame.hist_zy, 1024);
+  costs[rec + 3] = __estimate_cost((uint8_t *)__frame.hist_zp, 1024);
   cost = __estimate_cost((uint8_t *)__frame.buf, 1024);
-  __frame.v92 = __estimate_cost((uint8_t *)__frame.v72, 1024);
-  v53 = __estimate_cost((uint8_t *)__frame.v73, 1024);
-  __frame.v94 = v53;
-  v54 = v53;
-  if ( cost < v53 )
-    v54 = cost;
-  if ( __frame.v92 < v53 )
-    v53 = __frame.v92;
-  v55 = __frame.v92 + v54;
-  v56 = cost + v53;
-  __frame.v93 = v56;
-  v58 = __frame.v94;
-  if ( (v55 < v56) )
+  __frame.d1_f = __estimate_cost((uint8_t *)__frame.hist_y, 1024);
+  c2 = __estimate_cost((uint8_t *)__frame.hist_yx, 1024);
+  __frame.rows = c2;
+  lo1 = c2;
+  if ( cost < c2 )
+    lo1 = cost;
+  if ( __frame.d1_f < c2 )
+    c2 = __frame.d1_f;
+  s1 = __frame.d1_f + lo1;
+  s2 = cost + c2;
+  __frame.best = s2;
+  c2b = __frame.rows;
+  if ( (s1 < s2) )
   {
-    __frame.v93 = v55;
-    v59 = v50;
-    v50 = __frame.v95;
-    cost = __frame.v92;
-    __frame.v95 = v59;
-    v60 = a8[v52 + 1];
-    a8[v52 + 1] = a8[v52 + 2];
-    n191_6 = __frame.n191_5;
-    a8[v52 + 2] = v60;
-    n191_7 = __frame.n191_2;
-    __frame.n191_2 = n191_6;
-    __frame.n191_5 = n191_7;
+    __frame.best = s1;
+    tmp = pick;
+    pick = __frame.d2_f;
+    cost = __frame.d1_f;
+    __frame.d2_f = tmp;
+    swap = costs[rec + 1];
+    costs[rec + 1] = costs[rec + 2];
+    w2s = __frame.n191_5;
+    costs[rec + 2] = swap;
+    w1s = __frame.n191_2;
+    __frame.n191_2 = w2s;
+    __frame.n191_5 = w1s;
   }
-  v63 = __frame.v90;
-  v64 = __frame.v88;
-  *(uint32_t *)&__frame.v88[__frame.v90 + 4] = __frame.n191_2;
-  *(uint32_t *)&v64[v63 + 8] = __frame.n191_5;
-  v65 = __frame.n2_2 + v50;
-  v66 = __frame.n2_2 + __frame.v95;
-  v64[16 * v65] = 0;
-  v64[1] = (uint8_t)v65;
-  v67 = 0;                            // -S
-  v64[16 * v66] = 1;
-  v64[17] = (uint8_t)v66;
-  if ( !v67 && *((uint32_t *)__frame.v89 + 3) > 0x1000000u )
-    return cost + v58 + a8[v52];
-  v69 = a8[v52];
-  v70 = a8[v52 + 2];
-  if ( v69 >= a8[v52 + 1] )
-    v69 = a8[v52 + 1];
-  if ( v70 >= a8[v52 + 3] )
-    v70 = a8[v52 + 3];
-  if ( v69 < v70 )
-    v70 = v69;
-  return __frame.v93 + v70;
+  off = __frame.rec_off;
+  descp = __frame.desc_f;
+  *(uint32_t *)&__frame.desc_f[__frame.rec_off + 4] = __frame.n191_2;
+  *(uint32_t *)&descp[off + 8] = __frame.n191_5;
+  idx1 = __frame.n2_2 + pick;
+  idx2 = __frame.n2_2 + __frame.d2_f;
+  descp[16 * idx1] = 0;
+  descp[1] = (uint8_t)idx1;
+  deep = 0;                            // -S
+  descp[16 * idx2] = 1;
+  descp[17] = (uint8_t)idx2;
+  if ( !deep && *((uint32_t *)__frame.img_f + 3) > 0x1000000u )
+    return cost + c2b + costs[rec];
+  lo2 = costs[rec];
+  lo3 = costs[rec + 2];
+  if ( lo2 >= costs[rec + 1] )
+    lo2 = costs[rec + 1];
+  if ( lo3 >= costs[rec + 3] )
+    lo3 = costs[rec + 3];
+  if ( lo2 < lo3 )
+    lo3 = lo2;
+  return __frame.best + lo3;
 }
 
 
