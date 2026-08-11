@@ -2920,3 +2920,59 @@ open with a usage line; the other four open with prose and carry one below.
 "runs three generators" in the same paragraph. There were four. The count is
 gone: `ls tools/mk*.py` is the answer, and it is the glob `sweep.sh` already
 skips.
+
+## 37. A second `goto` shape, and a balance check that was a sum
+
+`degoto.py` rewrites one shape — a `goto` that is the *whole* of an `if`,
+jumping forward over a region nothing else enters — and reports the rest by the
+condition each fails. Nine of the file's labels failed on one line of that
+breakdown:
+
+```
+9  the goto is not the whole of an if
+```
+
+Read, all nine are the same jump with statements above it:
+
+```c
+if ( c ) { S; goto L; }   R   L:      ->      if ( c ) { S; } else { R }
+```
+
+Exact for the same reason the first shape is: the `goto` is the last statement,
+so a consequent that is entered either leaves by an earlier `return`/`break` or
+reaches the `goto` — it never falls into `R`.
+
+With the shape added, the nine become five "the region after the if is not one
+run of statements", three "something else enters the region it skips" and one
+that genuinely is not an `if`. Zero candidates either way on this file, but a
+breakdown that names the obstacle rather than the shape.
+
+### The bug the extension found
+
+The first version accepted a candidate at `4481630` and produced this:
+
+```c
+    else
+    {
+      …
+      Stream_1 = ((BmfArc *)v5)->fp;
+    }
+    if ( (uint16_t)__expand_image_Buffer_1 != 0x8A81 …
+```
+
+The `while` that the region's last `}` had closed is now unterminated. The
+region *summed* to zero braces — it closes a loop and opens an `if` — and the
+check was `sum(l.count('{') - l.count('}')) == 0`, which is not the question.
+The running depth has to stay non-negative as well as end at zero. The
+original shape had the same check and the same hole for six rounds; it happened
+never to have a region of that form to accept.
+
+### And a control
+
+Both shapes report zero on this file. That is only worth anything if they can
+report something: replayed over the history, the `else` shape fires once at
+`b3f71fe` and the inverting one twice in the same revision, and the corrected
+balance check is what rejects `4481630`'s. A rule that has never been shown to
+fire is indistinguishable from one that never looks — which is `proven.sh`'s
+whole argument, applied by hand to a rule that is new enough not to have a
+history in it yet.
