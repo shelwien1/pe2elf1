@@ -627,11 +627,18 @@ static inline SymListBlock *sym_list_block(SymList *list) {
 
 // A binary counter pair: two `uint16_t`, both seeded 0x2000 -- p = 1/2 for a
 // fresh counter.  `layout_workspace` writes 0x10000 of them per context group.
-struct CtrPair {
-  uint16_t f0;
-  uint16_t f1;
+// Not a counter pair, whatever the name says: the two most recent symbols seen
+// in one context.  `init_model_tables` writes `pix_cur[1] = pix_cur[0]` and then
+// `pix_cur[0] = <this pixel>` with `pix_cur` pointing at one of these, which is
+// a two-entry move-to-front; both coders read them back as candidates and score
+// a hit on `last` at 15 and on `prev` at 75.  The seed is (0x2000, 0x2000),
+// which is one past the largest thirteen-bit symbol -- a value no pixel can
+// have, so a fresh context matches neither.
+struct SymPair {
+  uint16_t last;
+  uint16_t prev;
 };
-static_assert(sizeof(CtrPair) == 4, "CtrPair: the record is four bytes");
+static_assert(sizeof(SymPair) == 4, "SymPair: the record is four bytes");
 
 // One adaptive binary counter: a count per bit value, and the total at which
 // the pair is rescaled.  `layout_workspace` seeds them (40, 16, 512) or
@@ -706,6 +713,9 @@ struct ModelBlock {
   // match promoted into them.  It is the coder's answer to "was this
   // candidate the pixel", carried across a call rather than returned.
   uint32_t hit;
+  // Write-only, like the three in `AltP2Block`: both coders store the
+  // neighbourhood word here once per pixel and nothing reads it back, and
+  // no computed reach lands on +36.  It stays because the layout does.
   uint32_t f36;
   // Which of `grid`'s 188 context buckets this pixel selected.  The only
   // reader is `&row_cur[4 * bucket_idx + 10]`, which in `uint32_t` steps is
@@ -830,7 +840,7 @@ struct ModelBlock {
   // which is +2 127 272 -- and 15 * 0x10000 * 4 is 3 932 160, this member's
   // whole extent.  The entry is the 16-bit context `code_pixel` derives from
   // the neighbourhood; the group is `ctx_state[flags]`.
-  CtrPair group_ctr[15][65536];   // +2127272 .. +6059431
+  SymPair group_ctr[15][65536];   // +2127272 .. +6059431
   // The symbol cache `code_pixel` promotes through: a cursor into
   // `sym_ctr`, set to `&sym_ctr[8 * ctx]` and walked as `[0..6]`.
   uint16_t *sym_cache;
@@ -1033,7 +1043,7 @@ struct AltP2Block {
       // `bank_ctx[n5]` at the top of each, which is what says these five
       // scalars are an array.  `alt_p2_context` writes them one at a time.
       int32_t bank_ctx[5];   // +278676 .. +278695
-      int32_t f278696;
+      int32_t f278696;   // no reader, and no writer either
       // The filter's last prediction.  `alt_p2_context` leaves its output
       // here and `alt_p2_model` reads it one pixel later as
       // `lane[2] = sample - pred_prev`, which is the residual the record
@@ -9544,7 +9554,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   // four `uint16_t`, which is one `PixRec`, and every one is `sym`.
   PixRec *v106;
   FreqRec *freq_tbl;
-  CtrPair *v16;   // the group's counter pair for this context
+  SymPair *v16;   // the group's counter pair for this context
   PixRec *n15_9;   // `row_cur[6]`, the row above
   uint16_t n4_10;   // a symbol, compared against four others
   PixRec *v110, *v121;   // `row_cur[7]` and `row_cur[8]`
@@ -9603,7 +9613,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   this_2->f36 = v15;
   v16 = &this_2->group_ctr[v15][v13];
   this_2->pix_cur = (uint16_t *)v16;
-  n4_9 = v16->f0;
+  n4_9 = v16->last;
   if ( n4_9 == __frame.sym0 )
   {
     __decode_pixel_n15 = 15;
@@ -9622,7 +9632,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
     if ( !(n4_9 == __frame.sym2) )
       __decode_pixel_n15 = 0;
   }
-  n4_10 = v16->f1;
+  n4_10 = v16->prev;
   if ( n4_10 == __frame.sym0 )
   {
     __decode_pixel_n15 += 75;
@@ -10320,7 +10330,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   ModelBlock *this_3;
   ModelBlock *this_4;
   ModelBlock *this_2;
-  CtrPair *v16;   // the group's counter pair for this context
+  SymPair *v16;   // the group's counter pair for this context
   // A cumulative count, a high count and a total: the three arguments the
   // range coder takes, and it takes them unsigned.
   uint32_t arg_cum, arg_high, arg_tot;
@@ -10399,7 +10409,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   *(int32_t *)&this_2->f36 = v15;
   v16 = &this_2->group_ctr[v15][v13];
   this_2->pix_cur = (uint16_t *)v16;
-  n15_6 = v16->f0;
+  n15_6 = v16->last;
   if ( n15_6 == __frame.sym8 )
   {
     n15_5 = 15;
@@ -10419,7 +10429,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
     if ( !v11 )
       n15_5 = 0;
   }
-  n15_8 = v16->f1;
+  n15_8 = v16->prev;
   if ( n15_8 == __frame.sym8 )
   {
     n15_5 += 75;
@@ -11358,7 +11368,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   ModelBlock *this_2;
   uint32_t *ArgList_6;
   SymListBlock *v31, *v35;
-  CtrPair *v22;   // one group's row of counter pairs
+  SymPair *v22;   // one group's row of counter pairs
   SymEntry *ArgList_7;
   SymList *i_1, *i, *j_1, *j;
   FreqRec *v13;   // a bucket record: `grid[bucket]`
@@ -11506,8 +11516,8 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
     v22 = this_1->group_ctr[v82];
     do
     {
-      v22[n0x10000].f0 = 0x2000;
-      v22[n0x10000++].f1 = 0x2000;
+      v22[n0x10000].last = 0x2000;
+      v22[n0x10000++].prev = 0x2000;
     }
     while ( n0x10000 < 0x10000 );
     v5 = v82 + 1;
@@ -15303,7 +15313,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
   PixRec *v47, *v48, *v49;   // three of the five row buffers
   uint32_t n0x10000, v31, v34, v37, v40;
   SymListBlock *v32, *v38;
-  CtrPair *v24;   // one group's row of counter pairs
+  SymPair *v24;   // one group's row of counter pairs
   SymList *v33, *v39;
   FreqRec *v12;   // a bucket record: `grid[bucket]`
   PixRec *v51, *v52;   // `row_cur[6]` and `row_cur[7]`, the two rows above
@@ -15474,8 +15484,8 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
       v24 = Blocka_2->group_ctr[v58];
       do
       {
-        v24[n0x10000].f0 = 0x2000;
-        v24[n0x10000++].f1 = 0x2000;
+        v24[n0x10000].last = 0x2000;
+        v24[n0x10000++].prev = 0x2000;
       }
       while ( n0x10000 < 0x10000 );
       Blocka_4 = (ModelBlock *)((uintptr_t)Blocka_5 + 1);
