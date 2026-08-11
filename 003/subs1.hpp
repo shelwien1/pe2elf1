@@ -6537,11 +6537,11 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   // slots are `_gapA`..`_gapC` above now; nothing is left to share.
   int32_t dv_now;
   int32_t mag_ref1;
-  int32_t n15;
+  int32_t ctx15;
   P2Ctx *nb4;   // row cursors into the neighbourhood table
   int32_t row0_i;
   int32_t mag_ref0;
-  int32_t run3;
+  int32_t d_run0b;
   int32_t g3pair;
   P2Ctx *ra1;
   P2Ctx *ra0;
@@ -6549,8 +6549,6 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   P2Ctx *rb0;
   P2Ctx *rb2;
   P2Ctx *ra2;
-  int32_t n1840_2;
-  int32_t n1840_1;
   // The six spill slots before `alt_p2_filter`'s six weight pointers are
   // loaded into them: a row cursor, a neighbour, a threshold-row index and
   // three counts.  Both lifetimes were `__frame.sub[0..5]`.
@@ -6560,7 +6558,6 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   // The five digits of the neighbourhood index and the index itself.
   int32_t  gA, gB, gC, gD, den_d, nb_slot;
   int32_t sum_all;
-  int32_t n3536;
   P2Ctx *cx0;   // the p2 row cursor, `cursor[0]`
   // The p2 row cursor and its copies.  Every dereference is a lane of the
   // 18-byte record or the high byte of one, so the byte offsets divide into
@@ -6575,8 +6572,6 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   P2Ctx *cx2;   // row cursors into the neighbourhood table
   uint32_t q39;
   uint32_t q10;
-  int32_t n960_1;
-  int32_t n1840;
   // Three slots MSVC reused between the bank stages: each held one term
   // of the stage-2 context word and then a magnitude sum at the end.
   int32_t up5, lap, magl;
@@ -6611,20 +6606,27 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   int16_t *nb2w, *nb2w2;
   P2Ctx *cursor1, *nb1, *nb2x;
   int32_t *up_row;
-  int32_t sum4, lane5, nb_id, next_id, plane, in63, *cur, c_lo, n2, c_mid,
-          n3536_5, lane3, g3sum, n3536_1, lane2, ctx0, bank0, pred0, sum_c,
-          n2256, ctx1, bank1, w1c, one1, pred1, n2576, n1840_13, ctx2, bank2,
-          pred2, n2896, bank3, w3c, pred3, n3536_2, bank4, pred4, n1840_15,
-          n1840_16, n1840_17, n960, n3536_4, mag, flat_a, flat_b, n1840_3,
-          n1840_8, n1840_7, n1840_10, ra0_val, n1840_11, n1840_12, n255, n1840_5,
-          n1840_4, n1840_6;
+  int32_t sum4, lane5, nb_id, next_id, plane, in63, *cur, c_lo, mode, c_mid,
+          filt, lane3, g3sum, run_s, lane2, ctx0, bank0, pred0, sum_c,
+          run0, ctx1, bank1, w1c, one1, pred1, run1, cx2_val0, ctx2, bank2,
+          pred2, run2, bank3, w3c, pred3, run3, bank4, pred4, band_lo0,
+          band_hi0, d_run4, magsum, run_s2, mag, flat_a, flat_b, d_run4b,
+          d_rb_rb1, band_hi_s2, d_rb_left, ra0_val, d_ra_ra1b, d_ra_leftb, ctx_idx, d_ra_ra1,
+          band_hi_s, d_ra_left;
   int8_t rate1;
   uint32_t ctx0_lo, q24, q10a, q10b, q9;
   uint8_t *cx2p;
+  // One name per lifetime.  MSVC gave each of these slots two, three or
+  // four unrelated jobs -- a context sum, then a difference term, then a
+  // band bound -- and Hex-Rays named the slot after the first constant it
+  // saw in it, so all four jobs answered to `n1840_1`.
+  int32_t sum_u, run, nb4_4, run4, sum_ul, d_up, d_ra, band_lo;
+  int32_t sum_ur, d_up5, dv1, band_hi, d_run0, cx1_val, magsum_s;
+  ;
   row0 = blk->cursor[0];
   cursor1 = blk->cursor[1];
   sub0_row = (P2Ctx *)blk->cursor[2];
-  n1840_1 = 21 * sub0_row[-1].dupleft
+  sum_ul = 21 * sub0_row[-1].dupleft
           + 12 * cursor1[3].dupleft
           + 16 * cursor1[2].dupleft
           + 22 * cursor1[1].dupleft
@@ -6632,7 +6634,7 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
           + 20 * cursor1->dupleft
           + ctx_bias[0]
           + 14 * row0[-2].dupleft;
-  n1840_2 = 17 * sub0_row[-2].dupright
+  sum_ur = 17 * sub0_row[-2].dupright
           + 21 * cursor1[2].dupright
           + 15 * cursor1[1].dupright
           + 25 * cursor1->dupright
@@ -6653,22 +6655,22 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   // three of them through `(int16_t *)cursor1`, whose subscripts are byte
   // offsets 64, 28 and 10 -- records 3, 1 and 0 at lane 5 of an 18-byte
   // record, which is the same neighbourhood the other three sums walk.
-  n3536 = 14 * cursor1[3].dup
+  sum_u = 14 * cursor1[3].dup
         + 23 * cursor1[1].dup
         + 19 * cursor1->dup
         + 25 * row0[-1].dup
         + ctx_bias[3]
         + 17 * row0[-2].dup
         + 15 * (blk->cursor[3]->dup + lane5);
-  sum_all = sum4 + n3536 + n1840_1 + n1840_2;
+  sum_all = sum4 + sum_u + sum_ul + sum_ur;
   // Which row of the threshold table: how many of five ratios the coded
   // length has passed.  This was `13 * <the same sum>` used as a flat
   // subscript, with the sum itself recomputed two statements later.
-  band = (8 * sum4 > 43 * n3536)
-       + (8 * sum4 > 17 * n3536)
-       + (8 * sum4 > 9 * n3536)
-       + (8 * sum4 > 5 * n3536)
-       + (8 * sum4 > 2 * n3536);
+  band = (8 * sum4 > 43 * sum_u)
+       + (8 * sum4 > 17 * sum_u)
+       + (8 * sum4 > 9 * sum_u)
+       + (8 * sum4 > 5 * sum_u)
+       + (8 * sum4 > 2 * sum_u);
   // Which neighbourhood the plane is in, as a mixed-radix index: the band
   // above, then four more ratios each counting how many of their own
   // thresholds this plane has passed.
@@ -6692,9 +6694,9 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   gB = (num_b > bmf_p2_thresholds[band][8])
      + (num_b > bmf_p2_thresholds[band][7])
      + (num_b > bmf_p2_thresholds[band][6]);
-  gC = (16 * n1840_2 > n1840_1 * bmf_p2_thresholds[band][5])
-     + (16 * n1840_2 > n1840_1 * bmf_p2_thresholds[band][4])
-     + (16 * n1840_2 > n1840_1 * bmf_p2_thresholds[band][3]);
+  gC = (16 * sum_ur > sum_ul * bmf_p2_thresholds[band][5])
+     + (16 * sum_ur > sum_ul * bmf_p2_thresholds[band][4])
+     + (16 * sum_ur > sum_ul * bmf_p2_thresholds[band][3]);
   gD = (num_d > bmf_p2_thresholds[band][2] * den_d)
      + (num_d > den_d * bmf_p2_thresholds[band][1])
      + (num_d > den_d * bmf_p2_thresholds[band][0]);
@@ -6885,38 +6887,38 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   __frame.sub3 = (float (*)[4])*(cur - 2);
   __frame.sub4 = (float (*)[4])*up_row;
   __frame.sub5 = (float (*)[4])*cur;
-  c_lo = 14 * n3536;
-  n2 = 1;
-  c_mid = 13 * n1840_2;
-  if ( 16 * sum4 <= 14 * n3536 )
+  c_lo = 14 * sum_u;
+  mode = 1;
+  c_mid = 13 * sum_ur;
+  if ( 16 * sum4 <= 14 * sum_u )
   {
     c_lo = 16 * sum4;
-    n2 = 0;
+    mode = 0;
   }
   if ( c_lo > c_mid )
-    n2 = 2;
+    mode = 2;
   else
     c_mid = c_lo;
-  if ( c_mid > 11 * n1840_1 )
-    n2 = 3;
-  n3536_5 = __alt_p2_filter((float (*)[4])(void *)*(int32_t *)&blk->f278656, (float (*)[4])blk->p2_row, (CtxWeights *)__frame.sub, n2);
+  if ( c_mid > 11 * sum_ul )
+    mode = 3;
+  filt = __alt_p2_filter((float (*)[4])(void *)*(int32_t *)&blk->f278656, (float (*)[4])blk->p2_row, (CtxWeights *)__frame.sub, mode);
   cx0 = (P2Ctx *)blk->cursor[0];
   cx1 = (P2Ctx *)blk->cursor[1];
-  *(int32_t *)&blk->pred_prev = n3536_5;
+  *(int32_t *)&blk->pred_prev = filt;
   lane3 = cx1->aerr;
   g3pair = cx0[-1].aerr + lane3;
   if ( refa )
     g3pair += (rb0->aerr + ra0->aerr) >> 1;
-  n3536 = n3536_5;
+  run = filt;
   cx3 = (P2Ctx *)(blk->cursor[3]);
   g3sum = cx1[3].aerr + cx1[-1].aerr + cx0[-1].aerr + cx0[-3].aerr + cx0[-4].aerr + cx0[-2].aerr;
-  n3536_1 = n3536;
+  run_s = run;
   ctx0_lo = (cx1[1].err + cx1->err + cx1[-1].err + cx0[-1].err) & 0x80000
        | (cx3->err + cx0[-2].err + 2 * cx0[-4].err) & 0x40000
        | (cx1[-3].err + cx0[-3].err + cx0[-5].err + cx0[-7].err) & 0x20000
        | cx0[-1].err & 0x10000
        | (uint16_t)cx0[-3].err & 0x8000
-       | (((n3536 > 3536) + (n3536 > 720) + (n3536 > 288)) << 13)
+       | (((run > 3536) + (run > 720) + (run > 288)) << 13)
        | ((((uint32_t)(752 - (g3pair + g3sum)) >> 31)
          + ((uint32_t)(400 - (g3pair + g3sum)) >> 31)
          + ((uint32_t)(240 - (g3pair + g3sum)) >> 31)) << 11);
@@ -6924,7 +6926,7 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   if ( refa )
   {
     lane2 = ra0->err;
-    n3536 = n3536_1;
+    run = run_s;
     ctx0 = rb0[-1].err & 0x2000000
          | rb0->err & 0x1000000
          | ra0[-1].err & 0x800000
@@ -6936,7 +6938,7 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   }
   else
   {
-    n3536 = n3536_1;
+    run = run_s;
     cx2 = (P2Ctx *)blk->cursor[2];
     ctx0 = (cx1[3].err + cx0[-3].err + cx0[-7].err + cx0[-5].err) & 0x2000000
          | (cx2[1].err + cx2->err + cx0[-4].err + cx0[-8].err) & 0x1000000
@@ -6952,42 +6954,42 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   sum_c = sum_all;
   cx4 = blk->cursor[4];
   blk->nb_sum[1] = pred0;
-  n2256 = pred0 + n3536_1;
-  blk->nb_sum[0] = n2256;
-  n1840 = cx4[4].val;
+  run0 = pred0 + run_s;
+  blk->nb_sum[0] = run0;
+  nb4_4 = cx4[4].val;
   sum_all = ((g3pair << 9) + sum_c) >> 13;
-  n960_1 = cx0[-5].val - n2256;
+  d_run0 = cx0[-5].val - run0;
   q24 = ((uint32_t)(24 - sum_all) >> 20) & 0xFFFFF800;
-  n1840_1 = n1840 - n2256;
+  d_up = nb4_4 - run0;
   up5 = cx1[5].val;
-  n1840_2 = up5 - n2256;
+  d_up5 = up5 - run0;
   q39 = ((uint32_t)(39 - sum_all) >> 20) & 0xFFFFF800;
   if ( refa )
   {
     q10 = ((uint32_t)(10 - sum_all) >> 20) & 0xFFFFF800;
     dv_now = cx0[0].dval;
     q10a = q10;
-    ctx1 = (cx0[-1].val + ra0->val - ra0[-1].val - n2256) & 0x2000000
+    ctx1 = (cx0[-1].val + ra0->val - ra0[-1].val - run0) & 0x2000000
          | (ra2->dval + ra1->dval - 2 * ra0->dval) & 0x1000000
-         | ((dv_now + cx0[-3].dval - n2256 - (cx1[2].dval - cx1[5].dval)) & 0x800000 | (dv_now + cx0[-5].dval - n2256) & 0x400000 | (dv_now + cx1->dval + rb1[2].dval - rb2[2].dval - n2256) & 0x200000 | (dv_now + cx0[-1].dval + rb0->dval - rb0[-1].dval - n2256) & 0x100000 | (cx2[-1].dval + dv_now + ra0->dval - ra2[-1].dval - n2256) & 0x80000 | (dv_now + cx1[2].dval + ra0->dval - ra1[2].dval - n2256) & 0x40000 | n1840_2 & 0x20000 | n1840_1 & 0x10000 | n960_1 & 0x8000 | (((n2256 > 2256) + (n2256 > 1056) + (n2256 > 144)) << 13) | ((((uint32_t)(55 - sum_all) >> 20) & 0xFFFFF800) + q10 + q24));
+         | ((dv_now + cx0[-3].dval - run0 - (cx1[2].dval - cx1[5].dval)) & 0x800000 | (dv_now + cx0[-5].dval - run0) & 0x400000 | (dv_now + cx1->dval + rb1[2].dval - rb2[2].dval - run0) & 0x200000 | (dv_now + cx0[-1].dval + rb0->dval - rb0[-1].dval - run0) & 0x100000 | (cx2[-1].dval + dv_now + ra0->dval - ra2[-1].dval - run0) & 0x80000 | (dv_now + cx1[2].dval + ra0->dval - ra1[2].dval - run0) & 0x40000 | d_up5 & 0x20000 | d_up & 0x10000 | d_run0 & 0x8000 | (((run0 > 2256) + (run0 > 1056) + (run0 > 144)) << 13) | ((((uint32_t)(55 - sum_all) >> 20) & 0xFFFFF800) + q10 + q24));
   }
   else
   {
     q10 = ((uint32_t)(10 - sum_all) >> 20) & 0xFFFFF800;
-    run3 = n2256 - cx0[-3].val;
-    ctx1 = (cx1[-5].val - cx1[-2].val + run3) & 0x1000000
-         | (run3 + cx1[2].val - up5) & 0x800000
-         | (cx4[3].val - cx2[2].val + n2256 - cx2[1].val) & 0x400000
-         | (cx4[-1].val - cx3->val + n2256 - cx1[-1].val) & 0x200000
-         | (cx1->val - cx1[2].val + n2256 - cx0[-2].val) & 0x100000
-         | -n1840_2 & 0x80000
-         | -n1840_1 & 0x40000
-         | (n2256 - cx4[2].val) & 0x20000
-         | (n2256 - cx4[-3].val) & 0x10000
-         | -n960_1 & 0x8000
-         | (((n2256 > 2400) + (n2256 > 1024) + (n2256 > 240)) << 13)
+    d_run0b = run0 - cx0[-3].val;
+    ctx1 = (cx1[-5].val - cx1[-2].val + d_run0b) & 0x1000000
+         | (d_run0b + cx1[2].val - up5) & 0x800000
+         | (cx4[3].val - cx2[2].val + run0 - cx2[1].val) & 0x400000
+         | (cx4[-1].val - cx3->val + run0 - cx1[-1].val) & 0x200000
+         | (cx1->val - cx1[2].val + run0 - cx0[-2].val) & 0x100000
+         | -d_up5 & 0x80000
+         | -d_up & 0x40000
+         | (run0 - cx4[2].val) & 0x20000
+         | (run0 - cx4[-3].val) & 0x10000
+         | -d_run0 & 0x8000
+         | (((run0 > 2400) + (run0 > 1024) + (run0 > 240)) << 13)
          | (q39 + q24 + (((uint32_t)(11 - sum_all) >> 20) & 0xFFFFF800))
-         | (n1840 - cx3->val + n2256 - cx1[4].val) & 0x2000000;
+         | (nb4_4 - cx3->val + run0 - cx1[4].val) & 0x2000000;
     q10a = q10;
   }
   q10 = q10a;
@@ -6997,42 +6999,41 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   w1c = blk->p2_ctr[bank1 + 32768].w2;
   one1 = 1 << ((rate1 + 31) & 31);
   pred1 = (one1 + w1c) >> (rate1 & 31);
-  n2576 = pred1 + n2256;
-  blk->nb_sum[2] = n2576;
+  run1 = pred1 + run0;
+  blk->nb_sum[2] = run1;
   blk->nb_sum[3] = pred1;
-  n1840_13 = cx2->val;
-  n960_1 = cx1->val;
-  n1840 = n1840_13;
-  dvsum2 = cx0[-2].val - n2576;
-  lap = cx0[-2].val + n2576 - 2 * cx0[-1].val;
-  dtop2 = n1840_13 - n2576;
+  cx2_val0 = cx2->val;
+  cx1_val = cx1->val;
+  dvsum2 = cx0[-2].val - run1;
+  lap = cx0[-2].val + run1 - 2 * cx0[-1].val;
+  dtop2 = cx2_val0 - run1;
   if ( refa )
   {
-    n1840_2 = cx1[1].dval;
-    n1840_1 = ra0->val - n2576;
+    dv1 = cx1[1].dval;
+    d_ra = ra0->val - run1;
     q10b = q10;
-    ctx2 = (cx0[0].dval + cx1[-1].dval - n2576 - (cx2->dval - n1840_2)) & 0x2000000
-         | (cx0[0].dval + cx0[-1].dval - n2576 - (cx1->dval - n1840_2)) & 0x1000000
-         | (rb0->val - n2576 + n1840 - rb2->val) & 0x800000
-         | (n1840_1 + n1840 - ra2->val) & 0x400000
-         | (n1840_1 + cx1[-1].val - ra1[-1].val) & 0x200000
-         | ((cx0[0].dval - cx0[-2].dval + 2 * cx0[-1].dval - n2576) & 0x100000 | (2 * n960_1 - n2576 - n1840) & 0x80000 | -lap & 0x40000 | dtop2 & 0x20000 | dvsum2 & 0x10000 | (208 - rb0->val) & 0x8000 | (((n2576 > 2576) + (n2576 > 1280) + (n2576 > 640)) << 13) | ((((uint32_t)(33 - sum_all) >> 31) + ((uint32_t)(12 - sum_all) >> 31) + ((uint32_t)(4 - sum_all) >> 31)) << 11));
+    ctx2 = (cx0[0].dval + cx1[-1].dval - run1 - (cx2->dval - dv1)) & 0x2000000
+         | (cx0[0].dval + cx0[-1].dval - run1 - (cx1->dval - dv1)) & 0x1000000
+         | (rb0->val - run1 + cx2_val0 - rb2->val) & 0x800000
+         | (d_ra + cx2_val0 - ra2->val) & 0x400000
+         | (d_ra + cx1[-1].val - ra1[-1].val) & 0x200000
+         | ((cx0[0].dval - cx0[-2].dval + 2 * cx0[-1].dval - run1) & 0x100000 | (2 * cx1_val - run1 - cx2_val0) & 0x80000 | -lap & 0x40000 | dtop2 & 0x20000 | dvsum2 & 0x10000 | (208 - rb0->val) & 0x8000 | (((run1 > 2576) + (run1 > 1280) + (run1 > 640)) << 13) | ((((uint32_t)(33 - sum_all) >> 31) + ((uint32_t)(12 - sum_all) >> 31) + ((uint32_t)(4 - sum_all) >> 31)) << 11));
   }
   else
   {
     q10b = q10;
-    ctx2 = (n2576 + 3 * (n1840 - n960_1) - cx3->val) & 0x2000000
-         | (n2576 + cx4->val - (cx2[2].val + cx2[-2].val)) & 0x1000000
-         | (cx3[2].val - cx2[-1].val + n2576 - cx1[3].val) & 0x800000
+    ctx2 = (run1 + 3 * (cx2_val0 - cx1_val) - cx3->val) & 0x2000000
+         | (run1 + cx4->val - (cx2[2].val + cx2[-2].val)) & 0x1000000
+         | (cx3[2].val - cx2[-1].val + run1 - cx1[3].val) & 0x800000
          | (cx3[1].val - cx1[1].val - dtop2) & 0x400000
-         | (cx3->val - n960_1 - dtop2) & 0x200000
+         | (cx3->val - cx1_val - dtop2) & 0x200000
          | lap & 0x100000
-         | (n2576 - cx4[3].val) & 0x80000
-         | (cx3[1].val - n2576) & 0x40000
-         | (n2576 - cx4->val) & 0x20000
-         | (n2576 - cx3[-2].val) & 0x10000
+         | (run1 - cx4[3].val) & 0x80000
+         | (cx3[1].val - run1) & 0x40000
+         | (run1 - cx4->val) & 0x20000
+         | (run1 - cx3[-2].val) & 0x10000
          | -dvsum2 & 0x8000
-         | (((n2576 > 2464) + (n2576 > 1216) + (n2576 > 688)) << 13)
+         | (((run1 > 2464) + (run1 > 1216) + (run1 > 688)) << 13)
          | ((((uint32_t)(58 - sum_all) >> 31) + ((uint32_t)(25 - sum_all) >> 31) + ((uint32_t)(13 - sum_all) >> 31)) << 11);
   }
   q10 = q10b;
@@ -7040,26 +7041,26 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   blk->bank_ctx[2] = bank2;
   pred2 = p2_pred(blk->p2_ctr[bank2 + 65536].w2, blk->p2_ctr[bank2 + 65536].b0);
   blk->nb_sum[5] = pred2;
-  n2896 = pred2 + n2576;
-  blk->nb_sum[4] = n2896;
-  run_dv3 = n2896 - cx0[0].dval;
+  run2 = pred2 + run1;
+  blk->nb_sum[4] = run2;
+  run_dv3 = run2 - cx0[0].dval;
   q9 = 9 - sum_all;
   sum_all = -sum_all;
-  bank3 = (int32_t)((3 * (cx0[-2].val - cx0[-1].val) + n2896 - cx0[-3].val) & 0x2000000
+  bank3 = (int32_t)((3 * (cx0[-2].val - cx0[-1].val) + run2 - cx0[-3].val) & 0x2000000
              | (cx2[1].dval
               - ((uint32_t)(cx1[1].dval + cx1[2].dval + cx1[-1].dval + cx1->dval) >> 1)
               + run_dv3)
              & 0x1000000
-             | (cx2[-3].val - cx1[-2].val + n2896 - cx1[-1].val) & 0x800000
-             | -(cx2[2].val + n2896 - 2 * cx1[1].val) & 0x400000
-             | (cx1[-2].dval - cx0[-2].val + n2896 - cx1->dval) & 0x200000
-             | (n2896 - cx1[3].val) & 0x100000
+             | (cx2[-3].val - cx1[-2].val + run2 - cx1[-1].val) & 0x800000
+             | -(cx2[2].val + run2 - 2 * cx1[1].val) & 0x400000
+             | (cx1[-2].dval - cx0[-2].val + run2 - cx1->dval) & 0x200000
+             | (run2 - cx1[3].val) & 0x100000
              | (run_dv3 - cx2[1].dval) & 0x80000
-             | (n2896 - cx3->val) & 0x40000
-             | (2 * n2896 - cx1->dval - (cx1->val + cx0[0].dval)) & 0x20000
-             | (n2896 - cx0[-1].dval - cx0[0].dval) & 0x10000
-             | (n2896 - cx0[-3].val) & 0x8000
-             | (((n2896 > 2896) + (n2896 > 1568) + (n2896 > 592)) << 13)
+             | (run2 - cx3->val) & 0x40000
+             | (2 * run2 - cx1->dval - (cx1->val + cx0[0].dval)) & 0x20000
+             | (run2 - cx0[-1].dval - cx0[0].dval) & 0x10000
+             | (run2 - cx0[-3].val) & 0x8000
+             | (((run2 > 2896) + (run2 > 1568) + (run2 > 592)) << 13)
              | ((((uint32_t)(sum_all + 37) >> 31) + ((uint32_t)(sum_all + 19) >> 31) + (q9 >> 31)) << 11)) >> 11;
   blk->bank_ctx[3] = bank3;
   w3c = blk->p2_ctr[bank3 + 98304].w2;
@@ -7067,31 +7068,31 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   // both masks read only the byte each copy wrote.
   pred3 = p2_pred(w3c, blk->p2_ctr[bank3 + 98304].b0);
   blk->nb_sum[7] = pred3;
-  n3536_2 = pred3 + n2896;
-  n3536 = n3536_2;
-  blk->nb_sum[6] = n3536_2;
+  run3 = pred3 + run2;
+  run = run3;
+  blk->nb_sum[6] = run3;
   dv_now4 = cx0[0].dval;
-  run_dv4 = n3536_2 - dv_now4;
-  run_up4 = n3536_2 + cx3->val;
-  bank4 = (int32_t)((n3536 - ((uint32_t)(cx1[1].val + cx1[-1].val + 2 * cx1->val) >> 2)) & 0x2000000
+  run_dv4 = run3 - dv_now4;
+  run_up4 = run3 + cx3->val;
+  bank4 = (int32_t)((run - ((uint32_t)(cx1[1].val + cx1[-1].val + 2 * cx1->val) >> 2)) & 0x2000000
              | (run_up4 - cx0[-2].val - (cx3[2].dval + dv_now4)) & 0x1000000
-             | (n3536 - 2 * cx0[-2].dval - (dv_now4 - cx0[-4].dval)) & 0x800000
-             | (n3536 - cx0[-3].dval - dv_now4 - (cx1->val - cx1[-3].val)) & 0x400000
+             | (run - 2 * cx0[-2].dval - (dv_now4 - cx0[-4].dval)) & 0x800000
+             | (run - cx0[-3].dval - dv_now4 - (cx1->val - cx1[-3].val)) & 0x400000
              | (run_up4 - dv_now4 - (cx1[1].val + cx2[-1].dval)) & 0x200000
-             | (cx2[-2].val + n3536 - 2 * cx1[-1].val) & 0x100000
+             | (cx2[-2].val + run - 2 * cx1[-1].val) & 0x100000
              | (cx2->dval - 2 * cx1->dval + run_dv4) & 0x80000
-             | ((n3536_2 - cx0[-1].val) - (cx1->val - cx1[-1].val)) & 0x40000
+             | ((run3 - cx0[-1].val) - (cx1->val - cx1[-1].val)) & 0x40000
              | (run_dv4 - cx1[4].dval) & 0x20000
              | (run_dv4 - cx1[-2].dval) & 0x10000
-             | (((uint16_t)n3536_2 - (uint16_t)cx0[-4].dval - (uint16_t)dv_now4) & 0x8000)
-             | ((((n3536_2 > 3056) + (n3536_2 > 1952) + (n3536_2 > 368)) << 13) | (q39 + (((uint32_t)(sum_all + 21) >> 20) & 0xFFFFF800) + q10))) >> 11;
+             | (((uint16_t)run3 - (uint16_t)cx0[-4].dval - (uint16_t)dv_now4) & 0x8000)
+             | ((((run3 > 3056) + (run3 > 1952) + (run3 > 368)) << 13) | (q39 + (((uint32_t)(sum_all + 21) >> 20) & 0xFFFFF800) + q10))) >> 11;
   blk->bank_ctx[4] = bank4;
   pred4 = p2_pred(blk->p2_ctr[bank4 + 131072].w2, blk->p2_ctr[bank4 + 131072].b0);
   cx2p = (uint8_t *)cx2;
   blk->nb_sum[9] = pred4;
-  n1840 = n3536 + pred4;
-  blk->nb_sum[8] = n3536 + pred4;
-  n960_1 = cx1[5].mag
+  run4 = run + pred4;
+  blk->nb_sum[8] = run + pred4;
+  magsum_s = cx1[5].mag
          + cx1[4].mag
          + cx1[-3].mag
          + cx1[-4].mag
@@ -7111,39 +7112,39 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
          + (cx3[2].mag + cx3[1].mag + cx3[-1].mag + cx3[-2].mag + cx4[-2].mag + cx2p[107] + cx2p[89] + cx2p[71] + (*(cx2p - 19)) + *(cx2p - 37))
          + 4 * (cx1[-1].mag + cx0[-2].mag + cx2p[17])
          + 2 * (cx1[-2].mag + cx1[3].mag + cx0[-3].mag + cx3->mag + *(cx2p - 1) + cx2p[53]);
-  n1840_15 = blk->band_lo;
-  blk->ctx_w[0].sel = (n1840 < 1840) + (n1840 < 272);
-  n1840_16 = blk->band_hi;
-  n1840_1 = n1840_15;
-  n1840_2 = n1840_16;
-  blk->ctx_w[1].sel = ((n1840 - cx1->val <= n1840_16) + (n1840 - cx1->val < n1840_15));
-  n1840_17 = n1840 - cx0[-1].val;
-  in_band = n1840_17 <= n1840_16;
-  blk->ctx_w[2].sel = in_band + (n1840_17 < n1840_1);
+  band_lo0 = blk->band_lo;
+  blk->ctx_w[0].sel = (run4 < 1840) + (run4 < 272);
+  band_hi0 = blk->band_hi;
+  band_lo = band_lo0;
+  band_hi = band_hi0;
+  blk->ctx_w[1].sel = ((run4 - cx1->val <= band_hi0) + (run4 - cx1->val < band_lo0));
+  d_run4 = run4 - cx0[-1].val;
+  in_band = d_run4 <= band_hi0;
+  blk->ctx_w[2].sel = in_band + (d_run4 < band_lo);
   blk->ctx_w[3].sel = cx1->sign;
   // The previous record's stored sign digit, straight into the fifth
   // group's selector.  Hex-Rays read it as `(uint8_t)lane[8]` -- one past
   // the eight lanes, whose low byte is `sign`.
   blk->ctx_w[4].sel = cx0[-1].sign;
-  n960 = n960_1;
+  magsum = magsum_s;
   magu = (cx2[0].mag + cx1->mag);
-  n3536_4 = n3536;
+  run_s2 = run;
   magl = cx0[-1].mag + cx0[-2].mag;
   if ( refa )
   {
     mag = rb0->mag;
     mag_ref1 = rb1->mag + ra1->mag;
     mag_ref0 = mag + ra0->mag;
-    n960 = mag_ref1 + n960_1 + 4 * mag_ref0 + 2 * (ra0[-1].mag + rb0[-1].mag);
+    magsum = mag_ref1 + magsum_s + 4 * mag_ref0 + 2 * (ra0[-1].mag + rb0[-1].mag);
     flat_a = mag_ref0 + magl + rb0[-2].mag + rb0[-1].mag + ra0[-2].mag + ra0[-1].mag;
-    n3536_4 = n3536;
+    run_s2 = run;
     if ( blk->has_ref )
     {
-      n1840_3 = n1840 - cx1->dval - cx0[0].dval;
-      if ( n1840_3 < n1840_1 || n1840_3 > n1840_2 )
+      d_run4b = run4 - cx1->dval - cx0[0].dval;
+      if ( d_run4b < band_lo || d_run4b > band_hi )
       {
-        n1840 = n1840 - cx0[-1].dval - cx0[0].dval;
-        flat_b = n1840 >= n1840_1 && n1840_2 >= n1840;
+        run4 = run4 - cx0[-1].dval - cx0[0].dval;
+        flat_b = run4 >= band_lo && band_hi >= run4;
       }
       else
       {
@@ -7156,37 +7157,37 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
     }
     if ( *(int32_t *)&blk->plane_idx == 1 )
     {
-      n960_1 = n960;
-      n1840_4 = n1840_2;
-      n1840_5 = ra0->val - ra1->val;
-      blk->ctx_w[3].sel = (n1840_5 <= n1840_2) + (n1840_5 < n1840_1);
-      n1840_6 = ra0->val - ra0[-1].val;
-      n960 = n960_1;
-      n3536_4 = n3536;
-      blk->ctx_w[4].sel = ((n1840_6 <= n1840_4) + (n1840_6 < n1840_1));
+      magsum_s = magsum;
+      band_hi_s = band_hi;
+      d_ra_ra1 = ra0->val - ra1->val;
+      blk->ctx_w[3].sel = (d_ra_ra1 <= band_hi) + (d_ra_ra1 < band_lo);
+      d_ra_left = ra0->val - ra0[-1].val;
+      magsum = magsum_s;
+      run_s2 = run;
+      blk->ctx_w[4].sel = ((d_ra_left <= band_hi_s) + (d_ra_left < band_lo));
     }
     else if ( *(int32_t *)&blk->plane_idx > 1 )
     {
-      n960_1 = n960;
-      n1840_7 = n1840_2;
-      n1840_8 = rb0->val - rb1->val;
-      blk->ctx_w[3].sel = (n1840_8 <= n1840_2) + (n1840_8 < n1840_1);
-      n1840_10 = rb0->val - rb0[-1].val;
-      in_band = n1840_10 <= n1840_7;
-      n960 = n960_1;
-      blk->ctx_w[4].sel = in_band + (n1840_10 < n1840_1);
+      magsum_s = magsum;
+      band_hi_s2 = band_hi;
+      d_rb_rb1 = rb0->val - rb1->val;
+      blk->ctx_w[3].sel = (d_rb_rb1 <= band_hi) + (d_rb_rb1 < band_lo);
+      d_rb_left = rb0->val - rb0[-1].val;
+      in_band = d_rb_left <= band_hi_s2;
+      magsum = magsum_s;
+      blk->ctx_w[4].sel = in_band + (d_rb_left < band_lo);
       ra0_val = ra0->val;
-      n1840_11 = ra0_val - ((P2Ctx *)(ra1))->val;
-      in_band = n1840_1 <= n1840_11;
-      n3536_4 = n3536;
-      if ( in_band && n1840_11 <= n1840_2 )
+      d_ra_ra1b = ra0_val - ((P2Ctx *)(ra1))->val;
+      in_band = band_lo <= d_ra_ra1b;
+      run_s2 = run;
+      if ( in_band && d_ra_ra1b <= band_hi )
       {
         flat_a = 1;
       }
       else
       {
-        n1840_12 = ra0_val - ra0[-1].val;
-        flat_a = n1840_12 >= n1840_1 && n1840_12 <= n1840_2;
+        d_ra_leftb = ra0_val - ra0[-1].val;
+        flat_a = d_ra_leftb >= band_lo && d_ra_leftb <= band_hi;
       }
     }
   }
@@ -7195,24 +7196,24 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
     flat_a = magl + cx0[-3].mag + cx0[-4].mag + cx0[-5].mag;
     flat_b = cx4->mag + cx3->mag + magu + cx0[0].mag;
   }
-  if ( n960 >= 960 )
+  if ( magsum >= 960 )
   {
-    n15 = 15;
+    ctx15 = 15;
     blk->ctx = 15;
   }
   else
   {
-    n15 = blk->nb_ctx[n960 >> 3];
-    blk->ctx = n15;
+    ctx15 = blk->nb_ctx[magsum >> 3];
+    blk->ctx = ctx15;
   }
-  n255 = (n3536_4 + pred4 + 7) >> 4;
-  if ( n255 >= 255 )
-    n255 = 255;
-  if ( n255 < 0 )
-    n255 = 0;
-  blk->ctx_pair[0] = blk->ctx_delta[n255 + 4] + n15;
-  blk->ctx_pair[1] = n15 + blk->ctx_delta[n255];
-  blk->ctx = n15
+  ctx_idx = (run_s2 + pred4 + 7) >> 4;
+  if ( ctx_idx >= 255 )
+    ctx_idx = 255;
+  if ( ctx_idx < 0 )
+    ctx_idx = 0;
+  blk->ctx_pair[0] = blk->ctx_delta[ctx_idx + 4] + ctx15;
+  blk->ctx_pair[1] = ctx15 + blk->ctx_delta[ctx_idx];
+  blk->ctx = ctx15
                           + 32 * (flat_b == 0)
                           + 16 * (flat_a == 0)
                           + blk->ctx_w[4].w[blk->ctx_w[4].sel]
@@ -7220,7 +7221,7 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
                           + blk->ctx_w[2].w[blk->ctx_w[2].sel]
                           + blk->ctx_w[1].w[blk->ctx_w[1].sel]
                           + blk->ctx_w[0].w[blk->ctx_w[0].sel];
-  return n255;
+  return ctx_idx;
 }
 
 
