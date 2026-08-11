@@ -24,13 +24,13 @@ and 3.
                                    round 8   round 9   round 9 end
 subs1.hpp lines                      17787     17616         17126
 bmf.cpp lines                            —         —           365
-raw-offset sites                        22        12             31
+raw-offset sites                        22        12             26
   off `_this`                            —         1             0
   in functions                           —         1             0
 byte offsets on a typed base           121         0             0
-pointer casts                         2137      1545          1254
-  to a scalar                            —         —           527
-  to a record                            —         —           369
+pointer casts                         2137      1545          1250
+  to a scalar                            —         —           522
+  to a record                            —         —           370
   to a scalar, of an address             —         —           353
   to a record, of an address             —         —             5
 fNN members / named ones             93/121     5/162         0/172
@@ -2378,3 +2378,32 @@ what `+ 16` means, and the compiler has no complaint to make about arithmetic
 that is still well-formed and now means something else. The two sites that
 did it were `__frame.tile_img + 16`, and they are the reason the rewrite names
 `pixels` rather than casting the base back to bytes.
+
+### Three more of the same shape
+
+Grouping the remaining 31 by base put three bases at the top with five sites
+between them, each an offset off something whose type was already known or
+already declared:
+
+```c
+rev   = *((uint16_t *)__frame.sym7 + __frame.sym8 + 3029720);  // x3
+                        -> __frame.sym7->sym_rev[__frame.sym8]
+        *((uint32_t *)__frame.r0_f + 3)
+                        -> ((BmfImage *)__frame.r0_f)->data_size
+        *((uint16_t *)__frame.p_i_2 + 1)
+                        -> __frame.p_i_2->height
+```
+
+`3029720` is `6059440 / 2` — `ModelBlock::sym_rev`, a member this file has had
+a name for since the tables were recovered, reached by counting `uint16_t` from
+the block's own base. `p_i_2` was the one worth noticing: it is *already*
+declared `BmfImage *`, so the cast that made it a raw offset was casting a
+typed pointer back to bytes in order to index it, and naming the field removes
+the cast rather than adding one.
+
+**31 → 26.** Eighteen of the twenty-six are in `choose_plane_coding`, where the
+original holds pointers in XMM spill slots and uses them as base-and-offset
+pairs — `*(uint8_t *)(x2[2] + x2[0])`. That is byte arithmetic in the source,
+not a member access spelled long. The other eight are listed by
+`shape.rawoffsets` with their function and base, and are read one at a time in
+§31.

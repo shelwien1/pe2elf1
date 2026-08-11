@@ -1120,4 +1120,4 @@ subs1.hpp:17014:30: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' 
 subs1.hpp:17029:41: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
 subs1.hpp: In function 'void __bmf_decompress(const char*, const char*)':
 subs1.hpp:17087:23: warning: conversion to 'uintptr_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
-# subs1.hpp 2141937747 622733
+# subs1.hpp 3260243638 622677

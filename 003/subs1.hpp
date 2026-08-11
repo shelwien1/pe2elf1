@@ -7778,7 +7778,7 @@ int32_t __cost_candidate(uint8_t *img, int32_t cand, uint8_t *desc, int8_t unrea
   __frame.img_f = (BmfImage *)img;
   __frame.d1_f = (int32_t)(__frame.cursor + 1) % 3 - (uint32_t)__frame.cursor;
   __frame.d2_f = (int32_t)(__frame.cursor + 2) % 3 - (uint32_t)__frame.cursor;
-  __frame.img_end = (uint32_t)&__frame.r0_f[*((uint32_t *)__frame.r0_f + 3) + 16];
+  __frame.img_end = (uint32_t)&__frame.r0_f[((BmfImage *)__frame.r0_f)->data_size + 16];
   d1 = __frame.d1_f;
   *(uint32_t *)__frame.buf_1 = row_b;
   memset(__frame.buf,0,24576);
@@ -10292,7 +10292,7 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
   {
     if ( __frame.sym8 == __frame.sym6 )
     {
-      rev = *((uint16_t *)__frame.sym7 + __frame.sym8 + 3029720);
+      rev = __frame.sym7->sym_rev[__frame.sym8];
       if ( __frame.sym8 == __frame.sym5 )
         key = (uint16_t)(rev - cur5[-2].sym);
       else
@@ -10300,12 +10300,12 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
     }
     else
     {
-      key = (uint16_t)(*((uint16_t *)__frame.sym7 + __frame.sym8 + 3029720) - __frame.sym6);
+      key = (uint16_t)(__frame.sym7->sym_rev[__frame.sym8] - __frame.sym6);
     }
   }
   else
   {
-    key = (uint16_t)(*((uint16_t *)__frame.sym7 + __frame.sym8 + 3029720) - __frame.sym10);
+    key = (uint16_t)(__frame.sym7->sym_rev[__frame.sym8] - __frame.sym10);
   }
   __frame.sym7->sym_cache = &__frame.sym7->sym_ctr[8 * key];
   ctx_state = this->ctx_state[nb];
@@ -15663,7 +15663,7 @@ LABEL_109:
         }
         while ( pl_i );
         img_at = __frame.p_i_2;
-        img_h = *((uint16_t *)__frame.p_i_2 + 1);
+        img_h = __frame.p_i_2->height;
         at = n_planes + __frame.nplanes_s;
         y = (int32_t)(uintptr_t)__frame.arc_f + 1;
       }
