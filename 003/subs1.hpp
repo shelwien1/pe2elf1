@@ -5320,10 +5320,10 @@ static inline int32_t bmf_pixels(const uint8_t *p) {
 uint8_t * __interleave_plane(uint8_t *p_i, uint8_t *Src, int32_t a3, int8_t a4)
 {
   ;
-  uint8_t *Src_5, *v25;
-  int32_t v4, n6_2, v8, n6_1, v10, Size, n4, Size_2, v15, Size_1, v17, v18,
-          v20, v21, v23, n2, v29, v30, v31, v32, n4_1, v34, n6;
-  uint32_t v6, Src_1, Src_2;
+  uint8_t *v25;
+  int32_t v4, n6_1, v10, Size, n4, Size_1, v17, v18, v20, v21, v23, n2, v29,
+          v30, v31, v32, n4_1, v34, n6;
+  uint32_t Src_1, Src_2;
   uint8_t *Src_4, *Src_3;
   if ( (plane_desc[a3 + 1].flags & 8) == 0 )
   {
@@ -5333,33 +5333,15 @@ uint8_t * __interleave_plane(uint8_t *p_i, uint8_t *Src, int32_t a3, int8_t a4)
     if ( plane_count == 1 )
       return (uint8_t *)memcpy(&((BmfImage *)p_i)->pixels[a3],Src,Size);
     p_i += a3;
-    if ( Size <= 6
-      || plane_count <= 0
-      || (Src_1 <= (uint32_t)Src || Size > Src_1 - (uint32_t)Src)
-      && (plane_count > 1 || (uint32_t)Src <= Src_1 || (uint32_t)&Src[-Src_1] < Size * plane_count) )
+    Size_1 = 0;
+    v17 = 0;
+    do
     {
-      Size_1 = 0;
-      v17 = 0;
-      do
-      {
-        p_i[v17 + 16] = Src[Size_1];
-        v17 += n4;
-        ++Size_1;
-      }
-      while ( Size_1 < Size );
+      p_i[v17 + 16] = Src[Size_1];
+      v17 += n4;
+      ++Size_1;
     }
-    else
-    {
-      Size_2 = 0;
-      v15 = 0;
-      do
-      {
-        p_i[v15 + 16] = Src[Size_2];
-        v15 += n4;
-        ++Size_2;
-      }
-      while ( Size_2 < Size );
-    }
+    while ( Size_1 < Size );
     return p_i;
   }
   n4_1 = plane_count;
@@ -5421,55 +5403,19 @@ LABEL_3:
 LABEL_4:
   p_i += a3;
   v25 = &p_i[v29];
-  if ( n6 <= 6 )
-    goto LABEL_25;
-  Src_5 = &p_i[v29 + 16];
-  if ( plane_count <= 0 )
-  {
-    if ( plane_count >= 0 )
-      goto LABEL_25;
-    if ( (uint32_t)Src_5 >= Src_2 || (v6 = n6 * plane_count, Src_2 - (uint32_t)Src_5 <= -(n6 * plane_count)) )
-    {
-      if ( (uint32_t)Src_5 <= Src_2 )
-        goto LABEL_25;
-      v6 = n6 * plane_count;
-      if ( (uint32_t)&Src_5[-Src_2] <= -(n6 * plane_count) )
-        goto LABEL_25;
-    }
-  }
-  else if ( (uint32_t)Src_5 >= Src_2 || (v6 = n6 * plane_count, n6 * plane_count > Src_2 - (uint32_t)Src_5) )
-  {
-    if ( (uint32_t)Src_5 <= Src_2 )
-      goto LABEL_25;
-    v6 = n6 * plane_count;
-    if ( (uint32_t)&Src_5[-Src_2] < n6 * plane_count )
-      goto LABEL_25;
-  }
-  if ( plane_count <= 0
-    || ((uint32_t)Src >= Src_2 || Src_2 - (uint32_t)Src < n6)
-    && (plane_count > 1 || (uint32_t)Src <= Src_2 || (uint32_t)&Src[-Src_2] < v6) )
-  {
-LABEL_25:
-    n6_1 = 0;
-    v10 = 0;
-    do
-    {
-      p_i[v10 + 16] = v25[v10 + 16] + v34 + Src[n6_1];
-      v10 += n4_1;
-      ++n6_1;
-    }
-    while ( n6_1 < n6 );
-    return p_i;
-  }
-  n6_2 = 0;
-  v8 = 0;
+  // Twenty-six lines of aliasing test stood here, spelled with five `goto`s
+  // into the loop below and a duplicate of it at the bottom -- `undup.py` finds
+  // this shape when it is written as an `if`/`else` and cannot when it is
+  // written as a jump.  Both destinations were the same six lines.
+  n6_1 = 0;
+  v10 = 0;
   do
   {
-    p_i[v8 + 16] = v25[v8 + 16] + v34 + Src[n6_2];
-    v8 += n4_1;
-    ++n6_2;
+    p_i[v10 + 16] = v25[v10 + 16] + v34 + Src[n6_1];
+    v10 += n4_1;
+    ++n6_1;
   }
-  while ( n6_2 < n6 );
+  while ( n6_1 < n6 );
   return p_i;
 }
 
@@ -15965,8 +15911,8 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
   uint8_t *Buffer_3, *n4_6, *n4_7, *v64;   // `uint8_t *` beside the `char` scalars above
   uint8_t has_coded;
   int32_t Buffer__1, v21, n4, predictor, v27, v28, v29, v30, ArgList, v33,
-          n4_4, v37, n2_1, i, Size_4, Size_5, n4_3, v44, Size_2, Size_3, n4_2,
-          v48, n2_2, n_planes, Src_2, v58, n4_8, v61, i_1, n4_9, v76;
+          n4_4, v37, n2_1, i, Size_2, Size_3, n4_2, v48, n2_2, n_planes,
+          Src_2, v58, n4_8, v61, i_1, n4_9, v76;
   uint16_t i_2;
   uint32_t __expand_image_Buffer_1, v12, *v13, ElementCount_5, ElementCount_2,
            v23, v25, Size_1, ElementCount_1, ElementCount_4, v67, v68, v69,
@@ -16308,45 +16254,21 @@ LABEL_104:
           else
           {
             __frame.Block = &((uint8_t *)p_i_1)[v37];
-            if ( (int32_t)__frame.s12 <= 6
-              || __frame.n4_1 <= 0
-              || (__frame.n4_1 > 1 || Src_1 <= __frame.Src || Src_1 - (uint8_t *)__frame.Src < __frame.s12 * ::plane_count)
-              && (Src_1 >= __frame.Src || (uint8_t *)__frame.Src - Src_1 < __frame.s12) )
+            __frame.s0 = n2_1;
+            __frame.s4 = v37;
+            __frame.s8 = n4_4;
+            Size_2 = __frame.s12;
+            __frame.p_i_2 = p_i_1;
+            Size_3 = 0;
+            n4_2 = __frame.n4_1;
+            v48 = 0;
+            do
             {
-              __frame.s0 = n2_1;
-              __frame.s4 = v37;
-              __frame.s8 = n4_4;
-              Size_2 = __frame.s12;
-              __frame.p_i_2 = p_i_1;
-              Size_3 = 0;
-              n4_2 = __frame.n4_1;
-              v48 = 0;
-              do
-              {
-                Src_1[Size_3] = __frame.Block[v48 + 16];
-                v48 += n4_2;
-                ++Size_3;
-              }
-              while ( Size_3 < Size_2 );
+              Src_1[Size_3] = __frame.Block[v48 + 16];
+              v48 += n4_2;
+              ++Size_3;
             }
-            else
-            {
-              __frame.s0 = n2_1;
-              __frame.s4 = v37;
-              __frame.s8 = n4_4;
-              Size_4 = __frame.s12;
-              __frame.p_i_2 = p_i_1;
-              Size_5 = 0;
-              n4_3 = __frame.n4_1;
-              v44 = 0;
-              do
-              {
-                Src_1[Size_5] = __frame.Block[v44 + 16];
-                v44 += n4_3;
-                ++Size_5;
-              }
-              while ( Size_5 < Size_4 );
-            }
+            while ( Size_3 < Size_2 );
             n2_2 = __frame.s0;
             v37 = __frame.s4;
             n4_4 = __frame.s8;

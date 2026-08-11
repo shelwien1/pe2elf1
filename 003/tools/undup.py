@@ -67,6 +67,19 @@ TOKEN = re.compile(r'[A-Za-z_]\w*|\d+|\S')
 IDENT = re.compile(r'^[A-Za-z_]\w*$')
 IFHEAD = re.compile(r'^(\s*)if \( ')
 LABEL = re.compile(r'^\s*LABEL_\d+:')
+# A local declaration, including the continuation lines of one Hex-Rays wrapped:
+# a run of names and commas with no operator, ending in `;` or a comma.
+DECL = re.compile(r'^\s*(?:(?:const|static|volatile|alignas\([^)]*\))\s+)*'
+                  r'(?:[A-Za-z_]\w*[\s*]+)?[\w\s,*\[\]]+[,;]\s*$')
+# `return v17;` and `goto LABEL_3;` fit that shape exactly, and a name whose
+# only other appearance is in a `return` must not be read as dead.  The
+# exclusion is a separate test rather than a lookahead because a lookahead
+# after `^\s*` backtracks into the indentation and passes anyway.
+STMT = re.compile(r'^\s*(?:return|break|continue|goto|else|case|do)\b')
+
+
+def declaration(line):
+    return DECL.match(line) and not STMT.match(line)
 # Anything the token stream may name that is not a local: keywords, types, and
 # the intrinsics.  A mismatch on one of these is a real difference.
 FIXED = set('''if else for while do switch case default return goto break continue
@@ -157,10 +170,16 @@ def candidates(lines):
                 out.append((nm, i, arm2[1], ren, cond, False))
                 continue
             # A renamed name that lives outside the two arms would be orphaned.
-            outside = '\n'.join(lines[a:i] + lines[arm2[1] + 1:b + 1])
-            outside = '\n'.join(l.split('//')[0] for l in outside.split('\n'))
+            # Hex-Rays declares every local at the top of the body, so the
+            # declaration mentions all of them -- counting that as a use makes
+            # the check reject everything, which is how the first version of
+            # this missed `interleave_plane`'s pair while finding
+            # `colour_transform`'s.  A declaration is not a use.
+            outside = [l.split('//')[0] for l in lines[a:i] + lines[arm2[1] + 1:b + 1]
+                       if not declaration(l)]
             names = set(ren) | set(ren.values())
-            if any(re.search(r'\b%s\b' % re.escape(x), outside) for x in names):
+            if any(re.search(r'\b%s\b' % re.escape(x), l)
+                   for x in names for l in outside):
                 continue
             out.append((nm, i, arm2[1], ren, cond, True))
     return out
@@ -184,8 +203,14 @@ def main():
     for nm, i, end, ren, cond, _safe in sorted(ok, key=lambda c: -c[1]):
         ind, _cond, after = condition(lines, i)
         arm1 = block(lines, after)
-        body = [ind + l.strip() if l.strip() else l
-                for l in lines[arm1[0]:arm1[1]]]
+        keep = lines[arm1[0]:arm1[1]]
+        # Shift the arm left by one level, do not flatten it: re-indenting every
+        # line to the `if`'s own indent puts the body of a `do` loop level with
+        # its braces.  The shift is the arm's base indent minus the `if`'s.
+        base = min((len(l) - len(l.lstrip()) for l in keep if l.strip()),
+                   default=len(ind))
+        cut = max(0, base - len(ind))
+        body = [l[cut:] if l.strip() else l for l in keep]
         lines[i:end + 1] = body
     open(path, 'w').write('\n'.join(lines))
     print('%d if/else pairs collapsed to one arm' % len(ok))
