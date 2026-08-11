@@ -27,9 +27,9 @@ raw-offset sites                        22        12
 byte offsets on a typed base           121         0
 pointer casts                         2137      1545
 fNN members / named ones             93/121     5/162
-distinct vNN locals                    554       545
-  bodies still carrying one              —   13/102
-  vNN uses                                —      9541
+distinct unexplained locals            554       591
+  bodies still carrying one              —    8/102
+  uses                                    —      6302
 goto / LABEL_n:                     112/79     81/55
 conversion warnings (ratchet)         1455      1331
 ```
@@ -46,6 +46,14 @@ had the same defect.
 the whole file, so it cannot move until a name is gone from every body that uses
 one, and naming every local in a function leaves it unchanged. The two rows
 beneath it are the ones that measure that work — and §11 is what they measure.
+
+It has since had to be corrected a second time, for a reason that belongs to
+§10 and is worth stating here. Naming a model body's intermediates `t0`, `t1`,
+`t2` in sequence is a small honest improvement — contiguous, and marked as that
+body's rather than Hex-Rays' — but it does not explain anything, and a row that
+counted only `vNN` would have read it as progress. It counts `[vt]NN` now. That
+correction moved the figure from "5 of 102 bodies, 5979 uses" to **8 of 102 and
+6302**, which is the number that was true all along.
 
 A figure a comment can move is not a measurement, and a figure that cannot move
 is not one either. That is the whole of §10.
