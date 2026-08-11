@@ -2890,17 +2890,21 @@ int32_t __init_model_tables(ModelBlock *_this)
 LABEL_19:
     if ( n2 && n2 <= 2 )
       goto LABEL_37;
-    goto LABEL_21;
   }
-  if ( n2_1 <= 2 )
-    goto LABEL_37;
-  if ( mode_symbol[3] != mode_symbol[4] )
+  else
   {
-    __symbol_list_update(&_this->sel0_list[mode_symbol[2]], _this->row_cur[5]->sym, 1u);
-    n2 = _this->hit;
-    goto LABEL_19;
+    // The `goto LABEL_21` that ended the block above skipped exactly this, and
+    // it was the block's last statement -- so the two are an `if`/`else` and
+    // the label was the join.
+    if ( n2_1 <= 2 )
+      goto LABEL_37;
+    if ( mode_symbol[3] != mode_symbol[4] )
+    {
+      __symbol_list_update(&_this->sel0_list[mode_symbol[2]], _this->row_cur[5]->sym, 1u);
+      n2 = _this->hit;
+      goto LABEL_19;
+    }
   }
-LABEL_21:
   v19 = _this->row_cur[5]->sym;
   sym_cache = _this->sym_cache;
   v21 = sym_cache[0];
@@ -5101,9 +5105,17 @@ LABEL_72:
     v49 = buf_1 - buf;
     if ( Bufferb_2 > buf_1 - buf )
     {
-      Bufferc_2 = Bufferc;
-      Stream_2 = Stream_1;
-      goto LABEL_76;
+      // The shared tail, copied here: the two assignments it used to reach it
+      // through are gone with the `goto`, so it names `Bufferc` and `Stream_1`
+      // directly.
+      bmp->biSizeImage = (uint32_t)v49;
+      ElementCount = (uint32_t)(buf_1 - Bufferc);
+      bmp->bfSize = ElementCount;
+      if ( fwrite(Bufferc, 1u, ElementCount, Stream_1) != bmp->bfSize )
+        return 0;
+      free(Bufferc);
+      fclose(Stream_1);
+      return 1;
     }
     v28 = 0;
   }
@@ -5137,9 +5149,8 @@ LABEL_72:
     Stream_2 = Stream_1;
     v49 = buf_1 - buf;
   }
-LABEL_76:
-  bmp->biSizeImage = v49;
-  ElementCount = buf_1 - Bufferc_2;
+  bmp->biSizeImage = (uint32_t)v49;
+  ElementCount = (uint32_t)(buf_1 - Bufferc_2);
   bmp->bfSize = ElementCount;
   if ( fwrite(Bufferc_2, 1u, ElementCount, Stream_2) != bmp->bfSize )
     return 0;
