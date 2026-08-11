@@ -8950,7 +8950,7 @@ int32_t *__read_bmp(char *FileName)
   struct alignas(16) ReadBmpFrame {   // 128 bytes, one stack frame
       uint32_t Size_4;
       int32_t Size;
-      BmfImage *v52;
+      BmfImage *img_f;
       int32_t Src_2;
       void *Buffer_3;
       uint8_t _pad0[4];
@@ -8974,12 +8974,8 @@ int32_t *__read_bmp(char *FileName)
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int32_t v46;
-  int32_t v47;
-  // These shared `__frame.Size` with the name that still binds it: one
-  // stack slot MSVC gave to locals whose live ranges do not overlap, and
-  // Hex-Rays named every use.  That they can have storage of their own is
-  // the gate's answer -- nothing writes one of them and reads another.
+  int32_t y4;
+  int32_t y8;
   // These shared `__frame.Size` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
@@ -8989,17 +8985,17 @@ int32_t *__read_bmp(char *FileName)
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int32_t v54;
+  int32_t run4;
   ;
   uintptr_t Src_1;   // were int32_t: addresses, masked and tagged
-  uint8_t *v7, *v8, *v9;   // were int32_t: these hold addresses
+  uint8_t *pal, *pal2, *pal3;   // were int32_t: these hold addresses
   FILE *Stream_v;
-  int8_t v25;
-  uint8_t v28, v30;
+  int8_t lo;
+  uint8_t cur, lo16;
   uint8_t *Src_4, *Src_3, *Src_6, *Buffer_4, *Src_5;   // `uint8_t *` beside the `char` scalars above
-  BmfImage *v3;
-  int32_t Size_1, i, j_3, Sizea_1, v22, n2_1, v26, v31, Offset_2, v35, v38, v40, v41;
-  uint32_t Size_2, n2_2, v29, ElementCount, ElementCount_1, v44;
+  BmfImage *img;
+  int32_t Size_1, i, j_3, Sizea_1, hi_nibble, n2_1, n4, n4b, Offset_2, y, dx, dxy, step;
+  uint32_t Size_2, n2_2, hi, ElementCount, ElementCount_1, left;
   // These two freads land in the frame, and each writes across several of the
   // slots Hex-Rays split it into -- which is why the fields do not look like
   // fields.  `bmp_info_hdr` is declared `uint32_t[2]` and the read is 40 bytes:
@@ -9031,8 +9027,8 @@ int32_t *__read_bmp(char *FileName)
   {
     return nullptr;
   }
-  v3 = (BmfImage *)(__alloc_image(__frame.bmp_info_hdr[1], __frame.bmp_height, __frame.bmp_bits, __frame.bmp_bits <= 8u, 1));
-  Size_2 = (v3->stride + 3) & 0xFFFFFFFC;
+  img = (BmfImage *)(__alloc_image(__frame.bmp_info_hdr[1], __frame.bmp_height, __frame.bmp_bits, __frame.bmp_bits <= 8u, 1));
+  Size_2 = (img->stride + 3) & 0xFFFFFFFC;
   if ( __frame.bmp_bits <= 8u )
   {
     Size_1 = 1 << (__frame.bmp_bits & 31);
@@ -9040,41 +9036,41 @@ int32_t *__read_bmp(char *FileName)
       Size_1 = __frame.bmp_clr_used;
     if ( Size_1 > 0 )
     {
-      __frame.Size_4 = (v3->stride + 3) & 0xFFFFFFFC;
+      __frame.Size_4 = (img->stride + 3) & 0xFFFFFFFC;
       __frame.Size = Size_1;
       for ( i = 0; i < __frame.Size; ++i )
       {
         fread(__frame.bmp_bgra, 4u, 1u, Stream_v);
-        if ( (v3->depth & 0x80) != 0 )
-          v7 = (uint8_t *)(uintptr_t)v3 + v3->data_size + 16;
+        if ( (img->depth & 0x80) != 0 )
+          pal = (uint8_t *)(uintptr_t)img + img->data_size + 16;
         else
-          v7 = 0;
-        *(v7 + 3 * i + 2) = __frame.bmp_bgra[2];
-        if ( (v3->depth & 0x80) != 0 )
-          v8 = (uint8_t *)(uintptr_t)v3 + v3->data_size + 16;
+          pal = 0;
+        *(pal + 3 * i + 2) = __frame.bmp_bgra[2];
+        if ( (img->depth & 0x80) != 0 )
+          pal2 = (uint8_t *)(uintptr_t)img + img->data_size + 16;
         else
-          v8 = 0;
-        *(v8 + 3 * i + 1) = __frame.bmp_bgra[1];
-        if ( (v3->depth & 0x80) != 0 )
-          v9 = (uint8_t *)(uintptr_t)v3 + v3->data_size + 16;
+          pal2 = 0;
+        *(pal2 + 3 * i + 1) = __frame.bmp_bgra[1];
+        if ( (img->depth & 0x80) != 0 )
+          pal3 = (uint8_t *)(uintptr_t)img + img->data_size + 16;
         else
-          v9 = 0;
-        *(v9 + 3 * i) = __frame.bmp_bgra[0];
+          pal3 = 0;
+        *(pal3 + 3 * i) = __frame.bmp_bgra[0];
       }
       Size_2 = __frame.Size_4;
     }
   }
   __frame.Buffer_3 = bmf_new(Size_2);
-  __frame.Src = (uint8_t *)v3 + v3->data_size - v3->stride + 16;
+  __frame.Src = (uint8_t *)img + img->data_size - img->stride + 16;
   fseek(Stream_v, (*(int32_t *)((uint8_t *)__frame.bmp_off_bits)), 0);
   if ( __frame.bmp_compression )
   {
     if ( __frame.bmp_compression == 1 )
     {
-      memset(v3->pixels,0,v3->data_size);
+      memset(img->pixels,0,img->data_size);
       Src_1 = (int32_t)__frame.Src;
-      __frame.v52 = v3;
-      v46 = v3->height - 1;
+      __frame.img_f = img;
+      y4 = img->height - 1;
       while ( 1 )
       {
         __frame.Src_2 = Src_1;
@@ -9103,8 +9099,8 @@ int32_t *__read_bmp(char *FileName)
             goto LABEL_61;
           if ( Sizea_1 == 2 )
           {
-            v38 = fgetc(Stream_v);
-            Src_1 = v38 + Src_1 - fgetc(Stream_v) * *((uint16_t *)__frame.v52 + 2);
+            dx = fgetc(Stream_v);
+            Src_1 = dx + Src_1 - fgetc(Stream_v) * *((uint16_t *)__frame.img_f + 2);
           }
           else
           {
@@ -9115,18 +9111,18 @@ int32_t *__read_bmp(char *FileName)
         }
         else
         {
-          if ( --v46 < 0 )
+          if ( --y4 < 0 )
             goto LABEL_61;
-          Src_1 = (int32_t)__frame.v52 + v46 * *((uint16_t *)__frame.v52 + 2) + 16;
+          Src_1 = (int32_t)__frame.img_f + y4 * *((uint16_t *)__frame.img_f + 2) + 16;
         }
       }
     }
     if ( __frame.bmp_compression != 2 )
       return nullptr;
-    memset(v3->pixels,0,v3->data_size);
-    __frame.v52 = v3;
-    v22 = 1;
-    v47 = v3->height - 1;
+    memset(img->pixels,0,img->data_size);
+    __frame.img_f = img;
+    hi_nibble = 1;
+    y8 = img->height - 1;
     while ( 1 )
     {
       while ( 1 )
@@ -9136,76 +9132,76 @@ int32_t *__read_bmp(char *FileName)
 LABEL_44:
           if ( ferror(Stream_v) )
             return nullptr;
-          v54 = fgetc(Stream_v);
+          run4 = fgetc(Stream_v);
           n2_1 = fgetc(Stream_v);
           n2_2 = n2_1;
-          if ( !v54 )
+          if ( !run4 )
             break;
-          v25 = n2_1 & 0xF;
-          if ( v22 )
+          lo = n2_1 & 0xF;
+          if ( hi_nibble )
           {
-            v31 = v54;
+            n4b = run4;
             Src_3 = __frame.Src;
-            while ( v31 != 1 )
+            while ( n4b != 1 )
             {
               *Src_3++ = n2_2;
-              v31 -= 2;
-              if ( !v31 )
+              n4b -= 2;
+              if ( !n4b )
               {
                 __frame.Src = Src_3;
-                v22 = 1;
+                hi_nibble = 1;
                 goto LABEL_44;
               }
             }
             __frame.Src = Src_3;
             *Src_3 = n2_2 & 0xF0;
-            v22 = 0;
+            hi_nibble = 0;
           }
           else
           {
-            v26 = v54;
+            n4 = run4;
             Src_4 = __frame.Src;
-            v28 = *__frame.Src;
-            v29 = n2_2 >> 4;
-            v30 = 16 * v25;
+            cur = *__frame.Src;
+            hi = n2_2 >> 4;
+            lo16 = 16 * lo;
             while ( 1 )
             {
-              *Src_4++ = v29 | v28;
-              if ( v26 == 1 )
+              *Src_4++ = hi | cur;
+              if ( n4 == 1 )
                 break;
-              v28 = v30;
-              v26 -= 2;
-              if ( !v26 )
+              cur = lo16;
+              n4 -= 2;
+              if ( !n4 )
               {
                 __frame.Src = Src_4;
-                *Src_4 = v30;
-                v22 = 0;
+                *Src_4 = lo16;
+                hi_nibble = 0;
                 goto LABEL_44;
               }
             }
             __frame.Src = Src_4;
-            v22 = 1;
+            hi_nibble = 1;
           }
         }
         if ( n2_1 )
           break;
-        if ( --v47 < 0 )
+        if ( --y8 < 0 )
           goto LABEL_61;
-        __frame.Src = (uint8_t *)__frame.v52 + v47 * *((uint16_t *)__frame.v52 + 2) + 16;
+        __frame.Src = (uint8_t *)__frame.img_f + y8 * *((uint16_t *)__frame.img_f + 2) + 16;
       }
       if ( n2_1 == 1 )
         goto LABEL_61;
       if ( n2_1 != 2 )
         break;
-      v40 = fgetc(Stream_v);
-      v41 = (v40 >> 1) - fgetc(Stream_v) * *((uint16_t *)__frame.v52 + 2);
-      if ( (v40 & 1) == 1 )
+      dxy = fgetc(Stream_v);
+      step = (dxy >> 1) - fgetc(Stream_v) * *((uint16_t *)__frame.img_f + 2);
+      if ( (dxy & 1) == 1 )
       {
-        if ( !v22 )
-          ++v41;
-        v22 = !v22;
+        if ( !hi_nibble )
+          ++step;
+        hi_nibble = !hi_nibble;
       }
-      __frame.Src += v41;
+      __frame.Src += step;
     }
     fread(__frame.Buffer_3, (((n2_1 + 1) >> 1) + 1) & 0xFFFFFFFE, 1u, Stream_v);
     Buffer_4 = (uint8_t *)__frame.Buffer_3;
@@ -9213,34 +9209,34 @@ LABEL_44:
     while ( 1 )
     {
       Sizeb = *Buffer_4;
-      if ( v22 )
+      if ( hi_nibble )
       {
-        v44 = n2_2 - 1;
-        if ( !v44 )
+        left = n2_2 - 1;
+        if ( !left )
         {
           __frame.Src = Src_5;
           *Src_5 = *Buffer_4 & 0xF0;
-          v22 = 0;
+          hi_nibble = 0;
           goto LABEL_44;
         }
         *Src_5++ = Sizeb;
-        v22 = 1;
+        hi_nibble = 1;
       }
       else
       {
         *Src_5++ |= (uint8_t)*Buffer_4 >> 4;
-        v44 = n2_2 - 1;
-        if ( !v44 )
+        left = n2_2 - 1;
+        if ( !left )
         {
           __frame.Src = Src_5;
-          v22 = 1;
+          hi_nibble = 1;
           goto LABEL_44;
         }
         *Src_5 = 16 * (Sizeb & 0xF);
-        v22 = 0;
+        hi_nibble = 0;
       }
       ++Buffer_4;
-      n2_2 = v44 - 1;
+      n2_2 = left - 1;
       if ( !n2_2 )
       {
         __frame.Src = Src_5;
@@ -9248,36 +9244,36 @@ LABEL_44:
       }
     }
   }
-  ElementCount = v3->stride;
+  ElementCount = img->stride;
   Offset_2 = Size_2 - ElementCount;
   if ( __frame.bmp_height - 1 >= 0 )
   {
-    v35 = __frame.bmp_height - 1;
-    __frame.v52 = v3;
+    y = __frame.bmp_height - 1;
+    __frame.img_f = img;
     Src_6 = __frame.Src;
     while ( 1 )
     {
       ElementCount_1 = fread(Src_6, 1u, ElementCount, Stream_v);
-      ElementCount = *((uint16_t *)__frame.v52 + 2);
+      ElementCount = *((uint16_t *)__frame.img_f + 2);
       if ( ElementCount_1 != ElementCount )
         return nullptr;
       if ( Offset_2 )
       {
         fseek(Stream_v, Offset_2, 1);
-        ElementCount = *((uint16_t *)__frame.v52 + 2);
+        ElementCount = *((uint16_t *)__frame.img_f + 2);
       }
       Src_6 -= ElementCount;
-      if ( --v35 < 0 )
+      if ( --y < 0 )
       {
 LABEL_61:
-        v3 = __frame.v52;
+        img = __frame.img_f;
         break;
       }
     }
   }
   fclose(Stream_v);
   free(__frame.Buffer_3);
-  return (int32_t *)v3;
+  return (int32_t *)img;
 }
 
 int32_t __decode_symbol_list(SymList *a1)
