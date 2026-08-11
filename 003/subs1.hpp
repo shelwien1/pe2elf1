@@ -2215,103 +2215,121 @@ uint16_t *__init_counter_node(uint16_t *_this)
   return _this;
 }
 
-int32_t __encode_symbol_tree(uint16_t *_this, int32_t n2) {
+// Code a symbol as a level, then the bits that pick it out within that level.
+//
+// `freq` is a counter block: the total at [0], the escape weight at [1], and
+// eight level counts from [2].  `model_geometry[sym]` says which level `sym`
+// falls in -- 0 and 1 are levels of their own, then 2, 4, 8, 16, 32 and 64
+// symbols per level -- so the level goes through the range coder against those
+// eight counts, and anything above level 1 then needs `level_geom[lvl].half`
+// bits to say which symbol within it.
+//
+// Those bits are coded down a binary tree of counter pairs at
+// `freq[2 * level_geom[lvl].tbl_base + 8]`, most significant first, with `node`
+// the index of the pair reached so far and `span` the width of the level below.
+// `decode_symbol_tree` walks the identical tree and reassembles `node` into the
+// symbol by adding `level_geom[lvl].first`.
+//
+// The rescale is the unrolled part: when the total passes 0x4000 all eight
+// counts halve, in a chain of partial sums MSVC interleaved with the stores,
+// and the escape weight steps down by 4 or by 16 depending on where it sits
+// relative to `alt_freq_limit`.
+int32_t __encode_symbol_tree(uint16_t *freq, int32_t sym)
+{
   ;
-  int16_t v24, v42;
+  int16_t add, sum4;
   // The cumulative count the range coder takes, which it takes unsigned.
-  uint32_t v8;
-  int32_t n4, n0x800000_5, v27, v28, v46, v56, v59, i, v65, v66;
-  uint16_t *v3, *v26, n0x4000, v39, v41, *v51, *this_2;
-  uint32_t n4_2, v38, v40, v43, v44, v45, v48, v52;
-  n4 = model_geometry[n2];
-  v3 = _this + 2;
-  v51 = _this + 2;
-  // The counts below `n2`, which is where the range coder's interval starts.
+  uint32_t cum;
+  int32_t lvl, result, go, fa, esc, path, node, span, f1, mask;
+  uint16_t *f0, *pair, fq, h2, h4, *slot;
+  uint32_t j, f1_old, acc, acc6, acc8, h9, tot, cum_hi;
+  lvl = model_geometry[sym];
+  f0 = freq + 2;
+  // The counts below `sym`, which is where the range coder's interval starts.
   // Four at a time in SSE, then a scalar tail; integer addition does not care
   // about the order, so it is one loop.
-  v8 = 0;
-  for ( n4_2 = 0; n4_2 < n4; n4_2++ )
-    v8 += v3[n4_2];
-  v51 = &v3[n4];
-  v52 = v8 + *v51;
-  v48 = *_this;
-  n0x800000_5 = rc.encode(v8, v52, v48);
-  if ( *_this > 0x4000u )
+  cum = 0;
+  for ( j = 0; j < lvl; j++ )
+    cum += f0[j];
+  slot = &f0[lvl];
+  cum_hi = cum + *slot;
+  tot = *freq;
+  result = rc.encode(cum, cum_hi, tot);
+  if ( *freq > 0x4000u )
   {
-    v39 = *(_this + 2) - (*(_this + 2) >> 1);
-    v40 = *(_this + 3);
-    *(_this + 2) = v39;
-    LOWORD(v40) = v40 - (v40 >> 1);
-    *(_this + 3) = v40;
-    LOWORD(v40) = v39 + v40;
-    v41 = *(_this + 4) - (*(_this + 4) >> 1);
-    *(_this + 4) = v41;
-    v42 = v40 + v41;
-    LOWORD(v40) = *(_this + 5) - (*(_this + 5) >> 1);
-    v43 = *(_this + 6);
-    *(_this + 5) = v40;
-    LOWORD(v43) = v43 - (v43 >> 1);
-    *(_this + 6) = v43;
-    LOWORD(v43) = v42 + v40 + v43;
-    LOWORD(v40) = *(_this + 7) - (*(_this + 7) >> 1);
-    v44 = *(_this + 8);
-    *(_this + 7) = v40;
-    LOWORD(v40) = v43 + v40;
-    LOWORD(v44) = v44 - (v44 >> 1);
-    v45 = *(_this + 9);
-    *(_this + 8) = v44;
-    LOWORD(v44) = v40 + v44;
-    LOWORD(v45) = v45 - (v45 >> 1);
-    v46 = *(_this + 1);
-    *(_this + 9) = v45;
-    *_this = v44 + v45;
-    if ( (v46 <= 4 * alt_freq_limit) )
+    h2 = *(freq + 2) - (*(freq + 2) >> 1);
+    acc = *(freq + 3);
+    *(freq + 2) = h2;
+    LOWORD(acc) = acc - (acc >> 1);
+    *(freq + 3) = acc;
+    LOWORD(acc) = h2 + acc;
+    h4 = *(freq + 4) - (*(freq + 4) >> 1);
+    *(freq + 4) = h4;
+    sum4 = acc + h4;
+    LOWORD(acc) = *(freq + 5) - (*(freq + 5) >> 1);
+    acc6 = *(freq + 6);
+    *(freq + 5) = acc;
+    LOWORD(acc6) = acc6 - (acc6 >> 1);
+    *(freq + 6) = acc6;
+    LOWORD(acc6) = sum4 + acc + acc6;
+    LOWORD(acc) = *(freq + 7) - (*(freq + 7) >> 1);
+    acc8 = *(freq + 8);
+    *(freq + 7) = acc;
+    LOWORD(acc) = acc6 + acc;
+    LOWORD(acc8) = acc8 - (acc8 >> 1);
+    h9 = *(freq + 9);
+    *(freq + 8) = acc8;
+    LOWORD(acc8) = acc + acc8;
+    LOWORD(h9) = h9 - (h9 >> 1);
+    esc = *(freq + 1);
+    *(freq + 9) = h9;
+    *freq = acc8 + h9;
+    if ( (esc <= 4 * alt_freq_limit) )
     {
-      n0x800000_5 = 4 * (v46 > alt_freq_limit);
-      v24 = v46 - n0x800000_5;
-      *(_this + 1) = v46 - n0x800000_5;
+      result = 4 * (esc > alt_freq_limit);
+      add = esc - result;
+      *(freq + 1) = esc - result;
     }
     else
     {
-      v24 = v46 - 16;
-      *(_this + 1) = v46 - 16;
+      add = esc - 16;
+      *(freq + 1) = esc - 16;
     }
   }
   else
   {
-    v24 = *(_this + 1);
+    add = *(freq + 1);
   }
-  *v51 += v24;
-  *_this += *(_this + 1);
-  if ( n2 >= 2 )
+  *slot += add;
+  *freq += *(freq + 1);
+  if ( sym >= 2 )
   {
-    v66 = level_geom[n4].half;
-    v56 = n2 - level_geom[n4].first;
-    v59 = 0;
-    this_2 = _this;
-    for ( i = 1; ; i *= 2 )
+    mask = level_geom[lvl].half;
+    path = sym - level_geom[lvl].first;
+    node = 0;
+    for ( span = 1; ; span *= 2 )
     {
-      v26 = (uint16_t *)(((uint8_t *)&this_2[2 * level_geom[n4].tbl_base + 8]) + 4 * (i + v59));
-      v65 = v26[1];
-      v27 = (v66 & v56) != 0;
-      v28 = *v26;
-      n0x800000_5 = rc.encode_bit(v28, v65, v27);
-      n0x4000 = v26[v27];
-      if ( n0x4000 > 0x4000u )
+      pair = (uint16_t *)(((uint8_t *)&freq[2 * level_geom[lvl].tbl_base + 8]) + 4 * (span + node));
+      f1 = pair[1];
+      go = (mask & path) != 0;
+      fa = *pair;
+      result = rc.encode_bit(fa, f1, go);
+      fq = pair[go];
+      if ( fq > 0x4000u )
       {
-        v38 = v26[1];
-        *v26 -= *v26 >> 1;
-        v26[1] = v38 - (v38 >> 1);
-        n0x4000 = v26[v27];
+        f1_old = pair[1];
+        *pair -= *pair >> 1;
+        pair[1] = f1_old - (f1_old >> 1);
+        fq = pair[go];
       }
-      v26[v27] = alt_freq_init + n0x4000;
-      v66 >>= 1;
-      v59 = v27 + 2 * v59;
-      if ( !v66 )
-        return n0x800000_5;
+      pair[go] = alt_freq_init + fq;
+      mask >>= 1;
+      node = go + 2 * node;
+      if ( !mask )
+        return result;
     }
   }
-  return n0x800000_5;
+  return result;
 }
 
 int32_t __alt_p1_encode_symbol(uint16_t *freq, int32_t n5, int32_t ctx, int32_t sym)
@@ -2388,101 +2406,105 @@ int32_t __alt_p1_encode_symbol(uint16_t *freq, int32_t n5, int32_t ctx, int32_t 
 // the total passes 0x4000, and the two are called from the matching sides:
 // `encode_symbol_tree` from alt_p1/alt_p2_encode_symbol, this from
 // alt_p1_decode_symbol and alt_p2_decode_symbol.
-int32_t __decode_symbol_tree(uint16_t *_this)
+// The inverse of `encode_symbol_tree`, and the same block in the same order:
+// find the level by cumulative count, rescale on the same threshold with the
+// same chain, then walk the same binary tree and add `level_geom[lvl].first`
+// to turn the path back into a symbol.
+int32_t __decode_symbol_tree(uint16_t *freq)
 {
   ;
-  int16_t v31, v33;
+  int16_t sum4, sum6;
   // The cumulative count the range coder takes, which it takes unsigned.
-  int32_t n2_1, v18, v23, v25, v36, v38, v40, n2, v43, v44;
-  uint16_t *v8, v16, *v17, n0x4000, v28, v30, v32, v34, *v37;
-  uint32_t v7, v9, v29, v35, v39;
-  v39 = *_this;
-  n2 = 0;
-  v7 = rc.get_freq(v39);
-  v8 = _this + 2;
-  v9 = *(_this + 2);
-  if ( v9 <= v7 )
+  int32_t k, fa, go, node1, esc, mask, node, sym, span, f1;
+  uint16_t *cur, add, *pair, fq, h2, h4, h6, h8, *slot;
+  uint32_t target, cum, acc, acc8, tot;
+  tot = *freq;
+  sym = 0;
+  target = rc.get_freq(tot);
+  cur = freq + 2;
+  cum = *(freq + 2);
+  if ( cum <= target )
   {
-    n2_1 = 0;
+    k = 0;
     do
     {
-      ++v8;
-      ++n2_1;
-      v9 += *v8;
+      ++cur;
+      ++k;
+      cum += *cur;
     }
-    while ( v9 <= v7 );
-    n2 = n2_1;
+    while ( cum <= target );
+    sym = k;
   }
-  v37 = v8;
-  rc.decode((v9 - *v8), v9, v39);
-  if ( *_this > 0x4000u )
+  slot = cur;
+  rc.decode((cum - *cur), cum, tot);
+  if ( *freq > 0x4000u )
   {
-    v28 = *(_this + 2) - (*(_this + 2) >> 1);
-    v29 = *(_this + 3);
-    *(_this + 2) = v28;
-    LOWORD(v29) = v29 - (v29 >> 1);
-    *(_this + 3) = v29;
-    LOWORD(v29) = v28 + v29;
-    v30 = *(_this + 4) - (*(_this + 4) >> 1);
-    *(_this + 4) = v30;
-    v31 = v29 + v30;
-    LOWORD(v29) = *(_this + 5) - (*(_this + 5) >> 1);
-    *(_this + 5) = v29;
-    LOWORD(v29) = v31 + v29;
-    v32 = *(_this + 6) - (*(_this + 6) >> 1);
-    *(_this + 6) = v32;
-    v33 = v29 + v32;
-    LOWORD(v29) = *(_this + 7) - (*(_this + 7) >> 1);
-    *(_this + 7) = v29;
-    LOWORD(v29) = v33 + v29;
-    v34 = *(_this + 8) - (*(_this + 8) >> 1);
-    v35 = *(_this + 9);
-    *(_this + 8) = v34;
-    LOWORD(v35) = v35 - (v35 >> 1);
-    *(_this + 9) = v35;
-    LOWORD(v35) = v29 + v34 + v35;
-    v36 = *(_this + 1);
-    *_this = v35;
-    if ( v36 <= 4 * alt_freq_limit )
-      v16 = v36 - 4 * (v36 > alt_freq_limit);
+    h2 = *(freq + 2) - (*(freq + 2) >> 1);
+    acc = *(freq + 3);
+    *(freq + 2) = h2;
+    LOWORD(acc) = acc - (acc >> 1);
+    *(freq + 3) = acc;
+    LOWORD(acc) = h2 + acc;
+    h4 = *(freq + 4) - (*(freq + 4) >> 1);
+    *(freq + 4) = h4;
+    sum4 = acc + h4;
+    LOWORD(acc) = *(freq + 5) - (*(freq + 5) >> 1);
+    *(freq + 5) = acc;
+    LOWORD(acc) = sum4 + acc;
+    h6 = *(freq + 6) - (*(freq + 6) >> 1);
+    *(freq + 6) = h6;
+    sum6 = acc + h6;
+    LOWORD(acc) = *(freq + 7) - (*(freq + 7) >> 1);
+    *(freq + 7) = acc;
+    LOWORD(acc) = sum6 + acc;
+    h8 = *(freq + 8) - (*(freq + 8) >> 1);
+    acc8 = *(freq + 9);
+    *(freq + 8) = h8;
+    LOWORD(acc8) = acc8 - (acc8 >> 1);
+    *(freq + 9) = acc8;
+    LOWORD(acc8) = acc + h8 + acc8;
+    esc = *(freq + 1);
+    *freq = acc8;
+    if ( esc <= 4 * alt_freq_limit )
+      add = esc - 4 * (esc > alt_freq_limit);
     else
-      v16 = v36 - 16;
-    *(_this + 1) = v16;
+      add = esc - 16;
+    *(freq + 1) = add;
   }
   else
   {
-    v16 = *(_this + 1);
+    add = *(freq + 1);
   }
-  *v37 += v16;
-  *_this += *(_this + 1);
-  if ( n2 < 2 )
-    return n2;
+  *slot += add;
+  *freq += *(freq + 1);
+  if ( sym < 2 )
+    return sym;
   else
   {
-    v38 = level_geom[n2].half;
-    v40 = 0;
-    v43 = 1;
+    mask = level_geom[sym].half;
+    node = 0;
+    span = 1;
     do
     {
-      v17 = _this + 2 * level_geom[n2].tbl_base + 2 * v43 + 2 * v40 + 8;
-      v18 = *v17;
-      v44 = v17[1];
-      v23 = rc.decode_bit(v18, v44);
-      n0x4000 = v17[v23];
-      if ( n0x4000 > 0x4000u )
+      pair = freq + 2 * level_geom[sym].tbl_base + 2 * span + 2 * node + 8;
+      fa = *pair;
+      f1 = pair[1];
+      go = rc.decode_bit(fa, f1);
+      fq = pair[go];
+      if ( fq > 0x4000u )
       {
-        *v17 -= *v17 >> 1;
-        v17[1] -= v17[1] >> 1;
-        n0x4000 = v17[v23];
+        *pair -= *pair >> 1;
+        pair[1] -= pair[1] >> 1;
+        fq = pair[go];
       }
-      v17[v23] = alt_freq_init + n0x4000;
-      v38 >>= 1;
-      v43 *= 2;
-      v25 = v23 + 2 * v40;
-      v40 = v25;
+      pair[go] = alt_freq_init + fq;
+      mask >>= 1;
+      span *= 2;
+      node1 = go + 2 * node;
+      node = node1;
     }
-    while ( v38 );
-    return v25 + level_geom[n2].first;
+    while ( mask );
+    return node1 + level_geom[sym].first;
   }
 }
 
