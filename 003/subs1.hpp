@@ -763,7 +763,7 @@ struct ModelBlock {
   // Write-only, like the three in `AltP2Block`: both coders store the
   // neighbourhood word here once per pixel and nothing reads it back, and
   // no computed reach lands on +36.  It stays because the layout does.
-  uint32_t f36;
+  uint32_t ctx_state_seen;   // +36
   // Which of `grid`'s 188 context buckets this pixel selected.  The only
   // reader is `&row_cur[4 * bucket_idx + 10]`, which in `uint32_t` steps is
   // +3104 + 16 * bucket_idx -- record `bucket_idx + 188` of the grid, the
@@ -1083,15 +1083,13 @@ struct AltP2Block {
     // an array and not 28 scalars.
     float p2_row[7][4];   // +278528 .. +278639
     struct {
-      uint64_t f278528_q;
-      // Three scalars every one of the four p2 bodies clears at a row start
-      // and nothing reads -- twelve writes, no readers, and no computed reach
-      // lands on +278536, +278540 or +278542 either.  They stay because the
-      // layout does; the observation is that a row start in this model
-      // resets more state than it uses.
-      uint32_t f278536;
-      uint16_t f278540;
-      uint8_t f278542;
+      // The same fifteen bytes as `p2_row[0][0]`..`[0][2]` and the low three
+      // of `[0][3]`, which every one of the four p2 bodies clears at a row
+      // start.  Hex-Rays had it as four scalars because that is how MSVC
+      // writes fifteen bytes -- an 8, a 4, a 2 and a 1 -- and called them
+      // readerless, which is true of the names and false of the bytes: the
+      // union's other arm is what the filter reads.
+      uint8_t p2_row0_head[15];
       uint8_t _u0_0_4[97];
       // Four floats, and only three have a reader: `alt_p2_filter` takes
       // `bias[0]` and `bias[1]`, `alt_p2_context` takes `bias[2]`, and all
@@ -1113,7 +1111,7 @@ struct AltP2Block {
       // `bank_ctx[n5]` at the top of each, which is what says these five
       // scalars are an array.  `alt_p2_context` writes them one at a time.
       int32_t bank_ctx[5];   // +278676 .. +278695
-      int32_t f278696;   // no reader, and no writer either
+      int32_t _unused278696;   // no reader, and no writer either
       // The filter's last prediction.  `alt_p2_context` leaves its output
       // here and `alt_p2_model` reads it one pixel later as
       // `err = sample - pred_prev`, which is the residual the record
@@ -4551,7 +4549,11 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t img_w, int32_t plane)
   *(uint32_t *)&_this->band_hi = band + 8;
   _this->row0 = (int32_t *)bmf_new(4 * img_w + 16);
   buf1 = bmf_new(4 * img_w + 16);
-  *(uint32_t *)((uint8_t *)_this + 232) = 0x3F800000 /* 1.0f */;
+  // Byte 232 is row 14 lane 2 of the first neighbourhood's weight block --
+  // `14 * 16 + 2 * 4` -- which is the slot `alt_p2_context` and `alt_p2_model`
+  // both read as the scale on their update floor.  Seeding it to 1 is what
+  // stops the first neighbourhood dividing by nothing.
+  ((float (*)[4])_this)[14][2] = 1.0f;
   _this->row1 = (int32_t *)buf1;
   _this->cur = _this->row0 + img_w + 2;
   if ( img_w > -4 )
@@ -9526,7 +9528,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   }
   __frame.sym5->sym_cache = &__frame.sym5->sym_ctr[8 * key];
   ctx_state = _this->ctx_state[nb];
-  _this->f36 = ctx_state;
+  _this->ctx_state_seen = ctx_state;
   pair = &_this->group_ctr[ctx_state][key];
   _this->pix_cur = (uint16_t *)pair;
   pair_last = pair->last;
@@ -10316,7 +10318,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   }
   __frame.sym7->sym_cache = &__frame.sym7->sym_ctr[8 * key];
   ctx_state = _this->ctx_state[nb];
-  *(int32_t *)&_this->f36 = ctx_state;
+  *(int32_t *)&_this->ctx_state_seen = ctx_state;
   pair = &_this->group_ctr[ctx_state][key];
   _this->pix_cur = (uint16_t *)pair;
   pair_last = pair->last;
@@ -13672,10 +13674,7 @@ void __alt_p2_d8_decode_body(AltP2Block *blk, int8_t ArgList, uint8_t *out, int3
       blk->above = r0;
       r1[-1] = *r0;
       blk->cur[-2] = *r0;
-      blk->f278528_q = 0;
-      blk->f278536 = 0;
-      blk->f278540 = 0;
-      blk->f278542 = 0;
+      memset(blk->p2_row0_head, 0, sizeof blk->p2_row0_head);
       blk->bias[0] = 0.0f;
 
       blk->bias[1] = 0.0f;
@@ -13977,10 +13976,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *cur0,
           blk_r->above = b0;
           r1[-1] = *b0;
           blk_r->cur[-2] = *b0;
-          blk_r->f278528_q = 0;
-          blk_r->f278536 = 0;
-          blk_r->f278540 = 0;
-          blk_r->f278542 = 0;
+          memset(blk_r->p2_row0_head, 0, sizeof blk_r->p2_row0_head);
           blk_r->bias[0] = 0.0f;
 
           blk_r->bias[1] = 0.0f;
@@ -14340,10 +14336,7 @@ void __alt_p2_d8_encode_body(AltP2Block *blk, uint8_t *src, int32_t width, int32
       blk->above = r0;
       r1[-1] = *r0;
       blk->cur[-2] = *r0;
-      blk->f278528_q = 0;
-      blk->f278536 = 0;
-      blk->f278540 = 0;
-      blk->f278542 = 0;
+      memset(blk->p2_row0_head, 0, sizeof blk->p2_row0_head);
       blk->bias[0] = 0.0f;
 
       blk->bias[1] = 0.0f;
@@ -14634,10 +14627,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
           blk_r->above = b0;
           r1[-1] = *b0;
           blk_r->cur[-2] = *b0;
-          blk_r->f278528_q = 0;
-          blk_r->f278536 = 0;
-          blk_r->f278540 = 0;
-          blk_r->f278542 = 0;
+          memset(blk_r->p2_row0_head, 0, sizeof blk_r->p2_row0_head);
           blk_r->bias[0] = 0.0f;
 
           blk_r->bias[1] = 0.0f;
