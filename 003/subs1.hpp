@@ -1592,7 +1592,10 @@ LABEL_24:
     }
   }
   // Whatever code was written last, which is not a result: both call sites
-  // discard it.
+  // discard it.  `-Wmaybe-uninitialized` flags it, correctly -- a 1x1 plane
+  // reaches no loop and returns the stack -- and it is left as the
+  // transcription rather than seeded, because seeding it would invent a value
+  // the original does not have.
   return last;
 }
 
@@ -4285,6 +4288,10 @@ uint8_t *__rc_begin_encode()
     ::model_tables = (uint16_t *)tbl;
   }
   rc.enc_init();
+  // Only assigned under `plane_alt_model`, so `-Wmaybe-uninitialized` flags
+  // it -- correctly, and it is left alone for the same reason `predict_med`'s
+  // return is: no caller reads it, and seeding it would invent a value the
+  // original does not have.
   return tbl;
 }
 
@@ -15243,7 +15250,6 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
   ;
   ModelBlock *blk;
   PixRec *r4, *r0;   // row cursors out of row_cur
-  int8_t mode;
   uint8_t *buf;   // `uint8_t *` beside the `char` scalars above
   int16_t __model_plane_n2, wt;
   int32_t g, flags, lo, w2, n2_1, n2_2, has3, has4, lvl, lvl2, live, s, y,
@@ -15281,7 +15287,14 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
     else
       blk = (ModelBlock *)(0);
     __rc_begin_encode();
-    __reduce_alphabet(blk, mode, pixels);
+    // `mode` was declared and never assigned.  `reduce_alphabet` does not
+    // read that parameter, and neither do the three below in
+    // `compress_image` -- `search_filter` forwards it to
+    // `choose_plane_coding`, which ignores it; `transform_planes` ignores it;
+    // and `model_planes` forwards it to `colour_transform`, which ignores it.
+    // Four uninitialised bytes travelling through five functions to be
+    // dropped.  `-Wmaybe-uninitialized` is what found them.
+    __reduce_alphabet(blk, 0, pixels);
     bucket = 0;
     g = 0;
     do
@@ -15751,7 +15764,7 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
   uint8_t *arc;   // were int32_t: these hold addresses
   FILE *Stream_1, *Stream_v;
   BmfImage *p_i_1;
-  int8_t hdr_flags, v34, v35;
+  int8_t hdr_flags;
   uint8_t bpp;
   uint8_t *Buffer_3, *n4_6, *n4_7, *dst;   // `uint8_t *` beside the `char` scalars above
   uint8_t has_coded;
@@ -16055,7 +16068,9 @@ LABEL_42:
         {
           __expand_predictor_mode0((uint32_t)Src_1, p_i_1->width, p_i_1->height);
         }
-        __interleave_plane((uint8_t *)p_i_1, Src_1, plane, v34);
+        // `v34` here and `v35` below were declared and never assigned: two more
+        // uninitialised bytes into a parameter `interleave_plane` does not read.
+        __interleave_plane((uint8_t *)p_i_1, Src_1, plane, 0);
         ++ArgList;
       }
       while ( ArgList < ::plane_count );
@@ -16127,7 +16142,7 @@ LABEL_104:
           {
             __expand_predictor_mode0((uint32_t)Src_1, p_i_1->width, p_i_1->height);
           }
-          __interleave_plane((uint8_t *)p_i_1, Src_1, plane2, v35);
+          __interleave_plane((uint8_t *)p_i_1, Src_1, plane2, 0);
         }
       }
       while ( n4_4 < ::plane_count );
@@ -17138,7 +17153,6 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
   uint8_t *arc;   // were int32_t: these hold addresses
   FILE *i;
   bool fits;
-  int8_t mode0, mode1, mode2;
   uint8_t bpp;
   uint8_t __compress_image_Buffer_1;   // 0/1, shifted into bit 7 of the header byte
   uint8_t *Srca, *Buffera_2, *Buffera_3;   // `uint8_t *` beside the `char` scalars above
@@ -17206,7 +17220,7 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
       __model_plane((BmfImage *)p_i, p_i->pixels, p_i->pixels);
     goto LABEL_57;
   }
-  __frame.ElementCount = __search_filter((BmfImage *)p_i, mode0);
+  __frame.ElementCount = __search_filter((BmfImage *)p_i, 0);
   __frame.hdr.flags |= 0x10u;
   if ( (p_i->flags & 2) != 0 )
   {
@@ -17368,7 +17382,7 @@ LABEL_22:
       __frame.arc_f = arc;
       n4_1 = 0;
       do
-        __model_planes((uint8_t *)p_i, Srca, plane_desc[n4_1++ + 1].src_plane, mode2);
+        __model_planes((uint8_t *)p_i, Srca, plane_desc[n4_1++ + 1].src_plane, 0);
       while ( n4_1 < ::plane_count );
       arc = __frame.arc_f;
     }
@@ -17376,7 +17390,7 @@ LABEL_22:
   }
   else
   {
-    __transform_planes((BmfImage *)p_i, (int32_t)p_i, mode1);
+    __transform_planes((BmfImage *)p_i, (int32_t)p_i, 0);
   }
 LABEL_57:
   *(uint32_t *)::packer_word = ::packer_acc;
