@@ -6610,12 +6610,12 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   P2Ctx *cursor1, *nb1, *nb2x;
   int32_t *up_row;
   int32_t sum4, lane5, nb_id, next_id, plane, in63, *cur, c_lo, n2, c_mid,
-          n3536_5, lane3, g3sum, n3536_1, v121, lane2, ctx0, bank0, pred0,
-          sum_c, n2256, ctx1, bank1, w1c, one1, pred1, n2576, n1840_13, v148,
-          ctx2, bank2, pred2, n2896, bank3, w3c, pred3, n3536_2, v185, v186,
-          n1840_15, n1840_16, n1840_17, n960, n3536_4, mag, v214, v215,
-          n1840_3, n1840_8, n1840_7, n1840_10, v224, n1840_11, n1840_12, n255,
-          n1840_5, n1840_4, n1840_6, v235, v236;
+          n3536_5, lane3, g3sum, n3536_1, lane2, ctx0, bank0, pred0, sum_c,
+          n2256, ctx1, bank1, w1c, one1, pred1, n2576, n1840_13, ctx2, bank2,
+          pred2, n2896, bank3, w3c, pred3, n3536_2, v185, v186, n1840_15,
+          n1840_16, n1840_17, n960, n3536_4, mag, v214, v215, n1840_3,
+          n1840_8, n1840_7, n1840_10, v224, n1840_11, n1840_12, n255, n1840_5,
+          n1840_4, n1840_6;
   int8_t rate1;
   uint32_t ctx0_lo, q24, q10a, q10b, q9;
   uint8_t *cx2p;
@@ -6922,27 +6922,25 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   blk->bank_ctx[0] = ctx0_lo;
   if ( refa )
   {
-    v121 = ra0[-2].err;
     lane2 = ra0->err;
     n3536 = n3536_1;
     ctx0 = rb0[-1].err & 0x2000000
          | rb0->err & 0x1000000
          | ra0[-1].err & 0x800000
          | (rb0->err + rb0[-2].err) & 0x400000
-         | (v121 + lane2) & 0x200000
+         | (ra0[-2].err + lane2) & 0x200000
          | cx0[-2].err & 0x100000
          | ctx0_lo;
     cx2 = (P2Ctx *)blk->cursor[2];
   }
   else
   {
-    v236 = cx0[-4].err;
     n3536 = n3536_1;
     cx2 = (P2Ctx *)blk->cursor[2];
     ctx0 = (cx1[3].err + cx0[-3].err + cx0[-7].err + cx0[-5].err) & 0x2000000
-         | (cx2[1].err + cx2->err + v236 + cx0[-8].err) & 0x1000000
-         | (v236 + cx0[-6].err) & 0x800000
-         | v236 & 0x400000
+         | (cx2[1].err + cx2->err + cx0[-4].err + cx0[-8].err) & 0x1000000
+         | (cx0[-4].err + cx0[-6].err) & 0x800000
+         | cx0[-4].err & 0x400000
          | cx0[-5].err & 0x200000
          | cx0[-7].err & 0x100000
          | ctx0_lo;
@@ -7009,26 +7007,24 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   v303 = n1840_13 - n2576;
   if ( refa )
   {
-    v148 = cx0[0].dval;
     n1840_2 = cx1[1].dval;
     n1840_1 = ra0->val - n2576;
     q10b = q10;
-    ctx2 = (v148 + cx1[-1].dval - n2576 - (cx2->dval - n1840_2)) & 0x2000000
-         | (v148 + cx0[-1].dval - n2576 - (cx1->dval - n1840_2)) & 0x1000000
+    ctx2 = (cx0[0].dval + cx1[-1].dval - n2576 - (cx2->dval - n1840_2)) & 0x2000000
+         | (cx0[0].dval + cx0[-1].dval - n2576 - (cx1->dval - n1840_2)) & 0x1000000
          | (rb0->val - n2576 + n1840 - rb2->val) & 0x800000
          | (n1840_1 + n1840 - ra2->val) & 0x400000
          | (n1840_1 + cx1[-1].val - ra1[-1].val) & 0x200000
-         | ((v148 - cx0[-2].dval + 2 * cx0[-1].dval - n2576) & 0x100000 | (2 * n960_1 - n2576 - n1840) & 0x80000 | -v301 & 0x40000 | v303 & 0x20000 | v302 & 0x10000 | (208 - rb0->val) & 0x8000 | (((n2576 > 2576) + (n2576 > 1280) + (n2576 > 640)) << 13) | ((((uint32_t)(33 - sum_all) >> 31) + ((uint32_t)(12 - sum_all) >> 31) + ((uint32_t)(4 - sum_all) >> 31)) << 11));
+         | ((cx0[0].dval - cx0[-2].dval + 2 * cx0[-1].dval - n2576) & 0x100000 | (2 * n960_1 - n2576 - n1840) & 0x80000 | -v301 & 0x40000 | v303 & 0x20000 | v302 & 0x10000 | (208 - rb0->val) & 0x8000 | (((n2576 > 2576) + (n2576 > 1280) + (n2576 > 640)) << 13) | ((((uint32_t)(33 - sum_all) >> 31) + ((uint32_t)(12 - sum_all) >> 31) + ((uint32_t)(4 - sum_all) >> 31)) << 11));
   }
   else
   {
-    v235 = cx3->val;
     q10b = q10;
-    ctx2 = (n2576 + 3 * (n1840 - n960_1) - v235) & 0x2000000
+    ctx2 = (n2576 + 3 * (n1840 - n960_1) - cx3->val) & 0x2000000
          | (n2576 + cx4->val - (cx2[2].val + cx2[-2].val)) & 0x1000000
          | (cx3[2].val - cx2[-1].val + n2576 - cx1[3].val) & 0x800000
          | (cx3[1].val - cx1[1].val - v303) & 0x400000
-         | (v235 - n960_1 - v303) & 0x200000
+         | (cx3->val - n960_1 - v303) & 0x200000
          | v301 & 0x100000
          | (n2576 - cx4[3].val) & 0x80000
          | (cx3[1].val - n2576) & 0x40000

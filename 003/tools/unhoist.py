@@ -68,6 +68,7 @@ LABEL = re.compile(r'^\s*LABEL_\d+:')
 CALL = re.compile(r'\b(?!if|while|for|switch|return|sizeof)\w+\s*\(')
 PRIMARY = re.compile(r'^[A-Za-z_]\w*(?:\s*(?:->|\.)\s*[A-Za-z_]\w*|\s*\[[^\[\]]*\])*$')
 HEXRAYS = re.compile(r'^[vt]\d+$')
+CONTROL = re.compile(r'^(?:if|else|while|do|for|switch|case|default|return|goto|break|continue)\b')
 KEYWORD = {'if', 'else', 'while', 'do', 'for', 'return', 'switch', 'case',
            'break', 'continue', 'goto', 'sizeof', 'true', 'false', 'nullptr'}
 WRITE = [r'\b%s\s*(?:\+\+|--)', r'(?:\+\+|--)\s*%s\b', r'\b%s\s*[-+*/|&^%%]?=(?!=)',
@@ -77,9 +78,34 @@ WRITE = [r'\b%s\s*(?:\+\+|--)', r'(?:\+\+|--)\s*%s\b', r'\b%s\s*[-+*/|&^%%]?=(?!
 
 
 def statements(code):
-    """[(first line, last line, text)] -- Hex-Rays wraps long expressions."""
+    """[(first line, last line, text)] -- Hex-Rays wraps long expressions.
+
+    Punctuation and control lines stand alone.  A first version joined any
+    line that did not end in `;` to whatever followed, so a bare `{` swallowed
+    the statement after it -- and every assignment that opens a block became
+    invisible to the caller, which is three of `alt_p2_context`'s remaining
+    names and no error message anywhere.
+    """
     out, i = [], 0
     while i < len(code):
+        s = code[i].strip()
+        if not s or s in ('{', '}', '};') or s.endswith('{') or LABEL.match(code[i]):
+            out.append((i, i, code[i]))
+            i += 1
+            continue
+        if CONTROL.match(s):
+            # A wrapped condition ends where its parentheses balance, not at a
+            # `;` -- `if ( a\n || b )` has no semicolon of its own.
+            j, depth = i, 0
+            while j < len(code):
+                depth += code[j].count('(') - code[j].count(')')
+                if depth <= 0:
+                    break
+                j += 1
+            j = min(j, len(code) - 1)
+            out.append((i, j, ' '.join(r.strip() for r in code[i:j + 1])))
+            i = j + 1
+            continue
         if code[i].count('(') != code[i].count(')') or not code[i].rstrip().endswith(';'):
             j = i
             depth = 0
