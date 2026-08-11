@@ -26,7 +26,7 @@ subs1.hpp / bmf.cpp lines            17787     17656
 raw-offset sites                        22        12
 byte offsets on a typed base           121         0
 pointer casts                         2137       992
-fNN members / named ones             93/121    44/121
+fNN members / named ones             93/121     5/162
 distinct vNN locals                    554       551
 goto / LABEL_n:                     112/79     92/58
 conversion warnings (ratchet)         1455      1372
@@ -319,6 +319,24 @@ noticing that a tool's *input* was narrower than the file.
   that leave a block, 3 whose skipped region something else enters, and 2 more
   that enter one. Removing any of those needs a flag or a duplicated body large
   enough that the duplication is the cost.
+* ~~**44 `fNN` members**~~ Five, and all five are recorded as having no
+  readers. The other 39 were named, and the method for the ones whose name
+  collided across structs -- `f8`, `f12` and `f16` exist in three of them -- is
+  §8's again: rename the member in its *declaration* and let the compiler
+  enumerate the uses, because `->f8` on a `SymList` stops compiling while
+  `->f8` on a `ModelBlock` carries on.
+
+  Three of the readings are worth more than the names. `ctx_id1/2/3` with their
+  `_used` counters are a chain of *interned* context ids: a neighbourhood
+  signature indexes a table of `0xFFFF` slots, an unclaimed slot takes the next
+  id, and that id plus a few more bits is the key to the next level. A context
+  is not a number the coder computes, it is one it hands out. `sym_rev` looked
+  write-only until the six reads of `*((uint16_t *)block + k + 3029720)` turned
+  out to be the member's own offset; it holds `k`'s low thirteen bits reversed,
+  which is what spreads consecutive symbols across the counter array. And
+  `CtrPair` was the wrong noun entirely -- `SymPair { last, prev }` is a
+  two-entry move-to-front over symbols, seeded to a value no pixel can have.
+
 * **`vNN` locals**, and this is the item round eight said was answerable only
   by knowing what the values mean. Two things turned out to be mechanical after
   all. Sixty-odd became record cursors in §3, §4 and §8 and their reads became
