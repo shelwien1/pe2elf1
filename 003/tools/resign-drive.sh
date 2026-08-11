@@ -18,7 +18,11 @@ trap 'rm -rf "$T"' EXIT
 BMF_WARN=1 ./build.sh >/dev/null 2>&1
 base=$(BMF_WARN=1 ./build.sh 2>/dev/null | head -1)
 echo "start $base"
-for round in 1 2 3 4 5 6 7 8; do
+# No fixed cap: the loop ends when no single candidate reduces the count,
+# which is the fixpoint.  A cap of eight looked like a fixpoint once and
+# was not -- it stopped with the count still falling every round.
+round=0
+while round=$((round + 1)); [ $round -le 200 ]; do
   cp subs1.hpp "$T/base.hpp"; cp warn.log "$T/base.warn"
   n=$(python3 tools/resign.py subs1.hpp | tail -1 | cut -d' ' -f1)
   [ "$n" = 0 ] && { echo "round $round: no candidates"; break; }

@@ -2939,7 +2939,8 @@ int32_t __init_model_tables(ModelBlock *_this)
   bool promoted;
   uint32_t blocks;
   uint32_t n_live;
-  int32_t hit0, recycled, hit1, just, c0, c1, c2, c3, c4, c5, c6,
+  uint32_t hit0;
+  int32_t recycled, hit1, just, c0, c1, c2, c3, c4, c5, c6,
           result;
   uint16_t *sym_cache;
   SymList *list;
@@ -7364,7 +7365,8 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
   uint32_t off;
   uint32_t slot_a;
   uint32_t sym;
-  int32_t depth_bits, node, side, alpha_m, carry, img_w, img_h, *p_n4, z2,
+  uint32_t depth_bits;
+  int32_t node, side, alpha_m, carry, img_w, img_h, *p_n4, z2,
           n_moved, zoff, height, n_distinct, row_w, y, at, bits, bpp, shift, sym2, *p_n4_2, z1, alphabet,
           alpha, prev, s, s_next, *p_n4_1, z0;
   ModelBlock *Blockaa_3;
@@ -9521,6 +9523,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   int32_t arg_tot;
   uint32_t done;
   uint32_t lvl_a;
+  uint32_t pos1;
   int32_t up_sym, left_sym, up_p1_sym, up_m1_sym, m_lo, m_up, nb, key, ctx_state, pair_last,
           __decode_pixel_n15, ctx_bucket, up_m0, m_w1, nb2, all_up, sig1,
           id1, sig2, id2, id3_used, s1a, m_up0, idx1, run, bucket,
@@ -9528,7 +9531,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
           flags_word, s3c, s3d, s1d, tot, target, cum, 
           w6a, b15a, w5a, msym3, msym1, msym2, pix1, cache0, cache1, c4,
           c5, c6, c7, h11, h10, h12, h13, h14, h15, h16, h17, h18, h19, h20,
-          h21, h24, h28, h26, h30, h31, psym, bit2, pos1, msym1b, lsym, s0b,
+          h21, h24, h28, h26, h30, h31, psym, bit2, msym1b, lsym, s0b,
           b15, w2t, w3t, w4t, w5, w0r, w1r, q1, w2r, w3, w3r, s0a,
           span, w4r, n4r, target2, cum2, lvl_b, b15b, w5b, w6b, s0c,
           s3a;
@@ -11064,7 +11067,8 @@ void __expand_alphabet(ModelBlock *_this)
   ;
   uint32_t *codes_p;   // was int32_t: this holds an address
   uint32_t nbytes;
-  int32_t bits, left2, left, run, gap;
+  uint32_t bits;
+  int32_t left2, left, run, gap;
   uint32_t mask, i, cap, n_1, n_syms, j, k, carry, s, b, piece, s2;
   void *codes;
   bits = _this->depth;
@@ -11351,8 +11355,9 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   uint32_t jj;
   uint32_t wt;
   uint32_t nbytes;
+  uint32_t row_w;
   int32_t g, flags, lo, k, w2, w4, w2n, lvl_n, live, gi, s,
-          bucket, row_w, x, x2, y, step, x7, x3, x4, bits, depth,
+          bucket, x, x2, y, step, x7, x3, x4, bits, depth,
           y2, depth_raw, nchunk, n_pix, chunk, q5, q1, at, q2, written, n_pix2, x5;
   uint32_t *ArgList_6;
   SymListBlock *has3, *alpha;
@@ -13906,7 +13911,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *cur0,
   int32_t val3;
   AltP2Block * plane[4];
   int32_t w;
-  int32_t back;
+  uint32_t back;
   uint32_t Size;
   int32_t ArgList;
   int32_t xf0;
@@ -13925,7 +13930,8 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *cur0,
   AltP2Block *blk1;
   bool xf3, off;
   int16_t seed1;
-  int32_t i, raw, pl, nplanes, xf1, xf2, b4, *b0, pred0, code0, val0, pred1, code1,
+  uint32_t i;
+  int32_t raw, pl, nplanes, xf1, xf2, b4, *b0, pred0, code0, val0, pred1, code1,
           val1, l7a, l4a, l5a, seed2, pred2, code2, val2, l7b, l4b, l5b,
           seed3, pred3, code3, l7c, l4c, l5c, nplanes2, pl3;
   P2Freq *freq;
@@ -15000,8 +15006,9 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
   PixRec *r4, *r0;   // row cursors out of row_cur
   uint8_t *buf;   // `uint8_t *` beside the `char` scalars above
   int16_t __model_plane_n2, wt;
+  uint32_t row_w;
   int32_t g, flags, lo, w2, w3, w4, has3, has4, lvl, lvl2, live, s, y,
-          row_w, x, x2, step;
+          x, x2, step;
   PixRec *row_cur3, *row_cur2, *row_cur1;   // three of the five row buffers
   uint32_t gi, n_syms, j, n_syms2, k;
   SymListBlock *blk1, *blk0;

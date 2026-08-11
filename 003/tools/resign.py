@@ -26,9 +26,10 @@ A local qualifies when:
     a local are only half the story: it also flows into other locals still
     declared the old way, and each of those becomes a conversion.  Counting
     only the first half proposed eighteen flips that put the total up;
-  * it is never an operand of `<`, `>`, `<=` or `>=`.  An ordering comparison
-    is where signedness changes the answer rather than the bits, and the other
-    side is usually a plain local with nothing to protect it;
+  * every ordering comparison it takes part in has an other side that cannot
+    change meaning under the flip -- an explicit cast, or a non-negative
+    literal.  Ordering is where signedness changes the answer rather than the
+    bits, and an unprotected other side is what breaks;
   * it is never the left operand of `>>`, `/` or `%`.  Those three are the
     operators whose *meaning* depends on signedness -- an arithmetic shift is
     not a logical one, and signed division truncates toward zero where unsigned
@@ -157,7 +158,14 @@ def candidates(lines, log='warn.log'):
         # unsigned makes every negative error enormous.  Four streams moved.
         #
         # Equality is exempt -- it compares the same bits either way.
-        if re.search(ORDER % (re.escape(name), re.escape(name)), body):
+        # An ordering comparison only breaks the flip when the *other* side is
+        # unprotected.  After `explicitcmp.py`, most carry a cast that converts
+        # either way round, and a non-negative literal cannot change meaning at
+        # all -- so look at what is on the other side rather than refusing on
+        # sight.  `alt_p2_model`'s `e_top` still fails this: its bound is a
+        # plain `deadzone_lo`, which is where the whole guard came from.
+        if any(not protected(other, want)
+               for other in opposites(body, name)):
             continue
         # Flipping removes the conversions *into* this local and creates one
         # wherever it flows into something still declared the old way.  A rule
@@ -178,6 +186,26 @@ def candidates(lines, log='warn.log'):
 
 
 DECLARES = re.compile(r'^\s*(?:const\s+|static\s+)*(\w+)[\s*]')
+
+
+def opposites(body, name):
+    """Every operand `name` is ordered against, either way round."""
+    out = []
+    for m in re.finditer(ORDER % (re.escape(name), re.escape(name)), body):
+        rest = body[m.end():] if m.group(0).lstrip().startswith(name[0]) else None
+        if rest is not None:
+            out.append(rest.split(')')[0].split(';')[0].split('&&')[0].strip())
+        else:
+            head = body[:m.start()]
+            out.append(re.split(r'[(;&|]', head)[-1].strip())
+    return [o for o in out if o]
+
+
+def protected(other, want):
+    """True when comparing against this cannot change meaning under the flip."""
+    if re.fullmatch(r'\d+', other):            # a non-negative literal
+        return True
+    return other.startswith('(%s)' % want) or other.startswith('(uint32_t)')
 
 
 def decl_line(lines, a, b, name, cur):
