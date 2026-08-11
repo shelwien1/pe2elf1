@@ -12116,7 +12116,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   // Lanes of the counter table.  Every read through this is a `uint16_t`
   // except the two shift counts at +-4, which are the low byte of the
   // neighbouring record; the byte offsets it carried were all even.
-  uint16_t *n2;
+  uint16_t *mir_top;
   P2Freq *n0xF0;
   // Two more things MSVC kept in the register `n0xF0` names.
   int32_t hi_nibble, rec_idx;
@@ -12129,54 +12129,54 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   uint32_t n0x10_1;
   int32_t v510;
   int32_t v511;
-  P2Count *v523;
-  P2Count *v531;
-  P2Count *v534;
-  P2Count *v535;
-  P2Count *v536;
-  P2Count *v537;
-  P2Count *v538;
-  P2Count *v539;
-  P2Count *v540;
-  P2Count *v541;
-  P2Count *v542;
-  P2Count *v543;
-  P2Count *v544;
+  P2Count *m0080;
+  P2Count *r0400;
+  P2Count *r0800;
+  P2Count *m0800;
+  P2Count *d1000;
+  P2Count *r1000;
+  P2Count *m1000;
+  P2Count *d2000;
+  P2Count *r2000;
+  P2Count *m2000;
+  P2Count *d4000;
+  P2Count *r4000;
+  P2Count *m4000;
   uint32_t v545;
   int32_t n3;
   int32_t v547;
   int32_t v548;
   int32_t v549;
   int32_t v550;
-  P2Count *v551;
-  P2Count *v552;
-  P2Count *v553;
-  P2Count *v554;
-  P2Count *v555;
-  P2Count *v556;
-  P2Count *v557;
-  P2Count *v558;
-  P2Count *v559;
-  P2Count *v560;
-  P2Count *v561;
-  P2Count *v562;
-  P2Count *v564;
-  P2Count *v565;
-  P2Count *v566;
-  P2Count *v567;
-  P2Count *v568;
+  P2Count *d0800;
+  P2Count *d0400;
+  P2Count *m0400;
+  P2Count *d0200;
+  P2Count *m0200;
+  P2Count *d0100;
+  P2Count *m0100;
+  P2Count *r0100;
+  P2Count *d0080;
+  P2Count *r0080;
+  P2Count *d0040;
+  P2Count *m0040;
+  P2Count *d0020;
+  P2Count *m0020;
+  P2Count *r0020;
+  P2Count *d0010;
+  P2Count *m0010;
   int32_t v571;
   int32_t v573;
   int32_t v576;
   int32_t v577;
   uint32_t n5;
   int32_t v580;
-  // The counter this pass updates and its two neighbours: `v581[-1]`,
-  // `v581[0]` and `v581[1]` are +284 708, +284 712 and +284 716 off the
+  // The counter this pass updates and its two neighbours: `node0[-1]`,
+  // `node0[0]` and `node0[1]` are +284 708, +284 712 and +284 716 off the
   // row base, which is `p2_ctr` reached through `v78`.
-  P2Count *v581;
+  P2Count *node0;
   ;
-  uint16_t *n2_1;   // a second name for `n2`
+  uint16_t *n2_1;   // a second name for `mir_top`
   // The parameter this used to copy is never read: `sample` is written from
   // `v577` below before any of its four readers, and lanes 1..3 were never
   // touched at all.  It is XMM0 being reused as a scratch register, which is
@@ -12188,34 +12188,34 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   bool v87, v103, v104, v105;
   uint8_t v114;
   uint8_t *v90;   // `uint8_t *` beside the `char` scalars above
-  P2Count *v91;
-  P2Count *v93;
+  P2Count *r0200;
+  P2Count *r0040;
   float v16, bias2, bias1, v21, v22, v23, v24, v26;
-  P2Count *v98;
-  int32_t v6, bank_ctx, v77, v79, v80, v81, v84, v85, v86, v88, v89, v95, v96,
-          v100, v101, v102, v106, v108, v113, v115, v117, v118, v119, v120,
-          v122, v123, v124, v125, v126, v128, v129, v130, v131, v132, v133,
-          v134, v135, v137, v138, v139, v140, v141, v142, v143, v144, v146,
-          v147, v148, v149, v150, v151, v152, v153, v155, v156, v157, v158,
-          v159, v160, v162, v163, v164, v165, v166, v167, v168, v169, v170,
-          v171, v173, v174, v175, v176, v177, v178, v179, v180, v182, v183,
-          v184, v185, v186, v187, v188, v189, v191, v192, v193, v194, v195,
-          v196, v197, v198, v199, v200, v201, v202, v203, v204, v205, v206,
-          v207, v209, v210, v211, v212, v213, v214, v215, v216, v217, v218,
-          v219, v220, v221, v223, v224, v225, v226, v227, v228, v229, v230,
-          v232, v233, v234, v235, v236, v237, v238, v239, v241, v242, v243,
-          v244, v245, v246, v247, v248, v250, v251, v252, v254, v255, v256,
-          nb_slot, v258, v260, v261, v262, v263, v264, v265, v266, v267, v269,
-          v270, v271, v272, v273, v274, v275, v276, v278, v279, v280, v281,
-          v282, v283, v284, v285, v287, v288, v289, v290, v291, v292, v293,
-          v294, v295, v297, v298, v299, v300, v301, v302, v303, v304, v306,
-          v307, v308, v309, v310, v311, v313, v314, v315, v316, v317, v318,
-          v319, v320, v322, v323, v324, v325, v326, v327, v328, v329, v330,
-          v331, v332, v333, v334, v335, v336, v337, v338, v339, v340, v341,
-          v342, v344, v345, v346, v347, v348, v350, v351, v352, v354, v355,
-          v356, v357, v358, v359, v360, v361, v362, v363, v364, v365, v366,
-          v367, v368, v369, v370, v371, v372, v373, v374, v376, v377, v378,
-          v379, v380, v381, v383, v384, ctx, n15, v398, v409, v410, v419,
+  P2Count *r0010;
+  int32_t v6, bank_ctx, v77, v79, v80, v81, v84, v85, v86, wnode0m1a, enode0m1a, x0020, x0010,
+          v100, v101, v102, v106, v108, v113, v115, wd4000a, ed4000a, wr4000b, er4000b,
+          wd4000m1b, ed4000m1b, wm4000c, em4000c, wd2000c, ed2000c, wr2000c, er2000c, wd2000m1b, ed2000m1b, wm2000c,
+          em2000c, wd1000c, ed1000c, wr1000c, er1000c, wd1000m1b, ed1000m1b, wm1000c, em1000c, wd0800c, ed0800c,
+          wr0800c, er0800c, wd0800m1b, ed0800m1b, wm0800c, em0800c, wd0400c, ed0400c, wr0400c, er0400c, wd0400m1b,
+          ed0400m1b, v160, wd0200c, ed0200c, wr0200c, er0200c, wd0200m1b, ed0200m1b, v168, wm0200c, em0200c,
+          wd0100c, ed0100c, wr0100c, er0100c, wd0100m1b, ed0100m1b, wm0100c, em0100c, wd0080c, ed0080c, wr0080c,
+          er0080c, wd0080m1b, ed0080m1b, wm0080c, em0080c, wd0040c, ed0040c, wr0040c, er0040c, wd0040m1b, ed0040m1b,
+          wm0040c, em0040c, wd0020c, v199, ed0020c, wr0020c, er0020c, wd0020m1b, ed0020m1b, wm0020c, em0020c,
+          wd0010c, ed0010c, wr0010c, er0010c, wd0010m1b, ed0010m1b, wm0010b, em0010b, wd4000m1a, ed4000m1a, v218,
+          wm4000b, em4000b, wd2000b, ed2000b, wr2000b, er2000b, wd2000m1a, ed2000m1a, wm2000b, em2000b, wd1000b,
+          ed1000b, wr1000b, er1000b, wd1000m1a, ed1000m1a, wm1000b, em1000b, wd0800b, ed0800b, wr0800b, er0800b,
+          wd0800m1a, ed0800m1a, wm0800b, em0800b, wd0400b, ed0400b, wr0400b, er0400b, wd0400m1a, ed0400m1a, v256,
+          nb_slot, wd0200b, ed0200b, wr0200b, er0200b, wd0200m1a, ed0200m1a, wm0200b, em0200b, wd0100b, ed0100b,
+          wr0100b, er0100b, wd0100m1a, ed0100m1a, wm0100b, em0100b, wd0080b, ed0080b, wr0080b, er0080b, wd0080m1a,
+          ed0080m1a, wm0080b, em0080b, wd0040b, ed0040b, wr0040b, er0040b, wd0040m1a, ed0040m1a, v292, wm0040b,
+          em0040b, wd0020b, ed0020b, wr0020b, er0020b, wd0020m1a, ed0020m1a, wm0020b, em0020b, wd0010b, ed0010b,
+          wr0010b, er0010b, wd0010m1a, ed0010m1a, wd4000b, ed4000b, wr4000a, er4000a, wd4000p1a, pd4000p1a, wm4000a,
+          em4000a, wd2000a, ed2000a, wr2000a, er2000a, wm2000a, em2000a, wd1000a, ed1000a, wr1000a, er1000a,
+          wm1000a, em1000a, wd0800a, ed0800a, wr0800a, er0800a, wm0800a, em0800a, wd0400a, ed0400a, wr0400a,
+          er0400a, v344, wd0200a, ed0200a, wr0200a, er0200a, wm0200a, em0200a, wd0100a, ed0100a, wr0100a,
+          er0100a, wm0100a, em0100a, wd0080a, ed0080a, wr0080a, er0080a, wm0080a, em0080a, wd0040a, ed0040a,
+          wr0040a, er0040a, wm0040a, em0040a, wd0020a, ed0020a, wr0020a, er0020a, wm0020a, pm0020a, wd0010a,
+          ed0010a, wr0010a, er0010a, wm0010a, em0010a, ctx, n15, v398, v409, v410, v419,
           v427, v435, v443, v450, v461, v472, v483, v494;
   int64_t v10, v11, v12, v13, v14;
   P2Freq *n0xF0_3;
@@ -12231,7 +12231,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   P2Freq *n2_2, *n2_3, *n2_4, *n2_5, *n2_6, *n2_7, *v408, *v411, *v420,
          *v428, *v436, *v444, *v452, *v456, *v457, *v463, *v466, *v474,
          *v477, *v485, *v488, *v491, *v502;
-  uint32_t v78, v92, v97, v109, n0x10, v393, v396;
+  uint32_t v78, ri0100, ri0010, v109, n0x10, v393, v396;
   uint8_t v83;
   v6 = a1->ctx & 0xF;
   v577 = 16 * a3;
@@ -12340,50 +12340,50 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
     v78 = n5 << 17;
     // 71178 records is +284712, `p2_ctr`, and `v78` is `n5 << 17` --
     // 32768 records a bank, which is what the five banks are.
-    v581 = &a1->p2_ctr[32768 * n5 + bank_ctx];
-    v79 = v77 + (uint16_t)v581->w2;
-    *(uint16_t *)&v581->w2 = v79;
-    v580 = v581->b1;
+    node0 = &a1->p2_ctr[32768 * n5 + bank_ctx];
+    v79 = v77 + (uint16_t)node0->w2;
+    *(uint16_t *)&node0->w2 = v79;
+    v580 = node0->b1;
     if ( v580 )
     {
       v576 = bank_ctx;
       v80 = v79 + 4 * ((v77 > deadzone_hi) - (v77 < deadzone_lo));
-      *(uint16_t *)&v581->w2 = v80;
+      *(uint16_t *)&node0->w2 = v80;
       v81 = v576;
       if ( (int32_t)abs32(v77) < 38 )
       {
         if ( (uint8_t)--v580 )
         {
-          v581->b1 = v580;
+          node0->b1 = v580;
         }
         else
         {
-          if ( *(uint8_t *)&v581->b0 < 8u )
+          if ( *(uint8_t *)&node0->b0 < 8u )
           {
-            v83 = *(uint8_t *)&v581->b0 + 1;
-            *(uint8_t *)&v581->b0 = v83;
-            v581->b1 = *((uint8_t *)&p2_float_pool + v83 + 3);   // two floats read sideways
-            *(uint16_t *)&v581->w2 = 2 * v80;
+            v83 = *(uint8_t *)&node0->b0 + 1;
+            *(uint8_t *)&node0->b0 = v83;
+            node0->b1 = *((uint8_t *)&p2_float_pool + v83 + 3);   // two floats read sideways
+            *(uint16_t *)&node0->w2 = 2 * v80;
           }
           else
           {
-            v581->b1 = v580;
+            node0->b1 = v580;
           }
         }
       }
       if ( !alphabet_reduced )
       {
-        __builtin_prefetch(&n2, 0, 1);
-        n2 = (uint16_t *)((uint8_t *)&a1->p2_ctr[(v81 ^ 0x7FF0)] + v78);
+        __builtin_prefetch(&mir_top, 0, 1);
+        mir_top = (uint16_t *)((uint8_t *)&a1->p2_ctr[(v81 ^ 0x7FF0)] + v78);
         v84 = (*(uint32_t *)&a1->nb_sum[2 * n5 + 1]) + v77;
         n3 = v81 & 3;
         if ( (uint32_t)n3 >= 3
           || (v545 = v78,
               v576 = v81,
-              v85 = v581[1].w2,
-              v86 = v84 - p2_pred(v85, *(uint8_t *)&v581[1].b0),
+              v85 = node0[1].w2,
+              v86 = v84 - p2_pred(v85, *(uint8_t *)&node0[1].b0),
               v87 = n3 <= 0,
-              *(uint16_t *)&v581[1].w2 = v85
+              *(uint16_t *)&node0[1].w2 = v85
                                                       + ((32
                                                         * ((v86 > deadzone_hi) - (uint32_t)(v86 < deadzone_lo))
                                                         + v86
@@ -12393,558 +12393,558 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
         {
           v545 = v78;
           v576 = v81;
-          v88 = v581[-1].w2;
-          v89 = v84 - p2_pred(v88, *(uint8_t *)&v581[-1].b0);
-          *(uint16_t *)&v581[-1].w2 = v88
-                                                  + ((32 * ((v89 > deadzone_hi) - (uint32_t)(v89 < deadzone_lo))
-                                                    + v89
+          wnode0m1a = node0[-1].w2;
+          enode0m1a = v84 - p2_pred(wnode0m1a, *(uint8_t *)&node0[-1].b0);
+          *(uint16_t *)&node0[-1].w2 = wnode0m1a
+                                                  + ((32 * ((enode0m1a > deadzone_hi) - (uint32_t)(enode0m1a < deadzone_lo))
+                                                    + enode0m1a
                                                     + 2) >> 2);
           v81 = v576;
         }
         v90 = (uint8_t *)a1 + v78;
         v550 = v84;
         __builtin_prefetch(&v90[4 * (v81 ^ 0x4000) + 284712], 0, 1);
-        v542 = (P2Count *)((int32_t)&v90[4 * (v81 ^ 0x4000) + 284712]);
-        v544 = (P2Count *)(&v90[4 * (v81 ^ 0x3FF0) + 284712]);
-        __builtin_prefetch(v544, 0, 1);
-        v543 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x4000) >> 2) & 3]
+        d4000 = (P2Count *)((int32_t)&v90[4 * (v81 ^ 0x4000) + 284712]);
+        m4000 = (P2Count *)(&v90[4 * (v81 ^ 0x3FF0) + 284712]);
+        __builtin_prefetch(m4000, 0, 1);
+        r4000 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x4000) >> 2) & 3]
                   + 284712
                   + 4 * ((v81 ^ 0x4000) & 0xFFFFFFF3)]);
-        __builtin_prefetch(v543, 0, 1);
+        __builtin_prefetch(r4000, 0, 1);
         __builtin_prefetch(&v90[4 * (v81 ^ 0x2000) + 284712], 0, 1);
-        v539 = (P2Count *)((int32_t)&v90[4 * (v81 ^ 0x2000) + 284712]);
+        d2000 = (P2Count *)((int32_t)&v90[4 * (v81 ^ 0x2000) + 284712]);
         __builtin_prefetch(&v90[4 * (v81 ^ 0x5FF0) + 284712], 0, 1);
-        v541 = (P2Count *)((int32_t)&v90[4 * (v81 ^ 0x5FF0) + 284712]);
-        v540 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x2000) >> 2) & 3]
+        m2000 = (P2Count *)((int32_t)&v90[4 * (v81 ^ 0x5FF0) + 284712]);
+        r2000 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x2000) >> 2) & 3]
                   + 284712
                   + 4 * ((v81 ^ 0x2000) & 0xFFFFFFF3)]);
-        __builtin_prefetch(v540, 0, 1);
+        __builtin_prefetch(r2000, 0, 1);
         __builtin_prefetch(&v90[4 * (v81 ^ 0x1000) + 284712], 0, 1);
-        v536 = (P2Count *)((int32_t)&v90[4 * (v81 ^ 0x1000) + 284712]);
+        d1000 = (P2Count *)((int32_t)&v90[4 * (v81 ^ 0x1000) + 284712]);
         __builtin_prefetch(&v90[4 * (v81 ^ 0x6FF0) + 284712], 0, 1);
-        v538 = (P2Count *)((int32_t)&v90[4 * (v81 ^ 0x6FF0) + 284712]);
-        v537 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x1000) >> 2) & 3]
+        m1000 = (P2Count *)((int32_t)&v90[4 * (v81 ^ 0x6FF0) + 284712]);
+        r1000 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x1000) >> 2) & 3]
                   + 284712
                   + 4 * ((v81 ^ 0x1000) & 0xFFFFFFF3)]);
-        __builtin_prefetch(v537, 0, 1);
-        v551 = (P2Count *)(&v90[4 * (v81 ^ 0x800) + 284712]);
-        v535 = (P2Count *)(&v90[4 * (v81 ^ 0x77F0) + 284712]);
-        v534 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x800) >> 2) & 3]
+        __builtin_prefetch(r1000, 0, 1);
+        d0800 = (P2Count *)(&v90[4 * (v81 ^ 0x800) + 284712]);
+        m0800 = (P2Count *)(&v90[4 * (v81 ^ 0x77F0) + 284712]);
+        r0800 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x800) >> 2) & 3]
                   + 284712
                   + 4 * ((v81 ^ 0x800) & 0xFFFFFFF3)]);
-        v552 = (P2Count *)(&v90[4 * (v81 ^ 0x400) + 284712]);
-        __builtin_prefetch(v551, 0, 1);
-        __builtin_prefetch(v535, 0, 1);
-        __builtin_prefetch(v534, 0, 1);
-        v553 = (P2Count *)(&v90[4 * (v81 ^ 0x7BF0) + 284712]);
-        v531 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x400) >> 2) & 3]
+        d0400 = (P2Count *)(&v90[4 * (v81 ^ 0x400) + 284712]);
+        __builtin_prefetch(d0800, 0, 1);
+        __builtin_prefetch(m0800, 0, 1);
+        __builtin_prefetch(r0800, 0, 1);
+        m0400 = (P2Count *)(&v90[4 * (v81 ^ 0x7BF0) + 284712]);
+        r0400 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x400) >> 2) & 3]
                   + 284712
                   + 4 * ((v81 ^ 0x400) & 0xFFFFFFF3)]);
-        v554 = (P2Count *)(&v90[4 * (v81 ^ 0x200) + 284712]);
-        __builtin_prefetch(v552, 0, 1);
-        v555 = (P2Count *)(&v90[4 * (v81 ^ 0x7DF0) + 284712]);
-        v91 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x200) >> 2) & 3]
+        d0200 = (P2Count *)(&v90[4 * (v81 ^ 0x200) + 284712]);
+        __builtin_prefetch(d0400, 0, 1);
+        m0200 = (P2Count *)(&v90[4 * (v81 ^ 0x7DF0) + 284712]);
+        r0200 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x200) >> 2) & 3]
                  + 284712
                  + 4 * ((v81 ^ 0x200) & 0xFFFFFFF3)]);
-        __builtin_prefetch(v553, 0, 1);
-        __builtin_prefetch(v531, 0, 1);
-        v556 = (P2Count *)(&v90[4 * (v81 ^ 0x100) + 284712]);
-        v92 = p2_ctx_rotate[((v81 ^ 0x100) >> 2) & 3] + ((v81 ^ 0x100) & 0xFFFFFFF3);
-        v557 = (P2Count *)(&v90[4 * (v81 ^ 0x7EF0) + 284712]);
-        __builtin_prefetch(v554, 0, 1);
-        v558 = (P2Count *)((int32_t)&v90[4 * v92 + 284712]);
-        v559 = (P2Count *)(&v90[4 * (v81 ^ 0x80) + 284712]);
-        __builtin_prefetch(v555, 0, 1);
-        __builtin_prefetch(v91, 0, 1);
-        v523 = (P2Count *)(&v90[4 * (v81 ^ 0x7F70) + 284712]);
-        v560 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x80) >> 2) & 3] + 284712 + 4 * ((v81 ^ 0x80) & 0xFFFFFFF3)]);
-        v561 = (P2Count *)(&v90[4 * (v81 ^ 0x40) + 284712]);
-        __builtin_prefetch(v556, 0, 1);
-        v562 = (P2Count *)(&v90[4 * (v81 ^ 0x7FB0) + 284712]);
-        v93 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x40) >> 2) & 3] + 284712 + 4 * ((v81 ^ 0x40) & 0xFFFFFFF3)]);
-        __builtin_prefetch(v557, 0, 1);
-        __builtin_prefetch(v558, 0, 1);
-        v95 = v81 ^ 0x20;
-        v96 = v81 ^ 0x10;
-        v564 = (P2Count *)(&v90[4 * v95 + 284712]);
-        v565 = (P2Count *)(&v90[4 * (v95 ^ 0x7FF0) + 284712]);
-        __builtin_prefetch(v559, 0, 1);
-        __builtin_prefetch(v523, 0, 1);
-        v566 = (P2Count *)((uint32_t)&v90[4 * p2_ctx_rotate[(v95 >> 2) & 3] + 284712 + 4 * (v95 & 0xFFFFFFF3)]);
-        v567 = (P2Count *)((int32_t)&v90[4 * v96 + 284712]);
-        v97 = p2_ctx_rotate[(v96 >> 2) & 3] + (v96 & 0xFFFFFFF3);
-        v568 = (P2Count *)((int32_t)&v90[4 * (v96 ^ 0x7FF0) + 284712]);
-        __builtin_prefetch(v560, 0, 1);
-        v98 = (P2Count *)((int32_t)&v90[4 * v97 + 284712]);
-        n2_1 = n2;
+        __builtin_prefetch(m0400, 0, 1);
+        __builtin_prefetch(r0400, 0, 1);
+        d0100 = (P2Count *)(&v90[4 * (v81 ^ 0x100) + 284712]);
+        ri0100 = p2_ctx_rotate[((v81 ^ 0x100) >> 2) & 3] + ((v81 ^ 0x100) & 0xFFFFFFF3);
+        m0100 = (P2Count *)(&v90[4 * (v81 ^ 0x7EF0) + 284712]);
+        __builtin_prefetch(d0200, 0, 1);
+        r0100 = (P2Count *)((int32_t)&v90[4 * ri0100 + 284712]);
+        d0080 = (P2Count *)(&v90[4 * (v81 ^ 0x80) + 284712]);
+        __builtin_prefetch(m0200, 0, 1);
+        __builtin_prefetch(r0200, 0, 1);
+        m0080 = (P2Count *)(&v90[4 * (v81 ^ 0x7F70) + 284712]);
+        r0080 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x80) >> 2) & 3] + 284712 + 4 * ((v81 ^ 0x80) & 0xFFFFFFF3)]);
+        d0040 = (P2Count *)(&v90[4 * (v81 ^ 0x40) + 284712]);
+        __builtin_prefetch(d0100, 0, 1);
+        m0040 = (P2Count *)(&v90[4 * (v81 ^ 0x7FB0) + 284712]);
+        r0040 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x40) >> 2) & 3] + 284712 + 4 * ((v81 ^ 0x40) & 0xFFFFFFF3)]);
+        __builtin_prefetch(m0100, 0, 1);
+        __builtin_prefetch(r0100, 0, 1);
+        x0020 = v81 ^ 0x20;
+        x0010 = v81 ^ 0x10;
+        d0020 = (P2Count *)(&v90[4 * x0020 + 284712]);
+        m0020 = (P2Count *)(&v90[4 * (x0020 ^ 0x7FF0) + 284712]);
+        __builtin_prefetch(d0080, 0, 1);
+        __builtin_prefetch(m0080, 0, 1);
+        r0020 = (P2Count *)((uint32_t)&v90[4 * p2_ctx_rotate[(x0020 >> 2) & 3] + 284712 + 4 * (x0020 & 0xFFFFFFF3)]);
+        d0010 = (P2Count *)((int32_t)&v90[4 * x0010 + 284712]);
+        ri0010 = p2_ctx_rotate[(x0010 >> 2) & 3] + (x0010 & 0xFFFFFFF3);
+        m0010 = (P2Count *)((int32_t)&v90[4 * (x0010 ^ 0x7FF0) + 284712]);
+        __builtin_prefetch(r0080, 0, 1);
+        r0010 = (P2Count *)((int32_t)&v90[4 * ri0010 + 284712]);
+        n2_1 = mir_top;
         v100 = -v550;
-        LOBYTE(v97) = (uint8_t)n2[0];
-        __builtin_prefetch(v561, 0, 1);
+        LOBYTE(ri0010) = (uint8_t)mir_top[0];
+        __builtin_prefetch(d0040, 0, 1);
         v101 = (int16_t)n2_1[1];
-        __builtin_prefetch(v562, 0, 1);
-        v102 = v100 - p2_pred(v101, v97);
+        __builtin_prefetch(m0040, 0, 1);
+        v102 = v100 - p2_pred(v101, ri0010);
         v105 = __OFSUB__(v102, deadzone_hi);
         v103 = v102 == deadzone_hi;
         v104 = v102 - deadzone_hi < 0;
-        __builtin_prefetch(v93, 0, 1);
+        __builtin_prefetch(r0040, 0, 1);
         v106 = 32 * (!(v104 ^ v105 | v103) - (v102 < deadzone_lo));
-        __builtin_prefetch(v564, 0, 1);
-        __builtin_prefetch(v565, 0, 1);
+        __builtin_prefetch(d0020, 0, 1);
+        __builtin_prefetch(m0020, 0, 1);
         v108 = v550;
         v109 = v106 + v102 + 2;
         LOWORD(v109) = v101 + (v109 >> 2);
         v87 = n3 < 3;
-        n2[1] = v109;
-        __builtin_prefetch(((P2Count *)(v566)), 0, 1);
-        __builtin_prefetch(v567, 0, 1);
-        __builtin_prefetch(v568, 0, 1);
-        __builtin_prefetch(v98, 0, 1);
+        mir_top[1] = v109;
+        __builtin_prefetch(((P2Count *)(r0020)), 0, 1);
+        __builtin_prefetch(d0010, 0, 1);
+        __builtin_prefetch(m0010, 0, 1);
+        __builtin_prefetch(r0010, 0, 1);
         if ( v87
-          && (v113 = (int16_t)n2[3],
-              v114 = (uint8_t)n2[2],
+          && (v113 = (int16_t)mir_top[3],
+              v114 = (uint8_t)mir_top[2],
               v550 = v108,
               v87 = n3 <= 0,
-              n2[3] = ((uint32_t)(-v108 - p2_pred(v113, v114) + 2) >> 2) + v113,
+              mir_top[3] = ((uint32_t)(-v108 - p2_pred(v113, v114) + 2) >> 2) + v113,
               v87) )
         {
-          v311 = v542->w2;
+          wd4000b = d4000->w2;
           v550 = v108;
-          v313 = v108 - p2_pred(v311, (*(uint8_t *)&v542->b0));
-          v542->w2 = p2_bump(v311, v313, 2);
-          v314 = v543->w2;
-          v315 = v108 - p2_pred(v314, v543->b0);
-          v543->w2 = p2_bump(v314, v315, 3);
-          v316 = v542[1].w2;
-          v317 = p2_pred(v316, *(uint8_t *)&v542[1].b0);
+          ed4000b = v108 - p2_pred(wd4000b, (*(uint8_t *)&d4000->b0));
+          d4000->w2 = p2_bump(wd4000b, ed4000b, 2);
+          wr4000a = r4000->w2;
+          er4000a = v108 - p2_pred(wr4000a, r4000->b0);
+          r4000->w2 = p2_bump(wr4000a, er4000a, 3);
+          wd4000p1a = d4000[1].w2;
+          pd4000p1a = p2_pred(wd4000p1a, *(uint8_t *)&d4000[1].b0);
           v549 = -v108;
-          *(uint16_t *)&v542[1].w2 = ((uint32_t)(v108 - v317 + 2) >> 2) + v316;
-          v318 = v544->w2;
-          v319 = -v108 - p2_pred(v318, v544->b0);
-          v544->w2 = p2_bump(v318, v319, 3);
-          v320 = v539->w2;
-          v322 = v550 - p2_pred(v320, *(uint8_t *)&v539->b0);
-          v539->w2 = p2_bump(v320, v322, 2);
-          v323 = v540->w2;
-          v324 = v550 - p2_pred(v323, v540->b0);
-          v540->w2 = p2_bump(v323, v324, 3);
-          *(uint16_t *)&v539[1].w2 += (uint32_t)(v550
-                                               - p2_pred(*(int16_t *)&*(uint16_t *)&v539[1].w2, *(uint8_t *)&v539[1].b0)
+          *(uint16_t *)&d4000[1].w2 = ((uint32_t)(v108 - pd4000p1a + 2) >> 2) + wd4000p1a;
+          wm4000a = m4000->w2;
+          em4000a = -v108 - p2_pred(wm4000a, m4000->b0);
+          m4000->w2 = p2_bump(wm4000a, em4000a, 3);
+          wd2000a = d2000->w2;
+          ed2000a = v550 - p2_pred(wd2000a, *(uint8_t *)&d2000->b0);
+          d2000->w2 = p2_bump(wd2000a, ed2000a, 2);
+          wr2000a = r2000->w2;
+          er2000a = v550 - p2_pred(wr2000a, r2000->b0);
+          r2000->w2 = p2_bump(wr2000a, er2000a, 3);
+          *(uint16_t *)&d2000[1].w2 += (uint32_t)(v550
+                                               - p2_pred(*(int16_t *)&*(uint16_t *)&d2000[1].w2, *(uint8_t *)&d2000[1].b0)
                                                + 2) >> 2;
-          v325 = v541->w2;
-          v326 = v549 - p2_pred(v325, *(uint8_t *)&v541->b0);
-          v541->w2 = p2_bump(v325, v326, 3);
-          v327 = v536->w2;
-          v328 = v550 - p2_pred(v327, *(uint8_t *)&v536->b0);
-          v536->w2 = p2_bump(v327, v328, 2);
-          v329 = v537->w2;
-          v330 = v550 - p2_pred(v329, v537->b0);
-          v537->w2 = p2_bump(v329, v330, 3);
-          *(uint16_t *)&v536[1].w2 += (uint32_t)(v550
-                                               - p2_pred(*(int16_t *)&*(uint16_t *)&v536[1].w2, *(uint8_t *)&v536[1].b0)
+          wm2000a = m2000->w2;
+          em2000a = v549 - p2_pred(wm2000a, *(uint8_t *)&m2000->b0);
+          m2000->w2 = p2_bump(wm2000a, em2000a, 3);
+          wd1000a = d1000->w2;
+          ed1000a = v550 - p2_pred(wd1000a, *(uint8_t *)&d1000->b0);
+          d1000->w2 = p2_bump(wd1000a, ed1000a, 2);
+          wr1000a = r1000->w2;
+          er1000a = v550 - p2_pred(wr1000a, r1000->b0);
+          r1000->w2 = p2_bump(wr1000a, er1000a, 3);
+          *(uint16_t *)&d1000[1].w2 += (uint32_t)(v550
+                                               - p2_pred(*(int16_t *)&*(uint16_t *)&d1000[1].w2, *(uint8_t *)&d1000[1].b0)
                                                + 2) >> 2;
-          v331 = v538->w2;
-          v332 = v549 - p2_pred(v331, *(uint8_t *)&v538->b0);
-          v538->w2 = p2_bump(v331, v332, 3);
-          v333 = v551->w2;
-          v334 = v550 - p2_pred(v333, v551->b0);
-          v551->w2 = p2_bump(v333, v334, 2);
-          v335 = v534->w2;
-          v336 = v550 - p2_pred(v335, v534->b0);
-          v534->w2 = p2_bump(v335, v336, 3);
-          *(uint16_t *)&v551[1].w2 += (uint32_t)(v550 - p2_pred(v551[1].w2, v551[1].b0) + 2) >> 2;
-          v337 = v535->w2;
-          v338 = v549 - p2_pred(v337, v535->b0);
-          v535->w2 = p2_bump(v337, v338, 3);
-          v339 = v552->w2;
-          v340 = v550 - p2_pred(v339, v552->b0);
-          v552->w2 = p2_bump(v339, v340, 2);
-          v341 = v531->w2;
-          v342 = v550 - p2_pred(v341, v531->b0);
-          v531->w2 = p2_bump(v341, v342, 3);
-          *(uint16_t *)&v552[1].w2 += (uint32_t)(v550 - p2_pred(v552[1].w2, v552[1].b0) + 2) >> 2;
-          v344 = v553->w2;
-          v549 -= p2_pred(v344, v553->b0);
-          v553->w2 = p2_bump(v344, v549, 3);
-          v345 = v554->w2;
-          v346 = v550 - p2_pred(v345, v554->b0);
-          v554->w2 = p2_bump(v345, v346, 2);
-          v347 = v91->w2;
-          v348 = v550 - p2_pred(v347, v91->b0);
-          v91->w2 = p2_bump(v347, v348, 3);
-          *(uint16_t *)&v554[1].w2 += (uint32_t)(v550 - p2_pred(v554[1].w2, v554[1].b0) + 2) >> 2;
-          v350 = v555->w2;
+          wm1000a = m1000->w2;
+          em1000a = v549 - p2_pred(wm1000a, *(uint8_t *)&m1000->b0);
+          m1000->w2 = p2_bump(wm1000a, em1000a, 3);
+          wd0800a = d0800->w2;
+          ed0800a = v550 - p2_pred(wd0800a, d0800->b0);
+          d0800->w2 = p2_bump(wd0800a, ed0800a, 2);
+          wr0800a = r0800->w2;
+          er0800a = v550 - p2_pred(wr0800a, r0800->b0);
+          r0800->w2 = p2_bump(wr0800a, er0800a, 3);
+          *(uint16_t *)&d0800[1].w2 += (uint32_t)(v550 - p2_pred(d0800[1].w2, d0800[1].b0) + 2) >> 2;
+          wm0800a = m0800->w2;
+          em0800a = v549 - p2_pred(wm0800a, m0800->b0);
+          m0800->w2 = p2_bump(wm0800a, em0800a, 3);
+          wd0400a = d0400->w2;
+          ed0400a = v550 - p2_pred(wd0400a, d0400->b0);
+          d0400->w2 = p2_bump(wd0400a, ed0400a, 2);
+          wr0400a = r0400->w2;
+          er0400a = v550 - p2_pred(wr0400a, r0400->b0);
+          r0400->w2 = p2_bump(wr0400a, er0400a, 3);
+          *(uint16_t *)&d0400[1].w2 += (uint32_t)(v550 - p2_pred(d0400[1].w2, d0400[1].b0) + 2) >> 2;
+          v344 = m0400->w2;
+          v549 -= p2_pred(v344, m0400->b0);
+          m0400->w2 = p2_bump(v344, v549, 3);
+          wd0200a = d0200->w2;
+          ed0200a = v550 - p2_pred(wd0200a, d0200->b0);
+          d0200->w2 = p2_bump(wd0200a, ed0200a, 2);
+          wr0200a = r0200->w2;
+          er0200a = v550 - p2_pred(wr0200a, r0200->b0);
+          r0200->w2 = p2_bump(wr0200a, er0200a, 3);
+          *(uint16_t *)&d0200[1].w2 += (uint32_t)(v550 - p2_pred(d0200[1].w2, d0200[1].b0) + 2) >> 2;
+          wm0200a = m0200->w2;
           v548 = -v550;
-          v351 = -v550 - p2_pred(v350, v555->b0);
-          v555->w2 = p2_bump(v350, v351, 3);
-          v352 = v556->w2;
-          v354 = v550 - p2_pred(v352, v556->b0);
-          v556->w2 = p2_bump(v352, v354, 2);
-          v355 = v558->w2;
-          v356 = v550 - p2_pred(v355, *(uint8_t *)&v558->b0);
-          v558->w2 = p2_bump(v355, v356, 3);
-          *(uint16_t *)&v556[1].w2 += (uint32_t)(v550 - p2_pred(v556[1].w2, v556[1].b0) + 2) >> 2;
-          v357 = v557->w2;
-          v358 = v548 - p2_pred(v357, v557->b0);
-          v557->w2 = p2_bump(v357, v358, 3);
-          v359 = v559->w2;
-          v360 = v550 - p2_pred(v359, v559->b0);
-          v559->w2 = p2_bump(v359, v360, 2);
-          v361 = v560->w2;
-          v362 = v550 - p2_pred(v361, v560->b0);
-          v560->w2 = p2_bump(v361, v362, 3);
-          *(uint16_t *)&v559[1].w2 += (uint32_t)(v550 - p2_pred(v559[1].w2, v559[1].b0) + 2) >> 2;
-          v363 = v523->w2;
-          v364 = v548 - p2_pred(v363, v523->b0);
-          v523->w2 = p2_bump(v363, v364, 3);
-          v365 = v561->w2;
-          v366 = v550 - p2_pred(v365, v561->b0);
-          v561->w2 = p2_bump(v365, v366, 2);
-          v367 = v93->w2;
-          v368 = v550 - p2_pred(v367, v93->b0);
-          v93->w2 = p2_bump(v367, v368, 3);
-          *(uint16_t *)&v561[1].w2 += (uint32_t)(v550 - p2_pred(v561[1].w2, v561[1].b0) + 2) >> 2;
-          v369 = v562->w2;
-          v370 = v548 - p2_pred(v369, v562->b0);
-          v562->w2 = p2_bump(v369, v370, 3);
-          v371 = v564->w2;
-          v372 = v550 - p2_pred(v371, v564->b0);
-          v564->w2 = p2_bump(v371, v372, 2);
-          v373 = v566->w2;
-          v374 = v550 - p2_pred(v373, *(uint8_t *)&v566->b0);
-          v566->w2 = p2_bump(v373, v374, 3);
-          *(uint16_t *)&v564[1].w2 += (uint32_t)(v550 - p2_pred(v564[1].w2, v564[1].b0) + 2) >> 2;
-          v376 = v565->w2;
-          v377 = p2_pred(v376, v565->b0);
-          *(uint16_t *)&v565->w2 = v376
-                               + ((32 * ((v548 - v377 > deadzone_hi) - (uint32_t)(v548 - v377 < deadzone_lo))
+          em0200a = -v550 - p2_pred(wm0200a, m0200->b0);
+          m0200->w2 = p2_bump(wm0200a, em0200a, 3);
+          wd0100a = d0100->w2;
+          ed0100a = v550 - p2_pred(wd0100a, d0100->b0);
+          d0100->w2 = p2_bump(wd0100a, ed0100a, 2);
+          wr0100a = r0100->w2;
+          er0100a = v550 - p2_pred(wr0100a, *(uint8_t *)&r0100->b0);
+          r0100->w2 = p2_bump(wr0100a, er0100a, 3);
+          *(uint16_t *)&d0100[1].w2 += (uint32_t)(v550 - p2_pred(d0100[1].w2, d0100[1].b0) + 2) >> 2;
+          wm0100a = m0100->w2;
+          em0100a = v548 - p2_pred(wm0100a, m0100->b0);
+          m0100->w2 = p2_bump(wm0100a, em0100a, 3);
+          wd0080a = d0080->w2;
+          ed0080a = v550 - p2_pred(wd0080a, d0080->b0);
+          d0080->w2 = p2_bump(wd0080a, ed0080a, 2);
+          wr0080a = r0080->w2;
+          er0080a = v550 - p2_pred(wr0080a, r0080->b0);
+          r0080->w2 = p2_bump(wr0080a, er0080a, 3);
+          *(uint16_t *)&d0080[1].w2 += (uint32_t)(v550 - p2_pred(d0080[1].w2, d0080[1].b0) + 2) >> 2;
+          wm0080a = m0080->w2;
+          em0080a = v548 - p2_pred(wm0080a, m0080->b0);
+          m0080->w2 = p2_bump(wm0080a, em0080a, 3);
+          wd0040a = d0040->w2;
+          ed0040a = v550 - p2_pred(wd0040a, d0040->b0);
+          d0040->w2 = p2_bump(wd0040a, ed0040a, 2);
+          wr0040a = r0040->w2;
+          er0040a = v550 - p2_pred(wr0040a, r0040->b0);
+          r0040->w2 = p2_bump(wr0040a, er0040a, 3);
+          *(uint16_t *)&d0040[1].w2 += (uint32_t)(v550 - p2_pred(d0040[1].w2, d0040[1].b0) + 2) >> 2;
+          wm0040a = m0040->w2;
+          em0040a = v548 - p2_pred(wm0040a, m0040->b0);
+          m0040->w2 = p2_bump(wm0040a, em0040a, 3);
+          wd0020a = d0020->w2;
+          ed0020a = v550 - p2_pred(wd0020a, d0020->b0);
+          d0020->w2 = p2_bump(wd0020a, ed0020a, 2);
+          wr0020a = r0020->w2;
+          er0020a = v550 - p2_pred(wr0020a, *(uint8_t *)&r0020->b0);
+          r0020->w2 = p2_bump(wr0020a, er0020a, 3);
+          *(uint16_t *)&d0020[1].w2 += (uint32_t)(v550 - p2_pred(d0020[1].w2, d0020[1].b0) + 2) >> 2;
+          wm0020a = m0020->w2;
+          pm0020a = p2_pred(wm0020a, m0020->b0);
+          *(uint16_t *)&m0020->w2 = wm0020a
+                               + ((32 * ((v548 - pm0020a > deadzone_hi) - (uint32_t)(v548 - pm0020a < deadzone_lo))
                                  + v548
-                                 - v377
+                                 - pm0020a
                                  + 4) >> 3);
-          v378 = v567->w2;
-          v379 = v550 - p2_pred(v378, *(uint8_t *)&v567->b0);
-          v567->w2 = p2_bump(v378, v379, 2);
-          v380 = v98->w2;
-          v381 = v550 - p2_pred(v380, *(uint8_t *)&v98->b0);
-          v98->w2 = p2_bump(v380, v381, 3);
-          *(uint16_t *)&v567[1].w2 += (uint32_t)(v550
-                                               - p2_pred(*(int16_t *)&*(uint16_t *)&v567[1].w2, *(uint8_t *)&v567[1].b0)
+          wd0010a = d0010->w2;
+          ed0010a = v550 - p2_pred(wd0010a, *(uint8_t *)&d0010->b0);
+          d0010->w2 = p2_bump(wd0010a, ed0010a, 2);
+          wr0010a = r0010->w2;
+          er0010a = v550 - p2_pred(wr0010a, *(uint8_t *)&r0010->b0);
+          r0010->w2 = p2_bump(wr0010a, er0010a, 3);
+          *(uint16_t *)&d0010[1].w2 += (uint32_t)(v550
+                                               - p2_pred(*(int16_t *)&*(uint16_t *)&d0010[1].w2, *(uint8_t *)&d0010[1].b0)
                                                + 2) >> 2;
-          v383 = v568->w2;
-          v384 = -v550 - p2_pred(v383, *(uint8_t *)&v568->b0);
-          v568->w2 = p2_bump(v383, v384, 3);
+          wm0010a = m0010->w2;
+          em0010a = -v550 - p2_pred(wm0010a, *(uint8_t *)&m0010->b0);
+          m0010->w2 = p2_bump(wm0010a, em0010a, 3);
         }
         else
         {
-          v115 = (int16_t)n2[-1];
+          v115 = (int16_t)mir_top[-1];
           v550 = v108;
-          n2[-1] = ((uint32_t)(-v108 - p2_pred(v115, ((uint8_t)n2[-2])) + 4) >> 3) + v115;
-          v117 = v542->w2;
-          v118 = v550 - p2_pred(v117, *(uint8_t *)&v542->b0);
-          v542->w2 = p2_bump(v117, v118, 2);
-          v119 = v543->w2;
+          mir_top[-1] = ((uint32_t)(-v108 - p2_pred(v115, ((uint8_t)mir_top[-2])) + 4) >> 3) + v115;
+          wd4000a = d4000->w2;
+          ed4000a = v550 - p2_pred(wd4000a, *(uint8_t *)&d4000->b0);
+          d4000->w2 = p2_bump(wd4000a, ed4000a, 2);
+          wr4000b = r4000->w2;
           v87 = n3 < 3;
-          v120 = v550 - p2_pred(v119, v543->b0);
-          v543->w2 = p2_bump(v119, v120, 3);
+          er4000b = v550 - p2_pred(wr4000b, r4000->b0);
+          r4000->w2 = p2_bump(wr4000b, er4000b, 3);
           if ( v87 )
           {
-            *(uint16_t *)&v542[1].w2 += (uint32_t)(v550
-                                                 - p2_pred(v542[1].w2, *(uint8_t *)&v542[1].b0)
+            *(uint16_t *)&d4000[1].w2 += (uint32_t)(v550
+                                                 - p2_pred(d4000[1].w2, *(uint8_t *)&d4000[1].b0)
                                                  + 2) >> 2;
-            v216 = v542[-1].w2;
-            v217 = v550 - p2_pred(v216, *(uint8_t *)&v542[-1].b0);
+            wd4000m1a = d4000[-1].w2;
+            ed4000m1a = v550 - p2_pred(wd4000m1a, *(uint8_t *)&d4000[-1].b0);
             v218 = -v550;
-            v542[-1].w2 = p2_bump(v216, v217, 3);
-            v219 = v544->w2;
-            v220 = v218 - p2_pred(v219, v544->b0);
-            v544->w2 = p2_bump(v219, v220, 3);
-            v221 = v539->w2;
-            v223 = v550 - p2_pred(v221, *(uint8_t *)&v539->b0);
-            v539->w2 = p2_bump(v221, v223, 2);
-            v224 = v540->w2;
-            v225 = v550 - p2_pred(v224, v540->b0);
-            v540->w2 = p2_bump(v224, v225, 3);
-            *(uint16_t *)&v539[1].w2 += (uint32_t)(v550
-                                                 - p2_pred(*(int16_t *)&*(uint16_t *)&v539[1].w2, *(uint8_t *)&v539[1].b0)
+            d4000[-1].w2 = p2_bump(wd4000m1a, ed4000m1a, 3);
+            wm4000b = m4000->w2;
+            em4000b = v218 - p2_pred(wm4000b, m4000->b0);
+            m4000->w2 = p2_bump(wm4000b, em4000b, 3);
+            wd2000b = d2000->w2;
+            ed2000b = v550 - p2_pred(wd2000b, *(uint8_t *)&d2000->b0);
+            d2000->w2 = p2_bump(wd2000b, ed2000b, 2);
+            wr2000b = r2000->w2;
+            er2000b = v550 - p2_pred(wr2000b, r2000->b0);
+            r2000->w2 = p2_bump(wr2000b, er2000b, 3);
+            *(uint16_t *)&d2000[1].w2 += (uint32_t)(v550
+                                                 - p2_pred(*(int16_t *)&*(uint16_t *)&d2000[1].w2, *(uint8_t *)&d2000[1].b0)
                                                  + 2) >> 2;
-            v226 = v539[-1].w2;
-            v227 = v550 - p2_pred(v226, *(uint8_t *)&v539[-1].b0);
-            v539[-1].w2 = p2_bump(v226, v227, 3);
-            v228 = v541->w2;
-            v229 = v218 - p2_pred(v228, *(uint8_t *)&v541->b0);
-            v541->w2 = p2_bump(v228, v229, 3);
-            v230 = v536->w2;
-            v232 = v550 - p2_pred(v230, *(uint8_t *)&v536->b0);
-            v536->w2 = p2_bump(v230, v232, 2);
-            v233 = v537->w2;
-            v234 = v550 - p2_pred(v233, v537->b0);
-            v537->w2 = p2_bump(v233, v234, 3);
-            *(uint16_t *)&v536[1].w2 += (uint32_t)(v550
-                                                 - p2_pred(*(int16_t *)&*(uint16_t *)&v536[1].w2, *(uint8_t *)&v536[1].b0)
+            wd2000m1a = d2000[-1].w2;
+            ed2000m1a = v550 - p2_pred(wd2000m1a, *(uint8_t *)&d2000[-1].b0);
+            d2000[-1].w2 = p2_bump(wd2000m1a, ed2000m1a, 3);
+            wm2000b = m2000->w2;
+            em2000b = v218 - p2_pred(wm2000b, *(uint8_t *)&m2000->b0);
+            m2000->w2 = p2_bump(wm2000b, em2000b, 3);
+            wd1000b = d1000->w2;
+            ed1000b = v550 - p2_pred(wd1000b, *(uint8_t *)&d1000->b0);
+            d1000->w2 = p2_bump(wd1000b, ed1000b, 2);
+            wr1000b = r1000->w2;
+            er1000b = v550 - p2_pred(wr1000b, r1000->b0);
+            r1000->w2 = p2_bump(wr1000b, er1000b, 3);
+            *(uint16_t *)&d1000[1].w2 += (uint32_t)(v550
+                                                 - p2_pred(*(int16_t *)&*(uint16_t *)&d1000[1].w2, *(uint8_t *)&d1000[1].b0)
                                                  + 2) >> 2;
-            v235 = v536[-1].w2;
-            v236 = v550 - p2_pred(v235, *(uint8_t *)&v536[-1].b0);
-            v536[-1].w2 = p2_bump(v235, v236, 3);
-            v237 = v538->w2;
-            v238 = v218 - p2_pred(v237, *(uint8_t *)&v538->b0);
-            v538->w2 = p2_bump(v237, v238, 3);
-            v239 = v551->w2;
-            v241 = v550 - p2_pred(v239, v551->b0);
-            v551->w2 = p2_bump(v239, v241, 2);
-            v242 = v534->w2;
-            v243 = v550 - p2_pred(v242, v534->b0);
-            v534->w2 = p2_bump(v242, v243, 3);
-            *(uint16_t *)&v551[1].w2 += (uint32_t)(v550
-                                                 - p2_pred(v551[1].w2, v551[1].b0)
+            wd1000m1a = d1000[-1].w2;
+            ed1000m1a = v550 - p2_pred(wd1000m1a, *(uint8_t *)&d1000[-1].b0);
+            d1000[-1].w2 = p2_bump(wd1000m1a, ed1000m1a, 3);
+            wm1000b = m1000->w2;
+            em1000b = v218 - p2_pred(wm1000b, *(uint8_t *)&m1000->b0);
+            m1000->w2 = p2_bump(wm1000b, em1000b, 3);
+            wd0800b = d0800->w2;
+            ed0800b = v550 - p2_pred(wd0800b, d0800->b0);
+            d0800->w2 = p2_bump(wd0800b, ed0800b, 2);
+            wr0800b = r0800->w2;
+            er0800b = v550 - p2_pred(wr0800b, r0800->b0);
+            r0800->w2 = p2_bump(wr0800b, er0800b, 3);
+            *(uint16_t *)&d0800[1].w2 += (uint32_t)(v550
+                                                 - p2_pred(d0800[1].w2, d0800[1].b0)
                                                  + 2) >> 2;
-            v244 = v551[-1].w2;
-            v245 = v550 - p2_pred(v244, v551[-1].b0);
-            v551[-1].w2 = p2_bump(v244, v245, 3);
-            v246 = v535->w2;
-            v247 = v218 - p2_pred(v246, v535->b0);
-            v535->w2 = p2_bump(v246, v247, 3);
-            v248 = v552->w2;
-            v250 = v550 - p2_pred(v248, v552->b0);
-            v552->w2 = p2_bump(v248, v250, 2);
-            v251 = v531->w2;
-            // `LOBYTE(v248) = v531->b0` and `v248 & 31` was the rate: the mask
+            wd0800m1a = d0800[-1].w2;
+            ed0800m1a = v550 - p2_pred(wd0800m1a, d0800[-1].b0);
+            d0800[-1].w2 = p2_bump(wd0800m1a, ed0800m1a, 3);
+            wm0800b = m0800->w2;
+            em0800b = v218 - p2_pred(wm0800b, m0800->b0);
+            m0800->w2 = p2_bump(wm0800b, em0800b, 3);
+            wd0400b = d0400->w2;
+            ed0400b = v550 - p2_pred(wd0400b, d0400->b0);
+            d0400->w2 = p2_bump(wd0400b, ed0400b, 2);
+            wr0400b = r0400->w2;
+            // `LOBYTE(wd0400b) = r0400->b0` and `wd0400b & 31` was the rate: the mask
             // reads only the byte that was written.
-            v252 = v550 - p2_pred(v251, v531->b0);
-            v531->w2 = p2_bump(v251, v252, 3);
-            *(uint16_t *)&v552[1].w2 += (uint32_t)(v550
-                                                 - p2_pred(v552[1].w2, v552[1].b0)
+            er0400b = v550 - p2_pred(wr0400b, r0400->b0);
+            r0400->w2 = p2_bump(wr0400b, er0400b, 3);
+            *(uint16_t *)&d0400[1].w2 += (uint32_t)(v550
+                                                 - p2_pred(d0400[1].w2, d0400[1].b0)
                                                  + 2) >> 2;
-            v254 = v552[-1].w2;
-            v255 = v550 - p2_pred(v254, v552[-1].b0);
-            v552[-1].w2 = p2_bump(v254, v255, 3);
-            v256 = v553->w2;
+            wd0400m1a = d0400[-1].w2;
+            ed0400m1a = v550 - p2_pred(wd0400m1a, d0400[-1].b0);
+            d0400[-1].w2 = p2_bump(wd0400m1a, ed0400m1a, 3);
+            v256 = m0400->w2;
             v573 = -v550;
-            nb_slot = -v550 - p2_pred(v256, v553->b0);
-            v553->w2 = p2_bump(v256, nb_slot, 3);
-            v258 = v554->w2;
-            v260 = v550 - p2_pred(v258, v554->b0);
-            v554->w2 = p2_bump(v258, v260, 2);
-            v261 = v91->w2;
-            v262 = v550 - p2_pred(v261, v91->b0);
-            v91->w2 = p2_bump(v261, v262, 3);
-            *(uint16_t *)&v554[1].w2 += (uint32_t)(v550
-                                                 - p2_pred(v554[1].w2, v554[1].b0)
+            nb_slot = -v550 - p2_pred(v256, m0400->b0);
+            m0400->w2 = p2_bump(v256, nb_slot, 3);
+            wd0200b = d0200->w2;
+            ed0200b = v550 - p2_pred(wd0200b, d0200->b0);
+            d0200->w2 = p2_bump(wd0200b, ed0200b, 2);
+            wr0200b = r0200->w2;
+            er0200b = v550 - p2_pred(wr0200b, r0200->b0);
+            r0200->w2 = p2_bump(wr0200b, er0200b, 3);
+            *(uint16_t *)&d0200[1].w2 += (uint32_t)(v550
+                                                 - p2_pred(d0200[1].w2, d0200[1].b0)
                                                  + 2) >> 2;
-            v263 = v554[-1].w2;
-            v264 = v550 - p2_pred(v263, v554[-1].b0);
-            v554[-1].w2 = p2_bump(v263, v264, 3);
-            v265 = v555->w2;
-            v266 = v573 - p2_pred(v265, v555->b0);
-            v555->w2 = p2_bump(v265, v266, 3);
-            v267 = v556->w2;
-            v269 = v550 - p2_pred(v267, v556->b0);
-            v556->w2 = p2_bump(v267, v269, 2);
-            v270 = v558->w2;
-            v271 = v550 - p2_pred(v270, *(uint8_t *)&v558->b0);
-            v558->w2 = p2_bump(v270, v271, 3);
-            *(uint16_t *)&v556[1].w2 += (uint32_t)(v550
-                                                 - p2_pred(v556[1].w2, v556[1].b0)
+            wd0200m1a = d0200[-1].w2;
+            ed0200m1a = v550 - p2_pred(wd0200m1a, d0200[-1].b0);
+            d0200[-1].w2 = p2_bump(wd0200m1a, ed0200m1a, 3);
+            wm0200b = m0200->w2;
+            em0200b = v573 - p2_pred(wm0200b, m0200->b0);
+            m0200->w2 = p2_bump(wm0200b, em0200b, 3);
+            wd0100b = d0100->w2;
+            ed0100b = v550 - p2_pred(wd0100b, d0100->b0);
+            d0100->w2 = p2_bump(wd0100b, ed0100b, 2);
+            wr0100b = r0100->w2;
+            er0100b = v550 - p2_pred(wr0100b, *(uint8_t *)&r0100->b0);
+            r0100->w2 = p2_bump(wr0100b, er0100b, 3);
+            *(uint16_t *)&d0100[1].w2 += (uint32_t)(v550
+                                                 - p2_pred(d0100[1].w2, d0100[1].b0)
                                                  + 2) >> 2;
-            v272 = v556[-1].w2;
-            v273 = v550 - p2_pred(v272, v556[-1].b0);
-            v556[-1].w2 = p2_bump(v272, v273, 3);
-            v274 = v557->w2;
-            v275 = v573 - p2_pred(v274, v557->b0);
-            v557->w2 = p2_bump(v274, v275, 3);
-            v276 = v559->w2;
-            v278 = v550 - p2_pred(v276, v559->b0);
-            v559->w2 = p2_bump(v276, v278, 2);
-            v279 = v560->w2;
-            v280 = v550 - p2_pred(v279, v560->b0);
-            v560->w2 = p2_bump(v279, v280, 3);
-            *(uint16_t *)&v559[1].w2 += (uint32_t)(v550
-                                                 - p2_pred(v559[1].w2, v559[1].b0)
+            wd0100m1a = d0100[-1].w2;
+            ed0100m1a = v550 - p2_pred(wd0100m1a, d0100[-1].b0);
+            d0100[-1].w2 = p2_bump(wd0100m1a, ed0100m1a, 3);
+            wm0100b = m0100->w2;
+            em0100b = v573 - p2_pred(wm0100b, m0100->b0);
+            m0100->w2 = p2_bump(wm0100b, em0100b, 3);
+            wd0080b = d0080->w2;
+            ed0080b = v550 - p2_pred(wd0080b, d0080->b0);
+            d0080->w2 = p2_bump(wd0080b, ed0080b, 2);
+            wr0080b = r0080->w2;
+            er0080b = v550 - p2_pred(wr0080b, r0080->b0);
+            r0080->w2 = p2_bump(wr0080b, er0080b, 3);
+            *(uint16_t *)&d0080[1].w2 += (uint32_t)(v550
+                                                 - p2_pred(d0080[1].w2, d0080[1].b0)
                                                  + 2) >> 2;
-            v281 = v559[-1].w2;
-            v282 = v550 - p2_pred(v281, v559[-1].b0);
-            v559[-1].w2 = p2_bump(v281, v282, 3);
-            v283 = v523->w2;
-            v284 = v573 - p2_pred(v283, v523->b0);
-            v523->w2 = p2_bump(v283, v284, 3);
-            v285 = v561->w2;
-            v287 = v550 - p2_pred(v285, v561->b0);
-            v561->w2 = p2_bump(v285, v287, 2);
-            v288 = v93->w2;
-            v289 = v550 - p2_pred(v288, v93->b0);
-            v93->w2 = p2_bump(v288, v289, 3);
-            *(uint16_t *)&v561[1].w2 += (uint32_t)(v550
-                                                 - p2_pred(v561[1].w2, v561[1].b0)
+            wd0080m1a = d0080[-1].w2;
+            ed0080m1a = v550 - p2_pred(wd0080m1a, d0080[-1].b0);
+            d0080[-1].w2 = p2_bump(wd0080m1a, ed0080m1a, 3);
+            wm0080b = m0080->w2;
+            em0080b = v573 - p2_pred(wm0080b, m0080->b0);
+            m0080->w2 = p2_bump(wm0080b, em0080b, 3);
+            wd0040b = d0040->w2;
+            ed0040b = v550 - p2_pred(wd0040b, d0040->b0);
+            d0040->w2 = p2_bump(wd0040b, ed0040b, 2);
+            wr0040b = r0040->w2;
+            er0040b = v550 - p2_pred(wr0040b, r0040->b0);
+            r0040->w2 = p2_bump(wr0040b, er0040b, 3);
+            *(uint16_t *)&d0040[1].w2 += (uint32_t)(v550
+                                                 - p2_pred(d0040[1].w2, d0040[1].b0)
                                                  + 2) >> 2;
-            v290 = v561[-1].w2;
-            v291 = v550 - p2_pred(v290, v561[-1].b0);
+            wd0040m1a = d0040[-1].w2;
+            ed0040m1a = v550 - p2_pred(wd0040m1a, d0040[-1].b0);
             v292 = -v550;
-            v561[-1].w2 = p2_bump(v290, v291, 3);
-            v293 = v562->w2;
-            v294 = v292 - p2_pred(v293, v562->b0);
-            v562->w2 = p2_bump(v293, v294, 3);
-            v295 = v564->w2;
-            v297 = v550 - p2_pred(v295, v564->b0);
-            v564->w2 = p2_bump(v295, v297, 2);
-            v298 = v566->w2;
-            v299 = v550 - p2_pred(v298, *(uint8_t *)&v566->b0);
-            v566->w2 = p2_bump(v298, v299, 3);
-            *(uint16_t *)&v564[1].w2 += (uint32_t)(v550
-                                                 - p2_pred(v564[1].w2, v564[1].b0)
+            d0040[-1].w2 = p2_bump(wd0040m1a, ed0040m1a, 3);
+            wm0040b = m0040->w2;
+            em0040b = v292 - p2_pred(wm0040b, m0040->b0);
+            m0040->w2 = p2_bump(wm0040b, em0040b, 3);
+            wd0020b = d0020->w2;
+            ed0020b = v550 - p2_pred(wd0020b, d0020->b0);
+            d0020->w2 = p2_bump(wd0020b, ed0020b, 2);
+            wr0020b = r0020->w2;
+            er0020b = v550 - p2_pred(wr0020b, *(uint8_t *)&r0020->b0);
+            r0020->w2 = p2_bump(wr0020b, er0020b, 3);
+            *(uint16_t *)&d0020[1].w2 += (uint32_t)(v550
+                                                 - p2_pred(d0020[1].w2, d0020[1].b0)
                                                  + 2) >> 2;
-            v300 = v564[-1].w2;
-            v301 = v550 - p2_pred(v300, v564[-1].b0);
-            v564[-1].w2 = p2_bump(v300, v301, 3);
-            v302 = v565->w2;
-            v303 = v292 - p2_pred(v302, v565->b0);
-            v565->w2 = p2_bump(v302, v303, 3);
-            v304 = v567->w2;
-            v306 = v550 - p2_pred(v304, *(uint8_t *)&v567->b0);
-            v567->w2 = p2_bump(v304, v306, 2);
-            v307 = v98->w2;
-            v308 = v550 - p2_pred(v307, *(uint8_t *)&v98->b0);
-            v98->w2 = p2_bump(v307, v308, 3);
-            *(uint16_t *)&v567[1].w2 += (uint32_t)(v550
-                                                 - p2_pred(*(int16_t *)&*(uint16_t *)&v567[1].w2, *(uint8_t *)&v567[1].b0)
+            wd0020m1a = d0020[-1].w2;
+            ed0020m1a = v550 - p2_pred(wd0020m1a, d0020[-1].b0);
+            d0020[-1].w2 = p2_bump(wd0020m1a, ed0020m1a, 3);
+            wm0020b = m0020->w2;
+            em0020b = v292 - p2_pred(wm0020b, m0020->b0);
+            m0020->w2 = p2_bump(wm0020b, em0020b, 3);
+            wd0010b = d0010->w2;
+            ed0010b = v550 - p2_pred(wd0010b, *(uint8_t *)&d0010->b0);
+            d0010->w2 = p2_bump(wd0010b, ed0010b, 2);
+            wr0010b = r0010->w2;
+            er0010b = v550 - p2_pred(wr0010b, *(uint8_t *)&r0010->b0);
+            r0010->w2 = p2_bump(wr0010b, er0010b, 3);
+            *(uint16_t *)&d0010[1].w2 += (uint32_t)(v550
+                                                 - p2_pred(*(int16_t *)&*(uint16_t *)&d0010[1].w2, *(uint8_t *)&d0010[1].b0)
                                                  + 2) >> 2;
-            v309 = v567[-1].w2;
-            v310 = v550 - p2_pred(v309, *(uint8_t *)&v567[-1].b0);
-            v567[-1].w2 = p2_bump(v309, v310, 3);
-            v214 = v568->w2;
-            v215 = v292 - p2_pred(v214, *(uint8_t *)&v568->b0);
+            wd0010m1a = d0010[-1].w2;
+            ed0010m1a = v550 - p2_pred(wd0010m1a, *(uint8_t *)&d0010[-1].b0);
+            d0010[-1].w2 = p2_bump(wd0010m1a, ed0010m1a, 3);
+            wm0010b = m0010->w2;
+            em0010b = v292 - p2_pred(wm0010b, *(uint8_t *)&m0010->b0);
           }
           else
           {
-            v122 = v542[-1].w2;
-            v123 = v550 - p2_pred(v122, *(uint8_t *)&v542[-1].b0);
-            v542[-1].w2 = p2_bump(v122, v123, 3);
-            v124 = v544->w2;
+            wd4000m1b = d4000[-1].w2;
+            ed4000m1b = v550 - p2_pred(wd4000m1b, *(uint8_t *)&d4000[-1].b0);
+            d4000[-1].w2 = p2_bump(wd4000m1b, ed4000m1b, 3);
+            wm4000c = m4000->w2;
             v547 = -v550;
-            v125 = -v550 - p2_pred(v124, v544->b0);
-            v544->w2 = p2_bump(v124, v125, 3);
-            v126 = v539->w2;
-            v128 = v550 - p2_pred(v126, *(uint8_t *)&v539->b0);
-            v539->w2 = p2_bump(v126, v128, 2);
-            v129 = v540->w2;
-            v130 = v550 - p2_pred(v129, v540->b0);
-            v540->w2 = p2_bump(v129, v130, 3);
-            v131 = v539[-1].w2;
-            v132 = v550 - p2_pred(v131, *(uint8_t *)&v539[-1].b0);
-            v539[-1].w2 = p2_bump(v131, v132, 3);
-            v133 = v541->w2;
-            v134 = v547 - p2_pred(v133, *(uint8_t *)&v541->b0);
-            v541->w2 = p2_bump(v133, v134, 3);
-            v135 = v536->w2;
-            v137 = v550 - p2_pred(v135, *(uint8_t *)&v536->b0);
-            v536->w2 = p2_bump(v135, v137, 2);
-            v138 = v537->w2;
-            v139 = v550 - p2_pred(v138, v537->b0);
-            v537->w2 = p2_bump(v138, v139, 3);
-            v140 = v536[-1].w2;
-            v141 = v550 - p2_pred(v140, *(uint8_t *)&v536[-1].b0);
-            v536[-1].w2 = p2_bump(v140, v141, 3);
-            v142 = v538->w2;
-            v143 = v547 - p2_pred(v142, *(uint8_t *)&v538->b0);
-            v538->w2 = p2_bump(v142, v143, 3);
-            v144 = v551->w2;
-            v146 = v550 - p2_pred(v144, v551->b0);
-            v551->w2 = p2_bump(v144, v146, 2);
-            v147 = v534->w2;
-            v148 = v550 - p2_pred(v147, v534->b0);
-            v534->w2 = p2_bump(v147, v148, 3);
-            v149 = v551[-1].w2;
-            v150 = v550 - p2_pred(v149, v551[-1].b0);
-            v551[-1].w2 = p2_bump(v149, v150, 3);
-            v151 = v535->w2;
-            v152 = v547 - p2_pred(v151, v535->b0);
-            v535->w2 = p2_bump(v151, v152, 3);
-            v153 = v552->w2;
-            v155 = v550 - p2_pred(v153, v552->b0);
-            v552->w2 = p2_bump(v153, v155, 2);
-            v156 = v531->w2;
-            v157 = v550 - p2_pred(v156, v531->b0);
-            v531->w2 = p2_bump(v156, v157, 3);
-            v158 = v552[-1].w2;
-            v159 = v550 - p2_pred(v158, v552[-1].b0);
-            v552[-1].w2 = p2_bump(v158, v159, 3);
-            v160 = v553->w2;
-            v547 -= p2_pred(v160, v553->b0);
-            v553->w2 = p2_bump(v160, v547, 3);
-            v162 = v554->w2;
-            v163 = v550 - p2_pred(v162, v554->b0);
-            v554->w2 = p2_bump(v162, v163, 2);
-            v164 = v91->w2;
-            v165 = v550 - p2_pred(v164, v91->b0);
-            v91->w2 = p2_bump(v164, v165, 3);
-            v166 = v554[-1].w2;
-            v167 = v550 - p2_pred(v166, v554[-1].b0);
+            em4000c = -v550 - p2_pred(wm4000c, m4000->b0);
+            m4000->w2 = p2_bump(wm4000c, em4000c, 3);
+            wd2000c = d2000->w2;
+            ed2000c = v550 - p2_pred(wd2000c, *(uint8_t *)&d2000->b0);
+            d2000->w2 = p2_bump(wd2000c, ed2000c, 2);
+            wr2000c = r2000->w2;
+            er2000c = v550 - p2_pred(wr2000c, r2000->b0);
+            r2000->w2 = p2_bump(wr2000c, er2000c, 3);
+            wd2000m1b = d2000[-1].w2;
+            ed2000m1b = v550 - p2_pred(wd2000m1b, *(uint8_t *)&d2000[-1].b0);
+            d2000[-1].w2 = p2_bump(wd2000m1b, ed2000m1b, 3);
+            wm2000c = m2000->w2;
+            em2000c = v547 - p2_pred(wm2000c, *(uint8_t *)&m2000->b0);
+            m2000->w2 = p2_bump(wm2000c, em2000c, 3);
+            wd1000c = d1000->w2;
+            ed1000c = v550 - p2_pred(wd1000c, *(uint8_t *)&d1000->b0);
+            d1000->w2 = p2_bump(wd1000c, ed1000c, 2);
+            wr1000c = r1000->w2;
+            er1000c = v550 - p2_pred(wr1000c, r1000->b0);
+            r1000->w2 = p2_bump(wr1000c, er1000c, 3);
+            wd1000m1b = d1000[-1].w2;
+            ed1000m1b = v550 - p2_pred(wd1000m1b, *(uint8_t *)&d1000[-1].b0);
+            d1000[-1].w2 = p2_bump(wd1000m1b, ed1000m1b, 3);
+            wm1000c = m1000->w2;
+            em1000c = v547 - p2_pred(wm1000c, *(uint8_t *)&m1000->b0);
+            m1000->w2 = p2_bump(wm1000c, em1000c, 3);
+            wd0800c = d0800->w2;
+            ed0800c = v550 - p2_pred(wd0800c, d0800->b0);
+            d0800->w2 = p2_bump(wd0800c, ed0800c, 2);
+            wr0800c = r0800->w2;
+            er0800c = v550 - p2_pred(wr0800c, r0800->b0);
+            r0800->w2 = p2_bump(wr0800c, er0800c, 3);
+            wd0800m1b = d0800[-1].w2;
+            ed0800m1b = v550 - p2_pred(wd0800m1b, d0800[-1].b0);
+            d0800[-1].w2 = p2_bump(wd0800m1b, ed0800m1b, 3);
+            wm0800c = m0800->w2;
+            em0800c = v547 - p2_pred(wm0800c, m0800->b0);
+            m0800->w2 = p2_bump(wm0800c, em0800c, 3);
+            wd0400c = d0400->w2;
+            ed0400c = v550 - p2_pred(wd0400c, d0400->b0);
+            d0400->w2 = p2_bump(wd0400c, ed0400c, 2);
+            wr0400c = r0400->w2;
+            er0400c = v550 - p2_pred(wr0400c, r0400->b0);
+            r0400->w2 = p2_bump(wr0400c, er0400c, 3);
+            wd0400m1b = d0400[-1].w2;
+            ed0400m1b = v550 - p2_pred(wd0400m1b, d0400[-1].b0);
+            d0400[-1].w2 = p2_bump(wd0400m1b, ed0400m1b, 3);
+            v160 = m0400->w2;
+            v547 -= p2_pred(v160, m0400->b0);
+            m0400->w2 = p2_bump(v160, v547, 3);
+            wd0200c = d0200->w2;
+            ed0200c = v550 - p2_pred(wd0200c, d0200->b0);
+            d0200->w2 = p2_bump(wd0200c, ed0200c, 2);
+            wr0200c = r0200->w2;
+            er0200c = v550 - p2_pred(wr0200c, r0200->b0);
+            r0200->w2 = p2_bump(wr0200c, er0200c, 3);
+            wd0200m1b = d0200[-1].w2;
+            ed0200m1b = v550 - p2_pred(wd0200m1b, d0200[-1].b0);
             v168 = -v550;
-            v554[-1].w2 = p2_bump(v166, v167, 3);
-            v169 = v555->w2;
-            v170 = v168 - p2_pred(v169, v555->b0);
-            v555->w2 = p2_bump(v169, v170, 3);
-            v171 = v556->w2;
-            v173 = v550 - p2_pred(v171, v556->b0);
-            v556->w2 = p2_bump(v171, v173, 2);
-            v174 = v558->w2;
-            v175 = v550 - p2_pred(v174, *(uint8_t *)&v558->b0);
-            v558->w2 = p2_bump(v174, v175, 3);
-            v176 = v556[-1].w2;
-            v177 = v550 - p2_pred(v176, v556[-1].b0);
-            v556[-1].w2 = p2_bump(v176, v177, 3);
-            v178 = v557->w2;
-            v179 = v168 - p2_pred(v178, v557->b0);
-            v557->w2 = p2_bump(v178, v179, 3);
-            v180 = v559->w2;
-            v182 = v550 - p2_pred(v180, v559->b0);
-            v559->w2 = p2_bump(v180, v182, 2);
-            v183 = v560->w2;
-            v184 = v550 - p2_pred(v183, v560->b0);
-            v560->w2 = p2_bump(v183, v184, 3);
-            v185 = v559[-1].w2;
-            v186 = v550 - p2_pred(v185, v559[-1].b0);
-            v559[-1].w2 = p2_bump(v185, v186, 3);
-            v187 = v523->w2;
-            v188 = v168 - p2_pred(v187, v523->b0);
-            v523->w2 = p2_bump(v187, v188, 3);
-            v189 = v561->w2;
-            v191 = v550 - p2_pred(v189, v561->b0);
-            v561->w2 = p2_bump(v189, v191, 2);
-            v192 = v93->w2;
-            v193 = v550 - p2_pred(v192, v93->b0);
-            v93->w2 = p2_bump(v192, v193, 3);
-            v194 = v561[-1].w2;
-            v195 = v550 - p2_pred(v194, v561[-1].b0);
-            v561[-1].w2 = p2_bump(v194, v195, 3);
-            v196 = v562->w2;
-            v197 = v168 - p2_pred(v196, v562->b0);
-            v562->w2 = p2_bump(v196, v197, 3);
-            v198 = v564->w2;
+            d0200[-1].w2 = p2_bump(wd0200m1b, ed0200m1b, 3);
+            wm0200c = m0200->w2;
+            em0200c = v168 - p2_pred(wm0200c, m0200->b0);
+            m0200->w2 = p2_bump(wm0200c, em0200c, 3);
+            wd0100c = d0100->w2;
+            ed0100c = v550 - p2_pred(wd0100c, d0100->b0);
+            d0100->w2 = p2_bump(wd0100c, ed0100c, 2);
+            wr0100c = r0100->w2;
+            er0100c = v550 - p2_pred(wr0100c, *(uint8_t *)&r0100->b0);
+            r0100->w2 = p2_bump(wr0100c, er0100c, 3);
+            wd0100m1b = d0100[-1].w2;
+            ed0100m1b = v550 - p2_pred(wd0100m1b, d0100[-1].b0);
+            d0100[-1].w2 = p2_bump(wd0100m1b, ed0100m1b, 3);
+            wm0100c = m0100->w2;
+            em0100c = v168 - p2_pred(wm0100c, m0100->b0);
+            m0100->w2 = p2_bump(wm0100c, em0100c, 3);
+            wd0080c = d0080->w2;
+            ed0080c = v550 - p2_pred(wd0080c, d0080->b0);
+            d0080->w2 = p2_bump(wd0080c, ed0080c, 2);
+            wr0080c = r0080->w2;
+            er0080c = v550 - p2_pred(wr0080c, r0080->b0);
+            r0080->w2 = p2_bump(wr0080c, er0080c, 3);
+            wd0080m1b = d0080[-1].w2;
+            ed0080m1b = v550 - p2_pred(wd0080m1b, d0080[-1].b0);
+            d0080[-1].w2 = p2_bump(wd0080m1b, ed0080m1b, 3);
+            wm0080c = m0080->w2;
+            em0080c = v168 - p2_pred(wm0080c, m0080->b0);
+            m0080->w2 = p2_bump(wm0080c, em0080c, 3);
+            wd0040c = d0040->w2;
+            ed0040c = v550 - p2_pred(wd0040c, d0040->b0);
+            d0040->w2 = p2_bump(wd0040c, ed0040c, 2);
+            wr0040c = r0040->w2;
+            er0040c = v550 - p2_pred(wr0040c, r0040->b0);
+            r0040->w2 = p2_bump(wr0040c, er0040c, 3);
+            wd0040m1b = d0040[-1].w2;
+            ed0040m1b = v550 - p2_pred(wd0040m1b, d0040[-1].b0);
+            d0040[-1].w2 = p2_bump(wd0040m1b, ed0040m1b, 3);
+            wm0040c = m0040->w2;
+            em0040c = v168 - p2_pred(wm0040c, m0040->b0);
+            m0040->w2 = p2_bump(wm0040c, em0040c, 3);
+            wd0020c = d0020->w2;
             v199 = v550;
-            v200 = v550 - p2_pred(v198, v564->b0);
-            v564->w2 = p2_bump(v198, v200, 2);
-            v201 = v566->w2;
-            v202 = v199 - p2_pred(v201, *(uint8_t *)&v566->b0);
+            ed0020c = v550 - p2_pred(wd0020c, d0020->b0);
+            d0020->w2 = p2_bump(wd0020c, ed0020c, 2);
+            wr0020c = r0020->w2;
+            er0020c = v199 - p2_pred(wr0020c, *(uint8_t *)&r0020->b0);
             v550 = v199;
-            v566->w2 = p2_bump(v201, v202, 3);
-            v203 = v564[-1].w2;
-            v204 = v199 - p2_pred(v203, v564[-1].b0);
-            v564[-1].w2 = p2_bump(v203, v204, 3);
-            v205 = v565->w2;
+            r0020->w2 = p2_bump(wr0020c, er0020c, 3);
+            wd0020m1b = d0020[-1].w2;
+            ed0020m1b = v199 - p2_pred(wd0020m1b, d0020[-1].b0);
+            d0020[-1].w2 = p2_bump(wd0020m1b, ed0020m1b, 3);
+            wm0020c = m0020->w2;
             v571 = -v199;
-            v206 = -v199 - p2_pred(v205, v565->b0);
-            v565->w2 = p2_bump(v205, v206, 3);
-            v207 = v567->w2;
-            v209 = v550 - p2_pred(v207, *(uint8_t *)&v567->b0);
-            v567->w2 = p2_bump(v207, v209, 2);
-            v210 = v98->w2;
-            v211 = v550 - p2_pred(v210, *(uint8_t *)&v98->b0);
-            v98->w2 = p2_bump(v210, v211, 3);
-            v212 = v567[-1].w2;
-            v213 = v550 - p2_pred(v212, *(uint8_t *)&v567[-1].b0);
-            v567[-1].w2 = p2_bump(v212, v213, 3);
-            v214 = v568->w2;
-            v215 = v571 - p2_pred(v214, *(uint8_t *)&v568->b0);
+            em0020c = -v199 - p2_pred(wm0020c, m0020->b0);
+            m0020->w2 = p2_bump(wm0020c, em0020c, 3);
+            wd0010c = d0010->w2;
+            ed0010c = v550 - p2_pred(wd0010c, *(uint8_t *)&d0010->b0);
+            d0010->w2 = p2_bump(wd0010c, ed0010c, 2);
+            wr0010c = r0010->w2;
+            er0010c = v550 - p2_pred(wr0010c, *(uint8_t *)&r0010->b0);
+            r0010->w2 = p2_bump(wr0010c, er0010c, 3);
+            wd0010m1b = d0010[-1].w2;
+            ed0010m1b = v550 - p2_pred(wd0010m1b, *(uint8_t *)&d0010[-1].b0);
+            d0010[-1].w2 = p2_bump(wd0010m1b, ed0010m1b, 3);
+            wm0010b = m0010->w2;
+            em0010b = v571 - p2_pred(wm0010b, *(uint8_t *)&m0010->b0);
           }
-          v568->w2 = p2_bump(v214, v215, 3);
+          m0010->w2 = p2_bump(wm0010b, em0010b, 3);
         }
       }
     }
@@ -12966,18 +12966,18 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
     v508 = a1->ctx_pair[a4 & 1];
     if ( n15 < 15 )
     {
-      n2 = (uint16_t *)&v387[1];
+      mir_top = (uint16_t *)&v387[1];
       if ( v387[1].f[2] + v387[1].f[1] + v387[1].f[0] > 29696 )
         __rescale_three_way(&v387[1]);
       v393 = (10 * (uint32_t)v387[1].step) >> 4;
       if ( a4 )
       {
-        n2[3 - v511] += v393;
+        mir_top[3 - v511] += v393;
         __update_binary_pair(model_strip((uint32_t)v508 + 1), (a4 - 1) >> 1);
       }
       else
       {
-        n2[1] += v393;
+        mir_top[1] += v393;
       }
       if ( n15 <= 0 )
       {
@@ -12999,28 +12999,28 @@ LABEL_37:
         if ( n15 < 15 )
         {
           n2_2 = &n0x10_3[1];
-          n2 = (uint16_t *)n2_2;
+          mir_top = (uint16_t *)n2_2;
           if ( n2_2->f[2] + n0x10_3[1].f[1] + n0x10_3[1].f[0] > 29696 )
           {
             n0x10_1 = n0x10;
             __rescale_three_way(n2_2);
             n0x10 = n0x10_1;
           }
-          n2[v510 + 1] += (p2_rec[1].step & 0xFFFC) >> 2;
+          mir_top[v510 + 1] += (p2_rec[1].step & 0xFFFC) >> 2;
           if ( n15 <= 0 )
             goto LABEL_48;
         }
         else
         {
         }
-        n2 = (uint16_t *)&p2_rec[-1];
+        mir_top = (uint16_t *)&p2_rec[-1];
         if ( p2_rec[-1].f[2] + p2_rec[-1].f[1] + p2_rec[-1].f[0] > 29696 )
         {
           n0x10_1 = n0x10;
           __rescale_three_way(&p2_rec[-1]);
           n0x10 = n0x10_1;
         }
-        n2[v510 + 1] += (uint16_t)(p2_rec[-1].step & 0xFFFC) >> 2;
+        mir_top[v510 + 1] += (uint16_t)(p2_rec[-1].step & 0xFFFC) >> 2;
 LABEL_48:
         if ( a4 )
         {
@@ -13072,24 +13072,24 @@ LABEL_48:
             n0x10_2 = a1->ctx_w[0].w[2] + v494;
             n0xF0 = n0xF0_1;
             n2_3 = &n0xF0_1[0];
-            n2 = (uint16_t *)n2_3;
+            mir_top = (uint16_t *)n2_3;
             if ( n2_3->f[2] + (n2_3->f[1] + n2_3->f[0]) > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way(n2_3);
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (3 * n0xF0[0].step) >> 4;
+            mir_top[v511 + 1] += (3 * n0xF0[0].step) >> 4;
             if ( n15 < 15 )
             {
-              n2 = (uint16_t *)&n0xF0[1];
+              mir_top = (uint16_t *)&n0xF0[1];
               if ( n0xF0[1].f[2] + n0xF0[1].f[1] + n0xF0[1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (uint16_t)(n0xF0[1].step & 0xFFFC) >> 2;
+              mir_top[v511 + 1] += (uint16_t)(n0xF0[1].step & 0xFFFC) >> 2;
               v502 = &a1->freq[n0x10_2 + 1];
               if ( a1->freq[n0x10_2 + 1].f[2]
                  + a1->freq[n0x10_2 + 1].f[1]
@@ -13103,14 +13103,14 @@ LABEL_48:
             }
             if ( n15 > 2 )
             {
-              n2 = (uint16_t *)&n0xF0[-1];
+              mir_top = (uint16_t *)&n0xF0[-1];
               if ( n0xF0[-1].f[2] + n0xF0[-1].f[1] + n0xF0[-1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[-1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
+              mir_top[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
             }
           }
           else
@@ -13126,17 +13126,17 @@ LABEL_48:
             }
             v411->f[v510] += (7 * (uint32_t)v411->step) >> 4;
             n0xF0 = ((&a1->freq[a1->ctx_w[0].w[1] + (a1->ctx - a1->ctx_w[0].w[a1->ctx_w[0].sel])]));
-            n2 = (uint16_t *)&n0xF0[0];
+            mir_top = (uint16_t *)&n0xF0[0];
             if ( n0xF0[0].f[2] + n0xF0[0].f[1] + n0xF0[0].f[0] > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way(&n0xF0[0]);
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (7 * n0xF0[0].step) >> 4;
+            mir_top[v511 + 1] += (7 * n0xF0[0].step) >> 4;
             if ( n15 < 15 )
             {
-              n2 = (uint16_t *)&n0xF0[1];
+              mir_top = (uint16_t *)&n0xF0[1];
               if ( n0xF0[1].f[2] + n0xF0[1].f[1] + n0xF0[1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
@@ -13144,33 +13144,33 @@ LABEL_48:
                 n0x10 = n0x10_1;
               }
               n0x10_1 = n0x10;
-              n2[v511 + 1] = n2[v511 + 1] + ((5 * (uint32_t)n0xF0[1].step) >> 4);
+              mir_top[v511 + 1] = mir_top[v511 + 1] + ((5 * (uint32_t)n0xF0[1].step) >> 4);
               n0x10 = n0x10_1;
             }
             if ( n15 > 0 )
             {
-              n2 = (uint16_t *)&n0xF0[-1];
+              mir_top = (uint16_t *)&n0xF0[-1];
               if ( n0xF0[-1].f[2] + n0xF0[-1].f[1] + n0xF0[-1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[-1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
+              mir_top[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
             }
           }
           v419 = a1->ctx_w[1].sel;
           if ( v419 == 1 )
           {
             n2_4 = &a1->freq[a1->ctx_w[1].w[0] + n0x10 - a1->ctx_w[1].w[1]];
-            n2 = (uint16_t *)n2_4;
+            mir_top = (uint16_t *)n2_4;
             if ( n2_4->f[2] + (a1->freq[a1->ctx_w[1].w[0] + n0x10 - a1->ctx_w[1].w[1]].f[1]) + (a1->freq[a1->ctx_w[1].w[0] + n0x10 - a1->ctx_w[1].w[1]].f[0]) > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way(n2_4);
               n0x10 = n0x10_1;
             }
-            n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
+            mir_top[v510 + 1] += (uint16_t)(mir_top[0] & 0xFFFC) >> 2;
             v483 = a1->ctx - a1->ctx_w[1].w[1];
             n0xF0_2 = (&a1->freq[v483 + a1->ctx_w[1].w[0]]);
             n0x10_2 = a1->ctx_w[1].w[2] + v483;
@@ -13185,14 +13185,14 @@ LABEL_48:
             v485->f[v511] += (3 * (uint32_t)n0xF0[0].step) >> 4;
             if ( n15 < 15 )
             {
-              n2 = (uint16_t *)&n0xF0[1];
+              mir_top = (uint16_t *)&n0xF0[1];
               if ( n0xF0[1].f[2] + n0xF0[1].f[1] + n0xF0[1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (uint16_t)(n0xF0[1].step & 0xFFFC) >> 2;
+              mir_top[v511 + 1] += (uint16_t)(n0xF0[1].step & 0xFFFC) >> 2;
               v488 = &a1->freq[n0x10_2 + 1];
               if ( a1->freq[n0x10_2 + 1].f[2]
                  + a1->freq[n0x10_2 + 1].f[1]
@@ -13206,14 +13206,14 @@ LABEL_48:
             }
             if ( n15 > 2 )
             {
-              n2 = (uint16_t *)&n0xF0[-1];
+              mir_top = (uint16_t *)&n0xF0[-1];
               if ( n0xF0[-1].f[2] + n0xF0[-1].f[1] + n0xF0[-1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[-1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
+              mir_top[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
             }
           }
           else
@@ -13229,49 +13229,49 @@ LABEL_48:
             }
             v420->f[v510] += (7 * (uint32_t)v420->step) >> 4;
             n0xF0 = ((&a1->freq[a1->ctx_w[1].w[1] + (a1->ctx - a1->ctx_w[1].w[a1->ctx_w[1].sel])]));
-            n2 = (uint16_t *)&n0xF0[0];
+            mir_top = (uint16_t *)&n0xF0[0];
             if ( n0xF0[0].f[2] + n0xF0[0].f[1] + n0xF0[0].f[0] > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way(&n0xF0[0]);
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (7 * (uint32_t)n0xF0[0].step) >> 4;
+            mir_top[v511 + 1] += (7 * (uint32_t)n0xF0[0].step) >> 4;
             if ( n15 < 15 )
             {
-              n2 = (uint16_t *)&n0xF0[1];
+              mir_top = (uint16_t *)&n0xF0[1];
               if ( n0xF0[1].f[2] + n0xF0[1].f[1] + n0xF0[1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (5 * (uint32_t)n0xF0[1].step) >> 4;
+              mir_top[v511 + 1] += (5 * (uint32_t)n0xF0[1].step) >> 4;
             }
             if ( n15 > 0 )
             {
-              n2 = (uint16_t *)&n0xF0[-1];
+              mir_top = (uint16_t *)&n0xF0[-1];
               if ( n0xF0[-1].f[2] + n0xF0[-1].f[1] + n0xF0[-1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[-1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
+              mir_top[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
             }
           }
           v427 = a1->ctx_w[2].sel;
           if ( v427 == 1 )
           {
             n2_5 = &a1->freq[a1->ctx_w[2].w[0] + n0x10 - a1->ctx_w[2].w[1]];
-            n2 = (uint16_t *)n2_5;
+            mir_top = (uint16_t *)n2_5;
             if ( n2_5->f[2] + (a1->freq[a1->ctx_w[2].w[0] + n0x10 - a1->ctx_w[2].w[1]].f[1]) + (a1->freq[a1->ctx_w[2].w[0] + n0x10 - a1->ctx_w[2].w[1]].f[0]) > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way(n2_5);
               n0x10 = n0x10_1;
             }
-            n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
+            mir_top[v510 + 1] += (uint16_t)(mir_top[0] & 0xFFFC) >> 2;
             v472 = a1->ctx - a1->ctx_w[2].w[1];
             n0xF0_3 = (&a1->freq[v472 + a1->ctx_w[2].w[0]]);
             n0x10_2 = a1->ctx_w[2].w[2] + v472;
@@ -13286,14 +13286,14 @@ LABEL_48:
             v474->f[v511] += (3 * (uint32_t)n0xF0[0].step) >> 4;
             if ( n15 < 15 )
             {
-              n2 = (uint16_t *)&n0xF0[1];
+              mir_top = (uint16_t *)&n0xF0[1];
               if ( n0xF0[1].f[2] + n0xF0[1].f[1] + n0xF0[1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (uint16_t)(n0xF0[1].step & 0xFFFC) >> 2;
+              mir_top[v511 + 1] += (uint16_t)(n0xF0[1].step & 0xFFFC) >> 2;
               v477 = &a1->freq[n0x10_2 + 1];
               if ( a1->freq[n0x10_2 + 1].f[2]
                  + a1->freq[n0x10_2 + 1].f[1]
@@ -13307,14 +13307,14 @@ LABEL_48:
             }
             if ( n15 > 2 )
             {
-              n2 = (uint16_t *)&n0xF0[-1];
+              mir_top = (uint16_t *)&n0xF0[-1];
               if ( n0xF0[-1].f[2] + n0xF0[-1].f[1] + n0xF0[-1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[-1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
+              mir_top[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
             }
           }
           else
@@ -13330,49 +13330,49 @@ LABEL_48:
             }
             v428->f[v510] += (7 * (uint32_t)v428->step) >> 4;
             n0xF0 = ((&a1->freq[a1->ctx_w[2].w[1] + (a1->ctx - a1->ctx_w[2].w[a1->ctx_w[2].sel])]));
-            n2 = (uint16_t *)&n0xF0[0];
+            mir_top = (uint16_t *)&n0xF0[0];
             if ( n0xF0[0].f[2] + n0xF0[0].f[1] + n0xF0[0].f[0] > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way(&n0xF0[0]);
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (7 * (uint32_t)n0xF0[0].step) >> 4;
+            mir_top[v511 + 1] += (7 * (uint32_t)n0xF0[0].step) >> 4;
             if ( n15 < 15 )
             {
-              n2 = (uint16_t *)&n0xF0[1];
+              mir_top = (uint16_t *)&n0xF0[1];
               if ( n0xF0[1].f[2] + n0xF0[1].f[1] + n0xF0[1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (5 * (uint32_t)n0xF0[1].step) >> 4;
+              mir_top[v511 + 1] += (5 * (uint32_t)n0xF0[1].step) >> 4;
             }
             if ( n15 > 0 )
             {
-              n2 = (uint16_t *)&n0xF0[-1];
+              mir_top = (uint16_t *)&n0xF0[-1];
               if ( n0xF0[-1].f[2] + n0xF0[-1].f[1] + n0xF0[-1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[-1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
+              mir_top[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
             }
           }
           v435 = a1->ctx_w[3].sel;
           if ( v435 == 1 )
           {
             n2_6 = &a1->freq[a1->ctx_w[3].w[0] + n0x10 - a1->ctx_w[3].w[1]];
-            n2 = (uint16_t *)n2_6;
+            mir_top = (uint16_t *)n2_6;
             if ( n2_6->f[2] + (a1->freq[a1->ctx_w[3].w[0] + n0x10 - a1->ctx_w[3].w[1]].f[1]) + (a1->freq[a1->ctx_w[3].w[0] + n0x10 - a1->ctx_w[3].w[1]].f[0]) > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way(n2_6);
               n0x10 = n0x10_1;
             }
-            n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
+            mir_top[v510 + 1] += (uint16_t)(mir_top[0] & 0xFFFC) >> 2;
             v461 = a1->ctx - a1->ctx_w[3].w[1];
             n0xF0_4 = (&a1->freq[v461 + a1->ctx_w[3].w[0]]);
             n0x10_2 = a1->ctx_w[3].w[2] + v461;
@@ -13387,14 +13387,14 @@ LABEL_48:
             v463->f[v511] += (3 * (uint32_t)n0xF0[0].step) >> 4;
             if ( n15 < 15 )
             {
-              n2 = (uint16_t *)&n0xF0[1];
+              mir_top = (uint16_t *)&n0xF0[1];
               if ( n0xF0[1].f[2] + n0xF0[1].f[1] + n0xF0[1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (uint16_t)(n0xF0[1].step & 0xFFFC) >> 2;
+              mir_top[v511 + 1] += (uint16_t)(n0xF0[1].step & 0xFFFC) >> 2;
               v466 = &a1->freq[n0x10_2 + 1];
               if ( a1->freq[n0x10_2 + 1].f[2]
                  + a1->freq[n0x10_2 + 1].f[1]
@@ -13408,14 +13408,14 @@ LABEL_48:
             }
             if ( n15 > 2 )
             {
-              n2 = (uint16_t *)&n0xF0[-1];
+              mir_top = (uint16_t *)&n0xF0[-1];
               if ( n0xF0[-1].f[2] + n0xF0[-1].f[1] + n0xF0[-1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[-1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
+              mir_top[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
             }
           }
           else
@@ -13431,45 +13431,45 @@ LABEL_48:
             }
             v436->f[v510] += (7 * (uint32_t)v436->step) >> 4;
             n0xF0 = ((&a1->freq[a1->ctx_w[3].w[1] + (a1->ctx - a1->ctx_w[3].w[a1->ctx_w[3].sel])]));
-            n2 = (uint16_t *)&n0xF0[0];
+            mir_top = (uint16_t *)&n0xF0[0];
             if ( n0xF0[0].f[2] + n0xF0[0].f[1] + n0xF0[0].f[0] > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way(&n0xF0[0]);
               n0x10 = n0x10_1;
             }
-            n2[v511 + 1] += (7 * (uint32_t)n0xF0[0].step) >> 4;
+            mir_top[v511 + 1] += (7 * (uint32_t)n0xF0[0].step) >> 4;
             if ( n15 < 15 )
             {
-              n2 = (uint16_t *)&n0xF0[1];
+              mir_top = (uint16_t *)&n0xF0[1];
               if ( n0xF0[1].f[2] + n0xF0[1].f[1] + n0xF0[1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (5 * (uint32_t)n0xF0[1].step) >> 4;
+              mir_top[v511 + 1] += (5 * (uint32_t)n0xF0[1].step) >> 4;
             }
             if ( n15 > 0 )
             {
-              n2 = (uint16_t *)&n0xF0[-1];
+              mir_top = (uint16_t *)&n0xF0[-1];
               if ( n0xF0[-1].f[2] + n0xF0[-1].f[1] + n0xF0[-1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[-1]);
                 n0x10 = n0x10_1;
               }
-              n2[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
+              mir_top[v511 + 1] += (6 * (uint32_t)n0xF0[-1].step) >> 4;
             }
           }
           v443 = a1->ctx_w[4].sel;
           if ( v443 == 1 )
           {
             n2_7 = &a1->freq[a1->ctx_w[4].w[0] + n0x10 - a1->ctx_w[4].w[1]];
-            n2 = (uint16_t *)n2_7;
+            mir_top = (uint16_t *)n2_7;
             if ( n2_7->f[2] + (a1->freq[a1->ctx_w[4].w[0] + n0x10 - a1->ctx_w[4].w[1]].f[1]) + (a1->freq[a1->ctx_w[4].w[0] + n0x10 - a1->ctx_w[4].w[1]].f[0]) > 29696 )
               __rescale_three_way(n2_7);
-            n2[v510 + 1] += (uint16_t)(n2[0] & 0xFFFC) >> 2;
+            mir_top[v510 + 1] += (uint16_t)(mir_top[0] & 0xFFFC) >> 2;
             v450 = a1->ctx - a1->ctx_w[4].w[1];
             n0x10_4 = &a1->freq[v450 + a1->ctx_w[4].w[0]];
             // An index, not an address -- the same register again.
@@ -13481,10 +13481,10 @@ LABEL_48:
             v452->f[v511] += (3 * (uint32_t)p2_rec[0].step) >> 4;
             if ( n15 < 15 )
             {
-              n2 = (uint16_t *)&p2_rec[1];
+              mir_top = (uint16_t *)&p2_rec[1];
               if ( p2_rec[1].f[2] + (p2_rec[1].f[1] + p2_rec[1].f[0]) > 29696 )
                 __rescale_three_way(&p2_rec[1]);
-              n2[v511 + 1] += (uint16_t)(p2_rec[1].step & 0xFFFC) >> 2;
+              mir_top[v511 + 1] += (uint16_t)(p2_rec[1].step & 0xFFFC) >> 2;
               v456 = &a1->freq[rec_idx + 1];
               if ( v456->f[2] + v456->f[1] + v456->f[0] > 29696 )
                 __rescale_three_way(v456);
@@ -13535,18 +13535,18 @@ LABEL_48:
       }
       v387 = (&a1->freq[a1->ctx]);
     }
-    n2 = (uint16_t *)&v387[-1];
+    mir_top = (uint16_t *)&v387[-1];
     if ( v387[-1].f[2] + v387[-1].f[1] + v387[-1].f[0] > 29696 )
       __rescale_three_way(&v387[-1]);
     v396 = (13 * (uint32_t)v387[-1].step) >> 4;
     if ( a4 )
     {
-      n2[3 - v511] += v396;
+      mir_top[3 - v511] += v396;
       __update_binary_pair(model_strip((uint32_t)v508 - 1), (a4 - 1) >> 1);
     }
     else
     {
-      n2[1] += v396;
+      mir_top[1] += v396;
     }
     goto LABEL_37;
   }
