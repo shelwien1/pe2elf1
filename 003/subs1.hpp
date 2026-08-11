@@ -1731,113 +1731,113 @@ uint32_t __rc_decode_flat(uint32_t tot)
   return sym;
 }
 
-int32_t __encode_context_bit(BitCtr *_this, BitCtr *a2, int32_t n15)
+int32_t __encode_context_bit(BitCtr *_this, BitCtr *a2, int32_t bit)
 {
   ;
-  int32_t v3, v4, n0x4000, result, v18, v19, n0x4000_1, v31, v33;
-  uint32_t tot, n0x88_1, v30, v32, v34;
-  v3 = _this->n[0];
+  int32_t n0, n1, cap, result, p0, p1, p_cap, par0, par_n;
+  uint32_t tot, p_tot, n1_old, par_tot, p1_old;
+  n0 = _this->n[0];
   if ( _this->n[0] )
   {
-    v4 = _this->n[1];
+    n1 = _this->n[1];
     if ( !_this->n[1] )
     {
-      v31 = a2->n[0];
-      v32 = v31 + a2->n[1];
-      _this->n[0] = (v32 + (v31 << 6) - 64) / v32;
-      _this->n[1] = ((a2->n[1] << 6) + v32 - 64) / v32;
-      _this->n[v3 - 1] += 4;
+      par0 = a2->n[0];
+      par_tot = par0 + a2->n[1];
+      _this->n[0] = (par_tot + (par0 << 6) - 64) / par_tot;
+      _this->n[1] = ((a2->n[1] << 6) + par_tot - 64) / par_tot;
+      _this->n[n0 - 1] += 4;
       _this->limit = 512;
-      v33 = a2->n[v3 - 1];
-      a2->n[v3 - 1] = -3 * ((uint32_t)(3 - v33) >> 31) + v33;
-      v3 = _this->n[0];
-      v4 = _this->n[1];
+      par_n = a2->n[n0 - 1];
+      a2->n[n0 - 1] = -3 * ((uint32_t)(3 - par_n) >> 31) + par_n;
+      n0 = _this->n[0];
+      n1 = _this->n[1];
     }
-    tot = v3 + v4;
-    rc.encode_bit(v3, v4, n15);
-    n0x4000 = _this->limit;
-    if ( tot > n0x4000 )
+    tot = n0 + n1;
+    rc.encode_bit(n0, n1, bit);
+    cap = _this->limit;
+    if ( tot > cap )
     {
-      v30 = _this->n[1];
+      n1_old = _this->n[1];
       _this->n[0] -= _this->n[0] >> 1;
-      _this->n[1] = v30 - (v30 >> 1);
-      if ( n0x4000 < 0x4000 )
-        _this->limit = n0x4000 + 64;
+      _this->n[1] = n1_old - (n1_old >> 1);
+      if ( cap < 0x4000 )
+        _this->limit = cap + 64;
     }
-    result = _this->n[n15] + 8;
-    _this->n[n15] = result;
-    a2->n[n15] += (uint32_t)tot < 0x88;
+    result = _this->n[bit] + 8;
+    _this->n[bit] = result;
+    a2->n[bit] += (uint32_t)tot < 0x88;
     return result;
   }
-  v18 = a2->n[0];
-  v19 = a2->n[1];
-  n0x88_1 = v18 + v19;
-  rc.encode_bit(v18, v19, n15);
-  n0x4000_1 = a2->limit;
-  if ( n0x88_1 > n0x4000_1 )
+  p0 = a2->n[0];
+  p1 = a2->n[1];
+  p_tot = p0 + p1;
+  rc.encode_bit(p0, p1, bit);
+  p_cap = a2->limit;
+  if ( p_tot > p_cap )
   {
-    v34 = a2->n[1];
+    p1_old = a2->n[1];
     a2->n[0] -= a2->n[0] >> 1;
-    a2->n[1] = v34 - (v34 >> 1);
-    if ( n0x4000_1 < 0x4000 )
-      a2->limit = n0x4000_1 + 64;
+    a2->n[1] = p1_old - (p1_old >> 1);
+    if ( p_cap < 0x4000 )
+      a2->limit = p_cap + 64;
   }
-  result = a2->n[n15] + 8;
-  a2->n[n15] = result;
-  _this->n[0] = n15 + 1;
+  result = a2->n[bit] + 8;
+  a2->n[bit] = result;
+  _this->n[0] = bit + 1;
   return result;
 }
 
 int32_t __decode_context_bit(BitCtr *_this, BitCtr *a2)
 {
   ;
-  int32_t v2, v3, result, n0x4000, v13, v14, n0x4000_1, v24, v26;
-  uint32_t tot, n0x88_1, v23, v25, v27;
-  v2 = _this->n[0];
+  int32_t n0, n1, result, cap, p0, p1, p_cap, par0, par_n;
+  uint32_t tot, p_tot, n1_old, par_tot, p1_old;
+  n0 = _this->n[0];
   if ( _this->n[0] )
   {
-    v3 = _this->n[1];
+    n1 = _this->n[1];
     if ( !_this->n[1] )
     {
-      v24 = a2->n[0];
-      v25 = v24 + a2->n[1];
-      _this->n[0] = (v25 + (v24 << 6) - 64) / v25;
-      _this->n[1] = ((a2->n[1] << 6) + v25 - 64) / v25;
-      _this->n[v2 - 1] += 4;
+      par0 = a2->n[0];
+      par_tot = par0 + a2->n[1];
+      _this->n[0] = (par_tot + (par0 << 6) - 64) / par_tot;
+      _this->n[1] = ((a2->n[1] << 6) + par_tot - 64) / par_tot;
+      _this->n[n0 - 1] += 4;
       _this->limit = 512;
-      v26 = a2->n[v2 - 1];
-      a2->n[v2 - 1] = -3 * ((uint32_t)(3 - v26) >> 31) + v26;
-      v2 = _this->n[0];
-      v3 = _this->n[1];
+      par_n = a2->n[n0 - 1];
+      a2->n[n0 - 1] = -3 * ((uint32_t)(3 - par_n) >> 31) + par_n;
+      n0 = _this->n[0];
+      n1 = _this->n[1];
     }
-    tot = v2 + v3;
-    result = rc.decode_bit(v2, v3);
-    n0x4000 = _this->limit;
-    if ( tot > n0x4000 )
+    tot = n0 + n1;
+    result = rc.decode_bit(n0, n1);
+    cap = _this->limit;
+    if ( tot > cap )
     {
-      v23 = _this->n[1];
+      n1_old = _this->n[1];
       _this->n[0] -= _this->n[0] >> 1;
-      _this->n[1] = v23 - (v23 >> 1);
-      if ( n0x4000 < 0x4000 )
-        _this->limit = n0x4000 + 64;
+      _this->n[1] = n1_old - (n1_old >> 1);
+      if ( cap < 0x4000 )
+        _this->limit = cap + 64;
     }
     _this->n[result] += 8;
     a2->n[result] += (uint32_t)tot < 0x88;
   }
   else
   {
-    v13 = a2->n[0];
-    v14 = a2->n[1];
-    n0x88_1 = v13 + v14;
-    result = rc.decode_bit(v13, v14);
-    n0x4000_1 = a2->limit;
-    if ( n0x88_1 > n0x4000_1 )
+    p0 = a2->n[0];
+    p1 = a2->n[1];
+    p_tot = p0 + p1;
+    result = rc.decode_bit(p0, p1);
+    p_cap = a2->limit;
+    if ( p_tot > p_cap )
     {
-      v27 = a2->n[1];
+      p1_old = a2->n[1];
       a2->n[0] -= a2->n[0] >> 1;
-      a2->n[1] = v27 - (v27 >> 1);
-      if ( n0x4000_1 < 0x4000 )
-        a2->limit = n0x4000_1 + 64;
+      a2->n[1] = p1_old - (p1_old >> 1);
+      if ( p_cap < 0x4000 )
+        a2->limit = p_cap + 64;
     }
     a2->n[result] += 8;
     _this->n[0] = result + 1;
@@ -2844,16 +2844,16 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
 {
   ;
   SymList *sel0_list;
-  int32_t result, v3, v4, v6, v9, v13, v14, n6;
-  SymEntry *v10, *v11;
-  n6 = *(int32_t *)&_this->sym_pos;
-  result = (p_n15)[n6];
+  int32_t result, near_hit, far_hit, ctx0, ctx1, fallback, ctx2, pos;
+  SymEntry *list_prev, *list_sym;
+  pos = *(int32_t *)&_this->sym_pos;
+  result = (p_n15)[pos];
   if ( exclusion_mask[result] == exclusion_gen )
     return -1;
-  v3 = 32
+  near_hit = 32
      * (result == p_n15[15] || result == p_n15[14] || result == p_n15[13] || result == p_n15[12] || result == p_n15[11])
      + ((result == p_n15[10]) << 6);
-  v4 = 16
+  far_hit = 16
      * (result == p_n15[31]
      || result == p_n15[30]
      || result == p_n15[29]
@@ -2870,27 +2870,27 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
      || result == p_n15[18]
      || result == p_n15[17]
      || result == p_n15[16]);
-  v6 = v4 + v3;
-  *(int32_t *)&_this->ctr_node = v6;
-  if ( (v4 + v3 == 0) && n6 > 6 )
+  ctx0 = far_hit + near_hit;
+  *(int32_t *)&_this->ctr_node = ctx0;
+  if ( (far_hit + near_hit == 0) && pos > 6 )
     return -1;
   sel0_list = _this->sel0_list;
-  v9 = v6 + 8 * sym_in_top((sel0_list[mode_symbol[1]].ent), 10, result);
-  *(int32_t *)&_this->ctr_node = v9;
-  v10 = sel0_list[mode_symbol[2]].ent;
-  v11 = sel0_list[result].ent;
-  v13 = sym_in_top((sel0_list[mode_symbol[3]].ent), 6, result)
-      + 2 * sym_in_top(v11, 10, mode_symbol[2])
-      + 4 * sym_in_top(v10, 4, result);
-  v14 = v13 + v9;
-  if ( n6 <= 14 || (v14 & 0xB) != 0 )
+  ctx1 = ctx0 + 8 * sym_in_top((sel0_list[mode_symbol[1]].ent), 10, result);
+  *(int32_t *)&_this->ctr_node = ctx1;
+  list_prev = sel0_list[mode_symbol[2]].ent;
+  list_sym = sel0_list[result].ent;
+  fallback = sym_in_top((sel0_list[mode_symbol[3]].ent), 6, result)
+      + 2 * sym_in_top(list_sym, 10, mode_symbol[2])
+      + 4 * sym_in_top(list_prev, 4, result);
+  ctx2 = fallback + ctx1;
+  if ( pos <= 14 || (ctx2 & 0xB) != 0 )
   {
-    *(int32_t *)&_this->ctr_node = (n6 << 7) + v14;
-    *(int32_t *)&_this->ctr_fallback = v13 + 8 * (n6 > 9);
+    *(int32_t *)&_this->ctr_node = (pos << 7) + ctx2;
+    *(int32_t *)&_this->ctr_fallback = fallback + 8 * (pos > 9);
   }
   else
   {
-    *(int32_t *)&_this->ctr_fallback = v13;
+    *(int32_t *)&_this->ctr_fallback = fallback;
     return -1;
   }
   return result;
@@ -3315,48 +3315,56 @@ int32_t __alt_p1_context(AltP1Block *_this, AltP1Block *a2, AltP1Block *a3)
 int32_t __update_binary_pair(uint16_t *_this, int32_t symbol)
 {
   ;
-  uint8_t *v12;   // was int32_t: these hold addresses
-  int32_t n0x8000, v3, v6, v7, v11, v13;
-  uint16_t *v8;
-  uint32_t v4, n0x2000, v10;
-  n0x8000 = *_this;
-  if ( (uint32_t)n0x8000 <= 0x8000 )
+  uint8_t *tbl;   // was int32_t: these hold addresses
+  int32_t tot, mask, lvl, node, span, path, go;
+  uint16_t *pair;
+  uint32_t step, f, f1_old;
+  tot = *_this;
+  if ( (uint32_t)tot <= 0x8000 )
   {
-    v3 = model_geometry[symbol];
-    v4 = (_this[1] >> 2) & 0xFFFFFFE0;
+    lvl = model_geometry[symbol];
+    step = (_this[1] >> 2) & 0xFFFFFFE0;
     if ( ::plane_predictor == 2 )
-      v4 = 15 * (_this[1] >> 5);
-    *(_this + v3 + 2) += v4 + 4;
-    n0x8000 = *_this + v4 + 4;
-    *_this = n0x8000;
+      step = 15 * (_this[1] >> 5);
+    *(_this + lvl + 2) += step + 4;
+    tot = *_this + step + 4;
+    *_this = tot;
     if ( symbol >= 2 )
     {
-      n0x8000 = level_geom[v3].half;
-      v11 = symbol - level_geom[v3].first;
-      v6 = 0;
-      v12 = (uint8_t *)((int32_t)(_this + 2 * level_geom[v3].tbl_base + 8));
-      v7 = 1;
+      // One local, `n0x8000`, held the running total up to here and the walk
+      // mask from here down: one register doing two jobs, which is why its
+      // name was a constant.  Splitting it is what lets the loop below say
+      // what it walks -- one bit of `path` per level, most significant first.
+      mask = level_geom[lvl].half;
+      path = symbol - level_geom[lvl].first;
+      node = 0;
+      tbl = (uint8_t *)((int32_t)(_this + 2 * level_geom[lvl].tbl_base + 8));
+      span = 1;
       do
       {
-        v8 = (uint16_t *)(v12 + 4 * (v6 + v7));
-        n0x2000 = (uint16_t)v8[(n0x8000 & v11) != 0];
-        v13 = (n0x8000 & v11) != 0;
-        if ( n0x2000 > 0x2000 )
+        pair = (uint16_t *)(tbl + 4 * (node + span));
+        f = (uint16_t)pair[(mask & path) != 0];
+        go = (mask & path) != 0;
+        if ( f > 0x2000 )
         {
-          v10 = (uint16_t)v8[1];
-          *v8 -= *v8 >> 1;
-          v8[1] = v10 - (v10 >> 1);
-          LOWORD(n0x2000) = v8[v13];
+          f1_old = (uint16_t)pair[1];
+          *pair -= *pair >> 1;
+          pair[1] = f1_old - (f1_old >> 1);
+          LOWORD(f) = pair[go];
         }
-        v7 *= 2;
-        n0x8000 >>= 1;
-        v6 = v13 + 2 * v6;
-        v8[v13] = n0x2000 + ((alt_freq_init * ((uint32_t)(::plane_predictor == 2) + 5)) >> 3);
+        span *= 2;
+        mask >>= 1;
+        node = go + 2 * node;
+        pair[go] = f + ((alt_freq_init * ((uint32_t)(::plane_predictor == 2) + 5)) >> 3);
       }
-      while ( n0x8000 );
+      while ( mask );
+      // The loop leaves only when `mask` is 0, and every one of the nine
+      // call sites discards the result -- one of them inside a comma
+      // expression -- so this is Hex-Rays reading the register, not a value.
+      return 0;
     }
   }
-  return n0x8000;
+  return tot;
 }
 
 int32_t __alt_p1_model(AltP1Block *_this)
