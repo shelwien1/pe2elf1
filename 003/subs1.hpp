@@ -11121,118 +11121,124 @@ void __expand_alphabet(ModelBlock *_this)
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 432, "frame layout moved");
   ;
-  uint32_t *v16;   // was int32_t: this holds an address
-  int32_t n8, v4, v6, n16_1, n16, v25, v27;
-  uint32_t j_2, i, n8193, v8, *v10, j_1, j, v15, v17, v18, v19, v20, *v22,
-           v26;
-  void *v12;
-  n8 = _this->depth;
-  j_2 = 0xFFFFFFFF >> (-(uint8_t)_this->depth & 31);
-  v4 = (n8 + 7) >> 3;
+  uint32_t *codes_p;   // was int32_t: this holds an address
+  int32_t bits, nbytes, slot, left2, left, run, gap;
+  uint32_t mask, i, cap, n_1, *q2, n_syms, j, k, carry, s, b, piece, *q,
+           s2;
+  void *codes;
+  bits = _this->depth;
+  mask = 0xFFFFFFFF >> (-(uint8_t)_this->depth & 31);
+  nbytes = (bits + 7) >> 3;
   for ( i = 0; i < 8; ++i )
   {
-    v6 = 12 * i;
-    __frame.v30[v6] = 0;
-    __frame.v30[v6 + 6] = 0;
+    slot = 12 * i;
+    __frame.v30[slot] = 0;
+    __frame.v30[slot + 6] = 0;
   }
-  n8193 = j_2 + 1;
-  if ( n8 > 8 )
-    n8193 = 8193;
-  v8 = __rc_decode_flat(n8193);
-  _this->alphabet = v8 + 1;
-  if ( (int32_t)(v8 + 1) <= 0x2000 )
+  cap = mask + 1;
+  if ( bits > 8 )
+    cap = 8193;
+  n_1 = __rc_decode_flat(cap);
+  _this->alphabet = n_1 + 1;
+  if ( (int32_t)(n_1 + 1) <= 0x2000 )
   {
-    v12 = bmf_new(4 * v8 + 4);
-    j_1 = _this->alphabet;
-    _this->sym_code = (uint32_t *)v12;
-    if ( j_1 )
+    codes = bmf_new(4 * n_1 + 4);
+    n_syms = _this->alphabet;
+    _this->sym_code = (uint32_t *)codes;
+    if ( n_syms )
     {
-      for ( j = 0; j < j_1; ++j )
+      for ( j = 0; j < n_syms; ++j )
       {
         _this->sym_code[j] = j;
-        j_1 = _this->alphabet;
+        n_syms = _this->alphabet;
       }
     }
     if ( (int32_t)_this->depth > 8 )
     {
-      if ( 4 * v4 )
+      if ( 4 * nbytes )
       {
-        v15 = 0;
+        k = 0;
         do
-          __init_symbol_list(&((SymList *)__frame.v28)[v15++], (int32_t)_this, 256, 1);
-        while ( v15 < 4 * v4 );
-        j_1 = _this->alphabet;
+          __init_symbol_list(&((SymList *)__frame.v28)[k++], (int32_t)_this, 256, 1);
+        while ( k < 4 * nbytes );
+        n_syms = _this->alphabet;
       }
-      if ( j_1 )
+      if ( n_syms )
       {
-        v16 = _this->sym_code;
-        v17 = 0;
-        v18 = 0;
+        codes_p = _this->sym_code;
+        carry = 0;
+        s = 0;
         do
         {
-          v16[v18] = 0;
-          if ( v4 )
+          codes_p[s] = 0;
+          if ( nbytes )
           {
-            __frame.v31[0] = v4;
-            v19 = 0;
+            __frame.v31[0] = nbytes;
+            b = 0;
             do
             {
-              v20 = __decode_symbol_list(&((SymList *)__frame.v28)[4 * v19 + v17]);
-              v17 = v20 >> 6;
-              _this->sym_code[v18] += (v20 << ((8 * v19) & 31));
-              ++v19;
+              piece = __decode_symbol_list(&((SymList *)__frame.v28)[4 * b + carry]);
+              carry = piece >> 6;
+              _this->sym_code[s] += (piece << ((8 * b) & 31));
+              ++b;
             }
-            while ( v19 < __frame.v31[0] );
-            v4 = __frame.v31[0];
+            while ( b < __frame.v31[0] );
+            nbytes = __frame.v31[0];
           }
-          v16 = _this->sym_code;
-          v17 = (uint8_t)v16[v18++] >> 7;
+          codes_p = _this->sym_code;
+          carry = (uint8_t)codes_p[s++] >> 7;
         }
-        while ( v18 < _this->alphabet );
+        while ( s < _this->alphabet );
       }
     }
-    else if ( j_1 <= j_2 )
+    else if ( n_syms <= mask )
     {
-      __init_symbol_list((SymList *)__frame.v28, (int32_t)_this, j_2 - j_1 + 2, 1);
+      __init_symbol_list((SymList *)__frame.v28, (int32_t)_this, mask - n_syms + 2, 1);
       __frame.v29 = 19 * ((SymList *)__frame.v28)->n;
       if ( !(_this->alphabet == 0) )
       {
-        v25 = 0;
-        v26 = 0;
+        run = 0;
+        s2 = 0;
         do
         {
-          v27 = __decode_symbol_list((SymList *)__frame.v28);
-          _this->sym_code[v26] = v27 + v25;
-          v25 += v27 + 1;
-          ++v26;
+          gap = __decode_symbol_list((SymList *)__frame.v28);
+          _this->sym_code[s2] = gap + run;
+          run += gap + 1;
+          ++s2;
         }
-        while ( v26 < _this->alphabet );
+        while ( s2 < _this->alphabet );
       }
     }
-    v22 = __frame.v31;
-    n16 = 16;
+    // Sixteen `SymList`s live in the frame, ending at `__frame.v31 + 5`:
+    // `sizeof(SymList)` is 24, so `-= 6` is one record back and `[5]` is
+    // `ent`, the entries each list owns.  This frees all sixteen whether or
+    // not the path above initialised them -- `init_symbol_list` is called for
+    // `4 * nbytes` of them at most, and the rest are the zeroed frame, so the
+    // extra `free(nullptr)`s are no-ops.
+    q = __frame.v31;
+    left = 16;
     do
     {
-      v22 -= 6;
-      free((void *)v22[5]);
-      --n16;
+      q -= 6;
+      free((void *)q[5]);
+      --left;
     }
-    while ( n16 );
+    while ( left );
   }
   else
   {
     _this->depth = 8;
-    *(uint32_t *)&_this->height = (*(uint32_t *)&_this->height * v4);
+    *(uint32_t *)&_this->height = (*(uint32_t *)&_this->height * nbytes);
     __expand_alphabet(_this);
-    v10 = __frame.v31;
-    n16_1 = 16;
+    q2 = __frame.v31;
+    left2 = 16;
     do
     {
-      v10 -= 6;
-      free((void *)v10[5]);
-      --n16_1;
+      q2 -= 6;
+      free((void *)q2[5]);
+      --left2;
     }
-    while ( n16_1 );
+    while ( left2 );
   }
 }
 
