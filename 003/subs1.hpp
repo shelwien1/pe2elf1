@@ -2861,32 +2861,26 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
 {
   ;
   SymList *sel0_list;
+  bool near, far;
+  int32_t band;
   int32_t result, near_hit, far_hit, ctx0, ctx1, fallback, ctx2, pos;
   SymEntry *list_prev, *list_sym;
   pos = *(int32_t *)&_this->sym_pos;
   result = (p_n15)[pos];
   if ( exclusion_mask[result] == exclusion_gen )
     return -1;
-  near_hit = 32
-     * (result == p_n15[15] || result == p_n15[14] || result == p_n15[13] || result == p_n15[12] || result == p_n15[11])
-     + ((result == p_n15[10]) << 6);
-  far_hit = 16
-     * (result == p_n15[31]
-     || result == p_n15[30]
-     || result == p_n15[29]
-     || result == p_n15[28]
-     || result == p_n15[27]
-     || result == p_n15[26]
-     || result == p_n15[25]
-     || result == p_n15[24]
-     || result == p_n15[23]
-     || result == p_n15[22]
-     || result == p_n15[21]
-     || result == p_n15[20]
-     || result == p_n15[19]
-     || result == p_n15[18]
-     || result == p_n15[17]
-     || result == p_n15[16]);
+  // Three bands of the neighbour list, each worth a different bit: the symbol
+  // at [10] on its own, the five at [11..15], and the sixteen at [16..31].
+  // MSVC unrolled the two ranges into twenty-one comparisons of one shape.
+  // `|=` rather than `||` because none of them has a side effect to short out.
+  near = false;
+  for ( band = 11; band < 16; ++band )
+    near |= result == (int32_t)p_n15[band];
+  far = false;
+  for ( band = 16; band < 32; ++band )
+    far |= result == (int32_t)p_n15[band];
+  near_hit = 32 * near + ((result == (int32_t)p_n15[10]) << 6);
+  far_hit = 16 * far;
   ctx0 = far_hit + near_hit;
   *(int32_t *)&_this->ctr_node = ctx0;
   if ( (far_hit + near_hit == 0) && pos > 6 )
