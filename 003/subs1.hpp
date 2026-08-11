@@ -3387,685 +3387,705 @@ int32_t __update_binary_pair(uint16_t *_this, int32_t symbol)
   return tot;
 }
 
+// Update the p1 model after a pixel: add to the counters the coded symbol
+// reached, and to the counters its *neighbours* in context space would have
+// reached, so a context seen once carries evidence from the contexts either
+// side of it.
+//
+// The body is nine copies of one block, one per `ctx_w[k]`, and naming them
+// with the index is what makes that visible.  Each block:
+//
+//   selK              the three-way selector this weight ended on
+//   midK, loK, hiK    when the selector is the middle one, the context with
+//                     `w[1]` removed and the two counter nodes either side
+//   oppK              otherwise, the node on the opposite side of the selector
+//   w1K, altiK        `w[1]` and the alternate context built from it
+//   midnK, altnK      the two nodes that alternate gets
+//   ctxK              `ctx[0]` reloaded, because every `+=` above may have
+//                     moved it
+//
+// The increments fall away from the symbol -- 17 at the node itself, 13 and 11
+// one context up and down, 7, 6, 5, 4, 3 and 2 further out -- which is the
+// same "spread the evidence" idea `sym_rev` implements for symbols.
 int32_t __alt_p1_model(AltP1Block *_this)
 {
   ;
   uintptr_t result;   // an index into the counter table, and the return value
   CounterNode *node;  // was `result` too: the address role, under its own name
-  CounterNode *v9;
-  CounterNode *v11;
-  CounterNode *v13;
-  CounterNode *v17, *v23, *v31, *v39, *v47, *v55, *v63, *v71, *v79;
-  int16_t v12, v15;
-  int32_t v3, n5_1, v5, n5_2, n5_3, v8, v14, v16, v18, v21, v22, v24, v26,
-          v29, v30, v32, v33, v34, v37, v38, v40, v41, v42, v45, v46, v48,
-          v49, v50, v53, v54, v56, v57, v58, v61, v62, v64, v65, v66, v69,
-          v70, v72, v73, v74, v77, v78, v80, v82, v83, v85, v86, v89, v92,
-          v95, v98, v101, v104, v107, n2, n5_4;
-  CounterNode *v108;
-  CounterNode *v109;
-  CounterNode *v19;
-  CounterNode *v20;
-  CounterNode *v105;
-  CounterNode *v106;
-  CounterNode *v27;
-  CounterNode *v28;
-  CounterNode *v102;
-  CounterNode *v103;
-  CounterNode *v35;
-  CounterNode *v36;
-  CounterNode *v99;
-  CounterNode *v100;
-  CounterNode *v43;
-  CounterNode *v44;
-  CounterNode *v96;
-  CounterNode *v97;
-  CounterNode *v51;
-  CounterNode *v52;
-  CounterNode *v93;
-  CounterNode *v94;
-  CounterNode *v59;
-  CounterNode *v60;
-  CounterNode *v90;
-  CounterNode *v91;
-  CounterNode *v67;
-  CounterNode *v68;
-  CounterNode *v87;
-  CounterNode *v88;
-  CounterNode *v75;
-  CounterNode *v76;
-  CounterNode *v84;
-  CounterNode *v81;
-  uint32_t n5, v110, v112;
-  n5 = *((uint8_t)(_this->cursor[0]->sym - (uint8_t)_this->pred) + _this->fold);
-  v3 = _this->ctx_w[1].sel;
-  n5_1 = *((uint8_t)((uint8_t)_this->pred - _this->cursor[0]->sym) + _this->fold);
-  v5 = _this->ctx_w[2].sel;
-  n2 = (int32_t)(n5 - 5) >> 1;
-  n5_2 = 6 - (n5 & 1);
-  if ( n5 < 5 )
-    n5_2 = *((uint8_t)(_this->cursor[0]->sym - (uint8_t)_this->pred) + _this->fold);
-  n5_3 = 6 - (n5_1 & 1);
-  if ( n5_1 < 5 )
-    n5_3 = n5_1;
-  n5_4 = n5_3;
-  v8 = _this->ctx_w[8].w[2 - _this->ctx_w[8].sel]
+  CounterNode *node_alt;
+  CounterNode *node_up;
+  CounterNode *node_dn;
+  CounterNode *opp0, *opp1, *opp2, *opp3, *opp4, *opp5, *opp6, *opp7, *opp8;
+  int16_t tot_up, tot_dn;
+  int32_t sel1_top, code_r, sel2_top, slot_f, slot_r, ctx_alt, ctx_dn, sel0, alti0, ctx0, sel1, w11, alti1,
+          ctx1, sel2, w12, x2, alti2, ctx2, sel3, w13, x3, alti3, ctx3, sel4, w14,
+          x4, alti4, ctx4, sel5, w15, x5, alti5, ctx5, sel6, w16, x6, alti6, ctx6,
+          sel7, w17, x7, alti7, ctx7, sel8, w18, alti8, midn8, ctx8, mid7, mid6, mid5,
+          mid4, mid3, mid2, mid1, mid0, tree_sym, slot_r2;
+  CounterNode *lo0;
+  CounterNode *hi0;
+  CounterNode *midn0;
+  CounterNode *altn0;
+  CounterNode *lo1;
+  CounterNode *hi1;
+  CounterNode *midn1;
+  CounterNode *altn1;
+  CounterNode *lo2;
+  CounterNode *hi2;
+  CounterNode *midn2;
+  CounterNode *altn2;
+  CounterNode *lo3;
+  CounterNode *hi3;
+  CounterNode *midn3;
+  CounterNode *altn3;
+  CounterNode *lo4;
+  CounterNode *hi4;
+  CounterNode *midn4;
+  CounterNode *altn4;
+  CounterNode *lo5;
+  CounterNode *hi5;
+  CounterNode *midn5;
+  CounterNode *altn5;
+  CounterNode *lo6;
+  CounterNode *hi6;
+  CounterNode *midn6;
+  CounterNode *altn6;
+  CounterNode *lo7;
+  CounterNode *hi7;
+  CounterNode *midn7;
+  CounterNode *altn7;
+  CounterNode *altn8;
+  CounterNode *x8;
+  uint32_t code_f, ctx_up, key;
+  code_f = *((uint8_t)(_this->cursor[0]->sym - (uint8_t)_this->pred) + _this->fold);
+  sel1_top = _this->ctx_w[1].sel;
+  code_r = *((uint8_t)((uint8_t)_this->pred - _this->cursor[0]->sym) + _this->fold);
+  sel2_top = _this->ctx_w[2].sel;
+  tree_sym = (int32_t)(code_f - 5) >> 1;
+  slot_f = 6 - (code_f & 1);
+  if ( code_f < 5 )
+    slot_f = *((uint8_t)(_this->cursor[0]->sym - (uint8_t)_this->pred) + _this->fold);
+  slot_r = 6 - (code_r & 1);
+  if ( code_r < 5 )
+    slot_r = code_r;
+  slot_r2 = slot_r;
+  ctx_alt = _this->ctx_w[8].w[2 - _this->ctx_w[8].sel]
      + _this->ctx_w[7].w[2 - _this->ctx_w[7].sel]
      + _this->ctx_w[6].w[2 - _this->ctx_w[6].sel]
      + _this->ctx_w[5].w[2 - _this->ctx_w[5].sel]
      + _this->ctx_w[4].w[2 - _this->ctx_w[4].sel]
      + _this->ctx_w[3].w[2 - _this->ctx_w[3].sel]
-     + _this->ctx_w[2].w[2 - v5]
-     + _this->ctx_w[1].w[2 - v3]
+     + _this->ctx_w[2].w[2 - sel2_top]
+     + _this->ctx_w[1].w[2 - sel1_top]
      + _this->ctx_w[0].w[1]
      + (_this->ctx[0] & 0x1F);
-  v9 = &_this->counters[v8];
-  v9[0].c[n5_3] += 17;
-  v9[0].total += 17;
+  node_alt = &_this->counters[ctx_alt];
+  node_alt[0].c[slot_r] += 17;
+  node_alt[0].total += 17;
   result = _this->ctx[0];
   if ( (result & 7) != 7 )
   {
-    v11 = &_this->counters[result];
-    v110 = (((_this->ctx[1] & 7u) - 7) >> 31) + _this->ctx[1];
-    v11[1].c[n5_2] += 11;
-    v12 = v11[1].total + 11;
-    v11[1].total = v12;
-    if ( n5_2 >= 5 )
+    node_up = &_this->counters[result];
+    ctx_up = (((_this->ctx[1] & 7u) - 7) >> 31) + _this->ctx[1];
+    node_up[1].c[slot_f] += 11;
+    tot_up = node_up[1].total + 11;
+    node_up[1].total = tot_up;
+    if ( slot_f >= 5 )
       __update_binary_pair(model_strip(
-        128 * (n5_2 & 1)
-        + v110
-        + (((((v12 & 0x7FFF)
-            + v11[1].c[0]
-            - 2 * (uint32_t)v11[1].c[n5_2]) >> 25)
-          & 0xFFFFFFC0))), (int32_t)(n5 - 5) >> 1);
+        128 * (slot_f & 1)
+        + ctx_up
+        + (((((tot_up & 0x7FFF)
+            + node_up[1].c[0]
+            - 2 * (uint32_t)node_up[1].c[slot_f]) >> 25)
+          & 0xFFFFFFC0))), (int32_t)(code_f - 5) >> 1);
     result = _this->ctx[0];
   }
   if ( (result & 7) != 0 )
   {
-    v13 = &_this->counters[result];
-    v14 = _this->ctx[1] - ((_this->ctx[1] & 7) != 0);
-    v13[-1].c[n5_2] += 13;
-    v15 = v13[-1].total + 13;
-    v13[-1].total = v15;
-    if ( n5_2 >= 5 )
+    node_dn = &_this->counters[result];
+    ctx_dn = _this->ctx[1] - ((_this->ctx[1] & 7) != 0);
+    node_dn[-1].c[slot_f] += 13;
+    tot_dn = node_dn[-1].total + 13;
+    node_dn[-1].total = tot_dn;
+    if ( slot_f >= 5 )
       __update_binary_pair(model_strip(
-        128 * (uint32_t)(n5_2 & 1)
-        + (uint32_t)v14
-        + (((((v15 & 0x7FFF)
-            + v13[-1].c[0]
-            - 2 * (uint32_t)v13[-1].c[n5_2]) >> 25)
-          & 0xFFFFFFC0))), n2);
+        128 * (uint32_t)(slot_f & 1)
+        + (uint32_t)ctx_dn
+        + (((((tot_dn & 0x7FFF)
+            + node_dn[-1].c[0]
+            - 2 * (uint32_t)node_dn[-1].c[slot_f]) >> 25)
+          & 0xFFFFFFC0))), tree_sym);
     result = _this->ctx[0];
   }
   if ( _this->counters[result].total < 0xCCCu )
   {
     if ( (result & 7u) < 7 )
     {
-      v9[1].c[n5_4] += 7;
-      v9[1].total += 7;
+      node_alt[1].c[slot_r2] += 7;
+      node_alt[1].total += 7;
       result = _this->ctx[0];
     }
     if ( (result & 7) != 0 )
     {
-      v9[-1].c[n5_4] += 5;
-      v9[-1].total += 5;
+      node_alt[-1].c[slot_r2] += 5;
+      node_alt[-1].total += 5;
       result = _this->ctx[0];
     }
-    if ( n5_2 >= 5 )
+    if ( slot_f >= 5 )
     {
-      v112 = _this->ctx[1]
+      key = _this->ctx[1]
            + (((_this->counters[result].c[0]
               + (_this->counters[result].total & 0x7FFF)
-              - 2 * (uint32_t)_this->counters[result].c[n5_2]) >> 25)
+              - 2 * (uint32_t)_this->counters[result].c[slot_f]) >> 25)
             & 0xFFFFFFC0)
-           + ((n5_2 & 1) << 7);
-      if ( (v112 & 0x38) >= 0x38
+           + ((slot_f & 1) << 7);
+      if ( (key & 0x38) >= 0x38
         || (__update_binary_pair(model_strip(
-              128 * (n5_2 & 1)
+              128 * (slot_f & 1)
               + _this->ctx[1]
               + ((((_this->counters[result].c[0]
                   + (_this->counters[result].total & 0x7FFF)
-                  - 2 * (uint32_t)_this->counters[result].c[n5_2]) >> 25)
+                  - 2 * (uint32_t)_this->counters[result].c[slot_f]) >> 25)
                 & 0xFFFFFFC0))
-              + 8), n2),
-            (v112 & 0x38) != 0) )
+              + 8), tree_sym),
+            (key & 0x38) != 0) )
       {
-        __update_binary_pair(model_strip(v112 - 8), n2);
+        __update_binary_pair(model_strip(key - 8), tree_sym);
       }
       result = _this->ctx[0];
     }
-    v16 = _this->ctx_w[0].sel;
-    if ( v16 == 1 )
+    sel0 = _this->ctx_w[0].sel;
+    if ( sel0 == 1 )
     {
-      v107 = result - _this->ctx_w[0].w[1];
-      v108 = &_this->counters[v107 + _this->ctx_w[0].w[0]];
-      v109 = &_this->counters[_this->ctx_w[0].w[2] + v107];
-      v108[0].c[n5_2] += 6;
-      v108[0].total += 6;
-      v109[0].c[n5_2] += 6;
-      v109[0].total += 6;
-      v21 = _this->ctx[0];
-      if ( (v21 & 7) != 7 )
+      mid0 = result - _this->ctx_w[0].w[1];
+      lo0 = &_this->counters[mid0 + _this->ctx_w[0].w[0]];
+      hi0 = &_this->counters[_this->ctx_w[0].w[2] + mid0];
+      lo0[0].c[slot_f] += 6;
+      lo0[0].total += 6;
+      hi0[0].c[slot_f] += 6;
+      hi0[0].total += 6;
+      ctx0 = _this->ctx[0];
+      if ( (ctx0 & 7) != 7 )
       {
-        v108[1].c[n5_2] += 4;
-        v108[1].total += 4;
-        v109[1].c[n5_2] += 4;
-        v109[1].total += 4;
-        v21 = _this->ctx[0];
+        lo0[1].c[slot_f] += 4;
+        lo0[1].total += 4;
+        hi0[1].c[slot_f] += 4;
+        hi0[1].total += 4;
+        ctx0 = _this->ctx[0];
       }
-      if ( (v21 & 7) != 0 )
+      if ( (ctx0 & 7) != 0 )
       {
-        v108[-1].c[n5_2] += 3;
-        v108[-1].total += 3;
-        v109[-1].c[n5_2] += 3;
-        v109[-1].total += 3;
-        v21 = _this->ctx[0];
+        lo0[-1].c[slot_f] += 3;
+        lo0[-1].total += 3;
+        hi0[-1].c[slot_f] += 3;
+        hi0[-1].total += 3;
+        ctx0 = _this->ctx[0];
       }
     }
     else
     {
-      v17 = &_this->counters[_this->ctx_w[0].w[2 - v16] + result - _this->ctx_w[0].w[v16]];
-      v17[0].c[n5_2] += 7;
-      v17[0].total += 7;
-      v18 = v8 + _this->ctx_w[0].w[0] - _this->ctx_w[0].w[1];
-      v19 = &_this->counters[_this->ctx_w[0].w[1] + _this->ctx[0] - _this->ctx_w[0].w[_this->ctx_w[0].sel]];
-      v19[0].c[n5_2] += 6;
-      v19[0].total += 6;
-      v20 = &_this->counters[v18];
-      v20[0].c[n5_4] += 4;
-      v20[0].total += 4;
-      v21 = _this->ctx[0];
-      if ( (v21 & 7) != 7 )
+      opp0 = &_this->counters[_this->ctx_w[0].w[2 - sel0] + result - _this->ctx_w[0].w[sel0]];
+      opp0[0].c[slot_f] += 7;
+      opp0[0].total += 7;
+      alti0 = ctx_alt + _this->ctx_w[0].w[0] - _this->ctx_w[0].w[1];
+      midn0 = &_this->counters[_this->ctx_w[0].w[1] + _this->ctx[0] - _this->ctx_w[0].w[_this->ctx_w[0].sel]];
+      midn0[0].c[slot_f] += 6;
+      midn0[0].total += 6;
+      altn0 = &_this->counters[alti0];
+      altn0[0].c[slot_r2] += 4;
+      altn0[0].total += 4;
+      ctx0 = _this->ctx[0];
+      if ( (ctx0 & 7) != 7 )
       {
-        v19[1].c[n5_2] += 4;
-        v19[1].total += 4;
-        v20[1].c[n5_4] += 2;
-        v20[1].total += 2;
-        v21 = _this->ctx[0];
+        midn0[1].c[slot_f] += 4;
+        midn0[1].total += 4;
+        altn0[1].c[slot_r2] += 2;
+        altn0[1].total += 2;
+        ctx0 = _this->ctx[0];
       }
-      if ( (v21 & 7) != 0 )
+      if ( (ctx0 & 7) != 0 )
       {
-        v19[-1].c[n5_2] += 3;
-        v19[-1].total += 3;
-        v20[-1].c[n5_4] += 2;
-        v20[-1].total += 2;
-        v21 = _this->ctx[0];
-      }
-    }
-    v22 = _this->ctx_w[1].sel;
-    if ( v22 == 1 )
-    {
-      v104 = v21 - _this->ctx_w[1].w[1];
-      v105 = &_this->counters[v104 + _this->ctx_w[1].w[0]];
-      v106 = &_this->counters[_this->ctx_w[1].w[2] + v104];
-      v105[0].c[n5_2] += 6;
-      v105[0].total += 6;
-      v106[0].c[n5_2] += 6;
-      v106[0].total += 6;
-      v29 = _this->ctx[0];
-      if ( (v29 & 7) != 7 )
-      {
-        v105[1].c[n5_2] += 4;
-        v105[1].total += 4;
-        v106[1].c[n5_2] += 4;
-        v106[1].total += 4;
-        v29 = _this->ctx[0];
-      }
-      if ( (v29 & 7) != 0 )
-      {
-        v105[-1].c[n5_2] += 3;
-        v105[-1].total += 3;
-        v106[-1].c[n5_2] += 3;
-        v106[-1].total += 3;
-        v29 = _this->ctx[0];
+        midn0[-1].c[slot_f] += 3;
+        midn0[-1].total += 3;
+        altn0[-1].c[slot_r2] += 2;
+        altn0[-1].total += 2;
+        ctx0 = _this->ctx[0];
       }
     }
-    else
+    sel1 = _this->ctx_w[1].sel;
+    if ( sel1 == 1 )
     {
-      v23 = &_this->counters[_this->ctx_w[1].w[2 - v22] + v21 - _this->ctx_w[1].w[v22]];
-      v23[0].c[n5_2] += 7;
-      v23[0].total += 7;
-      v24 = _this->ctx_w[1].w[1];
-      v26 = v8 + v24 - _this->ctx_w[1].w[2 - _this->ctx_w[1].sel];
-      v27 = &_this->counters[(v24 + _this->ctx[0] - _this->ctx_w[1].w[_this->ctx_w[1].sel])];
-      v27[0].c[n5_2] += 6;
-      v27[0].total += 6;
-      v28 = &_this->counters[v26];
-      v28[0].c[n5_4] += 4;
-      v28[0].total += 4;
-      v29 = _this->ctx[0];
-      if ( (v29 & 7) != 7 )
+      mid1 = ctx0 - _this->ctx_w[1].w[1];
+      lo1 = &_this->counters[mid1 + _this->ctx_w[1].w[0]];
+      hi1 = &_this->counters[_this->ctx_w[1].w[2] + mid1];
+      lo1[0].c[slot_f] += 6;
+      lo1[0].total += 6;
+      hi1[0].c[slot_f] += 6;
+      hi1[0].total += 6;
+      ctx1 = _this->ctx[0];
+      if ( (ctx1 & 7) != 7 )
       {
-        v27[1].c[n5_2] += 4;
-        v27[1].total += 4;
-        v28[1].c[n5_4] += 2;
-        v28[1].total += 2;
-        v29 = _this->ctx[0];
+        lo1[1].c[slot_f] += 4;
+        lo1[1].total += 4;
+        hi1[1].c[slot_f] += 4;
+        hi1[1].total += 4;
+        ctx1 = _this->ctx[0];
       }
-      if ( (v29 & 7) != 0 )
+      if ( (ctx1 & 7) != 0 )
       {
-        v27[-1].c[n5_2] += 3;
-        v27[-1].total += 3;
-        v28[-1].c[n5_4] += 2;
-        v28[-1].total += 2;
-        v29 = _this->ctx[0];
-      }
-    }
-    v30 = _this->ctx_w[2].sel;
-    if ( v30 == 1 )
-    {
-      v101 = v29 - _this->ctx_w[2].w[1];
-      v102 = &_this->counters[v101 + _this->ctx_w[2].w[0]];
-      v103 = &_this->counters[_this->ctx_w[2].w[2] + v101];
-      v102[0].c[n5_2] += 6;
-      v102[0].total += 6;
-      v103[0].c[n5_2] += 6;
-      v103[0].total += 6;
-      v37 = _this->ctx[0];
-      if ( (v37 & 7) != 7 )
-      {
-        v102[1].c[n5_2] += 4;
-        v102[1].total += 4;
-        v103[1].c[n5_2] += 4;
-        v103[1].total += 4;
-        v37 = _this->ctx[0];
-      }
-      if ( (v37 & 7) != 0 )
-      {
-        v102[-1].c[n5_2] += 3;
-        v102[-1].total += 3;
-        v103[-1].c[n5_2] += 3;
-        v103[-1].total += 3;
-        v37 = _this->ctx[0];
+        lo1[-1].c[slot_f] += 3;
+        lo1[-1].total += 3;
+        hi1[-1].c[slot_f] += 3;
+        hi1[-1].total += 3;
+        ctx1 = _this->ctx[0];
       }
     }
     else
     {
-      v31 = &_this->counters[_this->ctx_w[2].w[2 - v30] + v29 - _this->ctx_w[2].w[v30]];
-      v31[0].c[n5_2] += 7;
-      v31[0].total += 7;
-      v32 = _this->ctx_w[2].w[1];
-      v33 = v32 + _this->ctx[0] - _this->ctx_w[2].w[_this->ctx_w[2].sel];
-      v34 = v8 + v32 - _this->ctx_w[2].w[2 - _this->ctx_w[2].sel];
-      v35 = &_this->counters[v33];
-      v35[0].c[n5_2] += 6;
-      v35[0].total += 6;
-      v36 = &_this->counters[v34];
-      v36[0].c[n5_4] += 4;
-      v36[0].total += 4;
-      v37 = _this->ctx[0];
-      if ( (v37 & 7) != 7 )
+      opp1 = &_this->counters[_this->ctx_w[1].w[2 - sel1] + ctx0 - _this->ctx_w[1].w[sel1]];
+      opp1[0].c[slot_f] += 7;
+      opp1[0].total += 7;
+      w11 = _this->ctx_w[1].w[1];
+      alti1 = ctx_alt + w11 - _this->ctx_w[1].w[2 - _this->ctx_w[1].sel];
+      midn1 = &_this->counters[(w11 + _this->ctx[0] - _this->ctx_w[1].w[_this->ctx_w[1].sel])];
+      midn1[0].c[slot_f] += 6;
+      midn1[0].total += 6;
+      altn1 = &_this->counters[alti1];
+      altn1[0].c[slot_r2] += 4;
+      altn1[0].total += 4;
+      ctx1 = _this->ctx[0];
+      if ( (ctx1 & 7) != 7 )
       {
-        v35[1].c[n5_2] += 4;
-        v35[1].total += 4;
-        v36[1].c[n5_4] += 2;
-        v36[1].total += 2;
-        v37 = _this->ctx[0];
+        midn1[1].c[slot_f] += 4;
+        midn1[1].total += 4;
+        altn1[1].c[slot_r2] += 2;
+        altn1[1].total += 2;
+        ctx1 = _this->ctx[0];
       }
-      if ( (v37 & 7) != 0 )
+      if ( (ctx1 & 7) != 0 )
       {
-        v35[-1].c[n5_2] += 3;
-        v35[-1].total += 3;
-        v36[-1].c[n5_4] += 2;
-        v36[-1].total += 2;
-        v37 = _this->ctx[0];
-      }
-    }
-    v38 = _this->ctx_w[3].sel;
-    if ( v38 == 1 )
-    {
-      v98 = v37 - _this->ctx_w[3].w[1];
-      v99 = &_this->counters[v98 + _this->ctx_w[3].w[0]];
-      v100 = &_this->counters[_this->ctx_w[3].w[2] + v98];
-      v99[0].c[n5_2] += 6;
-      v99[0].total += 6;
-      v100[0].c[n5_2] += 6;
-      v100[0].total += 6;
-      v45 = _this->ctx[0];
-      if ( (v45 & 7) != 7 )
-      {
-        v99[1].c[n5_2] += 4;
-        v99[1].total += 4;
-        v100[1].c[n5_2] += 4;
-        v100[1].total += 4;
-        v45 = _this->ctx[0];
-      }
-      if ( (v45 & 7) != 0 )
-      {
-        v99[-1].c[n5_2] += 3;
-        v99[-1].total += 3;
-        v100[-1].c[n5_2] += 3;
-        v100[-1].total += 3;
-        v45 = _this->ctx[0];
+        midn1[-1].c[slot_f] += 3;
+        midn1[-1].total += 3;
+        altn1[-1].c[slot_r2] += 2;
+        altn1[-1].total += 2;
+        ctx1 = _this->ctx[0];
       }
     }
-    else
+    sel2 = _this->ctx_w[2].sel;
+    if ( sel2 == 1 )
     {
-      v39 = &_this->counters[_this->ctx_w[3].w[2 - v38] + v37 - _this->ctx_w[3].w[v38]];
-      v39[0].c[n5_2] += 7;
-      v39[0].total += 7;
-      v40 = _this->ctx_w[3].w[1];
-      v41 = v40 + _this->ctx[0] - _this->ctx_w[3].w[_this->ctx_w[3].sel];
-      v42 = v8 + v40 - _this->ctx_w[3].w[2 - _this->ctx_w[3].sel];
-      v43 = &_this->counters[v41];
-      v43[0].c[n5_2] += 6;
-      v43[0].total += 6;
-      v44 = &_this->counters[v42];
-      v44[0].c[n5_4] += 4;
-      v44[0].total += 4;
-      v45 = _this->ctx[0];
-      if ( (v45 & 7) != 7 )
+      mid2 = ctx1 - _this->ctx_w[2].w[1];
+      lo2 = &_this->counters[mid2 + _this->ctx_w[2].w[0]];
+      hi2 = &_this->counters[_this->ctx_w[2].w[2] + mid2];
+      lo2[0].c[slot_f] += 6;
+      lo2[0].total += 6;
+      hi2[0].c[slot_f] += 6;
+      hi2[0].total += 6;
+      ctx2 = _this->ctx[0];
+      if ( (ctx2 & 7) != 7 )
       {
-        v43[1].c[n5_2] += 4;
-        v43[1].total += 4;
-        v44[1].c[n5_4] += 2;
-        v44[1].total += 2;
-        v45 = _this->ctx[0];
+        lo2[1].c[slot_f] += 4;
+        lo2[1].total += 4;
+        hi2[1].c[slot_f] += 4;
+        hi2[1].total += 4;
+        ctx2 = _this->ctx[0];
       }
-      if ( (v45 & 7) != 0 )
+      if ( (ctx2 & 7) != 0 )
       {
-        v43[-1].c[n5_2] += 3;
-        v43[-1].total += 3;
-        v44[-1].c[n5_4] += 2;
-        v44[-1].total += 2;
-        v45 = _this->ctx[0];
-      }
-    }
-    v46 = _this->ctx_w[4].sel;
-    if ( v46 == 1 )
-    {
-      v95 = v45 - _this->ctx_w[4].w[1];
-      v96 = &_this->counters[v95 + _this->ctx_w[4].w[0]];
-      v97 = &_this->counters[_this->ctx_w[4].w[2] + v95];
-      v96[0].c[n5_2] += 6;
-      v96[0].total += 6;
-      v97[0].c[n5_2] += 6;
-      v97[0].total += 6;
-      v53 = _this->ctx[0];
-      if ( (v53 & 7) != 7 )
-      {
-        v96[1].c[n5_2] += 4;
-        v96[1].total += 4;
-        v97[1].c[n5_2] += 4;
-        v97[1].total += 4;
-        v53 = _this->ctx[0];
-      }
-      if ( (v53 & 7) != 0 )
-      {
-        v96[-1].c[n5_2] += 3;
-        v96[-1].total += 3;
-        v97[-1].c[n5_2] += 3;
-        v97[-1].total += 3;
-        v53 = _this->ctx[0];
+        lo2[-1].c[slot_f] += 3;
+        lo2[-1].total += 3;
+        hi2[-1].c[slot_f] += 3;
+        hi2[-1].total += 3;
+        ctx2 = _this->ctx[0];
       }
     }
     else
     {
-      v47 = &_this->counters[_this->ctx_w[4].w[2 - v46] + v45 - _this->ctx_w[4].w[v46]];
-      v47[0].c[n5_2] += 7;
-      v47[0].total += 7;
-      v48 = _this->ctx_w[4].w[1];
-      v49 = v48 + _this->ctx[0] - _this->ctx_w[4].w[_this->ctx_w[4].sel];
-      v50 = v8 + v48 - _this->ctx_w[4].w[2 - _this->ctx_w[4].sel];
-      v51 = &_this->counters[v49];
-      v51[0].c[n5_2] += 6;
-      v51[0].total += 6;
-      v52 = &_this->counters[v50];
-      v52[0].c[n5_4] += 4;
-      v52[0].total += 4;
-      v53 = _this->ctx[0];
-      if ( (v53 & 7) != 7 )
+      opp2 = &_this->counters[_this->ctx_w[2].w[2 - sel2] + ctx1 - _this->ctx_w[2].w[sel2]];
+      opp2[0].c[slot_f] += 7;
+      opp2[0].total += 7;
+      w12 = _this->ctx_w[2].w[1];
+      x2 = w12 + _this->ctx[0] - _this->ctx_w[2].w[_this->ctx_w[2].sel];
+      alti2 = ctx_alt + w12 - _this->ctx_w[2].w[2 - _this->ctx_w[2].sel];
+      midn2 = &_this->counters[x2];
+      midn2[0].c[slot_f] += 6;
+      midn2[0].total += 6;
+      altn2 = &_this->counters[alti2];
+      altn2[0].c[slot_r2] += 4;
+      altn2[0].total += 4;
+      ctx2 = _this->ctx[0];
+      if ( (ctx2 & 7) != 7 )
       {
-        v51[1].c[n5_2] += 4;
-        v51[1].total += 4;
-        v52[1].c[n5_4] += 2;
-        v52[1].total += 2;
-        v53 = _this->ctx[0];
+        midn2[1].c[slot_f] += 4;
+        midn2[1].total += 4;
+        altn2[1].c[slot_r2] += 2;
+        altn2[1].total += 2;
+        ctx2 = _this->ctx[0];
       }
-      if ( (v53 & 7) != 0 )
+      if ( (ctx2 & 7) != 0 )
       {
-        v51[-1].c[n5_2] += 3;
-        v51[-1].total += 3;
-        v52[-1].c[n5_4] += 2;
-        v52[-1].total += 2;
-        v53 = _this->ctx[0];
-      }
-    }
-    v54 = _this->ctx_w[5].sel;
-    if ( v54 == 1 )
-    {
-      v92 = v53 - _this->ctx_w[5].w[1];
-      v93 = &_this->counters[v92 + _this->ctx_w[5].w[0]];
-      v94 = &_this->counters[_this->ctx_w[5].w[2] + v92];
-      v93[0].c[n5_2] += 6;
-      v93[0].total += 6;
-      v94[0].c[n5_2] += 6;
-      v94[0].total += 6;
-      v61 = _this->ctx[0];
-      if ( (v61 & 7) != 7 )
-      {
-        v93[1].c[n5_2] += 4;
-        v93[1].total += 4;
-        v94[1].c[n5_2] += 4;
-        v94[1].total += 4;
-        v61 = _this->ctx[0];
-      }
-      if ( (v61 & 7) != 0 )
-      {
-        v93[-1].c[n5_2] += 3;
-        v93[-1].total += 3;
-        v94[-1].c[n5_2] += 3;
-        v94[-1].total += 3;
-        v61 = _this->ctx[0];
+        midn2[-1].c[slot_f] += 3;
+        midn2[-1].total += 3;
+        altn2[-1].c[slot_r2] += 2;
+        altn2[-1].total += 2;
+        ctx2 = _this->ctx[0];
       }
     }
-    else
+    sel3 = _this->ctx_w[3].sel;
+    if ( sel3 == 1 )
     {
-      v55 = &_this->counters[_this->ctx_w[5].w[2 - v54] + v53 - _this->ctx_w[5].w[v54]];
-      v55[0].c[n5_2] += 7;
-      v55[0].total += 7;
-      v56 = _this->ctx_w[5].w[1];
-      v57 = v56 + _this->ctx[0] - _this->ctx_w[5].w[_this->ctx_w[5].sel];
-      v58 = v8 + v56 - _this->ctx_w[5].w[2 - _this->ctx_w[5].sel];
-      v59 = &_this->counters[v57];
-      v59[0].c[n5_2] += 6;
-      v59[0].total += 6;
-      v60 = &_this->counters[v58];
-      v60[0].c[n5_4] += 4;
-      v60[0].total += 4;
-      v61 = _this->ctx[0];
-      if ( (v61 & 7) != 7 )
+      mid3 = ctx2 - _this->ctx_w[3].w[1];
+      lo3 = &_this->counters[mid3 + _this->ctx_w[3].w[0]];
+      hi3 = &_this->counters[_this->ctx_w[3].w[2] + mid3];
+      lo3[0].c[slot_f] += 6;
+      lo3[0].total += 6;
+      hi3[0].c[slot_f] += 6;
+      hi3[0].total += 6;
+      ctx3 = _this->ctx[0];
+      if ( (ctx3 & 7) != 7 )
       {
-        v59[1].c[n5_2] += 4;
-        v59[1].total += 4;
-        v60[1].c[n5_4] += 2;
-        v60[1].total += 2;
-        v61 = _this->ctx[0];
+        lo3[1].c[slot_f] += 4;
+        lo3[1].total += 4;
+        hi3[1].c[slot_f] += 4;
+        hi3[1].total += 4;
+        ctx3 = _this->ctx[0];
       }
-      if ( (v61 & 7) != 0 )
+      if ( (ctx3 & 7) != 0 )
       {
-        v59[-1].c[n5_2] += 3;
-        v59[-1].total += 3;
-        v60[-1].c[n5_4] += 2;
-        v60[-1].total += 2;
-        v61 = _this->ctx[0];
-      }
-    }
-    v62 = _this->ctx_w[6].sel;
-    if ( v62 == 1 )
-    {
-      v89 = v61 - _this->ctx_w[6].w[1];
-      v90 = &_this->counters[v89 + _this->ctx_w[6].w[0]];
-      v91 = &_this->counters[_this->ctx_w[6].w[2] + v89];
-      v90[0].c[n5_2] += 6;
-      v90[0].total += 6;
-      v91[0].c[n5_2] += 6;
-      v91[0].total += 6;
-      v69 = _this->ctx[0];
-      if ( (v69 & 7) != 7 )
-      {
-        v90[1].c[n5_2] += 4;
-        v90[1].total += 4;
-        v91[1].c[n5_2] += 4;
-        v91[1].total += 4;
-        v69 = _this->ctx[0];
-      }
-      if ( (v69 & 7) != 0 )
-      {
-        v90[-1].c[n5_2] += 3;
-        v90[-1].total += 3;
-        v91[-1].c[n5_2] += 3;
-        v91[-1].total += 3;
-        v69 = _this->ctx[0];
+        lo3[-1].c[slot_f] += 3;
+        lo3[-1].total += 3;
+        hi3[-1].c[slot_f] += 3;
+        hi3[-1].total += 3;
+        ctx3 = _this->ctx[0];
       }
     }
     else
     {
-      v63 = &_this->counters[_this->ctx_w[6].w[2 - v62] + v61 - _this->ctx_w[6].w[v62]];
-      v63[0].c[n5_2] += 7;
-      v63[0].total += 7;
-      v64 = _this->ctx_w[6].w[1];
-      v65 = v64 + _this->ctx[0] - _this->ctx_w[6].w[_this->ctx_w[6].sel];
-      v66 = v8 + v64 - _this->ctx_w[6].w[2 - _this->ctx_w[6].sel];
-      v67 = &_this->counters[v65];
-      v67[0].c[n5_2] += 6;
-      v67[0].total += 6;
-      v68 = &_this->counters[v66];
-      v68[0].c[n5_4] += 4;
-      v68[0].total += 4;
-      v69 = _this->ctx[0];
-      if ( (v69 & 7) != 7 )
+      opp3 = &_this->counters[_this->ctx_w[3].w[2 - sel3] + ctx2 - _this->ctx_w[3].w[sel3]];
+      opp3[0].c[slot_f] += 7;
+      opp3[0].total += 7;
+      w13 = _this->ctx_w[3].w[1];
+      x3 = w13 + _this->ctx[0] - _this->ctx_w[3].w[_this->ctx_w[3].sel];
+      alti3 = ctx_alt + w13 - _this->ctx_w[3].w[2 - _this->ctx_w[3].sel];
+      midn3 = &_this->counters[x3];
+      midn3[0].c[slot_f] += 6;
+      midn3[0].total += 6;
+      altn3 = &_this->counters[alti3];
+      altn3[0].c[slot_r2] += 4;
+      altn3[0].total += 4;
+      ctx3 = _this->ctx[0];
+      if ( (ctx3 & 7) != 7 )
       {
-        v67[1].c[n5_2] += 4;
-        v67[1].total += 4;
-        v68[1].c[n5_4] += 2;
-        v68[1].total += 2;
-        v69 = _this->ctx[0];
+        midn3[1].c[slot_f] += 4;
+        midn3[1].total += 4;
+        altn3[1].c[slot_r2] += 2;
+        altn3[1].total += 2;
+        ctx3 = _this->ctx[0];
       }
-      if ( (v69 & 7) != 0 )
+      if ( (ctx3 & 7) != 0 )
       {
-        v67[-1].c[n5_2] += 3;
-        v67[-1].total += 3;
-        v68[-1].c[n5_4] += 2;
-        v68[-1].total += 2;
-        v69 = _this->ctx[0];
+        midn3[-1].c[slot_f] += 3;
+        midn3[-1].total += 3;
+        altn3[-1].c[slot_r2] += 2;
+        altn3[-1].total += 2;
+        ctx3 = _this->ctx[0];
       }
     }
-    v70 = _this->ctx_w[7].sel;
-    if ( v70 == 1 )
+    sel4 = _this->ctx_w[4].sel;
+    if ( sel4 == 1 )
     {
-      v86 = v69 - _this->ctx_w[7].w[1];
-      v87 = &_this->counters[v86 + _this->ctx_w[7].w[0]];
-      v88 = &_this->counters[_this->ctx_w[7].w[2] + v86];
-      v87[0].c[n5_2] += 6;
-      v87[0].total += 6;
-      v88[0].c[n5_2] += 6;
-      v88[0].total += 6;
-      v77 = _this->ctx[0];
-      if ( (v77 & 7) != 7 )
+      mid4 = ctx3 - _this->ctx_w[4].w[1];
+      lo4 = &_this->counters[mid4 + _this->ctx_w[4].w[0]];
+      hi4 = &_this->counters[_this->ctx_w[4].w[2] + mid4];
+      lo4[0].c[slot_f] += 6;
+      lo4[0].total += 6;
+      hi4[0].c[slot_f] += 6;
+      hi4[0].total += 6;
+      ctx4 = _this->ctx[0];
+      if ( (ctx4 & 7) != 7 )
       {
-        v87[1].c[n5_2] += 4;
-        v87[1].total += 4;
-        v88[1].c[n5_2] += 4;
-        v88[1].total += 4;
-        v77 = _this->ctx[0];
+        lo4[1].c[slot_f] += 4;
+        lo4[1].total += 4;
+        hi4[1].c[slot_f] += 4;
+        hi4[1].total += 4;
+        ctx4 = _this->ctx[0];
       }
-      if ( (v77 & 7) != 0 )
+      if ( (ctx4 & 7) != 0 )
       {
-        v87[-1].c[n5_2] += 3;
-        v87[-1].total += 3;
-        v88[-1].c[n5_2] += 3;
-        v88[-1].total += 3;
-        v77 = _this->ctx[0];
+        lo4[-1].c[slot_f] += 3;
+        lo4[-1].total += 3;
+        hi4[-1].c[slot_f] += 3;
+        hi4[-1].total += 3;
+        ctx4 = _this->ctx[0];
       }
     }
     else
     {
-      v71 = &_this->counters[_this->ctx_w[7].w[2 - v70] + v69 - _this->ctx_w[7].w[v70]];
-      v71[0].c[n5_2] += 7;
-      v71[0].total += 7;
-      v72 = _this->ctx_w[7].w[1];
-      v73 = v72 + _this->ctx[0] - _this->ctx_w[7].w[_this->ctx_w[7].sel];
-      v74 = v8 + v72 - _this->ctx_w[7].w[2 - _this->ctx_w[7].sel];
-      v75 = &_this->counters[v73];
-      v75[0].c[n5_2] += 6;
-      v75[0].total += 6;
-      v76 = &_this->counters[v74];
-      v76[0].c[n5_4] += 4;
-      v76[0].total += 4;
-      v77 = _this->ctx[0];
-      if ( (v77 & 7) != 7 )
+      opp4 = &_this->counters[_this->ctx_w[4].w[2 - sel4] + ctx3 - _this->ctx_w[4].w[sel4]];
+      opp4[0].c[slot_f] += 7;
+      opp4[0].total += 7;
+      w14 = _this->ctx_w[4].w[1];
+      x4 = w14 + _this->ctx[0] - _this->ctx_w[4].w[_this->ctx_w[4].sel];
+      alti4 = ctx_alt + w14 - _this->ctx_w[4].w[2 - _this->ctx_w[4].sel];
+      midn4 = &_this->counters[x4];
+      midn4[0].c[slot_f] += 6;
+      midn4[0].total += 6;
+      altn4 = &_this->counters[alti4];
+      altn4[0].c[slot_r2] += 4;
+      altn4[0].total += 4;
+      ctx4 = _this->ctx[0];
+      if ( (ctx4 & 7) != 7 )
       {
-        v75[1].c[n5_2] += 4;
-        v75[1].total += 4;
-        v76[1].c[n5_4] += 2;
-        v76[1].total += 2;
-        v77 = _this->ctx[0];
+        midn4[1].c[slot_f] += 4;
+        midn4[1].total += 4;
+        altn4[1].c[slot_r2] += 2;
+        altn4[1].total += 2;
+        ctx4 = _this->ctx[0];
       }
-      if ( (v77 & 7) != 0 )
+      if ( (ctx4 & 7) != 0 )
       {
-        v75[-1].c[n5_2] += 3;
-        v75[-1].total += 3;
-        v76[-1].c[n5_4] += 2;
-        v76[-1].total += 2;
-        v77 = _this->ctx[0];
+        midn4[-1].c[slot_f] += 3;
+        midn4[-1].total += 3;
+        altn4[-1].c[slot_r2] += 2;
+        altn4[-1].total += 2;
+        ctx4 = _this->ctx[0];
       }
     }
-    v78 = _this->ctx_w[8].sel;
-    if ( v78 == 1 )
+    sel5 = _this->ctx_w[5].sel;
+    if ( sel5 == 1 )
     {
-      v83 = v77 - _this->ctx_w[8].w[1];
-      v84 = &_this->counters[v83 + _this->ctx_w[8].w[0]];
-      node = &_this->counters[_this->ctx_w[8].w[2] + v83];
-      v84[0].c[n5_2] += 6;
-      v84[0].total += 6;
-      node[0].c[n5_2] += 6;
+      mid5 = ctx4 - _this->ctx_w[5].w[1];
+      lo5 = &_this->counters[mid5 + _this->ctx_w[5].w[0]];
+      hi5 = &_this->counters[_this->ctx_w[5].w[2] + mid5];
+      lo5[0].c[slot_f] += 6;
+      lo5[0].total += 6;
+      hi5[0].c[slot_f] += 6;
+      hi5[0].total += 6;
+      ctx5 = _this->ctx[0];
+      if ( (ctx5 & 7) != 7 )
+      {
+        lo5[1].c[slot_f] += 4;
+        lo5[1].total += 4;
+        hi5[1].c[slot_f] += 4;
+        hi5[1].total += 4;
+        ctx5 = _this->ctx[0];
+      }
+      if ( (ctx5 & 7) != 0 )
+      {
+        lo5[-1].c[slot_f] += 3;
+        lo5[-1].total += 3;
+        hi5[-1].c[slot_f] += 3;
+        hi5[-1].total += 3;
+        ctx5 = _this->ctx[0];
+      }
+    }
+    else
+    {
+      opp5 = &_this->counters[_this->ctx_w[5].w[2 - sel5] + ctx4 - _this->ctx_w[5].w[sel5]];
+      opp5[0].c[slot_f] += 7;
+      opp5[0].total += 7;
+      w15 = _this->ctx_w[5].w[1];
+      x5 = w15 + _this->ctx[0] - _this->ctx_w[5].w[_this->ctx_w[5].sel];
+      alti5 = ctx_alt + w15 - _this->ctx_w[5].w[2 - _this->ctx_w[5].sel];
+      midn5 = &_this->counters[x5];
+      midn5[0].c[slot_f] += 6;
+      midn5[0].total += 6;
+      altn5 = &_this->counters[alti5];
+      altn5[0].c[slot_r2] += 4;
+      altn5[0].total += 4;
+      ctx5 = _this->ctx[0];
+      if ( (ctx5 & 7) != 7 )
+      {
+        midn5[1].c[slot_f] += 4;
+        midn5[1].total += 4;
+        altn5[1].c[slot_r2] += 2;
+        altn5[1].total += 2;
+        ctx5 = _this->ctx[0];
+      }
+      if ( (ctx5 & 7) != 0 )
+      {
+        midn5[-1].c[slot_f] += 3;
+        midn5[-1].total += 3;
+        altn5[-1].c[slot_r2] += 2;
+        altn5[-1].total += 2;
+        ctx5 = _this->ctx[0];
+      }
+    }
+    sel6 = _this->ctx_w[6].sel;
+    if ( sel6 == 1 )
+    {
+      mid6 = ctx5 - _this->ctx_w[6].w[1];
+      lo6 = &_this->counters[mid6 + _this->ctx_w[6].w[0]];
+      hi6 = &_this->counters[_this->ctx_w[6].w[2] + mid6];
+      lo6[0].c[slot_f] += 6;
+      lo6[0].total += 6;
+      hi6[0].c[slot_f] += 6;
+      hi6[0].total += 6;
+      ctx6 = _this->ctx[0];
+      if ( (ctx6 & 7) != 7 )
+      {
+        lo6[1].c[slot_f] += 4;
+        lo6[1].total += 4;
+        hi6[1].c[slot_f] += 4;
+        hi6[1].total += 4;
+        ctx6 = _this->ctx[0];
+      }
+      if ( (ctx6 & 7) != 0 )
+      {
+        lo6[-1].c[slot_f] += 3;
+        lo6[-1].total += 3;
+        hi6[-1].c[slot_f] += 3;
+        hi6[-1].total += 3;
+        ctx6 = _this->ctx[0];
+      }
+    }
+    else
+    {
+      opp6 = &_this->counters[_this->ctx_w[6].w[2 - sel6] + ctx5 - _this->ctx_w[6].w[sel6]];
+      opp6[0].c[slot_f] += 7;
+      opp6[0].total += 7;
+      w16 = _this->ctx_w[6].w[1];
+      x6 = w16 + _this->ctx[0] - _this->ctx_w[6].w[_this->ctx_w[6].sel];
+      alti6 = ctx_alt + w16 - _this->ctx_w[6].w[2 - _this->ctx_w[6].sel];
+      midn6 = &_this->counters[x6];
+      midn6[0].c[slot_f] += 6;
+      midn6[0].total += 6;
+      altn6 = &_this->counters[alti6];
+      altn6[0].c[slot_r2] += 4;
+      altn6[0].total += 4;
+      ctx6 = _this->ctx[0];
+      if ( (ctx6 & 7) != 7 )
+      {
+        midn6[1].c[slot_f] += 4;
+        midn6[1].total += 4;
+        altn6[1].c[slot_r2] += 2;
+        altn6[1].total += 2;
+        ctx6 = _this->ctx[0];
+      }
+      if ( (ctx6 & 7) != 0 )
+      {
+        midn6[-1].c[slot_f] += 3;
+        midn6[-1].total += 3;
+        altn6[-1].c[slot_r2] += 2;
+        altn6[-1].total += 2;
+        ctx6 = _this->ctx[0];
+      }
+    }
+    sel7 = _this->ctx_w[7].sel;
+    if ( sel7 == 1 )
+    {
+      mid7 = ctx6 - _this->ctx_w[7].w[1];
+      lo7 = &_this->counters[mid7 + _this->ctx_w[7].w[0]];
+      hi7 = &_this->counters[_this->ctx_w[7].w[2] + mid7];
+      lo7[0].c[slot_f] += 6;
+      lo7[0].total += 6;
+      hi7[0].c[slot_f] += 6;
+      hi7[0].total += 6;
+      ctx7 = _this->ctx[0];
+      if ( (ctx7 & 7) != 7 )
+      {
+        lo7[1].c[slot_f] += 4;
+        lo7[1].total += 4;
+        hi7[1].c[slot_f] += 4;
+        hi7[1].total += 4;
+        ctx7 = _this->ctx[0];
+      }
+      if ( (ctx7 & 7) != 0 )
+      {
+        lo7[-1].c[slot_f] += 3;
+        lo7[-1].total += 3;
+        hi7[-1].c[slot_f] += 3;
+        hi7[-1].total += 3;
+        ctx7 = _this->ctx[0];
+      }
+    }
+    else
+    {
+      opp7 = &_this->counters[_this->ctx_w[7].w[2 - sel7] + ctx6 - _this->ctx_w[7].w[sel7]];
+      opp7[0].c[slot_f] += 7;
+      opp7[0].total += 7;
+      w17 = _this->ctx_w[7].w[1];
+      x7 = w17 + _this->ctx[0] - _this->ctx_w[7].w[_this->ctx_w[7].sel];
+      alti7 = ctx_alt + w17 - _this->ctx_w[7].w[2 - _this->ctx_w[7].sel];
+      midn7 = &_this->counters[x7];
+      midn7[0].c[slot_f] += 6;
+      midn7[0].total += 6;
+      altn7 = &_this->counters[alti7];
+      altn7[0].c[slot_r2] += 4;
+      altn7[0].total += 4;
+      ctx7 = _this->ctx[0];
+      if ( (ctx7 & 7) != 7 )
+      {
+        midn7[1].c[slot_f] += 4;
+        midn7[1].total += 4;
+        altn7[1].c[slot_r2] += 2;
+        altn7[1].total += 2;
+        ctx7 = _this->ctx[0];
+      }
+      if ( (ctx7 & 7) != 0 )
+      {
+        midn7[-1].c[slot_f] += 3;
+        midn7[-1].total += 3;
+        altn7[-1].c[slot_r2] += 2;
+        altn7[-1].total += 2;
+        ctx7 = _this->ctx[0];
+      }
+    }
+    sel8 = _this->ctx_w[8].sel;
+    if ( sel8 == 1 )
+    {
+      midn8 = ctx7 - _this->ctx_w[8].w[1];
+      altn8 = &_this->counters[midn8 + _this->ctx_w[8].w[0]];
+      node = &_this->counters[_this->ctx_w[8].w[2] + midn8];
+      altn8[0].c[slot_f] += 6;
+      altn8[0].total += 6;
+      node[0].c[slot_f] += 6;
       node[0].total += 6;
-      v85 = _this->ctx[0];
-      if ( (v85 & 7) != 7 )
+      ctx8 = _this->ctx[0];
+      if ( (ctx8 & 7) != 7 )
       {
-        v84[1].c[n5_2] += 4;
-        v84[1].total += 4;
-        node[1].c[n5_2] += 4;
+        altn8[1].c[slot_f] += 4;
+        altn8[1].total += 4;
+        node[1].c[slot_f] += 4;
         node[1].total += 4;
-        v85 = _this->ctx[0];
+        ctx8 = _this->ctx[0];
       }
-      if ( (v85 & 7) != 0 )
+      if ( (ctx8 & 7) != 0 )
       {
-        v84[-1].c[n5_2] += 3;
-        v84[-1].total += 3;
-        node[-1].c[n5_2] += 3;
+        altn8[-1].c[slot_f] += 3;
+        altn8[-1].total += 3;
+        node[-1].c[slot_f] += 3;
         node[-1].total += 3;
       }
     }
     else
     {
-      v79 = &_this->counters[_this->ctx_w[8].w[2 - v78] + v77 - _this->ctx_w[8].w[v78]];
-      v79[0].c[n5_2] += 7;
-      v79[0].total += 7;
-      v80 = _this->ctx_w[8].w[1];
-      node = &_this->counters[v80 + _this->ctx[0] - _this->ctx_w[8].w[_this->ctx_w[8].sel]];
-      v81 = &_this->counters[v80 - _this->ctx_w[8].w[2 - _this->ctx_w[8].sel] + v8];
-      node[0].c[n5_2] += 6;
+      opp8 = &_this->counters[_this->ctx_w[8].w[2 - sel8] + ctx7 - _this->ctx_w[8].w[sel8]];
+      opp8[0].c[slot_f] += 7;
+      opp8[0].total += 7;
+      w18 = _this->ctx_w[8].w[1];
+      node = &_this->counters[w18 + _this->ctx[0] - _this->ctx_w[8].w[_this->ctx_w[8].sel]];
+      x8 = &_this->counters[w18 - _this->ctx_w[8].w[2 - _this->ctx_w[8].sel] + ctx_alt];
+      node[0].c[slot_f] += 6;
       node[0].total += 6;
-      v81[0].c[n5_4] += 4;
-      v81[0].total += 4;
-      v82 = _this->ctx[0];
-      if ( (v82 & 7) != 7 )
+      x8[0].c[slot_r2] += 4;
+      x8[0].total += 4;
+      alti8 = _this->ctx[0];
+      if ( (alti8 & 7) != 7 )
       {
-        node[1].c[n5_2] += 4;
+        node[1].c[slot_f] += 4;
         node[1].total += 4;
-        v81[1].c[n5_4] += 2;
-        v81[1].total += 2;
-        v82 = _this->ctx[0];
+        x8[1].c[slot_r2] += 2;
+        x8[1].total += 2;
+        alti8 = _this->ctx[0];
       }
-      if ( (v82 & 7) != 0 )
+      if ( (alti8 & 7) != 0 )
       {
-        node[-1].c[n5_2] += 3;
+        node[-1].c[slot_f] += 3;
         node[-1].total += 3;
-        result = (uint16_t)v81[-1].c[n5_4] + 2;
-        v81[-1].c[n5_4] = result;
-        v81[-1].total += 2;
+        result = (uint16_t)x8[-1].c[slot_r2] + 2;
+        x8[-1].c[slot_r2] = result;
+        x8[-1].total += 2;
       }
     }
   }
