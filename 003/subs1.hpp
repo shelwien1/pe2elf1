@@ -4681,56 +4681,67 @@ int32_t *__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palett
   ;
   uint8_t *buf;
   int32_t *result;
+  bool byte_rows;
   int32_t bits, word2, row_pack, row_bytes, data_bytes, Size;
   uint32_t row16;
   LOWORD(row16) = img_w;
   bits = bpp;
   word2 = (uint8_t)bpp << 16;
+  // How wide a row is, in bytes.  Four cases, and the decompilation reached
+  // them with four `goto`s -- one of them jumping two blocks deep into the
+  // middle of the `!packed` arm, which is why the arms did not look like
+  // cases at all:
+  //
+  //   bpp 5..7          one byte a pixel, and `row16` already holds `img_w`
+  //   bits >= 8         `(bits + 7) / 8` bytes a pixel
+  //   unpacked, 4 bits  two pixels a byte, rounded up to four bytes
+  //   packed, 1/2/4     the bit-packed widths, and the 0x40000000 tag
+  //
+  // `bpp == 3` never takes the second: the test for it sits in the other arm
+  // of the `bpp == 3` branch, which is what `byte_rows` records.
   if ( bpp >= 5 && bpp <= 7 )
-    goto LABEL_19;
-  if ( bpp == 3 )
   {
-    bits = 4;
+    row_bytes = (uint16_t)row16;
   }
   else
   {
+    if ( bpp == 3 )
+      bits = 4;
+    else if ( !packed )
+      bits = bpp > 4 ? bpp : 4;
+    byte_rows = bpp != 3 && bits >= 8;
+
     if ( !packed )
     {
-      bits = 4;
-      if ( bpp > 4 )
-        bits = bpp;
-    }
-    if ( bits >= 8 )
-      goto LABEL_18;
-  }
-  if ( !packed )
-  {
-    if ( bits == 4 )
-    {
-      row16 = ((img_w + 7) >> 1) & 0xFFFFFFFC;
-LABEL_19:
+      if ( !byte_rows && bits == 4 )
+        row16 = ((img_w + 7) >> 1) & 0xFFFFFFFC;
+      else
+        LOWORD(row16) = (uint16_t)(((bits + 7) >> 3) * img_w);
       row_bytes = (uint16_t)row16;
-      goto LABEL_20;
     }
-LABEL_18:
-    LOWORD(row16) = ((bits + 7) >> 3) * img_w;
-    goto LABEL_19;
+    else if ( byte_rows )
+    {
+      LOWORD(row16) = (uint16_t)(((bits + 7) >> 3) * img_w);
+      row_bytes = (uint16_t)row16;
+    }
+    else
+    {
+      if ( bits == 1 )
+      {
+        row_pack = (int32_t)(((uint32_t)((img_w + 7) >> 2) >> 29) + img_w + 7) >> 3;
+      }
+      else if ( bits == 2 )
+      {
+        row_pack = (int32_t)(((uint32_t)((img_w + 3) >> 1) >> 30) + img_w + 3) >> 2;
+      }
+      else
+      {
+        row_pack = (int32_t)(img_w + ((uint32_t)(img_w + 1) >> 31) + 1) >> 1;
+      }
+      word2 = ((uint8_t)bpp << 16) | 0x40000000;
+      row_bytes = (uint16_t)row_pack;
+    }
   }
-  if ( bits == 1 )
-  {
-    row_pack = (int32_t)(((uint32_t)((img_w + 7) >> 2) >> 29) + img_w + 7) >> 3;
-  }
-  else if ( bits == 2 )
-  {
-    row_pack = (int32_t)(((uint32_t)((img_w + 3) >> 1) >> 30) + img_w + 3) >> 2;
-  }
-  else
-  {
-    row_pack = (int32_t)(img_w + ((uint32_t)(img_w + 1) >> 31) + 1) >> 1;
-  }
-  word2 = ((uint8_t)bpp << 16) | 0x40000000;
-  row_bytes = (uint16_t)row_pack;
-LABEL_20:
   data_bytes = row_bytes * img_h;
   if ( palette )
   {
