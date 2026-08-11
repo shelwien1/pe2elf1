@@ -18,21 +18,27 @@ and 3.
 
 ## 1. Where the file is
 
-`python3 tools/shape.py`, verbatim, with round eight's numbers beside it:
+`python3 tools/shape.py`, verbatim, with the two rounds before it beside it:
 
 ```
-                                   round 8   round 9
-subs1.hpp / bmf.cpp lines            17787     17616
-raw-offset sites                        22        12
-byte offsets on a typed base           121         0
-pointer casts                         2137      1545
-fNN members / named ones             93/121     5/162
-distinct unexplained locals            554       591
-  bodies still carrying one              —    8/102
-  uses                                    —      6302
-goto / LABEL_n:                     112/79     81/55
-conversion warnings (ratchet)         1455      1331
+                                   round 8   round 9   round 9 end
+subs1.hpp / bmf.cpp lines            17787     17616         17334
+raw-offset sites                        22        12            11
+  off `_this`                            —         1             0
+byte offsets on a typed base           121         0             0
+pointer casts                         2137      1545          1389
+fNN members / named ones             93/121     5/162         0/171
+distinct unexplained locals            554       591             0
+  bodies still carrying one              —    8/102         0/102
+  uses                                    —      6302             0
+goto / LABEL_n:                     112/79     81/55         63/44
+conversion warnings (ratchet)         1455      1331          1323
 ```
+
+**Not one Hex-Rays name is left in either file.** Checked by running the
+pattern over the comment-stripped text of `subs1.hpp` and `bmf.cpp`, not by
+reading it off the row that is supposed to say so — because that row had to be
+corrected three times before it did.
 
 Four of those numbers were wrong when this section was first written, and the
 correction is §10's subject. `shape.py` hardcoded `SRC = 'subs1.hpp'` and
@@ -47,16 +53,28 @@ the whole file, so it cannot move until a name is gone from every body that uses
 one, and naming every local in a function leaves it unchanged. The two rows
 beneath it are the ones that measure that work — and §11 is what they measure.
 
-It has since had to be corrected a second time, for a reason that belongs to
-§10 and is worth stating here. Naming a model body's intermediates `t0`, `t1`,
-`t2` in sequence is a small honest improvement — contiguous, and marked as that
-body's rather than Hex-Rays' — but it does not explain anything, and a row that
-counted only `vNN` would have read it as progress. It counts `[vt]NN` now. That
-correction moved the figure from "5 of 102 bodies, 5979 uses" to **8 of 102 and
-6302**, which is the number that was true all along.
+It has since had to be corrected three more times, each for a different reason
+and each found the same way — by noticing that the row said something I could
+have satisfied without doing anything:
+
+1. Naming a model body's intermediates `t0`, `t1`, `t2` in sequence is a small
+   honest improvement — contiguous, and marked as that body's rather than
+   Hex-Rays' — but it does not explain anything, and a row that counted only
+   `vNN` would have read it as progress. It counts `[vt]NN` now, which moved
+   the figure from "5 of 102 bodies, 5979 uses" to **8 of 102 and 6302**.
+2. Hex-Rays does not only spell a name `vNN`. It also names a local after the
+   first constant it sees stored in it, so `n1840_1`, `n0x7FFFFFFF_10` and `n2`
+   are the same kind of non-name — **198 of them, in 28 bodies**, never
+   counted. Adding them moved a row reading `448, 1 of 102` to `637, 28 of
+   102`. That is the same lesson from the other side: the first correction was
+   about a measure I could satisfy by renaming, this one about a measure that
+   only ever went down because it could not see the rest.
+3. The headline counted comments while the two rows under it stripped them, and
+   this file quotes the old names on purpose — `// was int32_t v312` beside the
+   padding that replaced it. So the row read **81 with every body clean**.
 
 A figure a comment can move is not a measurement, and a figure that cannot move
-is not one either. That is the whole of §10.
+is not one either. That is the whole of §10, and §12 is four more of it.
 
 `tools/sweep.sh` runs every tool in the directory and prints what each still
 finds; all of them report zero. It also checks that the file did not change
@@ -408,8 +426,10 @@ noticing that a tool's *input* was narrower than the file.
 
 ## 9. Tools
 
-No new tools. Two fixes and one scan that lives in this document rather than in
-`tools/`, because it is eleven lines and its answer is now zero:
+Two new folding rules, `uncopy.py` and `unhoist.py`, and four fixes to guards
+that had gone quiet — §12. Otherwise two fixes and one scan that lives in this
+document rather than in `tools/`, because it is eleven lines and its answer is
+now zero:
 
 | tool | change |
 | --- | --- |
@@ -421,6 +441,8 @@ No new tools. Two fixes and one scan that lives in this document rather than in
 | `undup.py` | new: an `if` whose arms agree is not a decision (§10) |
 | `unsave.py` | new: a spill slot is not a variable (§11) |
 | `unreload.py` | new: one member, loaded five times (§11) |
+| `uncopy.py` | new: a local that is only a copy of another is not a local (§12) |
+| `unhoist.py` | new: put back the load the scheduler moved (§12) |
 | `proven.sh` | new: which tools' answers depend on the file at all (§10) |
 | `outpath.py` | new: a generator's argument is the file to write, and must look like one |
 | `sweep.sh` | new: run every tool, and fail if the file moved (§10) |
@@ -668,17 +690,192 @@ path across six images decodes the same first member six times and reports
 identical counts for all of them; `tools/triage.sh` removes the file first, and
 this is why.
 
-### What is actually left
+### What was actually left
 
-Thirteen bodies, and they are the model itself: `alt_p2_model` (481 distinct
+Thirteen bodies, and they were the model itself: `alt_p2_model` (481 distinct
 names), `alt_p2_context` (184), `choose_plane_coding` (177), `alt_p1_model`
 (104), `decode_pixel` (100), `alt_model_p2_encode` (91), `search_filter` (81),
 `code_pixel` (78), `alt_model_p2_decode` (74), `cost_candidate` (72),
 `alt_model_p1_encode` (60), `reduce_alphabet` (54) and `alt_model_p1_decode`
 (47).
 
-This is where round eight's claim finally is true. Their locals are intermediate
-values of an arithmetic whose meaning is `algorithm_v2.md`'s subject, not a
-sweep's — and the difference from the forty-five bodies above is not size but
-that those had a *shape*: a margin mirror, a cursor rotation, a fold table, an
-inverse. These have an equation.
+This is where round eight's claim finally was true. Their locals are
+intermediate values of an arithmetic whose meaning is `algorithm_v2.md`'s
+subject, not a sweep's — and the difference from the forty-five bodies above
+was not size but that those had a *shape*: a margin mirror, a cursor rotation,
+a fold table, an inverse. These had an equation.
+
+All thirteen are done, and so is every other body — §§12–13 are how. Two of
+them turned out to have a shape after all, and it was the same one both times:
+a mixed-radix index and an unrolled tree, each written by the decompiler as a
+pile of unrelated scalars. The claim that the last bodies are "an equation, not
+a shape" was half right. It was right that no sweep would name them. It was
+wrong that there was nothing under them but arithmetic.
+
+---
+
+## 12. Four guards that made a rule quieter rather than wrong
+
+Two of this round's rules are about names that are not names.
+
+`uncopy.py`. MSVC keeps a value in more than one register across a long
+straight-line block, and Hex-Rays names every register. `alt_p2_context`
+reaches six reference-row cursors through nineteen names: `v93` and `v97` are
+both `v282`; `v81`, `v92`, `v95` and `v69` are all `v281`. Naming those
+nineteen by hand would have produced nineteen names for six things, and a
+reader who trusted the names would think the rows were different rows. A copy
+folds when it is `X = Y;`, `X` is assigned once and never through its address,
+and `Y` is not assigned between the copy and `X`'s last use. It later learned
+to see through a round trip between two pointer types, which is the residue of
+the stride fix in §2 — `(P2Ctx *)((int16_t *)v282)` is the same copy with the
+old spelling wrapped round it.
+
+`unhoist.py`. The scheduler moves loads early and Hex-Rays names each one, so
+one bank-context expression arrives as a pile of one-use locals with the
+expression itself two screens down. I found that out by naming eleven of them
+`k0`, `k1`, `k2`, `j1`, `j2` — which is exactly the spelling §10 already
+records does not explain anything. `v121` is not a quantity this algorithm has
+a word for; it is the second operand of a term, moved. So it goes back.
+
+It only touches names spelled `vNN`/`tNN`. `Depth = p_i_img->depth & 0x3F`
+reads once as well, and inlining that would delete a word someone chose on
+purpose.
+
+### The guards
+
+Both rules, and `unsave.py` with them, guard against the cases where folding
+would change the meaning. Four of those guards were wrong, and all four were
+wrong in the same direction:
+
+| guard | what it missed |
+| --- | --- |
+| `unreload.types()` | a local declared on a continuation line of a multi-line declaration — so most of the two biggest bodies had no types at all, and three rules read that as "not a local here" |
+| `unhoist.statements()` | a bare `{` does not end in `;`, so it swallowed the statement after it, and the first assignment inside every block stopped looking like an assignment |
+| `unhoist` read counting | counted *statements*, and one wrapped expression names the same local six times — so a six-read load looked single-use |
+| `&NAME\b` | matches `&x->m`, `&x.m` and `&x[i]`, none of which is the variable's address. `alt_p2_model` reads its counters as `*(uint16_t *)&v533->w2`, so every counter pointer looked address-taken |
+
+Fixing them, on a file where every rule had reported zero:
+
+```
+uncopy    0 sites  ->  33, then 15 more
+unhoist   0 sites  ->  63, then 48 more, then 13
+unsave    0 sites  ->   1
+```
+
+Only one of the four was a correctness bug — the read counting, which would
+have made six loads out of one. The other three made a rule *quieter*. That is
+the failure mode this round keeps producing, and it is worse than a wrong
+answer, because §10's whole apparatus is built to catch a tool that stops
+saying anything: `sweep.sh` fails if a tool prints nothing, `proven.sh` fails
+if a tool's answer never changes. Neither of them fires on a tool that still
+answers, still changes, and answers about a third of the file.
+
+There is no general check for this. What there is, is the habit: when a rule
+reports zero, ask what it *cannot* see, and go and look at a place it should
+have fired.
+
+### Checking a guard rather than asserting it
+
+`unhoist`'s write check had a second hole: the patterns stop at the first `[`
+or `->`, so they catch `cx0 = ...` and miss `cx0[-4].err = ...` — and the
+second is exactly what changes the value of `v = cx0[-4].err`. That one is a
+correctness hole, so it wanted checking and not asserting.
+
+Replaying the stricter rule against the file as it stood at each of the four
+revisions where the rule fired: 76 sites then against 127 now, 4 against 52, 65
+against 144, 48 against 48 — strictly more in every case, and exactly one site
+in the whole history that the stricter rule refuses. That one is
+`v228 = blk->ctx_w[0].sel`, blocked because `blk->ctx_pair[1] = ...` writes
+through `blk`; the two members cannot alias and the inline was right.
+
+It is left blunt. Distinguishing them means deciding when two member chains off
+one base can alias, which unions make a real question, and the whole cost of
+not deciding is one load.
+
+### What the two rules were worth
+
+They removed 190 names between them without a single rename, and they are why
+`alt_p2_model` was namable at all: it went from 482 to 421 before anyone read a
+line of it.
+
+---
+
+## 13. What the last two bodies turned out to be
+
+`alt_p2_context` picks one of 1600 neighbourhood slots, and the index arrived
+in five different disguises: a `P2Ctx *` that only ever held `16 * gB`, an
+`int16_t` subscript on it carrying two more digits, a stack slot carrying a
+fourth shifted left by six, three loose comparisons for the fifth, and a
+`uint8_t *` for the sum. Written out it is one line:
+
+```
+nb_slot = 320 * band + 64 * gA + 16 * gB + 4 * gC + gD
+```
+
+with `gA` in [0,5) and the other three in [0,4), so the digits pack exactly.
+Each is a count of how many of its own thresholds one ratio has passed, and
+`band` — five ratio bands of the coded length — picks the threshold row all
+four read.
+
+`P2Ctx::lane[8]` was an array because Hex-Rays could not see it any other way,
+and 506 reaches into it read `lane[4]`, `lane[5]`, `lane[6]`, `lane[7]` without
+saying that those are four directions. `alt_p2_model`'s prologue writes seven
+of them in a row and says what they are; `alt_p2_context` corroborates from the
+other side, since its four weighted context sums are seven taps each over lanes
+4, 5, 6 and 7 — one sum per direction, which is not a thing anyone builds
+unless those four lanes are the four directions. They are `val`, `dval`, `err`,
+`aerr`, `dleft`, `dup`, `dupleft`, `dupright` now.
+
+I expected to keep the array arm in a union for the sites that subscript it
+with a running index. There are none — the grep that found four was matching
+the tail of `Block_plane[k++]`.
+
+`alt_p2_model` walks a binary tree of counters, fully unrolled, eleven levels
+from 0x4000 down to 0x10, touching three nodes at each: the node itself, its
+mirror at `0x7FF0 ^ bit`, and its rotation through `p2_ctx_rotate`. Hex-Rays
+had those 35 pointers as `v531`..`v568` in scheduler order, so `v542` and `v544`
+are the two halves of one level and `v542` and `v539` are different levels.
+Each is then updated by the same three lines — load `w2`, take the residual
+against `p2_pred`, store `p2_bump` — 96 times over, which is 192 more names.
+
+The generator that named those had the same bare-`{` bug I had just fixed in
+`unhoist.statements()`. It is a genuinely easy mistake to make twice.
+
+---
+
+## 14. Structure: what a `goto` was standing in for
+
+Every jump removed this round was one of three things.
+
+**A branch condition written as a jump.** `predict_med` and `unpredict_med`
+both write the median-edge predictor as a pair of `goto`s over a shared
+statement. It is an `else if`: northwest outside `[min(west, north),
+max(west, north)]` predicts the far end of it, inside predicts the plane
+through all three. The two arms differ only in which way round the comparisons
+go, because which of west and north is the smaller is what the arm is testing.
+
+`write_bmp` is the same thing three times. Its RLE encoder flushes pending
+literals when a repeat run starts, when the literal run hits its cap, and at
+the end of a row, and each arrived as a jump into the middle of another arm.
+The condition is whether an absolute run pays for its two-byte header — from
+two literals in 4-bit mode, three in 8-bit — which the decompilation spelled
+`Size != 1` in one arm and `Size >= 3` in the other and jumped between them.
+`nib ? Size != 1 : Size >= 3` says it once.
+
+**A loop skip.** `if (height == 1) goto` past the row loop is the row loop
+under an `if`.
+
+**A join with several predecessors that all do the same thing first.**
+`unpredict_med`'s `LABEL_29` has three, and every one of them sets `rows_left`
+and returns early on a single row before jumping. Hoisting the common part
+makes the jump a fallthrough.
+
+What stays is the fourth shape, and it stays on purpose: `write_bmp`'s
+`LABEL_72` is the row terminator, reached from five places inside three nested
+loops. A forward jump to a single join point is what that is for, and it now
+says so in a comment rather than by being the only one left.
+
+One thing worth recording: removing a `goto` duplicates the statement it jumped
+over, and in `predict_med` that took the conversion count *up* by three. The
+ratchet caught it before I did. Casting the four `LOBYTE` assignments
+explicitly took it to 1323 instead, below where it started.
