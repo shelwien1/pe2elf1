@@ -34,7 +34,7 @@ distinct unexplained locals            554       591             0
 goto / LABEL_n:                     112/79     81/55         49/34
   restart a loop / exit N blocks         —         —         16/29
   jump into a block / sideways           —         —           1/3
-conversion warnings (ratchet)         1455      1331          1174
+conversion warnings (ratchet)         1455      1331          1159
 ```
 
 **Not one Hex-Rays name is left in either file.** Checked by running the
@@ -956,7 +956,8 @@ at the operator. 62 sites, no semantic change, and the two claims it does
 *not* make are in its docstring — it does not decide whether a comparison is
 right, which is a question about whether the signed side can go negative.
 
-What is left is 1174 warnings about a value narrowed or resigned on assignment.
+What is left is 1159 warnings about a value narrowed or resigned on assignment,
+and nothing else — no `-Wsign-compare`, no `-Wuseless-cast`.
 
 The same tool would zero those too, and it is not going to, which is worth
 being explicit about because the distinction is thin and the temptation is not.
@@ -966,7 +967,7 @@ knowing the conversion rules. A cast on an assignment adds nothing — `x = y`
 with the two declared types visible already says the value is being narrowed,
 and writing `(uint16_t)` in front of it moves no information anywhere. It would
 move the number, which is the entire objection: §10 is about measures you can
-satisfy without doing the work, and putting 1174 casts in this file to make a
+satisfy without doing the work, and putting 1159 casts in this file to make a
 scoreboard read zero is the purest example of one this project could produce.
 
 The number goes down when the *types* are right, and §16 is 64 of them.
@@ -993,6 +994,13 @@ count assigned only from `int32_t` expressions arrives declared `uint32_t` and
 every assignment to it converts. That is not a narrowing anyone intended; it is
 a declaration disagreeing with its own right-hand sides, and the fix is the
 declaration. `tools/resign.py` retyped 156 locals over three passes.
+
+Retyping leaves a tail, and it is worth doing rather than leaving: eleven casts
+became useless when the type under them changed, and four comparisons became
+mixed that were not before — including three where the `(int32_t)` that
+`explicitcmp.py` had added a commit earlier now pointed the wrong way and had
+to come off entirely. 1174 to 1159, and the only warnings left in the file are
+the narrowings.
 
 Every correction to the rule came from the gate, and each one is a different
 part of it:

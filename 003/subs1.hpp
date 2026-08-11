@@ -1598,7 +1598,7 @@ uint32_t __predict_med(uint8_t *pixels, int32_t width, int32_t height)
     {
       done = 1;
     }
-    if ( last > (uint32_t)(done - 1) )
+    if ( last > (done - 1) )
     {
       q = (&p[-done]);
       last = (uint8_t)(*q - *((int8_t *)q - 1));
@@ -1722,7 +1722,7 @@ uint32_t __alt_init_tables(uint8_t *fold, int8_t *unfold)
     {
       done = 1;
     }
-    if ( (uint32_t)(done - 1) < span )
+    if ( (done - 1) < span )
     {
       if ( in_bucket == 1 )
         LOBYTE(half) = half + 1;
@@ -2886,11 +2886,11 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
   // `|=` rather than `||` because none of them has a side effect to short out.
   near = false;
   for ( band = 11; band < 16; ++band )
-    near |= result == (int32_t)p_n15[band];
+    near |= result == p_n15[band];
   far = false;
   for ( band = 16; band < 32; ++band )
-    far |= result == (int32_t)p_n15[band];
-  near_hit = 32 * near + ((result == (int32_t)p_n15[10]) << 6);
+    far |= result == p_n15[band];
+  near_hit = 32 * near + ((result == p_n15[10]) << 6);
   far_hit = 16 * far;
   ctx0 = far_hit + near_hit;
   *(int32_t *)&_this->ctr_node = ctx0;
@@ -2975,7 +2975,7 @@ int32_t __init_model_tables(ModelBlock *_this)
         want = _this->row_cur[5]->sym;
         n_live = list->live;
         ent = list->ent;
-        if ( n_live == (int32_t)list->n )
+        if ( n_live == list->n )
         {
           list->live = --n_live;
           recycled = list->ent[n_live].cnt;
@@ -4596,7 +4596,7 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t img_w, int32_t plane)
     {
       done = 1;
     }
-    if ( (uint32_t)(img_w + 4) > (uint32_t)(done - 1) )
+    if ( (uint32_t)(img_w + 4) > (done - 1) )
     {
       *(uint8_t **)&_this->row1[done - 1] = (uint8_t *)_this;
       *(uint8_t **)&_this->row0[done - 1] = (uint8_t *)_this;
@@ -4987,7 +4987,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
         {
           at = 1;
         }
-        if ( (uint32_t)(at - 1) < (uint32_t)ncol )
+        if ( (at - 1) < (uint32_t)ncol )
           *(uint32_t *)&Bufferc_3[4 * at + 50] = ((uint8_t)(Buffera * (at - 1)) << 16)
                                               | (uint8_t)(Buffera * (at - 1))
                                               | ((uint8_t)(Buffera * (at - 1)) << 8);
@@ -5032,7 +5032,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
           at2 = 1;
           done = 1;
         }
-        if ( (uint32_t)(at2 - 1) < (uint32_t)ncol )
+        if ( (at2 - 1) < (uint32_t)ncol )
         {
           pal2 = &Bufferb_1[p_i_1];
           bgr2 = *(uint16_t *)&pal2[3 * done + 13];
@@ -7646,7 +7646,7 @@ LABEL_14:
         {
           done = 1;
         }
-        if ( k_2 > (uint32_t)(done - 1) )
+        if ( k_2 > (done - 1) )
           __frame.slot[done + 1] = (uint8_t *)(__frame.slot[1]) + __frame.slot0 * -__frame.kids_i + __frame.slot6 * done;
       }
       else
@@ -7685,7 +7685,7 @@ LABEL_14:
               {
                 done2 = 1;
               }
-              if ( (uint32_t)(done2 - 1) >= __frame.slot9 )
+              if ( (done2 - 1) >= __frame.slot9 )
                 break;
               dst_c = (uint8_t *)__frame.slot[done2 + 1];
               srcp = &rp[done2];
@@ -8191,7 +8191,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
       next_plane = 1;
     }
     result = next_plane - 1;
-    if ( (uint32_t)n_planes > (uint32_t)(next_plane - 1) )
+    if ( (uint32_t)n_planes > (next_plane - 1) )
     {
       plane_desc[next_plane].src_plane = result;
       plane_desc[next_plane].predictor = result;
@@ -9849,7 +9849,7 @@ LABEL_57:
           {
             done = 1;
           }
-          if ( (uint32_t)(idx_s - hit_a - 1) > (uint32_t)(done - 1) )
+          if ( (uint32_t)(idx_s - hit_a - 1) > (done - 1) )
           {
             s3d = __frame.sym3;
             _this->pix_cur[1] = __frame.sym1;
@@ -10618,7 +10618,7 @@ LABEL_42:
         {
           done = 1;
         }
-        if ( (uint32_t)p_n15_4 > (uint32_t)(done - 1) )
+        if ( (uint32_t)p_n15_4 > (done - 1) )
         {
           _this->pix_cur[1] = __frame.sym8;
           *(uint32_t *)_this->row_cur[5] = rec_word;
@@ -11096,7 +11096,7 @@ void __expand_alphabet(ModelBlock *_this)
         k = 0;
         do
           __init_symbol_list(&__frame.lists[k++], (int32_t)_this, 256, 1);
-        while ( k < (uint32_t)(4 * nbytes) );
+        while ( k < (4 * nbytes) );
         n_syms = _this->alphabet;
       }
       if ( n_syms )
