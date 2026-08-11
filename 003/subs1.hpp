@@ -14070,9 +14070,8 @@ void __alt_model_p2_d8_decode( uint8_t *Src, int32_t i, int32_t a5)
     __alt_p2_free((void **)blk, 1);
 }
 
-int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *v105,
-        *v115, *v124, *v132, *v30, *v34, *v38, *v67, *v75, *buf3, *v82, *buf2,
-        *buf1, *v85, *v86, *v88, *v90, *v92, *v94, *v96, *v98;
+int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *cur0,
+        *cur1, *cur2, *cur3, *buf3, *bb4, *buf2, *buf1, *bb0;
   struct alignas(16) AltModelP2DecodeFrame {   // 276 bytes, one stack frame
       uint8_t   _gap0[4];   // was uint32_t Size_1
       uint8_t slot4[16];
@@ -14084,69 +14083,64 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *v105,
       uint8_t slot100[16];
       uint8_t slot116[16];
       uint8_t slot132[16];
-      uint8_t   _gap1[4];   // was int32_t v149
-      int32_t v150;
+      uint8_t   _gap1[4];   // was int32_t y
+      int32_t x;
       uint8_t   _gap2[4];   // was uint8_t * Src_1
-      uint8_t   _gap3[4];   // was int32_t v153
-      uint8_t   _gap4[4];   // was int32_t v154
+      uint8_t   _gap3[4];   // was int32_t xf4
+      uint8_t   _gap4[4];   // was int32_t val3
       uint8_t   _gap5[16];   // was AltP2Block * plane
-      uint8_t   _gap6[4];   // was int32_t v159
-      uint8_t   _gap7[4];   // was int32_t v160
+      uint8_t   _gap6[4];   // was int32_t w
+      uint8_t   _gap7[4];   // was int32_t back
       uint8_t   _gap8[4];   // was uint32_t Size
       uint8_t   _gap9[4];   // was int32_t ArgList
-      uint8_t   _gap10[4];   // was int32_t v163
+      uint8_t   _gap10[4];   // was int32_t xf0
       uint8_t   _gap11[4];   // was uint32_t i_1
-      uint8_t   _gap12[4];   // was uint32_t v165
+      uint8_t   _gap12[4];   // was uint32_t first
       uint8_t   _gap13[4];   // was int32_t n4_2
       uint8_t   _gap14[4];   // was uint32_t i_2
       uint8_t   _gap15[4];   // was int32_t v168
       uint8_t   _gap16[4];   // was int32_t v169
       uint8_t   _gap17[4];   // was int32_t v170
-      uint8_t   _gap18[4];   // was uint32_t v171
+      uint8_t   _gap18[4];   // was uint32_t np
       uint8_t _pad0[40];
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 288, "frame layout moved");
-  int32_t v149;
-  // These shared `__frame.v150` with the name that still binds it: one
+  int32_t y;
+  // These shared `__frame.x` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int32_t v153;
-  int32_t v154;
+  int32_t xf4;
+  int32_t val3;
   AltP2Block * plane[4];
-  int32_t v159;
-  int32_t v160;
+  int32_t w;
+  int32_t back;
   uint32_t Size;
   int32_t ArgList;
-  int32_t v163;
+  int32_t xf0;
   uint32_t i_1;
-  uint32_t v165;
+  uint32_t first;
   int32_t n4_2;
   uint32_t i_2;
-  uint32_t v171;
+  uint32_t np;
   ;
-  AltP2Block *v56;
-  AltP2Block *v14;
-  AltP2Block *v25;
-  P2Ctx *v26;   // a record cursor
-  P2Ctx *v41;   // a record cursor
-  P2Ctx *v63;   // a record cursor
-  P2Ctx *v71;   // a record cursor
-  P2Ctx *v78;   // a record cursor
-  int32_t *cur, *v60;   // the row cursors, four bytes a step
-  AltP2Block *v120;
-  AltP2Block *v129;
-  AltP2Block *v111;
-  bool v17, v109;
-  int16_t v110;
-  int32_t i, v5, n4, n4_1, v15, v16, v31, v58, *v59, v101, v103, v104, v112,
-          v113, v114, v116, v117, v118, v119, v121, v122, v123, v125, v126,
-          v127, v128, v130, v131, v133, v134, v135, n4_3, n4_4;
+  AltP2Block *blk_r;
+  AltP2Block *src3;
+  AltP2Block *blk_k;
+  int32_t *cur, *r1;   // the row cursors, four bytes a step
+  AltP2Block *blk2;
+  AltP2Block *blk3;
+  AltP2Block *blk1;
+  bool xf3, off;
+  int16_t seed1;
+  int32_t i, raw, n4, n4_1, xf1, xf2, b4, *b0, pred0, code0, val0, pred1, code1,
+          val1, l7a, l4a, l5a, seed2, pred2, code2, val2, l7b, l4b, l5b,
+          seed3, pred3, code3, l7c, l4c, l5c, n4_3, n4_4;
   P2Freq *freq;
   AltP2Block *lpAddress_1;
-  uint32_t v11;
-  void *v7, *v8, **lpAddress_2;
-  AltP2Block **v18;
+  uint32_t src2;
+  void *made, *src1, **lpAddress_2;
+  AltP2Block **planep;
   // The p2 filter coefficients drift over a run: rows 4..6 are folded into
   // rows 0..2 here and then zeroed, and the whole table goes back on the way
   // out, so a run starts from the same place the last one did.
@@ -14172,66 +14166,64 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *v105,
     bmf_p2_rate[6][k] = bmf_p2_rate_reset;
   }
   i = *p_i;
-  v5 = p_i[1];
+  raw = p_i[1];
   if ( plane_count > 0 )
   {
     n4 = 0;
     do
     {
-      v7 = bmf_page_alloc(0x103E30u);
-      if ( v7 )
-        v8 = __alt_p2_alloc((AltP2Block *)v7, i, n4);
+      made = bmf_page_alloc(0x103E30u);
+      if ( made )
+        src1 = __alt_p2_alloc((AltP2Block *)made, i, n4);
       else
-        v8 = nullptr;
-      plane[n4++] = (AltP2Block *)v8;
+        src1 = nullptr;
+      plane[n4++] = (AltP2Block *)src1;
     }
     while ( n4 < plane_count );
   }
-  v163 = plane_desc[plane_desc[2].src_plane + 1].flags & 8;
+  xf0 = plane_desc[plane_desc[2].src_plane + 1].flags & 8;
   ArgList = plane_desc[plane_desc[3].src_plane + 1].flags & 8;
-  v153 = (plane_desc[plane_desc[4].src_plane + 1].flags) & 8;
+  xf4 = (plane_desc[plane_desc[4].src_plane + 1].flags) & 8;
   __rc_begin_decode(ArgList);
-  if ( v5 > 0 )
+  if ( raw > 0 )
   {
-    v11 = 0;
-    v149 = i;
-    v160 = -i;
+    src2 = 0;
+    y = i;
+    back = -i;
     n4_1 = plane_count;
     Size = 18 * i + 234;
-    v171 = i + 13;
+    np = i + 13;
     do
     {
       if ( n4_1 > 0 )
       {
-        v165 = v11;
+        first = src2;
         n4_2 = 0;
-        __frame.v150 = v5;
+        __frame.x = raw;
         i_1 = i;
         do
         {
           ++n4_2;
-          if ( v165 )
+          if ( first )
           {
-            v18 = &plane[n4_2];
-            if ( v165 == 1 )
+            planep = &plane[n4_2];
+            if ( first == 1 )
             {
-              v25 = (AltP2Block *)((int32_t)*(v18 - 1));
-              v26 = (P2Ctx *)v25->cursor[0];
-              v26[0] = v26[-1];
-              v30 = v25->cursor[0];
-              v31 = *(uint32_t *)&v30[-1].lane[2];
-              ((P2Ctx *)v30)[1] = ((P2Ctx *)v30)[-1];
-              LOWORD(v31) = *(uint16_t *)&v30[-1].sign;
-              v34 = v25->cursor[0];
-              ((P2Ctx *)v34)[2] = ((P2Ctx *)v34)[-1];
-              v38 = v25->cursor[0];
-              ((P2Ctx *)v38)[3] = ((P2Ctx *)v38)[-1];
-              LOWORD(v34) = *(uint16_t *)&v38[-1].sign;
-              v41 = (P2Ctx *)v25->cursor[0];
-              v41[4] = v41[-1];
+              blk_k = (AltP2Block *)((int32_t)*(planep - 1));
+              // The row end mirrored into the right margin: five copies of
+              // record -1.  `v31` and the `LOWORD(v34)` between them read two
+              // of record -1's fields into registers that are never read back.
+              {
+                P2Ctx *const here = blk_k->cursor[0];
+                here[0] = here[-1];
+                here[1] = here[-1];
+                here[2] = here[-1];
+                here[3] = here[-1];
+                here[4] = here[-1];
+              }
               // One cursor for the 8 records this shifts; MSVC reloaded the base
               // between every pair and nothing here writes it.
-              P2Ctx *const rec2 = v25->cursor[0] + v160;
+              P2Ctx *const rec2 = blk_k->cursor[0] + back;
               rec2[-1] = rec2[0];
               rec2[-2] = rec2[1];
               rec2[-3] = rec2[2];
@@ -14240,122 +14232,119 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *v105,
               rec2[-6] = rec2[5];
               rec2[-7] = rec2[6];
               rec2[-8] = rec2[7];
-              memcpy(v25->buf[1],v25->buf[0],Size);
-              memcpy(v25->buf[2],v25->buf[0],Size);
-              memcpy(v25->buf[3],v25->buf[0],Size);
+              memcpy(blk_k->buf[1],blk_k->buf[0],Size);
+              memcpy(blk_k->buf[2],blk_k->buf[0],Size);
+              memcpy(blk_k->buf[3],blk_k->buf[0],Size);
             }
           }
           else
           {
-            v14 = (AltP2Block *)((int32_t)plane[n4_2 - 1]);
-            v159 = (int32_t)(&plane[n4_2]);
-            v15 = 0;
+            src3 = (AltP2Block *)((int32_t)plane[n4_2 - 1]);
+            w = (int32_t)(&plane[n4_2]);
+            xf1 = 0;
             do
             {
-              v16 = v15;
-              v14->buf[0][v16].lane[0] = 256;
-              v17 = ++v15 < v171;
-              v14->buf[0][v16].lane[1] = 256;
-              v14->buf[0][v16].lane[2] = -16;
-              v14->buf[0][v16].sign = 1;
-              v14->buf[0][v16].mag = 3;
-              v14->buf[0][v16].lane[3] = 512;
-              v14->buf[0][v16].lane[7] = 512;
-              v14->buf[0][v16].lane[6] = 512;
-              v14->buf[0][v16].lane[5] = 1024;
-              v14->buf[0][v16].lane[4] = 256;
+              xf2 = xf1;
+              src3->buf[0][xf2].lane[0] = 256;
+              xf3 = ++xf1 < np;
+              src3->buf[0][xf2].lane[1] = 256;
+              src3->buf[0][xf2].lane[2] = -16;
+              src3->buf[0][xf2].sign = 1;
+              src3->buf[0][xf2].mag = 3;
+              src3->buf[0][xf2].lane[3] = 512;
+              src3->buf[0][xf2].lane[7] = 512;
+              src3->buf[0][xf2].lane[6] = 512;
+              src3->buf[0][xf2].lane[5] = 1024;
+              src3->buf[0][xf2].lane[4] = 256;
             }
-            while ( v17 );
-            v18 = (AltP2Block **)v159;
-            memcpy(v14->buf[1],v14->buf[0],Size);
-            memcpy(v14->buf[2],v14->buf[0],Size);
-            memcpy(v14->buf[3],v14->buf[0],Size);
-            v14->cursor[0] = v14->buf[0] + v149 + 8;
-            v14->cursor[1] = (v14->buf[1] + v149 + 8);
-            v14->cursor[2] = v14->buf[2] + v149 + 8;
-            v14->cursor[3] = v14->buf[3] + v149 + 8;
-            v14->cursor[4] = (v14->buf[4] + v149 + 8);
+            while ( xf3 );
+            planep = (AltP2Block **)w;
+            memcpy(src3->buf[1],src3->buf[0],Size);
+            memcpy(src3->buf[2],src3->buf[0],Size);
+            memcpy(src3->buf[3],src3->buf[0],Size);
+            src3->cursor[0] = src3->buf[0] + y + 8;
+            src3->cursor[1] = (src3->buf[1] + y + 8);
+            src3->cursor[2] = src3->buf[2] + y + 8;
+            src3->cursor[3] = src3->buf[3] + y + 8;
+            src3->cursor[4] = (src3->buf[4] + y + 8);
           }
-          v56 = (AltP2Block *)((int32_t)*(v18 - 1));
+          blk_r = (AltP2Block *)((int32_t)*(planep - 1));
           // Start the next row: carry the last word of this one forward, swap
           // the two row buffers, and re-derive the two cursors from them.
-          cur = v56->cur;
-          v58 = cur[-1];
-          cur[1] = v58;
-          *v56->cur = v58;
-          v59 = v56->row0;
-          v60 = v56->row1;
-          v56->row0 = v60;
-          v56->row1 = v59;
-          v60 += 2;
-          v56->cur = v60;
-          v59 += 2;
-          v56->above = v59;
-          v60[-1] = *v59;
-          v56->cur[-2] = *v59;
-          v56->f278528_q = 0;
-          v56->f278536 = 0;
-          v56->f278540 = 0;
-          v56->f278542 = 0;
-          v56->bias[0] = 0.0f;
+          cur = blk_r->cur;
+          b4 = cur[-1];
+          cur[1] = b4;
+          *blk_r->cur = b4;
+          b0 = blk_r->row0;
+          r1 = blk_r->row1;
+          blk_r->row0 = r1;
+          blk_r->row1 = b0;
+          r1 += 2;
+          blk_r->cur = r1;
+          b0 += 2;
+          blk_r->above = b0;
+          r1[-1] = *b0;
+          blk_r->cur[-2] = *b0;
+          blk_r->f278528_q = 0;
+          blk_r->f278536 = 0;
+          blk_r->f278540 = 0;
+          blk_r->f278542 = 0;
+          blk_r->bias[0] = 0.0f;
 
-          v56->bias[1] = 0.0f;
+          blk_r->bias[1] = 0.0f;
 
-          v56->bias[2] = 0.0f;
+          blk_r->bias[2] = 0.0f;
 
-          v56->bias[3] = 0.0f;
+          blk_r->bias[3] = 0.0f;
           // `(p + 278543) & ~15` is `&p->p2_row[0]`: +278528 is a multiple of 16
           // and the object comes from `bmf_page_alloc`, so the round-up is a no-op.
           // Seven sixteen-byte stores are the 112 bytes of the seven rows.
-          __builtin_memset(v56->p2_row, 0, sizeof v56->p2_row);
-          v63 = (P2Ctx *)v56->cursor[0];
-          v63[0] = v63[-1];
-          v67 = v56->cursor[0];
-          ((P2Ctx *)v67)[1] = ((P2Ctx *)v67)[-2];
-          v71 = (P2Ctx *)v56->cursor[0];
-          v71[2] = v71[-3];
-          v75 = v56->cursor[0];
-          ((P2Ctx *)v75)[3] = ((P2Ctx *)v75)[-4];
-          v78 = (P2Ctx *)v56->cursor[0];
-          v78[4] = v78[-5];
-          buf3 = v56->buf[3];
-          v82 = v56->buf[4];
-          buf2 = v56->buf[2];
-          buf1 = v56->buf[1];
-          v85 = v56->buf[0];
-          v56->buf[4] = buf3;
-          v56->buf[3] = buf2;
-          v56->buf[2] = buf1;
-          v56->buf[0] = v82;
-          v56->buf[1] = v85;
-          v82 += 8;
-          v56->cursor[0] = v82;
-          v85 += 8;
-          v56->cursor[1] = v85;
-          v56->cursor[2] = buf1 + 8;
-          v56->cursor[3] = buf2 + 8;
-          v56->cursor[4] = buf3 + 8;
-          ((P2Ctx *)v82)[-1] = ((P2Ctx *)v85)[0];
-          v86 = v56->cursor[0];
-          ((P2Ctx *)v86)[-2] = ((P2Ctx *)v56->cursor[1])[1];
-          v88 = v56->cursor[0];
-          ((P2Ctx *)v88)[-3] = ((P2Ctx *)v56->cursor[1])[2];
-          v90 = v56->cursor[0];
-          ((P2Ctx *)v90)[-4] = ((P2Ctx *)v56->cursor[1])[3];
-          v92 = v56->cursor[0];
-          ((P2Ctx *)v92)[-5] = ((P2Ctx *)v56->cursor[1])[4];
-          v94 = v56->cursor[0];
-          ((P2Ctx *)v94)[-6] = ((P2Ctx *)v56->cursor[1])[5];
-          v96 = v56->cursor[0];
-          ((P2Ctx *)v96)[-7] = ((P2Ctx *)v56->cursor[1])[6];
-          v98 = v56->cursor[0];
-          ((P2Ctx *)v98)[-8] = ((P2Ctx *)v56->cursor[1])[7];
-          v56->cursor[0]->lane[1] = 0;
+          __builtin_memset(blk_r->p2_row, 0, sizeof blk_r->p2_row);
+          // And at the row start, records 0..4 take -1..-5.
+          {
+            P2Ctx *const here = blk_r->cursor[0];
+            here[0] = here[-1];
+            here[1] = here[-2];
+            here[2] = here[-3];
+            here[3] = here[-4];
+            here[4] = here[-5];
+          }
+          buf3 = blk_r->buf[3];
+          bb4 = blk_r->buf[4];
+          buf2 = blk_r->buf[2];
+          buf1 = blk_r->buf[1];
+          bb0 = blk_r->buf[0];
+          blk_r->buf[4] = buf3;
+          blk_r->buf[3] = buf2;
+          blk_r->buf[2] = buf1;
+          blk_r->buf[0] = bb4;
+          blk_r->buf[1] = bb0;
+          bb4 += 8;
+          blk_r->cursor[0] = bb4;
+          bb0 += 8;
+          blk_r->cursor[1] = bb0;
+          blk_r->cursor[2] = buf1 + 8;
+          blk_r->cursor[3] = buf2 + 8;
+          blk_r->cursor[4] = buf3 + 8;
+          ((P2Ctx *)bb4)[-1] = ((P2Ctx *)bb0)[0];
+          // The new row's left margin, from the row above, reversed.
+          {
+            P2Ctx *const here = blk_r->cursor[0];
+            P2Ctx *const up   = blk_r->cursor[1];
+            here[-2] = up[1];
+            here[-3] = up[2];
+            here[-4] = up[3];
+            here[-5] = up[4];
+            here[-6] = up[5];
+            here[-7] = up[6];
+            here[-8] = up[7];
+          }
+          blk_r->cursor[0]->lane[1] = 0;
           n4_1 = plane_count;
         }
         while ( plane_count > n4_2 );
-        v11 = v165;
-        v5 = __frame.v150;
+        src2 = first;
+        raw = __frame.x;
         i = i_1;
       }
       ctx_bias[3] = 0;
@@ -14364,7 +14353,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *v105,
       ctx_bias[0] = 0;
       if ( i > 0 )
       {
-        v165 = v11;
+        first = src2;
         i_2 = 0;
         i_1 = i;
         do
@@ -14374,94 +14363,94 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *v105,
           ctx_bias[2] >>= 3;
           ctx_bias[3] >>= 3;
           lpAddress_1 = (AltP2Block *)(plane[0]);
-          v101 = __alt_p2_context((AltP2Block *)plane[0], (AltP2Block *)plane[2], (AltP2Block *)plane[1]);
+          pred0 = __alt_p2_context((AltP2Block *)plane[0], (AltP2Block *)plane[2], (AltP2Block *)plane[1]);
           freq = &lpAddress_1->freq[lpAddress_1->ctx];
-          v103 = __alt_p2_decode_symbol(freq, lpAddress_1->ctx_pair);
-          v104 = (uint8_t)(v101 + (*(uint8_t *)&lpAddress_1->unfold[v103]));
-          __alt_p2_model((AltP2Block *)lpAddress_1, v104, v103, v104 - v101);
-          v105 = lpAddress_1->cursor[0];
-          ctx_bias[0] += 32 * v105[-1].lane[6];
-          ctx_bias[1] += (32 * v105[-1].lane[7]);
-          ctx_bias[2] += 32 * v105[-1].lane[4];
-          ctx_bias[3] += 32 * v105[-1].lane[5];
-          v109 = v163 == 0;
-          Src[plane_desc[1].src_plane] = v104;
-          if ( v109 )
-            v110 = 0;
+          code0 = __alt_p2_decode_symbol(freq, lpAddress_1->ctx_pair);
+          val0 = (uint8_t)(pred0 + (*(uint8_t *)&lpAddress_1->unfold[code0]));
+          __alt_p2_model((AltP2Block *)lpAddress_1, val0, code0, val0 - pred0);
+          cur0 = lpAddress_1->cursor[0];
+          ctx_bias[0] += 32 * cur0[-1].lane[6];
+          ctx_bias[1] += (32 * cur0[-1].lane[7]);
+          ctx_bias[2] += 32 * cur0[-1].lane[4];
+          ctx_bias[3] += 32 * cur0[-1].lane[5];
+          off = xf0 == 0;
+          Src[plane_desc[1].src_plane] = val0;
+          if ( off )
+            seed1 = 0;
           else
-            v110 = 16 * Src[plane_desc[1].src_plane];
-          v111 = (AltP2Block *)(plane[1]);
-          plane[1]->cursor[0]->lane[1] = v110;
-          v112 = __alt_p2_context((AltP2Block *)v111, (AltP2Block *)plane[0], (AltP2Block *)plane[2]);
-          v113 = __alt_p2_decode_symbol(&v111->freq[v111->ctx], v111->ctx_pair);
-          v114 = (uint8_t)(v112 + v111->unfold[v113]);
-          __alt_p2_model((AltP2Block *)v111, v114, v113, v114 - v112);
-          v115 = v111->cursor[0];
-          v116 = v115[-1].lane[7];
-          v117 = v115[-1].lane[4];
-          ctx_bias[0] += 32 * v115[-1].lane[6];
-          v118 = v115[-1].lane[5];
-          ctx_bias[1] += 32 * v116;
-          ctx_bias[2] += 32 * v117;
-          ctx_bias[3] += 32 * v118;
-          v109 = ArgList == 0;
-          Src[plane_desc[2].src_plane] = v114;
-          if ( v109 )
-            LOWORD(v119) = 0;
+            seed1 = 16 * Src[plane_desc[1].src_plane];
+          blk1 = (AltP2Block *)(plane[1]);
+          plane[1]->cursor[0]->lane[1] = seed1;
+          pred1 = __alt_p2_context((AltP2Block *)blk1, (AltP2Block *)plane[0], (AltP2Block *)plane[2]);
+          code1 = __alt_p2_decode_symbol(&blk1->freq[blk1->ctx], blk1->ctx_pair);
+          val1 = (uint8_t)(pred1 + blk1->unfold[code1]);
+          __alt_p2_model((AltP2Block *)blk1, val1, code1, val1 - pred1);
+          cur1 = blk1->cursor[0];
+          l7a = cur1[-1].lane[7];
+          l4a = cur1[-1].lane[4];
+          ctx_bias[0] += 32 * cur1[-1].lane[6];
+          l5a = cur1[-1].lane[5];
+          ctx_bias[1] += 32 * l7a;
+          ctx_bias[2] += 32 * l4a;
+          ctx_bias[3] += 32 * l5a;
+          off = ArgList == 0;
+          Src[plane_desc[2].src_plane] = val1;
+          if ( off )
+            LOWORD(seed2) = 0;
           else
-            v119 = (plane_desc[plane_desc[3].src_plane + 1].w8 * Src[plane_desc[2].src_plane]
+            seed2 = (plane_desc[plane_desc[3].src_plane + 1].w8 * Src[plane_desc[2].src_plane]
                   + plane_desc[plane_desc[3].src_plane + 1].w4 * Src[plane_desc[1].src_plane]) >> 3;
-          v120 = (AltP2Block *)(plane[2]);
-          plane[2]->cursor[0]->lane[1] = v119;
-          v121 = __alt_p2_context((AltP2Block *)v120, (AltP2Block *)plane[0], (AltP2Block *)plane[1]);
-          v122 = __alt_p2_decode_symbol(&v120->freq[v120->ctx], v120->ctx_pair);
-          v123 = (uint8_t)(v121 + v120->unfold[v122]);
-          __alt_p2_model((AltP2Block *)v120, v123, v122, v123 - v121);
-          v124 = v120->cursor[0];
-          v125 = v124[-1].lane[7];
-          v126 = v124[-1].lane[4];
-          ctx_bias[0] += 32 * v124[-1].lane[6];
-          v127 = v124[-1].lane[5];
-          ctx_bias[1] += 32 * v125;
-          ctx_bias[2] += 32 * v126;
-          ctx_bias[3] += 32 * v127;
-          Src[plane_desc[3].src_plane] = v123;
+          blk2 = (AltP2Block *)(plane[2]);
+          plane[2]->cursor[0]->lane[1] = seed2;
+          pred2 = __alt_p2_context((AltP2Block *)blk2, (AltP2Block *)plane[0], (AltP2Block *)plane[1]);
+          code2 = __alt_p2_decode_symbol(&blk2->freq[blk2->ctx], blk2->ctx_pair);
+          val2 = (uint8_t)(pred2 + blk2->unfold[code2]);
+          __alt_p2_model((AltP2Block *)blk2, val2, code2, val2 - pred2);
+          cur2 = blk2->cursor[0];
+          l7b = cur2[-1].lane[7];
+          l4b = cur2[-1].lane[4];
+          ctx_bias[0] += 32 * cur2[-1].lane[6];
+          l5b = cur2[-1].lane[5];
+          ctx_bias[1] += 32 * l7b;
+          ctx_bias[2] += 32 * l4b;
+          ctx_bias[3] += 32 * l5b;
+          Src[plane_desc[3].src_plane] = val2;
           n4_1 = plane_count;
           if ( plane_count >= 4 )
           {
-            if ( v153 )
-              v128 = (plane_desc[plane_desc[4].src_plane + 1].w12 * Src[2]
+            if ( xf4 )
+              seed3 = (plane_desc[plane_desc[4].src_plane + 1].w12 * Src[2]
                     + plane_desc[plane_desc[4].src_plane + 1].w8 * Src[1]
                     + plane_desc[plane_desc[4].src_plane + 1].w4 * *Src) >> 3;
             else
-              LOWORD(v128) = 0;
-            v129 = (AltP2Block *)(plane[3]);
-            plane[3]->cursor[0]->lane[1] = v128;
-            v130 = __alt_p2_context((AltP2Block *)v129, (AltP2Block *)plane[2], (AltP2Block *)plane[0]);
-            v131 = __alt_p2_decode_symbol(&v129->freq[v129->ctx], v129->ctx_pair);
-            v154 = (uint8_t)(v130 + v129->unfold[v131]);
-            __alt_p2_model((AltP2Block *)v129, v154, v131, v154 - v130);
-            v132 = v129->cursor[0];
-            v133 = v132[-1].lane[7];
-            v134 = v132[-1].lane[4];
-            v135 = v132[-1].lane[5];
-            ctx_bias[0] += 32 * v132[-1].lane[6];
-            ctx_bias[1] += 32 * v133;
-            ctx_bias[2] += 32 * v134;
-            ctx_bias[3] += 32 * v135;
-            Src[3] = v154;
+              LOWORD(seed3) = 0;
+            blk3 = (AltP2Block *)(plane[3]);
+            plane[3]->cursor[0]->lane[1] = seed3;
+            pred3 = __alt_p2_context((AltP2Block *)blk3, (AltP2Block *)plane[2], (AltP2Block *)plane[0]);
+            code3 = __alt_p2_decode_symbol(&blk3->freq[blk3->ctx], blk3->ctx_pair);
+            val3 = (uint8_t)(pred3 + blk3->unfold[code3]);
+            __alt_p2_model((AltP2Block *)blk3, val3, code3, val3 - pred3);
+            cur3 = blk3->cursor[0];
+            l7c = cur3[-1].lane[7];
+            l4c = cur3[-1].lane[4];
+            l5c = cur3[-1].lane[5];
+            ctx_bias[0] += 32 * cur3[-1].lane[6];
+            ctx_bias[1] += 32 * l7c;
+            ctx_bias[2] += 32 * l4c;
+            ctx_bias[3] += 32 * l5c;
+            Src[3] = val3;
             n4_1 = plane_count;
           }
           Src += n4_1;
           ++i_2;
         }
         while ( i_2 < i_1 );
-        v11 = v165;
+        src2 = first;
         i = i_1;
       }
-      ++v11;
+      ++src2;
     }
-    while ( v11 < v5 );
+    while ( src2 < raw );
   }
   __rc_end_decode();
   __builtin_memcpy(bmf_p2_coef, saved_p2_coef, sizeof saved_p2_coef);
