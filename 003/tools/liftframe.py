@@ -4,10 +4,12 @@
     python3 tools/liftframe.py subs1.hpp --list
     python3 tools/liftframe.py subs1.hpp __model_planes
 
-Seventeen bodies still hold their locals in a `struct alignas(16) …{ … }
-__frame;`, and each carries a comment saying the frame is a layout rather than
-a bag of locals, with the exact failure that proved it -- "altp1 segfaults
-while compressing", "five streams move, no signal".
+Bodies that hold their locals in a `struct alignas(16) …{ … } __frame;` --
+seventeen when this was written, nine now -- each carry a comment saying the
+frame is a layout rather than a bag of locals, with the exact failure that
+proved it: "altp1 segfaults while compressing", "five streams move, no signal".
+The count is printed by `--list` rather than quoted here, because a number in a
+docstring is a measurement that stops being re-taken.
 
 Every one of those comments cites `tools/frame-sweep.sh`, which drives
 `defram.py`, which lifts *aliases* -- `int32_t &v83 = *(int32_t *)(frame +
@@ -25,8 +27,14 @@ was.
 Three things it declines rather than guesses at:
 
   * **a frame with a `union`.**  The union is MSVC's slot sharing written down,
-    and lifting its arms to separate locals is not the same program.  Nine of
-    the seventeen have one;
+    and lifting its arms to separate locals is not the same program.  A frame
+    whose *every* member is inside one is declined outright and said so -- for
+    a long time it was declined silently, and six frames were neither offered
+    nor mentioned under a line reading "0 frames this can offer to lift".  Two
+    of those six were not slot sharing at all: `compress_image`'s union held a
+    header and a scratch in mutually exclusive branches, and
+    `alt_p2_context`'s two arms were the same six pointers viewed twice.  Both
+    dissolved when the gate was asked;
   * **a member whose name is already a local** of that body -- the two would
     become one variable;
   * **any use of `__frame` that is not `__frame.X`**, which after the asserts
@@ -107,15 +115,31 @@ PROVEN = {
 
 
 def candidates(lines):
-    out = []
+    """(offers, declines) -- and the declines are named.
+
+    A frame whose every non-padding member sits inside a `union` yields an
+    empty member list, and for a long time that frame simply did not appear:
+    the run ended on "0 frames this can offer to lift" with six frames neither
+    offered nor mentioned.  That is the silence this file was written against
+    -- `frame-sweep.sh` printed "0 kept, 0 reverted" under seventeen claims
+    that rested on it having tried.  So a frame it cannot offer is now printed
+    with the reason it cannot.
+    """
+    out, declined = [], []
     for a, b, nm, sig in structs.bodies(lines):
         got = frame_of(lines, a, b)
-        if got and got[2] and nm.lstrip('_') not in PROVEN:
+        if not got or nm.lstrip('_') in PROVEN:
+            continue
+        if got[2] is None:
+            declined.append((nm, 'a line in it is not a member declaration'))
+        elif not got[2]:
+            declined.append((nm, 'every member is inside its union'))
+        else:
             types = structs.decl_types(sig, lines, a, b)
             clash = [n for _, _, n in got[2]
                      if n in types and n not in {m[2] for m in got[2]}]
             out.append((nm, a, b, got, clash))
-    return out
+    return out, declined
 
 
 def apply(lines, nm, a, b, got, indent='  '):
@@ -165,7 +189,7 @@ if __name__ == '__main__':
     path = sys.argv[1] if len(sys.argv) > 1 else 'subs1.hpp'
     lines = open(path).read().split('\n')
     want = next((x for x in sys.argv[2:] if not x.startswith('--')), None)
-    found = candidates(lines)
+    found, declined = candidates(lines)
     if want:
         one = [f for f in found if f[0].lstrip('_') == want.lstrip('_')]
         if not one:
@@ -184,4 +208,7 @@ if __name__ == '__main__':
                                              '  CLASH: ' + ','.join(clash) if clash else ''))
         for fn, why in sorted(PROVEN.items()):
             print('  %-24s tried: %s' % (fn, why))
-        print('%d frames this can offer to lift' % len(found))
+        for nm, why in sorted(declined):
+            print('  %-24s declined: %s' % (nm.lstrip('_'), why))
+        print('%d frames this can offer to lift; %d tried and reverted, '
+              '%d declined' % (len(found), len(PROVEN), len(declined)))

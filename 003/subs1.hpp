@@ -6459,66 +6459,14 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   // allowed.  The note here used to read "altp1 segfaults while compressing"
   // on the authority of `frame-sweep.sh`, which lifts aliases and has
   // had none to lift since round nine.
-  struct alignas(16) AltP2ContextFrame {   // 208 bytes, one stack frame
-      // Three slots MSVC used for `cursor[0]`, one digit of the
-      // neighbourhood index, and `(int16_t *)cursor[1]`.  All three had one
-      // other name that says what they are, and the layout is pinned, so
-      // they stay as the size they were.
-      uint8_t   _gapA[4];   // was P2Ctx * v246, which is `cursor[0]`
-      uint8_t   _gapB[4];   // was int32_t v256, which is `64 * gA`
-      uint8_t   _gapC[4];   // was int16_t * v268, which is `cursor[1]`
-      // `alt_p2_filter`'s six sub-model weight blocks, which is what `CtxWeights`
-      // says and the only thing the six slots hold by the time it is called.
-      // The scratch the body kept here first is six locals now.
-      union {
-          void *sub[6];
-          struct {
-            float (*sub0)[4];
-            float (*sub1)[4];
-            float (*sub2)[4];
-            float (*sub3)[4];
-            float (*sub4)[4];
-            float (*sub5)[4];
-          };
-      };
-      uint8_t   _gap0[4];   // was int16_t * ra1
-      uint8_t   _gap1[4];   // was int16_t * ra0
-      uint8_t   _gap2[4];   // was int16_t * rb1
-      uint8_t   _gap3[4];   // was int16_t * rb0
-      uint8_t   _gap4[4];   // was int16_t * rb2
-      uint8_t   _gap5[4];   // was int16_t * ra2
-      uint8_t   _gap6[4];   // was int32_t n1840_2
-      uint8_t   _gap7[4];   // was int32_t n1840_1
-      uint8_t   _gap8[4];   // was AltP2Block * blk
-      uint8_t   _gap9[4];   // was int32_t sum_all
-      uint8_t   _gap10[4];   // was int32_t n3536
-      uint8_t   _gap11[4];   // was int32_t v292
-      uint8_t   _gap12[4];   // was P2Ctx *cx1, now a `P2Ctx *`
-      uint8_t   _gap13[4];   // was int16_t * cx3
-      uint8_t   _gap14[4];   // was int16_t * cx2
-      uint8_t   _gap15[4];   // was int16_t * v296
-      uint8_t   _gap16[4];   // was uint32_t q39
-      uint8_t   _gap17[4];   // was uint32_t q10
-      uint8_t   _gap18[4];   // was int32_t n960_1
-      uint8_t   _gap19[4];   // was int32_t n1840
-      uint8_t   _gap20[4];   // was int32_t v301
-      uint8_t   _gap21[4];   // was int32_t v302
-      uint8_t   _gap22[4];   // was int32_t v303
-      uint8_t   _gap23[4];   // was int32_t v304
-      uint8_t   _gap24[4];   // was int32_t v305
-      uint8_t   _gap25[4];   // was int32_t run_dv3
-      uint8_t   _gap26[4];   // was int32_t dv_now4
-      uint8_t   _gap27[4];   // was int32_t v308
-      uint8_t   _gap28[4];   // was int32_t v309
-      uint8_t   _gap29[4];   // was int32_t v310
-      uint8_t   _gap30[4];   // was int32_t v311
-      uint8_t   _gap31[4];   // was int32_t run_dv4
-      uint8_t   _gap32[4];   // was int32_t run_up4
-      uint8_t   _gap33[4];   // was int32_t v314
-      uint8_t   _gap34[4];   // was int32_t v315
-      uint8_t _pad0[32];
-  } __frame;
-  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 208, "frame layout moved");
+  // A 208-byte frame for six pointers.  Thirty-five of its members were
+  // `_gapN` -- locals that had been given storage of their own and left
+  // behind to hold the layout -- and the six that were live are exactly
+  // `CtxWeights`, which is the argument `alt_p2_filter` takes.  The frame's
+  // own note said the gaps stay "because the layout is pinned"; that is a
+  // claim the gate can be asked, and the answer is fifteen streams
+  // byte-identical without it.
+  CtxWeights weights;   // `alt_p2_filter`'s six sub-model weight blocks
   // Sixteen locals shared three stack slots with the names that used to bind
   // them: MSVC gave one slot to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is the
@@ -6535,7 +6483,7 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   P2Ctx *nb4;   // row cursors into the neighbourhood table
   // The six spill slots before `alt_p2_filter`'s six weight pointers are
   // loaded into them: a row cursor, a neighbour, a threshold-row index and
-  // three counts.  Both lifetimes were `__frame.sub[0..5]`.
+  // three counts.  Both lifetimes were the same six words.
   int32_t  num_b, band, num_d;
   // The five digits of the neighbourhood index and the index itself.
   int32_t  gA, gB, gC, gD, den_d, nb_slot;
@@ -6845,13 +6793,13 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
     ra0 = nullptr;
   }
   cur = blk->cur;
-  __frame.sub0 = (float (*)[4])*(cur - 1);
+  weights.f0[0] = (float (*)[4])*(cur - 1);
   up_row = blk->above;
-  __frame.sub1 = (float (*)[4])up_row[1];
-  __frame.sub2 = (float (*)[4])up_row[2];
-  __frame.sub3 = (float (*)[4])*(cur - 2);
-  __frame.sub4 = (float (*)[4])*up_row;
-  __frame.sub5 = (float (*)[4])*cur;
+  weights.f0[1] = (float (*)[4])up_row[1];
+  weights.f0[2] = (float (*)[4])up_row[2];
+  weights.f0[3] = (float (*)[4])*(cur - 2);
+  weights.f0[4] = (float (*)[4])*up_row;
+  weights.f0[5] = (float (*)[4])*cur;
   c_lo = 14 * sum_u;
   mode = 1;
   c_mid = 13 * sum_ur;
@@ -6866,7 +6814,7 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
     c_mid = c_lo;
   if ( c_mid > 11 * sum_ul )
     mode = 3;
-  filt = __alt_p2_filter((float (*)[4])(void *)*(int32_t *)&blk->f278656, (float (*)[4])blk->p2_row, (CtxWeights *)__frame.sub, mode);
+  filt = __alt_p2_filter((float (*)[4])(void *)*(int32_t *)&blk->f278656, (float (*)[4])blk->p2_row, &weights, mode);
   cx0 = (P2Ctx *)blk->cursor[0];
   cx1 = (P2Ctx *)blk->cursor[1];
   *(int32_t *)&blk->pred_prev = filt;
@@ -16593,23 +16541,17 @@ int32_t __compress_image(uint8_t *arc_in, BmfImage *p_i, void *coded_buf)
   // allowed.  The note here used to read "the two-member archive fails to decompress"
   // on the authority of `frame-sweep.sh`, which lifts aliases and has
   // had none to lift since round nine.
-  struct alignas(16) CompressImageFrame {   // 80 bytes, one stack frame
-      uint8_t _pad0[12];
-      union {
-          // The 16-byte archive member header `fwrite` sends in one call, and
-          // the scratch MSVC put in the same bytes afterwards.  The two live in
-          // mutually exclusive branches: everything below `if ( fits )` returns,
-          // so the header is finished with before the deinterleave starts.
-          BmfImage hdr;
-          struct {
-            uint8_t  _scratch0[4];
-            int32_t  plane_n;    // +4   `plane_count`, the deinterleave stride
-            uint8_t *row;        // +8   the source cursor, then the row index
-            int32_t  row_step;   // +12  `plane_count * (height - 1)`
-          };
-      };
-      uint8_t _pad1[32];
-  } __frame;
+  // MSVC put the 16-byte archive member header and the deinterleave's scratch
+  // in the same bytes, and the frame kept them as a union.  The comment on it
+  // said the two live in mutually exclusive branches -- everything below
+  // `if ( fits )` returns, so the header is finished with before the
+  // deinterleave starts -- which is a claim about the program and so a thing
+  // the gate can be asked.  It was asked: separate locals, fifteen streams
+  // byte-identical, and the frame had nothing left but its padding.
+  BmfImage hdr;        // the member header, written in one `fwrite`
+  int32_t  plane_n;    // `plane_count`, the deinterleave stride
+  uint8_t *row;        // the source cursor, then the row index
+  int32_t  row_step;   // `plane_count * (height - 1)`
   uint32_t filtered;
   int32_t y0;
   uint8_t *arc_f;
@@ -16619,7 +16561,7 @@ int32_t __compress_image(uint8_t *arc_in, BmfImage *p_i, void *coded_buf)
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
   int32_t coded_bytes;
-  // These shared `__frame.hdr[0]` with the name that still binds it: one
+  // These shared `hdr[0]` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
@@ -16660,15 +16602,15 @@ int32_t __compress_image(uint8_t *arc_in, BmfImage *p_i, void *coded_buf)
   row_bytes = p_i->stride;
   if ( coded_buf )
     has_coded = 1;
-  __frame.hdr.width = p_i->width;
-  __frame.hdr.height = p_i->height;
+  hdr.width = p_i->width;
+  hdr.height = p_i->height;
   p_i->flags |= has_coded << 7;
   hdr_pad8 = *(uint32_t *)&p_i->_pad8;
-  __frame.hdr.stride = (uint32_t)row_bytes;
+  hdr.stride = (uint32_t)row_bytes;
   plane_desc[0].w4 = 512;
   plane_desc[0].w12 = 0;
-  *(uint32_t *)&__frame.hdr._pad8 = hdr_pad8;
-  __frame.hdr.data_size = (uint32_t)p_i->data_size;
+  *(uint32_t *)&hdr._pad8 = hdr_pad8;
+  hdr.data_size = (uint32_t)p_i->data_size;
   ::plane_count = ((p_i->depth & 0x3Fu) + 7) >> 3;
   if ( fwrite("\x81\x8A""20\x81\x90""20a+b", 4u, 1u, ((BmfArc *)arc)->fp) != 1 )
     return 0;
@@ -16680,7 +16622,7 @@ int32_t __compress_image(uint8_t *arc_in, BmfImage *p_i, void *coded_buf)
   if ( p_i->data_size < 0x10u )   // -N is on, so only the size decides
     goto LABEL_76;
   desc_slow_mode = 1;               // -S
-  __frame.hdr.flags |= 0x24;        // -S in bit 2, and bit 5 always set
+  hdr.flags |= 0x24;        // -S in bit 2, and bit 5 always set
   if ( (p_i->depth & 0x3Fu) <= 4 )         // -F is on, so only the depth decides
   {
     coded_size = p_i->data_size + 0x20000;
@@ -16698,18 +16640,18 @@ int32_t __compress_image(uint8_t *arc_in, BmfImage *p_i, void *coded_buf)
     goto LABEL_57;
   }
   filtered = __search_filter((BmfImage *)p_i, 0);
-  __frame.hdr.flags |= 0x10u;
+  hdr.flags |= 0x10u;
   if ( (p_i->flags & 2) != 0 )
   {
     img_stride = p_i->stride;
     hdr_pad8b = *(uint32_t *)&p_i->_pad8;
-    __frame.hdr.width = p_i->width;
-    __frame.hdr.height = p_i->height;
+    hdr.width = p_i->width;
+    hdr.height = p_i->height;
     data_bytes = p_i->data_size;
-    __frame.hdr.stride = (uint32_t)img_stride;
-    *(uint32_t *)&__frame.hdr._pad8 = hdr_pad8b;
-    __frame.hdr.data_size = (uint32_t)data_bytes;
-    __frame.hdr.flags = 0x34 | (uint8_t)(hdr_pad8b >> 24);   // -S in bit 2
+    hdr.stride = (uint32_t)img_stride;
+    *(uint32_t *)&hdr._pad8 = hdr_pad8b;
+    hdr.data_size = (uint32_t)data_bytes;
+    hdr.flags = 0x34 | (uint8_t)(hdr_pad8b >> 24);   // -S in bit 2
   }
   else
   {
@@ -16852,7 +16794,7 @@ LABEL_22:
   if ( filtered )
   {
     n_pix = p_i->width * p_i->height;
-    __frame.hdr.flags |= 8u;
+    hdr.flags |= 8u;
     plane_buf = (uint8_t *)bmf_new(n_pix);
     if ( ::plane_count > 0 )
     {
@@ -16873,10 +16815,10 @@ LABEL_57:
   *(uint32_t *)::packer_word = ::packer_acc;
   fits = (uint32_t)(out_cursor - (uint32_t)::coded_buf) < p_i->data_size;
   coded_bytes = out_cursor - ::coded_buf;
-  __frame.hdr.data_size = (uint32_t)(out_cursor - ::coded_buf);
+  hdr.data_size = (uint32_t)(out_cursor - ::coded_buf);
   if ( fits )
   {
-    ok = fwrite(&__frame.hdr, 1u, 0x10u, ((BmfArc *)arc)->fp) == 16;
+    ok = fwrite(&hdr, 1u, 0x10u, ((BmfArc *)arc)->fp) == 16;
     if ( coded_buf )
     {
       // Word 1 of the coded block is its length; the eight is the header in
@@ -16890,23 +16832,22 @@ LABEL_57:
       fwrite(&p_i->pixels[p_i->data_size], 1u, pal_bytes, ((BmfArc *)arc)->fp);
     fflush(((BmfArc *)arc)->fp);
     if ( ok_all )
-      return (int32_t)__frame.hdr.data_size;
+      return (int32_t)hdr.data_size;
     return ok_all;
   }
   free(::coded_buf);
   if ( (p_i->flags & 2) != 0 )
   {
     pix_copy = (uint8_t *)bmf_new(p_i->data_size);
-    __frame.plane_n = ::plane_count;
-    __frame.row = pix_copy;
-    __frame.row_step = ::plane_count * (p_i->height - 1);
+    plane_n = ::plane_count;
+    row = pix_copy;
+    row_step = ::plane_count * (p_i->height - 1);
     pixels = (uint16_t *)p_i->pixels;
     memcpy(pix_copy,p_i->pixels,p_i->data_size);
     LOWORD(img_h) = p_i->height;
     if ( (uint16_t)img_h )
     {
-      rows_left = __frame.plane_n;
-      row_at = __frame.row;
+      row_at = row;
       row_next = nullptr;
       y = 0;
       arc_f = arc;
@@ -16914,35 +16855,34 @@ LABEL_57:
       {
         pl_i = img->width;
         y0 = y;
-        __frame.row = row_next;
+        row = row_next;
         dst = (uint8_t *)img + y + 16;
-        step = __frame.row_step;
         do
         {
-          countdown = rows_left;
+          countdown = plane_n;
           do
           {
             *dst++ = *row_at++;
             --countdown;
           }
           while ( countdown );
-          dst += step;
+          dst += row_step;
           --pl_i;
         }
         while ( pl_i );
         img = (BmfImage *)(p_i);
         img_h = p_i->height;
-        y = rows_left + y0;
-        row_next = __frame.row + 1;
+        y = plane_n + y0;
+        row_next = row + 1;
       }
-      while ( (int32_t)(__frame.row + 1) < img_h );
+      while ( (int32_t)(row + 1) < img_h );
       arc = arc_f;
     }
     w16 = img->width;
     img->width = img_h;
     img->height = w16;
     img->flags ^= 2u;
-    img->stride = (img_h * __frame.plane_n);
+    img->stride = (img_h * plane_n);
     free(pix_copy);
     goto LABEL_77;
   }

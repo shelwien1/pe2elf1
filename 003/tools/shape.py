@@ -260,25 +260,23 @@ def summary():
     for k, v in sorted(kinds.items(), key=lambda kv: -kv[1]):
         row('  ' + k, v)
     row('globals still at a 1997 address', len(bss()))
-    row('frames', '%d, %d bytes, %d aliases'
-        % (len(fr), sum(f['size'] for f in fr), sum(f['alias'] for f in fr)))
-    row('  slots carrying two names',
-        '%d, %d extra names, in %d functions'
-        % (sum(len(f['slots']) for f in fr),
-           sum(sum(c - 1 for c in f['slots'].values()) for f in fr),
-           sum(1 for f in fr if f['slots'])))
+    # One value a row, for the same reason `goto` and `pointer casts` were
+    # split: a row whose value is three numbers and a clause is a row
+    # `checktable.py` cannot compare, so REFACTORING9.md section 1 carried no
+    # frame figure at all -- the one thing the round was asked about was the
+    # one thing the checked table could not say.
+    row('frames', len(fr))
+    row('  bytes they hold', sum(f['size'] for f in fr))
+    row('  aliases left in them', sum(f['alias'] for f in fr))
+    row('  slots carrying two names', sum(len(f['slots']) for f in fr))
+    row('  extra names on those slots',
+        sum(sum(c - 1 for c in f['slots'].values()) for f in fr))
     row('  member runs walked as arrays',
-        '%d sites, %d bases, %d functions'
-        % (sum(sum(f['runs'].values()) for f in fr),
-           sum(len(f['runs']) for f in fr),
-           sum(1 for f in fr if f['runs'])))
+        sum(sum(f['runs'].values()) for f in fr))
     row('  frames that dissolve outright',
-        '%d, %d aliases' % (sum(1 for f in fr if not f['slots'] and not f['runs']),
-                            sum(f['alias'] for f in fr
-                                if not f['slots'] and not f['runs'])))
-    row('structs', '%d, %d still ObjN' % (len(members),
-                                          sum(1 for k in members
-                                              if re.fullmatch(r'Obj\d+', k))))
+        sum(1 for f in fr if not f['slots'] and not f['runs']))
+    row('structs', len(members))
+    row('  still ObjN', sum(1 for k in members if re.fullmatch(r'Obj\d+', k)))
     row('  fNN members / named ones',
         '%d / %d' % (sum(len(v[0]) for v in members.values()), named))
     # `distinct` counts spellings across the whole file, so it cannot move until

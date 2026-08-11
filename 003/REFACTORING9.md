@@ -22,17 +22,26 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17136
+subs1.hpp lines                      17787     17616         17076
 bmf.cpp lines                            —         —           365
 raw-offset sites                        22        12             18
   off `_this`                            —         1             0
   in functions                           —         1             0
 byte offsets on a typed base           121         0             0
-pointer casts                         2137      1545          1228
+pointer casts                         2137      1545          1227
   to a scalar                            —         —           506
-  to a record                            —         —           365
+  to a record                            —         —           364
   to a scalar, of an address             —         —           352
   to a record, of an address             —         —             5
+frames                                  —        17             9
+  bytes they hold                        —         —        167780
+  aliases left in them                   —         —             0
+  slots carrying two names               —         —             0
+  extra names on those slots             —         —             0
+  member runs walked as arrays           —         —             0
+  frames that dissolve outright          —         —             9
+structs                                 —         —            24
+  still ObjN                             —         —             0
 fNN members / named ones             93/121     5/162         0/172
 distinct unexplained locals            554       591             0
   bodies still carrying one              —   8 of 102     0 of 104
@@ -2525,3 +2534,121 @@ write is dead.
 keeps pointers in XMM spill slots and adds them: `*(uint8_t *)(x2[2] + x2[0])`
 is a base in one lane and an offset in another. Those are the arithmetic the
 compiler wrote, not a member access spelled long.
+
+## 32. Two frames that were not slot sharing, and a control that could not see
+
+### `liftframe.py` declined six frames without saying so
+
+`liftframe.py --list` ended on **"0 frames this can offer to lift"** with five
+frames named as tried-and-reverted. There were eleven frames. The other six
+returned an empty member list — every non-padding member was inside a `union`,
+which the tool declines by design — and an empty list is not an offer, so they
+fell out of the loop and were never printed.
+
+That is the same silence the file was written against: `frame-sweep.sh`
+printed "0 kept, 0 reverted" under seventeen comments that rested on it having
+tried. A frame it cannot offer is now printed with the reason, and the line
+reads `0 frames this can offer to lift; 5 tried and reverted, 4 declined` —
+which adds up to the frame count `shape.py` reports, and can be checked
+against it.
+
+### Two of the six were not slot sharing
+
+`compress_image`'s frame was eighty bytes: twelve of padding, a sixteen-byte
+union, thirty-two more of padding. The union's own comment said what it was:
+
+```c
+// The 16-byte archive member header `fwrite` sends in one call, and the
+// scratch MSVC put in the same bytes afterwards.  The two live in mutually
+// exclusive branches: everything below `if ( fits )` returns, so the header
+// is finished with before the deinterleave starts.
+BmfImage hdr;
+struct { uint8_t _scratch0[4]; int32_t plane_n; uint8_t *row; int32_t row_step; };
+```
+
+"They live in mutually exclusive branches" is a claim about the program, which
+means the gate can be asked it. It was: four separate locals, fifteen streams
+byte-identical, and the frame had nothing left but padding. It went entirely.
+Two aliases fell out of it that `unaliasvar.py` and `uncopy.py` could not see
+while the names were frame members — `rows_left = plane_n` and
+`step = row_step`.
+
+`alt_p2_context`'s frame was 208 bytes for six pointers. Thirty-five of its
+members were `_gapN` — locals given storage of their own in an earlier round
+and left behind "because the layout is pinned" — and the union's two arms were
+not two lifetimes at all:
+
+```c
+union {
+    void *sub[6];
+    struct { float (*sub0)[4]; … float (*sub5)[4]; };
+};
+…
+__alt_p2_filter(…, (CtxWeights *)__frame.sub, mode);
+```
+
+Six pointers written one at a time and read once as an array, because the
+callee takes them together. `CtxWeights` is `float (*f0[6])[4]` — that array,
+with a name, already in the file. The frame is one `CtxWeights weights;` now,
+and the cast at the call site is `&weights`.
+
+**11 frames → 9.** The four that remain decline for a reason that holds:
+`choose_plane_coding` overlays a 32 KB buffer with three histograms,
+`decode_symbol_list` overlays an 8192-entry list with the eight words MSVC
+spilled into its head, and `code_pixel` and `decode_pixel` each overlay
+`sym[32]` with thirty-two named locals that `pixel_context` reads back as an
+array. Those arms are live at the same time.
+
+### §1 could not carry a frame count
+
+The reason the frame figure never appeared in §1's checked table is that
+`shape.py` printed it as `frames  9, 167780 bytes, 0 aliases` — three numbers
+and a clause on one row, which is exactly what §1 says was split out of the
+`goto` and `pointer casts` rows so `checktable.py` could compare them. The one
+thing this round was asked about was the one thing the checkable table could
+not say. Seven single-value rows now, and §1 carries them.
+
+### `proven.sh` could not see the failure it was written for
+
+`proven.sh` replays each tool against old revisions and reports the ones whose
+answer never moves, on the reasoning that such a tool "either always finds
+nothing or never looks". Its docstring named the failure it was built for:
+`shape.py` ignored the path it was given, so it answered identically for every
+revision.
+
+It could not detect that failure, because a tool that ignores the path lands in
+the flat list looking exactly like a rule written for a shape already gone.
+`tools/reads.py` is the probe — it runs the tool in-process with `open` and
+`subprocess` spied and reports what its input actually was. Of the ten flat
+rows:
+
+| tool | what it reads |
+| --- | --- |
+| `decast.py` | **never opens the file it is given**; its input is a fresh compile of the working tree, filtered by the path's *basename*, which a replay through `$tmp/s.hpp` never matches |
+| `undef.py` | **never opens the file it is given**; it reads `bmf.cpp` and ignores an argument that is not a `.cpp`, and `proven.sh` hands it nothing else |
+| `uncast.py`, `unused.py` | read it, and a compile of the working tree |
+| `explicitcmp.py` | reads it, and `warn.log` — this build's line numbers against a file from four hundred commits ago |
+| `retype_locals.py` | reads it, and `strict.log`, the same way |
+| `unbss.py`, `uncursor.py`, `unmemcast.py`, `unspill.py` | read only what they are given |
+
+**Four of ten.** For the other six the replay could not have moved them, and
+their flat row is the script's reach rather than evidence about the file.
+`proven.sh` prints the verdict under each flat row now, and its own aged
+sentence — "43 of 51 tools", "six revisions", "329 commits" — is gone in favour
+of the counts the run itself prints.
+
+Two mechanical faults came out with it. `proven.sh` established each tool's
+current answer by running it against the *working* `subs1.hpp`, under a
+docstring promising that nothing in the working tree is touched — a tool that
+rewrites what it finds would have rewritten the decompilation in order to
+measure it. And the revision copies were called `s.hpp`, which is why the two
+basename-filtering tools could never match. Both runs go through a copy named
+`subs1.hpp` now.
+
+### The empty file proves nothing
+
+The first probe tried was to hand each flat tool an empty file and see whether
+its answer changed. Every one of them "ignored its argument". It was a useless
+test: a tool that finds nothing in `subs1.hpp` prints `0 …` for an empty file
+too, so identical output is the *expected* result whether it read the file or
+not. A control has to be able to fail.

@@ -24,13 +24,21 @@
 # some rules were written for a shape already gone.  It is the list of zeros
 # that have never been demonstrated to mean anything.
 #
-# Run against six revisions spanning the project's 329 commits, 43 of 51 tools
-# answer differently somewhere.  The eight that do not were each checked by
-# hand and every one of their zeros is correct -- REFACTORING9.md section 10
-# has the table and the evidence.  That is the outcome this is for: the list is
-# short enough to audit, which a list of fifty-one zeros is not.
+# "Never looks" has more than one shape, and this script cannot see any of them
+# on its own: a tool that ignores the path, or joins it against `warn.log` or a
+# fresh compile of the working tree, answers identically for every revision and
+# lands in the flat list looking like a rule written for a shape already gone.
+# So each flat row is handed to `tools/reads.py`, which runs the tool with
+# `open` and `subprocess` spied and says what its input actually was.  A row
+# that says anything but "reads only what it is given" is this script's reach,
+# not a finding about the file.
 #
-# Nothing in the working tree is touched.
+# The counts this used to quote -- "43 of 51 tools", "six revisions", "329
+# commits" -- were true when they were written and are printed by the run now,
+# because a claim in a comment is a measurement that has to be re-taken.
+#
+# Nothing in the working tree is touched -- which used to be a claim and is now
+# a copy: see the note above `ans`.
 set -u
 cd "$(dirname "$0")/.."
 
@@ -46,26 +54,54 @@ for ((k = 0; k < ${#all[@]}; k += step)); do revs+=("${all[k]}"); done
 echo "${#revs[@]} revisions of subs1.hpp, spanning ${#all[@]} commits"
 echo
 
+# Every run goes through a copy, and every copy is named `subs1.hpp`.
+#
+#   * the working tree is what this script promises not to touch, and `now` was
+#     being taken by running each tool against the real file -- a tool that
+#     rewrites what it finds would have rewritten the decompilation to measure
+#     it;
+#   * the name matters as much as the contents.  `decast.py` and `uncast.py`
+#     keep the compiler warnings whose file matches the path's basename, so a
+#     replay through `$tmp/s.hpp` matched nothing and answered "no useless
+#     casts" for every revision including the current one.  Same basename, same
+#     question.
+mkdir -p "$tmp/now" "$tmp/rev"
+cp subs1.hpp "$tmp/now/subs1.hpp"
 ans() { timeout 180 python3 "$1" "$2" 2>&1 | tail -1; }
 
-flat=0
+flat_tools=()
+seen=0
 for t in tools/*.py; do
   base=$(basename "$t")
   case $base in structs.py|outpath.py|mk*.py) continue ;; esac
-  now=$(ans "$t" subs1.hpp)
+  cp subs1.hpp "$tmp/now/subs1.hpp"
+  now=$(ans "$t" "$tmp/now/subs1.hpp")
   case $now in *'python3 '*) continue ;; esac      # needs more arguments
+  seen=$((seen + 1))
   moved=''
   for r in "${revs[@]}"; do
-    git show "$r:./subs1.hpp" > "$tmp/s.hpp" 2>/dev/null || continue
-    if [ "$(ans "$t" "$tmp/s.hpp")" != "$now" ]; then moved=$r; break; fi
+    git show "$r:./subs1.hpp" > "$tmp/rev/subs1.hpp" 2>/dev/null || continue
+    if [ "$(ans "$t" "$tmp/rev/subs1.hpp")" != "$now" ]; then moved=$r; break; fi
   done
   if [ -n "$moved" ]; then
     printf '%-22s answers differently at %s\n' "$base" "$moved"
   else
     printf '%-22s SAME ANSWER THROUGHOUT  %s\n' "$base" "${now:0:44}"
-    flat=$((flat + 1))
+    flat_tools+=("$t")
   fi
 done
 
 echo
-echo "$flat tools give the same answer for every revision checked"
+echo "${#flat_tools[@]} of $seen tools give the same answer for every revision checked."
+echo "What each of those actually reads, from tools/reads.py:"
+echo
+spoken=0
+for t in "${flat_tools[@]}"; do
+  line=$(timeout 300 python3 tools/reads.py "$t" subs1.hpp 2>&1 | tail -1)
+  printf '  %s\n' "$line"
+  case $line in *'reads only what it is given') spoken=$((spoken + 1)) ;; esac
+done
+echo
+echo "$spoken of ${#flat_tools[@]} read only the file they were replayed against;"
+echo "for the rest the replay could not have moved them, and their zero here is"
+echo "this script's reach rather than evidence about the file."
