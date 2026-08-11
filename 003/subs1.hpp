@@ -15226,105 +15226,89 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *v109,
   return n4_3;
 }
 
-void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
+void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
 {
   int32_t Size;
-  int32_t v58;
-  // These shared `__frame.v58` with the name that still binds it: one
-  // stack slot MSVC gave to locals whose live ranges do not overlap, and
-  // Hex-Rays named every use.  That they can have storage of their own is
-  // the gate's answer -- nothing writes one of them and reads another.
-  uint16_t *v59;   // a row cursor into sym_word
-  ModelBlock *Blocka_5;
-  // These shared `__frame.Blocka_5` with the name that still binds it: one
-  // stack slot MSVC gave to locals whose live ranges do not overlap, and
-  // Hex-Rays named every use.  That they can have storage of their own is
-  // the gate's answer -- nothing writes one of them and reads another.
-  int32_t v61;
-  // These shared `__frame.Blocka_2` with the name that still binds it: one
-  // stack slot MSVC gave to locals whose live ranges do not overlap, and
-  // Hex-Rays named every use.  That they can have storage of their own is
-  // the gate's answer -- nothing writes one of them and reads another.
-  ModelBlock *Blocka_2;
-  int32_t v64;
-  int32_t v65;
-  int32_t v66;
-  int32_t v67;
-  int32_t v68;
-  int32_t v69;
-  int32_t v70;
-  int32_t v72;
-  int32_t v73;
-  uint32_t n5;
+  // These three shared a stack slot each with a local the main declaration
+  // below still names: MSVC gave one slot to locals whose live ranges do not
+  // overlap, and Hex-Rays named every use.  That they can have storage of
+  // their own is the gate's answer -- nothing writes one of them and reads
+  // another.  The two names that used to head this list, `v58` and
+  // `Blocka_2`, are gone: the first was the outer loop's counter written
+  // twice and the second was a second name for the block.
+  uint16_t *word;   // a row cursor into sym_word
+  int32_t y1;
+  int32_t bucket;
+  int32_t m1;
+  int32_t m2;
+  int32_t m3;
+  int32_t m4;
+  int32_t m5;
+  int32_t m6;
+  int32_t alpha;
+  uint32_t hi;
   ;
-  ModelBlock *Blocka_1;
-  PixRec *v46, *v50;   // row cursors out of row_cur
-  int8_t v7;
+  ModelBlock *blk;
+  PixRec *r4, *r0;   // row cursors out of row_cur
+  int8_t mode;
   uint8_t *buf;   // `uint8_t *` beside the `char` scalars above
-  int16_t __model_plane_n2, v22;
-  ModelBlock *Blocka_3;
-  ModelBlock *Blocka_4;
-  int32_t v8, v10, v11, v14, n2_1, n2_2, v17, v18, v19, v20, v21, v44, v45,
-          v53, v54, v55, v56;
+  int16_t __model_plane_n2, wt;
+  int32_t g, flags, lo, w2, n2_1, n2_2, has3, has4, lvl, lvl2, live, s, y,
+          row_w, x, x2, step;
   PixRec *row_cur3, *row_cur2, *row_cur1;   // three of the five row buffers
-  uint32_t n0x10000, v31, v34, v37, v40;
-  SymListBlock *v32, *v38;
+  uint32_t n0x10000, n_syms, j, n_syms2, k;
+  SymListBlock *blk1, *blk0;
   SymPair *group_ctr;   // one group's row of counter pairs
-  SymList *v33, *v39;
-  FreqRec *v12;   // a bucket record: `grid[bucket]`
-  PixRec *v51, *v52;   // `row_cur[6]` and `row_cur[7]`, the two rows above
-  void *v5;
+  SymList *lists1, *lists0;
+  FreqRec *rec;   // a bucket record: `grid[bucket]`
+  PixRec *up1, *up2;   // `row_cur[6]` and `row_cur[7]`, the two rows above
+  void *ws;
   if ( plane_alt_model )
   {
     if ( ::plane_predictor == 1 )
     {
       if ( (p_i->depth & 0x3F) == 8 )
-        __alt_model_p1_d8_encode(a4, p_i->width, p_i->height, a5);
+        __alt_model_p1_d8_encode(pixels, p_i->width, p_i->height, raw);
       else
-        __alt_model_p1_encode((uint16_t *)p_i, a4);
+        __alt_model_p1_encode((uint16_t *)p_i, pixels);
     }
     else if ( ::plane_predictor == 2 )
     {
       if ( (p_i->depth & 0x3F) == 8 )
-        __alt_model_p2_d8_encode(a4, p_i->width, p_i->height, a5);
+        __alt_model_p2_d8_encode(pixels, p_i->width, p_i->height, raw);
       else
-        __alt_model_p2_encode((BmfImage *)p_i, a4);
+        __alt_model_p2_encode((BmfImage *)p_i, pixels);
     }
   }
   else
   {
-    v5 = bmf_new(0x7BA230u);
-    if ( v5 )
-      Blocka_3 = __layout_workspace((ModelBlock *)v5, p_i->height, p_i->width, p_i->height, p_i->depth & 0x3F);
+    ws = bmf_new(0x7BA230u);
+    if ( ws )
+      blk = __layout_workspace((ModelBlock *)ws, p_i->height, p_i->width, p_i->height, p_i->depth & 0x3F);
     else
-      Blocka_3 = (ModelBlock *)(0);
+      blk = (ModelBlock *)(0);
     __rc_begin_encode();
-    __reduce_alphabet(Blocka_3, v7, a4);
-    v64 = 0;
-    v8 = 0;
-    Blocka_2 = (ModelBlock *)((uint32_t *)Blocka_3);
-    Blocka_4 = (ModelBlock *)(Blocka_3);
+    __reduce_alphabet(blk, mode, pixels);
+    bucket = 0;
+    g = 0;
     do
     {
-      v10 = ctx_group_flags[v8];
-      Blocka_2->ctx_state[v10] = v8;
-      v11 = 0;
-      v58 = v8;
-      v69 = v10 & 4;
-      v68 = v10 & 2;
-      v67 = v10 & 0x10;
-      v66 = v10 & 1;
-      v65 = v10 & 8;
-      v70 = v10 & 0x20;
+      flags = ctx_group_flags[g];
+      blk->ctx_state[flags] = g;
+      lo = 0;
+      m5 = flags & 4;
+      m4 = flags & 2;
+      m3 = flags & 0x10;
+      m2 = flags & 1;
+      m1 = flags & 8;
+      m6 = flags & 0x20;
       do
       {
-        v72 = v11;
-        n5 = 0;
-        Blocka_5 = (ModelBlock *)(Blocka_4);
+        hi = 0;
         do
         {
-          Blocka_2->ctx_bucket[v8 + 15 * v11 + 75 * n5] = v64;
-          v73 = Blocka_2->alphabet;
+          blk->ctx_bucket[g + 15 * lo + 75 * hi] = bucket;
+          alpha = blk->alphabet;
           // A sixteen-byte record per bucket, at `+96 + 16 * bucket`: five
           // counts at words 0..4, their total at 5, a scaled weight at 6, and
           // two bytes at 7 -- a level (`<= f16`) and the weight `1 << (5 -
@@ -15341,253 +15325,248 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
           // +3119.  `FreqRec` is on the same grid from record 188 (+3104),
           // which makes the last bucket record and the first frequency record
           // the same sixteen bytes -- the two tables abut and share one.
-          v12 = &Blocka_2->grid[v64];
+          rec = &blk->grid[bucket];
           __model_plane_n2 = 2;
-          v12->w[0] = 2;
-          LOWORD(v14) = 2;
+          rec->w[0] = 2;
+          LOWORD(w2) = 2;
           n2_1 = 2;
           n2_2 = 2;
-          if ( v69 )
+          if ( m5 )
           {
             n2_1 = 4;
             n2_2 = 0;
           }
-          if ( v68 )
+          if ( m4 )
           {
-            LOWORD(v14) = n2_2 + 2;
+            LOWORD(w2) = n2_2 + 2;
             n2_2 = 0;
           }
-          if ( v67 )
+          if ( m3 )
           {
-            LOWORD(v14) = n2_1 + v14;
+            LOWORD(w2) = n2_1 + w2;
             n2_1 = 0;
           }
-          if ( v66 )
+          if ( m2 )
           {
             __model_plane_n2 = n2_2 + 2;
             n2_2 = 0;
-            v12->w[4] = 0;
+            rec->w[4] = 0;
           }
           else
           {
-            v12->w[4] = n2_2;
+            rec->w[4] = n2_2;
           }
-          if ( v65 )
+          if ( m1 )
           {
             __model_plane_n2 += n2_1;
             n2_1 = 0;
-            v12->w[3] = 0;
+            rec->w[3] = 0;
           }
           else
           {
-            v12->w[3] = n2_1;
+            rec->w[3] = n2_1;
           }
-          if ( v70 )
+          if ( m6 )
           {
-            v12->w[1] = v14 + __model_plane_n2;
-            LOWORD(v14) = 0;
-            v12->w[2] = 0;
+            rec->w[1] = w2 + __model_plane_n2;
+            LOWORD(w2) = 0;
+            rec->w[2] = 0;
           }
           else
           {
-            v12->w[2] = v14;
-            v12->w[1] = __model_plane_n2;
+            rec->w[2] = w2;
+            rec->w[1] = __model_plane_n2;
           }
-          v17 = n2_1 != 0;
-          v18 = n2_2 != 0;
-          v14 = (uint16_t)v14;
-          if ( (uint16_t)v14 )
-            v14 = 1;
-          v19 = v18 + v17 + v14 + 2;
-          if ( v19 <= v73 )
+          has3 = n2_1 != 0;
+          has4 = n2_2 != 0;
+          w2 = (uint16_t)w2;
+          if ( (uint16_t)w2 )
+            w2 = 1;
+          lvl = has4 + has3 + w2 + 2;
+          if ( lvl <= alpha )
           {
-            v12->b14 = v19;
+            rec->b14 = lvl;
           }
           else
           {
-            v12->b14 = v18 + v17 + v14 + 1;
-            v12->w[0] = 0;
+            rec->b14 = has4 + has3 + w2 + 1;
+            rec->w[0] = 0;
           }
-          if ( v12->w[v72]
-            && v12->w[n5]
-            && (v20 = v12->b14, v20 <= v73) )
+          if ( rec->w[lo]
+            && rec->w[hi]
+            && (lvl2 = rec->b14, lvl2 <= alpha) )
           {
-            v21 = 1;
-            v22 = (uint8_t)(1 << ((5 - v20) & 31));
-            v12->b15 = v22;
-            v12->w[6] = v22 << 6;
-            v12->w[v72] += v22;
-            v12->w[n5] += v12->b15;
-            v12->w[5] = v12->w[0]
-                                 + v12->w[4]
-                                 + v12->w[3]
-                                 + v12->w[2]
-                                 + v12->w[1];
+            live = 1;
+            wt = (uint8_t)(1 << ((5 - lvl2) & 31));
+            rec->b15 = wt;
+            rec->w[6] = wt << 6;
+            rec->w[lo] += wt;
+            rec->w[hi] += rec->b15;
+            rec->w[5] = rec->w[0]
+                                 + rec->w[4]
+                                 + rec->w[3]
+                                 + rec->w[2]
+                                 + rec->w[1];
           }
           else
           {
-            v21 = 0;
+            live = 0;
           }
-          v64 += v21;
-          ++n5;
+          bucket += live;
+          ++hi;
         }
-        while ( n5 < 5 );
-        Blocka_4 = (ModelBlock *)(Blocka_5);
-        v11 = v72 + 1;
+        while ( hi < 5 );
+        ++lo;
       }
-      while ( (uint32_t)(v72 + 1) < 5 );
+      while ( (uint32_t)lo < 5 );
       n0x10000 = 0;
-      group_ctr = Blocka_2->group_ctr[v58];
+      group_ctr = blk->group_ctr[g];
       do
       {
         group_ctr[n0x10000].last = 0x2000;
         group_ctr[n0x10000++].prev = 0x2000;
       }
       while ( n0x10000 < 0x10000 );
-      Blocka_4 = (ModelBlock *)((uintptr_t)Blocka_5 + 1);
-      v8 = v58 + 1;
+      ++g;
     }
-    while ( (uint32_t)(v58 + 1) < 0xF );
-    Blocka_1 = (ModelBlock *)((int32_t)Blocka_2);
-    buf = (uint8_t *)bmf_new(Blocka_2->alphabet);
-    Size = Blocka_2->alphabet;
-    Blocka_2->alpha_map = buf;
+    while ( (uint32_t)g < 0xF );
+    buf = (uint8_t *)bmf_new(blk->alphabet);
+    Size = blk->alphabet;
+    blk->alpha_map = buf;
     memset(buf,1,Size);
-    Blocka_2->escape_list = &Blocka_2->escape;
-    __init_symbol_list(&Blocka_1->escape, 0, Blocka_1->alphabet, 1);
-    Blocka_2->sel_cur = Blocka_2->sel;
-    v31 = Blocka_2->alphabet;
-    v32 = (SymListBlock *)bmf_new(24 * v31 + 4);
-    if ( v32 )
+    blk->escape_list = &blk->escape;
+    __init_symbol_list(&blk->escape, 0, blk->alphabet, 1);
+    blk->sel_cur = blk->sel;
+    n_syms = blk->alphabet;
+    blk1 = (SymListBlock *)bmf_new(24 * n_syms + 4);
+    if ( blk1 )
     {
-      v32->n = v31;
-      v33 = v32->list;
-      if ( v31 )
+      blk1->n = n_syms;
+      lists1 = blk1->list;
+      if ( n_syms )
       {
         // MSVC unrolled this two lists at a time and left a scalar tail; both
-        // halves write `ent`, and between them they cover 0 .. v31 - 1.
-        for ( v34 = 0; v34 < v31; ++v34 )
-          v33[v34].ent = nullptr;
-        if ( v31 >> 1 )   // the register the unrolled loop clobbered
-          Blocka_1 = (ModelBlock *)((int32_t)Blocka_2);
+        // halves write `ent`, and between them they cover 0 .. n_syms - 1.
+        for ( j = 0; j < n_syms; ++j )
+          lists1[j].ent = nullptr;
       }
     }
     else
     {
-      v33 = nullptr;
+      lists1 = nullptr;
     }
-    v37 = Blocka_1->alphabet;
-    Blocka_1->sel1_list = v33;
-    v38 = (SymListBlock *)bmf_new(24 * v37 + 4);
-    if ( v38 )
+    n_syms2 = blk->alphabet;
+    blk->sel1_list = lists1;
+    blk0 = (SymListBlock *)bmf_new(24 * n_syms2 + 4);
+    if ( blk0 )
     {
-      v38->n = v37;
-      v39 = v38->list;
-      if ( v37 )
+      blk0->n = n_syms2;
+      lists0 = blk0->list;
+      if ( n_syms2 )
       {
         // MSVC unrolled this two lists at a time and left a scalar tail; both
-        // halves write `ent`, and between them they cover 0 .. v37 - 1.
-        for ( v40 = 0; v40 < v37; ++v40 )
-          v39[v40].ent = nullptr;
+        // halves write `ent`, and between them they cover 0 .. n_syms2 - 1.
+        for ( k = 0; k < n_syms2; ++k )
+          lists0[k].ent = nullptr;
       }
     }
     else
     {
-      v39 = nullptr;
+      lists0 = nullptr;
     }
-    Blocka_1->sel0_list = v39;
-    if ( !(Blocka_1->alphabet <= 0) )
+    blk->sel0_list = lists0;
+    if ( !(blk->alphabet <= 0) )
     {
-      v44 = 0;
+      s = 0;
       do
       {
-        __init_symbol_list(&Blocka_1->sel1_list[v44], 0, 99, 0);
-        __init_symbol_list(&Blocka_1->sel0_list[v44++], 0, 33, 0);
+        __init_symbol_list(&blk->sel1_list[s], 0, 99, 0);
+        __init_symbol_list(&blk->sel0_list[s++], 0, 33, 0);
       }
-      while ( v44 < Blocka_1->alphabet );
+      while ( s < blk->alphabet );
     }
-    if ( Blocka_1->height > 0 )
+    if ( blk->height > 0 )
     {
-      v59 = Blocka_1->sym_word;
-      v45 = 0;
+      word = blk->sym_word;
+      y = 0;
       do
       {
-        v61 = v45 + 1;
-        Blocka_1->row_cur[5]->match[1] = Blocka_1->row_cur[5][-1].sym == 0;
-        Blocka_1->row_cur[5]->match[3] = Blocka_1->row_cur[6][-1].sym == 0;
-        v46 = Blocka_1->row_cur[4];
-        row_cur3 = Blocka_1->row_cur[3];
-        row_cur2 = Blocka_1->row_cur[2];
-        row_cur1 = Blocka_1->row_cur[1];
-        v50 = Blocka_1->row_cur[0];
-        Blocka_1->row_cur[4] = row_cur3;
-        Blocka_1->row_cur[3] = row_cur2;
-        Blocka_1->row_cur[2] = row_cur1;
-        Blocka_1->row_cur[1] = v50;
-        Blocka_1->row_cur[0] = v46;
-        v46 += 7;
-        Blocka_1->row_cur[5] = v46;
-        v50 += 7;
-        Blocka_1->row_cur[6] = v50;
-        Blocka_1->row_cur[7] = row_cur1 + 7;
-        Blocka_1->row_cur[8] = row_cur2 + 7;
-        Blocka_1->row_cur[9] = row_cur3 + 7;
+        y1 = y + 1;
+        blk->row_cur[5]->match[1] = blk->row_cur[5][-1].sym == 0;
+        blk->row_cur[5]->match[3] = blk->row_cur[6][-1].sym == 0;
+        r4 = blk->row_cur[4];
+        row_cur3 = blk->row_cur[3];
+        row_cur2 = blk->row_cur[2];
+        row_cur1 = blk->row_cur[1];
+        r0 = blk->row_cur[0];
+        blk->row_cur[4] = row_cur3;
+        blk->row_cur[3] = row_cur2;
+        blk->row_cur[2] = row_cur1;
+        blk->row_cur[1] = r0;
+        blk->row_cur[0] = r4;
+        r4 += 7;
+        blk->row_cur[5] = r4;
+        r0 += 7;
+        blk->row_cur[6] = r0;
+        blk->row_cur[7] = row_cur1 + 7;
+        blk->row_cur[8] = row_cur2 + 7;
+        blk->row_cur[9] = row_cur3 + 7;
         // The same two flags, on the encoding side.
         {
-          uint8_t zero = v50[1].sym == 0;
-          v46->match[2] = zero;
-          Blocka_1->row_cur[5][-1].match[4] = zero;
-          Blocka_1->row_cur[5][-2].match[5] = zero;
-          zero = Blocka_1->row_cur[6][2].sym == 0;
-          Blocka_1->row_cur[5]->match[4] = zero;
-          Blocka_1->row_cur[5][-1].match[5] = zero;
+          uint8_t zero = r0[1].sym == 0;
+          r4->match[2] = zero;
+          blk->row_cur[5][-1].match[4] = zero;
+          blk->row_cur[5][-2].match[5] = zero;
+          zero = blk->row_cur[6][2].sym == 0;
+          blk->row_cur[5]->match[4] = zero;
+          blk->row_cur[5][-1].match[5] = zero;
         }
-        Blocka_1->row_cur[5]->match[5] = Blocka_1->row_cur[6][3].sym == 0;
-        v51 = Blocka_1->row_cur[6];
-        v52 = Blocka_1->row_cur[7];
-        ++Blocka_1->row_cur[5];
-        ++v51;
-        Blocka_1->row_cur[6] = v51;
-        ++Blocka_1->row_cur[8];
-        ++v52;
-        Blocka_1->row_cur[7] = v52;
-        ++Blocka_1->row_cur[9];
-        Blocka_1->grad[0] = v51[3].match[0] + v51[2].match[0] + v51[1].match[0] + v51[0].match[0] + v51[4].match[0] - 5;
+        blk->row_cur[5]->match[5] = blk->row_cur[6][3].sym == 0;
+        up1 = blk->row_cur[6];
+        up2 = blk->row_cur[7];
+        ++blk->row_cur[5];
+        ++up1;
+        blk->row_cur[6] = up1;
+        ++blk->row_cur[8];
+        ++up2;
+        blk->row_cur[7] = up2;
+        ++blk->row_cur[9];
+        blk->grad[0] = up1[3].match[0] + up1[2].match[0] + up1[1].match[0] + up1[0].match[0] + up1[4].match[0] - 5;
         // The same five counts as the line above, off the other row.
-        Blocka_1->grad[3] = 0;
-        Blocka_1->grad[2] = 0;
-        v45 = v61;
-        v53 = Blocka_1->width;
-        Blocka_1->grad[1] = v52[3].match[0] + v52[2].match[0] + v52[1].match[0] + v52[0].match[0] + v52[4].match[0] - 5;
-        if ( v53 > 0 )
+        blk->grad[3] = 0;
+        blk->grad[2] = 0;
+        y = y1;
+        row_w = blk->width;
+        blk->grad[1] = up2[3].match[0] + up2[2].match[0] + up2[1].match[0] + up2[0].match[0] + up2[4].match[0] - 5;
+        if ( row_w > 0 )
         {
-          v54 = 0;
+          x = 0;
           do
           {
-            ++v54;
-            Blocka_1->row_cur[5][v54 - 1].sym = v59[v54 - 1];
-            v53 = Blocka_1->width;
+            ++x;
+            blk->row_cur[5][x - 1].sym = word[x - 1];
+            row_w = blk->width;
           }
-          while ( v54 < Blocka_1->width );
-          v59 += v54;
+          while ( x < blk->width );
+          word += x;
         }
-        if ( v53 > 0 )
+        if ( row_w > 0 )
         {
-          v55 = 0;
+          x2 = 0;
           do
           {
-            v56 = __code_pixel((ModelBlock *)(int32_t *)Blocka_1, v55);
-            __init_model_tables(Blocka_1);
-            v55 += v56;
+            step = __code_pixel((ModelBlock *)(int32_t *)blk, x2);
+            __init_model_tables(blk);
+            x2 += step;
           }
-          while ( v55 < Blocka_1->width );
-          v45 = v61;
+          while ( x2 < blk->width );
+          y = y1;
         }
       }
-      while ( v45 < *(uint32_t *)&Blocka_1->height );
+      while ( y < *(uint32_t *)&blk->height );
     }
     __rc_end_encode();
-    __free_workspace((ModelBlock *)(void **)Blocka_1, 1);
+    __free_workspace((ModelBlock *)(void **)blk, 1);
   }
 }
 
