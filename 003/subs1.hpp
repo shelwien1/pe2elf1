@@ -1467,26 +1467,26 @@ static_assert(sizeof(void *) != 4 || sizeof(BmfArc) == 8,
 FILE *__bmf_close_archive(BmfArc *_this)
 {
   ;
-  FILE *Stream_v;
-  Stream_v = _this->fp;
-  if ( Stream_v )
+  FILE *fp;
+  fp = _this->fp;
+  if ( fp )
   {
-    fseek(Stream_v, 0, 2);
+    fseek(fp, 0, 2);
     return (FILE *)fclose(_this->fp);
   }
-  return Stream_v;
+  return fp;
 }
 
-BmfArc *__bmf_destroy_archive(BmfArc *Block, int8_t a2)
+BmfArc *__bmf_destroy_archive(BmfArc *arc, int8_t a2)
 {
   ;
-  __bmf_close_archive((BmfArc *)Block);
+  __bmf_close_archive((BmfArc *)arc);
   if ( (a2 & 1) != 0 )
-    free(Block);
-  return Block;
+    free(arc);
+  return arc;
 }
 
-void __expand_predictor_mode0(uint32_t Src, int32_t i, int32_t a3)
+void __expand_predictor_mode0(uint32_t unread_src, int32_t i, int32_t a3)
 {
   ;
   // never taken: -E is 0
@@ -3197,33 +3197,33 @@ int32_t __init_model_tables(ModelBlock *_this)
   return result;
 }
 
-void **__alt_p2_free(void **lpAddress, int8_t a2)
+void **__alt_p2_free(void **blk, int8_t a2)
 {
   ;
-  free(*(lpAddress + 69689));
-  free(*(lpAddress + 69690));
-  free(*(lpAddress + 69691));
-  free(*(lpAddress + 69692));
-  free(*(lpAddress + 69693));
-  free(*(lpAddress + 69665));
-  free(*(lpAddress + 69666));
+  free(*(blk + 69689));
+  free(*(blk + 69690));
+  free(*(blk + 69691));
+  free(*(blk + 69692));
+  free(*(blk + 69693));
+  free(*(blk + 69665));
+  free(*(blk + 69666));
   if ( (a2 & 1) != 0 )
-    bmf_page_free(lpAddress);
-  return lpAddress;
+    bmf_page_free(blk);
+  return blk;
 }
 
 
-void **__alt_p1_free(void **Block, int8_t a2)
+void **__alt_p1_free(void **blk, int8_t a2)
 {
   ;
-  free(*(Block + 44));
-  free(*(Block + 45));
-  free(*(Block + 46));
-  free(*(Block + 47));
-  free(*(Block + 48));
+  free(*(blk + 44));
+  free(*(blk + 45));
+  free(*(blk + 46));
+  free(*(blk + 47));
+  free(*(blk + 48));
   if ( (a2 & 1) != 0 )
-    free(Block);
-  return Block;
+    free(blk);
+  return blk;
 }
 
 // Context for the alternate p1 model: reads the causal neighbourhood through
@@ -4300,12 +4300,12 @@ uint16_t *__rc_begin_encode()
   FreqPair *seed;   // the row's tree of counter pairs, seeded (60, 36)
   int32_t at4, at5, k;
   int32_t bits;          // the same slot as the buffer pointer below, in a
-  uint8_t *Buffer;       // register MSVC reused; two roles, two names
+  uint8_t *at;       // register MSVC reused; two roles, two names
   int32_t at6;
   int32_t at7;
   uint32_t i;   // offsets into model_geometry, not pointers
   *packer_word = ::packer_acc;
-  Buffer = out_cursor;
+  at = out_cursor;
   // Back the output cursor up over whatever whole bytes the packer has not
   // filled, and keep the leftover bit count.
   if ( out_cursor != (uint8_t *)packer_word )
@@ -4319,11 +4319,11 @@ uint16_t *__rc_begin_encode()
     {
       do
       {
-        --Buffer;
+        --at;
         bits -= 8;
       }
       while ( bits >= 0 );
-      out_cursor = Buffer;
+      out_cursor = at;
       packer_free_bits = bits;
     }
   }
@@ -4770,7 +4770,7 @@ int32_t *__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palett
   uint8_t *buf;
   int32_t *result;
   bool byte_rows;
-  int32_t bits, word2, row_pack, row_bytes, data_bytes, Size;
+  int32_t bits, word2, row_pack, row_bytes, data_bytes, pal_bytes;
   uint16_t row16;
   row16 = img_w;
   bits = bpp;
@@ -4837,17 +4837,17 @@ int32_t *__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palett
   data_bytes = row_bytes * img_h;
   if ( palette )
   {
-    Size = 3 << (bpp & 31);
+    pal_bytes = 3 << (bpp & 31);
     if ( bpp > 8 )
-      Size = 0;
+      pal_bytes = 0;
     else
       word2 = ((BYTE2(word2) | 0xFFFF0080) << 16) | word2 & 0xFF00FFFF;
   }
   else
   {
-    Size = 0;
+    pal_bytes = 0;
   }
-  result = ((int32_t *)bmf_new(data_bytes + Size + 19));
+  result = ((int32_t *)bmf_new(data_bytes + pal_bytes + 19));
   if ( !result )
     return nullptr;
   // The descriptor, and the reason BmfImage looks the way it does.  Three of
@@ -4861,13 +4861,13 @@ int32_t *__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palett
   img->stride = row_bytes;
   result[2] = word2;                 // +8 and +9 zero, depth at +10, flags at +11
   img->data_size = data_bytes;
-  if ( Size )
+  if ( pal_bytes )
   {
     if ( (((const BmfImage *)result)->depth & 0x80) != 0 )
       buf = (uint8_t *)result + result[3] + 16;
     else
       buf = nullptr;
-    memset(buf,0,Size);
+    memset(buf,0,pal_bytes);
     return result;
   }
   return result;
@@ -5741,7 +5741,7 @@ __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...)
   exit(Code);
   __builtin_unreachable();
 }
-int32_t __rc_begin_decode(int8_t ArgList_1)
+int32_t __rc_begin_decode(int8_t unread_flag)
 {
   ;
   int32_t bits_left, at4, at5, k;
@@ -6038,7 +6038,7 @@ int32_t __estimate_cost(uint8_t *a1, int32_t n)
   return (int32_t)((total - entropy) * 1.442695040888963);
 }
 
-void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_t a4)
+void ** __alt_model_p1_d8_decode(int8_t unread_flag, uint8_t *out, int32_t i, int32_t a4)
 {
   P1Ctx *buf1, *b0, *cursor0, *b4, *buf3, *buf2;
   ;
@@ -6047,13 +6047,13 @@ void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_
   int32_t y, val, x;
   int64_t err;
   P1Ctx *cursor2, *cursor4;
-  uint8_t *Src_1;
+  uint8_t *out_at;
   raw = (AltP1Block *)((int32_t *)bmf_new(0x99D4D8u));
   if ( raw )
     blk = (AltP1Block *)(__alt_p1_alloc((AltP1Block *)raw, i, a4, 0));
   else
     blk = (AltP1Block *)(nullptr);
-  __rc_begin_decode(ArgList);
+  __rc_begin_decode(unread_flag);
   if ( blk->height > 0 )
   {
     y = 0;
@@ -6119,7 +6119,7 @@ void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_
                  + cursor0[-3].mag + cursor0[-1].mag;
       if ( !(blk->width <= 0) )
       {
-        Src_1 = Src;
+        out_at = out;
         x = 0;
         do
         {
@@ -6127,7 +6127,7 @@ void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_
           __alt_p1_context((AltP1Block *)(uint32_t *)blk, (AltP1Block *)nullptr, (AltP1Block *)0);
           val = (uint8_t)((uint8_t)blk->pred
                                 + *((uint8_t *)blk + (uint8_t)__alt_p1_decode_symbol((uint16_t *)&((int32_t *)blk)[4 * blk->ctx[0] + 950], 0, blk->ctx[1]) + 1496));
-          *Src_1 = val;
+          *out_at = val;
           err = val - blk->pred;
           // The record's two writers, one line apart: the reconstructed
           // sample, then the size of the prediction error.
@@ -6144,14 +6144,14 @@ void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_
           if ( blk->counters[blk->ctx[0]].total < 0x4000u )
             __alt_p1_model((AltP1Block *)blk);
           ++blk->cursor[0];
-          ++Src_1;
+          ++out_at;
           ++blk->cursor[1];
           ++blk->cursor[2];
           ++blk->cursor[3];
           ++blk->cursor[4];
         }
         while ( x < blk->width );
-        Src = Src_1;
+        out = out_at;
       }
     }
     while ( y < blk->height );
@@ -7424,12 +7424,12 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
                    - __builtin_offsetof(__typeof__(__frame), buf) == 0x10000,
                 "buf is not the 64 KiB the memset clears");
   ;
-  ModelBlock *Blockaa_2;
+  ModelBlock *blk2;
   bool more, packed, first;
   int8_t mode;
   uint8_t *half;   // `uint8_t *` beside the `char` scalars above
-  ModelBlock *Blockaa_1;
-  ModelBlock *Blockaa_4;
+  ModelBlock *blk1;
+  ModelBlock *blk4;
   uint32_t alpha_n;
   uint32_t done;
   uint32_t done2;
@@ -7440,7 +7440,7 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
   int32_t node, side, alpha_m, carry, img_w, img_h, *slotp, z2,
           n_moved, zoff, height, n_distinct, row_w, y, at, bits, bpp, shift, sym2, *slotp2, z1, alphabet,
           alpha, prev, s, s_next, *slotp1, z0;
-  ModelBlock *Blockaa_3;
+  ModelBlock *blk3;
   uint32_t k_2, i, written, li, si, si_end, word, k, pairs, j_1, j,
            x, idx, n_syms, n_syms3, next_id, m;
   uint16_t *kidp;   // was uint64_t *, read only as uint16_t
@@ -7458,7 +7458,7 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
     __frame.lists[2 * i].ent = nullptr;
     __frame.lists[2 * i + 1].ent = nullptr;
   }
-  Blockaa_1 = (ModelBlock *)((int32_t *)__frame.slot7);
+  blk1 = (ModelBlock *)((int32_t *)__frame.slot7);
   if ( depth_bits <= 8 )
   {
     // 1024 bytes cleared, sixteen at a time from the top: `zero_base` is
@@ -7476,15 +7476,15 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
       zoff -= 16;
     }
     while ( zoff * 4 );
-    packed = *(int32_t *)&Blockaa_1->depth < 8;
-    height = Blockaa_1->height;
-    *(int32_t *)&Blockaa_1->alphabet = 0;
+    packed = *(int32_t *)&blk1->depth < 8;
+    height = blk1->height;
+    *(int32_t *)&blk1->alphabet = 0;
     if ( packed )
     {
       n_distinct = 0;
       if ( height )
       {
-        row_w = *(int32_t *)&Blockaa_1->width;
+        row_w = *(int32_t *)&blk1->width;
         __frame.slot8 = src - 1;
         __frame.at_spill = 0;
         y = 0;
@@ -7498,7 +7498,7 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
           bits = 0;
           do
           {
-            bpp = *(int32_t *)&Blockaa_1->depth;
+            bpp = *(int32_t *)&blk1->depth;
             shift = bits - bpp;
             if ( shift < 0 )
             {
@@ -7511,45 +7511,45 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
             ++x;
             *(uint32_t *)&__frame.buf[4 * sym - 4] = 1;
             bits = __frame.bits_spill;
-            *(int32_t *)&Blockaa_1->alphabet += first;
-            Blockaa_1->sym_word[at] = sym;
-            row_w = *(int32_t *)&Blockaa_1->width;
+            *(int32_t *)&blk1->alphabet += first;
+            blk1->sym_word[at] = sym;
+            row_w = *(int32_t *)&blk1->width;
             ++at;
           }
-          while ( x < (uint32_t)(*(int32_t *)&Blockaa_1->width) );
-          n_distinct = *(int32_t *)&Blockaa_1->alphabet;
+          while ( x < (uint32_t)(*(int32_t *)&blk1->width) );
+          n_distinct = *(int32_t *)&blk1->alphabet;
           __frame.at_spill = at;
           y = __frame.y_spill + 1;
         }
-        while ( (uint32_t)(__frame.y_spill + 1) < (uint32_t)Blockaa_1->height );
+        while ( (uint32_t)(__frame.y_spill + 1) < (uint32_t)blk1->height );
       }
     }
-    else if ( height * *(int32_t *)&Blockaa_1->width )
+    else if ( height * *(int32_t *)&blk1->width )
     {
       q = __frame.slot2;
       idx = 0;
       do
       {
-        *(int32_t *)&Blockaa_1->alphabet += *(uint32_t *)&__frame.buf[4 * *q - 4] == 0;
+        *(int32_t *)&blk1->alphabet += *(uint32_t *)&__frame.buf[4 * *q - 4] == 0;
         sym2 = *q;
         *(uint32_t *)&__frame.buf[4 * sym2 - 4] = 1;
         ++q;
-        Blockaa_1->sym_word[idx++] = sym2;
+        blk1->sym_word[idx++] = sym2;
       }
-      while ( idx < (uint32_t)(Blockaa_1->height * *(int32_t *)&Blockaa_1->width) );
-      n_distinct = *(int32_t *)&Blockaa_1->alphabet;
+      while ( idx < (uint32_t)(blk1->height * *(int32_t *)&blk1->width) );
+      n_distinct = *(int32_t *)&blk1->alphabet;
     }
     else
     {
       n_distinct = 0;
     }
     rc.encode(n_distinct - 1, n_distinct, __frame.slot4 + 1);
-    n_syms = *(int32_t *)&Blockaa_1->alphabet;
+    n_syms = *(int32_t *)&blk1->alphabet;
     if ( n_syms <= __frame.slot4 )
     {
-      __init_symbol_list(&__frame.lists[0], (int32_t)Blockaa_1, __frame.slot4 - n_syms + 2, 1);
+      __init_symbol_list(&__frame.lists[0], (int32_t)blk1, __frame.slot4 - n_syms + 2, 1);
       __frame.lists[0].rescale_at = 19 * __frame.lists[0].n;
-      n_syms3 = *(int32_t *)&Blockaa_1->alphabet;
+      n_syms3 = *(int32_t *)&blk1->alphabet;
       if ( n_syms3 )
       {
         prev = 0;
@@ -7560,7 +7560,7 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
           if ( *(uint32_t *)&__frame.buf[4 * s - 4] )
           {
             __encode_symbol_list(&__frame.lists[0], s - prev);
-            n_syms3 = *(int32_t *)&Blockaa_1->alphabet;
+            n_syms3 = *(int32_t *)&blk1->alphabet;
             *(uint32_t *)&__frame.buf[4 * s - 4] = next_id;
             s_next = s + 1;
             prev = s + 1;
@@ -7574,17 +7574,17 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
         }
         while ( next_id < n_syms3 );
       }
-      if ( Blockaa_1->height * *(int32_t *)&Blockaa_1->width )
+      if ( blk1->height * *(int32_t *)&blk1->width )
       {
         m = 0;
         do
         {
-          Blockaa_1->sym_word[m] = *(uint32_t *)&__frame.buf[4
-                                                                  * Blockaa_1->sym_word[m]
+          blk1->sym_word[m] = *(uint32_t *)&__frame.buf[4
+                                                                  * blk1->sym_word[m]
                                                                   - 4];
           ++m;
         }
-        while ( m < (uint32_t)(Blockaa_1->height * *(int32_t *)&Blockaa_1->width) );
+        while ( m < (uint32_t)(blk1->height * *(int32_t *)&blk1->width) );
       }
       slotp1 = (int32_t *)__frame.slot;
       z0 = 16;
@@ -7612,14 +7612,14 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
   else
   {
     memset(__frame.buf,0,0x10000);
-    *(int32_t *)&Blockaa_1->alphabet = 1;
+    *(int32_t *)&blk1->alphabet = 1;
     *(uint32_t *)__frame.buf = __frame.slot4 & *(uint32_t *)src;
-    Blockaa_1->sym_word[0] = 0;
-    if ( (uint32_t)(Blockaa_1->height * *(int32_t *)&Blockaa_1->width) > 1 )
+    blk1->sym_word[0] = 0;
+    if ( (uint32_t)(blk1->height * *(int32_t *)&blk1->width) > 1 )
     {
       __frame.slot8 = src;
       __frame.slot9 = k_2;
-      __frame.slot7 = (ModelBlock *)((int32_t)Blockaa_1);
+      __frame.slot7 = (ModelBlock *)((int32_t)blk1);
       p = __frame.slot2;
       node = 0;
       written = 1;
@@ -7653,48 +7653,48 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
             p = __frame.slot2;
             __frame.slot0 = side;
             (__frame.slot[1]) = val;
-            Blockaa_2 = (ModelBlock *)(__frame.slot7);
+            blk2 = (ModelBlock *)(__frame.slot7);
             alphabet = __frame.slot7->alphabet;
             mode_symbol[1] = side;
             node = (uint16_t)alphabet;
             alpha = alphabet + 1;
             *(uint16_t *)(__frame.kids_i + 2 * side) = node;
             written = __frame.slot3;
-            Blockaa_2->alphabet = alpha;
+            blk2->alphabet = alpha;
             if ( alpha > 0x2000 )
             {
               srcp = __frame.slot8;
               alpha_n = alpha;
               k_2 = __frame.slot9;
-              Blockaa_1 = (ModelBlock *)((int32_t *)__frame.slot7);
+              blk1 = (ModelBlock *)((int32_t *)__frame.slot7);
               goto LABEL_14;
             }
             *(void **)&__frame.buf[8 * node] = (__frame.slot[1]);
           }
         }
 LABEL_12:
-        Blockaa_3 = (ModelBlock *)((uint32_t *)__frame.slot7);
+        blk3 = (ModelBlock *)((uint32_t *)__frame.slot7);
         __frame.slot7->sym_word[written++] = node;
-        if ( written >= *(uint32_t *)&Blockaa_3->height * Blockaa_3->width )
+        if ( written >= *(uint32_t *)&blk3->height * blk3->width )
         {
           srcp = __frame.slot8;
           k_2 = __frame.slot9;
-          Blockaa_1 = (ModelBlock *)((int32_t *)__frame.slot7);
+          blk1 = (ModelBlock *)((int32_t *)__frame.slot7);
           alpha_n = __frame.slot7->alphabet;
           goto LABEL_14;
         }
       }
     }
-    alpha_n = *(int32_t *)&Blockaa_1->alphabet;
+    alpha_n = *(int32_t *)&blk1->alphabet;
 LABEL_14:
     rc.encode(alpha_n - 1, alpha_n, 0x2001u);
-    alpha_m = *(int32_t *)&Blockaa_1->alphabet;
+    alpha_m = *(int32_t *)&blk1->alphabet;
     if ( alpha_m > 0x2000 )
     {
-      (__frame.slot[1]) = bmf_new(Blockaa_1->height * k_2 * *(int32_t *)&Blockaa_1->width);
-      img_w = *(int32_t *)&Blockaa_1->width;
-      img_h = Blockaa_1->height;
-      __frame.kids_i = *(int32_t *)&Blockaa_1->width;
+      (__frame.slot[1]) = bmf_new(blk1->height * k_2 * *(int32_t *)&blk1->width);
+      img_w = *(int32_t *)&blk1->width;
+      img_h = blk1->height;
+      __frame.kids_i = *(int32_t *)&blk1->width;
       __frame.slot0 = img_h;
       if ( k_2 )
       {
@@ -7704,7 +7704,7 @@ LABEL_14:
           half = (uint8_t *)(__frame.slot[1]) + __frame.slot0 * __frame.kids_i;
           __frame.slot8 = srcp;
           __frame.slot9 = k_2;
-          __frame.slot7 = (ModelBlock *)((int32_t)Blockaa_1);
+          __frame.slot7 = (ModelBlock *)((int32_t)blk1);
           pairs = 0;
           do
           {
@@ -7716,7 +7716,7 @@ LABEL_14:
           while ( pairs < k_2 >> 1 );
           srcp = __frame.slot8;
           k_2 = __frame.slot9;
-          Blockaa_1 = (ModelBlock *)((int32_t *)__frame.slot7);
+          blk1 = (ModelBlock *)((int32_t *)__frame.slot7);
           done = 2 * pairs + 1;
         }
         else
@@ -7736,7 +7736,7 @@ LABEL_14:
         if ( k_2 )
         {
           __frame.slot9 = k_2;
-          __frame.slot7 = (ModelBlock *)((int32_t)Blockaa_1);
+          __frame.slot7 = (ModelBlock *)((int32_t)blk1);
           __frame.kids_i = 0;
           n_moved = 0;
           j_1 = k_2 >> 1;
@@ -7779,24 +7779,24 @@ LABEL_14:
           }
 LABEL_71:
           k_2 = __frame.slot9;
-          Blockaa_1 = (ModelBlock *)((int32_t *)__frame.slot7);
+          blk1 = (ModelBlock *)((int32_t *)__frame.slot7);
         }
       }
-      __frame.tmp = Blockaa_1->sym_word;
-      Blockaa_1->height = k_2 * __frame.slot0;
-      *(int32_t *)&Blockaa_1->depth = 8;
+      __frame.tmp = blk1->sym_word;
+      blk1->height = k_2 * __frame.slot0;
+      *(int32_t *)&blk1->depth = 8;
       free(__frame.tmp);
-      newbuf = bmf_new(2 * Blockaa_1->height * *(int32_t *)&Blockaa_1->width);
+      newbuf = bmf_new(2 * blk1->height * *(int32_t *)&blk1->width);
       __frame.tmp = (__frame.slot[1]);
-      Blockaa_1->sym_word = (uint16_t *)newbuf;
-      __reduce_alphabet((ModelBlock *)Blockaa_1, mode, (uint8_t *)__frame.tmp);
+      blk1->sym_word = (uint16_t *)newbuf;
+      __reduce_alphabet((ModelBlock *)blk1, mode, (uint8_t *)__frame.tmp);
       free((__frame.slot[1]));
     }
     else
     {
       if ( 4 * k_2 )
       {
-        __frame.slot7 = (ModelBlock *)((int32_t)Blockaa_1);
+        __frame.slot7 = (ModelBlock *)((int32_t)blk1);
         li = 0;
         do
         {
@@ -7804,7 +7804,7 @@ LABEL_71:
           ++li;
         }
         while ( li < 4 * k_2 );
-        Blockaa_1 = (ModelBlock *)((int32_t *)__frame.slot7);
+        blk1 = (ModelBlock *)((int32_t *)__frame.slot7);
         alpha_m = __frame.slot7->alphabet;
       }
       if ( alpha_m )
@@ -7812,7 +7812,7 @@ LABEL_71:
         carry = 0;
         si = 0;
         si_end = alpha_m;
-        Blockaa_4 = (ModelBlock *)((int32_t)Blockaa_1);
+        blk4 = (ModelBlock *)((int32_t)blk1);
         do
         {
           word = *(uint32_t *)&__frame.buf[8 * si];
@@ -7820,7 +7820,7 @@ LABEL_71:
           {
             __frame.kids_i = si;
             __frame.slot9 = k_2;
-            __frame.slot7 = (ModelBlock *)(Blockaa_4);
+            __frame.slot7 = (ModelBlock *)(blk4);
             for ( k = 0; k < __frame.slot9; ++k )
             {
               __encode_symbol_list(&__frame.lists[4 * k + carry], (uint8_t)word);
@@ -7829,7 +7829,7 @@ LABEL_71:
             }
             si = __frame.kids_i;
             k_2 = __frame.slot9;
-            Blockaa_4 = (ModelBlock *)(__frame.slot7);
+            blk4 = (ModelBlock *)(__frame.slot7);
             word = *(uint32_t *)&__frame.buf[8 * __frame.kids_i];
             si_end = __frame.slot7->alphabet;
           }
@@ -11384,10 +11384,10 @@ ModelBlock *__layout_workspace(ModelBlock *blk, int32_t a2, int32_t img_w, int32
   return blk;
 }
 
-void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
+void __unmodel_plane_slow(ModelBlock *_this, uint8_t *dst)
 {
   struct alignas(16) UnmodelPlaneSlowFrame {   // 100 bytes, one stack frame
-      uint8_t   _gap0[4];   // was int32_t Size
+      uint8_t   _gap0[4];   // was int32_t alpha_n
       uint8_t   _pad1[4];
       uint8_t   _gap2[4];   // was int32_t g0
       uint8_t   _gap3[4];   // was uint8_t * v85
@@ -11398,7 +11398,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 112,
                 "frame layout moved");
-  uint32_t Size;
+  uint32_t alpha_n;
   // These shared `__frame.g0` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
@@ -11427,7 +11427,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   int32_t f_b3;
   int32_t f_b4;
   int32_t f_b5;
-  uint8_t *Src_1;
+  uint8_t *dst_keep;
   ModelBlock *this_1;
   int32_t f_b1;
   int32_t lo1;
@@ -11437,7 +11437,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   ModelBlock *this_4;
   uint32_t *x6;   // the alphabet map again
   uint8_t *dst_base, *dst_buf, *buf, *expand_buf, *out_bits, *row_at,
-          *Src_2, *p, *out8;
+          *interleave_at, *p, *out8;
   int16_t lvl;
   PixRec *kk, *row_cur3, *row_cur2, *row_cur1, *n_syms;   // the five row buffers, rotated
   uint32_t has4;
@@ -11463,10 +11463,10 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   SymList *i_1, *i, *j_1, *j;
   FreqRec *rec;   // a bucket record: `grid[bucket]`
   PixRec *lists, *t;   // `row_cur[6]` and `row_cur[7]`, the two rows above
-  Src_1 = Src;
+  dst_keep = dst;
   // One byte back when the depth is sub-byte, because `out_bits` writes with
   // `*++out_bits` and so starts one before the first byte it fills.
-  dst_base = &Src[-(_this->depth < 8)];
+  dst_base = &dst[-(_this->depth < 8)];
   __rc_begin_decode(0);
   __expand_alphabet((ModelBlock *)_this);
   this_1 = (ModelBlock *)(_this);
@@ -11623,9 +11623,9 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   dst_buf = dst_base;
   this_4 = (ModelBlock *)((int32_t)this_1);
   buf = (uint8_t *)bmf_new(this_1->alphabet);
-  Size = this_1->alphabet;
+  alpha_n = this_1->alphabet;
   this_1->alpha_map = (uint8_t *)buf;
-  memset(buf,1,Size);
+  memset(buf,1,alpha_n);
   this_4->escape_list = &this_4->escape;
   __init_symbol_list(&this_4->escape, (int32_t)this_4, this_4->alphabet, 1);
   this_4->sel_cur = this_4->sel;
@@ -11887,15 +11887,15 @@ LABEL_76:
     }
     if ( n_pix > 0 )
     {
-      Src_2 = Src_1;
+      interleave_at = dst_keep;
       q2 = 0;
       written = 0;
       do
       {
         p = __frame.row[q2];
-        *Src_2 = *p;
+        *interleave_at = *p;
         n_pix2 = *(uint32_t *)&this_4->height * this_4->width;
-        ++Src_2;
+        ++interleave_at;
         __frame.row[q2++] = p + 1;
         if ( q2 == nchunk )
           q2 = 0;
@@ -13760,7 +13760,7 @@ LABEL_48:
 }
 
 
-void __alt_p2_d8_decode_body(AltP2Block *blk, int8_t ArgList, uint8_t *out, int32_t width, int32_t height)
+void __alt_p2_d8_decode_body(AltP2Block *blk, int8_t unread_flag, uint8_t *out, int32_t width, int32_t height)
 {
   P2Ctx *pix, *prev, *rec, *buf3, *b4, *buf2, *buf1, *b0;
   int32_t x;
@@ -13779,7 +13779,7 @@ void __alt_p2_d8_decode_body(AltP2Block *blk, int8_t ArgList, uint8_t *out, int3
   int32_t wid, q, last, *r0, pred, val2;
   int64_t err;
   uint32_t j;
-  __rc_begin_decode(ArgList);
+  __rc_begin_decode(unread_flag);
   wid = width;
   pix = blk->cursor[0];
   prev = pix;
@@ -13951,7 +13951,7 @@ void __alt_p2_d8_decode_body(AltP2Block *blk, int8_t ArgList, uint8_t *out, int3
   __rc_end_decode();
 }
 
-void __alt_model_p2_d8_decode( uint8_t *Src, int32_t i, int32_t a5)
+void __alt_model_p2_d8_decode( uint8_t *out, int32_t i, int32_t a5)
 {
   ;
   void *raw, **blk;
@@ -13960,12 +13960,12 @@ void __alt_model_p2_d8_decode( uint8_t *Src, int32_t i, int32_t a5)
     blk = (void **)__alt_p2_alloc((AltP2Block *)raw, i, 0);
   else
     blk = nullptr;
-  __alt_p2_d8_decode_body((AltP2Block *)(int32_t)blk, i, Src, i, a5);
+  __alt_p2_d8_decode_body((AltP2Block *)(int32_t)blk, i, out, i, a5);
   if ( blk )
     __alt_p2_free((void **)blk, 1);
 }
 
-int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *cur0,
+int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *out) {   P2Ctx *cur0,
         *cur1, *cur2, *cur3, *buf3, *bb4, *buf2, *buf1, *bb0;
   struct alignas(16) AltModelP2DecodeFrame {   // 276 bytes, one stack frame
       uint8_t   _gap0[4];   // was uint32_t Size_1
@@ -13986,8 +13986,8 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *cur0,
       uint8_t   _gap5[16];   // was AltP2Block * plane
       uint8_t   _gap6[4];   // was int32_t w
       uint8_t   _gap7[4];   // was int32_t back
-      uint8_t   _gap8[4];   // was uint32_t Size
-      uint8_t   _gap9[4];   // was int32_t ArgList
+      uint8_t   _gap8[4];   // was uint32_t row_bytes
+      uint8_t   _gap9[4];   // was int32_t dc_flag
       uint8_t   _gap10[4];   // was int32_t xf0
       uint8_t   _gap11[4];   // was uint32_t i_1
       uint8_t   _gap12[4];   // was uint32_t first
@@ -14009,8 +14009,8 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *cur0,
   AltP2Block * plane[4];
   int32_t w;
   uint32_t back;
-  uint32_t Size;
-  int32_t ArgList;
+  uint32_t row_bytes;
+  int32_t dc_flag;
   int32_t xf0;
   uint32_t i_1;
   uint32_t first;
@@ -14034,9 +14034,9 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *cur0,
   int16_t seed3;
   int16_t seed2;
   P2Freq *freq;
-  AltP2Block *lpAddress_1;
+  AltP2Block *blk0;
   uint32_t src2;
-  void *made, *src1, **lpAddress_2;
+  void *made, *src1, **plane_p;
   AltP2Block **planep;
   // The p2 filter coefficients drift over a run: rows 4..6 are folded into
   // rows 0..2 here and then zeroed, and the whole table goes back on the way
@@ -14079,15 +14079,15 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *cur0,
     while ( pl < plane_count );
   }
   xf0 = plane_desc[plane_desc[2].src_plane + 1].flags & 8;
-  ArgList = plane_desc[plane_desc[3].src_plane + 1].flags & 8;
+  dc_flag = plane_desc[plane_desc[3].src_plane + 1].flags & 8;
   xf4 = (plane_desc[plane_desc[4].src_plane + 1].flags) & 8;
-  __rc_begin_decode(ArgList);
+  __rc_begin_decode(dc_flag);
   if ( raw > 0 )
   {
     src2 = 0;
     back = -i;
     nplanes = plane_count;
-    Size = 18 * i + 234;
+    row_bytes = 18 * i + 234;
     np = i + 13;
     do
     {
@@ -14128,9 +14128,9 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *cur0,
               rec2[-6] = rec2[5];
               rec2[-7] = rec2[6];
               rec2[-8] = rec2[7];
-              memcpy(blk_k->buf[1],blk_k->buf[0],Size);
-              memcpy(blk_k->buf[2],blk_k->buf[0],Size);
-              memcpy(blk_k->buf[3],blk_k->buf[0],Size);
+              memcpy(blk_k->buf[1],blk_k->buf[0],row_bytes);
+              memcpy(blk_k->buf[2],blk_k->buf[0],row_bytes);
+              memcpy(blk_k->buf[3],blk_k->buf[0],row_bytes);
             }
           }
           else
@@ -14155,9 +14155,9 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *cur0,
             }
             while ( xf3 );
             planep = (AltP2Block **)w;
-            memcpy(src3->buf[1],src3->buf[0],Size);
-            memcpy(src3->buf[2],src3->buf[0],Size);
-            memcpy(src3->buf[3],src3->buf[0],Size);
+            memcpy(src3->buf[1],src3->buf[0],row_bytes);
+            memcpy(src3->buf[2],src3->buf[0],row_bytes);
+            memcpy(src3->buf[3],src3->buf[0],row_bytes);
             src3->cursor[0] = src3->buf[0] + i + 8;
             src3->cursor[1] = (src3->buf[1] + i + 8);
             src3->cursor[2] = src3->buf[2] + i + 8;
@@ -14255,23 +14255,23 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *cur0,
           ctx_bias[1] >>= 3;
           ctx_bias[2] >>= 3;
           ctx_bias[3] >>= 3;
-          lpAddress_1 = (AltP2Block *)(plane[0]);
+          blk0 = (AltP2Block *)(plane[0]);
           pred0 = __alt_p2_context((AltP2Block *)plane[0], (AltP2Block *)plane[2], (AltP2Block *)plane[1]);
-          freq = &lpAddress_1->freq[lpAddress_1->ctx];
-          code0 = __alt_p2_decode_symbol(freq, lpAddress_1->ctx_pair);
-          val0 = (uint8_t)(pred0 + (*(uint8_t *)&lpAddress_1->unfold[code0]));
-          __alt_p2_model((AltP2Block *)lpAddress_1, val0, code0, val0 - pred0);
-          cur0 = lpAddress_1->cursor[0];
+          freq = &blk0->freq[blk0->ctx];
+          code0 = __alt_p2_decode_symbol(freq, blk0->ctx_pair);
+          val0 = (uint8_t)(pred0 + (*(uint8_t *)&blk0->unfold[code0]));
+          __alt_p2_model((AltP2Block *)blk0, val0, code0, val0 - pred0);
+          cur0 = blk0->cursor[0];
           ctx_bias[0] += 32 * cur0[-1].dupleft;
           ctx_bias[1] += (32 * cur0[-1].dupright);
           ctx_bias[2] += 32 * cur0[-1].dleft;
           ctx_bias[3] += 32 * cur0[-1].dup;
           off = xf0 == 0;
-          Src[plane_desc[1].src_plane] = val0;
+          out[plane_desc[1].src_plane] = val0;
           if ( off )
             seed1 = 0;
           else
-            seed1 = 16 * Src[plane_desc[1].src_plane];
+            seed1 = 16 * out[plane_desc[1].src_plane];
           blk1 = (AltP2Block *)(plane[1]);
           plane[1]->cursor[0]->dval = seed1;
           pred1 = __alt_p2_context((AltP2Block *)blk1, (AltP2Block *)plane[0], (AltP2Block *)plane[2]);
@@ -14286,13 +14286,13 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *cur0,
           ctx_bias[1] += 32 * l7a;
           ctx_bias[2] += 32 * l4a;
           ctx_bias[3] += 32 * l5a;
-          off = ArgList == 0;
-          Src[plane_desc[2].src_plane] = val1;
+          off = dc_flag == 0;
+          out[plane_desc[2].src_plane] = val1;
           if ( off )
             seed2 = 0;
           else
-            seed2 = (plane_desc[plane_desc[3].src_plane + 1].w8 * Src[plane_desc[2].src_plane]
-                  + plane_desc[plane_desc[3].src_plane + 1].w4 * Src[plane_desc[1].src_plane]) >> 3;
+            seed2 = (plane_desc[plane_desc[3].src_plane + 1].w8 * out[plane_desc[2].src_plane]
+                  + plane_desc[plane_desc[3].src_plane + 1].w4 * out[plane_desc[1].src_plane]) >> 3;
           blk2 = (AltP2Block *)(plane[2]);
           plane[2]->cursor[0]->dval = seed2;
           pred2 = __alt_p2_context((AltP2Block *)blk2, (AltP2Block *)plane[0], (AltP2Block *)plane[1]);
@@ -14307,14 +14307,14 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *cur0,
           ctx_bias[1] += 32 * l7b;
           ctx_bias[2] += 32 * l4b;
           ctx_bias[3] += 32 * l5b;
-          Src[plane_desc[3].src_plane] = val2;
+          out[plane_desc[3].src_plane] = val2;
           nplanes = plane_count;
           if ( plane_count >= 4 )
           {
             if ( xf4 )
-              seed3 = (plane_desc[plane_desc[4].src_plane + 1].w12 * Src[2]
-                    + plane_desc[plane_desc[4].src_plane + 1].w8 * Src[1]
-                    + plane_desc[plane_desc[4].src_plane + 1].w4 * *Src) >> 3;
+              seed3 = (plane_desc[plane_desc[4].src_plane + 1].w12 * out[2]
+                    + plane_desc[plane_desc[4].src_plane + 1].w8 * out[1]
+                    + plane_desc[plane_desc[4].src_plane + 1].w4 * *out) >> 3;
             else
               seed3 = 0;
             blk3 = (AltP2Block *)(plane[3]);
@@ -14331,10 +14331,10 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *cur0,
             ctx_bias[1] += 32 * l7c;
             ctx_bias[2] += 32 * l4c;
             ctx_bias[3] += 32 * l5c;
-            Src[3] = val3;
+            out[3] = val3;
             nplanes = plane_count;
           }
-          Src += nplanes;
+          out += nplanes;
           ++i_2;
         }
         while ( i_2 < i_1 );
@@ -14354,10 +14354,10 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *cur0,
     pl3 = 0;
     do
     {
-      lpAddress_2 = (void **)plane[pl3];
-      if ( lpAddress_2 )
+      plane_p = (void **)plane[pl3];
+      if ( plane_p )
       {
-        __alt_p2_free((void **)lpAddress_2, 1);
+        __alt_p2_free((void **)plane_p, 1);
         nplanes2 = plane_count;
       }
       ++pl3;
@@ -14367,7 +14367,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *cur0,
   return nplanes2;
 }
 
-void __unmodel_plane(int8_t ArgList, uint16_t *p_i, uint8_t *Src)
+void __unmodel_plane(int8_t unread_flag, uint16_t *p_i, uint8_t *out)
 {
   ;
   ModelBlock *blk;
@@ -14377,16 +14377,16 @@ void __unmodel_plane(int8_t ArgList, uint16_t *p_i, uint8_t *Src)
     if ( plane_predictor == 1 )
     {
       if ( (p_i[5] & 0x3F) == 8 )
-        __alt_model_p1_d8_decode(ArgList, Src, *p_i, p_i[1]);
+        __alt_model_p1_d8_decode(unread_flag, out, *p_i, p_i[1]);
       else
-        __alt_model_p1_decode(p_i, Src);
+        __alt_model_p1_decode(p_i, out);
     }
     else if ( plane_predictor == 2 )
     {
       if ( (p_i[5] & 0x3F) == 8 )
-        __alt_model_p2_d8_decode(Src, *p_i, p_i[1]);
+        __alt_model_p2_d8_decode(out, *p_i, p_i[1]);
       else
-        __alt_model_p2_decode(p_i, Src);
+        __alt_model_p2_decode(p_i, out);
     }
   }
   else
@@ -14396,7 +14396,7 @@ void __unmodel_plane(int8_t ArgList, uint16_t *p_i, uint8_t *Src)
       blk = __layout_workspace((ModelBlock *)raw, p_i[1], *p_i, p_i[1], p_i[5] & 0x3F);
     else
       blk = (ModelBlock *)(nullptr);
-    __unmodel_plane_slow((ModelBlock *)blk, Src);
+    __unmodel_plane_slow((ModelBlock *)blk, out);
     if ( blk )
       __free_workspace((ModelBlock *)blk, 1);
   }
@@ -14426,7 +14426,7 @@ void __alt_p2_d8_encode_body(AltP2Block *blk, uint8_t *src, int32_t width, int32
   ;
   int32_t *cur, *r1;   // the row cursors, four bytes a step
   uint8_t recon, recon2;
-  int32_t q, resid, drift, q2, Size, last, *r0, pred, resid2, drift2, code;
+  int32_t q, resid, drift, q2, row_bytes, last, *r0, pred, resid2, drift2, code;
   int64_t err;
   P2Ctx *rec2;
   uint32_t k;
@@ -14513,10 +14513,10 @@ void __alt_p2_d8_encode_body(AltP2Block *blk, uint8_t *src, int32_t width, int32
   rec3[-6] = rec3[5];
   rec3[-7] = rec3[6];
   rec3[-8] = rec3[7];
-  Size = 18 * width + 234;
-  memcpy(blk->buf[1],blk->buf[0],Size);
-  memcpy(blk->buf[2],blk->buf[0],Size);
-  memcpy(blk->buf[3],blk->buf[0],Size);
+  row_bytes = 18 * width + 234;
+  memcpy(blk->buf[1],blk->buf[0],row_bytes);
+  memcpy(blk->buf[2],blk->buf[0],row_bytes);
+  memcpy(blk->buf[3],blk->buf[0],row_bytes);
   if ( height > 1 )
   {
     pair = blk->ctx_pair;
@@ -14652,7 +14652,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
   AltP2Block * plane[4];
   int32_t back;
   int32_t first;
-  uint32_t Size;
+  uint32_t row_bytes;
   uint8_t *out;
   int32_t np;
   int32_t xf0;
@@ -14689,8 +14689,8 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
   int16_t l7c;
   int16_t seed2;
   uint32_t src1;
-  AltP2Block *lpAddress_1;
-  void *raw, *made, **lpAddress_2;
+  AltP2Block *blk0;
+  void *raw, *made, **plane_p;
   AltP2Block **xf3;
   out = a2;
   // The p2 filter coefficients drift over a run: rows 4..6 are folded into
@@ -14741,7 +14741,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
   {
     src1 = 0;
     first = -i_1;
-    Size = 18 * i_1 + 234;
+    row_bytes = 18 * i_1 + 234;
     code3 = i_1 + 13;
     nplanes = plane_count;
     do
@@ -14781,9 +14781,9 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
               rec4[-6] = rec4[5];
               rec4[-7] = rec4[6];
               rec4[-8] = rec4[7];
-              memcpy(blk_k->buf[1],blk_k->buf[0],Size);
-              memcpy(blk_k->buf[2],blk_k->buf[0],Size);
-              memcpy(blk_k->buf[3],blk_k->buf[0],Size);
+              memcpy(blk_k->buf[1],blk_k->buf[0],row_bytes);
+              memcpy(blk_k->buf[2],blk_k->buf[0],row_bytes);
+              memcpy(blk_k->buf[3],blk_k->buf[0],row_bytes);
             }
           }
           else
@@ -14808,9 +14808,9 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
             }
             while ( xf2 );
             xf3 = (AltP2Block **)back;
-            memcpy(src2->buf[1],src2->buf[0],Size);
-            memcpy(src2->buf[2],src2->buf[0],Size);
-            memcpy(src2->buf[3],src2->buf[0],Size);
+            memcpy(src2->buf[1],src2->buf[0],row_bytes);
+            memcpy(src2->buf[2],src2->buf[0],row_bytes);
+            memcpy(src2->buf[3],src2->buf[0],row_bytes);
             src2->cursor[0] = src2->buf[0] + i_1 + 8;
             src2->cursor[1] = (src2->buf[1] + i_1 + 8);
             src2->cursor[2] = src2->buf[2] + i_1 + 8;
@@ -14912,27 +14912,27 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
           ctx_bias[1] = seed0 >> 3;
           ctx_bias[2] = off0 >> 3;
           ctx_bias[3] = want0 >> 3;
-          lpAddress_1 = (AltP2Block *)(plane[0]);
+          blk0 = (AltP2Block *)(plane[0]);
           cur0 = out[plane_desc[1].src_plane];
           pred0 = __alt_p2_context((AltP2Block *)plane[0], (AltP2Block *)plane[2], (AltP2Block *)plane[1]);
           resid0 = (uint8_t)(cur0 - pred0);
-          code0 = (uint8_t)lpAddress_1->fold[resid0];
+          code0 = (uint8_t)blk0->fold[resid0];
           out0 = out[off0b];
-          recon0b = (uint8_t)(pred0 + (*(uint8_t *)&lpAddress_1->unfold[code0]));
+          recon0b = (uint8_t)(pred0 + (*(uint8_t *)&blk0->unfold[code0]));
           recon0 = (uint8_t)(recon0b + out0 - cur0);
           drift0 = out0 - recon0;
           if ( drift0 < -16 || drift0 > 16 )
           {
-            code0 = (uint8_t)lpAddress_1->fold_hi[resid0];
+            code0 = (uint8_t)blk0->fold_hi[resid0];
           }
           else
           {
             cur0 = recon0b;
             out[off0b] = recon0;
           }
-          __alt_p2_encode_symbol(&lpAddress_1->freq[lpAddress_1->ctx], lpAddress_1->ctx_pair, code0);
-          __alt_p2_model((AltP2Block *)lpAddress_1, cur0, code0, cur0 - pred0);
-          rec0 = lpAddress_1->cursor[0];
+          __alt_p2_encode_symbol(&blk0->freq[blk0->ctx], blk0->ctx_pair, code0);
+          __alt_p2_model((AltP2Block *)blk0, cur0, code0, cur0 - pred0);
+          rec0 = blk0->cursor[0];
           l7a = rec0[-1].dupright;
           l4a = rec0[-1].dleft;
           l5a = rec0[-1].dup;
@@ -15068,10 +15068,10 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
     pl3 = 0;
     do
     {
-      lpAddress_2 = (void **)plane[pl3];
-      if ( lpAddress_2 )
+      plane_p = (void **)plane[pl3];
+      if ( plane_p )
       {
-        __alt_p2_free((void **)lpAddress_2, 1);
+        __alt_p2_free((void **)plane_p, 1);
         nplanes2 = plane_count;
       }
       ++pl3;
@@ -15083,7 +15083,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
 
 void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
 {
-  uint32_t Size;
+  uint32_t alpha_n;
   // These three shared a stack slot each with a local the main declaration
   // below still names: MSVC gave one slot to locals whose live ranges do not
   // overlap, and Hex-Rays named every use.  That they can have storage of
@@ -15293,9 +15293,9 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
     }
     while ( (uint32_t)g < 0xF );
     buf = (uint8_t *)bmf_new(blk->alphabet);
-    Size = blk->alphabet;
+    alpha_n = blk->alphabet;
     blk->alpha_map = buf;
-    memset(buf,1,Size);
+    memset(buf,1,alpha_n);
     blk->escape_list = &blk->escape;
     __init_symbol_list(&blk->escape, 0, blk->alphabet, 1);
     blk->sel_cur = blk->sel;
@@ -16927,11 +16927,11 @@ LABEL_63:
 }
 
 
-BmfArc *__bmf_open_archive(BmfArc *out, char *FileName, int32_t read_only)
+BmfArc *__bmf_open_archive(BmfArc *out, char *path, int32_t read_only)
 {
   ;
   BmfArc *arc;
-  FILE *Stream_v, *Stream_1;
+  FILE *fp, *fp2;
   const char *a_b;   // an fopen mode string, so `char` and not a byte
   int32_t rc, live;
   arc = out;
@@ -16951,41 +16951,41 @@ BmfArc *__bmf_open_archive(BmfArc *out, char *FileName, int32_t read_only)
   if ( read_only )
     a_b = "rb";
   out->images = 0;
-  Stream_v = fopen(FileName, a_b);
-  arc->fp = Stream_v;
-  if ( !Stream_v )
-    __exit_402E40(6, FileName);
+  fp = fopen(path, a_b);
+  arc->fp = fp;
+  if ( !fp )
+    __exit_402E40(6, path);
   arc->images = 0;
-  rc = fseek(Stream_v, 0, 0);
+  rc = fseek(fp, 0, 0);
   live = arc->fp != nullptr;
   if ( rc )
   {
     if ( !live )
-      __exit_402E40(3, FileName);
+      __exit_402E40(3, path);
     return arc;
   }
   if ( !live )
     {
-      __exit_402E40(3, FileName);
+      __exit_402E40(3, path);
       return arc;
     }
   if ( !feof(arc->fp) )
   {
     __expand_image((uint8_t *)arc, 1, (void **)nullptr);
-    Stream_1 = arc->fp;
-    if ( !Stream_1 )
+    fp2 = arc->fp;
+    if ( !fp2 )
       {
-        __exit_402E40(3, FileName);
+        __exit_402E40(3, path);
         return arc;
       }
     if ( !feof(arc->fp) )
     {
       arc->images = 0;
-      fseek(Stream_1, 0, 0);
+      fseek(fp2, 0, 0);
       live = arc->fp != nullptr;
       {
         if ( !live )
-        __exit_402E40(3, FileName);
+        __exit_402E40(3, path);
         return arc;
       }
     }
@@ -17397,18 +17397,18 @@ void __bmf_compress(
                             const char *InName, const char *OutName)
 {
   ;
-  FILE *Stream_v;
+  FILE *fp;
   const uint8_t *Palette;
   int32_t *p_i, Arc, Flags, Colours, Step, Grey, i;
-  int32_t Size;
+  int32_t coded_len;
 
   // The reader below answers "no" the same way whether the file is missing or
   // is not a BMP, and BMF told those apart -- so open it once first, as its
   // format sniffer used to, and keep the two messages.
-  Stream_v = fopen(InName, "rb");
-  if ( !Stream_v )
+  fp = fopen(InName, "rb");
+  if ( !fp )
     __exit_402E40(6, InName);
-  fclose(Stream_v);
+  fclose(fp);
   p_i = __read_bmp((char *)InName);
   if ( !p_i )
     __exit_402E40(4);
@@ -17452,12 +17452,12 @@ void __bmf_compress(
     }
   }
 
-  Size = __compress_image((uint8_t *)Arc, (BmfImage *)(uint16_t *)p_i, (void *)coded_block);
-  if ( !Size )
+  coded_len = __compress_image((uint8_t *)Arc, (BmfImage *)(uint16_t *)p_i, (void *)coded_block);
+  if ( !coded_len )
     __exit_402E40(5, OutName);
   printf(
     "%6.3f bpp\n",
-    (double)Size * 8.0 / (double)(p_i_img->height * p_i_img->width));
+    (double)coded_len * 8.0 / (double)(p_i_img->height * p_i_img->width));
   free(p_i);
 }
 
@@ -17468,24 +17468,24 @@ void __bmf_decompress(
   ;
   int32_t Number, Depth;
   uint32_t *p_i;
-  void *Block;
+  void *arc;
 
   if ( void *__nb = bmf_new(sizeof(BmfArc)) )
-    Block = (void *)__bmf_open_archive((BmfArc *)__nb, (char *)InName, 1);
+    arc = (void *)__bmf_open_archive((BmfArc *)__nb, (char *)InName, 1);
   else
-    Block = nullptr;
+    arc = nullptr;
   printf("File %16s,\r", InName);
   Number = 0;
   while ( 1 )
   {
-    p_i = (uint32_t *)__expand_image((uint8_t *)Block, 0, &coded_block);
+    p_i = (uint32_t *)__expand_image((uint8_t *)arc, 0, &coded_block);
     BmfImage *const p_i_img = (BmfImage *)p_i;
     if ( !p_i )
     {
       printf("\n");
-      if ( !((BmfArc *)Block)->fp )
+      if ( !((BmfArc *)arc)->fp )
         __exit_402E40(3, InName);
-      __bmf_destroy_archive((BmfArc *)(FILE **)Block, 1);
+      __bmf_destroy_archive((BmfArc *)(FILE **)arc, 1);
       return;
     }
     ++Number;
@@ -17517,14 +17517,14 @@ void __bmf_decompress(
 int32_t __main(int32_t argc, const char **argv)
 {
   ;
-  int32_t Mode;
+  int32_t mode;
 
   bmf_set_denormal_mode();
   __set_new_handler(__out_of_memory_handler);
   printf("BMF lossless image compressor, v.2.01 (C) 1998-1999, 2009 by Dmitry Shkarin\n");
 
-  Mode = argc == 4 && !argv[1][1] ? toupper(argv[1][0]) : 0;
-  if ( Mode != 'C' && Mode != 'D' )
+  mode = argc == 4 && !argv[1][1] ? toupper(argv[1][0]) : 0;
+  if ( mode != 'C' && mode != 'D' )
   {
     printf(
       "e-mail: <dmitry.shkarin@mtu-net.ru>;  web: http://compression.graphicon.ru/ds/\n"
@@ -17533,7 +17533,7 @@ int32_t __main(int32_t argc, const char **argv)
     return 1;
   }
 
-  if ( Mode == 'C' )
+  if ( mode == 'C' )
     __bmf_compress( argv[2], argv[3]);
   else
     __bmf_decompress( argv[2], argv[3]);
