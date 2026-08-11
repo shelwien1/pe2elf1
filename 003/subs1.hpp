@@ -539,9 +539,22 @@ struct AltP1Block {
   // call: a sentinel written over `fold_hi` immediately before
   // `alt_init_tables` is gone immediately after, at both ends of the range and
   // in both blocks.  So the write extent is 512 bytes and the split is the
-  // readers' -- some index `fold`, some `fold_hi`, none crosses.  What
-  // separates the two index spaces is not established, which is why this is
-  // two members and not `fold[512]`.
+  // readers' -- some index `fold`, some `fold_hi`, none crosses.
+  //
+  // What separates the two index spaces was left open here for several rounds.
+  // It is nothing: both halves are byte-indexed maps of the same residual to
+  // the same code, and in this build they hold the same 256 bytes.  Reading
+  // `alt_init_tables` says why -- the quantiser walk fills `fold[0..255]` and
+  // the closing loop fills `fold_hi[b] = code` by inverting `unfold` outright,
+  // and with `-E` at 0 the quantiser's buckets are one residual wide, so the
+  // walk computes that same inverse the long way round.  Measured rather than
+  // argued: a probe comparing the two halves at the end of every
+  // `alt_init_tables` call reports 0 of 256 differing, on every test stream.
+  //
+  // They stay two members because they are two *objects* -- the near-lossless
+  // build would fill them differently, and a reader that indexes `fold_hi`
+  // is asking for the exact inverse while one that indexes `fold` is asking
+  // for the quantised one.
   uint8_t fold[256];     // +984  .. +1239
   uint8_t fold_hi[256];    // +1240 .. +1495
   uint8_t unfold[256];   // +1496 .. +1751
@@ -1583,14 +1596,30 @@ LABEL_24:
   return last;
 }
 
-uint32_t __alt_init_tables(uint8_t *a1, int8_t *a2)
+// Build the residual folding pair the alternate models use, which is the same
+// pair `predict_med` and `unpredict_med` build inline for themselves:
+//
+//   unfold[code]        the signed residual a code stands for: 0, -1, +1, -2,
+//                       +2 ... out to -127, +127, -128.
+//   fold[residual+256]  the inverse, indexed by the residual as a byte.  The
+//                       +256 is the zero point, so `fold` is addressed from
+//                       -128 to +127 either side of it.
+//
+// The middle block is the near-lossless quantiser: with a maximum error of `w`
+// it maps a run of `2w+1` residuals onto one code, and `bucket_size` is that
+// run.  This build is lossless -- `-E` is 0, so `w` is 0, `bucket_size` is 1
+// and every bucket holds one residual -- which is why `lo` is 1 and the walk
+// degenerates to writing consecutive codes.  It is kept whole rather than
+// folded to that special case, because the special case is a build option and
+// not a property of the format.
+uint32_t __alt_init_tables(uint8_t *fold, int8_t *unfold)
 {
   ;
-  uint8_t v48, v53;
-  int32_t n128_1, n128_6, v30, n128_5, v33, n128_3, n128_4, v36, n128_11;
-  uint32_t i, v32, n0x80, v49, v52;
-  uint8_t *v50, *v51;
-  n128_1 = 2 * plane_desc[0].w12 + 1;
+  uint8_t even, odd;
+  int32_t bucket_size, lo, half, in_bucket, ofs, bucket, bucket_1, done;
+  uint32_t i, k, n0x80, span, pairs;
+  uint8_t *pos, *neg;
+  bucket_size = 2 * plane_desc[0].w12 + 1;
   // The predictor-mode-0 branch was here: 111 lines building a 256-entry
   // identity table with SSE.  Nothing can reach it.  This function is called
   // only by alt_p2_alloc and alt_p1_alloc; those are called only by the eight
@@ -1600,23 +1629,23 @@ uint32_t __alt_init_tables(uint8_t *a1, int8_t *a2)
   // 0, which a run over the corpus agrees with: 164 entries, 83 at 1 and 81
   // at 2.  Deleted on the same grounds as the fast path (REFACTORING.md
   // section 2.1) -- code no dispatch reaches is not a feature to keep.
-  *a2 = 0;
-  a2[255] = 0x80;
+  *unfold = 0;
+  unfold[255] = 0x80;
   // MSVC's overlap check for the loop below, and it is always true:
-  // `a2 + 1 <= a2 + 2` settles the first half, and the second falls to
+  // `unfold + 1 <= unfold + 2` settles the first half, and the second falls to
   // `(uint32_t)(v18 - v19) < 0xFE`, which is `1 < 254`.  Both `v18` and
-  // `v19` are constants of `a2`, so nothing at run time can change it.
+  // `v19` are constants of `unfold`, so nothing at run time can change it.
   // Kept as a comment for the same reason the other always-taken tests in
   // this function are: the branch is the artefact, the body is the code.
   for ( i = 0; i < 0x3F; ++i )
   {
-    ((uint8_t *)a2)[4 * i + 2] = 2 * i + 1;
-    ((uint8_t *)a2)[4 * i + 1] = -2 * i - 1;
-    ((uint8_t *)a2)[4 * i + 4] = 2 * i + 2;
-    ((uint8_t *)a2)[4 * i + 3] = -2 * i - 2;
+    ((uint8_t *)unfold)[4 * i + 2] = 2 * i + 1;
+    ((uint8_t *)unfold)[4 * i + 1] = -2 * i - 1;
+    ((uint8_t *)unfold)[4 * i + 4] = 2 * i + 2;
+    ((uint8_t *)unfold)[4 * i + 3] = -2 * i - 2;
   }
-  a2[254] = 127;
-  a2[253] = -127;
+  unfold[254] = 127;
+  unfold[253] = -127;
   // The `else` that stood here is gone with the test: it wrote the same
   // 256 values in two passes instead of one, which is what an overlap
   // fallback does, and it is what says the branch was MSVC's and not the
@@ -1627,69 +1656,71 @@ uint32_t __alt_init_tables(uint8_t *a1, int8_t *a2)
   // and those only by the eight alt_model bodies, which the dispatch reaches
   // only under the predictor being 1 or 2.  Always true, so it and its
   // 22-line else are gone.  Same argument as the block above it.
-  *a1 = 0;
-  n128_6 = 1;
-  a1[128] = -1;
+  *fold = 0;
+  lo = 1;
+  fold[128] = -1;
   // -E is 0, so the near-lossless fill that stood here never ran: the jump
   // over it was `if ( 1 ) goto LABEL_52`, and LABEL_52 had no other source.
-  // The `n128_6 < 128` test it jumped past went with it -- the only live
+  // The `lo < 128` test it jumped past went with it -- the only live
   // path entered the block without evaluating it.
   {
-    v49 = 128 - n128_6;
-    v52 = (128 - n128_6) / 2;
-    v30 = 0;
-    n128_5 = 1;
-    if ( v52 )
+    span = 128 - lo;
+    pairs = (128 - lo) / 2;
+    half = 0;
+    in_bucket = 1;
+    if ( pairs )
     {
-      n128_11 = n128_6;
-      v32 = 0;
-      v33 = 0;
-      v50 = &(a1)[n128_6];
-      v51 = &(a1)[-n128_6];
+      k = 0;
+      ofs = 0;
+      pos = &(fold)[lo];
+      neg = &(fold)[-lo];
       do
       {
-        n128_3 = n128_1;
-        n128_4 = n128_5 - 1;
-        if ( n128_4 )
-          n128_3 = n128_4;
+        bucket = bucket_size;
+        bucket_1 = in_bucket - 1;
+        if ( bucket_1 )
+          bucket = bucket_1;
         else
-          ++v30;
-        v48 = 2 * v30;
-        v50[2 * v32] = 2 * v30;
-        v53 = 2 * v30 - 1;
-        n128_5 = n128_3 - 1;
-        v51[v33 + 256] = v53;
-        if ( n128_3 == 1 )
+          ++half;
+        even = 2 * half;
+        pos[2 * k] = 2 * half;
+        odd = 2 * half - 1;
+        in_bucket = bucket - 1;
+        neg[ofs + 256] = odd;
+        if ( bucket == 1 )
         {
-          n128_5 = n128_1;
-          v48 = 2 * ++v30;
-          v53 = 2 * v30 - 1;
+          in_bucket = bucket_size;
+          even = 2 * ++half;
+          odd = 2 * half - 1;
         }
-        v50[2 * v32++ + 1] = v48;
-        v51[v33 + 255] = v53;
-        v33 -= 2;
+        pos[2 * k++ + 1] = even;
+        neg[ofs + 255] = odd;
+        ofs -= 2;
       }
-      while ( v32 < v52 );
-      n128_6 = n128_11;
-      v36 = 2 * v32 + 1;
+      while ( k < pairs );
+      done = 2 * k + 1;
     }
     else
     {
-      v36 = 1;
+      done = 1;
     }
-    if ( v36 - 1 < v49 )
+    if ( done - 1 < span )
     {
-      if ( n128_5 == 1 )
-        LOBYTE(v30) = v30 + 1;
-      (a1)[n128_6 - 1 + v36] = 2 * v30;
-      (a1)[-n128_6 - v36 + 257] = 2 * v30 - 1;
+      if ( in_bucket == 1 )
+        LOBYTE(half) = half + 1;
+      (fold)[lo - 1 + done] = 2 * half;
+      (fold)[-lo - done + 257] = 2 * half - 1;
     }
   }
+  // `fold` is finished by inverting `unfold` outright: whatever residual a code
+  // stands for, that residual folds back to that code.  Two codes per turn
+  // because the residuals come in signed pairs.
   for ( n0x80 = 0; n0x80 < 0x80; ++n0x80 )
   {
-    (a1)[(uint8_t)((uint8_t *)a2)[2 * n0x80] + 256] = 2 * n0x80;
-    (a1)[(uint8_t)((uint8_t *)a2)[2 * n0x80 + 1] + 256] = 2 * n0x80 + 1;
+    (fold)[(uint8_t)((uint8_t *)unfold)[2 * n0x80] + 256] = 2 * n0x80;
+    (fold)[(uint8_t)((uint8_t *)unfold)[2 * n0x80 + 1] + 256] = 2 * n0x80 + 1;
   }
+  // 0x80, and no caller reads it.
   return n0x80;
 }
 
