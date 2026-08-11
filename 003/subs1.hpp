@@ -1818,7 +1818,11 @@ int32_t __encode_context_bit(BitCtr *_this, BitCtr *a2, int32_t bit)
 int32_t __decode_context_bit(BitCtr *_this, BitCtr *a2)
 {
   ;
-  int32_t c0, c1, result, cap, p0, p1, p_cap, par0, par_n;
+  uint32_t c0;
+  uint32_t c1;
+  uint32_t p0;
+  uint32_t p1;
+  int32_t result, cap, p_cap, par0, par_n;
   int32_t par_tot;
   uint32_t tot, p_tot, n1_old, p1_old;
   c0 = _this->n[0];
@@ -3465,11 +3469,24 @@ int32_t __alt_p1_model(AltP1Block *_this)
   uint32_t alti1;
   uint32_t ctx_alt;
   uint32_t alti0;
+  uint32_t alti2;
+  uint32_t alti3;
+  uint32_t alti4;
+  uint32_t alti5;
+  uint32_t alti6;
+  uint32_t alti7;
+  uint32_t alti8;
+  uint32_t x2;
+  uint32_t x3;
+  uint32_t x4;
+  uint32_t x5;
+  uint32_t x6;
+  uint32_t x7;
   int32_t sel1_top, code_r, sel2_top, slot_f, slot_r, ctx_dn, sel0,
-          ctx0, sel1, ctx1, sel2, x2, alti2, ctx2,
-          sel3, x3, alti3, ctx3, sel4, x4, alti4, ctx4, sel5, 
-          x5, alti5, ctx5, sel6, x6, alti6, ctx6, sel7, x7, alti7,
-          ctx7, sel8, alti8, midn8, ctx8, mid7, mid6, mid5, mid4, mid3,
+          ctx0, sel1, ctx1, sel2, ctx2,
+          sel3, ctx3, sel4, ctx4, sel5, 
+          ctx5, sel6, ctx6, sel7, 
+          ctx7, sel8, midn8, ctx8, mid7, mid6, mid5, mid4, mid3,
           mid2, mid1, mid0, tree_sym;
   CounterNode *lo0;
   CounterNode *hi0;

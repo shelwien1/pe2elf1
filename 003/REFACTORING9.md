@@ -34,7 +34,7 @@ distinct unexplained locals            554       591             0
 goto / LABEL_n:                     112/79     81/55         49/34
   restart a loop / exit N blocks         —         —         16/29
   jump into a block / sideways           —         —           1/3
-conversion warnings (ratchet)         1455      1331          1090
+conversion warnings (ratchet)         1455      1331          1070
 ```
 
 **Not one Hex-Rays name is left in either file.** Checked by running the
@@ -969,12 +969,12 @@ at the operator. 62 sites, no semantic change, and the two claims it does
 *not* make are in its docstring — it does not decide whether a comparison is
 right, which is a question about whether the signed side can go negative.
 
-What is left is 1090, and `shape.py` now says what they are made of rather
+What is left is 1070, and `shape.py` now says what they are made of rather
 than only how many there are — the same defect the `goto` row had:
 
 ```
-conversion warnings                1090
-  signedness, same width            588
+conversion warnings                1070
+  signedness, same width            568
   narrowing 32 -> 16                305
   narrowing 32 -> 8                 165
   narrowing 64 -> 16                 18
@@ -994,15 +994,17 @@ bits: `freq_tbl->w[0] = ...` where `w` is `uint16_t[8]` because the record is
 sixteen bytes. No declaration can fix those; only a cast, and §15's argument
 applies.
 
-The 588 same-width ones are where the destination is not a local either rule
+The 568 same-width ones are where the destination is not a local either rule
 can reach, or where one can and the flip has been *measured* not to pay.
 
-Getting there took four extensions, each from watching the rule stop: both
+Getting there took six extensions, each from watching the rule stop: both
 directions of flow, every width rather than the 32-bit pair, past an ordering
-comparison whose other side is already cast, and finally whole components at
-once. The two rules feed each other — a group flip creates single candidates
-and vice versa — so they were alternated until both stopped, which took
-1238 down to 1090.
+comparison whose other side is already cast, whole components at once, an edge
+between locals that never convert against each other at all, and offering a
+component both of its two signednesses instead of the one a headcount picks.
+The two rules feed each other — a group flip creates single candidates and vice
+versa — so they were alternated until both stopped, which took 1238 down to
+1070.
 
 The rate is what says where to stop rather than any argument about it: the last
 rounds cost fifteen minutes of rebuilds each and returned one or two warnings.
@@ -1142,6 +1144,37 @@ about what that means: fifteen byte-identical streams did not approve a
 truncation, they failed to exercise it. A gate is evidence about the inputs it
 runs, and the rule has to be right about the ones it does not.
 
+### Locals that have to agree and never meet
+
+The graph above has one blind spot, and it took reading the leftover
+single-local candidates to find it rather than watching the rule fail. Six of
+the thirty were `alti2` … `alti7` in `alt_p1_model`: six registers holding one
+quantity, each converting into the same struct member, and **none of them
+assigned from any other**. There is no conversion edge between any two, so the
+components rule saw six components of one node each, and the single rule
+measured each flip against the five siblings still declared the old way and
+correctly refused all six. Every one of them was a trade alone; the six
+together were worth ten warnings.
+
+So the graph gets a second kind of edge, drawn not from a conversion but from a
+name: same stem, same body, same width, differing only in the trailing number.
+That is a Hex-Rays register-numbering artefact rather than anything in the
+program, which is exactly why it is safe to key on — the numbers came from the
+allocator, and locals that share a stem in one body are one quantity spilled
+across several registers far more often than not. The edge only proposes; every
+member still has to pass `safe()`, and the driver still has to measure a fall.
+
+**And the majority vote was itself the last defect.** `alti0` and `alti1` were
+already `uint32_t` and the other six `int32_t`, so the headcount said the
+component should agree at *signed* — proposing to flip two correct declarations
+to reach a worse total. A component has exactly two possible answers, so the
+rule stopped voting and now offers both as separate candidates, letting the
+ratchet pick. That is the same move as §15's: replacing a heuristic that
+decides with a measurement that decides, and keeping the heuristic only for
+what to try. The pair of fixes landed together and the first group they found
+was the `alti` sextet — it needed the sibling edge to be seen at all and the
+both-directions change to be proposed the right way round.
+
 ### Why `resign.py` proposes rather than counts
 
 It joins `shape.py`, `addrmap.py` and `unify_types.py` in the sweep's
@@ -1151,8 +1184,8 @@ because unlike those three it does have a count.
 Whether a type change removes conversions or merely moves them is settled by
 the compiler. The rule's net-effect test sees a local flowing into other
 *locals*; it cannot see it flowing into a struct member or a call argument, and
-after the passes that paid there are still eight candidates left that do not.
-So its list is a list of things to try, the ratchet is what says whether trying
-them worked, and a non-empty list is not a defect. That is a different kind of
+after the passes that paid there are still 29 single locals and 23 groups left
+that do not. So its list is a list of things to try, the ratchet is what says
+whether trying them worked, and a non-empty list is not a defect. That is a different kind of
 tool from `uncopy` and `unhoist`, whose conditions are decidable from the text,
 and the sweep should not pretend otherwise.
