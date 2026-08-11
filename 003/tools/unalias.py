@@ -110,14 +110,18 @@ def main():
     args = [x for x in sys.argv[2:] if not x.startswith('--')]
 
     if '--list' in sys.argv or not (args or '--all' in sys.argv):
+        seen = bodies = 0
         for a, b, nm, _ in structs.bodies(lines):
             fr = frame_of(lines, a, b)
             if not fr:
                 continue
             al = aliases(lines, a, b, fr[1])
             if al:
+                bodies += 1
                 cast = sum(1 for x in al if not PLAIN.match(x[4]))
                 print('%-24s %3d aliases, %d carry a cast' % (nm.lstrip('_'), len(al), cast))
+                seen += len(al)
+        print('%d frame aliases in %d functions' % (seen, bodies))
         return 0
 
     _, folded, sites = run(lines, set(args))

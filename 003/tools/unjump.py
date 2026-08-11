@@ -55,7 +55,7 @@ def candidates(lines):
             m = LABEL.match(lines[i])
             if m:
                 labs[m.group(2)] = i
-            for g in re.finditer(r'goto (LABEL_\d+);', lines[i]):
+            for g in re.finditer(r'goto (LABEL_\d+);', lines[i].split('//')[0]):
                 gotos.setdefault(g.group(1), []).append(i)
         for name, at in labs.items():
             gs = gotos.get(name, [])

@@ -48,7 +48,8 @@ def analyse(lines, why=None):
             lab[m.group(2)] = i
     gotos = {}
     for i, l in enumerate(lines):
-        m = re.search(r'goto (LABEL_\d+);', l)
+        # Comments explain jumps that are no longer there; only code has them.
+        m = re.search(r'goto (LABEL_\d+);', l.split('//')[0])
         if m:
             gotos.setdefault(m.group(1), []).append(i)
 
@@ -134,9 +135,14 @@ def main():
         for reason, names in sorted(why.items(), key=lambda kv: -len(kv[1])):
             print('%3d  %s' % (len(names), reason))
             print('     %s' % ', '.join(sorted(names)[:8]))
+        # Count the jumps, not the mentions.  `sum(1 for l in lines if
+        # 'goto LABEL_' in l)` reported 91 for a file with 89, because two
+        # comments explain a `goto` that is no longer there -- and a headline
+        # figure that a comment can move is not a measurement.
         print('%d labels rejected, %d gotos in the file'
               % (sum(len(v) for v in why.values()),
-                 sum(1 for l in lines if 'goto LABEL_' in l)))
+                 sum(1 for l in lines
+                     if re.search(r'goto LABEL_\d+;', l.split('//')[0]))))
         return 0
 
     cands = analyse(lines)
@@ -146,7 +152,7 @@ def main():
             print('%3d  line %-6d %-10s %3d lines   if ( %s )'
                   % (k, head + 1, n, j - i - 1, cond[:46]))
         print('%d candidates of %d gotos' % (len(cands), sum(
-            1 for l in lines if 'goto LABEL_' in l)))
+            1 for l in lines if re.search(r'goto LABEL_\d+;', l.split('//')[0]))))
         return
 
     k = int(sys.argv[sys.argv.index('--apply') + 1]) - 1

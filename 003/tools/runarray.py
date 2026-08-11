@@ -127,6 +127,7 @@ def main():
 
     if '--list' in sys.argv or len(args) < 3:
         # every frame member whose address is walked, and how long its run is
+        seen = 0
         for a, b, nm, sig in structs.bodies(lines):
             fr = defram.parse(lines, a, b)
             if not fr:
@@ -139,6 +140,8 @@ def main():
                 print('%-26s %-16s run of %d  %s'
                       % (nm.lstrip('_'), x['name'], len(run) if run else 0,
                          run[0]['ty'] if run else '?'))
+                seen += 1
+        print('%d frame members have their address walked' % seen)
         return 0
 
     name = args[0] if args[0].startswith('__') else '__' + args[0]

@@ -22,24 +22,28 @@ and 3.
 
 ```
                                    round 8   round 9
-subs1.hpp / bmf.cpp lines            17787     17656
+subs1.hpp / bmf.cpp lines            17787     17814
 raw-offset sites                        22        12
 byte offsets on a typed base           121         0
-pointer casts                         2137       992
 fNN members / named ones             93/121     5/162
-distinct vNN locals                    554       551
-goto / LABEL_n:                     112/79     92/58
-conversion warnings (ratchet)         1455      1372
+distinct vNN locals                    554       550
+goto / LABEL_n:                     112/79     89/58
+conversion warnings (ratchet)         1455      1370
 ```
 
-Every tool reports zero: `unused.py`, `unwrite.py`, `unaliasvar.py`,
-`uncursor.py`, `unoffset.py`, `unindex.py`, `unlane.py`, `unrec.py`,
-`decast.py`, `unslot.py`, `unstruct.py`, `untable.py`, `unwiden.py`,
-`unspill.py`, `unscalar.py`, `unshim.py`, `unhoist.py`, `uncopy.py`,
-`unmemcast.py`, `unalias.py`, `defram.py`, `unframe.py`, `dedup.py`,
-`arrayify.py`, `runarray.py`. So did they at the end of round eight, with 379
-more pointer casts and 121 more byte offsets in the file. That is the whole
-argument for §2.
+Three of those numbers were wrong when this section was first written, and the
+correction is §10's subject. `shape.py` hardcoded `SRC = 'subs1.hpp'` and
+ignored the path it was given, so the same file answered for every version it
+was asked about; its `goto` count was `src.count('goto ')`, which counts the two
+comments that *explain* a jump no longer there; and its label count anchored at
+column zero, which misses the two labels that are indented. The row read 92/58
+where the file has 89/58, and `degoto.py`'s headline had the same defect.
+
+A figure a comment can move is not a measurement. That is the whole of §10.
+
+`tools/sweep.sh` runs every tool in the directory and prints what each still
+finds; all of them report zero. It also checks that the file did not change
+while being measured, which is not a formality — see §10.
 
 ---
 
@@ -296,15 +300,25 @@ noticing that a tool's *input* was narrower than the file.
 * **Zero byte offsets on a typed base**, from 121 at the start of the round.
   Every pointer in the file whose target is a record is typed as that record,
   and the stride scan of §2 reports zero for the third time.
-* **92 gotos and 58 labels**, from 112 and 79. Three rules did it, and each
+* **91 gotos and 56 labels**, from 112 and 79. Four rules did it, and each
   came from reading `degoto.py --why` rather than the file:
 
   | rule | tool | gotos |
   | --- | --- | --- |
-  | a shared tail small enough to copy | `untail.py` | 8 |
+  | a shared tail small enough to copy | `untail.py` | 9 |
   | a jump into a block is a disjunction | `unjump.py` | 10 |
   | a forward jump over a region | `degoto.py` | 1 |
+  | an unconditional `goto` ending a block is an `else` | — | 1 |
   | one statement duplicated by hand | — | 1 |
+
+  The `else` is the one worth reading, because it is the shape a decompiler
+  produces most often and the one a tool is least able to claim. In
+  `__init_model_tables` a block ended `goto LABEL_21;` and `LABEL_21` was the
+  first line after the code that followed the block — so the block and that
+  code are the two arms of an `if`, and the label was only ever the join. No
+  condition is inverted and nothing moves; the `goto` is deleted and an `else`
+  is written. What makes it hand work rather than a rule is that "the label is
+  the join" has to be read, not matched.
 
   `untail.py` and `unjump.py` are the round's two new tools and both were wrong
   on their first run in a way the file has taught before: `untail` copied one
@@ -314,10 +328,10 @@ noticing that a tool's *input* was narrower than the file.
   at `if ( fwrite(...) != n ) return 0;` when control carries straight on. A
   `return` ends a run only when it is unconditional.
 
-  What is left is 44 labels and it is genuinely structural: 20 shared tails too
-  big to copy, 8 where the `goto` is not the whole of an `if`, 6 backward, 5
-  that leave a block, 3 whose skipped region something else enters, and 2 more
-  that enter one. Removing any of those needs a flag or a duplicated body large
+  What is left is 44 labels and it is genuinely structural: 19 reached by more
+  than one `goto`, 8 where the `goto` is not the whole of an `if`, 6 backward,
+  5 that leave a block, 3 that enter one, and 3 whose skipped region something
+  else enters. Removing any of those needs a flag or a duplicated body large
   enough that the duplication is the cost.
 * ~~**44 `fNN` members**~~ Five, and all five are recorded as having no
   readers. The other 39 were named, and the method for the ones whose name
@@ -359,9 +373,11 @@ noticing that a tool's *input* was narrower than the file.
 
   What is left are the names whose *values* are unexplained, which is
   `algorithm_v2.md`'s work and not a sweep's.
-* **1372 conversion warnings.** The ratchet fell 83 this round and every step
-  was a by-product: a `match[0]` read through a typed field does not need the
-  cast that a raw byte read did.
+* **1370 conversion warnings.** The ratchet fell 85 this round and almost every
+  step was a by-product: a `match[0]` read through a typed field does not need
+  the cast that a raw byte read did. The last two came from the shared tail
+  §10 copied, where the two `ptrdiff_t`-to-`uint32_t` assignments in it are
+  truncating on purpose and now say so.
 
 ---
 
@@ -376,9 +392,96 @@ No new tools. Two fixes and one scan that lives in this document rather than in
 | `untail.py` | new: copy a shared tail small enough to be copied |
 | `unjump.py` | new: a jump into a block is a disjunction |
 | `untemp.py` | new: a local assigned once and read once is the expression |
+| `namelocal.py` | new: a local that is one assignment of a member takes its name |
+| `outpath.py` | new: a generator's argument is the file to write, and must look like one |
+| `sweep.sh` | new: run every tool, and fail if the file moved (§10) |
+| `collect_globals.py` | do nothing, and write nothing, when there is nothing to collect |
+| `prune_unreachable.py` | `alignas(16) ... = {` is not a function called `alignas` |
+| `hex_constants.py` | an already-converted constant is not a count mismatch |
+| `deblob` `foldif` `reframe` `retype` | print the usage line instead of a traceback |
+| `runarray` `unalias` `unmemcast` `unspill` | say zero out loud instead of nothing |
 | `triage.sh` | unchanged, and it paid for itself four times over |
 
 The stride scan is in §2. It is not committed as a tool because a scan that
 reports zero and cannot report anything else is a claim, and the claim belongs
 in prose where it can be read alongside what it does not cover — arrays of
 pointers, and addresses held as integers.
+
+---
+
+## 10. The zeros were not measurements
+
+Every round of this project has ended with some version of "every tool in
+`tools/` reports zero", and the sentence has been carrying more weight than it
+could bear. The obvious way to check it is to ask the whole directory at once:
+
+```
+for t in tools/*.py; do python3 $t subs1.hpp; done
+```
+
+That command destroys the decompilation. Three of the sixty tools are `mk*.py`
+generators that take the file to **write** in the argument position every other
+tool takes the file to **read**, so it runs them with `subs1.hpp` as their
+destination and leaves it a 96×96 bitmap. It cost nothing, because the file had
+been committed a minute earlier — which is luck, not a safety property.
+
+What the sweep showed once it could run is that the zeros were not zeros:
+
+| tool | what it was actually doing |
+| --- | --- |
+| `collect_globals.py` | rewriting the file when it had nothing to collect, stacking a header announcing "0 declarations for 0 objects" above the real one |
+| `prune_unreachable.py` | dying on `assert 'two definitions of alignas'` before printing a line |
+| `deblob` `foldif` `reframe` `retype` | a traceback where the rest of the directory prints a usage line |
+| `hex_constants.py` | exiting on the first already-converted constant, so it never reached the ones still in decimal |
+| `runarray` `unalias` `unmemcast` `unspill` | printing nothing at all, which reads exactly like a tool that crashed |
+
+Nine tools out of sixty, and not one of them had ever answered the question it
+was being counted as answering.
+
+Two of the failures are worth the space. `prune_unreachable.py` finds a
+function definition by looking for the last `name(` before a top-level `{`,
+which reads `alignas(16) static uint8_t ctx_group_flags[32] = {` as a definition
+of a function called `alignas` and `#pragma pack(push, 1)` as one called `pack`.
+A brace after an `=` opens an initializer and a preprocessor line is never part
+of a signature; with those two lines added it runs, and says 90 definitions and
+nothing unreachable — the first time that has been checked rather than assumed.
+
+And `hex_constants.py` was hiding a finding behind its crash. Its four
+unreachable constants were all in a table called `p2_b1_seed`, and every one of
+that table's seventeen entries is an IEEE-754 single: `169.2f`, `1.0f`,
+`0.001f`, `0.0001f`, `0.1f`, `2.0f`, `576.0f`, `2.6f`, `26896.0f`, `0.013f`,
+`5041.0f`, `529.0f`, `0.0002f`, `10.0f`. Fifteen of them appear *verbatim* as
+float literals in `alt_p2_model` a few hundred lines below:
+
+```c
+_this[14][1] = 169.2f;
+v26 = (1.0f - (v24 / (v23 + 576.0f))) * 2.0f;
+const float floor_a = 26896.0f * f278656[14][2];
+... / (f278656[7 + j][k] + ms_scale * 529.0f);
+```
+
+It is MSVC's `.rdata` constant pool for that function. Hex-Rays put the loads
+back inline, so the pool has no float reader left, and the name was backwards:
+it is `p2_float_pool`. The only thing that still touches it reads it a byte at
+a time — `P2Count::b1` is seeded from bytes 4..11, which are the low halves of
+`1.0f` and `-2784.44f`, `00 00 80 3F 02 07 2E C5`. Those are not counter seeds
+and were never meant to be. It does not matter, and that is the interesting
+part: `b1` is written on every counter update and read nowhere in the program,
+so the sole use of the table is a store no one loads.
+
+The table keeps `int32_t` and its address for that reason. Retyping it to
+`float[17]` would be more honest about the data and would have to be trusted to
+round-trip seventeen literals back to the same bits; hex with the float beside
+it says the same thing and cannot be wrong.
+
+`tools/sweep.sh` is the answer to the sentence. It runs every tool, checksums
+the file before and after, and **fails if the file changed** — a read-only
+sweep that modifies what it is measuring has measured nothing. It also fails if
+any tool prints nothing, because a tool that is silent when it finds nothing
+cannot be told from one that died. `tools/outpath.py` is what makes it safe to
+run: a generator writes a `.bmp`, so a destination not named like one is a
+mistake and is refused.
+
+It takes about a minute, so it is not in `test.sh`; the gate stays fast. The
+point is not that it is automatic. The point is that "every tool reports zero"
+is now a command with an exit status instead of a claim in a commit message.

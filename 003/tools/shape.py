@@ -22,7 +22,10 @@ import sys
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs                                                    # noqa: E402
 
-SRC = 'subs1.hpp'
+# The file to report on.  This was a constant, so `shape.py other.hpp`
+# silently reported on `subs1.hpp` -- which made every figure in it look
+# identical across four commits when they were being read from one file.
+SRC = next((a for a in sys.argv[1:] if not a.startswith('--')), 'subs1.hpp')
 
 # A type name with any number of stars: `char *`, `uint32_t **`, `Obj11 *`.
 T = r'[A-Za-z_]\w*\s*\**'
@@ -162,7 +165,7 @@ def summary():
     members = fields()
     named = sum(len(v[1]) for v in members.values())
     row = lambda k, v: print('%-34s %s' % (k, v))                 # noqa: E731
-    row('subs1.hpp / bmf.cpp lines',
+    row('%s / bmf.cpp lines' % SRC,
         '%d / %d' % (len(lines) - 1, len(open('bmf.cpp').read().split('\n')) - 1))
     row('raw-offset sites', len(raw))
     row('  off `_this`',
@@ -191,8 +194,14 @@ def summary():
     row('  fNN members / named ones',
         '%d / %d' % (sum(len(v[0]) for v in members.values()), named))
     row('distinct vNN locals', len(set(re.findall(r'\bv\d+\b', src))))
-    row('goto / LABEL_n:', '%d / %d' % (src.count('goto '),
-                                        len(re.findall(r'^LABEL_\d+:', src, re.M))))
+    # Both halves used to be wrong, in opposite directions: `src.count('goto ')`
+    # counted two comments that mention a `goto` that is no longer there, and
+    # `^LABEL_\d+:` missed the two labels that are indented.  Strip the comments
+    # and allow the indent.
+    code = '\n'.join(l.split('//')[0] for l in src.split('\n'))
+    row('goto / LABEL_n:',
+        '%d / %d' % (len(re.findall(r'goto LABEL_\d+;', code)),
+                     len(re.findall(r'^\s*LABEL_\d+:', code, re.M))))
     row('__fwd_* shims', len(set(re.findall(r'\b__fwd_\w+', src))))
 
 

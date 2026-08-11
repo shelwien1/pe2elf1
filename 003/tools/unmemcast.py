@@ -80,8 +80,11 @@ def main():
     args = [x for x in sys.argv[2:] if not x.startswith('--')]
 
     if len(args) < 3:
+        seen = 0
         for nm, mem, ty, k in candidates(lines):
             print('%-24s %-16s -> %-12s %d sites' % (nm.lstrip('_'), mem, ty, k))
+            seen += 1
+        print('%d frame members are read as one wider type' % seen)
         return 0
 
     fn, mem, ty = args

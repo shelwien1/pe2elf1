@@ -101,7 +101,7 @@ def main():
             labels.setdefault(m.group(1), []).append(i)
     sources = {}
     for i, l in enumerate(lines):
-        for m in re.finditer(r'goto (LABEL_\d+);', l):
+        for m in re.finditer(r'goto (LABEL_\d+);', l.split('//')[0]):
             sources.setdefault(m.group(1), []).append(i)
     for name, at in sorted(labels.items()):
         if name not in sources:

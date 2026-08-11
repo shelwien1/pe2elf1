@@ -138,6 +138,8 @@ def main():
                       % (fn, mem, n, len(use),
                          sum(sum(c.values()) for c in use.values()), tys,
                          ', %d walks' % len(walk) if walk else ''))
+        print('%d spill areas in %d functions'
+              % (sum(len(g) for g in found.values()), len(found)))
         return 0
 
     fn, mem = args[0], args[1]

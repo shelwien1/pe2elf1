@@ -95,7 +95,7 @@ def main():
     for a, b, nm, _ in structs.bodies(lines):
         local = tails(lines, a, b, mx)
         for i in range(a, b + 1):
-            m = re.search(r'goto (LABEL_\d+);', lines[i])
+            m = re.search(r'goto (LABEL_\d+);', lines[i].split('//')[0])
             if m and m.group(1) in local:
                 sites.setdefault((nm, m.group(1)), []).append(i)
         for k, v in local.items():
