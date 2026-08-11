@@ -2842,3 +2842,19 @@ answers at the top come from one version of the directory and the ones at the
 bottom from another. It showed in its own output: `explicitcmp.py` was
 reported as reading `warn.log, cksum` by a run that had started before `cksum`
 was anywhere in it. The directory is copied with the file now.
+
+### Two more things the replay could not see
+
+`undef.py`'s input is `bmf.cpp`, and `proven.sh` only ever varied `subs1.hpp`,
+so it could not have moved for any revision — §32's table said so and stopped
+there. A tool that did not move is asked the same question about the other
+file now, before it is called flat, and `undef.py` moves: **10 definitions**
+at `b9abcd1`, which is the file before §24's `LODWORD` cascade came out. Its
+zero is a measurement.
+
+That change surfaced the other one. Several tools name the file they were
+given in their summary — `0 definitions in bmf.cpp that nothing uses` — and
+against a temp copy that makes *every* revision's answer unique, so the tool
+reads as "answers differently" at the first revision tried. A false pass, and
+the dangerous direction: it takes a tool off the list this script exists to
+produce. The path is normalised out of the answer before the comparison.

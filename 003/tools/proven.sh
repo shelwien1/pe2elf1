@@ -46,12 +46,19 @@ n=${1:-12}
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-mapfile -t all < <(git log --format=%h --follow -- subs1.hpp)
-[ "${#all[@]}" -gt 0 ] || { echo "no history for subs1.hpp" >&2; exit 2; }
-step=$(( ${#all[@]} / n + 1 ))
-revs=()
-for ((k = 0; k < ${#all[@]}; k += step)); do revs+=("${all[k]}"); done
-echo "${#revs[@]} revisions of subs1.hpp, spanning ${#all[@]} commits"
+pick() {   # ~n points spread over one file's history
+  local f=$1
+  mapfile -t hist < <(git log --format=%h --follow -- "$f")
+  [ "${#hist[@]}" -gt 0 ] || { echo "no history for $f" >&2; exit 2; }
+  local st=$(( ${#hist[@]} / n + 1 )) k
+  out=()
+  for ((k = 0; k < ${#hist[@]}; k += st)); do out+=("${hist[k]}"); done
+  total=${#hist[@]}
+}
+pick subs1.hpp; revs=("${out[@]}"); ncommits=$total
+pick bmf.cpp;   cpp_revs=("${out[@]}"); ncpp=$total
+echo "${#revs[@]} revisions of subs1.hpp spanning $ncommits commits, and"
+echo "${#cpp_revs[@]} of bmf.cpp spanning $ncpp -- some tools read that one"
 echo
 
 # Every run goes through a copy, and every copy is named `subs1.hpp`.
@@ -79,7 +86,13 @@ echo
 mkdir -p "$tmp/now" "$tmp/rev" "$tmp/base"
 cp subs1.hpp "$tmp/base/subs1.hpp"
 cp -r tools "$tmp/tools"
-ans() { timeout 180 python3 "$1" "$2" 2>&1 | tail -1; }
+# The path is normalised out of the answer.  Several tools name the file they
+# were given in their summary -- `0 definitions in bmf.cpp that nothing uses`
+# -- and against a temp copy that makes every revision's answer unique, so the
+# tool reads as "answers differently" at the first revision tried.  That is a
+# false pass, and the more dangerous direction: it takes a tool *off* the list
+# this script exists to produce.
+ans() { timeout 180 python3 "$1" "$2" 2>&1 | tail -1 | sed "s|$tmp[^ ]*|<file>|g"; }
 
 flat_tools=()
 seen=0
@@ -95,6 +108,22 @@ for t in "$tmp"/tools/*.py; do
     git show "$r:./subs1.hpp" > "$tmp/rev/subs1.hpp" 2>/dev/null || continue
     if [ "$(ans "$t" "$tmp/rev/subs1.hpp")" != "$now" ]; then moved=$r; break; fi
   done
+  # A tool whose input is `bmf.cpp` cannot move for any revision of
+  # `subs1.hpp`, and lands here looking like a rule written for a shape
+  # already gone -- `undef.py` did, for exactly that reason.  So a tool that
+  # did not move is asked the same question about the other file before it is
+  # called flat.  `undef.py` takes a path and ignores one that is not a
+  # `.cpp`, which is what makes this work without the tool knowing.
+  if [ -z "$moved" ]; then
+    cp bmf.cpp "$tmp/now/bmf.cpp"
+    now2=$(ans "$t" "$tmp/now/bmf.cpp")
+    for r in "${cpp_revs[@]}"; do
+      git show "$r:./bmf.cpp" > "$tmp/rev/bmf.cpp" 2>/dev/null || continue
+      if [ "$(ans "$t" "$tmp/rev/bmf.cpp")" != "$now2" ]; then
+        moved="$r (bmf.cpp)"; break
+      fi
+    done
+  fi
   if [ -n "$moved" ]; then
     printf '%-22s answers differently at %s\n' "$base" "$moved"
   else
