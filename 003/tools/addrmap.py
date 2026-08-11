@@ -99,8 +99,14 @@ def walk(name, root, rel, seen):
         try:
             revs = git(['log', '--format=%H', '-S', '__%s(' % name, '--',
                         rel], root).split()
-            revs += git(['log', '--format=%H', '-S', '::%s(' % name, '--',
-                         rel], root).split()
+            # Only if the first search found nothing: a body that became a
+            # method is `Type::name(` today and `__name(` in every revision
+            # before that, so the second search is what finds the commit that
+            # moved it -- and running it for the other ninety doubled the
+            # slowest tool in the directory for no answers.
+            if not revs:
+                revs = git(['log', '--format=%H', '-S', '::%s(' % name, '--',
+                            rel], root).split()
         except subprocess.CalledProcessError:
             return {}
         for rev in reversed(revs):
@@ -173,7 +179,14 @@ def main():
     # scaffolding this tree wrote, and two names `bodies()` picks up from
     # attribute syntax -- neither came out of BMF.exe, so neither is missing
     ours = {'alignas', 'attribute__', 'main', 'bmf_addr', 'bmf_data_relocate',
-            'bmf_set_denormal_mode', 'bmf_compress', 'bmf_decompress'}
+            'bmf_set_denormal_mode', 'bmf_compress', 'bmf_decompress',
+            # A method this project wrote rather than moved: `SymList::rescale`
+            # is the fifty-three lines `code_symbol` and `add_weight` both had
+            # inline.  It has no address because it was never one body in
+            # BMF.exe -- it was two copies of part of two.  Named here rather
+            # than left in the missing list, where it would read as a body
+            # whose address nobody has found.
+            'rescale'}
     missing = sorted({n.lstrip('_') for n in defined
                       if not n.startswith('__sub_')} - set(pairs) - ours)
     print('\n# %d mapped.  %d named bodies have no recorded address:'

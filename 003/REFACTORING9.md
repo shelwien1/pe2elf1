@@ -22,15 +22,15 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17231
+subs1.hpp lines                      17787     17616         17243
 bmf.cpp lines                            —         —           365
 raw-offset sites                        22        12             5
   off `_this`                            —         1             0
   in functions                           —         1             0
 byte offsets on a typed base           121         0             0
-pointer casts                         2137      1545          1290
+pointer casts                         2137      1545          1270
   to a scalar                            —         —           541
-  to a record                            —         —           391
+  to a record                            —         —           371
   to a scalar, of an address             —         —           353
   to a record, of an address             —         —             5
 fNN members / named ones             93/121     5/162         0/172
@@ -40,7 +40,7 @@ distinct unexplained locals            554       591             0
 locals named for a callee parameter      —         —             0
   declarations / bodies                   —         —           0/0
 names Hex-Rays chose and nobody changed  —         —             0
-  conventional ones kept / bodies joined  —         —         64/74
+  conventional ones kept / bodies joined  —         —         56/74
 goto / LABEL_n:                     112/79     81/55         49/33
   restart a loop / exit N blocks         —         —         15/32
   sideways to a join / to neither        —         —           2/0
@@ -2096,3 +2096,68 @@ the tool now reads `->name(` and `.name(` as calls too. Checked by mutating a
 body's call site in a copy and confirming it is still reported dead.
 
 `checktable.py` caught the two §1 figures the change moved, on the same run.
+
+---
+
+## 26. `_this` was the receiver
+
+MSVC's `__thiscall` puts the object in `ecx`, and Hex-Rays writes it back as a
+first parameter called `_this`. Twenty bodies in this file carried one. For
+sixteen of them the type is a record this project has already recovered — so
+the parameter is not a parameter, and saying so moves every call site from
+`__f(x, …)` to `x->f(…)`.
+
+The twentieth is `update_binary_pair`, whose `_this` is a `uint16_t *` into a
+counter block rather than a record. It stays a function, which is the honest
+answer: there is nothing for it to be a method of.
+
+`tools/methodise.py` does one at a time, because rewriting the call sites
+renumbers the file under the next one. The body does not move — a diff that
+relocated four thousand lines would hide whatever else it did — and `_this`
+becomes `this` rather than nothing, because a body that declares a local with a
+member's name would silently change meaning if the prefix simply vanished.
+
+### Two things the gate found and the rule had not
+
+**A call whose arguments wrap.** `decode_pixel` calls `__decode_context_bit`
+with a five-line first argument, and a per-line scan cannot see a parenthesis
+that closes on another line — so it left the call alone while the function it
+named stopped existing. The rewrite works on the whole text now.
+
+**`(&rec[1])->f(x)`.** Taking an address only to follow it is the shape this
+change removes, not one it should introduce. `__f(&rec[1], x)` is
+`rec[1].f(x)`, in the 29 places that had it.
+
+The 20 casts the change made redundant — `((ModelBlock *)blk)->code_pixel(x)`
+where `blk` is already a `ModelBlock *` — took the ratchet up 20 and were
+removed by `uncast.py`, which is exactly what it is for. Back to 1065.
+
+### Three tools that all assumed a body is `__name`
+
+The methods are named after their receiver now — `blk->update_model()`,
+`rec->encode_symbol(pair, code)` — and getting there needed the same fix in
+three places, each a version of one assumption:
+
+* **`rename.py`**, twice. `--member` changes the *rewrite* to reach through
+  `->` but not the *existence check*, so a name that only appears as
+  `x->name(…)` — every method — was refused as "no such identifier". And
+  without `--member` the declaration renames and the calls do not.
+* **`deadcheck.py`** reported every new method dead, because its call pattern
+  is `\b(__[A-Za-z0-9_]+)\s*\(`.
+* **`addrmap.py`**, and this one mattered most. Its `DEF` pattern requires
+  `__name(`, so after the methodising commit `real_bodies` returned a shorter
+  list than before it — which is exactly the "this commit did more than rename"
+  case it declines to guess through. The chain broke and eight bodies lost
+  their address.
+
+That last one is worth being explicit about, because nothing would have
+complained: `unnamed.py` joins the file to the decompiler's output *through*
+that map, so eight bodies would simply have stopped being checked and the row
+would have gone on reading zero. `checktable.py` is what caught it —
+`conventional ones kept / bodies joined` fell from 64/74 to 50/66, and a
+denominator that drops is a measure losing its subject.
+
+One body genuinely has no address: `SymList::rescale`, §25's extraction, was
+never one function in BMF.exe — it was two copies of part of two. `addrmap.py`
+names it with the other things this project wrote rather than leaving it in a
+list of addresses nobody has found.
