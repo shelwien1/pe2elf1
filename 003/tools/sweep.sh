@@ -45,7 +45,7 @@ work=$(mktemp "$(dirname "$file")/.sweep.XXXXXX")
 trap 'rm -f "$work"' EXIT
 cp "$file" "$work"
 before=$(cksum < "$work")
-usage=0 quiet=0 killed=0 nonzero=
+usage=0 quiet=0 killed=0 nonzero= reported=
 
 for t in tools/*.py; do
   n=$(basename "$t")
@@ -61,8 +61,9 @@ for t in tools/*.py; do
   # ratchet in `build.sh` is for.  Its list is meant to be read and tried, and
   # a non-empty one is not a defect.
   case $n in
-    addrmap.py|shape.py|unify_types.py|resign.py|resign_group.py) report=1 ;;
-    *)                                  report=0 ;;
+    addrmap.py|shape.py|unify_types.py|resign.py|resign_group.py)
+        report=1; reported="$reported ${n%.py}" ;;
+    *)  report=0 ;;
   esac
   line=$(timeout 300 python3 "$t" "$work" 2>&1 | tail -1)
   rc=$?
@@ -95,7 +96,11 @@ fi
   exit 1
 }
 echo "$file unchanged by the sweep; $usage tools want more arguments, $quiet said nothing"
-echo "every counting tool reports zero; addrmap, shape, unify_types and the two resign rules report rather than count"
+# Named from the `case` above rather than restated here.  A sentence that
+# lists the exemptions in prose is a claim that ages the moment the list
+# changes -- which is the defect this round found in seventeen frame comments,
+# and there is no reason for the sweep's own summary to have it.
+echo "every counting tool reports zero; these report rather than count:$reported"
 [ "$quiet" = 0 ] || {
   echo "FAIL: a tool that prints nothing cannot be told from one that crashed"
   exit 1

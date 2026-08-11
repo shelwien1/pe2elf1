@@ -45,7 +45,7 @@ MEMBER = re.compile(r'\s*(?:alignas\([^)]*\)\s*)?'
 
 
 def frame_of(lines, a, b):
-    """(first, last, [(type, declarator, name)]) for the body's frame, or None."""
+    """(first, last, [lift], [keep]) for the body's frame, or None."""
     start = None
     for i in range(a, b + 1):
         c = lines[i].split('//')[0]
@@ -64,13 +64,21 @@ def frame_of(lines, a, b):
     if end is None:
         return None
     body = lines[start + 1:end]
-    if any(re.search(r'\bunion\b', l.split('//')[0]) for l in body):
-        return start, end, None            # slot sharing; not ours to undo
-    out = []
+    # A `union` is MSVC's slot sharing written down, and lifting its arms to
+    # separate locals is not the same program.  But the members *outside* it
+    # are ordinary locals that happen to sit in the same struct, and nine
+    # frames were being declined whole for the union in the middle of them.
+    # So the union is kept -- as a smaller frame in its own right -- and only
+    # what surrounds it is offered.  Whether the two can be separated at all
+    # is the gate's question, not this one's: the code in these bodies writes
+    # past the ends of things, which is why the frames exist.
+    out, depth, keep = [], 0, []
     for l in body:
         c = l.split('//')[0]
-        if re.match(r'\s*[}{]', c):
-            return start, end, None        # a nested struct; leave it
+        depth += c.count('{') - c.count('}')
+        if depth > 0 or re.search(r'\b(?:union|struct)\b', c) or c.strip() in ('};', '}'):
+            keep.append(l)
+            continue
         m = MEMBER.fullmatch(c)
         if not m:
             if c.strip():
@@ -78,9 +86,10 @@ def frame_of(lines, a, b):
             continue
         name = m.group(2).lstrip('* ')
         if name.startswith('_pad') or name.startswith('_gap'):
+            keep.append(l)
             continue
         out.append((m.group(1).strip(), m.group(2).strip() + m.group(3), name))
-    return start, end, out
+    return start, end, out, keep
 
 
 # Frames whose members have been given their own storage and which failed the
@@ -90,6 +99,10 @@ PROVEN = {
     'read_bmp':       'DLRAW aborts while compressing',
     'search_filter':  'altp1 aborts while compressing',
     'cost_candidate': 'altp1 aborts while compressing',
+    # These two offer only the members outside their union, and even that much
+    # moves what the body writes past.
+    'expand_image':   'DLRAW exits 3 while decompressing',
+    'reduce_alphabet': 'DLRAW aborts while compressing',
 }
 
 
@@ -106,7 +119,7 @@ def candidates(lines):
 
 
 def apply(lines, nm, a, b, got, indent='  '):
-    start, end, members = got
+    start, end, members, keep = got
     body = '\n'.join(lines[a:b + 1])
     # `__frame` must only ever be `__frame.X` once the asserts are gone.
     rest = re.sub(r'\}\s*__frame\s*;', '', re.sub(
@@ -114,13 +127,13 @@ def apply(lines, nm, a, b, got, indent='  '):
             r'static_assert\([^;]*?__frame[^;]*?\);', '', body, flags=re.S)))
     if '__frame' in rest:
         return False, '%s: `__frame` is used other than as a member' % nm.lstrip('_')
-    decls = ['%s%s %s;' % (indent, t, d) for t, d, _ in members]
-    text = '\n'.join(lines[a:b + 1])
+
     text = re.sub(r'[ \t]*static_assert\([^;]*?__frame[^;]*?\);\n', '',
-                  text, flags=re.S)
+                  body, flags=re.S)
     rows = text.split('\n')
     s2 = next(i for i, l in enumerate(rows)
-              if re.match(r'\s*struct\s+alignas\([^)]*\)\s*\w*\s*\{', l.split('//')[0]))
+              if re.match(r'\s*struct\s+alignas\([^)]*\)\s*\w*\s*\{',
+                          l.split('//')[0]))
     depth, e2 = 0, None
     for i in range(s2, len(rows)):
         c = rows[i].split('//')[0]
@@ -128,10 +141,24 @@ def apply(lines, nm, a, b, got, indent='  '):
         if depth <= 0 and '__frame' in c:
             e2 = i
             break
-    rows[s2:e2 + 1] = decls
-    text = '\n'.join(rows).replace('__frame.', '')
+    decls = ['%s%s %s;' % (indent, t, d) for t, d, _ in members]
+    # What is left of the struct: the union and the padding that positions it.
+    # If that is nothing but braces, the frame goes entirely.
+    real = [l for l in keep
+            if l.split('//')[0].strip() not in ('', '{', '}', '};')]
+    if real:
+        new = [rows[s2]] + keep + [rows[e2]] + decls
+    else:
+        new = decls
+    rows[s2:e2 + 1] = new
+    text = '\n'.join(rows)
+    # Only the lifted names lose the prefix; the ones still in the struct keep
+    # it, which is what makes a partial lift a rewrite rather than a guess.
+    for _, _, n in members:
+        text = re.sub(r'__frame\.%s\b' % re.escape(n), n, text)
     lines[a:b + 1] = text.split('\n')
-    return True, '%s: %d members lifted' % (nm.lstrip('_'), len(members))
+    return True, '%s: %d members lifted, %d left in the frame' % (
+        nm.lstrip('_'), len(members), len(real))
 
 
 if __name__ == '__main__':

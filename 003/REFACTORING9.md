@@ -22,9 +22,9 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17148
+subs1.hpp lines                      17787     17616         17126
 bmf.cpp lines                            —         —           365
-raw-offset sites                        22        12             5
+raw-offset sites                        22        12             12
   off `_this`                            —         1             0
   in functions                           —         1             0
 byte offsets on a typed base           121         0             0
@@ -45,7 +45,7 @@ goto / LABEL_n:                     112/79     81/55         49/33
   restart a loop / exit N blocks         —         —         15/32
   sideways to a join / to neither        —         —           2/0
   jump into a block                      —         —             0
-conversion warnings                   1455      1331          1065
+conversion warnings                   1455      1331          1062
 ```
 
 `python3 tools/checktable.py` compares that table against `shape.py --rows`
@@ -2219,3 +2219,61 @@ say anything about `__frame.plane_x16`, because a struct member might be read
 by anything that has the struct's address — so five pieces of dead code sat
 inside six frames, invisible to the rules that exist to find exactly them, for
 as long as the frames did.
+
+---
+
+## 28. The rest of the frames, and the sweep's own aged sentence
+
+### Three more frames, from the members outside the union
+
+§27 declined nine frames whole because each had a `union` in it. That was the
+right call about the union and the wrong call about everything else: the members
+*outside* it are ordinary locals that happen to share a struct, and refusing the
+frame entire is refusing them for the union's reasons.
+
+`liftframe.py` keeps the union — as a smaller frame in its own right — and
+offers what surrounds it. Five frames had something to offer; **three took
+it**: `compress_image`, `decode_symbol_list` and `choose_plane_coding`, the
+last of them 29 members. `expand_image` and `reduce_alphabet` fail even that
+much, and are named with their failure alongside the three from §27.
+
+The lifts exposed another **25 dead declarations, two copies and a save** to
+rules that cannot say anything about a struct member — the same effect §27
+found, at a quarter the size, because the same thing was still true of the
+members that had stayed inside.
+
+### Every frame note, re-taken
+
+All eleven remaining frames still carried the sentence §27 is about:
+`tools/frame-sweep.sh --arrays` as the authority for the frame being a layout.
+Three had been re-taken; eight had not, and those eight now say which of two
+things is true of them:
+
+* **the union stays and everything round it has been lifted** — five frames.
+  The note says what the union is and what was done with the rest;
+* **it was tried and it failed** — with today's failure, from today's tool.
+
+`frame-sweep.sh` is still named in each, as the thing the note used to cite and
+why that citation stopped meaning anything. A comment that quietly drops the
+tool it was wrong about is a comment that will be wrong the same way again.
+
+### The sweep's closing line said its own list out loud
+
+```
+every counting tool reports zero; addrmap, shape, unify_types and the two
+resign rules report rather than count
+```
+
+That sentence is a hand-written copy of a `case` statement four lines above it,
+and it is exactly the defect this round found in seventeen frame comments: a
+claim that ages the moment the thing it describes changes. Eight tools were
+added to the directory this round and it would have gone on naming five. It is
+built from the `case` now.
+
+### Where the retyping rules stopped
+
+Driven again over a file that has changed by a fifth since they last ran, the
+two rules found three more flips between them — 1065 to **1062** — and then
+stopped, with 29 single candidates and 23 groups still on the table and none of
+them paying. That is the same answer as last time and, this round, from a
+genuinely different file.

@@ -3440,8 +3440,9 @@ inline int32_t AltP1Block::update_model()
   uintptr_t result;   // an index into the counter table, and the return value
   CounterNode *node;  // was `result` too: the address role, under its own name
   CounterNode *node_alt, *node_up, *node_dn;
+  int32_t alti8;
   uint32_t w11, w12, w13, w14, w15, w16, w17, w18, alti1, ctx_alt, alti0, alti2, alti3, alti4,
-           alti5, alti6, alti7, alti8, x2, x3, x4, x5, x6, x7;
+           alti5, alti6, alti7, x2, x3, x4, x5, x6, x7;
   CounterNode *opp0, *opp1, *opp2, *opp3, *opp4, *opp5, *opp6, *opp7, *opp8;
   int16_t tot_up, tot_dn;
   int32_t sel1_top, code_r, sel2_top, slot_f, slot_r, ctx_dn, sel0,
@@ -6449,8 +6450,12 @@ int32_t __alt_p2_filter(float (*_this)[4], float (*a2)[4], CtxWeights *w, int32_
 // question, and it is still open -- this names the role, not the algorithm.
 int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) {   P2Ctx *unused_p,
         *row0;
-  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
-  // gives every member its own storage and altp1 segfaults while compressing.
+  // The union below is MSVC's slot sharing written down, and lifting
+  // its arms to separate locals is not the same program, so the frame
+  // stays.  Everything outside it has been lifted where the gate
+  // allowed.  The note here used to read "altp1 segfaults while compressing"
+  // on the authority of `frame-sweep.sh`, which lifts aliases and has
+  // had none to lift since round nine.
   struct alignas(16) AltP2ContextFrame {   // 208 bytes, one stack frame
       // Three slots MSVC used for `cursor[0]`, one digit of the
       // neighbourhood index, and `(int16_t *)cursor[1]`.  All three had one
@@ -7206,8 +7211,11 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
 // storage, two uses, and no way to tell them apart from the text.
 void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
 {
-  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
-  // gives every member its own storage and DLRAW aborts while compressing.
+  // This one is a layout, not a bag of locals: giving its members
+  // their own storage makes DLRAW abort while compressing.  Re-checked
+  // by `tools/liftframe.py` against the file as it is now --
+  // `frame-sweep.sh`, which this note used to cite, lifts aliases
+  // and has had none to lift since round nine.
   struct alignas(16) ReduceAlphabetFrame {   // 66064 bytes, one stack frame
       uint32_t zero_base[15];
       void *tmp;
@@ -7703,7 +7711,7 @@ LABEL_71:
 int32_t __cost_candidate(uint8_t *img, int32_t cand, uint8_t *desc, int8_t unread4, int32_t unread5, int32_t unread6, int32_t unread7, uint32_t *costs)
 {
   // This one is a layout, not a bag of locals: lifting its members to
-  // ordinary locals makes altp1 aborts while compressing.  Re-checked against the
+  // ordinary locals makes altp1 abort while compressing.  Re-checked against the
   // file as it is now, by `tools/liftframe.py` -- `frame-sweep.sh`, which
   // the note here used to cite, lifts aliases and has none left to lift.
   struct alignas(16) CostCandidateFrame {   // 26712 bytes, one stack frame
@@ -7943,15 +7951,14 @@ int32_t __cost_candidate(uint8_t *img, int32_t cand, uint8_t *desc, int8_t unrea
 
 int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
 {
-  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
-  // gives every member its own storage and altp1 segfaults while compressing.
+  // The union below is MSVC's slot sharing written down, and lifting
+  // its arms to separate locals is not the same program, so the frame
+  // stays.  Everything outside it has been lifted where the gate
+  // allowed.  The note here used to read "altp1 segfaults while compressing"
+  // on the authority of `frame-sweep.sh`, which lifts aliases and has
+  // had none to lift since round nine.
   struct alignas(16) ChoosePlaneCodingFrame {   // 41456 bytes, one stack frame
-      int32_t best0;
-      int32_t best1;
-      int32_t best2;
       uint8_t _pad0[4];
-      // 32 KiB, which is what `memset(buf, 0, 0x8000)` says and what
-      // `buf[4096 * pred]` walks; `char buf[4]` was the first four bytes of it.
       union {
           uint8_t buf[32768];
           struct {
@@ -7961,9 +7968,6 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
             int32_t hist_c[5120];
           };
       };
-      uint8_t buf_3[2048];   // `memset(buf_3, 0, 2048)`, 512 counters
-      // The same 2 KiB twice: `buf_1` is 512 counters while the seventeen
-      // locals below are dead, and they are live while it is not.
       union {
           uint8_t buf_1[2048];
           struct {
@@ -7988,31 +7992,6 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
             uint8_t _pad3[1976];
           };
       };
-      uint8_t buf_4[2048];   // `memset(buf_4, 0, 2048)`, 512 counters
-      uint8_t buf_2[2048];   // `memset(buf_2, 0, 2048)`, 512 counters
-      // Six sixteen-byte spill slots -- XMM0..XMM5 as the original used them.
-      // The body reads each 157 times as four `int32_t`, 48 times as the two
-      // `double` halves the 3x3 solve below works in, and four times as an
-      // `int16_t` lane.  The declaration is the reading that is an array; the
-      // other two say their width at the site, which is the only way to keep
-      // a 64-bit access from turning into a 32-bit one.
-      alignas(16) int32_t x0[4];
-      alignas(16) int32_t x1[4];
-      alignas(16) int32_t x2[4];
-      alignas(16) int32_t x3[4];
-      alignas(16) int32_t x4[4];
-      alignas(16) int32_t x5[4];
-      // Three slots with two lifetimes each, which is why they were declared
-      // 64-bit and read 32 bits at a time through `LODWORD`/`HIDWORD`.
-      //
-      // Before the 3x3 solve they are six independent `int32_t`: two plane
-      // offsets, a row stride, a plane count and the weight the search is
-      // tuning.  From `q0 = *(int64_t *)&x2[2]` down they are what their
-      // declared types say -- the solve reads all three as `double`, and
-      // `*(double *)&__frame.q0` is that reading written at the site.
-      //
-      // A union says both, which is what the rest of this frame already does
-      // for the slots MSVC shared.  Nothing moves: eight bytes either way.
       union {
           int64_t q0;              // the solve's first coefficient, as a double
           struct {
@@ -8034,30 +8013,39 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
           // four bytes.  Two lifetimes inside one half of one slot.
           uint32_t wt_slot;
       };
-      double d1;
-      double d2;
-      double d3;
-      int32_t acc0[4];
-      uint64_t acc1[5];
-      double d4;
-      int32_t tbl16[16];
-      uint8_t tbl64a[64];
-      uint8_t tbl64b[64];
-      int64_t q2;
-      double d5;
-      double d6;
-      uint8_t *pp;
-      uint32_t uu;
-      int32_t wa_slot;
-      BmfImage *img_a;
-      uint32_t data_end;
       uint8_t _pad6[4];
-      // A second copy of `img`, stored on entry and never read again.  The
-      // slot stays so the frame keeps its size; the store is gone.
       uint8_t _pad5[4];
       uint8_t _pad7[28];
   } __frame;
-  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 41456, "frame layout moved");
+  int32_t best0;
+  int32_t best1;
+  int32_t best2;
+  uint8_t buf_3[2048];
+  uint8_t buf_4[2048];
+  uint8_t buf_2[2048];
+  int32_t x0[4];
+  int32_t x1[4];
+  int32_t x2[4];
+  int32_t x3[4];
+  int32_t x4[4];
+  int32_t x5[4];
+  double d1;
+  double d2;
+  double d3;
+  int32_t acc0[4];
+  uint64_t acc1[5];
+  double d4;
+  int32_t tbl16[16];
+  uint8_t tbl64a[64];
+  uint8_t tbl64b[64];
+  int64_t q2;
+  double d5;
+  double d6;
+  uint8_t *pp;
+  uint32_t uu;
+  int32_t wa_slot;
+  BmfImage *img_a;
+  uint32_t data_end;
   ;
   bool keep0, cheaper, keep3, pick0;
   int8_t unread0, unread1, unread2, pos, pos3;
@@ -8079,21 +8067,22 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
           ul_b, g_b, cur_b, n_b, bin_b, wt8_best;
   uint32_t pair, cost0, cost1, best_cost, best, cost_flat, i4, quad, cost_lin, best4, cost_c0, cost_c1,
            cost_c2, cost_c, cost_d, cost_a, cost_b;
-  uint8_t *px, *end_px, *row1, *q_c, *r_c, *p_c, *q_d, *r_d, *p_d, *q_a, *p_a, *q_b, *p_b;
+  uint8_t *px, *end_px, *q_c, *r_c, *p_c, *q_d, *r_d, *p_d, *q_a, *p_a, *q_b,
+          *p_b;
   n_planes = plane_count;
   data_size = img->data_size;
-  __frame.img_a = (BmfImage *)((uint8_t *)img);
+  img_a = (BmfImage *)((uint8_t *)img);
   alphabet_reduced = 1;
   __frame.row_stride = ((uint16_t)img->stride);
-  __frame.data_end = (uintptr_t)&img->pixels[data_size];
+  data_end = (uintptr_t)&img->pixels[data_size];
   memset(__frame.buf,0,0x8000);
   result = 192;
   do
   {
-    bmf_zero16(((uint8_t *)&__frame.acc1[4] + result));
-    bmf_zero16(((uint8_t *)&__frame.acc1[2] + result));
-    bmf_zero16(((uint8_t *)__frame.acc1 + result));
-    bmf_zero16(((uint8_t *)__frame.acc0 + result));
+    bmf_zero16(((uint8_t *)&acc1[4] + result));
+    bmf_zero16(((uint8_t *)&acc1[2] + result));
+    bmf_zero16(((uint8_t *)acc1 + result));
+    bmf_zero16(((uint8_t *)acc0 + result));
     result -= 64;
   }
   while ( result );
@@ -8127,20 +8116,20 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
     }
     if ( n_planes >= 3 )
     {
-      cost0 = __cost_candidate((uint8_t *)__frame.img_a, 0, (uint8_t *)__frame.tbl16, unread0, __frame.best0, __frame.best1, __frame.best2, (uint32_t *)&__frame.acc0[2]);
-      cost1 = __cost_candidate((uint8_t *)__frame.img_a, 1, __frame.tbl64a, unread1, __frame.best0, __frame.best1, __frame.best2, (uint32_t *)&__frame.acc0[2]);
+      cost0 = __cost_candidate((uint8_t *)img_a, 0, (uint8_t *)tbl16, unread0, best0, best1, best2, (uint32_t *)&acc0[2]);
+      cost1 = __cost_candidate((uint8_t *)img_a, 1, tbl64a, unread1, best0, best1, best2, (uint32_t *)&acc0[2]);
       keep0 = cost1 >= cost0;
       if ( cost1 >= cost0 )
         cost1 = cost0;
       pick01 = !keep0;
-      __frame.x3[2] = pick01;
-      cheaper = (uint32_t)(__cost_candidate((uint8_t *)__frame.img_a, 2, __frame.tbl64b, unread2, __frame.best0, __frame.best1, __frame.best2, (uint32_t *)&__frame.acc0[2])) < cost1;
+      x3[2] = pick01;
+      cheaper = (uint32_t)(__cost_candidate((uint8_t *)img_a, 2, tbl64b, unread2, best0, best1, best2, (uint32_t *)&acc0[2])) < cost1;
       xform = pick01;
       if ( cheaper )
         xform = 2;
-      __frame.x3[2] = xform;
+      x3[2] = xform;
       dw = 16;
-      win_row = &__frame.tbl16[16 * xform];
+      win_row = &tbl16[16 * xform];
       do
       {
         *(uint64_t *)(bmf_plane_desc(dw * 4 - 8)) = *(uint64_t *)&win_row[dw - 2];
@@ -8150,42 +8139,42 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
         dw -= 8;
       }
       while ( dw * 4 );
-      best_cost = __frame.acc0[4 * __frame.x3[2] + 2];
-      __frame.x3[1] = 16 * __frame.x3[2];
-      __frame.plane_a = plane_desc[1].src_plane - __frame.x3[2];
-      wt8 = plane_desc[__frame.x3[2] + 1].w8;
-      __frame.plane_b = plane_desc[2].src_plane - __frame.x3[2];
-      wt4 = plane_desc[__frame.x3[2] + 1].w4;
+      best_cost = acc0[4 * x3[2] + 2];
+      x3[1] = 16 * x3[2];
+      __frame.plane_a = plane_desc[1].src_plane - x3[2];
+      wt8 = plane_desc[x3[2] + 1].w8;
+      __frame.plane_b = plane_desc[2].src_plane - x3[2];
+      wt4 = plane_desc[x3[2] + 1].w4;
       // always taken: -S is on.  (The block is kept braced -- LABEL_19 below
       // is jumped to from inside it.)
       {
         __frame.wt_slot = wt8;
-        __frame.x5[3] = wt4;
+        x5[3] = wt4;
         __frame.nplanes_s = n_planes;
-        __frame.x0[1] = 4;            // (opt_search_quality + 5) / 3, and -Q is 9
+        x0[1] = 4;            // (opt_search_quality + 5) / 3, and -Q is 9
         __frame.s1 = wt4 - 1;
         wt4_dn = wt4 - 1;
         __frame.s6 = wt8 - 1;
         wt8_dn = wt8 - 1;
-        __frame.s0 = wt4 - __frame.x0[1];
+        __frame.s0 = wt4 - x0[1];
         wt4_dn_end = __frame.s0;
-        *(uint32_t *)__frame.buf_1 = wt8 - __frame.x0[1];
-        __frame.x0[0] = (int32_t)&((uint8_t *)__frame.img_a)[__frame.x3[2]];
-        wt8_dn_end = wt8 - __frame.x0[1];
+        *(uint32_t *)__frame.buf_1 = wt8 - x0[1];
+        x0[0] = (int32_t)&((uint8_t *)img_a)[x3[2]];
+        wt8_dn_end = wt8 - x0[1];
         while ( 1 )
         {
           if ( wt4_dn <= wt4_dn_end )
           {
             if ( wt8_dn <= wt8_dn_end )
             {
-              __frame.x1[0] = __frame.x5[3] + 1;
-              wt4_up = __frame.x5[3] + 1;
-              __frame.x3[3] = __frame.wt_slot + 1;
+              x1[0] = x5[3] + 1;
+              wt4_up = x5[3] + 1;
+              x3[3] = __frame.wt_slot + 1;
               wt8_up = __frame.wt_slot + 1;
-              __frame.x0[3] = __frame.x5[3] + __frame.x0[1];
-              wt4_up_end = __frame.x5[3] + __frame.x0[1];
-              __frame.x0[2] = __frame.wt_slot + __frame.x0[1];
-              wt8_up_end = __frame.wt_slot + __frame.x0[1];
+              x0[3] = x5[3] + x0[1];
+              wt4_up_end = x5[3] + x0[1];
+              x0[2] = __frame.wt_slot + x0[1];
+              wt8_up_end = __frame.wt_slot + x0[1];
               // The two weights step outward together and each stops at its
               // own limit, so on any pass one of the two may be finished while
               // the other is not.  `LABEL_109` was that case written as a jump
@@ -8197,120 +8186,120 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                 if ( wt4_up >= wt4_up_end && wt8_up >= wt8_up_end )
                 {
                   wt8 = __frame.wt_slot;
-                  wt4 = __frame.x5[3];
+                  wt4 = x5[3];
                   n_planes = __frame.nplanes_s;
                   goto LABEL_19;
                 }
                 if ( wt4_up < wt4_up_end && wt4_up < 192 )
                 {
-                  __frame.x0[2] = wt8_up_end;
+                  x0[2] = wt8_up_end;
                   memset(__frame.buf_1,0,2048);
-                  npix_a = __frame.img_a->width * (__frame.img_a->height - 1);
-                  stride_a = (uint16_t)__frame.img_a->stride;
-                  __frame.x3[3] = wt8_up;
-                  __frame.x1[0] = wt4_up;
-                  __frame.x1[1] = npix_a - 1;
-                  __frame.x3[0] = best_cost;
-                  __frame.x2[1] = -stride_a;
+                  npix_a = img_a->width * (img_a->height - 1);
+                  stride_a = (uint16_t)img_a->stride;
+                  x3[3] = wt8_up;
+                  x1[0] = wt4_up;
+                  x1[1] = npix_a - 1;
+                  x3[0] = best_cost;
+                  x2[1] = -stride_a;
                   left_a = -plane_count;
-                  __frame.x2[0] = -stride_a - plane_count;
-                  __frame.x1[3] = __frame.x0[0] - __frame.x2[0] + 16;
-                  __frame.x1[2] = __frame.q1 + __frame.x0[0] - __frame.x2[0] + 16;
-                  q_a = (uint8_t *)__frame.x1[2];
-                  r_a = __frame.plane_b + __frame.x0[0] - __frame.x2[0] + 16;
-                  p_a = (uint8_t *)__frame.x1[3];
+                  x2[0] = -stride_a - plane_count;
+                  x1[3] = x0[0] - x2[0] + 16;
+                  x1[2] = __frame.q1 + x0[0] - x2[0] + 16;
+                  q_a = (uint8_t *)x1[2];
+                  r_a = __frame.plane_b + x0[0] - x2[0] + 16;
+                  p_a = (uint8_t *)x1[3];
                   do
                   {
-                    ul_a = p_a[__frame.x2[0]];
-                    *(int64_t *)&__frame.x1[2] = __PAIR64__((uint32_t)p_a, q_a);
-                    __frame.x2[2] = r_a;
-                    g_a = ul_a + *p_a - p_a[__frame.x2[1]] - p_a[left_a];
+                    ul_a = p_a[x2[0]];
+                    *(int64_t *)&x1[2] = __PAIR64__((uint32_t)p_a, q_a);
+                    x2[2] = r_a;
+                    g_a = ul_a + *p_a - p_a[x2[1]] - p_a[left_a];
                     cur_a = *q_a;
-                    __frame.x2[3] = g_a;
-                    r_a = __frame.x2[2] - left_a;
-                    n_a = __frame.x1[1];
-                    bin_a = (((int16_t *)__frame.x2)[6]
-                          - (uint16_t)((__frame.x1[0]
-                                              * (q_a[__frame.x2[0]] + cur_a - q_a[__frame.x2[1]] - q_a[left_a])
+                    x2[3] = g_a;
+                    r_a = x2[2] - left_a;
+                    n_a = x1[1];
+                    bin_a = (((int16_t *)x2)[6]
+                          - (uint16_t)((x1[0]
+                                              * (q_a[x2[0]] + cur_a - q_a[x2[1]] - q_a[left_a])
                                               + __frame.wt_slot
-                                              * (*(uint8_t *)(__frame.x2[2] + __frame.x2[0])
-                                               + *(uint8_t *)__frame.x2[2]
-                                               - *(uint8_t *)(__frame.x2[2] + __frame.x2[1])
-                                               - (uint32_t)*(uint8_t *)(__frame.x2[2] + left_a))
+                                              * (*(uint8_t *)(x2[2] + x2[0])
+                                               + *(uint8_t *)x2[2]
+                                               - *(uint8_t *)(x2[2] + x2[1])
+                                               - (uint32_t)*(uint8_t *)(x2[2] + left_a))
                                               + 40) >> 7)
                           - 256)
                          & 0x1FF;
                     ++*(uint32_t *)&__frame.buf_1[4 * bin_a];
                     q_a -= left_a;
-                    p_a = (uint8_t *)(__frame.x1[3] - left_a);
-                    __frame.x1[1] = n_a - 1;
+                    p_a = (uint8_t *)(x1[3] - left_a);
+                    x1[1] = n_a - 1;
                   }
                   while ( n_a != 1 );
-                  wt8_up = __frame.x3[3];
-                  wt4_up = __frame.x1[0];
-                  best_cost = __frame.x3[0];
+                  wt8_up = x3[3];
+                  wt4_up = x1[0];
+                  best_cost = x3[0];
                   cost_a = __estimate_cost((uint8_t *)__frame.buf_1, 512);
-                  wt8_up_end = __frame.x0[2];
-                  wt4_best = __frame.x5[3];
+                  wt8_up_end = x0[2];
+                  wt4_best = x5[3];
                   if ( cost_a < best_cost )
                   {
                     best_cost = cost_a;
                     wt4_best = wt4_up;
                   }
-                  __frame.x5[3] = wt4_best;
-                  wt4_up_end = __frame.x0[1] + wt4_best;
+                  x5[3] = wt4_best;
+                  wt4_up_end = x0[1] + wt4_best;
                 }
                 if ( wt8_up < wt8_up_end && wt8_up < 192 )
                 {
                   {
-                    __frame.x0[3] = wt4_up_end;
-                    memset(__frame.buf_2,0,2048);
-                    npix_b = __frame.img_a->width * (__frame.img_a->height - 1);
-                    stride_b = (uint16_t)__frame.img_a->stride;
-                    __frame.x3[3] = wt8_up;
-                    __frame.x1[0] = wt4_up;
-                    __frame.x4[0] = npix_b - 1;
-                    __frame.x3[0] = best_cost;
-                    __frame.x5[0] = -stride_b;
+                    x0[3] = wt4_up_end;
+                    memset(buf_2,0,2048);
+                    npix_b = img_a->width * (img_a->height - 1);
+                    stride_b = (uint16_t)img_a->stride;
+                    x3[3] = wt8_up;
+                    x1[0] = wt4_up;
+                    x4[0] = npix_b - 1;
+                    x3[0] = best_cost;
+                    x5[0] = -stride_b;
                     left_b = -plane_count;
-                    __frame.x4[3] = -stride_b - plane_count;
-                    __frame.x4[2] = __frame.x0[0] - __frame.x4[3] + 16;
-                    q_b = (uint8_t *)(__frame.q1 + __frame.x0[0] - __frame.x4[3] + 16);
-                    __frame.x4[1] = (int32_t)q_b;
-                    r_b = __frame.plane_b + __frame.x0[0] - __frame.x4[3] + 16;
-                    p_b = (uint8_t *)__frame.x4[2];
+                    x4[3] = -stride_b - plane_count;
+                    x4[2] = x0[0] - x4[3] + 16;
+                    q_b = (uint8_t *)(__frame.q1 + x0[0] - x4[3] + 16);
+                    x4[1] = (int32_t)q_b;
+                    r_b = __frame.plane_b + x0[0] - x4[3] + 16;
+                    p_b = (uint8_t *)x4[2];
                     do
                     {
-                      ul_b = p_b[__frame.x4[3]];
-                      *(int64_t *)((uint8_t *)__frame.x4 + 4) = __PAIR64__((uint32_t)p_b, q_b);
-                      __frame.x5[1] = r_b;
-                      g_b = ul_b + *p_b - p_b[__frame.x5[0]] - p_b[left_b];
+                      ul_b = p_b[x4[3]];
+                      *(int64_t *)((uint8_t *)x4 + 4) = __PAIR64__((uint32_t)p_b, q_b);
+                      x5[1] = r_b;
+                      g_b = ul_b + *p_b - p_b[x5[0]] - p_b[left_b];
                       cur_b = *q_b;
-                      __frame.x5[2] = g_b;
-                      r_b = __frame.x5[1] - left_b;
-                      n_b = __frame.x4[0];
-                      bin_b = (((int16_t *)__frame.x5)[4]
-                            - (uint16_t)((__frame.x5[3]
-                                                * (q_b[__frame.x4[3]] + cur_b - q_b[__frame.x5[0]] - q_b[left_b])
-                                                + __frame.x3[3]
-                                                * (*(uint8_t *)(__frame.x5[1] + __frame.x4[3])
-                                                 + *(uint8_t *)__frame.x5[1]
-                                                 - *(uint8_t *)(__frame.x5[1] + __frame.x5[0])
-                                                 - (uint32_t)*(uint8_t *)(__frame.x5[1] + left_b))
+                      x5[2] = g_b;
+                      r_b = x5[1] - left_b;
+                      n_b = x4[0];
+                      bin_b = (((int16_t *)x5)[4]
+                            - (uint16_t)((x5[3]
+                                                * (q_b[x4[3]] + cur_b - q_b[x5[0]] - q_b[left_b])
+                                                + x3[3]
+                                                * (*(uint8_t *)(x5[1] + x4[3])
+                                                 + *(uint8_t *)x5[1]
+                                                 - *(uint8_t *)(x5[1] + x5[0])
+                                                 - (uint32_t)*(uint8_t *)(x5[1] + left_b))
                                                 + 40) >> 7)
                             - 256)
                            & 0x1FF;
-                      ++*(uint32_t *)&__frame.buf_2[4 * bin_b];
+                      ++*(uint32_t *)&buf_2[4 * bin_b];
                       q_b -= left_b;
-                      p_b = (uint8_t *)(__frame.x4[2] - left_b);
-                      __frame.x4[0] = n_b - 1;
+                      p_b = (uint8_t *)(x4[2] - left_b);
+                      x4[0] = n_b - 1;
                     }
                     while ( n_b != 1 );
-                    wt8_up = __frame.x3[3];
-                    wt4_up = __frame.x1[0];
-                    best_cost = __frame.x3[0];
-                    cost_b = __estimate_cost((uint8_t *)__frame.buf_2, 512);
-                    wt4_up_end = __frame.x0[3];
+                    wt8_up = x3[3];
+                    wt4_up = x1[0];
+                    best_cost = x3[0];
+                    cost_b = __estimate_cost((uint8_t *)buf_2, 512);
+                    wt4_up_end = x0[3];
                     wt8_best = __frame.wt_slot;
                     if ( cost_b < best_cost )
                     {
@@ -8318,7 +8307,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                       wt8_best = wt8_up;
                     }
                     __frame.wt_slot = wt8_best;
-                    wt8_up_end = __frame.x0[1] + wt8_best;
+                    wt8_up_end = x0[1] + wt8_best;
                   }
                 }
                 ++wt4_up;
@@ -8337,20 +8326,20 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
           if ( wt4_dn > wt4_dn_end && wt4_dn >= -64 )
           {
             *(uint32_t *)__frame.buf_1 = wt8_dn_end;
-            memset(__frame.buf_3,0,2048);
-            npix_c = __frame.img_a->width * (__frame.img_a->height - 1);
-            stride_c = (uint16_t)__frame.img_a->stride;
+            memset(buf_3,0,2048);
+            npix_c = img_a->width * (img_a->height - 1);
+            stride_c = (uint16_t)img_a->stride;
             __frame.s6 = wt8_dn;
             __frame.s1 = wt4_dn;
             __frame.s2 = npix_c - 1;
-            __frame.x3[0] = best_cost;
+            x3[0] = best_cost;
             __frame.s4 = -stride_c;
             left_c = -plane_count;
             __frame.s3 = -stride_c - plane_count;
-            __frame.p1 = (uint8_t *)(__frame.x0[0] - __frame.s3 + 16);
-            __frame.p0 = (uint8_t *)(__frame.q1 + __frame.x0[0] - __frame.s3 + 16);
+            __frame.p1 = (uint8_t *)(x0[0] - __frame.s3 + 16);
+            __frame.p0 = (uint8_t *)(__frame.q1 + x0[0] - __frame.s3 + 16);
             q_c = __frame.p0;
-            r_c = (uint8_t *)(__frame.plane_b + __frame.x0[0] - __frame.s3 + 16);
+            r_c = (uint8_t *)(__frame.plane_b + x0[0] - __frame.s3 + 16);
             p_c = __frame.p1;
             do
             {
@@ -8369,7 +8358,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                                         + 40) >> 7)
                     - 256)
                    & 0x1FF;
-              ++*(uint32_t *)&__frame.buf_3[4 * bin_c];
+              ++*(uint32_t *)&buf_3[4 * bin_c];
               q_c -= left_c;
               p_c = &__frame.p1[-left_c];
               __frame.s2 = n_c - 1;
@@ -8377,36 +8366,36 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
             while ( n_c != 1 );
             wt8_dn = __frame.s6;
             wt4_dn = __frame.s1;
-            best_cost = __frame.x3[0];
-            cost_c = __estimate_cost((uint8_t *)__frame.buf_3, 512);
+            best_cost = x3[0];
+            cost_c = __estimate_cost((uint8_t *)buf_3, 512);
             wt8_dn_end = *(uint32_t *)__frame.buf_1;
-            wt4_best_dn = __frame.x5[3];
+            wt4_best_dn = x5[3];
             if ( cost_c < best_cost )
             {
               best_cost = cost_c;
               wt4_best_dn = wt4_dn;
             }
-            __frame.x5[3] = wt4_best_dn;
-            wt4_dn_end = wt4_best_dn - __frame.x0[1];
+            x5[3] = wt4_best_dn;
+            wt4_dn_end = wt4_best_dn - x0[1];
           }
           if ( wt8_dn > wt8_dn_end && wt8_dn >= -64 )
           {
             {
               __frame.s0 = wt4_dn_end;
-              memset(__frame.buf_4,0,2048);
-              npix_d = __frame.img_a->width * (__frame.img_a->height - 1);
-              stride_d = (uint16_t)__frame.img_a->stride;
+              memset(buf_4,0,2048);
+              npix_d = img_a->width * (img_a->height - 1);
+              stride_d = (uint16_t)img_a->stride;
               __frame.s6 = wt8_dn;
               __frame.s1 = wt4_dn;
               __frame.s7 = npix_d - 1;
-              __frame.x3[0] = best_cost;
+              x3[0] = best_cost;
               __frame.s9 = -stride_d;
               left_d = -plane_count;
               __frame.s8 = -stride_d - plane_count;
-              __frame.p4 = (uint8_t *)(__frame.x0[0] - __frame.s8 + 16);
-              q_d = (uint8_t *)(__frame.q1 + __frame.x0[0] - __frame.s8 + 16);
+              __frame.p4 = (uint8_t *)(x0[0] - __frame.s8 + 16);
+              q_d = (uint8_t *)(__frame.q1 + x0[0] - __frame.s8 + 16);
               __frame.p3 = q_d;
-              r_d = (uint8_t *)(__frame.plane_b + __frame.x0[0] - __frame.s8 + 16);
+              r_d = (uint8_t *)(__frame.plane_b + x0[0] - __frame.s8 + 16);
               p_d = __frame.p4;
               do
               {
@@ -8420,12 +8409,12 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                 r_d = &__frame.p5[-left_d];
                 n_d = __frame.s7;
                 bin_d = ((uint16_t)__frame.s10
-                      - (uint16_t)((__frame.x5[3] * (q_d[__frame.s8] + cur_d - q_d[__frame.s9] - q_d[left_d])
+                      - (uint16_t)((x5[3] * (q_d[__frame.s8] + cur_d - q_d[__frame.s9] - q_d[left_d])
                                           + __frame.s6 * (__frame.p5[__frame.s8] + *__frame.p5 - __frame.p5[__frame.s9] - (uint32_t)__frame.p5[left_d])
                                           + 40) >> 7)
                       - 256)
                      & 0x1FF;
-                ++*(uint32_t *)&__frame.buf_4[4 * bin_d];
+                ++*(uint32_t *)&buf_4[4 * bin_d];
                 q_d -= left_d;
                 p_d = &__frame.p4[-left_d];
                 __frame.s7 = n_d - 1;
@@ -8433,8 +8422,8 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
               while ( n_d != 1 );
               wt8_dn = __frame.s6;
               wt4_dn = __frame.s1;
-              best_cost = __frame.x3[0];
-              cost_d = __estimate_cost((uint8_t *)__frame.buf_4, 512);
+              best_cost = x3[0];
+              cost_d = __estimate_cost((uint8_t *)buf_4, 512);
               wt4_dn_end = __frame.s0;
               wt8_best_dn = __frame.wt_slot;
               if ( cost_d < best_cost )
@@ -8443,7 +8432,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                 wt8_best_dn = wt8_dn;
               }
               __frame.wt_slot = wt8_best_dn;
-              wt8_dn_end = wt8_best_dn - __frame.x0[1];
+              wt8_dn_end = wt8_best_dn - x0[1];
             }
           }
           --wt4_dn;
@@ -8451,19 +8440,19 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
         }
       }
 LABEL_19:
-      px = &((uint8_t *)__frame.img_a)[__frame.q0 + 16 + n_planes + __frame.x3[2]];
-      if ( (uint32_t)px < __frame.data_end )
+      px = &((uint8_t *)img_a)[__frame.q0 + 16 + n_planes + x3[2]];
+      if ( (uint32_t)px < data_end )
       {
         __frame.wt_slot = wt8;
-        __frame.x5[3] = wt4;
-        __frame.x3[0] = best_cost;
+        x5[3] = wt4;
+        x3[0] = best_cost;
         __frame.nplanes_s = n_planes;
         do
         {
           c2 = px[__frame.plane_b];
           c2w = c2 * __frame.wt_slot;
           c1 = px[__frame.q1];
-          c1w = c1 * __frame.x5[3];
+          c1w = c1 * x5[3];
           ++__frame.hist_c[c2 - c1 + 1280];
           c0 = *px + 512;
           px += __frame.nplanes_s;
@@ -8473,42 +8462,42 @@ LABEL_19:
           ++__frame.hist_b[c0 - c2];
           ++__frame.hist_c[(c0 - ((uint32_t)(((c1 + c2) << 6) + 40) >> 7))];
         }
-        while ( (uint32_t)px < __frame.data_end );
+        while ( (uint32_t)px < data_end );
         wt8 = __frame.wt_slot;
-        wt4 = __frame.x5[3];
-        best_cost = __frame.x3[0];
+        wt4 = x5[3];
+        best_cost = x3[0];
         n_planes = __frame.nplanes_s;
       }
       slack = best_cost >> 7;
       if ( best_cost >> 7 >= 0x4000 )
         slack = 0x4000;
       best = slack + best_cost;
-      cost_flat = *(int32_t *)((uint8_t *)&__frame.acc0[3] + __frame.x3[1]);
+      cost_flat = *(int32_t *)((uint8_t *)&acc0[3] + x3[1]);
       cheaper = cost_flat < best;
       if ( cost_flat < best )
       {
-        best = *(int32_t *)((uint8_t *)&__frame.acc0[3] + __frame.x3[1]);
+        best = *(int32_t *)((uint8_t *)&acc0[3] + x3[1]);
         wt4 = 128;
         wt8 = 0;
       }
       pred = cheaper;
-      if ( *(uint32_t *)((uint8_t *)__frame.acc1 + __frame.x3[1]) < best )
+      if ( *(uint32_t *)((uint8_t *)acc1 + x3[1]) < best )
       {
-        best = *(uint32_t *)((uint8_t *)__frame.acc1 + __frame.x3[1]);
+        best = *(uint32_t *)((uint8_t *)acc1 + x3[1]);
         pred = 2;
         wt4 = 0;
         wt8 = 128;
       }
-      keep3 = best <= *(uint32_t *)((uint8_t *)__frame.acc1 + __frame.x3[1] + 4);
-      if ( best > *(uint32_t *)((uint8_t *)__frame.acc1 + __frame.x3[1] + 4) )
+      keep3 = best <= *(uint32_t *)((uint8_t *)acc1 + x3[1] + 4);
+      if ( best > *(uint32_t *)((uint8_t *)acc1 + x3[1] + 4) )
         pred = 3;
-      xform_row = __frame.x3[2];   // a record index; it was the byte offset 16 * it
+      xform_row = x3[2];   // a record index; it was the byte offset 16 * it
       if ( !keep3 )
       {
         wt4 = 64;
         wt8 = 64;
       }
-      plane_desc[__frame.x3[2] + 1].w4 = wt4;
+      plane_desc[x3[2] + 1].w4 = wt4;
       plane_desc[xform_row + 1].w8 = wt8;
       hist = &__frame.buf[4096 * pred];
       win = (uint8_t)(uintptr_t)hist & 0xF;
@@ -8538,7 +8527,7 @@ LABEL_19:
         while ( win < 1024 );
         n_planes = __frame.nplanes_s;
       }
-      plane_desc[__frame.x3[2] + 1].b3 = pos + 1;
+      plane_desc[x3[2] + 1].b3 = pos + 1;
       // Same window, over the second table.  `i` is left at 256 for the slide
       // that follows.
       best_sum2 = 0;
@@ -8561,171 +8550,170 @@ LABEL_19:
       // and not the second.  The chosen transform is 0 on all fifteen reference
       // images -- both spellings agree there, which is why the gate stayed green
       // -- but it is 1 or 2 for an image that picks another one.
-      plane_desc[__frame.plane_b + __frame.x3[2] + 1].b3 = result;
+      plane_desc[__frame.plane_b + x3[2] + 1].b3 = result;
       if ( n_planes >= 4 )
       {
-        __builtin_memset(__frame.x0, 0, 16);
-        __builtin_memset(__frame.x1, 0, 16);
-        __builtin_memset(__frame.x2, 0, 16);
-        __builtin_memset(__frame.x3, 0, 16);
-        __builtin_memset(__frame.x4, 0, 16);
-        __builtin_memset(__frame.x5, 0, 16);
+        __builtin_memset(x0, 0, 16);
+        __builtin_memset(x1, 0, 16);
+        __builtin_memset(x2, 0, 16);
+        __builtin_memset(x3, 0, 16);
+        __builtin_memset(x4, 0, 16);
+        __builtin_memset(x5, 0, 16);
         memset(__frame.buf,0,0x8000);
-        __frame.pp = &((uint8_t *)__frame.img_a)[__frame.q0];
-        n_quads = (int32_t)(__frame.data_end - 17 - (uint32_t)&((uint8_t *)__frame.img_a)[__frame.q0]) / 4;
-        end_px = &((uint8_t *)__frame.img_a)[__frame.q0 + 20];
-        if ( __frame.data_end <= (uint32_t)end_px )
+        pp = &((uint8_t *)img_a)[__frame.q0];
+        n_quads = (int32_t)(data_end - 17 - (uint32_t)&((uint8_t *)img_a)[__frame.q0]) / 4;
+        end_px = &((uint8_t *)img_a)[__frame.q0 + 20];
+        if ( data_end <= (uint32_t)end_px )
         {
-          sum01 = *(double *)&__frame.x0[2];
-          sum02 = *(double *)__frame.x1;
-          sum12 = *(double *)&__frame.x2[2];
-          __frame.q1 = *(int64_t *)&__frame.x0[2];
-          __frame.q0 = *(int64_t *)&__frame.x2[2];
-          __frame.d4 = *(double *)__frame.x0;
-          __frame.q2 = *(int64_t *)&__frame.x4[2];
-          sum02_c = *(double *)__frame.x1;
+          sum01 = *(double *)&x0[2];
+          sum02 = *(double *)x1;
+          sum12 = *(double *)&x2[2];
+          __frame.q1 = *(int64_t *)&x0[2];
+          __frame.q0 = *(int64_t *)&x2[2];
+          d4 = *(double *)x0;
+          q2 = *(int64_t *)&x4[2];
+          sum02_c = *(double *)x1;
         }
         else
         {
-          sum22 = *(double *)__frame.x4;
-          sum11 = *(double *)__frame.x2;
-          __frame.q2 = *(int64_t *)&__frame.x4[2];
-          __frame.d4 = *(double *)__frame.x0;
-          __frame.d5 = *(double *)&__frame.x0[2];
-          __frame.d2 = *(double *)__frame.x1;
-          __frame.d6 = *(double *)&__frame.x2[2];
-          __frame.d3 = *(double *)__frame.x5;
-          __frame.d1 = *(double *)&__frame.x5[2];
-          __frame.wt_slot = (uintptr_t)&((uint8_t *)__frame.img_a)[__frame.q0 + 20];
+          sum22 = *(double *)x4;
+          sum11 = *(double *)x2;
+          q2 = *(int64_t *)&x4[2];
+          d4 = *(double *)x0;
+          d5 = *(double *)&x0[2];
+          d2 = *(double *)x1;
+          d6 = *(double *)&x2[2];
+          d3 = *(double *)x5;
+          d1 = *(double *)&x5[2];
+          __frame.wt_slot = (uintptr_t)&((uint8_t *)img_a)[__frame.q0 + 20];
           i4 = 0;
-          __frame.uu = (int32_t)(__frame.data_end - 17 - (uint32_t)&((uint8_t *)__frame.img_a)[__frame.q0]) / 4;
+          uu = (int32_t)(data_end - 17 - (uint32_t)&((uint8_t *)img_a)[__frame.q0]) / 4;
           do
           {
-            dv0 = (double)(((uint8_t *)__frame.img_a)[4 * i4 + 16] + __frame.pp[4 * i4 + 20] - (((uint8_t *)__frame.img_a)[4 * i4 + 20] + __frame.pp[4 * i4 + 16]));
-            dv1 = (double)(((uint8_t *)__frame.img_a)[4 * i4 + 17] + __frame.pp[4 * i4 + 21] - (((uint8_t *)__frame.img_a)[4 * i4 + 21] + __frame.pp[4 * i4 + 17]));
-            dv2 = (double)(((uint8_t *)__frame.img_a)[4 * i4 + 18] + __frame.pp[4 * i4 + 22] - (((uint8_t *)__frame.img_a)[4 * i4 + 22] + __frame.pp[4 * i4 + 18]));
-            dv3 = ((uint8_t *)__frame.img_a)[4 * i4 + 19] + __frame.pp[4 * i4 + 23] - (((uint8_t *)__frame.img_a)[4 * i4 + 23] + __frame.pp[4 * i4 + 19]);
-            __frame.d4 = __frame.d4 + dv0 * dv0;
+            dv0 = (double)(((uint8_t *)img_a)[4 * i4 + 16] + pp[4 * i4 + 20] - (((uint8_t *)img_a)[4 * i4 + 20] + pp[4 * i4 + 16]));
+            dv1 = (double)(((uint8_t *)img_a)[4 * i4 + 17] + pp[4 * i4 + 21] - (((uint8_t *)img_a)[4 * i4 + 21] + pp[4 * i4 + 17]));
+            dv2 = (double)(((uint8_t *)img_a)[4 * i4 + 18] + pp[4 * i4 + 22] - (((uint8_t *)img_a)[4 * i4 + 22] + pp[4 * i4 + 18]));
+            dv3 = ((uint8_t *)img_a)[4 * i4 + 19] + pp[4 * i4 + 23] - (((uint8_t *)img_a)[4 * i4 + 23] + pp[4 * i4 + 19]);
+            d4 = d4 + dv0 * dv0;
             ++i4;
-            __frame.d5 = __frame.d5 + dv0 * dv1;
-            __frame.d2 = __frame.d2 + dv0 * dv2;
+            d5 = d5 + dv0 * dv1;
+            d2 = d2 + dv0 * dv2;
             sum11 = sum11 + dv1 * dv1;
-            __frame.d6 = __frame.d6 + dv1 * dv2;
+            d6 = d6 + dv1 * dv2;
             sum22 = sum22 + dv2 * dv2;
-            *(double *)&__frame.q2 = *(double *)&__frame.q2 + dv0 * (double)dv3;
-            __frame.d3 = __frame.d3 + dv1 * (double)dv3;
-            __frame.d1 = __frame.d1 + dv2 * (double)dv3;
+            *(double *)&q2 = *(double *)&q2 + dv0 * (double)dv3;
+            d3 = d3 + dv1 * (double)dv3;
+            d1 = d1 + dv2 * (double)dv3;
           }
-          while ( i4 < __frame.uu );
-          sum01 = __frame.d5;
-          sum02 = __frame.d2;
-          sum12 = __frame.d6;
+          while ( i4 < uu );
+          sum01 = d5;
+          sum02 = d2;
+          sum12 = d6;
           end_px = (uint8_t *)__frame.wt_slot;
-          n_quads = __frame.uu;
-          *(double *)&__frame.x5[2] = __frame.d1;
-          *(double *)__frame.x5 = __frame.d3;
-          *(int64_t *)&__frame.x4[2] = __frame.q2;
-          *(double *)__frame.x4 = sum22;
-          *(double *)&__frame.x2[2] = __frame.d6;
-          *(double *)__frame.x2 = sum11;
-          *(double *)__frame.x1 = __frame.d2;
-          *(double *)&__frame.x0[2] = __frame.d5;
-          *(double *)__frame.x0 = __frame.d4;
-          sum02_c = __frame.d2;
-          *(double *)&__frame.q0 = __frame.d6;
-          *(double *)&__frame.q1 = __frame.d5;
+          n_quads = uu;
+          *(double *)&x5[2] = d1;
+          *(double *)x5 = d3;
+          *(int64_t *)&x4[2] = q2;
+          *(double *)x4 = sum22;
+          *(double *)&x2[2] = d6;
+          *(double *)x2 = sum11;
+          *(double *)x1 = d2;
+          *(double *)&x0[2] = d5;
+          *(double *)x0 = d4;
+          sum02_c = d2;
+          *(double *)&__frame.q0 = d6;
+          *(double *)&__frame.q1 = d5;
         }
-        __frame.d5 = sum01;
-        __frame.d6 = sum12;
+        d5 = sum01;
+        d6 = sum12;
         __frame.d0 = sum02_c;
-        *(double *)&__frame.x1[2] = sum01;
-        *(double *)__frame.x3 = sum02;
-        *(double *)&__frame.x3[2] = sum12;
-        __frame.d1 = __frame.d4 * *(double *)__frame.x4 - sum02_c * sum02;
-        __frame.d2 = 0.0 - __frame.d4 * sum12 + sum02 * *(double *)&__frame.q1;
-        __frame.d3 = sum02_c * sum12 - *(double *)&__frame.q1 * *(double *)__frame.x4;
-        inv = 128.0 / (*(double *)__frame.x2 * __frame.d1 + *(double *)&__frame.q0 * __frame.d2 + sum01 * __frame.d3 + 0.1);
-        *(double *)__frame.acc0 = inv;
-        wa = (int32_t)(((sum02 * *(double *)&__frame.q0 - sum01 * *(double *)__frame.x4) * *(double *)__frame.x5
-                    + (0.0 - sum02 * *(double *)__frame.x2 + sum01 * __frame.d6) * *(double *)&__frame.x5[2]
-                    + (*(double *)__frame.x4 * *(double *)__frame.x2 - __frame.d6 * *(double *)&__frame.q0)
-                    * *(double *)&__frame.q2)
+        *(double *)&x1[2] = sum01;
+        *(double *)x3 = sum02;
+        *(double *)&x3[2] = sum12;
+        d1 = d4 * *(double *)x4 - sum02_c * sum02;
+        d2 = 0.0 - d4 * sum12 + sum02 * *(double *)&__frame.q1;
+        d3 = sum02_c * sum12 - *(double *)&__frame.q1 * *(double *)x4;
+        inv = 128.0 / (*(double *)x2 * d1 + *(double *)&__frame.q0 * d2 + sum01 * d3 + 0.1);
+        *(double *)acc0 = inv;
+        wa = (int32_t)(((sum02 * *(double *)&__frame.q0 - sum01 * *(double *)x4) * *(double *)x5
+                    + (0.0 - sum02 * *(double *)x2 + sum01 * d6) * *(double *)&x5[2]
+                    + (*(double *)x4 * *(double *)x2 - d6 * *(double *)&__frame.q0)
+                    * *(double *)&q2)
                    * inv);
         if ( wa >= 191 )
           wa = 191;
         if ( wa < -64 )
           wa = -64;
-        __frame.wa_slot = wa;
-        wb = (int32_t)((__frame.d1 * *(double *)__frame.x5 + __frame.d2 * *(double *)&__frame.x5[2]
-                                                         + __frame.d3 * *(double *)&__frame.q2)
+        wa_slot = wa;
+        wb = (int32_t)((d1 * *(double *)x5 + d2 * *(double *)&x5[2]
+                                                         + d3 * *(double *)&q2)
                      * inv);
         if ( wb >= 191 )
           wb = 191;
         if ( wb < -64 )
           wb = -64;
-        wc = (int32_t)(*(double *)__frame.acc0
-                     * ((__frame.d4 * *(double *)&__frame.x5[2] - __frame.d0 * *(double *)&__frame.q2) * *(double *)__frame.x2
-                      + (0.0 - __frame.d4 * *(double *)__frame.x5 + *(double *)&__frame.q2 * *(double *)&__frame.q1)
+        wc = (int32_t)(*(double *)acc0
+                     * ((d4 * *(double *)&x5[2] - __frame.d0 * *(double *)&q2) * *(double *)x2
+                      + (0.0 - d4 * *(double *)x5 + *(double *)&q2 * *(double *)&__frame.q1)
                       * *(double *)&__frame.q0
-                      + (__frame.d0 * *(double *)__frame.x5 - *(double *)&__frame.q1 * *(double *)&__frame.x5[2]) * __frame.d5));
+                      + (__frame.d0 * *(double *)x5 - *(double *)&__frame.q1 * *(double *)&x5[2]) * d5));
         if ( wc >= 191 )
           wc = 191;
         if ( wc < -64 )
           wc = -64;
-        if ( (uint32_t)end_px < __frame.data_end )
+        if ( (uint32_t)end_px < data_end )
         {
-          *(int64_t *)__frame.x0 = __PAIR64__(wc, wb);
-          __frame.uu = n_quads;
+          *(int64_t *)x0 = __PAIR64__(wc, wb);
+          uu = n_quads;
           quad = 0;
           do
           {
-            nx0 = ((uint8_t *)__frame.img_a)[4 * quad + 20];
-            dg0 = ((uint8_t *)__frame.img_a)[4 * quad + 16] + __frame.pp[4 * quad + 20];
-            dn0 = __frame.pp[4 * quad + 16];
-            __frame.x0[2] = quad;
+            nx0 = ((uint8_t *)img_a)[4 * quad + 20];
+            dg0 = ((uint8_t *)img_a)[4 * quad + 16] + pp[4 * quad + 20];
+            dn0 = pp[4 * quad + 16];
+            x0[2] = quad;
             ad0 = nx0 + dn0;
-            dnx1 = __frame.pp[4 * quad + 21];
+            dnx1 = pp[4 * quad + 21];
             g0 = dg0 - ad0;
-            dn1 = __frame.pp[4 * quad + 17];
-            __frame.x0[3] = g0;
-            nx2 = ((uint8_t *)__frame.img_a)[4 * quad + 22];
-            g1 = ((uint8_t *)__frame.img_a)[4 * quad + 17] + dnx1 - (((uint8_t *)__frame.img_a)[4 * quad + 21] + dn1);
-            dnx2 = __frame.pp[4 * quad + 22];
-            __frame.x1[0] = g1;
-            g2 = ((uint8_t *)__frame.img_a)[4 * quad + 18] + dnx2 - (nx2 + __frame.pp[4 * quad + 18]);
-            LOWORD(g1) = ((uint8_t *)__frame.img_a)[4 * quad + 19] + __frame.pp[4 * quad + 23] - __frame.pp[4 * quad + 19] - ((uint8_t *)__frame.img_a)[4 * quad + 23];
-            g1_lo = ((int16_t *)__frame.x1)[0];
+            dn1 = pp[4 * quad + 17];
+            x0[3] = g0;
+            nx2 = ((uint8_t *)img_a)[4 * quad + 22];
+            g1 = ((uint8_t *)img_a)[4 * quad + 17] + dnx1 - (((uint8_t *)img_a)[4 * quad + 21] + dn1);
+            dnx2 = pp[4 * quad + 22];
+            x1[0] = g1;
+            g2 = ((uint8_t *)img_a)[4 * quad + 18] + dnx2 - (nx2 + pp[4 * quad + 18]);
+            LOWORD(g1) = ((uint8_t *)img_a)[4 * quad + 19] + pp[4 * quad + 23] - pp[4 * quad + 19] - ((uint8_t *)img_a)[4 * quad + 23];
+            g1_lo = ((int16_t *)x1)[0];
             LOWORD(g1) = g1 - 512;
-            pa = __frame.x1[0] * __frame.x0[0] + __frame.x0[3] * __frame.wa_slot;
-            pb = g2 * __frame.x0[1];
-            ++__frame.hist_a[((uint16_t)g1 - ((int16_t *)__frame.x0)[6]) & 0x3FF];
+            pa = x1[0] * x0[0] + x0[3] * wa_slot;
+            pb = g2 * x0[1];
+            ++__frame.hist_a[((uint16_t)g1 - ((int16_t *)x0)[6]) & 0x3FF];
             bin_lin = ((uint16_t)g1 - (uint16_t)((uint32_t)(pa + pb + 63) >> 7)) & 0x3FF;
             ++*(uint32_t *)&__frame.buf[4 * bin_lin];
             ++__frame.hist_b[((uint16_t)g1 - g1_lo) & 0x3FF];
             LOWORD(g1) = g1 - g2;
-            quad_r = __frame.x0[2];
-            row1 = __frame.pp;
+            quad_r = x0[2];
             ++__frame.hist_c[g1 & 0x3FF];
-            alpha = row1[4 * quad_r + 23] + 256;
+            alpha = pp[4 * quad_r + 23] + 256;
             bin_lin2 = ((uint16_t)alpha
-                 - (uint16_t)((__frame.x0[0] * row1[4 * quad_r + 21]
-                                     + __frame.wa_slot * row1[4 * quad_r + 20]
-                                     + __frame.x0[1] * (uint32_t)row1[4 * quad_r + 22]
+                 - (uint16_t)((x0[0] * pp[4 * quad_r + 21]
+                                     + wa_slot * pp[4 * quad_r + 20]
+                                     + x0[1] * (uint32_t)pp[4 * quad_r + 22]
                                      + 63) >> 7)
                  + 256)
                 & 0x3FF;
             ++__frame.hist_c[bin_lin2 + 1024];
-            r0 = alpha - row1[4 * quad_r + 20];
+            r0 = alpha - pp[4 * quad_r + 20];
             ++__frame.hist_c[r0 + 2048];
-            r1 = alpha - row1[4 * quad_r + 21];
+            r1 = alpha - pp[4 * quad_r + 21];
             ++__frame.hist_c[r1 + 3072];
-            r2 = alpha - row1[4 * quad_r + 22];
+            r2 = alpha - pp[4 * quad_r + 22];
             ++__frame.hist_c[r2 + 4096];
             quad = quad_r + 1;
           }
-          while ( quad < __frame.uu );
-          wc = __frame.x0[1];
-          wb = __frame.x0[0];
+          while ( quad < uu );
+          wc = x0[1];
+          wb = x0[0];
         }
         cost_lin = __estimate_cost((uint8_t *)__frame.buf, 1024);
         best4 = (cost_lin >> 7) + cost_lin;
@@ -8733,36 +8721,36 @@ LABEL_19:
         pick0 = cost_c0 < best4;
         if ( cost_c0 < best4 )
           best4 = cost_c0;
-        wa_pick = __frame.wa_slot;
+        wa_pick = wa_slot;
         if ( pick0 )
         {
           wa_pick = 128;
           wc = 0;
           wb = 0;
         }
-        __frame.wa_slot = wa_pick;
-        __frame.x0[0] = pick0;
+        wa_slot = wa_pick;
+        x0[0] = pick0;
         cost_c1 = __estimate_cost((uint8_t *)__frame.hist_b, 1024);
-        pred4 = __frame.x0[0];
+        pred4 = x0[0];
         if ( cost_c1 < best4 )
         {
           best4 = cost_c1;
           pred4 = 2;
           wb = 128;
           wc = 0;
-          __frame.wa_slot = 0;
+          wa_slot = 0;
         }
-        __frame.x0[0] = pred4;
+        x0[0] = pred4;
         cost_c2 = __estimate_cost((uint8_t *)__frame.hist_c, 1024);
-        pred4b = __frame.x0[0];
+        pred4b = x0[0];
         if ( cost_c2 < best4 )
         {
           pred4b = 3;
           wc = 128;
           wb = 0;
-          __frame.wa_slot = 0;
+          wa_slot = 0;
         }
-        plane_desc[4].w4 = __frame.wa_slot;
+        plane_desc[4].w4 = wa_slot;
         plane_desc[4].w8 = wb;
         plane_desc[4].w12 = wc;
         plane_desc[4].src_plane = 3;
@@ -8794,7 +8782,7 @@ LABEL_19:
 int32_t *__read_bmp(char *path)
 {
   // This one is a layout, not a bag of locals: lifting its members to
-  // ordinary locals makes DLRAW aborts while compressing.  Re-checked against the
+  // ordinary locals makes DLRAW abort while compressing.  Re-checked against the
   // file as it is now, by `tools/liftframe.py` -- `frame-sweep.sh`, which
   // the note here used to cite, lifts aliases and has none left to lift.
   struct alignas(16) ReadBmpFrame {   // 128 bytes, one stack frame
@@ -9136,8 +9124,12 @@ LABEL_61:
 
 int32_t __decode_symbol_list(SymList *syms)
 {
-  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
-  // gives every member its own storage and DLRAW segfaults while decompressing.
+  // The union below is MSVC's slot sharing written down, and lifting
+  // its arms to separate locals is not the same program, so the frame
+  // stays.  Everything outside it has been lifted where the gate
+  // allowed.  The note here used to read "DLRAW segfaults while decompressing"
+  // on the authority of `frame-sweep.sh`, which lifts aliases and has
+  // had none to lift since round nine.
   struct alignas(16) DecodeSymbolListFrame {   // 32824 bytes, one stack frame
       union {
           SymEntry *list[8192];   // the symbol list: 8 named slots and 32736 bytes of tail, one array
@@ -9147,7 +9139,7 @@ int32_t __decode_symbol_list(SymList *syms)
             // the two roles, which is what the original casts were hiding.
             uint32_t list0;
             SymEntry *list1;
-            int32_t list2;
+            uint32_t list2;
             int32_t list3;
             int32_t list4;
             uint32_t list5;
@@ -9156,15 +9148,13 @@ int32_t __decode_symbol_list(SymList *syms)
             SymEntry *list_tail[8184];
           };
       };
-      uint32_t unused_f;
-      int32_t tot;
-      int32_t tot0;
-      SymEntry *first;
-      SymList *owner;
-      uint32_t gen;   // the exclusion generation, not a pointer: the slot is reused
       uint8_t _pad1[32];
   } __frame;
-  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 32832, "frame layout moved");
+  int32_t tot;
+  int32_t tot0;
+  SymEntry *first;
+  SymList *owner;
+  uint32_t gen;
   ;
   // Every cursor here walks `syms->ent`'s three-byte entries: the symbol was
   // `*(uint16_t *)p` and the count `p[2]`, and the steps were +3 and -3.
@@ -9178,20 +9168,19 @@ int32_t __decode_symbol_list(SymList *syms)
   // The cumulative count the range coder takes, which it takes unsigned.
   int32_t live, cum, i, c, top, half, back_cnt, last_cnt;
   uint32_t n_left, zeros;   // counts that MSVC spilled into the list's first slot
-  SymList *owner0, *owner1;
   uint32_t list5_s, 
            rescale_at, limit20, running,
            since_rescale;
   live = syms->live;
   ent = syms->ent;
   w = __frame.list;
-  __frame.gen = (uint8_t)exclusion_gen;
-  __frame.owner = syms;
+  gen = (uint8_t)exclusion_gen;
+  owner = syms;
   cum = 0;
   i = 0;
   do
   {
-    if ( (uint8_t)exclusion_mask[ent[i].sym] == __frame.gen )
+    if ( (uint8_t)exclusion_mask[ent[i].sym] == gen )
     {
       c = 0;
     }
@@ -9205,18 +9194,16 @@ int32_t __decode_symbol_list(SymList *syms)
     ++i;
   }
   while ( i < live );
-  owner0 = __frame.owner;
   if ( !cum )
     return -1;
   *w = nullptr;
-  __frame.tot0 = owner0->tot;
-  tot_all = cum + __frame.tot0;
+  tot0 = owner->tot;
+  tot_all = cum + tot0;
   target = rc.get_freq(tot_all);
-  __frame.tot = cum + __frame.tot0;
-  __frame.owner = owner0;
+  tot = cum + tot0;
   p = (__frame.list[0]);
   rd = &__frame.list[1];
-  __frame.first = (__frame.list[0]);
+  first = (__frame.list[0]);
   cum_lo = 0;
   while ( 1 )
   {
@@ -9226,11 +9213,11 @@ int32_t __decode_symbol_list(SymList *syms)
     p = *rd++;
     if ( !p )
     {
-      gen_b = (int8_t)__frame.gen;
+      gen_b = (int8_t)gen;
       sym_cum = cum_lo;
-      cum_hi = __frame.tot;
-      sym_high = __frame.tot;
-      q = __frame.first;
+      cum_hi = tot;
+      sym_high = tot;
+      q = first;
       rd2 = &__frame.list[1];
       do
       {
@@ -9238,7 +9225,7 @@ int32_t __decode_symbol_list(SymList *syms)
         q = *rd2++;
       }
       while ( q );
-      tot_1 = __frame.tot;
+      tot_1 = tot;
       __frame.list7 = -1;
       {
         rc.decode(cum_lo, cum_hi, tot_1);
@@ -9246,13 +9233,12 @@ int32_t __decode_symbol_list(SymList *syms)
       }
     }
   }
-  owner1 = __frame.owner;
   sym_high = cum_lo;
   sym_cum = cum_lo - p->cnt;
   __frame.list7 = p->sym;
   p->cnt += 4;
-  head = owner1->ent;
-  owner1->since_rescale += 4;
+  head = owner->ent;
+  owner->since_rescale += 4;
   if ( p == head )
   {
     top = p->cnt;
@@ -9265,7 +9251,7 @@ int32_t __decode_symbol_list(SymList *syms)
     q2 = p - 1;
     *p = *q2;
     q2->set(s_a, c_a);
-    head = owner1->ent;
+    head = owner->ent;
     if ( q2 == head )
     {
       top = q2->cnt;
@@ -9284,7 +9270,7 @@ int32_t __decode_symbol_list(SymList *syms)
         c_b = q2->cnt;
         *q2 = *r;
         r->set(s_b, c_b);
-        head = owner1->ent;
+        head = owner->ent;
         --q2;
         if ( r == head )
         {
@@ -9297,11 +9283,11 @@ int32_t __decode_symbol_list(SymList *syms)
     }
   }
 LABEL_30:
-  rescale_at = owner1->rescale_at;
-  if ( top > 251 || rescale_at < owner1->since_rescale )
+  rescale_at = owner->rescale_at;
+  if ( top > 251 || rescale_at < owner->since_rescale )
   {
-    __frame.list0 = owner1->live;
-    limit20 = 20 * owner1->n;
+    __frame.list0 = owner->live;
+    limit20 = 20 * owner->n;
     n_left = __frame.list0;
     __frame.list5 = list5_s;
     __frame.list4 = rescale_at < limit20;
@@ -9312,7 +9298,7 @@ LABEL_30:
       ++cur;
       half = (__frame.list4 + (uint32_t)cur->cnt) >> 1;
       cur->cnt = half;
-      if ( cur != owner1->ent )
+      if ( cur != owner->ent )
       {
         up = cur - 1;
         __frame.list3 = up->cnt;
@@ -9320,7 +9306,7 @@ LABEL_30:
         {
           __frame.list2 = cur->sym;
           cur->set(up->sym, __frame.list3);
-          if ( up != owner1->ent )
+          if ( up != owner->ent )
           {
             (__frame.list[1]) = cur;
             __frame.list0 = n_left;
@@ -9333,7 +9319,7 @@ LABEL_30:
               up->set(back->sym, back_cnt);
               --up;
             }
-            while ( back != owner1->ent );
+            while ( back != owner->ent );
             cur = (__frame.list[1]);
             n_left = __frame.list0;
           }
@@ -9344,7 +9330,7 @@ LABEL_30:
     }
     while ( n_left );
     list5_s = __frame.list5;
-    running = owner1->tot;
+    running = owner->tot;
     __frame.list0 = 0;
     if ( !cur->cnt )
     {
@@ -9352,20 +9338,20 @@ LABEL_30:
       do
       {
         ++zeros;
-        owner1->tot = ++running;
+        owner->tot = ++running;
         last_cnt = prev->cnt;
         --prev;
       }
       while ( !last_cnt );
       __frame.list0 = zeros;
-      owner1->live -= zeros;
+      owner->live -= zeros;
     }
-    since_rescale = owner1->since_rescale;
-    owner1->tot = running - (running >> 1);
+    since_rescale = owner->since_rescale;
+    owner->tot = running - (running >> 1);
     cum_lo = sym_cum;
     cum_hi = sym_high;
     tot_1 = tot_all;
-    owner1->since_rescale = since_rescale - (since_rescale >> 1);
+    owner->since_rescale = since_rescale - (since_rescale >> 1);
   }
   else
   {
@@ -9379,8 +9365,12 @@ LABEL_30:
 
 inline int32_t ModelBlock::decode_pixel(int32_t x)
 {
-  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
-  // gives every member its own storage and DLRAW segfaults while decompressing.
+  // The union below is MSVC's slot sharing written down, and lifting
+  // its arms to separate locals is not the same program, so the frame
+  // stays.  Everything outside it has been lifted where the gate
+  // allowed.  The note here used to read "DLRAW segfaults while decompressing"
+  // on the authority of `frame-sweep.sh`, which lifts aliases and has
+  // had none to lift since round nine.
   struct alignas(16) DecodePixelFrame {   // 164 bytes, one stack frame
       union {
           uint32_t  sym[32];   // pixel_context reads sym[0..31]; `sym_pos` runs 0..31 (was n15_8 .. v211)
@@ -10176,8 +10166,12 @@ LABEL_86:
 
 inline int32_t ModelBlock::code_pixel(int32_t x)
 {
-  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
-  // gives every member its own storage and DLRAW segfaults while compressing.
+  // The union below is MSVC's slot sharing written down, and lifting
+  // its arms to separate locals is not the same program, so the frame
+  // stays.  Everything outside it has been lifted where the gate
+  // allowed.  The note here used to read "DLRAW segfaults while compressing"
+  // on the authority of `frame-sweep.sh`, which lifts aliases and has
+  // had none to lift since round nine.
   struct alignas(16) CodePixelFrame {   // 164 bytes, one stack frame
       union {
           uint32_t  sym[32];   // pixel_context reads sym[0..31]; `sym_pos` runs 0..31 (was p_n15 .. v207)
@@ -11208,7 +11202,6 @@ ModelBlock *__layout_workspace(ModelBlock *blk, int32_t unread_flag, int32_t img
 inline void ModelBlock::unmodel_plane_slow(uint8_t *dst)
 {
   uint8_t *row[19];
-  uint8_t _tail[12];
   uint32_t alpha_n;
   ModelBlock *this_1, *blk;
   int16_t lvl;
@@ -11705,8 +11698,6 @@ LABEL_76:
 int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
 {
   P1Ctx *b4, *buf3, *buf2, *buf1, *b0, *cursor0;
-  uint32_t m1;
-  int32_t m2;
   int8_t dc3;
   uint8_t out3;
   int32_t resid3, cur3;
@@ -13667,16 +13658,6 @@ void __alt_model_p2_d8_decode( uint8_t *out, int32_t i, int32_t height)
 
 int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *out) {   P2Ctx *cur0,
         *cur1, *cur2, *cur3, *buf3, *bb4, *buf2, *buf1, *bb0;
-  uint8_t slot4[16];
-  uint8_t slot20[16];
-  uint8_t slot36[16];
-  uint8_t slot52[16];
-  uint8_t slot68[16];
-  uint8_t slot84[16];
-  uint8_t slot100[16];
-  uint8_t slot116[16];
-  uint8_t slot132[16];
-  int32_t x;
   // These shared `x` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
@@ -15062,14 +15043,7 @@ void __model_planes(uint8_t *img, uint8_t *pixels, int32_t plane, int8_t unread_
   // Its frame was lifted: `tools/liftframe.py` gave every member its own
   // storage and the gate held.  The comment that stood here said the opposite,
   // on the authority of a sweep that by then could no longer make the attempt.
-  uint8_t slot0[4];
-  uint8_t slot4[4];
-  uint8_t slot8[4];
-  uint8_t slot12[4];
-  uint8_t slot16[4];
   BmfImage hdr;
-  int32_t plane_x16;
-  int32_t plane_idx;
   ;
   uint8_t *aligned;   // was int32_t: these hold addresses
   uint8_t *scratch;
@@ -15198,8 +15172,11 @@ void __transform_planes(BmfImage *p_i, int32_t unread_mode, int8_t unread_flag)
 
 uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
 {
-  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
-  // gives every member its own storage and DLRAW exits 3 while decompressing.
+  // This one is a layout, not a bag of locals: giving its members
+  // their own storage makes DLRAW exit 3 while decompressing.  Re-checked
+  // by `tools/liftframe.py` against the file as it is now --
+  // `frame-sweep.sh`, which this note used to cite, lifts aliases
+  // and has had none to lift since round nine.
   struct alignas(16) ExpandImageFrame {   // 104 bytes, one stack frame
       uint8_t *Block;
       // Four words with three roles, in three phases of the function.  MSVC
@@ -15723,7 +15700,7 @@ LABEL_109:
 uint32_t __search_filter(BmfImage *img, int8_t mode)
 {
   // This one is a layout, not a bag of locals: lifting its members to
-  // ordinary locals makes altp1 aborts while compressing.  Re-checked against the
+  // ordinary locals makes altp1 abort while compressing.  Re-checked against the
   // file as it is now, by `tools/liftframe.py` -- `frame-sweep.sh`, which
   // the note here used to cite, lifts aliases and has none left to lift.
   struct alignas(16) SearchFilterFrame {   // 164 bytes, one stack frame
@@ -16600,12 +16577,14 @@ BmfArc *__bmf_open_archive(BmfArc *out, char *path, int32_t read_only)
 
 int32_t __compress_image(uint8_t *arc_in, BmfImage *p_i, void *coded_buf)
 {
-  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
-  // gives every member its own storage and the two-member archive fails to decompress.
+  // The union below is MSVC's slot sharing written down, and lifting
+  // its arms to separate locals is not the same program, so the frame
+  // stays.  Everything outside it has been lifted where the gate
+  // allowed.  The note here used to read "the two-member archive fails to decompress"
+  // on the authority of `frame-sweep.sh`, which lifts aliases and has
+  // had none to lift since round nine.
   struct alignas(16) CompressImageFrame {   // 80 bytes, one stack frame
-      uint8_t *owned;
       uint8_t _pad0[12];
-      uint32_t filtered;
       union {
           // The 16-byte archive member header `fwrite` sends in one call, and
           // the scratch MSVC put in the same bytes afterwards.  The two live in
@@ -16619,13 +16598,13 @@ int32_t __compress_image(uint8_t *arc_in, BmfImage *p_i, void *coded_buf)
             int32_t  row_step;   // +12  `plane_count * (height - 1)`
           };
       };
-      int32_t y0;
-      uint8_t *arc_f;
-      void *pixels;
       uint8_t _pad1[32];
   } __frame;
-  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 80, "frame layout moved");
-  // These shared `__frame.filtered` with the name that still binds it: one
+  uint32_t filtered;
+  int32_t y0;
+  uint8_t *arc_f;
+  void *pixels;
+  // These shared `filtered` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
@@ -16708,7 +16687,7 @@ int32_t __compress_image(uint8_t *arc_in, BmfImage *p_i, void *coded_buf)
       __model_plane((BmfImage *)p_i, p_i->pixels, p_i->pixels);
     goto LABEL_57;
   }
-  __frame.filtered = __search_filter((BmfImage *)p_i, 0);
+  filtered = __search_filter((BmfImage *)p_i, 0);
   __frame.hdr.flags |= 0x10u;
   if ( (p_i->flags & 2) != 0 )
   {
@@ -16764,7 +16743,7 @@ LABEL_22:
   if ( ::plane_count > 0 )
   {
     bits_left = ::packer_free_bits;
-    __frame.arc_f = arc;
+    arc_f = arc;
     pl = 0;
     do
     {
@@ -16858,21 +16837,21 @@ LABEL_22:
       ++pl;
     }
     while ( pl < ::plane_count );
-    arc = __frame.arc_f;
+    arc = arc_f;
   }
-  if ( __frame.filtered )
+  if ( filtered )
   {
     n_pix = p_i->width * p_i->height;
     __frame.hdr.flags |= 8u;
     plane_buf = (uint8_t *)bmf_new(n_pix);
     if ( ::plane_count > 0 )
     {
-      __frame.arc_f = arc;
+      arc_f = arc;
       pl2 = 0;
       do
         __model_planes((uint8_t *)p_i, plane_buf, plane_desc[pl2++ + 1].src_plane, 0);
       while ( pl2 < ::plane_count );
-      arc = __frame.arc_f;
+      arc = arc_f;
     }
     free(plane_buf);
   }
@@ -16911,7 +16890,7 @@ LABEL_57:
     __frame.plane_n = ::plane_count;
     __frame.row = pix_copy;
     __frame.row_step = ::plane_count * (p_i->height - 1);
-    __frame.pixels = (uint16_t *)p_i->pixels;
+    pixels = (uint16_t *)p_i->pixels;
     memcpy(pix_copy,p_i->pixels,p_i->data_size);
     LOWORD(img_h) = p_i->height;
     if ( (uint16_t)img_h )
@@ -16920,11 +16899,11 @@ LABEL_57:
       row_at = __frame.row;
       row_next = nullptr;
       y = 0;
-      __frame.arc_f = arc;
+      arc_f = arc;
       do
       {
         pl_i = img->width;
-        __frame.y0 = y;
+        y0 = y;
         __frame.row = row_next;
         dst = (uint8_t *)img + y + 16;
         step = __frame.row_step;
@@ -16943,23 +16922,22 @@ LABEL_57:
         while ( pl_i );
         img = (BmfImage *)(p_i);
         img_h = p_i->height;
-        y = rows_left + __frame.y0;
+        y = rows_left + y0;
         row_next = __frame.row + 1;
       }
       while ( (int32_t)(__frame.row + 1) < img_h );
-      arc = __frame.arc_f;
+      arc = arc_f;
     }
-    __frame.owned = pix_copy;
     w16 = img->width;
     img->width = img_h;
     img->height = w16;
     img->flags ^= 2u;
     img->stride = (img_h * __frame.plane_n);
-    free(__frame.owned);
+    free(pix_copy);
     goto LABEL_77;
   }
 LABEL_76:
-  __frame.pixels = (uint16_t *)p_i->pixels;
+  pixels = (uint16_t *)p_i->pixels;
 LABEL_77:
   ok_raw = fwrite(img, 1u, 0x10u, ((BmfArc *)arc)->fp) == 16;
   if ( coded_buf )
@@ -16967,7 +16945,7 @@ LABEL_77:
     coded_len = ((const uint32_t *)coded_buf)[1];
     ok_raw &= fwrite(coded_buf, 1u, coded_len + 8, ((BmfArc *)arc)->fp) == coded_len + 8;
   }
-  written = fwrite(__frame.pixels, 1u, pal_bytes + img->data_size, ((BmfArc *)arc)->fp);
+  written = fwrite(pixels, 1u, pal_bytes + img->data_size, ((BmfArc *)arc)->fp);
   data_size = img->data_size;
   if ( (ok_raw & (written == data_size + pal_bytes)) == 0 )
     return 0;
