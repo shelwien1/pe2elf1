@@ -22,14 +22,14 @@ and 3.
 
 ```
                                    round 8   round 9
-subs1.hpp / bmf.cpp lines            17787     17882
-raw-offset sites                        22        13
+subs1.hpp / bmf.cpp lines            17787     17656
+raw-offset sites                        22        12
 byte offsets on a typed base           121         0
 pointer casts                         2137       992
 fNN members / named ones             93/121    44/121
-distinct vNN locals                    554       553
+distinct vNN locals                    554       551
 goto / LABEL_n:                     112/79     92/58
-conversion warnings (ratchet)         1455      1393
+conversion warnings (ratchet)         1455      1373
 ```
 
 Every tool reports zero: `unused.py`, `unwrite.py`, `unaliasvar.py`,
@@ -319,13 +319,29 @@ noticing that a tool's *input* was narrower than the file.
   that leave a block, 3 whose skipped region something else enters, and 2 more
   that enter one. Removing any of those needs a flag or a duplicated body large
   enough that the duplication is the cost.
-* **`vNN` locals and 44 `fNN` members.** Round eight said this is answerable
-  only by knowing what the values mean, and §3, §4 and this section are what
-  that looks like when it works: sixty-odd `vNN` across the three models became
-  record cursors and their reads became field names, without a naming pass.
-  What is left are the ones whose *values* are still unexplained, which is
+* **`vNN` locals**, and this is the item round eight said was answerable only
+  by knowing what the values mean. Two things turned out to be mechanical after
+  all. Sixty-odd became record cursors in §3, §4 and §8 and their reads became
+  field names, without a naming pass. And 171 were not values at all:
+
+  ```c
+  v17 = v16->cnt;                     n251_1->cnt = v16->cnt;
+  n251_1->cnt = v17;          →       v16->cnt = n251_1->cnt;
+  v20 = n251_1->cnt;
+  v16->cnt = v20;
+  ```
+
+  `untemp.py` folds a local assigned once and read once, which is
+  `unaliasvar.py`'s idea with a harder safety question — the right-hand side
+  has inputs, and something between the two lines might change them. Its
+  conditions are in its docstring and two of them were learned the hard way:
+  precedence is not a property of the characters around the name, and a read
+  deeper than its assignment is inside a loop the expression would be moved
+  into. Four streams segfaulted for the first and the gate caught the second.
+
+  What is left are the names whose *values* are unexplained, which is
   `algorithm_v2.md`'s work and not a sweep's.
-* **1393 conversion warnings.** The ratchet fell 62 this round and every step
+* **1373 conversion warnings.** The ratchet fell 82 this round and every step
   was a by-product: a `match[0]` read through a typed field does not need the
   cast that a raw byte read did.
 
@@ -339,7 +355,9 @@ No new tools. Two fixes and one scan that lives in this document rather than in
 | tool | change |
 | --- | --- |
 | `unwrite.py` | carry the declaration state across comma-continued lines |
-| `unaliasvar.py` | unchanged; it found one more fold after §4 |
+| `untail.py` | new: copy a shared tail small enough to be copied |
+| `unjump.py` | new: a jump into a block is a disjunction |
+| `untemp.py` | new: a local assigned once and read once is the expression |
 | `triage.sh` | unchanged, and it paid for itself four times over |
 
 The stride scan is in §2. It is not committed as a tool because a scan that
