@@ -9221,13 +9221,21 @@ LABEL_44:
       }
       Src_6 -= ElementCount;
       if ( --y < 0 )
-      {
-LABEL_61:
-        img = __frame.img_f;
-        break;
-      }
+        goto LABEL_61;
     }
   }
+  // Four jumps arrive here and all four mean the same thing: the image is
+  // complete, stop decoding and hand it back.  Three of them are in the RLE8
+  // and RLE4 decoders, which are separate loops, and the label used to sit
+  // *inside* the uncompressed decoder's loop -- so reaching it was a jump into
+  // a block followed by a `break` out of a loop the jumper was never in.
+  //
+  // What made that readable as an exit at all was `img = __frame.img_f`, which
+  // is a reload and not an assignment: `img` is written once, at the
+  // allocation, and `__frame.img_f` is written three times and always from
+  // `img`.  With the reload gone the label is the function's success exit and
+  // says so by where it is.
+LABEL_61:
   fclose(Stream_v);
   free(__frame.Buffer_3);
   return (int32_t *)img;

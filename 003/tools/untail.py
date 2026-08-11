@@ -28,7 +28,17 @@ The condition is narrow enough that the copy cannot change anything:
     statement is inside the run too;
   * that run ends in an unconditional `return`, so it never falls out of the
     bottom either;
-  * the run is at most `--max` statements, five by default.
+  * the run is at most `--max` statements, five by default;
+  * and at most `--sites` `goto`s name it, two by default.
+
+The site cap is the one that is a judgement rather than a soundness condition,
+and it is set at what this file has actually accepted: every tail copied so far
+went to two places, and the pairs of `fclose(arc->fp); … return nullptr;` in
+`bmf_add` and `bmf_extract` are what two copies of a release look like.
+`read_bmp`'s success exit is what five looks like -- `fclose`, `free`, `return`,
+reached from three separate decoders -- and putting the release in five places
+where one edit has to keep all five right is the situation `goto cleanup`
+exists for.  Copying is only cheap while the copies are few.
 
 Together those make the run a value: it reads whatever is in scope, returns,
 and has no other exit. Copying it to the `goto` site executes exactly what
@@ -90,6 +100,7 @@ def tails(lines, a, b, max_stmts):
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else 'subs1.hpp'
     mx = int(sys.argv[sys.argv.index('--max') + 1]) if '--max' in sys.argv else 5
+    mg = int(sys.argv[sys.argv.index('--sites') + 1]) if '--sites' in sys.argv else 2
     lines = open(path).read().split('\n')
     found, sites = {}, {}
     for a, b, nm, _ in structs.bodies(lines):
@@ -100,7 +111,9 @@ def main():
                 sites.setdefault((nm, m.group(1)), []).append(i)
         for k, v in local.items():
             found[(nm, k)] = v
-    found = {k: v for k, v in found.items() if k in sites}
+    reached = {k: v for k, v in found.items() if k in sites}
+    found = {k: v for k, v in reached.items() if len(sites[k]) <= mg}
+    capped = sorted(set(reached) - set(found))
 
     if '--all' not in sys.argv:
         for k in sorted(found, key=lambda k: found[k][0]):
@@ -108,8 +121,17 @@ def main():
                   (found[k][0] + 1, k[0].lstrip('_'), k[1],
                    len(sites[k]), 's'[:len(sites[k]) ^ 1],
                    len(found[k][1]), 's'[:len(found[k][1]) ^ 1]))
-        print('%d shared tails, %d gotos' %
-              (len(found), sum(len(s) for s in sites.values())))
+        # Count the gotos of the tails actually proposed, not of every tail
+        # looked at -- "0 shared tails, 5 gotos" is a line that reports a zero
+        # and a number belonging to something it just declined, which is the
+        # shape of report §10 is about.  What the cap turned down is named
+        # instead of folded into the total.
+        for k in capped:
+            print('%6d  %-24s %-12s declined: %d sites, cap is %d' %
+                  (reached[k][0] + 1, k[0].lstrip('_'), k[1], len(sites[k]), mg))
+        print('%d shared tails, %d gotos%s' %
+              (len(found), sum(len(sites[k]) for k in found),
+               '; %d over the site cap' % len(capped) if capped else ''))
         return 0
 
     edits = []

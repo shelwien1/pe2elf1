@@ -31,9 +31,10 @@ fNN members / named ones             93/121     5/162         0/171
 distinct unexplained locals            554       591             0
   bodies still carrying one              —    8/102         0/102
   uses                                    —      6302             0
-goto / LABEL_n:                     112/79     81/55         48/33
-  restart a loop / exit N blocks         —         —         15/29
-  jump into a block / sideways           —         —           1/3
+goto / LABEL_n:                     112/79     81/55         49/33
+  restart a loop / exit N blocks         —         —         15/32
+  sideways to a join / to neither        —         —           2/0
+  jump into a block                      —         —             0
 conversion warnings (ratchet)         1455      1331          1070
 ```
 
@@ -1333,3 +1334,100 @@ row, so the arithmetic is deliberately in bytes. The last is
 which §13's binary-tree walk describes and which a `struct { uint16_t f[2]; }`
 would express — that one is a candidate for a later round rather than a thing
 that cannot be done.
+
+---
+
+## 18. The last jump into a block, and a row that was over-reporting
+
+§17 removed one of the two badly shaped jumps by splitting a cursor. The
+other was in `read_bmp`, and it is the clearer case because nothing about it
+was a type.
+
+`read_bmp` has three decoders — RLE8, RLE4 and uncompressed — and four jumps
+that all mean the same thing: *the image is complete, stop decoding and hand it
+back.* The label they jump to sat **inside the uncompressed decoder's loop**,
+in the arm of an `if` that ends the last row:
+
+```c
+      Src_6 -= ElementCount;
+      if ( --y < 0 )
+      {
+LABEL_61:
+        img = __frame.img_f;
+        break;
+      }
+```
+
+Three of the four jumps come from the other two decoders, so reaching that is a
+jump into a block followed by a `break` out of a loop the jumper was never in.
+It works — `break` leaves the block it is written in and control falls to
+`fclose` — and it is unreadable.
+
+What made it look like an exit rather than a `break` is `img = __frame.img_f`,
+and that line is a reload, not an assignment. `img` is written once, at the
+allocation; `__frame.img_f` is written three times and every one of them is
+`__frame.img_f = img`. So the whole label body is `break;` with a spill
+restore in front of it, which is §12's kind of artefact wearing a control-flow
+disguise. With the reload gone the label is the function's success exit and
+belongs where the exit is, just above `fclose`, and the fourth jump — the
+natural one that used to fall into it — becomes an ordinary forward `goto`.
+
+**The bare `goto` count went up by one and that is the improvement.** Turning
+a fallthrough into an explicit jump adds a `goto` and removes the last jump
+into a block in the file. A total that moves in the wrong direction while the
+thing it summarises gets better is the argument for the breakdown rows, made
+by the rows themselves.
+
+### The row was reporting two problems that were not there
+
+That left two jumps under `sideways`, and reading them found nothing to fix.
+One is `write_bmp`'s row terminator, which five paths reach and which the file
+already documents as a join. The other is `compress_image`'s "this image is
+under sixteen bytes, skip the whole compression path and write it raw", which
+jumps forward to the raw-write path that an `if` also falls into.
+
+Both are joins, and the classifier's own comment says so: *"forward at the same
+depth to something that is **not** a join"* is the bad shape. It never checked
+the second half of its own sentence. A label reached from two places is a join
+whatever the depths are; one reached from a single `goto` and from nowhere else
+is a branch written inside out. Counting predecessors — the `goto`s naming it,
+plus one if the statement above it can fall through — separates them, and both
+of the file's remaining sideways jumps are joins.
+
+They are counted apart rather than dropped. A row that stopped mentioning them
+would be a breakdown that quietly omits part of what it breaks down, which is
+§10's whole subject, and the four shape rows still sum to the headline.
+
+So the shape of every jump left in the file is one a `goto` is for: fifteen
+restart a loop, thirty-two leave nested blocks for one join, two go sideways to
+a join, and none goes into a block. The row that had been reading `1/3` since
+the round began now reads `2/0` and `0`, and one of those two changes is work
+and the other is the measure catching up with its own claim — which is worth
+keeping separate, because only the first one changed the program.
+
+### And the exit `untail.py` then offered to copy
+
+Making `LABEL_61` a return tail put it in range of a rule that had been
+reporting zero all round. `untail.py` replaces a `goto` to a straight-line
+return with the statements themselves, and `fclose(Stream_v); free(…);
+return …;` reached from five places is exactly its pattern.
+
+The answer is no, and the reason is the number five rather than anything about
+the statements. Every tail this file has copied so far went to two places —
+the pairs of `fclose(arc->fp); … return nullptr;` in the archive paths are what
+two copies of a release look like. Five copies of a release put the same
+`free` in five places where one later edit has to keep all five right, which is
+the situation `goto cleanup` exists for. So the rule takes a `--sites` cap,
+default two, set at what the file has actually accepted rather than at what
+made this one case go away.
+
+Replaying the capped rule against the last forty revisions of `subs1.hpp`
+changes nothing: every tail it has ever proposed had two sites, so the cap
+costs no work that was ever done and refuses exactly the one case that
+prompted it. That replay is the point — a cap justified only by the case it
+was written for is a cap that will quietly refuse the next real one.
+
+It also had to stop reporting `0 shared tails, 5 gotos`, which is a line that
+answers with a zero and a number belonging to something it just declined. The
+gotos counted are those of the tails proposed, and what the cap turned down is
+named on its own line.

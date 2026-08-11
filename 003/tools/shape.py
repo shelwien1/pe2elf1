@@ -295,8 +295,18 @@ def summary():
     # `goto` is for in C.  A jump *into* a block, or forward at the same depth
     # to something that is not a join, is a branch or a loop with its shape
     # missing -- and those are the ones this round removed.
+    # Whether a label is a join is the half of that sentence this used to state
+    # and not check.  A label reached from two places is a join whatever the
+    # depths are; one reached from a single `goto` and from nowhere else is a
+    # branch written inside out.  Both of the file's `same`-depth jumps turn
+    # out to go to joins -- one to a row terminator five paths reach, one to
+    # the raw-write path an `if` also falls into -- so the row was reporting
+    # two things to fix that were not there.  They are counted apart now
+    # rather than dropped, because a breakdown that stops mentioning part of
+    # what it breaks down is §10's whole subject.
     def jumpshapes():
         out = collections.Counter()
+        STOP = re.compile(r'(?:goto\s+\w+|return\b[^;]*|break|continue)\s*;\s*$')
         for a, b, _nm, _sig in structs.bodies(lines):
             labs, depth, at = {}, 0, {}
             for i in range(a, b + 1):
@@ -306,6 +316,16 @@ def summary():
                 if m:
                     labs[m.group(1)] = i
                 depth += c.count('{') - c.count('}')
+            preds = collections.Counter()
+            for i in range(a, b + 1):
+                for m in re.finditer(r'goto (LABEL_\d+)', lines[i].split('//')[0]):
+                    preds[m.group(1)] += 1
+            for name, tgt in labs.items():
+                j = tgt - 1
+                while j > a and not lines[j].split('//')[0].strip():
+                    j -= 1
+                if not STOP.search(lines[j].split('//')[0].strip()):
+                    preds[name] += 1          # also reached by falling into it
             for i in range(a, b + 1):
                 for m in re.finditer(r'goto (LABEL_\d+)', lines[i].split('//')[0]):
                     tgt = labs.get(m.group(1))
@@ -313,7 +333,8 @@ def summary():
                         continue
                     out['back' if tgt < i else
                         'into' if at[tgt] > at[i] else
-                        'out' if at[tgt] < at[i] else 'same'] += 1
+                        'out' if at[tgt] < at[i] else
+                        'join' if preds[m.group(1)] > 1 else 'same'] += 1
         return out
     shapes = jumpshapes()
     row('goto / LABEL_n:',
@@ -321,8 +342,10 @@ def summary():
                      len(re.findall(r'^\s*LABEL_\d+:', code, re.M))))
     row('  restart a loop / exit N blocks',
         '%d / %d' % (shapes['back'], shapes['out']))
-    row('  jump into a block / sideways',
-        '%d / %d' % (shapes['into'], shapes['same']))
+    row('  sideways to a join / to neither',
+        '%d / %d' % (shapes['join'], shapes['same']))
+    row('  jump into a block',
+        '%d' % shapes['into'])
     # What the conversion ratchet is made of.  The total says how many are
     # left and not whether any of them can be fixed, which is the same defect
     # the goto row had: a narrowing into a field the 1997 layout fixes at
