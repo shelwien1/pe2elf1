@@ -93,13 +93,13 @@ subs1.hpp:1986:26: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {
 subs1.hpp:1992:22: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
 subs1.hpp:2009:22: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp: In function 'void __symbol_list_update(SymList*, int32_t, uint32_t)':
-subs1.hpp:2061:17: warning: conversion from 'uint32_t' {aka 'unsigned int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
-subs1.hpp:2115:16: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
-subs1.hpp:2115:42: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
+subs1.hpp:2061:12: warning: conversion from 'uint32_t' {aka 'unsigned int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
+subs1.hpp:2115:17: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
+subs1.hpp:2115:44: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:2116:20: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
 subs1.hpp:2125:24: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
-subs1.hpp:2135:28: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
-subs1.hpp:2141:24: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
+subs1.hpp:2135:27: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
+subs1.hpp:2141:23: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
 subs1.hpp:2187:18: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:2189:17: warning: conversion from 'int32_t' {aka 'int'} to 'uint16_t' {aka 'short unsigned int'} may change value [-Wconversion]
 subs1.hpp: In function 'int32_t __encode_symbol_tree(uint16_t*, int32_t)':

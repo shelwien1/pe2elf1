@@ -69,6 +69,15 @@ def rename_in(path, fn, pairs):
             sys.exit('%s: %s does not appear in it' % (fn, old))
         if re.search(r'\b%s\b' % re.escape(new), code):
             sys.exit('%s: %s already means something in it' % (fn, new))
+        # A local may share a name with a struct member, and the substitution
+        # below is textual: renaming `rescale_at` to `due` in a body that also
+        # says `_this->rescale_at` renames the member access too, and the
+        # struct has no such member.  Caught by the build, but only after the
+        # rename had been applied to everything else in the body.
+        if re.search(r'(?:->|\.)\s*%s\b' % re.escape(old), code):
+            sys.exit('%s: %s is also a member name here -- rename it in the '
+                     'struct, or pick a local name that is not a member'
+                     % (fn, old))
     total = 0
     for old, new in pairs:
         text, k = re.subn(r'\b%s\b' % re.escape(old), new, text)

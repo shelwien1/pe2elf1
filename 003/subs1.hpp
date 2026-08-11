@@ -2032,133 +2032,133 @@ LABEL_37:
 // which of them reached the final `return` depended on the branch.  Split into
 // `list` and `count`, there is nothing sensible to return, so it returns
 // nothing.
-void __symbol_list_update(SymList *_this, int32_t a2, uint32_t a3)
+void __symbol_list_update(SymList *_this, int32_t want, uint32_t add)
 {
   ;
   SymEntry *list;     // the three-byte entries, `_this->ent`
   uint32_t count;     // a symbol's count byte, while it is being compared
-  bool v7;
-  uint8_t v11, v15, v19;
+  bool full;
+  uint8_t c3, c, c2;
   // All of these walk the entries; the -3 and +2 they carried were the record
   // stride and the count field.
-  SymEntry *v16, *v23, *v24, *v26, *v27, *n251_1, *n251_2;
-  uint16_t v10, v14, v18, v34;
-  int32_t v8, v25, v28, v30, v35, v36;
-  uint32_t v22;   // a count, like `live` which it is subtracted from
-  uint32_t v4, v6, rescale_at, v29, since_rescale;
+  SymEntry *q, *cur, *prev, *up, *back, *p, *head;
+  uint16_t s3, s, s2, keep;
+  int32_t recycled, half, back_cnt, last_cnt, up_cnt, bias;
+  uint32_t n_left;   // a count, like `live` which it is subtracted from
+  uint32_t n_live, left, due, running, since_rescale;
   list = _this->ent;
-  v4 = _this->live;
-  n251_1 = list;
-  v6 = v4;
-  if ( v4 )
+  n_live = _this->live;
+  p = list;
+  left = n_live;
+  if ( n_live )
   {
-    while ( n251_1->sym != a2 )
+    while ( p->sym != want )
     {
-      ++n251_1;
-      if ( !--v6 )
+      ++p;
+      if ( !--left )
         goto LABEL_4;
     }
-    n251_1->cnt += a3;
-    _this->since_rescale += a3;
-    n251_2 = _this->ent;
-    if ( n251_1 == n251_2 )
+    p->cnt += add;
+    _this->since_rescale += add;
+    head = _this->ent;
+    if ( p == head )
     {
 LABEL_16:
-      count = n251_1->cnt;
+      count = p->cnt;
     }
     else
     {
       // Swap this entry with the one before it.
-      v14 = n251_1->sym;
-      v15 = n251_1->cnt;
-      v16 = n251_1 - 1;
-      n251_1->sym = v16->sym;
-      n251_1->cnt = v16->cnt;
-      v16->sym = v14;
-      v16->cnt = v15;
-      n251_2 = _this->ent;
-      if ( v16 == n251_2 )
+      s = p->sym;
+      c = p->cnt;
+      q = p - 1;
+      p->sym = q->sym;
+      p->cnt = q->cnt;
+      q->sym = s;
+      q->cnt = c;
+      head = _this->ent;
+      if ( q == head )
       {
-        count = v16->cnt;
+        count = q->cnt;
       }
       else
       {
         while ( 1 )
         {
-          count = v16->cnt;
-          n251_1 = v16 - 1;
-          if ( count <= n251_1->cnt )
+          count = q->cnt;
+          p = q - 1;
+          if ( count <= p->cnt )
             break;
-          v18 = v16->sym;
-          v19 = v16->cnt;
-          v16->sym = n251_1->sym;
-          v16->cnt = n251_1->cnt;
-          n251_1->sym = v18;
-          n251_1->cnt = v19;
-          n251_2 = _this->ent;
-          --v16;
-          if ( n251_1 == n251_2 )
+          s2 = q->sym;
+          c2 = q->cnt;
+          q->sym = p->sym;
+          q->cnt = p->cnt;
+          p->sym = s2;
+          p->cnt = c2;
+          head = _this->ent;
+          --q;
+          if ( p == head )
             goto LABEL_16;
         }
       }
     }
-    rescale_at = _this->rescale_at;
-    if ( count > 251 || rescale_at < _this->since_rescale )
+    due = _this->rescale_at;
+    if ( count > 251 || due < _this->since_rescale )
     {
-      v22 = _this->live;
-      v36 = rescale_at < 20 * _this->n;
-      v23 = n251_2 - 1;
+      n_left = _this->live;
+      bias = due < 20 * _this->n;
+      cur = head - 1;
       do
       {
-        v24 = v23;
-        ++v23;
-        v25 = (v36 + (uint32_t)v23->cnt) >> 1;
-        v23->cnt = v25;
-        if ( v23 != _this->ent )
+        prev = cur;
+        ++cur;
+        half = (bias + (uint32_t)cur->cnt) >> 1;
+        cur->cnt = half;
+        if ( cur != _this->ent )
         {
-          v26 = v23 - 1;
-          v35 = v26->cnt;
-          if ( v25 > v35 )
+          up = cur - 1;
+          up_cnt = up->cnt;
+          if ( half > up_cnt )
           {
-            v34 = v23->sym;
-            v23->sym = v26->sym;
-            v23->cnt = v35;
-            if ( v26 != _this->ent )
+            keep = cur->sym;
+            cur->sym = up->sym;
+            cur->cnt = up_cnt;
+            if ( up != _this->ent )
             {
               do
               {
-                v27 = v26 - 1;
-                v28 = v27->cnt;
-                if ( v25 <= v28 )
+                back = up - 1;
+                back_cnt = back->cnt;
+                if ( half <= back_cnt )
                   break;
-                v26->sym = v27->sym;
-                v26->cnt = v28;
-                --v26;
+                up->sym = back->sym;
+                up->cnt = back_cnt;
+                --up;
               }
-              while ( v27 != _this->ent );
+              while ( back != _this->ent );
             }
-            v26->sym = v34;
-            v26->cnt = v25;
+            up->sym = keep;
+            up->cnt = half;
           }
         }
-        --v22;
+        --n_left;
       }
-      while ( v22 );
-      v29 = _this->tot;
-      if ( !v23->cnt )
+      while ( n_left );
+      running = _this->tot;
+      if ( !cur->cnt )
       {
         do
         {
-          ++v22;
-          _this->tot = ++v29;
-          v30 = v24->cnt;
-          --v24;
+          ++n_left;
+          _this->tot = ++running;
+          last_cnt = prev->cnt;
+          --prev;
         }
-        while ( !v30 );
-        _this->live -= v22;
+        while ( !last_cnt );
+        _this->live -= n_left;
       }
       since_rescale = _this->since_rescale;
-      _this->tot = v29 - (v29 >> 1);
+      _this->tot = running - (running >> 1);
       _this->since_rescale = since_rescale - (since_rescale >> 1);
       return;
     }
@@ -2166,37 +2166,37 @@ LABEL_16:
   else
   {
 LABEL_4:
-    v7 = v4 == _this->n;
-    if ( v4 >= _this->n )
+    full = n_live == _this->n;
+    if ( n_live >= _this->n )
     {
-      if ( a3 <= 1 )
+      if ( add <= 1 )
         return;
-      v7 = v4 == _this->n;
+      full = n_live == _this->n;
     }
-    if ( v7 )
+    if ( full )
     {
-      _this->live = --v4;
-      v8 = list[v4].cnt;
+      _this->live = --n_live;
+      recycled = list[n_live].cnt;
     }
     else
     {
-      v8 = 1;
+      recycled = 1;
     }
-    list += v4;
-    _this->live = v4 + 1;
-    _this->tot = v8 + _this->tot + 1;
+    list += n_live;
+    _this->live = n_live + 1;
+    _this->tot = recycled + _this->tot + 1;
     list->cnt = 2;
-    list->sym = a2;
+    list->sym = want;
     _this->since_rescale += 4;
     if ( list != _this->ent )
     {
       // The new entry starts one place forward, same swap as above.
-      v10 = list->sym;
-      v11 = list->cnt;
+      s3 = list->sym;
+      c3 = list->cnt;
       list->sym = list[-1].sym;
       list->cnt = list[-1].cnt;
-      list[-1].sym = v10;
-      list[-1].cnt = v11;
+      list[-1].sym = s3;
+      list[-1].cnt = c3;
     }
   }
 }
