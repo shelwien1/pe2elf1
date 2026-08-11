@@ -2876,7 +2876,7 @@ static inline bool sym_in_top(const SymEntry *ent, int32_t n, int32_t sym) {
   return false;
 }
 
-int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
+int32_t __pixel_context(ModelBlock *_this, uint32_t *nb)
 {
   ;
   SymList *sel0_list;
@@ -2886,7 +2886,7 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
   int32_t near_hit, far_hit, ctx0, ctx1, fallback, ctx2, pos;
   SymEntry *list_prev, *list_sym;
   pos = *(int32_t *)&_this->sym_pos;
-  result = (p_n15)[pos];
+  result = (nb)[pos];
   if ( exclusion_mask[result] == exclusion_gen )
     return -1;
   // Three bands of the neighbour list, each worth a different bit: the symbol
@@ -2895,11 +2895,11 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
   // `|=` rather than `||` because none of them has a side effect to short out.
   near = false;
   for ( band = 11; band < 16; ++band )
-    near |= result == p_n15[band];
+    near |= result == nb[band];
   far = false;
   for ( band = 16; band < 32; ++band )
-    far |= result == p_n15[band];
-  near_hit = 32 * near + ((result == p_n15[10]) << 6);
+    far |= result == nb[band];
+  near_hit = 32 * near + ((result == nb[10]) << 6);
   far_hit = 16 * far;
   ctx0 = far_hit + near_hit;
   *(int32_t *)&_this->ctr_node = ctx0;
@@ -7374,9 +7374,9 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
   uint32_t slot_a;
   uint32_t sym;
   uint32_t depth_bits;
-  int32_t node, side, alpha_m, carry, img_w, img_h, *p_n4, z2,
-          n_moved, zoff, height, n_distinct, row_w, y, at, bits, bpp, shift, sym2, *p_n4_2, z1, alphabet,
-          alpha, prev, s, s_next, *p_n4_1, z0;
+  int32_t node, side, alpha_m, carry, img_w, img_h, *slotp, z2,
+          n_moved, zoff, height, n_distinct, row_w, y, at, bits, bpp, shift, sym2, *slotp2, z1, alphabet,
+          alpha, prev, s, s_next, *slotp1, z0;
   ModelBlock *Blockaa_3;
   uint32_t k_2, i, written, li, si, si_end, word, k, pairs, j_1, j,
            x, idx, n_syms, n_syms3, next_id, m;
@@ -7523,24 +7523,24 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
         }
         while ( m < (uint32_t)(Blockaa_1->height * *(int32_t *)&Blockaa_1->width) );
       }
-      p_n4_1 = (int32_t *)__frame.slot;
+      slotp1 = (int32_t *)__frame.slot;
       z0 = 16;
       do
       {
-        p_n4_1 -= 6;
-        free((void *)p_n4_1[5]);
+        slotp1 -= 6;
+        free((void *)slotp1[5]);
         --z0;
       }
       while ( z0 );
     }
     else
     {
-      p_n4_2 = (int32_t *)__frame.slot;
+      slotp2 = (int32_t *)__frame.slot;
       z1 = 16;
       do
       {
-        p_n4_2 -= 6;
-        free((void *)p_n4_2[5]);
+        slotp2 -= 6;
+        free((void *)slotp2[5]);
         --z1;
       }
       while ( z1 );
@@ -7776,12 +7776,12 @@ LABEL_71:
         while ( si < si_end );
       }
     }
-    p_n4 = (int32_t *)__frame.slot;
+    slotp = (int32_t *)__frame.slot;
     z2 = 16;
     do
     {
-      p_n4 -= 6;
-      free((void *)p_n4[5]);
+      slotp -= 6;
+      free((void *)slotp[5]);
       --z2;
     }
     while ( z2 );
@@ -8130,7 +8130,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
       double d6;
       uint8_t *pp;
       uint32_t uu;
-      int32_t __choose_plane_coding_n191_1;
+      int32_t wa_slot;
       BmfImage *img_a;
       uint32_t data_end;
       uint8_t _pad6[4];
@@ -8740,7 +8740,7 @@ LABEL_19:
           wa = 191;
         if ( wa < -64 )
           wa = -64;
-        __frame.__choose_plane_coding_n191_1 = wa;
+        __frame.wa_slot = wa;
         wb = (int32_t)((__frame.d1 * *(double *)__frame.x5 + __frame.d2 * *(double *)&__frame.x5[2]
                                                          + __frame.d3 * *(double *)&__frame.q2)
                      * inv);
@@ -8781,7 +8781,7 @@ LABEL_19:
             LOWORD(g1) = ((uint8_t *)__frame.img_a)[4 * quad + 19] + __frame.pp[4 * quad + 23] - __frame.pp[4 * quad + 19] - ((uint8_t *)__frame.img_a)[4 * quad + 23];
             g1_lo = ((int16_t *)__frame.x1)[0];
             LOWORD(g1) = g1 - 512;
-            pa = __frame.x1[0] * __frame.x0[0] + __frame.x0[3] * __frame.__choose_plane_coding_n191_1;
+            pa = __frame.x1[0] * __frame.x0[0] + __frame.x0[3] * __frame.wa_slot;
             pb = g2 * __frame.x0[1];
             ++__frame.hist_a[((uint16_t)g1 - ((int16_t *)__frame.x0)[6]) & 0x3FF];
             bin_lin = ((uint16_t)g1 - (uint16_t)((uint32_t)(pa + pb + 63) >> 7)) & 0x3FF;
@@ -8794,7 +8794,7 @@ LABEL_19:
             alpha = row1[4 * quad_r + 23] + 256;
             bin_lin2 = ((uint16_t)alpha
                  - (uint16_t)((__frame.x0[0] * row1[4 * quad_r + 21]
-                                     + __frame.__choose_plane_coding_n191_1 * row1[4 * quad_r + 20]
+                                     + __frame.wa_slot * row1[4 * quad_r + 20]
                                      + __frame.x0[1] * (uint32_t)row1[4 * quad_r + 22]
                                      + 63) >> 7)
                  + 256)
@@ -8818,14 +8818,14 @@ LABEL_19:
         pick0 = cost_c0 < best4;
         if ( cost_c0 < best4 )
           best4 = cost_c0;
-        wa_pick = __frame.__choose_plane_coding_n191_1;
+        wa_pick = __frame.wa_slot;
         if ( pick0 )
         {
           wa_pick = 128;
           wc = 0;
           wb = 0;
         }
-        __frame.__choose_plane_coding_n191_1 = wa_pick;
+        __frame.wa_slot = wa_pick;
         __frame.x0[0] = pick0;
         cost_c1 = __estimate_cost((uint8_t *)__frame.hist_b, 1024);
         pred4 = __frame.x0[0];
@@ -8835,7 +8835,7 @@ LABEL_19:
           pred4 = 2;
           wb = 128;
           wc = 0;
-          __frame.__choose_plane_coding_n191_1 = 0;
+          __frame.wa_slot = 0;
         }
         __frame.x0[0] = pred4;
         cost_c2 = __estimate_cost((uint8_t *)__frame.hist_c, 1024);
@@ -8845,9 +8845,9 @@ LABEL_19:
           pred4b = 3;
           wc = 128;
           wb = 0;
-          __frame.__choose_plane_coding_n191_1 = 0;
+          __frame.wa_slot = 0;
         }
-        plane_desc[4].w4 = __frame.__choose_plane_coding_n191_1;
+        plane_desc[4].w4 = __frame.wa_slot;
         plane_desc[4].w8 = wb;
         plane_desc[4].w12 = wc;
         plane_desc[4].src_plane = 3;
@@ -9261,7 +9261,7 @@ int32_t __decode_symbol_list(SymList *a1)
   int32_t tot_1;
   int32_t tot_all;
   int32_t target;
-  uint32_t __decode_symbol_list_n0x800000, 
+  uint32_t list5_s, 
            rescale_at, limit20, running,
            since_rescale;
   live = a1->live;
@@ -9356,7 +9356,7 @@ int32_t __decode_symbol_list(SymList *a1)
     }
     else
     {
-      __frame.list5 = __decode_symbol_list_n0x800000;
+      __frame.list5 = list5_s;
       while ( 1 )
       {
         top = q2->cnt;
@@ -9374,12 +9374,12 @@ int32_t __decode_symbol_list(SymList *a1)
         --q2;
         if ( r == head )
         {
-          __decode_symbol_list_n0x800000 = __frame.list5;
+          list5_s = __frame.list5;
           top = r->cnt;
           goto LABEL_30;
         }
       }
-      __decode_symbol_list_n0x800000 = __frame.list5;
+      list5_s = __frame.list5;
     }
   }
 LABEL_30:
@@ -9389,7 +9389,7 @@ LABEL_30:
     __frame.list0 = owner1->live;
     limit20 = 20 * owner1->n;
     n_left = __frame.list0;
-    __frame.list5 = __decode_symbol_list_n0x800000;
+    __frame.list5 = list5_s;
     __frame.list4 = rescale_at < limit20;
     cur = head - 1;
     do
@@ -9432,7 +9432,7 @@ LABEL_30:
       --n_left;
     }
     while ( n_left );
-    __decode_symbol_list_n0x800000 = __frame.list5;
+    list5_s = __frame.list5;
     running = owner1->tot;
     __frame.list0 = 0;
     if ( !cur->cnt )
@@ -9535,7 +9535,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   uint32_t lvl_a;
   uint32_t pos1;
   int32_t up_sym, left_sym, up_p1_sym, up_m1_sym, m_lo, m_up, nb, key, ctx_state, pair_last,
-          __decode_pixel_n15, ctx_bucket, up_m0, m_w1, nb2, all_up, sig1,
+          cap, ctx_bucket, up_m0, m_w1, nb2, all_up, sig1,
           id1, sig2, id2, id3_used, s1a, m_up0, idx1, run, bucket,
           bit, msym1c, hit_a, idx_s, mask, seen, run0, s1b, *recw,
           flags_word, s3c, s3d, s1d, tot, target, cum, 
@@ -9622,42 +9622,42 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   pair_last = pair->last;
   if ( pair_last == __frame.sym0 )
   {
-    __decode_pixel_n15 = 15;
+    cap = 15;
   }
   else if ( pair_last == __frame.sym1 )
   {
-    __decode_pixel_n15 = 30;
+    cap = 30;
   }
   else if ( pair_last == __frame.sym3 )
   {
-    __decode_pixel_n15 = 45;
+    cap = 45;
   }
   else
   {
-    __decode_pixel_n15 = 60;
+    cap = 60;
     if ( !(pair_last == __frame.sym2) )
-      __decode_pixel_n15 = 0;
+      cap = 0;
   }
   pair_prev = pair->prev;
   if ( pair_prev == __frame.sym0 )
   {
-    __decode_pixel_n15 += 75;
+    cap += 75;
   }
   else if ( pair_prev == __frame.sym1 )
   {
-    __decode_pixel_n15 += 150;
+    cap += 150;
   }
   else if ( pair_prev == __frame.sym3 )
   {
-    __decode_pixel_n15 += 225;
+    cap += 225;
   }
   else if ( pair_prev == __frame.sym2 )
   {
-    __decode_pixel_n15 += 300;
+    cap += 300;
   }
   r8 = _this->row_cur[8];
   __frame.sym3 = (int32_t)cur6;
-  ctx_bucket = _this->ctx_bucket[ctx_state + __decode_pixel_n15];
+  ctx_bucket = _this->ctx_bucket[ctx_state + cap];
   r7 = _this->row_cur[7];
   _this->bucket_idx = ctx_bucket;
   up_m0 = cur6->match[0];
@@ -10340,18 +10340,18 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   uint32_t arg_high;
   uint32_t done;
   uint32_t rec_word;
-  uint32_t __code_pixel_n0x2000;
-  int32_t up_sym, left_sym, __code_pixel_n15, upleft_sym, nb, key, ctx_state, pair_last, cap,
-          pair_prev, ctx_bucket, p_n15_1, cur9v, m_w1, nb2, sig1, id1, sig2,
-          id2, id3_used, sig3, m_w1b, m_w0, m_up0, p_n15_2, one, run,
-          run_pair, amap, runlen, run_hit, row_cur9, p_n15_4, s1,
+  uint32_t grid_kind;
+  int32_t up_sym, left_sym, up_next_sym, upleft_sym, nb, key, ctx_state, pair_last, cap,
+          pair_prev, ctx_bucket, up_match0, cur9v, m_w1, nb2, sig1, id1, sig2,
+          id2, id3_used, sig3, m_w1b, m_w0, m_up0, to_edge, one, run,
+          run_pair, amap, runlen, run_hit, row_cur9, run_left, s1,
           s8b, s6, msym1, s4, bit5, first, s5, s1b,
-          bucket_i, s9, cum1, lvl_a, p_n15_5, p_n15_7,
-          b15a, msym3, excl_sym_a, excl_sym_b, p_n15_11, wq1, cache2,
+          bucket_i, s9, cum1, lvl_a, w6a, w5a,
+          b15a, msym3, excl_sym_a, excl_sym_b, w6d, wq1, cache2,
           cache1, cache3, cache4, cache6, cur5_back2, h11, h12, h13, h14, h15,
           h16, h17, h18, h19, h20, h21, h24, h28, h26, h30, esym, up_hit, pos1,
-          msym1b, p_n15_6, *ip, b15, w2t, w3t, w4t, w5, acc, q1, w2s, q2,
-          w3s, w4s, s9b, cum2, lvl_b, p_n15_10, p_n15_8, p_n15_9, s3b;
+          msym1b, w6b, *ip, b15, w2t, w3t, w4t, w5, acc, q1, w2s, q2,
+          w3s, w4s, s9b, cum2, lvl_b, w5c, w6c, w5b, s3b;
   FreqRec *frec;
   uint16_t *wr;
   // `row_cur[6]`, the row above: every reach through it is a multiple of
@@ -10365,15 +10365,15 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   PixRec *cur2;   // `row_cur[5]`, one record past the pixel just written
   SymList *sel1_list;
   SymList **sel_p;
-  uint32_t bin_tot, half, k, h2, p_n15_12, w0, h3, h4, w1, g2, g2h, g3,
+  uint32_t bin_tot, half, k, h2, w1a, w0, h3, h4, w1, g2, g2h, g3,
           g4;
   PixRec *up3;      // `row_cur[7]`, two rows above
-  PixRec *p_n15_3, *up2;   // `row_cur[6]` and `row_cur[7]`, the two rows above
+  PixRec *cur6c, *up2;   // `row_cur[6]` and `row_cur[7]`, the two rows above
   cur6 = (PixRec *)_this->row_cur[6];
   up_sym = cur6->sym;
   cur5 = _this->row_cur[5];
   left_sym = cur5[-1].sym;
-  __code_pixel_n15 = cur6[1].sym;
+  up_next_sym = cur6[1].sym;
   // `sym7` is a `ModelBlock *` here and a *symbol* at the bottom of the body:
   // the frame's union puts MSVC's spill slots over the 32-entry symbol history
   // `pixel_context` reads.  The nine reloads that used to sit between the two
@@ -10386,15 +10386,15 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   ::mode_symbol[1] = up_sym;
   __frame.sym10 = left_sym;
   ::mode_symbol[2] = left_sym;
-  __frame.sym6 = __code_pixel_n15;
-  ::mode_symbol[3] = __code_pixel_n15;
+  __frame.sym6 = up_next_sym;
+  ::mode_symbol[3] = up_next_sym;
   __frame.sym5 = upleft_sym;
   mode_symbol[4] = upleft_sym;
   nb = 32 * cur5[-1].match[2]
       + 16 * cur5[-1].match[4]
       + 2 * cur5[-1].match[0]
       + 8 * cur6[1].match[1]
-      + (cur6->match[1] + 4 * (__code_pixel_n15 == upleft_sym));
+      + (cur6->match[1] + 4 * (up_next_sym == upleft_sym));
   up_eq_west = up_sym == left_sym;
   if ( up_eq_west )
   {
@@ -10462,11 +10462,11 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   ctx_bucket = _this->ctx_bucket[ctx_state + cap];
   r2 = _this->row_cur[7];
   *(int32_t *)&_this->bucket_idx = ctx_bucket;
-  p_n15_1 = cur6->match[0];
+  up_match0 = cur6->match[0];
   match1 = cur6->match[1];
   __frame.sym2 = (uint16_t *)cur5;
   __frame.sym7 = (ModelBlock *)(_this);
-  __frame.sym0 = p_n15_1;
+  __frame.sym0 = up_match0;
   cur9v = (int32_t)_this->row_cur[9];
   m_w1 = cur5[-1].match[1];
   __frame.sym3 = cur9v;
@@ -10525,35 +10525,35 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   m_w0 = row[-1].match[0];
   __frame.sym9 = row;
   if ( (m_w1b & m_w0) != 0
-    && (p_n15_3 = _this->row_cur[6],
+    && (cur6c = _this->row_cur[6],
         up2 = _this->row_cur[7],
         ((uint8_t)(up2[2].match[1]
                          & up2[1].match[1]
                          & up2[0].match[1]
-                         & p_n15_3[3].match[1]
-                         & p_n15_3[2].match[1]
-                         & p_n15_3[1].match[1]
-                         & p_n15_3[0].match[1]
-                         & p_n15_3[0].match[0]
-                         & p_n15_3[-1].match[1])
+                         & cur6c[3].match[1]
+                         & cur6c[2].match[1]
+                         & cur6c[1].match[1]
+                         & cur6c[0].match[1]
+                         & cur6c[0].match[0]
+                         & cur6c[-1].match[1])
        & up2[3].match[1]) != 0) )
   {
     m_up0 = up2[0].match[0];
-    p_n15_2 = *(int32_t *)&_this->width - a2;
+    to_edge = *(int32_t *)&_this->width - a2;
     __frame.sym4 = 1;
-    if ( p_n15_2 <= 1 )
+    if ( to_edge <= 1 )
     {
       run = 1;
     }
     else
     {
-      __frame.sym0 = p_n15_2;
+      __frame.sym0 = to_edge;
       one = 1;
       __frame.sym7 = (ModelBlock *)(_this);
       while ( 1 )
       {
         run = one;
-        if ( (p_n15_3[one + 2].match[1] & p_n15_3[one + 2].match[0]) == 0 )
+        if ( (cur6c[one + 2].match[1] & cur6c[one + 2].match[0]) == 0 )
           break;
         m_up0 = (uint8_t)(up2[run].match[0] & m_up0);
         if ( ++one >= __frame.sym0 )
@@ -10572,18 +10572,18 @@ LABEL_42:
     runlen = 0;
     if ( __frame.sym9->sym == __frame.sym8 )
     {
-      __frame.sym0 = (int32_t)p_n15_3;
+      __frame.sym0 = (int32_t)cur6c;
       __frame.sym7 = (ModelBlock *)(_this);
       do
         ++runlen;
       while ( runlen < __frame.sym4 && __frame.sym9[runlen].sym == __frame.sym8 );
-      p_n15_3 = (PixRec *)__frame.sym0;
+      cur6c = (PixRec *)__frame.sym0;
     }
     run_hit = runlen == __frame.sym4;
     __frame.sym6 = run_hit;
     if ( runlen > run_hit )
     {
-      _this->row_cur[6] = &p_n15_3[runlen - run_hit];
+      _this->row_cur[6] = &cur6c[runlen - run_hit];
       _this->row_cur[7] = &up2[runlen - run_hit];
       row_cur9 = (int32_t)_this->row_cur[9];
       _this->row_cur[8] = _this->row_cur[8] + runlen - run_hit;
@@ -10602,11 +10602,11 @@ LABEL_42:
       _this->row_cur[5] = r3 + 1;
       if ( runlen - run_hit != 1 )
       {
-        p_n15_4 = runlen - run_hit - 1;
-        half = p_n15_4 / 2;
-        if ( p_n15_4 / 2 )
+        run_left = runlen - run_hit - 1;
+        half = run_left / 2;
+        if ( run_left / 2 )
         {
-          __frame.sym0 = p_n15_4;
+          __frame.sym0 = run_left;
           s1 = __frame.sym1;
           runlen_s = runlen;
           k = 0;
@@ -10627,7 +10627,7 @@ LABEL_42:
             ++k;
           }
           while ( k < half );
-          p_n15_4 = __frame.sym0;
+          run_left = __frame.sym0;
           amap = __frame.sym3;
           __frame.sym2 = (uint16_t *)cur5p1;
           runlen = runlen_s;
@@ -10637,7 +10637,7 @@ LABEL_42:
         {
           done = 1;
         }
-        if ( (uint32_t)p_n15_4 > (done - 1) )
+        if ( (uint32_t)run_left > (done - 1) )
         {
           _this->pix_cur[1] = __frame.sym8;
           *(uint32_t *)_this->row_cur[5] = rec_word;
@@ -10732,10 +10732,10 @@ LABEL_42:
     binp = (FreqRec *)&_this->row_cur[bucket_i + 10];
     __frame.sym4 = (int32_t)(uintptr_t)binp;
     frec = &_this->grid[id2 + 188];
-    __code_pixel_n0x2000 = HIWORD(((int32_t *)_this)[4 * id2 + 778]);
-    if ( __code_pixel_n0x2000 )
+    grid_kind = HIWORD(((int32_t *)_this)[4 * id2 + 778]);
+    if ( grid_kind )
     {
-      if ( __code_pixel_n0x2000 == 1 )
+      if ( grid_kind == 1 )
       {
         ip = (int32_t *)&_this->row_cur[bucket_i + 10];
         b15 = binp->b15;
@@ -10769,12 +10769,12 @@ LABEL_42:
         acc2 = (uint16_t)(uintptr_t)bp + acc + w6;
         LOWORD(w5) = (w4s + w5 - 1) / w5 + __frame.sym3;
         frec->w[4] = w5;
-        __code_pixel_n0x2000 = (uint16_t)(__frame.sym0 + w5 + acc2);
-        frec->w[5] = __code_pixel_n0x2000;
+        grid_kind = (uint16_t)(__frame.sym0 + w5 + acc2);
+        frec->w[5] = grid_kind;
         __frame.sym9 = _this->row_cur[5];
       }
       s9 = __frame.sym9->sym;
-      arg_tot = __code_pixel_n0x2000;
+      arg_tot = grid_kind;
       if ( s9 == __frame.sym8 )
       {
         cum1 = frec->w[0];
@@ -10800,25 +10800,25 @@ LABEL_42:
         cum1 = 0;
         lvl_a = 0;
       }
-      p_n15_5 = frec->w[6];
+      w6a = frec->w[6];
       arg_cum = cum1;
       arg_high = frec->w[lvl_a] + cum1;
-      p_n15_7 = frec->w[5];
+      w5a = frec->w[5];
       b15a = frec->b15;
-      if ( p_n15_7 > p_n15_5
-        && (frec->w[lvl_a] + b15a + 8 < p_n15_7 || frec->w[5] > 0x4000u) )
+      if ( w5a > w6a
+        && (frec->w[lvl_a] + b15a + 8 < w5a || frec->w[5] > 0x4000u) )
       {
         h2 = frec->w[2];
-        __frame.sym0 = p_n15_5;
-        p_n15_12 = frec->w[1];
+        __frame.sym0 = w6a;
+        w1a = frec->w[1];
         __frame.sym7 = (ModelBlock *)(_this);
         __frame.sym1 = lvl_a;
         w0 = frec->w[0];
         __frame.sym2 = (uint16_t *)b15a;
         LOWORD(w0) = w0 - (w0 >> 1);
         frec->w[0] = w0;
-        LOWORD(p_n15_12) = p_n15_12 - (p_n15_12 >> 1);
-        frec->w[1] = p_n15_12;
+        LOWORD(w1a) = w1a - (w1a >> 1);
+        frec->w[1] = w1a;
         LOWORD(h2) = h2 - (h2 >> 1);
         h3 = frec->w[3];
         frec->w[2] = h2;
@@ -10827,26 +10827,26 @@ LABEL_42:
         frec->w[3] = h3;
         LOWORD(h4) = h4 - (h4 >> 1);
         frec->w[4] = h4;
-        LOWORD(p_n15_12) = h3 + h2 + p_n15_12;
+        LOWORD(w1a) = h3 + h2 + w1a;
         b15a = (int32_t)__frame.sym2;
-        LOWORD(p_n15_12) = w0 + h4 + p_n15_12;
+        LOWORD(w1a) = w0 + h4 + w1a;
         lvl_a = __frame.sym1;
-        p_n15_7 = (uint16_t)p_n15_12;
-        p_n15_6 = __frame.sym0;
-        frec->w[5] = p_n15_7;
-        if ( p_n15_6 < 256 && !frec->b14 )
+        w5a = (uint16_t)w1a;
+        w6b = __frame.sym0;
+        frec->w[5] = w5a;
+        if ( w6b < 256 && !frec->b14 )
         {
-          p_n15_6 = 256;
+          w6b = 256;
           frec->w[6] = 256;
         }
-        if ( p_n15_7 > p_n15_6 )
+        if ( w5a > w6b )
         {
           if ( b15a < 15 )
             LOWORD(b15a) = 15;
           frec->b15 = b15a;
         }
       }
-      frec->w[5] = b15a + p_n15_7;
+      frec->w[5] = b15a + w5a;
       frec->w[lvl_a] += b15a;
       rc.encode(arg_cum, arg_high, arg_tot);
       *(int32_t *)&_this->hit = lvl_a;
@@ -10891,12 +10891,12 @@ LABEL_42:
       }
       arg_cum = cum2;
       arg_high = binp->w[lvl_b] + cum2;
-      p_n15_10 = binp->w[5];
-      p_n15_8 = binp->w[6];
+      w5c = binp->w[5];
+      w6c = binp->w[6];
       __frame.sym3 = binp->b15;
-      if ( p_n15_10 > p_n15_8 && (binp->w[lvl_b] + __frame.sym3 + 8 < p_n15_10 || p_n15_10 > 0x4000) )
+      if ( w5c > w6c && (binp->w[lvl_b] + __frame.sym3 + 8 < w5c || w5c > 0x4000) )
       {
-        __frame.sym0 = p_n15_8;
+        __frame.sym0 = w6c;
         __frame.sym7 = (ModelBlock *)(_this);
         w1 = binp->w[1];
         g2 = binp->w[2];
@@ -10916,16 +10916,16 @@ LABEL_42:
         binp->w[4] = g4;
         LOWORD(g4) = g0 + g4;
         lvl_b = (int32_t)__frame.sym2;
-        p_n15_10 = (uint16_t)(g4 + g3 + g2h + w1);
-        p_n15_9 = __frame.sym0;
+        w5c = (uint16_t)(g4 + g3 + g2h + w1);
+        w5b = __frame.sym0;
         frec = (FreqRec *)__frame.sym1;
-        binp->w[5] = p_n15_10;
-        if ( p_n15_9 < 256 && !binp->b14 )
+        binp->w[5] = w5c;
+        if ( w5b < 256 && !binp->b14 )
         {
-          p_n15_9 = 256;
+          w5b = 256;
           binp->w[6] = 256;
         }
-        if ( p_n15_10 > p_n15_9 )
+        if ( w5c > w5b )
         {
           s3b = __frame.sym3;
           if ( __frame.sym3 < 15 )
@@ -10935,7 +10935,7 @@ LABEL_42:
         }
       }
       s3 = __frame.sym3;
-      binp->w[5] = __frame.sym3 + p_n15_10;
+      binp->w[5] = __frame.sym3 + w5c;
       binp->w[lvl_b] += s3;
       rc.encode(arg_cum, arg_high, arg_tot);
       *(int32_t *)&_this->hit = lvl_b;
@@ -10959,11 +10959,11 @@ LABEL_42:
   __byte_445440[0] = mode;
   runlen_s = runlen;
   _this->sel[0] = nullptr;
-  p_n15_11 = *wq;
+  w6d = *wq;
   wq1 = wq[1];
   cache0p = (uint16_t *)(uintptr_t)*sym_cache;
   cache2 = sym_cache[2];
-  __frame.sym0 = p_n15_11;
+  __frame.sym0 = w6d;
   cache1 = sym_cache[1];
   __frame.sym1 = wq1;
   cache3 = sym_cache[3];
@@ -15017,7 +15017,7 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
   ModelBlock *blk;
   PixRec *r4, *r0;   // row cursors out of row_cur
   uint8_t *buf;   // `uint8_t *` beside the `char` scalars above
-  int16_t __model_plane_n2, wt;
+  int16_t w2n, wt;
   uint32_t row_w;
   int32_t g, flags, lo, w2, w3, w4, has3, has4, lvl, lvl2, live, s, y,
           x, x2, step;
@@ -15099,7 +15099,7 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
           // which makes the last bucket record and the first frequency record
           // the same sixteen bytes -- the two tables abut and share one.
           rec = &blk->grid[bucket];
-          __model_plane_n2 = 2;
+          w2n = 2;
           rec->w[0] = 2;
           LOWORD(w2) = 2;
           w3 = 2;
@@ -15121,7 +15121,7 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
           }
           if ( m2 )
           {
-            __model_plane_n2 = w4 + 2;
+            w2n = w4 + 2;
             w4 = 0;
             rec->w[4] = 0;
           }
@@ -15131,7 +15131,7 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
           }
           if ( m1 )
           {
-            __model_plane_n2 += w3;
+            w2n += w3;
             w3 = 0;
             rec->w[3] = 0;
           }
@@ -15141,14 +15141,14 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
           }
           if ( m6 )
           {
-            rec->w[1] = w2 + __model_plane_n2;
+            rec->w[1] = w2 + w2n;
             LOWORD(w2) = 0;
             rec->w[2] = 0;
           }
           else
           {
             rec->w[2] = w2;
-            rec->w[1] = __model_plane_n2;
+            rec->w[1] = w2n;
           }
           has3 = w3 != 0;
           has4 = w4 != 0;

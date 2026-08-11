@@ -92,7 +92,12 @@ def rename_in(path, fn, pairs):
                      % (fn, old))
     total = 0
     for old, new in pairs:
-        text, k = re.subn(NAMED % re.escape(old), new, text)
+        # `--member` renames a *frame* member, which is reached as
+        # `__frame.X` -- the member-safe pattern excludes exactly that, so
+        # without the flag a frame member's declaration renames and its uses do
+        # not, and the build stops.
+        pat = (r'\b%s\b' if '--member' in sys.argv else NAMED)
+        text, k = re.subn(pat % re.escape(old), new, text)
         print('%-22s -> %-22s %4d' % (old, new, k))
         total += k
     lines[a:b + 1] = text.split('\n')
