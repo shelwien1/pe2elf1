@@ -230,9 +230,40 @@ def summary():
     # `^LABEL_\d+:` missed the two labels that are indented.  Strip the comments
     # and allow the indent.
     code = '\n'.join(l.split('//')[0] for l in src.split('\n'))
+    # What shape the remaining jumps are.  The bare count says how many are
+    # left and not whether any of them should be: a forward jump out of nested
+    # blocks to one join, or a backward jump to the top of a loop, is what a
+    # `goto` is for in C.  A jump *into* a block, or forward at the same depth
+    # to something that is not a join, is a branch or a loop with its shape
+    # missing -- and those are the ones this round removed.
+    def jumpshapes():
+        out = collections.Counter()
+        for a, b, _nm, _sig in structs.bodies(lines):
+            labs, depth, at = {}, 0, {}
+            for i in range(a, b + 1):
+                c = lines[i].split('//')[0]
+                at[i] = depth
+                m = re.match(r'\s*(LABEL_\d+):', c)
+                if m:
+                    labs[m.group(1)] = i
+                depth += c.count('{') - c.count('}')
+            for i in range(a, b + 1):
+                for m in re.finditer(r'goto (LABEL_\d+)', lines[i].split('//')[0]):
+                    tgt = labs.get(m.group(1))
+                    if tgt is None:
+                        continue
+                    out['back' if tgt < i else
+                        'into' if at[tgt] > at[i] else
+                        'out' if at[tgt] < at[i] else 'same'] += 1
+        return out
+    shapes = jumpshapes()
     row('goto / LABEL_n:',
         '%d / %d' % (len(re.findall(r'goto LABEL_\d+;', code)),
                      len(re.findall(r'^\s*LABEL_\d+:', code, re.M))))
+    row('  restart a loop / exit N blocks',
+        '%d / %d' % (shapes['back'], shapes['out']))
+    row('  jump into a block / sideways',
+        '%d / %d' % (shapes['into'], shapes['same']))
     row('__fwd_* shims', len(set(re.findall(r'\b__fwd_\w+', src))))
 
 

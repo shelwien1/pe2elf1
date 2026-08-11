@@ -31,8 +31,10 @@ fNN members / named ones             93/121     5/162         0/171
 distinct unexplained locals            554       591             0
   bodies still carrying one              —    8/102         0/102
   uses                                    —      6302             0
-goto / LABEL_n:                     112/79     81/55         63/44
-conversion warnings (ratchet)         1455      1331          1323
+goto / LABEL_n:                     112/79     81/55         49/34
+  restart a loop / exit N blocks         —         —         16/29
+  jump into a block / sideways           —         —           1/3
+conversion warnings (ratchet)         1455      1331          1322
 ```
 
 **Not one Hex-Rays name is left in either file.** Checked by running the
@@ -874,6 +876,23 @@ What stays is the fourth shape, and it stays on purpose: `write_bmp`'s
 `LABEL_72` is the row terminator, reached from five places inside three nested
 loops. A forward jump to a single join point is what that is for, and it now
 says so in a comment rather than by being the only one left.
+
+`shape.py` has two more rows for exactly that reason. The bare count says how
+many jumps are left and not whether any of them should be, which is the same
+defect §10 is about — so it now says what shape they are:
+
+```
+goto / LABEL_n:                    49 / 34
+  restart a loop / exit N blocks   16 / 29
+  jump into a block / sideways      1 / 3
+```
+
+45 of the 49 are a loop restart or an exit out of nested blocks to one join,
+which is what C has `goto` for. The four on the second row are three exits to a
+function's single return path and one jump into a block in `read_bmp`'s RLE
+decoder, where the label is the top of the decoder loop and every predecessor
+is a `continue` from two loops in. Those are the honest residue, and the row
+exists so that a later round can tell at a glance whether it has grown.
 
 One thing worth recording: removing a `goto` duplicates the statement it jumped
 over, and in `predict_med` that took the conversion count *up* by three. The
