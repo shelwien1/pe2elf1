@@ -5473,145 +5473,130 @@ LABEL_25:
   return p_i;
 }
 
-uint8_t * __colour_transform(uint8_t *Blockb, uint8_t *Src, int32_t a3, int8_t a4)
+// Pull one plane out of the interleaved image and decorrelate it against the
+// others -- BMF's colour transform, chosen per plane by the search in
+// `choose_plane_coding` and recorded in that plane's `plane_desc` entry.
+//
+// The pixels are interleaved, so `plane` is a byte offset within a pixel and
+// every loop here steps by `plane_count`.  Flag 8 clear means no transform at
+// all, and the body is a plain de-interleave.  Otherwise `predictor` picks one
+// of three:
+//
+//   1  dst = x - dc - ref0                     subtract one other plane whole
+//   2  dst = x - dc - ((w0*ref0 + w1*ref1 + 40) >> 7)     a weighted blend
+//   3  dst = x - dc - ((w1*p[-2] + w0*p[-3] + w2*p[-1] + 63) >> 7)
+//
+// The weights are sevenths-of-a-bit fixed point and the `+ 40` and `+ 63` are
+// the rounding.  Mode 3 reaches backwards inside the *pixel* rather than to a
+// named plane, which is why it needs no `to_refN`.
+//
+// Mode 2 with the weights summing to 128 and one of them zero is mode 1 in
+// disguise -- all the weight on one reference -- and the code says so by
+// jumping into mode 1's loop with `to_ref0` pointed at whichever plane won.
+//
+// Returns `img` advanced to the plane, which two of the four paths do and two
+// do not; no caller uses it.
+uint8_t * __colour_transform(uint8_t *img, uint8_t *dst, int32_t plane, int8_t a4)
 {
   ;
-  uint8_t v8, v11;
-  uint8_t *v29;   // `uint8_t *` beside the `char` scalars above
-  int32_t v4, n6_2, v7, n6_1, v10, Size, n4, Size_1, v16, Size_2, v18, v19,
-          v21, v22, v23, v24, v26, n2, v33, v34, v35, v36, v37, n4_1, n6;
-  uint32_t Src_2, Src_1, v27, Src_3;
-  uint8_t *Src_5, *Src_4;
-  if ( (plane_desc[a3 + 1].flags & 8) == 0 )
+  uint8_t d;
+  uint8_t *ref;   // `uint8_t *` beside the `char` scalars above
+  int32_t wgt1, i2, ofs2, n_flat, step, i, ofs, left3,
+          x3, wsum, w12sum, left2, x2, mode, to_ref0, wgt2, to_ref1, wgt0, dc, stride, n;
+  uint32_t blend, src;
+  uint8_t *p3, *p2;
+  if ( (plane_desc[plane + 1].flags & 8) == 0 )
   {
-    Size = bmf_pixels(Blockb);
-    n4 = plane_count;
-    Src_1 = (uint32_t)&((const BmfImage *)Blockb)->pixels[a3];
+    n_flat = bmf_pixels(img);
+    step = plane_count;
     if ( plane_count == 1 )
-      return (uint8_t *)memcpy(Src,&((const BmfImage *)Blockb)->pixels[a3],Size);
-    Blockb += a3;
-    if ( Size > 6 && plane_count > 0 )
-    {
-      if ( plane_count > 1 )
-        goto LABEL_30;
-      if ( (uint32_t)Src > Src_1 && (uint32_t)&Src[-Src_1] >= Size * plane_count )
-        goto LABEL_31;
-      if ( plane_count > 0 )
-      {
-LABEL_30:
-        if ( Src_1 > (uint32_t)Src && Size <= Src_1 - (uint32_t)Src )
-        {
-LABEL_31:
-          Size_1 = 0;
-          v16 = 0;
-          do
-          {
-            Src[Size_1] = Blockb[v16 + 16];
-            v16 += n4;
-            ++Size_1;
-          }
-          while ( Size_1 < Size );
-          return Blockb;
-        }
-      }
-    }
-    Size_2 = 0;
-    v18 = 0;
+      return (uint8_t *)memcpy(dst,&((const BmfImage *)img)->pixels[plane],n_flat);
+    img += plane;
+    // MSVC's overlap check stood here, and both of its arms were this loop --
+    // the same six lines character for character, reached through two `goto`s
+    // and two labels.  A test whose arms agree is not a decision, and the two
+    // copies exist because the compiler unrolled its own aliasing proof, not
+    // because the program had a case to distinguish.  The same shape, with the
+    // same reasoning, is at LABEL_4 below.
+    i = 0;
+    ofs = 0;
     do
     {
-      Src[Size_2] = Blockb[v18 + 16];
-      v18 += n4;
-      ++Size_2;
+      dst[i] = img[ofs + 16];
+      ofs += step;
+      ++i;
     }
-    while ( Size_2 < Size );
-    return Blockb;
+    while ( i < n_flat );
+    return img;
   }
-  n4_1 = plane_count;
-  n6 = bmf_pixels(Blockb);
-  v33 = plane_desc[1].src_plane - a3;
-  v35 = plane_desc[2].src_plane - a3;
-  n2 = plane_desc[a3 + 1].predictor;
-  v37 = plane_desc[a3 + 1].b3;
-  Src_3 = (uint32_t)&((const BmfImage *)Blockb)->pixels[a3];
-  v4 = plane_desc[a3 + 1].w8;
-  v36 = plane_desc[a3 + 1].w4;
-  v34 = plane_desc[a3 + 1].w12;
-  if ( n2 == 2 && v36 + v4 == 128 )
+  stride = plane_count;
+  n = bmf_pixels(img);
+  to_ref0 = plane_desc[1].src_plane - plane;
+  to_ref1 = plane_desc[2].src_plane - plane;
+  mode = plane_desc[plane + 1].predictor;
+  dc = plane_desc[plane + 1].b3;
+  src = (uint32_t)&((const BmfImage *)img)->pixels[plane];
+  wgt1 = plane_desc[plane + 1].w8;
+  wgt0 = plane_desc[plane + 1].w4;
+  wgt2 = plane_desc[plane + 1].w12;
+  if ( mode == 2 && wgt0 + wgt1 == 128 )
   {
-    if ( !v4 )
+    if ( !wgt1 )
       goto LABEL_4;
-    if ( !v36 )
+    if ( !wgt0 )
     {
-      v33 = plane_desc[2].src_plane - a3;
+      to_ref0 = plane_desc[2].src_plane - plane;
       goto LABEL_4;
     }
   }
-  if ( plane_desc[a3 + 1].predictor == 1 )
+  if ( plane_desc[plane + 1].predictor == 1 )
   {
 LABEL_4:
-    Blockb += a3;
-    v29 = &Blockb[v33];
-    if ( n6 <= 6
-      || (Src_2 = (uint32_t)&Blockb[v33 + 16], plane_count <= 0)
-      || (plane_count > 1 || (uint32_t)Src <= Src_2 || (uint32_t)&Src[-Src_2] < n6 * plane_count)
-      && (Src_2 <= (uint32_t)Src || Src_2 - (uint32_t)Src < n6)
-      || (plane_count > 1 || (uint32_t)Src <= Src_3 || (uint32_t)&Src[-Src_3] < n6 * plane_count)
-      && ((uint32_t)Src >= Src_3 || Src_3 - (uint32_t)Src < n6) )
-    {
-      n6_1 = 0;
-      v10 = 0;
-      do
-      {
-        v11 = Blockb[v10 + 16] - v37 - v29[v10 + 16];
-        v10 += n4_1;
-        Src[n6_1++] = v11;
-      }
-      while ( n6_1 < n6 );
-    }
-    else
-    {
-      n6_2 = 0;
-      v7 = 0;
-      do
-      {
-        v8 = Blockb[v7 + 16] - v37 - v29[v7 + 16];
-        v7 += n4_1;
-        Src[n6_2++] = v8;
-      }
-      while ( n6_2 < n6 );
-    }
-    return Blockb;
-  }
-  if ( n2 == 2 )
-  {
-    v24 = bmf_pixels(Blockb);
-    Src_4 = (uint8_t *)Src_3;
+    img += plane;
+    ref = &img[to_ref0];
+    // The second of the two duplicated bodies -- six lines of aliasing test
+    // whose `if` and `else` were the same loop.
+    i2 = 0;
+    ofs2 = 0;
     do
     {
-      v26 = *Src_4 - v37;
-      v27 = v36 * Src_4[v33] + v4 * Src_4[v35] + 40;
-      Src_4 += n4_1;
-      *Src++ = (uint8_t)(v26 - (v27 >> 7));
-      --v24;
+      d = img[ofs2 + 16] - dc - ref[ofs2 + 16];
+      ofs2 += stride;
+      dst[i2++] = d;
     }
-    while ( v24 );
+    while ( i2 < n );
+    return img;
   }
-  else if ( n2 == 3 )
+  if ( mode == 2 )
   {
-    v19 = bmf_pixels(Blockb);
-    Src_5 = (uint8_t *)Src_3;
+    left2 = bmf_pixels(img);
+    p2 = (uint8_t *)src;
     do
     {
-      v21 = *Src_5 - v37;
-      v22 = v4 * *(Src_5 - 2) + v36 * *(Src_5 - 3);
-      v23 = v34 * *(Src_5 - 1);
-      Src_5 += n4_1;
-      *Src++ = (uint8_t)(v21 - ((uint32_t)(v22 + v23 + 63) >> 7));
-      --v19;
+      x2 = *p2 - dc;
+      blend = wgt0 * p2[to_ref0] + wgt1 * p2[to_ref1] + 40;
+      p2 += stride;
+      *dst++ = (uint8_t)(x2 - (blend >> 7));
+      --left2;
     }
-    while ( v19 );
+    while ( left2 );
   }
-  return Blockb;
+  else if ( mode == 3 )
+  {
+    left3 = bmf_pixels(img);
+    p3 = (uint8_t *)src;
+    do
+    {
+      x3 = *p3 - dc;
+      wsum = wgt1 * *(p3 - 2) + wgt0 * *(p3 - 3);
+      w12sum = wgt2 * *(p3 - 1);
+      p3 += stride;
+      *dst++ = (uint8_t)(x3 - ((uint32_t)(wsum + w12sum + 63) >> 7));
+      --left3;
+    }
+    while ( left3 );
+  }
+  return img;
 }
 
 __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...)
