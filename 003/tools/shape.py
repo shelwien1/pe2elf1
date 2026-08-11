@@ -216,7 +216,12 @@ def summary():
     bodyv = [len(re.findall(unexp,
                             '\n'.join(l.split('//')[0] for l in lines[a:b + 1])))
              for a, b, _, _ in structs.bodies(lines)]
-    row('distinct unexplained locals', len(set(re.findall(unexp, src))))
+    # Code only, like the two rows under it.  Counting `src` counted the
+    # comments as well, and this file's comments quote the old names on
+    # purpose -- `// was int32_t v312` beside the padding that replaced it.
+    # The row read 81 when every body was clean and one parameter was left.
+    code = '\n'.join(l.split('//')[0] for l in lines)
+    row('distinct unexplained locals', len(set(re.findall(unexp, code))))
     row('  bodies still carrying one', '%d of %d' % (sum(1 for n in bodyv if n),
                                                      len(bodyv)))
     row('  uses', sum(bodyv))
