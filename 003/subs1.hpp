@@ -6453,9 +6453,13 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
   // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
   // gives every member its own storage and altp1 segfaults while compressing.
   struct alignas(16) AltP2ContextFrame {   // 208 bytes, one stack frame
-      P2Ctx *v246;   // `cursor[0]`, the current row
-      int32_t v256;
-      int16_t *v268;
+      // Three slots MSVC used for `cursor[0]`, one digit of the
+      // neighbourhood index, and `(int16_t *)cursor[1]`.  All three had one
+      // other name that says what they are, and the layout is pinned, so
+      // they stay as the size they were.
+      uint8_t   _gapA[4];   // was P2Ctx * v246, which is `cursor[0]`
+      uint8_t   _gapB[4];   // was int32_t v256, which is `64 * gA`
+      uint8_t   _gapC[4];   // was int16_t * v268, which is `cursor[1]`
       // `alt_p2_filter`'s six sub-model weight blocks, which is what `CtxWeights`
       // says and the only thing the six slots hold by the time it is called.
       // The scratch the body kept here first is six locals now.
@@ -6508,54 +6512,26 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
       uint8_t _pad0[32];
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 208, "frame layout moved");
-  // These shared `__frame.v246` with the name that still binds it: one
-  // stack slot MSVC gave to locals whose live ranges do not overlap, and
-  // Hex-Rays named every use.  That they can have storage of their own is
-  // the gate's answer -- nothing writes one of them and reads another.
-  // These shared `__frame.v246` with the name that still binds it: one
-  // stack slot MSVC gave to locals whose live ranges do not overlap, and
-  // Hex-Rays named every use.  That they can have storage of their own is
-  // the gate's answer -- nothing writes one of them and reads another.
+  // Sixteen locals shared three stack slots with the names that used to bind
+  // them: MSVC gave one slot to locals whose live ranges do not overlap, and
+  // Hex-Rays named every use.  That they can have storage of their own is the
+  // gate's answer -- nothing writes one of them and reads another.  The three
+  // slots are `_gapA`..`_gapC` above now; nothing is left to share.
   int32_t v248;
   int32_t v250;
   int32_t v251;
   int32_t n15;
   int32_t v254;
-  // These shared `__frame.v246` with the name that still binds it: one
-  // stack slot MSVC gave to locals whose live ranges do not overlap, and
-  // Hex-Rays named every use.  That they can have storage of their own is
-  // the gate's answer -- nothing writes one of them and reads another.
   P2Ctx *v255;   // row cursors into the neighbourhood table
-  // These shared `__frame.v256` with the name that still binds it: one
-  // stack slot MSVC gave to locals whose live ranges do not overlap, and
-  // Hex-Rays named every use.  That they can have storage of their own is
-  // the gate's answer -- nothing writes one of them and reads another.
-  uint8_t *v257;
-  // These shared `__frame.v256` with the name that still binds it: one
-  // stack slot MSVC gave to locals whose live ranges do not overlap, and
-  // Hex-Rays named every use.  That they can have storage of their own is
-  // the gate's answer -- nothing writes one of them and reads another.
   int32_t v259;
   int32_t v260;
   int32_t v264;
   int32_t v266;
   int32_t v267;
-  // These shared `__frame.v268` with the name that still binds it: one
-  // stack slot MSVC gave to locals whose live ranges do not overlap, and
-  // Hex-Rays named every use.  That they can have storage of their own is
-  // the gate's answer -- nothing writes one of them and reads another.
   int32_t v269;
-  // These shared `__frame.v268` with the name that still binds it: one
-  // stack slot MSVC gave to locals whose live ranges do not overlap, and
-  // Hex-Rays named every use.  That they can have storage of their own is
-  // the gate's answer -- nothing writes one of them and reads another.
   int32_t v270;
   int32_t v272;
   int32_t v273;
-  // These shared `__frame.v268` with the name that still binds it: one
-  // stack slot MSVC gave to locals whose live ranges do not overlap, and
-  // Hex-Rays named every use.  That they can have storage of their own is
-  // the gate's answer -- nothing writes one of them and reads another.
   P2Ctx *v281;
   P2Ctx *v282;
   P2Ctx *v283;
@@ -6568,8 +6544,10 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
   // loaded into them: a row cursor, a neighbour, a threshold-row index and
   // three counts.  Both lifetimes were `__frame.sub[0..5]`.
   P2Ctx *sub0_row;
-  P2Ctx   *sub1_nb;
-  int32_t  sub2_n, sub3_row, sub4_n, sub5_n;
+  P2Ctx   *row2c;
+  int32_t  num_b, band, num_d;
+  // The five digits of the neighbourhood index and the index itself.
+  int32_t  gA, gB, gC, gD, den_d, nb_slot;
   int32_t v290;
   int32_t n3536;
   P2Ctx *v109;   // the p2 row cursor, `cursor[0]`
@@ -6639,8 +6617,6 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
   uint8_t *v187;
   v6 = a1->cursor[0];
   cursor1 = a1->cursor[1];
-  __frame.v246 = v6;
-  __frame.v268 = (int16_t *)cursor1;
   sub0_row = (P2Ctx *)a1->cursor[2];
   n1840_1 = 21 * sub0_row[-1].lane[6]
           + 12 * cursor1[3].lane[6]
@@ -6670,37 +6646,61 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
   v14 = a1->cursor[3]->lane[5];
   v15 = v6[-2].lane[5];
   v16 = v6[-1].lane[5];
-  n3536 = 14 * __frame.v268[32] + 23 * __frame.v268[14] + 19 * __frame.v268[5] + 25 * v16 + ctx_bias[3] + 17 * v15 + 15 * (v14 + lane5);
+  // The same seven taps as the three above, on lane 5.  Hex-Rays reached
+  // three of them through `(int16_t *)cursor1`, whose subscripts are byte
+  // offsets 64, 28 and 10 -- records 3, 1 and 0 at lane 5 of an 18-byte
+  // record, which is the same neighbourhood the other three sums walk.
+  n3536 = 14 * cursor1[3].lane[5]
+        + 23 * cursor1[1].lane[5]
+        + 19 * cursor1->lane[5]
+        + 25 * v16
+        + ctx_bias[3]
+        + 17 * v15
+        + 15 * (v14 + lane5);
   v17 = sub0_row[-1].lane[0];
   v18 = sub0_row[2].lane[0] + sub0_row->lane[0];
   v290 = v12 + n3536 + n1840_1 + n1840_2;
-  v19 = __frame.v268[9];
-  v21 = __frame.v246[-1].lane[0];
-  sub1_nb = (P2Ctx *)(2 * __frame.v246[-2].lane[0] + 2 * v21);
-  sub2_n = v19 + (*__frame.v268 + 2 * v21);
-  sub4_n = 16 * (v18 + v19 + v17);
+  v19 = cursor1[1].lane[0];
+  v21 = v6[-1].lane[0];
   // Which row of the threshold table: how many of five ratios the coded
   // length has passed.  This was `13 * <the same sum>` used as a flat
   // subscript, with the sum itself recomputed two statements later.
-  sub3_row = (8 * v12 > 43 * n3536)
+  band = (8 * v12 > 43 * n3536)
        + (8 * v12 > 17 * n3536)
        + (8 * v12 > 9 * n3536)
        + (8 * v12 > 5 * n3536)
        + (8 * v12 > 2 * n3536);
-  v25 = v290 > bmf_p2_thresholds[sub3_row][9];
-  v26 = v290 <= bmf_p2_thresholds[sub3_row][10];
-  __frame.v256 = ((v290 > bmf_p2_thresholds[sub3_row][12]) + (v290 > bmf_p2_thresholds[sub3_row][11]) + !v26 + v25) << 6;
-  sub5_n = (16 * n1840_2 > n1840_1 * bmf_p2_thresholds[sub3_row][5])
-       + (16 * n1840_2 > n1840_1 * bmf_p2_thresholds[sub3_row][4])
-       + (16 * n1840_2 > n1840_1 * bmf_p2_thresholds[sub3_row][3]);
-  v281 = (P2Ctx *)((int16_t *)(16 * ((sub2_n > bmf_p2_thresholds[sub3_row][8]) + (sub2_n > bmf_p2_thresholds[sub3_row][7]) + (sub2_n > bmf_p2_thresholds[sub3_row][6]))));
-  v257 = (uint8_t *)&((int16_t *)v281)[160 * sub3_row + 2 * sub5_n]
-       + (sub4_n > bmf_p2_thresholds[sub3_row][2] * (int32_t)sub1_nb)
-       + (sub4_n > (int32_t)sub1_nb * bmf_p2_thresholds[sub3_row][1])
-       + (sub4_n > (int32_t)sub1_nb * bmf_p2_thresholds[sub3_row][0])
-       + __frame.v256;
-  nb_id = a1->nb_id[(uint32_t)v257];
-  if ( a1->nb_id[(uint32_t)v257] )
+  // Which neighbourhood the plane is in, as a mixed-radix index: the band
+  // above, then four more ratios each counting how many of their own
+  // thresholds this plane has passed.
+  //
+  //     nb_slot = 320 * band + 64 * gA + 16 * gB + 4 * gC + gD
+  //
+  // `gA` runs [0,5) and the other three [0,4), so the digits pack exactly and
+  // reach 5 * 5 * 4 * 4 * 4 = 1600 slots.  `nb_id` spans 1916 entries -- that
+  // is the distance to the next field, not a bound this index knows.  All five
+  // arrived in different disguises -- `gB` as a `P2Ctx *` holding `16 * gB`
+  // and nothing else, the band and `gC` as an `int16_t` subscript on it,
+  // `gA` through a stack slot, and the whole index as a `uint8_t *`.
+  den_d = 2 * v6[-2].lane[0] + 2 * v21;
+  num_b = v19 + (cursor1->lane[0] + 2 * v21);
+  num_d = 16 * (v18 + v19 + v17);
+  gA = (v290 > bmf_p2_thresholds[band][12])
+     + (v290 > bmf_p2_thresholds[band][11])
+     + (v290 > bmf_p2_thresholds[band][10])
+     + (v290 > bmf_p2_thresholds[band][9]);
+  gB = (num_b > bmf_p2_thresholds[band][8])
+     + (num_b > bmf_p2_thresholds[band][7])
+     + (num_b > bmf_p2_thresholds[band][6]);
+  gC = (16 * n1840_2 > n1840_1 * bmf_p2_thresholds[band][5])
+     + (16 * n1840_2 > n1840_1 * bmf_p2_thresholds[band][4])
+     + (16 * n1840_2 > n1840_1 * bmf_p2_thresholds[band][3]);
+  gD = (num_d > bmf_p2_thresholds[band][2] * den_d)
+     + (num_d > den_d * bmf_p2_thresholds[band][1])
+     + (num_d > den_d * bmf_p2_thresholds[band][0]);
+  nb_slot = 320 * band + 64 * gA + 16 * gB + 4 * gC + gD;
+  nb_id = a1->nb_id[(uint32_t)nb_slot];
+  if ( a1->nb_id[(uint32_t)nb_slot] )
   {
     v31 = &((float (*)[4])a1)[16 * nb_id];
     *(int32_t *)&a1->f278656 = (int32_t)v31;
@@ -6719,7 +6719,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
         for ( j = 1; j < 7; ++j )
           acc[k] += v31[j][k] * a1->p2_row[j][k];
       }
-      err = ((float)__frame.v246[-1].lane[0]
+      err = ((float)v6[-1].lane[0]
              - (bmf_hsum4(acc) + a1->bias[0])) * 2.0999999f;
       floor_ = 7744.0f * v31[14][2];
 
@@ -6738,7 +6738,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
   {
     v30 = a1->nb_id_used;
     a1->nb_id_used = ++v30;
-    a1->nb_id[(uint32_t)v257] = v30;
+    a1->nb_id[(uint32_t)nb_slot] = v30;
     *(int32_t *)&a1->f278656 = (int32_t)&((float (*)[4])a1)[16 * (int16_t)v30];
   }
   v45 = (P2Ctx *)a1->cursor[1];
@@ -6746,15 +6746,15 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
   v46 = (P2Ctx *)a1->cursor[0];
   a1->p2_row[0][1] = (float)v45[1].lane[1];
   a1->p2_row[0][2] = (float)(v46[-1].lane[1] + v45->lane[1] - v45[-1].lane[1]);
-  sub1_nb = (P2Ctx *)a1->cursor[2];
+  row2c = (P2Ctx *)a1->cursor[2];
   a1->p2_row[0][3] = (float)(v46[-2].lane[1] + (v45->lane[1] - v45[-2].lane[1]));
   v50 = (P2Ctx *)a1->cursor[3];
-  a1->p2_row[1][0] = (float)(v45[-1].lane[1] + v45->lane[1] - sub1_nb[-1].lane[1]);
-  a1->p2_row[1][1] = (float)(-3 * (sub1_nb->lane[1] - v45->lane[1]) + v50->lane[1]);
+  a1->p2_row[1][0] = (float)(v45[-1].lane[1] + v45->lane[1] - row2c[-1].lane[1]);
+  a1->p2_row[1][1] = (float)(-3 * (row2c->lane[1] - v45->lane[1]) + v50->lane[1]);
   a1->p2_row[1][2] = (float)(v46[-1].lane[1] + v45[2].lane[1] - v45[1].lane[1]);
   a1->p2_row[1][3] = (float)(v46[-2].lane[1] + v45[1].lane[1] - v45[-1].lane[1]);
   a1->p2_row[2][0] = (float)(2 * v46[-1].lane[1] - v46[-2].lane[1]);
-  v52 = (P2Ctx *)(sub1_nb);
+  v52 = (P2Ctx *)(row2c);
   a1->p2_row[2][1] = (float)(v46[-3].lane[1] + v45->lane[1] - v45[-3].lane[1]);
   a1->p2_row[2][2] = (float)(v52->lane[1] + v45[1].lane[1] - v50[1].lane[1]);
   a1->p2_row[2][3] = (float)v46[-3].lane[1];
@@ -6864,14 +6864,14 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
     a1->p2_row[4][0] = (float)(v45[3].lane[0] + v45->lane[0] - v52[3].lane[0]);
     v239 = v45->lane[0];
     v240 = v45[-4].lane[0];
-    sub1_nb = v52;
+    row2c = v52;
     a1->p2_row[4][1] = (float)(v46[-4].lane[0] + v239 - v240);
     v241 = v52->lane[0] + 3 * v45[1].lane[0] - 4 * v52[1].lane[0];
     v242 = v45[2].lane[0] - v45->lane[0];
     v244 = (float)(v241 - (((v242 - (v50[2].lane[0] - v50->lane[0])) >> 1) - v50[1].lane[0]));
     a1->p2_row[4][2] = v244;
     v255 = (P2Ctx *)a1->cursor[4];
-    a1->p2_row[4][3] = (float)(sub1_nb[-1].lane[0] + v45[1].lane[0] - v50->lane[0]);
+    a1->p2_row[4][3] = (float)(row2c[-1].lane[0] + v45[1].lane[0] - v50->lane[0]);
     a1->p2_row[5][0] = (float)(v50[1].lane[0] + v45->lane[0] - v255[1].lane[0]);
     a1->p2_row[5][1] = (float)v45[3].lane[0];
     a1->p2_row[5][2] = (float)(v46[-3].lane[0] + v46[-1].lane[0] - v46[-4].lane[0]);
@@ -12336,7 +12336,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
           v220, v221, v222, v223, v224, v225, v226, v227, v228, v229, v230,
           v231, v232, v233, v234, v235, v236, v237, v238, v239, v240, v241,
           v242, v243, v244, v245, v246, v247, v248, v250, v251, v252, v253,
-          v254, v255, v256, v257, v258, v259, v260, v261, v262, v263, v264,
+          v254, v255, v256, nb_slot, v258, v259, v260, v261, v262, v263, v264,
           v265, v266, v267, v268, v269, v270, v271, v272, v273, v274, v275,
           v276, v277, v278, v279, v280, v281, v282, v283, v284, v285, v286,
           v287, v288, v289, v290, v291, v292, v293, v294, v295, v296, v297,
@@ -12878,8 +12878,8 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
             v530[-1].w2 = p2_bump(v254, v255, 3);
             v256 = v553->w2;
             v573 = -v253;
-            v257 = -v253 - p2_pred(v256, v553->b0);
-            v553->w2 = p2_bump(v256, v257, 3);
+            nb_slot = -v253 - p2_pred(v256, v553->b0);
+            v553->w2 = p2_bump(v256, nb_slot, 3);
             v258 = v527->w2;
             v259 = v550;
             v260 = v550 - p2_pred(v258, v527->b0);

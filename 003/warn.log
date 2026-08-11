@@ -528,7 +528,7 @@ subs1.hpp:6310:48: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {
 subs1.hpp:6316:19: warning: comparison of integer expressions of different signedness: 'uint32_t' {aka 'unsigned int'} and 'int32_t' {aka 'int'} [-Wsign-compare]
 subs1.hpp:6321:15: warning: comparison of integer expressions of different signedness: 'uint32_t' {aka 'unsigned int'} and 'int32_t' {aka 'int'} [-Wsign-compare]
 subs1.hpp: In function 'int32_t __alt_p2_context(AltP2Block*, AltP2Block*, AltP2Block*)':
-subs1.hpp:6741:33: warning: conversion from 'int32_t' {aka 'int'} to 'int16_t' {aka 'short int'} may change value [-Wconversion]
+subs1.hpp:6741:36: warning: conversion from 'int32_t' {aka 'int'} to 'int16_t' {aka 'short int'} may change value [-Wconversion]
 subs1.hpp:6935:8: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int' may change the sign of the result [-Wsign-conversion]
 subs1.hpp:6939:21: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:6953:10: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
