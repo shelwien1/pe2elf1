@@ -22,11 +22,11 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp / bmf.cpp lines            17787     17616         17488
-raw-offset sites                        22        12             6
+subs1.hpp / bmf.cpp lines            17787     17616         17533
+raw-offset sites                        22        12             5
   off `_this`                            —         1             0
 byte offsets on a typed base           121         0             0
-pointer casts                         2137      1545          1382
+pointer casts                         2137      1545          1379
 fNN members / named ones             93/121     5/162         0/171
 distinct unexplained locals            554       591             0
   bodies still carrying one              —    8/102         0/102
@@ -1431,3 +1431,96 @@ It also had to stop reporting `0 shared tails, 5 gotos`, which is a line that
 answers with a zero and a number belonging to something it just declined. The
 gotos counted are those of the tails proposed, and what the cap turned down is
 named on its own line.
+
+---
+
+## 19. One address, three spellings, and the record nobody had written down
+
+§17 left one raw offset flagged as "a candidate for a later round rather than a
+thing that cannot be done". Following it up found something better than one
+offset: three functions walking one data structure, each with the arithmetic
+written out a different way, and only one of the three visible to any measure
+this project has.
+
+The structure is the binary tree of counter pairs the symbol coders use below
+level 1. `encode_symbol_tree` codes each bit of `sym - level_geom[lvl].first`
+down it, `decode_symbol_tree` walks the identical tree and reassembles the
+symbol, and `update_binary_pair` walks it again to age the counts. Here is
+how each of them found the pair for `node` at width `span`:
+
+```c
+pair = (uint16_t *)(((uint8_t *)&freq[2 * level_geom[lvl].tbl_base + 8]) + 4 * (span + node));
+pair = freq + 2 * level_geom[sym].tbl_base + 2 * span + 2 * node + 8;
+tbl  = (uint8_t *)((int32_t)(_this + 2 * level_geom[lvl].tbl_base + 8));   pair = (uint16_t *)(tbl + 4 * (node + span));
+```
+
+Those are the same address. The first is `uint16_t` arithmetic re-cast to
+bytes, the second is the whole thing in `uint16_t` units with the factor of two
+distributed by hand, and the third launders a pointer through an `int32_t` and
+then steps in bytes. **Only the third counted as a raw offset**, which is why
+the other two survived every round that has looked at this file: a measure that
+keys on byte arithmetic sees the one function that does byte arithmetic, and a
+tool that looks for a wrong element size — §2's lens — sees nothing wrong with
+a `uint16_t *` stepping by two.
+
+What was missing is that four bytes there is a record:
+
+```c
+struct FreqPair {
+  uint16_t f[2];
+};
+```
+
+A count for the bit being 0 and a count for it being 1, indexed by the bit,
+which is why it is an array of two and not two names — every one of the three
+walks does `pair[go]` with `go` the bit just coded. With the record and one
+accessor for where a level's tree starts, all three walks say
+
+```c
+pair = bit_tree(freq, lvl) + span + node;
+```
+
+and the `int32_t` round trip, the `4 *`, the `2 *` and the byte casts are all
+gone. Three of the file's remaining pointer casts went with them.
+
+### What the accessor had to say out loud
+
+`bit_tree` bases at `&freq[2 * tbl_base + 8]`, and the header it skips is *ten*
+`uint16_t`, not eight — `rc_begin_encode` seeds a total, an escape weight and
+eight fixed counts, and the pairs start at byte 20 while the accessor points at
+byte 16. That is not an off-by-one: **the tree is 1-indexed.** All three walks
+start at `span = 1`, so the first pair any of them touches is element 1, and
+element 0 is the header's last two words which nothing ever reaches through
+this type.
+
+That was invisible while the three spellings disagreed, and it is the kind of
+fact a record makes you state: writing `bit_tree(freq, lvl) + span + node`
+forces the question of what element 0 is, where `+ 4 * (span + node)` on a byte
+pointer does not. The seeding loop in `rc_begin_encode` now writes
+`seed[i].f[0] = 60; seed[i].f[1] = 36;` over `(FreqPair *)&row[20]`, which is
+the same 0x7A pairs it always wrote and which now visibly starts one element
+into the tree.
+
+### Two smaller things it turned up
+
+`SymPair`'s comment opened "A binary counter pair: two `uint16_t`, both seeded
+0x2000" and then, two lines later, "Not a counter pair, whatever the name
+says". Both halves were left in when an earlier round corrected itself, so the
+record's documentation led with the claim it exists to deny. Introducing the
+type that *is* a counter pair, forty lines below it, is what made that
+unreadable enough to fix.
+
+And `deadcheck.py` reported `bit_tree` as never called, from three call sites.
+Its call-site pattern is `\b(__[A-Za-z0-9_]+)\s*\(` — every body recovered from
+the binary carries the `__` prefix, so a helper that was never in the binary is
+invisible to it as a callee. The answer is the convention the file already
+has: every accessor introduced by this project — `p2_pred`, `p2_bump`,
+`sym_list_count`, `bmf_plane_desc` — is `static inline`, which both
+`deadcheck.py` and `addrmap.py` skip, and which is what they should be skipped
+for. `addrmap.py` made the same point from the other side and more precisely:
+it reported one named body with no recorded address, because a function that
+was never at an address in 1997 should not be claiming a name that maps to one.
+
+The false positive is left as it is. A plain `static` helper would be reported
+dead rather than silently missed, and being pointed at the convention is the
+right outcome for that.

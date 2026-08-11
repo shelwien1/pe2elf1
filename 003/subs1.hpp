@@ -672,10 +672,11 @@ static inline SymListBlock *sym_list_block(SymList *list) {
   return (SymListBlock *)((uint32_t *)list - 1);
 }
 
-// A binary counter pair: two `uint16_t`, both seeded 0x2000 -- p = 1/2 for a
-// fresh counter.  `layout_workspace` writes 0x10000 of them per context group.
-// Not a counter pair, whatever the name says: the two most recent symbols seen
-// in one context.  `init_model_tables` writes `pix_cur[1] = pix_cur[0]` and then
+// Not a counter pair, whatever its two `uint16_t` and its 0x2000 seeds
+// suggest -- and this comment said it was one until the seeds were read
+// against what uses them.  It is the two most recent symbols seen in one
+// context.  `layout_workspace` writes 0x10000 of them per context group;
+// `init_model_tables` writes `pix_cur[1] = pix_cur[0]` and then
 // `pix_cur[0] = <this pixel>` with `pix_cur` pointing at one of these, which is
 // a two-entry move-to-front; both coders read them back as candidates and score
 // a hit on `last` at 15 and on `prev` at 75.  The seed is (0x2000, 0x2000),
@@ -686,6 +687,35 @@ struct SymPair {
   uint16_t prev;
 };
 static_assert(sizeof(SymPair) == 4, "SymPair: the record is four bytes");
+
+// The counter pair `SymPair` is not.  One node of the binary tree the symbol
+// coders walk below level 1: a count for the bit being 0 and a count for it
+// being 1, indexed by the bit itself, which is why they are an array and not
+// two names.
+struct FreqPair {
+  uint16_t f[2];
+};
+static_assert(sizeof(FreqPair) == 4, "FreqPair: two counts, four bytes");
+
+// Where one level's tree of those starts inside a counter block.
+//
+// Three functions walk this tree -- `encode_symbol_tree`, `decode_symbol_tree`
+// and `update_binary_pair` -- and each reached it by a different arithmetic:
+// `(uint8_t *)&freq[2 * tbl_base + 8] + 4 * (span + node)`, `freq + 2 *
+// tbl_base + 2 * span + 2 * node + 8`, and a byte pointer laundered through an
+// `int32_t`.  All three are this address; only the third was a raw offset that
+// any measure could see, which is why the other two survived four rounds.
+//
+// The tree is 1-indexed, and the `+ 8` rather than `+ 10` is how it says so.
+// The block's header is ten `uint16_t` -- a total, an escape weight and eight
+// fixed counts, which is what `rc_begin_encode` seeds -- so the pairs start at
+// byte 20 and element 0 of this array is the header's last two words.  No walk
+// reaches it: all three start at `span = 1`, and the first pair they touch is
+// element 1.
+static inline FreqPair *bit_tree(uint16_t *freq, int32_t lvl)
+{
+  return (FreqPair *)&freq[2 * level_geom[lvl].tbl_base + 8];
+}
 
 // One adaptive binary counter: a count per bit value, and the total at which
 // the pair is rescaled.  `layout_workspace` seeds them (40, 16, 512) or
@@ -2278,7 +2308,8 @@ int32_t __encode_symbol_tree(uint16_t *freq, int32_t sym)
   // The cumulative count the range coder takes, which it takes unsigned.
   uint32_t cum;
   int32_t lvl, result, go, fa, esc, path, node, span, f1, mask;
-  uint16_t *f0, *pair, fq, h2, h4, *slot;
+  uint16_t *f0, fq, h2, h4, *slot;
+  FreqPair *pair;
   uint32_t j, f1_old, acc, acc6, acc8, h9, tot, cum_hi;
   lvl = model_geometry[sym];
   f0 = freq + 2;
@@ -2346,20 +2377,20 @@ int32_t __encode_symbol_tree(uint16_t *freq, int32_t sym)
     node = 0;
     for ( span = 1; ; span *= 2 )
     {
-      pair = (uint16_t *)(((uint8_t *)&freq[2 * level_geom[lvl].tbl_base + 8]) + 4 * (span + node));
-      f1 = pair[1];
+      pair = bit_tree(freq, lvl) + span + node;
+      f1 = pair->f[1];
       go = (mask & path) != 0;
-      fa = *pair;
+      fa = pair->f[0];
       result = rc.encode_bit(fa, f1, go);
-      fq = pair[go];
+      fq = pair->f[go];
       if ( fq > 0x4000u )
       {
-        f1_old = pair[1];
-        *pair -= *pair >> 1;
-        pair[1] = f1_old - (f1_old >> 1);
-        fq = pair[go];
+        f1_old = pair->f[1];
+        pair->f[0] -= pair->f[0] >> 1;
+        pair->f[1] = f1_old - (f1_old >> 1);
+        fq = pair->f[go];
       }
-      pair[go] = alt_freq_init + fq;
+      pair->f[go] = alt_freq_init + fq;
       mask >>= 1;
       node = go + 2 * node;
       if ( !mask )
@@ -2454,7 +2485,8 @@ int32_t __decode_symbol_tree(uint16_t *freq)
   int16_t sum4, sum6;
   // The cumulative count the range coder takes, which it takes unsigned.
   int32_t k, fa, go, node1, esc, mask, node, sym, span, f1;
-  uint16_t *cur, add, *pair, fq, h2, h4, h6, h8, *slot;
+  uint16_t *cur, add, fq, h2, h4, h6, h8, *slot;
+  FreqPair *pair;
   uint32_t target, cum, acc, acc8, tot;
   tot = *freq;
   sym = 0;
@@ -2524,18 +2556,18 @@ int32_t __decode_symbol_tree(uint16_t *freq)
     span = 1;
     do
     {
-      pair = freq + 2 * level_geom[sym].tbl_base + 2 * span + 2 * node + 8;
-      fa = *pair;
-      f1 = pair[1];
+      pair = bit_tree(freq, sym) + span + node;
+      fa = pair->f[0];
+      f1 = pair->f[1];
       go = rc.decode_bit(fa, f1);
-      fq = pair[go];
+      fq = pair->f[go];
       if ( fq > 0x4000u )
       {
-        *pair -= *pair >> 1;
-        pair[1] -= pair[1] >> 1;
-        fq = pair[go];
+        pair->f[0] -= pair->f[0] >> 1;
+        pair->f[1] -= pair->f[1] >> 1;
+        fq = pair->f[go];
       }
-      pair[go] = alt_freq_init + fq;
+      pair->f[go] = alt_freq_init + fq;
       mask >>= 1;
       span *= 2;
       node1 = go + 2 * node;
@@ -3376,9 +3408,10 @@ int32_t __alt_p1_context(AltP1Block *_this, AltP1Block *nb0, AltP1Block *nb1)
 int32_t __update_binary_pair(uint16_t *_this, int32_t symbol)
 {
   ;
-  uint8_t *tbl;   // was int32_t: these hold addresses
+  // Was `int32_t`, then a byte pointer laundered back through one: Hex-Rays
+  // kept the tree base in a register and every step in bytes.  It is the tree.
+  FreqPair *tbl, *pair;
   int32_t tot, mask, lvl, node, span, path, go;
-  uint16_t *pair;
   uint32_t step, f, f1_old;
   tot = *_this;
   if ( (uint32_t)tot <= 0x8000 )
@@ -3399,24 +3432,24 @@ int32_t __update_binary_pair(uint16_t *_this, int32_t symbol)
       mask = level_geom[lvl].half;
       path = symbol - level_geom[lvl].first;
       node = 0;
-      tbl = (uint8_t *)((int32_t)(_this + 2 * level_geom[lvl].tbl_base + 8));
+      tbl = bit_tree(_this, lvl);
       span = 1;
       do
       {
-        pair = (uint16_t *)(tbl + 4 * (node + span));
-        f = (uint16_t)pair[(mask & path) != 0];
+        pair = tbl + node + span;
         go = (mask & path) != 0;
+        f = pair->f[go];
         if ( f > 0x2000 )
         {
-          f1_old = (uint16_t)pair[1];
-          *pair -= *pair >> 1;
-          pair[1] = f1_old - (f1_old >> 1);
-          LOWORD(f) = pair[go];
+          f1_old = pair->f[1];
+          pair->f[0] -= pair->f[0] >> 1;
+          pair->f[1] = f1_old - (f1_old >> 1);
+          f = pair->f[go];
         }
         span *= 2;
         mask >>= 1;
         node = go + 2 * node;
-        pair[go] = f + ((alt_freq_init * ((uint32_t)(::plane_predictor == 2) + 5)) >> 3);
+        pair->f[go] = f + ((alt_freq_init * ((uint32_t)(::plane_predictor == 2) + 5)) >> 3);
       }
       while ( mask );
       // The loop leaves only when `mask` is 0, and every one of the nine
@@ -4264,6 +4297,7 @@ uint8_t *__rc_begin_encode()
 {
   ;
   uint8_t *tbl, *row;
+  FreqPair *seed;   // the row's tree of counter pairs, seeded (60, 36)
   int32_t at4, at5, k;
   int32_t bits;          // the same slot as the buffer pointer below, in a
   uint8_t *Buffer;       // register MSVC reused; two roles, two names
@@ -4361,10 +4395,13 @@ uint8_t *__rc_begin_encode()
         *(uint16_t *)&row[16] = 8;
         *(uint16_t *)&row[18] = 4;
         *(uint16_t *)row = 635;
+        // Byte 20 is `bit_tree` element 1: the tree is 1-indexed and its
+        // element 0 is the last two words of the header seeded above.
+        seed = (FreqPair *)&row[20];
         for ( i = 0; i < 0x7A; ++i )
         {
-          *(uint16_t *)&row[4 * i + 20] = 60;
-          *(uint16_t *)&row[4 * i + 22] = 36;
+          seed[i].f[0] = 60;
+          seed[i].f[1] = 36;
         }
         row += 508;
         ++k;
