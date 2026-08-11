@@ -113,6 +113,31 @@ def locals_named(text, name):
     return len(pat.findall(text))
 
 
+def frames_declaring(text, name):
+    """Every frame struct that declares a member called `name`.
+
+    Reached as `__frame.name`, which the member-safe rename pattern excludes on
+    purpose -- so these are exactly the declarations a whole-file rename would
+    move without their uses.
+    """
+    out, cur, depth = set(), None, 0
+    for l in text.split('\n'):
+        c = l.split('//')[0]
+        m = re.match(r'\s*struct\s+(?:alignas\([^)]*\)\s*)?(\w+)\s*\{', c)
+        if m:
+            cur, depth = m.group(1), c.count('{') - c.count('}')
+            continue
+        if cur is None:
+            continue
+        depth += c.count('{') - c.count('}')
+        if re.match(r'\s*(?:const\s+)?[A-Za-z_]\w*[\s*]+%s\s*(?:\[[^\]]*\])?\s*;'
+                    % re.escape(name), c):
+            out.add(cur)
+        if depth <= 0:
+            cur = None
+    return out
+
+
 SKIP = 'tools/struct-skip.txt'
 
 
@@ -194,6 +219,18 @@ def main():
         if n:
             sys.exit('%s -> %s: %d bodies already declare a local called %s'
                      % (old, new, n, new))
+        # The name being renamed *away from* matters too, and only here.
+        # `--member` above says a frame member's uses are `__frame.X`, which
+        # the member-safe pattern excludes -- so a whole-file rename of a name
+        # that is *also* some frame's member moves that member's declaration
+        # and leaves its uses behind.  It compiles right up until it does not:
+        # renaming the locals `m1`..`m4` in one body took four members out of
+        # three other frames and stopped the build.
+        where = frames_declaring(text, old)
+        if where and '--member' not in sys.argv:
+            sys.exit('%s: also a member of %s -- rename it with --in FUNC, or '
+                     'pass --member to move the frame member itself'
+                     % (old, ', '.join(sorted(where))))
 
     total = 0
     for old, new in pairs:

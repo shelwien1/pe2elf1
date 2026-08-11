@@ -11409,27 +11409,35 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
   int32_t y0;
-  // These shared `__frame.ArgList` with the name that still binds it: one
-  // stack slot MSVC gave to locals whose live ranges do not overlap, and
-  // Hex-Rays named every use.  That they can have storage of their own is
-  // the gate's answer -- nothing writes one of them and reads another.
-  uint8_t *ArgList_5;
+  // These ten shared `__frame.ArgList`: one stack slot MSVC gave to locals
+  // whose live ranges do not overlap, and Hex-Rays named every use after it.
+  // That they can have storage of their own is the gate's answer -- nothing
+  // writes one of them and reads another.
+  //
+  // What they are is one output cursor at the width the plane's depth calls
+  // for.  `unmodel_plane_slow` writes a reconstructed plane at four, three,
+  // two or one bytes a pixel or packed below a byte, and each width walks the
+  // same buffer through its own type: `out32`, `out_ent`, `out16`, `out8`,
+  // `out_bits`.  `out_at` is where the next one starts and where the last one
+  // left off, which is why every branch begins by casting it and ends by
+  // casting back.
+  uint8_t *out_at;
   int32_t done;
-  int32_t m1;
-  int32_t m2;
-  int32_t m3;
-  int32_t ArgList_4;
+  int32_t f_b0;
+  int32_t f_b3;
+  int32_t f_b4;
+  int32_t f_b5;
   uint8_t *Src_1;
   ModelBlock *this_1;
-  int32_t m4;
+  int32_t f_b1;
   int32_t lo1;
   int32_t m5;
   int32_t g1;
   ;
   ModelBlock *this_4;
   uint32_t *x6;   // the alphabet map again
-  uint8_t *ArgList, *ArgList_2, *buf, *ArgList_3, *ArgList_9, *ArgList_10,
-          *Src_2, *p, *ArgList_8;
+  uint8_t *dst_base, *dst_buf, *buf, *expand_buf, *out_bits, *row_at,
+          *Src_2, *p, *out8;
   int16_t lvl;
   PixRec *kk, *row_cur3, *row_cur2, *row_cur1, *n_syms;   // the five row buffers, rotated
   uint32_t has4;
@@ -11440,8 +11448,8 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   int32_t g, flags, lo, k, w2, w4, w2n, lvl_n, live, gi, s,
           bucket, x, x2, y, step, x7, x3, x4, bits, depth,
           y2, depth_raw, nchunk, n_pix, chunk, q5, q1, at, q2, written, n_pix2, x5;
-  uint32_t *ArgList_6;
-  // `ArgList_6` was one register carrying two cursors: four bytes per pixel in
+  uint32_t *out32;
+  // `out32` was one register carrying two cursors: four bytes per pixel in
   // the 32-bit branch and two in the 16-bit one, which is why every store
   // through it in the second loop had to cast the width back down.  The two
   // branches shared the two-line tail that puts the cursor back, and the goto
@@ -11451,12 +11459,14 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   uint16_t *out16;
   SymListBlock *has3, *alpha;
   SymPair *group_ctr;   // one group's row of counter pairs
-  SymEntry *ArgList_7;
+  SymEntry *out_ent;
   SymList *i_1, *i, *j_1, *j;
   FreqRec *rec;   // a bucket record: `grid[bucket]`
   PixRec *lists, *t;   // `row_cur[6]` and `row_cur[7]`, the two rows above
   Src_1 = Src;
-  ArgList = &Src[-(_this->depth < 8)];
+  // One byte back when the depth is sub-byte, because `out_bits` writes with
+  // `*++out_bits` and so starts one before the first byte it fills.
+  dst_base = &Src[-(_this->depth < 8)];
   __rc_begin_decode(0);
   __expand_alphabet((ModelBlock *)_this);
   this_1 = (ModelBlock *)(_this);
@@ -11470,13 +11480,20 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
     g0 = g;
 
     y0 = flags & 4;
-    m4 = flags & 2;
-    m3 = flags & 0x10;
+    // Six bits of `flags`, each gating one "fold this weight into that one"
+    // step, and each named for the bit it tests.  Hex-Rays called them
+    // `m1`..`m4` here and `m1`..`m6` in `model_plane`, which is the encoder's
+    // mirror of this loop -- and the two numberings disagree: `m1` was bit 0
+    // here and bit 3 there, `m2` the other way round.  Two mirror functions
+    // whose masks swap names is the same defect as one address written two
+    // ways, and the bit is the one name both can be checked against.
+    f_b1 = flags & 2;
+    f_b4 = flags & 0x10;
     lo = 0;
-    m1 = flags & 1;
+    f_b0 = flags & 1;
 
-    ArgList_4 = flags & 0x20;
-    m2 = flags & 8;
+    f_b5 = flags & 0x20;
+    f_b3 = flags & 8;
     do
     {
       lo1 = lo;
@@ -11519,7 +11536,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
           w2 = rec->w[3];
           w4 = rec->w[4];
         }
-        if ( m4 )
+        if ( f_b1 )
         {
           w2n = (uint16_t)(w4 + rec->w[2]);
           rec->w[2] = w2n;
@@ -11530,26 +11547,26 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         {
           w2n = rec->w[2];
         }
-        if ( m3 )
+        if ( f_b4 )
         {
           w2n = (uint16_t)(w2 + w2n);
           rec->w[2] = w2n;
           w2 = 0;
           rec->w[3] = 0;
         }
-        if ( m1 )
+        if ( f_b0 )
         {
           rec->w[1] += w4;
           w4 = 0;
           rec->w[4] = 0;
         }
-        if ( m2 )
+        if ( f_b3 )
         {
           rec->w[1] += w2;
           w2 = 0;
           rec->w[3] = 0;
         }
-        if ( ArgList_4 )
+        if ( f_b5 )
         {
           rec->w[1] += w2n;
           w2n = 0;
@@ -11603,7 +11620,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
     g = g0 + 1;
   }
   while ( g0 + 1 < 15 );
-  ArgList_2 = ArgList;
+  dst_buf = dst_base;
   this_4 = (ModelBlock *)((int32_t)this_1);
   buf = (uint8_t *)bmf_new(this_1->alphabet);
   Size = this_1->alphabet;
@@ -11655,19 +11672,18 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   jj = this_4->depth;
   if ( (uint32_t)jj == this_4->depth_raw )
   {
-    ArgList_3 = nullptr;
+    expand_buf = nullptr;
   }
   else
   {
-    ArgList_2 = (uint8_t *)bmf_new(*(uint32_t *)&this_4->height * this_4->width + 3);
+    dst_buf = (uint8_t *)bmf_new(*(uint32_t *)&this_4->height * this_4->width + 3);
     jj = this_4->depth;
-    ArgList_3 = ArgList_2;
+    expand_buf = dst_buf;
   }
   nbytes = (jj + 7) >> 3;
   if ( this_4->height > 0 )
   {
-    ArgList_4 = (int32_t)ArgList_3;
-    ArgList_5 = ArgList_2;
+    out_at = dst_buf;
     bucket = 0;
     while ( 1 )
     {
@@ -11737,21 +11753,18 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         goto LABEL_53;
       if ( row_w > 0 )
       {
-        ArgList_6 = (uint32_t *)ArgList_5;
+        out32 = (uint32_t *)out_at;
         y2 = 0;
         do
-          *ArgList_6++ = this_4->sym_code[this_4->row_cur[0][y2++ + 8].sym];
+          *out32++ = this_4->sym_code[this_4->row_cur[0][y2++ + 8].sym];
         while ( (uint32_t)y2 < this_4->width );
-        ArgList_5 = (uint8_t *)ArgList_6;
+        out_at = (uint8_t *)out32;
         goto LABEL_74;
       }
 LABEL_74:
       bucket = x + 1;
       if ( (uint32_t)bucket >= *(uint32_t *)&this_4->height )
-      {
-        ArgList_3 = (uint8_t *)ArgList_4;
         goto LABEL_76;
-      }
     }
     if ( nbytes == 4 )
       goto LABEL_74;
@@ -11762,19 +11775,19 @@ LABEL_53:
       {
         // Three bytes out of each 24-bit code: the low half and byte 2, which
         // is a `SymEntry` -- the same three-byte pair the symbol lists hold.
-        ArgList_7 = (SymEntry *)ArgList_5;
+        out_ent = (SymEntry *)out_at;
         step = 0;
         do
         {
           x6 = this_4->sym_code;
           x7 = this_4->row_cur[0][step + 8].sym;
-          ArgList_7->sym = (uint16_t)x6[x7];
-          ArgList_7->cnt = (uint8_t)(x6[x7] >> 16);
+          out_ent->sym = (uint16_t)x6[x7];
+          out_ent->cnt = (uint8_t)(x6[x7] >> 16);
           ++step;
-          ++ArgList_7;
+          ++out_ent;
         }
         while ( (uint32_t)step < this_4->width );
-        ArgList_5 = (uint8_t *)ArgList_7;
+        out_at = (uint8_t *)out_ent;
       }
       goto LABEL_74;
     }
@@ -11784,21 +11797,21 @@ LABEL_53:
       {
         if ( row_w > 0 )
         {
-          ArgList_8 = ArgList_5;
+          out8 = out_at;
           x5 = 0;
           do
             // A byte, not a word: this branch is the 8-bits-per-pixel one, and
             // `sym_code` was a `uint8_t *` when this dereference was written.
-            *ArgList_8++ = (uint8_t)this_4->sym_code[this_4->row_cur[0][x5++ + 8].sym];
+            *out8++ = (uint8_t)this_4->sym_code[this_4->row_cur[0][x5++ + 8].sym];
           while ( (uint32_t)x5 < this_4->width );
-          ArgList_5 = ArgList_8;
+          out_at = out8;
         }
       }
       else if ( row_w > 0 )
       {
         x4 = 0;
         bits = 0;
-        ArgList_9 = ArgList_5;
+        out_bits = out_at;
         do
         {
           depth = this_4->depth;
@@ -11806,27 +11819,27 @@ LABEL_53:
           if ( bits < 0 )
           {
             bits = 8 - depth;
-            *++ArgList_9 = this_4->sym_code[this_4->row_cur[0][x4 + 8].sym] << ((8 - depth) & 31);
+            *++out_bits = this_4->sym_code[this_4->row_cur[0][x4 + 8].sym] << ((8 - depth) & 31);
           }
           else
           {
-            *ArgList_9 |= this_4->sym_code[this_4->row_cur[0][x4 + 8].sym] << (bits & 31);
+            *out_bits |= this_4->sym_code[this_4->row_cur[0][x4 + 8].sym] << (bits & 31);
           }
           ++x4;
         }
         while ( (uint32_t)x4 < this_4->width );
-        ArgList_5 = ArgList_9;
+        out_at = out_bits;
       }
       goto LABEL_74;
     }
     if ( row_w > 0 )
     {
-      out16 = (uint16_t *)ArgList_5;
+      out16 = (uint16_t *)out_at;
       x3 = 0;
       do
         *out16++ = this_4->sym_code[this_4->row_cur[0][x3++ + 8].sym];
       while ( (uint32_t)x3 < this_4->width );
-      ArgList_5 = (uint8_t *)out16;
+      out_at = (uint8_t *)out16;
     }
     goto LABEL_74;
   }
@@ -11848,15 +11861,15 @@ LABEL_76:
       if ( nchunk >= 6 )
       {
         q5 = 0;
-        ArgList_10 = ArgList_3;
+        row_at = expand_buf;
         do
         {
-          __frame.row[q5] = ArgList_10;
-          ArgList_10 += 5 * chunk;
-          __frame.row[q5 + 1] = &ArgList_3[chunk * (q5 + 1)];
-          __frame.row[q5 + 2] = &ArgList_3[chunk * (q5 + 2)];
-          __frame.row[q5 + 3] = &ArgList_3[chunk * (q5 + 3)];
-          __frame.row[q5 + 4] = &ArgList_3[chunk * (q5 + 4)];
+          __frame.row[q5] = row_at;
+          row_at += 5 * chunk;
+          __frame.row[q5 + 1] = &expand_buf[chunk * (q5 + 1)];
+          __frame.row[q5 + 2] = &expand_buf[chunk * (q5 + 2)];
+          __frame.row[q5 + 3] = &expand_buf[chunk * (q5 + 3)];
+          __frame.row[q5 + 4] = &expand_buf[chunk * (q5 + 4)];
           q5 += 5;
         }
         while ( q5 <= nchunk - 6 );
@@ -11866,7 +11879,7 @@ LABEL_76:
       at = chunk * done;
       do
       {
-        __frame.row[q1] = &ArgList_3[at];
+        __frame.row[q1] = &expand_buf[at];
         at += chunk;
         ++q1;
       }
@@ -11875,7 +11888,6 @@ LABEL_76:
     if ( n_pix > 0 )
     {
       Src_2 = Src_1;
-      ArgList_4 = (int32_t)ArgList_3;
       q2 = 0;
       written = 0;
       do
@@ -11890,9 +11902,8 @@ LABEL_76:
         ++written;
       }
       while ( written < n_pix2 );
-      ArgList_3 = (uint8_t *)ArgList_4;
     }
-    free(ArgList_3);
+    free(expand_buf);
   }
 }
 
@@ -15083,12 +15094,12 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
   uint16_t *word;   // a row cursor into sym_word
   int32_t y1;
   int32_t bucket;
-  int32_t m1;
-  int32_t m2;
-  int32_t m3;
-  int32_t m4;
-  int32_t m5;
-  int32_t m6;
+  int32_t f_b3;
+  int32_t f_b0;
+  int32_t f_b4;
+  int32_t f_b1;
+  int32_t f_b2;
+  int32_t f_b5;
   int32_t alpha;
   uint32_t hi;
   ;
@@ -15147,12 +15158,12 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
       flags = ctx_group_flags[g];
       blk->ctx_state[flags] = g;
       lo = 0;
-      m5 = flags & 4;
-      m4 = flags & 2;
-      m3 = flags & 0x10;
-      m2 = flags & 1;
-      m1 = flags & 8;
-      m6 = flags & 0x20;
+      f_b2 = flags & 4;
+      f_b1 = flags & 2;
+      f_b4 = flags & 0x10;
+      f_b0 = flags & 1;
+      f_b3 = flags & 8;
+      f_b5 = flags & 0x20;
       do
       {
         hi = 0;
@@ -15182,22 +15193,22 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
           LOWORD(w2) = 2;
           w3 = 2;
           w4 = 2;
-          if ( m5 )
+          if ( f_b2 )
           {
             w3 = 4;
             w4 = 0;
           }
-          if ( m4 )
+          if ( f_b1 )
           {
             LOWORD(w2) = w4 + 2;
             w4 = 0;
           }
-          if ( m3 )
+          if ( f_b4 )
           {
             LOWORD(w2) = w3 + w2;
             w3 = 0;
           }
-          if ( m2 )
+          if ( f_b0 )
           {
             w2n = w4 + 2;
             w4 = 0;
@@ -15207,7 +15218,7 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
           {
             rec->w[4] = w4;
           }
-          if ( m1 )
+          if ( f_b3 )
           {
             w2n += w3;
             w3 = 0;
@@ -15217,7 +15228,7 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
           {
             rec->w[3] = w3;
           }
-          if ( m6 )
+          if ( f_b5 )
           {
             rec->w[1] = w2 + w2n;
             LOWORD(w2) = 0;

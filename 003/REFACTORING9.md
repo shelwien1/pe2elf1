@@ -22,11 +22,11 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp / bmf.cpp lines            17787     17616         17533
+subs1.hpp / bmf.cpp lines            17787     17616         17548
 raw-offset sites                        22        12             5
   off `_this`                            —         1             0
 byte offsets on a typed base           121         0             0
-pointer casts                         2137      1545          1369
+pointer casts                         2137      1545          1367
 fNN members / named ones             93/121     5/162         0/171
 distinct unexplained locals            554       591             0
   bodies still carrying one              —    8/102         0/102
@@ -1589,3 +1589,61 @@ evaluate is not an address it can compare. And a line that its two scans both
 see is deduplicated before the comparison: `p = &q[i + 1];` is a subscript and
 a store, and a line reported against itself is the tool finding its own
 duplicate rather than the file's.
+
+---
+
+## 20. Ten names for one cursor, and a mask family that swapped
+
+`unmodel_plane_slow` still carried ten locals called `ArgList` through
+`ArgList_10`, with a comment saying they had shared one stack slot and that
+Hex-Rays named every use after it. The comment was right about where the names
+came from and said nothing about what they are, which is why they survived a
+round that claims no Hex-Rays names are left: the *pattern* `\bv\d+` and
+`\bn0x` do not match `ArgList_7`, and §1's row measures the pattern.
+
+What they are is one output cursor at the width the plane's depth calls for.
+The function reconstructs a plane at four, three, two or one bytes a pixel or
+packed below a byte, and each width walks the same buffer through its own type.
+So `out_at` is where the next branch starts and the last one left off, and
+`out32`, `out_ent`, `out16`, `out8` and `out_bits` are the five views of it —
+which is why every branch begins by casting `out_at` and ends by casting back.
+The remaining four are the input base, the destination buffer, the expansion
+buffer that gets freed, and the row walker.
+
+### One of the ten was two things
+
+`ArgList_4` held `flags & 0x20` for the first half of the function and
+`(int32_t)ArgList_3` for the second — a mask and a pointer in one slot, which
+is the artefact §12 is about wearing a type. The pointer half is dead: both
+`ArgList_4 = (int32_t)ArgList_3; … ArgList_3 = (uint8_t *)ArgList_4;` pairs
+save and restore across a region that never writes `ArgList_3`, the same shape
+as `read_bmp`'s `img = __frame.img_f` in §18. Four lines out, and the name is
+a mask again.
+
+### The mask family, and why it was renamed twice
+
+Those masks are six bits of `flags`, each gating one "fold this weight into
+that one" step. Hex-Rays called them `m1`..`m4` here and `m1`..`m6` in
+`model_plane`, which is the encoder's mirror of the same loop — **and the two
+numberings disagree.** `m1` is `flags & 1` in the decoder and `flags & 8` in
+the encoder; `m2` is the other way round. Two mirror functions whose masks
+swap names is the same defect §19 is about, one thing written two ways, and it
+is worse here because both spellings are single letters and a digit. Naming
+each for the bit it tests — `f_b0` … `f_b5` — makes every line check itself
+against the constant beside it and makes the two functions line up.
+
+**The first attempt renamed them file-wide and stopped the build**, which is
+the part worth keeping. `m1` and `m2` are also members of
+`AltModelP1EncodeFrame`, and a frame member is reached as `__frame.m1` —
+precisely what `rename.py`'s member-safe pattern excludes, so the declaration
+moved and the uses did not. It also renamed the encoder's `m1` to the
+decoder's meaning, which would have compiled: two functions where `f_b0` is
+`flags & 1` in one and `flags & 8` in the other is worse than what it replaced.
+
+`rename.py` refuses that now. It already had `--member` for renaming a frame
+member deliberately and `--in FUNC` for scoping to one body; what it lacked was
+a check on the name being renamed *away* from, so a whole-file rename of a name
+that is some frame's member is refused with the frames named and the two ways
+out spelled in the message. The guard is one function, `frames_declaring`, and
+asking it about `m1` answers `AltModelP1EncodeFrame` — which is where the four
+declarations went.
