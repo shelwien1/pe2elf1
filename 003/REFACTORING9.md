@@ -22,24 +22,31 @@ and 3.
 
 ```
                                    round 8   round 9
-subs1.hpp / bmf.cpp lines            17787     17814
+subs1.hpp / bmf.cpp lines            17787     17810
 raw-offset sites                        22        12
 byte offsets on a typed base           121         0
 fNN members / named ones             93/121     5/162
 distinct vNN locals                    554       550
-goto / LABEL_n:                     112/79     89/58
-conversion warnings (ratchet)         1455      1370
+  bodies still carrying one              —   54/102
+goto / LABEL_n:                     112/79     81/55
+conversion warnings (ratchet)         1455      1341
 ```
 
-Three of those numbers were wrong when this section was first written, and the
+Four of those numbers were wrong when this section was first written, and the
 correction is §10's subject. `shape.py` hardcoded `SRC = 'subs1.hpp'` and
 ignored the path it was given, so the same file answered for every version it
-was asked about; its `goto` count was `src.count('goto ')`, which counts the two
+was asked about; its `goto` count was `src.count('goto ')`, which counts the
 comments that *explain* a jump no longer there; and its label count anchored at
-column zero, which misses the two labels that are indented. The row read 92/58
-where the file has 89/58, and `degoto.py`'s headline had the same defect.
+column zero, which misses the labels that are indented. `degoto.py`'s headline
+had the same defect.
 
-A figure a comment can move is not a measurement. That is the whole of §10.
+`distinct vNN locals` was not wrong, it was useless: it counts spellings across
+the whole file, so it cannot move until a name is gone from all 59 bodies that
+use one, and naming every local in a function leaves it unchanged. The row
+beneath it is the one that measures that work.
+
+A figure a comment can move is not a measurement, and a figure that cannot move
+is not one either. That is the whole of §10.
 
 `tools/sweep.sh` runs every tool in the directory and prints what each still
 finds; all of them report zero. It also checks that the file did not change
@@ -300,7 +307,7 @@ noticing that a tool's *input* was narrower than the file.
 * **Zero byte offsets on a typed base**, from 121 at the start of the round.
   Every pointer in the file whose target is a record is typed as that record,
   and the stride scan of §2 reports zero for the third time.
-* **91 gotos and 56 labels**, from 112 and 79. Four rules did it, and each
+* **81 gotos and 55 labels**, from 112 and 79. Five rules did it, and each
   came from reading `degoto.py --why` rather than the file:
 
   | rule | tool | gotos |
@@ -308,8 +315,15 @@ noticing that a tool's *input* was narrower than the file.
   | a shared tail small enough to copy | `untail.py` | 9 |
   | a jump into a block is a disjunction | `unjump.py` | 10 |
   | a forward jump over a region | `degoto.py` | 1 |
+  | an `if` whose arms agree is not a decision | `undup.py` | 6 |
   | an unconditional `goto` ending a block is an `else` | — | 1 |
   | one statement duplicated by hand | — | 1 |
+
+  `undup.py`'s six are §10's, and the rule generalises past `goto`s: MSVC
+  emitted its own aliasing proofs as control flow, so `colour_transform`,
+  `interleave_plane` and `expand_image` each carried a copy loop written out
+  twice behind a six-line test whose two arms were the same code. Three of the
+  five were spelled as `if`/`else` and two with jumps into the kept copy.
 
   The `else` is the one worth reading, because it is the shape a decompiler
   produces most often and the one a tool is least able to claim. In
@@ -328,10 +342,10 @@ noticing that a tool's *input* was narrower than the file.
   at `if ( fwrite(...) != n ) return 0;` when control carries straight on. A
   `return` ends a run only when it is unconditional.
 
-  What is left is 44 labels and it is genuinely structural: 19 reached by more
-  than one `goto`, 8 where the `goto` is not the whole of an `if`, 6 backward,
-  5 that leave a block, 3 that enter one, and 3 whose skipped region something
-  else enters. Removing any of those needs a flag or a duplicated body large
+  What is left is 42 labels and it is genuinely structural: 17 reached by more
+  than one `goto`, 9 where the `goto` is not the whole of an `if`, 6 backward,
+  5 that leave a block, 3 whose skipped region something else enters, and 2
+  that enter one. Removing any of those needs a flag or a duplicated body large
   enough that the duplication is the cost.
 * ~~**44 `fNN` members**~~ Five, and all five are recorded as having no
   readers. The other 39 were named, and the method for the ones whose name
@@ -373,11 +387,12 @@ noticing that a tool's *input* was narrower than the file.
 
   What is left are the names whose *values* are unexplained, which is
   `algorithm_v2.md`'s work and not a sweep's.
-* **1370 conversion warnings.** The ratchet fell 85 this round and almost every
-  step was a by-product: a `match[0]` read through a typed field does not need
-  the cast that a raw byte read did. The last two came from the shared tail
-  §10 copied, where the two `ptrdiff_t`-to-`uint32_t` assignments in it are
-  truncating on purpose and now say so.
+* **1341 conversion warnings.** The ratchet fell 114 this round and most of it
+  was a by-product: a `match[0]` read through a typed field does not need the
+  cast that a raw byte read did. Seventeen came from the deleted aliasing proofs
+  of §10, which existed to compare pointers against integers holding addresses,
+  and the last four from `bmf.cpp` — where one of the four was not a defect at
+  all, and taking the warning at its word cost a stream. §10 again.
 
 ---
 
