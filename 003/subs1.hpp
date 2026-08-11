@@ -1658,9 +1658,9 @@ uint32_t __alt_init_tables(uint8_t *fold, int8_t *unfold)
   for ( i = 0; i < 0x3F; ++i )
   {
     ((uint8_t *)unfold)[4 * i + 2] = 2 * i + 1;
-    ((uint8_t *)unfold)[4 * i + 1] = -2 * i - 1;
+    ((uint8_t *)unfold)[4 * i + 1] = (uint8_t)(-2 * i - 1);
     ((uint8_t *)unfold)[4 * i + 4] = 2 * i + 2;
-    ((uint8_t *)unfold)[4 * i + 3] = -2 * i - 2;
+    ((uint8_t *)unfold)[4 * i + 3] = (uint8_t)(-2 * i - 2);
   }
   unfold[254] = 127;
   unfold[253] = -127;
@@ -1676,7 +1676,10 @@ uint32_t __alt_init_tables(uint8_t *fold, int8_t *unfold)
   // 22-line else are gone.  Same argument as the block above it.
   *fold = 0;
   lo = 1;
-  fold[128] = -1;
+  // The wrap is the point: the odd codes count down from -1, which in a byte
+  // is 255.  The cast says so, where the bare `-1` left the compiler to point
+  // out that the value changes -- which it does, deliberately.
+  fold[128] = (uint8_t)-1;
   // -E is 0, so the near-lossless fill that stood here never ran: the jump
   // over it was `if ( 1 ) goto LABEL_52`, and LABEL_52 had no other source.
   // The `lo < 128` test it jumped past went with it -- the only live

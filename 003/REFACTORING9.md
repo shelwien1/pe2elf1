@@ -34,7 +34,7 @@ distinct unexplained locals            554       591             0
 goto / LABEL_n:                     112/79     81/55         49/34
   restart a loop / exit N blocks         —         —         16/29
   jump into a block / sideways           —         —           1/3
-conversion warnings (ratchet)         1455      1331          1159
+conversion warnings (ratchet)         1455      1331          1156
 ```
 
 **Not one Hex-Rays name is left in either file.** Checked by running the
@@ -956,8 +956,33 @@ at the operator. 62 sites, no semantic change, and the two claims it does
 *not* make are in its docstring — it does not decide whether a comparison is
 right, which is a question about whether the signed side can go negative.
 
-What is left is 1159 warnings about a value narrowed or resigned on assignment,
-and nothing else — no `-Wsign-compare`, no `-Wuseless-cast`.
+What is left is 1156, and `shape.py` now says what they are made of rather
+than only how many there are — the same defect the `goto` row had:
+
+```
+conversion warnings                1156
+  signedness, same width            651
+  narrowing 32 -> 16                306
+  narrowing 32 -> 8                 167
+  narrowing 64 -> 16                 18
+  a negative constant into an unsigned type    5
+  narrowing 64 -> 8                   5
+  narrowing 16 -> 8                   3
+  narrowing 64 -> 32                  1
+```
+
+The rows add up to the ratchet by construction, including rows for
+`-Wsign-compare` and `-Wuseless-cast` that are currently absent — a breakdown
+that quietly drops two of what it is breaking down is exactly what §10 is
+about, and the first version of this dropped two.
+
+The 502 narrowings are into fields the 1997 layout fixes at eight or sixteen
+bits: `freq_tbl->w[0] = ...` where `w` is `uint16_t[8]` because the record is
+sixteen bytes. No declaration can fix those; only a cast, and §15's argument
+applies. The 651 same-width ones are what `resign.py` could not reach — 97
+where the local is not 32 bits, 59 where the conversion is not the shape the
+rule needs, 53 blocked by an ordering comparison, and the rest in member stores
+and call arguments where the destination is not a local at all.
 
 The same tool would zero those too, and it is not going to, which is worth
 being explicit about because the distinction is thin and the temptation is not.
@@ -967,7 +992,7 @@ knowing the conversion rules. A cast on an assignment adds nothing — `x = y`
 with the two declared types visible already says the value is being narrowed,
 and writing `(uint16_t)` in front of it moves no information anywhere. It would
 move the number, which is the entire objection: §10 is about measures you can
-satisfy without doing the work, and putting 1159 casts in this file to make a
+satisfy without doing the work, and putting 1156 casts in this file to make a
 scoreboard read zero is the purest example of one this project could produce.
 
 The number goes down when the *types* are right, and §16 is 64 of them.
@@ -999,8 +1024,13 @@ Retyping leaves a tail, and it is worth doing rather than leaving: eleven casts
 became useless when the type under them changed, and four comparisons became
 mixed that were not before — including three where the `(int32_t)` that
 `explicitcmp.py` had added a commit earlier now pointed the wrong way and had
-to come off entirely. 1174 to 1159, and the only warnings left in the file are
-the narrowings.
+to come off entirely. 1174 to 1156, and five deliberate wraps say so: `fold[128] = (uint8_t)-1` is
+the fold table's odd codes counting down from -1, which in a byte is 255. That
+cast earns its place by the same test as the comparison casts -- a negative
+constant reaching an unsigned type is either a mistake or a deliberate wrap,
+and the compiler naming the value it becomes is not the same as the reader
+knowing which. A sixth attempt at one was itself useless and came straight back
+out; a useless cast is worse than the warning it silences.
 
 Every correction to the rule came from the gate, and each one is a different
 part of it:

@@ -156,6 +156,58 @@ def fields():
     return out
 
 
+# Widths on this target; `unify_types.py` has already made the spellings
+# uniform, so the aka forms only turn up for types with no typedef name.
+WIDTH = {'uint8_t': 8, 'int8_t': 8, 'char': 8, 'bool': 8, 'unsigned char': 8,
+         'signed char': 8, 'uint16_t': 16, 'int16_t': 16, 'short int': 16,
+         'short unsigned int': 16, 'uint32_t': 32, 'int32_t': 32, 'int': 32,
+         'unsigned int': 32, 'size_t': 32, 'uintptr_t': 32, 'float': 32,
+         'long int': 32, 'long unsigned int': 32, 'uint64_t': 64,
+         'int64_t': 64, 'double': 64}
+CONV = re.compile(r"warning: (?:unsigned )?conversion (from|to) '([^']+)'"
+                  r"(?: \{aka '[^']*'\})? (?:to|from) '([^']+)'")
+# A negative constant reaching an unsigned type is its own thing: the compiler
+# names the value it becomes, so it is either a mistake or a deliberate wrap,
+# and never the ambient type mixture the other rows are about.
+CONST = re.compile(r'warning: unsigned conversion')
+RATCHET = re.compile(r'\[-W(?:conversion|sign-conversion|sign-compare'
+                     r'|useless-cast)\]')
+
+
+def warnkinds(log='warn.log'):
+    """{kind: count} over warn.log, or {} when there is no log."""
+    out = collections.Counter()
+    try:
+        rows = open(log).read().split('\n')
+    except OSError:
+        return out
+    for l in rows:
+        if not RATCHET.search(l):
+            continue
+        m = CONV.search(l)
+        if not m:
+            # Everything the ratchet counts has a row, so the rows add up to
+            # the ratchet.  A breakdown that quietly drops two of them is the
+            # kind of measurement section 10 is about.
+            out['sign-compare' if 'sign-compare' in l else 'useless cast'] += 1
+            continue
+        if CONST.search(l):
+            out['a negative constant into an unsigned type'] += 1
+            continue
+        src, dst = ((m.group(3), m.group(2)) if m.group(1) == 'to'
+                    else (m.group(2), m.group(3)))
+        a, b = WIDTH.get(src), WIDTH.get(dst)
+        if a is None or b is None:
+            out['of an unrecognised type'] += 1
+        elif b < a:
+            out['narrowing %d -> %d' % (a, b)] += 1
+        elif b == a:
+            out['signedness, same width'] += 1
+        else:
+            out['widening'] += 1
+    return out
+
+
 def summary():
     lines, span, sigs = load()
     src = '\n'.join(lines)
@@ -264,6 +316,14 @@ def summary():
         '%d / %d' % (shapes['back'], shapes['out']))
     row('  jump into a block / sideways',
         '%d / %d' % (shapes['into'], shapes['same']))
+    # What the conversion ratchet is made of.  The total says how many are
+    # left and not whether any of them can be fixed, which is the same defect
+    # the goto row had: a narrowing into a field the 1997 layout fixes at
+    # sixteen bits is not the same kind of thing as a local declared against
+    # its own assignments, and only the second is `resign.py`'s business.
+    row('conversion warnings', '%d' % sum(warnkinds().values()))
+    for k, v in sorted(warnkinds().items(), key=lambda kv: -kv[1]):
+        row('  ' + k, v)
     row('__fwd_* shims', len(set(re.findall(r'\b__fwd_\w+', src))))
 
 
