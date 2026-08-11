@@ -1433,114 +1433,154 @@ void __expand_predictor_mode0(uint32_t Src, int32_t i, int32_t a3)
   // never taken: -E is 0
 }
 
-uint32_t __predict_med(uint8_t *Src, int32_t i, int32_t a3)
+// MED, the LOCO-I / JPEG-LS median edge predictor, applied to a whole plane in
+// place: every byte is replaced by its residual, folded to an unsigned code.
+//
+// It runs *backwards*, from the last pixel to the first, which is what lets it
+// work in place -- each pixel's predictors are up and to the left, so they are
+// still the originals when it reaches them.  That also fixes the shape of the
+// loops: the last row is the general case, the first column of each row has no
+// west neighbour, and the first row has no north one, so those two are peeled
+// out rather than guarded.
+//
+// It also counts every code it writes into `hist_scratch`, and nothing in this
+// build reads that count back: `hist_scratch` is a scratch region that
+// `model_planes` immediately reuses as `__model_planes_buf`.  The histogram was
+// for a cost estimate that this build's constant compression mode does not
+// reach -- as is `predict_med` itself, whose two call sites are both under
+// `plane_predictor == 1`, which `-E` being 0 makes unreachable.  `unpredict_med`
+// is not: a decoder still has to read streams an encoder with `-E` produced,
+// which is what `testfiles/med32.bmp` exists to exercise.
+//
+// So this body is here to be *read*, as the definition of what the inverse
+// undoes, and the naming below is worth more than the code is.
+uint32_t __predict_med(uint8_t *pixels, int32_t width, int32_t height)
 {
   ;
-  uint8_t v26;
-  int32_t i_1, v16, v17, v18, v19, v20, v21, v22, v24, v27, v29;
-  uint32_t j, n15, v23, n15_1;
-  uint8_t *v28;
-  uint8_t *v3, *v4;
-  alignas(16) uint8_t v31[272];
-  v3 = (Src + a3 * i);
-  v4 = &v3[-i];
+  uint8_t left;
+  int32_t rows_left, x_left, north, pred, northwest, code, pairs, ofs, done;
+  uint32_t j, last, k;
+  uint8_t *q;
+  uint8_t *p, *up;
+  alignas(16) uint8_t fold[272];
+  p = (pixels + height * width);
+  up = &p[-width];
   // The folding table, value -> code: a non-negative residual takes the even
   // codes counting up from 0, a negative one the odd codes counting down from
   // -1.  `unpredict_med` builds the inverse of this.  Wrapping to eight bits
   // is what the byte stores did.
   for ( j = 0; j < 128; ++j )
   {
-    v31[j]       = (uint8_t)(2 * j);
-    v31[128 + j] = (uint8_t)(-1 - 2 * (int32_t)j);
+    fold[j]       = (uint8_t)(2 * j);
+    fold[128 + j] = (uint8_t)(-1 - 2 * (int32_t)j);
   }
-  i_1 = i;
-  v16 = a3 - 1;
-  if ( a3 == 1 )
+  rows_left = height - 1;
+  if ( height == 1 )
     goto LABEL_24;
   do
   {
-    v17 = i - 1;
-    if ( i_1 == 1 )
+    x_left = width - 1;
+    if ( width == 1 )
       goto LABEL_23;
-    v29 = v16;
     do
     {
-      v18 = (uint8_t)*--v4;
-      v19 = (uint8_t)*(--v3 - 1);
-      v20 = (uint8_t)v3[-i - 1];
-      if ( v19 < v18 )
+      // `up` trails `p` by exactly one row and the two step together, so
+      // these three are the neighbourhood of the pixel at `*p`:
+      //
+      //     northwest  north
+      //     pred(west) *p
+      //
+      // `pred` starts as the west neighbour because two of MED's three
+      // outcomes are `west` or `north` unchanged, and west is the more common.
+      north = (uint8_t)*--up;
+      pred = (uint8_t)*(--p - 1);
+      northwest = (uint8_t)p[-width - 1];
+      // MED: northwest above both neighbours predicts the smaller, below both
+      // predicts the larger, between them predicts the plane through all three.
+      // An edge through the corner therefore predicts across it, not along it.
+      if ( pred < north )
       {
-        if ( v20 < v19 )
+        if ( northwest < pred )
         {
-          LOBYTE(v19) = *v4;
+          LOBYTE(pred) = *up;
           goto LABEL_21;
         }
-        if ( v20 <= v18 )
+        if ( northwest <= north )
 LABEL_20:
-          LOBYTE(v19) = v18 + v19 - v20;
+          LOBYTE(pred) = north + pred - northwest;
       }
       else
       {
-        if ( v20 > v19 )
+        if ( northwest > pred )
         {
-          LOBYTE(v19) = *v4;
+          LOBYTE(pred) = *up;
           goto LABEL_21;
         }
-        if ( v20 >= v18 )
+        if ( northwest >= north )
           goto LABEL_20;
       }
 LABEL_21:
-      v21 = (uint8_t)v31[(uint8_t)(*v3 - v19)];
-      *v3 = v21;
-      ++*(uint32_t *)&hist_scratch[4 * v21];
-      --v17;
+      code = (uint8_t)fold[(uint8_t)(*p - pred)];
+      *p = code;
+      ++*(uint32_t *)&hist_scratch[4 * code];
+      --x_left;
     }
-    while ( v17 );
-    v16 = v29;
-    i_1 = i;
+    while ( x_left );
 LABEL_23:
-    --v4;
-    --v3;
-    n15 = (uint8_t)v31[(uint8_t)(*v3 - v3[-i_1])];
-    *v3 = n15;
-    ++*(uint32_t *)&hist_scratch[4 * n15];
-    --v16;
+    // The first column of the row: no west neighbour, so predict from north
+    // alone.  This is also where a width of 1 lands, which is why the inner
+    // loop is skipped rather than entered zero times.
+    --up;
+    --p;
+    last = (uint8_t)fold[(uint8_t)(*p - p[-width])];
+    *p = last;
+    ++*(uint32_t *)&hist_scratch[4 * last];
+    --rows_left;
   }
-  while ( v16 );
+  while ( rows_left );
 LABEL_24:
-  if ( i_1 != 1 )
+  // The first row, which has no north neighbour: predict each pixel from the
+  // one to its left.  MSVC unrolled it two pixels at a time, so `left` is the
+  // one value both halves of a pair need and `ofs` walks back in twos; `done`
+  // is how far the unrolled part got, and the `if` below is the odd pixel it
+  // leaves when the row is an even number wide.
+  //
+  // Nothing here touches `hist_scratch`, unlike the two cases above -- the
+  // first row is one row out of `height`, and leaving it out saves the
+  // unrolled loop a dependent store.
+  if ( width != 1 )
   {
-    n15 = i_1 - 1;
-    v22 = (i_1 - 1) / 2;
-    if ( v22 )
+    last = width - 1;
+    pairs = (width - 1) / 2;
+    if ( pairs )
     {
-      n15_1 = i_1 - 1;
-      v23 = 0;
-      v24 = 0;
+      k = 0;
+      ofs = 0;
       do
       {
-        v26 = v3[v24 - 2];
-        ++v23;
-        v3[v24 - 1] = v31[(uint8_t)(v3[v24 - 1] - v26)];
-        v3[v24 - 2] = v31[(uint8_t)(v26 - v3[v24 - 3])];
-        v24 -= 2;
+        left = p[ofs - 2];
+        ++k;
+        p[ofs - 1] = fold[(uint8_t)(p[ofs - 1] - left)];
+        p[ofs - 2] = fold[(uint8_t)(left - p[ofs - 3])];
+        ofs -= 2;
       }
-      while ( v23 < v22 );
-      n15 = n15_1;
-      v27 = 2 * v23 + 1;
+      while ( k < pairs );
+      done = 2 * k + 1;
     }
     else
     {
-      v27 = 1;
+      done = 1;
     }
-    if ( n15 > v27 - 1 )
+    if ( last > done - 1 )
     {
-      v28 = (&v3[-v27]);
-      n15 = (uint8_t)(*v28 - *((int8_t *)v28 - 1));
-      *v28 = v31[(uint8_t)n15];
+      q = (&p[-done]);
+      last = (uint8_t)(*q - *((int8_t *)q - 1));
+      *q = fold[(uint8_t)last];
     }
   }
-  return n15;
+  // Whatever code was written last, which is not a result: both call sites
+  // discard it.
+  return last;
 }
 
 uint32_t __alt_init_tables(uint8_t *a1, int8_t *a2)
