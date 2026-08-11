@@ -7414,23 +7414,25 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
   // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
   // gives every member its own storage and DLRAW aborts while compressing.
   struct alignas(16) ReduceAlphabetFrame {   // 66064 bytes, one stack frame
-      uint32_t v78[15];
-      void *v79;
+      uint32_t zero_base[15];
+      void *tmp;
       int32_t n0x2000_5;
       // 64 KiB: `memset(buf, 0, 0x10000)` clears it and the body walks it as
-      // 8192 eight-byte records, so `v82`, `v83`, `v84`, `v85` and `_pad0` are
+      // 8192 eight-byte records, so `kids`, `y_spill`, `at_spill`, `bits_spill` and `_pad0` are
       // inside it -- the same bytes under other names at other times.  It stays
-      // four bytes here because `v82` wants eight-byte alignment and `buf` does
+      // four bytes here because `kids` wants eight-byte alignment and `buf` does
       // not, and a union of the two would move the whole frame four bytes.
       uint8_t buf[4];
-      uint64_t v82[127];
-      int32_t v83;
-      int32_t v84;
-      int32_t v85;
+      uint64_t kids[127];
+      int32_t y_spill;
+      int32_t at_spill;
+      int32_t bits_spill;
       uint8_t _pad0[64504];
-      uint8_t v86[16];
-      int32_t v87;
-      uint32_t v88[91];
+      // The same sixteen `SymList`s `expand_alphabet`'s frame ends in, and
+      // recovered the same way -- as three untyped members.  16 + 4 + 364 is
+      // 384, which is 16 * sizeof(SymList), and the free loop below walks back
+      // from `slot` six words at a time taking `[5]`, which is `ent`.
+      SymList lists[16];
       union {
           void *slot[19];   // one array, three bases: `&n4_1`, `*(&Block + n)` and the interleaved `(&v91)[2*j]` / `*(&v92 + 2*j)`
           // The locals MSVC spilled into these bytes.  The walk above reaches
@@ -7455,7 +7457,7 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 66064, "frame layout moved");
   static_assert(sizeof(void *) != 4
-                || __builtin_offsetof(__typeof__(__frame), v86)
+                || __builtin_offsetof(__typeof__(__frame), lists)
                    - __builtin_offsetof(__typeof__(__frame), buf) == 0x10000,
                 "buf is not the 64 KiB the memset clears");
   ;
@@ -7465,7 +7467,7 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
   uint8_t *half;   // `uint8_t *` beside the `char` scalars above
   ModelBlock *Blockaa_1;
   ModelBlock *Blockaa_4;
-  int32_t n8, lane, node, n4, n0x2000_2, n0x2000_1, carry, img_w, n4_2, slot_a, off, done, *p_n4, n16_2,
+  int32_t n8, node, n4, n0x2000_2, n0x2000_1, carry, img_w, n4_2, slot_a, off, done, *p_n4, n16_2,
           n_moved, done2, n256, height, n_distinct, row_w, y, at, bits, bpp, shift, sym, sym2, *p_n4_2, n16_1, alphabet,
           n0x2000, prev, s, s_next, *p_n4_1, n16;
   ModelBlock *Blockaa_3;
@@ -7483,20 +7485,24 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
   k_2 = (n8 + 7) >> 3;
   for ( i = 0; i < 8; ++i )
   {
-    lane = 12 * i;
-    __frame.v88[lane] = 0;
-    __frame.v88[lane + 6] = 0;
+    __frame.lists[2 * i].ent = nullptr;
+    __frame.lists[2 * i + 1].ent = nullptr;
   }
   Blockaa_1 = (ModelBlock *)((int32_t *)__frame.slot7);
   if ( n8 <= 8 )
   {
+    // 1024 bytes cleared, sixteen at a time from the top: `zero_base` is
+    // 60 bytes before `buf`, and `&zero_base[16]` through `&zero_base[268]`
+    // is `buf[0 .. 1023]` -- the 256 four-byte flags an eight-bit alphabet
+    // needs.  The other path memsets the whole 64 KiB because its values do
+    // not fit 256 slots.
     n256 = 256;
     do
     {
-      bmf_zero16(&__frame.v78[n256 + 12]);
-      bmf_zero16(&__frame.v78[n256 + 8]);
-      bmf_zero16(&__frame.v78[n256 + 4]);
-      bmf_zero16(&__frame.v78[n256]);
+      bmf_zero16(&__frame.zero_base[n256 + 12]);
+      bmf_zero16(&__frame.zero_base[n256 + 8]);
+      bmf_zero16(&__frame.zero_base[n256 + 4]);
+      bmf_zero16(&__frame.zero_base[n256]);
       n256 -= 16;
     }
     while ( n256 * 4 );
@@ -7510,15 +7516,15 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
       {
         row_w = *(int32_t *)&Blockaa_1->width;
         __frame.slot8 = src - 1;
-        __frame.v84 = 0;
+        __frame.at_spill = 0;
         y = 0;
         do
         {
           if ( !row_w )
             break;
-          __frame.v83 = y;
+          __frame.y_spill = y;
           x = 0;
-          at = __frame.v84;
+          at = __frame.at_spill;
           bits = 0;
           do
           {
@@ -7531,10 +7537,10 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
             }
             sym = __frame.slot4 & (*__frame.slot8 >> (shift & 31));
             first = *(uint32_t *)&__frame.buf[4 * sym - 4] == 0;
-            __frame.v85 = shift;
+            __frame.bits_spill = shift;
             ++x;
             *(uint32_t *)&__frame.buf[4 * sym - 4] = 1;
-            bits = __frame.v85;
+            bits = __frame.bits_spill;
             *(int32_t *)&Blockaa_1->alphabet += first;
             Blockaa_1->sym_word[at] = sym;
             row_w = *(int32_t *)&Blockaa_1->width;
@@ -7542,10 +7548,10 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
           }
           while ( x < *(int32_t *)&Blockaa_1->width );
           n_distinct = *(int32_t *)&Blockaa_1->alphabet;
-          __frame.v84 = at;
-          y = __frame.v83 + 1;
+          __frame.at_spill = at;
+          y = __frame.y_spill + 1;
         }
-        while ( __frame.v83 + 1 < (uint32_t)Blockaa_1->height );
+        while ( __frame.y_spill + 1 < (uint32_t)Blockaa_1->height );
       }
     }
     else if ( height * *(int32_t *)&Blockaa_1->width )
@@ -7571,8 +7577,8 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
     n_syms = *(int32_t *)&Blockaa_1->alphabet;
     if ( n_syms <= __frame.slot4 )
     {
-      __init_symbol_list((SymList *)__frame.v86, (int32_t)Blockaa_1, __frame.slot4 - n_syms + 2, 1);
-      __frame.v87 = 19 * ((SymList *)__frame.v86)->n;
+      __init_symbol_list(&__frame.lists[0], (int32_t)Blockaa_1, __frame.slot4 - n_syms + 2, 1);
+      __frame.lists[0].rescale_at = 19 * __frame.lists[0].n;
       n_syms3 = *(int32_t *)&Blockaa_1->alphabet;
       if ( n_syms3 )
       {
@@ -7583,7 +7589,7 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
         {
           if ( *(uint32_t *)&__frame.buf[4 * s - 4] )
           {
-            __encode_symbol_list((SymList *)__frame.v86, s - prev);
+            __encode_symbol_list(&__frame.lists[0], s - prev);
             n_syms3 = *(int32_t *)&Blockaa_1->alphabet;
             *(uint32_t *)&__frame.buf[4 * s - 4] = next_id;
             s_next = s + 1;
@@ -7661,7 +7667,7 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
             while ( 1 )
             {
               n4 = *(uint32_t *)&__frame.buf[8 * node] < (uint32_t)val;
-              n0x2000_6 = (uint16_t *)&__frame.v82[node];
+              n0x2000_6 = (uint16_t *)&__frame.kids[node];
               node = n0x2000_6[n4];
               if ( !n0x2000_6[n4] )
                 break;
@@ -7807,14 +7813,14 @@ LABEL_71:
           Blockaa_1 = (ModelBlock *)((int32_t *)__frame.slot7);
         }
       }
-      __frame.v79 = Blockaa_1->sym_word;
+      __frame.tmp = Blockaa_1->sym_word;
       Blockaa_1->height = k_2 * __frame.slot0;
       *(int32_t *)&Blockaa_1->depth = 8;
-      free(__frame.v79);
+      free(__frame.tmp);
       newbuf = bmf_new(2 * Blockaa_1->height * *(int32_t *)&Blockaa_1->width);
-      __frame.v79 = (__frame.slot[1]);
+      __frame.tmp = (__frame.slot[1]);
       Blockaa_1->sym_word = (uint16_t *)newbuf;
-      __reduce_alphabet((ModelBlock *)Blockaa_1, mode, (uint8_t *)__frame.v79);
+      __reduce_alphabet((ModelBlock *)Blockaa_1, mode, (uint8_t *)__frame.tmp);
       free((__frame.slot[1]));
     }
     else
@@ -7825,7 +7831,7 @@ LABEL_71:
         li = 0;
         do
         {
-          __init_symbol_list(&((SymList *)__frame.v86)[li], li, 256, 1);
+          __init_symbol_list(&__frame.lists[li], li, 256, 1);
           ++li;
         }
         while ( li < 4 * k_2 );
@@ -7848,7 +7854,7 @@ LABEL_71:
             __frame.slot7 = (ModelBlock *)(Blockaa_4);
             for ( k = 0; k < __frame.slot9; ++k )
             {
-              __encode_symbol_list(&((SymList *)__frame.v86)[4 * k + carry], (uint8_t)word);
+              __encode_symbol_list(&__frame.lists[4 * k + carry], (uint8_t)word);
               carry = (uint8_t)word >> 6;
               word >>= 8;
             }
