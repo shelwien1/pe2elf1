@@ -6023,14 +6023,13 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src) {   P1Ctx *v25,
   AltP1Block *v24;
   AltP1Block *v6;
   int32_t i, v3, n4, *v7, v8, v9, v10, v14, v15, v16, ArgList, v18, i_3, n4_1,
-          n4_2, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43,
-          v44, v45, v46, v48, v49, v50, v52, v53, v54, v56, v57, v60,
-          v62, v64, v67, v68, v71, v72, v74, v75, v78, v79, n4_3, n4_4;
+          n4_2, v52, v53, v54, v56, v57, v60, v62, v64, v67, v68, v71, v72,
+          v74, v75, v78, v79, n4_3, n4_4;
   uint32_t v20, *v51;
   AltP1Block *v66;
   AltP1Block *v73;
-  uint8_t *v30;
-  uint8_t *v31;
+  P1Ctx *v30;
+  P1Ctx *v31;
   uint8_t *v69, *v76;
   void **v82;
   i = *p_i;
@@ -6115,50 +6114,41 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src) {   P1Ctx *v25,
             here[-2] = up[1];
             here[-1] = up[0];
           }
-          v30 = (uint8_t *)(*&v24->cursor[2]);
-          v31 = (uint8_t *)(*&v24->cursor[4]);
-          v24->ctx[2] = 0;
-          v24->ctx[3] = 0;
-          v24->ctx[4] = 0;
-          v32 = *((int8_t *)v30 - 3);
-          v24->ctx[3] = v32;
-          v33 = *((int8_t *)v30 - 1);
-          v24->ctx[4] = v33;
-          v34 = *((int8_t *)v31 - 3) + v32;
-          v24->ctx[3] = v34;
-          v35 = *((int8_t *)v31 - 1) + v33;
-          v24->ctx[4] = v35;
-          v36 = v30[1] + v34;
-          v24->ctx[3] = v36;
-          v37 = v30[3] + v35;
-          v24->ctx[4] = v37;
-          v38 = v31[1] + v36;
-          v24->ctx[3] = v38;
-          v39 = v31[3] + v37;
-          v24->ctx[4] = v39;
-          v40 = v30[5] + v38;
-          v24->ctx[3] = v40;
-          v41 = v30[7] + v39;
-          v24->ctx[4] = v41;
-          v42 = v31[5] + v40;
-          v24->ctx[3] = v42;
-          v43 = v31[7] + v41;
-          v24->ctx[4] = v43;
-          v44 = v30[9] + v42;
-          v24->ctx[3] = v44;
-          v45 = v30[11] + v43;
-          v24->ctx[4] = v45;
-          v46 = v31[9] + v44;
+          v30 = v24->cursor[2];
+          v31 = v24->cursor[4];
           cursor0 = v24->cursor[0];
-          v24->ctx[3] = v46;
-          v48 = v31[11] + v45;
-          v24->ctx[4] = v48;
-          v49 = cursor0[-4].mag + v46;
-          v24->ctx[3] = v49;
-          v50 = cursor0[-3].mag + v48;
-          v24->ctx[4] = v50;
-          v24->ctx[3] = cursor0[-2].mag + v49;
-          v24->ctx[4] = cursor0[-1].mag + v50;
+          v24->ctx[2] = 0;
+          // The same twenty terms `alt_p1_d8_encode_body` sums, arriving here
+          // as byte offsets on a `uint8_t *`: a record is `sym` then `mag`, so
+          // every odd offset is a `mag` and byte 2k+1 is record k.
+          //
+          // The four `(int8_t)` casts are load-bearing, and this is measured
+          // rather than argued.  MSVC emitted `movsx` for the four left-margin
+          // loads and `movzx` for the other sixteen; a magnitude is
+          // `abs(sample - prediction)` on eight-bit samples, so it can exceed
+          // 127, and a probe counting how often it does says **21 of 1536** on
+          // `testfiles/altp1.bmp`.  The sign shows.  (That is also the only
+          // stream in the corpus that reaches this body at all, which is what
+          // `tools/mkaltp1.py` exists for.)
+          //
+          // Contrast REFACTORING9.md section 3, where `PixRec`'s three `movsx`
+          // loads keep their casts on the opposite finding: there the writers
+          // are comparisons and the seed is 1, so the sign *cannot* show.  Two
+          // casts kept for two different reasons, and only one of them was a
+          // transcription.
+          //
+          // The `_d8` pair reads all twenty unsigned, which is the same source
+          // compiled differently.
+          v24->ctx[3] = (int8_t)v30[-2].mag + (int8_t)v31[-2].mag
+                      + v30[0].mag  + v31[0].mag
+                      + v30[2].mag  + v31[2].mag
+                      + v30[4].mag  + v31[4].mag
+                      + cursor0[-4].mag + cursor0[-2].mag;
+          v24->ctx[4] = (int8_t)v30[-1].mag + (int8_t)v31[-1].mag
+                      + v30[1].mag  + v31[1].mag
+                      + v30[3].mag  + v31[3].mag
+                      + v30[5].mag  + v31[5].mag
+                      + cursor0[-3].mag + cursor0[-1].mag;
           n4_1 = plane_count;
         }
         while ( n4_2 < plane_count );
@@ -11909,17 +11899,15 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
   uint8_t v11, v12, v13, v62, v71, v81;
   AltP1Block *v6;
   int32_t i, v3, n4, *v7, v8, v9, v10, v14, v15, v16, v17, i_3, n4_1, n4_2,
-          v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43,
-          v44, v45, v47, v48, v49, n5_9, n5_7, n5_2, n5_1, v56, n16, v58,
-          v63, v64, v65, n16_1, n5_3, v69, n5_4, v73, v74, n16_2, v77, n5_5,
-          v84, n16_3, n4_3, n4_4;
+          n5_9, n5_7, n5_2, n5_1, v56, n16, v58, v63, v64, v65, n16_1, n5_3,
+          v69, n5_4, v73, v74, n16_2, v77, n5_5, v84, n16_3, n4_3, n4_4;
   int64_t v68, v76, v86;
   uint32_t v19;
   AltP1Block *v61;
   AltP1Block *v70;
   AltP1Block *v80;
-  uint8_t *v29;
-  uint8_t *v30;
+  P1Ctx *v29;
+  P1Ctx *v30;
   uint8_t v53, v60, v79;
   AltP1Block *v50;
   void **v89;
@@ -12009,50 +11997,22 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
             here[-2] = up[1];
             here[-1] = up[0];
           }
-          v29 = (uint8_t *)(*&v23->cursor[2]);
-          v30 = (uint8_t *)(*&v23->cursor[4]);
-          v23->ctx[2] = 0;
-          v23->ctx[3] = 0;
-          v23->ctx[4] = 0;
-          v31 = *((int8_t *)v29 - 3);
-          v23->ctx[3] = v31;
-          v32 = *((int8_t *)v29 - 1);
-          v23->ctx[4] = v32;
-          v33 = *((int8_t *)v30 - 3) + v31;
-          v23->ctx[3] = v33;
-          v34 = *((int8_t *)v30 - 1) + v32;
-          v23->ctx[4] = v34;
-          v35 = v29[1] + v33;
-          v23->ctx[3] = v35;
-          v36 = v29[3] + v34;
-          v23->ctx[4] = v36;
-          v37 = v30[1] + v35;
-          v23->ctx[3] = v37;
-          v38 = v30[3] + v36;
-          v23->ctx[4] = v38;
-          v39 = v29[5] + v37;
-          v23->ctx[3] = v39;
-          v40 = v29[7] + v38;
-          v23->ctx[4] = v40;
-          v41 = v30[5] + v39;
-          v23->ctx[3] = v41;
-          v42 = v30[7] + v40;
-          v23->ctx[4] = v42;
-          v43 = v29[9] + v41;
-          v23->ctx[3] = v43;
-          v44 = v29[11] + v42;
-          v23->ctx[4] = v44;
-          v45 = v30[9] + v43;
+          v29 = v23->cursor[2];
+          v30 = v23->cursor[4];
           cursor0 = v23->cursor[0];
-          v23->ctx[3] = v45;
-          v47 = v30[11] + v44;
-          v23->ctx[4] = v47;
-          v48 = cursor0[-4].mag + v45;
-          v23->ctx[3] = v48;
-          v49 = cursor0[-3].mag + v47;
-          v23->ctx[4] = v49;
-          v23->ctx[3] = cursor0[-2].mag + v48;
-          v23->ctx[4] = cursor0[-1].mag + v49;
+          v23->ctx[2] = 0;
+          // `alt_model_p1_decode`'s block, term for term and cast for cast --
+          // see the note there for why the four `(int8_t)`s stay.
+          v23->ctx[3] = (int8_t)v29[-2].mag + (int8_t)v30[-2].mag
+                      + v29[0].mag  + v30[0].mag
+                      + v29[2].mag  + v30[2].mag
+                      + v29[4].mag  + v30[4].mag
+                      + cursor0[-4].mag + cursor0[-2].mag;
+          v23->ctx[4] = (int8_t)v29[-1].mag + (int8_t)v30[-1].mag
+                      + v29[1].mag  + v30[1].mag
+                      + v29[3].mag  + v30[3].mag
+                      + v29[5].mag  + v30[5].mag
+                      + cursor0[-3].mag + cursor0[-1].mag;
           n4_1 = plane_count;
         }
         while ( n4_2 < plane_count );
