@@ -994,6 +994,11 @@ struct AltP2Block {
     float p2_row[7][4];   // +278528 .. +278639
     struct {
       uint64_t f278528_q;
+      // Three scalars every one of the four p2 bodies clears at a row start
+      // and nothing reads -- twelve writes, no readers, and no computed reach
+      // lands on +278536, +278540 or +278542 either.  They stay because the
+      // layout does; the observation is that a row start in this model
+      // resets more state than it uses.
       uint32_t f278536;
       uint16_t f278540;
       uint8_t f278542;
@@ -1019,14 +1024,18 @@ struct AltP2Block {
       // scalars are an array.  `alt_p2_context` writes them one at a time.
       int32_t bank_ctx[5];   // +278676 .. +278695
       int32_t f278696;
-      uint16_t f278700;
+      // The filter's last prediction.  `alt_p2_context` leaves its output
+      // here and `alt_p2_model` reads it one pixel later as
+      // `lane[2] = sample - pred_prev`, which is the residual the record
+      // carries and the sign of which is one of the five context digits.
+      uint16_t pred_prev;
       uint8_t _u0_0_12[2];
       uint32_t ctx;
       // Two indices derived from `ctx`, one per parity of a bit the coders
       // are handed alongside the record: `alt_p2_encode_symbol` reads
       // `a2[a3 & 1]`, and `alt_p2_context` writes both from `ctx_delta`.
       uint32_t ctx_pair[2];   // +278708 .. +278715
-      int32_t f278716;
+      int32_t nb_id_used;
       // The context band: `alt_p2_alloc` sets it to -(16q + 7) .. 16q + 8 for
       // `q = plane_desc[0].w12`, and three of the five weight groups classify a
       // difference against it as `(d <= band_hi) + (d < band_lo)` -- above,
@@ -1041,7 +1050,11 @@ struct AltP2Block {
       // `plane_desc[plane_idx + 1]`'s subscript, and `alt_p2_alloc` folds it
       // into the high bits of every `ctx_delta` entry.
       uint32_t plane_idx;
-      int32_t f278732;
+      // Whether this plane has a reference to predict from, out of
+      // `plane_desc`.  Zero skips the bias `alt_p2_context` adds to its first
+      // four rows and skips the sub-model rows that read the other two
+      // blocks, so a plane with no reference predicts from itself alone.
+      int32_t has_ref;
       // Five p2 planes and a cursor into each.  `alt_p2_alloc` takes five
       // buffers of `18 * width + 234` bytes -- `sizeof(P2Ctx)` times
       // `width + 13` -- and sets each cursor 144 bytes in, which is one row of
@@ -1077,8 +1090,12 @@ struct AltP2Block {
   // 120 = 960 / 8, and the reader caps at 960 before shifting: the guard is
   // the extent.  Hex-Rays' 16-byte view of this ran into the next table, whose
   // real base is +280872 -- which is why every read of that one said `+ 4`.
-  uint8_t f280752[120];   // +280752 .. +280871
-  int16_t f280872[1916];   // +280872 .. +284703
+  uint8_t nb_ctx[120];   // +280752 .. +280871
+  // The same interning as `ModelBlock::ctx_id`, one level deep: a
+  // neighbourhood signature indexes `nb_id`, and a slot still zero takes the
+  // next id from `nb_id_used`.  `nb_ctx` is the other half of the pairing --
+  // 120 entries for the 960 the reader caps at, indexed `sum >> 3`.
+  int16_t nb_id[1916];   // +280872 .. +284703
   uint8_t _pad2[8];   // +284704 .. +284711
   // The p2 counter table: five banks of 32768 records.  Hex-Rays named the
   // first sixteen bytes of each bank -- f284704, f415776, f546848, f677920,
@@ -1131,8 +1148,8 @@ static_assert(sizeof(void *) != 4
                   && __builtin_offsetof(AltP2Block, fold) == 279984
                   && __builtin_offsetof(AltP2Block, fold_hi) == 280240
                   && __builtin_offsetof(AltP2Block, unfold) == 280496
-                  && __builtin_offsetof(AltP2Block, f280752) == 280752
-                  && __builtin_offsetof(AltP2Block, f280872) == 280872
+                  && __builtin_offsetof(AltP2Block, nb_ctx) == 280752
+                  && __builtin_offsetof(AltP2Block, nb_id) == 280872
                   && __builtin_offsetof(AltP2Block, p2_ctr) == 284712
                   && __builtin_offsetof(AltP2Block, freq) == 940072),
               "AltP2Block: the layout moved");
@@ -4350,7 +4367,7 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
   while ( n0x1E60 < 0x1E60 );
   v8 = 4 * plane_desc[0].w12 + 1;
   v9 = 16 * plane_desc[0].w12;
-  *(uint32_t *)&_this->f278732 = (uint8_t)(plane_desc[plane_desc[_this->plane_idx + 1].src_plane + 1].flags
+  *(uint32_t *)&_this->has_ref = (uint8_t)(plane_desc[plane_desc[_this->plane_idx + 1].src_plane + 1].flags
                                                & 8) >> 3;
   deadzone_hi = v8;
   deadzone_lo = -v8;
@@ -4410,9 +4427,9 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
   v24 = 0;
   for ( n = 0; n < 0x3C; ++n )
   {
-    _this->f280752[2 * n] = v24;
+    _this->nb_ctx[2 * n] = v24;
     v27 = (2 * n == p2_len_edges[v24]) + v24;
-    _this->f280752[2 * n + 1] = v27;
+    _this->nb_ctx[2 * n + 1] = v27;
     v24 = (2 * n + 1 == p2_len_edges[v27]) + v27;
   }
   _this->ctx = 15;
@@ -6657,8 +6674,8 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
        + (sub4_n > (int32_t)sub1_nb * bmf_p2_thresholds[sub3_row][1])
        + (sub4_n > (int32_t)sub1_nb * bmf_p2_thresholds[sub3_row][0])
        + __frame.v256;
-  v29 = v289->f280872[(uint32_t)v257];
-  if ( v289->f280872[(uint32_t)v257] )
+  v29 = v289->nb_id[(uint32_t)v257];
+  if ( v289->nb_id[(uint32_t)v257] )
   {
     v31 = &((float (*)[4])v289)[16 * v29];
     *(int32_t *)&v289->f278656 = (int32_t)v31;
@@ -6694,9 +6711,9 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
   }
   else
   {
-    v30 = v289->f278716;
-    v289->f278716 = ++v30;
-    v28->f280872[(uint32_t)v257] = v30;
+    v30 = v289->nb_id_used;
+    v289->nb_id_used = ++v30;
+    v28->nb_id[(uint32_t)v257] = v30;
     *(int32_t *)&v28->f278656 = (int32_t)&((float (*)[4])v28)[16 * (int16_t)v30];
   }
   v45 = (P2Ctx *)v28->cursor[1];
@@ -6727,7 +6744,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
     v281 = (P2Ctx *)((int16_t *)(a4->cursor[1] - 1));
     v286 = (P2Ctx *)((int16_t *)(a4->cursor[2] - 1));
     v284 = (P2Ctx *)a5->cursor[0] - 1;
-    v58 = v28->f278732 == 0;
+    v58 = v28->has_ref == 0;
     v283 = a5->cursor[1] - 1;
     v285 = a5->cursor[2] - 1;
     if ( !v58 )
@@ -6760,7 +6777,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
         v87 = (P2Ctx *)((int16_t *)(v282));
         v28->p2_row[5][1] = (float)(v46[-2].lane[0] + v86->lane[0] - v86[-2].lane[0]);
         v28->p2_row[5][2] = (float)(v45->lane[0] + v86->lane[0] - v83->lane[0]);
-        v58 = v28->f278732 == 0;
+        v58 = v28->has_ref == 0;
         v28->p2_row[5][3] = (float)(v46[-2].lane[0] + v87->lane[2]);
         if ( v58 )
         {
@@ -6890,7 +6907,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
   n3536_5 = __alt_p2_filter((float (*)[4])(void *)*(int32_t *)&v28->f278656, (float (*)[4])v28->p2_row, (CtxWeights *)__frame.sub, n2);
   v109 = (P2Ctx *)v28->cursor[0];
   v293 = (P2Ctx *)v28->cursor[1];
-  *(int32_t *)&v28->f278700 = n3536_5;
+  *(int32_t *)&v28->pred_prev = n3536_5;
   v111 = v293->lane[3];
   v112 = v109[-1].lane[3];
   v293 = v293;
@@ -7231,7 +7248,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
     n960 = v251 + n960_1 + 4 * v264 + 2 * (v213 + v212);
     v214 = v264 + v301 + v284[-2].mag + v212 + v282[-2].mag + v213;
     n3536_4 = n3536;
-    if ( v196->f278732 )
+    if ( v196->has_ref )
     {
       n1840_3 = n1840 - v293->lane[1] - v109[0].lane[1];
       if ( n1840_3 < n1840_1 || n1840_3 > n1840_2 )
@@ -7303,7 +7320,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
   }
   else
   {
-    n15 = v196->f280752[n960 >> 3];
+    n15 = v196->nb_ctx[n960 >> 3];
     v196->ctx = n15;
   }
   n255 = (n3536_4 + v186 + 7) >> 4;
@@ -12411,7 +12428,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   a1->cursor[0]->lane[6] = (WORD2(v12) ^ v12) - WORD2(v12);
   v13 = v9 - a1->cursor[1][1].lane[0];
   a1->cursor[0]->lane[7] = (WORD2(v13) ^ v13) - WORD2(v13);
-  v14 = (int16_t)(v9 - a1->f278700);
+  v14 = (int16_t)(v9 - a1->pred_prev);
   a1->cursor[0]->lane[2] = v14;
   a1->cursor[0]->lane[3] = (WORD2(v14) ^ v14) - WORD2(v14);
   v15 = a1->f278656;
