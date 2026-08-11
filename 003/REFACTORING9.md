@@ -26,7 +26,7 @@ subs1.hpp / bmf.cpp lines            17787     17616         17533
 raw-offset sites                        22        12             5
   off `_this`                            —         1             0
 byte offsets on a typed base           121         0             0
-pointer casts                         2137      1545          1379
+pointer casts                         2137      1545          1369
 fNN members / named ones             93/121     5/162         0/171
 distinct unexplained locals            554       591             0
   bodies still carrying one              —    8/102         0/102
@@ -1524,3 +1524,43 @@ was never at an address in 1997 should not be claiming a name that maps to one.
 The false positive is left as it is. A plain `static` helper would be reported
 dead rather than silently missed, and being pointed at the convention is the
 right outcome for that.
+
+### The measure that would have found it
+
+§19 is a find nothing in `tools/` could have made, and that is worth a rule
+rather than a note. `shape.py` counts raw offsets, and only one of the three
+spellings was one. §2's lens takes the gcd of a cursor's *constant*
+subscripts, and none of the three has any — their indices are all variable.
+The compiler is happy with every one of them. So a duplicated address
+computation survives every measure here unless two copies happen to be read
+side by side, which is how this one was found and is not a method.
+
+The arithmetic is what makes it decidable. For a pointer whose element size is
+known, parse each `p[expr]` and `p + expr` as a sum of `c * v` terms, multiply
+every coefficient by the element size, and key the site on the map from
+variable to *byte* coefficient. Two sites with one key are one address. If
+their source text differs, they are two spellings of it. `tools/unspell.py`.
+
+Run against the revision before §19 it finds the pair the section is about, and
+one more that reading had missed:
+
+```
+row  {'': 20, 'i': 4}
+   rc_begin_decode   row[2 * i + 10] = 60;
+   rc_begin_encode   *(uint16_t *)&row[4 * i + 20] = 60;
+```
+
+**`rc_begin_encode` and `rc_begin_decode` seed the same table**, one walking a
+508-byte row as bytes and the other walking the identical row as 254 words —
+the same ten header fields in the same order with the same values, and the same
+0x7A pairs after them. The decoder's spelling is the right one, because every
+field in that row is sixteen bits, and converting the encoder to match removed
+ten pointer casts including the `(uint8_t *)` on the allocation and the
+`(uint16_t *)` putting it back. Its return type went with them: it returns the
+table, which is `uint16_t *`, and the four call sites that discard it did not
+care either way.
+
+The tool reports and does not rewrite. Which spelling wins is a judgement —
+usually the one whose pointer type matches the record, but that is an argument
+about the data and not something the arithmetic decides. It reports zero now,
+and the two revisions above are what says the zero means something.

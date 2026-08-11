@@ -4293,10 +4293,10 @@ int32_t *__alt_p1_alloc(AltP1Block *_this, int32_t img_w, int32_t img_h, int32_t
   return (int32_t *)_this;
 }
 
-uint8_t *__rc_begin_encode()
+uint16_t *__rc_begin_encode()
 {
   ;
-  uint8_t *tbl, *row;
+  uint16_t *tbl, *row;
   FreqPair *seed;   // the row's tree of counter pairs, seeded (60, 36)
   int32_t at4, at5, k;
   int32_t bits;          // the same slot as the buffer pointer below, in a
@@ -4378,39 +4378,39 @@ uint8_t *__rc_begin_encode()
     // The header's first two words -- 635 and `24 * alt_freq_limit` -- are the
     // total and the escape weight; the eight after them are a fixed
     // distribution, 205 124 147 83 48 16 8 4, halving away from the front.
-    tbl = (uint8_t *)bmf_new(0x7F000u);
+    tbl = (uint16_t *)bmf_new(0x7F000u);
     if ( tbl )
     {
       k = 0;
       row = tbl;
       do
       {
-        *(uint16_t *)&row[2] = 24 * alt_freq_limit;
-        *(uint16_t *)&row[4] = 205;
-        *(uint16_t *)&row[12] = 48;
-        *(uint16_t *)&row[6] = 124;
-        *(uint16_t *)&row[14] = 16;
-        *(uint16_t *)&row[8] = 147;
-        *(uint16_t *)&row[10] = 83;
-        *(uint16_t *)&row[16] = 8;
-        *(uint16_t *)&row[18] = 4;
-        *(uint16_t *)row = 635;
-        // Byte 20 is `bit_tree` element 1: the tree is 1-indexed and its
+        row[1] = 24 * alt_freq_limit;
+        row[2] = 205;
+        row[6] = 48;
+        row[3] = 124;
+        row[7] = 16;
+        row[4] = 147;
+        row[5] = 83;
+        row[8] = 8;
+        row[9] = 4;
+        *row = 635;
+        // Word 10 is `bit_tree` element 1: the tree is 1-indexed and its
         // element 0 is the last two words of the header seeded above.
-        seed = (FreqPair *)&row[20];
+        seed = (FreqPair *)&row[10];
         for ( i = 0; i < 0x7A; ++i )
         {
           seed[i].f[0] = 60;
           seed[i].f[1] = 36;
         }
-        row += 508;
+        row += 254;
         ++k;
       }
       while ( (uint32_t)k < 0x400 );
     }
     // An `else { tbl = nullptr; }` stood here, assigning null to what was
     // already null.
-    ::model_tables = (uint16_t *)tbl;
+    ::model_tables = tbl;
   }
   rc.enc_init();
   // Only assigned under `plane_alt_model`, so `-Wmaybe-uninitialized` flags
@@ -5746,6 +5746,7 @@ int32_t __rc_begin_decode(int8_t ArgList_1)
   ;
   int32_t bits_left, at4, at5, k;
   uint16_t *tbl0, *row;
+  FreqPair *seed;   // the row's tree of counter pairs, seeded (60, 36)
   int32_t at6;
   int32_t at7;
   uint32_t i;   // offsets into model_geometry, not pointers
@@ -5832,10 +5833,13 @@ int32_t __rc_begin_decode(int8_t ArgList_1)
         row[8] = 8;
         row[9] = 4;
         *row = 635;
+        // Word 10 is `bit_tree` element 1: the tree is 1-indexed and its
+        // element 0 is the last two words of the header seeded above.
+        seed = (FreqPair *)&row[10];
         for ( i = 0; i < 0x7A; ++i )
         {
-          row[2 * i + 10] = 60;
-          row[2 * i + 11] = 36;
+          seed[i].f[0] = 60;
+          seed[i].f[1] = 36;
         }
         row += 254;
         ++k;
