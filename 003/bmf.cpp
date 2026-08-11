@@ -118,6 +118,12 @@
 
 // Two 32-bit halves as one 64-bit value, which is how Hex-Rays writes a
 // register pair.
+// The cast on `low` is load-bearing: without it a signed `low` sign-extends
+// through the OR and fills the high half with ones.  Removing it on the
+// strength of `-Wuseless-cast` moved `x_ep` by four bytes -- the warning was
+// right about two of the three expansions and the macro is textual, so it has
+// to be correct for all three.  The two call sites that were casting `low`
+// themselves no longer do, which is what made the cast look useless.
 #define __PAIR64__(high, low) (((uint64_t)(high) << 32) | (uint32_t)(low))
 
 // |x| as an unsigned value.  The sign of the *result* is the point: the bodies
@@ -131,7 +137,7 @@ inline uint32_t abs32(int32_t x) { return x >= 0 ? (uint32_t)x : (uint32_t)-x; }
 inline int8_t __OFSUB__(int32_t x, int32_t y)
 {
   int8_t sx = (int8_t)(x < 0);
-  return (int8_t)((sx ^ (int8_t)(y < 0)) & (sx ^ (int8_t)((int32_t)(x - y) < 0)));
+  return (int8_t)((sx ^ (int8_t)(y < 0)) & (sx ^ (int8_t)((x - y) < 0)));
 }
 
 // defs.h stops at SLODWORD/SHIDWORD; the bodies also index DWORD lanes
@@ -281,7 +287,7 @@ static void *bmf_page_alloc(size_t n) {
   if (!base)
     return nullptr;
   uintptr_t raw = (uintptr_t)base + sizeof(void *);
-  char *p = (char *)((raw + (BMF_PAGE - 1)) & ~(uintptr_t)(BMF_PAGE - 1));
+  char *p = (char *)((raw + (BMF_PAGE - 1)) & ~(BMF_PAGE - 1));
   ((void **)p)[-1] = base;
   memset(p, 0, n);
   return p;

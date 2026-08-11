@@ -1,4 +1,4 @@
-In file included from bmf.cpp:345:
+In file included from bmf.cpp:351:
 subs1.hpp: In function 'int32_t __decode_pixel(ModelBlock*, int32_t)':
 subs1.hpp:10249:12: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp:10254:19: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]

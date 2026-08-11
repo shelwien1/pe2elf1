@@ -8390,7 +8390,7 @@ int32_t __choose_plane_coding(BmfImage *a1, int32_t n3, int8_t a3)
                   do
                   {
                     v154 = v153[__frame.v204[0]];
-                    *(int64_t *)&__frame.v203[2] = __PAIR64__((uint32_t)v153, (uint32_t)v151);
+                    *(int64_t *)&__frame.v203[2] = __PAIR64__((uint32_t)v153, v151);
                     __frame.v204[2] = v152;
                     v155 = v154 + *v153 - v153[__frame.v204[1]] - v153[v150];
                     v156 = *v151;
@@ -8452,7 +8452,7 @@ LABEL_109:
                     do
                     {
                       v167 = v166[__frame.v206[3]];
-                      *(int64_t *)((uint8_t *)__frame.v206 + 4) = __PAIR64__((uint32_t)v166, (uint32_t)v164);
+                      *(int64_t *)((uint8_t *)__frame.v206 + 4) = __PAIR64__((uint32_t)v166, v164);
                       __frame.v207[1] = v165;
                       v168 = v167 + *v166 - v166[__frame.v207[0]] - v166[v163];
                       v169 = *v164;

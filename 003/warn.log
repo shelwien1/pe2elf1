@@ -1,8 +1,4 @@
-bmf.cpp: In function 'int8_t __OFSUB__(int32_t, int32_t)':
-bmf.cpp:134:59: warning: useless cast to type 'int32_t' {aka 'int'} [-Wuseless-cast]
-bmf.cpp: In function 'void* bmf_page_alloc(size_t)':
-bmf.cpp:284:48: warning: useless cast to type 'uintptr_t' {aka 'unsigned int'} [-Wuseless-cast]
-In file included from bmf.cpp:345:
+In file included from bmf.cpp:351:
 subs1.hpp: In function 'uint32_t __predict_med(uint8_t*, int32_t, int32_t)':
 subs1.hpp:1523:39: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
 subs1.hpp:1537:12: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
@@ -667,8 +663,6 @@ subs1.hpp:8386:86: warning: conversion from 'int64_t' {aka 'long long int'} to '
 subs1.hpp:8388:64: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8388:82: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8388:84: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
-bmf.cpp:121:59: warning: useless cast to type 'uint32_t' {aka 'unsigned int'} [-Wuseless-cast]
-subs1.hpp:8393:52: note: in expansion of macro '__PAIR64__'
 subs1.hpp:8406:48: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int' may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8402:47: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8419:39: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
@@ -677,8 +671,6 @@ subs1.hpp:8443:39: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' 
 subs1.hpp:8450:66: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8450:84: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8450:86: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
-bmf.cpp:121:59: warning: useless cast to type 'uint32_t' {aka 'unsigned int'} [-Wuseless-cast]
-subs1.hpp:8455:67: note: in expansion of macro '__PAIR64__'
 subs1.hpp:8468:50: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int' may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8465:65: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8464:49: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
