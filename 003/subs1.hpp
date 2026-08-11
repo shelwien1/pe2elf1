@@ -5080,31 +5080,33 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
                 run = run_max;
               if ( Size )
               {
-                if ( nib )
+                // Flush the literals collected so far.  An absolute run is
+                // worth its two-byte header from two literals in 4-bit mode
+                // and three in 8-bit, and below that the literals go out as
+                // one- or two-pixel encoded runs instead.  `LABEL_67` was
+                // that one condition written as a jump from inside the other
+                // arm; the two spellings of it are `Size != 1` and `Size >= 3`.
+                if ( nib ? Size != 1 : Size >= 3 )
                 {
-                  if ( Size != 1 )
+                  *buf_2 = 0;
+                  abs_end2 = buf_2 + 2;
+                  buf_2[1] = Size << (nib & 31);
+                  memcpy(buf_2 + 2,&p[-Size],Size);
+                  buf_2 += Size + 2;
+                  if ( (Size & 1) != 0 )
                   {
-  LABEL_67:
-                    *buf_2 = 0;
-                    abs_end2 = buf_2 + 2;
-                    buf_2[1] = Size << (nib & 31);
-                    memcpy(buf_2 + 2,&p[-Size],Size);
-                    buf_2 += Size + 2;
-                    if ( (Size & 1) != 0 )
-                    {
-                      abs_end2[Size] = 0;
-                      ++buf_2;
-                    }
-                    goto LABEL_69;
+                    abs_end2[Size] = 0;
+                    ++buf_2;
                   }
+                }
+                else if ( nib )
+                {
                   *buf_2 = 2;
                   buf_2[1] = *(p - 1);
                   buf_2 += 2;
                 }
                 else
                 {
-                  if ( Size >= 3 )
-                    goto LABEL_67;
                   if ( Size == 2 )
                   {
                     *buf_2 = 1;
@@ -5115,7 +5117,6 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
                   buf_2[1] = *(p - 1);
                   buf_2 += 2;
                 }
-  LABEL_69:
                 Size = 0;
                 LOBYTE(byte) = *p;
               }
@@ -5136,17 +5137,29 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
             ++p;
             if ( ++Size != run_max )
               break;
-            if ( nib )
+            // The same flush as above, at the point where a literal run hits
+            // its length cap, and the same one condition: two literals pay for
+            // an absolute run in 4-bit mode, three in 8-bit.
+            if ( nib ? Size != 1 : Size >= 3 )
             {
-              if ( Size == 1 )
+              *buf_2 = 0;
+              abs_end = buf_2 + 2;
+              buf_2[1] = Size << (nib & 31);
+              memcpy(buf_2 + 2,&q[-Size],Size);
+              buf_2 += Size + 2;
+              if ( (Size & 1) != 0 )
               {
-                *buf_2 = 2;
-                buf_2[1] = *(q - 1);
-                buf_2 += 2;
-                goto LABEL_55;
+                abs_end[Size] = 0;
+                ++buf_2;
               }
             }
-            else if ( Size < 3 )
+            else if ( nib )
+            {
+              *buf_2 = 2;
+              buf_2[1] = *(q - 1);
+              buf_2 += 2;
+            }
+            else
             {
               if ( Size == 2 )
               {
@@ -5157,19 +5170,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
               *buf_2 = 1;
               buf_2[1] = *(q - 1);
               buf_2 += 2;
-              goto LABEL_55;
             }
-            *buf_2 = 0;
-            abs_end = buf_2 + 2;
-            buf_2[1] = Size << (nib & 31);
-            memcpy(buf_2 + 2,&q[-Size],Size);
-            buf_2 += Size + 2;
-            if ( (Size & 1) != 0 )
-            {
-              abs_end[Size] = 0;
-              ++buf_2;
-            }
-LABEL_55:
             if ( (uint32_t)q >= end )
             {
               buf_1 = buf_2;
@@ -5184,20 +5185,12 @@ LABEL_55:
         while ( (uint32_t)q < end );
         buf_1 = buf_2;
         Buffer_4 = Buffer_5;
-        if ( !Size )
-          goto LABEL_89;
-        if ( nib )
+        // End of the row: flush whatever literals are left, by the same rule
+        // once more.  `LABEL_89` and `LABEL_97` were this written as four
+        // entries into two blocks; every one of them ends by loading the
+        // image geometry and falling into the row terminator below.
+        if ( Size && (nib ? Size != 1 : Size >= 3) )
         {
-          if ( Size == 1 )
-          {
-            buf_2[1] = *(q - 1);
-            *buf_2 = 2;
-            Buffer_3 = img->height;
-            Size_3 = img->stride;
-            buf_1 = buf_2 + 2;
-            goto LABEL_72;
-          }
-LABEL_97:
           *buf_2 = 0;
           buf_2[1] = Size << (nib & 31);
           memcpy(buf_2 + 2,&q[-Size],Size);
@@ -5206,29 +5199,32 @@ LABEL_97:
           if ( (Size & 1) != 0 )
           {
             buf_2[Size + 2] = 0;
-            Buffer_3 = img->height;
-            Size_3 = img->stride;
             ++buf_1;
-            goto LABEL_72;
           }
-LABEL_89:
-          Buffer_3 = img->height;
-          Size_3 = img->stride;
-          goto LABEL_72;
         }
-        if ( Size >= 3 )
-          goto LABEL_97;
-        if ( Size == 2 )
+        else if ( Size && nib )
         {
-          *buf_2 = 1;
-          buf_2[1] = *(q - 2);
+          buf_2[1] = *(q - 1);
+          *buf_2 = 2;
           buf_1 = buf_2 + 2;
         }
-        buf_1[1] = *(q - 1);
-        *buf_1 = 1;
+        else if ( Size )
+        {
+          if ( Size == 2 )
+          {
+            *buf_2 = 1;
+            buf_2[1] = *(q - 2);
+            buf_1 = buf_2 + 2;
+          }
+          buf_1[1] = *(q - 1);
+          *buf_1 = 1;
+          buf_1 += 2;
+        }
         Buffer_3 = img->height;
         Size_3 = img->stride;
-        buf_1 += 2;
+        // The row terminator, and the one place five paths above jump to.
+        // It stays a label: they are early exits out of three nested loops,
+        // which is the shape a forward jump to a single join is for.
 LABEL_72:
         *buf_1 = 0;
         buf_1[1] = 0;
