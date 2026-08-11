@@ -4421,16 +4421,16 @@ void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
 void __alt_model_p1_d8_encode(uint8_t *a1, int32_t i, int32_t a3, uint8_t *a4)
 {
   ;
-  AltP1Block *v4;
-  void **v5;
-  v4 = (AltP1Block *)((int32_t *)bmf_new(0x99D4D8u));
-  if ( v4 )
-    v5 = (void **)__alt_p1_alloc((AltP1Block *)v4, i, a3, 0);
+  AltP1Block *raw;
+  void **blk;
+  raw = (AltP1Block *)((int32_t *)bmf_new(0x99D4D8u));
+  if ( raw )
+    blk = (void **)__alt_p1_alloc((AltP1Block *)raw, i, a3, 0);
   else
-    v5 = nullptr;
-  __alt_p1_d8_encode_body((AltP1Block *)v5, a1, a4);
-  if ( v5 )
-    __alt_p1_free((void **)v5, 1);
+    blk = nullptr;
+  __alt_p1_d8_encode_body((AltP1Block *)blk, a1, a4);
+  if ( blk )
+    __alt_p1_free((void **)blk, 1);
 }
 t_new_handler __set_new_handler(t_new_handler __out_of_memory_handler)
 {
@@ -5268,42 +5268,45 @@ LABEL_72:
   fclose(Stream_2);
   return 1;
 }
-uint32_t __init_symbol_list(SymList *a1, int32_t a2, int32_t a3, int32_t a4)
+uint32_t __init_symbol_list(SymList *list, int32_t a2, int32_t n_syms, int32_t dense)
 {
   ;
   SymEntry *buf;
-  uint32_t v7, v10, result;   // counts, like the header fields they move
-  a1->n = a3;
-  buf = (SymEntry *)bmf_new(3 * a3);
-  a1->ent = buf;
-  if ( a4 )
+  uint32_t result;   // a count, like the header fields it moves
+  // Hex-Rays had this twice, once per arm, as `v7 = list->n` and
+  // `v10 = list->n` read back immediately after the store below -- MSVC keeping
+  // the count in a register.  It is the parameter, unsigned, because every
+  // field it feeds is a count and none of them can be negative.
+  const uint32_t n = (uint32_t)n_syms;
+  list->n = n_syms;
+  buf = (SymEntry *)bmf_new(3 * n_syms);
+  list->ent = buf;
+  if ( dense )
   {
-    v7 = a1->n;
-    a1->tot = 0;
-    a1->live = v7;
-    result = 12 * v7;
-    a1->since_rescale = 12 * v7;
-    a1->rescale_at = 8 * v7;
-    if ( v7 )
+    list->tot = 0;
+    list->live = n;
+    result = 12 * n;
+    list->since_rescale = 12 * n;
+    list->rescale_at = 8 * n;
+    if ( n )
     {
       result = 0;
       do
       {
-        a1->ent[result].sym = result;
-        a1->ent[result].cnt = 1;
+        list->ent[result].sym = result;
+        list->ent[result].cnt = 1;
         ++result;
       }
-      while ( result < a1->live );
+      while ( result < list->live );
     }
   }
   else
   {
-    v10 = a1->n;
-    a1->tot = 2;
-    a1->rescale_at = 20 * v10;
-    a1->live = 0;
-    a1->since_rescale = 18 * v10;
-    return (uint32_t)memset(buf,0,3 * v10);
+    list->tot = 2;
+    list->rescale_at = 20 * n;
+    list->live = 0;
+    list->since_rescale = 18 * n;
+    return (uint32_t)memset(buf,0,3 * n);
   }
   return result;
 }
@@ -14154,15 +14157,15 @@ void __alt_p2_d8_decode_body(AltP2Block *lpAddress, int8_t ArgList, uint8_t *a5,
 void __alt_model_p2_d8_decode( uint8_t *Src, int32_t i, int32_t a5)
 {
   ;
-  void *v5, **lpAddress;
-  v5 = bmf_page_alloc(0x103E30u);
-  if ( v5 )
-    lpAddress = (void **)__alt_p2_alloc((AltP2Block *)v5, i, 0);
+  void *raw, **blk;
+  raw = bmf_page_alloc(0x103E30u);
+  if ( raw )
+    blk = (void **)__alt_p2_alloc((AltP2Block *)raw, i, 0);
   else
-    lpAddress = nullptr;
-  __alt_p2_d8_decode_body((AltP2Block *)(int32_t)lpAddress, i, Src, i, a5);
-  if ( lpAddress )
-    __alt_p2_free((void **)lpAddress, 1);
+    blk = nullptr;
+  __alt_p2_d8_decode_body((AltP2Block *)(int32_t)blk, i, Src, i, a5);
+  if ( blk )
+    __alt_p2_free((void **)blk, 1);
 }
 
 int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *v105,
@@ -14589,8 +14592,8 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *v105,
 void __unmodel_plane(int8_t ArgList, uint16_t *p_i, uint8_t *Src)
 {
   ;
-  ModelBlock *v6;
-  void *v5;
+  ModelBlock *blk;
+  void *raw;
   if ( plane_alt_model )
   {
     if ( plane_predictor == 1 )
@@ -14610,14 +14613,14 @@ void __unmodel_plane(int8_t ArgList, uint16_t *p_i, uint8_t *Src)
   }
   else
   {
-    v5 = bmf_new(0x7BA230u);
-    if ( v5 )
-      v6 = __layout_workspace((ModelBlock *)v5, p_i[1], *p_i, p_i[1], p_i[5] & 0x3F);
+    raw = bmf_new(0x7BA230u);
+    if ( raw )
+      blk = __layout_workspace((ModelBlock *)raw, p_i[1], *p_i, p_i[1], p_i[5] & 0x3F);
     else
-      v6 = (ModelBlock *)(nullptr);
-    __unmodel_plane_slow((ModelBlock *)v6, Src);
-    if ( v6 )
-      __free_workspace((ModelBlock *)v6, 1);
+      blk = (ModelBlock *)(nullptr);
+    __unmodel_plane_slow((ModelBlock *)blk, Src);
+    if ( blk )
+      __free_workspace((ModelBlock *)blk, 1);
   }
 }
 
@@ -14878,16 +14881,16 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
 void __alt_model_p2_d8_encode( uint8_t *a3, int32_t i, int32_t a5, uint8_t *a6)
 {
   ;
-  void * v6;
-  AltP2Block *lpAddress;
-  v6 = bmf_page_alloc(0x103E30u);
-  if ( v6 )
-    lpAddress = (AltP2Block *)__alt_p2_alloc((AltP2Block *)v6, i, 0);
+  void * raw;
+  AltP2Block *blk;
+  raw = bmf_page_alloc(0x103E30u);
+  if ( raw )
+    blk = (AltP2Block *)__alt_p2_alloc((AltP2Block *)raw, i, 0);
   else
-    lpAddress = (AltP2Block *)(nullptr);
-  __alt_p2_d8_encode_body((AltP2Block *)lpAddress, a3, i, a5, a6);
-  if ( lpAddress )
-    __alt_p2_free((void **)lpAddress, 1);
+    blk = (AltP2Block *)(nullptr);
+  __alt_p2_d8_encode_body((AltP2Block *)blk, a3, i, a5, a6);
+  if ( blk )
+    __alt_p2_free((void **)blk, 1);
 }
 
 int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *v109,
@@ -15724,10 +15727,10 @@ void __model_planes(uint8_t *Blockb, uint8_t *Srca_3, int32_t a3, int8_t a4)
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 80, "frame layout moved");
   ;
-  uint8_t *v12;   // was int32_t: these hold addresses
+  uint8_t *aligned;   // was int32_t: these hold addresses
   uint8_t *Srca_1, *Srca_2;   // `uint8_t *` beside the `char` scalars above
   uint8_t *__model_planes_buf;
-  int32_t n1008;
+  int32_t ofs;
   __frame.v53 = a3;
   Srca_1 = Srca_3;
   __frame.v52 = 16 * a3;
@@ -15736,24 +15739,24 @@ void __model_planes(uint8_t *Blockb, uint8_t *Srca_3, int32_t a3, int8_t a4)
   Srca_2 = Srca_3;
   __colour_transform(Blockb, Srca_3, a3, a4);
   __model_planes_buf = ::hist_scratch;
-  v12 = (uint8_t *)((uintptr_t)(::hist_scratch + 15) & 0xFFFFFFF0);
+  aligned = (uint8_t *)((uintptr_t)(::hist_scratch + 15) & 0xFFFFFFF0);
   // Fifteen bytes at the front and sixteen at +1008.  MSVC split the first
   // into 8 + 4 + 2 + 1 and the second into two eight-byte stores.
   memset(__model_planes_buf, 0, 15);
   bmf_zero16(&__model_planes_buf[1008]);
-  n1008 = 1008;
+  ofs = 1008;
   do
   {
-    bmf_zero16((v12 + n1008 - 16));
-    bmf_zero16((v12 + n1008 - 32));
-    bmf_zero16((v12 + n1008 - 48));
-    bmf_zero16((v12 + n1008 - 64));
-    bmf_zero16((v12 + n1008 - 80));
-    bmf_zero16((v12 + n1008 - 96));
-    bmf_zero16((v12 + n1008 - 112));
-    n1008 -= 112;
+    bmf_zero16((aligned + ofs - 16));
+    bmf_zero16((aligned + ofs - 32));
+    bmf_zero16((aligned + ofs - 48));
+    bmf_zero16((aligned + ofs - 64));
+    bmf_zero16((aligned + ofs - 80));
+    bmf_zero16((aligned + ofs - 96));
+    bmf_zero16((aligned + ofs - 112));
+    ofs -= 112;
   }
-  while ( n1008 );
+  while ( ofs );
   // always taken: -S
   {
     // The caller's header, with the depth byte replaced: 72 is 8 bits plus the
