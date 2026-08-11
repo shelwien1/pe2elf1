@@ -2927,6 +2927,7 @@ int32_t __init_model_tables(ModelBlock *_this)
   uint16_t want, sym;
   SymList **cur;
   PixRec *row;   // the current row, one record past the pixel just written
+  bool promoted;
   int32_t hit0, n_live, recycled, blocks, hit1, just, c0, c1, c2, c3, c4, c5, c6,
           result;
   uint16_t *sym_cache;
@@ -3014,24 +3015,28 @@ int32_t __init_model_tables(ModelBlock *_this)
       ++exclusion_gen;
       hit1 = _this->hit;
     }
-LABEL_19:
-    if ( hit1 && hit1 <= 2 )
-      goto LABEL_37;
+    promoted = hit1 && hit1 <= 2;
   }
   else
   {
     // The `goto LABEL_21` that ended the block above skipped exactly this, and
     // it was the block's last statement -- so the two are an `if`/`else` and
     // the label was the join.
-    if ( hit0 <= 2 )
-      goto LABEL_37;
-    if ( mode_symbol[3] != mode_symbol[4] )
+    //
+    // `LABEL_19` was a jump *into* the arm above, to reach the one test at the
+    // end of it.  Both arms decide the same thing -- whether the symbol was
+    // already near the front of its list -- so they both set it, and the
+    // cache-reordering block below runs when neither did.
+    promoted = hit0 <= 2;
+    if ( !promoted && mode_symbol[3] != mode_symbol[4] )
     {
       __symbol_list_update(&_this->sel0_list[mode_symbol[2]], _this->row_cur[5]->sym, 1u);
       hit1 = _this->hit;
-      goto LABEL_19;
+      promoted = hit1 && hit1 <= 2;
     }
   }
+  if ( !promoted )
+  {
   just = _this->row_cur[5]->sym;
   sym_cache = _this->sym_cache;
   c0 = sym_cache[0];
@@ -3104,7 +3109,7 @@ LABEL_19:
     }
     _this->sym_cache[0] = just;
   }
-LABEL_37:
+  }
   // The other fourteen sites already spell the 16-bit accesses out --
   // `*(uint16_t *)(pix_cur + 2) = *(uint16_t *)pix_cur` at 11752 is this
   // line -- so the field is a byte cursor and these two were the odd ones.
@@ -5387,6 +5392,7 @@ uint8_t * __interleave_plane(uint8_t *img, uint8_t *src, int32_t plane, int8_t a
   }
   stride = plane_count;
   n = bmf_pixels(img);
+  bool by_weights;
   to_ref0 = plane_desc[1].src_plane - plane;
   to_ref1 = plane_desc[2].src_plane - plane;
   mode = plane_desc[plane + 1].predictor;
@@ -5395,13 +5401,24 @@ uint8_t * __interleave_plane(uint8_t *img, uint8_t *src, int32_t plane, int8_t a
   wgt1 = plane_desc[plane + 1].w8;
   wgt0 = plane_desc[plane + 1].w4;
   wgt2 = plane_desc[plane + 1].w12;
-  if ( mode != 2 || wgt0 + wgt1 != 128 )
-    goto LABEL_3;
-  if ( !wgt1 )
-    goto LABEL_4;
-  if ( wgt0 )
+  // The same disjunction as `colour_transform`'s, and the same reading: the
+  // weights select a reference outright, or the predictor does.  Five `goto`s
+  // stood here for it.
+  by_weights = false;
+  if ( mode == 2 && wgt0 + wgt1 == 128 )
   {
-LABEL_3:
+    if ( !wgt1 )
+    {
+      by_weights = true;
+    }
+    else if ( !wgt0 )
+    {
+      to_ref0 = plane_desc[2].src_plane - plane;
+      by_weights = true;
+    }
+  }
+  if ( !by_weights )
+  {
     if ( plane_desc[plane + 1].predictor != 1 )
     {
       if ( mode == 2 )
@@ -5438,10 +5455,7 @@ LABEL_3:
       }
       return img;
     }
-    goto LABEL_4;
   }
-  to_ref0 = plane_desc[2].src_plane - plane;
-LABEL_4:
   img += plane;
   ref = &img[to_ref0];
   // Twenty-six lines of aliasing test stood here, spelled with five `goto`s
@@ -5518,6 +5532,7 @@ uint8_t * __colour_transform(uint8_t *img, uint8_t *dst, int32_t plane, int8_t a
   }
   stride = plane_count;
   n = bmf_pixels(img);
+  bool by_weights;
   to_ref0 = plane_desc[1].src_plane - plane;
   to_ref1 = plane_desc[2].src_plane - plane;
   mode = plane_desc[plane + 1].predictor;
@@ -5526,19 +5541,25 @@ uint8_t * __colour_transform(uint8_t *img, uint8_t *dst, int32_t plane, int8_t a
   wgt1 = plane_desc[plane + 1].w8;
   wgt0 = plane_desc[plane + 1].w4;
   wgt2 = plane_desc[plane + 1].w12;
+  // Two ways into the same loop: the weights say this plane is a straight
+  // copy of one reference -- mode 2 with all 128 on one side, and which side
+  // decides which reference -- or the predictor says so outright.  The three
+  // `goto`s were that disjunction; the flag is the same thing with a name.
+  by_weights = false;
   if ( mode == 2 && wgt0 + wgt1 == 128 )
   {
     if ( !wgt1 )
-      goto LABEL_4;
-    if ( !wgt0 )
+    {
+      by_weights = true;
+    }
+    else if ( !wgt0 )
     {
       to_ref0 = plane_desc[2].src_plane - plane;
-      goto LABEL_4;
+      by_weights = true;
     }
   }
-  if ( plane_desc[plane + 1].predictor == 1 )
+  if ( by_weights || plane_desc[plane + 1].predictor == 1 )
   {
-LABEL_4:
     img += plane;
     ref = &img[to_ref0];
     // The second of the two duplicated bodies -- six lines of aliasing test
