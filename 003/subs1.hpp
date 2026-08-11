@@ -10108,12 +10108,17 @@ LABEL_86:
   cache0 = sym_cache[0];
   cache1 = sym_cache[1];
   __frame.sym1 = pix1;
-  this_4 = (ModelBlock *)(sym_cache[3]);
+  // The tail of the body reloads the symbol cache into the frame slots for
+  // the next pixel, and four of those slots are typed as pointers by an
+  // earlier lifetime.  A `uint16_t` symbol going into a 32-bit pointer slot
+  // is what the width warning was about; the `uintptr_t` says the value is
+  // being parked, not dereferenced.
+  this_4 = (ModelBlock *)(uintptr_t)sym_cache[3];
   __frame.sym2 = cache0;
   c4 = sym_cache[4];
   __frame.sym3 = cache1;
   c5 = sym_cache[5];
-  __frame.sym4 = ((FreqRec *)sym_cache[2]);
+  __frame.sym4 = (FreqRec *)(uintptr_t)sym_cache[2];
   c6 = sym_cache[6];
   c7 = sym_cache[7];
   __frame.sym5 = (ModelBlock *)((uint32_t *)this_4);
@@ -10883,7 +10888,7 @@ LABEL_42:
   _this->sel[0] = nullptr;
   p_n15_11 = *wq;
   wq1 = wq[1];
-  cache0p = (uint16_t *)*sym_cache;
+  cache0p = (uint16_t *)(uintptr_t)*sym_cache;
   cache2 = sym_cache[2];
   __frame.sym0 = p_n15_11;
   cache1 = sym_cache[1];
@@ -10892,7 +10897,8 @@ LABEL_42:
   __frame.sym2 = cache0p;
   cache4 = sym_cache[4];
   __frame.sym3 = cache1;
-  this_4 = (ModelBlock *)((int32_t *)sym_cache[5]);
+  // Same as `decode_pixel`'s tail: symbols going into pointer-typed slots.
+  this_4 = (ModelBlock *)(uintptr_t)sym_cache[5];
   __frame.sym4 = cache2;
   cache6 = sym_cache[6];
   __frame.sym5 = cache3;
@@ -10903,7 +10909,7 @@ LABEL_42:
   up4 = (PixRec *)_this->row_cur[6];
   __frame.sym8 = cache6;
   h11 = up4[2].sym;
-  __frame.sym9 = (PixRec *)(((uint16_t *)sym_cache[7]));
+  __frame.sym9 = (PixRec *)(uintptr_t)sym_cache[7];
   __frame.sym10 = cur5_back2;
   r6 = _this->row_cur[7];
   h12 = r6[1].sym;
@@ -17339,6 +17345,9 @@ int32_t __main(int32_t argc, const char **argv)
   return 0;
 }
 void __out_of_memory_handler() { __exit_402E40(7); }
-int32_t main(int32_t argc, uint8_t **argv) {
+// `char **`, which is what a hosted `main` takes.  The decompilation had
+// `uint8_t **` because that is the type Hex-Rays gave the argv walk below,
+// and the cast into `__main` was already doing the conversion.
+int32_t main(int32_t argc, char **argv) {
   return __main(argc, (const char **)argv);
 }
