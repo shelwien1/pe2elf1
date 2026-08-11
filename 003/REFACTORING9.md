@@ -22,16 +22,16 @@ and 3.
 
 ```
                                    round 8   round 9
-subs1.hpp / bmf.cpp lines            17787     17750
+subs1.hpp / bmf.cpp lines            17787     17616
 raw-offset sites                        22        12
 byte offsets on a typed base           121         0
-pointer casts                         2137      1624
+pointer casts                         2137      1545
 fNN members / named ones             93/121     5/162
-distinct vNN locals                    554       546
-  bodies still carrying one              —   24/102
-  vNN uses                                —     11790
+distinct vNN locals                    554       545
+  bodies still carrying one              —   13/102
+  vNN uses                                —      9541
 goto / LABEL_n:                     112/79     81/55
-conversion warnings (ratchet)         1455      1333
+conversion warnings (ratchet)         1455      1331
 ```
 
 Four of those numbers were wrong when this section was first written, and the
@@ -410,6 +410,10 @@ No new tools. Two fixes and one scan that lives in this document rather than in
 | `unjump.py` | new: a jump into a block is a disjunction |
 | `untemp.py` | new: a local assigned once and read once is the expression |
 | `namelocal.py` | new: a local that is one assignment of a member takes its name |
+| `undup.py` | new: an `if` whose arms agree is not a decision (§10) |
+| `unsave.py` | new: a spill slot is not a variable (§11) |
+| `unreload.py` | new: one member, loaded five times (§11) |
+| `proven.sh` | new: which tools' answers depend on the file at all (§10) |
 | `outpath.py` | new: a generator's argument is the file to write, and must look like one |
 | `sweep.sh` | new: run every tool, and fail if the file moved (§10) |
 | `collect_globals.py` | do nothing, and write nothing, when there is nothing to collect |
@@ -549,7 +553,7 @@ Round eight said the `vNN` locals were answerable only by knowing what their
 values mean, and §8 above repeated it. That is true of the *last* ones and was
 never true of the first ones, and the way to tell which is which is to start.
 
-Thirty-four bodies went from carrying `vNN` names to carrying none:
+Forty-five bodies went from carrying `vNN` names to carrying none:
 `predict_med`, `unpredict_med`, `alt_init_tables`, `colour_transform`,
 `interleave_plane`, `transform_planes`, `alloc_image`, `model_planes`,
 `init_symbol_list`, `unmodel_plane`, three `alt_model_p*_d8_*` wrappers,
@@ -558,8 +562,12 @@ Thirty-four bodies went from carrying `vNN` names to carrying none:
 `alt_p2_decode_symbol`, `alt_p2_encode_symbol`, `rc_begin_encode`,
 `rc_begin_decode`, `layout_workspace`, `alt_p1_alloc`, `alt_p2_alloc`,
 `encode_symbol_tree`, `decode_symbol_tree`, `symbol_list_update`,
-`encode_symbol_list`, `decode_symbol_list`, `expand_alphabet` and `read_bmp`.
-58 of 102 bodies to 24, and 13 969 `vNN` uses to 11 790.
+`encode_symbol_list`, `decode_symbol_list`, `expand_alphabet`, `read_bmp`,
+`init_model_tables`, `compress_image`, `write_bmp`, `expand_image`,
+`alt_p1_context`, `alt_p1_d8_encode_body`, `alt_model_p1_d8_decode`,
+`model_plane`, `unmodel_plane_slow`, `alt_p2_d8_decode_body` and
+`alt_p2_d8_encode_body`.  58 of 102 bodies to 13, and 13 969 `vNN` uses to
+9541.
 
 **Almost every one of them turned out to be readable from its shape alone.**
 `predict_med` is MED, the LOCO-I median edge predictor: `up` trails `p` by
@@ -578,12 +586,15 @@ substantial fraction turned out not to be values at all:
 
 | shape | tool | count |
 | --- | --- | --- |
-| a spill saved and restored across a region that cannot change it | `unsave.py` | 25 |
+| a spill saved and restored across a region that cannot change it | `unsave.py` | 30 |
+| one member loaded again between every pair of uses | `unreload.py` | ~40 |
+| a running sum stored back after every term, eighteen of them dead | — | 4 blocks |
 | an `if` whose two arms are the same code | `undup.py` | 5 |
-| a local that is a second name for a parameter nothing assigns | — | ~20 |
-| a loop counter doubled as `k_before = k` with `while (k_before + 1 < N)` | — | 5 |
+| a local that is a second name for a parameter nothing assigns | — | ~25 |
+| a loop counter doubled as `k_before = k` with `while (k_before + 1 < N)` | — | 7 |
 | a pointer and a byte offset walking the same buffer in step | — | 3 |
-| a declaration with no use at all | `unused.py` | 38 |
+| a local declared and never assigned, passed to a parameter nothing reads | — | 6 |
+| a declaration with no use at all | `unused.py` | 60 |
 
 `unsave.py` is the one worth keeping. MSVC spills a register before a loop and
 reloads it after; Hex-Rays names the spill slot, and the loop arrives wrapped in
@@ -624,15 +635,42 @@ words at a time from one past the last list taking `[5]`, and the zeroing loop
 wrote bytes 20 + 48i and 44 + 48i, which are `lists[2i].ent` and
 `lists[2i+1].ent`.
 
+### The four accumulator blocks
+
+Worth its own note because it is the largest single artefact found. All four
+`alt_model_p1_*` bodies open each row with the same twenty terms — ten `.mag`
+values into `ctx[3]` and ten into `ctx[4]`, from the two rows above and this
+row's left margin, even offsets to one and odd to the other. MSVC kept both
+running sums in registers and stored *every partial back*, so each arrived as
+twenty stores of which eighteen were dead and nineteen locals holding one
+accumulator at nineteen points. Two of the four also arrived as byte offsets on
+a `uint8_t *` — a record is `sym` then `mag`, so byte 2k+1 is record k, and the
+stride scan of §2 cannot see it because the gcd of −3, −1, 1, 3, 5, 7, 9 and 11
+is 1.
+
+The four `(int8_t)` casts on the left-margin loads stay, and this round can say
+why rather than leaving it open. A probe counting how often a margin magnitude
+exceeds 127 reports **21 of 1536** on `testfiles/altp1.bmp`. The sign shows.
+That is the *opposite* of §3's finding for `PixRec`'s three `movsx` loads, where
+the writers are comparisons and the seed is 1 so the sign cannot show — two sets
+of casts kept for two different reasons, and only one of them a transcription.
+
+Getting that number took two tries. `bmf c` appends, so reusing one archive
+path across six images decodes the same first member six times and reports
+identical counts for all of them; `tools/triage.sh` removes the file first, and
+this is why.
+
 ### What is actually left
 
-Nine bodies hold two thirds of what remains: `alt_p2_model` (483 distinct
+Thirteen bodies, and they are the model itself: `alt_p2_model` (481 distinct
 names), `alt_p2_context` (184), `choose_plane_coding` (177), `alt_p1_model`
 (104), `decode_pixel` (100), `alt_model_p2_encode` (91), `search_filter` (81),
-`code_pixel` (78) and `alt_model_p1_encode` (78). These are the model bodies,
-and they are where round eight's claim finally is true: their locals are
-intermediate values of an arithmetic whose meaning is `algorithm_v2.md`'s
-subject, not a sweep's.
+`code_pixel` (78), `alt_model_p2_decode` (74), `cost_candidate` (72),
+`alt_model_p1_encode` (60), `reduce_alphabet` (54) and `alt_model_p1_decode`
+(47).
 
-The other fifteen are the drivers and the two `_d8` bodies, and those are
-ordinary work of the kind above rather than a different kind of work.
+This is where round eight's claim finally is true. Their locals are intermediate
+values of an arithmetic whose meaning is `algorithm_v2.md`'s subject, not a
+sweep's — and the difference from the forty-five bodies above is not size but
+that those had a *shape*: a margin mirror, a cursor rotation, a fold table, an
+inverse. These have an equation.
