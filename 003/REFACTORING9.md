@@ -755,6 +755,7 @@ wrong in the same direction:
 | `unhoist.statements()` | a bare `{` does not end in `;`, so it swallowed the statement after it, and the first assignment inside every block stopped looking like an assignment |
 | `unhoist` read counting | counted *statements*, and one wrapped expression names the same local six times — so a six-read load looked single-use |
 | `&NAME\b` | matches `&x->m`, `&x.m` and `&x[i]`, none of which is the variable's address. `alt_p2_model` reads its counters as `*(uint16_t *)&v533->w2`, so every counter pointer looked address-taken |
+| `\bNAME\b` | matches `blk->band_lo`, which is a *member* and not the local of that name. It put a use before the local's own assignment and disqualified the copy — and in `unaliasvar.py` the same pattern was in the rewriter, where it turned `blk->band_hi` into `blk->band_hi0` and stopped the build |
 
 Fixing them, on a file where every rule had reported zero:
 
@@ -775,6 +776,31 @@ answers, still changes, and answers about a third of the file.
 There is no general check for this. What there is, is the habit: when a rule
 reports zero, ask what it *cannot* see, and go and look at a place it should
 have fired.
+
+Four of the five are one mistake: a pattern that names an identifier has to say
+it is not reaching through one. `&x` is not `&x->m`; `x` is not `y->x`.
+
+### And the claim was still being read rather than checked
+
+`unaliasvar.py` had been reporting **four** the whole time. Nothing hid it —
+`sweep.sh` prints every tool, and I had been reading `sweep.sh | tail -2`,
+which shows the summary and not the tools.
+
+So the summary is the check now. Every tool's last line must contain a zero, and
+the sweep exits non-zero naming the ones that do not; `addrmap.py`, `shape.py`
+and `unify_types.py` answer with a map, a table and a census, have no count in
+them to be zero, and are named in the script as exemptions rather than passing
+by accident. Verified against the file as it stood fourteen commits earlier,
+where it exits 1 and names `unaliasvar`, `uncopy`, `unhoist` and `unsave` —
+because a check that has never failed is a claim.
+
+The sweep also runs every tool against a *copy* now, beside the real file rather
+than in `/tmp` (`addrmap.py` resolves the repository from the path it is given).
+That closes a window: one sweep failed with "a tool wrote to the file it was
+asked about" and never reproduced, and a tool killed by the 300-second timeout
+part-way through a write is the shape that fits. A killed tool is reported as
+killed rather than counted as reporting nothing, and nothing in the sweep can
+reach the decompilation at all.
 
 ### Checking a guard rather than asserting it
 
