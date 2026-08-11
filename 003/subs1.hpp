@@ -5566,11 +5566,11 @@ __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...)
 int32_t __rc_begin_decode(int8_t ArgList_1)
 {
   ;
-  int32_t bits_left, v7, v8, v16, v17, v20;
-  uint16_t *n256, *tbl;
-  uint32_t i, v9, v11;   // offsets into model_geometry, not pointers
-  uint8_t *v1;
-  v1 = out_cursor;
+  int32_t bits_left, at4, at5, k;
+  uint16_t *tbl0, *row;
+  uint32_t i, at6, at7;   // offsets into model_geometry, not pointers
+  uint8_t *cursor;
+  cursor = out_cursor;
   if ((uint32_t *)out_cursor != packer_word)
   {
     bits_left = ::packer_free_bits - 8;
@@ -5582,11 +5582,11 @@ int32_t __rc_begin_decode(int8_t ArgList_1)
     {
       do
       {
-        --v1;
+        --cursor;
         bits_left -= 8;
       }
       while ( bits_left >= 0 );
-      out_cursor = v1;
+      out_cursor = cursor;
       ::packer_free_bits = bits_left;
     }
   }
@@ -5614,61 +5614,58 @@ int32_t __rc_begin_decode(int8_t ArgList_1)
     level_geom[3].tbl_base = 1;
     memset(&model_geometry[4], 3, 4);
     level_geom[4].half = 4;
-    v7 = 2 * level_geom[3].half + 4;
+    at4 = 2 * level_geom[3].half + 4;
     level_geom[4].first = 2 * level_geom[3].half + 4;
     level_geom[4].tbl_base = 2 * level_geom[3].half;
-    memset(&model_geometry[v7], 4, 8);
+    memset(&model_geometry[at4], 4, 8);
     level_geom[5].half = 8;
-    v8 = v7 + 2 * level_geom[4].half;
-    level_geom[5].first = v8;
-    level_geom[5].tbl_base = v8 - 5;
-    memset(&model_geometry[v8], 0x05, 16);
+    at5 = at4 + 2 * level_geom[4].half;
+    level_geom[5].first = at5;
+    level_geom[5].tbl_base = at5 - 5;
+    memset(&model_geometry[at5], 0x05, 16);
     level_geom[6].half = 16;
-    v9 = v8 + 2 * level_geom[5].half;
-    level_geom[6].first = (uint8_t)v9;
-    level_geom[6].tbl_base = (uint8_t)v9 - 6;
-    memset(&model_geometry[v9], 0x06, 32);
+    at6 = at5 + 2 * level_geom[5].half;
+    level_geom[6].first = (uint8_t)at6;
+    level_geom[6].tbl_base = (uint8_t)at6 - 6;
+    memset(&model_geometry[at6], 0x06, 32);
     level_geom[7].half = 32;
-    v11 = v9 + 2 * level_geom[6].half;
-    level_geom[7].first = (uint8_t)v11;
-    level_geom[7].tbl_base = (uint8_t)v11 - 7;
-    memset(&model_geometry[v11], 0x07, 64);
-    n256 = (uint16_t *)bmf_new(0x7F000u);
-    if ( n256 )
+    at7 = at6 + 2 * level_geom[6].half;
+    level_geom[7].first = (uint8_t)at7;
+    level_geom[7].tbl_base = (uint8_t)at7 - 7;
+    memset(&model_geometry[at7], 0x07, 64);
+    // The same 0x400 x 508-byte table `rc_begin_encode` builds, seeded
+    // identically -- see the note there.  254 `uint16_t` is 508 bytes.
+    tbl0 = (uint16_t *)bmf_new(0x7F000u);
+    if ( tbl0 )
     {
-      tbl = n256;
-      v16 = 0;
-      v17 = 0;
+      row = tbl0;
+      k = 0;
       do
       {
-        v20 = v16;
-        tbl[1] = 24 * alt_freq_limit;
-        n256[v17 + 2] = 205;
-        n256[v17 + 6] = 48;
-        n256[v17 + 3] = 124;
-        n256[v17 + 7] = 16;
-        n256[v17 + 4] = 147;
-        n256[v17 + 5] = 83;
-        n256[v17 + 8] = 8;
-        n256[v17 + 9] = 4;
-        *tbl = 635;
+        row[1] = 24 * alt_freq_limit;
+        row[2] = 205;
+        row[6] = 48;
+        row[3] = 124;
+        row[7] = 16;
+        row[4] = 147;
+        row[5] = 83;
+        row[8] = 8;
+        row[9] = 4;
+        *row = 635;
         for ( i = 0; i < 0x7A; ++i )
         {
-          tbl[2 * i + 10] = 60;
-          tbl[2 * i + 11] = 36;
+          row[2 * i + 10] = 60;
+          row[2 * i + 11] = 36;
         }
-        tbl += 254;
-        v17 += 254;
-        ++v16;
+        row += 254;
+        ++k;
       }
-      while ( (uint32_t)(v20 + 1) < 0x400 );
+      while ( (uint32_t)k < 0x400 );
     }
-    else
-    {
-      n256 = nullptr;
-    }
-    ::model_tables = n256;
-    v1 = out_cursor;
+    // An `else { tbl0 = nullptr; }` stood here, assigning null to what was
+    // already null -- the same one `rc_begin_encode` had.
+    ::model_tables = tbl0;
+    cursor = out_cursor;
   }
   rc.dec_init();
   return (int32_t)(uintptr_t)out_cursor;
@@ -11218,134 +11215,134 @@ void __expand_alphabet(ModelBlock *_this)
   }
 }
 
-ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4, int32_t a5)
+ModelBlock *__layout_workspace(ModelBlock *blk, int32_t a2, int32_t img_w, int32_t img_h, int32_t img_depth)
 {
   ;
-  PixRec *v8;   // one of the five row buffers
-  uint8_t v12;
-  int16_t v19;
-  int32_t i_1, j, v9, v13, k_1, v35, v38;
+  PixRec *buf;   // one of the five row buffers
+  uint8_t bucket;
+  int16_t rev;
+  int32_t w, j, r, x, bits, e0, e1;
   uint32_t k, m, n0x2000_1, n, n8, n0x18;
-  uint8_t *v10;
-  i_1 = i;
+  uint8_t *runs;
+  w = img_w;
   exclusion_gen = 1;
-  a1->width = i;
-  *(uint32_t *)&a1->height = a4;
-  a1->depth = a5;
-  a1->depth_raw = a5;
-  a1->escape.ent = nullptr;
-  a1->sym_code = nullptr;
+  blk->width = img_w;
+  *(uint32_t *)&blk->height = img_h;
+  blk->depth = img_depth;
+  blk->depth_raw = img_depth;
+  blk->escape.ent = nullptr;
+  blk->sym_code = nullptr;
   for ( j = 0; j < 5; ++j )
   {
-    // `8 * i_1 + 128` is the plane's width plus sixteen records: eight of
+    // `8 * w + 128` is the plane's width plus sixteen records: eight of
     // left margin, which is what the cursor starts past, and eight of right.
     // Every record is seeded "matches all six neighbours", so a margin read
     // off either end of the row contributes 1 and not whatever `bmf_new`
     // left there.
-    v8 = (PixRec *)bmf_new(8 * i_1 + 128);
-    a1->row_cur[j] = v8;
-    a1->row_cur[j + 5] = v8 + 8;
-    i_1 = a1->width;
-    if ( (int32_t)a1->width > -16 )
+    buf = (PixRec *)bmf_new(8 * w + 128);
+    blk->row_cur[j] = buf;
+    blk->row_cur[j + 5] = buf + 8;
+    w = blk->width;
+    if ( (int32_t)blk->width > -16 )
     {
-      v9 = 0;
+      r = 0;
       do
       {
-        a1->row_cur[j][v9].sym = 0;
-        a1->row_cur[j][v9].match[5] = 1;
-        a1->row_cur[j][v9].match[4] = 1;
-        a1->row_cur[j][v9].match[3] = 1;
-        a1->row_cur[j][v9].match[2] = 1;
-        a1->row_cur[j][v9].match[1] = 1;
-        a1->row_cur[j][v9].match[0] = 1;
-        i_1 = a1->width;
-        ++v9;
+        blk->row_cur[j][r].sym = 0;
+        blk->row_cur[j][r].match[5] = 1;
+        blk->row_cur[j][r].match[4] = 1;
+        blk->row_cur[j][r].match[3] = 1;
+        blk->row_cur[j][r].match[2] = 1;
+        blk->row_cur[j][r].match[1] = 1;
+        blk->row_cur[j][r].match[0] = 1;
+        w = blk->width;
+        ++r;
       }
-      while ( v9 < a1->width + 16 );
+      while ( r < blk->width + 16 );
     }
   }
-  v10 = (uint8_t *)bmf_new(i_1 + 1);
-  a1->run_bucket = v10;
-  *v10 = 0;
-  if ( (int32_t)a1->width > 0 )
+  runs = (uint8_t *)bmf_new(w + 1);
+  blk->run_bucket = runs;
+  *runs = 0;
+  if ( (int32_t)blk->width > 0 )
   {
-    v12 = 0;
-    v13 = 0;
+    bucket = 0;
+    x = 0;
     do
     {
-      v12 += v13 == 2 << (v12 & 31);
-      *(uint8_t *)(*(uint32_t *)&a1->run_bucket + v13++ + 1) = v12;
+      bucket += x == 2 << (bucket & 31);
+      *(uint8_t *)(*(uint32_t *)&blk->run_bucket + x++ + 1) = bucket;
     }
-    while ( v13 < a1->width );
+    while ( x < blk->width );
   }
   // 0x2000 sixteen-bit counters cleared.  What was here instead was the same
   // range in three passes -- a scalar head to reach sixteen-byte alignment,
   // thirty-two counters an iteration, a scalar tail -- with a branch for the
-  // case where `a1` is odd and no alignment is reachable at all.
-  __builtin_memset(a1->sym_rev, 0, sizeof a1->sym_rev);
+  // case where `blk` is odd and no alignment is reachable at all.
+  __builtin_memset(blk->sym_rev, 0, sizeof blk->sym_rev);
   for ( k = 0; k < 0x2000; ++k )
   {
-    v19 = a1->sym_rev[k];
-    k_1 = k;
+    rev = blk->sym_rev[k];
+    bits = k;
     for ( m = 0; m < 0xD; ++m )
     {
-      v19 += v19 + (k_1 & 1);
-      k_1 >>= 1;
+      rev += rev + (bits & 1);
+      bits >>= 1;
     }
-    a1->sym_rev[k] = v19;
+    blk->sym_rev[k] = rev;
   }
   // ... and every one of them scaled by eight, the same range in the same
   // three passes.
   for ( n0x2000_1 = 0; n0x2000_1 < 0x2000; ++n0x2000_1 )
-    a1->sym_rev[n0x2000_1] *= 8;
-  memset(&a1->grid[188],0,0x100000);
-  a1->ctx_id3_used = 0;
-  a1->ctx_id2_used = 0;
-  a1->ctx_id1_used = 0;
-  memset(a1->ctx_id1,255,sizeof a1->ctx_id1);
-  memset(a1->ctx_id2,255,sizeof a1->ctx_id2);
-  memset(a1->ctx_id3,255,sizeof a1->ctx_id3);
+    blk->sym_rev[n0x2000_1] *= 8;
+  memset(&blk->grid[188],0,0x100000);
+  blk->ctx_id3_used = 0;
+  blk->ctx_id2_used = 0;
+  blk->ctx_id1_used = 0;
+  memset(blk->ctx_id1,255,sizeof blk->ctx_id1);
+  memset(blk->ctx_id2,255,sizeof blk->ctx_id2);
+  memset(blk->ctx_id3,255,sizeof blk->ctx_id3);
   memset(exclusion_mask,0,8193);
-  (*(uint64_t *)&a1->sel[0]) = 0;
-  *(uint64_t *)&a1->escape_list = 0;
+  (*(uint64_t *)&blk->sel[0]) = 0;
+  *(uint64_t *)&blk->escape_list = 0;
   for ( n = 0; n < 0x40000; ++n )
   {
-    a1->sym_ctr[2 * n] = 0x2000;
-    a1->sym_ctr[2 * n + 1] = 0x2000;
+    blk->sym_ctr[2 * n] = 0x2000;
+    blk->sym_ctr[2 * n + 1] = 0x2000;
   }
   n8 = 0;
   do
   {
-    v35 = 2 * n8;   // two records a pass
-    a1->bit_root[v35].n[0] = 40;
+    e0 = 2 * n8;   // two records a pass
+    blk->bit_root[e0].n[0] = 40;
     ++n8;
-    a1->bit_root[v35].n[1] = 16;
-    a1->bit_root[v35].limit = 512;
-    a1->bit_root[v35 + 1].n[0] = 40;
-    a1->bit_root[v35 + 1].n[1] = 16;
-    a1->bit_root[v35 + 1].limit = 512;
+    blk->bit_root[e0].n[1] = 16;
+    blk->bit_root[e0].limit = 512;
+    blk->bit_root[e0 + 1].n[0] = 40;
+    blk->bit_root[e0 + 1].n[1] = 16;
+    blk->bit_root[e0 + 1].limit = 512;
   }
   while ( n8 < 8 );
   n0x18 = 0;
-  memset(a1->bit_node,0,sizeof a1->bit_node);
-  a1->sym_word = (uint16_t *)bmf_new(2 * a1->height * a1->width);
-  a1->esc_ctr[0].n[0] = 4;
-  a1->esc_ctr[0].n[1] = 4;
-  a1->esc_ctr[0].limit = 72;
-  memset(&a1->esc_ctr[1],0,1536);
+  memset(blk->bit_node,0,sizeof blk->bit_node);
+  blk->sym_word = (uint16_t *)bmf_new(2 * blk->height * blk->width);
+  blk->esc_ctr[0].n[0] = 4;
+  blk->esc_ctr[0].n[1] = 4;
+  blk->esc_ctr[0].limit = 72;
+  memset(&blk->esc_ctr[1],0,1536);
   do
   {
-    v38 = 2 * n0x18;   // two records a pass
-    a1->run_ctr[v38].n[0] = 4;
+    e1 = 2 * n0x18;   // two records a pass
+    blk->run_ctr[e1].n[0] = 4;
     ++n0x18;
-    a1->run_ctr[v38].n[1] = 4;
-    a1->run_ctr[v38].limit = 72;
-    a1->run_ctr[v38 + 1].n[0] = 4;
-    a1->run_ctr[v38 + 1].n[1] = 4;
-    a1->run_ctr[v38 + 1].limit = 72;
+    blk->run_ctr[e1].n[1] = 4;
+    blk->run_ctr[e1].limit = 72;
+    blk->run_ctr[e1 + 1].n[0] = 4;
+    blk->run_ctr[e1 + 1].n[1] = 4;
+    blk->run_ctr[e1 + 1].limit = 72;
   }
   while ( n0x18 < 0x18 );
-  return a1;
+  return blk;
 }
 
 void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
