@@ -30,8 +30,12 @@ while round=$((round + 1)); [ $round -le 200 ]; do
   for k in $(seq 0 $((n - 1))); do
     cp "$T/base.hpp" subs1.hpp; cp "$T/base.warn" warn.log
     python3 tools/resign.py subs1.hpp --all --only=$k >/dev/null 2>&1
-    ./build.sh >/dev/null 2>&1 || continue
+    # `BMF_WARN=1` is `-fsyntax-only`, so one pass both counts the warnings and
+    # says whether the edit compiles.  Doing a full -O2 build per candidate as
+    # well made a round of 27 take twenty-five minutes for information the
+    # syntax pass already had.
     now=$(BMF_WARN=1 ./build.sh 2>/dev/null | head -1)
+    { [ -n "$now" ] && ! grep -q ' error: ' warn.log; } || continue
     [ "$now" -lt "$bestn" ] && { best=$k; bestn=$now; }
   done
   cp "$T/base.hpp" subs1.hpp; cp "$T/base.warn" warn.log

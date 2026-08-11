@@ -1077,6 +1077,20 @@ attempt and is not the check: a `cp` of the source is *newer* than a log that
 describes it exactly, so the guard fired through an entire bisection and
 reported the change innocent twice.
 
+### Both directions
+
+The first rule looked only at what flows *into* a local: the warnings that name
+it as a destination. That misses the mirror case, and the mirror case is where
+the range coder lives. `rc.encode(cum, cum_hi, tot)` takes unsigned cumulative
+counts, and its callers pass locals Hex-Rays declared `int32_t` — so the
+conversion is on the way *out*, at the call, and the local's own assignments do
+not warn at all.
+
+GCC's column points at the expression being converted, so a bare identifier
+there is the local and the flip goes toward the destination's type. What the
+rule will not do is flip a local that converts on the way in *and* on the way
+out: that one cannot be helped, because the flip only moves which end warns.
+
 ### Why `resign.py` proposes rather than counts
 
 It joins `shape.py`, `addrmap.py` and `unify_types.py` in the sweep's
