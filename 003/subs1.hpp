@@ -1845,180 +1845,180 @@ int32_t __decode_context_bit(BitCtr *_this, BitCtr *a2)
   return result;
 }
 
-int32_t __encode_symbol_list(SymList *_this, int32_t a2)
+int32_t __encode_symbol_list(SymList *_this, int32_t want)
 {
   ;
-  int8_t v2;
-  uint8_t v27, v32;
+  int8_t gen;
+  uint8_t c_a, c_b;
   // Every one of these walked `_this[5]`'s entries three bytes at a time,
   // reading the symbol as `*(uint16_t *)p` and the count as `p[2]`.
-  SymEntry *v4, *v25, *v28, *v36, *v37, *v39, *v40;
-  uint16_t v51;
+  SymEntry *p, *head, *q, *cur, *prev, *up, *back;
+  uint16_t keep;
   // A cumulative count, a high count and a total: the three arguments
   // `RangeCoder::encode` takes, and it takes them unsigned.
   uint32_t enc_cum, enc_high, enc_tot;
-  int32_t v3, v5, v6, v7, v8, v24, n251, v35, v38, v41, v43, v53, v54;
-  uint16_t v26, v31;
-  uint32_t i_1, i, rescale_at, v42, since_rescale;
-  v2 = exclusion_gen;
-  v3 = _this->live;
-  v4 = _this->ent - 1;
-  v5 = 0;
+  int32_t left, cum, s, c, result, c2, top, n_left, half, back_cnt, last_cnt, up_cnt, bias;
+  uint16_t s_a, s_b;
+  uint32_t rest, i, rescale_at, running, since_rescale;
+  gen = exclusion_gen;
+  left = _this->live;
+  p = _this->ent - 1;
+  cum = 0;
   while ( 1 )
   {
-    ++v4;
-    v6 = v4->sym;
-    if ( exclusion_mask[v6] != exclusion_gen )
+    ++p;
+    s = p->sym;
+    if ( exclusion_mask[s] != exclusion_gen )
     {
-      v7 = v4->cnt;
-      v5 += v7;
-      if ( v6 == a2 )
+      c = p->cnt;
+      cum += c;
+      if ( s == want )
         break;
     }
-    if ( !--v3 )
+    if ( !--left )
     {
-      if ( !v5 )
+      if ( !cum )
         return 0;
-      enc_cum = v5;
-      enc_tot = _this->tot + v5;
+      enc_cum = cum;
+      enc_tot = _this->tot + cum;
       enc_high = enc_tot;
       do
       {
-        exclusion_mask[v4->sym] = v2;
-        --v4;
+        exclusion_mask[p->sym] = gen;
+        --p;
       }
-      while ( v4 >= _this->ent );
-      v8 = 0;
+      while ( p >= _this->ent );
+      result = 0;
       {
         rc.encode(enc_cum, enc_high, enc_tot);
-        return v8;
+        return result;
       }
     }
   }
-  enc_high = v5;
-  i_1 = v3 - 1;
-  enc_cum = v5 - v7;
-  if ( i_1 )
+  enc_high = cum;
+  rest = left - 1;
+  enc_cum = cum - c;
+  if ( rest )
   {
-    for ( i = 0; i < i_1; ++i )
+    for ( i = 0; i < rest; ++i )
     {
-      if ( exclusion_mask[v4[i + 1].sym] == exclusion_gen )
-        v24 = 0;
+      if ( exclusion_mask[p[i + 1].sym] == exclusion_gen )
+        c2 = 0;
       else
-        v24 = v4[i + 1].cnt;
-      v5 += v24;
+        c2 = p[i + 1].cnt;
+      cum += c2;
     }
   }
-  enc_tot = _this->tot + v5;
-  v4->cnt += 4;
-  v25 = _this->ent;
+  enc_tot = _this->tot + cum;
+  p->cnt += 4;
+  head = _this->ent;
   _this->since_rescale += 4;
-  if ( v4 == v25 )
+  if ( p == head )
   {
 LABEL_37:
-    n251 = v4->cnt;
+    top = p->cnt;
   }
   else
   {
-    v26 = v4->sym;
-    v27 = v4->cnt;
-    v28 = v4 - 1;
-    v4->sym = v28->sym;
-    v4->cnt = v28->cnt;
-    v28->sym = v26;
-    v28->cnt = v27;
-    v25 = _this->ent;
-    if ( v28 == v25 )
+    s_a = p->sym;
+    c_a = p->cnt;
+    q = p - 1;
+    p->sym = q->sym;
+    p->cnt = q->cnt;
+    q->sym = s_a;
+    q->cnt = c_a;
+    head = _this->ent;
+    if ( q == head )
     {
-      n251 = v28->cnt;
+      top = q->cnt;
     }
     else
     {
       while ( 1 )
       {
-        n251 = v28->cnt;
-        v4 = v28 - 1;
-        if ( n251 <= v4->cnt )
+        top = q->cnt;
+        p = q - 1;
+        if ( top <= p->cnt )
           break;
-        v31 = v28->sym;
-        v32 = v28->cnt;
-        v28->sym = v4->sym;
-        v28->cnt = v4->cnt;
-        v4->sym = v31;
-        v4->cnt = v32;
-        v25 = _this->ent;
-        --v28;
-        if ( v4 == v25 )
+        s_b = q->sym;
+        c_b = q->cnt;
+        q->sym = p->sym;
+        q->cnt = p->cnt;
+        p->sym = s_b;
+        p->cnt = c_b;
+        head = _this->ent;
+        --q;
+        if ( p == head )
           goto LABEL_37;
       }
     }
   }
   rescale_at = _this->rescale_at;
-  if ( n251 > 251 || rescale_at < _this->since_rescale )
+  if ( top > 251 || rescale_at < _this->since_rescale )
   {
-    v35 = _this->live;
-    v54 = rescale_at < 20 * _this->n;
-    v36 = v25 - 1;
+    n_left = _this->live;
+    bias = rescale_at < 20 * _this->n;
+    cur = head - 1;
     do
     {
-      v37 = v36;
-      ++v36;
-      v38 = (v54 + (uint32_t)v36->cnt) >> 1;
-      v36->cnt = v38;
-      if ( v36 != _this->ent )
+      prev = cur;
+      ++cur;
+      half = (bias + (uint32_t)cur->cnt) >> 1;
+      cur->cnt = half;
+      if ( cur != _this->ent )
       {
-        v39 = v36 - 1;
-        v53 = v39->cnt;
-        if ( v38 > v53 )
+        up = cur - 1;
+        up_cnt = up->cnt;
+        if ( half > up_cnt )
         {
-          v51 = v36->sym;
-          v36->sym = v39->sym;
-          v36->cnt = v53;
-          if ( v39 != _this->ent )
+          keep = cur->sym;
+          cur->sym = up->sym;
+          cur->cnt = up_cnt;
+          if ( up != _this->ent )
           {
             do
             {
-              v40 = v39 - 1;
-              v41 = v40->cnt;
-              if ( v38 <= v41 )
+              back = up - 1;
+              back_cnt = back->cnt;
+              if ( half <= back_cnt )
                 break;
-              v39->sym = v40->sym;
-              v39->cnt = v41;
-              --v39;
+              up->sym = back->sym;
+              up->cnt = back_cnt;
+              --up;
             }
-            while ( v40 != _this->ent );
+            while ( back != _this->ent );
           }
-          v39->sym = v51;
-          v39->cnt = v38;
+          up->sym = keep;
+          up->cnt = half;
         }
       }
-      --v35;
+      --n_left;
     }
-    while ( v35 );
-    v42 = _this->tot;
-    if ( !v36->cnt )
+    while ( n_left );
+    running = _this->tot;
+    if ( !cur->cnt )
     {
       do
       {
-        ++v35;
-        _this->tot = ++v42;
-        v43 = v37->cnt;
-        --v37;
+        ++n_left;
+        _this->tot = ++running;
+        last_cnt = prev->cnt;
+        --prev;
       }
-      while ( !v43 );
-      _this->live -= v35;
+      while ( !last_cnt );
+      _this->live -= n_left;
     }
     since_rescale = _this->since_rescale;
-    _this->tot = v42 - (v42 >> 1);
+    _this->tot = running - (running >> 1);
     _this->since_rescale = since_rescale - (since_rescale >> 1);
-    v8 = 1;
+    result = 1;
   }
   else
   {
-    v8 = 1;
+    result = 1;
   }
   rc.encode(enc_cum, enc_high, enc_tot);
-  return v8;
+  return result;
 }
 
 // Add `a3` to symbol `a2`'s count in the list `encode_symbol_list` codes from
@@ -9304,85 +9304,85 @@ int32_t __decode_symbol_list(SymList *a1)
       };
       uint32_t n0x7F800000_1;
       int32_t tot;
-      int32_t v65;
-      SymEntry *v66;
-      SymList *v67;
-      uint32_t v68;   // the exclusion generation, not a pointer: the slot is reused
+      int32_t tot0;
+      SymEntry *first;
+      SymList *owner;
+      uint32_t gen;   // the exclusion generation, not a pointer: the slot is reused
       uint8_t _pad1[32];
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 32832, "frame layout moved");
   ;
   // Every cursor here walks `a1->ent`'s three-byte entries: the symbol was
   // `*(uint16_t *)p` and the count `p[2]`, and the steps were +3 and -3.
-  SymEntry *ent, *v7, *v20, *v25, *v33, *v36, *v38, *v44, *v45, *v47, *v48;
-  SymEntry **v4, **v21, **v26;
-  int8_t v23;
-  uint8_t v34, v40;
-  uint16_t v35, v39;
+  SymEntry *ent, *e, *p, *q, *head, *q2, *r, *cur, *prev, *up, *back;
+  SymEntry **w, **rd, **rd2;
+  int8_t gen_b;
+  uint8_t c_a, c_b;
+  uint16_t s_a, s_b;
   // The cumulative count the range coder takes, which it takes unsigned.
   uint32_t n0x2000_2;
-  int32_t sym_cum, sym_high, live, v5, v6, v8, n251, v46, v49, v53;
-  uint32_t v43, v52;   // counts that MSVC spilled into the list's first slot
-  SymList *v9, *v32;
+  int32_t sym_cum, sym_high, live, cum, i, c, top, half, back_cnt, last_cnt;
+  uint32_t n_left, zeros;   // counts that MSVC spilled into the list's first slot
+  SymList *owner0, *owner1;
   uint32_t __decode_symbol_list_n0x800000, n0x2000_6, n0x2000_4,
-           n0x2000_3, tot_1, rescale_at, v42, v50,
+           n0x2000_3, tot_1, rescale_at, limit20, running,
            since_rescale;
   live = a1->live;
   ent = a1->ent;
-  v4 = __frame.list;
-  __frame.v68 = (uint8_t)exclusion_gen;
-  __frame.v67 = a1;
-  v5 = 0;
-  v6 = 0;
+  w = __frame.list;
+  __frame.gen = (uint8_t)exclusion_gen;
+  __frame.owner = a1;
+  cum = 0;
+  i = 0;
   do
   {
-    if ( (uint8_t)exclusion_mask[ent[v6].sym] == __frame.v68 )
+    if ( (uint8_t)exclusion_mask[ent[i].sym] == __frame.gen )
     {
-      v8 = 0;
+      c = 0;
     }
     else
     {
-      v7 = &ent[v6];
-      v8 = v7->cnt;
-      *v4++ = v7;
+      e = &ent[i];
+      c = e->cnt;
+      *w++ = e;
     }
-    v5 += v8;
-    ++v6;
+    cum += c;
+    ++i;
   }
-  while ( v6 < live );
-  v9 = __frame.v67;
-  if ( !v5 )
+  while ( i < live );
+  owner0 = __frame.owner;
+  if ( !cum )
     return -1;
-  *v4 = nullptr;
-  __frame.v65 = v9->tot;
-  n0x2000_6 = v5 + __frame.v65;
+  *w = nullptr;
+  __frame.tot0 = owner0->tot;
+  n0x2000_6 = cum + __frame.tot0;
   n0x2000_4 = rc.get_freq(n0x2000_6);
-  __frame.tot = v5 + __frame.v65;
-  __frame.v67 = v9;
-  v20 = (__frame.list[0]);
-  v21 = &__frame.list[1];
-  __frame.v66 = (__frame.list[0]);
+  __frame.tot = cum + __frame.tot0;
+  __frame.owner = owner0;
+  p = (__frame.list[0]);
+  rd = &__frame.list[1];
+  __frame.first = (__frame.list[0]);
   n0x2000_2 = 0;
   while ( 1 )
   {
-    n0x2000_2 += v20->cnt;
+    n0x2000_2 += p->cnt;
     if ( n0x2000_2 > (int32_t)n0x2000_4 )
       break;
-    v20 = *v21++;
-    if ( !v20 )
+    p = *rd++;
+    if ( !p )
     {
-      v23 = (int8_t)__frame.v68;
+      gen_b = (int8_t)__frame.gen;
       sym_cum = n0x2000_2;
       n0x2000_3 = __frame.tot;
       sym_high = __frame.tot;
-      v25 = __frame.v66;
-      v26 = &__frame.list[1];
+      q = __frame.first;
+      rd2 = &__frame.list[1];
       do
       {
-        exclusion_mask[v25->sym] = v23;
-        v25 = *v26++;
+        exclusion_mask[q->sym] = gen_b;
+        q = *rd2++;
       }
-      while ( v25 );
+      while ( q );
       tot_1 = __frame.tot;
       __frame.list7 = -1;
       {
@@ -9391,54 +9391,54 @@ int32_t __decode_symbol_list(SymList *a1)
       }
     }
   }
-  v32 = __frame.v67;
+  owner1 = __frame.owner;
   sym_high = n0x2000_2;
-  sym_cum = n0x2000_2 - v20->cnt;
-  __frame.list7 = v20->sym;
-  v20->cnt += 4;
-  v33 = v32->ent;
-  v32->since_rescale += 4;
-  if ( v20 == v33 )
+  sym_cum = n0x2000_2 - p->cnt;
+  __frame.list7 = p->sym;
+  p->cnt += 4;
+  head = owner1->ent;
+  owner1->since_rescale += 4;
+  if ( p == head )
   {
-    n251 = v20->cnt;
+    top = p->cnt;
   }
   else
   {
     // Swap this entry with the one before it.
-    v34 = v20->cnt;
-    v35 = v20->sym;
-    v36 = v20 - 1;
-    v20->sym = v36->sym;
-    v20->cnt = v36->cnt;
-    v36->sym = v35;
-    v36->cnt = v34;
-    v33 = v32->ent;
-    if ( v36 == v33 )
+    c_a = p->cnt;
+    s_a = p->sym;
+    q2 = p - 1;
+    p->sym = q2->sym;
+    p->cnt = q2->cnt;
+    q2->sym = s_a;
+    q2->cnt = c_a;
+    head = owner1->ent;
+    if ( q2 == head )
     {
-      n251 = v36->cnt;
+      top = q2->cnt;
     }
     else
     {
       __frame.list5 = __decode_symbol_list_n0x800000;
       while ( 1 )
       {
-        n251 = v36->cnt;
-        v38 = v36 - 1;
-        if ( n251 <= v38->cnt )
+        top = q2->cnt;
+        r = q2 - 1;
+        if ( top <= r->cnt )
           break;
         // Swap the two entries: the more-used one moves towards the front.
-        v39 = v36->sym;
-        v40 = v36->cnt;
-        v36->sym = v38->sym;
-        v36->cnt = v38->cnt;
-        v38->sym = v39;
-        v38->cnt = v40;
-        v33 = v32->ent;
-        --v36;
-        if ( v38 == v33 )
+        s_b = q2->sym;
+        c_b = q2->cnt;
+        q2->sym = r->sym;
+        q2->cnt = r->cnt;
+        r->sym = s_b;
+        r->cnt = c_b;
+        head = owner1->ent;
+        --q2;
+        if ( r == head )
         {
           __decode_symbol_list_n0x800000 = __frame.list5;
-          n251 = v38->cnt;
+          top = r->cnt;
           goto LABEL_30;
         }
       }
@@ -9446,78 +9446,78 @@ int32_t __decode_symbol_list(SymList *a1)
     }
   }
 LABEL_30:
-  rescale_at = v32->rescale_at;
-  if ( n251 > 251 || rescale_at < v32->since_rescale )
+  rescale_at = owner1->rescale_at;
+  if ( top > 251 || rescale_at < owner1->since_rescale )
   {
-    __frame.list0 = v32->live;
-    v42 = 20 * v32->n;
-    v43 = __frame.list0;
+    __frame.list0 = owner1->live;
+    limit20 = 20 * owner1->n;
+    n_left = __frame.list0;
     __frame.list5 = __decode_symbol_list_n0x800000;
-    __frame.list4 = rescale_at < v42;
-    v44 = v33 - 1;
+    __frame.list4 = rescale_at < limit20;
+    cur = head - 1;
     do
     {
-      v45 = v44;
-      ++v44;
-      v46 = (__frame.list4 + (uint32_t)v44->cnt) >> 1;
-      v44->cnt = v46;
-      if ( v44 != v32->ent )
+      prev = cur;
+      ++cur;
+      half = (__frame.list4 + (uint32_t)cur->cnt) >> 1;
+      cur->cnt = half;
+      if ( cur != owner1->ent )
       {
-        v47 = v44 - 1;
-        __frame.list3 = v47->cnt;
-        if ( v46 > __frame.list3 )
+        up = cur - 1;
+        __frame.list3 = up->cnt;
+        if ( half > __frame.list3 )
         {
-          __frame.list2 = v44->sym;
-          v44->sym = v47->sym;
-          v44->cnt = __frame.list3;
-          if ( v47 != v32->ent )
+          __frame.list2 = cur->sym;
+          cur->sym = up->sym;
+          cur->cnt = __frame.list3;
+          if ( up != owner1->ent )
           {
-            (__frame.list[1]) = v44;
-            __frame.list0 = v43;
+            (__frame.list[1]) = cur;
+            __frame.list0 = n_left;
             do
             {
-              v48 = v47 - 1;
-              v49 = v48->cnt;
-              if ( v46 <= v49 )
+              back = up - 1;
+              back_cnt = back->cnt;
+              if ( half <= back_cnt )
                 break;
-              v47->sym = v48->sym;
-              v47->cnt = v49;
-              --v47;
+              up->sym = back->sym;
+              up->cnt = back_cnt;
+              --up;
             }
-            while ( v48 != v32->ent );
-            v44 = (__frame.list[1]);
-            v43 = __frame.list0;
+            while ( back != owner1->ent );
+            cur = (__frame.list[1]);
+            n_left = __frame.list0;
           }
-          v47->sym = __frame.list2;
-          v47->cnt = v46;
+          up->sym = __frame.list2;
+          up->cnt = half;
         }
       }
-      --v43;
+      --n_left;
     }
-    while ( v43 );
+    while ( n_left );
     __decode_symbol_list_n0x800000 = __frame.list5;
-    v50 = v32->tot;
+    running = owner1->tot;
     __frame.list0 = 0;
-    if ( !v44->cnt )
+    if ( !cur->cnt )
     {
-      v52 = __frame.list0;
+      zeros = __frame.list0;
       do
       {
-        ++v52;
-        v32->tot = ++v50;
-        v53 = v45->cnt;
-        --v45;
+        ++zeros;
+        owner1->tot = ++running;
+        last_cnt = prev->cnt;
+        --prev;
       }
-      while ( !v53 );
-      __frame.list0 = v52;
-      v32->live -= v52;
+      while ( !last_cnt );
+      __frame.list0 = zeros;
+      owner1->live -= zeros;
     }
-    since_rescale = v32->since_rescale;
-    v32->tot = v50 - (v50 >> 1);
+    since_rescale = owner1->since_rescale;
+    owner1->tot = running - (running >> 1);
     n0x2000_2 = sym_cum;
     n0x2000_3 = sym_high;
     tot_1 = n0x2000_6;
-    v32->since_rescale = since_rescale - (since_rescale >> 1);
+    owner1->since_rescale = since_rescale - (since_rescale >> 1);
   }
   else
   {

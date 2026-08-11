@@ -39,6 +39,7 @@ import sys
 
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs                                                  # noqa: E402
+import undup                                                    # noqa: E402
 
 
 def body_span(lines, fn):
@@ -74,7 +75,14 @@ def rename_in(path, fn, pairs):
         # says `_this->rescale_at` renames the member access too, and the
         # struct has no such member.  Caught by the build, but only after the
         # rename had been applied to everything else in the body.
-        if re.search(r'(?:->|\.)\s*%s\b' % re.escape(old), code):
+        # ... unless the body declares it.  The frames are `struct` types
+        # defined inside the function that uses them, so their members do
+        # appear after a `.` *and* in a declaration here, and renaming those is
+        # exactly what this is for.  What must be refused is a name that is a
+        # member of some other struct declared elsewhere.
+        if re.search(r'(?:->|\.)\s*%s\b' % re.escape(old), code) and not any(
+                undup.declaration(l) and re.search(r'\b%s\b' % re.escape(old), l)
+                for l in code.split('\n')):
             sys.exit('%s: %s is also a member name here -- rename it in the '
                      'struct, or pick a local name that is not a member'
                      % (fn, old))
