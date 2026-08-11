@@ -2329,72 +2329,72 @@ int32_t __encode_symbol_tree(uint16_t *_this, int32_t n2) {
   return n0x800000_5;
 }
 
-int32_t __alt_p1_encode_symbol(uint16_t *a1, int32_t n5, int32_t a3, int32_t n5a)
+int32_t __alt_p1_encode_symbol(uint16_t *freq, int32_t n5, int32_t ctx, int32_t sym)
 {
   ;
-  bool v29;
-  int16_t v4;
+  bool done;
+  int16_t tot0;
   // The cumulative count the range coder takes, which it takes unsigned.
-  uint32_t n0x2000_2;
-  int32_t n5a_1, result, n256, n5a_2;
-  uint16_t *v27, *v30, v31, *v35, *v37;
-  uint32_t tot, n5a_3, n0x2000_3;
-  v4 = *a1;
-  n5a_1 = 6 - (n5a & 1);
-  if ( n5a < 5 )
-    n5a_1 = n5a;
-  n5a_2 = n5a_1;
-  v37 = a1 + 1;
-  v35 = a1 + 1;
-  tot = v4 & 0x7FFF;
+  uint32_t cum;
+  int32_t slot0, result, lo, slot;
+  uint16_t *p, *q, nf, *cur, *base;
+  uint32_t tot, k, cum_hi;
+  tot0 = *freq;
+  slot0 = 6 - (sym & 1);
+  if ( sym < 5 )
+    slot0 = sym;
+  slot = slot0;
+  base = freq + 1;
+  cur = freq + 1;
+  tot = tot0 & 0x7FFF;
   // The counts below the symbol, same shape as `encode_symbol_tree`'s.
-  n0x2000_2 = 0;
-  for ( n5a_3 = 0; n5a_3 < n5a_2; n5a_3++ )
-    n0x2000_2 += v37[n5a_3];
-  v35 = &v37[n5a_2];
-  n0x2000_3 = n0x2000_2 + *v35;
-  rc.encode(n0x2000_2, n0x2000_3, tot);
+  cum = 0;
+  for ( k = 0; k < slot; k++ )
+    cum += base[k];
+  cur = &base[slot];
+  cum_hi = cum + *cur;
+  rc.encode(cum, cum_hi, tot);
   if ( tot > 0x2000 )
   {
-    *a1 = 0x8000;
-    v27 = a1 + 7;
-    n256 = 256;
-    v29 = a1 + 7 < v37;
-    v30 = a1 + 7;
-    if ( a1 + 7 >= v37 )
+    *freq = 0x8000;
+    p = freq + 7;
+    lo = 256;
+    done = freq + 7 < base;
+    q = freq + 7;
+    if ( freq + 7 >= base )
     {
       do
       {
-        if ( *v30 < n256 )
-          n256 = *v30;
-        --v30;
+        if ( *q < lo )
+          lo = *q;
+        --q;
       }
-      while ( v30 >= v37 );
-      v29 = v27 < v37;
+      while ( q >= base );
+      done = p < base;
     }
-    if ( !v29 )
+    if ( !done )
     {
       do
       {
-        if ( (uint16_t)n256 <= 1u )
-          v31 = *v27 - (*v27 >> 1);
+        if ( (uint16_t)lo <= 1u )
+          nf = *p - (*p >> 1);
         else
-          v31 = (*v27 + 2) / 3;
-        *v27 = v31;
-        *a1 += v31;
-        --v27;
+          nf = (*p + 2) / 3;
+        *p = nf;
+        *freq += nf;
+        --p;
       }
-      while ( v27 >= v37 );
+      while ( p >= base );
     }
   }
-  *v35 += 32;
-  result = *a1 + 32;
-  *a1 = result;
-  if ( n5a_2 >= 5 )
+  *cur += 32;
+  result = *freq + 32;
+  *freq = result;
+  if ( slot >= 5 )
     return __encode_symbol_tree(model_strip(
-             128 * (uint32_t)(n5a_2 & 1)
-             + ((((a1[1] + (result & 0x7FFF) + 96 - 2 * (uint32_t)a1[n5a_2 + 1]) >> 25) & 0xFFFFFFC0)
-             + (uint32_t)a3)), (n5a - 5) >> 1);
+             128 * (uint32_t)(slot & 1)
+             + ((((freq[1] + (result & 0x7FFF) + 96 - 2 * (uint32_t)freq[slot + 1]) >> 25) & 0xFFFFFFC0)
+             + (uint32_t)ctx)), (sym - 5) >> 1);
   return result;
 }
 
@@ -2501,68 +2501,68 @@ int32_t __decode_symbol_tree(uint16_t *_this)
   }
 }
 
-int32_t __alt_p1_decode_symbol(uint16_t *a1, int32_t a2, int32_t a3)
+int32_t __alt_p1_decode_symbol(uint16_t *freq, int32_t a2, int32_t ctx)
 {
   ;
-  bool v21;
-  int16_t v16, v23;
-  int32_t n5, n256;
-  uint16_t *v11, *v19, *v22;
-  uint32_t tot, sym,
-           n0x2000_2, v24;
-  tot = *a1 & 0x7FFF;
+  bool done;
+  int16_t tot_new, nf;
+  int32_t slot, lo;
+  uint16_t *cur, *p, *q;
+  uint32_t tot, sym, cum;
+  uint16_t *base;   // was uint32_t: the base of the counts, as an address
+  tot = *freq & 0x7FFF;
   sym = rc.get_freq(tot);
-  v11 = a1 + 1;
-  n0x2000_2 = (uint16_t)a1[1];
-  v24 = (uint32_t)(a1 + 1);
-  while ( n0x2000_2 <= sym )
-    n0x2000_2 += (uint16_t)*++v11;
-  rc.decode(n0x2000_2 - (uint16_t)*v11, n0x2000_2, tot);
+  cur = freq + 1;
+  cum = (uint16_t)freq[1];
+  base = freq + 1;
+  while ( cum <= sym )
+    cum += (uint16_t)*++cur;
+  rc.decode(cum - (uint16_t)*cur, cum, tot);
   if ( tot > 0x2000 )
   {
-    *a1 = 0x8000;
-    v19 = a1 + 7;
-    n256 = 256;
-    v21 = (uint32_t)(a1 + 7) < v24;
-    v22 = a1 + 7;
-    if ( (uint32_t)(a1 + 7) >= v24 )
+    *freq = 0x8000;
+    p = freq + 7;
+    lo = 256;
+    done = freq + 7 < base;
+    q = freq + 7;
+    if ( freq + 7 >= base )
     {
       do
       {
-        if ( *v22 < n256 )
-          n256 = *v22;
-        --v22;
+        if ( *q < lo )
+          lo = *q;
+        --q;
       }
-      while ( (uint32_t)v22 >= v24 );
-      v21 = (uint32_t)v19 < v24;
+      while ( q >= base );
+      done = p < base;
     }
-    if ( !v21 )
+    if ( !done )
     {
       do
       {
-        if ( (uint16_t)n256 <= 1u )
-          v23 = *v19 - (*v19 >> 1);
+        if ( (uint16_t)lo <= 1u )
+          nf = *p - (*p >> 1);
         else
-          v23 = ((uint16_t)*v19 + 2) / 3;
-        *v19 = v23;
-        *a1 += v23;
-        --v19;
+          nf = ((uint16_t)*p + 2) / 3;
+        *p = nf;
+        *freq += nf;
+        --p;
       }
-      while ( (uint32_t)v19 >= v24 );
+      while ( p >= base );
     }
   }
-  *v11 += 32;
-  v16 = *a1 + 32;
-  *a1 = v16;
-  n5 = (int32_t)((int32_t)v11 - v24) >> 1;
-  if ( n5 >= 5 )
-    n5 += 2
+  *cur += 32;
+  tot_new = *freq + 32;
+  *freq = tot_new;
+  slot = cur - base;
+  if ( slot >= 5 )
+    slot += 2
         * __decode_symbol_tree(model_strip(
-            128 * (uint32_t)(n5 & 1)
-            + (((((uint16_t)a1[1] + (v16 & 0x7FFF) + 96 - 2 * (uint32_t)(uint16_t)a1[n5 + 1]) >> 25)
+            128 * (uint32_t)(slot & 1)
+            + (((((uint16_t)freq[1] + (tot_new & 0x7FFF) + 96 - 2 * (uint32_t)(uint16_t)freq[slot + 1]) >> 25)
               & 0xFFFFFFC0)
-            + (uint32_t)a3)));
-  return n5;
+            + (uint32_t)ctx)));
+  return slot;
 }
 
 int32_t __alt_p2_encode_symbol(P2Freq *_this, const uint32_t *a2, int32_t a3)
@@ -2644,68 +2644,68 @@ int32_t __alt_p2_decode_symbol(P2Freq *_this, const uint32_t *a2)
 {
   ;
   // The cumulative count the range coder takes, which it takes unsigned.
-  uint32_t v8;
-  int32_t v7, n0x4000, n32, v16, v21;
-  uint16_t *v9, *v24;
-  uint32_t f1, f2, v20;
-  v21 = _this->f[1] + _this->f[0];
-  v20 = _this->f[2] + v21;
-  v7 = rc.get_freq(v20);
-  v8 = _this->f[0];
-  if ( v7 >= v8 )
+  uint32_t cum;
+  int32_t target, fq, st, idx, c01;
+  uint16_t *slot, *base;
+  uint32_t f1_old, f2_old, tot;
+  c01 = _this->f[1] + _this->f[0];
+  tot = _this->f[2] + c01;
+  target = rc.get_freq(tot);
+  cum = _this->f[0];
+  if ( target >= cum )
   {
-    if ( v7 >= v21 )
+    if ( target >= c01 )
     {
-      v8 = v21;
-      v9 = &_this->f[2];
+      cum = c01;
+      slot = &_this->f[2];
     }
     else
     {
-      v9 = &_this->f[1];
+      slot = &_this->f[1];
     }
-    v24 = &_this->f[0];
+    base = &_this->f[0];
   }
   else
   {
-    v9 = &_this->f[0];
-    v8 = 0;
-    v24 = &_this->f[0];
+    slot = &_this->f[0];
+    cum = 0;
+    base = &_this->f[0];
   }
-  rc.decode(v8, (v8 + ((uint16_t)*v9)), v20);
-  n0x4000 = (uint16_t)*v9;
-  if ( n0x4000 > 0x4000 )
+  rc.decode(cum, (cum + ((uint16_t)*slot)), tot);
+  fq = (uint16_t)*slot;
+  if ( fq > 0x4000 )
   {
-    f1 = _this->f[1];
-    f2 = _this->f[2];
+    f1_old = _this->f[1];
+    f2_old = _this->f[2];
     _this->f[0] -= _this->f[0] >> 1;
-    n32 = _this->step;
-    _this->f[1] = f1 - (f1 >> 1);
-    _this->f[2] = f2 - (f2 >> 1);
-    if ( n32 <= 256 )
+    st = _this->step;
+    _this->f[1] = f1_old - (f1_old >> 1);
+    _this->f[2] = f2_old - (f2_old >> 1);
+    if ( st <= 256 )
     {
-      if ( n32 <= 32 )
-        n0x4000 = ((uint32_t)(16 - n32) >> 30) & 0xFFFFFFFE;
+      if ( st <= 32 )
+        fq = ((uint32_t)(16 - st) >> 30) & 0xFFFFFFFE;
       else
-        LOWORD(n0x4000) = 32;
-      LOWORD(n32) = n32 - n0x4000;
-      _this->step = n32;
-      LOWORD(n0x4000) = *v9;
+        LOWORD(fq) = 32;
+      LOWORD(st) = st - fq;
+      _this->step = st;
+      LOWORD(fq) = *slot;
     }
     else
     {
-      n32 = (uint32_t)n32 >> 1;
-      _this->step = n32;
-      LOWORD(n0x4000) = *v9;
+      st = (uint32_t)st >> 1;
+      _this->step = st;
+      LOWORD(fq) = *slot;
     }
   }
   else
   {
-    LOWORD(n32) = _this->step;
+    LOWORD(st) = _this->step;
   }
-  *v9 = n32 + n0x4000;
-  v16 = v9 - v24;
-  if ( v16 )
-    return v16 + 2 * __decode_symbol_tree(model_strip(a2[v16 & 1]));
+  *slot = st + fq;
+  idx = slot - base;
+  if ( idx )
+    return idx + 2 * __decode_symbol_tree(model_strip(a2[idx & 1]));
   else
     return 0;
 }
@@ -2761,72 +2761,65 @@ void __rc_end_encode()
     free(model_tables);
 }
 
-void **__free_workspace(ModelBlock *Blocka, int8_t a2)
+void **__free_workspace(ModelBlock *blk, int8_t a2)
 {
   ;
-  int32_t v4, v6, v10, v13, i;
-  SymList *v3, *sel1_list, *v8, *v9, *sel0_list, *v14;
-  ModelBlock *Blocka_3;
-  ModelBlock *Blocka_1;
-  ModelBlock *Blocka_2;
-  Blocka_1 = (ModelBlock *)(Blocka);
-  free(Blocka->sym_code);
-  free(Blocka_1->sym_word);
-  free(Blocka_1->run_bucket);
-  free(*(void**)&Blocka_1->alpha_map);
+  int32_t n, left, i;
+  SymList *lists, *p;
+  free(blk->sym_code);
+  free(blk->sym_word);
+  free(blk->run_bucket);
+  free(*(void**)&blk->alpha_map);
   // Both arrays are allocated as `bmf_new(24 * n + 4)` with the count in the
   // word before the first list, so `n` is `sym_list_count(lists)` and that
   // same word is what gets freed.  Each list owns its entries.
-  v3 = Blocka_1->sel1_list;
-  if ( v3 )
+  //
+  // Hex-Rays had five more locals here: `Blocka_1`, `Blocka_2` and `Blocka_3`
+  // were the block saved and restored around two loops that never touched it,
+  // and `sel1_list`/`sel0_list` were second copies of the two list pointers,
+  // restored the same way.  Nothing in either loop writes what they protect.
+  lists = blk->sel1_list;
+  if ( lists )
   {
-    v4 = sym_list_count(v3);
-    if ( v4 )
+    n = sym_list_count(lists);
+    if ( n )
     {
-      Blocka_2 = (ModelBlock *)(Blocka_1);
-      v6 = v4;
-      sel1_list = Blocka_1->sel1_list;
-      v8 = &v3[v4];
+      left = n;
+      p = &lists[n];
       do
       {
-        --v8;
-        free(v8->ent);
-        --v6;
+        --p;
+        free(p->ent);
+        --left;
       }
-      while ( v6 );
-      v3 = sel1_list;
-      Blocka_1 = (ModelBlock *)(Blocka_2);
+      while ( left );
     }
-    free(sym_list_block(v3));
+    free(sym_list_block(lists));
   }
-  v9 = Blocka_1->sel0_list;
-  if ( v9 )
+  lists = blk->sel0_list;
+  if ( lists )
   {
-    v10 = sym_list_count(v9);
-    if ( v10 )
+    n = sym_list_count(lists);
+    if ( n )
     {
-      Blocka_3 = (ModelBlock *)(Blocka_1);
-      sel0_list = Blocka_1->sel0_list;
-      v13 = v10;
-      v14 = &v9[v10];
+      left = n;
+      p = &lists[n];
       do
       {
-        --v14;
-        free(v14->ent);
-        --v13;
+        --p;
+        free(p->ent);
+        --left;
       }
-      while ( v13 );
-      v9 = sel0_list;
-      Blocka_1 = (ModelBlock *)(Blocka_3);
+      while ( left );
     }
-    free(sym_list_block(v9));
+    free(sym_list_block(lists));
   }
   for ( i = 0; i < 5; ++i )
-    free(((void**)Blocka_1)[i + 14]);
-  free(Blocka_1->escape.ent);
+    free(((void**)blk)[i + 14]);
+  free(blk->escape.ent);
   if ( (a2 & 1) != 0 )
-    free(Blocka_1);
-  return (void **)Blocka_1;
+    free(blk);
+  return (void **)blk;
 }
 
 // Is `sym` one of the list's `n` most-used symbols?  The list is kept sorted by
