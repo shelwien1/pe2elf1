@@ -22,7 +22,7 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17291
+subs1.hpp lines                      17787     17616         17231
 bmf.cpp lines                            —         —           365
 raw-offset sites                        22        12             5
   off `_this`                            —         1             0
@@ -35,7 +35,7 @@ pointer casts                         2137      1545          1290
   to a record, of an address             —         —             5
 fNN members / named ones             93/121     5/162         0/172
 distinct unexplained locals            554       591             0
-  bodies still carrying one              —   8 of 102     0 of 103
+  bodies still carrying one              —   8 of 102     0 of 104
   uses                                    —      6302             0
 locals named for a callee parameter      —         —             0
   declarations / bodies                   —         —           0/0
@@ -45,7 +45,7 @@ goto / LABEL_n:                     112/79     81/55         49/33
   restart a loop / exit N blocks         —         —         15/32
   sideways to a join / to neither        —         —           2/0
   jump into a block                      —         —             0
-conversion warnings                   1455      1331          1070
+conversion warnings                   1455      1331          1065
 ```
 
 `python3 tools/checktable.py` compares that table against `shape.py --rows`
@@ -2051,3 +2051,48 @@ just arithmetic.
 `LOWORD` alone, and every one of them is a genuine partial write to a register
 MSVC used at two widths, which §17's rule narrows where it can and leaves
 alone where something reads the whole.
+
+---
+
+## 25. Two methods, and a fifty-three-line duplicate
+
+### `SymEntry::set`
+
+The symbol lists write `sym` and then `cnt` to the same entry nineteen times
+and never one without the other — MSVC stored the pair with two `mov`s and
+Hex-Rays wrote down two statements. Eight more of those pairs are a *copy*:
+`p->sym = q->sym; p->cnt = q->cnt;` is `*p = *q;`, and `uncopyrec.py` cannot
+see it because that rule is about the 18-byte `bmf_copy` calls and matches on
+the call.
+
+`SymEntry` gets a `set(s, c)`, which leaves it an aggregate and three bytes —
+the `static_assert` under it is what says so.
+
+### `SymList::rescale`
+
+`encode_symbol_list` and `symbol_list_update` both halve every count, re-sort
+what the halving moved, and drop the tail that reached zero. They did it in
+**fifty-three lines that differ in one identifier** — the local holding the
+count that triggers it, `top` in one and `count` in the other. Diffing them
+with that name normalised gives no other difference at all.
+
+Both walk from a local `head`, and `head` can only be `ent`: each body assigns
+it three times and always from that member. So the block moves onto the record
+whole, and both call sites become one line.
+
+**The ratchet fell five, from 1070 to 1065**, and that is the clearest possible
+statement of what a duplicate costs: those five conversions were being counted
+twice because they were written twice. `unused.py` then found two declarations
+and 28 names orphaned by the move.
+
+### Both tools that police this needed telling about methods
+
+`deadcheck.py` reported `rescale is never called`, from two call sites. Its
+call pattern is `\b(__[A-Za-z0-9_]+)\s*\(` — every body recovered from the
+binary carries the `__` prefix, and a method reached as `p->rescale(x)` carries
+nothing. This is the same blind spot §19 hit with `bit_tree`, where the answer
+was the file's `static inline` convention; a method cannot take that route, so
+the tool now reads `->name(` and `.name(` as calls too. Checked by mutating a
+body's call site in a copy and confirming it is still reported dead.
+
+`checktable.py` caught the two §1 figures the change moved, on the same run.

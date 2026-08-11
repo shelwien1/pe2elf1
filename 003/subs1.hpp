@@ -625,6 +625,11 @@ static_assert(__builtin_offsetof(FreqRec, b14) == 14, "FreqRec: the byte moved")
 struct SymEntry {
   uint16_t sym;
   uint8_t  cnt;
+  // Both fields at once.  The symbol lists write them in that order nineteen
+  // times and never one without the other: MSVC stored the pair with two
+  // `mov`s and Hex-Rays wrote down two statements.  Still an aggregate, still
+  // three bytes -- the assertion below is what says so.
+  void set(uint32_t s, uint32_t c) { sym = (uint16_t)s; cnt = (uint8_t)c; }
 };
 #pragma pack(pop)
 static_assert(sizeof(SymEntry) == 3, "SymEntry: the record is three bytes");
@@ -647,8 +652,86 @@ struct SymList {
   uint32_t  since_rescale; // +12  12 * n at init
   uint32_t  rescale_at;    // +16  8 * n at init
   SymEntry *ent;      // +20
+
+  // Halve every count, re-sort what the halving moved, and drop the tail that
+  // reached zero.  Returns whether it ran.
+  //
+  // `encode_symbol_list` and `symbol_list_update` both had this inline, in
+  // fifty-three lines that differed in one identifier -- the local holding the
+  // count that triggers it.  Both walked from `head`, and `head` is `ent` at
+  // both sites and can only be: each body assigns it three times and always
+  // from this member.
+  //
+  // The bias is what `rescale_at` decides.  A list initialised at `8 * n`
+  // halves rounding down and one at `20 * n` rounds up, which is the whole of
+  // `bias = due < 20 * n`.
+  bool rescale(int32_t count);
 };
 static_assert(sizeof(SymList) == 24, "SymList: the header is 24 bytes");
+
+inline bool SymList::rescale(int32_t count)
+{
+  int32_t half, bias, up_cnt, back_cnt, last_cnt;
+  uint32_t n_left, running, since, due = rescale_at;
+  uint16_t keep;
+  SymEntry *cur, *prev, *up, *back;
+  if ( count <= 251 && due >= since_rescale )
+    return false;
+  n_left = live;
+  bias = due < 20 * n;
+  cur = ent - 1;
+  prev = cur;
+  do
+  {
+    prev = cur;
+    ++cur;
+    half = (bias + (uint32_t)cur->cnt) >> 1;
+    cur->cnt = half;
+    if ( cur != ent )
+    {
+      up = cur - 1;
+      up_cnt = up->cnt;
+      if ( half > up_cnt )
+      {
+        keep = cur->sym;
+        cur->set(up->sym, up_cnt);
+        if ( up != ent )
+        {
+          do
+          {
+            back = up - 1;
+            back_cnt = back->cnt;
+            if ( half <= back_cnt )
+              break;
+            up->set(back->sym, back_cnt);
+            --up;
+          }
+          while ( back != ent );
+        }
+        up->set(keep, half);
+      }
+    }
+    --n_left;
+  }
+  while ( n_left );
+  running = tot;
+  if ( !cur->cnt )
+  {
+    do
+    {
+      ++n_left;
+      tot = ++running;
+      last_cnt = prev->cnt;
+      --prev;
+    }
+    while ( !last_cnt );
+    live -= n_left;
+  }
+  since = since_rescale;
+  tot = running - (running >> 1);
+  since_rescale = since - (since >> 1);
+  return true;
+}
 
 // What `bmf_new(24 * n + 4)` returns: the count, then `n` lists.  Four sites
 // build one and step past the count with `(SymList *)(p + 1)`; `free_workspace`
@@ -1904,18 +1987,17 @@ int32_t __encode_symbol_list(SymList *_this, int32_t want)
 {
   ;
   int8_t gen;
-  uint16_t keep;
   int32_t enc_cum, enc_high, enc_tot;
-  uint32_t left, n_left;
+  uint32_t left;
   uint8_t c_a, c_b;
   // Every one of these walked `_this[5]`'s entries three bytes at a time,
   // reading the symbol as `*(uint16_t *)p` and the count as `p[2]`.
-  SymEntry *p, *head, *q, *cur, *prev, *up, *back;
+  SymEntry *p, *head, *q;
   // A cumulative count, a high count and a total: the three arguments
   // `RangeCoder::encode` takes, and it takes them unsigned.
-  int32_t cum, s, c, result, c2, top, half, back_cnt, last_cnt, up_cnt, bias;
+  int32_t cum, s, c, result, c2, top;
   uint16_t s_a, s_b;
-  uint32_t rest, i, rescale_at, running, since_rescale;
+  uint32_t rest, i;
   gen = exclusion_gen;
   left = _this->live;
   p = _this->ent - 1;
@@ -1979,10 +2061,8 @@ LABEL_37:
     s_a = p->sym;
     c_a = p->cnt;
     q = p - 1;
-    p->sym = q->sym;
-    p->cnt = q->cnt;
-    q->sym = s_a;
-    q->cnt = c_a;
+    *p = *q;
+    q->set(s_a, c_a);
     head = _this->ent;
     if ( q == head )
     {
@@ -1998,10 +2078,8 @@ LABEL_37:
           break;
         s_b = q->sym;
         c_b = q->cnt;
-        q->sym = p->sym;
-        q->cnt = p->cnt;
-        p->sym = s_b;
-        p->cnt = c_b;
+        *q = *p;
+        p->set(s_b, c_b);
         head = _this->ent;
         --q;
         if ( p == head )
@@ -2009,70 +2087,8 @@ LABEL_37:
       }
     }
   }
-  rescale_at = _this->rescale_at;
-  if ( top > 251 || rescale_at < _this->since_rescale )
-  {
-    n_left = _this->live;
-    bias = rescale_at < 20 * _this->n;
-    cur = head - 1;
-    do
-    {
-      prev = cur;
-      ++cur;
-      half = (bias + (uint32_t)cur->cnt) >> 1;
-      cur->cnt = half;
-      if ( cur != _this->ent )
-      {
-        up = cur - 1;
-        up_cnt = up->cnt;
-        if ( half > up_cnt )
-        {
-          keep = cur->sym;
-          cur->sym = up->sym;
-          cur->cnt = up_cnt;
-          if ( up != _this->ent )
-          {
-            do
-            {
-              back = up - 1;
-              back_cnt = back->cnt;
-              if ( half <= back_cnt )
-                break;
-              up->sym = back->sym;
-              up->cnt = back_cnt;
-              --up;
-            }
-            while ( back != _this->ent );
-          }
-          up->sym = keep;
-          up->cnt = half;
-        }
-      }
-      --n_left;
-    }
-    while ( n_left );
-    running = _this->tot;
-    if ( !cur->cnt )
-    {
-      do
-      {
-        ++n_left;
-        _this->tot = ++running;
-        last_cnt = prev->cnt;
-        --prev;
-      }
-      while ( !last_cnt );
-      _this->live -= n_left;
-    }
-    since_rescale = _this->since_rescale;
-    _this->tot = running - (running >> 1);
-    _this->since_rescale = since_rescale - (since_rescale >> 1);
-    result = 1;
-  }
-  else
-  {
-    result = 1;
-  }
+  _this->rescale(top);
+  result = 1;
   rc.encode(enc_cum, enc_high, enc_tot);
   return result;
 }
@@ -2097,11 +2113,10 @@ void __symbol_list_update(SymList *_this, int32_t want, uint32_t add)
   uint8_t c3, c, c2;
   // All of these walk the entries; the -3 and +2 they carried were the record
   // stride and the count field.
-  SymEntry *q, *cur, *prev, *up, *back, *p, *head;
-  uint16_t s3, s, s2, keep;
-  int32_t recycled, half, back_cnt, last_cnt, up_cnt, bias;
-  uint32_t n_left;   // a count, like `live` which it is subtracted from
-  uint32_t n_live, left, due, running, since_rescale;
+  SymEntry *q, *p, *head;
+  uint16_t s3, s, s2;
+  int32_t recycled;
+  uint32_t n_live, left;
   list = _this->ent;
   n_live = _this->live;
   p = list;
@@ -2128,10 +2143,8 @@ LABEL_16:
       s = p->sym;
       c = p->cnt;
       q = p - 1;
-      p->sym = q->sym;
-      p->cnt = q->cnt;
-      q->sym = s;
-      q->cnt = c;
+      *p = *q;
+      q->set(s, c);
       head = _this->ent;
       if ( q == head )
       {
@@ -2147,10 +2160,8 @@ LABEL_16:
             break;
           s2 = q->sym;
           c2 = q->cnt;
-          q->sym = p->sym;
-          q->cnt = p->cnt;
-          p->sym = s2;
-          p->cnt = c2;
+          *q = *p;
+          p->set(s2, c2);
           head = _this->ent;
           --q;
           if ( p == head )
@@ -2158,66 +2169,8 @@ LABEL_16:
         }
       }
     }
-    due = _this->rescale_at;
-    if ( count > 251 || due < _this->since_rescale )
-    {
-      n_left = _this->live;
-      bias = due < 20 * _this->n;
-      cur = head - 1;
-      do
-      {
-        prev = cur;
-        ++cur;
-        half = (bias + (uint32_t)cur->cnt) >> 1;
-        cur->cnt = half;
-        if ( cur != _this->ent )
-        {
-          up = cur - 1;
-          up_cnt = up->cnt;
-          if ( half > up_cnt )
-          {
-            keep = cur->sym;
-            cur->sym = up->sym;
-            cur->cnt = up_cnt;
-            if ( up != _this->ent )
-            {
-              do
-              {
-                back = up - 1;
-                back_cnt = back->cnt;
-                if ( half <= back_cnt )
-                  break;
-                up->sym = back->sym;
-                up->cnt = back_cnt;
-                --up;
-              }
-              while ( back != _this->ent );
-            }
-            up->sym = keep;
-            up->cnt = half;
-          }
-        }
-        --n_left;
-      }
-      while ( n_left );
-      running = _this->tot;
-      if ( !cur->cnt )
-      {
-        do
-        {
-          ++n_left;
-          _this->tot = ++running;
-          last_cnt = prev->cnt;
-          --prev;
-        }
-        while ( !last_cnt );
-        _this->live -= n_left;
-      }
-      since_rescale = _this->since_rescale;
-      _this->tot = running - (running >> 1);
-      _this->since_rescale = since_rescale - (since_rescale >> 1);
-      return;
-    }
+    _this->rescale(count);
+    return;
   }
   else
   {
@@ -2249,10 +2202,8 @@ LABEL_4:
       // The new entry starts one place forward, same swap as above.
       s3 = list->sym;
       c3 = list->cnt;
-      list->sym = list[-1].sym;
-      list->cnt = list[-1].cnt;
-      list[-1].sym = s3;
-      list[-1].cnt = c3;
+      *list = list[-1];
+      list[-1].set(s3, c3);
     }
   }
 }
@@ -3023,17 +2974,14 @@ int32_t __init_model_tables(ModelBlock *_this)
         slot = &ent[n_live];
         list->live = n_live + 1;
         list->tot = recycled + list->tot + 1;
-        slot->sym = want;
-        slot->cnt = 2;
+        slot->set(want, 2);
         list->since_rescale += 4;
         if ( slot != list->ent )
         {
           sym = slot->sym;
           cnt = slot->cnt;
-          slot->sym = slot[-1].sym;
-          slot->cnt = slot[-1].cnt;
-          slot[-1].sym = sym;
-          slot[-1].cnt = cnt;
+          *slot = slot[-1];
+          slot[-1].set(sym, cnt);
         }
         cur = _this->sel_cur;
       }
@@ -9318,10 +9266,8 @@ int32_t __decode_symbol_list(SymList *syms)
     c_a = p->cnt;
     s_a = p->sym;
     q2 = p - 1;
-    p->sym = q2->sym;
-    p->cnt = q2->cnt;
-    q2->sym = s_a;
-    q2->cnt = c_a;
+    *p = *q2;
+    q2->set(s_a, c_a);
     head = owner1->ent;
     if ( q2 == head )
     {
@@ -9339,10 +9285,8 @@ int32_t __decode_symbol_list(SymList *syms)
         // Swap the two entries: the more-used one moves towards the front.
         s_b = q2->sym;
         c_b = q2->cnt;
-        q2->sym = r->sym;
-        q2->cnt = r->cnt;
-        r->sym = s_b;
-        r->cnt = c_b;
+        *q2 = *r;
+        r->set(s_b, c_b);
         head = owner1->ent;
         --q2;
         if ( r == head )
@@ -9378,8 +9322,7 @@ LABEL_30:
         if ( half > __frame.list3 )
         {
           __frame.list2 = cur->sym;
-          cur->sym = up->sym;
-          cur->cnt = __frame.list3;
+          cur->set(up->sym, __frame.list3);
           if ( up != owner1->ent )
           {
             (__frame.list[1]) = cur;
@@ -9390,16 +9333,14 @@ LABEL_30:
               back_cnt = back->cnt;
               if ( half <= back_cnt )
                 break;
-              up->sym = back->sym;
-              up->cnt = back_cnt;
+              up->set(back->sym, back_cnt);
               --up;
             }
             while ( back != owner1->ent );
             cur = (__frame.list[1]);
             n_left = __frame.list0;
           }
-          up->sym = __frame.list2;
-          up->cnt = half;
+          up->set(__frame.list2, half);
         }
       }
       --n_left;
@@ -11654,8 +11595,7 @@ LABEL_53:
         {
           x6 = blk->sym_code;
           x7 = blk->row_cur[0][step + 8].sym;
-          out_ent->sym = (uint16_t)x6[x7];
-          out_ent->cnt = (uint8_t)(x6[x7] >> 16);
+          out_ent->set((uint16_t)x6[x7], (uint8_t)(x6[x7] >> 16));
           ++step;
           ++out_ent;
         }

@@ -73,6 +73,12 @@ def call_graph(lines):
             for m in re.finditer(r'\b(__[A-Za-z0-9_]+)\s*\(', l):
                 callers.setdefault(shim.get(m.group(1), m.group(1)),
                                    set()).add(n)
+            # A method is reached as `p->rescale(x)`, which carries no `__`
+            # prefix -- every body recovered from the binary has one and a
+            # method this project introduced does not.  Without this the first
+            # method added to the file was reported dead from two call sites.
+            for m in re.finditer(r'(?:->|\.)\s*([A-Za-z_]\w*)\s*\(', l):
+                callers.setdefault(m.group(1), set()).add(n)
     return callers
 
 
