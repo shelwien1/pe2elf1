@@ -2267,18 +2267,23 @@ LABEL_4:
   }
 }
 
-uint16_t *__init_counter_node(uint16_t *_this)
+CounterNode *__init_counter_node(CounterNode *node)
 {
   ;
-  *(_this + 1) = 8;
-  *(_this + 2) = 2;
-  *(_this + 3) = 2;
-  *(_this + 4) = 2;
-  *(_this + 5) = 2;
-  *(_this + 6) = 3;
-  *(_this + 7) = 3;
-  *_this = 22;
-  return _this;
+  // The one body still spelled exactly as Hex-Rays spelled it, found by
+  // diffing against the first commit rather than by looking: eight `uint16_t`
+  // written through a pointer, which `CounterNode` has declared since round
+  // nine.  22 is the sum of the seven counts, which is the invariant the
+  // record is for and which `*_this = 22` does not say.
+  node->c[0] = 8;
+  node->c[1] = 2;
+  node->c[2] = 2;
+  node->c[3] = 2;
+  node->c[4] = 2;
+  node->c[5] = 3;
+  node->c[6] = 3;
+  node->total = 22;
+  return node;
 }
 
 // Code a symbol as a level, then the bits that pick it out within that level.
@@ -2811,17 +2816,17 @@ uint32_t __rescale_three_way(P2Freq *_this)
   return cut;
 }
 
-int32_t __rescale_counter_pair(uint16_t *_this)
+int32_t __rescale_counter_pair(BitCtr *ctr)
 {
   ;
   int32_t tot;
-  *_this -= *_this >> 1;
-  tot = (uint16_t)*(_this + 2);
-  *(_this + 1) -= *(_this + 1) >> 1;
+  ctr->n[0] -= ctr->n[0] >> 1;
+  tot = ctr->limit;
+  ctr->n[1] -= ctr->n[1] >> 1;
   if ( tot < 0x4000 )
   {
     tot += 64;
-    *(_this + 2) = tot;
+    ctr->limit = tot;
   }
   return tot;
 }
@@ -4200,7 +4205,7 @@ int32_t *__alt_p1_alloc(AltP1Block *_this, int32_t img_w, int32_t img_h, int32_t
   _this->width = img_w;
   _this->height = img_h;
   do
-    __init_counter_node((uint16_t *)&_this->counters[ctr++]);
+    __init_counter_node(&_this->counters[ctr++]);
   while ( ctr < 0x99C60 );
   _this->pred = 0;
   lvl = 0;
@@ -9864,7 +9869,7 @@ LABEL_42:
                      run0,
                      __frame.sym5->run_ctr[16 * ((seen == 0) + (bucket == __frame.sym0)) + bucket].n[1]);
             if ( __frame.sym5->run_ctr[16 * ((seen == 0) + (bucket == __frame.sym0)) + bucket].limit < (uint32_t)bin_tot )
-              __rescale_counter_pair((uint16_t *)__frame.sym2);
+              __rescale_counter_pair((BitCtr *)__frame.sym2);
             s1b = __frame.sym1;
             *(uint16_t *)(__frame.sym2 + 2 * __frame.sym1) += 8;
             if ( s1b )
@@ -10780,7 +10785,7 @@ LABEL_42:
           bin_tot = *runp + runp[1];
           rc.encode_bit(*runp, runp[1], (runlen_s & bit5) != 0);
           if ( __frame.sym7->run_ctr[16 * ((first == 0) + (s5 == __frame.sym0)) + s5].limit < (uint32_t)bin_tot )
-            __rescale_counter_pair((uint16_t *)__frame.sym2);
+            __rescale_counter_pair((BitCtr *)__frame.sym2);
           s1b = __frame.sym1;
           __frame.sym4 = bit5;
           __frame.sym2[__frame.sym1 != 0] += 8;

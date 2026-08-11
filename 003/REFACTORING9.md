@@ -34,7 +34,7 @@ distinct unexplained locals            554       591             0
 locals named for a callee parameter      —         —             0
   declarations / bodies                   —         —           0/0
 names Hex-Rays chose, nobody changed     —         —             0
-  conventional ones kept on purpose      —         —         66/74
+  conventional ones kept on purpose      —         —         64/74
 goto / LABEL_n:                     112/79     81/55         49/33
   restart a loop / exit N blocks         —         —         15/32
   sideways to a join / to neither        —         —           2/0
@@ -1807,3 +1807,40 @@ asks every rule, `triage.sh` asks which stream moved, and this one asks the
 decompiler's own file. None of the five has ever needed correcting. Every row
 that has needed correcting — four times, on one line — asked the text what it
 looked like.
+
+### The same reference, asked a second question
+
+Once the decompiler's own output is a thing the tools can read, it answers more
+than names. `unnamed.py --diff` reports, for each body, how much of it is
+still the decompiler's text verbatim — not a count and never zero, because a
+short function Hex-Rays got right should stay that way, but a way of asking
+*which bodies have had nothing done to them.* That is a question no rule can
+answer and that reading seventeen thousand lines answers badly.
+
+Asked the first time it found exactly one body at 1.00 — unchanged, line for
+line, through nine rounds:
+
+```c
+uint16_t *__init_counter_node(uint16_t *_this)
+{
+  *(_this + 1) = 8;
+  *(_this + 2) = 2;
+  ...
+  *_this = 22;
+}
+```
+
+Eight `uint16_t` written through a pointer into a record this file has had
+declared since round nine — `CounterNode`, a total and seven counts — and the
+caller was casting a `CounterNode *` to `uint16_t *` to hand it over. With the
+parameter typed, the cast goes and the body says what the seeds are: seven
+counts and their sum. Twenty-two is not a magic number, it is `8 + 2*4 + 3*2`.
+
+The second-least-changed body was the same shape: `rescale_counter_pair` took
+a `uint16_t *` and walked `*_this`, `*(_this + 1)` and `*(_this + 2)`, which is
+`BitCtr` — `n[0]`, `n[1]`, `limit` — a record with a `static_assert` on its
+size and an offset assertion on `limit`. Both callers cast to hand it over.
+
+Nothing is above 0.50 now and the median is 0.13. The top of the list is short
+dispatch and cleanup functions where a high ratio means the decompiler had
+little to get wrong, not that anything is owed.
