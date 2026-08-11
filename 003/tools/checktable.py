@@ -19,14 +19,21 @@ import sys
 import subprocess
 
 # `sweep.sh` hands every tool a copy of the *source* to check, so an argument
-# that is not the document is the sweep asking politely and is ignored.
+# that is not the document is not a mistake -- but it is not nothing either.
+# `shape.py` was being run with no path at all, so it read `subs1.hpp` from the
+# working directory whatever this was handed, and the check answered about the
+# working copy while claiming to answer about the file it was given.  That is
+# the exact defect `proven.sh` exists to catch, in the tool that checks the
+# table `proven.sh`'s own numbers go into.
 DOC = next((a for a in sys.argv[1:] if a.endswith('.md')), 'REFACTORING9.md')
+SRC = next((a for a in sys.argv[1:] if not a.endswith('.md')
+            and not a.startswith('--')), 'subs1.hpp')
 HERE = __file__.rsplit('/', 1)[0]
 
 
 def live():
     out = subprocess.check_output(
-        [sys.executable, HERE + '/shape.py', '--rows']).decode()
+        [sys.executable, HERE + '/shape.py', '--rows', SRC]).decode()
     return dict(l.split('\t', 1) for l in out.split('\n') if '\t' in l)
 
 
@@ -51,6 +58,15 @@ if __name__ == '__main__':
         # The two rows that are history only: `shape.py` never printed them.
         if label in ('byte offsets on a typed base',):
             continue
+        # `shape.py` labels its first row with the source's basename, which is
+        # right -- the row should say what was measured -- but it means that
+        # against a copy the table's `subs1.hpp lines` matches nothing and the
+        # sweep fails on the typography.  Only that one row is remapped, and
+        # only when the file being checked is not the one the table quotes.
+        if label.endswith(' lines') and label not in now:
+            alt = SRC.rsplit('/', 1)[-1] + ' lines'
+            if label == 'subs1.hpp lines' and alt in now:
+                label = alt
         got = now.get(label)
         if got is None:
             print('%-40s quoted but shape.py prints no such row' % label)

@@ -2976,3 +2976,38 @@ balance check is what rejects `4481630`'s. A rule that has never been shown to
 fire is indistinguishable from one that never looks — which is `proven.sh`'s
 whole argument, applied by hand to a rule that is new enough not to have a
 history in it yet.
+
+## 38. The checker of the table did not read the file it was given
+
+`checktable.py` compares §1's table against `shape.py --rows`. It ran
+
+```python
+subprocess.check_output([sys.executable, HERE + '/shape.py', '--rows'])
+```
+
+with no path, so `shape.py` read `subs1.hpp` from the working directory
+whatever `checktable.py` had been handed. That is §10's founding defect —
+`shape.py` ignoring the path it was given — in the tool that checks the table
+§10 is written in. It answered about the working copy while claiming to answer
+about the file it was given, and `proven.sh` had no way to see it because the
+answer moved for an unrelated reason every time the working file did.
+
+The path is passed through now. Against this file, 0 rows disagree; against
+`4481630`'s, 26 do — which is the control, and which also makes the row
+replayable.
+
+Two things fell out of it.
+
+`shape.py` reads `warn.log` for the conversion-warning rows, and did not check
+the stamp. Handed an old revision it reported the *working* tree's 1061
+warnings under that revision's other rows — a table half about one file and
+half about another. It is the fifth place §35's check belongs, and the old
+revision now reports `conversion warnings 0`, because the log is not about it.
+
+And `shape.py` labels its first row with the source it measured, which is
+right, but it used the whole path: run against a copy in a temp directory the
+label became `/tmp/tmp.XXXX/subs1.hpp lines` and `checktable.py` reported the
+table's `subs1.hpp lines` as "quoted but shape.py prints no such row" — a
+failing sweep about typography. The basename is the label; `checktable.py`
+remaps that one row when the file it is checking is not the one the table
+quotes.

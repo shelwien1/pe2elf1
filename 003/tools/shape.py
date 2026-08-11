@@ -20,6 +20,7 @@ import re
 import sys
 
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
+import buildlog                                                   # noqa: E402
 import structs                                                    # noqa: E402
 
 # The file to report on.  This was a constant, so `shape.py other.hpp`
@@ -183,11 +184,17 @@ RATCHET = re.compile(r'\[-W(?:conversion|sign-conversion|sign-compare'
 
 
 def warnkinds(log='warn.log'):
-    """{kind: count} over warn.log, or {} when there is no log."""
+    """{kind: count} over warn.log, or {} when it is about another file.
+
+    The log's line numbers and counts belong to the source it was built from.
+    Handed an old revision -- which `proven.sh` does, and `checktable.py` now
+    passes the path through -- this used to report the *working* tree's
+    warnings under that revision's other rows.  `buildlog` is the same check
+    REFACTORING9.md section 35 put in four other places.
+    """
     out = collections.Counter()
-    try:
-        rows = open(log).read().split('\n')
-    except OSError:
+    rows, note = buildlog.read(log, SRC)
+    if note:
         return out
     for l in rows:
         if not RATCHET.search(l):
@@ -235,7 +242,11 @@ def summary():
     # compared against the copy of this table in REFACTORING9.md §1 without the
     # checker parsing prose, and the point of `checktable.py` is that it does
     # not have to.
-    row('%s lines' % SRC, len(lines) - 1)
+    # The basename, not the path: run against a copy in a temp directory --
+    # which `sweep.sh` and `proven.sh` both do -- the label carried the whole
+    # of `/tmp/tmp.XXXX/subs1.hpp`, and `checktable.py` then found no row by
+    # the name section 1 quotes.
+    row('%s lines' % SRC.rsplit('/', 1)[-1], len(lines) - 1)
     row('bmf.cpp lines', len(open('bmf.cpp').read().split('\n')) - 1)
     row('raw-offset sites', len(raw))
     row('  off `_this`', len(this))
@@ -452,7 +463,7 @@ def narrowings():
     """
     lines = open(SRC).read().split('\n')
     out, ex = collections.Counter(), collections.defaultdict(list)
-    for l in open('warn.log'):
+    for l in buildlog.read('warn.log', SRC)[0]:
         m = re.match(r'%s:(\d+):(\d+): (.*)' % re.escape(SRC), l)
         if not m:
             continue
