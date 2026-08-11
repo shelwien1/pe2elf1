@@ -14494,7 +14494,8 @@ void __unmodel_plane(int8_t ArgList, uint16_t *p_i, uint8_t *Src)
 void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int32_t a6, uint8_t *a7)
 {
   int32_t v20;   // the symbol MSVC kept in the low half of `v16`
-  P2Ctx *v11, *v16, *v23, *v30, *v61, *v69, *buf3, *v76, *buf2, *buf1, *v79, *v80, *v82, *v84, *v86, *v88, *v90, *v92;
+  P2Ctx *v11, *v16, *v23, *v30, *buf3, *v76, *buf2, *buf1, *v79, *v80, *v82,
+        *v84, *v86, *v88, *v90, *v92;
   int32_t j;
   // These shared `__frame.j` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
@@ -14516,8 +14517,6 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
   ;
   P2Ctx *v34;   // a record cursor
   P2Ctx *v57;   // a record cursor
-  P2Ctx *v65;   // a record cursor
-  P2Ctx *v72;   // a record cursor
   P2Ctx *v27;   // a record cursor
   int32_t *cur, *v54;   // the row cursors, four bytes a step
   P2Ctx *v93;   // a record cursor
@@ -14661,14 +14660,10 @@ void __alt_p2_d8_encode_body(AltP2Block *lpAddress, uint8_t *a4, int32_t i, int3
       __builtin_memset(lpAddress->p2_row, 0, sizeof lpAddress->p2_row);
       v57 = lpAddress->cursor[0];
       v57[0] = v57[-1];
-      v61 = lpAddress->cursor[0];
-      ((P2Ctx *)v61)[1] = ((P2Ctx *)v61)[-2];
-      v65 = lpAddress->cursor[0];
-      v65[2] = v65[-3];
-      v69 = lpAddress->cursor[0];
-      ((P2Ctx *)v69)[3] = ((P2Ctx *)v69)[-4];
-      v72 = lpAddress->cursor[0];
-      v72[4] = v72[-5];
+      ((P2Ctx *)v57)[1] = ((P2Ctx *)v57)[-2];
+      v57[2] = v57[-3];
+      ((P2Ctx *)v57)[3] = ((P2Ctx *)v57)[-4];
+      v57[4] = v57[-5];
       buf3 = lpAddress->buf[3];
       v76 = lpAddress->buf[4];
       buf2 = lpAddress->buf[2];
