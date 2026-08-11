@@ -71,8 +71,14 @@ HEXRAYS = re.compile(r'^[vt]\d+$')
 CONTROL = re.compile(r'^(?:if|else|while|do|for|switch|case|default|return|goto|break|continue)\b')
 KEYWORD = {'if', 'else', 'while', 'do', 'for', 'return', 'switch', 'case',
            'break', 'continue', 'goto', 'sizeof', 'true', 'false', 'nullptr'}
+# `&x` is the variable's address; `&x->m`, `&x.m` and `&x[i]` are not -- they
+# name a member or an element, and a callee holding one of those cannot change
+# `x` itself.  Without the lookahead every `*(uint16_t *)&v533->w2` read as
+# "address taken" and disqualified the local, which is thirteen of the counter
+# pointers in `alt_p2_model` alone.
+ADDR = r'&\s*%s\b(?!\s*(?:->|\.|\[))'
 WRITE = [r'\b%s\s*(?:\+\+|--)', r'(?:\+\+|--)\s*%s\b', r'\b%s\s*[-+*/|&^%%]?=(?!=)',
-         r'&\s*%s\b',
+         ADDR,
          r'\b(?:LO|HI)(?:BYTE|WORD|DWORD)\d?\s*\(\s*%s\s*\)',
          r'\b(?:BYTE[123]|WORD[123])\s*\(\s*%s\s*\)']
 
@@ -177,7 +183,7 @@ def candidates(lines):
                 continue
             use = reads[-1][0]
             first = reads[0][0]
-            if re.search(r'&\s*%s\b' % re.escape(dst), '\n'.join(code)):
+            if re.search(ADDR % re.escape(dst), '\n'.join(code)):
                 continue
             span = code[hi + 1:stmts[use][0]]
             del first

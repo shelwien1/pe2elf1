@@ -4845,7 +4845,6 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   uint32_t Buffera;
   uint8_t *Bufferb;
   uint8_t *Bufferc;
-  uint8_t *Bufferd;
   uint32_t Size_2;
   // These shared `__frame.pairs` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
@@ -4877,7 +4876,8 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   uintptr_t p_i_1;   // were int32_t: addresses, masked and tagged
   FILE *Stream_1, *Stream_2;
   bool can_rle;
-  uint8_t *Bufferc_3, *Bufferc_1, *Bufferb_1, *pal, *pal2, *buf_1, *p, *q, *buf_3, *Bufferc_2;   // `uint8_t *` beside the `char` scalars above
+  uint8_t *Bufferc_3, *Bufferb_1, *pal, *pal2, *buf_1, *p, *q, *buf_3,
+          *Bufferc_2;
   int32_t rle_on, i, Buffer_1, bits, ncolours, grey, at, slot, bgr, r, at2, bgr2, rle_mode,
           src_bits, rle_kind, Buffer_3, Buffer_4, Size, byte, run, coded_bytes, Size_1, y;
   uint16_t *p_i_2;
@@ -4890,11 +4890,10 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
                                  + 8 * img->height
                                  + (img->data_size >> 5) + 2048);
   p_i_1 = p_i;
-  Bufferc_1 = Bufferc_3;
-  // Bufferc, Bufferc_1, Bufferc_2 and Bufferc_3 are one allocation: the chain
-  // is Bufferc_1 = Bufferc_3, Bufferc = Bufferc_1, Bufferc_2 = Bufferc, and
+  // Bufferc, Bufferc_3, Bufferc_2 and Bufferc_3 are one allocation: the chain
+  // is Bufferc_3 = Bufferc_3, Bufferc = Bufferc_3, Bufferc_2 = Bufferc, and
   // none of them is ever stepped.  So one view of the header serves all four,
-  // and the pixel writes through Bufferc_1[k + 54] keep the spelling they had.
+  // and the pixel writes through Bufferc_3[k + 54] keep the spelling they had.
   BmpHeader *bmp = (BmpHeader *)Bufferc_3;
   i = img->width;
   bmp->biSize = 40;
@@ -4930,10 +4929,10 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
           grey = 0;
           do
           {
-            *(uint32_t *)&Bufferc_1[8 * k + 54] = ((uint8_t)grey << 16)
+            *(uint32_t *)&Bufferc_3[8 * k + 54] = ((uint8_t)grey << 16)
                                                 | (uint8_t)grey
                                                 | ((uint8_t)grey << 8);
-            *(uint32_t *)&Bufferc_1[8 * k + 58] = ((uint8_t)(grey - Buffera + 2 * Buffera) << 16)
+            *(uint32_t *)&Bufferc_3[8 * k + 58] = ((uint8_t)(grey - Buffera + 2 * Buffera) << 16)
                                                 | (uint8_t)(grey - Buffera + 2 * Buffera)
                                                 | ((uint8_t)(grey - Buffera + 2 * Buffera) << 8);
             grey += 2 * Buffera;
@@ -4948,7 +4947,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
           at = 1;
         }
         if ( at - 1 < (uint32_t)ncol )
-          *(uint32_t *)&Bufferc_1[4 * at + 50] = ((uint8_t)(Buffera * (at - 1)) << 16)
+          *(uint32_t *)&Bufferc_3[4 * at + 50] = ((uint8_t)(Buffera * (at - 1)) << 16)
                                               | (uint8_t)(Buffera * (at - 1))
                                               | ((uint8_t)(Buffera * (at - 1)) << 8);
       }
@@ -4975,9 +4974,9 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
             slot = 2 * j;
             bgr = *(uint16_t *)&pal[6 * j + 19];
             r = (uint8_t)pal[6 * j + 21];
-            *(uint32_t *)&Bufferc_1[4 * slot + 54] = ((uint8_t)pal[6 * j + 18] << 16)
+            *(uint32_t *)&Bufferc_3[4 * slot + 54] = ((uint8_t)pal[6 * j + 18] << 16)
                                                 | *(uint16_t *)&pal[6 * j + 16];
-            *(uint32_t *)&Bufferc_1[4 * slot + 58] = (r << 16) | bgr;
+            *(uint32_t *)&Bufferc_3[4 * slot + 58] = (r << 16) | bgr;
             ++j;
           }
           while ( j < pairs );
@@ -4994,11 +4993,9 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
         }
         if ( at2 - 1 < (uint32_t)ncol )
         {
-          Bufferd = Bufferb_1;
           pal2 = &Bufferb_1[p_i_1];
           bgr2 = *(uint16_t *)&pal2[3 * done + 13];
-          Bufferb_1 = Bufferd;
-          *(uint32_t *)&Bufferc_1[4 * done + 50] = (((uint8_t)pal2[3 * done + 15]) << 16) | bgr2;
+          *(uint32_t *)&Bufferc_3[4 * done + 50] = (((uint8_t)pal2[3 * done + 15]) << 16) | bgr2;
           p_i_1 = p_i;
         }
         pal_bytes = 4 * ncol;
@@ -5012,15 +5009,15 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
       Bufferb_1 = (uint8_t *)(uintptr_t)img->data_size;
       Buffer_2 = img->height;
     }
-    buf = &Bufferc_1[pal_bytes + 54];
+    buf = &Bufferc_3[pal_bytes + 54];
   }
   else
   {
     Bufferb_1 = (uint8_t *)(uintptr_t)img->data_size;
   }
   Size_2 = img->stride;
-  Bufferc = Bufferc_1;
-  off_bits = (uint8_t *)(buf - Bufferc_1);
+  Bufferc = Bufferc_3;
+  off_bits = (uint8_t *)(buf - Bufferc_3);
   p_i_2 = (uint16_t *)p_i_1;
   rle_mode = rle_on;
   Bufferb_2 = (uint32_t)Bufferb_1;
@@ -11259,7 +11256,6 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   int32_t g, flags, lo, k, w2, w4, w2n, lvl_n, live, gi, wt, has4, s,
           jj, nbytes, bucket, row_w, x, x2, y, step, x7, x3, x4, bits, depth,
           y2, depth_raw, nchunk, n_pix, chunk, q5, q1, at, q2, written, n_pix2, x5;
-  ModelBlock *this_3;
   uint32_t *ArgList_6;
   SymListBlock *has3, *alpha;
   SymPair *group_ctr;   // one group's row of counter pairs
@@ -11296,9 +11292,8 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
 
       do
       {
-        this_3 = (ModelBlock *)(this_1);
         this_1->ctx_bucket[g + 15 * lo + 75 * k] = g1;
-        m5 = this_3->alphabet;
+        m5 = this_1->alphabet;
         // A sixteen-byte record per bucket, at `+96 + 16 * bucket`: five
         // counts at words 0..4, their total at 5, a scaled weight at 6, and
         // two bytes at 7 -- a level (`<= f16`) and the weight `1 << (5 -
@@ -11315,7 +11310,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         // +3119.  `FreqRec` is on the same grid from record 188 (+3104),
         // which makes the last bucket record and the first frequency record
         // the same sixteen bytes -- the two tables abut and share one.
-        rec = &this_3->grid[g1];
+        rec = &this_1->grid[g1];
         rec->w[1] = 2;
         rec->w[2] = 2;
         rec->w[3] = 2;
@@ -12134,21 +12129,8 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   uint32_t n0x10_1;
   int32_t v510;
   int32_t v511;
-  P2Count *v512;
-  P2Count *v513;
-  P2Count *v514;
-  P2Count *v515;
-  P2Count *v516;
-  P2Count *v517;
-  P2Count *v518;
-  P2Count *v521;
   P2Count *v523;
-  P2Count *v524;
-  P2Count *v525;
-  P2Count *v527;
-  P2Count *v530;
   P2Count *v531;
-  P2Count *v533;
   P2Count *v534;
   P2Count *v535;
   P2Count *v536;
@@ -12233,13 +12215,8 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
           v342, v344, v345, v346, v347, v348, v350, v351, v352, v354, v355,
           v356, v357, v358, v359, v360, v361, v362, v363, v364, v365, v366,
           v367, v368, v369, v370, v371, v372, v373, v374, v376, v377, v378,
-          v379, v380, v381, v383, v384, ctx, n15, v391, v392, v394, v395,
-          v398, v406, v407, v409, v410, v412, v413, v415, v416, v417, v418,
-          v419, v421, v422, v423, v424, v425, v426, v427, v429, v430, v431,
-          v432, v433, v434, v435, v437, v438, v439, v440, v441, v442, v443,
-          v450, v453, v454, v461, v464, v465, v467, v468, v472, v475, v476,
-          v478, v479, v483, v486, v487, v489, v490, v494, v500, v501, v503,
-          v504;
+          v379, v380, v381, v383, v384, ctx, n15, v398, v409, v410, v419,
+          v427, v435, v443, v450, v461, v472, v483, v494;
   int64_t v10, v11, v12, v13, v14;
   P2Freq *n0xF0_3;
   P2Freq *n0xF0_2;
@@ -12451,13 +12428,11 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
                   + 4 * ((v81 ^ 0x1000) & 0xFFFFFFF3)]);
         __builtin_prefetch(v537, 0, 1);
         v551 = (P2Count *)(&v90[4 * (v81 ^ 0x800) + 284712]);
-        v533 = (P2Count *)(v551);
         v535 = (P2Count *)(&v90[4 * (v81 ^ 0x77F0) + 284712]);
         v534 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x800) >> 2) & 3]
                   + 284712
                   + 4 * ((v81 ^ 0x800) & 0xFFFFFFF3)]);
         v552 = (P2Count *)(&v90[4 * (v81 ^ 0x400) + 284712]);
-        v530 = (P2Count *)(v552);
         __builtin_prefetch(v551, 0, 1);
         __builtin_prefetch(v535, 0, 1);
         __builtin_prefetch(v534, 0, 1);
@@ -12466,7 +12441,6 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
                   + 284712
                   + 4 * ((v81 ^ 0x400) & 0xFFFFFFF3)]);
         v554 = (P2Count *)(&v90[4 * (v81 ^ 0x200) + 284712]);
-        v527 = (P2Count *)(v554);
         __builtin_prefetch(v552, 0, 1);
         v555 = (P2Count *)(&v90[4 * (v81 ^ 0x7DF0) + 284712]);
         v91 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x200) >> 2) & 3]
@@ -12475,20 +12449,16 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
         __builtin_prefetch(v553, 0, 1);
         __builtin_prefetch(v531, 0, 1);
         v556 = (P2Count *)(&v90[4 * (v81 ^ 0x100) + 284712]);
-        v524 = (P2Count *)(v556);
         v92 = p2_ctx_rotate[((v81 ^ 0x100) >> 2) & 3] + ((v81 ^ 0x100) & 0xFFFFFFF3);
         v557 = (P2Count *)(&v90[4 * (v81 ^ 0x7EF0) + 284712]);
         __builtin_prefetch(v554, 0, 1);
         v558 = (P2Count *)((int32_t)&v90[4 * v92 + 284712]);
-        v525 = (P2Count *)(v558);
         v559 = (P2Count *)(&v90[4 * (v81 ^ 0x80) + 284712]);
-        v521 = (P2Count *)(v559);
         __builtin_prefetch(v555, 0, 1);
         __builtin_prefetch(v91, 0, 1);
         v523 = (P2Count *)(&v90[4 * (v81 ^ 0x7F70) + 284712]);
         v560 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x80) >> 2) & 3] + 284712 + 4 * ((v81 ^ 0x80) & 0xFFFFFFF3)]);
         v561 = (P2Count *)(&v90[4 * (v81 ^ 0x40) + 284712]);
-        v518 = (P2Count *)(v561);
         __builtin_prefetch(v556, 0, 1);
         v562 = (P2Count *)(&v90[4 * (v81 ^ 0x7FB0) + 284712]);
         v93 = (P2Count *)(&v90[4 * p2_ctx_rotate[((v81 ^ 0x40) >> 2) & 3] + 284712 + 4 * ((v81 ^ 0x40) & 0xFFFFFFF3)]);
@@ -12497,23 +12467,17 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
         v95 = v81 ^ 0x20;
         v96 = v81 ^ 0x10;
         v564 = (P2Count *)(&v90[4 * v95 + 284712]);
-        v515 = (P2Count *)(v564);
         v565 = (P2Count *)(&v90[4 * (v95 ^ 0x7FF0) + 284712]);
-        v517 = (P2Count *)(v565);
         __builtin_prefetch(v559, 0, 1);
         __builtin_prefetch(v523, 0, 1);
         v566 = (P2Count *)((uint32_t)&v90[4 * p2_ctx_rotate[(v95 >> 2) & 3] + 284712 + 4 * (v95 & 0xFFFFFFF3)]);
-        v516 = (P2Count *)(v566);
         v567 = (P2Count *)((int32_t)&v90[4 * v96 + 284712]);
-        v512 = (P2Count *)(v567);
         v97 = p2_ctx_rotate[(v96 >> 2) & 3] + (v96 & 0xFFFFFFF3);
         v568 = (P2Count *)((int32_t)&v90[4 * (v96 ^ 0x7FF0) + 284712]);
-        v514 = (P2Count *)(v568);
         __builtin_prefetch(v560, 0, 1);
         v98 = (P2Count *)((int32_t)&v90[4 * v97 + 284712]);
         n2_1 = n2;
         v100 = -v550;
-        v513 = (P2Count *)(v98);
         LOBYTE(v97) = (uint8_t)n2[0];
         __builtin_prefetch(v561, 0, 1);
         v101 = (int16_t)n2_1[1];
@@ -12581,93 +12545,93 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
           v331 = v538->w2;
           v332 = v549 - p2_pred(v331, *(uint8_t *)&v538->b0);
           v538->w2 = p2_bump(v331, v332, 3);
-          v333 = v533->w2;
-          v334 = v550 - p2_pred(v333, v533->b0);
-          v533->w2 = p2_bump(v333, v334, 2);
+          v333 = v551->w2;
+          v334 = v550 - p2_pred(v333, v551->b0);
+          v551->w2 = p2_bump(v333, v334, 2);
           v335 = v534->w2;
           v336 = v550 - p2_pred(v335, v534->b0);
           v534->w2 = p2_bump(v335, v336, 3);
-          *(uint16_t *)&v533[1].w2 += (uint32_t)(v550 - p2_pred(v533[1].w2, v533[1].b0) + 2) >> 2;
+          *(uint16_t *)&v551[1].w2 += (uint32_t)(v550 - p2_pred(v551[1].w2, v551[1].b0) + 2) >> 2;
           v337 = v535->w2;
           v338 = v549 - p2_pred(v337, v535->b0);
           v535->w2 = p2_bump(v337, v338, 3);
-          v339 = v530->w2;
-          v340 = v550 - p2_pred(v339, v530->b0);
-          v530->w2 = p2_bump(v339, v340, 2);
+          v339 = v552->w2;
+          v340 = v550 - p2_pred(v339, v552->b0);
+          v552->w2 = p2_bump(v339, v340, 2);
           v341 = v531->w2;
           v342 = v550 - p2_pred(v341, v531->b0);
           v531->w2 = p2_bump(v341, v342, 3);
-          *(uint16_t *)&v530[1].w2 += (uint32_t)(v550 - p2_pred(v530[1].w2, v530[1].b0) + 2) >> 2;
+          *(uint16_t *)&v552[1].w2 += (uint32_t)(v550 - p2_pred(v552[1].w2, v552[1].b0) + 2) >> 2;
           v344 = v553->w2;
           v549 -= p2_pred(v344, v553->b0);
           v553->w2 = p2_bump(v344, v549, 3);
-          v345 = v527->w2;
-          v346 = v550 - p2_pred(v345, v527->b0);
-          v527->w2 = p2_bump(v345, v346, 2);
+          v345 = v554->w2;
+          v346 = v550 - p2_pred(v345, v554->b0);
+          v554->w2 = p2_bump(v345, v346, 2);
           v347 = v91->w2;
           v348 = v550 - p2_pred(v347, v91->b0);
           v91->w2 = p2_bump(v347, v348, 3);
-          *(uint16_t *)&v527[1].w2 += (uint32_t)(v550 - p2_pred(v527[1].w2, v527[1].b0) + 2) >> 2;
+          *(uint16_t *)&v554[1].w2 += (uint32_t)(v550 - p2_pred(v554[1].w2, v554[1].b0) + 2) >> 2;
           v350 = v555->w2;
           v548 = -v550;
           v351 = -v550 - p2_pred(v350, v555->b0);
           v555->w2 = p2_bump(v350, v351, 3);
-          v352 = v524->w2;
-          v354 = v550 - p2_pred(v352, v524->b0);
-          v524->w2 = p2_bump(v352, v354, 2);
-          v355 = v525->w2;
-          v356 = v550 - p2_pred(v355, *(uint8_t *)&v525->b0);
-          v525->w2 = p2_bump(v355, v356, 3);
-          *(uint16_t *)&v524[1].w2 += (uint32_t)(v550 - p2_pred(v524[1].w2, v524[1].b0) + 2) >> 2;
+          v352 = v556->w2;
+          v354 = v550 - p2_pred(v352, v556->b0);
+          v556->w2 = p2_bump(v352, v354, 2);
+          v355 = v558->w2;
+          v356 = v550 - p2_pred(v355, *(uint8_t *)&v558->b0);
+          v558->w2 = p2_bump(v355, v356, 3);
+          *(uint16_t *)&v556[1].w2 += (uint32_t)(v550 - p2_pred(v556[1].w2, v556[1].b0) + 2) >> 2;
           v357 = v557->w2;
           v358 = v548 - p2_pred(v357, v557->b0);
           v557->w2 = p2_bump(v357, v358, 3);
-          v359 = v521->w2;
-          v360 = v550 - p2_pred(v359, v521->b0);
-          v521->w2 = p2_bump(v359, v360, 2);
+          v359 = v559->w2;
+          v360 = v550 - p2_pred(v359, v559->b0);
+          v559->w2 = p2_bump(v359, v360, 2);
           v361 = v560->w2;
           v362 = v550 - p2_pred(v361, v560->b0);
           v560->w2 = p2_bump(v361, v362, 3);
-          *(uint16_t *)&v521[1].w2 += (uint32_t)(v550 - p2_pred(v521[1].w2, v521[1].b0) + 2) >> 2;
+          *(uint16_t *)&v559[1].w2 += (uint32_t)(v550 - p2_pred(v559[1].w2, v559[1].b0) + 2) >> 2;
           v363 = v523->w2;
           v364 = v548 - p2_pred(v363, v523->b0);
           v523->w2 = p2_bump(v363, v364, 3);
-          v365 = v518->w2;
-          v366 = v550 - p2_pred(v365, v518->b0);
-          v518->w2 = p2_bump(v365, v366, 2);
+          v365 = v561->w2;
+          v366 = v550 - p2_pred(v365, v561->b0);
+          v561->w2 = p2_bump(v365, v366, 2);
           v367 = v93->w2;
           v368 = v550 - p2_pred(v367, v93->b0);
           v93->w2 = p2_bump(v367, v368, 3);
-          *(uint16_t *)&v518[1].w2 += (uint32_t)(v550 - p2_pred(v518[1].w2, v518[1].b0) + 2) >> 2;
+          *(uint16_t *)&v561[1].w2 += (uint32_t)(v550 - p2_pred(v561[1].w2, v561[1].b0) + 2) >> 2;
           v369 = v562->w2;
           v370 = v548 - p2_pred(v369, v562->b0);
           v562->w2 = p2_bump(v369, v370, 3);
-          v371 = v515->w2;
-          v372 = v550 - p2_pred(v371, v515->b0);
-          v515->w2 = p2_bump(v371, v372, 2);
-          v373 = v516->w2;
-          v374 = v550 - p2_pred(v373, *(uint8_t *)&v516->b0);
-          v516->w2 = p2_bump(v373, v374, 3);
-          *(uint16_t *)&v515[1].w2 += (uint32_t)(v550 - p2_pred(v515[1].w2, v515[1].b0) + 2) >> 2;
-          v376 = v517->w2;
-          v377 = p2_pred(v376, v517->b0);
-          *(uint16_t *)&v517->w2 = v376
+          v371 = v564->w2;
+          v372 = v550 - p2_pred(v371, v564->b0);
+          v564->w2 = p2_bump(v371, v372, 2);
+          v373 = v566->w2;
+          v374 = v550 - p2_pred(v373, *(uint8_t *)&v566->b0);
+          v566->w2 = p2_bump(v373, v374, 3);
+          *(uint16_t *)&v564[1].w2 += (uint32_t)(v550 - p2_pred(v564[1].w2, v564[1].b0) + 2) >> 2;
+          v376 = v565->w2;
+          v377 = p2_pred(v376, v565->b0);
+          *(uint16_t *)&v565->w2 = v376
                                + ((32 * ((v548 - v377 > deadzone_hi) - (uint32_t)(v548 - v377 < deadzone_lo))
                                  + v548
                                  - v377
                                  + 4) >> 3);
-          v378 = v512->w2;
-          v379 = v550 - p2_pred(v378, *(uint8_t *)&v512->b0);
-          v512->w2 = p2_bump(v378, v379, 2);
-          v380 = v513->w2;
-          v381 = v550 - p2_pred(v380, *(uint8_t *)&v513->b0);
-          v513->w2 = p2_bump(v380, v381, 3);
-          *(uint16_t *)&v512[1].w2 += (uint32_t)(v550
-                                               - p2_pred(*(int16_t *)&*(uint16_t *)&v512[1].w2, *(uint8_t *)&v512[1].b0)
+          v378 = v567->w2;
+          v379 = v550 - p2_pred(v378, *(uint8_t *)&v567->b0);
+          v567->w2 = p2_bump(v378, v379, 2);
+          v380 = v98->w2;
+          v381 = v550 - p2_pred(v380, *(uint8_t *)&v98->b0);
+          v98->w2 = p2_bump(v380, v381, 3);
+          *(uint16_t *)&v567[1].w2 += (uint32_t)(v550
+                                               - p2_pred(*(int16_t *)&*(uint16_t *)&v567[1].w2, *(uint8_t *)&v567[1].b0)
                                                + 2) >> 2;
-          v383 = v514->w2;
-          v384 = -v550 - p2_pred(v383, *(uint8_t *)&v514->b0);
-          v514->w2 = p2_bump(v383, v384, 3);
+          v383 = v568->w2;
+          v384 = -v550 - p2_pred(v383, *(uint8_t *)&v568->b0);
+          v568->w2 = p2_bump(v383, v384, 3);
         }
         else
         {
@@ -12723,129 +12687,129 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
             v237 = v538->w2;
             v238 = v218 - p2_pred(v237, *(uint8_t *)&v538->b0);
             v538->w2 = p2_bump(v237, v238, 3);
-            v239 = v533->w2;
-            v241 = v550 - p2_pred(v239, v533->b0);
-            v533->w2 = p2_bump(v239, v241, 2);
+            v239 = v551->w2;
+            v241 = v550 - p2_pred(v239, v551->b0);
+            v551->w2 = p2_bump(v239, v241, 2);
             v242 = v534->w2;
             v243 = v550 - p2_pred(v242, v534->b0);
             v534->w2 = p2_bump(v242, v243, 3);
-            *(uint16_t *)&v533[1].w2 += (uint32_t)(v550
-                                                 - p2_pred(v533[1].w2, v533[1].b0)
+            *(uint16_t *)&v551[1].w2 += (uint32_t)(v550
+                                                 - p2_pred(v551[1].w2, v551[1].b0)
                                                  + 2) >> 2;
-            v244 = v533[-1].w2;
-            v245 = v550 - p2_pred(v244, v533[-1].b0);
-            v533[-1].w2 = p2_bump(v244, v245, 3);
+            v244 = v551[-1].w2;
+            v245 = v550 - p2_pred(v244, v551[-1].b0);
+            v551[-1].w2 = p2_bump(v244, v245, 3);
             v246 = v535->w2;
             v247 = v218 - p2_pred(v246, v535->b0);
             v535->w2 = p2_bump(v246, v247, 3);
-            v248 = v530->w2;
-            v250 = v550 - p2_pred(v248, v530->b0);
-            v530->w2 = p2_bump(v248, v250, 2);
+            v248 = v552->w2;
+            v250 = v550 - p2_pred(v248, v552->b0);
+            v552->w2 = p2_bump(v248, v250, 2);
             v251 = v531->w2;
             // `LOBYTE(v248) = v531->b0` and `v248 & 31` was the rate: the mask
             // reads only the byte that was written.
             v252 = v550 - p2_pred(v251, v531->b0);
             v531->w2 = p2_bump(v251, v252, 3);
-            *(uint16_t *)&v530[1].w2 += (uint32_t)(v550
-                                                 - p2_pred(v530[1].w2, v530[1].b0)
+            *(uint16_t *)&v552[1].w2 += (uint32_t)(v550
+                                                 - p2_pred(v552[1].w2, v552[1].b0)
                                                  + 2) >> 2;
-            v254 = v530[-1].w2;
-            v255 = v550 - p2_pred(v254, v530[-1].b0);
-            v530[-1].w2 = p2_bump(v254, v255, 3);
+            v254 = v552[-1].w2;
+            v255 = v550 - p2_pred(v254, v552[-1].b0);
+            v552[-1].w2 = p2_bump(v254, v255, 3);
             v256 = v553->w2;
             v573 = -v550;
             nb_slot = -v550 - p2_pred(v256, v553->b0);
             v553->w2 = p2_bump(v256, nb_slot, 3);
-            v258 = v527->w2;
-            v260 = v550 - p2_pred(v258, v527->b0);
-            v527->w2 = p2_bump(v258, v260, 2);
+            v258 = v554->w2;
+            v260 = v550 - p2_pred(v258, v554->b0);
+            v554->w2 = p2_bump(v258, v260, 2);
             v261 = v91->w2;
             v262 = v550 - p2_pred(v261, v91->b0);
             v91->w2 = p2_bump(v261, v262, 3);
-            *(uint16_t *)&v527[1].w2 += (uint32_t)(v550
-                                                 - p2_pred(v527[1].w2, v527[1].b0)
+            *(uint16_t *)&v554[1].w2 += (uint32_t)(v550
+                                                 - p2_pred(v554[1].w2, v554[1].b0)
                                                  + 2) >> 2;
-            v263 = v527[-1].w2;
-            v264 = v550 - p2_pred(v263, v527[-1].b0);
-            v527[-1].w2 = p2_bump(v263, v264, 3);
+            v263 = v554[-1].w2;
+            v264 = v550 - p2_pred(v263, v554[-1].b0);
+            v554[-1].w2 = p2_bump(v263, v264, 3);
             v265 = v555->w2;
             v266 = v573 - p2_pred(v265, v555->b0);
             v555->w2 = p2_bump(v265, v266, 3);
-            v267 = v524->w2;
-            v269 = v550 - p2_pred(v267, v524->b0);
-            v524->w2 = p2_bump(v267, v269, 2);
-            v270 = v525->w2;
-            v271 = v550 - p2_pred(v270, *(uint8_t *)&v525->b0);
-            v525->w2 = p2_bump(v270, v271, 3);
-            *(uint16_t *)&v524[1].w2 += (uint32_t)(v550
-                                                 - p2_pred(v524[1].w2, v524[1].b0)
+            v267 = v556->w2;
+            v269 = v550 - p2_pred(v267, v556->b0);
+            v556->w2 = p2_bump(v267, v269, 2);
+            v270 = v558->w2;
+            v271 = v550 - p2_pred(v270, *(uint8_t *)&v558->b0);
+            v558->w2 = p2_bump(v270, v271, 3);
+            *(uint16_t *)&v556[1].w2 += (uint32_t)(v550
+                                                 - p2_pred(v556[1].w2, v556[1].b0)
                                                  + 2) >> 2;
-            v272 = v524[-1].w2;
-            v273 = v550 - p2_pred(v272, v524[-1].b0);
-            v524[-1].w2 = p2_bump(v272, v273, 3);
+            v272 = v556[-1].w2;
+            v273 = v550 - p2_pred(v272, v556[-1].b0);
+            v556[-1].w2 = p2_bump(v272, v273, 3);
             v274 = v557->w2;
             v275 = v573 - p2_pred(v274, v557->b0);
             v557->w2 = p2_bump(v274, v275, 3);
-            v276 = v521->w2;
-            v278 = v550 - p2_pred(v276, v521->b0);
-            v521->w2 = p2_bump(v276, v278, 2);
+            v276 = v559->w2;
+            v278 = v550 - p2_pred(v276, v559->b0);
+            v559->w2 = p2_bump(v276, v278, 2);
             v279 = v560->w2;
             v280 = v550 - p2_pred(v279, v560->b0);
             v560->w2 = p2_bump(v279, v280, 3);
-            *(uint16_t *)&v521[1].w2 += (uint32_t)(v550
-                                                 - p2_pred(v521[1].w2, v521[1].b0)
+            *(uint16_t *)&v559[1].w2 += (uint32_t)(v550
+                                                 - p2_pred(v559[1].w2, v559[1].b0)
                                                  + 2) >> 2;
-            v281 = v521[-1].w2;
-            v282 = v550 - p2_pred(v281, v521[-1].b0);
-            v521[-1].w2 = p2_bump(v281, v282, 3);
+            v281 = v559[-1].w2;
+            v282 = v550 - p2_pred(v281, v559[-1].b0);
+            v559[-1].w2 = p2_bump(v281, v282, 3);
             v283 = v523->w2;
             v284 = v573 - p2_pred(v283, v523->b0);
             v523->w2 = p2_bump(v283, v284, 3);
-            v285 = v518->w2;
-            v287 = v550 - p2_pred(v285, v518->b0);
-            v518->w2 = p2_bump(v285, v287, 2);
+            v285 = v561->w2;
+            v287 = v550 - p2_pred(v285, v561->b0);
+            v561->w2 = p2_bump(v285, v287, 2);
             v288 = v93->w2;
             v289 = v550 - p2_pred(v288, v93->b0);
             v93->w2 = p2_bump(v288, v289, 3);
-            *(uint16_t *)&v518[1].w2 += (uint32_t)(v550
-                                                 - p2_pred(v518[1].w2, v518[1].b0)
+            *(uint16_t *)&v561[1].w2 += (uint32_t)(v550
+                                                 - p2_pred(v561[1].w2, v561[1].b0)
                                                  + 2) >> 2;
-            v290 = v518[-1].w2;
-            v291 = v550 - p2_pred(v290, v518[-1].b0);
+            v290 = v561[-1].w2;
+            v291 = v550 - p2_pred(v290, v561[-1].b0);
             v292 = -v550;
-            v518[-1].w2 = p2_bump(v290, v291, 3);
+            v561[-1].w2 = p2_bump(v290, v291, 3);
             v293 = v562->w2;
             v294 = v292 - p2_pred(v293, v562->b0);
             v562->w2 = p2_bump(v293, v294, 3);
-            v295 = v515->w2;
-            v297 = v550 - p2_pred(v295, v515->b0);
-            v515->w2 = p2_bump(v295, v297, 2);
-            v298 = v516->w2;
-            v299 = v550 - p2_pred(v298, *(uint8_t *)&v516->b0);
-            v516->w2 = p2_bump(v298, v299, 3);
-            *(uint16_t *)&v515[1].w2 += (uint32_t)(v550
-                                                 - p2_pred(v515[1].w2, v515[1].b0)
+            v295 = v564->w2;
+            v297 = v550 - p2_pred(v295, v564->b0);
+            v564->w2 = p2_bump(v295, v297, 2);
+            v298 = v566->w2;
+            v299 = v550 - p2_pred(v298, *(uint8_t *)&v566->b0);
+            v566->w2 = p2_bump(v298, v299, 3);
+            *(uint16_t *)&v564[1].w2 += (uint32_t)(v550
+                                                 - p2_pred(v564[1].w2, v564[1].b0)
                                                  + 2) >> 2;
-            v300 = v515[-1].w2;
-            v301 = v550 - p2_pred(v300, v515[-1].b0);
-            v515[-1].w2 = p2_bump(v300, v301, 3);
-            v302 = v517->w2;
-            v303 = v292 - p2_pred(v302, v517->b0);
-            v517->w2 = p2_bump(v302, v303, 3);
-            v304 = v512->w2;
-            v306 = v550 - p2_pred(v304, *(uint8_t *)&v512->b0);
-            v512->w2 = p2_bump(v304, v306, 2);
-            v307 = v513->w2;
-            v308 = v550 - p2_pred(v307, *(uint8_t *)&v513->b0);
-            v513->w2 = p2_bump(v307, v308, 3);
-            *(uint16_t *)&v512[1].w2 += (uint32_t)(v550
-                                                 - p2_pred(*(int16_t *)&*(uint16_t *)&v512[1].w2, *(uint8_t *)&v512[1].b0)
+            v300 = v564[-1].w2;
+            v301 = v550 - p2_pred(v300, v564[-1].b0);
+            v564[-1].w2 = p2_bump(v300, v301, 3);
+            v302 = v565->w2;
+            v303 = v292 - p2_pred(v302, v565->b0);
+            v565->w2 = p2_bump(v302, v303, 3);
+            v304 = v567->w2;
+            v306 = v550 - p2_pred(v304, *(uint8_t *)&v567->b0);
+            v567->w2 = p2_bump(v304, v306, 2);
+            v307 = v98->w2;
+            v308 = v550 - p2_pred(v307, *(uint8_t *)&v98->b0);
+            v98->w2 = p2_bump(v307, v308, 3);
+            *(uint16_t *)&v567[1].w2 += (uint32_t)(v550
+                                                 - p2_pred(*(int16_t *)&*(uint16_t *)&v567[1].w2, *(uint8_t *)&v567[1].b0)
                                                  + 2) >> 2;
-            v309 = v512[-1].w2;
-            v310 = v550 - p2_pred(v309, *(uint8_t *)&v512[-1].b0);
-            v512[-1].w2 = p2_bump(v309, v310, 3);
-            v214 = v514->w2;
-            v215 = v292 - p2_pred(v214, *(uint8_t *)&v514->b0);
+            v309 = v567[-1].w2;
+            v310 = v550 - p2_pred(v309, *(uint8_t *)&v567[-1].b0);
+            v567[-1].w2 = p2_bump(v309, v310, 3);
+            v214 = v568->w2;
+            v215 = v292 - p2_pred(v214, *(uint8_t *)&v568->b0);
           }
           else
           {
@@ -12880,107 +12844,107 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
             v142 = v538->w2;
             v143 = v547 - p2_pred(v142, *(uint8_t *)&v538->b0);
             v538->w2 = p2_bump(v142, v143, 3);
-            v144 = v533->w2;
-            v146 = v550 - p2_pred(v144, v533->b0);
-            v533->w2 = p2_bump(v144, v146, 2);
+            v144 = v551->w2;
+            v146 = v550 - p2_pred(v144, v551->b0);
+            v551->w2 = p2_bump(v144, v146, 2);
             v147 = v534->w2;
             v148 = v550 - p2_pred(v147, v534->b0);
             v534->w2 = p2_bump(v147, v148, 3);
-            v149 = v533[-1].w2;
-            v150 = v550 - p2_pred(v149, v533[-1].b0);
-            v533[-1].w2 = p2_bump(v149, v150, 3);
+            v149 = v551[-1].w2;
+            v150 = v550 - p2_pred(v149, v551[-1].b0);
+            v551[-1].w2 = p2_bump(v149, v150, 3);
             v151 = v535->w2;
             v152 = v547 - p2_pred(v151, v535->b0);
             v535->w2 = p2_bump(v151, v152, 3);
-            v153 = v530->w2;
-            v155 = v550 - p2_pred(v153, v530->b0);
-            v530->w2 = p2_bump(v153, v155, 2);
+            v153 = v552->w2;
+            v155 = v550 - p2_pred(v153, v552->b0);
+            v552->w2 = p2_bump(v153, v155, 2);
             v156 = v531->w2;
             v157 = v550 - p2_pred(v156, v531->b0);
             v531->w2 = p2_bump(v156, v157, 3);
-            v158 = v530[-1].w2;
-            v159 = v550 - p2_pred(v158, v530[-1].b0);
-            v530[-1].w2 = p2_bump(v158, v159, 3);
+            v158 = v552[-1].w2;
+            v159 = v550 - p2_pred(v158, v552[-1].b0);
+            v552[-1].w2 = p2_bump(v158, v159, 3);
             v160 = v553->w2;
             v547 -= p2_pred(v160, v553->b0);
             v553->w2 = p2_bump(v160, v547, 3);
-            v162 = v527->w2;
-            v163 = v550 - p2_pred(v162, v527->b0);
-            v527->w2 = p2_bump(v162, v163, 2);
+            v162 = v554->w2;
+            v163 = v550 - p2_pred(v162, v554->b0);
+            v554->w2 = p2_bump(v162, v163, 2);
             v164 = v91->w2;
             v165 = v550 - p2_pred(v164, v91->b0);
             v91->w2 = p2_bump(v164, v165, 3);
-            v166 = v527[-1].w2;
-            v167 = v550 - p2_pred(v166, v527[-1].b0);
+            v166 = v554[-1].w2;
+            v167 = v550 - p2_pred(v166, v554[-1].b0);
             v168 = -v550;
-            v527[-1].w2 = p2_bump(v166, v167, 3);
+            v554[-1].w2 = p2_bump(v166, v167, 3);
             v169 = v555->w2;
             v170 = v168 - p2_pred(v169, v555->b0);
             v555->w2 = p2_bump(v169, v170, 3);
-            v171 = v524->w2;
-            v173 = v550 - p2_pred(v171, v524->b0);
-            v524->w2 = p2_bump(v171, v173, 2);
-            v174 = v525->w2;
-            v175 = v550 - p2_pred(v174, *(uint8_t *)&v525->b0);
-            v525->w2 = p2_bump(v174, v175, 3);
-            v176 = v524[-1].w2;
-            v177 = v550 - p2_pred(v176, v524[-1].b0);
-            v524[-1].w2 = p2_bump(v176, v177, 3);
+            v171 = v556->w2;
+            v173 = v550 - p2_pred(v171, v556->b0);
+            v556->w2 = p2_bump(v171, v173, 2);
+            v174 = v558->w2;
+            v175 = v550 - p2_pred(v174, *(uint8_t *)&v558->b0);
+            v558->w2 = p2_bump(v174, v175, 3);
+            v176 = v556[-1].w2;
+            v177 = v550 - p2_pred(v176, v556[-1].b0);
+            v556[-1].w2 = p2_bump(v176, v177, 3);
             v178 = v557->w2;
             v179 = v168 - p2_pred(v178, v557->b0);
             v557->w2 = p2_bump(v178, v179, 3);
-            v180 = v521->w2;
-            v182 = v550 - p2_pred(v180, v521->b0);
-            v521->w2 = p2_bump(v180, v182, 2);
+            v180 = v559->w2;
+            v182 = v550 - p2_pred(v180, v559->b0);
+            v559->w2 = p2_bump(v180, v182, 2);
             v183 = v560->w2;
             v184 = v550 - p2_pred(v183, v560->b0);
             v560->w2 = p2_bump(v183, v184, 3);
-            v185 = v521[-1].w2;
-            v186 = v550 - p2_pred(v185, v521[-1].b0);
-            v521[-1].w2 = p2_bump(v185, v186, 3);
+            v185 = v559[-1].w2;
+            v186 = v550 - p2_pred(v185, v559[-1].b0);
+            v559[-1].w2 = p2_bump(v185, v186, 3);
             v187 = v523->w2;
             v188 = v168 - p2_pred(v187, v523->b0);
             v523->w2 = p2_bump(v187, v188, 3);
-            v189 = v518->w2;
-            v191 = v550 - p2_pred(v189, v518->b0);
-            v518->w2 = p2_bump(v189, v191, 2);
+            v189 = v561->w2;
+            v191 = v550 - p2_pred(v189, v561->b0);
+            v561->w2 = p2_bump(v189, v191, 2);
             v192 = v93->w2;
             v193 = v550 - p2_pred(v192, v93->b0);
             v93->w2 = p2_bump(v192, v193, 3);
-            v194 = v518[-1].w2;
-            v195 = v550 - p2_pred(v194, v518[-1].b0);
-            v518[-1].w2 = p2_bump(v194, v195, 3);
+            v194 = v561[-1].w2;
+            v195 = v550 - p2_pred(v194, v561[-1].b0);
+            v561[-1].w2 = p2_bump(v194, v195, 3);
             v196 = v562->w2;
             v197 = v168 - p2_pred(v196, v562->b0);
             v562->w2 = p2_bump(v196, v197, 3);
-            v198 = v515->w2;
+            v198 = v564->w2;
             v199 = v550;
-            v200 = v550 - p2_pred(v198, v515->b0);
-            v515->w2 = p2_bump(v198, v200, 2);
-            v201 = v516->w2;
-            v202 = v199 - p2_pred(v201, *(uint8_t *)&v516->b0);
+            v200 = v550 - p2_pred(v198, v564->b0);
+            v564->w2 = p2_bump(v198, v200, 2);
+            v201 = v566->w2;
+            v202 = v199 - p2_pred(v201, *(uint8_t *)&v566->b0);
             v550 = v199;
-            v516->w2 = p2_bump(v201, v202, 3);
-            v203 = v515[-1].w2;
-            v204 = v199 - p2_pred(v203, v515[-1].b0);
-            v515[-1].w2 = p2_bump(v203, v204, 3);
-            v205 = v517->w2;
+            v566->w2 = p2_bump(v201, v202, 3);
+            v203 = v564[-1].w2;
+            v204 = v199 - p2_pred(v203, v564[-1].b0);
+            v564[-1].w2 = p2_bump(v203, v204, 3);
+            v205 = v565->w2;
             v571 = -v199;
-            v206 = -v199 - p2_pred(v205, v517->b0);
-            v517->w2 = p2_bump(v205, v206, 3);
-            v207 = v512->w2;
-            v209 = v550 - p2_pred(v207, *(uint8_t *)&v512->b0);
-            v512->w2 = p2_bump(v207, v209, 2);
-            v210 = v513->w2;
-            v211 = v550 - p2_pred(v210, *(uint8_t *)&v513->b0);
-            v513->w2 = p2_bump(v210, v211, 3);
-            v212 = v512[-1].w2;
-            v213 = v550 - p2_pred(v212, *(uint8_t *)&v512[-1].b0);
-            v512[-1].w2 = p2_bump(v212, v213, 3);
-            v214 = v514->w2;
-            v215 = v571 - p2_pred(v214, *(uint8_t *)&v514->b0);
+            v206 = -v199 - p2_pred(v205, v565->b0);
+            v565->w2 = p2_bump(v205, v206, 3);
+            v207 = v567->w2;
+            v209 = v550 - p2_pred(v207, *(uint8_t *)&v567->b0);
+            v567->w2 = p2_bump(v207, v209, 2);
+            v210 = v98->w2;
+            v211 = v550 - p2_pred(v210, *(uint8_t *)&v98->b0);
+            v98->w2 = p2_bump(v210, v211, 3);
+            v212 = v567[-1].w2;
+            v213 = v550 - p2_pred(v212, *(uint8_t *)&v567[-1].b0);
+            v567[-1].w2 = p2_bump(v212, v213, 3);
+            v214 = v568->w2;
+            v215 = v571 - p2_pred(v214, *(uint8_t *)&v568->b0);
           }
-          v514->w2 = p2_bump(v214, v215, 3);
+          v568->w2 = p2_bump(v214, v215, 3);
         }
       }
     }
@@ -13002,10 +12966,8 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
     v508 = a1->ctx_pair[a4 & 1];
     if ( n15 < 15 )
     {
-      v391 = v387[1].f[0];
-      v392 = v387[1].f[1];
       n2 = (uint16_t *)&v387[1];
-      if ( v387[1].f[2] + v392 + v391 > 29696 )
+      if ( v387[1].f[2] + v387[1].f[1] + v387[1].f[0] > 29696 )
         __rescale_three_way(&v387[1]);
       v393 = (10 * (uint32_t)v387[1].step) >> 4;
       if ( a4 )
@@ -13051,10 +13013,8 @@ LABEL_37:
         else
         {
         }
-        v406 = p2_rec[-1].f[0];
-        v407 = p2_rec[-1].f[1];
         n2 = (uint16_t *)&p2_rec[-1];
-        if ( p2_rec[-1].f[2] + v407 + v406 > 29696 )
+        if ( p2_rec[-1].f[2] + p2_rec[-1].f[1] + p2_rec[-1].f[0] > 29696 )
         {
           n0x10_1 = n0x10;
           __rescale_three_way(&p2_rec[-1]);
@@ -13122,10 +13082,8 @@ LABEL_48:
             n2[v511 + 1] += (3 * n0xF0[0].step) >> 4;
             if ( n15 < 15 )
             {
-              v500 = n0xF0[1].f[0];
-              v501 = n0xF0[1].f[1];
               n2 = (uint16_t *)&n0xF0[1];
-              if ( n0xF0[1].f[2] + v501 + v500 > 29696 )
+              if ( n0xF0[1].f[2] + n0xF0[1].f[1] + n0xF0[1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[1]);
@@ -13145,10 +13103,8 @@ LABEL_48:
             }
             if ( n15 > 2 )
             {
-              v503 = n0xF0[-1].f[0];
-              v504 = n0xF0[-1].f[1];
               n2 = (uint16_t *)&n0xF0[-1];
-              if ( n0xF0[-1].f[2] + v504 + v503 > 29696 )
+              if ( n0xF0[-1].f[2] + n0xF0[-1].f[1] + n0xF0[-1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[-1]);
@@ -13170,10 +13126,8 @@ LABEL_48:
             }
             v411->f[v510] += (7 * (uint32_t)v411->step) >> 4;
             n0xF0 = ((&a1->freq[a1->ctx_w[0].w[1] + (a1->ctx - a1->ctx_w[0].w[a1->ctx_w[0].sel])]));
-            v412 = n0xF0[0].f[0];
-            v413 = n0xF0[0].f[1];
             n2 = (uint16_t *)&n0xF0[0];
-            if ( n0xF0[0].f[2] + v413 + v412 > 29696 )
+            if ( n0xF0[0].f[2] + n0xF0[0].f[1] + n0xF0[0].f[0] > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way(&n0xF0[0]);
@@ -13182,10 +13136,8 @@ LABEL_48:
             n2[v511 + 1] += (7 * n0xF0[0].step) >> 4;
             if ( n15 < 15 )
             {
-              v415 = n0xF0[1].f[0];
-              v416 = n0xF0[1].f[1];
               n2 = (uint16_t *)&n0xF0[1];
-              if ( n0xF0[1].f[2] + v416 + v415 > 29696 )
+              if ( n0xF0[1].f[2] + n0xF0[1].f[1] + n0xF0[1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[1]);
@@ -13197,10 +13149,8 @@ LABEL_48:
             }
             if ( n15 > 0 )
             {
-              v417 = n0xF0[-1].f[0];
-              v418 = n0xF0[-1].f[1];
               n2 = (uint16_t *)&n0xF0[-1];
-              if ( n0xF0[-1].f[2] + v418 + v417 > 29696 )
+              if ( n0xF0[-1].f[2] + n0xF0[-1].f[1] + n0xF0[-1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[-1]);
@@ -13235,10 +13185,8 @@ LABEL_48:
             v485->f[v511] += (3 * (uint32_t)n0xF0[0].step) >> 4;
             if ( n15 < 15 )
             {
-              v486 = n0xF0[1].f[0];
-              v487 = n0xF0[1].f[1];
               n2 = (uint16_t *)&n0xF0[1];
-              if ( n0xF0[1].f[2] + v487 + v486 > 29696 )
+              if ( n0xF0[1].f[2] + n0xF0[1].f[1] + n0xF0[1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[1]);
@@ -13258,10 +13206,8 @@ LABEL_48:
             }
             if ( n15 > 2 )
             {
-              v489 = n0xF0[-1].f[0];
-              v490 = n0xF0[-1].f[1];
               n2 = (uint16_t *)&n0xF0[-1];
-              if ( n0xF0[-1].f[2] + v490 + v489 > 29696 )
+              if ( n0xF0[-1].f[2] + n0xF0[-1].f[1] + n0xF0[-1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[-1]);
@@ -13283,10 +13229,8 @@ LABEL_48:
             }
             v420->f[v510] += (7 * (uint32_t)v420->step) >> 4;
             n0xF0 = ((&a1->freq[a1->ctx_w[1].w[1] + (a1->ctx - a1->ctx_w[1].w[a1->ctx_w[1].sel])]));
-            v421 = n0xF0[0].f[0];
-            v422 = n0xF0[0].f[1];
             n2 = (uint16_t *)&n0xF0[0];
-            if ( n0xF0[0].f[2] + v422 + v421 > 29696 )
+            if ( n0xF0[0].f[2] + n0xF0[0].f[1] + n0xF0[0].f[0] > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way(&n0xF0[0]);
@@ -13295,10 +13239,8 @@ LABEL_48:
             n2[v511 + 1] += (7 * (uint32_t)n0xF0[0].step) >> 4;
             if ( n15 < 15 )
             {
-              v423 = n0xF0[1].f[0];
-              v424 = n0xF0[1].f[1];
               n2 = (uint16_t *)&n0xF0[1];
-              if ( n0xF0[1].f[2] + v424 + v423 > 29696 )
+              if ( n0xF0[1].f[2] + n0xF0[1].f[1] + n0xF0[1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[1]);
@@ -13308,10 +13250,8 @@ LABEL_48:
             }
             if ( n15 > 0 )
             {
-              v425 = n0xF0[-1].f[0];
-              v426 = n0xF0[-1].f[1];
               n2 = (uint16_t *)&n0xF0[-1];
-              if ( n0xF0[-1].f[2] + v426 + v425 > 29696 )
+              if ( n0xF0[-1].f[2] + n0xF0[-1].f[1] + n0xF0[-1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[-1]);
@@ -13346,10 +13286,8 @@ LABEL_48:
             v474->f[v511] += (3 * (uint32_t)n0xF0[0].step) >> 4;
             if ( n15 < 15 )
             {
-              v475 = n0xF0[1].f[0];
-              v476 = n0xF0[1].f[1];
               n2 = (uint16_t *)&n0xF0[1];
-              if ( n0xF0[1].f[2] + v476 + v475 > 29696 )
+              if ( n0xF0[1].f[2] + n0xF0[1].f[1] + n0xF0[1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[1]);
@@ -13369,10 +13307,8 @@ LABEL_48:
             }
             if ( n15 > 2 )
             {
-              v478 = n0xF0[-1].f[0];
-              v479 = n0xF0[-1].f[1];
               n2 = (uint16_t *)&n0xF0[-1];
-              if ( n0xF0[-1].f[2] + v479 + v478 > 29696 )
+              if ( n0xF0[-1].f[2] + n0xF0[-1].f[1] + n0xF0[-1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[-1]);
@@ -13394,10 +13330,8 @@ LABEL_48:
             }
             v428->f[v510] += (7 * (uint32_t)v428->step) >> 4;
             n0xF0 = ((&a1->freq[a1->ctx_w[2].w[1] + (a1->ctx - a1->ctx_w[2].w[a1->ctx_w[2].sel])]));
-            v429 = n0xF0[0].f[0];
-            v430 = n0xF0[0].f[1];
             n2 = (uint16_t *)&n0xF0[0];
-            if ( n0xF0[0].f[2] + v430 + v429 > 29696 )
+            if ( n0xF0[0].f[2] + n0xF0[0].f[1] + n0xF0[0].f[0] > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way(&n0xF0[0]);
@@ -13406,10 +13340,8 @@ LABEL_48:
             n2[v511 + 1] += (7 * (uint32_t)n0xF0[0].step) >> 4;
             if ( n15 < 15 )
             {
-              v431 = n0xF0[1].f[0];
-              v432 = n0xF0[1].f[1];
               n2 = (uint16_t *)&n0xF0[1];
-              if ( n0xF0[1].f[2] + v432 + v431 > 29696 )
+              if ( n0xF0[1].f[2] + n0xF0[1].f[1] + n0xF0[1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[1]);
@@ -13419,10 +13351,8 @@ LABEL_48:
             }
             if ( n15 > 0 )
             {
-              v433 = n0xF0[-1].f[0];
-              v434 = n0xF0[-1].f[1];
               n2 = (uint16_t *)&n0xF0[-1];
-              if ( n0xF0[-1].f[2] + v434 + v433 > 29696 )
+              if ( n0xF0[-1].f[2] + n0xF0[-1].f[1] + n0xF0[-1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[-1]);
@@ -13457,10 +13387,8 @@ LABEL_48:
             v463->f[v511] += (3 * (uint32_t)n0xF0[0].step) >> 4;
             if ( n15 < 15 )
             {
-              v464 = n0xF0[1].f[0];
-              v465 = n0xF0[1].f[1];
               n2 = (uint16_t *)&n0xF0[1];
-              if ( n0xF0[1].f[2] + v465 + v464 > 29696 )
+              if ( n0xF0[1].f[2] + n0xF0[1].f[1] + n0xF0[1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[1]);
@@ -13480,10 +13408,8 @@ LABEL_48:
             }
             if ( n15 > 2 )
             {
-              v467 = n0xF0[-1].f[0];
-              v468 = n0xF0[-1].f[1];
               n2 = (uint16_t *)&n0xF0[-1];
-              if ( n0xF0[-1].f[2] + v468 + v467 > 29696 )
+              if ( n0xF0[-1].f[2] + n0xF0[-1].f[1] + n0xF0[-1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[-1]);
@@ -13505,10 +13431,8 @@ LABEL_48:
             }
             v436->f[v510] += (7 * (uint32_t)v436->step) >> 4;
             n0xF0 = ((&a1->freq[a1->ctx_w[3].w[1] + (a1->ctx - a1->ctx_w[3].w[a1->ctx_w[3].sel])]));
-            v437 = n0xF0[0].f[0];
-            v438 = n0xF0[0].f[1];
             n2 = (uint16_t *)&n0xF0[0];
-            if ( n0xF0[0].f[2] + v438 + v437 > 29696 )
+            if ( n0xF0[0].f[2] + n0xF0[0].f[1] + n0xF0[0].f[0] > 29696 )
             {
               n0x10_1 = n0x10;
               __rescale_three_way(&n0xF0[0]);
@@ -13517,10 +13441,8 @@ LABEL_48:
             n2[v511 + 1] += (7 * (uint32_t)n0xF0[0].step) >> 4;
             if ( n15 < 15 )
             {
-              v439 = n0xF0[1].f[0];
-              v440 = n0xF0[1].f[1];
               n2 = (uint16_t *)&n0xF0[1];
-              if ( n0xF0[1].f[2] + v440 + v439 > 29696 )
+              if ( n0xF0[1].f[2] + n0xF0[1].f[1] + n0xF0[1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[1]);
@@ -13530,10 +13452,8 @@ LABEL_48:
             }
             if ( n15 > 0 )
             {
-              v441 = n0xF0[-1].f[0];
-              v442 = n0xF0[-1].f[1];
               n2 = (uint16_t *)&n0xF0[-1];
-              if ( n0xF0[-1].f[2] + v442 + v441 > 29696 )
+              if ( n0xF0[-1].f[2] + n0xF0[-1].f[1] + n0xF0[-1].f[0] > 29696 )
               {
                 n0x10_1 = n0x10;
                 __rescale_three_way(&n0xF0[-1]);
@@ -13561,10 +13481,8 @@ LABEL_48:
             v452->f[v511] += (3 * (uint32_t)p2_rec[0].step) >> 4;
             if ( n15 < 15 )
             {
-              v453 = p2_rec[1].f[2];
-              v454 = p2_rec[1].f[1] + p2_rec[1].f[0];
               n2 = (uint16_t *)&p2_rec[1];
-              if ( v453 + v454 > 29696 )
+              if ( p2_rec[1].f[2] + (p2_rec[1].f[1] + p2_rec[1].f[0]) > 29696 )
                 __rescale_three_way(&p2_rec[1]);
               n2[v511 + 1] += (uint16_t)(p2_rec[1].step & 0xFFFC) >> 2;
               v456 = &a1->freq[rec_idx + 1];
@@ -13617,10 +13535,8 @@ LABEL_48:
       }
       v387 = (&a1->freq[a1->ctx]);
     }
-    v394 = v387[-1].f[0];
-    v395 = v387[-1].f[1];
     n2 = (uint16_t *)&v387[-1];
-    if ( v387[-1].f[2] + v395 + v394 > 29696 )
+    if ( v387[-1].f[2] + v387[-1].f[1] + v387[-1].f[0] > 29696 )
       __rescale_three_way(&v387[-1]);
     v396 = (13 * (uint32_t)v387[-1].step) >> 4;
     if ( a4 )

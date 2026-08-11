@@ -59,8 +59,14 @@ import undup                                                      # noqa: E402
 
 ASSIGN = re.compile(r'^\s*(\w+) = (\w+);\s*$')
 LABEL = re.compile(r'^\s*LABEL_\d+:')
+# `&x` is the variable's address; `&x->m`, `&x.m` and `&x[i]` are not -- they
+# name a member or an element, and a callee holding one of those cannot change
+# `x` itself.  Without the lookahead every `*(uint16_t *)&v533->w2` read as
+# "address taken" and disqualified the local, which is thirteen of the counter
+# pointers in `alt_p2_model` alone.
+ADDR = r'&\s*%s\b(?!\s*(?:->|\.|\[))'
 WRITE = [r'\b%s\s*(?:\+\+|--)', r'(?:\+\+|--)\s*%s\b', r'\b%s\s*[-+*/|&^%%]?=(?!=)',
-         r'&\s*%s\b',
+         ADDR,
          # Hex-Rays writes a sub-register through these, and a partial write is
          # still a write: `BYTE1(v20) = 3` leaves the restore below stale.
          r'\b(?:LO|HI)(?:BYTE|WORD|DWORD)\d?\s*\(\s*%s\s*\)',

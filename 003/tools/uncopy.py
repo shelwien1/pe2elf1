@@ -60,6 +60,12 @@ COPY = re.compile(r'^\s*([A-Za-z_]\w*) = (.*);\s*$')
 CAST = re.compile(r'^\(([A-Za-z_][\w\s*]*?)\s*\)\s*(.*)$')
 NAME = re.compile(r'^[A-Za-z_]\w*$')
 LABEL = re.compile(r'^\s*LABEL_\d+:')
+# `&x` is the variable's address; `&x->m`, `&x.m` and `&x[i]` are not -- they
+# name a member or an element, and a callee holding one of those cannot change
+# `x` itself.  Without the lookahead every `*(uint16_t *)&v533->w2` read as
+# "address taken" and disqualified the local, which is thirteen of the counter
+# pointers in `alt_p2_model` alone.
+ADDR = r'&\s*%s\b(?!\s*(?:->|\.|\[))'
 WRITE = [r'\b%s\s*(?:\+\+|--)', r'(?:\+\+|--)\s*%s\b', r'\b%s\s*[-+*/|&^%%]?=(?!=)',
          r'\b(?:LO|HI)(?:BYTE|WORD|DWORD)\d?\s*\(\s*%s\s*\)',
          r'\b(?:BYTE[123]|WORD[123])\s*\(\s*%s\s*\)']
@@ -132,9 +138,9 @@ def candidates(lines):
             if any(re.search(p % re.escape(dst), code[k])
                    for k in uses[1:] for p in WRITE):
                 continue
-            if re.search(r'&\s*%s\b' % re.escape(dst), '\n'.join(code)):
+            if re.search(ADDR % re.escape(dst), '\n'.join(code)):
                 continue
-            if re.search(r'&\s*%s\b' % re.escape(src), '\n'.join(code)):
+            if re.search(ADDR % re.escape(src), '\n'.join(code)):
                 continue
             span = code[i + 1:last + 1]
             if any(LABEL.match(r) for r in span):
