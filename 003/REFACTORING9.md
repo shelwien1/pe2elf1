@@ -26,7 +26,11 @@ subs1.hpp / bmf.cpp lines            17787     17616         17539
 raw-offset sites                        22        12             5
   off `_this`                            —         1             0
 byte offsets on a typed base           121         0             0
-pointer casts                         2137      1545          1367
+pointer casts                         2137      1545          1290
+  to a scalar                            —         —           541
+  to a record                            —         —           391
+  to a scalar, of an address             —         —           353
+  to a record, of an address             —         —             5
 fNN members / named ones             93/121     5/162         0/171
 distinct unexplained locals            554       591             0
   bodies still carrying one              —    8/102         0/103
@@ -1844,3 +1848,61 @@ size and an offset assertion on `limit`. Both callers cast to hand it over.
 Nothing is above 0.50 now and the median is 0.13. The top of the list is short
 dispatch and cleanup functions where a high ratio means the decompiler had
 little to get wrong, not that anything is owed.
+
+---
+
+## 22. The pointer-cast row, and the fifteen casts nothing could see
+
+`pointer casts` is the last figure in §1 that was a bare total, and applying
+this round's own lesson to it found two miscounts and one small class of work.
+
+**It counted comments.** The row read `src`, not the comment-stripped text, and
+this file quotes the code it replaced on purpose — 28 of the casts it was
+counting are in prose about casts that are gone. That is the *same* defect §10
+records for the `goto` row, in the row directly above it, uncorrected for three
+rounds after the first one was.
+
+**It counted `sizeof(void *)`.** Thirty-three of them, one per layout
+assertion — `static_assert(sizeof(void *) != 4 || sizeof(AltP1Block) == …)` —
+which is the file saying the 32-bit layout is what it assumes and is not a cast
+at all. A lookbehind fixes it.
+
+So 1367 was 1290, and the breakdown says what they are:
+
+```
+pointer casts                      1290
+  to a scalar                       541
+  to a record                       391
+  to a scalar, of an address        353
+  to a record, of an address          5
+```
+
+The 353 `(uint32_t *)&x` are naming a byte inside an object — `*(uint32_t
+*)&rec->match[2]` writes four match flags at once because the original wrote
+four bytes at once, and no declaration replaces that. The 391 to a record are
+the types doing their job at a call boundary. The row is a description now
+rather than a target.
+
+### Fifteen casts two cast-removing tools could not see
+
+```c
+__transform_planes((BmfImage *)(uint16_t *)__frame.tile_img, ...)
+__alt_p1_context((AltP1Block *)(uint8_t **)_this, ...)
+__bmf_destroy_archive((BmfArc *)(FILE **)arc, 1)
+```
+
+The inner cast is consumed by the outer one before anything can be done with
+it. `uncast.py` and `decast.py` both exist to remove casts and both report
+zero here, for a reason worth writing down: both are driven by
+`-Wuseless-cast`, which fires only when the target type is **identical** to the
+operand's. `(uint16_t *)` applied to a `uint8_t *` is not identical to
+anything, so the compiler is silent and stays silent — these are useless in a
+way it has no word for.
+
+The safety argument is not the compiler's either. On this target a pointer is
+four bytes and a cast between pointer types computes nothing, so `(A *)(B *)x`
+reaches the same address as `(A *)x` whether `x` is a pointer or an integer.
+What `tools/unlayer.py` will not touch is a cast with anything between it and
+the next — an inner cast whose result is indexed or dereferenced is doing work,
+and the absence of anything between the two closing parens is what says it is
+not.

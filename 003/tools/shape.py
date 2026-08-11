@@ -222,7 +222,25 @@ def summary():
     row('raw-offset sites', len(raw))
     row('  off `_this`',
         '%d, in %d functions' % (len(this), len(set(r[1] for r in this))))
-    row('pointer casts', len(re.findall(r'\([A-Za-z_]\w*\s*\*+\s*\)', src)))
+    # `sizeof(void *)` is not a cast, and thirty-three of them -- one per
+    # layout assertion -- were in this figure from the day it was written.
+    # The lookbehind is the whole correction.
+    casts = re.findall(r'(?<!sizeof)\(\s*([A-Za-z_]\w*)\s*(\*+)\s*\)\s*(.?)',
+                       '\n'.join(l.split('//')[0] for l in lines))
+    row('pointer casts', len(casts))
+    # And what they are, because the total says how many are left and not
+    # whether any of them should be -- the same defect the `goto` row had.
+    # A cast of `&x` is naming a byte inside an object, a cast to a declared
+    # record is the type doing its job, and only the first group is a place
+    # where a declaration could still replace arithmetic.
+    kinds = collections.Counter()
+    for ty, stars, nxt in casts:
+        rec = ty[:1].isupper() or ty == 'FILE'
+        kinds['%s, of an address' % ('to a record' if rec else 'to a scalar')
+              if nxt == '&' else
+              'to a record' if rec else 'to a scalar'] += 1
+    for k, v in sorted(kinds.items(), key=lambda kv: -kv[1]):
+        row('  ' + k, v)
     row('globals still at a 1997 address', len(bss()))
     row('frames', '%d, %d bytes, %d aliases'
         % (len(fr), sum(f['size'] for f in fr), sum(f['alias'] for f in fr)))

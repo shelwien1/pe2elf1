@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // BMF's globals.
-//
+
 // Every global the decompiled bodies touch is a reference bound to a fixed
 // offset inside blob.inc, BMF.exe's data segment.  Hex-Rays named each one
 // after the function it was recovered in, so the same object arrived under one
@@ -12,12 +12,12 @@
 // now private to the class below, and 2 more went with the command-line and
 // SSE2 cleanups.  One, __byte_44337D, is not from the extractor at all -- see
 // the note further down.
-//
+
 // The typedefs carry the array shapes, which cannot be written inline in the
 // reference declaration.  Where one body reads an address as a bare scalar and
 // another indexes it, the array shape is the one declared and the scalar's
 // users say [0].
-//
+
 // Nothing below this block writes an address as a number any more.  Hex-Rays
 // left some baked into expressions rather than into named globals -- the
 // `*(_QWORD *)(n64 + 4469652)` shape, 4469652 being 0x00443394 -- and those now
@@ -26,18 +26,18 @@
 // rather than given a global of its own; the exception is 0x0044337D, byte 1 of
 // the dword array based at coded_buf, which is indexed like an array and so got
 // a byte global of its own.
-//
+
 // A few functions declare a local with the same name as the global they use
 // and reach the global through `::`; those locals still carry their original
 // `__sub_XXXXXX_` names, which is now what tells the two apart.
-//
+
 // incdec.md §6.1 is why the addresses are still the names: giving these
 // objects real names is a much larger job than moving them, because the same
 // address is an int to one function and a char[] to the next.
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------
 // BMF.exe's data segment, one definition per global.
-//
+
 // Each carries the bytes it had, and 64 bytes of guard after it so
 // that a global running past its own end lands in padding rather than
 // in its neighbour.  The extent is the distance to the next global:
@@ -45,12 +45,12 @@
 // way to tell from the source which are real.  REFACTORING.md §4.1.
 // ---------------------------------------------------------------
 // BMF's .bss, the last of its data segment that is still one object.
-//
+
 // Every global below is a reference into it at its original offset, which is
 // what `blob1` used to be -- but this is 19 584 bytes of zeroes rather than a
 // generated copy of the whole data segment, because that is all the surviving
 // globals need.  Two measurements say so:
-//
+
 //   * 0x44294C..0x448000 is one unbroken run of zero bytes in BMF.exe's data
 //     segment, and all of these globals are inside it.  There are no
 //     initialisers to recover: this is bss.
@@ -58,7 +58,7 @@
 //     -- the whole segment under 0x44294C, bar the relocation slots -- leaves
 //     all fifteen streams byte-identical.  The string tables down there belong
 //     to the modes that are gone.
-//
+
 // The offsets stay because the code still strides between these globals with
 // variable subscripts: `plane_desc[plane + 1].flags` walks four sixteen-byte
 // records that Hex-Rays split into a name per field (REFACTORING.md Phase 3
@@ -92,7 +92,7 @@ alignas(16) static uint8_t p2_len_edges[32] = {   // 0x4398A0
 // 0x4398C0..0x4399F7 and Hex-Rays split the first twelve columns into twelve
 // globals, each subscripted by the same `13 * row`, leaving the thirteenth as
 // one array at 0x4398F0.  It is one table.
-//
+
 // The columns come in four runs -- 0..2, 3..5, 6..8, 9..12 -- each an ascending
 // ladder compared against one of the four neighbourhood sums, and each turning
 // into a small count that becomes part of the context index.
@@ -107,18 +107,18 @@ alignas(16) static int32_t bmf_p2_thresholds[6][13] = {
 // `alt_p2_model`'s float constant pool: seventeen IEEE-754 single-precision
 // bit patterns, which is what every one of these decodes to and what fifteen of
 // them are also written as, verbatim, a few hundred lines below --
-//
+
 //     _this[14][1] = 169.2f;                                 // [ 0]
 //     v26 = (1.0f - (v24 / (v23 + 576.0f))) * 2.0f;          // [ 1] [ 7] [ 6]
 //     const float floor_a = 26896.0f * f278656[14][2];       // [ 9]
 //     ... / (f278656[7 + j][k] + ms_scale * 529.0f);         // [12]
-//
+
 // MSVC pooled the literals into .rdata and loaded them from here; Hex-Rays put
 // them back inline, so nothing reads the pool as floats any more.  Only
 // [ 2] -2784.44f and [ 8] 2.6f have no surviving literal, which is what the
 // compression mode being a constant leaves behind -- the arithmetic that used
 // them is in a branch this build folds away.
-//
+
 // It stays `int32_t` and keeps its address, because the one thing that still
 // touches it does so a byte at a time and must keep reading the same bytes:
 // `alt_p2_model` seeds `P2Count::b1` from `*((uint8_t *)&p2_float_pool + b0 + 3)`
@@ -222,7 +222,7 @@ static int32_t alphabet_reduced;   // was 0x443388 in bmf_bss
 // 0x44338C.  Record 0 holds the image-wide parameters and records 1..4 are the
 // four planes, so the plane `p` a reader sees is record `p + 1`.  Three things
 // say it is one table rather than twenty globals:
-//
+
 //   * the subscripts the code already writes -- `plane_desc[plane + 1].flags`,
 //     `plane_desc[plane + 1].w4` -- both step whole records;
 //   * field +1 is reached from two origins one record apart, `transform_planes`
@@ -231,9 +231,9 @@ static int32_t alphabet_reduced;   // was 0x443388 in bmf_bss
 //     in front of an array looks like;
 //   * and `alt_model_p2_encode` walks all four plane records in one loop using
 //     four of the record-0 names as its field bases.
-//
+
 // So `plane_count`, read as a scalar throughout, is field +8 of record 0.
-//
+
 // The union is the one thing here that is still a question rather than a
 // layout: records 1..4 use +0..+3 as four separate bytes, and record 0 has its
 // +0..+3 read as a whole dword by the packer bit accounting at 18433.
@@ -260,7 +260,7 @@ static PlaneDesc plane_desc[5];
 // could move a few at a time.  Nineteen of them are folded now; a subscript
 // that stepped a whole record -- `[16 * p]` on a byte field, `[4 * p]` on a
 // dword one -- says `plane_desc[p + 1]` instead.
-//
+
 // This one stays.  It is record 0's `w8` read as a scalar 149 times, always as
 // the number of planes, and no other field is read that way.
 static int32_t &plane_count = *&plane_desc[0].w8;
@@ -315,7 +315,7 @@ static t_new_handler __pout_of_memory_handler = nullptr;
 // bmf_blob_relocate in blob.inc: an address-translation layer that let a global
 // be reached by the virtual address it had in BMF.exe, and two startup passes
 // that rebased the absolute pointers sitting inside the data.
-//
+
 // All of it is dead, and measured to be.  Taking both relocation calls out
 // leaves every one of the fifteen streams byte-identical, because the 39
 // pointers they rebased all point into the string tables under 0x44294C --
@@ -323,14 +323,14 @@ static t_new_handler __pout_of_memory_handler = nullptr;
 // They belong to the modes that are gone (REFACTORING.md §2.1).
 // ---------------------------------------------------------------------------
 // The compression mode.
-//
+
 // BMF read these six from its .ini and then from the command line; this program
 // has one mode and always did -- `bmf c` pinned -S and -Q9 and let the other
 // four keep the values BMF.exe's data segment starts them at.  They are
 // constants here instead of blob words, so the compiler folds the branches that
 // test them and everything only the other modes could reach becomes
 // unreachable rather than merely unreached.  See REFACTORING.md §2.
-//
+
 // Their addresses in BMF.exe, for anyone comparing against a disassembly:
 // 0x0044108C, 0x00441090, 0x00441094, 0x00441098, 0x0044109C, 0x004410A0.
 // ---------------------------------------------------------------------------
@@ -381,7 +381,7 @@ static inline uint16_t *model_strip(uint32_t k) { return model_tables + 254 * k;
 static int32_t mode_symbol[5];
 
 // The four plane records, `plane_desc[1]` onwards, as a byte cursor.
-//
+
 // Six places copy all four records in or out with 64-bit moves, and Hex-Rays
 // wrote those as offsets from four *other* globals -- coded_buf,
 // desc_slow_mode, and the two dwords that are now `plane_desc[0].w0` and
@@ -391,7 +391,7 @@ static int32_t mode_symbol[5];
 // counter and a plane count, and none of them is a base for this.  Written
 // against the records themselves the arithmetic is the same and the dependency
 // on where four unrelated globals sit is gone.  REFACTORING.md §4.1.
-//
+
 // `off` runs 0..56, the 64 bytes of records 1..4, eight at a time.
 // Sixteen zero bytes.  MSVC unrolled `memset(p, 0, n)` into aligned SSE stores
 // and Hex-Rays wrote each one as `*(M128 *)p = 0`; three loops in this file
@@ -406,21 +406,21 @@ static inline uint8_t *bmf_plane_desc(int32_t off)
 
 // ---------------------------------------------------------------------------
 // The range coder.
-//
+
 // BMF's entropy coder, as it implements it: a carry-counting range coder over
 // a 31-bit `low`, renormalised a byte at a time, in the Subbotin lineage.
 // ALGORITHM.md §5 describes it in prose; this is the same thing as code.
-//
+
 // The state used to be six globals in the block above -- __n0x800000,
 // __n0x7F800000, __dword_4456E8, __dword_4456EC, __byte_4456F0 -- and the
 // arguments of a coding step three more, __n0x2000_1 / __n0x2000_0 /
 // __n0x2000, which every caller assigned before calling an entry that took no
 // parameters.  Both sets are members here, and the entries take arguments.
-//
+
 // It lives in this file rather than in bmf.cpp because it shares its output
 // cursor with the bit packer: out_cursor is the one position both advance
 // through, and that is a blob global declared above.
-//
+
 // Encoder and decoder never both run, so `low` doubles as the decoder's
 // `code`, and `rdiv` occupies what is `pending` while encoding -- exactly as
 // the donor overlapped them in one word.
@@ -432,14 +432,14 @@ __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...);
 // weights added together.  Both models are built this way and neither declared
 // it: the p2 block has five groups and the p1 block nine, and in both the flat
 // array Hex-Rays saw is read as `t[t[4g] + 4g+1]`, which is this record.
-//
+
 // `alt_p2_alloc` fills its five groups with
-//
+
 //   0  64  128     0  192  384     0  576  1152     0  1728  3456     0  5184  10368
-//
+
 // -- 0, 64*3^g and 128*3^g -- so the five selectors are the digits of a base-3
 // number scaled by 64: 3^5 = 243 contexts, 64 counters apart.
-//
+
 // The encoder adds `w[sel]` and the decoder `w[2 - sel]`; the two are the same
 // slot only when `sel` is 1, so the direction is each side's, not a symmetry.
 struct CtxWeight {
@@ -450,15 +450,15 @@ static_assert(sizeof(CtxWeight) == 16, "CtxWeight: a selector and three weights"
 
 // The two runs of five are arrays, and the code says so rather than the
 // offsets: alt_model_p1_decode rotates `row` by one place every pass --
-//
+
 //   v25 = row[4]; v26 = row[3]; v27 = row[2]; v28 = row[1]; v29 = row[0];
 //   row[4] = v26; row[3] = v27; row[2] = v28; row[1] = v29; row[0] = v25;
-//
+
 // a five-deep ring of row pointers -- and then derives `cur` from it, three of
 // the five offset by eight.  Naming ten consecutive `uint32_t` f176 through
 // cursor[4] hid the one fact about them worth having.  The layout is unchanged:
 // `row[0]` is still +176, and the static_assert says so.
-//
+
 // AltP1Block -- recovered from 260 dereferences over 54 offsets, under 4
 // names.  The layout is the one the code already assumed: at 32 bits a
 // pointer is four bytes, so naming these fields moves nothing, and the
@@ -526,7 +526,7 @@ struct AltP1Block {
   uint8_t slot_of[256];     // +728  .. +983
   // A pair of inverse maps, the same pair in both blocks -- `alt_init_tables`
   // is handed `(fold, unfold)` by each allocator.
-  //
+  
   // `unfold` is built as 0, -1, 1, -2, 2, ... : `unfold[0] = 0`,
   // `unfold[4i + 1] = -(2i + 1)`, `unfold[4i + 2] = 2i + 1`, and the same one
   // further out for the even pair, ending at `unfold[253] = -127`,
@@ -534,13 +534,13 @@ struct AltP1Block {
   // a non-negative symbol, and `fold` is the way back: the coders read
   // `n = fold[residual]`, code `n`, and reconstruct with `unfold[n] +
   // predictor`.  Neither table's name says more than that pairing.
-  //
+  
   // `fold_hi` is the 256 bytes after `fold`, and the two are filled by one
   // call: a sentinel written over `fold_hi` immediately before
   // `alt_init_tables` is gone immediately after, at both ends of the range and
   // in both blocks.  So the write extent is 512 bytes and the split is the
   // readers' -- some index `fold`, some `fold_hi`, none crosses.
-  //
+  
   // What separates the two index spaces was left open here for several rounds.
   // It is nothing: both halves are byte-indexed maps of the same residual to
   // the same code, and in this build they hold the same 256 bytes.  Reading
@@ -550,7 +550,7 @@ struct AltP1Block {
   // walk computes that same inverse the long way round.  Measured rather than
   // argued: a probe comparing the two halves at the end of every
   // `alt_init_tables` call reports 0 of 256 differing, on every test stream.
-  //
+  
   // They stay two members because they are two *objects* -- the near-lossless
   // build would fill them differently, and a reader that indexes `fold_hi`
   // is asking for the exact inverse while one that indexes `fold` is asking
@@ -587,7 +587,7 @@ static_assert(sizeof(void *) != 4
 // established: the allocation rc_begin_encode and rc_begin_decode make,
 // reached here at offsets 0x64 to 0x5C75AC.  See REFACTORING.md section 4.2.  The other structs keep their
 // ObjN names because naming their fields waits on ALGORITHM.md section 9.
-//
+
 // Recovered from 174 dereferences over 25 offsets, under 5
 // names.  The layout is the one the code already assumed: at 32 bits a
 // pointer is four bytes, so naming these fields moves nothing, and the
@@ -597,7 +597,7 @@ static_assert(sizeof(void *) != 4
 // union is not a choice between two readings -- word 7 is touched as `+14` and
 // `+15` and never as a word, and the two spellings sit on the same bytes
 // because the code uses both.
-//
+
 // One record type, two roles, one array.  `code_pixel` and `decode_pixel` copy
 // a whole record with two 64-bit moves, which is what fixes the size; they
 // reach it as `&((uint32_t *)this)[4 * k + 776]`, grid record k + 188.
@@ -698,14 +698,14 @@ struct FreqPair {
 static_assert(sizeof(FreqPair) == 4, "FreqPair: two counts, four bytes");
 
 // Where one level's tree of those starts inside a counter block.
-//
+
 // Three functions walk this tree -- `encode_symbol_tree`, `decode_symbol_tree`
 // and `update_binary_pair` -- and each reached it by a different arithmetic:
 // `(uint8_t *)&freq[2 * tbl_base + 8] + 4 * (span + node)`, `freq + 2 *
 // tbl_base + 2 * span + 2 * node + 8`, and a byte pointer laundered through an
 // `int32_t`.  All three are this address; only the third was a raw offset that
 // any measure could see, which is why the other two survived four rounds.
-//
+
 // The tree is 1-indexed, and the `+ 8` rather than `+ 10` is how it says so.
 // The block's header is ten `uint16_t` -- a total, an escape weight and eight
 // fixed counts, which is what `rc_begin_encode` seeds -- so the pairs start at
@@ -720,12 +720,12 @@ static inline FreqPair *bit_tree(uint16_t *freq, int32_t lvl)
 // One adaptive binary counter: a count per bit value, and the total at which
 // the pair is rescaled.  `layout_workspace` seeds them (40, 16, 512) or
 // (4, 4, 72), and the four tables that hold them are all indexed `3 * k`.
-//
+
 // `encode_context_bit` codes with `rc.encode_bit(n[0], n[1], bit)`, adds 8 to
 // `n[bit]`, and when `n[0] + n[1]` passes `limit` halves both and raises
 // `limit` by 64 -- to a ceiling of 0x4000, so the counter forgets faster while
 // it is young and settles as it ages.
-//
+
 // A record has three states, and the first two are why `n` is an array.  Cold
 // is `n[0] == 0`: the coder falls back on the second counter it was handed,
 // codes from that, and leaves `n[0] = bit + 1`, so `n[0]` is *the first bit
@@ -733,7 +733,7 @@ static inline FreqPair *bit_tree(uint16_t *freq, int32_t lvl)
 // `n[1]` are seeded from the fallback's ratio scaled to 64, `limit` is set to
 // 512, and `n[n[0] - 1] += 4` bumps the bit that cold state remembered.  Live
 // is everything after.
-//
+
 // That reach only lands inside the record while `n[0]` is 1 or 2, which the
 // seeds actively contradict -- 40 and 4.  It holds because it is reachable
 // only from half-warm: a `__builtin_trap()` on `n[0] > 2` there fires on none
@@ -748,7 +748,7 @@ static_assert(__builtin_offsetof(BitCtr, limit) == 4, "BitCtr: the limit is last
 
 // The pixel model's per-pixel record, and the unit every pointer in
 // `ModelBlock::row_cur` steps.
-//
+
 // `code_pixel` writes the symbol at +0 and then six comparisons of it against
 // six neighbours' symbols at +2..+7 -- the match state `ALGORITHM.md` §8.2
 // describes.  All six have readers now that the row pointers count records.
@@ -928,7 +928,7 @@ struct ModelBlock {
   // bound or the memset length that fills it, and the four of them run to
   // 8102448 -- which is the 0x7BA230 both callers ask `bmf_new` for, so the
   // last one ends exactly at the end of the object.
-  //
+  
   // `sym_rev[k]` is the low thirteen bits of `k` reversed, times eight:
   // `layout_workspace` builds it with `v += v + (k & 1)` thirteen times and
   // then scales the lot.  Its three readers subtract a neighbouring symbol
@@ -945,7 +945,7 @@ struct ModelBlock {
   // third level is entered only while the alphabet is under 32 symbols.  So a
   // context is not a number the coder computes but a number it *hands out*,
   // and identical neighbourhoods share one however they were reached.
-  //
+  
   // `ctx_id3` has a ceiling: past 53248 ids the index is or-ed with 15, which
   // collapses every further context into the last slot of its group rather
   // than growing the table.
@@ -969,7 +969,7 @@ static_assert(sizeof(void *) != 4
 // rescales w2.  Every reader says the same thing -- `p2_pred` below -- so b0 is
 // a shift and w2 is what it scales.  The signedness is each site's: b0 and w2
 // are read signed, b1 is written unsigned and never read.
-//
+
 // b1 is the odd one.  It is written on every update, from a byte of
 // `p2_float_pool` indexed by the new b0 -- which is the middle of a float
 // constant, not a table of seeds -- and nothing in the program reads it back.
@@ -984,7 +984,7 @@ static_assert(sizeof(P2Count) == 4, "P2Count: the record is four bytes");
 
 // One p2 frequency record: an adaptive step and three symbol frequencies,
 // seeded (4096; 2048, 2816, 2816).
-//
+
 // `alt_p2_encode_symbol` reads it as a three-way alphabet -- `rc.encode` gets
 // a cumulative pair out of `f[0 .. 2]` and `f[0] + f[1] + f[2]` as the total --
 // and ends with `*chosen = step + *chosen`.  So `step` is not a fourth count:
@@ -992,7 +992,7 @@ static_assert(sizeof(P2Count) == 4, "P2Count: the record is four bytes");
 // passes 0x4000 halves the three frequencies and *lowers* `step` -- by half
 // above 256, by 32 above 32, by 2 or 0 below that.  A learning rate that
 // decays as the record matures.
-//
+
 // Both halves of that are checked rather than read off: a `__builtin_trap()`
 // on the addend differing from `step`, and one on the halving branch failing
 // to lower it, fire on none of the fifteen images.
@@ -1011,7 +1011,7 @@ static_assert(__builtin_offsetof(P2Freq, f) == 2, "P2Freq: the step comes first"
 // rate were reached -- including three that add the two terms the other way
 // round, and five where the rate arrived through a `LOBYTE` copy.  Both masks
 // are mod 32, so only the byte such a copy writes can reach the shift.
-//
+
 // `rate` is `int32_t` and not `int8_t` because a third of the sites reach b0
 // through a widened temporary; `-Wsign-conversion` is what checks that none of
 // them passes an unsigned value, which would have made `>>` a logical shift.
@@ -1020,12 +1020,12 @@ static inline int32_t p2_pred(int32_t w2, int32_t rate) {
 }
 
 // The counter update, and the file's most repeated expression: 117 sites.
-//
+
 // `err` is the prediction error.  A dead zone around zero contributes +-32 --
 // `deadzone_hi` and `deadzone_lo` are the edges -- and the rest is the error
 // scaled down by `shift`, with the rounding term `1 << (shift - 1)` that MSVC
 // emitted as the constant 2 or 4.
-//
+
 // The arithmetic stays unsigned, which is what the `(uint32_t)` on the second
 // comparison made it.  For a negative sum an unsigned shift and an arithmetic
 // one differ only above bit 29, and the result is kept in sixteen bits, so the
@@ -1039,20 +1039,20 @@ static inline int16_t p2_bump(int32_t w2, int32_t err, int32_t shift) {
 // The p2 model's neighbourhood table: eighteen bytes a record, rows 144 bytes
 // apart -- eight records to a row.  `alt_p2_context` reaches records -2 .. +4
 // of the cursor it is given.
-//
+
 // The last two bytes are not a ninth lane.  Both pixel bodies end a record
 // with `cursor[17] = 2` and `cursor[16] = (lane[2] <= 0) + (lane[2] < 0)`, and
 // `alt_p2_model` overwrites them with `abs32(err)` and a comparison.
-//
+
 // `mag` is read 32 times, always summed over a neighbourhood.  `sign` is read
 // exactly once, and that once is the thing worth having: `alt_p2_context`
 // assigns it to `ctx_w[4].sel`, so the three-way sign of a record's gradient
 // *is* the fifth base-3 digit of the next context (§9.1).  Hex-Rays had that
 // read as `(uint8_t)lane[8]` -- one past the eight lanes it then had -- which
 // is how it stayed hidden while the record claimed nine of them.
-//
+
 // What the eight lanes hold is what the decoder writes as it emits a pixel:
-//
+
 //   val     = pixel * 16
 //   dval    = the same, and zeroed again at the start of the next row
 //   err     = val - the previous record's val, signed
@@ -1060,7 +1060,7 @@ static inline int16_t p2_bump(int32_t w2, int32_t err, int32_t shift) {
 //   dleft   = |err| / 2
 //   sign    = the three-way sign of `err`, 0 / 1 / 2
 //   mag     = 2
-//
+
 // so a fresh record is a pixel, its gradient, and five copies of that
 // gradient's magnitude that then diverge -- `alt_p2_model` writes `dval`
 // through `dupright` separately afterwards.  Five is `bank_ctx`'s five and the five planes' five;
@@ -1074,7 +1074,7 @@ struct P2Ctx {
   // it from the other side -- seven taps each over lanes 4, 5, 6 and 7, one
   // sum per direction, which is only a sensible thing to build if those four
   // lanes are the four directions.
-  //
+  
   // The array spelling is gone: all 506 reaches named a literal lane.
   int16_t val;       // +0   lane[0]  16 * the sample
   int16_t dval;      // +2   lane[1]  `val` less whatever this slot held
@@ -1178,7 +1178,7 @@ struct AltP2Block {
       // `width + 13` -- and sets each cursor 144 bytes in, which is one row of
       // eight records.  A row is finished by rotating the five buffers by one
       // and re-deriving the five cursors.
-      //
+      
       // Hex-Rays had three readings of these twenty bytes: `f278736[6 .. 9]`
       // as pointers, `f278760[0 .. 3]` as `uint32_t`, and four named pointers
       // `buf[1]`, `buf[2]`, `buf[3]`, `buf[4]`.  The same three
@@ -1220,7 +1220,7 @@ struct AltP2Block {
   // f808992, 131072 bytes apart -- and every read of one said `+ 8`, because
   // the records start eight bytes past the name.  Four things agree on the
   // shape:
-  //
+  
   //   * `alt_p2_alloc` resets all of it in one loop of 0x14000 iterations
   //     eight bytes wide, two records at a time, and 284712 + 0x14000 * 8 is
   //     940072 -- exactly where the next table starts;
@@ -1235,11 +1235,11 @@ struct AltP2Block {
   // which is 15552 records -- and 15552 is 3^5 * 64, the p2 context space
   // `algorithm_v2.md` §9.1 derives from the five weight groups.  The size is
   // not an independent fact about the table; it is what `ctx_w` can index.
-  //
+  
   // `alt_p2_encode_symbol` is handed `&freq[ctx]`, `ctx` being that
   // index, and `alt_p2_model` updates records `k - 1`, `k` and `k + 1` --
   // three adjacent, the way the p1 model does.
-  //
+  
   // `alt_p2_model` reached all of that through `uint16_t *` cursors at
   // `block + 8 * k`, so the table's offset arrived folded into the index in
   // whatever unit was to hand: 470036 as a `uint16_t` index, 235018 as a
@@ -1494,14 +1494,14 @@ void __expand_predictor_mode0(uint32_t unread_src, int32_t i, int32_t unread_h)
 
 // MED, the LOCO-I / JPEG-LS median edge predictor, applied to a whole plane in
 // place: every byte is replaced by its residual, folded to an unsigned code.
-//
+
 // It runs *backwards*, from the last pixel to the first, which is what lets it
 // work in place -- each pixel's predictors are up and to the left, so they are
 // still the originals when it reaches them.  That also fixes the shape of the
 // loops: the last row is the general case, the first column of each row has no
 // west neighbour, and the first row has no north one, so those two are peeled
 // out rather than guarded.
-//
+
 // It also counts every code it writes into `hist_scratch`, and nothing in this
 // build reads that count back: `hist_scratch` is a scratch region that
 // `model_planes` immediately reuses as `__model_planes_buf`.  The histogram was
@@ -1510,7 +1510,7 @@ void __expand_predictor_mode0(uint32_t unread_src, int32_t i, int32_t unread_h)
 // `plane_predictor == 1`, which `-E` being 0 makes unreachable.  `unpredict_med`
 // is not: a decoder still has to read streams an encoder with `-E` produced,
 // which is what `testfiles/med32.bmp` exists to exercise.
-//
+
 // So this body is here to be *read*, as the definition of what the inverse
 // undoes, and the naming below is worth more than the code is.
 uint32_t __predict_med(uint8_t *pixels, int32_t width, int32_t height)
@@ -1546,10 +1546,10 @@ uint32_t __predict_med(uint8_t *pixels, int32_t width, int32_t height)
      {
       // `up` trails `p` by exactly one row and the two step together, so
       // these three are the neighbourhood of the pixel at `*p`:
-      //
+      
       //     northwest  north
       //     pred(west) *p
-      //
+      
       // `pred` starts as the west neighbour because two of MED's three
       // outcomes are `west` or `north` unchanged, and west is the more common.
       north = (uint8_t)*--up;
@@ -1601,7 +1601,7 @@ uint32_t __predict_med(uint8_t *pixels, int32_t width, int32_t height)
   // one value both halves of a pair need and `ofs` walks back in twos; `done`
   // is how far the unrolled part got, and the `if` below is the odd pixel it
   // leaves when the row is an even number wide.
-  //
+  
   // Nothing here touches `hist_scratch`, unlike the two cases above -- the
   // first row is one row out of `height`, and leaving it out saves the
   // unrolled loop a dependent store.
@@ -1645,13 +1645,13 @@ uint32_t __predict_med(uint8_t *pixels, int32_t width, int32_t height)
 
 // Build the residual folding pair the alternate models use, which is the same
 // pair `predict_med` and `unpredict_med` build inline for themselves:
-//
+
 //   unfold[code]        the signed residual a code stands for: 0, -1, +1, -2,
 //                       +2 ... out to -127, +127, -128.
 //   fold[residual+256]  the inverse, indexed by the residual as a byte.  The
 //                       +256 is the zero point, so `fold` is addressed from
 //                       -128 to +127 either side of it.
-//
+
 // The middle block is the near-lossless quantiser: with a maximum error of `w`
 // it maps a run of `2w+1` residuals onto one code, and `bucket_size` is that
 // run.  This build is lossless -- `-E` is 0, so `w` is 0, `bucket_size` is 1
@@ -2287,20 +2287,20 @@ CounterNode *__init_counter_node(CounterNode *node)
 }
 
 // Code a symbol as a level, then the bits that pick it out within that level.
-//
+
 // `freq` is a counter block: the total at [0], the escape weight at [1], and
 // eight level counts from [2].  `model_geometry[sym]` says which level `sym`
 // falls in -- 0 and 1 are levels of their own, then 2, 4, 8, 16, 32 and 64
 // symbols per level -- so the level goes through the range coder against those
 // eight counts, and anything above level 1 then needs `level_geom[lvl].half`
 // bits to say which symbol within it.
-//
+
 // Those bits are coded down a binary tree of counter pairs at
 // `freq[2 * level_geom[lvl].tbl_base + 8]`, most significant first, with `node`
 // the index of the pair reached so far and `span` the width of the level below.
 // `decode_symbol_tree` walks the identical tree and reassembles `node` into the
 // symbol by adding `level_geom[lvl].first`.
-//
+
 // The rescale is the unrolled part: when the total passes 0x4000 all eight
 // counts halve, in a chain of partial sums MSVC interleaved with the stores,
 // and the escape weight steps down by 4 or by 16 depending on where it sits
@@ -2857,7 +2857,7 @@ void **__free_workspace(ModelBlock *blk, int8_t do_free)
   // Both arrays are allocated as `bmf_new(24 * n + 4)` with the count in the
   // word before the first list, so `n` is `sym_list_count(lists)` and that
   // same word is what gets freed.  Each list owns its entries.
-  //
+  
   // Hex-Rays had five more locals here: `Blocka_1`, `Blocka_2` and `Blocka_3`
   // were the block saved and restored around two loops that never touched it,
   // and `sel1_list`/`sel0_list` were second copies of the two list pointers,
@@ -3080,7 +3080,7 @@ int32_t __init_model_tables(ModelBlock *_this)
     // The `goto LABEL_21` that ended the block above skipped exactly this, and
     // it was the block's last statement -- so the two are an `if`/`else` and
     // the label was the join.
-    //
+    
     // `LABEL_19` was a jump *into* the arm above, to reach the one test at the
     // end of it.  Both arms decide the same thing -- whether the symbol was
     // already near the front of its list -- so they both set it, and the
@@ -3241,10 +3241,10 @@ void **__alt_p1_free(void **blk, int8_t do_free)
 // against.  Three things come out: `pred`, `ctx[0..1]`, and the nine
 // three-way selectors in `ctx_w`, whose weights sum to the context index the
 // caller uses.
-//
+
 // It opens with MED -- the same median edge tree as `predict_med`, over
 // `cursor[1]` (north), `cur[-1]` (west) and `cursor[1][-1]` (northwest).
-//
+
 // `act` is the activity: a weighted sum of the error magnitudes around the
 // pixel, 6 on the west neighbour, 4 on north and two-west, 3 on north-east and
 // the row above that, 2 further out, 1 at the edges.  `act_all` adds whatever
@@ -3252,7 +3252,7 @@ void **__alt_p1_free(void **blk, int8_t do_free)
 // neighbours, one, or none -- and each arm also picks a different set of
 // gradients for `ctx_w[3]` and `ctx_w[5..8]`.  With no neighbouring plane the
 // gradients come from this plane's own rows instead.
-//
+
 // Then `act_q` quantises the activity, `level_of` maps it to a level and
 // `step` is that level's dead zone, and each gradient becomes a three-way
 // selector: below `-step`, within, or above `+step`.  Nine selectors, nine
@@ -3470,10 +3470,10 @@ int32_t __update_binary_pair(uint16_t *_this, int32_t symbol)
 // reached, and to the counters its *neighbours* in context space would have
 // reached, so a context seen once carries evidence from the contexts either
 // side of it.
-//
+
 // The body is nine copies of one block, one per `ctx_w[k]`, and naming them
 // with the index is what makes that visible.  Each block:
-//
+
 //   selK              the three-way selector this weight ended on
 //   midK, loK, hiK    when the selector is the middle one, the context with
 //                     `w[1]` removed and the two counter nodes either side
@@ -3482,7 +3482,7 @@ int32_t __update_binary_pair(uint16_t *_this, int32_t symbol)
 //   midnK, altnK      the two nodes that alternate gets
 //   ctxK              `ctx[0]` reloaded, because every `+=` above may have
 //                     moved it
-//
+
 // The increments fall away from the symbol -- 17 at the node itself, 13 and 11
 // one context up and down, 7, 6, 5, 4, 3 and 2 further out -- which is the
 // same "spread the evidence" idea `sym_rev` implements for symbols.
@@ -4505,7 +4505,7 @@ void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *src, uint8_t *out)
         do
         {
           ++x;
-          __alt_p1_context((AltP1Block *)(uint8_t **)_this, (AltP1Block *)nullptr, (AltP1Block *)0);
+          __alt_p1_context((AltP1Block *)_this, (AltP1Block *)nullptr, (AltP1Block *)0);
           pred = (uint8_t)_this->pred;
           resid = (uint8_t)(*src - pred);
           recon = *(_this->fold[resid] + _this->unfold) + pred;
@@ -4580,13 +4580,13 @@ t_new_handler __set_new_handler(t_new_handler __out_of_memory_handler)
 // of a global that sub_434A30 had filled in from CPUID, took an FXSAVE to ask
 // whether the part could do DAZ at all, and printed an Intel runtime error and
 // exited on a machine without SSE2.
-//
+
 // SSE2 is a given here -- the bodies are full of it and would fault long
 // before this ran -- which settles all three questions: the level test is
 // always taken, DAZ has been available on every part that has SSE2, and the
 // no-SSE2 exit is unreachable.  What is left is the two mode bits, and
 // <xmmintrin.h> and <pmmintrin.h> already name them.
-//
+
 // main passed 3 -- flush-to-zero and denormals-are-zero, not the third bit --
 // so these two lines are the whole of what it did.
 static void bmf_set_denormal_mode()
@@ -4727,12 +4727,12 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t img_w, int32_t plane)
 
 // The image descriptor `alloc_image` returns, and every reader of an image
 // takes.  Sixteen bytes, then the pixels.
-//
+
 // This one is not documented anywhere -- it is BMF's own -- but it does not
 // need to be inferred from the offsets its readers touch, because
 // `alloc_image` writes all four words in a row and the arithmetic around them
 // says what each is:
-//
+
 //   result[0] = (a2 << 16) | (uint16_t)a1;   width in the low half, height in
 //                                            the high half -- a1 and a2 are its
 //                                            first two parameters
@@ -4744,7 +4744,7 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t img_w, int32_t plane)
 //   result[3] = v10;                         v10 = v9 * a2 -- stride times
 //                                            height, the size of the pixels
 //   buf = (uint8_t *)result + result[3] + 16;   which start at +16
-//
+
 // The depth byte carries two flags above its six bits of depth.  0x80 is set
 // only on the palette path -- `a4` true and a depth of 8 or less -- and every
 // reader tests it before looking for a palette; `bmf_compress` toggles it and
@@ -4784,12 +4784,12 @@ int32_t *__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palett
   // them with four `goto`s -- one of them jumping two blocks deep into the
   // middle of the `!packed` arm, which is why the arms did not look like
   // cases at all:
-  //
+  
   //   bpp 5..7          one byte a pixel, and `row16` already holds `img_w`
   //   bits >= 8         `(bits + 7) / 8` bytes a pixel
   //   unpacked, 4 bits  two pixels a byte, rounded up to four bytes
   //   packed, 1/2/4     the bit-packed widths, and the 0x40000000 tag
-  //
+  
   // `bpp == 3` never takes the second: the test for it sits in the other arm
   // of the `bpp == 3` branch, which is what `byte_rows` records.
   if ( bpp >= 5 && bpp <= 7 )
@@ -4880,14 +4880,14 @@ int32_t *__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palett
 
 // The two headers a .bmp file begins with: a 14-byte BITMAPFILEHEADER and the
 // 40-byte BITMAPINFOHEADER after it.
-//
+
 // Unlike the ObjN structs this is not recovered from the offsets the code
 // happens to touch -- it is the documented layout of the format, and the code
 // agrees with it at every offset it uses.  `biSize = 40` at +14 is the one that
 // settles it: that field exists to say which info header this is, and 40 is
 // this one.  read_bmp checks the same two numbers on the way in, `'BM'` at +0
 // and 40 at +14.
-//
+
 // Packed, because `bfSize` sits at +2 and every later field is odd of its own
 // alignment.  The static_asserts are the same guard the recovered structs
 // carry, and here they check the port against a published layout rather than
@@ -5475,7 +5475,7 @@ static inline int32_t bmf_pixels(const uint8_t *p) {
 // rounding -- with the shift added back instead of subtracted, and the
 // reference planes read from the image as it is being rebuilt, which is why
 // the planes are done in `src_plane` order.
-//
+
 uint8_t * __interleave_plane(uint8_t *img, uint8_t *src, int32_t plane, int8_t unread_flag)
 {
   ;
@@ -5589,24 +5589,24 @@ uint8_t * __interleave_plane(uint8_t *img, uint8_t *src, int32_t plane, int8_t u
 // Pull one plane out of the interleaved image and decorrelate it against the
 // others -- BMF's colour transform, chosen per plane by the search in
 // `choose_plane_coding` and recorded in that plane's `plane_desc` entry.
-//
+
 // The pixels are interleaved, so `plane` is a byte offset within a pixel and
 // every loop here steps by `plane_count`.  Flag 8 clear means no transform at
 // all, and the body is a plain de-interleave.  Otherwise `predictor` picks one
 // of three:
-//
+
 //   1  dst = x - dc - ref0                     subtract one other plane whole
 //   2  dst = x - dc - ((w0*ref0 + w1*ref1 + 40) >> 7)     a weighted blend
 //   3  dst = x - dc - ((w1*p[-2] + w0*p[-3] + w2*p[-1] + 63) >> 7)
-//
+
 // The weights are sevenths-of-a-bit fixed point and the `+ 40` and `+ 63` are
 // the rounding.  Mode 3 reaches backwards inside the *pixel* rather than to a
 // named plane, which is why it needs no `to_refN`.
-//
+
 // Mode 2 with the weights summing to 128 and one of them zero is mode 1 in
 // disguise -- all the weight on one reference -- and the code says so by
 // jumping into mode 1's loop with `to_ref0` pointed at whichever plane won.
-//
+
 // Returns `img` advanced to the plane, which two of the four paths do and two
 // do not; no caller uses it.
 uint8_t * __colour_transform(uint8_t *img, uint8_t *dst, int32_t plane, int8_t unread_flag)
@@ -5864,14 +5864,14 @@ int32_t __rc_begin_decode(int8_t unread_flag)
 // what `testfiles/med32.bmp` exercises.  It walks *forwards*, the opposite way,
 // for the same reason -- a residual can only be added to neighbours that have
 // already been reconstructed, and forwards is where those are.
-//
+
 // So the peeled cases are the mirror image.  Pixel 0 is stored raw and is
 // already correct, which is why `p` starts one past it; the rest of the first
 // row has only a west neighbour; the first column of every later row has only
 // a north one; and everything else gets the full MED tree, identical to the
 // one in `predict_med` because it must reproduce the same prediction from the
 // same three neighbours.
-//
+
 // Returns one past the last byte it wrote.
 uint8_t *__unpredict_med(uint8_t *pixels, int32_t width, int32_t height)
 {
@@ -5997,7 +5997,7 @@ uint8_t *__unpredict_med(uint8_t *pixels, int32_t width, int32_t height)
 
 // The zeroth-order cost of a histogram, in bits: `total*log(total) - sum(n*log n)`
 // over ln 2.  `a1` is `n2` int32 bins.
-//
+
 // Two running pairs rather than one running total, because that is what the
 // SSE original had: even bins accumulated in lane 0, odd bins in lane 1, and
 // the two added at the end.  Double addition is not associative, so folding
@@ -6129,7 +6129,7 @@ void ** __alt_model_p1_d8_decode(int8_t unread_flag, uint8_t *out, int32_t i, in
         do
         {
           ++x;
-          __alt_p1_context((AltP1Block *)(uint32_t *)blk, (AltP1Block *)nullptr, (AltP1Block *)0);
+          __alt_p1_context((AltP1Block *)blk, (AltP1Block *)nullptr, (AltP1Block *)0);
           val = (uint8_t)((uint8_t)blk->pred
                                 + *((uint8_t *)blk + (uint8_t)__alt_p1_decode_symbol((uint16_t *)&((int32_t *)blk)[4 * blk->ctx[0] + 950], 0, blk->ctx[1]) + 1496));
           *out_at = val;
@@ -6174,7 +6174,7 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
   // past the end, and once each local has its own storage those writes land on
   // whatever the compiler put next.  At -O2 that is a null pointer handed to
   // alt_p1_context; at -O0 it is a plane that decodes to the wrong pixels.
-  //
+  
   // Nothing caught it because nothing reached it: this is the body
   // REFACTORING.md section 2.3 lists as unexercised.  testfiles/altp1.bmp
   // reaches it now.
@@ -6295,7 +6295,7 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
           // The same twenty terms `alt_p1_d8_encode_body` sums, arriving here
           // as byte offsets on a `uint8_t *`: a record is `sym` then `mag`, so
           // every odd offset is a `mag` and byte 2k+1 is record k.
-          //
+          
           // The four `(int8_t)` casts are load-bearing, and this is measured
           // rather than argued.  MSVC emitted `movsx` for the four left-margin
           // loads and `movzx` for the other sixteen; a magnitude is
@@ -6304,13 +6304,13 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
           // `testfiles/altp1.bmp`.  The sign shows.  (That is also the only
           // stream in the corpus that reaches this body at all, which is what
           // `tools/mkaltp1.py` exists for.)
-          //
+          
           // Contrast REFACTORING9.md section 3, where `PixRec`'s three `movsx`
           // loads keep their casts on the opposite finding: there the writers
           // are comparisons and the seed is 1, so the sign *cannot* show.  Two
           // casts kept for two different reasons, and only one of them was a
           // transcription.
-          //
+          
           // The `_d8` pair reads all twenty unsigned, which is the same source
           // compiled differently.
           blk_k->ctx[3] = (int8_t)cursor2[-2].mag + (int8_t)cursor4[-2].mag
@@ -6334,7 +6334,7 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
         do
         {
           p0 = (uint32_t *)plane[0];
-          __alt_p1_context((AltP1Block *)(uint8_t **)plane[0], (AltP1Block *)nullptr, (AltP1Block *)0);
+          __alt_p1_context((AltP1Block *)plane[0], (AltP1Block *)nullptr, (AltP1Block *)0);
           code0 = __alt_p1_decode_symbol((uint16_t *)&p0[4 * p0[3] + 950], 0, p0[4]);
           pred0 = p0[2];
           AltP1Block *const blk = (AltP1Block *)p0;
@@ -6364,7 +6364,7 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
           p0[53] += 2;
           blk1 = (AltP1Block *)plane1;
           *(plane_desc[1].src_plane + out) = val0;
-          __alt_p1_context((AltP1Block *)(uint8_t **)blk1, (AltP1Block *)plane[0], (AltP1Block *)0);
+          __alt_p1_context((AltP1Block *)blk1, (AltP1Block *)plane[0], (AltP1Block *)0);
           code1 = __alt_p1_decode_symbol(&blk1->counters[blk1->ctx[0]].total, 0, blk1->ctx[1]);
           pred1 = *(uint32_t *)&blk1->pred;
           val1 = (uint8_t)(pred1 + blk1->unfold[code1]);
@@ -6804,9 +6804,9 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   // Which neighbourhood the plane is in, as a mixed-radix index: the band
   // above, then four more ratios each counting how many of their own
   // thresholds this plane has passed.
-  //
+  
   //     nb_slot = 320 * band + 64 * gA + 16 * gB + 4 * gC + gD
-  //
+  
   // `gA` runs [0,5) and the other three [0,4), so the digits pack exactly and
   // reach 5 * 5 * 4 * 4 * 4 = 1600 slots.  `nb_id` spans 1916 entries -- that
   // is the distance to the next field, not a bound this index knows.  All five
@@ -7354,23 +7354,23 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
 // Find the distinct symbol values a plane actually uses, number them 0..n-1,
 // rewrite the plane in those numbers, and code the numbering so the decoder can
 // undo it.  `expand_alphabet` is the other half.
-//
+
 // Two paths.  At eight bits or fewer the value fits a byte, so the map is a
 // 64 KiB flag array indexed by value; the plane is walked once to set a flag
 // per value seen, the flags are renumbered in order, and the plane is walked
 // again to substitute.  The numbering goes out as gaps between consecutive
 // used values through one symbol list.
-//
+
 // Above eight bits the value does not fit an index, so the same job is done
 // with a **binary search tree** over the distinct values: `buf[8 * node]` holds
 // a value, `v82[node]` holds its two child indices as `uint16_t`, and the
 // comparison at each step picks the side.  A value not found is inserted and
 // takes the next number.  That is the same interning idea `ModelBlock`'s
 // `ctx_id1/2/3` use for context signatures, done here for symbols.
-//
+
 // Above 0x2000 distinct values it gives up on both and splits the plane into
 // byte planes -- height times the byte count, depth 8 -- then calls itself.
-//
+
 // The `Blockaa_1..4` reloads of `__frame.slot7` are *not* foldable, and that is
 // worth saying because everything else of that shape in this file was.  The
 // frame's `slot` array is also walked by index -- `slot[2 * j + 2]`,
@@ -7861,7 +7861,7 @@ LABEL_71:
 // candidate.  Both arrived as `uint8_t *` and neither is an address.
 // Price one candidate plane pairing, in bits, for `choose_plane_coding`'s
 // search.  Six histograms and two least-squares weights.
-//
+
 // The first loop walks the plane once and bins five differences per pixel:
 // `dx` and `dy` are the two-dimensional gradients of the two planes being
 // paired, `dz` is the third plane's, and the last two bins are `dz - dx`,
@@ -7869,16 +7869,16 @@ LABEL_71:
 // five products a two-variable least-squares fit needs -- `sxx`, `syy`, `sxy`,
 // `sxz`, `syz` -- in `double`, which is the only floating-point arithmetic in
 // the encoder's search.
-//
+
 // `w1` and `w2` come out of that fit, clamped to [-64, 191] and used as
 // sevenths-of-a-bit fixed point: the second loop bins `dz` minus the weighted
 // blend `(w1 * dx + w2 * dy + 40) >> 7`, which is exactly the residual
 // `colour_transform`'s predictor 2 would leave.  `estimate_cost` turns each
 // histogram into bits.
-//
+
 // The tail picks the cheaper of two pairings, swapping the two weights and the
 // two cost words with it, and writes the winner into the descriptor.
-//
+
 // `a4`, `a5`, `a6` and `a7` are unread.
 int32_t __cost_candidate(uint8_t *img, int32_t cand, uint8_t *desc, int8_t unread4, int32_t unread5, int32_t unread6, int32_t unread7, uint32_t *costs)
 {
@@ -8481,7 +8481,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
           }
           // The same shape as the pass above, walking inward: `LABEL_55` was
           // the case where `wt4` has reached its limit and `wt8` has not.
-          //
+          
           // The `wt8_dn > wt8_dn_end` guard below is new and is a no-op:
           // reaching here with `wt8` *also* finished would mean the outward
           // search above had run, and that loop has no exit except the one
@@ -9002,7 +9002,7 @@ int32_t *__read_bmp(char *path)
   // These two freads land in the frame, and each writes across several of the
   // slots Hex-Rays split it into -- which is why the fields do not look like
   // fields.  `bmp_info_hdr` is declared `uint32_t[2]` and the read is 40 bytes:
-  //
+  
   //   frame +36  bmp_info_hdr[0]  biSize          checked == 40 below
   //         +40  bmp_info_hdr[1]  biWidth
   //         +44  bmp_height       biHeight
@@ -9012,7 +9012,7 @@ int32_t *__read_bmp(char *path)
   //         +56  _pad2[12]        biSizeImage and the two pixels-per-metre
   //         +68  bmp_clr_used     biClrUsed
   //         +72  _pad3[4]         biClrImportant
-  //
+  
   // and the 14-byte read covers `bmp_file_hdr[0..4]` and the slot after it,
   // whose four bytes are `bfOffBits` -- `bmp_off_bits`, which the fseek below
   // uses.  Every one of these names is confirmed by what the code does with it,
@@ -9088,7 +9088,7 @@ int32_t *__read_bmp(char *path)
           // iteration, and a scalar tail -- memset with the alignment written
           // out, and a separate short-run path for anything under 16 + the
           // head.
-          //
+          
           // The write is still not bounded by the pixel buffer: a stream that
           // ends mid-run keeps writing.  That is a real defect, recorded
           // rather than repaired (REFACTORING.md §6), and it is why the
@@ -9275,7 +9275,7 @@ LABEL_44:
   // and RLE4 decoders, which are separate loops, and the label used to sit
   // *inside* the uncompressed decoder's loop -- so reaching it was a jump into
   // a block followed by a `break` out of a loop the jumper was never in.
-  //
+  
   // What made that readable as an exit at all was `img = __frame.img_f`, which
   // is a reload and not an assignment: `img` is written once, at the
   // allocation, and `__frame.img_f` is written three times and always from
@@ -11133,7 +11133,7 @@ void __expand_alphabet(ModelBlock *_this)
 {
   // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
   // gives every member its own storage and DLRAW aborts while decompressing.
-  //
+  
   // It is sixteen `SymList`s, and the three untyped arrays it was recovered as
   // were one array all along.  `sizeof(SymList)` is 24 and `ent` is at +20, so
   // the free loop at the end -- which walked back from one past the last of
@@ -11141,7 +11141,7 @@ void __expand_alphabet(ModelBlock *_this)
   // `lists[0]`, `.ent` each; and the zeroing loop at the top, which wrote
   // `v30[12 * i]` and `v30[12 * i + 6]`, is bytes 20 + 48i and 44 + 48i, which
   // are `lists[2i].ent` and `lists[2i + 1].ent`.
-  //
+  
   // `spill` is genuinely past the array: MSVC used it to hold `nbytes` across
   // the inner decode loop.
   struct alignas(16) ExpandAlphabetFrame {   // 420 bytes, one stack frame
@@ -11418,7 +11418,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *dst)
   // whose live ranges do not overlap, and Hex-Rays named every use after it.
   // That they can have storage of their own is the gate's answer -- nothing
   // writes one of them and reads another.
-  //
+  
   // What they are is one output cursor at the width the plane's depth calls
   // for.  `unmodel_plane_slow` writes a reconstructed plane at four, three,
   // two or one bytes a pixel or packed below a byte, and each width walks the
@@ -11517,7 +11517,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *dst)
         // loop reads back.  That copy is dead -- nothing reads `f1051664` --
         // so the collision costs nothing at run time, but it does mean one
         // of `row_cur`'s length and `f1051664`'s type is wrong.
-        //
+        
         // The bucket counter reaches exactly 188: a `__builtin_trap()` on
         // `>= 188` fires on fourteen of the gate's streams and one on
         // `>= 189` fires on none.  So this table is 189 records, +96 ..
@@ -11747,7 +11747,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *dst)
       x2 = 0;
       do
       {
-        y = __decode_pixel((ModelBlock *)(uint32_t *)blk, x2);
+        y = __decode_pixel((ModelBlock *)blk, x2);
         __init_model_tables(blk);
         row_w = blk->width;
         x2 += y;
@@ -12106,7 +12106,7 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
           want0 = *(src + plane_desc[1].src_plane);
           off0 = plane_desc[1].src_plane;
           cur0 = want0;
-          __alt_p1_context((AltP1Block *)(uint8_t **)plane[0], (AltP1Block *)nullptr, (AltP1Block *)0);
+          __alt_p1_context((AltP1Block *)plane[0], (AltP1Block *)nullptr, (AltP1Block *)0);
           keep0 = cur0;
           pred0 = (uint8_t)blk0->pred;
           resid0 = (uint8_t)(cur0 - pred0);
@@ -15185,7 +15185,7 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
           // loop reads back.  That copy is dead -- nothing reads `f1051664` --
           // so the collision costs nothing at run time, but it does mean one
           // of `row_cur`'s length and `f1051664`'s type is wrong.
-          //
+          
           // The bucket counter reaches exactly 188: a `__builtin_trap()` on
           // `>= 188` fires on fourteen of the gate's streams and one on
           // `>= 189` fires on none.  So this table is 189 records, +96 ..
@@ -15422,7 +15422,7 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
           x2 = 0;
           do
           {
-            step = __code_pixel((ModelBlock *)(int32_t *)blk, x2);
+            step = __code_pixel((ModelBlock *)blk, x2);
             __init_model_tables(blk);
             x2 += step;
           }
@@ -15433,7 +15433,7 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
       while ( (uint32_t)y < *(uint32_t *)&blk->height );
     }
     __rc_end_encode();
-    __free_workspace((ModelBlock *)(void **)blk, 1);
+    __free_workspace((ModelBlock *)blk, 1);
   }
 }
 
@@ -15559,7 +15559,7 @@ void __transform_planes(BmfImage *p_i, int32_t unread_mode, int8_t unread_flag)
           // the `do`/`while` writes one byte first and asks afterwards.  Both
           // are otherwise the same six lines, with the `else` carrying a save
           // and restore of `k` around a loop that never touched it.
-          //
+          
           // The `for` is the one kept, which is a choice and not a
           // transcription: a zero-pixel plane cannot reach here through any
           // input the gate has, so the difference is unobservable, and between
@@ -16104,13 +16104,13 @@ LABEL_109:
 // keep the cheapest setting.  The coder's own output is the cost function --
 // there is no model of compressibility here, only the compressor run at each
 // candidate and the byte count read back off `out_cursor`.
-//
+
 // The tile is the whole image at the default quality (`-Q 9`); a lower -Q
 // capped it, and that cap is gone with the mode.  After each trial the packer
 // is rewound -- `out_cursor`, `packer_word`, `packer_acc`, `packer_free_bits`
 // and `hist_scratch` all reset -- which is why the same five lines recur
 // between candidates.
-//
+
 // `choose_plane_coding` is the other half: this one picks flags per plane,
 // that one picks the plane pairing they apply to.
 uint32_t __search_filter(BmfImage *img, int8_t mode)
@@ -16648,7 +16648,7 @@ LABEL_172:
         }
         while ( plane < ::plane_count );
       }
-      __transform_planes((BmfImage *)(uint16_t *)__frame.tile_img, (int32_t)p1, 0);
+      __transform_planes((BmfImage *)__frame.tile_img, (int32_t)p1, 0);
       bits_e = 8 * (out_cursor - coded_buf);
       // never taken: -S
       deep2 = bits_e <= (int32_t)__frame.best_bits;
@@ -16717,7 +16717,7 @@ LABEL_172:
       }
       else
       {
-        __transform_planes((BmfImage *)(uint16_t *)__frame.tile_img, cand, 0);
+        __transform_planes((BmfImage *)__frame.tile_img, cand, 0);
         bits_a = (uint8_t *)(8 * (out_cursor - coded_buf));
         // never taken: -S
         deep2 = (int32_t)bits_a <= (int32_t)__frame.best_bits;
@@ -16760,7 +16760,7 @@ LABEL_172:
               }
               while ( pl_b < ::plane_count );
             }
-            __transform_planes((BmfImage *)(uint16_t *)__frame.tile_img, (int32_t)p0, 0);
+            __transform_planes((BmfImage *)__frame.tile_img, (int32_t)p0, 0);
             bits2 = 8 * (out_cursor - coded_buf);
             // never taken: -S
             deep2 = bits2 <= (int32_t)__frame.rows[0];
@@ -16836,7 +16836,7 @@ LABEL_63:
       }
       while ( pl_c < ::plane_count );
     }
-    __transform_planes((BmfImage *)(uint16_t *)__frame.tile_img, cand, 0);
+    __transform_planes((BmfImage *)__frame.tile_img, cand, 0);
     bits_b = (uint8_t *)(8 * (out_cursor - coded_buf));
     // never taken: -S
     __frame.rows[1] = bits_b;
@@ -16884,7 +16884,7 @@ LABEL_63:
         while ( pl_d < ::plane_count );
       }
       memcpy((uint8_t *)__frame.tile_src,__frame.rows[0],*((uint32_t *)__frame.tile_img + 3));
-      __transform_planes((BmfImage *)(uint16_t *)__frame.tile_img, cand, 0);
+      __transform_planes((BmfImage *)__frame.tile_img, cand, 0);
       bits_c = 8 * (out_cursor - coded_buf);
       // never taken: -S
       deep2 = bits_c <= (int32_t)__frame.best_bits;
@@ -16939,7 +16939,7 @@ BmfArc *__bmf_open_archive(BmfArc *out, char *path, int32_t read_only)
   // and `bmf d` reads every member back -- it prints "number: 1", "number: 2"
   // and decodes both.  Opening "w+b" did not tidy a harness annoyance, it
   // removed half of a feature the format carries a flag for.
-  //
+  
   // Not "wb" either: the pass below reads the stream back, and it is not only
   // walking the images already in the file -- it also sets up state the writer
   // goes on to use.
@@ -17372,15 +17372,15 @@ LABEL_77:
 
 // ---------------------------------------------------------------------------
 // The two things this program does.
-//
+
 // BMF's own driver, sub_4015C0, sniffed the first four bytes of its argument
 // to choose between six readers, derived the output name from the input's by
 // swapping the extension, and picked the writer from a switch.  The command
 // line is now
-//
+
 //     bmf c input.bmp output      compress a BMP into a BMF stream
 //     bmf d input output.bmp      expand a BMF stream back into a BMP
-//
+
 // which names both files and fixes both formats, so what is left is one
 // reader and one writer.  Everything the other five readers and the other two
 // writers reached went with them; so did the wildcard walk, the .ini, the
@@ -17448,7 +17448,7 @@ void __bmf_compress(
     }
   }
 
-  coded_len = __compress_image((uint8_t *)Arc, (BmfImage *)(uint16_t *)p_i, (void *)coded_block);
+  coded_len = __compress_image((uint8_t *)Arc, (BmfImage *)p_i, (void *)coded_block);
   if ( !coded_len )
     __exit_402E40(5, OutName);
   printf(
@@ -17481,7 +17481,7 @@ void __bmf_decompress(
       printf("\n");
       if ( !((BmfArc *)arc)->fp )
         __exit_402E40(3, InName);
-      __bmf_destroy_archive((BmfArc *)(FILE **)arc, 1);
+      __bmf_destroy_archive((BmfArc *)arc, 1);
       return;
     }
     ++Number;
