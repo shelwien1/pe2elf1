@@ -1755,7 +1755,10 @@ uint32_t __rc_decode_flat(uint32_t tot)
 int32_t __encode_context_bit(BitCtr *_this, BitCtr *a2, int32_t bit)
 {
   ;
-  int32_t c0, c1, cap, result, p0, p1, p_cap, par0, par_n;
+  uint32_t c1;
+  uint32_t p0;
+  uint32_t p1;
+  int32_t c0, cap, result, p_cap, par0, par_n;
   int32_t par_tot;
   uint32_t tot, p_tot, n1_old, p1_old;
   c0 = _this->n[0];
@@ -3218,7 +3221,8 @@ int32_t __alt_p1_context(AltP1Block *_this, AltP1Block *nb0, AltP1Block *nb1)
   P1Ctx *cur;
   P1Ctx *cursor4;
   bool pick, is_zero, is_neg;
-  int32_t west, northwest, act, nb0_a, nb0_b, act_q, s1, hi, lo, s3, s5, g6, h6, g7, h7,
+  uint32_t nb0_b;
+  int32_t west, northwest, act, nb0_a, act_q, s1, hi, lo, s3, s5, g6, h6, g7, h7,
           s8, result, step, act_all, s2, s4, s6, s7;
   uint32_t quiet, s0;
   // Byte values Hex-Rays gave a pointer type: none is dereferenced here,
@@ -3496,7 +3500,7 @@ int32_t __alt_p1_model(AltP1Block *_this)
   CounterNode *altn7;
   CounterNode *altn8;
   CounterNode *x8;
-  int32_t key;
+  uint32_t key;
   uint32_t code_f, ctx_up;
   code_f = *((uint8_t)(_this->cursor[0]->sym - (uint8_t)_this->pred) + _this->fold);
   sel1_top = _this->ctx_w[1].sel;
@@ -10326,7 +10330,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   // A cumulative count, a high count and a total: the three arguments the
   // range coder takes, and it takes them unsigned.
   int32_t arg_cum;
-  int32_t arg_tot;
+  uint32_t arg_tot;
   uint32_t arg_high;
   uint32_t done;
   uint32_t rec_word;

@@ -34,7 +34,7 @@ distinct unexplained locals            554       591             0
 goto / LABEL_n:                     112/79     81/55         49/34
   restart a loop / exit N blocks         —         —         16/29
   jump into a block / sideways           —         —           1/3
-conversion warnings (ratchet)         1455      1331          1124
+conversion warnings (ratchet)         1455      1331          1116
 ```
 
 **Not one Hex-Rays name is left in either file.** Checked by running the
@@ -446,7 +446,11 @@ now zero:
 | `uncopy.py` | new: a local that is only a copy of another is not a local (§12) |
 | `unhoist.py` | new: put back the load the scheduler moved (§12) |
 | `explicitcmp.py` | new: write out the conversion a comparison already performs (§15) |
+| `resign.py` | new: give a local the signedness of the values it holds (§16) |
+| `resign-drive.sh` | new: apply the retypes that measurably pay, and only those (§16) |
+| `build.sh` | stamp `warn.log` with the source checksum, so a stale log is refusable (§16) |
 | `unify_types.py` | write only when there is something to change (§15) |
+| `decast.py` | unchanged, and it earned its keep the moment 156 declarations moved |
 | `proven.sh` | new: which tools' answers depend on the file at all (§10) |
 | `outpath.py` | new: a generator's argument is the file to write, and must look like one |
 | `sweep.sh` | new: run every tool, and fail if the file moved (§10) |
@@ -956,12 +960,12 @@ at the operator. 62 sites, no semantic change, and the two claims it does
 *not* make are in its docstring — it does not decide whether a comparison is
 right, which is a question about whether the signed side can go negative.
 
-What is left is 1124, and `shape.py` now says what they are made of rather
+What is left is 1116, and `shape.py` now says what they are made of rather
 than only how many there are — the same defect the `goto` row had:
 
 ```
-conversion warnings                1124
-  signedness, same width            620
+conversion warnings                1116
+  signedness, same width            612
   narrowing 32 -> 16                305
   narrowing 32 -> 8                 167
   narrowing 64 -> 16                 18
@@ -981,11 +985,17 @@ bits: `freq_tbl->w[0] = ...` where `w` is `uint16_t[8]` because the record is
 sixteen bytes. No declaration can fix those; only a cast, and §15's argument
 applies.
 
-The 620 same-width ones are where the destination is not a local the rule can
-reach: a struct member, a call argument, or a local whose flip has been
-*measured* and does not pay. Six candidates are left and not one of them
-reduces the count on its own — which is a measurement and not an opinion, and
-the difference is `tools/resign-drive.sh`.
+The 612 same-width ones are where the destination is not a local the rule can
+reach, or where it can and the flip has been *measured* and does not pay.
+Twenty-three candidates are left and not one of them reduces the count on its
+own — which is a measurement and not an opinion, and the difference is
+`tools/resign-drive.sh`.
+
+Reaching that took the rule looking in both directions, at every width, and
+past an ordering comparison whose other side is already cast. What is left
+under it is the shape it cannot see through: a local that converts on the way
+in *and* on the way out, where the flip moves which end warns rather than
+removing either.
 
 Retyping struct members was tried and abandoned, which is worth recording so
 the next round does not try it again: the member clusters are mixed-direction.
@@ -1001,7 +1011,7 @@ knowing the conversion rules. A cast on an assignment adds nothing — `x = y`
 with the two declared types visible already says the value is being narrowed,
 and writing `(uint16_t)` in front of it moves no information anywhere. It would
 move the number, which is the entire objection: §10 is about measures you can
-satisfy without doing the work, and putting 1124 casts in this file to make a
+satisfy without doing the work, and putting 1116 casts in this file to make a
 scoreboard read zero is the purest example of one this project could produce.
 
 The number goes down when the *types* are right, and §16 is 64 of them.

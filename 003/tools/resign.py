@@ -59,7 +59,7 @@ import unreload                                                   # noqa: E402
 # and reading both the same way had every sign conversion backwards, which
 # looked like a local being assigned from both signednesses at once.  204 of
 # the 319 candidates were rejected as "mixed direction" for that reason alone.
-WARN = re.compile(r"^subs1\.hpp:(\d+):\d+: warning: conversion "
+WARN = re.compile(r"^subs1\.hpp:(\d+):(\d+): warning: conversion "
                   r"(from|to) '([^']+)'(?: \{aka '[^']*'\})? (?:to|from) '([^']+)'")
 STORE = re.compile(r'^\s*([A-Za-z_]\w*)\s*=(?!=)')
 # Every width, not just the 32-bit pair.  Hex-Rays picks a signedness per
@@ -119,11 +119,23 @@ def candidates(lines, log='warn.log'):
         nm = fn.get(ln - 1)
         if nm is None:
             continue
-        src, dst = ((m.group(4), m.group(3)) if m.group(2) == 'to'
-                    else (m.group(3), m.group(4)))
-        d = STORE.match(lines[ln - 1].split('//')[0])
+        src, dst = ((m.group(5), m.group(4)) if m.group(3) == 'to'
+                    else (m.group(4), m.group(5)))
+        code = lines[ln - 1].split('//')[0]
+        d = STORE.match(code)
         if d:
             seen[(nm, d.group(1))].append((src, dst))
+            continue
+        # The other direction: a local being *read* into something of the
+        # opposite signedness -- an argument to `rc.encode`, whose counts are
+        # unsigned, passed a local Hex-Rays declared signed.  The warning's
+        # column is the expression being converted, so a bare identifier there
+        # is the local to flip, and the flip goes toward the destination.
+        col = int(m.group(2)) - 1
+        w = re.match(r'[A-Za-z_]\w*', code[col:])
+        back = re.search(r'[A-Za-z_]\w*$', code[:col])
+        if w and not back and code[col + w.end():col + w.end() + 1] in (',', ')'):
+            seen[(nm, w.group(0))].append((src, dst))
 
     out = []
     for (nm, name), convs in sorted(seen.items()):
@@ -141,8 +153,15 @@ def candidates(lines, log='warn.log'):
         # declaration disagreeing with its own right-hand sides.
         same = [(src, dst) for src, dst in convs
                 if {src, dst} == {cur[0], want}]
-        if not same or any(dst != cur[0] for _s, dst in same):
+        # Into this local, or out of it -- but not both.  A local that is
+        # converted on the way in *and* on the way out is one the flip cannot
+        # help: it would only move which end warns.
+        if not same or len({dst for _s, dst in same}) != 1:
             continue
+        if same[0][1] != cur[0]:
+            want = same[0][1]
+            if FLIP.get(cur[0]) != want:
+                continue
         if re.search(r'\b%s\b' % re.escape(name), sig):
             continue
         body = '\n'.join(code)
