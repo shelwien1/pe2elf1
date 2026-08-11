@@ -4135,11 +4135,11 @@ int32_t *__alt_p1_alloc(AltP1Block *_this, int32_t i, int32_t a3, int32_t n4) { 
 uint8_t *__rc_begin_encode()
 {
   ;
-  uint8_t *__rc_begin_encode_n256, *__rc_begin_encode_n256_1;
-  int32_t v2, v3, v9, v10, v13;
+  uint8_t *tbl, *row;
+  int32_t at4, at5, k;
   int32_t bits;          // the same slot as the buffer pointer below, in a
   uint8_t *Buffer;       // register MSVC reused; two roles, two names
-  uint32_t i, v4, v6;   // offsets into model_geometry, not pointers
+  uint32_t i, at6, at7;   // offsets into model_geometry, not pointers
   *packer_word = ::packer_acc;
   Buffer = out_cursor;
   // Back the output cursor up over whatever whole bytes the packer has not
@@ -4187,66 +4187,66 @@ uint8_t *__rc_begin_encode()
     level_geom[3].tbl_base = 1;
     memset(&model_geometry[4], 3, 4);
     level_geom[4].half = 4;
-    v2 = 2 * level_geom[3].half + 4;
+    at4 = 2 * level_geom[3].half + 4;
     level_geom[4].first = 2 * level_geom[3].half + 4;
     level_geom[4].tbl_base = 2 * level_geom[3].half;
-    memset(&model_geometry[v2], 4, 8);
+    memset(&model_geometry[at4], 4, 8);
     level_geom[5].half = 8;
-    v3 = v2 + 2 * level_geom[4].half;
-    level_geom[5].first = v3;
-    level_geom[5].tbl_base = v3 - 5;
-    memset(&model_geometry[v3], 0x05, 16);
+    at5 = at4 + 2 * level_geom[4].half;
+    level_geom[5].first = at5;
+    level_geom[5].tbl_base = at5 - 5;
+    memset(&model_geometry[at5], 0x05, 16);
     level_geom[6].half = 16;
-    v4 = v3 + 2 * level_geom[5].half;
-    level_geom[6].first = (uint8_t)v4;
-    level_geom[6].tbl_base = (uint8_t)v4 - 6;
-    memset(&model_geometry[v4], 0x06, 32);
+    at6 = at5 + 2 * level_geom[5].half;
+    level_geom[6].first = (uint8_t)at6;
+    level_geom[6].tbl_base = (uint8_t)at6 - 6;
+    memset(&model_geometry[at6], 0x06, 32);
     level_geom[7].half = 32;
-    v6 = v4 + 2 * level_geom[6].half;
-    level_geom[7].first = (uint8_t)v6;
-    level_geom[7].tbl_base = (uint8_t)v6 - 7;
+    at7 = at6 + 2 * level_geom[6].half;
+    level_geom[7].first = (uint8_t)at7;
+    level_geom[7].tbl_base = (uint8_t)at7 - 7;
     // 64 bytes of 7, after 16 of 5 and 32 of 6 -- one level per line.  MSVC
     // inlined this third one because the length crossed its threshold, which
     // is why it arrived as a scalar head, three aligned stores and a tail.
-    memset(&model_geometry[v6], 0x07, 64);
-    __rc_begin_encode_n256 = (uint8_t *)bmf_new(0x7F000u);
-    if ( __rc_begin_encode_n256 )
+    memset(&model_geometry[at7], 0x07, 64);
+    // 0x400 rows of 508 bytes is 0x7F000 exactly: one seeded counter table per
+    // context, each a header of ten `uint16_t` and then 0x7A pairs of (60, 36).
+    // The header's first two words -- 635 and `24 * alt_freq_limit` -- are the
+    // total and the escape weight; the eight after them are a fixed
+    // distribution, 205 124 147 83 48 16 8 4, halving away from the front.
+    tbl = (uint8_t *)bmf_new(0x7F000u);
+    if ( tbl )
     {
-      v9 = 0;
-      v10 = 0;
-      __rc_begin_encode_n256_1 = __rc_begin_encode_n256;
+      k = 0;
+      row = tbl;
       do
       {
-        v13 = v9;
-        *((uint16_t *)__rc_begin_encode_n256_1 + 1) = 24 * alt_freq_limit;
-        *(uint16_t *)&__rc_begin_encode_n256[v10 + 4] = 205;
-        *(uint16_t *)&__rc_begin_encode_n256[v10 + 12] = 48;
-        *(uint16_t *)&__rc_begin_encode_n256[v10 + 6] = 124;
-        *(uint16_t *)&__rc_begin_encode_n256[v10 + 14] = 16;
-        *(uint16_t *)&__rc_begin_encode_n256[v10 + 8] = 147;
-        *(uint16_t *)&__rc_begin_encode_n256[v10 + 10] = 83;
-        *(uint16_t *)&__rc_begin_encode_n256[v10 + 16] = 8;
-        *(uint16_t *)&__rc_begin_encode_n256[v10 + 18] = 4;
-        *(uint16_t *)__rc_begin_encode_n256_1 = 635;
+        *((uint16_t *)row + 1) = 24 * alt_freq_limit;
+        *(uint16_t *)&row[4] = 205;
+        *(uint16_t *)&row[12] = 48;
+        *(uint16_t *)&row[6] = 124;
+        *(uint16_t *)&row[14] = 16;
+        *(uint16_t *)&row[8] = 147;
+        *(uint16_t *)&row[10] = 83;
+        *(uint16_t *)&row[16] = 8;
+        *(uint16_t *)&row[18] = 4;
+        *(uint16_t *)row = 635;
         for ( i = 0; i < 0x7A; ++i )
         {
-          *(uint16_t *)&__rc_begin_encode_n256_1[4 * i + 20] = 60;
-          *(uint16_t *)&__rc_begin_encode_n256_1[4 * i + 22] = 36;
+          *(uint16_t *)&row[4 * i + 20] = 60;
+          *(uint16_t *)&row[4 * i + 22] = 36;
         }
-        __rc_begin_encode_n256_1 += 508;
-        v10 += 508;
-        ++v9;
+        row += 508;
+        ++k;
       }
-      while ( (uint32_t)(v13 + 1) < 0x400 );
+      while ( (uint32_t)k < 0x400 );
     }
-    else
-    {
-      __rc_begin_encode_n256 = nullptr;
-    }
-    ::model_tables = (uint16_t *)__rc_begin_encode_n256;
+    // An `else { tbl = nullptr; }` stood here, assigning null to what was
+    // already null.
+    ::model_tables = (uint16_t *)tbl;
   }
   rc.enc_init();
-  return __rc_begin_encode_n256;
+  return tbl;
 }
 
 void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
@@ -4619,7 +4619,6 @@ int32_t *__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palett
   ;
   uint8_t *buf;
   int32_t *result;
-  int32_t *v15;
   int32_t bits, word2, row_pack, row_bytes, data_bytes, Size;
   uint32_t row16;
   LOWORD(row16) = img_w;
@@ -4703,9 +4702,8 @@ LABEL_20:
       buf = (uint8_t *)result + result[3] + 16;
     else
       buf = nullptr;
-    v15 = (int32_t *)(result);
     memset(buf,0,Size);
-    return v15;
+    return result;
   }
   return result;
 }
@@ -15660,7 +15658,7 @@ void __model_plane( BmfImage *p_i, uint8_t *a4, uint8_t *a5)
   }
 }
 
-void __model_planes(uint8_t *Blockb, uint8_t *Srca_3, int32_t a3, int8_t a4)
+void __model_planes(uint8_t *img, uint8_t *pixels, int32_t plane, int8_t a4)
 {
   // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
   // gives every member its own storage and med32 divides by zero while compressing.
@@ -15673,29 +15671,26 @@ void __model_planes(uint8_t *Blockb, uint8_t *Srca_3, int32_t a3, int8_t a4)
       // Four consecutive words that `model_plane` is handed as a `BmfImage *`:
       // this is the header, copied from the caller's a word at a time.
       BmfImage hdr;   // +20 .. +35
-      int32_t v52;
-      int32_t v53;
+      int32_t plane_x16;
+      int32_t plane_idx;
       uint8_t _pad0[32];
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 80, "frame layout moved");
   ;
   uint8_t *aligned;   // was int32_t: these hold addresses
-  uint8_t *Srca_1, *Srca_2;   // `uint8_t *` beside the `char` scalars above
-  uint8_t *__model_planes_buf;
+  uint8_t *scratch;
   int32_t ofs;
-  __frame.v53 = a3;
-  Srca_1 = Srca_3;
-  __frame.v52 = 16 * a3;
-  plane_predictor = plane_desc[a3 + 1].flags & 3;
-  plane_alt_model = (uint8_t)(plane_desc[a3 + 1].flags & 4) >> 2;
-  Srca_2 = Srca_3;
-  __colour_transform(Blockb, Srca_3, a3, a4);
-  __model_planes_buf = ::hist_scratch;
+  __frame.plane_idx = plane;
+  __frame.plane_x16 = 16 * plane;
+  plane_predictor = plane_desc[plane + 1].flags & 3;
+  plane_alt_model = (uint8_t)(plane_desc[plane + 1].flags & 4) >> 2;
+  __colour_transform(img, pixels, plane, a4);
+  scratch = ::hist_scratch;
   aligned = (uint8_t *)((uintptr_t)(::hist_scratch + 15) & 0xFFFFFFF0);
   // Fifteen bytes at the front and sixteen at +1008.  MSVC split the first
   // into 8 + 4 + 2 + 1 and the second into two eight-byte stores.
-  memset(__model_planes_buf, 0, 15);
-  bmf_zero16(&__model_planes_buf[1008]);
+  memset(scratch, 0, 15);
+  bmf_zero16(&scratch[1008]);
   ofs = 1008;
   do
   {
@@ -15713,19 +15708,20 @@ void __model_planes(uint8_t *Blockb, uint8_t *Srca_3, int32_t a3, int8_t a4)
   {
     // The caller's header, with the depth byte replaced: 72 is 8 bits plus the
     // 0x40 flag `alloc_image` sets.
-    __frame.hdr = *(BmfImage *)Blockb;
+    __frame.hdr = *(BmfImage *)img;
     __frame.hdr.depth = 72;
     // never taken: -E is 0
     if ( plane_predictor == 1 && !plane_alt_model )
-      __predict_med(Srca_1, ((const BmfImage *)Blockb)->width, ((const BmfImage *)Blockb)->height);
-    __model_plane(&__frame.hdr, Srca_1, Srca_2);
-    // `if ( Srca_2 != Srca_1 )` stood here, and behind it an interleave and a
+      __predict_med(pixels, ((const BmfImage *)img)->width, ((const BmfImage *)img)->height);
+    __model_plane(&__frame.hdr, pixels, pixels);
+    // `if ( pixels != pixels )` stood here, and behind it an interleave and a
     // free.  It was the test for "the -E block above allocated a second
-    // buffer"; with that block gone, both names hold the caller's one buffer
-    // and the test is false on every path.  Deleting a block does not delete
+    // buffer"; with that block gone, both names held the caller's one buffer
+    // and the test was false on every path.  Deleting a block does not delete
     // the test that asked whether it ran, and this one outlived it by a
     // fortnight -- as the last thing in the file gcov could report as never
-    // executed.  tools/deadcheck.py looks for the shape now.
+    // executed.  tools/deadcheck.py looks for the shape now.  The two names
+    // are gone as well, which is what made the argument above checkable.
   }
 }
 
