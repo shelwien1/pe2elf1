@@ -22,16 +22,16 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17126
+subs1.hpp lines                      17787     17616         17136
 bmf.cpp lines                            —         —           365
-raw-offset sites                        22        12             26
+raw-offset sites                        22        12             18
   off `_this`                            —         1             0
   in functions                           —         1             0
 byte offsets on a typed base           121         0             0
-pointer casts                         2137      1545          1250
-  to a scalar                            —         —           522
-  to a record                            —         —           370
-  to a scalar, of an address             —         —           353
+pointer casts                         2137      1545          1228
+  to a scalar                            —         —           506
+  to a record                            —         —           365
+  to a scalar, of an address             —         —           352
   to a record, of an address             —         —             5
 fNN members / named ones             93/121     5/162         0/172
 distinct unexplained locals            554       591             0
@@ -2407,3 +2407,121 @@ pairs — `*(uint8_t *)(x2[2] + x2[0])`. That is byte arithmetic in the source,
 not a member access spelled long. The other eight are listed by
 `shape.rawoffsets` with their function and base, and are read one at a time in
 §31.
+
+## 31. The other eight, one at a time
+
+`shape.rawoffsets` returns `(line, function, base)`, so "which of these are
+really byte arithmetic" is a question that can be asked of the eight rather
+than assumed of all of them. Read one at a time, six were a member or a
+subscript and two were a whole phase of a reused slot.
+
+### The run scan's counter, five times over
+
+`decode_pixel`:
+
+```c
+run0 = __frame.sym5->run_ctr[16 * ((seen == 0) + (bucket == __frame.sym0)) + bucket].n[0];
+__frame.sym2 = (int32_t)&__frame.sym5->run_ctr[/* the same index */];
+bin_tot = run0 + __frame.sym5->run_ctr[/* the same index */].n[1];
+__frame.sym1 = rc.decode_bit(run0, __frame.sym5->run_ctr[/* … */].n[1]);
+if ( __frame.sym5->run_ctr[/* … */].limit < (uint32_t)bin_tot )
+  __rescale_counter_pair((BitCtr *)__frame.sym2);
+*(uint16_t *)(__frame.sym2 + 2 * __frame.sym1) += 8;
+```
+
+One counter, addressed five times: four times by recomputing the index and
+once through a slot holding its address as an `int32_t`, which is where the
+`2 * __frame.sym1` came from. A `BitCtr *ctr` collapses all five, and the
+increment becomes `ctr->n[__frame.sym1] += 8` — which is what a count per bit
+value is.
+
+`code_pixel` has the mirror, and had reached the same counter three ways in
+one loop: a `uint16_t *runp` for the two counts, the record for the `limit`,
+and `__frame.sym2` again for the rescale. The same `ctr` removes `runp`
+outright.
+
+### A slot that held a record pointer for two hundred lines
+
+`code_pixel`'s `__frame.sym2` is a `uint16_t *` written four times and read
+once as `(PixRec *)__frame.sym2`, into a local the file already names `cur2`.
+One of the four writes was `(uint16_t *)(r3 + 1)`, which is a `PixRec` step
+cast down to words and back. Assigning `cur2` at all four writes deletes the
+read, the four casts and the phase.
+
+### `kidp[side]`
+
+`reduce_alphabet` walks a binary tree, stops on the child link it wants, and
+then parks the link's address in `__frame.kids_i` to write through:
+
+```c
+kidp = (uint16_t *)&__frame.kids[node];
+…
+__frame.kids_i = (int32_t)kidp;
+…
+*(uint16_t *)(__frame.kids_i + 2 * side) = node;   ->   kidp[side] = node;
+```
+
+`kidp` and `side` are both still live and neither changes in between. The
+slot's next reader is its next writer, so the store went with the read.
+
+### `unfold` and `counters`
+
+`alt_model_p1_d8_decode` reached two members of `AltP1Block` by counting from
+the block's base, in one expression:
+
+```c
+val = (uint8_t)((uint8_t)blk->pred
+        + *((uint8_t *)blk
+            + (uint8_t)__alt_p1_decode_symbol(
+                  (uint16_t *)&((int32_t *)blk)[4 * blk->ctx[0] + 950], 0, blk->ctx[1])
+            + 1496));
+```
+
+`4 * ctx[0] + 950` counted in dwords is byte `16 * ctx[0] + 3800`, and
+`counters` is at +3800 with a sixteen-byte record; `+ 1496` is `unfold`. Both
+have had names since the layout was recovered, and the sibling decoder two
+hundred lines down already spells the second one `blk->unfold[code0]`.
+
+### The last dword of the block
+
+`expand_image` allocates `pad_len + 8` and zeroes `(uint8_t *)blk + pad_len + 4`.
+`pad_len` is `& 0xFFFFFFFC`, so the division is exact and the site is
+`blk[pad_len / 4 + 1]` — the dword after the payload, which is what lets the
+decoder read a whole dword past the last coded byte.
+
+### `base` was the image, not its pixels
+
+`cost_candidate` had three integer address locals — `cand_base`, `at`, `at1` —
+and every use of them added 16:
+
+```c
+base      = (uint8_t *)__frame.img_f;
+cand_base = (int32_t)&base[cand2];
+p         = &base[cand2 + 16 + row_b2 + __frame.nplanes];
+at        = cand_base - (-img_w - plane_count);
+r0        = (uint8_t *)(at + 16);
+at1       = d1 + at + 16;
+__frame.cursor = (uint8_t *)(__frame.d2_f + at + 16);
+```
+
+Sixteen is `offsetof(BmfImage, pixels)`, added at every use because `base` was
+the header. Pointing `base` at `img_f->pixels` removes the constant from all
+five sites and the three integers with it:
+
+```c
+base = __frame.img_f->pixels;
+p    = &base[cand2 + row_b2 + __frame.nplanes];
+r0   = &base[cand2 + img_w + plane_count];
+r1   = r0 + d1;
+r2   = r0 + __frame.d2_f;
+```
+
+`__frame.img_end` was the same mistake one level up — `&r0_f[data_size + 16]`
+off a slot that held the image only so that line could read it. Off `img_f` it
+is `&__frame.img_f->pixels[__frame.img_f->data_size]`, and the slot's first
+write is dead.
+
+**26 → 18.** What is left is `choose_plane_coding` alone, where the original
+keeps pointers in XMM spill slots and adds them: `*(uint8_t *)(x2[2] + x2[0])`
+is a base in one lane and an offset in another. Those are the arithmetic the
+compiler wrote, not a member access spelled long.

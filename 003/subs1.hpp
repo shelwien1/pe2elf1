@@ -5907,7 +5907,7 @@ void ** __alt_model_p1_d8_decode(int8_t unread_flag, uint8_t *out, int32_t i, in
   AltP1Block *blk, *raw;
   int64_t err;
   uint8_t *out_at;
-  int32_t y, val, x;
+  int32_t y, val, x, code;
   P1Ctx *cursor2, *cursor4;
   raw = (AltP1Block *)((int32_t *)bmf_new(0x99D4D8u));
   if ( raw )
@@ -5985,9 +5985,12 @@ void ** __alt_model_p1_d8_decode(int8_t unread_flag, uint8_t *out, int32_t i, in
         do
         {
           ++x;
-          ((AltP1Block *)blk)->ctx_of((AltP1Block *)nullptr, (AltP1Block *)0);
-          val = (uint8_t)((uint8_t)blk->pred
-                                + *((uint8_t *)blk + (uint8_t)__alt_p1_decode_symbol((uint16_t *)&((int32_t *)blk)[4 * blk->ctx[0] + 950], 0, blk->ctx[1]) + 1496));
+          blk->ctx_of((AltP1Block *)nullptr, (AltP1Block *)0);
+          // `4 * ctx[0] + 950` counted in dwords is byte `16 * ctx[0] + 3800`,
+          // and `counters` is at +3800 with a sixteen-byte record; `+ 1496` off
+          // the block's base is `unfold`.  Both are members with names.
+          code = __alt_p1_decode_symbol((uint16_t *)&blk->counters[blk->ctx[0]], 0, blk->ctx[1]);
+          val = (uint8_t)((uint8_t)blk->pred + blk->unfold[(uint8_t)code]);
           *out_at = val;
           err = val - blk->pred;
           // The record's two writers, one line apart: the reconstructed
@@ -7482,7 +7485,6 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
                 goto LABEL_12;
               }
             }
-            __frame.kids_i = (int32_t)kidp;
             p = __frame.slot2;
             __frame.slot0 = side;
             (__frame.slot[1]) = val;
@@ -7491,7 +7493,7 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
             mode_symbol[1] = side;
             node = (uint16_t)alphabet;
             alpha = alphabet + 1;
-            *(uint16_t *)(__frame.kids_i + 2 * side) = node;
+            kidp[side] = node;   // the child link the walk above stopped on
             written = __frame.slot3;
             blk2->alphabet = alpha;
             if ( alpha > 0x2000 )
@@ -7755,7 +7757,6 @@ int32_t __cost_candidate(uint8_t *img, int32_t cand, uint8_t *desc, int8_t unrea
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 26720, "frame layout moved");
   ;
-  int32_t cand_base;   // was `__frame.v91`, phase one: `&base[cand2]` as a number
   int32_t cost;        // was `__frame.v91`, phase three: an `estimate_cost`
   int32_t off;      // a byte offset into `descp`, which is the address
   uint8_t *descp;
@@ -7763,14 +7764,13 @@ int32_t __cost_candidate(uint8_t *img, int32_t cand, uint8_t *desc, int8_t unrea
   uint32_t row_b2, swap;
   double syz, syy, sxz, sxy, sxx, inv, w1f, w2f;
   int32_t row_b, d1, d2, dx, o1, dy, o2, diag, west, dz, bin, w1,
-          w2, img_w, nstep, at, at1, e0, e1, e2, left, bin2, pick, c0, rec,
+          w2, img_w, nstep, e0, e1, e2, left, bin2, pick, c0, rec,
           c2, lo1, s1, s2, c2b, tmp, w2s, w1s;
   uint32_t lo2, lo3;
   uint8_t *base, *p, *q, *r0, *r2, *r1;
   int32_t cand2, idx1, idx2;   // candidate indices, not addresses
   __frame.off_up = (int32_t)(uintptr_t)desc;
   __frame.cursor = (uint8_t *)cand;   // the slot is reused as an address below
-  __frame.r0_f = img;
   __frame.desc_f = desc;
   __frame.nplanes = plane_count;
   row_b = *(const uint16_t *)&((const BmfImage *)img)->stride;   // the low half of the stride
@@ -7778,13 +7778,13 @@ int32_t __cost_candidate(uint8_t *img, int32_t cand, uint8_t *desc, int8_t unrea
   __frame.img_f = (BmfImage *)img;
   __frame.d1_f = (int32_t)(__frame.cursor + 1) % 3 - (uint32_t)__frame.cursor;
   __frame.d2_f = (int32_t)(__frame.cursor + 2) % 3 - (uint32_t)__frame.cursor;
-  __frame.img_end = (uint32_t)&__frame.r0_f[((BmfImage *)__frame.r0_f)->data_size + 16];
+  __frame.img_end = (uint32_t)&__frame.img_f->pixels[__frame.img_f->data_size];
   d1 = __frame.d1_f;
   *(uint32_t *)__frame.buf_1 = row_b;
   memset(__frame.buf,0,24576);
   row_b2 = *(uint32_t *)__frame.buf_1;
   cand2 = __frame.cand_i;
-  base = (uint8_t *)__frame.img_f;
+  base = __frame.img_f->pixels;
   syz = 0;
   syy = 0.0;
   sxz = 0.0;
@@ -7793,8 +7793,7 @@ int32_t __cost_candidate(uint8_t *img, int32_t cand, uint8_t *desc, int8_t unrea
   __frame.rec_off = 16 * __frame.cand_i;
   __frame.desc_f[16 * __frame.cand_i] = 2;
   __frame.desc_f[33] = (uint8_t)cand2;
-  cand_base = (int32_t)&base[cand2];
-  p = &base[cand2 + 16 + row_b2 + __frame.nplanes];
+  p = &base[cand2 + row_b2 + __frame.nplanes];
   if ( (uint32_t)p < __frame.img_end )
   {
     __frame.d1_f = d1;
@@ -7858,15 +7857,15 @@ int32_t __cost_candidate(uint8_t *img, int32_t cand, uint8_t *desc, int8_t unrea
   __frame.rows = ((__frame.img_f->height - 1) * __frame.img_f->width) - 1;
   __frame.best = -img_w;
   nstep = -plane_count;
-  at = cand_base - (-img_w - plane_count);
   __frame.off_up = -img_w - plane_count;
-  __frame.r0_f = (uint8_t *)(at + 16);
-  at1 = d1 + at + 16;
-  r0 = (uint8_t *)(at + 16);
-  __frame.r1_f = (uint8_t *)at1;
-  __frame.cursor = (uint8_t *)(__frame.d2_f + at + 16);
-  r2 = __frame.cursor;
-  r1 = (uint8_t *)at1;
+  // The candidate's first pixel, one row and one plane in -- the original
+  // holds it as an integer address and adds sixteen to reach the pixels.
+  r0 = &base[cand2 + img_w + plane_count];
+  __frame.r0_f = r0;
+  r1 = r0 + d1;
+  __frame.r1_f = r1;
+  r2 = r0 + __frame.d2_f;
+  __frame.cursor = r2;
   do
   {
     e0 = r0[__frame.off_up];
@@ -9463,6 +9462,7 @@ inline int32_t ModelBlock::decode_pixel(int32_t x)
   PixRec *up1;     // `row_cur[6]`, the row above
   PixRec *up3;      // `row_cur[7]`, two rows above
   PixRec *cur6c;   // `row_cur[6]`, the row above
+  BitCtr *ctr;     // the run scan's counter for one bucket
   cur6 = (PixRec *)this->row_cur[6];
   up_sym = cur6->sym;
   row = this->row_cur[5];
@@ -9679,16 +9679,19 @@ LABEL_42:
         {
           if ( (mask | seen) < __frame.sym3 )
           {
-            run0 = __frame.sym5->run_ctr[16 * ((seen == 0) + (bucket == __frame.sym0)) + bucket].n[0];
-            __frame.sym2 = (int32_t)&__frame.sym5->run_ctr[16 * ((seen == 0) + (bucket == __frame.sym0)) + bucket];
-            bin_tot = run0 + __frame.sym5->run_ctr[16 * ((seen == 0) + (bucket == __frame.sym0)) + bucket].n[1];
-            __frame.sym1 = rc.decode_bit(
-                     run0,
-                     __frame.sym5->run_ctr[16 * ((seen == 0) + (bucket == __frame.sym0)) + bucket].n[1]);
-            if ( __frame.sym5->run_ctr[16 * ((seen == 0) + (bucket == __frame.sym0)) + bucket].limit < (uint32_t)bin_tot )
-              __rescale_counter_pair((BitCtr *)__frame.sym2);
+            // The same counter five times over -- the original recomputes the
+            // index for each read and parks the address in a slot to pass to
+            // the rescale.  `run_ctr[16 * k + bucket]` with `k` in 0..2 is the
+            // three-way split ALGORITHM.md 8.3 describes: first bucket of the
+            // scan, the bucket the run started in, or neither.
+            ctr = &__frame.sym5->run_ctr[16 * ((seen == 0) + (bucket == __frame.sym0)) + bucket];
+            run0 = ctr->n[0];
+            bin_tot = run0 + ctr->n[1];
+            __frame.sym1 = rc.decode_bit(run0, ctr->n[1]);
+            if ( ctr->limit < (uint32_t)bin_tot )
+              __rescale_counter_pair(ctr);
             s1b = __frame.sym1;
-            *(uint16_t *)(__frame.sym2 + 2 * __frame.sym1) += 8;
+            ctr->n[__frame.sym1] += 8;
             if ( s1b )
               idx_s |= mask;
             seen |= idx_s & mask;
@@ -10255,8 +10258,9 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
   PixRec *row;   // `row_cur[5]`, the current row
   PixRec *cur6;   // `row_cur[6]`, the row above
   PixRec *cur5, *cur5p1, *cur5p1b, *r6, *r7;   // row cursors out of ModelBlock
-  uint16_t *runp, *wq, *sym_cache, *cache0p, w6;
+  uint16_t *wq, *sym_cache, *cache0p, w6;
   PixRec *cur2;   // `row_cur[5]`, one record past the pixel just written
+  BitCtr *ctr;    // the run scan's counter for one bucket
   uint32_t bin_tot, half, k, h2, w1a, w0, h3, h4, w1, g2, g2h, g3,
           g4;
   PixRec *up3;      // `row_cur[7]`, two rows above
@@ -10356,7 +10360,7 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
   *(int32_t *)&this->bucket_idx = ctx_bucket;
   up_match0 = cur6->match[0];
   match1 = cur6->match[1];
-  __frame.sym2 = (uint16_t *)cur5;
+  cur2 = cur5;
   __frame.sym7 = (this);
   __frame.sym0 = up_match0;
   cur9v = (int32_t)this->row_cur[9];
@@ -10489,7 +10493,7 @@ LABEL_42:
       r3 = this->row_cur[5];
       rec_word = *(uint32_t *)r3;
       __frame.sym1 = *(uint32_t *)&r3->match[2];
-      __frame.sym2 = (uint16_t *)(r3 + 1);
+      cur2 = r3 + 1;
       this->row_cur[5] = r3 + 1;
       if ( runlen - run_hit != 1 )
       {
@@ -10520,7 +10524,7 @@ LABEL_42:
           while ( k < half );
           run_left = __frame.sym0;
           amap = __frame.sym3;
-          __frame.sym2 = (uint16_t *)cur5p1;
+          cur2 = cur5p1;
           runlen = runlen_s;
           done = 2 * k + 1;
         }
@@ -10535,7 +10539,7 @@ LABEL_42:
           *(uint32_t *)&this->row_cur[5]->match[2] = __frame.sym1;
           cur5p1b = this->row_cur[5] + 1;
           this->row_cur[5] = cur5p1b;
-          __frame.sym2 = (uint16_t *)cur5p1b;
+          cur2 = cur5p1b;
         }
       }
       r4 = (PixRec *)this->row_cur[6];
@@ -10547,7 +10551,6 @@ LABEL_42:
       runlen_s = runlen;
       up3 = (PixRec *)this->row_cur[7];
       this->grad[0] = (r4[3].match[0] + m1 + m0 + m3 + m2 - 5);
-      cur2 = (PixRec *)__frame.sym2;
       // Eight records of the row two above, `match[0]` in each: the
       // byte offsets 2, 10, 18, 26, 34 and -6, -14, -22 were records
       // 0..4 and -1..-3.  Three of the eight loads are `movsx` in the
@@ -10595,16 +10598,18 @@ LABEL_42:
         if ( s4 > (bit5 | first) )
         {
           __frame.sym3 = first;
-          runp = (uint16_t *)&__frame.sym7->run_ctr[16 * ((first == 0) + (s5 == __frame.sym0)) + s5];
-          __frame.sym2 = runp;
+          // The decoder's mirror, `decode_pixel`'s run scan: one counter, read
+          // as a word pointer for the two counts and as a record for the
+          // limit, and parked in a slot a third time for the rescale.
+          ctr = &__frame.sym7->run_ctr[16 * ((first == 0) + (s5 == __frame.sym0)) + s5];
           __frame.sym1 = runlen_s & bit5;
-          bin_tot = *runp + runp[1];
-          rc.encode_bit(*runp, runp[1], (runlen_s & bit5) != 0);
-          if ( __frame.sym7->run_ctr[16 * ((first == 0) + (s5 == __frame.sym0)) + s5].limit < (uint32_t)bin_tot )
-            __rescale_counter_pair((BitCtr *)__frame.sym2);
+          bin_tot = ctr->n[0] + ctr->n[1];
+          rc.encode_bit(ctr->n[0], ctr->n[1], (runlen_s & bit5) != 0);
+          if ( ctr->limit < (uint32_t)bin_tot )
+            __rescale_counter_pair(ctr);
           s1b = __frame.sym1;
           __frame.sym4 = bit5;
-          __frame.sym2[__frame.sym1 != 0] += 8;
+          ctr->n[__frame.sym1 != 0] += 8;
           first |= s1b;
           bit5 = __frame.sym4;
         }
@@ -15277,7 +15282,12 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
       blk = (uint32_t *)bmf_new(pad_len + 8);
       *blk = hdr_word;
       blk[1] = pad_len;
-      *(uint32_t *)((uint8_t *)blk + pad_len + 4) = 0;
+      // The last dword of the block: `pad_len` rounds the coded length up to a
+      // multiple of four and the allocation adds eight, so `blk[0]` and
+      // `blk[1]` are the header and the rest is `pad_len` bytes of payload
+      // whose tail is whatever the round-up left.  Zeroing it lets the decoder
+      // read a whole dword past the last coded byte.
+      blk[pad_len / 4 + 1] = 0;
       *p_coded_buf = blk;
       fread(blk + 2, (*(uint32_t *)&__frame.hdr[4]), 1u, ((BmfArc *)arc)->fp);
     }
