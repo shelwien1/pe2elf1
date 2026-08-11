@@ -1101,6 +1101,35 @@ there is the local and the flip goes toward the destination's type. What the
 rule will not do is flip a local that converts on the way in *and* on the way
 out: that one cannot be helped, because the flip only moves which end warns.
 
+### Locals that have to agree
+
+What single-local retyping cannot reach is a local converted on the way in
+*and* on the way out. Whichever way it is declared, one end converts — so
+flipping it alone always trades, and the driver measures that and refuses.
+
+Those locals are not independent of each other. `cum = ...; cum_hi = cum +
+*slot; rc.encode(cum, cum_hi, tot)` is three names that have to agree, and
+Hex-Rays declared them from three registers. Flipping any one trades; flipping
+all three removes every conversion between them.
+
+`tools/resign_group.py` builds the graph whose nodes are locals and whose edges
+are the signedness conversions between two locals of one body, takes its
+connected components, and proposes making each component agree — 167 locals in
+59 groups, in a file where every one of them had already been measured not to
+pay alone. The target is the component's majority signedness; a tie goes to
+unsigned, which is what this codec's counts and cumulative frequencies mostly
+are. Every member has to pass the same `safe()` test the single-local rule
+uses, and one member failing disqualifies the group: half a group agreeing is
+worse than none of it.
+
+**Signedness only, never width.** A component whose members are not all the
+same width has no single signedness to agree on, and the majority vote proposes
+a *truncation* instead. `uint8_t <- half (int32_t)` in `alt_init_tables` got as
+far as a green gate before that check existed, and it is worth being precise
+about what that means: fifteen byte-identical streams did not approve a
+truncation, they failed to exercise it. A gate is evidence about the inputs it
+runs, and the rule has to be right about the ones it does not.
+
 ### Why `resign.py` proposes rather than counts
 
 It joins `shape.py`, `addrmap.py` and `unify_types.py` in the sweep's
