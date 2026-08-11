@@ -4820,8 +4820,12 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
   // with x the size and img_addr the descriptor is `img_addr + data_size`, which is where
   // alloc_image put the palette.
   BmfImage *const img = (BmfImage *)img_addr;
-  uint32_t Buffera;
-  // These shared `Buffera` with the name that still binds it: one
+  // `img->depth`: the low six bits are the bit count, bit 6 says greyscale
+  // and bit 7 says the palette is written out.  Hex-Rays named it for the
+  // `fwrite` parameter it was eventually passed as and gave it a register's
+  // width; every one of its three reads is through an `(int8_t *)`.
+  int8_t depth_flags;
+  // These shared `depth_flags` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
@@ -4881,7 +4885,7 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
   bmp->biWidth = i;
   bmp->biHeight = rows;
   LOBYTE(rows) = img->depth;
-  (*((int8_t *)&Buffera)) = rows;
+  depth_flags = (int8_t)rows;
   bmp->biPlanes = 1;
   bits = rows & 0x3F;
   bmp->biBitCount = bits;
@@ -4894,7 +4898,7 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
   {
     ncolours = 1 << (bits & 31);
     ncol = 1 << (bits & 31);
-    if ( ((*((int8_t *)&Buffera)) & 0x40) != 0 )
+    if ( (depth_flags & 0x40) != 0 )
     {
       levels = 0x100u >> (bits & 31);
       if ( ncol > 0 )
@@ -4930,7 +4934,7 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
       data_ofs2 = (uint8_t *)(uintptr_t)img->data_size;
       pal_bytes = 4 * ncol;
     }
-    else if ( (*((int8_t *)&Buffera)) < 0 )
+    else if ( depth_flags < 0 )
     {
       data_ofs2 = (uint8_t *)(uintptr_t)img->data_size;
       if ( ncol <= 0 )

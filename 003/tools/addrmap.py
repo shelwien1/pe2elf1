@@ -52,11 +52,22 @@ def repo_path(path):
     `git log -S ... -- 003/subs1.hpp` finds nothing when it is run from inside
     003, and finding nothing looks exactly like a name with no recorded
     address.  Neither the root nor the path is assumed.
+
+    A path outside any repository is not an error: `sweep.sh` and `proven.sh`
+    both hand every tool a copy in a temp directory, and this one answered them
+    with a `CalledProcessError` instead of a map.  The names come from the file
+    it was given and the history comes from the tree it is running in, which is
+    what the join needs; so the root falls back to the working directory and
+    the path inside it to `subs1.hpp` in that tree.
     """
     full = os.path.abspath(path)
-    root = git(['rev-parse', '--show-toplevel'],
-               os.path.dirname(full)).strip()
-    return root, os.path.relpath(full, root)
+    try:
+        root = git(['rev-parse', '--show-toplevel'],
+                   os.path.dirname(full)).strip()
+        return root, os.path.relpath(full, root)
+    except (subprocess.CalledProcessError, OSError):
+        root = git(['rev-parse', '--show-toplevel'], os.getcwd()).strip()
+        return root, os.path.relpath(os.path.abspath('subs1.hpp'), root)
 
 
 PAIR = re.compile(r'\bsub_([0-9A-F]{6})\s*(?:->|=>|=|→)\s*'

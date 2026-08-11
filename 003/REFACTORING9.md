@@ -22,16 +22,16 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17076
+subs1.hpp lines                      17787     17616         17080
 bmf.cpp lines                            —         —           365
 raw-offset sites                        22        12             18
   off `_this`                            —         1             0
   in functions                           —         1             0
 byte offsets on a typed base           121         0             0
-pointer casts                         2137      1545          1227
+pointer casts                         2137      1545          1224
   to a scalar                            —         —           506
   to a record                            —         —           364
-  to a scalar, of an address             —         —           352
+  to a scalar, of an address             —         —           349
   to a record, of an address             —         —             5
 frames                                  —        17             9
   bytes they hold                        —         —        167780
@@ -46,15 +46,15 @@ fNN members / named ones             93/121     5/162         0/172
 distinct unexplained locals            554       591             0
   bodies still carrying one              —   8 of 102     0 of 104
   uses                                    —      6302             0
-locals named for a callee parameter      —         —             1
-  declarations / bodies                   —         —           1/1
+locals named for a callee parameter      —         —             0
+  declarations / bodies                   —         —           0/0
 names Hex-Rays chose and nobody changed  —         —             0
   conventional ones kept / bodies joined  —         —         56/74
 goto / LABEL_n:                     112/79     81/55         49/33
   restart a loop / exit N blocks         —         —         15/32
   sideways to a join / to neither        —         —           2/0
   jump into a block                      —         —             0
-conversion warnings                   1455      1331          1062
+conversion warnings                   1455      1331          1061
 ```
 
 `python3 tools/checktable.py` compares that table against `shape.py --rows`
