@@ -474,6 +474,44 @@ The table keeps `int32_t` and its address for that reason. Retyping it to
 round-trip seventeen literals back to the same bits; hex with the float beside
 it says the same thing and cannot be wrong.
 
+### The eight zeros that had never moved
+
+`sweep.sh` fixes the mechanics. It does not fix the deeper problem, which is
+that a tool reporting zero and a tool that cannot report anything look the
+same. `tools/proven.sh` is the check for that: run each tool — today's tool —
+against old revisions of the file, and ask whether its answer ever *changes*. A
+tool whose last line is identical across the whole history either always finds
+nothing or never looks.
+
+Over six revisions spanning the project's 329 commits, 43 of 51 answer
+differently somewhere. Eight do not, and a list of eight is short enough to
+audit by hand, which a list of fifty-one zeros is not:
+
+| tool | why its zero is right |
+| --- | --- |
+| `decast.py`, `uncast.py` | the compiler agrees — all four remaining `-Wuseless-cast` warnings were in `bmf.cpp`, which neither tool scans |
+| `unbss.py` | there is no `bmf_bss`; every global that lived in it has storage of its own, and the last mention of it was a stale comment in `bmf.cpp` |
+| `uncursor.py`, `unmemcast.py`, `unspill.py` | `shape.py` says 17 frames, 0 aliases, 0 spill slots, 0 member runs walked as arrays — the shape is gone |
+| `retype_locals.py` | its worklist *is* `strict.log`, and `BMF_STRICT` reports 0 |
+| `unused.py` | came off the list the same afternoon: nothing to do until §10's collapses, then six names in one run and four in the next |
+
+That last row is the point of the distinction. "Has never reported anything" is
+not "is broken" — it is "has never been shown to work", and the two need
+different responses.
+
+The audit also cost a stream. Three of the four `-Wuseless-cast` warnings in
+`bmf.cpp` were real; the fourth was `__PAIR64__`'s cast of `low` to `uint32_t`,
+and removing it moved `x_ep` by four bytes. The compiler is right that at two of
+the three expansions `low` already arrives unsigned, and wrong that the cast is
+therefore removable, because a macro is textual and the third expansion passes a
+signed value that sign-extends through the OR. **A ratchet is a scoreboard, not
+an instruction.** The fix was to stop the two innocent call sites from casting
+`low` themselves — they pass a `uint8_t *`, so the macro's cast performs that
+conversion instead of repeating one — which leaves the macro correct and no
+expansion useless.
+
+---
+
 `tools/sweep.sh` is the answer to the sentence. It runs every tool, checksums
 the file before and after, and **fails if the file changed** — a read-only
 sweep that modifies what it is measuring has measured nothing. It also fails if

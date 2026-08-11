@@ -24,6 +24,12 @@
 # some rules were written for a shape already gone.  It is the list of zeros
 # that have never been demonstrated to mean anything.
 #
+# Run against six revisions spanning the project's 329 commits, 43 of 51 tools
+# answer differently somewhere.  The eight that do not were each checked by
+# hand and every one of their zeros is correct -- REFACTORING9.md section 10
+# has the table and the evidence.  That is the outcome this is for: the list is
+# short enough to audit, which a list of fifty-one zeros is not.
+#
 # Nothing in the working tree is touched.
 set -u
 cd "$(dirname "$0")/.."

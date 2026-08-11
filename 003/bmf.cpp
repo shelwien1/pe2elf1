@@ -22,8 +22,10 @@
 #define BMF_STANDALONE 1
 
 // blob.inc was here: BMF.exe's data segment as one generated array, 343 794
-// bytes of it.  What survived is `bmf_bss` in subs1.hpp -- 19 584 zero bytes,
-// which is what the surviving globals actually need.
+// bytes of it.  What survived it was `bmf_bss` in subs1.hpp, 19 584 zero bytes
+// -- and that is gone too: every global that lived inside it has storage of
+// its own now, so nothing in the program is addressed relative to a 1997 image
+// base any more.  `unbss.py` reporting zero is that, and not a broken tool.
 //--- #include "bmfhead.h"    // Hex-Rays' type vocabulary, SSE wrappers, defs.h
 // bmfhead.h — the vocabulary the decompiled bodies are written in.
 //

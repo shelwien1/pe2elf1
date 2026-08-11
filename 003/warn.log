@@ -1,4 +1,4 @@
-In file included from bmf.cpp:351:
+In file included from bmf.cpp:353:
 subs1.hpp: In function 'uint32_t __predict_med(uint8_t*, int32_t, int32_t)':
 subs1.hpp:1523:39: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
 subs1.hpp:1537:12: warning: conversion from 'int32_t' {aka 'int'} to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
@@ -652,11 +652,11 @@ subs1.hpp:8356:71: warning: conversion to 'uint32_t' {aka 'unsigned int'} from '
 subs1.hpp:8356:55: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8357:62: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8357:46: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
-bmf.cpp:102:24: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
-bmf.cpp:110:20: note: in expansion of macro 'DWORDn'
+bmf.cpp:104:24: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
+bmf.cpp:112:20: note: in expansion of macro 'DWORDn'
 subs1.hpp:8364:30: note: in expansion of macro 'LODWORD'
-bmf.cpp:102:24: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
-bmf.cpp:113:20: note: in expansion of macro 'DWORDn'
+bmf.cpp:104:24: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
+bmf.cpp:115:20: note: in expansion of macro 'DWORDn'
 subs1.hpp:8366:26: note: in expansion of macro 'HIDWORD'
 subs1.hpp:8381:37: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8386:86: warning: conversion from 'int64_t' {aka 'long long int'} to 'int32_t' {aka 'int'} may change value [-Wconversion]
@@ -676,8 +676,8 @@ subs1.hpp:8465:65: warning: conversion to 'uint32_t' {aka 'unsigned int'} from '
 subs1.hpp:8464:49: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8481:41: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8482:43: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
-bmf.cpp:102:24: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
-bmf.cpp:110:20: note: in expansion of macro 'DWORDn'
+bmf.cpp:104:24: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
+bmf.cpp:112:20: note: in expansion of macro 'DWORDn'
 subs1.hpp:8484:30: note: in expansion of macro 'LODWORD'
 subs1.hpp:8490:45: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8503:42: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
@@ -697,8 +697,8 @@ subs1.hpp:8590:53: warning: conversion to 'uint32_t' {aka 'unsigned int'} from '
 subs1.hpp:8589:53: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8602:35: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8603:37: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
-bmf.cpp:102:24: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
-bmf.cpp:110:20: note: in expansion of macro 'DWORDn'
+bmf.cpp:104:24: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
+bmf.cpp:112:20: note: in expansion of macro 'DWORDn'
 subs1.hpp:8605:22: note: in expansion of macro 'LODWORD'
 subs1.hpp:8611:39: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8623:33: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
@@ -707,12 +707,12 @@ subs1.hpp:8626:33: warning: conversion to 'uint32_t' {aka 'unsigned int'} from '
 subs1.hpp:8630:17: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8630:21: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8640:27: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
-bmf.cpp:102:24: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
-bmf.cpp:110:20: note: in expansion of macro 'DWORDn'
+bmf.cpp:104:24: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
+bmf.cpp:112:20: note: in expansion of macro 'DWORDn'
 subs1.hpp:8643:18: note: in expansion of macro 'LODWORD'
 subs1.hpp:8645:29: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
-bmf.cpp:102:24: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
-bmf.cpp:113:20: note: in expansion of macro 'DWORDn'
+bmf.cpp:104:24: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
+bmf.cpp:115:20: note: in expansion of macro 'DWORDn'
 subs1.hpp:8646:14: note: in expansion of macro 'HIDWORD'
 subs1.hpp:8648:21: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8651:13: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
@@ -722,8 +722,8 @@ subs1.hpp:8693:33: warning: conversion to 'uint32_t' {aka 'unsigned int'} from '
 subs1.hpp:8696:49: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8696:53: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:8699:24: warning: conversion from 'int32_t' {aka 'int'} to 'int8_t' {aka 'signed char'} may change value [-Wconversion]
-bmf.cpp:102:24: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
-bmf.cpp:113:20: note: in expansion of macro 'DWORDn'
+bmf.cpp:104:24: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]
+bmf.cpp:115:20: note: in expansion of macro 'DWORDn'
 subs1.hpp:8705:14: note: in expansion of macro 'HIDWORD'
 subs1.hpp:8707:53: warning: conversion from 'int' to 'uint8_t' {aka 'unsigned char'} may change value [-Wconversion]
 subs1.hpp:8730:56: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
