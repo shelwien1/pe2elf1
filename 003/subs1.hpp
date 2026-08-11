@@ -1852,16 +1852,14 @@ int32_t __encode_symbol_list(SymList *_this, int32_t a2)
   uint8_t v27, v32;
   // Every one of these walked `_this[5]`'s entries three bytes at a time,
   // reading the symbol as `*(uint16_t *)p` and the count as `p[2]`.
-  SymEntry *v4, *v25, *v28, *v36, *v37, *v39, *v40, *v49;
+  SymEntry *v4, *v25, *v28, *v36, *v37, *v39, *v40;
   uint16_t v51;
   // A cumulative count, a high count and a total: the three arguments
   // `RangeCoder::encode` takes, and it takes them unsigned.
   uint32_t enc_cum, enc_high, enc_tot;
-  int32_t v3, v5, v6, v7, v8, v24, n251, v35, v38,
-          v41, v43, v47, v53, v54;
+  int32_t v3, v5, v6, v7, v8, v24, n251, v35, v38, v41, v43, v53, v54;
   uint16_t v26, v31;
   uint32_t i_1, i, rescale_at, v42, since_rescale;
-  SymList *this_1;
   v2 = exclusion_gen;
   v3 = _this->live;
   v4 = _this->ent - 1;
@@ -1902,7 +1900,6 @@ int32_t __encode_symbol_list(SymList *_this, int32_t a2)
   enc_cum = v5 - v7;
   if ( i_1 )
   {
-    this_1 = _this;
     for ( i = 0; i < i_1; ++i )
     {
       if ( exclusion_mask[v4[i + 1].sym] == exclusion_gen )
@@ -1911,7 +1908,6 @@ int32_t __encode_symbol_list(SymList *_this, int32_t a2)
         v24 = v4[i + 1].cnt;
       v5 += v24;
     }
-    _this = this_1;
   }
   enc_tot = _this->tot + v5;
   v4->cnt += 4;
@@ -1980,8 +1976,6 @@ LABEL_37:
           v36->cnt = v53;
           if ( v39 != _this->ent )
           {
-            v49 = v36;
-            v47 = v35;
             do
             {
               v40 = v39 - 1;
@@ -1993,8 +1987,6 @@ LABEL_37:
               --v39;
             }
             while ( v40 != _this->ent );
-            v36 = v49;
-            v35 = v47;
           }
           v39->sym = v51;
           v39->cnt = v38;
@@ -2049,9 +2041,9 @@ void __symbol_list_update(SymList *_this, int32_t a2, uint32_t a3)
   uint8_t v11, v15, v19;
   // All of these walk the entries; the -3 and +2 they carried were the record
   // stride and the count field.
-  SymEntry *v16, *v23, *v24, *v26, *v27, *v33, *n251_1, *n251_2;
+  SymEntry *v16, *v23, *v24, *v26, *v27, *n251_1, *n251_2;
   uint16_t v10, v14, v18, v34;
-  int32_t v8, v25, v28, v30, v32, v35, v36;
+  int32_t v8, v25, v28, v30, v35, v36;
   uint32_t v22;   // a count, like `live` which it is subtracted from
   uint32_t v4, v6, rescale_at, v29, since_rescale;
   list = _this->ent;
@@ -2133,8 +2125,6 @@ LABEL_16:
             v23->cnt = v35;
             if ( v26 != _this->ent )
             {
-              v33 = v23;
-              v32 = v22;
               do
               {
                 v27 = v26 - 1;
@@ -2146,8 +2136,6 @@ LABEL_16:
                 --v26;
               }
               while ( v27 != _this->ent );
-              v23 = v33;
-              v22 = v32;
             }
             v26->sym = v34;
             v26->cnt = v25;
@@ -2232,8 +2220,7 @@ int32_t __encode_symbol_tree(uint16_t *_this, int32_t n2) {
   int16_t v24, v42;
   // The cumulative count the range coder takes, which it takes unsigned.
   uint32_t v8;
-  int32_t n4, n0x7F800000_6, n0x800000_5, v27, v28, v46, v56, v59, i, v65,
-          v66, n0x7F800000_7;
+  int32_t n4, n0x800000_5, v27, v28, v46, v56, v59, i, v65, v66;
   uint16_t *v3, *v26, n0x4000, v39, v41, *v51, *this_2;
   uint32_t n4_2, v38, v40, v43, v44, v45, v48, v52;
   n4 = model_geometry[n2];
@@ -2251,7 +2238,6 @@ int32_t __encode_symbol_tree(uint16_t *_this, int32_t n2) {
   n0x800000_5 = rc.encode(v8, v52, v48);
   if ( *_this > 0x4000u )
   {
-    n0x7F800000_7 = n0x7F800000_6;
     v39 = *(_this + 2) - (*(_this + 2) >> 1);
     v40 = *(_this + 3);
     *(_this + 2) = v39;
@@ -2279,7 +2265,6 @@ int32_t __encode_symbol_tree(uint16_t *_this, int32_t n2) {
     v46 = *(_this + 1);
     *(_this + 9) = v45;
     *_this = v44 + v45;
-    n0x7F800000_6 = n0x7F800000_7;
     if ( (v46 <= 4 * alt_freq_limit) )
     {
       n0x800000_5 = 4 * (v46 > alt_freq_limit);
@@ -4270,7 +4255,7 @@ void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
   ;
   uint8_t pred, v35;
   int32_t v4, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24,
-          v25, v26, v28, v29, v30, v34, n5, n16, v38, v40, v42;
+          v25, v26, v28, v29, v30, v34, n5, n16, v38, v42;
   // The five planes, held across the rotation that ends a row, and the cursor
   // the row is written through.
   int64_t v39;
@@ -4366,7 +4351,6 @@ void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
       if ( !(_this->width <= 0) )
       {
         v32 = a3;
-        v40 = v4;
         v42 = 0;
         do
         {
@@ -4410,7 +4394,6 @@ void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
           ++a2;
         }
         while ( v42 < _this->width );
-        v4 = v40;
         a3 = v32;
       }
     }
@@ -5890,7 +5873,7 @@ void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_
   AltP1Block *v5;
   AltP1Block *v4;
   int32_t v6, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26,
-          v27, v28, v30, v31, v32, v35, v36, v39, v41;
+          v27, v28, v30, v31, v32, v35, v36, v41;
   int64_t v37;
   uint8_t *cursor2, *cursor4, *Src_1;
   v4 = (AltP1Block *)((int32_t *)bmf_new(0x99D4D8u));
@@ -5989,7 +5972,6 @@ void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_
       if ( !(v5->width <= 0) )
       {
         Src_1 = Src;
-        v39 = v6;
         v41 = 0;
         do
         {
@@ -6021,7 +6003,6 @@ void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_
           ++v5->cursor[4];
         }
         while ( v41 < v5->width );
-        v6 = v39;
         Src = Src_1;
       }
     }
@@ -6045,11 +6026,6 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src) {   P1Ctx *v25,
   // REFACTORING.md section 2.3 lists as unexercised.  testfiles/altp1.bmp
   // reaches it now.
   void *v84;
-  uint32_t v86;
-  uint32_t v87;
-  int32_t v88;
-  int32_t v89;
-  uint8_t *Src_1;
   int32_t v92;
   void * Block_plane[4];
   AltP1Block * &v94 = (AltP1Block * &)Block_plane[1];
@@ -6112,10 +6088,7 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src) {   P1Ctx *v25,
     {
       if ( n4_1 > 0 )
       {
-        v86 = v20;
         n4_2 = 0;
-        v88 = v3;
-        Src_1 = Src;
         do
         {
           ++n4_2;
@@ -6206,16 +6179,11 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src) {   P1Ctx *v25,
           n4_1 = plane_count;
         }
         while ( n4_2 < plane_count );
-        v20 = v86;
-        v3 = v88;
         i_3 = i;
-        Src = Src_1;
       }
       if ( i_3 > 0 )
       {
-        v87 = v20;
         i_4 = 0;
-        v89 = v3;
         do
         {
           v51 = (uint32_t *)Block_plane[0];
@@ -6347,8 +6315,6 @@ int32_t __alt_model_p1_decode(uint16_t *p_i, uint8_t *Src) {   P1Ctx *v25,
           ++i_4;
         }
         while ( i_4 < i );
-        v20 = v87;
-        v3 = v89;
         i_3 = i;
       }
       ++v20;
@@ -11410,7 +11376,6 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
   int32_t v86;
-  int32_t v87;
   int32_t v88;
   // These shared `__frame.ArgList` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
@@ -11790,7 +11755,6 @@ LABEL_53:
       }
       else if ( v51 > 0 )
       {
-        v87 = v52;
         v61 = 0;
         v62 = 0;
         ArgList_9 = ArgList_5;
@@ -11810,7 +11774,6 @@ LABEL_53:
           ++v61;
         }
         while ( v61 < this_4->width );
-        v52 = v87;
         ArgList_5 = ArgList_9;
       }
       goto LABEL_74;
@@ -11942,13 +11905,10 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  uint32_t v92;
   // These shared `__frame.v93` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int32_t v94;
-  uint8_t *v95;
   uint8_t v97;
   int32_t v98;
   int32_t v99;
@@ -12032,7 +11992,6 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
         __frame.v91 = v19;
         n4_2 = 0;
         __frame.v93 = v3;
-        v95 = a2;
         do
         {
           ++n4_2;
@@ -12124,13 +12083,10 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
         v19 = __frame.v91;
         v3 = __frame.v93;
         i_3 = i;
-        a2 = v95;
       }
       if ( i_3 > 0 )
       {
-        v92 = v19;
         i_4 = 0;
-        v94 = v3;
         do
         {
           v50 = (AltP1Block *)Block_plane[0];
@@ -12317,8 +12273,6 @@ int32_t __alt_model_p1_encode(uint16_t *p_i, uint8_t *a2)
           ++i_4;
         }
         while ( i_4 < i );
-        v19 = v92;
-        v3 = v94;
         i_3 = i;
       }
       ++v19;
@@ -12455,32 +12409,39 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   P2Count *v93;
   float v16, bias2, bias1, v21, v22, v23, v24, v26;
   P2Count *v98;
-  int32_t v6, v9, bank_ctx, v77, v79, v80, v81, v84, v85, v86, v88, v89, v95, v96, v100, v101, v102,
-          v106, v108, v113, v115, v117, v118, v119, v120, v121, v122, v123, v124, v125, v126,
-          v127, v128, v129, v130, v131, v132, v133, v134, v135, v136, v137, v138, v139, v140,
-          v141, v142, v143, v144, v145, v146, v147, v148, v149, v150, v151, v152, v153, v154,
-          v155, v156, v157, v158, v159, v160, v161, v162, v163, v164, v165, v166, v167, v168,
-          v169, v170, v171, v172, v173, v174, v175, v176, v177, v178, v179, v180, v181, v182,
-          v183, v184, v185, v186, v187, v188, v189, v190, v191, v192, v193, v194, v195, v196,
-          v197, v198, v199, v200, v201, v202, v203, v204, v205, v206, v207, v208, v209, v210,
-          v211, v212, v213, v214, v215, v216, v217, v218, v219, v220, v221, v222, v223, v224,
-          v225, v226, v227, v228, v229, v230, v231, v232, v233, v234, v235, v236, v237, v238,
-          v239, v240, v241, v242, v243, v244, v245, v246, v247, v248, v249, v250, v251, v252,
-          v253, v254, v255, v256, v257, v258, v259, v260, v261, v262, v263, v264, v265, v266,
-          v267, v268, v269, v270, v271, v272, v273, v274, v275, v276, v277, v278, v279, v280,
-          v281, v282, v283, v284, v285, v286, v287, v288, v289, v290, v291, v292, v293, v294,
-          v295, v296, v297, v298, v299, v300, v301, v302, v303, v304, v305, v306, v307, v308,
-          v309, v310, v311, v313, v314, v315, v316, v317, v318, v319, v320, v321, v322, v323,
-          v324, v325, v326, v327, v328, v329, v330, v331, v332, v333, v334, v335, v336, v337,
-          v338, v339, v340, v341, v342, v343, v344, v345, v346, v347, v348, v349, v350, v351,
-          v352, v353, v354, v355, v356, v357, v358, v359, v360, v361, v362, v363, v364, v365,
-          v366, v367, v368, v369, v370, v371, v372, v373, v374, v375, v376, v377, v378, v379,
-          v380, v381, v382, v383, v384, ctx, n15, v391, v392, v394, v395, v397, v398, v399,
-          v400, v403, v404, v406, v407, v409, v410, v412, v413, v415, v416, v417, v418, v419,
-          v421, v422, v423, v424, v425, v426, v427, v429, v430, v431, v432, v433, v434, v435,
-          v437, v438, v439, v440, v441, v442, v443, v447, v448, v449, v450, v453, v454, v459,
-          v460, v461, v464, v465, v467, v468, v470, v471, v472, v475, v476, v478, v479, v481,
-          v482, v483, v486, v487, v489, v490, v492, v493, v494, v497, v498, v500, v501, v503,
+  int32_t v6, v9, bank_ctx, v77, v79, v80, v81, v84, v85, v86, v88, v89, v95,
+          v96, v100, v101, v102, v106, v108, v113, v115, v117, v118, v119,
+          v120, v121, v122, v123, v124, v125, v126, v127, v128, v129, v130,
+          v131, v132, v133, v134, v135, v136, v137, v138, v139, v140, v141,
+          v142, v143, v144, v145, v146, v147, v148, v149, v150, v151, v152,
+          v153, v154, v155, v156, v157, v158, v159, v160, v161, v162, v163,
+          v164, v165, v166, v167, v168, v169, v170, v171, v172, v173, v174,
+          v175, v176, v177, v178, v179, v180, v181, v182, v183, v184, v185,
+          v186, v187, v188, v189, v190, v191, v192, v193, v194, v195, v196,
+          v197, v198, v199, v200, v201, v202, v203, v204, v205, v206, v207,
+          v208, v209, v210, v211, v212, v213, v214, v215, v216, v217, v218,
+          v219, v220, v221, v222, v223, v224, v225, v226, v227, v228, v229,
+          v230, v231, v232, v233, v234, v235, v236, v237, v238, v239, v240,
+          v241, v242, v243, v244, v245, v246, v247, v248, v249, v250, v251,
+          v252, v253, v254, v255, v256, v257, v258, v259, v260, v261, v262,
+          v263, v264, v265, v266, v267, v268, v269, v270, v271, v272, v273,
+          v274, v275, v276, v277, v278, v279, v280, v281, v282, v283, v284,
+          v285, v286, v287, v288, v289, v290, v291, v292, v293, v294, v295,
+          v296, v297, v298, v299, v300, v301, v302, v303, v304, v305, v306,
+          v307, v308, v309, v310, v311, v313, v314, v315, v316, v317, v318,
+          v319, v320, v321, v322, v323, v324, v325, v326, v327, v328, v329,
+          v330, v331, v332, v333, v334, v335, v336, v337, v338, v339, v340,
+          v341, v342, v344, v345, v346, v347, v348, v349, v350, v351, v352,
+          v353, v354, v355, v356, v357, v358, v359, v360, v361, v362, v363,
+          v364, v365, v366, v367, v368, v369, v370, v371, v372, v373, v374,
+          v376, v377, v378, v379, v380, v381, v382, v383, v384, ctx, n15,
+          v391, v392, v394, v395, v397, v398, v399, v400, v403, v404, v406,
+          v407, v409, v410, v412, v413, v415, v416, v417, v418, v419, v421,
+          v422, v423, v424, v425, v426, v427, v429, v430, v431, v432, v433,
+          v434, v435, v437, v438, v439, v440, v441, v442, v443, v447, v448,
+          v449, v450, v453, v454, v459, v460, v461, v464, v465, v467, v468,
+          v470, v471, v472, v475, v476, v478, v479, v481, v482, v483, v486,
+          v487, v489, v490, v492, v493, v494, v497, v498, v500, v501, v503,
           v504;
   int64_t v10, v11, v12, v13, v14;
   P2Freq *n0xF0_3;
@@ -12856,11 +12817,9 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
           v341 = v531->w2;
           v342 = v550 - p2_pred(v341, v531->b0);
           v531->w2 = p2_bump(v341, v342, 3);
-          v343 = v550;
           *(uint16_t *)&v530[1].w2 += (uint32_t)(v550 - p2_pred(v530[1].w2, v530[1].b0) + 2) >> 2;
           v344 = v532->w2;
           v549 -= p2_pred(v344, v532->b0);
-          v550 = v343;
           v532->w2 = p2_bump(v344, v549, 3);
           v345 = v527->w2;
           v346 = v550 - p2_pred(v345, v527->b0);
@@ -12911,11 +12870,9 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
           v373 = v516->w2;
           v374 = v550 - p2_pred(v373, *(uint8_t *)&v516->b0);
           v516->w2 = p2_bump(v373, v374, 3);
-          v375 = v550;
           *(uint16_t *)&v515[1].w2 += (uint32_t)(v550 - p2_pred(v515[1].w2, v515[1].b0) + 2) >> 2;
           v376 = v517->w2;
           v377 = p2_pred(v376, v517->b0);
-          v550 = v375;
           *(uint16_t *)&v517->w2 = v376
                                + ((32 * ((v548 - v377 > deadzone_hi) - (uint32_t)(v548 - v377 < deadzone_lo))
                                  + v548
@@ -14210,8 +14167,6 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *v105,
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int32_t v151;
-  uint8_t *Src_1;
   int32_t v153;
   int32_t v154;
   AltP2Block * plane[4];
@@ -14308,7 +14263,6 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *v105,
         n4_2 = 0;
         __frame.v150 = v5;
         i_1 = i;
-        Src_1 = Src;
         do
         {
           ++n4_2;
@@ -14459,7 +14413,6 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *v105,
         v11 = v165;
         v5 = __frame.v150;
         i = i_1;
-        Src = Src_1;
       }
       ctx_bias[3] = 0;
       ctx_bias[2] = 0;
@@ -14469,7 +14422,6 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *v105,
       {
         v165 = v11;
         i_2 = 0;
-        v151 = v5;
         i_1 = i;
         do
         {
@@ -14561,7 +14513,6 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *Src) {   P2Ctx *v105,
         }
         while ( i_2 < i_1 );
         v11 = v165;
-        v5 = v151;
         i = i_1;
       }
       ++v11;
@@ -15895,7 +15846,6 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  uint8_t *Blocka;
   ;
   uint8_t *v5;   // were int32_t: these hold addresses
   FILE *Stream_1, *Stream_v;
@@ -16322,7 +16272,6 @@ LABEL_109:
     {
       __frame.Src = (void *)Src_2;
       n4_7 = (uint8_t *)__frame.n4_1;
-      Blocka = n4_6;
       n4_8 = 0;
       v61 = 0;
       do
@@ -16352,7 +16301,6 @@ LABEL_109:
         v61 = (int32_t)(uintptr_t)__frame.v86 + 1;
       }
       while ( __frame.v86 + 1 < (uint8_t *)(uintptr_t)v58 );
-      n4_6 = Blocka;
     }
     // The deinterleave swaps width and height and rewrites the stride; only
     // the low half of `stride` is touched, which is what `(uint16_t *)p_i + 2`
@@ -17280,7 +17228,6 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
   int32_t ElementCounta;
-  uint32_t ElementCountb;
   // These shared `__frame.hdr[0]` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
@@ -17568,7 +17515,6 @@ LABEL_57:
     if ( (uint16_t)v43 )
     {
       n4_3 = __frame.plane_n;
-      ElementCountb = ElementCount_1;
       Buffera_2 = __frame.row;
       Buffera_3 = nullptr;
       v47 = 0;
@@ -17599,7 +17545,6 @@ LABEL_57:
         Buffera_3 = __frame.row + 1;
       }
       while ( (int32_t)(__frame.row + 1) < v43 );
-      ElementCount_1 = ElementCountb;
       v5 = __frame.v66;
     }
     __frame.Buffera_4 = Buffer_copy;
