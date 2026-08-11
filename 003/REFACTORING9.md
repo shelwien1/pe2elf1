@@ -3033,3 +3033,28 @@ bargain as `unstale.py`'s `HISTORY`.
 `subs1.hpp` in the working directory and ignored the path it was given, which
 is `reads.py`'s one damning verdict, so it could not move for any revision. It
 takes the source now: 0 names against this file, 9 against `4481630`'s.
+
+### Numbers age the same way names do
+
+`unstale.py` asks whether a name the documents spell still exists. The other
+half of a stale reference is a number that has moved, and the algorithm
+documents had four:
+
+```
+code_pixel             ALGORITHM.md:810  says 787 lines, is 781
+alt_p2_model           ALGORITHM.md:814  says 1969 lines, is 1402
+choose_plane_coding    algorithm_v2.md:236  says 867 lines, is 815
+search_filter          algorithm_v2.md:276  says 837 lines, is 808
+```
+
+`alt_p2_model` had lost 567 lines under a sentence arguing it is too long to
+read in one sitting — still true, and no longer a measurement. The claims are
+of one shape, ``​`X` … N lines``, and the body sizes are already in
+`structs.bodies`, so the check is six lines and runs in the same pass. It has
+two lines of slack: a paragraph does not become wrong when a body loses one.
+
+Two more went with them. `ALGORITHM.md` said `tools/addrmap.txt` maps "all 71
+names" — it maps 74, and the checked-in file said 76 because it had not been
+regenerated since. The sentence now says "every named body", which is what it
+meant and what the tool's own last line already counts; the file is
+regenerated.

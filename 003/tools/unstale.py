@@ -37,6 +37,8 @@ finding one here is the finding.
 import re
 import sys
 
+sys.path.insert(0, __file__.rsplit('/', 1)[0])
+
 DOCS = ('ALGORITHM.md', 'algorithm_v2.md')
 
 # Named on purpose.  The reason is the entry: a name whose reason cannot be
@@ -95,6 +97,49 @@ HISTORY = {
 }
 
 
+BODY_LINES = re.compile(r'`(\w+)`[^`\n]{0,60}?\(?(\d[\d ,]*) lines')
+
+
+def sizes(sources):
+    """{body name: line count} for every body in the source."""
+    import structs
+    out = {}
+    for src in sources:
+        if not src.endswith(('.hpp', '.cpp')):
+            continue
+        try:
+            lines = open(src).read().split('\n')
+        except IOError:
+            continue
+        for a, b, nm, _sig in structs.bodies(lines):
+            out[nm.lstrip('_')] = b - a + 1
+    return out
+
+
+def measured(docs, sources, slack=2):
+    """Claims of the form ``X` is N lines` that the source disagrees with.
+
+    A name that is gone is one kind of stale; a number that has moved is the
+    other, and `ALGORITHM.md` had three -- `code_pixel` at 787 when it is 781,
+    `alt_p2_model` at 1969 when it is 1402, and "all 71 names" against an
+    address map that has 74.  A sentence arguing that a body is too long to
+    read in one sitting does not become wrong when it loses six lines, so the
+    check has slack; it is there for the ones that have drifted by hundreds.
+    """
+    have, out = sizes(sources), []
+    for doc in docs:
+        try:
+            lines = open(doc).read().split('\n')
+        except IOError:
+            continue
+        for i, line in enumerate(lines, 1):
+            for m in BODY_LINES.finditer(line):
+                nm, n = m.group(1), int(m.group(2).replace(' ', '').replace(',', ''))
+                if nm in have and abs(have[nm] - n) > slack:
+                    out.append((doc, i, nm, n, have[nm]))
+    return out
+
+
 def known(names, n):
     """Is `n` an identifier the source still has?
 
@@ -145,8 +190,13 @@ def main():
         if '--list' in sys.argv or name not in seen:
             print('%-22s %s:%d  %s' % (name, doc, line, text[:70]))
         seen.add(name)
-    print('%d names in %d documents that the program no longer has'
-          % (len(seen), len(set(d for d, _, _, _ in found))))
+    sources = tuple(src) + ('bmf.cpp',) if src else ('subs1.hpp', 'bmf.cpp')
+    drift = measured(docs, sources)
+    for doc, line, nm, said, is_ in drift:
+        print('%-22s %s:%d  says %d lines, is %d' % (nm, doc, line, said, is_))
+    print('%d names in %d documents that the program no longer has, '
+          '%d line counts that have drifted'
+          % (len(seen), len(set(d for d, _, _, _ in found)), len(drift)))
     return 0
 
 

@@ -22,17 +22,17 @@ alt_init_tables            0x004118A0
 rc_decode_flat             0x004123E0
 encode_context_bit         0x00412490
 decode_context_bit         0x00412850
-encode_symbol_list         0x00412B10
+code_symbol                0x00412B10
 decode_symbol_list         0x00412E60
-symbol_list_update         0x00413230
+add_weight                 0x00413230
 update_binary_pair         0x00413430
 init_counter_node          0x00413560
 alt_p1_encode_symbol       0x004135A0
 encode_symbol_tree         0x00413900
 alt_p1_decode_symbol       0x00413E60
 decode_symbol_tree         0x00414060
-alt_p2_encode_symbol       0x00414390
-alt_p2_decode_symbol       0x00414620
+encode_symbol              0x00414390
+decode_symbol              0x00414620
 rescale_three_way          0x00414800
 init_symbol_list           0x00414860
 rescale_counter_pair       0x004148F0
@@ -44,7 +44,7 @@ free_workspace             0x00415270
 model_plane                0x00415380
 code_pixel                 0x004159E0
 pixel_context              0x00416860
-init_model_tables          0x00416C90
+init_tables                0x00416C90
 reduce_alphabet            0x00417200
 layout_workspace           0x00417980
 unmodel_plane              0x00417DB0
@@ -52,7 +52,6 @@ unmodel_plane_slow         0x00417E80
 decode_pixel               0x00418650
 expand_alphabet            0x00419430
 alt_p2_free                0x00419610
-init_sse_constants         0x00419680
 alt_model_p2_d8_encode     0x004197A0
 alt_p2_d8_encode_body      0x00419800
 alt_p2_context             0x0041A130
@@ -65,17 +64,16 @@ alt_p2_d8_decode_body      0x00422DB0
 alt_model_p2_decode        0x00423600
 alt_p1_free                0x004244A0
 alt_model_p1_d8_encode     0x00424500
-alt_p1_d8_encode_body      0x00424550
-alt_p1_context             0x004248D0
+d8_encode_body             0x00424550
+ctx_of                     0x004248D0
 alt_model_p1_encode        0x00424D90
 alt_p1_alloc               0x004256F0
-alt_p1_model               0x004259F0
+update_model               0x004259F0
 alt_model_p1_d8_decode     0x004273F0
 alt_model_p1_decode        0x00427740
 read_bmp                   0x0042AB20
 write_bmp                  0x0042B0C0
 alloc_image                0x0042B830
 set_new_handler            0x0042CBB0
-log_two_lane               0x00436E10
 
-# 76 mapped.  0 named bodies have no recorded address:
+# 74 mapped.  0 named bodies have no recorded address:
