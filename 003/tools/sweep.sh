@@ -54,10 +54,14 @@ for t in tools/*.py; do
     mk*.py)                continue ;;          # generators: they write, not read
     sweep_check.py)        continue ;;          # reads the report, not the file
   esac
-  # These three answer with a table, a census and an address map.  There is no
-  # count in them to be zero, so they are reported and not checked.
+  # These four have no count that can be zero.  Three answer with a table, a
+  # census and an address map.  The fourth, `resign.py`, answers with proposals:
+  # whether a type change reduces the conversions or moves them is settled by
+  # the compiler and not by anything the tool can see, which is what the
+  # ratchet in `build.sh` is for.  Its list is meant to be read and tried, and
+  # a non-empty one is not a defect.
   case $n in
-    addrmap.py|shape.py|unify_types.py) report=1 ;;
+    addrmap.py|shape.py|unify_types.py|resign.py) report=1 ;;
     *)                                  report=0 ;;
   esac
   line=$(timeout 300 python3 "$t" "$work" 2>&1 | tail -1)
@@ -91,7 +95,7 @@ fi
   exit 1
 }
 echo "$file unchanged by the sweep; $usage tools want more arguments, $quiet said nothing"
-echo "every counting tool reports zero; addrmap, shape and unify_types report rather than count"
+echo "every counting tool reports zero; addrmap, shape, unify_types and resign report rather than count"
 [ "$quiet" = 0 ] || {
   echo "FAIL: a tool that prints nothing cannot be told from one that crashed"
   exit 1

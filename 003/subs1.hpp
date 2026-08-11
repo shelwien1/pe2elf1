@@ -1487,7 +1487,8 @@ uint32_t __predict_med(uint8_t *pixels, int32_t width, int32_t height)
 {
   ;
   uint8_t left;
-  int32_t rows_left, x_left, north, pred, northwest, code, pairs, ofs, done;
+  uint32_t done;
+  int32_t rows_left, x_left, north, pred, northwest, code, pairs, ofs;
   uint32_t j, last, k;
   uint8_t *q;
   uint8_t *p, *up;
@@ -1632,7 +1633,8 @@ uint32_t __alt_init_tables(uint8_t *fold, int8_t *unfold)
 {
   ;
   uint8_t even, odd;
-  int32_t bucket_size, lo, half, in_bucket, ofs, bucket, bucket_1, done;
+  uint32_t done;
+  int32_t bucket_size, lo, half, in_bucket, ofs, bucket, bucket_1;
   uint32_t i, k, b, span, pairs;
   uint8_t *pos, *neg;
   bucket_size = 2 * plane_desc[0].w12 + 1;
@@ -1751,7 +1753,8 @@ int32_t __encode_context_bit(BitCtr *_this, BitCtr *a2, int32_t bit)
 {
   ;
   int32_t c0, c1, cap, result, p0, p1, p_cap, par0, par_n;
-  uint32_t tot, p_tot, n1_old, par_tot, p1_old;
+  int32_t par_tot;
+  uint32_t tot, p_tot, n1_old, p1_old;
   c0 = _this->n[0];
   if ( _this->n[0] )
   {
@@ -1808,7 +1811,8 @@ int32_t __decode_context_bit(BitCtr *_this, BitCtr *a2)
 {
   ;
   int32_t c0, c1, result, cap, p0, p1, p_cap, par0, par_n;
-  uint32_t tot, p_tot, n1_old, par_tot, p1_old;
+  int32_t par_tot;
+  uint32_t tot, p_tot, n1_old, p1_old;
   c0 = _this->n[0];
   if ( _this->n[0] )
   {
@@ -1872,8 +1876,12 @@ int32_t __encode_symbol_list(SymList *_this, int32_t want)
   uint16_t keep;
   // A cumulative count, a high count and a total: the three arguments
   // `RangeCoder::encode` takes, and it takes them unsigned.
-  uint32_t enc_cum, enc_high, enc_tot;
-  int32_t left, cum, s, c, result, c2, top, n_left, half, back_cnt, last_cnt, up_cnt, bias;
+  int32_t enc_cum;
+  int32_t enc_high;
+  int32_t enc_tot;
+  uint32_t left;
+  uint32_t n_left;
+  int32_t cum, s, c, result, c2, top, half, back_cnt, last_cnt, up_cnt, bias;
   uint16_t s_a, s_b;
   uint32_t rest, i, rescale_at, running, since_rescale;
   gen = exclusion_gen;
@@ -2788,7 +2796,9 @@ void __rc_end_encode()
 void **__free_workspace(ModelBlock *blk, int8_t a2)
 {
   ;
-  int32_t n, left, i;
+  uint32_t n;
+  uint32_t left;
+  int32_t i;
   SymList *lists, *p;
   free(blk->sym_code);
   free(blk->sym_word);
@@ -2863,7 +2873,8 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
   SymList *sel0_list;
   bool near, far;
   int32_t band;
-  int32_t result, near_hit, far_hit, ctx0, ctx1, fallback, ctx2, pos;
+  uint32_t result;
+  int32_t near_hit, far_hit, ctx0, ctx1, fallback, ctx2, pos;
   SymEntry *list_prev, *list_sym;
   pos = *(int32_t *)&_this->sym_pos;
   result = (p_n15)[pos];
@@ -2922,7 +2933,9 @@ int32_t __init_model_tables(ModelBlock *_this)
   SymList **cur;
   PixRec *row;   // the current row, one record past the pixel just written
   bool promoted;
-  int32_t hit0, n_live, recycled, blocks, hit1, just, c0, c1, c2, c3, c4, c5, c6,
+  uint32_t blocks;
+  uint32_t n_live;
+  int32_t hit0, recycled, hit1, just, c0, c1, c2, c3, c4, c5, c6,
           result;
   uint16_t *sym_cache;
   SymList *list;
@@ -3430,11 +3443,19 @@ int32_t __alt_p1_model(AltP1Block *_this)
   CounterNode *node_dn;
   CounterNode *opp0, *opp1, *opp2, *opp3, *opp4, *opp5, *opp6, *opp7, *opp8;
   int16_t tot_up, tot_dn;
+  uint32_t w11;
+  uint32_t w12;
+  uint32_t w13;
+  uint32_t w14;
+  uint32_t w15;
+  uint32_t w16;
+  uint32_t w17;
+  uint32_t w18;
   int32_t sel1_top, code_r, sel2_top, slot_f, slot_r, ctx_alt, ctx_dn, sel0,
-          alti0, ctx0, sel1, w11, alti1, ctx1, sel2, w12, x2, alti2, ctx2,
-          sel3, w13, x3, alti3, ctx3, sel4, w14, x4, alti4, ctx4, sel5, w15,
-          x5, alti5, ctx5, sel6, w16, x6, alti6, ctx6, sel7, w17, x7, alti7,
-          ctx7, sel8, w18, alti8, midn8, ctx8, mid7, mid6, mid5, mid4, mid3,
+          alti0, ctx0, sel1, alti1, ctx1, sel2, x2, alti2, ctx2,
+          sel3, x3, alti3, ctx3, sel4, x4, alti4, ctx4, sel5, 
+          x5, alti5, ctx5, sel6, x6, alti6, ctx6, sel7, x7, alti7,
+          ctx7, sel8, alti8, midn8, ctx8, mid7, mid6, mid5, mid4, mid3,
           mid2, mid1, mid0, tree_sym;
   CounterNode *lo0;
   CounterNode *hi0;
@@ -3470,7 +3491,8 @@ int32_t __alt_p1_model(AltP1Block *_this)
   CounterNode *altn7;
   CounterNode *altn8;
   CounterNode *x8;
-  uint32_t code_f, ctx_up, key;
+  int32_t key;
+  uint32_t code_f, ctx_up;
   code_f = *((uint8_t)(_this->cursor[0]->sym - (uint8_t)_this->pred) + _this->fold);
   sel1_top = _this->ctx_w[1].sel;
   code_r = *((uint8_t)((uint8_t)_this->pred - _this->cursor[0]->sym) + _this->fold);
@@ -4214,7 +4236,9 @@ uint8_t *__rc_begin_encode()
   int32_t at4, at5, k;
   int32_t bits;          // the same slot as the buffer pointer below, in a
   uint8_t *Buffer;       // register MSVC reused; two roles, two names
-  uint32_t i, at6, at7;   // offsets into model_geometry, not pointers
+  int32_t at6;
+  int32_t at7;
+  uint32_t i;   // offsets into model_geometry, not pointers
   *packer_word = ::packer_acc;
   Buffer = out_cursor;
   // Back the output cursor up over whatever whole bytes the packer has not
@@ -4502,7 +4526,9 @@ static void bmf_set_denormal_mode()
 uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t img_w, int32_t plane)
 {
   ;
-  int32_t e, dz, band, done, row_bytes, lvl, lvl1, bump, len, len1;
+  uint32_t done;
+  uint32_t e;
+  int32_t dz, band, row_bytes, lvl, lvl1, bump, len, len1;
   uint32_t j, k, ctr, pairs, p, row, pair, n;
   void *buf1;
   _this->plane_idx = plane;
@@ -4862,7 +4888,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
   uint32_t pairs;
-  uint32_t done;
+  int32_t done;
   uint8_t *off_bits;
   int32_t ncol;
   // These shared `__frame.ncol` with the name that still binds it: one
@@ -4889,8 +4915,12 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   bool can_rle;
   uint8_t *Bufferc_3, *Bufferb_1, *pal, *pal2, *buf_1, *p, *q, *buf_3,
           *Bufferc_2;
-  int32_t rle_on, i, Buffer_1, bits, ncolours, grey, at, slot, bgr, r, at2, bgr2, rle_mode,
-          src_bits, rle_kind, Buffer_3, Buffer_4, Size, byte, run, coded_bytes, Size_1, y;
+  uint32_t Size_1;
+  uint32_t at;
+  uint32_t at2;
+  uint32_t slot;
+  int32_t rle_on, i, Buffer_1, bits, ncolours, grey, bgr, r, bgr2, rle_mode,
+          src_bits, rle_kind, Buffer_3, Buffer_4, Size, byte, run, coded_bytes, y;
   uint16_t *p_i_2;
   uint32_t k, j, Bufferb_2, Size_3, ElementCount, pad;
   rle_on = a3;
@@ -5644,7 +5674,9 @@ int32_t __rc_begin_decode(int8_t ArgList_1)
   ;
   int32_t bits_left, at4, at5, k;
   uint16_t *tbl0, *row;
-  uint32_t i, at6, at7;   // offsets into model_geometry, not pointers
+  int32_t at6;
+  int32_t at7;
+  uint32_t i;   // offsets into model_geometry, not pointers
   uint8_t *cursor;
   cursor = out_cursor;
   if ((uint32_t *)out_cursor != packer_word)
@@ -6079,8 +6111,12 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
   uintptr_t code1;
   AltP1Block *blk_k;
   AltP1Block *raw;
+  uint32_t at0;
+  uint32_t code0;
+  uint32_t pred0;
+  uint32_t pred1;
   int32_t width, height, k, *made, src1, src2, src3, dc2, dc3, xf1, xf2, xf3, w, n_planes,
-          p, code0, pred0, val0, at0, pred1, val1, code2, val2, at2,
+          p, val0, val1, code2, val2, at2,
           code3, val3, at3, np, f;
   uint32_t y, *p0;
   AltP1Block *blk2;
@@ -7318,8 +7354,14 @@ void __reduce_alphabet(ModelBlock *blk, int8_t a2, uint8_t *src)
   uint8_t *half;   // `uint8_t *` beside the `char` scalars above
   ModelBlock *Blockaa_1;
   ModelBlock *Blockaa_4;
-  int32_t depth_bits, node, side, alpha_n, alpha_m, carry, img_w, img_h, slot_a, off, done, *p_n4, z2,
-          n_moved, done2, zoff, height, n_distinct, row_w, y, at, bits, bpp, shift, sym, sym2, *p_n4_2, z1, alphabet,
+  uint32_t alpha_n;
+  uint32_t done;
+  uint32_t done2;
+  uint32_t off;
+  uint32_t slot_a;
+  uint32_t sym;
+  int32_t depth_bits, node, side, alpha_m, carry, img_w, img_h, *p_n4, z2,
+          n_moved, zoff, height, n_distinct, row_w, y, at, bits, bpp, shift, sym2, *p_n4_2, z1, alphabet,
           alpha, prev, s, s_next, *p_n4_1, z0;
   ModelBlock *Blockaa_3;
   uint32_t k_2, i, written, li, si, si_end, word, k, pairs, j_1, j,
@@ -7807,9 +7849,11 @@ int32_t __cost_candidate(uint8_t *img, int32_t cand, uint8_t *desc, int8_t a4, i
   uint8_t *descp;
   bool deep;
   double syz, syy, sxz, sxy, sxx, inv, w1f, w2f;
-  int32_t row_b, d1, row_b2, d2, dx, o1, dy, o2, diag, west, dz, bin, w1,
+  uint32_t row_b2;
+  uint32_t swap;
+  int32_t row_b, d1, d2, dx, o1, dy, o2, diag, west, dz, bin, w1,
           w2, img_w, nstep, at, at1, e0, e1, e2, left, bin2, pick, c0, rec,
-          c2, lo1, s1, s2, c2b, tmp, swap, w2s, w1s;
+          c2, lo1, s1, s2, c2b, tmp, w2s, w1s;
   uint32_t lo2, lo3;
   uint8_t *base, *p, *q, *r0, *r2, *r1;
   int32_t cand2, idx1, idx2;   // candidate indices, not addresses
@@ -8089,10 +8133,14 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
   uint8_t *hist;   // `uint8_t *` beside the `char` scalars above
   double sum22, sum11, dv0, dv1, dv2, sum01, sum02, sum12, sum02_c, inv;
   int16_t g1_lo;
-  int32_t n_planes, data_size, result, row, next_plane, pick01, xform, dw, *win_row,
-          wt8, wt4, c2, c2w, c1, c1w, c0, bin0, slack, pred, xform_row, win,
+  uint32_t n_quads;
+  uint32_t next_plane;
+  uint32_t row;
+  uint32_t slack;
+  int32_t n_planes, data_size, result, pick01, xform, dw, *win_row,
+          wt8, wt4, c2, c2w, c1, c1w, c0, bin0, pred, xform_row, win,
           sum, best_sum, i, pos2, best_sum2, sum2, wt4_dn, wt8_dn, wt4_dn_end,
-          wt8_dn_end, n_quads, dv3, wa, wb, wc, nx0, dg0, dn0, ad0, dnx1, g0,
+          wt8_dn_end, dv3, wa, wb, wc, nx0, dg0, dn0, ad0, dnx1, g0,
           dn1, nx2, g1, dnx2, g2, pa, pb, bin_lin, quad_r, alpha, bin_lin2,
           r0, r1, r2, wa_pick, pred4, pred4b, *hist2, sum3, best_sum3, npix_c,
           stride_c, left_c, ul_c, g_c, cur_c, n_c, bin_c, wt4_best_dn, npix_d,
@@ -8865,7 +8913,8 @@ int32_t *__read_bmp(char *FileName)
   uint8_t cur, lo16;
   uint8_t *Src_4, *Src_3, *Src_6, *Buffer_4, *Src_5;   // `uint8_t *` beside the `char` scalars above
   BmfImage *img;
-  int32_t Size_1, i, j_3, Sizea_1, hi_nibble, byte, left4, left4b, Offset_2, y, dx, dxy, step;
+  uint32_t Offset_2;
+  int32_t Size_1, i, j_3, Sizea_1, hi_nibble, byte, left4, left4b, y, dx, dxy, step;
   uint32_t Size_2, pair, hi, ElementCount, ElementCount_1, left;
   // These two freads land in the frame, and each writes across several of the
   // slots Hex-Rays split it into -- which is why the fields do not look like
@@ -9188,11 +9237,17 @@ int32_t __decode_symbol_list(SymList *a1)
   uint16_t s_a, s_b;
   // The cumulative count the range coder takes, which it takes unsigned.
   uint32_t cum_lo;
-  int32_t sym_cum, sym_high, live, cum, i, c, top, half, back_cnt, last_cnt;
+  uint32_t sym_cum;
+  uint32_t sym_high;
+  int32_t live, cum, i, c, top, half, back_cnt, last_cnt;
   uint32_t n_left, zeros;   // counts that MSVC spilled into the list's first slot
   SymList *owner0, *owner1;
-  uint32_t __decode_symbol_list_n0x800000, tot_all, target,
-           cum_hi, tot_1, rescale_at, limit20, running,
+  int32_t cum_hi;
+  int32_t tot_1;
+  int32_t tot_all;
+  int32_t target;
+  uint32_t __decode_symbol_list_n0x800000, 
+           rescale_at, limit20, running,
            since_rescale;
   live = a1->live;
   ent = a1->ent;
@@ -9457,12 +9512,16 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   ModelBlock *this_4;
   // A cumulative count, a high count and a total: the three arguments the
   // range coder takes, and it takes them unsigned.
-  uint32_t arg_cum, arg_high, arg_tot;
+  int32_t arg_cum;
+  int32_t arg_high;
+  int32_t arg_tot;
+  uint32_t done;
+  uint32_t lvl_a;
   int32_t up_sym, left_sym, up_p1_sym, up_m1_sym, m_lo, m_up, nb, key, ctx_state, pair_last,
           __decode_pixel_n15, ctx_bucket, up_m0, m_w1, nb2, all_up, sig1,
           id1, sig2, id2, id3_used, s1a, m_up0, idx1, run, bucket,
           bit, msym1c, hit_a, idx_s, mask, seen, run0, s1b, *recw,
-          flags_word, s3c, done, s3d, s1d, tot, target, cum, lvl_a,
+          flags_word, s3c, s3d, s1d, tot, target, cum, 
           w6a, b15a, w5a, msym3, msym1, msym2, pix1, cache0, cache1, c4,
           c5, c6, c7, h11, h10, h12, h13, h14, h15, h16, h17, h18, h19, h20,
           h21, h24, h28, h26, h30, h31, psym, bit2, pos1, msym1b, lsym, s0b,
@@ -9485,7 +9544,8 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
            k0;
   SymList *sel1_list;
   SymList **sel_p;
-  uint32_t bin_tot, si, s2a, g2, g1, g0, g3, g4, k1, k2, k2h, k3,
+  int32_t bin_tot;
+  uint32_t si, s2a, g2, g1, g0, g3, g4, k1, k2, k2h, k3,
            k4;
   PixRec *up2;     // `row_cur[7]`, two rows above
   PixRec *up1;     // `row_cur[6]`, the row above
@@ -10257,12 +10317,16 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   SymPair *pair;   // the group's counter pair for this context
   // A cumulative count, a high count and a total: the three arguments the
   // range coder takes, and it takes them unsigned.
-  uint32_t arg_cum, arg_high, arg_tot;
+  int32_t arg_cum;
+  int32_t arg_tot;
+  uint32_t arg_high;
+  uint32_t done;
+  uint32_t rec_word;
   int32_t up_sym, left_sym, __code_pixel_n15, upleft_sym, nb, key, ctx_state, pair_last, cap,
           pair_prev, ctx_bucket, p_n15_1, cur9v, m_w1, nb2, sig1, id1, sig2,
           id2, id3_used, sig3, m_w1b, m_w0, m_up0, p_n15_2, one, run,
-          run_pair, amap, runlen, run_hit, row_cur9, rec_word, p_n15_4, s1,
-          done, s8b, s6, msym1, s4, bit5, first, s5, s1b,
+          run_pair, amap, runlen, run_hit, row_cur9, p_n15_4, s1,
+          s8b, s6, msym1, s4, bit5, first, s5, s1b,
           bucket_i, __code_pixel_n0x2000, s9, cum1, lvl_a, p_n15_5, p_n15_7,
           b15a, msym3, excl_sym_a, excl_sym_b, p_n15_11, wq1, cache2,
           cache1, cache3, cache4, cache6, cur5_back2, h11, h12, h13, h14, h15,
@@ -10994,7 +11058,8 @@ void __expand_alphabet(ModelBlock *_this)
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 432, "frame layout moved");
   ;
   uint32_t *codes_p;   // was int32_t: this holds an address
-  int32_t bits, nbytes, left2, left, run, gap;
+  uint32_t nbytes;
+  int32_t bits, left2, left, run, gap;
   uint32_t mask, i, cap, n_1, n_syms, j, k, carry, s, b, piece, s2;
   void *codes;
   bits = _this->depth;
@@ -11102,7 +11167,10 @@ ModelBlock *__layout_workspace(ModelBlock *blk, int32_t a2, int32_t img_w, int32
   PixRec *buf;   // one of the five row buffers
   uint8_t bucket;
   int16_t rev;
-  int32_t w, j, r, x, bits, e0, e1;
+  uint32_t e0;
+  uint32_t e1;
+  uint32_t w;
+  int32_t j, r, x, bits;
   uint32_t k, m, s, n, i8, i24;
   uint8_t *runs;
   w = img_w;
@@ -11240,7 +11308,7 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 112,
                 "frame layout moved");
-  int32_t Size;
+  uint32_t Size;
   // These shared `__frame.g0` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
@@ -11274,8 +11342,12 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
           *Src_2, *p, *ArgList_8;
   int16_t lvl;
   PixRec *kk, *row_cur3, *row_cur2, *row_cur1, *n_syms;   // the five row buffers, rotated
-  int32_t g, flags, lo, k, w2, w4, w2n, lvl_n, live, gi, wt, has4, s,
-          jj, nbytes, bucket, row_w, x, x2, y, step, x7, x3, x4, bits, depth,
+  uint32_t has4;
+  uint32_t jj;
+  uint32_t wt;
+  uint32_t nbytes;
+  int32_t g, flags, lo, k, w2, w4, w2n, lvl_n, live, gi, s,
+          bucket, row_w, x, x2, y, step, x7, x3, x4, bits, depth,
           y2, depth_raw, nchunk, n_pix, chunk, q5, q1, at, q2, written, n_pix2, x5;
   uint32_t *ArgList_6;
   SymListBlock *has3, *alpha;
@@ -12140,7 +12212,8 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   uint16_t *mir_top;
   P2Freq *grp;
   // Two more things MSVC kept in the register `grp` names.
-  int32_t hi_nibble, rec_idx;
+  uint32_t rec_idx;
+  int32_t hi_nibble;
   uint32_t idx0;   // a record index in four regions ...
   P2Freq *p2_rec;
   // Two things in one slot, and both are read as numbers: the strip index
@@ -12213,6 +12286,11 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   P2Count *r0040;
   float ms1, bias2, bias1, d_bias, ms_a, ms_b, ms_b10, conf;
   P2Count *r0010;
+  uint32_t off0;
+  uint32_t off1;
+  uint32_t off2;
+  uint32_t off3;
+  uint32_t off4;
   int32_t ctx_lo, bank_ctx, res, w0, w0b, ctxw, res2, w1, e1, wnode0m1a, enode0m1a, x0020, x0010,
           neg, w_top, e_top, bump, res_s, w_top3, w_topm1, wd4000a, ed4000a, wr4000b, er4000b,
           wd4000m1b, ed4000m1b, wm4000c, em4000c, wd2000c, ed2000c, wr2000c, er2000c, wd2000m1b, ed2000m1b, wm2000c,
@@ -12237,7 +12315,7 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
           er0100a, wm0100a, em0100a, wd0080a, ed0080a, wr0080a, er0080a, wm0080a, em0080a, wd0040a, ed0040a,
           wr0040a, er0040a, wm0040a, em0040a, wd0020a, ed0020a, wr0020a, er0020a, wm0020a, pm0020a, wd0010a,
           ed0010a, wr0010a, er0010a, wm0010a, em0010a, ctx, ctx15, fold_sel, sel_alt, sel0, sel1,
-          sel2, sel3, sel4, off4, off3, off2, off1, off0;
+          sel2, sel3, sel4;
   int64_t dl, du, dul, dur, resid;
   P2Freq *frecg2;
   P2Freq *frecg1;
@@ -14893,7 +14971,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
 
 void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
 {
-  int32_t Size;
+  uint32_t Size;
   // These three shared a stack slot each with a local the main declaration
   // below still names: MSVC gave one slot to locals whose live ranges do not
   // overlap, and Hex-Rays named every use.  That they can have storage of
@@ -15433,12 +15511,19 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
   uint8_t bpp;
   uint8_t *Buffer_3, *copy, *srcp, *dst;   // `uint8_t *` beside the `char` scalars above
   uint8_t has_coded;
-  int32_t Buffer__1, near_lossless, pl, predictor, dc_v, w4_v, w8_v, w12_v, ArgList, plane,
-          pl2, plane2, pred, i, Size_2, Size_3, nplanes_c, i2, pred_s, n_planes,
+  uint32_t dc_v;
+  uint32_t near_lossless;
+  uint32_t pred_s;
+  uint32_t w12_v;
+  uint32_t w4_v;
+  uint32_t w8_v;
+  int32_t Buffer__1, pl, predictor, ArgList, plane,
+          pl2, plane2, pred, i, Size_2, Size_3, nplanes_c, i2, n_planes,
           Src_2, img_h, at, y, i_1, left;
   uint16_t i_2;
+  int32_t Size_1;
   uint32_t __expand_image_Buffer_1, pad_len, *blk, ElementCount_5, ElementCount_2,
-           desc, desc_flags, Size_1, ElementCount_1, ElementCount_4, word12, word8, word4,
+           desc, desc_flags, ElementCount_1, ElementCount_4, word12, word8, word4,
            worddc, word6, word4b;
   uint8_t *Src_1;
   void *Src_3;
@@ -16840,7 +16925,12 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
   uint8_t __compress_image_Buffer_1;   // 0/1, shifted into bit 7 of the header byte
   uint8_t *Srca, *Buffera_2, *Buffera_3;   // `uint8_t *` beside the `char` scalars above
   uint32_t Buffera_5, Buffera_6;   // the header's pad/depth/flags word, not an address
-  int32_t row_bytes, data_bytes, img_stride, bits_left, pl, shifted, free_bits, acc, pl2, ok_all, img_h,
+  uint32_t acc;
+  uint32_t data_bytes;
+  uint32_t img_stride;
+  uint32_t row_bytes;
+  uint32_t shifted;
+  int32_t bits_left, pl, free_bits, pl2, ok_all, img_h,
           rows_left, y, i_1, step, countdown, data_size;
   BmfImage *p_i_1;
   uint16_t i_2;
@@ -17195,7 +17285,7 @@ void __bmf_compress(
   FILE *Stream_v;
   const uint8_t *Palette;
   int32_t *p_i, Arc, Flags, Colours, Step, Grey, i;
-  uint32_t Size;
+  int32_t Size;
 
   // The reader below answers "no" the same way whether the file is missing or
   // is not a BMP, and BMF told those apart -- so open it once first, as its

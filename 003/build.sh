@@ -76,6 +76,11 @@ if [ "${BMF_WARN:-0}" = 1 ]; then
   "$CXX" "${opts[@]}" -O2 "${incs[@]}" "${warn[@]}" -fsyntax-only \
       -fdiagnostics-plain-output bmf.cpp "$@" 2>&1 | tee warn.log |
       grep -cE '\[-W(conversion|sign-conversion|sign-compare|useless-cast)\]' || true
+  # Stamp what the log is about.  Its line numbers mean nothing against any
+  # other version of the file, and a tool that reads them (tools/resign.py)
+  # cannot tell a stale log from a fresh one without this -- mtime is not it,
+  # since a `cp` of the source is newer than a log that still describes it.
+  printf '# subs1.hpp %s\n' "$(cksum < subs1.hpp)" >> warn.log
   exit 0
 fi
 
