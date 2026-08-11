@@ -22,15 +22,16 @@ and 3.
 
 ```
                                    round 8   round 9
-subs1.hpp / bmf.cpp lines            17787     17810
+subs1.hpp / bmf.cpp lines            17787     17750
 raw-offset sites                        22        12
 byte offsets on a typed base           121         0
+pointer casts                         2137      1624
 fNN members / named ones             93/121     5/162
-distinct vNN locals                    554       547
-  bodies still carrying one              —   29/102
-  vNN uses                                —     12487
+distinct vNN locals                    554       546
+  bodies still carrying one              —   24/102
+  vNN uses                                —     11790
 goto / LABEL_n:                     112/79     81/55
-conversion warnings (ratchet)         1455      1335
+conversion warnings (ratchet)         1455      1333
 ```
 
 Four of those numbers were wrong when this section was first written, and the
@@ -548,7 +549,7 @@ Round eight said the `vNN` locals were answerable only by knowing what their
 values mean, and §8 above repeated it. That is true of the *last* ones and was
 never true of the first ones, and the way to tell which is which is to start.
 
-Twenty-one bodies went from carrying `vNN` names to carrying none:
+Thirty-four bodies went from carrying `vNN` names to carrying none:
 `predict_med`, `unpredict_med`, `alt_init_tables`, `colour_transform`,
 `interleave_plane`, `transform_planes`, `alloc_image`, `model_planes`,
 `init_symbol_list`, `unmodel_plane`, three `alt_model_p*_d8_*` wrappers,
@@ -556,7 +557,9 @@ Twenty-one bodies went from carrying `vNN` names to carrying none:
 `decode_context_bit`, `alt_p1_encode_symbol`, `alt_p1_decode_symbol`,
 `alt_p2_decode_symbol`, `alt_p2_encode_symbol`, `rc_begin_encode`,
 `rc_begin_decode`, `layout_workspace`, `alt_p1_alloc`, `alt_p2_alloc`,
-`encode_symbol_tree`, `decode_symbol_tree`. 58 of 102 bodies to 29.
+`encode_symbol_tree`, `decode_symbol_tree`, `symbol_list_update`,
+`encode_symbol_list`, `decode_symbol_list`, `expand_alphabet` and `read_bmp`.
+58 of 102 bodies to 24, and 13 969 `vNN` uses to 11 790.
 
 **Almost every one of them turned out to be readable from its shape alone.**
 `predict_med` is MED, the LOCO-I median edge predictor: `up` trails `p` by
@@ -577,9 +580,9 @@ substantial fraction turned out not to be values at all:
 | --- | --- | --- |
 | a spill saved and restored across a region that cannot change it | `unsave.py` | 25 |
 | an `if` whose two arms are the same code | `undup.py` | 5 |
-| a local that is a second name for a parameter nothing assigns | — | ~15 |
-| a loop counter doubled as `k_before = k` with `while (k_before + 1 < N)` | — | 4 |
-| a pointer and a byte offset walking the same buffer in step | — | 2 |
+| a local that is a second name for a parameter nothing assigns | — | ~20 |
+| a loop counter doubled as `k_before = k` with `while (k_before + 1 < N)` | — | 5 |
+| a pointer and a byte offset walking the same buffer in step | — | 3 |
 | a declaration with no use at all | `unused.py` | 38 |
 
 `unsave.py` is the one worth keeping. MSVC spills a register before a loop and
@@ -613,6 +616,14 @@ to read what an encoder with `-E` produced, which is what `testfiles/med32.bmp`
 exists to exercise. The body is there to be read, as the definition of what the
 inverse undoes.
 
+One more structure came out of it. `expand_alphabet`'s frame was recovered as
+three untyped arrays — `uint64_t v28[2]`, `int32_t v29`, `uint32_t v30[91]` —
+and is sixteen `SymList`s. `sizeof(SymList)` is 24 and `ent` is at +20, which
+makes both loops that walk it legible at once: the free loop stepped back six
+words at a time from one past the last list taking `[5]`, and the zeroing loop
+wrote bytes 20 + 48i and 44 + 48i, which are `lists[2i].ent` and
+`lists[2i+1].ent`.
+
 ### What is actually left
 
 Nine bodies hold two thirds of what remains: `alt_p2_model` (483 distinct
@@ -622,3 +633,6 @@ names), `alt_p2_context` (184), `choose_plane_coding` (177), `alt_p1_model`
 and they are where round eight's claim finally is true: their locals are
 intermediate values of an arithmetic whose meaning is `algorithm_v2.md`'s
 subject, not a sweep's.
+
+The other fifteen are the drivers and the two `_d8` bodies, and those are
+ordinary work of the kind above rather than a different kind of work.
