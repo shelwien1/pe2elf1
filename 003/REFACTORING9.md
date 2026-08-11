@@ -34,7 +34,7 @@ distinct unexplained locals            554       591             0
 goto / LABEL_n:                     112/79     81/55         49/34
   restart a loop / exit N blocks         —         —         16/29
   jump into a block / sideways           —         —           1/3
-conversion warnings (ratchet)         1455      1331          1116
+conversion warnings (ratchet)         1455      1331          1092
 ```
 
 **Not one Hex-Rays name is left in either file.** Checked by running the
@@ -74,6 +74,13 @@ have satisfied without doing anything:
 3. The headline counted comments while the two rows under it stripped them, and
    this file quotes the old names on purpose — `// was int32_t v312` beside the
    padding that replaced it. So the row read **81 with every body clean**.
+4. Hex-Rays' names also turn up behind a prefix. `rename.py` puts the function's
+   name in front of a local that collides with a global, and `p_` goes on a
+   pointer, so `__code_pixel_n0x2000`, `p_n15` and eleven `p_n15_N` are the same
+   residue in a disguise `\bn0x…` cannot match — there is no word boundary
+   before the `n`. **22 of them, in seven bodies, while the row read zero for
+   the third time.** Found by the retyping driver picking one of them as a
+   candidate, which is not a way of finding things anyone should rely on.
 
 A figure a comment can move is not a measurement, and a figure that cannot move
 is not one either. That is the whole of §10, and §12 is four more of it.
@@ -447,7 +454,9 @@ now zero:
 | `unhoist.py` | new: put back the load the scheduler moved (§12) |
 | `explicitcmp.py` | new: write out the conversion a comparison already performs (§15) |
 | `resign.py` | new: give a local the signedness of the values it holds (§16) |
+| `resign_group.py` | new: give a set of locals that must agree the same signedness (§16) |
 | `resign-drive.sh` | new: apply the retypes that measurably pay, and only those (§16) |
+| `rename.py` | `--member`, because the member-safe patterns exclude `__frame.X` (§16) |
 | `build.sh` | stamp `warn.log` with the source checksum, so a stale log is refusable (§16) |
 | `unify_types.py` | write only when there is something to change (§15) |
 | `decast.py` | unchanged, and it earned its keep the moment 156 declarations moved |
@@ -960,7 +969,7 @@ at the operator. 62 sites, no semantic change, and the two claims it does
 *not* make are in its docstring — it does not decide whether a comparison is
 right, which is a question about whether the signed side can go negative.
 
-What is left is 1116, and `shape.py` now says what they are made of rather
+What is left is 1092, and `shape.py` now says what they are made of rather
 than only how many there are — the same defect the `goto` row had:
 
 ```
@@ -1011,7 +1020,7 @@ knowing the conversion rules. A cast on an assignment adds nothing — `x = y`
 with the two declared types visible already says the value is being narrowed,
 and writing `(uint16_t)` in front of it moves no information anywhere. It would
 move the number, which is the entire objection: §10 is about measures you can
-satisfy without doing the work, and putting 1116 casts in this file to make a
+satisfy without doing the work, and putting 1092 casts in this file to make a
 scoreboard read zero is the purest example of one this project could produce.
 
 The number goes down when the *types* are right, and §16 is 64 of them.
