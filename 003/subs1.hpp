@@ -4030,45 +4030,45 @@ int32_t __alt_p1_model(AltP1Block *_this)
   return result;
 }
 
-int32_t *__alt_p1_alloc(AltP1Block *_this, int32_t i, int32_t a3, int32_t n4) {   P1Ctx *v22;
+int32_t *__alt_p1_alloc(AltP1Block *_this, int32_t img_w, int32_t img_h, int32_t plane)
+{
   ;
-  int32_t v6, v7, v8, v10, v12, v13, v15, v17, v18, v20, v21, v27, v28;
+  int32_t lvl, grp, k, lvl1, odd, grp1, slot, slot1, bump, wid, r, plane_hi;
   uint32_t n0x99C60, n0x80, n5;
   n0x99C60 = 0;
-  _this->width = i;
-  _this->height = a3;
+  _this->width = img_w;
+  _this->height = img_h;
   do
     __init_counter_node((uint16_t *)&_this->counters[n0x99C60++]);
   while ( n0x99C60 < 0x99C60 );
   _this->pred = 0;
-  v6 = 0;
-  v7 = 0;
-  v8 = 0;
-  v27 = n4 << 8;
+  lvl = 0;
+  grp = 0;
+  k = 0;
+  plane_hi = plane << 8;
   do
   {
-    v28 = v8;
-    _this->level_of[2 * v8] = v6;
-    v10 = (2 * v8 == p1_level_edges[v6]) + v6;
-    _this->group_of[2 * v8] = v27 | v7;
-    _this->level_of[2 * v8 + 1] = v10;
-    v12 = 2 * v8 + 1;
-    v13 = (2 * v8 == p1_group_edges[v7]) + v7;
-    v6 = (v12 == p1_level_edges[v10]) + v10;
-    _this->group_of[2 * v8 + 1] = v13 | v27;
-    v7 = (v12 == p1_group_edges[v13]) + v13;
-    ++v8;
+    _this->level_of[2 * k] = lvl;
+    lvl1 = (2 * k == p1_level_edges[lvl]) + lvl;
+    _this->group_of[2 * k] = plane_hi | grp;
+    _this->level_of[2 * k + 1] = lvl1;
+    odd = 2 * k + 1;
+    grp1 = (2 * k == p1_group_edges[grp]) + grp;
+    lvl = (odd == p1_level_edges[lvl1]) + lvl1;
+    _this->group_of[2 * k + 1] = grp1 | plane_hi;
+    grp = (odd == p1_group_edges[grp1]) + grp1;
+    ++k;
   }
-  while ( (uint32_t)(v28 + 1) < 0x100 );
+  while ( (uint32_t)k < 0x100 );
   n0x80 = 0;
-  v15 = 0;
+  slot = 0;
   do
   {
-    _this->slot_of[2 * n0x80] = 8 * v15;
-    v17 = (2 * n0x80 == p1_slot_edges[v15]) + v15;
-    _this->slot_of[2 * n0x80 + 1] = 8 * v17;
-    v18 = 2 * n0x80++ + 1 == p1_slot_edges[v17];
-    v15 = v18 + v17;
+    _this->slot_of[2 * n0x80] = 8 * slot;
+    slot1 = (2 * n0x80 == p1_slot_edges[slot]) + slot;
+    _this->slot_of[2 * n0x80 + 1] = 8 * slot1;
+    bump = 2 * n0x80++ + 1 == p1_slot_edges[slot1];
+    slot = bump + slot1;
   }
   while ( n0x80 < 0x80 );
   _this->ctx_w[0].w[1] = 32;
@@ -4103,32 +4103,32 @@ int32_t *__alt_p1_alloc(AltP1Block *_this, int32_t i, int32_t a3, int32_t n4) { 
     _this->buf[n5++] = (P1Ctx *)bmf_new(2 * _this->width + 20);
   while ( n5 < 5 );
   __alt_init_tables(_this->fold, (int8_t *)_this->unfold);
-  v20 = _this->width;
+  wid = _this->width;
   if ( _this->width > -10 )
   {
-    v21 = 0;
+    r = 0;
     do
     {
-      _this->buf[4][v21].sym = 72;
-      _this->buf[3][v21].sym = 72;
-      _this->buf[2][v21].sym = 72;
-      _this->buf[1][v21].sym = 72;
-      _this->buf[0][v21].sym = 72;
-      _this->buf[4][v21].mag = 0;
-      _this->buf[3][v21].mag = 0;
-      _this->buf[2][v21].mag = 0;
-      _this->buf[1][v21].mag = 0;
-      _this->buf[0][v21].mag = 0;
-      v20 = _this->width;
-      ++v21;
+      _this->buf[4][r].sym = 72;
+      _this->buf[3][r].sym = 72;
+      _this->buf[2][r].sym = 72;
+      _this->buf[1][r].sym = 72;
+      _this->buf[0][r].sym = 72;
+      _this->buf[4][r].mag = 0;
+      _this->buf[3][r].mag = 0;
+      _this->buf[2][r].mag = 0;
+      _this->buf[1][r].mag = 0;
+      _this->buf[0][r].mag = 0;
+      wid = _this->width;
+      ++r;
     }
-    while ( v21 < _this->width + 10 );
+    while ( r < _this->width + 10 );
   }
-  _this->cursor[0] = _this->buf[0] + v20 + 4;
-  _this->cursor[1] = _this->buf[1] + v20 + 4;
-  _this->cursor[2] = _this->buf[2] + v20 + 4;
-  _this->cursor[3] = _this->buf[3] + v20 + 4;
-  _this->cursor[4] = _this->buf[4] + v20 + 4;
+  _this->cursor[0] = _this->buf[0] + wid + 4;
+  _this->cursor[1] = _this->buf[1] + wid + 4;
+  _this->cursor[2] = _this->buf[2] + wid + 4;
+  _this->cursor[3] = _this->buf[3] + wid + 4;
+  _this->cursor[4] = _this->buf[4] + wid + 4;
   return (int32_t *)_this;
 }
 
@@ -4446,14 +4446,13 @@ static void bmf_set_denormal_mode()
 }
 
 
-uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
+uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t img_w, int32_t plane)
 {
-  P2Ctx *v17;
   ;
-  int32_t v7, v8, v9, v13, Size, v18, v21, v23, v24, v27;
-  uint32_t j, k, n0x1E60, m_1, m, n5, n0x82, n;
-  void *v10;
-  _this->plane_idx = n4;
+  int32_t e, dz, band, done, row_bytes, lvl, lvl1, bump, len, len1;
+  uint32_t j, k, n0x1E60, pairs, p, n5, n0x82, n;
+  void *buf1;
+  _this->plane_idx = plane;
   // Two records a step, which is how MSVC unrolled the seed of all 163 840.
   for ( j = 0; j < 0x14000; ++j )
   {
@@ -4471,63 +4470,63 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
   do
   {
     // Two records a pass, 0x1E60 passes: 15552 of them.
-    v7 = 2 * n0x1E60;
-    _this->freq[v7].f[0] = 2048;
+    e = 2 * n0x1E60;
+    _this->freq[e].f[0] = 2048;
     ++n0x1E60;
-    _this->freq[v7].f[1] = 2816;
-    _this->freq[v7].f[2] = 2816;
-    _this->freq[v7].step = 4096;
-    _this->freq[v7 + 1].f[0] = 2048;
-    _this->freq[v7 + 1].f[1] = 2816;
-    _this->freq[v7 + 1].f[2] = 2816;
-    _this->freq[v7 + 1].step = 4096;
+    _this->freq[e].f[1] = 2816;
+    _this->freq[e].f[2] = 2816;
+    _this->freq[e].step = 4096;
+    _this->freq[e + 1].f[0] = 2048;
+    _this->freq[e + 1].f[1] = 2816;
+    _this->freq[e + 1].f[2] = 2816;
+    _this->freq[e + 1].step = 4096;
   }
   while ( n0x1E60 < 0x1E60 );
-  v8 = 4 * plane_desc[0].w12 + 1;
-  v9 = 16 * plane_desc[0].w12;
+  dz = 4 * plane_desc[0].w12 + 1;
+  band = 16 * plane_desc[0].w12;
   *(uint32_t *)&_this->has_ref = (uint8_t)(plane_desc[plane_desc[_this->plane_idx + 1].src_plane + 1].flags
                                                & 8) >> 3;
-  deadzone_hi = v8;
-  deadzone_lo = -v8;
-  *(uint32_t *)&_this->band_lo = -v9 - 7;
-  *(uint32_t *)&_this->band_hi = v9 + 8;
-  _this->row0 = (int32_t *)bmf_new(4 * i + 16);
-  v10 = bmf_new(4 * i + 16);
+  deadzone_hi = dz;
+  deadzone_lo = -dz;
+  *(uint32_t *)&_this->band_lo = -band - 7;
+  *(uint32_t *)&_this->band_hi = band + 8;
+  _this->row0 = (int32_t *)bmf_new(4 * img_w + 16);
+  buf1 = bmf_new(4 * img_w + 16);
   *(uint32_t *)((uint8_t *)_this + 232) = 0x3F800000 /* 1.0f */;
-  _this->row1 = (int32_t *)v10;
-  _this->cur = _this->row0 + i + 2;
-  if ( i > -4 )
+  _this->row1 = (int32_t *)buf1;
+  _this->cur = _this->row0 + img_w + 2;
+  if ( img_w > -4 )
   {
-    m_1 = (i + 4) / 2;
-    if ( m_1 )
+    pairs = (img_w + 4) / 2;
+    if ( pairs )
     {
-      for ( m = 0; m < m_1; ++m )
+      for ( p = 0; p < pairs; ++p )
       {
-        *(uint8_t **)&_this->row1[2 * m] = (uint8_t *)_this;
-        *(uint8_t **)&_this->row0[2 * m] = (uint8_t *)_this;
-        *(uint8_t **)&_this->row1[2 * m + 1] = (uint8_t *)_this;
-        *(uint8_t **)&_this->row0[2 * m + 1] = (uint8_t *)_this;
+        *(uint8_t **)&_this->row1[2 * p] = (uint8_t *)_this;
+        *(uint8_t **)&_this->row0[2 * p] = (uint8_t *)_this;
+        *(uint8_t **)&_this->row1[2 * p + 1] = (uint8_t *)_this;
+        *(uint8_t **)&_this->row0[2 * p + 1] = (uint8_t *)_this;
       }
-      v13 = 2 * m + 1;
+      done = 2 * p + 1;
     }
     else
     {
-      v13 = 1;
+      done = 1;
     }
-    if ( i + 4 > (uint32_t)(v13 - 1) )
+    if ( img_w + 4 > (uint32_t)(done - 1) )
     {
-      *(uint8_t **)&_this->row1[v13 - 1] = (uint8_t *)_this;
-      *(uint8_t **)&_this->row0[v13 - 1] = (uint8_t *)_this;
+      *(uint8_t **)&_this->row1[done - 1] = (uint8_t *)_this;
+      *(uint8_t **)&_this->row0[done - 1] = (uint8_t *)_this;
     }
   }
   n5 = 0;
-  Size = 18 * i + 234;
+  row_bytes = 18 * img_w + 234;
   do
-    _this->buf[n5++] = (P2Ctx *)bmf_new(Size);
+    _this->buf[n5++] = (P2Ctx *)bmf_new(row_bytes);
   while ( n5 < 5 );
-  memset(_this->buf[0],0,Size);
+  memset(_this->buf[0],0,row_bytes);
   ctx_bias[3] = 0;
-  v18 = 0;
+  lvl = 0;
   ctx_bias[2] = 0;
   ctx_bias[1] = 0;
   n0x82 = 0;
@@ -4535,20 +4534,20 @@ uint8_t *__alt_p2_alloc(AltP2Block *_this, int32_t i, int32_t n4)
   _this->cursor[0] = _this->buf[0] + 8;
   do
   {
-    *(uint32_t *)&_this->ctx_delta[2 * n0x82] = (_this->plane_idx << 8) | (16 * v18);
-    v21 = (2 * n0x82 == p2_ctx_edges[v18]) + v18;
-    *(uint32_t *)&_this->ctx_delta[2 * n0x82 + 1] = (_this->plane_idx << 8) | (16 * v21);
-    v23 = 2 * n0x82++ + 1 == p2_ctx_edges[v21];
-    v18 = v23 + v21;
+    *(uint32_t *)&_this->ctx_delta[2 * n0x82] = (_this->plane_idx << 8) | (16 * lvl);
+    lvl1 = (2 * n0x82 == p2_ctx_edges[lvl]) + lvl;
+    *(uint32_t *)&_this->ctx_delta[2 * n0x82 + 1] = (_this->plane_idx << 8) | (16 * lvl1);
+    bump = 2 * n0x82++ + 1 == p2_ctx_edges[lvl1];
+    lvl = bump + lvl1;
   }
   while ( n0x82 < 0x82 );
-  v24 = 0;
+  len = 0;
   for ( n = 0; n < 0x3C; ++n )
   {
-    _this->nb_ctx[2 * n] = v24;
-    v27 = (2 * n == p2_len_edges[v24]) + v24;
-    _this->nb_ctx[2 * n + 1] = v27;
-    v24 = (2 * n + 1 == p2_len_edges[v27]) + v27;
+    _this->nb_ctx[2 * n] = len;
+    len1 = (2 * n == p2_len_edges[len]) + len;
+    _this->nb_ctx[2 * n + 1] = len1;
+    len = (2 * n + 1 == p2_len_edges[len1]) + len1;
   }
   _this->ctx = 15;
   __alt_init_tables(_this->fold, _this->unfold);
@@ -15849,7 +15848,7 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
   uint8_t has_coded;
   int32_t Buffer__1, v21, n4, predictor, v27, v28, v29, v30, ArgList, v33,
           n4_4, v37, n2_1, i, Size_2, Size_3, n4_2, v48, n2_2, n_planes,
-          Src_2, v58, n4_8, v61, i_1, n4_9, v76;
+          Src_2, v58, n4_8, v61, i_1, n4_9;
   uint16_t i_2;
   uint32_t __expand_image_Buffer_1, v12, *v13, ElementCount_5, ElementCount_2,
            v23, v25, Size_1, ElementCount_1, ElementCount_4, v67, v68, v69,
@@ -15991,9 +15990,8 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
   {
     v75 = *(uint32_t *)out_cursor;
     out_cursor += 4;
-    v76 = v75 << ((packer_free_bits + 4) & 31);
     ElementCount_2 = v75 >> (-packer_free_bits & 31);
-    v21 = packer_acc | v76 & 0xF;
+    v21 = packer_acc | (v75 << ((packer_free_bits + 4) & 31)) & 0xF;
     packer_acc = ElementCount_2;
     packer_free_bits += 32;
   }
