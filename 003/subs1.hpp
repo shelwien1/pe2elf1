@@ -2264,7 +2264,8 @@ uint16_t *__init_counter_node(uint16_t *_this)
 int32_t __encode_symbol_tree(uint16_t *freq, int32_t sym)
 {
   ;
-  int16_t add, sum4;
+  uint16_t add;
+  int16_t sum4;
   // The cumulative count the range coder takes, which it takes unsigned.
   uint32_t cum;
   int32_t lvl, result, go, fa, esc, path, node, span, f1, mask;
@@ -2365,7 +2366,7 @@ int32_t __alt_p1_encode_symbol(uint16_t *freq, int32_t unread_ctx, int32_t ctx, 
 {
   ;
   bool done;
-  int16_t tot0;
+  uint16_t tot0;
   // The cumulative count the range coder takes, which it takes unsigned.
   uint32_t cum;
   int32_t slot, result, lo;
@@ -2603,7 +2604,7 @@ int32_t __alt_p1_decode_symbol(uint16_t *freq, int32_t a2, int32_t ctx)
 int32_t __alt_p2_encode_symbol(P2Freq *_this, const uint32_t *a2, int32_t a3)
 {
   ;
-  int16_t f_before;
+  uint16_t f_before;
   uint16_t *result;
   // The cumulative count the range coder takes, which it takes unsigned.
   uint32_t cum;
@@ -9245,7 +9246,7 @@ int32_t __decode_symbol_list(SymList *a1)
   int32_t live, cum, i, c, top, half, back_cnt, last_cnt;
   uint32_t n_left, zeros;   // counts that MSVC spilled into the list's first slot
   SymList *owner0, *owner1;
-  int32_t cum_hi;
+  uint32_t cum_hi;
   int32_t tot_1;
   int32_t tot_all;
   int32_t target;
@@ -10315,7 +10316,8 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   uint8_t match1, m0, m1, m2, m3;
   uint8_t *bp;   // `uint8_t *` beside the `char` scalars above
   uint16_t *id3p;   // a cursor into `ctx_id3`
-  int16_t rev, s8, w1s, acc2, s3, g0;
+  uint16_t rev;
+  int16_t s8, w1s, acc2, s3, g0;
   ModelBlock *this_4;
   SymPair *pair;   // the group's counter pair for this context
   // A cumulative count, a high count and a total: the three arguments the
@@ -11169,7 +11171,7 @@ ModelBlock *__layout_workspace(ModelBlock *blk, int32_t a2, int32_t img_w, int32
   ;
   PixRec *buf;   // one of the five row buffers
   uint8_t bucket;
-  int16_t rev;
+  uint16_t rev;
   uint32_t e0;
   uint32_t e1;
   uint32_t w;
@@ -16038,7 +16040,9 @@ uint32_t __search_filter(BmfImage *img, int8_t a2)
   int8_t f4;
   uint8_t f0, f1, f2, f3;
   uint8_t *srcp, *y, *dstp, *hard, *Blockb_2, *Srca_1, *bits_a, *p0, *p1, *bits_b, *p2, *p3, *Blockb_6, *p4, *p5, *p6, *Blockb_7, *p7, *p10, *p11, *Blockb_8, *p12, *p13, *p14, *Blockb_9, *Blockb_4, *Srca_3, *Blockb_5, *Srca_4, *cost_f13, *Srca_5, *Blockb_3, *Srca_2, *Blockb_1, *Srca, *flags_s;   // `uint8_t *` beside the `char` scalars above
-  int16_t w_a, w_b, w_d, w_e;
+  uint16_t w_a;
+  uint16_t w_d;
+  int16_t w_b, w_e;
   int32_t tile_w, tile_h, pl, nplanes, y0, dx, off_y, Size, best_cost, bits_f5,
           cost_f5, f5, pred, c0, c1, c2, c3, cand, sv1, nplanes_c, pl_a,
           pi0, sv2, pl_b, pi1, bits2, sv0, plane, pi3, bits_e, nplanes_b, sv3,

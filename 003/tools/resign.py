@@ -61,7 +61,15 @@ import unreload                                                   # noqa: E402
 WARN = re.compile(r"^subs1\.hpp:(\d+):\d+: warning: conversion "
                   r"(from|to) '([^']+)'(?: \{aka '[^']*'\})? (?:to|from) '([^']+)'")
 STORE = re.compile(r'^\s*([A-Za-z_]\w*)\s*=(?!=)')
-FLIP = {'int32_t': 'uint32_t', 'uint32_t': 'int32_t'}
+# Every width, not just the 32-bit pair.  Hex-Rays picks a signedness per
+# register at whatever width the register is used at, and a `uint16_t`
+# holding a signed difference is the same mistake as a `uint32_t` one.
+FLIP = {'int32_t': 'uint32_t', 'uint32_t': 'int32_t',
+        'int16_t': 'uint16_t', 'uint16_t': 'int16_t',
+        'int8_t': 'uint8_t', 'uint8_t': 'int8_t',
+        'int64_t': 'uint64_t', 'uint64_t': 'int64_t'}
+PAIRS = [{'int32_t', 'uint32_t'}, {'int16_t', 'uint16_t'},
+         {'int8_t', 'uint8_t'}, {'int64_t', 'uint64_t'}]
 SRC = ['subs1.hpp']
 # The three operators whose meaning, and not just their operand's bits, depends
 # on the signedness of the left-hand side.
@@ -130,7 +138,8 @@ def candidates(lines, log='warn.log'):
         # stored into a `uint16_t` member -- is unaffected by the flip: it stays
         # one warning either way, so it is not a reason to leave the
         # declaration disagreeing with its own right-hand sides.
-        same = [(src, dst) for src, dst in convs if {src, dst} == set(FLIP)]
+        same = [(src, dst) for src, dst in convs
+                if {src, dst} == {cur[0], want}]
         if not same or any(dst != cur[0] for _s, dst in same):
             continue
         if re.search(r'\b%s\b' % re.escape(name), sig):
@@ -206,6 +215,13 @@ def main():
     lim = next((a for a in sys.argv if a.startswith('--limit=')), None)
     if lim:
         found = found[:int(lim.split('=')[1])]
+    # `--only=K` applies the Kth alone.  The net-effect test above cannot see a
+    # local flowing into a struct member or a call argument, so for the few it
+    # cannot settle the answer is a rebuild -- one candidate, one measurement.
+    only = next((a for a in sys.argv if a.startswith('--only=')), None)
+    if only:
+        k = int(only.split('=')[1])
+        found = found[k:k + 1]
 
     if '--all' not in sys.argv:
         for nm, _a, _b, name, cur, want, n in found:
