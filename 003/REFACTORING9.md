@@ -34,7 +34,7 @@ distinct unexplained locals            554       591             0
 goto / LABEL_n:                     112/79     81/55         49/34
   restart a loop / exit N blocks         —         —         16/29
   jump into a block / sideways           —         —           1/3
-conversion warnings (ratchet)         1455      1331          1238
+conversion warnings (ratchet)         1455      1331          1174
 ```
 
 **Not one Hex-Rays name is left in either file.** Checked by running the
@@ -956,9 +956,7 @@ at the operator. 62 sites, no semantic change, and the two claims it does
 *not* make are in its docstring — it does not decide whether a comparison is
 right, which is a question about whether the signed side can go negative.
 
-What is left is 502 `-Wconversion` and 736 `-Wsign-conversion`, which are the
-decompilation's type mixture proper — a value narrowed or resigned on
-assignment, several hundred times.
+What is left is 1174 warnings about a value narrowed or resigned on assignment.
 
 The same tool would zero those too, and it is not going to, which is worth
 being explicit about because the distinction is thin and the temptation is not.
@@ -968,10 +966,10 @@ knowing the conversion rules. A cast on an assignment adds nothing — `x = y`
 with the two declared types visible already says the value is being narrowed,
 and writing `(uint16_t)` in front of it moves no information anywhere. It would
 move the number, which is the entire objection: §10 is about measures you can
-satisfy without doing the work, and putting 1238 casts in this file to make a
+satisfy without doing the work, and putting 1174 casts in this file to make a
 scoreboard read zero is the purest example of one this project could produce.
 
-The number goes down when the types are right, and that is a round of its own.
+The number goes down when the *types* are right, and §16 is 64 of them.
 
 **49 jumps, 45 of which are what `goto` is for.** The breakdown row in §1 is
 there so a later round can see whether the other four have grown.
@@ -985,3 +983,64 @@ has said since round three that it is a counter and not a target, and
 What is *not* left: a Hex-Rays name, anywhere in either file; an `fNN` member;
 a raw offset off `_this`; a frame that carries two names in one slot; a rule in
 `tools/` that finds anything.
+
+---
+
+## 16. Retyping: 1238 to 1174, and four corrections from the gate
+
+Hex-Rays picks `int` or `unsigned int` per register and not per quantity, so a
+count assigned only from `int32_t` expressions arrives declared `uint32_t` and
+every assignment to it converts. That is not a narrowing anyone intended; it is
+a declaration disagreeing with its own right-hand sides, and the fix is the
+declaration. `tools/resign.py` retyped 156 locals over three passes.
+
+Every correction to the rule came from the gate, and each one is a different
+part of it:
+
+**The streams.** The first version proposed 153 flips and four streams moved.
+Bisecting found `alt_p2_model`'s `e_top`, which is a *residual*: `e_top <
+deadzone_lo` asks whether the error is below a negative bound, and declaring it
+unsigned makes every negative error enormous. So the rule will not touch a
+local that is an operand of `<`, `>`, `<=` or `>=` — that is where signedness
+changes the answer rather than the bits, and the other side is usually a plain
+local with nothing to protect it. 153 candidates became 91 and the streams held.
+
+Worth noting what made the *rest* safe: `explicitcmp.py` had already put a cast
+on every mixed comparison in the file, so those sites convert the same way
+whichever side is flipped. The two rules only work in that order.
+
+**The ratchet.** The warnings *into* a local are half the story — it also flows
+into locals still declared the old way, and each of those becomes a conversion.
+Counting one half proposed eighteen flips that put the total *up*. The rule
+counts both halves now and requires a net gain; the ones it still cannot see
+through are why `resign.py` reports rather than counts (below).
+
+**The strict pass.** Taking one name out of an eight-row comma list left
+`int32_t a, b, ;`, and where the name carried a trailing comment,
+`uint32_t ;   // a record index`. That compiles under `-fpermissive` and
+nowhere else, so it failed the gate's strict pass while the streams stayed
+byte-identical.
+
+**And one that no part of the gate could have caught**, because it made the
+tool do nothing at all: `warn.log`'s line numbers mean nothing against any
+other version of the file, and running against a stale one retypes whatever now
+sits on those lines — 17 wrong locals, +43 warnings. `build.sh` stamps the log
+with the source's checksum now and the tool checks it. mtime was the first
+attempt and is not the check: a `cp` of the source is *newer* than a log that
+describes it exactly, so the guard fired through an entire bisection and
+reported the change innocent twice.
+
+### Why `resign.py` proposes rather than counts
+
+It joins `shape.py`, `addrmap.py` and `unify_types.py` in the sweep's
+report-rather-than-count list, and this one needs its reason written down
+because unlike those three it does have a count.
+
+Whether a type change removes conversions or merely moves them is settled by
+the compiler. The rule's net-effect test sees a local flowing into other
+*locals*; it cannot see it flowing into a struct member or a call argument, and
+after the passes that paid there are still eight candidates left that do not.
+So its list is a list of things to try, the ratchet is what says whether trying
+them worked, and a non-empty list is not a defect. That is a different kind of
+tool from `uncopy` and `unhoist`, whose conditions are decidable from the text,
+and the sweep should not pretend otherwise.
