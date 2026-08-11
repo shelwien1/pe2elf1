@@ -1525,24 +1525,38 @@ The false positive is left as it is. A plain `static` helper would be reported
 dead rather than silently missed, and being pointed at the convention is the
 right outcome for that.
 
-### The measure that would have found it
+### The measure that would have found it, and did not
 
-§19 is a find nothing in `tools/` could have made, and that is worth a rule
-rather than a note. `shape.py` counts raw offsets, and only one of the three
-spellings was one. §2's lens takes the gcd of a cursor's *constant*
-subscripts, and none of the three has any — their indices are all variable.
-The compiler is happy with every one of them. So a duplicated address
-computation survives every measure here unless two copies happen to be read
-side by side, which is how this one was found and is not a method.
+§19 was found by reading, which is not a method, so the next move is the rule
+it suggests. `shape.py` counts raw offsets and only one of the three spellings
+was one; §2's lens takes the gcd of a cursor's *constant* subscripts and none
+of the three has any; the compiler is happy with all of them. A duplicated
+address computation survives every measure here unless two copies happen to be
+read side by side.
 
-The arithmetic is what makes it decidable. For a pointer whose element size is
-known, parse each `p[expr]` and `p + expr` as a sum of `c * v` terms, multiply
-every coefficient by the element size, and key the site on the map from
-variable to *byte* coefficient. Two sites with one key are one address. If
-their source text differs, they are two spellings of it. `tools/unspell.py`.
+The arithmetic is decidable. `tools/unspell.py` evaluates a pointer expression
+to a base and a map from variable to *byte* coefficient — following casts
+rather than stripping them, because after `(uint8_t *)` a `+ 4` is four bytes
+and before it, on a `uint16_t *`, it was eight — and reports two sites that
+reach one address by different text.
 
-Run against the revision before §19 it finds the pair the section is about, and
-one more that reading had missed:
+**It does not find §19.** Two of the three spellings are
+`2 * level_geom[lvl].tbl_base + …` and `2 * level_geom[sym].tbl_base + …`, and
+`lvl` in one function and `sym` in the other are the same value under two
+names. The third is in `update_binary_pair`, where the block arrives as
+`_this` rather than `freq`. Nothing textual can know those denote the same
+thing, so the rule that would have caught §19 is not this one and probably is
+not a rule at all — it is having read both functions.
+
+That is worth stating plainly rather than quietly shipping a tool named after a
+find it cannot make. The first version of this section claimed otherwise, and
+checking the claim against the revision before §19 is what corrected it: the
+tool ran, reported, and the three spellings were not in the report.
+
+### What it did find
+
+It reports a different duplicate of exactly the same kind, and one that eight
+rounds of reading had missed:
 
 ```
 row  {'': 20, 'i': 4}
@@ -1552,15 +1566,26 @@ row  {'': 20, 'i': 4}
 
 **`rc_begin_encode` and `rc_begin_decode` seed the same table**, one walking a
 508-byte row as bytes and the other walking the identical row as 254 words —
-the same ten header fields in the same order with the same values, and the same
-0x7A pairs after them. The decoder's spelling is the right one, because every
-field in that row is sixteen bits, and converting the encoder to match removed
-ten pointer casts including the `(uint8_t *)` on the allocation and the
+the same ten header fields, in the same order, with the same values, and the
+same 0x7A pairs after them. The decoder's spelling is the right one, because
+every field in that row is sixteen bits, and converting the encoder to match
+removed ten pointer casts including the `(uint8_t *)` on the allocation and the
 `(uint16_t *)` putting it back. Its return type went with them: it returns the
 table, which is `uint16_t *`, and the four call sites that discard it did not
 care either way.
 
-The tool reports and does not rewrite. Which spelling wins is a judgement —
-usually the one whose pointer type matches the record, but that is an argument
-about the data and not something the arithmetic decides. It reports zero now,
-and the two revisions above are what says the zero means something.
+Running the tool back through the file's history says the pair has been there
+since round eight and before. That is the argument for it — not the find it
+was named for, but a find of that shape that reading did not make in eight
+rounds of looking.
+
+It reports and does not rewrite. Which spelling wins is a judgement — usually
+the one whose pointer type matches the record, but that is an argument about
+the data and not something the arithmetic settles.
+
+Two things it declines rather than guesses at. A site whose index will not
+parse — a shift, a call, a `k++` — is skipped, because an address it cannot
+evaluate is not an address it can compare. And a line that its two scans both
+see is deduplicated before the comparison: `p = &q[i + 1];` is a subscript and
+a store, and a line reported against itself is the tool finding its own
+duplicate rather than the file's.
