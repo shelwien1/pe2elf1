@@ -6175,10 +6175,10 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
   // reaches it now.
   void *p0v;
   int32_t val3x;
-  void * Block_plane[4];
-  AltP1Block * &plane1 = (AltP1Block * &)Block_plane[1];
-  AltP1Block * &plane2 = (AltP1Block * &)Block_plane[2];
-  AltP1Block * &plane3 = (AltP1Block * &)Block_plane[3];
+  void * plane[4];
+  AltP1Block * &plane1 = (AltP1Block * &)plane[1];
+  AltP1Block * &plane2 = (AltP1Block * &)plane[2];
+  AltP1Block * &plane3 = (AltP1Block * &)plane[3];
   int32_t dc1;
   uint32_t x;
   int32_t val1x;
@@ -6213,7 +6213,7 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
         made = __alt_p1_alloc((AltP1Block *)raw, width, height, k);
       else
         made = nullptr;
-      Block_plane[k++] = made;
+      plane[k++] = made;
     }
     while ( k < plane_count );
   }
@@ -6243,9 +6243,9 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
         do
         {
           ++p;
-          // `&val3x + n` is `Block_plane[n - 1]`: val3x is the member
+          // `&val3x + n` is `plane[n - 1]`: val3x is the member
           // before the array, and this loop pre-increments from 0.
-          blk_k = (AltP1Block *)Block_plane[p - 1];
+          blk_k = (AltP1Block *)plane[p - 1];
           // The row end mirrored into the right margin: records 0..5 take -1..-6.
           // Two bytes each, which is what the twelve even offsets were.
           {
@@ -6328,8 +6328,8 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
         x = 0;
         do
         {
-          p0 = (uint32_t *)Block_plane[0];
-          __alt_p1_context((AltP1Block *)(uint8_t **)Block_plane[0], (AltP1Block *)nullptr, (AltP1Block *)0);
+          p0 = (uint32_t *)plane[0];
+          __alt_p1_context((AltP1Block *)(uint8_t **)plane[0], (AltP1Block *)nullptr, (AltP1Block *)0);
           code0 = __alt_p1_decode_symbol((uint16_t *)&p0[4 * p0[3] + 950], 0, p0[4]);
           pred0 = p0[2];
           AltP1Block *const blk = (AltP1Block *)p0;
@@ -6359,7 +6359,7 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
           p0[53] += 2;
           blk1 = (AltP1Block *)plane1;
           *(plane_desc[1].src_plane + out) = val0;
-          __alt_p1_context((AltP1Block *)(uint8_t **)blk1, (AltP1Block *)Block_plane[0], (AltP1Block *)0);
+          __alt_p1_context((AltP1Block *)(uint8_t **)blk1, (AltP1Block *)plane[0], (AltP1Block *)0);
           code1 = __alt_p1_decode_symbol(&blk1->counters[blk1->ctx[0]].total, 0, blk1->ctx[1]);
           pred1 = *(uint32_t *)&blk1->pred;
           val1 = (uint8_t)(pred1 + blk1->unfold[code1]);
@@ -6384,7 +6384,7 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
           if ( xf1 )
             val1x += dc1 + *(plane_desc[1].src_plane + out);
           blk2 = (AltP1Block *)(plane2);
-          p0v = Block_plane[0];
+          p0v = plane[0];
           *(out + plane_desc[2].src_plane) = val1x;
           __alt_p1_context((AltP1Block *)blk2, (AltP1Block *)plane1, (AltP1Block *)(int32_t)p0v);
           code2 = __alt_p1_decode_symbol((uint16_t *)&((uint8_t**)blk2)[4 * blk2->ctx[0] + 950], 0, (int32_t)blk2->ctx[1]);
@@ -6470,7 +6470,7 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
     f = 0;
     do
     {
-      q = (void **)Block_plane[f];
+      q = (void **)plane[f];
       if ( q )
       {
         __alt_p1_free((void **)q, 1);
@@ -11950,10 +11950,10 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
   uint8_t out3;
   int32_t resid3;
   int32_t cur3;
-  void * Block_plane[4];
-  AltP1Block * &plane1 = (AltP1Block * &)Block_plane[1];
-  AltP1Block * &plane2 = (AltP1Block * &)Block_plane[2];
-  AltP1Block * &plane3 = (AltP1Block * &)Block_plane[3];
+  void * plane[4];
+  AltP1Block * &plane1 = (AltP1Block * &)plane[1];
+  AltP1Block * &plane2 = (AltP1Block * &)plane[2];
+  AltP1Block * &plane3 = (AltP1Block * &)plane[3];
   int32_t dc1;
   uint32_t x;
   int32_t out1;
@@ -11995,7 +11995,7 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
         made = __alt_p1_alloc((AltP1Block *)raw, width, height, k);
       else
         made = nullptr;
-      Block_plane[k++] = made;
+      plane[k++] = made;
     }
     while ( k < plane_count );
   }
@@ -12031,7 +12031,7 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
         do
         {
           ++p;
-          blk_k = (AltP1Block *)Block_plane[p - 1];
+          blk_k = (AltP1Block *)plane[p - 1];
           // The row end mirrored into the right margin: records 0..5 take -1..-6.
           // Two bytes each, which is what the twelve even offsets were.
           {
@@ -12097,11 +12097,11 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
         x = 0;
         do
         {
-          blk0 = (AltP1Block *)Block_plane[0];
+          blk0 = (AltP1Block *)plane[0];
           want0 = *(src + plane_desc[1].src_plane);
           off0 = plane_desc[1].src_plane;
           cur0 = want0;
-          __alt_p1_context((AltP1Block *)(uint8_t **)Block_plane[0], (AltP1Block *)nullptr, (AltP1Block *)0);
+          __alt_p1_context((AltP1Block *)(uint8_t **)plane[0], (AltP1Block *)nullptr, (AltP1Block *)0);
           keep0 = cur0;
           pred0 = (uint8_t)blk0->pred;
           resid0 = (uint8_t)(cur0 - pred0);
@@ -12144,7 +12144,7 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
             want1 = want1 - dc1 - *(plane_desc[1].src_plane + src);
           blk1 = (AltP1Block *)(plane1);
           cur1 = want1;
-          __alt_p1_context((AltP1Block *)plane1, (AltP1Block *)Block_plane[0], (AltP1Block *)0);
+          __alt_p1_context((AltP1Block *)plane1, (AltP1Block *)plane[0], (AltP1Block *)0);
           pred1 = (uint8_t)blk1->pred;
           resid1 = (uint8_t)(cur1 - pred1);
           code1 = blk1->fold[resid1];
@@ -12191,7 +12191,7 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
                                     * (uint32_t)*(plane_desc[2].src_plane + src)
                                     + 40) >> 7));
           blk2 = (AltP1Block *)(plane2);
-          __alt_p1_context((AltP1Block *)plane2, (AltP1Block *)plane1, (AltP1Block *)(int32_t)Block_plane[0]);
+          __alt_p1_context((AltP1Block *)plane2, (AltP1Block *)plane1, (AltP1Block *)(int32_t)plane[0]);
           pred2 = (uint8_t)blk2->pred;
           resid2 = (uint8_t)(want2 - pred2);
           code2 = blk2->fold[resid2];
@@ -12294,7 +12294,7 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
     f = 0;
     do
     {
-      q = (void **)Block_plane[f];
+      q = (void **)plane[f];
       if ( q )
       {
         __alt_p1_free((void **)q, 1);
@@ -15608,7 +15608,7 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
       int8_t flags_b;
       uint32_t data_len;
       uint8_t   hdr[8];   // the 8-byte member header `fread` takes in one call
-      uint32_t __expand_image_Buffer;
+      uint32_t magic_word;
       uint8_t _pad0[32];
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 112, "frame layout moved");
@@ -15635,7 +15635,7 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
           last_row, img_h, at, y, i_1, left;
   uint16_t i_2;
   int32_t n_pix;
-  uint32_t __expand_image_Buffer_1, pad_len, *blk, pal_bytes, want2,
+  uint32_t magic, pad_len, *blk, pal_bytes, want2,
            desc, desc_flags, want, got, word12, word8, word4,
            worddc, word6, word4b;
   uint8_t *plane_buf;
@@ -15648,7 +15648,7 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
     return nullptr;
   while ( 1 )
   {
-    if ( fread(&__frame.__expand_image_Buffer, 4u, 1u, fp1) != 1 )
+    if ( fread(&__frame.magic_word, 4u, 1u, fp1) != 1 )
     {
       fp = ((BmfArc *)arc)->fp;
       if ( feof(fp) )
@@ -15659,17 +15659,17 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
         return nullptr;
       }
     }
-    __expand_image_Buffer_1 = __frame.__expand_image_Buffer;
-    if ( (uint16_t)__frame.__expand_image_Buffer != 0x9081 )
+    magic = __frame.magic_word;
+    if ( (uint16_t)__frame.magic_word != 0x9081 )
       break;
-    plane_desc[0].w4 = ((BYTE2(__frame.__expand_image_Buffer) << 8) - 12288) | (HIBYTE(__frame.__expand_image_Buffer) - 48);
+    plane_desc[0].w4 = ((BYTE2(__frame.magic_word) << 8) - 12288) | (HIBYTE(__frame.magic_word) - 48);
     if ( plane_desc[0].w4 != 512 || fread(__frame.hdr, 8u, 1u, ((BmfArc *)arc)->fp) != 1 )
       break;
     fseek(((BmfArc *)arc)->fp, (*(uint32_t *)&__frame.hdr[4]), 1);
     fp1 = ((BmfArc *)arc)->fp;
   }
-  if ( (uint16_t)__expand_image_Buffer_1 != 0x8A81
-    || (plane_desc[0].w4 = ((BYTE2(__expand_image_Buffer_1) << 8) - 12288) | (HIBYTE(__expand_image_Buffer_1) - 48), plane_desc[0].w4 != 512)
+  if ( (uint16_t)magic != 0x8A81
+    || (plane_desc[0].w4 = ((BYTE2(magic) << 8) - 12288) | (HIBYTE(magic) - 48), plane_desc[0].w4 != 512)
     || fread(__frame.hdr_words, 0x10u, 1u, ((BmfArc *)arc)->fp) != 1 )
   {
     fp = ((BmfArc *)arc)->fp;
@@ -17021,14 +17021,14 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  uint8_t *Buffer_copy;
+  uint8_t *pix_copy;
   ;
   uint32_t coded_len;   // word 1 of the coded block, its length
   uint8_t *arc;   // were int32_t: these hold addresses
   FILE *i;
   bool fits;
   uint8_t bpp;
-  uint8_t __compress_image_Buffer_1;   // 0/1, shifted into bit 7 of the header byte
+  uint8_t has_coded;   // 0/1, shifted into bit 7 of the header byte
   uint8_t *plane_buf, *row_at, *row_next;   // `uint8_t *` beside the `char` scalars above
   uint32_t hdr_pad8, hdr_pad8b;   // the header's pad/depth/flags word, not an address
   uint32_t acc;
@@ -17057,14 +17057,14 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
       __expand_image(arc, 1, (void **)nullptr);
     }
   }
-  __compress_image_Buffer_1 = (uint8_t)(uintptr_t)coded_buf;
+  has_coded = (uint8_t)(uintptr_t)coded_buf;
   p_i_1 = (BmfImage *)(p_i);
   row_bytes = p_i->stride;
   if ( coded_buf )
-    __compress_image_Buffer_1 = 1;
+    has_coded = 1;
   __frame.hdr.width = p_i->width;
   __frame.hdr.height = p_i->height;
-  p_i->flags |= __compress_image_Buffer_1 << 7;
+  p_i->flags |= has_coded << 7;
   hdr_pad8 = *(uint32_t *)&p_i->_pad8;
   __frame.hdr.stride = (uint32_t)row_bytes;
   plane_desc[0].w4 = 512;
@@ -17298,12 +17298,12 @@ LABEL_57:
   free(::coded_buf);
   if ( (p_i->flags & 2) != 0 )
   {
-    Buffer_copy = (uint8_t *)bmf_new(p_i->data_size);
+    pix_copy = (uint8_t *)bmf_new(p_i->data_size);
     __frame.plane_n = ::plane_count;
-    __frame.row = Buffer_copy;
+    __frame.row = pix_copy;
     __frame.row_step = ::plane_count * (p_i->height - 1);
     __frame.pixels = (uint16_t *)p_i->pixels;
-    memcpy(Buffer_copy,p_i->pixels,p_i->data_size);
+    memcpy(pix_copy,p_i->pixels,p_i->data_size);
     LOWORD(img_h) = p_i->height;
     if ( (uint16_t)img_h )
     {
@@ -17340,7 +17340,7 @@ LABEL_57:
       while ( (int32_t)(__frame.row + 1) < img_h );
       arc = __frame.arc_f;
     }
-    __frame.owned = Buffer_copy;
+    __frame.owned = pix_copy;
     i_2 = p_i_1->width;
     p_i_1->width = img_h;
     p_i_1->height = i_2;

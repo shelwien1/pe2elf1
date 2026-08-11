@@ -295,9 +295,16 @@ def summary():
     # The vocabulary is MSVC's CRT headers and is listed rather than guessed:
     # a name is only counted if it is one of these, which is why `InName`,
     # `Colours` and `gA` are not in the row despite the capital.
-    crt = (r'\b(?:ArgList|Block|Buffer|Count|Dst|ElementCount|FileName|Format'
-           r'|Memory|Mode|NewSize|Offset|Origin|Position|Size|Src|Str|Stream'
-           r'|lpAddress)[a-c]*(?:_\w{1,2})?\b')
+    # The prefix and the long suffix are the same correction §1's `nNNNN` row
+    # needed and for the same reason: `rename.py` puts the function's name in
+    # front of a local that collides with a global, so
+    # `__expand_image_Buffer_1` is a Hex-Rays name behind a disguise, and a
+    # suffix of one or two characters misses `Buffer_copy` and `Block_plane`.
+    # Five of them sat in the file while this row read zero -- on the day it
+    # was written.
+    crt = (r'(?:\w+_)?(?:ArgList|Block|Buffer|Count|Dst|ElementCount|FileName'
+           r'|Format|Memory|Mode|NewSize|Offset|Origin|Position|Size|Src|Str'
+           r'|Stream|lpAddress)[a-c]*(?:_\w+)?')
     hits = collections.Counter()
     for a, b, nm, sig in structs.bodies(lines):
         for name in structs.decl_types(sig, lines, a, b):

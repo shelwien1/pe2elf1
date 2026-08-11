@@ -1721,3 +1721,25 @@ things wrong with it, each found by a stopped build rather than by reading:
 All three are the same shape: `__frame.X` is deliberately *not* a use of `X`,
 and every place that fact matters had to be told separately. The pattern is
 right and the exception list around it was three entries short.
+
+### The same disguise, a fourth time
+
+The row read zero the day it was written, and five names were sitting in the
+file. `rename.py` puts the function's name in front of a local that collides
+with a global, so `__expand_image_Buffer_1` is `Buffer_1` behind a prefix —
+which is **exactly** §1's fourth correction, the one about `__code_pixel_n0x2000`,
+recurring on a new pattern in the same week it was written. The suffix was too
+short as well: `Buffer_copy` and `Block_plane` are one word past `_\w{1,2}`.
+
+So the pattern takes an optional prefix and a suffix of any length, and the
+five are named: `expand_image`'s pair is the archive's magic word and the copy
+of it that gets compared to `0x8A81`, `compress_image`'s is the 0/1 that
+becomes bit 7 of the header, and `Block_plane` is the four-element array of
+`AltP1Block *` that `plane1`, `plane2` and `plane3` are references into.
+
+Four rounds of writing "the row is zero" have now been followed by four
+findings that the row could not see, and the pattern in *that* is worth more
+than any of the four: **a row whose test is a spelling will be defeated by a
+spelling.** The two rows that have never had to be corrected — the ratchet and
+the stream comparison — are the two that ask the compiler and the output rather
+than the text.
