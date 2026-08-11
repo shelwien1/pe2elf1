@@ -90,6 +90,11 @@ KEYWORD = {'if', 'else', 'while', 'do', 'for', 'return', 'switch', 'case',
 # `x` itself.  Without the lookahead every `*(uint16_t *)&v533->w2` read as
 # "address taken" and disqualified the local, which is thirteen of the counter
 # pointers in `alt_p2_model` alone.
+# A member is not the local of the same name.  `blk->band_lo = ...` matched
+# `\bband_lo\b` and counted as a use of the local `band_lo`, which put a use
+# *before* the assignment and disqualified the copy.  Same family as `ADDR`:
+# a pattern that names an identifier has to say it is not reaching through one.
+USE = r'(?<![\w.])(?<!->)%s\b'
 ADDR = r'&\s*%s\b(?!\s*(?:->|\.|\[))'
 REACH = (r'\b%s\b(?:\s*(?:->|\.)\s*\w+|\s*\[[^\]]*\])+'
          r'\s*(?:\+\+|--|[-+*/|&^%%]?=(?!=))')
@@ -181,9 +186,9 @@ def candidates(lines):
             # the local six times, and the first version of this counted that
             # as a single read -- putting the load back would have made six
             # loads out of one, which is the thing the rule exists to refuse.
-            reads = [(j, len(re.findall(r'\b%s\b' % re.escape(dst), t)))
+            reads = [(j, len(re.findall(USE % re.escape(dst), t)))
                      for j, (_l, _h, t) in enumerate(stmts)
-                     if j != k and re.search(r'\b%s\b' % re.escape(dst), t)
+                     if j != k and re.search(USE % re.escape(dst), t)
                      and not undup.declaration(t)]
             total = sum(n for _j, n in reads)
             if not reads or reads[0][0] < k:

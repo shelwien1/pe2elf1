@@ -77,7 +77,7 @@ def candidates(lines):
             m = ASSIGN.match(code)
             if m:
                 writes.setdefault(m.group(2), []).append((i, m.group(3).strip()))
-            for w in re.findall(r'\b(\w+)\b', code):
+            for w in re.findall(r'(?<![.>])\b(\w+)\b', code):
                 if w not in touched and written(w, code):
                     touched.setdefault(w, 0)
                     touched[w] += 1
@@ -168,7 +168,12 @@ def main():
                 if indecl:
                     indecl = not code.rstrip().endswith(';')
                     continue
-                lines[k] = re.sub(r'\b%s\b' % re.escape(v), rhs, lines[k])
+                # A member is not the local of the same name.  Without the
+                # lookbehinds this rewrote `blk->band_hi` to `blk->band_hi0`
+                # and the build stopped; the counting above has the same
+                # blind spot, which is why `band_hi` looked like an alias
+                # with a use before its own assignment.
+                lines[k] = re.sub(r'(?<![\w.])(?<!->)%s\b' % re.escape(v), rhs, lines[k])
             drop.append(i)
             n += 1
     for i in sorted(drop, reverse=True):

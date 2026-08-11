@@ -65,6 +65,11 @@ LABEL = re.compile(r'^\s*LABEL_\d+:')
 # `x` itself.  Without the lookahead every `*(uint16_t *)&v533->w2` read as
 # "address taken" and disqualified the local, which is thirteen of the counter
 # pointers in `alt_p2_model` alone.
+# A member is not the local of the same name.  `blk->band_lo = ...` matched
+# `\bband_lo\b` and counted as a use of the local `band_lo`, which put a use
+# *before* the assignment and disqualified the copy.  Same family as `ADDR`:
+# a pattern that names an identifier has to say it is not reaching through one.
+USE = r'(?<![\w.])(?<!->)%s\b'
 ADDR = r'&\s*%s\b(?!\s*(?:->|\.|\[))'
 WRITE = [r'\b%s\s*(?:\+\+|--)', r'(?:\+\+|--)\s*%s\b', r'\b%s\s*[-+*/|&^%%]?=(?!=)',
          r'\b(?:LO|HI)(?:BYTE|WORD|DWORD)\d?\s*\(\s*%s\s*\)',
@@ -129,7 +134,7 @@ def candidates(lines):
                 if not all('*' in c for c in casts) or not ty[dst][1]:
                     continue
             uses = [k for k, r in enumerate(code)
-                    if re.search(r'\b%s\b' % re.escape(dst), r)
+                    if re.search(USE % re.escape(dst), r)
                     and not undup.declaration(r)]
             if not uses or uses[0] != i:
                 continue
