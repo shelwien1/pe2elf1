@@ -8059,9 +8059,38 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
       alignas(16) int32_t x3[4];
       alignas(16) int32_t x4[4];
       alignas(16) int32_t x5[4];
-      int64_t q0;
-      int64_t q1;
-      double d0;
+      // Three slots with two lifetimes each, which is why they were declared
+      // 64-bit and read 32 bits at a time through `LODWORD`/`HIDWORD`.
+      //
+      // Before the 3x3 solve they are six independent `int32_t`: two plane
+      // offsets, a row stride, a plane count and the weight the search is
+      // tuning.  From `q0 = *(int64_t *)&x2[2]` down they are what their
+      // declared types say -- the solve reads all three as `double`, and
+      // `*(double *)&__frame.q0` is that reading written at the site.
+      //
+      // A union says both, which is what the rest of this frame already does
+      // for the slots MSVC shared.  Nothing moves: eight bytes either way.
+      union {
+          int64_t q0;              // the solve's first coefficient, as a double
+          struct {
+              uint32_t row_stride;   // `(uint16_t)img->stride`
+              uint32_t plane_b;      // `plane_desc[2].src_plane - x3[2]`
+          };
+      };
+      union {
+          int64_t q1;              // the solve's second coefficient
+          struct {
+              uint32_t plane_a;      // `plane_desc[1].src_plane - x3[2]`
+              uint32_t nplanes_s;    // the plane count, kept across the search
+          };
+      };
+      union {
+          double d0;               // the solve's third coefficient
+          // The weight the search is tuning, and -- on the last write before
+          // the solve begins -- the end-of-pixels pointer parked in the same
+          // four bytes.  Two lifetimes inside one half of one slot.
+          uint32_t wt_slot;
+      };
       double d1;
       double d2;
       double d3;
@@ -8112,7 +8141,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
   data_size = img->data_size;
   __frame.img_a = (BmfImage *)((uint8_t *)img);
   alphabet_reduced = 1;
-  LODWORD(__frame.q0) = ((uint16_t)img->stride);
+  __frame.row_stride = ((uint16_t)img->stride);
   __frame.data_end = (uintptr_t)&img->pixels[data_size];
   memset(__frame.buf,0,0x8000);
   result = 192;
@@ -8180,16 +8209,16 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
       while ( dw * 4 );
       best_cost = __frame.acc0[4 * __frame.x3[2] + 2];
       __frame.x3[1] = 16 * __frame.x3[2];
-      LODWORD(__frame.q1) = plane_desc[1].src_plane - __frame.x3[2];
+      __frame.plane_a = plane_desc[1].src_plane - __frame.x3[2];
       wt8 = plane_desc[__frame.x3[2] + 1].w8;
-      HIDWORD(__frame.q0) = plane_desc[2].src_plane - __frame.x3[2];
+      __frame.plane_b = plane_desc[2].src_plane - __frame.x3[2];
       wt4 = plane_desc[__frame.x3[2] + 1].w4;
       // always taken: -S is on.  (The block is kept braced -- LABEL_19 below
       // is jumped to from inside it.)
       {
-        LODWORD(__frame.d0) = wt8;
+        __frame.wt_slot = wt8;
         __frame.x5[3] = wt4;
-        HIDWORD(__frame.q1) = n_planes;
+        __frame.nplanes_s = n_planes;
         __frame.x0[1] = 4;            // (opt_search_quality + 5) / 3, and -Q is 9
         __frame.s1 = wt4 - 1;
         wt4_dn = wt4 - 1;
@@ -8208,12 +8237,12 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
             {
               __frame.x1[0] = __frame.x5[3] + 1;
               wt4_up = __frame.x5[3] + 1;
-              __frame.x3[3] = LODWORD(__frame.d0) + 1;
-              wt8_up = LODWORD(__frame.d0) + 1;
+              __frame.x3[3] = __frame.wt_slot + 1;
+              wt8_up = __frame.wt_slot + 1;
               __frame.x0[3] = __frame.x5[3] + __frame.x0[1];
               wt4_up_end = __frame.x5[3] + __frame.x0[1];
-              __frame.x0[2] = LODWORD(__frame.d0) + __frame.x0[1];
-              wt8_up_end = LODWORD(__frame.d0) + __frame.x0[1];
+              __frame.x0[2] = __frame.wt_slot + __frame.x0[1];
+              wt8_up_end = __frame.wt_slot + __frame.x0[1];
               // The two weights step outward together and each stops at its
               // own limit, so on any pass one of the two may be finished while
               // the other is not.  `LABEL_109` was that case written as a jump
@@ -8224,9 +8253,9 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
               {
                 if ( wt4_up >= wt4_up_end && wt8_up >= wt8_up_end )
                 {
-                  wt8 = LODWORD(__frame.d0);
+                  wt8 = __frame.wt_slot;
                   wt4 = __frame.x5[3];
-                  n_planes = HIDWORD(__frame.q1);
+                  n_planes = __frame.nplanes_s;
                   goto LABEL_19;
                 }
                 if ( wt4_up < wt4_up_end && wt4_up < 192 )
@@ -8245,7 +8274,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                   __frame.x1[3] = __frame.x0[0] - __frame.x2[0] + 16;
                   __frame.x1[2] = __frame.q1 + __frame.x0[0] - __frame.x2[0] + 16;
                   q_a = (uint8_t *)__frame.x1[2];
-                  r_a = HIDWORD(__frame.q0) + __frame.x0[0] - __frame.x2[0] + 16;
+                  r_a = __frame.plane_b + __frame.x0[0] - __frame.x2[0] + 16;
                   p_a = (uint8_t *)__frame.x1[3];
                   do
                   {
@@ -8260,7 +8289,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                     bin_a = (((int16_t *)__frame.x2)[6]
                           - (uint16_t)((__frame.x1[0]
                                               * (q_a[__frame.x2[0]] + cur_a - q_a[__frame.x2[1]] - q_a[left_a])
-                                              + LODWORD(__frame.d0)
+                                              + __frame.wt_slot
                                               * (*(uint8_t *)(__frame.x2[2] + __frame.x2[0])
                                                + *(uint8_t *)__frame.x2[2]
                                                - *(uint8_t *)(__frame.x2[2] + __frame.x2[1])
@@ -8305,7 +8334,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                     __frame.x4[2] = __frame.x0[0] - __frame.x4[3] + 16;
                     q_b = (uint8_t *)(__frame.q1 + __frame.x0[0] - __frame.x4[3] + 16);
                     __frame.x4[1] = (int32_t)q_b;
-                    r_b = HIDWORD(__frame.q0) + __frame.x0[0] - __frame.x4[3] + 16;
+                    r_b = __frame.plane_b + __frame.x0[0] - __frame.x4[3] + 16;
                     p_b = (uint8_t *)__frame.x4[2];
                     do
                     {
@@ -8339,13 +8368,13 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                     best_cost = __frame.x3[0];
                     cost_b = __estimate_cost((uint8_t *)__frame.buf_2, 512);
                     wt4_up_end = __frame.x0[3];
-                    wt8_best = LODWORD(__frame.d0);
+                    wt8_best = __frame.wt_slot;
                     if ( cost_b < best_cost )
                     {
                       best_cost = cost_b;
                       wt8_best = wt8_up;
                     }
-                    LODWORD(__frame.d0) = wt8_best;
+                    __frame.wt_slot = wt8_best;
                     wt8_up_end = __frame.x0[1] + wt8_best;
                   }
                 }
@@ -8378,7 +8407,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
             __frame.p1 = (uint8_t *)(__frame.x0[0] - __frame.s3 + 16);
             __frame.p0 = (uint8_t *)(__frame.q1 + __frame.x0[0] - __frame.s3 + 16);
             q_c = __frame.p0;
-            r_c = (uint8_t *)(HIDWORD(__frame.q0) + __frame.x0[0] - __frame.s3 + 16);
+            r_c = (uint8_t *)(__frame.plane_b + __frame.x0[0] - __frame.s3 + 16);
             p_c = __frame.p1;
             do
             {
@@ -8393,7 +8422,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
               n_c = __frame.s2;
               bin_c = ((uint16_t)__frame.s5
                     - (uint16_t)((__frame.s1 * (q_c[__frame.s3] + cur_c - q_c[__frame.s4] - q_c[left_c])
-                                        + LODWORD(__frame.d0) * (__frame.p2[__frame.s3] + *__frame.p2 - __frame.p2[__frame.s4] - (uint32_t)__frame.p2[left_c])
+                                        + __frame.wt_slot * (__frame.p2[__frame.s3] + *__frame.p2 - __frame.p2[__frame.s4] - (uint32_t)__frame.p2[left_c])
                                         + 40) >> 7)
                     - 256)
                    & 0x1FF;
@@ -8434,7 +8463,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
               __frame.p4 = (uint8_t *)(__frame.x0[0] - __frame.s8 + 16);
               q_d = (uint8_t *)(__frame.q1 + __frame.x0[0] - __frame.s8 + 16);
               __frame.p3 = q_d;
-              r_d = (uint8_t *)(HIDWORD(__frame.q0) + __frame.x0[0] - __frame.s8 + 16);
+              r_d = (uint8_t *)(__frame.plane_b + __frame.x0[0] - __frame.s8 + 16);
               p_d = __frame.p4;
               do
               {
@@ -8464,13 +8493,13 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
               best_cost = __frame.x3[0];
               cost_d = __estimate_cost((uint8_t *)__frame.buf_4, 512);
               wt4_dn_end = __frame.s0;
-              wt8_best_dn = LODWORD(__frame.d0);
+              wt8_best_dn = __frame.wt_slot;
               if ( cost_d < best_cost )
               {
                 best_cost = cost_d;
                 wt8_best_dn = wt8_dn;
               }
-              LODWORD(__frame.d0) = wt8_best_dn;
+              __frame.wt_slot = wt8_best_dn;
               wt8_dn_end = wt8_best_dn - __frame.x0[1];
             }
           }
@@ -8482,19 +8511,19 @@ LABEL_19:
       px = &((uint8_t *)__frame.img_a)[__frame.q0 + 16 + n_planes + __frame.x3[2]];
       if ( (uint32_t)px < __frame.data_end )
       {
-        LODWORD(__frame.d0) = wt8;
+        __frame.wt_slot = wt8;
         __frame.x5[3] = wt4;
         __frame.x3[0] = best_cost;
-        HIDWORD(__frame.q1) = n_planes;
+        __frame.nplanes_s = n_planes;
         do
         {
-          c2 = px[HIDWORD(__frame.q0)];
-          c2w = c2 * LODWORD(__frame.d0);
+          c2 = px[__frame.plane_b];
+          c2w = c2 * __frame.wt_slot;
           c1 = px[__frame.q1];
           c1w = c1 * __frame.x5[3];
           ++__frame.hist_c[c2 - c1 + 1280];
           c0 = *px + 512;
-          px += HIDWORD(__frame.q1);
+          px += __frame.nplanes_s;
           bin0 = ((uint16_t)c0 - (uint16_t)((uint32_t)(c2w + c1w + 40) >> 7)) & 0x3FF;
           ++*(uint32_t *)&__frame.buf[4 * bin0];
           ++__frame.hist_a[c0 - c1];
@@ -8502,10 +8531,10 @@ LABEL_19:
           ++__frame.hist_c[(c0 - ((uint32_t)(((c1 + c2) << 6) + 40) >> 7))];
         }
         while ( (uint32_t)px < __frame.data_end );
-        wt8 = LODWORD(__frame.d0);
+        wt8 = __frame.wt_slot;
         wt4 = __frame.x5[3];
         best_cost = __frame.x3[0];
-        n_planes = HIDWORD(__frame.q1);
+        n_planes = __frame.nplanes_s;
       }
       slack = best_cost >> 7;
       if ( best_cost >> 7 >= 0x4000 )
@@ -8552,7 +8581,7 @@ LABEL_19:
       pos = -1;
       if ( win < 1024 )
       {
-        HIDWORD(__frame.q1) = n_planes;
+        __frame.nplanes_s = n_planes;
         do
         {
           sum = *(uint32_t *)&hist[4 * win] + sum - *(uint32_t *)&hist[4 * win - 1024];
@@ -8564,7 +8593,7 @@ LABEL_19:
           ++win;
         }
         while ( win < 1024 );
-        n_planes = HIDWORD(__frame.q1);
+        n_planes = __frame.nplanes_s;
       }
       plane_desc[__frame.x3[2] + 1].b3 = pos + 1;
       // Same window, over the second table.  `i` is left at 256 for the slide
@@ -8589,7 +8618,7 @@ LABEL_19:
       // and not the second.  The chosen transform is 0 on all fifteen reference
       // images -- both spellings agree there, which is why the gate stayed green
       // -- but it is 1 or 2 for an image that picks another one.
-      plane_desc[HIDWORD(__frame.q0) + __frame.x3[2] + 1].b3 = result;
+      plane_desc[__frame.plane_b + __frame.x3[2] + 1].b3 = result;
       if ( n_planes >= 4 )
       {
         __builtin_memset(__frame.x0, 0, 16);
@@ -8624,7 +8653,7 @@ LABEL_19:
           __frame.d6 = *(double *)&__frame.x2[2];
           __frame.d3 = *(double *)__frame.x5;
           __frame.d1 = *(double *)&__frame.x5[2];
-          LODWORD(__frame.d0) = (uintptr_t)&((uint8_t *)__frame.img_a)[__frame.q0 + 20];
+          __frame.wt_slot = (uintptr_t)&((uint8_t *)__frame.img_a)[__frame.q0 + 20];
           i4 = 0;
           __frame.uu = (int32_t)(__frame.data_end - 17 - (uint32_t)&((uint8_t *)__frame.img_a)[__frame.q0]) / 4;
           do
@@ -8648,7 +8677,7 @@ LABEL_19:
           sum01 = __frame.d5;
           sum02 = __frame.d2;
           sum12 = __frame.d6;
-          end_px = (uint8_t *)LODWORD(__frame.d0);
+          end_px = (uint8_t *)__frame.wt_slot;
           n_quads = __frame.uu;
           *(double *)&__frame.x5[2] = __frame.d1;
           *(double *)__frame.x5 = __frame.d3;

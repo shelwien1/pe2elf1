@@ -22,8 +22,8 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17262
-bmf.cpp lines                            —         —           363
+subs1.hpp lines                      17787     17616         17291
+bmf.cpp lines                            —         —           365
 raw-offset sites                        22        12             5
   off `_this`                            —         1             0
   in functions                           —         1             0
@@ -2006,3 +2006,48 @@ just clutter; it is a claim about the program that nobody has had to keep true.
 
 `tools/undef.py` reports zero now, and reports eight against the revision
 before.
+
+---
+
+## 24. What `LODWORD` was hiding
+
+Every one of the 33 `LODWORD`/`HIDWORD` uses in the file was on one of three
+members of `choose_plane_coding`'s frame — `q0` and `q1` declared `int64_t`,
+`d0` declared `double`. The question they raise is whether those are mistyped
+variables or genuine 64-bit fields, and the answer is neither: **they are one
+stack slot with two lifetimes of different widths, and both declarations are
+right for one of them.**
+
+Before the 3×3 solve the three slots are six independent `int32_t`: two plane
+offsets, a row stride, the plane count carried across the search, and the
+weight the search is tuning. From `q0 = *(int64_t *)&x2[2]` down they are what
+their declared types say — the solve reads all three as `double`, and
+`*(double *)&__frame.q0` is that reading written at the site.
+
+The whole-slot reads in the *early* lifetime look like a contradiction and are
+not: `img_a[__frame.q0 + 20]` indexes with all sixty-four bits, but pointer
+arithmetic on this target discards everything above thirty-two, so it is the
+low half — the row stride — whichever way it is written.
+
+So the frame declares a union, which is what the rest of this frame already
+does for the slots MSVC shared. Nothing moves: eight bytes either way. The
+halves have names taken from what writes them, and `LODWORD(__frame.q1)`
+becomes `__frame.plane_a`.
+
+One of the six is still two things in one place: `wt_slot` holds the weight
+through the search and then, on the last write before the solve begins, the
+end-of-pixels pointer. That is said in a comment rather than split, because
+splitting it would move a byte.
+
+### Three macros went with them
+
+With the 33 uses gone, `LODWORD` and `HIDWORD` had none — and removing those
+left `DWORDn`, which existed only to define them, with none either.
+`tools/undef.py` reported each in turn, which is the cascade an unused-
+definition rule is for: the first removal is a judgement, the two after it are
+just arithmetic.
+
+`LOWORD`, `LOBYTE`, `HIWORD`, `HIBYTE`, `BYTEn` and `WORDn` stay — 77 uses of
+`LOWORD` alone, and every one of them is a genuine partial write to a register
+MSVC used at two widths, which §17's rule narrows where it can and leaves
+alone where something reads the whole.

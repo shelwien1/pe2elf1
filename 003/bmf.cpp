@@ -101,7 +101,7 @@
 // bodies rely on: `LOBYTE(v10) = ...` is a store into byte 0 of `v10`.
 #define BYTEn(x, n)   (*((uint8_t  *)&(x) + (n)))
 #define WORDn(x, n)   (*((uint16_t *)&(x) + (n)))
-#define DWORDn(x, n)  (*((uint32_t *)&(x) + (n)))
+// `DWORDn` stood here.  It existed for LODWORD and HIDWORD and went with them.
 
 // Little-endian only, which this target is: lane 0 is the low one.  defs.h
 // wrote these through LOW_IND/HIGH_IND/LAST_IND so that one header could serve
@@ -109,10 +109,12 @@
 // three macros to say `0` and `sizeof(x)/sizeof(lane) - 1`.
 #define LOBYTE(x)  BYTEn(x, 0)
 #define LOWORD(x)  WORDn(x, 0)
-#define LODWORD(x) DWORDn(x, 0)
 #define HIBYTE(x)  BYTEn(x,  sizeof(x) - 1)
 #define HIWORD(x)  WORDn(x,  sizeof(x) / 2 - 1)
-#define HIDWORD(x) DWORDn(x, sizeof(x) / 4 - 1)
+// `LODWORD` and `HIDWORD` stood here.  Every one of their 33 uses was on one
+// of three slots in `choose_plane_coding`'s frame, each of which carries two
+// 32-bit quantities before the 3x3 solve and one 64-bit one after it; the
+// frame declares that as a union now and the halves have names.
 #define BYTE1(x)   BYTEn(x, 1)
 #define BYTE2(x)   BYTEn(x, 2)
 #define BYTE4(x)   BYTEn(x, 4)
