@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""Names the algorithm documents spell that the program no longer has.
+
+    python3 tools/unstale.py                  # ALGORITHM.md, algorithm_v2.md
+    python3 tools/unstale.py --list           # and what each one is
+
+`ALGORITHM.md` and `algorithm_v2.md` describe the program as it stands, body by
+body and field by field.  Every rename since they were written has been able to
+falsify a sentence in them, and nothing checked: `rename.py` warns about the
+renames *it* makes, and says nothing about an edit made by hand.
+
+So this reads every identifier the two documents put in backticks and asks
+whether the source still has it.  A name is known if `subs1.hpp` or `bmf.cpp`
+contains it, with or without the `__` prefix this file puts on the decompiled
+bodies.
+
+What it found on the day it was written was one table headed `global` listing
+seven Hex-Rays globals -- `__byte_44339C` through `__dword_4433A8` -- as the
+per-plane descriptor's fields, which is `PlaneDesc` now; a table of coding
+constants under their IDA names; and `near_lossless_max`, which is
+`plane_desc[0].w12`.  Reading the first of those against the struct is how
+`PlaneDesc::predictor` turned out to be the *reference count* and not a
+predictor at all.
+
+`HISTORY` below is the other half.  These documents quote what BMF.exe and
+Hex-Rays called things on purpose -- "IDA named each word after whatever
+constant it saw the word compared against" -- and a check that cannot tell a
+deliberate quotation from a stale reference is a check that gets switched off.
+The list is explicit and grouped by reason rather than pattern-matched out of
+the prose, because a rule whose test is a spelling gets defeated by a spelling:
+"was `v58`" and "reads `v58`" differ by one word.
+
+Adding a name here is a claim that the document means it historically.  Not
+finding one here is the finding.
+"""
+import glob
+import re
+import sys
+
+DOCS = ('ALGORITHM.md', 'algorithm_v2.md')
+
+# Named on purpose.  The reason is the entry: a name whose reason cannot be
+# written down does not belong here.
+HISTORY = {
+    # IDA's names for the range coder's five words, quoted beside the members
+    # that replaced them in a table with a `was` column of its own.
+    '__n0x800000': "IDA's name for `range`",
+    '__n0x7F800000': "IDA's name for `low`",
+    '__byte_4456F0': "IDA's name for `cache`",
+    '__dword_4456E8': "IDA's name for `pending`",
+    '__dword_4456EC': "IDA's name for `bytes`",
+    '__n0x2000': 'a donor global, never in this source',
+    '__n0x2000_0': 'a donor global, never in this source',
+    '__n0x2000_1': 'a donor global, never in this source',
+    '__n0x88': 'a donor global, never in this source',
+    'cumFreq': "the donor range coder's term for a cumulative count",
+    'totFreq': "the donor range coder's term for a total",
+    # The coding parameters, quoted at their BMF.exe addresses in the sentence
+    # that says what they became.
+    '__dword_44108C': 'was `-F`, now `opt_use_filters`',
+    '__dword_441090': 'was `-S`, now `opt_slow`',
+    '__n2_4': 'was `-T`, now `opt_filter_template`',
+    '__n7_0': 'was `-Q`, now `opt_search_quality`',
+    '__n7_1': 'was `-E`, now `opt_max_error`',
+    'near_lossless_max': 'the global that became `plane_desc[0].w12`',
+    # Code that is not in this source at all: the fast back end and the SIMD
+    # the port has no equivalent for.
+    'sub_408510': 'the fast back end, deleted (section 7.1)',
+    'sub_40CF80': 'the fast back end, deleted (section 7.1)',
+    'sub_40F450': 'the fast back end, deleted (section 7.1)',
+    'sub_4111B0': 'the predictor-mode-0 encoder, deleted',
+    'sub_40A8A0': "named as gone, in the section that says so",
+    'log_two_lane': "BMF.exe's two-lane `log`, gone with the SIMD",
+    '__bmf_half_half': 'the constant that helper substituted',
+    '_mm_andnot_ps': 'an intrinsic, in a sentence about the original',
+    # Hex-Rays locals, quoted as what Hex-Rays called them.
+    'v58': 'quoted as a Hex-Rays name',
+    'n15_2': 'quoted as a Hex-Rays name',
+    'n15_3': 'quoted as a Hex-Rays name',
+    'n15_4': 'quoted as a Hex-Rays name',
+    'n15_7': 'quoted as a Hex-Rays name',
+    'n1840': 'quoted as a Hex-Rays name',
+    'n960': 'quoted as a Hex-Rays name',
+    # Prose in backticks: informal type names in layout tables, and English
+    # words the documents emphasise.
+    'uint8': 'an informal type name in a layout table',
+    'uint16': 'an informal type name in a layout table',
+    'uint32': 'an informal type name in a layout table',
+    'int32': 'an informal type name in a layout table',
+    'was': 'a table column heading',
+    'old': 'an English word, emphasised',
+    'length': 'an English word, emphasised',
+    'index': 'an English word, emphasised',
+    'coded': 'an English word, emphasised',
+}
+
+
+def known(names, n):
+    """Is `n` an identifier the source still has?
+
+    The bodies carry a `__` prefix here and the documents write them without
+    one, so `compress_image` and `__compress_image` are the same name.
+    """
+    return n in names or ('__' + n) in names or n.lstrip('_') in names
+
+
+def survey(docs=DOCS, sources=('subs1.hpp', 'bmf.cpp')):
+    text = []
+    for p in sources:
+        try:
+            text.append(open(p).read())
+        except IOError:
+            pass
+    code = '\n'.join(l.split('//')[0] for l in '\n'.join(text).split('\n'))
+    names = set(re.findall(r'[A-Za-z_]\w*', code))
+    out = []
+    for doc in docs:
+        try:
+            lines = open(doc).read().split('\n')
+        except IOError:
+            continue
+        for i, line in enumerate(lines, 1):
+            for m in re.finditer(r'`([A-Za-z_]\w*)`', line):
+                n = m.group(1)
+                if len(n) <= 2 or known(names, n) or n in HISTORY:
+                    continue
+                out.append((doc, i, n, line.strip()))
+    return out
+
+
+def main():
+    # `sweep.sh` hands every tool a copy of subs1.hpp; this one reads the
+    # documents, so an argument that is not one of them is the sweep asking.
+    docs = [a for a in sys.argv[1:] if a.endswith('.md')] or list(DOCS)
+    found = survey(tuple(docs))
+    seen = set()
+    for doc, line, name, text in found:
+        if '--list' in sys.argv or name not in seen:
+            print('%-22s %s:%d  %s' % (name, doc, line, text[:70]))
+        seen.add(name)
+    print('%d names in %d documents that the program no longer has'
+          % (len(seen), len(set(d for d, _, _, _ in found))))
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -241,7 +241,13 @@ struct PlaneDesc {
   union {
     int32_t w0;
     struct {
-      uint8_t predictor;   // `v23 & 3`, the plane's predictor number
+      // The number of reference planes, 0..3 -- *not* the predictor, which is
+      // `flags & 3` and is what `plane_predictor` is set from.  The header
+      // emitter is the proof: it writes `(flags << 2) | this`, then one weight
+      // if this is `> 1` and a second if it is `> 2`, so it counts the weights
+      // that follow.  `colour_transform` reads the same byte as `mode` and
+      // tests it against 1 and 2, which is one reference and two blended.
+      uint8_t nrefs;
       uint8_t src_plane;   // a plane number, fed back as `plane_desc[src_plane + 1]`
       uint8_t flags;       // & 3 predictor, & 4 alt model, & 8 a third mode
       uint8_t b3;
@@ -5369,7 +5375,7 @@ uint8_t * __interleave_plane(uint8_t *img, uint8_t *src, int32_t plane, int8_t u
   bool by_weights;
   to_ref0 = plane_desc[1].src_plane - plane;
   to_ref1 = plane_desc[2].src_plane - plane;
-  mode = plane_desc[plane + 1].predictor;
+  mode = plane_desc[plane + 1].nrefs;
   dc = plane_desc[plane + 1].b3;
   base = (uint32_t)&((const BmfImage *)img)->pixels[plane];
   wgt1 = plane_desc[plane + 1].w8;
@@ -5393,7 +5399,7 @@ uint8_t * __interleave_plane(uint8_t *img, uint8_t *src, int32_t plane, int8_t u
   }
   if ( !by_weights )
   {
-    if ( plane_desc[plane + 1].predictor != 1 )
+    if ( plane_desc[plane + 1].nrefs != 1 )
     {
       if ( mode == 2 )
       {
@@ -5509,7 +5515,7 @@ uint8_t * __colour_transform(uint8_t *img, uint8_t *dst, int32_t plane, int8_t u
   bool by_weights;
   to_ref0 = plane_desc[1].src_plane - plane;
   to_ref1 = plane_desc[2].src_plane - plane;
-  mode = plane_desc[plane + 1].predictor;
+  mode = plane_desc[plane + 1].nrefs;
   dc = plane_desc[plane + 1].b3;
   src = (uint32_t)&((const BmfImage *)img)->pixels[plane];
   wgt1 = plane_desc[plane + 1].w8;
@@ -5532,7 +5538,7 @@ uint8_t * __colour_transform(uint8_t *img, uint8_t *dst, int32_t plane, int8_t u
       by_weights = true;
     }
   }
-  if ( by_weights || plane_desc[plane + 1].predictor == 1 )
+  if ( by_weights || plane_desc[plane + 1].nrefs == 1 )
   {
     img += plane;
     ref = &img[to_ref0];
@@ -8035,9 +8041,9 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
         row = 2 * pair;   // a record index; it was 32 * pair, two records' worth
         plane_desc[row + 1].src_plane = 2 * pair;
         pl_odd = 2 * pair++ + 1;
-        plane_desc[row + 1].predictor = pl_even;
+        plane_desc[row + 1].nrefs = pl_even;
         plane_desc[row + 2].src_plane = pl_odd;
-        plane_desc[row + 2].predictor = pl_odd;
+        plane_desc[row + 2].nrefs = pl_odd;
       }
       while ( pair < (uint32_t)(n_planes / 2) );
       next_plane = 2 * pair + 1;
@@ -8050,7 +8056,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
     if ( (uint32_t)n_planes > (next_plane - 1) )
     {
       plane_desc[next_plane].src_plane = result;
-      plane_desc[next_plane].predictor = result;
+      plane_desc[next_plane].nrefs = result;
     }
     if ( n_planes >= 3 )
     {
@@ -8692,7 +8698,7 @@ LABEL_19:
         plane_desc[4].w8 = wb;
         plane_desc[4].w12 = wc;
         plane_desc[4].src_plane = 3;
-        plane_desc[4].predictor = 3;
+        plane_desc[4].nrefs = 3;
         hist2 = &__frame.hist_c[1024 * pred4b + 1024];
         result = (uint8_t)(uintptr_t)hist2 & 0xF;
         // And the same again, over the third.
@@ -15162,7 +15168,7 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
   uint8_t bpp, has_coded, dc_v;
   uint32_t near_lossless, pred_s, w12_v, w4_v, w8_v;
   uint8_t *pal_at, *copy, *srcp, *dst;   // `uint8_t *` beside the `char` scalars above
-  int32_t hdr_word, pl, predictor, plane_i, plane,
+  int32_t hdr_word, pl, nrefs, plane_i, plane,
           pl2, plane2, pred, i, n_pix2, pix_at, nplanes_c, i2, n_planes,
           last_row, img_h, at, y, pl_i, left;
   uint16_t w16;
@@ -15357,10 +15363,10 @@ LABEL_42:
         packer_acc = packer_acc >> 6;
       }
       desc_flags = desc >> 2;
-      predictor = desc & 3;
+      nrefs = desc & 3;
       plane_desc[pl + 1].flags = desc_flags;
-      plane_desc[pl + 1].predictor = predictor;
-      plane_desc[predictor + 1].src_plane = pl;
+      plane_desc[pl + 1].nrefs = nrefs;
+      plane_desc[nrefs + 1].src_plane = pl;
       if ( (plane_desc[pl + 1].flags & 8) != 0 )
       {
         packer_free_bits -= 8;
@@ -15378,7 +15384,7 @@ LABEL_42:
           packer_acc = packer_acc >> 8;
         }
         plane_desc[pl + 1].b3 = dc_v;
-        if ( predictor > 1 )
+        if ( nrefs > 1 )
         {
           packer_free_bits -= 8;
           if ( packer_free_bits < 0 )
@@ -15410,7 +15416,7 @@ LABEL_42:
             packer_acc = packer_acc >> 8;
           }
           plane_desc[pl + 1].w8 = w8_v - 64;
-          if ( predictor > 2 )
+          if ( nrefs > 2 )
           {
             packer_free_bits -= 8;
             if ( packer_free_bits < 0 )
@@ -15462,7 +15468,8 @@ LABEL_42:
               __unpredict_med(plane_buf, img_at->width, img_at->height);
           }
           // `else if ( !desc_slow_mode && ::plane_predictor == 2 )` -- the fast-mode
-          // predictor-2 expander, never reached: -S is on.
+          // predictor-2 expander, never reached: -S is on.  (`predictor` here
+          // is `flags & 3`, not the reference count `nrefs` renamed beside it.)
         }
         else
         {
@@ -15717,7 +15724,7 @@ uint32_t __search_filter(BmfImage *img, int8_t mode)
       {
         plane_desc[pl + 1].flags = 0;
         plane_desc[pl + 1].src_plane = pl;
-        plane_desc[pl + 1].predictor = pl;
+        plane_desc[pl + 1].nrefs = pl;
         ++pl;
       }
       while ( pl < ::plane_count );
@@ -16288,7 +16295,7 @@ LABEL_172:
               do
               {
                 pi1 = pl_b;   // a record index; it was 16 * it
-                f1 = plane_desc[pl_b++ + 1].predictor;
+                f1 = plane_desc[pl_b++ + 1].nrefs;
                 plane_desc[pi1 + 1].flags |= 8 * (f1 != 0);
               }
               while ( pl_b < ::plane_count );
@@ -16689,7 +16696,7 @@ LABEL_22:
     pl = 0;
     do
     {
-      word_flags = (4 * plane_desc[pl + 1].flags) | plane_desc[pl + 1].predictor;
+      word_flags = (4 * plane_desc[pl + 1].flags) | plane_desc[pl + 1].nrefs;
       if ( bits_left < 6 )
       {
         *(uint32_t *)::packer_word = ::packer_acc | (2 * (word_flags << ((31 - bits_left) & 31)));
@@ -16722,7 +16729,7 @@ LABEL_22:
           ::packer_acc |= shifted;
         }
         ::packer_free_bits = bits_left;
-        if ( plane_desc[pl + 1].predictor > 1u )
+        if ( plane_desc[pl + 1].nrefs > 1u )
         {
           word_w4 = plane_desc[pl + 1].w4 + 64;
           if ( bits_left < 8 )
@@ -16754,7 +16761,7 @@ LABEL_22:
             ::packer_acc |= (word_w8 << (-free_bits & 31));
           }
           ::packer_free_bits = bits_left;
-          if ( plane_desc[pl + 1].predictor > 2u )
+          if ( plane_desc[pl + 1].nrefs > 2u )
           {
             word_w12 = plane_desc[pl + 1].w12 + 64;
             if ( bits_left < 8 )

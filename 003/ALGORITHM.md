@@ -418,15 +418,25 @@ Interleaved pixels are de-interleaved into planes with a strided copy: plane
 
 A 16-byte record per plane at `0x0044339C`, indexed `[16 * k]`:
 
-| offset | global | meaning |
+It is `PlaneDesc plane_desc[5]` here; record 0 is a header the four plane
+records sit above, which is why every subscript in the code is `[k + 1]`.
+
+| offset | member | meaning |
 | --- | --- | --- |
-| +0 | `__byte_44339C` | number of reference planes in the colour transform, 0–3 |
-| +1 | `__byte_44339D` | this plane's byte offset within an interleaved pixel |
-| +2 | `__byte_44339E` | flags: bits 0–1 = spatial predictor mode (→ `plane_predictor`), bit 2 = alternate model (→ `plane_alt_model`), bit 3 = colour transform present |
-| +3 | `__byte_44339F` | constant bias |
-| +4 | `__dword_4433A0` | coefficient 0 |
-| +8 | `__dword_4433A4` | coefficient 1 |
-| +12 | `__dword_4433A8` | coefficient 2 |
+| +0 | `nrefs` | number of reference planes in the colour transform, 0–3 |
+| +1 | `src_plane` | this plane's byte offset within an interleaved pixel |
+| +2 | `flags` | bits 0–1 = spatial predictor mode (→ `plane_predictor`), bit 2 = alternate model (→ `plane_alt_model`), bit 3 = colour transform present |
+| +3 | `b3` | constant bias |
+| +4 | `w4` | coefficient 0 |
+| +8 | `w8` | coefficient 1 |
+| +12 | `w12` | coefficient 2 |
+
+`nrefs` was called `predictor` in the struct until this table was checked
+against it. The two disagreed about the same byte, and the header emitter
+settles it: it writes `(flags << 2) | nrefs`, then one coefficient if `nrefs`
+is `> 1` and a second if it is `> 2`, so the byte counts the coefficients that
+follow. The *predictor* is `flags & 3`, which is what `plane_predictor` is
+assigned from four lines further on.
 
 `compress_image` writes these into the bit stream ahead of the coded data: 6 bits of
 `(flags << 2) | nrefs`, then — if the transform is present — 8 bits of bias, and
@@ -759,13 +769,13 @@ comparing against a disassembly.
 
 | constant | address | switch | value here | meaning |
 | --- | --- | --- | --- | --- |
-| `__dword_44108C` | `0x0044108C` | `-F` | 1 | use filters |
-| `__dword_441090` | `0x00441090` | `-S` | 1 | slow but efficient |
-| `__n2_4` | `0x00441094` | `-T` | 0 | filter template |
-| `__dword_441098` | `0x00441098` | `-N` | 1 | pack the output |
-| `__n7_0` | `0x0044109C` | `-Q` | 9 | filter search quality |
-| `__n7_1` | `0x004410A0` | `-E` | 0 | max error, near-lossless |
-| ~~`__dword_4410A4`~~ | `0x004410A4` | | — | the `-T` template; deleted with it |
+| `opt_use_filters` | `0x0044108C` | `-F` | 1 | use filters |
+| `opt_slow` | `0x00441090` | `-S` | 1 | slow but efficient |
+| `opt_filter_template` | `0x00441094` | `-T` | 0 | filter template |
+| `opt_pack_output` | `0x00441098` | `-N` | 1 | pack the output |
+| `opt_search_quality` | `0x0044109C` | `-Q` | 9 | filter search quality |
+| `opt_max_error` | `0x004410A0` | `-E` | 0 | max error, near-lossless |
+| *(none)* | `0x004410A4` | | — | the `-T` template store; deleted with it |
 
 **Per-image working state**
 
@@ -775,8 +785,8 @@ comparing against a disassembly.
 | `plane_predictor` | `0x00443360` | current plane's predictor mode |
 | `plane_alt_model` | `0x00443364` | current plane's alternate-model flag |
 | `desc_slow_mode` | `0x00443384` | slow mode for this image — always 1; a stream saying otherwise is refused |
-| `near_lossless_max` | `0x00443398` | near-lossless max error `E` — always 0, likewise |
-| `__byte_44339C…__dword_4433A8` | `0x0044339C` | per-plane descriptors, 16 bytes each |
+| `plane_desc[0].w12` | `0x00443398` | near-lossless max error `E` — always 0, likewise; was the global `near_lossless_max`, and it is record 0's fourth word |
+| `plane_desc[1…4]` | `0x0044339C` | per-plane descriptors, 16 bytes each (§6.2) |
 | `ctx_group_flags` | `0x00439860` | 15 context-group flag bytes |
 | `model_geometry` | `0x00445660` | model geometry tables built by `rc_begin_encode` |
 

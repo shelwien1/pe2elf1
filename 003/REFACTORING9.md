@@ -22,7 +22,7 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17066
+subs1.hpp lines                      17787     17616         17073
 bmf.cpp lines                            —         —           365
 raw-offset sites                        22        12             18
   off `_this`                            —         1             0
@@ -2715,3 +2715,75 @@ run takes ten minutes; an edit made while it runs lands in the middle of the
 answers, half the tools compared against one file and half against another,
 with nothing in the output to say so. That happened twice while this section
 was being written. The snapshot is taken once now, at the start.
+
+## 34. A member named for the wrong field
+
+`ALGORITHM.md` describes the program as it stands, and nothing checked that it
+still did. `rename.py` warns about the renames *it* makes; an edit made by
+hand leaves the documents behind silently. `tools/unstale.py` reads every
+identifier the two algorithm documents put in backticks and asks whether the
+source still has it — nine were gone, seven of them one table:
+
+```
+| offset | global | meaning |
+| +0 | `__byte_44339C` | number of reference planes in the colour transform, 0–3 |
+| +1 | `__byte_44339D` | this plane's byte offset within an interleaved pixel |
+| +2 | `__byte_44339E` | flags: bits 0–1 = spatial predictor mode …
+```
+
+Seven Hex-Rays globals in a column headed `global`, for a record that has been
+`PlaneDesc plane_desc[5]` since round four.
+
+Reading that table against the struct is the part worth keeping. They
+disagreed about byte +0:
+
+```c
+uint8_t predictor;   // `v23 & 3`, the plane's predictor number
+```
+
+The document says *number of reference planes*. The header emitter settles it:
+
+```c
+word_flags = (4 * plane_desc[pl + 1].flags) | plane_desc[pl + 1].nrefs;
+…
+if ( plane_desc[pl + 1].nrefs > 1u )   { …write w4; …write w8;
+  if ( plane_desc[pl + 1].nrefs > 2u ) { …write w12; } }
+```
+
+It writes `(flags << 2) | X`, then one coefficient if `X > 1` and a second if
+`X > 2`. The byte counts the coefficients that follow. `colour_transform`
+reads the same byte into a local it calls `mode` and tests it against 1 and 2
+— one reference, or two blended with weights summing to 128. And the predictor
+is `flags & 3`, four lines from the write:
+
+```c
+plane_predictor  = plane_desc[plane + 1].flags & 3;
+plane_alt_model  = (plane_desc[plane + 1].flags & 4) >> 2;
+```
+
+So the member was named for a field two bytes along. It is `nrefs` now, with
+the emitter quoted beside it, and fourteen reaches follow.
+
+One thing to watch came out of the rename. `rename.py` rewrites comments as
+well as code — deliberately, "because a comment naming the variable should
+follow it" — and one comment in `expand_image` said "predictor-2 expander"
+about `::plane_predictor == 2`, a different thing spelled the same way. It
+became "nrefs-2 expander" and had to be put back. A whole-word rename inside
+one body is still a rename of a *word*, and prose reuses words.
+
+### What the check has to be told
+
+`unstale.py` would be worthless if it reported the other thirty-six.
+`ALGORITHM.md` quotes what BMF.exe and IDA called things on purpose — "IDA
+named each word after whatever constant it saw the word compared against, so
+`range` is `__n0x800000`" — and a check that cannot tell a deliberate
+quotation from a stale reference is a check that gets switched off.
+
+The obvious discriminator is the prose: "was `v58`" is history, "reads `v58`"
+is a defect. That is a spelling test, and this round has been about what those
+are worth. So the exclusions are an explicit list with a reason each — IDA's
+name for a range-coder word, a donor global that was never in this source, the
+fast back end that is deleted, an English word in backticks — on the same
+footing as `liftframe.PROVEN` and `unnamed.KEPT`. Adding a name to it is a
+claim that the document means it historically. Not finding one there is the
+finding.
