@@ -8219,21 +8219,22 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
               wt4_up_end = __frame.x5[3] + __frame.x0[1];
               __frame.x0[2] = LODWORD(__frame.d0) + __frame.x0[1];
               wt8_up_end = LODWORD(__frame.d0) + __frame.x0[1];
+              // The two weights step outward together and each stops at its
+              // own limit, so on any pass one of the two may be finished while
+              // the other is not.  `LABEL_109` was that case written as a jump
+              // past the `wt4` pass, and the inner `if ( wt4_up >= wt4_up_end )`
+              // guarding it is trivially true -- it is already inside that
+              // test.  Guarding each pass with its own limit says the same.
               while ( 1 )
               {
-                if ( wt4_up >= wt4_up_end )
+                if ( wt4_up >= wt4_up_end && wt8_up >= wt8_up_end )
                 {
-                  if ( wt8_up >= wt8_up_end )
-                  {
-                    wt8 = LODWORD(__frame.d0);
-                    wt4 = __frame.x5[3];
-                    n_planes = HIDWORD(__frame.q1);
-                    goto LABEL_19;
-                  }
-                  if ( wt4_up >= wt4_up_end )
-                    goto LABEL_109;
+                  wt8 = LODWORD(__frame.d0);
+                  wt4 = __frame.x5[3];
+                  n_planes = HIDWORD(__frame.q1);
+                  goto LABEL_19;
                 }
-                if ( wt4_up < 192 )
+                if ( wt4_up < wt4_up_end && wt4_up < 192 )
                 {
                   __frame.x0[2] = wt8_up_end;
                   memset(__frame.buf_1,0,2048);
@@ -8292,10 +8293,8 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                   __frame.x5[3] = wt4_best;
                   wt4_up_end = __frame.x0[1] + wt4_best;
                 }
-                if ( wt8_up < wt8_up_end )
+                if ( wt8_up < wt8_up_end && wt8_up < 192 )
                 {
-LABEL_109:
-                  if ( wt8_up < 192 )
                   {
                     __frame.x0[3] = wt4_up_end;
                     memset(__frame.buf_2,0,2048);
@@ -8359,10 +8358,16 @@ LABEL_109:
                 ++wt8_up;
               }
             }
-            if ( wt4_dn <= wt4_dn_end )
-              goto LABEL_55;
           }
-          if ( wt4_dn >= -64 )
+          // The same shape as the pass above, walking inward: `LABEL_55` was
+          // the case where `wt4` has reached its limit and `wt8` has not.
+          //
+          // The `wt8_dn > wt8_dn_end` guard below is new and is a no-op:
+          // reaching here with `wt8` *also* finished would mean the outward
+          // search above had run, and that loop has no exit except the one
+          // that leaves this whole function's search -- so it cannot fall out
+          // of it.  The jump relied on that; the guard makes it visible.
+          if ( wt4_dn > wt4_dn_end && wt4_dn >= -64 )
           {
             *(uint32_t *)__frame.buf_1 = wt8_dn_end;
             memset(__frame.buf_3,0,2048);
@@ -8417,10 +8422,8 @@ LABEL_109:
             __frame.x5[3] = wt4_best_dn;
             wt4_dn_end = wt4_best_dn - __frame.x0[1];
           }
-          if ( wt8_dn > wt8_dn_end )
+          if ( wt8_dn > wt8_dn_end && wt8_dn >= -64 )
           {
-LABEL_55:
-            if ( wt8_dn >= -64 )
             {
               __frame.s0 = wt4_dn_end;
               memset(__frame.buf_4,0,2048);
