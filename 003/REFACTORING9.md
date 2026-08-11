@@ -29,8 +29,10 @@ byte offsets on a typed base           121         0             0
 pointer casts                         2137      1545          1367
 fNN members / named ones             93/121     5/162         0/171
 distinct unexplained locals            554       591             0
-  bodies still carrying one              —    8/102         0/102
+  bodies still carrying one              —    8/102         0/103
   uses                                    —      6302             0
+locals named for a callee parameter      —         —            71
+  declarations / bodies                   —         —        127/27
 goto / LABEL_n:                     112/79     81/55         49/33
   restart a loop / exit N blocks         —         —         15/32
   sideways to a join / to neither        —         —           2/0
@@ -1647,3 +1649,28 @@ that is some frame's member is refused with the frames named and the two ways
 out spelled in the message. The guard is one function, `frames_declaring`, and
 asking it about `m1` answers `AltModelP1EncodeFrame` — which is where the four
 declarations went.
+
+### §1's row, corrected for the fifth time
+
+§20's ten `ArgList` names sat in a file whose §1 row reads `distinct
+unexplained locals: 0`, and the reason is the one this document keeps
+recording: the row measures a pattern, and `ArgList_7` is not that pattern.
+
+Hex-Rays has a third way of naming a local, and it is the one nothing here
+counted. Besides `vNN` and naming a local after the first constant stored in
+it, it names an argument after the **callee's parameter** — so a pointer passed
+to `fread` becomes `Buffer`, the count becomes `ElementCount`, the file becomes
+`Stream`, and the copies get `a`, `b`, `c` and `_N`. That vocabulary is MSVC's
+CRT headers, and the file is full of it: `Src_6`, `Buffera_5`, `Bufferc_3`,
+`Sizea_1`, `ElementCount_4`, `lpAddress_2`, `Blockb_9`.
+
+**71 spellings, 127 declarations, 27 bodies**, while the row above them read
+zero through an entire round of naming work.
+
+The new row lists its vocabulary rather than matching a shape, which is the
+opposite of how the other rows work and is deliberate. A capital letter is not
+the test: `InName` and `OutName` in `bmf_compress` are names somebody chose,
+`Colours` and `Palette` and `Grey` say what they hold, and `gA` … `gD` in
+`alt_p2_context` were named by §4. Counting every capitalised local would have
+put those in the row and made it a measure of typography. Counting the CRT
+vocabulary counts the names Hex-Rays wrote and nothing else.

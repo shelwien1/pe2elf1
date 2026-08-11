@@ -284,6 +284,31 @@ def summary():
     row('  bodies still carrying one', '%d of %d' % (sum(1 for n in bodyv if n),
                                                      len(bodyv)))
     row('  uses', sum(bodyv))
+    # And the fifth correction, which is a different kind of name entirely.
+    # Hex-Rays also names a local after the *callee parameter* it is passed as,
+    # so an argument to `fread` becomes `Buffer`, `ElementCount` or `Stream`
+    # and the copies get `a`, `b`, `c` and `_N`.  None of those match `[vt]NN`
+    # or `nNNNN`, so this row read zero through the whole naming round while
+    # `unmodel_plane_slow` carried ten locals called `ArgList` through
+    # `ArgList_10` and the I/O layer carried eighty more.
+    #
+    # The vocabulary is MSVC's CRT headers and is listed rather than guessed:
+    # a name is only counted if it is one of these, which is why `InName`,
+    # `Colours` and `gA` are not in the row despite the capital.
+    crt = (r'\b(?:ArgList|Block|Buffer|Count|Dst|ElementCount|FileName|Format'
+           r'|Memory|Mode|NewSize|Offset|Origin|Position|Size|Src|Str|Stream'
+           r'|lpAddress)[a-c]*(?:_\w{1,2})?\b')
+    hits = collections.Counter()
+    for a, b, nm, sig in structs.bodies(lines):
+        for name in structs.decl_types(sig, lines, a, b):
+            if re.fullmatch(crt, name):
+                hits[name] += 1
+    row('locals named for a callee parameter', len(hits))
+    row('  declarations / bodies', '%d / %d' % (
+        sum(hits.values()),
+        sum(1 for a, b, nm, sig in structs.bodies(lines)
+            if any(re.fullmatch(crt, n)
+                   for n in structs.decl_types(sig, lines, a, b)))))
     # Both halves used to be wrong, in opposite directions: `src.count('goto ')`
     # counted two comments that mention a `goto` that is no longer there, and
     # `^LABEL_\d+:` missed the two labels that are indented.  Strip the comments
