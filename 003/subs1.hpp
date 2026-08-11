@@ -669,15 +669,26 @@ struct ModelBlock {
   uint32_t f8;
   uint32_t f12;
   uint32_t f16;
-  uint32_t f20;
-  uint32_t f24;
-  uint32_t f28;
+  uint32_t ctx_id1_used;
+  uint32_t ctx_id2_used;
+  uint32_t ctx_id3_used;
   uint32_t f32;
   uint32_t f36;
-  uint32_t f40;
+  // Which of `grid`'s 188 context buckets this pixel selected.  The only
+  // reader is `&f56[4 * bucket_idx + 10]`, which in `uint32_t` steps is
+  // +3104 + 16 * bucket_idx -- record `bucket_idx + 188` of the grid, the
+  // frequency record the coder then walks.
+  uint32_t bucket_idx;
   uint32_t sym_pos;   // 0..31; the index pixel_context reads sym[] with
-  uint32_t f48;
-  uint32_t f52;
+  // The two counter indices `pixel_context` leaves behind, which is what
+  // `code_pixel` hands to `encode_context_bit(node, fallback, bit)`:
+  // `f1051776[ctr_node]` and `f1051680[ctr_fallback]`.  `ctr_node` is
+  // `(sym_pos << 7) + <seven bits of neighbourhood agreement>`, so twelve
+  // bits into the 4096-record table; `ctr_fallback` is three of those bits
+  // plus 8 if the candidate is past the ninth, so four into the 16-record
+  // one.  A context with no history codes from the fallback.
+  uint32_t ctr_fallback;
+  uint32_t ctr_node;
   // Ten pointers into the plane's five row buffers.  `f56[0..4]` are the
   // buffers, rotated one step per row -- what was the current row becomes
   // the row above -- and `f56[5..9]` are the cursors the coders walk: the
@@ -750,7 +761,12 @@ struct ModelBlock {
   uint8_t ctx_state[64];     // +1078244 .. +1078307
   uint8_t ctx_bucket[375];   // +1078308 .. +1078682
   uint8_t _pad25[1];         // +1078683
-  uint8_t *f1078684;
+  // Run length to bucket, `width + 1` bytes.  `layout_workspace` fills it
+  // with `v12 += v13 == 2 << v12`, so entry `k` is how many powers of two
+  // `k` has passed: 0, 1, 2, 2, 3, 3, 3, 3, ... -- the base-2 magnitude of a
+  // run.  Both coders read it with the length of the same-colour run they
+  // just scanned and weight the answer by eight into a counter index.
+  uint8_t *run_bucket;
   uint8_t *alpha_map;   // the alphabet map, one byte a symbol
   // Four directional differences of causal neighbours, accumulated a pixel at
   // a time.  What is established is how they are read: `code_pixel` takes the
@@ -777,21 +793,38 @@ struct ModelBlock {
   // bound or the memset length that fills it, and the four of them run to
   // 8102448 -- which is the 0x7BA230 both callers ask `bmf_new` for, so the
   // last one ends exactly at the end of the object.
-  uint16_t f6059440[8192];   // +6059440 .. +6075823
-  // All three are read only through `(uint16_t *)this + k`, and `memset`
-  // does not care: the byte counts are the same and the element type is now
-  // the one the code uses.
-  uint16_t f6075824[192512];   // +6075824 .. +6460847
-  uint16_t f6460848[108800];   // +6460848 .. +6678447
-  uint16_t f6678448[712000];   // +6678448 .. +8102447
+  //
+  // `sym_rev[k]` is the low thirteen bits of `k` reversed, times eight:
+  // `layout_workspace` builds it with `v += v + (k & 1)` thirteen times and
+  // then scales the lot.  Its three readers subtract a neighbouring symbol
+  // from it and index `sym_ctr[8 * that]`, so reversing is what spreads
+  // consecutive symbols across the counter array instead of stacking them.
+  // It was reached as `*((uint16_t *)block + k + 3029720)`, and 3029720 words
+  // is this member's own offset -- the six reads were the table all along.
+  uint16_t sym_rev[8192];   // +6059440 .. +6075823
+  // Three levels of interned context id, each `0xFFFF` until claimed.  A
+  // pixel's neighbourhood signature indexes `ctx_id1`; if the slot is unused it
+  // takes the next id from `ctx_id1_used`.  That id, shifted up three and
+  // joined with three more match flags, indexes `ctx_id2`; that id, shifted up
+  // four and joined with four bits of the symbol, indexes `ctx_id3` -- and the
+  // third level is entered only while the alphabet is under 32 symbols.  So a
+  // context is not a number the coder computes but a number it *hands out*,
+  // and identical neighbourhoods share one however they were reached.
+  //
+  // `ctx_id3` has a ceiling: past 53248 ids the index is or-ed with 15, which
+  // collapses every further context into the last slot of its group rather
+  // than growing the table.
+  uint16_t ctx_id1[192512];   // +6075824 .. +6460847
+  uint16_t ctx_id2[108800];   // +6460848 .. +6678447
+  uint16_t ctx_id3[712000];   // +6678448 .. +8102447
 };
 static_assert(sizeof(void *) != 4
               || (__builtin_offsetof(ModelBlock, pix_cur) == 6059436
                   && __builtin_offsetof(ModelBlock, sym_ctr) == 1078696
-                  && __builtin_offsetof(ModelBlock, f6059440) == 6059440
-                  && __builtin_offsetof(ModelBlock, f6075824) == 6075824
-                  && __builtin_offsetof(ModelBlock, f6460848) == 6460848
-                  && __builtin_offsetof(ModelBlock, f6678448) == 6678448
+                  && __builtin_offsetof(ModelBlock, sym_rev) == 6059440
+                  && __builtin_offsetof(ModelBlock, ctx_id1) == 6075824
+                  && __builtin_offsetof(ModelBlock, ctx_id2) == 6460848
+                  && __builtin_offsetof(ModelBlock, ctx_id3) == 6678448
                   && sizeof(ModelBlock) == 0x7BA230),
               "ModelBlock: the layout moved");
 
@@ -2554,7 +2587,7 @@ void **__free_workspace(ModelBlock *Blocka, int8_t a2)
   Blocka_1 = (ModelBlock *)(Blocka);
   free(Blocka->sym_code);
   free(Blocka_1->sym_word);
-  free(Blocka_1->f1078684);
+  free(Blocka_1->run_bucket);
   free(*(void**)&Blocka_1->alpha_map);
   // Both arrays are allocated as `bmf_new(24 * n + 4)` with the count in the
   // word before the first list, so `n` is `sym_list_count(lists)` and that
@@ -2653,12 +2686,12 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
      || result == p_n15[17]
      || result == p_n15[16]);
   v6 = v4 + v3;
-  *(int32_t *)&_this->f52 = v6;
+  *(int32_t *)&_this->ctr_node = v6;
   if ( (v4 + v3 == 0) && n6 > 6 )
     return -1;
   v7 = _this->sel0_list;
   v9 = v6 + 8 * sym_in_top((v7[mode_symbol[1]].ent), 10, result);
-  *(int32_t *)&_this->f52 = v9;
+  *(int32_t *)&_this->ctr_node = v9;
   v10 = v7[mode_symbol[2]].ent;
   v11 = v7[result].ent;
   v13 = sym_in_top((v7[mode_symbol[3]].ent), 6, result)
@@ -2667,12 +2700,12 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
   v14 = v13 + v9;
   if ( n6 <= 14 || (v14 & 0xB) != 0 )
   {
-    *(int32_t *)&_this->f52 = (n6 << 7) + v14;
-    *(int32_t *)&_this->f48 = v13 + 8 * (n6 > 9);
+    *(int32_t *)&_this->ctr_node = (n6 << 7) + v14;
+    *(int32_t *)&_this->ctr_fallback = v13 + 8 * (n6 > 9);
   }
   else
   {
-    *(int32_t *)&_this->f48 = v13;
+    *(int32_t *)&_this->ctr_fallback = v13;
     return -1;
   }
   return result;
@@ -9485,7 +9518,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   {
     if ( __frame.sym3 == __frame.sym0 )
     {
-      v14 = *((uint16_t *)__frame.sym5 + n4_8 + 3029720);
+      v14 = __frame.sym5->sym_rev[n4_8];
       if ( n4_8 == __frame.sym2 )
         v13 = (uint16_t)(v14 - v4[-2].sym);
       else
@@ -9493,12 +9526,12 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
     }
     else
     {
-      v13 = (uint16_t)(*((uint16_t *)__frame.sym5 + n4_8 + 3029720) - __frame.sym3);
+      v13 = (uint16_t)(__frame.sym5->sym_rev[n4_8] - __frame.sym3);
     }
   }
   else
   {
-    v13 = (uint16_t)(*((uint16_t *)__frame.sym5 + n4_8 + 3029720) - __frame.sym1);
+    v13 = (uint16_t)(__frame.sym5->sym_rev[n4_8] - __frame.sym1);
   }
   __frame.sym5->sym_cache = &__frame.sym5->sym_ctr[8 * v13];
   v15 = this_2->ctx_state[v12];
@@ -9545,7 +9578,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   __frame.sym3 = (int32_t)n15_9;
   v22 = this_2->ctx_bucket[v15 + __decode_pixel_n15];
   v23 = this_2->f56[7];
-  this_2->f40 = v22;
+  this_2->bucket_idx = v22;
   n4_11 = n15_9->match[0];
   __frame.sym4 = (FreqRec *)v4;
   __frame.sym5 = (ModelBlock *)(this_2);
@@ -9567,41 +9600,41 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
       + 32 * (__frame.sym5->grad[1] == 0)
       + 16 * (__frame.sym5->grad[0] == 0)
       + v29;
-  n0xFFFF = __frame.sym5->f6075824[v31];
+  n0xFFFF = __frame.sym5->ctx_id1[v31];
   if ( n0xFFFF == 0xFFFF )
   {
-    __frame.sym5->f6075824[v31] = __frame.sym5->f20;
+    __frame.sym5->ctx_id1[v31] = __frame.sym5->ctx_id1_used;
     n15_10 = this_3->f56[6];
     v4 = this_3->f56[5];
-    ++this_3->f20;
-    n0xFFFF = this_3->f6075824[v31];
+    ++this_3->ctx_id1_used;
+    n0xFFFF = this_3->ctx_id1[v31];
     __frame.sym2 = n15_10->match[0];
   }
   v33 = v4[-1].match[5] + 4 * n15_10[1].match[3] + 2 * __frame.sym2 + 8 * n0xFFFF;
-  n0xFFFF_1 = this_3->f6460848[v33];
+  n0xFFFF_1 = this_3->ctx_id2[v33];
   if ( n0xFFFF_1 == 0xFFFF )
   {
-    this_3->f6460848[v33] = this_3->f24++;
-    n0xFFFF_1 = this_3->f6460848[v33];
+    this_3->ctx_id2[v33] = this_3->ctx_id2_used++;
+    n0xFFFF_1 = this_3->ctx_id2[v33];
   }
   if ( (int32_t)this_3->f16 < 32 )
   {
-    n53248 = this_3->f28;
+    n53248 = this_3->ctx_id3_used;
     __frame.sym1 = 16 * n0xFFFF_1 + (__frame.sym1 & 0xF);
-    v36 = &this_3->f6678448[__frame.sym1];
+    v36 = &this_3->ctx_id3[__frame.sym1];
     n0xFFFF_1 = *v36;
     if ( n0xFFFF_1 == 0xFFFF )
     {
       n4_12 = __frame.sym1;
       if ( n53248 > 53248 )
         n4_12 = __frame.sym1 | 0xF;
-      v36 = &this_3->f6678448[n4_12];
+      v36 = &this_3->ctx_id3[n4_12];
       n0xFFFF_1 = *v36;
     }
     if ( n0xFFFF_1 >= n53248 )
     {
       *v36 = n53248;
-      ++this_3->f28;
+      ++this_3->ctx_id3_used;
       n0xFFFF_1 = *v36;
     }
   }
@@ -9641,7 +9674,7 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
         this_3 = (ModelBlock *)(__frame.sym5);
       }
 LABEL_42:
-      n15_12 = *(this_3->f1078684 + n15_11);
+      n15_12 = *(this_3->run_bucket + n15_11);
       // Record `8 * n15_12 + 4 * (two neighbour flags) + 2 * v40 + sym + 1`
       // of the 257-record grid: `269089 * 4` is +1 076 356, four bytes past
       // `f1076352`, and every term above it is a multiple of three words.
@@ -9810,7 +9843,7 @@ LABEL_57:
       goto LABEL_86;
     }
   }
-  v80 = (FreqRec *)&this_3->f56[4 * this_3->f40 + 10];
+  v80 = (FreqRec *)&this_3->f56[4 * this_3->bucket_idx + 10];
   __frame.sym4 = v80;
   freq_tbl = &this_3->grid[n0xFFFF_1 + 188];
   v83 = freq_tbl->w[5];
@@ -10130,7 +10163,7 @@ LABEL_86:
     v127 = __pixel_context((ModelBlock *)this_3, (uint32_t *)__frame.sym);
     if ( v127 >= 0 )
     {
-      v128 = __decode_context_bit(&this_3->f1051776[this_3->f52], &this_3->f1051680[this_3->f48]);
+      v128 = __decode_context_bit(&this_3->f1051776[this_3->ctr_node], &this_3->f1051680[this_3->ctr_fallback]);
       this_3->f56[5]->sym = v127;
       if ( v128 )
         return n15_24 + 1;
@@ -10217,7 +10250,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   int8_t v93;
   uint8_t v24, v64, v65, v66, v67;
   uint8_t *v156;   // `uint8_t *` beside the `char` scalars above
-  uint16_t *v36;   // a cursor into `f6678448`
+  uint16_t *v36;   // a cursor into `ctx_id3`
   int16_t v14, n15_10, v147, v158, n15_21, v170;
   ModelBlock *this_3;
   ModelBlock *this_4;
@@ -10342,7 +10375,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   __frame.sym1 = (int32_t)n2_7;
   v21 = this_2->ctx_bucket[v15 + n15_5];
   v22 = this_2->f56[7];
-  *(int32_t *)&this_2->f40 = v21;
+  *(int32_t *)&this_2->bucket_idx = v21;
   p_n15_1 = n2_7->match[0];
   v24 = n2_7->match[1];
   __frame.sym2 = (uint16_t *)n2_8;
@@ -10364,41 +10397,41 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
       + ((uint8_t)(((PixRec *)__frame.sym3)->match[1] & v20->match[1] & v22->match[1] & v24) << 8)
       + (v21 << 10)
       + v27;
-  n0xFFFF = __frame.sym7->f6075824[v29];
+  n0xFFFF = __frame.sym7->ctx_id1[v29];
   n2_9 = (PixRec *)__frame.sym1;
   if ( n0xFFFF == 0xFFFF )
   {
-    __frame.sym7->f6075824[v29] = *(int32_t *)&__frame.sym7->f20;
+    __frame.sym7->ctx_id1[v29] = *(int32_t *)&__frame.sym7->ctx_id1_used;
     n2_9 = this_3->f56[6];
     n2_8 = this_3->f56[5];
-    ++*(int32_t *)&this_3->f20;
-    n0xFFFF = this_3->f6075824[v29];
+    ++*(int32_t *)&this_3->ctx_id1_used;
+    n0xFFFF = this_3->ctx_id1[v29];
     __frame.sym0 = n2_9->match[0];
   }
   v32 = n2_8[-1].match[5] + 4 * n2_9[1].match[3] + 2 * __frame.sym0 + 8 * n0xFFFF;
-  n0xFFFF_1 = this_3->f6460848[v32];
+  n0xFFFF_1 = this_3->ctx_id2[v32];
   if ( n0xFFFF_1 == 0xFFFF )
   {
-    this_3->f6460848[v32] = (*(int32_t *)&this_3->f24)++;
-    n0xFFFF_1 = this_3->f6460848[v32];
+    this_3->ctx_id2[v32] = (*(int32_t *)&this_3->ctx_id2_used)++;
+    n0xFFFF_1 = this_3->ctx_id2[v32];
   }
   if ( *(int32_t *)&this_3->f16 < 32 )
   {
-    n53248 = *(int32_t *)&this_3->f28;
+    n53248 = *(int32_t *)&this_3->ctx_id3_used;
     v35 = 16 * n0xFFFF_1 + (__frame.sym10 & 0xF);
-    v36 = &this_3->f6678448[v35];
+    v36 = &this_3->ctx_id3[v35];
     n0xFFFF_1 = *v36;
     if ( n0xFFFF_1 == 0xFFFF )
     {
       if ( n53248 > 53248 )
         v35 |= 0xFu;
-      v36 = &this_3->f6678448[v35];
+      v36 = &this_3->ctx_id3[v35];
       n0xFFFF_1 = *v36;
     }
     if ( n0xFFFF_1 >= n53248 )
     {
       *v36 = n53248;
-      ++*(int32_t *)&this_3->f28;
+      ++*(int32_t *)&this_3->ctx_id3_used;
       n0xFFFF_1 = *v36;
     }
   }
@@ -10451,7 +10484,7 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
     }
 LABEL_42:
     v46 = (uint8_t)(v41[run + 3].match[1] & v41[run + 2].match[1]);
-    __frame.sym5 = *(uint8_t *)(*(int32_t *)&this_3->f1078684 + __frame.sym4);
+    __frame.sym5 = *(uint8_t *)(*(int32_t *)&this_3->run_bucket + __frame.sym4);
     n15_32 = *(uint8_t *)(*(int32_t *)&this_3->alpha_map + __frame.sym8) + 8 * __frame.sym5 + 4 * v46 + 2 * v42;
     n15_12 = 0;
     if ( __frame.sym9->sym == __frame.sym8 )
@@ -10614,7 +10647,7 @@ LABEL_42:
   }
   else
   {
-    v82 = 4 * *(int32_t *)&this_3->f40;
+    v82 = 4 * *(int32_t *)&this_3->bucket_idx;
     n15_36 = (FreqRec *)&this_3->f56[v82 + 10];
     __frame.sym4 = (int32_t)(uintptr_t)n15_36;
     n2_3 = &this_3->grid[n0xFFFF_1 + 188];
@@ -10917,7 +10950,7 @@ LABEL_42:
     if ( v129 >= 0 )
     {
       n15_28 = v129 == this_3->f56[5]->sym;
-      __encode_context_bit(&this_3->f1051776[*(int32_t *)&this_3->f52], &this_3->f1051680[*(int32_t *)&this_3->f48], n15_28);
+      __encode_context_bit(&this_3->f1051776[*(int32_t *)&this_3->ctr_node], &this_3->f1051680[*(int32_t *)&this_3->ctr_fallback], n15_28);
       if ( n15_28 )
         return n15_14 + 1;
       exclusion_mask[v129] = exclusion_gen;
@@ -11119,7 +11152,7 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
     }
   }
   v10 = (uint8_t *)bmf_new(i_1 + 1);
-  a1->f1078684 = v10;
+  a1->run_bucket = v10;
   *v10 = 0;
   if ( (int32_t)a1->f0 > 0 )
   {
@@ -11128,7 +11161,7 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
     do
     {
       v12 += v13 == 2 << (v12 & 31);
-      *(uint8_t *)(*(uint32_t *)&a1->f1078684 + v13++ + 1) = v12;
+      *(uint8_t *)(*(uint32_t *)&a1->run_bucket + v13++ + 1) = v12;
     }
     while ( v13 < a1->f0 );
   }
@@ -11136,29 +11169,29 @@ ModelBlock *__layout_workspace(ModelBlock *a1, int32_t a2, int32_t i, int32_t a4
   // range in three passes -- a scalar head to reach sixteen-byte alignment,
   // thirty-two counters an iteration, a scalar tail -- with a branch for the
   // case where `a1` is odd and no alignment is reachable at all.
-  __builtin_memset(a1->f6059440, 0, sizeof a1->f6059440);
+  __builtin_memset(a1->sym_rev, 0, sizeof a1->sym_rev);
   for ( k = 0; k < 0x2000; ++k )
   {
-    v19 = a1->f6059440[k];
+    v19 = a1->sym_rev[k];
     k_1 = k;
     for ( m = 0; m < 0xD; ++m )
     {
       v19 += v19 + (k_1 & 1);
       k_1 >>= 1;
     }
-    a1->f6059440[k] = v19;
+    a1->sym_rev[k] = v19;
   }
   // ... and every one of them scaled by eight, the same range in the same
   // three passes.
   for ( n0x2000_1 = 0; n0x2000_1 < 0x2000; ++n0x2000_1 )
-    a1->f6059440[n0x2000_1] *= 8;
+    a1->sym_rev[n0x2000_1] *= 8;
   memset(&a1->grid[188],0,0x100000);
-  a1->f28 = 0;
-  a1->f24 = 0;
-  a1->f20 = 0;
-  memset(a1->f6075824,255,sizeof a1->f6075824);
-  memset(a1->f6460848,255,sizeof a1->f6460848);
-  memset(a1->f6678448,255,sizeof a1->f6678448);
+  a1->ctx_id3_used = 0;
+  a1->ctx_id2_used = 0;
+  a1->ctx_id1_used = 0;
+  memset(a1->ctx_id1,255,sizeof a1->ctx_id1);
+  memset(a1->ctx_id2,255,sizeof a1->ctx_id2);
+  memset(a1->ctx_id3,255,sizeof a1->ctx_id3);
   memset(exclusion_mask,0,8193);
   (*(uint64_t *)&a1->sel[0]) = 0;
   *(uint64_t *)&a1->escape_list = 0;
