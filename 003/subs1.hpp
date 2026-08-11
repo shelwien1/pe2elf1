@@ -11127,9 +11127,8 @@ void __expand_alphabet(ModelBlock *_this)
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 432, "frame layout moved");
   ;
   uint32_t *codes_p;   // was int32_t: this holds an address
-  int32_t bits, nbytes, slot, left2, left, run, gap;
-  uint32_t mask, i, cap, n_1, *q2, n_syms, j, k, carry, s, b, piece, *q,
-           s2;
+  int32_t bits, nbytes, left2, left, run, gap;
+  uint32_t mask, i, cap, n_1, n_syms, j, k, carry, s, b, piece, s2;
   void *codes;
   bits = _this->depth;
   mask = 0xFFFFFFFF >> (-(uint8_t)_this->depth & 31);

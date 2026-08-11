@@ -2,6 +2,7 @@
 """Delete the locals nothing uses, with the compiler saying which.
 
     ./build.sh >/dev/null && python3 tools/unused.py subs1.hpp
+    ./build.sh >/dev/null && python3 tools/unused.py subs1.hpp --all
 
 Folding the six mode switches deleted about a third of the file, and every
 deletion left behind the declarations of whatever that code had been using.
@@ -144,12 +145,19 @@ def main():
         out.append(cur.rstrip())
         lines[a:b + 1] = out
 
-    open(path, 'w').write('\n'.join(lines))
+    # `--all` to write.  This used to write unconditionally, which meant asking
+    # it what it found *was* applying it -- and `tools/sweep.sh`, which runs
+    # every tool and fails if the file moved, caught exactly that.  A tool that
+    # cannot be asked a question without answering it with an edit is one that
+    # has to be left out of any survey.
+    if '--all' in sys.argv:
+        open(path, 'w').write('\n'.join(lines))
     # `len(stmts) - kept` counted a statement the type match skipped as a
     # deletion, which is how five of them were reported gone while the file was
     # byte-identical afterwards.  Count what was actually removed.
-    print('%d declarations deleted, %d rewritten, %d names gone'
-          % (deleted, kept, gone))
+    print('%d declarations %s, %d rewritten, %d names gone'
+          % (deleted, 'deleted' if '--all' in sys.argv else 'deletable',
+             kept, gone))
     return 0
 
 
