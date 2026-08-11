@@ -77,13 +77,23 @@ def candidates(lines):
                     break
             else:
                 continue
-            # The saving name must exist only for this pair.
-            uses = sum(1 for x in code
-                       if re.search(r'\b%s\b' % re.escape(slot), x)
-                       and not undup.declaration(x))
-            if uses != 2:
-                continue
+            # The saving name must exist only for this pair and, at most, as a
+            # read inside the region -- MSVC sometimes uses the spill slot as
+            # the operand while the original register holds something else, so
+            # `v34 = v5; ... v34[-1].sym ...; v5 = v34;` is the same artefact
+            # with the alias read rather than idle.  Those reads become reads
+            # of the original, which is what they are: nothing in the region
+            # writes it.
             region = code[i + 1:j]
+            outside = [x for k, x in enumerate(code)
+                       if not (i < k < j) and k != i and k != j
+                       and re.search(r'\b%s\b' % re.escape(slot), x)
+                       and not undup.declaration(x)]
+            if outside:
+                continue
+            if any(re.search(p % re.escape(slot), '\n'.join(region))
+                   for p in WRITE):
+                continue
             body = '\n'.join(region)
             if 'goto ' in body or any(LABEL.match(r) for r in region):
                 continue
@@ -95,7 +105,8 @@ def candidates(lines):
             if any(re.search(r'\b%s\b' % re.escape(held), c)
                    for c in re.findall(r'\w+\s*\(([^;]*)\)', body)):
                 continue
-            out.append((nm, a + i, a + j, slot, held, len(region)))
+            reads = sum(1 for r in region if re.search(r'\b%s\b' % re.escape(slot), r))
+            out.append((nm, a + i, a + j, slot, held, len(region), reads))
     return out
 
 
@@ -105,17 +116,24 @@ def main():
     found = candidates(lines)
 
     if '--all' not in sys.argv:
-        for nm, i, j, slot, held, n in found:
-            print('%6d  %-24s %-10s saves %-10s over %d lines'
-                  % (i + 1, nm.lstrip('_'), slot, held, n))
+        for nm, i, j, slot, held, n, reads in found:
+            print('%6d  %-24s %-10s saves %-10s over %d lines%s'
+                  % (i + 1, nm.lstrip('_'), slot, held, n,
+                     ', read %d times as an alias' % reads if reads else ''))
         print('%d saves across a region that cannot change the value' % len(found))
         return 0
 
+    # An alias read inside the region becomes a read of what it aliases.
+    for _nm, i, j, slot, held, _l, reads in found:
+        if not reads:
+            continue
+        for k in range(i + 1, j):
+            lines[k] = re.sub(r'\b%s\b' % re.escape(slot), held, lines[k])
     # One descending pass over every line to remove: pairs can nest, and
     # deleting a pair at a time lets an inner pair's indices shift under an
     # outer one's restore.
-    for k in sorted({i for _n, i, _j, _s, _h, _l in found} |
-                    {j for _n, _i, j, _s, _h, _l in found}, reverse=True):
+    for k in sorted({i for _n, i, _j, _s, _h, _l, _r in found} |
+                    {j for _n, _i, j, _s, _h, _l, _r in found}, reverse=True):
         del lines[k]
     open(path, 'w').write('\n'.join(lines))
     print('%d saves deleted' % len(found))

@@ -3157,155 +3157,172 @@ void **__alt_p1_free(void **Block, int8_t a2)
 // table pointers they select.  It codes nothing -- no `rc.` call anywhere in it
 // -- and all four p1 bodies call it, encoder and decoder alike, which is what
 // says it is context rather than coding.
-int32_t __alt_p1_context(AltP1Block *_this, AltP1Block *a2, AltP1Block *a3)
+// Build the coding context for one p1 pixel, and the prediction it is coded
+// against.  Three things come out: `pred`, `ctx[0..1]`, and the nine
+// three-way selectors in `ctx_w`, whose weights sum to the context index the
+// caller uses.
+//
+// It opens with MED -- the same median edge tree as `predict_med`, over
+// `cursor[1]` (north), `cur[-1]` (west) and `cursor[1][-1]` (northwest).
+//
+// `act` is the activity: a weighted sum of the error magnitudes around the
+// pixel, 6 on the west neighbour, 4 on north and two-west, 3 on north-east and
+// the row above that, 2 further out, 1 at the edges.  `act_all` adds whatever
+// the neighbouring planes contribute, which is why there are three arms -- two
+// neighbours, one, or none -- and each arm also picks a different set of
+// gradients for `ctx_w[3]` and `ctx_w[5..8]`.  With no neighbouring plane the
+// gradients come from this plane's own rows instead.
+//
+// Then `act_q` quantises the activity, `level_of` maps it to a level and
+// `step` is that level's dead zone, and each gradient becomes a three-way
+// selector: below `-step`, within, or above `+step`.  Nine selectors, nine
+// weights, one context.
+int32_t __alt_p1_context(AltP1Block *_this, AltP1Block *nb0, AltP1Block *nb1)
 {
-  P1Ctx *v12, *v13, *cursor1, *cursor2;
+  P1Ctx *nb0_row, *nb0_row2, *cursor1, *cursor2;
   ;
-  P1Ctx *v5;
+  P1Ctx *cur;
   P1Ctx *cursor4;
-  bool v9, v19, v20;
-  P1Ctx *v34;
-  int32_t v6, v7, v11, v14, v15, v16, v18, v21, v22, v23, v24, v25, v26, v27, v28,
-          v29, result, v35, v36, v39, v40, v41, v42;
-  uint32_t v37, v38;
+  bool pick, is_zero, is_neg;
+  int32_t west, northwest, act, nb0_a, nb0_b, act_q, s1, hi, lo, s3, s5, g6, h6, g7, h7,
+          s8, result, step, act_all, s2, s4, s6, s7;
+  uint32_t quiet, s0;
   // Byte values Hex-Rays gave a pointer type: none is dereferenced here,
-  // and `&v4[k]` on a `uint8_t *` is the addition it looks like.  The
-  // `(uint32_t)` casts on them stay: `(216 - (uint32_t)v4) >> 31` is a
+  // and `&guess[k]` on a `uint8_t *` is the addition it looks like.  The
+  // `(uint32_t)` casts on them stay: `(216 - (uint32_t)guess) >> 31` is a
   // logical shift, and it is a selector -- signed it would be -1, not 1.
-  int32_t v4, v8, v10, level_of;
+  int32_t guess, plane_a, plane_b, level_of;
   cursor1 = _this->cursor[1];
-  v4 = cursor1->sym;
-  v5 = _this->cursor[0];
-  v6 = v5[-1].sym;
-  v7 = cursor1[-1].sym;
-  if ( v6 < v4 )
+  guess = cursor1->sym;
+  cur = _this->cursor[0];
+  west = cur[-1].sym;
+  northwest = cursor1[-1].sym;
+  if ( west < guess )
   {
-    if ( v7 >= v6 )
+    if ( northwest >= west )
     {
-      v10 = v4 + v6 - v7;
-      v9 = v7 < v4;
-      v4 = v5[-1].sym;
-      if ( v9 )
-        v4 = v10;
+      plane_b = guess + west - northwest;
+      pick = northwest < guess;
+      guess = cur[-1].sym;
+      if ( pick )
+        guess = plane_b;
     }
   }
-  else if ( v7 <= v6 )
+  else if ( northwest <= west )
   {
-    v8 = v4 + v6 - v7;
-    v9 = v7 <= v4;
-    v4 = v5[-1].sym;
-    if ( !v9 )
-      v4 = v8;
+    plane_a = guess + west - northwest;
+    pick = northwest <= guess;
+    guess = cur[-1].sym;
+    if ( !pick )
+      guess = plane_a;
   }
-  _this->pred = v4;
+  _this->pred = guess;
   cursor2 = _this->cursor[2];
-  v11 = cursor1[-1].mag
-      + v5[-3].mag
+  act = cursor1[-1].mag
+      + cur[-3].mag
       + 3 * (cursor1[1].mag + cursor2->mag)
-      + 6 * v5[-1].mag
-      + 4 * (cursor1->mag + v5[-2].mag)
-      + 2 * (cursor2[2].mag + cursor1[2].mag + v5[-4].mag);
+      + 6 * cur[-1].mag
+      + 4 * (cursor1->mag + cur[-2].mag)
+      + 2 * (cursor2[2].mag + cursor1[2].mag + cur[-4].mag);
   // The two neighbouring planes, reached through their own row cursors.  Both
   // rows are two bytes a pixel -- the reconstructed sample at +0 and the size
   // of the prediction error at +1 -- so the odd subscript `[-1]` is the error
   // magnitude one pixel back and the even ones `[-2]` and `[-4]` are the
   // samples one and two pixels back.  Hex-Rays typed both parameters
-  // `uint32_t *` and reached the cursors as `a2[49]` and `a2[50]`, which is
-  // +196 and +200: `cursor[0]` and `cursor[1]`.  `a2[2]` is `f8`.
-  if ( a2 )
+  // `uint32_t *` and reached the cursors as `nb0[49]` and `nb0[50]`, which is
+  // +196 and +200: `cursor[0]` and `cursor[1]`.  `nb0[2]` is `f8`.
+  if ( nb0 )
   {
-    if ( a3 )
+    if ( nb1 )
     {
-      v34 = v5;
-      v12 = a2->cursor[0];
-      v36 = v11 + 2 * (a3->cursor[0][-1].mag + v12[-1].mag);
+      nb0_row = nb0->cursor[0];
+      act_all = act + 2 * (nb1->cursor[0][-1].mag + nb0_row[-1].mag);
       _this->ctx_w[5].sel = (cursor1->sym
-                                       - (uint32_t)v4
-                                       + v12[-1].sym
-                                       - a2->cursor[1][-1].sym);
-      v13 = a2->cursor[0];
-      v14 = v13[-1].sym;
-      v15 = v13[-2].sym;
-      v5 = v34;
-      _this->ctx_w[6].sel = (v34[-1].sym - (uint32_t)v4 + v14 - v15);
-      _this->ctx_w[7].sel = (v34[-1].sym
-                                       - (uint32_t)v4
-                                       + a3->cursor[0][-1].sym
-                                       - a3->cursor[0][-2].sym);
-      _this->ctx_w[8].sel = (a3->cursor[0][-1].sym - a3->pred);
-      _this->ctx_w[3].sel = (a2->cursor[0][-1].sym - a2->pred);
-      v37 = (a3->cursor[0][-1].mag + (uint32_t)a2->cursor[0][-1].mag - 16) >> 31;
+                                       - (uint32_t)guess
+                                       + nb0_row[-1].sym
+                                       - nb0->cursor[1][-1].sym);
+      nb0_row2 = nb0->cursor[0];
+      nb0_a = nb0_row2[-1].sym;
+      nb0_b = nb0_row2[-2].sym;
+      _this->ctx_w[6].sel = (cur[-1].sym - (uint32_t)guess + nb0_a - nb0_b);
+      _this->ctx_w[7].sel = (cur[-1].sym
+                                       - (uint32_t)guess
+                                       + nb1->cursor[0][-1].sym
+                                       - nb1->cursor[0][-2].sym);
+      _this->ctx_w[8].sel = (nb1->cursor[0][-1].sym - nb1->pred);
+      _this->ctx_w[3].sel = (nb0->cursor[0][-1].sym - nb0->pred);
+      quiet = (nb1->cursor[0][-1].mag + (uint32_t)nb0->cursor[0][-1].mag - 16) >> 31;
     }
     else
     {
-      v36 = cursor1[3].mag + v11 + 3 * a2->cursor[0][-1].mag;
-      _this->ctx_w[5].sel = (2 * v5[-1].sym - v5[-2].sym - (uint32_t)v4);
-      _this->ctx_w[6].sel = (2 * v5[-1].sym - v5[-2].sym - (uint32_t)v4);
-      _this->ctx_w[7].sel = (-v4 - cursor1->sym + cursor1[1].sym + v5[-1].sym);
-      _this->ctx_w[8].sel = (v5[-1].sym
-                                       - (uint32_t)v4
-                                       + a2->cursor[0][-1].sym
-                                       - a2->cursor[0][-2].sym);
-      _this->ctx_w[3].sel = (a2->cursor[0][-1].sym - a2->pred);
-      v37 = ((uint32_t)a2->cursor[0][-1].mag - 8) >> 31;
+      act_all = cursor1[3].mag + act + 3 * nb0->cursor[0][-1].mag;
+      _this->ctx_w[5].sel = (2 * cur[-1].sym - cur[-2].sym - (uint32_t)guess);
+      _this->ctx_w[6].sel = (2 * cur[-1].sym - cur[-2].sym - (uint32_t)guess);
+      _this->ctx_w[7].sel = (-guess - cursor1->sym + cursor1[1].sym + cur[-1].sym);
+      _this->ctx_w[8].sel = (cur[-1].sym
+                                       - (uint32_t)guess
+                                       + nb0->cursor[0][-1].sym
+                                       - nb0->cursor[0][-2].sym);
+      _this->ctx_w[3].sel = (nb0->cursor[0][-1].sym - nb0->pred);
+      quiet = ((uint32_t)nb0->cursor[0][-1].mag - 8) >> 31;
     }
   }
   else
   {
     cursor4 = _this->cursor[4];
-    v36 = cursor4->mag + cursor2[-2].mag + cursor1[3].mag + v11 + cursor4[2].mag;
-    _this->ctx_w[5].sel = (2 * v5[-1].sym - v5[-2].sym - (uint32_t)v4);
-    _this->ctx_w[6].sel = (2 * cursor1->sym - cursor2->sym - (uint32_t)v4);
-    _this->ctx_w[7].sel = (-v4 - cursor1->sym + cursor1[1].sym + v5[-1].sym);
-    _this->ctx_w[8].sel = (-3 * (v5[-2].sym - v5[-1].sym)
-                                     + v5[-3].sym
-                                     - (uint32_t)v4);
-    _this->ctx_w[3].sel = (cursor1[2].sym - (uint32_t)v4);
-    v37 = v5->mag + cursor4->mag + _this->cursor[3]->mag + cursor2->mag + cursor1->mag == 0;
+    act_all = cursor4->mag + cursor2[-2].mag + cursor1[3].mag + act + cursor4[2].mag;
+    _this->ctx_w[5].sel = (2 * cur[-1].sym - cur[-2].sym - (uint32_t)guess);
+    _this->ctx_w[6].sel = (2 * cursor1->sym - cursor2->sym - (uint32_t)guess);
+    _this->ctx_w[7].sel = (-guess - cursor1->sym + cursor1[1].sym + cur[-1].sym);
+    _this->ctx_w[8].sel = (-3 * (cur[-2].sym - cur[-1].sym)
+                                     + cur[-3].sym
+                                     - (uint32_t)guess);
+    _this->ctx_w[3].sel = (cursor1[2].sym - (uint32_t)guess);
+    quiet = cur->mag + cursor4->mag + _this->cursor[3]->mag + cursor2->mag + cursor1->mag == 0;
   }
-  v16 = (v36 + 7) >> 4;
-  level_of = _this->level_of[v16];
-  v35 = p1_level_step[(uint32_t)level_of];
+  act_q = (act_all + 7) >> 4;
+  level_of = _this->level_of[act_q];
+  step = p1_level_step[(uint32_t)level_of];
   _this->ctx[0] = level_of;
-  _this->ctx[1] = _this->group_of[v16] + _this->slot_of[(uint32_t)v4];
-  _this->ctx_w[0].sel = (((216 - (uint32_t)v4) >> 31) + ((22 - (uint32_t)v4) >> 31));
-  v38 = ((216 - (uint32_t)v4) >> 31) + ((22 - (uint32_t)v4) >> 31);
-  v18 = (cursor1[-1].sym - cursor1->sym >= 0) + (cursor1[-1].sym > (int32_t)cursor1->sym);
-  _this->ctx_w[1].sel = v18;
-  v39 = (cursor1[-1].sym - v5[-1].sym >= 0) + (cursor1[-1].sym > (int32_t)v5[-1].sym);
-  _this->ctx_w[2].sel = v39;
-  v19 = _this->ctx_w[3].sel == 0;
-  v20 = _this->ctx_w[3].sel < 0;
-  v40 = (cursor1[1].sym - v4 >= -v35) + (cursor1[1].sym - v4 > v35);
-  _this->ctx_w[4].sel = v40;
-  v21 = v35 < _this->ctx_w[5].sel;
-  v22 = -v35 <= _this->ctx_w[5].sel;
-  v23 = !v20 + (!v20 && !v19);
-  _this->ctx_w[3].sel = v23;
-  v24 = v22 + v21;
-  v19 = _this->ctx_w[6].sel == 0;
-  v20 = _this->ctx_w[6].sel < 0;
-  _this->ctx_w[5].sel = v24;
-  v25 = !v20 && !v19;
-  v26 = !v20;
-  v19 = _this->ctx_w[7].sel == 0;
-  v20 = _this->ctx_w[7].sel < 0;
-  v41 = v26 + v25;
-  _this->ctx_w[6].sel = (v26 + v25);
-  v27 = !v20 && !v19;
-  v28 = !v20;
-  v19 = _this->ctx_w[8].sel == 0;
-  v20 = _this->ctx_w[8].sel < 0;
-  v42 = v28 + v27;
-  _this->ctx_w[7].sel = (v28 + v27);
-  v29 = !v20 + (!v20 && !v19);
-  _this->ctx_w[8].sel = v29;
-  result = _this->ctx_w[0].w[v38] + _this->ctx_w[1].w[v18]
-         + _this->ctx_w[2].w[v39] + _this->ctx_w[3].w[v23]
-         + _this->ctx_w[4].w[v40] + _this->ctx_w[5].w[v24]
-         + _this->ctx_w[6].w[v41] + _this->ctx_w[7].w[v42]
-         + _this->ctx_w[8].w[v29]
-         + 16 * v37
+  _this->ctx[1] = _this->group_of[act_q] + _this->slot_of[(uint32_t)guess];
+  _this->ctx_w[0].sel = (((216 - (uint32_t)guess) >> 31) + ((22 - (uint32_t)guess) >> 31));
+  s0 = ((216 - (uint32_t)guess) >> 31) + ((22 - (uint32_t)guess) >> 31);
+  s1 = (cursor1[-1].sym - cursor1->sym >= 0) + (cursor1[-1].sym > (int32_t)cursor1->sym);
+  _this->ctx_w[1].sel = s1;
+  s2 = (cursor1[-1].sym - cur[-1].sym >= 0) + (cursor1[-1].sym > (int32_t)cur[-1].sym);
+  _this->ctx_w[2].sel = s2;
+  is_zero = _this->ctx_w[3].sel == 0;
+  is_neg = _this->ctx_w[3].sel < 0;
+  s4 = (cursor1[1].sym - guess >= -step) + (cursor1[1].sym - guess > step);
+  _this->ctx_w[4].sel = s4;
+  hi = step < _this->ctx_w[5].sel;
+  lo = -step <= _this->ctx_w[5].sel;
+  s3 = !is_neg + (!is_neg && !is_zero);
+  _this->ctx_w[3].sel = s3;
+  s5 = lo + hi;
+  is_zero = _this->ctx_w[6].sel == 0;
+  is_neg = _this->ctx_w[6].sel < 0;
+  _this->ctx_w[5].sel = s5;
+  g6 = !is_neg && !is_zero;
+  h6 = !is_neg;
+  is_zero = _this->ctx_w[7].sel == 0;
+  is_neg = _this->ctx_w[7].sel < 0;
+  s6 = h6 + g6;
+  _this->ctx_w[6].sel = (h6 + g6);
+  g7 = !is_neg && !is_zero;
+  h7 = !is_neg;
+  is_zero = _this->ctx_w[8].sel == 0;
+  is_neg = _this->ctx_w[8].sel < 0;
+  s7 = h7 + g7;
+  _this->ctx_w[7].sel = (h7 + g7);
+  s8 = !is_neg + (!is_neg && !is_zero);
+  _this->ctx_w[8].sel = s8;
+  result = _this->ctx_w[0].w[s0] + _this->ctx_w[1].w[s1]
+         + _this->ctx_w[2].w[s2] + _this->ctx_w[3].w[s3]
+         + _this->ctx_w[4].w[s4] + _this->ctx_w[5].w[s5]
+         + _this->ctx_w[6].w[s6] + _this->ctx_w[7].w[s7]
+         + _this->ctx_w[8].w[s8]
+         + 16 * quiet
          + 8 * (_this->ctx[3 + _this->ctx[2]] == 0)
          + level_of;
   _this->ctx[0] = result;
@@ -12418,40 +12435,39 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   P2Count *v93;
   float v16, bias2, bias1, v21, v22, v23, v24, v26;
   P2Count *v98;
-  int32_t v6, v9, bank_ctx, v77, v79, v80, v81, v84, v85, v86, v88, v89, v95,
-          v96, v100, v101, v102, v106, v108, v113, v115, v117, v118, v119,
-          v120, v121, v122, v123, v124, v125, v126, v127, v128, v129, v130,
-          v131, v132, v133, v134, v135, v136, v137, v138, v139, v140, v141,
-          v142, v143, v144, v145, v146, v147, v148, v149, v150, v151, v152,
-          v153, v154, v155, v156, v157, v158, v159, v160, v161, v162, v163,
-          v164, v165, v166, v167, v168, v169, v170, v171, v172, v173, v174,
-          v175, v176, v177, v178, v179, v180, v181, v182, v183, v184, v185,
-          v186, v187, v188, v189, v190, v191, v192, v193, v194, v195, v196,
-          v197, v198, v199, v200, v201, v202, v203, v204, v205, v206, v207,
-          v208, v209, v210, v211, v212, v213, v214, v215, v216, v217, v218,
-          v219, v220, v221, v222, v223, v224, v225, v226, v227, v228, v229,
-          v230, v231, v232, v233, v234, v235, v236, v237, v238, v239, v240,
-          v241, v242, v243, v244, v245, v246, v247, v248, v249, v250, v251,
-          v252, v253, v254, v255, v256, v257, v258, v259, v260, v261, v262,
-          v263, v264, v265, v266, v267, v268, v269, v270, v271, v272, v273,
-          v274, v275, v276, v277, v278, v279, v280, v281, v282, v283, v284,
-          v285, v286, v287, v288, v289, v290, v291, v292, v293, v294, v295,
-          v296, v297, v298, v299, v300, v301, v302, v303, v304, v305, v306,
-          v307, v308, v309, v310, v311, v313, v314, v315, v316, v317, v318,
-          v319, v320, v321, v322, v323, v324, v325, v326, v327, v328, v329,
-          v330, v331, v332, v333, v334, v335, v336, v337, v338, v339, v340,
-          v341, v342, v344, v345, v346, v347, v348, v349, v350, v351, v352,
-          v353, v354, v355, v356, v357, v358, v359, v360, v361, v362, v363,
-          v364, v365, v366, v367, v368, v369, v370, v371, v372, v373, v374,
-          v376, v377, v378, v379, v380, v381, v382, v383, v384, ctx, n15,
-          v391, v392, v394, v395, v397, v398, v399, v400, v403, v404, v406,
-          v407, v409, v410, v412, v413, v415, v416, v417, v418, v419, v421,
-          v422, v423, v424, v425, v426, v427, v429, v430, v431, v432, v433,
-          v434, v435, v437, v438, v439, v440, v441, v442, v443, v447, v448,
-          v449, v450, v453, v454, v459, v460, v461, v464, v465, v467, v468,
-          v470, v471, v472, v475, v476, v478, v479, v481, v482, v483, v486,
-          v487, v489, v490, v492, v493, v494, v497, v498, v500, v501, v503,
-          v504;
+  int32_t v6, bank_ctx, v77, v79, v80, v81, v84, v85, v86, v88, v89, v95, v96,
+          v100, v101, v102, v106, v108, v113, v115, v117, v118, v119, v120,
+          v121, v122, v123, v124, v125, v126, v127, v128, v129, v130, v131,
+          v132, v133, v134, v135, v136, v137, v138, v139, v140, v141, v142,
+          v143, v144, v145, v146, v147, v148, v149, v150, v151, v152, v153,
+          v154, v155, v156, v157, v158, v159, v160, v161, v162, v163, v164,
+          v165, v166, v167, v168, v169, v170, v171, v172, v173, v174, v175,
+          v176, v177, v178, v179, v180, v181, v182, v183, v184, v185, v186,
+          v187, v188, v189, v190, v191, v192, v193, v194, v195, v196, v197,
+          v198, v199, v200, v201, v202, v203, v204, v205, v206, v207, v208,
+          v209, v210, v211, v212, v213, v214, v215, v216, v217, v218, v219,
+          v220, v221, v222, v223, v224, v225, v226, v227, v228, v229, v230,
+          v231, v232, v233, v234, v235, v236, v237, v238, v239, v240, v241,
+          v242, v243, v244, v245, v246, v247, v248, v250, v251, v252, v253,
+          v254, v255, v256, v257, v258, v259, v260, v261, v262, v263, v264,
+          v265, v266, v267, v268, v269, v270, v271, v272, v273, v274, v275,
+          v276, v277, v278, v279, v280, v281, v282, v283, v284, v285, v286,
+          v287, v288, v289, v290, v291, v292, v293, v294, v295, v296, v297,
+          v298, v299, v300, v301, v302, v303, v304, v305, v306, v307, v308,
+          v309, v310, v311, v313, v314, v315, v316, v317, v318, v319, v320,
+          v321, v322, v323, v324, v325, v326, v327, v328, v329, v330, v331,
+          v332, v333, v334, v335, v336, v337, v338, v339, v340, v341, v342,
+          v344, v345, v346, v347, v348, v349, v350, v351, v352, v353, v354,
+          v355, v356, v357, v358, v359, v360, v361, v362, v363, v364, v365,
+          v366, v367, v368, v369, v370, v371, v372, v373, v374, v376, v377,
+          v378, v379, v380, v381, v382, v383, v384, ctx, n15, v391, v392,
+          v394, v395, v397, v398, v399, v400, v403, v404, v406, v407, v409,
+          v410, v412, v413, v415, v416, v417, v418, v419, v421, v422, v423,
+          v424, v425, v426, v427, v429, v430, v431, v432, v433, v434, v435,
+          v437, v438, v439, v440, v441, v442, v443, v447, v448, v449, v450,
+          v453, v454, v459, v460, v461, v464, v465, v467, v468, v470, v471,
+          v472, v475, v476, v478, v479, v481, v482, v483, v486, v487, v489,
+          v490, v492, v493, v494, v497, v498, v500, v501, v503, v504;
   int64_t v10, v11, v12, v13, v14;
   P2Freq *n0xF0_3;
   P2Freq *n0xF0_2;
@@ -12482,17 +12498,16 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
                                                                 + 2 * ((uint32_t)(9 - v6) >> 31)));
   a1->cursor[0]->mag = abs32(a5);
   cursor0 = a1->cursor[0];
-  v9 = v577;
   sample = (float)v577;
   v10 = v577 - cursor0[-1].lane[0];
   cursor0->lane[4] = (WORD2(v10) ^ v10) - WORD2(v10);
-  v11 = v9 - a1->cursor[1]->lane[0];
+  v11 = v577 - a1->cursor[1]->lane[0];
   a1->cursor[0]->lane[5] = (WORD2(v11) ^ v11) - WORD2(v11);
-  v12 = v9 - a1->cursor[1][-1].lane[0];
+  v12 = v577 - a1->cursor[1][-1].lane[0];
   a1->cursor[0]->lane[6] = (WORD2(v12) ^ v12) - WORD2(v12);
-  v13 = v9 - a1->cursor[1][1].lane[0];
+  v13 = v577 - a1->cursor[1][1].lane[0];
   a1->cursor[0]->lane[7] = (WORD2(v13) ^ v13) - WORD2(v13);
-  v14 = (int16_t)(v9 - a1->pred_prev);
+  v14 = (int16_t)(v577 - a1->pred_prev);
   a1->cursor[0]->lane[2] = v14;
   a1->cursor[0]->lane[3] = (WORD2(v14) ^ v14) - WORD2(v14);
   f278656 = a1->f278656;
@@ -12517,7 +12532,6 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   // different floors.
   v26 = (1.0f - (v24 / (v23 + 576.0f))) * 2.0f;
   n5 = 0;
-  v577 = v9;
   v578 = (AltP2Block *)((uint32_t *)a1);
   {
     const float err_a     = (sample - bias1) * 2.5999999f;
@@ -12975,14 +12989,12 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
             v247 = v218 - p2_pred(v246, v535->b0);
             v535->w2 = p2_bump(v246, v247, 3);
             v248 = v530->w2;
-            v249 = v550;
             v250 = v550 - p2_pred(v248, v530->b0);
             v530->w2 = p2_bump(v248, v250, 2);
             v251 = v531->w2;
             // `LOBYTE(v248) = v531->b0` and `v248 & 31` was the rate: the mask
             // reads only the byte that was written.
-            v252 = v249 - p2_pred(v251, v531->b0);
-            v550 = v249;
+            v252 = v550 - p2_pred(v251, v531->b0);
             v531->w2 = p2_bump(v251, v252, 3);
             v253 = v550;
             *(uint16_t *)&v530[1].w2 += (uint32_t)(v550
