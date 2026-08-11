@@ -22,29 +22,45 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp / bmf.cpp lines            17787     17616         17539
+subs1.hpp lines                      17787     17616         17544
+bmf.cpp lines                            —         —           366
 raw-offset sites                        22        12             5
   off `_this`                            —         1             0
+  in functions                           —         1             0
 byte offsets on a typed base           121         0             0
 pointer casts                         2137      1545          1290
   to a scalar                            —         —           541
   to a record                            —         —           391
   to a scalar, of an address             —         —           353
   to a record, of an address             —         —             5
-fNN members / named ones             93/121     5/162         0/171
+fNN members / named ones             93/121     5/162         0/172
 distinct unexplained locals            554       591             0
-  bodies still carrying one              —    8/102         0/103
+  bodies still carrying one              —   8 of 102     0 of 103
   uses                                    —      6302             0
 locals named for a callee parameter      —         —             0
   declarations / bodies                   —         —           0/0
-names Hex-Rays chose, nobody changed     —         —             0
-  conventional ones kept on purpose      —         —         64/74
+names Hex-Rays chose and nobody changed  —         —             0
+  conventional ones kept / bodies joined  —         —         64/74
 goto / LABEL_n:                     112/79     81/55         49/33
   restart a loop / exit N blocks         —         —         15/32
   sideways to a join / to neither        —         —           2/0
   jump into a block                      —         —             0
-conversion warnings (ratchet)         1455      1331          1070
+conversion warnings                   1455      1331          1070
 ```
+
+`python3 tools/checktable.py` compares that table against `shape.py --rows`
+and exits non-zero if any row disagrees. It was written because the table had
+been wrong seven times: four because the measure behind a row was wrong — §10
+and §12 and §21 are those — and three because somebody copied a number into it
+and the file kept changing underneath. The first four needed thought. The
+last three are a diff, and a document that says "verbatim" should be checked
+against the tool rather than reread.
+
+Making it checkable took two changes to `shape.py` and none to its numbers: a
+`--rows` mode that prints the table tab-separated, because a long label leaves
+one space before its value and a short one leaves twenty and no parser should
+have to guess; and splitting the two rows whose value was two numbers and a
+clause, because a row with one value is a row a checker can compare.
 
 **Not one Hex-Rays name is left in either file.** Checked by running the
 pattern over the comment-stripped text of `subs1.hpp` and `bmf.cpp`, not by

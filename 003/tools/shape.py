@@ -216,12 +216,22 @@ def summary():
     fr = frames(lines)
     members = fields()
     named = sum(len(v[1]) for v in members.values())
-    row = lambda k, v: print('%-34s %s' % (k, v))                 # noqa: E731
-    row('%s / bmf.cpp lines' % SRC,
-        '%d / %d' % (len(lines) - 1, len(open('bmf.cpp').read().split('\n')) - 1))
+    # `--rows` prints the same table tab-separated, so `checktable.py` can
+    # compare it against the copy in REFACTORING9.md §1 without guessing where
+    # a label ends -- which it cannot do reliably, because a long label leaves
+    # one space before its value and a short one leaves twenty.
+    row = ((lambda k, v: print('%s\t%s' % (k.strip(), v)))
+           if '--rows' in sys.argv else
+           (lambda k, v: print('%-34s %s' % (k, v))))
+    # One value a row.  A row whose value is two numbers and a clause cannot be
+    # compared against the copy of this table in REFACTORING9.md §1 without the
+    # checker parsing prose, and the point of `checktable.py` is that it does
+    # not have to.
+    row('%s lines' % SRC, len(lines) - 1)
+    row('bmf.cpp lines', len(open('bmf.cpp').read().split('\n')) - 1)
     row('raw-offset sites', len(raw))
-    row('  off `_this`',
-        '%d, in %d functions' % (len(this), len(set(r[1] for r in this))))
+    row('  off `_this`', len(this))
+    row('  in functions', len(set(r[1] for r in this)))
     # `sizeof(void *)` is not a cast, and thirty-three of them -- one per
     # layout assertion -- were in this figure from the day it was written.
     # The lookbehind is the whole correction.
@@ -347,9 +357,8 @@ def summary():
     if live is not None:
         row('names Hex-Rays chose and nobody changed',
             '%d' % sum(len(v) for v in live.values()))
-        row('  conventional ones kept on purpose',
-            '%d, over %d bodies joined by address'
-            % (sum(len(v) for v in on_purpose.values()), joined))
+        row('  conventional ones kept / bodies joined',
+            '%d / %d' % (sum(len(v) for v in on_purpose.values()), joined))
     # Both halves used to be wrong, in opposite directions: `src.count('goto ')`
     # counted two comments that mention a `goto` that is no longer there, and
     # `^LABEL_\d+:` missed the two labels that are indented.  Strip the comments
