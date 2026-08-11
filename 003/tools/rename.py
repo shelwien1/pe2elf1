@@ -183,7 +183,9 @@ def main():
         sys.exit(__doc__.strip().split('\n\n')[1].strip())
     path = sys.argv[1]
     pairs = []
-    args = sys.argv[2:]
+    # Flags are read off `sys.argv` where they are used, so they have to come
+    # out of the positional list here or the OLD=NEW parser chokes on them.
+    args = [a for a in sys.argv[2:] if a != '--member']
     if args and args[0] == '--in':
         scope, args = args[1], args[2:]
         for a in args:

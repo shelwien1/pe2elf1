@@ -16120,17 +16120,17 @@ uint32_t __search_filter(BmfImage *img, int8_t a2)
       int32_t plane_i;
       uint32_t costs[4];
       int32_t pi;
-      void *Srca_7;
+      void *tile_buf;
       int32_t flag8;
       uint8_t *best_flags;
       uint8_t _pad0[28];
-      void *Src;
+      void *tile_src;
       uint8_t *n_hard;
       int32_t bits_total;
       int32_t n_flagged;
       uint8_t *best_bits;
       BmfImage *p_i_2;
-      uint8_t *Blockb;
+      uint8_t *tile_img;
       uint8_t _pad1[36];
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 176, "frame layout moved");
@@ -16147,11 +16147,13 @@ uint32_t __search_filter(BmfImage *img, int8_t a2)
   // bytes travelling to be dropped, on top of section 11's six.
   int8_t f4;
   uint8_t f0, f1, f2, f3;
-  uint8_t *srcp, *y, *dstp, *hard, *Blockb_2, *Srca_1, *bits_a, *p0, *p1, *bits_b, *p2, *p3, *Blockb_6, *p4, *p5, *p6, *Blockb_7, *p7, *p10, *p11, *Blockb_8, *p12, *p13, *p14, *Blockb_9, *Blockb_4, *Srca_3, *Blockb_5, *Srca_4, *cost_f13, *Srca_5, *Blockb_3, *Srca_2, *Blockb_1, *Srca, *flags_s;   // `uint8_t *` beside the `char` scalars above
+  uint8_t *srcp, *y, *dstp, *hard, *bits_a, *p0, *p1, *bits_b, *p2, *p3,
+          *tile_a, *p4, *p5, *p6, *tile_b, *p7, *p10, *p11, *tile_c,
+          *p12, *p13, *p14, *tile_d, *cost_f13, *flags_s;   // `uint8_t *` beside the `char` scalars above
   uint16_t w_a;
   uint16_t w_d;
   int16_t w_b, w_e;
-  int32_t tile_w, tile_h, pl, nplanes, y0, dx, off_y, Size, best_cost, bits_f5,
+  int32_t tile_w, tile_h, pl, nplanes, y0, dx, off_y, row_bytes, best_cost, bits_f5,
           cost_f5, f5, pred, c0, c1, c2, c3, cand, sv1, nplanes_c, pl_a,
           pi0, sv2, pl_b, pi1, bits2, sv0, plane, pi3, bits_e, nplanes_b, sv3,
           pl_c, pi4, sv4, pl_d, bits_c, img_h1, img_h1b, y1, off1, x1,
@@ -16187,8 +16189,8 @@ uint32_t __search_filter(BmfImage *img, int8_t a2)
   __choose_plane_coding((BmfImage *)img_c, tile_h, a2);
   // `if ( opt_filter_template == 2 )` -- 94 lines of the -T2 filter-template path, gone
   // with the mode.  See REFACTORING.md §2.
-  __frame.Blockb = (uint8_t *)__alloc_image(tile_w, tile_h, img_c->depth & 0x3F, 0, 0);
-  coded_size = *((uint32_t *)__frame.Blockb + 3) + 0x20000;
+  __frame.tile_img = (uint8_t *)__alloc_image(tile_w, tile_h, img_c->depth & 0x3F, 0, 0);
+  coded_size = *((uint32_t *)__frame.tile_img + 3) + 0x20000;
   coded_buf = (uint8_t *)bmf_new(coded_size);
   out_cursor = coded_buf;
   packer_free_bits = 0;
@@ -16196,27 +16198,27 @@ uint32_t __search_filter(BmfImage *img, int8_t a2)
   packer_word = (uint32_t *)coded_buf;
   __frame.dims[0] = tile_h * tile_w;
   hist_scratch = coded_buf + coded_size - 4096;
-  __frame.Srca_7 = bmf_new(tile_h * tile_w);
+  __frame.tile_buf = bmf_new(tile_h * tile_w);
   nplanes = ::plane_count;
   y0 = (img_c->height - tile_h) >> 1;
   dx = img_c->width - tile_w;
   off_y = y0 * img_c->stride;
   __frame.rows[1] = (uint8_t *)y0;
   srcp = (uint8_t *)img_c + ::plane_count * (dx >> 1) + off_y + 16;
-  __frame.Src = __frame.Blockb + 16;
-  __frame.rows[0] = __frame.Blockb + 16;
+  __frame.tile_src = __frame.tile_img + 16;
+  __frame.rows[0] = __frame.tile_img + 16;
   if ( y0 < tile_h + y0 )
   {
-    Size = *((uint16_t *)__frame.Blockb + 2);
+    row_bytes = *((uint16_t *)__frame.tile_img + 2);
     __frame.dims[1] = tile_h;
     y = __frame.rows[1];
     __frame.p_i_2 = (BmfImage *)(img_c);
     dstp = __frame.rows[0];
     do
     {
-      memcpy(dstp,srcp,Size);
-      Size = *((uint16_t *)__frame.Blockb + 2);
-      dstp += Size;
+      memcpy(dstp,srcp,row_bytes);
+      row_bytes = *((uint16_t *)__frame.tile_img + 2);
+      dstp += row_bytes;
       srcp += __frame.p_i_2->stride;
       ++y;
     }
@@ -16245,11 +16247,9 @@ uint32_t __search_filter(BmfImage *img, int8_t a2)
       }
       else
       {
-        Blockb_1 = __frame.Blockb;
-        Srca = (uint8_t *)__frame.Srca_7;
         pl1 = __frame.dims[1];
         plane_desc[__frame.dims[1] + 1].flags = 0;
-        __model_planes(Blockb_1, Srca, pl1, 0);
+        __model_planes(__frame.tile_img, (uint8_t *)__frame.tile_buf, pl1, 0);
         bits_f0 = 8 * (out_cursor - coded_buf);
         best_cost = plane_desc[0].w0 - packer_free_bits + bits_f0 + 32;
         deep = 0;                            // -S
@@ -16268,10 +16268,8 @@ uint32_t __search_filter(BmfImage *img, int8_t a2)
           flags_s = nullptr;
         __frame.best_flags = flags_s;
       }
-      Blockb_2 = __frame.Blockb;
-      Srca_1 = (uint8_t *)__frame.Srca_7;
       plane_desc[__frame.plane_i + 1].flags = 5;
-      __model_planes(Blockb_2, Srca_1, __frame.dims[1], 0);
+      __model_planes(__frame.tile_img, (uint8_t *)__frame.tile_buf, __frame.dims[1], 0);
       bits_f5 = 8 * (out_cursor - coded_buf);
       cost_f5 = plane_desc[0].w0 - packer_free_bits + bits_f5 + 32;
       deep = 0;                            // -S
@@ -16292,11 +16290,9 @@ uint32_t __search_filter(BmfImage *img, int8_t a2)
       __frame.best_flags = (uint8_t *)f5;
       if ( cost_f5 < best_cost + (best_cost >> 5) || hard )
       {
-        Blockb_3 = __frame.Blockb;
-        Srca_2 = (uint8_t *)__frame.Srca_7;
         pl0 = __frame.dims[1];
         plane_desc[__frame.plane_i + 1].flags = 6;
-        __model_planes(Blockb_3, Srca_2, pl0, 0);
+        __model_planes(__frame.tile_img, (uint8_t *)__frame.tile_buf, pl0, 0);
         bits_f6 = 8 * (out_cursor - coded_buf);
         cost_f6 = plane_desc[0].w0 - packer_free_bits + bits_f6 + 32;
         deep = 0;                            // -S
@@ -16320,11 +16316,9 @@ uint32_t __search_filter(BmfImage *img, int8_t a2)
           // always taken: -Q is 9, so `opt_search_quality > 5` decides it whatever hard is
           {
 LABEL_191:
-            Blockb_4 = __frame.Blockb;
-            Srca_3 = (uint8_t *)__frame.Srca_7;
             pl2 = __frame.dims[1];
             plane_desc[__frame.plane_i + 1].flags = 8;
-            __model_planes(Blockb_4, Srca_3, pl2, 0);
+            __model_planes(__frame.tile_img, (uint8_t *)__frame.tile_buf, pl2, 0);
             bits_f8 = 8 * (out_cursor - coded_buf);
             cost_f8 = plane_desc[0].w0 - packer_free_bits + bits_f8 + 32;
             deep = 0;                            // -S
@@ -16344,11 +16338,9 @@ LABEL_191:
             }
             __frame.best_flags = (uint8_t *)f8;
           }
-          Blockb_5 = __frame.Blockb;
-          Srca_4 = (uint8_t *)__frame.Srca_7;
           pl3 = __frame.dims[1];
           plane_desc[__frame.plane_i + 1].flags = 13;
-          __model_planes(Blockb_5, Srca_4, pl3, 0);
+          __model_planes(__frame.tile_img, (uint8_t *)__frame.tile_buf, pl3, 0);
           bits_f13 = 8 * (out_cursor - coded_buf);
           cost_f13 = (uint8_t *)(plane_desc[0].w0 - packer_free_bits + bits_f13 + 32);
           deep = 0;                            // -S
@@ -16371,10 +16363,9 @@ LABEL_191:
           pred = f13 & 3;
           if ( pred == 2 || best_cost + (best_cost >> 5) > (int32_t)__frame.rows[0] )
           {
-            Srca_5 = (uint8_t *)__frame.Srca_7;
             pl4 = __frame.dims[1];
             plane_desc[__frame.plane_i + 1].flags = 14;
-            __model_planes((uint8_t *)__frame.Blockb, Srca_5, pl4, 0);
+            __model_planes((uint8_t *)__frame.tile_img, (uint8_t *)__frame.tile_buf, pl4, 0);
             cost_f14 = plane_desc[0].w0 - packer_free_bits + 8 * (out_cursor - coded_buf) + 32;
             // always taken: -S
               cost_f14 = 8 * (out_cursor - coded_buf);
@@ -16432,27 +16423,27 @@ LABEL_43:
   }
   // always taken: -Q is 9
   {
-    p2 = (uint8_t *)bmf_new(*((uint32_t *)__frame.Blockb + 3));
-    img_h1 = *((uint16_t *)__frame.Blockb + 1);
+    p2 = (uint8_t *)bmf_new(*((uint32_t *)__frame.tile_img + 3));
+    img_h1 = *((uint16_t *)__frame.tile_img + 1);
     __frame.rows[1] = (uint8_t *)::plane_count;
     __frame.plane_i = (int32_t)p2;
     __frame.pi = ::plane_count * (img_h1 - 1);
-    memcpy(p2,(uint8_t *)__frame.Src,*((uint32_t *)__frame.Blockb + 3));
-    LOWORD(img_h1b) = *((uint16_t *)__frame.Blockb + 1);
+    memcpy(p2,(uint8_t *)__frame.tile_src,*((uint32_t *)__frame.tile_img + 3));
+    LOWORD(img_h1b) = *((uint16_t *)__frame.tile_img + 1);
     if ( (uint16_t)img_h1b )
     {
       __frame.rows[0] = p2;
       p3 = __frame.rows[1];
       __frame.p_i_2 = (BmfImage *)(img_c);
       y1 = 0;
-      Blockb_6 = __frame.Blockb;
+      tile_a = __frame.tile_img;
       off1 = 0;
       do
       {
-        x1 = ((const BmfImage *)Blockb_6)->width;
+        x1 = ((const BmfImage *)tile_a)->width;
         __frame.dims[1] = off1;
         __frame.dims[0] = y1;
-        p4 = &Blockb_6[off1 + 16];
+        p4 = &tile_a[off1 + 16];
         p5 = (uint8_t *)__frame.plane_i;
         do
         {
@@ -16467,8 +16458,8 @@ LABEL_43:
           --x1;
         }
         while ( x1 );
-        Blockb_6 = __frame.Blockb;
-        img_h1b = *((uint16_t *)__frame.Blockb + 1);
+        tile_a = __frame.tile_img;
+        img_h1b = *((uint16_t *)__frame.tile_img + 1);
         __frame.plane_i = (int32_t)p5;
         off1 = (int32_t)&p3[__frame.dims[1]];
         y1 = __frame.dims[0] + 1;
@@ -16477,13 +16468,13 @@ LABEL_43:
       p2 = __frame.rows[0];
       img_c = (BmfImage *)(__frame.p_i_2);
     }
-    Blockb_7 = __frame.Blockb;
-    w_a = ((const BmfImage *)__frame.Blockb)->width;
+    tile_b = __frame.tile_img;
+    w_a = ((const BmfImage *)__frame.tile_img)->width;
     w_b = img_h1b * LOWORD(__frame.rows[1]);
-    ((BmfImage *)__frame.Blockb)->width = img_h1b;
-    ((BmfImage *)Blockb_7)->height = w_a;
-    ((BmfImage *)Blockb_7)->flags ^= 2u;
-    *(uint16_t *)&((BmfImage *)Blockb_7)->stride = w_b;
+    ((BmfImage *)__frame.tile_img)->width = img_h1b;
+    ((BmfImage *)tile_b)->height = w_a;
+    ((BmfImage *)tile_b)->flags ^= 2u;
+    *(uint16_t *)&((BmfImage *)tile_b)->stride = w_b;
     free(p2);
     bits_d = 0;
     if ( ::plane_count > 0 )
@@ -16494,7 +16485,7 @@ LABEL_43:
       {
         pl_k = plane_desc[pk + 1].src_plane;
         __frame.rows[0] = (uint8_t *)pl_k;
-        __model_planes((uint8_t *)__frame.Blockb, (uint8_t *)__frame.Srca_7, pl_k, f4);
+        __model_planes((uint8_t *)__frame.tile_img, (uint8_t *)__frame.tile_buf, pl_k, f4);
         bits = 8 * (out_cursor - coded_buf);
         // never taken: -S
         *(uint32_t *)packer_word = packer_acc;
@@ -16518,26 +16509,26 @@ LABEL_43:
 LABEL_172:
     if ( bits_d + (bits_d >> 12) >= (int32_t)__frame.best_bits )
     {
-      __frame.rows[0] = (uint8_t *)bmf_new(*((uint32_t *)__frame.Blockb + 3));
-      rows_x_planes = ::plane_count * (*((uint16_t *)__frame.Blockb + 1) - 1);
+      __frame.rows[0] = (uint8_t *)bmf_new(*((uint32_t *)__frame.tile_img + 3));
+      rows_x_planes = ::plane_count * (*((uint16_t *)__frame.tile_img + 1) - 1);
       __frame.rows[1] = (uint8_t *)::plane_count;
       __frame.plane_i = (int32_t)__frame.rows[0];
-      memcpy(__frame.rows[0],(uint8_t *)__frame.Src,*((uint32_t *)__frame.Blockb + 3));
-      LOWORD(img_h2) = *((uint16_t *)__frame.Blockb + 1);
+      memcpy(__frame.rows[0],(uint8_t *)__frame.tile_src,*((uint32_t *)__frame.tile_img + 3));
+      LOWORD(img_h2) = *((uint16_t *)__frame.tile_img + 1);
       if ( (uint16_t)img_h2 )
       {
         __frame.costs[0] = rows_x_planes;
         p11 = __frame.rows[1];
         __frame.p_i_2 = (BmfImage *)(img_c);
         y2 = 0;
-        Blockb_8 = __frame.Blockb;
+        tile_c = __frame.tile_img;
         off2 = 0;
         do
         {
-          x2 = ((const BmfImage *)Blockb_8)->width;
+          x2 = ((const BmfImage *)tile_c)->width;
           __frame.dims[1] = off2;
           __frame.dims[0] = y2;
-          p12 = &Blockb_8[off2 + 16];
+          p12 = &tile_c[off2 + 16];
           p13 = (uint8_t *)__frame.plane_i;
           do
           {
@@ -16552,8 +16543,8 @@ LABEL_172:
             --x2;
           }
           while ( x2 );
-          Blockb_8 = __frame.Blockb;
-          img_h2 = *((uint16_t *)__frame.Blockb + 1);
+          tile_c = __frame.tile_img;
+          img_h2 = *((uint16_t *)__frame.tile_img + 1);
           __frame.plane_i = (int32_t)p13;
           off2 = (int32_t)&p11[__frame.dims[1]];
           y2 = __frame.dims[0] + 1;
@@ -16561,14 +16552,14 @@ LABEL_172:
         while ( __frame.dims[0] + 1 < img_h2 );
         img_c = (BmfImage *)(__frame.p_i_2);
       }
-      Blockb_9 = __frame.Blockb;
+      tile_d = __frame.tile_img;
       base2 = __frame.rows[0];
-      w_d = ((const BmfImage *)__frame.Blockb)->width;
+      w_d = ((const BmfImage *)__frame.tile_img)->width;
       w_e = img_h2 * LOWORD(__frame.rows[1]);
-      ((BmfImage *)__frame.Blockb)->width = img_h2;
-      ((BmfImage *)Blockb_9)->height = w_d;
-      ((BmfImage *)Blockb_9)->flags ^= 2u;
-      *(uint16_t *)&((BmfImage *)Blockb_9)->stride = w_e;
+      ((BmfImage *)__frame.tile_img)->width = img_h2;
+      ((BmfImage *)tile_d)->height = w_d;
+      ((BmfImage *)tile_d)->flags ^= 2u;
+      *(uint16_t *)&((BmfImage *)tile_d)->stride = w_e;
       free(base2);
     }
     else
@@ -16625,7 +16616,7 @@ LABEL_172:
       free(__frame.base);
     }
   }
-  free(__frame.Srca_7);
+  free(__frame.tile_buf);
   if ( ::plane_count > 2 )
   {
     if ( __frame.bits_total )
@@ -16652,7 +16643,7 @@ LABEL_172:
         }
         while ( plane < ::plane_count );
       }
-      __transform_planes((BmfImage *)(uint16_t *)__frame.Blockb, (int32_t)p1, 0);
+      __transform_planes((BmfImage *)(uint16_t *)__frame.tile_img, (int32_t)p1, 0);
       bits_e = 8 * (out_cursor - coded_buf);
       // never taken: -S
       deep2 = bits_e <= (int32_t)__frame.best_bits;
@@ -16721,7 +16712,7 @@ LABEL_172:
       }
       else
       {
-        __transform_planes((BmfImage *)(uint16_t *)__frame.Blockb, cand, 0);
+        __transform_planes((BmfImage *)(uint16_t *)__frame.tile_img, cand, 0);
         bits_a = (uint8_t *)(8 * (out_cursor - coded_buf));
         // never taken: -S
         deep2 = (int32_t)bits_a <= (int32_t)__frame.best_bits;
@@ -16764,7 +16755,7 @@ LABEL_172:
               }
               while ( pl_b < ::plane_count );
             }
-            __transform_planes((BmfImage *)(uint16_t *)__frame.Blockb, (int32_t)p0, 0);
+            __transform_planes((BmfImage *)(uint16_t *)__frame.tile_img, (int32_t)p0, 0);
             bits2 = 8 * (out_cursor - coded_buf);
             // never taken: -S
             deep2 = bits2 <= (int32_t)__frame.rows[0];
@@ -16817,8 +16808,8 @@ LABEL_172:
 LABEL_63:
   if ( !__frame.n_hard && ::plane_count > 1 )
   {
-    __frame.rows[0] = (uint8_t *)bmf_new(*((uint32_t *)__frame.Blockb + 3));
-    memcpy(__frame.rows[0],(uint8_t *)__frame.Src,*((uint32_t *)__frame.Blockb + 3));
+    __frame.rows[0] = (uint8_t *)bmf_new(*((uint32_t *)__frame.tile_img + 3));
+    memcpy(__frame.rows[0],(uint8_t *)__frame.tile_src,*((uint32_t *)__frame.tile_img + 3));
     sv3 = 16;
     do
     {
@@ -16840,7 +16831,7 @@ LABEL_63:
       }
       while ( pl_c < ::plane_count );
     }
-    __transform_planes((BmfImage *)(uint16_t *)__frame.Blockb, cand, 0);
+    __transform_planes((BmfImage *)(uint16_t *)__frame.tile_img, cand, 0);
     bits_b = (uint8_t *)(8 * (out_cursor - coded_buf));
     // never taken: -S
     __frame.rows[1] = bits_b;
@@ -16887,8 +16878,8 @@ LABEL_63:
           plane_desc[pl_d++ + 1].flags = 0;
         while ( pl_d < ::plane_count );
       }
-      memcpy((uint8_t *)__frame.Src,__frame.rows[0],*((uint32_t *)__frame.Blockb + 3));
-      __transform_planes((BmfImage *)(uint16_t *)__frame.Blockb, cand, 0);
+      memcpy((uint8_t *)__frame.tile_src,__frame.rows[0],*((uint32_t *)__frame.tile_img + 3));
+      __transform_planes((BmfImage *)(uint16_t *)__frame.tile_img, cand, 0);
       bits_c = 8 * (out_cursor - coded_buf);
       // never taken: -S
       deep2 = bits_c <= (int32_t)__frame.best_bits;
@@ -16919,7 +16910,7 @@ LABEL_63:
     free(__frame.rows[0]);
   }
   free(coded_buf);
-  free(__frame.Blockb);
+  free(__frame.tile_img);
   // `if ( opt_filter_template == 1 )` -- 38 lines that built the -T1 filter template into
   // __dword_4410A4.  With -T off nothing writes that word, so it keeps the 0
   // BMF.exe's data segment starts it at, and the -T2 reader above is gone too.
