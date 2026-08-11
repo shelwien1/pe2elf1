@@ -5317,106 +5317,112 @@ static inline int32_t bmf_pixels(const uint8_t *p) {
   return img->width * img->height;
 }
 
-uint8_t * __interleave_plane(uint8_t *p_i, uint8_t *Src, int32_t a3, int8_t a4)
+// The inverse of `colour_transform`: take one decoded plane and write it back
+// into the interleaved image, undoing whatever decorrelation that plane's
+// `plane_desc` entry records.  Same three predictors, same weights, same
+// rounding -- with the shift added back instead of subtracted, and the
+// reference planes read from the image as it is being rebuilt, which is why
+// the planes are done in `src_plane` order.
+//
+uint8_t * __interleave_plane(uint8_t *img, uint8_t *src, int32_t plane, int8_t a4)
 {
   ;
-  uint8_t *v25;
-  int32_t v4, n6_1, v10, Size, n4, Size_1, v17, v18, v20, v21, v23, n2, v29,
-          v30, v31, v32, n4_1, v34, n6;
-  uint32_t Src_1, Src_2;
-  uint8_t *Src_4, *Src_3;
-  if ( (plane_desc[a3 + 1].flags & 8) == 0 )
+  uint8_t *ref;
+  int32_t wgt1, i2, ofs2, n_flat, step, i, ofs, left3, x3, left2, x2, mode, to_ref0,
+          wgt2, to_ref1, wgt0, stride, dc, n;
+  uint32_t base;
+  uint8_t *p3, *p2;
+  if ( (plane_desc[plane + 1].flags & 8) == 0 )
   {
-    Size = bmf_pixels(p_i);
-    n4 = plane_count;
-    Src_1 = (uint32_t)&((const BmfImage *)p_i)->pixels[a3];
+    n_flat = bmf_pixels(img);
+    step = plane_count;
     if ( plane_count == 1 )
-      return (uint8_t *)memcpy(&((BmfImage *)p_i)->pixels[a3],Src,Size);
-    p_i += a3;
-    Size_1 = 0;
-    v17 = 0;
+      return (uint8_t *)memcpy(&((BmfImage *)img)->pixels[plane],src,n_flat);
+    img += plane;
+    i = 0;
+    ofs = 0;
     do
     {
-      p_i[v17 + 16] = Src[Size_1];
-      v17 += n4;
-      ++Size_1;
+      img[ofs + 16] = src[i];
+      ofs += step;
+      ++i;
     }
-    while ( Size_1 < Size );
-    return p_i;
+    while ( i < n_flat );
+    return img;
   }
-  n4_1 = plane_count;
-  n6 = bmf_pixels(p_i);
-  v29 = plane_desc[1].src_plane - a3;
-  v31 = plane_desc[2].src_plane - a3;
-  n2 = plane_desc[a3 + 1].predictor;
-  v34 = plane_desc[a3 + 1].b3;
-  Src_2 = (uint32_t)&((const BmfImage *)p_i)->pixels[a3];
-  v4 = plane_desc[a3 + 1].w8;
-  v32 = plane_desc[a3 + 1].w4;
-  v30 = plane_desc[a3 + 1].w12;
-  if ( n2 != 2 || v32 + v4 != 128 )
+  stride = plane_count;
+  n = bmf_pixels(img);
+  to_ref0 = plane_desc[1].src_plane - plane;
+  to_ref1 = plane_desc[2].src_plane - plane;
+  mode = plane_desc[plane + 1].predictor;
+  dc = plane_desc[plane + 1].b3;
+  base = (uint32_t)&((const BmfImage *)img)->pixels[plane];
+  wgt1 = plane_desc[plane + 1].w8;
+  wgt0 = plane_desc[plane + 1].w4;
+  wgt2 = plane_desc[plane + 1].w12;
+  if ( mode != 2 || wgt0 + wgt1 != 128 )
     goto LABEL_3;
-  if ( !v4 )
+  if ( !wgt1 )
     goto LABEL_4;
-  if ( v32 )
+  if ( wgt0 )
   {
 LABEL_3:
-    if ( plane_desc[a3 + 1].predictor != 1 )
+    if ( plane_desc[plane + 1].predictor != 1 )
     {
-      if ( n2 == 2 )
+      if ( mode == 2 )
       {
-        v21 = bmf_pixels(p_i);
-        Src_3 = (uint8_t *)Src_2;
+        left2 = bmf_pixels(img);
+        p2 = (uint8_t *)base;
         do
         {
-          v23 = v34 + (uint8_t)*Src++;
-          *Src_3 = (uint8_t)(((v32 * (uint8_t)Src_3[v29]
-                               + v4 * (uint32_t)(uint8_t)Src_3[v31] + 40) >> 7)
-                             + v23);
-          Src_3 += n4_1;
-          --v21;
+          x2 = dc + (uint8_t)*src++;
+          *p2 = (uint8_t)(((wgt0 * (uint8_t)p2[to_ref0]
+                               + wgt1 * (uint32_t)(uint8_t)p2[to_ref1] + 40) >> 7)
+                             + x2);
+          p2 += stride;
+          --left2;
         }
-        while ( v21 );
+        while ( left2 );
       }
-      else if ( n2 == 3 )
+      else if ( mode == 3 )
       {
-        v18 = bmf_pixels(p_i);
-        Src_4 = (uint8_t *)Src_2;
+        left3 = bmf_pixels(img);
+        p3 = (uint8_t *)base;
         do
         {
-          v20 = v34 + (uint8_t)*Src++;
-          *Src_4 = (uint8_t)(((v4 * (uint8_t)*(Src_4 - 2)
-                               + v32 * (uint8_t)*(Src_4 - 3)
-                               + v30 * (uint32_t)(uint8_t)*(Src_4 - 1)
+          x3 = dc + (uint8_t)*src++;
+          *p3 = (uint8_t)(((wgt1 * (uint8_t)*(p3 - 2)
+                               + wgt0 * (uint8_t)*(p3 - 3)
+                               + wgt2 * (uint32_t)(uint8_t)*(p3 - 1)
                                + 63) >> 7)
-                             + v20);
-          Src_4 += n4_1;
-          --v18;
+                             + x3);
+          p3 += stride;
+          --left3;
         }
-        while ( v18 );
+        while ( left3 );
       }
-      return p_i;
+      return img;
     }
     goto LABEL_4;
   }
-  v29 = plane_desc[2].src_plane - a3;
+  to_ref0 = plane_desc[2].src_plane - plane;
 LABEL_4:
-  p_i += a3;
-  v25 = &p_i[v29];
+  img += plane;
+  ref = &img[to_ref0];
   // Twenty-six lines of aliasing test stood here, spelled with five `goto`s
   // into the loop below and a duplicate of it at the bottom -- `undup.py` finds
   // this shape when it is written as an `if`/`else` and cannot when it is
   // written as a jump.  Both destinations were the same six lines.
-  n6_1 = 0;
-  v10 = 0;
+  i2 = 0;
+  ofs2 = 0;
   do
   {
-    p_i[v10 + 16] = v25[v10 + 16] + v34 + Src[n6_1];
-    v10 += n4_1;
-    ++n6_1;
+    img[ofs2 + 16] = ref[ofs2 + 16] + dc + src[i2];
+    ofs2 += stride;
+    ++i2;
   }
-  while ( n6_1 < n6 );
-  return p_i;
+  while ( i2 < n );
+  return img;
 }
 
 // Pull one plane out of the interleaved image and decorrelate it against the
