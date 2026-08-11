@@ -6562,7 +6562,7 @@ int32_t __alt_p2_context(AltP2Block *a1, AltP2Block *a4, AltP2Block *a5) {   P2C
   v290 = v12 + n3536 + n1840_1 + n1840_2;
   v19 = __frame.v268[9];
   v21 = __frame.v246[-1].lane[0];
-  sub1_nb = (P2Ctx *)((P2Ctx *)(2 * __frame.v246[-2].lane[0] + 2 * v21));
+  sub1_nb = (P2Ctx *)(2 * __frame.v246[-2].lane[0] + 2 * v21);
   sub2_n = v19 + (*__frame.v268 + 2 * v21);
   sub4_n = 16 * (v18 + v19 + v17);
   // Which row of the threshold table: how many of five ratios the coded

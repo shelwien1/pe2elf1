@@ -29,7 +29,7 @@ pointer casts                         2137       992
 fNN members / named ones             93/121    44/121
 distinct vNN locals                    554       551
 goto / LABEL_n:                     112/79     92/58
-conversion warnings (ratchet)         1455      1373
+conversion warnings (ratchet)         1455      1372
 ```
 
 Every tool reports zero: `unused.py`, `unwrite.py`, `unaliasvar.py`,
@@ -341,7 +341,7 @@ noticing that a tool's *input* was narrower than the file.
 
   What is left are the names whose *values* are unexplained, which is
   `algorithm_v2.md`'s work and not a sweep's.
-* **1373 conversion warnings.** The ratchet fell 82 this round and every step
+* **1372 conversion warnings.** The ratchet fell 83 this round and every step
   was a by-product: a `match[0]` read through a typed field does not need the
   cast that a raw byte read did.
 
