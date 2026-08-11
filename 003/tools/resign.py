@@ -74,6 +74,7 @@ PAIRS = [{'int32_t', 'uint32_t'}, {'int16_t', 'uint16_t'},
 SRC = ['subs1.hpp']
 # The three operators whose meaning, and not just their operand's bits, depends
 # on the signedness of the left-hand side.
+ADDR = r'&\s*%s\b(?!\s*(?:->|\.|\[))'
 MEANS = r'\b%s\b\s*(?:>>|/|%%)'
 # `x < y` and `y < x`, either way round, but not `x == y`.
 ORDER = (r'(?:\b%s\b\s*(?:<=|>=|<(?![<=])|>(?![>=]))'
@@ -162,29 +163,7 @@ def candidates(lines, log='warn.log'):
             want = same[0][1]
             if FLIP.get(cur[0]) != want:
                 continue
-        if re.search(r'\b%s\b' % re.escape(name), sig):
-            continue
-        body = '\n'.join(code)
-        if re.search(r'&\s*%s\b(?!\s*(?:->|\.|\[))' % re.escape(name), body):
-            continue
-        if re.search(MEANS % re.escape(name), body):
-            continue
-        # An ordering comparison is where signedness changes the *answer* and
-        # not just the bits, and the other side is usually a plain local with
-        # no cast to protect it.  `alt_p2_model`'s `e_top` is the case that
-        # found this: it is a residual, so `e_top < deadzone_lo` is asking
-        # whether the error is below a negative bound, and declaring it
-        # unsigned makes every negative error enormous.  Four streams moved.
-        #
-        # Equality is exempt -- it compares the same bits either way.
-        # An ordering comparison only breaks the flip when the *other* side is
-        # unprotected.  After `explicitcmp.py`, most carry a cast that converts
-        # either way round, and a non-negative literal cannot change meaning at
-        # all -- so look at what is on the other side rather than refusing on
-        # sight.  `alt_p2_model`'s `e_top` still fails this: its bound is a
-        # plain `deadzone_lo`, which is where the whole guard came from.
-        if any(not protected(other, want)
-               for other in opposites(body, name)):
+        if not safe(name, cur[0], want, code, sig):
             continue
         # Flipping removes the conversions *into* this local and creates one
         # wherever it flows into something still declared the old way.  A rule
@@ -205,6 +184,22 @@ def candidates(lines, log='warn.log'):
 
 
 DECLARES = re.compile(r'^\s*(?:const\s+|static\s+)*(\w+)[\s*]')
+
+
+def safe(name, cur, want, code, sig):
+    """Can this local's signedness change without changing what the body does?
+
+    Shared with `resign_group.py`, which asks the same question about every
+    member of a set that has to agree.
+    """
+    if re.search(r'\b%s\b' % re.escape(name), sig):
+        return False
+    body = '\n'.join(code)
+    if re.search(ADDR % re.escape(name), body):
+        return False
+    if re.search(MEANS % re.escape(name), body):
+        return False
+    return all(protected(other, want) for other in opposites(body, name))
 
 
 def opposites(body, name):
@@ -252,6 +247,45 @@ def decl_line(lines, a, b, name, cur):
     return None
 
 
+def retype(lines, got, name, cur, want):
+    """Move one name out of its declaration into a new one.  Returns 1 if a
+    line was inserted, so a caller tracking a body's bounds can follow it.
+
+    Shared with `resign_group.py`.
+    """
+    top, lo = got
+    text = lines[lo]
+    for pat in (r'\b%s\s*,\s*' % re.escape(name),
+                r'\s*,\s*\b%s\b' % re.escape(name),
+                r'\b%s\b' % re.escape(name)):
+        new_text, k = re.subn(pat, '', text, count=1)
+        if k:
+            break
+    indent = text[:len(text) - len(text.lstrip())]
+    # Nothing left but the type: the whole declaration was this one name.  The
+    # comment has to come off before that test and go back on after --
+    # `uint32_t n0x10_2;   // a record index` left `uint32_t ;   // ...`, which
+    # compiles only under `-fpermissive` and so failed the gate's strict pass
+    # rather than the streams.
+    bare, _sep, note = new_text.partition('//')
+    if re.fullmatch(r'\s*(?:const\s+|static\s+)*%s\s*;?\s*' % cur, bare):
+        lines[lo] = '%s%s %s;%s' % (indent, want, name,
+                                    ('   //' + note) if note else '')
+        return 0
+    lines[lo] = new_text
+    head = lines[top][:len(lines[top]) - len(lines[top].lstrip())]
+    lines.insert(top, '%s%s %s;' % (head, want, name))
+    return 1
+
+
+def tidy(text):
+    """Taking the last name off a wrapped line leaves the comma that separated
+    it and, when the line held only that name, an orphan `;` under it."""
+    text = re.sub(r',\s*,', ',', text)
+    text = re.sub(r',[ \t]*\n[ \t]*;', ';', text)
+    return re.sub(r',[ \t]*;', ';', text)
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else 'subs1.hpp'
     SRC[0] = path
@@ -290,37 +324,9 @@ def main():
         got = decl_line(lines, _a, _b + grown[nm], name, cur)
         if got is None:
             continue
-        top, lo = got
-        text = lines[lo]
-        for pat in (r'\b%s\s*,\s*' % re.escape(name),
-                    r'\s*,\s*\b%s\b' % re.escape(name),
-                    r'\b%s\b' % re.escape(name)):
-            new_text, k = re.subn(pat, '', text, count=1)
-            if k:
-                break
-        indent = text[:len(text) - len(text.lstrip())]
-        # Nothing left but the type: the whole declaration was this one name.
-        # The comment has to come off before that test and go back on after --
-        # `uint32_t n0x10_2;   // a record index` left `uint32_t ;   // ...`,
-        # which compiles only under `-fpermissive` and so failed the gate's
-        # strict pass rather than the streams.
-        bare, _sep, note = new_text.partition('//')
-        if re.fullmatch(r'\s*(?:const\s+|static\s+)*%s\s*;?\s*' % cur, bare):
-            lines[lo] = '%s%s %s;%s' % (indent, want, name,
-                                        ('   //' + note) if note else '')
-        else:
-            lines[lo] = new_text
-            head = lines[top][:len(lines[top]) - len(lines[top].lstrip())]
-            lines.insert(top, '%s%s %s;' % (head, want, name))
-            grown[nm] += 1
+        grown[nm] += retype(lines, got, name, cur, want)
         done += 1
-    # Taking the last name off a wrapped line leaves the comma that separated
-    # it and, when the line held only that name, an orphan `;` under it.
-    text = '\n'.join(lines)
-    text = re.sub(r',\s*,', ',', text)
-    text = re.sub(r',[ \t]*\n[ \t]*;', ';', text)
-    text = re.sub(r',[ \t]*;', ';', text)
-    open(path, 'w').write(text)
+    open(path, 'w').write(tidy('\n'.join(lines)))
     print('%d locals retyped' % done)
     return 0
 

@@ -264,7 +264,14 @@ def summary():
     # `v112` -- 198 of them, never counted, while the row read as if the only
     # question left were `vNN`.  The digit after the `n` is required: `nb0` is
     # a name, and `b0` is valid hex.
-    unexp = r'\b(?:[vt]\d+|n(?:0x[0-9A-Fa-f]+|\d[0-9A-Fa-f]*)(?:_\d+)?)\b'
+    # And behind a prefix.  `rename.py` disambiguates a local against a global
+    # of the same name by putting the function's name in front of it, so
+    # `__code_pixel_n0x2000` is a Hex-Rays name that `\bn0x...` cannot match --
+    # there is no word boundary before the `n`.  Six of them sat in the file
+    # while this row read zero.  The suffix has to be a whole Hex-Rays name:
+    # `run_dv3` and `w4_c` are not, and do not match.
+    hexrays = r'(?:[vt]\d+|n(?:0x[0-9A-Fa-f]+|\d[0-9A-Fa-f]*)(?:_\d+)?)'
+    unexp = r'\b(?:\w+_)?%s\b' % hexrays
     bodyv = [len(re.findall(unexp,
                             '\n'.join(l.split('//')[0] for l in lines[a:b + 1])))
              for a, b, _, _ in structs.bodies(lines)]

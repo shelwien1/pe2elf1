@@ -1634,7 +1634,8 @@ uint32_t __alt_init_tables(uint8_t *fold, int8_t *unfold)
   ;
   uint8_t even, odd;
   uint32_t done;
-  int32_t bucket_size, lo, half, in_bucket, ofs, bucket, bucket_1;
+  uint32_t lo;
+  int32_t bucket_size, half, in_bucket, ofs, bucket, bucket_1;
   uint32_t i, k, b, span, pairs;
   uint8_t *pos, *neg;
   bucket_size = 2 * plane_desc[0].w12 + 1;
@@ -1758,7 +1759,8 @@ int32_t __encode_context_bit(BitCtr *_this, BitCtr *a2, int32_t bit)
   uint32_t c1;
   uint32_t p0;
   uint32_t p1;
-  int32_t c0, cap, result, p_cap, par0, par_n;
+  uint32_t c0;
+  int32_t cap, result, p_cap, par0, par_n;
   int32_t par_tot;
   uint32_t tot, p_tot, n1_old, p1_old;
   c0 = _this->n[0];
@@ -3460,8 +3462,10 @@ int32_t __alt_p1_model(AltP1Block *_this)
   uint32_t w16;
   uint32_t w17;
   uint32_t w18;
-  int32_t sel1_top, code_r, sel2_top, slot_f, slot_r, ctx_alt, ctx_dn, sel0,
-          alti0, ctx0, sel1, alti1, ctx1, sel2, x2, alti2, ctx2,
+  uint32_t alti1;
+  uint32_t ctx_alt;
+  int32_t sel1_top, code_r, sel2_top, slot_f, slot_r, ctx_dn, sel0,
+          alti0, ctx0, sel1, ctx1, sel2, x2, alti2, ctx2,
           sel3, x3, alti3, ctx3, sel4, x4, alti4, ctx4, sel5, 
           x5, alti5, ctx5, sel6, x6, alti6, ctx6, sel7, x7, alti7,
           ctx7, sel8, alti8, midn8, ctx8, mid7, mid6, mid5, mid4, mid3,
@@ -4897,7 +4901,7 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
   uint32_t pairs;
-  int32_t done;
+  uint32_t done;
   uint8_t *off_bits;
   int32_t ncol;
   // These shared `__frame.ncol` with the name that still binds it: one
@@ -8919,12 +8923,13 @@ int32_t *__read_bmp(char *FileName)
   uintptr_t Src_1;   // were int32_t: addresses, masked and tagged
   uint8_t *pal, *pal2, *pal3;   // were int32_t: these hold addresses
   FILE *Stream_v;
-  int8_t lo;
+  uint8_t lo;
   uint8_t cur, lo16;
   uint8_t *Src_4, *Src_3, *Src_6, *Buffer_4, *Src_5;   // `uint8_t *` beside the `char` scalars above
   BmfImage *img;
   uint32_t Offset_2;
-  int32_t Size_1, i, j_3, Sizea_1, hi_nibble, byte, left4, left4b, y, dx, dxy, step;
+  uint32_t byte;
+  int32_t Size_1, i, j_3, Sizea_1, hi_nibble, left4, left4b, y, dx, dxy, step;
   uint32_t Size_2, pair, hi, ElementCount, ElementCount_1, left;
   // These two freads land in the frame, and each writes across several of the
   // slots Hex-Rays split it into -- which is why the fields do not look like
@@ -9515,7 +9520,8 @@ int32_t __decode_pixel(ModelBlock *_this, int32_t a2)
   PixRec *s0p;   // `row_cur[6]`, the row above
   uint16_t *pixq;   // a copy of `pix_cur`
   PixRec *r8b, *r7b, *next, *r5, *cur6b;
-  int8_t g_ab, gen;
+  uint8_t g_ab;
+  int8_t gen;
   uint8_t g_a, g_b, g_c, g_d, g_e;
   uint8_t *n2r;   // `uint8_t *` beside the `char` scalars above
   int16_t sym_rev, s1c, w1s, s3b;
@@ -10334,12 +10340,13 @@ int32_t __code_pixel(ModelBlock *_this, int32_t a2)
   uint32_t arg_high;
   uint32_t done;
   uint32_t rec_word;
+  uint32_t __code_pixel_n0x2000;
   int32_t up_sym, left_sym, __code_pixel_n15, upleft_sym, nb, key, ctx_state, pair_last, cap,
           pair_prev, ctx_bucket, p_n15_1, cur9v, m_w1, nb2, sig1, id1, sig2,
           id2, id3_used, sig3, m_w1b, m_w0, m_up0, p_n15_2, one, run,
           run_pair, amap, runlen, run_hit, row_cur9, p_n15_4, s1,
           s8b, s6, msym1, s4, bit5, first, s5, s1b,
-          bucket_i, __code_pixel_n0x2000, s9, cum1, lvl_a, p_n15_5, p_n15_7,
+          bucket_i, s9, cum1, lvl_a, p_n15_5, p_n15_7,
           b15a, msym3, excl_sym_a, excl_sym_b, p_n15_11, wq1, cache2,
           cache1, cache3, cache4, cache6, cur5_back2, h11, h12, h13, h14, h15,
           h16, h17, h18, h19, h20, h21, h24, h28, h26, h30, esym, up_hit, pos1,
@@ -12305,7 +12312,8 @@ uint32_t __alt_p2_model(AltP2Block *a1, int32_t a3, uint8_t a4, int32_t a5)
   uint32_t off2;
   uint32_t off3;
   uint32_t off4;
-  int32_t ctx_lo, bank_ctx, res, w0, w0b, ctxw, res2, w1, e1, wnode0m1a, enode0m1a, x0020, x0010,
+  uint32_t ctxw;
+  int32_t ctx_lo, bank_ctx, res, w0, w0b, res2, w1, e1, wnode0m1a, enode0m1a, x0020, x0010,
           neg, w_top, e_top, bump, res_s, w_top3, w_topm1, wd4000a, ed4000a, wr4000b, er4000b,
           wd4000m1b, ed4000m1b, wm4000c, em4000c, wd2000c, ed2000c, wr2000c, er2000c, wd2000m1b, ed2000m1b, wm2000c,
           em2000c, wd1000c, ed1000c, wr1000c, er1000c, wd1000m1b, ed1000m1b, wm1000c, em1000c, wd0800c, ed0800c,
