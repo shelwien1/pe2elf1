@@ -71,9 +71,27 @@ DECL = re.compile(r'^\s*((?:const\s+|static\s+)*[A-Za-z_]\w*)\s*([\s*]+)')
 
 
 def types(code):
-    """{name: type} for every local a declaration in this body names."""
+    """{name: type} for every local a declaration in this body names.
+
+    A declaration is joined to its continuation lines first.  Hex-Rays writes
+    one `int32_t` list across eight rows, and reading only the first row left
+    every name on rows two to eight with no type at all -- which three tools
+    read as "not a local in this body" and silently skipped.  `v124` in
+    `alt_p2_context` was one of them.
+    """
     out = {}
-    for l in code:
+    joined, i = [], 0
+    while i < len(code):
+        l = code[i]
+        if undup.declaration(l) and not l.rstrip().endswith(';'):
+            j = i
+            while j + 1 < len(code) and not code[j].rstrip().endswith(';'):
+                j += 1
+            l = ' '.join(r.strip() for r in code[i:j + 1])
+            i = j
+        joined.append(l)
+        i += 1
+    for l in joined:
         if not undup.declaration(l):
             continue
         m = DECL.match(l)

@@ -45,10 +45,13 @@ A hoist qualifies when:
 `.`, `->` and `[...]` on it -- so a hoisted sum landing under a `*` keeps its
 own precedence.
 
-This is deliberately narrower than "inline any single-use temporary". A load
-read twice stays: putting it back twice would be a second load, and whether
-that is the same value is the question this rule is answering, not one it may
-assume.  Reads are counted as occurrences and not as statements -- Hex-Rays
+This is deliberately narrower than "inline any single-use temporary". An
+expression with work in it stays behind its name the moment it is read twice:
+duplicating it is copying logic, not putting a load back. A primary -- a name
+with `.`, `->` and constant subscripts on it -- may go back at up to three
+reads, because the span check has already proved nothing between them can make
+two reads differ, and `cx0[-4].err` spelled twice is no harder to read than
+`v236` spelled twice.  Reads are counted as occurrences and not as statements -- Hex-Rays
 wraps one expression over twenty lines and can name the same local six times
 inside it, and counting statements read that as a single use.
 """
@@ -134,12 +137,24 @@ def candidates(lines):
                      for j, (_l, _h, t) in enumerate(stmts)
                      if j != k and re.search(r'\b%s\b' % re.escape(dst), t)
                      and not undup.declaration(t)]
-            if sum(n for _j, n in reads) != 1 or reads[0][0] < k:
+            total = sum(n for _j, n in reads)
+            if not reads or reads[0][0] < k:
                 continue
-            use = reads[0][0]
+            # One read of anything, or a few reads of a primary.  A primary --
+            # a name with `.`, `->` and constant subscripts on it -- costs
+            # nothing to spell again and duplicates no logic, and the span
+            # check below already proves nothing between the reads can make
+            # two of them differ.  Anything longer stays behind its name at
+            # more than one read: that would be copying an expression, not
+            # putting a load back.
+            if total != 1 and not (total <= 3 and PRIMARY.match(expr)):
+                continue
+            use = reads[-1][0]
+            first = reads[0][0]
             if re.search(r'&\s*%s\b' % re.escape(dst), '\n'.join(code)):
                 continue
             span = code[hi + 1:stmts[use][0]]
+            del first
             if any(LABEL.match(r) for r in span) or any(CALL.search(r) for r in span):
                 continue
             depth = 0
@@ -155,8 +170,8 @@ def candidates(lines):
                 body = '\n'.join(span)
                 if any(re.search(p % re.escape(w), body) for w in names for p in WRITE):
                     continue
-                out.append((nm, a + lo, a + hi, a + stmts[use][0], a + stmts[use][1],
-                            dst, expr, m.group(1)))
+                out.append((nm, a + lo, a + hi, a + stmts[reads[0][0]][0],
+                            a + stmts[use][1], dst, expr, m.group(1)))
     return out
 
 
