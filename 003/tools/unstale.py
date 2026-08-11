@@ -3,6 +3,7 @@
 
     python3 tools/unstale.py                  # ALGORITHM.md, algorithm_v2.md
     python3 tools/unstale.py --list           # and what each one is
+    python3 tools/unstale.py old/subs1.hpp    # check them against that source
 
 `ALGORITHM.md` and `algorithm_v2.md` describe the program as it stands, body by
 body and field by field.  Every rename since they were written has been able to
@@ -33,7 +34,6 @@ the prose, because a rule whose test is a spelling gets defeated by a spelling:
 Adding a name here is a claim that the document means it historically.  Not
 finding one here is the finding.
 """
-import glob
 import re
 import sys
 
@@ -129,10 +129,17 @@ def survey(docs=DOCS, sources=('subs1.hpp', 'bmf.cpp')):
 
 
 def main():
-    # `sweep.sh` hands every tool a copy of subs1.hpp; this one reads the
-    # documents, so an argument that is not one of them is the sweep asking.
+    # `sweep.sh` hands every tool a copy of subs1.hpp and `proven.sh` hands it
+    # old revisions of one.  Neither is a mistake and neither should be
+    # ignored: the documents are checked *against a source*, so a source given
+    # on the command line is the source to check them against.  Ignoring it was
+    # what made this answer identically for every revision -- "never opens the
+    # file it is given", which is the one verdict `reads.py` exists to print.
     docs = [a for a in sys.argv[1:] if a.endswith('.md')] or list(DOCS)
-    found = survey(tuple(docs))
+    src = [a for a in sys.argv[1:]
+           if not a.endswith('.md') and not a.startswith('--')]
+    found = survey(tuple(docs), tuple(src) + ('bmf.cpp',) if src
+                   else ('subs1.hpp', 'bmf.cpp'))
     seen = set()
     for doc, line, name, text in found:
         if '--list' in sys.argv or name not in seen:

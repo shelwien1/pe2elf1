@@ -3011,3 +3011,25 @@ table's `subs1.hpp lines` as "quoted but shape.py prints no such row" — a
 failing sweep about typography. The basename is the label; `checktable.py`
 remaps that one row when the file it is checking is not the one the table
 quotes.
+
+### The false pass in the other direction
+
+The run after §35 showed `explicitcmp.py`, `retype_locals.py` and `resign.py`
+all answering differently at the *first* revision tried. They had not started
+working: they had started saying `(warn.log describes another file)`, which is
+§35's stamp doing its job. A note that appears and vanishes with the working
+tree is not evidence about the file being replayed, and three tools came off
+this list on the strength of it.
+
+That is the more dangerous direction — the list is what `proven.sh` exists to
+produce, and anything that shortens it without cause is worse than anything
+that lengthens it. Provenance clauses are stripped before the comparison, from
+a list of phrases rather than by shape: stripping every trailing `(…)` would
+also strip `unnamed.py`'s "(56 more kept on purpose)", which is part of its
+answer. A tool that adds a provenance note adds it to that list — the same
+bargain as `unstale.py`'s `HISTORY`.
+
+`unstale.py` needed the opposite fix. It checked the documents against
+`subs1.hpp` in the working directory and ignored the path it was given, which
+is `reads.py`'s one damning verdict, so it could not move for any revision. It
+takes the source now: 0 names against this file, 9 against `4481630`'s.

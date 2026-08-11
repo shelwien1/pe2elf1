@@ -92,7 +92,22 @@ cp -r tools "$tmp/tools"
 # tool reads as "answers differently" at the first revision tried.  That is a
 # false pass, and the more dangerous direction: it takes a tool *off* the list
 # this script exists to produce.
-ans() { timeout 180 python3 "$1" "$2" 2>&1 | tail -1 | sed "s|$tmp[^ ]*|<file>|g"; }
+# And the provenance clauses come off with it.  Four tools now end their
+# summary with a parenthesised note saying where their input came from --
+# `(warn.log describes another file)`, `(resign-drive.sh: none of 28 reduces
+# the count)` -- and those notes appear or vanish with the *working tree*, not
+# with the file being replayed.  `explicitcmp.py`, `retype_locals.py` and
+# `resign.py` all "answered differently" at the first revision tried for that
+# reason alone, which took three tools off this list without a shred of
+# evidence that their rules work.
+#
+# The phrases are listed rather than matched by shape: stripping every trailing
+# `(...)` would also strip `unnamed.py`'s "(56 more kept on purpose)", which is
+# part of its answer.  A tool that adds a provenance note adds it here, the
+# same bargain as `unstale.py`'s HISTORY and `liftframe.py`'s PROVEN.
+PROV='s| ([^()]*describes another file)||g; s| ([^()]*is not there)||g; s| (resign-drive\.sh:[^()]*)||g'
+ans() { timeout 180 python3 "$1" "$2" 2>&1 | tail -1 \
+        | sed "s|$tmp[^ ]*|<file>|g" | sed "$PROV"; }
 
 flat_tools=()
 seen=0
