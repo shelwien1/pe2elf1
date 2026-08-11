@@ -59,6 +59,10 @@ sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs                                                    # noqa: E402
 import undup                                                      # noqa: E402
 
+# A member is not the local of the same name: `blk->slot` is not `slot`.  A
+# pattern that names an identifier has to say it is not reaching through one.
+NAMED = r'(?<![\w.])(?<!->)%s\b'
+
 LOAD = re.compile(r'^\s*(\w+) = ((?:\([\w\s*]+\)\s*)*)\(*'
                   r'([A-Za-z_]\w*->[\w\[\]]+)\)*;\s*$')
 LABEL = re.compile(r'^\s*LABEL_\d+:')
@@ -125,7 +129,7 @@ def runs(lines, a, b):
         m = LOAD.match(l)
         if m:
             if base is not None and m.group(3) == base and i - cur[-1][0] <= GAP \
-                    and all(re.search(r'\b%s\b' % re.escape(cur[-1][1]), code[k])
+                    and all(re.search(NAMED % re.escape(cur[-1][1]), code[k])
                             for k in range(cur[-1][0] + 1, i)):
                 cur.append((i, m.group(1)))
                 end = i
@@ -139,7 +143,7 @@ def runs(lines, a, b):
         # the function it was written from.  `end` has to follow those uses
         # too: the last load is not the last line of the run, and treating it
         # as one put the final store outside its own segment.
-        if cur and re.search(r'\b%s\b' % re.escape(cur[-1][1]), l) \
+        if cur and re.search(NAMED % re.escape(cur[-1][1]), l) \
                 and i - cur[-1][0] <= GAP:
             end = i
             continue
@@ -179,7 +183,7 @@ def runs(lines, a, b):
             for j, r in enumerate(code):
                 if bounds[k] <= j < bounds[k + 1]:
                     continue
-                if re.search(r'\b%s\b' % re.escape(n), r) and not undup.declaration(r):
+                if re.search(NAMED % re.escape(n), r) and not undup.declaration(r):
                     ok = False
                     break
             if not ok:
@@ -218,7 +222,7 @@ def main():
                 continue
             drop.append(i)
             for j in range(bounds[k], bounds[k + 1]):
-                lines[j] = re.sub(r'\b%s\b' % re.escape(n), first, lines[j])
+                lines[j] = re.sub(NAMED % re.escape(n), first, lines[j])
     for i in sorted(set(drop), reverse=True):
         del lines[i]
     open(path, 'w').write('\n'.join(lines))

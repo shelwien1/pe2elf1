@@ -37,6 +37,10 @@ import merge                                                      # noqa: E402
 import structs                                                    # noqa: E402
 import unp2                                                       # noqa: E402
 
+# A member is not the local of the same name: `blk->slot` is not `slot`.  A
+# pattern that names an identifier has to say it is not reaching through one.
+NAMED = r'(?<![\w.])(?<!->)%s\b'
+
 
 def singles(src):
     """{ObjN: (type, {member: index})} for every struct that is one scalar run."""
@@ -99,7 +103,7 @@ def main():
     if '--list' in sys.argv or not (args or '--all' in sys.argv):
         for n, (t, at) in sorted(found.items(), key=lambda kv: int(kv[0][3:])):
             print('%-8s %-10s %d uses, %s'
-                  % (n, t, len(re.findall(r'\b%s\b' % n, src)),
+                  % (n, t, len(re.findall(NAMED % n, src)),
                      ' '.join('%s=[%d]%s' % (m, k, '..' if c > 1 else '')
                               for m, (k, c) in sorted(at.items(), key=lambda y: y[1]))))
         print('%d structs are a run of one scalar' % len(found))
@@ -117,7 +121,7 @@ def main():
         src = re.sub(r'\((?:const )?%s \*\)' % n, '(%s%s*)' % (t, sep), src)
         lines = src.split('\n')
         span = unp2.declaration(lines, n)
-        if span and not any(re.search(r'\b%s\b' % n, lines[j])
+        if span and not any(re.search(NAMED % n, lines[j])
                             for j in range(len(lines))
                             if not span[0] <= j <= span[1]):
             del lines[span[0]:span[1] + 1]

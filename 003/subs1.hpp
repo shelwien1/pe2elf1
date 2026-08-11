@@ -6628,7 +6628,7 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   int32_t sum4, lane5, nb_id, next_id, plane, in63, *cur, c_lo, mode, c_mid,
           filt, lane3, g3sum, run_s, lane2, ctx0, bank0, pred0, sum_c, run0,
           ctx1, bank1, w1c, one1, pred1, run1, cx2_val0, ctx2, bank2, pred2,
-          run2, bank3, w3c, pred3, run3, bank4, pred4, lo_bound, hi_bound,
+          run2, bank3, w3c, pred3, run3, bank4, pred4, band_lo, band_hi,
           d_run4, magsum, run_s2, mag, flat_a, flat_b, d_run4b, d_rb_rb1,
           d_rb_left, ra0_val, d_ra_ra1b, d_ra_leftb, ctx_idx, d_ra_ra1,
           d_ra_left;
@@ -7131,13 +7131,13 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
          + (cx3[2].mag + cx3[1].mag + cx3[-1].mag + cx3[-2].mag + cx4[-2].mag + cx2p[107] + cx2p[89] + cx2p[71] + (*(cx2p - 19)) + *(cx2p - 37))
          + 4 * (cx1[-1].mag + cx0[-2].mag + cx2p[17])
          + 2 * (cx1[-2].mag + cx1[3].mag + cx0[-3].mag + cx3->mag + *(cx2p - 1) + cx2p[53]);
-  lo_bound = blk->band_lo;
+  band_lo = blk->band_lo;
   blk->ctx_w[0].sel = (run4 < 1840) + (run4 < 272);
-  hi_bound = blk->band_hi;
-  blk->ctx_w[1].sel = ((run4 - cx1->val <= hi_bound) + (run4 - cx1->val < lo_bound));
+  band_hi = blk->band_hi;
+  blk->ctx_w[1].sel = ((run4 - cx1->val <= band_hi) + (run4 - cx1->val < band_lo));
   d_run4 = run4 - cx0[-1].val;
-  in_band = d_run4 <= hi_bound;
-  blk->ctx_w[2].sel = in_band + (d_run4 < lo_bound);
+  in_band = d_run4 <= band_hi;
+  blk->ctx_w[2].sel = in_band + (d_run4 < band_lo);
   blk->ctx_w[3].sel = cx1->sign;
   // The previous record's stored sign digit, straight into the fifth
   // group's selector.  Hex-Rays read it as `(uint8_t)lane[8]` -- one past
@@ -7158,10 +7158,10 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
     if ( blk->has_ref )
     {
       d_run4b = run4 - cx1->dval - cx0[0].dval;
-      if ( d_run4b < lo_bound || d_run4b > hi_bound )
+      if ( d_run4b < band_lo || d_run4b > band_hi )
       {
         run4 = run4 - cx0[-1].dval - cx0[0].dval;
-        flat_b = run4 >= lo_bound && hi_bound >= run4;
+        flat_b = run4 >= band_lo && band_hi >= run4;
       }
       else
       {
@@ -7176,33 +7176,33 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
     {
       magsum_s = magsum;
       d_ra_ra1 = ra0->val - ra1->val;
-      blk->ctx_w[3].sel = (d_ra_ra1 <= hi_bound) + (d_ra_ra1 < lo_bound);
+      blk->ctx_w[3].sel = (d_ra_ra1 <= band_hi) + (d_ra_ra1 < band_lo);
       d_ra_left = ra0->val - ra0[-1].val;
       magsum = magsum_s;
       run_s2 = run;
-      blk->ctx_w[4].sel = ((d_ra_left <= hi_bound) + (d_ra_left < lo_bound));
+      blk->ctx_w[4].sel = ((d_ra_left <= band_hi) + (d_ra_left < band_lo));
     }
     else if ( *(int32_t *)&blk->plane_idx > 1 )
     {
       magsum_s = magsum;
       d_rb_rb1 = rb0->val - rb1->val;
-      blk->ctx_w[3].sel = (d_rb_rb1 <= hi_bound) + (d_rb_rb1 < lo_bound);
+      blk->ctx_w[3].sel = (d_rb_rb1 <= band_hi) + (d_rb_rb1 < band_lo);
       d_rb_left = rb0->val - rb0[-1].val;
-      in_band = d_rb_left <= hi_bound;
+      in_band = d_rb_left <= band_hi;
       magsum = magsum_s;
-      blk->ctx_w[4].sel = in_band + (d_rb_left < lo_bound);
+      blk->ctx_w[4].sel = in_band + (d_rb_left < band_lo);
       ra0_val = ra0->val;
       d_ra_ra1b = ra0_val - ((P2Ctx *)(ra1))->val;
-      in_band = lo_bound <= d_ra_ra1b;
+      in_band = band_lo <= d_ra_ra1b;
       run_s2 = run;
-      if ( in_band && d_ra_ra1b <= hi_bound )
+      if ( in_band && d_ra_ra1b <= band_hi )
       {
         flat_a = 1;
       }
       else
       {
         d_ra_leftb = ra0_val - ra0[-1].val;
-        flat_a = d_ra_leftb >= lo_bound && d_ra_leftb <= hi_bound;
+        flat_a = d_ra_leftb >= band_lo && d_ra_leftb <= band_hi;
       }
     }
   }

@@ -41,6 +41,10 @@ sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs                                                  # noqa: E402
 import undup                                                    # noqa: E402
 
+# A member is not the local of the same name: `blk->slot` is not `slot`.  A
+# pattern that names an identifier has to say it is not reaching through one.
+NAMED = r'(?<![\w.])(?<!->)%s\b'
+
 
 def body_span(lines, fn):
     """The line range of one function, its signature included."""
@@ -66,9 +70,9 @@ def rename_in(path, fn, pairs):
     # because a comment naming the variable should follow it.
     code = '\n'.join(l.split('//')[0] for l in lines[a:b + 1])
     for old, new in pairs:
-        if not re.search(r'\b%s\b' % re.escape(old), text):
+        if not re.search(NAMED % re.escape(old), text):
             sys.exit('%s: %s does not appear in it' % (fn, old))
-        if re.search(r'\b%s\b' % re.escape(new), code):
+        if re.search(NAMED % re.escape(new), code):
             sys.exit('%s: %s already means something in it' % (fn, new))
         # A local may share a name with a struct member, and the substitution
         # below is textual: renaming `rescale_at` to `due` in a body that also
@@ -81,14 +85,14 @@ def rename_in(path, fn, pairs):
         # exactly what this is for.  What must be refused is a name that is a
         # member of some other struct declared elsewhere.
         if re.search(r'(?:->|\.)\s*%s\b' % re.escape(old), code) and not any(
-                undup.declaration(l) and re.search(r'\b%s\b' % re.escape(old), l)
+                undup.declaration(l) and re.search(NAMED % re.escape(old), l)
                 for l in code.split('\n')):
             sys.exit('%s: %s is also a member name here -- rename it in the '
                      'struct, or pick a local name that is not a member'
                      % (fn, old))
     total = 0
     for old, new in pairs:
-        text, k = re.subn(r'\b%s\b' % re.escape(old), new, text)
+        text, k = re.subn(NAMED % re.escape(old), new, text)
         print('%-22s -> %-22s %4d' % (old, new, k))
         total += k
     lines[a:b + 1] = text.split('\n')
@@ -175,7 +179,7 @@ def main():
             pairs.append((old, new))
 
     text = open(path).read()
-    pat = (lambda s: re.escape(s)) if funcs else (lambda s: r'\b%s\b' % re.escape(s))
+    pat = (lambda s: re.escape(s)) if funcs else (lambda s: NAMED % re.escape(s))
     for old, new in pairs:
         if not re.search(pat(old), text):
             sys.exit('%s: no such identifier' % old)

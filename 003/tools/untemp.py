@@ -46,6 +46,10 @@ import sys
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs                                                    # noqa: E402
 
+# A member is not the local of the same name: `blk->slot` is not `slot`.  A
+# pattern that names an identifier has to say it is not reaching through one.
+NAMED = r'(?<![\w.])(?<!->)%s\b'
+
 NAME = re.compile(r'\bv\d+\b')
 WRITE = [r'\b%s\s*(?:\+\+|--)', r'(?:\+\+|--)\s*%s\b', r'\b%s\s*[-+*/|&^%%]?=(?!=)',
          r'&\s*%s\b', r'\b(?:LO|HI)(?:BYTE|WORD|DWORD)\d?\s*\(\s*%s\s*\)']
@@ -76,7 +80,7 @@ def candidates(lines, width):
             if CALL.search(rhs) or re.search(r'\+\+|--|(?<![=!<>])=(?!=)', rhs):
                 continue
             use = lines[u]
-            if len(NAME.findall(use)) and len(re.findall(r'\b%s\b' % v, use)) != 1:
+            if len(NAME.findall(use)) and len(re.findall(NAMED % v, use)) != 1:
                 continue
             if any(re.search(p % re.escape(v), use) for p in WRITE):
                 continue
@@ -102,7 +106,7 @@ def candidates(lines, width):
             srcs = set(re.findall(r'\b([A-Za-z_]\w*)\b', rhs))
             if any(re.search(p % re.escape(x), joined) for x in srcs for p in WRITE):
                 continue
-            folded = re.sub(r'\b%s\b' % v,
+            folded = re.sub(NAMED % v,
                             lambda _: ('(%s)' % rhs) if _needs(rhs) else rhs, use)
             if len(folded.rstrip()) > width:
                 continue

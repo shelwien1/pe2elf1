@@ -57,6 +57,10 @@ sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs                                                    # noqa: E402
 import undup                                                      # noqa: E402
 
+# A member is not the local of the same name: `blk->slot` is not `slot`.  A
+# pattern that names an identifier has to say it is not reaching through one.
+NAMED = r'(?<![\w.])(?<!->)%s\b'
+
 ASSIGN = re.compile(r'^\s*(\w+) = (\w+);\s*$')
 LABEL = re.compile(r'^\s*LABEL_\d+:')
 # `&x` is the variable's address; `&x->m`, `&x.m` and `&x[i]` are not -- they
@@ -107,7 +111,7 @@ def candidates(lines):
             # to a pair already accepted are not uses that block this one.
             outside = [k for k, x in enumerate(code)
                        if not (i <= k <= j) and k not in used
-                       and re.search(r'\b%s\b' % re.escape(slot), x)
+                       and re.search(NAMED % re.escape(slot), x)
                        and not undup.declaration(x)]
             if outside:
                 continue
@@ -122,10 +126,10 @@ def candidates(lines):
             if any(re.search(p % re.escape(held), body) for p in WRITE):
                 continue
             # A callee handed `X` -- or its address -- can change it unseen.
-            if any(re.search(r'\b%s\b' % re.escape(held), c)
+            if any(re.search(NAMED % re.escape(held), c)
                    for c in re.findall(r'\w+\s*\(([^;]*)\)', body)):
                 continue
-            reads = sum(1 for r in region if re.search(r'\b%s\b' % re.escape(slot), r))
+            reads = sum(1 for r in region if re.search(NAMED % re.escape(slot), r))
             used.update((i, j))
             out.append((nm, a + i, a + j, slot, held, len(region), reads))
     return out
@@ -149,7 +153,7 @@ def main():
         if not reads:
             continue
         for k in range(i + 1, j):
-            lines[k] = re.sub(r'\b%s\b' % re.escape(slot), held, lines[k])
+            lines[k] = re.sub(NAMED % re.escape(slot), held, lines[k])
     # One descending pass over every line to remove: pairs can nest, and
     # deleting a pair at a time lets an inner pair's indices shift under an
     # outer one's restore.

@@ -41,6 +41,10 @@ import sys
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs                                                    # noqa: E402
 
+# A member is not the local of the same name: `blk->slot` is not `slot`.  A
+# pattern that names an identifier has to say it is not reaching through one.
+NAMED = r'(?<![\w.])(?<!->)%s\b'
+
 LABEL = re.compile(r'^(\s*)(LABEL_\d+):\s*$')
 IF = re.compile(r'^(\s*)if \( (.*) \)\s*$')
 WRITE = [r'\b%s\s*(?:\+\+|--)', r'(?:\+\+|--)\s*%s\b', r'\b%s\s*[-+*/|&^%%]?=(?!=)',
@@ -85,7 +89,7 @@ def candidates(lines):
                 continue
             # a call anywhere in the region must not mention a condition name
             calls = re.findall(r'\w+\s*\(([^;]*)\)', body)
-            if any(re.search(r'\b%s\b' % re.escape(v), c) for c in calls for v in names):
+            if any(re.search(NAMED % re.escape(v), c) for c in calls for v in names):
                 continue
             out.append((nm, name, g, at, mg, md, region))
     return out
