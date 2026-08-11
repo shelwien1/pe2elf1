@@ -2899,24 +2899,24 @@ int32_t __pixel_context(ModelBlock *_this, uint32_t *p_n15)
 int32_t __init_model_tables(ModelBlock *_this)
 {
   ;
-  SymEntry *v11, *ent;
+  SymEntry *slot, *ent;
   // The two rows above, walked one record at a time.  Every reach through
   // them is `match[0]` -- byte 2 of an eight-byte record -- so the byte
   // offsets 34 and -30 were records +4 and -4: the window `grad` slides,
   // adding the record entering on the right and dropping the one leaving.
-  PixRec *v28, *v29;            // row cursors out of row_cur
+  PixRec *up1, *up2;            // row cursors out of row_cur
   uint8_t cnt;
   uint8_t *buf;   // `uint8_t *` beside the `char` scalars above
-  uint16_t v6, sym;
-  SymList **v3;
-  PixRec *v30;   // the current row, one record past the pixel just written
-  int32_t n2_1, v7, v9, v17, n2, v19, v21, v22, v23, v24, v25, v26, v27,
+  uint16_t want, sym;
+  SymList **cur;
+  PixRec *row;   // the current row, one record past the pixel just written
+  int32_t hit0, n_live, recycled, blocks, hit1, just, c0, c1, c2, c3, c4, c5, c6,
           result;
   uint16_t *sym_cache;
-  SymList *v5;
-  SymList **v4;
-  n2_1 = _this->hit;
-  if ( !n2_1 )
+  SymList *list;
+  SymList **prev;
+  hit0 = _this->hit;
+  if ( !hit0 )
   {
     if ( _this->sel == _this->sel_cur )
     {
@@ -2938,67 +2938,67 @@ int32_t __init_model_tables(ModelBlock *_this)
       __symbol_list_update(&_this->sel0_list[_this->row_cur[5]->sym], mode_symbol[2], 2u);
       __symbol_list_update(&_this->sel0_list[_this->row_cur[5]->sym], mode_symbol[1], 1u);
       __symbol_list_update(&_this->sel1_list[_this->row_cur[5]->sym], mode_symbol[1], 2u);
-      v3 = _this->sel_cur;
+      cur = _this->sel_cur;
       do
       {
-        v4 = v3 - 1;
-        _this->sel_cur = v4;
+        prev = cur - 1;
+        _this->sel_cur = prev;
         // `symbol_list_update`'s insert path, inlined: append the symbol at
         // `live`, evicting the last entry when the list is full, then swap it
         // one place forward.
-        v5 = *v4;
-        v6 = _this->row_cur[5]->sym;
-        v7 = v5->live;
-        ent = v5->ent;
-        if ( v7 == (int32_t)v5->n )
+        list = *prev;
+        want = _this->row_cur[5]->sym;
+        n_live = list->live;
+        ent = list->ent;
+        if ( n_live == (int32_t)list->n )
         {
-          v5->live = --v7;
-          v9 = v5->ent[v7].cnt;
+          list->live = --n_live;
+          recycled = list->ent[n_live].cnt;
         }
         else
         {
-          v9 = 1;
+          recycled = 1;
         }
-        v11 = &ent[v7];
-        v5->live = v7 + 1;
-        v5->tot = v9 + v5->tot + 1;
-        v11->sym = v6;
-        v11->cnt = 2;
-        v5->since_rescale += 4;
-        if ( v11 != v5->ent )
+        slot = &ent[n_live];
+        list->live = n_live + 1;
+        list->tot = recycled + list->tot + 1;
+        slot->sym = want;
+        slot->cnt = 2;
+        list->since_rescale += 4;
+        if ( slot != list->ent )
         {
-          sym = v11->sym;
-          cnt = v11->cnt;
-          v11->sym = v11[-1].sym;
-          v11->cnt = v11[-1].cnt;
-          v11[-1].sym = sym;
-          v11[-1].cnt = cnt;
+          sym = slot->sym;
+          cnt = slot->cnt;
+          slot->sym = slot[-1].sym;
+          slot->cnt = slot[-1].cnt;
+          slot[-1].sym = sym;
+          slot[-1].cnt = cnt;
         }
-        v3 = _this->sel_cur;
+        cur = _this->sel_cur;
       }
-      while ( v3 != _this->sel );
+      while ( cur != _this->sel );
     }
     if ( exclusion_gen == -1 )
     {
       exclusion_gen = 1;
       buf = (uint8_t *)exclusion_mask;
-      v17 = (_this->alphabet + 15) >> 4;
+      blocks = (_this->alphabet + 15) >> 4;
       do
       {
         bmf_zero16(buf);
         buf += 16;
-        --v17;
+        --blocks;
       }
-      while ( v17 );
-      n2 = _this->hit;
+      while ( blocks );
+      hit1 = _this->hit;
     }
     else
     {
       ++exclusion_gen;
-      n2 = _this->hit;
+      hit1 = _this->hit;
     }
 LABEL_19:
-    if ( n2 && n2 <= 2 )
+    if ( hit1 && hit1 <= 2 )
       goto LABEL_37;
   }
   else
@@ -3006,58 +3006,58 @@ LABEL_19:
     // The `goto LABEL_21` that ended the block above skipped exactly this, and
     // it was the block's last statement -- so the two are an `if`/`else` and
     // the label was the join.
-    if ( n2_1 <= 2 )
+    if ( hit0 <= 2 )
       goto LABEL_37;
     if ( mode_symbol[3] != mode_symbol[4] )
     {
       __symbol_list_update(&_this->sel0_list[mode_symbol[2]], _this->row_cur[5]->sym, 1u);
-      n2 = _this->hit;
+      hit1 = _this->hit;
       goto LABEL_19;
     }
   }
-  v19 = _this->row_cur[5]->sym;
+  just = _this->row_cur[5]->sym;
   sym_cache = _this->sym_cache;
-  v21 = sym_cache[0];
-  if ( v19 != v21 )
+  c0 = sym_cache[0];
+  if ( just != c0 )
   {
-    v22 = sym_cache[1];
-    if ( v19 == v22 )
+    c1 = sym_cache[1];
+    if ( just == c1 )
     {
-      sym_cache[1] = v21;
+      sym_cache[1] = c0;
     }
     else
     {
-      v23 = sym_cache[2];
-      if ( v19 == v23 )
+      c2 = sym_cache[2];
+      if ( just == c2 )
       {
-        sym_cache[2] = v22;
+        sym_cache[2] = c1;
         _this->sym_cache[1] = _this->sym_cache[0];
       }
       else
       {
-        v24 = sym_cache[3];
-        if ( v19 == v24 )
+        c3 = sym_cache[3];
+        if ( just == c3 )
         {
-          sym_cache[3] = v23;
+          sym_cache[3] = c2;
           _this->sym_cache[2] = _this->sym_cache[1];
           _this->sym_cache[1] = _this->sym_cache[0];
         }
         else
         {
-          v25 = sym_cache[4];
-          if ( v19 == v25 )
+          c4 = sym_cache[4];
+          if ( just == c4 )
           {
-            sym_cache[4] = v24;
+            sym_cache[4] = c3;
             _this->sym_cache[3] = _this->sym_cache[2];
             _this->sym_cache[2] = _this->sym_cache[1];
             _this->sym_cache[1] = _this->sym_cache[0];
           }
           else
           {
-            v26 = sym_cache[5];
-            if ( v19 == v26 )
+            c5 = sym_cache[5];
+            if ( just == c5 )
             {
-              sym_cache[5] = v25;
+              sym_cache[5] = c4;
               _this->sym_cache[4] = _this->sym_cache[3];
               _this->sym_cache[3] = _this->sym_cache[2];
               _this->sym_cache[2] = _this->sym_cache[1];
@@ -3065,14 +3065,14 @@ LABEL_19:
             }
             else
             {
-              v27 = sym_cache[6];
-              if ( v19 == v27 )
+              c6 = sym_cache[6];
+              if ( just == c6 )
               {
-                sym_cache[6] = v26;
+                sym_cache[6] = c5;
               }
               else
               {
-                sym_cache[7] = v27;
+                sym_cache[7] = c6;
                 _this->sym_cache[6] = _this->sym_cache[5];
               }
               _this->sym_cache[5] = _this->sym_cache[4];
@@ -3085,7 +3085,7 @@ LABEL_19:
         }
       }
     }
-    _this->sym_cache[0] = v19;
+    _this->sym_cache[0] = just;
   }
 LABEL_37:
   // The other fourteen sites already spell the 16-bit accesses out --
@@ -3104,20 +3104,20 @@ LABEL_37:
     here->match[4] = here->sym == up[2].sym;
     here->match[5] = here->sym == up[3].sym;
   }
-  v28 = _this->row_cur[6];
-  v29 = _this->row_cur[7];
-  v30 = _this->row_cur[5] + 1;
-  _this->row_cur[5] = v30;
+  up1 = _this->row_cur[6];
+  up2 = _this->row_cur[7];
+  row = _this->row_cur[5] + 1;
+  _this->row_cur[5] = row;
   ++_this->row_cur[8];
-  ++v28;
-  _this->row_cur[6] = v28;
-  ++v29;
+  ++up1;
+  _this->row_cur[6] = up1;
+  ++up2;
   ++_this->row_cur[9];
-  _this->row_cur[7] = v29;
-  _this->grad[0] += v28[4].match[0] - v28[-4].match[0];
-  _this->grad[1] += v29[4].match[0] - v29[-4].match[0];
-  _this->grad[2] += v30[-1].match[1] - v30[-5].match[1];
-  result = v30[-1].match[0] - v30[-8].match[0];
+  _this->row_cur[7] = up2;
+  _this->grad[0] += up1[4].match[0] - up1[-4].match[0];
+  _this->grad[1] += up2[4].match[0] - up2[-4].match[0];
+  _this->grad[2] += row[-1].match[1] - row[-5].match[1];
+  result = row[-1].match[0] - row[-8].match[0];
   _this->grad[3] += result;
   return result;
 }
@@ -17214,7 +17214,7 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
       union {
           // The 16-byte archive member header `fwrite` sends in one call, and
           // the scratch MSVC put in the same bytes afterwards.  The two live in
-          // mutually exclusive branches: everything below `if ( v38 )` returns,
+          // mutually exclusive branches: everything below `if ( fits )` returns,
           // so the header is finished with before the deinterleave starts.
           BmfImage hdr;
           struct {
@@ -17224,8 +17224,8 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
             int32_t  row_step;   // +12  `plane_count * (height - 1)`
           };
       };
-      int32_t v65;
-      uint8_t *v66;
+      int32_t y0;
+      uint8_t *arc_f;
       void *Buffer_2;
       uint8_t _pad1[32];
   } __frame;
@@ -17242,33 +17242,33 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
   uint8_t *Buffer_copy;
   ;
   uint32_t coded_len;   // word 1 of the coded block, its length
-  uint8_t *v5;   // were int32_t: these hold addresses
+  uint8_t *arc;   // were int32_t: these hold addresses
   FILE *i;
-  bool v38;
-  int8_t v13, v21, v36;
-  uint8_t v15;
+  bool fits;
+  int8_t mode0, mode1, mode2;
+  uint8_t bpp;
   uint8_t __compress_image_Buffer_1;   // 0/1, shifted into bit 7 of the header byte
   uint8_t *Srca, *Buffera_2, *Buffera_3;   // `uint8_t *` beside the `char` scalars above
   uint32_t Buffera_5, Buffera_6;   // the header's pad/depth/flags word, not an address
-  int32_t row_bytes, v18, n4_6, bits_left, n4, v27, n8_1, acc, n4_1, v40, v43,
-          n4_3, v47, i_1, v50, n4_4, data_size;
+  int32_t row_bytes, data_bytes, n4_6, bits_left, n4, shifted, n8_1, acc, n4_1, ok_all, img_h,
+          n4_3, y, i_1, step, n4_4, data_size;
   BmfImage *p_i_1;
   uint16_t i_2;
-  uint32_t ElementCount_1, v25, v26, v28, v30, v32, Size, v55;
-  uint8_t v39, *v49, v54;
-  v5 = a1;
+  uint32_t ElementCount_1, word_flags, word_dc, word_w4, word_w8, word_w12, Size, written;
+  uint8_t ok, *dst, ok_raw;
+  arc = a1;
   if ( !((BmfArc *)a1)->fp )
     return 0;
   if ( !feof(((BmfArc *)a1)->fp) )
   {
-    __expand_image(v5, 1, (void **)nullptr);
-    for ( i = ((BmfArc *)v5)->fp; i; i = ((BmfArc *)v5)->fp )
+    __expand_image(arc, 1, (void **)nullptr);
+    for ( i = ((BmfArc *)arc)->fp; i; i = ((BmfArc *)arc)->fp )
     {
-      if ( feof(((BmfArc *)v5)->fp) )
+      if ( feof(((BmfArc *)arc)->fp) )
         break;
       if ( feof(i) )
         break;
-      __expand_image(v5, 1, (void **)nullptr);
+      __expand_image(arc, 1, (void **)nullptr);
     }
   }
   __compress_image_Buffer_1 = (uint8_t)(uintptr_t)coded_buf;
@@ -17286,13 +17286,13 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
   *(uint32_t *)&__frame.hdr._pad8 = Buffera_5;
   __frame.hdr.data_size = (uint32_t)p_i->data_size;
   ::plane_count = ((p_i->depth & 0x3Fu) + 7) >> 3;
-  if ( fwrite("\x81\x8A""20\x81\x90""20a+b", 4u, 1u, ((BmfArc *)v5)->fp) != 1 )
+  if ( fwrite("\x81\x8A""20\x81\x90""20a+b", 4u, 1u, ((BmfArc *)arc)->fp) != 1 )
     return 0;
-  v15 = p_i->depth;
-  ++*(uint32_t *)v5;
-  ElementCount_1 = v15 & 0x80;
-  if ( (v15 & 0x80) != 0 )   // bit 7 is the palette flag, not a sign
-    ElementCount_1 = 3 << (v15 & 31);
+  bpp = p_i->depth;
+  ++*(uint32_t *)arc;
+  ElementCount_1 = bpp & 0x80;
+  if ( (bpp & 0x80) != 0 )   // bit 7 is the palette flag, not a sign
+    ElementCount_1 = 3 << (bpp & 31);
   if ( p_i->data_size < 0x10u )   // -N is on, so only the size decides
     goto LABEL_76;
   desc_slow_mode = 1;               // -S
@@ -17313,7 +17313,7 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
       __model_plane((BmfImage *)p_i, p_i->pixels, p_i->pixels);
     goto LABEL_57;
   }
-  __frame.ElementCount = __search_filter((BmfImage *)p_i, v13);
+  __frame.ElementCount = __search_filter((BmfImage *)p_i, mode0);
   __frame.hdr.flags |= 0x10u;
   if ( (p_i->flags & 2) != 0 )
   {
@@ -17321,18 +17321,18 @@ int32_t __compress_image(uint8_t *a1, BmfImage *p_i, void *coded_buf)
     Buffera_6 = *(uint32_t *)&p_i->_pad8;
     __frame.hdr.width = p_i->width;
     __frame.hdr.height = p_i->height;
-    v18 = p_i->data_size;
+    data_bytes = p_i->data_size;
     __frame.hdr.stride = (uint32_t)n4_6;
     *(uint32_t *)&__frame.hdr._pad8 = Buffera_6;
-    __frame.hdr.data_size = (uint32_t)v18;
+    __frame.hdr.data_size = (uint32_t)data_bytes;
     __frame.hdr.flags = 0x34 | (uint8_t)(Buffera_6 >> 24);   // -S in bit 2
   }
   else
   {
-    v18 = p_i->data_size;
+    data_bytes = p_i->data_size;
   }
-  coded_size = v18 + 0x20000;
-  ::coded_buf = (uint8_t *)bmf_new(v18 + 0x20000);
+  coded_size = data_bytes + 0x20000;
+  ::coded_buf = (uint8_t *)bmf_new(data_bytes + 0x20000);
   out_cursor = ::coded_buf;
   ::packer_free_bits = 0;
   ::packer_acc = 0;
@@ -17369,91 +17369,91 @@ LABEL_22:
   if ( ::plane_count > 0 )
   {
     bits_left = ::packer_free_bits;
-    __frame.v66 = v5;
+    __frame.arc_f = arc;
     n4 = 0;
     do
     {
-      v25 = (4 * plane_desc[n4 + 1].flags) | plane_desc[n4 + 1].predictor;
+      word_flags = (4 * plane_desc[n4 + 1].flags) | plane_desc[n4 + 1].predictor;
       if ( bits_left < 6 )
       {
-        *(uint32_t *)::packer_word = ::packer_acc | (2 * (v25 << ((31 - bits_left) & 31)));
+        *(uint32_t *)::packer_word = ::packer_acc | (2 * (word_flags << ((31 - bits_left) & 31)));
         ::packer_word = (uint32_t *)out_cursor;
         out_cursor += 4;
         bits_left = ::packer_free_bits + 26;
-        ::packer_acc = v25 >> (::packer_free_bits & 31);
+        ::packer_acc = word_flags >> (::packer_free_bits & 31);
       }
       else
       {
-        ::packer_acc |= v25 << (-bits_left & 31);
+        ::packer_acc |= word_flags << (-bits_left & 31);
         bits_left = ::packer_free_bits - 6;
       }
       ::packer_free_bits = bits_left;
       if ( (plane_desc[n4 + 1].flags & 8) != 0 )
       {
-        v26 = plane_desc[n4 + 1].b3;
+        word_dc = plane_desc[n4 + 1].b3;
         if ( bits_left < 8 )
         {
-          *(uint32_t *)::packer_word = ::packer_acc | (2 * (v26 << ((31 - bits_left) & 31)));
+          *(uint32_t *)::packer_word = ::packer_acc | (2 * (word_dc << ((31 - bits_left) & 31)));
           ::packer_word = (uint32_t *)out_cursor;
           out_cursor += 4;
           bits_left = ::packer_free_bits + 24;
-          ::packer_acc = v26 >> (::packer_free_bits & 31);
+          ::packer_acc = word_dc >> (::packer_free_bits & 31);
         }
         else
         {
-          v27 = v26 << (-bits_left & 31);
+          shifted = word_dc << (-bits_left & 31);
           bits_left -= 8;
-          ::packer_acc |= v27;
+          ::packer_acc |= shifted;
         }
         ::packer_free_bits = bits_left;
         if ( plane_desc[n4 + 1].predictor > 1u )
         {
-          v28 = plane_desc[n4 + 1].w4 + 64;
+          word_w4 = plane_desc[n4 + 1].w4 + 64;
           if ( bits_left < 8 )
           {
-            *(uint32_t *)::packer_word = ::packer_acc | (2 * (v28 << ((31 - bits_left) & 31)));
+            *(uint32_t *)::packer_word = ::packer_acc | (2 * (word_w4 << ((31 - bits_left) & 31)));
             ::packer_word = (uint32_t *)out_cursor;
             out_cursor += 4;
             n8_1 = ::packer_free_bits + 24;
-            ::packer_acc = v28 >> (::packer_free_bits & 31);
+            ::packer_acc = word_w4 >> (::packer_free_bits & 31);
           }
           else
           {
-            ::packer_acc |= v28 << (-bits_left & 31);
+            ::packer_acc |= word_w4 << (-bits_left & 31);
             n8_1 = ::packer_free_bits - 8;
           }
           ::packer_free_bits = n8_1;
-          v30 = plane_desc[n4 + 1].w8 + 64;
+          word_w8 = plane_desc[n4 + 1].w8 + 64;
           if ( n8_1 < 8 )
           {
-            *(uint32_t *)::packer_word = ::packer_acc | (2 * (v30 << ((31 - n8_1) & 31)));
+            *(uint32_t *)::packer_word = ::packer_acc | (2 * (word_w8 << ((31 - n8_1) & 31)));
             ::packer_word = (uint32_t *)out_cursor;
             out_cursor += 4;
             bits_left = ::packer_free_bits + 24;
-            ::packer_acc = v30 >> (::packer_free_bits & 31);
+            ::packer_acc = word_w8 >> (::packer_free_bits & 31);
           }
           else
           {
             bits_left = n8_1 - 8;
-            ::packer_acc |= (v30 << (-n8_1 & 31));
+            ::packer_acc |= (word_w8 << (-n8_1 & 31));
           }
           ::packer_free_bits = bits_left;
           if ( plane_desc[n4 + 1].predictor > 2u )
           {
-            v32 = plane_desc[n4 + 1].w12 + 64;
+            word_w12 = plane_desc[n4 + 1].w12 + 64;
             if ( bits_left < 8 )
             {
-              *(uint32_t *)::packer_word = ::packer_acc | (2 * (v32 << ((31 - bits_left) & 31)));
+              *(uint32_t *)::packer_word = ::packer_acc | (2 * (word_w12 << ((31 - bits_left) & 31)));
               ::packer_word = (uint32_t *)out_cursor;
               out_cursor += 4;
-              acc = v32 >> (::packer_free_bits & 31);
+              acc = word_w12 >> (::packer_free_bits & 31);
               bits_left = ::packer_free_bits + 24;
               ::packer_free_bits += 24;
               ::packer_acc = acc;
             }
             else
             {
-              ::packer_acc |= v32 << (-bits_left & 31);
+              ::packer_acc |= word_w12 << (-bits_left & 31);
               bits_left = ::packer_free_bits - 8;
               ::packer_free_bits -= 8;
             }
@@ -17463,7 +17463,7 @@ LABEL_22:
       ++n4;
     }
     while ( n4 < ::plane_count );
-    v5 = __frame.v66;
+    arc = __frame.arc_f;
   }
   if ( __frame.ElementCount )
   {
@@ -17472,42 +17472,42 @@ LABEL_22:
     Srca = (uint8_t *)bmf_new(Size);
     if ( ::plane_count > 0 )
     {
-      __frame.v66 = v5;
+      __frame.arc_f = arc;
       n4_1 = 0;
       do
-        __model_planes((uint8_t *)p_i, Srca, plane_desc[n4_1++ + 1].src_plane, v36);
+        __model_planes((uint8_t *)p_i, Srca, plane_desc[n4_1++ + 1].src_plane, mode2);
       while ( n4_1 < ::plane_count );
-      v5 = __frame.v66;
+      arc = __frame.arc_f;
     }
     free(Srca);
   }
   else
   {
-    __transform_planes((BmfImage *)p_i, (int32_t)p_i, v21);
+    __transform_planes((BmfImage *)p_i, (int32_t)p_i, mode1);
   }
 LABEL_57:
   *(uint32_t *)::packer_word = ::packer_acc;
-  v38 = (uint32_t)(out_cursor - (uint32_t)::coded_buf) < p_i->data_size;
+  fits = (uint32_t)(out_cursor - (uint32_t)::coded_buf) < p_i->data_size;
   ElementCounta = out_cursor - ::coded_buf;
   __frame.hdr.data_size = (uint32_t)(out_cursor - ::coded_buf);
-  if ( v38 )
+  if ( fits )
   {
-    v39 = fwrite(&__frame.hdr, 1u, 0x10u, ((BmfArc *)v5)->fp) == 16;
+    ok = fwrite(&__frame.hdr, 1u, 0x10u, ((BmfArc *)arc)->fp) == 16;
     if ( coded_buf )
     {
       // Word 1 of the coded block is its length; the eight is the header in
       // front of it.
       coded_len = ((const uint32_t *)coded_buf)[1];
-      v39 &= fwrite(coded_buf, 1u, coded_len + 8, ((BmfArc *)v5)->fp) == coded_len + 8;
+      ok &= fwrite(coded_buf, 1u, coded_len + 8, ((BmfArc *)arc)->fp) == coded_len + 8;
     }
-    v40 = (fwrite(::coded_buf, 1u, ElementCounta, ((BmfArc *)v5)->fp) == ElementCounta) & v39;
+    ok_all = (fwrite(::coded_buf, 1u, ElementCounta, ((BmfArc *)arc)->fp) == ElementCounta) & ok;
     free(::coded_buf);
-    if ( v40 && (p_i->depth & 0x80) != 0 )
-      fwrite(&p_i->pixels[p_i->data_size], 1u, ElementCount_1, ((BmfArc *)v5)->fp);
-    fflush(((BmfArc *)v5)->fp);
-    if ( v40 )
+    if ( ok_all && (p_i->depth & 0x80) != 0 )
+      fwrite(&p_i->pixels[p_i->data_size], 1u, ElementCount_1, ((BmfArc *)arc)->fp);
+    fflush(((BmfArc *)arc)->fp);
+    if ( ok_all )
       return (int32_t)__frame.hdr.data_size;
-    return v40;
+    return ok_all;
   }
   free(::coded_buf);
   if ( (p_i->flags & 2) != 0 )
@@ -17518,63 +17518,63 @@ LABEL_57:
     __frame.row_step = ::plane_count * (p_i->height - 1);
     __frame.Buffer_2 = (uint16_t *)p_i->pixels;
     memcpy(Buffer_copy,p_i->pixels,p_i->data_size);
-    LOWORD(v43) = p_i->height;
-    if ( (uint16_t)v43 )
+    LOWORD(img_h) = p_i->height;
+    if ( (uint16_t)img_h )
     {
       n4_3 = __frame.plane_n;
       Buffera_2 = __frame.row;
       Buffera_3 = nullptr;
-      v47 = 0;
-      __frame.v66 = v5;
+      y = 0;
+      __frame.arc_f = arc;
       do
       {
         i_1 = p_i_1->width;
-        __frame.v65 = v47;
+        __frame.y0 = y;
         __frame.row = Buffera_3;
-        v49 = (uint8_t *)p_i_1 + v47 + 16;
-        v50 = __frame.row_step;
+        dst = (uint8_t *)p_i_1 + y + 16;
+        step = __frame.row_step;
         do
         {
           n4_4 = n4_3;
           do
           {
-            *v49++ = *Buffera_2++;
+            *dst++ = *Buffera_2++;
             --n4_4;
           }
           while ( n4_4 );
-          v49 += v50;
+          dst += step;
           --i_1;
         }
         while ( i_1 );
         p_i_1 = (BmfImage *)(p_i);
-        v43 = p_i->height;
-        v47 = n4_3 + __frame.v65;
+        img_h = p_i->height;
+        y = n4_3 + __frame.y0;
         Buffera_3 = __frame.row + 1;
       }
-      while ( (int32_t)(__frame.row + 1) < v43 );
-      v5 = __frame.v66;
+      while ( (int32_t)(__frame.row + 1) < img_h );
+      arc = __frame.arc_f;
     }
     __frame.Buffera_4 = Buffer_copy;
     i_2 = p_i_1->width;
-    p_i_1->width = v43;
+    p_i_1->width = img_h;
     p_i_1->height = i_2;
     p_i_1->flags ^= 2u;
-    p_i_1->stride = (v43 * __frame.plane_n);
+    p_i_1->stride = (img_h * __frame.plane_n);
     free(__frame.Buffera_4);
     goto LABEL_77;
   }
 LABEL_76:
   __frame.Buffer_2 = (uint16_t *)p_i->pixels;
 LABEL_77:
-  v54 = fwrite(p_i_1, 1u, 0x10u, ((BmfArc *)v5)->fp) == 16;
+  ok_raw = fwrite(p_i_1, 1u, 0x10u, ((BmfArc *)arc)->fp) == 16;
   if ( coded_buf )
   {
     coded_len = ((const uint32_t *)coded_buf)[1];
-    v54 &= fwrite(coded_buf, 1u, coded_len + 8, ((BmfArc *)v5)->fp) == coded_len + 8;
+    ok_raw &= fwrite(coded_buf, 1u, coded_len + 8, ((BmfArc *)arc)->fp) == coded_len + 8;
   }
-  v55 = fwrite(__frame.Buffer_2, 1u, ElementCount_1 + p_i_1->data_size, ((BmfArc *)v5)->fp);
+  written = fwrite(__frame.Buffer_2, 1u, ElementCount_1 + p_i_1->data_size, ((BmfArc *)arc)->fp);
   data_size = p_i_1->data_size;
-  if ( (v54 & (v55 == data_size + ElementCount_1)) == 0 )
+  if ( (ok_raw & (written == data_size + ElementCount_1)) == 0 )
     return 0;
   return data_size;
 }
