@@ -26,10 +26,11 @@ subs1.hpp / bmf.cpp lines            17787     17810
 raw-offset sites                        22        12
 byte offsets on a typed base           121         0
 fNN members / named ones             93/121     5/162
-distinct vNN locals                    554       550
-  bodies still carrying one              —   54/102
+distinct vNN locals                    554       547
+  bodies still carrying one              —   29/102
+  vNN uses                                —     12487
 goto / LABEL_n:                     112/79     81/55
-conversion warnings (ratchet)         1455      1341
+conversion warnings (ratchet)         1455      1335
 ```
 
 Four of those numbers were wrong when this section was first written, and the
@@ -41,9 +42,9 @@ column zero, which misses the labels that are indented. `degoto.py`'s headline
 had the same defect.
 
 `distinct vNN locals` was not wrong, it was useless: it counts spellings across
-the whole file, so it cannot move until a name is gone from all 59 bodies that
-use one, and naming every local in a function leaves it unchanged. The row
-beneath it is the one that measures that work.
+the whole file, so it cannot move until a name is gone from every body that uses
+one, and naming every local in a function leaves it unchanged. The two rows
+beneath it are the ones that measure that work — and §11 is what they measure.
 
 A figure a comment can move is not a measurement, and a figure that cannot move
 is not one either. That is the whole of §10.
@@ -538,3 +539,86 @@ mistake and is refused.
 It takes about a minute, so it is not in `test.sh`; the gate stays fast. The
 point is not that it is automatic. The point is that "every tool reports zero"
 is now a command with an exit status instead of a claim in a commit message.
+
+---
+
+## 11. Naming the bodies, and what the names were hiding
+
+Round eight said the `vNN` locals were answerable only by knowing what their
+values mean, and §8 above repeated it. That is true of the *last* ones and was
+never true of the first ones, and the way to tell which is which is to start.
+
+Twenty-one bodies went from carrying `vNN` names to carrying none:
+`predict_med`, `unpredict_med`, `alt_init_tables`, `colour_transform`,
+`interleave_plane`, `transform_planes`, `alloc_image`, `model_planes`,
+`init_symbol_list`, `unmodel_plane`, three `alt_model_p*_d8_*` wrappers,
+`free_workspace`, `pixel_context`, `update_binary_pair`, `encode_context_bit`,
+`decode_context_bit`, `alt_p1_encode_symbol`, `alt_p1_decode_symbol`,
+`alt_p2_decode_symbol`, `alt_p2_encode_symbol`, `rc_begin_encode`,
+`rc_begin_decode`, `layout_workspace`, `alt_p1_alloc`, `alt_p2_alloc`,
+`encode_symbol_tree`, `decode_symbol_tree`. 58 of 102 bodies to 29.
+
+**Almost every one of them turned out to be readable from its shape alone.**
+`predict_med` is MED, the LOCO-I median edge predictor: `up` trails `p` by
+exactly one row and steps with it, so the three loads are north, west and
+northwest, and the branch tree is MED's three outcomes. `colour_transform` and
+`interleave_plane` are inverses with the same three predictors and the same
+seven-bit weights. `encode_symbol_tree` and `decode_symbol_tree` are a level
+chosen by cumulative count and then a walk down a binary tree of counter pairs.
+None of that needed the algorithm to be understood first; understanding fell
+out of naming, not the other way round.
+
+### What was not a variable
+
+The names hid a category, and it is a large one. Of everything renamed, a
+substantial fraction turned out not to be values at all:
+
+| shape | tool | count |
+| --- | --- | --- |
+| a spill saved and restored across a region that cannot change it | `unsave.py` | 25 |
+| an `if` whose two arms are the same code | `undup.py` | 5 |
+| a local that is a second name for a parameter nothing assigns | — | ~15 |
+| a loop counter doubled as `k_before = k` with `while (k_before + 1 < N)` | — | 4 |
+| a pointer and a byte offset walking the same buffer in step | — | 2 |
+| a declaration with no use at all | `unused.py` | 38 |
+
+`unsave.py` is the one worth keeping. MSVC spills a register before a loop and
+reloads it after; Hex-Rays names the spill slot, and the loop arrives wrapped in
+a save and a restore of a value nothing in it touches. Reading the body as if
+that were a variable means looking for a reason a value is being carried across
+a region — when the reason is that there is no reason.
+
+Two more were single locals doing two jobs, which is the same artefact seen from
+the other side: `update_binary_pair`'s `n0x8000` held a running total for the
+first half of the body and a walk mask for the second, and `rc_begin_encode`
+held a table position twice, once as a pointer and once as a byte offset. A
+register doing two jobs is why its Hex-Rays name is a constant.
+
+### Two findings, and one correction
+
+`p2_b1_seed` is `p2_float_pool` — §10. `AltP1Block::fold` and `::fold_hi` hold
+the same 256 bytes, which closes a question the struct had carried open for
+several rounds; the quantiser walk fills the low half and the closing loop fills
+the high half by inverting `unfold` outright, and with `-E` at 0 the buckets are
+one residual wide so those are the same map computed two ways. Measured with a
+probe, on every stream: 0 of 256 differ.
+
+The correction is `predict_med`. The first draft of its commentary said the
+residual histogram it builds feeds `cost_candidate`. It does not: nothing reads
+`hist_scratch` back, because `model_planes` reuses that region as
+`__model_planes_buf` a few lines later — and `predict_med` itself is unreachable
+in this build, both call sites being under `plane_predictor == 1`, which `-E`
+being 0 rules out. `unpredict_med` *is* reachable, because a decoder still has
+to read what an encoder with `-E` produced, which is what `testfiles/med32.bmp`
+exists to exercise. The body is there to be read, as the definition of what the
+inverse undoes.
+
+### What is actually left
+
+Nine bodies hold two thirds of what remains: `alt_p2_model` (483 distinct
+names), `alt_p2_context` (184), `choose_plane_coding` (177), `alt_p1_model`
+(104), `decode_pixel` (100), `alt_model_p2_encode` (91), `search_filter` (81),
+`code_pixel` (78) and `alt_model_p1_encode` (78). These are the model bodies,
+and they are where round eight's claim finally is true: their locals are
+intermediate values of an arithmetic whose meaning is `algorithm_v2.md`'s
+subject, not a sweep's.
