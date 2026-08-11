@@ -4288,24 +4288,23 @@ uint8_t *__rc_begin_encode()
   return tbl;
 }
 
-void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
+void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *src, uint8_t *out)
 {
-  P1Ctx *cursor2, *cursor4, *cursor0, *v5, *buf3, *buf2, *buf1, *v9;
+  P1Ctx *cursor2, *cursor4, *cursor0, *b4, *buf3, *buf2, *buf1, *b0;
   ;
-  uint8_t pred, v35;
-  int32_t v4, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24,
-          v25, v26, v28, v29, v30, v34, n5, n16, v38, v42;
+  uint8_t pred, recon;
+  int32_t y, resid, code, drift, val, x;
   // The five planes, held across the rotation that ends a row, and the cursor
   // the row is written through.
-  int64_t v39;
-  uint8_t *v32;
+  int64_t err;
+  uint8_t *q;
   __rc_begin_encode();
   if ( _this->height > 0 )
   {
-    v4 = 0;
+    y = 0;
     do
     {
-      ++v4;
+      ++y;
       // The row end mirrored into the right margin: records 0..5 take -1..-6.
       // Two bytes each, which is what the twelve even offsets were.
       {
@@ -4317,24 +4316,24 @@ void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
         here[4] = here[-5];
         here[5] = here[-6];
       }
-      v5 = _this->buf[4];
+      b4 = _this->buf[4];
       buf3 = _this->buf[3];
       buf2 = _this->buf[2];
       buf1 = _this->buf[1];
-      v9 = _this->buf[0];
+      b0 = _this->buf[0];
       _this->buf[4] = buf3;
       _this->buf[3] = buf2;
       _this->buf[2] = buf1;
-      _this->buf[1] = v9;
-      _this->buf[0] = v5;
-      v5 += 4;
-      _this->cursor[0] = v5;
-      v9 += 4;
-      _this->cursor[1] = v9;
+      _this->buf[1] = b0;
+      _this->buf[0] = b4;
+      b4 += 4;
+      _this->cursor[0] = b4;
+      b0 += 4;
+      _this->cursor[1] = b0;
       _this->cursor[2] = buf1 + 4;
       _this->cursor[3] = buf2 + 4;
       _this->cursor[4] = buf3 + 4;
-      ((P1Ctx *)v5)[-4] = ((P1Ctx *)v9)[3];
+      ((P1Ctx *)b4)[-4] = ((P1Ctx *)b0)[3];
       // And the rest of the new row's left margin, from the row above.
       {
         P1Ctx *const here = (P1Ctx *)_this->cursor[0];
@@ -4346,74 +4345,49 @@ void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
       cursor2 = _this->cursor[2];
       cursor4 = _this->cursor[4];
       _this->ctx[2] = 0;
-      _this->ctx[3] = 0;
-      _this->ctx[4] = 0;
-      v12 = cursor2[-2].mag;
-      _this->ctx[3] = v12;
-      v13 = cursor2[-1].mag;
-      _this->ctx[4] = v13;
-      v14 = cursor4[-2].mag + v12;
-      _this->ctx[3] = v14;
-      v15 = cursor4[-1].mag + v13;
-      _this->ctx[4] = v15;
-      v16 = cursor2->mag + v14;
-      _this->ctx[3] = v16;
-      v17 = cursor2[1].mag + v15;
-      _this->ctx[4] = v17;
-      v18 = cursor4->mag + v16;
-      _this->ctx[3] = v18;
-      v19 = cursor4[1].mag + v17;
-      _this->ctx[4] = v19;
-      v20 = cursor2[2].mag + v18;
-      _this->ctx[3] = v20;
-      v21 = cursor2[3].mag + v19;
-      _this->ctx[4] = v21;
-      v22 = cursor4[2].mag + v20;
-      _this->ctx[3] = v22;
-      v23 = cursor4[3].mag + v21;
-      _this->ctx[4] = v23;
-      v24 = cursor2[4].mag + v22;
-      _this->ctx[3] = v24;
-      v25 = cursor2[5].mag + v23;
-      _this->ctx[4] = v25;
-      v26 = cursor4[4].mag + v24;
       cursor0 = _this->cursor[0];
-      _this->ctx[3] = v26;
-      v28 = cursor4[5].mag + v25;
-      _this->ctx[4] = v28;
-      v29 = cursor0[-4].mag + v26;
-      _this->ctx[3] = v29;
-      v30 = cursor0[-3].mag + v28;
-      _this->ctx[4] = v30;
-      _this->ctx[3] = cursor0[-2].mag + v29;
-      _this->ctx[4] = cursor0[-1].mag + v30;
+      // Ten `.mag` terms each, from the two rows above and this row's left
+      // margin: `ctx[3]` takes the even offsets and `ctx[4]` the odd.  MSVC
+      // kept both running sums in registers and stored every partial back, so
+      // this arrived as twenty stores of which eighteen were dead, and
+      // nineteen locals holding one accumulator at nineteen points.
+      _this->ctx[3] = cursor2[-2].mag + cursor4[-2].mag
+                    + cursor2[0].mag  + cursor4[0].mag
+                    + cursor2[2].mag  + cursor4[2].mag
+                    + cursor2[4].mag  + cursor4[4].mag
+                    + cursor0[-4].mag + cursor0[-2].mag;
+      _this->ctx[4] = cursor2[-1].mag + cursor4[-1].mag
+                    + cursor2[1].mag  + cursor4[1].mag
+                    + cursor2[3].mag  + cursor4[3].mag
+                    + cursor2[5].mag  + cursor4[5].mag
+                    + cursor0[-3].mag + cursor0[-1].mag;
       if ( !(_this->width <= 0) )
       {
-        v32 = a3;
-        v42 = 0;
+        q = out;
+        x = 0;
         do
         {
-          ++v42;
+          ++x;
           __alt_p1_context((AltP1Block *)(uint8_t **)_this, (AltP1Block *)nullptr, (AltP1Block *)0);
           pred = (uint8_t)_this->pred;
-          v34 = (uint8_t)(*a2 - pred);
-          v35 = *(_this->fold[v34] + _this->unfold) + pred;
-          n5 = _this->fold[v34];
-          n16 = (uint8_t)*v32 - (uint8_t)(v35 + *v32 - *a2);
-          if ( n16 < -16 || n16 > 16 )
+          resid = (uint8_t)(*src - pred);
+          recon = *(_this->fold[resid] + _this->unfold) + pred;
+          code = _this->fold[resid];
+          drift = (uint8_t)*q - (uint8_t)(recon + *q - *src);
+          if ( drift < -16 || drift > 16 )
           {
-            *v32 = *a2;
-            n5 = _this->fold_hi[v34];
+            *q = *src;
+            code = _this->fold_hi[resid];
           }
           else
           {
-            *v32 = v35;
+            *q = recon;
           }
-          __alt_p1_encode_symbol(&_this->counters[_this->ctx[0]].total, 16 * _this->ctx[0], _this->ctx[1], n5);
-          v38 = (uint8_t)*v32;
-          v39 = v38 - _this->pred;
-          _this->cursor[0]->sym = v38;
-          _this->cursor[0]->mag = (BYTE4(v39) ^ v39) - BYTE4(v39);
+          __alt_p1_encode_symbol(&_this->counters[_this->ctx[0]].total, 16 * _this->ctx[0], _this->ctx[1], code);
+          val = (uint8_t)*q;
+          err = val - _this->pred;
+          _this->cursor[0]->sym = val;
+          _this->cursor[0]->mag = (BYTE4(err) ^ err) - BYTE4(err);
           _this->ctx[3 + _this->ctx[2]] = _this->ctx[3 + _this->ctx[2]]
                                                               + _this->cursor[0]->mag
                                                               - _this->cursor[0][-4].mag
@@ -4425,18 +4399,18 @@ void __alt_p1_d8_encode_body(AltP1Block *_this, uint8_t *a2, uint8_t *a3)
           if ( _this->counters[_this->ctx[0]].total < 0x4000u )
             __alt_p1_model(_this);
           ++_this->cursor[0];
-          ++v32;
+          ++q;
           ++_this->cursor[1];
           ++_this->cursor[2];
           ++_this->cursor[3];
           ++_this->cursor[4];
-          ++a2;
+          ++src;
         }
-        while ( v42 < _this->width );
-        a3 = v32;
+        while ( x < _this->width );
+        out = q;
       }
     }
-    while ( v4 < *(uint32_t *)&_this->height );
+    while ( y < *(uint32_t *)&_this->height );
   }
   __rc_end_encode();
 }
@@ -5901,30 +5875,30 @@ int32_t __estimate_cost(uint8_t *a1, int32_t n2)
 
 void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_t a4)
 {
-  P1Ctx *buf1, *v11, *cursor0, *v7, *buf3, *buf2;
+  P1Ctx *buf1, *b0, *cursor0, *b4, *buf3, *buf2;
   ;
-  AltP1Block *v5;
-  AltP1Block *v4;
-  int32_t v6, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26,
-          v27, v28, v30, v31, v32, v35, v36, v41;
-  int64_t v37;
-  uint8_t *cursor2, *cursor4, *Src_1;
-  v4 = (AltP1Block *)((int32_t *)bmf_new(0x99D4D8u));
-  if ( v4 )
-    v5 = (AltP1Block *)(__alt_p1_alloc((AltP1Block *)v4, i, a4, 0));
+  AltP1Block *blk;
+  AltP1Block *raw;
+  int32_t y, val, x;
+  int64_t err;
+  P1Ctx *cursor2, *cursor4;
+  uint8_t *Src_1;
+  raw = (AltP1Block *)((int32_t *)bmf_new(0x99D4D8u));
+  if ( raw )
+    blk = (AltP1Block *)(__alt_p1_alloc((AltP1Block *)raw, i, a4, 0));
   else
-    v5 = (AltP1Block *)(nullptr);
+    blk = (AltP1Block *)(nullptr);
   __rc_begin_decode(ArgList);
-  if ( v5->height > 0 )
+  if ( blk->height > 0 )
   {
-    v6 = 0;
+    y = 0;
     do
     {
-      ++v6;
+      ++y;
       // The row end mirrored into the right margin: records 0..5 take -1..-6.
       // Two bytes each, which is what the twelve even offsets were.
       {
-        P1Ctx *const here = (P1Ctx *)v5->cursor[0];
+        P1Ctx *const here = (P1Ctx *)blk->cursor[0];
         here[0] = here[-1];
         here[1] = here[-2];
         here[2] = here[-3];
@@ -5932,117 +5906,93 @@ void ** __alt_model_p1_d8_decode(int8_t ArgList, uint8_t *Src, int32_t i, int32_
         here[4] = here[-5];
         here[5] = here[-6];
       }
-      v7 = v5->buf[4];
-      buf3 = v5->buf[3];
-      buf2 = v5->buf[2];
-      buf1 = v5->buf[1];
-      v11 = v5->buf[0];
-      v5->buf[4] = buf3;
-      v5->buf[3] = buf2;
-      v5->buf[2] = buf1;
-      v5->buf[1] = v11;
-      v5->buf[0] = v7;
-      v7 += 4;
-      v5->cursor[0] = v7;
-      v11 += 4;
-      v5->cursor[1] = v11;
-      v5->cursor[2] = buf1 + 4;
-      v5->cursor[3] = buf2 + 4;
-      v5->cursor[4] = buf3 + 4;
-      ((P1Ctx *)v7)[-4] = ((P1Ctx *)v11)[3];
+      b4 = blk->buf[4];
+      buf3 = blk->buf[3];
+      buf2 = blk->buf[2];
+      buf1 = blk->buf[1];
+      b0 = blk->buf[0];
+      blk->buf[4] = buf3;
+      blk->buf[3] = buf2;
+      blk->buf[2] = buf1;
+      blk->buf[1] = b0;
+      blk->buf[0] = b4;
+      b4 += 4;
+      blk->cursor[0] = b4;
+      b0 += 4;
+      blk->cursor[1] = b0;
+      blk->cursor[2] = buf1 + 4;
+      blk->cursor[3] = buf2 + 4;
+      blk->cursor[4] = buf3 + 4;
+      ((P1Ctx *)b4)[-4] = ((P1Ctx *)b0)[3];
       // And the rest of the new row's left margin, from the row above.
       {
-        P1Ctx *const here = (P1Ctx *)v5->cursor[0];
-        P1Ctx *const up   = (P1Ctx *)v5->cursor[1];
+        P1Ctx *const here = (P1Ctx *)blk->cursor[0];
+        P1Ctx *const up   = (P1Ctx *)blk->cursor[1];
         here[-3] = up[2];
         here[-2] = up[1];
         here[-1] = up[0];
       }
-      cursor2 = (uint8_t *)v5->cursor[2];
-      cursor4 = (uint8_t *)v5->cursor[4];
-      v5->ctx[2] = 0;
-      v5->ctx[3] = 0;
-      v5->ctx[4] = 0;
-      v14 = *(cursor2 - 3);
-      v5->ctx[3] = v14;
-      v15 = *(cursor2 - 1);
-      v5->ctx[4] = v15;
-      v16 = *(cursor4 - 3) + v14;
-      v5->ctx[3] = v16;
-      v17 = *(cursor4 - 1) + v15;
-      v5->ctx[4] = v17;
-      v18 = cursor2[1] + v16;
-      v5->ctx[3] = v18;
-      v19 = cursor2[3] + v17;
-      v5->ctx[4] = v19;
-      v20 = cursor4[1] + v18;
-      v5->ctx[3] = v20;
-      v21 = cursor4[3] + v19;
-      v5->ctx[4] = v21;
-      v22 = cursor2[5] + v20;
-      v5->ctx[3] = v22;
-      v23 = cursor2[7] + v21;
-      v5->ctx[4] = v23;
-      v24 = cursor4[5] + v22;
-      v5->ctx[3] = v24;
-      v25 = cursor4[7] + v23;
-      v5->ctx[4] = v25;
-      v26 = cursor2[9] + v24;
-      v5->ctx[3] = v26;
-      v27 = cursor2[11] + v25;
-      v5->ctx[4] = v27;
-      v28 = cursor4[9] + v26;
-      cursor0 = v5->cursor[0];
-      v5->ctx[3] = v28;
-      v30 = cursor4[11] + v27;
-      v5->ctx[4] = v30;
-      v31 = cursor0[-4].mag + v28;
-      v5->ctx[3] = v31;
-      v32 = cursor0[-3].mag + v30;
-      v5->ctx[4] = v32;
-      v5->ctx[3] = cursor0[-2].mag + v31;
-      v5->ctx[4] = cursor0[-1].mag + v32;
-      if ( !(v5->width <= 0) )
+      cursor2 = blk->cursor[2];
+      cursor4 = blk->cursor[4];
+      blk->ctx[2] = 0;
+      cursor0 = blk->cursor[0];
+      // The encoder's block, byte for byte -- and it arrived as bytes, because
+      // `cursor2` and `cursor4` were `uint8_t *` over two-byte records.  A
+      // record is `sym` then `mag`, so the odd byte offsets are all `mag`:
+      // byte -3 is record -2, byte 1 is record 0, byte 11 is record 5.  The
+      // stride scan of REFACTORING9.md section 2 cannot see this one, because
+      // the gcd of -3, -1, 1, 3, 5, 7, 9 and 11 is 1.
+      blk->ctx[3] = cursor2[-2].mag + cursor4[-2].mag
+                 + cursor2[0].mag  + cursor4[0].mag
+                 + cursor2[2].mag  + cursor4[2].mag
+                 + cursor2[4].mag  + cursor4[4].mag
+                 + cursor0[-4].mag + cursor0[-2].mag;
+      blk->ctx[4] = cursor2[-1].mag + cursor4[-1].mag
+                 + cursor2[1].mag  + cursor4[1].mag
+                 + cursor2[3].mag  + cursor4[3].mag
+                 + cursor2[5].mag  + cursor4[5].mag
+                 + cursor0[-3].mag + cursor0[-1].mag;
+      if ( !(blk->width <= 0) )
       {
         Src_1 = Src;
-        v41 = 0;
+        x = 0;
         do
         {
-          ++v41;
-          __alt_p1_context((AltP1Block *)(uint32_t *)v5, (AltP1Block *)nullptr, (AltP1Block *)0);
-          v36 = (uint8_t)((uint8_t)v5->pred
-                                + *((uint8_t *)v5 + (uint8_t)__alt_p1_decode_symbol((uint16_t *)&((int32_t *)v5)[4 * v5->ctx[0] + 950], v35, v5->ctx[1]) + 1496));
-          *Src_1 = v36;
-          v37 = v36 - v5->pred;
+          ++x;
+          __alt_p1_context((AltP1Block *)(uint32_t *)blk, (AltP1Block *)nullptr, (AltP1Block *)0);
+          val = (uint8_t)((uint8_t)blk->pred
+                                + *((uint8_t *)blk + (uint8_t)__alt_p1_decode_symbol((uint16_t *)&((int32_t *)blk)[4 * blk->ctx[0] + 950], 0, blk->ctx[1]) + 1496));
+          *Src_1 = val;
+          err = val - blk->pred;
           // The record's two writers, one line apart: the reconstructed
           // sample, then the size of the prediction error.
-          v5->cursor[0]->sym = v36;
-          v5->cursor[0]->mag = (BYTE4(v37) ^ v37) - BYTE4(v37);
-          v5->ctx[3 + v5->ctx[2]] = v5->ctx[3 + v5->ctx[2]]
-                        + v5->cursor[0]->mag
-                        - v5->cursor[0][-4].mag
-                        - (v5->cursor[4][-2].mag
-                         - v5->cursor[4][6].mag
-                         + v5->cursor[2][-2].mag
-                         - v5->cursor[2][6].mag);
-            v5->ctx[2] = v5->ctx[2] == 0;
-          if ( v5->counters[v5->ctx[0]].total < 0x4000u )
-            __alt_p1_model((AltP1Block *)v5);
-          ++v5->cursor[0];
+          blk->cursor[0]->sym = val;
+          blk->cursor[0]->mag = (BYTE4(err) ^ err) - BYTE4(err);
+          blk->ctx[3 + blk->ctx[2]] = blk->ctx[3 + blk->ctx[2]]
+                        + blk->cursor[0]->mag
+                        - blk->cursor[0][-4].mag
+                        - (blk->cursor[4][-2].mag
+                         - blk->cursor[4][6].mag
+                         + blk->cursor[2][-2].mag
+                         - blk->cursor[2][6].mag);
+            blk->ctx[2] = blk->ctx[2] == 0;
+          if ( blk->counters[blk->ctx[0]].total < 0x4000u )
+            __alt_p1_model((AltP1Block *)blk);
+          ++blk->cursor[0];
           ++Src_1;
-          ++v5->cursor[1];
-          ++v5->cursor[2];
-          ++v5->cursor[3];
-          ++v5->cursor[4];
+          ++blk->cursor[1];
+          ++blk->cursor[2];
+          ++blk->cursor[3];
+          ++blk->cursor[4];
         }
-        while ( v41 < v5->width );
+        while ( x < blk->width );
         Src = Src_1;
       }
     }
-    while ( v6 < v5->height );
+    while ( y < blk->height );
   }
   __rc_end_decode();
-  return __alt_p1_free((void **)v5, 1);
+  return __alt_p1_free((void **)blk, 1);
 }
 
 
