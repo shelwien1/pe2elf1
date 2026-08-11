@@ -11112,11 +11112,20 @@ void __expand_alphabet(ModelBlock *_this)
 {
   // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
   // gives every member its own storage and DLRAW aborts while decompressing.
+  //
+  // It is sixteen `SymList`s, and the three untyped arrays it was recovered as
+  // were one array all along.  `sizeof(SymList)` is 24 and `ent` is at +20, so
+  // the free loop at the end -- which walked back from one past the last of
+  // them, six words at a time, taking `[5]` -- is `lists[15]` down to
+  // `lists[0]`, `.ent` each; and the zeroing loop at the top, which wrote
+  // `v30[12 * i]` and `v30[12 * i + 6]`, is bytes 20 + 48i and 44 + 48i, which
+  // are `lists[2i].ent` and `lists[2i + 1].ent`.
+  //
+  // `spill` is genuinely past the array: MSVC used it to hold `nbytes` across
+  // the inner decode loop.
   struct alignas(16) ExpandAlphabetFrame {   // 420 bytes, one stack frame
-      uint64_t v28[2];
-      int32_t v29;
-      uint32_t v30[91];
-      uint32_t v31[5];
+      SymList lists[16];      // 384 bytes
+      uint32_t spill[5];      // MSVC's spill slots, past the end of the array
       uint8_t _pad0[16];
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 432, "frame layout moved");
@@ -11129,11 +11138,11 @@ void __expand_alphabet(ModelBlock *_this)
   bits = _this->depth;
   mask = 0xFFFFFFFF >> (-(uint8_t)_this->depth & 31);
   nbytes = (bits + 7) >> 3;
+  // Two records a pass, which is how MSVC unrolled it.
   for ( i = 0; i < 8; ++i )
   {
-    slot = 12 * i;
-    __frame.v30[slot] = 0;
-    __frame.v30[slot + 6] = 0;
+    __frame.lists[2 * i].ent = nullptr;
+    __frame.lists[2 * i + 1].ent = nullptr;
   }
   cap = mask + 1;
   if ( bits > 8 )
@@ -11159,7 +11168,7 @@ void __expand_alphabet(ModelBlock *_this)
       {
         k = 0;
         do
-          __init_symbol_list(&((SymList *)__frame.v28)[k++], (int32_t)_this, 256, 1);
+          __init_symbol_list(&__frame.lists[k++], (int32_t)_this, 256, 1);
         while ( k < 4 * nbytes );
         n_syms = _this->alphabet;
       }
@@ -11173,17 +11182,17 @@ void __expand_alphabet(ModelBlock *_this)
           codes_p[s] = 0;
           if ( nbytes )
           {
-            __frame.v31[0] = nbytes;
+            __frame.spill[0] = nbytes;
             b = 0;
             do
             {
-              piece = __decode_symbol_list(&((SymList *)__frame.v28)[4 * b + carry]);
+              piece = __decode_symbol_list(&__frame.lists[4 * b + carry]);
               carry = piece >> 6;
               _this->sym_code[s] += (piece << ((8 * b) & 31));
               ++b;
             }
-            while ( b < __frame.v31[0] );
-            nbytes = __frame.v31[0];
+            while ( b < __frame.spill[0] );
+            nbytes = __frame.spill[0];
           }
           codes_p = _this->sym_code;
           carry = (uint8_t)codes_p[s++] >> 7;
@@ -11193,15 +11202,15 @@ void __expand_alphabet(ModelBlock *_this)
     }
     else if ( n_syms <= mask )
     {
-      __init_symbol_list((SymList *)__frame.v28, (int32_t)_this, mask - n_syms + 2, 1);
-      __frame.v29 = 19 * ((SymList *)__frame.v28)->n;
+      __init_symbol_list(&__frame.lists[0], (int32_t)_this, mask - n_syms + 2, 1);
+      __frame.lists[0].rescale_at = 19 * __frame.lists[0].n;
       if ( !(_this->alphabet == 0) )
       {
         run = 0;
         s2 = 0;
         do
         {
-          gap = __decode_symbol_list((SymList *)__frame.v28);
+          gap = __decode_symbol_list(&__frame.lists[0]);
           _this->sym_code[s2] = gap + run;
           run += gap + 1;
           ++s2;
@@ -11209,36 +11218,19 @@ void __expand_alphabet(ModelBlock *_this)
         while ( s2 < _this->alphabet );
       }
     }
-    // Sixteen `SymList`s live in the frame, ending at `__frame.v31 + 5`:
-    // `sizeof(SymList)` is 24, so `-= 6` is one record back and `[5]` is
-    // `ent`, the entries each list owns.  This frees all sixteen whether or
-    // not the path above initialised them -- `init_symbol_list` is called for
-    // `4 * nbytes` of them at most, and the rest are the zeroed frame, so the
-    // extra `free(nullptr)`s are no-ops.
-    q = __frame.v31;
-    left = 16;
-    do
-    {
-      q -= 6;
-      free((void *)q[5]);
-      --left;
-    }
-    while ( left );
+    // Every list's entries, whether or not this path initialised it: the
+    // uninitialised ones are the null `ent`s zeroed at the top, so those
+    // `free`s are no-ops.
+    for ( left = 15; left >= 0; --left )
+      free(__frame.lists[left].ent);
   }
   else
   {
     _this->depth = 8;
     *(uint32_t *)&_this->height = (*(uint32_t *)&_this->height * nbytes);
     __expand_alphabet(_this);
-    q2 = __frame.v31;
-    left2 = 16;
-    do
-    {
-      q2 -= 6;
-      free((void *)q2[5]);
-      --left2;
-    }
-    while ( left2 );
+    for ( left2 = 15; left2 >= 0; --left2 )
+      free(__frame.lists[left2].ent);
   }
 }
 
