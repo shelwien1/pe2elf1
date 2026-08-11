@@ -205,7 +205,14 @@ def summary():
     # label for an intermediate nobody has explained -- contiguous, and marked
     # as this body's rather than Hex-Rays' -- but it is still unexplained, and
     # the number says so.
-    unexp = r'\b[vt]\d+\b'
+    #
+    # So does `nNNNN`, which this row missed for the whole of the naming work.
+    # Hex-Rays names a local after the first constant it sees stored in it, so
+    # `n1840_1`, `n0x7FFFFFFF_10` and `n2` are the same kind of non-name as
+    # `v112` -- 198 of them, never counted, while the row read as if the only
+    # question left were `vNN`.  The digit after the `n` is required: `nb0` is
+    # a name, and `b0` is valid hex.
+    unexp = r'\b(?:[vt]\d+|n(?:0x[0-9A-Fa-f]+|\d[0-9A-Fa-f]*)(?:_\d+)?)\b'
     bodyv = [len(re.findall(unexp,
                             '\n'.join(l.split('//')[0] for l in lines[a:b + 1])))
              for a, b, _, _ in structs.bodies(lines)]
