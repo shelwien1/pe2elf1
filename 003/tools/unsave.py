@@ -42,6 +42,13 @@ cannot see inside the callee.
 
 What it will not touch is the other shape, where the restore assigns something
 the region *did* change -- that is a real save, and the body needs it.
+
+Nor will it see a pair written with casts.  `unmodel_plane_slow` has
+`this_1 = (ModelBlock *)((uint32_t *)this_4); ... this_4 = (ModelBlock *)((int32_t)this_1);`
+twice, which is the same artefact, and `ASSIGN` above wants a bare name on both
+sides.  Allowing casts would mean deciding which casts preserve the value, and
+that is a question about widths this cannot answer from the text -- so those
+two were done by hand.
 """
 import re
 import sys
@@ -64,12 +71,15 @@ def candidates(lines):
     out = []
     for a, b, nm, _ in structs.bodies(lines):
         code = [l.split('//')[0] for l in lines[a:b + 1]]
+        used = set()
         for i, l in enumerate(code):
             m = ASSIGN.match(l)
             if not m:
                 continue
             slot, held = m.group(1), m.group(2)
             if slot == held:
+                continue
+            if i in used:
                 continue
             back = re.compile(r'^\s*%s = %s;\s*$' % (re.escape(held), re.escape(slot)))
             for j in range(i + 1, len(code)):
@@ -85,8 +95,12 @@ def candidates(lines):
             # of the original, which is what they are: nothing in the region
             # writes it.
             region = code[i + 1:j]
-            outside = [x for k, x in enumerate(code)
-                       if not (i < k < j) and k != i and k != j
+            # One slot name can serve several pairs -- MSVC reuses the stack
+            # slot, so `this_1 = this_4; ... this_4 = this_1;` appears twice in
+            # `unmodel_plane_slow` with the same two names.  Uses that belong
+            # to a pair already accepted are not uses that block this one.
+            outside = [k for k, x in enumerate(code)
+                       if not (i <= k <= j) and k not in used
                        and re.search(r'\b%s\b' % re.escape(slot), x)
                        and not undup.declaration(x)]
             if outside:
@@ -106,6 +120,7 @@ def candidates(lines):
                    for c in re.findall(r'\w+\s*\(([^;]*)\)', body)):
                 continue
             reads = sum(1 for r in region if re.search(r'\b%s\b' % re.escape(slot), r))
+            used.update((i, j))
             out.append((nm, a + i, a + j, slot, held, len(region), reads))
     return out
 

@@ -11321,9 +11321,9 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   struct alignas(16) UnmodelPlaneSlowFrame {   // 100 bytes, one stack frame
       uint8_t   _gap0[4];   // was int32_t Size
       uint8_t   _pad1[4];
-      uint8_t   _gap2[4];   // was int32_t v82
+      uint8_t   _gap2[4];   // was int32_t g0
       uint8_t   _gap3[4];   // was uint8_t * v85
-      uint8_t   _gap1[4];   // was int32_t v88
+      uint8_t   _gap1[4];   // was int32_t y0
       uint8_t   _gap4[4];   // was uint8_t * ArgList_1
       uint8_t *row[19];   // the row-pointer array; the loop fills (&v92)[k] for k < n6, five at a time
       uint8_t   _tail[12];   // alignas(16) rounds 100 up
@@ -11331,86 +11331,85 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 112,
                 "frame layout moved");
   int32_t Size;
-  // These shared `__frame.v82` with the name that still binds it: one
+  // These shared `__frame.g0` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int32_t v82;
-  int32_t v84;
+  int32_t g0;
   // These shared `__frame.v85` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int32_t v86;
-  int32_t v88;
+  int32_t lo0;
+  int32_t y0;
   // These shared `__frame.ArgList` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
   uint8_t *ArgList_5;
   int32_t n6_3;
-  int32_t v93;
-  int32_t v94;
-  int32_t v95;
+  int32_t m1;
+  int32_t m2;
+  int32_t m3;
   int32_t ArgList_4;
   uint8_t *Src_1;
   ModelBlock *this_1;
-  int32_t v99;
-  int32_t v100;
-  int32_t v101;
-  int32_t v102;
+  int32_t m4;
+  int32_t lo1;
+  int32_t m5;
+  int32_t g1;
   ;
   ModelBlock *this_4;
-  uint32_t *v57;   // the alphabet map again
+  uint32_t *x6;   // the alphabet map again
   uint8_t *ArgList, *ArgList_2, *buf, *ArgList_3, *ArgList_9, *ArgList_10,
-          *Src_2, *v77, *ArgList_8;
-  int16_t v20;
-  PixRec *v44, *row_cur3, *row_cur2, *row_cur1, *v48;   // the five row buffers, rotated
-  int32_t v5, v6, v8, n5, v14, v15, v16, v17, v18, n0x10000, v30, v34, v39,
-          v40, n4_1, v43, v51, v52, v53, v54, v56, v58, v60, v61, v62, depth,
-          v65, depth_raw, n6, v68, v69, n6_4, n6_1, v73, n6_2, v76, v78, v80;
+          *Src_2, *p, *ArgList_8;
+  int16_t lvl;
+  PixRec *kk, *row_cur3, *row_cur2, *row_cur1, *n_syms;   // the five row buffers, rotated
+  int32_t g, flags, lo, n5, w2, n2a, n2b, n2c, live, n0x10000, wt, has4, s,
+          jj, n4_1, bucket, row_w, x, x2, y, step, x7, x3, x4, bits, depth,
+          y2, depth_raw, n6, n_pix, chunk, n6_4, n6_1, at, n6_2, written, n_pix2, x5;
   ModelBlock *this_3;
   ModelBlock *this_2;
   uint32_t *ArgList_6;
-  SymListBlock *v31, *v35;
+  SymListBlock *has3, *alpha;
   SymPair *group_ctr;   // one group's row of counter pairs
   SymEntry *ArgList_7;
   SymList *i_1, *i, *j_1, *j;
-  FreqRec *v13;   // a bucket record: `grid[bucket]`
-  PixRec *v49, *v50;   // `row_cur[6]` and `row_cur[7]`, the two rows above
+  FreqRec *rec;   // a bucket record: `grid[bucket]`
+  PixRec *lists, *t;   // `row_cur[6]` and `row_cur[7]`, the two rows above
   Src_1 = Src;
   ArgList = &Src[-(_this->depth < 8)];
   __rc_begin_decode(0);
   __expand_alphabet((ModelBlock *)_this);
   this_1 = (ModelBlock *)(_this);
-  v102 = 0;
-  v5 = 0;
+  g1 = 0;
+  g = 0;
   do
   {
-    v6 = ctx_group_flags[v5];
+    flags = ctx_group_flags[g];
     this_2 = (ModelBlock *)(this_1);
-    this_1->ctx_state[v6] = v5;
-    v100 = 0;
-    v82 = v5;
+    this_1->ctx_state[flags] = g;
+    lo1 = 0;
+    g0 = g;
 
-    v88 = v6 & 4;
-    v99 = v6 & 2;
-    v95 = v6 & 0x10;
-    v8 = 0;
-    v93 = v6 & 1;
+    y0 = flags & 4;
+    m4 = flags & 2;
+    m3 = flags & 0x10;
+    lo = 0;
+    m1 = flags & 1;
 
-    ArgList_4 = v6 & 0x20;
-    v94 = v6 & 8;
+    ArgList_4 = flags & 0x20;
+    m2 = flags & 8;
     do
     {
-      v100 = v8;
+      lo1 = lo;
       n5 = 0;
 
       do
       {
         this_3 = (ModelBlock *)(this_1);
-        this_2->ctx_bucket[v5 + 15 * v8 + 75 * n5] = v102;
-        v101 = this_3->alphabet;
+        this_2->ctx_bucket[g + 15 * lo + 75 * n5] = g1;
+        m5 = this_3->alphabet;
         // A sixteen-byte record per bucket, at `+96 + 16 * bucket`: five
         // counts at words 0..4, their total at 5, a scaled weight at 6, and
         // two bytes at 7 -- a level (`<= f16`) and the weight `1 << (5 -
@@ -11427,107 +11426,107 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         // +3119.  `FreqRec` is on the same grid from record 188 (+3104),
         // which makes the last bucket record and the first frequency record
         // the same sixteen bytes -- the two tables abut and share one.
-        v13 = &this_3->grid[v102];
-        v13->w[1] = 2;
-        v13->w[2] = 2;
-        v13->w[3] = 2;
-        v13->w[4] = 2;
-        if ( v88 )
+        rec = &this_3->grid[g1];
+        rec->w[1] = 2;
+        rec->w[2] = 2;
+        rec->w[3] = 2;
+        rec->w[4] = 2;
+        if ( y0 )
         {
-          v14 = (uint16_t)(v13->w[4] + v13->w[3]);
-          v13->w[3] = v14;
-          v15 = 0;
-          v13->w[4] = 0;
+          w2 = (uint16_t)(rec->w[4] + rec->w[3]);
+          rec->w[3] = w2;
+          n2a = 0;
+          rec->w[4] = 0;
         }
         else
         {
-          v14 = v13->w[3];
-          v15 = v13->w[4];
+          w2 = rec->w[3];
+          n2a = rec->w[4];
         }
-        if ( v99 )
+        if ( m4 )
         {
-          v16 = (uint16_t)(v15 + v13->w[2]);
-          v13->w[2] = v16;
-          v15 = 0;
-          v13->w[4] = 0;
+          n2b = (uint16_t)(n2a + rec->w[2]);
+          rec->w[2] = n2b;
+          n2a = 0;
+          rec->w[4] = 0;
         }
         else
         {
-          v16 = v13->w[2];
+          n2b = rec->w[2];
         }
-        if ( v95 )
+        if ( m3 )
         {
-          v16 = (uint16_t)(v14 + v16);
-          v13->w[2] = v16;
-          v14 = 0;
-          v13->w[3] = 0;
+          n2b = (uint16_t)(w2 + n2b);
+          rec->w[2] = n2b;
+          w2 = 0;
+          rec->w[3] = 0;
         }
-        if ( v93 )
+        if ( m1 )
         {
-          v13->w[1] += v15;
-          v15 = 0;
-          v13->w[4] = 0;
+          rec->w[1] += n2a;
+          n2a = 0;
+          rec->w[4] = 0;
         }
-        if ( v94 )
+        if ( m2 )
         {
-          v13->w[1] += v14;
-          v14 = 0;
-          v13->w[3] = 0;
+          rec->w[1] += w2;
+          w2 = 0;
+          rec->w[3] = 0;
         }
         if ( ArgList_4 )
         {
-          v13->w[1] += v16;
-          v16 = 0;
-          v13->w[2] = 0;
+          rec->w[1] += n2b;
+          n2b = 0;
+          rec->w[2] = 0;
         }
-        v17 = (v14 != 0) + (v16 != 0) + (v15 != 0) + 2;
-        if ( v17 <= v101 )
+        n2c = (w2 != 0) + (n2b != 0) + (n2a != 0) + 2;
+        if ( n2c <= m5 )
         {
-          v13->b14 = v17;
-          v13->w[0] = 2;
+          rec->b14 = n2c;
+          rec->w[0] = 2;
         }
         else
         {
-          LOBYTE(v17) = v17 - 1;
-          v13->b14 = v17;
-          v13->w[0] = 0;
+          LOBYTE(n2c) = n2c - 1;
+          rec->b14 = n2c;
+          rec->w[0] = 0;
         }
-        if ( v13->w[v100] && v13->w[n5] && (uint8_t)v17 <= v101 )
+        if ( rec->w[lo1] && rec->w[n5] && (uint8_t)n2c <= m5 )
         {
-          v18 = 1;
-          v20 = (uint8_t)(1 << ((5 - v17) & 31));
-          v13->b15 = v20;
-          v13->w[6] = v20 << 6;
-          v13->w[v100] += v20;
-          v13->w[n5] += v13->b15;
-          v13->w[5] = v13->w[0]
-                               + v13->w[4]
-                               + v13->w[3]
-                               + v13->w[2]
-                               + v13->w[1];
+          live = 1;
+          lvl = (uint8_t)(1 << ((5 - n2c) & 31));
+          rec->b15 = lvl;
+          rec->w[6] = lvl << 6;
+          rec->w[lo1] += lvl;
+          rec->w[n5] += rec->b15;
+          rec->w[5] = rec->w[0]
+                               + rec->w[4]
+                               + rec->w[3]
+                               + rec->w[2]
+                               + rec->w[1];
         }
         else
         {
-          v18 = 0;
+          live = 0;
         }
-        v102 += v18;
+        g1 += live;
         ++n5;
       }
       while ( n5 < 5 );
-      v8 = v100 + 1;
+      lo = lo1 + 1;
     }
-    while ( v100 + 1 < 5 );
+    while ( lo1 + 1 < 5 );
     n0x10000 = 0;
-    group_ctr = this_1->group_ctr[v82];
+    group_ctr = this_1->group_ctr[g0];
     do
     {
       group_ctr[n0x10000].last = 0x2000;
       group_ctr[n0x10000++].prev = 0x2000;
     }
     while ( n0x10000 < 0x10000 );
-    v5 = v82 + 1;
+    g = g0 + 1;
   }
-  while ( v82 + 1 < 15 );
+  while ( g0 + 1 < 15 );
   ArgList_2 = ArgList;
   this_4 = (ModelBlock *)((int32_t)this_1);
   buf = (uint8_t *)bmf_new(this_1->alphabet);
@@ -11539,27 +11538,27 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   this_4->sel_cur = this_4->sel;
   // `24 * n + 4`: the count word, then `n` lists.  `free_workspace` reads the
   // count back from `sym_list_count(lists)`.
-  v30 = this_4->alphabet;
-  v31 = (SymListBlock *)bmf_new(24 * v30 + 4);
-  if ( v31 )
+  wt = this_4->alphabet;
+  has3 = (SymListBlock *)bmf_new(24 * wt + 4);
+  if ( has3 )
   {
-    v31->n = v30;
-    i_1 = v31->list;
-    for ( i = i_1; v30; --v30 )
+    has3->n = wt;
+    i_1 = has3->list;
+    for ( i = i_1; wt; --wt )
       (i_1++)->ent = nullptr;
   }
   else
   {
     i = nullptr;
   }
-  v34 = this_4->alphabet;
+  has4 = this_4->alphabet;
   this_4->sel1_list = i;
-  v35 = (SymListBlock *)bmf_new(24 * v34 + 4);
-  if ( v35 )
+  alpha = (SymListBlock *)bmf_new(24 * has4 + 4);
+  if ( alpha )
   {
-    v35->n = v34;
-    j_1 = v35->list;
-    for ( j = j_1; v34; --v34 )
+    alpha->n = has4;
+    j_1 = alpha->list;
+    for ( j = j_1; has4; --has4 )
       (j_1++)->ent = nullptr;
   }
   else
@@ -11569,59 +11568,59 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
   this_4->sel0_list = j;
   if ( !(this_4->alphabet <= 0) )
   {
-    v39 = 0;
+    s = 0;
     do
     {
-      __init_symbol_list(&this_4->sel1_list[v39], (int32_t)this_4, 99, 0);
-      __init_symbol_list(&this_4->sel0_list[v39++], (int32_t)this_4, 33, 0);
+      __init_symbol_list(&this_4->sel1_list[s], (int32_t)this_4, 99, 0);
+      __init_symbol_list(&this_4->sel0_list[s++], (int32_t)this_4, 33, 0);
     }
-    while ( v39 < this_4->alphabet );
+    while ( s < this_4->alphabet );
   }
-  v40 = this_4->depth;
-  if ( v40 == this_4->depth_raw )
+  jj = this_4->depth;
+  if ( jj == this_4->depth_raw )
   {
     ArgList_3 = nullptr;
   }
   else
   {
     ArgList_2 = (uint8_t *)bmf_new(*(uint32_t *)&this_4->height * this_4->width + 3);
-    v40 = this_4->depth;
+    jj = this_4->depth;
     ArgList_3 = ArgList_2;
   }
-  n4_1 = (v40 + 7) >> 3;
+  n4_1 = (jj + 7) >> 3;
   if ( this_4->height > 0 )
   {
     ArgList_4 = (int32_t)ArgList_3;
     ArgList_5 = ArgList_2;
-    v43 = 0;
+    bucket = 0;
     while ( 1 )
     {
-      v86 = v43;
+      lo0 = bucket;
       this_4->row_cur[5]->match[1] = this_4->row_cur[5][-1].sym == 0;
       this_4->row_cur[5]->match[3] = this_4->row_cur[6][-1].sym == 0;
-      v44 = this_4->row_cur[4];
+      kk = this_4->row_cur[4];
       row_cur3 = this_4->row_cur[3];
       row_cur2 = this_4->row_cur[2];
       row_cur1 = this_4->row_cur[1];
-      v48 = this_4->row_cur[0];
+      n_syms = this_4->row_cur[0];
       this_4->row_cur[4] = row_cur3;
       this_4->row_cur[3] = row_cur2;
       this_4->row_cur[2] = row_cur1;
-      this_4->row_cur[1] = v48;
-      this_4->row_cur[0] = v44;
-      v44 += 7;
-      this_4->row_cur[5] = v44;
-      v48 += 7;
-      this_4->row_cur[6] = v48;
+      this_4->row_cur[1] = n_syms;
+      this_4->row_cur[0] = kk;
+      kk += 7;
+      this_4->row_cur[5] = kk;
+      n_syms += 7;
+      this_4->row_cur[6] = n_syms;
       this_4->row_cur[7] = row_cur1 + 7;
       this_4->row_cur[8] = row_cur2 + 7;
       this_4->row_cur[9] = row_cur3 + 7;
       // Two "is this count zero" flags, written to three and two places.
       // MSVC put each in the low byte of a register that held a cursor, which
-      // is where `LOBYTE(v48) = ...` came from; neither cursor is read again.
+      // is where `LOBYTE(n_syms) = ...` came from; neither cursor is read again.
       {
-        uint8_t zero = v48[1].sym == 0;
-        v44->match[2] = zero;
+        uint8_t zero = n_syms[1].sym == 0;
+        kk->match[2] = zero;
         this_4->row_cur[5][-1].match[4] = zero;
         this_4->row_cur[5][-2].match[5] = zero;
         zero = this_4->row_cur[6][2].sym == 0;
@@ -11629,50 +11628,50 @@ void __unmodel_plane_slow(ModelBlock *_this, uint8_t *Src)
         this_4->row_cur[5][-1].match[5] = zero;
       }
       this_4->row_cur[5]->match[5] = this_4->row_cur[6][3].sym == 0;
-      v49 = this_4->row_cur[6];
-      v50 = this_4->row_cur[7];
+      lists = this_4->row_cur[6];
+      t = this_4->row_cur[7];
       ++this_4->row_cur[5];
-      ++v49;
+      ++lists;
       ++this_4->row_cur[8];
-      this_4->row_cur[6] = v49;
-      ++v50;
-      this_4->row_cur[7] = v50;
+      this_4->row_cur[6] = lists;
+      ++t;
+      this_4->row_cur[7] = t;
       ++this_4->row_cur[9];
-      this_4->grad[0] = v49[3].match[0] + v49[2].match[0] + v49[1].match[0] + v49[0].match[0] + v49[4].match[0] - 5;
+      this_4->grad[0] = lists[3].match[0] + lists[2].match[0] + lists[1].match[0] + lists[0].match[0] + lists[4].match[0] - 5;
       // The same five counts as the line above, off the other row.  MSVC
       // spilled each byte into a register whose upper bits were leftovers,
       // and the destination is one byte, so only the low bytes ever counted.
       this_4->grad[3] = 0;
       this_4->grad[2] = 0;
-      v51 = this_4->width;
-      this_4->grad[1] = v50[3].match[0] + v50[2].match[0] + v50[1].match[0] + v50[0].match[0] + v50[4].match[0] - 5;
-      v52 = v86;
-      if ( v51 <= 0 )
+      row_w = this_4->width;
+      this_4->grad[1] = t[3].match[0] + t[2].match[0] + t[1].match[0] + t[0].match[0] + t[4].match[0] - 5;
+      x = lo0;
+      if ( row_w <= 0 )
         break;
-      v53 = 0;
+      x2 = 0;
       do
       {
-        v54 = __decode_pixel((ModelBlock *)(uint32_t *)this_4, v53);
+        y = __decode_pixel((ModelBlock *)(uint32_t *)this_4, x2);
         __init_model_tables(this_4);
-        v51 = this_4->width;
-        v53 += v54;
+        row_w = this_4->width;
+        x2 += y;
       }
-      while ( v53 < this_4->width );
-      v52 = v86;
+      while ( x2 < this_4->width );
+      x = lo0;
       if ( n4_1 != 4 )
         goto LABEL_53;
-      if ( v51 > 0 )
+      if ( row_w > 0 )
       {
         ArgList_6 = (uint32_t *)ArgList_5;
-        v65 = 0;
+        y2 = 0;
         do
-          *ArgList_6++ = this_4->sym_code[this_4->row_cur[0][v65++ + 8].sym];
-        while ( v65 < this_4->width );
+          *ArgList_6++ = this_4->sym_code[this_4->row_cur[0][y2++ + 8].sym];
+        while ( y2 < this_4->width );
         goto LABEL_73;
       }
 LABEL_74:
-      v43 = v52 + 1;
-      if ( v43 >= *(uint32_t *)&this_4->height )
+      bucket = x + 1;
+      if ( bucket >= *(uint32_t *)&this_4->height )
       {
         ArgList_3 = (uint8_t *)ArgList_4;
         goto LABEL_76;
@@ -11683,22 +11682,22 @@ LABEL_74:
 LABEL_53:
     if ( n4_1 == 3 )
     {
-      if ( v51 > 0 )
+      if ( row_w > 0 )
       {
         // Three bytes out of each 24-bit code: the low half and byte 2, which
         // is a `SymEntry` -- the same three-byte pair the symbol lists hold.
         ArgList_7 = (SymEntry *)ArgList_5;
-        v56 = 0;
+        step = 0;
         do
         {
-          v57 = this_4->sym_code;
-          v58 = this_4->row_cur[0][v56 + 8].sym;
-          ArgList_7->sym = (uint16_t)v57[v58];
-          ArgList_7->cnt = (uint8_t)(v57[v58] >> 16);
-          ++v56;
+          x6 = this_4->sym_code;
+          x7 = this_4->row_cur[0][step + 8].sym;
+          ArgList_7->sym = (uint16_t)x6[x7];
+          ArgList_7->cnt = (uint8_t)(x6[x7] >> 16);
+          ++step;
           ++ArgList_7;
         }
-        while ( v56 < this_4->width );
+        while ( step < this_4->width );
         ArgList_5 = (uint8_t *)ArgList_7;
       }
       goto LABEL_74;
@@ -11707,53 +11706,53 @@ LABEL_53:
     {
       if ( this_4->depth == 8 )
       {
-        if ( v51 > 0 )
+        if ( row_w > 0 )
         {
           ArgList_8 = ArgList_5;
-          v80 = 0;
+          x5 = 0;
           do
             // A byte, not a word: this branch is the 8-bits-per-pixel one, and
             // `sym_code` was a `uint8_t *` when this dereference was written.
-            *ArgList_8++ = (uint8_t)this_4->sym_code[this_4->row_cur[0][v80++ + 8].sym];
-          while ( v80 < this_4->width );
+            *ArgList_8++ = (uint8_t)this_4->sym_code[this_4->row_cur[0][x5++ + 8].sym];
+          while ( x5 < this_4->width );
           ArgList_5 = ArgList_8;
         }
       }
-      else if ( v51 > 0 )
+      else if ( row_w > 0 )
       {
-        v61 = 0;
-        v62 = 0;
+        x4 = 0;
+        bits = 0;
         ArgList_9 = ArgList_5;
         do
         {
           depth = this_4->depth;
-          v62 -= depth;
-          if ( v62 < 0 )
+          bits -= depth;
+          if ( bits < 0 )
           {
-            v62 = 8 - depth;
-            *++ArgList_9 = this_4->sym_code[this_4->row_cur[0][v61 + 8].sym] << ((8 - depth) & 31);
+            bits = 8 - depth;
+            *++ArgList_9 = this_4->sym_code[this_4->row_cur[0][x4 + 8].sym] << ((8 - depth) & 31);
           }
           else
           {
-            *ArgList_9 |= this_4->sym_code[this_4->row_cur[0][v61 + 8].sym] << (v62 & 31);
+            *ArgList_9 |= this_4->sym_code[this_4->row_cur[0][x4 + 8].sym] << (bits & 31);
           }
-          ++v61;
+          ++x4;
         }
-        while ( v61 < this_4->width );
+        while ( x4 < this_4->width );
         ArgList_5 = ArgList_9;
       }
       goto LABEL_74;
     }
-    if ( v51 > 0 )
+    if ( row_w > 0 )
     {
       ArgList_6 = (uint32_t *)ArgList_5;
-      v60 = 0;
+      x3 = 0;
       do
       {
-        *(uint16_t *)ArgList_6 = this_4->sym_code[this_4->row_cur[0][v60++ + 8].sym];
+        *(uint16_t *)ArgList_6 = this_4->sym_code[this_4->row_cur[0][x3++ + 8].sym];
         ArgList_6 = (uint32_t *)((uint8_t *)ArgList_6 + 2);
       }
-      while ( v60 < this_4->width );
+      while ( x3 < this_4->width );
 LABEL_73:
       ArgList_5 = (uint8_t *)ArgList_6;
       goto LABEL_74;
@@ -11768,64 +11767,58 @@ LABEL_76:
     n6 = (depth_raw + 7) >> 3;
     if ( n6 <= 0 )
     {
-      v68 = *(uint32_t *)&this_4->height * this_4->width;
+      n_pix = *(uint32_t *)&this_4->height * this_4->width;
     }
     else
     {
       n6_3 = 0;
-      v68 = *(uint32_t *)&this_4->height * this_4->width;
-      v69 = v68 / n6;
+      n_pix = *(uint32_t *)&this_4->height * this_4->width;
+      chunk = n_pix / n6;
       if ( n6 >= 6 )
       {
-        v84 = *(uint32_t *)&this_4->height * this_4->width;
         n6_4 = 0;
-        this_1 = (ModelBlock *)((uint32_t *)this_4);
         ArgList_10 = ArgList_3;
         do
         {
           __frame.row[n6_4] = ArgList_10;
-          ArgList_10 += 5 * v69;
-          __frame.row[n6_4 + 1] = &ArgList_3[v69 * (n6_4 + 1)];
-          __frame.row[n6_4 + 2] = &ArgList_3[v69 * (n6_4 + 2)];
-          __frame.row[n6_4 + 3] = &ArgList_3[v69 * (n6_4 + 3)];
-          __frame.row[n6_4 + 4] = &ArgList_3[v69 * (n6_4 + 4)];
+          ArgList_10 += 5 * chunk;
+          __frame.row[n6_4 + 1] = &ArgList_3[chunk * (n6_4 + 1)];
+          __frame.row[n6_4 + 2] = &ArgList_3[chunk * (n6_4 + 2)];
+          __frame.row[n6_4 + 3] = &ArgList_3[chunk * (n6_4 + 3)];
+          __frame.row[n6_4 + 4] = &ArgList_3[chunk * (n6_4 + 4)];
           n6_4 += 5;
         }
         while ( n6_4 <= n6 - 6 );
-        this_4 = (ModelBlock *)((int32_t)this_1);
         n6_3 = n6_4;
-        v68 = v84;
       }
       n6_1 = n6_3;
-      v73 = v69 * n6_3;
-      this_1 = (ModelBlock *)((uint32_t *)this_4);
+      at = chunk * n6_3;
       do
       {
-        __frame.row[n6_1] = &ArgList_3[v73];
-        v73 += v69;
+        __frame.row[n6_1] = &ArgList_3[at];
+        at += chunk;
         ++n6_1;
       }
       while ( n6_1 < n6 );
-      this_4 = (ModelBlock *)((int32_t)this_1);
     }
-    if ( v68 > 0 )
+    if ( n_pix > 0 )
     {
       Src_2 = Src_1;
       ArgList_4 = (int32_t)ArgList_3;
       n6_2 = 0;
-      v76 = 0;
+      written = 0;
       do
       {
-        v77 = __frame.row[n6_2];
-        *Src_2 = *v77;
-        v78 = *(uint32_t *)&this_4->height * this_4->width;
+        p = __frame.row[n6_2];
+        *Src_2 = *p;
+        n_pix2 = *(uint32_t *)&this_4->height * this_4->width;
         ++Src_2;
-        __frame.row[n6_2++] = v77 + 1;
+        __frame.row[n6_2++] = p + 1;
         if ( n6_2 == n6 )
           n6_2 = 0;
-        ++v76;
+        ++written;
       }
-      while ( v76 < v78 );
+      while ( written < n_pix2 );
       ArgList_3 = (uint8_t *)ArgList_4;
     }
     free(ArgList_3);
