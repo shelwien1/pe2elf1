@@ -22,7 +22,7 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17243
+subs1.hpp lines                      17787     17616         17148
 bmf.cpp lines                            —         —           365
 raw-offset sites                        22        12             5
   off `_this`                            —         1             0
@@ -37,8 +37,8 @@ fNN members / named ones             93/121     5/162         0/172
 distinct unexplained locals            554       591             0
   bodies still carrying one              —   8 of 102     0 of 104
   uses                                    —      6302             0
-locals named for a callee parameter      —         —             0
-  declarations / bodies                   —         —           0/0
+locals named for a callee parameter      —         —             1
+  declarations / bodies                   —         —           1/1
 names Hex-Rays chose and nobody changed  —         —             0
   conventional ones kept / bodies joined  —         —         56/74
 goto / LABEL_n:                     112/79     81/55         49/33
@@ -955,8 +955,8 @@ many jumps are left and not whether any of them should be, which is the same
 defect §10 is about — so it now says what shape they are:
 
 ```
-goto / LABEL_n:                    49 / 34
-  restart a loop / exit N blocks   16 / 29
+goto / LABEL_n:                    49 / 49/33
+  restart a loop / exit N blocks   16 / 15/32
   jump into a block / sideways      1 / 3
 ```
 
@@ -2161,3 +2161,61 @@ One body genuinely has no address: `SymList::rescale`, §25's extraction, was
 never one function in BMF.exe — it was two copies of part of two. `addrmap.py`
 names it with the other things this project wrote rather than leaving it in a
 list of addresses nobody has found.
+
+---
+
+## 27. Six of the seventeen frames were not layouts
+
+Every frame in this file carried the same note: *"This one is a layout, not a
+bag of locals: `tools/frame-sweep.sh --arrays` gives every member its own
+storage and altp1 segfaults while compressing."* Seventeen of them, each with
+its own failure — a segfault, an abort, "five streams move, no signal".
+
+**The sweep those notes cite can no longer make the attempt.** `frame-sweep.sh`
+drives `defram.py`, which lifts *aliases* — `int32_t &v83 = *(int32_t
+*)(frame + 24600);`. There are none left: earlier rounds turned every alias
+into a named member, so `defram.py --list` answers `0 of 0 aliases lift` and
+the sweep prints **`0 kept, 0 reverted`**. A green line meaning *nothing was
+tried*, under seventeen claims that rest on it having been tried.
+
+That is this round's defect in the load-bearing comment of seventeen bodies,
+and it is the worst version of it so far: the other cases were rows reading
+zero, and this one was a sentence saying "we checked".
+
+### Re-taking the measurement
+
+`tools/liftframe.py` runs the same experiment against the shape the file has
+now: each non-padding member becomes a plain declaration, `__frame.X` becomes
+`X`, and the `static_assert`s that pin the layout go with them. It declines a
+frame with a `union` — that union is MSVC's slot sharing written down, and
+lifting its arms to separate locals is not the same program — which is nine of
+the seventeen.
+
+Of the nine it can offer, **six dissolve and the gate holds**: `model_planes`,
+`expand_alphabet`, `unmodel_plane_slow`, `write_bmp`, `alt_model_p1_encode`
+and `alt_model_p2_decode`. Their notes are gone, replaced by what actually
+happened.
+
+Three fail, and their notes are re-taken with today's failure and today's tool:
+`read_bmp` and `search_filter` and `cost_candidate` abort on the first stream
+that reaches them. Those three are named in `liftframe.py` with the failure
+they produced, so that "0 frames to lift" means *nothing left that has not been
+tried* rather than *nothing offered*.
+
+**17 frames became 11.**
+
+### What the frames had been hiding
+
+Lifting six frames made two rules find work they had been unable to see:
+
+```
+unwrite.py   2 write-only locals      model_planes: plane_x16, plane_idx
+unsave.py    3 saves across a region that cannot change the value
+```
+
+`unwrite.py` looks for a local that is written and never read; `unsave.py` for
+a local that saves another across a region that cannot change it. Neither can
+say anything about `__frame.plane_x16`, because a struct member might be read
+by anything that has the struct's address — so five pieces of dead code sat
+inside six frames, invisible to the rules that exist to find exactly them, for
+as long as the frames did.

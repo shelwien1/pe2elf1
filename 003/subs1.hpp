@@ -4819,31 +4819,8 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
   // with x the size and img_addr the descriptor is `img_addr + data_size`, which is where
   // alloc_image put the palette.
   BmfImage *const img = (BmfImage *)img_addr;
-  struct alignas(16) WriteBmpFrame {   // 96 bytes, one stack frame
-      uint32_t  Buffera;
-      uint8_t   _gap10[4];   // was uint32_t pairs
-      uint8_t   _gap0[4];   // was uint8_t * off_bits
-      uint8_t   _gap11[4];   // was int32_t ncol
-      uint8_t   _gap1[4];   // was FILE * Stream_v
-      uint8_t   _gap2[4];   // was int32_t Buffer_2
-      uint8_t   _gap3[4];   // was uint8_t * buf
-      uint8_t   _gap4[4];   // was uint8_t * abs_end2
-      uint8_t   _pad8[4];
-      uint8_t   _gap5[4];   // was int32_t Buffer_5
-      uint8_t   _pad10[4];
-      uint8_t   _gap6[4];   // was int32_t run_max
-      uint8_t   _gap7[4];   // was int32_t nib
-      uint8_t   _gap8[4];   // was uint8_t * buf_2
-      uint8_t   _pad14[4];
-      uint8_t   _gap9[4];   // was uint32_t end
-      uint8_t   _pad16[32];
-  } __frame;
-  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 96,
-                "frame layout moved");
-  static_assert(sizeof(void *) != 4
-                || __builtin_offsetof(__typeof__(__frame), _pad16) == 64,
-                "the named part of the frame moved");
-  // These shared `__frame.Buffera` with the name that still binds it: one
+  uint32_t Buffera;
+  // These shared `Buffera` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
@@ -4857,15 +4834,15 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
   int32_t ncol, pal_bytes;
   uint8_t *buf, *abs_end2;
   int32_t row_i2, run_max, nib;
-  // These shared `__frame.pairs` with the name that still binds it: one
+  // These shared `pairs` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  // These shared `__frame.ncol` with the name that still binds it: one
+  // These shared `ncol` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  // These shared `__frame.ncol` with the name that still binds it: one
+  // These shared `ncol` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
@@ -4903,7 +4880,7 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
   bmp->biWidth = i;
   bmp->biHeight = rows;
   LOBYTE(rows) = img->depth;
-  (*((int8_t *)&__frame.Buffera)) = rows;
+  (*((int8_t *)&Buffera)) = rows;
   bmp->biPlanes = 1;
   bits = rows & 0x3F;
   bmp->biBitCount = bits;
@@ -4916,7 +4893,7 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
   {
     ncolours = 1 << (bits & 31);
     ncol = 1 << (bits & 31);
-    if ( ((*((int8_t *)&__frame.Buffera)) & 0x40) != 0 )
+    if ( ((*((int8_t *)&Buffera)) & 0x40) != 0 )
     {
       levels = 0x100u >> (bits & 31);
       if ( ncol > 0 )
@@ -4952,7 +4929,7 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
       data_ofs2 = (uint8_t *)(uintptr_t)img->data_size;
       pal_bytes = 4 * ncol;
     }
-    else if ( (*((int8_t *)&__frame.Buffera)) < 0 )
+    else if ( (*((int8_t *)&Buffera)) < 0 )
     {
       data_ofs2 = (uint8_t *)(uintptr_t)img->data_size;
       if ( ncol <= 0 )
@@ -7725,8 +7702,10 @@ LABEL_71:
 // `a4`, `a5`, `a6` and `a7` are unread.
 int32_t __cost_candidate(uint8_t *img, int32_t cand, uint8_t *desc, int8_t unread4, int32_t unread5, int32_t unread6, int32_t unread7, uint32_t *costs)
 {
-  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
-  // gives every member its own storage and altp1 segfaults while compressing.
+  // This one is a layout, not a bag of locals: lifting its members to
+  // ordinary locals makes altp1 aborts while compressing.  Re-checked against the
+  // file as it is now, by `tools/liftframe.py` -- `frame-sweep.sh`, which
+  // the note here used to cite, lifts aliases and has none left to lift.
   struct alignas(16) CostCandidateFrame {   // 26712 bytes, one stack frame
       uint8_t buf[4096];
       int32_t hist_y[1024];
@@ -8814,8 +8793,10 @@ LABEL_19:
 
 int32_t *__read_bmp(char *path)
 {
-  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
-  // gives every member its own storage and DLRAW aborts while compressing.
+  // This one is a layout, not a bag of locals: lifting its members to
+  // ordinary locals makes DLRAW aborts while compressing.  Re-checked against the
+  // file as it is now, by `tools/liftframe.py` -- `frame-sweep.sh`, which
+  // the note here used to cite, lifts aliases and has none left to lift.
   struct alignas(16) ReadBmpFrame {   // 128 bytes, one stack frame
       uint32_t Size_4;
       int32_t pal_bytes;
@@ -10972,8 +10953,9 @@ LABEL_42:
 
 inline void ModelBlock::expand_alphabet()
 {
-  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
-  // gives every member its own storage and DLRAW aborts while decompressing.
+  // Its frame was lifted: `tools/liftframe.py` gave every member its own
+  // storage and the gate held.  The comment that stood here said the opposite,
+  // on the authority of a sweep that by then could no longer make the attempt.
   
   // It is sixteen `SymList`s, and the three untyped arrays it was recovered as
   // were one array all along.  `sizeof(SymList)` is 24 and `ent` is at +20, so
@@ -10985,12 +10967,8 @@ inline void ModelBlock::expand_alphabet()
   
   // `spill` is genuinely past the array: MSVC used it to hold `nbytes` across
   // the inner decode loop.
-  struct alignas(16) ExpandAlphabetFrame {   // 420 bytes, one stack frame
-      SymList lists[16];      // 384 bytes
-      uint32_t spill[5];      // MSVC's spill slots, past the end of the array
-      uint8_t _pad0[16];
-  } __frame;
-  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 432, "frame layout moved");
+  SymList lists[16];
+  uint32_t spill[5];
   ;
   uint32_t *codes_p;   // was int32_t: this holds an address
   uint32_t nbytes, bits;
@@ -11003,8 +10981,8 @@ inline void ModelBlock::expand_alphabet()
   // Two records a pass, which is how MSVC unrolled it.
   for ( i = 0; i < 8; ++i )
   {
-    __frame.lists[2 * i].ent = nullptr;
-    __frame.lists[2 * i + 1].ent = nullptr;
+    lists[2 * i].ent = nullptr;
+    lists[2 * i + 1].ent = nullptr;
   }
   cap = mask + 1;
   if ( bits > 8 )
@@ -11030,7 +11008,7 @@ inline void ModelBlock::expand_alphabet()
       {
         k = 0;
         do
-          __init_symbol_list(&__frame.lists[k++], (int32_t)this, 256, 1);
+          __init_symbol_list(&lists[k++], (int32_t)this, 256, 1);
         while ( k < (4 * nbytes) );
         n_syms = this->alphabet;
       }
@@ -11044,17 +11022,17 @@ inline void ModelBlock::expand_alphabet()
           codes_p[s] = 0;
           if ( nbytes )
           {
-            __frame.spill[0] = nbytes;
+            spill[0] = nbytes;
             b = 0;
             do
             {
-              piece = __decode_symbol_list(&__frame.lists[4 * b + carry]);
+              piece = __decode_symbol_list(&lists[4 * b + carry]);
               carry = piece >> 6;
               this->sym_code[s] += (piece << ((8 * b) & 31));
               ++b;
             }
-            while ( b < __frame.spill[0] );
-            nbytes = __frame.spill[0];
+            while ( b < spill[0] );
+            nbytes = spill[0];
           }
           codes_p = this->sym_code;
           carry = (uint8_t)codes_p[s++] >> 7;
@@ -11064,15 +11042,15 @@ inline void ModelBlock::expand_alphabet()
     }
     else if ( n_syms <= mask )
     {
-      __init_symbol_list(&__frame.lists[0], (int32_t)this, mask - n_syms + 2, 1);
-      __frame.lists[0].rescale_at = 19 * __frame.lists[0].n;
+      __init_symbol_list(&lists[0], (int32_t)this, mask - n_syms + 2, 1);
+      lists[0].rescale_at = 19 * lists[0].n;
       if ( !(this->alphabet == 0) )
       {
         run = 0;
         s2 = 0;
         do
         {
-          gap = __decode_symbol_list(&__frame.lists[0]);
+          gap = __decode_symbol_list(&lists[0]);
           this->sym_code[s2] = gap + run;
           run += gap + 1;
           ++s2;
@@ -11084,7 +11062,7 @@ inline void ModelBlock::expand_alphabet()
     // uninitialised ones are the null `ent`s zeroed at the top, so those
     // `free`s are no-ops.
     for ( left = 15; left >= 0; --left )
-      free(__frame.lists[left].ent);
+      free(lists[left].ent);
   }
   else
   {
@@ -11092,7 +11070,7 @@ inline void ModelBlock::expand_alphabet()
     *(uint32_t *)&this->height = (*(uint32_t *)&this->height * nbytes);
     this->expand_alphabet();
     for ( left2 = 15; left2 >= 0; --left2 )
-      free(__frame.lists[left2].ent);
+      free(lists[left2].ent);
   }
 }
 
@@ -11229,18 +11207,8 @@ ModelBlock *__layout_workspace(ModelBlock *blk, int32_t unread_flag, int32_t img
 
 inline void ModelBlock::unmodel_plane_slow(uint8_t *dst)
 {
-  struct alignas(16) UnmodelPlaneSlowFrame {   // 100 bytes, one stack frame
-      uint8_t   _gap0[4];   // was int32_t alpha_n
-      uint8_t   _pad1[4];
-      uint8_t   _gap2[4];   // was int32_t g0
-      uint8_t   _gap3[4];   // was uint8_t * v85
-      uint8_t   _gap1[4];   // was int32_t y0
-      uint8_t   _gap4[4];   // was uint8_t * ArgList_1
-      uint8_t *row[19];   // the row-pointer array; the loop fills (&v92)[k] for k < nchunk, five at a time
-      uint8_t   _tail[12];   // alignas(16) rounds 100 up
-  } __frame;
-  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 112,
-                "frame layout moved");
+  uint8_t *row[19];
+  uint8_t _tail[12];
   uint32_t alpha_n;
   ModelBlock *this_1, *blk;
   int16_t lvl;
@@ -11251,15 +11219,15 @@ inline void ModelBlock::unmodel_plane_slow(uint8_t *dst)
   int32_t g0, y0;
   int32_t done, f_b0, f_b3, f_b4, f_b5;
   int32_t f_b1, lo1, m5, g1;
-  // These shared `__frame.g0` with the name that still binds it: one
+  // These shared `g0` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  // These shared `__frame.v85` with the name that still binds it: one
+  // These shared `v85` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  // These ten shared `__frame.ArgList`: one stack slot MSVC gave to locals
+  // These ten shared `ArgList`: one stack slot MSVC gave to locals
   // whose live ranges do not overlap, and Hex-Rays named every use after it.
   // That they can have storage of their own is the gate's answer -- nothing
   // writes one of them and reads another.
@@ -11691,12 +11659,12 @@ LABEL_76:
         row_at = expand_buf;
         do
         {
-          __frame.row[q5] = row_at;
+          row[q5] = row_at;
           row_at += 5 * chunk;
-          __frame.row[q5 + 1] = &expand_buf[chunk * (q5 + 1)];
-          __frame.row[q5 + 2] = &expand_buf[chunk * (q5 + 2)];
-          __frame.row[q5 + 3] = &expand_buf[chunk * (q5 + 3)];
-          __frame.row[q5 + 4] = &expand_buf[chunk * (q5 + 4)];
+          row[q5 + 1] = &expand_buf[chunk * (q5 + 1)];
+          row[q5 + 2] = &expand_buf[chunk * (q5 + 2)];
+          row[q5 + 3] = &expand_buf[chunk * (q5 + 3)];
+          row[q5 + 4] = &expand_buf[chunk * (q5 + 4)];
           q5 += 5;
         }
         while ( q5 <= nchunk - 6 );
@@ -11706,7 +11674,7 @@ LABEL_76:
       at = chunk * done;
       do
       {
-        __frame.row[q1] = &expand_buf[at];
+        row[q1] = &expand_buf[at];
         at += chunk;
         ++q1;
       }
@@ -11719,11 +11687,11 @@ LABEL_76:
       written = 0;
       do
       {
-        p = __frame.row[q2];
+        p = row[q2];
         *interleave_at = *p;
         n_pix2 = *(uint32_t *)&blk->height * blk->width;
         ++interleave_at;
-        __frame.row[q2++] = p + 1;
+        row[q2++] = p + 1;
         if ( q2 == nchunk )
           q2 = 0;
         ++written;
@@ -11737,42 +11705,13 @@ LABEL_76:
 int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
 {
   P1Ctx *b4, *buf3, *buf2, *buf1, *b0, *cursor0;
-  struct alignas(16) AltModelP1EncodeFrame {   // 144 bytes, one stack frame
-      uint8_t   _gap0[1];   // was int8_t dc3
-      uint8_t _pad0[3];
-      uint32_t m1;
-      int32_t m2;
-      uint8_t   _gap1[4];   // was uint8_t * v95
-      uint8_t   _gap2[4];   // was int32_t v96
-      uint8_t   _gap3[1];   // was int8_t out3
-      uint8_t _pad1[3];
-      uint8_t   _gap4[4];   // was int32_t resid3
-      uint8_t   _gap5[4];   // was int32_t cur3
-      uint8_t   _gap6[4];   // was int32_t n5_8
-      uint8_t   _gap7[16];   // was void * Block_plane
-      uint8_t   _gap8[4];   // was int32_t dc1
-      uint8_t   _gap9[4];   // was int32_t v106
-      uint8_t   _gap10[4];   // was uint32_t i_1
-      uint8_t   _gap11[4];   // was int32_t v108
-      uint8_t   _gap12[4];   // was int32_t v109
-      uint8_t   _gap13[4];   // was uint32_t x
-      uint8_t   _gap14[4];   // was int32_t out1
-      uint8_t   _gap15[4];   // was int32_t resid0
-      uint8_t   _gap16[4];   // was int32_t off1
-      uint8_t   _gap17[4];   // was int32_t off0
-      uint8_t   _gap18[4];   // was int32_t resid2
-      uint8_t   _gap19[4];   // was int32_t cur0
-      uint8_t   _gap20[4];   // was int32_t off2
-      uint8_t   _gap21[4];   // was int32_t cur1
-      uint8_t   _gap22[4];   // was int32_t code1
-      uint8_t _pad2[32];
-  } __frame;
-  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 144, "frame layout moved");
+  uint32_t m1;
+  int32_t m2;
   int8_t dc3;
   uint8_t out3;
   int32_t resid3, cur3;
   void *plane[4];
-  // These shared `__frame.m1` and `__frame.m2` with the names that still
+  // These shared `m1` and `m2` with the names that still
   // bind them: one stack slot MSVC gave to locals whose live ranges do not
   // overlap, and Hex-Rays named every use.  That they can have storage of
   // their own is the gate's answer -- nothing writes one of them and reads
@@ -11838,9 +11777,7 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
     {
       if ( n_planes > 0 )
       {
-        __frame.m1 = y;
         p = 0;
-        __frame.m2 = height;
         do
         {
           ++p;
@@ -11901,8 +11838,6 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
           n_planes = plane_count;
         }
         while ( p < plane_count );
-        y = __frame.m1;
-        height = __frame.m2;
         w = width;
       }
       if ( w > 0 )
@@ -13732,40 +13667,17 @@ void __alt_model_p2_d8_decode( uint8_t *out, int32_t i, int32_t height)
 
 int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *out) {   P2Ctx *cur0,
         *cur1, *cur2, *cur3, *buf3, *bb4, *buf2, *buf1, *bb0;
-  struct alignas(16) AltModelP2DecodeFrame {   // 276 bytes, one stack frame
-      uint8_t   _gap0[4];   // was uint32_t Size_1
-      uint8_t slot4[16];
-      uint8_t slot20[16];
-      uint8_t slot36[16];
-      uint8_t slot52[16];
-      uint8_t slot68[16];
-      uint8_t slot84[16];
-      uint8_t slot100[16];
-      uint8_t slot116[16];
-      uint8_t slot132[16];
-      uint8_t   _gap1[4];   // was int32_t y
-      int32_t x;
-      uint8_t   _gap2[4];   // was uint8_t * Src_1
-      uint8_t   _gap3[4];   // was int32_t xf4
-      uint8_t   _gap4[4];   // was int32_t val3
-      uint8_t   _gap5[16];   // was AltP2Block * plane
-      uint8_t   _gap6[4];   // was int32_t w
-      uint8_t   _gap7[4];   // was int32_t back
-      uint8_t   _gap8[4];   // was uint32_t row_bytes
-      uint8_t   _gap9[4];   // was int32_t dc_flag
-      uint8_t   _gap10[4];   // was int32_t xf0
-      uint8_t   _gap11[4];   // was uint32_t i_1
-      uint8_t   _gap12[4];   // was uint32_t first
-      uint8_t   _gap13[4];   // was int32_t pl2
-      uint8_t   _gap14[4];   // was uint32_t i_2
-      uint8_t   _gap15[4];   // was int32_t v168
-      uint8_t   _gap16[4];   // was int32_t v169
-      uint8_t   _gap17[4];   // was int32_t v170
-      uint8_t   _gap18[4];   // was uint32_t np
-      uint8_t _pad0[40];
-  } __frame;
-  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 288, "frame layout moved");
-  // These shared `__frame.x` with the name that still binds it: one
+  uint8_t slot4[16];
+  uint8_t slot20[16];
+  uint8_t slot36[16];
+  uint8_t slot52[16];
+  uint8_t slot68[16];
+  uint8_t slot84[16];
+  uint8_t slot100[16];
+  uint8_t slot116[16];
+  uint8_t slot132[16];
+  int32_t x;
+  // These shared `x` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
@@ -13848,7 +13760,6 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *out) {   P2Ctx *cur0,
       {
         first = src2;
         pl2 = 0;
-        __frame.x = raw;
         i_1 = i;
         do
         {
@@ -13990,7 +13901,6 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *out) {   P2Ctx *cur0,
         }
         while ( plane_count > pl2 );
         src2 = first;
-        raw = __frame.x;
         i = i_1;
       }
       ctx_bias[3] = 0;
@@ -15149,28 +15059,21 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
 
 void __model_planes(uint8_t *img, uint8_t *pixels, int32_t plane, int8_t unread_flag)
 {
-  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
-  // gives every member its own storage and med32 divides by zero while compressing.
-  struct alignas(16) ModelPlanesFrame {   // 76 bytes, one stack frame
-      uint8_t slot0[4];
-      uint8_t slot4[4];
-      uint8_t slot8[4];
-      uint8_t slot12[4];
-      uint8_t slot16[4];
-      // Four consecutive words that `model_plane` is handed as a `BmfImage *`:
-      // this is the header, copied from the caller's a word at a time.
-      BmfImage hdr;   // +20 .. +35
-      int32_t plane_x16;
-      int32_t plane_idx;
-      uint8_t _pad0[32];
-  } __frame;
-  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 80, "frame layout moved");
+  // Its frame was lifted: `tools/liftframe.py` gave every member its own
+  // storage and the gate held.  The comment that stood here said the opposite,
+  // on the authority of a sweep that by then could no longer make the attempt.
+  uint8_t slot0[4];
+  uint8_t slot4[4];
+  uint8_t slot8[4];
+  uint8_t slot12[4];
+  uint8_t slot16[4];
+  BmfImage hdr;
+  int32_t plane_x16;
+  int32_t plane_idx;
   ;
   uint8_t *aligned;   // was int32_t: these hold addresses
   uint8_t *scratch;
   int32_t ofs;
-  __frame.plane_idx = plane;
-  __frame.plane_x16 = 16 * plane;
   plane_predictor = plane_desc[plane + 1].flags & 3;
   plane_alt_model = (uint8_t)(plane_desc[plane + 1].flags & 4) >> 2;
   __colour_transform(img, pixels, plane, unread_flag);
@@ -15197,12 +15100,12 @@ void __model_planes(uint8_t *img, uint8_t *pixels, int32_t plane, int8_t unread_
   {
     // The caller's header, with the depth byte replaced: 72 is 8 bits plus the
     // 0x40 flag `alloc_image` sets.
-    __frame.hdr = *(BmfImage *)img;
-    __frame.hdr.depth = 72;
+    hdr = *(BmfImage *)img;
+    hdr.depth = 72;
     // never taken: -E is 0
     if ( plane_predictor == 1 && !plane_alt_model )
       __predict_med(pixels, ((const BmfImage *)img)->width, ((const BmfImage *)img)->height);
-    __model_plane(&__frame.hdr, pixels, pixels);
+    __model_plane(&hdr, pixels, pixels);
     // `if ( pixels != pixels )` stood here, and behind it an interleave and a
     // free.  It was the test for "the -E block above allocated a second
     // buffer"; with that block gone, both names held the caller's one buffer
@@ -15819,8 +15722,10 @@ LABEL_109:
 // that one picks the plane pairing they apply to.
 uint32_t __search_filter(BmfImage *img, int8_t mode)
 {
-  // This one is a layout, not a bag of locals: `tools/frame-sweep.sh --arrays`
-  // gives every member its own storage and five streams move, no signal.
+  // This one is a layout, not a bag of locals: lifting its members to
+  // ordinary locals makes altp1 aborts while compressing.  Re-checked against the
+  // file as it is now, by `tools/liftframe.py` -- `frame-sweep.sh`, which
+  // the note here used to cite, lifts aliases and has none left to lift.
   struct alignas(16) SearchFilterFrame {   // 164 bytes, one stack frame
       uint8_t *base;
       uint8_t marks[16];
