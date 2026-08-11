@@ -395,8 +395,8 @@ The state is `private`, so "does anything outside still touch the coder?" is a
 question the compiler answers.
 
 Two model functions still hold a coding step that is more than one call:
-`encode_symbol_list` encodes a symbol against a sorted frequency list (§7.3) and
-`alt_p2_decode_symbol` decodes one from a 3-way counter node. Both now do their search
+`SymList::code_symbol` encodes a symbol against a sorted frequency list (§7.3) and
+`P2Freq::decode_symbol` decodes one from a 3-way counter node. Both now do their search
 and then call `rc`.
 
 ## 6. The modelling front end
@@ -502,8 +502,10 @@ did not establish (§9).
 
 ### 6.5 Near-lossless
 
-`-E<N>` (`__n7_1`, `0x004410A0`) is copied into `near_lossless_max` (`0x00443398`) and
-becomes the maximal allowed error `E`. When it is non-zero the residual is
+`-E<N>` (`__n7_1`, `0x004410A0`) is copied into what was the global
+`near_lossless_max` (`0x00443398`) and becomes the maximal allowed error `E`.
+REFACTORING4 §4.1 folded that global into the plane descriptors, so it is
+`plane_desc[n].w12` in the source now. When it is non-zero the residual is
 quantised with step `2E + 1`:
 
 ```c
@@ -536,10 +538,10 @@ bits** of a histogram of `n` counts summing to `N`:
 H = (N·log N  −  Σᵢ nᵢ·log nᵢ) · log₂(e)
 ```
 
-computed in `double`, two histogram entries at a time in SSE. `log_two_lane`
-supplies the two-lane `log`, and takes a mask: where a lane's count is zero it
-substitutes `0.5` (`__bmf_half_half`, `0x0043B480`) so that `log` is never
-handed a zero, and the caller then masks those lanes back out of the running sum
+computed in `double`, two histogram entries at a time in SSE.  BMF had a
+two-lane `log` helper, `log_two_lane`, which took a mask: where a lane's count
+was zero it substituted `0.5` (`__bmf_half_half`, `0x0043B480`) so that `log`
+was never handed a zero, and the caller then masks those lanes back out of the running sum
 with `_mm_andnot_ps`. The substituted value is never used — it exists to keep a
 `-inf` out of the vector. This
 and the cost functions `choose_plane_coding` (`choose_plane_coding`) and `cost_candidate`
@@ -603,7 +605,7 @@ It is a binary context model driving the range coder of §5.
    both recursive. It scans
    the plane for the symbols actually used, encodes `distinct - 1` with
    `rc.encode` as a flat one-wide slot out of the full alphabet size, encodes each used
-   symbol with `encode_symbol_list`, and then re-indexes the plane onto the dense
+   symbol with `SymList::code_symbol`, and then re-indexes the plane onto the dense
    alphabet that leaves. A plane using 40 of 256 values is coded over 40
    symbols from here on.
 4. Model initialisation — the tables described below.
@@ -694,7 +696,7 @@ if (counter > 0x2000) {            /* rescale before it saturates */
 counter += (__n8_0 * ((plane_predictor == 2) + 5)) >> 3;   /* adaptive increment */
 ```
 
-**Three-way node — `alt_p2_decode_symbol`,** the decoder for a node holding three
+**Three-way node — `P2Freq::decode_symbol`,** the decoder for a node holding three
 frequencies (`node[1]`, `node[2]`, `node[3]`) plus its own increment in
 `node[0]`. After decoding it does
 
@@ -715,7 +717,7 @@ The increment starts large and ratchets down each time the node rescales — fas
 adaptation early, stability later — with 16 as the floor, so the node never
 stops adapting entirely.
 
-**Sorted list — `encode_symbol_list` and `decode_symbol_list`.** For alphabets
+**Sorted list — `SymList::code_symbol` and `decode_symbol_list`.** For alphabets
 rather than bits: a list of
 `(symbol, count)` triples kept in descending count order. Encoding sums counts
 until the symbol is found (that sum is `cumFreq`), calls the range coder, then
@@ -803,8 +805,8 @@ Stated plainly, so the rest can be trusted:
 
   **The gap has a boundary, at least.** 22 bodies are reachable *only* from
   this dispatch and from nothing else — `alt_p2_model`, `alt_p2_context`,
-  `alt_p1_model`, `alt_p1_alloc`, `alt_p2_alloc` and the rest, plus
-  `update_binary_pair` and `alt_p2_decode_symbol`, which the slow path does not
+  `AltP1Block::update_model`, `alt_p1_alloc`, `alt_p2_alloc` and the rest, plus
+  `update_binary_pair` and `P2Freq::decode_symbol`, which the slow path does not
   use. That is the subsystem, and it is a closed one: anything outside it is
   described elsewhere in this document.
 
@@ -820,8 +822,10 @@ Stated plainly, so the rest can be trusted:
   * **The record is 18 bytes**, and thirty-two places copy one. MSVC unrolled
     each into four dwords and a word, which is what made them recognisable:
     `*(uint32_t *)(d - 18) = *(uint32_t *)s` through `*(uint16_t *)(d - 2) =
-    *(uint16_t *)(s + 16)`. They are `bmf_copy` calls now (REFACTORING.md
-    §Phase 4).
+    *(uint16_t *)(s + 16)`. Round three folded each into a `bmf_copy(d, s, 18)`
+    and round six gave the record a type, so every one of them is a record
+    assignment now -- `((P2Ctx *)p)[i] = ((P2Ctx *)p)[j]` -- and the helper has
+    no callers left.
   * **Rows are 144 bytes apart.** `alt_model_p2_decode` rotates five row
     pointers and advances three of them by exactly 144: `f278744 = v84 + 144`,
     `f278748 = v83 + 144`, `f278752 = v81 + 144`. Eight rows of 18 bytes.
@@ -931,5 +935,5 @@ Stated plainly, so the rest can be trusted:
 | `-S` model driver | `model_plane` | `0x00415380` |
 | alphabet reduction | `reduce_alphabet` | `0x00417200` |
 | `-S` per-pixel coder | `code_pixel` | `0x004159E0` |
-| adaptive symbol list | `encode_symbol_list` | `0x00412B10` |
+| adaptive symbol list | `SymList::code_symbol` | `0x00412B10` |
 | BMP read / write | `read_bmp` / `write_bmp` | `0x0042AB20` / `0x0042B0C0` |

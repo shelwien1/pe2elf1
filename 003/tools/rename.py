@@ -279,6 +279,21 @@ def main():
         total += k
     open(path, 'w').write(text)
     print('%d occurrences, %d names' % (total, len(pairs)))
+    # A rename silently invalidates every document that names the function.
+    # ALGORITHM.md describes the algorithm body by body, and eight renames in
+    # one round left twenty-four of its references pointing at names that no
+    # longer exist -- found by scanning the documents afterwards, which is not
+    # a way of finding things anyone should rely on.
+    import glob
+    for old_name, _ in pairs:
+        where = []
+        for doc in sorted(glob.glob('*.md')):
+            k = len(re.findall(r'(?<![\w:])%s(?![\w:])' % re.escape(old_name),
+                               open(doc).read()))
+            if k:
+                where.append('%s x%d' % (doc, k))
+        if where:
+            print('  %-22s still named in: %s' % (old_name, ', '.join(where)))
     n = follow_skip_list(pairs, pat)
     if n:
         print('%s: %d entries followed the rename' % (SKIP, n))

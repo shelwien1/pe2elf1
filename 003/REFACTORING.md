@@ -537,6 +537,12 @@ been red at a commit boundary.
 6  control flow                done   2 of 123; the rest is irreducible
 ```
 
+Read that as this round's answer, not as the file's state. Phase 2's "0 frames
+left" was true when it was written and is not now: `reframe.py` put eight of
+them back before the round was out, because locals that had stopped being
+adjacent segfaulted — REFACTORING3.md §511 is that story, and round nine's §27
+is where eleven of them still are and why.
+
 Two things happened after all seven were closed, and neither is a phase:
 
 **Naming carried on.** 42 more functions, each from evidence rather than from

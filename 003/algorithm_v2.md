@@ -340,7 +340,7 @@ which carves it into the model's tables for the given width, height and depth.
 `data_size + 0x20000`, with the last 4 KiB used as `hist_scratch`.
 
 Before coding, `reduce_alphabet` restricts the alphabet to the symbols that
-actually occur, and `init_symbol_list` / `init_model_tables` build the initial
+actually occur, and `init_symbol_list` / `ModelBlock::init_tables` build the initial
 counts.
 
 ### 8.2 The candidate cascade
@@ -392,7 +392,7 @@ struct PixRec {
 };
 ```
 
-`init_model_tables` writes all six immediately after the symbol:
+`ModelBlock::init_tables` writes all six immediately after the symbol:
 
 | flag | the neighbour it is compared against |
 | --- | --- |
@@ -478,7 +478,7 @@ list[4]  a rescale limit
 list[5]  → entries, three bytes each: { uint16 symbol; uint8 count; }
 ```
 
-`encode_symbol_list(list, sym)` walks the entries, skipping anything in
+`SymList::code_symbol(list, sym)` walks the entries, skipping anything in
 `exclusion_mask`, accumulating counts. If it finds the symbol it codes
 `(cum, cum + count, total)`. If it runs off the end it codes an **escape** —
 `(total, total + escape_weight, total + escape_weight)` — marks every symbol it
@@ -490,7 +490,7 @@ paid for again in the next.
 count 1, escape weight 0 — or **empty** — no entries, escape weight 2 — so the
 chain mixes a learned model with a fallback that can always code anything.
 
-`symbol_list_update` is the update: add to the symbol's count and to the running
+`SymList::add_weight` is the update: add to the symbol's count and to the running
 total, bubble the entry forward while it outweighs its predecessor (so the list
 stays sorted by count, and the walk above finds likely symbols first), and
 rescale — halve every count and re-sort — when a count passes 251 or the total
@@ -512,11 +512,11 @@ with matching decoders. That dispatch is the whole of what selects them: the
 predictor field picks the family, the depth picks the specialisation.
 
 **What these do is not established.** Twenty-two bodies are reachable only from
-this dispatch and from each other — `alt_p1_context`, `alt_p2_context`,
-`alt_p2_model`, `alt_p1_model`, the two allocators and the rest — and reading
+this dispatch and from each other — `AltP1Block::ctx_of`, `alt_p2_context`,
+`alt_p2_model`, `AltP1Block::update_model`, the two allocators and the rest — and reading
 them is open work. What *is* established, from their own code:
 
-* `alt_p1_context` and `alt_p2_context` compute context and code nothing: no
+* `AltP1Block::ctx_of` and `alt_p2_context` compute context and code nothing: no
   `rc.` call appears in either, and both encoder and decoder call them. They
   read the causal neighbourhood, form gradients (`2W − WW − N` and relatives)
   and a weighted neighbour sum, and store them with the table pointers those
@@ -537,7 +537,7 @@ them is open work. What *is* established, from their own code:
   fourth counter beside those three is.
 * The p1 side's working memory is **0x99C60 nodes of sixteen bytes** starting at
   `AltP1Block + 3800` — a total and seven counts, seeded (22; 8, 2, 2, 2, 2, 3,
-  3), where 22 is the sum. `alt_p1_model` updates **three adjacent nodes per
+  3), where 22 is the sum. `AltP1Block::update_model` updates **three adjacent nodes per
   symbol**: the one its context picks and both neighbours, bumping the total and
   one of the first three counts in each by amounts that fall off with distance
   (17 for the centre in one arm, 11 and 13 for the neighbours; 7 / 4 / 3 in
@@ -554,14 +554,14 @@ five in `AltP2Block` — of four words each:
 
     struct CtxWeight { int32_t sel; uint32_t w[3]; };
 
-`alt_p1_context` and `alt_p2_context` write `sel` from a difference of causal
+`AltP1Block::ctx_of` and `alt_p2_context` write `sel` from a difference of causal
 neighbours — `2W − WW − N`, `NE − W`, and their relatives — and then read the
 same slot back, classified:
 
     digit = !(sel < 0) + (!(sel < 0) && !(sel == 0))
 
 which is 0 when the difference is negative, 1 when it is zero and 2 when it is
-positive. The index is `w[digit]` summed over the groups, and `alt_p1_context`
+positive. The index is `w[digit]` summed over the groups, and `AltP1Block::ctx_of`
 returns exactly that sum plus three terms of its own.
 
 The weights say what the sum means. `alt_p1_alloc` fills its nine groups with
@@ -583,12 +583,12 @@ an independent fact about the model; it is the context space.
 own allocator too. `AltP2Block::freq` is 15552 four-counter records, seeded
 (4096, 2048, 2816, 2816) by a loop that runs `0x1E60` = 7776 times writing two
 records a pass. The p2 coder's three-way choice over three counters, §9's last
-bullet, is a choice inside one of those records: `alt_p2_encode_symbol` is
+bullet, is a choice inside one of those records: `P2Freq::encode_symbol` is
 handed `&freq[index]` and picks among `c[1]`, `c[2]` and `c[3]`, with `c[0]` a
 fourth count that the rescale treats differently from the other three.
 
 `alt_p2_model` then updates records `index - 1`, `index` and `index + 1` —
-three adjacent, which is what `alt_p1_model` does to its counter nodes (§9's
+three adjacent, which is what `AltP1Block::update_model` does to its counter nodes (§9's
 last bullet but one). Both models spread an update over a neighbourhood of the
 context space, not just the context.
 
@@ -692,7 +692,7 @@ five is not established.
 
 ### 9.3 What the fourth counter of a `P2Freq` is
 
-Three of the four are a three-way alphabet: `alt_p2_encode_symbol` hands
+Three of the four are a three-way alphabet: `P2Freq::encode_symbol` hands
 `rc.encode` a cumulative pair out of `f[0..2]` with their sum as the total, and
 its argument picks which — zero the first, odd the second, even-and-nonzero the
 third. It then ends with `*chosen = step + *chosen`.
@@ -768,7 +768,7 @@ bytes skips the model entirely and goes straight to the raw store.
   still open is the first group — `p_n15[10]` and the ranked candidate list —
   which is a different table.
 * **Which symbol lists are in the escape chain, and in what order** (§8.4). The
-  walk is over a pointer chain built by `init_model_tables`, and the chain's
+  walk is over a pointer chain built by `ModelBlock::init_tables`, and the chain's
   membership is not established.
 * **Where flag bit 3 comes from, and what the flags byte starts as** (§2.3).
   Bit 3 is set in every stream the corpus produces, and the value `alloc_image`
@@ -791,7 +791,7 @@ bytes skips the model entirely and goes straight to the raw store.
 | cost | `estimate_cost`, `cost_candidate` |
 | the searches | `choose_plane_coding`, `search_filter`, `transform_planes` |
 | spatial prediction | `predict_med`, `unpredict_med` |
-| the default model | `model_plane`, `code_pixel`, `pixel_context`, `encode_context_bit`, `encode_symbol_list`, `symbol_list_update`, `layout_workspace`, `reduce_alphabet` |
+| the default model | `model_plane`, `code_pixel`, `pixel_context`, `encode_context_bit`, `SymList::code_symbol`, `SymList::add_weight`, `layout_workspace`, `reduce_alphabet` |
 | the alternate families | `alt_model_p{1,2}[_d8]_{en,de}code` and everything under them |
 
 `tools/addrmap.txt` maps every name here to the address of the body in

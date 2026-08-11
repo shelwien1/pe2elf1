@@ -2277,3 +2277,59 @@ two rules found three more flips between them — 1065 to **1062** — and then
 stopped, with 29 single candidates and 23 groups still on the table and none of
 them paying. That is the same answer as last time and, this round, from a
 genuinely different file.
+
+---
+
+## 29. Claims that age, in three more places
+
+### The guard in §17 costs exactly one local
+
+`unloword.py` refuses a local whose value is *used* at full width, and §17
+recorded that as "a false rejection with a reason beats an acceptance with a
+coincidence". What it did not say is what the reason costs.
+
+The extension it declined would accept a read that feeds only the low `w` bits
+of a `w`-bit store, through operators whose low bits depend only on the
+operands' low bits — `+ - * & | ^ <<`. Measured over the file, 46 reads
+qualify. **They belong to one local**: `down` in `P2Freq::encode_symbol`, the
+case the guard was written from. One local is not worth a rule with a subtler
+soundness argument, and now that is a measurement rather than an opinion.
+
+### Renaming a function invalidates every document that names it
+
+Eight functions became methods and were renamed this round, and that left
+**twenty-four references in `ALGORITHM.md` and `algorithm_v2.md` pointing at
+names that are nowhere in the source**. Those two describe the algorithm body
+by body; a reader following one of them would have looked for
+`encode_symbol_list` and found nothing.
+
+Found by scanning the documents afterwards, which is not a way of finding
+things anyone should rely on. `rename.py` reports it now: after a rename it
+names every document that still mentions the old name and how many times.
+
+The round records keep their old names on purpose — REFACTORING3 saying what
+round three did to `alt_p1_model` is correct for round three. Only the two
+documents that describe the file as it is were changed.
+
+Three more references in `ALGORITHM.md` were stale for older reasons and are
+corrected: `near_lossless_max` was folded into the plane descriptors four
+rounds ago, `log_two_lane` went with the SSE thread, and the eighteen-byte
+copies stopped being `bmf_copy` calls when the record got a type — the
+document still said they were.
+
+The `sub_XXXXXX` names it uses elsewhere are *not* stale: those bodies were
+pruned as unreachable, and an address is the only thing left to call them by.
+
+### Round one's status table reads as current
+
+`REFACTORING.md` §5's table says `2  frames -> real locals   done   0 frames
+left`. That was true when it was written; `reframe.py` put eight of them back
+before the round was out, because locals that had stopped being adjacent
+segfaulted. The table is a record of that round and stays, with a line under
+it saying where the frames went and where the eleven that remain are explained.
+
+### And the sweep's own summary
+
+Fixed in §28, but it belongs in this list: `sweep.sh` closed with a
+hand-written copy of the `case` statement four lines above it. Eight tools
+were added to the directory this round and it would have gone on naming five.
