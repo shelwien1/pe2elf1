@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 """Refuse to write a generator's output over something that is not its output.
 
-Every tool in this directory but four takes the file to *read* as its first
-argument.  The four `mk*.py` generators take the file to *write*, and they take
-it in exactly the same position, so
+Nearly every tool in this directory takes the file to *read* as its first
+argument.  The `mk*.py` generators take the file to *write*, in exactly the
+same position, so
 
     for t in tools/*.py; do python3 $t subs1.hpp; done
 
--- an entirely reasonable way to ask what every tool reports -- runs three
-generators with `subs1.hpp` as their destination and leaves the decompilation
-as a 96x96 bitmap.  That happened.  It cost nothing because the file was
-committed a minute earlier, which is not a safety property.
+-- an entirely reasonable way to ask what every tool reports -- runs every
+generator with `subs1.hpp` as its destination and leaves the decompilation as a
+96x96 bitmap.  That happened.  It cost nothing because the file was committed a
+minute earlier, which is not a safety property.
+
+(The count is not written down here.  It said "all but four" and "three
+generators" in the same paragraph, and there were four; a number in a docstring
+is a measurement that stops being re-taken.  `ls tools/mk*.py` is the answer,
+and `sweep.sh` skips exactly that glob.)
 
 The guard is the weakest thing that would have stopped it: a generator writes a
 `.bmp`, so a destination that is not named like one is a mistake, and a

@@ -52,8 +52,37 @@ import sys
 
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import buildlog                                                   # noqa: E402
+
 import structs                                                    # noqa: E402
 import unreload                                                   # noqa: E402
+
+
+DRIVEN = 'tools/driven.txt'
+
+
+def driven(path, who=None):
+    """What `tools/resign-drive.sh` last measured about these offers.
+
+    Every candidate listed here can be applied, rebuilt and counted, and the
+    driver does exactly that.  A run ending "none of 28 reduces" means
+    twenty-eight things were *tried*, not twenty-eight things left to do --
+    and nothing said so.  A list of offers with no note that they were tried
+    is `liftframe.py`'s defect in REFACTORING9.md section 32.
+
+    The verdict is stamped with the source's checksum through `buildlog`, so
+    it goes stale by itself when the file moves under it, which a hardcoded
+    list of failures could not.
+    """
+    rows, note = buildlog.read(DRIVEN, path)
+    if note:
+        return ''
+    # `who` names the caller, because `__file__` here is always this file --
+    # `resign_group.py` calls in and would have read `resign.py`'s verdict.
+    me = who or __file__.rsplit('/', 1)[-1]
+    for r in rows:
+        if r.startswith(me + ' '):
+            return 'resign-drive.sh: ' + r[len(me) + 1:].strip()
+    return ''
 
 # GCC writes the two operands in opposite orders for the two warnings --
 # `-Wconversion` says "from A to B", `-Wsign-conversion` says "to B from A" --
@@ -301,8 +330,9 @@ def main():
         for nm, _a, _b, name, cur, want, n in found:
             print('%-24s %-16s %-9s -> %-9s %d conversions'
                   % (nm.lstrip('_'), name, cur, want, n))
-        print('%d locals declared against their own assignments, %d conversions'
-              % (len(found), sum(f[6] for f in found)))
+        was = driven(SRC[0], 'resign.py')
+        print('%d locals declared against their own assignments, %d conversions%s'
+              % (len(found), sum(f[6] for f in found), was and ' (%s)' % was))
         return 0
 
     # Declarations only: the uses do not mention the type.  One name has to

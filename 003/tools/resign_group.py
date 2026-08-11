@@ -184,8 +184,9 @@ def main():
                                         next(iter(flips.values())),
                                         ', '.join('%s (%s)' % (v, cur[v])
                                                   for v in sorted(flips))[:60]))
-        print('%d groups of locals that have to agree, %d flips'
-              % (len(found), sum(len(f[3]) for f in found)))
+        was = resign.driven(sys.argv[1], 'resign_group.py')
+        print('%d groups of locals that have to agree, %d flips%s'
+              % (len(found), sum(len(f[3]) for f in found), was and ' (%s)' % was))
         return 0
 
     done = 0

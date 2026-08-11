@@ -1,8 +1,28 @@
 # tools/
 
-One-shot migrations that were run over `subs1.hpp`, kept because the file is
-generator output: if it is produced again from the extractor, these are what
-has to be replayed on top.
+This began as six one-shot migrations run over `subs1.hpp`, kept because the
+file is generator output: if it is produced again from the extractor, these are
+what has to be replayed on top. It is a good deal more than that now — the
+sweeps, the gates, the replay harness — and the sections here cover the ones
+that need more than a docstring to explain.
+
+**Every script documents itself.** `python3 tools/<name>.py` with no arguments
+prints its usage, and the module docstring is the reasoning: what the rule is,
+what it declines rather than guesses at, and what it got wrong before it got it
+right. That is where to look for a script this file does not name, which is
+most of them and will stay that way — a table of eighty-seven rows maintained
+by hand is a table that goes stale, which is the subject of half of
+`REFACTORING9.md`.
+
+Three commands are the entry points:
+
+```
+./tools/sweep.sh          # run every tool against a copy; all should report zero
+./tools/proven.sh         # and whether those zeros have ever been able to move
+./tools/triage.sh         # bisect a stream that moved, by name
+```
+
+## the original six
 
 All are idempotent — running them on an already-migrated file changes
 nothing — and none touches `bmf.cpp` or `blob.inc`.

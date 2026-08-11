@@ -589,6 +589,12 @@ Over six revisions spanning the project's 329 commits, 43 of 51 answer
 differently somewhere. Eight do not, and a list of eight is short enough to
 audit by hand, which a list of fifty-one zeros is not:
 
+> **The table below is that day's measurement and has aged.** §32 re-takes it
+> and finds that six of the ten it names now could not have moved for the
+> replay at all — the input of four of them is partly a build artefact of the
+> working tree, and two never open the file they are given. `proven.sh` prints
+> the counts itself now rather than quoting them here.
+
 | tool | why its zero is right |
 | --- | --- |
 | `decast.py`, `uncast.py` | the compiler agrees — all four remaining `-Wuseless-cast` warnings were in `bmf.cpp`, which neither tool scans |
@@ -2858,3 +2864,59 @@ against a temp copy that makes *every* revision's answer unique, so the tool
 reads as "answers differently" at the first revision tried. A false pass, and
 the dangerous direction: it takes a tool off the list this script exists to
 produce. The path is normalised out of the answer before the comparison.
+
+## 36. Fifty-one offers that had all been tried
+
+`resign.py` reports 28 locals whose declaration disagrees with their own
+assignments and `resign_group.py` 23 groups that have to agree — 51 standing
+proposals, in a directory where every other tool reports zero. They are the
+two the sweep exempts as "report rather than count", and reading the sweep's
+output that is what they look like: 51 things left to do.
+
+They are 51 things that have been **tried**. `tools/resign-drive.sh` applies
+each candidate, rebuilds, counts the conversion warnings and keeps only the
+ones that reduce them; run against this file it ends
+
+```
+start 1061
+round 1: none of 28 reduces
+```
+
+and the same for the groups. Applying all 28 at once puts the count *up*, from
+1061 to 1087, which is the other half of the answer: the per-local accounting
+assumes the other locals stay as they are, and `resign_group.py` exists
+precisely because they do not.
+
+Nothing recorded any of that. This is §32's `liftframe.py` again — a list of
+offers with no note that they were tried — and the fix there was a hardcoded
+`PROVEN` table. That will not do here: a frame either lifts or does not, and
+the answer holds until the frame changes, whereas which flips pay changes
+every time the file does.
+
+So the driver writes its verdict to `tools/driven.txt`, stamped with the
+source's `cksum` through `buildlog` (§35), and the two tools read it back:
+
+```
+28 locals declared against their own assignments, 38 conversions (resign-drive.sh: none of 28 reduces the count)
+23 groups of locals that have to agree, 50 flips (resign-drive.sh: none of 23 reduces the count)
+```
+
+The stamp is what makes this honest rather than a note that ages: change one
+line of `subs1.hpp` and the verdict stops being printed, because it is no
+longer about this file. It has to be re-measured, which takes twenty minutes
+of builds and is exactly the cost of the claim.
+
+### Two documents that described an earlier shape of themselves
+
+`tools/README.md` opened with "One-shot migrations that were run over
+`subs1.hpp`" and a table of six. There are 87 scripts; 70 of them are named
+nowhere in it. The answer is not seventy more rows — a hand-maintained table
+of eighty-seven is the thing that goes stale — but to say what the directory
+is, point at the three commands that are the entry points, and say plainly
+that each script's docstring is its documentation. 75 of the 79 Python tools
+open with a usage line; the other four open with prose and carry one below.
+
+`outpath.py`'s docstring said "every tool in this directory but four" and
+"runs three generators" in the same paragraph. There were four. The count is
+gone: `ls tools/mk*.py` is the answer, and it is the glob `sweep.sh` already
+skips.
