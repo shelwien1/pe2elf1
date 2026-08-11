@@ -4781,21 +4781,21 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   BmfImage *const img = (BmfImage *)p_i;
   struct alignas(16) WriteBmpFrame {   // 96 bytes, one stack frame
       uint32_t  Buffera;
-      uint8_t   _gap10[4];   // was uint32_t v62
-      uint8_t   _gap0[4];   // was uint8_t * v65
-      uint8_t   _gap11[4];   // was int32_t v66
+      uint8_t   _gap10[4];   // was uint32_t pairs
+      uint8_t   _gap0[4];   // was uint8_t * off_bits
+      uint8_t   _gap11[4];   // was int32_t ncol
       uint8_t   _gap1[4];   // was FILE * Stream_v
       uint8_t   _gap2[4];   // was int32_t Buffer_2
       uint8_t   _gap3[4];   // was uint8_t * buf
-      uint8_t   _gap4[4];   // was uint8_t * v72
+      uint8_t   _gap4[4];   // was uint8_t * abs_end2
       uint8_t   _pad8[4];
       uint8_t   _gap5[4];   // was int32_t Buffer_5
       uint8_t   _pad10[4];
       uint8_t   _gap6[4];   // was int32_t n2_2
-      uint8_t   _gap7[4];   // was int32_t v75
+      uint8_t   _gap7[4];   // was int32_t nib
       uint8_t   _gap8[4];   // was uint8_t * buf_2
       uint8_t   _pad14[4];
-      uint8_t   _gap9[4];   // was uint32_t v77
+      uint8_t   _gap9[4];   // was uint32_t end
       uint8_t   _pad16[32];
   } __frame;
   static_assert(sizeof(void *) != 4 || sizeof(__frame) == 96,
@@ -4812,42 +4812,42 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   uint8_t *Bufferc;
   uint8_t *Bufferd;
   uint32_t Size_2;
-  // These shared `__frame.v62` with the name that still binds it: one
+  // These shared `__frame.pairs` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  uint32_t v62;
-  uint32_t v63;
-  uint8_t *v65;
-  int32_t v66;
-  // These shared `__frame.v66` with the name that still binds it: one
+  uint32_t pairs;
+  uint32_t done;
+  uint8_t *off_bits;
+  int32_t ncol;
+  // These shared `__frame.ncol` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  int32_t v67;
-  // These shared `__frame.v66` with the name that still binds it: one
+  int32_t pal_bytes;
+  // These shared `__frame.ncol` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  uint8_t *v68;
+  uint8_t *abs_end;
   int32_t Buffer_2;
   uint8_t *buf;
-  uint8_t *v72;
+  uint8_t *abs_end2;
   int32_t Buffer_5;
   int32_t n2_2;
-  int32_t v75;
+  int32_t nib;
   uint8_t *buf_2;
-  uint32_t v77;
+  uint32_t end;
   ;
   uintptr_t p_i_1;   // were int32_t: addresses, masked and tagged
   FILE *Stream_1, *Stream_2;
-  bool v33;
-  uint8_t *Bufferc_3, *Bufferc_1, *Bufferb_1, *v19, *v24, *buf_1, *v31, *v39, *buf_3, *Bufferc_2;   // `uint8_t *` beside the `char` scalars above
-  int32_t v3, i, Buffer_1, n8, v14, v16, v17, v20, v21, v22, v23, v25, v28,
-          n4, n2, Buffer_3, Buffer_4, Size, v40, n2_1, v49, Size_1, v55;
+  bool can_rle;
+  uint8_t *Bufferc_3, *Bufferc_1, *Bufferb_1, *pal, *pal2, *buf_1, *p, *q, *buf_3, *Bufferc_2;   // `uint8_t *` beside the `char` scalars above
+  int32_t rle_on, i, Buffer_1, n8, ncolours, grey, at, slot, bgr, r, at2, bgr2, rle_mode,
+          n4, n2, Buffer_3, Buffer_4, Size, byte, run, coded_bytes, Size_1, y;
   uint16_t *p_i_2;
-  uint32_t v15, v18, Bufferb_2, Size_3, ElementCount, v53;
-  v3 = a3;
+  uint32_t k, j, Bufferb_2, Size_3, ElementCount, pad;
+  rle_on = a3;
   Stream_1 = fopen(FileName, "wb");
   if ( !Stream_1 )
     return 0;
@@ -4882,102 +4882,102 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   buf = Bufferc_3 + 54;
   if ( n8 <= 8 )
   {
-    v14 = 1 << (n8 & 31);
-    v66 = 1 << (n8 & 31);
+    ncolours = 1 << (n8 & 31);
+    ncol = 1 << (n8 & 31);
     if ( ((*((int8_t *)&__frame.Buffera)) & 0x40) != 0 )
     {
       Buffera = 0x100u >> (n8 & 31);
-      if ( v66 > 0 )
+      if ( ncol > 0 )
       {
-        if ( v66 / 2 )
+        if ( ncol / 2 )
         {
-          v15 = 0;
-          v16 = 0;
+          k = 0;
+          grey = 0;
           do
           {
-            *(uint32_t *)&Bufferc_1[8 * v15 + 54] = ((uint8_t)v16 << 16)
-                                                | (uint8_t)v16
-                                                | ((uint8_t)v16 << 8);
-            *(uint32_t *)&Bufferc_1[8 * v15 + 58] = ((uint8_t)(v16 - Buffera + 2 * Buffera) << 16)
-                                                | (uint8_t)(v16 - Buffera + 2 * Buffera)
-                                                | ((uint8_t)(v16 - Buffera + 2 * Buffera) << 8);
-            v16 += 2 * Buffera;
-            ++v15;
+            *(uint32_t *)&Bufferc_1[8 * k + 54] = ((uint8_t)grey << 16)
+                                                | (uint8_t)grey
+                                                | ((uint8_t)grey << 8);
+            *(uint32_t *)&Bufferc_1[8 * k + 58] = ((uint8_t)(grey - Buffera + 2 * Buffera) << 16)
+                                                | (uint8_t)(grey - Buffera + 2 * Buffera)
+                                                | ((uint8_t)(grey - Buffera + 2 * Buffera) << 8);
+            grey += 2 * Buffera;
+            ++k;
           }
-          while ( v15 < v66 / 2 );
+          while ( k < ncol / 2 );
           p_i_1 = p_i;
-          v17 = 2 * v15 + 1;
+          at = 2 * k + 1;
         }
         else
         {
-          v17 = 1;
+          at = 1;
         }
-        if ( v17 - 1 < (uint32_t)v66 )
-          *(uint32_t *)&Bufferc_1[4 * v17 + 50] = ((uint8_t)(Buffera * (v17 - 1)) << 16)
-                                              | (uint8_t)(Buffera * (v17 - 1))
-                                              | ((uint8_t)(Buffera * (v17 - 1)) << 8);
+        if ( at - 1 < (uint32_t)ncol )
+          *(uint32_t *)&Bufferc_1[4 * at + 50] = ((uint8_t)(Buffera * (at - 1)) << 16)
+                                              | (uint8_t)(Buffera * (at - 1))
+                                              | ((uint8_t)(Buffera * (at - 1)) << 8);
       }
       Bufferb_1 = (uint8_t *)(uintptr_t)img->data_size;
-      v67 = 4 * v66;
+      pal_bytes = 4 * ncol;
     }
     else if ( (*((int8_t *)&__frame.Buffera)) < 0 )
     {
       Bufferb_1 = (uint8_t *)(uintptr_t)img->data_size;
-      if ( v66 <= 0 )
+      if ( ncol <= 0 )
       {
-        v67 = 4 * v14;
+        pal_bytes = 4 * ncolours;
       }
       else
       {
-        v62 = v14 / 2;
-        if ( v14 / 2 )
+        pairs = ncolours / 2;
+        if ( ncolours / 2 )
         {
           Bufferb = (uint8_t *)(uintptr_t)img->data_size;
-          v18 = 0;
-          v19 = &Bufferb_1[p_i];
+          j = 0;
+          pal = &Bufferb_1[p_i];
           do
           {
-            v20 = 2 * v18;
-            v21 = *(uint16_t *)&v19[6 * v18 + 19];
-            v22 = (uint8_t)v19[6 * v18 + 21];
-            *(uint32_t *)&Bufferc_1[4 * v20 + 54] = ((uint8_t)v19[6 * v18 + 18] << 16)
-                                                | *(uint16_t *)&v19[6 * v18 + 16];
-            *(uint32_t *)&Bufferc_1[4 * v20 + 58] = (v22 << 16) | v21;
-            ++v18;
+            slot = 2 * j;
+            bgr = *(uint16_t *)&pal[6 * j + 19];
+            r = (uint8_t)pal[6 * j + 21];
+            *(uint32_t *)&Bufferc_1[4 * slot + 54] = ((uint8_t)pal[6 * j + 18] << 16)
+                                                | *(uint16_t *)&pal[6 * j + 16];
+            *(uint32_t *)&Bufferc_1[4 * slot + 58] = (r << 16) | bgr;
+            ++j;
           }
-          while ( v18 < v62 );
+          while ( j < pairs );
           Bufferb_1 = Bufferb;
           p_i_1 = p_i;
-          v3 = a3;
-          v23 = 2 * v18 + 1;
-          v63 = v23;
+          rle_on = a3;
+          at2 = 2 * j + 1;
+          done = at2;
         }
         else
         {
-          v23 = 1;
-          v63 = 1;
+          at2 = 1;
+          done = 1;
         }
-        if ( v23 - 1 < (uint32_t)v66 )
+        if ( at2 - 1 < (uint32_t)ncol )
         {
           Bufferd = Bufferb_1;
-          v24 = &Bufferb_1[p_i_1];
-          v25 = *(uint16_t *)&v24[3 * v63 + 13];
+          pal2 = &Bufferb_1[p_i_1];
+          bgr2 = *(uint16_t *)&pal2[3 * done + 13];
           Bufferb_1 = Bufferd;
-          *(uint32_t *)&Bufferc_1[4 * v63 + 50] = (((uint8_t)v24[3 * v63 + 15]) << 16) | v25;
+          *(uint32_t *)&Bufferc_1[4 * done + 50] = (((uint8_t)pal2[3 * done + 15]) << 16) | bgr2;
           p_i_1 = p_i;
         }
-        v67 = 4 * v66;
+        pal_bytes = 4 * ncol;
       }
     }
     else
     {
-      v67 = 4 * v14;
-      memset(buf,0,4 * v14);
+      pal_bytes = 4 * ncolours;
+      memset(buf,0,4 * ncolours);
       p_i_1 = p_i;
       Bufferb_1 = (uint8_t *)(uintptr_t)img->data_size;
       Buffer_2 = img->height;
     }
-    buf = &Bufferc_1[v67 + 54];
+    buf = &Bufferc_1[pal_bytes + 54];
   }
   else
   {
@@ -4985,30 +4985,30 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
   }
   Size_2 = img->stride;
   Bufferc = Bufferc_1;
-  v65 = (uint8_t *)(buf - Bufferc_1);
+  off_bits = (uint8_t *)(buf - Bufferc_1);
   p_i_2 = (uint16_t *)p_i_1;
-  v28 = v3;
+  rle_mode = rle_on;
   Bufferb_2 = (uint32_t)Bufferb_1;
   while ( 1 )
   {
     buf_1 = buf;
-    v31 = (uint8_t *)p_i_2 + Bufferb_2 - Size_2 + 16;
-    bmp->bfOffBits = (uintptr_t)v65;
-    if ( !v28 )
+    p = (uint8_t *)p_i_2 + Bufferb_2 - Size_2 + 16;
+    bmp->bfOffBits = (uintptr_t)off_bits;
+    if ( !rle_mode )
       break;
     n4 = p_i_2[5] & 0x3F;
-    v33 = n4 == 4;
+    can_rle = n4 == 4;
     if ( n4 != 4 )
     {
       if ( n4 != 8 )
         break;
-      v33 = 0;
+      can_rle = 0;
     }
     n2 = 2;
-    if ( !v33 )
+    if ( !can_rle )
       n2 = 1;
     bmp->biCompression = n2;
-    v75 = n2 - 1;
+    nib = n2 - 1;
     n2_2 = (0x100u >> ((n2 - 1) & 31)) - 1;
     if ( Buffer_2 > 0 )
     {
@@ -5017,10 +5017,10 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
       Buffer_4 = 0;
       while ( 1 )
       {
-        if ( v31 >= &v31[Size_3] )
+        if ( p >= &p[Size_3] )
           goto LABEL_72;
         buf_2 = buf_1;
-        v77 = (uint32_t)&v31[Size_3];
+        end = (uint32_t)&p[Size_3];
         Buffer_5 = Buffer_4;
         Size = 0;
         do
@@ -5029,43 +5029,43 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
           {
             while ( 1 )
             {
-              v39 = v31 + 1;
-              if ( (uint32_t)(v31 + 1) >= v77 )
+              q = p + 1;
+              if ( (uint32_t)(p + 1) >= end )
                 break;
-              v40 = (uint8_t)*v31;
-              n2_1 = 1;
+              byte = (uint8_t)*p;
+              run = 1;
               do
               {
-                if ( v40 != (uint8_t)v31[n2_1] )
+                if ( byte != (uint8_t)p[run] )
                   break;
-                ++n2_1;
+                ++run;
               }
-              while ( v77 > (uint32_t)&v31[n2_1] );
-              if ( n2_1 <= 2 && (n2_1 != 2 || Size) )
+              while ( end > (uint32_t)&p[run] );
+              if ( run <= 2 && (run != 2 || Size) )
                 break;
-              if ( n2_2 < n2_1 )
-                n2_1 = n2_2;
+              if ( n2_2 < run )
+                run = n2_2;
               if ( Size )
               {
-                if ( v75 )
+                if ( nib )
                 {
                   if ( Size != 1 )
                   {
   LABEL_67:
                     *buf_2 = 0;
-                    v72 = buf_2 + 2;
-                    buf_2[1] = Size << (v75 & 31);
-                    memcpy(buf_2 + 2,&v31[-Size],Size);
+                    abs_end2 = buf_2 + 2;
+                    buf_2[1] = Size << (nib & 31);
+                    memcpy(buf_2 + 2,&p[-Size],Size);
                     buf_2 += Size + 2;
                     if ( (Size & 1) != 0 )
                     {
-                      v72[Size] = 0;
+                      abs_end2[Size] = 0;
                       ++buf_2;
                     }
                     goto LABEL_69;
                   }
                   *buf_2 = 2;
-                  buf_2[1] = *(v31 - 1);
+                  buf_2[1] = *(p - 1);
                   buf_2 += 2;
                 }
                 else
@@ -5075,23 +5075,23 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
                   if ( Size == 2 )
                   {
                     *buf_2 = 1;
-                    buf_2[1] = *(v31 - 2);
+                    buf_2[1] = *(p - 2);
                     buf_2 += 2;
                   }
                   *buf_2 = 1;
-                  buf_2[1] = *(v31 - 1);
+                  buf_2[1] = *(p - 1);
                   buf_2 += 2;
                 }
   LABEL_69:
                 Size = 0;
-                LOBYTE(v40) = *v31;
+                LOBYTE(byte) = *p;
               }
-              buf_2[1] = v40;
-              v31 += n2_1;
-              *buf_2 = n2_1 << (v75 & 31);
+              buf_2[1] = byte;
+              p += run;
+              *buf_2 = run << (nib & 31);
               buf_3 = buf_2 + 2;
               buf_2 += 2;
-              if ( (uint32_t)v31 >= v77 )
+              if ( (uint32_t)p >= end )
               {
                 buf_1 = buf_3;
                 Buffer_4 = Buffer_5;
@@ -5100,15 +5100,15 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
                 goto LABEL_72;
               }
             }
-            ++v31;
+            ++p;
             if ( ++Size != n2_2 )
               break;
-            if ( v75 )
+            if ( nib )
             {
               if ( Size == 1 )
               {
                 *buf_2 = 2;
-                buf_2[1] = *(v39 - 1);
+                buf_2[1] = *(q - 1);
                 buf_2 += 2;
                 goto LABEL_55;
               }
@@ -5118,26 +5118,26 @@ int32_t __write_bmp(uintptr_t p_i, char *FileName, int32_t a3)
               if ( Size == 2 )
               {
                 *buf_2 = 1;
-                buf_2[1] = *(v39 - 2);
+                buf_2[1] = *(q - 2);
                 buf_2 += 2;
               }
               *buf_2 = 1;
-              buf_2[1] = *(v39 - 1);
+              buf_2[1] = *(q - 1);
               buf_2 += 2;
               goto LABEL_55;
             }
             *buf_2 = 0;
-            v68 = buf_2 + 2;
-            buf_2[1] = Size << (v75 & 31);
-            memcpy(buf_2 + 2,&v39[-Size],Size);
+            abs_end = buf_2 + 2;
+            buf_2[1] = Size << (nib & 31);
+            memcpy(buf_2 + 2,&q[-Size],Size);
             buf_2 += Size + 2;
             if ( (Size & 1) != 0 )
             {
-              v68[Size] = 0;
+              abs_end[Size] = 0;
               ++buf_2;
             }
 LABEL_55:
-            if ( (uint32_t)v39 >= v77 )
+            if ( (uint32_t)q >= end )
             {
               buf_1 = buf_2;
               Buffer_4 = Buffer_5;
@@ -5148,16 +5148,16 @@ LABEL_55:
             Size = 0;
           }
         }
-        while ( (uint32_t)v39 < v77 );
+        while ( (uint32_t)q < end );
         buf_1 = buf_2;
         Buffer_4 = Buffer_5;
         if ( !Size )
           goto LABEL_89;
-        if ( v75 )
+        if ( nib )
         {
           if ( Size == 1 )
           {
-            buf_2[1] = *(v39 - 1);
+            buf_2[1] = *(q - 1);
             *buf_2 = 2;
             Buffer_3 = img->height;
             Size_3 = img->stride;
@@ -5166,8 +5166,8 @@ LABEL_55:
           }
 LABEL_97:
           *buf_2 = 0;
-          buf_2[1] = Size << (v75 & 31);
-          memcpy(buf_2 + 2,&v39[-Size],Size);
+          buf_2[1] = Size << (nib & 31);
+          memcpy(buf_2 + 2,&q[-Size],Size);
           Buffer_4 = Buffer_5;
           buf_1 = &buf_2[Size + 2];
           if ( (Size & 1) != 0 )
@@ -5188,10 +5188,10 @@ LABEL_89:
         if ( Size == 2 )
         {
           *buf_2 = 1;
-          buf_2[1] = *(v39 - 2);
+          buf_2[1] = *(q - 2);
           buf_1 = buf_2 + 2;
         }
-        buf_1[1] = *(v39 - 1);
+        buf_1[1] = *(q - 1);
         *buf_1 = 1;
         Buffer_3 = img->height;
         Size_3 = img->stride;
@@ -5201,7 +5201,7 @@ LABEL_72:
         buf_1[1] = 0;
         buf_1 += 2;
         ++Buffer_4;
-        v31 -= 2 * Size_3;
+        p -= 2 * Size_3;
         if ( Buffer_4 >= Buffer_3 )
         {
           Buffer_2 = Buffer_3;
@@ -5215,13 +5215,13 @@ LABEL_72:
     *buf_1 = 0;
     buf_1[1] = 1;
     buf_1 += 2;
-    v49 = buf_1 - buf;
+    coded_bytes = buf_1 - buf;
     if ( Bufferb_2 > buf_1 - buf )
     {
       // The shared tail, copied here: the two assignments it used to reach it
       // through are gone with the `goto`, so it names `Bufferc` and `Stream_1`
       // directly.
-      bmp->biSizeImage = (uint32_t)v49;
+      bmp->biSizeImage = (uint32_t)coded_bytes;
       ElementCount = (uint32_t)(buf_1 - Bufferc);
       bmp->bfSize = ElementCount;
       if ( fwrite(Bufferc, 1u, ElementCount, Stream_1) != bmp->bfSize )
@@ -5230,39 +5230,39 @@ LABEL_72:
       fclose(Stream_1);
       return 1;
     }
-    v28 = 0;
+    rle_mode = 0;
   }
   Stream_2 = Stream_1;
   Bufferc_2 = Bufferc;
   bmp->biCompression = 0;
   if ( Buffer_2 <= 0 )
   {
-    v49 = 0;
+    coded_bytes = 0;
   }
   else
   {
-    v53 = ((Size_2 + 3) & 0xFFFFFFFC) - Size_2;
+    pad = ((Size_2 + 3) & 0xFFFFFFFC) - Size_2;
     Size_1 = Size_2;
-    v55 = 0;
+    y = 0;
     do
     {
-      memcpy(buf_1,v31,Size_1);
+      memcpy(buf_1,p,Size_1);
       Size_1 = img->stride;
       buf_1 += Size_1;
-      v31 -= Size_1;
-      if ( v53 )
+      p -= Size_1;
+      if ( pad )
       {
         *(uint32_t *)buf_1 = 0;
-        buf_1 += v53;
+        buf_1 += pad;
       }
-      ++v55;
+      ++y;
     }
-    while ( v55 < img->height );
+    while ( y < img->height );
     Bufferc_2 = Bufferc;
     Stream_2 = Stream_1;
-    v49 = buf_1 - buf;
+    coded_bytes = buf_1 - buf;
   }
-  bmp->biSizeImage = (uint32_t)v49;
+  bmp->biSizeImage = (uint32_t)coded_bytes;
   ElementCount = (uint32_t)(buf_1 - Bufferc_2);
   bmp->bfSize = ElementCount;
   if ( fwrite(Bufferc_2, 1u, ElementCount, Stream_2) != bmp->bfSize )
@@ -15837,13 +15837,13 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
       };
       int32_t n4_1;
       void *Src;
-      uint8_t *v86;
+      uint8_t *arc_f;
       BmfImage *p_i_2;
-      int32_t v88;
+      int32_t depth_f;
       uint32_t ElementCount_3;
       uint16_t Buffer_2[5];
-      uint8_t v91;
-      int8_t v92;
+      uint8_t depth_b;
+      int8_t flags_b;
       uint32_t ElementCount;
       uint8_t   hdr[8];   // the 8-byte member header `fread` takes in one call
       uint32_t __expand_image_Buffer;
@@ -15855,23 +15855,23 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
   ;
-  uint8_t *v5;   // were int32_t: these hold addresses
+  uint8_t *arc;   // were int32_t: these hold addresses
   FILE *Stream_1, *Stream_v;
   BmfImage *p_i_1;
-  int8_t v17, v34, v35;
-  uint8_t v20;
-  uint8_t *Buffer_3, *n4_6, *n4_7, *v64;   // `uint8_t *` beside the `char` scalars above
+  int8_t hdr_flags, v34, v35;
+  uint8_t bpp;
+  uint8_t *Buffer_3, *n4_6, *n4_7, *dst;   // `uint8_t *` beside the `char` scalars above
   uint8_t has_coded;
-  int32_t Buffer__1, v21, n4, predictor, v27, v28, v29, v30, ArgList, v33,
-          n4_4, v37, n2_1, i, Size_2, Size_3, n4_2, v48, n2_2, n_planes,
-          Src_2, v58, n4_8, v61, i_1, n4_9;
+  int32_t Buffer__1, near_lossless, n4, predictor, dc_v, w4_v, w8_v, w12_v, ArgList, plane,
+          n4_4, plane2, n2_1, i, Size_2, Size_3, n4_2, i2, n2_2, n_planes,
+          Src_2, img_h, n4_8, y, i_1, n4_9;
   uint16_t i_2;
-  uint32_t __expand_image_Buffer_1, v12, *v13, ElementCount_5, ElementCount_2,
-           v23, v25, Size_1, ElementCount_1, ElementCount_4, v67, v68, v69,
-           v70, v74, v75;
+  uint32_t __expand_image_Buffer_1, pad_len, *blk, ElementCount_5, ElementCount_2,
+           desc, desc_flags, Size_1, ElementCount_1, ElementCount_4, word12, word8, word4,
+           worddc, word6, word4b;
   uint8_t *Src_1;
   void *Src_3;
-  v5 = a1;
+  arc = a1;
   if ( p_coded_buf )
     *p_coded_buf = nullptr;
   Stream_1 = ((BmfArc *)a1)->fp;
@@ -15881,12 +15881,12 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
   {
     if ( fread(&__frame.__expand_image_Buffer, 4u, 1u, Stream_1) != 1 )
     {
-      Stream_v = ((BmfArc *)v5)->fp;
+      Stream_v = ((BmfArc *)arc)->fp;
       if ( feof(Stream_v) )
         return nullptr;
       {
         fclose(Stream_v);
-        ((BmfArc *)v5)->fp = 0;
+        ((BmfArc *)arc)->fp = 0;
         return nullptr;
       }
     }
@@ -15894,65 +15894,65 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
     if ( (uint16_t)__frame.__expand_image_Buffer != 0x9081 )
       break;
     plane_desc[0].w4 = ((BYTE2(__frame.__expand_image_Buffer) << 8) - 12288) | (HIBYTE(__frame.__expand_image_Buffer) - 48);
-    if ( plane_desc[0].w4 != 512 || fread(__frame.hdr, 8u, 1u, ((BmfArc *)v5)->fp) != 1 )
+    if ( plane_desc[0].w4 != 512 || fread(__frame.hdr, 8u, 1u, ((BmfArc *)arc)->fp) != 1 )
       break;
-    fseek(((BmfArc *)v5)->fp, (*(uint32_t *)&__frame.hdr[4]), 1);
-    Stream_1 = ((BmfArc *)v5)->fp;
+    fseek(((BmfArc *)arc)->fp, (*(uint32_t *)&__frame.hdr[4]), 1);
+    Stream_1 = ((BmfArc *)arc)->fp;
   }
   if ( (uint16_t)__expand_image_Buffer_1 != 0x8A81
     || (plane_desc[0].w4 = ((BYTE2(__expand_image_Buffer_1) << 8) - 12288) | (HIBYTE(__expand_image_Buffer_1) - 48), plane_desc[0].w4 != 512)
-    || fread(__frame.Buffer_2, 0x10u, 1u, ((BmfArc *)v5)->fp) != 1 )
+    || fread(__frame.Buffer_2, 0x10u, 1u, ((BmfArc *)arc)->fp) != 1 )
   {
-    Stream_v = ((BmfArc *)v5)->fp;
+    Stream_v = ((BmfArc *)arc)->fp;
     fclose(Stream_v);
-    ((BmfArc *)v5)->fp = 0;
+    ((BmfArc *)arc)->fp = 0;
     return nullptr;
   }
-  ++*(uint32_t *)v5;
-  if ( __frame.v92 < 0 )
+  ++*(uint32_t *)arc;
+  if ( __frame.flags_b < 0 )
   {
-    fread(__frame.hdr, 8u, 1u, ((BmfArc *)v5)->fp);
+    fread(__frame.hdr, 8u, 1u, ((BmfArc *)arc)->fp);
     if ( p_coded_buf )
     {
       Buffer__1 = (*(int32_t *)&__frame.hdr[0]);
-      v12 = ((*(uint32_t *)&__frame.hdr[4]) + ((*(uint32_t *)&__frame.hdr[4]) == 0) + 3) & 0xFFFFFFFC;
-      v13 = (uint32_t *)bmf_new(v12 + 8);
-      *v13 = Buffer__1;
-      v13[1] = v12;
-      *(uint32_t *)((uint8_t *)v13 + v12 + 4) = 0;
-      *p_coded_buf = v13;
-      fread(v13 + 2, (*(uint32_t *)&__frame.hdr[4]), 1u, ((BmfArc *)v5)->fp);
+      pad_len = ((*(uint32_t *)&__frame.hdr[4]) + ((*(uint32_t *)&__frame.hdr[4]) == 0) + 3) & 0xFFFFFFFC;
+      blk = (uint32_t *)bmf_new(pad_len + 8);
+      *blk = Buffer__1;
+      blk[1] = pad_len;
+      *(uint32_t *)((uint8_t *)blk + pad_len + 4) = 0;
+      *p_coded_buf = blk;
+      fread(blk + 2, (*(uint32_t *)&__frame.hdr[4]), 1u, ((BmfArc *)arc)->fp);
     }
     else
     {
-      fseek(((BmfArc *)v5)->fp, (*(uint32_t *)&__frame.hdr[4]), 1);
+      fseek(((BmfArc *)arc)->fp, (*(uint32_t *)&__frame.hdr[4]), 1);
     }
   }
-  ElementCount_5 = 3 << (__frame.v91 & 31);
-  if ( (__frame.v91 & 0x80) == 0 )
-    ElementCount_5 = __frame.v91 & 0x80;
+  ElementCount_5 = 3 << (__frame.depth_b & 31);
+  if ( (__frame.depth_b & 0x80) == 0 )
+    ElementCount_5 = __frame.depth_b & 0x80;
   __frame.ElementCount_3 = ElementCount_5;
   if ( a4 )
   {
-    fseek(((BmfArc *)v5)->fp, __frame.ElementCount_3 + __frame.ElementCount, 1);
+    fseek(((BmfArc *)arc)->fp, __frame.ElementCount_3 + __frame.ElementCount, 1);
     return nullptr;
   }
-  p_i_1 = (BmfImage *)((uint8_t *)__alloc_image(__frame.Buffer_2[0], __frame.Buffer_2[1], __frame.v91 & 0x3F, (uint8_t)(__frame.v91 & 0x80) >> 7, 1));
-  __frame.v88 = __frame.v91;
-  p_i_1->depth = __frame.v91;
+  p_i_1 = (BmfImage *)((uint8_t *)__alloc_image(__frame.Buffer_2[0], __frame.Buffer_2[1], __frame.depth_b & 0x3F, (uint8_t)(__frame.depth_b & 0x80) >> 7, 1));
+  __frame.depth_f = __frame.depth_b;
+  p_i_1->depth = __frame.depth_b;
   // The flag is whether there is a block at all; Hex-Rays kept the pointer's
   // low byte and then overwrote it with 1, which is the same thing said twice.
   has_coded = p_coded_buf && *p_coded_buf;
-  v17 = __frame.v92;
-  p_i_1->flags |= __frame.v92 & 2 | (has_coded << 7);
-  ::plane_count = ((__frame.v88 & 0x3Fu) + 7) >> 3;
-  if ( (v17 & 0x20) == 0 )
+  hdr_flags = __frame.flags_b;
+  p_i_1->flags |= __frame.flags_b & 2 | (has_coded << 7);
+  ::plane_count = ((__frame.depth_f & 0x3Fu) + 7) >> 3;
+  if ( (hdr_flags & 0x20) == 0 )
   {
     ElementCount_1 = __frame.ElementCount;
-    if ( fread(p_i_1->pixels, 1u, __frame.ElementCount, ((BmfArc *)v5)->fp) != ElementCount_1 )
+    if ( fread(p_i_1->pixels, 1u, __frame.ElementCount, ((BmfArc *)arc)->fp) != ElementCount_1 )
       {
-        fclose(((BmfArc *)v5)->fp);
-        ((BmfArc *)v5)->fp = 0;
+        fclose(((BmfArc *)arc)->fp);
+        ((BmfArc *)arc)->fp = 0;
         return nullptr;
       }
     goto LABEL_109;
@@ -15963,7 +15963,7 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
   // that mode -- the constants at the top of the file, and the fast back end
   // that used to decode the other one is gone -- so a stream without the bit is
   // refused rather than decoded wrongly.
-  if ( (v17 & 4) == 0 )
+  if ( (hdr_flags & 4) == 0 )
   {
     printf("\nwritten in fast mode; this build only decodes -S streams\n");
     exit(3);
@@ -15977,14 +15977,14 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
   ::packer_word = (uint32_t *)::coded_buf;
   hist_scratch = ::coded_buf + coded_size - 4096;
   ElementCount_2 = __frame.ElementCount;
-  if ( fread(::coded_buf, 1u, __frame.ElementCount, ((BmfArc *)v5)->fp) != ElementCount_2 )
+  if ( fread(::coded_buf, 1u, __frame.ElementCount, ((BmfArc *)arc)->fp) != ElementCount_2 )
   {
-    fclose(((BmfArc *)v5)->fp);
-    ((BmfArc *)v5)->fp = 0;
+    fclose(((BmfArc *)arc)->fp);
+    ((BmfArc *)arc)->fp = 0;
     return nullptr;
   }
-  v20 = p_i_1->depth;
-  if ( (v20 & 0x3Fu) <= 4 || (__frame.v92 & 0x10) == 0 )
+  bpp = p_i_1->depth;
+  if ( (bpp & 0x3Fu) <= 4 || (__frame.flags_b & 0x10) == 0 )
   {
     ::plane_predictor = 0;
     plane_alt_model = 0;
@@ -15994,7 +15994,7 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
   }
   if ( ::plane_count == 1 )
   {
-    if ( (v20 & 0x40) == 0 )
+    if ( (bpp & 0x40) == 0 )
       goto LABEL_42;
   }
   else if ( ::plane_count <= 2 )
@@ -16004,25 +16004,25 @@ uint8_t * __expand_image(uint8_t *a1, int32_t a4, void **p_coded_buf)
   packer_free_bits -= 4;
   if ( packer_free_bits < 0 )
   {
-    v75 = *(uint32_t *)out_cursor;
+    word4b = *(uint32_t *)out_cursor;
     out_cursor += 4;
-    ElementCount_2 = v75 >> (-packer_free_bits & 31);
-    v21 = packer_acc | (v75 << ((packer_free_bits + 4) & 31)) & 0xF;
+    ElementCount_2 = word4b >> (-packer_free_bits & 31);
+    near_lossless = packer_acc | (word4b << ((packer_free_bits + 4) & 31)) & 0xF;
     packer_acc = ElementCount_2;
     packer_free_bits += 32;
   }
   else
   {
-    v21 = packer_acc & 0xF;
+    near_lossless = packer_acc & 0xF;
     packer_acc = packer_acc >> 4;
   }
   // The 4-bit near-lossless field, ALGORITHM.md §4.1.  This build compresses
   // with -E0 and the code that reconstructs a quantised plane is gone with the
   // rest of the modes, so a stream that asks for E>0 is refused rather than
   // expanded wrongly.
-  if ( v21 )
+  if ( near_lossless )
   {
-    printf("\nnear-lossless stream (E=%d); this build only decodes E=0\n", v21);
+    printf("\nnear-lossless stream (E=%d); this build only decodes E=0\n", near_lossless);
     exit(3);
   }
   plane_desc[0].w12 = 0;
@@ -16032,27 +16032,27 @@ LABEL_42:
     LOBYTE(ElementCount_2) = 63;
     __frame.mask = 255;
     __frame.p_i_2 = p_i_1;
-    __frame.v86 = v5;
+    __frame.arc_f = arc;
     n4 = 0;
     do
     {
       packer_free_bits -= 6;
       if ( packer_free_bits < 0 )
       {
-        v74 = *(uint32_t *)out_cursor;
+        word6 = *(uint32_t *)out_cursor;
         out_cursor += 4;
-        v23 = packer_acc | (v74 << ((packer_free_bits + 6) & 31)) & 0x3F;
-        packer_acc = v74 >> (-packer_free_bits & 31);
+        desc = packer_acc | (word6 << ((packer_free_bits + 6) & 31)) & 0x3F;
+        packer_acc = word6 >> (-packer_free_bits & 31);
         packer_free_bits += 32;
       }
       else
       {
-        v23 = packer_acc & 0x3F;
+        desc = packer_acc & 0x3F;
         packer_acc = packer_acc >> 6;
       }
-      v25 = v23 >> 2;
-      predictor = v23 & 3;
-      plane_desc[n4 + 1].flags = v25;
+      desc_flags = desc >> 2;
+      predictor = desc & 3;
+      plane_desc[n4 + 1].flags = desc_flags;
       plane_desc[n4 + 1].predictor = predictor;
       plane_desc[predictor + 1].src_plane = n4;
       if ( (plane_desc[n4 + 1].flags & 8) != 0 )
@@ -16060,67 +16060,67 @@ LABEL_42:
         packer_free_bits -= 8;
         if ( packer_free_bits < 0 )
         {
-          v70 = *(uint32_t *)out_cursor;
+          worddc = *(uint32_t *)out_cursor;
           out_cursor += 4;
-          v27 = packer_acc | __frame.mask & (v70 << ((packer_free_bits + 8) & 31));
-          packer_acc = v70 >> (-packer_free_bits & 31);
+          dc_v = packer_acc | __frame.mask & (worddc << ((packer_free_bits + 8) & 31));
+          packer_acc = worddc >> (-packer_free_bits & 31);
           packer_free_bits += 32;
         }
         else
         {
-          LOBYTE(v27) = packer_acc & (uint8_t)__frame.mask;
+          LOBYTE(dc_v) = packer_acc & (uint8_t)__frame.mask;
           packer_acc = packer_acc >> 8;
         }
-        plane_desc[n4 + 1].b3 = v27;
+        plane_desc[n4 + 1].b3 = dc_v;
         if ( predictor > 1 )
         {
           packer_free_bits -= 8;
           if ( packer_free_bits < 0 )
           {
-            v69 = *(uint32_t *)out_cursor;
+            word4 = *(uint32_t *)out_cursor;
             out_cursor += 4;
-            v28 = packer_acc | __frame.mask & (v69 << ((packer_free_bits + 8) & 31));
-            packer_acc = v69 >> (-packer_free_bits & 31);
+            w4_v = packer_acc | __frame.mask & (word4 << ((packer_free_bits + 8) & 31));
+            packer_acc = word4 >> (-packer_free_bits & 31);
             packer_free_bits += 32;
           }
           else
           {
-            v28 = packer_acc & __frame.mask;
+            w4_v = packer_acc & __frame.mask;
             packer_acc = packer_acc >> 8;
           }
-          plane_desc[n4 + 1].w4 = v28 - 64;
+          plane_desc[n4 + 1].w4 = w4_v - 64;
           packer_free_bits -= 8;
           if ( packer_free_bits < 0 )
           {
-            v68 = *(uint32_t *)out_cursor;
+            word8 = *(uint32_t *)out_cursor;
             out_cursor += 4;
-            v29 = packer_acc | __frame.mask & (v68 << ((packer_free_bits + 8) & 31));
-            packer_acc = v68 >> (-packer_free_bits & 31);
+            w8_v = packer_acc | __frame.mask & (word8 << ((packer_free_bits + 8) & 31));
+            packer_acc = word8 >> (-packer_free_bits & 31);
             packer_free_bits += 32;
           }
           else
           {
-            v29 = packer_acc & __frame.mask;
+            w8_v = packer_acc & __frame.mask;
             packer_acc = packer_acc >> 8;
           }
-          plane_desc[n4 + 1].w8 = v29 - 64;
+          plane_desc[n4 + 1].w8 = w8_v - 64;
           if ( predictor > 2 )
           {
             packer_free_bits -= 8;
             if ( packer_free_bits < 0 )
             {
-              v67 = *(uint32_t *)out_cursor;
+              word12 = *(uint32_t *)out_cursor;
               out_cursor += 4;
-              v30 = packer_acc | __frame.mask & (v67 << ((packer_free_bits + 8) & 31));
-              packer_acc = v67 >> (-packer_free_bits & 31);
+              w12_v = packer_acc | __frame.mask & (word12 << ((packer_free_bits + 8) & 31));
+              packer_acc = word12 >> (-packer_free_bits & 31);
               packer_free_bits += 32;
             }
             else
             {
-              v30 = packer_acc & __frame.mask;
+              w12_v = packer_acc & __frame.mask;
               packer_acc = packer_acc >> 8;
             }
-            plane_desc[n4 + 1].w12 = v30 - 64;
+            plane_desc[n4 + 1].w12 = w12_v - 64;
           }
         }
       }
@@ -16128,10 +16128,10 @@ LABEL_42:
     }
     while ( n4 < ::plane_count );
     p_i_1 = __frame.p_i_2;
-    v5 = __frame.v86;
+    arc = __frame.arc_f;
   }
   Src_1 = (uint8_t *)bmf_new(p_i_1->width * p_i_1->height);
-  if ( (__frame.v92 & 8) != 0 )
+  if ( (__frame.flags_b & 8) != 0 )
   {
     // The caller's header with the depth byte replaced, exactly as
     // `model_planes` does it: 72 is 8 bits plus the 0x40 flag.
@@ -16139,13 +16139,13 @@ LABEL_42:
     __frame.img.depth = 72;
     if ( ::plane_count > 0 )
     {
-      __frame.v86 = v5;
+      __frame.arc_f = arc;
       ArgList = 0;
       do
       {
-        v33 = plane_desc[ArgList + 1].src_plane;
-        ::plane_predictor = plane_desc[v33 + 1].flags & 3;
-        plane_alt_model = (uint8_t)(plane_desc[v33 + 1].flags & 4) >> 2;
+        plane = plane_desc[ArgList + 1].src_plane;
+        ::plane_predictor = plane_desc[plane + 1].flags & 3;
+        plane_alt_model = (uint8_t)(plane_desc[plane + 1].flags & 4) >> 2;
         // always taken: -S
           __unmodel_plane(ArgList, (uint16_t *)&__frame.img, Src_1);
         if ( ::plane_predictor )
@@ -16162,12 +16162,12 @@ LABEL_42:
         {
           __expand_predictor_mode0((uint32_t)Src_1, p_i_1->width, p_i_1->height);
         }
-        __interleave_plane((uint8_t *)p_i_1, Src_1, v33, v34);
+        __interleave_plane((uint8_t *)p_i_1, Src_1, plane, v34);
         ++ArgList;
       }
       while ( ArgList < ::plane_count );
 LABEL_104:
-      v5 = __frame.v86;
+      arc = __frame.arc_f;
     }
   }
   else
@@ -16182,18 +16182,18 @@ LABEL_104:
     }
     if ( ::plane_count > 0 )
     {
-      __frame.v86 = v5;
+      __frame.arc_f = arc;
       n4_4 = 0;
       do
       {
         ++n4_4;
-        v37 = BYTE1(plane_desc[n4_4].w0);
-        n2_1 = plane_desc[v37 + 1].flags & 3;
+        plane2 = BYTE1(plane_desc[n4_4].w0);
+        n2_1 = plane_desc[plane2 + 1].flags & 3;
         ::plane_predictor = n2_1;
-        if ( (plane_desc[v37 + 1].flags & 8) != 0 || n2_1 )
+        if ( (plane_desc[plane2 + 1].flags & 8) != 0 || n2_1 )
         {
           i = p_i_1->width;
-          __frame.Src = &((uint8_t *)p_i_1)[v37 + 16];
+          __frame.Src = &((uint8_t *)p_i_1)[plane2 + 16];
           Size_1 = i * p_i_1->height;
           __frame.n4_1 = ::plane_count;
           __frame.s12 = Size_1;
@@ -16204,24 +16204,24 @@ LABEL_104:
           }
           else
           {
-            __frame.Block = &((uint8_t *)p_i_1)[v37];
+            __frame.Block = &((uint8_t *)p_i_1)[plane2];
             __frame.s0 = n2_1;
-            __frame.s4 = v37;
+            __frame.s4 = plane2;
             __frame.s8 = n4_4;
             Size_2 = __frame.s12;
             __frame.p_i_2 = p_i_1;
             Size_3 = 0;
             n4_2 = __frame.n4_1;
-            v48 = 0;
+            i2 = 0;
             do
             {
-              Src_1[Size_3] = __frame.Block[v48 + 16];
-              v48 += n4_2;
+              Src_1[Size_3] = __frame.Block[i2 + 16];
+              i2 += n4_2;
               ++Size_3;
             }
             while ( Size_3 < Size_2 );
             n2_2 = __frame.s0;
-            v37 = __frame.s4;
+            plane2 = __frame.s4;
             n4_4 = __frame.s8;
             p_i_1 = __frame.p_i_2;
           }
@@ -16234,7 +16234,7 @@ LABEL_104:
           {
             __expand_predictor_mode0((uint32_t)Src_1, p_i_1->width, p_i_1->height);
           }
-          __interleave_plane((uint8_t *)p_i_1, Src_1, v37, v35);
+          __interleave_plane((uint8_t *)p_i_1, Src_1, plane2, v35);
         }
       }
       while ( n4_4 < ::plane_count );
@@ -16246,24 +16246,24 @@ LABEL_105:
 LABEL_106:
   if ( ::coded_buf + __frame.ElementCount != out_cursor )
   {
-    fclose(((BmfArc *)v5)->fp);
-    ((BmfArc *)v5)->fp = 0;
+    fclose(((BmfArc *)arc)->fp);
+    ((BmfArc *)arc)->fp = 0;
     return nullptr;
   }
   free(::coded_buf);
-  __frame.v88 = __frame.v91;
+  __frame.depth_f = __frame.depth_b;
 LABEL_109:
-  if ( (__frame.v88 & 0x80) != 0 )
+  if ( (__frame.depth_f & 0x80) != 0 )
   {
     // `f10 < 0` was a signed int8_t testing its own top bit -- the palette
     // flag.  depth is unsigned, so the test has to name the bit; it read as
     // always-false otherwise, which is what the gate caught.
     Buffer_3 = (p_i_1->depth & 0x80) ? &((uint8_t *)p_i_1)[p_i_1->data_size + 16] : nullptr;
-    ElementCount_4 = fread(Buffer_3, 1u, __frame.ElementCount_3, ((BmfArc *)v5)->fp);
+    ElementCount_4 = fread(Buffer_3, 1u, __frame.ElementCount_3, ((BmfArc *)arc)->fp);
     if ( ElementCount_4 != __frame.ElementCount_3 )
       {
-        fclose(((BmfArc *)v5)->fp);
-        ((BmfArc *)v5)->fp = 0;
+        fclose(((BmfArc *)arc)->fp);
+        ((BmfArc *)arc)->fp = 0;
         return nullptr;
       }
   }
@@ -16274,49 +16274,49 @@ LABEL_109:
     __frame.n4_1 = (int32_t)n4_6;
     Src_2 = ::plane_count * (p_i_1->height - 1);
     memcpy(n4_6,p_i_1->pixels,p_i_1->data_size);
-    LOWORD(v58) = p_i_1->height;
-    if ( (uint16_t)v58 )
+    LOWORD(img_h) = p_i_1->height;
+    if ( (uint16_t)img_h )
     {
       __frame.Src = (void *)Src_2;
       n4_7 = (uint8_t *)__frame.n4_1;
       n4_8 = 0;
-      v61 = 0;
+      y = 0;
       do
       {
         i_1 = p_i_1->width;
         __frame.n4_1 = n4_8;
-        __frame.v86 = (uint8_t *)v61;
+        __frame.arc_f = (uint8_t *)y;
         Src_3 = __frame.Src;
         __frame.p_i_2 = p_i_1;
-        v64 = &((uint8_t *)p_i_1)[n4_8 + 16];
+        dst = &((uint8_t *)p_i_1)[n4_8 + 16];
         do
         {
           n4_9 = n_planes;
           do
           {
-            *v64++ = *n4_7++;
+            *dst++ = *n4_7++;
             --n4_9;
           }
           while ( n4_9 );
-          v64 = &v64[(uint32_t)Src_3];
+          dst = &dst[(uint32_t)Src_3];
           --i_1;
         }
         while ( i_1 );
         p_i_1 = __frame.p_i_2;
-        v58 = *((uint16_t *)__frame.p_i_2 + 1);
+        img_h = *((uint16_t *)__frame.p_i_2 + 1);
         n4_8 = n_planes + __frame.n4_1;
-        v61 = (int32_t)(uintptr_t)__frame.v86 + 1;
+        y = (int32_t)(uintptr_t)__frame.arc_f + 1;
       }
-      while ( __frame.v86 + 1 < (uint8_t *)(uintptr_t)v58 );
+      while ( __frame.arc_f + 1 < (uint8_t *)(uintptr_t)img_h );
     }
     // The deinterleave swaps width and height and rewrites the stride; only
     // the low half of `stride` is touched, which is what `(uint16_t *)p_i + 2`
     // was addressing.
     i_2 = p_i_1->width;
-    p_i_1->width = v58;
+    p_i_1->width = img_h;
     p_i_1->flags ^= 2u;
     p_i_1->height = i_2;
-    *(uint16_t *)&p_i_1->stride = v58 * n_planes;
+    *(uint16_t *)&p_i_1->stride = img_h * n_planes;
     free(n4_6);
   }
   return (uint8_t *)p_i_1;
