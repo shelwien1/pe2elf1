@@ -34,10 +34,18 @@ T = r'[A-Za-z_]\w*\s*\**'
 # optional byte-cast on the base; P2 is `((T *)base + n)`, where the `+ n` is
 # scaled; P3 is the reversed form Hex-Rays emits when the index came first,
 # `*(uint8_t *)(idx + (char *)base + 984)`.
+# The base of the arithmetic.  A bare name was all this matched for six
+# rounds, so `(uint8_t *)__frame.acc1 + result` -- a byte offset off a frame
+# member -- was not a raw offset as far as the row was concerned, and neither
+# was one off any struct member.  Lifting six frames in round nine turned seven
+# such sites into `(uint8_t *)acc1 + result` and the row went from 5 to 12
+# without a line of arithmetic changing, which is what said the pattern was the
+# thing at fault.  With member and subscript bases allowed it reads 56.
+B = (r'((?:[A-Za-z_]\w*)(?:(?:\.|->)[A-Za-z_]\w*|\[[^\]\[]*\])*)')
 P1 = re.compile(r'\(\s*%s\s*\*\s*\)\s*\(\s*(?:\(\s*%s\s*\*\s*\)\s*)?'
-                r'([A-Za-z_]\w*)\s*\+' % (T, T))
-P2 = re.compile(r'\(\s*\(\s*%s\s*\*\s*\)\s*([A-Za-z_]\w*)\s*\+' % T)
-P3 = re.compile(r'\+\s*\(\s*%s\s*\*\s*\)\s*([A-Za-z_]\w*)\b' % T)
+                r'%s\s*\+' % (T, T, B))
+P2 = re.compile(r'\(\s*\(\s*%s\s*\*\s*\)\s*%s\s*\+' % (T, B))
+P3 = re.compile(r'\+\s*\(\s*%s\s*\*\s*\)\s*%s\b' % (T, B))
 
 # The tag came with REFACTORING4.md §5 item 1; the byte count is what counts.
 FRAME = re.compile(r'struct alignas\(16\) \w* ?\{   // (\d+) bytes')

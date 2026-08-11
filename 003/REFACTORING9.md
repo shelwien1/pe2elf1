@@ -24,13 +24,13 @@ and 3.
                                    round 8   round 9   round 9 end
 subs1.hpp lines                      17787     17616         17126
 bmf.cpp lines                            —         —           365
-raw-offset sites                        22        12             12
+raw-offset sites                        22        12             31
   off `_this`                            —         1             0
   in functions                           —         1             0
 byte offsets on a typed base           121         0             0
-pointer casts                         2137      1545          1270
-  to a scalar                            —         —           541
-  to a record                            —         —           371
+pointer casts                         2137      1545          1254
+  to a scalar                            —         —           527
+  to a record                            —         —           369
   to a scalar, of an address             —         —           353
   to a record, of an address             —         —             5
 fNN members / named ones             93/121     5/162         0/172
@@ -2333,3 +2333,48 @@ it saying where the frames went and where the eleven that remain are explained.
 Fixed in §28, but it belongs in this list: `sweep.sh` closed with a
 hand-written copy of the `case` statement four lines above it. Eight tools
 were added to the directory this round and it would have gone on naming five.
+
+---
+
+## 30. The raw-offset row could not see a member
+
+Lifting six frames in §27 made the `raw-offset sites` row jump from **5 to 12**
+without a line of arithmetic changing. Seven sites that had been
+`(uint8_t *)__frame.acc1 + result` became `(uint8_t *)acc1 + result`, and the
+row noticed them for the first time.
+
+That is the row at fault, not the file. Its three patterns anchor on
+`([A-Za-z_]\w*)` — a bare name — so a byte offset off *any* member, frame or
+struct, was not a raw offset as far as it was concerned. Six rounds of "the
+raw-offset count is down to five" rested on that.
+
+With member and subscript bases allowed the row reads **56**, and it reads 56
+against the file from before the lift as well — which is the control: the lift
+changed what the row could see and nothing else.
+
+### Two of them were one type
+
+Twenty-five of the 56 were byte offsets off two frame members declared
+`uint8_t *`:
+
+```c
+coded_size = *((uint32_t *)__frame.tile_img + 3) + 0x20000;
+row_bytes  = *((uint16_t *)__frame.tile_img + 2);
+img_h1     = *((uint16_t *)__frame.tile_img + 1);
+```
+
+Byte 12, byte 4, byte 2 — `data_size`, `stride`, `height` of a `BmfImage`,
+which is what `__alloc_image` returns and what the member has always held.
+Typed, all twenty-five become named fields, and `__frame.tile_img + 16` becomes
+`__frame.tile_img->pixels`, which is what byte 16 is.
+
+**56 → 31.** The reads that take sixteen bits of the thirty-two-bit `stride`
+keep a cast saying so, because that is what the original does and the value
+only agrees while a stride fits in a word.
+
+The first attempt at this let the compiler drive the casts — insert one
+wherever it complains — and three streams moved. Retyping a pointer changes
+what `+ 16` means, and the compiler has no complaint to make about arithmetic
+that is still well-formed and now means something else. The two sites that
+did it were `__frame.tile_img + 16`, and they are the reason the rewrite names
+`pixels` rather than casting the base back to bytes.
