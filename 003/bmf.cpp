@@ -219,43 +219,46 @@ inline int8_t __OFSUB__(int32_t x, int32_t y)
 // what bmf_page_free hands back.
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
-// A heap the program's own 32-bit pointer fields can address -- 64-bit only.
+// An arena above 4 GB -- 64-bit only, and a test rather than a workaround.
 //
-// BMF's structures keep pointers in 32-bit fields.  At 32 bits that is merely
-// untyped; at 64 it is lossy.  The clean fix is to widen the fields, and
-// REFACTORING.md §4 records why that cannot be done here: every one of the 159
-// objects is walked with variable offsets as well as constant ones, so moving a
-// field moves the arrays after it.
+// What stood here was the opposite: an arena *below* 4 GB, so that "the
+// program's own 32-bit pointer fields" could hold a whole address.  Its note
+// said the clean fix -- widening those fields -- could not be done, because
+// every one of the 159 objects is walked with variable offsets as well as
+// constant ones.  Round eleven did it anyway: `tools/ptrwidth.py` reports zero
+// pointers through a 32-bit integer, and every object is reached by name.
 //
-// This is the other way, and it is the only one left: put every allocation the
-// program makes below 4 GB, so a 32-bit field holds a whole address.  It does
-// not make the code honest about its types and it is not a substitute for
-// doing that.
+// So the crutch is gone, and what is left is the check it was standing in for.
+// A low arena *hides* this whole class: with every allocation under 4 GB, a
+// truncation to 32 bits is the identity and nothing fails.  `-DBMF_HIGH_ARENA`
+// puts every allocation an eight-byte pointer can reach and a four-byte one
+// cannot, which turns any surviving 32-bit pointer field into a fault on its
+// first dereference.  `tools/x64.sh --high` runs the corpus that way, and the
+// fifteen streams still come out byte for byte.
 //
-// Compiled only for a 64-bit target, so the 32-bit build -- the one the streams
-// are verified against -- allocates exactly as it did.
+// Not the default: it is an instrument, it needs `MAP_FIXED_NOREPLACE`, and a
+// program that only runs correctly at one address is not what this is for.
 // ---------------------------------------------------------------------------
-#if UINTPTR_MAX > 0xFFFFFFFFu
-#if defined(__linux__)
-#  include <sys/mman.h>
-#  define BMF_LOW_ARENA 1
-#endif
-#define BMF_ARENA_BYTES (768u << 20)
+#if UINTPTR_MAX > 0xFFFFFFFFu && defined(BMF_HIGH_ARENA)
+#include <sys/mman.h>
+#define BMF_ARENA_BYTES ((size_t)768 << 20)
+// Far above anything a four-byte pointer can name, and clear of where the
+// loader puts the heap, the stack and the shared libraries.
+#define BMF_ARENA_AT    ((void *)0x0000200000000000ull)
 static char  *bmf_arena;
 static size_t bmf_arena_used;
 static void bmf_arena_init(void) {
-#ifdef BMF_LOW_ARENA
-  void *p = mmap(nullptr, BMF_ARENA_BYTES, PROT_READ | PROT_WRITE,
-                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
+  void *p = mmap(BMF_ARENA_AT, BMF_ARENA_BYTES, PROT_READ | PROT_WRITE,
+                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
   bmf_arena = (p == MAP_FAILED) ? nullptr : (char *)p;
-#else
-  bmf_arena = (char *)malloc(BMF_ARENA_BYTES);
-#endif
-  if (!bmf_arena) { fprintf(stderr, "bmf: no arena\n"); exit(7); }
-  if (sizeof(void *) > 4 && (uintptr_t)bmf_arena + BMF_ARENA_BYTES > 0xFFFFFFFFu) {
-    fprintf(stderr, "bmf: arena above 4 GB\n"); exit(7);
+  if (!bmf_arena) { fprintf(stderr, "bmf: no high arena\n"); exit(7); }
+  if ((uintptr_t)bmf_arena <= 0xFFFFFFFFu) {
+    fprintf(stderr, "bmf: the high arena is not high\n"); exit(7);
   }
 }
+// One free list per power-of-two size class, and the class index in the word
+// ahead of the block.  Small and stupid on purpose: this is a test harness, so
+// what matters is that every block comes from the arena and none from libc.
 #define BMF_BUCKETS 40
 static void *bmf_bucket[BMF_BUCKETS];
 static int bmf_bucket_of(size_t n) { int b=0; while ((size_t)1<<(b+5) < n && b<BMF_BUCKETS-1) b++; return b; }
@@ -279,9 +282,13 @@ static void bmf_free(void *p) {
 #define malloc bmf_malloc
 #define free   bmf_free
 
-#endif  // 64-bit only
+#endif  // the high arena
 
-#define BMF_PAGE 4096u
+// `uintptr_t` and not `4096u`: `~(BMF_PAGE - 1)` on an `unsigned int` is
+// 0xFFFFF000, which zero-extends on a 64-bit target and takes the top half of
+// the address off with the low twelve bits.  Typed here rather than cast at
+// the use, because a cast there is useless on i386 and the ratchet counts it.
+#define BMF_PAGE ((uintptr_t)4096)
 
 static void *bmf_page_alloc(size_t n) {
   void *base = malloc(n + BMF_PAGE + sizeof(void *));

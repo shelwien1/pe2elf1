@@ -229,6 +229,7 @@ BMF_BITS=64 tools/fuzz.sh      400 mutants: 288 refused, 112 accepted, 0 reporte
 BMF_BITS=64 tools/hdrscan.sh   no report in 7680 runs: both one-byte header
                                fields, every value, 15 streams
 tools/x64.sh                   21 of 21, streams compared
+tools/x64.sh --high            21 of 21 with every allocation above 4 GB
 tools/x64diff.sh               400 mutants through *both* builds: same exit
                                code, same bytes
 ```
@@ -247,6 +248,52 @@ reasons: i386 calling conventions on the moved entry points, CPUID helpers in
 i386 inline asm, and the address blob. All three were true when it was written
 and all three were gone by round seven. **A reason in a comment is a
 measurement, and that one had not been re-taken in four rounds.**
+
+---
+
+## 3c. The safety net that was hiding the whole class
+
+`bmf.cpp` carried, for 64-bit targets only, an arena *below* 4 GB and a
+`#define malloc` onto it. Its note said why:
+
+> BMF's structures keep pointers in 32-bit fields. At 32 bits that is merely
+> untyped; at 64 it is lossy. The clean fix is to widen the fields, and
+> REFACTORING.md section 4 records why that cannot be done here: every one of
+> the 159 objects is walked with variable offsets as well as constant ones, so
+> moving a field moves the arrays after it.
+>
+> This is the other way, and it is the only one left: put every allocation the
+> program makes below 4 GB, so a 32-bit field holds a whole address.
+
+Every clause of that is now false. `tools/ptrwidth.py` reports zero, and every
+one of those objects is reached by name. But while it stood it did something
+worse than being unnecessary: **with every allocation under 4 GB, truncating a
+pointer to 32 bits is the identity and nothing fails.** The scoreboard this
+round drove to zero was measuring a program that could not have failed the
+test.
+
+So the arena is gone, and what replaces it is the check it was standing in
+for. `-DBMF_HIGH_ARENA` puts every allocation at 0x200000000000 — an address an
+eight-byte pointer can name and a four-byte one cannot — so any surviving
+32-bit pointer field faults on its first dereference. `tools/x64.sh --high`
+runs the whole corpus that way, and the fifteen streams still come out byte for
+byte.
+
+The control says what that is worth. One truncated store, on a slot that is
+reloaded a few lines later:
+
+```c
+__frame.slot7 = (ModelBlock *)(uintptr_t)(uint32_t)(uintptr_t)blk1;
+```
+
+reads **21 of 21 on the default heap and 17 of 21 with the high arena**. The
+ordinary run is blind to the class the whole round is about; only the second
+one is evidence.
+
+`bmf_page_alloc` came with it: `(raw + BMF_PAGE - 1) & ~(BMF_PAGE - 1)` with
+`BMF_PAGE` an `unsigned int` is a mask of 0x00000000FFFFF000, which takes the
+top half of the address off with the low twelve bits. It had always worked
+because the arena kept every allocation low. `BMF_PAGE` is a `uintptr_t` now.
 
 ---
 
@@ -326,6 +373,7 @@ target where the mistake has a consequence — which is the whole argument for
 | `tools/negindex.py` | which negative indices are negated in an unsigned type | 0 |
 | `tools/x64.sh` | whether the other pointer width gives the same answers | 21 of 21 |
 | `tools/x64diff.sh` | whether the two agree on inputs nobody chose | 400 mutants, no disagreement |
+| `tools/x64.sh --high` | whether any 32-bit pointer field survives, by putting every allocation where one cannot reach | 21 of 21 |
 
 `BMF_WARN=1 BMF_BITS=64 ./build.sh` writes `warn64.log`, and `warn64.txt` is
 its ceiling — a ratchet like `warn.txt` and over a different population, since

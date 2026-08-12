@@ -1,4 +1,4 @@
-In file included from bmf.cpp:352:
+In file included from bmf.cpp:359:
 subs1.hpp: In member function 'bool SymList::rescale(int32_t)':
 subs1.hpp:760:13: warning: conversion to 'uint32_t' {aka 'unsigned int'} from 'int32_t' {aka 'int'} may change the sign of the result [-Wsign-conversion]
 subs1.hpp:760:40: warning: conversion to 'int32_t' {aka 'int'} from 'uint32_t' {aka 'unsigned int'} may change the sign of the result [-Wsign-conversion]

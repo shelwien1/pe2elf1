@@ -2,6 +2,7 @@
 # x64.sh — what the 64-bit build still gets wrong.
 #
 #     tools/x64.sh
+#     tools/x64.sh --high     # and put every allocation above 4 GB
 #
 # `test.sh` is the project's oracle and it runs one target.  For six rounds
 # that was the only target there was, and "fifteen streams byte-identical" was
@@ -20,10 +21,16 @@
 # and a run that is wrong look the same from here and the truncation count is
 # what says which is likelier.  See tools/ptrwidth.py for the four kinds.
 #
-# Not in `test.sh`: the 64-bit build is a target and not yet a guarantee, and a
-# gate that fails on the work still to do stops being a gate.  When this run
-# is clean it belongs in test.sh, and that is the point at which this goal is
-# finished.
+# `--high` builds with `-DBMF_HIGH_ARENA`, which puts every allocation the
+# program makes at an address a four-byte pointer cannot name.  That is the
+# check the whole exercise reduces to: with a *low* heap -- which is what x86-64
+# Linux hands out for a program this size, and what `bmf.cpp` used to force with
+# an arena under 4 GB -- truncating a pointer to 32 bits is the identity and
+# nothing fails.  Above 4 GB it faults on the first dereference.  The streams
+# come out byte for byte either way, and only the second run proves anything.
+#
+# It is not the default: `MAP_FIXED_NOREPLACE` is Linux-only, and a program that
+# runs correctly at one address is not a property worth gating on.
 set -u
 # A job killed by a signal is reported by the shell that waits on it, and
 # that shell is this one -- so the redirect has to be on the *loops*
@@ -35,7 +42,8 @@ cd "$(dirname "$0")/.."
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-if ! BMF_OUT="$tmp/bmf64" BMF_BITS=64 ./build.sh >"$tmp/build" 2>&1; then
+high=; [ "${1:-}" = --high ] && high=-DBMF_HIGH_ARENA
+if ! BMF_OUT="$tmp/bmf64" BMF_BITS=64 ./build.sh $high >"$tmp/build" 2>&1; then
   echo "the 64-bit build failed:" >&2
   grep -m5 'error:' "$tmp/build" >&2
   exit 2
@@ -157,6 +165,6 @@ BMF_STRICT=1 BMF_BITS=64 ./build.sh >/dev/null 2>&1
 left=$(python3 tools/ptrwidth.py subs1.hpp | tail -1)
 
 echo
-echo "$same of $ran cases agree with the 32-bit build"
+echo "$same of $ran cases agree with the 32-bit build${high:+, every allocation above 4 GB}"
 echo "$left"
 exit $((bad ? 1 : 0))
