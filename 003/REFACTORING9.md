@@ -22,7 +22,7 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17582
+subs1.hpp lines                      17787     17616         17617
 bmf.cpp lines                            —         —           365
 raw-offset sites                        22        12              0
   off `_this`                            —         1             0

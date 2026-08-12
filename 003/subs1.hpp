@@ -224,9 +224,9 @@ static int32_t alphabet_reduced;   // was 0x443388 in bmf_bss
 // say it is one table rather than twenty globals:
 
 //   * the subscripts the code already writes -- `plane_desc[plane + 1].flags`,
-//     `plane_desc[plane + 1].w4` -- both step whole records;
+//     `plane_desc[plane + 1].weight0` -- both step whole records;
 //   * field +1 is reached from two origins one record apart, `transform_planes`
-//     pre-incrementing from 0 into `plane_desc[n].w0` and `rc_begin_encode`
+//     pre-incrementing from 0 into `plane_desc[n].desc_word` and `rc_begin_encode`
 //     indexing `plane_desc[p + 1].src_plane` by plane, which is what a header entry
 //     in front of an array looks like;
 //   * and `alt_model_p2_encode` walks all four plane records in one loop using
@@ -239,7 +239,17 @@ static int32_t alphabet_reduced;   // was 0x443388 in bmf_bss
 // +0..+3 read as a whole dword by the packer bit accounting at 18433.
 struct PlaneDesc {
   union {
-    int32_t w0;
+    // The four bytes below as one word.  For records 1..4 that is what MSVC
+    // loaded when it wanted the whole descriptor at once.
+    //
+    // Record 0's copy is a puzzle worth leaving stated rather than guessed at:
+    // `choose_plane_coding` reads `plane_desc[0].desc_word` seven times, always
+    // as `desc_word - packer_free_bits + <bits> + 32`, and **nothing in this
+    // build writes it** -- not through this name and not through any of the
+    // four bytes it overlays.  `plane_desc` is a file-scope array, so it starts
+    // zeroed and the term contributes nothing; whether the original had a
+    // writer that this build's fixed mode does not reach is not settled here.
+    int32_t desc_word;
     struct {
       // The number of reference planes, 0..3 -- *not* the predictor, which is
       // `flags & 3` and is what `plane_predictor` is set from.  The header
@@ -250,12 +260,27 @@ struct PlaneDesc {
       uint8_t nrefs;
       uint8_t src_plane;   // a plane number, fed back as `plane_desc[src_plane + 1]`
       uint8_t flags;       // & 3 predictor, & 4 alt model, & 8 a third mode
-      uint8_t b3;
+      // The plane's DC offset.  Every reader takes it straight into a local
+      // called `dc`, `dc1`, `dc2` or `dc3`, and `search_filter` writes it as
+      // the position it picked plus one.  It was `b3`, which said where it is.
+      uint8_t dc;
     };
   };
-  int32_t w4;
-  int32_t w8;
-  int32_t w12;   // record 0: the near-lossless quantiser, `4 * w12 + 1` wide
+  // The three prediction weights, in the order the header carries them and the
+  // order `colour_transform` and `interleave_plane` read them into `wgt0`,
+  // `wgt1`, `wgt2`.  `compress_image` writes `weight0 + 64` and `expand_image`
+  // reads `w4_v - 64` back, so the first is stored with a bias and the other
+  // two are not -- which is a fact about the format and not about these names.
+  //
+  // Records 1..4 are the planes and mean this.  Record 0 is the image's own and
+  // means something else in each slot: `weight1` is the plane count, which
+  // `plane_count` below binds, `weight2` is the near-lossless quantiser that
+  // `near_lossless_q` binds, and `weight0` is scratch for the member magic
+  // check in `expand_image`.  The overloading is the original's; naming the
+  // three for the planes is naming them for four records out of five.
+  int32_t weight0;   // +4
+  int32_t weight1;   // +8
+  int32_t weight2;   // +12
 };
 static_assert(sizeof(void *) != 4 || sizeof(PlaneDesc) == 16,
               "PlaneDesc: the layout moved");
@@ -269,7 +294,12 @@ static PlaneDesc plane_desc[5];
 
 // This one stays.  It is record 0's `w8` read as a scalar 149 times, always as
 // the number of planes, and no other field is read that way.
-static int32_t &plane_count = *&plane_desc[0].w8;
+static int32_t &plane_count = *&plane_desc[0].weight1;
+// Record 0's third slot: the near-lossless quantiser, which every reader
+// spells as `4 * q + 1` or `16 * q`.  Bound for the same reason as
+// `plane_count` above -- the name is what says which of record 0's five
+// meanings this slot carries.
+static int32_t &near_lossless_q = *&plane_desc[0].weight2;
 // Symbol -> level, one byte a symbol.  `rc_begin_encode` fills it one level a
 // line, and the runs are the level sizes: one symbol at level 0, one at 1, two
 // at 2, then 4, 8, 16, 32 and 64 -- which is `level_geom[n].first` and
@@ -305,7 +335,7 @@ static LevelGeom level_geom[8];
 static int32_t ctx_bias[4];
 
 // The near-lossless dead zone.  `rc_begin_encode` sets these to +d and -d for
-// d = 4 * plane_desc[0].w12 + 1, and every reader spells the same shape --
+// d = 4 * near_lossless_q + 1, and every reader spells the same shape --
 // `(x > deadzone_hi) - (x < deadzone_lo)`, a sign that is 0 inside the zone.
 // Were 0x4458F0 and 0x4458F4 in bmf_bss.
 static int32_t deadzone_hi;
@@ -404,8 +434,8 @@ static int32_t mode_symbol[5];
 
 // Six places copy all four records in or out with 64-bit moves, and Hex-Rays
 // wrote those as offsets from four *other* globals -- coded_buf,
-// desc_slow_mode, and the two dwords that are now `plane_desc[0].w0` and
-// `plane_desc[0].w8` -- which sit 32, 24, 16 and 8 bytes below the records.
+// desc_slow_mode, and the two dwords that are now `plane_desc[0].desc_word` and
+// `plane_desc[0].weight1` -- which sit 32, 24, 16 and 8 bytes below the records.
 // That is the original compiler's strength reduction showing through, not
 // something the program means; those four are a buffer pointer, a mode flag, a
 // counter and a plane count, and none of them is a base for this.  Written
@@ -1113,9 +1143,14 @@ static_assert(sizeof(void *) != 4
 // A store whose source is meaningless and whose value is never loaded is not a
 // puzzle to solve; it is a field this build does not use.
 struct P2Count {
-  int8_t b0;
+  // `rate` is a shift and `weighted` is what it scales: every reader is
+  // `p2_pred(weighted, rate)`, which is
+  // `(weighted + (1 << ((rate + 31) & 31))) >> (rate & 31)`.  They were `b0`
+  // and `w2`, named for their offsets, while the function that reads them had
+  // said what they are all along.
+  int8_t rate;
   uint8_t b1;
-  int16_t w2;
+  int16_t weighted;
 };
 static_assert(sizeof(P2Count) == 4, "P2Count: the record is four bytes");
 
@@ -1155,8 +1190,8 @@ static_assert(__builtin_offsetof(P2Freq, f) == 2, "P2Freq: the step comes first"
 // `rate` is `int32_t` and not `int8_t` because a third of the sites reach b0
 // through a widened temporary; `-Wsign-conversion` is what checks that none of
 // them passes an unsigned value, which would have made `>>` a logical shift.
-static inline int32_t p2_pred(int32_t w2, int32_t rate) {
-  return (w2 + (1 << ((rate + 31) & 31))) >> (rate & 31);
+static inline int32_t p2_pred(int32_t weighted, int32_t rate) {
+  return (weighted + (1 << ((rate + 31) & 31))) >> (rate & 31);
 }
 
 // The counter update, and the file's most repeated expression: 117 sites.
@@ -1321,7 +1356,7 @@ struct AltP2Block {
       uint32_t ctx_pair[2];   // +278708 .. +278715
       int32_t nb_id_used;
       // The context band: `alt_p2_alloc` sets it to -(16q + 7) .. 16q + 8 for
-      // `q = plane_desc[0].w12`, and three of the five weight groups classify a
+      // `q = near_lossless_q`, and three of the five weight groups classify a
       // difference against it as `(d <= band_hi) + (d < band_lo)` -- above,
       // inside, below, which is a base-3 digit.  The same `q` sets
       // `deadzone_hi`/`deadzone_lo` to +-(4q + 1) two lines earlier, so the
@@ -1867,7 +1902,7 @@ uint32_t __alt_init_tables(uint8_t *fold, int8_t *unfold)
   uint8_t half;
   uint32_t i, k, b, span, pairs;
   uint8_t *pos, *neg;
-  bucket_size = 2 * plane_desc[0].w12 + 1;
+  bucket_size = 2 * near_lossless_q + 1;
   // The predictor-mode-0 branch was here: 111 lines building a 256-entry
   // identity table with SSE.  Nothing can reach it.  This function is called
   // only by alt_p2_alloc and alt_p1_alloc; those are called only by the eight
@@ -4606,14 +4641,14 @@ inline AltP2Block *AltP2Block::alt_p2_alloc(int32_t img_w, int32_t plane)
   // Two records a step, which is how MSVC unrolled the seed of all 163 840.
   for ( j = 0; j < 0x14000; ++j )
   {
-    this->p2_ctr[2 * j].w2 = 0;
-    this->p2_ctr[2 * j + 1].w2 = 0;
+    this->p2_ctr[2 * j].weighted = 0;
+    this->p2_ctr[2 * j + 1].weighted = 0;
   }
   for ( k = 0; k < 0x14000; ++k )
   {
-    this->p2_ctr[2 * k].b0 = 5;
+    this->p2_ctr[2 * k].rate = 5;
     this->p2_ctr[2 * k].b1 = 2;
-    this->p2_ctr[2 * k + 1].b0 = 5;
+    this->p2_ctr[2 * k + 1].rate = 5;
     this->p2_ctr[2 * k + 1].b1 = 2;
   }
   ctr = 0;
@@ -4632,8 +4667,8 @@ inline AltP2Block *AltP2Block::alt_p2_alloc(int32_t img_w, int32_t plane)
     this->freq[e + 1].step = 4096;
   }
   while ( ctr < 0x1E60 );
-  dz = 4 * plane_desc[0].w12 + 1;
-  band = 16 * plane_desc[0].w12;
+  dz = 4 * near_lossless_q + 1;
+  band = 16 * near_lossless_q;
   this->has_ref = (uint8_t)(plane_desc[plane_desc[this->plane_idx + 1].src_plane + 1].flags
                                                & 8) >> 3;
   deadzone_hi = dz;
@@ -5486,11 +5521,11 @@ uint8_t * __interleave_plane(uint8_t *img, uint8_t *src, int32_t plane, int8_t u
   to_ref0 = plane_desc[1].src_plane - plane;
   to_ref1 = plane_desc[2].src_plane - plane;
   mode = plane_desc[plane + 1].nrefs;
-  dc = plane_desc[plane + 1].b3;
+  dc = plane_desc[plane + 1].dc;
   base = (uint32_t)&((const BmfImage *)img)->pixels[plane];
-  wgt1 = plane_desc[plane + 1].w8;
-  wgt0 = plane_desc[plane + 1].w4;
-  wgt2 = plane_desc[plane + 1].w12;
+  wgt1 = plane_desc[plane + 1].weight1;
+  wgt0 = plane_desc[plane + 1].weight0;
+  wgt2 = plane_desc[plane + 1].weight2;
   // The same disjunction as `colour_transform`'s, and the same reading: the
   // weights select a reference outright, or the predictor does.  Five `goto`s
   // stood here for it.
@@ -5626,11 +5661,11 @@ uint8_t * __colour_transform(uint8_t *img, uint8_t *dst, int32_t plane, int8_t u
   to_ref0 = plane_desc[1].src_plane - plane;
   to_ref1 = plane_desc[2].src_plane - plane;
   mode = plane_desc[plane + 1].nrefs;
-  dc = plane_desc[plane + 1].b3;
+  dc = plane_desc[plane + 1].dc;
   src = (uint32_t)&((const BmfImage *)img)->pixels[plane];
-  wgt1 = plane_desc[plane + 1].w8;
-  wgt0 = plane_desc[plane + 1].w4;
-  wgt2 = plane_desc[plane + 1].w12;
+  wgt1 = plane_desc[plane + 1].weight1;
+  wgt0 = plane_desc[plane + 1].weight0;
+  wgt2 = plane_desc[plane + 1].weight2;
   // Two ways into the same loop: the weights say this plane is a straight
   // copy of one reference -- mode 2 with all 128 on one side, and which side
   // decides which reference -- or the predictor says so outright.  The three
@@ -6225,9 +6260,9 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
   src1 = plane_desc[2].src_plane;
   src2 = plane_desc[3].src_plane;
   src3 = plane_desc[4].src_plane;
-  dc2 = plane_desc[src2 + 1].b3;
-  dc3 = plane_desc[src3 + 1].b3;
-  dc1 = plane_desc[src1 + 1].b3;
+  dc2 = plane_desc[src2 + 1].dc;
+  dc3 = plane_desc[src3 + 1].dc;
+  dc1 = plane_desc[src1 + 1].dc;
   xf1 = plane_desc[src1 + 1].flags & 8;
   xf2 = plane_desc[src2 + 1].flags & 8;
   xf3 = plane_desc[src3 + 1].flags & 8;
@@ -6410,10 +6445,10 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
           ++blk2->cursor[3];
           ++blk2->cursor[4];
           if ( xf2 )
-            *(plane_desc[3].src_plane + out) = ((plane_desc[plane_desc[3].src_plane + 1].w4
+            *(plane_desc[3].src_plane + out) = ((plane_desc[plane_desc[3].src_plane + 1].weight0
                                                                 * *(plane_desc[1].src_plane
                                                                                      + out)
-                                                                + plane_desc[plane_desc[3].src_plane + 1].w8
+                                                                + plane_desc[plane_desc[3].src_plane + 1].weight1
                                                                 * (uint32_t)*(plane_desc[2].src_plane + out)
                                                                 + 40) >> 7)
                                                               + dc2
@@ -6447,9 +6482,9 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
             ++blk3->cursor[3];
             ++blk3->cursor[4];
             if ( xf3 )
-              val3x += ((plane_desc[plane_desc[4].src_plane + 1].w8 * *(plane_desc[4].src_plane + out - 2)
-                     + plane_desc[plane_desc[4].src_plane + 1].w4 * *(plane_desc[4].src_plane + out - 3)
-                     + plane_desc[plane_desc[4].src_plane + 1].w12 * *(plane_desc[4].src_plane + out - 1)
+              val3x += ((plane_desc[plane_desc[4].src_plane + 1].weight1 * *(plane_desc[4].src_plane + out - 2)
+                     + plane_desc[plane_desc[4].src_plane + 1].weight0 * *(plane_desc[4].src_plane + out - 3)
+                     + plane_desc[plane_desc[4].src_plane + 1].weight2 * *(plane_desc[4].src_plane + out - 1)
                      + 64) >> 7)
                    + dc3;
             *(plane_desc[4].src_plane + out) = val3x;
@@ -7007,7 +7042,7 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   }
   bank0 = ctx0 >> 11;
   blk->bank_ctx[0] = bank0;
-  pred0 = p2_pred(blk->p2_ctr[bank0].w2, blk->p2_ctr[bank0].b0);
+  pred0 = p2_pred(blk->p2_ctr[bank0].weighted, blk->p2_ctr[bank0].rate);
   sum_c = sum_all;
   cx4 = blk->cursor[4];
   blk->nb_sum[1] = pred0;
@@ -7052,8 +7087,8 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   q10 = q10a;
   bank1 = ctx1 >> 11;
   blk->bank_ctx[1] = bank1;
-  rate1 = blk->p2_ctr[bank1 + 32768].b0;
-  w1c = blk->p2_ctr[bank1 + 32768].w2;
+  rate1 = blk->p2_ctr[bank1 + 32768].rate;
+  w1c = blk->p2_ctr[bank1 + 32768].weighted;
   one1 = 1 << ((rate1 + 31) & 31);
   pred1 = (one1 + w1c) >> (rate1 & 31);
   run1 = pred1 + run0;
@@ -7096,7 +7131,7 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   q10 = q10b;
   bank2 = ctx2 >> 11;
   blk->bank_ctx[2] = bank2;
-  pred2 = p2_pred(blk->p2_ctr[bank2 + 65536].w2, blk->p2_ctr[bank2 + 65536].b0);
+  pred2 = p2_pred(blk->p2_ctr[bank2 + 65536].weighted, blk->p2_ctr[bank2 + 65536].rate);
   blk->nb_sum[5] = pred2;
   run2 = pred2 + run1;
   blk->nb_sum[4] = run2;
@@ -7120,10 +7155,10 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
              | (((run2 > 2896) + (run2 > 1568) + (run2 > 592)) << 13)
              | ((((uint32_t)(sum_all + 37) >> 31) + ((uint32_t)(sum_all + 19) >> 31) + (q9 >> 31)) << 11)) >> 11;
   blk->bank_ctx[3] = bank3;
-  w3c = blk->p2_ctr[bank3 + 98304].w2;
+  w3c = blk->p2_ctr[bank3 + 98304].weighted;
   // The rate reached `>>` through two `LOBYTE` copies, `v163` then `v164`;
   // both masks read only the byte each copy wrote.
-  pred3 = p2_pred(w3c, blk->p2_ctr[bank3 + 98304].b0);
+  pred3 = p2_pred(w3c, blk->p2_ctr[bank3 + 98304].rate);
   blk->nb_sum[7] = pred3;
   run3 = pred3 + run2;
   run = run3;
@@ -7144,7 +7179,7 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
              | (((uint16_t)run3 - (uint16_t)cx0[-4].dval - (uint16_t)dv_now4) & 0x8000)
              | ((((run3 > 3056) + (run3 > 1952) + (run3 > 368)) << 13) | (q39 + (((uint32_t)(sum_all + 21) >> 20) & 0xFFFFF800) + q10))) >> 11;
   blk->bank_ctx[4] = bank4;
-  pred4 = p2_pred(blk->p2_ctr[bank4 + 131072].w2, blk->p2_ctr[bank4 + 131072].b0);
+  pred4 = p2_pred(blk->p2_ctr[bank4 + 131072].weighted, blk->p2_ctr[bank4 + 131072].rate);
   cx2p = (uint8_t *)cx2;
   blk->nb_sum[9] = pred4;
   run4 = run + pred4;
@@ -8257,9 +8292,9 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
       // bits, by a cast to `uint8_t *` or by indexing one, so what they read
       // is this half and nothing else.  Section 24's `LODWORD` again.
       __frame.plane_a = plane_desc[1].src_plane - x3[2];
-      wt8 = plane_desc[x3[2] + 1].w8;
+      wt8 = plane_desc[x3[2] + 1].weight1;
       __frame.plane_b = plane_desc[2].src_plane - x3[2];
-      wt4 = plane_desc[x3[2] + 1].w4;
+      wt4 = plane_desc[x3[2] + 1].weight0;
       // always taken: -S is on.  (The block is kept braced -- LABEL_19 below
       // is jumped to from inside it.)
       {
@@ -8608,8 +8643,8 @@ LABEL_19:
         wt4 = 64;
         wt8 = 64;
       }
-      plane_desc[x3[2] + 1].w4 = wt4;
-      plane_desc[xform_row + 1].w8 = wt8;
+      plane_desc[x3[2] + 1].weight0 = wt4;
+      plane_desc[xform_row + 1].weight1 = wt8;
       hist = &__frame.buf[4096 * pred];
       win = (uint8_t)(uintptr_t)hist & 0xF;
       // The first 256-wide window over these 1024 counters.  Where it starts
@@ -8638,7 +8673,7 @@ LABEL_19:
         while ( win < 1024 );
         n_planes = __frame.nplanes_s;
       }
-      plane_desc[x3[2] + 1].b3 = pos + 1;
+      plane_desc[x3[2] + 1].dc = pos + 1;
       // Same window, over the second table.  `i` is left at 256 for the slide
       // that follows.
       best_sum2 = 0;
@@ -8661,7 +8696,7 @@ LABEL_19:
       // and not the second.  The chosen transform is 0 on all fifteen reference
       // images -- both spellings agree there, which is why the gate stayed green
       // -- but it is 1 or 2 for an image that picks another one.
-      plane_desc[__frame.plane_b + x3[2] + 1].b3 = result;
+      plane_desc[__frame.plane_b + x3[2] + 1].dc = result;
       if ( n_planes >= 4 )
       {
         __builtin_memset(x0, 0, 16);
@@ -8869,9 +8904,9 @@ LABEL_19:
           wb = 0;
           wa_slot = 0;
         }
-        plane_desc[4].w4 = wa_slot;
-        plane_desc[4].w8 = wb;
-        plane_desc[4].w12 = wc;
+        plane_desc[4].weight0 = wa_slot;
+        plane_desc[4].weight1 = wb;
+        plane_desc[4].weight2 = wc;
         plane_desc[4].src_plane = 3;
         plane_desc[4].nrefs = 3;
         hist2 = &__frame.hist_c[1024 * pred4b + 1024];
@@ -8891,7 +8926,7 @@ LABEL_19:
             best_sum3 = sum3;
           }
         }
-        plane_desc[4].b3 = pos3 + 1;
+        plane_desc[4].dc = pos3 + 1;
       }
     }
   }
@@ -12011,14 +12046,14 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
   fl1 = plane_desc[src1 + 1].flags;
   fl2 = plane_desc[src2 + 1].flags;
   fl3 = plane_desc[src3 + 1].flags;
-  dc2 = plane_desc[src2 + 1].b3;
-  dc1 = plane_desc[src1 + 1].b3;
+  dc2 = plane_desc[src2 + 1].dc;
+  dc1 = plane_desc[src1 + 1].dc;
   xf1 = fl1 & 8;
   // `src3` is a plane number and the two lines above read it as one.  MSVC then
   // reused the register for that plane's `b3` byte; `dc3` is the only reader
   // and it takes the low byte, so it reads the field directly and `src3` keeps
   // the one meaning it started with.
-  dc3 = plane_desc[src3 + 1].b3;
+  dc3 = plane_desc[src3 + 1].dc;
   xf2 = fl2 & 8;
   xf3 = fl3 & 8;
   __rc_begin_encode();
@@ -12187,9 +12222,9 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
           if ( xf2 )
             want2 = (uint8_t)(want2
                                   - dc2
-                                  - ((plane_desc[plane_desc[3].src_plane + 1].w4
+                                  - ((plane_desc[plane_desc[3].src_plane + 1].weight0
                                     * *(plane_desc[1].src_plane + src)
-                                    + plane_desc[plane_desc[3].src_plane + 1].w8
+                                    + plane_desc[plane_desc[3].src_plane + 1].weight1
                                     * (uint32_t)*(plane_desc[2].src_plane + src)
                                     + 40) >> 7));
           blk2 = (AltP1Block *)(plane2);
@@ -12235,9 +12270,9 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
             if ( xf3 )
               want3 = *(plane_desc[4].src_plane + src)
                   - dc3
-                  - ((plane_desc[plane_desc[4].src_plane + 1].w8 * *(plane_desc[4].src_plane + src - 2)
-                    + plane_desc[plane_desc[4].src_plane + 1].w4 * *(plane_desc[4].src_plane + src - 3)
-                    + plane_desc[plane_desc[4].src_plane + 1].w12 * *(plane_desc[4].src_plane + src - 1)
+                  - ((plane_desc[plane_desc[4].src_plane + 1].weight1 * *(plane_desc[4].src_plane + src - 2)
+                    + plane_desc[plane_desc[4].src_plane + 1].weight0 * *(plane_desc[4].src_plane + src - 3)
+                    + plane_desc[plane_desc[4].src_plane + 1].weight2 * *(plane_desc[4].src_plane + src - 1)
                     + 64) >> 7);
             else
               want3 = *(plane_desc[4].src_plane + src);
@@ -12501,14 +12536,14 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
     // 71178 records is +284712, `p2_ctr`, and `bank_off` is `bank << 17` --
     // 32768 records a bank, which is what the five banks are.
     node0 = &blk->p2_ctr[32768 * bank + bank_ctx];
-    w0 = res + (uint16_t)node0->w2;
-    node0->w2 = w0;
+    w0 = res + (uint16_t)node0->weighted;
+    node0->weighted = w0;
     countdown = node0->b1;
     if ( countdown )
     {
       ctxw_s = bank_ctx;
       w0b = w0 + 4 * ((res > deadzone_hi) - (res < deadzone_lo));
-      node0->w2 = w0b;
+      node0->weighted = w0b;
       ctxw = ctxw_s;
       if ( (int32_t)abs32(res) < 38 )
       {
@@ -12518,12 +12553,12 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
         }
         else
         {
-          if ( *(uint8_t *)&node0->b0 < 8u )
+          if ( *(uint8_t *)&node0->rate < 8u )
           {
-            b0n = node0->b0 + 1;
-            node0->b0 = b0n;
+            b0n = node0->rate + 1;
+            node0->rate = b0n;
             node0->b1 = *((uint8_t *)&p2_float_pool + b0n + 3);   // two floats read sideways
-            node0->w2 = 2 * w0b;
+            node0->weighted = 2 * w0b;
           }
           else
           {
@@ -12540,10 +12575,10 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
         if ( (uint32_t)lowbits >= 3
           || (bank_off2 = bank_off,
               ctxw_s = ctxw,
-              w1 = node0[1].w2,
-              e1 = res2 - p2_pred(w1, *(uint8_t *)&node0[1].b0),
+              w1 = node0[1].weighted,
+              e1 = res2 - p2_pred(w1, *(uint8_t *)&node0[1].rate),
               go = lowbits <= 0,
-              *(uint16_t *)&node0[1].w2 = w1
+              *(uint16_t *)&node0[1].weighted = w1
                                                       + ((32
                                                         * ((e1 > deadzone_hi) - (uint32_t)(e1 < deadzone_lo))
                                                         + e1
@@ -12553,9 +12588,9 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
         {
           bank_off2 = bank_off;
           ctxw_s = ctxw;
-          wnode0m1a = node0[-1].w2;
-          enode0m1a = res2 - p2_pred(wnode0m1a, *(uint8_t *)&node0[-1].b0);
-          *(uint16_t *)&node0[-1].w2 = wnode0m1a
+          wnode0m1a = node0[-1].weighted;
+          enode0m1a = res2 - p2_pred(wnode0m1a, *(uint8_t *)&node0[-1].rate);
+          *(uint16_t *)&node0[-1].weighted = wnode0m1a
                                                   + ((32 * ((enode0m1a > deadzone_hi) - (uint32_t)(enode0m1a < deadzone_lo))
                                                     + enode0m1a
                                                     + 2) >> 2);
@@ -12671,444 +12706,444 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
               mir_top[3] = ((uint32_t)(-res_s - p2_pred(w_top3, b_top3) + 2) >> 2) + w_top3,
               go) )
         {
-          wd4000b = d4000->w2;
+          wd4000b = d4000->weighted;
           res_c = res_s;
-          ed4000b = res_s - p2_pred(wd4000b, (d4000->b0));
-          d4000->w2 = p2_bump(wd4000b, ed4000b, 2);
-          wr4000a = r4000->w2;
-          er4000a = res_s - p2_pred(wr4000a, r4000->b0);
-          r4000->w2 = p2_bump(wr4000a, er4000a, 3);
-          wd4000p1a = d4000[1].w2;
-          pd4000p1a = p2_pred(wd4000p1a, *(uint8_t *)&d4000[1].b0);
+          ed4000b = res_s - p2_pred(wd4000b, (d4000->rate));
+          d4000->weighted = p2_bump(wd4000b, ed4000b, 2);
+          wr4000a = r4000->weighted;
+          er4000a = res_s - p2_pred(wr4000a, r4000->rate);
+          r4000->weighted = p2_bump(wr4000a, er4000a, 3);
+          wd4000p1a = d4000[1].weighted;
+          pd4000p1a = p2_pred(wd4000p1a, *(uint8_t *)&d4000[1].rate);
           nres3 = -res_s;
-          *(uint16_t *)&d4000[1].w2 = ((uint32_t)(res_s - pd4000p1a + 2) >> 2) + wd4000p1a;
-          wm4000a = m4000->w2;
-          em4000a = -res_s - p2_pred(wm4000a, m4000->b0);
-          m4000->w2 = p2_bump(wm4000a, em4000a, 3);
-          wd2000a = d2000->w2;
-          ed2000a = res_c - p2_pred(wd2000a, d2000->b0);
-          d2000->w2 = p2_bump(wd2000a, ed2000a, 2);
-          wr2000a = r2000->w2;
-          er2000a = res_c - p2_pred(wr2000a, r2000->b0);
-          r2000->w2 = p2_bump(wr2000a, er2000a, 3);
-          *(uint16_t *)&d2000[1].w2 += (uint32_t)(res_c
-                                               - p2_pred(*(int16_t *)&*(uint16_t *)&d2000[1].w2, *(uint8_t *)&d2000[1].b0)
+          *(uint16_t *)&d4000[1].weighted = ((uint32_t)(res_s - pd4000p1a + 2) >> 2) + wd4000p1a;
+          wm4000a = m4000->weighted;
+          em4000a = -res_s - p2_pred(wm4000a, m4000->rate);
+          m4000->weighted = p2_bump(wm4000a, em4000a, 3);
+          wd2000a = d2000->weighted;
+          ed2000a = res_c - p2_pred(wd2000a, d2000->rate);
+          d2000->weighted = p2_bump(wd2000a, ed2000a, 2);
+          wr2000a = r2000->weighted;
+          er2000a = res_c - p2_pred(wr2000a, r2000->rate);
+          r2000->weighted = p2_bump(wr2000a, er2000a, 3);
+          *(uint16_t *)&d2000[1].weighted += (uint32_t)(res_c
+                                               - p2_pred(*(int16_t *)&*(uint16_t *)&d2000[1].weighted, *(uint8_t *)&d2000[1].rate)
                                                + 2) >> 2;
-          wm2000a = m2000->w2;
-          em2000a = nres3 - p2_pred(wm2000a, m2000->b0);
-          m2000->w2 = p2_bump(wm2000a, em2000a, 3);
-          wd1000a = d1000->w2;
-          ed1000a = res_c - p2_pred(wd1000a, d1000->b0);
-          d1000->w2 = p2_bump(wd1000a, ed1000a, 2);
-          wr1000a = r1000->w2;
-          er1000a = res_c - p2_pred(wr1000a, r1000->b0);
-          r1000->w2 = p2_bump(wr1000a, er1000a, 3);
-          *(uint16_t *)&d1000[1].w2 += (uint32_t)(res_c
-                                               - p2_pred(*(int16_t *)&*(uint16_t *)&d1000[1].w2, *(uint8_t *)&d1000[1].b0)
+          wm2000a = m2000->weighted;
+          em2000a = nres3 - p2_pred(wm2000a, m2000->rate);
+          m2000->weighted = p2_bump(wm2000a, em2000a, 3);
+          wd1000a = d1000->weighted;
+          ed1000a = res_c - p2_pred(wd1000a, d1000->rate);
+          d1000->weighted = p2_bump(wd1000a, ed1000a, 2);
+          wr1000a = r1000->weighted;
+          er1000a = res_c - p2_pred(wr1000a, r1000->rate);
+          r1000->weighted = p2_bump(wr1000a, er1000a, 3);
+          *(uint16_t *)&d1000[1].weighted += (uint32_t)(res_c
+                                               - p2_pred(*(int16_t *)&*(uint16_t *)&d1000[1].weighted, *(uint8_t *)&d1000[1].rate)
                                                + 2) >> 2;
-          wm1000a = m1000->w2;
-          em1000a = nres3 - p2_pred(wm1000a, m1000->b0);
-          m1000->w2 = p2_bump(wm1000a, em1000a, 3);
-          wd0800a = d0800->w2;
-          ed0800a = res_c - p2_pred(wd0800a, d0800->b0);
-          d0800->w2 = p2_bump(wd0800a, ed0800a, 2);
-          wr0800a = r0800->w2;
-          er0800a = res_c - p2_pred(wr0800a, r0800->b0);
-          r0800->w2 = p2_bump(wr0800a, er0800a, 3);
-          *(uint16_t *)&d0800[1].w2 += (uint32_t)(res_c - p2_pred(d0800[1].w2, d0800[1].b0) + 2) >> 2;
-          wm0800a = m0800->w2;
-          em0800a = nres3 - p2_pred(wm0800a, m0800->b0);
-          m0800->w2 = p2_bump(wm0800a, em0800a, 3);
-          wd0400a = d0400->w2;
-          ed0400a = res_c - p2_pred(wd0400a, d0400->b0);
-          d0400->w2 = p2_bump(wd0400a, ed0400a, 2);
-          wr0400a = r0400->w2;
-          er0400a = res_c - p2_pred(wr0400a, r0400->b0);
-          r0400->w2 = p2_bump(wr0400a, er0400a, 3);
-          *(uint16_t *)&d0400[1].w2 += (uint32_t)(res_c - p2_pred(d0400[1].w2, d0400[1].b0) + 2) >> 2;
-          wm0400z = m0400->w2;
-          nres3 -= p2_pred(wm0400z, m0400->b0);
-          m0400->w2 = p2_bump(wm0400z, nres3, 3);
-          wd0200a = d0200->w2;
-          ed0200a = res_c - p2_pred(wd0200a, d0200->b0);
-          d0200->w2 = p2_bump(wd0200a, ed0200a, 2);
-          wr0200a = r0200->w2;
-          er0200a = res_c - p2_pred(wr0200a, r0200->b0);
-          r0200->w2 = p2_bump(wr0200a, er0200a, 3);
-          *(uint16_t *)&d0200[1].w2 += (uint32_t)(res_c - p2_pred(d0200[1].w2, d0200[1].b0) + 2) >> 2;
-          wm0200a = m0200->w2;
+          wm1000a = m1000->weighted;
+          em1000a = nres3 - p2_pred(wm1000a, m1000->rate);
+          m1000->weighted = p2_bump(wm1000a, em1000a, 3);
+          wd0800a = d0800->weighted;
+          ed0800a = res_c - p2_pred(wd0800a, d0800->rate);
+          d0800->weighted = p2_bump(wd0800a, ed0800a, 2);
+          wr0800a = r0800->weighted;
+          er0800a = res_c - p2_pred(wr0800a, r0800->rate);
+          r0800->weighted = p2_bump(wr0800a, er0800a, 3);
+          *(uint16_t *)&d0800[1].weighted += (uint32_t)(res_c - p2_pred(d0800[1].weighted, d0800[1].rate) + 2) >> 2;
+          wm0800a = m0800->weighted;
+          em0800a = nres3 - p2_pred(wm0800a, m0800->rate);
+          m0800->weighted = p2_bump(wm0800a, em0800a, 3);
+          wd0400a = d0400->weighted;
+          ed0400a = res_c - p2_pred(wd0400a, d0400->rate);
+          d0400->weighted = p2_bump(wd0400a, ed0400a, 2);
+          wr0400a = r0400->weighted;
+          er0400a = res_c - p2_pred(wr0400a, r0400->rate);
+          r0400->weighted = p2_bump(wr0400a, er0400a, 3);
+          *(uint16_t *)&d0400[1].weighted += (uint32_t)(res_c - p2_pred(d0400[1].weighted, d0400[1].rate) + 2) >> 2;
+          wm0400z = m0400->weighted;
+          nres3 -= p2_pred(wm0400z, m0400->rate);
+          m0400->weighted = p2_bump(wm0400z, nres3, 3);
+          wd0200a = d0200->weighted;
+          ed0200a = res_c - p2_pred(wd0200a, d0200->rate);
+          d0200->weighted = p2_bump(wd0200a, ed0200a, 2);
+          wr0200a = r0200->weighted;
+          er0200a = res_c - p2_pred(wr0200a, r0200->rate);
+          r0200->weighted = p2_bump(wr0200a, er0200a, 3);
+          *(uint16_t *)&d0200[1].weighted += (uint32_t)(res_c - p2_pred(d0200[1].weighted, d0200[1].rate) + 2) >> 2;
+          wm0200a = m0200->weighted;
           nres2 = -res_c;
-          em0200a = -res_c - p2_pred(wm0200a, m0200->b0);
-          m0200->w2 = p2_bump(wm0200a, em0200a, 3);
-          wd0100a = d0100->w2;
-          ed0100a = res_c - p2_pred(wd0100a, d0100->b0);
-          d0100->w2 = p2_bump(wd0100a, ed0100a, 2);
-          wr0100a = r0100->w2;
-          er0100a = res_c - p2_pred(wr0100a, r0100->b0);
-          r0100->w2 = p2_bump(wr0100a, er0100a, 3);
-          *(uint16_t *)&d0100[1].w2 += (uint32_t)(res_c - p2_pred(d0100[1].w2, d0100[1].b0) + 2) >> 2;
-          wm0100a = m0100->w2;
-          em0100a = nres2 - p2_pred(wm0100a, m0100->b0);
-          m0100->w2 = p2_bump(wm0100a, em0100a, 3);
-          wd0080a = d0080->w2;
-          ed0080a = res_c - p2_pred(wd0080a, d0080->b0);
-          d0080->w2 = p2_bump(wd0080a, ed0080a, 2);
-          wr0080a = r0080->w2;
-          er0080a = res_c - p2_pred(wr0080a, r0080->b0);
-          r0080->w2 = p2_bump(wr0080a, er0080a, 3);
-          *(uint16_t *)&d0080[1].w2 += (uint32_t)(res_c - p2_pred(d0080[1].w2, d0080[1].b0) + 2) >> 2;
-          wm0080a = m0080->w2;
-          em0080a = nres2 - p2_pred(wm0080a, m0080->b0);
-          m0080->w2 = p2_bump(wm0080a, em0080a, 3);
-          wd0040a = d0040->w2;
-          ed0040a = res_c - p2_pred(wd0040a, d0040->b0);
-          d0040->w2 = p2_bump(wd0040a, ed0040a, 2);
-          wr0040a = r0040->w2;
-          er0040a = res_c - p2_pred(wr0040a, r0040->b0);
-          r0040->w2 = p2_bump(wr0040a, er0040a, 3);
-          *(uint16_t *)&d0040[1].w2 += (uint32_t)(res_c - p2_pred(d0040[1].w2, d0040[1].b0) + 2) >> 2;
-          wm0040a = m0040->w2;
-          em0040a = nres2 - p2_pred(wm0040a, m0040->b0);
-          m0040->w2 = p2_bump(wm0040a, em0040a, 3);
-          wd0020a = d0020->w2;
-          ed0020a = res_c - p2_pred(wd0020a, d0020->b0);
-          d0020->w2 = p2_bump(wd0020a, ed0020a, 2);
-          wr0020a = r0020->w2;
-          er0020a = res_c - p2_pred(wr0020a, r0020->b0);
-          r0020->w2 = p2_bump(wr0020a, er0020a, 3);
-          *(uint16_t *)&d0020[1].w2 += (uint32_t)(res_c - p2_pred(d0020[1].w2, d0020[1].b0) + 2) >> 2;
-          wm0020a = m0020->w2;
-          pm0020a = p2_pred(wm0020a, m0020->b0);
-          m0020->w2 = wm0020a
+          em0200a = -res_c - p2_pred(wm0200a, m0200->rate);
+          m0200->weighted = p2_bump(wm0200a, em0200a, 3);
+          wd0100a = d0100->weighted;
+          ed0100a = res_c - p2_pred(wd0100a, d0100->rate);
+          d0100->weighted = p2_bump(wd0100a, ed0100a, 2);
+          wr0100a = r0100->weighted;
+          er0100a = res_c - p2_pred(wr0100a, r0100->rate);
+          r0100->weighted = p2_bump(wr0100a, er0100a, 3);
+          *(uint16_t *)&d0100[1].weighted += (uint32_t)(res_c - p2_pred(d0100[1].weighted, d0100[1].rate) + 2) >> 2;
+          wm0100a = m0100->weighted;
+          em0100a = nres2 - p2_pred(wm0100a, m0100->rate);
+          m0100->weighted = p2_bump(wm0100a, em0100a, 3);
+          wd0080a = d0080->weighted;
+          ed0080a = res_c - p2_pred(wd0080a, d0080->rate);
+          d0080->weighted = p2_bump(wd0080a, ed0080a, 2);
+          wr0080a = r0080->weighted;
+          er0080a = res_c - p2_pred(wr0080a, r0080->rate);
+          r0080->weighted = p2_bump(wr0080a, er0080a, 3);
+          *(uint16_t *)&d0080[1].weighted += (uint32_t)(res_c - p2_pred(d0080[1].weighted, d0080[1].rate) + 2) >> 2;
+          wm0080a = m0080->weighted;
+          em0080a = nres2 - p2_pred(wm0080a, m0080->rate);
+          m0080->weighted = p2_bump(wm0080a, em0080a, 3);
+          wd0040a = d0040->weighted;
+          ed0040a = res_c - p2_pred(wd0040a, d0040->rate);
+          d0040->weighted = p2_bump(wd0040a, ed0040a, 2);
+          wr0040a = r0040->weighted;
+          er0040a = res_c - p2_pred(wr0040a, r0040->rate);
+          r0040->weighted = p2_bump(wr0040a, er0040a, 3);
+          *(uint16_t *)&d0040[1].weighted += (uint32_t)(res_c - p2_pred(d0040[1].weighted, d0040[1].rate) + 2) >> 2;
+          wm0040a = m0040->weighted;
+          em0040a = nres2 - p2_pred(wm0040a, m0040->rate);
+          m0040->weighted = p2_bump(wm0040a, em0040a, 3);
+          wd0020a = d0020->weighted;
+          ed0020a = res_c - p2_pred(wd0020a, d0020->rate);
+          d0020->weighted = p2_bump(wd0020a, ed0020a, 2);
+          wr0020a = r0020->weighted;
+          er0020a = res_c - p2_pred(wr0020a, r0020->rate);
+          r0020->weighted = p2_bump(wr0020a, er0020a, 3);
+          *(uint16_t *)&d0020[1].weighted += (uint32_t)(res_c - p2_pred(d0020[1].weighted, d0020[1].rate) + 2) >> 2;
+          wm0020a = m0020->weighted;
+          pm0020a = p2_pred(wm0020a, m0020->rate);
+          m0020->weighted = wm0020a
                                + ((32 * ((nres2 - pm0020a > deadzone_hi) - (uint32_t)(nres2 - pm0020a < deadzone_lo))
                                  + nres2
                                  - pm0020a
                                  + 4) >> 3);
-          wd0010a = d0010->w2;
-          ed0010a = res_c - p2_pred(wd0010a, d0010->b0);
-          d0010->w2 = p2_bump(wd0010a, ed0010a, 2);
-          wr0010a = r0010->w2;
-          er0010a = res_c - p2_pred(wr0010a, r0010->b0);
-          r0010->w2 = p2_bump(wr0010a, er0010a, 3);
-          *(uint16_t *)&d0010[1].w2 += (uint32_t)(res_c
-                                               - p2_pred(*(int16_t *)&*(uint16_t *)&d0010[1].w2, *(uint8_t *)&d0010[1].b0)
+          wd0010a = d0010->weighted;
+          ed0010a = res_c - p2_pred(wd0010a, d0010->rate);
+          d0010->weighted = p2_bump(wd0010a, ed0010a, 2);
+          wr0010a = r0010->weighted;
+          er0010a = res_c - p2_pred(wr0010a, r0010->rate);
+          r0010->weighted = p2_bump(wr0010a, er0010a, 3);
+          *(uint16_t *)&d0010[1].weighted += (uint32_t)(res_c
+                                               - p2_pred(*(int16_t *)&*(uint16_t *)&d0010[1].weighted, *(uint8_t *)&d0010[1].rate)
                                                + 2) >> 2;
-          wm0010a = m0010->w2;
-          em0010a = -res_c - p2_pred(wm0010a, m0010->b0);
-          m0010->w2 = p2_bump(wm0010a, em0010a, 3);
+          wm0010a = m0010->weighted;
+          em0010a = -res_c - p2_pred(wm0010a, m0010->rate);
+          m0010->weighted = p2_bump(wm0010a, em0010a, 3);
         }
         else
         {
           w_topm1 = (int16_t)mir_top[-1];
           res_c = res_s;
           mir_top[-1] = ((uint32_t)(-res_s - p2_pred(w_topm1, ((uint8_t)mir_top[-2])) + 4) >> 3) + w_topm1;
-          wd4000a = d4000->w2;
-          ed4000a = res_c - p2_pred(wd4000a, d4000->b0);
-          d4000->w2 = p2_bump(wd4000a, ed4000a, 2);
-          wr4000b = r4000->w2;
+          wd4000a = d4000->weighted;
+          ed4000a = res_c - p2_pred(wd4000a, d4000->rate);
+          d4000->weighted = p2_bump(wd4000a, ed4000a, 2);
+          wr4000b = r4000->weighted;
           go = lowbits < 3;
-          er4000b = res_c - p2_pred(wr4000b, r4000->b0);
-          r4000->w2 = p2_bump(wr4000b, er4000b, 3);
+          er4000b = res_c - p2_pred(wr4000b, r4000->rate);
+          r4000->weighted = p2_bump(wr4000b, er4000b, 3);
           if ( go )
           {
-            *(uint16_t *)&d4000[1].w2 += (uint32_t)(res_c
-                                                 - p2_pred(d4000[1].w2, *(uint8_t *)&d4000[1].b0)
+            *(uint16_t *)&d4000[1].weighted += (uint32_t)(res_c
+                                                 - p2_pred(d4000[1].weighted, *(uint8_t *)&d4000[1].rate)
                                                  + 2) >> 2;
-            wd4000m1a = d4000[-1].w2;
-            ed4000m1a = res_c - p2_pred(wd4000m1a, *(uint8_t *)&d4000[-1].b0);
+            wd4000m1a = d4000[-1].weighted;
+            ed4000m1a = res_c - p2_pred(wd4000m1a, *(uint8_t *)&d4000[-1].rate);
             neg_c = -res_c;
-            d4000[-1].w2 = p2_bump(wd4000m1a, ed4000m1a, 3);
-            wm4000b = m4000->w2;
-            em4000b = neg_c - p2_pred(wm4000b, m4000->b0);
-            m4000->w2 = p2_bump(wm4000b, em4000b, 3);
-            wd2000b = d2000->w2;
-            ed2000b = res_c - p2_pred(wd2000b, d2000->b0);
-            d2000->w2 = p2_bump(wd2000b, ed2000b, 2);
-            wr2000b = r2000->w2;
-            er2000b = res_c - p2_pred(wr2000b, r2000->b0);
-            r2000->w2 = p2_bump(wr2000b, er2000b, 3);
-            *(uint16_t *)&d2000[1].w2 += (uint32_t)(res_c
-                                                 - p2_pred(*(int16_t *)&*(uint16_t *)&d2000[1].w2, *(uint8_t *)&d2000[1].b0)
+            d4000[-1].weighted = p2_bump(wd4000m1a, ed4000m1a, 3);
+            wm4000b = m4000->weighted;
+            em4000b = neg_c - p2_pred(wm4000b, m4000->rate);
+            m4000->weighted = p2_bump(wm4000b, em4000b, 3);
+            wd2000b = d2000->weighted;
+            ed2000b = res_c - p2_pred(wd2000b, d2000->rate);
+            d2000->weighted = p2_bump(wd2000b, ed2000b, 2);
+            wr2000b = r2000->weighted;
+            er2000b = res_c - p2_pred(wr2000b, r2000->rate);
+            r2000->weighted = p2_bump(wr2000b, er2000b, 3);
+            *(uint16_t *)&d2000[1].weighted += (uint32_t)(res_c
+                                                 - p2_pred(*(int16_t *)&*(uint16_t *)&d2000[1].weighted, *(uint8_t *)&d2000[1].rate)
                                                  + 2) >> 2;
-            wd2000m1a = d2000[-1].w2;
-            ed2000m1a = res_c - p2_pred(wd2000m1a, *(uint8_t *)&d2000[-1].b0);
-            d2000[-1].w2 = p2_bump(wd2000m1a, ed2000m1a, 3);
-            wm2000b = m2000->w2;
-            em2000b = neg_c - p2_pred(wm2000b, m2000->b0);
-            m2000->w2 = p2_bump(wm2000b, em2000b, 3);
-            wd1000b = d1000->w2;
-            ed1000b = res_c - p2_pred(wd1000b, d1000->b0);
-            d1000->w2 = p2_bump(wd1000b, ed1000b, 2);
-            wr1000b = r1000->w2;
-            er1000b = res_c - p2_pred(wr1000b, r1000->b0);
-            r1000->w2 = p2_bump(wr1000b, er1000b, 3);
-            *(uint16_t *)&d1000[1].w2 += (uint32_t)(res_c
-                                                 - p2_pred(*(int16_t *)&*(uint16_t *)&d1000[1].w2, *(uint8_t *)&d1000[1].b0)
+            wd2000m1a = d2000[-1].weighted;
+            ed2000m1a = res_c - p2_pred(wd2000m1a, *(uint8_t *)&d2000[-1].rate);
+            d2000[-1].weighted = p2_bump(wd2000m1a, ed2000m1a, 3);
+            wm2000b = m2000->weighted;
+            em2000b = neg_c - p2_pred(wm2000b, m2000->rate);
+            m2000->weighted = p2_bump(wm2000b, em2000b, 3);
+            wd1000b = d1000->weighted;
+            ed1000b = res_c - p2_pred(wd1000b, d1000->rate);
+            d1000->weighted = p2_bump(wd1000b, ed1000b, 2);
+            wr1000b = r1000->weighted;
+            er1000b = res_c - p2_pred(wr1000b, r1000->rate);
+            r1000->weighted = p2_bump(wr1000b, er1000b, 3);
+            *(uint16_t *)&d1000[1].weighted += (uint32_t)(res_c
+                                                 - p2_pred(*(int16_t *)&*(uint16_t *)&d1000[1].weighted, *(uint8_t *)&d1000[1].rate)
                                                  + 2) >> 2;
-            wd1000m1a = d1000[-1].w2;
-            ed1000m1a = res_c - p2_pred(wd1000m1a, *(uint8_t *)&d1000[-1].b0);
-            d1000[-1].w2 = p2_bump(wd1000m1a, ed1000m1a, 3);
-            wm1000b = m1000->w2;
-            em1000b = neg_c - p2_pred(wm1000b, m1000->b0);
-            m1000->w2 = p2_bump(wm1000b, em1000b, 3);
-            wd0800b = d0800->w2;
-            ed0800b = res_c - p2_pred(wd0800b, d0800->b0);
-            d0800->w2 = p2_bump(wd0800b, ed0800b, 2);
-            wr0800b = r0800->w2;
-            er0800b = res_c - p2_pred(wr0800b, r0800->b0);
-            r0800->w2 = p2_bump(wr0800b, er0800b, 3);
-            *(uint16_t *)&d0800[1].w2 += (uint32_t)(res_c
-                                                 - p2_pred(d0800[1].w2, d0800[1].b0)
+            wd1000m1a = d1000[-1].weighted;
+            ed1000m1a = res_c - p2_pred(wd1000m1a, *(uint8_t *)&d1000[-1].rate);
+            d1000[-1].weighted = p2_bump(wd1000m1a, ed1000m1a, 3);
+            wm1000b = m1000->weighted;
+            em1000b = neg_c - p2_pred(wm1000b, m1000->rate);
+            m1000->weighted = p2_bump(wm1000b, em1000b, 3);
+            wd0800b = d0800->weighted;
+            ed0800b = res_c - p2_pred(wd0800b, d0800->rate);
+            d0800->weighted = p2_bump(wd0800b, ed0800b, 2);
+            wr0800b = r0800->weighted;
+            er0800b = res_c - p2_pred(wr0800b, r0800->rate);
+            r0800->weighted = p2_bump(wr0800b, er0800b, 3);
+            *(uint16_t *)&d0800[1].weighted += (uint32_t)(res_c
+                                                 - p2_pred(d0800[1].weighted, d0800[1].rate)
                                                  + 2) >> 2;
-            wd0800m1a = d0800[-1].w2;
-            ed0800m1a = res_c - p2_pred(wd0800m1a, d0800[-1].b0);
-            d0800[-1].w2 = p2_bump(wd0800m1a, ed0800m1a, 3);
-            wm0800b = m0800->w2;
-            em0800b = neg_c - p2_pred(wm0800b, m0800->b0);
-            m0800->w2 = p2_bump(wm0800b, em0800b, 3);
-            wd0400b = d0400->w2;
-            ed0400b = res_c - p2_pred(wd0400b, d0400->b0);
-            d0400->w2 = p2_bump(wd0400b, ed0400b, 2);
-            wr0400b = r0400->w2;
-            // `LOBYTE(wd0400b) = r0400->b0` and `wd0400b & 31` was the rate: the mask
+            wd0800m1a = d0800[-1].weighted;
+            ed0800m1a = res_c - p2_pred(wd0800m1a, d0800[-1].rate);
+            d0800[-1].weighted = p2_bump(wd0800m1a, ed0800m1a, 3);
+            wm0800b = m0800->weighted;
+            em0800b = neg_c - p2_pred(wm0800b, m0800->rate);
+            m0800->weighted = p2_bump(wm0800b, em0800b, 3);
+            wd0400b = d0400->weighted;
+            ed0400b = res_c - p2_pred(wd0400b, d0400->rate);
+            d0400->weighted = p2_bump(wd0400b, ed0400b, 2);
+            wr0400b = r0400->weighted;
+            // `LOBYTE(wd0400b) = r0400->rate` and `wd0400b & 31` was the rate: the mask
             // reads only the byte that was written.
-            er0400b = res_c - p2_pred(wr0400b, r0400->b0);
-            r0400->w2 = p2_bump(wr0400b, er0400b, 3);
-            *(uint16_t *)&d0400[1].w2 += (uint32_t)(res_c
-                                                 - p2_pred(d0400[1].w2, d0400[1].b0)
+            er0400b = res_c - p2_pred(wr0400b, r0400->rate);
+            r0400->weighted = p2_bump(wr0400b, er0400b, 3);
+            *(uint16_t *)&d0400[1].weighted += (uint32_t)(res_c
+                                                 - p2_pred(d0400[1].weighted, d0400[1].rate)
                                                  + 2) >> 2;
-            wd0400m1a = d0400[-1].w2;
-            ed0400m1a = res_c - p2_pred(wd0400m1a, d0400[-1].b0);
-            d0400[-1].w2 = p2_bump(wd0400m1a, ed0400m1a, 3);
-            wm0400y = m0400->w2;
+            wd0400m1a = d0400[-1].weighted;
+            ed0400m1a = res_c - p2_pred(wd0400m1a, d0400[-1].rate);
+            d0400[-1].weighted = p2_bump(wd0400m1a, ed0400m1a, 3);
+            wm0400y = m0400->weighted;
             nres5 = -res_c;
-            nb_slot = -res_c - p2_pred(wm0400y, m0400->b0);
-            m0400->w2 = p2_bump(wm0400y, nb_slot, 3);
-            wd0200b = d0200->w2;
-            ed0200b = res_c - p2_pred(wd0200b, d0200->b0);
-            d0200->w2 = p2_bump(wd0200b, ed0200b, 2);
-            wr0200b = r0200->w2;
-            er0200b = res_c - p2_pred(wr0200b, r0200->b0);
-            r0200->w2 = p2_bump(wr0200b, er0200b, 3);
-            *(uint16_t *)&d0200[1].w2 += (uint32_t)(res_c
-                                                 - p2_pred(d0200[1].w2, d0200[1].b0)
+            nb_slot = -res_c - p2_pred(wm0400y, m0400->rate);
+            m0400->weighted = p2_bump(wm0400y, nb_slot, 3);
+            wd0200b = d0200->weighted;
+            ed0200b = res_c - p2_pred(wd0200b, d0200->rate);
+            d0200->weighted = p2_bump(wd0200b, ed0200b, 2);
+            wr0200b = r0200->weighted;
+            er0200b = res_c - p2_pred(wr0200b, r0200->rate);
+            r0200->weighted = p2_bump(wr0200b, er0200b, 3);
+            *(uint16_t *)&d0200[1].weighted += (uint32_t)(res_c
+                                                 - p2_pred(d0200[1].weighted, d0200[1].rate)
                                                  + 2) >> 2;
-            wd0200m1a = d0200[-1].w2;
-            ed0200m1a = res_c - p2_pred(wd0200m1a, d0200[-1].b0);
-            d0200[-1].w2 = p2_bump(wd0200m1a, ed0200m1a, 3);
-            wm0200b = m0200->w2;
-            em0200b = nres5 - p2_pred(wm0200b, m0200->b0);
-            m0200->w2 = p2_bump(wm0200b, em0200b, 3);
-            wd0100b = d0100->w2;
-            ed0100b = res_c - p2_pred(wd0100b, d0100->b0);
-            d0100->w2 = p2_bump(wd0100b, ed0100b, 2);
-            wr0100b = r0100->w2;
-            er0100b = res_c - p2_pred(wr0100b, r0100->b0);
-            r0100->w2 = p2_bump(wr0100b, er0100b, 3);
-            *(uint16_t *)&d0100[1].w2 += (uint32_t)(res_c
-                                                 - p2_pred(d0100[1].w2, d0100[1].b0)
+            wd0200m1a = d0200[-1].weighted;
+            ed0200m1a = res_c - p2_pred(wd0200m1a, d0200[-1].rate);
+            d0200[-1].weighted = p2_bump(wd0200m1a, ed0200m1a, 3);
+            wm0200b = m0200->weighted;
+            em0200b = nres5 - p2_pred(wm0200b, m0200->rate);
+            m0200->weighted = p2_bump(wm0200b, em0200b, 3);
+            wd0100b = d0100->weighted;
+            ed0100b = res_c - p2_pred(wd0100b, d0100->rate);
+            d0100->weighted = p2_bump(wd0100b, ed0100b, 2);
+            wr0100b = r0100->weighted;
+            er0100b = res_c - p2_pred(wr0100b, r0100->rate);
+            r0100->weighted = p2_bump(wr0100b, er0100b, 3);
+            *(uint16_t *)&d0100[1].weighted += (uint32_t)(res_c
+                                                 - p2_pred(d0100[1].weighted, d0100[1].rate)
                                                  + 2) >> 2;
-            wd0100m1a = d0100[-1].w2;
-            ed0100m1a = res_c - p2_pred(wd0100m1a, d0100[-1].b0);
-            d0100[-1].w2 = p2_bump(wd0100m1a, ed0100m1a, 3);
-            wm0100b = m0100->w2;
-            em0100b = nres5 - p2_pred(wm0100b, m0100->b0);
-            m0100->w2 = p2_bump(wm0100b, em0100b, 3);
-            wd0080b = d0080->w2;
-            ed0080b = res_c - p2_pred(wd0080b, d0080->b0);
-            d0080->w2 = p2_bump(wd0080b, ed0080b, 2);
-            wr0080b = r0080->w2;
-            er0080b = res_c - p2_pred(wr0080b, r0080->b0);
-            r0080->w2 = p2_bump(wr0080b, er0080b, 3);
-            *(uint16_t *)&d0080[1].w2 += (uint32_t)(res_c
-                                                 - p2_pred(d0080[1].w2, d0080[1].b0)
+            wd0100m1a = d0100[-1].weighted;
+            ed0100m1a = res_c - p2_pred(wd0100m1a, d0100[-1].rate);
+            d0100[-1].weighted = p2_bump(wd0100m1a, ed0100m1a, 3);
+            wm0100b = m0100->weighted;
+            em0100b = nres5 - p2_pred(wm0100b, m0100->rate);
+            m0100->weighted = p2_bump(wm0100b, em0100b, 3);
+            wd0080b = d0080->weighted;
+            ed0080b = res_c - p2_pred(wd0080b, d0080->rate);
+            d0080->weighted = p2_bump(wd0080b, ed0080b, 2);
+            wr0080b = r0080->weighted;
+            er0080b = res_c - p2_pred(wr0080b, r0080->rate);
+            r0080->weighted = p2_bump(wr0080b, er0080b, 3);
+            *(uint16_t *)&d0080[1].weighted += (uint32_t)(res_c
+                                                 - p2_pred(d0080[1].weighted, d0080[1].rate)
                                                  + 2) >> 2;
-            wd0080m1a = d0080[-1].w2;
-            ed0080m1a = res_c - p2_pred(wd0080m1a, d0080[-1].b0);
-            d0080[-1].w2 = p2_bump(wd0080m1a, ed0080m1a, 3);
-            wm0080b = m0080->w2;
-            em0080b = nres5 - p2_pred(wm0080b, m0080->b0);
-            m0080->w2 = p2_bump(wm0080b, em0080b, 3);
-            wd0040b = d0040->w2;
-            ed0040b = res_c - p2_pred(wd0040b, d0040->b0);
-            d0040->w2 = p2_bump(wd0040b, ed0040b, 2);
-            wr0040b = r0040->w2;
-            er0040b = res_c - p2_pred(wr0040b, r0040->b0);
-            r0040->w2 = p2_bump(wr0040b, er0040b, 3);
-            *(uint16_t *)&d0040[1].w2 += (uint32_t)(res_c
-                                                 - p2_pred(d0040[1].w2, d0040[1].b0)
+            wd0080m1a = d0080[-1].weighted;
+            ed0080m1a = res_c - p2_pred(wd0080m1a, d0080[-1].rate);
+            d0080[-1].weighted = p2_bump(wd0080m1a, ed0080m1a, 3);
+            wm0080b = m0080->weighted;
+            em0080b = nres5 - p2_pred(wm0080b, m0080->rate);
+            m0080->weighted = p2_bump(wm0080b, em0080b, 3);
+            wd0040b = d0040->weighted;
+            ed0040b = res_c - p2_pred(wd0040b, d0040->rate);
+            d0040->weighted = p2_bump(wd0040b, ed0040b, 2);
+            wr0040b = r0040->weighted;
+            er0040b = res_c - p2_pred(wr0040b, r0040->rate);
+            r0040->weighted = p2_bump(wr0040b, er0040b, 3);
+            *(uint16_t *)&d0040[1].weighted += (uint32_t)(res_c
+                                                 - p2_pred(d0040[1].weighted, d0040[1].rate)
                                                  + 2) >> 2;
-            wd0040m1a = d0040[-1].w2;
-            ed0040m1a = res_c - p2_pred(wd0040m1a, d0040[-1].b0);
+            wd0040m1a = d0040[-1].weighted;
+            ed0040m1a = res_c - p2_pred(wd0040m1a, d0040[-1].rate);
             neg_d = -res_c;
-            d0040[-1].w2 = p2_bump(wd0040m1a, ed0040m1a, 3);
-            wm0040b = m0040->w2;
-            em0040b = neg_d - p2_pred(wm0040b, m0040->b0);
-            m0040->w2 = p2_bump(wm0040b, em0040b, 3);
-            wd0020b = d0020->w2;
-            ed0020b = res_c - p2_pred(wd0020b, d0020->b0);
-            d0020->w2 = p2_bump(wd0020b, ed0020b, 2);
-            wr0020b = r0020->w2;
-            er0020b = res_c - p2_pred(wr0020b, r0020->b0);
-            r0020->w2 = p2_bump(wr0020b, er0020b, 3);
-            *(uint16_t *)&d0020[1].w2 += (uint32_t)(res_c
-                                                 - p2_pred(d0020[1].w2, d0020[1].b0)
+            d0040[-1].weighted = p2_bump(wd0040m1a, ed0040m1a, 3);
+            wm0040b = m0040->weighted;
+            em0040b = neg_d - p2_pred(wm0040b, m0040->rate);
+            m0040->weighted = p2_bump(wm0040b, em0040b, 3);
+            wd0020b = d0020->weighted;
+            ed0020b = res_c - p2_pred(wd0020b, d0020->rate);
+            d0020->weighted = p2_bump(wd0020b, ed0020b, 2);
+            wr0020b = r0020->weighted;
+            er0020b = res_c - p2_pred(wr0020b, r0020->rate);
+            r0020->weighted = p2_bump(wr0020b, er0020b, 3);
+            *(uint16_t *)&d0020[1].weighted += (uint32_t)(res_c
+                                                 - p2_pred(d0020[1].weighted, d0020[1].rate)
                                                  + 2) >> 2;
-            wd0020m1a = d0020[-1].w2;
-            ed0020m1a = res_c - p2_pred(wd0020m1a, d0020[-1].b0);
-            d0020[-1].w2 = p2_bump(wd0020m1a, ed0020m1a, 3);
-            wm0020b = m0020->w2;
-            em0020b = neg_d - p2_pred(wm0020b, m0020->b0);
-            m0020->w2 = p2_bump(wm0020b, em0020b, 3);
-            wd0010b = d0010->w2;
-            ed0010b = res_c - p2_pred(wd0010b, d0010->b0);
-            d0010->w2 = p2_bump(wd0010b, ed0010b, 2);
-            wr0010b = r0010->w2;
-            er0010b = res_c - p2_pred(wr0010b, r0010->b0);
-            r0010->w2 = p2_bump(wr0010b, er0010b, 3);
-            *(uint16_t *)&d0010[1].w2 += (uint32_t)(res_c
-                                                 - p2_pred(*(int16_t *)&*(uint16_t *)&d0010[1].w2, *(uint8_t *)&d0010[1].b0)
+            wd0020m1a = d0020[-1].weighted;
+            ed0020m1a = res_c - p2_pred(wd0020m1a, d0020[-1].rate);
+            d0020[-1].weighted = p2_bump(wd0020m1a, ed0020m1a, 3);
+            wm0020b = m0020->weighted;
+            em0020b = neg_d - p2_pred(wm0020b, m0020->rate);
+            m0020->weighted = p2_bump(wm0020b, em0020b, 3);
+            wd0010b = d0010->weighted;
+            ed0010b = res_c - p2_pred(wd0010b, d0010->rate);
+            d0010->weighted = p2_bump(wd0010b, ed0010b, 2);
+            wr0010b = r0010->weighted;
+            er0010b = res_c - p2_pred(wr0010b, r0010->rate);
+            r0010->weighted = p2_bump(wr0010b, er0010b, 3);
+            *(uint16_t *)&d0010[1].weighted += (uint32_t)(res_c
+                                                 - p2_pred(*(int16_t *)&*(uint16_t *)&d0010[1].weighted, *(uint8_t *)&d0010[1].rate)
                                                  + 2) >> 2;
-            wd0010m1a = d0010[-1].w2;
-            ed0010m1a = res_c - p2_pred(wd0010m1a, *(uint8_t *)&d0010[-1].b0);
-            d0010[-1].w2 = p2_bump(wd0010m1a, ed0010m1a, 3);
-            wm0010b = m0010->w2;
-            em0010b = neg_d - p2_pred(wm0010b, m0010->b0);
+            wd0010m1a = d0010[-1].weighted;
+            ed0010m1a = res_c - p2_pred(wd0010m1a, *(uint8_t *)&d0010[-1].rate);
+            d0010[-1].weighted = p2_bump(wd0010m1a, ed0010m1a, 3);
+            wm0010b = m0010->weighted;
+            em0010b = neg_d - p2_pred(wm0010b, m0010->rate);
           }
           else
           {
-            wd4000m1b = d4000[-1].w2;
-            ed4000m1b = res_c - p2_pred(wd4000m1b, *(uint8_t *)&d4000[-1].b0);
-            d4000[-1].w2 = p2_bump(wd4000m1b, ed4000m1b, 3);
-            wm4000c = m4000->w2;
+            wd4000m1b = d4000[-1].weighted;
+            ed4000m1b = res_c - p2_pred(wd4000m1b, *(uint8_t *)&d4000[-1].rate);
+            d4000[-1].weighted = p2_bump(wd4000m1b, ed4000m1b, 3);
+            wm4000c = m4000->weighted;
             nres1 = -res_c;
-            em4000c = -res_c - p2_pred(wm4000c, m4000->b0);
-            m4000->w2 = p2_bump(wm4000c, em4000c, 3);
-            wd2000c = d2000->w2;
-            ed2000c = res_c - p2_pred(wd2000c, d2000->b0);
-            d2000->w2 = p2_bump(wd2000c, ed2000c, 2);
-            wr2000c = r2000->w2;
-            er2000c = res_c - p2_pred(wr2000c, r2000->b0);
-            r2000->w2 = p2_bump(wr2000c, er2000c, 3);
-            wd2000m1b = d2000[-1].w2;
-            ed2000m1b = res_c - p2_pred(wd2000m1b, *(uint8_t *)&d2000[-1].b0);
-            d2000[-1].w2 = p2_bump(wd2000m1b, ed2000m1b, 3);
-            wm2000c = m2000->w2;
-            em2000c = nres1 - p2_pred(wm2000c, m2000->b0);
-            m2000->w2 = p2_bump(wm2000c, em2000c, 3);
-            wd1000c = d1000->w2;
-            ed1000c = res_c - p2_pred(wd1000c, d1000->b0);
-            d1000->w2 = p2_bump(wd1000c, ed1000c, 2);
-            wr1000c = r1000->w2;
-            er1000c = res_c - p2_pred(wr1000c, r1000->b0);
-            r1000->w2 = p2_bump(wr1000c, er1000c, 3);
-            wd1000m1b = d1000[-1].w2;
-            ed1000m1b = res_c - p2_pred(wd1000m1b, *(uint8_t *)&d1000[-1].b0);
-            d1000[-1].w2 = p2_bump(wd1000m1b, ed1000m1b, 3);
-            wm1000c = m1000->w2;
-            em1000c = nres1 - p2_pred(wm1000c, m1000->b0);
-            m1000->w2 = p2_bump(wm1000c, em1000c, 3);
-            wd0800c = d0800->w2;
-            ed0800c = res_c - p2_pred(wd0800c, d0800->b0);
-            d0800->w2 = p2_bump(wd0800c, ed0800c, 2);
-            wr0800c = r0800->w2;
-            er0800c = res_c - p2_pred(wr0800c, r0800->b0);
-            r0800->w2 = p2_bump(wr0800c, er0800c, 3);
-            wd0800m1b = d0800[-1].w2;
-            ed0800m1b = res_c - p2_pred(wd0800m1b, d0800[-1].b0);
-            d0800[-1].w2 = p2_bump(wd0800m1b, ed0800m1b, 3);
-            wm0800c = m0800->w2;
-            em0800c = nres1 - p2_pred(wm0800c, m0800->b0);
-            m0800->w2 = p2_bump(wm0800c, em0800c, 3);
-            wd0400c = d0400->w2;
-            ed0400c = res_c - p2_pred(wd0400c, d0400->b0);
-            d0400->w2 = p2_bump(wd0400c, ed0400c, 2);
-            wr0400c = r0400->w2;
-            er0400c = res_c - p2_pred(wr0400c, r0400->b0);
-            r0400->w2 = p2_bump(wr0400c, er0400c, 3);
-            wd0400m1b = d0400[-1].w2;
-            ed0400m1b = res_c - p2_pred(wd0400m1b, d0400[-1].b0);
-            d0400[-1].w2 = p2_bump(wd0400m1b, ed0400m1b, 3);
-            wm0400x = m0400->w2;
-            nres1 -= p2_pred(wm0400x, m0400->b0);
-            m0400->w2 = p2_bump(wm0400x, nres1, 3);
-            wd0200c = d0200->w2;
-            ed0200c = res_c - p2_pred(wd0200c, d0200->b0);
-            d0200->w2 = p2_bump(wd0200c, ed0200c, 2);
-            wr0200c = r0200->w2;
-            er0200c = res_c - p2_pred(wr0200c, r0200->b0);
-            r0200->w2 = p2_bump(wr0200c, er0200c, 3);
-            wd0200m1b = d0200[-1].w2;
-            ed0200m1b = res_c - p2_pred(wd0200m1b, d0200[-1].b0);
+            em4000c = -res_c - p2_pred(wm4000c, m4000->rate);
+            m4000->weighted = p2_bump(wm4000c, em4000c, 3);
+            wd2000c = d2000->weighted;
+            ed2000c = res_c - p2_pred(wd2000c, d2000->rate);
+            d2000->weighted = p2_bump(wd2000c, ed2000c, 2);
+            wr2000c = r2000->weighted;
+            er2000c = res_c - p2_pred(wr2000c, r2000->rate);
+            r2000->weighted = p2_bump(wr2000c, er2000c, 3);
+            wd2000m1b = d2000[-1].weighted;
+            ed2000m1b = res_c - p2_pred(wd2000m1b, *(uint8_t *)&d2000[-1].rate);
+            d2000[-1].weighted = p2_bump(wd2000m1b, ed2000m1b, 3);
+            wm2000c = m2000->weighted;
+            em2000c = nres1 - p2_pred(wm2000c, m2000->rate);
+            m2000->weighted = p2_bump(wm2000c, em2000c, 3);
+            wd1000c = d1000->weighted;
+            ed1000c = res_c - p2_pred(wd1000c, d1000->rate);
+            d1000->weighted = p2_bump(wd1000c, ed1000c, 2);
+            wr1000c = r1000->weighted;
+            er1000c = res_c - p2_pred(wr1000c, r1000->rate);
+            r1000->weighted = p2_bump(wr1000c, er1000c, 3);
+            wd1000m1b = d1000[-1].weighted;
+            ed1000m1b = res_c - p2_pred(wd1000m1b, *(uint8_t *)&d1000[-1].rate);
+            d1000[-1].weighted = p2_bump(wd1000m1b, ed1000m1b, 3);
+            wm1000c = m1000->weighted;
+            em1000c = nres1 - p2_pred(wm1000c, m1000->rate);
+            m1000->weighted = p2_bump(wm1000c, em1000c, 3);
+            wd0800c = d0800->weighted;
+            ed0800c = res_c - p2_pred(wd0800c, d0800->rate);
+            d0800->weighted = p2_bump(wd0800c, ed0800c, 2);
+            wr0800c = r0800->weighted;
+            er0800c = res_c - p2_pred(wr0800c, r0800->rate);
+            r0800->weighted = p2_bump(wr0800c, er0800c, 3);
+            wd0800m1b = d0800[-1].weighted;
+            ed0800m1b = res_c - p2_pred(wd0800m1b, d0800[-1].rate);
+            d0800[-1].weighted = p2_bump(wd0800m1b, ed0800m1b, 3);
+            wm0800c = m0800->weighted;
+            em0800c = nres1 - p2_pred(wm0800c, m0800->rate);
+            m0800->weighted = p2_bump(wm0800c, em0800c, 3);
+            wd0400c = d0400->weighted;
+            ed0400c = res_c - p2_pred(wd0400c, d0400->rate);
+            d0400->weighted = p2_bump(wd0400c, ed0400c, 2);
+            wr0400c = r0400->weighted;
+            er0400c = res_c - p2_pred(wr0400c, r0400->rate);
+            r0400->weighted = p2_bump(wr0400c, er0400c, 3);
+            wd0400m1b = d0400[-1].weighted;
+            ed0400m1b = res_c - p2_pred(wd0400m1b, d0400[-1].rate);
+            d0400[-1].weighted = p2_bump(wd0400m1b, ed0400m1b, 3);
+            wm0400x = m0400->weighted;
+            nres1 -= p2_pred(wm0400x, m0400->rate);
+            m0400->weighted = p2_bump(wm0400x, nres1, 3);
+            wd0200c = d0200->weighted;
+            ed0200c = res_c - p2_pred(wd0200c, d0200->rate);
+            d0200->weighted = p2_bump(wd0200c, ed0200c, 2);
+            wr0200c = r0200->weighted;
+            er0200c = res_c - p2_pred(wr0200c, r0200->rate);
+            r0200->weighted = p2_bump(wr0200c, er0200c, 3);
+            wd0200m1b = d0200[-1].weighted;
+            ed0200m1b = res_c - p2_pred(wd0200m1b, d0200[-1].rate);
             neg_b = -res_c;
-            d0200[-1].w2 = p2_bump(wd0200m1b, ed0200m1b, 3);
-            wm0200c = m0200->w2;
-            em0200c = neg_b - p2_pred(wm0200c, m0200->b0);
-            m0200->w2 = p2_bump(wm0200c, em0200c, 3);
-            wd0100c = d0100->w2;
-            ed0100c = res_c - p2_pred(wd0100c, d0100->b0);
-            d0100->w2 = p2_bump(wd0100c, ed0100c, 2);
-            wr0100c = r0100->w2;
-            er0100c = res_c - p2_pred(wr0100c, r0100->b0);
-            r0100->w2 = p2_bump(wr0100c, er0100c, 3);
-            wd0100m1b = d0100[-1].w2;
-            ed0100m1b = res_c - p2_pred(wd0100m1b, d0100[-1].b0);
-            d0100[-1].w2 = p2_bump(wd0100m1b, ed0100m1b, 3);
-            wm0100c = m0100->w2;
-            em0100c = neg_b - p2_pred(wm0100c, m0100->b0);
-            m0100->w2 = p2_bump(wm0100c, em0100c, 3);
-            wd0080c = d0080->w2;
-            ed0080c = res_c - p2_pred(wd0080c, d0080->b0);
-            d0080->w2 = p2_bump(wd0080c, ed0080c, 2);
-            wr0080c = r0080->w2;
-            er0080c = res_c - p2_pred(wr0080c, r0080->b0);
-            r0080->w2 = p2_bump(wr0080c, er0080c, 3);
-            wd0080m1b = d0080[-1].w2;
-            ed0080m1b = res_c - p2_pred(wd0080m1b, d0080[-1].b0);
-            d0080[-1].w2 = p2_bump(wd0080m1b, ed0080m1b, 3);
-            wm0080c = m0080->w2;
-            em0080c = neg_b - p2_pred(wm0080c, m0080->b0);
-            m0080->w2 = p2_bump(wm0080c, em0080c, 3);
-            wd0040c = d0040->w2;
-            ed0040c = res_c - p2_pred(wd0040c, d0040->b0);
-            d0040->w2 = p2_bump(wd0040c, ed0040c, 2);
-            wr0040c = r0040->w2;
-            er0040c = res_c - p2_pred(wr0040c, r0040->b0);
-            r0040->w2 = p2_bump(wr0040c, er0040c, 3);
-            wd0040m1b = d0040[-1].w2;
-            ed0040m1b = res_c - p2_pred(wd0040m1b, d0040[-1].b0);
-            d0040[-1].w2 = p2_bump(wd0040m1b, ed0040m1b, 3);
-            wm0040c = m0040->w2;
-            em0040c = neg_b - p2_pred(wm0040c, m0040->b0);
-            m0040->w2 = p2_bump(wm0040c, em0040c, 3);
-            wd0020c = d0020->w2;
+            d0200[-1].weighted = p2_bump(wd0200m1b, ed0200m1b, 3);
+            wm0200c = m0200->weighted;
+            em0200c = neg_b - p2_pred(wm0200c, m0200->rate);
+            m0200->weighted = p2_bump(wm0200c, em0200c, 3);
+            wd0100c = d0100->weighted;
+            ed0100c = res_c - p2_pred(wd0100c, d0100->rate);
+            d0100->weighted = p2_bump(wd0100c, ed0100c, 2);
+            wr0100c = r0100->weighted;
+            er0100c = res_c - p2_pred(wr0100c, r0100->rate);
+            r0100->weighted = p2_bump(wr0100c, er0100c, 3);
+            wd0100m1b = d0100[-1].weighted;
+            ed0100m1b = res_c - p2_pred(wd0100m1b, d0100[-1].rate);
+            d0100[-1].weighted = p2_bump(wd0100m1b, ed0100m1b, 3);
+            wm0100c = m0100->weighted;
+            em0100c = neg_b - p2_pred(wm0100c, m0100->rate);
+            m0100->weighted = p2_bump(wm0100c, em0100c, 3);
+            wd0080c = d0080->weighted;
+            ed0080c = res_c - p2_pred(wd0080c, d0080->rate);
+            d0080->weighted = p2_bump(wd0080c, ed0080c, 2);
+            wr0080c = r0080->weighted;
+            er0080c = res_c - p2_pred(wr0080c, r0080->rate);
+            r0080->weighted = p2_bump(wr0080c, er0080c, 3);
+            wd0080m1b = d0080[-1].weighted;
+            ed0080m1b = res_c - p2_pred(wd0080m1b, d0080[-1].rate);
+            d0080[-1].weighted = p2_bump(wd0080m1b, ed0080m1b, 3);
+            wm0080c = m0080->weighted;
+            em0080c = neg_b - p2_pred(wm0080c, m0080->rate);
+            m0080->weighted = p2_bump(wm0080c, em0080c, 3);
+            wd0040c = d0040->weighted;
+            ed0040c = res_c - p2_pred(wd0040c, d0040->rate);
+            d0040->weighted = p2_bump(wd0040c, ed0040c, 2);
+            wr0040c = r0040->weighted;
+            er0040c = res_c - p2_pred(wr0040c, r0040->rate);
+            r0040->weighted = p2_bump(wr0040c, er0040c, 3);
+            wd0040m1b = d0040[-1].weighted;
+            ed0040m1b = res_c - p2_pred(wd0040m1b, d0040[-1].rate);
+            d0040[-1].weighted = p2_bump(wd0040m1b, ed0040m1b, 3);
+            wm0040c = m0040->weighted;
+            em0040c = neg_b - p2_pred(wm0040c, m0040->rate);
+            m0040->weighted = p2_bump(wm0040c, em0040c, 3);
+            wd0020c = d0020->weighted;
             res_t = res_c;
-            ed0020c = res_c - p2_pred(wd0020c, d0020->b0);
-            d0020->w2 = p2_bump(wd0020c, ed0020c, 2);
-            wr0020c = r0020->w2;
-            er0020c = res_t - p2_pred(wr0020c, r0020->b0);
+            ed0020c = res_c - p2_pred(wd0020c, d0020->rate);
+            d0020->weighted = p2_bump(wd0020c, ed0020c, 2);
+            wr0020c = r0020->weighted;
+            er0020c = res_t - p2_pred(wr0020c, r0020->rate);
             res_c = res_t;
-            r0020->w2 = p2_bump(wr0020c, er0020c, 3);
-            wd0020m1b = d0020[-1].w2;
-            ed0020m1b = res_t - p2_pred(wd0020m1b, d0020[-1].b0);
-            d0020[-1].w2 = p2_bump(wd0020m1b, ed0020m1b, 3);
-            wm0020c = m0020->w2;
+            r0020->weighted = p2_bump(wr0020c, er0020c, 3);
+            wd0020m1b = d0020[-1].weighted;
+            ed0020m1b = res_t - p2_pred(wd0020m1b, d0020[-1].rate);
+            d0020[-1].weighted = p2_bump(wd0020m1b, ed0020m1b, 3);
+            wm0020c = m0020->weighted;
             nres4 = -res_t;
-            em0020c = -res_t - p2_pred(wm0020c, m0020->b0);
-            m0020->w2 = p2_bump(wm0020c, em0020c, 3);
-            wd0010c = d0010->w2;
-            ed0010c = res_c - p2_pred(wd0010c, d0010->b0);
-            d0010->w2 = p2_bump(wd0010c, ed0010c, 2);
-            wr0010c = r0010->w2;
-            er0010c = res_c - p2_pred(wr0010c, r0010->b0);
-            r0010->w2 = p2_bump(wr0010c, er0010c, 3);
-            wd0010m1b = d0010[-1].w2;
-            ed0010m1b = res_c - p2_pred(wd0010m1b, *(uint8_t *)&d0010[-1].b0);
-            d0010[-1].w2 = p2_bump(wd0010m1b, ed0010m1b, 3);
-            wm0010b = m0010->w2;
-            em0010b = nres4 - p2_pred(wm0010b, m0010->b0);
+            em0020c = -res_t - p2_pred(wm0020c, m0020->rate);
+            m0020->weighted = p2_bump(wm0020c, em0020c, 3);
+            wd0010c = d0010->weighted;
+            ed0010c = res_c - p2_pred(wd0010c, d0010->rate);
+            d0010->weighted = p2_bump(wd0010c, ed0010c, 2);
+            wr0010c = r0010->weighted;
+            er0010c = res_c - p2_pred(wr0010c, r0010->rate);
+            r0010->weighted = p2_bump(wr0010c, er0010c, 3);
+            wd0010m1b = d0010[-1].weighted;
+            ed0010m1b = res_c - p2_pred(wd0010m1b, *(uint8_t *)&d0010[-1].rate);
+            d0010[-1].weighted = p2_bump(wd0010m1b, ed0010m1b, 3);
+            wm0010b = m0010->weighted;
+            em0010b = nres4 - p2_pred(wm0010b, m0010->rate);
           }
-          m0010->w2 = p2_bump(wm0010b, em0010b, 3);
+          m0010->weighted = p2_bump(wm0010b, em0010b, 3);
         }
       }
     }
@@ -14204,8 +14239,8 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *out) {   P2Ctx *cur0,
           if ( off )
             seed2 = 0;
           else
-            seed2 = (plane_desc[plane_desc[3].src_plane + 1].w8 * out[plane_desc[2].src_plane]
-                  + plane_desc[plane_desc[3].src_plane + 1].w4 * out[plane_desc[1].src_plane]) >> 3;
+            seed2 = (plane_desc[plane_desc[3].src_plane + 1].weight1 * out[plane_desc[2].src_plane]
+                  + plane_desc[plane_desc[3].src_plane + 1].weight0 * out[plane_desc[1].src_plane]) >> 3;
           blk2 = (AltP2Block *)(plane[2]);
           plane[2]->cursor[0]->dval = seed2;
           pred2 = __alt_p2_context((AltP2Block *)blk2, (AltP2Block *)plane[0], (AltP2Block *)plane[1]);
@@ -14225,9 +14260,9 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *out) {   P2Ctx *cur0,
           if ( plane_count >= 4 )
           {
             if ( xf4 )
-              seed3 = (plane_desc[plane_desc[4].src_plane + 1].w12 * out[2]
-                    + plane_desc[plane_desc[4].src_plane + 1].w8 * out[1]
-                    + plane_desc[plane_desc[4].src_plane + 1].w4 * *out) >> 3;
+              seed3 = (plane_desc[plane_desc[4].src_plane + 1].weight2 * out[2]
+                    + plane_desc[plane_desc[4].src_plane + 1].weight1 * out[1]
+                    + plane_desc[plane_desc[4].src_plane + 1].weight0 * *out) >> 3;
             else
               seed3 = 0;
             blk3 = (AltP2Block *)(plane[3]);
@@ -14860,8 +14895,8 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
           ctx_bias[2] += 32 * l4b;
           ctx_bias[3] += 32 * l5b;
           if ( np )
-            seed2 = (plane_desc[plane_desc[3].src_plane + 1].w8 * out[plane_desc[2].src_plane]
-                  + plane_desc[plane_desc[3].src_plane + 1].w4 * out[plane_desc[1].src_plane]) >> 3;
+            seed2 = (plane_desc[plane_desc[3].src_plane + 1].weight1 * out[plane_desc[2].src_plane]
+                  + plane_desc[plane_desc[3].src_plane + 1].weight0 * out[plane_desc[1].src_plane]) >> 3;
           else
             seed2 = 0;
           blk2 = (AltP2Block *)(plane[2]);
@@ -14899,9 +14934,9 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
             ctx_bias[2] = off0;
             ctx_bias[3] = want0;
             if ( y )
-              l7c = (plane_desc[plane_desc[4].src_plane + 1].w12 * out[2]
-                    + plane_desc[plane_desc[4].src_plane + 1].w8 * out[1]
-                    + plane_desc[plane_desc[4].src_plane + 1].w4 * *out) >> 3;
+              l7c = (plane_desc[plane_desc[4].src_plane + 1].weight2 * out[2]
+                    + plane_desc[plane_desc[4].src_plane + 1].weight1 * out[1]
+                    + plane_desc[plane_desc[4].src_plane + 1].weight0 * *out) >> 3;
             else
               l7c = 0;
             l4c = (AltP2Block *)(plane[3]);
@@ -15587,21 +15622,21 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
     // for '0'.  Kept as one expression rather than split into two comparisons
     // because the value it computes is what the next line tests.
     //
-    // It lands in `plane_desc[0].w4`, which is this check's scratch and not a
+    // It lands in `plane_desc[0].weight0`, which is this check's scratch and not a
     // plane weight: record 0 is the image's own and `compress_image` sets the
     // same field to 512 on the way out.  Records 1..4 are the weights.
     major_v = (uint8_t)(__frame.magic_word >> 16);
     minor_v = (uint8_t)(__frame.magic_word >> 24);
-    plane_desc[0].w4 = ((major_v << 8) - 12288) | (minor_v - 48);
-    if ( plane_desc[0].w4 != 512 || fread(__frame.hdr, 8u, 1u, ((BmfArc *)arc)->fp) != 1 )
+    plane_desc[0].weight0 = ((major_v << 8) - 12288) | (minor_v - 48);
+    if ( plane_desc[0].weight0 != 512 || fread(__frame.hdr, 8u, 1u, ((BmfArc *)arc)->fp) != 1 )
       break;
     fseek(((BmfArc *)arc)->fp, (*(uint32_t *)&__frame.hdr[4]), 1);
     fp1 = ((BmfArc *)arc)->fp;
   }
   if ( (uint16_t)magic != 0x8A81
     || (major_v = (uint8_t)(magic >> 16), minor_v = (uint8_t)(magic >> 24),
-        plane_desc[0].w4 = ((major_v << 8) - 12288) | (minor_v - 48),
-        plane_desc[0].w4 != 512)
+        plane_desc[0].weight0 = ((major_v << 8) - 12288) | (minor_v - 48),
+        plane_desc[0].weight0 != 512)
     || fread(__frame.hdr_words, 0x10u, 1u, ((BmfArc *)arc)->fp) != 1 )
   {
     fp = ((BmfArc *)arc)->fp;
@@ -15747,7 +15782,7 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
       }
     goto LABEL_109;
   }
-  plane_desc[0].w12 = 0;
+  near_lossless_q = 0;
   alphabet_reduced = 0;
   // Bit 2 of the descriptor is -S.  This build implements that mode and only
   // that mode -- the constants at the top of the file, and the fast back end
@@ -15814,7 +15849,7 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
     printf("\nnear-lossless stream (E=%d); this build only decodes E=0\n", near_lossless);
     exit(3);
   }
-  plane_desc[0].w12 = 0;
+  near_lossless_q = 0;
 LABEL_42:
   if ( ::plane_count > 0 )
   {
@@ -15862,7 +15897,7 @@ LABEL_42:
           dc_v = packer_acc & (uint8_t)__frame.mask;
           packer_acc = packer_acc >> 8;
         }
-        plane_desc[pl + 1].b3 = dc_v;
+        plane_desc[pl + 1].dc = dc_v;
         if ( nrefs > 1 )
         {
           packer_free_bits -= 8;
@@ -15878,7 +15913,7 @@ LABEL_42:
             w4_v = packer_acc & __frame.mask;
             packer_acc = packer_acc >> 8;
           }
-          plane_desc[pl + 1].w4 = w4_v - 64;
+          plane_desc[pl + 1].weight0 = w4_v - 64;
           packer_free_bits -= 8;
           if ( packer_free_bits < 0 )
           {
@@ -15892,7 +15927,7 @@ LABEL_42:
             w8_v = packer_acc & __frame.mask;
             packer_acc = packer_acc >> 8;
           }
-          plane_desc[pl + 1].w8 = w8_v - 64;
+          plane_desc[pl + 1].weight1 = w8_v - 64;
           if ( nrefs > 2 )
           {
             packer_free_bits -= 8;
@@ -15908,7 +15943,7 @@ LABEL_42:
               w12_v = packer_acc & __frame.mask;
               packer_acc = packer_acc >> 8;
             }
-            plane_desc[pl + 1].w12 = w12_v - 64;
+            plane_desc[pl + 1].weight2 = w12_v - 64;
           }
         }
       }
@@ -16301,7 +16336,7 @@ uint32_t __search_filter(BmfImage *img, int8_t mode)
         plane_desc[__frame.dims[1] + 1].flags = 0;
         __model_planes((uint8_t *)__frame.tile_img, (uint8_t *)__frame.tile_buf, pl1, 0);
         bits_f0 = 8 * (out_cursor - coded_buf);
-        best_cost = plane_desc[0].w0 - packer_free_bits + bits_f0 + 32;
+        best_cost = plane_desc[0].desc_word - packer_free_bits + bits_f0 + 32;
         deep = 0;                            // -S
         *(uint32_t *)packer_word = packer_acc;
         if ( !deep )
@@ -16321,7 +16356,7 @@ uint32_t __search_filter(BmfImage *img, int8_t mode)
       plane_desc[__frame.plane_i + 1].flags = 5;
       __model_planes((uint8_t *)__frame.tile_img, (uint8_t *)__frame.tile_buf, __frame.dims[1], 0);
       bits_f5 = 8 * (out_cursor - coded_buf);
-      cost_f5 = plane_desc[0].w0 - packer_free_bits + bits_f5 + 32;
+      cost_f5 = plane_desc[0].desc_word - packer_free_bits + bits_f5 + 32;
       deep = 0;                            // -S
       *(uint32_t *)packer_word = packer_acc;
       out_cursor = coded_buf;
@@ -16344,7 +16379,7 @@ uint32_t __search_filter(BmfImage *img, int8_t mode)
         plane_desc[__frame.plane_i + 1].flags = 6;
         __model_planes((uint8_t *)__frame.tile_img, (uint8_t *)__frame.tile_buf, pl0, 0);
         bits_f6 = 8 * (out_cursor - coded_buf);
-        cost_f6 = plane_desc[0].w0 - packer_free_bits + bits_f6 + 32;
+        cost_f6 = plane_desc[0].desc_word - packer_free_bits + bits_f6 + 32;
         deep = 0;                            // -S
         *(uint32_t *)packer_word = packer_acc;
         out_cursor = coded_buf;
@@ -16370,7 +16405,7 @@ LABEL_191:
             plane_desc[__frame.plane_i + 1].flags = 8;
             __model_planes((uint8_t *)__frame.tile_img, (uint8_t *)__frame.tile_buf, pl2, 0);
             bits_f8 = 8 * (out_cursor - coded_buf);
-            cost_f8 = plane_desc[0].w0 - packer_free_bits + bits_f8 + 32;
+            cost_f8 = plane_desc[0].desc_word - packer_free_bits + bits_f8 + 32;
             deep = 0;                            // -S
             *(uint32_t *)packer_word = packer_acc;
             out_cursor = coded_buf;
@@ -16392,7 +16427,7 @@ LABEL_191:
           plane_desc[__frame.plane_i + 1].flags = 13;
           __model_planes((uint8_t *)__frame.tile_img, (uint8_t *)__frame.tile_buf, pl3, 0);
           bits_f13 = 8 * (out_cursor - coded_buf);
-          cost_f13 = (uint8_t *)(plane_desc[0].w0 - packer_free_bits + bits_f13 + 32);
+          cost_f13 = (uint8_t *)(plane_desc[0].desc_word - packer_free_bits + bits_f13 + 32);
           deep = 0;                            // -S
           *(uint32_t *)packer_word = packer_acc;
           out_cursor = coded_buf;
@@ -16416,7 +16451,7 @@ LABEL_191:
             pl4 = __frame.dims[1];
             plane_desc[__frame.plane_i + 1].flags = 14;
             __model_planes((uint8_t *)__frame.tile_img, (uint8_t *)__frame.tile_buf, pl4, 0);
-            cost_f14 = plane_desc[0].w0 - packer_free_bits + 8 * (out_cursor - coded_buf) + 32;
+            cost_f14 = plane_desc[0].desc_word - packer_free_bits + 8 * (out_cursor - coded_buf) + 32;
             // always taken: -S
               cost_f14 = 8 * (out_cursor - coded_buf);
             deep2 = cost_f14 < best_cost;
@@ -16674,10 +16709,10 @@ LABEL_172:
       sv0 = 16;
       do
       {
-        __frame.dims[sv0 + 1] = plane_desc[sv0 / 4].w12;
+        __frame.dims[sv0 + 1] = plane_desc[sv0 / 4].weight2;
         __frame.dims[sv0] = *(int32_t *)((uint8_t *)&::plane_count + sv0 * 4);
-        __frame.rows[sv0 + 1] = (uint8_t *)plane_desc[sv0 / 4].w4;
-        p1 = (uint8_t *)plane_desc[sv0 / 4].w0;
+        __frame.rows[sv0 + 1] = (uint8_t *)plane_desc[sv0 / 4].weight0;
+        p1 = (uint8_t *)plane_desc[sv0 / 4].desc_word;
         __frame.rows[sv0] = p1;
         sv0 -= 4;
       }
@@ -16736,10 +16771,10 @@ LABEL_172:
       sv1 = 16;
       do
       {
-        __frame.dims[sv1 + 1] = plane_desc[sv1 / 4].w12;
+        __frame.dims[sv1 + 1] = plane_desc[sv1 / 4].weight2;
         __frame.dims[sv1] = *(int32_t *)((uint8_t *)&::plane_count + sv1 * 4);
-        __frame.rows[sv1 + 1] = (uint8_t *)plane_desc[sv1 / 4].w4;
-        __frame.rows[sv1] = (uint8_t *)plane_desc[sv1 / 4].w0;
+        __frame.rows[sv1 + 1] = (uint8_t *)plane_desc[sv1 / 4].weight0;
+        __frame.rows[sv1] = (uint8_t *)plane_desc[sv1 / 4].desc_word;
         sv1 -= 4;
       }
       while ( sv1 * 4 );
@@ -16786,10 +16821,10 @@ LABEL_172:
             sv2 = 16;
             do
             {
-              __frame.dims[sv2 + 1] = plane_desc[sv2 / 4].w12;
+              __frame.dims[sv2 + 1] = plane_desc[sv2 / 4].weight2;
               __frame.dims[sv2] = *(int32_t *)((uint8_t *)&::plane_count + sv2 * 4);
-              __frame.rows[sv2 + 1] = (uint8_t *)plane_desc[sv2 / 4].w4;
-              p0 = (uint8_t *)plane_desc[sv2 / 4].w0;
+              __frame.rows[sv2 + 1] = (uint8_t *)plane_desc[sv2 / 4].weight0;
+              p0 = (uint8_t *)plane_desc[sv2 / 4].desc_word;
               __frame.rows[sv2] = p0;
               sv2 -= 4;
             }
@@ -16863,10 +16898,10 @@ LABEL_63:
     sv3 = 16;
     do
     {
-      __frame.dims[sv3 + 1] = plane_desc[sv3 / 4].w12;
+      __frame.dims[sv3 + 1] = plane_desc[sv3 / 4].weight2;
       __frame.dims[sv3] = *(int32_t *)((uint8_t *)&::plane_count + sv3 * 4);
-      __frame.rows[sv3 + 1] = (uint8_t *)plane_desc[sv3 / 4].w4;
-      __frame.rows[sv3] = (uint8_t *)plane_desc[sv3 / 4].w0;
+      __frame.rows[sv3 + 1] = (uint8_t *)plane_desc[sv3 / 4].weight0;
+      __frame.rows[sv3] = (uint8_t *)plane_desc[sv3 / 4].desc_word;
       sv3 -= 4;
     }
     while ( sv3 * 4 );
@@ -16914,10 +16949,10 @@ LABEL_63:
       sv4 = 16;
       do
       {
-        __frame.dims[sv4 + 1] = plane_desc[sv4 / 4].w12;
+        __frame.dims[sv4 + 1] = plane_desc[sv4 / 4].weight2;
         __frame.dims[sv4] = *(int32_t *)((uint8_t *)&::plane_count + sv4 * 4);
-        __frame.rows[sv4 + 1] = (uint8_t *)plane_desc[sv4 / 4].w4;
-        __frame.rows[sv4] = (uint8_t *)plane_desc[sv4 / 4].w0;
+        __frame.rows[sv4 + 1] = (uint8_t *)plane_desc[sv4 / 4].weight0;
+        __frame.rows[sv4] = (uint8_t *)plane_desc[sv4 / 4].desc_word;
         sv4 -= 4;
       }
       while ( sv4 * 4 );
@@ -17119,8 +17154,8 @@ int32_t __compress_image(uint8_t *arc_in, BmfImage *p_i, void *coded_buf)
   p_i->flags |= has_coded << 7;
   hdr_pad8 = *(uint32_t *)&p_i->_pad8;
   hdr.stride = (uint32_t)row_bytes;
-  plane_desc[0].w4 = 512;
-  plane_desc[0].w12 = 0;
+  plane_desc[0].weight0 = 512;
+  near_lossless_q = 0;
   *(uint32_t *)&hdr._pad8 = hdr_pad8;
   hdr.data_size = (uint32_t)p_i->data_size;
   ::plane_count = ((p_i->depth & 0x3Fu) + 7) >> 3;
@@ -17184,7 +17219,7 @@ LABEL_22:
       // The 4-bit near-lossless field -- ALGORITHM.md §4.1's bit packer writing
       // -E into the header.  -E is 0, so the bits are zero and only the
       // packer's cursor moves; what is left is that cursor arithmetic.
-      plane_desc[0].w12 = 0;
+      near_lossless_q = 0;
       if ( ::packer_free_bits < 4 )
       {
         *(uint32_t *)::packer_word = ::packer_acc;
@@ -17227,7 +17262,7 @@ LABEL_22:
       ::packer_free_bits = bits_left;
       if ( (plane_desc[pl + 1].flags & 8) != 0 )
       {
-        word_dc = plane_desc[pl + 1].b3;
+        word_dc = plane_desc[pl + 1].dc;
         if ( bits_left < 8 )
         {
           *(uint32_t *)::packer_word = ::packer_acc | (2 * (word_dc << ((31 - bits_left) & 31)));
@@ -17245,7 +17280,7 @@ LABEL_22:
         ::packer_free_bits = bits_left;
         if ( plane_desc[pl + 1].nrefs > 1u )
         {
-          word_w4 = plane_desc[pl + 1].w4 + 64;
+          word_w4 = plane_desc[pl + 1].weight0 + 64;
           if ( bits_left < 8 )
           {
             *(uint32_t *)::packer_word = ::packer_acc | (2 * (word_w4 << ((31 - bits_left) & 31)));
@@ -17260,7 +17295,7 @@ LABEL_22:
             free_bits = ::packer_free_bits - 8;
           }
           ::packer_free_bits = free_bits;
-          word_w8 = plane_desc[pl + 1].w8 + 64;
+          word_w8 = plane_desc[pl + 1].weight1 + 64;
           if ( free_bits < 8 )
           {
             *(uint32_t *)::packer_word = ::packer_acc | (2 * (word_w8 << ((31 - free_bits) & 31)));
@@ -17277,7 +17312,7 @@ LABEL_22:
           ::packer_free_bits = bits_left;
           if ( plane_desc[pl + 1].nrefs > 2u )
           {
-            word_w12 = plane_desc[pl + 1].w12 + 64;
+            word_w12 = plane_desc[pl + 1].weight2 + 64;
             if ( bits_left < 8 )
             {
               *(uint32_t *)::packer_word = ::packer_acc | (2 * (word_w12 << ((31 - bits_left) & 31)));
