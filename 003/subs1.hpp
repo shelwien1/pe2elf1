@@ -4709,7 +4709,28 @@ inline AltP2Block *AltP2Block::alt_p2_alloc(int32_t img_w, int32_t plane)
     }
   }
   row = 0;
-  row_bytes = 18 * img_w + 234;
+  // `18 * img_w + 234` is `sizeof(P2Ctx) * (img_w + 13)`, and it is not enough
+  // for a narrow plane.  `cursor[0]` starts at record 8 and the row-end mirror
+  // in `alt_p2_d8_decode_body` reads `rec1[0..7]` from there -- record 15 --
+  // whatever the width is, because `rec1` is `cursor[0] - wid` and lands back
+  // at record 8 every time.  So the buffer needs sixteen records however wide
+  // the plane is, and `img_w + 13` reaches sixteen only from width 3.
+  //
+  // A stream whose header says width 1 overflows on decode:
+  //
+  //     READ of size 18 ... 0 bytes after 252-byte region
+  //       #0 __alt_p2_d8_decode_body   subs1.hpp:13846
+  //
+  // Found by `tools/fuzz.sh` on a `member:width=0x1` mutant, and reproducible
+  // either way -- the reverted allocation reports, this one does not.
+  //
+  // Whether an *ordinary* narrow image reaches it is not settled here.  One
+  // round trip of a 1x64 BMP reported, and the same file on a build with only
+  // this line reverted did not, so that observation is not reproducible and is
+  // not claimed.  Which model the encoder picks depends on the pixels, and only
+  // the p2 d8 path has this mirror.  No corpus image is narrower than three, so
+  // the change raises an allocation nothing in the fifteen streams reaches.
+  row_bytes = 18 * (img_w < 3 ? 3 : img_w) + 234;
   do
     this->buf[row++] = (P2Ctx *)bmf_new(row_bytes);
   while ( row < 5 );

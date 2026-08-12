@@ -60,7 +60,10 @@ bad=0 ran=0
 # fast form of what `tools/hdrscan.sh` finds by walking all 256.  The other two
 # here change the exit code, so they are in `test.sh` as well; they are repeated
 # because this is where the overflow itself is visible rather than its
-# consequence.
+# consequence.  `narrow` is a header claiming width 1: `alt_p2_alloc` sizes its
+# row buffers `sizeof(P2Ctx) * (width + 13)` and the row-end mirror in
+# `alt_p2_d8_decode_body` reads record 15 whatever the width is, so a plane
+# narrower than three has nothing there.
 #
 # Built here rather than kept in testfiles/ so that it is derived from whatever
 # the corpus currently is, the way test.sh's truncations are.
@@ -78,9 +81,12 @@ open("'"$tmp"'/len1.bmf","wb").write(d)
 d=bytearray(open("testfiles/ref_t24.bmf","rb").read())
 d[15]&=~8
 open("'"$tmp"'/medflag.bmf","wb").write(d)
+d=bytearray(open("testfiles/ref_t8g.bmf","rb").read())
+struct.pack_into("<H",d,4,1)
+open("'"$tmp"'/narrow.bmf","wb").write(d)
 open("'"$tmp"'/rawlen.bmf","wb").write(
     struct.pack("<4sHHHHHBBI",b"\x81\x8a20",8,8,0,0,0,8,0x04,100000)+b"\xaa"*100000)'
-  for m in shortlen len1 medflag depthff rawlen; do
+  for m in shortlen len1 medflag narrow depthff rawlen; do
     ASAN_OPTIONS=detect_leaks=0 "$tmp/bmf" d "$tmp/$m.bmf" "$tmp/$m.out" \
         >"$tmp/$m.log" 2>&1
     ran=$((ran + 1))

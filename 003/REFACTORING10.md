@@ -570,3 +570,147 @@ never touches it. F depends on nothing.
 If only one phase gets done, it should be A: until it is, two of this project's
 rules report zero for the wrong reason, and that is the failure mode the last
 three rounds were entirely about.
+
+---
+
+# What round 10 did
+
+Written after the phases, against the file as it stands. Each row is a command
+anyone can re-run; where a phase found something the plan had wrong, it says so
+rather than quietly correcting the plan above.
+
+| population | plan said | now | phase |
+| --- | --- | --- | --- |
+| extractor macros in code | 100 | **12** | B |
+| `_this` occurrences | 172 | **35** | A, D |
+| raw `blk + N` indices | 12 | **0** | D |
+| pointer casts (`shape.py`) | 1205 | **1052** | C, D |
+| frames | 9 | **8** | E |
+| records with a positional member name | 3 | **0** | F |
+| `goto` / `LABEL_n:` | 49 / 33 | **49 / 33** | G |
+| conversion-warning ratchet | 1038 | **975** | — |
+
+## The ratchet went the other way, mostly
+
+§2 said the ratchet would rise, and for Phase C it did — 100 cast deletions
+bought 31 warnings, exactly the trade that section describes. What §2 did not
+anticipate is that Phase B would *lower* it by more: giving 40 locals the width
+their writes and reads agree on removed 93 conversions, because a mask on a
+narrowed value is not a conversion. Net for the round: 1038 → 975.
+
+The rise is still recorded where it happened, which is what §2 asked for. It is
+the only one.
+
+## What the plan got wrong
+
+* **The fix it proposed for `methodise.py` was a typo.** §A.1 gives it as
+  `(.+?)[\s*]`, which matches the same signatures and throws the star away —
+  `int32_t *__alt_p1_alloc` would report its return type as `int32_t`. The form
+  that works is `(.+?[\s*])`, capturing the separator, which is what the scratch
+  test in that section actually used.
+* **Fixing `candidates()` was not enough.** `apply()` re-reads the signature
+  with the same `\s+`, so all three bodies became candidates and then failed
+  with "cannot re-read its own signature" — the rule declining out loud rather
+  than writing something wrong, which is the behaviour §A.2 asks for and this
+  one already had.
+* **Phase G is not "47 of the 49 are the easy kind".** `degoto.py --why`
+  categorises the residue and none of it is mechanical: 9 labels are reached by
+  more than one `goto` (a shared tail), 5 skip a region that is not one run of
+  statements, 4 jump backwards, 6 jump out of a block, 3 skip a region something
+  else enters, 1 is not the whole of an `if`. `LABEL_4` is representative — it
+  leaves a search loop and lands *inside the `else` arm* of the enclosing `if`,
+  so rewriting it means restructuring the two arms, not choosing a keyword.
+  The two shapes the tool knows are exhausted, and that is the phase's result.
+* **`--retry` does not re-take `liftframe.py`'s reversion table.** It suppresses
+  it, so the tool offers a frame anyway; the gate is what says whether the offer
+  was good. The round-nine re-take was lift, gate, revert, five times, and the
+  note above the table says so now.
+
+## What the phases found that the plan did not
+
+**The row buffers hold weight-block pointers.** §D.1 predicted that settling
+`row0`'s type would "settle six casts". It settled sixteen, and then the head of
+`AltP2Block` turned out to be a table of 1088 weight blocks — `_pad0` was 278528
+bytes and 278528 / 256 is 1088 exactly. Three sites had been saying so in three
+different disguises. `nb_id` spans 1916 entries against a table of 1088, which
+is written down where the next reader will meet it.
+
+**The classifier Phase C needed was wrong four times before it was right**, and
+one of those wrongs got as far as the file: comparing widths alone called
+`*(double *)&__frame.q0` on an `int64_t` member a signedness cast, and deleting
+six of them turned a bit-store into a float-to-int conversion. **The gate
+passed.** Fifteen streams byte-identical, because the solve those belong to does
+not reach the chosen filter for any image in the corpus. A rule may not rely on
+the gate to catch a wrong rewrite, and `reinterpret` is a column now.
+
+**`read_bmp`'s frame dissolved, and the lift was not what dissolved it.** The
+entry had been in `PROVEN` for five rounds. The reason was the two `fread`s
+writing across the slots Hex-Rays had split the BMP headers into; reading into
+`BmpHeader` removed the reason and the lift was then ordinary. An entry in that
+table is a measurement of the body as it stands, and the way to clear one is to
+change what made it true.
+
+**`plane_desc[0].desc_word` is read seven times and written nowhere** — always
+as `desc_word - packer_free_bits + <bits> + 32` in `choose_plane_coding`'s cost
+comparisons, and not through that name nor through any of the four bytes it
+overlays. The array is file-scope so the term is zero. Whether the original had
+a writer this build's fixed mode does not reach is not settled, and the note is
+in the struct rather than in this document.
+
+## What is left, and why
+
+* **12 extractor macros**, on 4 locals, each declined with its reason by
+  `unloword.py --declined`. `acc` is read at full width after its partial store;
+  `w_new` is the hazard the tool's own docstring names; the two `err` are an
+  `int64_t` used as sixteen-bit lanes, which is a different idiom.
+* **8 frames.** Four decline because every member is inside a union — the
+  question there is whether the two views are live at the same time, which
+  §E.2 sets out and which wants a probe rather than a grep. Four have a
+  reversion recorded with the image and the exit status.
+* **49 gotos**, categorised above.
+* **36 `_this`**, none of them a receiver: `update_binary_pair` takes a
+  `uint16_t *` and `alt_p2_filter` a `float (*)[4]`, and the rest are comments.
+* **6 wide packed stores** and **35 casts on a pointer member**, which
+  `uncastwidth.py` lists.
+
+Nothing in that list is a rule waiting to be run. Every item is a reading job
+with the reading not yet done, which is a different kind of work from the nine
+rounds behind it.
+
+## One defect, found by the round's own tooling
+
+`tools/fuzz.sh` on seed 41 reported a `member:width=0x1` mutant:
+
+```
+READ of size 18 ... 0 bytes after 252-byte region
+  #0 __alt_p2_d8_decode_body   subs1.hpp:13846
+```
+
+`alt_p2_alloc` sizes its five row buffers `18 * width + 234`, which is
+`sizeof(P2Ctx) * (width + 13)`. `cursor[0]` starts at record 8, and the row-end
+mirror reads `rec1[0..7]` where `rec1` is `cursor[0] - wid` — back at record 8
+every time, so it reads record 15 **whatever the width is**. `width + 13`
+reaches sixteen records only from width 3. The allocation has a floor now.
+
+The honest part of this is what is *not* claimed. One round trip of an ordinary
+1×64 BMP reported the same overflow, which would have made it a defect reachable
+without a malformed stream — and the same file on a build with only that line
+reverted did not report, so the observation is not reproducible and the source
+comment says so rather than repeating it. Which model the encoder picks depends
+on the pixels, and only the p2 d8 path has this mirror.
+
+What is reproducible is the mutant, both ways: it reports on a tree that differs
+from this one in that single line and is clean here. It is `narrow.bmf` in
+`tools/asan.sh`, which reports `1 of 40 runs` against that tree.
+
+## Final state
+
+```
+./test.sh                     PASS, fifteen streams byte-identical, ratchet 975
+tools/triage.sh               TRIAGE OK
+tools/sweep.sh                clean
+tools/asan.sh                 no report in 40 runs
+tools/fuzz.sh 400 41          1 reported -> 0 after the fix
+python3 tools/checktable.py   0 rows disagree
+python3 tools/unstale.py      0 names, 0 drifted counts
+```
