@@ -381,11 +381,26 @@ and the byte counts, and `--high` is the difference between those two runs.
 
 ## 5. What this round did not do, and what is left
 
-* **`warn64.txt` is a ceiling and not a target.** 952 conversions, against 933
+* **`warn64.txt` is a ceiling and not a target.** 952 conversions against 933
   on i386, and they are not the same population: a `ptrdiff_t` narrowed to an
   `int32_t` count is a conversion on one target and an identity on the other.
-  Reading through them is round-five's job done again, and it is a round of its
-  own.
+  The difference is not the whole nineteen lines it looks like — 47 of the 64-bit
+  warnings come from a 64-bit-wide source (`long`, `size_t`, `ptrdiff_t`)
+  against 23 on i386 — and the eight distinct sites behind it were read:
+
+  ```
+  slot = cur - base;                      two symbol-list walks
+  coded_bytes = out_at - buf;             twice, the coder's output length
+  n_quads = (data_end - 17 - pp) / 4;     twice, in choose_plane_coding
+  got = fread(row6, 1u, stride, fp);      a row read
+  SymListBlock::bytes                     offsetof + sizeof * n
+  ```
+
+  Every one is a length or a count bounded by `data_size`, which is a
+  `uint32_t` the header carries, and every one has the conversion at the
+  assignment where a reader can see it. Lowering the ceiling means reading the
+  other 905, which is round five's job done again on a second target, and a
+  round of its own.
 * **`-march`.** Both targets build at `k8`; whether the p2 filter's float
   arithmetic still agrees at a wider baseline is not asked here.
 * **Anything that is not 4 or 8 bytes of pointer, or is big-endian.** The
