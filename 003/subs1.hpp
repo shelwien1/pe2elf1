@@ -5843,7 +5843,9 @@ __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...)
   exit(Code);
   __builtin_unreachable();
 }
-int32_t __rc_begin_decode(int8_t unread_flag)
+// Returned `(int32_t)(uintptr_t)out_cursor`, which is `out_cursor` truncated
+// -- and none of the three call sites reads it.
+void __rc_begin_decode(int8_t unread_flag)
 {
   ;
   int32_t bits_left, at4, at5, k;
@@ -5953,7 +5955,6 @@ int32_t __rc_begin_decode(int8_t unread_flag)
     cursor = out_cursor;
   }
   rc.dec_init();
-  return (int32_t)(uintptr_t)out_cursor;
 }
 
 // The inverse of `predict_med`, and the direction that actually runs: this is
@@ -7957,7 +7958,6 @@ int32_t __cost_candidate(uint8_t *img, int32_t cand, uint8_t *desc, int8_t unrea
   uint32_t lo2, lo3;
   uint8_t *base, *p, *q, *r0, *r2, *r1;
   int32_t cand2, idx1, idx2;   // candidate indices, not addresses
-  __frame.off_up = (int32_t)(uintptr_t)desc;
   __frame.desc_f = desc;
   __frame.nplanes = plane_count;
   row_b = *(const uint16_t *)&((const BmfImage *)img)->stride;   // the low half of the stride
@@ -8720,7 +8720,10 @@ LABEL_19:
       plane_desc[x3[2] + 1].weight0 = wt4;
       plane_desc[xform_row + 1].weight1 = wt8;
       hist = &__frame.buf[4096 * pred];
-      win = (uint8_t)(uintptr_t)hist & 0xF;
+      // The pointer's low four bits, and no narrowing cast: `(uint8_t)` in
+      // front of the mask says nothing the mask does not, and it is the shape
+      // `tools/ptrwidth.py --laundered` looks for.
+      win = (uintptr_t)hist & 0xF;
       // The first 256-wide window over these 1024 counters.  Where it starts
       // is the pointer's low four bits, which the frame's alignas(16) makes
       // zero; sixteen counters an iteration is all the vectors were doing,
@@ -8993,7 +8996,7 @@ LABEL_19:
         plane_desc[4].src_plane = 3;
         plane_desc[4].nrefs = 3;
         hist2 = &__frame.hist_c[1024 * pred4b + 1024];
-        result = (uint8_t)(uintptr_t)hist2 & 0xF;
+        result = (uintptr_t)hist2 & 0xF;
         // And the same again, over the third.
         sum3 = 0;
         for ( i = 0; i < 256; ++i )
@@ -9180,17 +9183,17 @@ int32_t *__read_bmp(char *path)
       {
         fread(bmp_bgra, 4u, 1u, fp);
         if ( (img->depth & 0x80) != 0 )
-          pal = (uint8_t *)(uintptr_t)img + img->data_size + 16;
+          pal = img->pixels + img->data_size;
         else
           pal = 0;
         *(pal + 3 * i + 2) = bmp_bgra[2];
         if ( (img->depth & 0x80) != 0 )
-          pal2 = (uint8_t *)(uintptr_t)img + img->data_size + 16;
+          pal2 = img->pixels + img->data_size;
         else
           pal2 = 0;
         *(pal2 + 3 * i + 1) = bmp_bgra[1];
         if ( (img->depth & 0x80) != 0 )
-          pal3 = (uint8_t *)(uintptr_t)img + img->data_size + 16;
+          pal3 = img->pixels + img->data_size;
         else
           pal3 = 0;
         *(pal3 + 3 * i) = bmp_bgra[0];
@@ -15408,7 +15411,10 @@ void __model_planes(uint8_t *img, uint8_t *pixels, int32_t plane, int8_t unread_
   plane_alt_model = (uint8_t)(plane_desc[plane + 1].flags & 4) >> 2;
   __colour_transform(img, pixels, plane, unread_flag);
   scratch = ::hist_scratch;
-  aligned = (uint8_t *)((uintptr_t)(::hist_scratch + 15) & 0xFFFFFFF0);
+  // `& ~(uintptr_t)15` and not `& 0xFFFFFFF0`: the constant is the alignment
+  // written as a 32-bit mask, which drops the top half of any address above
+  // four gigabytes.  It is the only mask in this file applied to a pointer.
+  aligned = (uint8_t *)((uintptr_t)(::hist_scratch + 15) & ~(uintptr_t)15);
   // Fifteen bytes at the front and sixteen at +1008.  MSVC split the first
   // into 8 + 4 + 2 + 1 and the second into two eight-byte stores.
   memset(scratch, 0, 15);
@@ -17124,7 +17130,7 @@ int32_t __compress_image(BmfArc *arc_in, BmfImage *p_i, void *coded_buf)
     if ( !arc->fp )
       return 0;
   }
-  has_coded = (uint8_t)(uintptr_t)coded_buf;
+  has_coded = coded_buf != nullptr;
   img = (BmfImage *)(p_i);
   row_bytes = p_i->stride;
   if ( coded_buf )

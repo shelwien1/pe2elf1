@@ -32,6 +32,20 @@ here -- which is the whole reason this reads a log instead of grepping.  A
 regex that matched `(T *)(int32_t)x` on its own would also match the one shape
 that must never be touched: `x` an integer, where the cast is a real narrowing
 and removing it changes the value.
+
+One shape gcc will not report, and so is counted here by text: a cast chain
+through `uintptr_t`.
+
+    return (int32_t)(uintptr_t)out_cursor;      // rc_begin_decode
+    __frame.off_up = (int32_t)(uintptr_t)desc;  // cost_candidate
+
+`(uintptr_t)p` is exact on every target and `(int32_t)` of it is an ordinary
+narrowing of an integer, so no diagnostic fires on either target -- the hop
+launders the pointer.  Four of these were left after the 112 the compiler
+found, and one of them (`hist_scratch & 0xFFFFFFF0`) was an alignment mask
+that drops the top half of any address above four gigabytes.  A chain that
+*ends* at `uintptr_t` or at a pointer is fine and is not counted; it is the
+ones that end narrower.
 """
 import collections
 import re
@@ -39,6 +53,7 @@ import sys
 
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import buildlog                                                   # noqa: E402
+import structs                                                    # noqa: E402
 
 LOG = 'strict64.log'
 SITE = re.compile(r'^subs1\.hpp:(\d+):(\d+): error: cast from '
@@ -71,6 +86,22 @@ def sites(path, log=LOG):
         if m:
             out.append((int(m.group(1)), int(m.group(2)), m.group(3)))
     return sorted(set(out)), ''
+
+
+# `(int32_t)(uintptr_t)x` and friends: the narrowing gcc will not report,
+# because by the time it happens the pointer is already an integer.
+LAUNDERED = re.compile(r'\(\s*(u?int(?:8|16|32)_t|unsigned int|int|char|short)\s*\)'
+                       r'\s*\(\s*uintptr_t\s*\)')
+
+
+def laundered(lines):
+    """[(line, text)] for every cast chain that narrows through `uintptr_t`."""
+    out = []
+    for a, b, nm, sig in structs.bodies(lines):
+        for i in range(a, b + 1):
+            if LAUNDERED.search(lines[i].split('//')[0]):
+                out.append((i + 1, lines[i].strip()[:66]))
+    return out
 
 
 def classify(lines, line, col):
@@ -113,12 +144,15 @@ def main():
     lines = open(path).read().split('\n')
     rows, note = sites(path)
     if note:
-        print('0 pointers through a 32-bit integer (%s)' % note)
+        n = len(laundered(lines))
+        print('%d pointers through a 32-bit integer (%s; the compiler half '
+              'needs a fresh log)' % (n, note))
         return
     kinds = collections.defaultdict(list)
     for line, col, ty in rows:
         kind, detail = classify(lines, line, col)
         kinds[kind].append((line, col, ty, detail))
+    launder = laundered(lines)
     for want in ('--roundtrip', '--slot', '--arg', '--arith', '--unmatched'):
         if want in sys.argv:
             k = want[2:]
@@ -126,6 +160,11 @@ def main():
                 print('%6d:%-3d %-16s %s' % (line, col, ty, detail))
             print('%d %s' % (len(kinds[k]), k))
             return
+    if '--laundered' in sys.argv:
+        for line, text in launder:
+            print('%6d %s' % (line, text))
+        print('%d laundered' % len(launder))
+        return
     if '--apply' in sys.argv:
         n = apply(lines, rows)
         open(path, 'w').write('\n'.join(lines))
@@ -139,7 +178,8 @@ def main():
     if slots:
         print('busiest slots: %s'
               % ', '.join('%s %d' % (n, c) for n, c in slots.most_common(8)))
-    print('%d pointers through a 32-bit integer' % len(rows))
+    print('%-10s %d' % ('laundered', len(launder)))
+    print('%d pointers through a 32-bit integer' % (len(rows) + len(launder)))
 
 
 if __name__ == '__main__':

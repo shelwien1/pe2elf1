@@ -132,6 +132,31 @@ one record. `free_workspace` freed the five row buffers as
 And thirty in `alt_p2_model` plus one in `alt_p2_d8_decode_body`, which is
 §1's `rawoffset` row.
 
+### 2.3a A pointer laundered through `uintptr_t`
+
+`(uintptr_t)p` is exact on every target, and `(int32_t)` of it is an ordinary
+narrowing of an integer — so `(int32_t)(uintptr_t)p` truncates the pointer and
+*neither* target diagnoses anything. The hop launders it. Four were left after
+the 112 the compiler found:
+
+* `rc_begin_decode` returned `(int32_t)(uintptr_t)out_cursor`, and none of its
+  three call sites reads the value.
+* `cost_candidate` parked `desc` in `__frame.off_up`, a slot that carries a
+  *row offset* eleven lines later — a spill nothing reloads.
+* `compress_image` took the low byte of `coded_buf` as a flag and then
+  overwrote it with 1 if the pointer was non-null.
+* `model_plane` aligned `hist_scratch` with `& 0xFFFFFFF0`, which drops the top
+  half of any address above four gigabytes. That one is a defect and not just a
+  spelling; it works today because the allocation happens to be low.
+
+`tools/ptrwidth.py --laundered` is the rule, and it is counted into that tool's
+total, because a tool that reads the compiler's diagnostics and stops there
+would report zero while these four stood.
+
+Two more matched it and are not defects: `(uint8_t)(uintptr_t)hist & 0xF` takes
+the pointer's low four bits, which every target preserves. They are written
+`(uintptr_t)hist & 0xF` — the mask says everything the cast did.
+
 ### 2.4 An index negated in an unsigned type
 
 `&p[-n]` with `n` a `uint32_t` is `p + 0xFFFFFFFF...`. On i386 the index
