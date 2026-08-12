@@ -11,14 +11,15 @@
                                                           rec->rescale();
 
 MSVC's `__thiscall` puts the object in `ecx` and Hex-Rays writes it back as a
-first parameter called `_this`.  Twenty bodies in this file carry one, and for
-nineteen of them the type is a record this project has already recovered -- so
-the parameter is not a parameter, it is the receiver, and saying so moves every
-call site from `__f(x, …)` to `x->f(…)`.
+first parameter called `_this`.  Where the type is a record this project has
+recovered, the parameter is not a parameter -- it is the receiver, and saying so
+moves every call site from `__f(x, …)` to `x->f(…)`.
 
-The twentieth is `update_binary_pair`, whose `_this` is a `uint16_t *` into a
-counter block rather than a record.  It stays a function, which is the honest
-answer: there is no type for it to be a method of.
+Five bodies still carry a `_this` and three are candidates.  The other two are
+honest declines and there is no type for either to be a method of:
+`update_binary_pair` takes a `uint16_t *` into a counter block, and
+`alt_p2_filter` takes a `float (*)[4]` -- a weight block, which wants a name
+rather than a receiver.
 
 What the rewrite does, and does not do:
 
@@ -47,7 +48,28 @@ def candidates(lines):
     """(name, record type, signature line, body span, return type, rest of params)."""
     out = []
     for a, b, nm, sig in structs.bodies(lines):
-        m = re.match(r'\s*(.+?)\s+%s\s*\((\s*([A-Za-z_]\w*)\s*\*\s*_this\s*'
+        # `(.+?[\s*])` and not `(.+?)\s+`: a body that returns a pointer is
+        # written `T *__name(`, so the character before the name is a star and
+        # not a space, and the whitespace form silently made it a non-candidate.
+        # Three of the five bodies with a `_this` parameter are declared that
+        # way -- `alt_p1_alloc`, `alt_p2_alloc`, `bmf_close_archive` -- which is
+        # 133 of the file's 172 `_this` occurrences behind one character.
+        #
+        # The control is the whole classification and not one body: the
+        # candidate set must grow by exactly those three and change in no other
+        # way, and the two correct declines below (`update_binary_pair`, a
+        # `uint16_t *`, and `alt_p2_filter`, a `float (*)[4]`) must still
+        # decline.  The obvious control was not available -- this file's own
+        # docstring example, `__rescale_three_way`, was methodised rounds ago
+        # and has no `_this` left to match, which is the same trap one level up.
+        #
+        # The separator is captured *inside* group 1 on purpose.  `(.+?)[\s*]`
+        # matches the same signatures and throws the star away, so
+        # `int32_t *__alt_p1_alloc` reports its return type as `int32_t` and the
+        # method would be declared returning a value where the body returns a
+        # pointer.  It compiles -- `-fpermissive` was made for that -- and the
+        # first sign would have been the gate.
+        m = re.match(r'\s*(.+?[\s*])%s\s*\((\s*([A-Za-z_]\w*)\s*\*\s*_this\s*'
                      r'(?:,\s*(.*))?)\)' % re.escape(nm), sig, re.S)
         if not m:
             continue
@@ -125,7 +147,14 @@ def apply(lines, nm, rec, ret, rest, a, b):
         j += 1
     sig = ' '.join(l.strip() for l in lines[head:j + 1])
     sig = sig.split('{')[0].strip()
-    m = re.match(r'(.+?)\s+%s\s*\((.*)\)\s*$' % re.escape(nm), sig, re.S)
+    # `[\s*]`, for the same reason as `candidates()` above -- and this one is
+    # why the fix there was not enough on its own.  With only the first regex
+    # widened, the three pointer-returning bodies became candidates and then
+    # every one of them failed here with "cannot re-read its own signature",
+    # which is the rule declining out loud rather than writing something wrong.
+    # The return type is not taken from this match; `candidates()` already has
+    # it, and all this needs is the parameter list.
+    m = re.match(r'(.+?)[\s*]%s\s*\((.*)\)\s*$' % re.escape(nm), sig, re.S)
     if not m:
         return False, '%s: cannot re-read its own signature' % short
     params = m.group(2)

@@ -73,9 +73,128 @@ def destination(lhs, mem, types):
     return None
 
 
+def record_members(lines):
+    """{record: {member: type}} for every named struct in the file.
+
+    `members()` above answers "how wide is a member called X anywhere", and
+    drops a name declared 16 bits in one record and 32 in another.  That is the
+    right answer when the record is unknown, and it costs the commonest case:
+    `height` is `uint16_t` in `BmfImage` and something else elsewhere, so the
+    global map has nothing to say about `img->height` even though the local's
+    declared type says exactly which record `img` points at.
+    """
+    out, cur, depth = collections.defaultdict(dict), None, 0
+    for l in lines:
+        c = l.split('//')[0]
+        m = re.match(r'\s*struct\s+([A-Za-z_]\w*)\s*\{', c)
+        if m and depth == 0:
+            cur, depth = m.group(1), c.count('{') - c.count('}')
+            continue
+        if not cur:
+            continue
+        depth += c.count('{') - c.count('}')
+        if depth <= 0:
+            cur = None
+            continue
+        d = re.match(r'\s*((?:u?int(?:8|16|32|64)_t|float|double))\s+(\w+)\s*'
+                     r'(?:\[[^\]]*\])?\s*;', c)
+        if d:
+            out[cur][d.group(2)] = d.group(1)
+    return out
+
+
+def fits(rhs, w, types, mem, rec=None, name=None):
+    """Does this right-hand side provably store no more than `w` bits?
+
+    Returns the signedness of the evidence, or None for "cannot tell".  Three
+    forms count, and nothing else does:
+
+      * an explicit narrowing cast -- `(uint8_t)*(p - 1)`.  The cast is the
+        author saying what the value is, and it is the commonest by far;
+      * a decimal or hex literal that fits;
+      * a designator whose own declared width is already `w` or less --
+        `this->step` on a `uint16_t` member, `*(freq + 3)` through a
+        `uint16_t *`, `p_i->height`.
+
+    The point of the whole exercise: a bare read of the local -- `if (pred <
+    north)` -- is only safe to narrow when the top half was never anything but
+    zero, and that is a property of the *writes*, not of the read.  Testing it
+    at the reads is what made this rule decline 48 of its 49 candidates.
+    """
+    e = rhs.strip().rstrip(';').strip()
+    m = re.match(r'\(\s*(u?)int(8|16|32|64)_t\s*\)', e)
+    if m and int(m.group(2)) <= w:
+        return m.group(1) == ''            # True == signed
+    if re.match(r'^(?:0[xX][0-9a-fA-F]+|\d+)$', e):
+        return False if int(e, 0) < (1 << w) else None
+    # A designator, possibly dereferenced: `x`, `a->b`, `*(p + 3)`, `p[3]`.
+    d = re.match(r'^\*?\(?\s*\*?\s*([A-Za-z_]\w*)\s*(?:->|\.)\s*([A-Za-z_]\w*)'
+                 r'\s*(?:\[[^\]]*\])?\s*\)?$', e)
+    if d:
+        t = mem.get(d.group(2))
+    else:
+        d = re.match(r'^\*\s*\(?\s*([A-Za-z_]\w*)\s*(?:[+\-][^)]*)?\)?$', e) or \
+            re.match(r'^([A-Za-z_]\w*)\s*\[[^\]]*\]$', e)
+        t = types.get(d.group(1), '').rstrip('*') if d else None
+    if t and structs.width(t) and structs.width(t) * 8 <= w:
+        return t.startswith('int')
+    # The same designator, resolved through the record the local points at
+    # rather than through the global member map: `img->height` when `img` is a
+    # `BmfImage *`.
+    o = re.match(r'^([A-Za-z_]\w*)\s*(?:->|\.)\s*([A-Za-z_]\w*)\s*$', e)
+    if rec and o:
+        f = rec.get((types.get(o.group(1)) or '').rstrip('*'), {}).get(o.group(2))
+        if f and structs.width(f) * 8 <= w:
+            return f.startswith('int')
+    # And the expressions whose *result* cannot be wider than `w`, whatever
+    # their operands were.  Three shapes, each one an argument about the value
+    # and not about a declaration:
+    #
+    #   e & K   with K < 2^w        -- the mask is the proof
+    #   e >> k  with k >= 32 - w    -- a 32-bit value shifted that far fits
+    #   (uint32_t)x >> k, k >= 1    -- `x` being this local, which the rest of
+    #                                  this analysis is busy assuming is narrow;
+    #                                  shifting it right cannot widen it, so the
+    #                                  assumption is inductive rather than circular
+    m = re.search(r'&\s*(0[xX][0-9a-fA-F]+|\d+)\s*$', e)
+    if m and int(m.group(1), 0) < (1 << w):
+        return False
+    m = re.search(r'>>\s*(\d+)\s*$', e)
+    if m and int(m.group(1)) >= 32 - w:
+        return False
+    if name and re.match(r'^\(\s*u?int32_t\s*\)\s*%s\s*>>\s*[1-9]\d*$'
+                         % re.escape(name), e):
+        return False
+    return None
+
+
+def narrow_by_writes(body, name, w, types, mem, rec):
+    """(True, signed) when every full write to `name` provably fits in `w` bits.
+
+    At least one full write is required.  A local written only through
+    `LOWORD(x) =` has an indeterminate top half, and while narrowing it can
+    only be an improvement, this rule does not get to decide that from a shape.
+    """
+    votes, seen = [], 0
+    for l in body:
+        for m in re.finditer(NAMED % re.escape(name), l):
+            after = l[m.end():]
+            if re.search(r'\b(?:LOWORD|LOBYTE)\s*\(\s*$', l[:m.start()]):
+                continue
+            if not re.match(r'\s*=[^=]', after):
+                continue
+            seen += 1
+            v = fits(after.split('=', 1)[1], w, types, mem, rec, name)
+            if v is None:
+                return False, False
+            votes.append(v)
+    return (seen > 0), (bool(votes) and all(votes))
+
+
 def survey(lines):
     out = []
     mem = members(lines)
+    rec = record_members(lines)
     for a, b, nm, sig in structs.bodies(lines):
         body = [l.split('//')[0] for l in lines[a:b + 1]]
         types = structs.decl_types(sig, lines, a, b)
@@ -104,6 +223,13 @@ def survey(lines):
             w = next(iter(widths))
             if structs.width(types[name]) != 4:
                 continue          # already narrow, or a pointer this cannot judge
+            # Whether a bare read of the whole local is safe, decided once from
+            # the writes rather than at each read.  `by_writes` is the evidence
+            # that the top half is always zero; `wsigned` is what the narrowing
+            # casts agreed on, and it wins over `lands` below because a cast in
+            # the source is a stronger statement than the type of a slot the
+            # value later happens to land in.
+            by_writes, wsigned = narrow_by_writes(body, name, w, types, mem, rec)
             lands, ok = [], True
             for i, l in enumerate(body):
                 for m in re.finditer(NAMED % re.escape(name), l):
@@ -141,6 +267,14 @@ def survey(lines):
                         continue                       # the whole right-hand side
                     if a + i in decl:
                         continue
+                    # A read this rule cannot otherwise account for.  It is
+                    # harmless exactly when the local never held more than `w`
+                    # bits, which `narrow_by_writes` has already settled: with
+                    # the top half always zero, a 32-bit read and a 16-bit one
+                    # give the same value, and `if (pred < north)` compares the
+                    # same two numbers either way.
+                    if by_writes:
+                        continue
                     ok = False
                     break
                 if not ok:
@@ -149,6 +283,8 @@ def survey(lines):
                 continue
             want = [t for t in lands if t and structs.width(t) * 8 == w]
             signed = bool(want) and all(t.startswith('int') for t in want)
+            if by_writes and not want:
+                signed = wsigned
             out.append((nm.lstrip('_'), a, b, name, types[name],
                         NARROW[w][signed], w, widths[w]))
     return out
@@ -188,6 +324,15 @@ def apply(lines, fn, a, b, name, want, w):
         if cut == run:
             cut = re.sub(r',[ \t]*\*?%s(?=[ \t]*;)' % (NAMED % re.escape(name)), '',
                          run, count=1)
+        # The last name of a *wrapped* run: the comma that introduces it is on
+        # the line before, so neither pattern above reaches it.  Crossing the
+        # newline is safe here and only here, because the lookahead pins the
+        # name to the `;` that closes the run -- there is nothing after it on
+        # its line to splice onto the one before.  `k4` and `g4` are the two,
+        # and without this they were the rule's only failures to apply.
+        if cut == run:
+            cut = re.sub(r',[ \t]*\n[ \t]*\*?%s(?=[ \t]*;)'
+                         % (NAMED % re.escape(name)), '', run, count=1)
         if cut == run:
             return False
         new = [l for l in cut.split('\n') if l.strip()]
