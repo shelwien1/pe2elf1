@@ -82,6 +82,14 @@ BMF_FUZZ_EXTRA="$tmp/extra" tools/fuzz.py "$tmp/in" "$count" "$seed" \
 # legitimate output (DLRAW is 490 kB) and well below the session's allowance.
 mkdir -p "$tmp/out"
 
+# `ulimit -v` and a 64-bit AddressSanitizer do not mix: ASan reserves a
+# sixteen-terabyte shadow region on x86-64, so any address-space cap at all
+# makes every single run abort before `main` -- which reads as 400 mutants
+# reporting rather than as the instrument declining to start.  On -m64 the
+# file-size cap and the timeout are the whole bound; ASan's own
+# `allocator_may_return_null` keeps a runaway request from being fatal.
+vlimit=(-v 1048576); [ "${BMF_BITS:-32}" = 32 ] || vlimit=()
+
 bad=0 ran=0 refused=0 alloc=0
 while IFS=$'\t' read -r file from what; do
   case $file in
@@ -89,7 +97,8 @@ while IFS=$'\t' read -r file from what; do
     *)     mode=d; dst=$tmp/out/$file.bmp ;;
   esac
   log=$tmp/out/$file.log
-  ( ulimit -f 65536 -v 1048576; ASAN_OPTIONS=detect_leaks=0:abort_on_error=0 \
+  ( ulimit -f 65536 "${vlimit[@]}"
+    ASAN_OPTIONS=detect_leaks=0:abort_on_error=0:allocator_may_return_null=1 \
       "$bin" "$mode" "$tmp/in/$file" "$dst" ) >"$log" 2>&1
   rc=$?
   ran=$((ran + 1))

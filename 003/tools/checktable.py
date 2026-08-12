@@ -39,7 +39,10 @@ def live():
 
 def quoted():
     txt = open(DOC).read()
-    m = re.search(r'```\n\s*round 8\s+round 9\s+round 9 end\n(.*?)```', txt, re.S)
+    # The last column used to be headed `round 9 end` and was re-taken by
+    # every round after it, which made the header the one part of the table
+    # nothing checked and nothing was true of.  It says `now`.
+    m = re.search(r'```\n\s*round 8\s+round 9\s+now\n(.*?)```', txt, re.S)
     if not m:
         sys.exit('%s: no §1 table found' % DOC)
     rows = []

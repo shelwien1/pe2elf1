@@ -21,6 +21,8 @@ import sys
 
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import buildlog                                                   # noqa: E402
+import negindex                                                 # noqa: E402
+import rawoffset                                                # noqa: E402
 import structs                                                    # noqa: E402
 
 # The file to report on.  This was a constant, so `shape.py other.hpp`
@@ -251,6 +253,16 @@ def summary():
     row('raw-offset sites', len(raw))
     row('  off `_this`', len(this))
     row('  in functions', len(set(r[1] for r in this)))
+    # The row above counts `_this + ofs`, which is the shape Hex-Rays emits for
+    # a small member.  It said 0 for four rounds while thirty sites in
+    # `alt_p2_model` reached the same records as `bankp[4 * ctx + 284712]` --
+    # an offset written as the number it is on i386.  These two are the
+    # measures that can see that, and the one under them the third way a record
+    # can be addressed by width rather than by name.
+    row('offsets written as numbers', len(rawoffset.survey(lines)))
+    row('  negative indices, unsigned name',
+        sum(1 for r in negindex.survey(lines)
+            if r[3].startswith('uint') or r[3] == '?'))
     # `sizeof(void *)` is not a cast, and thirty-three of them -- one per
     # layout assertion -- were in this figure from the day it was written.
     # The lookbehind is the whole correction.

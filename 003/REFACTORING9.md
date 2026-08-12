@@ -18,46 +18,51 @@ and 3.
 
 ## 1. Where the file is
 
-`python3 tools/shape.py`, verbatim, with the two rounds before it beside it:
+`python3 tools/shape.py`, verbatim.  The last column is re-taken every round
+-- `tools/checktable.py` fails the sweep when it drifts -- so it is headed
+`now` rather than with a round number, which is the one part of this table
+nothing was checking and nothing had been true of since round nine.
 
 ```
-                                   round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17638
-bmf.cpp lines                            —         —           365
-raw-offset sites                        22        12              0
-  off `_this`                            —         1             0
-  in functions                           —         1             0
-byte offsets on a typed base           121         0             0
-pointer casts                         2137      1545          1052
-  to a scalar                            —         —           443
-  to a record                            —         —           372
-  to a scalar, of an address             —         —           232
-  to a record, of an address             —         —             5
-declarations carrying alignas            —         —            23
-frames                                  —        17             8
-  bytes they hold                        —         —        167652
-  aliases left in them                   —         —             0
-  slots carrying two names               —         —             0
-  extra names on those slots             —         —             0
-  member runs walked as arrays           —         —             0
-  this can offer to lift                 —         —             0
-  tried and reverted                     —         —             4
-  declined, every member in a union      —         —             4
-structs                                 —         —            24
-  still ObjN                             —         —             0
-fNN members / named ones             93/121     5/162         0/170
-distinct unexplained locals            554       591             0
-  bodies still carrying one              —   8 of 102       0 of 94
-  uses                                    —      6302             0
-locals named for a callee parameter      —         —             0
-  declarations / bodies                   —         —           0/0
-names Hex-Rays chose and nobody changed  —         —             0
-  conventional ones kept / bodies joined  —         —         53/74
-goto / LABEL_n:                     112/79     81/55         49/33
-  restart a loop / exit N blocks         —         —         15/32
-  sideways to a join / to neither        —         —           2/0
-  jump into a block                      —         —             0
-conversion warnings                   1455      1331           975
+                                           round 8     round 9         now
+subs1.hpp lines                              17787       17616       17589
+bmf.cpp lines                                    —           —         365
+raw-offset sites                                22          12           0
+  off `_this`                                    —           1           0
+  in functions                                   —           1           0
+offsets written as numbers                       —           —           0
+  negative indices, unsigned name                —           —           0
+byte offsets on a typed base                   121           0           0
+pointer casts                                 2137        1545         763
+  to a scalar                                    —           —         296
+  to a record                                    —           —         256
+  to a scalar, of an address                     —           —         208
+  to a record, of an address                     —           —           3
+declarations carrying alignas                    —           —          23
+frames                                           —          17           8
+  bytes they hold                                —           —      167652
+  aliases left in them                           —           —           0
+  slots carrying two names                       —           —           0
+  extra names on those slots                     —           —           0
+  member runs walked as arrays                   —           —           0
+  this can offer to lift                         —           —           0
+  tried and reverted                             —           —           4
+  declined, every member in a union              —           —           4
+structs                                          —           —          24
+  still ObjN                                     —           —           0
+fNN members / named ones                    93/121       5/162       0/170
+distinct unexplained locals                    554         591           0
+  bodies still carrying one                      —    8 of 102       0of95
+  uses                                           —        6302           0
+locals named for a callee parameter              —           —           0
+  declarations / bodies                          —           —         0/0
+names Hex-Rays chose and nobody changed           —           —           0
+  conventional ones kept / bodies joined           —           —       52/74
+goto / LABEL_n:                             112/79       81/55       49/33
+  restart a loop / exit N blocks                 —           —       15/32
+  sideways to a join / to neither                —           —         2/0
+  jump into a block                              —           —           0
+conversion warnings                           1455        1331         935
 ```
 
 `python3 tools/checktable.py` compares that table against `shape.py --rows`

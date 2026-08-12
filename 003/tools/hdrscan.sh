@@ -43,6 +43,14 @@ fi
 files=("$@")
 [ "${#files[@]}" -gt 0 ] || files=(testfiles/ref_*.bmf)
 
+# `ulimit -v` and a 64-bit AddressSanitizer do not mix: ASan reserves a
+# sixteen-terabyte shadow region on x86-64, so any address-space cap at all
+# makes every mutant abort before `main` -- which reads as every case
+# reporting rather than as the instrument declining to start.  On -m64 the
+# file-size cap and the walk's own bounds are the whole limit; ASan's
+# `allocator_may_return_null` keeps a runaway request from being fatal.
+vlimit=(-v 2097152); [ "${BMF_BITS:-32}" = 32 ] || vlimit=()
+
 bad=0 ran=0
 for f in "${files[@]}"; do
   n=$(basename "$f" .bmf)
@@ -53,9 +61,9 @@ for f in "${files[@]}"; do
       python3 -c 'import sys
 d=bytearray(open(sys.argv[1],"rb").read()); d[int(sys.argv[2])]=int(sys.argv[3])
 open(sys.argv[4],"wb").write(d)' "$f" "$off" "$v" "$tmp/m.bmf"
-      ( ulimit -f 262144 -v 2097152
-        ASAN_OPTIONS=detect_leaks=0 "$tmp/bmf" d "$tmp/m.bmf" "$tmp/o.bmp" ) \
-          >"$tmp/log" 2>&1
+      ( ulimit -f 262144 "${vlimit[@]}"
+        ASAN_OPTIONS=detect_leaks=0:allocator_may_return_null=1 \
+          "$tmp/bmf" d "$tmp/m.bmf" "$tmp/o.bmp" ) >"$tmp/log" 2>&1
       rc=$?
       ran=$((ran + 1))
       rm -f "$tmp/o.bmp"
