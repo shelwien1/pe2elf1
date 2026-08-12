@@ -9504,14 +9504,20 @@ int32_t __decode_symbol_list(SymList *syms)
             // Slot 0 holds an entry pointer while the list is being built and
             // a loop count once the rescale pass starts; the two spellings are
             // the two roles, which is what the original casts were hiding.
-            uint32_t list0;
+            //
+            // Both spellings are live -- `p = __frame.list[0]` and
+            // `__frame.list0 = owner->live`, `(__frame.list[1]) = cur` and
+            // `SymEntry *list1` -- so the two arms have to agree slot for
+            // slot, and they do only while a pointer is four bytes.  See
+            // `BMF_SPILL_PAD`: nothing on i386, four bytes elsewhere.
+            uint32_t list0;    BMF_SPILL_PAD(l0);
             SymEntry *list1;
-            uint32_t list2;
-            int32_t list3;
-            int32_t list4;
-            uint32_t list5;
+            uint32_t list2;    BMF_SPILL_PAD(l2);
+            int32_t list3;     BMF_SPILL_PAD(l3);
+            int32_t list4;     BMF_SPILL_PAD(l4);
+            uint32_t list5;    BMF_SPILL_PAD(l5);
             SymEntry *list6;
-            int32_t list7;
+            int32_t list7;     BMF_SPILL_PAD(l7);
             SymEntry *list_tail[8184];
           };
       };
