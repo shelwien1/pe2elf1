@@ -132,7 +132,7 @@ one record. `free_workspace` freed the five row buffers as
 `*(uint8_t *)(*(uint32_t *)&blk->run_bucket + x + 1)`.
 
 And thirty in `alt_p2_model` plus one in `alt_p2_d8_decode_body`, which is
-§1's `rawoffset` row.
+section 1's `rawoffset` row.
 
 ### 2.3a A pointer laundered through `uintptr_t`
 
@@ -209,17 +209,18 @@ were "still broken" were the instrument.
 BMF_BITS=64 ./build.sh              # the same source as x86-64
 BMF_STRICT=1 BMF_BITS=64 ./build.sh # strict64.log, ptrwidth.py's worklist
 BMF_WARN=1  BMF_BITS=64 ./build.sh  # warn64.log, ratcheted by warn64.txt
-tools/x64.sh                        # 23 cases, and test.sh runs it
+tools/x64.sh --high                 # 22 cases, and test.sh runs it
 ```
 
 The logs are named after the target because the `cksum` stamp
 (`tools/buildlog.py`) says which *version* of the source a log describes and
 could never have said which *target*.
 
-`test.sh` gained one line, and the argument for it is a positive control:
-reintroducing one line of the `alt_p2_model` byte view leaves all fifteen
-32-bit streams byte-identical and takes the x64 leg from 22 of 22 to 18 of 22.
-`BMF_X64_GATE=0` skips it, for a host with no 64-bit toolchain.
+`test.sh` gained one line, and it asks the *strong* form: `tools/x64.sh
+--high`, with every allocation above 4 GB. The argument for that is section 3c
+and its control. `BMF_X64_GATE=0` skips it, for a host with no 64-bit
+toolchain, and `x64.sh` falls back to the ordinary 64-bit build, with a line
+saying so, where the arena cannot be placed.
 
 Every other instrument takes `BMF_BITS=64` in front of it, and all four are
 clean on the 64-bit build:
@@ -242,13 +243,59 @@ which for a file this full of reinterpreted memory is not a foregone
 conclusion.
 
 The fuzz line is the same tally the 32-bit run gives, mutant for mutant, which
-is the check that §3a's `plane_b` was the whole of what it found.
+is the check that section 3a's `plane_b` was the whole of what it found.
 
 `build.sh`'s header used to say "-m32 is not negotiable" and gave three
 reasons: i386 calling conventions on the moved entry points, CPUID helpers in
 i386 inline asm, and the address blob. All three were true when it was written
 and all three were gone by round seven. **A reason in a comment is a
 measurement, and that one had not been re-taken in four rounds.**
+
+---
+
+## 3a. What the fuzzer found that no static rule could
+
+Running `tools/fuzz.sh` under `BMF_BITS=64` — 400 mutants of 33 seed files
+through a 64-bit ASan build — reported two crashes where the 32-bit run
+reported none, and both were the same site. Neither mutant touches a header:
+`altp1.186.bmp` differs from `testfiles/altp1.bmp` in five *pixels*.
+
+`choose_plane_coding`'s frame carries `uint32_t plane_b`, which is
+`plane_desc[2].src_plane - x3[2]` — a difference of plane numbers, so it can be
+negative — and `plane0 + __frame.plane_b` is then a pointer plus 0xFFFFFFFF-ish.
+Its neighbour in the same union, `plane_a`, carries the note "Signed: it is a
+difference of plane numbers and the second reference can sit before the current
+plane", added in an earlier round to kill eight sign conversions. The same
+argument was true of `plane_b` and nobody made it.
+
+No static rule here catches that. `tools/negindex.py` looks for a *subscript*;
+this is an addition. `tools/ptrwidth.py` sees no truncation, because there is
+none. `tools/rawoffset.py` sees no offset. The compiler is silent on both
+targets. What found it is running the program on inputs nobody chose, on the
+target where the mistake has a consequence — which is the whole argument for
+`BMF_BITS=64 tools/fuzz.sh`, and it is the fourth instrument in section 1's table.
+
+---
+
+## 3b. The instrument that never ran
+
+`tools/x64.sh` compared each 64-bit stream against `testfiles/$n.bmf`, guarded
+by `[ -f ]`. The reference streams are called `testfiles/ref_$n.bmf` -- which
+is what `test.sh` calls them -- so the guard was false for every image and the
+comparison, the entire reason that script exists, never ran once. It reported
+"23 of 23" and what it had checked was 23 round trips.
+
+A round trip is a weak claim here: the encoder and the decoder are the same
+build, so a model that has drifted agrees with itself. The three streams the
+`q0` defect changed decode perfectly.
+
+Two smaller faults came with it. The glob was `testfiles/*.bmp`, which picks
+up `out_rle4.bmp` and `out_rle8.bmp` -- not inputs, but what the decoder is
+expected to *write*, and `test.sh` excludes them. And a missing reference was
+a skip; it is a failure now, for the reason above.
+
+The count is 22 of 22 with the comparison running, the out-of-memory ladder
+added, and `out_rle4`/`out_rle8` no longer counted as inputs.
 
 ---
 
@@ -306,75 +353,7 @@ because the arena kept every allocation low. `BMF_PAGE` is a `uintptr_t` now.
 
 ---
 
-## 3b. The instrument that never ran
-
-`tools/x64.sh` compared each 64-bit stream against `testfiles/$n.bmf`, guarded
-by `[ -f ]`. The reference streams are called `testfiles/ref_$n.bmf` -- which
-is what `test.sh` calls them -- so the guard was false for every image and the
-comparison, the entire reason that script exists, never ran once. It reported
-"23 of 23" and what it had checked was 23 round trips.
-
-A round trip is a weak claim here: the encoder and the decoder are the same
-build, so a model that has drifted agrees with itself. The three streams the
-`q0` defect changed decode perfectly.
-
-Two smaller faults came with it. The glob was `testfiles/*.bmp`, which picks
-up `out_rle4.bmp` and `out_rle8.bmp` -- not inputs, but what the decoder is
-expected to *write*, and `test.sh` excludes them. And a missing reference was
-a skip; it is a failure now, for the reason above.
-
-The count is 22 of 22 with the comparison running, the out-of-memory ladder
-added, and `out_rle4`/`out_rle8` no longer counted as inputs.
-
----
-
-## 3a. What the fuzzer found that no static rule could
-
-Running `tools/fuzz.sh` under `BMF_BITS=64` — 400 mutants of 33 seed files
-through a 64-bit ASan build — reported two crashes where the 32-bit run
-reported none, and both were the same site. Neither mutant touches a header:
-`altp1.186.bmp` differs from `testfiles/altp1.bmp` in five *pixels*.
-
-`choose_plane_coding`'s frame carries `uint32_t plane_b`, which is
-`plane_desc[2].src_plane - x3[2]` — a difference of plane numbers, so it can be
-negative — and `plane0 + __frame.plane_b` is then a pointer plus 0xFFFFFFFF-ish.
-Its neighbour in the same union, `plane_a`, carries the note "Signed: it is a
-difference of plane numbers and the second reference can sit before the current
-plane", added in an earlier round to kill eight sign conversions. The same
-argument was true of `plane_b` and nobody made it.
-
-No static rule here catches that. `tools/negindex.py` looks for a *subscript*;
-this is an addition. `tools/ptrwidth.py` sees no truncation, because there is
-none. `tools/rawoffset.py` sees no offset. The compiler is silent on both
-targets. What found it is running the program on inputs nobody chose, on the
-target where the mistake has a consequence — which is the whole argument for
-`BMF_BITS=64 tools/fuzz.sh`, and it is the fourth instrument in §1's table.
-
----
-
-## 4. What this round did not do
-
-* **`BMF_BITS` reaches the other instruments, and one of them needed a fix to
-  survive it.** `tools/asan.sh`, `tools/fuzz.sh` and `tools/hdrscan.sh` all
-  build through `build.sh`, so `BMF_BITS=64` in front of any of them is enough
-  — except that the last two cap the address space with `ulimit -v`, and a
-  64-bit AddressSanitizer reserves a sixteen-terabyte shadow region. Every
-  single mutant aborted before `main`, and the tally read *400 reported*: the
-  instrument declining to start, presented as four hundred defects. Both now
-  drop the `-v` cap on `-m64` and set `allocator_may_return_null=1`, which is
-  what the cap was there to stand in for.
-* **Nothing was done about `-march`.** Both targets build at `k8`, which is the
-  first x86-64 part, so the two are comparable. Whether the float arithmetic in
-  the p2 filter would still agree at a wider baseline is not something this
-  round asked, and `-mfpmath=sse` is what makes the question answerable at all.
-* **Big-endian, and pointers that are not 4 or 8 bytes.** Out of scope, and the
-  file is full of `*(uint32_t *)&x` reads that would have to be read one at a
-  time. `sizeof(void *) != 4 ||` on the layout assertions is the honest guard:
-  it says "i386 is pinned and nothing else is claimed".
-
----
-
-## 5. The rules this round added
+## 4. The rules this round added
 
 | tool | asks | target |
 |---|---|---|
@@ -390,7 +369,26 @@ its ceiling — a ratchet like `warn.txt` and over a different population, since
 a `ptrdiff_t` narrowed to an `int32_t` count is a conversion there and an
 identity here.
 
-All four are in `tools/sweep.sh`; the first three are counting tools and the
-sweep holds them to zero. Each was replayed against the file from *before* its
-fix and reports what it is supposed to find — which is the standing rule that a
-rule reporting zero on the current file has proved nothing.
+The three Python rules are in `tools/sweep.sh`, which holds a counting tool to
+zero. Each was replayed against the file from *before* its fix and reports what
+it is supposed to find — the standing rule being that a rule reporting zero on
+the current file has proved nothing. The three shell instruments have the same
+property and it is stated where each of them lives: `x64.sh` moves from 22 of
+22 to 18 of 22 on one reintroduced truncation, `x64diff.sh` names the mutant
+and the byte counts, and `--high` is the difference between those two runs.
+
+---
+
+## 5. What this round did not do, and what is left
+
+* **`warn64.txt` is a ceiling and not a target.** 952 conversions, against 933
+  on i386, and they are not the same population: a `ptrdiff_t` narrowed to an
+  `int32_t` count is a conversion on one target and an identity on the other.
+  Reading through them is round-five's job done again, and it is a round of its
+  own.
+* **`-march`.** Both targets build at `k8`; whether the p2 filter's float
+  arithmetic still agrees at a wider baseline is not asked here.
+* **Anything that is not 4 or 8 bytes of pointer, or is big-endian.** The
+  `sizeof(void *) != 4 ||` guard on every layout assertion is the honest
+  statement: i386 is pinned, x86-64 is checked by running it, and nothing else
+  is claimed.
