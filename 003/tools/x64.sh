@@ -52,12 +52,14 @@ why() {
   esac
 }
 
+# `test.sh`'s corpus, and its exclusion: `out_<name>.bmp` is not an input, it
+# is what the decoder is expected to *write* for an input it does not reproduce
+# byte for byte.  Globbing `testfiles/*.bmp` picked both of those up and then
+# looked for a reference stream that could not exist.
 same=0 ran=0 bad=0
-for f in testfiles/*.bmp; do
+for f in $(ls testfiles/*.bmp | grep -v '/out_' | sort); do
   n=$(basename "$f" .bmp)
   ran=$((ran + 1))
-  # The reference stream is testfiles/$n.bmf when test.sh has one; without it
-  # there is nothing to compare against and the round trip is all this can say.
   # `$?` after `if ! cmd` is the negation's status and is always 0, which is
   # how the first version of this reported "compress exits 0" under a line of
   # SIGSEGV.  Run it, then read the code.
@@ -84,8 +86,19 @@ for f in testfiles/*.bmp; do
     printf '%-9s round trip differs from %s\n' "$n" "$(basename "$want")"
     bad=$((bad + 1)); continue
   fi
-  if [ -f "testfiles/$n.bmf" ] && ! cmp -s "$tmp/$n.bmf" "testfiles/$n.bmf"; then
-    printf '%-9s round trips, but the stream is not the 32-bit one\n' "$n"
+  # `testfiles/ref_<name>.bmf`, which is what `test.sh` calls it.  The first
+  # version of this said `testfiles/$n.bmf` and guarded the comparison with
+  # `[ -f ]`, so the guard was false for every image and the whole
+  # stream check -- the entire reason this script exists -- never ran once.
+  # A missing reference is a failure and not a skip, for that exact reason.
+  ref=testfiles/ref_$n.bmf
+  if [ ! -f "$ref" ]; then
+    printf '%-9s no reference stream (%s) -- run tools/mkrefs.sh\n' "$n" "$ref"
+    bad=$((bad + 1)); continue
+  fi
+  if ! cmp -s "$tmp/$n.bmf" "$ref"; then
+    printf '%-9s round trips, but the stream is not the 32-bit one (%s vs %s bytes)\n' \
+      "$n" "$(stat -c%s "$tmp/$n.bmf")" "$(stat -c%s "$ref")"
     bad=$((bad + 1)); continue
   fi
   same=$((same + 1))

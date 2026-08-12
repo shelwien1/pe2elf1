@@ -8188,7 +8188,11 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
       union {
           int64_t q0;              // the solve's first coefficient, as a double
           struct {
-              uint32_t row_stride;   // `(uint16_t)img->stride`
+              // Signed, like `plane_b` below and for the same kind of
+              // reason: it is a length that three sites add to a pointer
+              // beside `int32_t` terms, and unsigned it made every one of
+              // those a sign conversion.  `(uint16_t)img->stride` is 0..65535.
+              int32_t  row_stride;   // `(uint16_t)img->stride`
               // Signed, for the same reason as `plane_a` below: it is a
               // difference of plane numbers and the reference can sit before
               // the current plane.  Unsigned, `plane0 + plane_b` was
@@ -8662,7 +8666,14 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
         }
       }
 LABEL_19:
-      px = &((uint8_t *)img_a)[__frame.q0 + 16 + n_planes + x3[2]];
+      // `row_stride` and not `q0`.  They are the low and the whole of one
+      // union slot -- two 32-bit quantities before the 3x3 solve, one 64-bit
+      // one after it -- and reading the `int64_t` here picks up `plane_b` in
+      // the top half.  On i386 the index converts to a 32-bit `ptrdiff_t` and
+      // the top half falls off, which is why it has always worked; with a
+      // 64-bit pointer `plane_b` is eight gigabytes of offset, `px` starts
+      // past `data_end`, and this whole histogram never runs.
+      px = &((uint8_t *)img_a)[__frame.row_stride + 16 + n_planes + x3[2]];
       if ( px < data_end )
       {
         __frame.wt_slot = wt8;
@@ -8725,9 +8736,13 @@ LABEL_19:
       // `tools/ptrwidth.py --laundered` looks for.
       win = (uintptr_t)hist & 0xF;
       // The first 256-wide window over these 1024 counters.  Where it starts
-      // is the pointer's low four bits, which the frame's alignas(16) makes
-      // zero; sixteen counters an iteration is all the vectors were doing,
-      // and integer addition does not care which lane a term landed in.
+      // is the pointer's low four bits.  This note used to say the frame's
+      // `alignas(16)` makes that zero; measured on both targets it is 4, and
+      // it is 4 because `buf` is at +4 in the frame.  What the alignment does
+      // guarantee is that it is the *same* on every target and every run,
+      // which is the property the streams depend on.  Sixteen counters an
+      // iteration is all the vectors were doing, and integer addition does not
+      // care which lane a term landed in.
       sum = 0;
       for ( i = 0; i < 256; ++i )
         sum += *(int32_t *)&hist[4 * (win + i)];
@@ -8783,7 +8798,7 @@ LABEL_19:
         __builtin_memset(x4, 0, 16);
         __builtin_memset(x5, 0, 16);
         memset(__frame.buf,0,0x8000);
-        pp = &((uint8_t *)img_a)[__frame.q0];
+        pp = &((uint8_t *)img_a)[__frame.row_stride];
         // `int32_t` from a pointer difference: the cast the decompilation had
         // here was useless on i386 (`ptrdiff_t` is `int`) and would be a
         // narrowing anywhere else, so the conversion is left to the
@@ -8791,7 +8806,7 @@ LABEL_19:
         // is.  The quad count is bounded by the image, which is bounded by
         // `data_size`.
         n_quads = (data_end - 17 - pp) / 4;
-        end_px = &((uint8_t *)img_a)[__frame.q0 + 20];
+        end_px = &((uint8_t *)img_a)[__frame.row_stride + 20];
         if ( data_end <= end_px )
         {
           sum01 = *(double *)&x0[2];
