@@ -4947,10 +4947,14 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
   bmp->bfReserved1 = 0;
   bmp->biWidth = i;
   bmp->biHeight = rows;
-  LOBYTE(rows) = img->depth;
-  depth_flags = (int8_t)rows;
+  // `rows` held the height five lines up and MSVC then reused its register for
+  // the depth byte, which is why Hex-Rays wrote a partial store here.  Nothing
+  // reads `rows` at full width again -- these two are its last uses and both
+  // take the low byte -- so the second lifetime gets the value it actually
+  // wants instead of a register with two jobs.
+  depth_flags = (int8_t)img->depth;
   bmp->biPlanes = 1;
-  bits = rows & 0x3F;
+  bits = img->depth & 0x3F;
   bmp->biBitCount = bits;
   bmp->biClrImportant = 0;
   bmp->biClrUsed = 0;
@@ -8106,6 +8110,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
   double sum22, sum11, dv0, dv1, dv2, sum01, sum02, sum12, sum02_c, inv;
   int16_t g1_lo;
   uint32_t n_quads, next_plane, row, slack;
+  uint16_t g1w;   // the second half of `g1`'s register, at the width it is read
   int32_t n_planes, data_size, result, pick01, xform, dw, *win_row, wt8, wt4,
           c2, c2w, c1, c1w, c0, bin0, pred, xform_row, win, sum, best_sum, i,
           pos2, best_sum2, sum2, wt4_dn, wt8_dn, wt4_dn_end, wt8_dn_end, dv3,
@@ -8736,18 +8741,26 @@ LABEL_19:
             dnx2 = pp[4 * quad + 22];
             x1[0] = g1;
             g2 = ((uint8_t *)img_a)[4 * quad + 18] + dnx2 - (nx2 + pp[4 * quad + 18]);
-            LOWORD(g1) = ((uint8_t *)img_a)[4 * quad + 19] + pp[4 * quad + 23] - pp[4 * quad + 19] - ((uint8_t *)img_a)[4 * quad + 23];
+            // `g1` is finished: it was a full-width gradient and `x1[0] = g1`
+            // two lines up was its last reader.  MSVC reused the register for a
+            // second gradient that is only ever taken sixteen bits wide -- every
+            // read below is `(uint16_t)` or `& 0x3FF` -- so the second lifetime
+            // gets a local of its own at the width it is used at.  Subtraction
+            // is why the switch is exact: the low sixteen bits of `x - y` do not
+            // depend on anything above them, so `g1w - 512` and `g1w - g2` give
+            // what the truncating stores gave.
+            g1w = (uint16_t)(((uint8_t *)img_a)[4 * quad + 19] + pp[4 * quad + 23] - pp[4 * quad + 19] - ((uint8_t *)img_a)[4 * quad + 23]);
             g1_lo = ((int16_t *)x1)[0];
-            LOWORD(g1) = g1 - 512;
+            g1w = g1w - 512;
             pa = x1[0] * x0[0] + x0[3] * wa_slot;
             pb = g2 * x0[1];
-            ++__frame.hist_a[((uint16_t)g1 - ((int16_t *)x0)[6]) & 0x3FF];
-            bin_lin = ((uint16_t)g1 - (uint16_t)((uint32_t)(pa + pb + 63) >> 7)) & 0x3FF;
+            ++__frame.hist_a[(g1w - ((int16_t *)x0)[6]) & 0x3FF];
+            bin_lin = (g1w - (uint16_t)((uint32_t)(pa + pb + 63) >> 7)) & 0x3FF;
             ++*(uint32_t *)&__frame.buf[4 * bin_lin];
-            ++__frame.hist_b[((uint16_t)g1 - g1_lo) & 0x3FF];
-            LOWORD(g1) = g1 - g2;
+            ++__frame.hist_b[(g1w - g1_lo) & 0x3FF];
+            g1w = g1w - g2;
             quad_r = x0[2];
-            ++__frame.hist_c[g1 & 0x3FF];
+            ++__frame.hist_c[g1w & 0x3FF];
             alpha = pp[4 * quad_r + 23] + 256;
             bin_lin2 = ((uint16_t)alpha
                  - (uint16_t)((x0[0] * pp[4 * quad_r + 21]
@@ -9879,12 +9892,18 @@ LABEL_57:
         *(uint32_t *)&rec->match[2] = 0x01010101;
         *(uint32_t *)this->row_cur[5] = 0x01010101;
         pixp = (uint16_t *)this->pix_cur;
-        LOWORD(r7b) = ::mode_symbol[1];
-        LOWORD(r8b) = *pixp;
+        // `r7b` and `r8b` are `PixRec *`, and this is where MSVC stopped using
+        // them as pointers: it wrote a sixteen-bit value over each register's
+        // low half and every read below took that half back.  Both have already
+        // done their pointer job two lines up -- the `row_cur[7]` and
+        // `row_cur[8]` updates -- and neither is read again after this block,
+        // so the second lifetime says what it means and the pointer casts go
+        // with it.  `mode_symbol` is `int32_t[5]`, so the `(uint16_t)` stays:
+        // it is the truncation `LOWORD` used to perform.
         __frame.sym1 = ::mode_symbol[1];
-        pixp[1] = (uint16_t)(uintptr_t)r8b;
-        this->row_cur[5]->sym = (uint16_t)(uintptr_t)r7b;
-        this->pix_cur[0] = (uint16_t)(uintptr_t)r7b;
+        pixp[1] = *pixp;
+        this->row_cur[5]->sym = (uint16_t)::mode_symbol[1];
+        this->pix_cur[0] = (uint16_t)::mode_symbol[1];
         recw = (int32_t *)this->row_cur[5];
         flags_word = recw[1];
         __frame.sym3 = *recw;
@@ -10098,7 +10117,7 @@ LABEL_57:
       if ( w5a > s0b )
       {
         if ( b15a < 15 )
-          LOWORD(b15a) = 15;
+          b15a = 15;
         freq_tbl->b15 = b15a;
       }
     }
@@ -10915,7 +10934,7 @@ LABEL_42:
         if ( w5a > w6b )
         {
           if ( b15a < 15 )
-            LOWORD(b15a) = 15;
+            b15a = 15;
           frec->b15 = b15a;
         }
       }
@@ -11548,7 +11567,10 @@ inline void ModelBlock::unmodel_plane_slow(uint8_t *dst)
         }
         else
         {
-          LOBYTE(lvl_n) = lvl_n - 1;
+          // `lvl_n` is `(w2 != 0) + (w2n != 0) + (w4 != 0) + 2`, so it is
+          // 2..5 here and `lvl_n - 1` is 1..4.  The partial store was MSVC
+          // writing the byte it knew was the whole value.
+          lvl_n = lvl_n - 1;
           rec->b14 = lvl_n;
           rec->w[0] = 0;
         }
@@ -11931,10 +11953,13 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
   fl2 = plane_desc[src2 + 1].flags;
   fl3 = plane_desc[src3 + 1].flags;
   dc2 = plane_desc[src2 + 1].b3;
-  LOBYTE(src3) = plane_desc[src3 + 1].b3;
   dc1 = plane_desc[src1 + 1].b3;
   xf1 = fl1 & 8;
-  dc3 = src3;
+  // `src3` is a plane number and the two lines above read it as one.  MSVC then
+  // reused the register for that plane's `b3` byte; `dc3` is the only reader
+  // and it takes the low byte, so it reads the field directly and `src3` keeps
+  // the one meaning it started with.
+  dc3 = plane_desc[src3 + 1].b3;
   xf2 = fl2 & 8;
   xf3 = fl3 & 8;
   __rc_begin_encode();
@@ -12554,11 +12579,15 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
         r0010 = (P2Count *)((int32_t)&bankp[4 * ri0010 + 284712]);
         mir_top2 = mir_top;
         neg = -res_c;
-        LOBYTE(ri0010) = (uint8_t)mir_top[0];
+        // `ri0010` was a table index two lines up -- `r0010` is built from it
+        // -- and MSVC then reused the register for the counter's rate byte.
+        // `p2_pred` masks its rate to five bits, so nothing above the low byte
+        // could ever have reached it, and the index has no reader left after
+        // this point.  Two lifetimes, one of them now written where it is used.
         __builtin_prefetch(d0040, 0, 1);
         w_top = (int16_t)mir_top2[1];
         __builtin_prefetch(m0040, 0, 1);
-        e_top = neg - p2_pred(w_top, ri0010);
+        e_top = neg - p2_pred(w_top, (uint8_t)mir_top[0]);
         ovf = __OFSUB__(e_top, deadzone_hi);
         eq_hi = e_top == deadzone_hi;
         lt_hi = e_top - deadzone_hi < 0;
@@ -15727,7 +15756,11 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
 LABEL_42:
   if ( ::plane_count > 0 )
   {
-    LOBYTE(want2) = 63;
+    // `LOBYTE(want2) = 63` stood here, setting up the first argument of the
+    // `__unmodel_plane` call below.  That parameter is dead the whole way down
+    // -- `unmodel_plane` passes it to `alt_model_p1_d8_decode`, which passes it
+    // to `rc_begin_decode`, which never reads it -- so the call takes the
+    // literal and `want2` keeps the one value it still has a use for.
     __frame.mask = 255;
     __frame.p_i_2 = img_at;
     __frame.arc_f = arc;
@@ -15872,7 +15905,7 @@ LABEL_104:
     plane_alt_model = (uint8_t)(plane_desc[1].flags & 4) >> 2;
     // always taken: -S
     {
-      __unmodel_plane(want2, (uint16_t *)img_at, img_at->pixels);
+      __unmodel_plane(63, (uint16_t *)img_at, img_at->pixels);
       if ( plane_alt_model )
         goto LABEL_105;
     }
