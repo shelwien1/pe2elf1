@@ -370,7 +370,9 @@ a `ptrdiff_t` narrowed to an `int32_t` count is a conversion there and an
 identity here.
 
 The three Python rules are in `tools/sweep.sh`, which holds a counting tool to
-zero. Each was replayed against the file from *before* its fix and reports what
+zero, and `tools/proven.sh` says all three answer differently against older
+revisions of the file — the check that a rule reporting zero is reporting about
+the file rather than about itself. Each was replayed against the file from *before* its fix and reports what
 it is supposed to find — the standing rule being that a rule reporting zero on
 the current file has proved nothing. The three shell instruments have the same
 property and it is stated where each of them lives: `x64.sh` moves from 22 of
