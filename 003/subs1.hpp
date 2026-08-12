@@ -1916,7 +1916,9 @@ uint32_t __predict_med(uint8_t *pixels, int32_t width, int32_t height)
     }
     if ( last > (done - 1) )
     {
-      q = (&p[-done]);
+      // `done` is unsigned, so `&p[-done]` computed `p + 0xFFFFFFFF...`: on
+      // i386 that wraps to `p - done` and on a 64-bit pointer it does not.
+      q = p - done;
       last = (uint8_t)(*q - *((int8_t *)q - 1));
       *q = fold[(uint8_t)last];
     }
@@ -2011,7 +2013,9 @@ uint32_t __alt_init_tables(uint8_t *fold, int8_t *unfold)
       k = 0;
       ofs = 0;
       pos = &(fold)[lo];
-      neg = &(fold)[-lo];
+      // Same wrap as `predict_med`'s `&p[-done]`: `lo` is unsigned, so this
+      // was `fold + 0xFFFFFFFF` and only i386 folds that back to `fold - 1`.
+      neg = fold - lo;
       do
       {
         bucket = bucket_size;
@@ -2047,7 +2051,11 @@ uint32_t __alt_init_tables(uint8_t *fold, int8_t *unfold)
       if ( in_bucket == 1 )
         half = half + 1;
       (fold)[lo - 1 + done] = 2 * half;
-      (fold)[-lo - done + 257] = 2 * half - 1;
+      // `257 - lo - done`, not `-lo - done + 257`: `lo` and `done` are both
+      // unsigned and both bounded by 129 here, so the value is the same --
+      // but written the other way round the first term is a wrapped
+      // 0xFFFFFFFF, which is the shape `tools/negindex.py` looks for.
+      fold[257 - lo - done] = 2 * half - 1;
     }
   }
   // `fold` is finished by inverting `unfold` outright: whatever residual a code
@@ -8008,7 +8016,9 @@ int32_t __cost_candidate(uint8_t *img, int32_t cand, uint8_t *desc, int8_t unrea
       // west one pixel, so `o2` is `stride + plane_count`.
       diag = p[-o2] + *p;
       west = p[-__frame.nplanes];
-      q = &p[-*(uint32_t *)__frame.buf_1];
+      // `p - stride`, and the stride is unsigned: `&p[-stride]` is the same
+      // wrap as `predict_med`'s `&p[-done]`.
+      q = p - *(uint32_t *)__frame.buf_1;
       p += __frame.nplanes;
       dz = diag - (*q + west);
       sxz = sxz + (double)dx * (double)dz;
