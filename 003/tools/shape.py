@@ -271,6 +271,16 @@ def summary():
     for k, v in sorted(kinds.items(), key=lambda kv: -kv[1]):
         row('  ' + k, v)
     row('globals still at a 1997 address', len(bss()))
+    # `alignas` on a declaration is a fact about the program that nothing else
+    # here counts, and a tool dropped six of them without anything noticing --
+    # REFACTORING9.md section 39.  It is a spelling, but it is one that no
+    # rewrite should ever change by accident, and a row that moves when one
+    # does is the cheapest guard available.  `struct alignas(16)` is the
+    # frames' own, counted by the `frames` row above.
+    row('declarations carrying alignas',
+        sum(1 for l in lines
+            if 'alignas(' in l.split('//')[0]
+            and not re.search(r'\bstruct\s+alignas', l.split('//')[0])))
     # One value a row, for the same reason `goto` and `pointer casts` were
     # split: a row whose value is three numbers and a clause is a row
     # `checktable.py` cannot compare, so REFACTORING9.md section 1 carried no

@@ -33,6 +33,7 @@ pointer casts                         2137      1545          1224
   to a record                            —         —           364
   to a scalar, of an address             —         —           349
   to a record, of an address             —         —             5
+declarations carrying alignas            —         —            22
 frames                                  —        17             9
   bytes they hold                        —         —        167780
   aliases left in them                   —         —             0
@@ -3125,3 +3126,17 @@ A declaration rebuilt from a regex's groups is the same declaration only if
 nothing fell between them, and that is cheap to assert. Replayed against
 `c7d7a75`'s file the lift now emits `alignas(16) int32_t x0[4]`, and with the
 old pattern the guard fires on exactly the six.
+
+### And a row that would have said so
+
+The round-trip guard stops `liftframe.py` doing it again. Nothing would have
+caught a *different* tool doing the same thing, so §1 carries the count:
+
+```
+declarations carrying alignas       22
+```
+
+It is a spelling, and this round has been about what those are worth as tests
+— but it is a spelling no rewrite should ever change by accident, and a row
+that moves when one does costs a line. `struct alignas(16)` is excluded; that
+is the frames' own, and the `frames` row above already counts them.
