@@ -463,7 +463,13 @@ fi
 # BMF_X64_GATE=0 skips it -- for a host with no 64-bit toolchain, and for a
 # tree that is mid-refactor on purpose.
 if [ "${BMF_X64_GATE:-1}" = 1 ] && [ -x ./tools/x64.sh ]; then
-  x64=$(./tools/x64.sh 2>&1)
+  # `--high` puts every allocation above 4 GB, where a four-byte pointer
+  # cannot reach.  That is the check the whole x86-64 exercise reduces to:
+  # on an ordinary heap -- which for a program this size is under 4 GB --
+  # truncating a pointer to 32 bits is the identity and nothing fails.
+  # `x64.sh` falls back to the ordinary build, with a line saying so, on a
+  # host where the arena cannot be placed.
+  x64=$(./tools/x64.sh --high 2>&1)
   if [ $? = 0 ]; then
     printf '%-12s ok  %s\n' 'x86-64' "$(echo "$x64" | grep 'agree with')"
   else

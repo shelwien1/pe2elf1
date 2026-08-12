@@ -49,6 +49,19 @@ if ! BMF_OUT="$tmp/bmf64" BMF_BITS=64 ./build.sh $high >"$tmp/build" 2>&1; then
   exit 2
 fi
 
+# `MAP_FIXED_NOREPLACE` is Linux 4.17 and later, and the address it asks for
+# can be taken.  A host that cannot place the arena is not a failing host --
+# it is one where this particular question cannot be asked -- so say so and
+# ask the ordinary one instead.  Rebuilt rather than flagged, because a binary
+# that exits 7 at startup answers nothing.
+if [ -n "$high" ] &&
+   ! "$tmp/bmf64" c testfiles/t1.bmp "$tmp/probe.bmf" >/dev/null 2>&1 &&
+   BMF_OUT="$tmp/bmf64" BMF_BITS=64 ./build.sh >"$tmp/build" 2>&1; then
+  echo "the high arena could not be placed here; running the ordinary 64-bit build"
+  high=
+fi
+rm -f "$tmp/probe.bmf"
+
 # A signal is not an exit code, and "exits 139" is a worse answer than the
 # name of the signal -- SIGSEGV and SIGFPE are different defects and this loop
 # sees both.  Anything under 128 is the program's own table (see __exit_402E40).
@@ -166,11 +179,21 @@ fi
 # i386: the records are bigger here -- five pointers in `AltP2Block` and ten in
 # `ModelBlock` -- so the ladder that made an allocation fail on one build is not
 # automatically the ladder that makes it fail on the other.
-if ( ulimit -v 65536 ) >/dev/null 2>&1; then
+#
+# Not the `--high` binary: that reserves 768 MB up front, so every rung of the
+# ladder fails inside `mmap` before the program has allocated anything, and
+# what is under test is `bmf_new` returning null.  Built separately when the
+# run is a high one.
+oombin=$tmp/bmf64
+if [ -n "$high" ]; then
+  oombin=$tmp/bmf64oom
+  BMF_OUT="$oombin" BMF_BITS=64 ./build.sh >/dev/null 2>&1 || oombin=
+fi
+if [ -n "$oombin" ] && ( ulimit -v 65536 ) >/dev/null 2>&1; then
   reported=0
   for kb in 6000 8000 10000 12000 16000; do
     rm -f "$tmp/oom.bmf"
-    ( ulimit -v $kb; timeout 120 "$tmp/bmf64" c testfiles/t1.bmp "$tmp/oom.bmf" ) \
+    ( ulimit -v $kb; timeout 120 "$oombin" c testfiles/t1.bmp "$tmp/oom.bmf" ) \
         >"$tmp/oom.log" 2>&1
     rc=$?
     case $rc in
