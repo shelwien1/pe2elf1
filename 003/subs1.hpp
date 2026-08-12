@@ -286,6 +286,20 @@ static_assert(sizeof(void *) != 4 || sizeof(PlaneDesc) == 16,
               "PlaneDesc: the layout moved");
 static PlaneDesc plane_desc[5];
 
+// Several of MSVC's stack-spill areas came back from the decompiler twice:
+// once as an array of pointers, once as the run of named locals that share
+// those bytes.  Both readings are real -- the array is walked with an index
+// (`slot[2 * j + 2]`) and the names are read as scalars -- and they coincide
+// only while a pointer is four bytes wide.  Give a pointer eight and the
+// fourth name lands in the middle of the third slot.
+//
+// `BMF_SPILL_PAD` is the difference: nothing on i386, four bytes elsewhere.
+// A 32-bit scalar declared in the named arm with one of these after it keeps a
+// pointer's stride, so the two arms line up on both targets and the i386
+// layout -- which the static_asserts pin -- does not move.  The zero-length
+// array is the extension `SymList list[0]` uses.
+#define BMF_SPILL_PAD(n)  uint8_t _spill_pad##n[sizeof(void *) - 4]
+
 // The table arrived as twenty separate globals, one per field per record, and
 // round three bound all twenty to it as views so that the ~221 subscript sites
 // could move a few at a time.  Nineteen of them are folded now; a subscript
@@ -990,9 +1004,10 @@ struct ModelBlock {
   // no computed reach lands on +36.  It stays because the layout does.
   uint32_t ctx_state_seen;   // +36
   // Which of `grid`'s 188 context buckets this pixel selected.  The only
-  // reader is `&row_cur[4 * bucket_idx + 10]`, which in `uint32_t` steps is
-  // +3104 + 16 * bucket_idx -- record `bucket_idx + 188` of the grid, the
-  // frequency record the coder then walks.
+  // reader is `grid[bucket_idx]`.  It arrived as `&row_cur[4 * bucket_idx +
+  // 10]`, which is the same address only because a pointer is four bytes:
+  // `row_cur` ends at +96 and so `&row_cur[10]` is `&grid[0]`, with four of
+  // its slots to one sixteen-byte record.
   uint32_t bucket_idx;
   uint32_t sym_pos;   // 0..31; the index pixel_context reads sym[] with
   // The two counter indices `pixel_context` leaves behind, which is what
@@ -3033,8 +3048,11 @@ void **__free_workspace(ModelBlock *blk, int8_t do_free)
     }
     free(sym_list_block(lists));
   }
+  // The five row buffers.  This was `((void **)blk)[i + 14]` -- word fourteen
+  // of the block is byte 56, which is `row_cur`, and only while a pointer is
+  // four bytes.
   for ( i = 0; i < 5; ++i )
-    free(((void**)blk)[i + 14]);
+    free(blk->row_cur[i]);
   free(blk->escape.ent);
   if ( (do_free & 1) != 0 )
     free(blk);
@@ -7414,6 +7432,14 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
       // four bytes here because `kids` wants eight-byte alignment and `buf` does
       // not, and a union of the two would move the whole frame four bytes.
       uint8_t buf[4];
+      // The distinct-symbol table: one word a symbol, 256 of them, and its
+      // first word is `kids_i` -- the decompilation reaches every entry as
+      // `*(uint32_t *)&buf[4 * sym - 4]`, which for symbol 0 is `buf - 4`.
+      // `sym` is unsigned, so `4 * 0 - 4` is 0xFFFFFFFC: on i386 the addition
+      // wraps back to `buf - 4` and on any wider pointer it is four gigabytes
+      // past the frame, which is the first thing the 64-bit build died on.
+      // Based where the run actually starts, it is one address on both.
+      uint32_t *sym_flag() { return (uint32_t *)&kids_i; }
       uint64_t kids[127];
       int32_t y_spill;
       int32_t at_spill;
@@ -7430,16 +7456,16 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
           // the same slots again with an expression, which is the same storage
           // at a later point in the function and not a second variable.
           struct {
-            int32_t slot0;
+            int32_t slot0;      BMF_SPILL_PAD(0);
             void *slot1;
             uint8_t *slot2;
-            uint32_t slot3;
-            uint32_t slot4;
+            uint32_t slot3;     BMF_SPILL_PAD(3);
+            uint32_t slot4;     BMF_SPILL_PAD(4);
             void *slot5;
-            uint32_t slot6;
+            uint32_t slot6;     BMF_SPILL_PAD(6);
             ModelBlock *slot7;
             uint8_t *slot8;
-            uint32_t slot9;
+            uint32_t slot9;     BMF_SPILL_PAD(9);
             void *slot10;
             ModelBlock *slot11;
             void *slot_tail[7];
@@ -7458,9 +7484,9 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
   uint32_t alpha_n, done, done2, off, slot_a, sym, depth_bits;
   bool more, packed, first;
   uint8_t *half;   // `uint8_t *` beside the `char` scalars above
-  int32_t node, side, alpha_m, carry, img_w, img_h,
-          n_moved, zoff, height, n_distinct, row_w, y, at, bits, bpp, shift, sym2, alphabet,
-          alpha, prev, s, s_next;
+  int32_t node, side, alpha_m, carry, img_w, img_h, n_moved, height,
+          n_distinct, row_w, y, at, bits, bpp, shift, sym2, alphabet, alpha,
+          prev, s, s_next;
   ModelBlock *blk3;
   uint32_t n_kids, i, written, li, si, si_end, word, k, pairs, n_pairs, j,
            x, idx, n_syms, n_syms3, next_id, m;
@@ -7487,21 +7513,13 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
   blk1 = __frame.slot7;
   if ( depth_bits <= 8 )
   {
-    // 1024 bytes cleared, sixteen at a time from the top: `zero_base` is
-    // 60 bytes before `buf`, and `&zero_base[16]` through `&zero_base[268]`
-    // is `buf[0 .. 1023]` -- the 256 four-byte flags an eight-bit alphabet
-    // needs.  The other path memsets the whole 64 KiB because its values do
-    // not fit 256 slots.
-    zoff = 256;
-    do
-    {
-      bmf_zero16(&__frame.zero_base[zoff + 12]);
-      bmf_zero16(&__frame.zero_base[zoff + 8]);
-      bmf_zero16(&__frame.zero_base[zoff + 4]);
-      bmf_zero16(&__frame.zero_base[zoff]);
-      zoff -= 16;
-    }
-    while ( zoff * 4 );
+    // The 256 flags an eight-bit alphabet needs.  This was sixteen
+    // `bmf_zero16` calls walking an index down `zero_base`, which is the same
+    // run reached from the third of the three pointers MSVC kept live over
+    // this frame -- `&zero_base[16]` is `sym_flag()[0]` and `&zero_base[271]`
+    // is `sym_flag()[255]`.  The other path memsets the whole 64 KiB, because
+    // its values do not fit 256 slots.
+    memset(__frame.sym_flag(), 0, 256 * sizeof(uint32_t));
     packed = blk1->depth < 8;
     height = blk1->height;
     blk1->alphabet = 0;
@@ -7532,10 +7550,10 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
               shift = 8 - bpp;
             }
             sym = __frame.slot4 & (*__frame.slot8 >> (shift & 31));
-            first = *(uint32_t *)&__frame.buf[4 * sym - 4] == 0;
+            first = __frame.sym_flag()[sym] == 0;
             __frame.bits_spill = shift;
             ++x;
-            *(uint32_t *)&__frame.buf[4 * sym - 4] = 1;
+            __frame.sym_flag()[sym] = 1;
             bits = __frame.bits_spill;
             blk1->alphabet += first;
             blk1->sym_word[at] = sym;
@@ -7556,9 +7574,9 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
       idx = 0;
       do
       {
-        blk1->alphabet += *(uint32_t *)&__frame.buf[4 * *q - 4] == 0;
+        blk1->alphabet += __frame.sym_flag()[*q] == 0;
         sym2 = *q;
-        *(uint32_t *)&__frame.buf[4 * sym2 - 4] = 1;
+        __frame.sym_flag()[sym2] = 1;
         ++q;
         blk1->sym_word[idx++] = sym2;
       }
@@ -7583,11 +7601,11 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
         next_id = 0;
         do
         {
-          if ( *(uint32_t *)&__frame.buf[4 * s - 4] )
+          if ( __frame.sym_flag()[s] )
           {
             __frame.lists[0].code_symbol(s - prev);
             n_syms3 = blk1->alphabet;
-            *(uint32_t *)&__frame.buf[4 * s - 4] = next_id;
+            __frame.sym_flag()[s] = next_id;
             s_next = s + 1;
             prev = s + 1;
             ++next_id;
@@ -7605,9 +7623,7 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
         m = 0;
         do
         {
-          blk1->sym_word[m] = *(uint32_t *)&__frame.buf[4
-                                                                  * blk1->sym_word[m]
-                                                                  - 4];
+          blk1->sym_word[m] = __frame.sym_flag()[blk1->sym_word[m]];
           ++m;
         }
         while ( m < (uint32_t)(blk1->height * *(int32_t *)&blk1->width) );
@@ -10125,7 +10141,7 @@ LABEL_57:
       goto LABEL_86;
     }
   }
-  freq = (FreqRec *)&this->row_cur[4 * this->bucket_idx + 10];
+  freq = &this->grid[this->bucket_idx];
   freq_tbl = &this->grid[id2 + 188];
   tot = freq_tbl->w[5];
   if ( freq_tbl->w[5] )
@@ -10558,17 +10574,16 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
   SymPair *pair;   // the group's counter pair for this context
   // A cumulative count, a high count and a total: the three arguments the
   // range coder takes, and it takes them unsigned.
-  int32_t up_sym, left_sym, up_next_sym, upleft_sym, nb, key, ctx_state, pair_last, cap,
-          pair_prev, ctx_bucket, up_match0, m_w1, nb2, sig1, id1, sig2,
-          id2, id3_used, sig3, m_w1b, m_w0, m_up0, to_edge, one, run,
-          run_pair, amap, runlen, run_hit, run_left, s1,
-          s8b, s6, msym1, s4, bit5, first, s5, s1b,
-          bucket_i, s9, cum1, lvl_a, w6a, w5a,
-          b15a, msym3, excl_sym_a, excl_sym_b, w6d, wq1, cache2,
-          cache1, cache3, cache4, cache6, cur5_back2, h11, h12, h13, h14, h15,
-          h16, h17, h18, h19, h20, h21, h24, h28, h26, h30, esym, up_hit, pos1,
-          msym1b, w6b, *ip, b15, w2t, w3t, w4t, acc, q1, w2s, q2,
-          w3s, w4s, s9b, cum2, lvl_b, w5c, w6c, w5b, s3b;
+  int32_t up_sym, left_sym, up_next_sym, upleft_sym, nb, key, ctx_state,
+          pair_last, cap, pair_prev, ctx_bucket, up_match0, m_w1, nb2, sig1,
+          id1, sig2, id2, id3_used, sig3, m_w1b, m_w0, m_up0, to_edge, one,
+          run, run_pair, amap, runlen, run_hit, run_left, s1, s8b, s6, msym1,
+          s4, bit5, first, s5, s1b, s9, cum1, lvl_a, w6a, w5a, b15a, msym3,
+          excl_sym_a, excl_sym_b, w6d, wq1, cache2, cache1, cache3, cache4,
+          cache6, cur5_back2, h11, h12, h13, h14, h15, h16, h17, h18, h19,
+          h20, h21, h24, h28, h26, h30, esym, up_hit, pos1, msym1b, w6b, *ip,
+          b15, w2t, w3t, w4t, acc, q1, w2s, q2, w3s, w4s, s9b, cum2, lvl_b,
+          w5c, w6c, w5b, s3b;
   uint16_t w5, w1, h4, h3, h2, w1a, w0;
   // `row_cur[6]`, the row above: every reach through it is a multiple of
   // four `uint16_t`, which is one `PixRec`, and every one is `sym`.
@@ -10932,8 +10947,7 @@ LABEL_42:
   }
   else
   {
-    bucket_i = 4 * this->bucket_idx;
-    binp = (FreqRec *)&this->row_cur[bucket_i + 10];
+    binp = &this->grid[this->bucket_idx];
     frec = &this->grid[id2 + 188];
     // The same record `frec` names on the line above, read eight bytes in and
     // taken at its high half: `grid` is at +96 and its records are sixteen
@@ -10945,7 +10959,7 @@ LABEL_42:
     {
       if ( grid_kind == 1 )
       {
-        ip = (int32_t *)&this->row_cur[bucket_i + 10];
+        ip = (int32_t *)&this->grid[this->bucket_idx];
         b15 = binp->b15;
         w2t = b15 * frec->w[2];
         w3t = b15 * frec->w[3];
@@ -11067,7 +11081,7 @@ LABEL_42:
     }
     else
     {
-      wr = ((uint16_t *)&this->row_cur[bucket_i + 10]);
+      wr = (uint16_t *)&this->grid[this->bucket_idx];
       s9b = rowp->sym;
       arg_tot = binp->w[5];
       if ( s9b == __frame.sym8 )
@@ -11432,7 +11446,7 @@ ModelBlock *__layout_workspace(ModelBlock *blk, int32_t unread_flag, int32_t img
     do
     {
       bucket += x == 2 << (bucket & 31);
-      *(uint8_t *)(*(uint32_t *)&blk->run_bucket + x++ + 1) = bucket;
+      blk->run_bucket[x++ + 1] = bucket;
     }
     while ( (uint32_t)x < blk->width );
   }

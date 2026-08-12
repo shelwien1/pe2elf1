@@ -1,10 +1,8 @@
 In file included from bmf.cpp:352:
 subs1.hpp: In function 'int32_t __alt_p2_context(AltP2Block*, AltP2Block*, AltP2Block*)':
-subs1.hpp:6960:31: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:6978:31: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp: In function 'int32_t __choose_plane_coding(BmfImage*, int32_t, int8_t)':
-subs1.hpp:8806:20: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:8822:20: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp: In member function 'int32_t ModelBlock::decode_pixel(int32_t)':
-subs1.hpp:10158:13: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp: In function 'ModelBlock* __layout_workspace(ModelBlock*, int32_t, int32_t, int32_t, int32_t)':
-subs1.hpp:11435:8: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-# subs1.hpp 3106586982 649387
+subs1.hpp:10174:13: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+# subs1.hpp 3371830884 650508
