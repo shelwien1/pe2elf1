@@ -16,19 +16,23 @@ i386 that class is not an error:
 Every one of those is a fact about i386 written in a place the compiler is not
 checking. This round asked the same questions of x86-64, and answered them.
 
-**Result: `tools/x64.sh` reports 22 of 22 cases agreeing with the 32-bit
-build, and it is in `test.sh`.** Fifteen images compress to the *32-bit*
+**Result: `tools/x64.sh --high` reports 22 of 22 cases agreeing with the
+32-bit build, and it is in `test.sh`.** Fifteen images compress to the *32-bit*
 reference stream byte for byte and expand back to what the decoder should
 write; the two-member archive reads back to its last member; five malformed
 inputs are refused with the program's own exit codes; and the out-of-memory
-ladder still reports and exits 7 on a target whose records are bigger.
+ladder still reports and exits 7 on a target whose records are bigger — all of
+it with every allocation at an address a four-byte pointer cannot name, which
+is what makes it a claim about this file rather than about where Linux happens
+to put a heap.
 
 ---
 
 ## 1. What the scoreboards could and could not see
 
-Four instruments, and the order matters — each is silent about the class the
-next one sees.
+Six instruments, and the order matters — each is silent about the class the
+next one sees, and the last one is the only one that is *evidence* rather than
+an absence of complaint.
 
 | instrument | what it sees | found this round |
 |---|---|---|
@@ -37,6 +41,7 @@ next one sees.
 | `tools/x64.sh` | the program giving a different answer | the rest |
 | `BMF_BITS=64 tools/fuzz.sh` | a *crash* on an input nobody chose | 1, and none of the above sees it |
 | `tools/x64diff.sh` | a different *answer* on an input nobody chose | the last one |
+| `tools/x64.sh --high` | a truncation that survives, by putting every allocation where a four-byte pointer cannot reach | see section 3c |
 
 The middle row is the interesting one. Round nine's census had a row reading
 `raw-offset sites 0`, and it was a spelling: the measure looked for
@@ -55,7 +60,7 @@ member, the `__builtin_offsetof(...) == N` in the static_asserts) and looks for
 those numbers in the code. Its row is in the census now, directly under the row
 that said zero.
 
-The bottom row is where the rest came from. `tools/x64.sh` builds the same
+The fourth row is where the rest came from. `tools/x64.sh` builds the same
 source as x86-64 and runs it; the failures were read one at a time with an
 ASan build and a `printf`, and each one, once found, was a class rather than a
 site.
