@@ -8808,7 +8808,8 @@ int32_t *__read_bmp(char *path)
   uint32_t row_pad, byte;
   uint8_t cur, lo16;
   uint8_t *row4, *row3, *row6, *pal_at, *row5;   // `uint8_t *` beside the `char` scalars above
-  int32_t pal_n, i, run, run_val, hi_nibble, left4, left4b, y, dx, dxy, step;
+  int32_t pal_n, i, run, run_val, hi_nibble, left4, left4b, y, dx, dy, dxy, dy4,
+          byte_in, step;
   uint32_t stride_pad, pair, hi, stride, got, left;
   // These two freads land in the frame, and each writes across several of the
   // slots Hex-Rays split it into -- which is why the fields do not look like
@@ -8841,7 +8842,63 @@ int32_t *__read_bmp(char *path)
   {
     return nullptr;
   }
+  // Everything the four checks above do not cover.  They are BMF's own -- the
+  // signature, a 40-byte DIB header, one plane -- and every other field went
+  // to `alloc_image` and the loops below unexamined.  REFACTORING.md section 6
+  // records a top-down BMP crashing in `alloc_image` off a negative size;
+  // fuzzing the header found four more ways through, all of the same shape,
+  // and each of these lines is one of them.
+  {
+    const int32_t  bmp_w   = (int32_t)__frame.bmp_info_hdr[1];
+    const int32_t  bmp_h   = __frame.bmp_height;
+    const int32_t  bmp_bpp = __frame.bmp_bits;
+    if ( bmp_w <= 0 || bmp_w > 0xFFFF
+      // A negative height is a top-down BMP: legal, and not what this reader
+      // is written for -- it fills rows from the last one backwards.  Refused
+      // rather than read upside down, and rather than reaching `alloc_image`
+      // with a negative size, which is where it used to go.
+      || bmp_h <= 0 || bmp_h > 0xFFFF
+      // `img->width` and `img->height` are sixteen bits, so a wider or taller
+      // image would be truncated into a buffer the loops then overrun.  So is
+      // the *row width* `alloc_image` computes -- `row16` is a `uint16_t` --
+      // and at eight bits a pixel and up it is `width * (bpp / 8)`, which for
+      // a 32 960-wide 32-bit image is 131 840 and wraps to 768.  The
+      // allocation is then a fifth of the size the rest of the read assumes.
+      // Below eight bits the packed row is at most half the width, so a width
+      // that fits leaves a row that fits.
+      || (bmp_bpp >= 8
+          && (uint32_t)bmp_w * (uint32_t)((bmp_bpp + 7) >> 3) > 0xFFFFu)
+      //
+      // The depths this build can carry all the way back out.  `bmf_decompress`
+      // refuses 2, 15 and 16 because BMF sent those to a TGA writer and this
+      // build only writes BMP -- so accepting them here compressed an image
+      // whose archive nothing can expand, and said "File ..." while doing it.
+      || (bmp_bpp != 1 && bmp_bpp != 4 && bmp_bpp != 8
+          && bmp_bpp != 24 && bmp_bpp != 32)
+      // `alloc_image` reserves `3 << bpp` bytes for the palette, which is
+      // `1 << bpp` entries of three.  `biClrUsed` is allowed to say fewer and
+      // was trusted to say no more; 25 600 wrote 76 800 bytes into room for
+      // 768.
+      || __frame.bmp_clr_used < 0
+      || (bmp_bpp <= 8 && __frame.bmp_clr_used > (1 << bmp_bpp))
+      // A run opcode implies its depth, and the decoders below assume it: the
+      // RLE8 loop steps one byte a pixel and the RLE4 loop two pixels a byte.
+      || __frame.bmp_compression > 2
+      || (__frame.bmp_compression == 1 && bmp_bpp != 8)
+      || (__frame.bmp_compression == 2 && bmp_bpp != 4) )
+    {
+      fclose(fp);
+      return nullptr;
+    }
+  }
   img = (BmfImage *)(__alloc_image(__frame.bmp_info_hdr[1], __frame.bmp_height, __frame.bmp_bits, __frame.bmp_bits <= 8u, 1));
+  // `alloc_image` returns null when `bmf_new` cannot serve it, and this read
+  // its `stride` regardless.
+  if ( !img )
+  {
+    fclose(fp);
+    return nullptr;
+  }
   stride_pad = (img->stride + 3) & 0xFFFFFFFC;
   if ( __frame.bmp_bits <= 8u )
   {
@@ -8874,11 +8931,33 @@ int32_t *__read_bmp(char *path)
       stride_pad = __frame.Size_4;
     }
   }
-  __frame.pal_buf = bmf_new(stride_pad);
+  // One buffer, two jobs, sized for one of them.  It is the row scratch for
+  // an uncompressed BMP, which wants `stride_pad` bytes -- and the landing
+  // area for the run decoders' *absolute* runs, which `fread` up to
+  // `(255 + 1) & ~1` = 256 bytes into whatever the stride happens to be.  A
+  // narrow image with a long run wrote past it: a 48-byte read into a 32-byte
+  // region, which glibc reported as `malloc(): corrupted top size` a while
+  // later and nowhere near.
+  __frame.pal_buf = bmf_new(stride_pad < 256 ? 256 : stride_pad);
   __frame.row = (uint8_t *)img + img->data_size - img->stride + 16;
   fseek(fp, (*(int32_t *)((uint8_t *)__frame.bmp_off_bits)), 0);
   if ( __frame.bmp_compression )
   {
+    // Both run decoders below take their lengths and their cursor moves
+    // straight out of the file, and neither bounded them.  `read_bmp` checks
+    // the `BM` signature, a 40-byte DIB header and a plane count of 1, and
+    // trusted the rest; a stream that ends mid-run kept writing, and `fgetc`
+    // returning EOF as -1 made a run of -1 bytes.  REFACTORING.md section 6
+    // recorded both and left them, because that round was a refactoring and a
+    // crash that reproduces is behaviour a gate is there to preserve.
+    //
+    // `pix_lo`/`pix_hi` are the pixel buffer.  Every write in the two loops is
+    // `cursor + k` for a `k` out of the file, so every one is checked against
+    // these, and a run that would leave the buffer refuses the file the way
+    // the header checks above already do -- `return nullptr`, which the caller
+    // turns into *Read error!* and exit 4.
+    uint8_t *const pix_lo = img->pixels;
+    uint8_t *const pix_hi = img->pixels + img->data_size;
     if ( __frame.bmp_compression == 1 )
     {
       memset(img->pixels,0,img->data_size);
@@ -8892,6 +8971,10 @@ int32_t *__read_bmp(char *path)
           return nullptr;
         run = fgetc(fp);
         run_val = fgetc(fp);
+        // EOF is -1, and -1 is not a run length.  Unchecked, `run` of -1 took
+        // the branch below and asked `memset` for -1 bytes.
+        if ( run < 0 || run_val < 0 )
+          return nullptr;
         if ( run )
         {
           // An RLE8 run: `run` copies of one byte.  What was here instead was
@@ -8900,10 +8983,9 @@ int32_t *__read_bmp(char *path)
           // out, and a separate short-run path for anything under 16 + the
           // head.
           
-          // The write is still not bounded by the pixel buffer: a stream that
-          // ends mid-run keeps writing.  That is a real defect, recorded
-          // rather than repaired (REFACTORING.md §6), and it is why the
-          // malformed-input check truncates an uncompressed BMP instead.
+          if ( (uint8_t *)__frame.row_ofs < pix_lo
+               || (uint8_t *)__frame.row_ofs + run > pix_hi )
+            return nullptr;
           __builtin_memset((void *)__frame.row_ofs, run_val, run);
           row_at = __frame.row_ofs + run;
         }
@@ -8914,10 +8996,16 @@ int32_t *__read_bmp(char *path)
           if ( run_val == 2 )
           {
             dx = fgetc(fp);
-            row_at = dx + row_at - fgetc(fp) * (uint16_t)__frame.img_f->stride;
+            dy = fgetc(fp);
+            if ( dx < 0 || dy < 0 )
+              return nullptr;
+            row_at = dx + row_at - dy * (uint16_t)__frame.img_f->stride;
           }
           else
           {
+            if ( (uint8_t *)row_at < pix_lo
+                 || (uint8_t *)row_at + run_val > pix_hi )
+              return nullptr;
             fread(__frame.pal_buf, (run_val + 1) & 0xFFFFFFFE, 1u, fp);
             memcpy((uint8_t *)row_at,(uint8_t *)__frame.pal_buf,run_val);
             row_at += run_val;
@@ -8947,10 +9035,22 @@ LABEL_44:
           if ( ferror(fp) )
             return nullptr;
           run4 = fgetc(fp);
-          byte = fgetc(fp);
+          byte_in = fgetc(fp);
+          // EOF is -1, and `byte` is unsigned: unchecked, it became
+          // 0xFFFFFFFF here, and `run4` of -1 ran the nibble loops below for
+          // ever -- `left4b -= 2` from -1 never reaches 1 -- writing a byte an
+          // iteration the whole way.
+          if ( run4 < 0 || byte_in < 0 )
+            return nullptr;
+          byte = (uint32_t)byte_in;
           pair = byte;
           if ( !run4 )
             break;
+          // One encoded run writes at most `run4 / 2 + 1` bytes from the
+          // cursor: two pixels a byte, and an odd length leaves a half-byte
+          // the loops below store whole.
+          if ( __frame.row < pix_lo || __frame.row + (run4 / 2 + 1) > pix_hi )
+            return nullptr;
           lo = byte & 0xF;
           if ( hi_nibble )
           {
@@ -9008,7 +9108,10 @@ LABEL_44:
       if ( byte != 2 )
         break;
       dxy = fgetc(fp);
-      step = (dxy >> 1) - fgetc(fp) * (uint16_t)__frame.img_f->stride;
+      dy4 = fgetc(fp);
+      if ( dxy < 0 || dy4 < 0 )
+        return nullptr;
+      step = (dxy >> 1) - dy4 * (uint16_t)__frame.img_f->stride;
       if ( (dxy & 1) == 1 )
       {
         if ( !hi_nibble )
@@ -9017,6 +9120,10 @@ LABEL_44:
       }
       __frame.row += step;
     }
+    // An absolute run: `byte` pixels read from the file, two to a byte.
+    if ( __frame.row < pix_lo
+         || __frame.row + ((int32_t)byte / 2 + 1) > pix_hi )
+      return nullptr;
     fread(__frame.pal_buf, (((byte + 1) >> 1) + 1) & 0xFFFFFFFE, 1u, fp);
     pal_at = (uint8_t *)__frame.pal_buf;
     row5 = __frame.row;
@@ -10131,6 +10238,16 @@ LABEL_86:
   this->sel[1] = &sel1_list[msym1b];
   while ( 1 )
   {
+    // `sel_cur` walks `sel[0]`, `sel[1]` and then `escape_list`, which is laid
+    // next to them on purpose: the escape list is the third selector, and for
+    // a stream this build can decode it always yields.  Nothing stopped the
+    // walk there.  Corrupt coded data ran it on into `_pad22` and then
+    // `sel_cur` itself, and faulted reading `live` off the first null it met
+    // -- `SEGV on unknown address 0x00000004`, which is `offsetof(live)` from
+    // nothing.  Past the escape list there is no fourth list to try, and a
+    // stream that has exhausted all three is not one this can read.
+    if ( sel_p > &this->escape_list )
+      __exit_402E40(4);
     if ( (*sel_p)->live )
     {
       lsym = __decode_symbol_list(*sel_p);
@@ -16621,6 +16738,16 @@ int32_t __compress_image(uint8_t *arc_in, BmfImage *p_i, void *coded_buf)
         break;
       __expand_image(arc, 1, (void **)nullptr);
     }
+    // `expand_image` closes the file and nulls this when it meets a member it
+    // cannot parse.  The loop above stops on that -- and then fell straight
+    // through to the `fwrite` below, which is `fwrite(..., nullptr)` and a
+    // segfault in libc.  Appending needs the walk to reach the end of the
+    // archive; if it could not, the file is refused the way a null `fp` is
+    // refused above, which `bmf_compress` reports as exit 5.
+    //
+    // Reachable without fuzzing anything: `bmf c image.bmp notanarchive`.
+    if ( !((BmfArc *)arc)->fp )
+      return 0;
   }
   has_coded = (uint8_t)(uintptr_t)coded_buf;
   img = (BmfImage *)(p_i);
