@@ -1742,7 +1742,8 @@ inline FILE * BmfArc::bmf_close_archive()
   if ( fp )
   {
     fseek(fp, 0, 2);
-    return (FILE *)fclose(this->fp);
+    fclose(this->fp);
+    return nullptr;
   }
   return fp;
 }
@@ -7465,7 +7466,12 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
            x, idx, n_syms, n_syms3, next_id, m;
   uint16_t *kidp;   // was uint64_t *, read only as uint16_t
   uint8_t *srcp, *p, *rp, *dst_a, *dst_b, *dst_c, *q;
-  void *val, *newbuf;
+  // The distinct-column key: `slot4 & *(uint32_t *)p`, a masked word out of the
+  // plane and never an address.  It was a `void *` because the frame slot it
+  // spills to holds a `bmf_new` buffer later in the body, and the tree's nodes
+  // were read as `*(void **)&buf[8 * node]` to match.
+  uint32_t val;
+  void *newbuf;
   __frame.slot11 = (ModelBlock *)(blk);
   srcp = src;
   depth_bits = blk->depth;
@@ -7478,7 +7484,7 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
     __frame.lists[2 * i].ent = nullptr;
     __frame.lists[2 * i + 1].ent = nullptr;
   }
-  blk1 = (ModelBlock *)((int32_t *)__frame.slot7);
+  blk1 = __frame.slot7;
   if ( depth_bits <= 8 )
   {
     // 1024 bytes cleared, sixteen at a time from the top: `zero_base` is
@@ -7630,22 +7636,22 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
       while ( 1 )
       {
         p += __frame.slot9;
-        val = (void *)(__frame.slot4 & *(uint32_t *)p);
-        if ( val != *(void **)&__frame.buf[8 * node] )
+        val = __frame.slot4 & *(uint32_t *)p;
+        if ( val != *(uint32_t *)&__frame.buf[8 * node] )
         {
           node = 0;
-          if ( val != *(void **)__frame.buf )
+          if ( val != *(uint32_t *)__frame.buf )
           {
             __frame.slot3 = written;
             __frame.slot2 = p;
             while ( 1 )
             {
-              side = *(uint32_t *)&__frame.buf[8 * node] < (uint32_t)val;
+              side = *(uint32_t *)&__frame.buf[8 * node] < val;
               kidp = (uint16_t *)&__frame.kids[node];
               node = kidp[side];
               if ( !kidp[side] )
                 break;
-              if ( val == *(void **)&__frame.buf[8 * node] )
+              if ( val == *(uint32_t *)&__frame.buf[8 * node] )
               {
                 written = __frame.slot3;
                 p = __frame.slot2;
@@ -7655,7 +7661,6 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
             }
             p = __frame.slot2;
             __frame.slot0 = side;
-            (__frame.slot[1]) = val;
             blk2 = (ModelBlock *)(__frame.slot7);
             alphabet = __frame.slot7->alphabet;
             mode_symbol[1] = side;
@@ -7669,20 +7674,20 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
               srcp = __frame.slot8;
               alpha_n = alpha;
               n_kids = __frame.slot9;
-              blk1 = (ModelBlock *)((int32_t *)__frame.slot7);
+              blk1 = __frame.slot7;
               goto LABEL_14;
             }
-            *(void **)&__frame.buf[8 * node] = (__frame.slot[1]);
+            *(uint32_t *)&__frame.buf[8 * node] = val;
           }
         }
 LABEL_12:
-        blk3 = (ModelBlock *)((uint32_t *)__frame.slot7);
+        blk3 = __frame.slot7;
         __frame.slot7->sym_word[written++] = node;
         if ( written >= blk3->height * blk3->width )
         {
           srcp = __frame.slot8;
           n_kids = __frame.slot9;
-          blk1 = (ModelBlock *)((int32_t *)__frame.slot7);
+          blk1 = __frame.slot7;
           alpha_n = __frame.slot7->alphabet;
           goto LABEL_14;
         }
@@ -7719,7 +7724,7 @@ LABEL_14:
           while ( pairs < n_kids >> 1 );
           srcp = __frame.slot8;
           n_kids = __frame.slot9;
-          blk1 = (ModelBlock *)((int32_t *)__frame.slot7);
+          blk1 = __frame.slot7;
           done = 2 * pairs + 1;
         }
         else
@@ -7782,7 +7787,7 @@ LABEL_14:
           }
 LABEL_71:
           n_kids = __frame.slot9;
-          blk1 = (ModelBlock *)((int32_t *)__frame.slot7);
+          blk1 = __frame.slot7;
         }
       }
       __frame.tmp = blk1->sym_word;
@@ -7807,7 +7812,7 @@ LABEL_71:
           ++li;
         }
         while ( li < 4 * n_kids );
-        blk1 = (ModelBlock *)((int32_t *)__frame.slot7);
+        blk1 = __frame.slot7;
         alpha_m = __frame.slot7->alphabet;
       }
       if ( alpha_m )
@@ -8225,7 +8230,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
   uint32_t uu;
   int32_t wa_slot;
   BmfImage *img_a;
-  uint32_t data_end;
+  const uint8_t *data_end;
   ;
   bool keep0, cheaper, keep3, pick0;
   int8_t unread0, unread1, unread2, pos, pos3;
@@ -8255,7 +8260,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
   img_a = (BmfImage *)((uint8_t *)img);
   alphabet_reduced = 1;
   __frame.row_stride = ((uint16_t)img->stride);
-  data_end = (uintptr_t)&img->pixels[data_size];
+  data_end = &img->pixels[data_size];
   memset(__frame.buf,0,0x8000);
   result = 192;
   do
@@ -8626,7 +8631,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
       }
 LABEL_19:
       px = &((uint8_t *)img_a)[__frame.q0 + 16 + n_planes + x3[2]];
-      if ( (uint32_t)px < data_end )
+      if ( px < data_end )
       {
         __frame.wt_slot = wt8;
         x5[3] = wt4;
@@ -8646,7 +8651,7 @@ LABEL_19:
           ++__frame.hist_b[c0 - c2];
           ++__frame.hist_c[(c0 - ((uint32_t)(((c1 + c2) << 6) + 40) >> 7))];
         }
-        while ( (uint32_t)px < data_end );
+        while ( px < data_end );
         wt8 = __frame.wt_slot;
         wt4 = x5[3];
         n_planes = __frame.nplanes_s;
@@ -8744,9 +8749,15 @@ LABEL_19:
         __builtin_memset(x5, 0, 16);
         memset(__frame.buf,0,0x8000);
         pp = &((uint8_t *)img_a)[__frame.q0];
-        n_quads = (int32_t)(data_end - 17 - (uint32_t)&((uint8_t *)img_a)[__frame.q0]) / 4;
+        // `int32_t` from a pointer difference: the cast the decompilation had
+        // here was useless on i386 (`ptrdiff_t` is `int`) and would be a
+        // narrowing anywhere else, so the conversion is left to the
+        // assignment, where each target's scoreboard can see it for what it
+        // is.  The quad count is bounded by the image, which is bounded by
+        // `data_size`.
+        n_quads = (data_end - 17 - pp) / 4;
         end_px = &((uint8_t *)img_a)[__frame.q0 + 20];
-        if ( data_end <= (uint32_t)end_px )
+        if ( data_end <= end_px )
         {
           sum01 = *(double *)&x0[2];
           sum02 = *(double *)x1;
@@ -8770,7 +8781,7 @@ LABEL_19:
           d1 = *(double *)&x5[2];
           __frame.wt_slot = (uintptr_t)&((uint8_t *)img_a)[__frame.q0 + 20];
           i4 = 0;
-          uu = (int32_t)(data_end - 17 - (uint32_t)&((uint8_t *)img_a)[__frame.q0]) / 4;
+          uu = (data_end - 17 - pp) / 4;
           do
           {
             dv0 = (double)(((uint8_t *)img_a)[4 * i4 + 16] + pp[4 * i4 + 20] - (((uint8_t *)img_a)[4 * i4 + 20] + pp[4 * i4 + 16]));
@@ -8844,7 +8855,7 @@ LABEL_19:
           wc = 191;
         if ( wc < -64 )
           wc = -64;
-        if ( (uint32_t)end_px < data_end )
+        if ( end_px < data_end )
         {
           *(int64_t *)x0 = __PAIR64__(wc, wb);
           uu = n_quads;
@@ -15542,7 +15553,7 @@ static uint32_t __packer_word()
   return w;
 }
 
-uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
+uint8_t * __expand_image(BmfArc *arc_in, int32_t want_pal, void **p_coded_buf)
 {
   // This one is a layout, not a bag of locals: giving its members
   // their own storage makes DLRAW exit 3 while decompressing.  Re-checked
@@ -15566,7 +15577,7 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
       };
       int32_t nplanes_s;
       void *row_step;
-      uint8_t *arc_f;
+      BmfArc *arc_f;
       BmfImage *p_i_2;
       int32_t depth_f;
       uint32_t pal_len;
@@ -15584,7 +15595,7 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
   ;
-  uint8_t *arc;   // were int32_t: these hold addresses
+  BmfArc *arc;   // was int32_t: an address
   FILE *fp1, *fp;
   BmfImage *img_at;
   int8_t hdr_flags;
@@ -15612,12 +15623,12 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
   {
     if ( fread(&__frame.magic_word, 4u, 1u, fp1) != 1 )
     {
-      fp = ((BmfArc *)arc)->fp;
+      fp = arc->fp;
       if ( feof(fp) )
         return nullptr;
       {
         fclose(fp);
-        ((BmfArc *)arc)->fp = 0;
+        arc->fp = 0;
         return nullptr;
       }
     }
@@ -15638,34 +15649,34 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
     major_v = (uint8_t)(__frame.magic_word >> 16);
     minor_v = (uint8_t)(__frame.magic_word >> 24);
     plane_desc[0].weight0 = ((major_v << 8) - 12288) | (minor_v - 48);
-    if ( plane_desc[0].weight0 != 512 || fread(__frame.hdr, 8u, 1u, ((BmfArc *)arc)->fp) != 1 )
+    if ( plane_desc[0].weight0 != 512 || fread(__frame.hdr, 8u, 1u, arc->fp) != 1 )
       break;
-    fseek(((BmfArc *)arc)->fp, (*(uint32_t *)&__frame.hdr[4]), 1);
-    fp1 = ((BmfArc *)arc)->fp;
+    fseek(arc->fp, (*(uint32_t *)&__frame.hdr[4]), 1);
+    fp1 = arc->fp;
   }
   if ( (uint16_t)magic != 0x8A81
     || (major_v = (uint8_t)(magic >> 16), minor_v = (uint8_t)(magic >> 24),
         plane_desc[0].weight0 = ((major_v << 8) - 12288) | (minor_v - 48),
         plane_desc[0].weight0 != 512)
-    || fread(__frame.hdr_words, 0x10u, 1u, ((BmfArc *)arc)->fp) != 1 )
+    || fread(__frame.hdr_words, 0x10u, 1u, arc->fp) != 1 )
   {
-    fp = ((BmfArc *)arc)->fp;
+    fp = arc->fp;
     fclose(fp);
-    ((BmfArc *)arc)->fp = 0;
+    arc->fp = 0;
     return nullptr;
   }
-  ++*(uint32_t *)arc;
+  ++arc->images;
   if ( __frame.flags_b < 0 )
   {
-    fread(__frame.hdr, 8u, 1u, ((BmfArc *)arc)->fp);
+    fread(__frame.hdr, 8u, 1u, arc->fp);
     if ( p_coded_buf )
     {
       hdr_word = (*(int32_t *)&__frame.hdr[0]);
       // The aux block's own length, bounded before it becomes an allocation.
-      if ( (*(uint32_t *)&__frame.hdr[4]) > __bytes_left(((BmfArc *)arc)->fp) )
+      if ( (*(uint32_t *)&__frame.hdr[4]) > __bytes_left(arc->fp) )
       {
-        fclose(((BmfArc *)arc)->fp);
-        ((BmfArc *)arc)->fp = 0;
+        fclose(arc->fp);
+        arc->fp = 0;
         return nullptr;
       }
       pad_len = ((*(uint32_t *)&__frame.hdr[4]) + ((*(uint32_t *)&__frame.hdr[4]) == 0) + 3) & 0xFFFFFFFC;
@@ -15679,20 +15690,20 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
       // read a whole dword past the last coded byte.
       blk[pad_len / 4 + 1] = 0;
       *p_coded_buf = blk;
-      fread(blk + 2, (*(uint32_t *)&__frame.hdr[4]), 1u, ((BmfArc *)arc)->fp);
+      fread(blk + 2, (*(uint32_t *)&__frame.hdr[4]), 1u, arc->fp);
     }
     else
     {
-      fseek(((BmfArc *)arc)->fp, (*(uint32_t *)&__frame.hdr[4]), 1);
+      fseek(arc->fp, (*(uint32_t *)&__frame.hdr[4]), 1);
     }
   }
   // Same for the member's payload, and for both of the things `data_len` goes
   // on to be: the size of the coded buffer on the -S path, and the byte count
   // of the raw `fread` below.
-  if ( __frame.data_len > __bytes_left(((BmfArc *)arc)->fp) )
+  if ( __frame.data_len > __bytes_left(arc->fp) )
   {
-    fclose(((BmfArc *)arc)->fp);
-    ((BmfArc *)arc)->fp = 0;
+    fclose(arc->fp);
+    arc->fp = 0;
     return nullptr;
   }
   pal_bytes = 3 << (__frame.depth_b & 31);
@@ -15701,7 +15712,7 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
   __frame.pal_len = pal_bytes;
   if ( want_pal )
   {
-    fseek(((BmfArc *)arc)->fp, __frame.pal_len + __frame.data_len, 1);
+    fseek(arc->fp, __frame.pal_len + __frame.data_len, 1);
     return nullptr;
   }
   // A dimension of zero.  `alloc_image` multiplies the two, so it asks for
@@ -15717,8 +15728,8 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
   // side, and this is where that gets said.
   if ( !__frame.hdr_words[0] || !__frame.hdr_words[1] )
   {
-    fclose(((BmfArc *)arc)->fp);
-    ((BmfArc *)arc)->fp = 0;
+    fclose(arc->fp);
+    arc->fp = 0;
     return nullptr;
   }
   img_at = (BmfImage *)((uint8_t *)__alloc_image(__frame.hdr_words[0], __frame.hdr_words[1], __frame.depth_b & 0x3F, (uint8_t)(__frame.depth_b & 0x80) >> 7, 1));
@@ -15756,8 +15767,8 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
   // are clear -- and a SIGFPE on the plain build, not only under ASan.
   if ( ::plane_count < 1 || ::plane_count > 4 )
   {
-    fclose(((BmfArc *)arc)->fp);
-    ((BmfArc *)arc)->fp = 0;
+    fclose(arc->fp);
+    arc->fp = 0;
     return nullptr;
   }
   if ( (hdr_flags & 0x20) == 0 )
@@ -15779,15 +15790,15 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
     // reach it: a 100 kB file really does have 100 kB left.
     if ( __frame.data_len > img_at->data_size )
     {
-      fclose(((BmfArc *)arc)->fp);
-      ((BmfArc *)arc)->fp = 0;
+      fclose(arc->fp);
+      arc->fp = 0;
       return nullptr;
     }
     want = __frame.data_len;
-    if ( fread(img_at->pixels, 1u, __frame.data_len, ((BmfArc *)arc)->fp) != want )
+    if ( fread(img_at->pixels, 1u, __frame.data_len, arc->fp) != want )
       {
-        fclose(((BmfArc *)arc)->fp);
-        ((BmfArc *)arc)->fp = 0;
+        fclose(arc->fp);
+        arc->fp = 0;
         return nullptr;
       }
     goto LABEL_109;
@@ -15812,10 +15823,10 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
   ::packer_word = (uint32_t *)::coded_buf;
   hist_scratch = ::coded_buf + coded_size - 4096;
   want2 = __frame.data_len;
-  if ( fread(::coded_buf, 1u, __frame.data_len, ((BmfArc *)arc)->fp) != want2 )
+  if ( fread(::coded_buf, 1u, __frame.data_len, arc->fp) != want2 )
   {
-    fclose(((BmfArc *)arc)->fp);
-    ((BmfArc *)arc)->fp = 0;
+    fclose(arc->fp);
+    arc->fp = 0;
     return nullptr;
   }
   bpp = img_at->depth;
@@ -16082,8 +16093,8 @@ LABEL_105:
 LABEL_106:
   if ( ::coded_buf + __frame.data_len != out_cursor )
   {
-    fclose(((BmfArc *)arc)->fp);
-    ((BmfArc *)arc)->fp = 0;
+    fclose(arc->fp);
+    arc->fp = 0;
     return nullptr;
   }
   free(::coded_buf);
@@ -16095,11 +16106,11 @@ LABEL_109:
     // flag.  depth is unsigned, so the test has to name the bit; it read as
     // always-false otherwise, which is what the gate caught.
     pal_at = (img_at->depth & 0x80) ? &((uint8_t *)img_at)[img_at->data_size + 16] : nullptr;
-    got = fread(pal_at, 1u, __frame.pal_len, ((BmfArc *)arc)->fp);
+    got = fread(pal_at, 1u, __frame.pal_len, arc->fp);
     if ( got != __frame.pal_len )
       {
-        fclose(((BmfArc *)arc)->fp);
-        ((BmfArc *)arc)->fp = 0;
+        fclose(arc->fp);
+        arc->fp = 0;
         return nullptr;
       }
   }
@@ -16129,30 +16140,30 @@ LABEL_109:
     if ( (uint64_t)img_at->width * img_at->height * (uint32_t)::plane_count
          > (uint64_t)img_at->data_size )
     {
-      fclose(((BmfArc *)arc)->fp);
-      ((BmfArc *)arc)->fp = 0;
+      fclose(arc->fp);
+      arc->fp = 0;
       return nullptr;
     }
     copy = (uint8_t *)bmf_new(img_at->data_size);
     n_planes = ::plane_count;
-    __frame.nplanes_s = (int32_t)copy;
     last_row = ::plane_count * (img_at->height - 1);
     memcpy(copy,img_at->pixels,img_at->data_size);
     img_h = img_at->height;
     if ( img_h )
     {
-      __frame.row_step = (void *)last_row;
-      srcp = (uint8_t *)__frame.nplanes_s;
+      // `search_filter`'s interleave run backwards, and spilled the same way:
+      // the read cursor into `nplanes_s`, the row offset into it again a line
+      // later, the row counter into `arc_f` -- a `uint8_t *` -- and the row
+      // step into `row_step`, a `void *` holding a number.  All four are the
+      // locals they were spilled from.
+      srcp = copy;
       at = 0;
       y = 0;
       do
       {
         pl_i = img_at->width;
-        __frame.nplanes_s = at;
-        __frame.arc_f = (uint8_t *)y;
-        last_row2 = __frame.row_step;
         __frame.p_i_2 = img_at;
-        dst = &((uint8_t *)img_at)[at + 16];
+        dst = &img_at->pixels[at];
         do
         {
           left = n_planes;
@@ -16162,16 +16173,16 @@ LABEL_109:
             --left;
           }
           while ( left );
-          dst = &dst[(uint32_t)last_row2];
+          dst += last_row;
           --pl_i;
         }
         while ( pl_i );
         img_at = __frame.p_i_2;
         img_h = __frame.p_i_2->height;
-        at = n_planes + __frame.nplanes_s;
-        y = (int32_t)(uintptr_t)__frame.arc_f + 1;
+        at += n_planes;
+        ++y;
       }
-      while ( __frame.arc_f + 1 < (uint8_t *)(uintptr_t)img_h );
+      while ( y < img_h );
     }
     // The deinterleave swaps width and height and rewrites the stride; only
     // the low half of `stride` is touched, which is what `(uint16_t *)p_i + 2`
@@ -16987,7 +16998,7 @@ BmfArc *__bmf_open_archive(BmfArc *out, char *path, int32_t read_only)
     }
   if ( !feof(arc->fp) )
   {
-    __expand_image((uint8_t *)arc, 1, (void **)nullptr);
+    __expand_image(arc, 1, (void **)nullptr);
     fp2 = arc->fp;
     if ( !fp2 )
       {
@@ -17010,7 +17021,7 @@ BmfArc *__bmf_open_archive(BmfArc *out, char *path, int32_t read_only)
 }
 
 
-int32_t __compress_image(uint8_t *arc_in, BmfImage *p_i, void *coded_buf)
+int32_t __compress_image(BmfArc *arc_in, BmfImage *p_i, void *coded_buf)
 {
   // The union below is MSVC's slot sharing written down, and lifting
   // its arms to separate locals is not the same program, so the frame
@@ -17044,7 +17055,7 @@ int32_t __compress_image(uint8_t *arc_in, BmfImage *p_i, void *coded_buf)
   uint8_t *pix_copy;
   ;
   uint32_t coded_len;   // word 1 of the coded block, its length
-  uint8_t *arc;   // were int32_t: these hold addresses
+  BmfArc *arc;   // was int32_t: an address
   FILE *i;
   bool fits;
   uint8_t bpp;
@@ -17053,21 +17064,21 @@ int32_t __compress_image(uint8_t *arc_in, BmfImage *p_i, void *coded_buf)
   uint8_t *plane_buf, *row_at, *row_next;   // `uint8_t *` beside the `char` scalars above
   uint32_t hdr_pad8, hdr_pad8b;   // the header's pad/depth/flags word, not an address
   int32_t bits_left, pl, free_bits, pl2, ok_all, y, pl_i, countdown,
-          data_size;
+          data_size, row_y;
   uint16_t img_h;
   BmfImage *img;
   uint16_t w16;
   uint32_t pal_bytes, word_flags, word_dc, word_w4, word_w8, word_w12, n_pix, written;
   uint8_t ok, *dst, ok_raw;
   arc = arc_in;
-  if ( !((BmfArc *)arc_in)->fp )
+  if ( !arc_in->fp )
     return 0;
-  if ( !feof(((BmfArc *)arc_in)->fp) )
+  if ( !feof(arc_in->fp) )
   {
     __expand_image(arc, 1, (void **)nullptr);
-    for ( i = ((BmfArc *)arc)->fp; i; i = ((BmfArc *)arc)->fp )
+    for ( i = arc->fp; i; i = arc->fp )
     {
-      if ( feof(((BmfArc *)arc)->fp) )
+      if ( feof(arc->fp) )
         break;
       if ( feof(i) )
         break;
@@ -17081,7 +17092,7 @@ int32_t __compress_image(uint8_t *arc_in, BmfImage *p_i, void *coded_buf)
     // refused above, which `bmf_compress` reports as exit 5.
     //
     // Reachable without fuzzing anything: `bmf c image.bmp notanarchive`.
-    if ( !((BmfArc *)arc)->fp )
+    if ( !arc->fp )
       return 0;
   }
   has_coded = (uint8_t)(uintptr_t)coded_buf;
@@ -17099,7 +17110,7 @@ int32_t __compress_image(uint8_t *arc_in, BmfImage *p_i, void *coded_buf)
   *(uint32_t *)&hdr._pad8 = hdr_pad8;
   hdr.data_size = (uint32_t)p_i->data_size;
   ::plane_count = ((p_i->depth & 0x3Fu) + 7) >> 3;
-  if ( fwrite("\x81\x8A""20\x81\x90""20a+b", 4u, 1u, ((BmfArc *)arc)->fp) != 1 )
+  if ( fwrite("\x81\x8A""20\x81\x90""20a+b", 4u, 1u, arc->fp) != 1 )
     return 0;
   bpp = p_i->depth;
   ++*(uint32_t *)arc;
@@ -17296,24 +17307,24 @@ LABEL_22:
   }
 LABEL_57:
   *(uint32_t *)::packer_word = ::packer_acc;
-  fits = (uint32_t)(out_cursor - (uint32_t)::coded_buf) < p_i->data_size;
+  fits = (uint32_t)(out_cursor - ::coded_buf) < p_i->data_size;
   coded_bytes = out_cursor - ::coded_buf;
   hdr.data_size = (uint32_t)(out_cursor - ::coded_buf);
   if ( fits )
   {
-    ok = fwrite(&hdr, 1u, 0x10u, ((BmfArc *)arc)->fp) == 16;
+    ok = fwrite(&hdr, 1u, 0x10u, arc->fp) == 16;
     if ( coded_buf )
     {
       // Word 1 of the coded block is its length; the eight is the header in
       // front of it.
       coded_len = ((const uint32_t *)coded_buf)[1];
-      ok &= fwrite(coded_buf, 1u, coded_len + 8, ((BmfArc *)arc)->fp) == coded_len + 8;
+      ok &= fwrite(coded_buf, 1u, coded_len + 8, arc->fp) == coded_len + 8;
     }
-    ok_all = (fwrite(::coded_buf, 1u, coded_bytes, ((BmfArc *)arc)->fp) == (uint32_t)coded_bytes) & ok;
+    ok_all = (fwrite(::coded_buf, 1u, coded_bytes, arc->fp) == (uint32_t)coded_bytes) & ok;
     free(::coded_buf);
     if ( ok_all && (p_i->depth & 0x80) != 0 )
-      fwrite(&p_i->pixels[p_i->data_size], 1u, pal_bytes, ((BmfArc *)arc)->fp);
-    fflush(((BmfArc *)arc)->fp);
+      fwrite(&p_i->pixels[p_i->data_size], 1u, pal_bytes, arc->fp);
+    fflush(arc->fp);
     if ( ok_all )
       return (int32_t)hdr.data_size;
     return ok_all;
@@ -17323,22 +17334,22 @@ LABEL_57:
   {
     pix_copy = (uint8_t *)bmf_new(p_i->data_size);
     plane_n = ::plane_count;
-    row = pix_copy;
     row_step = ::plane_count * (p_i->height - 1);
     pixels = (uint16_t *)p_i->pixels;
     memcpy(pix_copy,p_i->pixels,p_i->data_size);
     img_h = p_i->height;
     if ( img_h )
     {
-      row_at = row;
-      row_next = nullptr;
+      // The third copy of the interleave, and spilled like the other two:
+      // the row counter lived in `row`, a `uint8_t *` that starts at
+      // `nullptr` and is compared against a height.
+      row_at = pix_copy;
+      row_y = 0;
       y = 0;
       do
       {
         pl_i = img->width;
-        y0 = y;
-        row = row_next;
-        dst = (uint8_t *)img + y + 16;
+        dst = img->pixels + y;
         do
         {
           countdown = plane_n;
@@ -17354,10 +17365,10 @@ LABEL_57:
         while ( pl_i );
         img = (BmfImage *)(p_i);
         img_h = p_i->height;
-        y = plane_n + y0;
-        row_next = row + 1;
+        y += plane_n;
+        ++row_y;
       }
-      while ( (int32_t)(row + 1) < img_h );
+      while ( row_y < img_h );
     }
     w16 = img->width;
     img->width = img_h;
@@ -17370,13 +17381,13 @@ LABEL_57:
 LABEL_76:
   pixels = (uint16_t *)p_i->pixels;
 LABEL_77:
-  ok_raw = fwrite(img, 1u, 0x10u, ((BmfArc *)arc)->fp) == 16;
+  ok_raw = fwrite(img, 1u, 0x10u, arc->fp) == 16;
   if ( coded_buf )
   {
     coded_len = ((const uint32_t *)coded_buf)[1];
-    ok_raw &= fwrite(coded_buf, 1u, coded_len + 8, ((BmfArc *)arc)->fp) == coded_len + 8;
+    ok_raw &= fwrite(coded_buf, 1u, coded_len + 8, arc->fp) == coded_len + 8;
   }
-  written = fwrite(pixels, 1u, pal_bytes + img->data_size, ((BmfArc *)arc)->fp);
+  written = fwrite(pixels, 1u, pal_bytes + img->data_size, arc->fp);
   data_size = img->data_size;
   if ( (ok_raw & (written == data_size + pal_bytes)) == 0 )
     return 0;
@@ -17408,7 +17419,8 @@ void __bmf_compress(
   ;
   FILE *fp;
   const uint8_t *Palette;
-  int32_t *p_i, Arc, Flags, Colours, Step, Grey, i;
+  int32_t *p_i, Flags, Colours, Step, Grey, i;
+  BmfArc *Arc;
   int32_t coded_len;
 
   // The reader below answers "no" the same way whether the file is missing or
@@ -17430,9 +17442,9 @@ void __bmf_compress(
     p_i_img->depth & 0x3F,
     p_i_img->data_size);
   if ( void *__nb = bmf_new(sizeof(BmfArc)) )
-    Arc = (int32_t)__bmf_open_archive((BmfArc *)__nb, (char *)OutName, 0);
+    Arc = __bmf_open_archive((BmfArc *)__nb, (char *)OutName, 0);
   else
-    Arc = 0;
+    Arc = nullptr;
 
   // A palette that is nothing but a grey ramp carries no information: drop it
   // (bit 0x80) and mark the image greyscale (bit 0x40) instead.  This is the
@@ -17461,7 +17473,7 @@ void __bmf_compress(
     }
   }
 
-  coded_len = __compress_image((uint8_t *)Arc, (BmfImage *)p_i, (void *)coded_block);
+  coded_len = __compress_image(Arc, (BmfImage *)p_i, (void *)coded_block);
   if ( !coded_len )
     __exit_402E40(5, OutName);
   printf(
@@ -17477,24 +17489,24 @@ void __bmf_decompress(
   ;
   int32_t Number, Depth;
   uint32_t *p_i;
-  void *arc;
+  BmfArc *arc;
 
   if ( void *__nb = bmf_new(sizeof(BmfArc)) )
-    arc = (void *)__bmf_open_archive((BmfArc *)__nb, (char *)InName, 1);
+    arc = __bmf_open_archive((BmfArc *)__nb, (char *)InName, 1);
   else
     arc = nullptr;
   printf("File %16s,\r", InName);
   Number = 0;
   while ( 1 )
   {
-    p_i = (uint32_t *)__expand_image((uint8_t *)arc, 0, &coded_block);
+    p_i = (uint32_t *)__expand_image(arc, 0, &coded_block);
     BmfImage *const p_i_img = (BmfImage *)p_i;
     if ( !p_i )
     {
       printf("\n");
-      if ( !((BmfArc *)arc)->fp )
+      if ( !arc->fp )
         __exit_402E40(3, InName);
-      __bmf_destroy_archive((BmfArc *)arc, 1);
+      __bmf_destroy_archive(arc, 1);
       return;
     }
     ++Number;

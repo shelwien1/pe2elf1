@@ -1,34 +1,10 @@
 In file included from bmf.cpp:352:
-subs1.hpp: In member function 'FILE* BmfArc::bmf_close_archive()':
-subs1.hpp:1745:12: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp: In function 'int32_t __alt_p2_context(AltP2Block*, AltP2Block*, AltP2Block*)':
-subs1.hpp:6959:31: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp: In function 'void __reduce_alphabet(ModelBlock*, int8_t, uint8_t*)':
-subs1.hpp:7633:15: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:7643:60: error: cast from 'void*' to 'uint32_t' {aka 'unsigned int'} loses precision [-fpermissive]
+subs1.hpp:6960:31: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp: In function 'int32_t __choose_plane_coding(BmfImage*, int32_t, int8_t)':
-subs1.hpp:8629:12: error: cast from 'uint8_t*' {aka 'unsigned char*'} to 'uint32_t' {aka 'unsigned int'} loses precision [-fpermissive]
-subs1.hpp:8649:17: error: cast from 'uint8_t*' {aka 'unsigned char*'} to 'uint32_t' {aka 'unsigned int'} loses precision [-fpermissive]
-subs1.hpp:8747:45: error: cast from 'uint8_t*' {aka 'unsigned char*'} to 'uint32_t' {aka 'unsigned int'} loses precision [-fpermissive]
-subs1.hpp:8749:26: error: cast from 'uint8_t*' {aka 'unsigned char*'} to 'uint32_t' {aka 'unsigned int'} loses precision [-fpermissive]
-subs1.hpp:8773:42: error: cast from 'uint8_t*' {aka 'unsigned char*'} to 'uint32_t' {aka 'unsigned int'} loses precision [-fpermissive]
-subs1.hpp:8795:20: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:8847:14: error: cast from 'uint8_t*' {aka 'unsigned char*'} to 'uint32_t' {aka 'unsigned int'} loses precision [-fpermissive]
+subs1.hpp:8806:20: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp: In member function 'int32_t ModelBlock::decode_pixel(int32_t)':
-subs1.hpp:10147:13: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+subs1.hpp:10158:13: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
 subs1.hpp: In function 'ModelBlock* __layout_workspace(ModelBlock*, int32_t, int32_t, int32_t, int32_t)':
-subs1.hpp:11424:8: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp: In function 'uint8_t* __expand_image(uint8_t*, int32_t, void**)':
-subs1.hpp:16138:25: error: cast from 'uint8_t*' {aka 'unsigned char*'} to 'int32_t' {aka 'int'} loses precision [-fpermissive]
-subs1.hpp:16144:26: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:16145:14: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:16152:25: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-subs1.hpp:16165:22: error: cast from 'void*' to 'uint32_t' {aka 'unsigned int'} loses precision [-fpermissive]
-subs1.hpp: In function 'int32_t __compress_image(uint8_t*, BmfImage*, void*)':
-subs1.hpp:17299:34: error: cast from 'uint8_t*' {aka 'unsigned char*'} to 'uint32_t' {aka 'unsigned int'} loses precision [-fpermissive]
-subs1.hpp:17299:10: error: cast from 'uint8_t*' {aka 'unsigned char*'} to 'uint32_t' {aka 'unsigned int'} loses precision [-fpermissive]
-subs1.hpp:17360:15: error: cast from 'uint8_t*' {aka 'unsigned char*'} to 'int32_t' {aka 'int'} loses precision [-fpermissive]
-subs1.hpp: In function 'void __bmf_compress(const char*, const char*)':
-subs1.hpp:17433:11: error: cast from 'BmfArc*' to 'int32_t' {aka 'int'} loses precision [-fpermissive]
-subs1.hpp:17464:32: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
-# subs1.hpp 3533039005 649666
+subs1.hpp:11435:8: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+# subs1.hpp 3106586982 649387
