@@ -2668,7 +2668,8 @@ inline int32_t P2Freq::encode_symbol(const uint32_t *ctx_pair, int32_t sym)
   uint32_t cum;
   uint16_t st, *slot;
   uint32_t tot, tot_1,
-           f1_old, f2_old, down;
+           f1_old, f2_old;
+  uint16_t down;
   cum = this->f[1] + this->f[0];
   tot = cum + this->f[2];
   if ( sym )
@@ -2704,7 +2705,7 @@ inline int32_t P2Freq::encode_symbol(const uint32_t *ctx_pair, int32_t sym)
       if ( st <= 32 )
         down = ((uint32_t)(16 - st) >> 30) & 0xFFFFFFFE;
       else
-        LOWORD(down) = 32;
+        down = 32;
       st = st - down;
       this->step = st;
       f_before = *slot;
@@ -2738,8 +2739,8 @@ inline int32_t P2Freq::decode_symbol(const uint32_t *ctx_pair)
   ;
   // The cumulative count the range coder takes, which it takes unsigned.
   uint32_t cum;
-  int32_t target, fq, idx, c01;
-  uint16_t st;
+  int32_t target, idx, c01;
+  uint16_t fq, st;
   uint16_t *slot, *base;
   uint32_t f1_old, f2_old, tot;
   c01 = this->f[1] + this->f[0];
@@ -2780,16 +2781,16 @@ inline int32_t P2Freq::decode_symbol(const uint32_t *ctx_pair)
       if ( st <= 32 )
         fq = ((uint32_t)(16 - st) >> 30) & 0xFFFFFFFE;
       else
-        LOWORD(fq) = 32;
+        fq = 32;
       st = st - fq;
       this->step = st;
-      LOWORD(fq) = *slot;
+      fq = *slot;
     }
     else
     {
       st = (uint32_t)st >> 1;
       this->step = st;
-      LOWORD(fq) = *slot;
+      fq = *slot;
     }
   }
   else
@@ -4794,7 +4795,12 @@ int32_t *__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palett
     if ( bpp > 8 )
       pal_bytes = 0;
     else
-      word2 = ((BYTE2(word2) | 0xFFFF0080) << 16) | word2 & 0xFF00FFFF;
+      // Byte 2 of `word2` is the depth, which lands at `BmfImage +10`, and
+      // 0x80 there is the palette flag.  MSVC read the byte, or-ed the flag in
+      // and rebuilt the word around it; the whole expression is one bit:
+      // `(0xFFFF0080 | depth) << 16` keeps only `(0x80 | depth) << 16` and the
+      // mask 0xFF00FFFF puts back every byte but that one.
+      word2 |= 0x00800000;
   }
   else
   {
@@ -9611,7 +9617,8 @@ inline int32_t ModelBlock::decode_pixel(int32_t x)
   PixRec *up5, *r8c;   // `row_cur[7]` and `row_cur[8]`
   uint16_t *pixp, *pixr, q1w, tot2,
            k0;
-  uint32_t si, s2a, g2, g1, g0, g3, g4, k1, k2, k2h;
+  uint32_t si, s2a, k2, k2h;
+  uint16_t k1, g4, g3, g2, g1, g0;
   uint16_t k4, k3;
   PixRec *up2;     // `row_cur[7]`, two rows above
   PixRec *up1;     // `row_cur[6]`, the row above
@@ -10064,21 +10071,21 @@ LABEL_57:
       g0 = freq_tbl->w[0];
       __frame.sym1 = lvl_a;
       __frame.sym2 = b15a;
-      LOWORD(g0) = g0 - (g0 >> 1);
+      g0 = g0 - (g0 >> 1);
       freq_tbl->w[0] = g0;
-      LOWORD(g1) = g1 - (g1 >> 1);
+      g1 = g1 - (g1 >> 1);
       freq_tbl->w[1] = g1;
-      LOWORD(g2) = g2 - (g2 >> 1);
+      g2 = g2 - (g2 >> 1);
       g3 = freq_tbl->w[3];
       freq_tbl->w[2] = g2;
-      LOWORD(g3) = g3 - (g3 >> 1);
+      g3 = g3 - (g3 >> 1);
       g4 = freq_tbl->w[4];
       freq_tbl->w[3] = g3;
-      LOWORD(g4) = g4 - (g4 >> 1);
+      g4 = g4 - (g4 >> 1);
       freq_tbl->w[4] = g4;
-      LOWORD(g1) = g3 + g2 + g1;
+      g1 = g3 + g2 + g1;
       b15a = __frame.sym2;
-      LOWORD(g4) = g0 + g4;
+      g4 = g0 + g4;
       w5a = (uint16_t)(g4 + g1);
       s0b = __frame.sym0;
       lvl_a = __frame.sym1;
@@ -10163,7 +10170,7 @@ LABEL_57:
       k2 = __frame.sym4->w[2];
       k0 = __frame.sym4->w[0] - (__frame.sym4->w[0] >> 1);
       __frame.sym4->w[0] = k0;
-      LOWORD(k1) = k1 - (k1 >> 1);
+      k1 = k1 - (k1 >> 1);
       freq3->w[1] = k1;
       k2h = k2 - (k2 >> 1);
       k3 = (uint16_t)freq3->w[3];
@@ -10416,8 +10423,9 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
           b15a, msym3, excl_sym_a, excl_sym_b, w6d, wq1, cache2,
           cache1, cache3, cache4, cache6, cur5_back2, h11, h12, h13, h14, h15,
           h16, h17, h18, h19, h20, h21, h24, h28, h26, h30, esym, up_hit, pos1,
-          msym1b, w6b, *ip, b15, w2t, w3t, w4t, w5, acc, q1, w2s, q2,
+          msym1b, w6b, *ip, b15, w2t, w3t, w4t, acc, q1, w2s, q2,
           w3s, w4s, s9b, cum2, lvl_b, w5c, w6c, w5b, s3b;
+  uint16_t w5, w1, h4, h3, h2, w1a, w0;
   // `row_cur[6]`, the row above: every reach through it is a multiple of
   // four `uint16_t`, which is one `PixRec`, and every one is `sym`.
   PixRec *row;   // `row_cur[5]`, the current row
@@ -10426,7 +10434,7 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
   uint16_t *wq, *sym_cache, *cache0p, w6;
   PixRec *cur2;   // `row_cur[5]`, one record past the pixel just written
   BitCtr *ctr;    // the run scan's counter for one bucket
-  uint32_t bin_tot, half, k, h2, w1a, w0, h3, h4, w1, g2, g2h;
+  uint32_t bin_tot, half, k, g2, g2h;
   PixRec *up3;      // `row_cur[7]`, two rows above
   PixRec *cur6c, *up2;   // `row_cur[6]` and `row_cur[7]`, the two rows above
   cur6 = (PixRec *)this->row_cur[6];
@@ -10792,7 +10800,12 @@ LABEL_42:
     binp = (FreqRec *)&this->row_cur[bucket_i + 10];
     __frame.sym4 = (int32_t)(uintptr_t)binp;
     frec = &this->grid[id2 + 188];
-    grid_kind = HIWORD(((int32_t *)this)[4 * id2 + 778]);
+    // The same record `frec` names on the line above, read eight bytes in and
+    // taken at its high half: `grid` is at +96 and its records are sixteen
+    // bytes, so `((int32_t *)this)[4 * id2 + 778]` is byte 16*id2 + 3112, which
+    // is `grid[id2 + 188]` plus 8 -- and the high half of the word at +8 is
+    // `w[5]`.
+    grid_kind = frec->w[5];
     if ( grid_kind )
     {
       if ( grid_kind == 1 )
@@ -10827,7 +10840,7 @@ LABEL_42:
         w4s = 21 * frec->w[4];
         frec->w[3] = (uint16_t)(uintptr_t)bp;
         acc2 = (uint16_t)(uintptr_t)bp + acc + w6;
-        LOWORD(w5) = (w4s + w5 - 1) / w5 + __frame.sym3;
+        w5 = (w4s + w5 - 1) / w5 + __frame.sym3;
         frec->w[4] = w5;
         grid_kind = (uint16_t)(__frame.sym0 + w5 + acc2);
         frec->w[5] = grid_kind;
@@ -10875,23 +10888,23 @@ LABEL_42:
         __frame.sym1 = lvl_a;
         w0 = frec->w[0];
         __frame.sym2 = (uint16_t *)b15a;
-        LOWORD(w0) = w0 - (w0 >> 1);
+        w0 = w0 - (w0 >> 1);
         frec->w[0] = w0;
-        LOWORD(w1a) = w1a - (w1a >> 1);
+        w1a = w1a - (w1a >> 1);
         frec->w[1] = w1a;
-        LOWORD(h2) = h2 - (h2 >> 1);
+        h2 = h2 - (h2 >> 1);
         h3 = frec->w[3];
         frec->w[2] = h2;
-        LOWORD(h3) = h3 - (h3 >> 1);
+        h3 = h3 - (h3 >> 1);
         h4 = frec->w[4];
         frec->w[3] = h3;
-        LOWORD(h4) = h4 - (h4 >> 1);
+        h4 = h4 - (h4 >> 1);
         frec->w[4] = h4;
-        LOWORD(w1a) = h3 + h2 + w1a;
+        w1a = h3 + h2 + w1a;
         b15a = (int32_t)__frame.sym2;
-        LOWORD(w1a) = w0 + h4 + w1a;
+        w1a = w0 + h4 + w1a;
         lvl_a = __frame.sym1;
-        w5a = (uint16_t)w1a;
+        w5a = w1a;
         w6b = __frame.sym0;
         frec->w[5] = w5a;
         if ( w6b < 256 && !frec->b14 )
@@ -10964,7 +10977,7 @@ LABEL_42:
         __frame.sym2 = (uint16_t *)lvl_b;
         g0 = binp->w[0] - (binp->w[0] >> 1);
         binp->w[0] = g0;
-        LOWORD(w1) = w1 - (w1 >> 1);
+        w1 = w1 - (w1 >> 1);
         binp->w[1] = w1;
         g2h = g2 - (g2 >> 1);
         g3 = (uint16_t)binp->w[3];
@@ -15279,7 +15292,7 @@ void __transform_planes(BmfImage *p_i, int32_t unread_mode, int8_t unread_flag)
     do
     {
       ++k;
-      plane = BYTE1(plane_desc[k].w0);
+      plane = plane_desc[k].src_plane;
       predictor = plane_desc[plane + 1].flags & 3;
       ::plane_predictor = predictor;
       alt = (uint8_t)(plane_desc[plane + 1].flags & 4) >> 2;
@@ -15444,8 +15457,9 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
   uint8_t *pal_at, *copy, *srcp, *dst;   // `uint8_t *` beside the `char` scalars above
   int32_t hdr_word, pl, nrefs, plane_i, plane,
           pl2, plane2, pred, i, n_pix2, pix_at, nplanes_c, i2, n_planes,
-          last_row, img_h, at, y, pl_i, left;
-  uint16_t w16;
+          last_row, at, y, pl_i, left;
+  uint16_t img_h, w16;
+  uint8_t major_v, minor_v;   // the member header's two version digits
   int32_t n_pix;
   uint32_t magic, pad_len, *blk, pal_bytes, want2,
            desc, desc_flags, want, got, word12, word8, word4,
@@ -15474,14 +15488,29 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
     magic = __frame.magic_word;
     if ( (uint16_t)__frame.magic_word != 0x9081 )
       break;
-    plane_desc[0].w4 = ((BYTE2(__frame.magic_word) << 8) - 12288) | (HIBYTE(__frame.magic_word) - 48);
+    // Bytes 2 and 3 of the four a member starts with are its version, as two
+    // ASCII digits: `compress_image` writes "\x81\x8A" "20" for an image member
+    // and "\x81\x90" "20" for the sub-member this loop is skipping.  The test is
+    // `major == '2' && minor == '0'` written as arithmetic -- 12288 is `'0' << 8`,
+    // so `(major << 8) - 12288` is 512 only for '2', and `minor - 48` is 0 only
+    // for '0'.  Kept as one expression rather than split into two comparisons
+    // because the value it computes is what the next line tests.
+    //
+    // It lands in `plane_desc[0].w4`, which is this check's scratch and not a
+    // plane weight: record 0 is the image's own and `compress_image` sets the
+    // same field to 512 on the way out.  Records 1..4 are the weights.
+    major_v = (uint8_t)(__frame.magic_word >> 16);
+    minor_v = (uint8_t)(__frame.magic_word >> 24);
+    plane_desc[0].w4 = ((major_v << 8) - 12288) | (minor_v - 48);
     if ( plane_desc[0].w4 != 512 || fread(__frame.hdr, 8u, 1u, ((BmfArc *)arc)->fp) != 1 )
       break;
     fseek(((BmfArc *)arc)->fp, (*(uint32_t *)&__frame.hdr[4]), 1);
     fp1 = ((BmfArc *)arc)->fp;
   }
   if ( (uint16_t)magic != 0x8A81
-    || (plane_desc[0].w4 = ((BYTE2(magic) << 8) - 12288) | (HIBYTE(magic) - 48), plane_desc[0].w4 != 512)
+    || (major_v = (uint8_t)(magic >> 16), minor_v = (uint8_t)(magic >> 24),
+        plane_desc[0].w4 = ((major_v << 8) - 12288) | (minor_v - 48),
+        plane_desc[0].w4 != 512)
     || fread(__frame.hdr_words, 0x10u, 1u, ((BmfArc *)arc)->fp) != 1 )
   {
     fp = ((BmfArc *)arc)->fp;
@@ -15854,7 +15883,7 @@ LABEL_104:
       do
       {
         ++pl2;
-        plane2 = BYTE1(plane_desc[pl2].w0);
+        plane2 = plane_desc[pl2].src_plane;
         pred = plane_desc[plane2 + 1].flags & 3;
         ::plane_predictor = pred;
         if ( (plane_desc[plane2 + 1].flags & 8) != 0 || pred )
@@ -15969,8 +15998,8 @@ LABEL_109:
     __frame.nplanes_s = (int32_t)copy;
     last_row = ::plane_count * (img_at->height - 1);
     memcpy(copy,img_at->pixels,img_at->data_size);
-    LOWORD(img_h) = img_at->height;
-    if ( (uint16_t)img_h )
+    img_h = img_at->height;
+    if ( img_h )
     {
       __frame.row_step = (void *)last_row;
       srcp = (uint8_t *)__frame.nplanes_s;
@@ -16082,11 +16111,12 @@ uint32_t __search_filter(BmfImage *img, int8_t mode)
   int32_t tile_w, tile_h, pl, nplanes, y0, dx, off_y, row_bytes, best_cost, bits_f5,
           cost_f5, f5, pred, c0, c1, c2, c3, cand, sv1, nplanes_c, pl_a,
           pi0, sv2, pl_b, pi1, bits2, sv0, plane, pi3, bits_e, nplanes_b, sv3,
-          pl_c, pi4, sv4, pl_d, bits_c, img_h1, img_h1b, y1, off1, x1,
-          bits_d, pk, pl_k, bits, img_h3, img_h3b, y3, off3, pl_i, rows_x_planes, img_h2,
+          pl_c, pi4, sv4, pl_d, bits_c, img_h1, y1, off1, x1,
+          bits_d, pk, pl_k, bits, img_h3, y3, off3, pl_i, rows_x_planes, 
           y2, off2, x2, pl2, bits_f8, cost_f8, f8, pl3,
           bits_f13, f13, pl4, cost_f14, f14, pl0,
           bits_f6, cost_f6, f6, pl1, bits_f0;
+  uint16_t img_h3b, img_h2, img_h1b;
   uint16_t w16, w_c;
   uint32_t rs2, rs1, rs0, rs3, rs4;
   uint8_t *p8, *p9;
@@ -16354,8 +16384,8 @@ LABEL_43:
     __frame.plane_i = (int32_t)p2;
     __frame.pi = ::plane_count * (img_h1 - 1);
     memcpy(p2,(uint8_t *)__frame.tile_src,__frame.tile_img->data_size);
-    LOWORD(img_h1b) = __frame.tile_img->height;
-    if ( (uint16_t)img_h1b )
+    img_h1b = __frame.tile_img->height;
+    if ( img_h1b )
     {
       __frame.rows[0] = p2;
       p3 = __frame.rows[1];
@@ -16439,8 +16469,8 @@ LABEL_172:
       __frame.rows[1] = (uint8_t *)::plane_count;
       __frame.plane_i = (int32_t)__frame.rows[0];
       memcpy(__frame.rows[0],(uint8_t *)__frame.tile_src,__frame.tile_img->data_size);
-      LOWORD(img_h2) = __frame.tile_img->height;
-      if ( (uint16_t)img_h2 )
+      img_h2 = __frame.tile_img->height;
+      if ( img_h2 )
       {
         __frame.costs[0] = rows_x_planes;
         p11 = __frame.rows[1];
@@ -16496,8 +16526,8 @@ LABEL_172:
       __frame.dims[0] = (int32_t)__frame.rows[0];
       __frame.costs[0] = ::plane_count * (img_h3 - 1);
       memcpy(__frame.rows[0],img_c->pixels,img_c->data_size);
-      LOWORD(img_h3b) = img_c->height;
-      if ( (uint16_t)img_h3b )
+      img_h3b = img_c->height;
+      if ( img_h3b )
       {
         p7 = __frame.rows[1];
         y3 = 0;

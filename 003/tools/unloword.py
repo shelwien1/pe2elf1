@@ -3,6 +3,7 @@
 
     python3 tools/unloword.py subs1.hpp
     python3 tools/unloword.py subs1.hpp --all
+    python3 tools/unloword.py subs1.hpp --declined   # and what stopped each one
 
     uint32_t row16;
     if ( !byte_rows && bits == 4 )
@@ -141,7 +142,14 @@ def fits(rhs, w, types, mem, rec=None, name=None):
     # The same designator, resolved through the record the local points at
     # rather than through the global member map: `img->height` when `img` is a
     # `BmfImage *`.
-    o = re.match(r'^([A-Za-z_]\w*)\s*(?:->|\.)\s*([A-Za-z_]\w*)\s*$', e)
+    #
+    # Only the last two components of a chain matter, which is what makes this
+    # cheap: `__frame.p_i_2->height` needs `p_i_2`'s type and nothing before it,
+    # and `structs.decl_types` already reports a frame's members as if they were
+    # locals -- so `p_i_2` is a `BmfImage *` there without this having to know
+    # what a frame is.
+    o = re.match(r'^(?:[A-Za-z_]\w*\s*(?:->|\.)\s*)*?([A-Za-z_]\w*)\s*(?:->|\.)'
+                 r'\s*([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*$', e)
     if rec and o:
         f = rec.get((types.get(o.group(1)) or '').rstrip('*'), {}).get(o.group(2))
         if f and structs.width(f) * 8 <= w:
@@ -159,8 +167,12 @@ def fits(rhs, w, types, mem, rec=None, name=None):
     m = re.search(r'&\s*(0[xX][0-9a-fA-F]+|\d+)\s*$', e)
     if m and int(m.group(1), 0) < (1 << w):
         return False
-    m = re.search(r'>>\s*(\d+)\s*$', e)
+    m = re.search(r'>>\s*(\d+)\s*\)?\s*(?:&[^&]*)?$', e)
     if m and int(m.group(1)) >= 32 - w:
+        # A shift far enough right fits whatever follows it, and a mask after
+        # it can only take bits away.  `((uint32_t)(16 - st) >> 30) & 0xFFFFFFFE`
+        # is at most 3 and the mask does not widen it -- reading only the
+        # trailing `& K` and rejecting it for K >= 2^w was what stopped this.
         return False
     if name and re.match(r'^\(\s*u?int32_t\s*\)\s*%s\s*>>\s*[1-9]\d*$'
                          % re.escape(name), e):
@@ -189,6 +201,67 @@ def narrow_by_writes(body, name, w, types, mem, rec):
                 return False, False
             votes.append(v)
     return (seen > 0), (bool(votes) and all(votes))
+
+
+def declined(lines):
+    """(body, local, why) for every partial-write target this rule will not take.
+
+    The plan for this round asks the rule to decline *out loud*: a candidate
+    that silently vanishes is indistinguishable from one the rule never saw,
+    which is how `methodise.py` sat at zero for three rounds.  Anything listed
+    here is a local that still carries a `LOWORD` or `LOBYTE` write and the one
+    fact that stops it.
+    """
+    out, mem, rec = [], members(lines), record_members(lines)
+    for a, b, nm, sig in bodies_with_parts(lines):
+        body = [l.split('//')[0] for l in lines[a:b + 1]]
+        types = structs.decl_types(sig, lines, a, b)
+        for name, widths in parts_of(body).items():
+            short = nm.lstrip('_')
+            if len(widths) != 1:
+                out.append((short, name, 'written at two widths'))
+                continue
+            w = next(iter(widths))
+            if name not in types:
+                out.append((short, name, 'no declaration this can read'))
+                continue
+            if structs.width(types[name]) != 4:
+                out.append((short, name, 'declared %s, not a 32-bit register'
+                            % types[name]))
+                continue
+            why, seen = None, 0
+            for l in body:
+                for m in re.finditer(NAMED % re.escape(name), l):
+                    if re.search(r'\b(?:LOWORD|LOBYTE)\s*\(\s*$', l[:m.start()]):
+                        continue
+                    after = l[m.end():]
+                    if not re.match(r'\s*=[^=]', after):
+                        continue
+                    seen += 1
+                    rhs = after.split('=', 1)[1].strip().rstrip(';').strip()
+                    if fits(rhs, w, types, mem, rec, name) is None:
+                        why = 'full write not provably %d-bit: %s' % (w, rhs[:44])
+            if why:
+                out.append((short, name, why))
+            elif seen == 0:
+                out.append((short, name, 'no full write, so the top half is '
+                                         'indeterminate'))
+    taken = {(f.lstrip('_'), n) for f, _, _, n, _, _, _, _ in survey(lines)}
+    return [r for r in out if (r[0], r[1]) not in taken]
+
+
+def bodies_with_parts(lines):
+    for a, b, nm, sig in structs.bodies(lines):
+        if parts_of([l.split('//')[0] for l in lines[a:b + 1]]):
+            yield a, b, nm, sig
+
+
+def parts_of(body):
+    part = collections.defaultdict(collections.Counter)
+    for l in body:
+        for m in re.finditer(r'\b(LOWORD|LOBYTE)\s*\(\s*(\w+)\s*\)\s*=[^=]', l):
+            part[m.group(2)][W[m.group(1)]] += 1
+    return part
 
 
 def survey(lines):
@@ -369,5 +442,10 @@ if __name__ == '__main__':
             done += apply(lines, fn, a, b, name, want, w)
         open(p, 'w').write('\n'.join(lines))
         print('%d of %d retyped' % (done, len(found)))
+    elif '--declined' in sys.argv:
+        no = declined(lines)
+        for fn, name, why in no:
+            print('%-26s %-10s %s' % (fn, name, why))
+        print('%d taken, %d declined and why' % (len(found), len(no)))
     else:
         print('%d locals held in a register wider than anything reads' % len(found))
