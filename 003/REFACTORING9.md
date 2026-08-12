@@ -47,7 +47,7 @@ structs                                 —         —            24
   still ObjN                             —         —             0
 fNN members / named ones             93/121     5/162         0/172
 distinct unexplained locals            554       591             0
-  bodies still carrying one              —   8 of 102     0 of 104
+  bodies still carrying one              —   8 of 102       0 of 92
   uses                                    —      6302             0
 locals named for a callee parameter      —         —             0
   declarations / bodies                   —         —           0/0
@@ -3459,3 +3459,47 @@ Address … is located in stack of thread T0 at offset 180 in frame
 These bodies walk off the ends of their locals on purpose. The frame is what
 makes the neighbours theirs to walk, and that is why it is a layout and not a
 bag of locals — stated now as a measurement rather than as an exit code.
+
+## 45. Twelve bodies that were not bodies
+
+`shape.py` takes two minutes and thirteen seconds. A profile says 131 of them
+are two `git log -S` searches inside `unnamed.py`, recovering a map every run
+that is already a committed file — `tools/addrmap.txt`. Reading the file
+instead takes 0.33 seconds, and `shape.py` goes to 0.7.
+
+What makes that safe is not a timestamp. The map does not cover every body —
+the helpers this project wrote have no address in BMF.exe and never will — so
+"every body is in the map" is the wrong test and would send every run down the
+slow path for ever. The test that matters is the one direction that can go
+stale: **every name in the map is a body this file has.** A rename since the
+map was written breaks exactly that, and a map naming a function the file does
+not have is a map about another revision. Replayed against `2127451`'s file it
+falls back and answers 816, which is the control.
+
+### And the denominator was wrong
+
+Writing that test is what showed the other thing. Eighteen names had no entry,
+and twelve of them were called `alignas`.
+
+`structs.bodies` finds a function by walking back from a `{` at depth zero
+looking for a name before a parenthesis. That is
+
+```c
+alignas(16) static uint8_t ctx_group_flags[32] = {
+```
+
+as well, so twelve of the file's global tables have been read as functions
+called `alignas` — and every per-body tool in `tools/` has been walking their
+initialisers as if they were code. §1 said **104 bodies**; there are **92**.
+
+A brace after `=` opens an initialiser. `prune_unreachable.py` learned that in
+round eight — "A brace after an `=` opens an initializer and a preprocessor
+line is never part of a signature" — and the lesson stayed in its own file
+while the shared parser kept the bug. One more of the same: the *last* name
+before the signature's parenthesis, not the first, or
+`__attribute__((noreturn)) void __exit_402E40(…)` is a function called
+`attribute__`.
+
+Nothing in the sweep moves: those spans held no code, so every rule that
+walked them found nothing there, which is why nine rounds of zeros never said
+so. What changes is what the zeros are *of*.

@@ -69,7 +69,23 @@ def bodies(lines):
                         if prev.lstrip().startswith('#'):
                             break
                         buf = prev + ' ' + buf
-                    m = re.search(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(', buf)
+                    # A brace after `=` opens an initialiser, not a body.
+                    # `alignas(16) static uint8_t ctx_group_flags[32] = {` has
+                    # a parenthesis and a name in front of it, so this read
+                    # twelve of the file's global tables as functions called
+                    # `alignas` -- and every per-body tool has been walking
+                    # their initialisers as if they were code, with `104
+                    # bodies` in section 1 where there are 92.
+                    # `prune_unreachable.py` learned the same thing in round
+                    # eight and the lesson stayed in its file.
+                    # The *last* name before the opening paren of the
+                    # signature, not the first: `__attribute__((noreturn)) void
+                    # __exit_402E40(...)` gave `attribute__`, and any leading
+                    # attribute or alignment specifier would do the same.
+                    m = (None if buf.rstrip().endswith('=') else
+                         re.search(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\([^()]*\)\s*$',
+                                   buf.rstrip().rstrip('{').rstrip()) or
+                         re.search(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(', buf))
                     name = m.group(1) if m and '(' in buf else None
                     sig, start = buf, i
                 depth += 1

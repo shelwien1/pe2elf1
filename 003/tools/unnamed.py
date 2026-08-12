@@ -98,12 +98,10 @@ def original():
     return out
 
 
-def addresses():
-    try:
-        txt = subprocess.check_output([sys.executable, ADDR],
-                                      stderr=subprocess.DEVNULL).decode()
-    except (subprocess.CalledProcessError, OSError):
-        return {}
+MAP = ADDR.rsplit('/', 1)[0] + '/addrmap.txt'
+
+
+def parse_map(txt):
     out = {}
     for l in txt.split('\n'):
         m = re.fullmatch(r'(\w+)\s+(0x[0-9A-Fa-f]+)\s*', l)
@@ -112,9 +110,51 @@ def addresses():
     return out
 
 
+def addresses(path=None):
+    """{name: address}, from the checked-in map when it fits the file.
+
+    `addrmap.py` recovers this from the git log with two `git log -S` searches
+    over the whole history, and they take two minutes.  `shape.py` calls this
+    once per run, so every `sweep.sh` and every one of `proven.sh`'s thirteen
+    replays of `shape.py` and `checktable.py` paid it -- 131 of `shape.py`'s
+    133 seconds were those two searches.
+
+    The map is committed, so the fast path is to read it.  What makes that
+    safe is not a timestamp or a checksum but the property the map itself
+    claims: every body in the file has an entry.  `addrmap.py`'s own last line
+    is "0 named bodies have no recorded address", and that is the test.  A file
+    the map does not cover -- an old revision, or one where a body has been
+    renamed since the map was written -- falls back to the git search, which is
+    the only thing that can answer for it.
+    """
+    if path:
+        try:
+            out = parse_map(open(MAP).read())
+        except IOError:
+            out = {}
+        if out:
+            # The test is the one direction that can go stale.  The map does
+            # not cover every body -- the helpers this project wrote have no
+            # address and never will -- but every name *in* it is a body this
+            # file has, and a rename since the map was written is exactly what
+            # breaks that.  A map that names a function the file does not have
+            # is a map about another revision, and the git search is the only
+            # thing that can answer for one of those.
+            here = {nm.lstrip('_') for _a, _b, nm, _s in
+                    structs.bodies(open(path).read().split('\n'))}
+            if all(n in here for n in out):
+                return out
+    try:
+        txt = subprocess.check_output([sys.executable, ADDR],
+                                      stderr=subprocess.DEVNULL).decode()
+    except (subprocess.CalledProcessError, OSError):
+        return {}
+    return parse_map(txt)
+
+
 def survey(path='subs1.hpp'):
     """({name: bodies} still Hex-Rays', {name: bodies} kept on purpose, joined)."""
-    was, addr = original(), addresses()
+    was, addr = original(), addresses(path)
     if was is None:
         return None, None, 0
     lines = open(path).read().split('\n')
