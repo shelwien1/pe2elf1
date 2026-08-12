@@ -16,7 +16,7 @@ i386 that class is not an error:
 Every one of those is a fact about i386 written in a place the compiler is not
 checking. This round asked the same questions of x86-64, and answered them.
 
-**Result: `tools/x64.sh` reports 23 of 23 cases agreeing with the 32-bit
+**Result: `tools/x64.sh` reports 21 of 21 cases agreeing with the 32-bit
 build, and it is in `test.sh`.** Seventeen images compress to the *32-bit*
 reference stream byte for byte and expand back to what the decoder should
 write; the two-member archive reads back to its last member; five malformed
@@ -34,7 +34,8 @@ next one sees.
 | `BMF_STRICT=1 BMF_BITS=64 ./build.sh` → `tools/ptrwidth.py` | a pointer *narrowed*: the compiler diagnoses it | 112 |
 | `tools/rawoffset.py`, `tools/negindex.py` | a number that is an offset; an index negated in an unsigned | 32 + 4 |
 | `tools/x64.sh` | the program giving a different answer | the rest |
-| `BMF_BITS=64 tools/fuzz.sh` | a different answer on an input nobody chose | 1, and none of the above sees it |
+| `BMF_BITS=64 tools/fuzz.sh` | a *crash* on an input nobody chose | 1, and none of the above sees it |
+| `tools/x64diff.sh` | a different *answer* on an input nobody chose | the last one |
 
 The middle row is the interesting one. Round nine's census had a row reading
 `raw-offset sites 0`, and it was a spelling: the measure looked for
@@ -169,6 +170,26 @@ The same wrap in a different costume closed the first x64 crash:
 `reduce_alphabet`'s distinct-symbol table is reached as
 `*(uint32_t *)&buf[4 * sym - 4]`, and for symbol 0 that is `0xFFFFFFFC`.
 
+### 2.4a A union slot read at the wrong width
+
+`choose_plane_coding`'s frame carries three unions, each holding two 32-bit
+quantities before its 3x3 solve and one 64-bit one after. Three sites in the
+first phase read the *64-bit* name:
+
+```c
+px = &((uint8_t *)img_a)[__frame.q0 + 16 + n_planes + x3[2]];
+```
+
+`q0` is `row_stride` and `plane_b` together, so the index is
+`row_stride + (plane_b << 32)`. On i386 the index converts to a 32-bit
+`ptrdiff_t` and the top half falls off, which is why it has always worked.
+With a 64-bit pointer it is eight gigabytes of offset, `px` starts past
+`data_end`, and the DC-offset histogram never runs at all: `pos` stays -1,
+`plane_desc[k].dc` comes out 0 instead of 42, and three of the fifteen streams
+differ by a few dozen bytes **while still round-tripping perfectly**.
+
+That last clause is the whole reason section 3b exists.
+
 ### 2.5 Not a defect at all
 
 `rle4` and `rle8` looked like the last two failures for an afternoon. An
@@ -196,7 +217,7 @@ could never have said which *target*.
 
 `test.sh` gained one line, and the argument for it is a positive control:
 reintroducing one line of the `alt_p2_model` byte view leaves all fifteen
-32-bit streams byte-identical and takes the x64 leg from 23 of 23 to 19 of 23.
+32-bit streams byte-identical and takes the x64 leg from 21 of 21 to 17 of 21.
 `BMF_X64_GATE=0` skips it, for a host with no 64-bit toolchain.
 
 Every other instrument takes `BMF_BITS=64` in front of it, and all four are
@@ -207,8 +228,16 @@ BMF_BITS=64 tools/asan.sh      no report in 40 runs over 17 images
 BMF_BITS=64 tools/fuzz.sh      400 mutants: 288 refused, 112 accepted, 0 reported
 BMF_BITS=64 tools/hdrscan.sh   no report in 7680 runs: both one-byte header
                                fields, every value, 15 streams
-tools/x64.sh                   23 of 23
+tools/x64.sh                   21 of 21, streams compared
+tools/x64diff.sh               400 mutants through *both* builds: same exit
+                               code, same bytes
 ```
+
+And both targets produce byte-identical streams at `-O0`, `-O1` and `-O3` --
+six builds, ninety streams. That is the check that nothing left in the coding
+path depends on undefined behaviour the optimiser is free to reinterpret,
+which for a file this full of reinterpreted memory is not a foregone
+conclusion.
 
 The fuzz line is the same tally the 32-bit run gives, mutant for mutant, which
 is the check that §3a's `plane_b` was the whole of what it found.
@@ -218,6 +247,27 @@ reasons: i386 calling conventions on the moved entry points, CPUID helpers in
 i386 inline asm, and the address blob. All three were true when it was written
 and all three were gone by round seven. **A reason in a comment is a
 measurement, and that one had not been re-taken in four rounds.**
+
+---
+
+## 3b. The instrument that never ran
+
+`tools/x64.sh` compared each 64-bit stream against `testfiles/$n.bmf`, guarded
+by `[ -f ]`. The reference streams are called `testfiles/ref_$n.bmf` -- which
+is what `test.sh` calls them -- so the guard was false for every image and the
+comparison, the entire reason that script exists, never ran once. It reported
+"23 of 23" and what it had checked was 23 round trips.
+
+A round trip is a weak claim here: the encoder and the decoder are the same
+build, so a model that has drifted agrees with itself. The three streams the
+`q0` defect changed decode perfectly.
+
+Two smaller faults came with it. The glob was `testfiles/*.bmp`, which picks
+up `out_rle4.bmp` and `out_rle8.bmp` -- not inputs, but what the decoder is
+expected to *write*, and `test.sh` excludes them. And a missing reference was
+a skip; it is a failure now, for the reason above.
+
+The count is 21 of 21 with the comparison running.
 
 ---
 
@@ -274,7 +324,8 @@ target where the mistake has a consequence — which is the whole argument for
 | `tools/ptrwidth.py` | which pointers still go through a 32-bit integer, and which of the four kinds each is | 0 |
 | `tools/rawoffset.py` | which numbers in the code are a member offset the file itself states | 0 |
 | `tools/negindex.py` | which negative indices are negated in an unsigned type | 0 |
-| `tools/x64.sh` | whether the other pointer width gives the same answers | 23 of 23 |
+| `tools/x64.sh` | whether the other pointer width gives the same answers | 21 of 21 |
+| `tools/x64diff.sh` | whether the two agree on inputs nobody chose | 400 mutants, no disagreement |
 
 `BMF_WARN=1 BMF_BITS=64 ./build.sh` writes `warn64.log`, and `warn64.txt` is
 its ceiling — a ratchet like `warn.txt` and over a different population, since
