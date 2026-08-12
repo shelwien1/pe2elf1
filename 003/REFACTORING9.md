@@ -3140,3 +3140,45 @@ It is a spelling, and this round has been about what those are worth as tests
 — but it is a spelling no rewrite should ever change by accident, and a row
 that moves when one does costs a line. `struct alignas(16)` is excluded; that
 is the frames' own, and the `frames` row above already counts them.
+
+## 40. Where the replay comes to rest
+
+`proven.sh`, run against the tree at `3f6c581` with the file and `tools/`
+both snapshotted and the provenance clauses stripped:
+
+```
+10 of 64 tools give the same answer for every revision checked.
+What each of those actually reads, from tools/reads.py:
+
+  decast.py         never opens the file it is given; its input is a compile of the working tree
+  explicitcmp.py    reads it, and warn.log
+  resign.py         reads it, and warn.log
+  resign_group.py   reads it, and warn.log
+  retype_locals.py  reads it, and strict.log
+  uncast.py         reads it, and a compile of the working tree
+  uncursor.py       reads only what it is given
+  unmemcast.py      reads only what it is given
+  unspill.py        reads only what it is given
+  unused.py         reads it, and a compile of the working tree
+
+3 of 10 read only the file they were replayed against
+```
+
+Fifty-four of sixty-four tools have been shown to answer differently somewhere
+in the file's 436 commits, which is as much as a replay can say about a rule.
+Three more read only what they are given and found nothing at any of the twelve
+points — `uncursor`, `unmemcast` and `unspill`, all three written for shapes
+that earlier rounds removed.
+
+The remaining seven are the honest residue, and they are all the same kind:
+their input is not the file. Four join it against `warn.log` or `strict.log`,
+whose line numbers are this build's; three run `g++` over the working tree.
+Replaying any of them against a revision from four hundred commits ago asks a
+question with no answer, and the run says so in place of a number.
+
+That is the whole of what this thread was for. The round began with
+`sweep.sh`'s line — *every tool reports zero* — and the observation that a
+broken tool reports zero too. It ends with the same line plus a second one
+naming the seven zeros that have not been demonstrated to mean anything and
+why each cannot be. Neither is a claim in a commit message; both are commands
+with an exit status.
