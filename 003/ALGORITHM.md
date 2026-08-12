@@ -838,11 +838,11 @@ Stated plainly, so the rest can be trusted:
   recomputed. Each row buffer holds one eight-byte record per pixel — the symbol
   and six flags comparing it against the pixel above, the pixel to the left, and
   four diagonals — and four counters slide eight-record and four-record windows
-  over two of those flags. `algorithm_v2.md` §8.2.1 has the table. `code_pixel` is 781 lines and would need a full reading.
+  over two of those flags. `algorithm_v2.md` §8.2.1 has the table. `code_pixel` is 786 lines and would need a full reading.
 * **The alternate model families.** When descriptor `+2` bit 2 is set,
   `model_plane` hands the plane to one of the four alternate families instead
   (the table is in §7.2). I established only which one is picked, not what they
-  do; `alt_p2_model` (1402 lines here) sits under two of them.
+  do; `alt_p2_model` (1406 lines here) sits under two of them.
 
   **The gap has a boundary, at least.** 22 bodies are reachable *only* from
   this dispatch and from nothing else — `alt_p2_model`, `alt_p2_context`,

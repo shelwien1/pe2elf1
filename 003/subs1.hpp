@@ -110,8 +110,8 @@ alignas(16) static int32_t bmf_p2_thresholds[6][13] = {
 
 //     _this[14][1] = 169.2f;                                 // [ 0]
 //     v26 = (1.0f - (v24 / (v23 + 576.0f))) * 2.0f;          // [ 1] [ 7] [ 6]
-//     const float floor_a = 26896.0f * f278656[14][2];       // [ 9]
-//     ... / (f278656[7 + j][k] + ms_scale * 529.0f);         // [12]
+//     const float floor_a = 26896.0f * nb_cur[14][2];       // [ 9]
+//     ... / (nb_cur[7 + j][k] + ms_scale * 529.0f);         // [12]
 
 // MSVC pooled the literals into .rdata and loaded them from here; Hex-Rays put
 // them back inline, so nothing reads the pool as floats any more.  Only
@@ -1219,7 +1219,23 @@ static_assert(__builtin_offsetof(P2Ctx, mag) == 17, "P2Ctx: mag is the last byte
 // static_assert is what says so.  Offsets the code only reaches with a
 // computed index are padding here -- their bounds are not visible.
 struct AltP2Block {
-  uint8_t _pad0[278528];
+  // One weight block per neighbourhood: sixteen rows of four floats, 256 bytes
+  // each, and the head of the block is a table of them.  Three sites said so
+  // and each said it a different way -- `&((float (*)[4])blk)[16 * nb_id]` to
+  // select one, `((float (*)[4])this)[14][2] = 1.0f` to seed slot [14][2] of
+  // the first, and the row buffers filled with the block's own address so that
+  // a neighbourhood with no block of its own reads entry 0.
+  //
+  // 1088 is not a guess: `_pad0` was 278528 bytes and 278528 / 256 is 1088
+  // exactly, which is the distance to `p2_row`.  `nb_id` spans 1916 entries,
+  // so the id space is wider than the table -- that is a fact about the two
+  // fields and not a bound either of them states, and it is what the extent
+  // note on `nb_id` is about.
+  //
+  // Entry 0 is the default the row buffers point at, and the 1.0f is the scale
+  // on the update floor -- what stops the first neighbourhood dividing by
+  // nothing.
+  float nb_weights[1088][16][4];   // +0 .. +278527
   // 336 bytes, 278528..278863, and four readings of them.  The extent is the
   // distance to `nb_sum`, not a measurement of any one reading: Hex-Rays had
   // a fifth, `__m128 f278528[21]`, which was its record of the sixteen-byte
@@ -1247,17 +1263,27 @@ struct AltP2Block {
       // four are cleared together at the start of a plane.  Hex-Rays had them
       // as two `uint64_t` because that is how the clearing writes them.
       float bias[4];   // +278640 .. +278655
-      float (*f278656)[4];   // a weight block: 16 rows of four, `alt_p2_filter`'s `_this`
+      // The neighbourhood the model is on: one entry of `nb_weights` above,
+      // selected by `nb_id[nb_slot]` and handed to `alt_p2_filter` as its
+      // coefficient block.  It was named for its offset because the three
+      // sites that set it did so through an `int32_t` cast of the address.
+      float (*nb_cur)[4];   // +278656
       // Two row buffers out of one `bmf_new(4 * i + 16)`, swapped once a row,
       // and two cursors into them: `cur` walks the row being written and
       // `above` the one before it, both re-derived as `row + 2` after the
       // swap.  The six neighbours `alt_p2_context` reads are `cur[-2 .. 0]`
       // and `above[0 .. 2]` -- three behind on this row, three at and ahead on
       // the last.
-      int32_t *row0;    // +278660
-      int32_t *row1;    // +278664
-      int32_t *cur;     // +278668
-      int32_t *above;   // +278672
+      // Weight-block pointers, one per column, not integers.  Every reader
+      // says so: `alt_p2_context` takes six of them straight into
+      // `CtxWeights::f0`, `alt_p2_model` reads `blk->cur[-1]` through a
+      // `float (**)[4]`, and `alt_p2_alloc` seeds every slot with the block's
+      // own `default_weights`.  They were `int32_t *` because that is the
+      // width Hex-Rays could see.
+      float (**row0)[4];    // +278660
+      float (**row1)[4];    // +278664
+      float (**cur)[4];     // +278668
+      float (**above)[4];   // +278672
       // One per bank: `alt_p2_model` runs five passes and reads
       // `bank_ctx[n5]` at the top of each, which is what says these five
       // scalars are an array.  `alt_p2_context` writes them one at a time.
@@ -4595,14 +4621,14 @@ inline AltP2Block *AltP2Block::alt_p2_alloc(int32_t img_w, int32_t plane)
   deadzone_lo = -dz;
   *(uint32_t *)&this->band_lo = -band - 7;
   *(uint32_t *)&this->band_hi = band + 8;
-  this->row0 = (int32_t *)bmf_new(4 * img_w + 16);
+  this->row0 = (float (**)[4])bmf_new(4 * img_w + 16);
   buf1 = bmf_new(4 * img_w + 16);
   // Byte 232 is row 14 lane 2 of the first neighbourhood's weight block --
   // `14 * 16 + 2 * 4` -- which is the slot `alt_p2_context` and `alt_p2_model`
   // both read as the scale on their update floor.  Seeding it to 1 is what
   // stops the first neighbourhood dividing by nothing.
-  ((float (*)[4])this)[14][2] = 1.0f;
-  this->row1 = (int32_t *)buf1;
+  this->nb_weights[0][14][2] = 1.0f;
+  this->row1 = (float (**)[4])buf1;
   this->cur = this->row0 + img_w + 2;
   if ( img_w > -4 )
   {
@@ -4611,10 +4637,10 @@ inline AltP2Block *AltP2Block::alt_p2_alloc(int32_t img_w, int32_t plane)
     {
       for ( p = 0; p < pairs; ++p )
       {
-        *(uint8_t **)&this->row1[2 * p] = (uint8_t *)this;
-        *(uint8_t **)&this->row0[2 * p] = (uint8_t *)this;
-        *(uint8_t **)&this->row1[2 * p + 1] = (uint8_t *)this;
-        *(uint8_t **)&this->row0[2 * p + 1] = (uint8_t *)this;
+        this->row1[2 * p] = this->nb_weights[0];
+        this->row0[2 * p] = this->nb_weights[0];
+        this->row1[2 * p + 1] = this->nb_weights[0];
+        this->row0[2 * p + 1] = this->nb_weights[0];
       }
       done = 2 * p + 1;
     }
@@ -4624,8 +4650,8 @@ inline AltP2Block *AltP2Block::alt_p2_alloc(int32_t img_w, int32_t plane)
     }
     if ( (uint32_t)(img_w + 4) > (done - 1) )
     {
-      *(uint8_t **)&this->row1[done - 1] = (uint8_t *)this;
-      *(uint8_t **)&this->row0[done - 1] = (uint8_t *)this;
+      this->row1[done - 1] = this->nb_weights[0];
+      this->row0[done - 1] = this->nb_weights[0];
     }
   }
   row = 0;
@@ -6574,7 +6600,8 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   int32_t sum_all;
   P2Ctx *cx1, *cx3;
   uint32_t q39, q10;
-  int32_t dtop2, run_dv3, dv_now4, run_dv4, run_up4, *up_row;
+  float (**up_row)[4];   // one weight block a column, on the row above
+  int32_t dtop2, run_dv3, dv_now4, run_dv4, run_up4;
   int8_t rate1;
   uint8_t *cx2p;
   P2Ctx *nb4;   // row cursors into the neighbourhood table
@@ -6618,7 +6645,8 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   bool in_band, no_ref;
   int16_t *nb2w, *nb2w2;
   P2Ctx *cursor1, *nb1, *nb2x;
-  int32_t sum4, lane5, nb_id, next_id, plane, in63, *cur, c_lo, mode, c_mid,
+  float (**cur)[4];      // and the same on the row being written
+  int32_t sum4, lane5, nb_id, next_id, plane, in63, c_lo, mode, c_mid,
           filt, lane3, g3sum, run_s, lane2, ctx0, bank0, pred0, sum_c, run0,
           ctx1, bank1, w1c, one1, pred1, run1, cx2_val0, ctx2, bank2, pred2,
           run2, bank3, w3c, pred3, run3, bank4, pred4, band_lo, band_hi,
@@ -6714,8 +6742,8 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   nb_id = blk->nb_id[(uint32_t)nb_slot];
   if ( blk->nb_id[(uint32_t)nb_slot] )
   {
-    wrow = &((float (*)[4])blk)[16 * nb_id];
-    *(int32_t *)&blk->f278656 = (int32_t)wrow;
+    wrow = blk->nb_weights[nb_id];
+    blk->nb_cur = wrow;
     // Normalised LMS.  Predict from the seven weight rows against the seven
     // inputs, take the error against what actually came, and step every weight
     // by  rate * error * input / (that input's running mean square + a floor).
@@ -6751,7 +6779,7 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
     next_id = blk->nb_id_used;
     blk->nb_id_used = ++next_id;
     blk->nb_id[(uint32_t)nb_slot] = next_id;
-    *(int32_t *)&blk->f278656 = (int32_t)&((float (*)[4])blk)[16 * (int16_t)next_id];
+    blk->nb_cur = blk->nb_weights[(int16_t)next_id];
   }
   nb1 = (P2Ctx *)blk->cursor[1];
   blk->p2_row[0][0] = (float)nb1->dval;
@@ -6890,13 +6918,13 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
     ra0 = nullptr;
   }
   cur = blk->cur;
-  weights.f0[0] = (float (*)[4])*(cur - 1);
+  weights.f0[0] = cur[-1];
   up_row = blk->above;
-  weights.f0[1] = (float (*)[4])up_row[1];
-  weights.f0[2] = (float (*)[4])up_row[2];
-  weights.f0[3] = (float (*)[4])*(cur - 2);
-  weights.f0[4] = (float (*)[4])*up_row;
-  weights.f0[5] = (float (*)[4])*cur;
+  weights.f0[1] = up_row[1];
+  weights.f0[2] = up_row[2];
+  weights.f0[3] = cur[-2];
+  weights.f0[4] = up_row[0];
+  weights.f0[5] = cur[0];
   c_lo = 14 * sum_u;
   mode = 1;
   c_mid = 13 * sum_ur;
@@ -6911,7 +6939,7 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
     c_mid = c_lo;
   if ( c_mid > 11 * sum_ul )
     mode = 3;
-  filt = __alt_p2_filter((float (*)[4])(void *)*(int32_t *)&blk->f278656, (float (*)[4])blk->p2_row, &weights, mode);
+  filt = __alt_p2_filter(blk->nb_cur, (float (*)[4])blk->p2_row, &weights, mode);
   cx0 = (P2Ctx *)blk->cursor[0];
   cx1 = (P2Ctx *)blk->cursor[1];
   *(int32_t *)&blk->pred_prev = filt;
@@ -12301,7 +12329,7 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
   P2Freq *frecg2, *frecg1, *frecg0, *frecg3, *gtop, *frec;
   P2Count *r0200, *r0040, *r0010;
   uint32_t off0, off1, off2, off3, off4, ctxw;
-  float (*f278656)[4];
+  float (*nb_cur)[4];
   float (*wrow_b)[4];
   bool go, eq_hi, lt_hi, ovf;
   uint8_t *bankp;   // `uint8_t *` beside the `char` scalars above
@@ -12365,23 +12393,23 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
   resid = (int16_t)(sample16 - blk->pred_prev);
   blk->cursor[0]->err = resid;
   blk->cursor[0]->aerr = (WORD2(resid) ^ resid) - WORD2(resid);
-  f278656 = blk->f278656;
-  ms1 = f278656[14][1] + 0.000099999997f;
-  wrow_b = *(float (**)[4])(blk->cur - 1);
+  nb_cur = blk->nb_cur;
+  ms1 = nb_cur[14][1] + 0.000099999997f;
+  wrow_b = blk->cur[-1];
   bias2 = blk->bias[2];
   n2_bias = blk->bias[0];
   d_bias2 = sample - bias2;
   bias1 = blk->bias[1];
   d_bias = bias1 - bias2;
-  ms_a = ((((sample - bias2) * (bias1 - bias2)) - f278656[14][0]) * 0.001f)
-      + f278656[14][0];
-  ms_b = ms1 + (((d_bias * d_bias) - f278656[14][1]) * 0.001f);
-  f278656[14][1] = ms_b;
+  ms_a = ((((sample - bias2) * (bias1 - bias2)) - nb_cur[14][0]) * 0.001f)
+      + nb_cur[14][0];
+  ms_b = ms1 + (((d_bias * d_bias) - nb_cur[14][1]) * 0.001f);
+  nb_cur[14][1] = ms_b;
   ms_b10 = 0.1f * ms_b;
   if ( (0.1f * ms_b) <= ms_a )
     ms_b10 = fminf(ms_b, ms_a);
-  f278656[14][0] = ms_b10;
-  // Two normalised-LMS updates side by side, on two weight blocks: `f278656` at a
+  nb_cur[14][0] = ms_b10;
+  // Two normalised-LMS updates side by side, on two weight blocks: `nb_cur` at a
   // fixed mean-square rate and `wrow_b` at one scaled by the confidence `conf`.
   // Same shape as `alt_p2_context`'s, run twice with different errors and
   // different floors.
@@ -12390,7 +12418,7 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
   {
     const float err_a     = (sample - bias1) * 2.5999999f;
     const float err_b     = d_bias2 * conf;
-    const float floor_a   = 26896.0f * f278656[14][2];
+    const float floor_a   = 26896.0f * nb_cur[14][2];
     const float floor_b   = 5041.0f * wrow_b[14][2];
     const float ms_rate_b = 0.013f * conf;
     int32_t j, k;
@@ -12401,10 +12429,10 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
         float x = blk->p2_row[j][k];
         float ms;
 
-        ms = f278656[7 + j][k]
-           + (x * x - f278656[7 + j][k]) * 0.05f;      // 0x439B40
-        f278656[7 + j][k] = ms;
-        f278656[j][k] += bmf_p2_rate[j][k] * err_a * x / (ms + floor_a);
+        ms = nb_cur[7 + j][k]
+           + (x * x - nb_cur[7 + j][k]) * 0.05f;      // 0x439B40
+        nb_cur[7 + j][k] = ms;
+        nb_cur[j][k] += bmf_p2_rate[j][k] * err_a * x / (ms + floor_a);
 
         ms = wrow_b[7 + j][k]
            + (x * x - wrow_b[7 + j][k]) * ms_rate_b;
@@ -12422,22 +12450,22 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
 
     for ( k = 0; k < 4; ++k )
     {
-      acc[k] = f278656[0][k] * blk->p2_row[0][k];
+      acc[k] = nb_cur[0][k] * blk->p2_row[0][k];
       for ( j = 1; j < 7; ++j )
-        acc[k] += f278656[j][k] * blk->p2_row[j][k];
+        acc[k] += nb_cur[j][k] * blk->p2_row[j][k];
     }
     pred     = n2_bias + bmf_hsum4(acc);
     err      = sample - pred;
-    ms_scale = f278656[14][2];
+    ms_scale = nb_cur[14][2];
 
     for ( j = 0; j < 7; ++j )
       for ( k = 0; k < 4; ++k )
-        f278656[j][k] += bmf_p2_rate[j][k] * err * blk->p2_row[j][k]
-                            / (f278656[7 + j][k] + ms_scale * 529.0f);
-    ++*(int32_t *)&f278656[15][0];
-    f278656[14][2] = ms_scale + ((10.0f - ms_scale) * 0.00019999999f);
+        nb_cur[j][k] += bmf_p2_rate[j][k] * err * blk->p2_row[j][k]
+                            / (nb_cur[7 + j][k] + ms_scale * 529.0f);
+    ++*(int32_t *)&nb_cur[15][0];
+    nb_cur[14][2] = ms_scale + ((10.0f - ms_scale) * 0.00019999999f);
   }
-  *blk->cur = *(uint32_t *)&blk->f278656;
+  *blk->cur = blk->nb_cur;
   ++blk->cur;
   ++blk->above;
   do
@@ -13677,11 +13705,12 @@ void __alt_p2_d8_decode_body(AltP2Block *blk, int8_t unread_flag, uint8_t *out, 
   uint8_t *row;
   ;
   uintptr_t code;
-  int32_t *cur, *r1;   // the row cursors, four bytes a step
+  float (**cur)[4], (**r1)[4];   // the row cursors, one weight block a step
   bool more;
   int16_t val;
   // The five planes, held across the rotation that ends a row.
-  int32_t wid, q, last, *r0, pred, val2;
+  float (*last)[4], (**r0)[4];
+  int32_t wid, q, pred, val2;
   int64_t err;
   uint32_t j;
   __rc_begin_decode(unread_flag);
@@ -13893,9 +13922,10 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *out) {   P2Ctx *cur0,
   uint32_t src2;
   AltP2Block **planep;
   float saved_p2_coef[7][4];
-  int32_t *cur, *r1;   // the row cursors, four bytes a step
+  float (**cur)[4], (**r1)[4];   // the row cursors, one weight block a step
   bool xf3, off;
-  int32_t raw, pl, nplanes, xf1, xf2, b4, *b0, pred0, code0, val0, pred1, code1,
+  float (*b4)[4], (**b0)[4];   // one row slot, and the row it comes from
+  int32_t raw, pl, nplanes, xf1, xf2, pred0, code0, val0, pred1, code1,
           val1, l7a, l4a, l5a, pred2, code2, val2, l7b, l4b, l5b,
           pred3, code3, l7c, l4c, l5c, nplanes2, pl3;
   void *made, *src1, **plane_p;
@@ -14279,9 +14309,10 @@ void __alt_p2_d8_encode_body(AltP2Block *blk, uint8_t *src, int32_t width, int32
   // the gate's answer -- nothing writes one of them and reads another.
   uint32_t *pair;   // the block's `ctx_pair`
   ;
-  int32_t *cur, *r1;   // the row cursors, four bytes a step
+  float (**cur)[4], (**r1)[4];   // the row cursors, one weight block a step
   uint8_t recon, recon2;
-  int32_t q, resid, drift, q2, row_bytes, last, *r0, pred, resid2, drift2, code;
+  float (*last)[4], (**r0)[4];
+  int32_t q, resid, drift, q2, row_bytes, pred, resid2, drift2, code;
   int64_t err;
   P2Ctx *rec2;
   uint32_t k;
@@ -14514,8 +14545,9 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
   int16_t seed1, l7c, seed2;
   uint32_t src1;
   AltP2Block *blk0, **xf3;
-  int32_t *cur, *r1;   // the row cursors, four bytes a step
-  int32_t row_i, height, pl, nplanes, src3, xf1, want0, b4, *b0, off0, seed0, at0,
+  float (**cur)[4], (**r1)[4];   // the row cursors, one weight block a step
+  float (*b4)[4], (**b0)[4];   // one row slot, and the row it comes from
+  int32_t row_i, height, pl, nplanes, src3, xf1, want0, off0, seed0, at0,
           cur0, code0, out0, recon0, drift0, l7a, l4a, l5a, cur1, code1, out1,
           recon1, drift1, l7b, l4b, l5b, cur2, code2, out2, recon2, drift2,
           l5c, seed3, blk3, cur3, drift3, nplanes2, pl3;

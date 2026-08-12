@@ -233,7 +233,7 @@ plane's folded residuals.
 
 ## 5. Choosing how to code each plane
 
-`choose_plane_coding` (847 lines) is the search. For every plane it decides:
+`choose_plane_coding` (856 lines) is the search. For every plane it decides:
 
 * the spatial predictor (2 bits),
 * whether the alternate model handles it (1 bit),
