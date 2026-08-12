@@ -3542,3 +3542,37 @@ rejects it, correctly, and pays for the search.
 Loosening the test would buy the speed back and is exactly the wrong trade. A
 map missing a body that has been renamed since answers `None` for it, that body
 is skipped, and the join silently undercounts. Slow and right.
+
+### Where it actually comes to rest
+
+§40 recorded 10 of 64 flat, 3 of them reading only the file. That was before
+the raw-offset work, `unsave.py`'s widening and the parser fix. Re-run against
+the tree at `5f52244`:
+
+```
+9 of 64 tools give the same answer for every revision checked.
+
+  decast.py         never opens the file it is given; its input is a compile of the working tree
+  explicitcmp.py    reads it, and warn.log
+  retype_locals.py  reads it, and strict.log
+  unbss.py          reads only what it is given
+  uncast.py         reads it, and a compile of the working tree
+  uncursor.py       reads only what it is given
+  unmemcast.py      reads only what it is given
+  unspill.py        reads only what it is given
+  unused.py         reads it, and a compile of the working tree
+
+4 of 9 read only the file they were replayed against
+```
+
+`resign.py` and `resign_group.py` have come off the list — they move now,
+because their candidate counts depend on a file that has changed under them —
+and `unbss.py` has gone on, for the mirror-image reason. Neither movement is a
+statement about the rules; the flat list is a property of the file *and* the
+history, and it will keep breathing.
+
+**Fifty-five of sixty-four** have been shown to answer differently somewhere in
+440 commits. Four more read only what they are given and found nothing at any
+of the twelve points. The remaining five are the residue this cannot reach:
+their input is a build log or a fresh compile of the working tree, and a
+revision from four hundred commits ago has neither.
