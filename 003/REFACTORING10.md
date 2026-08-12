@@ -19,15 +19,23 @@ because of their own spelling, not because there is nothing left.**
 ```
 python3 tools/shape.py                      # the standing census
 grep -oE '\b(LOBYTE|HIBYTE|BYTE[123]|LOWORD|HIWORD|WORD1)\(' subs1.hpp | wc -l
-grep -c '\b_this\b' subs1.hpp
-grep -cE '\*\([A-Za-z_0-9]+ \*\)&' subs1.hpp
-grep -nE '\bblk\s*\+\s*[0-9]{2,}' subs1.hpp
+grep -oE '\b_this\b' subs1.hpp | wc -l
+grep -oE '\*\([A-Za-z_0-9]+ \*+\)&' subs1.hpp | wc -l   # 303; 301 outside comments
+grep -oE '\bblk\s*\+\s*[0-9]{2,}' subs1.hpp | wc -l
 python3 tools/methodise.py subs1.hpp        # says 0
 python3 tools/unloword.py subs1.hpp         # says 0
 python3 tools/liftframe.py subs1.hpp        # says 0, with reasons
 ```
 
-The last three are the interesting ones, and §1 is about why.
+`grep -o | wc -l` and not `grep -c`, which is what the first draft of this
+document used and which counts **lines that match, not matches**. Three of its
+figures were wrong that way, all of them low: `_this` at 151 when it is 172,
+the packed stores at 272 when they are 301, and `read_bmp`'s header references
+at 44 when they are 49. A line with two `_this` on it is not one `_this`, and
+this file has plenty. Anything below quoted as a count of *sites* is a
+`grep -o`; anything quoted as a count of *lines* says so.
+
+The last three commands are the interesting ones. Phase A is why.
 
 ---
 
@@ -35,30 +43,44 @@ The last three are the interesting ones, and §1 is about why.
 
 | population | today | target | phase |
 | --- | --- | --- | --- |
-| extractor macros (`LOWORD`, `LOBYTE`, `BYTE2`, …) | **103** | 0 | B |
-| — of which writes into a 32-bit local | 87 | 0 | B |
-| `_this` uses | **151** | ≤ 21 | D |
-| — in `alt_p1_alloc` + `alt_p2_alloc` | 114 | 0 | D |
-| `*(T *)&member` stores | **272** | see below | C |
+| extractor macros in code (3 more are comment mentions) | **100** | 0 | B |
+| — partial writes, `LOWORD(x) = e` / `LOBYTE(x) = e` | 85 | 0 | B |
+| — of those, into a 32-bit local | 83 | 0 | B |
+| — the distinct locals they write | 51 | 0 | B |
+| — of those, the 4-byte ones `unloword.py` considers | 49 | 0 | B |
+| `_this` occurrences | **172** | 39 after D, 27 after F | D, F |
+| — in `alt_p1_alloc` (66) + `alt_p2_alloc` (65) | 131 | 0 | D |
+| — outside any function body (comments, asserts) | 19 | audited | F |
+| `*(T *)&…` casts in code | **301** | see below | C |
+| — of which the target is a struct member | 193 | — | C |
 | — same width as the member (signedness only) | 115 | 0 | C |
 | — wider than the member (a real packed store) | 24 | 24, named | C |
-| — narrower (a byte field of a word) | 6 | 0 | C |
+| — a pointer store, `*(T **)&…` | 10 | 0 | C, D |
+| — narrower than the member | 1 | 0 | C |
+| — the classifier could not type | 43 | 0 unknown | C |
 | raw `blk + N` indices | **12** | 0 | D |
-| pointer casts (all kinds) | **1205** | < 1000 | C, D |
+| pointer casts (all kinds, `shape.py`) | **1205** | falls; no number | C, D |
 | frames | **9** | 9, re-asked | E |
-| `goto` / `LABEL_n:` | **49 / 33** | < 30 / < 20 | G |
-| positional member names (`w4`, `w8`, `w12`, `w2`) | **4 records** | 0 | F |
+| `goto` / `LABEL_n:` | **49 / 33** | falls; no number | G |
+| records with a positional member name | **3** | 0 | F |
 | conversion-warning ratchet | 1038 | *rises* — see §2 | — |
 
-The ratchet is the one row that is expected to move the wrong way, and §2 says
-why that is the correct outcome rather than a regression.
+Two rows deliberately carry no target. "Pointer casts under 1000" and "gotos
+under 30" were in the first draft and both were invented — a round number that
+nothing in the survey supports is a target you can hit by picking easy sites,
+which is the opposite of what these phases are for. What C and D are worth is
+measured by the four cast rows above them, and what G is worth is a `goto` that
+became a `break`; the totals are a consequence, not a goal.
+
+The ratchet is the one row expected to move the wrong way, and §2 says why that
+is the correct outcome rather than a regression.
 
 ---
 
 ## 2. The ratchet will rise, and that is the point
 
 `build.sh`'s `BMF_WARN` count is a ratchet: `test.sh` fails when it goes above
-`warn.txt`. Three of the phases below **remove casts that were hiding a
+`warn.txt`. Phases B, C and D all **remove casts that were hiding a
 conversion**, and a hidden conversion is worse than a counted one:
 
 ```c
@@ -95,9 +117,9 @@ parameter are declared `T *__name(`, where the character before the name is
 `*` and not a space. They are silently not candidates:
 
 ```
-int32_t *__alt_p1_alloc(AltP1Block *_this, …)      60 uses of _this
-uint8_t *__alt_p2_alloc(AltP2Block *_this, …)      54 uses
-FILE    *__bmf_close_archive(BmfArc *_this)         3 uses
+int32_t *__alt_p1_alloc(AltP1Block *_this, …)      66 uses of _this
+uint8_t *__alt_p2_alloc(AltP2Block *_this, …)      65 uses
+FILE    *__bmf_close_archive(BmfArc *_this)         2 uses
 ```
 
 `(.+?)[\s*]` instead of `(.+?)\s+` makes all three candidates.
@@ -136,9 +158,10 @@ Phase F's answer — a name — not Phase D's.
 
 ### A.2 `unloword.py` disqualifies 48 of its 49 candidates on one rule
 
-It finds 49 locals written through `LOWORD`/`LOBYTE` and retypes none. The
-disqualification is measured, and it is one line: *a read this rule cannot
-account for*. The example is
+It finds 49 **locals** — the 85 partial writes in §1 land on 51 distinct names,
+two of which it drops for being `int64_t` rather than 32-bit — and retypes
+none. The disqualification is measured, and it is one line: *a read
+this rule cannot account for*. The example is
 
 ```c
 int32_t rows_left, pred, north, northwest;
@@ -180,16 +203,23 @@ a revision where the work existed.
 
 ## Phase B — the extractor macros
 
-103 uses, and they are not one thing:
+100 uses in code, and they are not one thing:
 
 | form | count | what it is | answer |
 | --- | --- | --- | --- |
 | `LOWORD(x) = e` | 70 | a 16-bit local held in a 32-bit register | retype the local |
-| `LOBYTE(x) = e` | 17 | the same at 8 bits | retype the local |
-| `LOWORD(e)` read | 8 | a mask on a value that is already narrow | delete the mask |
+| `LOBYTE(x) = e` | 15 | the same at 8 bits | retype the local |
+| `LOWORD(e)` read | 7 | a mask on a value that is already narrow | delete the mask |
 | `BYTE1/BYTE2/HIBYTE/HIWORD(e)` read | 8 | a byte *of* a word — a real field | name the field |
 
 The first two are Phase A.2's output, applied. The third falls out with them.
+
+Two of the 85 partial writes are not a narrowing at all: `LOWORD(x) = …` on a
+local declared `PixRec *`. Those are a register holding an address in one
+lifetime and a value in the next, and `unloword.py` already declines them by
+name — its docstring records that proposing one turned a green build into an
+`-fpermissive` conversion. They stay until somebody splits the lifetimes, which
+is not this phase.
 
 The fourth is different and must not be swept in with the rest: `HIBYTE(magic)`
 and `BYTE2(magic)` in `expand_image` are reading the version digits out of the
@@ -207,8 +237,10 @@ stays at 0. `BMF_WARN` may move; §2.
 
 ## Phase C — the casts
 
-272 `*(T *)&member` stores, classified by comparing the cast's width against the
-member's declared width:
+301 `*(T *)&…` casts in code. 193 of them have a struct member as their target
+and can be classified by comparing the cast's width against the member's
+declared width; the other 108 are `&array[i]` and similar, and are Phase D's
+problem or nobody's.
 
 **115 same width.** Pure signedness. `*(int32_t *)&this->ctr_node = ctx0` where
 `ctr_node` is `uint32_t` is `this->ctr_node = ctx0` with a warning instead of a
@@ -216,24 +248,47 @@ cast. Thirteen of them are `int32_t` written as `int32_t` — not even a
 signedness change, just noise Hex-Rays emitted. These delete.
 
 **24 wider than the member.** These are the real thing and they must survive as
-something readable. `*(uint32_t *)&_this->has_ref = …` writes four bytes across
-`has_ref` and its three neighbours because MSVC merged four byte stores. The
-answer is not to keep the cast and not to split it into four stores that might
-not be the same instruction sequence — it is to give the four bytes a named
-union member, the way `PlaneDesc` and `BmfImage` already do, and store to that.
-Each one is a small reading job with a `static_assert` at the end of it.
+something readable:
 
-**6 narrower.** `*(uint8_t *)&x` on a 32-bit member: a byte field of a word,
-which is Phase B's fourth row wearing different clothes. Same answer — name the
+```c
+*(uint32_t *)&rec->match  = …   // match is uint8_t[6] — four of the six
+*(uint64_t *)&blk->sel    = …   // sel is int32_t[2]  — both, in one store
+*(uint32_t *)&p_i->_pad8  = …   // BmfImage +8..11, which is why _pad8 exists
+```
+
+MSVC merged adjacent byte or word stores into one, and the cast is Hex-Rays
+saying so. The answer is not to keep the cast, and not to split it into six
+stores that may not be the same instruction sequence — it is to give the run a
+named union member, the way `PlaneDesc` and `BmfImage` already do, and store to
+that. Each is a small reading job ending in a `static_assert`.
+
+*(An earlier draft used `*(uint32_t *)&_this->has_ref` as the example here.
+That was wrong: `has_ref` is declared `int32_t`, so the cast is the same width
+and it belongs in the 115 above. The lesson is the phase's own: the width of
+the member is a thing to look up, not to infer from the shape of the cast.)*
+
+**1 narrower**: `*(uint16_t *)&img_at->stride`, the low half of a 32-bit
+stride, which is Phase B's fourth row wearing different clothes — name the
 field.
 
-**47 my classifier could not type**, because the member's declaration is in a
-form its regex does not read (`P1Ctx <- uint32_t`, `BmfImage <- uint32_t`, and
-ten `double` casts with no member at all). These need looking at rather than
-counting, and several are likely the same packed-store story. **The classifier
-should become `tools/uncastwidth.py`** so that this table is a command and not
-a paragraph in a plan — a count in prose is a count that goes stale, which is
-`REFACTORING9.md` §30 in one sentence.
+That one was **seven** in the first draft, because the classifier took `\*+`
+and then compared `sizeof(uint8_t)` against the member, turning six
+`*(uint8_t **)&…` pointer stores into "narrow" casts. They are their own row
+now: **10 pointer stores**, six of them the `row0`/`row1` seeds D.1 is about
+and the rest waiting on the same question — what those slots hold. A classifier
+that ignores pointer depth will mis-bucket every one of them, which is the
+concrete reason for the next paragraph.
+
+**43 the classifier could not type**, because the member's declaration is in a
+form its regex does not read (`P1Ctx`, `BmfImage`, `PixRec` as the member type,
+and ten `double` casts whose target is not a member at all). These need reading
+rather than counting, and several are likely the same packed-store story.
+
+**The classifier should become `tools/uncastwidth.py` before any of Phase C is
+done**, because everything above came out of a throwaway script with at least
+one known defect, and a table in prose is a table that goes stale — which is
+`REFACTORING9.md` §30 in one sentence. Its first job is to reproduce the four
+numbers above; where it disagrees, it is right and this section is wrong.
 
 **Check.** The gate for all of it. For the 24, additionally: the `static_assert`
 that pins the union's layout, and `BMF_STRICT` at 0 — a packed store written
@@ -246,24 +301,25 @@ wrongly is exactly the sort of thing `-fpermissive` used to absorb.
 ### D.1 The two allocators become methods
 
 With A.1 fixed, `__alt_p1_alloc` and `__alt_p2_alloc` are methods of
-`AltP1Block` and `AltP2Block`. 114 of the file's 151 `_this` uses are in those
-two bodies and all 114 become `this->`, which is not by itself an improvement —
-it is what makes the next step possible, because a method can drop the
-receiver where a free function cannot.
+`AltP1Block` and `AltP2Block`. 131 of the file's 172 `_this` occurrences are in
+those two bodies and all 131 become `this->`, which is not by itself an
+improvement — it is what makes the next step possible, because a method can
+drop the receiver where a free function cannot.
 
 What is left in `alt_p2_alloc` afterwards is the actual reading job, and it is
 small and specific:
 
 ```c
-*(uint32_t *)&_this->has_ref = …;            // Phase C: a four-byte field
 *(uint8_t **)&_this->row0[2 * p] = (uint8_t *)_this;   // ← this one
-((float (*)[4])_this)[14][2] = 1.0f;         // ← and this one
+((float (*)[4])_this)[14][2] = 1.0f;                   // ← and this one
 ```
 
-The second seeds `row0`/`row1` — declared `int32_t *` — with the block's own
-address, which says those rows are not `int32_t` at all but a pointer-sized
+The first seeds `row0`/`row1` — declared `int32_t *` — with the block's own
+address, which says those rows do not hold `int32_t` at all but a pointer-sized
 sentinel the neighbourhood walk compares against. Settling that settles the
-type, and the type settles seven casts.
+type, and the type settles **six** casts: the four in the unrolled pair loop and
+the two in its tail. (A seventh `*(uint8_t **)` in the file is a comment
+mentioning the shape, not an instance of it.)
 
 The third writes 1.0f at byte 232 of the block through a cast of the whole
 object, and the comment beside it already works out that byte 232 is
@@ -351,8 +407,12 @@ So E.1 is: `read_bmp` reads one `BmpHeader`, the same type the writer uses. The
 `_pad` runs stop being padding and become `biSizeImage`, `biXPelsPerMeter`,
 `biYPelsPerMeter` and `biClrImportant` — fields the reader skips, which is a
 different statement from fields nobody identified. §46's header checks then read
-against names instead of offsets. Forty-four sites reach one of these eight
-slots; two of them are the `__frame.bmp_info_hdr[1]` that is `hdr.biWidth`.
+against names instead of offsets. Forty-nine references reach the eight header
+slots (`bmp_file_hdr`, `bmp_off_bits`, `bmp_info_hdr`, `bmp_height`,
+`bmp_planes`, `bmp_bits`, `bmp_compression`, `bmp_clr_used`); two of them are
+the `__frame.bmp_info_hdr[1]` that is `hdr.biWidth`. `_pad2` and `_pad3` have
+**zero** references, which is what "fields the reader skips" means measured
+rather than asserted.
 
 The one thing to watch: the two `fread`s are inside a `||` chain whose
 short-circuit order is the validation order, and `BmpHeader` is one struct where
@@ -400,12 +460,18 @@ why §43 exists.
 
 ## Phase F — the names that are still positions
 
-Four records still carry members named for their offsets:
+Three records still carry members named for their offsets, plus one parameter:
 
-* `PlaneDesc::w4`, `w8`, `w12`. `w8` is already aliased as `plane_count` and
-  read 149 times through that name; `w12` has a comment saying it is the
-  near-lossless quantiser; `w4` is the 512 the magic check compares against.
-  Three names, each already worked out in prose next to the field.
+* `PlaneDesc::w0`, `w4`, `w8`, `w12`. `w8` is already aliased as `plane_count`
+  and read through that name **136** times; `w12` has a comment saying it is the
+  near-lossless quantiser; `w4` is the 512 the magic check compares against;
+  `w0` is a union tag whose four bytes are named inside it. Three names to
+  settle, each already worked out in prose next to the field.
+
+  While there: the comment on `plane_count` says it is "read as a scalar 149
+  times" and the count is 136 today. It was true when it was written. That is
+  the §30 failure in a single line, sitting in the record this phase is about,
+  and fixing the number is part of the phase rather than an aside.
 * `P2Count::w2` — named in a comment as the value `b0` scales, which is a name.
 * `AltP2Block::f278656` — a weight block still called by its offset.
 * `alt_p2_filter`'s parameter is `float (*_this)[4]` and is not a receiver.
@@ -424,18 +490,35 @@ longer has, plus the gate.
 
 ## Phase G — the `goto` residue
 
-49 gotos and 33 labels, concentrated: `read_bmp` 12, `expand_image` 11,
-`unmodel_plane_slow` 10, `search_filter` 8, `compress_image` 8. `shape.py`
-already splits them by kind — 15 restart a loop, 32 exit N blocks, 2 go
+49 gotos and 33 labels, concentrated in six bodies:
+
+| body | gotos | labels |
+| --- | --- | --- |
+| `read_bmp` | 10 | 2 |
+| `unmodel_plane_slow` | 7 | 3 |
+| `expand_image` | 6 | 5 |
+| `reduce_alphabet` | 4 | 3 |
+| `search_filter` | 4 | 4 |
+| `compress_image` | 4 | 4 |
+
+(The first draft gave these as 12/11/10/8/8, which was gotos and labels added
+together and attributed by a line-scan that put some of them in the wrong body.
+The table above counts each separately, from `structs.bodies`.)
+
+`shape.py` splits the 49 by kind — 15 restart a loop, 32 exit N blocks, 2 go
 sideways to a join, **0 jump into a block**.
 
-That last zero is the one that matters: every remaining goto is expressible as
-`break`, `continue` or a `return`, and none of them is the irreducible kind.
-`tools/degoto.py` handles two shapes and §41 records a third it got wrong and
-now rejects. This phase is last because it is the one where a wrong rewrite is
-hardest to see — the region that "closed the enclosing `while` and opened an
-`if`, summing to zero braces" cost a debugging session in §41 — and because
-E.1 will delete some of `read_bmp`'s twelve for free.
+That last zero is what makes the phase tractable: none of these is the
+irreducible kind, so no rewrite has to invent a state variable. It does *not*
+follow that all 49 are a one-line `break` — the 2 that go sideways to a join
+are the shape `degoto.py` got wrong in §41 and now rejects, and they may want
+restructuring rather than a keyword. 47 of the 49 are the easy kind; the plan
+should not round that to 49.
+
+This phase is last because a wrong rewrite here is the hardest to see — the
+region that "closed the enclosing `while` and opened an `if`, summing to zero
+braces" cost a debugging session in §41 — and because E.1 removes some of
+`read_bmp`'s ten for free.
 
 **Check.** The gate per rewrite, and `degoto.py`'s balanced-prefix guard, which
 is what §41 added.
@@ -444,9 +527,9 @@ is what §41 added.
 
 ## What this plan does not propose
 
-* **No new behaviour.** Round 9 ended with the bug-fixing goal met and §46–§49
-  recording seven-plus defects repaired. Everything above is shape. A change
-  that moves a stream is a bug in the change.
+* **No new behaviour.** Round 9 ended with the bug-fixing goal met: §46 records
+  seven defects repaired, §47 three, §48 five and §49 one. Everything above is
+  shape. A change that moves a stream is a bug in the change.
 * **No reformatting sweep.** The `;` on its own line after every `{`, the
   `if ( x )` spacing — that is Hex-Rays' and it is harmless. Changing it would
   produce the largest diff in the project's history and hide whatever else was
@@ -465,15 +548,25 @@ is what §41 added.
 ```
 A  the two blocked tools          (unblocks B and D; no source change)
 B  the extractor macros           (needs A.2)
-C  the casts                      (independent; raises the ratchet — §2)
-D  _this, the allocators, freeing (needs A.1; C cleans up after it)
-E  the frames                     (independent, and the only phase that is reading)
-F  the positional names           (after D, which changes what alt_p2_filter is called)
+C  the casts                      (needs its own tool first — see Phase C;
+                                   raises the ratchet — §2)
+D  _this, the allocators, freeing (needs A.1)
+E  the frames                     (independent, and the phase that is reading)
+F  the positional names           (independent of all of them)
 G  the gotos                      (last; E.1 removes some of its work)
 ```
 
-A, B, C, D and G are mechanical enough to be tool-driven and gated. **E is not,
+Only B, D and G are mechanical end to end — a rule proposes, the gate decides.
+**C is two phases wearing one name**: 115 cast deletions that are mechanical,
+and 24 packed stores that are 24 small reading jobs, and it should be split the
+moment `uncastwidth.py` exists to draw the line. **E is not mechanical at all,
 and pretending otherwise is how a plan produces a lift that passes the gate and
-means nothing.** If only one phase gets done, it should be A — because until it
-is, two of this project's rules are reporting zero for the wrong reason, and
-that is the failure mode the last three rounds were entirely about.
+means nothing.**
+
+F was listed as needing D in the first draft, on the grounds that D "changes
+what `alt_p2_filter` is called". It does not — A.1 declines that body and D
+never touches it. F depends on nothing.
+
+If only one phase gets done, it should be A: until it is, two of this project's
+rules report zero for the wrong reason, and that is the failure mode the last
+three rounds were entirely about.
