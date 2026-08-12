@@ -284,8 +284,21 @@ def summary():
         sum(sum(c - 1 for c in f['slots'].values()) for f in fr))
     row('  member runs walked as arrays',
         sum(sum(f['runs'].values()) for f in fr))
-    row('  frames that dissolve outright',
-        sum(1 for f in fr if not f['slots'] and not f['runs']))
+    # This row used to be "frames that dissolve outright", counting the ones
+    # with neither an aliased slot nor a member run to unpick first.  Once the
+    # last alias went it equalled the row above it exactly, under a name that
+    # reads as "nine frames could just be removed" while `liftframe.py`
+    # reported none it could offer.  A row whose value is another row's under a
+    # different name is not a measurement; these three are what is actually
+    # known about the nine, and they add up to it.
+    try:
+        import liftframe
+        offers, declined = liftframe.candidates(lines)
+        row('  this can offer to lift', len(offers))
+        row('  tried and reverted', len(liftframe.PROVEN))
+        row('  declined, every member in a union', len(declined))
+    except Exception:                                             # noqa: BLE001
+        pass
     row('structs', len(members))
     row('  still ObjN', sum(1 for k in members if re.fullmatch(r'Obj\d+', k)))
     row('  fNN members / named ones',

@@ -39,7 +39,9 @@ frames                                  —        17             9
   slots carrying two names               —         —             0
   extra names on those slots             —         —             0
   member runs walked as arrays           —         —             0
-  frames that dissolve outright          —         —             9
+  this can offer to lift                 —         —             0
+  tried and reverted                     —         —             5
+  declined, every member in a union      —         —             4
 structs                                 —         —            24
   still ObjN                             —         —             0
 fNN members / named ones             93/121     5/162         0/172
@@ -3058,3 +3060,24 @@ names" — it maps 74, and the checked-in file said 76 because it had not been
 regenerated since. The sentence now says "every named body", which is what it
 meant and what the tool's own last line already counts; the file is
 regenerated.
+
+### A row whose value was another row's
+
+`shape.py` printed **`frames that dissolve outright  9`** beside
+**`frames  9`**. The row counted frames with neither an aliased slot nor a
+member run to unpick first, which was a real distinction while there were
+aliases; once the last one went it equalled the row above it exactly, under a
+name that reads as "nine frames could just be removed" — while `liftframe.py`
+reported none it could offer.
+
+A row whose value is another row's under a different name is not a
+measurement. What is actually known about the nine is `liftframe.py`'s own
+split, so that is what §1 carries now:
+
+```
+  this can offer to lift             0
+  tried and reverted                 5
+  declined, every member in a union  4
+```
+
+Nine, and each one accounted for.
