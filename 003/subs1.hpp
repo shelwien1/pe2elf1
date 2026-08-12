@@ -7991,6 +7991,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
   uint8_t tbl64a[64], tbl64b[64];
   int64_t q2;
   double d5, d6;
+  uint8_t *row_c, *row_d;   // the third plane's row cursor, one pixel a step
   uint8_t *pp;
   uint32_t uu;
   int32_t wa_slot;
@@ -8004,17 +8005,17 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
   double sum22, sum11, dv0, dv1, dv2, sum01, sum02, sum12, sum02_c, inv;
   int16_t g1_lo;
   uint32_t n_quads, next_plane, row, slack;
-  int32_t n_planes, data_size, result, pick01, xform, dw, *win_row,
-          wt8, wt4, c2, c2w, c1, c1w, c0, bin0, pred, xform_row, win,
-          sum, best_sum, i, pos2, best_sum2, sum2, wt4_dn, wt8_dn, wt4_dn_end,
-          wt8_dn_end, dv3, wa, wb, wc, nx0, dg0, dn0, ad0, dnx1, g0,
-          dn1, nx2, g1, dnx2, g2, pa, pb, bin_lin, quad_r, alpha, bin_lin2,
-          r0, r1, r2, wa_pick, pred4, pred4b, *hist2, sum3, best_sum3, npix_c,
-          stride_c, left_c, ul_c, g_c, cur_c, n_c, bin_c, wt4_best_dn, npix_d,
-          stride_d, left_d, ul_d, g_d, cur_d, n_d, bin_d, wt8_best_dn, wt4_up,
-          wt8_up, wt4_up_end, wt8_up_end, npix_a, stride_a, left_a, r_a, ul_a,
-          g_a, cur_a, n_a, bin_a, wt4_best, npix_b, stride_b, left_b, r_b,
-          ul_b, g_b, cur_b, n_b, bin_b, wt8_best;
+  int32_t n_planes, data_size, result, pick01, xform, dw, *win_row, wt8, wt4,
+          c2, c2w, c1, c1w, c0, bin0, pred, xform_row, win, sum, best_sum, i,
+          pos2, best_sum2, sum2, wt4_dn, wt8_dn, wt4_dn_end, wt8_dn_end, dv3,
+          wa, wb, wc, nx0, dg0, dn0, ad0, dnx1, g0, dn1, nx2, g1, dnx2, g2,
+          pa, pb, bin_lin, quad_r, alpha, bin_lin2, r0, r1, r2, wa_pick,
+          pred4, pred4b, *hist2, sum3, best_sum3, npix_c, stride_c, left_c,
+          ul_c, g_c, cur_c, n_c, bin_c, wt4_best_dn, npix_d, stride_d, left_d,
+          ul_d, g_d, cur_d, n_d, bin_d, wt8_best_dn, wt4_up, wt8_up,
+          wt4_up_end, wt8_up_end, npix_a, stride_a, left_a, ul_a, ofs_ul_a,
+          ofs_up_a, ofs_ul_b, ofs_up_b, g_a, cur_a, n_a, bin_a, wt4_best,
+          npix_b, stride_b, left_b, ul_b, g_b, cur_b, n_b, bin_b, wt8_best;
   uint32_t pair, cost0, cost1, best_cost, best, cost_flat, i4, quad, cost_lin, best4, cost_c0, cost_c1,
            cost_c2, cost_c, cost_d, cost_a, cost_b;
   uint8_t *px, *end_px, *q_c, *r_c, *p_c, *q_d, *r_d, *p_d, *q_a, *p_a, *q_b,
@@ -8148,42 +8149,43 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                   stride_a = (uint16_t)img_a->stride;
                   x3[3] = wt8_up;
                   x1[0] = wt4_up;
-                  x1[1] = npix_a - 1;
-                  x2[1] = -stride_a;
+                  // Three cursors one pixel apart, and the three neighbour
+                  // offsets they are indexed by.  `x2`'s four lanes held all
+                  // of this: two offsets, the third plane's cursor as an
+                  // integer, and the gradient whose low half the bin reads.
+                  // `x1[2..3]` held `q_a` and `p_a` as a `__PAIR64__` spilled
+                  // and reloaded every iteration, which is `-= left_a` said
+                  // the long way, and `x1[1]` held the loop counter.
+                  n_a = npix_a - 1;
+                  ofs_up_a = -stride_a;
                   left_a = -plane_count;
-                  x2[0] = -stride_a - plane_count;
-                  x1[3] = x0[0] - x2[0] + 16;
-                  x1[2] = __frame.q1 + x0[0] - x2[0] + 16;
-                  q_a = (uint8_t *)x1[2];
-                  r_a = __frame.plane_b + x0[0] - x2[0] + 16;
-                  p_a = (uint8_t *)x1[3];
+                  ofs_ul_a = -stride_a - plane_count;
+                  p_a = (uint8_t *)(x0[0] - ofs_ul_a + 16);
+                  q_a = (uint8_t *)(__frame.q1 + x0[0] - ofs_ul_a + 16);
+                  row_c = (uint8_t *)(__frame.plane_b + x0[0] - ofs_ul_a + 16);
                   do
                   {
-                    ul_a = p_a[x2[0]];
-                    *(int64_t *)&x1[2] = __PAIR64__((uint32_t)p_a, q_a);
-                    x2[2] = r_a;
-                    g_a = ul_a + *p_a - p_a[x2[1]] - p_a[left_a];
+                    ul_a = p_a[ofs_ul_a];
+                    g_a = ul_a + *p_a - p_a[ofs_up_a] - p_a[left_a];
                     cur_a = *q_a;
-                    x2[3] = g_a;
-                    r_a = x2[2] - left_a;
-                    n_a = x1[1];
-                    bin_a = (((int16_t *)x2)[6]
+                    bin_a = ((int16_t)g_a
                           - (uint16_t)((x1[0]
-                                              * (q_a[x2[0]] + cur_a - q_a[x2[1]] - q_a[left_a])
+                                              * (q_a[ofs_ul_a] + cur_a - q_a[ofs_up_a] - q_a[left_a])
                                               + __frame.wt_slot
-                                              * (*(uint8_t *)(x2[2] + x2[0])
-                                               + *(uint8_t *)x2[2]
-                                               - *(uint8_t *)(x2[2] + x2[1])
-                                               - (uint32_t)*(uint8_t *)(x2[2] + left_a))
+                                              * (row_c[ofs_ul_a]
+                                               + *row_c
+                                               - row_c[ofs_up_a]
+                                               - (uint32_t)row_c[left_a])
                                               + 40) >> 7)
                           - 256)
                          & 0x1FF;
                     ++*(uint32_t *)&__frame.buf_1[4 * bin_a];
                     q_a -= left_a;
-                    p_a = (uint8_t *)(x1[3] - left_a);
-                    x1[1] = n_a - 1;
+                    p_a -= left_a;
+                    row_c -= left_a;
+                    --n_a;
                   }
-                  while ( n_a != 1 );
+                  while ( n_a );
                   wt8_up = x3[3];
                   wt4_up = x1[0];
                   cost_a = __estimate_cost((uint8_t *)__frame.buf_1, 512);
@@ -8206,42 +8208,39 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                     stride_b = (uint16_t)img_a->stride;
                     x3[3] = wt8_up;
                     x1[0] = wt4_up;
-                    x4[0] = npix_b - 1;
-                    x5[0] = -stride_b;
+                    // The `wt8` half of the same search: the block above with
+                    // `x4` and `x5` in place of `x1` and `x2`, and `x3[3]`
+                    // holding the weight rather than `__frame.wt_slot`.
+                    n_b = npix_b - 1;
+                    ofs_up_b = -stride_b;
                     left_b = -plane_count;
-                    x4[3] = -stride_b - plane_count;
-                    x4[2] = x0[0] - x4[3] + 16;
-                    q_b = (uint8_t *)(__frame.q1 + x0[0] - x4[3] + 16);
-                    x4[1] = (int32_t)q_b;
-                    r_b = __frame.plane_b + x0[0] - x4[3] + 16;
-                    p_b = (uint8_t *)x4[2];
+                    ofs_ul_b = -stride_b - plane_count;
+                    p_b = (uint8_t *)(x0[0] - ofs_ul_b + 16);
+                    q_b = (uint8_t *)(__frame.q1 + x0[0] - ofs_ul_b + 16);
+                    row_d = (uint8_t *)(__frame.plane_b + x0[0] - ofs_ul_b + 16);
                     do
                     {
-                      ul_b = p_b[x4[3]];
-                      *(int64_t *)((uint8_t *)x4 + 4) = __PAIR64__((uint32_t)p_b, q_b);
-                      x5[1] = r_b;
-                      g_b = ul_b + *p_b - p_b[x5[0]] - p_b[left_b];
+                      ul_b = p_b[ofs_ul_b];
+                      g_b = ul_b + *p_b - p_b[ofs_up_b] - p_b[left_b];
                       cur_b = *q_b;
-                      x5[2] = g_b;
-                      r_b = x5[1] - left_b;
-                      n_b = x4[0];
-                      bin_b = (((int16_t *)x5)[4]
+                      bin_b = ((int16_t)g_b
                             - (uint16_t)((x5[3]
-                                                * (q_b[x4[3]] + cur_b - q_b[x5[0]] - q_b[left_b])
+                                                * (q_b[ofs_ul_b] + cur_b - q_b[ofs_up_b] - q_b[left_b])
                                                 + x3[3]
-                                                * (*(uint8_t *)(x5[1] + x4[3])
-                                                 + *(uint8_t *)x5[1]
-                                                 - *(uint8_t *)(x5[1] + x5[0])
-                                                 - (uint32_t)*(uint8_t *)(x5[1] + left_b))
+                                                * (row_d[ofs_ul_b]
+                                                 + *row_d
+                                                 - row_d[ofs_up_b]
+                                                 - (uint32_t)row_d[left_b])
                                                 + 40) >> 7)
                             - 256)
                            & 0x1FF;
                       ++*(uint32_t *)&buf_2[4 * bin_b];
                       q_b -= left_b;
-                      p_b = (uint8_t *)(x4[2] - left_b);
-                      x4[0] = n_b - 1;
+                      p_b -= left_b;
+                      row_d -= left_b;
+                      --n_b;
                     }
-                    while ( n_b != 1 );
+                    while ( n_b );
                     wt8_up = x3[3];
                     wt4_up = x1[0];
                     cost_b = __estimate_cost((uint8_t *)buf_2, 512);

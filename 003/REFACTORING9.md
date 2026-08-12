@@ -22,16 +22,16 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17059
+subs1.hpp lines                      17787     17616         17058
 bmf.cpp lines                            —         —           365
-raw-offset sites                        22        12             18
+raw-offset sites                        22        12             14
   off `_this`                            —         1             0
   in functions                           —         1             0
 byte offsets on a typed base           121         0             0
-pointer casts                         2137      1545          1224
-  to a scalar                            —         —           506
+pointer casts                         2137      1545          1211
+  to a scalar                            —         —           494
   to a record                            —         —           364
-  to a scalar, of an address             —         —           349
+  to a scalar, of an address             —         —           348
   to a record, of an address             —         —             5
 declarations carrying alignas            —         —            22
 frames                                  —        17             9
@@ -57,7 +57,7 @@ goto / LABEL_n:                     112/79     81/55         49/33
   restart a loop / exit N blocks         —         —         15/32
   sideways to a join / to neither        —         —           2/0
   jump into a block                      —         —             0
-conversion warnings                   1455      1331          1051
+conversion warnings                   1455      1331          1048
 ```
 
 `python3 tools/checktable.py` compares that table against `shape.py --rows`
@@ -3238,3 +3238,83 @@ remove that nothing had reached before.
 Replayed over the file's history the rule reports 28 at `2127451` and 29 at
 `85f9b43`, which is the control the previous version could not have had: it
 answered 0 or 1 everywhere.
+
+## 42. The two histogram loops
+
+What was left of `choose_plane_coding` after §41 was its two inner loops, which
+are the same loop twice — the `wt4` search and the `wt8` search — and between
+them held nine of the file's eighteen raw offsets. The first, verbatim:
+
+```c
+x1[3] = x0[0] - x2[0] + 16;
+x1[2] = __frame.q1 + x0[0] - x2[0] + 16;
+q_a   = (uint8_t *)x1[2];
+r_a   = __frame.plane_b + x0[0] - x2[0] + 16;
+p_a   = (uint8_t *)x1[3];
+do {
+  ul_a = p_a[x2[0]];
+  *(int64_t *)&x1[2] = __PAIR64__((uint32_t)p_a, q_a);
+  x2[2] = r_a;
+  …
+  r_a = x2[2] - left_a;
+  n_a = x1[1];
+  bin_a = (((int16_t *)x2)[6] - … * (*(uint8_t *)(x2[2] + x2[0]) + *(uint8_t *)x2[2] - …
+  q_a -= left_a;
+  p_a = (uint8_t *)(x1[3] - left_a);
+  x1[1] = n_a - 1;
+} while ( n_a != 1 );
+```
+
+Eight of the two slots' lanes, doing five things:
+
+| lane | what it is |
+| --- | --- |
+| `x2[0]`, `x2[1]` | the up-left and up neighbour offsets, `-stride - planes` and `-stride` |
+| `x2[2]` | the third plane's cursor, as an integer |
+| `x2[3]` | the gradient — `((int16_t *)x2)[6]` is byte 12, its low half |
+| `x1[1]` | the loop counter |
+| `x1[2]`, `x1[3]` | `q_a` and `p_a`, spilled as a `__PAIR64__` and reloaded every iteration |
+
+The pair spill is the one worth naming. `*(int64_t *)&x1[2] = __PAIR64__(p_a, q_a)`
+at the top and `p_a = (uint8_t *)(x1[3] - left_a)` at the bottom are together
+`p_a -= left_a` — a register pair written to the stack and read back because
+MSVC had nowhere else to put it. `q_a` was already advancing that way one line
+above, which is what makes the reading checkable rather than plausible.
+
+Named, the loop is three cursors one pixel apart and three neighbour offsets:
+
+```c
+p_a   = (uint8_t *)(x0[0] - ofs_ul_a + 16);
+q_a   = (uint8_t *)(__frame.q1 + x0[0] - ofs_ul_a + 16);
+row_c = (uint8_t *)(__frame.plane_b + x0[0] - ofs_ul_a + 16);
+do {
+  ul_a  = p_a[ofs_ul_a];
+  g_a   = ul_a + *p_a - p_a[ofs_up_a] - p_a[left_a];
+  bin_a = ((int16_t)g_a - (uint16_t)((x1[0] * (q_a[ofs_ul_a] + cur_a - q_a[ofs_up_a] - q_a[left_a])
+                                    + __frame.wt_slot * (row_c[ofs_ul_a] + *row_c - row_c[ofs_up_a]
+                                                       - (uint32_t)row_c[left_a]) + 40) >> 7) - 256) & 0x1FF;
+  ++*(uint32_t *)&__frame.buf_1[4 * bin_a];
+  q_a -= left_a;  p_a -= left_a;  row_c -= left_a;
+  --n_a;
+} while ( n_a );
+```
+
+The counter needs one check the rest do not: the original reads `n_a` at the
+*top* and stores `n_a - 1` at the bottom, exiting when the value read was 1.
+`--n_a; while ( n_a )` exits when the decremented value is 0, which is the same
+iteration. Both loops end on `npix != 2` for the first round, which is what
+says the off-by-one is not one.
+
+The `wt8` loop is the same eight lanes in `x4` and `x5`, with `x3[3]` holding
+the weight where the first has `__frame.wt_slot`. `x5[3]` is *not* part of it —
+it is `wt4`, live across the whole body — which is the distinction a rule
+working from lane traffic alone would have had to guess and a reading does not.
+
+**18 raw offsets → 14, 1051 conversion warnings → 1048**, fifteen streams
+byte-identical. Every remaining one is one of two shapes: `acc0`/`acc1`
+indexed by a byte offset kept in `x3[1]` (six), and the four pairs of
+`(uint8_t *)(__frame.q1 + x0[0] - <offset> + 16)` that start a row — the same
+`+ 16` that was `offsetof(BmfImage, pixels)` in §31, off a base the frame holds
+as an integer rather than a `BmfImage *`. Naming those means retyping two
+frame members that the solve also reads as halves of a `double`, which is a
+different job from this one.
