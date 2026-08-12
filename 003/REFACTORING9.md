@@ -25,7 +25,7 @@ nothing was checking and nothing had been true of since round nine.
 
 ```
                                            round 8     round 9         now
-subs1.hpp lines                              17787       17616       17589
+subs1.hpp lines                              17787       17616       17598
 bmf.cpp lines                                    —           —         365
 raw-offset sites                                22          12           0
   off `_this`                                    —           1           0
@@ -33,8 +33,8 @@ raw-offset sites                                22          12           0
 offsets written as numbers                       —           —           0
   negative indices, unsigned name                —           —           0
 byte offsets on a typed base                   121           0           0
-pointer casts                                 2137        1545         763
-  to a scalar                                    —           —         296
+pointer casts                                 2137        1545         760
+  to a scalar                                    —           —         293
   to a record                                    —           —         256
   to a scalar, of an address                     —           —         208
   to a record, of an address                     —           —           3
@@ -62,7 +62,7 @@ goto / LABEL_n:                             112/79       81/55       49/33
   restart a loop / exit N blocks                 —           —       15/32
   sideways to a join / to neither                —           —         2/0
   jump into a block                              —           —           0
-conversion warnings                           1455        1331         935
+conversion warnings                           1455        1331         933
 ```
 
 `python3 tools/checktable.py` compares that table against `shape.py --rows`
