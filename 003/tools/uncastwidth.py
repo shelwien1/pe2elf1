@@ -44,7 +44,7 @@ SIZE = {'uint8_t': 1, 'int8_t': 1, 'char': 1, 'bool': 1,
 
 CAST = re.compile(r'\*\(\s*([A-Za-z_]\w*)\s*(\*+)\s*\)\s*&\s*'
                   r'((?:[A-Za-z_]\w*\s*(?:->|\.)\s*)*)([A-Za-z_]\w*)'
-                  r'\s*(?:\[[^\]]*\])?')
+                  r'\s*(?P<sub>\[[^\]]*\])?')
 
 
 def records(lines):
@@ -96,7 +96,7 @@ def survey(lines):
         for i in range(a, b + 1):
             c = lines[i].split('//')[0]
             for m in CAST.finditer(c):
-                ct, stars, chain, mem = m.groups()
+                ct, stars, chain, mem = m.group(1, 2, 3, 4)
                 if len(stars) > 1:
                     out.append((i + 1, 'pointer', ct + stars, None, c.strip()))
                     continue
@@ -128,6 +128,16 @@ def survey(lines):
                     mt = types.get(mem)
                 if mt is None:
                     mt = any_.get(mem)
+                # A member reached *with a subscript* is an array read,
+                # whatever `decl_types` says its type is -- and what it says
+                # is `uint8_t *` for every one of them, because it decays
+                # arrays.  Eighteen `*(uint32_t *)&__frame.buf[8 * node]`
+                # rows sat in the `ptr-member` column for that reason: a
+                # 32-bit word read out of a byte buffer, filed under "a
+                # member that holds an address".
+                if m.group('sub'):
+                    out.append((i + 1, 'array', ct, mt, c.strip()))
+                    continue
                 if mt and mt.endswith('*'):
                     out.append((i + 1, 'ptr-member', ct, mt, c.strip()))
                     continue

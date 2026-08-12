@@ -25,7 +25,7 @@ nothing was checking and nothing had been true of since round nine.
 
 ```
                                            round 8     round 9         now
-subs1.hpp lines                              17787       17616       17604
+subs1.hpp lines                              17787       17616       17611
 bmf.cpp lines                                    —           —         365
 raw-offset sites                                22          12           0
   off `_this`                                    —           1           0
@@ -33,10 +33,10 @@ raw-offset sites                                22          12           0
 offsets written as numbers                       —           —           0
   negative indices, unsigned name                —           —           0
 byte offsets on a typed base                   121           0           0
-pointer casts                                 2137        1545         757
+pointer casts                                 2137        1545         755
   to a scalar                                    —           —         290
   to a record                                    —           —         256
-  to a scalar, of an address                     —           —         208
+  to a scalar, of an address                     —           —         206
   to a record, of an address                     —           —           3
 declarations carrying alignas                    —           —          23
 frames                                           —          17           8

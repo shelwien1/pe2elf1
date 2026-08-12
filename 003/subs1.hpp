@@ -11500,8 +11500,15 @@ ModelBlock *__layout_workspace(ModelBlock *blk, int32_t unread_flag, int32_t img
   memset(blk->ctx_id2,255,sizeof blk->ctx_id2);
   memset(blk->ctx_id3,255,sizeof blk->ctx_id3);
   memset(exclusion_mask,0,8193);
-  (*(uint64_t *)&blk->sel[0]) = 0;
-  *(uint64_t *)&blk->escape_list = 0;
+  // Three pointers cleared, by name.  This was two eight-byte stores --
+  // `*(uint64_t *)&sel[0]` and `*(uint64_t *)&escape_list` -- which is how
+  // MSVC clears two adjacent four-byte pointers, and which on a target with
+  // an eight-byte pointer clears one of each pair and leaves the other.
+  // `_pad22`, the four bytes the second store also cleared, has no reader:
+  // the walk in `decode_pixel` stops at `escape_list` (§43's guard).
+  blk->sel[0] = nullptr;
+  blk->sel[1] = nullptr;
+  blk->escape_list = nullptr;
   for ( n = 0; n < 0x40000; ++n )
   {
     blk->sym_ctr[2 * n] = 0x2000;
