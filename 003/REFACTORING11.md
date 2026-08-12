@@ -199,6 +199,20 @@ reintroducing one line of the `alt_p2_model` byte view leaves all fifteen
 32-bit streams byte-identical and takes the x64 leg from 23 of 23 to 19 of 23.
 `BMF_X64_GATE=0` skips it, for a host with no 64-bit toolchain.
 
+Every other instrument takes `BMF_BITS=64` in front of it, and all four are
+clean on the 64-bit build:
+
+```
+BMF_BITS=64 tools/asan.sh      no report in 40 runs over 17 images
+BMF_BITS=64 tools/fuzz.sh      400 mutants: 288 refused, 112 accepted, 0 reported
+BMF_BITS=64 tools/hdrscan.sh   no report in 7680 runs: both one-byte header
+                               fields, every value, 15 streams
+tools/x64.sh                   23 of 23
+```
+
+The fuzz line is the same tally the 32-bit run gives, mutant for mutant, which
+is the check that §3a's `plane_b` was the whole of what it found.
+
 `build.sh`'s header used to say "-m32 is not negotiable" and gave three
 reasons: i386 calling conventions on the moved entry points, CPUID helpers in
 i386 inline asm, and the address blob. All three were true when it was written
