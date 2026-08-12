@@ -3389,3 +3389,40 @@ same; the six offsets are `&scratch[…]`; and the writes are in bounds.
 
 **14 → 0 raw offsets, 1047 conversion warnings → 1039**, fifteen streams
 byte-identical.
+
+## 44. What fifteen byte-identical streams cannot say
+
+The gate's strongest sentence is that the fifteen reference streams come out
+byte-for-byte identical. It is silent about one whole class: a body that reads
+or writes past the end of something and happens not to change the answer.
+
+§43 found one by arithmetic and then by a probe. The general instrument was
+sitting there unused — the toolchain has a 32-bit AddressSanitizer:
+
+```
+$ tools/asan.sh testfiles/altp1.bmp
+altp1   ERROR: AddressSanitizer: stack-buffer-overflow
+        WRITE of size 16 … at offset 464 in frame
+```
+
+That is `choose_plane_coding`'s zero loop, on the file as it stood one commit
+ago, and it fires on two of the seventeen images. On the file with §43's
+declared buffer there is **no report in 34 runs over 17 images**.
+
+So the check works, and it can fail — which is the whole of what `proven.sh`
+asks of a rule, taken at the level of the program rather than the text.
+`tools/asan.sh` is that command now.
+
+It is not in `test.sh`: an ASan build plus two runs an image is minutes, the
+same bargain `sweep.sh` makes. What it is *for* is being run after a lift. A
+frame whose members become ordinary locals is exactly the change that turns a
+deliberate walk over neighbours into an overflow, and `liftframe.py` has five
+entries under "tried and reverted" that are that walk failing loudly. This
+finds the ones that fail quietly.
+
+The build needs three flags the normal one does not: `BMF_STATIC=0` because
+ASan's runtime does not survive `-static` here, `BMF_GC=0` because
+`--gc-sections` hides frames the report wants, and `-O1 -g`. The binary is
+still stripped by `build.sh`'s `-s`, so the stack trace is addresses — but the
+line that matters is `is located in stack of thread T0 at offset N in frame`,
+which names a local and is enough to find the body.
