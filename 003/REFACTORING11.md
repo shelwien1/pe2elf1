@@ -279,6 +279,14 @@ eight-byte pointer can name and a four-byte one cannot — so any surviving
 runs the whole corpus that way, and the fifteen streams still come out byte for
 byte.
 
+It cost the other instruments too, and quietly. The arena was a bump allocator
+with `#define malloc` over it, so on the 64-bit build **AddressSanitizer had no
+redzone on a single one of the program's allocations** — every heap overflow it
+is there to find went into the next object in the arena and was never seen.
+`BMF_BITS=64 tools/asan.sh`, `tools/fuzz.sh` and `tools/hdrscan.sh` were all
+reporting clean about an allocator ASan cannot instrument. They are re-taken
+here against real `malloc`.
+
 The control says what that is worth. One truncated store, on a slot that is
 reloaded a few lines later:
 
