@@ -146,12 +146,12 @@ if [ "${BMF_MALFORMED:-1}" = 1 ]; then
     # size as well.
     ref=$(ls -S -- *.bmf 2>/dev/null | grep -v '^arc\.' | head -1)
     # The largest *uncompressed* BMP -- the compression field of the info
-    # header, at offset 30, has to be 0.  Cutting an RLE8 file short does not
-    # produce a refusal, it produces a buffer overflow: read_bmp's run decoder
-    # writes each run into the pixel buffer without bounding it, so a stream
-    # that ends mid-run keeps writing.  That is a real defect and it is recorded
-    # rather than repaired (REFACTORING.md §6), the same as the top-down BMP;
-    # what belongs here is the case that has an exit to check.
+    # header, at offset 30, has to be 0.  This used to be here because cutting
+    # an RLE8 file short produced a buffer overflow rather than a refusal, and
+    # the case with an exit to check was the uncompressed one.  Both are
+    # refusals now (REFACTORING.md §6) and the RLE cut is one of the cases
+    # below; this still picks an uncompressed image because the two truncations
+    # fail in different places and both are worth having.
     img=""
     for f in $(ls -S -- orig_*.bmp 2>/dev/null); do
       [ "$(od -An -tu4 -j30 -N4 "$f" | tr -d ' ')" = 0 ] || continue
@@ -167,9 +167,38 @@ if [ "${BMF_MALFORMED:-1}" = 1 ]; then
       head -c $n "$ref" >"cut$n.bmf"; cuts="$cuts $n"
     done
     head -c 6000 "$img" >cut.bmp
+
+    # The seven that used to crash.  Each was recorded in REFACTORING.md §6 or
+    # found by fuzzing the header, and each is now a refusal with an exit to
+    # check -- which is the only way a fix stays fixed.
+    rle=$(for f in $(ls -S -- orig_*.bmp 2>/dev/null); do
+            [ "$(od -An -tu4 -j30 -N4 "$f" | tr -d ' ')" = 0 ] || { echo "$f"; break; }
+          done)
+    [ -n "$rle" ] && head -c 6000 "$rle" >cutrle.bmp
+    # A top-down BMP: a negative height, legal and common.
+    hdr_patch() {   # file offset value width -> writes a little-endian field
+      python3 -c 'import struct,sys
+d=bytearray(open(sys.argv[1],"rb").read())
+struct.pack_into("<i" if sys.argv[4]=="i" else "<I", d, int(sys.argv[2]), int(sys.argv[3]))
+open(sys.argv[5],"wb").write(d)' "$1" "$2" "$3" "$4" "$5"
+    }
+    # `biClrUsed` only means anything at eight bits and below, so that case
+    # needs a paletted image and not just the largest one.
+    pal=$(for f in $(ls -S -- orig_*.bmp 2>/dev/null); do
+            [ "$(od -An -tu4 -j30 -N4 "$f" | tr -d ' ')" = 0 ] || continue
+            [ "$(od -An -tu2 -j28 -N2 "$f" | tr -d ' ')" -le 8 ] || continue
+            echo "$f"; break
+          done)
+    hdr_patch "$img" 22 -240 i topdown.bmp
+    [ -n "$pal" ] && hdr_patch "$pal" 46 25600 I clrused.bmp
+    hdr_patch "$img" 18 32960 i wide.bmp
+    hdr_patch "$img" 28 16 I bpp16.bmp
+    # An output that exists and is not an archive: `compress_image` walks it to
+    # append, and used to write through the FILE `expand_image` had closed.
+    echo "not an archive" >notarc.out
     rm -f gone.bmp gone.bmf
 
-    bad=0
+    bad=0 cases=0
     # mode  input        want  what it should hit
     while read -r mode file want _; do
       [ -n "${mode:-}" ] || continue
@@ -181,6 +210,7 @@ if [ "${BMF_MALFORMED:-1}" = 1 ]; then
         cat mal.log; bad=1; continue
       fi
       [ -f mal.out ] && { echo "malformed: $BIN $mode $file wrote an output anyway"; bad=1; }
+      cases=$((cases + 1))
     done <<CASES
 d empty.bmf   0   an archive with no members in it
 $(for n in $cuts; do echo "d cut$n.bmf 3 cut at $n bytes"; done)
@@ -189,6 +219,11 @@ d ones.bmf    3   the other end of the same
 d gone.bmf    6   an input that is not there
 c gone.bmp    6   the same, compressing
 c cut.bmp     4   a BMP whose pixels run out
+$([ -n "$rle" ] && echo "c cutrle.bmp 4 an RLE BMP that ends mid-run")
+c topdown.bmp 4   a top-down BMP, which this reader does not do
+$([ -n "$pal" ] && echo "c clrused.bmp 4 biClrUsed past the palette alloc_image reserves")
+c wide.bmp    4   a row wider than the sixteen bits the stride has
+c bpp16.bmp   4   a depth the writer cannot put back in a BMP
 CASES
 
     # The two files that are each other's wrong kind.  Named separately because
@@ -199,6 +234,32 @@ CASES
       timeout "${BMF_TIMEOUT:-300}" $RUN "$BIN" "$1" "$2" mal.out >mal.log 2>&1
       rc=$?
       [ "$rc" = "$3" ] || { echo "malformed: $BIN $1 $2 exited $rc, expected $3"; cat mal.log; bad=1; }
+      cases=$((cases + 1))
+    done
+
+    # An output that already exists and cannot be walked to its end.
+    # `compress_image` walks an archive to append after it; `expand_image`
+    # closes the file and nulls `arc->fp` on the first member it cannot parse,
+    # and the walk used to fall through to `fwrite(..., nullptr)`.
+    #
+    # A file that is not an archive *at all* does not reach that -- the walk in
+    # `bmf_open_archive` refuses it first, with exit 3.  What does is a real
+    # archive with something after the last member, which is what an interrupted
+    # write leaves behind.  The output is named here rather than `mal.out`,
+    # because being the output is the whole case.
+    for want in "notarc.out 3" "tail.bmf 5"; do
+      set -- $want
+      rm -f "$1"
+      [ "$1" = notarc.out ] && echo "not an archive" >"$1"
+      [ "$1" = tail.bmf ] && {
+        timeout "${BMF_TIMEOUT:-300}" $RUN "$BIN" c "$img" "$1" >/dev/null 2>&1
+        printf 'garbagegarbage' >>"$1"
+      }
+      timeout "${BMF_TIMEOUT:-300}" $RUN "$BIN" c "$img" "$1" >mal.log 2>&1
+      rc=$?
+      [ "$rc" = "$2" ] || { echo "malformed: $BIN c $img $1 exited $rc, expected $2"
+                            cat mal.log; bad=1; }
+      cases=$((cases + 1))
     done
 
     # No arguments at all, and a mode letter that is neither c nor d.
@@ -206,10 +267,13 @@ CASES
       timeout "${BMF_TIMEOUT:-300}" $RUN "$BIN" $args >mal.log 2>&1
       rc=$?
       [ "$rc" = 1 ] || { echo "malformed: $BIN $args exited $rc, expected 1"; cat mal.log; bad=1; }
+      cases=$((cases + 1))
     done
 
     [ $bad -eq 0 ] || exit 1
-    printf '%-12s ok  refused %d inputs, no crash\n' malformed "$(( $(echo $cuts | wc -w) + 10 ))"
+    # Counted, not computed: the arithmetic here said `cuts + 10` and went on
+    # saying 15 while five cases were added under it.
+    printf '%-12s ok  refused %d inputs, no crash\n' malformed "$cases"
     exit 0
   ) || fail=1
 fi

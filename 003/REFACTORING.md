@@ -1022,14 +1022,21 @@ gate cannot tell from a layout change.
   Both of those were properties of the tool, described as properties of the
   code. That is worth more attention than the fix: *the reason a thing looks
   not worth doing is sometimes just the last error message you read.*
-- **`read_bmp` validates less than it looks like it does.** It checks the `BM`
+- **`read_bmp` validated less than it looked like it did.** It checked the `BM`
   signature, that the DIB header is 40 bytes and that the plane count is 1, and
-  then trusts the rest. A **top-down BMP — a negative height, which is legal and
-  common — segfaults it**, in `alloc_image` off a negative size. Found by
+  then trusted the rest. A **top-down BMP — a negative height, which is legal and
+  common — segfaulted it**, in `alloc_image` off a negative size. Found by
   feeding it one; the header checks that exist are BMF's own, so the donor is
-  unlikely to have fared better. Left alone deliberately: this is a refactoring,
-  and a crash that reproduces is behaviour the gate is there to preserve. Worth
-  knowing before anyone points this at untrusted input.
+  unlikely to have fared better.
+
+  > **Fixed, along with everything else in this entry and the two below.**
+  > These were left for eight rounds on the reasoning that this is a
+  > refactoring and a crash that reproduces is behaviour the gate is there to
+  > preserve. That was right while the goal was to preserve behaviour and wrong
+  > to leave standing for ever. All of them are repaired, the fifteen reference
+  > streams are still byte-identical, and each is a case in `test.sh`'s
+  > malformed suite that fails on the commit before the fix.
+  > `REFACTORING9.md` §46 has the readings.
 
   **It has a second one, and the gate found this one for me.** The run decoder
   inside `read_bmp` writes each run into the pixel buffer without bounding it,
@@ -1040,19 +1047,20 @@ gate cannot tell from a layout change.
   ./bmf c cut.bmp o.bmf          # SIGSEGV in read_bmp, subs1.hpp:14835
   ```
 
-  Any truncation of an RLE8 file does it; the same treatment of an uncompressed
+  Any truncation of an RLE8 file did it; the same treatment of an uncompressed
   BMP exits 4 with *Read error!*, which is why the truncated-BMP case in
-  `test.sh` picks the largest **uncompressed** image, off the compression field
-  of the info header rather than off a filename. Recorded, not repaired, for the
-  reason above — but this one is a buffer overflow rather than a null
-  dereference, and reachable from an ordinary file.
-- **A 16-bit BMP compresses and then cannot be expanded.** `read_bmp` accepts
-  16 bits per pixel; the writer refuses depths 2, 15 and 16, because BMF sent
-  those to a TGA writer and this build only writes BMP (`bmf_decompress` says
-  so and exits 5). The stream is fine — nothing in this build can turn it back
-  into a file. The asymmetry is in the original's shape, not introduced here,
-  but the trap is: `bmf c` reports success on input whose output is
-  unreachable.
+  `test.sh` picked the largest **uncompressed** image, off the compression field
+  of the info header rather than off a filename. This one was a buffer overflow
+  rather than a null dereference, and reachable from an ordinary file. Both
+  truncations are cases in that suite now, and both refuse.
+- **A 16-bit BMP compressed and then could not be expanded.** `read_bmp`
+  accepted 16 bits per pixel; the writer refuses depths 2, 15 and 16, because
+  BMF sent those to a TGA writer and this build only writes BMP
+  (`bmf_decompress` says so and exits 5). The stream is fine — nothing in this
+  build can turn it back into a file. The asymmetry is in the original's shape,
+  not introduced here, but the trap was: `bmf c` reported success on input whose
+  output is unreachable. `read_bmp` refuses those three depths on the way in
+  now, so the two ends agree.
 - **Inherited names lie, and so do first readings.** `__n8`, `__n256`, `__n2`
   are the last value assigned, not the meaning. But the opposite error is just
   as easy: an earlier draft of §4.1 concluded `__Buffer` was not a buffer,

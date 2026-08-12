@@ -69,12 +69,16 @@ When the data does not compress (`coded size >= raw size`) the member is
 rewritten with the descriptor's "compressed" flag clear and the raw pixels in
 place of the coded data.
 
-> **What `read_bmp` checks.** The `BM` signature, a 40-byte DIB header, and a
-> plane count of 1. Not the sign of the height: a top-down BMP, which is legal,
-> reaches `alloc_image` with a negative height and segfaults. Not the depth
-> against what can be written back either — 16 bits per pixel reads, compresses,
-> and then has no writer (§10 of `REFACTORING.md`'s list, and `bmf_decompress`
-> exits 5 saying so).
+> **What `read_bmp` checks.** The `BM` signature, a 40-byte DIB header and a
+> plane count of 1 — and, since the fixes in `REFACTORING9.md` §46, the fields
+> the rest of it indexes with: the height's sign (a top-down BMP is legal and
+> this reader fills rows from the bottom up, so it is refused rather than sent
+> to `alloc_image` as a negative size), the width and height against the
+> sixteen bits `BmfImage` stores them in, the row width against the sixteen
+> `alloc_image` computes it in, `biClrUsed` against the palette space reserved
+> for it, a run opcode against the depth it implies, and the depth against what
+> can be written back — 2, 15 and 16 bits per pixel read and compress but have
+> no writer, and `bmf_decompress` exits 5 saying so.
 
 ## 3. The image descriptor
 

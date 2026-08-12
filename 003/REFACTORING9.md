@@ -3576,3 +3576,93 @@ history, and it will keep breathing.
 of the twelve points. The remaining five are the residue this cannot reach:
 their input is a build log or a fresh compile of the working tree, and a
 revision from four hundred commits ago has neither.
+
+## 46. The bugs, fixed
+
+`REFACTORING.md` §6 records three defects in `read_bmp` and leaves them, with
+the reason stated each time: *this is a refactoring, and a crash that
+reproduces is behaviour the gate is there to preserve.* That was right while
+the goal was to preserve behaviour. It is not a reason to leave a reachable
+buffer overflow standing for ever, and the goal changed.
+
+All three are fixed. Fuzzing found four more of the same shape. The fifteen
+reference streams are byte-identical throughout, and every one of the seven is
+a case in `test.sh`'s malformed suite that **fails on the commit before the
+fix** — checked, not assumed:
+
+```
+malformed: ./bmf c cutrle.bmp exited 139, expected 4
+malformed: ./bmf c topdown.bmp exited 7, expected 4
+malformed: ./bmf c clrused.bmp exited 139, expected 4
+malformed: ./bmf c wide.bmp exited 135, expected 4
+malformed: ./bmf c bpp16.bmp exited 0, expected 4
+malformed: ./bmf c orig_x_ep.bmp tail.bmf exited 139, expected 5
+```
+
+### The run decoders
+
+Both took their run lengths and cursor moves straight out of the file and
+bounded none of them. `fgetc` returns EOF as `-1`:
+
+* RLE8 asked `memset` for **−1 bytes** — ASan's `negative-size-param`;
+* RLE4 is worse. `byte` is `uint32_t`, so `-1` became `0xFFFFFFFF`, and the
+  nibble loop is `while ( left4b != 1 ) { *row3++ = pair; left4b -= 2; }` —
+  from `-1` that never reaches 1, and it writes a byte an iteration for ever.
+
+Every write is checked against the pixel buffer now and every `fgetc` against
+EOF, and a run that would leave the buffer refuses the file the way the header
+checks already do: `Read error!`, exit 4. A valid RLE stream ends on its
+end-of-bitmap marker and never reaches either check.
+
+### One buffer, two jobs
+
+The absolute runs `fread` into a scratch that is also the row buffer for an
+uncompressed BMP, and it is sized `stride_pad` — the row width. An absolute
+run reads up to `(255 + 1) & ~1` = 256 bytes regardless of the stride, so a
+narrow image with a long run wrote 48 bytes into a 32-byte region. glibc
+reported that as `malloc(): corrupted top size`, a long way from the cause.
+
+### What the header checks did not check
+
+`read_bmp` validated the signature, a 40-byte DIB header and a plane count of
+1. Fuzzing the header found four more ways in, all one shape — a field the
+code below indexes with, taken on trust:
+
+| field | what it did |
+| --- | --- |
+| `biHeight < 0` | a top-down BMP, legal and common, reached `alloc_image` as a negative size |
+| `biWidth`, `biHeight` | `BmfImage` stores them in sixteen bits, so a larger one is truncated into a buffer the loops then overrun |
+| the row width | `alloc_image` computes it in a `uint16_t`: a 32 960-wide 32-bit image is 131 840 bytes a row and wrapped to **768**, a fifth of what the read assumes |
+| `biClrUsed` | `alloc_image` reserves `3 << bpp` bytes for the palette; 25 600 entries wrote 76 800 bytes into room for 768 |
+| the depth | a run opcode implies its depth and the decoders assume it; and 2, 15 and 16 read and compress but have no writer |
+
+`alloc_image`'s null return was unchecked too — its `stride` was read either
+way.
+
+That last row is `REFACTORING.md`'s third defect: `bmf c` reported success on
+input whose output nothing in this build can produce. Both ends agree now.
+
+### Appending to something that is not an archive
+
+`compress_image` walks an existing archive to append after it, and
+`expand_image` closes the file and nulls `arc->fp` on the first member it
+cannot parse. The walk stops on that — and then fell straight through to
+`fwrite(…, nullptr)`.
+
+A file that is not an archive at all does not reach it: `bmf_open_archive`
+refuses that first, exit 3. What does is a *real* archive with something after
+the last member, which is what an interrupted write leaves behind.
+
+### And one in the decoder
+
+`decode_pixel`'s selector walk goes `sel[0]`, `sel[1]`, `escape_list` — three
+lists laid next to each other on purpose, the escape list being the third and
+last. Nothing stopped the walk there. Corrupt coded data ran it on into
+`_pad22` and then into `sel_cur` itself, and faulted on the first null it read:
+`SEGV on unknown address 0x00000004`, which is `offsetof(SymList, live)` from
+nothing. Past the escape list there is no fourth list to try, and a stream that
+has exhausted all three is not one this can read.
+
+**1122 compress runs and 900 expand runs over fuzzed inputs, no crash and no
+ASan report.** The malformed suite counts 22 cases now, and counts them: the
+line said `cuts + 10` and went on printing 15 while five were added under it.
