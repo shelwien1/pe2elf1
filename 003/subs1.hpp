@@ -590,7 +590,8 @@ struct AltP1Block {
   int32_t ctx_of(AltP1Block *nb0, AltP1Block *nb1);
   void d8_encode_body(uint8_t *src, uint8_t *out);
   int32_t update_model();
-  int32_t * alt_p1_alloc(int32_t img_w, int32_t img_h, int32_t plane);
+  AltP1Block *alt_p1_alloc(int32_t img_w, int32_t img_h, int32_t plane);
+  AltP1Block *alt_p1_free(int8_t do_free);
 };
 static_assert(sizeof(void *) != 4 || sizeof(AltP1Block) == 0x99D4D8,
               "AltP1Block is not what alt_p1_alloc's callers allocate");
@@ -1369,7 +1370,8 @@ struct AltP2Block {
   // `[1]` -- which is why none of those numbers is left in the file.
   P2Freq freq[15552];   // +940072 .. +1064487
   uint8_t _pad3[8];   // +1064488 .. +1064495
-  uint8_t * alt_p2_alloc(int32_t img_w, int32_t plane);
+  AltP2Block *alt_p2_alloc(int32_t img_w, int32_t plane);
+  AltP2Block *alt_p2_free(int8_t do_free);
 };
 // The three readings this replaced disagreed about where the pointers stop and
 // the weights start; these say where, so a fourth reading cannot creep back in.
@@ -3208,33 +3210,36 @@ inline int32_t ModelBlock::init_tables()
   return result;
 }
 
-void **__alt_p2_free(void **blk, int8_t do_free)
+// The same story as `AltP1Block::alt_p1_free`, at bigger numbers: `blk + 69689` is
+// 278756 bytes in, which is `offsetof(AltP2Block, buf)`, and 69665 and 69666
+// are `row0` and `row1`.  Seven indices, seven members the struct has named
+// since round five.
+inline AltP2Block *AltP2Block::alt_p2_free(int8_t do_free)
 {
   ;
-  free(*(blk + 69689));
-  free(*(blk + 69690));
-  free(*(blk + 69691));
-  free(*(blk + 69692));
-  free(*(blk + 69693));
-  free(*(blk + 69665));
-  free(*(blk + 69666));
+  for ( int32_t k = 0; k < 5; ++k )
+    free(this->buf[k]);
+  free(this->row0);
+  free(this->row1);
   if ( (do_free & 1) != 0 )
-    bmf_page_free(blk);
-  return blk;
+    bmf_page_free(this);
+  return this;
 }
 
 
-void **__alt_p1_free(void **blk, int8_t do_free)
+// Every index this used to count in was a member the struct already names:
+// `blk + 44` is 176 bytes in, which is `offsetof(AltP1Block, buf)`, and the
+// five run to +195.  The record landed rounds ago and nobody came back to the
+// function that frees against it, so it was still stepping dwords through a
+// `void **` -- which is also why every call site had to cast.
+inline AltP1Block *AltP1Block::alt_p1_free(int8_t do_free)
 {
   ;
-  free(*(blk + 44));
-  free(*(blk + 45));
-  free(*(blk + 46));
-  free(*(blk + 47));
-  free(*(blk + 48));
+  for ( int32_t k = 0; k < 5; ++k )
+    free(this->buf[k]);
   if ( (do_free & 1) != 0 )
-    free(blk);
-  return blk;
+    free(this);
+  return this;
 }
 
 // Context for the alternate p1 model: reads the causal neighbourhood through
@@ -4147,7 +4152,7 @@ inline int32_t AltP1Block::update_model()
   return result;
 }
 
-inline int32_t * AltP1Block::alt_p1_alloc(int32_t img_w, int32_t img_h, int32_t plane)
+inline AltP1Block *AltP1Block::alt_p1_alloc(int32_t img_w, int32_t img_h, int32_t plane)
 {
   ;
   int32_t lvl, grp, k, lvl1, odd, grp1, slot, slot1, bump, wid, r, plane_hi;
@@ -4246,7 +4251,7 @@ inline int32_t * AltP1Block::alt_p1_alloc(int32_t img_w, int32_t img_h, int32_t 
   this->cursor[2] = this->buf[2] + wid + 4;
   this->cursor[3] = this->buf[3] + wid + 4;
   this->cursor[4] = this->buf[4] + wid + 4;
-  return (int32_t *)this;
+  return this;
 }
 
 uint16_t *__rc_begin_encode()
@@ -4505,16 +4510,15 @@ inline void AltP1Block::d8_encode_body(uint8_t *src, uint8_t *out)
 void __alt_model_p1_d8_encode(uint8_t *src, int32_t i, int32_t height, uint8_t *out)
 {
   ;
-  AltP1Block *raw;
-  void **blk;
-  raw = (AltP1Block *)((int32_t *)bmf_new(0x99D4D8u));
+  AltP1Block *raw, *blk;
+  raw = (AltP1Block *)bmf_new(0x99D4D8u);
   if ( raw )
-    blk = (void **)((AltP1Block *)raw)->alt_p1_alloc(i, height, 0);
+    blk = raw->alt_p1_alloc(i, height, 0);
   else
     blk = nullptr;
-  ((AltP1Block *)blk)->d8_encode_body(src, out);
+  blk->d8_encode_body(src, out);
   if ( blk )
-    __alt_p1_free((void **)blk, 1);
+    blk->alt_p1_free(1);
 }
 t_new_handler __set_new_handler(t_new_handler __out_of_memory_handler)
 {
@@ -4546,7 +4550,7 @@ static void bmf_set_denormal_mode()
 }
 
 
-inline uint8_t * AltP2Block::alt_p2_alloc(int32_t img_w, int32_t plane)
+inline AltP2Block *AltP2Block::alt_p2_alloc(int32_t img_w, int32_t plane)
 {
   ;
   uint32_t done, e;
@@ -4671,7 +4675,7 @@ inline uint8_t * AltP2Block::alt_p2_alloc(int32_t img_w, int32_t plane)
   this->ctx_w[3].w[2] = 3456;
   this->ctx_w[4].w[1] = 5184;
   this->ctx_w[4].w[2] = 10368;
-  return (uint8_t *)this;
+  return this;
 }
 
 // The image descriptor `alloc_image` returns, and every reader of an image
@@ -6001,11 +6005,11 @@ void ** __alt_model_p1_d8_decode(int8_t unread_flag, uint8_t *out, int32_t i, in
   uint8_t *out_at;
   int32_t y, val, x, code;
   P1Ctx *cursor2, *cursor4;
-  raw = (AltP1Block *)((int32_t *)bmf_new(0x99D4D8u));
+  raw = (AltP1Block *)bmf_new(0x99D4D8u);
   if ( raw )
-    blk = (AltP1Block *)(((AltP1Block *)raw)->alt_p1_alloc(i, height, 0));
+    blk = raw->alt_p1_alloc(i, height, 0);
   else
-    blk = (AltP1Block *)(nullptr);
+    blk = nullptr;
   __rc_begin_decode(unread_flag);
   if ( blk->height > 0 )
   {
@@ -6113,7 +6117,7 @@ void ** __alt_model_p1_d8_decode(int8_t unread_flag, uint8_t *out, int32_t i, in
     while ( y < blk->height );
   }
   __rc_end_decode();
-  return __alt_p1_free((void **)blk, 1);
+  return (void **)blk->alt_p1_free(1);
 }
 
 
@@ -6148,7 +6152,8 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
   P1Ctx *cursor2, *cursor4;
   void **q;
   ;
-  int32_t width, height, k, *made, src1, src2, src3, dc2, dc3, xf1, xf2, xf3, w, n_planes,
+  AltP1Block *made;
+  int32_t width, height, k, src1, src2, src3, dc2, dc3, xf1, xf2, xf3, w, n_planes,
           p, val0, val1, code2, val2, at2,
           code3, val3, at3, np, f;
   uint32_t y, *p0;
@@ -6160,9 +6165,9 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
     k = 0;
     do
     {
-      raw = (AltP1Block *)((int32_t *)bmf_new(0x99D4D8u));
+      raw = (AltP1Block *)bmf_new(0x99D4D8u);
       if ( raw )
-        made = ((AltP1Block *)raw)->alt_p1_alloc(width, height, k);
+        made = raw->alt_p1_alloc(width, height, k);
       else
         made = nullptr;
       plane[k++] = made;
@@ -6425,7 +6430,7 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
       q = (void **)plane[f];
       if ( q )
       {
-        __alt_p1_free((void **)q, 1);
+        ((AltP1Block *)q)->alt_p1_free(1);
         np = plane_count;
       }
       ++f;
@@ -11920,7 +11925,8 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
   uintptr_t off3;   // were int32_t: addresses, masked and tagged
   AltP1Block *blk_k, *raw;
   uint8_t fl1, fl2, fl3, pred1, pred2, pred3;
-  int32_t width, height, k, *made, src1, src2, src3, dc2, xf1, xf2, xf3, w, n_planes, p,
+  AltP1Block *made;
+  int32_t width, height, k, src1, src2, src3, dc2, xf1, xf2, xf3, w, n_planes, p,
           want0, keep0, code0, recon0, out0, drift0, err0, resid1, at1, recon1, drift1, code1x,
           want2, code2, recon2, out2, drift2, at2, code3, recon3, drift3, np, f;
   int64_t err1, err2, err3;
@@ -11934,9 +11940,9 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
     k = 0;
     do
     {
-      raw = (AltP1Block *)((int32_t *)bmf_new(0x99D4D8u));
+      raw = (AltP1Block *)bmf_new(0x99D4D8u);
       if ( raw )
-        made = ((AltP1Block *)raw)->alt_p1_alloc(width, height, k);
+        made = raw->alt_p1_alloc(width, height, k);
       else
         made = nullptr;
       plane[k++] = made;
@@ -12240,7 +12246,7 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
       q = (void **)plane[f];
       if ( q )
       {
-        __alt_p1_free((void **)q, 1);
+        ((AltP1Block *)q)->alt_p1_free(1);
         np = plane_count;
       }
       ++f;
@@ -13853,15 +13859,15 @@ void __alt_p2_d8_decode_body(AltP2Block *blk, int8_t unread_flag, uint8_t *out, 
 void __alt_model_p2_d8_decode( uint8_t *out, int32_t i, int32_t height)
 {
   ;
-  void *raw, **blk;
-  raw = bmf_page_alloc(0x103E30u);
+  AltP2Block *raw, *blk;
+  raw = (AltP2Block *)bmf_page_alloc(0x103E30u);
   if ( raw )
-    blk = (void **)((AltP2Block *)raw)->alt_p2_alloc(i, 0);
+    blk = raw->alt_p2_alloc(i, 0);
   else
     blk = nullptr;
-  __alt_p2_d8_decode_body((AltP2Block *)(int32_t)blk, i, out, i, height);
+  __alt_p2_d8_decode_body(blk, i, out, i, height);
   if ( blk )
-    __alt_p2_free((void **)blk, 1);
+    blk->alt_p2_free(1);
 }
 
 int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *out) {   P2Ctx *cur0,
@@ -14209,7 +14215,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *out) {   P2Ctx *cur0,
       plane_p = (void **)plane[pl3];
       if ( plane_p )
       {
-        __alt_p2_free((void **)plane_p, 1);
+        ((AltP2Block *)plane_p)->alt_p2_free(1);
         nplanes2 = plane_count;
       }
       ++pl3;
@@ -14478,16 +14484,15 @@ void __alt_p2_d8_encode_body(AltP2Block *blk, uint8_t *src, int32_t width, int32
 void __alt_model_p2_d8_encode( uint8_t *src, int32_t i, int32_t height, uint8_t *out)
 {
   ;
-  void * raw;
-  AltP2Block *blk;
-  raw = bmf_page_alloc(0x103E30u);
+  AltP2Block *raw, *blk;
+  raw = (AltP2Block *)bmf_page_alloc(0x103E30u);
   if ( raw )
-    blk = (AltP2Block *)((AltP2Block *)raw)->alt_p2_alloc(i, 0);
+    blk = raw->alt_p2_alloc(i, 0);
   else
-    blk = (AltP2Block *)(nullptr);
-  __alt_p2_d8_encode_body((AltP2Block *)blk, src, i, height, out);
+    blk = nullptr;
+  __alt_p2_d8_encode_body(blk, src, i, height, out);
   if ( blk )
-    __alt_p2_free((void **)blk, 1);
+    blk->alt_p2_free(1);
 }
 
 int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
@@ -14894,7 +14899,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
       plane_p = (void **)plane[pl3];
       if ( plane_p )
       {
-        __alt_p2_free((void **)plane_p, 1);
+        ((AltP2Block *)plane_p)->alt_p2_free(1);
         nplanes2 = plane_count;
       }
       ++pl3;

@@ -22,15 +22,15 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17520
+subs1.hpp lines                      17787     17616         17525
 bmf.cpp lines                            —         —           365
 raw-offset sites                        22        12              0
   off `_this`                            —         1             0
   in functions                           —         1             0
 byte offsets on a typed base           121         0             0
-pointer casts                         2137      1545          1204
-  to a scalar                            —         —           469
-  to a record                            —         —           379
+pointer casts                         2137      1545          1182
+  to a scalar                            —         —           454
+  to a record                            —         —           372
   to a scalar, of an address             —         —           351
   to a record, of an address             —         —             5
 declarations carrying alignas            —         —            23

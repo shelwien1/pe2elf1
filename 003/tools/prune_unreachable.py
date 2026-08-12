@@ -118,6 +118,16 @@ def main():
     funcs = parse(src)
     names = {}
     for f in funcs:
+        # Bare names, and they have to stay unique across the file -- including
+        # across classes.  Reachability below is `identifiers(text) & names`, so
+        # a call site says `release`, not `AltP2Block::release`; keying the map
+        # on the qualified name would have to map one identifier back to several
+        # definitions, and getting that wrong in a tool that *deletes* code is a
+        # different order of mistake from getting it wrong in one that reports.
+        #
+        # It fired once, when `AltP1Block` and `AltP2Block` were both given a
+        # method called `release`.  They are `alt_p1_free` and `alt_p2_free`,
+        # which is what the allocators beside them are called anyway.
         assert f['name'] not in names, 'two definitions of %s' % f['name']
         names[f['name']] = f
     print('%d function definitions' % len(funcs))
