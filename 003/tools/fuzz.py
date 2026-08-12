@@ -9,11 +9,14 @@ that reports can be described without keeping the whole run.
 
 Deterministic on purpose.  A fuzzer whose findings cannot be replayed is a
 fuzzer whose findings have to be believed, and this project has spent nine
-rounds learning not to believe measurements it cannot re-take.  Same SEED and
-same corpus gives the same bytes, so `tools/fuzz.sh --seed 7` names an exact
-set of inputs and a report against one of them is a file anyone can rebuild.
+rounds learning not to believe measurements it cannot re-take.  Same SEED, same
+corpus and same version of this file gives the same bytes, so a seed names an
+exact set of inputs and a report against one of them is a file anyone can
+rebuild.  The third of those conditions is real: adding the `member` mutator
+below renumbered every mutant after the first .bmf seed, so a finding recorded
+as "seed 2, mutant 36" has to carry the revision that produced it.
 
-Three mutators, in the proportion the last round argued for:
+Four mutators, in the proportion the rounds behind them argued for:
 
   bytes    flip a few bytes anywhere.  This is what the crash-only round ran,
            and over 2000 runs it found nothing: the odds of landing inside the
@@ -31,9 +34,18 @@ Three mutators, in the proportion the last round argued for:
            data, and part-way through it.  Two of the seven crashes were a
            read that ran off the end of a short file.
 
-The `.bmf` corpus gets `bytes` and `truncate` only: a compressed stream has no
-named fields, and its header is four bytes of magic plus the image record that
-`compress_image` wrote, which the header mutator would only be flipping blind.
+  member   rewrite one field of a .bmf member header from the same edges.
+
+The first three of those were the whole of it for one round, on the reasoning
+that "a compressed stream has no named fields, and its header is four bytes of
+magic plus the image record `compress_image` wrote, which the header mutator
+would only be flipping blind".  Every clause of that is true and the conclusion
+does not follow: the image record *is* six named fields at fixed offsets, and
+two of the three defects section 47 fixed are in them -- `data_len` believed
+against the file's length, and believed against the pixel buffer sized from the
+width, height and depth beside it.  Both had to be built by hand because this
+script was only flipping bits at them.  So `member` exists, and the reasoning
+that left it out is kept above as the shape of the mistake.
 """
 import os
 import random
@@ -60,10 +72,24 @@ BMP_FIELDS = [
 EDGES = [0, 1, 2, 3, 4, 0xFFFFFFFF, 0x7FFFFFFF, 0x80000000, 0xFFFF, 0x10000,
          24, 32, 255, 256, 0x40000000]
 
+# The .bmf member header: four bytes of magic, then the sixteen-byte BmfImage
+# `compress_image` wrote.  Offsets are from the start of the file, so this
+# reaches the *first* member.  For the two-member archive `fuzz.sh` adds to the
+# corpus that is the interesting one anyway: what a mutated first member tests
+# is whether the walk survives it and reaches the second.
+BMF_FIELDS = [
+    ("width",     4, 2),
+    ("height",    6, 2),
+    ("stride",    8, 4),
+    ("depth",    14, 1),
+    ("flags",    15, 1),
+    ("data_len", 16, 4),
+]
+
 
 def put(buf, off, size, val):
-    buf[off:off + size] = struct.pack("<I" if size == 4 else "<H",
-                                      val & (0xFFFFFFFF if size == 4 else 0xFFFF))
+    fmt = {1: "<B", 2: "<H", 4: "<I"}[size]
+    buf[off:off + size] = struct.pack(fmt, val & ((1 << (8 * size)) - 1))
 
 
 def mutate_bytes(rng, data):
@@ -84,6 +110,16 @@ def mutate_header(rng, data):
     val = rng.choice(choices)
     put(buf, off, size, val)
     return bytes(buf), "header:%s=%#x" % (name, val & 0xFFFFFFFF)
+
+
+def mutate_member(rng, data):
+    buf = bytearray(data)
+    name, off, size = rng.choice(BMF_FIELDS)
+    if off + size > len(buf):
+        return mutate_bytes(rng, data)
+    val = rng.choice(EDGES + [len(data), len(data) * 2, 8, 16, 100000])
+    put(buf, off, size, val)
+    return bytes(buf), "member:%s=%#x" % (name, val & 0xFFFFFFFF)
 
 
 def mutate_truncate(rng, data):
@@ -110,13 +146,23 @@ def main():
 
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     corpus = []
-    tf = os.path.join(here, "testfiles")
-    for n in sorted(os.listdir(tf)):
-        if n.endswith(".bmp") or n.endswith(".bmf"):
-            with open(os.path.join(tf, n), "rb") as f:
-                corpus.append((n, f.read()))
+    dirs = [os.path.join(here, "testfiles")]
+    # Every stream in testfiles/ has one member in it, so the archive walk --
+    # the loop `expand_image` runs until a member does not parse -- was only
+    # ever entered once.  BMF_FUZZ_EXTRA is how `fuzz.sh` hands over a directory
+    # with a two-member archive in it; the mutators do not care which is which,
+    # and a header mutated in the first member is a walk that has to survive
+    # reaching the second.
+    extra = os.environ.get("BMF_FUZZ_EXTRA")
+    if extra and os.path.isdir(extra):
+        dirs.append(extra)
+    for d in dirs:
+        for n in sorted(os.listdir(d)):
+            if n.endswith(".bmp") or n.endswith(".bmf"):
+                with open(os.path.join(d, n), "rb") as f:
+                    corpus.append((n, f.read()))
     if not corpus:
-        sys.exit("no corpus in %s" % tf)
+        sys.exit("no corpus in %s" % dirs[0])
 
     os.makedirs(outdir, exist_ok=True)
     for i in range(count):
@@ -125,7 +171,8 @@ def main():
             m = rng.choice([mutate_bytes, mutate_header, mutate_header,
                             mutate_truncate])
         else:
-            m = rng.choice([mutate_bytes, mutate_truncate])
+            m = rng.choice([mutate_bytes, mutate_member, mutate_member,
+                            mutate_truncate])
         body, what = m(rng, data)
         ext = ".bmf" if name.endswith(".bmf") else ".bmp"
         out = "%s.%d%s" % (name.rsplit(".", 1)[0], i, ext)

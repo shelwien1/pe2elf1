@@ -21,6 +21,7 @@ Three commands are the entry points:
 ./tools/proven.sh         # and whether those zeros have ever been able to move
 ./tools/asan.sh           # every test image under AddressSanitizer
 ./tools/fuzz.sh           # mutated inputs through the same
+./tools/hdrscan.sh        # and the header bytes small enough to enumerate
 ./tools/triage.sh         # bisect a stream that moved, by name
 ```
 
@@ -33,6 +34,12 @@ is the one to run after changing anything a stream's header reaches. The round
 that fuzzed for crashes alone got 2022 runs and no findings out of the `-O2`
 build; the first 400 through the ASan build reported 26. `REFACTORING9.md` §47
 is what they were.
+
+`hdrscan.sh` is the one that does not sample. A `.bmf` member header has two
+one-byte fields, so 512 runs a stream covers both completely — and what that
+buys is a claim fuzzing cannot make: every value was tried, not enough of them
+to feel confident. It found four defects §47's fuzzer had not, one of them a
+SIGFPE reachable from four values in 256. §48.
 
 ## the original six
 

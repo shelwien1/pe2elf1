@@ -22,15 +22,15 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17315
+subs1.hpp lines                      17787     17616         17449
 bmf.cpp lines                            —         —           365
 raw-offset sites                        22        12              0
   off `_this`                            —         1             0
   in functions                           —         1             0
 byte offsets on a typed base           121         0             0
-pointer casts                         2137      1545          1204
-  to a scalar                            —         —           475
-  to a record                            —         —           373
+pointer casts                         2137      1545          1205
+  to a scalar                            —         —           470
+  to a record                            —         —           379
   to a scalar, of an address             —         —           351
   to a record, of an address             —         —             5
 declarations carrying alignas            —         —            23
@@ -47,7 +47,7 @@ structs                                 —         —            24
   still ObjN                             —         —             0
 fNN members / named ones             93/121     5/162         0/172
 distinct unexplained locals            554       591             0
-  bodies still carrying one              —   8 of 102       0 of 93
+  bodies still carrying one              —   8 of 102       0 of 94
   uses                                    —      6302             0
 locals named for a callee parameter      —         —             0
   declarations / bodies                   —         —           0/0
@@ -3799,3 +3799,237 @@ counts now.
 The honest summary of §46's closing line is that it measured two instruments and
 reported three. This section is what the third one says now that it has been
 pointed at the inputs it was for.
+
+## 48. Enumerating the part small enough to enumerate
+
+§47's fuzzer had three mutators and a stated reason for having no fourth:
+
+> The `.bmf` corpus gets `bytes` and `truncate` only: a compressed stream has
+> no named fields, and its header is four bytes of magic plus the image record
+> that `compress_image` wrote, which the header mutator would only be flipping
+> blind.
+
+Every clause of that is true and the conclusion does not follow. The image
+record *is* six named fields at fixed offsets — width, height, stride, depth,
+flags, `data_len` — and two of the three defects §47 fixed are in them. Both had
+to be built by hand, precisely because the fuzzer was only flipping bits at
+them. So `fuzz.py` grew a `member` mutator, and against the §46 worktree it
+immediately reported on `member:height`, `member:width`, `member:depth` and
+`member:flags` — four fields the byte-flipper had never once reached in 2000
+runs, because a header is twenty bytes of a file that is often megabytes.
+
+That is the general shape: **the reason a search finds nothing is sometimes the
+search.** §47 said the same thing one level up, about the instrument.
+
+### And then stop sampling
+
+Two of those fields are one byte. A byte has 256 values. `tools/hdrscan.sh`
+walks both of them through all 256 against every reference stream — 512 runs a
+stream, under ASan — and what it buys is a claim no fuzzer can make: not *enough
+values were tried to feel confident*, but *every value was tried*.
+
+It found five defects. Four are below; the fifth is not a bounds problem at all
+and has a section of its own. Three of the four a fuzzer would eventually have
+found; the fourth it would have found slowly, and the difference is instructive:
+
+| field | values that report | what |
+| --- | --- | --- |
+| depth | 1 of 256 (`0xFF`) | six bits of depth say 63, `(63 + 7) >> 3` is eight planes, and `plane_desc` holds four — a **global**-buffer-overflow, into `alphabet_reduced` |
+| depth | 4 of 256 (`0, 64, 128, 192`) | low six bits clear, so `-0 & 31` is 0, `expand_alphabet`'s `mask` is `0xFFFFFFFF`, its `cap` is 2³² in a `uint32_t` — and `get_freq` divides by it. **SIGFPE on the plain build**, not only under ASan |
+| flags | 11 of 256 | bit 1 asks for the deinterleave: a walk of `width * height * plane_count` bytes, which is the buffer's size only when the image is a byte per plane per pixel. For a packed image it is up to eight times it |
+| `data_len` | small values | the six plane-descriptor reads are `*(uint32_t *)out_cursor`, and they run *before* the range decoder, so §47's `dec_get` never gets the chance. `data_len = 1` is a four-byte read out of a one-byte buffer |
+
+The eleven flag values are the interesting row. They are not eleven *arbitrary*
+values — every one needs bit 1 set and the rest of the header still parseable —
+so a uniform byte mutator hits one about once in a hundred tries at that offset,
+and it has to pick that offset first. The scan finds all eleven in five hundred
+runs, every time, and says so.
+
+### The fixes
+
+Two bounded reads and three refusals, all in `__expand_image`:
+
+* `__packer_word()`, which is to the bit packer what §47's `dec_get` is to the
+  range decoder — the one place that knows where the coded buffer ends;
+* `plane_count` outside 1…4 is refused, which is both ends of the depth field;
+* a zero width or height is refused. `alloc_image` multiplies the two, so it
+  asks for nothing, and `bmf_new` is `malloc(n ? n : 1)` — it gets one byte and
+  *succeeds*, and every loop below is then written against an image whose other
+  side is still nonzero;
+* the deinterleave checks that `width * height * plane_count` fits in
+  `data_size` before it walks. In 64 bits: two sixteen-bit sides and four planes
+  is 2³⁴.
+
+### Where each case went, again
+
+The same split §47 drew, and it landed differently for each:
+
+| case | before | after | lives in |
+| --- | --- | --- | --- |
+| `zeroh.bmf` | 139 — SIGSEGV | 3 | `test.sh` |
+| `packed2d.bmf` | 139 — SIGSEGV | 3 | `test.sh` |
+| `depthff.bmf` | 4 | 3 | `test.sh` |
+| `depth0.bmf` | 4 | 3 | `test.sh` |
+| `len1.bmf` | 4 | 4 | `tools/asan.sh` |
+
+Those are the suite's own numbers, run against the previous commit — not the
+readings above, which came from hand-built files. The difference is the stream
+each case is built from, and it is worth a sentence because it decides whether a
+case tests anything at all:
+
+* the same zero height is a **SIGSEGV** on `med32`, a **SIGABRT** on `rle8`, exit
+  4 on `t24`, exit 3 on `x_ci` — and on `altp1` it is **exit 0**, a written
+  output for an image with no rows in it;
+* the same depth of 0 is a **SIGFPE** on `rle4` and exit 4 on `x_ci`;
+* the same deinterleave flag is a SIGABRT on `t1` and a SIGSEGV on `rle4`.
+
+So the streams are chosen rather than named. `$ref` is the largest, as it was;
+`zeroh` is built from the *smallest*, because against the pre-fix build `$ref`
+exits 3 either way and a row whose two sides agree is a row that tests the
+spelling of its expectation; and `packed2d` is built from the first stream whose
+header says four bits a pixel or fewer, because at eight bits and up the flag it
+sets is *valid*. Under `BMF_IMAGES=t24.bmp` there is no packed stream and that
+row drops out, which is the suite declining to run rather than passing.
+
+Both selections are taken at the top of the block, beside `$ref`, and not beside
+the cases that use them — everything below writes `.bmf` files into the same
+directory, so an `ls -S` a few lines later picks `empty.bmf`, which is this
+suite's own and zero bytes long. It did, once, and the three cases built from it
+turned into "Can't open file", exit 6, which is a suite reporting on itself.
+
+### One finding that was the harness
+
+Seed 2, 1200 mutants: one report, `x_ai.bmp` with `biHeight` at `0xFFFF`, and
+ASan saying it could not allocate 185 MB. That is not a defect. `x_ai.bmp` is
+RLE8, and the RLE path memsets the whole buffer before it decodes, so a
+2820×65535 image is asked for honestly and filled honestly — a legal BMP header
+describing a mostly-empty picture. What made it look like a finding was
+`fuzz.sh`'s own `ulimit -v`.
+
+The same message on a `.bmf` — `member:data_len=0x40000000` in a 53 kB file —
+*was* a defect. Neither is decided by reading the message, so `fuzz.sh` counts
+allocator messages in their own column and fails on the rest. Hiding them would
+have hidden the second one; failing on them would have made the harness's limit
+into the program's problem.
+
+For the record on the other half of that: an *uncompressed* BMP with an inflated
+height exits 4. The row loop checks every `fread` against the stride, which is
+the check §46 added, working.
+
+### What it comes to
+
+* `tools/hdrscan.sh` over all fifteen reference streams — both one-byte fields,
+  every value, 7680 runs — went from four kinds of report to **one**, sixteen
+  runs of it, which is §49 and not any of the above;
+* `tools/fuzz.sh` seed 11 with the `member` mutator: 6 reports before, 0 after;
+* `tools/asan.sh`: no report;
+* the malformed suite counts 28 cases, up from 22 at the end of §46;
+* fifteen streams byte-identical, ratchet unmoved at 1038.
+
+### A guard whose failure mode was "allow"
+
+`__bytes_left` returns how many bytes are left in the file, and the first
+version returned `-1` when it could not tell. Its comment said:
+
+> The -1 is not a special case for the callers to handle: they compare an
+> unsigned length against it, so a file whose length cannot be taken refuses
+> every member.
+
+Both callers do compare an unsigned length against it, and `(uint32_t)-1` is
+`0xFFFFFFFF` — the largest value there is. `len > that` is never true, so a file
+this could not measure had **every** member accepted. The comment described the
+opposite of the code, and described it confidently.
+
+It returns 0 now, which is the same idea written the way the comparison reads
+it. Nothing in the corpus reaches either branch — BMF opens its input by name,
+so `ftell` does not fail — which is exactly why this could sit there being
+wrong: no test could have caught it, and the only thing that did was reading the
+change back with the cast in mind.
+
+## 49. A table with one entry missing
+
+The last thing `hdrscan.sh` reported was not a bound. Eight of the 256 flag
+values, on `ref_t24` and `ref_t32` and nowhere else:
+
+```
+READ of size 1 ... offset 287 in frame
+  #0 __unpredict_med(unsigned char*, int, int)   subs1.hpp:5896
+```
+
+Those eight all set the predictor to 1, which is the only thing that reaches
+`unpredict_med` — the inverse of the MED residual transform. It builds its
+unfolding table on the stack:
+
+```c
+alignas(16) uint8_t unfold[255];
+unfold[0] = 0;
+for ( j = 0; j < 127; ++j ) {
+  unfold[2 * j + 1] = (uint8_t)(-1 - (int32_t)j);
+  unfold[2 * j + 2] = (uint8_t)(1 + j);
+}
+```
+
+255 entries, filled to 254, and then indexed by a whole byte out of the plane:
+`unfold[(uint8_t)*p]`.
+
+### It is the table that is wrong, not the index
+
+The tempting fix is to clamp the index. That would be the wrong one, and the
+proof is thirty lines away in `predict_med`, which builds the inverse:
+
+```c
+alignas(16) uint8_t fold[272];
+for ( j = 0; j < 128; ++j ) {
+  fold[j]       = (uint8_t)(2 * j);
+  fold[128 + j] = (uint8_t)(-1 - 2 * (int32_t)j);
+}
+```
+
+`fold[128]` is **255**. A residual of −128 — which `*p - pred` produces whenever
+the prediction is 128 above the pixel — folds to code 255, so 255 is a code the
+encoder *emits*. The decoder had no entry for it, and what it read instead was
+whatever the stack happened to hold past the array.
+
+The entry belongs where the pattern already puts it: 255 is `2 * 127 + 1`, so it
+is `-1 - 127`, which is −128, and that inverts `fold[128] = 255` exactly. One
+line, and the array is 256 now.
+
+### Why nine rounds of byte-identical streams said nothing
+
+Three reasons, each of which would have been enough on its own:
+
+* `unpredict_med` runs for exactly one image in the corpus, and instrumented,
+  the number of times any stream reaches `unfold[255]` is **0**. `med32` is the
+  only stream that runs the body at all, and it never carries that code;
+* its forward direction, `predict_med`, is *unreachable in this build* — both
+  call sites are under `plane_predictor == 1` and `-E` is 0. The encoder here
+  cannot produce the stream that exposes it, so no round trip can;
+* the reference streams are the *encoder's* output and this is in the decoder.
+  Fifteen byte-identical streams are silent about the whole decode side by
+  construction.
+
+That is the same shape as `choose_plane_coding`'s stack overflow in §43 and the
+range decoder's unbounded read in §47, and it is the third time: **the gate's
+strongest statement is about one direction of one half of the program.** What
+found it was an exhaustive walk of two header bytes — a search with no model of
+the code at all — because the eight flag values that reach the MED expander are
+eight values a corpus of legitimate streams never contains.
+
+`REFACTORING.md` §2.3 says of this body that it "is here to be *read*, as the
+definition of what the inverse undoes". It was, and reading it against its own
+inverse is what settled which of the two was wrong.
+
+### What it comes to
+
+* `tools/hdrscan.sh`: **16 reports before, 0 after**, over 7680 runs — both
+  one-byte fields, every value, all fifteen reference streams;
+* `tools/asan.sh` grew a `medflag` case, which is the one flag bit that sends
+  `ref_t24` through the MED expander. Against a tree differing *only* in this
+  one line it reports `1 of 39 runs`; against this one, none. That is the fast
+  form of what the scan finds by walking all 256;
+* `tools/fuzz.sh` seed 31, 600 mutants over 33 seeds — the corpus plus a
+  two-member archive, which nothing had been mutating: **0 reported**. Every
+  stream in `testfiles/` holds one image, so the walk in `expand_image` had only
+  ever been entered once by anything here;
+* fifteen streams byte-identical, ratchet unmoved at 1038, `test.sh` at 28
+  refused inputs, sweep clean.

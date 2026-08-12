@@ -359,6 +359,20 @@ static uint8_t  *coded_buf;     // base of the buffer, from malloc
 // only ever touches element 0, where it keeps an address -- so it is one
 // pointer, and out of the blob for the same reason as the cursors above.
 // BMF.exe had it at 0x00443380.
+//
+// Every one of its sixteen assignments is `coded_buf + coded_size - 4096`, and
+// on the decode side `coded_size` is the member's own `data_len` -- which can be
+// less than 4096, and for `testfiles/ref_altp1.bmf` is 172.  That computes a
+// pointer well before the buffer, which is undefined behaviour on its own.
+//
+// It is left as it is, and the reason is a measurement rather than a
+// preference: nothing on the decode side ever dereferences it.  The two readers
+// are `predict_med`, which is unreachable in this build (both call sites are
+// under `plane_predictor == 1`, and `-E` is 0), and `transform_planes`, whose
+// seven call sites are all in `compress_image`.  On the encode side
+// `coded_size` is `data_size + 0x20000`, so the subtraction is always inside.
+// Making the decode side safe would mean touching sixteen assignments to
+// change a value nothing reads; saying which sixteen, and why, is worth more.
 static uint8_t *hist_scratch;
 // The last two.  `tools/blob-independence.txt` marks both SHARED, and they are
 // shared with each other: `exclusion_mask` is 8192 bytes and the 544 of
@@ -5778,7 +5792,7 @@ uint8_t *__unpredict_med(uint8_t *pixels, int32_t width, int32_t height)
   int32_t rows_left, pred, north, northwest;
   uint32_t j, row_rest, pairs, k, x_left;
   uint8_t *p, *up;
-  alignas(16) uint8_t unfold[255];
+  alignas(16) uint8_t unfold[256];
   p = (pixels + 1);
   // The test here was `if ( plane_predictor )`, with a 45-line else building
   // a table for predictor mode 0.  Nothing reaches it: expand_image calls
@@ -5790,12 +5804,33 @@ uint8_t *__unpredict_med(uint8_t *pixels, int32_t width, int32_t height)
   // The unfolding table, code -> residual: code 0 is no change and the rest
   // alternate -1, +1, -2, +2 ... out to +-127.  `predict_med` builds the
   // inverse.
+  //
+  // The last entry is the one the loop cannot reach and the one this table was
+  // missing.  `predict_med`'s `fold` is 256 entries and `fold[128]` is 255 --
+  // a residual of -128, which `*p - pred` produces whenever the prediction is
+  // 128 above the pixel -- so code 255 is a code the encoder emits.  This table
+  // was declared `unfold[255]` and filled to 254, so decoding one read a byte
+  // off the end of the array:
+  //
+  //     READ of size 1 ... offset 287 in frame
+  //       #0 __unpredict_med   subs1.hpp:5896
+  //
+  // and, worse than the read, the value it got was whatever the stack held.
+  // The entry belongs where the pattern puts it: 255 is `2 * 127 + 1`, so it is
+  // `-1 - 127`, which is -128 and inverts `fold[128] = 255` exactly.
+  //
+  // Reachable only from a stream an encoder with `-E` produced, which is why
+  // fifteen byte-identical streams say nothing about it: this build's `-E` is 0
+  // and `predict_med` is unreachable here.  The decoder still has to read those
+  // streams, which is what `testfiles/med32.bmp` is for.  Found by
+  // `tools/hdrscan.sh`, at eight of the 256 flag values on two streams.
   unfold[0] = 0;
   for ( j = 0; j < 127; ++j )
   {
     unfold[2 * j + 1] = (uint8_t)(-1 - (int32_t)j);
     unfold[2 * j + 2] = (uint8_t)(1 + j);
   }
+  unfold[255] = (uint8_t)(-1 - 127);
   if ( width == 1 )
   {
     rows_left = height - 1;
@@ -15306,19 +15341,49 @@ void __transform_planes(BmfImage *p_i, int32_t unread_mode, int8_t unread_flag)
 // overcommit grants, so the lie only surfaced when the `fread` came up short.
 //
 // A member cannot be longer than what is left of the file, and this is what
-// says so.  The -1 is not a special case for the callers to handle: they
-// compare an unsigned length against it, so a file whose length cannot be
-// taken refuses every member, which is the right answer for input this cannot
-// bound.  BMF opens its input by name, so in practice that never happens.
-static long __bytes_left(FILE *fp)
+// says so.
+//
+// It returns *zero* when the length cannot be taken, and that is the whole of
+// how the failure is handled: the callers compare an unsigned length against
+// it, so a file this cannot measure refuses every member, which is the right
+// answer for input it cannot bound.  The first version returned -1 and said the
+// same thing in its comment, which was exactly wrong -- `(uint32_t)-1` is the
+// largest value there is, so `len > that` is never true and the check passed
+// everything it could not measure.  A guard whose failure mode is "allow" is
+// worse than no guard, because the comment above it says otherwise.
+//
+// BMF opens its input by name, so in practice neither branch is reached.
+static uint32_t __bytes_left(FILE *fp)
 {
   long here = ftell(fp);
   if ( here < 0 || fseek(fp, 0, SEEK_END) != 0 )
-    return -1;
+    return 0;
   long end = ftell(fp);
   if ( end < 0 || fseek(fp, here, SEEK_SET) != 0 )
-    return -1;
-  return end - here;
+    return 0;
+  return (uint32_t)(end - here);
+}
+
+// The bit packer's half of the same buffer, bounded the same way `dec_get`
+// bounds the range decoder's.
+//
+// The plane descriptors are read as bit fields out of 32-bit words, six sites
+// that all say `*(uint32_t *)out_cursor; out_cursor += 4;`.  They run *before*
+// the range decoder does, so `dec_get`'s bound never gets the chance: setting
+// `data_len` to 1 gives a one-byte coded buffer and the first of them reads
+// four out of it --
+//
+//     READ of size 4 ... 0 bytes after 1-byte region
+//       #0 __expand_image   subs1.hpp:15578
+//
+// -- which is where a `member:data_len=0x1` mutant lands.
+static uint32_t __packer_word()
+{
+  if ( out_cursor + 4 > coded_buf + coded_size )
+    __exit_402E40(4);
+  uint32_t w = *(uint32_t *)out_cursor;
+  out_cursor += 4;
+  return w;
 }
 
 uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
@@ -15425,7 +15490,7 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
     {
       hdr_word = (*(int32_t *)&__frame.hdr[0]);
       // The aux block's own length, bounded before it becomes an allocation.
-      if ( (*(uint32_t *)&__frame.hdr[4]) > (uint32_t)__bytes_left(((BmfArc *)arc)->fp) )
+      if ( (*(uint32_t *)&__frame.hdr[4]) > __bytes_left(((BmfArc *)arc)->fp) )
       {
         fclose(((BmfArc *)arc)->fp);
         ((BmfArc *)arc)->fp = 0;
@@ -15452,7 +15517,7 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
   // Same for the member's payload, and for both of the things `data_len` goes
   // on to be: the size of the coded buffer on the -S path, and the byte count
   // of the raw `fread` below.
-  if ( __frame.data_len > (uint32_t)__bytes_left(((BmfArc *)arc)->fp) )
+  if ( __frame.data_len > __bytes_left(((BmfArc *)arc)->fp) )
   {
     fclose(((BmfArc *)arc)->fp);
     ((BmfArc *)arc)->fp = 0;
@@ -15467,6 +15532,23 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
     fseek(((BmfArc *)arc)->fp, __frame.pal_len + __frame.data_len, 1);
     return nullptr;
   }
+  // A dimension of zero.  `alloc_image` multiplies the two, so it asks for
+  // nothing -- and `bmf_new` is `malloc(n ? n : 1)`, so it gets one byte and
+  // returns it rather than failing.  Every loop below is then written against
+  // an image whose other dimension is still nonzero:
+  //
+  //     WRITE of size 1 ... 0 bytes after 1-byte region
+  //       #0 __alt_p2_d8_decode_body   subs1.hpp:13621
+  //
+  // A `member:height=0x10000` mutant does it without looking like it: the field
+  // is sixteen bits, so 0x10000 arrives as 0.  There is no image with a zero
+  // side, and this is where that gets said.
+  if ( !__frame.hdr_words[0] || !__frame.hdr_words[1] )
+  {
+    fclose(((BmfArc *)arc)->fp);
+    ((BmfArc *)arc)->fp = 0;
+    return nullptr;
+  }
   img_at = (BmfImage *)((uint8_t *)__alloc_image(__frame.hdr_words[0], __frame.hdr_words[1], __frame.depth_b & 0x3F, (uint8_t)(__frame.depth_b & 0x80) >> 7, 1));
   __frame.depth_f = __frame.depth_b;
   img_at->depth = __frame.depth_b;
@@ -15476,6 +15558,36 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
   hdr_flags = __frame.flags_b;
   img_at->flags |= __frame.flags_b & 2 | (has_coded << 7);
   ::plane_count = ((__frame.depth_f & 0x3Fu) + 7) >> 3;
+  // `plane_desc` is five records -- record 0 for the image, then one per plane
+  // -- and the descriptor loop below writes `plane_desc[pl + 1]` for every
+  // plane.  Four planes is what that holds, and four is what the depths this
+  // format has produce: 1, 2, 4 and 8 give one, 24 gives three, 32 gives four.
+  //
+  // The depth is six bits of a header byte, so it can say 63, and 63 asks for
+  // eight:
+  //
+  //     WRITE of size 1 ... 2 bytes after global variable 'plane_desc'
+  //       #0 __expand_image   subs1.hpp:15606
+  //
+  // one changed byte of `testfiles/ref_t24.bmf`.  `read_bmp` was taught to
+  // check the depth it is handed (REFACTORING9.md §46); this is the same field
+  // arriving by the other door, and nothing had checked it there.
+  //
+  // Zero is the other end of the same field and a worse answer.  `-0 & 31` is
+  // 0, so `expand_alphabet`'s `mask` is 0xFFFFFFFF, its `cap` is 2^32 in a
+  // `uint32_t`, and `get_freq` divides the range by it:
+  //
+  //     FPE  #0 RangeCoder::get_freq()  #1 __rc_decode_flat()
+  //          #2 ModelBlock::expand_alphabet()
+  //
+  // Four of the 256 values -- 0, 64, 128 and 192, the ones whose low six bits
+  // are clear -- and a SIGFPE on the plain build, not only under ASan.
+  if ( ::plane_count < 1 || ::plane_count > 4 )
+  {
+    fclose(((BmfArc *)arc)->fp);
+    ((BmfArc *)arc)->fp = 0;
+    return nullptr;
+  }
   if ( (hdr_flags & 0x20) == 0 )
   {
     // The uncompressed member: `data_len` bytes straight into the pixel buffer.
@@ -15555,8 +15667,7 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
   packer_free_bits -= 4;
   if ( packer_free_bits < 0 )
   {
-    word4b = *(uint32_t *)out_cursor;
-    out_cursor += 4;
+    word4b = __packer_word();
     want2 = word4b >> (-packer_free_bits & 31);
     near_lossless = packer_acc | (word4b << ((packer_free_bits + 4) & 31)) & 0xF;
     packer_acc = want2;
@@ -15590,8 +15701,7 @@ LABEL_42:
       packer_free_bits -= 6;
       if ( packer_free_bits < 0 )
       {
-        word6 = *(uint32_t *)out_cursor;
-        out_cursor += 4;
+        word6 = __packer_word();
         desc = packer_acc | (word6 << ((packer_free_bits + 6) & 31)) & 0x3F;
         packer_acc = word6 >> (-packer_free_bits & 31);
         packer_free_bits += 32;
@@ -15611,8 +15721,7 @@ LABEL_42:
         packer_free_bits -= 8;
         if ( packer_free_bits < 0 )
         {
-          worddc = *(uint32_t *)out_cursor;
-          out_cursor += 4;
+          worddc = __packer_word();
           dc_v = packer_acc | __frame.mask & (worddc << ((packer_free_bits + 8) & 31));
           packer_acc = worddc >> (-packer_free_bits & 31);
           packer_free_bits += 32;
@@ -15628,8 +15737,7 @@ LABEL_42:
           packer_free_bits -= 8;
           if ( packer_free_bits < 0 )
           {
-            word4 = *(uint32_t *)out_cursor;
-            out_cursor += 4;
+            word4 = __packer_word();
             w4_v = packer_acc | __frame.mask & (word4 << ((packer_free_bits + 8) & 31));
             packer_acc = word4 >> (-packer_free_bits & 31);
             packer_free_bits += 32;
@@ -15643,8 +15751,7 @@ LABEL_42:
           packer_free_bits -= 8;
           if ( packer_free_bits < 0 )
           {
-            word8 = *(uint32_t *)out_cursor;
-            out_cursor += 4;
+            word8 = __packer_word();
             w8_v = packer_acc | __frame.mask & (word8 << ((packer_free_bits + 8) & 31));
             packer_acc = word8 >> (-packer_free_bits & 31);
             packer_free_bits += 32;
@@ -15660,8 +15767,7 @@ LABEL_42:
             packer_free_bits -= 8;
             if ( packer_free_bits < 0 )
             {
-              word12 = *(uint32_t *)out_cursor;
-              out_cursor += 4;
+              word12 = __packer_word();
               w12_v = packer_acc | __frame.mask & (word12 << ((packer_free_bits + 8) & 31));
               packer_acc = word12 >> (-packer_free_bits & 31);
               packer_free_bits += 32;
@@ -15823,6 +15929,34 @@ LABEL_109:
   }
   if ( (img_at->flags & 2) != 0 )
   {
+    // The deinterleave walks `width * height * plane_count` bytes back into
+    // `img_at->pixels`, one byte per plane per pixel, because that is the shape
+    // `compress_image` sets the flag for: it swaps width and height and writes
+    // `stride = height * plane_count`, so the product is exactly `data_size`.
+    //
+    // Bit 1 of the header's flag byte is where the flag arrives from, and
+    // nothing checked that the rest of the header agreed with it.  For a packed
+    // image -- 1, 2 or 4 bits a pixel -- `stride` is a *fraction* of the width,
+    // so the walk is up to eight times the buffer:
+    //
+    //     WRITE of size 1 ... 231 bytes after 9625-byte region
+    //       #0 __expand_image   subs1.hpp:15871
+    //
+    // one changed byte of `testfiles/ref_t1.bmf`, and eleven of the 256 values
+    // that byte can take reach it.  Found by walking both one-byte fields of a
+    // member header through all 256 values against every reference stream,
+    // which is a smaller search than the fuzzer's and covers this part of it
+    // exhaustively.
+    //
+    // 64-bit product: the two dimensions are sixteen bits each and there can be
+    // four planes, which is 2^34 and not a `uint32_t`.
+    if ( (uint64_t)img_at->width * img_at->height * (uint32_t)::plane_count
+         > (uint64_t)img_at->data_size )
+    {
+      fclose(((BmfArc *)arc)->fp);
+      ((BmfArc *)arc)->fp = 0;
+      return nullptr;
+    }
     copy = (uint8_t *)bmf_new(img_at->data_size);
     n_planes = ::plane_count;
     __frame.nplanes_s = (int32_t)copy;

@@ -52,7 +52,15 @@ bad=0 ran=0
 # the example: `data_len` halved, so the range decoder runs off the end of the
 # coded buffer -- and the -O2 build reads whatever malloc put there next, keeps
 # decoding, and still exits 4, exactly as it does now that the read is bounded.
-# Under ASan the two are a heap-buffer-overflow and a clean refusal.
+# Under ASan the two are a heap-buffer-overflow and a clean refusal.  `len1` is
+# the same field taken to 1, which is a four-byte packer read out of a one-byte
+# buffer and 4 either way for the same reason.  `medflag` is the one flag bit
+# that sends `ref_t24` through the MED expander, whose unfolding table was a
+# byte short of the codes its own inverse emits (REFACTORING9.md §49) -- the
+# fast form of what `tools/hdrscan.sh` finds by walking all 256.  The other two
+# here change the exit code, so they are in `test.sh` as well; they are repeated
+# because this is where the overflow itself is visible rather than its
+# consequence.
 #
 # Built here rather than kept in testfiles/ so that it is derived from whatever
 # the corpus currently is, the way test.sh's truncations are.
@@ -61,9 +69,18 @@ if [ "$#" = 0 ] && [ -f testfiles/ref_t24.bmf ]; then
 d=bytearray(open("testfiles/ref_t24.bmf","rb").read())
 struct.pack_into("<I",d,16,struct.unpack_from("<I",d,16)[0]//2)
 open("'"$tmp"'/shortlen.bmf","wb").write(d)
+d=bytearray(open("testfiles/ref_t24.bmf","rb").read())
+d[14]=0xFF
+open("'"$tmp"'/depthff.bmf","wb").write(d)
+d=bytearray(open("testfiles/ref_t24.bmf","rb").read())
+struct.pack_into("<I",d,16,1)
+open("'"$tmp"'/len1.bmf","wb").write(d)
+d=bytearray(open("testfiles/ref_t24.bmf","rb").read())
+d[15]&=~8
+open("'"$tmp"'/medflag.bmf","wb").write(d)
 open("'"$tmp"'/rawlen.bmf","wb").write(
     struct.pack("<4sHHHHHBBI",b"\x81\x8a20",8,8,0,0,0,8,0x04,100000)+b"\xaa"*100000)'
-  for m in shortlen rawlen; do
+  for m in shortlen len1 medflag depthff rawlen; do
     ASAN_OPTIONS=detect_leaks=0 "$tmp/bmf" d "$tmp/$m.bmf" "$tmp/$m.out" \
         >"$tmp/$m.log" 2>&1
     ran=$((ran + 1))

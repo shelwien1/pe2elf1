@@ -145,6 +145,29 @@ if [ "${BMF_MALFORMED:-1}" = 1 ]; then
     # if there is something past it, so the lengths are filtered against the
     # size as well.
     ref=$(ls -S -- *.bmf 2>/dev/null | grep -v '^arc\.' | head -1)
+    # The *smallest*, from the same set and for a reason of its own: the
+    # zero-height case below has to be built from a stream where it
+    # discriminates, and against the pre-fix build `$ref` exits 3 either way
+    # while the smallest segfaults.  A row whose two sides agree is a row that
+    # tests the spelling of its expectation.
+    #
+    # Both of these are taken here rather than beside the case that uses them,
+    # because everything below writes .bmf files into this directory -- `ls -S`
+    # a few lines later picks `empty.bmf`, which is this suite's own and zero
+    # bytes long.
+    small=$(ls -S -- *.bmf 2>/dev/null | grep -v '^arc\.' | tail -1)
+    # And one whose image is 1, 2 or 4 bits a pixel, chosen by reading the depth
+    # out of its own member header rather than by name: the deinterleave case
+    # needs a *packed* image, and at eight bits and up the flag it sets is valid
+    # rather than a defect.
+    packed=""
+    for f in *.bmf; do
+      [ -s "$f" ] || continue
+      case $f in arc.*) continue ;; esac
+      d=$(od -An -tu1 -j14 -N1 "$f" | tr -d ' ')
+      [ -n "$d" ] && [ "$((d & 63))" -le 4 ] || continue
+      packed=$f; break
+    done
     # The largest *uncompressed* BMP -- the compression field of the info
     # header, at offset 30, has to be 0.  This used to be here because cutting
     # an RLE8 file short produced a buffer overflow rather than a refusal, and
@@ -193,7 +216,7 @@ open(sys.argv[5],"wb").write(d)' "$1" "$2" "$3" "$4" "$5"
     [ -n "$pal" ] && hdr_patch "$pal" 46 25600 I clrused.bmp
     hdr_patch "$img" 18 32960 i wide.bmp
     hdr_patch "$img" 28 16 I bpp16.bmp
-    # The three lengths in a member header, each of which used to be believed.
+    # The fields of a member header, each of which used to be believed.
     #
     #   rawlen   an uncompressed member whose `data_len` has nothing to do with
     #            its width, height and depth.  `expand_image` freads it into
@@ -205,17 +228,49 @@ open(sys.argv[5],"wb").write(d)' "$1" "$2" "$3" "$4" "$5"
     #            space than a 32-bit process has, so the pre-fix build got its
     #            answer from `bmf_new` failing -- "Out of memory!", exit 7, for
     #            a 53 kB file.
+    #   depthff  the depth byte at 0xFF.  Six of its bits are the depth, so it
+    #            says 63, and `(63 + 7) >> 3` is eight planes written into the
+    #            five records `plane_desc` has.  This one is only a different
+    #            exit code here -- 4 against 3 -- because the write lands in the
+    #            next global rather than anywhere the program notices; the
+    #            overflow itself is in `tools/asan.sh`'s pass.
+    #   depth0   the other end of the same field.  With its low six bits clear
+    #            `expand_alphabet`'s `mask` is 0xFFFFFFFF, its `cap` is 2^32 in
+    #            a uint32_t, and `get_freq` divides the range by it -- a SIGFPE
+    #            on `rle4`, exit 4 on the stream this picks.
+    #   zeroh    an image with no rows.  `alloc_image` multiplies the sides, so
+    #            it asks for nothing, and `bmf_new` is `malloc(n ? n : 1)`: it
+    #            gets one byte and succeeds, and every loop below is written
+    #            against an image whose other side is still nonzero.  Built from
+    #            the smallest stream, for the reason given up there.
+    #   packed2d the deinterleave flag on an image that is not one byte per
+    #            plane per pixel.  The walk is `width * height * plane_count`,
+    #            which for a packed image is up to eight times the buffer.
     #
     # `shortlen` -- the same field made too *small*, which walks the range
     # decoder off the end of the coded buffer -- is not here: the pre-fix build
     # reads the next allocation and still exits 4, so nothing this suite can see
-    # tells the two apart.  It is in `tools/asan.sh`, which can.
+    # tells the two apart.  Nor is `len1`, `data_len` at 1, which is a four-byte
+    # packer read out of a one-byte buffer and 4 either way for the same reason.
+    # Both are in `tools/asan.sh`, which can tell them apart.
     python3 -c 'import struct,sys
 d=bytearray(open(sys.argv[1],"rb").read())
 struct.pack_into("<I",d,16,0xF0000000)
 open("biglen.bmf","wb").write(d)
+d=bytearray(open(sys.argv[1],"rb").read())
+d[14]=0xFF
+open("depthff.bmf","wb").write(d)
+d=bytearray(open(sys.argv[1],"rb").read())
+d[14]&=0xC0
+open("depth0.bmf","wb").write(d)
+d=bytearray(open(sys.argv[3],"rb").read())
+struct.pack_into("<H",d,6,0)
+open("zeroh.bmf","wb").write(d)
+d=bytearray(open(sys.argv[2],"rb").read())
+d[15]|=2
+open("packed2d.bmf","wb").write(d)
 open("rawlen.bmf","wb").write(
-    struct.pack("<4sHHHHHBBI",b"\x81\x8a20",8,8,0,0,0,8,0x04,100000)+b"\xaa"*100000)' "$ref"
+    struct.pack("<4sHHHHHBBI",b"\x81\x8a20",8,8,0,0,0,8,0x04,100000)+b"\xaa"*100000)' "$ref" "${packed:-$ref}" "${small:-$ref}"
 
     # An output that exists and is not an archive: `compress_image` walks it to
     # append, and used to write through the FILE `expand_image` had closed.
@@ -242,6 +297,10 @@ d zeros.bmf   3   a stream that is not one
 d ones.bmf    3   the other end of the same
 d rawlen.bmf  3   a raw member longer than the pixels it decodes to
 d biglen.bmf  3   a member longer than the file it is in
+d depthff.bmf 3   a depth asking for more planes than plane_desc has
+d depth0.bmf  3   the other end of it: a depth of zero, which divided by zero
+d zeroh.bmf   3   an image with a side of zero
+$([ -n "$packed" ] && echo "d packed2d.bmf 3 the deinterleave flag on an image that is not a byte a plane")
 d gone.bmf    6   an input that is not there
 c gone.bmp    6   the same, compressing
 c cut.bmp     4   a BMP whose pixels run out

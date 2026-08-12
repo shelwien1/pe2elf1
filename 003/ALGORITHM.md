@@ -80,10 +80,16 @@ place of the coded data.
 > can be written back — 2, 15 and 16 bits per pixel read and compress but have
 > no writer, and `bmf_decompress` exits 5 saying so.
 >
-> **And what `expand_image` checks**, since §47: the two lengths in a member
-> header that become allocations, against what is left of the file; and
+> **And what `expand_image` checks**, since §47 and §48: the two lengths in a
+> member header that become allocations, against what is left of the file;
 > `data_len` on the uncompressed path against the pixel buffer `alloc_image`
-> sized from the *other* three header fields, which nothing had tied it to.
+> sized from the *other* three header fields, which nothing had tied it to; a
+> plane count of 1 to 4, which is both ends of the depth field — 63 asks for
+> eight planes into a five-record table, and 0 divides by zero in
+> `expand_alphabet`; a nonzero width and height, since `alloc_image` multiplies
+> them and `bmf_new` turns a request for nothing into one byte and succeeds; and
+> the deinterleave flag against the shape it assumes, one byte per plane per
+> pixel, which a packed image is not.
 
 ## 3. The image descriptor
 
@@ -511,6 +517,12 @@ residual `X - pred` (mod 256) is then folded from signed to unsigned through a
 256-entry table built at the top of the function: `0 → 0`, `+d → 2d`,
 `-d → 2d - 1`. The folded byte replaces the pixel, and a histogram is
 accumulated in `hist_scratch` for the filter search.
+
+The table is 256 entries and its last one matters: `fold[128] = 255`, a residual
+of −128, which happens whenever the prediction is 128 above the pixel. The
+inverse table in `unpredict_med` was declared 255 long and filled to 254, so
+that code decoded to whatever the stack held past the array. `REFACTORING9.md`
+§49 — it is the missing entry that is the defect, not the index that found it.
 
 `__byte_44339E & 3` (`plane_predictor`, `0x00443360`) chooses the mode, and it interacts
 with `E`. The dispatch, read off `transform_planes`, is:
