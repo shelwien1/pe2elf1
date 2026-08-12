@@ -79,6 +79,11 @@ place of the coded data.
 > for it, a run opcode against the depth it implies, and the depth against what
 > can be written back — 2, 15 and 16 bits per pixel read and compress but have
 > no writer, and `bmf_decompress` exits 5 saying so.
+>
+> **And what `expand_image` checks**, since §47: the two lengths in a member
+> header that become allocations, against what is left of the file; and
+> `data_len` on the uncompressed path against the pixel buffer `alloc_image`
+> sized from the *other* three header fields, which nothing had tied it to.
 
 ## 3. The image descriptor
 
@@ -385,6 +390,16 @@ blob global.
 | `rc.decode_bit(f0, f1)` | decode | one bit; returns it |
 | `rc.flush()` | encode | tail, length, padding, terminator |
 | `rc.finish()` | decode | skip to the terminator |
+| `rc.dec_get(q)` | decode | one input byte, bounded by the end of the coded buffer |
+
+`dec_get` is the only place the decoder touches its input, and the only place
+that knows where that input stops. It exists because none of the three read
+paths above had an end: `dec_normalise` primed `code` from whatever followed the
+buffer, and `finish` scanned for the `0x97` terminator with `while (*q++ !=
+kMarker) { }` and nothing on the other side of it. A well-formed stream never
+reaches the bound — `flush` pads the tail to a four-byte boundary before the
+marker, which is the read-ahead `get_freq` and `decode_bit` need — so it fires
+only on a stream that lied about its own length. `REFACTORING9.md` §47.
 
 Every argument is an argument. The donor had no choice about that — its
 entries took no parameters and three globals *were* the argument list, so a

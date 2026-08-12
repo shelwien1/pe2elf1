@@ -20,12 +20,19 @@ Three commands are the entry points:
 ./tools/sweep.sh          # run every tool against a copy; all should report zero
 ./tools/proven.sh         # and whether those zeros have ever been able to move
 ./tools/asan.sh           # every test image under AddressSanitizer
+./tools/fuzz.sh           # mutated inputs through the same
 ./tools/triage.sh         # bisect a stream that moved, by name
 ```
 
 `asan.sh` is the one to run after lifting a frame: these bodies walk off the
 ends of their locals on purpose, and a frame is what makes the neighbours
 theirs to walk.
+
+`fuzz.sh` is the same instrument pointed at input nobody wrote by hand, and it
+is the one to run after changing anything a stream's header reaches. The round
+that fuzzed for crashes alone got 2022 runs and no findings out of the `-O2`
+build; the first 400 through the ASan build reported 26. `REFACTORING9.md` §47
+is what they were.
 
 ## the original six
 

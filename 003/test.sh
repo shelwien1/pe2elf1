@@ -193,6 +193,30 @@ open(sys.argv[5],"wb").write(d)' "$1" "$2" "$3" "$4" "$5"
     [ -n "$pal" ] && hdr_patch "$pal" 46 25600 I clrused.bmp
     hdr_patch "$img" 18 32960 i wide.bmp
     hdr_patch "$img" 28 16 I bpp16.bmp
+    # The three lengths in a member header, each of which used to be believed.
+    #
+    #   rawlen   an uncompressed member whose `data_len` has nothing to do with
+    #            its width, height and depth.  `expand_image` freads it into
+    #            the pixel buffer `alloc_image` sized from the other three:
+    #            8x8x8 against 100000 is 100000 bytes of the file's own
+    #            choosing over the heap, and the pre-fix build aborts in
+    #            glibc's allocator rather than refusing.
+    #   biglen   `data_len` larger than the file.  0xF0000000 is more address
+    #            space than a 32-bit process has, so the pre-fix build got its
+    #            answer from `bmf_new` failing -- "Out of memory!", exit 7, for
+    #            a 53 kB file.
+    #
+    # `shortlen` -- the same field made too *small*, which walks the range
+    # decoder off the end of the coded buffer -- is not here: the pre-fix build
+    # reads the next allocation and still exits 4, so nothing this suite can see
+    # tells the two apart.  It is in `tools/asan.sh`, which can.
+    python3 -c 'import struct,sys
+d=bytearray(open(sys.argv[1],"rb").read())
+struct.pack_into("<I",d,16,0xF0000000)
+open("biglen.bmf","wb").write(d)
+open("rawlen.bmf","wb").write(
+    struct.pack("<4sHHHHHBBI",b"\x81\x8a20",8,8,0,0,0,8,0x04,100000)+b"\xaa"*100000)' "$ref"
+
     # An output that exists and is not an archive: `compress_image` walks it to
     # append, and used to write through the FILE `expand_image` had closed.
     echo "not an archive" >notarc.out
@@ -216,6 +240,8 @@ d empty.bmf   0   an archive with no members in it
 $(for n in $cuts; do echo "d cut$n.bmf 3 cut at $n bytes"; done)
 d zeros.bmf   3   a stream that is not one
 d ones.bmf    3   the other end of the same
+d rawlen.bmf  3   a raw member longer than the pixels it decodes to
+d biglen.bmf  3   a member longer than the file it is in
 d gone.bmf    6   an input that is not there
 c gone.bmp    6   the same, compressing
 c cut.bmp     4   a BMP whose pixels run out

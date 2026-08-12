@@ -45,6 +45,36 @@ files=("$@")
 [ "${#files[@]}" -gt 0 ] || files=(testfiles/*.bmp)
 
 bad=0 ran=0
+
+# Malformed input first, because that is where this instrument earns its keep.
+# `test.sh` checks an exit code, so it can only hold on to a defect that changes
+# one; the whole point of this class is the ones that do not.  `shortlen.bmf` is
+# the example: `data_len` halved, so the range decoder runs off the end of the
+# coded buffer -- and the -O2 build reads whatever malloc put there next, keeps
+# decoding, and still exits 4, exactly as it does now that the read is bounded.
+# Under ASan the two are a heap-buffer-overflow and a clean refusal.
+#
+# Built here rather than kept in testfiles/ so that it is derived from whatever
+# the corpus currently is, the way test.sh's truncations are.
+if [ "$#" = 0 ] && [ -f testfiles/ref_t24.bmf ]; then
+  python3 -c 'import struct
+d=bytearray(open("testfiles/ref_t24.bmf","rb").read())
+struct.pack_into("<I",d,16,struct.unpack_from("<I",d,16)[0]//2)
+open("'"$tmp"'/shortlen.bmf","wb").write(d)
+open("'"$tmp"'/rawlen.bmf","wb").write(
+    struct.pack("<4sHHHHHBBI",b"\x81\x8a20",8,8,0,0,0,8,0x04,100000)+b"\xaa"*100000)'
+  for m in shortlen rawlen; do
+    ASAN_OPTIONS=detect_leaks=0 "$tmp/bmf" d "$tmp/$m.bmf" "$tmp/$m.out" \
+        >"$tmp/$m.log" 2>&1
+    ran=$((ran + 1))
+    if grep -q 'ERROR: AddressSanitizer' "$tmp/$m.log"; then
+      bad=$((bad + 1))
+      printf '%-14s %s\n' "$m" \
+        "$(sed 's/^==[0-9]*==//' "$tmp/$m.log" | grep -m1 'ERROR: AddressSanitizer')"
+    fi
+  done
+fi
+
 for f in "${files[@]}"; do
   n=$(basename "$f" .bmp)
   ASAN_OPTIONS=detect_leaks=0 "$tmp/bmf" c "$f" "$tmp/$n.bmf" >"$tmp/$n.c" 2>&1
@@ -62,9 +92,12 @@ for f in "${files[@]}"; do
 done
 
 echo
+# `ran` and not `2 * ${#files[@]}`: the malformed pass above adds to it, and a
+# line that computes what it claims to have counted goes on being confident
+# while cases are added under it -- which is what test.sh's `cuts + 10` did.
 if [ "$bad" = 0 ]; then
   echo "no AddressSanitizer report in $ran runs over ${#files[@]} images"
 else
-  echo "$bad of ${#files[@]} images report to AddressSanitizer"
+  echo "$bad of $ran runs report to AddressSanitizer"
 fi
 exit $((bad ? 1 : 0))

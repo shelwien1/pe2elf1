@@ -51,7 +51,7 @@ for t in tools/*.py; do
   n=$(basename "$t")
   case $n in
     structs.py|outpath.py) continue ;;          # imported, not run
-    mk*.py)                continue ;;          # generators: they write, not read
+    mk*.py|fuzz.py)        continue ;;          # generators: they write, not read
     sweep_check.py)        continue ;;          # reads the report, not the file
   esac
   # These five have no count that can be zero.  Three answer with a table, a

@@ -1417,6 +1417,35 @@ struct RangeCoder {
   uint8_t *p()               { return out_cursor; }
   void     set_p(uint8_t *q) { out_cursor = q; }
 
+  // Every byte the decoder takes from the coded buffer comes through here, and
+  // this is the only place that knows where that buffer ends.
+  //
+  // `__expand_image` sizes it at exactly the byte count the stream's own header
+  // claimed and then freads that many, so one byte past the end is not "the
+  // rest of the file" -- it is whatever malloc handed out next.  Nothing
+  // stopped the walk there.  Five changed bytes of the 192 in
+  // `testfiles/ref_altp1.bmf` were enough:
+  //
+  //     READ of size 1 ... 0 bytes after 172-byte region
+  //       #0 RangeCoder::dec_normalise()
+  //       #1 RangeCoder::get_freq(unsigned int)
+  //
+  // and the -O2 build reads the neighbouring allocation and decodes on without
+  // saying anything, which is why 2000 crash-only fuzz runs found none of it.
+  //
+  // A well-formed stream never reaches the bound.  `flush` pads the tail to a
+  // four-byte boundary before the marker, which is exactly the read-ahead
+  // `get_freq` and `decode_bit` need, `__expand_image` refuses any stream that
+  // does not leave the cursor on the last byte, and `tools/asan.sh` over all
+  // seventeen images reports nothing.  So this only ever fires on a stream that
+  // lied about its own length -- and "Read error!" is what the other two
+  // exhausted-input checks in this file already say.
+  uint8_t dec_get(uint8_t *&q) {
+    if (q >= coded_buf + coded_size)
+      __exit_402E40(4);
+    return *q++;
+  }
+
  public:
 
   // ---- encoder ---------------------------------------------------------
@@ -1494,13 +1523,14 @@ struct RangeCoder {
 
   // ---- decoder ---------------------------------------------------------
 
+
   // Consume the marker and prime `code` with 31 bits.  range = 2^7 makes the
   // first normalise run three times, which is what fills it.
   void dec_init() {
     uint8_t *q = p();
-    if (*q++ != kMarker)
+    if (dec_get(q) != kMarker)
       __exit_402E40(4);
-    cache = *q++;
+    cache = dec_get(q);
     set_p(q);
     range = 128;
     low   = cache >> 1;
@@ -1513,7 +1543,7 @@ struct RangeCoder {
     uint8_t *q = p();
     while (range <= kTop) {
       uint32_t head = (uint32_t)(uint8_t)(cache << 7) | (low << 8);
-      cache = *q++;
+      cache = dec_get(q);
       low   = (cache >> 1) | head;
       range <<= 8;
     }
@@ -1548,7 +1578,7 @@ struct RangeCoder {
   void finish() {
     dec_normalise();
     uint8_t *q = p();
-    while (*q++ != kMarker) { }
+    while (dec_get(q) != kMarker) { }
     set_p(q);
     packer_word = (uint32_t *)out_cursor;
     packer_free_bits = 0; packer_acc = 0;
@@ -15265,6 +15295,32 @@ void __transform_planes(BmfImage *p_i, int32_t unread_mode, int8_t unread_flag)
   }
 }
 
+// How many bytes are left in `fp` from where it is now, or -1 if that cannot
+// be established.
+//
+// Every length in a member header is the stream's own claim about how much
+// follows it, and until the two callers below each claim was believed.  The
+// cost of believing them is an allocation and a read the size of whatever a
+// mutated header says: five changed bytes of `testfiles/ref_altp1.bmf` put
+// 0x72C200AC in `data_len` and `bmf_new` asked for 1.9 GB of it, which
+// overcommit grants, so the lie only surfaced when the `fread` came up short.
+//
+// A member cannot be longer than what is left of the file, and this is what
+// says so.  The -1 is not a special case for the callers to handle: they
+// compare an unsigned length against it, so a file whose length cannot be
+// taken refuses every member, which is the right answer for input this cannot
+// bound.  BMF opens its input by name, so in practice that never happens.
+static long __bytes_left(FILE *fp)
+{
+  long here = ftell(fp);
+  if ( here < 0 || fseek(fp, 0, SEEK_END) != 0 )
+    return -1;
+  long end = ftell(fp);
+  if ( end < 0 || fseek(fp, here, SEEK_SET) != 0 )
+    return -1;
+  return end - here;
+}
+
 uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
 {
   // This one is a layout, not a bag of locals: giving its members
@@ -15368,6 +15424,13 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
     if ( p_coded_buf )
     {
       hdr_word = (*(int32_t *)&__frame.hdr[0]);
+      // The aux block's own length, bounded before it becomes an allocation.
+      if ( (*(uint32_t *)&__frame.hdr[4]) > (uint32_t)__bytes_left(((BmfArc *)arc)->fp) )
+      {
+        fclose(((BmfArc *)arc)->fp);
+        ((BmfArc *)arc)->fp = 0;
+        return nullptr;
+      }
       pad_len = ((*(uint32_t *)&__frame.hdr[4]) + ((*(uint32_t *)&__frame.hdr[4]) == 0) + 3) & 0xFFFFFFFC;
       blk = (uint32_t *)bmf_new(pad_len + 8);
       *blk = hdr_word;
@@ -15385,6 +15448,15 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
     {
       fseek(((BmfArc *)arc)->fp, (*(uint32_t *)&__frame.hdr[4]), 1);
     }
+  }
+  // Same for the member's payload, and for both of the things `data_len` goes
+  // on to be: the size of the coded buffer on the -S path, and the byte count
+  // of the raw `fread` below.
+  if ( __frame.data_len > (uint32_t)__bytes_left(((BmfArc *)arc)->fp) )
+  {
+    fclose(((BmfArc *)arc)->fp);
+    ((BmfArc *)arc)->fp = 0;
+    return nullptr;
   }
   pal_bytes = 3 << (__frame.depth_b & 31);
   if ( (__frame.depth_b & 0x80) == 0 )
@@ -15406,6 +15478,27 @@ uint8_t * __expand_image(uint8_t *arc_in, int32_t want_pal, void **p_coded_buf)
   ::plane_count = ((__frame.depth_f & 0x3Fu) + 7) >> 3;
   if ( (hdr_flags & 0x20) == 0 )
   {
+    // The uncompressed member: `data_len` bytes straight into the pixel buffer.
+    // That buffer is `__alloc_image`'s, sized from the header's width, height
+    // and depth, and `data_len` is a fourth field nothing tied to the other
+    // three.  The encoder writes them consistent -- `compress_image` emits the
+    // BmfImage whose `data_size` this is -- so a well-formed member has them
+    // equal, and it took a member built by hand to show what an inconsistent
+    // one does:
+    //
+    //     WRITE of size 100000 ... 0 bytes after 83-byte region
+    //       #0 fread
+    //       #1 __expand_image
+    //
+    // 8x8x8 in the header, 100000 in `data_len`, and 100000 bytes of the
+    // attacker's choosing over the heap.  The file-length bound above does not
+    // reach it: a 100 kB file really does have 100 kB left.
+    if ( __frame.data_len > img_at->data_size )
+    {
+      fclose(((BmfArc *)arc)->fp);
+      ((BmfArc *)arc)->fp = 0;
+      return nullptr;
+    }
     want = __frame.data_len;
     if ( fread(img_at->pixels, 1u, __frame.data_len, ((BmfArc *)arc)->fp) != want )
       {

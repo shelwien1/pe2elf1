@@ -22,16 +22,16 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17222
+subs1.hpp lines                      17787     17616         17315
 bmf.cpp lines                            —         —           365
 raw-offset sites                        22        12              0
   off `_this`                            —         1             0
   in functions                           —         1             0
 byte offsets on a typed base           121         0             0
-pointer casts                         2137      1545          1195
+pointer casts                         2137      1545          1204
   to a scalar                            —         —           475
-  to a record                            —         —           365
-  to a scalar, of an address             —         —           350
+  to a record                            —         —           373
+  to a scalar, of an address             —         —           351
   to a record, of an address             —         —             5
 declarations carrying alignas            —         —            23
 frames                                  —        17             9
@@ -47,7 +47,7 @@ structs                                 —         —            24
   still ObjN                             —         —             0
 fNN members / named ones             93/121     5/162         0/172
 distinct unexplained locals            554       591             0
-  bodies still carrying one              —   8 of 102       0 of 92
+  bodies still carrying one              —   8 of 102       0 of 93
   uses                                    —      6302             0
 locals named for a callee parameter      —         —             0
   declarations / bodies                   —         —           0/0
@@ -3663,6 +3663,139 @@ last. Nothing stopped the walk there. Corrupt coded data ran it on into
 nothing. Past the escape list there is no fourth list to try, and a stream that
 has exhausted all three is not one this can read.
 
-**1122 compress runs and 900 expand runs over fuzzed inputs, no crash and no
-ASan report.** The malformed suite counts 22 cases now, and counts them: the
-line said `cuts + 10` and went on printing 15 while five were added under it.
+**1122 compress runs and 900 expand runs over fuzzed inputs, no crash.** The
+malformed suite counts its cases now — the line said `cuts + 10` and went on
+printing 15 while five were added under it.
+
+That fuzzing was crash-only, against the `-O2` build. This paragraph originally
+went on to say "and no ASan report", which was not a measurement of anything: no
+malformed input had ever been in front of the sanitiser. §47 is what happened
+when one was.
+
+## 47. What the plain build could not see
+
+Section 46 ends on a measurement: **1122 compress runs and 900 expand runs over
+fuzzed inputs, no crash and no ASan report.** The first half of that is true and
+the second half was not a measurement at all. The fuzzing was crash-only,
+against the `-O2` binary; ASan came into it only through `tools/asan.sh`, which
+runs the seventeen *legitimate* images. Nothing had ever put a malformed input
+in front of the sanitiser.
+
+`tools/asan.sh` says why that gap matters, in the comment it was written with:
+
+> `test.sh` says the fifteen streams are byte-identical. That is the strongest
+> statement this project has about correctness and it is silent about one whole
+> class: a body that reads or writes past the end of something and happens not
+> to change the answer.
+
+A crash-only fuzzer is silent about the same class, for the same reason. So the
+two instruments were composed — `tools/fuzz.sh` mutates the corpus and runs the
+mutants through an ASan build — and the first four hundred mutants reported
+twenty-six times.
+
+### The fuzzer
+
+`tools/fuzz.py` is deterministic. Same seed and same corpus gives the same
+bytes, so a report names a file anyone can rebuild; the alternative is findings
+that have to be believed, and §30–§45 are largely about what believing a
+measurement costs. Three mutators, in the proportion the crash-only round
+argued for:
+
+| mutator | what it does | why |
+| --- | --- | --- |
+| `bytes` | flips one to eight bytes anywhere | what the last round ran, and over 2000 runs it found nothing — one flip in a thousand lands in the 14-byte file header, and everything past it is entropy-coded, so a flip there is absorbed rather than followed |
+| `header` | rewrites one named BMP field from a set of edges | every defect §46 records was a header field the reader trusted |
+| `truncate` | cuts at a boundary that means something | two of §46's seven were a read that ran off a short file |
+
+`.bmf` seeds get `bytes` and `truncate` only: a compressed stream has no named
+fields to aim at.
+
+### One defect, twenty-five times
+
+Twenty-five of the twenty-six were the same three lines:
+
+```
+READ of size 1 at 0xf4903a1c
+    #0 RangeCoder::dec_normalise()   subs1.hpp:1516
+    #1 RangeCoder::get_freq()        subs1.hpp:1526
+    #2 __alt_p1_decode_symbol()
+0xf4903a1c is located 0 bytes after 172-byte region
+```
+
+`__expand_image` sizes the coded buffer at exactly the byte count the member
+header claims and freads that many. One byte past it is not the rest of the
+file — it is whatever `malloc` handed out next. The decoder's three read paths
+(`dec_init`, `dec_normalise`, and `finish`'s scan for the section marker, which
+was `while (*q++ != kMarker) { }` with nothing on the other end) all walked
+straight through it. Five changed bytes of the 192 in `testfiles/ref_altp1.bmf`
+were enough.
+
+Every one of those reads goes through `RangeCoder::dec_get` now, which is the
+only place that knows where the buffer ends. A well-formed stream never reaches
+the bound — `flush` pads the tail to a four-byte boundary before the marker,
+which is exactly the read-ahead `get_freq` and `decode_bit` need — and that is
+not an argument, it is what `tools/asan.sh` reports over all seventeen images.
+
+### The three lengths in a member header
+
+The twenty-sixth was an allocation: `data_len` of `0x72C200AC` out of a 192-byte
+file, and `bmf_new` asked for 1.9 GB of it. Overcommit grants that, so the lie
+only surfaced when the `fread` came up short — the right answer, arrived at the
+most expensive way available.
+
+A member cannot be longer than what is left of the file. `__bytes_left` says
+what that is, and the two header lengths that become allocations are checked
+against it.
+
+That is not the whole of it, and the fuzzer could not have found the rest: the
+uncompressed path freads `data_len` bytes into the pixel buffer `alloc_image`
+sized from the header's *width, height and depth*. Four fields, and nothing tied
+the fourth to the other three. A member built by hand — 8×8×8 in the header,
+100000 in `data_len` — writes 100 kB of the file's own choosing over the heap:
+
+```
+WRITE of size 100000 at 0xf4b01ef3
+    #0 fread
+    #1 __expand_image   subs1.hpp:15410
+0xf4b01ef3 is located 0 bytes after 83-byte region
+```
+
+The encoder writes those fields consistent — `compress_image` emits the
+`BmfImage` whose `data_size` this is — so a well-formed member has them equal,
+and `data_len > img_at->data_size` is a refusal.
+
+### Where each case had to go
+
+Three regression cases, and they do not all belong in the same suite:
+
+| case | pre-fix | fixed | lives in |
+| --- | --- | --- | --- |
+| `rawlen.bmf` | 134, glibc aborting in the allocator | 3 | `test.sh` |
+| `biglen.bmf` | 7, "Out of memory!" for a 53 kB file | 3 | `test.sh` |
+| `shortlen.bmf` | 4 | 4 | `tools/asan.sh` |
+
+`shortlen.bmf` is `data_len` halved, which walks the range decoder off the end
+of the coded buffer. The pre-fix build reads the neighbouring allocation, keeps
+decoding, and exits 4 — the same code the fixed build exits. `test.sh` checks an
+exit code, so it can only hold on to a defect that changes one, and putting
+`shortlen` there would have added a row that passes either way: *a row whose
+test is a spelling will be defeated by a spelling*. Under ASan the two are a
+heap-buffer-overflow and a clean refusal, so `tools/asan.sh` grew a malformed
+pass and that is where it lives. Against the pre-fix worktree that pass reports
+`2 of 36 runs`.
+
+The tally line there had the same defect `test.sh`'s `cuts + 10` did — it
+computed `2 * ${#files[@]}` while claiming to report what it had run — and
+counts now.
+
+### What it comes to
+
+* seed 1, 400 mutants: **26 reports before, 0 after**, and the 86 mutants that
+  decoded successfully still decode — the fixes turned reports into refusals and
+  moved nothing else;
+* `tools/asan.sh`: no report in 36 runs;
+* the fifteen reference streams byte-identical, the ratchet unmoved at 1038.
+
+The honest summary of §46's closing line is that it measured two instruments and
+reported three. This section is what the third one says now that it has been
+pointed at the inputs it was for.
