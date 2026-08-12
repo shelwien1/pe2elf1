@@ -127,11 +127,18 @@ def addresses(path=None):
     renamed since the map was written -- falls back to the git search, which is
     the only thing that can answer for it.
     """
-    if path:
+    # A map beside the file comes first.  `proven.sh` replays this against a
+    # dozen old revisions, and for each of those the committed map does not fit
+    # -- correctly, it is about another revision -- so every one fell back to
+    # the two-minute git search and the whole run took the best part of an
+    # hour.  The map is committed, so each revision has its own, and the caller
+    # that has the revision can put it next to the file.
+    here = path and path.rsplit('/', 1)[0] + '/addrmap.txt'
+    for src in ([here] if here and here != MAP else []) + ([MAP] if path else []):
         try:
-            out = parse_map(open(MAP).read())
+            out = parse_map(open(src).read())
         except IOError:
-            out = {}
+            continue
         if out:
             # The test is the one direction that can go stale.  The map does
             # not cover every body -- the helpers this project wrote have no
