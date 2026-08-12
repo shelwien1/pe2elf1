@@ -6733,7 +6733,7 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
   // Hex-Rays named every use.  That they can have storage of their own is the
   // gate's answer -- nothing writes one of them and reads another.  The three
   // slots are `_gapA`..`_gapC` above now; nothing is left to share.
-  int32_t dv_now, mag_ref1, ctx15, row0_i, mag_ref0, d_run0b, g3pair;
+  int32_t dv_now, mag_ref1, ctx15, mag_ref0, d_run0b, g3pair;
   P2Ctx *ra1, *ra0, *rb1, *rb0, *rb2, *ra2, *sub0_row, *row2c;
   int32_t sum_all;
   P2Ctx *cx1, *cx3;
@@ -6978,12 +6978,11 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
         blk->p2_row[5][3] = (float)(nb0[-2].val + ra0->err);
         if ( no_ref )
         {
-          row0_i = (int32_t)(uintptr_t)nb0;
           nb2w = (int16_t *)blk->cursor[2];
           blk->p2_row[6][0] = ((float)(nb0[-2].val + ra0->val - ra0[-2].val));
           blk->p2_row[6][1] = (float)(*nb2w + ra0->val - ((P2Ctx *)(ra2))->val);
           blk->p2_row[6][2] = (float)(ra2->val + ra0->val - *nb2w + 2 * (nb1->val - ra1->val));
-          in63 = *(int16_t *)((uint8_t *)row0_i - 18) + nb1[-1].val + ra1[-2].val + ra0->val - ra0[-1].val - ra1[-1].val - nb1[-2].val;
+          in63 = *(int16_t *)((uint8_t *)nb0 - 18) + nb1[-1].val + ra1[-2].val + ra0->val - ra0[-1].val - ra1[-1].val - nb1[-2].val;
         }
         else
         {
@@ -8190,7 +8189,14 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
           int64_t q0;              // the solve's first coefficient, as a double
           struct {
               uint32_t row_stride;   // `(uint16_t)img->stride`
-              uint32_t plane_b;      // `plane_desc[2].src_plane - x3[2]`
+              // Signed, for the same reason as `plane_a` below: it is a
+              // difference of plane numbers and the reference can sit before
+              // the current plane.  Unsigned, `plane0 + plane_b` was
+              // `plane0 + 0xFFFFFFFF...`, which i386 wraps back and a 64-bit
+              // pointer does not -- `tools/fuzz.sh` found it on the 64-bit
+              // build with three bytes of one test image changed, and the
+              // 32-bit build accepts the same file without a word.
+              int32_t  plane_b;      // `plane_desc[2].src_plane - x3[2]`
           };
       };
       union {
@@ -8805,7 +8811,11 @@ LABEL_19:
           d6 = *(double *)&x2[2];
           d3 = *(double *)x5;
           d1 = *(double *)&x5[2];
-          __frame.wt_slot = (uintptr_t)&((uint8_t *)img_a)[__frame.q0 + 20];
+          // `end_px` is this value, set eighteen lines up and read eighteen
+          // lines down.  It went through `__frame.wt_slot` -- a `uint32_t`
+          // that carries a *weight* everywhere else in this body -- because
+          // MSVC spilled the register, and came back through a cast that only
+          // i386 makes harmless.
           i4 = 0;
           uu = (data_end - 17 - pp) / 4;
           do
@@ -8829,7 +8839,6 @@ LABEL_19:
           sum01 = d5;
           sum02 = d2;
           sum12 = d6;
-          end_px = (uint8_t *)__frame.wt_slot;
           n_quads = uu;
           *(double *)&x5[2] = d1;
           *(double *)x5 = d3;
@@ -9770,7 +9779,7 @@ inline int32_t ModelBlock::decode_pixel(int32_t x)
   uint16_t *pixq;   // a copy of `pix_cur`
   PixRec *r8b, *r7b, *next, *r5, *cur6b;
   uint8_t g_a, g_b, g_c, g_d, g_e;
-  uint8_t *n2r;   // `uint8_t *` beside the `char` scalars above
+  int32_t n2r;   // a frequency, not an address
   int16_t sym_rev, s1c, w1s, s3b;
   // A cumulative count, a high count and a total: the three arguments the
   // range coder takes, and it takes them unsigned.
@@ -10181,14 +10190,14 @@ LABEL_57:
       freq_tbl->w[1] = q1w;
       w3r = 21 * w3;
       s0a = __frame.sym0;
-      n2r = (uint8_t *)((w2r + w5 - 1) / w5 + __frame.sym2);
-      freq_tbl->w[2] = (uint16_t)(uintptr_t)n2r;
+      n2r = (w2r + w5 - 1) / w5 + __frame.sym2;
+      freq_tbl->w[2] = (uint16_t)n2r;
       span = (w3r + w5 - 1) / w5 + s0a;
       w4r = 21 * freq_tbl->w[4];
       freq_tbl->w[3] = span;
       n4r = (w4r + w5 - 1) / w5 + __frame.sym3;
       freq_tbl->w[4] = n4r;
-      tot2 = __frame.sym1 + n4r + (span + (uint16_t)(uintptr_t)n2r + q1w);
+      tot2 = __frame.sym1 + n4r + (span + (uint16_t)n2r + q1w);
       tot = tot2;
       freq_tbl->w[5] = tot2;
     }

@@ -26,7 +26,7 @@ inputs are refused with the program's own exit codes.
 
 ## 1. What the scoreboards could and could not see
 
-Three instruments, and the order matters — each is silent about the class the
+Four instruments, and the order matters — each is silent about the class the
 next one sees.
 
 | instrument | what it sees | found this round |
@@ -34,6 +34,7 @@ next one sees.
 | `BMF_STRICT=1 BMF_BITS=64 ./build.sh` → `tools/ptrwidth.py` | a pointer *narrowed*: the compiler diagnoses it | 112 |
 | `tools/rawoffset.py`, `tools/negindex.py` | a number that is an offset; an index negated in an unsigned | 32 + 4 |
 | `tools/x64.sh` | the program giving a different answer | the rest |
+| `BMF_BITS=64 tools/fuzz.sh` | a different answer on an input nobody chose | 1, and none of the above sees it |
 
 The middle row is the interesting one. Round nine's census had a row reading
 `raw-offset sites 0`, and it was a spelling: the measure looked for
@@ -160,7 +161,7 @@ were "still broken" were the instrument.
 ./build.sh                          # -m32, as before
 BMF_BITS=64 ./build.sh              # the same source as x86-64
 BMF_STRICT=1 BMF_BITS=64 ./build.sh # strict64.log, ptrwidth.py's worklist
-BMF_WARN=1  BMF_BITS=64 ./build.sh  # warn64.log
+BMF_WARN=1  BMF_BITS=64 ./build.sh  # warn64.log, ratcheted by warn64.txt
 tools/x64.sh                        # 23 cases, and test.sh runs it
 ```
 
@@ -181,13 +182,32 @@ measurement, and that one had not been re-taken in four rounds.**
 
 ---
 
+## 3a. What the fuzzer found that no static rule could
+
+Running `tools/fuzz.sh` under `BMF_BITS=64` — 400 mutants of 33 seed files
+through a 64-bit ASan build — reported two crashes where the 32-bit run
+reported none, and both were the same site. Neither mutant touches a header:
+`altp1.186.bmp` differs from `testfiles/altp1.bmp` in five *pixels*.
+
+`choose_plane_coding`'s frame carries `uint32_t plane_b`, which is
+`plane_desc[2].src_plane - x3[2]` — a difference of plane numbers, so it can be
+negative — and `plane0 + __frame.plane_b` is then a pointer plus 0xFFFFFFFF-ish.
+Its neighbour in the same union, `plane_a`, carries the note "Signed: it is a
+difference of plane numbers and the second reference can sit before the current
+plane", added in an earlier round to kill eight sign conversions. The same
+argument was true of `plane_b` and nobody made it.
+
+No static rule here catches that. `tools/negindex.py` looks for a *subscript*;
+this is an addition. `tools/ptrwidth.py` sees no truncation, because there is
+none. `tools/rawoffset.py` sees no offset. The compiler is silent on both
+targets. What found it is running the program on inputs nobody chose, on the
+target where the mistake has a consequence — which is the whole argument for
+`BMF_BITS=64 tools/fuzz.sh`, and it is the fourth instrument in §1's table.
+
+---
+
 ## 4. What this round did not do
 
-* **`BMF_WARN` on `-m64` is not a ratchet.** It writes `warn64.log` and nothing
-  reads it. The 64-bit target has its own conversion population — every
-  `ptrdiff_t` narrowed to an `int32_t` count, for one — and until somebody
-  reads through those the way round five read through the 32-bit ones, a
-  ceiling on them would be a number rather than a claim.
 * **`BMF_BITS` reaches the other instruments, and one of them needed a fix to
   survive it.** `tools/asan.sh`, `tools/fuzz.sh` and `tools/hdrscan.sh` all
   build through `build.sh`, so `BMF_BITS=64` in front of any of them is enough
@@ -216,6 +236,11 @@ measurement, and that one had not been re-taken in four rounds.**
 | `tools/rawoffset.py` | which numbers in the code are a member offset the file itself states | 0 |
 | `tools/negindex.py` | which negative indices are negated in an unsigned type | 0 |
 | `tools/x64.sh` | whether the other pointer width gives the same answers | 23 of 23 |
+
+`BMF_WARN=1 BMF_BITS=64 ./build.sh` writes `warn64.log`, and `warn64.txt` is
+its ceiling — a ratchet like `warn.txt` and over a different population, since
+a `ptrdiff_t` narrowed to an `int32_t` count is a conversion there and an
+identity here.
 
 All four are in `tools/sweep.sh`; the first three are counting tools and the
 sweep holds them to zero. Each was replayed against the file from *before* its

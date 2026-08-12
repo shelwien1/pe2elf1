@@ -430,6 +430,22 @@ if [ "${BMF_WARN_GATE:-1}" = 1 ] && [ -x ./build.sh ] && [ -r warn.txt ]; then
   fi
 fi
 
+# The 64-bit target's own conversion ratchet.  Same bargain as `warn.txt`
+# above and a different population: `ptrdiff_t` narrowed to an `int32_t` count
+# is a conversion there and an identity here, so the two counts are not
+# comparable and neither is a subset of the other.  `warn64.txt` holds what
+# that target costs today.
+if [ "${BMF_WARN_GATE:-1}" = 1 ] && [ "${BMF_X64_GATE:-1}" = 1 ] &&
+   [ -x ./build.sh ] && [ -r warn64.txt ]; then
+  want=$(cat warn64.txt)
+  got=$(BMF_WARN=1 BMF_BITS=64 ./build.sh 2>/dev/null | tail -1)
+  if [ "$got" -le "$want" ] 2>/dev/null; then
+    printf '%-12s ok  %s conversion warnings on -m64, ceiling %s\n' 'warnings64' "$got" "$want"
+  else
+    echo "warnings64: $got, up from the $want in warn64.txt (see warn64.log)"; fail=1
+  fi
+fi
+
 # The other pointer width.  Everything above runs one target, and for six
 # rounds that was the only target there was -- which left "fifteen streams
 # byte-identical" with a gap in it the size of every pointer in the file: on
