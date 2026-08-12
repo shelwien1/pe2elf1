@@ -19,8 +19,13 @@ Three commands are the entry points:
 ```
 ./tools/sweep.sh          # run every tool against a copy; all should report zero
 ./tools/proven.sh         # and whether those zeros have ever been able to move
+./tools/asan.sh           # every test image under AddressSanitizer
 ./tools/triage.sh         # bisect a stream that moved, by name
 ```
+
+`asan.sh` is the one to run after lifting a frame: these bodies walk off the
+ends of their locals on purpose, and a frame is what makes the neighbours
+theirs to walk.
 
 ## the original six
 
