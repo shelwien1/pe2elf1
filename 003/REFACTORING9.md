@@ -25,7 +25,7 @@ nothing was checking and nothing had been true of since round nine.
 
 ```
                                            round 8     round 9         now
-subs1.hpp lines                              17787       17616       17626
+subs1.hpp lines                              17787       17616       17632
 bmf.cpp lines                                    —           —         365
 raw-offset sites                                22          12           0
   off `_this`                                    —           1           0
