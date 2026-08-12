@@ -22,7 +22,7 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17079
+subs1.hpp lines                      17787     17616         17053
 bmf.cpp lines                            —         —           365
 raw-offset sites                        22        12             18
   off `_this`                            —         1             0
@@ -57,7 +57,7 @@ goto / LABEL_n:                     112/79     81/55         49/33
   restart a loop / exit N blocks         —         —         15/32
   sideways to a join / to neither        —         —           2/0
   jump into a block                      —         —             0
-conversion warnings                   1455      1331          1061
+conversion warnings                   1455      1331          1051
 ```
 
 `python3 tools/checktable.py` compares that table against `shape.py --rows`
@@ -3182,3 +3182,59 @@ broken tool reports zero too. It ends with the same line plus a second one
 naming the seven zeros that have not been demonstrated to mean anything and
 why each cannot be. Neither is a claim in a commit message; both are commands
 with an exit status.
+## 41. Nine saves that blocked each other
+
+`unsave.py` deletes a local that parks a value across a region which cannot
+change it — MSVC's spill and reload, with a name on the slot. It reported
+**one**, and there were nine.
+
+Two things were hiding the other eight.
+
+### A slot can be one lane of an array
+
+`ASSIGN` wanted a bare name on the left. MSVC parks a register in a
+sixteen-byte stack slot as readily as in a four-byte one, and Hex-Rays writes
+that as
+
+```c
+x3[0] = best_cost;
+…                        // a loop that touches neither
+best_cost = x3[0];
+```
+
+which the pattern could not see. It is the raw-offset row's blindness in §30
+exactly, in a different tool: a rule anchored on a bare name, applied to a file
+where the interesting bases are subscripts.
+
+A lane needs two guards a name does not. Its trailing boundary cannot be `\b`
+— a lane ends in `]`, which is not a word character, so `x3\[0\]\b` matches
+nothing. And a lane can be written without being named: `memset(x1, 0, 16)`
+and `*(double *)x1` reach the whole slot, and
+`*(int64_t *)&x1[2] = __PAIR64__(p, q)` writes lanes **2 and 3** through the
+address of lane 2. So the region must contain neither the bare array nor the
+address of any lane of it — while a plain subscript of a *different* lane is a
+different variable and is allowed, which is what keeps a pair on `x0[2]`
+offerable in a region that reads `x0[0]`.
+
+### The pairs blocked each other
+
+The rule is "the saving name exists only for this pair". `choose_plane_coding`
+parks `best_cost` in `x3[0]` **five** times, around five different loops, and
+`compress_image` parks `arc` in `arc_f` three times. Each pair saw the other
+pairs' lines as other uses of the slot and refused — and so did they. Five
+candidates, none accepted, and the docstring already said MSVC reuses a slot;
+the code only excused pairs *already* accepted, which on the first pass is
+none.
+
+Ownership is a fixed point: a slot is owned by all of its pairs, and which
+pairs survive depends on the test. Dropping a pair only removes ownership, so
+removing the violators and asking again terminates. That is four lines and it
+found eight more.
+
+**Nine deleted, and ten conversion warnings with them** — 1061 → 1051. Fifteen
+streams byte-identical. `unused.py` then had two declarations and four names to
+remove that nothing had reached before.
+
+Replayed over the file's history the rule reports 28 at `2127451` and 29 at
+`85f9b43`, which is the control the previous version could not have had: it
+answered 0 or 1 everywhere.

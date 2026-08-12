@@ -8149,7 +8149,6 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                   x3[3] = wt8_up;
                   x1[0] = wt4_up;
                   x1[1] = npix_a - 1;
-                  x3[0] = best_cost;
                   x2[1] = -stride_a;
                   left_a = -plane_count;
                   x2[0] = -stride_a - plane_count;
@@ -8187,7 +8186,6 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                   while ( n_a != 1 );
                   wt8_up = x3[3];
                   wt4_up = x1[0];
-                  best_cost = x3[0];
                   cost_a = __estimate_cost((uint8_t *)__frame.buf_1, 512);
                   wt8_up_end = x0[2];
                   wt4_best = x5[3];
@@ -8209,7 +8207,6 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                     x3[3] = wt8_up;
                     x1[0] = wt4_up;
                     x4[0] = npix_b - 1;
-                    x3[0] = best_cost;
                     x5[0] = -stride_b;
                     left_b = -plane_count;
                     x4[3] = -stride_b - plane_count;
@@ -8247,7 +8244,6 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                     while ( n_b != 1 );
                     wt8_up = x3[3];
                     wt4_up = x1[0];
-                    best_cost = x3[0];
                     cost_b = __estimate_cost((uint8_t *)buf_2, 512);
                     wt4_up_end = x0[3];
                     wt8_best = __frame.wt_slot;
@@ -8282,7 +8278,6 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
             __frame.s6 = wt8_dn;
             __frame.s1 = wt4_dn;
             __frame.s2 = npix_c - 1;
-            x3[0] = best_cost;
             __frame.s4 = -stride_c;
             left_c = -plane_count;
             __frame.s3 = -stride_c - plane_count;
@@ -8316,7 +8311,6 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
             while ( n_c != 1 );
             wt8_dn = __frame.s6;
             wt4_dn = __frame.s1;
-            best_cost = x3[0];
             cost_c = __estimate_cost((uint8_t *)buf_3, 512);
             wt8_dn_end = *(uint32_t *)__frame.buf_1;
             wt4_best_dn = x5[3];
@@ -8338,7 +8332,6 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
               __frame.s6 = wt8_dn;
               __frame.s1 = wt4_dn;
               __frame.s7 = npix_d - 1;
-              x3[0] = best_cost;
               __frame.s9 = -stride_d;
               left_d = -plane_count;
               __frame.s8 = -stride_d - plane_count;
@@ -8372,7 +8365,6 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
               while ( n_d != 1 );
               wt8_dn = __frame.s6;
               wt4_dn = __frame.s1;
-              best_cost = x3[0];
               cost_d = __estimate_cost((uint8_t *)buf_4, 512);
               wt4_dn_end = __frame.s0;
               wt8_best_dn = __frame.wt_slot;
@@ -8395,7 +8387,6 @@ LABEL_19:
       {
         __frame.wt_slot = wt8;
         x5[3] = wt4;
-        x3[0] = best_cost;
         __frame.nplanes_s = n_planes;
         do
         {
@@ -8415,7 +8406,6 @@ LABEL_19:
         while ( (uint32_t)px < data_end );
         wt8 = __frame.wt_slot;
         wt4 = x5[3];
-        best_cost = x3[0];
         n_planes = __frame.nplanes_s;
       }
       slack = best_cost >> 7;
@@ -10917,7 +10907,6 @@ inline void ModelBlock::expand_alphabet()
   // `spill` is genuinely past the array: MSVC used it to hold `nbytes` across
   // the inner decode loop.
   SymList lists[16];
-  uint32_t spill[5];
   ;
   uint32_t *codes_p;   // was int32_t: this holds an address
   uint32_t nbytes, bits;
@@ -10971,7 +10960,6 @@ inline void ModelBlock::expand_alphabet()
           codes_p[s] = 0;
           if ( nbytes )
           {
-            spill[0] = nbytes;
             b = 0;
             do
             {
@@ -10980,8 +10968,7 @@ inline void ModelBlock::expand_alphabet()
               this->sym_code[s] += (piece << ((8 * b) & 31));
               ++b;
             }
-            while ( b < spill[0] );
-            nbytes = spill[0];
+            while ( b < nbytes );
           }
           codes_p = this->sym_code;
           carry = (uint8_t)codes_p[s++] >> 7;
@@ -16557,7 +16544,6 @@ int32_t __compress_image(uint8_t *arc_in, BmfImage *p_i, void *coded_buf)
   int32_t  row_step;   // `plane_count * (height - 1)`
   uint32_t filtered;
   int32_t y0;
-  uint8_t *arc_f;
   void *pixels;
   // These shared `filtered` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
@@ -16579,8 +16565,8 @@ int32_t __compress_image(uint8_t *arc_in, BmfImage *p_i, void *coded_buf)
   uint8_t has_coded;   // 0/1, shifted into bit 7 of the header byte
   uint8_t *plane_buf, *row_at, *row_next;   // `uint8_t *` beside the `char` scalars above
   uint32_t hdr_pad8, hdr_pad8b;   // the header's pad/depth/flags word, not an address
-  int32_t bits_left, pl, free_bits, pl2, ok_all, img_h,
-          rows_left, y, pl_i, step, countdown, data_size;
+  int32_t bits_left, pl, free_bits, pl2, ok_all, img_h, y, pl_i, countdown,
+          data_size;
   BmfImage *img;
   uint16_t w16;
   uint32_t pal_bytes, word_flags, word_dc, word_w4, word_w8, word_w12, n_pix, written;
@@ -16698,7 +16684,6 @@ LABEL_22:
   if ( ::plane_count > 0 )
   {
     bits_left = ::packer_free_bits;
-    arc_f = arc;
     pl = 0;
     do
     {
@@ -16792,7 +16777,6 @@ LABEL_22:
       ++pl;
     }
     while ( pl < ::plane_count );
-    arc = arc_f;
   }
   if ( filtered )
   {
@@ -16801,12 +16785,10 @@ LABEL_22:
     plane_buf = (uint8_t *)bmf_new(n_pix);
     if ( ::plane_count > 0 )
     {
-      arc_f = arc;
       pl2 = 0;
       do
         __model_planes((uint8_t *)p_i, plane_buf, plane_desc[pl2++ + 1].src_plane, 0);
       while ( pl2 < ::plane_count );
-      arc = arc_f;
     }
     free(plane_buf);
   }
@@ -16853,7 +16835,6 @@ LABEL_57:
       row_at = row;
       row_next = nullptr;
       y = 0;
-      arc_f = arc;
       do
       {
         pl_i = img->width;
@@ -16879,7 +16860,6 @@ LABEL_57:
         row_next = row + 1;
       }
       while ( (int32_t)(row + 1) < img_h );
-      arc = arc_f;
     }
     w16 = img->width;
     img->width = img_h;
