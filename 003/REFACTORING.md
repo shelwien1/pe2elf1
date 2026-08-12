@@ -398,13 +398,21 @@ last of them found a bug.
 1. No global is a reference into a byte array. Each is a definition with its own
    type, its own extent, and an initialiser where the original had one.
    `blob.inc` is deleted.
-2. ~~No integer holds a pointer.~~ **Withdrawn, on evidence — see Phase 4.**
-   Every one of this program's 159 objects is walked with variable offsets as
-   well as constant ones, so widening a field moves the arrays indexed after it.
-   What replaces it: *no integer holds a pointer where the object permits it*
-   (done — every local, parameter and global that could be typed, is), and a
-   64-bit build gets its addresses into 32 bits by confining the heap rather
-   than by widening the fields.
+2. No integer holds a pointer. **Done — round 11.** This was withdrawn once,
+   on the evidence that every one of this program's 159 objects is walked with
+   variable offsets as well as constant ones, so widening a field moves the
+   arrays indexed after it; the replacement goal was to confine the heap below
+   4 GB instead, which `bmf.cpp` did with an arena. Round 11 withdrew the
+   withdrawal. The objects are reached by name, so nothing is indexed past a
+   field that moved; `tools/ptrwidth.py` reports zero, counting both what the
+   compiler diagnoses and the `(int32_t)(uintptr_t)p` chains it does not; and
+   `tools/x64.sh --high` runs the whole corpus with every allocation at
+   0x200000000000, where a four-byte pointer cannot reach, and the fifteen
+   streams still come out byte for byte.
+
+   The arena is gone, and its removal is the point rather than a tidy-up: with
+   every allocation under 4 GB, truncating a pointer to 32 bits is the identity
+   and nothing fails, so the workaround was also the blindfold.
 3. The recurring `base + constant` families are `struct`s, and the variables
    that walk them are typed pointers to those structs. **Done for 115 objects**
    — 2645 accesses name a field, 290 raw-offset dereferences remain, and the
@@ -874,6 +882,19 @@ an image count, the one object with no variable-offset access), the 64-bit
 binary compiles, runs, opens its files, and reaches `model_plane` before it
 meets the model block. Getting past that is one fault at a time, and it will not
 produce typed fields at the end.
+
+> **Round 11: the paragraph above is wrong about its own premise, and the
+> arena it recommends is gone.** The variable-offset count was a count of
+> *dereferences*, not of fields that cannot move: rounds 4 through 10 turned
+> those 2184 into member access, so nothing is indexed past a field that
+> moved and the fields could be widened after all — which is what "no integer
+> holds a pointer" in §3.2 now records as done. The arena is worse than
+> unnecessary: with every allocation under 4 GB, truncating a pointer to 32
+> bits is the identity, so it was the workaround *and* the blindfold. What
+> replaces it is the same machinery pointed the other way — `-DBMF_HIGH_ARENA`
+> puts every allocation at 0x200000000000, where a four-byte pointer cannot
+> reach, and `tools/x64.sh --high` runs the corpus that way. REFACTORING11.md
+> §3c has the reading.
 
 ### Phase 5 — done, and two thirds of it should not have been attempted
 

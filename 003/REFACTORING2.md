@@ -547,11 +547,13 @@ an integer. If the count ever falls quickly, this is what to check first.
 The 12 `-Wint-to-pointer-cast` warnings are worth pulling out first anyway,
 because they are the narrowest and most mechanical group — but they are not part
 of the `-fpermissive` count, and they are not the 64-bit blocker either.
-`REFACTORING.md` §Phase 4 establishes that the 64-bit gap is the program's
-**32-bit pointer fields**, which cannot be widened because every object is
-walked with variable offsets as well as constant ones, and which the low arena
-in `bmf.cpp` addresses instead. Fixing these 12 makes the file cleaner and does
-not move that.
+`REFACTORING.md` §Phase 4 used to establish that the 64-bit gap is the
+program's **32-bit pointer fields**, which cannot be widened because every
+object is walked with variable offsets as well as constant ones, and which the
+low arena in `bmf.cpp` addressed instead. **Round 11 closed that gap** — the
+objects are reached by name, `tools/ptrwidth.py` reports zero, the arena is
+gone, and `tools/x64.sh --high` proves it by putting every allocation where a
+four-byte pointer cannot reach. These 12 were part of it after all.
 
 ### 4.3 The `vNN` names
 
