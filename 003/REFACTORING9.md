@@ -22,7 +22,7 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17073
+subs1.hpp lines                      17787     17616         17079
 bmf.cpp lines                            —         —           365
 raw-offset sites                        22        12             18
   off `_this`                            —         1             0
@@ -3081,3 +3081,47 @@ split, so that is what §1 carries now:
 ```
 
 Nine, and each one accounted for.
+
+## 39. Six declarations that lost a word
+
+`choose_plane_coding` holds six of MSVC's sixteen-byte spill slots. Each is
+four `int32_t` in the histogram pass and two `double` in the 3×3 solve —
+`*(double *)x2` and `*(double *)&x2[2]` are the second phase — so the
+alignment is on the declaration for a reason, and `bmf.cpp` says so:
+
+> The `alignas(16)` that used to live on the union lives on those six now.
+
+It did not. Reading them against the file that still had the frame:
+
+```
+c7d7a75:  alignas(16) int32_t x0[4];   … x5[4];
+today:    int32_t x0[4], x1[4], …, x5[4];
+```
+
+`liftframe.py` dropped the specifier when it lifted them out of
+`ChoosePlaneCodingFrame`. Its member pattern matched `alignas(...)` in a
+**non-capturing** group and rebuilt the declaration from the groups it did
+capture, so the word simply was not in the output. Nothing failed: the file
+compiled, the fifteen streams stayed identical, and x86 loads an unaligned
+`double` without complaint. It is the same shape as the `BmfImage` retype in
+§30 — an edit the compiler has no complaint to make about, that means
+something else.
+
+Six of the eight `alignas` declarations in the file went that way, and the
+sentence in `bmf.cpp` asserting they had not is what made it findable.
+
+### The check is a round trip
+
+Capturing the specifier fixes this one. What stops the next one is comparing
+the rebuilt declaration against the line it came from:
+
+```python
+for (t, d, _n, src), got in zip(members, decls):
+    if re.sub(r'\s+', '', src) != re.sub(r'\s+', '', got):
+        return False, '%s: `%s` would be rewritten as `%s`' % (nm, src, got)
+```
+
+A declaration rebuilt from a regex's groups is the same declaration only if
+nothing fell between them, and that is cheap to assert. Replayed against
+`c7d7a75`'s file the lift now emits `alignas(16) int32_t x0[4]`, and with the
+old pattern the guard fires on exactly the six.

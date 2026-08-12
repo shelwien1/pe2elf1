@@ -47,8 +47,15 @@ import sys
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import structs                                                    # noqa: E402
 
-MEMBER = re.compile(r'\s*(?:alignas\([^)]*\)\s*)?'
-                    r'((?:const\s+|unsigned\s+|signed\s+)*[A-Za-z_]\w*'
+# `alignas(...)` is part of the type, not something to step over.  Matching it
+# in a non-capturing group and rebuilding the declaration from the rest is a
+# silent drop: lifting `ChoosePlaneCodingFrame` turned six
+# `alignas(16) int32_t x[4]` members into plain ones and nothing said so.  The
+# gate stayed green because x86 loads an unaligned double happily -- the same
+# "the compiler has no complaint to make" hazard as retyping a pointer -- and
+# what was lost is six sixteen-byte spill slots that no longer say they are.
+MEMBER = re.compile(r'\s*((?:alignas\([^)]*\)\s*)?'
+                    r'(?:const\s+|unsigned\s+|signed\s+)*[A-Za-z_]\w*'
                     r'(?:\s*\*)*)\s+(\**\s*\w+)\s*((?:\[[^\]]*\])*)\s*;\s*$')
 
 
@@ -96,7 +103,7 @@ def frame_of(lines, a, b):
         if name.startswith('_pad') or name.startswith('_gap'):
             keep.append(l)
             continue
-        out.append((m.group(1).strip(), m.group(2).strip() + m.group(3), name))
+        out.append((m.group(1).strip(), m.group(2).strip() + m.group(3), name, c))
     return start, end, out, keep
 
 
@@ -136,7 +143,7 @@ def candidates(lines):
             declined.append((nm, 'every member is inside its union'))
         else:
             types = structs.decl_types(sig, lines, a, b)
-            clash = [n for _, _, n in got[2]
+            clash = [n for _, _, n, _src in got[2]
                      if n in types and n not in {m[2] for m in got[2]}]
             out.append((nm, a, b, got, clash))
     return out, declined
@@ -165,7 +172,19 @@ def apply(lines, nm, a, b, got, indent='  '):
         if depth <= 0 and '__frame' in c:
             e2 = i
             break
-    decls = ['%s%s %s;' % (indent, t, d) for t, d, _ in members]
+    decls = ['%s%s %s;' % (indent, t, d) for t, d, _, _src in members]
+    # A declaration rebuilt from a regex's groups is only the same declaration
+    # if nothing fell between them.  `alignas(16) int32_t x0[4];` came out as
+    # `int32_t x0[4];` for six members of `ChoosePlaneCodingFrame` because the
+    # pattern stepped over the specifier instead of capturing it, and nothing
+    # noticed: the file compiled, the streams did not move, and x86 loads an
+    # unaligned double happily.  So the rebuild is compared against the source
+    # line, ignoring whitespace, and a member that does not round-trip stops
+    # the lift rather than being quietly simplified.
+    for (t, d, _n, src), got_line in zip(members, decls):
+        if re.sub(r'\s+', '', src) != re.sub(r'\s+', '', got_line):
+            return False, ('%s: `%s` would be rewritten as `%s`'
+                           % (nm.lstrip('_'), src.strip(), got_line.strip()))
     # What is left of the struct: the union and the padding that positions it.
     # If that is nothing but braces, the frame goes entirely.
     real = [l for l in keep
@@ -178,7 +197,7 @@ def apply(lines, nm, a, b, got, indent='  '):
     text = '\n'.join(rows)
     # Only the lifted names lose the prefix; the ones still in the struct keep
     # it, which is what makes a partial lift a rewrite rather than a guess.
-    for _, _, n in members:
+    for _, _, n, _src in members:
         text = re.sub(r'__frame\.%s\b' % re.escape(n), n, text)
     lines[a:b + 1] = text.split('\n')
     return True, '%s: %d members lifted, %d left in the frame' % (

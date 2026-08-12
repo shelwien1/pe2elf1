@@ -7976,7 +7976,13 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
   } __frame;
   int32_t best0, best1, best2;
   uint8_t buf_3[2048], buf_4[2048], buf_2[2048];
-  int32_t x0[4], x1[4], x2[4], x3[4], x4[4], x5[4];
+  // MSVC's six sixteen-byte spill slots.  Each holds four `int32_t` in the
+  // histogram pass and two `double` in the 3x3 solve -- `*(double *)x2` and
+  // `*(double *)&x2[2]` are the second phase -- which is why the alignment
+  // is on the declaration and not incidental.  `liftframe.py` dropped it
+  // when it lifted these out of the frame: x86 loads an unaligned double
+  // without complaint, so nothing failed and nothing said so.
+  alignas(16) int32_t x0[4], x1[4], x2[4], x3[4], x4[4], x5[4];
   double d1, d2, d3;
   int32_t acc0[4];
   uint64_t acc1[5];
