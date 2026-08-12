@@ -108,16 +108,30 @@ def frame_of(lines, a, b):
 
 
 # Frames whose members have been given their own storage and which failed the
-# gate for it, on this file.  Named with the failure rather than left on the
-# offer list, so that "0 to lift" means what it says.
+# gate for it.  Named with the failure rather than left on the offer list, so
+# that "0 to lift" means what it says.
+#
+# Re-taken with `--retry` against the file as it is now, five hundred commits
+# and nine rounds after they were first measured -- because a table of past
+# failures is the kind of claim REFACTORING9.md section 32 is about.  All five
+# still fail, and in the same way.
+#
+# `tools/asan.sh` says what the failure *is*, which these lines never did:
+# lifting `search_filter`'s frame gives
+#
+#     ERROR: AddressSanitizer: stack-buffer-overflow
+#     Address … is located in stack of thread T0 at offset 180 in frame
+#
+# These bodies walk off the ends of their locals on purpose, and the frame is
+# what makes the neighbours theirs to walk.
 PROVEN = {
-    'read_bmp':       'DLRAW aborts while compressing',
-    'search_filter':  'altp1 aborts while compressing',
-    'cost_candidate': 'altp1 aborts while compressing',
+    'read_bmp':       'DLRAW aborts while compressing (rc 134)',
+    'search_filter':  'altp1 aborts while compressing (rc 134)',
+    'cost_candidate': 'altp1 aborts while compressing (rc 134)',
     # These two offer only the members outside their union, and even that much
     # moves what the body writes past.
     'expand_image':   'DLRAW exits 3 while decompressing',
-    'reduce_alphabet': 'DLRAW aborts while compressing',
+    'reduce_alphabet': 'DLRAW aborts while compressing (rc 134)',
 }
 
 
@@ -133,9 +147,15 @@ def candidates(lines):
     with the reason it cannot.
     """
     out, declined = [], []
+    # `--retry` puts the tried-and-reverted frames back on the offer list.
+    # `PROVEN`'s entries are measurements of a file that has moved a long way
+    # since they were taken -- which is REFACTORING9.md section 32's whole
+    # subject -- and re-taking one should be a command, not an edit to this
+    # table.
+    proven = set() if '--retry' in sys.argv else set(PROVEN)
     for a, b, nm, sig in structs.bodies(lines):
         got = frame_of(lines, a, b)
-        if not got or nm.lstrip('_') in PROVEN:
+        if not got or nm.lstrip('_') in proven:
             continue
         if got[2] is None:
             declined.append((nm, 'a line in it is not a member declaration'))
@@ -225,9 +245,12 @@ if __name__ == '__main__':
         for nm, a, b, got, clash in found:
             print('  %-24s %3d members%s' % (nm.lstrip('_'), len(got[2]),
                                              '  CLASH: ' + ','.join(clash) if clash else ''))
-        for fn, why in sorted(PROVEN.items()):
-            print('  %-24s tried: %s' % (fn, why))
+        if '--retry' not in sys.argv:
+            for fn, why in sorted(PROVEN.items()):
+                print('  %-24s tried: %s' % (fn, why))
         for nm, why in sorted(declined):
             print('  %-24s declined: %s' % (nm.lstrip('_'), why))
         print('%d frames this can offer to lift; %d tried and reverted, '
-              '%d declined' % (len(found), len(PROVEN), len(declined)))
+              '%d declined' % (len(found),
+                               0 if '--retry' in sys.argv else len(PROVEN),
+                               len(declined)))

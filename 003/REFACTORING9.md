@@ -3426,3 +3426,36 @@ ASan's runtime does not survive `-static` here, `BMF_GC=0` because
 still stripped by `build.sh`'s `-s`, so the stack trace is addresses — but the
 line that matters is `is located in stack of thread T0 at offset N in frame`,
 which names a local and is enough to find the body.
+
+### The five that were tried, re-tried
+
+`liftframe.PROVEN` names five frames that failed the gate when lifted, with the
+failure beside each. Those measurements were taken nine rounds and five hundred
+commits ago, which by §32's own argument makes them claims rather than facts.
+`--retry` puts them back on the offer list so re-taking one is a command
+instead of an edit to the table.
+
+All five still fail, and in the same way:
+
+```
+read_bmp           DLRAW: COMPRESS FAILED (rc=134)
+expand_image       DLRAW: DECOMPRESS FAILED (rc=3)
+search_filter      altp1: COMPRESS FAILED (rc=134)
+cost_candidate     altp1: COMPRESS FAILED (rc=134)
+reduce_alphabet    DLRAW: COMPRESS FAILED (rc=134)
+```
+
+An aged claim that survives re-taking is still worth the re-taking; this is the
+first one this round that did.
+
+And `asan.sh` says what the failure *is*, which those five lines never did.
+Lifting `search_filter`'s frame gives
+
+```
+ERROR: AddressSanitizer: stack-buffer-overflow
+Address … is located in stack of thread T0 at offset 180 in frame
+```
+
+These bodies walk off the ends of their locals on purpose. The frame is what
+makes the neighbours theirs to walk, and that is why it is a layout and not a
+bag of locals — stated now as a measurement rather than as an exit code.
