@@ -7959,7 +7959,11 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
       union {
           int64_t q1;              // the solve's second coefficient
           struct {
-              uint32_t plane_a;      // `plane_desc[1].src_plane - x3[2]`
+              // Signed: it is a difference of plane numbers and the second
+              // reference can sit before the current plane.  Declared
+              // `uint32_t` it was eight sign conversions, because every
+              // site adds it to `int32_t` offsets.
+              int32_t  plane_a;      // `plane_desc[1].src_plane - x3[2]`
               uint32_t nplanes_s;    // the plane count, kept across the search
           };
       };
@@ -7984,14 +7988,33 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
   // without complaint, so nothing failed and nothing said so.
   alignas(16) int32_t x0[4], x1[4], x2[4], x3[4], x4[4], x5[4];
   double d1, d2, d3;
-  int32_t acc0[4];
-  uint64_t acc1[5];
+  // One buffer, three names.  `acc0`, `acc1` and `tbl16` are contiguous --
+  // measured, not assumed: a probe printing their offsets says 0, 16 and 56,
+  // while `d4` lands at -112 and the two 64-byte tables 35 kB away, so the run
+  // is these three and 120 bytes long.
+  //
+  // The loop below zeroes twelve 16-byte chunks from byte 64 to byte 255, and
+  // 136 of those bytes are past the end of the run.  That is MSVC's stack
+  // frame being cleared by a body that knew what else was next to it; here it
+  // was writing over whatever the compiler had put there.  It happens at the
+  // top of the function, so what it clobbered was uninitialised and the fifteen
+  // streams never noticed -- which is exactly the kind of luck this file should
+  // not be running on.  The buffer is declared, so the writes are in bounds.
+  // References rather than a struct, so that every existing use of the three
+  // names still reads the same: an anonymous struct inside an anonymous union
+  // is only allowed inside a named type, and naming one here would put
+  // `__scratch.` in front of twenty sites for no gain.
+  alignas(16) uint8_t scratch[256];
+  int32_t  (&acc0)[4]  = *(int32_t  (*)[4]) &scratch[0];
+  uint64_t (&acc1)[5]  = *(uint64_t (*)[5])&scratch[16];
+  int32_t  (&tbl16)[16] = *(int32_t (*)[16])&scratch[56];
   double d4;
-  int32_t tbl16[16];
   uint8_t tbl64a[64], tbl64b[64];
   int64_t q2;
   double d5, d6;
   uint8_t *row_c, *row_d;   // the third plane's row cursor, one pixel a step
+  uint8_t *plane0;   // `&img_a->pixels[plane]`, the search's base row
+  int32_t wt_step;   // the weight step `-Q` sets
   uint8_t *pp;
   uint32_t uu;
   int32_t wa_slot;
@@ -8030,10 +8053,10 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
   result = 192;
   do
   {
-    bmf_zero16(((uint8_t *)&acc1[4] + result));
-    bmf_zero16(((uint8_t *)&acc1[2] + result));
-    bmf_zero16(((uint8_t *)acc1 + result));
-    bmf_zero16(((uint8_t *)acc0 + result));
+    bmf_zero16(&scratch[result + 48]);
+    bmf_zero16(&scratch[result + 32]);
+    bmf_zero16(&scratch[result + 16]);
+    bmf_zero16(&scratch[result]);
     result -= 64;
   }
   while ( result );
@@ -8092,6 +8115,12 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
       while ( dw * 4 );
       best_cost = acc0[4 * x3[2] + 2];
       x3[1] = 16 * x3[2];
+      // The second reference plane's offset within an interleaved pixel.
+      // Hex-Rays reads this slot as `q1`, its sixty-four-bit name, at the
+      // five sites below -- the union's other arm, which the 3x3 solve uses
+      // as a `double`.  Every one of those five truncates back to thirty-two
+      // bits, by a cast to `uint8_t *` or by indexing one, so what they read
+      // is this half and nothing else.  Section 24's `LODWORD` again.
       __frame.plane_a = plane_desc[1].src_plane - x3[2];
       wt8 = plane_desc[x3[2] + 1].w8;
       __frame.plane_b = plane_desc[2].src_plane - x3[2];
@@ -8102,16 +8131,24 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
         __frame.wt_slot = wt8;
         x5[3] = wt4;
         __frame.nplanes_s = n_planes;
-        x0[1] = 4;            // (opt_search_quality + 5) / 3, and -Q is 9
+        // Two of `x0`'s lanes are constants for the whole search: the step
+        // `-Q` sets, and the plane's first sample.  Both are dead by the
+        // `memset(x0, 0, 16)` that starts the 3x3 solve, so the slot is
+        // MSVC's and the values are ordinary locals.
+        wt_step = 4;          // (opt_search_quality + 5) / 3, and -Q is 9
         __frame.s1 = wt4 - 1;
         wt4_dn = wt4 - 1;
         __frame.s6 = wt8 - 1;
         wt8_dn = wt8 - 1;
-        __frame.s0 = wt4 - x0[1];
+        __frame.s0 = wt4 - wt_step;
         wt4_dn_end = __frame.s0;
-        *(uint32_t *)__frame.buf_1 = wt8 - x0[1];
-        x0[0] = (int32_t)&((uint8_t *)img_a)[x3[2]];
-        wt8_dn_end = wt8 - x0[1];
+        *(uint32_t *)__frame.buf_1 = wt8 - wt_step;
+        // The plane's first sample, not the image header.  Every one of the
+        // twelve reads below added 16 to it, which is
+        // `offsetof(BmfImage, pixels)` -- section 31's `cost_candidate`
+        // exactly, one function along.
+        plane0 = &img_a->pixels[x3[2]];
+        wt8_dn_end = wt8 - wt_step;
         while ( 1 )
         {
           if ( wt4_dn <= wt4_dn_end )
@@ -8122,10 +8159,10 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
               wt4_up = x5[3] + 1;
               x3[3] = __frame.wt_slot + 1;
               wt8_up = __frame.wt_slot + 1;
-              x0[3] = x5[3] + x0[1];
-              wt4_up_end = x5[3] + x0[1];
-              x0[2] = __frame.wt_slot + x0[1];
-              wt8_up_end = __frame.wt_slot + x0[1];
+              x0[3] = x5[3] + wt_step;
+              wt4_up_end = x5[3] + wt_step;
+              x0[2] = __frame.wt_slot + wt_step;
+              wt8_up_end = __frame.wt_slot + wt_step;
               // The two weights step outward together and each stops at its
               // own limit, so on any pass one of the two may be finished while
               // the other is not.  `LABEL_109` was that case written as a jump
@@ -8160,9 +8197,9 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                   ofs_up_a = -stride_a;
                   left_a = -plane_count;
                   ofs_ul_a = -stride_a - plane_count;
-                  p_a = (uint8_t *)(x0[0] - ofs_ul_a + 16);
-                  q_a = (uint8_t *)(__frame.q1 + x0[0] - ofs_ul_a + 16);
-                  row_c = (uint8_t *)(__frame.plane_b + x0[0] - ofs_ul_a + 16);
+                  p_a = plane0 - ofs_ul_a;
+                  q_a = plane0 + __frame.plane_a - ofs_ul_a;
+                  row_c = plane0 + __frame.plane_b - ofs_ul_a;
                   do
                   {
                     ul_a = p_a[ofs_ul_a];
@@ -8197,7 +8234,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                     wt4_best = wt4_up;
                   }
                   x5[3] = wt4_best;
-                  wt4_up_end = x0[1] + wt4_best;
+                  wt4_up_end = wt_step + wt4_best;
                 }
                 if ( wt8_up < wt8_up_end && wt8_up < 192 )
                 {
@@ -8215,9 +8252,9 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                     ofs_up_b = -stride_b;
                     left_b = -plane_count;
                     ofs_ul_b = -stride_b - plane_count;
-                    p_b = (uint8_t *)(x0[0] - ofs_ul_b + 16);
-                    q_b = (uint8_t *)(__frame.q1 + x0[0] - ofs_ul_b + 16);
-                    row_d = (uint8_t *)(__frame.plane_b + x0[0] - ofs_ul_b + 16);
+                    p_b = plane0 - ofs_ul_b;
+                    q_b = plane0 + __frame.plane_a - ofs_ul_b;
+                    row_d = plane0 + __frame.plane_b - ofs_ul_b;
                     do
                     {
                       ul_b = p_b[ofs_ul_b];
@@ -8252,7 +8289,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                       wt8_best = wt8_up;
                     }
                     __frame.wt_slot = wt8_best;
-                    wt8_up_end = x0[1] + wt8_best;
+                    wt8_up_end = wt_step + wt8_best;
                   }
                 }
                 ++wt4_up;
@@ -8280,10 +8317,10 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
             __frame.s4 = -stride_c;
             left_c = -plane_count;
             __frame.s3 = -stride_c - plane_count;
-            __frame.p1 = (uint8_t *)(x0[0] - __frame.s3 + 16);
-            __frame.p0 = (uint8_t *)(__frame.q1 + x0[0] - __frame.s3 + 16);
+            __frame.p1 = plane0 - __frame.s3;
+            __frame.p0 = plane0 + __frame.plane_a - __frame.s3;
             q_c = __frame.p0;
-            r_c = (uint8_t *)(__frame.plane_b + x0[0] - __frame.s3 + 16);
+            r_c = plane0 + __frame.plane_b - __frame.s3;
             p_c = __frame.p1;
             do
             {
@@ -8319,7 +8356,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
               wt4_best_dn = wt4_dn;
             }
             x5[3] = wt4_best_dn;
-            wt4_dn_end = wt4_best_dn - x0[1];
+            wt4_dn_end = wt4_best_dn - wt_step;
           }
           if ( wt8_dn > wt8_dn_end && wt8_dn >= -64 )
           {
@@ -8334,10 +8371,10 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
               __frame.s9 = -stride_d;
               left_d = -plane_count;
               __frame.s8 = -stride_d - plane_count;
-              __frame.p4 = (uint8_t *)(x0[0] - __frame.s8 + 16);
-              q_d = (uint8_t *)(__frame.q1 + x0[0] - __frame.s8 + 16);
+              __frame.p4 = plane0 - __frame.s8;
+              q_d = plane0 + __frame.plane_a - __frame.s8;
               __frame.p3 = q_d;
-              r_d = (uint8_t *)(__frame.plane_b + x0[0] - __frame.s8 + 16);
+              r_d = plane0 + __frame.plane_b - __frame.s8;
               p_d = __frame.p4;
               do
               {
@@ -8373,7 +8410,7 @@ int32_t __choose_plane_coding(BmfImage *img, int32_t unused_h, int8_t unused_c)
                 wt8_best_dn = wt8_dn;
               }
               __frame.wt_slot = wt8_best_dn;
-              wt8_dn_end = wt8_best_dn - x0[1];
+              wt8_dn_end = wt8_best_dn - wt_step;
             }
           }
           --wt4_dn;
@@ -8391,7 +8428,7 @@ LABEL_19:
         {
           c2 = px[__frame.plane_b];
           c2w = c2 * __frame.wt_slot;
-          c1 = px[__frame.q1];
+          c1 = px[__frame.plane_a];
           c1w = c1 * x5[3];
           ++__frame.hist_c[c2 - c1 + 1280];
           c0 = *px + 512;
@@ -8420,15 +8457,15 @@ LABEL_19:
         wt8 = 0;
       }
       pred = cheaper;
-      if ( *(uint32_t *)((uint8_t *)acc1 + x3[1]) < best )
+      if ( *(uint32_t *)&scratch[x3[1] + 16] < best )
       {
-        best = *(uint32_t *)((uint8_t *)acc1 + x3[1]);
+        best = *(uint32_t *)&scratch[x3[1] + 16];
         pred = 2;
         wt4 = 0;
         wt8 = 128;
       }
-      keep3 = best <= *(uint32_t *)((uint8_t *)acc1 + x3[1] + 4);
-      if ( best > *(uint32_t *)((uint8_t *)acc1 + x3[1] + 4) )
+      keep3 = best <= *(uint32_t *)&scratch[x3[1] + 20];
+      if ( best > *(uint32_t *)&scratch[x3[1] + 20] )
         pred = 3;
       xform_row = x3[2];   // a record index; it was the byte offset 16 * it
       if ( !keep3 )

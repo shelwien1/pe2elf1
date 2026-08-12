@@ -22,18 +22,18 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17058
+subs1.hpp lines                      17787     17616         17095
 bmf.cpp lines                            —         —           365
-raw-offset sites                        22        12             14
+raw-offset sites                        22        12              0
   off `_this`                            —         1             0
   in functions                           —         1             0
 byte offsets on a typed base           121         0             0
-pointer casts                         2137      1545          1211
-  to a scalar                            —         —           494
+pointer casts                         2137      1545          1190
+  to a scalar                            —         —           471
   to a record                            —         —           364
-  to a scalar, of an address             —         —           348
+  to a scalar, of an address             —         —           350
   to a record, of an address             —         —             5
-declarations carrying alignas            —         —            22
+declarations carrying alignas            —         —            23
 frames                                  —        17             9
   bytes they hold                        —         —        167780
   aliases left in them                   —         —             0
@@ -57,7 +57,7 @@ goto / LABEL_n:                     112/79     81/55         49/33
   restart a loop / exit N blocks         —         —         15/32
   sideways to a join / to neither        —         —           2/0
   jump into a block                      —         —             0
-conversion warnings                   1455      1331          1048
+conversion warnings                   1455      1331          1039
 ```
 
 `python3 tools/checktable.py` compares that table against `shape.py --rows`
@@ -3318,3 +3318,74 @@ indexed by a byte offset kept in `x3[1]` (six), and the four pairs of
 as an integer rather than a `BmfImage *`. Naming those means retyping two
 frame members that the solve also reads as halves of a `double`, which is a
 different job from this one.
+
+## 43. Zero raw offsets, and what the probe said
+
+§1's `raw-offset sites` row has been in the table since round three. It reads
+**0**.
+
+Three things got the last fourteen.
+
+### `x0`'s two constants
+
+`x0[0]` held the plane's base address from line 8127 to 8352 and a weight from
+8619 on; `x0[1]` held the step `-Q` sets for the whole of the first phase.
+Both are dead by the `memset(x0, 0, 16)` that starts the 3×3 solve, so the
+slot is MSVC's and the values are ordinary locals — `plane0` and `wt_step`.
+
+Twelve reads of `x0[0]` had the shape `(uint8_t *)(<offset> + x0[0] - <ofs> + 16)`.
+The `+ 16` is `offsetof(BmfImage, pixels)` — §31's `cost_candidate`, one
+function along — so the base is `&img_a->pixels[plane]` and the twelve become
+pointer arithmetic on a `uint8_t *`. Eight raw offsets, twelve casts and
+twelve magic sixteens.
+
+### `q1` was the union's low half again
+
+Four of those twelve read `__frame.q1`, an `int64_t` whose union arm is
+`{ uint32_t plane_a; uint32_t nplanes_s; }`. Every one truncates back to
+thirty-two bits — by a cast to `uint8_t *`, or by indexing one — so what they
+read is `plane_a` and nothing else. §24's `LODWORD` in a different disguise.
+
+Naming it put the warning count **up** by eight, because `plane_a` was
+declared `uint32_t` and every site adds it to `int32_t` offsets. It is a
+difference of plane numbers and the second reference can sit before the current
+plane, so the honest type is signed: `int32_t`, and the eight go away with one
+more.
+
+### The buffer that was not there
+
+The last six were `acc0` and `acc1` indexed by a byte offset, and the arithmetic
+said they were one buffer with `d4`, `tbl16` and the two 64-byte tables — 256
+bytes, exactly the sum of the six declarations.
+
+That was wrong, and the way to find out was to ask rather than to add:
+
+```
+PROBE acc0=0 acc1=16 d4=-112 tbl16=56 a=35012 b=35076
+```
+
+`d4` is 112 bytes *before* `acc0` and the tables are 35 kB away. The run is
+`acc0`, `acc1`, `tbl16` — **120 bytes** — and the zero loop above them writes
+twelve 16-byte chunks from byte 64 to byte 255. A hundred and thirty-six of
+those bytes are past the end of it.
+
+That is MSVC's frame being cleared by a body that knew what was next to it. It
+happens at the top of the function, so what it clobbered here was uninitialised
+and the fifteen streams never noticed — which is the kind of luck this file
+should not be running on. The buffer is declared now, and the three names are
+references into it:
+
+```c
+alignas(16) uint8_t scratch[256];
+int32_t  (&acc0)[4]   = *(int32_t  (*)[4]) &scratch[0];
+uint64_t (&acc1)[5]   = *(uint64_t (*)[5])&scratch[16];
+int32_t  (&tbl16)[16] = *(int32_t  (*)[16])&scratch[56];
+```
+
+References rather than a struct because an anonymous struct inside an anonymous
+union is only allowed inside a named type, and naming one would put
+`__scratch.` in front of twenty sites for nothing. Every existing use reads the
+same; the six offsets are `&scratch[…]`; and the writes are in bounds.
+
+**14 → 0 raw offsets, 1047 conversion warnings → 1039**, fifteen streams
+byte-identical.
