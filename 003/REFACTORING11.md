@@ -227,19 +227,24 @@ and its control. `BMF_X64_GATE=0` skips it, for a host with no 64-bit
 toolchain, and `x64.sh` falls back to the ordinary 64-bit build, with a line
 saying so, where the arena cannot be placed.
 
-Every other instrument takes `BMF_BITS=64` in front of it, and all four are
+Every other instrument takes `BMF_BITS=64` in front of it, and all of them are
 clean on the 64-bit build:
 
 ```
-BMF_BITS=64 tools/asan.sh      no report in 40 runs over 17 images
-BMF_BITS=64 tools/fuzz.sh      400 mutants: 288 refused, 112 accepted, 0 reported
-BMF_BITS=64 tools/hdrscan.sh   no report in 7680 runs: both one-byte header
-                               fields, every value, 15 streams
-tools/x64.sh                   22 of 22, streams compared
-tools/x64.sh --high            22 of 22 with every allocation above 4 GB
-tools/x64diff.sh               400 mutants through *both* builds: same exit
-                               code, same bytes
+BMF_BITS=64 tools/asan.sh        no report in 40 runs over 17 images
+BMF_BITS=64 tools/fuzz.sh        400 mutants: 288 refused, 112 accepted,
+                                 0 reported -- the 32-bit tally exactly
+BMF_BITS=64 tools/hdrscan.sh     no report in 7680 runs: both one-byte header
+                                 fields, every value, 15 streams
+tools/x64.sh                     22 of 22, streams compared
+tools/x64.sh --high              22 of 22 with every allocation above 4 GB
+BMF_HIGH=1 tools/x64diff.sh 400  400 mutants through *both* builds, the 64-bit
+                                 side above 4 GB: same exit code, same bytes
 ```
+
+Those first three are re-takes. They were run once before section 3c and
+reported clean about an allocator AddressSanitizer cannot instrument; these are
+against real `malloc`.
 
 And both targets produce byte-identical streams at `-O0`, `-O1` and `-O3` --
 six builds, ninety streams. That is the check that nothing left in the coding
