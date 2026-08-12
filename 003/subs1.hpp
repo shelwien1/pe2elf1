@@ -13982,13 +13982,8 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *out) {   P2Ctx *cur0,
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
   int32_t xf4, val3;
-  AltP2Block *plane[4];
-  AltP2Block **w;
-  int32_t pl2;
-  uint32_t back, row_bytes;
-  int32_t dc_flag, xf0;
-  uint32_t i_1, first;
-  uint32_t i_2, np;
+  AltP2Block *plane[4], **w;
+  uint32_t back, row_bytes, i_1, first, i_2, np;
   ;
   AltP2Block *blk_r, *src3, *blk_k, *blk2, *blk3, *blk1;
   int16_t seed1;
@@ -14002,7 +13997,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *out) {   P2Ctx *cur0,
   float (**cur)[4], (**r1)[4];   // the row cursors, one weight block a step
   bool xf3, off;
   float (*b4)[4], (**b0)[4];   // one row slot, and the row it comes from
-  int32_t raw, pl, nplanes, xf1, xf2, pred0, code0, val0, pred1, code1,
+  int32_t pl2, dc_flag, xf0, raw, pl, nplanes, xf1, xf2, pred0, code0, val0, pred1, code1,
           val1, l7a, l4a, l5a, pred2, code2, val2, l7b, l4b, l5b,
           pred3, code3, l7c, l4c, l5c, nplanes2, pl3;
   void *made, *src1, **plane_p;
@@ -15612,7 +15607,6 @@ uint8_t * __expand_image(BmfArc *arc_in, int32_t want_pal, void **p_coded_buf)
            desc, desc_flags, want, got, word12, word8, word4,
            worddc, word6, word4b;
   uint8_t *plane_buf;
-  void *last_row2;
   arc = arc_in;
   if ( p_coded_buf )
     *p_coded_buf = nullptr;
@@ -17038,10 +17032,8 @@ int32_t __compress_image(BmfArc *arc_in, BmfImage *p_i, void *coded_buf)
   // byte-identical, and the frame had nothing left but its padding.
   BmfImage hdr;        // the member header, written in one `fwrite`
   int32_t  plane_n;    // `plane_count`, the deinterleave stride
-  uint8_t *row;        // the source cursor, then the row index
   int32_t  row_step;   // `plane_count * (height - 1)`
   uint32_t filtered;
-  int32_t y0;
   void *pixels;
   // These shared `filtered` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
@@ -17061,7 +17053,7 @@ int32_t __compress_image(BmfArc *arc_in, BmfImage *p_i, void *coded_buf)
   uint8_t bpp;
   uint32_t acc, data_bytes, img_stride, row_bytes, shifted;
   uint8_t has_coded;   // 0/1, shifted into bit 7 of the header byte
-  uint8_t *plane_buf, *row_at, *row_next;   // `uint8_t *` beside the `char` scalars above
+  uint8_t *plane_buf, *row_at;
   uint32_t hdr_pad8, hdr_pad8b;   // the header's pad/depth/flags word, not an address
   int32_t bits_left, pl, free_bits, pl2, ok_all, y, pl_i, countdown,
           data_size, row_y;
