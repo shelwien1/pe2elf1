@@ -12432,7 +12432,7 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
   float (*nb_cur)[4];
   float (*wrow_b)[4];
   bool go, eq_hi, lt_hi, ovf;
-  uint8_t *bankp;   // `uint8_t *` beside the `char` scalars above
+  P2Count *bankp;   // the bank's first counter
   float ms1, bias2, bias1, d_bias, ms_a, ms_b, ms_b10, conf;
   int32_t ctx_lo, bank_ctx, res, w0, w0b, res2, w1, e1, wnode0m1a, enode0m1a, x0020, x0010,
           neg, w_top, e_top, bump, res_s, w_top3, w_topm1, wd4000a, ed4000a, wr4000b, er4000b,
@@ -12636,81 +12636,77 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
                                                     + 2) >> 2);
           ctxw = ctxw_s;
         }
-        bankp = (uint8_t *)blk + bank_off;
+        // The bank's first counter.  This was `(uint8_t *)blk + (bank <<
+        // 17)`, with every one of the thirty reads below adding 284712 --
+        // `offsetof(AltP2Block, p2_ctr)` written as the number it is on
+        // i386, where five pointers earlier in the record are four bytes
+        // each.  Give them eight and the counters are twenty bytes further
+        // on and every one of those reads lands in the middle of a record.
+        // `node0` two hundred lines up already says `&blk->p2_ctr[32768 *
+        // bank + ctx]`, which is the same address and the same arithmetic.
+        bankp = &blk->p2_ctr[32768 * bank];
         res_c = res2;
-        __builtin_prefetch(&bankp[4 * (ctxw ^ 0x4000) + 284712], 0, 1);
-        d4000 = (P2Count *)(&bankp[4 * (ctxw ^ 0x4000) + 284712]);
-        m4000 = (P2Count *)(&bankp[4 * (ctxw ^ 0x3FF0) + 284712]);
+        __builtin_prefetch(&bankp[(ctxw ^ 0x4000)], 0, 1);
+        d4000 = &bankp[(ctxw ^ 0x4000)];
+        m4000 = &bankp[(ctxw ^ 0x3FF0)];
         __builtin_prefetch(m4000, 0, 1);
-        r4000 = (P2Count *)(&bankp[4 * p2_ctx_rotate[((ctxw ^ 0x4000) >> 2) & 3]
-                  + 284712
-                  + 4 * ((ctxw ^ 0x4000) & 0xFFFFFFF3)]);
+        r4000 = &bankp[p2_ctx_rotate[((ctxw ^ 0x4000) >> 2) & 3] + ((ctxw ^ 0x4000) & 0xFFFFFFF3)];
         __builtin_prefetch(r4000, 0, 1);
-        __builtin_prefetch(&bankp[4 * (ctxw ^ 0x2000) + 284712], 0, 1);
-        d2000 = (P2Count *)(&bankp[4 * (ctxw ^ 0x2000) + 284712]);
-        __builtin_prefetch(&bankp[4 * (ctxw ^ 0x5FF0) + 284712], 0, 1);
-        m2000 = (P2Count *)(&bankp[4 * (ctxw ^ 0x5FF0) + 284712]);
-        r2000 = (P2Count *)(&bankp[4 * p2_ctx_rotate[((ctxw ^ 0x2000) >> 2) & 3]
-                  + 284712
-                  + 4 * ((ctxw ^ 0x2000) & 0xFFFFFFF3)]);
+        __builtin_prefetch(&bankp[(ctxw ^ 0x2000)], 0, 1);
+        d2000 = &bankp[(ctxw ^ 0x2000)];
+        __builtin_prefetch(&bankp[(ctxw ^ 0x5FF0)], 0, 1);
+        m2000 = &bankp[(ctxw ^ 0x5FF0)];
+        r2000 = &bankp[p2_ctx_rotate[((ctxw ^ 0x2000) >> 2) & 3] + ((ctxw ^ 0x2000) & 0xFFFFFFF3)];
         __builtin_prefetch(r2000, 0, 1);
-        __builtin_prefetch(&bankp[4 * (ctxw ^ 0x1000) + 284712], 0, 1);
-        d1000 = (P2Count *)(&bankp[4 * (ctxw ^ 0x1000) + 284712]);
-        __builtin_prefetch(&bankp[4 * (ctxw ^ 0x6FF0) + 284712], 0, 1);
-        m1000 = (P2Count *)(&bankp[4 * (ctxw ^ 0x6FF0) + 284712]);
-        r1000 = (P2Count *)(&bankp[4 * p2_ctx_rotate[((ctxw ^ 0x1000) >> 2) & 3]
-                  + 284712
-                  + 4 * ((ctxw ^ 0x1000) & 0xFFFFFFF3)]);
+        __builtin_prefetch(&bankp[(ctxw ^ 0x1000)], 0, 1);
+        d1000 = &bankp[(ctxw ^ 0x1000)];
+        __builtin_prefetch(&bankp[(ctxw ^ 0x6FF0)], 0, 1);
+        m1000 = &bankp[(ctxw ^ 0x6FF0)];
+        r1000 = &bankp[p2_ctx_rotate[((ctxw ^ 0x1000) >> 2) & 3] + ((ctxw ^ 0x1000) & 0xFFFFFFF3)];
         __builtin_prefetch(r1000, 0, 1);
-        d0800 = (P2Count *)(&bankp[4 * (ctxw ^ 0x800) + 284712]);
-        m0800 = (P2Count *)(&bankp[4 * (ctxw ^ 0x77F0) + 284712]);
-        r0800 = (P2Count *)(&bankp[4 * p2_ctx_rotate[((ctxw ^ 0x800) >> 2) & 3]
-                  + 284712
-                  + 4 * ((ctxw ^ 0x800) & 0xFFFFFFF3)]);
-        d0400 = (P2Count *)(&bankp[4 * (ctxw ^ 0x400) + 284712]);
+        d0800 = &bankp[(ctxw ^ 0x800)];
+        m0800 = &bankp[(ctxw ^ 0x77F0)];
+        r0800 = &bankp[p2_ctx_rotate[((ctxw ^ 0x800) >> 2) & 3] + ((ctxw ^ 0x800) & 0xFFFFFFF3)];
+        d0400 = &bankp[(ctxw ^ 0x400)];
         __builtin_prefetch(d0800, 0, 1);
         __builtin_prefetch(m0800, 0, 1);
         __builtin_prefetch(r0800, 0, 1);
-        m0400 = (P2Count *)(&bankp[4 * (ctxw ^ 0x7BF0) + 284712]);
-        r0400 = (P2Count *)(&bankp[4 * p2_ctx_rotate[((ctxw ^ 0x400) >> 2) & 3]
-                  + 284712
-                  + 4 * ((ctxw ^ 0x400) & 0xFFFFFFF3)]);
-        d0200 = (P2Count *)(&bankp[4 * (ctxw ^ 0x200) + 284712]);
+        m0400 = &bankp[(ctxw ^ 0x7BF0)];
+        r0400 = &bankp[p2_ctx_rotate[((ctxw ^ 0x400) >> 2) & 3] + ((ctxw ^ 0x400) & 0xFFFFFFF3)];
+        d0200 = &bankp[(ctxw ^ 0x200)];
         __builtin_prefetch(d0400, 0, 1);
-        m0200 = (P2Count *)(&bankp[4 * (ctxw ^ 0x7DF0) + 284712]);
-        r0200 = (P2Count *)(&bankp[4 * p2_ctx_rotate[((ctxw ^ 0x200) >> 2) & 3]
-                 + 284712
-                 + 4 * ((ctxw ^ 0x200) & 0xFFFFFFF3)]);
+        m0200 = &bankp[(ctxw ^ 0x7DF0)];
+        r0200 = &bankp[p2_ctx_rotate[((ctxw ^ 0x200) >> 2) & 3] + ((ctxw ^ 0x200) & 0xFFFFFFF3)];
         __builtin_prefetch(m0400, 0, 1);
         __builtin_prefetch(r0400, 0, 1);
-        d0100 = (P2Count *)(&bankp[4 * (ctxw ^ 0x100) + 284712]);
+        d0100 = &bankp[(ctxw ^ 0x100)];
         ri0100 = p2_ctx_rotate[((ctxw ^ 0x100) >> 2) & 3] + ((ctxw ^ 0x100) & 0xFFFFFFF3);
-        m0100 = (P2Count *)(&bankp[4 * (ctxw ^ 0x7EF0) + 284712]);
+        m0100 = &bankp[(ctxw ^ 0x7EF0)];
         __builtin_prefetch(d0200, 0, 1);
-        r0100 = (P2Count *)(&bankp[4 * ri0100 + 284712]);
-        d0080 = (P2Count *)(&bankp[4 * (ctxw ^ 0x80) + 284712]);
+        r0100 = &bankp[ri0100];
+        d0080 = &bankp[(ctxw ^ 0x80)];
         __builtin_prefetch(m0200, 0, 1);
         __builtin_prefetch(r0200, 0, 1);
-        m0080 = (P2Count *)(&bankp[4 * (ctxw ^ 0x7F70) + 284712]);
-        r0080 = (P2Count *)(&bankp[4 * p2_ctx_rotate[((ctxw ^ 0x80) >> 2) & 3] + 284712 + 4 * ((ctxw ^ 0x80) & 0xFFFFFFF3)]);
-        d0040 = (P2Count *)(&bankp[4 * (ctxw ^ 0x40) + 284712]);
+        m0080 = &bankp[(ctxw ^ 0x7F70)];
+        r0080 = &bankp[p2_ctx_rotate[((ctxw ^ 0x80) >> 2) & 3] + ((ctxw ^ 0x80) & 0xFFFFFFF3)];
+        d0040 = &bankp[(ctxw ^ 0x40)];
         __builtin_prefetch(d0100, 0, 1);
-        m0040 = (P2Count *)(&bankp[4 * (ctxw ^ 0x7FB0) + 284712]);
-        r0040 = (P2Count *)(&bankp[4 * p2_ctx_rotate[((ctxw ^ 0x40) >> 2) & 3] + 284712 + 4 * ((ctxw ^ 0x40) & 0xFFFFFFF3)]);
+        m0040 = &bankp[(ctxw ^ 0x7FB0)];
+        r0040 = &bankp[p2_ctx_rotate[((ctxw ^ 0x40) >> 2) & 3] + ((ctxw ^ 0x40) & 0xFFFFFFF3)];
         __builtin_prefetch(m0100, 0, 1);
         __builtin_prefetch(r0100, 0, 1);
         x0020 = ctxw ^ 0x20;
         x0010 = ctxw ^ 0x10;
-        d0020 = (P2Count *)(&bankp[4 * x0020 + 284712]);
-        m0020 = (P2Count *)(&bankp[4 * (x0020 ^ 0x7FF0) + 284712]);
+        d0020 = &bankp[x0020];
+        m0020 = &bankp[(x0020 ^ 0x7FF0)];
         __builtin_prefetch(d0080, 0, 1);
         __builtin_prefetch(m0080, 0, 1);
-        r0020 = (P2Count *)(&bankp[4 * p2_ctx_rotate[(x0020 >> 2) & 3] + 284712 + 4 * (x0020 & 0xFFFFFFF3)]);
-        d0010 = (P2Count *)(&bankp[4 * x0010 + 284712]);
+        r0020 = &bankp[p2_ctx_rotate[(x0020 >> 2) & 3] + (x0020 & 0xFFFFFFF3)];
+        d0010 = &bankp[x0010];
         ri0010 = p2_ctx_rotate[(x0010 >> 2) & 3] + (x0010 & 0xFFFFFFF3);
-        m0010 = (P2Count *)(&bankp[4 * (x0010 ^ 0x7FF0) + 284712]);
+        m0010 = &bankp[(x0010 ^ 0x7FF0)];
         __builtin_prefetch(r0080, 0, 1);
-        r0010 = (P2Count *)(&bankp[4 * ri0010 + 284712]);
+        r0010 = &bankp[ri0010];
         mir_top2 = mir_top;
         neg = -res_c;
         // `ri0010` was a table index two lines up -- `r0010` is built from it
@@ -13826,16 +13822,19 @@ void __alt_p2_d8_decode_body(AltP2Block *blk, int8_t unread_flag, uint8_t *out, 
       blk->ctx_pair[0] = blk->ctx + (blk->ctx_delta[q + 4]);
       blk->ctx_pair[1] = blk->ctx + (blk->ctx_delta[q]);
       val = (uint8_t)(((uint16_t)blk->cursor[0][-1].val >> 4)
-                            + *(uint8_t *)(blk->freq[blk->ctx
+                            // `+ (uintptr_t)blk + 280496` stood here, 280496
+                            // being `offsetof(AltP2Block, unfold)` written as
+                            // the number it is on i386.  It is the same
+                            // unfolding table the three lines below this one
+                            // index by name.
+                            + (uint8_t)blk->unfold[blk->freq[blk->ctx
                                                                + blk->ctx_w[3].w[(prev[-1].val <= prev[-2].val)
                                                                             + (prev[-1].val < prev[-2].val)]
                                                                + blk->ctx_w[2].w[prev[-2].sign]
                                                                + blk->ctx_w[1].w[prev[-1].sign]
                                                                + blk->ctx_w[0].w[(((uint32_t)(q - 115) >> 31)
                                                                             + ((uint32_t)(q - 17) >> 31))]
-                                                               + blk->ctx_w[4].w[1]].decode_symbol(blk->ctx_pair)
-                                       + (uintptr_t)blk
-                                       + 280496));
+                                                               + blk->ctx_w[4].w[1]].decode_symbol(blk->ctx_pair)]);
       *out = val;
       val *= 16;
       blk->cursor[0]->val = val;
