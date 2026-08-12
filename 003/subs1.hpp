@@ -810,8 +810,8 @@ struct SymListBlock {
   uint32_t n;         // +0
   SymList  list[0];   // +4 on i386, +8 where a SymList is eight-aligned
 
-  static size_t bytes(uint32_t n) {
-    return __builtin_offsetof(SymListBlock, list) + sizeof(SymList) * (size_t)n;
+  static uint32_t bytes(uint32_t n) {
+    return __builtin_offsetof(SymListBlock, list) + sizeof(SymList) * n;
   }
 };
 static_assert(sizeof(void *) != 4 || __builtin_offsetof(SymListBlock, list) == 4,
@@ -5032,12 +5032,9 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
   uint32_t levels;
-  uint8_t *off_bits, *abs_end;
+  uint32_t off_bits, data_ofs, stride, pairs, done;
+  uint8_t *abs_end, *buf_2, *end, *out;
   int32_t rows2;
-  uint8_t *buf_2;
-  uint32_t end;
-  uint8_t *data_ofs, *out;
-  uint32_t stride, pairs, done;
   int32_t ncol, pal_bytes;
   uint8_t *buf, *abs_end2;
   int32_t row_i2, run_max, nib;
@@ -5059,8 +5056,8 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
   bool can_rle;
   uint32_t stride1, at, at2, slot;
   uint16_t *pix;
-  uint8_t *out_buf, *data_ofs2, *pal, *pal2, *out_at, *p, *q, *out_end,
-          *out2;
+  uint8_t *out_buf, *pal, *pal2, *out_at, *p, *q, *out_end, *out2;
+  uint32_t data_ofs2;
   int32_t rle_on, i, rows, bits, ncolours, grey, bgr, r, bgr2, rle_mode,
           src_bits, rle_kind, rows3, row_i, lit_len, run, coded_bytes, y;
   uint8_t byte;
@@ -5138,12 +5135,12 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
                                               | (uint8_t)(levels * (at - 1))
                                               | ((uint8_t)(levels * (at - 1)) << 8);
       }
-      data_ofs2 = (uint8_t *)(uintptr_t)img->data_size;
+      data_ofs2 = img->data_size;
       pal_bytes = 4 * ncol;
     }
     else if ( depth_flags < 0 )
     {
-      data_ofs2 = (uint8_t *)(uintptr_t)img->data_size;
+      data_ofs2 = img->data_size;
       if ( ncol <= 0 )
       {
         pal_bytes = 4 * ncolours;
@@ -5153,9 +5150,9 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
         pairs = ncolours / 2;
         if ( ncolours / 2 )
         {
-          data_ofs = (uint8_t *)(uintptr_t)img->data_size;
+          data_ofs = img->data_size;
           j = 0;
-          pal = &data_ofs2[img_addr];
+          pal = (uint8_t *)img_addr + data_ofs2;
           do
           {
             slot = 2 * j;
@@ -5180,7 +5177,7 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
         }
         if ( (at2 - 1) < (uint32_t)ncol )
         {
-          pal2 = &data_ofs2[img_at];
+          pal2 = (uint8_t *)img_at + data_ofs2;
           bgr2 = *(uint16_t *)&pal2[3 * done + 13];
           *(uint32_t *)&out_buf[4 * done + 50] = (((uint8_t)pal2[3 * done + 15]) << 16) | bgr2;
           img_at = img_addr;
@@ -5193,26 +5190,26 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
       pal_bytes = 4 * ncolours;
       memset(buf,0,4 * ncolours);
       img_at = img_addr;
-      data_ofs2 = (uint8_t *)(uintptr_t)img->data_size;
+      data_ofs2 = img->data_size;
       rows2 = img->height;
     }
     buf = &out_buf[pal_bytes + 54];
   }
   else
   {
-    data_ofs2 = (uint8_t *)(uintptr_t)img->data_size;
+    data_ofs2 = img->data_size;
   }
   stride = img->stride;
   out = out_buf;
-  off_bits = (uint8_t *)(buf - out_buf);
+  off_bits = (uint32_t)(buf - out_buf);
   pix = (uint16_t *)img_at;
   rle_mode = rle_on;
-  data_len = (uint32_t)data_ofs2;
+  data_len = data_ofs2;
   while ( 1 )
   {
     out_at = buf;
     p = (uint8_t *)pix + data_len - stride + 16;
-    bmp->bfOffBits = (uintptr_t)off_bits;
+    bmp->bfOffBits = off_bits;
     if ( !rle_mode )
       break;
     src_bits = pix[5] & 0x3F;
@@ -5239,7 +5236,7 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
         if ( p >= &p[stride3] )
           goto LABEL_72;
         buf_2 = out_at;
-        end = (uint32_t)&p[stride3];
+        end = &p[stride3];
         row_i2 = row_i;
         lit_len = 0;
         do
@@ -5249,7 +5246,7 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
             while ( 1 )
             {
               q = p + 1;
-              if ( (uint32_t)(p + 1) >= end )
+              if ( p + 1 >= end )
                 break;
               byte = (uint8_t)*p;
               run = 1;
@@ -5259,7 +5256,7 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
                   break;
                 ++run;
               }
-              while ( end > (uint32_t)&p[run] );
+              while ( end > &p[run] );
               if ( run <= 2 && (run != 2 || lit_len) )
                 break;
               if ( run_max < run )
@@ -5311,7 +5308,7 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
               *buf_2 = run << (nib & 31);
               out_end = buf_2 + 2;
               buf_2 += 2;
-              if ( (uint32_t)p >= end )
+              if ( p >= end )
               {
                 out_at = out_end;
                 row_i = row_i2;
@@ -5357,7 +5354,7 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
               buf_2[1] = *(q - 1);
               buf_2 += 2;
             }
-            if ( (uint32_t)q >= end )
+            if ( q >= end )
             {
               out_at = buf_2;
               row_i = row_i2;
@@ -5368,7 +5365,7 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
             lit_len = 0;
           }
         }
-        while ( (uint32_t)q < end );
+        while ( q < end );
         out_at = buf_2;
         row_i = row_i2;
         // End of the row: flush whatever literals are left, by the same rule
@@ -5551,8 +5548,7 @@ uint8_t * __interleave_plane(uint8_t *img, uint8_t *src, int32_t plane, int8_t u
   uint8_t *ref;
   int32_t wgt1, i2, ofs2, n_flat, step, i, ofs, left3, x3, left2, x2, mode, to_ref0,
           wgt2, to_ref1, wgt0, stride, dc, n;
-  uint32_t base;
-  uint8_t *p3, *p2;
+  uint8_t *base, *p3, *p2;
   if ( (plane_desc[plane + 1].flags & 8) == 0 )
   {
     n_flat = bmf_pixels(img);
@@ -5578,7 +5574,7 @@ uint8_t * __interleave_plane(uint8_t *img, uint8_t *src, int32_t plane, int8_t u
   to_ref1 = plane_desc[2].src_plane - plane;
   mode = plane_desc[plane + 1].nrefs;
   dc = plane_desc[plane + 1].dc;
-  base = (uint32_t)&((const BmfImage *)img)->pixels[plane];
+  base = &((BmfImage *)img)->pixels[plane];
   wgt1 = plane_desc[plane + 1].weight1;
   wgt0 = plane_desc[plane + 1].weight0;
   wgt2 = plane_desc[plane + 1].weight2;
@@ -5605,7 +5601,7 @@ uint8_t * __interleave_plane(uint8_t *img, uint8_t *src, int32_t plane, int8_t u
       if ( mode == 2 )
       {
         left2 = bmf_pixels(img);
-        p2 = (uint8_t *)base;
+        p2 = base;
         do
         {
           x2 = dc + (uint8_t)*src++;
@@ -5620,7 +5616,7 @@ uint8_t * __interleave_plane(uint8_t *img, uint8_t *src, int32_t plane, int8_t u
       else if ( mode == 3 )
       {
         left3 = bmf_pixels(img);
-        p3 = (uint8_t *)base;
+        p3 = base;
         do
         {
           x3 = dc + (uint8_t)*src++;
@@ -5685,8 +5681,8 @@ uint8_t * __colour_transform(uint8_t *img, uint8_t *dst, int32_t plane, int8_t u
   uint8_t *ref;   // `uint8_t *` beside the `char` scalars above
   int32_t wgt1, i2, ofs2, n_flat, step, i, ofs, left3,
           x3, wsum, w12sum, left2, x2, mode, to_ref0, wgt2, to_ref1, wgt0, dc, stride, n;
-  uint32_t blend, src;
-  uint8_t *p3, *p2;
+  uint32_t blend;
+  uint8_t *src, *p3, *p2;
   if ( (plane_desc[plane + 1].flags & 8) == 0 )
   {
     n_flat = bmf_pixels(img);
@@ -5718,7 +5714,7 @@ uint8_t * __colour_transform(uint8_t *img, uint8_t *dst, int32_t plane, int8_t u
   to_ref1 = plane_desc[2].src_plane - plane;
   mode = plane_desc[plane + 1].nrefs;
   dc = plane_desc[plane + 1].dc;
-  src = (uint32_t)&((const BmfImage *)img)->pixels[plane];
+  src = &((BmfImage *)img)->pixels[plane];
   wgt1 = plane_desc[plane + 1].weight1;
   wgt0 = plane_desc[plane + 1].weight0;
   wgt2 = plane_desc[plane + 1].weight2;
@@ -5759,7 +5755,7 @@ uint8_t * __colour_transform(uint8_t *img, uint8_t *dst, int32_t plane, int8_t u
   if ( mode == 2 )
   {
     left2 = bmf_pixels(img);
-    p2 = (uint8_t *)src;
+    p2 = src;
     do
     {
       x2 = *p2 - dc;
@@ -5773,7 +5769,7 @@ uint8_t * __colour_transform(uint8_t *img, uint8_t *dst, int32_t plane, int8_t u
   else if ( mode == 3 )
   {
     left3 = bmf_pixels(img);
-    p3 = (uint8_t *)src;
+    p3 = src;
     do
     {
       x3 = *p3 - dc;
@@ -7883,7 +7879,7 @@ int32_t __cost_candidate(uint8_t *img, int32_t cand, uint8_t *desc, int8_t unrea
       int32_t hist_zy[1024];
       int32_t hist_zp[1024];
       uint8_t buf_1[4];
-      uint32_t img_end;
+      uint8_t *img_end;
       int32_t step_d;
       int32_t off_b0;
       int32_t off_b1;
@@ -7929,15 +7925,19 @@ int32_t __cost_candidate(uint8_t *img, int32_t cand, uint8_t *desc, int8_t unrea
   uint8_t *base, *p, *q, *r0, *r2, *r1;
   int32_t cand2, idx1, idx2;   // candidate indices, not addresses
   __frame.off_up = (int32_t)(uintptr_t)desc;
-  __frame.cursor = (uint8_t *)cand;   // the slot is reused as an address below
   __frame.desc_f = desc;
   __frame.nplanes = plane_count;
   row_b = *(const uint16_t *)&((const BmfImage *)img)->stride;   // the low half of the stride
   __frame.cand_i = cand;
   __frame.img_f = (BmfImage *)img;
-  __frame.d1_f = (int32_t)(__frame.cursor + 1) % 3 - (uint32_t)__frame.cursor;
-  __frame.d2_f = (int32_t)(__frame.cursor + 2) % 3 - (uint32_t)__frame.cursor;
-  __frame.img_end = (uint32_t)&__frame.img_f->pixels[__frame.img_f->data_size];
+  // The two other candidates' offsets from this one, wrapping at three.  Both
+  // were written through `__frame.cursor`, which is a `uint8_t *` and holds an
+  // address for the whole second half of the body: the three statements above
+  // parked `cand` in it, took `(int32_t)(cursor + 1) % 3` and never looked at
+  // it again.  `cand` is the value and is in scope, so it is the one used.
+  __frame.d1_f = (cand + 1) % 3 - cand;
+  __frame.d2_f = (cand + 2) % 3 - cand;
+  __frame.img_end = &__frame.img_f->pixels[__frame.img_f->data_size];
   d1 = __frame.d1_f;
   *(uint32_t *)__frame.buf_1 = row_b;
   memset(__frame.buf,0,24576);
@@ -7953,7 +7953,7 @@ int32_t __cost_candidate(uint8_t *img, int32_t cand, uint8_t *desc, int8_t unrea
   __frame.desc_f[16 * __frame.cand_i] = 2;
   __frame.desc_f[33] = (uint8_t)cand2;
   p = &base[cand2 + row_b2 + __frame.nplanes];
-  if ( (uint32_t)p < __frame.img_end )
+  if ( p < __frame.img_end )
   {
     __frame.d1_f = d1;
     *(uint32_t *)__frame.buf_1 = row_b2;
@@ -7992,7 +7992,7 @@ int32_t __cost_candidate(uint8_t *img, int32_t cand, uint8_t *desc, int8_t unrea
       bin = ((uint16_t)dz - (uint16_t)((uint32_t)(((dx + dy) << 6) + 40) >> 7) - 512) & 0x3FF;
       ++__frame.hist_zp[bin];
     }
-    while ( (uint32_t)p < __frame.img_end );
+    while ( p < __frame.img_end );
     d1 = __frame.d1_f;
   }
   inv = 128.0 / (0.1 - sxy * sxy + sxx * syy);
@@ -8982,9 +8982,8 @@ int32_t *__read_bmp(char *path)
   // so pulling those slots apart pulled the reads apart with them.  Reading
   // into `BmpHeader` -- the record `write_bmp` has been filling all along --
   // removed the reason, and then the lift was ordinary.
-  int32_t pal_bytes;
   BmfImage *img_f;
-  int32_t row_ofs;
+  uint8_t *row_ofs;
   void *pal_buf;
   uint8_t *row, bmp_bgra[4], pix;
   // `y4` and `y8` shared a stack slot with `Size_4`, which is gone: it held the
@@ -9003,7 +9002,7 @@ int32_t *__read_bmp(char *path)
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
   ;
-  uintptr_t row_at;   // were int32_t: addresses, masked and tagged
+  uint8_t *row_at;   // were int32_t: addresses, masked and tagged
   uint8_t *pal, *pal2, *pal3;   // were int32_t: these hold addresses
   FILE *fp;
   uint8_t lo;
@@ -9155,7 +9154,7 @@ int32_t *__read_bmp(char *path)
   // region, which glibc reported as `malloc(): corrupted top size` a while
   // later and nowhere near.
   pal_buf = bmf_new(stride_pad < 256 ? 256 : stride_pad);
-  row = (uint8_t *)img + img->data_size - img->stride + 16;
+  row = img->pixels + img->data_size - img->stride;
   fseek(fp, (int32_t)hdr.bfOffBits, 0);
   if ( hdr.biCompression )
   {
@@ -9177,7 +9176,7 @@ int32_t *__read_bmp(char *path)
     if ( hdr.biCompression == 1 )
     {
       memset(img->pixels,0,img->data_size);
-      row_at = (int32_t)row;
+      row_at = row;
       img_f = (BmfImage *)img;
       y4 = img->height - 1;
       while ( 1 )
@@ -9199,10 +9198,10 @@ int32_t *__read_bmp(char *path)
           // out, and a separate short-run path for anything under 16 + the
           // head.
           
-          if ( (uint8_t *)row_ofs < pix_lo
-               || (uint8_t *)row_ofs + run > pix_hi )
+          if ( row_ofs < pix_lo
+               || row_ofs + run > pix_hi )
             return nullptr;
-          __builtin_memset((void *)row_ofs, run_val, run);
+          __builtin_memset(row_ofs, run_val, run);
           row_at = row_ofs + run;
         }
         else if ( run_val )
@@ -9215,15 +9214,15 @@ int32_t *__read_bmp(char *path)
             dy = fgetc(fp);
             if ( dx < 0 || dy < 0 )
               return nullptr;
-            row_at = dx + row_at - dy * (uint16_t)img_f->stride;
+            row_at += dx - dy * (uint16_t)img_f->stride;
           }
           else
           {
-            if ( (uint8_t *)row_at < pix_lo
-                 || (uint8_t *)row_at + run_val > pix_hi )
+            if ( row_at < pix_lo
+                 || row_at + run_val > pix_hi )
               return nullptr;
             fread(pal_buf, (run_val + 1) & 0xFFFFFFFE, 1u, fp);
-            memcpy((uint8_t *)row_at,(uint8_t *)pal_buf,run_val);
+            memcpy(row_at,(uint8_t *)pal_buf,run_val);
             row_at += run_val;
           }
         }
@@ -9231,7 +9230,7 @@ int32_t *__read_bmp(char *path)
         {
           if ( --y4 < 0 )
             goto LABEL_61;
-          row_at = (int32_t)img_f + y4 * (uint16_t)img_f->stride + 16;
+          row_at = img_f->pixels + y4 * (uint16_t)img_f->stride;
         }
       }
     }
@@ -9317,7 +9316,7 @@ LABEL_44:
           break;
         if ( --y8 < 0 )
           goto LABEL_61;
-        row = (uint8_t *)img_f + y8 * (uint16_t)img_f->stride + 16;
+        row = img_f->pixels + y8 * (uint16_t)img_f->stride;
       }
       if ( byte == 1 )
         goto LABEL_61;
@@ -9677,8 +9676,8 @@ inline int32_t ModelBlock::decode_pixel(int32_t x)
             int32_t sym1;
             int32_t sym2;
             int32_t sym3;
-            FreqRec *sym4;   // the coder's frequency record
-            ModelBlock *sym5;
+            int32_t sym4;
+            int32_t sym5;
             int32_t sym6;
             int32_t sym7;
             int32_t sym8;
@@ -9717,8 +9716,7 @@ inline int32_t ModelBlock::decode_pixel(int32_t x)
   uint16_t *id3p;
   uint8_t g_ab;
   int8_t gen;
-  ModelBlock *blk;
-  FreqRec *freq3, *freq2;
+  FreqRec *freq2;
   uint16_t *sym_cache;
   PixRec *up4;
   FreqRec *freq_tbl;
@@ -9727,7 +9725,6 @@ inline int32_t ModelBlock::decode_pixel(int32_t x)
   int32_t arg_cum, arg_high, arg_tot;
   uint32_t done, lvl_a, pos1;
   PixRec *r8, *r7, *rec;   // row cursors out of ModelBlock
-  PixRec *s0p;   // `row_cur[6]`, the row above
   uint16_t *pixq;   // a copy of `pix_cur`
   PixRec *r8b, *r7b, *next, *r5, *cur6b;
   uint8_t g_a, g_b, g_c, g_d, g_e;
@@ -9761,6 +9758,7 @@ inline int32_t ModelBlock::decode_pixel(int32_t x)
   PixRec *up2;     // `row_cur[7]`, two rows above
   PixRec *up1;     // `row_cur[6]`, the row above
   PixRec *up3;      // `row_cur[7]`, two rows above
+  PixRec *up9;     // `row_cur[9]`
   PixRec *cur6c;   // `row_cur[6]`, the row above
   BitCtr *ctr;     // the run scan's counter for one bucket
   cur6 = (PixRec *)this->row_cur[6];
@@ -9777,7 +9775,6 @@ inline int32_t ModelBlock::decode_pixel(int32_t x)
   // this body's `goto`s are forward -- so no reload could see the symbol.
   // `reduce_alphabet` has the same shape and fails that test, which is why
   // its reloads stay.
-  __frame.sym5 = (this);
   up_m1_sym = cur6[-1].sym;
   __frame.sym0 = up_sym;
   ::mode_symbol[1] = up_sym;
@@ -9794,7 +9791,7 @@ inline int32_t ModelBlock::decode_pixel(int32_t x)
   {
     if ( __frame.sym3 == __frame.sym0 )
     {
-      sym_rev = __frame.sym5->sym_rev[up_sym];
+      sym_rev = this->sym_rev[up_sym];
       if ( up_sym == __frame.sym2 )
         key = (uint16_t)(sym_rev - row[-2].sym);
       else
@@ -9802,14 +9799,14 @@ inline int32_t ModelBlock::decode_pixel(int32_t x)
     }
     else
     {
-      key = (uint16_t)(__frame.sym5->sym_rev[up_sym] - __frame.sym3);
+      key = (uint16_t)(this->sym_rev[up_sym] - __frame.sym3);
     }
   }
   else
   {
-    key = (uint16_t)(__frame.sym5->sym_rev[up_sym] - __frame.sym1);
+    key = (uint16_t)(this->sym_rev[up_sym] - __frame.sym1);
   }
-  __frame.sym5->sym_cache = &__frame.sym5->sym_ctr[8 * key];
+  this->sym_cache = &this->sym_ctr[8 * key];
   ctx_state = this->ctx_state[nb];
   this->ctx_state_seen = ctx_state;
   pair = &this->group_ctr[ctx_state][key];
@@ -9851,34 +9848,28 @@ inline int32_t ModelBlock::decode_pixel(int32_t x)
     cap += 300;
   }
   r8 = this->row_cur[8];
-  __frame.sym3 = (int32_t)cur6;
   ctx_bucket = this->ctx_bucket[ctx_state + cap];
   r7 = this->row_cur[7];
   this->bucket_idx = ctx_bucket;
   up_m0 = cur6->match[0];
-  __frame.sym4 = (FreqRec *)row;
-  __frame.sym5 = (this);
   __frame.sym2 = up_m0;
   m_w1 = row[-1].match[1];
-  // `v186` is one stack slot with two roles: a row cursor here, and the
-  // `uint16_t` value out of `sym_cache[4]` at 11290.  Splitting it needs the frame
-  // to dissolve first, so the cast records the double booking (§4.2).
-  __frame.sym6 = (int32_t)this->row_cur[9];
+  up9 = this->row_cur[9];
   nb2 = 8 * row[-2].match[2] + 4 * row[-2].match[5] + m_w1 + 2 * row[-2].match[4];
-  all_up = ((uint8_t)(((PixRec *)__frame.sym6)->match[0] & r8->match[0] & __frame.sym2 & r7->match[0]) << 9)
-      + ((uint8_t)(((PixRec *)__frame.sym6)->match[1] & r8->match[1] & r7->match[1] & cur6->match[1]) << 8)
+  all_up = ((uint8_t)(up9->match[0] & r8->match[0] & __frame.sym2 & r7->match[0]) << 9)
+      + ((uint8_t)(up9->match[1] & r8->match[1] & r7->match[1] & cur6->match[1]) << 8)
       + (ctx_bucket << 10)
       + nb2;
-  cur6b = (PixRec *)__frame.sym3;
-  sig1 = ((__frame.sym5->grad[3] == 0) << 7)
-      + ((__frame.sym5->grad[2] == 0) << 6)
-      + 32 * (__frame.sym5->grad[1] == 0)
-      + 16 * (__frame.sym5->grad[0] == 0)
+  cur6b = cur6;
+  sig1 = ((this->grad[3] == 0) << 7)
+      + ((this->grad[2] == 0) << 6)
+      + 32 * (this->grad[1] == 0)
+      + 16 * (this->grad[0] == 0)
       + all_up;
-  id1 = __frame.sym5->ctx_id1[sig1];
+  id1 = this->ctx_id1[sig1];
   if ( id1 == 0xFFFF )
   {
-    __frame.sym5->ctx_id1[sig1] = __frame.sym5->ctx_id1_used;
+    this->ctx_id1[sig1] = this->ctx_id1_used;
     cur6b = this->row_cur[6];
     row = this->row_cur[5];
     ++this->ctx_id1_used;
@@ -9932,7 +9923,6 @@ inline int32_t ModelBlock::decode_pixel(int32_t x)
       else
       {
         __frame.sym1 = this->width - x;
-        __frame.sym5 = (this);
         while ( 1 )
         {
           run = idx1;
@@ -9971,7 +9961,6 @@ LABEL_42:
           goto LABEL_57;
         __frame.sym3 = idx1;
         __frame.sym0 = bucket;
-        __frame.sym5 = (this);
         idx_s = 0;
         mask = 1 << (bucket & 31);
         seen = 0;
@@ -9984,7 +9973,7 @@ LABEL_42:
             // the rescale.  `run_ctr[16 * k + bucket]` with `k` in 0..2 is the
             // three-way split ALGORITHM.md 8.3 describes: first bucket of the
             // scan, the bucket the run started in, or neither.
-            ctr = &__frame.sym5->run_ctr[16 * ((seen == 0) + (bucket == __frame.sym0)) + bucket];
+            ctr = &this->run_ctr[16 * ((seen == 0) + (bucket == __frame.sym0)) + bucket];
             run0 = ctr->n[0];
             bin_tot = run0 + ctr->n[1];
             __frame.sym1 = rc.decode_bit(run0, ctr->n[1]);
@@ -10084,7 +10073,6 @@ LABEL_57:
         g_b = cur6c[-2].match[0];
         g_c = cur6c[2].match[0];
         g_d = cur6c[3].match[0];
-        __frame.sym0 = (int32_t)cur6c;
         g_ab = g_b + g_a;
         g_e = cur6c[4].match[0];
         up3 = (PixRec *)this->row_cur[7];
@@ -10104,7 +10092,6 @@ LABEL_57:
                                      + (int8_t)up3[-3].match[0]
                                      + up3[4].match[0]
                                      - 8;
-        s0p = (PixRec *)__frame.sym0;
         this->grad[2] = next[-4].match[1] + next[-3].match[1] - 2;
         s1d = __frame.sym1;
         this->grad[3] = next[-5].match[0]
@@ -10112,7 +10099,7 @@ LABEL_57:
                                      + next[-7].match[0]
                                      + next[-4].match[0]
                                      - 4;
-        next[-1].match[4] = s1d == s0p[1].sym;
+        next[-1].match[4] = s1d == cur6c[1].sym;
         idx_s = idx_t;
         this->row_cur[5][-1].match[5] = s1d == this->row_cur[6][2].sym;
         hit_a = this->hit;
@@ -10123,7 +10110,6 @@ LABEL_57:
     }
   }
   freq = (FreqRec *)&this->row_cur[4 * this->bucket_idx + 10];
-  __frame.sym4 = freq;
   freq_tbl = &this->grid[id2 + 188];
   tot = freq_tbl->w[5];
   if ( freq_tbl->w[5] )
@@ -10143,7 +10129,6 @@ LABEL_57:
       w5 = freq_tbl->w[5];
       w0r = freq_tbl->w[0];
       freq_tbl->b14 *= 8;
-      __frame.sym5 = (this);
       w1r = 21 * freq_tbl->w[1];
       __frame.sym1 += (21 * w0r + w5 - 1) / w5;
       freq_tbl->w[0] = __frame.sym1;
@@ -10211,7 +10196,6 @@ LABEL_57:
       g2 = freq_tbl->w[2];
       __frame.sym0 = w6a;
       g1 = freq_tbl->w[1];
-      __frame.sym5 = (this);
       g0 = freq_tbl->w[0];
       __frame.sym1 = lvl_a;
       __frame.sym2 = b15a;
@@ -10253,8 +10237,8 @@ LABEL_57:
     if ( freq_tbl->b14 )
     {
       --freq_tbl->b14;
-      freq2 = __frame.sym4;
-      ++__frame.sym4->w[5];
+      freq2 = freq;
+      ++freq->w[5];
       ++freq2->w[lvl_a];
       lvl_a = this->hit;
     }
@@ -10263,19 +10247,19 @@ LABEL_57:
   {
     arg_tot = freq->w[5];
     target2 = rc.get_freq(arg_tot);
-    cum2 = __frame.sym4->w[0];
+    cum2 = freq->w[0];
     if ( cum2 <= target2 )
     {
-      cum2 += __frame.sym4->w[1];
+      cum2 += freq->w[1];
       if ( cum2 <= target2 )
       {
-        cum2 += __frame.sym4->w[2];
+        cum2 += freq->w[2];
         if ( cum2 <= target2 )
         {
-          cum2 += __frame.sym4->w[3];
+          cum2 += freq->w[3];
           if ( cum2 <= target2 )
           {
-            cum2 += __frame.sym4->w[4];
+            cum2 += freq->w[4];
             lvl_b = 4;
           }
           else
@@ -10297,43 +10281,39 @@ LABEL_57:
     {
       lvl_b = 0;
     }
-    b15b = __frame.sym4->b15;
+    b15b = freq->b15;
     arg_high = cum2;
-    arg_cum = cum2 - __frame.sym4->w[lvl_b];
-    w5b = __frame.sym4->w[5];
-    w6b = __frame.sym4->w[6];
+    arg_cum = cum2 - freq->w[lvl_b];
+    w5b = freq->w[5];
+    w6b = freq->w[6];
     __frame.sym3 = b15b;
-    if ( w5b > w6b && (__frame.sym4->w[lvl_b] + __frame.sym3 + 8 < w5b || w5b > 0x4000) )
+    if ( w5b > w6b && (freq->w[lvl_b] + __frame.sym3 + 8 < w5b || w5b > 0x4000) )
     {
       __frame.sym0 = w6b;
-      __frame.sym5 = (this);
-      __frame.sym1 = (int32_t)(uintptr_t)freq_tbl;
       __frame.sym2 = lvl_b;
-      freq3 = __frame.sym4;
-      k1 = __frame.sym4->w[1];
-      k2 = __frame.sym4->w[2];
-      k0 = __frame.sym4->w[0] - (__frame.sym4->w[0] >> 1);
-      __frame.sym4->w[0] = k0;
+      k1 = freq->w[1];
+      k2 = freq->w[2];
+      k0 = freq->w[0] - (freq->w[0] >> 1);
+      freq->w[0] = k0;
       k1 = k1 - (k1 >> 1);
-      freq3->w[1] = k1;
+      freq->w[1] = k1;
       k2h = k2 - (k2 >> 1);
-      k3 = (uint16_t)freq3->w[3];
-      freq3->w[2] = k2h;
+      k3 = (uint16_t)freq->w[3];
+      freq->w[2] = k2h;
       k3 = k3 - (k3 >> 1);
-      k4 = (uint16_t)freq3->w[4];
-      freq3->w[3] = k3;
+      k4 = (uint16_t)freq->w[4];
+      freq->w[3] = k3;
       k4 = k4 - (k4 >> 1);
-      freq3->w[4] = k4;
+      freq->w[4] = k4;
       k4 = k0 + k4;
       w5b = (uint16_t)(k4 + k3 + k2h + k1);
       s0c = __frame.sym0;
-      freq_tbl = (FreqRec *)__frame.sym1;
-      freq3->w[5] = w5b;
+      freq->w[5] = w5b;
       lvl_b = __frame.sym2;
-      if ( s0c < 256 && !__frame.sym4->b14 )
+      if ( s0c < 256 && !freq->b14 )
       {
         s0c = 256;
-        __frame.sym4->w[6] = 256;
+        freq->w[6] = 256;
       }
       if ( w5b > s0c )
       {
@@ -10341,12 +10321,12 @@ LABEL_57:
         if ( __frame.sym3 < 15 )
           s3a = 15;
         __frame.sym3 = s3a;
-        __frame.sym4->b15 = s3a;
+        freq->b15 = s3a;
       }
     }
     s3b = __frame.sym3;
-    __frame.sym4->w[5] = __frame.sym3 + w5b;
-    __frame.sym4->w[lvl_b] += s3b;
+    freq->w[5] = __frame.sym3 + w5b;
+    freq->w[lvl_b] += s3b;
     rc.decode(arg_cum, arg_high, arg_tot);
     this->hit = lvl_b;
     freq_tbl->w[5] = freq_tbl->w[lvl_b]++ != 0;
@@ -10378,19 +10358,21 @@ LABEL_86:
   cache1 = sym_cache[1];
   __frame.sym1 = pix1;
   // The tail of the body reloads the symbol cache into the frame slots for
-  // the next pixel, and four of those slots are typed as pointers by an
-  // earlier lifetime.  A `uint16_t` symbol going into a 32-bit pointer slot
-  // is what the width warning was about; the `uintptr_t` says the value is
-  // being parked, not dereferenced.
-  blk = (ModelBlock *)(uintptr_t)sym_cache[3];
+  // the next pixel.  Four of these slots used to be typed as pointers by an
+  // earlier lifetime, so a `uint16_t` symbol reached them through a
+  // `uintptr_t` -- which parks the value and says nothing about what it is,
+  // and on a 64-bit target puts the history's fifth entry eight bytes wide in
+  // a union whose other arm is thirty-two four-byte words.  Those lifetimes
+  // are ordinary locals now (`freq`, `this`, `cur6`, `cur6c`) and the slots
+  // hold what their name says.
   __frame.sym2 = cache0;
   c4 = sym_cache[4];
   __frame.sym3 = cache1;
   c5 = sym_cache[5];
-  __frame.sym4 = (FreqRec *)(uintptr_t)sym_cache[2];
+  __frame.sym4 = sym_cache[2];
   c6 = sym_cache[6];
   c7 = sym_cache[7];
-  __frame.sym5 = (ModelBlock *)((uint32_t *)blk);
+  __frame.sym5 = sym_cache[3];
   up4 = (PixRec *)this->row_cur[6];
   __frame.sym6 = c4;
   h11 = up4[2].sym;
@@ -10497,14 +10479,14 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
           struct {   // the locals MSVC spilled into these bytes
             int32_t sym0;
             int32_t sym1;
-            uint16_t *sym2;
+            int32_t sym2;
             int32_t sym3;
             int32_t sym4;
             int32_t sym5;
             int32_t sym6;
-            ModelBlock *sym7;
+            int32_t sym7;
             int32_t sym8;
-            PixRec *sym9;
+            int32_t sym9;
             int32_t sym10;
             int32_t sym11;
             int32_t sym12;
@@ -10537,10 +10519,12 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
   ;
   PixRec *r4;
   uint8_t *alpha_map;
+  PixRec *up9;      // `row_cur[9]`
+  PixRec *rowp;     // `row_cur[5]`, the current row
+  PixRec *row_cur9;
   bool up_eq_west;
   int8_t mode;
   uint16_t rev;
-  ModelBlock *blk;
   int32_t arg_cum;
   FreqRec *frec;
   uint16_t *wr;
@@ -10552,16 +10536,16 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
   FreqRec *binp, *binp_s;
   uint16_t *pixp;   // a copy of `pix_cur`
   uint8_t match1, m0, m1, m2, m3;
-  uint8_t *bp;   // `uint8_t *` beside the `char` scalars above
+  int32_t bp;   // a running frequency, not an address
   uint16_t *id3p;   // a cursor into `ctx_id3`
   int16_t s8, w1s, acc2, s3, g0;
   SymPair *pair;   // the group's counter pair for this context
   // A cumulative count, a high count and a total: the three arguments the
   // range coder takes, and it takes them unsigned.
   int32_t up_sym, left_sym, up_next_sym, upleft_sym, nb, key, ctx_state, pair_last, cap,
-          pair_prev, ctx_bucket, up_match0, cur9v, m_w1, nb2, sig1, id1, sig2,
+          pair_prev, ctx_bucket, up_match0, m_w1, nb2, sig1, id1, sig2,
           id2, id3_used, sig3, m_w1b, m_w0, m_up0, to_edge, one, run,
-          run_pair, amap, runlen, run_hit, row_cur9, run_left, s1,
+          run_pair, amap, runlen, run_hit, run_left, s1,
           s8b, s6, msym1, s4, bit5, first, s5, s1b,
           bucket_i, s9, cum1, lvl_a, w6a, w5a,
           b15a, msym3, excl_sym_a, excl_sym_b, w6d, wq1, cache2,
@@ -10575,7 +10559,8 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
   PixRec *row;   // `row_cur[5]`, the current row
   PixRec *cur6;   // `row_cur[6]`, the row above
   PixRec *cur5, *cur5p1, *cur5p1b, *r6, *r7;   // row cursors out of ModelBlock
-  uint16_t *wq, *sym_cache, *cache0p, w6;
+  uint16_t *wq, *sym_cache, w6;
+  uint16_t cache0p;   // sym_cache[0]; was a `uint16_t *` holding a symbol
   PixRec *cur2;   // `row_cur[5]`, one record past the pixel just written
   BitCtr *ctr;    // the run scan's counter for one bucket
   uint32_t bin_tot, half, k, g2, g2h;
@@ -10592,7 +10577,6 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
   // are gone, and the argument is the same as `decode_pixel`'s -- every write
   // before the last reload comes from the block chain, the one that does not is
   // after it, and this body's only `goto` is forward.
-  __frame.sym7 = (this);
   upleft_sym = cur6[-1].sym;
   __frame.sym8 = up_sym;
   ::mode_symbol[1] = up_sym;
@@ -10612,7 +10596,7 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
   {
     if ( __frame.sym8 == __frame.sym6 )
     {
-      rev = __frame.sym7->sym_rev[__frame.sym8];
+      rev = this->sym_rev[__frame.sym8];
       if ( __frame.sym8 == __frame.sym5 )
         key = (uint16_t)(rev - cur5[-2].sym);
       else
@@ -10620,14 +10604,14 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
     }
     else
     {
-      key = (uint16_t)(__frame.sym7->sym_rev[__frame.sym8] - __frame.sym6);
+      key = (uint16_t)(this->sym_rev[__frame.sym8] - __frame.sym6);
     }
   }
   else
   {
-    key = (uint16_t)(__frame.sym7->sym_rev[__frame.sym8] - __frame.sym10);
+    key = (uint16_t)(this->sym_rev[__frame.sym8] - __frame.sym10);
   }
-  __frame.sym7->sym_cache = &__frame.sym7->sym_ctr[8 * key];
+  this->sym_cache = &this->sym_ctr[8 * key];
   ctx_state = this->ctx_state[nb];
   this->ctx_state_seen = ctx_state;
   pair = &this->group_ctr[ctx_state][key];
@@ -10670,35 +10654,32 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
     cap += 300;
   }
   r1 = this->row_cur[8];
-  __frame.sym1 = (int32_t)cur6;
   ctx_bucket = this->ctx_bucket[ctx_state + cap];
   r2 = this->row_cur[7];
   this->bucket_idx = ctx_bucket;
   up_match0 = cur6->match[0];
   match1 = cur6->match[1];
   cur2 = cur5;
-  __frame.sym7 = (this);
   __frame.sym0 = up_match0;
-  cur9v = (int32_t)this->row_cur[9];
+  up9 = this->row_cur[9];
   m_w1 = cur5[-1].match[1];
-  __frame.sym3 = cur9v;
   nb2 = 8 * cur5[-2].match[2]
       + 4 * cur5[-2].match[5]
       + m_w1
       + 2 * cur5[-2].match[4];
-  sig1 = ((__frame.sym7->grad[3] == 0) << 7)
-      + ((__frame.sym7->grad[2] == 0) << 6)
-      + 32 * (__frame.sym7->grad[1] == 0)
-      + 16 * (__frame.sym7->grad[0] == 0)
-      + ((uint8_t)(((PixRec *)__frame.sym3)->match[0] & r1->match[0] & __frame.sym0 & r2->match[0]) << 9)
-      + ((uint8_t)(((PixRec *)__frame.sym3)->match[1] & r1->match[1] & r2->match[1] & match1) << 8)
+  sig1 = ((this->grad[3] == 0) << 7)
+      + ((this->grad[2] == 0) << 6)
+      + 32 * (this->grad[1] == 0)
+      + 16 * (this->grad[0] == 0)
+      + ((uint8_t)(up9->match[0] & r1->match[0] & __frame.sym0 & r2->match[0]) << 9)
+      + ((uint8_t)(up9->match[1] & r1->match[1] & r2->match[1] & match1) << 8)
       + (ctx_bucket << 10)
       + nb2;
-  id1 = __frame.sym7->ctx_id1[sig1];
-  cur6b = (PixRec *)__frame.sym1;
+  id1 = this->ctx_id1[sig1];
+  cur6b = cur6;
   if ( id1 == 0xFFFF )
   {
-    __frame.sym7->ctx_id1[sig1] = __frame.sym7->ctx_id1_used;
+    this->ctx_id1[sig1] = this->ctx_id1_used;
     cur6b = this->row_cur[6];
     cur5 = this->row_cur[5];
     ++*(int32_t *)&this->ctx_id1_used;
@@ -10735,7 +10716,7 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
   row = this->row_cur[5];
   m_w1b = row[-1].match[1];
   m_w0 = row[-1].match[0];
-  __frame.sym9 = row;
+  rowp = row;
   if ( (m_w1b & m_w0) != 0
     && (cur6c = this->row_cur[6],
         up2 = this->row_cur[7],
@@ -10761,7 +10742,6 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
     {
       __frame.sym0 = to_edge;
       one = 1;
-      __frame.sym7 = (this);
       while ( 1 )
       {
         run = one;
@@ -10779,17 +10759,14 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
     }
 LABEL_42:
     run_pair = (uint8_t)(up2[run + 3].match[1] & up2[run + 2].match[1]);
-    __frame.sym5 = *(uint8_t *)(*(int32_t *)&this->run_bucket + __frame.sym4);
-    amap = *(uint8_t *)(*(int32_t *)&this->alpha_map + __frame.sym8) + 8 * __frame.sym5 + 4 * run_pair + 2 * m_up0;
+    __frame.sym5 = this->run_bucket[__frame.sym4];
+    amap = this->alpha_map[__frame.sym8] + 8 * __frame.sym5 + 4 * run_pair + 2 * m_up0;
     runlen = 0;
-    if ( __frame.sym9->sym == __frame.sym8 )
+    if ( rowp->sym == __frame.sym8 )
     {
-      __frame.sym0 = (int32_t)cur6c;
-      __frame.sym7 = (this);
       do
         ++runlen;
-      while ( runlen < __frame.sym4 && __frame.sym9[runlen].sym == __frame.sym8 );
-      cur6c = (PixRec *)__frame.sym0;
+      while ( runlen < __frame.sym4 && rowp[runlen].sym == __frame.sym8 );
     }
     run_hit = runlen == __frame.sym4;
     __frame.sym6 = run_hit;
@@ -10797,10 +10774,10 @@ LABEL_42:
     {
       this->row_cur[6] = &cur6c[runlen - run_hit];
       this->row_cur[7] = &up2[runlen - run_hit];
-      row_cur9 = (int32_t)this->row_cur[9];
+      row_cur9 = this->row_cur[9];
       this->row_cur[8] = this->row_cur[8] + runlen - run_hit;
-      this->row_cur[9] = (PixRec *)row_cur9 + runlen - run_hit;
-      __frame.sym9->match2345 = 0x01010101;
+      this->row_cur[9] = row_cur9 + runlen - run_hit;
+      rowp->match2345 = 0x01010101;
       *(uint32_t *)this->row_cur[5] = 0x01010101;
       this->pix_cur[1] = this->pix_cur[0];
       wp = __frame.sym8;
@@ -10904,7 +10881,6 @@ LABEL_42:
     {
       runlen_s = runlen;
       __frame.sym0 = __frame.sym5;
-      __frame.sym7 = (this);
       s4 = __frame.sym4;
       bit5 = 1 << (__frame.sym5 & 31);
       first = 0;
@@ -10917,7 +10893,7 @@ LABEL_42:
           // The decoder's mirror, `decode_pixel`'s run scan: one counter, read
           // as a word pointer for the two counts and as a record for the
           // limit, and parked in a slot a third time for the rescale.
-          ctr = &__frame.sym7->run_ctr[16 * ((first == 0) + (s5 == __frame.sym0)) + s5];
+          ctr = &this->run_ctr[16 * ((first == 0) + (s5 == __frame.sym0)) + s5];
           __frame.sym1 = runlen_s & bit5;
           bin_tot = ctr->n[0] + ctr->n[1];
           rc.encode_bit(ctr->n[0], ctr->n[1], (runlen_s & bit5) != 0);
@@ -10942,7 +10918,6 @@ LABEL_42:
   {
     bucket_i = 4 * this->bucket_idx;
     binp = (FreqRec *)&this->row_cur[bucket_i + 10];
-    __frame.sym4 = (int32_t)(uintptr_t)binp;
     frec = &this->grid[id2 + 188];
     // The same record `frec` names on the line above, read eight bytes in and
     // taken at its high half: `grid` is at +96 and its records are sixteen
@@ -10962,12 +10937,11 @@ LABEL_42:
         w1s = b15 * frec->w[1];
         __frame.sym1 = w2t;
         w4t = b15 * frec->w[4];
-        __frame.sym2 = (uint16_t *)w3t;
+        __frame.sym2 = w3t;
         __frame.sym3 = w4t;
         *frec = *(FreqRec *)ip;
         w5 = frec->w[5];
         frec->b14 *= 8;
-        __frame.sym7 = (this);
         acc = 21 * frec->w[1];
         __frame.sym0 += (21 * frec->w[0] + w5 - 1) / w5;
         frec->w[0] = __frame.sym0;
@@ -10980,17 +10954,17 @@ LABEL_42:
         w3s = 21 * frec->w[3];
         LOWORD(acc) = q2 + acc;
         frec->w[2] = acc;
-        bp = (uint8_t *)__frame.sym2 + (w3s + w5 - 1) / w5;
+        bp = __frame.sym2 + (w3s + w5 - 1) / w5;
         w4s = 21 * frec->w[4];
-        frec->w[3] = (uint16_t)(uintptr_t)bp;
-        acc2 = (uint16_t)(uintptr_t)bp + acc + w6;
+        frec->w[3] = (uint16_t)bp;
+        acc2 = (uint16_t)bp + acc + w6;
         w5 = (w4s + w5 - 1) / w5 + __frame.sym3;
         frec->w[4] = w5;
         grid_kind = (uint16_t)(__frame.sym0 + w5 + acc2);
         frec->w[5] = grid_kind;
-        __frame.sym9 = this->row_cur[5];
+        rowp = this->row_cur[5];
       }
-      s9 = __frame.sym9->sym;
+      s9 = rowp->sym;
       arg_tot = grid_kind;
       if ( s9 == __frame.sym8 )
       {
@@ -11028,10 +11002,9 @@ LABEL_42:
         h2 = frec->w[2];
         __frame.sym0 = w6a;
         w1a = frec->w[1];
-        __frame.sym7 = (this);
         __frame.sym1 = lvl_a;
         w0 = frec->w[0];
-        __frame.sym2 = (uint16_t *)b15a;
+        __frame.sym2 = b15a;
         w0 = w0 - (w0 >> 1);
         frec->w[0] = w0;
         w1a = w1a - (w1a >> 1);
@@ -11045,7 +11018,7 @@ LABEL_42:
         h4 = h4 - (h4 >> 1);
         frec->w[4] = h4;
         w1a = h3 + h2 + w1a;
-        b15a = (int32_t)__frame.sym2;
+        b15a = __frame.sym2;
         w1a = w0 + h4 + w1a;
         lvl_a = __frame.sym1;
         w5a = w1a;
@@ -11079,7 +11052,7 @@ LABEL_42:
     else
     {
       wr = ((uint16_t *)&this->row_cur[bucket_i + 10]);
-      s9b = __frame.sym9->sym;
+      s9b = rowp->sym;
       arg_tot = binp->w[5];
       if ( s9b == __frame.sym8 )
       {
@@ -11114,11 +11087,9 @@ LABEL_42:
       if ( w5c > w6c && (binp->w[lvl_b] + __frame.sym3 + 8 < w5c || w5c > 0x4000) )
       {
         __frame.sym0 = w6c;
-        __frame.sym7 = (this);
         w1 = binp->w[1];
         g2 = binp->w[2];
-        __frame.sym1 = (int32_t)(uintptr_t)frec;
-        __frame.sym2 = (uint16_t *)lvl_b;
+        __frame.sym2 = lvl_b;
         g0 = binp->w[0] - (binp->w[0] >> 1);
         binp->w[0] = g0;
         w1 = w1 - (w1 >> 1);
@@ -11132,10 +11103,9 @@ LABEL_42:
         g4 = g4 - (g4 >> 1);
         binp->w[4] = g4;
         g4 = g0 + g4;
-        lvl_b = (int32_t)__frame.sym2;
+        lvl_b = __frame.sym2;
         w5c = (uint16_t)(g4 + g3 + g2h + w1);
         w5b = __frame.sym0;
-        frec = (FreqRec *)__frame.sym1;
         binp->w[5] = w5c;
         if ( w5b < 256 && !binp->b14 )
         {
@@ -11178,7 +11148,7 @@ LABEL_42:
   this->sel[0] = nullptr;
   w6d = *wq;
   wq1 = wq[1];
-  cache0p = (uint16_t *)(uintptr_t)*sym_cache;
+  cache0p = *sym_cache;
   cache2 = sym_cache[2];
   __frame.sym0 = w6d;
   cache1 = sym_cache[1];
@@ -11187,19 +11157,17 @@ LABEL_42:
   __frame.sym2 = cache0p;
   cache4 = sym_cache[4];
   __frame.sym3 = cache1;
-  // Same as `decode_pixel`'s tail: symbols going into pointer-typed slots.
-  blk = (ModelBlock *)(uintptr_t)sym_cache[5];
   __frame.sym4 = cache2;
   cache6 = sym_cache[6];
   __frame.sym5 = cache3;
   r5 = this->row_cur[5];
   __frame.sym6 = cache4;
   cur5_back2 = r5[-2].sym;
-  __frame.sym7 = (ModelBlock *)(blk);
+  __frame.sym7 = sym_cache[5];
   up4 = (PixRec *)this->row_cur[6];
   __frame.sym8 = cache6;
   h11 = up4[2].sym;
-  __frame.sym9 = (PixRec *)(uintptr_t)sym_cache[7];
+  __frame.sym9 = sym_cache[7];
   __frame.sym10 = cur5_back2;
   r6 = this->row_cur[7];
   h12 = r6[1].sym;
