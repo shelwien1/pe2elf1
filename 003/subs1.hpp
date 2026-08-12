@@ -14006,7 +14006,12 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *out) {   P2Ctx *cur0,
   // the gate's answer -- nothing writes one of them and reads another.
   int32_t xf4, val3;
   AltP2Block *plane[4], **w;
-  uint32_t back, row_bytes, i_1, first, i_2, np;
+  uint32_t row_bytes, i_1, first, i_2, np;
+  // `-i`, the width, stepped back from the row's end.  It was a `uint32_t`,
+  // so `cursor[0] + back` was `cursor[0] + 0xFFFF...`: the same wrap
+  // `tools/negindex.py` looks for, spelled as an addition instead of a
+  // negative subscript, which is why that rule does not see it.
+  int32_t back;
   ;
   AltP2Block *blk_r, *src3, *blk_k, *blk2, *blk3, *blk1;
   int16_t seed1;

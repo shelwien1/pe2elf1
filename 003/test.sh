@@ -430,5 +430,32 @@ if [ "${BMF_WARN_GATE:-1}" = 1 ] && [ -x ./build.sh ] && [ -r warn.txt ]; then
   fi
 fi
 
+# The other pointer width.  Everything above runs one target, and for six
+# rounds that was the only target there was -- which left "fifteen streams
+# byte-identical" with a gap in it the size of every pointer in the file: on
+# i386 a truncated address, a stride written as the number it happens to be,
+# and an index negated in a `uint32_t` all mean the right thing.
+#
+# `tools/x64.sh` builds the same source as x86-64 and asks this file's own
+# question of it: every image compressed to the *32-bit* reference stream byte
+# for byte, expanded back to the input, plus the two-member archive and five
+# malformed inputs refused with the program's own exit codes.  Twenty-three
+# cases.  It is here rather than beside `asan.sh` because it is cheap enough
+# (one extra build and two runs an image) and because a second target is only
+# worth having if something notices when it stops working.
+#
+# BMF_X64_GATE=0 skips it -- for a host with no 64-bit toolchain, and for a
+# tree that is mid-refactor on purpose.
+if [ "${BMF_X64_GATE:-1}" = 1 ] && [ -x ./tools/x64.sh ]; then
+  x64=$(./tools/x64.sh 2>&1)
+  if [ $? = 0 ]; then
+    printf '%-12s ok  %s\n' 'x86-64' "$(echo "$x64" | grep 'agree with')"
+  else
+    echo "x86-64: the 64-bit build does not agree with the 32-bit one"
+    echo "$x64" | grep -v '^$' | head -20
+    fail=1
+  fi
+fi
+
 [ $fail -eq 0 ] || { echo "FAIL"; exit 1; }
 echo "PASS"
