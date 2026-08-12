@@ -111,10 +111,11 @@ def frame_of(lines, a, b):
 # gate for it.  Named with the failure rather than left on the offer list, so
 # that "0 to lift" means what it says.
 #
-# Re-taken with `--retry` against the file as it is now, five hundred commits
-# and nine rounds after they were first measured -- because a table of past
-# failures is the kind of claim REFACTORING9.md section 32 is about.  All five
-# still fail, and in the same way.
+# Re-taken against the file as it is now -- lift each with `--retry`, run the
+# gate, revert -- because a table of past failures is the kind of claim
+# REFACTORING9.md section 32 is about.  Five were re-taken at round nine and
+# all five still failed in the same way; `read_bmp` cleared at round ten, and
+# the note below says what cleared it.
 #
 # `tools/asan.sh` says what the failure *is*, which these lines never did:
 # lifting `search_filter`'s frame gives
@@ -124,8 +125,19 @@ def frame_of(lines, a, b):
 #
 # These bodies walk off the ends of their locals on purpose, and the frame is
 # what makes the neighbours theirs to walk.
+# `read_bmp` was here, with "DLRAW aborts while compressing (rc 134)", for five
+# rounds.  It is gone because the reason is gone, not because the entry aged
+# out: the two `fread`s wrote across the slots Hex-Rays had split the BMP file
+# and info headers into, so lifting those slots pulled the reads apart.  Reading
+# into `BmpHeader` instead removed the reason and the lift was then ordinary --
+# the frame dissolved to padding and the padding went with it.
+#
+# Which is the thing to take from this table: an entry here is a measurement of
+# the *body as it stands*, and the way to clear one is to change what made it
+# true.  `--retry` does not re-take them; it suppresses the table so the tool
+# will offer a frame anyway, and the gate is what says whether the offer was
+# good.
 PROVEN = {
-    'read_bmp':       'DLRAW aborts while compressing (rc 134)',
     'search_filter':  'altp1 aborts while compressing (rc 134)',
     'cost_candidate': 'altp1 aborts while compressing (rc 134)',
     # These two offer only the members outside their union, and even that much

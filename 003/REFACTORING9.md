@@ -22,26 +22,26 @@ and 3.
 
 ```
                                    round 8   round 9   round 9 end
-subs1.hpp lines                      17787     17616         17576
+subs1.hpp lines                      17787     17616         17582
 bmf.cpp lines                            —         —           365
 raw-offset sites                        22        12              0
   off `_this`                            —         1             0
   in functions                           —         1             0
 byte offsets on a typed base           121         0             0
-pointer casts                         2137      1545          1054
-  to a scalar                            —         —           445
+pointer casts                         2137      1545          1052
+  to a scalar                            —         —           443
   to a record                            —         —           372
   to a scalar, of an address             —         —           232
   to a record, of an address             —         —             5
 declarations carrying alignas            —         —            23
-frames                                  —        17             9
-  bytes they hold                        —         —        167780
+frames                                  —        17             8
+  bytes they hold                        —         —        167652
   aliases left in them                   —         —             0
   slots carrying two names               —         —             0
   extra names on those slots             —         —             0
   member runs walked as arrays           —         —             0
   this can offer to lift                 —         —             0
-  tried and reverted                     —         —             5
+  tried and reverted                     —         —             4
   declined, every member in a union      —         —             4
 structs                                 —         —            24
   still ObjN                             —         —             0
@@ -57,7 +57,7 @@ goto / LABEL_n:                     112/79     81/55         49/33
   restart a loop / exit N blocks         —         —         15/32
   sideways to a join / to neither        —         —           2/0
   jump into a block                      —         —             0
-conversion warnings                   1455      1331           976
+conversion warnings                   1455      1331           975
 ```
 
 `python3 tools/checktable.py` compares that table against `shape.py --rows`

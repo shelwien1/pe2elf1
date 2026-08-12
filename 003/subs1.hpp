@@ -8904,41 +8904,34 @@ int32_t *__read_bmp(char *path)
   // ordinary locals makes DLRAW abort while compressing.  Re-checked against the
   // file as it is now, by `tools/liftframe.py` -- `frame-sweep.sh`, which
   // the note here used to cite, lifts aliases and has none left to lift.
-  struct alignas(16) ReadBmpFrame {   // 128 bytes, one stack frame
-      uint32_t Size_4;
-      int32_t pal_bytes;
-      BmfImage *img_f;
-      int32_t row_ofs;
-      void *pal_buf;
-      uint8_t _pad0[4];
-      uint8_t *row;
-      uint8_t _pad1[4];
-      uint8_t bmp_bgra[4];
-      uint32_t bmp_info_hdr[2];
-      int32_t bmp_height;
-      int16_t bmp_planes;
-      uint16_t bmp_bits;
-      int32_t bmp_compression;
-      uint8_t _pad2[12];
-      int32_t bmp_clr_used;
-      uint8_t _pad3[4];
-      int16_t bmp_file_hdr[5];
-      uint8_t bmp_off_bits[4];
-      uint8_t _pad4[38];
-  } __frame;
-  static_assert(sizeof(void *) != 4 || sizeof(__frame) == 128, "frame layout moved");
-  // These shared `__frame.Size_4` with the name that still binds it: one
-  // stack slot MSVC gave to locals whose live ranges do not overlap, and
-  // Hex-Rays named every use.  That they can have storage of their own is
-  // the gate's answer -- nothing writes one of them and reads another.
+  // `ReadBmpFrame` stood here.  What was left of it after the lift was five
+  // runs of padding and nothing else -- every named member is an ordinary local
+  // now -- so the frame is gone with them.
+  //
+  // It is the first of the nine to dissolve, and what dissolved it was not the
+  // lift: `liftframe.py` had it in `PROVEN` for five rounds with "DLRAW aborts
+  // while compressing (rc 134)" beside it.  The reason was the two `fread`s,
+  // which wrote across the slots Hex-Rays had split the two BMP headers into,
+  // so pulling those slots apart pulled the reads apart with them.  Reading
+  // into `BmpHeader` -- the record `write_bmp` has been filling all along --
+  // removed the reason, and then the lift was ordinary.
+  int32_t pal_bytes;
+  BmfImage *img_f;
+  int32_t row_ofs;
+  void *pal_buf;
+  uint8_t *row, bmp_bgra[4], pix;
+  // `y4` and `y8` shared a stack slot with `Size_4`, which is gone: it held the
+  // padded stride a second time, and `stride_pad` four lines into the body has
+  // the same expression.  These two keep storage of their own, which is what
+  // the gate said about every one of these slots -- nothing writes one of them
+  // and reads another.
   int32_t y4, y8;
-  uint8_t pix;
   int32_t run4;
-  // These shared `__frame.pal_bytes` with the name that still binds it: one
+  // These shared `pal_bytes` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
-  // These shared `__frame.row_ofs` with the name that still binds it: one
+  // These shared `row_ofs` with the name that still binds it: one
   // stack slot MSVC gave to locals whose live ranges do not overlap, and
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
@@ -8954,9 +8947,19 @@ int32_t *__read_bmp(char *path)
   int32_t pal_n, i, run, run_val, hi_nibble, left4, left4b, y, dx, dy, dxy, dy4,
           byte_in, step;
   uint32_t stride_pad, pair, hi, stride, got, left;
-  // These two freads land in the frame, and each writes across several of the
-  // slots Hex-Rays split it into -- which is why the fields do not look like
-  // fields.  `bmp_info_hdr` is declared `uint32_t[2]` and the read is 40 bytes:
+  // The two headers a BMP begins with, read into the record that already
+  // describes them.  `BmpHeader` is 54 bytes, `#pragma pack`ed, with four
+  // offsets pinned by static_assert, and `write_bmp` has been filling it field
+  // by field all along; this end read the same bytes into eight frame slots and
+  // reached them as `hdr.biWidth`.
+  //
+  // Two reads and not one: they sit in a `||` chain whose short-circuit order
+  // is the validation order -- signature, then DIB size, then plane count --
+  // and the format puts them in two blocks anyway.
+  BmpHeader hdr;
+  // These two freads used to land in the frame, and each wrote across several
+  // of the slots Hex-Rays split it into -- which is why the fields did not look
+  // like fields.  `bmp_info_hdr` is declared `uint32_t[2]` and the read is 40 bytes:
   
   //   frame +36  bmp_info_hdr[0]  biSize          checked == 40 below
   //         +40  bmp_info_hdr[1]  biWidth
@@ -8977,11 +8980,11 @@ int32_t *__read_bmp(char *path)
   // piece is `BmpHeader`, above write_bmp, which builds this on the way out.
   fp = fopen(path, "rb");
   if ( !fp
-    || fread(__frame.bmp_file_hdr, 0xEu, 1u, fp) != 1
-    || __frame.bmp_file_hdr[0] != 0x4D42 /* 'BM' */
-    || fread(__frame.bmp_info_hdr, 0x28u, 1u, fp) != 1
-    || __frame.bmp_info_hdr[0] != 40
-    || __frame.bmp_planes != 1 )
+    || fread(&hdr.bfType, 0xEu, 1u, fp) != 1
+    || hdr.bfType != 0x4D42 /* 'BM' */
+    || fread(&hdr.biSize, 0x28u, 1u, fp) != 1
+    || hdr.biSize != 40
+    || hdr.biPlanes != 1 )
   {
     return nullptr;
   }
@@ -8992,9 +8995,9 @@ int32_t *__read_bmp(char *path)
   // fuzzing the header found four more ways through, all of the same shape,
   // and each of these lines is one of them.
   {
-    const int32_t  bmp_w   = (int32_t)__frame.bmp_info_hdr[1];
-    const int32_t  bmp_h   = __frame.bmp_height;
-    const int32_t  bmp_bpp = __frame.bmp_bits;
+    const int32_t  bmp_w   = hdr.biWidth;
+    const int32_t  bmp_h   = hdr.biHeight;
+    const int32_t  bmp_bpp = hdr.biBitCount;
     if ( bmp_w <= 0 || bmp_w > 0xFFFF
       // A negative height is a top-down BMP: legal, and not what this reader
       // is written for -- it fills rows from the last one backwards.  Refused
@@ -9022,19 +9025,19 @@ int32_t *__read_bmp(char *path)
       // `1 << bpp` entries of three.  `biClrUsed` is allowed to say fewer and
       // was trusted to say no more; 25 600 wrote 76 800 bytes into room for
       // 768.
-      || __frame.bmp_clr_used < 0
-      || (bmp_bpp <= 8 && __frame.bmp_clr_used > (1 << bmp_bpp))
+      || (int32_t)hdr.biClrUsed < 0
+      || (bmp_bpp <= 8 && (int32_t)hdr.biClrUsed > (1 << bmp_bpp))
       // A run opcode implies its depth, and the decoders below assume it: the
       // RLE8 loop steps one byte a pixel and the RLE4 loop two pixels a byte.
-      || __frame.bmp_compression > 2
-      || (__frame.bmp_compression == 1 && bmp_bpp != 8)
-      || (__frame.bmp_compression == 2 && bmp_bpp != 4) )
+      || hdr.biCompression > 2
+      || (hdr.biCompression == 1 && bmp_bpp != 8)
+      || (hdr.biCompression == 2 && bmp_bpp != 4) )
     {
       fclose(fp);
       return nullptr;
     }
   }
-  img = (BmfImage *)(__alloc_image(__frame.bmp_info_hdr[1], __frame.bmp_height, __frame.bmp_bits, __frame.bmp_bits <= 8u, 1));
+  img = (BmfImage *)(__alloc_image(hdr.biWidth, hdr.biHeight, hdr.biBitCount, hdr.biBitCount <= 8u, 1));
   // `alloc_image` returns null when `bmf_new` cannot serve it, and this read
   // its `stride` regardless.
   if ( !img )
@@ -9043,35 +9046,38 @@ int32_t *__read_bmp(char *path)
     return nullptr;
   }
   stride_pad = (img->stride + 3) & 0xFFFFFFFC;
-  if ( __frame.bmp_bits <= 8u )
+  if ( hdr.biBitCount <= 8u )
   {
-    pal_n = 1 << (__frame.bmp_bits & 31);
-    if ( __frame.bmp_clr_used )
-      pal_n = __frame.bmp_clr_used;
+    pal_n = 1 << (hdr.biBitCount & 31);
+    if ( (int32_t)hdr.biClrUsed )
+      pal_n = (int32_t)hdr.biClrUsed;
     if ( pal_n > 0 )
     {
-      __frame.Size_4 = (img->stride + 3) & 0xFFFFFFFC;
-      __frame.pal_bytes = pal_n;
-      for ( i = 0; i < __frame.pal_bytes; ++i )
+      // `Size_4 = (img->stride + 3) & 0xFFFFFFFC` stood here and
+      // `stride_pad = Size_4` after the loop, which is the same expression
+      // `stride_pad` was given four lines up and nothing between the two
+      // touches `img->stride`.  MSVC kept the value in a second register
+      // across the palette read; Hex-Rays named that register after a callee's
+      // parameter, which is where `Size_4` came from.
+      for ( i = 0; i < pal_n; ++i )
       {
-        fread(__frame.bmp_bgra, 4u, 1u, fp);
+        fread(bmp_bgra, 4u, 1u, fp);
         if ( (img->depth & 0x80) != 0 )
           pal = (uint8_t *)(uintptr_t)img + img->data_size + 16;
         else
           pal = 0;
-        *(pal + 3 * i + 2) = __frame.bmp_bgra[2];
+        *(pal + 3 * i + 2) = bmp_bgra[2];
         if ( (img->depth & 0x80) != 0 )
           pal2 = (uint8_t *)(uintptr_t)img + img->data_size + 16;
         else
           pal2 = 0;
-        *(pal2 + 3 * i + 1) = __frame.bmp_bgra[1];
+        *(pal2 + 3 * i + 1) = bmp_bgra[1];
         if ( (img->depth & 0x80) != 0 )
           pal3 = (uint8_t *)(uintptr_t)img + img->data_size + 16;
         else
           pal3 = 0;
-        *(pal3 + 3 * i) = __frame.bmp_bgra[0];
+        *(pal3 + 3 * i) = bmp_bgra[0];
       }
-      stride_pad = __frame.Size_4;
     }
   }
   // One buffer, two jobs, sized for one of them.  It is the row scratch for
@@ -9081,10 +9087,10 @@ int32_t *__read_bmp(char *path)
   // narrow image with a long run wrote past it: a 48-byte read into a 32-byte
   // region, which glibc reported as `malloc(): corrupted top size` a while
   // later and nowhere near.
-  __frame.pal_buf = bmf_new(stride_pad < 256 ? 256 : stride_pad);
-  __frame.row = (uint8_t *)img + img->data_size - img->stride + 16;
-  fseek(fp, (*(int32_t *)((uint8_t *)__frame.bmp_off_bits)), 0);
-  if ( __frame.bmp_compression )
+  pal_buf = bmf_new(stride_pad < 256 ? 256 : stride_pad);
+  row = (uint8_t *)img + img->data_size - img->stride + 16;
+  fseek(fp, (int32_t)hdr.bfOffBits, 0);
+  if ( hdr.biCompression )
   {
     // Both run decoders below take their lengths and their cursor moves
     // straight out of the file, and neither bounded them.  `read_bmp` checks
@@ -9101,15 +9107,15 @@ int32_t *__read_bmp(char *path)
     // turns into *Read error!* and exit 4.
     uint8_t *const pix_lo = img->pixels;
     uint8_t *const pix_hi = img->pixels + img->data_size;
-    if ( __frame.bmp_compression == 1 )
+    if ( hdr.biCompression == 1 )
     {
       memset(img->pixels,0,img->data_size);
-      row_at = (int32_t)__frame.row;
-      __frame.img_f = (BmfImage *)img;
+      row_at = (int32_t)row;
+      img_f = (BmfImage *)img;
       y4 = img->height - 1;
       while ( 1 )
       {
-        __frame.row_ofs = row_at;
+        row_ofs = row_at;
         if ( ferror(fp) )
           return nullptr;
         run = fgetc(fp);
@@ -9126,11 +9132,11 @@ int32_t *__read_bmp(char *path)
           // out, and a separate short-run path for anything under 16 + the
           // head.
           
-          if ( (uint8_t *)__frame.row_ofs < pix_lo
-               || (uint8_t *)__frame.row_ofs + run > pix_hi )
+          if ( (uint8_t *)row_ofs < pix_lo
+               || (uint8_t *)row_ofs + run > pix_hi )
             return nullptr;
-          __builtin_memset((void *)__frame.row_ofs, run_val, run);
-          row_at = __frame.row_ofs + run;
+          __builtin_memset((void *)row_ofs, run_val, run);
+          row_at = row_ofs + run;
         }
         else if ( run_val )
         {
@@ -9142,15 +9148,15 @@ int32_t *__read_bmp(char *path)
             dy = fgetc(fp);
             if ( dx < 0 || dy < 0 )
               return nullptr;
-            row_at = dx + row_at - dy * (uint16_t)__frame.img_f->stride;
+            row_at = dx + row_at - dy * (uint16_t)img_f->stride;
           }
           else
           {
             if ( (uint8_t *)row_at < pix_lo
                  || (uint8_t *)row_at + run_val > pix_hi )
               return nullptr;
-            fread(__frame.pal_buf, (run_val + 1) & 0xFFFFFFFE, 1u, fp);
-            memcpy((uint8_t *)row_at,(uint8_t *)__frame.pal_buf,run_val);
+            fread(pal_buf, (run_val + 1) & 0xFFFFFFFE, 1u, fp);
+            memcpy((uint8_t *)row_at,(uint8_t *)pal_buf,run_val);
             row_at += run_val;
           }
         }
@@ -9158,14 +9164,14 @@ int32_t *__read_bmp(char *path)
         {
           if ( --y4 < 0 )
             goto LABEL_61;
-          row_at = (int32_t)__frame.img_f + y4 * (uint16_t)__frame.img_f->stride + 16;
+          row_at = (int32_t)img_f + y4 * (uint16_t)img_f->stride + 16;
         }
       }
     }
-    if ( __frame.bmp_compression != 2 )
+    if ( hdr.biCompression != 2 )
       return nullptr;
     memset(img->pixels,0,img->data_size);
-    __frame.img_f = (BmfImage *)img;
+    img_f = (BmfImage *)img;
     hi_nibble = 1;
     y8 = img->height - 1;
     while ( 1 )
@@ -9192,33 +9198,33 @@ LABEL_44:
           // One encoded run writes at most `run4 / 2 + 1` bytes from the
           // cursor: two pixels a byte, and an odd length leaves a half-byte
           // the loops below store whole.
-          if ( __frame.row < pix_lo || __frame.row + (run4 / 2 + 1) > pix_hi )
+          if ( row < pix_lo || row + (run4 / 2 + 1) > pix_hi )
             return nullptr;
           lo = byte & 0xF;
           if ( hi_nibble )
           {
             left4b = run4;
-            row3 = __frame.row;
+            row3 = row;
             while ( left4b != 1 )
             {
               *row3++ = pair;
               left4b -= 2;
               if ( !left4b )
               {
-                __frame.row = row3;
+                row = row3;
                 hi_nibble = 1;
                 goto LABEL_44;
               }
             }
-            __frame.row = row3;
+            row = row3;
             *row3 = pair & 0xF0;
             hi_nibble = 0;
           }
           else
           {
             left4 = run4;
-            row4 = __frame.row;
-            cur = *__frame.row;
+            row4 = row;
+            cur = *row;
             hi = pair >> 4;
             lo16 = 16 * lo;
             while ( 1 )
@@ -9230,13 +9236,13 @@ LABEL_44:
               left4 -= 2;
               if ( !left4 )
               {
-                __frame.row = row4;
+                row = row4;
                 *row4 = lo16;
                 hi_nibble = 0;
                 goto LABEL_44;
               }
             }
-            __frame.row = row4;
+            row = row4;
             hi_nibble = 1;
           }
         }
@@ -9244,7 +9250,7 @@ LABEL_44:
           break;
         if ( --y8 < 0 )
           goto LABEL_61;
-        __frame.row = (uint8_t *)__frame.img_f + y8 * (uint16_t)__frame.img_f->stride + 16;
+        row = (uint8_t *)img_f + y8 * (uint16_t)img_f->stride + 16;
       }
       if ( byte == 1 )
         goto LABEL_61;
@@ -9254,22 +9260,22 @@ LABEL_44:
       dy4 = fgetc(fp);
       if ( dxy < 0 || dy4 < 0 )
         return nullptr;
-      step = (dxy >> 1) - dy4 * (uint16_t)__frame.img_f->stride;
+      step = (dxy >> 1) - dy4 * (uint16_t)img_f->stride;
       if ( (dxy & 1) == 1 )
       {
         if ( !hi_nibble )
           ++step;
         hi_nibble = !hi_nibble;
       }
-      __frame.row += step;
+      row += step;
     }
     // An absolute run: `byte` pixels read from the file, two to a byte.
-    if ( __frame.row < pix_lo
-         || __frame.row + ((int32_t)byte / 2 + 1) > pix_hi )
+    if ( row < pix_lo
+         || row + ((int32_t)byte / 2 + 1) > pix_hi )
       return nullptr;
-    fread(__frame.pal_buf, (((byte + 1) >> 1) + 1) & 0xFFFFFFFE, 1u, fp);
-    pal_at = (uint8_t *)__frame.pal_buf;
-    row5 = __frame.row;
+    fread(pal_buf, (((byte + 1) >> 1) + 1) & 0xFFFFFFFE, 1u, fp);
+    pal_at = (uint8_t *)pal_buf;
+    row5 = row;
     while ( 1 )
     {
       pix = *pal_at;
@@ -9278,7 +9284,7 @@ LABEL_44:
         left = pair - 1;
         if ( !left )
         {
-          __frame.row = row5;
+          row = row5;
           *row5 = *pal_at & 0xF0;
           hi_nibble = 0;
           goto LABEL_44;
@@ -9292,7 +9298,7 @@ LABEL_44:
         left = pair - 1;
         if ( !left )
         {
-          __frame.row = row5;
+          row = row5;
           hi_nibble = 1;
           goto LABEL_44;
         }
@@ -9303,28 +9309,28 @@ LABEL_44:
       pair = left - 1;
       if ( !pair )
       {
-        __frame.row = row5;
+        row = row5;
         goto LABEL_44;
       }
     }
   }
   stride = img->stride;
   row_pad = stride_pad - stride;
-  if ( __frame.bmp_height - 1 >= 0 )
+  if ( hdr.biHeight - 1 >= 0 )
   {
-    y = __frame.bmp_height - 1;
-    __frame.img_f = (BmfImage *)img;
-    row6 = __frame.row;
+    y = hdr.biHeight - 1;
+    img_f = (BmfImage *)img;
+    row6 = row;
     while ( 1 )
     {
       got = fread(row6, 1u, stride, fp);
-      stride = (uint16_t)__frame.img_f->stride;
+      stride = (uint16_t)img_f->stride;
       if ( got != stride )
         return nullptr;
       if ( row_pad )
       {
         fseek(fp, row_pad, 1);
-        stride = (uint16_t)__frame.img_f->stride;
+        stride = (uint16_t)img_f->stride;
       }
       row6 -= stride;
       if ( --y < 0 )
@@ -9337,14 +9343,14 @@ LABEL_44:
   // *inside* the uncompressed decoder's loop -- so reaching it was a jump into
   // a block followed by a `break` out of a loop the jumper was never in.
   
-  // What made that readable as an exit at all was `img = __frame.img_f`, which
+  // What made that readable as an exit at all was `img = img_f`, which
   // is a reload and not an assignment: `img` is written once, at the
-  // allocation, and `__frame.img_f` is written three times and always from
+  // allocation, and `img_f` is written three times and always from
   // `img`.  With the reload gone the label is the function's success exit and
   // says so by where it is.
 LABEL_61:
   fclose(fp);
-  free(__frame.pal_buf);
+  free(pal_buf);
   return (int32_t *)img;
 }
 
