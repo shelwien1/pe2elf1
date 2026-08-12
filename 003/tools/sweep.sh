@@ -28,10 +28,10 @@
 #
 # And the claim itself is checked rather than read.  Every round ends "all of
 # them report zero", which for a long time meant someone had looked down the
-# list; three of these print a census or a map and have no count to be zero, so
-# a reader scanning for the word could be forgiven either way.  Those three are
-# named below and exempted; every other tool's last line must contain a zero,
-# and the sweep exits non-zero if one does not.
+# list; six of these print a census, a map or a list of proposals and have no
+# count to be zero, so a reader scanning for the word could be forgiven either
+# way.  Those six are named below and exempted; every other tool's last line
+# must contain a zero, and the sweep exits non-zero if one does not.
 set -u
 cd "$(dirname "$0")/.."
 
@@ -54,14 +54,14 @@ for t in tools/*.py; do
     mk*.py|fuzz.py)        continue ;;          # generators: they write, not read
     sweep_check.py)        continue ;;          # reads the report, not the file
   esac
-  # These five have no count that can be zero.  Three answer with a table, a
+  # These six have no count that can be zero.  Three answer with a table, a
   # census and an address map.  The fourth, `resign.py`, answers with proposals:
   # whether a type change reduces the conversions or moves them is settled by
   # the compiler and not by anything the tool can see, which is what the
   # ratchet in `build.sh` is for.  Its list is meant to be read and tried, and
   # a non-empty one is not a defect.
   case $n in
-    addrmap.py|shape.py|unify_types.py|resign.py|resign_group.py)
+    addrmap.py|shape.py|unify_types.py|resign.py|resign_group.py|uncastwidth.py)
         report=1; reported="$reported ${n%.py}" ;;
     *)  report=0 ;;
   esac

@@ -872,10 +872,29 @@ static_assert(__builtin_offsetof(BitCtr, limit) == 4, "BitCtr: the limit is last
 // up-right and two-away comparisons, are read one record and two records back
 // and weighted 2, 4, 8, 16 and 32 into the context indices the coders build.
 struct PixRec {
-  uint16_t sym;        // +0
-  uint8_t  match[6];   // +2 .. +7
+  union {
+    struct {
+      uint16_t sym;        // +0
+      uint8_t  match[6];   // +2 .. +7
+    };
+    struct {
+      uint8_t  _head[4];     // `sym` and `match[0..1]`
+      // The four the coders set and read together.  Nine sites reached them as
+      // one word, seven of those storing 0x01010101 -- all four flags at once
+      // -- because MSVC merged the byte stores.  The comment above already
+      // says these four are a group; this is the group with a name, and the
+      // offset assert is what keeps it one.
+      //
+      // The overlay starts at the record's base rather than at `match`: a
+      // `uint32_t` declared after a two-byte member aligns to four and lands
+      // at +6, which is not where those nine stores go.
+      uint32_t match2345;    // +4 .. +7
+    };
+  };
 };
 static_assert(sizeof(PixRec) == 8, "PixRec: the record is eight bytes");
+static_assert(__builtin_offsetof(PixRec, match2345) == 4,
+              "PixRec::match2345 must overlay match[2..5]");
 
 struct ModelBlock {
   // The plane's geometry.  `reduce_alphabet` sizes every buffer it takes as
@@ -2966,7 +2985,7 @@ inline int32_t ModelBlock::pixel_context(uint32_t *nb)
   uint32_t result;
   int32_t near_hit, far_hit, ctx0, ctx1, fallback, ctx2, pos;
   SymEntry *list_prev, *list_sym;
-  pos = *(int32_t *)&this->sym_pos;
+  pos = this->sym_pos;
   result = (nb)[pos];
   if ( exclusion_mask[result] == exclusion_gen )
     return -1;
@@ -2983,12 +3002,12 @@ inline int32_t ModelBlock::pixel_context(uint32_t *nb)
   near_hit = 32 * near + ((result == nb[10]) << 6);
   far_hit = 16 * far;
   ctx0 = far_hit + near_hit;
-  *(int32_t *)&this->ctr_node = ctx0;
+  this->ctr_node = ctx0;
   if ( (far_hit + near_hit == 0) && pos > 6 )
     return -1;
   sel0_list = this->sel0_list;
   ctx1 = ctx0 + 8 * sym_in_top((sel0_list[mode_symbol[1]].ent), 10, result);
-  *(int32_t *)&this->ctr_node = ctx1;
+  this->ctr_node = ctx1;
   list_prev = sel0_list[mode_symbol[2]].ent;
   list_sym = sel0_list[result].ent;
   fallback = sym_in_top((sel0_list[mode_symbol[3]].ent), 6, result)
@@ -2997,12 +3016,12 @@ inline int32_t ModelBlock::pixel_context(uint32_t *nb)
   ctx2 = fallback + ctx1;
   if ( pos <= 14 || (ctx2 & 0xB) != 0 )
   {
-    *(int32_t *)&this->ctr_node = (pos << 7) + ctx2;
-    *(int32_t *)&this->ctr_fallback = fallback + 8 * (pos > 9);
+    this->ctr_node = (pos << 7) + ctx2;
+    this->ctr_fallback = fallback + 8 * (pos > 9);
   }
   else
   {
-    *(int32_t *)&this->ctr_fallback = fallback;
+    this->ctr_fallback = fallback;
     return -1;
   }
   return result;
@@ -4615,12 +4634,12 @@ inline AltP2Block *AltP2Block::alt_p2_alloc(int32_t img_w, int32_t plane)
   while ( ctr < 0x1E60 );
   dz = 4 * plane_desc[0].w12 + 1;
   band = 16 * plane_desc[0].w12;
-  *(uint32_t *)&this->has_ref = (uint8_t)(plane_desc[plane_desc[this->plane_idx + 1].src_plane + 1].flags
+  this->has_ref = (uint8_t)(plane_desc[plane_desc[this->plane_idx + 1].src_plane + 1].flags
                                                & 8) >> 3;
   deadzone_hi = dz;
   deadzone_lo = -dz;
-  *(uint32_t *)&this->band_lo = -band - 7;
-  *(uint32_t *)&this->band_hi = band + 8;
+  this->band_lo = -band - 7;
+  this->band_hi = band + 8;
   this->row0 = (float (**)[4])bmf_new(4 * img_w + 16);
   buf1 = bmf_new(4 * img_w + 16);
   // Byte 232 is row 14 lane 2 of the first neighbourhood's weight block --
@@ -4669,9 +4688,9 @@ inline AltP2Block *AltP2Block::alt_p2_alloc(int32_t img_w, int32_t plane)
   this->cursor[0] = this->buf[0] + 8;
   do
   {
-    *(uint32_t *)&this->ctx_delta[2 * pair] = (this->plane_idx << 8) | (16 * lvl);
+    this->ctx_delta[2 * pair] = (this->plane_idx << 8) | (16 * lvl);
     lvl1 = (2 * pair == p2_ctx_edges[lvl]) + lvl;
-    *(uint32_t *)&this->ctx_delta[2 * pair + 1] = (this->plane_idx << 8) | (16 * lvl1);
+    this->ctx_delta[2 * pair + 1] = (this->plane_idx << 8) | (16 * lvl1);
     bump = 2 * pair++ + 1 == p2_ctx_edges[lvl1];
     lvl = bump + lvl1;
   }
@@ -6344,7 +6363,7 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
           *(plane_desc[1].src_plane + out) = val0;
           ((AltP1Block *)blk1)->ctx_of((AltP1Block *)plane[0], (AltP1Block *)0);
           code1 = __alt_p1_decode_symbol(&blk1->counters[blk1->ctx[0]].total, 0, blk1->ctx[1]);
-          pred1 = *(uint32_t *)&blk1->pred;
+          pred1 = blk1->pred;
           val1 = (uint8_t)(pred1 + blk1->unfold[code1]);
           val1x = val1;
           blk1->cursor[0]->sym = val1;
@@ -6824,7 +6843,7 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
       nb0 = (P2Ctx *)blk->cursor[0];
       nb1 = (P2Ctx *)blk->cursor[1];
     }
-    plane = *(int32_t *)&blk->plane_idx;
+    plane = blk->plane_idx;
     if ( plane )
     {
       if ( plane == 1 )
@@ -7191,7 +7210,7 @@ int32_t __alt_p2_context(AltP2Block *blk, AltP2Block *refa, AltP2Block *refb) { 
     {
       flat_b = mag_ref1 + mag_ref0 + magu + rb2->mag + ra2->mag;
     }
-    if ( *(int32_t *)&blk->plane_idx == 1 )
+    if ( blk->plane_idx == 1 )
     {
       magsum_s = magsum;
       d_ra_ra1 = ra0->val - ra1->val;
@@ -7385,15 +7404,15 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
       zoff -= 16;
     }
     while ( zoff * 4 );
-    packed = *(int32_t *)&blk1->depth < 8;
+    packed = blk1->depth < 8;
     height = blk1->height;
-    *(int32_t *)&blk1->alphabet = 0;
+    blk1->alphabet = 0;
     if ( packed )
     {
       n_distinct = 0;
       if ( height )
       {
-        row_w = *(int32_t *)&blk1->width;
+        row_w = blk1->width;
         __frame.slot8 = src - 1;
         __frame.at_spill = 0;
         y = 0;
@@ -7407,7 +7426,7 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
           bits = 0;
           do
           {
-            bpp = *(int32_t *)&blk1->depth;
+            bpp = blk1->depth;
             shift = bits - bpp;
             if ( shift < 0 )
             {
@@ -7420,13 +7439,13 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
             ++x;
             *(uint32_t *)&__frame.buf[4 * sym - 4] = 1;
             bits = __frame.bits_spill;
-            *(int32_t *)&blk1->alphabet += first;
+            blk1->alphabet += first;
             blk1->sym_word[at] = sym;
-            row_w = *(int32_t *)&blk1->width;
+            row_w = blk1->width;
             ++at;
           }
           while ( x < (uint32_t)(*(int32_t *)&blk1->width) );
-          n_distinct = *(int32_t *)&blk1->alphabet;
+          n_distinct = blk1->alphabet;
           __frame.at_spill = at;
           y = __frame.y_spill + 1;
         }
@@ -7439,26 +7458,26 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
       idx = 0;
       do
       {
-        *(int32_t *)&blk1->alphabet += *(uint32_t *)&__frame.buf[4 * *q - 4] == 0;
+        blk1->alphabet += *(uint32_t *)&__frame.buf[4 * *q - 4] == 0;
         sym2 = *q;
         *(uint32_t *)&__frame.buf[4 * sym2 - 4] = 1;
         ++q;
         blk1->sym_word[idx++] = sym2;
       }
       while ( idx < (uint32_t)(blk1->height * *(int32_t *)&blk1->width) );
-      n_distinct = *(int32_t *)&blk1->alphabet;
+      n_distinct = blk1->alphabet;
     }
     else
     {
       n_distinct = 0;
     }
     rc.encode(n_distinct - 1, n_distinct, __frame.slot4 + 1);
-    n_syms = *(int32_t *)&blk1->alphabet;
+    n_syms = blk1->alphabet;
     if ( n_syms <= __frame.slot4 )
     {
       __init_symbol_list(&__frame.lists[0], (int32_t)blk1, __frame.slot4 - n_syms + 2, 1);
       __frame.lists[0].rescale_at = 19 * __frame.lists[0].n;
-      n_syms3 = *(int32_t *)&blk1->alphabet;
+      n_syms3 = blk1->alphabet;
       if ( n_syms3 )
       {
         prev = 0;
@@ -7469,7 +7488,7 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
           if ( *(uint32_t *)&__frame.buf[4 * s - 4] )
           {
             __frame.lists[0].code_symbol(s - prev);
-            n_syms3 = *(int32_t *)&blk1->alphabet;
+            n_syms3 = blk1->alphabet;
             *(uint32_t *)&__frame.buf[4 * s - 4] = next_id;
             s_next = s + 1;
             prev = s + 1;
@@ -7521,7 +7540,7 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
   else
   {
     memset(__frame.buf,0,0x10000);
-    *(int32_t *)&blk1->alphabet = 1;
+    blk1->alphabet = 1;
     *(uint32_t *)__frame.buf = __frame.slot4 & *(uint32_t *)src;
     blk1->sym_word[0] = 0;
     if ( (uint32_t)(blk1->height * *(int32_t *)&blk1->width) > 1 )
@@ -7583,7 +7602,7 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
 LABEL_12:
         blk3 = (ModelBlock *)((uint32_t *)__frame.slot7);
         __frame.slot7->sym_word[written++] = node;
-        if ( written >= *(uint32_t *)&blk3->height * blk3->width )
+        if ( written >= blk3->height * blk3->width )
         {
           srcp = __frame.slot8;
           n_kids = __frame.slot9;
@@ -7593,16 +7612,16 @@ LABEL_12:
         }
       }
     }
-    alpha_n = *(int32_t *)&blk1->alphabet;
+    alpha_n = blk1->alphabet;
 LABEL_14:
     rc.encode(alpha_n - 1, alpha_n, 0x2001u);
-    alpha_m = *(int32_t *)&blk1->alphabet;
+    alpha_m = blk1->alphabet;
     if ( alpha_m > 0x2000 )
     {
-      (__frame.slot[1]) = bmf_new(blk1->height * n_kids * *(int32_t *)&blk1->width);
-      img_w = *(int32_t *)&blk1->width;
+      (__frame.slot[1]) = bmf_new(blk1->height * n_kids * blk1->width);
+      img_w = blk1->width;
       img_h = blk1->height;
-      __frame.kids_i = *(int32_t *)&blk1->width;
+      __frame.kids_i = blk1->width;
       __frame.slot0 = img_h;
       if ( n_kids )
       {
@@ -7692,9 +7711,9 @@ LABEL_71:
       }
       __frame.tmp = blk1->sym_word;
       blk1->height = n_kids * __frame.slot0;
-      *(int32_t *)&blk1->depth = 8;
+      blk1->depth = 8;
       free(__frame.tmp);
-      newbuf = bmf_new(2 * blk1->height * *(int32_t *)&blk1->width);
+      newbuf = bmf_new(2 * blk1->height * blk1->width);
       __frame.tmp = (__frame.slot[1]);
       blk1->sym_word = (uint16_t *)newbuf;
       __reduce_alphabet((ModelBlock *)blk1, mode, (uint8_t *)__frame.tmp);
@@ -9922,7 +9941,7 @@ LABEL_57:
         this->row_cur[8] = r8b + idx_s - hit_a;
         rec = this->row_cur[5];
         this->row_cur[9] = this->row_cur[9] + idx_s - hit_a;
-        *(uint32_t *)&rec->match[2] = 0x01010101;
+        rec->match2345 = 0x01010101;
         *(uint32_t *)this->row_cur[5] = 0x01010101;
         pixp = (uint16_t *)this->pix_cur;
         // `r7b` and `r8b` are `PixRec *`, and this is where MSVC stopped using
@@ -9957,12 +9976,12 @@ LABEL_57:
             {
               this->pix_cur[1] = s1c;
               *(uint32_t *)this->row_cur[5] = s3c;
-              *(uint32_t *)&this->row_cur[5]->match[2] = flags_word;
+              this->row_cur[5]->match2345 = flags_word;
               pixq = this->pix_cur;
               ++this->row_cur[5];
               pixq[1] = s1c;
               *(uint32_t *)this->row_cur[5] = s3c;
-              *(uint32_t *)&this->row_cur[5]->match[2] = flags_word;
+              this->row_cur[5]->match2345 = flags_word;
               next = this->row_cur[5] + 1;
               this->row_cur[5] = next;
               ++si;
@@ -9981,7 +10000,7 @@ LABEL_57:
             s3d = __frame.sym3;
             this->pix_cur[1] = __frame.sym1;
             *(uint32_t *)this->row_cur[5] = s3d;
-            *(uint32_t *)&this->row_cur[5]->match[2] = flags_word;
+            this->row_cur[5]->match2345 = flags_word;
             next = this->row_cur[5] + 1;
             this->row_cur[5] = next;
           }
@@ -10537,7 +10556,7 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
   }
   __frame.sym7->sym_cache = &__frame.sym7->sym_ctr[8 * key];
   ctx_state = this->ctx_state[nb];
-  *(int32_t *)&this->ctx_state_seen = ctx_state;
+  this->ctx_state_seen = ctx_state;
   pair = &this->group_ctr[ctx_state][key];
   this->pix_cur = (uint16_t *)pair;
   pair_last = pair->last;
@@ -10581,7 +10600,7 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
   __frame.sym1 = (int32_t)cur6;
   ctx_bucket = this->ctx_bucket[ctx_state + cap];
   r2 = this->row_cur[7];
-  *(int32_t *)&this->bucket_idx = ctx_bucket;
+  this->bucket_idx = ctx_bucket;
   up_match0 = cur6->match[0];
   match1 = cur6->match[1];
   cur2 = cur5;
@@ -10606,7 +10625,7 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
   cur6b = (PixRec *)__frame.sym1;
   if ( id1 == 0xFFFF )
   {
-    __frame.sym7->ctx_id1[sig1] = *(int32_t *)&__frame.sym7->ctx_id1_used;
+    __frame.sym7->ctx_id1[sig1] = __frame.sym7->ctx_id1_used;
     cur6b = this->row_cur[6];
     cur5 = this->row_cur[5];
     ++*(int32_t *)&this->ctx_id1_used;
@@ -10617,12 +10636,12 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
   id2 = this->ctx_id2[sig2];
   if ( id2 == 0xFFFF )
   {
-    this->ctx_id2[sig2] = (*(int32_t *)&this->ctx_id2_used)++;
+    this->ctx_id2[sig2] = (this->ctx_id2_used)++;
     id2 = this->ctx_id2[sig2];
   }
   if ( *(int32_t *)&this->alphabet < 32 )
   {
-    id3_used = *(int32_t *)&this->ctx_id3_used;
+    id3_used = this->ctx_id3_used;
     sig3 = 16 * id2 + (__frame.sym10 & 0xF);
     id3p = &this->ctx_id3[sig3];
     id2 = *id3p;
@@ -10659,7 +10678,7 @@ inline int32_t ModelBlock::code_pixel(int32_t x)
        & up2[3].match[1]) != 0) )
   {
     m_up0 = up2[0].match[0];
-    to_edge = *(int32_t *)&this->width - x;
+    to_edge = this->width - x;
     __frame.sym4 = 1;
     if ( to_edge <= 1 )
     {
@@ -10708,7 +10727,7 @@ LABEL_42:
       row_cur9 = (int32_t)this->row_cur[9];
       this->row_cur[8] = this->row_cur[8] + runlen - run_hit;
       this->row_cur[9] = (PixRec *)row_cur9 + runlen - run_hit;
-      *(uint32_t *)&__frame.sym9->match[2] = 0x01010101;
+      __frame.sym9->match2345 = 0x01010101;
       *(uint32_t *)this->row_cur[5] = 0x01010101;
       this->pix_cur[1] = this->pix_cur[0];
       wp = __frame.sym8;
@@ -10716,7 +10735,7 @@ LABEL_42:
       this->pix_cur[0] = wp;
       r3 = this->row_cur[5];
       rec_word = *(uint32_t *)r3;
-      __frame.sym1 = *(uint32_t *)&r3->match[2];
+      __frame.sym1 = r3->match2345;
       cur2 = r3 + 1;
       this->row_cur[5] = r3 + 1;
       if ( runlen - run_hit != 1 )
@@ -10735,12 +10754,12 @@ LABEL_42:
           {
             this->pix_cur[1] = s8;
             *(uint32_t *)this->row_cur[5] = rec_word;
-            *(uint32_t *)&this->row_cur[5]->match[2] = s1;
+            this->row_cur[5]->match2345 = s1;
             pixp = this->pix_cur;
             ++this->row_cur[5];
             pixp[1] = s8;
             *(uint32_t *)this->row_cur[5] = rec_word;
-            *(uint32_t *)&this->row_cur[5]->match[2] = s1;
+            this->row_cur[5]->match2345 = s1;
             cur5p1 = this->row_cur[5] + 1;
             this->row_cur[5] = cur5p1;
             ++k;
@@ -10760,7 +10779,7 @@ LABEL_42:
         {
           this->pix_cur[1] = __frame.sym8;
           *(uint32_t *)this->row_cur[5] = rec_word;
-          *(uint32_t *)&this->row_cur[5]->match[2] = __frame.sym1;
+          this->row_cur[5]->match2345 = __frame.sym1;
           cur5p1b = this->row_cur[5] + 1;
           this->row_cur[5] = cur5p1b;
           cur2 = cur5p1b;
@@ -10806,7 +10825,7 @@ LABEL_42:
     s6 = __frame.sym6;
     msym1 = ::mode_symbol[1];
     alpha_map = (uint8_t *)this->alpha_map;
-    *(int32_t *)&this->hit = __frame.sym6;
+    this->hit = __frame.sym6;
     *(alpha_map + msym1) = s6;
     if ( !s6 && __frame.sym4 != 1 )
     {
@@ -10848,7 +10867,7 @@ LABEL_42:
   }
   else
   {
-    bucket_i = 4 * *(int32_t *)&this->bucket_idx;
+    bucket_i = 4 * this->bucket_idx;
     binp = (FreqRec *)&this->row_cur[bucket_i + 10];
     __frame.sym4 = (int32_t)(uintptr_t)binp;
     frec = &this->grid[id2 + 188];
@@ -10974,14 +10993,14 @@ LABEL_42:
       frec->w[5] = b15a + w5a;
       frec->w[lvl_a] += b15a;
       rc.encode(arg_cum, arg_high, arg_tot);
-      *(int32_t *)&this->hit = lvl_a;
+      this->hit = lvl_a;
       if ( frec->b14 )
       {
         --frec->b14;
         binp_s = binp;
         ++binp->w[5];
         ++binp_s->w[lvl_a];
-        lvl_a = *(int32_t *)&this->hit;
+        lvl_a = this->hit;
       }
     }
     else
@@ -11063,9 +11082,9 @@ LABEL_42:
       binp->w[5] = __frame.sym3 + w5c;
       binp->w[lvl_b] += s3;
       rc.encode(arg_cum, arg_high, arg_tot);
-      *(int32_t *)&this->hit = lvl_b;
+      this->hit = lvl_b;
       frec->w[5] = (frec->w[lvl_b])++ != 0;
-      lvl_a = *(int32_t *)&this->hit;
+      lvl_a = this->hit;
     }
     if ( lvl_a )
       return 1;
@@ -11146,7 +11165,7 @@ LABEL_42:
   __frame.sym29 = r7[-1].sym;
   __frame.sym30 = h30;
   __frame.sym31 = r6[3].sym;
-  *(int32_t *)&this->sym_pos = 0;
+  this->sym_pos = 0;
   do
   {
     esym = (this)->pixel_context((uint32_t *)__frame.sym);
@@ -11158,8 +11177,8 @@ LABEL_42:
         return runlen_s + 1;
       exclusion_mask[esym] = exclusion_gen;
     }
-    pos1 = *(int32_t *)&this->sym_pos + 1;
-    *(int32_t *)&this->sym_pos = pos1;
+    pos1 = this->sym_pos + 1;
+    this->sym_pos = pos1;
   }
   while ( pos1 < 32 );
   msym1b = ::mode_symbol[1];
@@ -11292,7 +11311,7 @@ inline void ModelBlock::expand_alphabet()
   else
   {
     this->depth = 8;
-    *(uint32_t *)&this->height = (*(uint32_t *)&this->height * nbytes);
+    this->height = (this->height * nbytes);
     this->expand_alphabet();
     for ( left2 = 15; left2 >= 0; --left2 )
       free(lists[left2].ent);
@@ -11312,7 +11331,7 @@ ModelBlock *__layout_workspace(ModelBlock *blk, int32_t unread_flag, int32_t img
   w = img_w;
   exclusion_gen = 1;
   blk->width = img_w;
-  *(uint32_t *)&blk->height = img_h;
+  blk->height = img_h;
   blk->depth = img_depth;
   blk->depth_raw = img_depth;
   blk->escape.ent = nullptr;
@@ -11699,7 +11718,7 @@ inline void ModelBlock::unmodel_plane_slow(uint8_t *dst)
   }
   else
   {
-    dst_buf = (uint8_t *)bmf_new(*(uint32_t *)&blk->height * blk->width + 3);
+    dst_buf = (uint8_t *)bmf_new(blk->height * blk->width + 3);
     jj = blk->depth;
     expand_buf = dst_buf;
   }
@@ -11786,7 +11805,7 @@ inline void ModelBlock::unmodel_plane_slow(uint8_t *dst)
       }
 LABEL_74:
       bucket = x + 1;
-      if ( (uint32_t)bucket >= *(uint32_t *)&blk->height )
+      if ( (uint32_t)bucket >= blk->height )
         goto LABEL_76;
     }
     if ( nbytes == 4 )
@@ -11873,12 +11892,12 @@ LABEL_76:
     nchunk = (depth_raw + 7) >> 3;
     if ( nchunk <= 0 )
     {
-      n_pix = *(uint32_t *)&blk->height * blk->width;
+      n_pix = blk->height * blk->width;
     }
     else
     {
       done = 0;
-      n_pix = *(uint32_t *)&blk->height * blk->width;
+      n_pix = blk->height * blk->width;
       chunk = n_pix / nchunk;
       if ( nchunk >= 6 )
       {
@@ -11916,7 +11935,7 @@ LABEL_76:
       {
         p = row[q2];
         *interleave_at = *p;
-        n_pix2 = *(uint32_t *)&blk->height * blk->width;
+        n_pix2 = blk->height * blk->width;
         ++interleave_at;
         row[q2++] = p + 1;
         if ( q2 == nchunk )
@@ -12471,19 +12490,19 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
   do
   {
     bank_ctx = (uint32_t)blk->bank_ctx[bank];
-    res = sample16 - (*(uint32_t *)&blk->nb_sum[2 * bank]);
+    res = sample16 - (blk->nb_sum[2 * bank]);
     bank_off = bank << 17;
     // 71178 records is +284712, `p2_ctr`, and `bank_off` is `bank << 17` --
     // 32768 records a bank, which is what the five banks are.
     node0 = &blk->p2_ctr[32768 * bank + bank_ctx];
     w0 = res + (uint16_t)node0->w2;
-    *(uint16_t *)&node0->w2 = w0;
+    node0->w2 = w0;
     countdown = node0->b1;
     if ( countdown )
     {
       ctxw_s = bank_ctx;
       w0b = w0 + 4 * ((res > deadzone_hi) - (res < deadzone_lo));
-      *(uint16_t *)&node0->w2 = w0b;
+      node0->w2 = w0b;
       ctxw = ctxw_s;
       if ( (int32_t)abs32(res) < 38 )
       {
@@ -12495,10 +12514,10 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
         {
           if ( *(uint8_t *)&node0->b0 < 8u )
           {
-            b0n = *(uint8_t *)&node0->b0 + 1;
-            *(uint8_t *)&node0->b0 = b0n;
+            b0n = node0->b0 + 1;
+            node0->b0 = b0n;
             node0->b1 = *((uint8_t *)&p2_float_pool + b0n + 3);   // two floats read sideways
-            *(uint16_t *)&node0->w2 = 2 * w0b;
+            node0->w2 = 2 * w0b;
           }
           else
           {
@@ -12510,7 +12529,7 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
       {
         __builtin_prefetch(&mir_top, 0, 1);
         mir_top = (uint16_t *)((uint8_t *)&blk->p2_ctr[(ctxw ^ 0x7FF0)] + bank_off);
-        res2 = (*(uint32_t *)&blk->nb_sum[2 * bank + 1]) + res;
+        res2 = (blk->nb_sum[2 * bank + 1]) + res;
         lowbits = ctxw & 3;
         if ( (uint32_t)lowbits >= 3
           || (bank_off2 = bank_off,
@@ -12648,7 +12667,7 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
         {
           wd4000b = d4000->w2;
           res_c = res_s;
-          ed4000b = res_s - p2_pred(wd4000b, (*(uint8_t *)&d4000->b0));
+          ed4000b = res_s - p2_pred(wd4000b, (d4000->b0));
           d4000->w2 = p2_bump(wd4000b, ed4000b, 2);
           wr4000a = r4000->w2;
           er4000a = res_s - p2_pred(wr4000a, r4000->b0);
@@ -12661,7 +12680,7 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
           em4000a = -res_s - p2_pred(wm4000a, m4000->b0);
           m4000->w2 = p2_bump(wm4000a, em4000a, 3);
           wd2000a = d2000->w2;
-          ed2000a = res_c - p2_pred(wd2000a, *(uint8_t *)&d2000->b0);
+          ed2000a = res_c - p2_pred(wd2000a, d2000->b0);
           d2000->w2 = p2_bump(wd2000a, ed2000a, 2);
           wr2000a = r2000->w2;
           er2000a = res_c - p2_pred(wr2000a, r2000->b0);
@@ -12670,10 +12689,10 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
                                                - p2_pred(*(int16_t *)&*(uint16_t *)&d2000[1].w2, *(uint8_t *)&d2000[1].b0)
                                                + 2) >> 2;
           wm2000a = m2000->w2;
-          em2000a = nres3 - p2_pred(wm2000a, *(uint8_t *)&m2000->b0);
+          em2000a = nres3 - p2_pred(wm2000a, m2000->b0);
           m2000->w2 = p2_bump(wm2000a, em2000a, 3);
           wd1000a = d1000->w2;
-          ed1000a = res_c - p2_pred(wd1000a, *(uint8_t *)&d1000->b0);
+          ed1000a = res_c - p2_pred(wd1000a, d1000->b0);
           d1000->w2 = p2_bump(wd1000a, ed1000a, 2);
           wr1000a = r1000->w2;
           er1000a = res_c - p2_pred(wr1000a, r1000->b0);
@@ -12682,7 +12701,7 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
                                                - p2_pred(*(int16_t *)&*(uint16_t *)&d1000[1].w2, *(uint8_t *)&d1000[1].b0)
                                                + 2) >> 2;
           wm1000a = m1000->w2;
-          em1000a = nres3 - p2_pred(wm1000a, *(uint8_t *)&m1000->b0);
+          em1000a = nres3 - p2_pred(wm1000a, m1000->b0);
           m1000->w2 = p2_bump(wm1000a, em1000a, 3);
           wd0800a = d0800->w2;
           ed0800a = res_c - p2_pred(wd0800a, d0800->b0);
@@ -12719,7 +12738,7 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
           ed0100a = res_c - p2_pred(wd0100a, d0100->b0);
           d0100->w2 = p2_bump(wd0100a, ed0100a, 2);
           wr0100a = r0100->w2;
-          er0100a = res_c - p2_pred(wr0100a, *(uint8_t *)&r0100->b0);
+          er0100a = res_c - p2_pred(wr0100a, r0100->b0);
           r0100->w2 = p2_bump(wr0100a, er0100a, 3);
           *(uint16_t *)&d0100[1].w2 += (uint32_t)(res_c - p2_pred(d0100[1].w2, d0100[1].b0) + 2) >> 2;
           wm0100a = m0100->w2;
@@ -12749,27 +12768,27 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
           ed0020a = res_c - p2_pred(wd0020a, d0020->b0);
           d0020->w2 = p2_bump(wd0020a, ed0020a, 2);
           wr0020a = r0020->w2;
-          er0020a = res_c - p2_pred(wr0020a, *(uint8_t *)&r0020->b0);
+          er0020a = res_c - p2_pred(wr0020a, r0020->b0);
           r0020->w2 = p2_bump(wr0020a, er0020a, 3);
           *(uint16_t *)&d0020[1].w2 += (uint32_t)(res_c - p2_pred(d0020[1].w2, d0020[1].b0) + 2) >> 2;
           wm0020a = m0020->w2;
           pm0020a = p2_pred(wm0020a, m0020->b0);
-          *(uint16_t *)&m0020->w2 = wm0020a
+          m0020->w2 = wm0020a
                                + ((32 * ((nres2 - pm0020a > deadzone_hi) - (uint32_t)(nres2 - pm0020a < deadzone_lo))
                                  + nres2
                                  - pm0020a
                                  + 4) >> 3);
           wd0010a = d0010->w2;
-          ed0010a = res_c - p2_pred(wd0010a, *(uint8_t *)&d0010->b0);
+          ed0010a = res_c - p2_pred(wd0010a, d0010->b0);
           d0010->w2 = p2_bump(wd0010a, ed0010a, 2);
           wr0010a = r0010->w2;
-          er0010a = res_c - p2_pred(wr0010a, *(uint8_t *)&r0010->b0);
+          er0010a = res_c - p2_pred(wr0010a, r0010->b0);
           r0010->w2 = p2_bump(wr0010a, er0010a, 3);
           *(uint16_t *)&d0010[1].w2 += (uint32_t)(res_c
                                                - p2_pred(*(int16_t *)&*(uint16_t *)&d0010[1].w2, *(uint8_t *)&d0010[1].b0)
                                                + 2) >> 2;
           wm0010a = m0010->w2;
-          em0010a = -res_c - p2_pred(wm0010a, *(uint8_t *)&m0010->b0);
+          em0010a = -res_c - p2_pred(wm0010a, m0010->b0);
           m0010->w2 = p2_bump(wm0010a, em0010a, 3);
         }
         else
@@ -12778,7 +12797,7 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
           res_c = res_s;
           mir_top[-1] = ((uint32_t)(-res_s - p2_pred(w_topm1, ((uint8_t)mir_top[-2])) + 4) >> 3) + w_topm1;
           wd4000a = d4000->w2;
-          ed4000a = res_c - p2_pred(wd4000a, *(uint8_t *)&d4000->b0);
+          ed4000a = res_c - p2_pred(wd4000a, d4000->b0);
           d4000->w2 = p2_bump(wd4000a, ed4000a, 2);
           wr4000b = r4000->w2;
           go = lowbits < 3;
@@ -12797,7 +12816,7 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
             em4000b = neg_c - p2_pred(wm4000b, m4000->b0);
             m4000->w2 = p2_bump(wm4000b, em4000b, 3);
             wd2000b = d2000->w2;
-            ed2000b = res_c - p2_pred(wd2000b, *(uint8_t *)&d2000->b0);
+            ed2000b = res_c - p2_pred(wd2000b, d2000->b0);
             d2000->w2 = p2_bump(wd2000b, ed2000b, 2);
             wr2000b = r2000->w2;
             er2000b = res_c - p2_pred(wr2000b, r2000->b0);
@@ -12809,10 +12828,10 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
             ed2000m1a = res_c - p2_pred(wd2000m1a, *(uint8_t *)&d2000[-1].b0);
             d2000[-1].w2 = p2_bump(wd2000m1a, ed2000m1a, 3);
             wm2000b = m2000->w2;
-            em2000b = neg_c - p2_pred(wm2000b, *(uint8_t *)&m2000->b0);
+            em2000b = neg_c - p2_pred(wm2000b, m2000->b0);
             m2000->w2 = p2_bump(wm2000b, em2000b, 3);
             wd1000b = d1000->w2;
-            ed1000b = res_c - p2_pred(wd1000b, *(uint8_t *)&d1000->b0);
+            ed1000b = res_c - p2_pred(wd1000b, d1000->b0);
             d1000->w2 = p2_bump(wd1000b, ed1000b, 2);
             wr1000b = r1000->w2;
             er1000b = res_c - p2_pred(wr1000b, r1000->b0);
@@ -12824,7 +12843,7 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
             ed1000m1a = res_c - p2_pred(wd1000m1a, *(uint8_t *)&d1000[-1].b0);
             d1000[-1].w2 = p2_bump(wd1000m1a, ed1000m1a, 3);
             wm1000b = m1000->w2;
-            em1000b = neg_c - p2_pred(wm1000b, *(uint8_t *)&m1000->b0);
+            em1000b = neg_c - p2_pred(wm1000b, m1000->b0);
             m1000->w2 = p2_bump(wm1000b, em1000b, 3);
             wd0800b = d0800->w2;
             ed0800b = res_c - p2_pred(wd0800b, d0800->b0);
@@ -12878,7 +12897,7 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
             ed0100b = res_c - p2_pred(wd0100b, d0100->b0);
             d0100->w2 = p2_bump(wd0100b, ed0100b, 2);
             wr0100b = r0100->w2;
-            er0100b = res_c - p2_pred(wr0100b, *(uint8_t *)&r0100->b0);
+            er0100b = res_c - p2_pred(wr0100b, r0100->b0);
             r0100->w2 = p2_bump(wr0100b, er0100b, 3);
             *(uint16_t *)&d0100[1].w2 += (uint32_t)(res_c
                                                  - p2_pred(d0100[1].w2, d0100[1].b0)
@@ -12924,7 +12943,7 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
             ed0020b = res_c - p2_pred(wd0020b, d0020->b0);
             d0020->w2 = p2_bump(wd0020b, ed0020b, 2);
             wr0020b = r0020->w2;
-            er0020b = res_c - p2_pred(wr0020b, *(uint8_t *)&r0020->b0);
+            er0020b = res_c - p2_pred(wr0020b, r0020->b0);
             r0020->w2 = p2_bump(wr0020b, er0020b, 3);
             *(uint16_t *)&d0020[1].w2 += (uint32_t)(res_c
                                                  - p2_pred(d0020[1].w2, d0020[1].b0)
@@ -12936,10 +12955,10 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
             em0020b = neg_d - p2_pred(wm0020b, m0020->b0);
             m0020->w2 = p2_bump(wm0020b, em0020b, 3);
             wd0010b = d0010->w2;
-            ed0010b = res_c - p2_pred(wd0010b, *(uint8_t *)&d0010->b0);
+            ed0010b = res_c - p2_pred(wd0010b, d0010->b0);
             d0010->w2 = p2_bump(wd0010b, ed0010b, 2);
             wr0010b = r0010->w2;
-            er0010b = res_c - p2_pred(wr0010b, *(uint8_t *)&r0010->b0);
+            er0010b = res_c - p2_pred(wr0010b, r0010->b0);
             r0010->w2 = p2_bump(wr0010b, er0010b, 3);
             *(uint16_t *)&d0010[1].w2 += (uint32_t)(res_c
                                                  - p2_pred(*(int16_t *)&*(uint16_t *)&d0010[1].w2, *(uint8_t *)&d0010[1].b0)
@@ -12948,7 +12967,7 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
             ed0010m1a = res_c - p2_pred(wd0010m1a, *(uint8_t *)&d0010[-1].b0);
             d0010[-1].w2 = p2_bump(wd0010m1a, ed0010m1a, 3);
             wm0010b = m0010->w2;
-            em0010b = neg_d - p2_pred(wm0010b, *(uint8_t *)&m0010->b0);
+            em0010b = neg_d - p2_pred(wm0010b, m0010->b0);
           }
           else
           {
@@ -12960,7 +12979,7 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
             em4000c = -res_c - p2_pred(wm4000c, m4000->b0);
             m4000->w2 = p2_bump(wm4000c, em4000c, 3);
             wd2000c = d2000->w2;
-            ed2000c = res_c - p2_pred(wd2000c, *(uint8_t *)&d2000->b0);
+            ed2000c = res_c - p2_pred(wd2000c, d2000->b0);
             d2000->w2 = p2_bump(wd2000c, ed2000c, 2);
             wr2000c = r2000->w2;
             er2000c = res_c - p2_pred(wr2000c, r2000->b0);
@@ -12969,10 +12988,10 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
             ed2000m1b = res_c - p2_pred(wd2000m1b, *(uint8_t *)&d2000[-1].b0);
             d2000[-1].w2 = p2_bump(wd2000m1b, ed2000m1b, 3);
             wm2000c = m2000->w2;
-            em2000c = nres1 - p2_pred(wm2000c, *(uint8_t *)&m2000->b0);
+            em2000c = nres1 - p2_pred(wm2000c, m2000->b0);
             m2000->w2 = p2_bump(wm2000c, em2000c, 3);
             wd1000c = d1000->w2;
-            ed1000c = res_c - p2_pred(wd1000c, *(uint8_t *)&d1000->b0);
+            ed1000c = res_c - p2_pred(wd1000c, d1000->b0);
             d1000->w2 = p2_bump(wd1000c, ed1000c, 2);
             wr1000c = r1000->w2;
             er1000c = res_c - p2_pred(wr1000c, r1000->b0);
@@ -12981,7 +13000,7 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
             ed1000m1b = res_c - p2_pred(wd1000m1b, *(uint8_t *)&d1000[-1].b0);
             d1000[-1].w2 = p2_bump(wd1000m1b, ed1000m1b, 3);
             wm1000c = m1000->w2;
-            em1000c = nres1 - p2_pred(wm1000c, *(uint8_t *)&m1000->b0);
+            em1000c = nres1 - p2_pred(wm1000c, m1000->b0);
             m1000->w2 = p2_bump(wm1000c, em1000c, 3);
             wd0800c = d0800->w2;
             ed0800c = res_c - p2_pred(wd0800c, d0800->b0);
@@ -13024,7 +13043,7 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
             ed0100c = res_c - p2_pred(wd0100c, d0100->b0);
             d0100->w2 = p2_bump(wd0100c, ed0100c, 2);
             wr0100c = r0100->w2;
-            er0100c = res_c - p2_pred(wr0100c, *(uint8_t *)&r0100->b0);
+            er0100c = res_c - p2_pred(wr0100c, r0100->b0);
             r0100->w2 = p2_bump(wr0100c, er0100c, 3);
             wd0100m1b = d0100[-1].w2;
             ed0100m1b = res_c - p2_pred(wd0100m1b, d0100[-1].b0);
@@ -13061,7 +13080,7 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
             ed0020c = res_c - p2_pred(wd0020c, d0020->b0);
             d0020->w2 = p2_bump(wd0020c, ed0020c, 2);
             wr0020c = r0020->w2;
-            er0020c = res_t - p2_pred(wr0020c, *(uint8_t *)&r0020->b0);
+            er0020c = res_t - p2_pred(wr0020c, r0020->b0);
             res_c = res_t;
             r0020->w2 = p2_bump(wr0020c, er0020c, 3);
             wd0020m1b = d0020[-1].w2;
@@ -13072,16 +13091,16 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
             em0020c = -res_t - p2_pred(wm0020c, m0020->b0);
             m0020->w2 = p2_bump(wm0020c, em0020c, 3);
             wd0010c = d0010->w2;
-            ed0010c = res_c - p2_pred(wd0010c, *(uint8_t *)&d0010->b0);
+            ed0010c = res_c - p2_pred(wd0010c, d0010->b0);
             d0010->w2 = p2_bump(wd0010c, ed0010c, 2);
             wr0010c = r0010->w2;
-            er0010c = res_c - p2_pred(wr0010c, *(uint8_t *)&r0010->b0);
+            er0010c = res_c - p2_pred(wr0010c, r0010->b0);
             r0010->w2 = p2_bump(wr0010c, er0010c, 3);
             wd0010m1b = d0010[-1].w2;
             ed0010m1b = res_c - p2_pred(wd0010m1b, *(uint8_t *)&d0010[-1].b0);
             d0010[-1].w2 = p2_bump(wd0010m1b, ed0010m1b, 3);
             wm0010b = m0010->w2;
-            em0010b = nres4 - p2_pred(wm0010b, *(uint8_t *)&m0010->b0);
+            em0010b = nres4 - p2_pred(wm0010b, m0010->b0);
           }
           m0010->w2 = p2_bump(wm0010b, em0010b, 3);
         }
@@ -13723,8 +13742,8 @@ void __alt_p2_d8_decode_body(AltP2Block *blk, int8_t unread_flag, uint8_t *out, 
     while ( 1 )
     {
       q = pix[-1].val >> 4;
-      blk->ctx_pair[0] = blk->ctx + (*(uint32_t *)&blk->ctx_delta[q + 4]);
-      blk->ctx_pair[1] = blk->ctx + (*(uint32_t *)&blk->ctx_delta[q]);
+      blk->ctx_pair[0] = blk->ctx + (blk->ctx_delta[q + 4]);
+      blk->ctx_pair[1] = blk->ctx + (blk->ctx_delta[q]);
       val = (uint8_t)(((uint16_t)blk->cursor[0][-1].val >> 4)
                             + *(uint8_t *)(blk->freq[blk->ctx
                                                                + blk->ctx_w[3].w[(prev[-1].val <= prev[-2].val)
@@ -13872,7 +13891,7 @@ void __alt_p2_d8_decode_body(AltP2Block *blk, int8_t unread_flag, uint8_t *out, 
         {
           pred = __alt_p2_context((AltP2Block *)blk, (AltP2Block *)nullptr, (AltP2Block *)nullptr);
           code = blk->freq[blk->ctx].decode_symbol(blk->ctx_pair);
-          val2 = (uint8_t)(pred + (*(uint8_t *)&blk->unfold[code]));
+          val2 = (uint8_t)(pred + (blk->unfold[code]));
           row[j] = val2;
           __alt_p2_model(blk, val2, code, val2 - pred);
           out = &row[j + 1];
@@ -14147,7 +14166,7 @@ int32_t __alt_model_p2_decode(uint16_t *p_i, uint8_t *out) {   P2Ctx *cur0,
           pred0 = __alt_p2_context((AltP2Block *)plane[0], (AltP2Block *)plane[2], (AltP2Block *)plane[1]);
           freq = &blk0->freq[blk0->ctx];
           code0 = freq->decode_symbol(blk0->ctx_pair);
-          val0 = (uint8_t)(pred0 + (*(uint8_t *)&blk0->unfold[code0]));
+          val0 = (uint8_t)(pred0 + (blk0->unfold[code0]));
           __alt_p2_model((AltP2Block *)blk0, val0, code0, val0 - pred0);
           cur0 = blk0->cursor[0];
           ctx_bias[0] += 32 * cur0[-1].dupleft;
@@ -14778,7 +14797,7 @@ int32_t __alt_model_p2_encode(BmfImage *p_i, uint8_t *a2) {   P2Ctx *rec0,
           resid0 = (uint8_t)(cur0 - pred0);
           code0 = (uint8_t)blk0->fold[resid0];
           out0 = out[off0b];
-          recon0b = (uint8_t)(pred0 + (*(uint8_t *)&blk0->unfold[code0]));
+          recon0b = (uint8_t)(pred0 + (blk0->unfold[code0]));
           recon0 = (uint8_t)(recon0b + out0 - cur0);
           drift0 = out0 - recon0;
           if ( drift0 < -16 || drift0 > 16 )
