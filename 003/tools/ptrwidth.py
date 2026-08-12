@@ -50,13 +50,19 @@ ASSIGN = re.compile(r'([A-Za-z_][\w.\[\]>*-]*)\s*=\s*\(?\s*$')
 CALL = re.compile(r'([A-Za-z_]\w*)\s*\([^()]*$')
 
 
-def sites(lines, log=LOG):
+def sites(path, log=LOG):
     """[(line, col, from-type)] — the truncations gcc found, deduplicated.
 
     gcc reports the outer cast of `(uint32_t)(a - (uint32_t)b)` twice, at two
     columns on one line; both are real and both are listed.
+
+    `path` and not the literal `subs1.hpp`: `sweep.sh` hands every tool a copy,
+    and a stamp check against the original would pass while the line numbers
+    were applied to something else.  The copy has the same contents, so the
+    cksum matches and the answer is the same -- but only because it is checked
+    against the file actually being read.
     """
-    rows, note = buildlog.read(log, 'subs1.hpp')
+    rows, note = buildlog.read(log, path)
     if note:
         return None, note
     out = []
@@ -105,7 +111,7 @@ def apply(lines, rows):
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else 'subs1.hpp'
     lines = open(path).read().split('\n')
-    rows, note = sites(lines)
+    rows, note = sites(path)
     if note:
         print('0 pointers through a 32-bit integer (%s)' % note)
         return

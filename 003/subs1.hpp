@@ -1755,7 +1755,7 @@ BmfArc *__bmf_destroy_archive(BmfArc *arc, int8_t do_free)
   return arc;
 }
 
-void __expand_predictor_mode0(uint32_t unread_src, int32_t i, int32_t unread_h)
+void __expand_predictor_mode0(uint8_t *unread_src, int32_t i, int32_t unread_h)
 {
   ;
   // never taken: -E is 0
@@ -5013,15 +5013,12 @@ static_assert(__builtin_offsetof(BmpHeader, bfOffBits) == 10
               && __builtin_offsetof(BmpHeader, biClrImportant) == 50,
               "BmpHeader fields are not where the format puts them");
 
-int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
+int32_t __write_bmp(BmfImage *img, char *path, int32_t want_rle)
 {
-  // img_addr, img_at and pix are the same descriptor -- `img_at = img_addr` and
-  // `pix = (uint16_t *)img_addr`, and none is stepped -- so one view serves all
-  // three.  Where a read of +12 was typed `uint8_t *` it stays a value cast back
-  // from the size, because that is what the code then does with it: `&x[img_addr]`
-  // with x the size and img_addr the descriptor is `img_addr + data_size`, which is where
-  // alloc_image put the palette.
-  BmfImage *const img = (BmfImage *)img_addr;
+  // `img` and `pix` are the same descriptor and neither is stepped, so one
+  // view serves both; `img_at`, a third, was MSVC reloading the parameter
+  // five times and is gone.  The palette is at `(uint8_t *)img +
+  // data_size`, which is where `alloc_image` put it.
   // `img->depth`: the low six bits are the bit count, bit 6 says greyscale
   // and bit 7 says the palette is written out.  Hex-Rays named it for the
   // `fwrite` parameter it was eventually passed as and gave it a register's
@@ -5051,7 +5048,6 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
   // Hex-Rays named every use.  That they can have storage of their own is
   // the gate's answer -- nothing writes one of them and reads another.
   ;
-  uintptr_t img_at;   // were int32_t: addresses, masked and tagged
   FILE *fp, *fp2;
   bool can_rle;
   uint32_t stride1, at, at2, slot;
@@ -5069,7 +5065,6 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
   out_buf = (uint8_t *)bmf_new(img->data_size
                                  + 8 * img->height
                                  + (img->data_size >> 5) + 2048);
-  img_at = img_addr;
   // out, out_buf, out2 and out_buf are one allocation: the chain
   // is out_buf = out_buf, out = out_buf, out2 = out, and
   // none of them is ever stepped.  So one view of the header serves all four,
@@ -5123,7 +5118,6 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
             ++k;
           }
           while ( k < (uint32_t)(ncol / 2) );
-          img_at = img_addr;
           at = 2 * k + 1;
         }
         else
@@ -5152,7 +5146,7 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
         {
           data_ofs = img->data_size;
           j = 0;
-          pal = (uint8_t *)img_addr + data_ofs2;
+          pal = (uint8_t *)img + data_ofs2;
           do
           {
             slot = 2 * j;
@@ -5165,7 +5159,6 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
           }
           while ( j < pairs );
           data_ofs2 = data_ofs;
-          img_at = img_addr;
           rle_on = want_rle;
           at2 = 2 * j + 1;
           done = at2;
@@ -5177,10 +5170,9 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
         }
         if ( (at2 - 1) < (uint32_t)ncol )
         {
-          pal2 = (uint8_t *)img_at + data_ofs2;
+          pal2 = (uint8_t *)img + data_ofs2;
           bgr2 = *(uint16_t *)&pal2[3 * done + 13];
           *(uint32_t *)&out_buf[4 * done + 50] = (((uint8_t)pal2[3 * done + 15]) << 16) | bgr2;
-          img_at = img_addr;
         }
         pal_bytes = 4 * ncol;
       }
@@ -5189,7 +5181,6 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
     {
       pal_bytes = 4 * ncolours;
       memset(buf,0,4 * ncolours);
-      img_at = img_addr;
       data_ofs2 = img->data_size;
       rows2 = img->height;
     }
@@ -5202,7 +5193,7 @@ int32_t __write_bmp(uintptr_t img_addr, char *path, int32_t want_rle)
   stride = img->stride;
   out = out_buf;
   off_bits = (uint32_t)(buf - out_buf);
-  pix = (uint16_t *)img_at;
+  pix = (uint16_t *)img;
   rle_mode = rle_on;
   data_len = data_ofs2;
   while ( 1 )
@@ -5418,7 +5409,7 @@ LABEL_72:
         {
           rows2 = rows3;
           stride = stride3;
-          pix = (uint16_t *)img_addr;
+          pix = (uint16_t *)img;
           data_len = img->data_size;
           break;
         }
@@ -5483,7 +5474,13 @@ LABEL_72:
   fclose(fp2);
   return 1;
 }
-uint32_t __init_symbol_list(SymList *list, int32_t unread_this, int32_t n_syms, int32_t dense)
+// The second parameter is gone.  It was unread, and its eleven call sites
+// disagreed about what it even was: six passed the block, one passed a list
+// index, three passed 0.  That is the signature of a register Hex-Rays
+// recovered rather than an argument -- MSVC's `this`, which this body does
+// not use -- and keeping it meant six pointers going through an `int32_t`
+// to reach a parameter nothing reads.
+uint32_t __init_symbol_list(SymList *list, int32_t n_syms, int32_t dense)
 {
   ;
   SymEntry *buf;
@@ -6289,7 +6286,7 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
           p, val0, val1, code2, val2, at2,
           code3, val3, at3, np, f;
   uint32_t y, *p0;
-  uint8_t *pred2, *pred3;
+  int32_t pred2, pred3;   // `AltP1Block::pred`, a sample and not an address
   width = *hdr;
   height = hdr[1];
   if ( plane_count > 0 )
@@ -6417,11 +6414,11 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
         x = 0;
         do
         {
-          p0 = (uint32_t *)plane[0];
-          ((AltP1Block *)plane[0])->ctx_of((AltP1Block *)nullptr, (AltP1Block *)0);
-          code0 = __alt_p1_decode_symbol((uint16_t *)&p0[4 * p0[3] + 950], 0, p0[4]);
-          pred0 = p0[2];
-          AltP1Block *const blk = (AltP1Block *)p0;
+          AltP1Block *const blk = (AltP1Block *)plane[0];
+          blk->ctx_of(nullptr, nullptr);
+          code0 = __alt_p1_decode_symbol((uint16_t *)&blk->counters[blk->ctx[0]],
+                                         0, blk->ctx[1]);
+          pred0 = blk->pred;
           val0 = (uint8_t)(pred0 + blk->unfold[code0]);
           // The row record is two bytes: the reconstructed sample at +0 and the
           // size of the prediction error at +1.  `[1]` is this pixel's error,
@@ -6430,22 +6427,22 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
           // the other two planes.
           blk->cursor[0]->sym = val0;
           blk->cursor[0]->mag = abs32(val0 - pred0);
-          p0[p0[5] + 6] = p0[p0[5] + 6]
+          blk->ctx[blk->ctx[2] + 3] = blk->ctx[blk->ctx[2] + 3]
                           + blk->cursor[0]->mag
                           - blk->cursor[0][-4].mag
                           - (blk->cursor[4][-2].mag
                            - blk->cursor[4][6].mag
                            + blk->cursor[2][-2].mag
                            - blk->cursor[2][6].mag);
-          at0 = 4 * p0[3];
-          p0[5] = p0[5] == 0;
-          if ( LOWORD(p0[at0 + 950]) < 0x4000u )
-            ((AltP1Block *)p0)->update_model();
-          p0[49] += 2;
-          p0[50] += 2;
-          p0[51] += 2;
-          p0[52] += 2;
-          p0[53] += 2;
+          at0 = blk->ctx[0];
+          blk->ctx[2] = blk->ctx[2] == 0;
+          if ( blk->counters[at0].total < 0x4000u )
+            blk->update_model();
+          ++blk->cursor[0];
+          ++blk->cursor[1];
+          ++blk->cursor[2];
+          ++blk->cursor[3];
+          ++blk->cursor[4];
           blk1 = (AltP1Block *)plane1;
           *(plane_desc[1].src_plane + out) = val0;
           ((AltP1Block *)blk1)->ctx_of((AltP1Block *)plane[0], (AltP1Block *)0);
@@ -6476,20 +6473,20 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
           p0v = plane[0];
           *(out + plane_desc[2].src_plane) = val1x;
           ((AltP1Block *)blk2)->ctx_of((AltP1Block *)plane1, (AltP1Block *)p0v);
-          code2 = __alt_p1_decode_symbol((uint16_t *)&((uint8_t**)blk2)[4 * blk2->ctx[0] + 950], 0, (int32_t)blk2->ctx[1]);
-          pred2 = (uint8_t *)(blk2->pred);
-          val2 = (uint8_t)((uint8_t)(uintptr_t)pred2 + blk2->unfold[code2]);
+          code2 = __alt_p1_decode_symbol((uint16_t *)&blk2->counters[blk2->ctx[0]], 0, (int32_t)blk2->ctx[1]);
+          pred2 = blk2->pred;
+          val2 = (uint8_t)(pred2 + blk2->unfold[code2]);
           blk2->cursor[0]->sym = val2;
-          blk2->cursor[0]->mag = abs32(val2 - (uint32_t)pred2);
-          ((uint8_t**)blk2)[blk2->ctx[2] + 6] = &((uint8_t**)blk2)[blk2->ctx[2] + 6][blk2->cursor[0]->mag
+          blk2->cursor[0]->mag = abs32(val2 - pred2);
+          blk2->ctx[blk2->ctx[2] + 3] += (blk2->cursor[0]->mag
                                                            - blk2->cursor[0][-4].mag
                                                            - (blk2->cursor[4][-2].mag
                                                             - blk2->cursor[4][6].mag)
                                                            - (blk2->cursor[2][-2].mag
-                                                            - blk2->cursor[2][6].mag)];
-          at2 = 4 * blk2->ctx[0];
+                                                            - blk2->cursor[2][6].mag));
+          at2 = blk2->ctx[0];
           blk2->ctx[2] = blk2->ctx[2] == 0;
-          if ( LOWORD(((uint8_t**)blk2)[at2 + 950]) < 0x4000u )
+          if ( blk2->counters[at2].total < 0x4000u )
             ((AltP1Block *)blk2)->update_model();
           ++blk2->cursor[0];
           ++blk2->cursor[1];
@@ -6512,21 +6509,21 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
           {
             blk3 = (AltP1Block *)(plane3);
             ((AltP1Block *)plane3)->ctx_of((AltP1Block *)plane2, (AltP1Block *)plane1);
-            code3 = __alt_p1_decode_symbol((uint16_t *)&((uint8_t**)blk3)[4 * blk3->ctx[0] + 950], 0, (int32_t)blk3->ctx[1]);
-            pred3 = (uint8_t *)(blk3->pred);
-            val3 = (uint8_t)((uint8_t)(uintptr_t)pred3 + blk3->unfold[code3]);
+            code3 = __alt_p1_decode_symbol((uint16_t *)&blk3->counters[blk3->ctx[0]], 0, (int32_t)blk3->ctx[1]);
+            pred3 = blk3->pred;
+            val3 = (uint8_t)(pred3 + blk3->unfold[code3]);
             val3x = val3;
             blk3->cursor[0]->sym = val3;
-            blk3->cursor[0]->mag = abs32(val3 - (uint32_t)pred3);
-            ((uint8_t**)blk3)[blk3->ctx[2] + 6] = &((uint8_t**)blk3)[blk3->ctx[2] + 6][blk3->cursor[0]->mag
+            blk3->cursor[0]->mag = abs32(val3 - pred3);
+            blk3->ctx[blk3->ctx[2] + 3] += (blk3->cursor[0]->mag
                                                              - blk3->cursor[0][-4].mag
                                                              - (blk3->cursor[4][-2].mag
                                                               - blk3->cursor[4][6].mag)
                                                              - (blk3->cursor[2][-2].mag
-                                                              - blk3->cursor[2][6].mag)];
-            at3 = 4 * blk3->ctx[0];
+                                                              - blk3->cursor[2][6].mag));
+            at3 = blk3->ctx[0];
             blk3->ctx[2] = blk3->ctx[2] == 0;
-            if ( LOWORD(((uint8_t**)blk3)[at3 + 950]) < 0x4000u )
+            if ( blk3->counters[at3].total < 0x4000u )
               ((AltP1Block *)blk3)->update_model();
             ++blk3->cursor[0];
             ++blk3->cursor[1];
@@ -7562,7 +7559,7 @@ void __reduce_alphabet(ModelBlock *blk, int8_t unread_flag, uint8_t *src)
     n_syms = blk1->alphabet;
     if ( n_syms <= __frame.slot4 )
     {
-      __init_symbol_list(&__frame.lists[0], (int32_t)blk1, __frame.slot4 - n_syms + 2, 1);
+      __init_symbol_list(&__frame.lists[0], __frame.slot4 - n_syms + 2, 1);
       __frame.lists[0].rescale_at = 19 * __frame.lists[0].n;
       n_syms3 = blk1->alphabet;
       if ( n_syms3 )
@@ -7798,7 +7795,7 @@ LABEL_71:
         li = 0;
         do
         {
-          __init_symbol_list(&__frame.lists[li], li, 256, 1);
+          __init_symbol_list(&__frame.lists[li], 256, 1);
           ++li;
         }
         while ( li < 4 * n_kids );
@@ -11295,7 +11292,7 @@ inline void ModelBlock::expand_alphabet()
       {
         k = 0;
         do
-          __init_symbol_list(&lists[k++], (int32_t)this, 256, 1);
+          __init_symbol_list(&lists[k++], 256, 1);
         while ( k < (4 * nbytes) );
         n_syms = this->alphabet;
       }
@@ -11327,7 +11324,7 @@ inline void ModelBlock::expand_alphabet()
     }
     else if ( n_syms <= mask )
     {
-      __init_symbol_list(&lists[0], (int32_t)this, mask - n_syms + 2, 1);
+      __init_symbol_list(&lists[0], mask - n_syms + 2, 1);
       lists[0].rescale_at = 19 * lists[0].n;
       if ( !(this->alphabet == 0) )
       {
@@ -11710,7 +11707,7 @@ inline void ModelBlock::unmodel_plane_slow(uint8_t *dst)
   this_1->alpha_map = (uint8_t *)buf;
   memset(buf,1,alpha_n);
   blk->escape_list = &blk->escape;
-  __init_symbol_list(&blk->escape, (int32_t)blk, blk->alphabet, 1);
+  __init_symbol_list(&blk->escape, blk->alphabet, 1);
   blk->sel_cur = blk->sel;
   // The count word, then `n` lists.  `free_workspace` reads the count back
   // from `sym_list_count(lists)`.
@@ -11747,8 +11744,8 @@ inline void ModelBlock::unmodel_plane_slow(uint8_t *dst)
     s = 0;
     do
     {
-      __init_symbol_list(&blk->sel1_list[s], (int32_t)blk, 99, 0);
-      __init_symbol_list(&blk->sel0_list[s++], (int32_t)blk, 33, 0);
+      __init_symbol_list(&blk->sel1_list[s], 99, 0);
+      __init_symbol_list(&blk->sel0_list[s++], 33, 0);
     }
     while ( (uint32_t)s < blk->alphabet );
   }
@@ -12199,16 +12196,16 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
             *(src + off1) = out1;
             cur1 = recon1;
           }
-          __alt_p1_encode_symbol((uint16_t *)&((uint8_t**)blk1)[4 * blk1->ctx[0] + 950], 16 * blk1->ctx[0], (int32_t)blk1->ctx[1], code1x);
+          __alt_p1_encode_symbol((uint16_t *)&blk1->counters[blk1->ctx[0]], 16 * blk1->ctx[0], (int32_t)blk1->ctx[1], code1x);
           err1 = cur1 - blk1->pred;
           blk1->cursor[0]->sym = cur1;
           blk1->cursor[0]->mag = (BYTE4(err1) ^ err1) - BYTE4(err1);
-          ((uint8_t**)blk1)[blk1->ctx[2] + 6] = &((uint8_t**)blk1)[blk1->ctx[2] + 6][blk1->cursor[0]->mag
+          blk1->ctx[blk1->ctx[2] + 3] += (blk1->cursor[0]->mag
                                                            - blk1->cursor[0][-4].mag
                                                            - (blk1->cursor[4][-2].mag
                                                             - blk1->cursor[4][6].mag)
                                                            - (blk1->cursor[2][-2].mag
-                                                            - blk1->cursor[2][6].mag)];
+                                                            - blk1->cursor[2][6].mag));
           blk1->ctx[2] = blk1->ctx[2] == 0;
           if ( blk1->counters[blk1->ctx[0]].total < 0x4000u )
             ((AltP1Block *)blk1)->update_model();
@@ -12244,19 +12241,19 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
             want2 = recon2;
             *(off2 + src) = out2;
           }
-          __alt_p1_encode_symbol((uint16_t *)&((uint8_t**)blk2)[4 * blk2->ctx[0] + 950], code2, (int32_t)blk2->ctx[1], code2);
+          __alt_p1_encode_symbol((uint16_t *)&blk2->counters[blk2->ctx[0]], code2, (int32_t)blk2->ctx[1], code2);
           err2 = want2 - blk2->pred;
           blk2->cursor[0]->sym = want2;
           blk2->cursor[0]->mag = (BYTE4(err2) ^ err2) - BYTE4(err2);
-          ((uint8_t**)blk2)[blk2->ctx[2] + 6] = &((uint8_t**)blk2)[blk2->ctx[2] + 6][blk2->cursor[0]->mag
+          blk2->ctx[blk2->ctx[2] + 3] += (blk2->cursor[0]->mag
                                                            - blk2->cursor[0][-4].mag
                                                            - (blk2->cursor[4][-2].mag
                                                             - blk2->cursor[4][6].mag)
                                                            - (blk2->cursor[2][-2].mag
-                                                            - blk2->cursor[2][6].mag)];
-          at2 = 4 * blk2->ctx[0];
+                                                            - blk2->cursor[2][6].mag));
+          at2 = blk2->ctx[0];
           blk2->ctx[2] = blk2->ctx[2] == 0;
-          if ( LOWORD(((uint8_t**)blk2)[at2 + 950]) < 0x4000u )
+          if ( blk2->counters[at2].total < 0x4000u )
             ((AltP1Block *)blk2)->update_model();
           ++blk2->cursor[0];
           ++blk2->cursor[1];
@@ -12294,16 +12291,16 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
               cur3 = recon3;
               *(off3 + src) = out3;
             }
-            __alt_p1_encode_symbol((uint16_t *)&((uint8_t**)blk3)[4 * blk3->ctx[0] + 950], code3, (int32_t)blk3->ctx[1], code3);
+            __alt_p1_encode_symbol((uint16_t *)&blk3->counters[blk3->ctx[0]], code3, (int32_t)blk3->ctx[1], code3);
             err3 = cur3 - blk3->pred;
             blk3->cursor[0]->sym = cur3;
             blk3->cursor[0]->mag = (BYTE4(err3) ^ err3) - BYTE4(err3);
-            ((uint8_t**)blk3)[blk3->ctx[2] + 6] = &((uint8_t**)blk3)[blk3->ctx[2] + 6][blk3->cursor[0]->mag
+            blk3->ctx[blk3->ctx[2] + 3] += (blk3->cursor[0]->mag
                                                              - blk3->cursor[0][-4].mag
                                                              - (blk3->cursor[4][-2].mag
                                                               - blk3->cursor[4][6].mag)
                                                              - (blk3->cursor[2][-2].mag
-                                                              - blk3->cursor[2][6].mag)];
+                                                              - blk3->cursor[2][6].mag));
             blk3->ctx[2] = blk3->ctx[2] == 0;
             if ( blk3->counters[blk3->ctx[0]].total < 0x4000u )
               ((AltP1Block *)blk3)->update_model();
@@ -15209,7 +15206,7 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
     blk->alpha_map = buf;
     memset(buf,1,alpha_n);
     blk->escape_list = &blk->escape;
-    __init_symbol_list(&blk->escape, 0, blk->alphabet, 1);
+    __init_symbol_list(&blk->escape, blk->alphabet, 1);
     blk->sel_cur = blk->sel;
     n_syms = blk->alphabet;
     blk1 = (SymListBlock *)bmf_new(SymListBlock::bytes(n_syms));
@@ -15254,8 +15251,8 @@ void __model_plane( BmfImage *p_i, uint8_t *pixels, uint8_t *raw)
       s = 0;
       do
       {
-        __init_symbol_list(&blk->sel1_list[s], 0, 99, 0);
-        __init_symbol_list(&blk->sel0_list[s++], 0, 33, 0);
+        __init_symbol_list(&blk->sel1_list[s], 99, 0);
+        __init_symbol_list(&blk->sel0_list[s++], 33, 0);
       }
       while ( (uint32_t)s < blk->alphabet );
     }
@@ -15398,7 +15395,10 @@ void __model_planes(uint8_t *img, uint8_t *pixels, int32_t plane, int8_t unread_
 }
 
 
-void __transform_planes(BmfImage *p_i, int32_t unread_mode, int8_t unread_flag)
+// `unread_mode` is gone, for the same reason as `__init_symbol_list`'s second
+// parameter: unread, and its six call sites passed a candidate index at three
+// of them, a plane pointer at two, and the image itself at the last.
+void __transform_planes(BmfImage *p_i, int8_t unread_flag)
 {
   ;
   uint8_t *arc, *hdr, *tmp, *dst;   // `uint8_t *` beside the `char` scalars above
@@ -15984,7 +15984,7 @@ LABEL_42:
         }
         else
         {
-          __expand_predictor_mode0((uint32_t)plane_buf, img_at->width, img_at->height);
+          __expand_predictor_mode0(plane_buf, img_at->width, img_at->height);
         }
         // `v34` here and `v35` below were declared and never assigned: two more
         // uninitialised bytes into a parameter `interleave_plane` does not read.
@@ -16058,7 +16058,7 @@ LABEL_104:
           }
           else
           {
-            __expand_predictor_mode0((uint32_t)plane_buf, img_at->width, img_at->height);
+            __expand_predictor_mode0(plane_buf, img_at->width, img_at->height);
           }
           __interleave_plane((uint8_t *)img_at, plane_buf, plane2, 0);
         }
@@ -16728,7 +16728,7 @@ LABEL_172:
         }
         while ( plane < ::plane_count );
       }
-      __transform_planes(__frame.tile_img, (int32_t)p1, 0);
+      __transform_planes(__frame.tile_img, 0);
       bits_e = 8 * (out_cursor - coded_buf);
       // never taken: -S
       deep2 = bits_e <= (int32_t)__frame.best_bits;
@@ -16797,7 +16797,7 @@ LABEL_172:
       }
       else
       {
-        __transform_planes(__frame.tile_img, cand, 0);
+        __transform_planes(__frame.tile_img, 0);
         bits_a = (uint8_t *)(8 * (out_cursor - coded_buf));
         // never taken: -S
         deep2 = (int32_t)bits_a <= (int32_t)__frame.best_bits;
@@ -16840,7 +16840,7 @@ LABEL_172:
               }
               while ( pl_b < ::plane_count );
             }
-            __transform_planes(__frame.tile_img, (int32_t)p0, 0);
+            __transform_planes(__frame.tile_img, 0);
             bits2 = 8 * (out_cursor - coded_buf);
             // never taken: -S
             deep2 = bits2 <= (int32_t)__frame.rows[0];
@@ -16916,7 +16916,7 @@ LABEL_63:
       }
       while ( pl_c < ::plane_count );
     }
-    __transform_planes(__frame.tile_img, cand, 0);
+    __transform_planes(__frame.tile_img, 0);
     bits_b = (uint8_t *)(8 * (out_cursor - coded_buf));
     // never taken: -S
     __frame.rows[1] = bits_b;
@@ -16964,7 +16964,7 @@ LABEL_63:
         while ( pl_d < ::plane_count );
       }
       memcpy((uint8_t *)__frame.tile_src,__frame.rows[0],__frame.tile_img->data_size);
-      __transform_planes(__frame.tile_img, cand, 0);
+      __transform_planes(__frame.tile_img, 0);
       bits_c = 8 * (out_cursor - coded_buf);
       // never taken: -S
       deep2 = bits_c <= (int32_t)__frame.best_bits;
@@ -17352,7 +17352,7 @@ LABEL_22:
   }
   else
   {
-    __transform_planes((BmfImage *)p_i, (int32_t)p_i, 0);
+    __transform_planes((BmfImage *)p_i, 0);
   }
 LABEL_57:
   *(uint32_t *)::packer_word = ::packer_acc;
@@ -17575,7 +17575,7 @@ void __bmf_decompress(
       printf("\n%s: %d bits per pixel is not a BMP depth\n", OutName, Depth);
       exit(5);
     }
-    if ( !__write_bmp((int32_t)p_i, (char *)OutName, 1) )
+    if ( !__write_bmp((BmfImage *)p_i, (char *)OutName, 1) )
       __exit_402E40(5, OutName);
     free(coded_block);
     coded_block = nullptr;
