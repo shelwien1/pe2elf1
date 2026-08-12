@@ -161,6 +161,35 @@ open("'"$tmp"'/rawlen.bmf","wb").write(
   done 2>/dev/null
 fi
 
+# And the out-of-memory path, which is `test.sh`'s last leg and the one place
+# a *failed* allocation is the answer.  It matters more on this target than on
+# i386: the records are bigger here -- five pointers in `AltP2Block` and ten in
+# `ModelBlock` -- so the ladder that made an allocation fail on one build is not
+# automatically the ladder that makes it fail on the other.
+if ( ulimit -v 65536 ) >/dev/null 2>&1; then
+  reported=0
+  for kb in 6000 8000 10000 12000 16000; do
+    rm -f "$tmp/oom.bmf"
+    ( ulimit -v $kb; timeout 120 "$tmp/bmf64" c testfiles/t1.bmp "$tmp/oom.bmf" ) \
+        >"$tmp/oom.log" 2>&1
+    rc=$?
+    case $rc in
+      7) grep -q 'Out of memory!' "$tmp/oom.log" || {
+           echo "out of mem  -v $kb exits 7 without saying why"; bad=$((bad + 1)); }
+         reported=1 ;;
+      0|1) ;;
+      *) printf 'out of mem  -v %s %s, not 7\n' "$kb" "$(why $rc)"; bad=$((bad + 1)) ;;
+    esac
+  done
+  ran=$((ran + 1))
+  if [ "$reported" = 1 ]; then
+    same=$((same + 1))
+  else
+    echo "out of mem  no limit in the ladder made an allocation fail"
+    bad=$((bad + 1))
+  fi
+fi
+
 BMF_STRICT=1 BMF_BITS=64 ./build.sh >/dev/null 2>&1
 left=$(python3 tools/ptrwidth.py subs1.hpp | tail -1)
 

@@ -16,11 +16,12 @@ i386 that class is not an error:
 Every one of those is a fact about i386 written in a place the compiler is not
 checking. This round asked the same questions of x86-64, and answered them.
 
-**Result: `tools/x64.sh` reports 21 of 21 cases agreeing with the 32-bit
-build, and it is in `test.sh`.** Seventeen images compress to the *32-bit*
+**Result: `tools/x64.sh` reports 22 of 22 cases agreeing with the 32-bit
+build, and it is in `test.sh`.** Fifteen images compress to the *32-bit*
 reference stream byte for byte and expand back to what the decoder should
 write; the two-member archive reads back to its last member; five malformed
-inputs are refused with the program's own exit codes.
+inputs are refused with the program's own exit codes; and the out-of-memory
+ladder still reports and exits 7 on a target whose records are bigger.
 
 ---
 
@@ -217,7 +218,7 @@ could never have said which *target*.
 
 `test.sh` gained one line, and the argument for it is a positive control:
 reintroducing one line of the `alt_p2_model` byte view leaves all fifteen
-32-bit streams byte-identical and takes the x64 leg from 21 of 21 to 17 of 21.
+32-bit streams byte-identical and takes the x64 leg from 22 of 22 to 18 of 22.
 `BMF_X64_GATE=0` skips it, for a host with no 64-bit toolchain.
 
 Every other instrument takes `BMF_BITS=64` in front of it, and all four are
@@ -228,8 +229,8 @@ BMF_BITS=64 tools/asan.sh      no report in 40 runs over 17 images
 BMF_BITS=64 tools/fuzz.sh      400 mutants: 288 refused, 112 accepted, 0 reported
 BMF_BITS=64 tools/hdrscan.sh   no report in 7680 runs: both one-byte header
                                fields, every value, 15 streams
-tools/x64.sh                   21 of 21, streams compared
-tools/x64.sh --high            21 of 21 with every allocation above 4 GB
+tools/x64.sh                   22 of 22, streams compared
+tools/x64.sh --high            22 of 22 with every allocation above 4 GB
 tools/x64diff.sh               400 mutants through *both* builds: same exit
                                code, same bytes
 ```
@@ -294,7 +295,7 @@ reloaded a few lines later:
 __frame.slot7 = (ModelBlock *)(uintptr_t)(uint32_t)(uintptr_t)blk1;
 ```
 
-reads **21 of 21 on the default heap and 17 of 21 with the high arena**. The
+reads **22 of 22 on the default heap and 18 of 22 with the high arena**. The
 ordinary run is blind to the class the whole round is about; only the second
 one is evidence.
 
@@ -322,7 +323,8 @@ up `out_rle4.bmp` and `out_rle8.bmp` -- not inputs, but what the decoder is
 expected to *write*, and `test.sh` excludes them. And a missing reference was
 a skip; it is a failure now, for the reason above.
 
-The count is 21 of 21 with the comparison running.
+The count is 22 of 22 with the comparison running, the out-of-memory ladder
+added, and `out_rle4`/`out_rle8` no longer counted as inputs.
 
 ---
 
@@ -379,9 +381,9 @@ target where the mistake has a consequence — which is the whole argument for
 | `tools/ptrwidth.py` | which pointers still go through a 32-bit integer, and which of the four kinds each is | 0 |
 | `tools/rawoffset.py` | which numbers in the code are a member offset the file itself states | 0 |
 | `tools/negindex.py` | which negative indices are negated in an unsigned type | 0 |
-| `tools/x64.sh` | whether the other pointer width gives the same answers | 21 of 21 |
+| `tools/x64.sh` | whether the other pointer width gives the same answers | 22 of 22 |
 | `tools/x64diff.sh` | whether the two agree on inputs nobody chose | 400 mutants, no disagreement |
-| `tools/x64.sh --high` | whether any 32-bit pointer field survives, by putting every allocation where one cannot reach | 21 of 21 |
+| `tools/x64.sh --high` | whether any 32-bit pointer field survives, by putting every allocation where one cannot reach | 22 of 22 |
 
 `BMF_WARN=1 BMF_BITS=64 ./build.sh` writes `warn64.log`, and `warn64.txt` is
 its ceiling — a ratchet like `warn.txt` and over a different population, since
