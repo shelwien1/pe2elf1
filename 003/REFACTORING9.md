@@ -3503,3 +3503,24 @@ before the signature's parenthesis, not the first, or
 Nothing in the sweep moves: those spans held no code, so every rule that
 walked them found nothing there, which is why nine rounds of zeros never said
 so. What changes is what the zeros are *of*.
+
+### A workaround that outlived what it worked around
+
+`addrmap.py`'s list of names it should not report as unmapped had two entries
+that were not names:
+
+```python
+# scaffolding this tree wrote, and two names `bodies()` picks up from
+# attribute syntax -- neither came out of BMF.exe, so neither is missing
+ours = {'alignas', 'attribute__', 'main', …}
+```
+
+So the parser bug was known, in another file, and named in a comment that
+called it "attribute syntax" — worked around where it surfaced rather than
+fixed where it was. Its own `0 named bodies have no recorded address` was
+resting on the workaround.
+
+With the parser fixed both entries go, and one real name comes out from behind
+them: `exit_402E40`. That is not a body whose address nobody found — the
+address *is* the name, which is what `__sub_XXXXXX` means too, and the check
+now says so.

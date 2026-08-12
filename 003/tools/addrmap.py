@@ -187,9 +187,14 @@ def main():
     for name in sorted(pairs, key=lambda n: pairs[n]):
         print('%-26s 0x00%s' % (name, pairs[name]))
 
-    # scaffolding this tree wrote, and two names `bodies()` picks up from
-    # attribute syntax -- neither came out of BMF.exe, so neither is missing
-    ours = {'alignas', 'attribute__', 'main', 'bmf_addr', 'bmf_data_relocate',
+    # Scaffolding this tree wrote: none of it came out of BMF.exe, so none of
+    # it is missing.  `alignas` and `attribute__` used to be here too -- two
+    # names `structs.bodies` invented out of an array initialiser and an
+    # attribute -- and naming them here was working around a parser bug in
+    # another file rather than fixing it.  REFACTORING9.md section 45 fixed it,
+    # and dropping them from this list is how a workaround stops outliving the
+    # thing it worked around.
+    ours = {'main', 'bmf_addr', 'bmf_data_relocate',
             'bmf_set_denormal_mode', 'bmf_compress', 'bmf_decompress',
             # A method this project wrote rather than moved: `SymList::rescale`
             # is the fifty-three lines `code_symbol` and `add_weight` both had
@@ -198,8 +203,13 @@ def main():
             # than left in the missing list, where it would read as a body
             # whose address nobody has found.
             'rescale'}
+    # A name that still ends in its address -- `exit_402E40`, the CRT entry
+    # nothing renamed -- is not a name with no recorded address.  The record is
+    # the name.  `__sub_XXXXXX` is the same case with the original prefix.
     missing = sorted({n.lstrip('_') for n in defined
-                      if not n.startswith('__sub_')} - set(pairs) - ours)
+                      if not n.startswith('__sub_')
+                      and not re.search(r'_[0-9A-F]{6}$', n)}
+                     - set(pairs) - ours)
     print('\n# %d mapped.  %d named bodies have no recorded address:'
           % (len(pairs), len(missing)))
     for i in range(0, len(missing), 4):
