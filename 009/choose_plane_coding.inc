@@ -62,12 +62,32 @@ int32_t __choose_plane_coding(BmfImage* img, int32_t unused_h, int8_t unused_c) 
   uint8_t buf_3[2048], buf_4[2048], buf_2[2048];
   alignas(16) int32_t x0[4], x1[4], x2[4], x3[4], x4[4], x5[4];
   double d1, d2, d3;
+  // One run of the original frame, and the body indexes across every boundary
+  // in it, so the six are bound onto one buffer at the offsets they had:
+  //
+  //     0   acc0[4]     the three candidates' costs are one 3x4 table --
+  //    16   acc1[5]     `acc0[4*xform+2]` and `scratch[16*xform+16]` read
+  //    56   d4          rows 1 and 2 of it from inside `acc1`
+  //    64   tbl16[16]   and the three 64-byte tables are one 3x16 table:
+  //   128   tbl64a[64]  `&tbl16[16*xform]` selects a row by walking off the
+  //   192   tbl64b[64]  end of the first, and the loop above zeroes all 192
+  //                     bytes of it as one block -- `scratch[64..255]`
+  //
+  // `acc0` and `acc1` were bound here when the frame was lifted; the tables
+  // were left as separate locals, and `tbl16` was placed 8 bytes early, over
+  // `d4`.  So for `xform != 0` the 64 bytes this copies into `plane_desc` --
+  // the image's plane order -- came from whatever the compiler put after
+  // `tbl16`, and three planes claimed the same source while two were never
+  // coded.  Every image in the corpus picks `xform == 0`, where the row is the
+  // buffer `__cost_candidate` was actually given, so the gate said nothing;
+  // `testfiles/xform1.bmp` is the image that does not.
   alignas(16) uint8_t scratch[256];
   int32_t(&acc0)[4] = *(int32_t(*)[4])&scratch[0];
   uint64_t(&acc1)[5] = *(uint64_t(*)[5])&scratch[16];
-  int32_t(&tbl16)[16] = *(int32_t(*)[16])&scratch[56];
-  double d4;
-  uint8_t tbl64a[64], tbl64b[64];
+  double&d4 = *(double*)&scratch[56];
+  int32_t(&tbl16)[16] = *(int32_t(*)[16])&scratch[64];
+  uint8_t(&tbl64a)[64] = *(uint8_t(*)[64])&scratch[128];
+  uint8_t(&tbl64b)[64] = *(uint8_t(*)[64])&scratch[192];
   int64_t q2;
   double d5, d6;
   uint8_t* row_c, * row_d;

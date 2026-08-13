@@ -6,13 +6,21 @@
 #     BMF_IMAGES='t24 t8g' ./test.sh
 #     BMF_TIMEOUT=25 ./test.sh       # what tools/struct-sweep.sh runs it with
 #
-# The corpus is testfiles/: fifteen .bmp inputs and, for each, the stream this
+# The corpus is testfiles/: seventeen .bmp inputs and, for each, the stream this
 # program is expected to produce for it -- testfiles/ref_<name>.bmf.  A
 # reference is not a claim about what BMF.exe emits; there is no wine here to
 # ask the donor.  It is what the build produced when the reference was taken,
 # which is what a refactoring gate needs: a change that was not meant to move
 # the compressed output and moved it has been caught, and one that was meant to
 # says so in a commit message and re-takes the references with tools/mkrefs.sh.
+#
+# `xform1` and `xform2` are the two exceptions, and they are a stronger claim:
+# their references were taken from a build of the *original decompilation* --
+# the first commit of the tree, before any refactoring round -- because they
+# exist to pin a defect a refactoring round introduced, and a reference taken
+# from the build under test could not have caught it.  See the header of
+# `choose_plane_coding.inc`.  Every other image picks colour transform 0; these
+# two are the only ones in the corpus that pick 1 and 2.
 #
 # Six legs, because "the streams match" is a much narrower statement than it
 # sounds and five kinds of defect live outside it:
