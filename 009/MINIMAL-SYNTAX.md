@@ -28,8 +28,17 @@ kept without its outcome is a plan that gets re-proposed.
 | `if( (x) )` | 2 | **2** | |
 | `while( 1 )` with a break | ~16 | **0** | see Phase 7 |
 
-Lines 12,187 → 12,071. Warnings 4 → 4, shadows 0, and `-Wshadow` is now in the
-ratchet.
+Lines 12,187 → 12,071 at the round's end. Warnings 4 → 4, shadows 0, and
+`-Wshadow` is now in the ratchet.
+
+**Re-taken after the round**, because the tree moved for a reason that had
+nothing to do with it: a bug report against `choose_plane_coding`'s plane-order
+table (see that file's header). Every count in the table above is unchanged —
+`this->` 0, `::` 0, `blk->` 224, `!= 0` 11, `= (x);` 0, `while( 1 )` 32,
+`__frame.` 972 — the warning count is still 4 with no shadows, and
+`deadcheck`, `methodise`, `unstale` and `liftframe` all still answer zero over
+a unit they can read. The tree is 12,091 lines now; the twenty are that fix's
+comment.
 
 ---
 

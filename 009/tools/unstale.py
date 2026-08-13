@@ -17,7 +17,9 @@ became `SymList::init` and the sentence saying so has to keep both names.  A
 check that cannot tell "the program no longer has this" from "the document is
 about the program no longer having this" would be answered by deleting the
 history, which is the wrong repair.  Pass it on the command line to see the
-list anyway; six of the seven names are prose and one is a keyword.
+list anyway: it is tool names, a calling convention, a keyword, and the names
+the round replaced -- and a count of them here would be one more measurement
+that stops being re-taken, which is what the rest of this file is about.
 
 So this reads every identifier the two documents put in backticks and asks
 whether the source still has it.  A name is known if `subs1.hpp` or `bmf.cpp`
