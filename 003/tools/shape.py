@@ -22,6 +22,7 @@ import sys
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 import buildlog                                                   # noqa: E402
 import negindex                                                 # noqa: E402
+import ptrwidth                                                 # noqa: E402
 import rawoffset                                                # noqa: E402
 import structs                                                    # noqa: E402
 
@@ -263,6 +264,12 @@ def summary():
     row('  negative indices, unsigned name',
         sum(1 for r in negindex.survey(lines)
             if r[3].startswith('uint') or r[3] == '?'))
+    # And the fourth way, which is neither an offset nor an index: a pointer
+    # put in an integer *name*, where the cast and the narrowing are lines
+    # apart.  Counted here and not from `ptrwidth.py`'s total, because that
+    # total needs a build log for the target and this row must answer for any
+    # file the census is pointed at.
+    row('  pointers parked in a name', len(ptrwidth.parked(lines)))
     # `sizeof(void *)` is not a cast, and thirty-three of them -- one per
     # layout assertion -- were in this figure from the day it was written.
     # The lookbehind is the whole correction.

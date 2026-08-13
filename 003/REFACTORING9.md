@@ -32,6 +32,7 @@ raw-offset sites                                22          12           0
   in functions                                   —           1           0
 offsets written as numbers                       —           —           0
   negative indices, unsigned name                —           —           0
+  pointers parked in a name                      —           —           0
 byte offsets on a typed base                   121           0           0
 pointer casts                                 2137        1545         755
   to a scalar                                    —           —         290
