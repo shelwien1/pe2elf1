@@ -11,6 +11,33 @@
 // still say is that the four files before `decls.inc` are the ones everything
 // is written in terms of: the decompiler's macros, the allocator, the constant
 // tables and the program's state.
+//
+// ## the encode/decode pairs
+//
+// Nine of them are one `template<int f_DEC>` each, instantiated as the two
+// names their callers use.  What decided which: how many lines the two bodies
+// actually share, measured as a longest common subsequence over the pair.
+//
+//   __rc_end                    5 + 5      __alt_p1_code_symbol   53 + 49
+//   __alt_model_p2_d8          11 + 11     __code_symbol_tree     85 + 86
+//   BitCtr::code_context_bit   52 + 50     __alt_p2_d8_body      171 + 147
+//   __rc_begin                 91 + 89     __alt_model_p1        263 + 212
+//   P2Freq::code_symbol        49 + 55
+//
+// Five pairs were measured and declined.  What they share is not the body --
+// it is the declaration block and the loop scaffolding -- and folding them
+// would put two unrelated algorithms behind one `if`:
+//
+//   __alt_model_p2_encode/decode     130 of 646 lines shared (20%)
+//   code_pixel/decode_pixel          179 of 1229 (14%)
+//   __predict_med/__unpredict_med     24 of 152 (15%)
+//   __alt_model_p1_d8_encode/decode    6 of 98 (6%)
+//   __model_plane/__unmodel_plane     10 of 271 (3%)
+//
+// Every merge was gated on its own -- the fifteen streams byte for byte, at
+// both pointer widths -- and then all nine were instrumented and run over the
+// corpus to check that both instantiations are actually entered.  A template
+// whose decode half never runs is a gate passing about nothing.
 
 #include <cctype>
 #include <cmath>
@@ -41,8 +68,7 @@
 #include "workspace.inc"
 #include "reduce_alphabet.inc"
 #include "p1.inc"
-#include "alt_model_p1_encode.inc"
-#include "alt_model_p1_decode.inc"
+#include "alt_model_p1.inc"
 #include "p2.inc"
 #include "alt_p2_context.inc"
 #include "alt_p2_model.inc"
