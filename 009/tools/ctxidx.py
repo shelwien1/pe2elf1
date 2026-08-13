@@ -169,10 +169,11 @@ def main():
     path = sys.argv[1] if len(sys.argv) > 1 else 'alt_p2_context.inc'
     src = open(path).read().split('\n')
     want = int(sys.argv[sys.argv.index('--line') + 1]) if '--line' in sys.argv else None
-    n_conv = n_raw = 0
+    n_conv = n_raw = seen = 0
     for i, l in enumerate(src, 1):
         if not re.search(r'&0x[0-9A-F]+\|', l):
             continue
+        seen += 1
         if want and i != want:
             continue
         head, rhs = l.split('=', 1)
@@ -223,6 +224,14 @@ def main():
                 open(path, 'w').write('\n'.join(src))
                 print('-- applied to %s:%d' % (path, i))
     if not want:
+        if not seen:
+            # `sweep.sh` hands every tool a copy of `bmf.cpp`, which is the
+            # include list: no masked context words are in it, and "0 terms
+            # convert" from a file that has none reads exactly like a tree with
+            # nothing left to do.  Say which it is.
+            print('not applicable: %s has no masked context words -- they are '
+                  'in alt_p2_context.inc' % path)
+            return 0
         print('%d terms convert, %d stay masked' % (n_conv, n_raw))
     return 0
 
