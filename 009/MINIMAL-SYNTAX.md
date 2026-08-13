@@ -64,6 +64,13 @@ anything reports the same zero as a clean tree.** It happened four times — the
 three tools above, and `methodise.py`, whose rule keyed on a parameter named
 `_this` while the two functions it was written for called theirs `blk`.
 
+The plan named two tools as needing repair before they could contribute.
+`methodise.py` was one and is repaired (Phase 3). The other, `unnamed.py`,
+**cannot be**: it joins the tree against the first commit of the Hex-Rays
+output to say which names nobody has chosen yet, and that commit is in the
+repository the earlier rounds were done in, not this one. It says so now
+instead of failing, and the sweep counts it apart rather than as a finding.
+
 And the compiler agreed where it could be asked: **`-Wuseless-cast` reports 0**
 over the whole translation unit. So the 590 integer casts and 207
 struct-pointer casts in the tree are not same-type casts; they all convert
@@ -326,9 +333,18 @@ round in this tree ends with:
 ./tools/x32.sh                           22 of 22 across the two widths
 ./tools/asan.sh                          nothing in 40 runs over 17 images
 ./tools/fuzz.sh 400                      nothing
+./tools/hdrscan.sh                       every value of both header bytes
 ./tools/sweep.sh bmf.cpp                 every counting tool at zero
 BMF_WARN=1 ./build.sh                    4, and zero shadows
 ```
+
+The sweep's own summary carries one more line — three tools ask about something
+this repository does not have (the previous round's document, the blob globals
+a round removed, the first commit of the Hex-Rays output). Two of them died on
+it and one said so in prose, and the sweep read all three as findings. They say
+`not applicable:` now and are counted apart. The tempting repair — answering
+zero — is the one thing that must not happen, and this whole round is a record
+of why.
 
 The warning count is the ratchet, and Phase 1 moved it: `-Wshadow` joined the
 set, so the target after Phase 1 was not "still 4" but "4, and zero shadows".

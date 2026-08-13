@@ -32,10 +32,10 @@ one, and this declines it.  `MINIMAL-SYNTAX.md` §3 is where that widening was
 asked for; the two bodies it was asked for were done by hand before the tool
 could, and the tool is what answers for the rest.
 
-The two remaining `_this` bodies are honest declines and there is no type for
-either to be a method of: `update_binary_pair` takes a `uint16_t *` into a
-counter block, and `alt_p2_filter` takes a `float (*)[4]` -- a weight block,
-which wants a name rather than a receiver.
+Two bodies still carry a `_this` and both are honest declines, because there
+is no type for either to be a method of: `update_binary_pair` takes a
+`uint16_t *` into a counter block, and `alt_p2_filter` takes a `float (*)[4]`
+-- a weight block, which wants a name rather than a receiver.
 
 The unit is 37 files, so a candidate's body, its struct and its call sites are
 usually in three different ones.  Analysis runs over the unit as the compiler
@@ -45,9 +45,10 @@ other direction: `bmf.cpp` alone is an include list with no bodies in it at all.
 
 What the rewrite does, and does not do:
 
-  * the body's `_this` becomes `this`.  Not `this->x` to `x`: a body that
-    declares a local with a member's name would silently change meaning, and
-    the second step below is where that gets decided one name at a time;
+  * the body's receiver -- `_this`, `blk`, `list`, whatever it was called --
+    becomes `this`.  Not `this->x` to `x`: a body that declares a local with a
+    member's name would silently change meaning, and that is decided one name
+    at a time afterwards, with `-Wshadow` naming them;
   * the declaration goes inside the struct and the definition stays where the
     body is, as `inline R T::name(…)`.  The file is one translation unit, so
     `inline` is what keeps the linker quiet, and the body does not move --
@@ -279,23 +280,6 @@ def rewrite_definition(lines, nm, rec, ret, a, b, p):
     lines[head:j + 1] = ['inline %s %s::%s(%s)' % (ret, rec, short, params),
                          '{']
     return params, None
-
-
-def apply(lines, nm, rec, ret, rest, a, b, p):
-    """Rewrite one body, its declaration and its call sites, in one list."""
-    short = nm.lstrip('_')
-    close = struct_end(lines, rec)
-    if close is None:
-        return False, '%s: no struct %s' % (short, rec)
-    params, why = rewrite_definition(lines, nm, rec, ret, a, b, p)
-    if params is None:
-        return False, why
-    # 3. the declaration, just inside the struct
-    lines.insert(close, '  %s %s(%s);' % (ret, short, params))
-    # 4. every call site
-    text, hits = rewrite_calls('\n'.join(lines), nm, short)
-    lines[:] = text.split('\n')
-    return True, '%s -> %s::%s, %d call sites' % (short, rec, short, hits)
 
 
 def unit_of(path):
