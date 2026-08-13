@@ -6,3 +6,9 @@ run/
 .wine/
 __pycache__/
 *.pyc
+
+# a script edited while bash is running it can jump to a wrong file offset,
+# so a long run is started from a copy beside the original.  The copy is not
+# the tool -- two byte-identical scripts and no way to say which is real --
+# and one of them reached a commit before this line existed.
+tools/.*.sh
