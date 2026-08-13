@@ -3,10 +3,8 @@
 void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   uint32_t alpha_n, hi;
   int32_t y1, bucket, f_b3, f_b0, f_b4, f_b1, f_b2, f_b5, alpha;
-  uint16_t* word;
   ModelBlock* blk;
   PixRec* r4, * r0;
-  uint8_t* buf;
   int16_t w2n, wt;
   uint32_t row_w;
   int32_t g, flags, lo, w3, w4, has3, has4, lvl, lvl2, live, s, y, x, x2, step;
@@ -14,11 +12,8 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   PixRec* row_cur3, * row_cur2, * row_cur1;
   uint32_t gi, n_syms, j, n_syms2, k;
   SymListBlock* blk1, * blk0;
-  SymPair* group_ctr;
   SymList* lists1, * lists0;
-  FreqRec* rec;
   PixRec* up1, * up2;
-  void* ws;
   if( plane_alt_model ) {
     if( plane_predictor==1 ) {
       if( (p_i->depth&0x3F)==8 )
@@ -32,7 +27,7 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
         __alt_model_p2_encode(p_i, pixels);
     }
   } else {
-    ws = bmf_new(sizeof(ModelBlock));
+    void* ws = bmf_new(sizeof(ModelBlock));
     if( ws )
       blk = __layout_workspace((ModelBlock*)ws, p_i->height, p_i->width, p_i->height, p_i->depth&0x3F);
     else
@@ -56,7 +51,7 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
         do {
           blk->ctx_bucket[g+15*lo+75*hi] = bucket;
           alpha = blk->alphabet;
-          rec = &blk->grid[bucket];
+          FreqRec* rec = &blk->grid[bucket];
           w2n = 2;
           rec->w[0] = 2;
           w2 = 2;
@@ -125,14 +120,14 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
         ++lo;
       } while( (uint32_t)lo<5 );
       gi = 0;
-      group_ctr = blk->group_ctr[g];
+      SymPair* group_ctr = blk->group_ctr[g];
       do {
         group_ctr[gi].last = 0x2000;
         group_ctr[gi++].prev = 0x2000;
       } while( gi<0x10000 );
       ++g;
     } while( (uint32_t)g<0xF );
-    buf = (uint8_t*)bmf_new(blk->alphabet);
+    uint8_t* buf = (uint8_t*)bmf_new(blk->alphabet);
     alpha_n = blk->alphabet;
     blk->alpha_map = buf;
     memset(buf, 1, alpha_n);
@@ -173,7 +168,7 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
       } while( (uint32_t)s<blk->alphabet );
     }
     if( blk->height>0 ) {
-      word = blk->sym_word;
+      uint16_t* word = blk->sym_word;
       y = 0;
       do {
         y1 = y+1;

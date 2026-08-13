@@ -85,8 +85,6 @@ void __alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* 
 void**__alt_model_p1_d8_decode(int8_t unread_flag, uint8_t* out, int32_t i, int32_t height) {
   P1Ctx* buf1, * b0, * cursor0, * b4, * buf3, * buf2;
   AltP1Block* blk, * raw;
-  int64_t err;
-  uint8_t* out_at;
   int32_t y, val, x, code;
   P1Ctx* cursor2, * cursor4;
   raw = (AltP1Block*)bmf_new(sizeof(AltP1Block));
@@ -140,7 +138,7 @@ void**__alt_model_p1_d8_decode(int8_t unread_flag, uint8_t* out, int32_t i, int3
       blk->ctx[3] = cursor2[-2].mag+cursor4[-2].mag+cursor2[0].mag+cursor4[0].mag+cursor2[2].mag+cursor4[2].mag+cursor2[4].mag+cursor4[4].mag+cursor0[-4].mag+cursor0[-2].mag;
       blk->ctx[4] = cursor2[-1].mag+cursor4[-1].mag+cursor2[1].mag+cursor4[1].mag+cursor2[3].mag+cursor4[3].mag+cursor2[5].mag+cursor4[5].mag+cursor0[-3].mag+cursor0[-1].mag;
       if( !(blk->width<=0) ) {
-        out_at = out;
+        uint8_t* out_at = out;
         x = 0;
         do {
           ++x;
@@ -148,7 +146,7 @@ void**__alt_model_p1_d8_decode(int8_t unread_flag, uint8_t* out, int32_t i, int3
           code = __alt_p1_decode_symbol((uint16_t*)&blk->counters[blk->ctx[0]], 0, blk->ctx[1]);
           val = (uint8_t)((uint8_t)blk->pred+blk->unfold[(uint8_t)code]);
           *out_at = val;
-          err = val-blk->pred;
+          int64_t err = val-blk->pred;
           blk->cursor[0]->sym = val;
           blk->cursor[0]->mag = (BYTE4(err)^err)-BYTE4(err);
           blk->ctx[3+blk->ctx[2]] = blk->ctx[3+blk->ctx[2]]+blk->cursor[0]->mag-blk->cursor[0][-4].mag-(blk->cursor[4][-2].mag-blk->cursor[4][6].mag+blk->cursor[2][-2].mag-blk->cursor[2][6].mag);

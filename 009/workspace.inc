@@ -46,11 +46,7 @@ void**__free_workspace(ModelBlock* blk, int8_t do_free) {
 }
 
 ModelBlock*__layout_workspace(ModelBlock* blk, int32_t unread_flag, int32_t img_w, int32_t img_h, int32_t img_depth) {
-  PixRec* buf;
-  uint8_t bucket;
-  uint16_t rev;
   uint32_t e0, e1, w;
-  uint8_t* runs;
   int32_t j, r, x, bits;
   uint32_t k, m, s, n, i8, i24;
   w = img_w;
@@ -62,7 +58,7 @@ ModelBlock*__layout_workspace(ModelBlock* blk, int32_t unread_flag, int32_t img_
   blk->escape.ent = nullptr;
   blk->sym_code = nullptr;
   for( j = 0; j<5; ++j ) {
-    buf = (PixRec*)bmf_new(sizeof(PixRec)*(w+16));
+    PixRec* buf = (PixRec*)bmf_new(sizeof(PixRec)*(w+16));
     blk->row_cur[j] = buf;
     blk->row_cur[j+5] = buf+8;
     w = blk->width;
@@ -81,11 +77,11 @@ ModelBlock*__layout_workspace(ModelBlock* blk, int32_t unread_flag, int32_t img_
       } while( (uint32_t)r<blk->width+16 );
     }
   }
-  runs = (uint8_t*)bmf_new(w+1);
+  uint8_t* runs = (uint8_t*)bmf_new(w+1);
   blk->run_bucket = runs;
   *runs = 0;
   if( (int32_t)blk->width>0 ) {
-    bucket = 0;
+    uint8_t bucket = 0;
     x = 0;
     do {
       bucket += x==2<<(bucket&31);
@@ -94,7 +90,7 @@ ModelBlock*__layout_workspace(ModelBlock* blk, int32_t unread_flag, int32_t img_
   }
   __builtin_memset(blk->sym_rev, 0, sizeof blk->sym_rev);
   for( k = 0; k<0x2000; ++k ) {
-    rev = blk->sym_rev[k];
+    uint16_t rev = blk->sym_rev[k];
     bits = k;
     for( m = 0; m<0xD; ++m ) {
       rev += rev+(bits&1);

@@ -3,22 +3,19 @@
 int32_t*__read_bmp(char* path) {
   BmfImage* img_f;
   uint8_t* row_ofs;
-  void* pal_buf;
   uint8_t* row, bmp_bgra[4], pix;
   int32_t y4, y8;
   int32_t run4;
   uint8_t* row_at;
   uint8_t* pal, * pal2, * pal3;
-  FILE* fp;
   uint8_t lo;
-  BmfImage* img;
   uint32_t row_pad, byte;
   uint8_t cur, lo16;
   uint8_t* row4, * row3, * row6, * pal_at, * row5;
   int32_t pal_n, i, run, run_val, hi_nibble, left4, left4b, y, dx, dy, dxy, dy4, byte_in, step;
   uint32_t stride_pad, pair, hi, stride, got, left;
   BmpHeader hdr;
-  fp = fopen(path, "rb");
+  FILE* fp = fopen(path, "rb");
   if( !fp||fread(&hdr.bfType, 0xEu, 1u, fp)!=1||hdr.bfType!=0x4D42||fread(&hdr.biSize, 0x28u, 1u, fp)!=1||hdr.biSize!=40||hdr.biPlanes!=1 ) {
     return nullptr;
   }
@@ -31,7 +28,7 @@ int32_t*__read_bmp(char* path) {
       return nullptr;
     }
   }
-  img = (BmfImage*)(__alloc_image(hdr.biWidth, hdr.biHeight, hdr.biBitCount, hdr.biBitCount<=8u, 1));
+  BmfImage* img = (BmfImage*)(__alloc_image(hdr.biWidth, hdr.biHeight, hdr.biBitCount, hdr.biBitCount<=8u, 1));
   if( !img ) {
     fclose(fp);
     return nullptr;
@@ -62,7 +59,7 @@ int32_t*__read_bmp(char* path) {
       }
     }
   }
-  pal_buf = bmf_new(stride_pad<256 ? 256 : stride_pad);
+  void* pal_buf = bmf_new(stride_pad<256 ? 256 : stride_pad);
   row = img->pixels+img->data_size-img->stride;
   fseek(fp, (int32_t)hdr.bfOffBits, 0);
   if( hdr.biCompression ) {

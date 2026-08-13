@@ -120,8 +120,7 @@ static inline uint8_t*bmf_plane_desc(int32_t off) {
 __attribute__((noreturn)) void __exit_402E40(int32_t Code, ...);
 
 t_new_handler __set_new_handler(t_new_handler __out_of_memory_handler) {
-  t_new_handler __set_new_handler_pout_of_memory_handler;
-  __set_new_handler_pout_of_memory_handler = __pout_of_memory_handler;
+  t_new_handler __set_new_handler_pout_of_memory_handler = __pout_of_memory_handler;
   __pout_of_memory_handler = __out_of_memory_handler;
   return __set_new_handler_pout_of_memory_handler;
 }

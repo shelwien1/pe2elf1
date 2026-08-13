@@ -5,13 +5,10 @@ int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
   int32_t xf4, val3;
   AltP2Block* plane[4], ** w;
   uint32_t row_bytes, i_1, first, i_2, np;
-  int32_t back;
   AltP2Block* blk_r, * src3, * blk_k, * blk2, * blk3, * blk1;
   int16_t seed1;
   uint32_t i;
   int16_t seed3, seed2;
-  P2Freq* freq;
-  AltP2Block* blk0;
   uint32_t src2;
   AltP2Block** planep;
   float saved_p2_coef[7][4];
@@ -55,7 +52,7 @@ int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
   __rc_begin_decode(dc_flag);
   if( raw>0 ) {
     src2 = 0;
-    back = -i;
+    int32_t back = -i;
     nplanes = plane_count;
     row_bytes = 18*i+234;
     np = i+13;
@@ -196,9 +193,9 @@ int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
           ctx_bias[1] >>= 3;
           ctx_bias[2] >>= 3;
           ctx_bias[3] >>= 3;
-          blk0 = (AltP2Block*)(plane[0]);
+          AltP2Block* blk0 = (AltP2Block*)(plane[0]);
           pred0 = plane[0]->alt_p2_context(plane[2], plane[1]);
-          freq = &blk0->freq[blk0->ctx];
+          P2Freq* freq = &blk0->freq[blk0->ctx];
           code0 = freq->decode_symbol(blk0->ctx_pair);
           val0 = (uint8_t)(pred0+(blk0->unfold[code0]));
           blk0->alt_p2_model(val0, code0, val0-pred0);

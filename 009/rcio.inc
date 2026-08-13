@@ -46,17 +46,14 @@ void __rc_end_encode() {
 template<int f_DEC>
 uint16_t*__rc_begin() {
   uint16_t* tbl, * row;
-  FreqPair* seed;
   int32_t at4, at5, k;
-  int32_t bits;
-  uint8_t* at;
   int32_t at6, at7;
   uint32_t i;
   if( !f_DEC )
     *packer_word = packer_acc;
-  at = out_cursor;
+  uint8_t* at = out_cursor;
   if( out_cursor!=(uint8_t*)packer_word ) {
-    bits = packer_free_bits-8;
+    int32_t bits = packer_free_bits-8;
     if( bits<0 ) {
       packer_free_bits = bits;
     } else {
@@ -122,7 +119,7 @@ uint16_t*__rc_begin() {
         row[8] = 8;
         row[9] = 4;
         *row = 635;
-        seed = (FreqPair*)&row[10];
+        FreqPair* seed = (FreqPair*)&row[10];
         for( i = 0; i<0x7A; ++i ) {
           seed[i].f[0] = 60;
           seed[i].f[1] = 36;

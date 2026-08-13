@@ -5,7 +5,6 @@ void __expand_predictor_mode0(uint8_t* unread_src, int32_t i, int32_t unread_h) 
 }
 
 uint32_t __predict_med(uint8_t* pixels, int32_t width, int32_t height) {
-  uint8_t left;
   uint32_t done;
   int32_t rows_left, x_left, north, northwest, code, pairs, ofs;
   uint8_t pred, * q;
@@ -59,7 +58,7 @@ uint32_t __predict_med(uint8_t* pixels, int32_t width, int32_t height) {
       k = 0;
       ofs = 0;
       do {
-        left = p[ofs-2];
+        uint8_t left = p[ofs-2];
         ++k;
         p[ofs-1] = fold[(uint8_t)(p[ofs-1]-left)];
         p[ofs-2] = fold[(uint8_t)(left-p[ofs-3])];
@@ -154,10 +153,7 @@ uint8_t*__interleave_plane(uint8_t* img, uint8_t* src, int32_t plane, int8_t unr
 }
 
 uint8_t*__colour_transform(uint8_t* img, uint8_t* dst, int32_t plane, int8_t unread_flag) {
-  uint8_t d;
-  uint8_t* ref;
   int32_t wgt1, i2, ofs2, n_flat, step, i, ofs, left3, x3, wsum, w12sum, left2, x2, mode, to_ref0, wgt2, to_ref1, wgt0, dc, stride, n;
-  uint32_t blend;
   uint8_t* src, * p3, * p2;
   if( !(plane_desc[plane+1].flags&8) ) {
     n_flat = bmf_pixels(img);
@@ -196,11 +192,11 @@ uint8_t*__colour_transform(uint8_t* img, uint8_t* dst, int32_t plane, int8_t unr
   }
   if( by_weights||plane_desc[plane+1].nrefs==1 ) {
     img += plane;
-    ref = &img[to_ref0];
+    uint8_t* ref = &img[to_ref0];
     i2 = 0;
     ofs2 = 0;
     do {
-      d = img[ofs2+16]-dc-ref[ofs2+16];
+      uint8_t d = img[ofs2+16]-dc-ref[ofs2+16];
       ofs2 += stride;
       dst[i2++] = d;
     } while( i2<n );
@@ -211,7 +207,7 @@ uint8_t*__colour_transform(uint8_t* img, uint8_t* dst, int32_t plane, int8_t unr
     p2 = src;
     do {
       x2 = *p2-dc;
-      blend = wgt0*p2[to_ref0]+wgt1*p2[to_ref1]+40;
+      uint32_t blend = wgt0*p2[to_ref0]+wgt1*p2[to_ref1]+40;
       p2 += stride;
       *dst++ = (uint8_t)(x2-(blend>>7));
       --left2;
@@ -314,12 +310,11 @@ uint8_t*__unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
 void __transform_planes(BmfImage* p_i, int8_t unread_flag) {
   uint8_t* arc, * hdr, * tmp, * dst;
   int32_t k, plane, predictor, alt, n, stride, ofs, i;
-  uint8_t* src_pixels;
   memset(hist_scratch, 0, 4096);
   arc = (uint8_t*)coded_buf;
   hdr = (uint8_t*)coded_buf+16;
   *(BmfImage*)hdr = *p_i;
-  src_pixels = (uint8_t*)((uint16_t*)p_i->pixels);
+  uint8_t* src_pixels = (uint8_t*)((uint16_t*)p_i->pixels);
   memcpy(arc+32, p_i->pixels, p_i->data_size);
   tmp = (uint8_t*)bmf_new(p_i->width*p_i->height);
   if( plane_count>0 ) {

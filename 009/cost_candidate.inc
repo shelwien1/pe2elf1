@@ -37,9 +37,6 @@ int32_t __cost_candidate(uint8_t* img, int32_t cand, uint8_t* desc, int8_t unrea
     uint8_t _pad1[28];
   } __frame;
   int32_t cost;
-  int32_t off;
-  uint8_t* descp;
-  bool deep;
   uint32_t row_b2, swap;
   double syz, syy, sxz, sxy, sxx, inv, w1f, w2f;
   int32_t row_b, d1, d2, dx, o1, dy, o2, diag, west, dz, bin, w1, w2, img_w, nstep, e0, e1, e2, left, bin2, pick, c0, rec, c2, lo1, s1, s2, c2b, tmp, w2s, w1s;
@@ -182,15 +179,15 @@ int32_t __cost_candidate(uint8_t* img, int32_t cand, uint8_t* desc, int8_t unrea
     __frame.wa = w2s;
     __frame.wb = w1s;
   }
-  off = __frame.rec_off;
-  descp = __frame.desc_f;
+  int32_t off = __frame.rec_off;
+  uint8_t* descp = __frame.desc_f;
   *(uint32_t*)&__frame.desc_f[__frame.rec_off+4] = __frame.wa;
   *(uint32_t*)&descp[off+8] = __frame.wb;
   idx1 = __frame.cand_i+pick;
   idx2 = __frame.cand_i+__frame.d2_f;
   descp[16*idx1] = 0;
   descp[1] = (uint8_t)idx1;
-  deep = 0;
+  bool deep = 0;
   descp[16*idx2] = 1;
   descp[17] = (uint8_t)idx2;
   if( !deep&&__frame.img_f->data_size>0x1000000u )

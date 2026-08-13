@@ -22,7 +22,6 @@
 template<int f_DEC>
 int32_t __code_symbol_tree(uint16_t* freq, int32_t sym) {
   uint16_t add;
-  int16_t sum4;
   uint32_t cum;
   int32_t lvl, result, go, fa, esc, path, node, span, f1, mask;
   uint16_t* f0, fq, h2, h4, * slot;
@@ -62,7 +61,7 @@ int32_t __code_symbol_tree(uint16_t* freq, int32_t sym) {
     acc = h2+acc;
     h4 = *(freq+4)-(*(freq+4)>>1);
     *(freq+4) = h4;
-    sum4 = acc+h4;
+    int16_t sum4 = acc+h4;
     acc = *(freq+5)-(*(freq+5)>>1);
     acc6 = *(freq+6);
     *(freq+5) = acc;
@@ -153,12 +152,11 @@ int32_t __decode_symbol_tree(uint16_t* freq) {
 template<int f_DEC>
 int32_t __alt_p1_code_symbol(uint16_t* freq, int32_t ctx, int32_t sym) {
   bool done;
-  uint16_t tot0;
   uint32_t cum;
   int32_t slot, result, lo;
   uint16_t* p, * q, nf, * cur, * base;
   uint32_t tot, k, cum_hi;
-  tot0 = *freq;
+  uint16_t tot0 = *freq;
   base = freq+1;
   cur = freq+1;
   tot = tot0&0x7FFF;

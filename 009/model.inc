@@ -61,7 +61,6 @@ struct ModelBlock {
   uint16_t ctx_id2[108800];
   uint16_t ctx_id3[712000];
   int32_t pixel_context(uint32_t* nb) {
-    SymList* sel0;
     bool near, far;
     int32_t band;
     uint32_t result;
@@ -83,7 +82,7 @@ struct ModelBlock {
     ctr_node = ctx0;
     if( (far_hit+near_hit==0)&&pos>6 )
       return -1;
-    sel0 = sel0_list;
+    SymList* sel0 = sel0_list;
     ctx1 = ctx0+8*sym_in_top((sel0[mode_symbol[1]].ent), 10, result);
     ctr_node = ctx1;
     list_prev = sel0[mode_symbol[2]].ent;
@@ -103,7 +102,6 @@ struct ModelBlock {
   int32_t init_tables() {
     SymEntry* slot, * ent;
     PixRec* up1, * up2;
-    uint8_t cnt;
     SymList** cur;
     bool promoted;
     uint16_t* cache;
@@ -150,7 +148,7 @@ struct ModelBlock {
           list->since_rescale += 4;
           if( slot!=list->ent ) {
             sym = slot->sym;
-            cnt = slot->cnt;
+            uint8_t cnt = slot->cnt;
             *slot = slot[-1];
             slot[-1].set(sym, cnt);
           }
@@ -269,7 +267,6 @@ struct ModelBlock {
     SymList lists[16];
     uint32_t* codes_p;
     uint32_t nbytes, bits;
-    void* codes;
     int32_t left2, left, run, gap;
     uint32_t mask, i, cap, n_1, n_syms, j, k, carry, s, b, piece, s2;
     bits = depth;
@@ -285,7 +282,7 @@ struct ModelBlock {
     n_1 = __rc_decode_flat(cap);
     alphabet = n_1+1;
     if( (int32_t)(n_1+1)<=0x2000 ) {
-      codes = bmf_new(sizeof(uint32_t)*(n_1+1));
+      void* codes = bmf_new(sizeof(uint32_t)*(n_1+1));
       n_syms = alphabet;
       sym_code = (uint32_t*)codes;
       if( n_syms ) {
@@ -348,9 +345,7 @@ struct ModelBlock {
 
   void unmodel_plane_slow(uint8_t* dst) {
     uint8_t* row[19];
-    uint32_t alpha_n;
     ModelBlock* this_1, * blk;
-    int16_t lvl;
     uint32_t has4, jj, wt, nbytes, row_w, * out32;
     uint16_t* out16;
     SymEntry* out_ent;
@@ -363,7 +358,6 @@ struct ModelBlock {
     PixRec* kk, * row_cur3, * row_cur2, * row_cur1, * n_syms;
     int32_t g, flags, lo, k, w2, w4, w2n, lvl_n, live, gi, s, bucket, x, x2, y, step, x7, x3, x4, bits, bpp, y2, bpp_raw, nchunk, n_pix, chunk, q5, q1, at, q2, written, n_pix2, x5;
     SymListBlock* has3, * alpha;
-    SymPair* gctr;
     SymList* list_a, * i, * list_b, * j;
     FreqRec* rec;
     PixRec* lists, * t;
@@ -446,7 +440,7 @@ struct ModelBlock {
           }
           if( rec->w[lo1]&&rec->w[k]&&(uint8_t)lvl_n<=m5 ) {
             live = 1;
-            lvl = (uint8_t)(1<<((5-lvl_n)&31));
+            int16_t lvl = (uint8_t)(1<<((5-lvl_n)&31));
             rec->b15 = lvl;
             rec->w[6] = lvl<<6;
             rec->w[lo1] += lvl;
@@ -461,7 +455,7 @@ struct ModelBlock {
         lo = lo1+1;
       } while( lo1+1<5 );
       gi = 0;
-      gctr = this_1->group_ctr[g0];
+      SymPair* gctr = this_1->group_ctr[g0];
       do {
         gctr[gi].last = 0x2000;
         gctr[gi++].prev = 0x2000;
@@ -471,7 +465,7 @@ struct ModelBlock {
     dst_buf = dst_base;
     blk = (ModelBlock*)(this_1);
     buf = (uint8_t*)bmf_new(this_1->alphabet);
-    alpha_n = this_1->alphabet;
+    uint32_t alpha_n = this_1->alphabet;
     this_1->alpha_map = (uint8_t*)buf;
     memset(buf, 1, alpha_n);
     blk->escape_list = &blk->escape;
@@ -1372,12 +1366,10 @@ struct ModelBlock {
     int32_t runlen_s;
     PixRec* r4;
     uint8_t* amap_at;
-    PixRec* up9;
     PixRec* rowp;
     PixRec* row_cur9;
     bool up_eq_west;
     int8_t mode;
-    uint16_t rev;
     int32_t arg_cum;
     FreqRec* frec;
     uint16_t* wr;
@@ -1392,11 +1384,8 @@ struct ModelBlock {
     int32_t bp;
     uint16_t* id3p;
     int16_t s8, w1s, acc2, s3, g0;
-    SymPair* pair;
     int32_t up_sym, left_sym, up_next_sym, upleft_sym, nb, key, state, pair_last, cap, pair_prev, bucket_at, up_match0, m_w1, nb2, sig1, id1, sig2, id2, id3_used, sig3, m_w1b, m_w0, m_up0, to_edge, one, run, run_pair, amap, runlen, run_hit, run_left, s1, s8b, s6, msym1, s4, bit5, first, s5, s1b, s9, cum1, lvl_a, w6a, w5a, b15a, msym3, excl_sym_a, excl_sym_b, w6d, wq1, cache2, cache1, cache3, cache4, cache6, cur5_back2, h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h24, h28, h26, h30, esym, up_hit, pos1, msym1b, w6b, * ip, b15, w2t, w3t, w4t, acc, q1, w2s, q2, w3s, w4s, s9b, cum2, lvl_b, w5c, w6c, w5b, s3b;
     uint16_t w5, w1, h4, h3, h2, w1a, w0;
-    PixRec* row;
-    PixRec* cur6;
     PixRec* cur5, * cur5p1, * cur5p1b, * r6, * r7;
     uint16_t* wq, * cache, w6;
     uint16_t cache0p;
@@ -1405,7 +1394,7 @@ struct ModelBlock {
     uint32_t bin_tot, half, k, g2, g2h;
     PixRec* up3;
     PixRec* cur6c, * up2;
-    cur6 = (PixRec*)row_cur[6];
+    PixRec* cur6 = (PixRec*)row_cur[6];
     up_sym = cur6->sym;
     cur5 = row_cur[5];
     left_sym = cur5[-1].sym;
@@ -1426,7 +1415,7 @@ struct ModelBlock {
     up_eq_west = up_sym==left_sym;
     if( up_eq_west ) {
       if( __frame.sym8==__frame.sym6 ) {
-        rev = sym_rev[__frame.sym8];
+        uint16_t rev = sym_rev[__frame.sym8];
         if( __frame.sym8==__frame.sym5 )
           key = (uint16_t)(rev-cur5[-2].sym);
         else
@@ -1440,7 +1429,7 @@ struct ModelBlock {
     sym_cache = &sym_ctr[8*key];
     state = ctx_state[nb];
     ctx_state_seen = state;
-    pair = &group_ctr[state][key];
+    SymPair* pair = &group_ctr[state][key];
     pix_cur = (uint16_t*)pair;
     pair_last = pair->last;
     if( pair_last==__frame.sym8 ) {
@@ -1473,7 +1462,7 @@ struct ModelBlock {
     match1 = cur6->match[1];
     cur2 = cur5;
     __frame.sym0 = up_match0;
-    up9 = row_cur[9];
+    PixRec* up9 = row_cur[9];
     m_w1 = cur5[-1].match[1];
     nb2 = CtxIdx{}.bit<3>(cur5[-2].match[2]).bit<2>(cur5[-2].match[5])
                   .bit<1>(cur5[-2].match[4]).bit<0>(m_w1);
@@ -1520,7 +1509,7 @@ struct ModelBlock {
         id2 = *id3p;
       }
     }
-    row = row_cur[5];
+    PixRec* row = row_cur[5];
     m_w1b = row[-1].match[1];
     m_w0 = row[-1].match[0];
     rowp = row;

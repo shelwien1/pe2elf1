@@ -87,12 +87,9 @@
 #include "compress_image.inc"
 
 void __bmf_compress(const char* InName, const char* OutName) {
-  FILE* fp;
-  const uint8_t* Palette;
   int32_t* p_i, Flags, Colours, Step, Grey, i;
   BmfArc* Arc;
-  int32_t coded_len;
-  fp = fopen(InName, "rb");
+  FILE* fp = fopen(InName, "rb");
   if( !fp )
     __exit_402E40(6, InName);
   fclose(fp);
@@ -112,7 +109,7 @@ void __bmf_compress(const char* InName, const char* OutName) {
     } else {
       Colours = 1<<(Flags&31);
       Step = 0x100u>>(Flags&31);
-      Palette = (const uint8_t*)p_i+p_i_img->data_size+16;
+      const uint8_t* Palette = (const uint8_t*)p_i+p_i_img->data_size+16;
       Grey = 0;
       for( i = 0; i<Colours; ++i ) {
         if( Palette[3*i]!=Grey||Palette[3*i+1]!=Grey||Palette[3*i+2]!=Grey )
@@ -123,7 +120,7 @@ void __bmf_compress(const char* InName, const char* OutName) {
         p_i_img->depth = (Flags|0x40)^0x80;
     }
   }
-  coded_len = __compress_image(Arc, (BmfImage*)p_i, (void*)coded_block);
+  int32_t coded_len = __compress_image(Arc, (BmfImage*)p_i, (void*)coded_block);
   if( !coded_len )
     __exit_402E40(5, OutName);
   printf("%6.3f bpp\n", (double)coded_len*8.0/(double)(p_i_img->height*p_i_img->width));
@@ -132,7 +129,6 @@ void __bmf_compress(const char* InName, const char* OutName) {
 
 void __bmf_decompress(const char* InName, const char* OutName) {
   int32_t Number, Depth;
-  uint32_t* p_i;
   BmfArc* arc;
   if( void* __nb = bmf_new(sizeof(BmfArc)) )
     arc = __bmf_open_archive((BmfArc*)__nb, (char*)InName, 1);
@@ -141,7 +137,7 @@ void __bmf_decompress(const char* InName, const char* OutName) {
   printf("File %16s,\r", InName);
   Number = 0;
   while( 1 ) {
-    p_i = (uint32_t*)__expand_image(arc, 0, &coded_block);
+    uint32_t* p_i = (uint32_t*)__expand_image(arc, 0, &coded_block);
     BmfImage*const p_i_img = (BmfImage*)p_i;
     if( !p_i ) {
       printf("\n");
@@ -166,11 +162,10 @@ void __bmf_decompress(const char* InName, const char* OutName) {
 }
 
 int32_t __main(int32_t argc, const char** argv) {
-  int32_t mode;
   bmf_set_denormal_mode();
   __set_new_handler(__out_of_memory_handler);
   printf("BMF lossless image compressor, v.2.01 (C) 1998-1999, 2009 by Dmitry Shkarin\n");
-  mode = argc==4&&!argv[1][1] ? toupper(argv[1][0]) : 0;
+  int32_t mode = argc==4&&!argv[1][1] ? toupper(argv[1][0]) : 0;
   if( mode!='C'&&mode!='D' ) {
     printf("e-mail: <dmitry.shkarin@mtu-net.ru>;  web: http://compression.graphicon.ru/ds/\n"
            "Usage: bmf c input.bmp output     compress, always with -S -Q9\n"

@@ -5,8 +5,7 @@ struct BmfArc {
   uint32_t images;
   FILE* fp;
   FILE*bmf_close_archive() {
-    FILE* f;
-    f = fp;
+    FILE* f = fp;
     if( f ) {
       fseek(f, 0, 2);
       fclose(fp);
@@ -34,11 +33,10 @@ static uint32_t __bytes_left(FILE* fp) {
 }
 
 BmfArc*__bmf_open_archive(BmfArc* out, char* path, int32_t read_only) {
-  BmfArc* arc;
   FILE* fp, * fp2;
   const char* mode;
   int32_t seek_rc, live;
-  arc = out;
+  BmfArc* arc = out;
   mode = "a+b";
   if( read_only )
     mode = "rb";

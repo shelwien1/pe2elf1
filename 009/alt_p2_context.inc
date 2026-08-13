@@ -11,12 +11,8 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   uint32_t q39, q10;
   float (**up_row)[4];
   int32_t dtop2, run_dv3, dv_now4, run_dv4, run_up4;
-  int8_t rate1;
-  uint8_t* cx2p;
-  P2Ctx* nb4;
   int32_t num_b, band, num_d;
   int32_t gA, gB, gC, gD, den_d, nb_slot;
-  P2Ctx* cx0;
   P2Ctx* cx2;
   int32_t up5, lap, magl;
   int32_t dvsum2, magu;
@@ -189,7 +185,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     row2c = nb2;
     p2_row[4][1] = (float)(nb0[-4].val+nb1->val-nb1[-4].val);
     p2_row[4][2] = (float)((nb2->val+3*nb1[1].val-4*nb2[1].val)-((((nb1[2].val-nb1->val)-(nb3[2].val-nb3->val))>>1)-nb3[1].val));
-    nb4 = (P2Ctx*)cursor[4];
+    P2Ctx* nb4 = (P2Ctx*)cursor[4];
     p2_row[4][3] = (float)(row2c[-1].val+nb1[1].val-nb3->val);
     p2_row[5][0] = (float)(nb3[1].val+nb1->val-nb4[1].val);
     p2_row[5][1] = (float)nb1[3].val;
@@ -228,7 +224,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   if( c_mid>11*sum_ul )
     mode = 3;
   filt = __alt_p2_filter(nb_cur, (float (*)[4]) p2_row, &weights, mode);
-  cx0 = (P2Ctx*)cursor[0];
+  P2Ctx* cx0 = (P2Ctx*)cursor[0];
   cx1 = (P2Ctx*)cursor[1];
   *(int32_t*)&pred_prev = filt;
   lane3 = cx1->aerr;
@@ -281,7 +277,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   q10 = q10a;
   bank1 = ctx1>>11;
   bank_ctx[1] = bank1;
-  rate1 = p2_ctr[bank1+32768].rate;
+  int8_t rate1 = p2_ctr[bank1+32768].rate;
   w1c = p2_ctr[bank1+32768].weighted;
   one1 = 1<<((rate1+31)&31);
   pred1 = (one1+w1c)>>(rate1&31);
@@ -326,7 +322,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   bank4 = (int32_t)((run-((uint32_t)(cx1[1].val+cx1[-1].val+2*cx1->val)>>2))&0x2000000|(run_up4-cx0[-2].val-(cx3[2].dval+dv_now4))&0x1000000|(run-2*cx0[-2].dval-(dv_now4-cx0[-4].dval))&0x800000|(run-cx0[-3].dval-dv_now4-(cx1->val-cx1[-3].val))&0x400000|(run_up4-dv_now4-(cx1[1].val+cx2[-1].dval))&0x200000|(cx2[-2].val+run-2*cx1[-1].val)&0x100000|(cx2->dval-2*cx1->dval+run_dv4)&0x80000|((run3-cx0[-1].val)-(cx1->val-cx1[-1].val))&0x40000|(run_dv4-cx1[4].dval)&0x20000|(run_dv4-cx1[-2].dval)&0x10000|(((uint16_t)run3-(uint16_t)cx0[-4].dval-(uint16_t)dv_now4)&0x8000)|((((run3>3056)+(run3>1952)+(run3>368))<<13)|(q39+(((uint32_t)(sum_all+21)>>20)&0xFFFFF800)+q10)))>>11;
   bank_ctx[4] = bank4;
   pred4 = p2_pred(p2_ctr[bank4+131072].weighted, p2_ctr[bank4+131072].rate);
-  cx2p = (uint8_t*)cx2;
+  uint8_t* cx2p = (uint8_t*)cx2;
   nb_sum[9] = pred4;
   run4 = run+pred4;
   nb_sum[8] = run+pred4;

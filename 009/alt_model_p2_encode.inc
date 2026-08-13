@@ -4,13 +4,8 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
   P2Ctx* rec0, * rec1, * rec2, * rec3, * buf3, * bb4, * buf2, * buf1, * bb0;
   int32_t y, alpha_src, x, w;
   AltP2Block* plane[4];
-  uint32_t row_bytes;
-  uint8_t* out;
   uint32_t xf4;
-  int32_t pl2;
   uint32_t i, code3;
-  AltP2Block** back;
-  int32_t first;
   int32_t np, xf0;
   int32_t recon0b, code2b, recon1b, off1, off2, pred0, pred1, pred2, resid0, resid2, resid1, off0b;
   AltP2Block* blk_r, * src2, * blk_k, * blk2, * l4c, * blk1;
@@ -22,7 +17,7 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
   float (*b4)[4], (**b0)[4];
   int32_t row_i, height, pl, nplanes, src3, xf1, want0, off0, seed0, at0, cur0, code0, out0, recon0, drift0, l7a, l4a, l5a, cur1, code1, out1, recon1, drift1, l7b, l4b, l5b, cur2, code2, out2, recon2, drift2, l5c, seed3, blk3, cur3, drift3, nplanes2, pl3;
   void* raw, * made, ** plane_p;
-  out = a2;
+  uint8_t* out = a2;
   float saved_p2_coef[7][4];
   __builtin_memcpy(saved_p2_coef, bmf_p2_coef, sizeof saved_p2_coef);
   for( int32_t k = 0; k<4; k++ ) {
@@ -59,14 +54,14 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
   __rc_begin_encode();
   if( height>0 ) {
     src1 = 0;
-    first = -row_i;
-    row_bytes = 18*row_i+234;
+    int32_t first = -row_i;
+    uint32_t row_bytes = 18*row_i+234;
     code3 = row_i+13;
     nplanes = plane_count;
     do {
       if( nplanes>0 ) {
         xf4 = src1;
-        pl2 = 0;
+        int32_t pl2 = 0;
         do {
           ++pl2;
           if( xf4 ) {
@@ -96,7 +91,7 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
             }
           } else {
             src2 = (AltP2Block*)(plane[pl2-1]);
-            back = &plane[pl2];
+            AltP2Block** back = &plane[pl2];
             src3 = 0;
             do {
               xf1 = src3;

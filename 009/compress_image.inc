@@ -9,10 +9,8 @@ int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* extra_blk) {
   int32_t coded_bytes;
   uint8_t* pix_copy;
   uint32_t coded_len;
-  BmfArc* arc;
   FILE* i;
   bool fits;
-  uint8_t bpp;
   uint32_t acc, data_bytes, img_stride, row_bytes, shifted;
   uint8_t has_coded;
   uint8_t* plane_buf, * row_at;
@@ -23,7 +21,7 @@ int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* extra_blk) {
   uint16_t w16;
   uint32_t pal_bytes, word_flags, word_dc, word_w4, word_w8, word_w12, n_pix, written;
   uint8_t ok, * dst, ok_raw;
-  arc = arc_in;
+  BmfArc* arc = arc_in;
   if( !arc_in->fp )
     return 0;
   if( !feof(arc_in->fp) ) {
@@ -58,7 +56,7 @@ int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* extra_blk) {
              "20a+b",
              4u, 1u, arc->fp)!=1 )
     return 0;
-  bpp = p_i->depth;
+  uint8_t bpp = p_i->depth;
   ++*(uint32_t*)arc;
   pal_bytes = bpp&0x80;
   if( bpp&0x80 )

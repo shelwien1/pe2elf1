@@ -2,7 +2,6 @@
 
 uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_in) {
   P2Ctx* unused_c, * cursor0;
-  float n2_bias;
   int32_t n2_half;
   uint16_t* mir_top;
   P2Freq* grp;
@@ -11,17 +10,12 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   P2Freq* p2_rec;
   uint32_t pair_ctx;
   uint32_t step_s, bank_off2, ctxw_s;
-  int32_t sample16;
-  uint32_t bank;
-  int32_t countdown;
-  P2Count* node0;
   int32_t fold_sel2, is_dec;
   P2Count* m0080, * r0400, * r0800, * m0800, * d1000, * r1000, * m1000, * d2000, * r2000, * m2000, * d4000, * r4000, * m4000;
   int32_t lowbits, nres1, nres2, nres3, res_c;
   P2Count* d0800, * d0400, * m0400, * d0200, * m0200, * d0100, * m0100, * r0100, * d0080, * r0080, * d0040, * m0040, * d0020, * m0020, * r0020, * d0010, * m0010;
   int32_t nres4, nres5;
   uint32_t idx0;
-  uint16_t* mir_top2;
   float sample, d_bias2;
   uint8_t b_top3, b0n;
   P2Freq* frecg2, * frecg1, * frecg0, * frecg3, * gtop, * frec;
@@ -30,7 +24,6 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   float (*wrow_cur)[4];
   float (*wrow_b)[4];
   bool go, eq_hi, lt_hi, ovf;
-  P2Count* bankp;
   float ms1, bias2, bias1, d_bias, ms_a, ms_b, ms_b10, conf;
   int32_t ctx_lo, bctx, res, w0, w0b, res2, w1, e1, wnode0m1a, enode0m1a, x0020, x0010, neg, w_top, e_top, bump, res_s, w_top3, w_topm1, wd4000a, ed4000a, wr4000b, er4000b, wd4000m1b, ed4000m1b, wm4000c, em4000c, wd2000c, ed2000c, wr2000c, er2000c, wd2000m1b, ed2000m1b, wm2000c, em2000c, wd1000c, ed1000c, wr1000c, er1000c, wd1000m1b, ed1000m1b, wm1000c, em1000c, wd0800c, ed0800c, wr0800c, er0800c, wd0800m1b, ed0800m1b, wm0800c, em0800c, wd0400c, ed0400c, wr0400c, er0400c, wd0400m1b, ed0400m1b, wm0400x, wd0200c, ed0200c, wr0200c, er0200c, wd0200m1b, ed0200m1b, neg_b, wm0200c, em0200c, wd0100c, ed0100c, wr0100c, er0100c, wd0100m1b, ed0100m1b, wm0100c, em0100c, wd0080c, ed0080c, wr0080c, er0080c, wd0080m1b, ed0080m1b, wm0080c, em0080c, wd0040c, ed0040c, wr0040c, er0040c, wd0040m1b, ed0040m1b, wm0040c, em0040c, wd0020c, res_t, ed0020c, wr0020c, er0020c, wd0020m1b, ed0020m1b, wm0020c, em0020c, wd0010c, ed0010c, wr0010c, er0010c, wd0010m1b, ed0010m1b, wm0010b, em0010b, wd4000m1a,
           ed4000m1a, neg_c, wm4000b, em4000b, wd2000b, ed2000b, wr2000b, er2000b, wd2000m1a, ed2000m1a, wm2000b, em2000b, wd1000b, ed1000b, wr1000b, er1000b, wd1000m1a, ed1000m1a, wm1000b, em1000b, wd0800b, ed0800b, wr0800b, er0800b, wd0800m1a, ed0800m1a, wm0800b, em0800b, wd0400b, ed0400b, wr0400b, er0400b, wd0400m1a, ed0400m1a, wm0400y, nb_slot, wd0200b, ed0200b, wr0200b, er0200b, wd0200m1a, ed0200m1a, wm0200b, em0200b, wd0100b, ed0100b, wr0100b, er0100b, wd0100m1a, ed0100m1a, wm0100b, em0100b, wd0080b, ed0080b, wr0080b, er0080b, wd0080m1a, ed0080m1a, wm0080b, em0080b, wd0040b, ed0040b, wr0040b, er0040b, wd0040m1a, ed0040m1a, neg_d, wm0040b, em0040b, wd0020b, ed0020b, wr0020b, er0020b, wd0020m1a, ed0020m1a, wm0020b, em0020b, wd0010b, ed0010b, wr0010b, er0010b, wd0010m1a, ed0010m1a, wd4000b, ed4000b, wr4000a, er4000a, wd4000p1a, pd4000p1a, wm4000a, em4000a, wd2000a, ed2000a, wr2000a, er2000a, wm2000a, em2000a, wd1000a, ed1000a, wr1000a, er1000a, wm1000a, em1000a, wd0800a, ed0800a,
@@ -40,7 +33,7 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   P2Freq* frec2, * frec3, * frec4b, * frec5, * frec6, * frec7, * prec0, * g0, * g1, * g2, * g3, * g4, * h4, * nxt4, * prec_m1, * h3, * nxt3, * h2, * nxt2, * h1, * nxt1, * h0, * nxt0;
   uint32_t bank_off, ri0100, ri0010, w_new, step_v, step10, step13;
   ctx_lo = ctx&0xF;
-  sample16 = 16*sample_in;
+  int32_t sample16 = 16*sample_in;
   cursor[0]->val = 16*sample_in;
   cursor[0]->dval = cursor[0]->val-cursor[0]->dval;
   cursor[0][1].dval = 0;
@@ -63,7 +56,7 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   ms1 = wrow_cur[14][1]+0.000099999997f;
   wrow_b = cur[-1];
   bias2 = bias[2];
-  n2_bias = bias[0];
+  float n2_bias = bias[0];
   d_bias2 = sample-bias2;
   bias1 = bias[1];
   d_bias = bias1-bias2;
@@ -75,7 +68,7 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
     ms_b10 = fminf(ms_b, ms_a);
   wrow_cur[14][0] = ms_b10;
   conf = (1.0f-(ms_b10/(ms_b+576.0f)))*2.0f;
-  bank = 0;
+  uint32_t bank = 0;
   {
     const float err_a = (sample-bias1)*2.5999999f;
     const float err_b = d_bias2*conf;
@@ -119,10 +112,10 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
     bctx = (uint32_t)bank_ctx[bank];
     res = sample16-(nb_sum[2*bank]);
     bank_off = bank<<17;
-    node0 = &p2_ctr[32768*bank+bctx];
+    P2Count* node0 = &p2_ctr[32768*bank+bctx];
     w0 = res+(uint16_t)node0->weighted;
     node0->weighted = w0;
-    countdown = node0->b1;
+    int32_t countdown = node0->b1;
     if( countdown ) {
       ctxw_s = bctx;
       w0b = w0+4*((res>deadzone_hi)-(res<deadzone_lo));
@@ -155,7 +148,7 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
           *(uint16_t*)&node0[-1].weighted = wnode0m1a+((32*((enode0m1a>deadzone_hi)-(uint32_t)(enode0m1a<deadzone_lo))+enode0m1a+2)>>2);
           ctxw = ctxw_s;
         }
-        bankp = &p2_ctr[32768*bank];
+        P2Count* bankp = &p2_ctr[32768*bank];
         res_c = res2;
         __builtin_prefetch(&bankp[(ctxw^0x4000)], 0, 1);
         d4000 = &bankp[(ctxw^0x4000)];
@@ -218,7 +211,7 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
         m0010 = &bankp[(x0010^0x7FF0)];
         __builtin_prefetch(r0080, 0, 1);
         r0010 = &bankp[ri0010];
-        mir_top2 = mir_top;
+        uint16_t* mir_top2 = mir_top;
         neg = -res_c;
         __builtin_prefetch(d0040, 0, 1);
         w_top = (int16_t)mir_top2[1];

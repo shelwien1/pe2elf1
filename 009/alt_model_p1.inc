@@ -27,17 +27,12 @@
 template<int f_DEC>
 int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
   P1Ctx* b4, * buf3, * buf2, * buf1, * b0, * cursor0;
-  int8_t dc3;
-  uint8_t out3;
   int32_t resid3, cur3;
   void* plane[4];
   AltP1Block*&plane1 = (AltP1Block*&)plane[1];
   AltP1Block*&plane2 = (AltP1Block*&)plane[2];
   AltP1Block*&plane3 = (AltP1Block*&)plane[3];
-  int32_t dc1;
   uint32_t x, y;
-  AltP1Block* blk0;
-  void** q;
   int32_t out1, resid0, off1, off0, resid2, cur0, off2, cur1, code1, off3;
   AltP1Block* blk_k, * raw;
   uint8_t fl1, fl2, fl3, pred1, pred2, pred3;
@@ -67,9 +62,9 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
   fl2 = plane_desc[src2+1].flags;
   fl3 = plane_desc[src3+1].flags;
   dc2 = plane_desc[src2+1].dc;
-  dc1 = plane_desc[src1+1].dc;
+  int32_t dc1 = plane_desc[src1+1].dc;
   xf1 = fl1&8;
-  dc3 = plane_desc[src3+1].dc;
+  int8_t dc3 = plane_desc[src3+1].dc;
   xf2 = fl2&8;
   xf3 = fl3&8;
   if( f_DEC )
@@ -133,7 +128,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
       if( w>0 ) {
         x = 0;
         do {
-          blk0 = (AltP1Block*)plane[0];
+          AltP1Block* blk0 = (AltP1Block*)plane[0];
           off0 = plane_desc[1].src_plane;
           if( !f_DEC ) {
             want0 = *(buf+plane_desc[1].src_plane);
@@ -291,7 +286,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
               resid3 = (uint8_t)(cur3-pred3);
               recon3 = (uint8_t)(blk3->unfold[code3]+pred3);
               drift3 = *(off3+buf)-(uint8_t)(recon3+*(off3+buf)-cur3);
-              out3 = recon3+*(off3+buf)-cur3;
+              uint8_t out3 = recon3+*(off3+buf)-cur3;
               if( drift3<-16||drift3>16 ) {
                 code3 = blk3->fold_hi[resid3];
               } else {
@@ -336,7 +331,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
   if( plane_count>0 ) {
     f = 0;
     do {
-      q = (void**)plane[f];
+      void** q = (void**)plane[f];
       if( q ) {
         ((AltP1Block*)q)->alt_p1_free(1);
         np = plane_count;

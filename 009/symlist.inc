@@ -33,7 +33,6 @@ struct SymList {
   bool rescale(int32_t count) {
     int32_t half, bias, up_cnt, back_cnt, last_cnt;
     uint32_t n_left, running, since, due = rescale_at;
-    uint16_t keep;
     SymEntry* cur, * prev, * up, * back;
     if( count<=251&&due>=since_rescale )
       return false;
@@ -50,7 +49,7 @@ struct SymList {
         up = cur-1;
         up_cnt = up->cnt;
         if( half>up_cnt ) {
-          keep = cur->sym;
+          uint16_t keep = cur->sym;
           cur->set(up->sym, up_cnt);
           if( up!=ent ) {
             do {
@@ -84,7 +83,6 @@ struct SymList {
   }
 
   int32_t code_symbol(int32_t want) {
-    int8_t gen;
     int32_t enc_cum, enc_high, enc_tot;
     uint32_t left;
     uint8_t c_a, c_b;
@@ -92,7 +90,7 @@ struct SymList {
     int32_t cum, s, c, result, c2, top;
     uint16_t s_a, s_b;
     uint32_t rest, i;
-    gen = exclusion_gen;
+    int8_t gen = exclusion_gen;
     left = live;
     p = ent-1;
     cum = 0;
@@ -174,7 +172,6 @@ struct SymList {
   }
 
   void add_weight(int32_t want, uint32_t add) {
-    SymEntry* list;
     uint32_t count;
     bool full;
     uint8_t c3, c, c2;
@@ -182,7 +179,7 @@ struct SymList {
     uint16_t s3, s, s2;
     int32_t recycled;
     uint32_t n_live, left;
-    list = ent;
+    SymEntry* list = ent;
     n_live = live;
     p = list;
     left = n_live;
@@ -285,11 +282,10 @@ static inline bool sym_in_top(const SymEntry* ent, int32_t n, int32_t sym) {
 }
 
 void __init_symbol_list(SymList* list, int32_t n_syms, int32_t dense) {
-  SymEntry* buf;
   uint32_t result;
   const uint32_t n = (uint32_t)n_syms;
   list->n = n_syms;
-  buf = (SymEntry*)bmf_new(3*n_syms);
+  SymEntry* buf = (SymEntry*)bmf_new(3*n_syms);
   list->ent = buf;
   if( dense ) {
     list->tot = 0;

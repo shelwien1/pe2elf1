@@ -30,7 +30,6 @@ uint8_t*__expand_image(BmfArc* arc_in, int32_t want_pal, void** p_coded_buf) {
   BmfArc* arc;
   FILE* fp1, * fp;
   BmfImage* img_at;
-  int8_t hdr_flags;
   uint8_t bpp, has_coded, dc_v;
   uint32_t near_lossless, pred_s, w12_v, w4_v, w8_v;
   uint8_t* pal_at, * copy, * srcp, * dst;
@@ -117,7 +116,7 @@ uint8_t*__expand_image(BmfArc* arc_in, int32_t want_pal, void** p_coded_buf) {
   __frame.depth_f = __frame.depth_b;
   img_at->depth = __frame.depth_b;
   has_coded = p_coded_buf&&*p_coded_buf;
-  hdr_flags = __frame.flags_b;
+  int8_t hdr_flags = __frame.flags_b;
   img_at->flags |= __frame.flags_b&2|(has_coded<<7);
   plane_count = ((__frame.depth_f&0x3Fu)+7)>>3;
   if( plane_count<1||plane_count>4 ) {

@@ -1,8 +1,6 @@
 // write_bmp.inc -- write one back.
 
 int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
-  int8_t depth_flags;
-  uint32_t levels;
   uint32_t off_bits, data_ofs, stride, pairs, done;
   uint8_t* abs_end, * buf_2, * end, * out;
   int32_t rows2;
@@ -33,7 +31,7 @@ int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
   bmp->bfReserved1 = 0;
   bmp->biWidth = i;
   bmp->biHeight = rows;
-  depth_flags = (int8_t)img->depth;
+  int8_t depth_flags = (int8_t)img->depth;
   bmp->biPlanes = 1;
   bits = img->depth&0x3F;
   bmp->biBitCount = bits;
@@ -46,7 +44,7 @@ int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
     ncolours = 1<<(bits&31);
     ncol = 1<<(bits&31);
     if( depth_flags&0x40 ) {
-      levels = 0x100u>>(bits&31);
+      uint32_t levels = 0x100u>>(bits&31);
       if( ncol>0 ) {
         if( ncol/2 ) {
           k = 0;

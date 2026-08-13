@@ -25,12 +25,8 @@ int32_t __decode_symbol_list(SymList* syms) {
     uint8_t _pad1[32];
   } __frame;
   int32_t tot, tot0;
-  SymEntry* first;
-  SymList* owner;
-  uint32_t gen;
   SymEntry* ent, * e, * p, * q, * head, * q2, * r, * cur, * prev, * up, * back;
   SymEntry** w, ** rd, ** rd2;
-  int8_t gen_b;
   uint32_t cum_lo, sym_cum, sym_high, cum_hi;
   int32_t tot_1, tot_all, target;
   uint8_t c_a, c_b;
@@ -41,8 +37,8 @@ int32_t __decode_symbol_list(SymList* syms) {
   live = syms->live;
   ent = syms->ent;
   w = __frame.list;
-  gen = (uint8_t)exclusion_gen;
-  owner = syms;
+  uint32_t gen = (uint8_t)exclusion_gen;
+  SymList* owner = syms;
   cum = 0;
   i = 0;
   do {
@@ -65,7 +61,7 @@ int32_t __decode_symbol_list(SymList* syms) {
   tot = cum+tot0;
   p = __frame.list[0];
   rd = &__frame.list[1];
-  first = __frame.list[0];
+  SymEntry* first = __frame.list[0];
   cum_lo = 0;
   while( 1 ) {
     cum_lo += p->cnt;
@@ -73,7 +69,7 @@ int32_t __decode_symbol_list(SymList* syms) {
       break;
     p = *rd++;
     if( !p ) {
-      gen_b = (int8_t)gen;
+      int8_t gen_b = (int8_t)gen;
       sym_cum = cum_lo;
       cum_hi = tot;
       sym_high = tot;

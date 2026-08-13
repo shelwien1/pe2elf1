@@ -76,8 +76,6 @@ int32_t __choose_plane_coding(BmfImage* img, int32_t unused_h, int8_t unused_c) 
   uint8_t* pp;
   uint32_t uu;
   int32_t wa_slot;
-  BmfImage* img_a;
-  const uint8_t* data_end;
   bool keep0, cheaper, keep3, pick0;
   int8_t unread0, unread1, unread2, pos, pos3;
   uint8_t pl_even, pl_odd;
@@ -91,10 +89,10 @@ int32_t __choose_plane_coding(BmfImage* img, int32_t unused_h, int8_t unused_c) 
   uint8_t* px, * end_px, * q_c, * r_c, * p_c, * q_d, * r_d, * p_d, * q_a, * p_a, * q_b, * p_b;
   n_planes = plane_count;
   data_size = img->data_size;
-  img_a = (BmfImage*)((uint8_t*)img);
+  BmfImage* img_a = (BmfImage*)((uint8_t*)img);
   alphabet_reduced = 1;
   __frame.row_stride = (uint16_t)img->stride;
-  data_end = &img->pixels[data_size];
+  const uint8_t* data_end = &img->pixels[data_size];
   memset(__frame.buf, 0, 0x8000);
   result = 192;
   do {

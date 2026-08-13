@@ -197,7 +197,6 @@ struct AltP2Block {
 
   AltP2Block*alt_p2_alloc(int32_t img_w, int32_t plane) {
     uint32_t done, e;
-    void* buf1;
     int32_t dz, band, row_bytes, lvl, lvl1, bump, len, len1;
     uint32_t j, k, ctr, pairs, p, row, pair, n;
     plane_idx = plane;
@@ -232,7 +231,7 @@ struct AltP2Block {
     band_lo = -band-7;
     band_hi = band+8;
     row0 = (float (**)[4])bmf_new(sizeof(float (*)[4])*(img_w+4));
-    buf1 = bmf_new(sizeof(float (*)[4])*(img_w+4));
+    void* buf1 = bmf_new(sizeof(float (*)[4])*(img_w+4));
     nb_weights[0][14][2] = 1.0f;
     row1 = (float (**)[4]) buf1;
     cur = row0+img_w+2;

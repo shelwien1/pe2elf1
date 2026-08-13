@@ -28,7 +28,6 @@ struct AltP1Block {
   int32_t ctx_of(AltP1Block* nb0, AltP1Block* nb1) {
     P1Ctx* nb0_row, * nb0_row2, * cursor1, * cursor2;
     P1Ctx* cur, * cursor4;
-    uint32_t nb0_b;
     bool pick, is_zero, is_neg;
     int32_t west, northwest, act, nb0_a, act_q, s1, hi, lo, s3, s5, g6, h6, g7, h7, s8, result, step, act_all, s2, s4, s6, s7;
     uint32_t quiet, s0;
@@ -63,7 +62,7 @@ struct AltP1Block {
         ctx_w[5].sel = cursor1->sym-(uint32_t)guess+nb0_row[-1].sym-nb0->cursor[1][-1].sym;
         nb0_row2 = nb0->cursor[0];
         nb0_a = nb0_row2[-1].sym;
-        nb0_b = nb0_row2[-2].sym;
+        uint32_t nb0_b = nb0_row2[-2].sym;
         ctx_w[6].sel = cur[-1].sym-(uint32_t)guess+nb0_a-nb0_b;
         ctx_w[7].sel = cur[-1].sym-(uint32_t)guess+nb1->cursor[0][-1].sym-nb1->cursor[0][-2].sym;
         ctx_w[8].sel = nb1->cursor[0][-1].sym-nb1->pred;
@@ -134,8 +133,6 @@ struct AltP1Block {
     P1Ctx* cursor2, * cursor4, * cursor0, * b4, * buf3, * buf2, * buf1, * b0;
     uint8_t guess, recon;
     int32_t y, resid, code, drift, val, x;
-    int64_t err;
-    uint8_t* q;
     __rc_begin_encode();
     if( height>0 ) {
       y = 0;
@@ -182,7 +179,7 @@ struct AltP1Block {
         ctx[3] = cursor2[-2].mag+cursor4[-2].mag+cursor2[0].mag+cursor4[0].mag+cursor2[2].mag+cursor4[2].mag+cursor2[4].mag+cursor4[4].mag+cursor0[-4].mag+cursor0[-2].mag;
         ctx[4] = cursor2[-1].mag+cursor4[-1].mag+cursor2[1].mag+cursor4[1].mag+cursor2[3].mag+cursor4[3].mag+cursor2[5].mag+cursor4[5].mag+cursor0[-3].mag+cursor0[-1].mag;
         if( !(width<=0) ) {
-          q = out;
+          uint8_t* q = out;
           x = 0;
           do {
             ++x;
@@ -200,7 +197,7 @@ struct AltP1Block {
             }
             __alt_p1_encode_symbol(&counters[ctx[0]].total, 16*ctx[0], ctx[1], code);
             val = (uint8_t)*q;
-            err = val-pred;
+            int64_t err = val-pred;
             cursor[0]->sym = val;
             cursor[0]->mag = (BYTE4(err)^err)-BYTE4(err);
             ctx[3+ctx[2]] = ctx[3+ctx[2]]+cursor[0]->mag-cursor[0][-4].mag-(cursor[4][-2].mag-cursor[4][6].mag+cursor[2][-2].mag-cursor[2][6].mag);
@@ -232,7 +229,6 @@ struct AltP1Block {
     int16_t tot_up, tot_dn;
     int32_t sel1_top, code_r, sel2_top, slot_f, slot_r, ctx_dn, sel0, ctx0, sel1, ctx1, sel2, ctx2, sel3, ctx3, sel4, ctx4, sel5, ctx5, sel6, ctx6, sel7, ctx7, sel8, midn8, ctx8, mid7, mid6, mid5, mid4, mid3, mid2, mid1, mid0, tree_sym;
     CounterNode* lo0, * hi0, * midn0, * altn0, * lo1, * hi1, * midn1, * altn1, * lo2, * hi2, * midn2, * altn2, * lo3, * hi3, * midn3, * altn3, * lo4, * hi4, * midn4, * altn4, * lo5, * hi5, * midn5, * altn5, * lo6, * hi6, * midn6, * altn6, * lo7, * hi7, * midn7, * altn7, * altn8, * x8;
-    uint32_t key;
     uint32_t code_f, ctx_up;
     code_f = *((uint8_t)(cursor[0]->sym-(uint8_t)pred)+fold);
     sel1_top = ctx_w[1].sel;
@@ -282,7 +278,7 @@ struct AltP1Block {
         result = ctx[0];
       }
       if( slot_f>=5 ) {
-        key = ctx[1]+(((counters[result].c[0]+(counters[result].total&0x7FFF)-2*(uint32_t)counters[result].c[slot_f])>>25)&0xFFFFFFC0)+((slot_f&1)<<7);
+        uint32_t key = ctx[1]+(((counters[result].c[0]+(counters[result].total&0x7FFF)-2*(uint32_t)counters[result].c[slot_f])>>25)&0xFFFFFFC0)+((slot_f&1)<<7);
         if( (key&0x38)>=0x38||(__update_binary_pair(model_strip(128*(slot_f&1)+ctx[1]+((((counters[result].c[0]+(counters[result].total&0x7FFF)-2*(uint32_t)counters[result].c[slot_f])>>25)&0xFFFFFFC0))+8), tree_sym), (key&0x38)!=0) ) {
           __update_binary_pair(model_strip(key-8), tree_sym);
         }

@@ -72,19 +72,14 @@ int32_t __alt_p2_filter(float (*_this)[4], float (*a2)[4], CtxWeights* w, int32_
 template<int f_DEC>
 void __alt_p2_d8_body(AltP2Block* blk, uint8_t* src, uint8_t* out, int8_t unread_flag,
                       int32_t width, int32_t height) {
-  int32_t val;
   P2Ctx* pix, * rec, * buf3, * b4, * buf2, * buf1, * b0;
   int32_t j;
-  uint32_t y;
-  uint8_t* p;
   int32_t code0;
   uint8_t* outp, want, * srcp, code2;
-  uint32_t* pair;
   float (**cur)[4], (**r1)[4];
   uint8_t recon, recon2;
   float (*last)[4], (**r0)[4];
   int32_t q, resid, drift, q2, row_bytes, pred, resid2, drift2, code;
-  int64_t err;
   uint32_t k;
   uint8_t* src_end;
   src_end = src;
@@ -94,7 +89,7 @@ void __alt_p2_d8_body(AltP2Block* blk, uint8_t* src, uint8_t* out, int8_t unread
     __rc_begin_encode();
   pix = blk->cursor[0];
   if( width>0 ) {
-    p = src;
+    uint8_t* p = src;
     for( j = 0; j<width; ++j ) {
       rec = blk->cursor[0];
       q2 = rec[-1].val>>4;
@@ -118,11 +113,11 @@ void __alt_p2_d8_body(AltP2Block* blk, uint8_t* src, uint8_t* out, int8_t unread
         fr.encode_symbol(blk->ctx_pair, code0);
         ++p;
       }
-      val = 16*(uint8_t)*out;
+      int32_t val = 16*(uint8_t)*out;
       blk->cursor[0]->val = val;
       blk->cursor[0]->dval = val;
       ++out;
-      err = (int16_t)(rec->val-rec[-1].val);
+      int64_t err = (int16_t)(rec->val-rec[-1].val);
       rec->err = err;
       LOWORD(err) = (WORD2(err)^err)-WORD2(err);
       blk->cursor[0]->aerr = err;
@@ -160,9 +155,9 @@ void __alt_p2_d8_body(AltP2Block* blk, uint8_t* src, uint8_t* out, int8_t unread
   memcpy(blk->buf[2], blk->buf[0], row_bytes);
   memcpy(blk->buf[3], blk->buf[0], row_bytes);
   if( height>1 ) {
-    pair = blk->ctx_pair;
+    uint32_t* pair = blk->ctx_pair;
     outp = out;
-    y = 0;
+    uint32_t y = 0;
     do {
       cur = blk->cur;
       last = cur[-1];
