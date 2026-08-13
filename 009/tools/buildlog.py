@@ -30,14 +30,34 @@ comes to be missing.
 A file the log is not about is not an error.  `sweep.sh` hands every tool a
 copy, and a tool with nothing to say should say so and exit 0.
 """
+import glob
 import os
 import sys
 
-STAMP = '# subs1.hpp '
+STAMP = '# sources '
+
+
+def digest(path):
+    """`cksum` of every source the build reads, in the order it reads them.
+
+    One file's checksum stopped being able to say what a log describes when
+    bmf.cpp became an include list: editing `model.inc` leaves bmf.cpp byte for
+    byte the same, so a stamp taken over bmf.cpp alone matched a log describing
+    the source as it was before the edit -- which is the exact staleness this
+    module exists to refuse, restored as a silent yes.
+
+    `path` names any file in the tree; the tree is its directory.  Both this and
+    the `stamp` in build.sh compute it the same way, and they have to: a digest
+    the writer and the reader disagree about is a log that is always stale.
+    """
+    d = os.path.dirname(os.path.abspath(path))
+    srcs = [os.path.join(d, 'bmf.cpp')] + sorted(glob.glob(os.path.join(d, '*.inc')))
+    return os.popen('cat %s | cksum' % ' '.join("'%s'" % s for s in srcs
+                                                if os.path.exists(s))).read().strip()
 
 
 def read(log, path):
-    """(lines, note).  `note` is empty when the log is about `path`.
+    """(lines, note).  `note` is empty when the log is about `path`'s tree.
 
     An unstamped log counts as stale: the stamp is cheap to add and its absence
     used to mean no check at all.
@@ -54,10 +74,10 @@ def read(log, path):
         out = open(log).read().split('\n')
     except OSError:
         return [], '%s is not there' % log
-    have = os.popen('cksum < %s' % path).read().strip()
+    have = digest(path)
     stamp = next((r for r in out if r.startswith(STAMP)), None)
     if stamp is None or stamp[len(STAMP):].strip() != have:
-        return [], '%s describes another file' % log
+        return [], '%s describes another source tree' % log
     return out, ''
 
 

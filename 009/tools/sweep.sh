@@ -52,6 +52,7 @@ for t in tools/*.py; do
   case $n in
     structs.py|outpath.py) continue ;;          # imported, not run
     mk*.py|fuzz.py)        continue ;;          # generators: they write, not read
+    split.py)              continue ;;          # a migration: it writes the tree
     sweep_check.py)        continue ;;          # reads the report, not the file
   esac
   # These six have no count that can be zero.  Three answer with a table, a

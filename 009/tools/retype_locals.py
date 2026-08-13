@@ -28,6 +28,7 @@ for: run it after every batch, and revert the batch rather than the file if a
 stream moves.
 """
 import re
+import os
 import sys
 
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
@@ -48,14 +49,21 @@ def complaints(log, path):
     match `^subs1\\.hpp:` as a literal and never ask *which* `subs1.hpp`, so a
     stale `strict.log` would have retyped whatever now sits on those lines --
     `tools/buildlog.py` has what that cost `resign.py`.
+
+    The name is `path`'s now rather than a literal, which is what makes it work
+    against a tree: the decompilation is 35 files and gcc says which of them a
+    conversion is in.  Spelled as a literal it matched none of them, and a rule
+    that cannot match reports zero exactly like a rule with nothing to find.
     """
     out = {}
     rows, note = buildlog.read(log, path)
     NOTE[:] = [note]
+    site = re.compile(r"^%s:(\d+):\d+: error: invalid conversion from "
+                      r"'([^']*)'(?: \{aka '([^']*)'\})? to "
+                      r"'([^']*)'(?: \{aka '[^']*'\})?"
+                      % re.escape(os.path.basename(path)))
     for l in rows:
-        m = re.match(r"^subs1\.hpp:(\d+):\d+: error: invalid conversion from "
-                     r"'([^']*)'(?: \{aka '([^']*)'\})? to "
-                     r"'([^']*)'(?: \{aka '[^']*'\})?", l)
+        m = site.match(l)
         if not m:
             continue
         out[int(m.group(1))] = (m.group(2), m.group(4))

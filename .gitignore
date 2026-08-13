@@ -7,3 +7,7 @@ bmf.exe
 warn.log
 strict.log
 strict64.log
+
+# Python bytecode from the tools.
+__pycache__/
+*.pyc

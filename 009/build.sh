@@ -126,12 +126,18 @@ fi
 
 # The two diagnostic passes.  Both are `-fsyntax-only`, so neither writes a
 # binary, and both stamp their log with `cksum` of the source they read: a log's
-# line numbers mean nothing against another version of the file and an mtime
-# cannot tell you which version that was.  tools/buildlog.py is what checks the
-# stamp, and `# subs1.hpp ` is the prefix it looks for -- from when the
-# decompilation was a header included by bmf.cpp, and left alone here because
-# the tools that read these logs still expect it.
-stamp() { printf '# subs1.hpp %s\n' "$(cksum < "$SRC")" >> "$1"; }
+# line numbers mean nothing against another version of the source and an mtime
+# cannot tell you which version that was.  tools/buildlog.py is what checks it.
+#
+# Every file, not just `$SRC`.  A stamp over bmf.cpp alone said nothing once
+# bmf.cpp became an include list -- an edit to `model.inc` leaves it byte for
+# byte identical, so the check passed for a log describing the source as it was
+# before the edit, which is worse than no check.  `tools/buildlog.py:digest`
+# computes this same concatenation and the two have to agree.
+stamp() {
+  printf '# sources %s\n' \
+      "$(cat "$SRC" $(ls *.inc | LC_ALL=C sort) | cksum)" >> "$1"
+}
 
 if [ "${BMF_WARN:-0}" = 1 ]; then
   # -fpermissive stays: this pass counts the comparisons whose conversion is

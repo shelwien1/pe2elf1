@@ -75,6 +75,7 @@ nothing happens to read.
                 `h0` already have.
 """
 import collections
+import os
 import re
 import sys
 
@@ -83,8 +84,14 @@ import buildlog                                                   # noqa: E402
 import structs                                                    # noqa: E402
 
 LOG = 'strict64.log'
-SITE = re.compile(r'^subs1\.hpp:(\d+):(\d+): error: cast from '
-                  r"'([^']+)' .*loses precision")
+# The file gcc names, not a literal one.  `subs1.hpp` was the whole
+# decompilation once; it is 35 files now, and a pattern anchored on a name none
+# of them has matches nothing and reports zero -- which is indistinguishable
+# from a census with nothing to count.  `tools/proven.sh` exists for exactly
+# this shape of zero.
+def site_re(path):
+    return re.compile(r'^%s:(\d+):(\d+): error: cast from '
+                      r"'([^']+)' .*loses precision" % re.escape(os.path.basename(path)))
 INT = re.compile(r'\((?:u?int32_t|unsigned int|int)\)')
 # `(T *)` or `(T **)`, allowing the space Hex-Rays puts before the star.
 PTRCAST = re.compile(r'\(\s*[A-Za-z_]\w*\s*\*+\s*\)\s*\(?\s*$')
@@ -108,8 +115,9 @@ def sites(path, log=LOG):
     if note:
         return None, note
     out = []
+    site = site_re(path)
     for r in rows:
-        m = SITE.match(r)
+        m = site.match(r)
         if m:
             out.append((int(m.group(1)), int(m.group(2)), m.group(3)))
     return sorted(set(out)), ''

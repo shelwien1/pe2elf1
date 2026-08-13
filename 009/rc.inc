@@ -160,3 +160,6 @@ public:
     packer_acc = 0;
   }
 };
+
+// The one coder the program has.
+static RangeCoder rc;

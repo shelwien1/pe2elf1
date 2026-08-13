@@ -1,0 +1,1931 @@
+// model.inc -- the main model.  One pixel in and one pixel out are the two largest
+// bodies in the program, and they are methods of the block they read.
+
+struct PixRec {
+  union {
+    struct {
+      uint16_t sym;
+      uint8_t match[6];
+    };
+    struct {
+      uint8_t _head[4];
+      uint32_t match2345;
+    };
+  };
+};
+
+struct ModelBlock {
+  uint32_t width;
+  int32_t height;
+  uint32_t depth;
+  uint32_t depth_raw;
+  uint32_t alphabet;
+  uint32_t ctx_id1_used;
+  uint32_t ctx_id2_used;
+  uint32_t ctx_id3_used;
+  uint32_t hit;
+  uint32_t ctx_state_seen;
+  uint32_t bucket_idx;
+  uint32_t sym_pos;
+  uint32_t ctr_fallback;
+  uint32_t ctr_node;
+  PixRec* row_cur[10];
+  FreqRec grid[65723];
+  uint8_t _pad1051664[16];
+  BitCtr bit_root[16];
+  BitCtr bit_node[4096];
+  BitCtr esc_ctr[257];
+  BitCtr run_ctr[48];
+  uint8_t _pad16[2];
+  SymList escape;
+  SymList* sel1_list;
+  SymList* sel0_list;
+  SymList* sel[2];
+  SymList* escape_list;
+  uint8_t _pad22[4];
+  SymList** sel_cur;
+  uint16_t* sym_word;
+  uint32_t* sym_code;
+  uint8_t ctx_state[64];
+  uint8_t ctx_bucket[375];
+  uint8_t _pad25[1];
+  uint8_t* run_bucket;
+  uint8_t* alpha_map;
+  uint8_t grad[4];
+  uint16_t sym_ctr[524288];
+  SymPair group_ctr[15][65536];
+  uint16_t* sym_cache;
+  uint16_t* pix_cur;
+  uint16_t sym_rev[8192];
+  uint16_t ctx_id1[192512];
+  uint16_t ctx_id2[108800];
+  uint16_t ctx_id3[712000];
+  int32_t pixel_context(uint32_t* nb) {
+    SymList* sel0_list;
+    bool near, far;
+    int32_t band;
+    uint32_t result;
+    int32_t near_hit, far_hit, ctx0, ctx1, fallback, ctx2, pos;
+    SymEntry* list_prev, * list_sym;
+    pos = this->sym_pos;
+    result = (nb)[pos];
+    if( exclusion_mask[result]==exclusion_gen )
+      return -1;
+    near = false;
+    for( band = 11; band<16; ++band )
+      near |= result==nb[band];
+    far = false;
+    for( band = 16; band<32; ++band )
+      far |= result==nb[band];
+    near_hit = 32*near+((result==nb[10])<<6);
+    far_hit = 16*far;
+    ctx0 = far_hit+near_hit;
+    this->ctr_node = ctx0;
+    if( (far_hit+near_hit==0)&&pos>6 )
+      return -1;
+    sel0_list = this->sel0_list;
+    ctx1 = ctx0+8*sym_in_top((sel0_list[mode_symbol[1]].ent), 10, result);
+    this->ctr_node = ctx1;
+    list_prev = sel0_list[mode_symbol[2]].ent;
+    list_sym = sel0_list[result].ent;
+    fallback = sym_in_top((sel0_list[mode_symbol[3]].ent), 6, result)+2*sym_in_top(list_sym, 10, mode_symbol[2])+4*sym_in_top(list_prev, 4, result);
+    ctx2 = fallback+ctx1;
+    if( pos<=14||(ctx2&0xB)!=0 ) {
+      this->ctr_node = (pos<<7)+ctx2;
+      this->ctr_fallback = fallback+8*(pos>9);
+    } else {
+      this->ctr_fallback = fallback;
+      return -1;
+    }
+    return result;
+  }
+
+  int32_t init_tables() {
+    SymEntry* slot, * ent;
+    PixRec* up1, * up2;
+    uint8_t cnt;
+    SymList** cur;
+    bool promoted;
+    uint16_t* sym_cache;
+    SymList* list, ** prev;
+    uint32_t blocks, n_live, hit0;
+    uint8_t* buf;
+    uint16_t want, sym;
+    PixRec* row;
+    int32_t recycled, hit1, just, c0, c1, c2, c3, c4, c5, c6, result;
+    hit0 = this->hit;
+    if( !hit0 ) {
+      if( this->sel==this->sel_cur ) {
+        if( this->sel[0] ) {
+          this->sel0_list[mode_symbol[1]].add_weight(this->row_cur[5]->sym, 3u);
+          this->sel0_list[this->row_cur[5]->sym].add_weight(mode_symbol[2], 2u);
+          this->sel1_list[mode_symbol[1]].add_weight(this->row_cur[5]->sym, 4u);
+          this->sel1_list[this->row_cur[5]->sym].add_weight(mode_symbol[1], 2u);
+        } else {
+          this->sel0_list[mode_symbol[2]].add_weight(this->row_cur[5]->sym, (this->sym_pos>3)+2);
+        }
+      } else {
+        this->sel0_list[mode_symbol[1]].add_weight(this->row_cur[5]->sym, 3u);
+        this->sel0_list[this->row_cur[5]->sym].add_weight(mode_symbol[2], 2u);
+        this->sel0_list[this->row_cur[5]->sym].add_weight(mode_symbol[1], 1u);
+        this->sel1_list[this->row_cur[5]->sym].add_weight(mode_symbol[1], 2u);
+        cur = this->sel_cur;
+        do {
+          prev = cur-1;
+          this->sel_cur = prev;
+          list = *prev;
+          want = this->row_cur[5]->sym;
+          n_live = list->live;
+          ent = list->ent;
+          if( n_live==list->n ) {
+            list->live = --n_live;
+            recycled = list->ent[n_live].cnt;
+          } else {
+            recycled = 1;
+          }
+          slot = &ent[n_live];
+          list->live = n_live+1;
+          list->tot = recycled+list->tot+1;
+          slot->set(want, 2);
+          list->since_rescale += 4;
+          if( slot!=list->ent ) {
+            sym = slot->sym;
+            cnt = slot->cnt;
+            *slot = slot[-1];
+            slot[-1].set(sym, cnt);
+          }
+          cur = this->sel_cur;
+        } while( cur!=this->sel );
+      }
+      if( exclusion_gen==-1 ) {
+        exclusion_gen = 1;
+        buf = (uint8_t*)exclusion_mask;
+        blocks = (this->alphabet+15)>>4;
+        do {
+          bmf_zero16(buf);
+          buf += 16;
+          --blocks;
+        } while( blocks );
+        hit1 = this->hit;
+      } else {
+        ++exclusion_gen;
+        hit1 = this->hit;
+      }
+      promoted = hit1&&hit1<=2;
+    } else {
+      promoted = hit0<=2;
+      if( !promoted&&mode_symbol[3]!=mode_symbol[4] ) {
+        this->sel0_list[mode_symbol[2]].add_weight(this->row_cur[5]->sym, 1u);
+        hit1 = this->hit;
+        promoted = hit1&&hit1<=2;
+      }
+    }
+    if( !promoted ) {
+      just = this->row_cur[5]->sym;
+      sym_cache = this->sym_cache;
+      c0 = sym_cache[0];
+      if( just!=c0 ) {
+        c1 = sym_cache[1];
+        if( just==c1 ) {
+          sym_cache[1] = c0;
+        } else {
+          c2 = sym_cache[2];
+          if( just==c2 ) {
+            sym_cache[2] = c1;
+            this->sym_cache[1] = this->sym_cache[0];
+          } else {
+            c3 = sym_cache[3];
+            if( just==c3 ) {
+              sym_cache[3] = c2;
+              this->sym_cache[2] = this->sym_cache[1];
+              this->sym_cache[1] = this->sym_cache[0];
+            } else {
+              c4 = sym_cache[4];
+              if( just==c4 ) {
+                sym_cache[4] = c3;
+                this->sym_cache[3] = this->sym_cache[2];
+                this->sym_cache[2] = this->sym_cache[1];
+                this->sym_cache[1] = this->sym_cache[0];
+              } else {
+                c5 = sym_cache[5];
+                if( just==c5 ) {
+                  sym_cache[5] = c4;
+                  this->sym_cache[4] = this->sym_cache[3];
+                  this->sym_cache[3] = this->sym_cache[2];
+                  this->sym_cache[2] = this->sym_cache[1];
+                  this->sym_cache[1] = this->sym_cache[0];
+                } else {
+                  c6 = sym_cache[6];
+                  if( just==c6 ) {
+                    sym_cache[6] = c5;
+                  } else {
+                    sym_cache[7] = c6;
+                    this->sym_cache[6] = this->sym_cache[5];
+                  }
+                  this->sym_cache[5] = this->sym_cache[4];
+                  this->sym_cache[4] = this->sym_cache[3];
+                  this->sym_cache[3] = this->sym_cache[2];
+                  this->sym_cache[2] = this->sym_cache[1];
+                  this->sym_cache[1] = this->sym_cache[0];
+                }
+              }
+            }
+          }
+        }
+        this->sym_cache[0] = just;
+      }
+    }
+    this->pix_cur[1] = this->pix_cur[0];
+    this->pix_cur[0] = this->row_cur[5]->sym;
+    {
+      PixRec*const here = this->row_cur[5];
+      PixRec*const up = this->row_cur[6];
+      here->match[0] = here->sym==up->sym;
+      here->match[1] = here->sym==here[-1].sym;
+      here->match[2] = here->sym==up[1].sym;
+      here->match[3] = here->sym==up[-1].sym;
+      here->match[4] = here->sym==up[2].sym;
+      here->match[5] = here->sym==up[3].sym;
+    }
+    up1 = this->row_cur[6];
+    up2 = this->row_cur[7];
+    row = this->row_cur[5]+1;
+    this->row_cur[5] = row;
+    ++this->row_cur[8];
+    ++up1;
+    this->row_cur[6] = up1;
+    ++up2;
+    ++this->row_cur[9];
+    this->row_cur[7] = up2;
+    this->grad[0] += up1[4].match[0]-up1[-4].match[0];
+    this->grad[1] += up2[4].match[0]-up2[-4].match[0];
+    this->grad[2] += row[-1].match[1]-row[-5].match[1];
+    result = row[-1].match[0]-row[-8].match[0];
+    this->grad[3] += result;
+    return result;
+  }
+
+  void expand_alphabet() {
+    SymList lists[16];
+    uint32_t* codes_p;
+    uint32_t nbytes, bits;
+    void* codes;
+    int32_t left2, left, run, gap;
+    uint32_t mask, i, cap, n_1, n_syms, j, k, carry, s, b, piece, s2;
+    bits = this->depth;
+    mask = 0xFFFFFFFF>>(-(uint8_t)this->depth&31);
+    nbytes = (bits+7)>>3;
+    for( i = 0; i<8; ++i ) {
+      lists[2*i].ent = nullptr;
+      lists[2*i+1].ent = nullptr;
+    }
+    cap = mask+1;
+    if( bits>8 )
+      cap = 8193;
+    n_1 = __rc_decode_flat(cap);
+    this->alphabet = n_1+1;
+    if( (int32_t)(n_1+1)<=0x2000 ) {
+      codes = bmf_new(sizeof(uint32_t)*(n_1+1));
+      n_syms = this->alphabet;
+      this->sym_code = (uint32_t*)codes;
+      if( n_syms ) {
+        for( j = 0; j<n_syms; ++j ) {
+          this->sym_code[j] = j;
+          n_syms = this->alphabet;
+        }
+      }
+      if( (int32_t)this->depth>8 ) {
+        if( 4*nbytes ) {
+          k = 0;
+          do
+            __init_symbol_list(&lists[k++], 256, 1);
+          while( k<(4*nbytes) );
+          n_syms = this->alphabet;
+        }
+        if( n_syms ) {
+          codes_p = this->sym_code;
+          carry = 0;
+          s = 0;
+          do {
+            codes_p[s] = 0;
+            if( nbytes ) {
+              b = 0;
+              do {
+                piece = __decode_symbol_list(&lists[4*b+carry]);
+                carry = piece>>6;
+                this->sym_code[s] += (piece<<((8*b)&31));
+                ++b;
+              } while( b<nbytes );
+            }
+            codes_p = this->sym_code;
+            carry = (uint8_t)codes_p[s++]>>7;
+          } while( s<this->alphabet );
+        }
+      } else if( n_syms<=mask ) {
+        __init_symbol_list(&lists[0], mask-n_syms+2, 1);
+        lists[0].rescale_at = 19*lists[0].n;
+        if( !(this->alphabet==0) ) {
+          run = 0;
+          s2 = 0;
+          do {
+            gap = __decode_symbol_list(&lists[0]);
+            this->sym_code[s2] = gap+run;
+            run += gap+1;
+            ++s2;
+          } while( s2<this->alphabet );
+        }
+      }
+      for( left = 15; left>=0; --left )
+        free(lists[left].ent);
+    } else {
+      this->depth = 8;
+      this->height = (this->height*nbytes);
+      this->expand_alphabet();
+      for( left2 = 15; left2>=0; --left2 )
+        free(lists[left2].ent);
+    }
+  }
+
+  void unmodel_plane_slow(uint8_t* dst) {
+    uint8_t* row[19];
+    uint32_t alpha_n;
+    ModelBlock* this_1, * blk;
+    int16_t lvl;
+    uint32_t has4, jj, wt, nbytes, row_w, * out32;
+    uint16_t* out16;
+    SymEntry* out_ent;
+    uint8_t* out_at, * dst_keep;
+    int32_t g0, y0;
+    int32_t done, f_b0, f_b3, f_b4, f_b5;
+    int32_t f_b1, lo1, m5, g1;
+    uint32_t* x6;
+    uint8_t* dst_base, * dst_buf, * buf, * expand_buf, * out_bits, * row_at, * interleave_at, * p, * out8;
+    PixRec* kk, * row_cur3, * row_cur2, * row_cur1, * n_syms;
+    int32_t g, flags, lo, k, w2, w4, w2n, lvl_n, live, gi, s, bucket, x, x2, y, step, x7, x3, x4, bits, depth, y2, depth_raw, nchunk, n_pix, chunk, q5, q1, at, q2, written, n_pix2, x5;
+    SymListBlock* has3, * alpha;
+    SymPair* group_ctr;
+    SymList* list_a, * i, * list_b, * j;
+    FreqRec* rec;
+    PixRec* lists, * t;
+    dst_keep = dst;
+    dst_base = &dst[-(this->depth<8)];
+    __rc_begin_decode(0);
+    (this)->expand_alphabet();
+    this_1 = (this);
+    g1 = 0;
+    g = 0;
+    do {
+      flags = ctx_group_flags[g];
+      this_1->ctx_state[flags] = g;
+      lo1 = 0;
+      g0 = g;
+      y0 = flags&4;
+      f_b1 = flags&2;
+      f_b4 = flags&0x10;
+      lo = 0;
+      f_b0 = flags&1;
+      f_b5 = flags&0x20;
+      f_b3 = flags&8;
+      do {
+        lo1 = lo;
+        k = 0;
+        do {
+          this_1->ctx_bucket[g+15*lo+75*k] = g1;
+          m5 = this_1->alphabet;
+          rec = &this_1->grid[g1];
+          rec->w[1] = 2;
+          rec->w[2] = 2;
+          rec->w[3] = 2;
+          rec->w[4] = 2;
+          if( y0 ) {
+            w2 = (uint16_t)(rec->w[4]+rec->w[3]);
+            rec->w[3] = w2;
+            w4 = 0;
+            rec->w[4] = 0;
+          } else {
+            w2 = rec->w[3];
+            w4 = rec->w[4];
+          }
+          if( f_b1 ) {
+            w2n = (uint16_t)(w4+rec->w[2]);
+            rec->w[2] = w2n;
+            w4 = 0;
+            rec->w[4] = 0;
+          } else {
+            w2n = rec->w[2];
+          }
+          if( f_b4 ) {
+            w2n = (uint16_t)(w2+w2n);
+            rec->w[2] = w2n;
+            w2 = 0;
+            rec->w[3] = 0;
+          }
+          if( f_b0 ) {
+            rec->w[1] += w4;
+            w4 = 0;
+            rec->w[4] = 0;
+          }
+          if( f_b3 ) {
+            rec->w[1] += w2;
+            w2 = 0;
+            rec->w[3] = 0;
+          }
+          if( f_b5 ) {
+            rec->w[1] += w2n;
+            w2n = 0;
+            rec->w[2] = 0;
+          }
+          lvl_n = (w2!=0)+(w2n!=0)+(w4!=0)+2;
+          if( lvl_n<=m5 ) {
+            rec->b14 = lvl_n;
+            rec->w[0] = 2;
+          } else {
+            lvl_n = lvl_n-1;
+            rec->b14 = lvl_n;
+            rec->w[0] = 0;
+          }
+          if( rec->w[lo1]&&rec->w[k]&&(uint8_t)lvl_n<=m5 ) {
+            live = 1;
+            lvl = (uint8_t)(1<<((5-lvl_n)&31));
+            rec->b15 = lvl;
+            rec->w[6] = lvl<<6;
+            rec->w[lo1] += lvl;
+            rec->w[k] += rec->b15;
+            rec->w[5] = rec->w[0]+rec->w[4]+rec->w[3]+rec->w[2]+rec->w[1];
+          } else {
+            live = 0;
+          }
+          g1 += live;
+          ++k;
+        } while( k<5 );
+        lo = lo1+1;
+      } while( lo1+1<5 );
+      gi = 0;
+      group_ctr = this_1->group_ctr[g0];
+      do {
+        group_ctr[gi].last = 0x2000;
+        group_ctr[gi++].prev = 0x2000;
+      } while( gi<0x10000 );
+      g = g0+1;
+    } while( g0+1<15 );
+    dst_buf = dst_base;
+    blk = (ModelBlock*)(this_1);
+    buf = (uint8_t*)bmf_new(this_1->alphabet);
+    alpha_n = this_1->alphabet;
+    this_1->alpha_map = (uint8_t*)buf;
+    memset(buf, 1, alpha_n);
+    blk->escape_list = &blk->escape;
+    __init_symbol_list(&blk->escape, blk->alphabet, 1);
+    blk->sel_cur = blk->sel;
+    wt = blk->alphabet;
+    has3 = (SymListBlock*)bmf_new(SymListBlock::bytes(wt));
+    if( has3 ) {
+      has3->n = wt;
+      list_a = has3->list;
+      for( i = list_a; wt; --wt )
+        (list_a++)->ent = nullptr;
+    } else {
+      i = nullptr;
+    }
+    has4 = blk->alphabet;
+    blk->sel1_list = i;
+    alpha = (SymListBlock*)bmf_new(SymListBlock::bytes(has4));
+    if( alpha ) {
+      alpha->n = has4;
+      list_b = alpha->list;
+      for( j = list_b; has4; --has4 )
+        (list_b++)->ent = nullptr;
+    } else {
+      j = nullptr;
+    }
+    blk->sel0_list = j;
+    if( !(blk->alphabet<=0) ) {
+      s = 0;
+      do {
+        __init_symbol_list(&blk->sel1_list[s], 99, 0);
+        __init_symbol_list(&blk->sel0_list[s++], 33, 0);
+      } while( (uint32_t)s<blk->alphabet );
+    }
+    jj = blk->depth;
+    if( (uint32_t)jj==blk->depth_raw ) {
+      expand_buf = nullptr;
+    } else {
+      dst_buf = (uint8_t*)bmf_new(blk->height*blk->width+3);
+      jj = blk->depth;
+      expand_buf = dst_buf;
+    }
+    nbytes = (jj+7)>>3;
+    if( blk->height>0 ) {
+      out_at = dst_buf;
+      bucket = 0;
+      while( 1 ) {
+        blk->row_cur[5]->match[1] = blk->row_cur[5][-1].sym==0;
+        blk->row_cur[5]->match[3] = blk->row_cur[6][-1].sym==0;
+        kk = blk->row_cur[4];
+        row_cur3 = blk->row_cur[3];
+        row_cur2 = blk->row_cur[2];
+        row_cur1 = blk->row_cur[1];
+        n_syms = blk->row_cur[0];
+        blk->row_cur[4] = row_cur3;
+        blk->row_cur[3] = row_cur2;
+        blk->row_cur[2] = row_cur1;
+        blk->row_cur[1] = n_syms;
+        blk->row_cur[0] = kk;
+        kk += 7;
+        blk->row_cur[5] = kk;
+        n_syms += 7;
+        blk->row_cur[6] = n_syms;
+        blk->row_cur[7] = row_cur1+7;
+        blk->row_cur[8] = row_cur2+7;
+        blk->row_cur[9] = row_cur3+7;
+        {
+          uint8_t zero = n_syms[1].sym==0;
+          kk->match[2] = zero;
+          blk->row_cur[5][-1].match[4] = zero;
+          blk->row_cur[5][-2].match[5] = zero;
+          zero = blk->row_cur[6][2].sym==0;
+          blk->row_cur[5]->match[4] = zero;
+          blk->row_cur[5][-1].match[5] = zero;
+        }
+        blk->row_cur[5]->match[5] = blk->row_cur[6][3].sym==0;
+        lists = blk->row_cur[6];
+        t = blk->row_cur[7];
+        ++blk->row_cur[5];
+        ++lists;
+        ++blk->row_cur[8];
+        blk->row_cur[6] = lists;
+        ++t;
+        blk->row_cur[7] = t;
+        ++blk->row_cur[9];
+        blk->grad[0] = lists[3].match[0]+lists[2].match[0]+lists[1].match[0]+lists[0].match[0]+lists[4].match[0]-5;
+        blk->grad[3] = 0;
+        blk->grad[2] = 0;
+        row_w = blk->width;
+        blk->grad[1] = t[3].match[0]+t[2].match[0]+t[1].match[0]+t[0].match[0]+t[4].match[0]-5;
+        x = bucket;
+        if( row_w<=0 )
+          break;
+        x2 = 0;
+        do {
+          y = ((ModelBlock*)blk)->decode_pixel(x2);
+          blk->init_tables();
+          row_w = blk->width;
+          x2 += y;
+        } while( (uint32_t)x2<blk->width );
+        x = bucket;
+        if( nbytes!=4 )
+          goto LABEL_53;
+        if( row_w>0 ) {
+          out32 = (uint32_t*)out_at;
+          y2 = 0;
+          do
+            *out32++ = blk->sym_code[blk->row_cur[0][y2+++8].sym];
+          while( (uint32_t)y2<blk->width );
+          out_at = (uint8_t*)out32;
+          goto LABEL_74;
+        }
+  LABEL_74:
+        bucket = x+1;
+        if( (uint32_t)bucket>=blk->height )
+          goto LABEL_76;
+      }
+      if( nbytes==4 )
+        goto LABEL_74;
+  LABEL_53:
+      if( nbytes==3 ) {
+        if( row_w>0 ) {
+          out_ent = (SymEntry*)out_at;
+          step = 0;
+          do {
+            x6 = blk->sym_code;
+            x7 = blk->row_cur[0][step+8].sym;
+            out_ent->set((uint16_t)x6[x7], (uint8_t)(x6[x7]>>16));
+            ++step;
+            ++out_ent;
+          } while( (uint32_t)step<blk->width );
+          out_at = (uint8_t*)out_ent;
+        }
+        goto LABEL_74;
+      }
+      if( nbytes!=2 ) {
+        if( blk->depth==8 ) {
+          if( row_w>0 ) {
+            out8 = out_at;
+            x5 = 0;
+            do
+              *out8++ = (uint8_t)blk->sym_code[blk->row_cur[0][x5+++8].sym];
+            while( (uint32_t)x5<blk->width );
+            out_at = out8;
+          }
+        } else if( row_w>0 ) {
+          x4 = 0;
+          bits = 0;
+          out_bits = out_at;
+          do {
+            depth = blk->depth;
+            bits -= depth;
+            if( bits<0 ) {
+              bits = 8-depth;
+              *++out_bits = blk->sym_code[blk->row_cur[0][x4+8].sym]<<((8-depth)&31);
+            } else {
+              *out_bits |= blk->sym_code[blk->row_cur[0][x4+8].sym]<<(bits&31);
+            }
+            ++x4;
+          } while( (uint32_t)x4<blk->width );
+          out_at = out_bits;
+        }
+        goto LABEL_74;
+      }
+      if( row_w>0 ) {
+        out16 = (uint16_t*)out_at;
+        x3 = 0;
+        do
+          *out16++ = blk->sym_code[blk->row_cur[0][x3+++8].sym];
+        while( (uint32_t)x3<blk->width );
+        out_at = (uint8_t*)out16;
+      }
+      goto LABEL_74;
+    }
+  LABEL_76:
+    __rc_end_decode();
+    depth_raw = blk->depth_raw;
+    if( (uint32_t)depth_raw!=blk->depth ) {
+      nchunk = (depth_raw+7)>>3;
+      if( nchunk<=0 ) {
+        n_pix = blk->height*blk->width;
+      } else {
+        done = 0;
+        n_pix = blk->height*blk->width;
+        chunk = n_pix/nchunk;
+        if( nchunk>=6 ) {
+          q5 = 0;
+          row_at = expand_buf;
+          do {
+            row[q5] = row_at;
+            row_at += 5*chunk;
+            row[q5+1] = &expand_buf[chunk*(q5+1)];
+            row[q5+2] = &expand_buf[chunk*(q5+2)];
+            row[q5+3] = &expand_buf[chunk*(q5+3)];
+            row[q5+4] = &expand_buf[chunk*(q5+4)];
+            q5 += 5;
+          } while( q5<=nchunk-6 );
+          done = q5;
+        }
+        q1 = done;
+        at = chunk*done;
+        do {
+          row[q1] = &expand_buf[at];
+          at += chunk;
+          ++q1;
+        } while( q1<nchunk );
+      }
+      if( n_pix>0 ) {
+        interleave_at = dst_keep;
+        q2 = 0;
+        written = 0;
+        do {
+          p = row[q2];
+          *interleave_at = *p;
+          n_pix2 = blk->height*blk->width;
+          ++interleave_at;
+          row[q2++] = p+1;
+          if( q2==nchunk )
+            q2 = 0;
+          ++written;
+        } while( written<n_pix2 );
+      }
+      free(expand_buf);
+    }
+  }
+
+  int32_t decode_pixel(int32_t x) {
+    struct alignas(16) DecodePixelFrame {
+      union {
+        uint32_t sym[32];
+        struct {
+          int32_t sym0;
+          int32_t sym1;
+          int32_t sym2;
+          int32_t sym3;
+          int32_t sym4;
+          int32_t sym5;
+          int32_t sym6;
+          int32_t sym7;
+          int32_t sym8;
+          int32_t sym9;
+          int32_t sym10;
+          int32_t sym11;
+          int32_t sym12;
+          int32_t sym13;
+          int32_t sym14;
+          int32_t sym15;
+          int32_t sym16;
+          int32_t sym17;
+          int32_t sym18;
+          int32_t sym19;
+          int32_t sym20;
+          int32_t sym21;
+          int32_t sym22;
+          int32_t sym23;
+          int32_t sym24;
+          int32_t sym25;
+          int32_t sym26;
+          int32_t sym27;
+          int32_t sym28;
+          int32_t sym29;
+          int32_t sym30;
+          int32_t sym31;
+        };
+      };
+      uint8_t _gap0[4];
+      uint8_t _pad0[32];
+    } __frame;
+    int32_t idx_t;
+    FreqRec* freq;
+    uint16_t* id3p;
+    uint8_t g_ab;
+    int8_t gen;
+    FreqRec* freq2;
+    uint16_t* sym_cache;
+    PixRec* up4;
+    FreqRec* freq_tbl;
+    SymList* sel1_list, ** sel_p;
+    int32_t bin_tot;
+    int32_t arg_cum, arg_high, arg_tot;
+    uint32_t done, lvl_a, pos1;
+    PixRec* r8, * r7, * rec;
+    uint16_t* pixq;
+    PixRec* r8b, * r7b, * next, * r5, * cur6b;
+    uint8_t g_a, g_b, g_c, g_d, g_e;
+    int32_t n2r;
+    int16_t sym_rev, s1c, w1s, s3b;
+    int32_t up_sym, left_sym, up_p1_sym, up_m1_sym, m_lo, m_up, nb, key, ctx_state, pair_last, cap, ctx_bucket, up_m0, m_w1, nb2, all_up, sig1, id1, sig2, id2, id3_used, s1a, m_up0, idx1, run, bucket, bit, msym1c, hit_a, idx_s, mask, seen, run0, s1b, * recw, flags_word, s3c, s3d, s1d, tot, target, cum, w6a, b15a, w5a, msym3, msym1, msym2, pix1, cache0, cache1, c4, c5, c6, c7, h11, h10, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h24, h28, h26, h30, h31, psym, bit2, msym1b, lsym, s0b, b15, w2t, w3t, w4t, w5, w0r, w1r, q1, w2r, w3, w3r, s0a, span, w4r, n4r, target2, cum2, lvl_b, b15b, w5b, w6b, s0c, s3a;
+    PixRec* row;
+    SymPair* pair;
+    PixRec* cur6;
+    uint16_t pair_prev;
+    PixRec* up5, * r8c;
+    uint16_t* pixp, * pixr, q1w, tot2, k0;
+    uint32_t si, s2a, k2, k2h;
+    uint16_t k1, g4, g3, g2, g1, g0;
+    uint16_t k4, k3;
+    PixRec* up2;
+    PixRec* up1;
+    PixRec* up3;
+    PixRec* up9;
+    PixRec* cur6c;
+    BitCtr* ctr;
+    cur6 = (PixRec*)this->row_cur[6];
+    up_sym = cur6->sym;
+    row = this->row_cur[5];
+    left_sym = row[-1].sym;
+    up_p1_sym = cur6[1].sym;
+    up_m1_sym = cur6[-1].sym;
+    __frame.sym0 = up_sym;
+    ::mode_symbol[1] = up_sym;
+    __frame.sym1 = left_sym;
+    ::mode_symbol[2] = left_sym;
+    __frame.sym3 = up_p1_sym;
+    ::mode_symbol[3] = up_p1_sym;
+    m_lo = cur6->match[1]+4*(up_p1_sym==up_m1_sym);
+    m_up = cur6[1].match[1];
+    __frame.sym2 = up_m1_sym;
+    mode_symbol[4] = up_m1_sym;
+    nb = 32*row[-1].match[2]+16*row[-1].match[4]+(2*row[-1].match[0]+8*m_up+m_lo);
+    if( up_sym==left_sym ) {
+      if( __frame.sym3==__frame.sym0 ) {
+        sym_rev = this->sym_rev[up_sym];
+        if( up_sym==__frame.sym2 )
+          key = (uint16_t)(sym_rev-row[-2].sym);
+        else
+          key = (uint16_t)(sym_rev-__frame.sym2);
+      } else {
+        key = (uint16_t)(this->sym_rev[up_sym]-__frame.sym3);
+      }
+    } else {
+      key = (uint16_t)(this->sym_rev[up_sym]-__frame.sym1);
+    }
+    this->sym_cache = &this->sym_ctr[8*key];
+    ctx_state = this->ctx_state[nb];
+    this->ctx_state_seen = ctx_state;
+    pair = &this->group_ctr[ctx_state][key];
+    this->pix_cur = (uint16_t*)pair;
+    pair_last = pair->last;
+    if( pair_last==__frame.sym0 ) {
+      cap = 15;
+    } else if( pair_last==__frame.sym1 ) {
+      cap = 30;
+    } else if( pair_last==__frame.sym3 ) {
+      cap = 45;
+    } else {
+      cap = 60;
+      if( !(pair_last==__frame.sym2) )
+        cap = 0;
+    }
+    pair_prev = pair->prev;
+    if( pair_prev==__frame.sym0 ) {
+      cap += 75;
+    } else if( pair_prev==__frame.sym1 ) {
+      cap += 150;
+    } else if( pair_prev==__frame.sym3 ) {
+      cap += 225;
+    } else if( pair_prev==__frame.sym2 ) {
+      cap += 300;
+    }
+    r8 = this->row_cur[8];
+    ctx_bucket = this->ctx_bucket[ctx_state+cap];
+    r7 = this->row_cur[7];
+    this->bucket_idx = ctx_bucket;
+    up_m0 = cur6->match[0];
+    __frame.sym2 = up_m0;
+    m_w1 = row[-1].match[1];
+    up9 = this->row_cur[9];
+    nb2 = 8*row[-2].match[2]+4*row[-2].match[5]+m_w1+2*row[-2].match[4];
+    all_up = ((uint8_t)(up9->match[0]&r8->match[0]&__frame.sym2&r7->match[0])<<9)+((uint8_t)(up9->match[1]&r8->match[1]&r7->match[1]&cur6->match[1])<<8)+(ctx_bucket<<10)+nb2;
+    cur6b = cur6;
+    sig1 = ((this->grad[3]==0)<<7)+((this->grad[2]==0)<<6)+32*(this->grad[1]==0)+16*(this->grad[0]==0)+all_up;
+    id1 = this->ctx_id1[sig1];
+    if( id1==0xFFFF ) {
+      this->ctx_id1[sig1] = this->ctx_id1_used;
+      cur6b = this->row_cur[6];
+      row = this->row_cur[5];
+      ++this->ctx_id1_used;
+      id1 = this->ctx_id1[sig1];
+      __frame.sym2 = cur6b->match[0];
+    }
+    sig2 = row[-1].match[5]+4*cur6b[1].match[3]+2*__frame.sym2+8*id1;
+    id2 = this->ctx_id2[sig2];
+    if( id2==0xFFFF ) {
+      this->ctx_id2[sig2] = this->ctx_id2_used++;
+      id2 = this->ctx_id2[sig2];
+    }
+    if( (int32_t)this->alphabet<32 ) {
+      id3_used = this->ctx_id3_used;
+      __frame.sym1 = 16*id2+(__frame.sym1&0xF);
+      id3p = &this->ctx_id3[__frame.sym1];
+      id2 = *id3p;
+      if( id2==0xFFFF ) {
+        s1a = __frame.sym1;
+        if( id3_used>53248 )
+          s1a = __frame.sym1|0xF;
+        id3p = &this->ctx_id3[s1a];
+        id2 = *id3p;
+      }
+      if( id2>=id3_used ) {
+        *id3p = id3_used;
+        ++this->ctx_id3_used;
+        id2 = *id3p;
+      }
+    }
+    if( (this->row_cur[5][-1].match[1]&this->row_cur[5][-1].match[0])!=0 ) {
+      up1 = this->row_cur[6];
+      up2 = this->row_cur[7];
+      if( ((uint8_t)(up2[2].match[1]&up2[1].match[1]&up2[0].match[1]&up1[3].match[1]&up1[2].match[1]&up1[1].match[1]&up1[0].match[1]&up1[0].match[0]&(int8_t)up1[-1].match[1])&up2[3].match[1])!=0 ) {
+        m_up0 = up2[0].match[0];
+        idx1 = 1;
+        if( this->width-x<=1 ) {
+          run = 1;
+        } else {
+          __frame.sym1 = this->width-x;
+          while( 1 ) {
+            run = idx1;
+            if( (up1[idx1+2].match[1]&up1[idx1+2].match[0])==0 )
+              break;
+            m_up0 = (uint8_t)(up2[run].match[0]&m_up0);
+            if( ++idx1>=__frame.sym1 ) {
+              run = idx1;
+              goto LABEL_42;
+            }
+          }
+        }
+  LABEL_42:
+        bucket = *(this->run_bucket+idx1);
+        bit = this->esc_ctr[(8*bucket+4*(uint8_t)(up2[run+3].match[1]&up2[run+2].match[1])+2*m_up0+*(this->alpha_map+__frame.sym0)+1)].decode_context_bit(this->esc_ctr);
+        msym1c = ::mode_symbol[1];
+        this->hit = bit;
+        *(((uint8_t*)this->alpha_map)+msym1c) = bit;
+        hit_a = this->hit;
+        if( hit_a ) {
+          idx_s = idx1;
+        } else {
+          idx_s = 0;
+          if( idx1==1 )
+            goto LABEL_57;
+          __frame.sym3 = idx1;
+          __frame.sym0 = bucket;
+          idx_s = 0;
+          mask = 1<<(bucket&31);
+          seen = 0;
+          do {
+            if( (mask|seen)<__frame.sym3 ) {
+              ctr = &this->run_ctr[16*((seen==0)+(bucket==__frame.sym0))+bucket];
+              run0 = ctr->n[0];
+              bin_tot = run0+ctr->n[1];
+              __frame.sym1 = rc.decode_bit(run0, ctr->n[1]);
+              if( ctr->limit<(uint32_t)bin_tot )
+                __rescale_counter_pair(ctr);
+              s1b = __frame.sym1;
+              ctr->n[__frame.sym1] += 8;
+              if( s1b )
+                idx_s |= mask;
+              seen |= idx_s&mask;
+            }
+            --bucket;
+            mask >>= 1;
+          } while( mask );
+        }
+        if( idx_s )
+          this->row_cur[5][idx_s-1].sym = this->row_cur[5][-1].sym;
+        hit_a = this->hit;
+  LABEL_57:
+        if( idx_s>hit_a ) {
+          this->row_cur[6] = this->row_cur[6]+idx_s-hit_a;
+          r8b = this->row_cur[8];
+          r7b = this->row_cur[7]+idx_s;
+          this->row_cur[7] = r7b-hit_a;
+          this->row_cur[8] = r8b+idx_s-hit_a;
+          rec = this->row_cur[5];
+          this->row_cur[9] = this->row_cur[9]+idx_s-hit_a;
+          rec->match2345 = 0x01010101;
+          *(uint32_t*)this->row_cur[5] = 0x01010101;
+          pixp = (uint16_t*)this->pix_cur;
+          __frame.sym1 = ::mode_symbol[1];
+          pixp[1] = *pixp;
+          this->row_cur[5]->sym = (uint16_t)::mode_symbol[1];
+          this->pix_cur[0] = (uint16_t)::mode_symbol[1];
+          recw = (int32_t*)this->row_cur[5];
+          flags_word = recw[1];
+          __frame.sym3 = *recw;
+          next = this->row_cur[5]+1;
+          this->row_cur[5] = next;
+          if( idx_s-hit_a!=1 ) {
+            __frame.sym2 = (idx_s-hit_a-1)/2;
+            if( __frame.sym2 ) {
+              s3c = __frame.sym3;
+              __frame.sym0 = hit_a;
+              s1c = __frame.sym1;
+              si = 0;
+              idx_t = idx_s;
+              s2a = __frame.sym2;
+              do {
+                this->pix_cur[1] = s1c;
+                *(uint32_t*)this->row_cur[5] = s3c;
+                this->row_cur[5]->match2345 = flags_word;
+                pixq = this->pix_cur;
+                ++this->row_cur[5];
+                pixq[1] = s1c;
+                *(uint32_t*)this->row_cur[5] = s3c;
+                this->row_cur[5]->match2345 = flags_word;
+                next = this->row_cur[5]+1;
+                this->row_cur[5] = next;
+                ++si;
+              } while( si<s2a );
+              hit_a = __frame.sym0;
+              idx_s = idx_t;
+              done = 2*si+1;
+            } else {
+              done = 1;
+            }
+            if( (uint32_t)(idx_s-hit_a-1)>(done-1) ) {
+              s3d = __frame.sym3;
+              this->pix_cur[1] = __frame.sym1;
+              *(uint32_t*)this->row_cur[5] = s3d;
+              this->row_cur[5]->match2345 = flags_word;
+              next = this->row_cur[5]+1;
+              this->row_cur[5] = next;
+            }
+          }
+          idx_t = idx_s;
+          cur6c = (PixRec*)this->row_cur[6];
+          g_a = cur6c[-3].match[0];
+          g_b = cur6c[-2].match[0];
+          g_c = cur6c[2].match[0];
+          g_d = cur6c[3].match[0];
+          g_ab = g_b+g_a;
+          g_e = cur6c[4].match[0];
+          up3 = (PixRec*)this->row_cur[7];
+          this->grad[0] = g_d+g_c+g_ab+g_e-5;
+          this->grad[1] = up3[3].match[0]+up3[2].match[0]+up3[1].match[0]+up3[0].match[0]+(int8_t)up3[-1].match[0]+(int8_t)up3[-2].match[0]+(int8_t)up3[-3].match[0]+up3[4].match[0]-8;
+          this->grad[2] = next[-4].match[1]+next[-3].match[1]-2;
+          s1d = __frame.sym1;
+          this->grad[3] = next[-5].match[0]+next[-6].match[0]+next[-7].match[0]+next[-4].match[0]-4;
+          next[-1].match[4] = s1d==cur6c[1].sym;
+          idx_s = idx_t;
+          this->row_cur[5][-1].match[5] = s1d==this->row_cur[6][2].sym;
+          hit_a = this->hit;
+        }
+        if( hit_a )
+          return idx_s;
+        goto LABEL_86;
+      }
+    }
+    freq = &this->grid[this->bucket_idx];
+    freq_tbl = &this->grid[id2+188];
+    tot = freq_tbl->w[5];
+    if( freq_tbl->w[5] ) {
+      if( tot==1 ) {
+        b15 = freq->b15;
+        w2t = b15*freq_tbl->w[2];
+        w3t = b15*freq_tbl->w[3];
+        __frame.sym1 = b15*freq_tbl->w[0];
+        w1s = b15*freq_tbl->w[1];
+        __frame.sym2 = w2t;
+        w4t = b15*freq_tbl->w[4];
+        __frame.sym0 = w3t;
+        __frame.sym3 = w4t;
+        *freq_tbl = *freq;
+        w5 = freq_tbl->w[5];
+        w0r = freq_tbl->w[0];
+        freq_tbl->b14 *= 8;
+        w1r = 21*freq_tbl->w[1];
+        __frame.sym1 += (21*w0r+w5-1)/w5;
+        freq_tbl->w[0] = __frame.sym1;
+        q1 = (w1r+w5-1)/w5;
+        w2r = 21*freq_tbl->w[2];
+        w3 = freq_tbl->w[3];
+        q1w = q1+w1s;
+        freq_tbl->w[1] = q1w;
+        w3r = 21*w3;
+        s0a = __frame.sym0;
+        n2r = (w2r+w5-1)/w5+__frame.sym2;
+        freq_tbl->w[2] = (uint16_t)n2r;
+        span = (w3r+w5-1)/w5+s0a;
+        w4r = 21*freq_tbl->w[4];
+        freq_tbl->w[3] = span;
+        n4r = (w4r+w5-1)/w5+__frame.sym3;
+        freq_tbl->w[4] = n4r;
+        tot2 = __frame.sym1+n4r+(span+(uint16_t)n2r+q1w);
+        tot = tot2;
+        freq_tbl->w[5] = tot2;
+      }
+      arg_tot = tot;
+      target = rc.get_freq(arg_tot);
+      cum = freq_tbl->w[0];
+      if( cum<=target ) {
+        cum += freq_tbl->w[1];
+        if( cum<=target ) {
+          cum += freq_tbl->w[2];
+          if( cum<=target ) {
+            cum += freq_tbl->w[3];
+            if( cum<=target ) {
+              cum += freq_tbl->w[4];
+              lvl_a = 4;
+            } else {
+              lvl_a = 3;
+            }
+          } else {
+            lvl_a = 2;
+          }
+        } else {
+          lvl_a = 1;
+        }
+      } else {
+        lvl_a = 0;
+      }
+      w6a = freq_tbl->w[6];
+      arg_high = cum;
+      b15a = freq_tbl->b15;
+      arg_cum = cum-freq_tbl->w[lvl_a];
+      w5a = freq_tbl->w[5];
+      if( w5a>w6a&&(freq_tbl->w[lvl_a]+b15a+8<w5a||freq_tbl->w[5]>0x4000u) ) {
+        g2 = freq_tbl->w[2];
+        __frame.sym0 = w6a;
+        g1 = freq_tbl->w[1];
+        g0 = freq_tbl->w[0];
+        __frame.sym1 = lvl_a;
+        __frame.sym2 = b15a;
+        g0 = g0-(g0>>1);
+        freq_tbl->w[0] = g0;
+        g1 = g1-(g1>>1);
+        freq_tbl->w[1] = g1;
+        g2 = g2-(g2>>1);
+        g3 = freq_tbl->w[3];
+        freq_tbl->w[2] = g2;
+        g3 = g3-(g3>>1);
+        g4 = freq_tbl->w[4];
+        freq_tbl->w[3] = g3;
+        g4 = g4-(g4>>1);
+        freq_tbl->w[4] = g4;
+        g1 = g3+g2+g1;
+        b15a = __frame.sym2;
+        g4 = g0+g4;
+        w5a = (uint16_t)(g4+g1);
+        s0b = __frame.sym0;
+        lvl_a = __frame.sym1;
+        freq_tbl->w[5] = w5a;
+        if( s0b<256&&!freq_tbl->b14 ) {
+          s0b = 256;
+          freq_tbl->w[6] = 256;
+        }
+        if( w5a>s0b ) {
+          if( b15a<15 )
+            b15a = 15;
+          freq_tbl->b15 = b15a;
+        }
+      }
+      freq_tbl->w[5] = b15a+w5a;
+      freq_tbl->w[lvl_a] += b15a;
+      rc.decode(arg_cum, arg_high, arg_tot);
+      this->hit = lvl_a;
+      if( freq_tbl->b14 ) {
+        --freq_tbl->b14;
+        freq2 = freq;
+        ++freq->w[5];
+        ++freq2->w[lvl_a];
+        lvl_a = this->hit;
+      }
+    } else {
+      arg_tot = freq->w[5];
+      target2 = rc.get_freq(arg_tot);
+      cum2 = freq->w[0];
+      if( cum2<=target2 ) {
+        cum2 += freq->w[1];
+        if( cum2<=target2 ) {
+          cum2 += freq->w[2];
+          if( cum2<=target2 ) {
+            cum2 += freq->w[3];
+            if( cum2<=target2 ) {
+              cum2 += freq->w[4];
+              lvl_b = 4;
+            } else {
+              lvl_b = 3;
+            }
+          } else {
+            lvl_b = 2;
+          }
+        } else {
+          lvl_b = 1;
+        }
+      } else {
+        lvl_b = 0;
+      }
+      b15b = freq->b15;
+      arg_high = cum2;
+      arg_cum = cum2-freq->w[lvl_b];
+      w5b = freq->w[5];
+      w6b = freq->w[6];
+      __frame.sym3 = b15b;
+      if( w5b>w6b&&(freq->w[lvl_b]+__frame.sym3+8<w5b||w5b>0x4000) ) {
+        __frame.sym0 = w6b;
+        __frame.sym2 = lvl_b;
+        k1 = freq->w[1];
+        k2 = freq->w[2];
+        k0 = freq->w[0]-(freq->w[0]>>1);
+        freq->w[0] = k0;
+        k1 = k1-(k1>>1);
+        freq->w[1] = k1;
+        k2h = k2-(k2>>1);
+        k3 = (uint16_t)freq->w[3];
+        freq->w[2] = k2h;
+        k3 = k3-(k3>>1);
+        k4 = (uint16_t)freq->w[4];
+        freq->w[3] = k3;
+        k4 = k4-(k4>>1);
+        freq->w[4] = k4;
+        k4 = k0+k4;
+        w5b = (uint16_t)(k4+k3+k2h+k1);
+        s0c = __frame.sym0;
+        freq->w[5] = w5b;
+        lvl_b = __frame.sym2;
+        if( s0c<256&&!freq->b14 ) {
+          s0c = 256;
+          freq->w[6] = 256;
+        }
+        if( w5b>s0c ) {
+          s3a = __frame.sym3;
+          if( __frame.sym3<15 )
+            s3a = 15;
+          __frame.sym3 = s3a;
+          freq->b15 = s3a;
+        }
+      }
+      s3b = __frame.sym3;
+      freq->w[5] = __frame.sym3+w5b;
+      freq->w[lvl_b] += s3b;
+      rc.decode(arg_cum, arg_high, arg_tot);
+      this->hit = lvl_b;
+      freq_tbl->w[5] = freq_tbl->w[lvl_b]++!=0;
+      lvl_a = this->hit;
+    }
+    if( lvl_a ) {
+      this->row_cur[5]->sym = mode_symbol[lvl_a];
+      return 1;
+    }
+    idx_s = 0;
+  LABEL_86:
+    gen = exclusion_gen;
+    msym3 = ::mode_symbol[3];
+    msym1 = ::mode_symbol[1];
+    idx_t = idx_s;
+    msym2 = ::mode_symbol[2];
+    exclusion_mask[mode_symbol[4]] = exclusion_gen;
+    pixr = (uint16_t*)this->pix_cur;
+    exclusion_mask[msym3] = gen;
+    exclusion_mask[msym2] = gen;
+    exclusion_mask[msym1] = gen;
+    __byte_445440[0] = gen;
+    this->sel[0] = nullptr;
+    pix1 = pixr[1];
+    __frame.sym0 = *pixr;
+    sym_cache = this->sym_cache;
+    cache0 = sym_cache[0];
+    cache1 = sym_cache[1];
+    __frame.sym1 = pix1;
+    __frame.sym2 = cache0;
+    c4 = sym_cache[4];
+    __frame.sym3 = cache1;
+    c5 = sym_cache[5];
+    __frame.sym4 = sym_cache[2];
+    c6 = sym_cache[6];
+    c7 = sym_cache[7];
+    __frame.sym5 = sym_cache[3];
+    up4 = (PixRec*)this->row_cur[6];
+    __frame.sym6 = c4;
+    h11 = up4[2].sym;
+    __frame.sym7 = c5;
+    r5 = this->row_cur[5];
+    __frame.sym8 = c6;
+    h10 = r5[-2].sym;
+    __frame.sym9 = c7;
+    __frame.sym10 = h10;
+    up5 = this->row_cur[7];
+    h12 = up5[1].sym;
+    __frame.sym11 = h11;
+    h13 = up5->sym;
+    __frame.sym12 = h12;
+    h14 = up4[-2].sym;
+    __frame.sym13 = h13;
+    h15 = up5[-1].sym;
+    __frame.sym14 = h14;
+    h16 = r5[-3].sym;
+    __frame.sym15 = h15;
+    h17 = up4[3].sym;
+    __frame.sym16 = h16;
+    h18 = up4[4].sym;
+    __frame.sym17 = h17;
+    h19 = r5[-4].sym;
+    __frame.sym18 = h18;
+    h20 = up4[-3].sym;
+    __frame.sym19 = h19;
+    h21 = up5[2].sym;
+    __frame.sym20 = h20;
+    __frame.sym21 = h21;
+    r8c = this->row_cur[8];
+    __frame.sym22 = r8c->sym;
+    __frame.sym23 = up5[-2].sym;
+    h24 = r5[-5].sym;
+    h28 = r5[-7].sym;
+    __frame.sym24 = h24;
+    __frame.sym25 = r8c[1].sym;
+    h26 = up4[5].sym;
+    h30 = up4[7].sym;
+    __frame.sym26 = h26;
+    __frame.sym27 = this->row_cur[9]->sym;
+    __frame.sym28 = h28;
+    __frame.sym29 = r8c[-1].sym;
+    h31 = up5[3].sym;
+    this->sym_pos = 0;
+    __frame.sym30 = h30;
+    __frame.sym31 = h31;
+    do {
+      psym = (this)->pixel_context((uint32_t*)__frame.sym);
+      if( psym>=0 ) {
+        bit2 = this->bit_node[this->ctr_node].decode_context_bit(&this->bit_root[this->ctr_fallback]);
+        this->row_cur[5]->sym = psym;
+        if( bit2 )
+          return idx_t+1;
+        exclusion_mask[psym] = exclusion_gen;
+      }
+      pos1 = this->sym_pos+1;
+      this->sym_pos = pos1;
+    } while( pos1<32 );
+    msym1b = ::mode_symbol[1];
+    sel1_list = this->sel1_list;
+    this->sel[0] = &this->sel0_list[::mode_symbol[2]];
+    sel_p = this->sel_cur;
+    this->sel[1] = &sel1_list[msym1b];
+    while( 1 ) {
+      if( sel_p>&this->escape_list )
+        __exit_402E40(4);
+      if( (*sel_p)->live ) {
+        lsym = __decode_symbol_list(*sel_p);
+        this->row_cur[5]->sym = lsym;
+        if( lsym>=0 )
+          return idx_t+1;
+        sel_p = this->sel_cur;
+      }
+      this->sel_cur = ++sel_p;
+    }
+  }
+
+  int32_t code_pixel(int32_t x) {
+    struct alignas(16) CodePixelFrame {
+      union {
+        uint32_t sym[32];
+        struct {
+          int32_t sym0;
+          int32_t sym1;
+          int32_t sym2;
+          int32_t sym3;
+          int32_t sym4;
+          int32_t sym5;
+          int32_t sym6;
+          int32_t sym7;
+          int32_t sym8;
+          int32_t sym9;
+          int32_t sym10;
+          int32_t sym11;
+          int32_t sym12;
+          int32_t sym13;
+          int32_t sym14;
+          int32_t sym15;
+          int32_t sym16;
+          int32_t sym17;
+          int32_t sym18;
+          int32_t sym19;
+          int32_t sym20;
+          int32_t sym21;
+          int32_t sym22;
+          int32_t sym23;
+          int32_t sym24;
+          int32_t sym25;
+          int32_t sym26;
+          int32_t sym27;
+          int32_t sym28;
+          int32_t sym29;
+          int32_t sym30;
+          int32_t sym31;
+        };
+      };
+      uint8_t _gap0[4];
+      uint8_t _pad0[32];
+    } __frame;
+    int32_t runlen_s;
+    PixRec* r4;
+    uint8_t* alpha_map;
+    PixRec* up9;
+    PixRec* rowp;
+    PixRec* row_cur9;
+    bool up_eq_west;
+    int8_t mode;
+    uint16_t rev;
+    int32_t arg_cum;
+    FreqRec* frec;
+    uint16_t* wr;
+    PixRec* up4;
+    uint16_t wp, g4, g3;
+    SymList* sel1_list, ** sel_p;
+    uint32_t arg_tot, arg_high, done, rec_word, grid_kind;
+    PixRec* r1, * r2, * cur6b, * r3, * r5;
+    FreqRec* binp, * binp_s;
+    uint16_t* pixp;
+    uint8_t match1, m0, m1, m2, m3;
+    int32_t bp;
+    uint16_t* id3p;
+    int16_t s8, w1s, acc2, s3, g0;
+    SymPair* pair;
+    int32_t up_sym, left_sym, up_next_sym, upleft_sym, nb, key, ctx_state, pair_last, cap, pair_prev, ctx_bucket, up_match0, m_w1, nb2, sig1, id1, sig2, id2, id3_used, sig3, m_w1b, m_w0, m_up0, to_edge, one, run, run_pair, amap, runlen, run_hit, run_left, s1, s8b, s6, msym1, s4, bit5, first, s5, s1b, s9, cum1, lvl_a, w6a, w5a, b15a, msym3, excl_sym_a, excl_sym_b, w6d, wq1, cache2, cache1, cache3, cache4, cache6, cur5_back2, h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h24, h28, h26, h30, esym, up_hit, pos1, msym1b, w6b, * ip, b15, w2t, w3t, w4t, acc, q1, w2s, q2, w3s, w4s, s9b, cum2, lvl_b, w5c, w6c, w5b, s3b;
+    uint16_t w5, w1, h4, h3, h2, w1a, w0;
+    PixRec* row;
+    PixRec* cur6;
+    PixRec* cur5, * cur5p1, * cur5p1b, * r6, * r7;
+    uint16_t* wq, * sym_cache, w6;
+    uint16_t cache0p;
+    PixRec* cur2;
+    BitCtr* ctr;
+    uint32_t bin_tot, half, k, g2, g2h;
+    PixRec* up3;
+    PixRec* cur6c, * up2;
+    cur6 = (PixRec*)this->row_cur[6];
+    up_sym = cur6->sym;
+    cur5 = this->row_cur[5];
+    left_sym = cur5[-1].sym;
+    up_next_sym = cur6[1].sym;
+    upleft_sym = cur6[-1].sym;
+    __frame.sym8 = up_sym;
+    ::mode_symbol[1] = up_sym;
+    __frame.sym10 = left_sym;
+    ::mode_symbol[2] = left_sym;
+    __frame.sym6 = up_next_sym;
+    ::mode_symbol[3] = up_next_sym;
+    __frame.sym5 = upleft_sym;
+    mode_symbol[4] = upleft_sym;
+    nb = 32*cur5[-1].match[2]+16*cur5[-1].match[4]+2*cur5[-1].match[0]+8*cur6[1].match[1]+(cur6->match[1]+4*(up_next_sym==upleft_sym));
+    up_eq_west = up_sym==left_sym;
+    if( up_eq_west ) {
+      if( __frame.sym8==__frame.sym6 ) {
+        rev = this->sym_rev[__frame.sym8];
+        if( __frame.sym8==__frame.sym5 )
+          key = (uint16_t)(rev-cur5[-2].sym);
+        else
+          key = (uint16_t)(rev-__frame.sym5);
+      } else {
+        key = (uint16_t)(this->sym_rev[__frame.sym8]-__frame.sym6);
+      }
+    } else {
+      key = (uint16_t)(this->sym_rev[__frame.sym8]-__frame.sym10);
+    }
+    this->sym_cache = &this->sym_ctr[8*key];
+    ctx_state = this->ctx_state[nb];
+    this->ctx_state_seen = ctx_state;
+    pair = &this->group_ctr[ctx_state][key];
+    this->pix_cur = (uint16_t*)pair;
+    pair_last = pair->last;
+    if( pair_last==__frame.sym8 ) {
+      cap = 15;
+    } else if( pair_last==__frame.sym10 ) {
+      cap = 30;
+    } else if( pair_last==__frame.sym6 ) {
+      cap = 45;
+    } else {
+      up_eq_west = pair_last==__frame.sym5;
+      cap = 60;
+      if( !up_eq_west )
+        cap = 0;
+    }
+    pair_prev = pair->prev;
+    if( pair_prev==__frame.sym8 ) {
+      cap += 75;
+    } else if( pair_prev==__frame.sym10 ) {
+      cap += 150;
+    } else if( pair_prev==__frame.sym6 ) {
+      cap += 225;
+    } else if( pair_prev==__frame.sym5 ) {
+      cap += 300;
+    }
+    r1 = this->row_cur[8];
+    ctx_bucket = this->ctx_bucket[ctx_state+cap];
+    r2 = this->row_cur[7];
+    this->bucket_idx = ctx_bucket;
+    up_match0 = cur6->match[0];
+    match1 = cur6->match[1];
+    cur2 = cur5;
+    __frame.sym0 = up_match0;
+    up9 = this->row_cur[9];
+    m_w1 = cur5[-1].match[1];
+    nb2 = 8*cur5[-2].match[2]+4*cur5[-2].match[5]+m_w1+2*cur5[-2].match[4];
+    sig1 = ((this->grad[3]==0)<<7)+((this->grad[2]==0)<<6)+32*(this->grad[1]==0)+16*(this->grad[0]==0)+((uint8_t)(up9->match[0]&r1->match[0]&__frame.sym0&r2->match[0])<<9)+((uint8_t)(up9->match[1]&r1->match[1]&r2->match[1]&match1)<<8)+(ctx_bucket<<10)+nb2;
+    id1 = this->ctx_id1[sig1];
+    cur6b = cur6;
+    if( id1==0xFFFF ) {
+      this->ctx_id1[sig1] = this->ctx_id1_used;
+      cur6b = this->row_cur[6];
+      cur5 = this->row_cur[5];
+      ++*(int32_t*)&this->ctx_id1_used;
+      id1 = this->ctx_id1[sig1];
+      __frame.sym0 = cur6b->match[0];
+    }
+    sig2 = cur5[-1].match[5]+4*cur6b[1].match[3]+2*__frame.sym0+8*id1;
+    id2 = this->ctx_id2[sig2];
+    if( id2==0xFFFF ) {
+      this->ctx_id2[sig2] = (this->ctx_id2_used)++;
+      id2 = this->ctx_id2[sig2];
+    }
+    if( *(int32_t*)&this->alphabet<32 ) {
+      id3_used = this->ctx_id3_used;
+      sig3 = 16*id2+(__frame.sym10&0xF);
+      id3p = &this->ctx_id3[sig3];
+      id2 = *id3p;
+      if( id2==0xFFFF ) {
+        if( id3_used>53248 )
+          sig3 |= 0xFu;
+        id3p = &this->ctx_id3[sig3];
+        id2 = *id3p;
+      }
+      if( id2>=id3_used ) {
+        *id3p = id3_used;
+        ++*(int32_t*)&this->ctx_id3_used;
+        id2 = *id3p;
+      }
+    }
+    row = this->row_cur[5];
+    m_w1b = row[-1].match[1];
+    m_w0 = row[-1].match[0];
+    rowp = row;
+    if( (m_w1b&m_w0)!=0&&(cur6c = this->row_cur[6], up2 = this->row_cur[7], ((uint8_t)(up2[2].match[1]&up2[1].match[1]&up2[0].match[1]&cur6c[3].match[1]&cur6c[2].match[1]&cur6c[1].match[1]&cur6c[0].match[1]&cur6c[0].match[0]&cur6c[-1].match[1])&up2[3].match[1])!=0) ) {
+      m_up0 = up2[0].match[0];
+      to_edge = this->width-x;
+      __frame.sym4 = 1;
+      if( to_edge<=1 ) {
+        run = 1;
+      } else {
+        __frame.sym0 = to_edge;
+        one = 1;
+        while( 1 ) {
+          run = one;
+          if( (cur6c[one+2].match[1]&cur6c[one+2].match[0])==0 )
+            break;
+          m_up0 = (uint8_t)(up2[run].match[0]&m_up0);
+          if( ++one>=__frame.sym0 ) {
+            __frame.sym4 = one;
+            run = one;
+            goto LABEL_42;
+          }
+        }
+        __frame.sym4 = one;
+      }
+  LABEL_42:
+      run_pair = (uint8_t)(up2[run+3].match[1]&up2[run+2].match[1]);
+      __frame.sym5 = this->run_bucket[__frame.sym4];
+      amap = this->alpha_map[__frame.sym8]+8*__frame.sym5+4*run_pair+2*m_up0;
+      runlen = 0;
+      if( rowp->sym==__frame.sym8 ) {
+        do
+          ++runlen;
+        while( runlen<__frame.sym4&&rowp[runlen].sym==__frame.sym8 );
+      }
+      run_hit = runlen==__frame.sym4;
+      __frame.sym6 = run_hit;
+      if( runlen>run_hit ) {
+        this->row_cur[6] = &cur6c[runlen-run_hit];
+        this->row_cur[7] = &up2[runlen-run_hit];
+        row_cur9 = this->row_cur[9];
+        this->row_cur[8] = this->row_cur[8]+runlen-run_hit;
+        this->row_cur[9] = row_cur9+runlen-run_hit;
+        rowp->match2345 = 0x01010101;
+        *(uint32_t*)this->row_cur[5] = 0x01010101;
+        this->pix_cur[1] = this->pix_cur[0];
+        wp = __frame.sym8;
+        this->row_cur[5]->sym = __frame.sym8;
+        this->pix_cur[0] = wp;
+        r3 = this->row_cur[5];
+        rec_word = *(uint32_t*)r3;
+        __frame.sym1 = r3->match2345;
+        cur2 = r3+1;
+        this->row_cur[5] = r3+1;
+        if( runlen-run_hit!=1 ) {
+          run_left = runlen-run_hit-1;
+          half = run_left/2;
+          if( run_left/2 ) {
+            __frame.sym0 = run_left;
+            s1 = __frame.sym1;
+            runlen_s = runlen;
+            k = 0;
+            __frame.sym3 = amap;
+            s8 = __frame.sym8;
+            do {
+              this->pix_cur[1] = s8;
+              *(uint32_t*)this->row_cur[5] = rec_word;
+              this->row_cur[5]->match2345 = s1;
+              pixp = this->pix_cur;
+              ++this->row_cur[5];
+              pixp[1] = s8;
+              *(uint32_t*)this->row_cur[5] = rec_word;
+              this->row_cur[5]->match2345 = s1;
+              cur5p1 = this->row_cur[5]+1;
+              this->row_cur[5] = cur5p1;
+              ++k;
+            } while( k<half );
+            run_left = __frame.sym0;
+            amap = __frame.sym3;
+            cur2 = cur5p1;
+            runlen = runlen_s;
+            done = 2*k+1;
+          } else {
+            done = 1;
+          }
+          if( (uint32_t)run_left>(done-1) ) {
+            this->pix_cur[1] = __frame.sym8;
+            *(uint32_t*)this->row_cur[5] = rec_word;
+            this->row_cur[5]->match2345 = __frame.sym1;
+            cur5p1b = this->row_cur[5]+1;
+            this->row_cur[5] = cur5p1b;
+            cur2 = cur5p1b;
+          }
+        }
+        r4 = (PixRec*)this->row_cur[6];
+        m0 = r4[-2].match[0];
+        m1 = r4[2].match[0];
+        m2 = r4[4].match[0];
+        __frame.sym3 = amap;
+        m3 = r4[-3].match[0];
+        runlen_s = runlen;
+        up3 = (PixRec*)this->row_cur[7];
+        this->grad[0] = (r4[3].match[0]+m1+m0+m3+m2-5);
+        this->grad[1] = up3[3].match[0]+up3[2].match[0]+up3[1].match[0]+up3[0].match[0]+(int8_t)up3[-1].match[0]+(int8_t)up3[-2].match[0]+(int8_t)up3[-3].match[0]+up3[4].match[0]-8;
+        this->grad[2] = cur2[-4].match[1]+cur2[-3].match[1]-2;
+        s8b = __frame.sym8;
+        this->grad[3] = cur2[-5].match[0]+cur2[-6].match[0]+cur2[-7].match[0]+cur2[-4].match[0]-4;
+        cur2[-1].match[4] = s8b==r4[1].sym;
+        amap = __frame.sym3;
+        this->row_cur[5][-1].match[5] = s8b==this->row_cur[6][2].sym;
+        runlen = runlen_s;
+      }
+      (&this->esc_ctr[(amap+1)])->encode_context_bit(this->esc_ctr, __frame.sym6);
+      s6 = __frame.sym6;
+      msym1 = ::mode_symbol[1];
+      alpha_map = (uint8_t*)this->alpha_map;
+      this->hit = __frame.sym6;
+      *(alpha_map+msym1) = s6;
+      if( !s6&&__frame.sym4!=1 ) {
+        runlen_s = runlen;
+        __frame.sym0 = __frame.sym5;
+        s4 = __frame.sym4;
+        bit5 = 1<<(__frame.sym5&31);
+        first = 0;
+        s5 = __frame.sym5;
+        do {
+          if( s4>(bit5|first) ) {
+            __frame.sym3 = first;
+            ctr = &this->run_ctr[16*((first==0)+(s5==__frame.sym0))+s5];
+            __frame.sym1 = runlen_s&bit5;
+            bin_tot = ctr->n[0]+ctr->n[1];
+            rc.encode_bit(ctr->n[0], ctr->n[1], (runlen_s&bit5)!=0);
+            if( ctr->limit<(uint32_t)bin_tot )
+              __rescale_counter_pair(ctr);
+            s1b = __frame.sym1;
+            __frame.sym4 = bit5;
+            ctr->n[__frame.sym1!=0] += 8;
+            first |= s1b;
+            bit5 = __frame.sym4;
+          }
+          --s5;
+          bit5 >>= 1;
+        } while( bit5 );
+        runlen = runlen_s;
+      }
+      if( *(int32_t*)&this->hit )
+        return runlen;
+    } else {
+      binp = &this->grid[this->bucket_idx];
+      frec = &this->grid[id2+188];
+      grid_kind = frec->w[5];
+      if( grid_kind ) {
+        if( grid_kind==1 ) {
+          ip = (int32_t*)&this->grid[this->bucket_idx];
+          b15 = binp->b15;
+          w2t = b15*frec->w[2];
+          w3t = b15*frec->w[3];
+          __frame.sym0 = b15*frec->w[0];
+          w1s = b15*frec->w[1];
+          __frame.sym1 = w2t;
+          w4t = b15*frec->w[4];
+          __frame.sym2 = w3t;
+          __frame.sym3 = w4t;
+          *frec = *(FreqRec*)ip;
+          w5 = frec->w[5];
+          frec->b14 *= 8;
+          acc = 21*frec->w[1];
+          __frame.sym0 += (21*frec->w[0]+w5-1)/w5;
+          frec->w[0] = __frame.sym0;
+          q1 = (acc+w5-1)/w5;
+          LOWORD(acc) = __frame.sym1;
+          w2s = 21*frec->w[2];
+          w6 = q1+w1s;
+          frec->w[1] = w6;
+          q2 = (w2s+w5-1)/w5;
+          w3s = 21*frec->w[3];
+          LOWORD(acc) = q2+acc;
+          frec->w[2] = acc;
+          bp = __frame.sym2+(w3s+w5-1)/w5;
+          w4s = 21*frec->w[4];
+          frec->w[3] = (uint16_t)bp;
+          acc2 = (uint16_t)bp+acc+w6;
+          w5 = (w4s+w5-1)/w5+__frame.sym3;
+          frec->w[4] = w5;
+          grid_kind = (uint16_t)(__frame.sym0+w5+acc2);
+          frec->w[5] = grid_kind;
+          rowp = this->row_cur[5];
+        }
+        s9 = rowp->sym;
+        arg_tot = grid_kind;
+        if( s9==__frame.sym8 ) {
+          cum1 = frec->w[0];
+          lvl_a = 1;
+        } else if( s9==__frame.sym10 ) {
+          cum1 = frec->w[0]+frec->w[1];
+          lvl_a = 2;
+        } else if( s9==__frame.sym6 ) {
+          cum1 = frec->w[0]+frec->w[2]+frec->w[1];
+          lvl_a = 3;
+        } else if( s9==__frame.sym5 ) {
+          cum1 = frec->w[5]-frec->w[4];
+          lvl_a = 4;
+        } else {
+          cum1 = 0;
+          lvl_a = 0;
+        }
+        w6a = frec->w[6];
+        arg_cum = cum1;
+        arg_high = frec->w[lvl_a]+cum1;
+        w5a = frec->w[5];
+        b15a = frec->b15;
+        if( w5a>w6a&&(frec->w[lvl_a]+b15a+8<w5a||frec->w[5]>0x4000u) ) {
+          h2 = frec->w[2];
+          __frame.sym0 = w6a;
+          w1a = frec->w[1];
+          __frame.sym1 = lvl_a;
+          w0 = frec->w[0];
+          __frame.sym2 = b15a;
+          w0 = w0-(w0>>1);
+          frec->w[0] = w0;
+          w1a = w1a-(w1a>>1);
+          frec->w[1] = w1a;
+          h2 = h2-(h2>>1);
+          h3 = frec->w[3];
+          frec->w[2] = h2;
+          h3 = h3-(h3>>1);
+          h4 = frec->w[4];
+          frec->w[3] = h3;
+          h4 = h4-(h4>>1);
+          frec->w[4] = h4;
+          w1a = h3+h2+w1a;
+          b15a = __frame.sym2;
+          w1a = w0+h4+w1a;
+          lvl_a = __frame.sym1;
+          w5a = w1a;
+          w6b = __frame.sym0;
+          frec->w[5] = w5a;
+          if( w6b<256&&!frec->b14 ) {
+            w6b = 256;
+            frec->w[6] = 256;
+          }
+          if( w5a>w6b ) {
+            if( b15a<15 )
+              b15a = 15;
+            frec->b15 = b15a;
+          }
+        }
+        frec->w[5] = b15a+w5a;
+        frec->w[lvl_a] += b15a;
+        rc.encode(arg_cum, arg_high, arg_tot);
+        this->hit = lvl_a;
+        if( frec->b14 ) {
+          --frec->b14;
+          binp_s = binp;
+          ++binp->w[5];
+          ++binp_s->w[lvl_a];
+          lvl_a = this->hit;
+        }
+      } else {
+        wr = (uint16_t*)&this->grid[this->bucket_idx];
+        s9b = rowp->sym;
+        arg_tot = binp->w[5];
+        if( s9b==__frame.sym8 ) {
+          cum2 = *wr;
+          lvl_b = 1;
+        } else if( s9b==__frame.sym10 ) {
+          cum2 = *wr+wr[1];
+          lvl_b = 2;
+        } else if( s9b==__frame.sym6 ) {
+          cum2 = *wr+wr[2]+wr[1];
+          lvl_b = 3;
+        } else if( s9b==__frame.sym5 ) {
+          cum2 = wr[5]-wr[4];
+          lvl_b = 4;
+        } else {
+          cum2 = 0;
+          lvl_b = 0;
+        }
+        arg_cum = cum2;
+        arg_high = binp->w[lvl_b]+cum2;
+        w5c = binp->w[5];
+        w6c = binp->w[6];
+        __frame.sym3 = binp->b15;
+        if( w5c>w6c&&(binp->w[lvl_b]+__frame.sym3+8<w5c||w5c>0x4000) ) {
+          __frame.sym0 = w6c;
+          w1 = binp->w[1];
+          g2 = binp->w[2];
+          __frame.sym2 = lvl_b;
+          g0 = binp->w[0]-(binp->w[0]>>1);
+          binp->w[0] = g0;
+          w1 = w1-(w1>>1);
+          binp->w[1] = w1;
+          g2h = g2-(g2>>1);
+          g3 = (uint16_t)binp->w[3];
+          binp->w[2] = g2h;
+          g3 = g3-(g3>>1);
+          g4 = (uint16_t)binp->w[4];
+          binp->w[3] = g3;
+          g4 = g4-(g4>>1);
+          binp->w[4] = g4;
+          g4 = g0+g4;
+          lvl_b = __frame.sym2;
+          w5c = (uint16_t)(g4+g3+g2h+w1);
+          w5b = __frame.sym0;
+          binp->w[5] = w5c;
+          if( w5b<256&&!binp->b14 ) {
+            w5b = 256;
+            binp->w[6] = 256;
+          }
+          if( w5c>w5b ) {
+            s3b = __frame.sym3;
+            if( __frame.sym3<15 )
+              s3b = 15;
+            __frame.sym3 = s3b;
+            binp->b15 = s3b;
+          }
+        }
+        s3 = __frame.sym3;
+        binp->w[5] = __frame.sym3+w5c;
+        binp->w[lvl_b] += s3;
+        rc.encode(arg_cum, arg_high, arg_tot);
+        this->hit = lvl_b;
+        frec->w[5] = (frec->w[lvl_b])++!=0;
+        lvl_a = this->hit;
+      }
+      if( lvl_a )
+        return 1;
+      runlen = 0;
+    }
+    mode = exclusion_gen;
+    msym3 = ::mode_symbol[3];
+    excl_sym_a = ::mode_symbol[2];
+    excl_sym_b = ::mode_symbol[1];
+    exclusion_mask[mode_symbol[4]] = exclusion_gen;
+    exclusion_mask[msym3] = mode;
+    wq = (uint16_t*)this->pix_cur;
+    exclusion_mask[excl_sym_a] = mode;
+    exclusion_mask[excl_sym_b] = mode;
+    sym_cache = this->sym_cache;
+    __byte_445440[0] = mode;
+    runlen_s = runlen;
+    this->sel[0] = nullptr;
+    w6d = *wq;
+    wq1 = wq[1];
+    cache0p = *sym_cache;
+    cache2 = sym_cache[2];
+    __frame.sym0 = w6d;
+    cache1 = sym_cache[1];
+    __frame.sym1 = wq1;
+    cache3 = sym_cache[3];
+    __frame.sym2 = cache0p;
+    cache4 = sym_cache[4];
+    __frame.sym3 = cache1;
+    __frame.sym4 = cache2;
+    cache6 = sym_cache[6];
+    __frame.sym5 = cache3;
+    r5 = this->row_cur[5];
+    __frame.sym6 = cache4;
+    cur5_back2 = r5[-2].sym;
+    __frame.sym7 = sym_cache[5];
+    up4 = (PixRec*)this->row_cur[6];
+    __frame.sym8 = cache6;
+    h11 = up4[2].sym;
+    __frame.sym9 = sym_cache[7];
+    __frame.sym10 = cur5_back2;
+    r6 = this->row_cur[7];
+    h12 = r6[1].sym;
+    __frame.sym11 = h11;
+    h13 = r6->sym;
+    __frame.sym12 = h12;
+    h14 = up4[-2].sym;
+    __frame.sym13 = h13;
+    h15 = r6[-1].sym;
+    __frame.sym14 = h14;
+    h16 = r5[-3].sym;
+    __frame.sym15 = h15;
+    h17 = up4[3].sym;
+    __frame.sym16 = h16;
+    h18 = up4[4].sym;
+    __frame.sym17 = h17;
+    h19 = r5[-4].sym;
+    __frame.sym18 = h18;
+    h20 = up4[-3].sym;
+    __frame.sym19 = h19;
+    h21 = r6[2].sym;
+    __frame.sym20 = h20;
+    __frame.sym21 = h21;
+    r7 = this->row_cur[8];
+    __frame.sym22 = r7->sym;
+    __frame.sym23 = r6[-2].sym;
+    h24 = r5[-5].sym;
+    h28 = r5[-7].sym;
+    __frame.sym24 = h24;
+    __frame.sym25 = r7[1].sym;
+    h26 = up4[5].sym;
+    h30 = up4[7].sym;
+    __frame.sym26 = h26;
+    __frame.sym27 = this->row_cur[9]->sym;
+    __frame.sym28 = h28;
+    __frame.sym29 = r7[-1].sym;
+    __frame.sym30 = h30;
+    __frame.sym31 = r6[3].sym;
+    this->sym_pos = 0;
+    do {
+      esym = (this)->pixel_context((uint32_t*)__frame.sym);
+      if( esym>=0 ) {
+        up_hit = esym==this->row_cur[5]->sym;
+        (&this->bit_node[*(int32_t*)&this->ctr_node])->encode_context_bit(&this->bit_root[*(int32_t*)&this->ctr_fallback], up_hit);
+        if( up_hit )
+          return runlen_s+1;
+        exclusion_mask[esym] = exclusion_gen;
+      }
+      pos1 = this->sym_pos+1;
+      this->sym_pos = pos1;
+    } while( pos1<32 );
+    msym1b = ::mode_symbol[1];
+    sel1_list = this->sel1_list;
+    this->sel[0] = &this->sel0_list[::mode_symbol[2]];
+    sel_p = this->sel_cur;
+    this->sel[1] = &sel1_list[msym1b];
+    while( 1 ) {
+      if( (*sel_p)->live ) {
+        if( (*sel_p)->code_symbol(this->row_cur[5]->sym) )
+          return runlen_s+1;
+        sel_p = this->sel_cur;
+      }
+      this->sel_cur = ++sel_p;
+    }
+  }
+};

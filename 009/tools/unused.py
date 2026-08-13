@@ -22,11 +22,14 @@ Warnings come from running the compile, or from a file given with `--from`.  A d
 after the named ones are dropped, wrapped at the width the file already uses,
 and deleted outright when nothing is left.
 """
+import os
 import re
 import subprocess
 import sys
 
-CXX = ('g++ -m32 -march=k8 -msse2 -mfpmath=sse -std=c++17 -fno-strict-aliasing '
+# The default target, which is x64: pinned at -m32 this needed the multilib
+# runtime to answer a question that has nothing to do with pointer width.
+CXX = ('g++ -march=k8 -std=c++17 -fno-strict-aliasing '
        '-fpermissive -fno-rtti -fno-exceptions -O2 -DNDEBUG -U_FORTIFY_SOURCE '
        '-D_FORTIFY_SOURCE=0 -Wunused-variable -fdiagnostics-plain-output '
        '-fsyntax-only bmf.cpp')
@@ -39,7 +42,7 @@ WARN = re.compile(r'^(\S+):(\d+):\d+: warning: unused variable '
                   r'[\'‘"`]([^\'’"`]+)[\'’"`]')
 
 
-def warnings(argv):
+def warnings(argv, path):
     # Read the compile, unless a saved one is named.  This used to take stdin
     # whenever stdin was not a terminal, which is most of the time a script runs
     # it: the tool then read nothing, reported "no unused-variable warnings",
@@ -50,10 +53,17 @@ def warnings(argv):
     else:
         text = subprocess.run(CXX, shell=True, capture_output=True,
                               text=True).stderr
+    # The warning says which file it is about, and until bmf.cpp became an
+    # include list there was only one it could be -- so the name was captured
+    # and thrown away, and the line numbers applied to whatever `path` was.
+    # Against a split tree that is a warning about `model.inc:7975` deleting
+    # line 7975 of bmf.cpp, which is a file 160 lines long: the tool reported
+    # zero and its three live sites were in another file entirely.
+    want = os.path.basename(path)
     out = {}
     for l in text.split('\n'):
         m = WARN.match(l)
-        if m:
+        if m and os.path.basename(m.group(1)) == want:
             out.setdefault(int(m.group(2)), set()).add(m.group(3))
     return out
 
@@ -89,7 +99,7 @@ def name_of(d):
 
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else 'subs1.hpp'
-    want = warnings(sys.argv)
+    want = warnings(sys.argv, path)
     if not want:
         print('no unused-variable warnings')
         return 0
