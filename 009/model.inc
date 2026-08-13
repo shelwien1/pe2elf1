@@ -791,7 +791,9 @@ struct ModelBlock {
     m_up = cur6[1].match[1];
     __frame.sym2 = up_m1_sym;
     mode_symbol[4] = up_m1_sym;
-    nb = 32*row[-1].match[2]+16*row[-1].match[4]+(2*row[-1].match[0]+8*m_up+m_lo);
+    // Six match flags of the four named neighbours, as six bits.
+    nb = CtxIdx{}.bit<5>(row[-1].match[2]).bit<4>(row[-1].match[4])
+                 .bit<3>(m_up).bit<1>(row[-1].match[0]).raw(m_lo);
     if( up_sym==left_sym ) {
       if( __frame.sym3==__frame.sym0 ) {
         sym_rev = this->sym_rev[up_sym];
@@ -840,10 +842,16 @@ struct ModelBlock {
     __frame.sym2 = up_m0;
     m_w1 = row[-1].match[1];
     up9 = this->row_cur[9];
-    nb2 = 8*row[-2].match[2]+4*row[-2].match[5]+m_w1+2*row[-2].match[4];
+    nb2 = CtxIdx{}.bit<3>(row[-2].match[2]).bit<2>(row[-2].match[5])
+                  .bit<1>(row[-2].match[4]).bit<0>(m_w1);
     all_up = ((uint8_t)(up9->match[0]&r8->match[0]&__frame.sym2&r7->match[0])<<9)+((uint8_t)(up9->match[1]&r8->match[1]&r7->match[1]&cur6->match[1])<<8)+(ctx_bucket<<10)+nb2;
     cur6b = cur6;
-    sig1 = ((this->grad[3]==0)<<7)+((this->grad[2]==0)<<6)+32*(this->grad[1]==0)+16*(this->grad[0]==0)+all_up;
+    // The four gradient accumulators as four "is it flat" bits, over the
+    // four-bit `nb2` below them; `all_up` carries the two run bits at 8 and 9
+    // and the bucket from 10 up.
+    sig1 = CtxIdx{}.bit<7>(this->grad[3]==0).bit<6>(this->grad[2]==0)
+                   .bit<5>(this->grad[1]==0).bit<4>(this->grad[0]==0)
+                   .raw(all_up);
     id1 = this->ctx_id1[sig1];
     if( id1==0xFFFF ) {
       this->ctx_id1[sig1] = this->ctx_id1_used;
@@ -853,7 +861,8 @@ struct ModelBlock {
       id1 = this->ctx_id1[sig1];
       __frame.sym2 = cur6b->match[0];
     }
-    sig2 = row[-1].match[5]+4*cur6b[1].match[3]+2*__frame.sym2+8*id1;
+    sig2 = CtxIdx{}.bit<2>(cur6b[1].match[3]).bit<1>(__frame.sym2)
+                   .bit<0>(row[-1].match[5]).raw(8*id1);
     id2 = this->ctx_id2[sig2];
     if( id2==0xFFFF ) {
       this->ctx_id2[sig2] = this->ctx_id2_used++;
@@ -1410,7 +1419,10 @@ struct ModelBlock {
     ::mode_symbol[3] = up_next_sym;
     __frame.sym5 = upleft_sym;
     mode_symbol[4] = upleft_sym;
-    nb = 32*cur5[-1].match[2]+16*cur5[-1].match[4]+2*cur5[-1].match[0]+8*cur6[1].match[1]+(cur6->match[1]+4*(up_next_sym==upleft_sym));
+    // Six match flags of the four named neighbours, as six bits.
+    nb = CtxIdx{}.bit<5>(cur5[-1].match[2]).bit<4>(cur5[-1].match[4])
+                 .bit<3>(cur6[1].match[1]).bit<2>(up_next_sym==upleft_sym)
+                 .bit<1>(cur5[-1].match[0]).bit<0>(cur6->match[1]);
     up_eq_west = up_sym==left_sym;
     if( up_eq_west ) {
       if( __frame.sym8==__frame.sym6 ) {
@@ -1463,8 +1475,17 @@ struct ModelBlock {
     __frame.sym0 = up_match0;
     up9 = this->row_cur[9];
     m_w1 = cur5[-1].match[1];
-    nb2 = 8*cur5[-2].match[2]+4*cur5[-2].match[5]+m_w1+2*cur5[-2].match[4];
-    sig1 = ((this->grad[3]==0)<<7)+((this->grad[2]==0)<<6)+32*(this->grad[1]==0)+16*(this->grad[0]==0)+((uint8_t)(up9->match[0]&r1->match[0]&__frame.sym0&r2->match[0])<<9)+((uint8_t)(up9->match[1]&r1->match[1]&r2->match[1]&match1)<<8)+(ctx_bucket<<10)+nb2;
+    nb2 = CtxIdx{}.bit<3>(cur5[-2].match[2]).bit<2>(cur5[-2].match[5])
+                  .bit<1>(cur5[-2].match[4]).bit<0>(m_w1);
+    // Four "is this gradient flat" bits, two "did four rows above all match"
+    // bits, and the bucket, over `nb2`'s four.  Written as one multiplication
+    // chain the widths were not countable; here the index is plainly 10 bits
+    // plus however many `ctx_bucket` has.
+    sig1 = CtxIdx{}.bit<7>(this->grad[3]==0).bit<6>(this->grad[2]==0)
+                   .bit<5>(this->grad[1]==0).bit<4>(this->grad[0]==0)
+                   .bit<9>((uint8_t)(up9->match[0]&r1->match[0]&__frame.sym0&r2->match[0]))
+                   .bit<8>((uint8_t)(up9->match[1]&r1->match[1]&r2->match[1]&match1))
+                   .raw(ctx_bucket<<10).raw(nb2);
     id1 = this->ctx_id1[sig1];
     cur6b = cur6;
     if( id1==0xFFFF ) {
@@ -1475,7 +1496,8 @@ struct ModelBlock {
       id1 = this->ctx_id1[sig1];
       __frame.sym0 = cur6b->match[0];
     }
-    sig2 = cur5[-1].match[5]+4*cur6b[1].match[3]+2*__frame.sym0+8*id1;
+    sig2 = CtxIdx{}.bit<2>(cur6b[1].match[3]).bit<1>(__frame.sym0)
+                   .bit<0>(cur5[-1].match[5]).raw(8*id1);
     id2 = this->ctx_id2[sig2];
     if( id2==0xFFFF ) {
       this->ctx_id2[sig2] = (this->ctx_id2_used)++;
@@ -1483,7 +1505,7 @@ struct ModelBlock {
     }
     if( *(int32_t*)&this->alphabet<32 ) {
       id3_used = this->ctx_id3_used;
-      sig3 = 16*id2+(__frame.sym10&0xF);
+      sig3 = CtxIdx{}.bits<0, 4>(__frame.sym10).raw(16*id2);
       id3p = &this->ctx_id3[sig3];
       id2 = *id3p;
       if( id2==0xFFFF ) {
@@ -1527,7 +1549,8 @@ struct ModelBlock {
   LABEL_42:
       run_pair = (uint8_t)(up2[run+3].match[1]&up2[run+2].match[1]);
       __frame.sym5 = this->run_bucket[__frame.sym4];
-      amap = this->alpha_map[__frame.sym8]+8*__frame.sym5+4*run_pair+2*m_up0;
+      amap = CtxIdx{}.bit<2>(run_pair).bit<1>(m_up0)
+                     .raw(8*__frame.sym5).raw(this->alpha_map[__frame.sym8]);
       runlen = 0;
       if( rowp->sym==__frame.sym8 ) {
         do

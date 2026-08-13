@@ -122,30 +122,20 @@ ModelBlock*__layout_workspace(ModelBlock* blk, int32_t unread_flag, int32_t img_
   i8 = 0;
   do {
     e0 = 2*i8;
-    blk->bit_root[e0].n[0] = 40;
     ++i8;
-    blk->bit_root[e0].n[1] = 16;
-    blk->bit_root[e0].limit = 512;
-    blk->bit_root[e0+1].n[0] = 40;
-    blk->bit_root[e0+1].n[1] = 16;
-    blk->bit_root[e0+1].limit = 512;
+    blk->bit_root[e0].init_root();
+    blk->bit_root[e0+1].init_root();
   } while( i8<8 );
   i24 = 0;
   memset(blk->bit_node, 0, sizeof blk->bit_node);
   blk->sym_word = (uint16_t*)bmf_new(2*blk->height*blk->width);
-  blk->esc_ctr[0].n[0] = 4;
-  blk->esc_ctr[0].n[1] = 4;
-  blk->esc_ctr[0].limit = 72;
+  blk->esc_ctr[0].init_parent();
   memset(&blk->esc_ctr[1], 0, 1536);
   do {
     e1 = 2*i24;
-    blk->run_ctr[e1].n[0] = 4;
     ++i24;
-    blk->run_ctr[e1].n[1] = 4;
-    blk->run_ctr[e1].limit = 72;
-    blk->run_ctr[e1+1].n[0] = 4;
-    blk->run_ctr[e1+1].n[1] = 4;
-    blk->run_ctr[e1+1].limit = 72;
+    blk->run_ctr[e1].init_parent();
+    blk->run_ctr[e1+1].init_parent();
   } while( i24<0x18 );
   return blk;
 }

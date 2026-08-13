@@ -50,6 +50,7 @@
 #include <xmmintrin.h>
 
 #include "ida.inc"
+#include "ctxidx.inc"
 #include "memory.inc"
 #include "tables.inc"
 #include "globals.inc"

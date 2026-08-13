@@ -19,87 +19,136 @@ static inline FreqPair*bit_tree(uint16_t* freq, int32_t lvl) {
   return (FreqPair*)&freq[2*level_geom[lvl].tbl_base+8];
 }
 
+// One binary counter with a parent to fall back on, and a three-state life:
+// unseen, seeded, live.  Read against `bcdr.cpp`'s `BIN_CODER`, which is the
+// same counter with the same states written by hand -- the two agree line for
+// line and only the constants differ, so the names below are that file's.
+//
+//   BIN_CODER::s[2]     n[2]        the two counts
+//   BIN_CODER::MaxFreq  limit       the total at which they are halved
+//   STEP = 10           kStep = 8   what a coded bit adds
+//   scaleRare()         scale_rare()
+//   initChild(bc)       seed_from(parent)
+//   process(rc,bc,..)   code_context_bit<f_DEC>(parent, bit)
+//
+// The one structural difference is where the "seen once" mark lives.
+// `BIN_CODER` marks itself unseeded with `MaxFreq == 0` and remembers the
+// first bit in `s[1]`; this remembers it in `n[0]` as `bit + 1` and reads
+// `n[1] == 0` as "not seeded yet".  Same machine, one slot over -- which is
+// worth knowing, because `n[0]` is a *count* in the live state and a
+// *remembered bit* before it, and nothing in the decompilation said so.
 struct BitCtr {
   uint16_t n[2];
   uint16_t limit;
-  // One binary counter, coded either way.  The two bodies were the same code
-  // twice: the same escape into the parent counter when this one is unseeded,
-  // the same rescale at the same limit, the same two updates afterwards.  Only
-  // the middle line differs -- the encoder is told the bit and the decoder is
-  // told by the stream -- so `bit` is the parameter on the way in and the
-  // answer on the way out.
-  //
+
+  // BIN_CODER's STEP, 8 here against its 10, and the same three uses: what a
+  // coded bit adds, half of it as the seeding bump, and the ceiling below
+  // which the parent is bumped too.
+  static const uint32_t kStep = 8;
+  static const uint32_t kSeedBump = 4;
+  static const uint32_t kSeedLimit = 512;
+  static const uint32_t kLimitStep = 64;
+  static const uint32_t kMaxLimit = 0x4000;
+  static const uint32_t kParentBump = 0x88;
+
+  uint32_t summ() const {
+    return n[0]+n[1];
+  }
+
+  // `BIN_CODER::initParent`: both sides at half a step, under a low ceiling,
+  // so the first few bits move it a long way.  What `esc_ctr[0]` and every
+  // `run_ctr[]` start as.
+  void init_parent() {
+    n[0] = n[1] = kStep/2;
+    limit = 72;
+  }
+
+  // A root of the escape tree, which does not start even: 40 against 16 is
+  // five to two toward "no", at the same ceiling `seed_from` hands a child.
+  void init_root() {
+    n[0] = 40;
+    n[1] = 16;
+    limit = kSeedLimit;
+  }
+
+  // And the third state has no initialiser at all: a counter is *unseen* when
+  // it is all zeroes, which is why `bit_node[]` and `esc_ctr[1..]` are simply
+  // memset.  bcdr does the same with `memset(BCdr2, 0, sizeof(BCdr2))`.
+
+  // `BIN_CODER::scaleRare`.  Halve both counts and let the limit climb, so a
+  // counter that keeps being right is allowed to get more confident before it
+  // is cut back again.  `__rescale_counter_pair` is this, called from the run
+  // coder, and is now the same code rather than a second copy of it.
+  int32_t scale_rare() {
+    n[0] -= n[0]>>1;
+    n[1] -= n[1]>>1;
+    if( limit<kMaxLimit )
+      limit += kLimitStep;
+    return limit;
+  }
+
+  // `BIN_CODER::initChild`.  A counter seen once takes its parent's shape
+  // scaled to 64 -- `(64 * (parent - 1) + total) / total` on each side, which
+  // is bcdr's formula with 32 -- bumps the side the first bit went, and takes
+  // the parent's confidence down by 3 for having handed it over.
+  void seed_from(BitCtr* parent) {
+    const int32_t first = n[0]-1;
+    const int32_t par0 = parent->n[0];
+    const int32_t par_tot = par0+parent->n[1];
+    n[0] = (par_tot+(par0<<6)-64)/par_tot;
+    n[1] = ((parent->n[1]<<6)+par_tot-64)/par_tot;
+    n[first] += kSeedBump;
+    limit = kSeedLimit;
+    const int32_t par_n = parent->n[first];
+    parent->n[first] = par_n-3*(par_n>3);
+  }
+
   // The two returns are not the same value and that is not a merge artefact:
   // the encoder returned the counter it had just bumped and the decoder
   // returns the bit.  Nothing reads the encoder's, both call sites drop it,
   // and it is kept anyway -- a merge is not the place to decide that a return
   // value is dead.
   template<int f_DEC>
-  int32_t code_context_bit(BitCtr* a2, int32_t bit) {
-    uint32_t c1, p0, p1, c0;
-    int32_t par_tot;
-    int32_t cap, result, p_cap, par0, par_n;
-    uint32_t tot, p_tot, n1_old, p1_old;
-    c0 = this->n[0];
-    if( this->n[0] ) {
-      c1 = this->n[1];
-      if( !this->n[1] ) {
-        par0 = a2->n[0];
-        par_tot = par0+a2->n[1];
-        this->n[0] = (par_tot+(par0<<6)-64)/par_tot;
-        this->n[1] = ((a2->n[1]<<6)+par_tot-64)/par_tot;
-        this->n[c0-1] += 4;
-        this->limit = 512;
-        par_n = a2->n[c0-1];
-        a2->n[c0-1] = -3*((uint32_t)(3-par_n)>>31)+par_n;
-        c0 = this->n[0];
-        c1 = this->n[1];
-      }
-      tot = c0+c1;
+  int32_t code_context_bit(BitCtr* parent, int32_t bit) {
+    int32_t result;
+    if( n[0] ) {
+      if( !n[1] )
+        seed_from(parent);
+      const uint32_t tot = summ();
       if( f_DEC )
-        bit = rc.decode_bit(c0, c1);
+        bit = rc.decode_bit(n[0], n[1]);
       else
-        rc.encode_bit(c0, c1, bit);
-      cap = this->limit;
-      if( tot>(uint32_t)cap ) {
-        n1_old = this->n[1];
-        this->n[0] -= this->n[0]>>1;
-        this->n[1] = n1_old-(n1_old>>1);
-        if( cap<0x4000 )
-          this->limit = cap+64;
-      }
-      result = this->n[bit]+8;
-      this->n[bit] = result;
-      a2->n[bit] += (uint32_t)tot<0x88;
+        rc.encode_bit(n[0], n[1], bit);
+      if( tot>limit )
+        scale_rare();
+      result = n[bit]+kStep;
+      n[bit] = result;
+      // `BIN_CODER`'s "kinda partial update": while this counter is still
+      // cheap to be wrong about, the parent hears about the bit as well.
+      parent->n[bit] += tot<kParentBump;
     } else {
-      p0 = a2->n[0];
-      p1 = a2->n[1];
-      p_tot = p0+p1;
+      // Unseen.  The parent codes the bit, and this keeps it as `bit + 1` so
+      // the next visit knows which side to bump when it seeds.
+      const uint32_t p_tot = parent->summ();
       if( f_DEC )
-        bit = rc.decode_bit(p0, p1);
+        bit = rc.decode_bit(parent->n[0], parent->n[1]);
       else
-        rc.encode_bit(p0, p1, bit);
-      p_cap = a2->limit;
-      if( p_tot>(uint32_t)p_cap ) {
-        p1_old = a2->n[1];
-        a2->n[0] -= a2->n[0]>>1;
-        a2->n[1] = p1_old-(p1_old>>1);
-        if( p_cap<0x4000 )
-          a2->limit = p_cap+64;
-      }
-      result = a2->n[bit]+8;
-      a2->n[bit] = result;
-      this->n[0] = bit+1;
+        rc.encode_bit(parent->n[0], parent->n[1], bit);
+      if( p_tot>parent->limit )
+        parent->scale_rare();
+      result = parent->n[bit]+kStep;
+      parent->n[bit] = result;
+      n[0] = bit+1;
     }
     return f_DEC ? bit : result;
   }
 
-  int32_t encode_context_bit(BitCtr* a2, int32_t bit) {
-    return code_context_bit<0>(a2, bit);
+  int32_t encode_context_bit(BitCtr* parent, int32_t bit) {
+    return code_context_bit<0>(parent, bit);
   }
 
-  int32_t decode_context_bit(BitCtr* a2) {
-    return code_context_bit<1>(a2, 0);
+  int32_t decode_context_bit(BitCtr* parent) {
+    return code_context_bit<1>(parent, 0);
   }
 };
 
@@ -116,13 +165,5 @@ CounterNode*__init_counter_node(CounterNode* node) {
 }
 
 int32_t __rescale_counter_pair(BitCtr* ctr) {
-  int32_t tot;
-  ctr->n[0] -= ctr->n[0]>>1;
-  tot = ctr->limit;
-  ctr->n[1] -= ctr->n[1]>>1;
-  if( tot<0x4000 ) {
-    tot += 64;
-    ctr->limit = tot;
-  }
-  return tot;
+  return ctr->scale_rare();
 }

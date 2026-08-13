@@ -35,6 +35,10 @@ What it does, and what each part of it cost:
   * `BMF_SPILL_PAD` is a `#define` between items and belongs with the rest of
     the decompiler's vocabulary in `ida.inc`; it is placed by name below.
 
+  * units written by hand *after* the split are not in `LAYOUT` and this does
+    not know about them -- `ctxidx.inc` is one.  A replay produces the tree
+    without them and their includes have to be put back.
+
 The gate is what says whether a run was right.  This one was checked by taking
 the multiset of non-comment lines before and after: 44 lines go (22 method
 declarations, 22 out-of-class heads) and 138 arrive (22 in-class heads, 34

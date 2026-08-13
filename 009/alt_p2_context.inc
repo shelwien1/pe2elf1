@@ -47,7 +47,19 @@ int32_t __alt_p2_context(AltP2Block* blk, AltP2Block* refa, AltP2Block* refb) {
   gB = (num_b>bmf_p2_thresholds[band][8])+(num_b>bmf_p2_thresholds[band][7])+(num_b>bmf_p2_thresholds[band][6]);
   gC = (16*sum_ur>sum_ul*bmf_p2_thresholds[band][5])+(16*sum_ur>sum_ul*bmf_p2_thresholds[band][4])+(16*sum_ur>sum_ul*bmf_p2_thresholds[band][3]);
   gD = (num_d>bmf_p2_thresholds[band][2]*den_d)+(num_d>den_d*bmf_p2_thresholds[band][1])+(num_d>den_d*bmf_p2_thresholds[band][0]);
-  nb_slot = 320*band+64*gA+16*gB+4*gC+gD;
+  // Mixed radix, and only three of the five terms are bit fields.  `gB`, `gC`
+  // and `gD` each sum three comparisons, so each is 0..3 and each is two bits.
+  // `gA` sums *four*, so it is 0..4 -- five values with a stride of 64, which
+  // is not a field however it is written, and `band` strides 320, which is
+  // 5 * 64 and not a power of two either.  Both stay `raw`.
+  //
+  // Writing them as `bits<6, 2>(gA)` is wrong and was tried: it masks gA to
+  // two bits, so the one neighbourhood in the corpus that reaches gA == 4
+  // lands in slot 0 instead of slot 256.  Three streams moved and the gate
+  // said so.  1916 slots is what `nb_id[]` is sized for, and 5*320 = 1600 plus
+  // the rest is what fills it.
+  nb_slot = CtxIdx{}.bits<4, 2>(gB).bits<2, 2>(gC).bits<0, 2>(gD)
+                    .raw(64*gA).raw(320*band);
   nb_id = blk->nb_id[(uint32_t)nb_slot];
   if( blk->nb_id[(uint32_t)nb_slot] ) {
     wrow = blk->nb_weights[nb_id];

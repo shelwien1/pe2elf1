@@ -324,6 +324,25 @@ only pays for contexts the image actually visits.
 
 A hit on any of the four neighbours ends the pixel.
 
+The binary counters all this runs on — `bit_node[]` against `bit_root[]`,
+`esc_ctr[]`, `run_ctr[]` — are one three-state object, `BitCtr`. A counter is
+**unseen** while it is all zeroes, in which case its *parent* codes the bit and
+the counter keeps it as `bit + 1`; **seeded** on the second visit, taking the
+parent's shape scaled to 64 by `(64*(parent - 1) + total) / total` per side;
+and **live** after that, coding on its own counts, halving them when the total
+passes a limit that itself climbs by 64 up to 0x4000, and passing a partial
+update back up to the parent while the total is still under 0x88.
+
+That is not a reading of the decompilation alone: `bcdr.cpp`'s `BIN_CODER` is
+the same counter written by hand, with the same three states, the same seeding
+formula at 32 instead of 64, the same `scaleRare`, and the same "kinda partial
+update" of the parent. The two agree closely enough that `bitctr.inc` now uses
+that file's names — `scale_rare`, `seed_from`, `init_parent` — and records
+where they came from. The one structural difference is which slot holds the
+"seen once" mark: `BIN_CODER` uses `MaxFreq == 0` and remembers the bit in
+`s[1]`, BMF uses `n[1] == 0` and remembers it in `n[0]`, so `n[0]` is a count
+in one state and a remembered bit in another.
+
 **Rung 3 — the escape ladder.** On escape, 32 candidate symbols are assembled:
 
 - 2 from `group_ctr[ctx_state][key]` — the last and previous symbol seen in this
