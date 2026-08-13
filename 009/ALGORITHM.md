@@ -329,11 +329,11 @@ counting "none". Fifteen groups times five times five is the 375 entries
 `ctx_bucket[]` has. The frequencies are rescaled by halving when
 the total passes `w[6]` or 0x4000, with a floor that keeps the escape reachable.
 
-There are two `FreqRec`s in play: a per-bucket one and a per-`ctx_id` one, and
+There are two `FreqRec`s in play: a per-bucket one and a per-context one, and
 when the latter is fresh it is seeded from the former by a 21/`w[5]` blend —
 a cheap way to give a new context a prior instead of a uniform start.
 
-The `ctx_id` chain is three levels of **lazily allocated context identifiers**:
+The context-id chain is three levels of **lazily allocated context identifiers**:
 `ctx_id1` is indexed by a 10-bit signature of gradient flags and match bits and
 the bucket; `ctx_id2` refines it with four more bits; `ctx_id3` refines that
 with the low nibble of W, but only when the alphabet is under 32 symbols. Each
@@ -570,8 +570,8 @@ the local texture. `__alt_p2_context` accumulates four directional activity sums
 — up-left, up-right, left, up — each a fixed-weight combination of eight
 neighbours' difference fields, and from them derives:
 
-- `band` — five thresholds on `sum_left` against `sum_up`, so 0–5 says how
-  horizontal or vertical the neighbourhood is;
+- `band` — five thresholds on `sum4` (the left sum) against `sum_u` (the up
+  sum), so 0–5 says how horizontal or vertical the neighbourhood is;
 - `gA` — total activity against four thresholds;
 - `gB` — a local value estimate against three;
 - `gC` — the up-right/up-left ratio against three;

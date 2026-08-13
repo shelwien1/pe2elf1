@@ -43,15 +43,6 @@ struct CtxIdx {
     return *this;
   }
 
-  // `W` bits of `v` that are *already* at `Pos` -- masked, not moved.  The
-  // decompilation does this a good deal: a byte of match flags is indexed by
-  // the bits it already has, and shifting it down and back is noise.
-  template<int Pos, int W>
-  constexpr CtxIdx&field(uint32_t v) {
-    val += v&((((1u<<W)-1))<<Pos);
-    return *this;
-  }
-
   // A term that is not a bit field -- a stride that is not a power of two, or
   // an index already built.
   constexpr CtxIdx&raw(uint32_t v) {

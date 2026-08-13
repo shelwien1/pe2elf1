@@ -32,6 +32,15 @@
 # count to be zero, so a reader scanning for the word could be forgiven either
 # way.  Those six are named below and exempted; every other tool's last line
 # must contain a zero, and the sweep exits non-zero if one does not.
+#
+# A third answer joined the two above when the decompilation moved to its own
+# repository: three of these check something that is not here at all -- the
+# previous round's document, the blob globals a round removed, the first commit
+# of the Hex-Rays output.  Two of them died on it and one said so in prose, and
+# the sweep read all three as findings.  A question whose subject is absent is
+# neither a finding nor a zero, so a tool says `not applicable: <what is
+# missing>` and is counted apart, the same way "needs more arguments" already
+# is.  What must not happen is the tempting fix: answering zero.
 set -u
 cd "$(dirname "$0")/.."
 
@@ -45,7 +54,7 @@ work=$(mktemp "$(dirname "$file")/.sweep.XXXXXX")
 trap 'rm -f "$work"' EXIT
 cp "$file" "$work"
 before=$(cksum < "$work")
-usage=0 quiet=0 killed=0 nonzero= reported=
+usage=0 quiet=0 killed=0 absent=0 nonzero= reported= inapplicable=
 
 for t in tools/*.py; do
   n=$(basename "$t")
@@ -69,8 +78,10 @@ for t in tools/*.py; do
   line=$(timeout 300 python3 "$t" "$work" 2>&1 | tail -1)
   rc=$?
   case $line in
-    *'python3 '*)  usage=$((usage + 1)); line='(needs more arguments)' ;;
-    '')            quiet=$((quiet + 1)); line='(said nothing)' ;;
+    *'python3 '*)      usage=$((usage + 1)); line='(needs more arguments)' ;;
+    'not applicable:'*) absent=$((absent + 1))
+                       inapplicable="$inapplicable ${n%.py}" ;;
+    '')                quiet=$((quiet + 1)); line='(said nothing)' ;;
   esac
   # A tool the timeout killed is not a tool reporting zero, and it can have
   # been killed part-way through a write.  Say which it was.
@@ -78,7 +89,7 @@ for t in tools/*.py; do
   if [ "$report" = 0 ] && [ "$rc" != 124 ]; then
     case $line in
       *[!0-9]0[!0-9]*|0[!0-9]*|*[!0-9]0|0) ;;
-      'no '*|*'nothing'*|*'(needs more arguments)'*) ;;
+      'no '*|*'nothing'*|*'(needs more arguments)'*|'not applicable:'*) ;;
       *) nonzero="$nonzero $n" ;;
     esac
   fi
@@ -102,6 +113,8 @@ echo "$file unchanged by the sweep; $usage tools want more arguments, $quiet sai
 # changes -- which is the defect this round found in seventeen frame comments,
 # and there is no reason for the sweep's own summary to have it.
 echo "every counting tool reports zero; these report rather than count:$reported"
+[ "$absent" = 0 ] ||
+  echo "$absent asked about something this repository does not have:$inapplicable"
 [ "$quiet" = 0 ] || {
   echo "FAIL: a tool that prints nothing cannot be told from one that crashed"
   exit 1

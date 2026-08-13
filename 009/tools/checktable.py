@@ -56,6 +56,16 @@ def quoted():
 
 
 if __name__ == '__main__':
+    # The document this checks is the previous round's and is not in this
+    # repository, which is not the same as a table that agrees.  Say which, and
+    # say it in the form `sweep.sh` reads: a check whose subject is absent has
+    # declined to answer, and counting that as a zero is how a sweep comes to
+    # report that everything is fine about a file nobody has.
+    try:
+        open(DOC).close()
+    except OSError:
+        sys.exit('not applicable: %s is not in this repository, so there is no '
+                 'table to check' % DOC)
     now, bad = live(), 0
     for label, want in quoted():
         # The two rows that are history only: `shape.py` never printed them.

@@ -65,20 +65,66 @@ def call_graph(lines):
                      r'(?:return\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\(', l)
         if m:
             shim[m.group(1)] = m.group(2)
+        # `#define malloc bmf_malloc` -- the allocator is reached from a
+        # hundred sites, none of which spell its name.  Same map as the `__fwd_`
+        # shims: what a call site writes, and what it reaches.
+        m = re.match(r'\s*#\s*define\s+([A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s*$', l)
+        if m:
+            shim[m.group(1)] = m.group(2)
+    # A body whose address is taken is reachable without a call:
+    # `__set_new_handler(__out_of_memory_handler)` never writes a parenthesis
+    # against the handler's name.  Only free functions -- taking a method's
+    # address needs `&Class::m`, and accepting a bare `raw` or `p` as a
+    # reference would let any local of that name mask a dead method.
+    free = {n for _, _, n, _, d in structs.defs(lines) if d == 0}
     callers = {}
-    for a, b, n, sig in structs.bodies(lines):
+    for a, b, n, sig, _ in structs.defs(lines):
         if 'static inline' in sig:
             continue
-        for l in lines[a:b + 1]:
-            for m in re.finditer(r'\b(__[A-Za-z0-9_]+)\s*\(', l):
+        # From *after* the opening brace, not from the start of the line that
+        # holds it.  Every body here is written `void __foo(args) {`, so the
+        # first line of the range is the declarator, and a pattern general
+        # enough to see `bmf_new(` in a body also sees `__foo(` in `__foo`'s
+        # own signature.  That made every function its own caller and the
+        # never-called check vacuous: an injected body with no call sites
+        # anywhere reported nothing, which is how it was caught.
+        body = [lines[a].split('{', 1)[-1]] + lines[a + 1:b + 1]
+        for l in body:
+            # Any identifier followed by an argument list, not just a
+            # `__`-prefixed one.  Every body recovered from the binary carries
+            # that prefix and every helper this project added does not, so the
+            # narrow pattern reported `bmf_new` dead from a hundred call sites.
+            # Over-matching here only adds callers, which can only make the
+            # tool more cautious; the keywords are excluded because `if (` is
+            # not a call.
+            for m in re.finditer(r'\b([A-Za-z_]\w*)\s*(?:<[^;<>]*>)?\s*\(', l):
+                if m.group(1) in ('if', 'while', 'for', 'switch', 'return',
+                                  'sizeof', 'do', 'else', 'catch'):
+                    continue
                 callers.setdefault(shim.get(m.group(1), m.group(1)),
                                    set()).add(n)
             # A method is reached as `p->rescale(x)`, which carries no `__`
             # prefix -- every body recovered from the binary has one and a
             # method this project introduced does not.  Without this the first
             # method added to the file was reported dead from two call sites.
-            for m in re.finditer(r'(?:->|\.)\s*([A-Za-z_]\w*)\s*\(', l):
+            # `p->code_symbol(x)` and `p->alt_p2_d8_body<1>(x)` -- a method
+            # reached through an explicit template argument list has no `(`
+            # against its name, which hid the one method template in the tree.
+            for m in re.finditer(r'(?:->|\.)\s*([A-Za-z_]\w*)\s*(?:<[^;<>]*>)?\s*\(', l):
                 callers.setdefault(m.group(1), set()).add(n)
+            # The name passed as an argument, not called: an operand position
+            # is what tells a function pointer apart from a mention.
+            for m in re.finditer(r'(?<![\w.>])([A-Za-z_]\w*)\s*(?=[,)])', l):
+                if m.group(1) in free:
+                    callers.setdefault(m.group(1), set()).add(n)
+    # A body that only calls itself is not called.  Recursion is a real edge
+    # for every other question this graph is asked, but for `is anything left
+    # that reaches this`, an edge from a body to itself answers yes about
+    # nothing.  Two dead bodies that call *each other* are still missed; that
+    # needs reachability from the entry points, not a caller count, and the
+    # link-time report (`BMF_GC=list ./build.sh`) is what has it.
+    for t, cs in callers.items():
+        cs.discard(t)
     return callers
 
 
@@ -94,11 +140,18 @@ def closed_under(callers, roots):
 
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else 'subs1.hpp'
+    raw, origin = structs.splice(path)
     # A comment describing deleted code quotes it, and a check that reads
     # comments finds the thing it was written to find in the note saying it is
     # gone.  This one reported exactly that on its first run.
-    lines = [l.split('//')[0] for l in open(path).read().split('\n')]
+    lines = [l.split('//')[0] for l in raw]
     bad = 0
+
+    class Where:
+        """`path` and a line number, resolved back to the file it came from."""
+        def __mod__(self, i):
+            return '%s:%d' % origin[i - 1]
+    path = Where()
 
     labels = {}
     for i, l in enumerate(lines):
@@ -111,17 +164,17 @@ def main():
             sources.setdefault(m.group(1), []).append(i)
     for name, at in sorted(labels.items()):
         if name not in sources:
-            print('%s:%d: %s has no goto left' % (path, at[0] + 1, name))
+            print('%s: %s has no goto left' % (path % (at[0] + 1), name))
             bad += 1
 
     for i, l in enumerate(lines):
         if re.search(r'\bif\s*\(\s*[01]\s*\)', l):
-            print('%s:%d: constant test: %s' % (path, i + 1, l.strip()[:60]))
+            print('%s: constant test: %s' % (path % (i + 1), l.strip()[:60]))
             bad += 1
 
     callers = call_graph(lines)
     closed = closed_under(callers, SUBSYSTEM_ROOTS) | set(ALSO_PINNED)
-    for a, b, n, sig in structs.bodies(lines):
+    for a, b, n, sig, _ in structs.defs(lines):
         if 'static inline' in sig or n not in closed:
             continue
         for i in range(a, b + 1):
@@ -139,11 +192,11 @@ def main():
                 k += 1
             negated = '!' in lines[i].split('plane_predictor')[0]
             if negated or (k <= b and lines[k].strip() == 'else'):
-                print('%s:%d: predictor test in %s, which the dispatch pins to '
-                      '1 or 2' % (path, i + 1, n.lstrip('_')))
+                print('%s: predictor test in %s, which the dispatch pins to '
+                      '1 or 2' % (path % (i + 1), n.lstrip('_')))
                 bad += 1
 
-    for a, b, n, sig in structs.bodies(lines):
+    for a, b, n, sig, _ in structs.defs(lines):
         if 'static inline' in sig:
             continue
         body = lines[a + 1:b + 1]
@@ -169,22 +222,20 @@ def main():
                 continue
             p, q = once.get(m.group(1)), once.get(m.group(3))
             if p and q and p == q:
-                print('%s:%d: %s %s %s in %s, and both are %s'
-                      % (path, i + 1, m.group(1), m.group(2), m.group(3),
+                print('%s: %s %s %s in %s, and both are %s'
+                      % (path % (i + 1), m.group(1), m.group(2), m.group(3),
                          n.lstrip('_'), p))
                 bad += 1
 
-    called = set()
-    for t, cs in callers.items():
-        called.add(t)
-    for a, b, n, sig in structs.bodies(lines):
-        if 'static inline' in sig or n in called:
+    called = {t for t, cs in callers.items() if cs}
+    for a, b, n, sig, _ in structs.defs(lines):
+        if 'static inline' in sig or n in called or n.startswith('operator '):
             continue
         if n.lstrip('_') in ('main', 'bmf_compress', 'bmf_decompress',
                              'bmf_addr', 'bmf_data_relocate', 'attribute__',
-                             'bmf_set_denormal_mode', 'alignas'):
+                             'bmf_set_denormal_mode'):
             continue
-        print('%s:%d: %s is never called' % (path, a + 1, n.lstrip('_')))
+        print('%s: %s is never called' % (path % (a + 1), n.lstrip('_')))
         bad += 1
 
     print('%d findings' % bad)

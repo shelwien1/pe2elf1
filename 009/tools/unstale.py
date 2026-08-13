@@ -89,6 +89,34 @@ HISTORY = {
     'uint16': 'an informal type name in a layout table',
     'uint32': 'an informal type name in a layout table',
     'int32': 'an informal type name in a layout table',
+    # The corpus.  `ALGORITHM.md`'s table of coding paths is indexed by the
+    # test image each path was observed on, and those are filenames in
+    # `testfiles/`, not names in the program.  They are listed one by one
+    # rather than matched by shape: a rule like "a name in the table column"
+    # would also excuse the next real name that lands there.
+    'f05_200': 'testfiles/f05_200.bmp',
+    'DLRAW': 'testfiles/DLRAW.bmp',
+    'rle4': 'testfiles/out_rle4.bmp',
+    'rle8': 'testfiles/out_rle8.bmp',
+    'x_ai': 'testfiles/x_ai.bmp',
+    'x_ci': 'testfiles/x_ci.bmp',
+    'x_ep': 'testfiles/x_ep.bmp',
+    't8g': 'testfiles/t8g.bmp',
+    't8p': 'testfiles/t8p.bmp',
+    't24': 'testfiles/t24.bmp',
+    't32': 'testfiles/t32.bmp',
+    'med32': 'testfiles/med32.bmp',
+    'altp1': 'testfiles/altp1.bmp',
+    'noise24': 'testfiles/noise24.bmp',
+    # The BMP file format's own vocabulary.  The fields this one names --
+    # `biCompression`, `biHeight` -- are members of `BmpHeader` and are found;
+    # the structure's name is Microsoft's and is not in the source at all.
+    'BITMAPINFOHEADER': "the BMP header's name in the Windows headers",
+    # `bcdr.cpp`, the 1bpp compressor read alongside this one.  The sentences
+    # quoting it are about the other program on purpose -- that is what makes
+    # them evidence for how this one's counters were meant to work.
+    'BIN_CODER': "bcdr.cpp's binary coder, quoted as the donor",
+    'scaleRare': "bcdr.cpp's name for the rare-symbol rescale",
     'was': 'a table column heading',
     'old': 'an English word, emphasised',
     'length': 'an English word, emphasised',
@@ -100,6 +128,21 @@ HISTORY = {
 BODY_LINES = re.compile(r'`(\w+)`[^`\n]{0,60}?\(?(\d[\d ,]*) lines')
 
 
+def read(src):
+    """The source as the compiler reads it: `#include "x.inc"` spliced in.
+
+    `bmf.cpp` is an include list, so a check that opens it sees thirty-seven
+    filenames and no program.  Reading it as one file said a hundred names the
+    documents use -- `SymList`, `__colour_transform`, `PixRec` -- were names
+    the program no longer has, all of them one `#include` away.
+    """
+    import structs
+    try:
+        return structs.splice(src)[0]
+    except IOError:
+        return None
+
+
 def sizes(sources):
     """{body name: line count} for every body in the source."""
     import structs
@@ -107,11 +150,12 @@ def sizes(sources):
     for src in sources:
         if not src.endswith(('.hpp', '.cpp')):
             continue
-        try:
-            lines = open(src).read().split('\n')
-        except IOError:
+        lines = read(src)
+        if lines is None:
             continue
-        for a, b, nm, _sig in structs.bodies(lines):
+        # `structs.defs`, not `structs.bodies`: a method is a body the
+        # documents quote and count, and `bodies` stops at brace depth 0.
+        for a, b, nm, _sig, _d in structs.defs(lines):
             out[nm.lstrip('_')] = b - a + 1
     return out
 
@@ -152,10 +196,9 @@ def known(names, n):
 def survey(docs=DOCS, sources=('subs1.hpp', 'bmf.cpp')):
     text = []
     for p in sources:
-        try:
-            text.append(open(p).read())
-        except IOError:
-            pass
+        lines = read(p)
+        if lines is not None:
+            text.append('\n'.join(lines))
     code = '\n'.join(l.split('//')[0] for l in '\n'.join(text).split('\n'))
     names = set(re.findall(r'[A-Za-z_]\w*', code))
     out = []

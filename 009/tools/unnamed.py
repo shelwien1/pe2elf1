@@ -191,7 +191,13 @@ if __name__ == '__main__':
                                 and not sys.argv[1].startswith('--')
                                 else 'subs1.hpp')
     if live is None:
-        sys.exit('cannot read %s -- not a checkout of this repository?' % ORIGIN)
+        # This joins against the first commit of the decompilation, which is
+        # what makes the answer exact -- and that commit is in the repository
+        # the earlier rounds were done in, not this one.  Worded the way
+        # `sweep.sh` reads a declined question, because a tool that cannot see
+        # its other half has not measured zero surviving names.
+        sys.exit('not applicable: %s is not in this repository, so there is no '
+                 'original to join against' % ORIGIN)
     rows = sorted(live.items(), key=lambda kv: (-len(kv[1]), kv[0]))
     if '--all' in sys.argv:
         rows += sorted(kept.items(), key=lambda kv: (-len(kv[1]), kv[0]))

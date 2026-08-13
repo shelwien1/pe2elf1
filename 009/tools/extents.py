@@ -34,6 +34,15 @@ def main():
     size = {'int32_t': 4, 'uint8_t': 1, 'char': 1, '__m128i': 16,
             'uint16_t': 2, 'int8_t': 1, 'uint32_t': 4}
 
+    # The uses are counted from the range coder down, which is where the code
+    # starts in the file this was written against.  There are no blob globals
+    # left to count -- they were given definitions of their own rounds ago, and
+    # the marker went with the single-file layout -- so say so rather than die
+    # on the `index`.  A traceback and an answer of zero look alike from the
+    # sweep, and neither of them is "this question no longer has a subject".
+    if not decl or '// The range coder.' not in text:
+        sys.exit('not applicable: no blob1 globals in %s -- every global has a '
+                 'definition of its own' % path)
     body = text[text.index('// The range coder.'):]
     rows = []
     for ty, _, bound, name, va in decl:

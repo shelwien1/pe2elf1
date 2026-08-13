@@ -98,6 +98,108 @@ def bodies(lines):
     return out
 
 
+# `if (x) {` is not a definition of a function called `if`.  `catch` and the
+# rest are here for the same reason; the tree has none of them, and a list that
+# is right only because of what the tree happens to contain is not a list.
+NOT_A_DEFINITION = ('if', 'while', 'for', 'switch', 'return', 'sizeof', 'do',
+                    'else', 'catch')
+
+
+def defs(lines):
+    """(start, end, name, sig, depth) for every function body, methods included.
+
+    `structs.bodies` opens a body only at brace depth 0, which was the whole
+    file when the whole file was free functions.  It is classes now, and a
+    method sits one level in: `bodies` walks straight past every one of them.
+    That is invisible in both directions -- a method's calls are not in the
+    graph, so nine free functions called only from methods were reported never
+    called; and a method's own body is not a body, so a method nothing calls
+    could never be reported at all.
+
+    The same walk-back over a wrapped signature as `structs.bodies`; what is
+    different is that the depth is a stack rather than a counter, and that the
+    depth comes back with the body.  `depth == 0` is a free function, which is
+    the only kind whose address can be taken by writing its bare name.
+    """
+    out, stack = [], []
+    for i, l in enumerate(lines):
+        s = l.split('//')[0]
+        for k, ch in enumerate(s):
+            if ch == '{':
+                buf, j = s[:k], i
+                while '(' not in buf or buf.count(')') - buf.count('(') > 0:
+                    j -= 1
+                    if j < 0 or i - j > 6:
+                        break
+                    prev = lines[j].split('//')[0]
+                    if prev.rstrip().endswith((';', '}', '{', ':')):
+                        break
+                    if prev.lstrip().startswith('#'):
+                        break
+                    buf = prev + ' ' + buf
+                head = buf.rstrip()
+                # `void f() const {`, `void f() noexcept {` -- the declarator
+                # ends before those, and the name is what comes before its
+                # parameter list either way.
+                head = re.sub(r'(?:\s*\b(?:const|noexcept|override|final)\b)+$',
+                              '', head)
+                m = (None if head.endswith('=') else
+                     re.search(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\([^()]*\)\s*$',
+                               head) or
+                     re.search(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(', buf))
+                name = m.group(1) if m and '(' in buf else None
+                if name in NOT_A_DEFINITION:
+                    name = None
+                # `struct alignas(16) CodePixelFrame {` has a parenthesis and a
+                # name in front of it and is a type, not a function.  The old
+                # answer was an entry in the never-called check's skip list
+                # called `alignas`, which suppressed the report rather than the
+                # cause.
+                if re.match(r'^\s*(?:template\s*<[^;]*>\s*)?'
+                            r'(?:struct|class|union|enum)\b', buf):
+                    name = None
+                # An operator is reached by syntax, never by its name.  It is
+                # kept as a body -- what it calls is real -- under a name no
+                # call site can spell, and the never-called check skips it.
+                if name and re.search(r'\boperator\b', head):
+                    name = 'operator ' + name
+                stack.append((i, k, name, buf, len(stack)))
+            elif ch == '}':
+                if stack:
+                    a, _, name, sig, d = stack.pop()
+                    if name:
+                        out.append((a, i, name, sig, d))
+    return out
+
+
+def splice(path):
+    """(lines, origin) for `path`, with any `#include "x.inc"` spliced in.
+
+    The decompilation used to be one file and this check was whole-program by
+    construction.  It is 37 files now, and a per-file call graph cannot see a
+    caller in another file: every method this round moved out of a free
+    function was reported dead from two live call sites, and pointing the tool
+    at bmf.cpp instead answered zero because bmf.cpp is the include list.
+    Both answers were wrong in the same direction, which is the worst kind.
+
+    So a file that includes others is read as what the compiler reads.
+    `origin[i]` is the (file, line) that line i came from, so a finding still
+    names somewhere a person can open.
+    """
+    import os
+    base = os.path.dirname(os.path.abspath(path))
+    out, origin = [], []
+    for n, l in enumerate(open(path).read().split('\n')):
+        m = re.match(r'\s*#include "([^"]+)"', l)
+        inc = os.path.join(base, m.group(1)) if m else None
+        if inc and os.path.exists(inc):
+            for k, il in enumerate(open(inc).read().split('\n')):
+                out.append(il); origin.append((m.group(1), k + 1))
+        else:
+            out.append(l); origin.append((os.path.basename(path), n + 1))
+    return out, origin
+
+
 def params_of(sig):
     m = re.search(r'\((.*)\)\s*\{?\s*$', sig)
     if not m:
