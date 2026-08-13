@@ -40,7 +40,7 @@ void**__free_workspace(ModelBlock* blk, int8_t do_free) {
   for( i = 0; i<5; ++i )
     free(blk->row_cur[i]);
   free(blk->escape.ent);
-  if( (do_free&1)!=0 )
+  if( do_free&1 )
     free(blk);
   return (void**)blk;
 }

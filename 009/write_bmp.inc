@@ -45,7 +45,7 @@ int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
   if( bits<=8 ) {
     ncolours = 1<<(bits&31);
     ncol = 1<<(bits&31);
-    if( (depth_flags&0x40)!=0 ) {
+    if( depth_flags&0x40 ) {
       levels = 0x100u>>(bits&31);
       if( ncol>0 ) {
         if( ncol/2 ) {
@@ -169,7 +169,7 @@ int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
                   buf_2[1] = lit_len<<(nib&31);
                   memcpy(buf_2+2, &p[-lit_len], lit_len);
                   buf_2 += lit_len+2;
-                  if( (lit_len&1)!=0 ) {
+                  if( lit_len&1 ) {
                     abs_end2[lit_len] = 0;
                     ++buf_2;
                   }
@@ -212,7 +212,7 @@ int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
               buf_2[1] = lit_len<<(nib&31);
               memcpy(buf_2+2, &q[-lit_len], lit_len);
               buf_2 += lit_len+2;
-              if( (lit_len&1)!=0 ) {
+              if( lit_len&1 ) {
                 abs_end[lit_len] = 0;
                 ++buf_2;
               }
@@ -248,7 +248,7 @@ int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
           memcpy(buf_2+2, &q[-lit_len], lit_len);
           row_i = row_i2;
           out_at = &buf_2[lit_len+2];
-          if( (lit_len&1)!=0 ) {
+          if( lit_len&1 ) {
             buf_2[lit_len+2] = 0;
             ++out_at;
           }

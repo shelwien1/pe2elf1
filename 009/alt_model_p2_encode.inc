@@ -117,10 +117,10 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
             memcpy(src2->buf[2], src2->buf[0], row_bytes);
             memcpy(src2->buf[3], src2->buf[0], row_bytes);
             src2->cursor[0] = src2->buf[0]+row_i+8;
-            src2->cursor[1] = (src2->buf[1]+row_i+8);
+            src2->cursor[1] = src2->buf[1]+row_i+8;
             src2->cursor[2] = src2->buf[2]+row_i+8;
             src2->cursor[3] = src2->buf[3]+row_i+8;
-            src2->cursor[4] = (src2->buf[4]+row_i+8);
+            src2->cursor[4] = src2->buf[4]+row_i+8;
           }
           blk_r = (AltP2Block*)(*(xf3-1));
           cur = blk_r->cur;
@@ -204,7 +204,7 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
           ctx_bias[3] = want0>>3;
           blk0 = (AltP2Block*)(plane[0]);
           cur0 = out[plane_desc[1].src_plane];
-          pred0 = __alt_p2_context((AltP2Block*)plane[0], (AltP2Block*)plane[2], (AltP2Block*)plane[1]);
+          pred0 = __alt_p2_context(plane[0], plane[2], plane[1]);
           resid0 = (uint8_t)(cur0-pred0);
           code0 = (uint8_t)blk0->fold[resid0];
           out0 = out[off0b];
@@ -218,7 +218,7 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
             out[off0b] = recon0;
           }
           blk0->freq[blk0->ctx].encode_symbol(blk0->ctx_pair, code0);
-          __alt_p2_model((AltP2Block*)blk0, cur0, code0, cur0-pred0);
+          __alt_p2_model(blk0, cur0, code0, cur0-pred0);
           rec0 = blk0->cursor[0];
           l7a = rec0[-1].dupright;
           l4a = rec0[-1].dleft;
@@ -235,7 +235,7 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
           plane[1]->cursor[0]->dval = seed1;
           off1 = plane_desc[2].src_plane;
           cur1 = out[plane_desc[2].src_plane];
-          pred1 = __alt_p2_context((AltP2Block*)blk1, (AltP2Block*)plane[0], (AltP2Block*)plane[2]);
+          pred1 = __alt_p2_context((AltP2Block*)blk1, plane[0], plane[2]);
           resid1 = (uint8_t)(cur1-pred1);
           code1 = blk1->fold[resid1];
           out1 = out[off1];
@@ -266,7 +266,7 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
           plane[2]->cursor[0]->dval = seed2;
           off2 = plane_desc[3].src_plane;
           cur2 = out[plane_desc[3].src_plane];
-          pred2 = __alt_p2_context((AltP2Block*)blk2, (AltP2Block*)plane[0], (AltP2Block*)plane[1]);
+          pred2 = __alt_p2_context((AltP2Block*)blk2, plane[0], plane[1]);
           resid2 = (uint8_t)(cur2-pred2);
           code2 = blk2->fold[resid2];
           out2 = out[off2];
@@ -300,7 +300,7 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
             plane[3]->cursor[0]->dval = l7c;
             alpha_src = plane_desc[4].src_plane;
             l5c = out[plane_desc[4].src_plane];
-            x = __alt_p2_context((AltP2Block*)l4c, (AltP2Block*)plane[2], (AltP2Block*)plane[0]);
+            x = __alt_p2_context((AltP2Block*)l4c, plane[2], plane[0]);
             w = (uint8_t)(l5c-x);
             seed3 = l4c->fold[w];
             blk3 = out[alpha_src];

@@ -67,7 +67,7 @@ struct P2Freq {
     } else {
       cum = c01;
       if( sym ) {
-        if( (sym&1)!=0 ) {
+        if( sym&1 ) {
           cum = this->f[0];
           slot = &this->f[1];
         } else {
@@ -298,7 +298,7 @@ struct AltP2Block {
       free(this->buf[k]);
     free(this->row0);
     free(this->row1);
-    if( (do_free&1)!=0 )
+    if( do_free&1 )
       bmf_page_free(this);
     return this;
   }

@@ -60,32 +60,32 @@ struct AltP1Block {
       if( nb1 ) {
         nb0_row = nb0->cursor[0];
         act_all = act+2*(nb1->cursor[0][-1].mag+nb0_row[-1].mag);
-        this->ctx_w[5].sel = (cursor1->sym-(uint32_t)guess+nb0_row[-1].sym-nb0->cursor[1][-1].sym);
+        this->ctx_w[5].sel = cursor1->sym-(uint32_t)guess+nb0_row[-1].sym-nb0->cursor[1][-1].sym;
         nb0_row2 = nb0->cursor[0];
         nb0_a = nb0_row2[-1].sym;
         nb0_b = nb0_row2[-2].sym;
-        this->ctx_w[6].sel = (cur[-1].sym-(uint32_t)guess+nb0_a-nb0_b);
-        this->ctx_w[7].sel = (cur[-1].sym-(uint32_t)guess+nb1->cursor[0][-1].sym-nb1->cursor[0][-2].sym);
-        this->ctx_w[8].sel = (nb1->cursor[0][-1].sym-nb1->pred);
-        this->ctx_w[3].sel = (nb0->cursor[0][-1].sym-nb0->pred);
+        this->ctx_w[6].sel = cur[-1].sym-(uint32_t)guess+nb0_a-nb0_b;
+        this->ctx_w[7].sel = cur[-1].sym-(uint32_t)guess+nb1->cursor[0][-1].sym-nb1->cursor[0][-2].sym;
+        this->ctx_w[8].sel = nb1->cursor[0][-1].sym-nb1->pred;
+        this->ctx_w[3].sel = nb0->cursor[0][-1].sym-nb0->pred;
         quiet = (nb1->cursor[0][-1].mag+(uint32_t)nb0->cursor[0][-1].mag-16)>>31;
       } else {
         act_all = cursor1[3].mag+act+3*nb0->cursor[0][-1].mag;
-        this->ctx_w[5].sel = (2*cur[-1].sym-cur[-2].sym-(uint32_t)guess);
-        this->ctx_w[6].sel = (2*cur[-1].sym-cur[-2].sym-(uint32_t)guess);
-        this->ctx_w[7].sel = (-guess-cursor1->sym+cursor1[1].sym+cur[-1].sym);
-        this->ctx_w[8].sel = (cur[-1].sym-(uint32_t)guess+nb0->cursor[0][-1].sym-nb0->cursor[0][-2].sym);
-        this->ctx_w[3].sel = (nb0->cursor[0][-1].sym-nb0->pred);
+        this->ctx_w[5].sel = 2*cur[-1].sym-cur[-2].sym-(uint32_t)guess;
+        this->ctx_w[6].sel = 2*cur[-1].sym-cur[-2].sym-(uint32_t)guess;
+        this->ctx_w[7].sel = -guess-cursor1->sym+cursor1[1].sym+cur[-1].sym;
+        this->ctx_w[8].sel = cur[-1].sym-(uint32_t)guess+nb0->cursor[0][-1].sym-nb0->cursor[0][-2].sym;
+        this->ctx_w[3].sel = nb0->cursor[0][-1].sym-nb0->pred;
         quiet = ((uint32_t)nb0->cursor[0][-1].mag-8)>>31;
       }
     } else {
       cursor4 = this->cursor[4];
       act_all = cursor4->mag+cursor2[-2].mag+cursor1[3].mag+act+cursor4[2].mag;
-      this->ctx_w[5].sel = (2*cur[-1].sym-cur[-2].sym-(uint32_t)guess);
-      this->ctx_w[6].sel = (2*cursor1->sym-cursor2->sym-(uint32_t)guess);
-      this->ctx_w[7].sel = (-guess-cursor1->sym+cursor1[1].sym+cur[-1].sym);
-      this->ctx_w[8].sel = (-3*(cur[-2].sym-cur[-1].sym)+cur[-3].sym-(uint32_t)guess);
-      this->ctx_w[3].sel = (cursor1[2].sym-(uint32_t)guess);
+      this->ctx_w[5].sel = 2*cur[-1].sym-cur[-2].sym-(uint32_t)guess;
+      this->ctx_w[6].sel = 2*cursor1->sym-cursor2->sym-(uint32_t)guess;
+      this->ctx_w[7].sel = -guess-cursor1->sym+cursor1[1].sym+cur[-1].sym;
+      this->ctx_w[8].sel = -3*(cur[-2].sym-cur[-1].sym)+cur[-3].sym-(uint32_t)guess;
+      this->ctx_w[3].sel = cursor1[2].sym-(uint32_t)guess;
       quiet = cur->mag+cursor4->mag+this->cursor[3]->mag+cursor2->mag+cursor1->mag==0;
     }
     act_q = (act_all+7)>>4;
@@ -93,7 +93,7 @@ struct AltP1Block {
     step = p1_level_step[(uint32_t)level_of];
     this->ctx[0] = level_of;
     this->ctx[1] = this->group_of[act_q]+this->slot_of[(uint32_t)guess];
-    this->ctx_w[0].sel = (((216-(uint32_t)guess)>>31)+((22-(uint32_t)guess)>>31));
+    this->ctx_w[0].sel = ((216-(uint32_t)guess)>>31)+((22-(uint32_t)guess)>>31);
     s0 = ((216-(uint32_t)guess)>>31)+((22-(uint32_t)guess)>>31);
     s1 = (cursor1[-1].sym-cursor1->sym>=0)+(cursor1[-1].sym>(int32_t)cursor1->sym);
     this->ctx_w[1].sel = s1;
@@ -116,13 +116,13 @@ struct AltP1Block {
     is_zero = this->ctx_w[7].sel==0;
     is_neg = this->ctx_w[7].sel<0;
     s6 = h6+g6;
-    this->ctx_w[6].sel = (h6+g6);
+    this->ctx_w[6].sel = h6+g6;
     g7 = !is_neg&&!is_zero;
     h7 = !is_neg;
     is_zero = this->ctx_w[8].sel==0;
     is_neg = this->ctx_w[8].sel<0;
     s7 = h7+g7;
-    this->ctx_w[7].sel = (h7+g7);
+    this->ctx_w[7].sel = h7+g7;
     s8 = !is_neg+(!is_neg&&!is_zero);
     this->ctx_w[8].sel = s8;
     result = this->ctx_w[0].w[s0]+this->ctx_w[1].w[s1]+this->ctx_w[2].w[s2]+this->ctx_w[3].w[s3]+this->ctx_w[4].w[s4]+this->ctx_w[5].w[s5]+this->ctx_w[6].w[s6]+this->ctx_w[7].w[s7]+this->ctx_w[8].w[s8]+16*quiet+8*(this->ctx[3+this->ctx[2]]==0)+level_of;
@@ -260,7 +260,7 @@ struct AltP1Block {
         __update_binary_pair(model_strip(128*(slot_f&1)+ctx_up+(((((tot_up&0x7FFF)+node_up[1].c[0]-2*(uint32_t)node_up[1].c[slot_f])>>25)&0xFFFFFFC0))), (int32_t)(code_f-5)>>1);
       result = this->ctx[0];
     }
-    if( (result&7)!=0 ) {
+    if( result&7 ) {
       node_dn = &this->counters[result];
       ctx_dn = this->ctx[1]-((this->ctx[1]&7)!=0);
       node_dn[-1].c[slot_f] += 13;
@@ -276,7 +276,7 @@ struct AltP1Block {
         node_alt[1].total += 7;
         result = this->ctx[0];
       }
-      if( (result&7)!=0 ) {
+      if( result&7 ) {
         node_alt[-1].c[slot_r] += 5;
         node_alt[-1].total += 5;
         result = this->ctx[0];
@@ -305,7 +305,7 @@ struct AltP1Block {
           hi0[1].total += 4;
           ctx0 = this->ctx[0];
         }
-        if( (ctx0&7)!=0 ) {
+        if( ctx0&7 ) {
           lo0[-1].c[slot_f] += 3;
           lo0[-1].total += 3;
           hi0[-1].c[slot_f] += 3;
@@ -331,7 +331,7 @@ struct AltP1Block {
           altn0[1].total += 2;
           ctx0 = this->ctx[0];
         }
-        if( (ctx0&7)!=0 ) {
+        if( ctx0&7 ) {
           midn0[-1].c[slot_f] += 3;
           midn0[-1].total += 3;
           altn0[-1].c[slot_r] += 2;
@@ -356,7 +356,7 @@ struct AltP1Block {
           hi1[1].total += 4;
           ctx1 = this->ctx[0];
         }
-        if( (ctx1&7)!=0 ) {
+        if( ctx1&7 ) {
           lo1[-1].c[slot_f] += 3;
           lo1[-1].total += 3;
           hi1[-1].c[slot_f] += 3;
@@ -383,7 +383,7 @@ struct AltP1Block {
           altn1[1].total += 2;
           ctx1 = this->ctx[0];
         }
-        if( (ctx1&7)!=0 ) {
+        if( ctx1&7 ) {
           midn1[-1].c[slot_f] += 3;
           midn1[-1].total += 3;
           altn1[-1].c[slot_r] += 2;
@@ -408,7 +408,7 @@ struct AltP1Block {
           hi2[1].total += 4;
           ctx2 = this->ctx[0];
         }
-        if( (ctx2&7)!=0 ) {
+        if( ctx2&7 ) {
           lo2[-1].c[slot_f] += 3;
           lo2[-1].total += 3;
           hi2[-1].c[slot_f] += 3;
@@ -436,7 +436,7 @@ struct AltP1Block {
           altn2[1].total += 2;
           ctx2 = this->ctx[0];
         }
-        if( (ctx2&7)!=0 ) {
+        if( ctx2&7 ) {
           midn2[-1].c[slot_f] += 3;
           midn2[-1].total += 3;
           altn2[-1].c[slot_r] += 2;
@@ -461,7 +461,7 @@ struct AltP1Block {
           hi3[1].total += 4;
           ctx3 = this->ctx[0];
         }
-        if( (ctx3&7)!=0 ) {
+        if( ctx3&7 ) {
           lo3[-1].c[slot_f] += 3;
           lo3[-1].total += 3;
           hi3[-1].c[slot_f] += 3;
@@ -489,7 +489,7 @@ struct AltP1Block {
           altn3[1].total += 2;
           ctx3 = this->ctx[0];
         }
-        if( (ctx3&7)!=0 ) {
+        if( ctx3&7 ) {
           midn3[-1].c[slot_f] += 3;
           midn3[-1].total += 3;
           altn3[-1].c[slot_r] += 2;
@@ -514,7 +514,7 @@ struct AltP1Block {
           hi4[1].total += 4;
           ctx4 = this->ctx[0];
         }
-        if( (ctx4&7)!=0 ) {
+        if( ctx4&7 ) {
           lo4[-1].c[slot_f] += 3;
           lo4[-1].total += 3;
           hi4[-1].c[slot_f] += 3;
@@ -542,7 +542,7 @@ struct AltP1Block {
           altn4[1].total += 2;
           ctx4 = this->ctx[0];
         }
-        if( (ctx4&7)!=0 ) {
+        if( ctx4&7 ) {
           midn4[-1].c[slot_f] += 3;
           midn4[-1].total += 3;
           altn4[-1].c[slot_r] += 2;
@@ -567,7 +567,7 @@ struct AltP1Block {
           hi5[1].total += 4;
           ctx5 = this->ctx[0];
         }
-        if( (ctx5&7)!=0 ) {
+        if( ctx5&7 ) {
           lo5[-1].c[slot_f] += 3;
           lo5[-1].total += 3;
           hi5[-1].c[slot_f] += 3;
@@ -595,7 +595,7 @@ struct AltP1Block {
           altn5[1].total += 2;
           ctx5 = this->ctx[0];
         }
-        if( (ctx5&7)!=0 ) {
+        if( ctx5&7 ) {
           midn5[-1].c[slot_f] += 3;
           midn5[-1].total += 3;
           altn5[-1].c[slot_r] += 2;
@@ -620,7 +620,7 @@ struct AltP1Block {
           hi6[1].total += 4;
           ctx6 = this->ctx[0];
         }
-        if( (ctx6&7)!=0 ) {
+        if( ctx6&7 ) {
           lo6[-1].c[slot_f] += 3;
           lo6[-1].total += 3;
           hi6[-1].c[slot_f] += 3;
@@ -648,7 +648,7 @@ struct AltP1Block {
           altn6[1].total += 2;
           ctx6 = this->ctx[0];
         }
-        if( (ctx6&7)!=0 ) {
+        if( ctx6&7 ) {
           midn6[-1].c[slot_f] += 3;
           midn6[-1].total += 3;
           altn6[-1].c[slot_r] += 2;
@@ -673,7 +673,7 @@ struct AltP1Block {
           hi7[1].total += 4;
           ctx7 = this->ctx[0];
         }
-        if( (ctx7&7)!=0 ) {
+        if( ctx7&7 ) {
           lo7[-1].c[slot_f] += 3;
           lo7[-1].total += 3;
           hi7[-1].c[slot_f] += 3;
@@ -701,7 +701,7 @@ struct AltP1Block {
           altn7[1].total += 2;
           ctx7 = this->ctx[0];
         }
-        if( (ctx7&7)!=0 ) {
+        if( ctx7&7 ) {
           midn7[-1].c[slot_f] += 3;
           midn7[-1].total += 3;
           altn7[-1].c[slot_r] += 2;
@@ -726,7 +726,7 @@ struct AltP1Block {
           node[1].total += 4;
           ctx8 = this->ctx[0];
         }
-        if( (ctx8&7)!=0 ) {
+        if( ctx8&7 ) {
           altn8[-1].c[slot_f] += 3;
           altn8[-1].total += 3;
           node[-1].c[slot_f] += 3;
@@ -751,7 +751,7 @@ struct AltP1Block {
           x8[1].total += 2;
           alti8 = this->ctx[0];
         }
-        if( (alti8&7)!=0 ) {
+        if( alti8&7 ) {
           node[-1].c[slot_f] += 3;
           node[-1].total += 3;
           result = (uint16_t)x8[-1].c[slot_r]+2;
@@ -859,7 +859,7 @@ struct AltP1Block {
   AltP1Block*alt_p1_free(int8_t do_free) {
     for( int32_t k = 0; k<5; ++k )
       free(this->buf[k]);
-    if( (do_free&1)!=0 )
+    if( do_free&1 )
       free(this);
     return this;
   }

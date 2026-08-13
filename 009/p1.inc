@@ -154,7 +154,7 @@ void**__alt_model_p1_d8_decode(int8_t unread_flag, uint8_t* out, int32_t i, int3
           blk->ctx[3+blk->ctx[2]] = blk->ctx[3+blk->ctx[2]]+blk->cursor[0]->mag-blk->cursor[0][-4].mag-(blk->cursor[4][-2].mag-blk->cursor[4][6].mag+blk->cursor[2][-2].mag-blk->cursor[2][6].mag);
           blk->ctx[2] = blk->ctx[2]==0;
           if( blk->counters[blk->ctx[0]].total<0x4000u )
-            ((AltP1Block*)blk)->update_model();
+            (blk)->update_model();
           ++blk->cursor[0];
           ++out_at;
           ++blk->cursor[1];

@@ -12,7 +12,7 @@ uint32_t __predict_med(uint8_t* pixels, int32_t width, int32_t height) {
   uint32_t j, last, k;
   uint8_t* p, * up;
   alignas(16) uint8_t fold[272];
-  p = (pixels+height*width);
+  p = pixels+height*width;
   up = &p[-width];
   for( j = 0; j<128; ++j ) {
     fold[j] = (uint8_t)(2*j);
@@ -82,7 +82,7 @@ uint8_t*__interleave_plane(uint8_t* img, uint8_t* src, int32_t plane, int8_t unr
   uint8_t* ref;
   int32_t wgt1, i2, ofs2, n_flat, step, i, ofs, left3, x3, left2, x2, mode, to_ref0, wgt2, to_ref1, wgt0, stride, dc, n;
   uint8_t* base, * p3, * p2;
-  if( (plane_desc[plane+1].flags&8)==0 ) {
+  if( !(plane_desc[plane+1].flags&8) ) {
     n_flat = bmf_pixels(img);
     step = plane_count;
     if( plane_count==1 )
@@ -159,7 +159,7 @@ uint8_t*__colour_transform(uint8_t* img, uint8_t* dst, int32_t plane, int8_t unr
   int32_t wgt1, i2, ofs2, n_flat, step, i, ofs, left3, x3, wsum, w12sum, left2, x2, mode, to_ref0, wgt2, to_ref1, wgt0, dc, stride, n;
   uint32_t blend;
   uint8_t* src, * p3, * p2;
-  if( (plane_desc[plane+1].flags&8)==0 ) {
+  if( !(plane_desc[plane+1].flags&8) ) {
     n_flat = bmf_pixels(img);
     step = plane_count;
     if( plane_count==1 )
@@ -238,7 +238,7 @@ uint8_t*__unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
   uint32_t j, row_rest, pairs, k, x_left;
   uint8_t* p, * up;
   alignas(16) uint8_t unfold[256];
-  p = (pixels+1);
+  p = pixels+1;
   unfold[0] = 0;
   for( j = 0; j<127; ++j ) {
     unfold[2*j+1] = (uint8_t)(-1-(int32_t)j);
@@ -316,8 +316,8 @@ void __transform_planes(BmfImage* p_i, int8_t unread_flag) {
   int32_t k, plane, predictor, alt, n, stride, ofs, i;
   uint8_t* src_pixels;
   memset(hist_scratch, 0, 4096);
-  arc = (uint8_t*)::coded_buf;
-  hdr = (uint8_t*)::coded_buf+16;
+  arc = (uint8_t*)coded_buf;
+  hdr = (uint8_t*)coded_buf+16;
   *(BmfImage*)hdr = *p_i;
   src_pixels = (uint8_t*)((uint16_t*)p_i->pixels);
   memcpy(arc+32, p_i->pixels, p_i->data_size);
@@ -328,13 +328,13 @@ void __transform_planes(BmfImage* p_i, int8_t unread_flag) {
       ++k;
       plane = plane_desc[k].src_plane;
       predictor = plane_desc[plane+1].flags&3;
-      ::plane_predictor = predictor;
+      plane_predictor = predictor;
       alt = (uint8_t)(plane_desc[plane+1].flags&4)>>2;
       plane_alt_model = alt;
       if( ((plane_desc[plane+1].flags&8)!=0||predictor)&&!alt ) {
         __colour_transform(hdr, tmp, plane, 0);
-        if( ::plane_predictor!=2 ) {
-          if( ::plane_predictor==1 ) {
+        if( plane_predictor!=2 ) {
+          if( plane_predictor==1 ) {
             __predict_med(tmp, p_i->width, p_i->height);
           }
         }
@@ -355,6 +355,6 @@ void __transform_planes(BmfImage* p_i, int8_t unread_flag) {
   }
   free(tmp);
   {
-    __model_plane((BmfImage*)p_i, src_pixels, src_pixels);
+    __model_plane(p_i, src_pixels, src_pixels);
   }
 }

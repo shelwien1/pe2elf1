@@ -43,7 +43,7 @@ uint8_t*__expand_image(BmfArc* arc_in, int32_t want_pal, void** p_coded_buf) {
   arc = arc_in;
   if( p_coded_buf )
     *p_coded_buf = nullptr;
-  fp1 = ((BmfArc*)arc_in)->fp;
+  fp1 = (arc_in)->fp;
   if( !fp1 )
     return nullptr;
   while( 1 ) {
@@ -78,7 +78,7 @@ uint8_t*__expand_image(BmfArc* arc_in, int32_t want_pal, void** p_coded_buf) {
   if( __frame.flags_b<0 ) {
     fread(__frame.hdr, 8u, 1u, arc->fp);
     if( p_coded_buf ) {
-      hdr_word = (*(int32_t*)&__frame.hdr[0]);
+      hdr_word = *(int32_t*)&__frame.hdr[0];
       if( (*(uint32_t*)&__frame.hdr[4])>__bytes_left(arc->fp) ) {
         fclose(arc->fp);
         arc->fp = 0;
@@ -101,7 +101,7 @@ uint8_t*__expand_image(BmfArc* arc_in, int32_t want_pal, void** p_coded_buf) {
     return nullptr;
   }
   pal_bytes = 3<<(__frame.depth_b&31);
-  if( (__frame.depth_b&0x80)==0 )
+  if( !(__frame.depth_b&0x80) )
     pal_bytes = __frame.depth_b&0x80;
   __frame.pal_len = pal_bytes;
   if( want_pal ) {
@@ -119,13 +119,13 @@ uint8_t*__expand_image(BmfArc* arc_in, int32_t want_pal, void** p_coded_buf) {
   has_coded = p_coded_buf&&*p_coded_buf;
   hdr_flags = __frame.flags_b;
   img_at->flags |= __frame.flags_b&2|(has_coded<<7);
-  ::plane_count = ((__frame.depth_f&0x3Fu)+7)>>3;
-  if( ::plane_count<1||::plane_count>4 ) {
+  plane_count = ((__frame.depth_f&0x3Fu)+7)>>3;
+  if( plane_count<1||plane_count>4 ) {
     fclose(arc->fp);
     arc->fp = 0;
     return nullptr;
   }
-  if( (hdr_flags&0x20)==0 ) {
+  if( !(hdr_flags&0x20) ) {
     if( __frame.data_len>img_at->data_size ) {
       fclose(arc->fp);
       arc->fp = 0;
@@ -141,35 +141,35 @@ uint8_t*__expand_image(BmfArc* arc_in, int32_t want_pal, void** p_coded_buf) {
   }
   near_lossless_q = 0;
   alphabet_reduced = 0;
-  if( (hdr_flags&4)==0 ) {
+  if( !(hdr_flags&4) ) {
     printf("\nwritten in fast mode; this build only decodes -S streams\n");
     exit(3);
   }
   desc_slow_mode = 1;
   coded_size = __frame.data_len;
-  ::coded_buf = (uint8_t*)bmf_new(__frame.data_len);
-  out_cursor = ::coded_buf;
+  coded_buf = (uint8_t*)bmf_new(__frame.data_len);
+  out_cursor = coded_buf;
   packer_free_bits = 0;
   packer_acc = 0;
-  ::packer_word = (uint32_t*)::coded_buf;
-  hist_scratch = ::coded_buf+coded_size-4096;
+  packer_word = (uint32_t*)coded_buf;
+  hist_scratch = coded_buf+coded_size-4096;
   want2 = __frame.data_len;
-  if( fread(::coded_buf, 1u, __frame.data_len, arc->fp)!=want2 ) {
+  if( fread(coded_buf, 1u, __frame.data_len, arc->fp)!=want2 ) {
     fclose(arc->fp);
     arc->fp = 0;
     return nullptr;
   }
   bpp = img_at->depth;
   if( (bpp&0x3Fu)<=4||(__frame.flags_b&0x10)==0 ) {
-    ::plane_predictor = 0;
+    plane_predictor = 0;
     plane_alt_model = 0;
     __unmodel_plane(want2, (uint16_t*)img_at, img_at->pixels);
     goto LABEL_106;
   }
-  if( ::plane_count==1 ) {
-    if( (bpp&0x40)==0 )
+  if( plane_count==1 ) {
+    if( !(bpp&0x40) )
       goto LABEL_42;
-  } else if( ::plane_count<=2 ) {
+  } else if( plane_count<=2 ) {
     goto LABEL_42;
   }
   packer_free_bits -= 4;
@@ -189,7 +189,7 @@ uint8_t*__expand_image(BmfArc* arc_in, int32_t want_pal, void** p_coded_buf) {
   }
   near_lossless_q = 0;
 LABEL_42:
-  if( ::plane_count>0 ) {
+  if( plane_count>0 ) {
     __frame.mask = 255;
     __frame.p_i_2 = img_at;
     __frame.arc_f = arc;
@@ -210,7 +210,7 @@ LABEL_42:
       plane_desc[pl+1].flags = desc_flags;
       plane_desc[pl+1].nrefs = nrefs;
       plane_desc[nrefs+1].src_plane = pl;
-      if( (plane_desc[pl+1].flags&8)!=0 ) {
+      if( plane_desc[pl+1].flags&8 ) {
         packer_free_bits -= 8;
         if( packer_free_bits<0 ) {
           worddc = __packer_word();
@@ -261,24 +261,24 @@ LABEL_42:
         }
       }
       ++pl;
-    } while( pl<::plane_count );
+    } while( pl<plane_count );
     img_at = __frame.p_i_2;
     arc = __frame.arc_f;
   }
   plane_buf = (uint8_t*)bmf_new(img_at->width*img_at->height);
-  if( (__frame.flags_b&8)!=0 ) {
+  if( __frame.flags_b&8 ) {
     __frame.img = *img_at;
     __frame.img.depth = 72;
-    if( ::plane_count>0 ) {
+    if( plane_count>0 ) {
       __frame.arc_f = arc;
       plane_i = 0;
       do {
         plane = plane_desc[plane_i+1].src_plane;
-        ::plane_predictor = plane_desc[plane+1].flags&3;
+        plane_predictor = plane_desc[plane+1].flags&3;
         plane_alt_model = (uint8_t)(plane_desc[plane+1].flags&4)>>2;
         __unmodel_plane(plane_i, (uint16_t*)&__frame.img, plane_buf);
-        if( ::plane_predictor ) {
-          if( ::plane_predictor==1 ) {
+        if( plane_predictor ) {
+          if( plane_predictor==1 ) {
             if( !plane_alt_model )
               __unpredict_med(plane_buf, img_at->width, img_at->height);
           }
@@ -287,35 +287,35 @@ LABEL_42:
         }
         __interleave_plane((uint8_t*)img_at, plane_buf, plane, 0);
         ++plane_i;
-      } while( plane_i<::plane_count );
+      } while( plane_i<plane_count );
 LABEL_104:
       arc = __frame.arc_f;
     }
   } else {
-    ::plane_predictor = plane_desc[1].flags&3;
+    plane_predictor = plane_desc[1].flags&3;
     plane_alt_model = (uint8_t)(plane_desc[1].flags&4)>>2;
     {
       __unmodel_plane(63, (uint16_t*)img_at, img_at->pixels);
       if( plane_alt_model )
         goto LABEL_105;
     }
-    if( ::plane_count>0 ) {
+    if( plane_count>0 ) {
       __frame.arc_f = arc;
       pl2 = 0;
       do {
         ++pl2;
         plane2 = plane_desc[pl2].src_plane;
         pred = plane_desc[plane2+1].flags&3;
-        ::plane_predictor = pred;
+        plane_predictor = pred;
         if( (plane_desc[plane2+1].flags&8)!=0||pred ) {
           i = img_at->width;
           __frame.row_step = &((uint8_t*)img_at)[plane2+16];
           n_pix = i*img_at->height;
-          __frame.nplanes_s = ::plane_count;
+          __frame.nplanes_s = plane_count;
           __frame.s12 = n_pix;
-          if( ::plane_count==1 ) {
+          if( plane_count==1 ) {
             memcpy(plane_buf, (uint8_t*)__frame.row_step, __frame.s12);
-            pred_s = ::plane_predictor;
+            pred_s = plane_predictor;
           } else {
             __frame.Block = &((uint8_t*)img_at)[plane2];
             __frame.s0 = pred;
@@ -344,22 +344,22 @@ LABEL_104:
           }
           __interleave_plane((uint8_t*)img_at, plane_buf, plane2, 0);
         }
-      } while( pl2<::plane_count );
+      } while( pl2<plane_count );
       goto LABEL_104;
     }
   }
 LABEL_105:
   free(plane_buf);
 LABEL_106:
-  if( ::coded_buf+__frame.data_len!=out_cursor ) {
+  if( coded_buf+__frame.data_len!=out_cursor ) {
     fclose(arc->fp);
     arc->fp = 0;
     return nullptr;
   }
-  free(::coded_buf);
+  free(coded_buf);
   __frame.depth_f = __frame.depth_b;
 LABEL_109:
-  if( (__frame.depth_f&0x80)!=0 ) {
+  if( __frame.depth_f&0x80 ) {
     pal_at = (img_at->depth&0x80) ? &((uint8_t*)img_at)[img_at->data_size+16] : nullptr;
     got = fread(pal_at, 1u, __frame.pal_len, arc->fp);
     if( got!=__frame.pal_len ) {
@@ -368,15 +368,15 @@ LABEL_109:
       return nullptr;
     }
   }
-  if( (img_at->flags&2)!=0 ) {
-    if( (uint64_t)img_at->width*img_at->height*(uint32_t)::plane_count>(uint64_t)img_at->data_size ) {
+  if( img_at->flags&2 ) {
+    if( (uint64_t)img_at->width*img_at->height*(uint32_t)plane_count>(uint64_t)img_at->data_size ) {
       fclose(arc->fp);
       arc->fp = 0;
       return nullptr;
     }
     copy = (uint8_t*)bmf_new(img_at->data_size);
-    n_planes = ::plane_count;
-    last_row = ::plane_count*(img_at->height-1);
+    n_planes = plane_count;
+    last_row = plane_count*(img_at->height-1);
     memcpy(copy, img_at->pixels, img_at->data_size);
     img_h = img_at->height;
     if( img_h ) {

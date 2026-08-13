@@ -112,7 +112,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
           blk_k->cursor[2] = buf1+4;
           blk_k->cursor[3] = buf2+4;
           blk_k->cursor[4] = buf3+4;
-          ((P1Ctx*)b4)[-4] = ((P1Ctx*)b0)[3];
+          (b4)[-4] = ((P1Ctx*)b0)[3];
           {
             P1Ctx*const here = (P1Ctx*)blk_k->cursor[0];
             P1Ctx*const up = (P1Ctx*)blk_k->cursor[1];
@@ -209,10 +209,10 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
           err1 = cur1-blk1->pred;
           blk1->cursor[0]->sym = cur1;
           blk1->cursor[0]->mag = (BYTE4(err1)^err1)-BYTE4(err1);
-          blk1->ctx[blk1->ctx[2]+3] += (blk1->cursor[0]->mag-blk1->cursor[0][-4].mag-(blk1->cursor[4][-2].mag-blk1->cursor[4][6].mag)-(blk1->cursor[2][-2].mag-blk1->cursor[2][6].mag));
+          blk1->ctx[blk1->ctx[2]+3] += blk1->cursor[0]->mag-blk1->cursor[0][-4].mag-(blk1->cursor[4][-2].mag-blk1->cursor[4][6].mag)-(blk1->cursor[2][-2].mag-blk1->cursor[2][6].mag);
           blk1->ctx[2] = blk1->ctx[2]==0;
           if( blk1->counters[blk1->ctx[0]].total<0x4000u )
-            ((AltP1Block*)blk1)->update_model();
+            (blk1)->update_model();
           ++blk1->cursor[0];
           ++blk1->cursor[1];
           ++blk1->cursor[2];
@@ -253,7 +253,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
           err2 = want2-blk2->pred;
           blk2->cursor[0]->sym = want2;
           blk2->cursor[0]->mag = (BYTE4(err2)^err2)-BYTE4(err2);
-          blk2->ctx[blk2->ctx[2]+3] += (blk2->cursor[0]->mag-blk2->cursor[0][-4].mag-(blk2->cursor[4][-2].mag-blk2->cursor[4][6].mag)-(blk2->cursor[2][-2].mag-blk2->cursor[2][6].mag));
+          blk2->ctx[blk2->ctx[2]+3] += blk2->cursor[0]->mag-blk2->cursor[0][-4].mag-(blk2->cursor[4][-2].mag-blk2->cursor[4][6].mag)-(blk2->cursor[2][-2].mag-blk2->cursor[2][6].mag);
           at2 = blk2->ctx[0];
           blk2->ctx[2] = blk2->ctx[2]==0;
           if( blk2->counters[at2].total<0x4000u )
@@ -303,7 +303,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
             err3 = cur3-blk3->pred;
             blk3->cursor[0]->sym = cur3;
             blk3->cursor[0]->mag = (BYTE4(err3)^err3)-BYTE4(err3);
-            blk3->ctx[blk3->ctx[2]+3] += (blk3->cursor[0]->mag-blk3->cursor[0][-4].mag-(blk3->cursor[4][-2].mag-blk3->cursor[4][6].mag)-(blk3->cursor[2][-2].mag-blk3->cursor[2][6].mag));
+            blk3->ctx[blk3->ctx[2]+3] += blk3->cursor[0]->mag-blk3->cursor[0][-4].mag-(blk3->cursor[4][-2].mag-blk3->cursor[4][6].mag)-(blk3->cursor[2][-2].mag-blk3->cursor[2][6].mag);
             blk3->ctx[2] = blk3->ctx[2]==0;
             if( blk3->counters[blk3->ctx[0]].total<0x4000u )
               ((AltP1Block*)blk3)->update_model();

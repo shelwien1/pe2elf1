@@ -46,18 +46,18 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
   tile_w = img->width;
   tile_h = img->height;
   if( tile_w<4||tile_h<3 ) {
-    if( ::plane_count>0 ) {
+    if( plane_count>0 ) {
       pl = 0;
       do {
         plane_desc[pl+1].flags = 0;
         plane_desc[pl+1].src_plane = pl;
         plane_desc[pl+1].nrefs = pl;
         ++pl;
-      } while( pl<::plane_count );
+      } while( pl<plane_count );
     }
     return 0;
   }
-  __choose_plane_coding((BmfImage*)img_c, tile_h, mode);
+  __choose_plane_coding(img_c, tile_h, mode);
   __frame.tile_img = (BmfImage*)__alloc_image(tile_w, tile_h, img_c->depth&0x3F, 0, 0);
   coded_size = __frame.tile_img->data_size+0x20000;
   coded_buf = (uint8_t*)bmf_new(coded_size);
@@ -68,12 +68,12 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
   __frame.dims[0] = tile_h*tile_w;
   hist_scratch = coded_buf+coded_size-4096;
   __frame.tile_buf = bmf_new(tile_h*tile_w);
-  nplanes = ::plane_count;
+  nplanes = plane_count;
   y0 = (img_c->height-tile_h)>>1;
   dx = img_c->width-tile_w;
   off_y = y0*img_c->stride;
   __frame.rows[1] = y0;
-  srcp = (uint8_t*)img_c+ ::plane_count*(dx>>1)+off_y+16;
+  srcp = (uint8_t*)img_c+ plane_count*(dx>>1)+off_y+16;
   __frame.tile_src = __frame.tile_img->pixels;
   if( y0<tile_h+y0 ) {
     row_bytes = (uint16_t)__frame.tile_img->stride;
@@ -89,7 +89,7 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
       ++y;
     } while( y<__frame.dims[1]+((__frame.p_i_2->height-__frame.dims[1])>>1) );
     img_c = (BmfImage*)(__frame.p_i_2);
-    nplanes = ::plane_count;
+    nplanes = plane_count;
   }
   __frame.n_hard = 0;
   __frame.bits_total = 0;
@@ -258,7 +258,7 @@ LABEL_43: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
       __frame.n_flagged += c2!=0;
       plane_desc[c1+1].flags = (uint8_t)__frame.best_flags;
       __frame.pi = c3+1;
-      if( c3+1>=::plane_count ) {
+      if( c3+1>=plane_count ) {
         __frame.n_hard = hard;
         img_c = (BmfImage*)(__frame.p_i_2);
         break;
@@ -268,8 +268,8 @@ LABEL_43: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
   {
     p2 = (uint8_t*)bmf_new(__frame.tile_img->data_size);
     img_h1 = __frame.tile_img->height;
-    __frame.rows[1] = ::plane_count;
-    __frame.pi = ::plane_count*(img_h1-1);
+    __frame.rows[1] = plane_count;
+    __frame.pi = plane_count*(img_h1-1);
     memcpy(p2, (uint8_t*)__frame.tile_src, __frame.tile_img->data_size);
     img_h1b = __frame.tile_img->height;
     if( img_h1b ) {
@@ -307,7 +307,7 @@ LABEL_43: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
     *(uint16_t*)&((BmfImage*)tile_b)->stride = w_b;
     free(p2);
     bits_d = 0;
-    if( ::plane_count>0 ) {
+    if( plane_count>0 ) {
       __frame.p_i_2 = (BmfImage*)(img_c);
       pk = 0;
       while( 1 ) {
@@ -324,7 +324,7 @@ LABEL_43: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
         hist_scratch = coded_buf+coded_size-4096;
         if( (uint32_t)(bits-(bits>>8))>__frame.costs[__frame.rows[0]] )
           break;
-        if( ++pk>=::plane_count ) {
+        if( ++pk>=plane_count ) {
           img_c = (BmfImage*)(__frame.p_i_2);
           goto LABEL_172;
         }
@@ -335,8 +335,8 @@ LABEL_43: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
 LABEL_172:
     if( bits_d+(bits_d>>12)>=__frame.best_bits ) {
       base2 = (uint8_t*)bmf_new(__frame.tile_img->data_size);
-      rows_x_planes = ::plane_count*(__frame.tile_img->height-1);
-      __frame.rows[1] = ::plane_count;
+      rows_x_planes = plane_count*(__frame.tile_img->height-1);
+      __frame.rows[1] = plane_count;
       memcpy(base2, (uint8_t*)__frame.tile_src, __frame.tile_img->data_size);
       img_h2 = __frame.tile_img->height;
       if( img_h2 ) {
@@ -378,8 +378,8 @@ LABEL_172:
       __frame.best_bits = bits_d;
       __frame.base = (uint8_t*)bmf_new(img_c->data_size);
       img_h3 = img_c->height;
-      __frame.rows[1] = ::plane_count;
-      __frame.costs[0] = ::plane_count*(img_h3-1);
+      __frame.rows[1] = plane_count;
+      __frame.costs[0] = plane_count*(img_h3-1);
       memcpy(__frame.base, img_c->pixels, img_c->data_size);
       img_h3b = img_c->height;
       if( img_h3b ) {
@@ -416,17 +416,17 @@ LABEL_172:
     }
   }
   free(__frame.tile_buf);
-  if( ::plane_count>2 ) {
+  if( plane_count>2 ) {
     if( __frame.bits_total ) {
       for( desc_k = 0; desc_k<4; ++desc_k )
         __frame.saved[desc_k] = plane_desc[desc_k+1];
-      if( ::plane_count>0 ) {
+      if( plane_count>0 ) {
         plane = 0;
         do {
           pi3 = plane;
           f2 = plane_desc[plane+++1].flags&8|5;
           plane_desc[pi3+1].flags = f2;
-        } while( plane<::plane_count );
+        } while( plane<plane_count );
       }
       __transform_planes(__frame.tile_img, 0);
       bits_e = 8*(out_cursor-coded_buf);
@@ -439,12 +439,12 @@ LABEL_172:
       hist_scratch = coded_buf+coded_size-4096;
       if( deep2 ) {
         __frame.best_bits = bits_e;
-        nplanes_b = ::plane_count;
+        nplanes_b = plane_count;
         cand = 0;
       } else {
         for( desc_k = 0; desc_k<4; ++desc_k )
           plane_desc[desc_k+1] = __frame.saved[desc_k];
-        nplanes_b = ::plane_count;
+        nplanes_b = plane_count;
         cand = 1;
       }
       if( nplanes_b<=2 )
@@ -455,15 +455,15 @@ LABEL_172:
     if( __frame.n_hard+(cand==0) ) {
       for( desc_k = 0; desc_k<4; ++desc_k )
         __frame.saved[desc_k] = plane_desc[desc_k+1];
-      nplanes_c = ::plane_count;
-      if( ::plane_count>0 ) {
+      nplanes_c = plane_count;
+      if( plane_count>0 ) {
         pl_a = 0;
         do {
           pi0 = pl_a;
           f0 = plane_desc[pl_a+++1].flags&8|6;
           plane_desc[pi0+1].flags = f0;
-          nplanes_c = ::plane_count;
-        } while( pl_a<::plane_count );
+          nplanes_c = plane_count;
+        } while( pl_a<plane_count );
       }
       if( nplanes_c==__frame.n_hard&&nplanes_c-1==__frame.n_flagged ) {
         cand = 0;
@@ -481,18 +481,18 @@ LABEL_172:
         if( deep2 ) {
           __frame.best_bits = bits_a;
           __frame.n_hard = bits_a;
-          if( ::plane_count-1==__frame.n_flagged ) {
+          if( plane_count-1==__frame.n_flagged ) {
             cand = 0;
           } else {
             for( desc_k = 0; desc_k<4; ++desc_k )
               __frame.saved[desc_k] = plane_desc[desc_k+1];
-            if( ::plane_count>0 ) {
+            if( plane_count>0 ) {
               pl_b = 0;
               do {
                 pi1 = pl_b;
                 f1 = plane_desc[pl_b+++1].nrefs;
                 plane_desc[pi1+1].flags |= 8*(f1!=0);
-              } while( pl_b<::plane_count );
+              } while( pl_b<plane_count );
             }
             __transform_planes(__frame.tile_img, 0);
             bits2 = 8*(out_cursor-coded_buf);
@@ -521,18 +521,18 @@ LABEL_172:
     cand = 1;
   }
 LABEL_63:
-  if( !__frame.n_hard&&::plane_count>1 ) {
+  if( !__frame.n_hard&&plane_count>1 ) {
     tile_copy = (uint8_t*)bmf_new(__frame.tile_img->data_size);
     memcpy(tile_copy, (uint8_t*)__frame.tile_src, __frame.tile_img->data_size);
     for( desc_k = 0; desc_k<4; ++desc_k )
       __frame.saved[desc_k] = plane_desc[desc_k+1];
-    if( ::plane_count>0 ) {
+    if( plane_count>0 ) {
       pl_c = 0;
       do {
         pi4 = pl_c;
         f3 = plane_desc[pl_c+++1].flags&0xFB;
         plane_desc[pi4+1].flags = f3;
-      } while( pl_c<::plane_count );
+      } while( pl_c<plane_count );
     }
     __transform_planes(__frame.tile_img, 0);
     bits_b = 8*(out_cursor-coded_buf);
@@ -553,11 +553,11 @@ LABEL_63:
     if( __frame.n_flagged+__frame.bits_total ) {
       for( desc_k = 0; desc_k<4; ++desc_k )
         __frame.saved[desc_k] = plane_desc[desc_k+1];
-      if( ::plane_count>0 ) {
+      if( plane_count>0 ) {
         pl_d = 0;
         do
           plane_desc[pl_d+++1].flags = 0;
-        while( pl_d<::plane_count );
+        while( pl_d<plane_count );
       }
       memcpy((uint8_t*)__frame.tile_src, tile_copy, __frame.tile_img->data_size);
       __transform_planes(__frame.tile_img, 0);

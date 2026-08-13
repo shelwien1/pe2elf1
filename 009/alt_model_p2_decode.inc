@@ -114,10 +114,10 @@ int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
             memcpy(src3->buf[2], src3->buf[0], row_bytes);
             memcpy(src3->buf[3], src3->buf[0], row_bytes);
             src3->cursor[0] = src3->buf[0]+i+8;
-            src3->cursor[1] = (src3->buf[1]+i+8);
+            src3->cursor[1] = src3->buf[1]+i+8;
             src3->cursor[2] = src3->buf[2]+i+8;
             src3->cursor[3] = src3->buf[3]+i+8;
-            src3->cursor[4] = (src3->buf[4]+i+8);
+            src3->cursor[4] = src3->buf[4]+i+8;
           }
           blk_r = (AltP2Block*)(*(planep-1));
           cur = blk_r->cur;
@@ -197,14 +197,14 @@ int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
           ctx_bias[2] >>= 3;
           ctx_bias[3] >>= 3;
           blk0 = (AltP2Block*)(plane[0]);
-          pred0 = __alt_p2_context((AltP2Block*)plane[0], (AltP2Block*)plane[2], (AltP2Block*)plane[1]);
+          pred0 = __alt_p2_context(plane[0], plane[2], plane[1]);
           freq = &blk0->freq[blk0->ctx];
           code0 = freq->decode_symbol(blk0->ctx_pair);
           val0 = (uint8_t)(pred0+(blk0->unfold[code0]));
-          __alt_p2_model((AltP2Block*)blk0, val0, code0, val0-pred0);
+          __alt_p2_model(blk0, val0, code0, val0-pred0);
           cur0 = blk0->cursor[0];
           ctx_bias[0] += 32*cur0[-1].dupleft;
-          ctx_bias[1] += (32*cur0[-1].dupright);
+          ctx_bias[1] += 32*cur0[-1].dupright;
           ctx_bias[2] += 32*cur0[-1].dleft;
           ctx_bias[3] += 32*cur0[-1].dup;
           off = xf0==0;
@@ -215,7 +215,7 @@ int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
             seed1 = 16*out[plane_desc[1].src_plane];
           blk1 = (AltP2Block*)(plane[1]);
           plane[1]->cursor[0]->dval = seed1;
-          pred1 = __alt_p2_context((AltP2Block*)blk1, (AltP2Block*)plane[0], (AltP2Block*)plane[2]);
+          pred1 = __alt_p2_context((AltP2Block*)blk1, plane[0], plane[2]);
           code1 = blk1->freq[blk1->ctx].decode_symbol(blk1->ctx_pair);
           val1 = (uint8_t)(pred1+blk1->unfold[code1]);
           __alt_p2_model((AltP2Block*)blk1, val1, code1, val1-pred1);
@@ -235,7 +235,7 @@ int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
             seed2 = (plane_desc[plane_desc[3].src_plane+1].weight1*out[plane_desc[2].src_plane]+plane_desc[plane_desc[3].src_plane+1].weight0*out[plane_desc[1].src_plane])>>3;
           blk2 = (AltP2Block*)(plane[2]);
           plane[2]->cursor[0]->dval = seed2;
-          pred2 = __alt_p2_context((AltP2Block*)blk2, (AltP2Block*)plane[0], (AltP2Block*)plane[1]);
+          pred2 = __alt_p2_context((AltP2Block*)blk2, plane[0], plane[1]);
           code2 = blk2->freq[blk2->ctx].decode_symbol(blk2->ctx_pair);
           val2 = (uint8_t)(pred2+blk2->unfold[code2]);
           __alt_p2_model((AltP2Block*)blk2, val2, code2, val2-pred2);
@@ -256,7 +256,7 @@ int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
               seed3 = 0;
             blk3 = (AltP2Block*)(plane[3]);
             plane[3]->cursor[0]->dval = seed3;
-            pred3 = __alt_p2_context((AltP2Block*)blk3, (AltP2Block*)plane[2], (AltP2Block*)plane[0]);
+            pred3 = __alt_p2_context((AltP2Block*)blk3, plane[2], plane[0]);
             code3 = blk3->freq[blk3->ctx].decode_symbol(blk3->ctx_pair);
             val3 = (uint8_t)(pred3+blk3->unfold[code3]);
             __alt_p2_model((AltP2Block*)blk3, val3, code3, val3-pred3);

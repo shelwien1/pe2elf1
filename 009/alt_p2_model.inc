@@ -647,7 +647,7 @@ uint32_t __alt_p2_model(AltP2Block* blk, int32_t sample_in, uint8_t a4, int32_t 
   } while( bank<5 );
   ctx = blk->ctx;
   ++blk->cursor[0];
-  frec = (&blk->freq[ctx]);
+  frec = &blk->freq[ctx];
   ++blk->cursor[1];
   ++blk->cursor[2];
   ++blk->cursor[3];
@@ -732,7 +732,7 @@ LABEL_48:
             }
             h0->f[fold_sel2] += (uint16_t)(h0->step&0xFFFC)>>2;
             off0 = blk->ctx-blk->ctx_w[0].w[1];
-            frecg0 = (&blk->freq[off0+blk->ctx_w[0].w[0]]);
+            frecg0 = &blk->freq[off0+blk->ctx_w[0].w[0]];
             idx0 = blk->ctx_w[0].w[2]+off0;
             grp = frecg0;
             frec3 = &frecg0[0];
@@ -776,7 +776,7 @@ LABEL_48:
               step_v = step_s;
             }
             g0->f[fold_sel2] += (7*(uint32_t)g0->step)>>4;
-            grp = ((&blk->freq[blk->ctx_w[0].w[1]+(blk->ctx-blk->ctx_w[0].w[blk->ctx_w[0].sel])]));
+            grp = (&blk->freq[blk->ctx_w[0].w[1]+(blk->ctx-blk->ctx_w[0].w[blk->ctx_w[0].sel])]);
             mir_top = (uint16_t*)&grp[0];
             if( grp[0].f[2]+grp[0].f[1]+grp[0].f[0]>29696 ) {
               step_s = step_v;
@@ -816,7 +816,7 @@ LABEL_48:
             }
             mir_top[fold_sel2+1] += (uint16_t)(mir_top[0]&0xFFFC)>>2;
             off1 = blk->ctx-blk->ctx_w[1].w[1];
-            frecg1 = (&blk->freq[off1+blk->ctx_w[1].w[0]]);
+            frecg1 = &blk->freq[off1+blk->ctx_w[1].w[0]];
             idx0 = blk->ctx_w[1].w[2]+off1;
             grp = frecg1;
             h1 = &frecg1[0];
@@ -859,7 +859,7 @@ LABEL_48:
               step_v = step_s;
             }
             g1->f[fold_sel2] += (7*(uint32_t)g1->step)>>4;
-            grp = ((&blk->freq[blk->ctx_w[1].w[1]+(blk->ctx-blk->ctx_w[1].w[blk->ctx_w[1].sel])]));
+            grp = (&blk->freq[blk->ctx_w[1].w[1]+(blk->ctx-blk->ctx_w[1].w[blk->ctx_w[1].sel])]);
             mir_top = (uint16_t*)&grp[0];
             if( grp[0].f[2]+grp[0].f[1]+grp[0].f[0]>29696 ) {
               step_s = step_v;
@@ -897,7 +897,7 @@ LABEL_48:
             }
             mir_top[fold_sel2+1] += (uint16_t)(mir_top[0]&0xFFFC)>>2;
             off2 = blk->ctx-blk->ctx_w[2].w[1];
-            frecg2 = (&blk->freq[off2+blk->ctx_w[2].w[0]]);
+            frecg2 = &blk->freq[off2+blk->ctx_w[2].w[0]];
             idx0 = blk->ctx_w[2].w[2]+off2;
             grp = frecg2;
             h2 = &frecg2[0];
@@ -940,7 +940,7 @@ LABEL_48:
               step_v = step_s;
             }
             g2->f[fold_sel2] += (7*(uint32_t)g2->step)>>4;
-            grp = ((&blk->freq[blk->ctx_w[2].w[1]+(blk->ctx-blk->ctx_w[2].w[blk->ctx_w[2].sel])]));
+            grp = (&blk->freq[blk->ctx_w[2].w[1]+(blk->ctx-blk->ctx_w[2].w[blk->ctx_w[2].sel])]);
             mir_top = (uint16_t*)&grp[0];
             if( grp[0].f[2]+grp[0].f[1]+grp[0].f[0]>29696 ) {
               step_s = step_v;
@@ -978,7 +978,7 @@ LABEL_48:
             }
             mir_top[fold_sel2+1] += (uint16_t)(mir_top[0]&0xFFFC)>>2;
             off3 = blk->ctx-blk->ctx_w[3].w[1];
-            frecg3 = (&blk->freq[off3+blk->ctx_w[3].w[0]]);
+            frecg3 = &blk->freq[off3+blk->ctx_w[3].w[0]];
             idx0 = blk->ctx_w[3].w[2]+off3;
             grp = frecg3;
             h3 = &frecg3[0];
@@ -1021,7 +1021,7 @@ LABEL_48:
               step_v = step_s;
             }
             g3->f[fold_sel2] += (7*(uint32_t)g3->step)>>4;
-            grp = ((&blk->freq[blk->ctx_w[3].w[1]+(blk->ctx-blk->ctx_w[3].w[blk->ctx_w[3].sel])]));
+            grp = (&blk->freq[blk->ctx_w[3].w[1]+(blk->ctx-blk->ctx_w[3].w[blk->ctx_w[3].sel])]);
             mir_top = (uint16_t*)&grp[0];
             if( grp[0].f[2]+grp[0].f[1]+grp[0].f[0]>29696 ) {
               step_s = step_v;
@@ -1085,7 +1085,7 @@ LABEL_48:
             if( blk->freq[step_v+blk->ctx_w[4].w[1]-blk->ctx_w[4].w[2-sel4]].f[2]+blk->freq[step_v+blk->ctx_w[4].w[1]-blk->ctx_w[4].w[2-sel4]].f[1]+blk->freq[step_v+blk->ctx_w[4].w[1]-blk->ctx_w[4].w[2-sel4]].f[0]>29696 )
               g4->rescale_three_way();
             g4->f[fold_sel2] += (7*(uint32_t)g4->step)>>4;
-            gtop = ((&blk->freq[blk->ctx_w[4].w[1]+(blk->ctx-blk->ctx_w[4].w[blk->ctx_w[4].sel])]));
+            gtop = (&blk->freq[blk->ctx_w[4].w[1]+(blk->ctx-blk->ctx_w[4].w[blk->ctx_w[4].sel])]);
             if( gtop[0].f[2]+gtop[0].f[1]+gtop[0].f[0]>29696 )
               gtop[0].rescale_three_way();
             gtop[0].f[is_dec] += (7*(uint32_t)gtop[0].step)>>4;
@@ -1105,7 +1105,7 @@ LABEL_48:
         }
         return step_v;
       }
-      frec = (&blk->freq[blk->ctx]);
+      frec = &blk->freq[blk->ctx];
     }
     mir_top = (uint16_t*)&frec[-1];
     if( frec[-1].f[2]+frec[-1].f[1]+frec[-1].f[0]>29696 )

@@ -106,8 +106,8 @@ void __bmf_compress(const char* InName, const char* OutName) {
   else
     Arc = nullptr;
   Flags = p_i_img->depth;
-  if( (Flags&0x80)!=0 ) {
-    if( (Flags&0x40)!=0 ) {
+  if( Flags&0x80 ) {
+    if( Flags&0x40 ) {
       p_i_img->depth = Flags^0x80;
     } else {
       Colours = 1<<(Flags&31);

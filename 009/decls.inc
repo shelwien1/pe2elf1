@@ -95,4 +95,4 @@ static uint32_t __packer_word();
 uint8_t*__expand_image(BmfArc* arc_in, int32_t want_pal, void** p_coded_buf);
 uint32_t __search_filter(BmfImage* img, int8_t mode);
 BmfArc*__bmf_open_archive(BmfArc* out, char* path, int32_t read_only);
-int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* coded_buf);
+int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* extra_blk);

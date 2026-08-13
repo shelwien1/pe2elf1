@@ -142,7 +142,7 @@ int32_t __alt_p2_context(AltP2Block* blk, AltP2Block* refa, AltP2Block* refb) {
         blk->p2_row[5][3] = (float)(nb0[-2].val+ra0->err);
         if( no_ref ) {
           nb2w = (int16_t*)blk->cursor[2];
-          blk->p2_row[6][0] = ((float)(nb0[-2].val+ra0->val-ra0[-2].val));
+          blk->p2_row[6][0] = (float)(nb0[-2].val+ra0->val-ra0[-2].val);
           blk->p2_row[6][1] = (float)(*nb2w+ra0->val-((P2Ctx*)(ra2))->val);
           blk->p2_row[6][2] = (float)(ra2->val+ra0->val-*nb2w+2*(nb1->val-ra1->val));
           in63 = *(int16_t*)((uint8_t*)nb0-18)+nb1[-1].val+ra1[-2].val+ra0->val-ra0[-1].val-ra1[-1].val-nb1[-2].val;
@@ -155,7 +155,7 @@ int32_t __alt_p2_context(AltP2Block* blk, AltP2Block* refa, AltP2Block* refb) {
         blk->p2_row[6][3] = (float)in63;
       } else {
         blk->p2_row[4][0] = (float)(nb0[-3].val+nb0[-1].val-nb0[-4].val);
-        blk->p2_row[4][1] = ((float)(nb0[-1].val+ra0[-1].val-ra0[-2].val));
+        blk->p2_row[4][1] = (float)(nb0[-1].val+ra0[-1].val-ra0[-2].val);
         blk->p2_row[4][2] = (float)(nb1[1].val+ra1->val-ra2[1].val);
         blk->p2_row[4][3] = (float)(nb0[-2].val+ra1[2].val-ra1->val);
         blk->p2_row[5][0] = (float)(nb1->val+ra0[-2].val-ra1[-2].val);
@@ -165,7 +165,7 @@ int32_t __alt_p2_context(AltP2Block* blk, AltP2Block* refa, AltP2Block* refb) {
         blk->p2_row[5][3] = (float)(nb0[-2].val+rb0->val-rb0[-2].val);
         blk->p2_row[6][0] = (float)(*nb2w2+rb0->val-((P2Ctx*)(rb2))->val);
         blk->p2_row[6][1] = (float)(rb0[-2].val+rb0->val-nb0[-2].val+2*(nb0[-1].val-rb0[-1].val));
-        blk->p2_row[6][2] = ((float)(nb0[-2].val+rb0->err));
+        blk->p2_row[6][2] = (float)(nb0[-2].val+rb0->err);
         blk->p2_row[6][3] = (float)(*nb2w2+ra0->err);
       }
     } else {
@@ -174,13 +174,13 @@ int32_t __alt_p2_context(AltP2Block* blk, AltP2Block* refa, AltP2Block* refb) {
       blk->p2_row[4][1] = (float)(nb0[-5].val+nb1->val-nb1[-5].val);
       nb2x = (P2Ctx*)blk->cursor[2];
       blk->p2_row[4][2] = (float)(nb0[-4].val+nb1->val-nb1[-4].val);
-      blk->p2_row[4][3] = ((float)((nb2x->val+3*nb1[1].val-4*nb2x[1].val)-(((nb1[2].val-nb1->val-(nb3x[2].val-nb3x->val))>>1)-nb3x[1].val)));
+      blk->p2_row[4][3] = (float)((nb2x->val+3*nb1[1].val-4*nb2x[1].val)-(((nb1[2].val-nb1->val-(nb3x[2].val-nb3x->val))>>1)-nb3x[1].val));
       blk->p2_row[5][0] = (float)(nb0[-2].val+ra0->val-ra0[-2].val);
       blk->p2_row[5][1] = (float)(nb1[1].val+ra1[1].val-ra2[2].val);
       blk->p2_row[5][2] = (float)(nb1[-2].val+ra1[2].val-ra2->val);
-      blk->p2_row[5][3] = ((float)((ra0[-2].val+ra0->val-nb0[-2].val)+2*(nb0[-1].val-ra0[-1].val)));
+      blk->p2_row[5][3] = (float)((ra0[-2].val+ra0->val-nb0[-2].val)+2*(nb0[-1].val-ra0[-1].val));
       blk->p2_row[6][0] = (float)(nb2x[1].val+rb0->val-rb2[1].val);
-      blk->p2_row[6][1] = ((float)(nb0[-2].val+rb0->val-rb0[-2].val));
+      blk->p2_row[6][1] = (float)(nb0[-2].val+rb0->val-rb0[-2].val);
       blk->p2_row[6][2] = (float)(nb0[-1].val+rb1[1].val-rb1->val);
       blk->p2_row[6][3] = (float)(nb1[1].val+rb1[2].val-rb2[3].val);
     }
@@ -188,7 +188,7 @@ int32_t __alt_p2_context(AltP2Block* blk, AltP2Block* refa, AltP2Block* refb) {
     blk->p2_row[4][0] = (float)(nb1[3].val+nb1->val-nb2[3].val);
     row2c = nb2;
     blk->p2_row[4][1] = (float)(nb0[-4].val+nb1->val-nb1[-4].val);
-    blk->p2_row[4][2] = ((float)((nb2->val+3*nb1[1].val-4*nb2[1].val)-((((nb1[2].val-nb1->val)-(nb3[2].val-nb3->val))>>1)-nb3[1].val)));
+    blk->p2_row[4][2] = (float)((nb2->val+3*nb1[1].val-4*nb2[1].val)-((((nb1[2].val-nb1->val)-(nb3[2].val-nb3->val))>>1)-nb3[1].val));
     nb4 = (P2Ctx*)blk->cursor[4];
     blk->p2_row[4][3] = (float)(row2c[-1].val+nb1[1].val-nb3->val);
     blk->p2_row[5][0] = (float)(nb3[1].val+nb1->val-nb4[1].val);
@@ -334,14 +334,14 @@ int32_t __alt_p2_context(AltP2Block* blk, AltP2Block* refa, AltP2Block* refb) {
   band_lo = blk->band_lo;
   blk->ctx_w[0].sel = (run4<1840)+(run4<272);
   band_hi = blk->band_hi;
-  blk->ctx_w[1].sel = ((run4-cx1->val<=band_hi)+(run4-cx1->val<band_lo));
+  blk->ctx_w[1].sel = (run4-cx1->val<=band_hi)+(run4-cx1->val<band_lo);
   d_run4 = run4-cx0[-1].val;
   in_band = d_run4<=band_hi;
   blk->ctx_w[2].sel = in_band+(d_run4<band_lo);
   blk->ctx_w[3].sel = cx1->sign;
   blk->ctx_w[4].sel = cx0[-1].sign;
   magsum = magsum_s;
-  magu = (cx2[0].mag+cx1->mag);
+  magu = cx2[0].mag+cx1->mag;
   run_s2 = run;
   magl = cx0[-1].mag+cx0[-2].mag;
   if( refa ) {
@@ -369,7 +369,7 @@ int32_t __alt_p2_context(AltP2Block* blk, AltP2Block* refa, AltP2Block* refb) {
       d_ra_left = ra0->val-ra0[-1].val;
       magsum = magsum_s;
       run_s2 = run;
-      blk->ctx_w[4].sel = ((d_ra_left<=band_hi)+(d_ra_left<band_lo));
+      blk->ctx_w[4].sel = (d_ra_left<=band_hi)+(d_ra_left<band_lo);
     } else if( *(int32_t*)&blk->plane_idx>1 ) {
       magsum_s = magsum;
       d_rb_rb1 = rb0->val-rb1->val;

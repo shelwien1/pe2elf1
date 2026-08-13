@@ -53,7 +53,7 @@ uint16_t*__rc_begin() {
   int32_t at6, at7;
   uint32_t i;
   if( !f_DEC )
-    *packer_word = ::packer_acc;
+    *packer_word = packer_acc;
   at = out_cursor;
   if( out_cursor!=(uint8_t*)packer_word ) {
     bits = packer_free_bits-8;
@@ -131,7 +131,7 @@ uint16_t*__rc_begin() {
         ++k;
       } while( (uint32_t)k<0x400 );
     }
-    ::model_tables = tbl;
+    model_tables = tbl;
   }
   if( f_DEC )
     rc.dec_init();

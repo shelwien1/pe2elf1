@@ -93,7 +93,7 @@ int32_t __choose_plane_coding(BmfImage* img, int32_t unused_h, int8_t unused_c) 
   data_size = img->data_size;
   img_a = (BmfImage*)((uint8_t*)img);
   alphabet_reduced = 1;
-  __frame.row_stride = ((uint16_t)img->stride);
+  __frame.row_stride = (uint16_t)img->stride;
   data_end = &img->pixels[data_size];
   memset(__frame.buf, 0, 0x8000);
   result = 192;

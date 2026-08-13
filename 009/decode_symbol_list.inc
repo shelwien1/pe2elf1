@@ -63,9 +63,9 @@ int32_t __decode_symbol_list(SymList* syms) {
   tot_all = cum+tot0;
   target = rc.get_freq(tot_all);
   tot = cum+tot0;
-  p = (__frame.list[0]);
+  p = __frame.list[0];
   rd = &__frame.list[1];
-  first = (__frame.list[0]);
+  first = __frame.list[0];
   cum_lo = 0;
   while( 1 ) {
     cum_lo += p->cnt;
@@ -161,7 +161,7 @@ LABEL_30:
               up->set(back->sym, back_cnt);
               --up;
             } while( back!=owner->ent );
-            cur = (__frame.list[1]);
+            cur = __frame.list[1];
             n_left = __frame.list0;
           }
           up->set(__frame.list2, half);

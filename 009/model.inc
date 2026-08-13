@@ -313,7 +313,7 @@ struct ModelBlock {
               do {
                 piece = __decode_symbol_list(&lists[4*b+carry]);
                 carry = piece>>6;
-                this->sym_code[s] += (piece<<((8*b)&31));
+                this->sym_code[s] += piece<<((8*b)&31);
                 ++b;
               } while( b<nbytes );
             }
@@ -339,7 +339,7 @@ struct ModelBlock {
         free(lists[left].ent);
     } else {
       this->depth = 8;
-      this->height = (this->height*nbytes);
+      this->height = this->height*nbytes;
       this->expand_alphabet();
       for( left2 = 15; left2>=0; --left2 )
         free(lists[left2].ent);
@@ -782,11 +782,11 @@ struct ModelBlock {
     up_p1_sym = cur6[1].sym;
     up_m1_sym = cur6[-1].sym;
     __frame.sym0 = up_sym;
-    ::mode_symbol[1] = up_sym;
+    mode_symbol[1] = up_sym;
     __frame.sym1 = left_sym;
-    ::mode_symbol[2] = left_sym;
+    mode_symbol[2] = left_sym;
     __frame.sym3 = up_p1_sym;
-    ::mode_symbol[3] = up_p1_sym;
+    mode_symbol[3] = up_p1_sym;
     m_lo = cur6->match[1]+4*(up_p1_sym==up_m1_sym);
     m_up = cur6[1].match[1];
     __frame.sym2 = up_m1_sym;
@@ -886,10 +886,10 @@ struct ModelBlock {
         id2 = *id3p;
       }
     }
-    if( (this->row_cur[5][-1].match[1]&this->row_cur[5][-1].match[0])!=0 ) {
+    if( this->row_cur[5][-1].match[1]&this->row_cur[5][-1].match[0] ) {
       up1 = this->row_cur[6];
       up2 = this->row_cur[7];
-      if( ((uint8_t)(up2[2].match[1]&up2[1].match[1]&up2[0].match[1]&up1[3].match[1]&up1[2].match[1]&up1[1].match[1]&up1[0].match[1]&up1[0].match[0]&(int8_t)up1[-1].match[1])&up2[3].match[1])!=0 ) {
+      if( (uint8_t)(up2[2].match[1]&up2[1].match[1]&up2[0].match[1]&up1[3].match[1]&up1[2].match[1]&up1[1].match[1]&up1[0].match[1]&up1[0].match[0]&(int8_t)up1[-1].match[1])&up2[3].match[1] ) {
         m_up0 = up2[0].match[0];
         idx1 = 1;
         if( this->width-x<=1 ) {
@@ -898,7 +898,7 @@ struct ModelBlock {
           __frame.sym1 = this->width-x;
           while( 1 ) {
             run = idx1;
-            if( (up1[idx1+2].match[1]&up1[idx1+2].match[0])==0 )
+            if( !(up1[idx1+2].match[1]&up1[idx1+2].match[0]) )
               break;
             m_up0 = (uint8_t)(up2[run].match[0]&m_up0);
             if( ++idx1>=__frame.sym1 ) {
@@ -910,7 +910,7 @@ struct ModelBlock {
   LABEL_42:
         bucket = *(this->run_bucket+idx1);
         bit = this->esc_ctr[(8*bucket+4*(uint8_t)(up2[run+3].match[1]&up2[run+2].match[1])+2*m_up0+*(this->alpha_map+__frame.sym0)+1)].decode_context_bit(this->esc_ctr);
-        msym1c = ::mode_symbol[1];
+        msym1c = mode_symbol[1];
         this->hit = bit;
         *(((uint8_t*)this->alpha_map)+msym1c) = bit;
         hit_a = this->hit;
@@ -958,10 +958,10 @@ struct ModelBlock {
           rec->match2345 = 0x01010101;
           *(uint32_t*)this->row_cur[5] = 0x01010101;
           pixp = (uint16_t*)this->pix_cur;
-          __frame.sym1 = ::mode_symbol[1];
+          __frame.sym1 = mode_symbol[1];
           pixp[1] = *pixp;
-          this->row_cur[5]->sym = (uint16_t)::mode_symbol[1];
-          this->pix_cur[0] = (uint16_t)::mode_symbol[1];
+          this->row_cur[5]->sym = (uint16_t)mode_symbol[1];
+          this->pix_cur[0] = (uint16_t)mode_symbol[1];
           recw = (int32_t*)this->row_cur[5];
           flags_word = recw[1];
           __frame.sym3 = *recw;
@@ -1223,10 +1223,10 @@ struct ModelBlock {
     idx_s = 0;
   LABEL_86:
     gen = exclusion_gen;
-    msym3 = ::mode_symbol[3];
-    msym1 = ::mode_symbol[1];
+    msym3 = mode_symbol[3];
+    msym1 = mode_symbol[1];
     idx_t = idx_s;
-    msym2 = ::mode_symbol[2];
+    msym2 = mode_symbol[2];
     exclusion_mask[mode_symbol[4]] = exclusion_gen;
     pixr = (uint16_t*)this->pix_cur;
     exclusion_mask[msym3] = gen;
@@ -1308,9 +1308,9 @@ struct ModelBlock {
       pos1 = this->sym_pos+1;
       this->sym_pos = pos1;
     } while( pos1<32 );
-    msym1b = ::mode_symbol[1];
+    msym1b = mode_symbol[1];
     sel1_list = this->sel1_list;
-    this->sel[0] = &this->sel0_list[::mode_symbol[2]];
+    this->sel[0] = &this->sel0_list[mode_symbol[2]];
     sel_p = this->sel_cur;
     this->sel[1] = &sel1_list[msym1b];
     while( 1 ) {
@@ -1412,11 +1412,11 @@ struct ModelBlock {
     up_next_sym = cur6[1].sym;
     upleft_sym = cur6[-1].sym;
     __frame.sym8 = up_sym;
-    ::mode_symbol[1] = up_sym;
+    mode_symbol[1] = up_sym;
     __frame.sym10 = left_sym;
-    ::mode_symbol[2] = left_sym;
+    mode_symbol[2] = left_sym;
     __frame.sym6 = up_next_sym;
-    ::mode_symbol[3] = up_next_sym;
+    mode_symbol[3] = up_next_sym;
     __frame.sym5 = upleft_sym;
     mode_symbol[4] = upleft_sym;
     // Six match flags of the four named neighbours, as six bits.
@@ -1535,7 +1535,7 @@ struct ModelBlock {
         one = 1;
         while( 1 ) {
           run = one;
-          if( (cur6c[one+2].match[1]&cur6c[one+2].match[0])==0 )
+          if( !(cur6c[one+2].match[1]&cur6c[one+2].match[0]) )
             break;
           m_up0 = (uint8_t)(up2[run].match[0]&m_up0);
           if( ++one>=__frame.sym0 ) {
@@ -1624,7 +1624,7 @@ struct ModelBlock {
         m3 = r4[-3].match[0];
         runlen_s = runlen;
         up3 = (PixRec*)this->row_cur[7];
-        this->grad[0] = (r4[3].match[0]+m1+m0+m3+m2-5);
+        this->grad[0] = r4[3].match[0]+m1+m0+m3+m2-5;
         this->grad[1] = up3[3].match[0]+up3[2].match[0]+up3[1].match[0]+up3[0].match[0]+(int8_t)up3[-1].match[0]+(int8_t)up3[-2].match[0]+(int8_t)up3[-3].match[0]+up3[4].match[0]-8;
         this->grad[2] = cur2[-4].match[1]+cur2[-3].match[1]-2;
         s8b = __frame.sym8;
@@ -1636,7 +1636,7 @@ struct ModelBlock {
       }
       (&this->esc_ctr[(amap+1)])->encode_context_bit(this->esc_ctr, __frame.sym6);
       s6 = __frame.sym6;
-      msym1 = ::mode_symbol[1];
+      msym1 = mode_symbol[1];
       alpha_map = (uint8_t*)this->alpha_map;
       this->hit = __frame.sym6;
       *(alpha_map+msym1) = s6;
@@ -1852,9 +1852,9 @@ struct ModelBlock {
       runlen = 0;
     }
     mode = exclusion_gen;
-    msym3 = ::mode_symbol[3];
-    excl_sym_a = ::mode_symbol[2];
-    excl_sym_b = ::mode_symbol[1];
+    msym3 = mode_symbol[3];
+    excl_sym_a = mode_symbol[2];
+    excl_sym_b = mode_symbol[1];
     exclusion_mask[mode_symbol[4]] = exclusion_gen;
     exclusion_mask[msym3] = mode;
     wq = (uint16_t*)this->pix_cur;
@@ -1937,9 +1937,9 @@ struct ModelBlock {
       pos1 = this->sym_pos+1;
       this->sym_pos = pos1;
     } while( pos1<32 );
-    msym1b = ::mode_symbol[1];
+    msym1b = mode_symbol[1];
     sel1_list = this->sel1_list;
-    this->sel[0] = &this->sel0_list[::mode_symbol[2]];
+    this->sel[0] = &this->sel0_list[mode_symbol[2]];
     sel_p = this->sel_cur;
     this->sel[1] = &sel1_list[msym1b];
     while( 1 ) {

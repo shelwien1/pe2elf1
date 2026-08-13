@@ -17,8 +17,8 @@ struct BmfArc {
 };
 
 BmfArc*__bmf_destroy_archive(BmfArc* arc, int8_t do_free) {
-  ((BmfArc*)arc)->bmf_close_archive();
-  if( (do_free&1)!=0 )
+  (arc)->bmf_close_archive();
+  if( do_free&1 )
     free(arc);
   return arc;
 }
@@ -37,7 +37,7 @@ BmfArc*__bmf_open_archive(BmfArc* out, char* path, int32_t read_only) {
   BmfArc* arc;
   FILE* fp, * fp2;
   const char* mode;
-  int32_t rc, live;
+  int32_t seek_rc, live;
   arc = out;
   mode = "a+b";
   if( read_only )
@@ -48,9 +48,9 @@ BmfArc*__bmf_open_archive(BmfArc* out, char* path, int32_t read_only) {
   if( !fp )
     __exit_402E40(6, path);
   arc->images = 0;
-  rc = fseek(fp, 0, 0);
+  seek_rc = fseek(fp, 0, 0);
   live = arc->fp!=nullptr;
-  if( rc ) {
+  if( seek_rc ) {
     if( !live )
       __exit_402E40(3, path);
     return arc;

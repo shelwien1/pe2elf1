@@ -59,7 +59,7 @@ int32_t*__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette
   } else {
     pal_bytes = 0;
   }
-  result = ((int32_t*)bmf_new(data_bytes+pal_bytes+19));
+  result = (int32_t*)bmf_new(data_bytes+pal_bytes+19);
   if( !result )
     return nullptr;
   BmfImage*const img = (BmfImage*)result;
@@ -69,7 +69,7 @@ int32_t*__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette
   result[2] = word2;
   img->data_size = data_bytes;
   if( pal_bytes ) {
-    if( (((const BmfImage*)result)->depth&0x80)!=0 )
+    if( ((const BmfImage*)result)->depth&0x80 )
       buf = (uint8_t*)result+result[3]+16;
     else
       buf = nullptr;

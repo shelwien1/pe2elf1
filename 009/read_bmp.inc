@@ -44,17 +44,17 @@ int32_t*__read_bmp(char* path) {
     if( pal_n>0 ) {
       for( i = 0; i<pal_n; ++i ) {
         fread(bmp_bgra, 4u, 1u, fp);
-        if( (img->depth&0x80)!=0 )
+        if( img->depth&0x80 )
           pal = img->pixels+img->data_size;
         else
           pal = 0;
         *(pal+3*i+2) = bmp_bgra[2];
-        if( (img->depth&0x80)!=0 )
+        if( img->depth&0x80 )
           pal2 = img->pixels+img->data_size;
         else
           pal2 = 0;
         *(pal2+3*i+1) = bmp_bgra[1];
-        if( (img->depth&0x80)!=0 )
+        if( img->depth&0x80 )
           pal3 = img->pixels+img->data_size;
         else
           pal3 = 0;
@@ -71,7 +71,7 @@ int32_t*__read_bmp(char* path) {
     if( hdr.biCompression==1 ) {
       memset(img->pixels, 0, img->data_size);
       row_at = row;
-      img_f = (BmfImage*)img;
+      img_f = img;
       y4 = img->height-1;
       while( 1 ) {
         row_ofs = row_at;
@@ -112,7 +112,7 @@ int32_t*__read_bmp(char* path) {
     if( hdr.biCompression!=2 )
       return nullptr;
     memset(img->pixels, 0, img->data_size);
-    img_f = (BmfImage*)img;
+    img_f = img;
     hi_nibble = 1;
     y8 = img->height-1;
     while( 1 ) {
@@ -232,7 +232,7 @@ LABEL_44:
   row_pad = stride_pad-stride;
   if( hdr.biHeight-1>=0 ) {
     y = hdr.biHeight-1;
-    img_f = (BmfImage*)img;
+    img_f = img;
     row6 = row;
     while( 1 ) {
       got = fread(row6, 1u, stride, fp);

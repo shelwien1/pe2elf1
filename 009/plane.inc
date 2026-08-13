@@ -21,9 +21,9 @@ void __unmodel_plane(int8_t unread_flag, uint16_t* p_i, uint8_t* out) {
       blk = __layout_workspace((ModelBlock*)raw, p_i[1], *p_i, p_i[1], p_i[5]&0x3F);
     else
       blk = (ModelBlock*)(nullptr);
-    ((ModelBlock*)blk)->unmodel_plane_slow(out);
+    (blk)->unmodel_plane_slow(out);
     if( blk )
-      __free_workspace((ModelBlock*)blk, 1);
+      __free_workspace(blk, 1);
   }
 }
 
@@ -35,8 +35,8 @@ void __model_planes(uint8_t* img, uint8_t* pixels, int32_t plane, int8_t unread_
   plane_predictor = plane_desc[plane+1].flags&3;
   plane_alt_model = (uint8_t)(plane_desc[plane+1].flags&4)>>2;
   __colour_transform(img, pixels, plane, unread_flag);
-  scratch = ::hist_scratch;
-  aligned = (uint8_t*)((uintptr_t)(::hist_scratch+15)&~(uintptr_t)15);
+  scratch = hist_scratch;
+  aligned = (uint8_t*)((uintptr_t)(hist_scratch+15)&~(uintptr_t)15);
   memset(scratch, 0, 15);
   bmf_zero16(&scratch[1008]);
   ofs = 1008;

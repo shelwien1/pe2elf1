@@ -20,16 +20,16 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   PixRec* up1, * up2;
   void* ws;
   if( plane_alt_model ) {
-    if( ::plane_predictor==1 ) {
+    if( plane_predictor==1 ) {
       if( (p_i->depth&0x3F)==8 )
         __alt_model_p1_d8_encode(pixels, p_i->width, p_i->height, raw);
       else
         __alt_model_p1_encode((uint16_t*)p_i, pixels);
-    } else if( ::plane_predictor==2 ) {
+    } else if( plane_predictor==2 ) {
       if( (p_i->depth&0x3F)==8 )
         __alt_model_p2_d8_encode(pixels, p_i->width, p_i->height, raw);
       else
-        __alt_model_p2_encode((BmfImage*)p_i, pixels);
+        __alt_model_p2_encode(p_i, pixels);
     }
   } else {
     ws = bmf_new(sizeof(ModelBlock));
@@ -233,7 +233,7 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
         if( row_w>0 ) {
           x2 = 0;
           do {
-            step = ((ModelBlock*)blk)->code_pixel(x2);
+            step = (blk)->code_pixel(x2);
             blk->init_tables();
             x2 += step;
           } while( (uint32_t)x2<blk->width );
@@ -242,6 +242,6 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
       } while( (uint32_t)y<*(uint32_t*)&blk->height );
     }
     __rc_end_encode();
-    __free_workspace((ModelBlock*)blk, 1);
+    __free_workspace(blk, 1);
   }
 }

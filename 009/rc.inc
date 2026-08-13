@@ -86,7 +86,7 @@ public:
     bytes += 5;
     uint32_t len = bytes;
     uint32_t rounded = ((low&0x7FFFFF)>=((len&0xFFFFFF)>>1))+(low>>23);
-    uint32_t carry = (rounded>0xFF);
+    uint32_t carry = rounded>0xFF;
     uint8_t* q = p();
     *q++ = (uint8_t)(cache+carry);
     for(; pending; --pending )

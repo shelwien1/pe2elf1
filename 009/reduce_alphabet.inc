@@ -306,9 +306,9 @@ LABEL_71:
       blk1->depth = 8;
       free(__frame.tmp);
       newbuf = bmf_new(2*blk1->height*blk1->width);
-      __frame.tmp = (__frame.slot[1]);
+      __frame.tmp = __frame.slot[1];
       blk1->sym_word = (uint16_t*)newbuf;
-      __reduce_alphabet((ModelBlock*)blk1, mode, (uint8_t*)__frame.tmp);
+      __reduce_alphabet(blk1, mode, (uint8_t*)__frame.tmp);
       free((__frame.slot[1]));
     } else {
       if( 4*n_kids ) {

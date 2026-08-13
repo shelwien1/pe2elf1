@@ -168,7 +168,7 @@ int32_t __cost_candidate(uint8_t* img, int32_t cand, uint8_t* desc, int8_t unrea
   s2 = cost+c2;
   __frame.best = s2;
   c2b = __frame.rows;
-  if( (s1<s2) ) {
+  if( s1<s2 ) {
     __frame.best = s1;
     tmp = pick;
     pick = __frame.d2_f;
