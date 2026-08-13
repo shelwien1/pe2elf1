@@ -33,6 +33,12 @@
 # that says anything but "reads only what it is given" is this script's reach,
 # not a finding about the file.
 #
+# One of those shapes says so itself, and gets its own verdict.  A tool built on
+# `tools/buildlog.py` refuses to answer for a file its log was not built from
+# and prints the refusal; replayed, it refuses at every revision, and the three
+# verdicts here are "answers differently at <rev>", "DECLINES", and "SAME ANSWER
+# THROUGHOUT".  Only the last one is the list this script exists to produce.
+#
 # The counts this used to quote -- "43 of 51 tools", "six revisions", "329
 # commits" -- were true when they were written and are printed by the run now,
 # because a claim in a comment is a measurement that has to be re-taken.
@@ -149,8 +155,37 @@ for t in "$tmp"/tools/*.py; do
       fi
     done
   fi
+  # A tool that reads a *build log* cannot be proved this way, and it is not
+  # flat.  `retype_locals.py` takes its worklist from `strict.log`, which is
+  # stamped with the cksum of the source it was built from (tools/buildlog.py);
+  # every old revision fails that stamp, so the tool declines and says so in a
+  # parenthetical.  That parenthetical is one of the ones `PROV` strips -- for
+  # the good reason above, that a note about the working tree must not read as
+  # a different answer -- so after the strip the tool looks identical at every
+  # revision and lands under SAME ANSWER THROUGHOUT, which reads as "a rule
+  # written for a shape already gone".  It is the opposite: the rule was never
+  # asked.  The first version of this checked `$now` for the phrase, which
+  # cannot ever match: `$now` is the *current* file's answer and the log does
+  # describe that one, so the note is not in it and the sed would have taken it
+  # out if it were.  It is the replayed answer that carries the declination, so
+  # that is what gets looked at -- unstripped, once, and only for a tool that
+  # did not move.  Rebuilding each revision to make a log for it is the honest
+  # fix and is a different script.
+  # The *oldest* revision, not `revs[0]`: `pick` lists history newest first, so
+  # `revs[0]` is the current file under another name -- the one revision whose
+  # cksum the log does match, and so the one revision that would never make the
+  # tool decline.  The check would have reported nothing and read as agreement.
+  declines=''
+  if [ -z "$moved" ] &&
+     git show "${revs[${#revs[@]} - 1]}:./subs1.hpp" > "$tmp/rev/subs1.hpp" 2>/dev/null; then
+    case $(timeout 180 python3 "$t" "$tmp/rev/subs1.hpp" 2>&1 | tail -1) in
+      *'describes another file'*|*'is not there'*) declines=1 ;;
+    esac
+  fi
   if [ -n "$moved" ]; then
     printf '%-22s answers differently at %s\n' "$base" "$moved"
+  elif [ -n "$declines" ]; then
+    printf '%-22s DECLINES: its worklist is a build log for another revision\n' "$base"
   else
     printf '%-22s SAME ANSWER THROUGHOUT  %s\n' "$base" "${now:0:44}"
     flat_tools+=("$t")

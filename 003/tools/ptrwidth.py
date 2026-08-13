@@ -46,6 +46,33 @@ found, and one of them (`hist_scratch & 0xFFFFFFF0`) was an alignment mask
 that drops the top half of any address above four gigabytes.  A chain that
 *ends* at `uintptr_t` or at a pointer is fine and is not counted; it is the
 ones that end narrower.
+
+The hop does not have to be a chain, and that is the shape both of the above
+miss.  Put the pointer in a *variable* and the cast and the narrowing are on
+different lines, with a name between them:
+
+    pair_ctx = (uintptr_t)h0;                          // __alt_p2_model
+    ...
+    __update_binary_pair(model_strip((uint32_t)pair_ctx - 1), ...);
+
+    step_v = (uintptr_t)p2_rec;                        // step_v is uint32_t
+    ...
+    return step_v;
+
+Nothing here is a cast chain, so `LAUNDERED` sees nothing; the second is a
+conversion gcc does report on `-m64` and does not on i386, and the first is not
+reported anywhere, because `uintptr_t` to `uint32_t` is the identity where a
+pointer is four bytes.  Both were Hex-Rays modelling one machine register that
+held an address at one point in the function and a small integer at another --
+which is why both turned out to be dead, and why neither cost a byte of output
+on either target.  Dead is not the same as absent: it is a pointer truncated to
+32 bits sitting in the file, and under `-DBMF_HIGH_ARENA` it is garbage that
+nothing happens to read.
+
+    parked      a name assigned `(uintptr_t)p`, which is then either declared
+                narrower than a pointer or read through a narrowing cast.  The
+                fix is to give the address role its own name, as `node` and
+                `h0` already have.
 """
 import collections
 import re
@@ -104,6 +131,59 @@ def laundered(lines):
     return out
 
 
+# `v = (uintptr_t)expr;` -- the address going into a name.  The operand is not
+# checked for being a pointer: `(uintptr_t)` of an integer is a widening nobody
+# writes, and the two in this file were both addresses.
+PARK = re.compile(r'^\s*([A-Za-z_]\w*)\s*=\s*\(\s*uintptr_t\s*\)')
+# `win = (uintptr_t)hist & 0xF;` is not one of these, and the mask is the
+# reason: a constant that fits in 32 bits has already discarded every bit the
+# narrowing would have discarded, so the result is the same integer on both
+# targets.  Two of the four this rule first reported were that -- reading the
+# low bits of an address to find its alignment, which is what the mask is for.
+# The test is the constant's width and not its presence: `& ~15` keeps the top
+# half and would be a truncation.
+MASK = re.compile(r'&\s*(0[xX][0-9A-Fa-f]+|\d+)\b')
+# and the name coming back out narrower.
+NARROW = r'\(\s*(?:u?int(?:8|16|32)_t|unsigned int|int|char|short)\s*\)\s*%s\b'
+# Wide enough to hold an address on both targets.  A name declared `uintptr_t`
+# is not narrow *here* -- the truncation is at its reads, which is why this
+# asks two questions and not one.
+WIDE = ('uintptr_t', 'uint64_t', 'int64_t', 'size_t', 'ptrdiff_t',
+        'intptr_t', 'unsigned long', 'long')
+
+
+def parked(lines):
+    """[(line, name, why, text)] for every pointer parked in an integer name."""
+    out = []
+    for a, b, nm, sig in structs.bodies(lines):
+        types = structs.decl_types(sig, lines, a, b)
+        body = [lines[i].split('//')[0] for i in range(a, b + 1)]
+        for i, text in enumerate(body):
+            m = PARK.match(text)
+            if not m:
+                continue
+            name = m.group(1)
+            ty = (types.get(name) or '').strip()
+            if ty.endswith('*'):
+                continue                      # a pointer holding an address
+            mask = MASK.search(text[m.end():])
+            if mask and int(mask.group(1), 0) <= 0xFFFFFFFF:
+                continue                      # the mask did the narrowing
+            if ty and ty not in WIDE:
+                why = 'declared %s' % ty
+            elif re.search(NARROW % re.escape(name), '\n'.join(body)):
+                why = 'read through a narrowing cast'
+            elif not ty:
+                # Not silently: a name `decl_types` could not resolve is a park
+                # this rule cannot judge, and dropping it would be a zero that
+                # means "not looked at".  Reported so the reader decides.
+                why = 'declared ? -- read it'
+            else:
+                continue
+            out.append((a + i + 1, name, why, lines[a + i].strip()[:52]))
+    return out
+
+
 def classify(lines, line, col):
     """(kind, detail) for the cast at 1-based (line, col)."""
     text = lines[line - 1]
@@ -144,7 +224,7 @@ def main():
     lines = open(path).read().split('\n')
     rows, note = sites(path)
     if note:
-        n = len(laundered(lines))
+        n = len(laundered(lines)) + len(parked(lines))
         print('%d pointers through a 32-bit integer (%s; the compiler half '
               'needs a fresh log)' % (n, note))
         return
@@ -153,6 +233,7 @@ def main():
         kind, detail = classify(lines, line, col)
         kinds[kind].append((line, col, ty, detail))
     launder = laundered(lines)
+    park = parked(lines)
     for want in ('--roundtrip', '--slot', '--arg', '--arith', '--unmatched'):
         if want in sys.argv:
             k = want[2:]
@@ -164,6 +245,11 @@ def main():
         for line, text in launder:
             print('%6d %s' % (line, text))
         print('%d laundered' % len(launder))
+        return
+    if '--parked' in sys.argv:
+        for line, name, why, text in park:
+            print('%6d %-10s %-28s %s' % (line, name, why, text))
+        print('%d parked' % len(park))
         return
     if '--apply' in sys.argv:
         n = apply(lines, rows)
@@ -179,7 +265,9 @@ def main():
         print('busiest slots: %s'
               % ', '.join('%s %d' % (n, c) for n, c in slots.most_common(8)))
     print('%-10s %d' % ('laundered', len(launder)))
-    print('%d pointers through a 32-bit integer' % (len(rows) + len(launder)))
+    print('%-10s %d' % ('parked', len(park)))
+    print('%d pointers through a 32-bit integer'
+          % (len(rows) + len(launder) + len(park)))
 
 
 if __name__ == '__main__':
