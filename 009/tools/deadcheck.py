@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Report code nothing can reach.
 
-    python3 tools/deadcheck.py subs1.hpp
+    python3 tools/deadcheck.py bmf.cpp
 
 Five kinds of unreachable code have been found in this file, each after the
 previous one had been declared the last. Two were found by a check that was
@@ -139,7 +139,7 @@ def closed_under(callers, roots):
 
 
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else 'subs1.hpp'
+    path = sys.argv[1] if len(sys.argv) > 1 else 'bmf.cpp'
     raw, origin = structs.splice(path)
     # A comment describing deleted code quotes it, and a check that reads
     # comments finds the thing it was written to find in the note saying it is

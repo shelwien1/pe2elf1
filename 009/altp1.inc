@@ -183,7 +183,7 @@ struct AltP1Block {
           x = 0;
           do {
             ++x;
-            (this)->ctx_of((AltP1Block*)nullptr, (AltP1Block*)0);
+            ctx_of((AltP1Block*)nullptr, (AltP1Block*)0);
             guess = (uint8_t)pred;
             resid = (uint8_t)(*src-guess);
             recon = *(fold[resid]+unfold)+guess;

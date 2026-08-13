@@ -10,6 +10,15 @@ body and field by field.  Every rename since they were written has been able to
 falsify a sentence in them, and nothing checked: `rename.py` warns about the
 renames *it* makes, and says nothing about an edit made by hand.
 
+`MINIMAL-SYNTAX.md` is deliberately not in that list, and the reason is the
+rule's own boundary.  It is a record of a round rather than a description of
+the program, so it names what the round *removed* -- `__init_symbol_list`
+became `SymList::init` and the sentence saying so has to keep both names.  A
+check that cannot tell "the program no longer has this" from "the document is
+about the program no longer having this" would be answered by deleting the
+history, which is the wrong repair.  Pass it on the command line to see the
+list anyway; six of the seven names are prose and one is a keyword.
+
 So this reads every identifier the two documents put in backticks and asks
 whether the source still has it.  A name is known if `subs1.hpp` or `bmf.cpp`
 contains it, with or without the `__` prefix this file puts on the decompiled

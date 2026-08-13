@@ -370,8 +370,8 @@ struct ModelBlock {
     dst_keep = dst;
     dst_base = &dst[-(depth<8)];
     __rc_begin_decode(0);
-    (this)->expand_alphabet();
-    this_1 = (this);
+    expand_alphabet();
+    this_1 = this;
     g1 = 0;
     g = 0;
     do {
@@ -1297,7 +1297,7 @@ struct ModelBlock {
     __frame.sym30 = h30;
     __frame.sym31 = h31;
     do {
-      psym = (this)->pixel_context((uint32_t*)__frame.sym);
+      psym = pixel_context((uint32_t*)__frame.sym);
       if( psym>=0 ) {
         bit2 = bit_node[ctr_node].decode_context_bit(&bit_root[ctr_fallback]);
         row_cur[5]->sym = psym;
@@ -1921,7 +1921,7 @@ struct ModelBlock {
     __frame.sym31 = r6[3].sym;
     sym_pos = 0;
     do {
-      esym = (this)->pixel_context((uint32_t*)__frame.sym);
+      esym = pixel_context((uint32_t*)__frame.sym);
       if( esym>=0 ) {
         up_hit = esym==row_cur[5]->sym;
         (&bit_node[*(int32_t*)&ctr_node])->encode_context_bit(&bit_root[*(int32_t*)&ctr_fallback], up_hit);
