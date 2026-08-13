@@ -52,11 +52,17 @@ rm -f "$tmp/probe.bmf"
 
 # The seeds `fuzz.sh` uses, and for the same reasons: the corpus, the reference
 # streams, and a two-member archive, which no single image is.
+# Concatenated for the reason `fuzz.sh` gives: `bmf c` creates its output, so
+# building this by running it twice against one path leaves one member.
 mkdir -p "$tmp/extra"
-"$tmp/bmf32" c testfiles/t1.bmp  "$tmp/extra/arc2.bmf" >/dev/null 2>&1 &&
-"$tmp/bmf32" c testfiles/t8g.bmp "$tmp/extra/arc2.bmf" >/dev/null 2>&1 || {
+"$tmp/bmf32" c testfiles/t1.bmp  "$tmp/extra/a1.bmf" >/dev/null 2>&1 &&
+"$tmp/bmf32" c testfiles/t8g.bmp "$tmp/extra/a2.bmf" >/dev/null 2>&1 &&
+cat "$tmp/extra/a1.bmf" "$tmp/extra/a2.bmf" > "$tmp/extra/arc2.bmf" &&
+[ "$(stat -c%s "$tmp/extra/arc2.bmf")" = "$(( $(stat -c%s "$tmp/extra/a1.bmf") +
+                                              $(stat -c%s "$tmp/extra/a2.bmf") ))" ] &&
+rm -f "$tmp/extra/a1.bmf" "$tmp/extra/a2.bmf" || {
   echo "warning: could not build the two-member archive" >&2
-  rm -f "$tmp/extra/arc2.bmf"; }
+  rm -f "$tmp/extra/arc2.bmf" "$tmp/extra/a1.bmf" "$tmp/extra/a2.bmf"; }
 
 BMF_FUZZ_EXTRA="$tmp/extra" tools/fuzz.py "$tmp/in" "$count" "$seed" \
     >"$tmp/manifest" || exit 2

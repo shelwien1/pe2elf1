@@ -64,14 +64,23 @@ fi
 # `detect_leaks=0`, as everywhere else here: this program frees nothing on the
 # way out and LeakSanitizer's exit 23 would read as "the archive would not
 # build".  It did, for one run.
+#
+# Concatenated, not appended: `bmf c` creates its output, so running it twice
+# against one path leaves one member.  A member is self-delimiting, so `cat` of
+# two streams is exactly the file the appending build produced -- and the size
+# is checked, because a seed that quietly became one member is a fuzz run that
+# quietly stopped covering the walk.
 mkdir -p "$tmp/extra"
 export ASAN_OPTIONS=detect_leaks=0
-if "$bin" c testfiles/t1.bmp "$tmp/extra/arc2.bmf" >/dev/null 2>&1 &&
-   "$bin" c testfiles/t8g.bmp "$tmp/extra/arc2.bmf" >/dev/null 2>&1; then
-  :
+if "$bin" c testfiles/t1.bmp "$tmp/extra/a1.bmf" >/dev/null 2>&1 &&
+   "$bin" c testfiles/t8g.bmp "$tmp/extra/a2.bmf" >/dev/null 2>&1 &&
+   cat "$tmp/extra/a1.bmf" "$tmp/extra/a2.bmf" > "$tmp/extra/arc2.bmf" &&
+   [ "$(stat -c%s "$tmp/extra/arc2.bmf")" = "$(( $(stat -c%s "$tmp/extra/a1.bmf") +
+                                                 $(stat -c%s "$tmp/extra/a2.bmf") ))" ]; then
+  rm -f "$tmp/extra/a1.bmf" "$tmp/extra/a2.bmf"
 else
   echo "warning: could not build the two-member archive; fuzzing single members only" >&2
-  rm -f "$tmp/extra/arc2.bmf"
+  rm -f "$tmp/extra/arc2.bmf" "$tmp/extra/a1.bmf" "$tmp/extra/a2.bmf"
 fi
 
 BMF_FUZZ_EXTRA="$tmp/extra" tools/fuzz.py "$tmp/in" "$count" "$seed" \

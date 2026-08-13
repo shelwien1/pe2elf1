@@ -10,11 +10,12 @@
 # "does the stream still match" and the full gate's minutes per attempt are the
 # whole cost.  Answer with `test.sh` before committing, always.
 #
-# The output file is removed first, and that is not tidiness: `bmf c` *appends*
-# a member to an archive that already exists, so a second run against a stale
-# file produces a two-member stream and reports a difference that is entirely
-# the script's own doing.  Leaving that out cost one wrong bisection here --
-# a known-good tree looked broken.
+# The output file is removed first.  It used to be load-bearing -- `bmf c`
+# appended a member to an archive that already existed, so a second run against
+# a stale file produced a two-member stream and a difference that was entirely
+# the script's own doing, which cost one wrong bisection here.  `c` creates its
+# output now and the `rm` is belt and braces: a stale file still makes "did not
+# write" and "wrote the same bytes" look alike.
 #
 # The images come from `testfiles/`, which is where they are.  This used to
 # compress `run/orig_$i.bmp` from inside a `run/` directory that no revision of

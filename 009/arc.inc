@@ -1,5 +1,6 @@
-// arc.inc -- the archive: several images in one file, which is what appending a
-// member to an existing output makes.
+// arc.inc -- the archive: several images in one file.  `bmf c` writes one and
+// creates its output; the walk over members that are already there is what
+// reading one of several needs, and what appending used to need.
 
 struct BmfArc {
   uint32_t images;
@@ -37,7 +38,17 @@ BmfArc*__bmf_open_archive(BmfArc* out, char* path, int32_t read_only) {
   const char* mode;
   int32_t seek_rc, live;
   BmfArc* arc = out;
-  mode = "a+b";
+  // `w+b`, not the donor's `a+b`: `bmf c in out` writes `out`, it does not add
+  // to it.  Appending is what the original did -- BMF took a list of files and
+  // put each one in the archive named by `-o` -- and this program takes one
+  // input and one output, where the same command run twice quietly produced a
+  // two-member file and a second `-o` of the same name grew it again.
+  //
+  // Everything below still walks the members that are already there, because
+  // *reading* an archive of several is unchanged and the walk is shared.  A
+  // truncated file simply has none, which is the case a brand-new output has
+  // always taken.
+  mode = "w+b";
   if( read_only )
     mode = "rb";
   out->images = 0;
