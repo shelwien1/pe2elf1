@@ -449,6 +449,7 @@ them run.
 | `checktable.py` | Check §1's table against what `shape.py` says right now | yes |
 | `collect_globals.py` | Collect subs1.hpp's global declarations into one sorted, deduplicated block | yes |
 | `compact_locals.py` | Compact one decompiled function's block of local declarations | yes |
+| `ctxidx.py` | Turn a masked context word into a `CtxIdx` chain, one line at a time | yes |
 | `deadcheck.py` | Report code nothing can reach | yes |
 | `deblob.py` | Give every blob global its own definition, and see what breaks | yes |
 | `decast.py` | Delete the casts that cast a thing to the type it already has | yes |

@@ -870,7 +870,10 @@ struct ModelBlock {
     }
     if( (int32_t)alphabet<32 ) {
       id3_used = ctx_id3_used;
-      __frame.sym1 = 16*id2+(__frame.sym1&0xF);
+      // The encoder's half of this context is at `sig3` below, written the same
+      // way: a four-bit field of the symbol under a lazily allocated id.  It
+      // reuses `sym1`, which held the left neighbour's symbol until here.
+      __frame.sym1 = CtxIdx{}.bits<0, 4>(__frame.sym1).raw(16*id2);
       id3p = &ctx_id3[__frame.sym1];
       id2 = *id3p;
       if( id2==0xFFFF ) {

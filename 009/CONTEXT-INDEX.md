@@ -71,8 +71,8 @@ are padding, so nothing observable changes. The same shape as the colour
 transform defect: a thing that is wrong, that the corpus reaches constantly,
 and that no check in the tree is looking at.
 
-*This document does not change the code.* The measurement above is what would
-justify the change, and it is here so the change can be made deliberately.
+**Done.** `nb_id[1920]`, `_pad2` gone, `sizeof(AltP2Block)` measured before and
+after at 1064560 either way.
 
 ---
 
@@ -135,6 +135,8 @@ states the array bound: `320 * 6 = 1920`, which is §1.
 
 **Recommendation:** add `digit`, convert this one site, decline `bits<6,5>`.
 
+**Done.**
+
 ---
 
 ## 3. The other ten `CtxIdx` sites
@@ -157,12 +159,11 @@ remark:
   field with a lazily allocated context id above it. `id2` has no static bound
   (it is handed out on first sight of a signature), so `raw` is right and
   `bits` would be a claim the code cannot make.
-- **873**, in the decoder, is that same context unconverted:
+- **873** *(done)*, in the decoder, was that same context unconverted:
   `__frame.sym1 = 16*id2+(__frame.sym1&0xF);` — the same four-bit field and the
   same `16*id2`, written as a multiply and a mask, in place. The encoder's half
-  says what it is and the decoder's does not, which is the one asymmetry in
-  these ten. Converting it is one line and it is the cheapest item in this
-  document.
+  said what it is and the decoder's did not, which was the one asymmetry in
+  these ten. It is `CtxIdx{}.bits<0, 4>(__frame.sym1).raw(16*id2)` now.
 
 No change proposed for the other nine.
 
@@ -302,6 +303,57 @@ In order:
 
 What I would not do: convert the `raw` terms in `model.inc`, or replace the
 `raw`s in `nb_slot` with `bits`. Both would be claims the code does not make.
+
+## 6.1 What the six items came to
+
+All six are done, and two of them did not come out the way this section
+predicted.
+
+**Item 4 was wrong about its own size.** "Most of the eighty-three" convert:
+the rule, written out as `tools/ctxidx.py`, converts **18**. Sixty-five stay
+masked, because every term in six of the nine lines carries a `run` and the
+masks reach down to bit 15. Three lines pay and are converted — `ctx0_lo` (4 of
+5 terms) and both spellings of `ctx0` (6 of 6 each) — and the other six are
+left alone, because eleven `.raw((expr)&0x…)` around one `.bit<>` is the line
+it started as with scaffolding on it. The tool refuses those rather than
+leaving that judgement to whoever runs it.
+
+The rule also got sharper while being written. "Bit 17 and above" is one bound
+for every weight; the true one is per weight, since a sum of `w` members is
+under `w * 2^15`: one member is a sign from bit 15, two from bit 16, three or
+four from bit 17. That is what the tool applies, and it is what makes
+`cx0[-1].err & 0x10000` convert.
+
+**Item 5 found four masks that are not sign tests.** Instrumenting every
+declined term over the corpus and taking the largest `|expr|`:
+
+```
+ctx1  bit 15  d_run0                          36157   past the bit
+bank3 bit 15  run2-cx0[-3].val                35550   past the bit
+bank3 bit 24  … - ((uint32_t)(…)>>1) …          unsigned throughout
+bank4 bit 15  (uint16_t)run3 - …              69572   past the bit as an int
+```
+
+Twelve more come within a factor of four of their bit. So "leave class 3
+masked" was not caution: converting any of those four would have changed what
+the program computes, and the corpus would have caught it only because the
+corpus happens to reach them. The measurement is in `alt_p2_context.inc` above
+the six lines.
+
+**Item 3 came out sideways.** The `<<13` rows are already fields and only one
+line's could become `bits<13,2>` — the line that was converted. What the other
+six had was the *bit-11* row written four different ways: inline
+`(uint32_t)(K-x)>>31`, the same shifted early as `>>20 & 0xFFFFF800`, and
+through `q10`, `q24`, `q39` and `q9`, which were saved into `q10a`/`q10b` and
+restored around other work. All four are now
+`((sum_all>a)+(sum_all>b)+(sum_all>c))<<11`, and the six locals are gone.
+
+That one hid something. `sum_all = -sum_all` sat between the `q` locals'
+assignment and their use, so `q39` and `q10` carried the *positive* sum past a
+line that negated it — which is what the saving was for. Written out, the six
+thresholds cancel with the negation, and it is gone too: `bank3` and `bank4`
+now compare the same `sum_all` everything else does. Getting this wrong is what
+five moved streams looked like, twice, before it was right.
 
 ## 7. A note on `field<Pos, W>`
 

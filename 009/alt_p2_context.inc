@@ -8,7 +8,6 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   P2Ctx* ra1, * ra0, * rb1, * rb0, * rb2, * ra2, * sub0_row, * row2c;
   int32_t sum_all;
   P2Ctx* cx1, * cx3;
-  uint32_t q39, q10;
   float (**up_row)[4];
   int32_t dtop2, run_dv3, dv_now4, run_dv4, run_up4;
   int32_t num_b, band, num_d;
@@ -23,7 +22,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   P2Ctx* cursor1, * nb1, * nb2x;
   float (**cur_l)[4];
   int32_t sum4, lane5, nb_at, next_id, plane, in63, c_lo, mode, c_mid, filt, lane3, g3sum, run_s, lane2, ctx0, bank0, pred0, sum_c, run0, ctx1, bank1, w1c, one1, pred1, run1, cx2_val0, ctx2, bank2, pred2, run2, bank3, w3c, pred3, run3, bank4, pred4, lo_band, hi_band, d_run4, magsum, run_s2, mag, flat_a, flat_b, d_run4b, d_rb_rb1, d_rb_left, ra0_val, d_ra_ra1b, d_ra_leftb, ctx_idx, d_ra_ra1, d_ra_left;
-  uint32_t ctx0_lo, q24, q10a, q10b, q9;
+  uint32_t ctx0_lo;
   int32_t sum_u, run, nb4_4, run4, sum_ul, d_up, d_ra;
   int32_t sum_ur, d_up5, dv1, d_run0, cx1_val, magsum_s;
   row0p = cursor[0];
@@ -45,17 +44,16 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   gD = (num_d>bmf_p2_thresholds[band][2]*den_d)+(num_d>den_d*bmf_p2_thresholds[band][1])+(num_d>den_d*bmf_p2_thresholds[band][0]);
   // Mixed radix, and only three of the five terms are bit fields.  `gB`, `gC`
   // and `gD` each sum three comparisons, so each is 0..3 and each is two bits.
-  // `gA` sums *four*, so it is 0..4 -- five values with a stride of 64, which
-  // is not a field however it is written, and `band` strides 320, which is
-  // 5 * 64 and not a power of two either.  Both stay `raw`.
+  // `gA` sums *four*, so it is 0..4 -- five values with a stride of 64 -- and
+  // `band` sums five, so it is 0..5 with a stride of 320, which is 5 * 64.
+  // Neither is a field however it is written: `bits<6, 2>(gA)` was tried, and
+  // the one neighbourhood in the corpus that reaches `gA == 4` landed in slot
+  // 0 instead of 256.  Three streams moved and the gate said so.
   //
-  // Writing them as `bits<6, 2>(gA)` is wrong and was tried: it masks gA to
-  // two bits, so the one neighbourhood in the corpus that reaches gA == 4
-  // lands in slot 0 instead of slot 256.  Three streams moved and the gate
-  // said so.  1916 slots is what `nb_at[]` is sized for, and 5*320 = 1600 plus
-  // the rest is what fills it.
+  // So they are digits, with their radices written down, and `320 * 6 = 1920`
+  // is what `nb_id[]` is sized for.
   nb_slot = CtxIdx{}.bits<4, 2>(gB).bits<2, 2>(gC).bits<0, 2>(gD)
-                    .raw(64*gA).raw(320*band);
+                    .digit<64, 5>(gA).digit<320, 6>(band);
   nb_at = nb_id[(uint32_t)nb_slot];
   if( nb_id[(uint32_t)nb_slot] ) {
     wrow = nb_weights[nb_at];
@@ -235,17 +233,40 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   cx3 = (P2Ctx*)(cursor[3]);
   g3sum = cx1[3].aerr+cx1[-1].aerr+cx0[-1].aerr+cx0[-3].aerr+cx0[-4].aerr+cx0[-2].aerr;
   run_s = run;
-  ctx0_lo = (cx1[1].err+cx1->err+cx1[-1].err+cx0[-1].err)&0x80000|(cx3->err+cx0[-2].err+2*cx0[-4].err)&0x40000|(cx1[-3].err+cx0[-3].err+cx0[-5].err+cx0[-7].err)&0x20000|cx0[-1].err&0x10000|(uint16_t)cx0[-3].err&0x8000|(((run>3536)+(run>720)+(run>288))<<13)|((((uint32_t)(752-(g3pair+g3sum))>>31)+((uint32_t)(400-(g3pair+g3sum))>>31)+((uint32_t)(240-(g3pair+g3sum))>>31))<<11);
+  // Four of the five masks are a sign test the types prove: a sum of `w` of
+  // these `int16_t` members is under `w * 2^15`, so every bit from
+  // `15 + ceil(log2 w)` up is a copy of the sign.  The fifth is a sign too, and
+  // for a reason from outside that rule -- the cast makes it bit 15 of a
+  // *sixteen-bit* value -- so it stays as it was written.  tools/ctxidx.py.
+  ctx0_lo = CtxIdx{}.bit<19>(cx1[1].err+cx1->err+cx1[-1].err+cx0[-1].err < 0)
+            .bit<18>(cx3->err+cx0[-2].err+2*cx0[-4].err < 0)
+            .bit<17>(cx1[-3].err+cx0[-3].err+cx0[-5].err+cx0[-7].err < 0)
+            .bit<16>(cx0[-1].err < 0)
+            .raw(((uint16_t)cx0[-3].err)&0x8000)
+            .bits<13, 2>((run>3536)+(run>720)+(run>288))
+            .bits<11, 2>(((g3pair+g3sum)>752)+((g3pair+g3sum)>400)+((g3pair+g3sum)>240));
   bank_ctx[0] = ctx0_lo;
   if( refa ) {
     lane2 = ra0->err;
     run = run_s;
-    ctx0 = rb0[-1].err&0x2000000|rb0->err&0x1000000|ra0[-1].err&0x800000|(rb0->err+rb0[-2].err)&0x400000|(ra0[-2].err+lane2)&0x200000|cx0[-2].err&0x100000|ctx0_lo;
+    ctx0 = CtxIdx{}.bit<25>(rb0[-1].err < 0)
+           .bit<24>(rb0->err < 0)
+           .bit<23>(ra0[-1].err < 0)
+           .bit<22>(rb0->err+rb0[-2].err < 0)
+           .bit<21>(ra0[-2].err+lane2 < 0)
+           .bit<20>(cx0[-2].err < 0)
+           .raw(ctx0_lo);
     cx2 = (P2Ctx*)cursor[2];
   } else {
     run = run_s;
     cx2 = (P2Ctx*)cursor[2];
-    ctx0 = (cx1[3].err+cx0[-3].err+cx0[-7].err+cx0[-5].err)&0x2000000|(cx2[1].err+cx2->err+cx0[-4].err+cx0[-8].err)&0x1000000|(cx0[-4].err+cx0[-6].err)&0x800000|cx0[-4].err&0x400000|cx0[-5].err&0x200000|cx0[-7].err&0x100000|ctx0_lo;
+    ctx0 = CtxIdx{}.bit<25>(cx1[3].err+cx0[-3].err+cx0[-7].err+cx0[-5].err < 0)
+           .bit<24>(cx2[1].err+cx2->err+cx0[-4].err+cx0[-8].err < 0)
+           .bit<23>(cx0[-4].err+cx0[-6].err < 0)
+           .bit<22>(cx0[-4].err < 0)
+           .bit<21>(cx0[-5].err < 0)
+           .bit<20>(cx0[-7].err < 0)
+           .raw(ctx0_lo);
   }
   bank0 = ctx0>>11;
   bank_ctx[0] = bank0;
@@ -258,23 +279,38 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   nb4_4 = cx4[4].val;
   sum_all = ((g3pair<<9)+sum_c)>>13;
   d_run0 = cx0[-5].val-run0;
-  q24 = ((uint32_t)(24-sum_all)>>20)&0xFFFFF800;
   d_up = nb4_4-run0;
   up5 = cx1[5].val;
   d_up5 = up5-run0;
-  q39 = ((uint32_t)(39-sum_all)>>20)&0xFFFFF800;
+  // The four words below -- two spellings of `ctx1`, two of `ctx2`, and the two
+  // `bank` words after them -- keep their masks, and this is the measurement
+  // that says they must.
+  //
+  // Every `expr & <one bit>` here is a sign test *if* `|expr|` stays under that
+  // bit, and `tools/ctxidx.py` converts the ones where the types say so: a sum
+  // of `w` `int16_t` members is under `w * 2^15`.  These are not those.  Every
+  // term carries a `run` -- `run0 = pred0 + run_s`, `run1 = pred1 + run0`, and
+  // on down -- which is an accumulated prediction with no type bound, and the
+  // masks reach as low as bit 15.
+  //
+  // Instrumented over the corpus, four of them are *not* sign tests at all:
+  //
+  //   ctx1  bit 15  `d_run0`                        reaches 36157
+  //   bank3 bit 15  `run2-cx0[-3].val`              reaches 35550
+  //   bank3 bit 24  `... - ((uint32_t)(...)>>1) ...`  is unsigned throughout
+  //   bank4 bit 15  `(uint16_t)run3 - ...`          reaches 69572 as an int
+  //
+  // and twelve more come within a factor of four of their bit, which makes
+  // them sign tests by how the corpus happened to run and not by anything the
+  // code says.  Rewriting any of these as `< 0` would change what the program
+  // computes.  `tools/ctxidx.py --line N` reports; it declines all six.
   if( refa ) {
-    q10 = ((uint32_t)(10-sum_all)>>20)&0xFFFFF800;
     dv_now = cx0[0].dval;
-    q10a = q10;
-    ctx1 = (cx0[-1].val+ra0->val-ra0[-1].val-run0)&0x2000000|(ra2->dval+ra1->dval-2*ra0->dval)&0x1000000|((dv_now+cx0[-3].dval-run0-(cx1[2].dval-cx1[5].dval))&0x800000|(dv_now+cx0[-5].dval-run0)&0x400000|(dv_now+cx1->dval+rb1[2].dval-rb2[2].dval-run0)&0x200000|(dv_now+cx0[-1].dval+rb0->dval-rb0[-1].dval-run0)&0x100000|(cx2[-1].dval+dv_now+ra0->dval-ra2[-1].dval-run0)&0x80000|(dv_now+cx1[2].dval+ra0->dval-ra1[2].dval-run0)&0x40000|d_up5&0x20000|d_up&0x10000|d_run0&0x8000|(((run0>2256)+(run0>1056)+(run0>144))<<13)|((((uint32_t)(55-sum_all)>>20)&0xFFFFF800)+q10+q24));
+    ctx1 = (cx0[-1].val+ra0->val-ra0[-1].val-run0)&0x2000000|(ra2->dval+ra1->dval-2*ra0->dval)&0x1000000|((dv_now+cx0[-3].dval-run0-(cx1[2].dval-cx1[5].dval))&0x800000|(dv_now+cx0[-5].dval-run0)&0x400000|(dv_now+cx1->dval+rb1[2].dval-rb2[2].dval-run0)&0x200000|(dv_now+cx0[-1].dval+rb0->dval-rb0[-1].dval-run0)&0x100000|(cx2[-1].dval+dv_now+ra0->dval-ra2[-1].dval-run0)&0x80000|(dv_now+cx1[2].dval+ra0->dval-ra1[2].dval-run0)&0x40000|d_up5&0x20000|d_up&0x10000|d_run0&0x8000|(((run0>2256)+(run0>1056)+(run0>144))<<13)|(((sum_all>55)+(sum_all>10)+(sum_all>24))<<11));
   } else {
-    q10 = ((uint32_t)(10-sum_all)>>20)&0xFFFFF800;
     d_run0b = run0-cx0[-3].val;
-    ctx1 = (cx1[-5].val-cx1[-2].val+d_run0b)&0x1000000|(d_run0b+cx1[2].val-up5)&0x800000|(cx4[3].val-cx2[2].val+run0-cx2[1].val)&0x400000|(cx4[-1].val-cx3->val+run0-cx1[-1].val)&0x200000|(cx1->val-cx1[2].val+run0-cx0[-2].val)&0x100000| -d_up5&0x80000| -d_up&0x40000|(run0-cx4[2].val)&0x20000|(run0-cx4[-3].val)&0x10000| -d_run0&0x8000|(((run0>2400)+(run0>1024)+(run0>240))<<13)|(q39+q24+(((uint32_t)(11-sum_all)>>20)&0xFFFFF800))|(nb4_4-cx3->val+run0-cx1[4].val)&0x2000000;
-    q10a = q10;
+    ctx1 = (cx1[-5].val-cx1[-2].val+d_run0b)&0x1000000|(d_run0b+cx1[2].val-up5)&0x800000|(cx4[3].val-cx2[2].val+run0-cx2[1].val)&0x400000|(cx4[-1].val-cx3->val+run0-cx1[-1].val)&0x200000|(cx1->val-cx1[2].val+run0-cx0[-2].val)&0x100000| -d_up5&0x80000| -d_up&0x40000|(run0-cx4[2].val)&0x20000|(run0-cx4[-3].val)&0x10000| -d_run0&0x8000|(((run0>2400)+(run0>1024)+(run0>240))<<13)|(((sum_all>39)+(sum_all>24)+(sum_all>11))<<11)|(nb4_4-cx3->val+run0-cx1[4].val)&0x2000000;
   }
-  q10 = q10a;
   bank1 = ctx1>>11;
   bank_ctx[1] = bank1;
   int8_t rate1 = p2_ctr[bank1+32768].rate;
@@ -292,13 +328,10 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   if( refa ) {
     dv1 = cx1[1].dval;
     d_ra = ra0->val-run1;
-    q10b = q10;
     ctx2 = (cx0[0].dval+cx1[-1].dval-run1-(cx2->dval-dv1))&0x2000000|(cx0[0].dval+cx0[-1].dval-run1-(cx1->dval-dv1))&0x1000000|(rb0->val-run1+cx2_val0-rb2->val)&0x800000|(d_ra+cx2_val0-ra2->val)&0x400000|(d_ra+cx1[-1].val-ra1[-1].val)&0x200000|((cx0[0].dval-cx0[-2].dval+2*cx0[-1].dval-run1)&0x100000|(2*cx1_val-run1-cx2_val0)&0x80000| -lap&0x40000|dtop2&0x20000|dvsum2&0x10000|(208-rb0->val)&0x8000|(((run1>2576)+(run1>1280)+(run1>640))<<13)|((((uint32_t)(33-sum_all)>>31)+((uint32_t)(12-sum_all)>>31)+((uint32_t)(4-sum_all)>>31))<<11));
   } else {
-    q10b = q10;
     ctx2 = (run1+3*(cx2_val0-cx1_val)-cx3->val)&0x2000000|(run1+cx4->val-(cx2[2].val+cx2[-2].val))&0x1000000|(cx3[2].val-cx2[-1].val+run1-cx1[3].val)&0x800000|(cx3[1].val-cx1[1].val-dtop2)&0x400000|(cx3->val-cx1_val-dtop2)&0x200000|lap&0x100000|(run1-cx4[3].val)&0x80000|(cx3[1].val-run1)&0x40000|(run1-cx4->val)&0x20000|(run1-cx3[-2].val)&0x10000| -dvsum2&0x8000|(((run1>2464)+(run1>1216)+(run1>688))<<13)|((((uint32_t)(58-sum_all)>>31)+((uint32_t)(25-sum_all)>>31)+((uint32_t)(13-sum_all)>>31))<<11);
   }
-  q10 = q10b;
   bank2 = ctx2>>11;
   bank_ctx[2] = bank2;
   pred2 = p2_pred(p2_ctr[bank2+65536].weighted, p2_ctr[bank2+65536].rate);
@@ -306,9 +339,12 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   run2 = pred2+run1;
   nb_sum[4] = run2;
   run_dv3 = run2-cx0[0].dval;
-  q9 = 9-sum_all;
-  sum_all = -sum_all;
-  bank3 = (int32_t)((3*(cx0[-2].val-cx0[-1].val)+run2-cx0[-3].val)&0x2000000|(cx2[1].dval-((uint32_t)(cx1[1].dval+cx1[2].dval+cx1[-1].dval+cx1->dval)>>1)+run_dv3)&0x1000000|(cx2[-3].val-cx1[-2].val+run2-cx1[-1].val)&0x800000| -(cx2[2].val+run2-2*cx1[1].val)&0x400000|(cx1[-2].dval-cx0[-2].val+run2-cx1->dval)&0x200000|(run2-cx1[3].val)&0x100000|(run_dv3-cx2[1].dval)&0x80000|(run2-cx3->val)&0x40000|(2*run2-cx1->dval-(cx1->val+cx0[0].dval))&0x20000|(run2-cx0[-1].dval-cx0[0].dval)&0x10000|(run2-cx0[-3].val)&0x8000|(((run2>2896)+(run2>1568)+(run2>592))<<13)|((((uint32_t)(sum_all+37)>>31)+((uint32_t)(sum_all+19)>>31)+(q9>>31))<<11))>>11;
+  // `sum_all = -sum_all` was here, and the six thresholds below read `< -K`
+  // because of it.  Nothing else used the negated value: it existed so that
+  // `q9`, `q39` and `q10` -- computed from the positive one, before this line
+  // -- could be added to comparisons made after it.  Those are written out
+  // now, so the negation and the six sign flips cancel.
+  bank3 = (int32_t)((3*(cx0[-2].val-cx0[-1].val)+run2-cx0[-3].val)&0x2000000|(cx2[1].dval-((uint32_t)(cx1[1].dval+cx1[2].dval+cx1[-1].dval+cx1->dval)>>1)+run_dv3)&0x1000000|(cx2[-3].val-cx1[-2].val+run2-cx1[-1].val)&0x800000| -(cx2[2].val+run2-2*cx1[1].val)&0x400000|(cx1[-2].dval-cx0[-2].val+run2-cx1->dval)&0x200000|(run2-cx1[3].val)&0x100000|(run_dv3-cx2[1].dval)&0x80000|(run2-cx3->val)&0x40000|(2*run2-cx1->dval-(cx1->val+cx0[0].dval))&0x20000|(run2-cx0[-1].dval-cx0[0].dval)&0x10000|(run2-cx0[-3].val)&0x8000|(((run2>2896)+(run2>1568)+(run2>592))<<13)|(((sum_all>37)+(sum_all>19)+(sum_all>9))<<11))>>11;
   bank_ctx[3] = bank3;
   w3c = p2_ctr[bank3+98304].weighted;
   pred3 = p2_pred(w3c, p2_ctr[bank3+98304].rate);
@@ -319,7 +355,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   dv_now4 = cx0[0].dval;
   run_dv4 = run3-dv_now4;
   run_up4 = run3+cx3->val;
-  bank4 = (int32_t)((run-((uint32_t)(cx1[1].val+cx1[-1].val+2*cx1->val)>>2))&0x2000000|(run_up4-cx0[-2].val-(cx3[2].dval+dv_now4))&0x1000000|(run-2*cx0[-2].dval-(dv_now4-cx0[-4].dval))&0x800000|(run-cx0[-3].dval-dv_now4-(cx1->val-cx1[-3].val))&0x400000|(run_up4-dv_now4-(cx1[1].val+cx2[-1].dval))&0x200000|(cx2[-2].val+run-2*cx1[-1].val)&0x100000|(cx2->dval-2*cx1->dval+run_dv4)&0x80000|((run3-cx0[-1].val)-(cx1->val-cx1[-1].val))&0x40000|(run_dv4-cx1[4].dval)&0x20000|(run_dv4-cx1[-2].dval)&0x10000|(((uint16_t)run3-(uint16_t)cx0[-4].dval-(uint16_t)dv_now4)&0x8000)|((((run3>3056)+(run3>1952)+(run3>368))<<13)|(q39+(((uint32_t)(sum_all+21)>>20)&0xFFFFF800)+q10)))>>11;
+  bank4 = (int32_t)((run-((uint32_t)(cx1[1].val+cx1[-1].val+2*cx1->val)>>2))&0x2000000|(run_up4-cx0[-2].val-(cx3[2].dval+dv_now4))&0x1000000|(run-2*cx0[-2].dval-(dv_now4-cx0[-4].dval))&0x800000|(run-cx0[-3].dval-dv_now4-(cx1->val-cx1[-3].val))&0x400000|(run_up4-dv_now4-(cx1[1].val+cx2[-1].dval))&0x200000|(cx2[-2].val+run-2*cx1[-1].val)&0x100000|(cx2->dval-2*cx1->dval+run_dv4)&0x80000|((run3-cx0[-1].val)-(cx1->val-cx1[-1].val))&0x40000|(run_dv4-cx1[4].dval)&0x20000|(run_dv4-cx1[-2].dval)&0x10000|(((uint16_t)run3-(uint16_t)cx0[-4].dval-(uint16_t)dv_now4)&0x8000)|((((run3>3056)+(run3>1952)+(run3>368))<<13)|(((sum_all>39)+(sum_all>21)+(sum_all>10))<<11)))>>11;
   bank_ctx[4] = bank4;
   pred4 = p2_pred(p2_ctr[bank4+131072].weighted, p2_ctr[bank4+131072].rate);
   uint8_t* cx2p = (uint8_t*)cx2;

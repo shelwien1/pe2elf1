@@ -43,8 +43,28 @@ struct CtxIdx {
     return *this;
   }
 
-  // A term that is not a bit field -- a stride that is not a power of two, or
-  // an index already built.
+  // A mixed-radix digit: `v` counts in units of `Stride`, and `Radix` is how
+  // many values it has.  Not a bit field -- `Stride` need not be a power of
+  // two, and `Radix` need not be the next one up from it.
+  //
+  // `nb_slot` is the reason this exists.  `gA` strides 64 with five values and
+  // `band` strides 320 -- which is 5*64 -- with six, so the pair is two digits
+  // of a mixed-radix number rather than two fields, and writing either as
+  // `bits<>` says a width where the truth is a radix.  That is not pedantry:
+  // `bits<6, 2>(gA)` was tried, and the one neighbourhood in the corpus that
+  // reaches `gA == 4` landed in slot 0 instead of 256, moving three streams.
+  //
+  // The radix is not enforced here -- it is a fact about the caller's value,
+  // and this is a constant-folded add -- but it is written down, which is what
+  // says `320 * 6 = 1920` is the size the table has to be.
+  template<uint32_t Stride, uint32_t Radix>
+  constexpr CtxIdx&digit(uint32_t v) {
+    val += Stride*v;
+    return *this;
+  }
+
+  // A term that is neither a bit field nor a bounded digit -- an index already
+  // built, or one whose range the code cannot state.
   constexpr CtxIdx&raw(uint32_t v) {
     val += v;
     return *this;

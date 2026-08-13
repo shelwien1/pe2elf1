@@ -182,8 +182,14 @@ struct AltP2Block {
   uint8_t fold_hi[256];
   int8_t unfold[256];
   uint8_t nb_ctx[120];
-  int16_t nb_id[1916];
-  uint8_t _pad2[8];
+  // 6 bands * 320.  Declared `[1916]` with the four entries after it split off
+  // as `uint8_t _pad2[8]` -- the recovery could not see them indexed, and the
+  // index reaches them: `63 + 64*gA + 320*band` with `gA` 0..4 and `band` 0..5
+  // is 1919 at its largest, which eight of the seventeen corpus images hit on
+  // every run.  The overrun landed in the padding and stopped there, exactly,
+  // because four `int16_t` is eight bytes.  Same size, same offsets, and the
+  // accesses are in bounds now.  CONTEXT-INDEX.md section 1.
+  int16_t nb_id[1920];
   P2Count p2_ctr[163840];
   P2Freq freq[15552];
   uint8_t _pad3[8];
