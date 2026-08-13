@@ -198,18 +198,6 @@ void __alt_p2_d8_decode_body(AltP2Block* blk, int8_t unread_flag, uint8_t* out, 
   __rc_end_decode();
 }
 
-void __alt_model_p2_d8_decode(uint8_t* out, int32_t i, int32_t height) {
-  AltP2Block* raw, * blk;
-  raw = (AltP2Block*)bmf_page_alloc(sizeof(AltP2Block));
-  if( raw )
-    blk = raw->alt_p2_alloc(i, 0);
-  else
-    blk = nullptr;
-  __alt_p2_d8_decode_body(blk, i, out, i, height);
-  if( blk )
-    blk->alt_p2_free(1);
-}
-
 void __alt_p2_d8_encode_body(AltP2Block* blk, uint8_t* src, int32_t width, int32_t height, uint8_t* out) {
   int32_t val;
   P2Ctx* pix, * rec, * buf3, * b4, * buf2, * buf1, * b0;
@@ -382,14 +370,29 @@ void __alt_p2_d8_encode_body(AltP2Block* blk, uint8_t* src, int32_t width, int32
   __rc_end_encode();
 }
 
-void __alt_model_p2_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
+// One block allocated, one body run, one block freed.  Only the middle line
+// differs, and the two bodies take their arguments in different orders --
+// which is the decompiler's record of two call sites, not two intentions.
+template<int f_DEC>
+void __alt_model_p2_d8(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
   AltP2Block* raw, * blk;
   raw = (AltP2Block*)bmf_page_alloc(sizeof(AltP2Block));
   if( raw )
     blk = raw->alt_p2_alloc(i, 0);
   else
     blk = nullptr;
-  __alt_p2_d8_encode_body(blk, src, i, height, out);
+  if( f_DEC )
+    __alt_p2_d8_decode_body(blk, i, out, i, height);
+  else
+    __alt_p2_d8_encode_body(blk, src, i, height, out);
   if( blk )
     blk->alt_p2_free(1);
+}
+
+void __alt_model_p2_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
+  __alt_model_p2_d8<0>(src, i, height, out);
+}
+
+void __alt_model_p2_d8_decode(uint8_t* out, int32_t i, int32_t height) {
+  __alt_model_p2_d8<1>(nullptr, i, height, out);
 }

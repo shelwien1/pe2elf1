@@ -87,7 +87,25 @@ void __encode_symbol_tree(uint16_t* freq, int32_t sym) {
   return;
 }
 
-void __alt_p1_encode_symbol(uint16_t* freq, int32_t unread_ctx, int32_t ctx, int32_t sym) {
+// One symbol of the one-bit model's alphabet.  The two directions meet at the
+// slot: the encoder is given a symbol, maps it to a slot and sums the
+// frequencies below it; the decoder is given a point in the range and walks the
+// same frequencies until it passes it.  Everything after -- the rescale at
+// 0x2000, the +32 on the slot and the total, the escape into the binary tree
+// for slots 5 and up -- is the same code, and was written twice.
+//
+// `slot` is `cur - base` in both, which is why the tail can be shared: the
+// encoder's `cur = &base[slot]` and the decoder's walk leave it in the same
+// place.  The decoder folds the tree's answer back into the slot; the encoder
+// sends it and has nothing to fold.
+//
+// The two bodies differed in a handful of casts as well -- `(uint16_t)freq[1]`
+// against `freq[1]`, `int16_t tot_new` against `int32_t result`.  None of them
+// is a difference: `freq` is `uint16_t *`, so the casts are the promotion that
+// was already happening, and the two totals agree in the low 16 bits that
+// `*freq` and `& 0x7FFF` keep.  The encoder's spellings are the ones kept.
+template<int f_DEC>
+int32_t __alt_p1_code_symbol(uint16_t* freq, int32_t ctx, int32_t sym) {
   bool done;
   uint16_t tot0;
   uint32_t cum;
@@ -95,18 +113,26 @@ void __alt_p1_encode_symbol(uint16_t* freq, int32_t unread_ctx, int32_t ctx, int
   uint16_t* p, * q, nf, * cur, * base;
   uint32_t tot, k, cum_hi;
   tot0 = *freq;
-  slot = 6-(sym&1);
-  if( sym<5 )
-    slot = sym;
   base = freq+1;
   cur = freq+1;
   tot = tot0&0x7FFF;
-  cum = 0;
-  for( k = 0; k<(uint32_t)slot; k++ )
-    cum += base[k];
-  cur = &base[slot];
-  cum_hi = cum+*cur;
-  rc.encode(cum, cum_hi, tot);
+  if( f_DEC ) {
+    sym = rc.get_freq(tot);
+    cum = (uint16_t)freq[1];
+    while( cum<=(uint32_t)sym )
+      cum += (uint16_t)*++cur;
+    rc.decode(cum-(uint16_t)*cur, cum, tot);
+  } else {
+    slot = 6-(sym&1);
+    if( sym<5 )
+      slot = sym;
+    cum = 0;
+    for( k = 0; k<(uint32_t)slot; k++ )
+      cum += base[k];
+    cur = &base[slot];
+    cum_hi = cum+*cur;
+    rc.encode(cum, cum_hi, tot);
+  }
   if( tot>0x2000 ) {
     *freq = 0x8000;
     p = freq+7;
@@ -136,9 +162,27 @@ void __alt_p1_encode_symbol(uint16_t* freq, int32_t unread_ctx, int32_t ctx, int
   *cur += 32;
   result = *freq+32;
   *freq = result;
-  if( slot>=5 )
-    return __encode_symbol_tree(model_strip(128*(uint32_t)(slot&1)+((((freq[1]+(result&0x7FFF)+96-2*(uint32_t)freq[slot+1])>>25)&0xFFFFFFC0)+(uint32_t)ctx)), (sym-5)>>1);
-  return;
+  slot = cur-base;
+  if( slot>=5 ) {
+    uint16_t*const strip = model_strip(128*(uint32_t)(slot&1)
+        +((((freq[1]+(result&0x7FFF)+96-2*(uint32_t)freq[slot+1])>>25)&0xFFFFFFC0)
+          +(uint32_t)ctx));
+    if( f_DEC )
+      slot += 2*__decode_symbol_tree(strip);
+    else
+      __encode_symbol_tree(strip, (sym-5)>>1);
+  }
+  return slot;
+}
+
+// `unread_ctx` and `unread_arg` are the decompiler's names for an argument the
+// donor pushed and neither body reads; the call sites still pass it.
+void __alt_p1_encode_symbol(uint16_t* freq, int32_t unread_ctx, int32_t ctx, int32_t sym) {
+  __alt_p1_code_symbol<0>(freq, ctx, sym);
+}
+
+int32_t __alt_p1_decode_symbol(uint16_t* freq, int32_t unread_arg, int32_t ctx) {
+  return __alt_p1_code_symbol<1>(freq, ctx, 0);
 }
 
 int32_t __decode_symbol_tree(uint16_t* freq) {
@@ -228,55 +272,6 @@ int32_t __decode_symbol_tree(uint16_t* freq) {
   }
 }
 
-int32_t __alt_p1_decode_symbol(uint16_t* freq, int32_t unread_arg, int32_t ctx) {
-  bool done;
-  int16_t tot_new, nf;
-  int32_t slot, lo;
-  uint16_t* cur, * p, * q;
-  uint32_t tot, sym, cum;
-  uint16_t* base;
-  tot = *freq&0x7FFF;
-  sym = rc.get_freq(tot);
-  cur = freq+1;
-  cum = (uint16_t)freq[1];
-  base = freq+1;
-  while( cum<=sym )
-    cum += (uint16_t)*++cur;
-  rc.decode(cum-(uint16_t)*cur, cum, tot);
-  if( tot>0x2000 ) {
-    *freq = 0x8000;
-    p = freq+7;
-    lo = 256;
-    done = freq+7<base;
-    q = freq+7;
-    if( freq+7>=base ) {
-      do {
-        if( *q<lo )
-          lo = *q;
-        --q;
-      } while( q>=base );
-      done = p<base;
-    }
-    if( !done ) {
-      do {
-        if( (uint16_t)lo<=1u )
-          nf = *p-(*p>>1);
-        else
-          nf = ((uint16_t)*p+2)/3;
-        *p = nf;
-        *freq += nf;
-        --p;
-      } while( p>=base );
-    }
-  }
-  *cur += 32;
-  tot_new = *freq+32;
-  *freq = tot_new;
-  slot = cur-base;
-  if( slot>=5 )
-    slot += 2*__decode_symbol_tree(model_strip(128*(uint32_t)(slot&1)+(((((uint16_t)freq[1]+(tot_new&0x7FFF)+96-2*(uint32_t)(uint16_t)freq[slot+1])>>25)&0xFFFFFFC0)+(uint32_t)ctx)));
-  return slot;
-}
 
 int32_t __update_binary_pair(uint16_t* _this, int32_t symbol) {
   FreqPair* tbl, * pair;

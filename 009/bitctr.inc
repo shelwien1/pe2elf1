@@ -22,7 +22,20 @@ static inline FreqPair*bit_tree(uint16_t* freq, int32_t lvl) {
 struct BitCtr {
   uint16_t n[2];
   uint16_t limit;
-  int32_t encode_context_bit(BitCtr* a2, int32_t bit) {
+  // One binary counter, coded either way.  The two bodies were the same code
+  // twice: the same escape into the parent counter when this one is unseeded,
+  // the same rescale at the same limit, the same two updates afterwards.  Only
+  // the middle line differs -- the encoder is told the bit and the decoder is
+  // told by the stream -- so `bit` is the parameter on the way in and the
+  // answer on the way out.
+  //
+  // The two returns are not the same value and that is not a merge artefact:
+  // the encoder returned the counter it had just bumped and the decoder
+  // returns the bit.  Nothing reads the encoder's, both call sites drop it,
+  // and it is kept anyway -- a merge is not the place to decide that a return
+  // value is dead.
+  template<int f_DEC>
+  int32_t code_context_bit(BitCtr* a2, int32_t bit) {
     uint32_t c1, p0, p1, c0;
     int32_t par_tot;
     int32_t cap, result, p_cap, par0, par_n;
@@ -43,7 +56,10 @@ struct BitCtr {
         c1 = this->n[1];
       }
       tot = c0+c1;
-      rc.encode_bit(c0, c1, bit);
+      if( f_DEC )
+        bit = rc.decode_bit(c0, c1);
+      else
+        rc.encode_bit(c0, c1, bit);
       cap = this->limit;
       if( tot>(uint32_t)cap ) {
         n1_old = this->n[1];
@@ -55,63 +71,14 @@ struct BitCtr {
       result = this->n[bit]+8;
       this->n[bit] = result;
       a2->n[bit] += (uint32_t)tot<0x88;
-      return result;
-    }
-    p0 = a2->n[0];
-    p1 = a2->n[1];
-    p_tot = p0+p1;
-    rc.encode_bit(p0, p1, bit);
-    p_cap = a2->limit;
-    if( p_tot>(uint32_t)p_cap ) {
-      p1_old = a2->n[1];
-      a2->n[0] -= a2->n[0]>>1;
-      a2->n[1] = p1_old-(p1_old>>1);
-      if( p_cap<0x4000 )
-        a2->limit = p_cap+64;
-    }
-    result = a2->n[bit]+8;
-    a2->n[bit] = result;
-    this->n[0] = bit+1;
-    return result;
-  }
-
-  int32_t decode_context_bit(BitCtr* a2) {
-    uint32_t c0, c1, p0, p1;
-    int32_t par_tot;
-    int32_t result, cap, p_cap, par0, par_n;
-    uint32_t tot, p_tot, n1_old, p1_old;
-    c0 = this->n[0];
-    if( this->n[0] ) {
-      c1 = this->n[1];
-      if( !this->n[1] ) {
-        par0 = a2->n[0];
-        par_tot = par0+a2->n[1];
-        this->n[0] = (par_tot+(par0<<6)-64)/par_tot;
-        this->n[1] = ((a2->n[1]<<6)+par_tot-64)/par_tot;
-        this->n[c0-1] += 4;
-        this->limit = 512;
-        par_n = a2->n[c0-1];
-        a2->n[c0-1] = -3*((uint32_t)(3-par_n)>>31)+par_n;
-        c0 = this->n[0];
-        c1 = this->n[1];
-      }
-      tot = c0+c1;
-      result = rc.decode_bit(c0, c1);
-      cap = this->limit;
-      if( tot>(uint32_t)cap ) {
-        n1_old = this->n[1];
-        this->n[0] -= this->n[0]>>1;
-        this->n[1] = n1_old-(n1_old>>1);
-        if( cap<0x4000 )
-          this->limit = cap+64;
-      }
-      this->n[result] += 8;
-      a2->n[result] += (uint32_t)tot<0x88;
     } else {
       p0 = a2->n[0];
       p1 = a2->n[1];
       p_tot = p0+p1;
-      result = rc.decode_bit(p0, p1);
+      if( f_DEC )
+        bit = rc.decode_bit(p0, p1);
+      else
+        rc.encode_bit(p0, p1, bit);
       p_cap = a2->limit;
       if( p_tot>(uint32_t)p_cap ) {
         p1_old = a2->n[1];
@@ -120,10 +87,19 @@ struct BitCtr {
         if( p_cap<0x4000 )
           a2->limit = p_cap+64;
       }
-      a2->n[result] += 8;
-      this->n[0] = result+1;
+      result = a2->n[bit]+8;
+      a2->n[bit] = result;
+      this->n[0] = bit+1;
     }
-    return result;
+    return f_DEC ? bit : result;
+  }
+
+  int32_t encode_context_bit(BitCtr* a2, int32_t bit) {
+    return code_context_bit<0>(a2, bit);
+  }
+
+  int32_t decode_context_bit(BitCtr* a2) {
+    return code_context_bit<1>(a2, 0);
   }
 };
 
