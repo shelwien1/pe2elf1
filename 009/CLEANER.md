@@ -3,7 +3,7 @@
 The first minimal-syntax round took out the prefixes — `this->`, `::`, `blk->`,
 923 + 181 + 562 of them — and everything else that was one token too many. That
 round is done and recorded in `MINIMAL-SYNTAX.md`, and the tree is 12,136 lines
-in 36 files with four warnings and no shadows.
+in 37 files with four warnings and no shadows.
 
 What is left is not spelling. It is **the same block written out again**, which
 is what the decompiler does with a loop it has unrolled and a helper it has
@@ -16,10 +16,10 @@ file, and each phase names the measurement so it can be re-taken.
 | what | sites | lines it costs now | after |
 | --- | --- | --- | --- |
 | the counter update, `alt_p2_model.inc` | 115 of 117 | ~345 | 115 |
-| its temporaries, in one declaration | 233 of 268 | 3 lines of 2,500 chars | ~35 names |
-| the bit packer, `compress_image.inc` | 6 | 69 | 6 |
+| its temporaries, in one declaration | 230 of 268 | 3 lines of 2,443 chars | 38 names |
+| the bit packer, `compress_image.inc` | 6 | 67 | 6 |
 | the bit unpacker, `expand_image.inc` | 6 | 61 | 6 |
-| declaration walls over 100 locals | 6 bodies | 1,105 locals | — |
+| declaration walls over 100 locals | 7 bodies | 1,406 locals | — |
 | lines over 200 characters | 42 | — | — |
 
 ---
@@ -28,7 +28,7 @@ file, and each phase names the measurement so it can be re-taken.
 
 **The finding.** `alt_p2_model.inc` is 1,120 lines, and 117 of them call
 `p2_bump`. **103 are exactly this**, twelve more are the same three statements
-with one unrelated line scheduled between them, and two are a variant:
+with something scheduled between them, and two are a variant:
 
 ```c
 wd0800c = d0800->weighted;
@@ -38,8 +38,11 @@ d0800->weighted = p2_bump(wd0800c, ed0800c, 2);
 
 Read it once and it is a counter update: take the weight, take the residual
 against its prediction, bump it. The only things that vary across the 115 are
-the counter, the residual (`res_c`, `res_s`, `nres1`, `nres2`, `nres3`,
-`nres5`, `neg_b`, `neg_c`, `neg_d`) and the shift, which is 2 or 3.
+the counter, the residual and the shift, which is 2 at 32 sites and 3 at 83.
+Eleven names carry the residual — `res_c` at 82 sites, then `res_s`, `res_t`,
+`nres1`…`nres5`, `neg_b`, `neg_c`, `neg_d` — and six more sites negate one in
+place (`-res_c`, `-res_s`, `-res_t`) instead of using the `neg_*` local that
+holds the same value.
 
 ```c
 static inline void p2_update(P2Count* p, int32_t res, int32_t shift) {
@@ -50,16 +53,29 @@ static inline void p2_update(P2Count* p, int32_t res, int32_t shift) {
 
 and every one of the 103 becomes `p2_update(d0800, res_c, 2);`.
 
+**Why the helper may read `p->rate` at all.** Eight of the 115 do not read
+`p->rate`; they read `*(uint8_t*)&d4000[-1].rate`, and `rate` is `int8_t`, so
+those eight take the byte *unsigned* where the helper would take it signed. That
+is the one place a mechanical fold could change what the program computes, and
+it does not, because `p2_pred` uses the rate only as two shift counts and masks
+both: `(weighted+(1<<((rate+31)&31)))>>(rate&31)`. A negative `int8_t` read
+unsigned differs by 256, and 256 is a multiple of 32, so both masks are
+unchanged. Without that, Phase 1 would have to keep the pun at eight sites.
+
 **What it takes with it.** The two temporaries per block are named after the
 counter — `wd0800c`, `ed0800c` — and they are declared in one statement of 268
-names spread over three lines of about 2,500 characters. **233 of those 268
-(86%) are these temporaries.** Measured: none of them is read outside its own
-three lines, so they go when the blocks do, and the declaration becomes 35
-names.
+names spread over three lines of 2,443 characters. **230 of those 268 (86%) are
+these temporaries**, and the declaration goes to 38 names. Measured: no member
+of the 230 is read outside the block that owns it.
 
-That is ~230 lines and 233 declarations out of one file, and what is left says
-what the code does: eleven banks, four counters each, updated with one of three
-residuals.
+One of the 230 is not named after its counter: the error temporary at line 427
+is called `nb_slot`, which is also a local of `alt_p2_context` meaning a slot
+index into `nb_id[]`. Two unrelated things under one name, in two files — a
+Phase 5 item that Phase 1 happens to delete.
+
+That is ~230 lines and 230 declarations out of one file, and what is left says
+what the code does: **44 counters — eleven banks of four** — each updated from
+one of eleven residuals at a shift of 2 or 3.
 
 **What it must decline.** Two of the 117 subtract into the residual instead of
 into a temporary — `nres3 -= p2_pred(wm0400z, m0400->rate);` and its twin at
@@ -68,23 +84,55 @@ residual by value and would drop that write. They stay as they are, and the
 difference is worth a comment at each: this is a counter update that also
 consumes the residual.
 
-The inline form is separate and also stays: about twenty sites update
-`mir_top[]` as `((uint32_t)(-res_s-p2_pred(w, b)+2)>>2)+w`, the same arithmetic
-with the bump folded in and a different rounding term. Not this helper.
+Two inline forms are separate and also stay. **21 sites** fold the whole update
+into one `+=` on the *next* counter in the bank:
 
-**Order of work.** The 103 exact blocks first, in one pass, gated. Then the
-twelve interleaved ones one at a time — each needs its stray statement (`res_c =
-res_s;`, `go = lowbits<3;`, `neg_c = -res_c;`) moved out first, and moving a
-statement across a counter update is a change the gate has to check.
+```c
+*(uint16_t*)&d0800[1].weighted += (uint32_t)(res_c-p2_pred(d0800[1].weighted, d0800[1].rate)+2)>>2;
+```
 
-**Gate.** The streams, both widths. This file is the deep-plane model: every
-32-bit image in the corpus reaches it, and `x_ep`, `t32`, `med32`, `altp1`,
-`xform1` and `xform2` all read it in the decoder as well.
+— all 21 with the same `+2)>>2`, which is `p2_bump`'s rounding without its
+dead-zone kick, so they are a *different* update and not `p2_update` written
+compactly. A second helper could take them, and it should be a second helper.
+**Two more** sites do the same thing to `mir_top[]`, at `+2)>>2` and `+4)>>3`.
+The other 35 `mir_top[]` writes in the file are `+=` of a frequency step and
+have nothing to do with any of this.
+
+**Order of work.** The 103 exact blocks first, in one pass, gated. Then eleven
+of the twelve interleaved ones one at a time — each has one stray statement
+scheduled into the middle (`res_c = res_s;`, `go = lowbits<3;`, `neg_c =
+-res_c;` and eight more of that shape, all of them setting up a *later* block's
+residual), and moving a statement across a counter update is a change the gate
+has to check.
+
+The twelfth is not that, and it is worth doing last: at line 639 the two
+temporaries are assigned in **both arms of an `if`/`else`** — `em0010b =
+neg_d-…` in one, `em0010b = nres4-…` in the other — and the bump sits after the
+join. Nothing can be moved out; the fold has to hoist the residual choice into
+a variable and call the helper past the brace. That is a control-flow edit, not
+a re-ordering, and it is the one site in the file where a mechanical pass
+should stop and hand over.
+
+**Gate.** The streams, both widths. Probed with a one-shot `fprintf` on entry
+and run over the corpus, **13 of the 19 images enter this body while
+compressing** — all six 32-bit ones, both 24-bit ones, and four of the six
+8-bit ones — **and 7 enter it while expanding**: `out_rle8`, `rle8`, `t8g`, `t8p`,
+`x_ep`, `xform1`, `xform2`.
+
+The gap between 13 and 7 is the thing to understand before trusting the gate.
+`t32`, `med32`, `altp1`, `t24` and `noise24` reach this body in the encoder and
+never in the decoder, because the encoder runs it as a *candidate* and
+`choose_plane_coding` then costs it out. For those five, a defect here cannot
+produce a wrong decode — it changes which path wins and therefore the
+compressed size, which the reference streams catch just as flatly. So the gate
+covers both failure modes, but only seven images exercise the decode half; if a
+change to this file passes and something still feels unproven, those seven are
+the whole decoder-side evidence there is.
 
 ## Phase 2 — `pack_bits` and `unpack_bits`: the header's bit stream
 
 `compress_image.inc` writes the per-plane descriptors a few bits at a time, and
-each write is this, six times over, 69 lines:
+each write is this, six times over, 67 lines:
 
 ```c
 if( bits_left<8 ) {
@@ -105,28 +153,47 @@ packer_free_bits = bits_left;
 helper each and a call per site: `pack_bits(dc, 8)` and `dc = unpack_bits(8)`.
 
 **What makes this more delicate than it looks.** The six copies are not
-textually identical — some use `bits_left`, one `free_bits`, some
-`packer_free_bits` directly, and the widths are 6 or 8. They are the same
+textually identical — four guard on `bits_left`, one on `free_bits`, one on
+`packer_free_bits` directly, and the widths are 4, 6 and 8. They are the same
 function with the accumulator's spill written out, so the helper has to take
 the width and nothing else, and the six call sites have to agree about which
 variable holds the count. The three names are one variable; that is the first
 thing to fix, and it is Phase 5 of the last round applied to a global.
+
+The 4-bit copy is the one to read first, because it does not look like the
+others at all: it stores `packer_acc` with no merge term and then sets
+`packer_acc = 0`. It is `pack_bits(0, 4)` — four zero bits — and every
+difference from the general form is what `word == 0` collapses. If it did not
+unify there would be five sites, not six.
+
+Two things make the helper sound, and both should be checked before the first
+edit rather than after. The spill branch computes the new count and the
+carry-out shift from `packer_free_bits` while the guard tested `bits_left` or
+`free_bits`; that is only correct because the preceding `packer_free_bits = …`
+leaves the two equal at every one of the six. And the decoder's mask comes from
+`__frame.mask`, a frame member holding 255, used for the 8-bit reads while the
+4- and 6-bit reads write `0xF` and `0x3F` inline. A helper takes `(1u<<n)-1`
+and `__frame.mask` goes with it — one more constant that had acquired a name.
 
 **Gate.** The streams, and `tools/hdrscan.sh`: this is the code that writes and
 reads the two header bytes that script enumerates completely.
 
 ## Phase 3 — the declaration walls
 
-Six bodies declare more than a hundred locals each:
+Seven bodies declare more than a hundred locals each — counting every name in
+every declaration statement of the body, comma lists included:
 
 ```
-choose_plane_coding   222 locals in 657 lines
-decode_pixel          176 in 630        code_pixel   174 in 627
-search_filter         123 in 581        alt_p2_context 112 in 440
-cost_candidate         88 in 201
+alt_p2_model          409 locals in 1118 lines
+choose_plane_coding   218 in 658        decode_pixel  203 in 631
+code_pixel            202 in 628        alt_p2_context 133 in 441
+search_filter         130 in 582        update_model  111 in 539
 ```
 
-Phase 1 removes 233 of them by removing what they are for. For the rest the
+1,406 locals, and the head of that list is the point: `alt_p2_model` declares
+more than the next two together, and 230 of its 409 are Phase 1's temporaries.
+Phase 1 is therefore most of this phase's work already, and it is confined to
+one body — the other six are untouched by it. For the rest the
 rule is the last round's Phase 5 — declare at first use — which took 102 and
 declined the others because they are assigned more than once, or in a loop, or
 across a `goto`. Re-running it after Phase 1 is worth it: the file it declined
@@ -140,11 +207,21 @@ whether the declaration is on its own line.
 
 ## Phase 4 — the lines that do not fit on a screen
 
-42 lines are over 200 characters and 16 are over 400. They are two kinds:
+42 lines are over 200 characters and 16 are over 400. They are four kinds, and
+only two of them are work:
 
-- **the declaration walls** — Phases 1 and 3;
-- **the context words** — six lines of `alt_p2_context.inc`, up to 664
-  characters, each a chain of eleven masked terms.
+- **the declaration walls**, 9 lines — Phases 1 and 3 take these, including the
+  two longest lines in the tree at 996 and 988 characters;
+- **the context words**, 6 lines of `alt_p2_context.inc`, 468 to 664
+  characters, each a chain of exactly eleven masked terms;
+- **four rows of `tables.inc`**, 213 to 427 characters, which are initialiser
+  data — a coefficient row is one line because it is one row, and breaking it
+  up to fit a column limit makes the table harder to read, not easier. Not
+  work;
+- **23 long expressions** elsewhere — `choose_plane_coding.inc:107` and 224–554,
+  `alt_model_p1.inc`'s six, `model.inc:1525`, `altp1.inc:244` and `:282`. Each
+  is one statement that is genuinely that long, and each would need its own
+  judgement about where to break. Not a pass; not this plan.
 
 The second kind was reviewed in `CONTEXT-INDEX.md` and mostly declined: the
 terms carry a `run`, so the masks are not provably sign tests, and four of them
@@ -170,37 +247,72 @@ Three specific ones, all measured:
 - **`q10a`, `q10b`** were the same shape in `alt_p2_context.inc` and are gone;
   the pattern is worth a sweep of the other files for `xxxa`/`xxxb` pairs that
   are one value saved across a call;
-- **`__frame.sym0` … `sym31`** in `model.inc` look like a 32-entry array
-  written as 32 members, and the first draft of this plan said a third of them
-  were locals in disguise. Measured, that is wrong and worth writing down: 122
-  writes and 124 reads across the 32, **every one written more than once**,
-  every one mentioned in both halves of the model, and a median span of 634
-  lines between a member's first mention and its last. They are the model's
-  state, not scheduling noise. What is left is the *name*: `sym10` and `sym31`
-  say nothing, and this is one place where the decompiler's numbering survived
-  a round that renamed everything else. A name each, from what the sites do
-  with them, is the work — not a lift.
+- **`__frame.sym0` … `sym31`** in `model.inc` do not merely *look* like a
+  32-entry array. They are one, and the source already says so:
+
+  ```c
+  union {
+    uint32_t sym[32];
+    struct { int32_t sym0; /* … */ int32_t sym31; };
+  };
+  ```
+
+  Both bodies fill the members one at a time and then hand the array off whole
+  — `psym = pixel_context((uint32_t*)__frame.sym);` at `model.inc:1303`, and
+  the same call at `:1936`. `pixel_context` reads `nb[sym_pos]`, a run-time
+  index. So the 32 writes are an unrolled fill of a neighbour array, and the
+  array half of the union is already declared and already used.
+
+  Two earlier drafts of this entry got it wrong in opposite directions, and the
+  reason both times was the measurement. Pooling the two frames says "every one
+  written more than once, median span 634 lines" — but `decode_pixel` and
+  `code_pixel` declare *separate* structs that happen to spell their members
+  the same way, so pooling counts `sym5` in one function and `sym5` in the
+  other as one name. Per function: **51 of the 64 members are written exactly
+  once and never read through their own name** — 28 of 32 in `decode_pixel`, 23
+  of 32 in `code_pixel` — and the median span between a member's first and last
+  mention is a single line.
+
+  The thirteen members that *are* read by name are all at the low end —
+  `sym0`…`sym3` in `decode_pixel`, `sym0`…`sym6` plus `sym8` and `sym10` in
+  `code_pixel` — which is what a neighbour array looks like: the nearest few
+  get used directly, the rest only through the index. They read as `sym[0]`,
+  `sym[3]` and so on with nothing lost.
+
+  So the work here is the lift, not a naming pass: `__frame.sym[N] = x` at the
+  fill sites, then delete the named half of the union. Naming the 32
+  individually — which is what this entry said to do — would have been work
+  spent making a fill loop harder to see.
 
 ---
 
 ## Declined, with the measurement
 
 **Merging the three plane bodies in `alt_model_p1.inc`.** They look like a
-three-times-unrolled loop — `blk1`/`blk2`/`blk3`, `err1`/`err2`/`err3`, 43/42/41
-lines each — and they are not. Renaming the suffix away and diffing gives 0.42
-and 0.53 similarity, and **one line in 42 matches positionally**. The planes
-genuinely differ: the first carries the colour transform, the third the
-near-lossless drift check. A loop over them would be a switch inside a loop,
-which is the unrolling with extra steps.
+three-times-unrolled loop — `blk1`/`blk2`/`blk3`, `err1`/`err2`/`err3`, spans of
+40/34/37 lines — and the reason not to merge them is that the planes genuinely
+differ: the first carries the colour transform, the third the near-lossless
+drift check. A loop over them would be a switch inside a loop, which is the
+unrolling with extra steps.
 
-**Dropping the `__` prefix from the 100 recovered functions.** It marks what
-came out of the binary as against what this project added — `bmf_new`,
-`p2_pred`, `sym_in_top` — and that distinction is load-bearing in every tool
-here: `deadcheck.py`, `unnamed.py` and `addrmap.py` all key on it. 100
-signatures and every call site, to lose a marker three tools read. No.
+**The similarity figure is a caveat on this decline, not support for it.**
+Renaming the suffix away and diffing gives 0.51 for planes 1 against 2 and
+**0.70 for 1 against 3**, with 9 of 37 lines identical in position. That is
+higher than the pairs merged in the last round were, and an earlier draft of
+this file quoted 0.42/0.53 and "one line in 42", which does not reproduce. So
+this decline rests on reading the three bodies, not on a distance: if the
+merge is ever attempted, 1-against-3 is the pair to try, and the switch it
+needs is the thing to look at before writing any of it.
 
-**`-Wold-style-cast`, now 1,172 sites.** Declined last round at 1,471 for being
-12 more characters at every site; the number went down because other work
+**Dropping the `__` prefix.** 57 bodies carry it, out of 60 `__` names in the
+tree. It marks what came out of the binary as against what this project added —
+`bmf_new`, `p2_pred`, `sym_in_top` — and that distinction is load-bearing in
+every tool here: `deadcheck.py`, `unnamed.py` and `addrmap.py` all key on it.
+57 signatures and every call site, to lose a marker three tools read. No.
+
+**`-Wold-style-cast`, now 1,377 warnings over 1,365 sites** (`g++
+-Wold-style-cast`, identical at both widths). Declined last round at 1,471 for
+being 12 more characters at every site; the number went down because other work
 removed casts, and the argument is unchanged.
 
 **The 161 `*(T*)&x` puns.** Most are a member read at a narrower width —
@@ -211,8 +323,15 @@ answers zero. The ones worth taking are the handful where the pun is of a
 is the rule for that; it reports zero too.
 
 **The eight `__frame` structs, 970 prefixes.** Declined twice with reasons, and
-now declined by rule: `tools/liftframe.py` refuses a frame whose members the
-body indexes across, which is what these are.
+now declined by measurement: `tools/liftframe.py` offers zero of them. It is
+worth reading its reasons rather than summarising them, because they are not
+all the same reason. It declines `choose_plane_coding` and `decode_symbol_list`
+outright — "every member is inside its union", so there is nothing to lift that
+is not already aliased — and it *tried* `cost_candidate`, `expand_image`,
+`reduce_alphabet` and `search_filter`, reverting each when the lifted build
+failed at run time on `altp1` or `DLRAW`. The remaining two are `model.inc`'s,
+which the tool does not reach and which Phase 5 now says to lift into their own
+array instead.
 
 **The five encode/decode pairs that were not merged.** 3% to 20% shared lines,
 measured pair by pair in `bmf.cpp`'s header. Unchanged.
@@ -223,18 +342,19 @@ measured pair by pair in `bmf.cpp`'s header. Unchanged.
 
 | phase | sites | lines saved | risk | gate |
 | --- | --- | --- | --- | --- |
-| 1 — `p2_update` | 115 | ~230 + 233 declarations | **medium** | streams, both widths |
-| 2 — `pack_bits` | 12 | ~110 | medium | streams, `hdrscan.sh` |
+| 1 — `p2_update` | 115 | ~230 + 230 declarations | **medium** | streams, both widths |
+| 2 — `pack_bits` | 12 | ~116 | medium | streams, `hdrscan.sh` |
 | 3 — declare at first use | ~200? | ~150 | low | streams, ASan |
-| 4 — wrapping | 42 lines | 0 | none | streams |
-| 5 — one name per thing | 3 classes | small | low | streams |
+| 4 — wrapping | 6 lines | 0 | none | streams |
+| 5 — one name per thing | 3 classes | ~70 | low | streams |
 
-Phase 1 first: it is the largest by a factor of three, it is mechanical, and it
+Phase 1 first: it is the largest by a factor of two, it is mechanical, and it
 makes Phase 3's measurement meaningful. Phase 4 can go at any time. Phase 2
 needs Phase 5's first item done inside it.
 
-Total: about 500 lines and 240 declarations out of 12,136, and — the point —
-three helpers where there are now 116 copies of them.
+Total: about 500 lines and 230 declarations out of 12,136, and — the point —
+three helpers where there are now **127 copies** of them: 115, and 6 each way
+across the header's bit stream.
 
 ## What "done" means
 
