@@ -1,0 +1,268 @@
+#!/usr/bin/env python3
+"""Turn one function's frame struct back into ordinary locals.
+
+    python3 tools/liftframe.py subs1.hpp --list
+    python3 tools/liftframe.py subs1.hpp __model_planes
+
+Bodies that hold their locals in a `struct alignas(16) …{ … } __frame;` --
+seventeen when this was written, nine now -- each carry a comment saying the
+frame is a layout rather than a bag of locals, with the exact failure that
+proved it: "altp1 segfaults while compressing", "five streams move, no signal".
+The count is printed by `--list` rather than quoted here, because a number in a
+docstring is a measurement that stops being re-taken.
+
+Every one of those comments cites `tools/frame-sweep.sh`, which drives
+`defram.py`, which lifts *aliases* -- `int32_t &v83 = *(int32_t *)(frame +
+24600);`.  There are none left: earlier rounds turned every alias into a named
+member, so `defram.py --list` answers "0 of 0 aliases lift" and the sweep
+prints "0 kept, 0 reverted".  That is a green line meaning *nothing was tried*,
+under seventeen claims that rest on it having been.
+
+So this is the same experiment against the shape the file has now: each
+non-padding member becomes a plain declaration, `__frame.X` becomes `X`, and
+the `static_assert`s that pin the layout go with it.  It proposes; the gate
+decides, one frame at a time, and a frame that fails goes back exactly as it
+was.
+
+Three things it declines rather than guesses at:
+
+  * **a frame with a `union`.**  The union is MSVC's slot sharing written down,
+    and lifting its arms to separate locals is not the same program.  A frame
+    whose *every* member is inside one is declined outright and said so -- for
+    a long time it was declined silently, and six frames were neither offered
+    nor mentioned under a line reading "0 frames this can offer to lift".  Two
+    of those six were not slot sharing at all: `compress_image`'s union held a
+    header and a scratch in mutually exclusive branches, and
+    `alt_p2_context`'s two arms were the same six pointers viewed twice.  Both
+    dissolved when the gate was asked;
+  * **a member whose name is already a local** of that body -- the two would
+    become one variable;
+  * **any use of `__frame` that is not `__frame.X`**, which after the asserts
+    are removed should be none.  If one is left, the frame is doing something
+    this does not model and it stays.
+"""
+import re
+import sys
+
+sys.path.insert(0, __file__.rsplit('/', 1)[0])
+import structs                                                    # noqa: E402
+
+# `alignas(...)` is part of the type, not something to step over.  Matching it
+# in a non-capturing group and rebuilding the declaration from the rest is a
+# silent drop: lifting `ChoosePlaneCodingFrame` turned six
+# `alignas(16) int32_t x[4]` members into plain ones and nothing said so.  The
+# gate stayed green because x86 loads an unaligned double happily -- the same
+# "the compiler has no complaint to make" hazard as retyping a pointer -- and
+# what was lost is six sixteen-byte spill slots that no longer say they are.
+MEMBER = re.compile(r'\s*((?:alignas\([^)]*\)\s*)?'
+                    r'(?:const\s+|unsigned\s+|signed\s+)*[A-Za-z_]\w*'
+                    r'(?:\s*\*)*)\s+(\**\s*\w+)\s*((?:\[[^\]]*\])*)\s*;\s*$')
+
+
+def frame_of(lines, a, b):
+    """(first, last, [lift], [keep]) for the body's frame, or None."""
+    start = None
+    for i in range(a, b + 1):
+        c = lines[i].split('//')[0]
+        if re.match(r'\s*struct\s+alignas\([^)]*\)\s*\w*\s*\{', c):
+            start = i
+            break
+    if start is None:
+        return None
+    depth, end = 0, None
+    for i in range(start, b + 1):
+        c = lines[i].split('//')[0]
+        depth += c.count('{') - c.count('}')
+        if depth <= 0 and '__frame' in c:
+            end = i
+            break
+    if end is None:
+        return None
+    body = lines[start + 1:end]
+    # A `union` is MSVC's slot sharing written down, and lifting its arms to
+    # separate locals is not the same program.  But the members *outside* it
+    # are ordinary locals that happen to sit in the same struct, and nine
+    # frames were being declined whole for the union in the middle of them.
+    # So the union is kept -- as a smaller frame in its own right -- and only
+    # what surrounds it is offered.  Whether the two can be separated at all
+    # is the gate's question, not this one's: the code in these bodies writes
+    # past the ends of things, which is why the frames exist.
+    out, depth, keep = [], 0, []
+    for l in body:
+        c = l.split('//')[0]
+        depth += c.count('{') - c.count('}')
+        if depth > 0 or re.search(r'\b(?:union|struct)\b', c) or c.strip() in ('};', '}'):
+            keep.append(l)
+            continue
+        m = MEMBER.fullmatch(c)
+        if not m:
+            if c.strip():
+                return start, end, None
+            continue
+        name = m.group(2).lstrip('* ')
+        if name.startswith('_pad') or name.startswith('_gap'):
+            keep.append(l)
+            continue
+        out.append((m.group(1).strip(), m.group(2).strip() + m.group(3), name, c))
+    return start, end, out, keep
+
+
+# Frames whose members have been given their own storage and which failed the
+# gate for it.  Named with the failure rather than left on the offer list, so
+# that "0 to lift" means what it says.
+#
+# Re-taken against the file as it is now -- lift each with `--retry`, run the
+# gate, revert -- because a table of past failures is the kind of claim
+# REFACTORING9.md section 32 is about.  Five were re-taken at round nine and
+# all five still failed in the same way; `read_bmp` cleared at round ten, and
+# the note below says what cleared it.
+#
+# `tools/asan.sh` says what the failure *is*, which these lines never did:
+# lifting `search_filter`'s frame gives
+#
+#     ERROR: AddressSanitizer: stack-buffer-overflow
+#     Address … is located in stack of thread T0 at offset 180 in frame
+#
+# These bodies walk off the ends of their locals on purpose, and the frame is
+# what makes the neighbours theirs to walk.
+# `read_bmp` was here, with "DLRAW aborts while compressing (rc 134)", for five
+# rounds.  It is gone because the reason is gone, not because the entry aged
+# out: the two `fread`s wrote across the slots Hex-Rays had split the BMP file
+# and info headers into, so lifting those slots pulled the reads apart.  Reading
+# into `BmpHeader` instead removed the reason and the lift was then ordinary --
+# the frame dissolved to padding and the padding went with it.
+#
+# Which is the thing to take from this table: an entry here is a measurement of
+# the *body as it stands*, and the way to clear one is to change what made it
+# true.  `--retry` does not re-take them; it suppresses the table so the tool
+# will offer a frame anyway, and the gate is what says whether the offer was
+# good.
+PROVEN = {
+    'search_filter':  'altp1 aborts while compressing (rc 134)',
+    'cost_candidate': 'altp1 aborts while compressing (rc 134)',
+    # These two offer only the members outside their union, and even that much
+    # moves what the body writes past.
+    'expand_image':   'DLRAW exits 3 while decompressing',
+    'reduce_alphabet': 'DLRAW aborts while compressing (rc 134)',
+}
+
+
+def candidates(lines):
+    """(offers, declines) -- and the declines are named.
+
+    A frame whose every non-padding member sits inside a `union` yields an
+    empty member list, and for a long time that frame simply did not appear:
+    the run ended on "0 frames this can offer to lift" with six frames neither
+    offered nor mentioned.  That is the silence this file was written against
+    -- `frame-sweep.sh` printed "0 kept, 0 reverted" under seventeen claims
+    that rested on it having tried.  So a frame it cannot offer is now printed
+    with the reason it cannot.
+    """
+    out, declined = [], []
+    # `--retry` puts the tried-and-reverted frames back on the offer list.
+    # `PROVEN`'s entries are measurements of a file that has moved a long way
+    # since they were taken -- which is REFACTORING9.md section 32's whole
+    # subject -- and re-taking one should be a command, not an edit to this
+    # table.
+    proven = set() if '--retry' in sys.argv else set(PROVEN)
+    for a, b, nm, sig in structs.bodies(lines):
+        got = frame_of(lines, a, b)
+        if not got or nm.lstrip('_') in proven:
+            continue
+        if got[2] is None:
+            declined.append((nm, 'a line in it is not a member declaration'))
+        elif not got[2]:
+            declined.append((nm, 'every member is inside its union'))
+        else:
+            types = structs.decl_types(sig, lines, a, b)
+            clash = [n for _, _, n, _src in got[2]
+                     if n in types and n not in {m[2] for m in got[2]}]
+            out.append((nm, a, b, got, clash))
+    return out, declined
+
+
+def apply(lines, nm, a, b, got, indent='  '):
+    start, end, members, keep = got
+    body = '\n'.join(lines[a:b + 1])
+    # `__frame` must only ever be `__frame.X` once the asserts are gone.
+    rest = re.sub(r'\}\s*__frame\s*;', '', re.sub(
+        r'__frame\.\w+', '', re.sub(
+            r'static_assert\([^;]*?__frame[^;]*?\);', '', body, flags=re.S)))
+    if '__frame' in rest:
+        return False, '%s: `__frame` is used other than as a member' % nm.lstrip('_')
+
+    text = re.sub(r'[ \t]*static_assert\([^;]*?__frame[^;]*?\);\n', '',
+                  body, flags=re.S)
+    rows = text.split('\n')
+    s2 = next(i for i, l in enumerate(rows)
+              if re.match(r'\s*struct\s+alignas\([^)]*\)\s*\w*\s*\{',
+                          l.split('//')[0]))
+    depth, e2 = 0, None
+    for i in range(s2, len(rows)):
+        c = rows[i].split('//')[0]
+        depth += c.count('{') - c.count('}')
+        if depth <= 0 and '__frame' in c:
+            e2 = i
+            break
+    decls = ['%s%s %s;' % (indent, t, d) for t, d, _, _src in members]
+    # A declaration rebuilt from a regex's groups is only the same declaration
+    # if nothing fell between them.  `alignas(16) int32_t x0[4];` came out as
+    # `int32_t x0[4];` for six members of `ChoosePlaneCodingFrame` because the
+    # pattern stepped over the specifier instead of capturing it, and nothing
+    # noticed: the file compiled, the streams did not move, and x86 loads an
+    # unaligned double happily.  So the rebuild is compared against the source
+    # line, ignoring whitespace, and a member that does not round-trip stops
+    # the lift rather than being quietly simplified.
+    for (t, d, _n, src), got_line in zip(members, decls):
+        if re.sub(r'\s+', '', src) != re.sub(r'\s+', '', got_line):
+            return False, ('%s: `%s` would be rewritten as `%s`'
+                           % (nm.lstrip('_'), src.strip(), got_line.strip()))
+    # What is left of the struct: the union and the padding that positions it.
+    # If that is nothing but braces, the frame goes entirely.
+    real = [l for l in keep
+            if l.split('//')[0].strip() not in ('', '{', '}', '};')]
+    if real:
+        new = [rows[s2]] + keep + [rows[e2]] + decls
+    else:
+        new = decls
+    rows[s2:e2 + 1] = new
+    text = '\n'.join(rows)
+    # Only the lifted names lose the prefix; the ones still in the struct keep
+    # it, which is what makes a partial lift a rewrite rather than a guess.
+    for _, _, n, _src in members:
+        text = re.sub(r'__frame\.%s\b' % re.escape(n), n, text)
+    lines[a:b + 1] = text.split('\n')
+    return True, '%s: %d members lifted, %d left in the frame' % (
+        nm.lstrip('_'), len(members), len(real))
+
+
+if __name__ == '__main__':
+    path = sys.argv[1] if len(sys.argv) > 1 else 'subs1.hpp'
+    lines = open(path).read().split('\n')
+    want = next((x for x in sys.argv[2:] if not x.startswith('--')), None)
+    found, declined = candidates(lines)
+    if want:
+        one = [f for f in found if f[0].lstrip('_') == want.lstrip('_')]
+        if not one:
+            sys.exit('%s: no frame this can lift' % want)
+        nm, a, b, got, clash = one[0]
+        if clash:
+            sys.exit('%s: %s already a local' % (nm, ', '.join(clash)))
+        ok, why = apply(lines, nm, a, b, got)
+        if not ok:
+            sys.exit(why)
+        open(path, 'w').write('\n'.join(lines))
+        print(why)
+    else:
+        for nm, a, b, got, clash in found:
+            print('  %-24s %3d members%s' % (nm.lstrip('_'), len(got[2]),
+                                             '  CLASH: ' + ','.join(clash) if clash else ''))
+        if '--retry' not in sys.argv:
+            for fn, why in sorted(PROVEN.items()):
+                print('  %-24s tried: %s' % (fn, why))
+        for nm, why in sorted(declined):
+            print('  %-24s declined: %s' % (nm.lstrip('_'), why))
+        print('%d frames this can offer to lift; %d tried and reverted, '
+              '%d declined' % (len(found),
+                               0 if '--retry' in sys.argv else len(PROVEN),
+                               len(declined)))

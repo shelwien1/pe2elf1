@@ -1,0 +1,279 @@
+#!/bin/sh
+# test.sh — the gate: does this build still encode exactly what it used to?
+#
+#     ./test.sh                      # ./bmf, every image, five minutes a run
+#     ./test.sh /tmp/bmf64
+#     BMF_IMAGES='t24 t8g' ./test.sh
+#     BMF_TIMEOUT=25 ./test.sh       # what tools/struct-sweep.sh runs it with
+#
+# The corpus is testfiles/: fifteen .bmp inputs and, for each, the stream this
+# program is expected to produce for it -- testfiles/ref_<name>.bmf.  A
+# reference is not a claim about what BMF.exe emits; there is no wine here to
+# ask the donor.  It is what the build produced when the reference was taken,
+# which is what a refactoring gate needs: a change that was not meant to move
+# the compressed output and moved it has been caught, and one that was meant to
+# says so in a commit message and re-takes the references with tools/mkrefs.sh.
+#
+# Six legs, because "the streams match" is a much narrower statement than it
+# sounds and five kinds of defect live outside it:
+#
+#   streams       compress each image, compare against its reference.
+#   round trip    expand it again, compare against the input.  A stream can
+#                 match while the decoder that has to read it does not.
+#   archive       two members appended to one file, then expanded.  Appending
+#                 walks the members and closing rewrites a header; no single
+#                 image reaches either path.
+#   malformed     five broken headers derived from the references.  The answer
+#                 here is an exit code, not a stream: 1..8 is the program's own
+#                 table (see __exit_402E40), and anything else is a crash.
+#   truncated     every reference cut short.  Same question, asked of the one
+#                 malformation that needs no knowledge of the format.
+#   out of memory the one leg where a *failed* allocation is the right answer.
+#                 Under a small enough `ulimit -v`, bmf_new returns null and the
+#                 program is expected to say "Out of memory!" and exit 7 rather
+#                 than dereference it.
+#
+# The malformed and truncated inputs are built here from whatever the corpus
+# currently is, rather than kept in testfiles/, so that re-taking the references
+# re-takes them too.
+#
+# Two things this leaves to other scripts, both on purpose.  It does not build:
+# tools/frame-sweep.sh and tools/struct-sweep.sh run ./build.sh themselves and
+# need to tell a build failure from a gate failure.  And it says nothing about
+# memory that is read or written out of bounds without changing the answer --
+# an exit code cannot see that class.  tools/asan.sh, tools/fuzz.sh and
+# tools/hdrscan.sh are what ask it.
+#
+# The last line of stdout begins PASS or FAILED, and the sweeps read exactly
+# that.  A moved stream is reported with the word CHANGED, which is what they
+# grep out of the log to say why a candidate was reverted.
+set -u
+cd "$(dirname "$0")"
+
+BIN=${1:-./bmf}
+T=${BMF_TIMEOUT:-300}
+[ -x "$BIN" ] || { echo "no $BIN (run ./build.sh)"; echo "FAILED: nothing to test"; exit 2; }
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+ran=0 bad=0
+note() { bad=$((bad + 1)); printf '%-9s %s\n' "$1" "$2"; }
+
+# A signal is not an exit code, and "exits 139" is a worse answer than the name
+# of the signal: SIGSEGV and SIGFPE are different defects and these legs see
+# both.  Anything under 128 is the program's own table.
+why() {
+  case $1 in
+    124) echo "timed out" ;;
+    13[4-9]|1[4-9][0-9]) echo "died on SIG$(kill -l $(($1 - 128)) 2>/dev/null || echo "?$1")" ;;
+    *)   echo "exits $1" ;;
+  esac
+}
+
+# `out_<name>.bmp` is not an input.  An RLE-compressed BMP does not come back
+# byte for byte -- bmf decodes the runs on the way in and re-encodes them with
+# its own run splitting, so the pixels are identical and the file is not -- and
+# out_rle4.bmp / out_rle8.bmp are what the decoder is expected to write instead.
+# Globbing testfiles/*.bmp picks them up and then looks for a reference stream
+# that cannot exist.
+images=''
+for f in testfiles/*.bmp; do
+  n=$(basename "$f" .bmp)
+  case $n in out_*) continue ;; esac
+  images="$images $n"
+done
+# BMF_IMAGES restricts the first two legs, and takes either spelling:
+# tools/struct-sweep.sh passes `t24.bmp altp1.bmp ...`, a person passes `t24`.
+if [ -n "${BMF_IMAGES:-}" ]; then
+  want=$(echo "$BMF_IMAGES" | tr ',' ' ' | sed 's/\.bmp//g')
+  keep=''
+  for n in $images; do
+    for w in $want; do [ "$n" = "$w" ] && keep="$keep $n" && break; done
+  done
+  for w in $want; do
+    case " $keep " in *" $w "*) ;; *) note "$w" "named in BMF_IMAGES, not in testfiles/" ;; esac
+  done
+  images=$keep
+fi
+
+# ---- streams, and the round trip ------------------------------------------
+# `bmf c` opens its output "a+b" -- it *appends* a member to an archive that
+# already exists -- so a second run against a stale file produces a two-member
+# stream and a difference that is entirely this script's doing.  Remove first,
+# every time.
+streams=0 trips=0 nimg=0
+for n in $images; do
+  nimg=$((nimg + 1))
+  ref=testfiles/ref_$n.bmf
+  rm -f "$tmp/$n.bmf" "$tmp/$n.bmp"
+  ran=$((ran + 2))
+  timeout "$T" "$BIN" c "testfiles/$n.bmp" "$tmp/$n.bmf" >/dev/null 2>&1
+  rc=$?
+  if [ $rc != 0 ]; then
+    note "$n" "compress $(why $rc)"; ran=$((ran - 1)); continue
+  fi
+  if [ ! -f "$ref" ]; then
+    note "$n" "no reference stream ($ref) -- run tools/mkrefs.sh"
+  elif ! cmp -s "$tmp/$n.bmf" "$ref"; then
+    note "$n" "stream CHANGED ($(stat -c%s "$tmp/$n.bmf") vs $(stat -c%s "$ref") bytes)"
+  else
+    streams=$((streams + 1))
+  fi
+  timeout "$T" "$BIN" d "$tmp/$n.bmf" "$tmp/$n.bmp" >/dev/null 2>&1
+  rc=$?
+  if [ $rc != 0 ]; then
+    note "$n" "expand $(why $rc)"; continue
+  fi
+  want=testfiles/$n.bmp
+  [ -f "testfiles/out_$n.bmp" ] && want=testfiles/out_$n.bmp
+  if cmp -s "$tmp/$n.bmp" "$want"; then
+    trips=$((trips + 1))
+  else
+    note "$n" "round trip differs from $(basename "$want")"
+  fi
+done
+echo "$streams/$nimg streams match their reference"
+echo "$trips/$nimg round trips are byte-identical"
+
+# ---- the archive ----------------------------------------------------------
+# Both members expand to the same output path, so what is left there is the
+# last one.
+arc=$tmp/arc.bmf
+rm -f "$arc" "$tmp/arc.bmp"
+ran=$((ran + 1))
+if timeout "$T" "$BIN" c testfiles/t1.bmp  "$arc" >/dev/null 2>&1 &&
+   timeout "$T" "$BIN" c testfiles/t8g.bmp "$arc" >/dev/null 2>&1 &&
+   timeout "$T" "$BIN" d "$arc" "$tmp/arc.bmp" >/dev/null 2>&1 &&
+   cmp -s "$tmp/arc.bmp" testfiles/t8g.bmp; then
+  echo "archive: two members, the last expands to t8g.bmp"
+else
+  note archive "the last member is not the input"
+fi
+
+# ---- malformed headers ----------------------------------------------------
+# The same five tools/x64.sh keeps, and for the same reason: each is one field
+# of a stream that is otherwise exactly a reference.
+#
+#   shortlen  data_len halved -- the range decoder runs off the coded buffer
+#   len1      the same field taken to 1, which is a four-byte packer read out
+#             of a one-byte buffer
+#   depthff   depth = 0xFF; six of its bits are the depth, so it says 63, and
+#             (63 + 7) >> 3 is eight planes written into five records
+#   narrow    a header claiming width 1, where the row-end mirror in
+#             alt_p2_d8_decode_body reads a record that a plane narrower than
+#             three does not have
+#   rawlen    a raw member whose declared length is 100000 bytes
+mal=0 nmal=0
+if [ -f testfiles/ref_t24.bmf ] && [ -f testfiles/ref_t8g.bmf ]; then
+  python3 -c 'import struct, sys
+t = sys.argv[1]
+r = open("testfiles/ref_t24.bmf", "rb").read()
+d = bytearray(r); struct.pack_into("<I", d, 16, struct.unpack_from("<I", d, 16)[0] // 2)
+open(t + "/shortlen.bmf", "wb").write(d)
+d = bytearray(r); struct.pack_into("<I", d, 16, 1)
+open(t + "/len1.bmf", "wb").write(d)
+d = bytearray(r); d[14] = 0xFF
+open(t + "/depthff.bmf", "wb").write(d)
+d = bytearray(open("testfiles/ref_t8g.bmf", "rb").read()); struct.pack_into("<H", d, 4, 1)
+open(t + "/narrow.bmf", "wb").write(d)
+open(t + "/rawlen.bmf", "wb").write(
+    struct.pack("<4sHHHHHBBI", b"\x81\x8a20", 8, 8, 0, 0, 0, 8, 0x04, 100000) + b"\xaa" * 100000)' "$tmp"
+  for m in shortlen len1 depthff narrow rawlen; do
+    nmal=$((nmal + 1)); ran=$((ran + 1))
+    rm -f "$tmp/$m.out"
+    ( ulimit -f 262144; timeout "$T" "$BIN" d "$tmp/$m.bmf" "$tmp/$m.out" ) >/dev/null 2>&1
+    rc=$?
+    if [ "$rc" -ge 1 ] && [ "$rc" -le 8 ]; then
+      mal=$((mal + 1))
+    else
+      note "$m" "malformed input $(why $rc), not a code from the table"
+    fi
+  done
+  echo "$mal/$nmal malformed streams refused with a code from the table"
+else
+  note malformed "testfiles/ref_t24.bmf and ref_t8g.bmf are what these are made from"
+fi
+
+# ---- truncations ----------------------------------------------------------
+# Every reference, cut to a half, a quarter and a sixteenth of itself.  A cut
+# stream may parse its header and run out part way through, or not parse at
+# all; both are fine and 0 is fine -- an empty archive is zero members and zero
+# members is success.  What is not fine is a signal.
+cut=0 ncut=0
+for r in testfiles/ref_*.bmf; do
+  [ -f "$r" ] || continue
+  n=$(basename "$r" .bmf)
+  sz=$(stat -c%s "$r")
+  for frac in 2 4 16; do
+    ncut=$((ncut + 1)); ran=$((ran + 1))
+    head -c $((sz / frac)) "$r" > "$tmp/cut.bmf"
+    rm -f "$tmp/cut.out"
+    ( ulimit -f 262144; timeout "$T" "$BIN" d "$tmp/cut.bmf" "$tmp/cut.out" ) >/dev/null 2>&1
+    rc=$?
+    if [ "$rc" -le 8 ]; then
+      cut=$((cut + 1))
+    else
+      note "${n#ref_}" "truncated to 1/$frac $(why $rc)"
+    fi
+  done
+done
+echo "$cut/$ncut truncated streams refused without a crash"
+
+# ---- out of memory --------------------------------------------------------
+# A ladder rather than one limit: which rung makes an allocation fail depends on
+# the pointer width and on what the libc reserves before main, and a single
+# number that happens to work on one target is a leg that quietly stops testing
+# anything on the other.  Any rung that reports is enough; a rung that succeeds
+# is not a failure.  What fails is every rung succeeding -- nothing was tested --
+# or a rung dying instead of reporting.
+ran=$((ran + 1))
+if ( ulimit -v 65536 ) >/dev/null 2>&1; then
+  said=''
+  for kb in 4000 6000 8000 10000 12000 16000; do
+    rm -f "$tmp/oom.bmf"
+    ( ulimit -v $kb; timeout "$T" "$BIN" c testfiles/t1.bmp "$tmp/oom.bmf" ) \
+        >"$tmp/oom.log" 2>&1
+    rc=$?
+    case $rc in
+      7) if grep -q 'Out of memory!' "$tmp/oom.log"; then
+           said=$kb
+         else
+           note "out of mem" "-v $kb exits 7 without saying why"
+         fi ;;
+      0|1) ;;
+      *) note "out of mem" "-v $kb $(why $rc), not 7" ;;
+    esac
+  done
+  if [ -n "$said" ]; then
+    echo "out of memory: -v $said exits 7, \"Out of memory!\""
+  else
+    note "out of mem" "no limit in the ladder made an allocation fail"
+  fi
+else
+  echo "out of memory: skipped, this shell cannot set ulimit -v"
+  ran=$((ran - 1))
+fi
+
+# ---- the command line -----------------------------------------------------
+# Cheap, and it is the one path every other leg avoids: three arguments are
+# what the five above always pass.
+ran=$((ran + 1))
+"$BIN" >"$tmp/usage" 2>&1
+rc=$?
+if [ "$rc" = 1 ] && grep -q '^Usage: bmf c input.bmp output' "$tmp/usage"; then
+  echo "usage: no arguments exits 1 and says how"
+else
+  note usage "no arguments $(why $rc)"
+fi
+
+echo
+# `ran` is counted as the legs run rather than computed from the corpus size:
+# a line that recomputes what it claims to have counted goes on being confident
+# while cases are added under it.
+if [ "$bad" = 0 ]; then
+  echo "PASS: $ran checks, $nimg images"
+else
+  echo "FAILED: $bad of $ran checks"
+fi
+exit $((bad ? 1 : 0))

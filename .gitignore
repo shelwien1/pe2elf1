@@ -1,0 +1,9 @@
+# What build.sh makes.  `bmf` is the binary; the three logs are the diagnostic
+# passes (BMF_WARN=1 / BMF_STRICT=1), which are stamped with a cksum of the
+# source they were read from and are worth nothing against any other revision.
+bmf
+bmf.exe
+*.o
+warn.log
+strict.log
+strict64.log
