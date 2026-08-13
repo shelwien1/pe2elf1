@@ -381,6 +381,27 @@ docstrings because the next person will believe the rule otherwise:
   merge, not two members of different widths.**  `merge.py`'s first version
   compared widths and silently took one of `Obj10::f6059436` and
   `ModelBlock::f6059436`; round two moved three streams on exactly that.
+- **A probe that measures where the compiler put the lifted members has
+  recorded the build, not the layout.**  The fifth one, and it took a bug
+  report to find, three rounds and a repository after the lift that caused it.
+  `choose_plane_coding`'s six-member run — `acc0 acc1 d4 tbl16 tbl64a tbl64b`,
+  256 bytes — was lifted, and ASan reported the zero loop above them running
+  136 bytes past the end on any 24bpp or 32bpp image.  The repair declared a
+  256-byte buffer and bound three of the six names into it *at the offsets a
+  probe had just measured* — `tbl16` at 56, where the frame has `d4` — and
+  left the other three outside.  Every write was then in bounds, ASan went
+  quiet, and every read of the second and third 64-byte table pointed at
+  bytes nothing had written.  The streams did not move, because every image
+  in the corpus reads the first table.
+
+  What makes it the fifth rule rather than a footnote: the measurement was
+  real and the reasoning from it was backwards.  Where a lifted member *is*
+  says nothing about where the body needs it; that comes from what indexes
+  across it, which here was `&tbl16[16*xform]` and a zero loop whose 192
+  bytes are exactly three 64-byte tables.  Both were in the source the whole
+  time.  The check after a lift is not "does the gate pass" — it is "does
+  anything index out of a member, and does the corpus reach the code that
+  does".
 
 ### What the four rewriters had wrong, and how each was caught
 

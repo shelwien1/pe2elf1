@@ -198,6 +198,17 @@ if __name__ == '__main__':
         # its other half has not measured zero surviving names.
         sys.exit('not applicable: %s is not in this repository, so there is no '
                  'original to join against' % ORIGIN)
+    if not joined:
+        # The blob is readable and the join still matched nothing, which is not
+        # the same as "no Hex-Rays names left".  It happened the moment the
+        # other round's branch was fetched into this repository: the object
+        # resolved, `addrmap.py` had no address map to join it against, and a
+        # tool that had been honestly declining started reporting a clean tree.
+        # A zero over zero bodies is the shape of answer this directory exists
+        # to refuse.
+        sys.exit('not applicable: %s reads, but the join matched 0 bodies -- '
+                 'this needs the address map from the tree it was decompiled '
+                 'in' % ORIGIN)
     rows = sorted(live.items(), key=lambda kv: (-len(kv[1]), kv[0]))
     if '--all' in sys.argv:
         rows += sorted(kept.items(), key=lambda kv: (-len(kv[1]), kv[0]))

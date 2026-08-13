@@ -24,7 +24,7 @@ the `static_assert`s that pin the layout go with it.  It proposes; the gate
 decides, one frame at a time, and a frame that fails goes back exactly as it
 was.
 
-Three things it declines rather than guesses at:
+Four things it declines rather than guesses at:
 
   * **a frame with a `union`.**  The union is MSVC's slot sharing written down,
     and lifting its arms to separate locals is not the same program.  A frame
@@ -39,7 +39,13 @@ Three things it declines rather than guesses at:
     become one variable;
   * **any use of `__frame` that is not `__frame.X`**, which after the asserts
     are removed should be none.  If one is left, the frame is doing something
-    this does not model and it stays.
+    this does not model and it stays;
+  * **a member the body indexes out of.**  `&tbl16[16*xform]` on an
+    `int32_t[16]` says the member after it is the rest of the object, and
+    lifting the two apart is not the same program.  This one was added after
+    the fact: the lift it would have declined shipped, and the defect took a
+    bug report and a bisect to find three rounds later.  `indexed_out` below
+    has the account.
 """
 import re
 import sys
@@ -107,6 +113,51 @@ def frame_of(lines, a, b):
     return start, end, out, keep
 
 
+def indexed_out(lines, a, b, got):
+    """(member, the index) where the body indexes past a member's own bound.
+
+    The fifth frame rule, and the one that cost a bug report: a member the body
+    walks off the end of is a member whose *neighbour* is the rest of the
+    object.  `choose_plane_coding` reads `&tbl16[16*xform]` out of an
+    `int32_t[16]`, because `tbl16`, `tbl64a` and `tbl64b` are one 3x16 table in
+    the frame -- lift them into three locals and rows 1 and 2 become whatever
+    the compiler put there.  ASan saw it (a zero loop 136 bytes past the end)
+    and the repair bound three of the six names onto one buffer *at the offsets
+    a probe measured*, which put the writes in bounds and left the reads wrong
+    for another three rounds.  tools/README.md has the whole account.
+
+    Two shapes, both conservative: a constant index at or past the bound, and
+    any index carrying a `*`, which is how a row of a flattened table is
+    reached.  A false positive costs a frame that is not offered and says why;
+    a false negative costs what this one did.
+    """
+    start, end, members = got[0], got[1], got[2]
+    if not members:
+        return None
+    # Not the frame's own declarations: `uint8_t buf_3[2048];` is a bound, not
+    # an index, and reading it as one declines every array member there is.
+    body = '\n'.join(l.split('//')[0]
+                     for i, l in enumerate(lines[a:b + 1], a)
+                     if not start <= i <= end)
+    for _ty, decl, name, _src in members:
+        m = re.search(r'\[\s*(\d+)\s*\]\s*$', decl)
+        if not m:
+            continue
+        bound = int(m.group(1))
+        # `__frame.tbl16[16*xform]` before the lift, `tbl16[16*xform]` after
+        # -- the question is asked of a frame that still exists, so the prefix
+        # is the spelling that matters.  Written without it, this rule found
+        # nothing anywhere and reported a clean tree.
+        for use in re.finditer(r'(?<![\w.>])(?:__frame\.)?%s\s*\[([^\]\n]+)\]'
+                               % re.escape(name), body):
+            idx = use.group(1).strip()
+            if '*' in idx:
+                return name, '%s[%s]' % (name, idx)
+            if re.fullmatch(r'\d+', idx) and int(idx) >= bound:
+                return name, '%s[%s]' % (name, idx)
+    return None
+
+
 # Frames whose members have been given their own storage and which failed the
 # gate for it.  Named with the failure rather than left on the offer list, so
 # that "0 to lift" means what it says.
@@ -169,10 +220,15 @@ def candidates(lines):
         got = frame_of(lines, a, b)
         if not got or nm.lstrip('_') in proven:
             continue
+        crossed = indexed_out(lines, a, b, got) if got[2] else None
         if got[2] is None:
             declined.append((nm, 'a line in it is not a member declaration'))
         elif not got[2]:
             declined.append((nm, 'every member is inside its union'))
+        elif crossed:
+            declined.append((nm, 'the body indexes out of %s -- `%s`, and %s'
+                             % (crossed[0], crossed[1], 'what it reaches is '
+                                'the member after it')))
         else:
             types = structs.decl_types(sig, lines, a, b)
             clash = [n for _, _, n, _src in got[2]
@@ -237,8 +293,14 @@ def apply(lines, nm, a, b, got, indent='  '):
 
 
 if __name__ == '__main__':
-    path = sys.argv[1] if len(sys.argv) > 1 else 'subs1.hpp'
-    lines = open(path).read().split('\n')
+    path = sys.argv[1] if len(sys.argv) > 1 else 'bmf.cpp'
+    # The unit is 37 files and every frame is in one of the `.inc`; handed
+    # `bmf.cpp` this used to read an include list, find no bodies and print
+    # "0 frames this can offer to lift" -- a zero from a rule that had nothing
+    # to read, which is the failure this whole directory is written against.
+    # Listing reads the unit as the compiler does; lifting rewrites a file, so
+    # it says which one to point at rather than writing to the wrong place.
+    lines, origin = structs.splice(path)
     want = next((x for x in sys.argv[2:] if not x.startswith('--')), None)
     found, declined = candidates(lines)
     if want:
@@ -248,6 +310,10 @@ if __name__ == '__main__':
         nm, a, b, got, clash = one[0]
         if clash:
             sys.exit('%s: %s already a local' % (nm, ', '.join(clash)))
+        home = origin[a][0]
+        if home != path.rsplit('/', 1)[-1]:
+            sys.exit('%s is in %s; run this against that file'
+                     % (nm.lstrip('_'), home))
         ok, why = apply(lines, nm, a, b, got)
         if not ok:
             sys.exit(why)
@@ -255,8 +321,9 @@ if __name__ == '__main__':
         print(why)
     else:
         for nm, a, b, got, clash in found:
-            print('  %-24s %3d members%s' % (nm.lstrip('_'), len(got[2]),
-                                             '  CLASH: ' + ','.join(clash) if clash else ''))
+            print('  %-24s %3d members  %s%s'
+                  % (nm.lstrip('_'), len(got[2]), origin[a][0],
+                     '  CLASH: ' + ','.join(clash) if clash else ''))
         if '--retry' not in sys.argv:
             for fn, why in sorted(PROVEN.items()):
                 print('  %-24s tried: %s' % (fn, why))

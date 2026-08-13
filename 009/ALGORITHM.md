@@ -134,9 +134,20 @@ coded last, with both others available — that carries the colour transform.
 
 First the plane order: planes are paired up (`0,1`, `2,3`, …) so a plane can
 reference the one before it. Then, for three or more planes, `__cost_candidate`
-is run over two candidate orderings and the cheaper is kept — this is what
-decides whether the green plane or the blue plane is the one everything else is
-predicted from.
+is run over **three** candidate orderings — 0, 1 and 2 — and the cheapest is
+kept. This is what decides whether the green plane or the blue plane is the one
+everything else is predicted from.
+
+Each candidate writes two things: a row of four costs, and a 16-entry window
+describing the ordering it costed. The three rows and the three windows are each
+one contiguous table — costs at `acc0[4*cand + …]`, windows at
+`tbl16[16*cand + …]` — and the winner is read back by indexing them with the
+candidate number. The 64 bytes of the winning window are then copied straight
+into `plane_desc`, which is how a candidate becomes the plane order. Every image
+in `testfiles/` except `xform1` and `xform2` picks candidate 0; those two exist
+because the difference between "the table is contiguous" and "the first row
+happens to be where the pointer already points" is invisible until something
+picks 1 or 2. See the header of `choose_plane_coding.inc`.
 
 Then the transform itself. For each plane it accumulates **histograms of
 differences** against the reference planes over the whole image:

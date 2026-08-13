@@ -117,6 +117,8 @@ HISTORY = {
     'med32': 'testfiles/med32.bmp',
     'altp1': 'testfiles/altp1.bmp',
     'noise24': 'testfiles/noise24.bmp',
+    'xform1': 'testfiles/xform1.bmp',
+    'xform2': 'testfiles/xform2.bmp',
     # The BMP file format's own vocabulary.  The fields this one names --
     # `biCompression`, `biHeight` -- are members of `BmpHeader` and are found;
     # the structure's name is Microsoft's and is not in the source at all.
