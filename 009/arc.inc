@@ -5,14 +5,14 @@ struct BmfArc {
   uint32_t images;
   FILE* fp;
   FILE*bmf_close_archive() {
-    FILE* fp;
-    fp = this->fp;
-    if( fp ) {
-      fseek(fp, 0, 2);
-      fclose(this->fp);
+    FILE* f;
+    f = fp;
+    if( f ) {
+      fseek(f, 0, 2);
+      fclose(fp);
       return nullptr;
     }
-    return fp;
+    return f;
   }
 };
 

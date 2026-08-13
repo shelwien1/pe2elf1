@@ -93,8 +93,8 @@ struct SymList {
     uint16_t s_a, s_b;
     uint32_t rest, i;
     gen = exclusion_gen;
-    left = this->live;
-    p = this->ent-1;
+    left = live;
+    p = ent-1;
     cum = 0;
     while( 1 ) {
       ++p;
@@ -109,12 +109,12 @@ struct SymList {
         if( !cum )
           return 0;
         enc_cum = cum;
-        enc_tot = this->tot+cum;
+        enc_tot = tot+cum;
         enc_high = enc_tot;
         do {
           exclusion_mask[p->sym] = gen;
           --p;
-        } while( p>=this->ent );
+        } while( p>=ent );
         result = 0;
         {
           rc.encode(enc_cum, enc_high, enc_tot);
@@ -134,10 +134,10 @@ struct SymList {
         cum += c2;
       }
     }
-    enc_tot = this->tot+cum;
+    enc_tot = tot+cum;
     p->cnt += 4;
-    head = this->ent;
-    this->since_rescale += 4;
+    head = ent;
+    since_rescale += 4;
     if( p==head ) {
   LABEL_37:
       top = p->cnt;
@@ -147,7 +147,7 @@ struct SymList {
       q = p-1;
       *p = *q;
       q->set(s_a, c_a);
-      head = this->ent;
+      head = ent;
       if( q==head ) {
         top = q->cnt;
       } else {
@@ -160,14 +160,14 @@ struct SymList {
           c_b = q->cnt;
           *q = *p;
           p->set(s_b, c_b);
-          head = this->ent;
+          head = ent;
           --q;
           if( p==head )
             goto LABEL_37;
         }
       }
     }
-    this->rescale(top);
+    rescale(top);
     result = 1;
     rc.encode(enc_cum, enc_high, enc_tot);
     return result;
@@ -182,8 +182,8 @@ struct SymList {
     uint16_t s3, s, s2;
     int32_t recycled;
     uint32_t n_live, left;
-    list = this->ent;
-    n_live = this->live;
+    list = ent;
+    n_live = live;
     p = list;
     left = n_live;
     if( n_live ) {
@@ -193,8 +193,8 @@ struct SymList {
           goto LABEL_4;
       }
       p->cnt += add;
-      this->since_rescale += add;
-      head = this->ent;
+      since_rescale += add;
+      head = ent;
       if( p==head ) {
   LABEL_16:
         count = p->cnt;
@@ -204,7 +204,7 @@ struct SymList {
         q = p-1;
         *p = *q;
         q->set(s, c);
-        head = this->ent;
+        head = ent;
         if( q==head ) {
           count = q->cnt;
         } else {
@@ -217,36 +217,36 @@ struct SymList {
             c2 = q->cnt;
             *q = *p;
             p->set(s2, c2);
-            head = this->ent;
+            head = ent;
             --q;
             if( p==head )
               goto LABEL_16;
           }
         }
       }
-      this->rescale(count);
+      rescale(count);
       return;
     } else {
   LABEL_4:
-      full = n_live==this->n;
-      if( n_live>=this->n ) {
+      full = n_live==n;
+      if( n_live>=n ) {
         if( add<=1 )
           return;
-        full = n_live==this->n;
+        full = n_live==n;
       }
       if( full ) {
-        this->live = --n_live;
+        live = --n_live;
         recycled = list[n_live].cnt;
       } else {
         recycled = 1;
       }
       list += n_live;
-      this->live = n_live+1;
-      this->tot = recycled+this->tot+1;
+      live = n_live+1;
+      tot = recycled+tot+1;
       list->cnt = 2;
       list->sym = want;
-      this->since_rescale += 4;
-      if( list!=this->ent ) {
+      since_rescale += 4;
+      if( list!=ent ) {
         s3 = list->sym;
         c3 = list->cnt;
         *list = list[-1];

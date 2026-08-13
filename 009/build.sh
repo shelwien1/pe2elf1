@@ -141,13 +141,22 @@ stamp() {
 
 if [ "${BMF_WARN:-0}" = 1 ]; then
   # -fpermissive stays: this pass counts the comparisons whose conversion is
-  # invisible, not the conversions themselves.  tools/explicitcmp.py and
-  # tools/unused.py read what it writes; tools/resign-drive.sh reads the count
-  # off stdout and ratchets on it, so the count is the first line.
+  # invisible, not the conversions themselves.
+  #
+  # `-Wshadow` is here because the tree has no `this->` left to disambiguate a
+  # member from a local of the same name.  A shadow reintroduced later would be
+  # silent -- `sym_cache = sym_cache;` compiles -- so the count is the guard.
+  # Note for anything that parses this log: gcc quotes the name with the
+  # locale's quotation marks, curly ones here, and `-fdiagnostics-plain-output`
+  # does not change that.  See tools/unused.py, which accepts both.
+  #
+  # tools/explicitcmp.py and tools/unused.py read what this writes;
+  # tools/resign-drive.sh reads the count off stdout and ratchets on it, so the
+  # count is the first line.
   log=warn.log
   set +e
   $CXX $arch $std $opt $incs $opts $permissive $fidelity -fdiagnostics-plain-output \
-      -Wsign-compare -Wunused-variable -fsyntax-only "$@" "$SRC" > "$log" 2>&1
+      -Wsign-compare -Wunused-variable -Wshadow -fsyntax-only "$@" "$SRC" > "$log" 2>&1
   set -e
   grep -c ': warning: ' "$log" || true
   stamp "$log"
