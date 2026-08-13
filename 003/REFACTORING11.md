@@ -164,6 +164,50 @@ Two more matched it and are not defects: `(uint8_t)(uintptr_t)hist & 0xF` takes
 the pointer's low four bits, which every target preserves. They are written
 `(uintptr_t)hist & 0xF` — the mask says everything the cast did.
 
+### 2.3b A pointer parked in a name
+
+The hop does not have to be a chain. Put the address in a *variable* and the
+cast and the narrowing land on different lines, with a name between them — so
+the rule above, which reads one line at a time, sees nothing:
+
+```
+pair_ctx = (uintptr_t)h0;                 // __alt_p2_model
+...
+__update_binary_pair(model_strip((uint32_t)pair_ctx - 1), (a4 - 1) >> 1);
+
+step_v = (uintptr_t)p2_rec;               // step_v is a uint32_t
+...
+return step_v;
+```
+
+Two of them, and both are the same artifact: one machine register held a small
+integer at one point in `__alt_p2_model` and an address at another, and
+Hex-Rays merged the two roles into one variable. Which is also why both are
+dead. `pair_ctx`'s store cannot reach any read of it — the block it sits in has
+no `goto`, `break` or `continue` out of it and its only exit is the `return`
+below, so the next read is on the path where that branch was not taken.
+`step_v`'s store reaches only that same `return`, and no caller of
+`__alt_p2_model` uses its result.
+
+Dead is not absent. `(uint32_t)pair_ctx` is the identity on i386 and is not on
+x86-64, and under `-DBMF_HIGH_ARENA` both are half an address that nothing
+happens to read. The address role keeps the name it already had — `h0` and
+`p2_rec` are right there — which is what `node` was given in round five.
+
+`tools/ptrwidth.py --parked` is the rule: a name assigned `(uintptr_t)…` that
+is either declared narrower than a pointer or read through a narrowing cast.
+It first reported four; the other two are `(uintptr_t)hist & 0xF`, where the
+mask has already discarded every bit the narrowing would, so the constant's
+width decides and not the target's. That exemption is the rule's, not a reader's
+— `& ~15` keeps the top half and is still reported.
+
+Four locals were mistyped `uintptr_t` beside them and are now what their
+siblings already were: `result` (plane zero's context word, `int32_t` like
+`ctx0`…`ctx6`), `code` and `code1` (both from an `int32_t` decode, `int32_t`
+like every other `codeN`), and `off3` (a plane number, `int32_t` like `off0`,
+`off1`, `off2`). None was a pointer; each was a value whose width changed with
+the target for no reason.
+
 ### 2.4 An index negated in an unsigned type
 
 `&p[-n]` with `n` a `uint32_t` is `p + 0xFFFFFFFF...`. On i386 the index
@@ -367,7 +411,7 @@ because the arena kept every allocation low. `BMF_PAGE` is a `uintptr_t` now.
 
 | tool | asks | target |
 |---|---|---|
-| `tools/ptrwidth.py` | which pointers still go through a 32-bit integer, and which of the four kinds each is | 0 |
+| `tools/ptrwidth.py` | which pointers still go through a 32-bit integer, and which of the six kinds each is | 0 |
 | `tools/rawoffset.py` | which numbers in the code are a member offset the file itself states | 0 |
 | `tools/negindex.py` | which negative indices are negated in an unsigned type | 0 |
 | `tools/x64.sh` | whether the other pointer width gives the same answers | 22 of 22 |
@@ -384,35 +428,52 @@ zero, and `tools/proven.sh` says all three answer differently against older
 revisions of the file — the check that a rule reporting zero is reporting about
 the file rather than about itself. Each was replayed against the file from *before* its fix and reports what
 it is supposed to find — the standing rule being that a rule reporting zero on
-the current file has proved nothing. The three shell instruments have the same
-property and it is stated where each of them lives: `x64.sh` moves from 22 of
-22 to 18 of 22 on one reintroduced truncation, `x64diff.sh` names the mutant
-and the byte counts, and `--high` is the difference between those two runs.
+the current file has proved nothing. `--parked`, added last, reports 2, 2, 1, 0
+across the four revisions it was replayed at and 0 here. The three shell
+instruments have the same property and it is stated where each of them lives:
+`x64.sh` moves from 22 of 22 to 18 of 22 on one reintroduced truncation,
+`x64diff.sh` names the mutant and the byte counts, and `--high` is the
+difference between those two runs.
+
+Two of `ptrwidth.py`'s own flags could not be replayed at all until this round:
+`--laundered` and `--parked` read the file and nothing else, but they sat
+*after* the check that `strict64.log` describes the file being read, so against
+any old revision they printed that note instead of an answer. A rule that
+cannot be asked about an old file is a rule that cannot be proved, which is the
+same failure `proven.sh` exists to catch — and `proven.sh` could not catch this
+one, because the tool's *last line* still moved for other reasons.
 
 ---
 
 ## 5. What this round did not do, and what is left
 
-* **`warn64.txt` is a ceiling and not a target.** 952 conversions against 933
+* **`warn64.txt` is a ceiling and not a target.** 945 conversions against 927
   on i386, and they are not the same population: a `ptrdiff_t` narrowed to an
   `int32_t` count is a conversion on one target and an identity on the other.
-  The difference is not the whole nineteen lines it looks like — 47 of the 64-bit
-  warnings come from a 64-bit-wide source (`long`, `size_t`, `ptrdiff_t`)
-  against 23 on i386 — and the eight distinct sites behind it were read:
+  47 of the 64-bit warnings come from a 64-bit-wide source against 23 on i386,
+  and the two sets overlap almost entirely — the 23 are `int64_t` and they are
+  the *same* 23 on both targets, spelled `long long int` there and `long int`
+  here. What exists only on x86-64 is the other 24, at 23 distinct
+  expressions, and they are three shapes and no more:
 
   ```
-  slot = cur - base;                      two symbol-list walks
-  coded_bytes = out_at - buf;             twice, the coder's output length
-  n_quads = (data_end - 17 - pp) / 4;     twice, in choose_plane_coding
-  got = fread(row6, 1u, stride, fp);      a row read
-  SymListBlock::bytes                     offsetof + sizeof * n
+  12  bits_* = 8 * (out_cursor - coded_buf);   one per cost probe
+   5  coded_bytes = out_at - buf, slot = cur - base, idx, n_quads, uu
+   3  fread twice, fwrite once                 a size_t return
+   1  offsetof(SymListBlock, list) + sizeof(SymList) * n
   ```
 
   Every one is a length or a count bounded by `data_size`, which is a
   `uint32_t` the header carries, and every one has the conversion at the
   assignment where a reader can see it. Lowering the ceiling means reading the
-  other 905, which is round five's job done again on a second target, and a
+  other 898, which is round five's job done again on a second target, and a
   round of its own.
+
+  The numbers in this bullet were 952/933 and "47 … the eight distinct sites",
+  and only one of those survived a re-measurement: the ceilings had moved,
+  and "eight sites" was never right — it counted the lines quoted rather than
+  the sites found. The 47 came back to 47 by coincidence, from 52, when §2.3b
+  removed five.
 * **`-march`.** Both targets build at `k8`; whether the p2 filter's float
   arithmetic still agrees at a wider baseline is not asked here.
 * **Anything that is not 4 or 8 bytes of pointer, or is big-endian.** The

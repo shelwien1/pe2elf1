@@ -222,6 +222,23 @@ def apply(lines, rows):
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else 'subs1.hpp'
     lines = open(path).read().split('\n')
+    # These two read the file and nothing else, so they answer for any file --
+    # including an old revision, which is the only way to show that a rule
+    # reporting zero here reports about the file.  They used to sit after the
+    # log check and were unreachable the moment the log did not match, so the
+    # replay that was supposed to prove them printed the note instead.
+    if '--laundered' in sys.argv:
+        launder = laundered(lines)
+        for line, text in launder:
+            print('%6d %s' % (line, text))
+        print('%d laundered' % len(launder))
+        return
+    if '--parked' in sys.argv:
+        park = parked(lines)
+        for line, name, why, text in park:
+            print('%6d %-10s %-28s %s' % (line, name, why, text))
+        print('%d parked' % len(park))
+        return
     rows, note = sites(path)
     if note:
         n = len(laundered(lines)) + len(parked(lines))
@@ -241,16 +258,6 @@ def main():
                 print('%6d:%-3d %-16s %s' % (line, col, ty, detail))
             print('%d %s' % (len(kinds[k]), k))
             return
-    if '--laundered' in sys.argv:
-        for line, text in launder:
-            print('%6d %s' % (line, text))
-        print('%d laundered' % len(launder))
-        return
-    if '--parked' in sys.argv:
-        for line, name, why, text in park:
-            print('%6d %-10s %-28s %s' % (line, name, why, text))
-        print('%d parked' % len(park))
-        return
     if '--apply' in sys.argv:
         n = apply(lines, rows)
         open(path, 'w').write('\n'.join(lines))

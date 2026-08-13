@@ -25,7 +25,7 @@ nothing was checking and nothing had been true of since round nine.
 
 ```
                                            round 8     round 9         now
-subs1.hpp lines                              17787       17616       17632
+subs1.hpp lines                              17787       17616       17651
 bmf.cpp lines                                    —           —         372
 raw-offset sites                                22          12           0
   off `_this`                                    —           1           0
@@ -62,7 +62,7 @@ goto / LABEL_n:                             112/79       81/55       49/33
   restart a loop / exit N blocks                 —           —       15/32
   sideways to a join / to neither                —           —         2/0
   jump into a block                              —           —           0
-conversion warnings                           1455        1331         933
+conversion warnings                           1455        1331         927
 ```
 
 `python3 tools/checktable.py` compares that table against `shape.py --rows`

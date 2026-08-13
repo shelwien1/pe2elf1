@@ -3646,7 +3646,7 @@ int32_t __update_binary_pair(uint16_t *_this, int32_t symbol)
 inline int32_t AltP1Block::update_model()
 {
   ;
-  uintptr_t result;   // an index into the counter table, and the return value
+  int32_t result;     // plane zero's context word, and the return value
   CounterNode *node;  // was `result` too: the address role, under its own name
   CounterNode *node_alt, *node_up, *node_dn;
   int32_t alti8;
@@ -6308,7 +6308,7 @@ int32_t __alt_model_p1_decode(uint16_t *hdr, uint8_t *out) {   P1Ctx *b4,
   uint32_t x;
   int32_t val1x;
   AltP1Block *blk1;
-  uintptr_t code1;
+  int32_t code1;
   AltP1Block *blk_k, *raw;
   uint32_t at0;
   int32_t code0;
@@ -12088,9 +12088,8 @@ int32_t __alt_model_p1_encode(uint16_t *hdr, uint8_t *src)
   uint32_t x, y;
   AltP1Block *blk0;
   void **q;
-  int32_t out1, resid0, off1, off0, resid2, cur0, off2, cur1, code1;
+  int32_t out1, resid0, off1, off0, resid2, cur0, off2, cur1, code1, off3;
   ;
-  uintptr_t off3;   // were int32_t: addresses, masked and tagged
   AltP1Block *blk_k, *raw;
   uint8_t fl1, fl2, fl3, pred1, pred2, pred3;
   AltP1Block *made;
@@ -12437,7 +12436,11 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
   uint32_t rec_idx;
   int32_t hi_nibble;
   P2Freq *p2_rec;
-  uintptr_t pair_ctx;
+  // `blk->ctx_pair[a4 & 1]`, which is what every read of it is: a model index
+  // handed to `model_strip`.  It was `uintptr_t` because one store below put
+  // an address in it -- the register this variable stands for held `h0` at
+  // that point -- and that store is gone, so the type is the value's again.
+  uint32_t pair_ctx;
   uint32_t step_s, bank_off2, ctxw_s;
   int32_t sample16;
   uint32_t bank;
@@ -13248,7 +13251,7 @@ uint32_t __alt_p2_model(AltP2Block *blk, int32_t sample_in, uint8_t a4, int32_t 
       if ( a4 )
       {
         mir_top[3 - is_dec] += step10;
-        __update_binary_pair(model_strip((uint32_t)pair_ctx + 1), (a4 - 1) >> 1);
+        __update_binary_pair(model_strip(pair_ctx + 1), (a4 - 1) >> 1);
       }
       else
       {
@@ -13305,12 +13308,12 @@ LABEL_48:
           hi_nibble = (uint8_t)pair_ctx & 0xF0;
           if ( hi_nibble >= 0xF0
             || (step_s = step_v,
-                __update_binary_pair(model_strip((uint32_t)pair_ctx + 16), n2_half),
+                __update_binary_pair(model_strip(pair_ctx + 16), n2_half),
                 step_v = step_s,
                 hi_nibble > 0) )
           {
             step_s = step_v;
-            __update_binary_pair(model_strip((uint32_t)pair_ctx - 16), n2_half);
+            __update_binary_pair(model_strip(pair_ctx - 16), n2_half);
             step_v = step_s;
           }
         }
@@ -13333,8 +13336,17 @@ LABEL_48:
           is_dec = sel_alt;
           if ( sel0 == 1 )
           {
+            // `pair_ctx = (uintptr_t)h0;` stood here: one machine register
+            // held the model index earlier in this function and `h0` from
+            // here on, and Hex-Rays merged the two into one variable.  The
+            // store is unreachable from every read -- this block's only exit
+            // is the `return step_v` below it, with no `goto`, `break` or
+            // `continue` out of it, so the next read of `pair_ctx` is on the
+            // path where this branch was not taken.  It was also the last
+            // pointer in the file to reach a 32-bit integer: `(uint32_t)
+            // pair_ctx` truncates it, which is the identity on i386 and is
+            // not on x86-64.  The address role keeps the name it already has.
             h0 = &blk->freq[blk->ctx_w[0].w[0] + step_v - blk->ctx_w[0].w[1]];
-            pair_ctx = (uintptr_t)h0;
             if ( h0->f[2] + (blk->freq[blk->ctx_w[0].w[0] + step_v - blk->ctx_w[0].w[1]].f[1]) + (blk->freq[blk->ctx_w[0].w[0] + step_v - blk->ctx_w[0].w[1]].f[0]) > 29696 )
             {
               step_s = step_v;
@@ -13773,7 +13785,14 @@ LABEL_48:
                  + p2_rec[-1].f[1]
                  + p2_rec[-1].f[0] > 29696 )
                 p2_rec[-1].rescale_three_way();
-              step_v = (uintptr_t)p2_rec;   // the slot's last value, and what this path returns
+              // `step_v = (uintptr_t)p2_rec;` stood here, the same register
+              // merge as `pair_ctx` above and dead for the same reason: the
+              // only read of `step_v` after this point is the `return step_v`
+              // that closes the block -- the reads at `g4 = &blk->freq[step_v
+              // + ...]` are in the `else` arm of the `if` this is inside --
+              // and no caller of `__alt_p2_model` uses its result.  It was a
+              // pointer stored in a `uint32_t`, which on x86-64 keeps the low
+              // half of an address and on i386 keeps all of it.
               prec_m1->f[is_dec] += (6
                                                                * (uint32_t)p2_rec[-1].step) >> 4;
             }
@@ -13817,7 +13836,7 @@ LABEL_48:
     if ( a4 )
     {
       mir_top[3 - is_dec] += step13;
-      __update_binary_pair(model_strip((uint32_t)pair_ctx - 1), (a4 - 1) >> 1);
+      __update_binary_pair(model_strip(pair_ctx - 1), (a4 - 1) >> 1);
     }
     else
     {
@@ -13840,7 +13859,7 @@ void __alt_p2_d8_decode_body(AltP2Block *blk, int8_t unread_flag, uint8_t *out, 
   uint32_t y;
   uint8_t *row;
   ;
-  uintptr_t code;
+  int32_t code;
   float (**cur)[4], (**r1)[4];   // the row cursors, one weight block a step
   bool more;
   int16_t val;
