@@ -197,9 +197,9 @@ struct AltP1Block {
             }
             __alt_p1_encode_symbol(&counters[ctx[0]].total, 16*ctx[0], ctx[1], code);
             val = (uint8_t)*q;
-            int64_t err = val-pred;
+            int32_t err = val-pred;
             cursor[0]->sym = val;
-            cursor[0]->mag = (BYTE4(err)^err)-BYTE4(err);
+            cursor[0]->mag = abs32(err);
             ctx[3+ctx[2]] = ctx[3+ctx[2]]+cursor[0]->mag-cursor[0][-4].mag-(cursor[4][-2].mag-cursor[4][6].mag+cursor[2][-2].mag-cursor[2][6].mag);
             ctx[2] = ctx[2]==0;
             if( counters[ctx[0]].total<0x4000u )

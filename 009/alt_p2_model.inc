@@ -23,12 +23,12 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   uint32_t off0, off1, off2, off3, off4, ctxw;
   float (*wrow_cur)[4];
   float (*wrow_b)[4];
-  bool go, eq_hi, lt_hi, ovf;
+  bool go;
   float ms1, bias2, bias1, d_bias, ms_a, ms_b, ms_b10, conf;
   int32_t ctx_lo, bctx, res, w0, w0b, res2, w1, e1, wnode0m1a, enode0m1a, x0020, x0010, neg, w_top, e_top, bump, res_s, w_top3, w_topm1, wd4000a, ed4000a, wr4000b, er4000b, wd4000m1b, ed4000m1b, wm4000c, em4000c, wd2000c, ed2000c, wr2000c, er2000c, wd2000m1b, ed2000m1b, wm2000c, em2000c, wd1000c, ed1000c, wr1000c, er1000c, wd1000m1b, ed1000m1b, wm1000c, em1000c, wd0800c, ed0800c, wr0800c, er0800c, wd0800m1b, ed0800m1b, wm0800c, em0800c, wd0400c, ed0400c, wr0400c, er0400c, wd0400m1b, ed0400m1b, wm0400x, wd0200c, ed0200c, wr0200c, er0200c, wd0200m1b, ed0200m1b, neg_b, wm0200c, em0200c, wd0100c, ed0100c, wr0100c, er0100c, wd0100m1b, ed0100m1b, wm0100c, em0100c, wd0080c, ed0080c, wr0080c, er0080c, wd0080m1b, ed0080m1b, wm0080c, em0080c, wd0040c, ed0040c, wr0040c, er0040c, wd0040m1b, ed0040m1b, wm0040c, em0040c, wd0020c, res_t, ed0020c, wr0020c, er0020c, wd0020m1b, ed0020m1b, wm0020c, em0020c, wd0010c, ed0010c, wr0010c, er0010c, wd0010m1b, ed0010m1b, wm0010b, em0010b, wd4000m1a,
           ed4000m1a, neg_c, wm4000b, em4000b, wd2000b, ed2000b, wr2000b, er2000b, wd2000m1a, ed2000m1a, wm2000b, em2000b, wd1000b, ed1000b, wr1000b, er1000b, wd1000m1a, ed1000m1a, wm1000b, em1000b, wd0800b, ed0800b, wr0800b, er0800b, wd0800m1a, ed0800m1a, wm0800b, em0800b, wd0400b, ed0400b, wr0400b, er0400b, wd0400m1a, ed0400m1a, wm0400y, nb_slot, wd0200b, ed0200b, wr0200b, er0200b, wd0200m1a, ed0200m1a, wm0200b, em0200b, wd0100b, ed0100b, wr0100b, er0100b, wd0100m1a, ed0100m1a, wm0100b, em0100b, wd0080b, ed0080b, wr0080b, er0080b, wd0080m1a, ed0080m1a, wm0080b, em0080b, wd0040b, ed0040b, wr0040b, er0040b, wd0040m1a, ed0040m1a, neg_d, wm0040b, em0040b, wd0020b, ed0020b, wr0020b, er0020b, wd0020m1a, ed0020m1a, wm0020b, em0020b, wd0010b, ed0010b, wr0010b, er0010b, wd0010m1a, ed0010m1a, wd4000b, ed4000b, wr4000a, er4000a, wd4000p1a, pd4000p1a, wm4000a, em4000a, wd2000a, ed2000a, wr2000a, er2000a, wm2000a, em2000a, wd1000a, ed1000a, wr1000a, er1000a, wm1000a, em1000a, wd0800a, ed0800a,
           wr0800a, er0800a, wm0800a, em0800a, wd0400a, ed0400a, wr0400a, er0400a, wm0400z, wd0200a, ed0200a, wr0200a, er0200a, wm0200a, em0200a, wd0100a, ed0100a, wr0100a, er0100a, wm0100a, em0100a, wd0080a, ed0080a, wr0080a, er0080a, wm0080a, em0080a, wd0040a, ed0040a, wr0040a, er0040a, wm0040a, em0040a, wd0020a, ed0020a, wr0020a, er0020a, wm0020a, pm0020a, wd0010a, ed0010a, wr0010a, er0010a, wm0010a, em0010a, ctx_l, ctx15, fold_sel, sel_alt, sel0, sel1, sel2, sel3, sel4;
-  int64_t dl, du, dul, dur, resid;
+  int32_t dl, du, dul, dur, resid;
   P2Freq* frec_step, * frec4c;
   P2Freq* frec2, * frec3, * frec4b, * frec5, * frec6, * frec7, * prec0, * g0, * g1, * g2, * g3, * g4, * h4, * nxt4, * prec_m1, * h3, * nxt3, * h2, * nxt2, * h1, * nxt1, * h0, * nxt0;
   uint32_t bank_off, ri0100, ri0010, w_new, step_v, step10, step13;
@@ -42,16 +42,16 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   cursor0 = cursor[0];
   sample = (float)sample16;
   dl = sample16-cursor0[-1].val;
-  cursor0->dleft = (WORD2(dl)^dl)-WORD2(dl);
+  cursor0->dleft = abs32(dl);
   du = sample16-cursor[1]->val;
-  cursor[0]->dup = (WORD2(du)^du)-WORD2(du);
+  cursor[0]->dup = abs32(du);
   dul = sample16-cursor[1][-1].val;
-  cursor[0]->dupleft = (WORD2(dul)^dul)-WORD2(dul);
+  cursor[0]->dupleft = abs32(dul);
   dur = sample16-cursor[1][1].val;
-  cursor[0]->dupright = (WORD2(dur)^dur)-WORD2(dur);
+  cursor[0]->dupright = abs32(dur);
   resid = (int16_t)(sample16-pred_prev);
   cursor[0]->err = resid;
-  cursor[0]->aerr = (WORD2(resid)^resid)-WORD2(resid);
+  cursor[0]->aerr = abs32(resid);
   wrow_cur = nb_cur;
   ms1 = wrow_cur[14][1]+0.000099999997f;
   wrow_b = cur[-1];
@@ -217,18 +217,22 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
         w_top = (int16_t)mir_top2[1];
         __builtin_prefetch(m0040, 0, 1);
         e_top = neg-p2_pred(w_top, (uint8_t)mir_top[0]);
-        ovf = __OFSUB__(e_top, deadzone_hi);
-        eq_hi = e_top==deadzone_hi;
-        lt_hi = e_top-deadzone_hi<0;
         __builtin_prefetch(r0040, 0, 1);
-        bump = 32*(!(lt_hi^ovf|eq_hi)-(e_top<deadzone_lo));
+        // `e_top > deadzone_hi`, which is what the five siblings of this line
+        // in this file already say.  It arrived as the x86 flags the compare
+        // sets -- `!(lt ^ of | zf)` over `__OFSUB__` -- because signed
+        // less-than *is* `SF != OF`, so `(e_top-deadzone_hi<0) ^ overflow` is
+        // the less-than, and not-less-and-not-equal is greater.
+        bump = 32*((e_top>deadzone_hi)-(e_top<deadzone_lo));
         __builtin_prefetch(d0020, 0, 1);
         __builtin_prefetch(m0020, 0, 1);
         res_s = res_c;
         w_new = bump+e_top+2;
-        LOWORD(w_new) = w_top+(w_new>>2);
         go = lowbits<3;
-        mir_top[1] = w_new;
+        // The partial store this was written as -- `LOWORD(w_new) = w_top +
+        // (w_new>>2)` -- kept a high half that the next line throws away:
+        // `mir_top` is `uint16_t *`.  Sixteen bits in and sixteen bits out.
+        mir_top[1] = w_top+(w_new>>2);
         __builtin_prefetch(((P2Count*)(r0020)), 0, 1);
         __builtin_prefetch(d0010, 0, 1);
         __builtin_prefetch(m0010, 0, 1);

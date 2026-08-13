@@ -146,9 +146,9 @@ void**__alt_model_p1_d8_decode(int8_t unread_flag, uint8_t* out, int32_t i, int3
           code = __alt_p1_decode_symbol((uint16_t*)&blk->counters[blk->ctx[0]], 0, blk->ctx[1]);
           val = (uint8_t)((uint8_t)blk->pred+blk->unfold[(uint8_t)code]);
           *out_at = val;
-          int64_t err = val-blk->pred;
+          int32_t err = val-blk->pred;
           blk->cursor[0]->sym = val;
-          blk->cursor[0]->mag = (BYTE4(err)^err)-BYTE4(err);
+          blk->cursor[0]->mag = abs32(err);
           blk->ctx[3+blk->ctx[2]] = blk->ctx[3+blk->ctx[2]]+blk->cursor[0]->mag-blk->cursor[0][-4].mag-(blk->cursor[4][-2].mag-blk->cursor[4][6].mag+blk->cursor[2][-2].mag-blk->cursor[2][6].mag);
           blk->ctx[2] = blk->ctx[2]==0;
           if( blk->counters[blk->ctx[0]].total<0x4000u )

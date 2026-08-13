@@ -117,13 +117,18 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out, int8_t unread_flag,
       cursor[0]->val = val;
       cursor[0]->dval = val;
       ++out;
-      int64_t err = (int16_t)(rec->val-rec[-1].val);
+      int32_t err = (int16_t)(rec->val-rec[-1].val);
       rec->err = err;
-      LOWORD(err) = (WORD2(err)^err)-WORD2(err);
-      cursor[0]->aerr = err;
-      cursor[0]->dupright = err;
-      cursor[0]->dupleft = err;
-      cursor[0]->dup = err;
+      // The signed difference goes to `err`, its magnitude to the four
+      // difference fields.  It arrived as a partial store -- the magnitude
+      // written over `err`'s low word after `rec->err` had taken the signed
+      // value -- and every one of the five destinations is sixteen bits wide,
+      // so the upper half the store preserved was never read.
+      int32_t adiff = abs32(err);
+      cursor[0]->aerr = adiff;
+      cursor[0]->dupright = adiff;
+      cursor[0]->dupleft = adiff;
+      cursor[0]->dup = adiff;
       cursor[0]->dleft = (uint32_t)cursor[0]->dup>>1;
       cursor[0]->mag = 2;
       cursor[0]->sign = (cursor[0]->err<=0)+(cursor[0]->err<0);

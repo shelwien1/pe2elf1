@@ -300,7 +300,7 @@ LABEL_43: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
     }
     tile_b = (uint8_t*)__frame.tile_img;
     w_a = (__frame.tile_img)->width;
-    w_b = img_h1b*LOWORD(__frame.rows[1]);
+    w_b = img_h1b*(uint16_t)__frame.rows[1];
     (__frame.tile_img)->width = img_h1b;
     ((BmfImage*)tile_b)->height = w_a;
     ((BmfImage*)tile_b)->flags ^= 2u;
@@ -368,7 +368,7 @@ LABEL_172:
       }
       tile_d = (uint8_t*)__frame.tile_img;
       w_d = (__frame.tile_img)->width;
-      w_e = img_h2*LOWORD(__frame.rows[1]);
+      w_e = img_h2*(uint16_t)__frame.rows[1];
       (__frame.tile_img)->width = img_h2;
       ((BmfImage*)tile_d)->height = w_d;
       ((BmfImage*)tile_d)->flags ^= 2u;
@@ -407,7 +407,7 @@ LABEL_172:
         } while( y3<img_h3b );
       }
       w16 = img_c->width;
-      w_c = img_h3b*LOWORD(__frame.rows[1]);
+      w_c = img_h3b*(uint16_t)__frame.rows[1];
       img_c->width = img_h3b;
       img_c->height = w16;
       img_c->flags ^= 2u;

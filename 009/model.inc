@@ -1687,13 +1687,22 @@ struct ModelBlock {
           __frame.sym0 += (21*frec->w[0]+w5-1)/w5;
           frec->w[0] = __frame.sym0;
           q1 = (acc+w5-1)/w5;
-          LOWORD(acc) = __frame.sym1;
+          // `acc` is `21*frec->w[1]` until here, and `q1` above is the last
+          // thing to read it whole.  From here down it is sixteen bits: MSVC
+          // kept the register and wrote only its low half, and both of the
+          // reads that follow are sixteen bits wide -- `frec->w[2]`, and
+          // `acc2`, which is an `int16_t`.  So the half the partial store
+          // preserved is dead, and this is the assignment it amounts to.
+          // (Written the other way first, mask and all: 72 images produce the
+          // same streams either way, which is a weaker statement than the
+          // types are.)
+          acc = (uint16_t)__frame.sym1;
           w2s = 21*frec->w[2];
           w6 = q1+w1s;
           frec->w[1] = w6;
           q2 = (w2s+w5-1)/w5;
           w3s = 21*frec->w[3];
-          LOWORD(acc) = q2+acc;
+          acc = (uint16_t)(q2+acc);
           frec->w[2] = acc;
           bp = __frame.sym2+(w3s+w5-1)/w5;
           w4s = 21*frec->w[4];

@@ -17,10 +17,13 @@
 // back after the fact -- which is why its stores sit one plane behind, between
 // a plane's cursor advance and the next plane's context.
 //
-// Two spellings differed and are the same value.  The encoder wrote a plane's
-// magnitude as `(BYTE4(err) ^ err) - BYTE4(err)` over an `int64_t` and the
-// decoder as `abs32(val - pred)`; `P1Ctx::mag` is a `uint8_t`, and the two
-// agree in the low eight bits, which is all of them that are kept.  And the
+// Two spellings differed and are the same value, and both are `abs32` now.
+// The encoder wrote a plane's magnitude as `(BYTE4(err) ^ err) - BYTE4(err)`
+// over an `int64_t` -- the sign of `err` broadcast into byte 4, exclusive-ored
+// and subtracted, which is `|err|` in the low eight bits and nothing in the
+// rest -- and the decoder as `abs32(val - pred)`.  `P1Ctx::mag` is a
+// `uint8_t`, so eight bits is all either of them keeps.  The `int64_t` went
+// with the macro: the width existed so that a byte 4 existed to read.  And the
 // decoder held `blk->ctx[0]` in a local across the `ctx[2]` update, which
 // cannot change it -- they are different elements.
 
@@ -38,7 +41,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
   uint8_t fl1, fl2, fl3, pred1, pred2, pred3;
   AltP1Block* made;
   int32_t width, height, k, src1, src2, src3, dc2, xf1, xf2, xf3, w, n_planes, p, want0, keep0, code0, recon0, out0, drift0, err0, resid1, at1, recon1, drift1, code1x, want2, code2, recon2, out2, drift2, at2, code3, recon3, drift3, np, f;
-  int64_t err1, err2, err3;
+  int32_t err1, err2, err3;
   AltP1Block* blk1, * blk2, * blk3;
   P1Ctx* cursor2, * cursor4;
   uint8_t pred0, want1, want3;
@@ -203,7 +206,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
           }
           err1 = cur1-blk1->pred;
           blk1->cursor[0]->sym = cur1;
-          blk1->cursor[0]->mag = (BYTE4(err1)^err1)-BYTE4(err1);
+          blk1->cursor[0]->mag = abs32(err1);
           blk1->ctx[blk1->ctx[2]+3] += blk1->cursor[0]->mag-blk1->cursor[0][-4].mag-(blk1->cursor[4][-2].mag-blk1->cursor[4][6].mag)-(blk1->cursor[2][-2].mag-blk1->cursor[2][6].mag);
           blk1->ctx[2] = blk1->ctx[2]==0;
           if( blk1->counters[blk1->ctx[0]].total<0x4000u )
@@ -247,7 +250,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
           }
           err2 = want2-blk2->pred;
           blk2->cursor[0]->sym = want2;
-          blk2->cursor[0]->mag = (BYTE4(err2)^err2)-BYTE4(err2);
+          blk2->cursor[0]->mag = abs32(err2);
           blk2->ctx[blk2->ctx[2]+3] += blk2->cursor[0]->mag-blk2->cursor[0][-4].mag-(blk2->cursor[4][-2].mag-blk2->cursor[4][6].mag)-(blk2->cursor[2][-2].mag-blk2->cursor[2][6].mag);
           at2 = blk2->ctx[0];
           blk2->ctx[2] = blk2->ctx[2]==0;
@@ -297,7 +300,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
             }
             err3 = cur3-blk3->pred;
             blk3->cursor[0]->sym = cur3;
-            blk3->cursor[0]->mag = (BYTE4(err3)^err3)-BYTE4(err3);
+            blk3->cursor[0]->mag = abs32(err3);
             blk3->ctx[blk3->ctx[2]+3] += blk3->cursor[0]->mag-blk3->cursor[0][-4].mag-(blk3->cursor[4][-2].mag-blk3->cursor[4][6].mag)-(blk3->cursor[2][-2].mag-blk3->cursor[2][6].mag);
             blk3->ctx[2] = blk3->ctx[2]==0;
             if( blk3->counters[blk3->ctx[0]].total<0x4000u )
