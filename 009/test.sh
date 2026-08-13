@@ -28,10 +28,7 @@
 #   streams       compress each image, compare against its reference.
 #   round trip    expand it again, compare against the input.  A stream can
 #                 match while the decoder that has to read it does not.
-#   archive       two members in one file, then expanded.  Walking the members
-#                 and closing an archive are paths no single image reaches.
-#                 `c` creates its output, so the two are concatenated -- and
-#                 that it creates rather than appends is checked here too.
+#   output        `bmf c` writes its output rather than growing it.
 #   malformed     five broken headers derived from the references.  The answer
 #                 here is an exit code, not a stream: 1..8 is the program's own
 #                 table (see __exit_402E40), and anything else is a crash.
@@ -145,35 +142,11 @@ done
 echo "$streams/$nimg streams match their reference"
 echo "$trips/$nimg round trips are byte-identical"
 
-# ---- the archive ----------------------------------------------------------
-# Both members expand to the same output path, so what is left there is the
-# last one.
-#
-# The two members are made separately and concatenated.  They used to be made
-# by running `bmf c` twice against the same path, which appended -- and when
-# `c` was changed to create its output, that leg went on passing while testing
-# one member: it expanded a single-member file and got the single image it
-# asked for.  A check that survives the removal of what it checks is worth
-# less than no check, so the archive is now built where the test can see it,
-# and its size is asserted: a member is self-delimiting, so the concatenation
-# is exactly the file appending used to leave behind.
-arc=$tmp/arc.bmf
-rm -f "$arc" "$tmp/arc.bmp" "$tmp/arc1.bmf" "$tmp/arc2.bmf"
-ran=$((ran + 1))
-if timeout "$T" "$BIN" c testfiles/t1.bmp  "$tmp/arc1.bmf" >/dev/null 2>&1 &&
-   timeout "$T" "$BIN" c testfiles/t8g.bmp "$tmp/arc2.bmf" >/dev/null 2>&1 &&
-   cat "$tmp/arc1.bmf" "$tmp/arc2.bmf" > "$arc" &&
-   [ "$(stat -c%s "$arc")" = "$(( $(stat -c%s "$tmp/arc1.bmf") +
-                                  $(stat -c%s "$tmp/arc2.bmf") ))" ] &&
-   timeout "$T" "$BIN" d "$arc" "$tmp/arc.bmp" >/dev/null 2>&1 &&
-   cmp -s "$tmp/arc.bmp" testfiles/t8g.bmp; then
-  echo "archive: two members, the last expands to t8g.bmp"
-else
-  note archive "the last member is not the input"
-fi
-
-# And that `c` creates rather than appends: the same command twice is the same
-# file, not a two-member one.  This is the check the leg above lost.
+# ---- the output file ------------------------------------------------------
+# `bmf c` writes its output: the same command twice is the same file, not a
+# bigger one.  This is all that is left of an archive leg that compressed two
+# images into one file and expanded the last -- there are no archives now, and
+# `arc.inc` opens `wb`.
 ran=$((ran + 1))
 rm -f "$tmp/twice.bmf"
 timeout "$T" "$BIN" c testfiles/t1.bmp "$tmp/twice.bmf" >/dev/null 2>&1
@@ -181,9 +154,9 @@ once=$(stat -c%s "$tmp/twice.bmf" 2>/dev/null || echo 0)
 timeout "$T" "$BIN" c testfiles/t1.bmp "$tmp/twice.bmf" >/dev/null 2>&1
 again=$(stat -c%s "$tmp/twice.bmf" 2>/dev/null || echo 0)
 if [ "$once" != 0 ] && [ "$once" = "$again" ]; then
-  echo "create: compressing twice to one path leaves one member ($once bytes)"
+  echo "output: compressing twice to one path writes one image ($once bytes)"
 else
-  note create "compressing twice grew the output: $once then $again bytes"
+  note output "compressing twice changed the output: $once then $again bytes"
 fi
 
 # ---- malformed headers ----------------------------------------------------

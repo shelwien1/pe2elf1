@@ -1,9 +1,13 @@
-// arc.inc -- the archive: several images in one file.  `bmf c` writes one and
-// creates its output; the walk over members that are already there is what
-// reading one of several needs, and what appending used to need.
+// arc.inc -- the file at each end: one image out, one image in.
+//
+// This was an archive.  The donor put several images in one file -- its command
+// line took a list and appended each to the archive named by `-o` -- and the
+// reader walked the members until one failed to parse.  `bmf c in.bmp out`
+// writes one image and `bmf d in out.bmp` reads one, so the walk, the append
+// point it existed to find, and the member count are all gone.  What is left is
+// the handle and the two ways of opening it.
 
 struct BmfArc {
-  uint32_t images;
   FILE* fp;
   FILE*bmf_close_archive() {
     FILE* f = fp;
@@ -34,57 +38,11 @@ static uint32_t __bytes_left(FILE* fp) {
 }
 
 BmfArc*__bmf_open_archive(BmfArc* out, char* path, int32_t read_only) {
-  FILE* fp, * fp2;
-  const char* mode;
-  int32_t seek_rc, live;
-  BmfArc* arc = out;
-  // `w+b`, not the donor's `a+b`: `bmf c in out` writes `out`, it does not add
-  // to it.  Appending is what the original did -- BMF took a list of files and
-  // put each one in the archive named by `-o` -- and this program takes one
-  // input and one output, where the same command run twice quietly produced a
-  // two-member file and a second `-o` of the same name grew it again.
-  //
-  // Everything below still walks the members that are already there, because
-  // *reading* an archive of several is unchanged and the walk is shared.  A
-  // truncated file simply has none, which is the case a brand-new output has
-  // always taken.
-  mode = "w+b";
-  if( read_only )
-    mode = "rb";
-  out->images = 0;
-  fp = fopen(path, mode);
-  arc->fp = fp;
-  if( !fp )
+  // `wb` to write and `rb` to read.  The donor opened `a+b` -- read *and*
+  // append -- because it had members already there to walk past; there is one
+  // image in a file now, so writing never reads and reading never writes.
+  out->fp = fopen(path, read_only ? "rb" : "wb");
+  if( !out->fp )
     __exit_402E40(6, path);
-  arc->images = 0;
-  seek_rc = fseek(fp, 0, 0);
-  live = arc->fp!=nullptr;
-  if( seek_rc ) {
-    if( !live )
-      __exit_402E40(3, path);
-    return arc;
-  }
-  if( !live ) {
-    __exit_402E40(3, path);
-    return arc;
-  }
-  if( !feof(arc->fp) ) {
-    __expand_image(arc, 1, (void**)nullptr);
-    fp2 = arc->fp;
-    if( !fp2 ) {
-      __exit_402E40(3, path);
-      return arc;
-    }
-    if( !feof(arc->fp) ) {
-      arc->images = 0;
-      fseek(fp2, 0, 0);
-      live = arc->fp!=nullptr;
-      {
-        if( !live )
-          __exit_402E40(3, path);
-        return arc;
-      }
-    }
-  }
-  return arc;
+  return out;
 }

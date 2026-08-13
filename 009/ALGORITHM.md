@@ -17,19 +17,18 @@ decided partly by the BMP subformat and partly by trial encoding.
 
 ## 1. The container
 
-A `.bmf` is an **archive**: one or more members, each a complete image, read
-until one fails to parse. `bmf d` decodes them all, writing each to the same
-output path — so the file left behind is the last member.
+A `.bmf` holds **one image**. `bmf c in.bmp out` writes it and `bmf d in
+out.bmp` reads it back; `arc.inc` opens `"wb"` and `"rb"`.
 
-`bmf c in.bmp out` writes one member and **creates** `out`. The donor appended
-(`arc.inc` opened `"a+b"`), which is what its command line was for: BMF took a
-list of files and put each one into the archive named by `-o`. This program
-takes one input and one output, where appending meant the same command run
-twice silently produced a two-member file, so it opens `"w+b"`. Reading is
-unchanged — `compress_image.inc` still walks the members already there, and on
-a freshly created output there are none.
+The donor's was an archive — several images in one file, because its command
+line took a list of them and appended each to the archive named by `-o`, and
+the reader walked the members until one failed to parse. This program takes one
+input and one output, so the append, the walk that found the place to append
+to, and the member count are gone. What is left of the format is one member,
+unchanged: the same magic, the same header, the same coded stream, so a `.bmf`
+this writes is a one-member archive as far as the donor is concerned.
 
-Each member is:
+The member is:
 
 | bytes | what |
 | --- | --- |

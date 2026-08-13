@@ -119,25 +119,10 @@ for f in $(ls testfiles/*.bmp | grep -v '/out_' | sort); do
   same=$((same + 1))
 done 2>/dev/null
 
-# The archive, because walking the members and `bmf_close_archive`'s rewrite of
-# a header are paths no single image reaches.  Two members, concatenated: `bmf
-# c` creates its output, and this leg used to build the archive by running it
-# twice against one path -- which after that change was one member and a leg
-# that passed without testing anything.  `test.sh`'s archive leg says the same.
-arc=$tmp/arc.bmf
-"$tmp/bmf32" c testfiles/t1.bmp "$tmp/arc1.bmf" >/dev/null 2>&1
-"$tmp/bmf32" c testfiles/t8g.bmp "$tmp/arc2.bmf" >/dev/null 2>&1
-cat "$tmp/arc1.bmf" "$tmp/arc2.bmf" > "$arc"
-# Both members expand to the same output name, so what is left there is the
-# last one -- which is what `test.sh` compares too.
-"$tmp/bmf32" d "$arc" "$tmp/arc.bmp" >/dev/null 2>&1
-ran=$((ran + 1))
-if cmp -s "$tmp/arc.bmp" testfiles/t8g.bmp; then
-  same=$((same + 1))
-else
-  echo "archive   the last member is not the input"
-  bad=$((bad + 1))
-fi
+# The archive leg that was here compressed two images into one file and expanded
+# the last.  There are no archives: a `.bmf` holds one image, `bmf c` writes its
+# output and `bmf d` reads one member.  `test.sh` keeps the one property that
+# outlived it -- compressing twice to a path writes one image, not two.
 
 # And the malformed suite, which is where an exit code and not a stream is the
 # answer.  `test.sh` builds these from whatever the corpus currently is; the

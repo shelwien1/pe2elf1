@@ -128,38 +128,31 @@ void __bmf_compress(const char* InName, const char* OutName) {
 }
 
 void __bmf_decompress(const char* InName, const char* OutName) {
-  int32_t Number, Depth;
   BmfArc* arc;
   if( void* __nb = bmf_new(sizeof(BmfArc)) )
     arc = __bmf_open_archive((BmfArc*)__nb, (char*)InName, 1);
   else
     arc = nullptr;
-  printf("File %16s,\r", InName);
-  Number = 0;
-  while( 1 ) {
-    uint32_t* p_i = (uint32_t*)__expand_image(arc, 0, &coded_block);
-    BmfImage*const p_i_img = (BmfImage*)p_i;
-    if( !p_i ) {
-      printf("\n");
-      if( !arc->fp )
-        __exit_402E40(3, InName);
-      __bmf_destroy_archive(arc, 1);
-      return;
-    }
-    ++Number;
-    printf("File %16s, image %dx%dx%d, size - %d, number: %d\r", InName, p_i_img->width, p_i_img->height, p_i_img->depth&0x3F, p_i_img->data_size, Number);
-    Depth = p_i_img->depth&0x3F;
-    if( Depth==2||Depth==15||Depth==16 ) {
-      printf("\n%s: %d bits per pixel is not a BMP depth\n", OutName, Depth);
-      exit(5);
-    }
-    if( !__write_bmp((BmfImage*)p_i, (char*)OutName, 1) )
-      __exit_402E40(5, OutName);
-    free(coded_block);
-    coded_block = nullptr;
-    free(p_i);
+  uint32_t* p_i = (uint32_t*)__expand_image(arc, &coded_block);
+  // One image in a file: nothing to parse is not the end of a list of members,
+  // it is a file that is not one of ours.
+  if( !p_i )
+    __exit_402E40(3, InName);
+  BmfImage*const p_i_img = (BmfImage*)p_i;
+  printf("File %16s, image %dx%dx%d, size - %d\n", InName, p_i_img->width, p_i_img->height, p_i_img->depth&0x3F, p_i_img->data_size);
+  int32_t Depth = p_i_img->depth&0x3F;
+  if( Depth==2||Depth==15||Depth==16 ) {
+    printf("%s: %d bits per pixel is not a BMP depth\n", OutName, Depth);
+    exit(5);
   }
+  if( !__write_bmp((BmfImage*)p_i, (char*)OutName, 1) )
+    __exit_402E40(5, OutName);
+  free(coded_block);
+  coded_block = nullptr;
+  free(p_i);
+  __bmf_destroy_archive(arc, 1);
 }
+
 
 int32_t __main(int32_t argc, const char** argv) {
   bmf_set_denormal_mode();

@@ -1,6 +1,6 @@
-// expand_image.inc -- one member out of an archive.
+// expand_image.inc -- the image out of a `.bmf`.
 
-uint8_t*__expand_image(BmfArc* arc_in, int32_t want_pal, void** p_coded_buf) {
+uint8_t*__expand_image(BmfArc* arc_in, void** p_coded_buf) {
   struct alignas(16) ExpandImageFrame {
     uint8_t* Block;
     union {
@@ -73,7 +73,6 @@ uint8_t*__expand_image(BmfArc* arc_in, int32_t want_pal, void** p_coded_buf) {
     arc->fp = 0;
     return nullptr;
   }
-  ++arc->images;
   if( __frame.flags_b<0 ) {
     fread(__frame.hdr, 8u, 1u, arc->fp);
     if( p_coded_buf ) {
@@ -103,10 +102,6 @@ uint8_t*__expand_image(BmfArc* arc_in, int32_t want_pal, void** p_coded_buf) {
   if( !(__frame.depth_b&0x80) )
     pal_bytes = __frame.depth_b&0x80;
   __frame.pal_len = pal_bytes;
-  if( want_pal ) {
-    fseek(arc->fp, __frame.pal_len+__frame.data_len, 1);
-    return nullptr;
-  }
   if( !__frame.hdr_words[0]||!__frame.hdr_words[1] ) {
     fclose(arc->fp);
     arc->fp = 0;

@@ -9,7 +9,6 @@ int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* extra_blk) {
   int32_t coded_bytes;
   uint8_t* pix_copy;
   uint32_t coded_len;
-  FILE* i;
   bool fits;
   uint32_t acc, data_bytes, img_stride, row_bytes, shifted;
   uint8_t has_coded;
@@ -24,18 +23,9 @@ int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* extra_blk) {
   BmfArc* arc = arc_in;
   if( !arc_in->fp )
     return 0;
-  if( !feof(arc_in->fp) ) {
-    __expand_image(arc, 1, (void**)nullptr);
-    for( i = arc->fp; i; i = arc->fp ) {
-      if( feof(arc->fp) )
-        break;
-      if( feof(i) )
-        break;
-      __expand_image(arc, 1, (void**)nullptr);
-    }
-    if( !arc->fp )
-      return 0;
-  }
+  // The walk that was here read every member already in the output and left
+  // the file positioned after the last, which is where an appended member had
+  // to go.  `bmf c` writes the file, so there is nothing in front of this one.
   has_coded = extra_blk!=nullptr;
   img = (BmfImage*)(p_i);
   row_bytes = p_i->stride;
@@ -57,7 +47,6 @@ int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* extra_blk) {
              4u, 1u, arc->fp)!=1 )
     return 0;
   uint8_t bpp = p_i->depth;
-  ++*(uint32_t*)arc;
   pal_bytes = bpp&0x80;
   if( bpp&0x80 )
     pal_bytes = 3<<(bpp&31);
