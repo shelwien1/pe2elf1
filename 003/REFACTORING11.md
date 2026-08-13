@@ -184,8 +184,10 @@ Two of them, and both are the same artifact: one machine register held a small
 integer at one point in `__alt_p2_model` and an address at another, and
 Hex-Rays merged the two roles into one variable. Which is also why both are
 dead. `pair_ctx`'s store cannot reach any read of it — the block it sits in has
-no `goto`, `break` or `continue` out of it and its only exit is the `return`
-below, so the next read is on the path where that branch was not taken.
+no `goto` and no `break` out of it and its only exit is the `return` below, so
+the next read is on the path where that branch was not taken. There is no third
+escape to rule out: the file has 83 `goto`s and `break`s and not one continue
+statement anywhere, which `unstale.py` pointed out by flagging the word.
 `step_v`'s store reaches only that same `return`, and no caller of
 `__alt_p2_model` uses its result.
 
@@ -291,6 +293,14 @@ BMF_HIGH=1 tools/x64diff.sh 400  400 mutants through *both* builds, the 64-bit
 Those first three are re-takes. They were run once before section 3c and
 reported clean about an allocator AddressSanitizer cannot instrument; these are
 against real `malloc`.
+
+And every line of the block is a re-take again, after §2.3b changed six
+declarations and removed two stores in the decode path all six of these
+exercise. The numbers came back identical — 40 runs, 400 mutants at
+288/112/0, 7680 header values, 22 of 22 twice, 400 agreeing across both widths
+— which is the answer wanted and not the answer assumed: a block of instrument
+results copied forward past an edit to the file it measures is a claim, and the
+rule here is that a claim is a measurement that has to be taken again.
 
 And both targets produce byte-identical streams at `-O0`, `-O1` and `-O3` --
 six builds, ninety streams. That is the check that nothing left in the coding
