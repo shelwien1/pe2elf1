@@ -29,35 +29,68 @@ struct P2Freq {
     return cut;
   }
 
-  void encode_symbol(const uint32_t* ctx_pair, int32_t sym) {
+  // One symbol of the deep model's three-way counter, and then the tree.  The
+  // encoder is handed a symbol and picks the slot it names; the decoder is
+  // handed a point in the range and finds the slot containing it.  They agree
+  // on `idx = slot - base`, which is what makes the tail one piece of code:
+  // slot 0 is the symbol, and slots 1 and 2 escape into the level tree with
+  // `idx & 1` choosing the context and `idx` the parity of what comes back.
+  //
+  // The encoder said `ctx_pair[sym & 1]` and `(sym - 1) >> 1` where this says
+  // `ctx_pair[idx & 1]`; they are the same, because `idx` is 1 for odd symbols
+  // and 2 for even ones above zero.
+  template<int f_DEC>
+  int32_t code_symbol(const uint32_t* ctx_pair, int32_t sym) {
     uint16_t f_before;
     uint32_t cum;
-    uint16_t st, * slot;
+    uint16_t st, * slot, * base;
     uint32_t tot, tot_1, f1_old, f2_old;
     uint16_t down;
-    cum = this->f[1]+this->f[0];
-    tot = cum+this->f[2];
-    if( sym ) {
-      if( (sym&1)!=0 ) {
-        cum = this->f[0];
-        slot = &this->f[1];
+    int32_t idx, target, c01;
+    base = &this->f[0];
+    c01 = this->f[1]+this->f[0];
+    tot = c01+this->f[2];
+    if( f_DEC ) {
+      target = rc.get_freq(tot);
+      cum = this->f[0];
+      if( (uint32_t)target>=cum ) {
+        if( target>=c01 ) {
+          cum = c01;
+          slot = &this->f[2];
+        } else {
+          slot = &this->f[1];
+        }
       } else {
-        slot = &this->f[2];
+        cum = 0;
+        slot = &this->f[0];
       }
     } else {
-      cum = 0;
-      slot = &this->f[0];
+      cum = c01;
+      if( sym ) {
+        if( (sym&1)!=0 ) {
+          cum = this->f[0];
+          slot = &this->f[1];
+        } else {
+          slot = &this->f[2];
+        }
+      } else {
+        cum = 0;
+        slot = &this->f[0];
+      }
     }
     tot_1 = cum+*slot;
-    rc.encode(cum, tot_1, tot);
+    if( f_DEC )
+      rc.decode(cum, tot_1, tot);
+    else
+      rc.encode(cum, tot_1, tot);
     f_before = *slot;
     if( *slot>0x4000u ) {
       f1_old = this->f[1];
       f2_old = this->f[2];
       this->f[0] -= this->f[0]>>1;
-      st = this->step;
       this->f[1] = f1_old-(f1_old>>1);
       this->f[2] = f2_old-(f2_old>>1);
+      st = this->step;
       if( st<=256 ) {
         if( st<=32 )
           down = ((uint32_t)(16-st)>>30)&0xFFFFFFFE;
@@ -75,64 +108,18 @@ struct P2Freq {
       st = this->step;
     }
     *slot = st+f_before;
-    if( sym>0 )
-      return __encode_symbol_tree(model_strip(ctx_pair[sym&1]), (sym-1)>>1);
+    idx = slot-base;
+    if( idx )
+      return idx+2*__code_symbol_tree<f_DEC>(model_strip(ctx_pair[idx&1]), (sym-1)>>1);
+    return 0;
+  }
+
+  void encode_symbol(const uint32_t* ctx_pair, int32_t sym) {
+    code_symbol<0>(ctx_pair, sym);
   }
 
   int32_t decode_symbol(const uint32_t* ctx_pair) {
-    uint32_t cum;
-    int32_t target, idx, c01;
-    uint16_t fq, st;
-    uint16_t* slot, * base;
-    uint32_t f1_old, f2_old, tot;
-    c01 = this->f[1]+this->f[0];
-    tot = this->f[2]+c01;
-    target = rc.get_freq(tot);
-    cum = this->f[0];
-    if( (uint32_t)target>=cum ) {
-      if( target>=c01 ) {
-        cum = c01;
-        slot = &this->f[2];
-      } else {
-        slot = &this->f[1];
-      }
-      base = &this->f[0];
-    } else {
-      slot = &this->f[0];
-      cum = 0;
-      base = &this->f[0];
-    }
-    rc.decode(cum, (cum+((uint16_t)*slot)), tot);
-    fq = (uint16_t)*slot;
-    if( fq>0x4000 ) {
-      f1_old = this->f[1];
-      f2_old = this->f[2];
-      this->f[0] -= this->f[0]>>1;
-      st = this->step;
-      this->f[1] = f1_old-(f1_old>>1);
-      this->f[2] = f2_old-(f2_old>>1);
-      if( st<=256 ) {
-        if( st<=32 )
-          fq = ((uint32_t)(16-st)>>30)&0xFFFFFFFE;
-        else
-          fq = 32;
-        st = st-fq;
-        this->step = st;
-        fq = *slot;
-      } else {
-        st = (uint32_t)st>>1;
-        this->step = st;
-        fq = *slot;
-      }
-    } else {
-      st = this->step;
-    }
-    *slot = st+fq;
-    idx = slot-base;
-    if( idx )
-      return idx+2*__decode_symbol_tree(model_strip(ctx_pair[idx&1]));
-    else
-      return 0;
+    return code_symbol<1>(ctx_pair, 0);
   }
 };
 

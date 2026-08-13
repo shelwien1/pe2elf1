@@ -1,24 +1,58 @@
 // symcode.inc -- the symbol trees: a symbol through a tree of binary counters, both
 // ways, for both models.
 
-void __encode_symbol_tree(uint16_t* freq, int32_t sym) {
+// One symbol out of a level's tree.  The two directions meet at `lvl`, the slot
+// in the level frequencies: the encoder is handed a symbol and looks its level
+// up in `model_geometry`, the decoder walks the same frequencies until it
+// passes the point the coder gave it.  From there the rescale, the escape
+// counter and the walk down the binary tree are the same code.
+//
+// The guard on the walk reads `lvl >= 2` for both, where the encoder said
+// `sym >= 2`.  They are the same test: `model_geometry` is 0 at 0, 1 at 1 and
+// 2 or more everywhere above -- __rc_begin lays it out that way -- so a symbol
+// below two has its own index as its level, which is also what the decoder
+// returns for those two.
+//
+// The rescale halves freq[2..9] and leaves the sum in *freq, and the two bodies
+// did it with the loads and stores interleaved differently and different
+// intermediates -- acc6/acc8/h9 against sum6/h6/h8, some int16_t and some
+// uint16_t.  It is the same sum: every intermediate is 16 bits wide and the
+// result is stored through a uint16_t, so the orderings agree in the low 16
+// bits, which is all of them that survive.  The encoder's spellings are kept.
+template<int f_DEC>
+int32_t __code_symbol_tree(uint16_t* freq, int32_t sym) {
   uint16_t add;
   int16_t sum4;
   uint32_t cum;
   int32_t lvl, result, go, fa, esc, path, node, span, f1, mask;
   uint16_t* f0, fq, h2, h4, * slot;
   FreqPair* pair;
-  uint32_t j, f1_old, tot, cum_hi;
+  uint32_t j, f1_old, tot, cum_hi, target;
   uint16_t h9, acc8, acc6, acc;
-  lvl = model_geometry[sym];
   f0 = freq+2;
-  cum = 0;
-  for( j = 0; j<(uint32_t)lvl; j++ )
-    cum += f0[j];
-  slot = &f0[lvl];
-  cum_hi = cum+*slot;
   tot = *freq;
-  result = rc.encode(cum, cum_hi, tot);
+  if( f_DEC ) {
+    target = rc.get_freq(tot);
+    slot = f0;
+    lvl = 0;
+    cum = *f0;
+    if( cum<=target ) {
+      do {
+        ++slot;
+        ++lvl;
+        cum += *slot;
+      } while( cum<=target );
+    }
+    rc.decode(cum-*slot, cum, tot);
+  } else {
+    lvl = model_geometry[sym];
+    cum = 0;
+    for( j = 0; j<(uint32_t)lvl; j++ )
+      cum += f0[j];
+    slot = &f0[lvl];
+    cum_hi = cum+*slot;
+    result = rc.encode(cum, cum_hi, tot);
+  }
   if( *freq>0x4000u ) {
     h2 = *(freq+2)-(*(freq+2)>>1);
     acc = *(freq+3);
@@ -60,31 +94,43 @@ void __encode_symbol_tree(uint16_t* freq, int32_t sym) {
   }
   *slot += add;
   *freq += *(freq+1);
-  if( sym>=2 ) {
-    mask = level_geom[lvl].half;
+  if( lvl<2 )
+    return lvl;
+  mask = level_geom[lvl].half;
+  if( !f_DEC )
     path = sym-level_geom[lvl].first;
-    node = 0;
-    for( span = 1;; span *= 2 ) {
-      pair = bit_tree(freq, lvl)+span+node;
-      f1 = pair->f[1];
+  node = 0;
+  for( span = 1;; span *= 2 ) {
+    pair = bit_tree(freq, lvl)+span+node;
+    f1 = pair->f[1];
+    fa = pair->f[0];
+    if( f_DEC ) {
+      go = rc.decode_bit(fa, f1);
+    } else {
       go = (mask&path)!=0;
-      fa = pair->f[0];
       result = rc.encode_bit(fa, f1, go);
-      fq = pair->f[go];
-      if( fq>0x4000u ) {
-        f1_old = pair->f[1];
-        pair->f[0] -= pair->f[0]>>1;
-        pair->f[1] = f1_old-(f1_old>>1);
-        fq = pair->f[go];
-      }
-      pair->f[go] = alt_freq_init+fq;
-      mask >>= 1;
-      node = go+2*node;
-      if( !mask )
-        return;
     }
+    fq = pair->f[go];
+    if( fq>0x4000u ) {
+      f1_old = pair->f[1];
+      pair->f[0] -= pair->f[0]>>1;
+      pair->f[1] = f1_old-(f1_old>>1);
+      fq = pair->f[go];
+    }
+    pair->f[go] = alt_freq_init+fq;
+    mask >>= 1;
+    node = go+2*node;
+    if( !mask )
+      return node+level_geom[lvl].first;
   }
-  return;
+}
+
+void __encode_symbol_tree(uint16_t* freq, int32_t sym) {
+  __code_symbol_tree<0>(freq, sym);
+}
+
+int32_t __decode_symbol_tree(uint16_t* freq) {
+  return __code_symbol_tree<1>(freq, 0);
 }
 
 // One symbol of the one-bit model's alphabet.  The two directions meet at the
@@ -185,92 +231,6 @@ int32_t __alt_p1_decode_symbol(uint16_t* freq, int32_t unread_arg, int32_t ctx) 
   return __alt_p1_code_symbol<1>(freq, ctx, 0);
 }
 
-int32_t __decode_symbol_tree(uint16_t* freq) {
-  int16_t sum4, sum6;
-  int32_t k, fa, go, node1, esc, mask, node, sym, span, f1;
-  uint16_t* cur, add, fq, h2, h4, h6, h8, * slot;
-  FreqPair* pair;
-  uint32_t target, cum, tot;
-  uint16_t acc8, acc;
-  tot = *freq;
-  sym = 0;
-  target = rc.get_freq(tot);
-  cur = freq+2;
-  cum = *(freq+2);
-  if( cum<=target ) {
-    k = 0;
-    do {
-      ++cur;
-      ++k;
-      cum += *cur;
-    } while( cum<=target );
-    sym = k;
-  }
-  slot = cur;
-  rc.decode((cum-*cur), cum, tot);
-  if( *freq>0x4000u ) {
-    h2 = *(freq+2)-(*(freq+2)>>1);
-    acc = *(freq+3);
-    *(freq+2) = h2;
-    acc = acc-(acc>>1);
-    *(freq+3) = acc;
-    acc = h2+acc;
-    h4 = *(freq+4)-(*(freq+4)>>1);
-    *(freq+4) = h4;
-    sum4 = acc+h4;
-    acc = *(freq+5)-(*(freq+5)>>1);
-    *(freq+5) = acc;
-    acc = sum4+acc;
-    h6 = *(freq+6)-(*(freq+6)>>1);
-    *(freq+6) = h6;
-    sum6 = acc+h6;
-    acc = *(freq+7)-(*(freq+7)>>1);
-    *(freq+7) = acc;
-    acc = sum6+acc;
-    h8 = *(freq+8)-(*(freq+8)>>1);
-    acc8 = *(freq+9);
-    *(freq+8) = h8;
-    acc8 = acc8-(acc8>>1);
-    *(freq+9) = acc8;
-    acc8 = acc+h8+acc8;
-    esc = *(freq+1);
-    *freq = acc8;
-    if( esc<=4*alt_freq_limit )
-      add = esc-4*(esc>alt_freq_limit);
-    else
-      add = esc-16;
-    *(freq+1) = add;
-  } else {
-    add = *(freq+1);
-  }
-  *slot += add;
-  *freq += *(freq+1);
-  if( sym<2 )
-    return sym;
-  else {
-    mask = level_geom[sym].half;
-    node = 0;
-    span = 1;
-    do {
-      pair = bit_tree(freq, sym)+span+node;
-      fa = pair->f[0];
-      f1 = pair->f[1];
-      go = rc.decode_bit(fa, f1);
-      fq = pair->f[go];
-      if( fq>0x4000u ) {
-        pair->f[0] -= pair->f[0]>>1;
-        pair->f[1] -= pair->f[1]>>1;
-        fq = pair->f[go];
-      }
-      pair->f[go] = alt_freq_init+fq;
-      mask >>= 1;
-      span *= 2;
-      node1 = go+2*node;
-      node = node1;
-    } while( mask );
-    return node1+level_geom[sym].first;
-  }
-}
 
 
 int32_t __update_binary_pair(uint16_t* _this, int32_t symbol) {

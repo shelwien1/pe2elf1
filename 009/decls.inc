@@ -41,6 +41,12 @@ uint32_t __predict_med(uint8_t* pixels, int32_t width, int32_t height);
 uint32_t __alt_init_tables(uint8_t* fold, int8_t* unfold);
 uint32_t __rc_decode_flat(uint32_t tot);
 CounterNode*__init_counter_node(CounterNode* node);
+// The templates the merged encode/decode pairs are instantiated from, declared
+// here for the same reason as everything else in this file: a caller that is
+// itself one of these templates -- P2Freq::code_symbol is -- can sit in a file
+// the definition comes after.
+template<int f_DEC> int32_t __code_symbol_tree(uint16_t* freq, int32_t sym);
+
 void __encode_symbol_tree(uint16_t* freq, int32_t sym);
 void __alt_p1_encode_symbol(uint16_t* freq, int32_t unread_ctx, int32_t ctx, int32_t sym);
 int32_t __decode_symbol_tree(uint16_t* freq);
