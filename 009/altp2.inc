@@ -187,6 +187,14 @@ struct AltP2Block {
   P2Count p2_ctr[163840];
   P2Freq freq[15552];
   uint8_t _pad3[8];
+  // Defined out of line, in alt_p2_context.inc and alt_p2_model.inc.  They are
+  // 400 and 1100 lines and belong in their own files, which is what the split
+  // is for; every other method in this tree is defined in its class body
+  // because every other method fits there.  They were free functions taking
+  // the block as a first argument, which is what a method is.
+  int32_t alt_p2_context(AltP2Block* refa, AltP2Block* refb);
+  uint32_t alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_in);
+
   AltP2Block*alt_p2_alloc(int32_t img_w, int32_t plane) {
     uint32_t done, e;
     void* buf1;

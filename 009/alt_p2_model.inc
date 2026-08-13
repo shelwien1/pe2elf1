@@ -1,6 +1,6 @@
 // alt_p2_model.inc -- the deep-plane model itself, and the largest body in the program.
 
-uint32_t __alt_p2_model(AltP2Block* blk, int32_t sample_in, uint8_t a4, int32_t resid_in) {
+uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_in) {
   P2Ctx* unused_c, * cursor0;
   float n2_bias;
   int32_t n2_half;
@@ -27,69 +27,69 @@ uint32_t __alt_p2_model(AltP2Block* blk, int32_t sample_in, uint8_t a4, int32_t 
   P2Freq* frecg2, * frecg1, * frecg0, * frecg3, * gtop, * frec;
   P2Count* r0200, * r0040, * r0010;
   uint32_t off0, off1, off2, off3, off4, ctxw;
-  float (*nb_cur)[4];
+  float (*wrow_cur)[4];
   float (*wrow_b)[4];
   bool go, eq_hi, lt_hi, ovf;
   P2Count* bankp;
   float ms1, bias2, bias1, d_bias, ms_a, ms_b, ms_b10, conf;
-  int32_t ctx_lo, bank_ctx, res, w0, w0b, res2, w1, e1, wnode0m1a, enode0m1a, x0020, x0010, neg, w_top, e_top, bump, res_s, w_top3, w_topm1, wd4000a, ed4000a, wr4000b, er4000b, wd4000m1b, ed4000m1b, wm4000c, em4000c, wd2000c, ed2000c, wr2000c, er2000c, wd2000m1b, ed2000m1b, wm2000c, em2000c, wd1000c, ed1000c, wr1000c, er1000c, wd1000m1b, ed1000m1b, wm1000c, em1000c, wd0800c, ed0800c, wr0800c, er0800c, wd0800m1b, ed0800m1b, wm0800c, em0800c, wd0400c, ed0400c, wr0400c, er0400c, wd0400m1b, ed0400m1b, wm0400x, wd0200c, ed0200c, wr0200c, er0200c, wd0200m1b, ed0200m1b, neg_b, wm0200c, em0200c, wd0100c, ed0100c, wr0100c, er0100c, wd0100m1b, ed0100m1b, wm0100c, em0100c, wd0080c, ed0080c, wr0080c, er0080c, wd0080m1b, ed0080m1b, wm0080c, em0080c, wd0040c, ed0040c, wr0040c, er0040c, wd0040m1b, ed0040m1b, wm0040c, em0040c, wd0020c, res_t, ed0020c, wr0020c, er0020c, wd0020m1b, ed0020m1b, wm0020c, em0020c, wd0010c, ed0010c, wr0010c, er0010c, wd0010m1b, ed0010m1b, wm0010b, em0010b, wd4000m1a,
+  int32_t ctx_lo, bctx, res, w0, w0b, res2, w1, e1, wnode0m1a, enode0m1a, x0020, x0010, neg, w_top, e_top, bump, res_s, w_top3, w_topm1, wd4000a, ed4000a, wr4000b, er4000b, wd4000m1b, ed4000m1b, wm4000c, em4000c, wd2000c, ed2000c, wr2000c, er2000c, wd2000m1b, ed2000m1b, wm2000c, em2000c, wd1000c, ed1000c, wr1000c, er1000c, wd1000m1b, ed1000m1b, wm1000c, em1000c, wd0800c, ed0800c, wr0800c, er0800c, wd0800m1b, ed0800m1b, wm0800c, em0800c, wd0400c, ed0400c, wr0400c, er0400c, wd0400m1b, ed0400m1b, wm0400x, wd0200c, ed0200c, wr0200c, er0200c, wd0200m1b, ed0200m1b, neg_b, wm0200c, em0200c, wd0100c, ed0100c, wr0100c, er0100c, wd0100m1b, ed0100m1b, wm0100c, em0100c, wd0080c, ed0080c, wr0080c, er0080c, wd0080m1b, ed0080m1b, wm0080c, em0080c, wd0040c, ed0040c, wr0040c, er0040c, wd0040m1b, ed0040m1b, wm0040c, em0040c, wd0020c, res_t, ed0020c, wr0020c, er0020c, wd0020m1b, ed0020m1b, wm0020c, em0020c, wd0010c, ed0010c, wr0010c, er0010c, wd0010m1b, ed0010m1b, wm0010b, em0010b, wd4000m1a,
           ed4000m1a, neg_c, wm4000b, em4000b, wd2000b, ed2000b, wr2000b, er2000b, wd2000m1a, ed2000m1a, wm2000b, em2000b, wd1000b, ed1000b, wr1000b, er1000b, wd1000m1a, ed1000m1a, wm1000b, em1000b, wd0800b, ed0800b, wr0800b, er0800b, wd0800m1a, ed0800m1a, wm0800b, em0800b, wd0400b, ed0400b, wr0400b, er0400b, wd0400m1a, ed0400m1a, wm0400y, nb_slot, wd0200b, ed0200b, wr0200b, er0200b, wd0200m1a, ed0200m1a, wm0200b, em0200b, wd0100b, ed0100b, wr0100b, er0100b, wd0100m1a, ed0100m1a, wm0100b, em0100b, wd0080b, ed0080b, wr0080b, er0080b, wd0080m1a, ed0080m1a, wm0080b, em0080b, wd0040b, ed0040b, wr0040b, er0040b, wd0040m1a, ed0040m1a, neg_d, wm0040b, em0040b, wd0020b, ed0020b, wr0020b, er0020b, wd0020m1a, ed0020m1a, wm0020b, em0020b, wd0010b, ed0010b, wr0010b, er0010b, wd0010m1a, ed0010m1a, wd4000b, ed4000b, wr4000a, er4000a, wd4000p1a, pd4000p1a, wm4000a, em4000a, wd2000a, ed2000a, wr2000a, er2000a, wm2000a, em2000a, wd1000a, ed1000a, wr1000a, er1000a, wm1000a, em1000a, wd0800a, ed0800a,
-          wr0800a, er0800a, wm0800a, em0800a, wd0400a, ed0400a, wr0400a, er0400a, wm0400z, wd0200a, ed0200a, wr0200a, er0200a, wm0200a, em0200a, wd0100a, ed0100a, wr0100a, er0100a, wm0100a, em0100a, wd0080a, ed0080a, wr0080a, er0080a, wm0080a, em0080a, wd0040a, ed0040a, wr0040a, er0040a, wm0040a, em0040a, wd0020a, ed0020a, wr0020a, er0020a, wm0020a, pm0020a, wd0010a, ed0010a, wr0010a, er0010a, wm0010a, em0010a, ctx, ctx15, fold_sel, sel_alt, sel0, sel1, sel2, sel3, sel4;
+          wr0800a, er0800a, wm0800a, em0800a, wd0400a, ed0400a, wr0400a, er0400a, wm0400z, wd0200a, ed0200a, wr0200a, er0200a, wm0200a, em0200a, wd0100a, ed0100a, wr0100a, er0100a, wm0100a, em0100a, wd0080a, ed0080a, wr0080a, er0080a, wm0080a, em0080a, wd0040a, ed0040a, wr0040a, er0040a, wm0040a, em0040a, wd0020a, ed0020a, wr0020a, er0020a, wm0020a, pm0020a, wd0010a, ed0010a, wr0010a, er0010a, wm0010a, em0010a, ctx_l, ctx15, fold_sel, sel_alt, sel0, sel1, sel2, sel3, sel4;
   int64_t dl, du, dul, dur, resid;
   P2Freq* frec_step, * frec4c;
   P2Freq* frec2, * frec3, * frec4b, * frec5, * frec6, * frec7, * prec0, * g0, * g1, * g2, * g3, * g4, * h4, * nxt4, * prec_m1, * h3, * nxt3, * h2, * nxt2, * h1, * nxt1, * h0, * nxt0;
   uint32_t bank_off, ri0100, ri0010, w_new, step_v, step10, step13;
-  ctx_lo = blk->ctx&0xF;
+  ctx_lo = ctx&0xF;
   sample16 = 16*sample_in;
-  blk->cursor[0]->val = 16*sample_in;
-  blk->cursor[0]->dval = blk->cursor[0]->val-blk->cursor[0]->dval;
-  blk->cursor[0][1].dval = 0;
-  blk->cursor[0]->sign = (resid_in<=(int32_t)(((uint32_t)(6-ctx_lo)>>31)+((uint32_t)(4-ctx_lo)>>31)+2*((uint32_t)(9-ctx_lo)>>31)))+(resid_in<(int32_t)-(((uint32_t)(6-ctx_lo)>>31)+((uint32_t)(4-ctx_lo)>>31)+2*((uint32_t)(9-ctx_lo)>>31)));
-  blk->cursor[0]->mag = abs32(resid_in);
-  cursor0 = blk->cursor[0];
+  cursor[0]->val = 16*sample_in;
+  cursor[0]->dval = cursor[0]->val-cursor[0]->dval;
+  cursor[0][1].dval = 0;
+  cursor[0]->sign = (resid_in<=(int32_t)(((uint32_t)(6-ctx_lo)>>31)+((uint32_t)(4-ctx_lo)>>31)+2*((uint32_t)(9-ctx_lo)>>31)))+(resid_in<(int32_t)-(((uint32_t)(6-ctx_lo)>>31)+((uint32_t)(4-ctx_lo)>>31)+2*((uint32_t)(9-ctx_lo)>>31)));
+  cursor[0]->mag = abs32(resid_in);
+  cursor0 = cursor[0];
   sample = (float)sample16;
   dl = sample16-cursor0[-1].val;
   cursor0->dleft = (WORD2(dl)^dl)-WORD2(dl);
-  du = sample16-blk->cursor[1]->val;
-  blk->cursor[0]->dup = (WORD2(du)^du)-WORD2(du);
-  dul = sample16-blk->cursor[1][-1].val;
-  blk->cursor[0]->dupleft = (WORD2(dul)^dul)-WORD2(dul);
-  dur = sample16-blk->cursor[1][1].val;
-  blk->cursor[0]->dupright = (WORD2(dur)^dur)-WORD2(dur);
-  resid = (int16_t)(sample16-blk->pred_prev);
-  blk->cursor[0]->err = resid;
-  blk->cursor[0]->aerr = (WORD2(resid)^resid)-WORD2(resid);
-  nb_cur = blk->nb_cur;
-  ms1 = nb_cur[14][1]+0.000099999997f;
-  wrow_b = blk->cur[-1];
-  bias2 = blk->bias[2];
-  n2_bias = blk->bias[0];
+  du = sample16-cursor[1]->val;
+  cursor[0]->dup = (WORD2(du)^du)-WORD2(du);
+  dul = sample16-cursor[1][-1].val;
+  cursor[0]->dupleft = (WORD2(dul)^dul)-WORD2(dul);
+  dur = sample16-cursor[1][1].val;
+  cursor[0]->dupright = (WORD2(dur)^dur)-WORD2(dur);
+  resid = (int16_t)(sample16-pred_prev);
+  cursor[0]->err = resid;
+  cursor[0]->aerr = (WORD2(resid)^resid)-WORD2(resid);
+  wrow_cur = nb_cur;
+  ms1 = wrow_cur[14][1]+0.000099999997f;
+  wrow_b = cur[-1];
+  bias2 = bias[2];
+  n2_bias = bias[0];
   d_bias2 = sample-bias2;
-  bias1 = blk->bias[1];
+  bias1 = bias[1];
   d_bias = bias1-bias2;
-  ms_a = ((((sample-bias2)*(bias1-bias2))-nb_cur[14][0])*0.001f)+nb_cur[14][0];
-  ms_b = ms1+(((d_bias*d_bias)-nb_cur[14][1])*0.001f);
-  nb_cur[14][1] = ms_b;
+  ms_a = ((((sample-bias2)*(bias1-bias2))-wrow_cur[14][0])*0.001f)+wrow_cur[14][0];
+  ms_b = ms1+(((d_bias*d_bias)-wrow_cur[14][1])*0.001f);
+  wrow_cur[14][1] = ms_b;
   ms_b10 = 0.1f*ms_b;
   if( (0.1f*ms_b)<=ms_a )
     ms_b10 = fminf(ms_b, ms_a);
-  nb_cur[14][0] = ms_b10;
+  wrow_cur[14][0] = ms_b10;
   conf = (1.0f-(ms_b10/(ms_b+576.0f)))*2.0f;
   bank = 0;
   {
     const float err_a = (sample-bias1)*2.5999999f;
     const float err_b = d_bias2*conf;
-    const float floor_a = 26896.0f*nb_cur[14][2];
+    const float floor_a = 26896.0f*wrow_cur[14][2];
     const float floor_b = 5041.0f*wrow_b[14][2];
     const float ms_rate_b = 0.013f*conf;
     int32_t j, k;
     for( j = 0; j<7; ++j )
       for( k = 0; k<4; ++k ) {
-        float x = blk->p2_row[j][k];
+        float x = p2_row[j][k];
         float ms;
-        ms = nb_cur[7+j][k]+(x*x-nb_cur[7+j][k])*0.05f;
-        nb_cur[7+j][k] = ms;
-        nb_cur[j][k] += bmf_p2_rate[j][k]*err_a*x/(ms+floor_a);
+        ms = wrow_cur[7+j][k]+(x*x-wrow_cur[7+j][k])*0.05f;
+        wrow_cur[7+j][k] = ms;
+        wrow_cur[j][k] += bmf_p2_rate[j][k]*err_a*x/(ms+floor_a);
         ms = wrow_b[7+j][k]+(x*x-wrow_b[7+j][k])*ms_rate_b;
         wrow_b[7+j][k] = ms;
         wrow_b[j][k] += bmf_p2_rate[j][k]*err_b*x/(ms+floor_b);
@@ -99,32 +99,32 @@ uint32_t __alt_p2_model(AltP2Block* blk, int32_t sample_in, uint8_t a4, int32_t 
     float acc[4], pred, err, ms_scale;
     int32_t j, k;
     for( k = 0; k<4; ++k ) {
-      acc[k] = nb_cur[0][k]*blk->p2_row[0][k];
+      acc[k] = wrow_cur[0][k]*p2_row[0][k];
       for( j = 1; j<7; ++j )
-        acc[k] += nb_cur[j][k]*blk->p2_row[j][k];
+        acc[k] += wrow_cur[j][k]*p2_row[j][k];
     }
     pred = n2_bias+bmf_hsum4(acc);
     err = sample-pred;
-    ms_scale = nb_cur[14][2];
+    ms_scale = wrow_cur[14][2];
     for( j = 0; j<7; ++j )
       for( k = 0; k<4; ++k )
-        nb_cur[j][k] += bmf_p2_rate[j][k]*err*blk->p2_row[j][k]/(nb_cur[7+j][k]+ms_scale*529.0f);
-    ++*(int32_t*)&nb_cur[15][0];
-    nb_cur[14][2] = ms_scale+((10.0f-ms_scale)*0.00019999999f);
+        wrow_cur[j][k] += bmf_p2_rate[j][k]*err*p2_row[j][k]/(wrow_cur[7+j][k]+ms_scale*529.0f);
+    ++*(int32_t*)&wrow_cur[15][0];
+    wrow_cur[14][2] = ms_scale+((10.0f-ms_scale)*0.00019999999f);
   }
-  *blk->cur = blk->nb_cur;
-  ++blk->cur;
-  ++blk->above;
+  *cur = nb_cur;
+  ++cur;
+  ++above;
   do {
-    bank_ctx = (uint32_t)blk->bank_ctx[bank];
-    res = sample16-(blk->nb_sum[2*bank]);
+    bctx = (uint32_t)bank_ctx[bank];
+    res = sample16-(nb_sum[2*bank]);
     bank_off = bank<<17;
-    node0 = &blk->p2_ctr[32768*bank+bank_ctx];
+    node0 = &p2_ctr[32768*bank+bctx];
     w0 = res+(uint16_t)node0->weighted;
     node0->weighted = w0;
     countdown = node0->b1;
     if( countdown ) {
-      ctxw_s = bank_ctx;
+      ctxw_s = bctx;
       w0b = w0+4*((res>deadzone_hi)-(res<deadzone_lo));
       node0->weighted = w0b;
       ctxw = ctxw_s;
@@ -144,8 +144,8 @@ uint32_t __alt_p2_model(AltP2Block* blk, int32_t sample_in, uint8_t a4, int32_t 
       }
       if( !alphabet_reduced ) {
         __builtin_prefetch(&mir_top, 0, 1);
-        mir_top = (uint16_t*)((uint8_t*)&blk->p2_ctr[(ctxw^0x7FF0)]+bank_off);
-        res2 = (blk->nb_sum[2*bank+1])+res;
+        mir_top = (uint16_t*)((uint8_t*)&p2_ctr[(ctxw^0x7FF0)]+bank_off);
+        res2 = (nb_sum[2*bank+1])+res;
         lowbits = ctxw&3;
         if( (uint32_t)lowbits>=3||(bank_off2 = bank_off, ctxw_s = ctxw, w1 = node0[1].weighted, e1 = res2-p2_pred(w1, *(uint8_t*)&node0[1].rate), go = lowbits<=0, *(uint16_t*)&node0[1].weighted = w1+((32*((e1>deadzone_hi)-(uint32_t)(e1<deadzone_lo))+e1+1)>>1), ctxw = ctxw_s, !go) ) {
           bank_off2 = bank_off;
@@ -155,7 +155,7 @@ uint32_t __alt_p2_model(AltP2Block* blk, int32_t sample_in, uint8_t a4, int32_t 
           *(uint16_t*)&node0[-1].weighted = wnode0m1a+((32*((enode0m1a>deadzone_hi)-(uint32_t)(enode0m1a<deadzone_lo))+enode0m1a+2)>>2);
           ctxw = ctxw_s;
         }
-        bankp = &blk->p2_ctr[32768*bank];
+        bankp = &p2_ctr[32768*bank];
         res_c = res2;
         __builtin_prefetch(&bankp[(ctxw^0x4000)], 0, 1);
         d4000 = &bankp[(ctxw^0x4000)];
@@ -645,18 +645,18 @@ uint32_t __alt_p2_model(AltP2Block* blk, int32_t sample_in, uint8_t a4, int32_t 
     }
     ++bank;
   } while( bank<5 );
-  ctx = blk->ctx;
-  ++blk->cursor[0];
-  frec = &blk->freq[ctx];
-  ++blk->cursor[1];
-  ++blk->cursor[2];
-  ++blk->cursor[3];
-  ++blk->cursor[4];
+  ctx_l = ctx;
+  ++cursor[0];
+  frec = &freq[ctx_l];
+  ++cursor[1];
+  ++cursor[2];
+  ++cursor[3];
+  ++cursor[4];
   step_v = frec[0].step;
   if( step_v>0x10 ) {
     is_dec = a4&1;
-    ctx15 = ctx&0xF;
-    pair_ctx = blk->ctx_pair[a4&1];
+    ctx15 = ctx_l&0xF;
+    pair_ctx = ctx_pair[a4&1];
     if( ctx15<15 ) {
       mir_top = (uint16_t*)&frec[1];
       if( frec[1].f[2]+frec[1].f[1]+frec[1].f[0]>29696 )
@@ -670,15 +670,15 @@ uint32_t __alt_p2_model(AltP2Block* blk, int32_t sample_in, uint8_t a4, int32_t 
       }
       if( ctx15<=0 ) {
 LABEL_37:
-        step_v = blk->ctx;
-        if( blk->freq[step_v].step<=0x1Au )
+        step_v = ctx;
+        if( freq[step_v].step<=0x1Au )
           return step_v;
-        fold_sel = 2-(blk->fold[(uint8_t)-resid_in]&1);
-        if( !blk->fold[(uint8_t)-resid_in] )
-          fold_sel = blk->fold[(uint8_t)-resid_in];
+        fold_sel = 2-(fold[(uint8_t)-resid_in]&1);
+        if( !fold[(uint8_t)-resid_in] )
+          fold_sel = fold[(uint8_t)-resid_in];
         fold_sel2 = fold_sel;
-        step_v = blk->ctx_w[4].w[2-blk->ctx_w[4].sel]+blk->ctx_w[3].w[2-blk->ctx_w[3].sel]+blk->ctx_w[2].w[2-blk->ctx_w[2].sel]+blk->ctx_w[1].w[2-blk->ctx_w[1].sel]+(blk->ctx_w[0].w[1]+(blk->ctx&0x3F));
-        frec_step = &blk->freq[step_v];
+        step_v = ctx_w[4].w[2-ctx_w[4].sel]+ctx_w[3].w[2-ctx_w[3].sel]+ctx_w[2].w[2-ctx_w[2].sel]+ctx_w[1].w[2-ctx_w[1].sel]+(ctx_w[0].w[1]+(ctx&0x3F));
+        frec_step = &freq[step_v];
         p2_rec = frec_step;
         if( ctx15<15 ) {
           frec2 = &frec_step[1];
@@ -717,23 +717,23 @@ LABEL_48:
           step_v = step_s;
         }
         prec0->f[fold_sel2] += (6*(uint32_t)p2_rec[0].step)>>4;
-        if( !blk->plane_idx||blk->freq[blk->ctx].step>0x100u ) {
+        if( !plane_idx||freq[ctx].step>0x100u ) {
           sel_alt = 2-is_dec;
           if( !a4 )
             sel_alt = 0;
-          sel0 = blk->ctx_w[0].sel;
+          sel0 = ctx_w[0].sel;
           is_dec = sel_alt;
           if( sel0==1 ) {
-            h0 = &blk->freq[blk->ctx_w[0].w[0]+step_v-blk->ctx_w[0].w[1]];
-            if( h0->f[2]+(blk->freq[blk->ctx_w[0].w[0]+step_v-blk->ctx_w[0].w[1]].f[1])+(blk->freq[blk->ctx_w[0].w[0]+step_v-blk->ctx_w[0].w[1]].f[0])>29696 ) {
+            h0 = &freq[ctx_w[0].w[0]+step_v-ctx_w[0].w[1]];
+            if( h0->f[2]+(freq[ctx_w[0].w[0]+step_v-ctx_w[0].w[1]].f[1])+(freq[ctx_w[0].w[0]+step_v-ctx_w[0].w[1]].f[0])>29696 ) {
               step_s = step_v;
               h0->rescale_three_way();
               step_v = step_s;
             }
             h0->f[fold_sel2] += (uint16_t)(h0->step&0xFFFC)>>2;
-            off0 = blk->ctx-blk->ctx_w[0].w[1];
-            frecg0 = &blk->freq[off0+blk->ctx_w[0].w[0]];
-            idx0 = blk->ctx_w[0].w[2]+off0;
+            off0 = ctx-ctx_w[0].w[1];
+            frecg0 = &freq[off0+ctx_w[0].w[0]];
+            idx0 = ctx_w[0].w[2]+off0;
             grp = frecg0;
             frec3 = &frecg0[0];
             mir_top = (uint16_t*)frec3;
@@ -751,10 +751,10 @@ LABEL_48:
                 step_v = step_s;
               }
               mir_top[is_dec+1] += (uint16_t)(grp[1].step&0xFFFC)>>2;
-              nxt0 = &blk->freq[idx0+1];
-              if( blk->freq[idx0+1].f[2]+blk->freq[idx0+1].f[1]+blk->freq[idx0+1].f[0]>29696 ) {
+              nxt0 = &freq[idx0+1];
+              if( freq[idx0+1].f[2]+freq[idx0+1].f[1]+freq[idx0+1].f[0]>29696 ) {
                 step_s = step_v;
-                (&blk->freq[idx0+1])->rescale_three_way();
+                (&freq[idx0+1])->rescale_three_way();
                 step_v = step_s;
               }
               nxt0->f[is_dec] += (nxt0->step&0xFFF8)>>3;
@@ -769,14 +769,14 @@ LABEL_48:
               mir_top[is_dec+1] += (6*(uint32_t)grp[-1].step)>>4;
             }
           } else {
-            g0 = &blk->freq[step_v+blk->ctx_w[0].w[1]-blk->ctx_w[0].w[2-sel0]];
-            if( blk->freq[step_v+blk->ctx_w[0].w[1]-blk->ctx_w[0].w[2-sel0]].f[2]+blk->freq[step_v+blk->ctx_w[0].w[1]-blk->ctx_w[0].w[2-sel0]].f[1]+blk->freq[step_v+blk->ctx_w[0].w[1]-blk->ctx_w[0].w[2-sel0]].f[0]>29696 ) {
+            g0 = &freq[step_v+ctx_w[0].w[1]-ctx_w[0].w[2-sel0]];
+            if( freq[step_v+ctx_w[0].w[1]-ctx_w[0].w[2-sel0]].f[2]+freq[step_v+ctx_w[0].w[1]-ctx_w[0].w[2-sel0]].f[1]+freq[step_v+ctx_w[0].w[1]-ctx_w[0].w[2-sel0]].f[0]>29696 ) {
               step_s = step_v;
               g0->rescale_three_way();
               step_v = step_s;
             }
             g0->f[fold_sel2] += (7*(uint32_t)g0->step)>>4;
-            grp = (&blk->freq[blk->ctx_w[0].w[1]+(blk->ctx-blk->ctx_w[0].w[blk->ctx_w[0].sel])]);
+            grp = (&freq[ctx_w[0].w[1]+(ctx-ctx_w[0].w[ctx_w[0].sel])]);
             mir_top = (uint16_t*)&grp[0];
             if( grp[0].f[2]+grp[0].f[1]+grp[0].f[0]>29696 ) {
               step_s = step_v;
@@ -805,19 +805,19 @@ LABEL_48:
               mir_top[is_dec+1] += (6*(uint32_t)grp[-1].step)>>4;
             }
           }
-          sel1 = blk->ctx_w[1].sel;
+          sel1 = ctx_w[1].sel;
           if( sel1==1 ) {
-            frec4b = &blk->freq[blk->ctx_w[1].w[0]+step_v-blk->ctx_w[1].w[1]];
+            frec4b = &freq[ctx_w[1].w[0]+step_v-ctx_w[1].w[1]];
             mir_top = (uint16_t*)frec4b;
-            if( frec4b->f[2]+(blk->freq[blk->ctx_w[1].w[0]+step_v-blk->ctx_w[1].w[1]].f[1])+(blk->freq[blk->ctx_w[1].w[0]+step_v-blk->ctx_w[1].w[1]].f[0])>29696 ) {
+            if( frec4b->f[2]+(freq[ctx_w[1].w[0]+step_v-ctx_w[1].w[1]].f[1])+(freq[ctx_w[1].w[0]+step_v-ctx_w[1].w[1]].f[0])>29696 ) {
               step_s = step_v;
               frec4b->rescale_three_way();
               step_v = step_s;
             }
             mir_top[fold_sel2+1] += (uint16_t)(mir_top[0]&0xFFFC)>>2;
-            off1 = blk->ctx-blk->ctx_w[1].w[1];
-            frecg1 = &blk->freq[off1+blk->ctx_w[1].w[0]];
-            idx0 = blk->ctx_w[1].w[2]+off1;
+            off1 = ctx-ctx_w[1].w[1];
+            frecg1 = &freq[off1+ctx_w[1].w[0]];
+            idx0 = ctx_w[1].w[2]+off1;
             grp = frecg1;
             h1 = &frecg1[0];
             if( h1->f[2]+h1->f[1]+h1->f[0]>29696 ) {
@@ -834,10 +834,10 @@ LABEL_48:
                 step_v = step_s;
               }
               mir_top[is_dec+1] += (uint16_t)(grp[1].step&0xFFFC)>>2;
-              nxt1 = &blk->freq[idx0+1];
-              if( blk->freq[idx0+1].f[2]+blk->freq[idx0+1].f[1]+blk->freq[idx0+1].f[0]>29696 ) {
+              nxt1 = &freq[idx0+1];
+              if( freq[idx0+1].f[2]+freq[idx0+1].f[1]+freq[idx0+1].f[0]>29696 ) {
                 step_s = step_v;
-                (&blk->freq[idx0+1])->rescale_three_way();
+                (&freq[idx0+1])->rescale_three_way();
                 step_v = step_s;
               }
               nxt1->f[is_dec] += (nxt1->step&0xFFF8)>>3;
@@ -852,14 +852,14 @@ LABEL_48:
               mir_top[is_dec+1] += (6*(uint32_t)grp[-1].step)>>4;
             }
           } else {
-            g1 = &blk->freq[step_v+blk->ctx_w[1].w[1]-blk->ctx_w[1].w[2-sel1]];
-            if( blk->freq[step_v+blk->ctx_w[1].w[1]-blk->ctx_w[1].w[2-sel1]].f[2]+blk->freq[step_v+blk->ctx_w[1].w[1]-blk->ctx_w[1].w[2-sel1]].f[1]+blk->freq[step_v+blk->ctx_w[1].w[1]-blk->ctx_w[1].w[2-sel1]].f[0]>29696 ) {
+            g1 = &freq[step_v+ctx_w[1].w[1]-ctx_w[1].w[2-sel1]];
+            if( freq[step_v+ctx_w[1].w[1]-ctx_w[1].w[2-sel1]].f[2]+freq[step_v+ctx_w[1].w[1]-ctx_w[1].w[2-sel1]].f[1]+freq[step_v+ctx_w[1].w[1]-ctx_w[1].w[2-sel1]].f[0]>29696 ) {
               step_s = step_v;
               g1->rescale_three_way();
               step_v = step_s;
             }
             g1->f[fold_sel2] += (7*(uint32_t)g1->step)>>4;
-            grp = (&blk->freq[blk->ctx_w[1].w[1]+(blk->ctx-blk->ctx_w[1].w[blk->ctx_w[1].sel])]);
+            grp = (&freq[ctx_w[1].w[1]+(ctx-ctx_w[1].w[ctx_w[1].sel])]);
             mir_top = (uint16_t*)&grp[0];
             if( grp[0].f[2]+grp[0].f[1]+grp[0].f[0]>29696 ) {
               step_s = step_v;
@@ -886,19 +886,19 @@ LABEL_48:
               mir_top[is_dec+1] += (6*(uint32_t)grp[-1].step)>>4;
             }
           }
-          sel2 = blk->ctx_w[2].sel;
+          sel2 = ctx_w[2].sel;
           if( sel2==1 ) {
-            frec5 = &blk->freq[blk->ctx_w[2].w[0]+step_v-blk->ctx_w[2].w[1]];
+            frec5 = &freq[ctx_w[2].w[0]+step_v-ctx_w[2].w[1]];
             mir_top = (uint16_t*)frec5;
-            if( frec5->f[2]+(blk->freq[blk->ctx_w[2].w[0]+step_v-blk->ctx_w[2].w[1]].f[1])+(blk->freq[blk->ctx_w[2].w[0]+step_v-blk->ctx_w[2].w[1]].f[0])>29696 ) {
+            if( frec5->f[2]+(freq[ctx_w[2].w[0]+step_v-ctx_w[2].w[1]].f[1])+(freq[ctx_w[2].w[0]+step_v-ctx_w[2].w[1]].f[0])>29696 ) {
               step_s = step_v;
               frec5->rescale_three_way();
               step_v = step_s;
             }
             mir_top[fold_sel2+1] += (uint16_t)(mir_top[0]&0xFFFC)>>2;
-            off2 = blk->ctx-blk->ctx_w[2].w[1];
-            frecg2 = &blk->freq[off2+blk->ctx_w[2].w[0]];
-            idx0 = blk->ctx_w[2].w[2]+off2;
+            off2 = ctx-ctx_w[2].w[1];
+            frecg2 = &freq[off2+ctx_w[2].w[0]];
+            idx0 = ctx_w[2].w[2]+off2;
             grp = frecg2;
             h2 = &frecg2[0];
             if( h2->f[2]+h2->f[1]+h2->f[0]>29696 ) {
@@ -915,10 +915,10 @@ LABEL_48:
                 step_v = step_s;
               }
               mir_top[is_dec+1] += (uint16_t)(grp[1].step&0xFFFC)>>2;
-              nxt2 = &blk->freq[idx0+1];
-              if( blk->freq[idx0+1].f[2]+blk->freq[idx0+1].f[1]+blk->freq[idx0+1].f[0]>29696 ) {
+              nxt2 = &freq[idx0+1];
+              if( freq[idx0+1].f[2]+freq[idx0+1].f[1]+freq[idx0+1].f[0]>29696 ) {
                 step_s = step_v;
-                (&blk->freq[idx0+1])->rescale_three_way();
+                (&freq[idx0+1])->rescale_three_way();
                 step_v = step_s;
               }
               nxt2->f[is_dec] += (nxt2->step&0xFFF8)>>3;
@@ -933,14 +933,14 @@ LABEL_48:
               mir_top[is_dec+1] += (6*(uint32_t)grp[-1].step)>>4;
             }
           } else {
-            g2 = &blk->freq[step_v+blk->ctx_w[2].w[1]-blk->ctx_w[2].w[2-sel2]];
-            if( blk->freq[step_v+blk->ctx_w[2].w[1]-blk->ctx_w[2].w[2-sel2]].f[2]+blk->freq[step_v+blk->ctx_w[2].w[1]-blk->ctx_w[2].w[2-sel2]].f[1]+blk->freq[step_v+blk->ctx_w[2].w[1]-blk->ctx_w[2].w[2-sel2]].f[0]>29696 ) {
+            g2 = &freq[step_v+ctx_w[2].w[1]-ctx_w[2].w[2-sel2]];
+            if( freq[step_v+ctx_w[2].w[1]-ctx_w[2].w[2-sel2]].f[2]+freq[step_v+ctx_w[2].w[1]-ctx_w[2].w[2-sel2]].f[1]+freq[step_v+ctx_w[2].w[1]-ctx_w[2].w[2-sel2]].f[0]>29696 ) {
               step_s = step_v;
               g2->rescale_three_way();
               step_v = step_s;
             }
             g2->f[fold_sel2] += (7*(uint32_t)g2->step)>>4;
-            grp = (&blk->freq[blk->ctx_w[2].w[1]+(blk->ctx-blk->ctx_w[2].w[blk->ctx_w[2].sel])]);
+            grp = (&freq[ctx_w[2].w[1]+(ctx-ctx_w[2].w[ctx_w[2].sel])]);
             mir_top = (uint16_t*)&grp[0];
             if( grp[0].f[2]+grp[0].f[1]+grp[0].f[0]>29696 ) {
               step_s = step_v;
@@ -967,19 +967,19 @@ LABEL_48:
               mir_top[is_dec+1] += (6*(uint32_t)grp[-1].step)>>4;
             }
           }
-          sel3 = blk->ctx_w[3].sel;
+          sel3 = ctx_w[3].sel;
           if( sel3==1 ) {
-            frec6 = &blk->freq[blk->ctx_w[3].w[0]+step_v-blk->ctx_w[3].w[1]];
+            frec6 = &freq[ctx_w[3].w[0]+step_v-ctx_w[3].w[1]];
             mir_top = (uint16_t*)frec6;
-            if( frec6->f[2]+(blk->freq[blk->ctx_w[3].w[0]+step_v-blk->ctx_w[3].w[1]].f[1])+(blk->freq[blk->ctx_w[3].w[0]+step_v-blk->ctx_w[3].w[1]].f[0])>29696 ) {
+            if( frec6->f[2]+(freq[ctx_w[3].w[0]+step_v-ctx_w[3].w[1]].f[1])+(freq[ctx_w[3].w[0]+step_v-ctx_w[3].w[1]].f[0])>29696 ) {
               step_s = step_v;
               frec6->rescale_three_way();
               step_v = step_s;
             }
             mir_top[fold_sel2+1] += (uint16_t)(mir_top[0]&0xFFFC)>>2;
-            off3 = blk->ctx-blk->ctx_w[3].w[1];
-            frecg3 = &blk->freq[off3+blk->ctx_w[3].w[0]];
-            idx0 = blk->ctx_w[3].w[2]+off3;
+            off3 = ctx-ctx_w[3].w[1];
+            frecg3 = &freq[off3+ctx_w[3].w[0]];
+            idx0 = ctx_w[3].w[2]+off3;
             grp = frecg3;
             h3 = &frecg3[0];
             if( h3->f[2]+h3->f[1]+h3->f[0]>29696 ) {
@@ -996,10 +996,10 @@ LABEL_48:
                 step_v = step_s;
               }
               mir_top[is_dec+1] += (uint16_t)(grp[1].step&0xFFFC)>>2;
-              nxt3 = &blk->freq[idx0+1];
-              if( blk->freq[idx0+1].f[2]+blk->freq[idx0+1].f[1]+blk->freq[idx0+1].f[0]>29696 ) {
+              nxt3 = &freq[idx0+1];
+              if( freq[idx0+1].f[2]+freq[idx0+1].f[1]+freq[idx0+1].f[0]>29696 ) {
                 step_s = step_v;
-                (&blk->freq[idx0+1])->rescale_three_way();
+                (&freq[idx0+1])->rescale_three_way();
                 step_v = step_s;
               }
               nxt3->f[is_dec] += (nxt3->step&0xFFF8)>>3;
@@ -1014,14 +1014,14 @@ LABEL_48:
               mir_top[is_dec+1] += (6*(uint32_t)grp[-1].step)>>4;
             }
           } else {
-            g3 = &blk->freq[step_v+blk->ctx_w[3].w[1]-blk->ctx_w[3].w[2-sel3]];
-            if( blk->freq[step_v+blk->ctx_w[3].w[1]-blk->ctx_w[3].w[2-sel3]].f[2]+blk->freq[step_v+blk->ctx_w[3].w[1]-blk->ctx_w[3].w[2-sel3]].f[1]+blk->freq[step_v+blk->ctx_w[3].w[1]-blk->ctx_w[3].w[2-sel3]].f[0]>29696 ) {
+            g3 = &freq[step_v+ctx_w[3].w[1]-ctx_w[3].w[2-sel3]];
+            if( freq[step_v+ctx_w[3].w[1]-ctx_w[3].w[2-sel3]].f[2]+freq[step_v+ctx_w[3].w[1]-ctx_w[3].w[2-sel3]].f[1]+freq[step_v+ctx_w[3].w[1]-ctx_w[3].w[2-sel3]].f[0]>29696 ) {
               step_s = step_v;
               g3->rescale_three_way();
               step_v = step_s;
             }
             g3->f[fold_sel2] += (7*(uint32_t)g3->step)>>4;
-            grp = (&blk->freq[blk->ctx_w[3].w[1]+(blk->ctx-blk->ctx_w[3].w[blk->ctx_w[3].sel])]);
+            grp = (&freq[ctx_w[3].w[1]+(ctx-ctx_w[3].w[ctx_w[3].sel])]);
             mir_top = (uint16_t*)&grp[0];
             if( grp[0].f[2]+grp[0].f[1]+grp[0].f[0]>29696 ) {
               step_s = step_v;
@@ -1048,16 +1048,16 @@ LABEL_48:
               mir_top[is_dec+1] += (6*(uint32_t)grp[-1].step)>>4;
             }
           }
-          sel4 = blk->ctx_w[4].sel;
+          sel4 = ctx_w[4].sel;
           if( sel4==1 ) {
-            frec7 = &blk->freq[blk->ctx_w[4].w[0]+step_v-blk->ctx_w[4].w[1]];
+            frec7 = &freq[ctx_w[4].w[0]+step_v-ctx_w[4].w[1]];
             mir_top = (uint16_t*)frec7;
-            if( frec7->f[2]+(blk->freq[blk->ctx_w[4].w[0]+step_v-blk->ctx_w[4].w[1]].f[1])+(blk->freq[blk->ctx_w[4].w[0]+step_v-blk->ctx_w[4].w[1]].f[0])>29696 )
+            if( frec7->f[2]+(freq[ctx_w[4].w[0]+step_v-ctx_w[4].w[1]].f[1])+(freq[ctx_w[4].w[0]+step_v-ctx_w[4].w[1]].f[0])>29696 )
               frec7->rescale_three_way();
             mir_top[fold_sel2+1] += (uint16_t)(mir_top[0]&0xFFFC)>>2;
-            off4 = blk->ctx-blk->ctx_w[4].w[1];
-            frec4c = &blk->freq[off4+blk->ctx_w[4].w[0]];
-            rec_idx = blk->ctx_w[4].w[2]+off4;
+            off4 = ctx-ctx_w[4].w[1];
+            frec4c = &freq[off4+ctx_w[4].w[0]];
+            rec_idx = ctx_w[4].w[2]+off4;
             p2_rec = frec4c;
             h4 = &frec4c[0];
             if( frec4c[0].f[2]+frec4c[0].f[1]+frec4c[0].f[0]>29696 )
@@ -1068,7 +1068,7 @@ LABEL_48:
               if( p2_rec[1].f[2]+(p2_rec[1].f[1]+p2_rec[1].f[0])>29696 )
                 p2_rec[1].rescale_three_way();
               mir_top[is_dec+1] += (uint16_t)(p2_rec[1].step&0xFFFC)>>2;
-              nxt4 = &blk->freq[rec_idx+1];
+              nxt4 = &freq[rec_idx+1];
               if( nxt4->f[2]+nxt4->f[1]+nxt4->f[0]>29696 )
                 nxt4->rescale_three_way();
               step_v = (nxt4->step&0xFFF8)>>3;
@@ -1081,11 +1081,11 @@ LABEL_48:
               prec_m1->f[is_dec] += (6*(uint32_t)p2_rec[-1].step)>>4;
             }
           } else {
-            g4 = &blk->freq[step_v+blk->ctx_w[4].w[1]-blk->ctx_w[4].w[2-sel4]];
-            if( blk->freq[step_v+blk->ctx_w[4].w[1]-blk->ctx_w[4].w[2-sel4]].f[2]+blk->freq[step_v+blk->ctx_w[4].w[1]-blk->ctx_w[4].w[2-sel4]].f[1]+blk->freq[step_v+blk->ctx_w[4].w[1]-blk->ctx_w[4].w[2-sel4]].f[0]>29696 )
+            g4 = &freq[step_v+ctx_w[4].w[1]-ctx_w[4].w[2-sel4]];
+            if( freq[step_v+ctx_w[4].w[1]-ctx_w[4].w[2-sel4]].f[2]+freq[step_v+ctx_w[4].w[1]-ctx_w[4].w[2-sel4]].f[1]+freq[step_v+ctx_w[4].w[1]-ctx_w[4].w[2-sel4]].f[0]>29696 )
               g4->rescale_three_way();
             g4->f[fold_sel2] += (7*(uint32_t)g4->step)>>4;
-            gtop = (&blk->freq[blk->ctx_w[4].w[1]+(blk->ctx-blk->ctx_w[4].w[blk->ctx_w[4].sel])]);
+            gtop = (&freq[ctx_w[4].w[1]+(ctx-ctx_w[4].w[ctx_w[4].sel])]);
             if( gtop[0].f[2]+gtop[0].f[1]+gtop[0].f[0]>29696 )
               gtop[0].rescale_three_way();
             gtop[0].f[is_dec] += (7*(uint32_t)gtop[0].step)>>4;
@@ -1105,7 +1105,7 @@ LABEL_48:
         }
         return step_v;
       }
-      frec = &blk->freq[blk->ctx];
+      frec = &freq[ctx];
     }
     mir_top = (uint16_t*)&frec[-1];
     if( frec[-1].f[2]+frec[-1].f[1]+frec[-1].f[0]>29696 )

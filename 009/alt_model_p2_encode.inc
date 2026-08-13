@@ -204,7 +204,7 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
           ctx_bias[3] = want0>>3;
           blk0 = (AltP2Block*)(plane[0]);
           cur0 = out[plane_desc[1].src_plane];
-          pred0 = __alt_p2_context(plane[0], plane[2], plane[1]);
+          pred0 = plane[0]->alt_p2_context(plane[2], plane[1]);
           resid0 = (uint8_t)(cur0-pred0);
           code0 = (uint8_t)blk0->fold[resid0];
           out0 = out[off0b];
@@ -218,7 +218,7 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
             out[off0b] = recon0;
           }
           blk0->freq[blk0->ctx].encode_symbol(blk0->ctx_pair, code0);
-          __alt_p2_model(blk0, cur0, code0, cur0-pred0);
+          blk0->alt_p2_model(cur0, code0, cur0-pred0);
           rec0 = blk0->cursor[0];
           l7a = rec0[-1].dupright;
           l4a = rec0[-1].dleft;
@@ -235,7 +235,7 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
           plane[1]->cursor[0]->dval = seed1;
           off1 = plane_desc[2].src_plane;
           cur1 = out[plane_desc[2].src_plane];
-          pred1 = __alt_p2_context((AltP2Block*)blk1, plane[0], plane[2]);
+          pred1 = blk1->alt_p2_context(plane[0], plane[2]);
           resid1 = (uint8_t)(cur1-pred1);
           code1 = blk1->fold[resid1];
           out1 = out[off1];
@@ -249,7 +249,7 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
             out[off1] = recon1;
           }
           blk1->freq[blk1->ctx].encode_symbol(blk1->ctx_pair, code1);
-          __alt_p2_model((AltP2Block*)blk1, cur1, code1, cur1-pred1);
+          blk1->alt_p2_model(cur1, code1, cur1-pred1);
           rec1 = blk1->cursor[0];
           l7b = rec1[-1].dupright;
           l4b = rec1[-1].dleft;
@@ -266,7 +266,7 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
           plane[2]->cursor[0]->dval = seed2;
           off2 = plane_desc[3].src_plane;
           cur2 = out[plane_desc[3].src_plane];
-          pred2 = __alt_p2_context((AltP2Block*)blk2, plane[0], plane[1]);
+          pred2 = blk2->alt_p2_context(plane[0], plane[1]);
           resid2 = (uint8_t)(cur2-pred2);
           code2 = blk2->fold[resid2];
           out2 = out[off2];
@@ -280,7 +280,7 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
             out[off2] = recon2;
           }
           blk2->freq[blk2->ctx].encode_symbol(blk2->ctx_pair, code2);
-          __alt_p2_model((AltP2Block*)blk2, cur2, code2, cur2-pred2);
+          blk2->alt_p2_model(cur2, code2, cur2-pred2);
           rec2 = blk2->cursor[0];
           nplanes = plane_count;
           at0 = ctx_bias[0]+32*rec2[-1].dupleft;
@@ -300,7 +300,7 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
             plane[3]->cursor[0]->dval = l7c;
             alpha_src = plane_desc[4].src_plane;
             l5c = out[plane_desc[4].src_plane];
-            x = __alt_p2_context((AltP2Block*)l4c, plane[2], plane[0]);
+            x = l4c->alt_p2_context(plane[2], plane[0]);
             w = (uint8_t)(l5c-x);
             seed3 = l4c->fold[w];
             blk3 = out[alpha_src];
@@ -313,7 +313,7 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
               out[alpha_src] = cur3;
             }
             l4c->freq[l4c->ctx].encode_symbol(l4c->ctx_pair, seed3);
-            __alt_p2_model((AltP2Block*)l4c, l5c, seed3, l5c-x);
+            l4c->alt_p2_model(l5c, seed3, l5c-x);
             rec3 = l4c->cursor[0];
             nplanes = plane_count;
             at0 = ctx_bias[0]+32*rec3[-1].dupleft;

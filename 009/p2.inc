@@ -225,7 +225,7 @@ void __alt_p2_d8_body(AltP2Block* blk, uint8_t* src, uint8_t* out, int8_t unread
       blk->cursor[0]->dval = 0;
       if( width>0 ) {
         for( k = 0; k<(uint32_t)width; ++k ) {
-          pred = __alt_p2_context(blk, (AltP2Block*)nullptr, (AltP2Block*)nullptr);
+          pred = blk->alt_p2_context((AltP2Block*)nullptr, (AltP2Block*)nullptr);
           if( f_DEC ) {
             code2 = code = blk->freq[blk->ctx].decode_symbol(pair);
             outp[k] = (uint8_t)(pred+(blk->unfold[code]));
@@ -244,7 +244,7 @@ void __alt_p2_d8_body(AltP2Block* blk, uint8_t* src, uint8_t* out, int8_t unread
             code2 = code;
             blk->freq[blk->ctx].encode_symbol(pair, code);
           }
-          __alt_p2_model(blk, (uint8_t)outp[k], code2, (uint8_t)outp[k]-pred);
+          blk->alt_p2_model((uint8_t)outp[k], code2, (uint8_t)outp[k]-pred);
         }
         if( !f_DEC )
           src_end = &srcp[width];
