@@ -63,11 +63,16 @@ never writes one.
 ### the raw fallback
 
 After coding, `compress_image.inc` compares the coded length against
-`data_size`. If coding did not make the image smaller the member is rewritten
-with `0x20` clear and the original pixels stored verbatim — so a BMF file is
-never larger than the input plus 20 bytes. `noise24.bmp` (49206 bytes of random
-data) takes this path: `ref_noise24.bmf` is 49172 bytes, which is the raw
-pixels plus the header, minus the BMP header the format does not need.
+`data_size` — the size of the **pixel data**, not of the input file. If coding
+did not beat that, the member is rewritten with `0x20` clear and the pixels
+stored verbatim.
+
+A raw member is therefore 20 bytes of overhead (magic and header) plus the
+pixel data plus, if there is one, a palette at 3 bytes an entry. The BMP it
+came from is 54 bytes plus 4 bytes an entry plus rows padded to a multiple of
+four, and BMF stores its rows unpadded — so a raw member is always **smaller**
+than the file it came from, not merely bounded by it. `noise24.bmp` is 49206
+bytes of random data and `ref_noise24.bmf` is 49172, thirty-four fewer.
 
 If the image was transposed for coding it is transposed back first, since a raw
 member has no model to undo it.
@@ -91,9 +96,13 @@ is why the corpus carries `out_rle4.bmp` and `out_rle8.bmp`: the decoded image
 is pixel-identical to the input and byte-different from it, and those two files
 are what the decoder is expected to write.
 
+Only bottom-up BMPs are accepted — a negative `biHeight` is refused rather
+than read as top-down — and the reader **un-flips them**: it fills the buffer
+from its last row backwards while reading the file forwards, so what BMF holds
+is top row first, in ordinary raster order, and `write_bmp.inc` flips it back.
+
 Whatever the depth, the image is held as **`plane_count = (depth + 7) / 8`
-byte planes, interleaved per pixel**, bottom row first (BMP order), in
-`__alloc_image`'s single allocation. So 24-bit is 3 planes (B, G, R in file
+byte planes, interleaved per pixel**, in `__alloc_image`'s single allocation. So 24-bit is 3 planes (B, G, R in file
 order), 32-bit is 4, and everything at 8 bits or below is 1 plane — sub-byte
 depths are held unpacked, one byte per pixel, which is what lets the same model
 handle 1-, 4- and 8-bit images.
@@ -175,10 +184,16 @@ predictor, bit 2 selects the alternate model and bit 3 the colour transform:
 | 13 | 1 | alternate p1 | yes |
 | 14 | 2 | alternate p2 | yes |
 
-Not all six are always tried. `0` is skipped once an earlier plane has come out
-"hard"; `6` is only tried when `5` came within `cost/32` of the best so far;
-`8` and `13` only from the second plane onward (the first has nothing to
-reference); `14` only when the winner so far is predictor 2 or `13` was within
+Not all six are always tried, and the condition that prunes them is the same
+one throughout: **has any earlier plane already chosen predictor 2**. The
+counter is called `n_hard` and it is incremented exactly when a plane settles
+on predictor 2, on the reasoning that an image needing the deep model for one
+plane will need it for the rest and the cheap candidates are not worth timing.
+
+So: `0` is skipped once that counter is non-zero; `6` is tried when `5` came
+within `cost/32` of the best so far **or** the counter is non-zero; `8` and
+`13` only from the second plane onward, since the first has nothing to
+reference; `14` only when the winner so far is predictor 2, or `13` came within
 `cost/32`.
 
 Three more decisions follow, each another trial encode of the whole tile:
@@ -266,8 +281,11 @@ multi-byte values through a hash of distinct words.
 
 ### 4.2 the neighbourhood
 
-Ten row cursors (`row_cur[0..9]`) give the model the current row, four rows
-above, and lookahead within them. Four neighbours are named throughout, and are
+`row_cur[0..4]` are five row buffers, rotated one step per row, and
+`row_cur[5..9]` are the working cursors into them — the current row and then
+one, two, three and four rows up. Each cursor sits seven records into its
+buffer, so the model can read several pixels either side of the current column
+without falling off an end. Four neighbours are named throughout, and are
 kept in `mode_symbol[1..4]`:
 
 ```
@@ -287,9 +305,9 @@ than the symbol values.
 `ModelBlock::code_pixel` is one pass down a ladder, stopping at the first rung
 that succeeds.
 
-**Rung 1 — run mode.** If the current pixel's west neighbour matched *and* a
-run of nine `match` flags across the two rows above is all set, the model is in
-a flat region. It measures how far the flat region extends
+**Rung 1 — run mode.** If the current pixel's west neighbour matched on both
+its flags *and* ten `match` flags across the two rows above are all set, the
+model is in a flat region. It measures how far the flat region extends
 (`run` = the run of pixels above whose `match[0] & match[1]` hold), counts the
 actual run of pixels equal to N, and codes a **binary "did the run reach the
 end"** decision through `esc_ctr[]`, contexted on the alphabet-map entry for N,
@@ -382,10 +400,16 @@ symbol walks the list accumulating the counts of entries not excluded, codes
 toward the front. Not finding it codes the accumulated total as an escape and
 excludes everything in the list on the way out.
 
-Rescale halves the counts when the total passes a threshold, with the entries
-that would round to zero pulled up so a symbol never becomes uncodeable. Lists
-come in two flavours: **dense** (`__init_symbol_list(..., 1)`) starts with every
-symbol present at count 1, and **sparse** starts empty and grows.
+Rescale runs when `since_rescale` passes `rescale_at`, or the moment any one
+count reaches 252. It halves every count — with a rounding bias of one when the
+threshold is below `20 * n` — and re-sorts as it goes. Counts that reach **zero
+are dropped**: the tail of the list is walked back, `live` shrinks by however
+many died, and the escape weight `tot` gains one for each. So the list forgets
+symbols rather than protecting them, and a forgotten symbol costs an escape to
+say again. `tot` and `since_rescale` are then halved themselves.
+
+Lists come in two flavours: **dense** (`__init_symbol_list(..., 1)`) starts with
+every symbol present at count 1, and **sparse** starts empty and grows.
 
 ---
 
@@ -410,15 +434,19 @@ It has **two drivers**, and which one runs is the planar/interleaved decision of
 
 ### 5.1 prediction
 
-`AltP1Block::ctx_of` computes the **MED / LOCO-I gradient predictor**:
+`AltP1Block::ctx_of` computes the **MED / LOCO-I gradient predictor**, the
+same one JPEG-LS uses:
 
 ```
-if W < N:   pred = (NW >= W)  ? (NW < N  ? N+W-NW : W) : W
-else:       pred = (NW <= W)  ? (NW <= N ? W : N+W-NW) : W
+NW >= max(W, N)   ->  pred = min(W, N)      a vertical edge left of the pixel
+NW <= min(W, N)   ->  pred = max(W, N)      a horizontal edge above it
+otherwise         ->  pred = W + N - NW     a plane through the three
 ```
 
-which is the standard "pick N on a vertical edge, W on a horizontal edge,
-N+W−NW on a gradient" rule.
+The decompilation writes it as a nest of four comparisons that fall through to
+`N` when none fires, which is the same function — the fall-through cases are
+exactly the two where `NW` is outside the interval `[min(W,N), max(W,N)]` and
+`N` is the answer the table above gives.
 
 ### 5.2 the context
 
@@ -457,8 +485,14 @@ The folded code is coded in two stages:
 
 1. **`__alt_p1_code_symbol`** codes the code's *slot* against a seven-way
    frequency array — slots 0–4 are the codes 0–4 directly, and slots 5 and 6
-   are "an odd code ≥ 5" and "an even code ≥ 5". The array is rescaled by
-   thirds once its total passes 0x2000.
+   are "an odd code ≥ 5" and "an even code ≥ 5".
+
+   The total lives in `freq[0]`, and only its low fifteen bits: **bit 15 is a
+   marker that the array has been rescaled at least once**, which is why every
+   read of the total is `& 0x7FFF`. Rescale triggers above 0x2000 and picks its
+   divisor from the *smallest* count in the array — by **halves** if that has
+   fallen to 1 or 0, and by **thirds** otherwise. Rescaling by thirds when
+   something is already at 1 would round it away.
 2. Slots 5 and 6 **escape into a binary tree**: `__code_symbol_tree` walks
    `level_geom[]` — a table of per-level spans laid out by `__rc_begin` — coding
    one bit per level through `FreqPair` counters, with the level itself chosen by
@@ -548,11 +582,19 @@ quantiser itself depends on the band**. The slot is
 `320*band + 64*gA + 16*gB + 4*gC + gD`, and `nb_id[]` maps slots to weight sets
 lazily, allocating on first use.
 
-A second linear stage, `__alt_p2_filter`, mixes seven weight rows with
-`bmf_p2_mix[4][6]` and `bmf_p2_coef[7][4]`, producing a centred prediction and,
-when the set has been used before, blending its own prediction with the mixed
-one by a confidence ratio held in `w[14][0] / w[14][1]` — which starts at
-47/169.2 and moves as the set proves itself.
+A second linear stage, `__alt_p2_filter`, blends **six** weight sets — the six
+pointers in `CtxWeights::f0`, each a 7×4 matrix like the one above — using the
+six coefficients of `bmf_p2_mix[mode]`, one row of a 4×6 table. `bmf_p2_coef`
+is separate and earlier: it makes the centre value the features are measured
+against. The result is a mixed prediction.
+
+When the weight set has been used before, its own prediction is blended with
+that mixed one by a confidence ratio, `w[14][0] / w[14][1]`. The pair starts at
+47/169.2 and both halves are then tracked with a rate of 0.001 — `[14][1]`
+following the variance of the difference between the two predictions and
+`[14][0]` following its covariance with the sample — so the ratio is a running
+least-squares weight, and a set that keeps agreeing with the mix is trusted
+less on its own account rather than more.
 
 ### 6.3 coding the residual, and the counter cascade
 
@@ -643,8 +685,15 @@ because the command line is pinned to `-S -Q9`:
 - **near-lossless (`-E`).** `near_lossless_q` is pinned to 0 (§5.5), so
   `fold_hi`, the drift checks and the `bucket_size` in `__alt_init_tables` are
   all inert.
-- **quality below 9.** `opt_search_quality` is a `constexpr` 9, so the filter
-  search always runs its full trial set.
+- **quality below 9.** `opt_search_quality` is a `constexpr` 9.
+
+That third one needs a caveat the other two do not, and it applies to all six
+`opt_*` constants in `globals.inc`: **nothing reads any of them.** Not
+`opt_use_filters`, `opt_slow`, `opt_filter_template`, `opt_pack_output`,
+`opt_search_quality` or `opt_max_error` — the mode-folding passes replaced every
+read with the folded behaviour, and what is left is a record of the settings
+this build is pinned to, not a set of switches. Changing one changes nothing.
 
 `tools/deadcheck.py` is what keeps track of code that became unreachable as
-those modes were folded away.
+those modes were folded away, and `tools/unused.py` of declarations left behind
+by it.
