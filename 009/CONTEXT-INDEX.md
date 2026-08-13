@@ -126,9 +126,11 @@ nb_slot = CtxIdx{}.bits<4, 2>(gB).bits<2, 2>(gC).bits<0, 2>(gD)
                   .digit<64, 5>(gA).digit<320, 6>(band);
 ```
 
-That is the same code generated, one line shorter than today, and it writes
-down the two numbers this review had to recover by reading the threshold table
-— that `gA` has five values and `band` six. Note that `digit<320,6>` also
+Same length as today, and the same binary: built both ways, `cmp` says the two
+executables are byte-identical, which is what `raw(Stride*v)` behind a
+`constexpr` should give and is worth checking rather than asserting. What it
+adds is the two numbers this review had to recover by reading the threshold
+table — that `gA` has five values and `band` six. Note that `digit<320,6>` also
 states the array bound: `320 * 6 = 1920`, which is §1.
 
 **Recommendation:** add `digit`, convert this one site, decline `bits<6,5>`.
@@ -137,24 +139,32 @@ states the array bound: `320 * 6 = 1920`, which is §1.
 
 ## 3. The other ten `CtxIdx` sites
 
-All in `model.inc`, and they come in pairs — the encoder's and the decoder's
-half of the same context, at 795/1418 (`nb`), 845/1473 (`nb2`), 852/1479
-(`sig1`), 864/1494 (`sig2`), plus `sig3` at 1503 and `amap` at 1547.
+All in `model.inc`. Four are one context each in both halves of the model —
+`decode_pixel` spans 702..1330 and `code_pixel` 1331 on, so the decoder's copy
+comes first: 795/1418 (`nb`), 845/1473 (`nb2`), 852/1479 (`sig1`), 864/1494
+(`sig2`). The last two, `sig3` at 1503 and `amap` at 1547, are in the encoder
+only.
 
-Eight are `bit<Pos>` chains over match flags and gradient tests, six of them
-with one `raw` for a term that is not a field — a bucket base, a symbol's low
-nibble. That is what the accessor was written for and they are fine as they
-are.
+By accessor: three are `bit<Pos>` chains alone, six are a `bit` chain with one
+`raw` for a term that is not a field, and one (`sig3`) is `bits` with a `raw`.
+That is what the accessor was written for and eight of the ten are fine as
+they are.
 
-Two are worth noting:
+Two are worth noting, and the second is a small piece of work rather than a
+remark:
 
 - **1503**, `sig3 = CtxIdx{}.bits<0,4>(__frame.sym10).raw(16*id2)` — a four-bit
-  field with a lazily allocated context id above it. `id2` has no static
-  bound (it is handed out on first sight of a signature), so `raw` is right and
+  field with a lazily allocated context id above it. `id2` has no static bound
+  (it is handed out on first sight of a signature), so `raw` is right and
   `bits` would be a claim the code cannot make.
-- **1547**, `amap` — three `bit`s and a `raw`; same reading.
+- **873**, in the decoder, is that same context unconverted:
+  `__frame.sym1 = 16*id2+(__frame.sym1&0xF);` — the same four-bit field and the
+  same `16*id2`, written as a multiply and a mask, in place. The encoder's half
+  says what it is and the decoder's does not, which is the one asymmetry in
+  these ten. Converting it is one line and it is the cheapest item in this
+  document.
 
-No change proposed for any of the ten.
+No change proposed for the other nine.
 
 ---
 
@@ -174,18 +184,28 @@ Nine lines of `alt_p2_context.inc`, 408 lines long, hold every one of them:
 | 311 | `bank3` | 11 | 15..25 | `<<13`, `<<11` |
 | 322 | `bank4` | 12 | 15..25 | `<<13` |
 
-Every one of the eighty-six is the same shape:
+**Eighty-three of the eighty-six** are the same shape:
 
 ```c
-(some difference of neighbours) & 0x2000000
+(a neighbour, or a difference of neighbours) & 0x2000000
 ```
 
-**A mask by a single power of two keeps one bit of a difference, and that bit
-is the difference's sign.** `P2Ctx::val`, `dval` and `err` are `int16_t`, so
+The other three are `& 0xFFFFF800`, which is not a bit test at all — it is the
+`sum_all` quantiser at the end of lines 270, 274 and 322, and the last part of
+this section is about it.
+
+**A mask by a single power of two keeps one bit of a value, and for these
+values that bit is the sign.** `P2Ctx::val`, `dval` and `err` are `int16_t`, so
 each promotes to `int` with bits 16..31 all copies of its sign; a sum of four
 of them cannot exceed `4 * 32767 < 2^17`, so bits 17 and up are still sign
 copies. Masking bit 25 of such a sum is therefore exactly "is this difference
 negative", shifted to bit 25.
+
+By operand, the eighty-three are: **8** a plain member access, **11** a bare
+local, and **64** an expression. The eleven bare locals are not the easy case
+they look like — every one of them (`d_run0`, `d_up`, `d_up5`, `dtop2`,
+`dvsum2`, `lap`) is itself a difference against a `run`, so they belong with
+class 3 below and not with class 1.
 
 Which makes each line a bit-packed context word, and `CtxIdx` the thing that
 says so. `ctx1` at 270, converted:
@@ -226,21 +246,33 @@ So both spellings are `((x>a)+(x>b)+(x>c))<<11`, and one of them can be read.
 `x & (1<<k)` is `(x < 0) << k` only while `|x| < 2^k`. That is a claim per
 term, not per file, and it splits into three classes:
 
-1. **One `int16_t` member, masked at bit 16 or above** — 19 of the 86. Provable
-   from the promotion alone: bits 16..31 are the sign. No range argument.
-2. **A sum of up to four members, masked at bit 17 or above** — most of the
-   rest. `4 * 32767 = 131068 < 2^17`, so provable from the member widths and
-   the number of terms. Coefficients count: `2*x + y + z` is four terms.
-3. **Terms carrying `run0`, `run1`, `run2` or `run`** — these are not members
-   but accumulated predictions (`run0 = pred0 + run_s`, `run1 = pred1 + run0`,
-   …), and `p2_pred` returns a rounded right-shift of a weight. The bound is
-   pixel-scale — `val` is `16 * sample`, so ≤ 4080 — but it is an argument
-   about the model rather than about a type, and it is the class where a
-   conversion could quietly be wrong.
+1. **One `int16_t` member, masked at bit 16 or above** — 7 of the 83, and one
+   more at bit 15 behind a `(uint16_t)` cast, which is the same argument one
+   bit down. Provable from the promotion alone: bits 16..31 are the sign, and
+   bit 15 of the 16-bit value is. No range argument.
+2. **A sum of members, masked at bit 17 or above** — provable from the widths
+   and the number of terms while there are at most four of them:
+   `4 * 32767 = 131068 < 2^17`. Coefficients count — `2*x + y + z` is four
+   terms — and so does the bit: at bit 16 a four-term *positive* sum can set
+   the bit without being negative, so bit 16 needs class 3's argument even for
+   a sum of members.
+3. **Anything carrying a `run`, and every mask at bit 15 or 16** — the largest
+   class. `run0 = pred0 + run_s`, `run1 = pred1 + run0`, `run2 = pred2 + run1`,
+   and `p2_pred` returns a rounded right-shift of a weight, so the bound is
+   pixel-scale (`val` is `16 * sample`, ≤ 4080) but it is an argument about the
+   model rather than about a type. All eleven bare locals are here, as are the
+   seven masks at bit 15 and the seven at bit 16.
+
+   Two of those are provable anyway and show what the class needs: line 322's
+   `((uint16_t)run3-(uint16_t)cx0[-4].dval-(uint16_t)dv_now4)&0x8000` casts to
+   sixteen bits first, so bit 15 *is* that difference's sign whatever the
+   magnitudes are; line 296's `(208-rb0->val)&0x8000` is not — with `val`'s
+   type alone the result reaches 32976, and only the model's `val = 16*sample`
+   keeps it under 32768.
 
 Class 3 is the one that needs measuring rather than reasoning: instrument each
-`run` and record the maximum over the corpus and over crops that reach the
-other coding paths. And the measurement is *evidence*, not proof — the corpus
+`run` and each masked expression, and record the maximum magnitude over the
+corpus and over crops that reach the other coding paths. And the measurement is *evidence*, not proof — the corpus
 did not reach colour transform 1 or 2 for eleven rounds either. Where a bound
 cannot be argued from types, the honest conversion is to keep the mask and say
 why in a comment, not to write `< 0` and hope.
@@ -258,12 +290,13 @@ In order:
    real out-of-bounds access from eight of seventeen images.
 2. **Add `digit<Stride,Radix>` and convert `nb_slot`** (§2). One site, no
    arithmetic change, and it writes down the two radices.
-3. **Convert the two `<<11` and `<<13` rows in all nine lines** — the threshold
-   counts. They are already fields; `bits<13,2>` and `bits<11,2>` say so, and
-   converting them also collapses the two spellings of the sum_all count into
-   one. No range argument needed: a sum of three comparisons is 0..3.
+3. **Convert the `<<13` and `<<11` rows** — the threshold counts. Seven of the
+   nine lines have them; 243 and 248 have neither. They are already fields, so
+   `bits<13,2>` and `bits<11,2>` say what they are, and converting them also
+   collapses the two spellings of the `sum_all` count into one. No range
+   argument needed: a sum of three comparisons is 0..3.
 4. **Convert the class-1 and class-2 masks** (§5), one line at a time, gating
-   each. About 70 of the 86 terms.
+   each — the sign tests at bit 17 and above, which is most of the eighty-three.
 5. **Leave class 3 masked** until each `run` bound has been measured, and write
    the bound in the comment when it is.
 
@@ -273,8 +306,8 @@ What I would not do: convert the `raw` terms in `model.inc`, or replace the
 ## 7. A note on `field<Pos, W>`
 
 `ctxidx.inc` had a fourth accessor, `field<Pos,W>`, which masked a value *in
-place* rather than shifting it — exactly the shape of the eighty-six terms
-above. It was deleted in the round that made `deadcheck.py` read the whole
+place* rather than shifting it — exactly the shape of the eighty-three sign
+tests above. It was deleted in the round that made `deadcheck.py` read the whole
 translation unit, because nothing used it, and that was right: it was dead.
 
 It is worth recording that the conversion in §4 would not bring it back either.
