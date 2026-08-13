@@ -132,7 +132,7 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
     blk->alpha_map = buf;
     memset(buf, 1, alpha_n);
     blk->escape_list = &blk->escape;
-    __init_symbol_list(&blk->escape, blk->alphabet, 1);
+    blk->escape.init(blk->alphabet, 1);
     blk->sel_cur = blk->sel;
     n_syms = blk->alphabet;
     blk1 = (SymListBlock*)bmf_new(SymListBlock::bytes(n_syms));
@@ -163,8 +163,8 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
     if( !(blk->alphabet<=0) ) {
       s = 0;
       do {
-        __init_symbol_list(&blk->sel1_list[s], 99, 0);
-        __init_symbol_list(&blk->sel0_list[s++], 33, 0);
+        blk->sel1_list[s].init(99, 0);
+        blk->sel0_list[s++].init(33, 0);
       } while( (uint32_t)s<blk->alphabet );
     }
     if( blk->height>0 ) {

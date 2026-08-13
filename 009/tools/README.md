@@ -445,7 +445,7 @@ them run.
 | `hex_constants.py` | Write subs1.hpp's pattern constants in hex instead of decimal | yes |
 | `liftframe.py` | Turn one function's frame struct back into ordinary locals | yes |
 | `merge.py` | Make several recoveries of one object into one struct | yes |
-| `methodise.py` | Turn a function whose first parameter is `_this` into a method of its type | yes |
+| `methodise.py` | Turn a function whose first parameter is its receiver into a method | yes |
 | `mkaltp1.py` | Write testfiles/altp1.bmp — the image that reaches `alt_model_p1_decode` | no |
 | `mkmed32.py` | Write testfiles/med32.bmp — the image that reaches `unpredict_med` | no |
 | `mknoise.py` | Write testfiles/noise24.bmp — data that does not compress | no |

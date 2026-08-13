@@ -301,7 +301,7 @@ struct ModelBlock {
         if( 4*nbytes ) {
           k = 0;
           do
-            __init_symbol_list(&lists[k++], 256, 1);
+            lists[k++].init(256, 1);
           while( k<(4*nbytes) );
           n_syms = alphabet;
         }
@@ -325,9 +325,9 @@ struct ModelBlock {
           } while( s<alphabet );
         }
       } else if( n_syms<=mask ) {
-        __init_symbol_list(&lists[0], mask-n_syms+2, 1);
+        lists[0].init(mask-n_syms+2, 1);
         lists[0].rescale_at = 19*lists[0].n;
-        if( !(alphabet==0) ) {
+        if( alphabet ) {
           run = 0;
           s2 = 0;
           do {
@@ -475,7 +475,7 @@ struct ModelBlock {
     this_1->alpha_map = (uint8_t*)buf;
     memset(buf, 1, alpha_n);
     blk->escape_list = &blk->escape;
-    __init_symbol_list(&blk->escape, blk->alphabet, 1);
+    blk->escape.init(blk->alphabet, 1);
     blk->sel_cur = blk->sel;
     wt = blk->alphabet;
     has3 = (SymListBlock*)bmf_new(SymListBlock::bytes(wt));
@@ -502,8 +502,8 @@ struct ModelBlock {
     if( !(blk->alphabet<=0) ) {
       s = 0;
       do {
-        __init_symbol_list(&blk->sel1_list[s], 99, 0);
-        __init_symbol_list(&blk->sel0_list[s++], 33, 0);
+        blk->sel1_list[s].init(99, 0);
+        blk->sel0_list[s++].init(33, 0);
       } while( (uint32_t)s<blk->alphabet );
     }
     jj = blk->depth;
@@ -932,7 +932,7 @@ struct ModelBlock {
               bin_tot = run0+ctr->n[1];
               __frame.sym1 = rc.decode_bit(run0, ctr->n[1]);
               if( ctr->limit<(uint32_t)bin_tot )
-                __rescale_counter_pair(ctr);
+                ctr->scale_rare();
               s1b = __frame.sym1;
               ctr->n[__frame.sym1] += 8;
               if( s1b )
@@ -1650,7 +1650,7 @@ struct ModelBlock {
             bin_tot = ctr->n[0]+ctr->n[1];
             rc.encode_bit(ctr->n[0], ctr->n[1], (runlen_s&bit5)!=0);
             if( ctr->limit<(uint32_t)bin_tot )
-              __rescale_counter_pair(ctr);
+              ctr->scale_rare();
             s1b = __frame.sym1;
             __frame.sym4 = bit5;
             ctr->n[__frame.sym1!=0] += 8;

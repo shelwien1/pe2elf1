@@ -251,6 +251,35 @@ struct SymList {
       }
     }
   }
+  void init(int32_t n_syms, int32_t dense) {
+    uint32_t result;
+    const uint32_t n_u = (uint32_t)n_syms;
+    n = n_syms;
+    SymEntry* buf = (SymEntry*)bmf_new(3*n_syms);
+    ent = buf;
+    if( dense ) {
+      tot = 0;
+      live = n_u;
+      result = 12*n_u;
+      since_rescale = 12*n_u;
+      rescale_at = 8*n_u;
+      if( n_u ) {
+        result = 0;
+        do {
+          ent[result].sym = result;
+          ent[result].cnt = 1;
+          ++result;
+        } while( result<live );
+      }
+    } else {
+      tot = 2;
+      rescale_at = 20*n_u;
+      live = 0;
+      since_rescale = 18*n_u;
+      memset(buf, 0, 3*n_u);
+    }
+    return;
+  }
 };
 
 struct SymListBlock {
@@ -279,34 +308,4 @@ static inline bool sym_in_top(const SymEntry* ent, int32_t n, int32_t sym) {
     if( ent[n].sym==sym )
       return true;
   return false;
-}
-
-void __init_symbol_list(SymList* list, int32_t n_syms, int32_t dense) {
-  uint32_t result;
-  const uint32_t n = (uint32_t)n_syms;
-  list->n = n_syms;
-  SymEntry* buf = (SymEntry*)bmf_new(3*n_syms);
-  list->ent = buf;
-  if( dense ) {
-    list->tot = 0;
-    list->live = n;
-    result = 12*n;
-    list->since_rescale = 12*n;
-    list->rescale_at = 8*n;
-    if( n ) {
-      result = 0;
-      do {
-        list->ent[result].sym = result;
-        list->ent[result].cnt = 1;
-        ++result;
-      } while( result<list->live );
-    }
-  } else {
-    list->tot = 2;
-    list->rescale_at = 20*n;
-    list->live = 0;
-    list->since_rescale = 18*n;
-    memset(buf, 0, 3*n);
-  }
-  return;
 }

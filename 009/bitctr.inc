@@ -163,7 +163,3 @@ CounterNode*__init_counter_node(CounterNode* node) {
   node->total = 22;
   return node;
 }
-
-int32_t __rescale_counter_pair(BitCtr* ctr) {
-  return ctr->scale_rare();
-}

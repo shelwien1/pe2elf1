@@ -124,7 +124,7 @@ void __reduce_alphabet(ModelBlock* blk, int8_t unread_flag, uint8_t* src) {
     rc.encode(n_distinct-1, n_distinct, __frame.slot4+1);
     n_syms = blk1->alphabet;
     if( n_syms<=__frame.slot4 ) {
-      __init_symbol_list(&__frame.lists[0], __frame.slot4-n_syms+2, 1);
+      __frame.lists[0].init(__frame.slot4-n_syms+2, 1);
       __frame.lists[0].rescale_at = 19*__frame.lists[0].n;
       n_syms3 = blk1->alphabet;
       if( n_syms3 ) {
@@ -315,7 +315,7 @@ LABEL_71:
         __frame.slot7 = (ModelBlock*)(blk1);
         li = 0;
         do {
-          __init_symbol_list(&__frame.lists[li], 256, 1);
+          __frame.lists[li].init(256, 1);
           ++li;
         } while( li<4*n_kids );
         blk1 = __frame.slot7;

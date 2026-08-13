@@ -254,15 +254,6 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out, int8_t unread_flag,
     __rc_end_encode();
 }
 
-void __alt_p2_d8_decode_body(AltP2Block* blk, int8_t unread_flag, uint8_t* out, int32_t width, int32_t height) {
-  blk->alt_p2_d8_body<1>(nullptr, out, unread_flag, width, height);
-}
-
-
-void __alt_p2_d8_encode_body(AltP2Block* blk, uint8_t* src, int32_t width, int32_t height, uint8_t* out) {
-  blk->alt_p2_d8_body<0>(src, out, 0, width, height);
-}
-
 // One block allocated, one body run, one block freed.  Only the middle line
 // differs, and the two bodies take their arguments in different orders --
 // which is the decompiler's record of two call sites, not two intentions.
@@ -275,9 +266,9 @@ void __alt_model_p2_d8(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
   else
     blk = nullptr;
   if( f_DEC )
-    __alt_p2_d8_decode_body(blk, i, out, i, height);
+    blk->alt_p2_d8_body<1>(nullptr, out, i, i, height);
   else
-    __alt_p2_d8_encode_body(blk, src, i, height, out);
+    blk->alt_p2_d8_body<0>(src, out, 0, i, height);
   if( blk )
     blk->alt_p2_free(1);
 }
