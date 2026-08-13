@@ -192,7 +192,9 @@ below, so the next read is on the path where that branch was not taken.
 Dead is not absent. `(uint32_t)pair_ctx` is the identity on i386 and is not on
 x86-64, and under `-DBMF_HIGH_ARENA` both are half an address that nothing
 happens to read. The address role keeps the name it already had — `h0` and
-`p2_rec` are right there — which is what `node` was given in round five.
+`p2_rec` are right there — which is what `node` in `AltP1Block::update_model`
+was given in round nine, where the merged variable was `result` and the
+mis-read cost eight bytes of phase.
 
 `tools/ptrwidth.py --parked` is the rule: a name assigned `(uintptr_t)…` that
 is either declared narrower than a pointer or read through a narrowing cast.
@@ -204,7 +206,7 @@ width decides and not the target's. That exemption is the rule's, not a reader's
 Four locals were mistyped `uintptr_t` beside them and are now what their
 siblings already were: `result` (plane zero's context word, `int32_t` like
 `ctx0`…`ctx6`), `code` and `code1` (both from an `int32_t` decode, `int32_t`
-like every other `codeN`), and `off3` (a plane number, `int32_t` like `off0`,
+like `code0`, `code2` and `code3`), and `off3` (a plane number, `int32_t` like `off0`,
 `off1`, `off2`). None was a pointer; each was a value whose width changed with
 the target for no reason.
 
