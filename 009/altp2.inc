@@ -192,6 +192,9 @@ struct AltP2Block {
   // is for; every other method in this tree is defined in its class body
   // because every other method fits there.  They were free functions taking
   // the block as a first argument, which is what a method is.
+  template<int f_DEC>
+  void alt_p2_d8_body(uint8_t* src, uint8_t* out, int8_t unread_flag,
+                      int32_t width, int32_t height);
   int32_t alt_p2_context(AltP2Block* refa, AltP2Block* refb);
   uint32_t alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_in);
 

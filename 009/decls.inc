@@ -54,7 +54,6 @@ int32_t __alt_p1_decode_symbol(uint16_t* freq, int32_t unread_arg, int32_t ctx);
 int32_t __rescale_counter_pair(BitCtr* ctr);
 void __rc_end_decode();
 void __rc_end_encode();
-void**__free_workspace(ModelBlock* blk, int8_t do_free);
 static inline bool sym_in_top(const SymEntry* ent, int32_t n, int32_t sym);
 int32_t __update_binary_pair(uint16_t* _this, int32_t symbol);
 uint16_t*__rc_begin_encode();
@@ -76,7 +75,6 @@ int32_t __cost_candidate(uint8_t* img, int32_t cand, uint8_t* desc, int8_t unrea
 int32_t __choose_plane_coding(BmfImage* img, int32_t unused_h, int8_t unused_c);
 int32_t*__read_bmp(char* path);
 int32_t __decode_symbol_list(SymList* syms);
-ModelBlock*__layout_workspace(ModelBlock* blk, int32_t unread_flag, int32_t img_w, int32_t img_h, int32_t img_depth);
 int32_t __alt_model_p1_encode(uint16_t* hdr, uint8_t* src);
 void __alt_p2_d8_decode_body(AltP2Block* blk, int8_t unread_flag, uint8_t* out, int32_t width, int32_t height);
 void __alt_model_p2_d8_decode(uint8_t* out, int32_t i, int32_t height);

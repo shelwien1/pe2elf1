@@ -70,13 +70,13 @@ int32_t __alt_p2_filter(float (*_this)[4], float (*a2)[4], CtxWeights* w, int32_
 // it is told which code was used -- and that asymmetry is the reason these two
 // were written separately in the first place.
 template<int f_DEC>
-void __alt_p2_d8_body(AltP2Block* blk, uint8_t* src, uint8_t* out, int8_t unread_flag,
-                      int32_t width, int32_t height) {
+void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out, int8_t unread_flag,
+                                int32_t width, int32_t height) {
   P2Ctx* pix, * rec, * buf3, * b4, * buf2, * buf1, * b0;
   int32_t j;
   int32_t code0;
   uint8_t* outp, want, * srcp, code2;
-  float (**cur)[4], (**r1)[4];
+  float (**cur_at)[4], (**r1)[4];
   uint8_t recon, recon2;
   float (*last)[4], (**r0)[4];
   int32_t q, resid, drift, q2, row_bytes, pred, resid2, drift2, code;
@@ -87,61 +87,61 @@ void __alt_p2_d8_body(AltP2Block* blk, uint8_t* src, uint8_t* out, int8_t unread
     __rc_begin_decode(unread_flag);
   else
     __rc_begin_encode();
-  pix = blk->cursor[0];
+  pix = cursor[0];
   if( width>0 ) {
     uint8_t* p = src;
     for( j = 0; j<width; ++j ) {
-      rec = blk->cursor[0];
+      rec = cursor[0];
       q2 = rec[-1].val>>4;
-      blk->ctx_pair[0] = blk->ctx+blk->ctx_delta[q2+4];
-      blk->ctx_pair[1] = blk->ctx+blk->ctx_delta[q2];
-      P2Freq&fr = blk->freq[blk->ctx+blk->ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+blk->ctx_w[2].w[rec[-2].sign]+blk->ctx_w[1].w[rec[-1].sign]+blk->ctx_w[0].w[((uint32_t)(q2-115)>>31)+((uint32_t)(q2-17)>>31)]+blk->ctx_w[4].w[1]];
+      ctx_pair[0] = ctx+ctx_delta[q2+4];
+      ctx_pair[1] = ctx+ctx_delta[q2];
+      P2Freq&fr = freq[ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[((uint32_t)(q2-115)>>31)+((uint32_t)(q2-17)>>31)]+ctx_w[4].w[1]];
       if( f_DEC ) {
-        *out = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)blk->unfold[fr.decode_symbol(blk->ctx_pair)]);
+        *out = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(ctx_pair)]);
       } else {
         q = (uint16_t)rec[-1].val>>4;
         resid = (uint8_t)(*p-q);
-        code0 = blk->fold[resid];
-        recon = blk->unfold[code0]+q;
+        code0 = fold[resid];
+        recon = unfold[code0]+q;
         drift = (uint8_t)*out-(uint8_t)(recon+*out-*p);
         if( drift<-16||drift>16 ) {
           *out = *p;
-          code0 = blk->fold_hi[resid];
+          code0 = fold_hi[resid];
         } else {
           *out = recon;
         }
-        fr.encode_symbol(blk->ctx_pair, code0);
+        fr.encode_symbol(ctx_pair, code0);
         ++p;
       }
       int32_t val = 16*(uint8_t)*out;
-      blk->cursor[0]->val = val;
-      blk->cursor[0]->dval = val;
+      cursor[0]->val = val;
+      cursor[0]->dval = val;
       ++out;
       int64_t err = (int16_t)(rec->val-rec[-1].val);
       rec->err = err;
       LOWORD(err) = (WORD2(err)^err)-WORD2(err);
-      blk->cursor[0]->aerr = err;
-      blk->cursor[0]->dupright = err;
-      blk->cursor[0]->dupleft = err;
-      blk->cursor[0]->dup = err;
-      blk->cursor[0]->dleft = (uint32_t)blk->cursor[0]->dup>>1;
-      blk->cursor[0]->mag = 2;
-      blk->cursor[0]->sign = (blk->cursor[0]->err<=0)+(blk->cursor[0]->err<0);
-      pix = blk->cursor[0]+1;
-      blk->cursor[0] = pix;
+      cursor[0]->aerr = err;
+      cursor[0]->dupright = err;
+      cursor[0]->dupleft = err;
+      cursor[0]->dup = err;
+      cursor[0]->dleft = (uint32_t)cursor[0]->dup>>1;
+      cursor[0]->mag = 2;
+      cursor[0]->sign = (cursor[0]->err<=0)+(cursor[0]->err<0);
+      pix = cursor[0]+1;
+      cursor[0] = pix;
     }
     if( !f_DEC )
       src_end = p;
   }
   {
-    P2Ctx*const here = blk->cursor[0];
+    P2Ctx*const here = cursor[0];
     here[0] = here[-1];
     here[1] = here[-1];
     here[2] = here[-1];
     here[3] = here[-1];
     here[4] = here[-1];
   }
-  P2Ctx*const rec3 = blk->cursor[0]+(-width);
+  P2Ctx*const rec3 = cursor[0]+(-width);
   rec3[-1] = rec3[0];
   rec3[-2] = rec3[1];
   rec3[-3] = rec3[2];
@@ -151,64 +151,64 @@ void __alt_p2_d8_body(AltP2Block* blk, uint8_t* src, uint8_t* out, int8_t unread
   rec3[-7] = rec3[6];
   rec3[-8] = rec3[7];
   row_bytes = 18*width+234;
-  memcpy(blk->buf[1], blk->buf[0], row_bytes);
-  memcpy(blk->buf[2], blk->buf[0], row_bytes);
-  memcpy(blk->buf[3], blk->buf[0], row_bytes);
+  memcpy(buf[1], buf[0], row_bytes);
+  memcpy(buf[2], buf[0], row_bytes);
+  memcpy(buf[3], buf[0], row_bytes);
   if( height>1 ) {
-    uint32_t* pair = blk->ctx_pair;
+    uint32_t* pair = ctx_pair;
     outp = out;
     uint32_t y = 0;
     do {
-      cur = blk->cur;
-      last = cur[-1];
+      cur_at = cur;
+      last = cur_at[-1];
       srcp = src_end;
-      cur[1] = last;
-      *blk->cur = last;
-      r0 = blk->row0;
-      r1 = blk->row1;
-      blk->row0 = r1;
-      blk->row1 = r0;
+      cur_at[1] = last;
+      *cur = last;
+      r0 = row0;
+      r1 = row1;
+      row0 = r1;
+      row1 = r0;
       r1 += 2;
-      blk->cur = r1;
+      cur = r1;
       r0 += 2;
-      blk->above = r0;
+      above = r0;
       r1[-1] = *r0;
-      blk->cur[-2] = *r0;
-      memset(blk->p2_row0_head, 0, sizeof blk->p2_row0_head);
-      blk->bias[0] = 0.0f;
-      blk->bias[1] = 0.0f;
-      blk->bias[2] = 0.0f;
-      blk->bias[3] = 0.0f;
-      __builtin_memset(blk->p2_row, 0, sizeof blk->p2_row);
+      cur[-2] = *r0;
+      memset(p2_row0_head, 0, sizeof p2_row0_head);
+      bias[0] = 0.0f;
+      bias[1] = 0.0f;
+      bias[2] = 0.0f;
+      bias[3] = 0.0f;
+      __builtin_memset(p2_row, 0, sizeof p2_row);
       {
-        P2Ctx*const here = blk->cursor[0];
+        P2Ctx*const here = cursor[0];
         here[0] = here[-1];
         here[1] = here[-2];
         here[2] = here[-3];
         here[3] = here[-4];
         here[4] = here[-5];
       }
-      buf3 = blk->buf[3];
-      b4 = blk->buf[4];
-      buf2 = blk->buf[2];
-      buf1 = blk->buf[1];
-      b0 = blk->buf[0];
-      blk->buf[4] = buf3;
-      blk->buf[3] = buf2;
-      blk->buf[2] = buf1;
-      blk->buf[0] = b4;
-      blk->buf[1] = b0;
+      buf3 = buf[3];
+      b4 = buf[4];
+      buf2 = buf[2];
+      buf1 = buf[1];
+      b0 = buf[0];
+      buf[4] = buf3;
+      buf[3] = buf2;
+      buf[2] = buf1;
+      buf[0] = b4;
+      buf[1] = b0;
       b4 += 8;
-      blk->cursor[0] = b4;
+      cursor[0] = b4;
       b0 += 8;
-      blk->cursor[1] = b0;
-      blk->cursor[2] = buf1+8;
-      blk->cursor[3] = buf2+8;
-      blk->cursor[4] = buf3+8;
+      cursor[1] = b0;
+      cursor[2] = buf1+8;
+      cursor[3] = buf2+8;
+      cursor[4] = buf3+8;
       ((P2Ctx*)b4)[-1] = ((P2Ctx*)b0)[0];
       {
-        P2Ctx*const here = blk->cursor[0];
-        P2Ctx*const up = blk->cursor[1];
+        P2Ctx*const here = cursor[0];
+        P2Ctx*const up = cursor[1];
         here[-2] = up[1];
         here[-3] = up[2];
         here[-4] = up[3];
@@ -217,29 +217,29 @@ void __alt_p2_d8_body(AltP2Block* blk, uint8_t* src, uint8_t* out, int8_t unread
         here[-7] = up[6];
         here[-8] = up[7];
       }
-      blk->cursor[0]->dval = 0;
+      cursor[0]->dval = 0;
       if( width>0 ) {
         for( k = 0; k<(uint32_t)width; ++k ) {
-          pred = blk->alt_p2_context((AltP2Block*)nullptr, (AltP2Block*)nullptr);
+          pred = alt_p2_context((AltP2Block*)nullptr, (AltP2Block*)nullptr);
           if( f_DEC ) {
-            code2 = code = blk->freq[blk->ctx].decode_symbol(pair);
-            outp[k] = (uint8_t)(pred+(blk->unfold[code]));
+            code2 = code = freq[ctx].decode_symbol(pair);
+            outp[k] = (uint8_t)(pred+(unfold[code]));
           } else {
             want = srcp[k];
             resid2 = (uint8_t)(want-pred);
-            recon2 = pred+blk->unfold[blk->fold[resid2]];
+            recon2 = pred+unfold[fold[resid2]];
             drift2 = (uint8_t)outp[k]-(uint8_t)(recon2+outp[k]-want);
-            code = blk->fold[resid2];
+            code = fold[resid2];
             if( drift2<-16||drift2>16 ) {
               outp[k] = want;
-              code = blk->fold_hi[(uint8_t)(want-pred)];
+              code = fold_hi[(uint8_t)(want-pred)];
             } else {
               outp[k] = recon2;
             }
             code2 = code;
-            blk->freq[blk->ctx].encode_symbol(pair, code);
+            freq[ctx].encode_symbol(pair, code);
           }
-          blk->alt_p2_model((uint8_t)outp[k], code2, (uint8_t)outp[k]-pred);
+          alt_p2_model((uint8_t)outp[k], code2, (uint8_t)outp[k]-pred);
         }
         if( !f_DEC )
           src_end = &srcp[width];
@@ -255,12 +255,12 @@ void __alt_p2_d8_body(AltP2Block* blk, uint8_t* src, uint8_t* out, int8_t unread
 }
 
 void __alt_p2_d8_decode_body(AltP2Block* blk, int8_t unread_flag, uint8_t* out, int32_t width, int32_t height) {
-  __alt_p2_d8_body<1>(blk, nullptr, out, unread_flag, width, height);
+  blk->alt_p2_d8_body<1>(nullptr, out, unread_flag, width, height);
 }
 
 
 void __alt_p2_d8_encode_body(AltP2Block* blk, uint8_t* src, int32_t width, int32_t height, uint8_t* out) {
-  __alt_p2_d8_body<0>(blk, src, out, 0, width, height);
+  blk->alt_p2_d8_body<0>(src, out, 0, width, height);
 }
 
 // One block allocated, one body run, one block freed.  Only the middle line

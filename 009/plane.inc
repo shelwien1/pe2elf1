@@ -17,12 +17,12 @@ void __unmodel_plane(int8_t unread_flag, uint16_t* p_i, uint8_t* out) {
   } else {
     void* raw = bmf_new(sizeof(ModelBlock));
     if( raw )
-      blk = __layout_workspace((ModelBlock*)raw, p_i[1], *p_i, p_i[1], p_i[5]&0x3F);
+      blk = ((ModelBlock*)raw)->layout_workspace(p_i[1], *p_i, p_i[1], p_i[5]&0x3F);
     else
       blk = (ModelBlock*)(nullptr);
     (blk)->unmodel_plane_slow(out);
     if( blk )
-      __free_workspace(blk, 1);
+      blk->free_workspace(1);
   }
 }
 

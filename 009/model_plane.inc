@@ -29,7 +29,7 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   } else {
     void* ws = bmf_new(sizeof(ModelBlock));
     if( ws )
-      blk = __layout_workspace((ModelBlock*)ws, p_i->height, p_i->width, p_i->height, p_i->depth&0x3F);
+      blk = ((ModelBlock*)ws)->layout_workspace(p_i->height, p_i->width, p_i->height, p_i->depth&0x3F);
     else
       blk = (ModelBlock*)(0);
     __rc_begin_encode();
@@ -237,6 +237,6 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
       } while( (uint32_t)y<*(uint32_t*)&blk->height );
     }
     __rc_end_encode();
-    __free_workspace(blk, 1);
+    blk->free_workspace(1);
   }
 }
