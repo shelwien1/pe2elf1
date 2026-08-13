@@ -233,7 +233,7 @@ plane's folded residuals.
 
 ## 5. Choosing how to code each plane
 
-`choose_plane_coding` (856 lines) is the search. For every plane it decides:
+`choose_plane_coding` (890 lines) is the search. For every plane it decides:
 
 * the spatial predictor (2 bits),
 * whether the alternate model handles it (1 bit),
@@ -273,7 +273,7 @@ The decoder sets `plane_predictor = mode & 3` and
 
 ## 6. The filter search
 
-`search_filter` (808 lines) runs before the per-plane coding and sets flag bit 4
+`search_filter` (739 lines) runs before the per-plane coding and sets flag bit 4
 when it applies something. `-Q` is 9, which in BMF selected the most thorough
 search; with the other quality levels folded away, what remains is the full one.
 It costs candidates with §4 and calls `transform_planes` to apply the winner.
