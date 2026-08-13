@@ -1,36 +1,44 @@
 #!/usr/bin/env bash
-# x64.sh — what the 64-bit build still gets wrong.
+# x32.sh — what the 32-bit build still gets wrong.
 #
-#     tools/x64.sh
-#     tools/x64.sh --high     # and put every allocation above 4 GB
+#     tools/x32.sh
 #
-# `test.sh` is the project's oracle and it runs one target.  For six rounds
-# that was the only target there was, and "fifteen streams byte-identical" was
-# the whole claim; the moment a second target exists the claim has a gap in it
-# the size of every pointer in the file.
+# `test.sh` is the project's oracle and it runs one target.  The moment a second
+# target exists the claim has a gap in it the size of every pointer in the file.
 #
-# So this asks `test.sh`'s question of `-m64`: compress each image and compare
-# the stream against the *32-bit* reference, then expand it and compare against
-# the input.  Byte-identical streams across two pointer widths is a much
-# stronger statement than either build alone -- it says the arithmetic that
-# reaches the range coder does not depend on how wide an address is, which is
-# exactly what a decompilation of 1997 x86 has no reason to guarantee and every
-# reason to violate.
+# So this asks `test.sh`'s question of `-m32`: compress each image and compare
+# the stream against the reference, then expand it and compare against the
+# input.  Byte-identical streams across two pointer widths is a much stronger
+# statement than either build alone -- it says the arithmetic that reaches the
+# range coder does not depend on how wide an address is, which is exactly what a
+# decompilation of 1997 x86 has no reason to guarantee and every reason to
+# violate.
 #
-# It also prints what `strict64.log` still holds, because a run that crashes
-# and a run that is wrong look the same from here and the truncation count is
-# what says which is likelier.  See tools/ptrwidth.py for the four kinds.
+# This was `x64.sh` and asked the question the other way round, because the
+# default target was `-m32` and the references were that build's.  The default
+# is x64 now; the references are unchanged, because the two widths produce the
+# same fifteen streams, and that fact is the entire subject of this script.  So
+# the same instrument now points at the width `test.sh` no longer covers, and
+# the sentence it prints -- "N of M cases agree" -- means what it always did.
 #
-# `--high` builds with `-DBMF_HIGH_ARENA`, which puts every allocation the
-# program makes at an address a four-byte pointer cannot name.  That is the
-# check the whole exercise reduces to: with a *low* heap -- which is what x86-64
-# Linux hands out for a program this size, and what `bmf.cpp` used to force with
-# an arena under 4 GB -- truncating a pointer to 32 bits is the identity and
-# nothing fails.  Above 4 GB it faults on the first dereference.  The streams
-# come out byte for byte either way, and only the second run proves anything.
+# It also prints what `strict64.log` still holds.  That is a question about the
+# *default* build rather than this one, and it is here because a truncation
+# count is what says whether a disagreement is likelier a crash or a wrong
+# answer.  See tools/ptrwidth.py for the four kinds.
 #
-# It is not the default: `MAP_FIXED_NOREPLACE` is Linux-only, and a program that
-# runs correctly at one address is not a property worth gating on.
+# `--high` is gone with the rename, and is not lost: `-DBMF_HIGH_ARENA` puts
+# every allocation at an address a four-byte pointer cannot name, and with x64
+# as the default that is now
+#
+#     ./build.sh -DBMF_HIGH_ARENA && ./test.sh
+#
+# on the ordinary gate, which reports 82 of 83 -- the out-of-memory leg skips
+# itself there, because the arena is reserved up front and the ladder stops
+# reaching the allocator it is about.  With a *low* heap, which is what x86-64
+# Linux hands out for a program this size, truncating a pointer to 32 bits is
+# the identity and nothing fails; above 4 GB it faults on the first dereference.
+# It is not the default gate: `MAP_FIXED_NOREPLACE` is Linux-only, and a program
+# that runs correctly at one address is not a property worth gating on.
 set -u
 # A job killed by a signal is reported by the shell that waits on it, and
 # that shell is this one -- so the redirect has to be on the *loops*
@@ -42,25 +50,11 @@ cd "$(dirname "$0")/.."
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-high=; [ "${1:-}" = --high ] && high=-DBMF_HIGH_ARENA
-if ! BMF_OUT="$tmp/bmf64" BMF_BITS=64 ./build.sh $high >"$tmp/build" 2>&1; then
-  echo "the 64-bit build failed:" >&2
+if ! BMF_OUT="$tmp/bmf32" BMF_BITS=32 ./build.sh >"$tmp/build" 2>&1; then
+  echo "the 32-bit build failed:" >&2
   grep -m5 'error:' "$tmp/build" >&2
   exit 2
 fi
-
-# `MAP_FIXED_NOREPLACE` is Linux 4.17 and later, and the address it asks for
-# can be taken.  A host that cannot place the arena is not a failing host --
-# it is one where this particular question cannot be asked -- so say so and
-# ask the ordinary one instead.  Rebuilt rather than flagged, because a binary
-# that exits 7 at startup answers nothing.
-if [ -n "$high" ] &&
-   ! "$tmp/bmf64" c testfiles/t1.bmp "$tmp/probe.bmf" >/dev/null 2>&1 &&
-   BMF_OUT="$tmp/bmf64" BMF_BITS=64 ./build.sh >"$tmp/build" 2>&1; then
-  echo "the high arena could not be placed here; running the ordinary 64-bit build"
-  high=
-fi
-rm -f "$tmp/probe.bmf"
 
 # A signal is not an exit code, and "exits 139" is a worse answer than the
 # name of the signal -- SIGSEGV and SIGFPE are different defects and this loop
@@ -84,13 +78,13 @@ for f in $(ls testfiles/*.bmp | grep -v '/out_' | sort); do
   # `$?` after `if ! cmd` is the negation's status and is always 0, which is
   # how the first version of this reported "compress exits 0" under a line of
   # SIGSEGV.  Run it, then read the code.
-  timeout 120 "$tmp/bmf64" c "$f" "$tmp/$n.bmf" >/dev/null 2>&1
+  timeout 120 "$tmp/bmf32" c "$f" "$tmp/$n.bmf" >/dev/null 2>&1
   rc=$?
   if [ "$rc" != 0 ]; then
     printf '%-9s compress %s\n' "$n" "$(why $rc)"
     bad=$((bad + 1)); continue
   fi
-  timeout 120 "$tmp/bmf64" d "$tmp/$n.bmf" "$tmp/$n.out" >/dev/null 2>&1
+  timeout 120 "$tmp/bmf32" d "$tmp/$n.bmf" "$tmp/$n.out" >/dev/null 2>&1
   rc=$?
   if [ "$rc" != 0 ]; then
     printf '%-9s expand %s\n' "$n" "$(why $rc)"
@@ -118,7 +112,7 @@ for f in $(ls testfiles/*.bmp | grep -v '/out_' | sort); do
     bad=$((bad + 1)); continue
   fi
   if ! cmp -s "$tmp/$n.bmf" "$ref"; then
-    printf '%-9s round trips, but the stream is not the 32-bit one (%s vs %s bytes)\n' \
+    printf '%-9s round trips, but the stream is not the reference (%s vs %s bytes)\n' \
       "$n" "$(stat -c%s "$tmp/$n.bmf")" "$(stat -c%s "$ref")"
     bad=$((bad + 1)); continue
   fi
@@ -128,11 +122,11 @@ done 2>/dev/null
 # The archive, because appending walks the members and `bmf_close_archive`
 # rewrites a header -- a path no single image reaches.
 arc=$tmp/arc.bmf
-"$tmp/bmf64" c testfiles/t1.bmp "$arc" >/dev/null 2>&1
-"$tmp/bmf64" c testfiles/t8g.bmp "$arc" >/dev/null 2>&1
+"$tmp/bmf32" c testfiles/t1.bmp "$arc" >/dev/null 2>&1
+"$tmp/bmf32" c testfiles/t8g.bmp "$arc" >/dev/null 2>&1
 # Both members expand to the same output name, so what is left there is the
 # last one -- which is what `test.sh` compares too.
-"$tmp/bmf64" d "$arc" "$tmp/arc.bmp" >/dev/null 2>&1
+"$tmp/bmf32" d "$arc" "$tmp/arc.bmp" >/dev/null 2>&1
 ran=$((ran + 1))
 if cmp -s "$tmp/arc.bmp" testfiles/t8g.bmp; then
   same=$((same + 1))
@@ -161,7 +155,7 @@ open("'"$tmp"'/narrow.bmf","wb").write(d)
 open("'"$tmp"'/rawlen.bmf","wb").write(
     struct.pack("<4sHHHHHBBI",b"\x81\x8a20",8,8,0,0,0,8,0x04,100000)+b"\xaa"*100000)'
   for m in shortlen len1 narrow depthff rawlen; do
-    timeout 120 "$tmp/bmf64" d "$tmp/$m.bmf" "$tmp/$m.out" >/dev/null 2>&1
+    timeout 120 "$tmp/bmf32" d "$tmp/$m.bmf" "$tmp/$m.out" >/dev/null 2>&1
     rc=$?
     ran=$((ran + 1))
     # Refused, not crashed: the program's own table is 1..8.
@@ -176,20 +170,12 @@ fi
 
 # And the out-of-memory path, which is `test.sh`'s last leg and the one place
 # a *failed* allocation is the answer.  It matters more on this target than on
-# i386: the records are bigger here -- five pointers in `AltP2Block` and ten in
-# `ModelBlock` -- so the ladder that made an allocation fail on one build is not
-# automatically the ladder that makes it fail on the other.
-#
-# Not the `--high` binary: that reserves 768 MB up front, so every rung of the
-# ladder fails inside `mmap` before the program has allocated anything, and
-# what is under test is `bmf_new` returning null.  Built separately when the
-# run is a high one.
-oombin=$tmp/bmf64
-if [ -n "$high" ]; then
-  oombin=$tmp/bmf64oom
-  BMF_OUT="$oombin" BMF_BITS=64 ./build.sh >/dev/null 2>&1 || oombin=
-fi
-if [ -n "$oombin" ] && ( ulimit -v 65536 ) >/dev/null 2>&1; then
+# the default build: the records are bigger there -- five pointers in
+# `AltP2Block` and ten in `ModelBlock` -- so the ladder that made an allocation
+# fail on one build is not automatically the ladder that makes it fail on the
+# other.  That is the whole reason this leg is repeated here.
+oombin=$tmp/bmf32
+if ( ulimit -v 65536 ) >/dev/null 2>&1; then
   reported=0
   for kb in 6000 8000 10000 12000 16000; do
     rm -f "$tmp/oom.bmf"
@@ -219,6 +205,6 @@ BMF_STRICT=1 BMF_BITS=64 ./build.sh >/dev/null 2>&1
 left=$(python3 tools/ptrwidth.py bmf.cpp | tail -1)
 
 echo
-echo "$same of $ran cases agree with the 32-bit build${high:+, every allocation above 4 GB}"
+echo "$same of $ran cases agree with the default build"
 echo "$left"
 exit $((bad ? 1 : 0))

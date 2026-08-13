@@ -38,7 +38,7 @@ six, which is the kind of thing the table below now makes hard to do):
 ./tools/asan.sh           # every test image under AddressSanitizer
 ./tools/fuzz.sh           # mutated inputs through the same
 ./tools/hdrscan.sh        # and the header bytes small enough to enumerate
-./tools/x64.sh --high     # the same corpus at the other pointer width
+./tools/x32.sh            # the same corpus at the other pointer width
 ./tools/x64diff.sh        # and whether the two widths agree on inputs nobody chose
 ./tools/triage.sh         # bisect a stream that moved, by name
 ```
@@ -517,7 +517,7 @@ them run.
 | `unused.py` | Delete the locals nothing uses, with the compiler saying which | yes |
 | `unwiden.py` | Give a cursor the type its dereferences read, not the one it was declared | yes |
 | `unwrite.py` | Delete a local that is written once and never read | yes |
-| `x64.sh` | What the 64-bit build still gets wrong |  |
+| `x32.sh` | What the 32-bit build still gets wrong |  |
 | `x64diff.sh` | Do the two pointer widths answer the same on inputs nobody chose? |  |
 
 <!-- end readme.py -->

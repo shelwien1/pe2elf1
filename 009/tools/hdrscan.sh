@@ -49,7 +49,7 @@ files=("$@")
 # reporting rather than as the instrument declining to start.  On -m64 the
 # file-size cap and the walk's own bounds are the whole limit; ASan's
 # `allocator_may_return_null` keeps a runaway request from being fatal.
-vlimit=(-v 2097152); [ "${BMF_BITS:-32}" = 32 ] || vlimit=()
+vlimit=(-v 2097152); [ "${BMF_BITS:-64}" = 32 ] || vlimit=()
 
 bad=0 ran=0
 for f in "${files[@]}"; do

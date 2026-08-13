@@ -229,12 +229,19 @@ echo "$cut/$ncut truncated streams refused without a crash"
 # or a rung dying instead of reporting.
 ran=$((ran + 1))
 if ( ulimit -v 65536 ) >/dev/null 2>&1; then
-  said=''
+  said='' arena=''
   for kb in 4000 6000 8000 10000 12000 16000; do
     rm -f "$tmp/oom.bmf"
     ( ulimit -v $kb; timeout "$T" "$BIN" c testfiles/t1.bmp "$tmp/oom.bmf" ) \
         >"$tmp/oom.log" 2>&1
     rc=$?
+    # A -DBMF_HIGH_ARENA build reserves 768 MB up front, so every rung fails
+    # inside mmap before the program has allocated anything -- and what this
+    # leg is about is bmf_new returning null.  It says so on the way out, which
+    # is the only way to tell that binary from a stripped ordinary one; a run
+    # that never reaches the allocator has not answered this question, so the
+    # leg is skipped with the reason rather than failed.
+    if grep -q 'no high arena' "$tmp/oom.log"; then arena=1; break; fi
     case $rc in
       7) if grep -q 'Out of memory!' "$tmp/oom.log"; then
            said=$kb
@@ -245,7 +252,10 @@ if ( ulimit -v 65536 ) >/dev/null 2>&1; then
       *) note "out of mem" "-v $kb $(why $rc), not 7" ;;
     esac
   done
-  if [ -n "$said" ]; then
+  if [ -n "$arena" ]; then
+    echo "out of memory: skipped, this build reserves a high arena up front"
+    ran=$((ran - 1))
+  elif [ -n "$said" ]; then
     echo "out of memory: -v $said exits 7, \"Out of memory!\""
   else
     note "out of mem" "no limit in the ladder made an allocation fail"

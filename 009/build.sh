@@ -1,8 +1,8 @@
 #!/bin/sh
 # build.sh — build `bmf` from bmf.cpp, the way g.bat builds bmf.exe.
 #
-#     ./build.sh                        # ./bmf: 32-bit, -O2, static, stripped
-#     BMF_BITS=64 ./build.sh            # the same source at the other width
+#     ./build.sh                        # ./bmf: x64, -O2, static, stripped
+#     BMF_BITS=32 ./build.sh            # the same source at the other width
 #     BMF_OUT=/tmp/bmf BMF_STATIC=0 BMF_GC=0 ./build.sh -fsanitize=address -g -O1
 #     BMF_WARN=1   ./build.sh           # warn.log   and the count, no binary
 #     BMF_STRICT=1 ./build.sh           # strict.log and the count, no binary
@@ -53,16 +53,24 @@
 # `-ffp-contract=off` is added so that a build re-pointed at another `-march`
 # cannot move a stream quietly.
 #
+# ## the target
+#
+# x64, which is what g.bat builds -- `-march=k8` with no `-m32` is the AMD64
+# baseline, and g32.bat is the separate 32-bit script.  Both widths produce the
+# fifteen reference streams byte for byte and pass all 83 checks; `BMF_BITS=32`
+# is the other one, and tools/x64diff.sh is what asks whether they still agree
+# on inputs nobody chose.
+#
 # On 32-bit, `-mfpmath=sse` is the same concern one register file over: the
-# 387's excess precision is not what the model was tuned on.  g32.bat sets it
-# and so does this.
+# 387's excess precision is not what the model was tuned on, and it is not the
+# default on i386 the way SSE is on x64.  g32.bat sets it and so does this.
 #
 # g++ 13 and clang++ 18 both produce the fifteen reference streams here.
 set -eu
 cd "$(dirname "$0")"
 
 CXX=${BMF_CXX:-g++}
-BITS=${BMF_BITS:-32}
+BITS=${BMF_BITS:-64}
 OUT=${BMF_OUT:-./bmf}
 SRC=bmf.cpp
 
@@ -99,11 +107,11 @@ case ${BMF_GC:-1} in
         link="$link -Wl,--gc-sections" ;;
 esac
 
-# A 32-bit build needs the multilib runtime, and the failure without it is
-# forty lines of `cannot find crti.o` that say nothing about the fix.  Ask
-# first, and name the package.  No silent fall back to -m64: the reference
-# streams are one target's and a build that quietly became another target is
-# the one thing this script must not do.
+# `BMF_BITS=32` needs the multilib runtime, which a host that only ever builds
+# the default target has no reason to have.  Without it the failure is forty
+# lines of `cannot find crti.o` that say nothing about the fix, so ask first and
+# name the package.  No silent fall back to the default width: a build that
+# quietly became another target is the one thing this script must not do.
 #
 # The probe links rather than preprocesses.  What is missing on a host without
 # multilib is `libc6-dev-i386` -- the startup objects and the 32-bit libraries
@@ -112,8 +120,7 @@ esac
 probe32() { echo 'int main(){return 0;}' | $CXX -m32 -x c++ - -o /dev/null; }
 if [ "$BITS" = 32 ] && ! probe32 >/dev/null 2>&1; then
   echo "$CXX cannot target -m32 here: install g++-multilib" >&2
-  echo "  (or BMF_BITS=64 ./build.sh -- the same fifteen streams, four more" >&2
-  echo "   bytes a pointer; tools/x64.sh is what checks that claim)" >&2
+  echo "  (the default target is x64 and needs none of it: ./build.sh)" >&2
   exit 2
 fi
 

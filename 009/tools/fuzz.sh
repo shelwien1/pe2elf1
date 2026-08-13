@@ -88,7 +88,7 @@ mkdir -p "$tmp/out"
 # reporting rather than as the instrument declining to start.  On -m64 the
 # file-size cap and the timeout are the whole bound; ASan's own
 # `allocator_may_return_null` keeps a runaway request from being fatal.
-vlimit=(-v 1048576); [ "${BMF_BITS:-32}" = 32 ] || vlimit=()
+vlimit=(-v 1048576); [ "${BMF_BITS:-64}" = 32 ] || vlimit=()
 
 bad=0 ran=0 refused=0 alloc=0
 while IFS=$'\t' read -r file from what; do
