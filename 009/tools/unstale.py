@@ -20,10 +20,11 @@ history, which is the wrong repair.  Pass it on the command line to see the
 list anyway: it is tool names, a calling convention, a keyword, and the names
 the round replaced -- and a count of them here would be one more measurement
 that stops being re-taken, which is what the rest of this file is about.
-`CONTEXT-INDEX.md` and `CLEANER.md` are the same boundary from the other side:
-they are a review and a plan, so they name what they *propose* -- an accessor,
-three helpers -- which the program does not have and should not be reported as
-having lost.
+`CONTEXT-INDEX.md`, `CLEANER.md` and `REVIEW.md` are the same boundary from the
+other side: they are two reviews and a plan, so they name what they *propose* --
+an accessor, three helpers, a dozen local names -- which the program does not
+have and should not be reported as having lost.  `MODELS.md` *is* in the list,
+because it describes the program rather than proposing changes to it.
 
 So this reads every identifier the two documents put in backticks and asks
 whether the source still has it.  A name is known if `subs1.hpp` or `bmf.cpp`
