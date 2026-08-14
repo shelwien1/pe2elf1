@@ -1,4 +1,6 @@
-// alt_p2_model.inc -- the deep-plane model itself, and the largest body in the program.
+// alt_p2_model.inc -- the predictor-2 model itself, and the largest body in the program.
+// "p2" is `plane_predictor == 2`; it is not about depth.  t8g is a single eight-bit
+// plane and codes here.  MODELS.md section 7.
 
 uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_in) {
   P2Ctx* unused_c, * cursor0;

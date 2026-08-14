@@ -1,4 +1,4 @@
-// alt_p1_code.inc -- one-bit planes, both directions.
+// alt_p1_code.inc -- the predictor-1 model, both directions.
 //
 // The two bodies this replaces were 263 and 212 lines and shared 134 of them,
 // in three runs that carry most of the function: the header parse and the

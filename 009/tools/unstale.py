@@ -54,7 +54,7 @@ import sys
 
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
 
-DOCS = ('ALGORITHM.md', 'algorithm_v2.md')
+DOCS = ('ALGORITHM.md', 'algorithm_v2.md', 'MODELS.md')
 
 # Named on purpose.  The reason is the entry: a name whose reason cannot be
 # written down does not belong here.
@@ -111,8 +111,10 @@ HISTORY = {
     # would also excuse the next real name that lands there.
     'f05_200': 'testfiles/f05_200.bmp',
     'DLRAW': 'testfiles/DLRAW.bmp',
-    'rle4': 'testfiles/out_rle4.bmp',
-    'rle8': 'testfiles/out_rle8.bmp',
+    'rle4': 'testfiles/rle4.bmp',
+    'rle8': 'testfiles/rle8.bmp',
+    'out_rle4': 'testfiles/out_rle4.bmp',
+    'out_rle8': 'testfiles/out_rle8.bmp',
     'x_ai': 'testfiles/x_ai.bmp',
     'x_ci': 'testfiles/x_ci.bmp',
     'x_ep': 'testfiles/x_ep.bmp',
@@ -129,6 +131,7 @@ HISTORY = {
     # `biCompression`, `biHeight` -- are members of `BmpHeader` and are found;
     # the structure's name is Microsoft's and is not in the source at all.
     'BITMAPINFOHEADER': "the BMP header's name in the Windows headers",
+    'BITMAPCOREHEADER': 'the header shape the reader refuses, named to say so',
     # `bcdr.cpp`, the 1bpp compressor read alongside this one.  The sentences
     # quoting it are about the other program on purpose -- that is what makes
     # them evidence for how this one's counters were meant to work.

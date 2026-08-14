@@ -1,4 +1,6 @@
-// alt_p1_block.inc -- the alternate model for one-bit planes.
+// alt_p1_block.inc -- the alternate model for predictor 1: its block, its context
+// and its counters.  "p1" is `plane_predictor == 1` and says nothing about depth --
+// measured, this codes t24's and t32's *eight-bit* planes.  MODELS.md section 6.
 
 struct CtxWeight {
   int32_t sel;

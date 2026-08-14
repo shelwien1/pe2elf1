@@ -1,4 +1,4 @@
-// alt_p2_context.inc -- the deep-plane model's context: which of its counters the next
+// alt_p2_context.inc -- the predictor-2 model's context: which of its counters the next
 // sample is coded against.
 
 int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {

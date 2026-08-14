@@ -1,4 +1,4 @@
-// alt_p2_block.inc -- the alternate model for deep planes: its counters, its frequency
+// alt_p2_block.inc -- the alternate model for predictor 2: its counters, its frequency
 // records and the block they live in.
 
 struct P2Count {

@@ -1,4 +1,4 @@
-// alt_p2_encode.inc -- deep planes, encoded.
+// alt_p2_encode.inc -- the predictor-2 model, encoding.
 
 int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
   AltP2Block* plane[4];
