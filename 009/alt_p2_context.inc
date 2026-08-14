@@ -76,6 +76,18 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
     nb_id[(uint32_t)nb_slot] = next_id;
     nb_cur = nb_weights[(int16_t)next_id];
   }
+  // The filter's 28 inputs, four to a row.  Rows 0..3 are differences of `dval`
+  // -- the second difference of the plane -- at widening offsets from the
+  // current pixel: row 0 the four nearest, row 1 the next ring, rows 2 and 3
+  // the ones two and three records out.  Rows 4..6 are the cross-plane terms
+  // and are only filled when this plane has references; without them the
+  // filter sees this plane alone.
+  //
+  // Written out one subscript at a time because that is what the original did,
+  // and left that way: the offsets are not a pattern a loop could generate --
+  // `nb0[-1] + nb1->dval - nb1[-1]` and `nb1[-2] + nb1->dval - nb2[-2]` are
+  // different shapes -- so a table of offsets would be 28 rows of data plus a
+  // loop, which is the same information one indirection further away.
   nb1 = (P2Ctx*)cursor[1];
   p2_row[0][0] = (float)nb1->dval;
   nb0 = (P2Ctx*)cursor[0];

@@ -79,8 +79,15 @@ def call_graph(lines):
     free = {n for _, _, n, _, d in structs.defs(lines) if d == 0}
     callers = {}
     for a, b, n, sig, _ in structs.defs(lines):
-        if 'static inline' in sig:
-            continue
+        # `static inline` bodies are skipped by the *report* below, because a
+        # helper with no call site is a helper the compiler will drop rather
+        # than a defect.  They were skipped here too, which is a different
+        # thing and was wrong: a call made *from* one of them never became an
+        # edge, so the first `static inline` helper to call a method --
+        # `p2_rescale`, calling `P2Freq::rescale_three_way` -- made that method
+        # look dead from its only call site.  Adding edges can only make this
+        # tool more cautious.
+        #
         # From *after* the opening brace, not from the start of the line that
         # holds it.  Every body here is written `void __foo(args) {`, so the
         # first line of the range is the declarator, and a pattern general

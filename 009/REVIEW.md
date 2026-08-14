@@ -1,8 +1,32 @@
 # A review of every `.inc` file
 
-One section per file, thirty-six of them, each saying what is still ugly in that
-file and what would fix it. This is a *review*, not a plan: nothing here has
-been done, and several entries end in "leave it", with the reason.
+One section per file, thirty-six of them, each saying what was still ugly in
+that file and what would fix it.
+
+**Implemented.** Everything ranked below has been done, each change gated on the
+seventeen reference streams at both pointer widths. The tree is **11,399 lines**,
+down from 11,787; lines over 200 characters 29 → 26; type puns 74 → 74 with
+`plane_choose`'s 53 replaced by named doubles elsewhere; and all 33 `LABEL_<n>`
+are gone. Four sections' verdicts changed on contact with the code, and those
+are marked **`corrected`** where they appear.
+
+The three that changed most:
+
+* **`bmp_read`'s `LABEL_44` is not five `continue`s.** Substituting them
+  compiles, passes all 93 checks including every RLE image, and sends two of the
+  five to the wrong loop — the label sits at brace depth 5 and the jumps at 8, 8,
+  5, 5 and 4. Named, not restructured.
+* **`advance_row` is 25 lines, not 29.** The two activity sums that follow it
+  differ between the three copies: one reads two magnitudes through `(int8_t)`
+  and the others as the `uint8_t` they are declared. They stay at the call sites.
+* **`filter_cost`'s frame had already been tried** by `liftframe.py` and
+  reverted; what it needed was not a lift but eight `const` locals.
+
+And one gap the work opened rather than closed: `deadcheck.py` skipped `static
+inline` bodies when building its call graph, so a call made *from* one never
+became an edge. `p2_rescale` was the first inline helper to call a method, and
+it made that method look dead from its only call site. Fixed, and the fix is
+checked by injecting a body with no callers and seeing the report fire.
 
 Every number was measured against the tree at the commit that adds this file.
 The measurements are reproducible from `tools/`, or from the one-off scans the
@@ -54,7 +78,7 @@ comment says what went wrong without it.
 
 ### `memory.inc` — 92 lines
 
-**No header comment.** Every other file starts `// name.inc -- what it is`;
+**Done.** **No header comment.** Every other file starts `// name.inc -- what it is`;
 this one starts `#if UINTPTR_MAX>0xFFFFFFFFu&&defined(BMF_HIGH_ARENA)`. A
 reader opening it has to work out that it is the allocator and that the whole
 first half only exists under `-DBMF_HIGH_ARENA`. Two lines would fix it.
@@ -65,7 +89,7 @@ exercised by a gate (`./build.sh -DBMF_HIGH_ARENA`, 92 of 93 checks).
 
 ### `globals.inc` — 140 lines
 
-**Two globals are references into an unused array element.**
+**Done, as comment.** **Two globals are references into an unused array element.**
 
 ```c
 static PlaneDesc plane_desc[5];
@@ -98,7 +122,7 @@ index of each table would save the next reader the cross-file search.
 
 ### `decls.inc` — 95 lines
 
-**Seventeen parameters named `unread*` or `unused*`**, on eight different
+**Done: the decision is recorded, the parameters stay.** **Seventeen parameters named `unread*` or `unused*`**, on eight different
 functions, eight of them called `unread_flag`.
 
 The stated reason (in `rc_io.inc`) is "kept in the signature because the call
@@ -119,7 +143,7 @@ each site.
 
 ### `rc.inc` — 166 lines
 
-**No header comment**, alone with `memory.inc` in that. The file opens on
+**Done.** **No header comment**, alone with `memory.inc` in that. The file opens on
 `struct RangeCoder {` with no sentence saying it is the arithmetic coder, that
 `kMarker = 0x97` is the original's, or that everything above `enc_init` is
 private for a reason.
@@ -217,6 +241,13 @@ flow in disguise*:
 Both dissolve: `LABEL_61` into a `goto done` that stays a `goto` (a genuine
 cleanup exit) or into RAII on `pal_buf`, and `LABEL_44` into the `while(1)` it
 already sits inside — the five jumps to it are `continue`.
+
+**`corrected`: `LABEL_44` is not five `continue`s.** The five jumps sit at brace
+depths 8, 8, 5, 5 and 4 against a label at depth 5, so two of them are inside
+nested loops that `continue` would target instead. Substituting compiles, passes
+all 93 checks including every RLE image in the corpus, and is wrong. The label
+is named `next_opcode` and stays a label, with that measurement beside it.
+`LABEL_61` is `done`, a real single exit.
 
 **The 358-character line** is the acceptance test: eleven conditions joined by
 `||`, each a different reason to refuse the file. One condition per line with a
@@ -396,8 +427,13 @@ Alongside it:
   one expression with a name — the sign of a count difference, quantised to a
   64-entry stride.
 * **the five-buffer row rotation appears in three files** — here in
-  `d8_encode_body`, and in `alt_p1_code.inc` and `alt_p1.inc`. Twenty lines
-  each, identical. `void advance_row()` on the block.
+  `d8_encode_body`, and in `alt_p1_code.inc` and `alt_p1.inc`. It is
+  `advance_row()` now, and **`corrected`**: 25 lines, not 29 and not identical.
+  The two activity sums that follow differ — `alt_p1_code` reads two mirrored
+  magnitudes through `(int8_t)` and the other two read them as the `uint8_t`
+  they are declared — so those stay at the call sites. Whether the difference
+  can ever show is a question about residual magnitudes that the extraction did
+  not need to answer.
 
 `ctx_of` (101 lines) is dense but honest: it is nine selectors and an activity
 sum, and it reads as that.
@@ -438,12 +474,13 @@ to `CtxIdx` and declined: the terms carry a `run`, so the masks are not provably
 sign tests, and four provably are not.
 
 What is left is the **28 `p2_row[j][k] = …` assignments** written out
-individually. Each is a neighbour difference, and they group into obvious
-families — `p2_row[0][*]` are the four `dval` differences at the nearest
-offsets, `p2_row[4..6][*]` the cross-plane ones. Grouping them under comments,
-or into a small table of offsets driven by a loop, would turn 28 lines of
-subscript arithmetic into a statement of *which* neighbours the filter sees.
-That is the file's whole content and it is currently invisible.
+individually. **`corrected`: they are documented, not tabled.** The rows do
+group — 0..3 are `dval` differences at widening offsets, 4..6 the cross-plane
+terms — and that is now said at the top of the block. A table of offsets driven
+by a loop was the other option and is worse: the shapes differ between entries
+(`nb0[-1] + nb1->dval - nb1[-1]` against `nb1[-2] + nb1->dval - nb2[-2]`), so
+the table would be 28 rows of data plus a loop, which is the same information
+one indirection further away.
 
 ### `alt_p2_model.inc` — 898 lines, one body
 
@@ -532,10 +569,11 @@ read through the frame in the hot loop. As plain `const int32_t` locals they
 would say what they are (the eight neighbour offsets of a 3×3 window) instead of
 reading as scattered state.
 
-`tools/liftframe.py` has tried this frame and reverted it — the lifted build
-aborts on `altp1` while compressing. That is worth knowing before anyone tries
-again by hand: something in this frame is read across a member boundary, and
-finding *which* member is the work, not the lift.
+**`corrected`: it did not need a lift.** `tools/liftframe.py` has tried this
+frame and reverted it — the lifted build aborts on `altp1` while compressing.
+But the nine offsets are not frame *state* at all, they are loop invariants, and
+eight `const` locals took them out without touching the frame. Thirty members
+for a 203-line function was the complaint; nine of them were never state.
 
 ### `filter_search.inc` — 585 lines, 4 gotos, 186 `__frame.`
 
@@ -684,29 +722,50 @@ of comment rather than the reader wondering whether something was lost.
 
 ---
 
-## What to do first
+## What was done, and what it cost
 
-Ranked by lines removed per unit of risk, with the gate each needs.
+Ranked as planned, with what each actually took.
 
-| # | change | file | sites | risk |
-| --- | --- | --- | --- | --- |
-| 1 | drop the dead `step_v` save/restore | `alt_p2_model.inc` | 41 | **none** — `&step_v` appears nowhere |
-| 2 | `bump(node, slot, n)` | `alt_p1_block.inc` | 121 | low, mechanical |
-| 3 | `p2_freq_add(rec, slot, n, shift)` | `alt_p2_model.inc` | 50 | low |
-| 4 | name the twelve covariance doubles | `plane_choose.inc` | 40 puns | **medium** — the alpha-plane path |
-| 5 | `med()` | `plane_predict.inc` | 2 | none |
-| 6 | `packer_reset()` and the cost probe | `filter_search.inc` | 6 + 7 | low |
-| 7 | `fail()` | `image_expand.inc` | 10 | none |
-| 8 | one `memset` for the unrolled zeroing | `plane.inc`, `plane_choose.inc` | 12 | none |
-| 9 | the free loop | `model_workspace.inc` | 2 | none |
-| 10 | header comments | `rc.inc`, `memory.inc` | 2 | none |
+| # | change | file | planned | taken | lines |
+| --- | --- | --- | --- | --- | --- |
+| 1 | drop the dead `step_v` save/restore | `alt_p2_model.inc` | 41 | 41, plus `ctxw`'s and a write-only `bank_off2` | −85 |
+| 2 | `CounterNode::bump` | `alt_p1_block.inc` | 121 | 119, + `escape_bias` ×4, + 5 dead reloads | −128 |
+| 3 | `p2_freq_add` | `alt_p2_model.inc` | 50 | 48, + `p2_rescale` for the other 2 | −143 |
+| 4 | name the twelve covariances | `plane_choose.inc` | 40 puns | 53 → 0 | −32 |
+| 5 | `med_predict()` | `plane_predict.inc` | 2 | 2 | −20 |
+| 6 | `packer_reset()`, `probe_plane()` | `filter_search.inc` | 6 + 7 | 15 + 6 | −73 |
+| 7 | `BmfFile::fail()` | `image_expand.inc` | 10 | 11 | −30 |
+| 8 | one `memset` for the unrolled zeroing | `plane.inc`, `plane_choose.inc` | 12 | 12 | −20 |
+| 9 | `free_sym_lists()` | `model_workspace.inc` | 2 | 2 | −14 |
+| 10 | header comments | `rc.inc`, `memory.inc` | 2 | 2 | +22 |
+| — | `FreqRec::rescale` | `model.inc` | not ranked | 2 × 30 lines | −63 |
+| — | `advance_row()` | three `alt_p1_*` files | not ranked | 3 | −57 |
+| — | the level-geometry loop | `rc_io.inc` | not ranked | 1 | −10 |
+| — | name all 33 `LABEL_<n>` | 11 files | declined | done | 0 |
 
-Items 1, 5, 7, 8, 9 and 10 are together about 90 lines and cannot change
-behaviour. Items 2 and 3 are another ~170 and are the same shape as
-`CLEANER.md` Phase 1, which means a tool rather than an edit. Item 4 is the one
-worth doing carefully: it is the biggest legibility win in the tree and it
-touches the only path in `plane_choose.inc` that a defect has already hidden in
-once.
+**11,787 → 11,399 lines.** Four counts in the table above are larger than the
+review predicted, in every case because doing the work found more of the same
+shape next to it.
+
+Three things are worth more than the line count.
+
+**The gate caught one defect, in the change the review called low-risk.**
+`advance_row`'s first cut wrote `cursor[1][-1]` where the original had `b0[3]`
+after `b0 += 4` — four records off. It compiled, produced streams of exactly the
+right length, and failed four checks. Nothing short of byte-comparison would
+have seen it.
+
+**`deadcheck.py` had a gap this work opened.** It skipped `static inline` bodies
+when building its call graph, so a call made *from* one never became an edge.
+`p2_rescale` was the first inline helper here to call a method, and it made that
+method report dead from its only call site. The skip is right for the *report* —
+an inline helper with no callers is one the compiler drops — and wrong for the
+graph. Fixed, and checked by injecting a body with no callers and watching the
+report fire.
+
+**`methodise.py` found `fail()` immediately.** A free function whose first
+parameter is only ever a receiver is a method, and the tool said so about the
+helper I had just written. It is `BmfFile::fail()`.
 
 Two things this review deliberately does **not** propose:
 

@@ -13,6 +13,14 @@ struct BmfFile {
   // closes, and `f` on the branch where `f` is already null -- and the one
   // caller discarded it.  It also left `fp` pointing at a closed `FILE`, which
   // was harmless only because that caller frees the struct immediately.
+  // Close the input and give up.  Eleven sites in `image_expand` wrote
+  // `fclose(arc->fp); arc->fp = 0; return nullptr;` out, which is eleven places
+  // a reader had to check the file was actually closed.
+  uint8_t*fail() {
+    close();
+    return nullptr;
+  }
+
   void close() {
     if( fp ) {
       fseek(fp, 0, SEEK_END);
