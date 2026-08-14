@@ -4,6 +4,31 @@
 struct CounterNode {
   uint16_t total;
   uint16_t c[7];
+
+  // One counter bumped, with the node's total kept in step.  119 sites in
+  // `alt_p1_block`'s `update_model` wrote both halves out, and the increment --
+  // one of nine constants, 2 to 17 -- is what that function is *about*: which
+  // counters a coded symbol moves, and by how much.
+  //
+  // The two halves have to move together, because the coder divides by the
+  // total; a site that bumped one and not the other would be a defect no type
+  // could catch.  As a method there is one place that can be wrong.
+  void bump(int32_t slot, uint32_t n) {
+    c[slot] += n;
+    total += n;
+  }
+
+  // The 64-wide stride the escape's context is shifted by: 0 when this slot
+  // holds at least half the node's mass, -64 when it does not.  `>>25` on a
+  // value that fits in 16 bits is a sign test, and `&0xFFFFFFC0` turns the
+  // resulting 0 or -1 into 0 or -64.
+  //
+  // `alt_p1_block` spelled this out four times, twice reading `total` from a
+  // local holding the value just stored into it.  Same value, three lines
+  // apart.
+  uint32_t escape_bias(int32_t slot) const {
+    return (((total&0x7FFF)+c[0]-2*(uint32_t)c[slot])>>25)&0xFFFFFFC0;
+  }
 };
 
 struct SymPair {

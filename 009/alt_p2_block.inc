@@ -149,6 +149,31 @@ static inline void p2_update(P2Count* p, int32_t res, int32_t shift) {
 // counter in the bank; the rounding term is the only thing they share with
 // `p2_update`, and folding them together would put the kick where the original
 // has none.
+// One count of a three-way record, bumped by `num` sixteenths of the record's
+// step, with the rescale that keeps the three counts from overflowing.  35 of
+// the 41 sites in `alt_p2_model` wrote both steps out.
+//
+// It takes the numerator rather than the increment because `rescale_three_way`
+// steps `step` down as well as halving the counts, and the bump reads `step`
+// *after* it.  Passing a computed increment would read it before.
+//
+// The increments in the file are 2, 3, 4, 5, 6, 7, 10 and 13 sixteenths and
+// nothing else, which is only visible once they are written as sixteenths:
+// `(step&0xFFFC)>>2` and `(step&0xFFF8)>>3` are `(4*step)>>4` and `(2*step)>>4`,
+// the masks clearing bits the shift discards anyway.
+// The rescale on its own.  Two of `alt_p2_model`'s fifty sites compute the
+// increment and then add it *conditionally*, so the add cannot move into the
+// helper; the guard still can.
+static inline void p2_rescale(P2Freq* r) {
+  if( r->f[0]+r->f[1]+r->f[2]>29696 )
+    r->rescale_three_way();
+}
+
+static inline void p2_freq_add(P2Freq* r, int32_t slot, uint32_t num) {
+  p2_rescale(r);
+  r->f[slot] += (num*(uint32_t)r->step)>>4;
+}
+
 static inline void p2_nudge(P2Count* p, int32_t res) {
   *(uint16_t*)&p->weighted += (uint32_t)(res-p2_pred(p->weighted, p->rate)+2)>>2;
 }

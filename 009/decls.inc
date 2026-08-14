@@ -37,6 +37,8 @@ static inline int32_t p2_pred(int32_t weighted, int32_t rate);
 static inline int16_t p2_bump(int32_t w2, int32_t err, int32_t shift);
 static inline void p2_update(P2Count* p, int32_t res, int32_t shift);
 static inline void p2_nudge(P2Count* p, int32_t res);
+static inline void p2_rescale(P2Freq* r);
+static inline void p2_freq_add(P2Freq* r, int32_t slot, uint32_t num);
 BmfArc*__bmf_destroy_archive(BmfArc* arc, int8_t do_free);
 void __expand_predictor_mode0(uint8_t* unread_src, int32_t i, int32_t unread_h);
 uint32_t __predict_med(uint8_t* pixels, int32_t width, int32_t height);

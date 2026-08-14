@@ -480,6 +480,8 @@ them run.
 | `negindex.py` | Find `p[-u]` where `u` is unsigned — a subtraction that only i386 undoes | yes |
 | `objects.py` | Group the names that denote the same allocation, and describe each object | yes |
 | `outpath.py` | Refuse to write a generator's output over something that is not its output | no |
+| `p1bump.py` | Fold `update_model`'s counter bumps into `CounterNode::bump` | yes |
+| `p2freq.py` | Fold `alt_p2_model`'s rescale-then-bump pairs into `p2_freq_add` | yes |
 | `p2update.py` | Fold `alt_p2_model`'s written-out counter updates into `p2_update` | yes |
 | `proven.sh` | Which tools' answers depend on the file at all? |  |
 | `prune_unreachable.py` | Delete the functions in subs1.hpp that nothing can reach any more | yes |

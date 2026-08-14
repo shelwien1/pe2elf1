@@ -235,95 +235,71 @@ struct AltP1Block {
       slot_r = code_r;
     uint32_t ctx_alt = ctx_w[8].w[2-ctx_w[8].sel]+ctx_w[7].w[2-ctx_w[7].sel]+ctx_w[6].w[2-ctx_w[6].sel]+ctx_w[5].w[2-ctx_w[5].sel]+ctx_w[4].w[2-ctx_w[4].sel]+ctx_w[3].w[2-ctx_w[3].sel]+ctx_w[2].w[2-sel2_top]+ctx_w[1].w[2-sel1_top]+ctx_w[0].w[1]+(ctx[0]&0x1F);
     CounterNode *node_alt = &counters[ctx_alt];
-    node_alt[0].c[slot_r] += 17;
-    node_alt[0].total += 17;
+    node_alt[0].bump(slot_r, 17);
     result = ctx[0];
     if( (result&7)!=7 ) {
       CounterNode *node_up = &counters[result];
       uint32_t ctx_up = (((ctx[1]&7u)-7)>>31)+ctx[1];
-      node_up[1].c[slot_f] += 11;
-      int16_t tot_up = node_up[1].total+11;
-      node_up[1].total = tot_up;
+      node_up[1].bump(slot_f, 11);
       if( slot_f>=5 )
-        __update_binary_pair(model_strip(128*(slot_f&1)+ctx_up+(((((tot_up&0x7FFF)+node_up[1].c[0]-2*(uint32_t)node_up[1].c[slot_f])>>25)&0xFFFFFFC0))), (int32_t)(code_f-5)>>1);
-      result = ctx[0];
+        __update_binary_pair(model_strip(128*(slot_f&1)+ctx_up+node_up[1].escape_bias(slot_f)), (int32_t)(code_f-5)>>1);
     }
     if( result&7 ) {
       CounterNode *node_dn = &counters[result];
       int32_t ctx_dn = ctx[1]-((ctx[1]&7)!=0);
-      node_dn[-1].c[slot_f] += 13;
-      int16_t tot_dn = node_dn[-1].total+13;
-      node_dn[-1].total = tot_dn;
+      node_dn[-1].bump(slot_f, 13);
       if( slot_f>=5 )
-        __update_binary_pair(model_strip(128*(uint32_t)(slot_f&1)+(uint32_t)ctx_dn+(((((tot_dn&0x7FFF)+node_dn[-1].c[0]-2*(uint32_t)node_dn[-1].c[slot_f])>>25)&0xFFFFFFC0))), tree_sym);
-      result = ctx[0];
+        __update_binary_pair(model_strip(128*(uint32_t)(slot_f&1)+(uint32_t)ctx_dn+node_dn[-1].escape_bias(slot_f)), tree_sym);
     }
     if( counters[result].total<0xCCCu ) {
       if( (result&7u)<7 ) {
-        node_alt[1].c[slot_r] += 7;
-        node_alt[1].total += 7;
-        result = ctx[0];
+        node_alt[1].bump(slot_r, 7);
       }
       if( result&7 ) {
-        node_alt[-1].c[slot_r] += 5;
-        node_alt[-1].total += 5;
-        result = ctx[0];
+        node_alt[-1].bump(slot_r, 5);
       }
       if( slot_f>=5 ) {
-        uint32_t key = ctx[1]+(((counters[result].c[0]+(counters[result].total&0x7FFF)-2*(uint32_t)counters[result].c[slot_f])>>25)&0xFFFFFFC0)+((slot_f&1)<<7);
-        if( (key&0x38)>=0x38||(__update_binary_pair(model_strip(128*(slot_f&1)+ctx[1]+((((counters[result].c[0]+(counters[result].total&0x7FFF)-2*(uint32_t)counters[result].c[slot_f])>>25)&0xFFFFFFC0))+8), tree_sym), (key&0x38)!=0) ) {
+        uint32_t bias = counters[result].escape_bias(slot_f);
+        uint32_t key = ctx[1]+bias+((slot_f&1)<<7);
+        if( (key&0x38)>=0x38||(__update_binary_pair(model_strip(128*(slot_f&1)+ctx[1]+bias+8), tree_sym), (key&0x38)!=0) ) {
           __update_binary_pair(model_strip(key-8), tree_sym);
         }
-        result = ctx[0];
       }
       int32_t sel0 = ctx_w[0].sel;
       if( sel0==1 ) {
         int32_t mid0 = result-ctx_w[0].w[1];
         CounterNode *lo0 = &counters[mid0+ctx_w[0].w[0]];
         CounterNode *hi0 = &counters[ctx_w[0].w[2]+mid0];
-        lo0[0].c[slot_f] += 6;
-        lo0[0].total += 6;
-        hi0[0].c[slot_f] += 6;
-        hi0[0].total += 6;
+        lo0[0].bump(slot_f, 6);
+        hi0[0].bump(slot_f, 6);
         ctx0 = ctx[0];
         if( (ctx0&7)!=7 ) {
-          lo0[1].c[slot_f] += 4;
-          lo0[1].total += 4;
-          hi0[1].c[slot_f] += 4;
-          hi0[1].total += 4;
+          lo0[1].bump(slot_f, 4);
+          hi0[1].bump(slot_f, 4);
           ctx0 = ctx[0];
         }
         if( ctx0&7 ) {
-          lo0[-1].c[slot_f] += 3;
-          lo0[-1].total += 3;
-          hi0[-1].c[slot_f] += 3;
-          hi0[-1].total += 3;
+          lo0[-1].bump(slot_f, 3);
+          hi0[-1].bump(slot_f, 3);
           ctx0 = ctx[0];
         }
       } else {
         CounterNode *opp0 = &counters[ctx_w[0].w[2-sel0]+result-ctx_w[0].w[sel0]];
-        opp0[0].c[slot_f] += 7;
-        opp0[0].total += 7;
+        opp0[0].bump(slot_f, 7);
         uint32_t alti0 = ctx_alt+ctx_w[0].w[0]-ctx_w[0].w[1];
         CounterNode *midn0 = &counters[ctx_w[0].w[1]+ctx[0]-ctx_w[0].w[ctx_w[0].sel]];
-        midn0[0].c[slot_f] += 6;
-        midn0[0].total += 6;
+        midn0[0].bump(slot_f, 6);
         CounterNode *altn0 = &counters[alti0];
-        altn0[0].c[slot_r] += 4;
-        altn0[0].total += 4;
+        altn0[0].bump(slot_r, 4);
         ctx0 = ctx[0];
         if( (ctx0&7)!=7 ) {
-          midn0[1].c[slot_f] += 4;
-          midn0[1].total += 4;
-          altn0[1].c[slot_r] += 2;
-          altn0[1].total += 2;
+          midn0[1].bump(slot_f, 4);
+          altn0[1].bump(slot_r, 2);
           ctx0 = ctx[0];
         }
         if( ctx0&7 ) {
-          midn0[-1].c[slot_f] += 3;
-          midn0[-1].total += 3;
-          altn0[-1].c[slot_r] += 2;
-          altn0[-1].total += 2;
+          midn0[-1].bump(slot_f, 3);
+          altn0[-1].bump(slot_r, 2);
           ctx0 = ctx[0];
         }
       }
@@ -332,50 +308,37 @@ struct AltP1Block {
         int32_t mid1 = ctx0-ctx_w[1].w[1];
         CounterNode *lo1 = &counters[mid1+ctx_w[1].w[0]];
         CounterNode *hi1 = &counters[ctx_w[1].w[2]+mid1];
-        lo1[0].c[slot_f] += 6;
-        lo1[0].total += 6;
-        hi1[0].c[slot_f] += 6;
-        hi1[0].total += 6;
+        lo1[0].bump(slot_f, 6);
+        hi1[0].bump(slot_f, 6);
         ctx1 = ctx[0];
         if( (ctx1&7)!=7 ) {
-          lo1[1].c[slot_f] += 4;
-          lo1[1].total += 4;
-          hi1[1].c[slot_f] += 4;
-          hi1[1].total += 4;
+          lo1[1].bump(slot_f, 4);
+          hi1[1].bump(slot_f, 4);
           ctx1 = ctx[0];
         }
         if( ctx1&7 ) {
-          lo1[-1].c[slot_f] += 3;
-          lo1[-1].total += 3;
-          hi1[-1].c[slot_f] += 3;
-          hi1[-1].total += 3;
+          lo1[-1].bump(slot_f, 3);
+          hi1[-1].bump(slot_f, 3);
           ctx1 = ctx[0];
         }
       } else {
         CounterNode *opp1 = &counters[ctx_w[1].w[2-sel1]+ctx0-ctx_w[1].w[sel1]];
-        opp1[0].c[slot_f] += 7;
-        opp1[0].total += 7;
+        opp1[0].bump(slot_f, 7);
         uint32_t w11 = ctx_w[1].w[1];
         uint32_t alti1 = ctx_alt+w11-ctx_w[1].w[2-ctx_w[1].sel];
         CounterNode *midn1 = &counters[(w11+ctx[0]-ctx_w[1].w[ctx_w[1].sel])];
-        midn1[0].c[slot_f] += 6;
-        midn1[0].total += 6;
+        midn1[0].bump(slot_f, 6);
         CounterNode *altn1 = &counters[alti1];
-        altn1[0].c[slot_r] += 4;
-        altn1[0].total += 4;
+        altn1[0].bump(slot_r, 4);
         ctx1 = ctx[0];
         if( (ctx1&7)!=7 ) {
-          midn1[1].c[slot_f] += 4;
-          midn1[1].total += 4;
-          altn1[1].c[slot_r] += 2;
-          altn1[1].total += 2;
+          midn1[1].bump(slot_f, 4);
+          altn1[1].bump(slot_r, 2);
           ctx1 = ctx[0];
         }
         if( ctx1&7 ) {
-          midn1[-1].c[slot_f] += 3;
-          midn1[-1].total += 3;
-          altn1[-1].c[slot_r] += 2;
-          altn1[-1].total += 2;
+          midn1[-1].bump(slot_f, 3);
+          altn1[-1].bump(slot_r, 2);
           ctx1 = ctx[0];
         }
       }
@@ -384,51 +347,38 @@ struct AltP1Block {
         int32_t mid2 = ctx1-ctx_w[2].w[1];
         CounterNode *lo2 = &counters[mid2+ctx_w[2].w[0]];
         CounterNode *hi2 = &counters[ctx_w[2].w[2]+mid2];
-        lo2[0].c[slot_f] += 6;
-        lo2[0].total += 6;
-        hi2[0].c[slot_f] += 6;
-        hi2[0].total += 6;
+        lo2[0].bump(slot_f, 6);
+        hi2[0].bump(slot_f, 6);
         ctx2 = ctx[0];
         if( (ctx2&7)!=7 ) {
-          lo2[1].c[slot_f] += 4;
-          lo2[1].total += 4;
-          hi2[1].c[slot_f] += 4;
-          hi2[1].total += 4;
+          lo2[1].bump(slot_f, 4);
+          hi2[1].bump(slot_f, 4);
           ctx2 = ctx[0];
         }
         if( ctx2&7 ) {
-          lo2[-1].c[slot_f] += 3;
-          lo2[-1].total += 3;
-          hi2[-1].c[slot_f] += 3;
-          hi2[-1].total += 3;
+          lo2[-1].bump(slot_f, 3);
+          hi2[-1].bump(slot_f, 3);
           ctx2 = ctx[0];
         }
       } else {
         CounterNode *opp2 = &counters[ctx_w[2].w[2-sel2]+ctx1-ctx_w[2].w[sel2]];
-        opp2[0].c[slot_f] += 7;
-        opp2[0].total += 7;
+        opp2[0].bump(slot_f, 7);
         uint32_t w12 = ctx_w[2].w[1];
         uint32_t x2 = w12+ctx[0]-ctx_w[2].w[ctx_w[2].sel];
         uint32_t alti2 = ctx_alt+w12-ctx_w[2].w[2-ctx_w[2].sel];
         CounterNode *midn2 = &counters[x2];
-        midn2[0].c[slot_f] += 6;
-        midn2[0].total += 6;
+        midn2[0].bump(slot_f, 6);
         CounterNode *altn2 = &counters[alti2];
-        altn2[0].c[slot_r] += 4;
-        altn2[0].total += 4;
+        altn2[0].bump(slot_r, 4);
         ctx2 = ctx[0];
         if( (ctx2&7)!=7 ) {
-          midn2[1].c[slot_f] += 4;
-          midn2[1].total += 4;
-          altn2[1].c[slot_r] += 2;
-          altn2[1].total += 2;
+          midn2[1].bump(slot_f, 4);
+          altn2[1].bump(slot_r, 2);
           ctx2 = ctx[0];
         }
         if( ctx2&7 ) {
-          midn2[-1].c[slot_f] += 3;
-          midn2[-1].total += 3;
-          altn2[-1].c[slot_r] += 2;
-          altn2[-1].total += 2;
+          midn2[-1].bump(slot_f, 3);
+          altn2[-1].bump(slot_r, 2);
           ctx2 = ctx[0];
         }
       }
@@ -437,51 +387,38 @@ struct AltP1Block {
         int32_t mid3 = ctx2-ctx_w[3].w[1];
         CounterNode *lo3 = &counters[mid3+ctx_w[3].w[0]];
         CounterNode *hi3 = &counters[ctx_w[3].w[2]+mid3];
-        lo3[0].c[slot_f] += 6;
-        lo3[0].total += 6;
-        hi3[0].c[slot_f] += 6;
-        hi3[0].total += 6;
+        lo3[0].bump(slot_f, 6);
+        hi3[0].bump(slot_f, 6);
         ctx3 = ctx[0];
         if( (ctx3&7)!=7 ) {
-          lo3[1].c[slot_f] += 4;
-          lo3[1].total += 4;
-          hi3[1].c[slot_f] += 4;
-          hi3[1].total += 4;
+          lo3[1].bump(slot_f, 4);
+          hi3[1].bump(slot_f, 4);
           ctx3 = ctx[0];
         }
         if( ctx3&7 ) {
-          lo3[-1].c[slot_f] += 3;
-          lo3[-1].total += 3;
-          hi3[-1].c[slot_f] += 3;
-          hi3[-1].total += 3;
+          lo3[-1].bump(slot_f, 3);
+          hi3[-1].bump(slot_f, 3);
           ctx3 = ctx[0];
         }
       } else {
         CounterNode *opp3 = &counters[ctx_w[3].w[2-sel3]+ctx2-ctx_w[3].w[sel3]];
-        opp3[0].c[slot_f] += 7;
-        opp3[0].total += 7;
+        opp3[0].bump(slot_f, 7);
         uint32_t w13 = ctx_w[3].w[1];
         uint32_t x3 = w13+ctx[0]-ctx_w[3].w[ctx_w[3].sel];
         uint32_t alti3 = ctx_alt+w13-ctx_w[3].w[2-ctx_w[3].sel];
         CounterNode *midn3 = &counters[x3];
-        midn3[0].c[slot_f] += 6;
-        midn3[0].total += 6;
+        midn3[0].bump(slot_f, 6);
         CounterNode *altn3 = &counters[alti3];
-        altn3[0].c[slot_r] += 4;
-        altn3[0].total += 4;
+        altn3[0].bump(slot_r, 4);
         ctx3 = ctx[0];
         if( (ctx3&7)!=7 ) {
-          midn3[1].c[slot_f] += 4;
-          midn3[1].total += 4;
-          altn3[1].c[slot_r] += 2;
-          altn3[1].total += 2;
+          midn3[1].bump(slot_f, 4);
+          altn3[1].bump(slot_r, 2);
           ctx3 = ctx[0];
         }
         if( ctx3&7 ) {
-          midn3[-1].c[slot_f] += 3;
-          midn3[-1].total += 3;
-          altn3[-1].c[slot_r] += 2;
-          altn3[-1].total += 2;
+          midn3[-1].bump(slot_f, 3);
+          altn3[-1].bump(slot_r, 2);
           ctx3 = ctx[0];
         }
       }
@@ -490,51 +427,38 @@ struct AltP1Block {
         int32_t mid4 = ctx3-ctx_w[4].w[1];
         CounterNode *lo4 = &counters[mid4+ctx_w[4].w[0]];
         CounterNode *hi4 = &counters[ctx_w[4].w[2]+mid4];
-        lo4[0].c[slot_f] += 6;
-        lo4[0].total += 6;
-        hi4[0].c[slot_f] += 6;
-        hi4[0].total += 6;
+        lo4[0].bump(slot_f, 6);
+        hi4[0].bump(slot_f, 6);
         ctx4 = ctx[0];
         if( (ctx4&7)!=7 ) {
-          lo4[1].c[slot_f] += 4;
-          lo4[1].total += 4;
-          hi4[1].c[slot_f] += 4;
-          hi4[1].total += 4;
+          lo4[1].bump(slot_f, 4);
+          hi4[1].bump(slot_f, 4);
           ctx4 = ctx[0];
         }
         if( ctx4&7 ) {
-          lo4[-1].c[slot_f] += 3;
-          lo4[-1].total += 3;
-          hi4[-1].c[slot_f] += 3;
-          hi4[-1].total += 3;
+          lo4[-1].bump(slot_f, 3);
+          hi4[-1].bump(slot_f, 3);
           ctx4 = ctx[0];
         }
       } else {
         CounterNode *opp4 = &counters[ctx_w[4].w[2-sel4]+ctx3-ctx_w[4].w[sel4]];
-        opp4[0].c[slot_f] += 7;
-        opp4[0].total += 7;
+        opp4[0].bump(slot_f, 7);
         uint32_t w14 = ctx_w[4].w[1];
         uint32_t x4 = w14+ctx[0]-ctx_w[4].w[ctx_w[4].sel];
         uint32_t alti4 = ctx_alt+w14-ctx_w[4].w[2-ctx_w[4].sel];
         CounterNode *midn4 = &counters[x4];
-        midn4[0].c[slot_f] += 6;
-        midn4[0].total += 6;
+        midn4[0].bump(slot_f, 6);
         CounterNode *altn4 = &counters[alti4];
-        altn4[0].c[slot_r] += 4;
-        altn4[0].total += 4;
+        altn4[0].bump(slot_r, 4);
         ctx4 = ctx[0];
         if( (ctx4&7)!=7 ) {
-          midn4[1].c[slot_f] += 4;
-          midn4[1].total += 4;
-          altn4[1].c[slot_r] += 2;
-          altn4[1].total += 2;
+          midn4[1].bump(slot_f, 4);
+          altn4[1].bump(slot_r, 2);
           ctx4 = ctx[0];
         }
         if( ctx4&7 ) {
-          midn4[-1].c[slot_f] += 3;
-          midn4[-1].total += 3;
-          altn4[-1].c[slot_r] += 2;
-          altn4[-1].total += 2;
+          midn4[-1].bump(slot_f, 3);
+          altn4[-1].bump(slot_r, 2);
           ctx4 = ctx[0];
         }
       }
@@ -543,51 +467,38 @@ struct AltP1Block {
         int32_t mid5 = ctx4-ctx_w[5].w[1];
         CounterNode *lo5 = &counters[mid5+ctx_w[5].w[0]];
         CounterNode *hi5 = &counters[ctx_w[5].w[2]+mid5];
-        lo5[0].c[slot_f] += 6;
-        lo5[0].total += 6;
-        hi5[0].c[slot_f] += 6;
-        hi5[0].total += 6;
+        lo5[0].bump(slot_f, 6);
+        hi5[0].bump(slot_f, 6);
         ctx5 = ctx[0];
         if( (ctx5&7)!=7 ) {
-          lo5[1].c[slot_f] += 4;
-          lo5[1].total += 4;
-          hi5[1].c[slot_f] += 4;
-          hi5[1].total += 4;
+          lo5[1].bump(slot_f, 4);
+          hi5[1].bump(slot_f, 4);
           ctx5 = ctx[0];
         }
         if( ctx5&7 ) {
-          lo5[-1].c[slot_f] += 3;
-          lo5[-1].total += 3;
-          hi5[-1].c[slot_f] += 3;
-          hi5[-1].total += 3;
+          lo5[-1].bump(slot_f, 3);
+          hi5[-1].bump(slot_f, 3);
           ctx5 = ctx[0];
         }
       } else {
         CounterNode *opp5 = &counters[ctx_w[5].w[2-sel5]+ctx4-ctx_w[5].w[sel5]];
-        opp5[0].c[slot_f] += 7;
-        opp5[0].total += 7;
+        opp5[0].bump(slot_f, 7);
         uint32_t w15 = ctx_w[5].w[1];
         uint32_t x5 = w15+ctx[0]-ctx_w[5].w[ctx_w[5].sel];
         uint32_t alti5 = ctx_alt+w15-ctx_w[5].w[2-ctx_w[5].sel];
         CounterNode *midn5 = &counters[x5];
-        midn5[0].c[slot_f] += 6;
-        midn5[0].total += 6;
+        midn5[0].bump(slot_f, 6);
         CounterNode *altn5 = &counters[alti5];
-        altn5[0].c[slot_r] += 4;
-        altn5[0].total += 4;
+        altn5[0].bump(slot_r, 4);
         ctx5 = ctx[0];
         if( (ctx5&7)!=7 ) {
-          midn5[1].c[slot_f] += 4;
-          midn5[1].total += 4;
-          altn5[1].c[slot_r] += 2;
-          altn5[1].total += 2;
+          midn5[1].bump(slot_f, 4);
+          altn5[1].bump(slot_r, 2);
           ctx5 = ctx[0];
         }
         if( ctx5&7 ) {
-          midn5[-1].c[slot_f] += 3;
-          midn5[-1].total += 3;
-          altn5[-1].c[slot_r] += 2;
-          altn5[-1].total += 2;
+          midn5[-1].bump(slot_f, 3);
+          altn5[-1].bump(slot_r, 2);
           ctx5 = ctx[0];
         }
       }
@@ -596,51 +507,38 @@ struct AltP1Block {
         int32_t mid6 = ctx5-ctx_w[6].w[1];
         CounterNode *lo6 = &counters[mid6+ctx_w[6].w[0]];
         CounterNode *hi6 = &counters[ctx_w[6].w[2]+mid6];
-        lo6[0].c[slot_f] += 6;
-        lo6[0].total += 6;
-        hi6[0].c[slot_f] += 6;
-        hi6[0].total += 6;
+        lo6[0].bump(slot_f, 6);
+        hi6[0].bump(slot_f, 6);
         ctx6 = ctx[0];
         if( (ctx6&7)!=7 ) {
-          lo6[1].c[slot_f] += 4;
-          lo6[1].total += 4;
-          hi6[1].c[slot_f] += 4;
-          hi6[1].total += 4;
+          lo6[1].bump(slot_f, 4);
+          hi6[1].bump(slot_f, 4);
           ctx6 = ctx[0];
         }
         if( ctx6&7 ) {
-          lo6[-1].c[slot_f] += 3;
-          lo6[-1].total += 3;
-          hi6[-1].c[slot_f] += 3;
-          hi6[-1].total += 3;
+          lo6[-1].bump(slot_f, 3);
+          hi6[-1].bump(slot_f, 3);
           ctx6 = ctx[0];
         }
       } else {
         CounterNode *opp6 = &counters[ctx_w[6].w[2-sel6]+ctx5-ctx_w[6].w[sel6]];
-        opp6[0].c[slot_f] += 7;
-        opp6[0].total += 7;
+        opp6[0].bump(slot_f, 7);
         uint32_t w16 = ctx_w[6].w[1];
         uint32_t x6 = w16+ctx[0]-ctx_w[6].w[ctx_w[6].sel];
         uint32_t alti6 = ctx_alt+w16-ctx_w[6].w[2-ctx_w[6].sel];
         CounterNode *midn6 = &counters[x6];
-        midn6[0].c[slot_f] += 6;
-        midn6[0].total += 6;
+        midn6[0].bump(slot_f, 6);
         CounterNode *altn6 = &counters[alti6];
-        altn6[0].c[slot_r] += 4;
-        altn6[0].total += 4;
+        altn6[0].bump(slot_r, 4);
         ctx6 = ctx[0];
         if( (ctx6&7)!=7 ) {
-          midn6[1].c[slot_f] += 4;
-          midn6[1].total += 4;
-          altn6[1].c[slot_r] += 2;
-          altn6[1].total += 2;
+          midn6[1].bump(slot_f, 4);
+          altn6[1].bump(slot_r, 2);
           ctx6 = ctx[0];
         }
         if( ctx6&7 ) {
-          midn6[-1].c[slot_f] += 3;
-          midn6[-1].total += 3;
-          altn6[-1].c[slot_r] += 2;
-          altn6[-1].total += 2;
+          midn6[-1].bump(slot_f, 3);
+          altn6[-1].bump(slot_r, 2);
           ctx6 = ctx[0];
         }
       }
@@ -649,51 +547,38 @@ struct AltP1Block {
         int32_t mid7 = ctx6-ctx_w[7].w[1];
         CounterNode *lo7 = &counters[mid7+ctx_w[7].w[0]];
         CounterNode *hi7 = &counters[ctx_w[7].w[2]+mid7];
-        lo7[0].c[slot_f] += 6;
-        lo7[0].total += 6;
-        hi7[0].c[slot_f] += 6;
-        hi7[0].total += 6;
+        lo7[0].bump(slot_f, 6);
+        hi7[0].bump(slot_f, 6);
         ctx7 = ctx[0];
         if( (ctx7&7)!=7 ) {
-          lo7[1].c[slot_f] += 4;
-          lo7[1].total += 4;
-          hi7[1].c[slot_f] += 4;
-          hi7[1].total += 4;
+          lo7[1].bump(slot_f, 4);
+          hi7[1].bump(slot_f, 4);
           ctx7 = ctx[0];
         }
         if( ctx7&7 ) {
-          lo7[-1].c[slot_f] += 3;
-          lo7[-1].total += 3;
-          hi7[-1].c[slot_f] += 3;
-          hi7[-1].total += 3;
+          lo7[-1].bump(slot_f, 3);
+          hi7[-1].bump(slot_f, 3);
           ctx7 = ctx[0];
         }
       } else {
         CounterNode *opp7 = &counters[ctx_w[7].w[2-sel7]+ctx6-ctx_w[7].w[sel7]];
-        opp7[0].c[slot_f] += 7;
-        opp7[0].total += 7;
+        opp7[0].bump(slot_f, 7);
         uint32_t w17 = ctx_w[7].w[1];
         uint32_t x7 = w17+ctx[0]-ctx_w[7].w[ctx_w[7].sel];
         uint32_t alti7 = ctx_alt+w17-ctx_w[7].w[2-ctx_w[7].sel];
         CounterNode *midn7 = &counters[x7];
-        midn7[0].c[slot_f] += 6;
-        midn7[0].total += 6;
+        midn7[0].bump(slot_f, 6);
         CounterNode *altn7 = &counters[alti7];
-        altn7[0].c[slot_r] += 4;
-        altn7[0].total += 4;
+        altn7[0].bump(slot_r, 4);
         ctx7 = ctx[0];
         if( (ctx7&7)!=7 ) {
-          midn7[1].c[slot_f] += 4;
-          midn7[1].total += 4;
-          altn7[1].c[slot_r] += 2;
-          altn7[1].total += 2;
+          midn7[1].bump(slot_f, 4);
+          altn7[1].bump(slot_r, 2);
           ctx7 = ctx[0];
         }
         if( ctx7&7 ) {
-          midn7[-1].c[slot_f] += 3;
-          midn7[-1].total += 3;
-          altn7[-1].c[slot_r] += 2;
-          altn7[-1].total += 2;
+          midn7[-1].bump(slot_f, 3);
+          altn7[-1].bump(slot_r, 2);
           ctx7 = ctx[0];
         }
       }
@@ -702,46 +587,34 @@ struct AltP1Block {
         int32_t midn8 = ctx7-ctx_w[8].w[1];
         CounterNode *altn8 = &counters[midn8+ctx_w[8].w[0]];
         node = &counters[ctx_w[8].w[2]+midn8];
-        altn8[0].c[slot_f] += 6;
-        altn8[0].total += 6;
-        node[0].c[slot_f] += 6;
-        node[0].total += 6;
+        altn8[0].bump(slot_f, 6);
+        node[0].bump(slot_f, 6);
         ctx8 = ctx[0];
         if( (ctx8&7)!=7 ) {
-          altn8[1].c[slot_f] += 4;
-          altn8[1].total += 4;
-          node[1].c[slot_f] += 4;
-          node[1].total += 4;
+          altn8[1].bump(slot_f, 4);
+          node[1].bump(slot_f, 4);
           ctx8 = ctx[0];
         }
         if( ctx8&7 ) {
-          altn8[-1].c[slot_f] += 3;
-          altn8[-1].total += 3;
-          node[-1].c[slot_f] += 3;
-          node[-1].total += 3;
+          altn8[-1].bump(slot_f, 3);
+          node[-1].bump(slot_f, 3);
         }
       } else {
         CounterNode *opp8 = &counters[ctx_w[8].w[2-sel8]+ctx7-ctx_w[8].w[sel8]];
-        opp8[0].c[slot_f] += 7;
-        opp8[0].total += 7;
+        opp8[0].bump(slot_f, 7);
         uint32_t w18 = ctx_w[8].w[1];
         node = &counters[w18+ctx[0]-ctx_w[8].w[ctx_w[8].sel]];
         CounterNode *x8 = &counters[w18-ctx_w[8].w[2-ctx_w[8].sel]+ctx_alt];
-        node[0].c[slot_f] += 6;
-        node[0].total += 6;
-        x8[0].c[slot_r] += 4;
-        x8[0].total += 4;
+        node[0].bump(slot_f, 6);
+        x8[0].bump(slot_r, 4);
         alti8 = ctx[0];
         if( (alti8&7)!=7 ) {
-          node[1].c[slot_f] += 4;
-          node[1].total += 4;
-          x8[1].c[slot_r] += 2;
-          x8[1].total += 2;
+          node[1].bump(slot_f, 4);
+          x8[1].bump(slot_r, 2);
           alti8 = ctx[0];
         }
         if( alti8&7 ) {
-          node[-1].c[slot_f] += 3;
-          node[-1].total += 3;
+          node[-1].bump(slot_f, 3);
           result = (uint16_t)x8[-1].c[slot_r]+2;
           x8[-1].c[slot_r] = result;
           x8[-1].total += 2;
