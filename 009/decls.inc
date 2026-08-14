@@ -73,9 +73,9 @@ CounterNode*__init_counter_node(CounterNode* node);
 template<int f_DEC> int32_t __code_symbol_tree(uint16_t* freq, int32_t sym);
 
 void __encode_symbol_tree(uint16_t* freq, int32_t sym);
-void __alt_p1_encode_symbol(uint16_t* freq, int32_t ctx, int32_t sym);
+void __alt_p1_encode_symbol(CounterNode* node, int32_t ctx, int32_t sym);
 int32_t __decode_symbol_tree(uint16_t* freq);
-int32_t __alt_p1_decode_symbol(uint16_t* freq, int32_t ctx);
+int32_t __alt_p1_decode_symbol(CounterNode* node, int32_t ctx);
 void __rc_end_decode();
 void __rc_end_encode();
 static inline bool sym_in_top(const SymEntry* ent, int32_t n, int32_t sym);

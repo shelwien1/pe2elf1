@@ -444,6 +444,7 @@ them run.
 | --- | --- | --- |
 | `abpair.py` | Two names for one value, told apart by a trailing `a`/`b` | yes |
 | `addrmap.py` | Recover which address in BMF.exe each named function came from | yes |
+| `alias.sh` | Is anything still read through a pointer of another type? |  |
 | `arrayify.py` | Collapse a run of consecutive same-type members into the array it is | yes |
 | `asan.sh` | Run every test image under AddressSanitizer |  |
 | `buildlog.py` | Read a build log, or say plainly that it is about another file | yes |
@@ -501,6 +502,7 @@ them run.
 | `retype_locals.py` | Give a local the type the compiler says its assignments have | yes |
 | `runarray.py` | Declare a run of frame members as the array the code walks it as | yes |
 | `shape.py` | Measure the things REFACTORING3.md is about, so its numbers can be checked | yes |
+| `signshift.py` | Find the comparisons written as a shift of a sign bit | yes |
 | `split.py` | Split bmf.cpp into one file per class and per large function | no |
 | `struct-sweep.sh` | Give the largest remaining objects a struct, one at a time, keeping only the ones the gate accepts |  |
 | `structs.py` | Give one of the program's objects a struct, and use it | no |

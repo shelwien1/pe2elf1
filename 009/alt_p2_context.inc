@@ -246,7 +246,10 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   int32_t filt = __alt_p2_filter(nb_cur, (float (*)[4]) p2_row, &weights, mode);
   P2Ctx* cx0 = (P2Ctx*)cursor[0];
   P2Ctx *cx1 = (P2Ctx*)cursor[1];
-  *(int32_t*)&pred_prev = filt;
+  // A 32-bit store at `&pred_prev`, which is a `uint16_t` followed by two
+  // bytes of padding: the original wrote the whole word and the top half
+  // landed in the pad, which nothing reads.  So it is the low half.
+  pred_prev = (uint16_t)filt;
   int32_t lane3 = cx1->aerr;
   int32_t g3pair = cx0[-1].aerr+lane3;
   if( refa )

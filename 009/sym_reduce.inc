@@ -13,7 +13,12 @@ struct alignas(16) ReduceAlphabetFrame {
     return (uint32_t*)&kids_i;
   }
 
-  uint64_t kids[127];
+  // Two `uint16_t` children per node, which is what the code reads: it took
+  // `(uint16_t*)&kids[node]` and indexed 0 or 1.  Four words rather than two
+  // because the slot is eight bytes wide in the original and the frame's
+  // layout is load-bearing -- `memset(buf, 0, 0x10000)` clears this array and
+  // 64KB past it, which is also why `liftframe.py` cannot lift this frame.
+  uint16_t kids[127][4];
   int32_t y_spill;
   int32_t at_spill;
   int32_t bits_spill;
@@ -195,7 +200,7 @@ void __reduce_alphabet(ModelBlock* blk, uint8_t* src) {
             __frame.slot2 = p;
             while( 1 ) {
               side = *(uint32_t*)&__frame.buf[8*node]<val;
-              kidp = (uint16_t*)&__frame.kids[node];
+              kidp = __frame.kids[node];
               node = kidp[side];
               if( !kidp[side] )
                 break;

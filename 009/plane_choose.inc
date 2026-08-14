@@ -548,11 +548,11 @@ weights_chosen:
             x1[0] = g1;
             g2 = ((uint8_t*)img_a)[4*quad+18]+dnx2-(nx2+pp[4*quad+18]);
             g1w = (uint16_t)(((uint8_t*)img_a)[4*quad+19]+pp[4*quad+23]-pp[4*quad+19]-((uint8_t*)img_a)[4*quad+23]);
-            g1_lo = ((int16_t*)x1)[0];
+            g1_lo = (int16_t)x1[0];
             g1w = g1w-512;
             pa = x1[0]*x0[0]+x0[3]*wa_slot;
             pb = g2*x0[1];
-            ++__frame.hist_a[(g1w-((int16_t*)x0)[6])&0x3FF];
+            ++__frame.hist_a[(g1w-(int16_t)x0[3])&0x3FF];
             bin_lin = (g1w-(uint16_t)((uint32_t)(pa+pb+63)>>7))&0x3FF;
             ++*(uint32_t*)&__frame.buf[4*bin_lin];
             ++__frame.hist_b[(g1w-g1_lo)&0x3FF];

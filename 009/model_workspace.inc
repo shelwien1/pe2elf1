@@ -17,7 +17,7 @@ void**ModelBlock::free_workspace(int8_t do_free) {
   free(sym_code);
   free(sym_word);
   free(run_bucket);
-  free(*(void**)&alpha_map);
+  free(alpha_map);
   free_sym_lists(sel1_list);
   free_sym_lists(sel0_list);
   for( i = 0; i<5; ++i )

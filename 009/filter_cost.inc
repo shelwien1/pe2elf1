@@ -43,7 +43,10 @@ int32_t __cost_candidate(uint8_t* img, int32_t cand, uint8_t* desc, int8_t unrea
   uint8_t *r0, *r2;
   __frame.desc_f = desc;
   __frame.nplanes = plane_count;
-  int32_t row_b = *(const uint16_t*)&((const BmfImage*)img)->stride;
+  // `*(const uint16_t*)&img->stride` -- the low half of a `uint32_t`, which
+  // is a truncation on a little-endian machine and a different field on any
+  // other.  Cast the value.
+  int32_t row_b = (uint16_t)((const BmfImage*)img)->stride;
   __frame.cand_i = cand;
   __frame.img_f = (BmfImage*)img;
   __frame.d1_f = (cand+1)%3-cand;

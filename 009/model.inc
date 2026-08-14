@@ -1261,7 +1261,7 @@ struct ModelBlock {
     int32_t bp;
     uint16_t* id3p;
     int16_t s8, w1s, acc2, s3, g0;
-    int32_t up_sym, left_sym, up_next_sym, upleft_sym, nb, key, state, pair_last, cap, pair_prev, bucket_at, up_match0, m_w1, nb2, sig1, id1, sig2, id2, m_w1b, m_w0, m_up0, to_edge, one, run, run_pair, amap, runlen, run_hit, run_left, s1, s8b, s6, msym1, s4, bit5, first, s5, s1b, s9, cum1, lvl_a, w6a, w5a, b15a, msym3, excl_sym_a, excl_sym_b, w6d, wq1, esym, up_hit, pos1, msym1b, *ip, b15, w2t, w3t, w4t, acc, q1, w2s, q2, w3s, w4s, s9b, cum2, lvl_b, w5c, w6c, w5b, s3b;
+    int32_t up_sym, left_sym, up_next_sym, upleft_sym, nb, key, state, pair_last, cap, pair_prev, bucket_at, up_match0, m_w1, nb2, sig1, id1, sig2, id2, m_w1b, m_w0, m_up0, to_edge, one, run, run_pair, amap, runlen, run_hit, run_left, s1, s8b, s6, msym1, s4, bit5, first, s5, s1b, s9, cum1, lvl_a, w6a, w5a, b15a, msym3, excl_sym_a, excl_sym_b, w6d, wq1, esym, up_hit, pos1, msym1b, b15, w2t, w3t, w4t, acc, q1, w2s, q2, w3s, w4s, s9b, cum2, lvl_b, w5c, w6c, w5b, s3b;
     uint16_t w5, w1;
     PixRec* cur5, * cur5p1, * cur5p1b, * r6, * r7;
     SymPair* wq;
@@ -1542,7 +1542,6 @@ struct ModelBlock {
       grid_kind = frec->w[5];
       if( grid_kind ) {
         if( grid_kind==1 ) {
-          ip = (int32_t*)&grid[bucket_idx];
           b15 = binp->b15;
           w2t = b15*frec->w[2];
           w3t = b15*frec->w[3];
@@ -1552,7 +1551,9 @@ struct ModelBlock {
           w4t = b15*frec->w[4];
           nb_sym[2] = w3t;
           nb_sym[3] = w4t;
-          *frec = *(FreqRec*)ip;
+          // `ip = (int32_t*)&grid[bucket_idx]` ten lines up, cast straight back
+          // here and used as nothing else in between.
+          *frec = grid[bucket_idx];
           w5 = frec->w[5];
           frec->b14 *= 8;
           acc = 21*frec->w[1];
@@ -1626,7 +1627,8 @@ struct ModelBlock {
           lvl_a = hit;
         }
       } else {
-        wr = (uint16_t*)&grid[bucket_idx];
+        // `w` is the union member this was casting to reach.
+        wr = grid[bucket_idx].w;
         s9b = rowp->sym;
         arg_tot = binp->w[5];
         if( s9b==nb_sym[8] ) {

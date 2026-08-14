@@ -7,6 +7,7 @@
 #     BMF_WARN=1   ./build.sh           # warn.log   and the count, no binary
 #     BMF_STRICT=1 ./build.sh           # strict.log and the count, no binary
 #     BMF_GC=list  ./build.sh           # and name the bodies --gc-sections drops
+#     BMF_ALIAS=-fstrict-aliasing ./build.sh   # tools/alias.sh's knob; see below
 #
 # Anything on the command line is appended to the compiler's, which is how
 # tools/asan.sh, tools/fuzz.sh and tools/hdrscan.sh ask for their builds.
@@ -30,17 +31,34 @@
 # `./test.sh` -- one flag apart, everything else held:
 #
 #     -fstrict-aliasing (g.bat's, and gcc's own default from -O2 up)
-#                                     t24, t32 and x_ep differ
+#                                     t24, t32 and x_ep differed -- WHEN THAT
+#                                     WAS MEASURED.  Not any more: see below.
 #     -ffast-math (which -Ofast implies), and specifically its
-#     -funsafe-math-optimizations     t8g, t8p and x_ep differ
+#     -funsafe-math-optimizations     t8g, t8p and x_ep differ.  Re-measured
+#                                     on the current tree: still three, still
+#                                     those three.
 #
 # So `-fno-strict-aliasing` is set explicitly and the optimiser is `-O2`.  This
 # is not a guess about which is faithful: it is the flag set that reproduces
 # testfiles/ref_*.bmf byte for byte, and it is also what g32.bat and the
-# canonical command in tools/unused.py already use.  The decompilation reads
-# objects through pointers of another type on purpose -- it is what MSVC emitted
-# for 1997 x86 -- and the float model behind t8g/t8p/x_ep is only reassociable
-# if you do not mind the answer changing.
+# canonical command in tools/unused.py already use.  The float model behind
+# t8g/t8p/x_ep is only reassociable if you do not mind the answer changing.
+#
+# **The aliasing half of that has expired.**  It was true of a tree that read
+# objects through pointers of another type; `-Wstrict-aliasing=2` counted 22
+# such sites and every one was real.  All 22 are gone -- the p1 symbol coder
+# takes a `CounterNode*` instead of the `uint16_t*` eleven callers cast to,
+# `mir_top` is a `P2Count*` and a `P2Freq*` instead of one word pointer doing
+# both jobs, `(int32_t*)&grid[i]` was cast straight back to `FreqRec*` on its
+# next use, the tree nodes in `__reduce_alphabet` are the word pair they are
+# read as, and the one genuine reinterpretation left goes through `memcpy`.
+#
+# The flag stays: it is part of the recipe the reference streams were taken
+# under, and so is `-O2`.  What changed is that the program no longer *depends*
+# on it.  `tools/alias.sh` is the check that keeps that true, and it gates on
+# the warning count rather than on the streams -- putting nine of the casts
+# back left all seventeen streams matching, because gcc is entitled to exploit
+# them and at `-O2` on this code simply does not.  `BMF_ALIAS` is its knob.
 #
 # `-O3` is *not* one of the causes, which is worth saying because it looks like
 # one: `-O3 -fno-strict-aliasing` matches all fifteen.  It is left at `-O2`
@@ -88,7 +106,7 @@ opts='-fomit-frame-pointer -fno-stack-protector -fno-stack-check -fno-check-new
 # reason that means nothing.  It did, until this line.
 permissive='-fpermissive'
 # And the three that decide the answer.  See the header.
-fidelity='-fno-strict-aliasing -ffp-contract=off'
+fidelity="${BMF_ALIAS:--fno-strict-aliasing} -ffp-contract=off"
 incs='-DNDEBUG -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0'
 std='-std=gnu++17'
 opt='-O2'

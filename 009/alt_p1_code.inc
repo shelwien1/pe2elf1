@@ -127,7 +127,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
           }
           plane[0]->ctx_of((AltP1Block*)nullptr, (AltP1Block*)0);
           if( f_DEC ) {
-            code0 = __alt_p1_decode_symbol((uint16_t*)&blk0->counters[blk0->ctx[0]], blk0->ctx[1]);
+            code0 = __alt_p1_decode_symbol(&blk0->counters[blk0->ctx[0]], blk0->ctx[1]);
             pred0 = (uint8_t)blk0->pred;
             cur0 = (uint8_t)(pred0+blk0->unfold[code0]);
             keep0 = cur0;
@@ -146,7 +146,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
               *(buf+off0) = out0;
               keep0 = recon0;
             }
-            __alt_p1_encode_symbol(&blk0->counters[blk0->ctx[0]].total, blk0->ctx[1], code0);
+            __alt_p1_encode_symbol(&blk0->counters[blk0->ctx[0]], blk0->ctx[1], code0);
           }
           int32_t err0 = keep0-blk0->pred;
           blk0->cursor[0]->sym = cur0;
@@ -172,7 +172,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
           AltP1Block* blk1 = plane[1];
           plane[1]->ctx_of(plane[0], (AltP1Block*)0);
           if( f_DEC ) {
-            code1 = __alt_p1_decode_symbol(&blk1->counters[blk1->ctx[0]].total, blk1->ctx[1]);
+            code1 = __alt_p1_decode_symbol(&blk1->counters[blk1->ctx[0]], blk1->ctx[1]);
             pred1 = (uint8_t)blk1->pred;
             cur1 = (uint8_t)(pred1+blk1->unfold[code1]);
           } else {
@@ -190,7 +190,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
               *(buf+off1) = out1;
               cur1 = recon1;
             }
-            __alt_p1_encode_symbol((uint16_t*)&blk1->counters[blk1->ctx[0]], (int32_t)blk1->ctx[1], code1x);
+            __alt_p1_encode_symbol(&blk1->counters[blk1->ctx[0]], (int32_t)blk1->ctx[1], code1x);
           }
           int32_t err1 = cur1-blk1->pred;
           blk1->cursor[0]->sym = cur1;
@@ -218,7 +218,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
           AltP1Block* blk2 = plane[2];
           plane[2]->ctx_of(plane[1], plane[0]);
           if( f_DEC ) {
-            code2 = __alt_p1_decode_symbol((uint16_t*)&blk2->counters[blk2->ctx[0]], (int32_t)blk2->ctx[1]);
+            code2 = __alt_p1_decode_symbol(&blk2->counters[blk2->ctx[0]], (int32_t)blk2->ctx[1]);
             pred2 = (uint8_t)blk2->pred;
             want2 = (uint8_t)(pred2+blk2->unfold[code2]);
           } else {
@@ -234,7 +234,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
               want2 = recon2;
               *(off2+buf) = out2;
             }
-            __alt_p1_encode_symbol((uint16_t*)&blk2->counters[blk2->ctx[0]], (int32_t)blk2->ctx[1], code2);
+            __alt_p1_encode_symbol(&blk2->counters[blk2->ctx[0]], (int32_t)blk2->ctx[1], code2);
           }
           int32_t err2 = want2-blk2->pred;
           blk2->cursor[0]->sym = want2;
@@ -268,7 +268,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
             AltP1Block* blk3 = plane[3];
             plane[3]->ctx_of(plane[2], plane[1]);
             if( f_DEC ) {
-              code3 = __alt_p1_decode_symbol((uint16_t*)&blk3->counters[blk3->ctx[0]], (int32_t)blk3->ctx[1]);
+              code3 = __alt_p1_decode_symbol(&blk3->counters[blk3->ctx[0]], (int32_t)blk3->ctx[1]);
               pred3 = (uint8_t)blk3->pred;
               cur3 = (uint8_t)(pred3+blk3->unfold[code3]);
             } else {
@@ -284,7 +284,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
                 cur3 = recon3;
                 *(off3+buf) = out3;
               }
-              __alt_p1_encode_symbol((uint16_t*)&blk3->counters[blk3->ctx[0]], (int32_t)blk3->ctx[1], code3);
+              __alt_p1_encode_symbol(&blk3->counters[blk3->ctx[0]], (int32_t)blk3->ctx[1], code3);
             }
             int32_t err3 = cur3-blk3->pred;
             blk3->cursor[0]->sym = cur3;

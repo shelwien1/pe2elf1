@@ -202,13 +202,29 @@ struct P2Ctx {
 // original used four bytes of it for this.
 //
 // Two sites reached it, one through `uint32_t*` and one through `int32_t*`,
-// which is two answers to what the type is.  This is one, and the punning has
-// one home.  Giving the row a struct with a `uint32_t` member at the identical
-// offset would remove the pun rather than name it, and that means retyping
-// every `float (*)[4]` in the p2 model and every `[j][k]` on one -- a wider
-// edit than this earns, so it is written down here rather than done.
-static inline uint32_t& nb_row_uses(float (*row)[4]) {
-  return *(uint32_t*)&row[15][0];
+// which is two answers to what the type is.
+//
+// `memcpy` rather than a cast, because a cast is the one thing that is not
+// allowed: reading a `float` object through a `uint32_t*` is exactly what
+// `-Wstrict-aliasing` was reporting here, and it was the last such report in
+// the tree.  `__builtin_memcpy` of four bytes is a single load or store at
+// `-O2` -- the streams are byte-identical either way -- and it is what the
+// language provides for reinterpreting bytes.
+//
+// Giving the row a struct with a `uint32_t` member at the identical offset
+// would remove the reinterpretation rather than legalise it, and that means
+// retyping every `float (*)[4]` in the p2 model and every `[j][k]` on one.
+// That is still worth doing and still not done; this makes the current form
+// defined in the meantime.
+static inline uint32_t nb_row_uses(const float (*row)[4]) {
+  uint32_t n;
+  __builtin_memcpy(&n, &row[15][0], sizeof n);
+  return n;
+}
+
+static inline void nb_row_bump(float (*row)[4]) {
+  const uint32_t n = nb_row_uses(row)+1;
+  __builtin_memcpy(&row[15][0], &n, sizeof n);
 }
 
 // `bmf_p2_coef` and `bmf_p2_rate` read like tuning constants and are not: for
@@ -354,7 +370,7 @@ struct AltP2Block {
     for( int32_t j = 0; j<7; ++j )
       for( int32_t k = 0; k<4; ++k )
         w[j][k] += bmf_p2_rate[j][k]*err*p2_row[j][k]/(w[7+j][k]+ms_scale*529.0f);
-    ++nb_row_uses(w);
+    nb_row_bump(w);
     w[14][2] = ms_scale+((10.0f-ms_scale)*0.00019999999f);
   }
 

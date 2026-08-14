@@ -257,19 +257,49 @@ themselves, and `palette()` is the accessor four sites spelled by hand.  Its
 palette clear had a guard that could not be false and a `nullptr` that could
 not be passed to `memset`.
 
-**The counter in a float slot: named, not removed.**  Each weight row keeps a
-use count in the first `float` of its sixteenth line, and two sites reached it
-through pointers of different signedness.  `nb_row_uses` is one accessor with
-one type, so the pun has one home -- but it is still a pun.  Removing it means
-giving the row a struct, which means retyping every `float (*)[4]` in the p2
-model and every `[j][k]` on one.  That is a wider edit than this earns, and
-saying so is better than implying it was done.
+**The counter in a float slot** is a `memcpy` now, not a cast.  Each weight
+row keeps a use count in the first `float` of its sixteenth line, and two sites
+reached it through pointers of different signedness.  Reading a `float` object
+through a `uint32_t*` is undefined however carefully it is wrapped, so the
+accessor does what the language provides for reinterpreting bytes.  Giving the
+row a struct with a `uint32_t` member at the identical offset would remove the
+reinterpretation rather than legalise it, and that is still not done -- it
+means retyping every `float (*)[4]` in the p2 model and every `[j][k]` on one.
 
-**`-fno-strict-aliasing` stays.**  The plan's last Phase 6 line is to remove it
-once the punning is gone, and the punning is not all gone -- `nb_row_uses` and
-`mir_top`, which walks both a `P2Count` and a `P2Freq` as words, are still
-there.  Removing the flag with those in place would be trading a gate for a
-line in a build script.
+**`-fno-strict-aliasing` stays, and the reason changed.**  The plan's last
+Phase 6 line is to remove the flag once the punning is gone.  Two findings, in
+this order:
+
+  * `build.sh` recorded that `-fstrict-aliasing` made t24, t32 and x_ep differ.
+    Re-measured on the current tree: all seventeen streams match.  The other
+    half of that note -- that `-funsafe-math-optimizations` moves three
+    streams -- was re-measured too and still holds, still those three.
+  * that measurement is nearly worthless as a check.  Nine `*(uint32_t*)` casts
+    on a `PixRec` were deliberately put back and all seventeen streams *still*
+    matched.  gcc is entitled to exploit those and at `-O2` on this code does
+    not.  A stream comparison says "the compiler is not currently taking the
+    opportunity", not "there is no opportunity".
+
+The check with teeth is `-Wstrict-aliasing=2` on an optimising build, which
+named 22 sites -- and needs the `-O2`, because under `-fsyntax-only` the
+analysis does not run and the count is the same whatever the code says.  All 22
+are gone: the p1 symbol coder takes a `CounterNode*` instead of the `uint16_t*`
+eleven callers were casting to (`CounterNode` *is* `{total, c[7]}`, which is
+what the body walked), `(int32_t*)&grid[i]` was cast straight back to
+`FreqRec*` on its next use, `*(const uint16_t*)&img->stride` and
+`*(int32_t*)&pred_prev` are value casts, `((int16_t*)x1)[0]` is `(int16_t)x1[0]`,
+`free(*(void**)&alpha_map)` is `free(alpha_map)`, and `__reduce_alphabet`'s
+tree nodes are the `uint16_t` pair the code reads rather than a `uint64_t`.
+
+`tools/alias.sh` gates on that count, with the stream comparison as
+corroboration rather than as the test.  The flag itself stays: it is part of
+the recipe the reference streams were taken under, and so is `-O2`.  What
+changed is that the program no longer depends on it.
+
+Retyping the coder also turned up dead scaffolding inside it: the rescale was
+guarded by `freq+7 < base` and `freq+7 >= base` with `base = freq+1`, which are
+`false` and `true` for any pointer.  Both loops always ran, and the `done` flag
+between them was MSVC's register for a branch it had already decided.
 
 ## Phase 7 -- modernization
 
