@@ -1,0 +1,14 @@
+# build outputs
+mp2
+mp2.exe
+mp3
+mp3.exe
+mp3_k8
+tests/mkmp2
+tests/mkmp2.exe
+tests/mp3chk
+tests/mp3chk.exe
+*.o
+# scratch
+work/
+*.pcm
