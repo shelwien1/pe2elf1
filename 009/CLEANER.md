@@ -452,7 +452,7 @@ byte. Run against the finished tree:
 ./tools/x32.sh                           23 of 23, 0 pointers through a 32-bit integer
 ./tools/asan.sh                          nothing in 44 runs over 19 images
 ./tools/hdrscan.sh                       nothing in 8,704 runs
-./tools/fuzz.sh 400                      nothing
+./tools/fuzz.sh 400                      400 mutants, 284 refused, 116 accepted, 0 reported
 ./tools/sweep.sh bmf.cpp                 every counting tool at zero
 BMF_WARN=1 ./build.sh                    4, and zero shadows
 ```
