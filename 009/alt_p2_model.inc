@@ -5,7 +5,13 @@
 uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_in) {
   P2Ctx* cursor0;
   int32_t n2_half;
-  uint16_t* mir_top;
+  P2Count* mir;
+  // The frequency record whose bins this symbol's decision moves.  It was
+  // `mir_top` again -- a `uint16_t*` over a `P2Freq`, where index 1 is `f[0]`
+  // and `3-is_dec` is `f[2]` or `f[1]`.  Every one of its thirteen
+  // assignments was a `P2Freq*` with the cast written on it, and every use was
+  // one of those two bins, so there was never anything a word pointer was for.
+  P2Freq* bin;
   P2Freq* grp;
   uint32_t rec_idx;
   int32_t hi_nibble;
@@ -108,12 +114,23 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
         }
       }
       if( !alphabet_reduced ) {
-        // The decompilation had this as `prefetch(&mir_top)` *before* the
+        // The mirrored context: the same counter with the top bits of its
+        // index flipped, which is the model's guess at what a symmetric
+        // neighbourhood would have used.
+        //
+        // This was `mir_top`, a `uint16_t*` walking `P2Count` two words at a
+        // time -- `[0]` the rate byte, `[1]` the weight, `[2]`/`[3]` the next
+        // record's, `[-2]`/`[-1]` the previous one's.  It is a `P2Count*`, and
+        // the name is reused a hundred lines below for a `uint16_t*` that
+        // genuinely does walk a `P2Freq` as words, which is why one name did
+        // two jobs.
+        //
+        // The decompilation also had `prefetch(&mir_top)` *before* the
         // assignment, which asks for the cache line holding a local the
         // function is about to write anyway.  Every other prefetch below is of
         // the counter the next few lines will read; this one is now too.
-        mir_top = (uint16_t*)&p2_ctr[32768*bank+(ctxw^0x7FF0)];
-        __builtin_prefetch(mir_top, 0, 1);
+        mir = &p2_ctr[32768*bank+(ctxw^0x7FF0)];
+        __builtin_prefetch(mir, 0, 1);
         res2 = (nb_sum[2*bank+1])+res;
         int32_t lowbits = ctxw&3;
         if( (uint32_t)lowbits>=3||(w1 = node0[1].weighted, e1 = res2-p2_pred(w1, (uint8_t)node0[1].rate), go = lowbits<=0, node0[1].weighted = (int16_t)w1+((32*((e1>deadzone_hi)-(uint32_t)(e1<deadzone_lo))+e1+1)>>1), !go) ) {
@@ -184,12 +201,11 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
         P2Count *m0010 = &bankp[(x0010^0x7FF0)];
         __builtin_prefetch(r0080, 0, 1);
         P2Count *r0010 = &bankp[ri0010];
-        uint16_t* mir_top2 = mir_top;
         neg = -res_c;
         __builtin_prefetch(d0040, 0, 1);
-        w_top = (int16_t)mir_top2[1];
+        w_top = mir[0].weighted;
         __builtin_prefetch(m0040, 0, 1);
-        e_top = neg-p2_pred(w_top, (uint8_t)mir_top[0]);
+        e_top = neg-p2_pred(w_top, (uint8_t)mir[0].rate);
         __builtin_prefetch(r0040, 0, 1);
         // `e_top > deadzone_hi`, which is what the five siblings of this line
         // in this file already say.  It arrived as the x86 flags the compare
@@ -203,14 +219,14 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
         uint32_t w_new = bump+e_top+2;
         go = lowbits<3;
         // The partial store this was written as -- `LOWORD(w_new) = w_top +
-        // (w_new>>2)` -- kept a high half that the next line throws away:
-        // `mir_top` is `uint16_t *`.  Sixteen bits in and sixteen bits out.
-        mir_top[1] = w_top+(w_new>>2);
+        // (w_new>>2)` -- kept a high half that the next line throws away.
+        // Sixteen bits in and sixteen bits out.
+        mir[0].weighted = (int16_t)(w_top+(w_new>>2));
         __builtin_prefetch(((P2Count*)(r0020)), 0, 1);
         __builtin_prefetch(d0010, 0, 1);
         __builtin_prefetch(m0010, 0, 1);
         __builtin_prefetch(r0010, 0, 1);
-        if( go&&(w_top3 = (int16_t)mir_top[3], b_top3 = (uint8_t)mir_top[2], res_c = res_s, go = lowbits<=0, mir_top[3] = ((uint32_t)(-res_s-p2_pred(w_top3, b_top3)+2)>>2)+w_top3, go) ) {
+        if( go&&(w_top3 = mir[1].weighted, b_top3 = (uint8_t)mir[1].rate, res_c = res_s, go = lowbits<=0, mir[1].weighted = (int16_t)(((uint32_t)(-res_s-p2_pred(w_top3, b_top3)+2)>>2)+w_top3), go) ) {
           res_c = res_s;
           p2_update(d4000, res_s, 2);
           p2_update(r4000, res_s, 3);
@@ -268,9 +284,9 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
           p2_nudge(&d0010[1], res_c);
           p2_update(m0010, -res_c, 3);
         } else {
-          w_topm1 = (int16_t)mir_top[-1];
+          w_topm1 = mir[-1].weighted;
           res_c = res_s;
-          mir_top[-1] = ((uint32_t)(-res_s-p2_pred(w_topm1, ((uint8_t)mir_top[-2]))+4)>>3)+w_topm1;
+          mir[-1].weighted = (int16_t)(((uint32_t)(-res_s-p2_pred(w_topm1, (uint8_t)mir[-1].rate)+4)>>3)+w_topm1);
           p2_update(d4000, res_c, 2);
           go = lowbits<3;
           p2_update(r4000, res_c, 3);
@@ -406,14 +422,14 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
     ctx15 = ctx_l&0xF;
     pair_ctx = ctx_pair[a4&1];
     if( ctx15<15 ) {
-      mir_top = (uint16_t*)&frec[1];
+      bin = &frec[1];
       p2_rescale(&frec[1]);
       step10 = (10*(uint32_t)frec[1].step)>>4;
       if( a4 ) {
-        mir_top[3-is_dec] += step10;
+        bin->f[2-is_dec] += step10;
         __update_binary_pair(model_strip(pair_ctx+1), (a4-1)>>1);
       } else {
-        mir_top[1] += step10;
+        bin->f[0] += step10;
       }
       if( ctx15<=0 ) {
 code_residual:
@@ -429,13 +445,13 @@ code_residual:
         p2_rec = frec_step;
         if( ctx15<15 ) {
           frec2 = &frec_step[1];
-          mir_top = (uint16_t*)frec2;
+          bin = frec2;
           p2_freq_add(frec2, fold_sel2, 4);
           if( ctx15<=0 )
             goto counters_done;
         } else {
         }
-        mir_top = (uint16_t*)&p2_rec[-1];
+        bin = &p2_rec[-1];
         p2_freq_add(&p2_rec[-1], fold_sel2, 4);
 counters_done:
         if( a4 ) {
@@ -461,37 +477,37 @@ counters_done:
             idx0 = ctx_w[0].w[2]+off0;
             grp = frecg0;
             frec3 = &frecg0[0];
-            mir_top = (uint16_t*)frec3;
+            bin = frec3;
             p2_freq_add(frec3, is_dec, 3);
             if( ctx15<15 ) {
-              mir_top = (uint16_t*)&grp[1];
+              bin = &grp[1];
               p2_freq_add(&grp[1], is_dec, 4);
               nxt0 = &freq[idx0+1];
               p2_freq_add(&freq[idx0+1], is_dec, 2);
             }
             if( ctx15>2 ) {
-              mir_top = (uint16_t*)&grp[-1];
+              bin = &grp[-1];
               p2_freq_add(&grp[-1], is_dec, 6);
             }
           } else {
             g0 = &freq[step_v+ctx_w[0].w[1]-ctx_w[0].w[2-sel0]];
             p2_freq_add(g0, fold_sel2, 7);
             grp = (&freq[ctx_w[0].w[1]+(ctx-ctx_w[0].w[ctx_w[0].sel])]);
-            mir_top = (uint16_t*)&grp[0];
+            bin = &grp[0];
             p2_freq_add(&grp[0], is_dec, 7);
             if( ctx15<15 ) {
-              mir_top = (uint16_t*)&grp[1];
+              bin = &grp[1];
               p2_freq_add(&grp[1], is_dec, 5);
             }
             if( ctx15>0 ) {
-              mir_top = (uint16_t*)&grp[-1];
+              bin = &grp[-1];
               p2_freq_add(&grp[-1], is_dec, 6);
             }
           }
           sel1 = ctx_w[1].sel;
           if( sel1==1 ) {
             frec4b = &freq[ctx_w[1].w[0]+step_v-ctx_w[1].w[1]];
-            mir_top = (uint16_t*)frec4b;
+            bin = frec4b;
             p2_freq_add(frec4b, fold_sel2, 4);
             off1 = ctx-ctx_w[1].w[1];
             frecg1 = &freq[off1+ctx_w[1].w[0]];
@@ -500,34 +516,34 @@ counters_done:
             h1 = &frecg1[0];
             p2_freq_add(h1, is_dec, 3);
             if( ctx15<15 ) {
-              mir_top = (uint16_t*)&grp[1];
+              bin = &grp[1];
               p2_freq_add(&grp[1], is_dec, 4);
               nxt1 = &freq[idx0+1];
               p2_freq_add(&freq[idx0+1], is_dec, 2);
             }
             if( ctx15>2 ) {
-              mir_top = (uint16_t*)&grp[-1];
+              bin = &grp[-1];
               p2_freq_add(&grp[-1], is_dec, 6);
             }
           } else {
             g1 = &freq[step_v+ctx_w[1].w[1]-ctx_w[1].w[2-sel1]];
             p2_freq_add(g1, fold_sel2, 7);
             grp = (&freq[ctx_w[1].w[1]+(ctx-ctx_w[1].w[ctx_w[1].sel])]);
-            mir_top = (uint16_t*)&grp[0];
+            bin = &grp[0];
             p2_freq_add(&grp[0], is_dec, 7);
             if( ctx15<15 ) {
-              mir_top = (uint16_t*)&grp[1];
+              bin = &grp[1];
               p2_freq_add(&grp[1], is_dec, 5);
             }
             if( ctx15>0 ) {
-              mir_top = (uint16_t*)&grp[-1];
+              bin = &grp[-1];
               p2_freq_add(&grp[-1], is_dec, 6);
             }
           }
           sel2 = ctx_w[2].sel;
           if( sel2==1 ) {
             frec5 = &freq[ctx_w[2].w[0]+step_v-ctx_w[2].w[1]];
-            mir_top = (uint16_t*)frec5;
+            bin = frec5;
             p2_freq_add(frec5, fold_sel2, 4);
             off2 = ctx-ctx_w[2].w[1];
             frecg2 = &freq[off2+ctx_w[2].w[0]];
@@ -536,34 +552,34 @@ counters_done:
             h2 = &frecg2[0];
             p2_freq_add(h2, is_dec, 3);
             if( ctx15<15 ) {
-              mir_top = (uint16_t*)&grp[1];
+              bin = &grp[1];
               p2_freq_add(&grp[1], is_dec, 4);
               nxt2 = &freq[idx0+1];
               p2_freq_add(&freq[idx0+1], is_dec, 2);
             }
             if( ctx15>2 ) {
-              mir_top = (uint16_t*)&grp[-1];
+              bin = &grp[-1];
               p2_freq_add(&grp[-1], is_dec, 6);
             }
           } else {
             g2 = &freq[step_v+ctx_w[2].w[1]-ctx_w[2].w[2-sel2]];
             p2_freq_add(g2, fold_sel2, 7);
             grp = (&freq[ctx_w[2].w[1]+(ctx-ctx_w[2].w[ctx_w[2].sel])]);
-            mir_top = (uint16_t*)&grp[0];
+            bin = &grp[0];
             p2_freq_add(&grp[0], is_dec, 7);
             if( ctx15<15 ) {
-              mir_top = (uint16_t*)&grp[1];
+              bin = &grp[1];
               p2_freq_add(&grp[1], is_dec, 5);
             }
             if( ctx15>0 ) {
-              mir_top = (uint16_t*)&grp[-1];
+              bin = &grp[-1];
               p2_freq_add(&grp[-1], is_dec, 6);
             }
           }
           sel3 = ctx_w[3].sel;
           if( sel3==1 ) {
             frec6 = &freq[ctx_w[3].w[0]+step_v-ctx_w[3].w[1]];
-            mir_top = (uint16_t*)frec6;
+            bin = frec6;
             p2_freq_add(frec6, fold_sel2, 4);
             off3 = ctx-ctx_w[3].w[1];
             frecg3 = &freq[off3+ctx_w[3].w[0]];
@@ -572,34 +588,34 @@ counters_done:
             h3 = &frecg3[0];
             p2_freq_add(h3, is_dec, 3);
             if( ctx15<15 ) {
-              mir_top = (uint16_t*)&grp[1];
+              bin = &grp[1];
               p2_freq_add(&grp[1], is_dec, 4);
               nxt3 = &freq[idx0+1];
               p2_freq_add(&freq[idx0+1], is_dec, 2);
             }
             if( ctx15>2 ) {
-              mir_top = (uint16_t*)&grp[-1];
+              bin = &grp[-1];
               p2_freq_add(&grp[-1], is_dec, 6);
             }
           } else {
             g3 = &freq[step_v+ctx_w[3].w[1]-ctx_w[3].w[2-sel3]];
             p2_freq_add(g3, fold_sel2, 7);
             grp = (&freq[ctx_w[3].w[1]+(ctx-ctx_w[3].w[ctx_w[3].sel])]);
-            mir_top = (uint16_t*)&grp[0];
+            bin = &grp[0];
             p2_freq_add(&grp[0], is_dec, 7);
             if( ctx15<15 ) {
-              mir_top = (uint16_t*)&grp[1];
+              bin = &grp[1];
               p2_freq_add(&grp[1], is_dec, 5);
             }
             if( ctx15>0 ) {
-              mir_top = (uint16_t*)&grp[-1];
+              bin = &grp[-1];
               p2_freq_add(&grp[-1], is_dec, 6);
             }
           }
           sel4 = ctx_w[4].sel;
           if( sel4==1 ) {
             frec7 = &freq[ctx_w[4].w[0]+step_v-ctx_w[4].w[1]];
-            mir_top = (uint16_t*)frec7;
+            bin = frec7;
             p2_freq_add(frec7, fold_sel2, 4);
             off4 = ctx-ctx_w[4].w[1];
             frec4c = &freq[off4+ctx_w[4].w[0]];
@@ -608,7 +624,7 @@ counters_done:
             h4 = &frec4c[0];
             p2_freq_add(h4, is_dec, 3);
             if( ctx15<15 ) {
-              mir_top = (uint16_t*)&p2_rec[1];
+              bin = &p2_rec[1];
               p2_freq_add(&p2_rec[1], is_dec, 4);
               nxt4 = &freq[rec_idx+1];
               p2_freq_add(nxt4, is_dec, 2);
@@ -634,14 +650,14 @@ counters_done:
       }
       frec = &freq[ctx];
     }
-    mir_top = (uint16_t*)&frec[-1];
+    bin = &frec[-1];
     p2_rescale(&frec[-1]);
     step13 = (13*(uint32_t)frec[-1].step)>>4;
     if( a4 ) {
-      mir_top[3-is_dec] += step13;
+      bin->f[2-is_dec] += step13;
       __update_binary_pair(model_strip(pair_ctx-1), (a4-1)>>1);
     } else {
-      mir_top[1] += step13;
+      bin->f[0] += step13;
     }
     goto code_residual;
   }
