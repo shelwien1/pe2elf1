@@ -35,7 +35,7 @@ typedef uint64_t qword;
   #define FTELL64 ftello
 #endif
 
-static const char MP2_MAGIC[8] = {'M','P','2','>','M','P','3',1};
+static const char MP2_MAGIC[8] = {'M','P','2','>','M','P','3',2};
 
 // number of Layer III granules generated per Layer II frame and per channel.
 // 12/G Layer II "parts" (3 samples each) end up in one Layer III granule,
@@ -104,6 +104,26 @@ struct BitReader {
 static void copy_bits(BitReader &r, BitWriter &w, qword n) {
   while( n>=24 ) { w.put(r.get(24), 24); n -= 24; }
   if( n ) w.put(r.get((int)n), (int)n);
+}
+
+// Fixed-width packing of a small-alphabet value stream.  Neighbouring values in
+// these streams come from the same subband of consecutive frames and are highly
+// correlated, so two or four of them share a byte without costing anything -
+// it in fact compresses slightly better than one value per byte.
+static void pack_stream(const std::vector<byte> &v, int bits, std::vector<byte> &out) {
+  BitWriter w;
+  for( size_t i = 0; i<v.size(); i++ ) w.put(v[i], bits);
+  w.align0();
+  out.assign(w.buf.begin(), w.buf.end());
+}
+
+static int unpack_stream(const byte* p, qword nbytes, qword count, int bits, std::vector<byte> &out) {
+  if( nbytes!=(count*(qword)bits+7)/8 ) return 0;
+  BitReader r;
+  r.init(p, nbytes);
+  out.resize((size_t)count);
+  for( qword i = 0; i<count; i++ ) out[(size_t)i] = (byte)r.get(bits);
+  return !r.over;
 }
 
 //---------------------------------------------------------------------------
@@ -233,75 +253,134 @@ static void read_pair(BitReader &r, int t, int &x, int &y) {
 // Layer II frame parsing
 //---------------------------------------------------------------------------
 
+// Slot numbering used everywhere below: slot = 2*subband + channel, 0..63.
+// The number of slots and their code widths follow from the frame header alone.
+static const int NSLOT = 64;
+
+struct L2Layout {
+  int total_bands, stereo_bands;
+  byte width[32];              // bit_alloc code width per subband
+  const byte* tab[32];         // bit_alloc code -> allocation
+};
+
 struct L2Info {
-  int  total_bands, stereo_bands;
-  byte ba[64];              // [2*sb+ch]; ch1 already zeroed above the js bound
-  uint prefix_bits;         // bit_alloc + scfsi + scalefactors
+  L2Layout lay;
+  byte ba[64];                 // allocation, before the ch1 zeroing (scfsi/scf use this)
+  byte bas[64];                // allocation, after it (sample reading uses this)
+  byte code[64];               // raw bit_alloc codes
+  byte scfsi[64];
+  uint prefix_bits;            // bit_alloc + scfsi + scalefactors
   uint sample_bits;
 };
 
 static int ba_nbits(int ba) { return ba<17 ? ba : (ba==17 ? 5 : (ba==18 ? 7 : 10)); }
 static int ba_mod(int ba)   { return ba==17 ? 3 : (ba==18 ? 5 : 9); }
 
-// mirrors _bs::_L12_read_scale_info(), but on our own 64-bit bit reader and
-// without computing the (float) scalefactors
-static void l2_read_scale_info(const byte* hdr, BitReader &br, L2Info &out) {
+// number of 6-bit scalefactors transmitted for a given scfsi
+static int scf_count(int scfsi) {
+  int mask = 4+((19>>scfsi)&3);
+  return ((mask>>2)&1)+((mask>>1)&1)+(mask&1);
+}
+
+// subband grouping / code widths, straight out of _L12_subband_alloc_table()
+static void l2_layout(const byte* hdr, L2Layout &L) {
   _L12_scale_info sci;
   const _L12_subband_alloc* sa = sci._L12_subband_alloc_table(hdr);
-  qword start = br.pos;
-  byte alloc[64], scfcod[64];
-  int i, k = 0, ba_bits = 0;
-  const byte* tab = g_bitalloc_code_tab_;
-
-  memset(alloc, 0, sizeof(alloc));
-  for( i = 0; i<sci.total_bands; i++ ) {
-    byte b;
-    if( i==k ) {
-      k += sa->band_count;
-      ba_bits = sa->code_tab_width;
-      tab = g_bitalloc_code_tab_+sa->tab_offset;
-      sa++;
-    }
-    b = tab[br.get(ba_bits)];
-    alloc[2*i] = b;
-    if( i<sci.stereo_bands ) b = tab[br.get(ba_bits)];
-    alloc[2*i+1] = sci.stereo_bands ? b : 0;
+  L.total_bands = sci.total_bands;
+  L.stereo_bands = sci.stereo_bands;
+  int k = 0, w = 0;
+  const byte* t = g_bitalloc_code_tab_;
+  for( int i = 0; i<L.total_bands; i++ ) {
+    if( i==k ) { k += sa->band_count; w = sa->code_tab_width; t = g_bitalloc_code_tab_+sa->tab_offset; sa++; }
+    L.width[i] = (byte)w;
+    L.tab[i] = t;
   }
-  for( i = 0; i<2*sci.total_bands; i++ ) scfcod[i] = alloc[i] ? (byte)br.get(2) : 6;
-  for( i = 0; i<2*sci.total_bands; i++ ) {
-    int mask = alloc[i] ? 4+((19>>scfcod[i])&3) : 0;
-    for( int m = 4; m; m >>= 1 ) if( mask&m ) br.get(6);
-  }
-  for( i = sci.stereo_bands; i<sci.total_bands; i++ ) alloc[2*i+1] = 0;
+}
 
-  out.total_bands  = sci.total_bands;
-  out.stereo_bands = sci.stereo_bands;
-  memcpy(out.ba, alloc, sizeof(out.ba));
-  out.prefix_bits = (uint)(br.pos-start);
+// bit_alloc codes -> allocations, mirroring _L12_read_scale_info()
+static void l2_decode_alloc(const L2Layout &L, const byte* code, byte* ba, byte* bas) {
+  memset(ba, 0, NSLOT);
+  memset(bas, 0, NSLOT);
+  for( int sb = 0; sb<L.total_bands; sb++ ) {
+    int b0 = L.tab[sb][code[2*sb]], b1;
+    if( sb<L.stereo_bands ) b1 = L.tab[sb][code[2*sb+1]];
+    else b1 = b0;                       // joint stereo: shared above the bound
+    ba[2*sb] = (byte)b0;
+    ba[2*sb+1] = (byte)(L.stereo_bands ? b1 : 0);
+    bas[2*sb] = (byte)b0;
+    bas[2*sb+1] = (byte)(sb<L.stereo_bands ? ba[2*sb+1] : 0);
+  }
 }
 
 // total number of sample bits of a Layer II frame with this allocation
 static uint l2_sample_bits(const L2Info &fi) {
   uint n = 0;
-  for( int i = 0; i<2*fi.total_bands; i++ ) {
-    int ba = fi.ba[i];
+  for( int i = 0; i<2*fi.lay.total_bands; i++ ) {
+    int ba = fi.bas[i];
     if( !ba ) continue;
     n += (ba<17 ? 3u*(uint)ba : (uint)ba_nbits(ba))*12u;
   }
   return n;
 }
 
-// parse header+prefix of a Layer II frame; 0 = does not fit / not parsable
-static int l2_parse(const byte* fr, int fbytes, L2Info &fi) {
+// Parse header + bit_alloc/scfsi/scalefactor region of a Layer II frame.
+// When bkA/bkS/bkF are given, the raw field values are appended to their
+// per-slot buckets (that is the meta file layout).  0 = not parsable.
+static int l2_parse(const byte* fr, int fbytes, L2Info &fi,
+                    std::vector<byte>* bkA, std::vector<byte>* bkS, std::vector<byte>* bkF) {
   int hb = 4+(_HDR_IS_CRC(fr) ? 2 : 0);
   if( fbytes<=hb ) return 0;
   BitReader br;
   br.init(fr+hb, (qword)(fbytes-hb));
-  l2_read_scale_info(fr, br, fi);
+  l2_layout(fr, fi.lay);
+  const L2Layout &L = fi.lay;
+
+  memset(fi.code, 0, sizeof(fi.code));
+  for( int sb = 0; sb<L.total_bands; sb++ ) {
+    fi.code[2*sb] = (byte)br.get(L.width[sb]);
+    if( bkA ) bkA[2*sb].push_back(fi.code[2*sb]);
+    if( sb<L.stereo_bands ) {
+      fi.code[2*sb+1] = (byte)br.get(L.width[sb]);
+      if( bkA ) bkA[2*sb+1].push_back(fi.code[2*sb+1]);
+    }
+  }
+  l2_decode_alloc(L, fi.code, fi.ba, fi.bas);
+
+  memset(fi.scfsi, 6, sizeof(fi.scfsi));
+  for( int j = 0; j<2*L.total_bands; j++ ) {
+    if( !fi.ba[j] ) continue;
+    fi.scfsi[j] = (byte)br.get(2);
+    if( bkS ) bkS[j].push_back(fi.scfsi[j]);
+  }
+  for( int j = 0; j<2*L.total_bands; j++ ) {
+    if( !fi.ba[j] ) continue;
+    int n = scf_count(fi.scfsi[j]);
+    for( int i = 0; i<n; i++ ) {
+      byte v = (byte)br.get(6);
+      if( bkF ) bkF[j].push_back(v);
+    }
+  }
   if( br.over ) return 0;
+  fi.prefix_bits = (uint)br.pos;
   fi.sample_bits = l2_sample_bits(fi);
   if( (qword)hb*8+fi.prefix_bits+fi.sample_bits>(qword)fbytes*8 ) return 0;
   return 1;
+}
+
+// write the bit_alloc/scfsi/scalefactor region back out, bit for bit
+static void l2_write_prefix(BitWriter &w, const L2Info &fi, const byte* scf) {
+  const L2Layout &L = fi.lay;
+  for( int sb = 0; sb<L.total_bands; sb++ ) {
+    w.put(fi.code[2*sb], L.width[sb]);
+    if( sb<L.stereo_bands ) w.put(fi.code[2*sb+1], L.width[sb]);
+  }
+  for( int j = 0; j<2*L.total_bands; j++ ) if( fi.ba[j] ) w.put(fi.scfsi[j], 2);
+  int k = 0;
+  for( int j = 0; j<2*L.total_bands; j++ ) {
+    if( !fi.ba[j] ) continue;
+    int n = scf_count(fi.scfsi[j]);
+    for( int i = 0; i<n; i++ ) w.put(scf[k++], 6);
+  }
 }
 
 //---------------------------------------------------------------------------
@@ -574,7 +653,7 @@ static void scan_mp2(const Buf &in, std::vector<FrameRec> &frames, std::vector<G
     if( fs<8||p+(size_t)fs>in.n ) { p++; insync = 0; continue; }
 
     L2Info fi;
-    if( !l2_parse(in.p()+p, fs, fi) ) { p++; insync = 0; continue; }
+    if( !l2_parse(in.p()+p, fs, fi, 0, 0, 0) ) { p++; insync = 0; continue; }
 
     if( !insync ) {
       // require the following frame header to match, to avoid false syncs
@@ -633,7 +712,8 @@ static int encode_pass(const Buf &in, const std::vector<FrameRec> &frames,
   const int PPG = 12/G;                 // Layer II parts per Layer III granule
   const int VPS = 3*PPG;                // spectral lines per subband per granule
 
-  BitWriter wpre, wtail, whi;
+  BitWriter wtail, whi;
+  std::vector<byte> bkA[NSLOT], bkS[NSLOT], bkF[NSLOT];
   std::vector<byte> hdrs, crcs;
   std::vector<byte> md;                 // concatenated main data, byte aligned per frame
   std::vector<uint> md_off, md_len;
@@ -656,23 +736,26 @@ static int encode_pass(const Buf &in, const std::vector<FrameRec> &frames,
     int nch = _HDR_IS_MONO(fr) ? 1 : 2;
 
     L2Info li;
-    if( !l2_parse(fr, fbytes, li) ) { fprintf(stderr, "mp2: frame %d unparsable\n", (int)fi); return 0; }
+    if( !l2_parse(fr, fbytes, li, bkA, bkS, bkF) ) {
+      fprintf(stderr, "mp2: frame %d unparsable\n", (int)fi);
+      return 0;
+    }
 
     hdrs.push_back(fr[0]); hdrs.push_back(fr[1]); hdrs.push_back(fr[2]); hdrs.push_back(fr[3]);
     if( hb==6 ) { crcs.push_back(fr[4]); crcs.push_back(fr[5]); }
 
-    // ---- copy the bit_alloc/scfsi/scalefactor region verbatim into the meta
+    // (l2_parse has already bucketed bit_alloc / scfsi / scalefactors)
     BitReader br;
     br.init(fr+hb, (qword)(fbytes-hb));
-    copy_bits(br, wpre, li.prefix_bits);
+    br.pos = li.prefix_bits;
 
     // ---- unpack the sample codes into Layer III spectral lines
     memset(g_vals, 0, sizeof(g_vals));
-    int tb = li.total_bands;
+    int tb = li.lay.total_bands;
     for( int part = 0; part<12; part++ ) {
       int gi = part/PPG, lp = part%PPG;
       for( int i = 0; i<2*tb; i++ ) {
-        int ba = li.ba[i];
+        int ba = li.bas[i];
         if( !ba ) continue;
         int sb = i>>1, ch = i&1;
         int* dst = &g_vals[ch][gi][sb*VPS+lp*3];
@@ -709,7 +792,7 @@ static int encode_pass(const Buf &in, const std::vector<FrameRec> &frames,
     int nvals[2] = {0, 0};
     for( int ch = 0; ch<nch; ch++ ) {
       int last = -1;
-      for( int sb = 0; sb<tb; sb++ ) if( li.ba[2*sb+ch] ) last = sb;
+      for( int sb = 0; sb<tb; sb++ ) if( li.bas[2*sb+ch] ) last = sb;
       nvals[ch] = last<0 ? 0 : VPS*(last+1);
     }
 
@@ -818,7 +901,6 @@ static int encode_pass(const Buf &in, const std::vector<FrameRec> &frames,
   }
 
   // ---- meta file
-  wpre.align0();
   wtail.align0();
   whi.align0();
 
@@ -837,10 +919,33 @@ static int encode_pass(const Buf &in, const std::vector<FrameRec> &frames,
     put64(gapblob, (qword)gaps[i].len);
     gapblob.insert(gapblob.end(), in.p()+gaps[i].off, in.p()+gaps[i].off+gaps[i].len);
   }
+  // headers and CRCs go out as byte planes (byte 0 of every frame, then byte 1,
+  // ...) - all but the bitrate/padding nibble of byte 2 is constant that way
+  std::vector<byte> hplanes, cplanes;
+  hplanes.resize(hdrs.size());
+  for( size_t i = 0; i<nfr; i++ ) for( int b = 0; b<4; b++ ) hplanes[b*nfr+i] = hdrs[i*4+b];
+  cplanes.resize(crcs.size());
+  for( size_t i = 0; i<crcs.size()/2; i++ ) {
+    cplanes[i] = crcs[i*2];
+    cplanes[crcs.size()/2+i] = crcs[i*2+1];
+  }
+  // bit_alloc / scfsi / scalefactors: one byte per field value, grouped by slot
+  // so that a slot's values across the whole file are contiguous
+  std::vector<byte> sA, sS, sF, pA, pS;
+  for( int s = 0; s<NSLOT; s++ ) sA.insert(sA.end(), bkA[s].begin(), bkA[s].end());
+  for( int s = 0; s<NSLOT; s++ ) sS.insert(sS.end(), bkS[s].begin(), bkS[s].end());
+  for( int s = 0; s<NSLOT; s++ ) sF.insert(sF.end(), bkF[s].begin(), bkF[s].end());
+  pack_stream(sA, 4, pA);                // bit_alloc codes are at most 4 bits
+  pack_stream(sS, 2, pS);                // scfsi is 2 bits
+                                         // scalefactors stay one per byte: 6-bit
+                                         // packing measurably hurts compression
+
   put_section(meta, gapblob.empty() ? (const byte*)"" : &gapblob[0], gapblob.size());
-  put_section(meta, hdrs.empty() ? (const byte*)"" : &hdrs[0], hdrs.size());
-  put_section(meta, crcs.empty() ? (const byte*)"" : &crcs[0], crcs.size());
-  put_section(meta, wpre.data(), wpre.size());
+  put_section(meta, hplanes.empty() ? (const byte*)"" : &hplanes[0], hplanes.size());
+  put_section(meta, cplanes.empty() ? (const byte*)"" : &cplanes[0], cplanes.size());
+  put_section(meta, pA.empty() ? (const byte*)"" : &pA[0], pA.size());
+  put_section(meta, pS.empty() ? (const byte*)"" : &pS[0], pS.size());
+  put_section(meta, sF.empty() ? (const byte*)"" : &sF[0], sF.size());
   put_section(meta, wtail.data(), wtail.size());
   put_section(meta, whi.data(), whi.size());
 
@@ -942,9 +1047,10 @@ static int decompress(const char* mp3path, const char* metapath, const char* out
   int free_format_bytes = (int)get32(meta.p()+pos); pos += 4;
   (void)get32(meta.p()+pos);          pos += 4;
 
-  Section sgap, shdr, scrc, spre, stail, shi;
+  Section sgap, shdr, scrc, sA, sS, sF, stail, shi;
   if( !get_section(meta, pos, sgap)||!get_section(meta, pos, shdr)||!get_section(meta, pos, scrc)
-    ||!get_section(meta, pos, spre)||!get_section(meta, pos, stail)||!get_section(meta, pos, shi) ) {
+    ||!get_section(meta, pos, sA)||!get_section(meta, pos, sS)||!get_section(meta, pos, sF)
+    ||!get_section(meta, pos, stail)||!get_section(meta, pos, shi) ) {
     fprintf(stderr, "mp2: truncated meta file\n");
     return 1;
   }
@@ -953,6 +1059,86 @@ static int decompress(const char* mp3path, const char* metapath, const char* out
 
   const int PPG = 12/G;
   const int VPS = 3*PPG;
+
+  // ---- headers come as byte planes
+  std::vector<byte> hdrs((size_t)nfr*4);
+  for( uint i = 0; i<nfr; i++ ) for( int b = 0; b<4; b++ ) hdrs[i*4+b] = shdr.p[(qword)b*nfr+i];
+  std::vector<byte> crcs;
+  {
+    size_t nc = (size_t)scrc.n/2;
+    crcs.resize(nc*2);
+    for( size_t i = 0; i<nc; i++ ) { crcs[i*2] = scrc.p[i]; crcs[i*2+1] = scrc.p[nc+i]; }
+  }
+
+  // ---- locate every slot's bucket inside the bit_alloc / scfsi / scalefactor
+  //      streams.  The bucket sizes follow from the headers, then from the
+  //      allocations, then from the scfsi values, so this takes three counting
+  //      walks over the frame list before the real one.
+  qword offA[NSLOT+1], offS[NSLOT+1], offF[NSLOT+1];
+  qword curA[NSLOT], curS[NSLOT], curF[NSLOT];
+  std::vector<byte> vA, vS;
+  {
+    qword cnt[NSLOT];
+    memset(cnt, 0, sizeof(cnt));
+    for( uint f = 0; f<nfr; f++ ) {
+      L2Layout L;
+      l2_layout(&hdrs[f*4], L);
+      for( int sb = 0; sb<L.total_bands; sb++ ) {
+        cnt[2*sb]++;
+        if( sb<L.stereo_bands ) cnt[2*sb+1]++;
+      }
+    }
+    offA[0] = 0;
+    for( int s = 0; s<NSLOT; s++ ) offA[s+1] = offA[s]+cnt[s];
+    if( !unpack_stream(sA.p, sA.n, offA[NSLOT], 4, vA) ) {
+      fprintf(stderr, "mp2: bit_alloc section size mismatch\n");
+      return 1;
+    }
+
+    memcpy(curA, offA, sizeof(curA));
+    memset(cnt, 0, sizeof(cnt));
+    for( uint f = 0; f<nfr; f++ ) {
+      L2Layout L;
+      byte code[64], ba[64], bas[64];
+      l2_layout(&hdrs[f*4], L);
+      memset(code, 0, sizeof(code));
+      for( int sb = 0; sb<L.total_bands; sb++ ) {
+        code[2*sb] = vA[(size_t)curA[2*sb]++];
+        if( sb<L.stereo_bands ) code[2*sb+1] = vA[(size_t)curA[2*sb+1]++];
+      }
+      l2_decode_alloc(L, code, ba, bas);
+      for( int j = 0; j<2*L.total_bands; j++ ) if( ba[j] ) cnt[j]++;
+    }
+    offS[0] = 0;
+    for( int s = 0; s<NSLOT; s++ ) offS[s+1] = offS[s]+cnt[s];
+    if( !unpack_stream(sS.p, sS.n, offS[NSLOT], 2, vS) ) {
+      fprintf(stderr, "mp2: scfsi section size mismatch\n");
+      return 1;
+    }
+
+    memcpy(curA, offA, sizeof(curA));
+    memcpy(curS, offS, sizeof(curS));
+    memset(cnt, 0, sizeof(cnt));
+    for( uint f = 0; f<nfr; f++ ) {
+      L2Layout L;
+      byte code[64], ba[64], bas[64];
+      l2_layout(&hdrs[f*4], L);
+      memset(code, 0, sizeof(code));
+      for( int sb = 0; sb<L.total_bands; sb++ ) {
+        code[2*sb] = vA[(size_t)curA[2*sb]++];
+        if( sb<L.stereo_bands ) code[2*sb+1] = vA[(size_t)curA[2*sb+1]++];
+      }
+      l2_decode_alloc(L, code, ba, bas);
+      for( int j = 0; j<2*L.total_bands; j++ ) if( ba[j] ) cnt[j] += (qword)scf_count(vS[(size_t)curS[j]++]);
+    }
+    offF[0] = 0;
+    for( int s = 0; s<NSLOT; s++ ) offF[s+1] = offF[s]+cnt[s];
+    if( offF[NSLOT]!=sF.n ) { fprintf(stderr, "mp2: scalefactor section size mismatch\n"); return 1; }
+
+    memcpy(curA, offA, sizeof(curA));
+    memcpy(curS, offS, sizeof(curS));
+    memcpy(curF, offF, sizeof(curF));
+  }
 
   // gaps
   std::vector< std::pair<uint, std::pair<const byte*, qword> > > gaps;
@@ -1012,8 +1198,7 @@ static int decompress(const char* mp3path, const char* metapath, const char* out
   rmd.init(mdstream.empty() ? (const byte*)"" : &mdstream[0],
            mdstream.size() ? mdstream.size()-16 : 0);
 
-  BitReader rpre, rtail, rhi;
-  rpre.init(spre.p, spre.n);
+  BitReader rtail, rhi;
   rtail.init(stail.p, stail.n);
   rhi.init(shi.p, shi.n);
   size_t crc_pos = 0;
@@ -1029,19 +1214,39 @@ static int decompress(const char* mp3path, const char* metapath, const char* out
     }
     if( fi==nfr ) break;
 
-    const byte* hdr = shdr.p+(qword)fi*4;
+    const byte* hdr = &hdrs[(size_t)fi*4];
     int mpeg1 = _HDR_TEST_MPEG1(hdr) ? 1 : 0;
     int nch = _HDR_IS_MONO(hdr) ? 1 : 2;
     int hb = 4+(_HDR_IS_CRC(hdr) ? 2 : 0);
     int fbytes = mp2_frame_size(hdr, free_format_bytes);
     if( fbytes<=hb ) { fprintf(stderr, "mp2: bad frame size in meta\n"); return 1; }
 
-    // ---- bit_alloc / scfsi / scalefactors
+    // ---- bit_alloc / scfsi / scalefactors, pulled from their slot buckets
     L2Info li;
-    qword pre_start = rpre.pos;
-    l2_read_scale_info(hdr, rpre, li);
-    li.sample_bits = l2_sample_bits(li);
-    rpre.pos = pre_start;               // rewind, the bits are copied out below
+    byte scf[3*64];
+    {
+      l2_layout(hdr, li.lay);
+      const L2Layout &L = li.lay;
+      memset(li.code, 0, sizeof(li.code));
+      for( int sb = 0; sb<L.total_bands; sb++ ) {
+        if( curA[2*sb]>=offA[2*sb+1] ) { fprintf(stderr, "mp2: bit_alloc stream exhausted\n"); return 1; }
+        li.code[2*sb] = vA[(size_t)curA[2*sb]++];
+        if( sb<L.stereo_bands ) li.code[2*sb+1] = vA[(size_t)curA[2*sb+1]++];
+      }
+      l2_decode_alloc(L, li.code, li.ba, li.bas);
+      memset(li.scfsi, 6, sizeof(li.scfsi));
+      for( int j = 0; j<2*L.total_bands; j++ ) if( li.ba[j] ) li.scfsi[j] = vS[(size_t)curS[j]++];
+      int k = 0;
+      for( int j = 0; j<2*L.total_bands; j++ ) {
+        if( !li.ba[j] ) continue;
+        int n = scf_count(li.scfsi[j]);
+        for( int i = 0; i<n; i++ ) scf[k++] = sF.p[curF[j]++];
+      }
+      li.sample_bits = l2_sample_bits(li);
+      li.prefix_bits = 0;
+      for( int sb = 0; sb<L.total_bands; sb++ ) li.prefix_bits += L.width[sb]*(sb<L.stereo_bands ? 2u : 1u);
+      for( int j = 0; j<2*L.total_bands; j++ ) if( li.ba[j] ) li.prefix_bits += 2u+6u*(uint)scf_count(li.scfsi[j]);
+    }
 
     // ---- read the matching mp3 frames
     memset(g_vals, 0, sizeof(g_vals));
@@ -1075,18 +1280,18 @@ static int decompress(const char* mp3path, const char* metapath, const char* out
     BitWriter w;
     w.put(hdr[0], 8); w.put(hdr[1], 8); w.put(hdr[2], 8); w.put(hdr[3], 8);
     if( hb==6 ) {
-      if( crc_pos+2>scrc.n ) { fprintf(stderr, "mp2: truncated crc section\n"); return 1; }
-      w.put(scrc.p[crc_pos], 8);
-      w.put(scrc.p[crc_pos+1], 8);
+      if( crc_pos+2>crcs.size() ) { fprintf(stderr, "mp2: truncated crc section\n"); return 1; }
+      w.put(crcs[crc_pos], 8);
+      w.put(crcs[crc_pos+1], 8);
       crc_pos += 2;
     }
-    copy_bits(rpre, w, li.prefix_bits);
+    l2_write_prefix(w, li, scf);
 
-    int tb = li.total_bands;
+    int tb = li.lay.total_bands;
     for( int part = 0; part<12; part++ ) {
       int gi = part/PPG, lp = part%PPG;
       for( int i = 0; i<2*tb; i++ ) {
-        int ba = li.ba[i];
+        int ba = li.bas[i];
         if( !ba ) continue;
         int sb = i>>1, ch = i&1;
         const int* src = &g_vals[ch][gi][sb*VPS+lp*3];
@@ -1117,7 +1322,7 @@ static int decompress(const char* mp3path, const char* metapath, const char* out
     out.insert(out.end(), w.buf.begin(), w.buf.end());
   }
 
-  if( rpre.over||rtail.over||rhi.over ) {
+  if( rtail.over||rhi.over ) {
     fprintf(stderr, "mp2: meta stream exhausted\n");
     return 1;
   }

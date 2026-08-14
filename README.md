@@ -33,20 +33,60 @@ function bodies (`python3 mktabs.py` regenerates it).
 | subband samples | mp3 Huffman spectral data |
 | frame header (4 bytes) | meta, `HDRS` |
 | CRC (if protected) | meta, `CRCS` |
-| bit allocation + scfsi + scalefactors | meta, `PREFIX` (copied as a raw bit region) |
+| bit allocation codes | meta, `ALLOC` |
+| scfsi | meta, `SCFSI` |
+| scalefactors | meta, `SCF` |
 | ancillary/padding bits at the end of a frame | meta, `TAIL` |
 | top bits of 15/16-bit samples | meta, `HIBITS` |
 | bytes that are not part of a frame (ID3, junk, gaps) | meta, `GAPS` |
 
-The bit allocation, scfsi and scalefactors form one contiguous bit region at the
-start of a Layer II frame, so the meta file simply copies those bits out. They
-are also *parsed*, because the allocation determines how many sample codes
-follow and how wide each one is — which is what lets the unpacker know how many
-spectral values to pull back out of the mp3.
+Nothing is duplicated — the meta holds exactly the Layer II fields that have no
+counterpart in the mp3 syntax, and nothing else.
 
-Nothing is duplicated: on the supplied sample the meta file is 922 669 bytes
-against 922 588 bytes of non-sample data in the source mp2, i.e. 81 bytes of
-framing overhead for the whole file.
+### The meta is laid out to be modelled, not to be small
+
+The obvious thing to do is copy the bit allocation / scfsi / scalefactor region
+of each frame out as a raw bit region, since it is contiguous in the source.
+That is a bad idea: the fields are 2, 3, 4 and 6 bits wide, so nothing lands on
+a byte boundary and every value is smeared across two bytes of a different
+frame's data. A general-purpose compressor cannot see through it.
+
+Instead each field gets its own section, and inside a section the values are
+grouped **by slot** — slot = `2*subband + channel` — so that one subband's
+values for the whole file are contiguous and consecutive bytes are the same
+subband in consecutive frames, which is where the correlation is. Frame headers
+go out as four byte planes for the same reason (all of byte 0, then all of
+byte 1, …), which leaves three constant planes and one that only moves in the
+padding bit.
+
+Values that fit in a nibble or less are packed two or four to a byte. Because
+neighbours in a slot stream are so alike, that packing *helps* compression as
+well as halving the section — the packed byte alphabet stays small and repeats.
+Scalefactors are 6 bits and are left one per byte: packing them four-to-three
+bytes costs 16 % in compressed size, and so does splitting them into high/low
+planes.
+
+The values are stored plainly, with no delta or other transform. Delta-coding
+the scalefactors buys 6 % with `xz` but only 0.8 % with `bzip2` — it is
+compensating for LZMA's weak context model rather than removing real
+redundancy — so the raw values are kept, and a context-mixing model can exploit
+the same correlation directly.
+
+On the supplied sample (`xz -9e` per section, as a proxy for what a real model
+would find):
+
+| section | raw | xz |
+| --- | ---: | ---: |
+| `ALLOC` (4 bits/value, slot-major) | 326 582 | 90 056 |
+| `SCFSI` (2 bits/value, slot-major) | 119 393 | 69 760 |
+| `SCF` (1 byte/value, slot-major) | 623 024 | 284 452 |
+| `HDRS` (4 byte planes) | 55 308 | 2 132 |
+| `TAIL`, `GAPS`, `CRCS`, `HIBITS` | 9 182 | 248 |
+| **total** | **1 133 581** | **447 100** |
+
+Against a single raw bit region for the same data — 922 669 bytes raw,
+632 632 compressed — the restructured meta is 23 % larger raw and **29 %
+smaller compressed**.
 
 ## How the samples map onto mp3 spectral lines
 
@@ -108,14 +148,30 @@ max part23 : 1535 bits
 samples    : 6301314 bytes mp2 -> 6026320 bytes huffman (95.6%)
 input      : 7223902 bytes
 output.mp3 : 6539103 bytes
-output.meta: 922669 bytes
+output.meta: 1133581 bytes
 ```
 
 The Huffman-coded spectral data is *smaller* than the fixed-width Layer II
 sample data it came from (95.6 %), because Layer II spends the same number of
 bits on every sample of a subband while the mp3 tables can exploit the fact that
-most of them are small. The 3.3 % total growth (7.46 MB vs 7.22 MB) is the mp3
-frame headers and side info — 36 bytes per frame.
+most of them are small. What is left over is the mp3 frame headers and side
+info, 36 bytes per frame.
+
+Raw sizes are not the point — the pair exists to be compressed. With plain
+`xz -9e` and no mp3-specific modelling at all:
+
+| | raw | xz -9e |
+| --- | ---: | ---: |
+| `Creditsmix_Comp.mp2` | 7 223 902 | 6 936 752 |
+| `output.mp3` | 6 539 103 | 6 388 608 |
+| `output.meta` | 1 133 581 | 447 100 |
+| mp3 + meta | 7 672 684 | **6 835 708** |
+
+so the split already beats compressing the mp2 directly, by 101 044 bytes,
+with all of the actual gain still to come from an mp3 recompressor working on
+the 6.4 MB of spectral data. (With the meta written as one raw bit region the
+compressed total was 7 021 240 — *worse* than the mp2 — which is what the
+layout above fixes.)
 
 The generated mp3 parses cleanly end to end with the reference decoder:
 
@@ -123,6 +179,19 @@ The generated mp3 parses cleanly end to end with the reference decoder:
 $ tests/mp3chk output.mp3
 frames 13827 layer 3 ch 2 sr 44100 consumed 6539103/6539103 skipped 0 failed 0
 ```
+
+### Why the meta does not live in spare mp3 header fields
+
+The mp3 side info has room to spare: `global_gain`, `scalefac_compress`,
+`preflag`, `scalefac_scale`, `count1table_select`, `scfsi` and the private bits
+are all constant here, 71 bits per frame, 123 KB over this file. Filling them
+would shrink the raw total, but it makes the *compressed* total worse. Those
+123 KB would hold about 164 000 scalefactors, which cost ~75 KB inside the meta
+where they sit next to their neighbours from the same subband; scattered one
+per granule across fixed-width side-info fields they compress to essentially
+nothing less than their raw 123 KB. Net result is roughly 48 KB worse. Moving
+bits between the two files does not remove information — only giving the
+modeller better context does, which is what the meta layout is for.
 
 ## Coverage
 
