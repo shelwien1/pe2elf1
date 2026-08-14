@@ -67,42 +67,8 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   wrow_cur[14][0] = ms_b10;
   conf = (1.0f-(ms_b10/(ms_b+576.0f)))*2.0f;
   uint32_t bank = 0;
-  {
-    const float err_a = (sample-bias1)*2.5999999f;
-    const float err_b = d_bias2*conf;
-    const float floor_a = 26896.0f*wrow_cur[14][2];
-    const float floor_b = 5041.0f*wrow_b[14][2];
-    const float ms_rate_b = 0.013f*conf;
-    int32_t j, k;
-    for( j = 0; j<7; ++j )
-      for( k = 0; k<4; ++k ) {
-        float x = p2_row[j][k];
-        float ms;
-        ms = wrow_cur[7+j][k]+(x*x-wrow_cur[7+j][k])*0.05f;
-        wrow_cur[7+j][k] = ms;
-        wrow_cur[j][k] += bmf_p2_rate[j][k]*err_a*x/(ms+floor_a);
-        ms = wrow_b[7+j][k]+(x*x-wrow_b[7+j][k])*ms_rate_b;
-        wrow_b[7+j][k] = ms;
-        wrow_b[j][k] += bmf_p2_rate[j][k]*err_b*x/(ms+floor_b);
-      }
-  }
-  {
-    float acc[4], pred, err, ms_scale;
-    int32_t j, k;
-    for( k = 0; k<4; ++k ) {
-      acc[k] = wrow_cur[0][k]*p2_row[0][k];
-      for( j = 1; j<7; ++j )
-        acc[k] += wrow_cur[j][k]*p2_row[j][k];
-    }
-    pred = n2_bias+bmf_hsum4(acc);
-    err = sample-pred;
-    ms_scale = wrow_cur[14][2];
-    for( j = 0; j<7; ++j )
-      for( k = 0; k<4; ++k )
-        wrow_cur[j][k] += bmf_p2_rate[j][k]*err*p2_row[j][k]/(wrow_cur[7+j][k]+ms_scale*529.0f);
-    ++*(int32_t*)&wrow_cur[15][0];
-    wrow_cur[14][2] = ms_scale+((10.0f-ms_scale)*0.00019999999f);
-  }
+  nlms_track_two_rows(wrow_cur, wrow_b, (sample-bias1)*2.5999999f, d_bias2*conf, conf);
+  nlms_predict_and_correct(wrow_cur, sample, n2_bias);
   *cur = nb_cur;
   ++cur;
   ++above;

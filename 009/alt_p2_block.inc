@@ -247,6 +247,59 @@ struct AltP2Block {
   // is for; every other method in this tree is defined in its class body
   // because every other method fits there.  They were free functions taking
   // the block as a first argument, which is what a method is.
+
+  // The NLMS filter, in two halves, and each was a bare braced block inside
+  // `alt_p2_model`'s 674 lines.
+  //
+  // A weight row is `float w[16][4]`: rows 0..6 are the filter taps, rows 7..13
+  // the running mean square of each tap's input -- which is what makes this
+  // *normalised* least mean squares, each tap's step divided by the energy it
+  // has been seeing -- and row 14 holds three scalars the two halves share.
+  //
+  // Both halves are written as `[7][4]` nests rather than 28 scalars because
+  // that is the shape the original's SSE was in; keeping it is what lets a
+  // compiler put it back.
+
+  // Track the input energy and step both rows' weights toward their own error.
+  // Two rows, not one: `cur` adapts fast against this sample and `prev` slowly
+  // against the confidence-scaled one, and the pair is the mixer.
+  void nlms_track_two_rows(float (*cur)[4], float (*prev)[4],
+                           float err_cur, float err_prev, float conf) {
+    const float floor_cur = 26896.0f*cur[14][2];
+    const float floor_prev = 5041.0f*prev[14][2];
+    const float rate_prev = 0.013f*conf;
+    for( int32_t j = 0; j<7; ++j )
+      for( int32_t k = 0; k<4; ++k ) {
+        const float x = p2_row[j][k];
+        float ms = cur[7+j][k]+(x*x-cur[7+j][k])*0.05f;
+        cur[7+j][k] = ms;
+        cur[j][k] += bmf_p2_rate[j][k]*err_cur*x/(ms+floor_cur);
+        ms = prev[7+j][k]+(x*x-prev[7+j][k])*rate_prev;
+        prev[7+j][k] = ms;
+        prev[j][k] += bmf_p2_rate[j][k]*err_prev*x/(ms+floor_prev);
+      }
+  }
+
+  // Predict this sample from the fast row, then step that row toward the error
+  // it just made.  `w[14][2]` decays toward 10 and scales the step floor, so
+  // the filter starts cautious and loosens; `w[15][0]` counts the samples this
+  // row has seen and is an `int32_t` living in a `float` slot.
+  void nlms_predict_and_correct(float (*w)[4], float sample, float bias0) {
+    float acc[4];
+    for( int32_t k = 0; k<4; ++k ) {
+      acc[k] = w[0][k]*p2_row[0][k];
+      for( int32_t j = 1; j<7; ++j )
+        acc[k] += w[j][k]*p2_row[j][k];
+    }
+    const float err = sample-(bias0+bmf_hsum4(acc));
+    const float ms_scale = w[14][2];
+    for( int32_t j = 0; j<7; ++j )
+      for( int32_t k = 0; k<4; ++k )
+        w[j][k] += bmf_p2_rate[j][k]*err*p2_row[j][k]/(w[7+j][k]+ms_scale*529.0f);
+    ++*(int32_t*)&w[15][0];
+    w[14][2] = ms_scale+((10.0f-ms_scale)*0.00019999999f);
+  }
+
   template<int f_DEC>
   void alt_p2_d8_body(uint8_t* src, uint8_t* out,
                       int32_t width, int32_t height);

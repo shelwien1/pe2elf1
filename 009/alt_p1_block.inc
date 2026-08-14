@@ -12,6 +12,15 @@ struct P1Ctx {
   uint8_t mag;
 };
 
+// Two shapes `ctx_of` builds from a *neighbouring plane's* row, each of which
+// it used in more than one of its three arms.
+//
+//   `cross_grad`  this plane's west-minus-prediction plus that plane's own
+//                 gradient over its last two samples.
+//   `nb_resid`    that plane's residual at the sample to the west.
+static inline int32_t cross_grad(int32_t here, int32_t guess, const AltP1Block* nb);
+static inline int32_t nb_resid(const AltP1Block* nb);
+
 struct AltP1Block {
   int32_t width;
   int32_t height;
@@ -97,34 +106,43 @@ struct AltP1Block {
     pred = guess;
     P1Ctx *cursor2 = cursor[2];
     int32_t act = cursor1[-1].mag+cur[-3].mag+3*(cursor1[1].mag+cursor2->mag)+6*cur[-1].mag+4*(cursor1->mag+cur[-2].mag)+2*(cursor2[2].mag+cursor1[2].mag+cur[-4].mag);
+    // The five selectors below this point are the ones that depend on how many
+    // *other planes* this one has to look at -- two, one, or none.  The three
+    // arms are genuinely three formulas and not one formula three times, but
+    // four shapes recur across them and are named here rather than spelled out
+    // seven times between them.
+    //
+    // `west_grad` and `north_grad` are computed unconditionally: both are pure
+    // reads of this plane's own row, and each appeared in two of the three
+    // arms.
+    const int32_t west_grad = 2*cur[-1].sym-cur[-2].sym-(uint32_t)guess;
+    const int32_t north_grad = -guess-cursor1->sym+cursor1[1].sym+cur[-1].sym;
     if( nb0 ) {
+      const P1Ctx* r0 = nb0->cursor[0];
       if( nb1 ) {
-        P1Ctx *nb0_row = nb0->cursor[0];
-        act_all = act+2*(nb1->cursor[0][-1].mag+nb0_row[-1].mag);
-        ctx_w[5].sel = cursor1->sym-(uint32_t)guess+nb0_row[-1].sym-nb0->cursor[1][-1].sym;
-        P1Ctx *nb0_row2 = nb0->cursor[0];
-        int32_t nb0_a = nb0_row2[-1].sym;
-        uint32_t nb0_b = nb0_row2[-2].sym;
-        ctx_w[6].sel = cur[-1].sym-(uint32_t)guess+nb0_a-nb0_b;
-        ctx_w[7].sel = cur[-1].sym-(uint32_t)guess+nb1->cursor[0][-1].sym-nb1->cursor[0][-2].sym;
-        ctx_w[8].sel = nb1->cursor[0][-1].sym-nb1->pred;
-        ctx_w[3].sel = nb0->cursor[0][-1].sym-nb0->pred;
-        quiet = (nb1->cursor[0][-1].mag+(uint32_t)nb0->cursor[0][-1].mag-16)>>31;
+        const P1Ctx* r1 = nb1->cursor[0];
+        act_all = act+2*(r1[-1].mag+r0[-1].mag);
+        ctx_w[5].sel = cursor1->sym-(uint32_t)guess+r0[-1].sym-nb0->cursor[1][-1].sym;
+        ctx_w[6].sel = cross_grad(cur[-1].sym, guess, nb0);
+        ctx_w[7].sel = cross_grad(cur[-1].sym, guess, nb1);
+        ctx_w[8].sel = nb_resid(nb1);
+        ctx_w[3].sel = nb_resid(nb0);
+        quiet = (r1[-1].mag+(uint32_t)r0[-1].mag-16)>>31;
       } else {
-        act_all = cursor1[3].mag+act+3*nb0->cursor[0][-1].mag;
-        ctx_w[5].sel = 2*cur[-1].sym-cur[-2].sym-(uint32_t)guess;
-        ctx_w[6].sel = 2*cur[-1].sym-cur[-2].sym-(uint32_t)guess;
-        ctx_w[7].sel = -guess-cursor1->sym+cursor1[1].sym+cur[-1].sym;
-        ctx_w[8].sel = cur[-1].sym-(uint32_t)guess+nb0->cursor[0][-1].sym-nb0->cursor[0][-2].sym;
-        ctx_w[3].sel = nb0->cursor[0][-1].sym-nb0->pred;
-        quiet = ((uint32_t)nb0->cursor[0][-1].mag-8)>>31;
+        act_all = cursor1[3].mag+act+3*r0[-1].mag;
+        ctx_w[5].sel = west_grad;
+        ctx_w[6].sel = west_grad;
+        ctx_w[7].sel = north_grad;
+        ctx_w[8].sel = cross_grad(cur[-1].sym, guess, nb0);
+        ctx_w[3].sel = nb_resid(nb0);
+        quiet = ((uint32_t)r0[-1].mag-8)>>31;
       }
     } else {
       P1Ctx *cursor4 = cursor[4];
       act_all = cursor4->mag+cursor2[-2].mag+cursor1[3].mag+act+cursor4[2].mag;
-      ctx_w[5].sel = 2*cur[-1].sym-cur[-2].sym-(uint32_t)guess;
+      ctx_w[5].sel = west_grad;
       ctx_w[6].sel = 2*cursor1->sym-cursor2->sym-(uint32_t)guess;
-      ctx_w[7].sel = -guess-cursor1->sym+cursor1[1].sym+cur[-1].sym;
+      ctx_w[7].sel = north_grad;
       ctx_w[8].sel = -3*(cur[-2].sym-cur[-1].sym)+cur[-3].sym-(uint32_t)guess;
       ctx_w[3].sel = cursor1[2].sym-(uint32_t)guess;
       quiet = cur->mag+cursor4->mag+cursor[3]->mag+cursor2->mag+cursor1->mag==0;
@@ -226,15 +244,68 @@ struct AltP1Block {
     __rc_end_encode();
   }
 
-  int32_t update_model() {
-    int32_t result;
-    CounterNode* node;
-    int32_t alti8;
-    int32_t slot_f, slot_r, ctx0, ctx1, ctx2, ctx3, ctx4, ctx5, ctx6, ctx7, ctx8;
+  // One selector's counters, and there are nine of them -- `ctx_w[0]` through
+  // `ctx_w[8]`.  The decompilation wrote all nine out, which is why
+  // `update_model` was 406 lines: about 360 of them are these forty, nine
+  // times over, differing only in which `ctx_w` they read and which locals
+  // they spelled the intermediate values into.
+  //
+  // `sel` names which of the three weights is the live one.  At `sel == 1` the
+  // update walks the other two symmetrically.  Otherwise it walks three
+  // counters: the opposite weight, the middle one, and an alternate context
+  // built from two of the three -- and *which* two is the one thing across the
+  // nine that is not uniform.  Slot 0 names `w[0]` and `w[1]` where the other
+  // eight name `w[1]` and `w[2-sel]`.
+  //
+  // That is the same one-weight shift `ctx_alt` shows: its slot-0 term reads
+  // `w[1]` where every other term reads `w[2-sel]`.  So the pair is a
+  // parameter, not a special case invented to make the loop close.
+  void update_selector(int32_t k, int32_t slot_f, int32_t slot_r,
+                       uint32_t ctx_alt, int32_t alt_lo, int32_t alt_hi) {
+    const CtxWeight& cw = ctx_w[k];
+    const int32_t sel = cw.sel;
+    // Every block re-read `ctx[0]` after each pair of bumps, into a local of
+    // its own -- `ctx0`, `ctx1`, ... `ctx8`, which is where those names came
+    // from.  Nothing here writes `ctx`; the re-reads are MSVC spilling a
+    // register, and the ninth of them was the value the function returned.
+    const int32_t here = ctx[0];
+    if( sel==1 ) {
+      int32_t mid = here-cw.w[1];
+      CounterNode *lo = &counters[mid+cw.w[0]];
+      CounterNode *hi = &counters[cw.w[2]+mid];
+      lo[0].bump(slot_f, 6);
+      hi[0].bump(slot_f, 6);
+      if( (here&7)!=7 ) {
+        lo[1].bump(slot_f, 4);
+        hi[1].bump(slot_f, 4);
+      }
+      if( here&7 ) {
+        lo[-1].bump(slot_f, 3);
+        hi[-1].bump(slot_f, 3);
+      }
+    } else {
+      counters[cw.w[2-sel]+here-cw.w[sel]].bump(slot_f, 7);
+      CounterNode *mid = &counters[cw.w[1]+here-cw.w[sel]];
+      CounterNode *alt = &counters[ctx_alt+cw.w[alt_lo]-cw.w[alt_hi]];
+      mid[0].bump(slot_f, 6);
+      alt[0].bump(slot_r, 4);
+      if( (here&7)!=7 ) {
+        mid[1].bump(slot_f, 4);
+        alt[1].bump(slot_r, 2);
+      }
+      if( here&7 ) {
+        mid[-1].bump(slot_f, 3);
+        alt[-1].bump(slot_r, 2);
+      }
+    }
+  }
+
+  // Returned `ctx[0]` -- or, if the ninth selector's last branch ran, a counter
+  // it had just bumped.  All five call sites discard it.
+  void update_model() {
+    int32_t slot_f, slot_r;
     uint32_t code_f = *((uint8_t)(cursor[0]->sym-(uint8_t)pred)+fold);
-    int32_t sel1_top = ctx_w[1].sel;
     int32_t code_r = *((uint8_t)((uint8_t)pred-cursor[0]->sym)+fold);
-    int32_t sel2_top = ctx_w[2].sel;
     int32_t tree_sym = (int32_t)(code_f-5)>>1;
     slot_f = 6-(code_f&1);
     if( code_f<5 )
@@ -242,10 +313,16 @@ struct AltP1Block {
     slot_r = 6-(code_r&1);
     if( code_r<5 )
       slot_r = code_r;
-    uint32_t ctx_alt = ctx_w[8].w[2-ctx_w[8].sel]+ctx_w[7].w[2-ctx_w[7].sel]+ctx_w[6].w[2-ctx_w[6].sel]+ctx_w[5].w[2-ctx_w[5].sel]+ctx_w[4].w[2-ctx_w[4].sel]+ctx_w[3].w[2-ctx_w[3].sel]+ctx_w[2].w[2-sel2_top]+ctx_w[1].w[2-sel1_top]+ctx_w[0].w[1]+(ctx[0]&0x1F);
+    // `ctx_w[1].sel` and `ctx_w[2].sel` were read into `sel1_top`/`sel2_top`
+    // eight lines above this sum, which made two of its nine terms look unlike
+    // the other seven.  Nothing between the read and the use touches `ctx_w`.
+    uint32_t ctx_alt = ctx[0]&0x1F;
+    for( int32_t k = 8; k>=1; --k )
+      ctx_alt += ctx_w[k].w[2-ctx_w[k].sel];
+    ctx_alt += ctx_w[0].w[1];
     CounterNode *node_alt = &counters[ctx_alt];
     node_alt[0].bump(slot_r, 17);
-    result = ctx[0];
+    const int32_t result = ctx[0];
     if( (result&7)!=7 ) {
       CounterNode *node_up = &counters[result];
       uint32_t ctx_up = (((ctx[1]&7u)-7)>>31)+ctx[1];
@@ -274,363 +351,12 @@ struct AltP1Block {
           __update_binary_pair(model_strip(key-8), tree_sym);
         }
       }
-      int32_t sel0 = ctx_w[0].sel;
-      if( sel0==1 ) {
-        int32_t mid0 = result-ctx_w[0].w[1];
-        CounterNode *lo0 = &counters[mid0+ctx_w[0].w[0]];
-        CounterNode *hi0 = &counters[ctx_w[0].w[2]+mid0];
-        lo0[0].bump(slot_f, 6);
-        hi0[0].bump(slot_f, 6);
-        ctx0 = ctx[0];
-        if( (ctx0&7)!=7 ) {
-          lo0[1].bump(slot_f, 4);
-          hi0[1].bump(slot_f, 4);
-          ctx0 = ctx[0];
-        }
-        if( ctx0&7 ) {
-          lo0[-1].bump(slot_f, 3);
-          hi0[-1].bump(slot_f, 3);
-          ctx0 = ctx[0];
-        }
-      } else {
-        CounterNode *opp0 = &counters[ctx_w[0].w[2-sel0]+result-ctx_w[0].w[sel0]];
-        opp0[0].bump(slot_f, 7);
-        uint32_t alti0 = ctx_alt+ctx_w[0].w[0]-ctx_w[0].w[1];
-        CounterNode *midn0 = &counters[ctx_w[0].w[1]+ctx[0]-ctx_w[0].w[ctx_w[0].sel]];
-        midn0[0].bump(slot_f, 6);
-        CounterNode *altn0 = &counters[alti0];
-        altn0[0].bump(slot_r, 4);
-        ctx0 = ctx[0];
-        if( (ctx0&7)!=7 ) {
-          midn0[1].bump(slot_f, 4);
-          altn0[1].bump(slot_r, 2);
-          ctx0 = ctx[0];
-        }
-        if( ctx0&7 ) {
-          midn0[-1].bump(slot_f, 3);
-          altn0[-1].bump(slot_r, 2);
-          ctx0 = ctx[0];
-        }
-      }
-      int32_t sel1 = ctx_w[1].sel;
-      if( sel1==1 ) {
-        int32_t mid1 = ctx0-ctx_w[1].w[1];
-        CounterNode *lo1 = &counters[mid1+ctx_w[1].w[0]];
-        CounterNode *hi1 = &counters[ctx_w[1].w[2]+mid1];
-        lo1[0].bump(slot_f, 6);
-        hi1[0].bump(slot_f, 6);
-        ctx1 = ctx[0];
-        if( (ctx1&7)!=7 ) {
-          lo1[1].bump(slot_f, 4);
-          hi1[1].bump(slot_f, 4);
-          ctx1 = ctx[0];
-        }
-        if( ctx1&7 ) {
-          lo1[-1].bump(slot_f, 3);
-          hi1[-1].bump(slot_f, 3);
-          ctx1 = ctx[0];
-        }
-      } else {
-        CounterNode *opp1 = &counters[ctx_w[1].w[2-sel1]+ctx0-ctx_w[1].w[sel1]];
-        opp1[0].bump(slot_f, 7);
-        uint32_t w11 = ctx_w[1].w[1];
-        uint32_t alti1 = ctx_alt+w11-ctx_w[1].w[2-ctx_w[1].sel];
-        CounterNode *midn1 = &counters[(w11+ctx[0]-ctx_w[1].w[ctx_w[1].sel])];
-        midn1[0].bump(slot_f, 6);
-        CounterNode *altn1 = &counters[alti1];
-        altn1[0].bump(slot_r, 4);
-        ctx1 = ctx[0];
-        if( (ctx1&7)!=7 ) {
-          midn1[1].bump(slot_f, 4);
-          altn1[1].bump(slot_r, 2);
-          ctx1 = ctx[0];
-        }
-        if( ctx1&7 ) {
-          midn1[-1].bump(slot_f, 3);
-          altn1[-1].bump(slot_r, 2);
-          ctx1 = ctx[0];
-        }
-      }
-      int32_t sel2 = ctx_w[2].sel;
-      if( sel2==1 ) {
-        int32_t mid2 = ctx1-ctx_w[2].w[1];
-        CounterNode *lo2 = &counters[mid2+ctx_w[2].w[0]];
-        CounterNode *hi2 = &counters[ctx_w[2].w[2]+mid2];
-        lo2[0].bump(slot_f, 6);
-        hi2[0].bump(slot_f, 6);
-        ctx2 = ctx[0];
-        if( (ctx2&7)!=7 ) {
-          lo2[1].bump(slot_f, 4);
-          hi2[1].bump(slot_f, 4);
-          ctx2 = ctx[0];
-        }
-        if( ctx2&7 ) {
-          lo2[-1].bump(slot_f, 3);
-          hi2[-1].bump(slot_f, 3);
-          ctx2 = ctx[0];
-        }
-      } else {
-        CounterNode *opp2 = &counters[ctx_w[2].w[2-sel2]+ctx1-ctx_w[2].w[sel2]];
-        opp2[0].bump(slot_f, 7);
-        uint32_t w12 = ctx_w[2].w[1];
-        uint32_t x2 = w12+ctx[0]-ctx_w[2].w[ctx_w[2].sel];
-        uint32_t alti2 = ctx_alt+w12-ctx_w[2].w[2-ctx_w[2].sel];
-        CounterNode *midn2 = &counters[x2];
-        midn2[0].bump(slot_f, 6);
-        CounterNode *altn2 = &counters[alti2];
-        altn2[0].bump(slot_r, 4);
-        ctx2 = ctx[0];
-        if( (ctx2&7)!=7 ) {
-          midn2[1].bump(slot_f, 4);
-          altn2[1].bump(slot_r, 2);
-          ctx2 = ctx[0];
-        }
-        if( ctx2&7 ) {
-          midn2[-1].bump(slot_f, 3);
-          altn2[-1].bump(slot_r, 2);
-          ctx2 = ctx[0];
-        }
-      }
-      int32_t sel3 = ctx_w[3].sel;
-      if( sel3==1 ) {
-        int32_t mid3 = ctx2-ctx_w[3].w[1];
-        CounterNode *lo3 = &counters[mid3+ctx_w[3].w[0]];
-        CounterNode *hi3 = &counters[ctx_w[3].w[2]+mid3];
-        lo3[0].bump(slot_f, 6);
-        hi3[0].bump(slot_f, 6);
-        ctx3 = ctx[0];
-        if( (ctx3&7)!=7 ) {
-          lo3[1].bump(slot_f, 4);
-          hi3[1].bump(slot_f, 4);
-          ctx3 = ctx[0];
-        }
-        if( ctx3&7 ) {
-          lo3[-1].bump(slot_f, 3);
-          hi3[-1].bump(slot_f, 3);
-          ctx3 = ctx[0];
-        }
-      } else {
-        CounterNode *opp3 = &counters[ctx_w[3].w[2-sel3]+ctx2-ctx_w[3].w[sel3]];
-        opp3[0].bump(slot_f, 7);
-        uint32_t w13 = ctx_w[3].w[1];
-        uint32_t x3 = w13+ctx[0]-ctx_w[3].w[ctx_w[3].sel];
-        uint32_t alti3 = ctx_alt+w13-ctx_w[3].w[2-ctx_w[3].sel];
-        CounterNode *midn3 = &counters[x3];
-        midn3[0].bump(slot_f, 6);
-        CounterNode *altn3 = &counters[alti3];
-        altn3[0].bump(slot_r, 4);
-        ctx3 = ctx[0];
-        if( (ctx3&7)!=7 ) {
-          midn3[1].bump(slot_f, 4);
-          altn3[1].bump(slot_r, 2);
-          ctx3 = ctx[0];
-        }
-        if( ctx3&7 ) {
-          midn3[-1].bump(slot_f, 3);
-          altn3[-1].bump(slot_r, 2);
-          ctx3 = ctx[0];
-        }
-      }
-      int32_t sel4 = ctx_w[4].sel;
-      if( sel4==1 ) {
-        int32_t mid4 = ctx3-ctx_w[4].w[1];
-        CounterNode *lo4 = &counters[mid4+ctx_w[4].w[0]];
-        CounterNode *hi4 = &counters[ctx_w[4].w[2]+mid4];
-        lo4[0].bump(slot_f, 6);
-        hi4[0].bump(slot_f, 6);
-        ctx4 = ctx[0];
-        if( (ctx4&7)!=7 ) {
-          lo4[1].bump(slot_f, 4);
-          hi4[1].bump(slot_f, 4);
-          ctx4 = ctx[0];
-        }
-        if( ctx4&7 ) {
-          lo4[-1].bump(slot_f, 3);
-          hi4[-1].bump(slot_f, 3);
-          ctx4 = ctx[0];
-        }
-      } else {
-        CounterNode *opp4 = &counters[ctx_w[4].w[2-sel4]+ctx3-ctx_w[4].w[sel4]];
-        opp4[0].bump(slot_f, 7);
-        uint32_t w14 = ctx_w[4].w[1];
-        uint32_t x4 = w14+ctx[0]-ctx_w[4].w[ctx_w[4].sel];
-        uint32_t alti4 = ctx_alt+w14-ctx_w[4].w[2-ctx_w[4].sel];
-        CounterNode *midn4 = &counters[x4];
-        midn4[0].bump(slot_f, 6);
-        CounterNode *altn4 = &counters[alti4];
-        altn4[0].bump(slot_r, 4);
-        ctx4 = ctx[0];
-        if( (ctx4&7)!=7 ) {
-          midn4[1].bump(slot_f, 4);
-          altn4[1].bump(slot_r, 2);
-          ctx4 = ctx[0];
-        }
-        if( ctx4&7 ) {
-          midn4[-1].bump(slot_f, 3);
-          altn4[-1].bump(slot_r, 2);
-          ctx4 = ctx[0];
-        }
-      }
-      int32_t sel5 = ctx_w[5].sel;
-      if( sel5==1 ) {
-        int32_t mid5 = ctx4-ctx_w[5].w[1];
-        CounterNode *lo5 = &counters[mid5+ctx_w[5].w[0]];
-        CounterNode *hi5 = &counters[ctx_w[5].w[2]+mid5];
-        lo5[0].bump(slot_f, 6);
-        hi5[0].bump(slot_f, 6);
-        ctx5 = ctx[0];
-        if( (ctx5&7)!=7 ) {
-          lo5[1].bump(slot_f, 4);
-          hi5[1].bump(slot_f, 4);
-          ctx5 = ctx[0];
-        }
-        if( ctx5&7 ) {
-          lo5[-1].bump(slot_f, 3);
-          hi5[-1].bump(slot_f, 3);
-          ctx5 = ctx[0];
-        }
-      } else {
-        CounterNode *opp5 = &counters[ctx_w[5].w[2-sel5]+ctx4-ctx_w[5].w[sel5]];
-        opp5[0].bump(slot_f, 7);
-        uint32_t w15 = ctx_w[5].w[1];
-        uint32_t x5 = w15+ctx[0]-ctx_w[5].w[ctx_w[5].sel];
-        uint32_t alti5 = ctx_alt+w15-ctx_w[5].w[2-ctx_w[5].sel];
-        CounterNode *midn5 = &counters[x5];
-        midn5[0].bump(slot_f, 6);
-        CounterNode *altn5 = &counters[alti5];
-        altn5[0].bump(slot_r, 4);
-        ctx5 = ctx[0];
-        if( (ctx5&7)!=7 ) {
-          midn5[1].bump(slot_f, 4);
-          altn5[1].bump(slot_r, 2);
-          ctx5 = ctx[0];
-        }
-        if( ctx5&7 ) {
-          midn5[-1].bump(slot_f, 3);
-          altn5[-1].bump(slot_r, 2);
-          ctx5 = ctx[0];
-        }
-      }
-      int32_t sel6 = ctx_w[6].sel;
-      if( sel6==1 ) {
-        int32_t mid6 = ctx5-ctx_w[6].w[1];
-        CounterNode *lo6 = &counters[mid6+ctx_w[6].w[0]];
-        CounterNode *hi6 = &counters[ctx_w[6].w[2]+mid6];
-        lo6[0].bump(slot_f, 6);
-        hi6[0].bump(slot_f, 6);
-        ctx6 = ctx[0];
-        if( (ctx6&7)!=7 ) {
-          lo6[1].bump(slot_f, 4);
-          hi6[1].bump(slot_f, 4);
-          ctx6 = ctx[0];
-        }
-        if( ctx6&7 ) {
-          lo6[-1].bump(slot_f, 3);
-          hi6[-1].bump(slot_f, 3);
-          ctx6 = ctx[0];
-        }
-      } else {
-        CounterNode *opp6 = &counters[ctx_w[6].w[2-sel6]+ctx5-ctx_w[6].w[sel6]];
-        opp6[0].bump(slot_f, 7);
-        uint32_t w16 = ctx_w[6].w[1];
-        uint32_t x6 = w16+ctx[0]-ctx_w[6].w[ctx_w[6].sel];
-        uint32_t alti6 = ctx_alt+w16-ctx_w[6].w[2-ctx_w[6].sel];
-        CounterNode *midn6 = &counters[x6];
-        midn6[0].bump(slot_f, 6);
-        CounterNode *altn6 = &counters[alti6];
-        altn6[0].bump(slot_r, 4);
-        ctx6 = ctx[0];
-        if( (ctx6&7)!=7 ) {
-          midn6[1].bump(slot_f, 4);
-          altn6[1].bump(slot_r, 2);
-          ctx6 = ctx[0];
-        }
-        if( ctx6&7 ) {
-          midn6[-1].bump(slot_f, 3);
-          altn6[-1].bump(slot_r, 2);
-          ctx6 = ctx[0];
-        }
-      }
-      int32_t sel7 = ctx_w[7].sel;
-      if( sel7==1 ) {
-        int32_t mid7 = ctx6-ctx_w[7].w[1];
-        CounterNode *lo7 = &counters[mid7+ctx_w[7].w[0]];
-        CounterNode *hi7 = &counters[ctx_w[7].w[2]+mid7];
-        lo7[0].bump(slot_f, 6);
-        hi7[0].bump(slot_f, 6);
-        ctx7 = ctx[0];
-        if( (ctx7&7)!=7 ) {
-          lo7[1].bump(slot_f, 4);
-          hi7[1].bump(slot_f, 4);
-          ctx7 = ctx[0];
-        }
-        if( ctx7&7 ) {
-          lo7[-1].bump(slot_f, 3);
-          hi7[-1].bump(slot_f, 3);
-          ctx7 = ctx[0];
-        }
-      } else {
-        CounterNode *opp7 = &counters[ctx_w[7].w[2-sel7]+ctx6-ctx_w[7].w[sel7]];
-        opp7[0].bump(slot_f, 7);
-        uint32_t w17 = ctx_w[7].w[1];
-        uint32_t x7 = w17+ctx[0]-ctx_w[7].w[ctx_w[7].sel];
-        uint32_t alti7 = ctx_alt+w17-ctx_w[7].w[2-ctx_w[7].sel];
-        CounterNode *midn7 = &counters[x7];
-        midn7[0].bump(slot_f, 6);
-        CounterNode *altn7 = &counters[alti7];
-        altn7[0].bump(slot_r, 4);
-        ctx7 = ctx[0];
-        if( (ctx7&7)!=7 ) {
-          midn7[1].bump(slot_f, 4);
-          altn7[1].bump(slot_r, 2);
-          ctx7 = ctx[0];
-        }
-        if( ctx7&7 ) {
-          midn7[-1].bump(slot_f, 3);
-          altn7[-1].bump(slot_r, 2);
-          ctx7 = ctx[0];
-        }
-      }
-      int32_t sel8 = ctx_w[8].sel;
-      if( sel8==1 ) {
-        int32_t midn8 = ctx7-ctx_w[8].w[1];
-        CounterNode *altn8 = &counters[midn8+ctx_w[8].w[0]];
-        node = &counters[ctx_w[8].w[2]+midn8];
-        altn8[0].bump(slot_f, 6);
-        node[0].bump(slot_f, 6);
-        ctx8 = ctx[0];
-        if( (ctx8&7)!=7 ) {
-          altn8[1].bump(slot_f, 4);
-          node[1].bump(slot_f, 4);
-          ctx8 = ctx[0];
-        }
-        if( ctx8&7 ) {
-          altn8[-1].bump(slot_f, 3);
-          node[-1].bump(slot_f, 3);
-        }
-      } else {
-        CounterNode *opp8 = &counters[ctx_w[8].w[2-sel8]+ctx7-ctx_w[8].w[sel8]];
-        opp8[0].bump(slot_f, 7);
-        uint32_t w18 = ctx_w[8].w[1];
-        node = &counters[w18+ctx[0]-ctx_w[8].w[ctx_w[8].sel]];
-        CounterNode *x8 = &counters[w18-ctx_w[8].w[2-ctx_w[8].sel]+ctx_alt];
-        node[0].bump(slot_f, 6);
-        x8[0].bump(slot_r, 4);
-        alti8 = ctx[0];
-        if( (alti8&7)!=7 ) {
-          node[1].bump(slot_f, 4);
-          x8[1].bump(slot_r, 2);
-          alti8 = ctx[0];
-        }
-        if( alti8&7 ) {
-          node[-1].bump(slot_f, 3);
-          result = (uint16_t)x8[-1].c[slot_r]+2;
-          x8[-1].c[slot_r] = result;
-          x8[-1].total += 2;
-        }
-      }
+      // The nine selectors.  `update_selector` is what the decompilation
+      // wrote out nine times.
+      update_selector(0, slot_f, slot_r, ctx_alt, 0, 1);
+      for( int32_t k = 1; k<9; ++k )
+        update_selector(k, slot_f, slot_r, ctx_alt, 1, 2-ctx_w[k].sel);
     }
-    return result;
   }
 
   AltP1Block*alt_p1_alloc(int32_t img_w, int32_t img_h, int32_t plane) {
@@ -738,3 +464,12 @@ struct AltP1Block {
       free(this);
   }
 };
+
+static inline int32_t cross_grad(int32_t here, int32_t guess, const AltP1Block* nb) {
+  const P1Ctx* r = nb->cursor[0];
+  return here-(uint32_t)guess+r[-1].sym-r[-2].sym;
+}
+
+static inline int32_t nb_resid(const AltP1Block* nb) {
+  return nb->cursor[0][-1].sym-nb->pred;
+}
