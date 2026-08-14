@@ -190,7 +190,7 @@ int32_t __choose_plane_coding(BmfImage* img, int32_t unused_h, int8_t unused_c) 
                   wt8 = __frame.wt_slot;
                   wt4 = x5[3];
                   n_planes = __frame.nplanes_s;
-                  goto LABEL_19;
+                  goto weights_chosen;
                 }
                 if( wt4_up<wt4_up_end&&wt4_up<192 ) {
                   x0[2] = wt8_up_end;
@@ -367,7 +367,7 @@ int32_t __choose_plane_coding(BmfImage* img, int32_t unused_h, int8_t unused_c) 
           --wt8_dn;
         }
       }
-LABEL_19:
+weights_chosen:
       px = &((uint8_t*)img_a)[__frame.row_stride+16+n_planes+x3[2]];
       if( px<data_end ) {
         __frame.wt_slot = wt8;

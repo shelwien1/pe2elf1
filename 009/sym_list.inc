@@ -137,7 +137,7 @@ struct SymList {
     head = ent;
     since_rescale += 4;
     if( p==head ) {
-  LABEL_37:
+  sorted:
       top = p->cnt;
     } else {
       s_a = p->sym;
@@ -161,7 +161,7 @@ struct SymList {
           head = ent;
           --q;
           if( p==head )
-            goto LABEL_37;
+            goto sorted;
         }
       }
     }
@@ -187,13 +187,13 @@ struct SymList {
       while( p->sym!=want ) {
         ++p;
         if( !--left )
-          goto LABEL_4;
+          goto rescaled;
       }
       p->cnt += add;
       since_rescale += add;
       head = ent;
       if( p==head ) {
-  LABEL_16:
+  placed:
         count = p->cnt;
       } else {
         s = p->sym;
@@ -217,14 +217,14 @@ struct SymList {
             head = ent;
             --q;
             if( p==head )
-              goto LABEL_16;
+              goto placed;
           }
         }
       }
       rescale(count);
       return;
     } else {
-  LABEL_4:
+  rescaled:
       full = n_live==n;
       if( n_live>=n ) {
         if( add<=1 )

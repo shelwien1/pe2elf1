@@ -138,7 +138,7 @@ int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
       row_i = 0;
       while( 1 ) {
         if( p>=&p[stride3] )
-          goto LABEL_72;
+          goto write_rows;
         buf_2 = out_at;
         end = &p[stride3];
         row_i2 = row_i;
@@ -198,7 +198,7 @@ int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
                 row_i = row_i2;
                 rows3 = img->height;
                 stride3 = img->stride;
-                goto LABEL_72;
+                goto write_rows;
               }
             }
             ++p;
@@ -233,7 +233,7 @@ int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
               row_i = row_i2;
               rows3 = img->height;
               stride3 = img->stride;
-              goto LABEL_72;
+              goto write_rows;
             }
             lit_len = 0;
           }
@@ -266,7 +266,10 @@ int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
         }
         rows3 = img->height;
         stride3 = img->stride;
-LABEL_72:
+// The row-writing loop.  Three paths reach it, each setting `row_i`, `rows3`
+// and `stride3` first -- which is the loop's three arguments, passed by
+// assignment because the decompiler had no function to pass them to.
+write_rows:
         *out_at = 0;
         out_at[1] = 0;
         out_at += 2;

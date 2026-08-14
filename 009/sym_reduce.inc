@@ -185,7 +185,7 @@ void __reduce_alphabet(ModelBlock* blk, int8_t unread_flag, uint8_t* src) {
                 written = __frame.slot3;
                 p = __frame.slot2;
                 mode_symbol[1] = side;
-                goto LABEL_12;
+                goto code_dense;
               }
             }
             p = __frame.slot2;
@@ -203,12 +203,13 @@ void __reduce_alphabet(ModelBlock* blk, int8_t unread_flag, uint8_t* src) {
               alpha_n = alpha;
               n_kids = __frame.slot9;
               blk1 = __frame.slot7;
-              goto LABEL_14;
+              goto alphabet_done;
             }
             *(uint32_t*)&__frame.buf[8*node] = val;
           }
         }
-LABEL_12:
+// The alphabet is dense enough to code as a run of flags.
+code_dense:
         blk3 = __frame.slot7;
         __frame.slot7->sym_word[written++] = node;
         if( written>=blk3->height*blk3->width ) {
@@ -216,12 +217,13 @@ LABEL_12:
           n_kids = __frame.slot9;
           blk1 = __frame.slot7;
           alpha_n = __frame.slot7->alphabet;
-          goto LABEL_14;
+          goto alphabet_done;
         }
       }
     }
     alpha_n = blk1->alphabet;
-LABEL_14:
+// Both codings converge here with `blk->alphabet` set.
+alphabet_done:
     rc.encode(alpha_n-1, alpha_n, 0x2001u);
     alpha_m = blk1->alphabet;
     if( alpha_m>0x2000 ) {
@@ -288,14 +290,14 @@ LABEL_14:
               more = (uint32_t)(++n_moved)<__frame.slot6;
               __frame.slot[done2+1] = dst_c+1;
               if( !more )
-                goto LABEL_71;
+                goto lists_ready;
               rp += done2;
             }
             if( (uint32_t)(++n_moved)>=__frame.slot6 )
               break;
             rp = srcp;
           }
-LABEL_71:
+lists_ready:
           n_kids = __frame.slot9;
           blk1 = __frame.slot7;
         }

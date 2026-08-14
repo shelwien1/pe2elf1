@@ -28,7 +28,7 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
     uint8_t _pad1[36];
   } __frame;
   uint8_t* base2;
-  bool deep, deep2;
+  bool deep2;
   int8_t f4;
   uint16_t w_a, w_d;
   BmfImage* img_c;
@@ -143,7 +143,7 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
         __frame.best_flags = f6;
         if( __frame.pi ) {
           {
-LABEL_191:
+try_flag8:
             pl2 = __frame.dims[1];
             plane_desc[__frame.plane_i+1].flags = 8;
             __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl2, 0);
@@ -191,15 +191,15 @@ LABEL_191:
             if( deep2 )
               pred = 2;
           }
-          goto LABEL_43;
+          goto keep_flag8;
         }
         pred = f6&3;
       } else {
         if( __frame.pi )
-          goto LABEL_191;
+          goto try_flag8;
         pred = (uint8_t)__frame.best_flags&3;
       }
-LABEL_43: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
+keep_flag8: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
       __frame.best_bits += best_cost;
       c0 = pred==2;
       if( pred!=1 )
@@ -277,13 +277,13 @@ LABEL_43: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
           break;
         if( ++pk>=plane_count ) {
           img_c = (BmfImage*)(__frame.p_i_2);
-          goto LABEL_172;
+          goto tile_restored;
         }
       }
       img_c = (BmfImage*)(__frame.p_i_2);
       bits_d += __frame.best_bits+1;
     }
-LABEL_172:
+tile_restored:
     if( bits_d+(bits_d>>12)>=__frame.best_bits ) {
       base2 = (uint8_t*)bmf_new(__frame.tile_img->data_size);
       rows_x_planes = plane_count*(__frame.tile_img->height-1);
@@ -395,7 +395,7 @@ LABEL_172:
         cand = 1;
       }
       if( nplanes_b<=2 )
-        goto LABEL_63;
+        goto planes_done;
     } else {
       cand = 1;
     }
@@ -459,7 +459,7 @@ LABEL_172:
   } else {
     cand = 1;
   }
-LABEL_63:
+planes_done:
   if( !__frame.n_hard&&plane_count>1 ) {
     tile_copy = (uint8_t*)bmf_new(__frame.tile_img->data_size);
     memcpy(tile_copy, (uint8_t*)__frame.tile_src, __frame.tile_img->data_size);

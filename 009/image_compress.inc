@@ -51,7 +51,7 @@ int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* extra_blk) {
   if( bpp&0x80 )
     pal_bytes = 3<<(bpp&31);
   if( p_i->data_size<0x10u )
-    goto LABEL_76;
+    goto write_raw;
   desc_slow_mode = 1;
   hdr.flags |= 0x24;
   if( (p_i->depth&0x3Fu)<=4 ) {
@@ -62,7 +62,7 @@ int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* extra_blk) {
     plane_alt_model = 0;
     alphabet_reduced = 0;
     __model_plane(p_i, p_i->pixels, p_i->pixels);
-    goto LABEL_57;
+    goto write_coded;
   }
   filtered = __search_filter(p_i, 0);
   hdr.flags |= 0x10u;
@@ -82,14 +82,14 @@ int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* extra_blk) {
   coded_size = data_bytes+0x20000;
   coded_buf = (uint8_t*)bmf_new(data_bytes+0x20000);
   packer_reset();
-  if( plane_count==1 ) {
-    if( p_i->depth&0x40 ) {
-LABEL_22:
-      near_lossless_q = 0;
-      pack_bits(0, 4);
-    }
-  } else if( plane_count>2 ) {
-    goto LABEL_22;
+  // The near-lossless nibble, four zero bits, is written for a single
+  // greyscale plane and for three or more planes -- and not for two, nor for a
+  // single palette plane.  The decompiler wrote that as a `goto` into the
+  // middle of the `if` from its own `else`, which is one condition with the
+  // `||` taken out.
+  if( plane_count==1 ? (p_i->depth&0x40)!=0 : plane_count>2 ) {
+    near_lossless_q = 0;
+    pack_bits(0, 4);
   }
   alphabet_reduced = 0;
   if( plane_count>0 ) {
@@ -128,7 +128,9 @@ LABEL_22:
   } else {
     __transform_planes(p_i, 0);
   }
-LABEL_57:
+// Everything coded; flush the packer's last word and decide whether the coded
+// stream is smaller than the pixels it came from.
+write_coded:
   *(uint32_t*)packer_word = packer_acc;
   fits = (uint32_t)(out_cursor- coded_buf)<p_i->data_size;
   coded_bytes = out_cursor- coded_buf;
@@ -184,11 +186,13 @@ LABEL_57:
     img->flags ^= 2u;
     img->stride = img_h*plane_n;
     free(pix_copy);
-    goto LABEL_77;
   }
-LABEL_76:
+  // Both arms end here with `pixels` pointing at the same bytes: the transpose
+  // above swaps the header's width, height and stride and leaves the pixel
+  // buffer alone.  The `goto` that skipped this assignment was skipping a
+  // second write of the value it already held.
+write_raw:
   pixels = (uint16_t*)p_i->pixels;
-LABEL_77:
   ok_raw = fwrite(img, 1u, 0x10u, arc->fp)==16;
   if( extra_blk ) {
     coded_len = ((const uint32_t*)extra_blk)[1];

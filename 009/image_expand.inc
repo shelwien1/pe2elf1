@@ -126,7 +126,7 @@ uint8_t*__expand_image(BmfArc* arc_in, void** p_coded_buf) {
     if( fread(img_at->pixels, 1u, __frame.data_len, arc->fp)!=want ) {
       return __expand_fail(arc);
     }
-    goto LABEL_109;
+    goto read_palette;
   }
   near_lossless_q = 0;
   alphabet_reduced = 0;
@@ -147,21 +147,19 @@ uint8_t*__expand_image(BmfArc* arc_in, void** p_coded_buf) {
     plane_predictor = 0;
     plane_alt_model = 0;
     __unmodel_plane(want2, (uint16_t*)img_at, img_at->pixels);
-    goto LABEL_106;
+    goto check_length;
   }
-  if( plane_count==1 ) {
-    if( !(bpp&0x40) )
-      goto LABEL_42;
-  } else if( plane_count<=2 ) {
-    goto LABEL_42;
+  // The near-lossless nibble, mirroring `image_compress`: present for a single
+  // greyscale plane and for three or more, absent otherwise.  Two `goto`s
+  // jumped over it; the condition is the encoder's, negated.
+  if( plane_count==1 ? (bpp&0x40)!=0 : plane_count>2 ) {
+    near_lossless = unpack_bits(4);
+    if( near_lossless ) {
+      printf("\nnear-lossless stream (E=%d); this build only decodes E=0\n", near_lossless);
+      exit(3);
+    }
+    near_lossless_q = 0;
   }
-  near_lossless = unpack_bits(4);
-  if( near_lossless ) {
-    printf("\nnear-lossless stream (E=%d); this build only decodes E=0\n", near_lossless);
-    exit(3);
-  }
-  near_lossless_q = 0;
-LABEL_42:
   if( plane_count>0 ) {
     __frame.mask = 255;
     __frame.p_i_2 = img_at;
@@ -216,7 +214,7 @@ LABEL_42:
         __interleave_plane((uint8_t*)img_at, plane_buf, plane, 0);
         ++plane_i;
       } while( plane_i<plane_count );
-LABEL_104:
+restore_arc:
       arc = __frame.arc_f;
     }
   } else {
@@ -225,7 +223,7 @@ LABEL_104:
     {
       __unmodel_plane(63, (uint16_t*)img_at, img_at->pixels);
       if( plane_alt_model )
-        goto LABEL_105;
+        goto free_plane_buf;
     }
     if( plane_count>0 ) {
       __frame.arc_f = arc;
@@ -273,18 +271,18 @@ LABEL_104:
           __interleave_plane((uint8_t*)img_at, plane_buf, plane2, 0);
         }
       } while( pl2<plane_count );
-      goto LABEL_104;
+      goto restore_arc;
     }
   }
-LABEL_105:
+free_plane_buf:
   free(plane_buf);
-LABEL_106:
+check_length:
   if( coded_buf+__frame.data_len!=out_cursor ) {
     return __expand_fail(arc);
   }
   free(coded_buf);
   __frame.depth_f = __frame.depth_b;
-LABEL_109:
+read_palette:
   if( __frame.depth_f&0x80 ) {
     pal_at = (img_at->depth&0x80) ? &((uint8_t*)img_at)[img_at->data_size+16] : nullptr;
     got = fread(pal_at, 1u, __frame.pal_len, arc->fp);

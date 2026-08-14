@@ -437,7 +437,7 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
         mir_top[1] += step10;
       }
       if( ctx15<=0 ) {
-LABEL_37:
+code_residual:
         step_v = ctx;
         if( freq[step_v].step<=0x1Au )
           return step_v;
@@ -453,12 +453,12 @@ LABEL_37:
           mir_top = (uint16_t*)frec2;
           p2_freq_add(frec2, fold_sel2, 4);
           if( ctx15<=0 )
-            goto LABEL_48;
+            goto counters_done;
         } else {
         }
         mir_top = (uint16_t*)&p2_rec[-1];
         p2_freq_add(&p2_rec[-1], fold_sel2, 4);
-LABEL_48:
+counters_done:
         if( a4 ) {
           n2_half = (a4-1)>>1;
           hi_nibble = (uint8_t)pair_ctx&0xF0;
@@ -664,7 +664,7 @@ LABEL_48:
     } else {
       mir_top[1] += step13;
     }
-    goto LABEL_37;
+    goto code_residual;
   }
   return step_v;
 }

@@ -561,7 +561,7 @@ struct ModelBlock {
         } while( (uint32_t)x2<blk->width );
         x = bucket;
         if( nbytes!=4 )
-          goto LABEL_53;
+          goto list_ready;
         if( row_w>0 ) {
           uint32_t *out32 = (uint32_t*)out_at;
           int32_t y2 = 0;
@@ -569,16 +569,16 @@ struct ModelBlock {
             *out32++ = blk->sym_code[blk->row_cur[0][y2+++8].sym];
           while( (uint32_t)y2<blk->width );
           out_at = (uint8_t*)out32;
-          goto LABEL_74;
+          goto next_list;
         }
-  LABEL_74:
+  next_list:
         bucket = x+1;
         if( (uint32_t)bucket>=blk->height )
-          goto LABEL_76;
+          goto list_done;
       }
       if( nbytes==4 )
-        goto LABEL_74;
-  LABEL_53:
+        goto next_list;
+  list_ready:
       if( nbytes==3 ) {
         if( row_w>0 ) {
           out_ent = (SymEntry*)out_at;
@@ -592,7 +592,7 @@ struct ModelBlock {
           } while( (uint32_t)step<blk->width );
           out_at = (uint8_t*)out_ent;
         }
-        goto LABEL_74;
+        goto next_list;
       }
       if( nbytes!=2 ) {
         if( blk->depth==8 ) {
@@ -621,7 +621,7 @@ struct ModelBlock {
           } while( (uint32_t)x4<blk->width );
           out_at = out_bits;
         }
-        goto LABEL_74;
+        goto next_list;
       }
       if( row_w>0 ) {
         out16 = (uint16_t*)out_at;
@@ -631,9 +631,9 @@ struct ModelBlock {
         while( (uint32_t)x3<blk->width );
         out_at = (uint8_t*)out16;
       }
-      goto LABEL_74;
+      goto next_list;
     }
-  LABEL_76:
+  list_done:
     __rc_end_decode();
     bpp_raw = blk->depth_raw;
     if( (uint32_t)bpp_raw!=blk->depth ) {
@@ -860,11 +860,11 @@ struct ModelBlock {
             m_up0 = (uint8_t)(up2[run].match[0]&m_up0);
             if( ++idx1>=__frame.sym[1] ) {
               run = idx1;
-              goto LABEL_42;
+              goto run_copied;
             }
           }
         }
-  LABEL_42:
+  run_copied:
         bucket = *(run_bucket+idx1);
         bit = esc_ctr[(8*bucket+4*(uint8_t)(up2[run+3].match[1]&up2[run+2].match[1])+2*m_up0+*(alpha_map+__frame.sym[0])+1)].decode_context_bit(esc_ctr);
         msym1c = mode_symbol[1];
@@ -876,7 +876,7 @@ struct ModelBlock {
         } else {
           idx_s = 0;
           if( idx1==1 )
-            goto LABEL_57;
+            goto run_done;
           __frame.sym[3] = idx1;
           __frame.sym[0] = bucket;
           idx_s = 0;
@@ -903,7 +903,7 @@ struct ModelBlock {
         if( idx_s )
           row_cur[5][idx_s-1].sym = row_cur[5][-1].sym;
         hit_a = hit;
-  LABEL_57:
+  run_done:
         if( idx_s>hit_a ) {
           row_cur[6] = row_cur[6]+idx_s-hit_a;
           r8b = row_cur[8];
@@ -982,7 +982,7 @@ struct ModelBlock {
         }
         if( hit_a )
           return idx_s;
-        goto LABEL_86;
+        goto pixel_done;
       }
     }
     freq = &grid[bucket_idx];
@@ -1178,7 +1178,7 @@ struct ModelBlock {
       return 1;
     }
     idx_s = 0;
-  LABEL_86:
+  pixel_done:
     gen = exclusion_gen;
     msym3 = mode_symbol[3];
     msym1 = mode_symbol[1];
@@ -1460,12 +1460,12 @@ struct ModelBlock {
           if( ++one>=__frame.sym[0] ) {
             __frame.sym[4] = one;
             run = one;
-            goto LABEL_42;
+            goto run_copied;
           }
         }
         __frame.sym[4] = one;
       }
-  LABEL_42:
+  run_copied:
       run_pair = (uint8_t)(up2[run+3].match[1]&up2[run+2].match[1]);
       __frame.sym[5] = run_bucket[__frame.sym[4]];
       amap = CtxIdx{}.bit<2>(run_pair).bit<1>(m_up0)

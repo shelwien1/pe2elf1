@@ -84,7 +84,7 @@ int32_t*__read_bmp(char* path) {
           row_at = row_ofs+run;
         } else if( run_val ) {
           if( run_val==1 )
-            goto LABEL_61;
+            goto done;
           if( run_val==2 ) {
             int32_t dx = fgetc(fp);
             int32_t dy = fgetc(fp);
@@ -100,7 +100,7 @@ int32_t*__read_bmp(char* path) {
           }
         } else {
           if( --y4<0 )
-            goto LABEL_61;
+            goto done;
           row_at = img_f->pixels+y4*(uint16_t)img_f->stride;
         }
       }
@@ -114,7 +114,12 @@ int32_t*__read_bmp(char* path) {
     while( 1 ) {
       while( 1 ) {
         while( 1 ) {
-LABEL_44:
+// The top of the run-length opcode loop.  Five paths jump here and this is
+          // not a `continue`: the label sits at brace depth 5 and the five jumps at
+          // depths 8, 8, 5, 5 and 4, so three of them are inside nested loops or
+          // outside this one.  Substituting `continue` compiles, passes the corpus,
+          // and sends two of the five to the wrong loop.
+next_opcode:
           if( ferror(fp) )
             return nullptr;
           run4 = fgetc(fp);
@@ -137,7 +142,7 @@ LABEL_44:
               if( !left4b ) {
                 row = row3;
                 hi_nibble = 1;
-                goto LABEL_44;
+                goto next_opcode;
               }
             }
             row = row3;
@@ -159,7 +164,7 @@ LABEL_44:
                 row = row4;
                 *row4 = lo16;
                 hi_nibble = 0;
-                goto LABEL_44;
+                goto next_opcode;
               }
             }
             row = row4;
@@ -169,11 +174,11 @@ LABEL_44:
         if( byte )
           break;
         if( --y8<0 )
-          goto LABEL_61;
+          goto done;
         row = img_f->pixels+y8*(uint16_t)img_f->stride;
       }
       if( byte==1 )
-        goto LABEL_61;
+        goto done;
       if( byte!=2 )
         break;
       dxy = fgetc(fp);
@@ -201,7 +206,7 @@ LABEL_44:
           row = row5;
           *row5 = *pal_at&0xF0;
           hi_nibble = 0;
-          goto LABEL_44;
+          goto next_opcode;
         }
         *row5++ = pix;
         hi_nibble = 1;
@@ -211,7 +216,7 @@ LABEL_44:
         if( !left ) {
           row = row5;
           hi_nibble = 1;
-          goto LABEL_44;
+          goto next_opcode;
         }
         *row5 = 16*(pix&0xF);
         hi_nibble = 0;
@@ -220,7 +225,7 @@ LABEL_44:
       pair = left-1;
       if( !pair ) {
         row = row5;
-        goto LABEL_44;
+        goto next_opcode;
       }
     }
   }
@@ -241,10 +246,11 @@ LABEL_44:
       }
       row6 -= stride;
       if( --y<0 )
-        goto LABEL_61;
+        goto done;
     }
   }
-LABEL_61:
+// One exit: close the file, give the palette scratch back, return the image.
+done:
   fclose(fp);
   free(pal_buf);
   return (int32_t*)img;

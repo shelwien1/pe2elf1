@@ -118,13 +118,13 @@ int32_t __decode_symbol_list(SymList* syms) {
         if( r==head ) {
           list5_s = __frame.list5;
           top = r->cnt;
-          goto LABEL_30;
+          goto next_symbol;
         }
       }
       list5_s = __frame.list5;
     }
   }
-LABEL_30:
+next_symbol:
   rescale_at = owner->rescale_at;
   if( top>251||rescale_at<owner->since_rescale ) {
     __frame.list0 = owner->live;
