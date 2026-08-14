@@ -3,12 +3,13 @@
 One section per file, thirty-six of them, each saying what was still ugly in
 that file and what would fix it.
 
-**Implemented.** Everything ranked below has been done, each change gated on the
-seventeen reference streams at both pointer widths. The tree is **11,399 lines**,
-down from 11,787; lines over 200 characters 29 → 26; type puns 74 → 74 with
-`plane_choose`'s 53 replaced by named doubles elsewhere; and all 33 `LABEL_<n>`
-are gone. Four sections' verdicts changed on contact with the code, and those
-are marked **`corrected`** where they appear.
+**Implemented.** Every section has been acted on, each change gated on the
+seventeen reference streams at both pointer widths. The tree is **11,363 lines**,
+down from 11,787; lines over 200 characters 29 → 22; `plane_choose`'s 53 type
+puns are named doubles; and all 33 `LABEL_<n>` are gone. **Eight** sections'
+verdicts changed on contact with the code, and those are marked **`corrected`**
+where they appear — the review was wrong about the same proportion of its
+findings that it was wrong about when it reviewed itself.
 
 The three that changed most:
 
@@ -111,8 +112,8 @@ data segment and is worth a sentence saying so.
 
 ### `tables.inc` — 65 lines
 
-Nothing to change. Four rows are over 200 characters and one is 427, and that
-is correct: a coefficient row is one line because it is one row. `CLEANER.md`
+**Done: six tables now name what indexes them.** Four rows are over 200
+characters and one is 427, and that: a coefficient row is one line because it is one row. `CLEANER.md`
 Phase 4 explicitly declined to wrap these.
 
 One thing worth adding: several tables are indexed by a value whose range is
@@ -249,11 +250,10 @@ all 93 checks including every RLE image in the corpus, and is wrong. The label
 is named `next_opcode` and stays a label, with that measurement beside it.
 `LABEL_61` is `done`, a real single exit.
 
-**The 358-character line** is the acceptance test: eleven conditions joined by
-`||`, each a different reason to refuse the file. One condition per line with a
-trailing comment naming the reason would make the *format's* rules readable,
-which is the one thing this file exists to state. `MODELS.md` §1 had to
-reconstruct that list by hand.
+**Done. The 358-character line** was the acceptance test: eleven conditions
+joined by `||`, each a different reason to refuse the file. It is one condition
+per line with the reason beside it, which makes this the only place the accepted
+format is stated — `MODELS.md` §1 had to reconstruct the list by hand.
 
 ### `bmp_write.inc` — 333 lines, 3 gotos, 1 label, 9 puns
 
@@ -305,11 +305,22 @@ a few lines of each other and nothing takes the array's address across them,
 `tools/liftframe.py`'s rule would apply if the array itself were separated from
 the slots.
 
-`tools/liftframe.py` has already looked and declined it, with a reason that is
-the right one and worth quoting: *every member is inside its union*. There is
-nothing to lift that is not already aliased onto the array. So the fix is not a
-lift — it is moving the eight slots out of the array's union into plain locals,
-which is a different edit and one no tool here performs.
+**`corrected`: left alone, and here is why.** `tools/liftframe.py` declined it
+with the right reason — *every member is inside its union* — and looking closer
+says the union is load-bearing rather than incidental. `__frame.list` is
+genuinely used as an array: `w = __frame.list`, `rd = &__frame.list[1]`, a work
+list of `SymEntry*` written and read through two cursors. The eight slots
+overlay its first words, and both are live in the same region — `__frame.list[1]`
+is written at line 148 and read at 158 while `__frame.list0` is written at 149
+and read at 159, and at 64 bits `list[1]` *is* `list1`, the same word under two
+spellings.
+
+So this is not a spill area with an array bolted on; it is one buffer the
+original reuses, and separating the two needs a liveness proof about when the
+work list stops being needed. That is a real piece of work and not a cleanup.
+The one free improvement — spelling `__frame.list[1]` and `__frame.list1` the
+same way — is left too, because the array spelling is what shows that word is
+the work list's second slot.
 
 ### `sym_reduce.inc` — 353 lines, 4 gotos, 3 labels, 12 puns
 
@@ -346,7 +357,17 @@ those are extractable without merging the bodies:
 
 **The `FreqRec` rescale is written out twice**, once in each body, 30 lines each:
 halve `w[0]`…`w[4]`, re-sum into `w[5]`, floor `w[6]` at 256, floor `b15` at 15.
-That is a method on `FreqRec` and it would read as one.
+That is a method on `FreqRec` and it would read as one. **Done** — and it
+returns the new sum, because both copies re-read `w[5]` afterwards to add the
+kick.
+
+**Done: the 32-slot fill is in slot order.** Both bodies interleaved the 32
+stores with the 24 loads that feed them and gave every load a name — `h10`
+through `h31`, `c4`…`c7`, `cache0`…`cache6` — because MSVC scheduled them that
+way and every one was used exactly once. Nothing between them writes `row_cur`
+or `sym_cache`, so the order was free. **39 locals** went with the straightening,
+which is why `model.inc` is 1,883 → 1,771 lines rather than the ~60 the two
+rescales alone would have given.
 
 **Seven `LABEL_<n>`**, four of which are inside the run-length shortcut and all
 of which mean "the run is over, resume the ladder".
@@ -372,10 +393,12 @@ One helper, called twice. This is the smallest and easiest fix in the tree.
 ### `model_plane.inc` — 237 lines
 
 The 100-line `FreqRec` seeding loop is the file's real content and is fine,
-though the six flag locals `f_b0`…`f_b5` could be one `switch` on
-`ctx_group_flags[g]` — as written, six `if`s each test one bit of a value that
-`tables.inc` supplies from a table of fifteen, and the *fifteen* is the thing to
-see.
+**`corrected`: not a `switch`, a naming.** The six flag locals were
+`f_b0`…`f_b5`, named after the bit rather than what it does, and a `switch` over
+fifteen groups would be worse than six `if`s. Each bit folds one selector weight
+into another and zeroes the source, so they are `f_w4_to_w1`, `f_w4_to_w2`,
+`f_w3_to_w1`, `f_w3_to_w2`, `f_w2_to_w1` and `f_w3_double` — and the order they
+are tested in is the order the folds compose.
 
 Otherwise nothing. The unrolled zeroing a reader might expect to find here is
 in `plane.inc`, in `__model_planes`.
@@ -461,10 +484,12 @@ Good. `P2Freq::code_three_way` is 71 lines and is the three-way coder; `p2_pred`
 `p2_bump`, `p2_update` and `p2_nudge` are the helpers `CLEANER.md` Phase 1
 added, each with the reasoning that makes it safe.
 
-`alt_p2_alloc` is 104 lines of table seeding with several `do/while` loops that
-step by 2 — the original's unrolling again. They are loops of `0x14000`
-iterations, so unlike the `memset` cases the unrolling might be load-bearing;
-worth measuring before touching.
+**`corrected`: the unrolling was not load-bearing, and it is measured.**
+`alt_p2_alloc` seeded its tables with `do/while` loops stepping by two, over
+163,840 counters and 15,552 frequency records — large enough that the unrolling
+might have been paying for itself. It was not: rolled to single steps and the
+two counter passes merged into one, `x_ep` takes 9.7s either way, three runs
+each. 104 lines → 92.
 
 ### `alt_p2_context.inc` — 504 lines, one body
 
@@ -742,8 +767,12 @@ Ranked as planned, with what each actually took.
 | — | `advance_row()` | three `alt_p1_*` files | not ranked | 3 | −57 |
 | — | the level-geometry loop | `rc_io.inc` | not ranked | 1 | −10 |
 | — | name all 33 `LABEL_<n>` | 11 files | declined | done | 0 |
+| — | the 32-slot neighbour fill | `model.inc` | not ranked | 2 × 48 lines, 39 locals | −49 |
+| — | roll the seeding loops | `alt_p2_block.inc` | measure first | measured: 9.7s either way | −12 |
+| — | wrap the acceptance test | `bmp_read.inc` | — | done | +12 |
+| — | name the six flag bits | `model_plane.inc` | a `switch` | a naming | +7 |
 
-**11,787 → 11,399 lines.** Four counts in the table above are larger than the
+**11,787 → 11,363 lines.** Four counts in the table above are larger than the
 review predicted, in every case because doing the work found more of the same
 shape next to it.
 

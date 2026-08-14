@@ -22,7 +22,21 @@ int32_t*__read_bmp(char* path) {
     const int32_t bmp_w = hdr.biWidth;
     const int32_t bmp_h = hdr.biHeight;
     const int32_t bmp_bpp = hdr.biBitCount;
-    if( bmp_w<=0||bmp_w>0xFFFF||bmp_h<=0||bmp_h>0xFFFF||(bmp_bpp>=8&&(uint32_t)bmp_w*(uint32_t)((bmp_bpp+7)>>3)>0xFFFFu)||(bmp_bpp!=1&&bmp_bpp!=4&&bmp_bpp!=8&&bmp_bpp!=24&&bmp_bpp!=32)||(int32_t)hdr.biClrUsed<0||(bmp_bpp<=8&&(int32_t)hdr.biClrUsed>(1<<bmp_bpp))||hdr.biCompression>2||(hdr.biCompression==1&&bmp_bpp!=8)||(hdr.biCompression==2&&bmp_bpp!=4) ) {
+    // Everything this reader will not take, one reason per line.  It was one
+    // 358-character condition, which is the only statement of the accepted
+    // format anywhere -- `MODELS.md` had to reconstruct the list from it by
+    // hand.
+    if( bmp_w<=0||bmp_w>0xFFFF                                  // width 1..65535
+     || bmp_h<=0||bmp_h>0xFFFF                                  // height likewise
+     || (bmp_bpp>=8&&(uint32_t)bmp_w*(uint32_t)((bmp_bpp+7)>>3)>0xFFFFu)
+                                                                // and a row of it fits in 16 bits
+     || (bmp_bpp!=1&&bmp_bpp!=4&&bmp_bpp!=8&&bmp_bpp!=24&&bmp_bpp!=32)
+                                                                // 1, 4, 8, 24 or 32 -- no 16
+     || (int32_t)hdr.biClrUsed<0                                // a palette count, not a sign
+     || (bmp_bpp<=8&&(int32_t)hdr.biClrUsed>(1<<bmp_bpp))       // no more entries than the depth allows
+     || hdr.biCompression>2                                     // none, RLE8 or RLE4
+     || (hdr.biCompression==1&&bmp_bpp!=8)                      // RLE8 is 8 bpp only
+     || (hdr.biCompression==2&&bmp_bpp!=4) ) {                  // RLE4 is 4 bpp only
       fclose(fp);
       return nullptr;
     }

@@ -700,7 +700,6 @@ struct ModelBlock {
     uint8_t g_ab;
     int8_t gen;
     FreqRec* freq2;
-    uint16_t* cache;
     PixRec* up4;
     FreqRec* freq_tbl;
     SymList* sel1, ** sel_p;
@@ -713,7 +712,7 @@ struct ModelBlock {
     uint8_t g_a, g_b, g_c, g_d, g_e;
     int32_t n2r;
     int16_t s1c, w1s, s3b;
-    int32_t up_sym, left_sym, up_p1_sym, up_m1_sym, m_lo, m_up, nb, key, state, pair_last, cap, bucket_at, up_m0, m_w1, nb2, all_up, sig1, id1, sig2, id2, s1a, m_up0, idx1, run, bucket, bit, msym1c, hit_a, idx_s, mask, seen, run0, s1b, *recw, flags_word, s3c, s3d, s1d, tot, target, cum, w6a, b15a, w5a, msym3, msym1, msym2, pix1, cache0, cache1, c4, c5, c6, c7, h11, h10, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h24, h28, h26, h30, h31, psym, bit2, msym1b, lsym, b15, w2t, w3t, w4t, w5, w0r, w1r, q1, w2r, w3, w3r, s0a, span, w4r, n4r, target2, cum2, lvl_b, b15b, w5b, w6b, s0c, s3a;
+    int32_t up_sym, left_sym, up_p1_sym, up_m1_sym, m_lo, m_up, nb, key, state, pair_last, cap, bucket_at, up_m0, m_w1, nb2, all_up, sig1, id1, sig2, id2, s1a, m_up0, idx1, run, bucket, bit, msym1c, hit_a, idx_s, mask, seen, run0, s1b, *recw, flags_word, s3c, s3d, s1d, tot, target, cum, w6a, b15a, w5a, msym3, msym1, msym2, psym, bit2, msym1b, lsym, b15, w2t, w3t, w4t, w5, w0r, w1r, q1, w2r, w3, w3r, s0a, span, w4r, n4r, target2, cum2, lvl_b, b15b, w5b, w6b, s0c, s3a;
     PixRec* row;
     SymPair* pair;
     PixRec* cur6;
@@ -1160,68 +1159,45 @@ struct ModelBlock {
     exclusion_mask[msym1] = gen;
     __byte_445440[0] = gen;
     sel[0] = nullptr;
-    pix1 = pixr[1];
-    __frame.sym[0] = *pixr;
-    cache = sym_cache;
-    cache0 = cache[0];
-    cache1 = cache[1];
-    __frame.sym[1] = pix1;
-    __frame.sym[2] = cache0;
-    c4 = cache[4];
-    __frame.sym[3] = cache1;
-    c5 = cache[5];
-    __frame.sym[4] = cache[2];
-    c6 = cache[6];
-    c7 = cache[7];
-    __frame.sym[5] = cache[3];
-    up4 = (PixRec*)row_cur[6];
-    __frame.sym[6] = c4;
-    h11 = up4[2].sym;
-    __frame.sym[7] = c5;
+    // The 32 candidate symbols `pixel_context` walks, in slot order.  Slots 0
+    // and 1 are the two most recent symbols at this exact context, 2..9 the
+    // move-to-front cache, and 10..31 the spatial neighbours widening outward.
+    //
+    // The decompilation interleaved the 32 stores with the 24 loads that feed
+    // them and gave every load a name -- `h10` through `h31` -- because MSVC
+    // scheduled them that way.  Every one was used exactly once.  Nothing here
+    // writes `row_cur` or `sym_cache`, so the order is free.
+    up4 = row_cur[6];
     r5 = row_cur[5];
-    __frame.sym[8] = c6;
-    h10 = r5[-2].sym;
-    __frame.sym[9] = c7;
-    __frame.sym[10] = h10;
     up5 = row_cur[7];
-    h12 = up5[1].sym;
-    __frame.sym[11] = h11;
-    h13 = up5->sym;
-    __frame.sym[12] = h12;
-    h14 = up4[-2].sym;
-    __frame.sym[13] = h13;
-    h15 = up5[-1].sym;
-    __frame.sym[14] = h14;
-    h16 = r5[-3].sym;
-    __frame.sym[15] = h15;
-    h17 = up4[3].sym;
-    __frame.sym[16] = h16;
-    h18 = up4[4].sym;
-    __frame.sym[17] = h17;
-    h19 = r5[-4].sym;
-    __frame.sym[18] = h18;
-    h20 = up4[-3].sym;
-    __frame.sym[19] = h19;
-    h21 = up5[2].sym;
-    __frame.sym[20] = h20;
-    __frame.sym[21] = h21;
     r8c = row_cur[8];
+    __frame.sym[0] = pixr[0];
+    __frame.sym[1] = pixr[1];
+    for( int32_t c = 0; c<8; ++c )
+      __frame.sym[2+c] = sym_cache[c];
+    __frame.sym[10] = r5[-2].sym;
+    __frame.sym[11] = up4[2].sym;
+    __frame.sym[12] = up5[1].sym;
+    __frame.sym[13] = up5->sym;
+    __frame.sym[14] = up4[-2].sym;
+    __frame.sym[15] = up5[-1].sym;
+    __frame.sym[16] = r5[-3].sym;
+    __frame.sym[17] = up4[3].sym;
+    __frame.sym[18] = up4[4].sym;
+    __frame.sym[19] = r5[-4].sym;
+    __frame.sym[20] = up4[-3].sym;
+    __frame.sym[21] = up5[2].sym;
     __frame.sym[22] = r8c->sym;
     __frame.sym[23] = up5[-2].sym;
-    h24 = r5[-5].sym;
-    h28 = r5[-7].sym;
-    __frame.sym[24] = h24;
+    __frame.sym[24] = r5[-5].sym;
     __frame.sym[25] = r8c[1].sym;
-    h26 = up4[5].sym;
-    h30 = up4[7].sym;
-    __frame.sym[26] = h26;
+    __frame.sym[26] = up4[5].sym;
     __frame.sym[27] = row_cur[9]->sym;
-    __frame.sym[28] = h28;
+    __frame.sym[28] = r5[-7].sym;
     __frame.sym[29] = r8c[-1].sym;
-    h31 = up5[3].sym;
+    __frame.sym[30] = up4[7].sym;
+    __frame.sym[31] = up5[3].sym;
     sym_pos = 0;
-    __frame.sym[30] = h30;
-    __frame.sym[31] = h31;
     do {
       psym = pixel_context((uint32_t*)__frame.sym);
       if( psym>=0 ) {
@@ -1283,11 +1259,10 @@ struct ModelBlock {
     int32_t bp;
     uint16_t* id3p;
     int16_t s8, w1s, acc2, s3, g0;
-    int32_t up_sym, left_sym, up_next_sym, upleft_sym, nb, key, state, pair_last, cap, pair_prev, bucket_at, up_match0, m_w1, nb2, sig1, id1, sig2, id2, m_w1b, m_w0, m_up0, to_edge, one, run, run_pair, amap, runlen, run_hit, run_left, s1, s8b, s6, msym1, s4, bit5, first, s5, s1b, s9, cum1, lvl_a, w6a, w5a, b15a, msym3, excl_sym_a, excl_sym_b, w6d, wq1, cache2, cache1, cache3, cache4, cache6, cur5_back2, h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h24, h28, h26, h30, esym, up_hit, pos1, msym1b, *ip, b15, w2t, w3t, w4t, acc, q1, w2s, q2, w3s, w4s, s9b, cum2, lvl_b, w5c, w6c, w5b, s3b;
+    int32_t up_sym, left_sym, up_next_sym, upleft_sym, nb, key, state, pair_last, cap, pair_prev, bucket_at, up_match0, m_w1, nb2, sig1, id1, sig2, id2, m_w1b, m_w0, m_up0, to_edge, one, run, run_pair, amap, runlen, run_hit, run_left, s1, s8b, s6, msym1, s4, bit5, first, s5, s1b, s9, cum1, lvl_a, w6a, w5a, b15a, msym3, excl_sym_a, excl_sym_b, w6d, wq1, esym, up_hit, pos1, msym1b, *ip, b15, w2t, w3t, w4t, acc, q1, w2s, q2, w3s, w4s, s9b, cum2, lvl_b, w5c, w6c, w5b, s3b;
     uint16_t w5, w1;
     PixRec* cur5, * cur5p1, * cur5p1b, * r6, * r7;
     uint16_t* wq, * cache, w6;
-    uint16_t cache0p;
     PixRec* cur2;
     BitCtr* ctr;
     uint32_t bin_tot, half, k, g2, g2h;
@@ -1732,63 +1707,39 @@ struct ModelBlock {
     sel[0] = nullptr;
     w6d = *wq;
     wq1 = wq[1];
-    cache0p = *cache;
-    cache2 = cache[2];
-    __frame.sym[0] = w6d;
-    cache1 = cache[1];
-    __frame.sym[1] = wq1;
-    cache3 = cache[3];
-    __frame.sym[2] = cache0p;
-    cache4 = cache[4];
-    __frame.sym[3] = cache1;
-    __frame.sym[4] = cache2;
-    cache6 = cache[6];
-    __frame.sym[5] = cache3;
+    // The same 32 candidates as `decode_pixel`'s, in slot order: 0 and 1 the
+    // two most recent symbols at this context, 2..9 the move-to-front cache,
+    // 10..31 the spatial neighbours widening outward.  The decompilation
+    // interleaved the stores with the loads and named every load.
     r5 = row_cur[5];
-    __frame.sym[6] = cache4;
-    cur5_back2 = r5[-2].sym;
-    __frame.sym[7] = cache[5];
-    up4 = (PixRec*)row_cur[6];
-    __frame.sym[8] = cache6;
-    h11 = up4[2].sym;
-    __frame.sym[9] = cache[7];
-    __frame.sym[10] = cur5_back2;
+    up4 = row_cur[6];
     r6 = row_cur[7];
-    h12 = r6[1].sym;
-    __frame.sym[11] = h11;
-    h13 = r6->sym;
-    __frame.sym[12] = h12;
-    h14 = up4[-2].sym;
-    __frame.sym[13] = h13;
-    h15 = r6[-1].sym;
-    __frame.sym[14] = h14;
-    h16 = r5[-3].sym;
-    __frame.sym[15] = h15;
-    h17 = up4[3].sym;
-    __frame.sym[16] = h16;
-    h18 = up4[4].sym;
-    __frame.sym[17] = h17;
-    h19 = r5[-4].sym;
-    __frame.sym[18] = h18;
-    h20 = up4[-3].sym;
-    __frame.sym[19] = h19;
-    h21 = r6[2].sym;
-    __frame.sym[20] = h20;
-    __frame.sym[21] = h21;
     r7 = row_cur[8];
+    __frame.sym[0] = w6d;
+    __frame.sym[1] = wq1;
+    for( int32_t c = 0; c<8; ++c )
+      __frame.sym[2+c] = cache[c];
+    __frame.sym[10] = r5[-2].sym;
+    __frame.sym[11] = up4[2].sym;
+    __frame.sym[12] = r6[1].sym;
+    __frame.sym[13] = r6->sym;
+    __frame.sym[14] = up4[-2].sym;
+    __frame.sym[15] = r6[-1].sym;
+    __frame.sym[16] = r5[-3].sym;
+    __frame.sym[17] = up4[3].sym;
+    __frame.sym[18] = up4[4].sym;
+    __frame.sym[19] = r5[-4].sym;
+    __frame.sym[20] = up4[-3].sym;
+    __frame.sym[21] = r6[2].sym;
     __frame.sym[22] = r7->sym;
     __frame.sym[23] = r6[-2].sym;
-    h24 = r5[-5].sym;
-    h28 = r5[-7].sym;
-    __frame.sym[24] = h24;
+    __frame.sym[24] = r5[-5].sym;
     __frame.sym[25] = r7[1].sym;
-    h26 = up4[5].sym;
-    h30 = up4[7].sym;
-    __frame.sym[26] = h26;
+    __frame.sym[26] = up4[5].sym;
     __frame.sym[27] = row_cur[9]->sym;
-    __frame.sym[28] = h28;
+    __frame.sym[28] = r5[-7].sym;
     __frame.sym[29] = r7[-1].sym;
-    __frame.sym[30] = h30;
+    __frame.sym[30] = up4[7].sym;
     __frame.sym[31] = r6[3].sym;
     sym_pos = 0;
     do {

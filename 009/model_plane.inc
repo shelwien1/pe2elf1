@@ -34,12 +34,19 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
       int32_t flags = ctx_group_flags[g];
       blk->ctx_state[flags] = g;
       int32_t lo = 0;
-      int32_t f_b2 = flags&4;
-      int32_t f_b1 = flags&2;
-      int32_t f_b4 = flags&0x10;
-      int32_t f_b0 = flags&1;
-      int32_t f_b3 = flags&8;
-      int32_t f_b5 = flags&0x20;
+      // The five selector weights are the five outcomes of the stage-one
+      // decision -- north, west, north-east, north-west, escape -- and one of
+      // fifteen groups says which of them share a weight.  Each bit of the
+      // group's mask folds one weight into another and zeroes the source, so
+      // the six below are read in the order the folds compose: 3 doubles first,
+      // then 4 into 2, then 3 into 2, then 4 into 1, then 3 into 1, then 2 into
+      // 1.  A group with no bits set gives all five their own weight.
+      int32_t f_w3_double = flags&4;
+      int32_t f_w4_to_w2 = flags&2;
+      int32_t f_w3_to_w2 = flags&0x10;
+      int32_t f_w4_to_w1 = flags&1;
+      int32_t f_w3_to_w1 = flags&8;
+      int32_t f_w2_to_w1 = flags&0x20;
       do {
         uint32_t hi = 0;
         do {
@@ -51,33 +58,33 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
           w2 = 2;
           w3 = 2;
           w4 = 2;
-          if( f_b2 ) {
+          if( f_w3_double ) {
             w3 = 4;
             w4 = 0;
           }
-          if( f_b1 ) {
+          if( f_w4_to_w2 ) {
             w2 = w4+2;
             w4 = 0;
           }
-          if( f_b4 ) {
+          if( f_w3_to_w2 ) {
             w2 = w3+w2;
             w3 = 0;
           }
-          if( f_b0 ) {
+          if( f_w4_to_w1 ) {
             w2n = w4+2;
             w4 = 0;
             rec->w[4] = 0;
           } else {
             rec->w[4] = w4;
           }
-          if( f_b3 ) {
+          if( f_w3_to_w1 ) {
             w2n += w3;
             w3 = 0;
             rec->w[3] = 0;
           } else {
             rec->w[3] = w3;
           }
-          if( f_b5 ) {
+          if( f_w2_to_w1 ) {
             rec->w[1] = w2+w2n;
             w2 = 0;
             rec->w[2] = 0;
