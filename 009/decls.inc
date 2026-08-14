@@ -35,6 +35,8 @@ static inline uint32_t sym_list_count(const SymList* list);
 static inline FreqPair*bit_tree(uint16_t* freq, int32_t lvl);
 static inline int32_t p2_pred(int32_t weighted, int32_t rate);
 static inline int16_t p2_bump(int32_t w2, int32_t err, int32_t shift);
+static inline void p2_update(P2Count* p, int32_t res, int32_t shift);
+static inline void p2_nudge(P2Count* p, int32_t res);
 BmfArc*__bmf_destroy_archive(BmfArc* arc, int8_t do_free);
 void __expand_predictor_mode0(uint8_t* unread_src, int32_t i, int32_t unread_h);
 uint32_t __predict_med(uint8_t* pixels, int32_t width, int32_t height);

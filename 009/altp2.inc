@@ -132,6 +132,29 @@ static inline int16_t p2_bump(int32_t w2, int32_t err, int32_t shift) {
   return (int16_t)((uint32_t)w2+((kick+(uint32_t)err+(1u<<(shift-1)))>>shift));
 }
 
+// One counter update: predict from the weight, bump it by how wrong that was.
+// 115 of `alt_p2_model`'s 117 `p2_bump` sites were these three statements
+// written out, with a pair of temporaries each.
+//
+// Eight of those 115 read the rate as `*(uint8_t*)&p->rate`, and `rate` is
+// `int8_t` -- so they took the byte unsigned where this takes it signed.  That
+// is the same value here and only here: `p2_pred` uses the rate as two shift
+// counts and masks both with `&31`, and the two readings differ by 256, which
+// is a multiple of 32.
+static inline void p2_update(P2Count* p, int32_t res, int32_t shift) {
+  const int32_t w = p->weighted;
+  p->weighted = p2_bump(w, res-p2_pred(w, p->rate), shift);
+}
+
+// The same counter, updated in place at a fixed shift of 2 and *without*
+// `p2_bump`'s dead-zone kick.  21 sites fold it into one `+=` on the next
+// counter in the bank; the rounding term is the only thing they share with
+// `p2_update`, and folding them together would put the kick where the original
+// has none.
+static inline void p2_nudge(P2Count* p, int32_t res) {
+  *(uint16_t*)&p->weighted += (uint32_t)(res-p2_pred(p->weighted, p->rate)+2)>>2;
+}
+
 struct P2Ctx {
   int16_t val;
   int16_t dval;
