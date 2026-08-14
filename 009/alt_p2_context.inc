@@ -306,10 +306,31 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   // computes.  `tools/ctxidx.py --line N` reports; it declines all six.
   if( refa ) {
     dv_now = cx0[0].dval;
-    ctx1 = (cx0[-1].val+ra0->val-ra0[-1].val-run0)&0x2000000|(ra2->dval+ra1->dval-2*ra0->dval)&0x1000000|((dv_now+cx0[-3].dval-run0-(cx1[2].dval-cx1[5].dval))&0x800000|(dv_now+cx0[-5].dval-run0)&0x400000|(dv_now+cx1->dval+rb1[2].dval-rb2[2].dval-run0)&0x200000|(dv_now+cx0[-1].dval+rb0->dval-rb0[-1].dval-run0)&0x100000|(cx2[-1].dval+dv_now+ra0->dval-ra2[-1].dval-run0)&0x80000|(dv_now+cx1[2].dval+ra0->dval-ra1[2].dval-run0)&0x40000|d_up5&0x20000|d_up&0x10000|d_run0&0x8000|(((run0>2256)+(run0>1056)+(run0>144))<<13)|(((sum_all>55)+(sum_all>10)+(sum_all>24))<<11));
+    ctx1 = (cx0[-1].val+ra0->val-ra0[-1].val-run0)&0x2000000             // bit 25
+         |(ra2->dval+ra1->dval-2*ra0->dval)&0x1000000                    // bit 24
+         |((dv_now+cx0[-3].dval-run0-(cx1[2].dval-cx1[5].dval))&0x800000 // bit 23
+         |(dv_now+cx0[-5].dval-run0)&0x400000                            // bit 22
+         |(dv_now+cx1->dval+rb1[2].dval-rb2[2].dval-run0)&0x200000       // bit 21
+         |(dv_now+cx0[-1].dval+rb0->dval-rb0[-1].dval-run0)&0x100000     // bit 20
+         |(cx2[-1].dval+dv_now+ra0->dval-ra2[-1].dval-run0)&0x80000      // bit 19
+         |(dv_now+cx1[2].dval+ra0->dval-ra1[2].dval-run0)&0x40000        // bit 18
+         |d_up5&0x20000                                                  // bit 17
+         |d_up&0x10000                                                   // bit 16
+         |d_run0&0x8000                                                  // bit 15
+         |(((run0>2256)+(run0>1056)+(run0>144))<<13)|(((sum_all>55)+(sum_all>10)+(sum_all>24))<<11));
   } else {
     d_run0b = run0-cx0[-3].val;
-    ctx1 = (cx1[-5].val-cx1[-2].val+d_run0b)&0x1000000|(d_run0b+cx1[2].val-up5)&0x800000|(cx4[3].val-cx2[2].val+run0-cx2[1].val)&0x400000|(cx4[-1].val-cx3->val+run0-cx1[-1].val)&0x200000|(cx1->val-cx1[2].val+run0-cx0[-2].val)&0x100000| -d_up5&0x80000| -d_up&0x40000|(run0-cx4[2].val)&0x20000|(run0-cx4[-3].val)&0x10000| -d_run0&0x8000|(((run0>2400)+(run0>1024)+(run0>240))<<13)|(((sum_all>39)+(sum_all>24)+(sum_all>11))<<11)|(nb4_4-cx3->val+run0-cx1[4].val)&0x2000000;
+    ctx1 = (cx1[-5].val-cx1[-2].val+d_run0b)&0x1000000                   // bit 24
+         |(d_run0b+cx1[2].val-up5)&0x800000                              // bit 23
+         |(cx4[3].val-cx2[2].val+run0-cx2[1].val)&0x400000               // bit 22
+         |(cx4[-1].val-cx3->val+run0-cx1[-1].val)&0x200000               // bit 21
+         |(cx1->val-cx1[2].val+run0-cx0[-2].val)&0x100000                // bit 20
+         | -d_up5&0x80000                                                // bit 19
+         | -d_up&0x40000                                                 // bit 18
+         |(run0-cx4[2].val)&0x20000                                      // bit 17
+         |(run0-cx4[-3].val)&0x10000                                     // bit 16
+         | -d_run0&0x8000                                                // bit 15
+         |(((run0>2400)+(run0>1024)+(run0>240))<<13)|(((sum_all>39)+(sum_all>24)+(sum_all>11))<<11)|(nb4_4-cx3->val+run0-cx1[4].val)&0x2000000;   // bit 25
   }
   bank1 = ctx1>>11;
   bank_ctx[1] = bank1;
@@ -328,9 +349,31 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   if( refa ) {
     dv1 = cx1[1].dval;
     d_ra = ra0->val-run1;
-    ctx2 = (cx0[0].dval+cx1[-1].dval-run1-(cx2->dval-dv1))&0x2000000|(cx0[0].dval+cx0[-1].dval-run1-(cx1->dval-dv1))&0x1000000|(rb0->val-run1+cx2_val0-rb2->val)&0x800000|(d_ra+cx2_val0-ra2->val)&0x400000|(d_ra+cx1[-1].val-ra1[-1].val)&0x200000|((cx0[0].dval-cx0[-2].dval+2*cx0[-1].dval-run1)&0x100000|(2*cx1_val-run1-cx2_val0)&0x80000| -lap&0x40000|dtop2&0x20000|dvsum2&0x10000|(208-rb0->val)&0x8000|(((run1>2576)+(run1>1280)+(run1>640))<<13)|((((uint32_t)(33-sum_all)>>31)+((uint32_t)(12-sum_all)>>31)+((uint32_t)(4-sum_all)>>31))<<11));
+    ctx2 = (cx0[0].dval+cx1[-1].dval-run1-(cx2->dval-dv1))&0x2000000     // bit 25
+         |(cx0[0].dval+cx0[-1].dval-run1-(cx1->dval-dv1))&0x1000000      // bit 24
+         |(rb0->val-run1+cx2_val0-rb2->val)&0x800000                     // bit 23
+         |(d_ra+cx2_val0-ra2->val)&0x400000                              // bit 22
+         |(d_ra+cx1[-1].val-ra1[-1].val)&0x200000                        // bit 21
+         |((cx0[0].dval-cx0[-2].dval+2*cx0[-1].dval-run1)&0x100000       // bit 20
+         |(2*cx1_val-run1-cx2_val0)&0x80000                              // bit 19
+         | -lap&0x40000                                                  // bit 18
+         |dtop2&0x20000                                                  // bit 17
+         |dvsum2&0x10000                                                 // bit 16
+         |(208-rb0->val)&0x8000                                          // bit 15
+         |(((run1>2576)+(run1>1280)+(run1>640))<<13)|((((uint32_t)(33-sum_all)>>31)+((uint32_t)(12-sum_all)>>31)+((uint32_t)(4-sum_all)>>31))<<11));
   } else {
-    ctx2 = (run1+3*(cx2_val0-cx1_val)-cx3->val)&0x2000000|(run1+cx4->val-(cx2[2].val+cx2[-2].val))&0x1000000|(cx3[2].val-cx2[-1].val+run1-cx1[3].val)&0x800000|(cx3[1].val-cx1[1].val-dtop2)&0x400000|(cx3->val-cx1_val-dtop2)&0x200000|lap&0x100000|(run1-cx4[3].val)&0x80000|(cx3[1].val-run1)&0x40000|(run1-cx4->val)&0x20000|(run1-cx3[-2].val)&0x10000| -dvsum2&0x8000|(((run1>2464)+(run1>1216)+(run1>688))<<13)|((((uint32_t)(58-sum_all)>>31)+((uint32_t)(25-sum_all)>>31)+((uint32_t)(13-sum_all)>>31))<<11);
+    ctx2 = (run1+3*(cx2_val0-cx1_val)-cx3->val)&0x2000000                // bit 25
+         |(run1+cx4->val-(cx2[2].val+cx2[-2].val))&0x1000000             // bit 24
+         |(cx3[2].val-cx2[-1].val+run1-cx1[3].val)&0x800000              // bit 23
+         |(cx3[1].val-cx1[1].val-dtop2)&0x400000                         // bit 22
+         |(cx3->val-cx1_val-dtop2)&0x200000                              // bit 21
+         |lap&0x100000                                                   // bit 20
+         |(run1-cx4[3].val)&0x80000                                      // bit 19
+         |(cx3[1].val-run1)&0x40000                                      // bit 18
+         |(run1-cx4->val)&0x20000                                        // bit 17
+         |(run1-cx3[-2].val)&0x10000                                     // bit 16
+         | -dvsum2&0x8000                                                // bit 15
+         |(((run1>2464)+(run1>1216)+(run1>688))<<13)|((((uint32_t)(58-sum_all)>>31)+((uint32_t)(25-sum_all)>>31)+((uint32_t)(13-sum_all)>>31))<<11);
   }
   bank2 = ctx2>>11;
   bank_ctx[2] = bank2;
@@ -344,7 +387,18 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   // `q9`, `q39` and `q10` -- computed from the positive one, before this line
   // -- could be added to comparisons made after it.  Those are written out
   // now, so the negation and the six sign flips cancel.
-  bank3 = (int32_t)((3*(cx0[-2].val-cx0[-1].val)+run2-cx0[-3].val)&0x2000000|(cx2[1].dval-((uint32_t)(cx1[1].dval+cx1[2].dval+cx1[-1].dval+cx1->dval)>>1)+run_dv3)&0x1000000|(cx2[-3].val-cx1[-2].val+run2-cx1[-1].val)&0x800000| -(cx2[2].val+run2-2*cx1[1].val)&0x400000|(cx1[-2].dval-cx0[-2].val+run2-cx1->dval)&0x200000|(run2-cx1[3].val)&0x100000|(run_dv3-cx2[1].dval)&0x80000|(run2-cx3->val)&0x40000|(2*run2-cx1->dval-(cx1->val+cx0[0].dval))&0x20000|(run2-cx0[-1].dval-cx0[0].dval)&0x10000|(run2-cx0[-3].val)&0x8000|(((run2>2896)+(run2>1568)+(run2>592))<<13)|(((sum_all>37)+(sum_all>19)+(sum_all>9))<<11))>>11;
+  bank3 = (int32_t)((3*(cx0[-2].val-cx0[-1].val)+run2-cx0[-3].val)&0x2000000 // bit 25
+       |(cx2[1].dval-((uint32_t)(cx1[1].dval+cx1[2].dval+cx1[-1].dval+cx1->dval)>>1)+run_dv3)&0x1000000 // bit 24
+       |(cx2[-3].val-cx1[-2].val+run2-cx1[-1].val)&0x800000              // bit 23
+       | -(cx2[2].val+run2-2*cx1[1].val)&0x400000                        // bit 22
+       |(cx1[-2].dval-cx0[-2].val+run2-cx1->dval)&0x200000               // bit 21
+       |(run2-cx1[3].val)&0x100000                                       // bit 20
+       |(run_dv3-cx2[1].dval)&0x80000                                    // bit 19
+       |(run2-cx3->val)&0x40000                                          // bit 18
+       |(2*run2-cx1->dval-(cx1->val+cx0[0].dval))&0x20000                // bit 17
+       |(run2-cx0[-1].dval-cx0[0].dval)&0x10000                          // bit 16
+       |(run2-cx0[-3].val)&0x8000                                        // bit 15
+       |(((run2>2896)+(run2>1568)+(run2>592))<<13)|(((sum_all>37)+(sum_all>19)+(sum_all>9))<<11))>>11;
   bank_ctx[3] = bank3;
   w3c = p2_ctr[bank3+98304].weighted;
   pred3 = p2_pred(w3c, p2_ctr[bank3+98304].rate);
@@ -355,7 +409,18 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   dv_now4 = cx0[0].dval;
   run_dv4 = run3-dv_now4;
   run_up4 = run3+cx3->val;
-  bank4 = (int32_t)((run-((uint32_t)(cx1[1].val+cx1[-1].val+2*cx1->val)>>2))&0x2000000|(run_up4-cx0[-2].val-(cx3[2].dval+dv_now4))&0x1000000|(run-2*cx0[-2].dval-(dv_now4-cx0[-4].dval))&0x800000|(run-cx0[-3].dval-dv_now4-(cx1->val-cx1[-3].val))&0x400000|(run_up4-dv_now4-(cx1[1].val+cx2[-1].dval))&0x200000|(cx2[-2].val+run-2*cx1[-1].val)&0x100000|(cx2->dval-2*cx1->dval+run_dv4)&0x80000|((run3-cx0[-1].val)-(cx1->val-cx1[-1].val))&0x40000|(run_dv4-cx1[4].dval)&0x20000|(run_dv4-cx1[-2].dval)&0x10000|(((uint16_t)run3-(uint16_t)cx0[-4].dval-(uint16_t)dv_now4)&0x8000)|((((run3>3056)+(run3>1952)+(run3>368))<<13)|(((sum_all>39)+(sum_all>21)+(sum_all>10))<<11)))>>11;
+  bank4 = (int32_t)((run-((uint32_t)(cx1[1].val+cx1[-1].val+2*cx1->val)>>2))&0x2000000 // bit 25
+       |(run_up4-cx0[-2].val-(cx3[2].dval+dv_now4))&0x1000000            // bit 24
+       |(run-2*cx0[-2].dval-(dv_now4-cx0[-4].dval))&0x800000             // bit 23
+       |(run-cx0[-3].dval-dv_now4-(cx1->val-cx1[-3].val))&0x400000       // bit 22
+       |(run_up4-dv_now4-(cx1[1].val+cx2[-1].dval))&0x200000             // bit 21
+       |(cx2[-2].val+run-2*cx1[-1].val)&0x100000                         // bit 20
+       |(cx2->dval-2*cx1->dval+run_dv4)&0x80000                          // bit 19
+       |((run3-cx0[-1].val)-(cx1->val-cx1[-1].val))&0x40000              // bit 18
+       |(run_dv4-cx1[4].dval)&0x20000                                    // bit 17
+       |(run_dv4-cx1[-2].dval)&0x10000                                   // bit 16
+       |(((uint16_t)run3-(uint16_t)cx0[-4].dval-(uint16_t)dv_now4)&0x8000 // bit 15
+       )|((((run3>3056)+(run3>1952)+(run3>368))<<13)|(((sum_all>39)+(sum_all>21)+(sum_all>10))<<11)))>>11;
   bank_ctx[4] = bank4;
   pred4 = p2_pred(p2_ctr[bank4+131072].weighted, p2_ctr[bank4+131072].rate);
   uint8_t* cx2p = (uint8_t*)cx2;

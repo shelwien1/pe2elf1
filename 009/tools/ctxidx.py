@@ -165,9 +165,66 @@ def row(piece):
     return '.bits<%d, 2>(%s)' % (at, inner)
 
 
+def wrap(path, src, do):
+    """One masked term per line, bit position first.  CLEANER.md Phase 4.
+
+    The six context words are 468 to 664 characters and eleven masked terms
+    each, and `--apply` above refuses all six because fewer than half of the
+    terms are provably sign tests.  That refusal is about what the line *means*;
+    it says nothing about the line being unreadable, which is a separate
+    complaint with a separate and much cheaper answer.
+
+    So this changes nothing but where the newlines are.  The terms keep their
+    masks and their order, the `|` moves to the front of each continuation so
+    the operator is visible without counting to the end of the line, and each
+    line is labelled with the bit its mask keeps -- which is the one thing the
+    original spelling makes you work out by hand, eleven times, per word.
+    """
+    n = 0
+    for i in range(len(src) - 1, -1, -1):
+        l = src[i]
+        if not re.search(r'&0x[0-9A-F]+\|', l) or '\n' in l:
+            continue
+        head, rhs = l.split('=', 1)
+        rhs = rhs.strip().rstrip(';')
+        terms = split_terms(rhs)
+        if len(terms) < 4:
+            continue
+        # Rebuild from the original text, keeping every character.  A term is
+        # emitted with the join that *precedes* it, so the extra parenthesis
+        # these lines wrap eight of their eleven terms in stays where it was and
+        # the `// bit` label is always the last thing on its line.  Labelling
+        # after the join instead comments the next term out, which is how the
+        # first version of this produced a file that still compiled.
+        lead = head.rstrip() + ' = '
+        pad = ' ' * (len(head.rstrip()) - len(head.rstrip().lstrip()) + 5)
+        out, prev = [], 0
+        for k, (_t, mask, s, e) in enumerate(terms):
+            glue = rhs[prev:s]
+            bit = mask.bit_length() - 1
+            body = (lead if k == 0 else pad) + glue + rhs[s:e]
+            out.append('%-72s // bit %d' % (body, bit))
+            prev = e
+        if prev < len(rhs):
+            out.append(pad + rhs[prev:] + ';')
+        else:
+            out[-1] = out[-1].rstrip()
+            out[-1] = re.sub(r'\s+(// bit \d+)$', r';   \1', out[-1])
+        n += 1
+        if do:
+            src[i:i + 1] = out
+    return n
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else 'alt_p2_context.inc'
     src = open(path).read().split('\n')
+    if '--wrap' in sys.argv:
+        n = wrap(path, src, '--apply' in sys.argv)
+        if '--apply' in sys.argv:
+            open(path, 'w').write('\n'.join(src))
+        print('%d masked context words wrapped, one term per line' % n)
+        return 0
     want = int(sys.argv[sys.argv.index('--line') + 1]) if '--line' in sys.argv else None
     n_conv = n_raw = seen = 0
     for i, l in enumerate(src, 1):
