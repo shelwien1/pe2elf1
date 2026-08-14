@@ -39,8 +39,11 @@ struct P2Freq {
   // The encoder said `ctx_pair[sym & 1]` and `(sym - 1) >> 1` where this says
   // `ctx_pair[idx & 1]`; they are the same, because `idx` is 1 for odd symbols
   // and 2 for even ones above zero.
+  // Named apart from `SymList::code_symbol`, which is a different coder in a
+  // different model.  Two methods with one name is not an error the compiler
+  // can see, and it made `unstale.py` measure the wrong one.
   template<int f_DEC>
-  int32_t code_symbol(const uint32_t* ctx_pair, int32_t sym) {
+  int32_t code_three_way(const uint32_t* ctx_pair, int32_t sym) {
     uint16_t f_before;
     uint32_t cum;
     uint16_t st, *slot;
@@ -113,11 +116,11 @@ struct P2Freq {
   }
 
   void encode_symbol(const uint32_t* ctx_pair, int32_t sym) {
-    code_symbol<0>(ctx_pair, sym);
+    code_three_way<0>(ctx_pair, sym);
   }
 
   int32_t decode_symbol(const uint32_t* ctx_pair) {
-    return code_symbol<1>(ctx_pair, 0);
+    return code_three_way<1>(ctx_pair, 0);
   }
 };
 

@@ -1,5 +1,14 @@
 // alt_p2_encode.inc -- the predictor-2 model, encoding.
 
+// The encoder borrows four global coefficient tables for the length of one
+// image: it folds rows 4..6 of `bmf_p2_coef` into rows 0..2, zeroes 4..6, sets
+// three `bmf_p2_rate` rows to the reset value, and puts all of it back at the
+// end.  The decoder does not, and does not need to -- the rows it zeroes are
+// the cross-plane terms, which the encoder's first pass over a plane has no
+// references for yet.
+//
+// Nothing about this is visible from the decoder's side, which is why it is
+// written here and pointed at from there.
 int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
   AltP2Block* plane[4];
   uint32_t xf4;

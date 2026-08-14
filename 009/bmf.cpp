@@ -36,7 +36,7 @@
 //   __alt_model_p2_d8          11 + 11     __code_symbol_tree     85 + 86
 //   BitCtr::code_context_bit   52 + 50     __alt_p2_d8_body      171 + 147
 //   __rc_begin                 91 + 89     __alt_model_p1        263 + 212
-//   P2Freq::code_symbol        49 + 55
+//   P2Freq::code_three_way        49 + 55
 //
 // Five pairs were measured and declined.  What they share is not the body --
 // it is the declaration block and the loop scaffolding -- and folding them

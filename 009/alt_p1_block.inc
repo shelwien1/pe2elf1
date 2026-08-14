@@ -27,6 +27,48 @@ struct AltP1Block {
   uint8_t unfold[256];
   int32_t group_of[512];
   CounterNode counters[629856];
+  // Start a row: mirror the last six records past the right edge, rotate the
+  // five row buffers by one, reseat the five cursors, carry the last record of
+  // the row above into the left margin, mirror three records back from it, and
+  // rebuild the two activity sums the context reads.
+  //
+  // Twenty-five lines, written out three times -- here, in `alt_p1_code.inc`
+  // and in `alt_p1.inc` -- because in the decompilation each of the three
+  // callers had its own copy of the loop.
+  //
+  // The two activity sums that follow it stay at the call sites, because they
+  // are *not* the same at all three: `alt_p1_code`'s reads the two mirrored
+  // records' magnitudes through `(int8_t)` and the other two read them as the
+  // `uint8_t` they are declared.  Whether that difference can ever show is a
+  // question about how large a residual magnitude gets, and it is not one this
+  // extraction needed to answer.
+  void advance_row() {
+    {
+      P1Ctx*const here = cursor[0];
+      for( int32_t k = 0; k<6; ++k )
+        here[k] = here[-1-k];
+    }
+    P1Ctx *b4 = buf[4], *buf3 = buf[3], *buf2 = buf[2], *buf1 = buf[1], *b0 = buf[0];
+    buf[4] = buf3;
+    buf[3] = buf2;
+    buf[2] = buf1;
+    buf[1] = b0;
+    buf[0] = b4;
+    cursor[0] = b4+4;
+    cursor[1] = b0+4;
+    cursor[2] = buf1+4;
+    cursor[3] = buf2+4;
+    cursor[4] = buf3+4;
+    cursor[0][-4] = cursor[1][3];
+    {
+      P1Ctx*const here = cursor[0];
+      P1Ctx*const up = cursor[1];
+      here[-3] = up[2];
+      here[-2] = up[1];
+      here[-1] = up[0];
+    }
+  }
+
   int32_t ctx_of(AltP1Block* nb0, AltP1Block* nb1) {
     bool pick, is_zero, is_neg;
     int32_t act_all;
@@ -136,46 +178,13 @@ struct AltP1Block {
       int32_t y = 0;
       do {
         ++y;
+        advance_row();
         {
-          P1Ctx*const here = (P1Ctx*)cursor[0];
-          here[0] = here[-1];
-          here[1] = here[-2];
-          here[2] = here[-3];
-          here[3] = here[-4];
-          here[4] = here[-5];
-          here[5] = here[-6];
+          P1Ctx *row0 = cursor[0], *row2 = cursor[2], *row4 = cursor[4];
+          ctx[2] = 0;
+          ctx[3] = row2[-2].mag+row4[-2].mag+row2[0].mag+row4[0].mag+row2[2].mag+row4[2].mag+row2[4].mag+row4[4].mag+row0[-4].mag+row0[-2].mag;
+          ctx[4] = row2[-1].mag+row4[-1].mag+row2[1].mag+row4[1].mag+row2[3].mag+row4[3].mag+row2[5].mag+row4[5].mag+row0[-3].mag+row0[-1].mag;
         }
-        P1Ctx *b4 = buf[4];
-        P1Ctx *buf3 = buf[3];
-        P1Ctx *buf2 = buf[2];
-        P1Ctx *buf1 = buf[1];
-        P1Ctx *b0 = buf[0];
-        buf[4] = buf3;
-        buf[3] = buf2;
-        buf[2] = buf1;
-        buf[1] = b0;
-        buf[0] = b4;
-        b4 += 4;
-        cursor[0] = b4;
-        b0 += 4;
-        cursor[1] = b0;
-        cursor[2] = buf1+4;
-        cursor[3] = buf2+4;
-        cursor[4] = buf3+4;
-        ((P1Ctx*)b4)[-4] = ((P1Ctx*)b0)[3];
-        {
-          P1Ctx*const here = (P1Ctx*)cursor[0];
-          P1Ctx*const up = (P1Ctx*)cursor[1];
-          here[-3] = up[2];
-          here[-2] = up[1];
-          here[-1] = up[0];
-        }
-        P1Ctx *cursor2 = cursor[2];
-        P1Ctx *cursor4 = cursor[4];
-        ctx[2] = 0;
-        P1Ctx *cursor0 = cursor[0];
-        ctx[3] = cursor2[-2].mag+cursor4[-2].mag+cursor2[0].mag+cursor4[0].mag+cursor2[2].mag+cursor4[2].mag+cursor2[4].mag+cursor4[4].mag+cursor0[-4].mag+cursor0[-2].mag;
-        ctx[4] = cursor2[-1].mag+cursor4[-1].mag+cursor2[1].mag+cursor4[1].mag+cursor2[3].mag+cursor4[3].mag+cursor2[5].mag+cursor4[5].mag+cursor0[-3].mag+cursor0[-1].mag;
         if( !(width<=0) ) {
           uint8_t* q = out;
           int32_t x = 0;

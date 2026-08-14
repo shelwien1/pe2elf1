@@ -248,7 +248,7 @@ Substantively fine. `SymList::code_symbol` at 88 lines is long but it is one
 algorithm: walk the list under exclusion, code, bump, move-to-front, rescale.
 
 One naming point that no tool here catches: **`code_symbol` names two different
-things** — this one, and `P2Freq::code_symbol` in `alt_p2_block.inc`, which is
+things** — this one, and `P2Freq::code_three_way` in `alt_p2_block.inc`, which is
 the predictor-2 model's three-way coder. They are methods of different structs
 so the compiler is content, but `tools/unstale.py` measures the wrong one when a
 document says "`code_symbol` is N lines", and a reader searching for the name
@@ -421,7 +421,7 @@ would take three levels off.
 
 ### `alt_p2_block.inc` — 347 lines
 
-Good. `P2Freq::code_symbol` is 71 lines and is the three-way coder; `p2_pred`,
+Good. `P2Freq::code_three_way` is 71 lines and is the three-way coder; `p2_pred`,
 `p2_bump`, `p2_update` and `p2_nudge` are the helpers `CLEANER.md` Phase 1
 added, each with the reasoning that makes it safe.
 

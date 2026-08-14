@@ -1,5 +1,12 @@
 // alt_p1.inc -- the predictor-1 model, around its block.
 
+// The residual codes: `unfold[]` runs 0, -1, +1, -2, +2, ... so a small residual
+// of either sign gets a small code, and `fold[]` is its inverse.
+//
+// The buckets are `2*near_lossless_q + 1` wide, which is the near-lossless
+// quantiser: at `E = 0` that is one and the mapping is the plain zigzag above.
+// Nothing else in this build sets `near_lossless_q`, so the bucket arithmetic
+// is present, correct and never exercised with a width above one.
 uint32_t __alt_init_tables(uint8_t* fold, int8_t* unfold) {
   uint8_t even, odd;
   uint32_t done;
@@ -93,40 +100,7 @@ void**__alt_model_p1_d8_decode(int8_t unread_flag, uint8_t* out, int32_t i, int3
     int32_t y = 0;
     do {
       ++y;
-      {
-        P1Ctx*const here = (P1Ctx*)blk->cursor[0];
-        here[0] = here[-1];
-        here[1] = here[-2];
-        here[2] = here[-3];
-        here[3] = here[-4];
-        here[4] = here[-5];
-        here[5] = here[-6];
-      }
-      P1Ctx *b4 = blk->buf[4];
-      P1Ctx *buf3 = blk->buf[3];
-      P1Ctx *buf2 = blk->buf[2];
-      P1Ctx *buf1 = blk->buf[1];
-      P1Ctx *b0 = blk->buf[0];
-      blk->buf[4] = buf3;
-      blk->buf[3] = buf2;
-      blk->buf[2] = buf1;
-      blk->buf[1] = b0;
-      blk->buf[0] = b4;
-      b4 += 4;
-      blk->cursor[0] = b4;
-      b0 += 4;
-      blk->cursor[1] = b0;
-      blk->cursor[2] = buf1+4;
-      blk->cursor[3] = buf2+4;
-      blk->cursor[4] = buf3+4;
-      ((P1Ctx*)b4)[-4] = ((P1Ctx*)b0)[3];
-      {
-        P1Ctx*const here = (P1Ctx*)blk->cursor[0];
-        P1Ctx*const up = (P1Ctx*)blk->cursor[1];
-        here[-3] = up[2];
-        here[-2] = up[1];
-        here[-1] = up[0];
-      }
+      blk->advance_row();
       P1Ctx *cursor2 = blk->cursor[2];
       P1Ctx *cursor4 = blk->cursor[4];
       blk->ctx[2] = 0;

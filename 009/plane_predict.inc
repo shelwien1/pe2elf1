@@ -1,6 +1,10 @@
 // plane_predict.inc -- the predictors and the colour transform -- what is subtracted from
 // an image before it is modelled, and added back after.
 
+// Predictor mode 0 undoes nothing: an image coded without a predictor has
+// nothing subtracted from it.  The body is empty in BMF.exe too -- the encoder
+// side calls through a table of three, and this is the entry the table needs at
+// index 0.
 void __expand_predictor_mode0(uint8_t* unread_src, int32_t i, int32_t unread_h) {
 }
 
@@ -161,6 +165,18 @@ uint8_t*__interleave_plane(uint8_t* img, uint8_t* src, int32_t plane, int8_t unr
   return img;
 }
 
+// Subtract from one plane whatever the other planes predict of it, and write
+// the residual to `dst`.  Four modes, chosen by `flags & 8` and `nrefs`:
+//
+//   no transform      copy the plane out, interleaved to flat
+//   one reference     `x - dc - ref`, a plain difference
+//   two references    `x - dc - (w0*a + w1*b + 40)/128`
+//   three references  `x - dc - (w0*a + w1*b + w2*c + 63)/128`
+//
+// The two-reference case degenerates to the one-reference case when one weight
+// is 128 and the other 0, and the code takes that path explicitly -- which is
+// the `by_weights` flag below, and why a two-reference descriptor can end up
+// reading only one plane.
 uint8_t*__colour_transform(uint8_t* img, uint8_t* dst, int32_t plane, int8_t unread_flag) {
   int32_t to_ref0;
   if( !(plane_desc[plane+1].flags&8) ) {

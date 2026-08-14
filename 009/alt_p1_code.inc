@@ -78,40 +78,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
         do {
           ++p;
           AltP1Block *blk_k = (AltP1Block*)plane[p-1];
-          {
-            P1Ctx*const here = (P1Ctx*)blk_k->cursor[0];
-            here[0] = here[-1];
-            here[1] = here[-2];
-            here[2] = here[-3];
-            here[3] = here[-4];
-            here[4] = here[-5];
-            here[5] = here[-6];
-          }
-          P1Ctx *b4 = blk_k->buf[4];
-          P1Ctx *buf3 = blk_k->buf[3];
-          P1Ctx *buf2 = blk_k->buf[2];
-          P1Ctx *buf1 = blk_k->buf[1];
-          P1Ctx *b0 = blk_k->buf[0];
-          blk_k->buf[4] = buf3;
-          blk_k->buf[3] = buf2;
-          blk_k->buf[2] = buf1;
-          blk_k->buf[1] = b0;
-          blk_k->buf[0] = b4;
-          b4 += 4;
-          blk_k->cursor[0] = b4;
-          b0 += 4;
-          blk_k->cursor[1] = b0;
-          blk_k->cursor[2] = buf1+4;
-          blk_k->cursor[3] = buf2+4;
-          blk_k->cursor[4] = buf3+4;
-          (b4)[-4] = ((P1Ctx*)b0)[3];
-          {
-            P1Ctx*const here = (P1Ctx*)blk_k->cursor[0];
-            P1Ctx*const up = (P1Ctx*)blk_k->cursor[1];
-            here[-3] = up[2];
-            here[-2] = up[1];
-            here[-1] = up[0];
-          }
+          blk_k->advance_row();
           P1Ctx *cursor2 = blk_k->cursor[2];
           P1Ctx *cursor4 = blk_k->cursor[4];
           P1Ctx *cursor0 = blk_k->cursor[0];

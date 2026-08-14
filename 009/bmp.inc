@@ -11,6 +11,14 @@ struct BmfImage {
   uint8_t pixels[0];
 };
 
+// The allocation is one block: a sixteen-byte `BmfImage`, the pixels, and the
+// palette after them if there is one.
+//
+// `word2` is the header's `(pad, pad, depth, flags)` word, assembled by
+// arithmetic because the original wrote it as one store: `bpp<<16` is `depth`,
+// `0x40000000` is `flags & 0x40` (rows are sub-byte packed) and `0x00800000` is
+// `depth & 0x80` (a palette follows).  It is the only place in the tree where
+// the header's two decision bytes are addressed as one integer.
 int32_t*__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette, int32_t packed) {
   uint8_t* buf;
   int32_t bits, word2, row_pack, row_bytes, pal_bytes;

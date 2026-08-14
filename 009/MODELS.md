@@ -493,7 +493,7 @@ search leaves set — §4.2.
 
 ### 7.4 coding the residual
 
-The folded residual goes to `P2Freq::code_symbol`: a three-way frequency record
+The folded residual goes to `P2Freq::code_three_way`: a three-way frequency record
 where slot 0 is "the symbol" and slots 1 and 2 escape by parity into the binary
 symbol tree, with the escape's context chosen by `idx & 1`. The records rescale
 three-way when their total passes 29,696, halving the first two counts and

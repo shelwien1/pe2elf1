@@ -1,5 +1,8 @@
 // alt_p2_decode.inc -- the predictor-2 model, decoding.
 
+// The mirror of `alt_p2_encode.inc`, minus two things: the near-lossless drift
+// control, which has nothing to decide here because the code says which fold
+// was used, and the coefficient-table borrow, which that file's header explains.
 int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
   AltP2Block* plane[4], ** w;
   uint32_t i_1, first;

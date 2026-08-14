@@ -1,25 +1,34 @@
 // tables.inc -- the constant tables, in the order they sit in BMF.exe's data segment.
 
+// Fifteen context groups, each a six-bit mask of which of the five selector
+// weights are folded together.  Indexed 0..14 by `g` in `model_plane`.
 alignas(16) static uint8_t ctx_group_flags[32] = {
   0, 1, 2, 4, 8, 10, 13, 16, 17, 22, 32, 35, 36, 56, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
 
+// The low-bit rotation of a p2 counter index: `[(ctx>>2)&3]`.
 alignas(16) static int32_t p2_ctx_rotate[4] = {
   4, 8, 12, 8,
 };
 
+// Quantiser edges for the p2 d8 body, indexed 0..15.
 alignas(16) static uint8_t p2_ctx_edges[16] = {
   17, 20, 27, 37, 49, 70, 93, 124, 157, 191, 205, 228, 235, 236, 237, 0,
 };
 
+// Run-length buckets for the p2 d8 body, indexed 0..15.
 alignas(16) static uint8_t p2_len_edges[32] = {
   4, 6, 8, 11, 14, 17, 21, 25, 30, 37, 45, 55, 67, 87, 120, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
 
+// [band][column]: `band` is 0..5 from the activity ratio, and the thirteen
+// columns are read by name in `alt_p2_context` -- 0..2 for gD, 3..5 for gC,
+// 6..8 for gB and 9..12 for gA.
 alignas(16) static int32_t bmf_p2_thresholds[6][13] = {
   {6, 14, 28, 4, 8, 26, 4096, 6144, 13056, 10240, 14336, 26624, 36864}, {4, 15, 42, 1, 8, 19, 2560, 6912, 11264, 10240, 28672, 71680, 139264}, {5, 14, 21, 4, 9, 25, 3840, 8448, 12032, 16384, 26624, 43008, 83968}, {6, 11, 20, 5, 11, 23, 2816, 5888, 10496, 22528, 32768, 51200, 131072}, {0, 11, 30, 7, 13, 22, 4352, 8448, 14848, 16384, 38912, 57344, 94208}, {7, 10, 31, -1, 11, 21, -256, 1024, 5888, -2048, -2048, -2048, 145408},
 };
 
+// Counter reset counts, indexed by `rate + 3` where `rate` is 0..8.
 alignas(16) static int32_t p2_float_pool[17] = {
   0x43293333, 0x3F800000, (int32_t)0xC52E0702, 0x3A83126F, 0x38D1B717, 0x3DCCCCCD, 0x40000000, 0x44100000, 0x40266666, 0x46D22000, 0x3C54FDF4, 0x459D8800, 0x44044000, 0x3951B717, 0x41200000, 0x3F800000, 0x3F800000,
 };

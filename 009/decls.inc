@@ -7,6 +7,20 @@
 // emitted -- and every one of these units would have to sit where its callers
 // put it.
 
+// Seventeen parameters below are named `unread*` or `unused*`, eight of them
+// `unread_flag`.  Every one is a static-scope function in a self-contained
+// program, so all seventeen could go along with the arguments at their call
+// sites -- and they stay, for a reason that is a decision about what this tree
+// is for rather than a fact about the code.
+//
+// The signatures match BMF.exe's.  `tools/addrmap.py` and `tools/addrmap.txt`
+// key on that: the map from a name here to an address there is what lets a
+// disagreement be traced back to the binary.  Dropping a parameter breaks the
+// correspondence for one function and saves one token at each of its two or
+// three call sites, which is the wrong side of that trade.
+//
+// Decided once, here, so it is not re-derived at each site.
+
 struct CtxWeight;
 struct CounterNode;
 struct P1Ctx;
@@ -49,7 +63,7 @@ uint32_t __rc_decode_flat(uint32_t tot);
 CounterNode*__init_counter_node(CounterNode* node);
 // The templates the merged encode/decode pairs are instantiated from, declared
 // here for the same reason as everything else in this file: a caller that is
-// itself one of these templates -- P2Freq::code_symbol is -- can sit in a file
+// itself one of these templates -- P2Freq::code_three_way is -- can sit in a file
 // the definition comes after.
 template<int f_DEC> int32_t __code_symbol_tree(uint16_t* freq, int32_t sym);
 
