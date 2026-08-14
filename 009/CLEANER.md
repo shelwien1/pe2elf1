@@ -405,6 +405,42 @@ item should have been read before it was planned. The plan called it a naming
 problem and it was a lift, and the two-line union declaration that says so was
 sitting in the file the whole time.
 
+## What this round found and did not take
+
+Two things turned up in `search_filter.inc` while Phase 2 was being traced
+through the packer's globals. Neither is in this plan, both are measured, and
+the next round should decide about them rather than rediscover them.
+
+**The cost probe, 7 sites of about 14 lines.** `search_filter` chooses a filter
+by trying each one: set `plane_desc[…].flags`, call `__model_planes`, measure
+`8*(out_cursor-coded_buf)`, flush and reset the packer to `coded_buf`, and keep
+the flag if the cost improved. That is the same block as Phase 1's and Phase
+2's -- a helper written out once per case -- and it is the largest one left.
+The 13 `packer_acc = 0` / `packer_word = (uint32_t*)coded_buf` pairs in the file
+are its resets.
+
+**Five dead cost expressions, and a no-op `if`.** Each probe writes
+
+```c
+best_cost = plane_desc[0].desc_word-packer_free_bits+bits_f0+32;
+deep = 0;
+*(uint32_t*)packer_word = packer_acc;
+if( !deep )
+  best_cost = bits_f0;
+```
+
+`deep` is assigned 0 four lines above the test at all five sites, so the first
+expression never survives; and one probe ends `if( best_cost==0x7FFFFFFF )
+best_cost = 0x7FFFFFFF;`. `foldif.py` reports zero on both because its rule
+wants a condition that is *literally* constant, not one assigned a constant
+three lines up. That is the gap worth closing, more than the six lines are
+worth deleting: a rule that only sees `if( 0 )` will keep saying zero here.
+
+Whether the dead expression is genuinely dead in BMF.exe or whether `deep` was
+a flag some build set is a question for whoever takes it -- the compressed
+streams say the program behaves as if `deep` is 0, which is not the same as
+saying the original had no other value for it.
+
 ## What "done" means
 
 Each phase ended with the fifteen — now seventeen — reference streams byte for
