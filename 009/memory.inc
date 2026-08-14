@@ -27,11 +27,15 @@ static void bmf_arena_init(void) {
 
 #define BMF_BUCKETS 40
 static void* bmf_bucket[BMF_BUCKETS];
+// The smallest bucket that holds `n`: bucket `b` is `1 << (b+5)` bytes, so the
+// answer is `ceil(log2(n)) - 5`, clamped.  This was the shift loop that says
+// the same thing one bucket at a time; it is a cold path either way, so the
+// change is for the reader.
 static int bmf_bucket_of(size_t n) {
-  int b = 0;
-  while( (size_t)1<<(b+5)<n&&b<BMF_BUCKETS-1 )
-    b++;
-  return b;
+  if( n<=32 )
+    return 0;
+  int b = 64-5-__builtin_clzll((unsigned long long)(n-1));
+  return b<BMF_BUCKETS-1 ? b : BMF_BUCKETS-1;
 }
 
 static void*bmf_malloc(size_t n) {
@@ -83,17 +87,17 @@ static void bmf_page_free(void* p) {
     free(((void**)p)[-1]);
 }
 
-void __out_of_memory_handler();
-typedef void (*t_new_handler)();
-static t_new_handler __pout_of_memory_handler = nullptr;
+// The original installed a new-handler and let `operator new` retry through
+// it forever; the handler it installed never returns.  So the loop had one
+// iteration and the indirection had one target, and both are gone: this is
+// the check they amounted to.
+//
+// `n ? n : 1` stays.  A zero-byte `malloc` may return null without being out
+// of memory, and this build's `bmf_new(0)` callers -- an image with no
+// palette -- would take the failure path.
 static void*bmf_new(size_t n) {
-  for(;; ) {
-    void* p = malloc(n ? n : 1);
-    if( p )
-      return p;
-    t_new_handler handler = __pout_of_memory_handler;
-    if( !handler )
-      return nullptr;
-    handler();
-  }
+  void* p = malloc(n ? n : 1);
+  if( !p )
+    bmf_fatal(bmf_no_memory);
+  return p;
 }

@@ -10,12 +10,12 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   SymList* lists1, * lists0;
   if( plane_alt_model ) {
     if( plane_predictor==1 ) {
-      if( (p_i->depth&0x3F)==8 )
+      if( (p_i->depth&depth_bits)==8 )
         __alt_model_p1_d8_encode(pixels, p_i->width, p_i->height, raw);
       else
         __alt_model_p1_encode((uint16_t*)p_i, pixels);
     } else if( plane_predictor==2 ) {
-      if( (p_i->depth&0x3F)==8 )
+      if( (p_i->depth&depth_bits)==8 )
         __alt_model_p2_d8_encode(pixels, p_i->width, p_i->height, raw);
       else
         __alt_model_p2_encode(p_i, pixels);
@@ -23,7 +23,7 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
   } else {
     void* ws = bmf_new(sizeof(ModelBlock));
     if( ws )
-      blk = ((ModelBlock*)ws)->layout_workspace(p_i->width, p_i->height, p_i->depth&0x3F);
+      blk = ((ModelBlock*)ws)->layout_workspace(p_i->width, p_i->height, p_i->depth&depth_bits);
     else
       blk = (ModelBlock*)(0);
     __rc_begin_encode();

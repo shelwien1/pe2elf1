@@ -28,16 +28,13 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
   } __frame;
   uint8_t* base2;
   bool deep2;
-  uint16_t w_a, w_d;
   uint8_t f0, f1, f2, f3;
-  uint8_t *srcp, *p2, *tile_copy, *tile_a, *p4, *p5, *tile_b, *tile_c, *p12, *p13, *tile_d;
+  uint8_t *srcp, *p2, *tile_copy, *tile_a, *p4, *p5, *tile_c, *p12, *p13;
   int32_t hard, bits_a, bits_b, cost_f13;
   int32_t p3, p6, p7, p10, p11, p14;
-  int16_t w_b, w_e;
   int32_t flags_s, desc_k;
   int32_t tile_w, tile_h, nplanes, y0, dx, off_y, row_bytes, best_cost, bits_f5, cost_f5, f5, pred, c0, c1, c2, c3, cand, nplanes_c, pl_a, pi0, pl_b, pi1, bits2, plane, pi3, bits_e, nplanes_b, pl_c, pi4, pl_d, bits_c, img_h1, y1, off1, x1, bits_d, pk, pl_k, bits, img_h3, y3, off3, pl_i, rows_x_planes, y2, off2, x2, pl2, bits_f8, cost_f8, f8, pl3, bits_f13, f13, cost_f14, f14, pl0, bits_f6, cost_f6, f6;
   uint16_t img_h3b, img_h2, img_h1b;
-  uint16_t w16, w_c;
   uint8_t* p8, * p9;
   tile_w = img->width;
   tile_h = img->height;
@@ -54,7 +51,7 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
     return 0;
   }
   __choose_plane_coding(img);
-  __frame.tile_img = (BmfImage*)__alloc_image(tile_w, tile_h, img->depth&0x3F, 0, 0);
+  __frame.tile_img = __alloc_image(tile_w, tile_h, img->depth&depth_bits, 0, 0);
   coded_size = __frame.tile_img->data_size+0x20000;
   coded_buf = (uint8_t*)bmf_new(coded_size);
   packer_reset();
@@ -81,7 +78,7 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
   dx = img->width-tile_w;
   off_y = y0*img->stride;
   __frame.rows[1] = y0;
-  srcp = (uint8_t*)img+ plane_count*(dx>>1)+off_y+16;
+  srcp = img->pixels+plane_count*(dx>>1)+off_y;
   __frame.tile_src = __frame.tile_img->pixels;
   if( y0<tile_h+y0 ) {
     row_bytes = (uint16_t)__frame.tile_img->stride;

@@ -1,14 +1,9 @@
 // alt_p2_encode.inc -- the predictor-2 model, encoding.
 
-// The encoder borrows four global coefficient tables for the length of one
-// image: it folds rows 4..6 of `bmf_p2_coef` into rows 0..2, zeroes 4..6, sets
-// three `bmf_p2_rate` rows to the reset value, and puts all of it back at the
-// end.  The decoder does not, and does not need to -- the rows it zeroes are
-// the cross-plane terms, which the encoder's first pass over a plane has no
-// references for yet.
-//
-// Nothing about this is visible from the decoder's side, which is why it is
-// written here and pointed at from there.
+// `P2Coef` in alt_p2_block.inc is the coefficient-table borrow both directions
+// do for the length of one image.  This file's header used to say the encoder
+// did it and the decoder did not; the decoder does, in the same six lines, and
+// the two are one object now.
 int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
   AltP2Block* plane[4];
   uint32_t xf4;
@@ -22,23 +17,8 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
   int32_t nplanes, want0, off0, seed0, at0, cur0, code0, cur1, code1, cur2, code2, l5c, seed3, nplanes2;
   void* raw, * made, ** plane_p;
   uint8_t* out = a2;
-  float saved_p2_coef[7][4];
-  __builtin_memcpy(saved_p2_coef, bmf_p2_coef, sizeof saved_p2_coef);
-  for( int32_t k = 0; k<4; k++ ) {
-    bmf_p2_coef[0][k] += bmf_p2_coef[4][k];
-    bmf_p2_coef[1][k] += bmf_p2_coef[5][k];
-    bmf_p2_coef[2][k] += bmf_p2_coef[6][k];
-    bmf_p2_coef[4][k] = 0;
-    bmf_p2_coef[5][k] = 0;
-    bmf_p2_coef[6][k] = 0;
-  }
-  float saved_p2_rate[3][4];
-  __builtin_memcpy(saved_p2_rate, bmf_p2_rate[4], sizeof saved_p2_rate);
-  for( int32_t k = 0; k<4; k++ ) {
-    bmf_p2_rate[4][k] = bmf_p2_rate_reset;
-    bmf_p2_rate[5][k] = bmf_p2_rate_reset;
-    bmf_p2_rate[6][k] = bmf_p2_rate_reset;
-  }
+  P2Coef p2_coef;
+  p2_coef.fold();
   int32_t row_i = p_i->width;
   int32_t height = p_i->height;
   if( plane_count>0 ) {
@@ -136,7 +116,7 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
           blk_r->above = b0;
           r1[-1] = *b0;
           blk_r->cur[-2] = *b0;
-          memset(blk_r->p2_row0_head, 0, sizeof blk_r->p2_row0_head);
+          memset(blk_r->p2_row, 0, 15);
           blk_r->bias[0] = 0.0f;
           blk_r->bias[1] = 0.0f;
           blk_r->bias[2] = 0.0f;
@@ -332,8 +312,7 @@ int32_t __alt_model_p2_encode(BmfImage* p_i, uint8_t* a2) {
     } while( src1<(uint32_t)height );
   }
   __rc_end_encode();
-  __builtin_memcpy(bmf_p2_coef, saved_p2_coef, sizeof saved_p2_coef);
-  __builtin_memcpy(bmf_p2_rate[4], saved_p2_rate, sizeof saved_p2_rate);
+  p2_coef.restore();
   nplanes2 = plane_count;
   if( plane_count>0 ) {
     int32_t pl3 = 0;

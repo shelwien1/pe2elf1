@@ -97,7 +97,7 @@ int32_t __choose_plane_coding(BmfImage* img) {
   int16_t g1_lo;
   uint32_t n_quads, next_plane, row, slack;
   uint16_t g1w;
-  int32_t n_planes, data_size, result, pick01, xform, dw, *win_row, wt8, wt4, c2, c2w, c1, c1w, c0, bin0, pred, xform_row, win, sum, best_sum, i, pos2, best_sum2, sum2, wt4_dn, wt8_dn, wt4_dn_end, wt8_dn_end, dv3, wa, wb, wc, nx0, dg0, dn0, ad0, dnx1, g0, dn1, nx2, g1, dnx2, g2, pa, pb, bin_lin, quad_r, alpha, bin_lin2, r0, r1, r2, wa_pick, pred4, pred4b, *hist2, sum3, best_sum3, n_c, wt4_best_dn, n_d, wt8_best_dn, wt4_up, wt8_up, wt4_up_end, wt8_up_end, wt4_best, wt8_best;
+  int32_t n_planes, data_size, result, pick01, xform, *win_row, wt8, wt4, c2, c2w, c1, c1w, c0, bin0, pred, xform_row, win, sum, best_sum, i, pos2, best_sum2, sum2, wt4_dn, wt8_dn, wt4_dn_end, wt8_dn_end, dv3, wa, wb, wc, nx0, dg0, dn0, ad0, dnx1, g0, dn1, nx2, g1, dnx2, g2, pa, pb, bin_lin, quad_r, alpha, bin_lin2, r0, r1, r2, wa_pick, pred4, pred4b, *hist2, sum3, best_sum3, n_c, wt4_best_dn, n_d, wt8_best_dn, wt4_up, wt8_up, wt4_up_end, wt8_up_end, wt4_best, wt8_best;
   uint32_t cost0, cost1, best_cost, best, cost_flat, i4, quad, cost_lin, best4, cost_c0, cost_c1, cost_c2;
   uint8_t *px, *end_px, *r_c, *p_c, *r_d, *p_d;
   n_planes = plane_count;
@@ -525,7 +525,11 @@ weights_chosen:
         if( wc<-64 )
           wc = -64;
         if( end_px<data_end ) {
-          *(int64_t*)x0 = __PAIR64__(wc, wb);
+          // Two 32-bit stores, which is what the one 64-bit store was: the
+          // original wrote `x0[0..1]` as a pair because MSVC had both halves
+          // in registers, and `__PAIR64__` is the decompiler's name for that.
+          x0[0] = wb;
+          x0[1] = wc;
           uu = n_quads;
           quad = 0;
           do {

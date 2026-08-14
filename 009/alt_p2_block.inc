@@ -178,7 +178,9 @@ static inline void p2_freq_add(P2Freq* r, int32_t slot, uint32_t num) {
 }
 
 static inline void p2_nudge(P2Count* p, int32_t res) {
-  *(uint16_t*)&p->weighted += (uint32_t)(res-p2_pred(p->weighted, p->rate)+2)>>2;
+  // Sixteen bits in and sixteen bits out, through `uint16_t` so that the
+  // wrap is defined rather than signed overflow.
+  p->weighted = (int16_t)((uint16_t)p->weighted+((uint32_t)(res-p2_pred(p->weighted, p->rate)+2)>>2));
 }
 
 struct P2Ctx {
@@ -194,37 +196,93 @@ struct P2Ctx {
   uint8_t mag;
 };
 
+// How many samples a weight row has seen, kept as an unsigned count in the
+// first `float` slot of the row's sixteenth line -- the row is `[16][4]` and
+// only fifteen lines are filter state, so the sixteenth was free and the
+// original used four bytes of it for this.
+//
+// Two sites reached it, one through `uint32_t*` and one through `int32_t*`,
+// which is two answers to what the type is.  This is one, and the punning has
+// one home.  Giving the row a struct with a `uint32_t` member at the identical
+// offset would remove the pun rather than name it, and that means retyping
+// every `float (*)[4]` in the p2 model and every `[j][k]` on one -- a wider
+// edit than this earns, so it is written down here rather than done.
+static inline uint32_t& nb_row_uses(float (*row)[4]) {
+  return *(uint32_t*)&row[15][0];
+}
+
+// `bmf_p2_coef` and `bmf_p2_rate` read like tuning constants and are not: for
+// the length of one image the model borrows them.  Rows 4..6 of the
+// coefficients -- the cross-plane terms -- fold into rows 0..2 and are zeroed,
+// three rate rows go to the reset value, and all of it goes back at the end.
+//
+// Both directions do it, in the same six lines each, 300 lines apart from the
+// six that undo them.  Filing the two tables with the genuine constants would
+// make the non-d8 path's behaviour inexplicable, so they are named as what
+// they are: a session, folded at the top of an image and restored at the
+// bottom.  Explicitly, not by a destructor -- the restore sits before the
+// plane-freeing loop in both callers and stays exactly there.
+struct P2Coef {
+  float saved_coef[7][4];
+  float saved_rate[3][4];
+
+  void fold() {
+    __builtin_memcpy(saved_coef, bmf_p2_coef, sizeof saved_coef);
+    __builtin_memcpy(saved_rate, bmf_p2_rate[4], sizeof saved_rate);
+    for( int32_t k = 0; k<4; ++k ) {
+      bmf_p2_coef[0][k] += bmf_p2_coef[4][k];
+      bmf_p2_coef[1][k] += bmf_p2_coef[5][k];
+      bmf_p2_coef[2][k] += bmf_p2_coef[6][k];
+      bmf_p2_coef[4][k] = 0;
+      bmf_p2_coef[5][k] = 0;
+      bmf_p2_coef[6][k] = 0;
+      bmf_p2_rate[4][k] = bmf_p2_rate_reset;
+      bmf_p2_rate[5][k] = bmf_p2_rate_reset;
+      bmf_p2_rate[6][k] = bmf_p2_rate_reset;
+    }
+  }
+
+  void restore() {
+    __builtin_memcpy(bmf_p2_coef, saved_coef, sizeof saved_coef);
+    __builtin_memcpy(bmf_p2_rate[4], saved_rate, sizeof saved_rate);
+  }
+};
+
 struct AltP2Block {
   float nb_weights[1088][16][4];
-  union {
-    float p2_row[7][4];
-    struct {
-      uint8_t p2_row0_head[15];
-      uint8_t _u0_0_4[97];
-      float bias[4];
-      float (*nb_cur)[4];
-      float (**row0)[4];
-      float (**row1)[4];
-      float (**cur)[4];
-      float (**above)[4];
-      int32_t bank_ctx[5];
-      int32_t _pad0;
-      uint16_t pred_prev;
-      uint8_t _u0_0_12[2];
-      uint32_t ctx;
-      uint32_t ctx_pair[2];
-      int32_t nb_id_used;
-      int32_t band_lo;
-      int32_t band_hi;
-      uint32_t plane_idx;
-      int32_t has_ref;
-      P2Ctx* cursor[5];
-      P2Ctx* buf[5];
-      CtxWeight ctx_w[5];
-      uint8_t _u0_0_tail[8];
-    };
-  };
-  uint8_t _pad1[40];
+  // This was a union of `p2_row` with a struct whose first 112 bytes were
+  // `p2_row0_head[15]` and `_u0_0_4[97]` -- 112 being `sizeof p2_row`, so the
+  // union existed only to pin everything after it at the original's offsets.
+  // The one overlap ever exercised is a partial clear of the first fifteen
+  // bytes of `p2_row` at three sites, which is what `p2_row0_head` was for and
+  // is written as that now.
+  //
+  // Fifteen, not sixteen: three and three-quarter floats.  The original very
+  // likely cleared a differently-shaped structure that started here, and
+  // rounding it up to a whole element would change what the model sees on the
+  // first sample of a plane, so it is preserved rather than tidied.
+  float p2_row[7][4];
+  float bias[4];
+  float (*nb_cur)[4];
+  float (**row0)[4];
+  float (**row1)[4];
+  float (**cur)[4];
+  float (**above)[4];
+  int32_t bank_ctx[5];
+  int32_t _pad0;
+  uint16_t pred_prev;
+  uint8_t _pad2[2];
+  uint32_t ctx;
+  uint32_t ctx_pair[2];
+  int32_t nb_id_used;
+  int32_t band_lo;
+  int32_t band_hi;
+  uint32_t plane_idx;
+  int32_t has_ref;
+  P2Ctx* cursor[5];
+  P2Ctx* buf[5];
+  CtxWeight ctx_w[5];
+  uint8_t _pad1[48];
   int32_t nb_sum[10];
   int32_t ctx_delta[260];
   uint8_t fold[256];
@@ -261,29 +319,29 @@ struct AltP2Block {
   // compiler put it back.
 
   // Track the input energy and step both rows' weights toward their own error.
-  // Two rows, not one: `cur` adapts fast against this sample and `prev` slowly
-  // against the confidence-scaled one, and the pair is the mixer.
-  void nlms_track_two_rows(float (*cur)[4], float (*prev)[4],
-                           float err_cur, float err_prev, float conf) {
-    const float floor_cur = 26896.0f*cur[14][2];
-    const float floor_prev = 5041.0f*prev[14][2];
-    const float rate_prev = 0.013f*conf;
+  // Two rows, not one: `fast` adapts against this sample and `slow` against the
+  // confidence-scaled one, and the pair is the mixer.
+  void nlms_track_two_rows(float (*fast)[4], float (*slow)[4],
+                           float err_fast, float err_slow, float conf) {
+    const float floor_fast = 26896.0f*fast[14][2];
+    const float floor_slow = 5041.0f*slow[14][2];
+    const float rate_slow = 0.013f*conf;
     for( int32_t j = 0; j<7; ++j )
       for( int32_t k = 0; k<4; ++k ) {
         const float x = p2_row[j][k];
-        float ms = cur[7+j][k]+(x*x-cur[7+j][k])*0.05f;
-        cur[7+j][k] = ms;
-        cur[j][k] += bmf_p2_rate[j][k]*err_cur*x/(ms+floor_cur);
-        ms = prev[7+j][k]+(x*x-prev[7+j][k])*rate_prev;
-        prev[7+j][k] = ms;
-        prev[j][k] += bmf_p2_rate[j][k]*err_prev*x/(ms+floor_prev);
+        float ms = fast[7+j][k]+(x*x-fast[7+j][k])*0.05f;
+        fast[7+j][k] = ms;
+        fast[j][k] += bmf_p2_rate[j][k]*err_fast*x/(ms+floor_fast);
+        ms = slow[7+j][k]+(x*x-slow[7+j][k])*rate_slow;
+        slow[7+j][k] = ms;
+        slow[j][k] += bmf_p2_rate[j][k]*err_slow*x/(ms+floor_slow);
       }
   }
 
   // Predict this sample from the fast row, then step that row toward the error
   // it just made.  `w[14][2]` decays toward 10 and scales the step floor, so
-  // the filter starts cautious and loosens; `w[15][0]` counts the samples this
-  // row has seen and is an `int32_t` living in a `float` slot.
+  // the filter starts cautious and loosens; `nb_row_uses` counts the samples
+  // this row has seen.
   void nlms_predict_and_correct(float (*w)[4], float sample, float bias0) {
     float acc[4];
     for( int32_t k = 0; k<4; ++k ) {
@@ -296,7 +354,7 @@ struct AltP2Block {
     for( int32_t j = 0; j<7; ++j )
       for( int32_t k = 0; k<4; ++k )
         w[j][k] += bmf_p2_rate[j][k]*err*p2_row[j][k]/(w[7+j][k]+ms_scale*529.0f);
-    ++*(int32_t*)&w[15][0];
+    ++nb_row_uses(w);
     w[14][2] = ms_scale+((10.0f-ms_scale)*0.00019999999f);
   }
 

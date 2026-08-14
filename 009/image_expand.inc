@@ -34,7 +34,7 @@ uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
   uint32_t near_lossless, pred_s, w12_v, w4_v, w8_v;
   uint8_t* pal_at, * copy, * srcp, * dst;
   int32_t pl, nrefs, plane_i, plane, pl2, plane2, pred, i, n_pix2, pix_at, nplanes_c, i2, n_planes, last_row, at, y, pl_i, left;
-  uint16_t img_h, w16;
+  uint16_t img_h;
   uint8_t major_v, minor_v;
   // The archive version, as a plain local.  The decompilation parked it in
   // `plane_desc[0].weight0` because the original did: `plane_desc[0]` is a
@@ -102,7 +102,7 @@ uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
   if( !__frame.hdr_words[0]||!__frame.hdr_words[1] ) {
     return arc->fail();
   }
-  img_at = (BmfImage*)((uint8_t*)__alloc_image(__frame.hdr_words[0], __frame.hdr_words[1], __frame.depth_b&0x3F, (uint8_t)(__frame.depth_b&0x80)>>7, 1));
+  img_at = __alloc_image(__frame.hdr_words[0], __frame.hdr_words[1], __frame.depth_b&0x3F, (uint8_t)(__frame.depth_b&0x80)>>7, 1);
   __frame.depth_f = __frame.depth_b;
   img_at->depth = __frame.depth_b;
   has_coded = p_coded_buf&&*p_coded_buf;
@@ -278,13 +278,13 @@ check_length:
   __frame.depth_f = __frame.depth_b;
 read_palette:
   if( __frame.depth_f&0x80 ) {
-    pal_at = (img_at->depth&0x80) ? &((uint8_t*)img_at)[img_at->data_size+16] : nullptr;
+    pal_at = (img_at->depth&depth_palette) ? img_at->palette() : nullptr;
     got = fread(pal_at, 1u, __frame.pal_len, arc->fp);
     if( got!=__frame.pal_len ) {
       return arc->fail();
     }
   }
-  if( img_at->flags&2 ) {
+  if( img_at->flags&flags_transposed ) {
     if( (uint64_t)img_at->width*img_at->height*(uint32_t)plane_count>(uint64_t)img_at->data_size ) {
       return arc->fail();
     }

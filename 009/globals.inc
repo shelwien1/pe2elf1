@@ -7,26 +7,6 @@
 // with SSE, and the recovery keeps the alignment so that a build which still
 // does can.
 
-// The exit codes, which are also the indices into the message table below --
-// that table is what defines them, so there is nothing here to invent.  They
-// are the program's exit status as well, and `test.sh` reads them, so the
-// numbers are the interface and not just an ordering.
-//
-// `bmf_no_option` and `bmf_user_break` are in the table and never raised: the
-// original had an option parser and a keyboard-interrupt check, and this build
-// has neither.  They stay because removing them would renumber the five that
-// are raised.
-enum BmfExit {
-  bmf_no_file    = 1,
-  bmf_no_option  = 2,
-  bmf_bad_file   = 3,
-  bmf_read_error = 4,
-  bmf_write_error= 5,
-  bmf_no_open    = 6,
-  bmf_no_memory  = 7,
-  bmf_user_break = 8,
-};
-
 __attribute__((noreturn)) void bmf_fatal(int32_t Code, ...) {
   va_list ap;
   static const char*const message[] = {
@@ -82,8 +62,17 @@ static PlaneDesc plane_desc[4];
 static int32_t plane_count;
 
 // The near-lossless quantiser: the residual bucket width is `2*q+1`, so `q=0`
-// is lossless.  Fully plumbed through both alternate models and never set to
-// anything but zero -- there is no option that reaches it.
+// is lossless.  Three sites read it -- `__alt_init_tables`'s bucket size and
+// two deadzone widths in `AltP2Block` -- and four set it, all four to zero,
+// two on each side of the round trip.  There is no option that reaches it.
+//
+// It stays.  The plan this tree is being refactored against asks for the
+// half-state to be resolved either by exposing it as a flag or by stripping the
+// dead plumbing, and neither is right here: a flag would change what the
+// program does, and stripping would delete arithmetic that is in BMF.exe.
+// Recovering the binary is what this tree is for, so the resolution is to say
+// so, once, here -- the plumbing is correct, complete, and never exercised
+// above a bucket width of one.
 static int32_t near_lossless_q;
 
 static uint8_t model_geometry[128];
@@ -169,14 +158,6 @@ static inline void bmf_zero16(void* p) {
   __builtin_memset(p, 0, 16);
 }
 
-__attribute__((noreturn)) void bmf_fatal(int32_t Code, ...);
-
-t_new_handler __set_new_handler(t_new_handler __out_of_memory_handler) {
-  t_new_handler __set_new_handler_pout_of_memory_handler = __pout_of_memory_handler;
-  __pout_of_memory_handler = __out_of_memory_handler;
-  return __set_new_handler_pout_of_memory_handler;
-}
-
 static void bmf_set_denormal_mode() {
   _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
   _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
@@ -186,6 +167,29 @@ static inline float bmf_hsum4(const float x[4]) {
   return (x[0]+x[2])+(x[1]+x[3]);
 }
 
-void __out_of_memory_handler() {
-  bmf_fatal(bmf_no_memory);
+// The five-row ring both alternate models keep.  `buf[0..4]` are the last five
+// rows, oldest last, and `cursor[k]` points `margin` records into row `k` so
+// that a negative index reaches the left-edge padding.  Advancing rotates the
+// rows -- the oldest buffer is reused as the newest -- and repoints all five.
+//
+// Written out in `AltP1Block::advance_row` and again in `alt_p2_d8_body`, the
+// two differing only in `margin` and the record type, which is what a template
+// is for.  Both spelled the rotation with five named temporaries because MSVC
+// held all five in registers.
+//
+// The padding-cell copies on either side of the call are deliberately *not*
+// here: the two models mirror different numbers of cells from different
+// offsets, and folding those in would mean one helper with two shapes behind
+// a flag, which is not one helper.
+template<typename T>
+static inline void ring_advance(T** buf, T** cursor, int32_t margin) {
+  T*const oldest = buf[4];
+  buf[4] = buf[3];
+  buf[3] = buf[2];
+  buf[2] = buf[1];
+  buf[1] = buf[0];
+  buf[0] = oldest;
+  for( int32_t k = 0; k<5; ++k )
+    cursor[k] = buf[k]+margin;
 }
+

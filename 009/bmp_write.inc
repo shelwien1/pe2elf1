@@ -33,7 +33,7 @@ int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
   bmp->biHeight = rows;
   int8_t depth_flags = (int8_t)img->depth;
   bmp->biPlanes = 1;
-  bits = img->depth&0x3F;
+  bits = img->depth&depth_bits;
   bmp->biBitCount = bits;
   bmp->biClrImportant = 0;
   bmp->biClrUsed = 0;

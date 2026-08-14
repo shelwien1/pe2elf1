@@ -28,7 +28,7 @@ int32_t __alt_p2_filter(float (*_this)[4], float (*a2)[4], CtxWeights* w, int32_
   }
   prediction = bmf_hsum4(acc)+centre;
   a2[7][2] = prediction;
-  if( *(uint32_t*)&_this[15][0] ) {
+  if( nb_row_uses(_this) ) {
     for( k = 0; k<4; k++ ) {
       acc[k] = _this[0][k]*a2[0][k];
       for( j = 1; j<7; j++ )
@@ -178,7 +178,7 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
       above = r0;
       r1[-1] = *r0;
       cur[-2] = *r0;
-      memset(p2_row0_head, 0, sizeof p2_row0_head);
+      memset(p2_row, 0, 15);
       bias[0] = 0.0f;
       bias[1] = 0.0f;
       bias[2] = 0.0f;
@@ -192,24 +192,8 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
         here[3] = here[-4];
         here[4] = here[-5];
       }
-      P2Ctx *buf3 = buf[3];
-      P2Ctx *b4 = buf[4];
-      P2Ctx *buf2 = buf[2];
-      P2Ctx *buf1 = buf[1];
-      P2Ctx *b0 = buf[0];
-      buf[4] = buf3;
-      buf[3] = buf2;
-      buf[2] = buf1;
-      buf[0] = b4;
-      buf[1] = b0;
-      b4 += 8;
-      cursor[0] = b4;
-      b0 += 8;
-      cursor[1] = b0;
-      cursor[2] = buf1+8;
-      cursor[3] = buf2+8;
-      cursor[4] = buf3+8;
-      ((P2Ctx*)b4)[-1] = ((P2Ctx*)b0)[0];
+      ring_advance(buf, cursor, 8);
+      cursor[0][-1] = cursor[1][0];
       {
         P2Ctx*const here = cursor[0];
         P2Ctx*const up = cursor[1];

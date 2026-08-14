@@ -28,9 +28,22 @@ alignas(16) static int32_t bmf_p2_thresholds[6][13] = {
   {6, 14, 28, 4, 8, 26, 4096, 6144, 13056, 10240, 14336, 26624, 36864}, {4, 15, 42, 1, 8, 19, 2560, 6912, 11264, 10240, 28672, 71680, 139264}, {5, 14, 21, 4, 9, 25, 3840, 8448, 12032, 16384, 26624, 43008, 83968}, {6, 11, 20, 5, 11, 23, 2816, 5888, 10496, 22528, 32768, 51200, 131072}, {0, 11, 30, 7, 13, 22, 4352, 8448, 14848, 16384, 38912, 57344, 94208}, {7, 10, 31, -1, 11, 21, -256, 1024, 5888, -2048, -2048, -2048, 145408},
 };
 
-// Counter reset counts, indexed by `rate + 3` where `rate` is 0..8.
-alignas(16) static int32_t p2_float_pool[17] = {
-  0x43293333, 0x3F800000, (int32_t)0xC52E0702, 0x3A83126F, 0x38D1B717, 0x3DCCCCCD, 0x40000000, 0x44100000, 0x40266666, 0x46D22000, 0x3C54FDF4, 0x459D8800, 0x44044000, 0x3951B717, 0x41200000, 0x3F800000, 0x3F800000,
+// What a `P2Count`'s countdown reloads to when its rate steps up, indexed by
+// the new rate less one.
+//
+// This was a seventeen-element `int32_t` table of float bit patterns named
+// `p2_float_pool`, and its one live use read *bytes* out of the middle of it:
+// `*((uint8_t*)&p2_float_pool + rate+1 + 3)`, which for a rate of 0..7 is byte
+// offsets 4 through 11 -- the little-endian bytes of elements [1] and [2],
+// `0x3F800000` and `0xC52E0702`.  Those eight bytes are the whole of what the
+// table was for; the other nine elements had no reader at all.
+//
+// So it is the eight bytes, written down.  The old form also only worked
+// little-endian, which is not a property a reload table should have.  A rate
+// of 0 or 1 reloading to zero is deliberate -- it interacts with the
+// `(uint8_t)--countdown` wrap at the use site, so it is preserved, not fixed.
+alignas(16) static const uint8_t p2_b1_reload[8] = {
+  0x00, 0x00, 0x80, 0x3F, 0x02, 0x07, 0x2E, 0xC5,
 };
 
 alignas(16) static uint8_t p1_level_edges[8] = {

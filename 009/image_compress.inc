@@ -17,7 +17,6 @@ int32_t __compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
   int32_t pl, pl2, ok_all, y, pl_i, countdown, data_size, row_y;
   uint16_t img_h;
   BmfImage* img;
-  uint16_t w16;
   uint32_t pal_bytes, word_flags, word_dc, word_w4, word_w8, word_w12, n_pix, written;
   uint8_t ok, * dst, ok_raw;
   BmfFile* arc = arc_in;
@@ -39,7 +38,7 @@ int32_t __compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
   near_lossless_q = 0;
   *(uint32_t*)&hdr._pad8 = hdr_pad8;
   hdr.data_size = (uint32_t)p_i->data_size;
-  plane_count = ((p_i->depth&0x3Fu)+7)>>3;
+  plane_count = ((p_i->depth&depth_bits)+7)>>3;
   if( fwrite("\x81\x8A"
              "20\x81\x90"
              "20a+b",
@@ -53,7 +52,7 @@ int32_t __compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
     goto write_raw;
   desc_slow_mode = 1;
   hdr.flags |= 0x24;
-  if( (p_i->depth&0x3Fu)<=4 ) {
+  if( (p_i->depth&depth_bits)<=4 ) {
     coded_size = p_i->data_size+0x20000;
     coded_buf = (uint8_t*)bmf_new(coded_size);
     packer_reset();
@@ -65,7 +64,7 @@ int32_t __compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
   }
   filtered = __search_filter(p_i, 0);
   hdr.flags |= 0x10u;
-  if( p_i->flags&2 ) {
+  if( p_i->flags&flags_transposed ) {
     uint32_t img_stride = p_i->stride;
     uint32_t hdr_pad8b = *(uint32_t*)&p_i->_pad8;
     hdr.width = p_i->width;
@@ -86,7 +85,7 @@ int32_t __compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
   // single palette plane.  The decompiler wrote that as a `goto` into the
   // middle of the `if` from its own `else`, which is one condition with the
   // `||` taken out.
-  if( plane_count==1 ? (p_i->depth&0x40)!=0 : plane_count>2 ) {
+  if( plane_count==1 ? (p_i->depth&depth_grey)!=0 : plane_count>2 ) {
     near_lossless_q = 0;
     pack_bits(0, 4);
   }
@@ -142,7 +141,7 @@ write_coded:
     }
     ok_all = (fwrite(coded_buf, 1u, coded_bytes, arc->fp)==(uint32_t)coded_bytes)&ok;
     free(coded_buf);
-    if( ok_all&&(p_i->depth&0x80)!=0 )
+    if( ok_all&&(p_i->depth&depth_palette)!=0 )
       fwrite(&p_i->pixels[p_i->data_size], 1u, pal_bytes, arc->fp);
     fflush(arc->fp);
     if( ok_all )
@@ -150,7 +149,7 @@ write_coded:
     return ok_all;
   }
   free(coded_buf);
-  if( p_i->flags&2 ) {
+  if( p_i->flags&flags_transposed ) {
     pix_copy = (uint8_t*)bmf_new(p_i->data_size);
     plane_n = plane_count;
     row_step = plane_count*(p_i->height-1);

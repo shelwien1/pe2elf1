@@ -75,7 +75,6 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   do {
     bctx = (uint32_t)bank_ctx[bank];
     res = sample16-(nb_sum[2*bank]);
-    uint32_t bank_off = bank<<17;
     P2Count* node0 = &p2_ctr[32768*bank+bctx];
     w0 = res+(uint16_t)node0->weighted;
     node0->weighted = w0;
@@ -88,10 +87,10 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
         if( (uint8_t)-- countdown ) {
           node0->b1 = countdown;
         } else {
-          if( *(uint8_t*)&node0->rate<8u ) {
+          if( (uint8_t)node0->rate<8u ) {
             uint8_t b0n = node0->rate+1;
             node0->rate = b0n;
-            node0->b1 = *((uint8_t*)&p2_float_pool+b0n+3);
+            node0->b1 = p2_b1_reload[b0n-1];
             node0->weighted = 2*w0b;
           } else {
             node0->b1 = countdown;
@@ -103,14 +102,14 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
         // assignment, which asks for the cache line holding a local the
         // function is about to write anyway.  Every other prefetch below is of
         // the counter the next few lines will read; this one is now too.
-        mir_top = (uint16_t*)((uint8_t*)&p2_ctr[(ctxw^0x7FF0)]+bank_off);
+        mir_top = (uint16_t*)&p2_ctr[32768*bank+(ctxw^0x7FF0)];
         __builtin_prefetch(mir_top, 0, 1);
         res2 = (nb_sum[2*bank+1])+res;
         int32_t lowbits = ctxw&3;
-        if( (uint32_t)lowbits>=3||(w1 = node0[1].weighted, e1 = res2-p2_pred(w1, *(uint8_t*)&node0[1].rate), go = lowbits<=0, *(uint16_t*)&node0[1].weighted = w1+((32*((e1>deadzone_hi)-(uint32_t)(e1<deadzone_lo))+e1+1)>>1), !go) ) {
+        if( (uint32_t)lowbits>=3||(w1 = node0[1].weighted, e1 = res2-p2_pred(w1, (uint8_t)node0[1].rate), go = lowbits<=0, node0[1].weighted = (int16_t)w1+((32*((e1>deadzone_hi)-(uint32_t)(e1<deadzone_lo))+e1+1)>>1), !go) ) {
           wnode0m1a = node0[-1].weighted;
-          enode0m1a = res2-p2_pred(wnode0m1a, *(uint8_t*)&node0[-1].rate);
-          *(uint16_t*)&node0[-1].weighted = wnode0m1a+((32*((enode0m1a>deadzone_hi)-(uint32_t)(enode0m1a<deadzone_lo))+enode0m1a+2)>>2);
+          enode0m1a = res2-p2_pred(wnode0m1a, (uint8_t)node0[-1].rate);
+          node0[-1].weighted = (int16_t)wnode0m1a+((32*((enode0m1a>deadzone_hi)-(uint32_t)(enode0m1a<deadzone_lo))+enode0m1a+2)>>2);
         }
         P2Count* bankp = &p2_ctr[32768*bank];
         res_c = res2;
@@ -206,9 +205,9 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
           p2_update(d4000, res_s, 2);
           p2_update(r4000, res_s, 3);
           wd4000p1a = d4000[1].weighted;
-          pd4000p1a = p2_pred(wd4000p1a, *(uint8_t*)&d4000[1].rate);
+          pd4000p1a = p2_pred(wd4000p1a, (uint8_t)d4000[1].rate);
           int32_t nres3 = -res_s;
-          *(uint16_t*)&d4000[1].weighted = ((uint32_t)(res_s-pd4000p1a+2)>>2)+wd4000p1a;
+          d4000[1].weighted = (int16_t)((uint32_t)(res_s-pd4000p1a+2)>>2)+wd4000p1a;
           p2_update(m4000, -res_s, 3);
           p2_update(d2000, res_c, 2);
           p2_update(r2000, res_c, 3);

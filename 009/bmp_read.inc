@@ -41,7 +41,7 @@ int32_t*__read_bmp(char* path) {
       return nullptr;
     }
   }
-  BmfImage* img = (BmfImage*)(__alloc_image(hdr.biWidth, hdr.biHeight, hdr.biBitCount, hdr.biBitCount<=8u, 1));
+  BmfImage* img = __alloc_image(hdr.biWidth, hdr.biHeight, hdr.biBitCount, hdr.biBitCount<=8u, 1);
   if( !img ) {
     fclose(fp);
     return nullptr;
@@ -54,17 +54,17 @@ int32_t*__read_bmp(char* path) {
     if( pal_n>0 ) {
       for( i = 0; i<pal_n; ++i ) {
         fread(bmp_bgra, 4u, 1u, fp);
-        if( img->depth&0x80 )
+        if( img->depth&depth_palette )
           pal = img->pixels+img->data_size;
         else
           pal = 0;
         *(pal+3*i+2) = bmp_bgra[2];
-        if( img->depth&0x80 )
+        if( img->depth&depth_palette )
           pal2 = img->pixels+img->data_size;
         else
           pal2 = 0;
         *(pal2+3*i+1) = bmp_bgra[1];
-        if( img->depth&0x80 )
+        if( img->depth&depth_palette )
           pal3 = img->pixels+img->data_size;
         else
           pal3 = 0;

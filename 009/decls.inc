@@ -82,7 +82,7 @@ static inline bool sym_in_top(const SymEntry* ent, int32_t n, int32_t sym);
 int32_t __update_binary_pair(uint16_t* _this, int32_t symbol);
 uint16_t*__rc_begin_encode();
 void __alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out);
-int32_t*__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette, int32_t packed);
+BmfImage*__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette, int32_t packed);
 int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle);
 static inline int32_t bmf_pixels(const uint8_t* p);
 uint8_t*__interleave_plane(uint8_t* img, uint8_t* src, int32_t plane);

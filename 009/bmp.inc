@@ -1,5 +1,16 @@
 // bmp.inc -- the BMP file, as this program holds it in memory.
 
+// The two decision bytes.  `depth` is a width in its low six bits and two
+// statements about the palette in its top two; `flags` is separate, and its
+// 0x40 means something else entirely -- which is why these are named rather
+// than left as an 0x40 in each field meaning packed rows in one and a grey
+// ramp in the other.
+static constexpr uint8_t depth_bits = 0x3F;      // bits per pixel
+static constexpr uint8_t depth_grey = 0x40;      // the palette is a grey ramp
+static constexpr uint8_t depth_palette = 0x80;   // a palette follows the pixels
+static constexpr uint8_t flags_transposed = 0x02;// width and height are swapped
+static constexpr uint8_t flags_packed = 0x40;    // rows are packed sub-byte
+
 struct BmfImage {
   uint16_t width;
   uint16_t height;
@@ -9,6 +20,13 @@ struct BmfImage {
   uint8_t flags;
   uint32_t data_size;
   uint8_t pixels[0];
+
+  // The palette, when `depth & 0x80` says there is one: it sits immediately
+  // after the pixels.  Four sites spelled this `(uint8_t*)img + data_size+16`,
+  // where the 16 is `sizeof(BmfImage)` -- the header this same block starts
+  // with, so `pixels` already is it.
+  uint8_t* palette() { return pixels+data_size; }
+  const uint8_t* palette() const { return pixels+data_size; }
 };
 
 // Transpose the header.  The loop at each call site has already moved the
@@ -35,18 +53,18 @@ static inline void transpose_image_in_place(BmfImage* img, int32_t planes) {
 // The allocation is one block: a sixteen-byte `BmfImage`, the pixels, and the
 // palette after them if there is one.
 //
-// `word2` is the header's `(pad, pad, depth, flags)` word, assembled by
-// arithmetic because the original wrote it as one store: `bpp<<16` is `depth`,
-// `0x40000000` is `flags & 0x40` (rows are sub-byte packed) and `0x00800000` is
-// `depth & 0x80` (a palette follows).  It is the only place in the tree where
-// the header's two decision bytes are addressed as one integer.
-int32_t*__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette, int32_t packed) {
-  uint8_t* buf;
-  int32_t bits, word2, row_pack, row_bytes, pal_bytes;
+// It used to build the header's `(pad, pad, depth, flags)` word by arithmetic
+// -- `bpp<<16` for `depth`, `0x40000000` for `flags & 0x40` (rows are sub-byte
+// packed), `0x00800000` for `depth & 0x80` (a palette follows) -- and store it
+// through `result[2]`, because the original wrote it as one store.  The two
+// decision bytes are written as themselves now, which is also what let the
+// return type stop being `int32_t*`.
+BmfImage*__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette, int32_t packed) {
+  int32_t bits, row_pack, row_bytes, pal_bytes;
   uint16_t row16;
+  bool sub_byte_rows = false;
   row16 = img_w;
   bits = bpp;
-  word2 = (uint8_t)bpp<<16;
   if( bpp>=5&&bpp<=7 ) {
     row_bytes = row16;
   } else {
@@ -72,38 +90,38 @@ int32_t*__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette
       } else {
         row_pack = (int32_t)(img_w+((uint32_t)(img_w+1)>>31)+1)>>1;
       }
-      word2 = ((uint8_t)bpp<<16)|0x40000000;
+      sub_byte_rows = true;
       row_bytes = (uint16_t)row_pack;
     }
   }
   int32_t data_bytes = row_bytes*img_h;
-  if( palette ) {
+  bool has_palette = false;
+  if( palette&&bpp<=8 ) {
     pal_bytes = 3<<(bpp&31);
-    if( bpp>8 )
-      pal_bytes = 0;
-    else
-      word2 |= 0x00800000;
+    has_palette = true;
   } else {
     pal_bytes = 0;
   }
-  int32_t* result = (int32_t*)bmf_new(data_bytes+pal_bytes+19);
-  if( !result )
+  // 19, not 16: three bytes of slop past the header, pixels and palette, which
+  // the original allocated and this keeps.
+  BmfImage* img = (BmfImage*)bmf_new(data_bytes+pal_bytes+19);
+  if( !img )
     return nullptr;
-  BmfImage*const img = (BmfImage*)result;
   img->width = img_w;
   img->height = img_h;
   img->stride = row_bytes;
-  result[2] = word2;
+  img->_pad8[0] = 0;
+  img->_pad8[1] = 0;
+  img->depth = (uint8_t)(bpp|(has_palette ? 0x80 : 0));
+  img->flags = sub_byte_rows ? 0x40 : 0;
   img->data_size = data_bytes;
-  if( pal_bytes ) {
-    if( ((const BmfImage*)result)->depth&0x80 )
-      buf = (uint8_t*)result+result[3]+16;
-    else
-      buf = nullptr;
-    memset(buf, 0, pal_bytes);
-    return result;
-  }
-  return result;
+  // The clear used to be guarded by `depth & 0x80`, with a `nullptr` for the
+  // other arm -- and reaching it needed `pal_bytes` non-zero, which is exactly
+  // when that bit was just set.  The guard could not be false and the `nullptr`
+  // could not be passed to `memset`.
+  if( pal_bytes )
+    memset(img->palette(), 0, pal_bytes);
+  return img;
 }
 
 #pragma pack(push, 1)

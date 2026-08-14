@@ -1,8 +1,12 @@
 // alt_p2_decode.inc -- the predictor-2 model, decoding.
 
-// The mirror of `alt_p2_encode.inc`, minus two things: the near-lossless drift
-// control, which has nothing to decide here because the code says which fold
-// was used, and the coefficient-table borrow, which that file's header explains.
+// The mirror of `alt_p2_encode.inc`, minus the near-lossless drift control,
+// which has nothing to decide here because the code says which fold was used.
+//
+// It used to say "minus two things", the second being the coefficient-table
+// borrow.  That was wrong: this function did the borrow too, in six lines
+// identical to the encoder's, 260 lines from the six that undo them.  Both are
+// `P2Coef::fold`/`restore` now, which is also how the claim got checked.
 int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
   AltP2Block* plane[4], ** w;
   uint32_t i_1, first;
@@ -11,28 +15,13 @@ int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
   int16_t seed3, seed2;
   uint32_t src2;
   AltP2Block** planep;
-  float saved_p2_coef[7][4];
   float (**cur)[4], (**r1)[4];
   bool xf3, off;
   float (*b4)[4], (**b0)[4];
   int32_t nplanes, nplanes2;
   void* made, * src1, ** plane_p;
-  __builtin_memcpy(saved_p2_coef, bmf_p2_coef, sizeof saved_p2_coef);
-  for( int32_t k = 0; k<4; k++ ) {
-    bmf_p2_coef[0][k] += bmf_p2_coef[4][k];
-    bmf_p2_coef[1][k] += bmf_p2_coef[5][k];
-    bmf_p2_coef[2][k] += bmf_p2_coef[6][k];
-    bmf_p2_coef[4][k] = 0;
-    bmf_p2_coef[5][k] = 0;
-    bmf_p2_coef[6][k] = 0;
-  }
-  float saved_p2_rate[3][4];
-  __builtin_memcpy(saved_p2_rate, bmf_p2_rate[4], sizeof saved_p2_rate);
-  for( int32_t k = 0; k<4; k++ ) {
-    bmf_p2_rate[4][k] = bmf_p2_rate_reset;
-    bmf_p2_rate[5][k] = bmf_p2_rate_reset;
-    bmf_p2_rate[6][k] = bmf_p2_rate_reset;
-  }
+  P2Coef p2_coef;
+  p2_coef.fold();
   i = *p_i;
   int32_t raw = p_i[1];
   if( plane_count>0 ) {
@@ -131,7 +120,7 @@ int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
           blk_r->above = b0;
           r1[-1] = *b0;
           blk_r->cur[-2] = *b0;
-          memset(blk_r->p2_row0_head, 0, sizeof blk_r->p2_row0_head);
+          memset(blk_r->p2_row, 0, 15);
           blk_r->bias[0] = 0.0f;
           blk_r->bias[1] = 0.0f;
           blk_r->bias[2] = 0.0f;
@@ -278,8 +267,7 @@ int32_t __alt_model_p2_decode(uint16_t* p_i, uint8_t* out) {
     } while( src2<(uint32_t)raw );
   }
   __rc_end_decode();
-  __builtin_memcpy(bmf_p2_coef, saved_p2_coef, sizeof saved_p2_coef);
-  __builtin_memcpy(bmf_p2_rate[4], saved_p2_rate, sizeof saved_p2_rate);
+  p2_coef.restore();
   nplanes2 = plane_count;
   if( plane_count>0 ) {
     int32_t pl3 = 0;

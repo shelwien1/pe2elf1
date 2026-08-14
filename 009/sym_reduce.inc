@@ -41,7 +41,7 @@ void __reduce_alphabet(ModelBlock* blk, uint8_t* src) {
     };
   } __frame;
   ModelBlock* blk1, * blk4;
-  uint32_t alpha_n, done, done2, off, slot_a, depth_bits;
+  uint32_t alpha_n, done, done2, off, slot_a, sym_bits;
   bool more, packed;
   uint8_t* half;
   int32_t node, side, alpha_m, carry, img_w, img_h, n_moved, height, n_distinct, row_w, y, bits, shift, prev, s, s_next;
@@ -53,17 +53,17 @@ void __reduce_alphabet(ModelBlock* blk, uint8_t* src) {
   void* newbuf;
   __frame.slot11 = (ModelBlock*)(blk);
   srcp = src;
-  depth_bits = blk->depth;
+  sym_bits = blk->depth;
   __frame.slot2 = src;
   __frame.slot7 = (ModelBlock*)(blk);
-  __frame.slot4 = 0xFFFFFFFF>>(-depth_bits&31);
-  n_kids = (depth_bits+7)>>3;
+  __frame.slot4 = 0xFFFFFFFF>>(-sym_bits&31);
+  n_kids = (sym_bits+7)>>3;
   for( i = 0; i<8; ++i ) {
     __frame.lists[2*i].ent = nullptr;
     __frame.lists[2*i+1].ent = nullptr;
   }
   blk1 = __frame.slot7;
-  if( depth_bits<=8 ) {
+  if( sym_bits<=8 ) {
     memset(__frame.sym_flag(), 0, 256*sizeof(uint32_t));
     packed = blk1->depth<8;
     height = blk1->height;

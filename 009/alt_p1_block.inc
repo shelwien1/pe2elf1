@@ -57,17 +57,7 @@ struct AltP1Block {
       for( int32_t k = 0; k<6; ++k )
         here[k] = here[-1-k];
     }
-    P1Ctx *b4 = buf[4], *buf3 = buf[3], *buf2 = buf[2], *buf1 = buf[1], *b0 = buf[0];
-    buf[4] = buf3;
-    buf[3] = buf2;
-    buf[2] = buf1;
-    buf[1] = b0;
-    buf[0] = b4;
-    cursor[0] = b4+4;
-    cursor[1] = b0+4;
-    cursor[2] = buf1+4;
-    cursor[3] = buf2+4;
-    cursor[4] = buf3+4;
+    ring_advance(buf, cursor, 4);
     cursor[0][-4] = cursor[1][3];
     {
       P1Ctx*const here = cursor[0];

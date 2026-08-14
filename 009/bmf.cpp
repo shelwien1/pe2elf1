@@ -111,19 +111,19 @@ void __bmf_compress(const char* InName, const char* OutName) {
   if( !p_i )
     bmf_fatal(bmf_read_error);
   BmfImage*const p_i_img = (BmfImage*)p_i;
-  printf("File %16s, image %dx%dx%d, size - %d:", InName, p_i_img->width, p_i_img->height, p_i_img->depth&0x3F, p_i_img->data_size);
+  printf("File %16s, image %dx%dx%d, size - %d:", InName, p_i_img->width, p_i_img->height, p_i_img->depth&depth_bits, p_i_img->data_size);
   if( void* __nb = bmf_new(sizeof(BmfFile)) )
     Arc = __bmf_open_file((BmfFile*)__nb, (char*)OutName, 0);
   else
     Arc = nullptr;
   int32_t Flags = p_i_img->depth;
-  if( Flags&0x80 ) {
-    if( Flags&0x40 ) {
-      p_i_img->depth = Flags^0x80;
+  if( Flags&depth_palette ) {
+    if( Flags&depth_grey ) {
+      p_i_img->depth = Flags^depth_palette;
     } else {
-      int32_t Colours = 1<<(Flags&31);
-      int32_t Step = 0x100u>>(Flags&31);
-      const uint8_t* Palette = (const uint8_t*)p_i+p_i_img->data_size+16;
+      int32_t Colours = 1<<(Flags&depth_bits);
+      int32_t Step = 0x100u>>(Flags&depth_bits);
+      const uint8_t* Palette = p_i_img->palette();
       int32_t Grey = 0;
       for( i = 0; i<Colours; ++i ) {
         if( Palette[3*i]!=Grey||Palette[3*i+1]!=Grey||Palette[3*i+2]!=Grey )
@@ -131,7 +131,7 @@ void __bmf_compress(const char* InName, const char* OutName) {
         Grey += Step;
       }
       if( i>=Colours )
-        p_i_img->depth = (Flags|0x40)^0x80;
+        p_i_img->depth = (Flags|depth_grey)^depth_palette;
     }
   }
   int32_t coded_len = __compress_image(Arc, (BmfImage*)p_i, (void*)coded_block);
@@ -153,8 +153,8 @@ void __bmf_decompress(const char* InName, const char* OutName) {
   if( !p_i )
     bmf_fatal(bmf_bad_file, InName);
   BmfImage*const p_i_img = (BmfImage*)p_i;
-  printf("File %16s, image %dx%dx%d, size - %d\n", InName, p_i_img->width, p_i_img->height, p_i_img->depth&0x3F, p_i_img->data_size);
-  int32_t Depth = p_i_img->depth&0x3F;
+  printf("File %16s, image %dx%dx%d, size - %d\n", InName, p_i_img->width, p_i_img->height, p_i_img->depth&depth_bits, p_i_img->data_size);
+  int32_t Depth = p_i_img->depth&depth_bits;
   if( Depth==2||Depth==15||Depth==16 ) {
     printf("%s: %d bits per pixel is not a BMP depth\n", OutName, Depth);
     exit(5);
@@ -170,7 +170,6 @@ void __bmf_decompress(const char* InName, const char* OutName) {
 
 int32_t __main(int32_t argc, const char** argv) {
   bmf_set_denormal_mode();
-  __set_new_handler(__out_of_memory_handler);
   printf("BMF lossless image compressor, v.2.01 (C) 1998-1999, 2009 by Dmitry Shkarin\n");
   int32_t mode = argc==4&&!argv[1][1] ? toupper(argv[1][0]) : 0;
   if( mode!='C'&&mode!='D' ) {
