@@ -2,12 +2,11 @@
 
 uint32_t __alt_init_tables(uint8_t* fold, int8_t* unfold) {
   uint8_t even, odd;
-  uint32_t done, lo;
-  int32_t bucket_size, in_bucket, ofs, bucket, bucket_1;
+  uint32_t done;
+  int32_t in_bucket, bucket;
   uint8_t half;
-  uint32_t i, k, b, span, pairs;
-  uint8_t* pos, * neg;
-  bucket_size = 2*near_lossless_q+1;
+  uint32_t i, b;
+  int32_t bucket_size = 2*near_lossless_q+1;
   *unfold = 0;
   unfold[255] = 0x80;
   for( i = 0; i<0x3F; ++i ) {
@@ -19,21 +18,21 @@ uint32_t __alt_init_tables(uint8_t* fold, int8_t* unfold) {
   unfold[254] = 127;
   unfold[253] = -127;
   *fold = 0;
-  lo = 1;
+  uint32_t lo = 1;
   fold[128] = (uint8_t)-1;
   {
-    span = 128-lo;
-    pairs = (128-lo)/2;
+    uint32_t span = 128-lo;
+    uint32_t pairs = (128-lo)/2;
     half = 0;
     in_bucket = 1;
     if( pairs ) {
-      k = 0;
-      ofs = 0;
-      pos = &(fold)[lo];
-      neg = fold-lo;
+      uint32_t k = 0;
+      int32_t ofs = 0;
+      uint8_t *pos = &(fold)[lo];
+      uint8_t *neg = fold-lo;
       do {
         bucket = bucket_size;
-        bucket_1 = in_bucket-1;
+        int32_t bucket_1 = in_bucket-1;
         if( bucket_1 )
           bucket = bucket_1;
         else
@@ -71,8 +70,8 @@ uint32_t __alt_init_tables(uint8_t* fold, int8_t* unfold) {
 }
 
 void __alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
-  AltP1Block* raw, * blk;
-  raw = (AltP1Block*)bmf_new(sizeof(AltP1Block));
+  AltP1Block *blk;
+  AltP1Block *raw = (AltP1Block*)bmf_new(sizeof(AltP1Block));
   if( raw )
     blk = raw->alt_p1_alloc(i, height, 0);
   else
@@ -83,18 +82,15 @@ void __alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* 
 }
 
 void**__alt_model_p1_d8_decode(int8_t unread_flag, uint8_t* out, int32_t i, int32_t height) {
-  P1Ctx* buf1, * b0, * cursor0, * b4, * buf3, * buf2;
-  AltP1Block* blk, * raw;
-  int32_t y, val, x, code;
-  P1Ctx* cursor2, * cursor4;
-  raw = (AltP1Block*)bmf_new(sizeof(AltP1Block));
+  AltP1Block *blk;
+  AltP1Block *raw = (AltP1Block*)bmf_new(sizeof(AltP1Block));
   if( raw )
     blk = raw->alt_p1_alloc(i, height, 0);
   else
     blk = nullptr;
   __rc_begin_decode(unread_flag);
   if( blk->height>0 ) {
-    y = 0;
+    int32_t y = 0;
     do {
       ++y;
       {
@@ -106,11 +102,11 @@ void**__alt_model_p1_d8_decode(int8_t unread_flag, uint8_t* out, int32_t i, int3
         here[4] = here[-5];
         here[5] = here[-6];
       }
-      b4 = blk->buf[4];
-      buf3 = blk->buf[3];
-      buf2 = blk->buf[2];
-      buf1 = blk->buf[1];
-      b0 = blk->buf[0];
+      P1Ctx *b4 = blk->buf[4];
+      P1Ctx *buf3 = blk->buf[3];
+      P1Ctx *buf2 = blk->buf[2];
+      P1Ctx *buf1 = blk->buf[1];
+      P1Ctx *b0 = blk->buf[0];
       blk->buf[4] = buf3;
       blk->buf[3] = buf2;
       blk->buf[2] = buf1;
@@ -131,20 +127,20 @@ void**__alt_model_p1_d8_decode(int8_t unread_flag, uint8_t* out, int32_t i, int3
         here[-2] = up[1];
         here[-1] = up[0];
       }
-      cursor2 = blk->cursor[2];
-      cursor4 = blk->cursor[4];
+      P1Ctx *cursor2 = blk->cursor[2];
+      P1Ctx *cursor4 = blk->cursor[4];
       blk->ctx[2] = 0;
-      cursor0 = blk->cursor[0];
+      P1Ctx *cursor0 = blk->cursor[0];
       blk->ctx[3] = cursor2[-2].mag+cursor4[-2].mag+cursor2[0].mag+cursor4[0].mag+cursor2[2].mag+cursor4[2].mag+cursor2[4].mag+cursor4[4].mag+cursor0[-4].mag+cursor0[-2].mag;
       blk->ctx[4] = cursor2[-1].mag+cursor4[-1].mag+cursor2[1].mag+cursor4[1].mag+cursor2[3].mag+cursor4[3].mag+cursor2[5].mag+cursor4[5].mag+cursor0[-3].mag+cursor0[-1].mag;
       if( !(blk->width<=0) ) {
         uint8_t* out_at = out;
-        x = 0;
+        int32_t x = 0;
         do {
           ++x;
           blk->ctx_of((AltP1Block*)nullptr, (AltP1Block*)0);
-          code = __alt_p1_decode_symbol((uint16_t*)&blk->counters[blk->ctx[0]], 0, blk->ctx[1]);
-          val = (uint8_t)((uint8_t)blk->pred+blk->unfold[(uint8_t)code]);
+          int32_t code = __alt_p1_decode_symbol((uint16_t*)&blk->counters[blk->ctx[0]], 0, blk->ctx[1]);
+          int32_t val = (uint8_t)((uint8_t)blk->pred+blk->unfold[(uint8_t)code]);
           *out_at = val;
           int32_t err = val-blk->pred;
           blk->cursor[0]->sym = val;

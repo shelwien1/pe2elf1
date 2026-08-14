@@ -23,15 +23,14 @@ template<int f_DEC>
 int32_t __code_symbol_tree(uint16_t* freq, int32_t sym) {
   uint16_t add;
   uint32_t cum;
-  int32_t lvl, result, go, fa, esc, path, node, span, f1, mask;
-  uint16_t* f0, fq, h2, h4, * slot;
-  FreqPair* pair;
-  uint32_t j, f1_old, tot, cum_hi, target;
+  int32_t lvl, result, go, path, node, span;
+  uint16_t fq, *slot;
+  uint32_t j;
   uint16_t h9, acc8, acc6, acc;
-  f0 = freq+2;
-  tot = *freq;
+  uint16_t *f0 = freq+2;
+  uint32_t tot = *freq;
   if( f_DEC ) {
-    target = rc.get_freq(tot);
+    uint32_t target = rc.get_freq(tot);
     slot = f0;
     lvl = 0;
     cum = *f0;
@@ -49,17 +48,17 @@ int32_t __code_symbol_tree(uint16_t* freq, int32_t sym) {
     for( j = 0; j<(uint32_t)lvl; j++ )
       cum += f0[j];
     slot = &f0[lvl];
-    cum_hi = cum+*slot;
+    uint32_t cum_hi = cum+*slot;
     result = rc.encode(cum, cum_hi, tot);
   }
   if( *freq>0x4000u ) {
-    h2 = *(freq+2)-(*(freq+2)>>1);
+    uint16_t h2 = *(freq+2)-(*(freq+2)>>1);
     acc = *(freq+3);
     *(freq+2) = h2;
     acc = acc-(acc>>1);
     *(freq+3) = acc;
     acc = h2+acc;
-    h4 = *(freq+4)-(*(freq+4)>>1);
+    uint16_t h4 = *(freq+4)-(*(freq+4)>>1);
     *(freq+4) = h4;
     int16_t sum4 = acc+h4;
     acc = *(freq+5)-(*(freq+5)>>1);
@@ -77,7 +76,7 @@ int32_t __code_symbol_tree(uint16_t* freq, int32_t sym) {
     *(freq+8) = acc8;
     acc8 = acc+acc8;
     h9 = h9-(h9>>1);
-    esc = *(freq+1);
+    int32_t esc = *(freq+1);
     *(freq+9) = h9;
     *freq = acc8+h9;
     if( esc<=4*alt_freq_limit ) {
@@ -95,14 +94,14 @@ int32_t __code_symbol_tree(uint16_t* freq, int32_t sym) {
   *freq += *(freq+1);
   if( lvl<2 )
     return lvl;
-  mask = level_geom[lvl].half;
+  int32_t mask = level_geom[lvl].half;
   if( !f_DEC )
     path = sym-level_geom[lvl].first;
   node = 0;
   for( span = 1;; span *= 2 ) {
-    pair = bit_tree(freq, lvl)+span+node;
-    f1 = pair->f[1];
-    fa = pair->f[0];
+    FreqPair *pair = bit_tree(freq, lvl)+span+node;
+    int32_t f1 = pair->f[1];
+    int32_t fa = pair->f[0];
     if( f_DEC ) {
       go = rc.decode_bit(fa, f1);
     } else {
@@ -111,7 +110,7 @@ int32_t __code_symbol_tree(uint16_t* freq, int32_t sym) {
     }
     fq = pair->f[go];
     if( fq>0x4000u ) {
-      f1_old = pair->f[1];
+      uint32_t f1_old = pair->f[1];
       pair->f[0] -= pair->f[0]>>1;
       pair->f[1] = f1_old-(f1_old>>1);
       fq = pair->f[go];
@@ -153,13 +152,13 @@ template<int f_DEC>
 int32_t __alt_p1_code_symbol(uint16_t* freq, int32_t ctx, int32_t sym) {
   bool done;
   uint32_t cum;
-  int32_t slot, result, lo;
-  uint16_t* p, * q, nf, * cur, * base;
-  uint32_t tot, k, cum_hi;
+  int32_t slot, lo;
+  uint16_t nf, *cur;
+  uint32_t k;
   uint16_t tot0 = *freq;
-  base = freq+1;
+  uint16_t *base = freq+1;
   cur = freq+1;
-  tot = tot0&0x7FFF;
+  uint32_t tot = tot0&0x7FFF;
   if( f_DEC ) {
     sym = rc.get_freq(tot);
     cum = (uint16_t)freq[1];
@@ -174,15 +173,15 @@ int32_t __alt_p1_code_symbol(uint16_t* freq, int32_t ctx, int32_t sym) {
     for( k = 0; k<(uint32_t)slot; k++ )
       cum += base[k];
     cur = &base[slot];
-    cum_hi = cum+*cur;
+    uint32_t cum_hi = cum+*cur;
     rc.encode(cum, cum_hi, tot);
   }
   if( tot>0x2000 ) {
     *freq = 0x8000;
-    p = freq+7;
+    uint16_t *p = freq+7;
     lo = 256;
     done = freq+7<base;
-    q = freq+7;
+    uint16_t *q = freq+7;
     if( freq+7>=base ) {
       do {
         if( *q<lo )
@@ -204,7 +203,7 @@ int32_t __alt_p1_code_symbol(uint16_t* freq, int32_t ctx, int32_t sym) {
     }
   }
   *cur += 32;
-  result = *freq+32;
+  int32_t result = *freq+32;
   *freq = result;
   slot = cur-base;
   if( slot>=5 ) {
@@ -232,12 +231,11 @@ int32_t __alt_p1_decode_symbol(uint16_t* freq, int32_t unread_arg, int32_t ctx) 
 
 
 int32_t __update_binary_pair(uint16_t* _this, int32_t symbol) {
-  FreqPair* tbl, * pair;
-  int32_t tot, mask, lvl, node, span, path, go;
-  uint32_t step, f, f1_old;
+  int32_t tot, node;
+  uint32_t step, f;
   tot = *_this;
   if( (uint32_t)tot<=0x8000 ) {
-    lvl = model_geometry[symbol];
+    int32_t lvl = model_geometry[symbol];
     step = (_this[1]>>2)&0xFFFFFFE0;
     if( plane_predictor==2 )
       step = 15*(_this[1]>>5);
@@ -245,17 +243,17 @@ int32_t __update_binary_pair(uint16_t* _this, int32_t symbol) {
     tot = *_this+step+4;
     *_this = tot;
     if( symbol>=2 ) {
-      mask = level_geom[lvl].half;
-      path = symbol-level_geom[lvl].first;
+      int32_t mask = level_geom[lvl].half;
+      int32_t path = symbol-level_geom[lvl].first;
       node = 0;
-      tbl = bit_tree(_this, lvl);
-      span = 1;
+      FreqPair *tbl = bit_tree(_this, lvl);
+      int32_t span = 1;
       do {
-        pair = tbl+node+span;
-        go = (mask&path)!=0;
+        FreqPair *pair = tbl+node+span;
+        int32_t go = (mask&path)!=0;
         f = pair->f[go];
         if( f>0x2000 ) {
-          f1_old = pair->f[1];
+          uint32_t f1_old = pair->f[1];
           pair->f[0] -= pair->f[0]>>1;
           pair->f[1] = f1_old-(f1_old>>1);
           f = pair->f[go];
@@ -274,7 +272,7 @@ int32_t __update_binary_pair(uint16_t* _this, int32_t symbol) {
 int32_t __estimate_cost(uint8_t* bins, int32_t n) {
   const int32_t* bin = (const int32_t*)bins;
   double sum_even = 0.0, sum_odd = 0.0, ent_even = 0.0, ent_odd = 0.0;
-  double total, entropy;
+  double total;
   int32_t i;
   for( i = 0; i+1<n; i += 2 ) {
     if( bin[i] ) {
@@ -286,7 +284,7 @@ int32_t __estimate_cost(uint8_t* bins, int32_t n) {
       ent_odd += (double)bin[i+1]*log((double)bin[i+1]);
     }
   }
-  entropy = ent_even+ent_odd;
+  double entropy = ent_even+ent_odd;
   total = sum_even+sum_odd;
   for(; i<n; i++ )
     if( bin[i] ) {

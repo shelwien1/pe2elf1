@@ -72,14 +72,13 @@ int32_t __alt_p2_filter(float (*_this)[4], float (*a2)[4], CtxWeights* w, int32_
 template<int f_DEC>
 void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out, int8_t unread_flag,
                                 int32_t width, int32_t height) {
-  P2Ctx* pix, * rec, * buf3, * b4, * buf2, * buf1, * b0;
+  P2Ctx *pix;
   int32_t j;
   int32_t code0;
-  uint8_t* outp, want, * srcp, code2;
+  uint8_t *outp, code2;
   float (**cur_at)[4], (**r1)[4];
-  uint8_t recon, recon2;
   float (*last)[4], (**r0)[4];
-  int32_t q, resid, drift, q2, row_bytes, pred, resid2, drift2, code;
+  int32_t code;
   uint32_t k;
   uint8_t* src_end;
   src_end = src;
@@ -91,19 +90,19 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out, int8_t unread_flag,
   if( width>0 ) {
     uint8_t* p = src;
     for( j = 0; j<width; ++j ) {
-      rec = cursor[0];
-      q2 = rec[-1].val>>4;
+      P2Ctx *rec = cursor[0];
+      int32_t q2 = rec[-1].val>>4;
       ctx_pair[0] = ctx+ctx_delta[q2+4];
       ctx_pair[1] = ctx+ctx_delta[q2];
       P2Freq&fr = freq[ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[((uint32_t)(q2-115)>>31)+((uint32_t)(q2-17)>>31)]+ctx_w[4].w[1]];
       if( f_DEC ) {
         *out = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(ctx_pair)]);
       } else {
-        q = (uint16_t)rec[-1].val>>4;
-        resid = (uint8_t)(*p-q);
+        int32_t q = (uint16_t)rec[-1].val>>4;
+        int32_t resid = (uint8_t)(*p-q);
         code0 = fold[resid];
-        recon = unfold[code0]+q;
-        drift = (uint8_t)*out-(uint8_t)(recon+*out-*p);
+        uint8_t recon = unfold[code0]+q;
+        int32_t drift = (uint8_t)*out-(uint8_t)(recon+*out-*p);
         if( drift<-16||drift>16 ) {
           *out = *p;
           code0 = fold_hi[resid];
@@ -155,7 +154,7 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out, int8_t unread_flag,
   rec3[-6] = rec3[5];
   rec3[-7] = rec3[6];
   rec3[-8] = rec3[7];
-  row_bytes = 18*width+234;
+  int32_t row_bytes = 18*width+234;
   memcpy(buf[1], buf[0], row_bytes);
   memcpy(buf[2], buf[0], row_bytes);
   memcpy(buf[3], buf[0], row_bytes);
@@ -166,7 +165,7 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out, int8_t unread_flag,
     do {
       cur_at = cur;
       last = cur_at[-1];
-      srcp = src_end;
+      uint8_t *srcp = src_end;
       cur_at[1] = last;
       *cur = last;
       r0 = row0;
@@ -193,11 +192,11 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out, int8_t unread_flag,
         here[3] = here[-4];
         here[4] = here[-5];
       }
-      buf3 = buf[3];
-      b4 = buf[4];
-      buf2 = buf[2];
-      buf1 = buf[1];
-      b0 = buf[0];
+      P2Ctx *buf3 = buf[3];
+      P2Ctx *b4 = buf[4];
+      P2Ctx *buf2 = buf[2];
+      P2Ctx *buf1 = buf[1];
+      P2Ctx *b0 = buf[0];
       buf[4] = buf3;
       buf[3] = buf2;
       buf[2] = buf1;
@@ -225,15 +224,15 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out, int8_t unread_flag,
       cursor[0]->dval = 0;
       if( width>0 ) {
         for( k = 0; k<(uint32_t)width; ++k ) {
-          pred = alt_p2_context((AltP2Block*)nullptr, (AltP2Block*)nullptr);
+          int32_t pred = alt_p2_context((AltP2Block*)nullptr, (AltP2Block*)nullptr);
           if( f_DEC ) {
             code2 = code = freq[ctx].decode_symbol(pair);
             outp[k] = (uint8_t)(pred+(unfold[code]));
           } else {
-            want = srcp[k];
-            resid2 = (uint8_t)(want-pred);
-            recon2 = pred+unfold[fold[resid2]];
-            drift2 = (uint8_t)outp[k]-(uint8_t)(recon2+outp[k]-want);
+            uint8_t want = srcp[k];
+            int32_t resid2 = (uint8_t)(want-pred);
+            uint8_t recon2 = pred+unfold[fold[resid2]];
+            int32_t drift2 = (uint8_t)outp[k]-(uint8_t)(recon2+outp[k]-want);
             code = fold[resid2];
             if( drift2<-16||drift2>16 ) {
               outp[k] = want;
@@ -264,8 +263,8 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out, int8_t unread_flag,
 // which is the decompiler's record of two call sites, not two intentions.
 template<int f_DEC>
 void __alt_model_p2_d8(uint8_t* src, int32_t i, int32_t height, uint8_t* out) {
-  AltP2Block* raw, * blk;
-  raw = (AltP2Block*)bmf_page_alloc(sizeof(AltP2Block));
+  AltP2Block *blk;
+  AltP2Block *raw = (AltP2Block*)bmf_page_alloc(sizeof(AltP2Block));
   if( raw )
     blk = raw->alt_p2_alloc(i, 0);
   else

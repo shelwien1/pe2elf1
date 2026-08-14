@@ -45,9 +45,7 @@ void __rc_end_encode() {
 // reads the result only under the same flag.
 template<int f_DEC>
 uint16_t*__rc_begin() {
-  uint16_t* tbl, * row;
-  int32_t at4, at5, k;
-  int32_t at6, at7;
+  uint16_t *tbl;
   uint32_t i;
   if( !f_DEC )
     *packer_word = packer_acc;
@@ -85,29 +83,29 @@ uint16_t*__rc_begin() {
     level_geom[3].tbl_base = 1;
     memset(&model_geometry[4], 3, 4);
     level_geom[4].half = 4;
-    at4 = 2*level_geom[3].half+4;
+    int32_t at4 = 2*level_geom[3].half+4;
     level_geom[4].first = 2*level_geom[3].half+4;
     level_geom[4].tbl_base = 2*level_geom[3].half;
     memset(&model_geometry[at4], 4, 8);
     level_geom[5].half = 8;
-    at5 = at4+2*level_geom[4].half;
+    int32_t at5 = at4+2*level_geom[4].half;
     level_geom[5].first = at5;
     level_geom[5].tbl_base = at5-5;
     memset(&model_geometry[at5], 0x05, 16);
     level_geom[6].half = 16;
-    at6 = at5+2*level_geom[5].half;
+    int32_t at6 = at5+2*level_geom[5].half;
     level_geom[6].first = (uint8_t)at6;
     level_geom[6].tbl_base = (uint8_t)at6-6;
     memset(&model_geometry[at6], 0x06, 32);
     level_geom[7].half = 32;
-    at7 = at6+2*level_geom[6].half;
+    int32_t at7 = at6+2*level_geom[6].half;
     level_geom[7].first = (uint8_t)at7;
     level_geom[7].tbl_base = (uint8_t)at7-7;
     memset(&model_geometry[at7], 0x07, 64);
     tbl = (uint16_t*)bmf_new(0x7F000u);
     if( tbl ) {
-      k = 0;
-      row = tbl;
+      int32_t k = 0;
+      uint16_t *row = tbl;
       do {
         row[1] = 24*alt_freq_limit;
         row[2] = 205;

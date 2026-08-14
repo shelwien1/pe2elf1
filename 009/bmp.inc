@@ -13,7 +13,7 @@ struct BmfImage {
 
 int32_t*__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette, int32_t packed) {
   uint8_t* buf;
-  int32_t bits, word2, row_pack, row_bytes, data_bytes, pal_bytes;
+  int32_t bits, word2, row_pack, row_bytes, pal_bytes;
   uint16_t row16;
   row16 = img_w;
   bits = bpp;
@@ -47,7 +47,7 @@ int32_t*__alloc_image(int32_t img_w, int32_t img_h, int32_t bpp, int32_t palette
       row_bytes = (uint16_t)row_pack;
     }
   }
-  data_bytes = row_bytes*img_h;
+  int32_t data_bytes = row_bytes*img_h;
   if( palette ) {
     pal_bytes = 3<<(bpp&31);
     if( bpp>8 )

@@ -33,11 +33,11 @@ uint8_t*__expand_image(BmfArc* arc_in, void** p_coded_buf) {
   uint8_t bpp, has_coded, dc_v;
   uint32_t near_lossless, pred_s, w12_v, w4_v, w8_v;
   uint8_t* pal_at, * copy, * srcp, * dst;
-  int32_t hdr_word, pl, nrefs, plane_i, plane, pl2, plane2, pred, i, n_pix2, pix_at, nplanes_c, i2, n_planes, last_row, at, y, pl_i, left;
+  int32_t pl, nrefs, plane_i, plane, pl2, plane2, pred, i, n_pix2, pix_at, nplanes_c, i2, n_planes, last_row, at, y, pl_i, left;
   uint16_t img_h, w16;
   uint8_t major_v, minor_v;
   int32_t n_pix;
-  uint32_t magic, pad_len, * blk, pal_bytes, want2, desc, desc_flags, want, got;
+  uint32_t magic, pal_bytes, want2, desc, desc_flags, got;
   uint8_t* plane_buf;
   arc = arc_in;
   if( p_coded_buf )
@@ -76,14 +76,14 @@ uint8_t*__expand_image(BmfArc* arc_in, void** p_coded_buf) {
   if( __frame.flags_b<0 ) {
     fread(__frame.hdr, 8u, 1u, arc->fp);
     if( p_coded_buf ) {
-      hdr_word = *(int32_t*)&__frame.hdr[0];
+      int32_t hdr_word = *(int32_t*)&__frame.hdr[0];
       if( (*(uint32_t*)&__frame.hdr[4])>__bytes_left(arc->fp) ) {
         fclose(arc->fp);
         arc->fp = 0;
         return nullptr;
       }
-      pad_len = ((*(uint32_t*)&__frame.hdr[4])+((*(uint32_t*)&__frame.hdr[4])==0)+3)&0xFFFFFFFC;
-      blk = (uint32_t*)bmf_new(pad_len+8);
+      uint32_t pad_len = ((*(uint32_t*)&__frame.hdr[4])+((*(uint32_t*)&__frame.hdr[4])==0)+3)&0xFFFFFFFC;
+      uint32_t *blk = (uint32_t*)bmf_new(pad_len+8);
       *blk = hdr_word;
       blk[1] = pad_len;
       blk[pad_len/4+1] = 0;
@@ -125,7 +125,7 @@ uint8_t*__expand_image(BmfArc* arc_in, void** p_coded_buf) {
       arc->fp = 0;
       return nullptr;
     }
-    want = __frame.data_len;
+    uint32_t want = __frame.data_len;
     if( fread(img_at->pixels, 1u, __frame.data_len, arc->fp)!=want ) {
       fclose(arc->fp);
       arc->fp = 0;

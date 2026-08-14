@@ -33,12 +33,12 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
   uint16_t w_a, w_d;
   BmfImage* img_c;
   uint8_t f0, f1, f2, f3;
-  uint8_t* srcp, * dstp, * p2, * tile_copy, * tile_a, * p4, * p5, * tile_b, * tile_c, * p12, * p13, * tile_d;
-  int32_t y, hard, bits_a, bits_b, cost_f13;
+  uint8_t *srcp, *p2, *tile_copy, *tile_a, *p4, *p5, *tile_b, *tile_c, *p12, *p13, *tile_d;
+  int32_t hard, bits_a, bits_b, cost_f13;
   int32_t p3, p6, p7, p10, p11, p14;
   int16_t w_b, w_e;
   int32_t flags_s, desc_k;
-  int32_t tile_w, tile_h, pl, nplanes, y0, dx, off_y, row_bytes, best_cost, bits_f5, cost_f5, f5, pred, c0, c1, c2, c3, cand, nplanes_c, pl_a, pi0, pl_b, pi1, bits2, plane, pi3, bits_e, nplanes_b, pl_c, pi4, pl_d, bits_c, img_h1, y1, off1, x1, bits_d, pk, pl_k, bits, img_h3, y3, off3, pl_i, rows_x_planes, y2, off2, x2, pl2, bits_f8, cost_f8, f8, pl3, bits_f13, f13, pl4, cost_f14, f14, pl0, bits_f6, cost_f6, f6, pl1, bits_f0;
+  int32_t tile_w, tile_h, nplanes, y0, dx, off_y, row_bytes, best_cost, bits_f5, cost_f5, f5, pred, c0, c1, c2, c3, cand, nplanes_c, pl_a, pi0, pl_b, pi1, bits2, plane, pi3, bits_e, nplanes_b, pl_c, pi4, pl_d, bits_c, img_h1, y1, off1, x1, bits_d, pk, pl_k, bits, img_h3, y3, off3, pl_i, rows_x_planes, y2, off2, x2, pl2, bits_f8, cost_f8, f8, pl3, bits_f13, f13, pl4, cost_f14, f14, pl0, bits_f6, cost_f6, f6;
   uint16_t img_h3b, img_h2, img_h1b;
   uint16_t w16, w_c;
   uint8_t* p8, * p9;
@@ -47,7 +47,7 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
   tile_h = img->height;
   if( tile_w<4||tile_h<3 ) {
     if( plane_count>0 ) {
-      pl = 0;
+      int32_t pl = 0;
       do {
         plane_desc[pl+1].flags = 0;
         plane_desc[pl+1].src_plane = pl;
@@ -78,9 +78,9 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
   if( y0<tile_h+y0 ) {
     row_bytes = (uint16_t)__frame.tile_img->stride;
     __frame.dims[1] = tile_h;
-    y = __frame.rows[1];
+    int32_t y = __frame.rows[1];
     __frame.p_i_2 = (BmfImage*)(img_c);
-    dstp = __frame.tile_img->pixels;
+    uint8_t *dstp = __frame.tile_img->pixels;
     do {
       memcpy(dstp, srcp, row_bytes);
       row_bytes = (uint16_t)__frame.tile_img->stride;
@@ -107,10 +107,10 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
       if( hard ) {
         best_cost = 0x7FFFFFFF;
       } else {
-        pl1 = __frame.dims[1];
+        int32_t pl1 = __frame.dims[1];
         plane_desc[__frame.dims[1]+1].flags = 0;
         __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl1, 0);
-        bits_f0 = 8*(out_cursor-coded_buf);
+        int32_t bits_f0 = 8*(out_cursor-coded_buf);
         best_cost = plane_desc[0].desc_word-packer_free_bits+bits_f0+32;
         deep = 0;
         *(uint32_t*)packer_word = packer_acc;

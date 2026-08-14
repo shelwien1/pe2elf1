@@ -1,19 +1,13 @@
 // model_plane.inc -- one plane through the main model.
 
 void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
-  uint32_t alpha_n, hi;
-  int32_t y1, bucket, f_b3, f_b0, f_b4, f_b1, f_b2, f_b5, alpha;
   ModelBlock* blk;
-  PixRec* r4, * r0;
-  int16_t w2n, wt;
+  int16_t w2n;
   uint32_t row_w;
-  int32_t g, flags, lo, w3, w4, has3, has4, lvl, lvl2, live, s, y, x, x2, step;
+  int32_t w3, w4, lvl2, live, y;
   uint16_t w2;
-  PixRec* row_cur3, * row_cur2, * row_cur1;
-  uint32_t gi, n_syms, j, n_syms2, k;
-  SymListBlock* blk1, * blk0;
+  uint32_t j, k;
   SymList* lists1, * lists0;
-  PixRec* up1, * up2;
   if( plane_alt_model ) {
     if( plane_predictor==1 ) {
       if( (p_i->depth&0x3F)==8 )
@@ -34,23 +28,23 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
       blk = (ModelBlock*)(0);
     __rc_begin_encode();
     __reduce_alphabet(blk, 0, pixels);
-    bucket = 0;
-    g = 0;
+    int32_t bucket = 0;
+    int32_t g = 0;
     do {
-      flags = ctx_group_flags[g];
+      int32_t flags = ctx_group_flags[g];
       blk->ctx_state[flags] = g;
-      lo = 0;
-      f_b2 = flags&4;
-      f_b1 = flags&2;
-      f_b4 = flags&0x10;
-      f_b0 = flags&1;
-      f_b3 = flags&8;
-      f_b5 = flags&0x20;
+      int32_t lo = 0;
+      int32_t f_b2 = flags&4;
+      int32_t f_b1 = flags&2;
+      int32_t f_b4 = flags&0x10;
+      int32_t f_b0 = flags&1;
+      int32_t f_b3 = flags&8;
+      int32_t f_b5 = flags&0x20;
       do {
-        hi = 0;
+        uint32_t hi = 0;
         do {
           blk->ctx_bucket[g+15*lo+75*hi] = bucket;
-          alpha = blk->alphabet;
+          int32_t alpha = blk->alphabet;
           FreqRec* rec = &blk->grid[bucket];
           w2n = 2;
           rec->w[0] = 2;
@@ -91,12 +85,12 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
             rec->w[2] = w2;
             rec->w[1] = w2n;
           }
-          has3 = w3!=0;
-          has4 = w4!=0;
+          int32_t has3 = w3!=0;
+          int32_t has4 = w4!=0;
           w2 = w2;
           if( w2 )
             w2 = 1;
-          lvl = has4+has3+w2+2;
+          int32_t lvl = has4+has3+w2+2;
           if( lvl<=alpha ) {
             rec->b14 = lvl;
           } else {
@@ -105,7 +99,7 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
           }
           if( rec->w[lo]&&rec->w[hi]&&(lvl2 = rec->b14, lvl2<=alpha) ) {
             live = 1;
-            wt = (uint8_t)(1<<((5-lvl2)&31));
+            int16_t wt = (uint8_t)(1<<((5-lvl2)&31));
             rec->b15 = wt;
             rec->w[6] = wt<<6;
             rec->w[lo] += wt;
@@ -119,7 +113,7 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
         } while( hi<5 );
         ++lo;
       } while( (uint32_t)lo<5 );
-      gi = 0;
+      uint32_t gi = 0;
       SymPair* group_ctr = blk->group_ctr[g];
       do {
         group_ctr[gi].last = 0x2000;
@@ -128,14 +122,14 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
       ++g;
     } while( (uint32_t)g<0xF );
     uint8_t* buf = (uint8_t*)bmf_new(blk->alphabet);
-    alpha_n = blk->alphabet;
+    uint32_t alpha_n = blk->alphabet;
     blk->alpha_map = buf;
     memset(buf, 1, alpha_n);
     blk->escape_list = &blk->escape;
     blk->escape.init(blk->alphabet, 1);
     blk->sel_cur = blk->sel;
-    n_syms = blk->alphabet;
-    blk1 = (SymListBlock*)bmf_new(SymListBlock::bytes(n_syms));
+    uint32_t n_syms = blk->alphabet;
+    SymListBlock *blk1 = (SymListBlock*)bmf_new(SymListBlock::bytes(n_syms));
     if( blk1 ) {
       blk1->n = n_syms;
       lists1 = blk1->list;
@@ -146,9 +140,9 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
     } else {
       lists1 = nullptr;
     }
-    n_syms2 = blk->alphabet;
+    uint32_t n_syms2 = blk->alphabet;
     blk->sel1_list = lists1;
-    blk0 = (SymListBlock*)bmf_new(SymListBlock::bytes(n_syms2));
+    SymListBlock *blk0 = (SymListBlock*)bmf_new(SymListBlock::bytes(n_syms2));
     if( blk0 ) {
       blk0->n = n_syms2;
       lists0 = blk0->list;
@@ -161,7 +155,7 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
     }
     blk->sel0_list = lists0;
     if( !(blk->alphabet<=0) ) {
-      s = 0;
+      int32_t s = 0;
       do {
         blk->sel1_list[s].init(99, 0);
         blk->sel0_list[s++].init(33, 0);
@@ -171,14 +165,14 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
       uint16_t* word = blk->sym_word;
       y = 0;
       do {
-        y1 = y+1;
+        int32_t y1 = y+1;
         blk->row_cur[5]->match[1] = blk->row_cur[5][-1].sym==0;
         blk->row_cur[5]->match[3] = blk->row_cur[6][-1].sym==0;
-        r4 = blk->row_cur[4];
-        row_cur3 = blk->row_cur[3];
-        row_cur2 = blk->row_cur[2];
-        row_cur1 = blk->row_cur[1];
-        r0 = blk->row_cur[0];
+        PixRec *r4 = blk->row_cur[4];
+        PixRec *row_cur3 = blk->row_cur[3];
+        PixRec *row_cur2 = blk->row_cur[2];
+        PixRec *row_cur1 = blk->row_cur[1];
+        PixRec *r0 = blk->row_cur[0];
         blk->row_cur[4] = row_cur3;
         blk->row_cur[3] = row_cur2;
         blk->row_cur[2] = row_cur1;
@@ -201,8 +195,8 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
           blk->row_cur[5][-1].match[5] = zero;
         }
         blk->row_cur[5]->match[5] = blk->row_cur[6][3].sym==0;
-        up1 = blk->row_cur[6];
-        up2 = blk->row_cur[7];
+        PixRec *up1 = blk->row_cur[6];
+        PixRec *up2 = blk->row_cur[7];
         ++blk->row_cur[5];
         ++up1;
         blk->row_cur[6] = up1;
@@ -217,7 +211,7 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
         row_w = blk->width;
         blk->grad[1] = up2[3].match[0]+up2[2].match[0]+up2[1].match[0]+up2[0].match[0]+up2[4].match[0]-5;
         if( row_w>0 ) {
-          x = 0;
+          int32_t x = 0;
           do {
             ++x;
             blk->row_cur[5][x-1].sym = word[x-1];
@@ -226,9 +220,9 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
           word += x;
         }
         if( row_w>0 ) {
-          x2 = 0;
+          int32_t x2 = 0;
           do {
-            step = (blk)->code_pixel(x2);
+            int32_t step = (blk)->code_pixel(x2);
             blk->init_tables();
             x2 += step;
           } while( (uint32_t)x2<blk->width );

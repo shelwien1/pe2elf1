@@ -25,12 +25,10 @@ int32_t __decode_symbol_list(SymList* syms) {
     uint8_t _pad1[32];
   } __frame;
   int32_t tot, tot0;
-  SymEntry* ent, * e, * p, * q, * head, * q2, * r, * cur, * prev, * up, * back;
+  SymEntry *ent, *p, *q, *head, *cur, *prev, *up, *back;
   SymEntry** w, ** rd, ** rd2;
   uint32_t cum_lo, sym_cum, sym_high, cum_hi;
   int32_t tot_1, tot_all, target;
-  uint8_t c_a, c_b;
-  uint16_t s_a, s_b;
   int32_t live, cum, i, c, top, half, back_cnt, last_cnt;
   uint32_t n_left, zeros;
   uint32_t list5_s, rescale_at, limit20, running, since_rescale;
@@ -45,7 +43,7 @@ int32_t __decode_symbol_list(SymList* syms) {
     if( (uint8_t)exclusion_mask[ent[i].sym]==gen ) {
       c = 0;
     } else {
-      e = &ent[i];
+      SymEntry *e = &ent[i];
       c = e->cnt;
       *w++ = e;
     }
@@ -96,9 +94,9 @@ int32_t __decode_symbol_list(SymList* syms) {
   if( p==head ) {
     top = p->cnt;
   } else {
-    c_a = p->cnt;
-    s_a = p->sym;
-    q2 = p-1;
+    uint8_t c_a = p->cnt;
+    uint16_t s_a = p->sym;
+    SymEntry *q2 = p-1;
     *p = *q2;
     q2->set(s_a, c_a);
     head = owner->ent;
@@ -108,11 +106,11 @@ int32_t __decode_symbol_list(SymList* syms) {
       __frame.list5 = list5_s;
       while( 1 ) {
         top = q2->cnt;
-        r = q2-1;
+        SymEntry *r = q2-1;
         if( top<=r->cnt )
           break;
-        s_b = q2->sym;
-        c_b = q2->cnt;
+        uint16_t s_b = q2->sym;
+        uint8_t c_b = q2->cnt;
         *q2 = *r;
         r->set(s_b, c_b);
         head = owner->ent;

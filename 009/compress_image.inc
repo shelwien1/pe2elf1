@@ -10,10 +10,10 @@ int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* extra_blk) {
   uint8_t* pix_copy;
   uint32_t coded_len;
   bool fits;
-  uint32_t data_bytes, img_stride, row_bytes;
+  uint32_t data_bytes, row_bytes;
   uint8_t has_coded;
   uint8_t* plane_buf, * row_at;
-  uint32_t hdr_pad8, hdr_pad8b;
+  uint32_t hdr_pad8;
   int32_t pl, pl2, ok_all, y, pl_i, countdown, data_size, row_y;
   uint16_t img_h;
   BmfImage* img;
@@ -71,8 +71,8 @@ int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* extra_blk) {
   filtered = __search_filter(p_i, 0);
   hdr.flags |= 0x10u;
   if( p_i->flags&2 ) {
-    img_stride = p_i->stride;
-    hdr_pad8b = *(uint32_t*)&p_i->_pad8;
+    uint32_t img_stride = p_i->stride;
+    uint32_t hdr_pad8b = *(uint32_t*)&p_i->_pad8;
     hdr.width = p_i->width;
     hdr.height = p_i->height;
     data_bytes = p_i->data_size;

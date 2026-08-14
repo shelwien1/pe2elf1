@@ -46,9 +46,9 @@ void**ModelBlock::free_workspace(int8_t do_free) {
 }
 
 ModelBlock*ModelBlock::layout_workspace(int32_t unread_flag, int32_t img_w, int32_t img_h, int32_t img_depth) {
-  uint32_t e0, e1, w;
-  int32_t j, r, x, bits;
-  uint32_t k, m, s, n, i8, i24;
+  uint32_t w;
+  int32_t j;
+  uint32_t k, m, s, n;
   w = img_w;
   exclusion_gen = 1;
   width = img_w;
@@ -63,7 +63,7 @@ ModelBlock*ModelBlock::layout_workspace(int32_t unread_flag, int32_t img_w, int3
     row_cur[j+5] = buf+8;
     w = width;
     if( (int32_t)width>-16 ) {
-      r = 0;
+      int32_t r = 0;
       do {
         row_cur[j][r].sym = 0;
         row_cur[j][r].match[5] = 1;
@@ -82,7 +82,7 @@ ModelBlock*ModelBlock::layout_workspace(int32_t unread_flag, int32_t img_w, int3
   *runs = 0;
   if( (int32_t)width>0 ) {
     uint8_t bucket = 0;
-    x = 0;
+    int32_t x = 0;
     do {
       bucket += x==2<<(bucket&31);
       run_bucket[x+++1] = bucket;
@@ -91,7 +91,7 @@ ModelBlock*ModelBlock::layout_workspace(int32_t unread_flag, int32_t img_w, int3
   __builtin_memset(sym_rev, 0, sizeof sym_rev);
   for( k = 0; k<0x2000; ++k ) {
     uint16_t rev = sym_rev[k];
-    bits = k;
+    int32_t bits = k;
     for( m = 0; m<0xD; ++m ) {
       rev += rev+(bits&1);
       bits >>= 1;
@@ -115,20 +115,20 @@ ModelBlock*ModelBlock::layout_workspace(int32_t unread_flag, int32_t img_w, int3
     sym_ctr[2*n] = 0x2000;
     sym_ctr[2*n+1] = 0x2000;
   }
-  i8 = 0;
+  uint32_t i8 = 0;
   do {
-    e0 = 2*i8;
+    uint32_t e0 = 2*i8;
     ++i8;
     bit_root[e0].init_root();
     bit_root[e0+1].init_root();
   } while( i8<8 );
-  i24 = 0;
+  uint32_t i24 = 0;
   memset(bit_node, 0, sizeof bit_node);
   sym_word = (uint16_t*)bmf_new(2*height*width);
   esc_ctr[0].init_parent();
   memset(&esc_ctr[1], 0, 1536);
   do {
-    e1 = 2*i24;
+    uint32_t e1 = 2*i24;
     ++i24;
     run_ctr[e1].init_parent();
     run_ctr[e1+1].init_parent();

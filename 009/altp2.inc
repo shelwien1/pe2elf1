@@ -11,12 +11,12 @@ struct P2Freq {
   uint16_t step;
   uint16_t f[3];
   uint32_t rescale_three_way() {
-    uint32_t cut, budget;
+    uint32_t cut;
     f[0] -= f[0]>>1;
     f[1] -= f[1]>>1;
     cut = f[2]>>1;
     f[2] -= cut;
-    budget = step;
+    uint32_t budget = step;
     if( budget<=0x100 ) {
       if( step<=0x20u )
         cut = ((16-budget)>>30)&0xFFFFFFFE;
@@ -43,15 +43,13 @@ struct P2Freq {
   int32_t code_symbol(const uint32_t* ctx_pair, int32_t sym) {
     uint16_t f_before;
     uint32_t cum;
-    uint16_t st, * slot, * base;
-    uint32_t tot, tot_1, f1_old, f2_old;
+    uint16_t st, *slot;
     uint16_t down;
-    int32_t idx, target, c01;
-    base = &f[0];
-    c01 = f[1]+f[0];
-    tot = c01+f[2];
+    uint16_t *base = &f[0];
+    int32_t c01 = f[1]+f[0];
+    uint32_t tot = c01+f[2];
     if( f_DEC ) {
-      target = rc.get_freq(tot);
+      int32_t target = rc.get_freq(tot);
       cum = f[0];
       if( (uint32_t)target>=cum ) {
         if( target>=c01 ) {
@@ -78,15 +76,15 @@ struct P2Freq {
         slot = &f[0];
       }
     }
-    tot_1 = cum+*slot;
+    uint32_t tot_1 = cum+*slot;
     if( f_DEC )
       rc.decode(cum, tot_1, tot);
     else
       rc.encode(cum, tot_1, tot);
     f_before = *slot;
     if( *slot>0x4000u ) {
-      f1_old = f[1];
-      f2_old = f[2];
+      uint32_t f1_old = f[1];
+      uint32_t f2_old = f[2];
       f[0] -= f[0]>>1;
       f[1] = f1_old-(f1_old>>1);
       f[2] = f2_old-(f2_old>>1);
@@ -108,7 +106,7 @@ struct P2Freq {
       st = step;
     }
     *slot = st+f_before;
-    idx = slot-base;
+    int32_t idx = slot-base;
     if( idx )
       return idx+2*__code_symbol_tree<f_DEC>(model_strip(ctx_pair[idx&1]), (sym-1)>>1);
     return 0;
@@ -228,9 +226,9 @@ struct AltP2Block {
   uint32_t alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_in);
 
   AltP2Block*alt_p2_alloc(int32_t img_w, int32_t plane) {
-    uint32_t done, e;
-    int32_t dz, band, row_bytes, lvl, lvl1, bump, len, len1;
-    uint32_t j, k, ctr, pairs, p, row, pair, n;
+    uint32_t done;
+    int32_t lvl, len;
+    uint32_t j, k, p, n;
     plane_idx = plane;
     for( j = 0; j<0x14000; ++j ) {
       p2_ctr[2*j].weighted = 0;
@@ -242,9 +240,9 @@ struct AltP2Block {
       p2_ctr[2*k+1].rate = 5;
       p2_ctr[2*k+1].b1 = 2;
     }
-    ctr = 0;
+    uint32_t ctr = 0;
     do {
-      e = 2*ctr;
+      uint32_t e = 2*ctr;
       freq[e].f[0] = 2048;
       ++ctr;
       freq[e].f[1] = 2816;
@@ -255,8 +253,8 @@ struct AltP2Block {
       freq[e+1].f[2] = 2816;
       freq[e+1].step = 4096;
     } while( ctr<0x1E60 );
-    dz = 4*near_lossless_q+1;
-    band = 16*near_lossless_q;
+    int32_t dz = 4*near_lossless_q+1;
+    int32_t band = 16*near_lossless_q;
     has_ref = (uint8_t)(plane_desc[plane_desc[plane_idx+1].src_plane+1].flags&8)>>3;
     deadzone_hi = dz;
     deadzone_lo = -dz;
@@ -268,7 +266,7 @@ struct AltP2Block {
     row1 = (float (**)[4]) buf1;
     cur = row0+img_w+2;
     if( img_w>-4 ) {
-      pairs = (img_w+4)/2;
+      uint32_t pairs = (img_w+4)/2;
       if( pairs ) {
         for( p = 0; p<pairs; ++p ) {
           row1[2*p] = nb_weights[0];
@@ -285,8 +283,8 @@ struct AltP2Block {
         row0[done-1] = nb_weights[0];
       }
     }
-    row = 0;
-    row_bytes = 18*(img_w<3 ? 3 : img_w)+234;
+    uint32_t row = 0;
+    int32_t row_bytes = 18*(img_w<3 ? 3 : img_w)+234;
     do
       buf[row++] = (P2Ctx*)bmf_new(row_bytes);
     while( row<5 );
@@ -295,20 +293,20 @@ struct AltP2Block {
     lvl = 0;
     ctx_bias[2] = 0;
     ctx_bias[1] = 0;
-    pair = 0;
+    uint32_t pair = 0;
     ctx_bias[0] = 0;
     cursor[0] = buf[0]+8;
     do {
       ctx_delta[2*pair] = (plane_idx<<8)|(16*lvl);
-      lvl1 = (2*pair==p2_ctx_edges[lvl])+lvl;
+      int32_t lvl1 = (2*pair==p2_ctx_edges[lvl])+lvl;
       ctx_delta[2*pair+1] = (plane_idx<<8)|(16*lvl1);
-      bump = 2*pair+++1==p2_ctx_edges[lvl1];
+      int32_t bump = 2*pair+++1==p2_ctx_edges[lvl1];
       lvl = bump+lvl1;
     } while( pair<0x82 );
     len = 0;
     for( n = 0; n<0x3C; ++n ) {
       nb_ctx[2*n] = len;
-      len1 = (2*n==p2_len_edges[len])+len;
+      int32_t len1 = (2*n==p2_len_edges[len])+len;
       nb_ctx[2*n+1] = len1;
       len = (2*n+1==p2_len_edges[len1])+len1;
     }

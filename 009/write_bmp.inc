@@ -1,21 +1,21 @@
 // write_bmp.inc -- write one back.
 
 int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
-  uint32_t off_bits, data_ofs, stride, pairs, done;
-  uint8_t* abs_end, * buf_2, * end, * out;
+  uint32_t off_bits, stride, done;
+  uint8_t *buf_2, *end, *out;
   int32_t rows2;
-  int32_t ncol, pal_bytes;
-  uint8_t* buf, * abs_end2;
+  int32_t pal_bytes;
+  uint8_t *buf;
   int32_t row_i2, run_max, nib;
   FILE* fp, * fp2;
   bool can_rle;
-  uint32_t stride1, at, at2, slot;
+  uint32_t stride1, at, at2;
   uint16_t* pix;
-  uint8_t* out_buf, * pal, * pal2, * out_at, * p, * q, * out_end, * out2;
+  uint8_t *out_buf, *out_at, *p, *q, *out2;
   uint32_t data_ofs2;
-  int32_t rle_on, i, rows, bits, ncolours, grey, bgr, r, bgr2, rle_mode, src_bits, rle_kind, rows3, row_i, lit_len, run, coded_bytes, y;
+  int32_t rle_on, i, rows, bits, rle_mode, src_bits, rle_kind, rows3, row_i, lit_len, run, coded_bytes, y;
   uint8_t byte;
-  uint32_t k, j, data_len, stride3, n_bytes, pad;
+  uint32_t data_len, stride3, n_bytes, pad;
   rle_on = want_rle;
   fp = fopen(path, "wb");
   if( !fp )
@@ -41,14 +41,14 @@ int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
   bmp->biXPelsPerMeter = 0;
   buf = out_buf+54;
   if( bits<=8 ) {
-    ncolours = 1<<(bits&31);
-    ncol = 1<<(bits&31);
+    int32_t ncolours = 1<<(bits&31);
+    int32_t ncol = 1<<(bits&31);
     if( depth_flags&0x40 ) {
       uint32_t levels = 0x100u>>(bits&31);
       if( ncol>0 ) {
         if( ncol/2 ) {
-          k = 0;
-          grey = 0;
+          uint32_t k = 0;
+          int32_t grey = 0;
           do {
             *(uint32_t*)&out_buf[8*k+54] = ((uint8_t)grey<<16)|(uint8_t)grey|((uint8_t)grey<<8);
             *(uint32_t*)&out_buf[8*k+58] = ((uint8_t)(grey-levels+2*levels)<<16)|(uint8_t)(grey-levels+2*levels)|((uint8_t)(grey-levels+2*levels)<<8);
@@ -69,15 +69,15 @@ int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
       if( ncol<=0 ) {
         pal_bytes = 4*ncolours;
       } else {
-        pairs = ncolours/2;
+        uint32_t pairs = ncolours/2;
         if( ncolours/2 ) {
-          data_ofs = img->data_size;
-          j = 0;
-          pal = (uint8_t*)img+data_ofs2;
+          uint32_t data_ofs = img->data_size;
+          uint32_t j = 0;
+          uint8_t *pal = (uint8_t*)img+data_ofs2;
           do {
-            slot = 2*j;
-            bgr = *(uint16_t*)&pal[6*j+19];
-            r = (uint8_t)pal[6*j+21];
+            uint32_t slot = 2*j;
+            int32_t bgr = *(uint16_t*)&pal[6*j+19];
+            int32_t r = (uint8_t)pal[6*j+21];
             *(uint32_t*)&out_buf[4*slot+54] = ((uint8_t)pal[6*j+18]<<16)|*(uint16_t*)&pal[6*j+16];
             *(uint32_t*)&out_buf[4*slot+58] = (r<<16)|bgr;
             ++j;
@@ -91,8 +91,8 @@ int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
           done = 1;
         }
         if( (at2-1)<(uint32_t)ncol ) {
-          pal2 = (uint8_t*)img+data_ofs2;
-          bgr2 = *(uint16_t*)&pal2[3*done+13];
+          uint8_t *pal2 = (uint8_t*)img+data_ofs2;
+          int32_t bgr2 = *(uint16_t*)&pal2[3*done+13];
           *(uint32_t*)&out_buf[4*done+50] = (((uint8_t)pal2[3*done+15])<<16)|bgr2;
         }
         pal_bytes = 4*ncol;
@@ -163,7 +163,7 @@ int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
               if( lit_len ) {
                 if( nib ? lit_len!=1 : lit_len>=3 ) {
                   *buf_2 = 0;
-                  abs_end2 = buf_2+2;
+                  uint8_t *abs_end2 = buf_2+2;
                   buf_2[1] = lit_len<<(nib&31);
                   memcpy(buf_2+2, &p[-lit_len], lit_len);
                   buf_2 += lit_len+2;
@@ -191,7 +191,7 @@ int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
               buf_2[1] = byte;
               p += run;
               *buf_2 = run<<(nib&31);
-              out_end = buf_2+2;
+              uint8_t *out_end = buf_2+2;
               buf_2 += 2;
               if( p>=end ) {
                 out_at = out_end;
@@ -206,7 +206,7 @@ int32_t __write_bmp(BmfImage* img, char* path, int32_t want_rle) {
               break;
             if( nib ? lit_len!=1 : lit_len>=3 ) {
               *buf_2 = 0;
-              abs_end = buf_2+2;
+              uint8_t *abs_end = buf_2+2;
               buf_2[1] = lit_len<<(nib&31);
               memcpy(buf_2+2, &q[-lit_len], lit_len);
               buf_2 += lit_len+2;

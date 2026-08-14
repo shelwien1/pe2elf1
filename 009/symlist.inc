@@ -31,30 +31,30 @@ struct SymList {
   uint32_t rescale_at;
   SymEntry* ent;
   bool rescale(int32_t count) {
-    int32_t half, bias, up_cnt, back_cnt, last_cnt;
+    int32_t last_cnt;
     uint32_t n_left, running, since, due = rescale_at;
-    SymEntry* cur, * prev, * up, * back;
+    SymEntry *prev, *back;
     if( count<=251&&due>=since_rescale )
       return false;
     n_left = live;
-    bias = due<20*n;
-    cur = ent-1;
+    int32_t bias = due<20*n;
+    SymEntry *cur = ent-1;
     prev = cur;
     do {
       prev = cur;
       ++cur;
-      half = (bias+(uint32_t)cur->cnt)>>1;
+      int32_t half = (bias+(uint32_t)cur->cnt)>>1;
       cur->cnt = half;
       if( cur!=ent ) {
-        up = cur-1;
-        up_cnt = up->cnt;
+        SymEntry *up = cur-1;
+        int32_t up_cnt = up->cnt;
         if( half>up_cnt ) {
           uint16_t keep = cur->sym;
           cur->set(up->sym, up_cnt);
           if( up!=ent ) {
             do {
               back = up-1;
-              back_cnt = back->cnt;
+              int32_t back_cnt = back->cnt;
               if( half<=back_cnt )
                 break;
               up->set(back->sym, back_cnt);
@@ -87,7 +87,7 @@ struct SymList {
     uint32_t left;
     uint8_t c_a, c_b;
     SymEntry* p, * head, * q;
-    int32_t cum, s, c, result, c2, top;
+    int32_t cum, c, result, c2, top;
     uint16_t s_a, s_b;
     uint32_t rest, i;
     int8_t gen = exclusion_gen;
@@ -96,7 +96,7 @@ struct SymList {
     cum = 0;
     while( 1 ) {
       ++p;
-      s = p->sym;
+      int32_t s = p->sym;
       if( exclusion_mask[s]!=exclusion_gen ) {
         c = p->cnt;
         cum += c;

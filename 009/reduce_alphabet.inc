@@ -40,17 +40,16 @@ void __reduce_alphabet(ModelBlock* blk, int8_t unread_flag, uint8_t* src) {
       };
     };
   } __frame;
-  ModelBlock* blk2;
   int8_t mode;
   ModelBlock* blk1, * blk4;
-  uint32_t alpha_n, done, done2, off, slot_a, sym, depth_bits;
-  bool more, packed, first;
+  uint32_t alpha_n, done, done2, off, slot_a, depth_bits;
+  bool more, packed;
   uint8_t* half;
-  int32_t node, side, alpha_m, carry, img_w, img_h, n_moved, height, n_distinct, row_w, y, at, bits, bpp, shift, sym2, alphabet, alpha, prev, s, s_next;
+  int32_t node, side, alpha_m, carry, img_w, img_h, n_moved, height, n_distinct, row_w, y, bits, shift, prev, s, s_next;
   ModelBlock* blk3;
-  uint32_t n_kids, i, written, li, si, si_end, word, k, pairs, n_pairs, j, x, idx, n_syms, n_syms3, next_id, m;
+  uint32_t n_kids, i, written, li, si, si_end, word, k, pairs, n_pairs, j, n_syms, n_syms3;
   uint16_t* kidp;
-  uint8_t* srcp, * p, * rp, * dst_a, * dst_b, * dst_c, * q;
+  uint8_t *srcp, *p, *rp, *dst_a, *dst_b, *dst_c;
   uint32_t val;
   void* newbuf;
   __frame.slot11 = (ModelBlock*)(blk);
@@ -81,18 +80,18 @@ void __reduce_alphabet(ModelBlock* blk, int8_t unread_flag, uint8_t* src) {
           if( !row_w )
             break;
           __frame.y_spill = y;
-          x = 0;
-          at = __frame.at_spill;
+          uint32_t x = 0;
+          int32_t at = __frame.at_spill;
           bits = 0;
           do {
-            bpp = blk1->depth;
+            int32_t bpp = blk1->depth;
             shift = bits-bpp;
             if( shift<0 ) {
               ++__frame.slot8;
               shift = 8-bpp;
             }
-            sym = __frame.slot4&(*__frame.slot8>>(shift&31));
-            first = __frame.sym_flag()[sym]==0;
+            uint32_t sym = __frame.slot4&(*__frame.slot8>>(shift&31));
+            bool first = __frame.sym_flag()[sym]==0;
             __frame.bits_spill = shift;
             ++x;
             __frame.sym_flag()[sym] = 1;
@@ -108,11 +107,11 @@ void __reduce_alphabet(ModelBlock* blk, int8_t unread_flag, uint8_t* src) {
         } while( (uint32_t)(__frame.y_spill+1)<(uint32_t)blk1->height );
       }
     } else if( height**(int32_t*)&blk1->width ) {
-      q = __frame.slot2;
-      idx = 0;
+      uint8_t *q = __frame.slot2;
+      uint32_t idx = 0;
       do {
         blk1->alphabet += __frame.sym_flag()[*q]==0;
-        sym2 = *q;
+        int32_t sym2 = *q;
         __frame.sym_flag()[sym2] = 1;
         ++q;
         blk1->sym_word[idx++] = sym2;
@@ -130,7 +129,7 @@ void __reduce_alphabet(ModelBlock* blk, int8_t unread_flag, uint8_t* src) {
       if( n_syms3 ) {
         prev = 0;
         s = 0;
-        next_id = 0;
+        uint32_t next_id = 0;
         do {
           if( __frame.sym_flag()[s] ) {
             __frame.lists[0].code_symbol(s-prev);
@@ -146,7 +145,7 @@ void __reduce_alphabet(ModelBlock* blk, int8_t unread_flag, uint8_t* src) {
         } while( next_id<n_syms3 );
       }
       if( blk1->height**(int32_t*)&blk1->width ) {
-        m = 0;
+        uint32_t m = 0;
         do {
           blk1->sym_word[m] = __frame.sym_flag()[blk1->sym_word[m]];
           ++m;
@@ -191,11 +190,11 @@ void __reduce_alphabet(ModelBlock* blk, int8_t unread_flag, uint8_t* src) {
             }
             p = __frame.slot2;
             __frame.slot0 = side;
-            blk2 = (ModelBlock*)(__frame.slot7);
-            alphabet = __frame.slot7->alphabet;
+            ModelBlock *blk2 = (ModelBlock*)(__frame.slot7);
+            int32_t alphabet = __frame.slot7->alphabet;
             mode_symbol[1] = side;
             node = (uint16_t)alphabet;
-            alpha = alphabet+1;
+            int32_t alpha = alphabet+1;
             kidp[side] = node;
             written = __frame.slot3;
             blk2->alphabet = alpha;

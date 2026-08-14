@@ -2,9 +2,8 @@
 
 int32_t*__read_bmp(char* path) {
   BmfImage* img_f;
-  uint8_t* row_ofs;
   uint8_t* row, bmp_bgra[4], pix;
-  int32_t y4, y8;
+  int32_t y8;
   int32_t run4;
   uint8_t* row_at;
   uint8_t* pal, * pal2, * pal3;
@@ -12,7 +11,7 @@ int32_t*__read_bmp(char* path) {
   uint32_t row_pad, byte;
   uint8_t cur, lo16;
   uint8_t* row4, * row3, * row6, * pal_at, * row5;
-  int32_t pal_n, i, run, run_val, hi_nibble, left4, left4b, y, dx, dy, dxy, dy4, byte_in, step;
+  int32_t pal_n, i, hi_nibble, left4, left4b, y, dxy, dy4, byte_in, step;
   uint32_t stride_pad, pair, hi, stride, got, left;
   BmpHeader hdr;
   FILE* fp = fopen(path, "rb");
@@ -69,13 +68,13 @@ int32_t*__read_bmp(char* path) {
       memset(img->pixels, 0, img->data_size);
       row_at = row;
       img_f = img;
-      y4 = img->height-1;
+      int32_t y4 = img->height-1;
       while( 1 ) {
-        row_ofs = row_at;
+        uint8_t *row_ofs = row_at;
         if( ferror(fp) )
           return nullptr;
-        run = fgetc(fp);
-        run_val = fgetc(fp);
+        int32_t run = fgetc(fp);
+        int32_t run_val = fgetc(fp);
         if( run<0||run_val<0 )
           return nullptr;
         if( run ) {
@@ -87,8 +86,8 @@ int32_t*__read_bmp(char* path) {
           if( run_val==1 )
             goto LABEL_61;
           if( run_val==2 ) {
-            dx = fgetc(fp);
-            dy = fgetc(fp);
+            int32_t dx = fgetc(fp);
+            int32_t dy = fgetc(fp);
             if( dx<0||dy<0 )
               return nullptr;
             row_at += dx-dy*(uint16_t)img_f->stride;

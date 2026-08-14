@@ -26,42 +26,40 @@ struct AltP1Block {
   int32_t group_of[512];
   CounterNode counters[629856];
   int32_t ctx_of(AltP1Block* nb0, AltP1Block* nb1) {
-    P1Ctx* nb0_row, * nb0_row2, * cursor1, * cursor2;
-    P1Ctx* cur, * cursor4;
     bool pick, is_zero, is_neg;
-    int32_t west, northwest, act, nb0_a, act_q, s1, hi, lo, s3, s5, g6, h6, g7, h7, s8, result, step, act_all, s2, s4, s6, s7;
-    uint32_t quiet, s0;
-    int32_t guess, plane_a, plane_b, act_lvl;
-    cursor1 = cursor[1];
+    int32_t act_all;
+    uint32_t quiet;
+    int32_t guess;
+    P1Ctx *cursor1 = cursor[1];
     guess = cursor1->sym;
-    cur = cursor[0];
-    west = cur[-1].sym;
-    northwest = cursor1[-1].sym;
+    P1Ctx *cur = cursor[0];
+    int32_t west = cur[-1].sym;
+    int32_t northwest = cursor1[-1].sym;
     if( west<guess ) {
       if( northwest>=west ) {
-        plane_b = guess+west-northwest;
+        int32_t plane_b = guess+west-northwest;
         pick = northwest<guess;
         guess = cur[-1].sym;
         if( pick )
           guess = plane_b;
       }
     } else if( northwest<=west ) {
-      plane_a = guess+west-northwest;
+      int32_t plane_a = guess+west-northwest;
       pick = northwest<=guess;
       guess = cur[-1].sym;
       if( !pick )
         guess = plane_a;
     }
     pred = guess;
-    cursor2 = cursor[2];
-    act = cursor1[-1].mag+cur[-3].mag+3*(cursor1[1].mag+cursor2->mag)+6*cur[-1].mag+4*(cursor1->mag+cur[-2].mag)+2*(cursor2[2].mag+cursor1[2].mag+cur[-4].mag);
+    P1Ctx *cursor2 = cursor[2];
+    int32_t act = cursor1[-1].mag+cur[-3].mag+3*(cursor1[1].mag+cursor2->mag)+6*cur[-1].mag+4*(cursor1->mag+cur[-2].mag)+2*(cursor2[2].mag+cursor1[2].mag+cur[-4].mag);
     if( nb0 ) {
       if( nb1 ) {
-        nb0_row = nb0->cursor[0];
+        P1Ctx *nb0_row = nb0->cursor[0];
         act_all = act+2*(nb1->cursor[0][-1].mag+nb0_row[-1].mag);
         ctx_w[5].sel = cursor1->sym-(uint32_t)guess+nb0_row[-1].sym-nb0->cursor[1][-1].sym;
-        nb0_row2 = nb0->cursor[0];
-        nb0_a = nb0_row2[-1].sym;
+        P1Ctx *nb0_row2 = nb0->cursor[0];
+        int32_t nb0_a = nb0_row2[-1].sym;
         uint32_t nb0_b = nb0_row2[-2].sym;
         ctx_w[6].sel = cur[-1].sym-(uint32_t)guess+nb0_a-nb0_b;
         ctx_w[7].sel = cur[-1].sym-(uint32_t)guess+nb1->cursor[0][-1].sym-nb1->cursor[0][-2].sym;
@@ -78,7 +76,7 @@ struct AltP1Block {
         quiet = ((uint32_t)nb0->cursor[0][-1].mag-8)>>31;
       }
     } else {
-      cursor4 = cursor[4];
+      P1Ctx *cursor4 = cursor[4];
       act_all = cursor4->mag+cursor2[-2].mag+cursor1[3].mag+act+cursor4[2].mag;
       ctx_w[5].sel = 2*cur[-1].sym-cur[-2].sym-(uint32_t)guess;
       ctx_w[6].sel = 2*cursor1->sym-cursor2->sym-(uint32_t)guess;
@@ -87,55 +85,53 @@ struct AltP1Block {
       ctx_w[3].sel = cursor1[2].sym-(uint32_t)guess;
       quiet = cur->mag+cursor4->mag+cursor[3]->mag+cursor2->mag+cursor1->mag==0;
     }
-    act_q = (act_all+7)>>4;
-    act_lvl = level_of[act_q];
-    step = p1_level_step[(uint32_t)act_lvl];
+    int32_t act_q = (act_all+7)>>4;
+    int32_t act_lvl = level_of[act_q];
+    int32_t step = p1_level_step[(uint32_t)act_lvl];
     ctx[0] = act_lvl;
     ctx[1] = group_of[act_q]+slot_of[(uint32_t)guess];
     ctx_w[0].sel = ((216-(uint32_t)guess)>>31)+((22-(uint32_t)guess)>>31);
-    s0 = ((216-(uint32_t)guess)>>31)+((22-(uint32_t)guess)>>31);
-    s1 = (cursor1[-1].sym-cursor1->sym>=0)+(cursor1[-1].sym>(int32_t)cursor1->sym);
+    uint32_t s0 = ((216-(uint32_t)guess)>>31)+((22-(uint32_t)guess)>>31);
+    int32_t s1 = (cursor1[-1].sym-cursor1->sym>=0)+(cursor1[-1].sym>(int32_t)cursor1->sym);
     ctx_w[1].sel = s1;
-    s2 = (cursor1[-1].sym-cur[-1].sym>=0)+(cursor1[-1].sym>(int32_t)cur[-1].sym);
+    int32_t s2 = (cursor1[-1].sym-cur[-1].sym>=0)+(cursor1[-1].sym>(int32_t)cur[-1].sym);
     ctx_w[2].sel = s2;
     is_zero = ctx_w[3].sel==0;
     is_neg = ctx_w[3].sel<0;
-    s4 = (cursor1[1].sym-guess>=-step)+(cursor1[1].sym-guess>step);
+    int32_t s4 = (cursor1[1].sym-guess>=-step)+(cursor1[1].sym-guess>step);
     ctx_w[4].sel = s4;
-    hi = step<ctx_w[5].sel;
-    lo = -step<=ctx_w[5].sel;
-    s3 = !is_neg+(!is_neg&&!is_zero);
+    int32_t hi = step<ctx_w[5].sel;
+    int32_t lo = -step<=ctx_w[5].sel;
+    int32_t s3 = !is_neg+(!is_neg&&!is_zero);
     ctx_w[3].sel = s3;
-    s5 = lo+hi;
+    int32_t s5 = lo+hi;
     is_zero = ctx_w[6].sel==0;
     is_neg = ctx_w[6].sel<0;
     ctx_w[5].sel = s5;
-    g6 = !is_neg&&!is_zero;
-    h6 = !is_neg;
+    int32_t g6 = !is_neg&&!is_zero;
+    int32_t h6 = !is_neg;
     is_zero = ctx_w[7].sel==0;
     is_neg = ctx_w[7].sel<0;
-    s6 = h6+g6;
+    int32_t s6 = h6+g6;
     ctx_w[6].sel = h6+g6;
-    g7 = !is_neg&&!is_zero;
-    h7 = !is_neg;
+    int32_t g7 = !is_neg&&!is_zero;
+    int32_t h7 = !is_neg;
     is_zero = ctx_w[8].sel==0;
     is_neg = ctx_w[8].sel<0;
-    s7 = h7+g7;
+    int32_t s7 = h7+g7;
     ctx_w[7].sel = h7+g7;
-    s8 = !is_neg+(!is_neg&&!is_zero);
+    int32_t s8 = !is_neg+(!is_neg&&!is_zero);
     ctx_w[8].sel = s8;
-    result = ctx_w[0].w[s0]+ctx_w[1].w[s1]+ctx_w[2].w[s2]+ctx_w[3].w[s3]+ctx_w[4].w[s4]+ctx_w[5].w[s5]+ctx_w[6].w[s6]+ctx_w[7].w[s7]+ctx_w[8].w[s8]+16*quiet+8*(ctx[3+ctx[2]]==0)+act_lvl;
+    int32_t result = ctx_w[0].w[s0]+ctx_w[1].w[s1]+ctx_w[2].w[s2]+ctx_w[3].w[s3]+ctx_w[4].w[s4]+ctx_w[5].w[s5]+ctx_w[6].w[s6]+ctx_w[7].w[s7]+ctx_w[8].w[s8]+16*quiet+8*(ctx[3+ctx[2]]==0)+act_lvl;
     ctx[0] = result;
     return result;
   }
 
   void d8_encode_body(uint8_t* src, uint8_t* out) {
-    P1Ctx* cursor2, * cursor4, * cursor0, * b4, * buf3, * buf2, * buf1, * b0;
-    uint8_t guess, recon;
-    int32_t y, resid, code, drift, val, x;
+    int32_t code;
     __rc_begin_encode();
     if( height>0 ) {
-      y = 0;
+      int32_t y = 0;
       do {
         ++y;
         {
@@ -147,11 +143,11 @@ struct AltP1Block {
           here[4] = here[-5];
           here[5] = here[-6];
         }
-        b4 = buf[4];
-        buf3 = buf[3];
-        buf2 = buf[2];
-        buf1 = buf[1];
-        b0 = buf[0];
+        P1Ctx *b4 = buf[4];
+        P1Ctx *buf3 = buf[3];
+        P1Ctx *buf2 = buf[2];
+        P1Ctx *buf1 = buf[1];
+        P1Ctx *b0 = buf[0];
         buf[4] = buf3;
         buf[3] = buf2;
         buf[2] = buf1;
@@ -172,23 +168,23 @@ struct AltP1Block {
           here[-2] = up[1];
           here[-1] = up[0];
         }
-        cursor2 = cursor[2];
-        cursor4 = cursor[4];
+        P1Ctx *cursor2 = cursor[2];
+        P1Ctx *cursor4 = cursor[4];
         ctx[2] = 0;
-        cursor0 = cursor[0];
+        P1Ctx *cursor0 = cursor[0];
         ctx[3] = cursor2[-2].mag+cursor4[-2].mag+cursor2[0].mag+cursor4[0].mag+cursor2[2].mag+cursor4[2].mag+cursor2[4].mag+cursor4[4].mag+cursor0[-4].mag+cursor0[-2].mag;
         ctx[4] = cursor2[-1].mag+cursor4[-1].mag+cursor2[1].mag+cursor4[1].mag+cursor2[3].mag+cursor4[3].mag+cursor2[5].mag+cursor4[5].mag+cursor0[-3].mag+cursor0[-1].mag;
         if( !(width<=0) ) {
           uint8_t* q = out;
-          x = 0;
+          int32_t x = 0;
           do {
             ++x;
             ctx_of((AltP1Block*)nullptr, (AltP1Block*)0);
-            guess = (uint8_t)pred;
-            resid = (uint8_t)(*src-guess);
-            recon = *(fold[resid]+unfold)+guess;
+            uint8_t guess = (uint8_t)pred;
+            int32_t resid = (uint8_t)(*src-guess);
+            uint8_t recon = *(fold[resid]+unfold)+guess;
             code = fold[resid];
-            drift = (uint8_t)*q-(uint8_t)(recon+*q-*src);
+            int32_t drift = (uint8_t)*q-(uint8_t)(recon+*q-*src);
             if( drift<-16||drift>16 ) {
               *q = *src;
               code = fold_hi[resid];
@@ -196,7 +192,7 @@ struct AltP1Block {
               *q = recon;
             }
             __alt_p1_encode_symbol(&counters[ctx[0]].total, 16*ctx[0], ctx[1], code);
-            val = (uint8_t)*q;
+            int32_t val = (uint8_t)*q;
             int32_t err = val-pred;
             cursor[0]->sym = val;
             cursor[0]->mag = abs32(err);
@@ -222,45 +218,39 @@ struct AltP1Block {
   int32_t update_model() {
     int32_t result;
     CounterNode* node;
-    CounterNode* node_alt, * node_up, * node_dn;
     int32_t alti8;
-    uint32_t w11, w12, w13, w14, w15, w16, w17, w18, alti1, ctx_alt, alti0, alti2, alti3, alti4, alti5, alti6, alti7, x2, x3, x4, x5, x6, x7;
-    CounterNode* opp0, * opp1, * opp2, * opp3, * opp4, * opp5, * opp6, * opp7, * opp8;
-    int16_t tot_up, tot_dn;
-    int32_t sel1_top, code_r, sel2_top, slot_f, slot_r, ctx_dn, sel0, ctx0, sel1, ctx1, sel2, ctx2, sel3, ctx3, sel4, ctx4, sel5, ctx5, sel6, ctx6, sel7, ctx7, sel8, midn8, ctx8, mid7, mid6, mid5, mid4, mid3, mid2, mid1, mid0, tree_sym;
-    CounterNode* lo0, * hi0, * midn0, * altn0, * lo1, * hi1, * midn1, * altn1, * lo2, * hi2, * midn2, * altn2, * lo3, * hi3, * midn3, * altn3, * lo4, * hi4, * midn4, * altn4, * lo5, * hi5, * midn5, * altn5, * lo6, * hi6, * midn6, * altn6, * lo7, * hi7, * midn7, * altn7, * altn8, * x8;
-    uint32_t code_f, ctx_up;
-    code_f = *((uint8_t)(cursor[0]->sym-(uint8_t)pred)+fold);
-    sel1_top = ctx_w[1].sel;
-    code_r = *((uint8_t)((uint8_t)pred-cursor[0]->sym)+fold);
-    sel2_top = ctx_w[2].sel;
-    tree_sym = (int32_t)(code_f-5)>>1;
+    int32_t slot_f, slot_r, ctx0, ctx1, ctx2, ctx3, ctx4, ctx5, ctx6, ctx7, ctx8;
+    uint32_t code_f = *((uint8_t)(cursor[0]->sym-(uint8_t)pred)+fold);
+    int32_t sel1_top = ctx_w[1].sel;
+    int32_t code_r = *((uint8_t)((uint8_t)pred-cursor[0]->sym)+fold);
+    int32_t sel2_top = ctx_w[2].sel;
+    int32_t tree_sym = (int32_t)(code_f-5)>>1;
     slot_f = 6-(code_f&1);
     if( code_f<5 )
       slot_f = *((uint8_t)(cursor[0]->sym-(uint8_t)pred)+fold);
     slot_r = 6-(code_r&1);
     if( code_r<5 )
       slot_r = code_r;
-    ctx_alt = ctx_w[8].w[2-ctx_w[8].sel]+ctx_w[7].w[2-ctx_w[7].sel]+ctx_w[6].w[2-ctx_w[6].sel]+ctx_w[5].w[2-ctx_w[5].sel]+ctx_w[4].w[2-ctx_w[4].sel]+ctx_w[3].w[2-ctx_w[3].sel]+ctx_w[2].w[2-sel2_top]+ctx_w[1].w[2-sel1_top]+ctx_w[0].w[1]+(ctx[0]&0x1F);
-    node_alt = &counters[ctx_alt];
+    uint32_t ctx_alt = ctx_w[8].w[2-ctx_w[8].sel]+ctx_w[7].w[2-ctx_w[7].sel]+ctx_w[6].w[2-ctx_w[6].sel]+ctx_w[5].w[2-ctx_w[5].sel]+ctx_w[4].w[2-ctx_w[4].sel]+ctx_w[3].w[2-ctx_w[3].sel]+ctx_w[2].w[2-sel2_top]+ctx_w[1].w[2-sel1_top]+ctx_w[0].w[1]+(ctx[0]&0x1F);
+    CounterNode *node_alt = &counters[ctx_alt];
     node_alt[0].c[slot_r] += 17;
     node_alt[0].total += 17;
     result = ctx[0];
     if( (result&7)!=7 ) {
-      node_up = &counters[result];
-      ctx_up = (((ctx[1]&7u)-7)>>31)+ctx[1];
+      CounterNode *node_up = &counters[result];
+      uint32_t ctx_up = (((ctx[1]&7u)-7)>>31)+ctx[1];
       node_up[1].c[slot_f] += 11;
-      tot_up = node_up[1].total+11;
+      int16_t tot_up = node_up[1].total+11;
       node_up[1].total = tot_up;
       if( slot_f>=5 )
         __update_binary_pair(model_strip(128*(slot_f&1)+ctx_up+(((((tot_up&0x7FFF)+node_up[1].c[0]-2*(uint32_t)node_up[1].c[slot_f])>>25)&0xFFFFFFC0))), (int32_t)(code_f-5)>>1);
       result = ctx[0];
     }
     if( result&7 ) {
-      node_dn = &counters[result];
-      ctx_dn = ctx[1]-((ctx[1]&7)!=0);
+      CounterNode *node_dn = &counters[result];
+      int32_t ctx_dn = ctx[1]-((ctx[1]&7)!=0);
       node_dn[-1].c[slot_f] += 13;
-      tot_dn = node_dn[-1].total+13;
+      int16_t tot_dn = node_dn[-1].total+13;
       node_dn[-1].total = tot_dn;
       if( slot_f>=5 )
         __update_binary_pair(model_strip(128*(uint32_t)(slot_f&1)+(uint32_t)ctx_dn+(((((tot_dn&0x7FFF)+node_dn[-1].c[0]-2*(uint32_t)node_dn[-1].c[slot_f])>>25)&0xFFFFFFC0))), tree_sym);
@@ -284,11 +274,11 @@ struct AltP1Block {
         }
         result = ctx[0];
       }
-      sel0 = ctx_w[0].sel;
+      int32_t sel0 = ctx_w[0].sel;
       if( sel0==1 ) {
-        mid0 = result-ctx_w[0].w[1];
-        lo0 = &counters[mid0+ctx_w[0].w[0]];
-        hi0 = &counters[ctx_w[0].w[2]+mid0];
+        int32_t mid0 = result-ctx_w[0].w[1];
+        CounterNode *lo0 = &counters[mid0+ctx_w[0].w[0]];
+        CounterNode *hi0 = &counters[ctx_w[0].w[2]+mid0];
         lo0[0].c[slot_f] += 6;
         lo0[0].total += 6;
         hi0[0].c[slot_f] += 6;
@@ -309,14 +299,14 @@ struct AltP1Block {
           ctx0 = ctx[0];
         }
       } else {
-        opp0 = &counters[ctx_w[0].w[2-sel0]+result-ctx_w[0].w[sel0]];
+        CounterNode *opp0 = &counters[ctx_w[0].w[2-sel0]+result-ctx_w[0].w[sel0]];
         opp0[0].c[slot_f] += 7;
         opp0[0].total += 7;
-        alti0 = ctx_alt+ctx_w[0].w[0]-ctx_w[0].w[1];
-        midn0 = &counters[ctx_w[0].w[1]+ctx[0]-ctx_w[0].w[ctx_w[0].sel]];
+        uint32_t alti0 = ctx_alt+ctx_w[0].w[0]-ctx_w[0].w[1];
+        CounterNode *midn0 = &counters[ctx_w[0].w[1]+ctx[0]-ctx_w[0].w[ctx_w[0].sel]];
         midn0[0].c[slot_f] += 6;
         midn0[0].total += 6;
-        altn0 = &counters[alti0];
+        CounterNode *altn0 = &counters[alti0];
         altn0[0].c[slot_r] += 4;
         altn0[0].total += 4;
         ctx0 = ctx[0];
@@ -335,11 +325,11 @@ struct AltP1Block {
           ctx0 = ctx[0];
         }
       }
-      sel1 = ctx_w[1].sel;
+      int32_t sel1 = ctx_w[1].sel;
       if( sel1==1 ) {
-        mid1 = ctx0-ctx_w[1].w[1];
-        lo1 = &counters[mid1+ctx_w[1].w[0]];
-        hi1 = &counters[ctx_w[1].w[2]+mid1];
+        int32_t mid1 = ctx0-ctx_w[1].w[1];
+        CounterNode *lo1 = &counters[mid1+ctx_w[1].w[0]];
+        CounterNode *hi1 = &counters[ctx_w[1].w[2]+mid1];
         lo1[0].c[slot_f] += 6;
         lo1[0].total += 6;
         hi1[0].c[slot_f] += 6;
@@ -360,15 +350,15 @@ struct AltP1Block {
           ctx1 = ctx[0];
         }
       } else {
-        opp1 = &counters[ctx_w[1].w[2-sel1]+ctx0-ctx_w[1].w[sel1]];
+        CounterNode *opp1 = &counters[ctx_w[1].w[2-sel1]+ctx0-ctx_w[1].w[sel1]];
         opp1[0].c[slot_f] += 7;
         opp1[0].total += 7;
-        w11 = ctx_w[1].w[1];
-        alti1 = ctx_alt+w11-ctx_w[1].w[2-ctx_w[1].sel];
-        midn1 = &counters[(w11+ctx[0]-ctx_w[1].w[ctx_w[1].sel])];
+        uint32_t w11 = ctx_w[1].w[1];
+        uint32_t alti1 = ctx_alt+w11-ctx_w[1].w[2-ctx_w[1].sel];
+        CounterNode *midn1 = &counters[(w11+ctx[0]-ctx_w[1].w[ctx_w[1].sel])];
         midn1[0].c[slot_f] += 6;
         midn1[0].total += 6;
-        altn1 = &counters[alti1];
+        CounterNode *altn1 = &counters[alti1];
         altn1[0].c[slot_r] += 4;
         altn1[0].total += 4;
         ctx1 = ctx[0];
@@ -387,11 +377,11 @@ struct AltP1Block {
           ctx1 = ctx[0];
         }
       }
-      sel2 = ctx_w[2].sel;
+      int32_t sel2 = ctx_w[2].sel;
       if( sel2==1 ) {
-        mid2 = ctx1-ctx_w[2].w[1];
-        lo2 = &counters[mid2+ctx_w[2].w[0]];
-        hi2 = &counters[ctx_w[2].w[2]+mid2];
+        int32_t mid2 = ctx1-ctx_w[2].w[1];
+        CounterNode *lo2 = &counters[mid2+ctx_w[2].w[0]];
+        CounterNode *hi2 = &counters[ctx_w[2].w[2]+mid2];
         lo2[0].c[slot_f] += 6;
         lo2[0].total += 6;
         hi2[0].c[slot_f] += 6;
@@ -412,16 +402,16 @@ struct AltP1Block {
           ctx2 = ctx[0];
         }
       } else {
-        opp2 = &counters[ctx_w[2].w[2-sel2]+ctx1-ctx_w[2].w[sel2]];
+        CounterNode *opp2 = &counters[ctx_w[2].w[2-sel2]+ctx1-ctx_w[2].w[sel2]];
         opp2[0].c[slot_f] += 7;
         opp2[0].total += 7;
-        w12 = ctx_w[2].w[1];
-        x2 = w12+ctx[0]-ctx_w[2].w[ctx_w[2].sel];
-        alti2 = ctx_alt+w12-ctx_w[2].w[2-ctx_w[2].sel];
-        midn2 = &counters[x2];
+        uint32_t w12 = ctx_w[2].w[1];
+        uint32_t x2 = w12+ctx[0]-ctx_w[2].w[ctx_w[2].sel];
+        uint32_t alti2 = ctx_alt+w12-ctx_w[2].w[2-ctx_w[2].sel];
+        CounterNode *midn2 = &counters[x2];
         midn2[0].c[slot_f] += 6;
         midn2[0].total += 6;
-        altn2 = &counters[alti2];
+        CounterNode *altn2 = &counters[alti2];
         altn2[0].c[slot_r] += 4;
         altn2[0].total += 4;
         ctx2 = ctx[0];
@@ -440,11 +430,11 @@ struct AltP1Block {
           ctx2 = ctx[0];
         }
       }
-      sel3 = ctx_w[3].sel;
+      int32_t sel3 = ctx_w[3].sel;
       if( sel3==1 ) {
-        mid3 = ctx2-ctx_w[3].w[1];
-        lo3 = &counters[mid3+ctx_w[3].w[0]];
-        hi3 = &counters[ctx_w[3].w[2]+mid3];
+        int32_t mid3 = ctx2-ctx_w[3].w[1];
+        CounterNode *lo3 = &counters[mid3+ctx_w[3].w[0]];
+        CounterNode *hi3 = &counters[ctx_w[3].w[2]+mid3];
         lo3[0].c[slot_f] += 6;
         lo3[0].total += 6;
         hi3[0].c[slot_f] += 6;
@@ -465,16 +455,16 @@ struct AltP1Block {
           ctx3 = ctx[0];
         }
       } else {
-        opp3 = &counters[ctx_w[3].w[2-sel3]+ctx2-ctx_w[3].w[sel3]];
+        CounterNode *opp3 = &counters[ctx_w[3].w[2-sel3]+ctx2-ctx_w[3].w[sel3]];
         opp3[0].c[slot_f] += 7;
         opp3[0].total += 7;
-        w13 = ctx_w[3].w[1];
-        x3 = w13+ctx[0]-ctx_w[3].w[ctx_w[3].sel];
-        alti3 = ctx_alt+w13-ctx_w[3].w[2-ctx_w[3].sel];
-        midn3 = &counters[x3];
+        uint32_t w13 = ctx_w[3].w[1];
+        uint32_t x3 = w13+ctx[0]-ctx_w[3].w[ctx_w[3].sel];
+        uint32_t alti3 = ctx_alt+w13-ctx_w[3].w[2-ctx_w[3].sel];
+        CounterNode *midn3 = &counters[x3];
         midn3[0].c[slot_f] += 6;
         midn3[0].total += 6;
-        altn3 = &counters[alti3];
+        CounterNode *altn3 = &counters[alti3];
         altn3[0].c[slot_r] += 4;
         altn3[0].total += 4;
         ctx3 = ctx[0];
@@ -493,11 +483,11 @@ struct AltP1Block {
           ctx3 = ctx[0];
         }
       }
-      sel4 = ctx_w[4].sel;
+      int32_t sel4 = ctx_w[4].sel;
       if( sel4==1 ) {
-        mid4 = ctx3-ctx_w[4].w[1];
-        lo4 = &counters[mid4+ctx_w[4].w[0]];
-        hi4 = &counters[ctx_w[4].w[2]+mid4];
+        int32_t mid4 = ctx3-ctx_w[4].w[1];
+        CounterNode *lo4 = &counters[mid4+ctx_w[4].w[0]];
+        CounterNode *hi4 = &counters[ctx_w[4].w[2]+mid4];
         lo4[0].c[slot_f] += 6;
         lo4[0].total += 6;
         hi4[0].c[slot_f] += 6;
@@ -518,16 +508,16 @@ struct AltP1Block {
           ctx4 = ctx[0];
         }
       } else {
-        opp4 = &counters[ctx_w[4].w[2-sel4]+ctx3-ctx_w[4].w[sel4]];
+        CounterNode *opp4 = &counters[ctx_w[4].w[2-sel4]+ctx3-ctx_w[4].w[sel4]];
         opp4[0].c[slot_f] += 7;
         opp4[0].total += 7;
-        w14 = ctx_w[4].w[1];
-        x4 = w14+ctx[0]-ctx_w[4].w[ctx_w[4].sel];
-        alti4 = ctx_alt+w14-ctx_w[4].w[2-ctx_w[4].sel];
-        midn4 = &counters[x4];
+        uint32_t w14 = ctx_w[4].w[1];
+        uint32_t x4 = w14+ctx[0]-ctx_w[4].w[ctx_w[4].sel];
+        uint32_t alti4 = ctx_alt+w14-ctx_w[4].w[2-ctx_w[4].sel];
+        CounterNode *midn4 = &counters[x4];
         midn4[0].c[slot_f] += 6;
         midn4[0].total += 6;
-        altn4 = &counters[alti4];
+        CounterNode *altn4 = &counters[alti4];
         altn4[0].c[slot_r] += 4;
         altn4[0].total += 4;
         ctx4 = ctx[0];
@@ -546,11 +536,11 @@ struct AltP1Block {
           ctx4 = ctx[0];
         }
       }
-      sel5 = ctx_w[5].sel;
+      int32_t sel5 = ctx_w[5].sel;
       if( sel5==1 ) {
-        mid5 = ctx4-ctx_w[5].w[1];
-        lo5 = &counters[mid5+ctx_w[5].w[0]];
-        hi5 = &counters[ctx_w[5].w[2]+mid5];
+        int32_t mid5 = ctx4-ctx_w[5].w[1];
+        CounterNode *lo5 = &counters[mid5+ctx_w[5].w[0]];
+        CounterNode *hi5 = &counters[ctx_w[5].w[2]+mid5];
         lo5[0].c[slot_f] += 6;
         lo5[0].total += 6;
         hi5[0].c[slot_f] += 6;
@@ -571,16 +561,16 @@ struct AltP1Block {
           ctx5 = ctx[0];
         }
       } else {
-        opp5 = &counters[ctx_w[5].w[2-sel5]+ctx4-ctx_w[5].w[sel5]];
+        CounterNode *opp5 = &counters[ctx_w[5].w[2-sel5]+ctx4-ctx_w[5].w[sel5]];
         opp5[0].c[slot_f] += 7;
         opp5[0].total += 7;
-        w15 = ctx_w[5].w[1];
-        x5 = w15+ctx[0]-ctx_w[5].w[ctx_w[5].sel];
-        alti5 = ctx_alt+w15-ctx_w[5].w[2-ctx_w[5].sel];
-        midn5 = &counters[x5];
+        uint32_t w15 = ctx_w[5].w[1];
+        uint32_t x5 = w15+ctx[0]-ctx_w[5].w[ctx_w[5].sel];
+        uint32_t alti5 = ctx_alt+w15-ctx_w[5].w[2-ctx_w[5].sel];
+        CounterNode *midn5 = &counters[x5];
         midn5[0].c[slot_f] += 6;
         midn5[0].total += 6;
-        altn5 = &counters[alti5];
+        CounterNode *altn5 = &counters[alti5];
         altn5[0].c[slot_r] += 4;
         altn5[0].total += 4;
         ctx5 = ctx[0];
@@ -599,11 +589,11 @@ struct AltP1Block {
           ctx5 = ctx[0];
         }
       }
-      sel6 = ctx_w[6].sel;
+      int32_t sel6 = ctx_w[6].sel;
       if( sel6==1 ) {
-        mid6 = ctx5-ctx_w[6].w[1];
-        lo6 = &counters[mid6+ctx_w[6].w[0]];
-        hi6 = &counters[ctx_w[6].w[2]+mid6];
+        int32_t mid6 = ctx5-ctx_w[6].w[1];
+        CounterNode *lo6 = &counters[mid6+ctx_w[6].w[0]];
+        CounterNode *hi6 = &counters[ctx_w[6].w[2]+mid6];
         lo6[0].c[slot_f] += 6;
         lo6[0].total += 6;
         hi6[0].c[slot_f] += 6;
@@ -624,16 +614,16 @@ struct AltP1Block {
           ctx6 = ctx[0];
         }
       } else {
-        opp6 = &counters[ctx_w[6].w[2-sel6]+ctx5-ctx_w[6].w[sel6]];
+        CounterNode *opp6 = &counters[ctx_w[6].w[2-sel6]+ctx5-ctx_w[6].w[sel6]];
         opp6[0].c[slot_f] += 7;
         opp6[0].total += 7;
-        w16 = ctx_w[6].w[1];
-        x6 = w16+ctx[0]-ctx_w[6].w[ctx_w[6].sel];
-        alti6 = ctx_alt+w16-ctx_w[6].w[2-ctx_w[6].sel];
-        midn6 = &counters[x6];
+        uint32_t w16 = ctx_w[6].w[1];
+        uint32_t x6 = w16+ctx[0]-ctx_w[6].w[ctx_w[6].sel];
+        uint32_t alti6 = ctx_alt+w16-ctx_w[6].w[2-ctx_w[6].sel];
+        CounterNode *midn6 = &counters[x6];
         midn6[0].c[slot_f] += 6;
         midn6[0].total += 6;
-        altn6 = &counters[alti6];
+        CounterNode *altn6 = &counters[alti6];
         altn6[0].c[slot_r] += 4;
         altn6[0].total += 4;
         ctx6 = ctx[0];
@@ -652,11 +642,11 @@ struct AltP1Block {
           ctx6 = ctx[0];
         }
       }
-      sel7 = ctx_w[7].sel;
+      int32_t sel7 = ctx_w[7].sel;
       if( sel7==1 ) {
-        mid7 = ctx6-ctx_w[7].w[1];
-        lo7 = &counters[mid7+ctx_w[7].w[0]];
-        hi7 = &counters[ctx_w[7].w[2]+mid7];
+        int32_t mid7 = ctx6-ctx_w[7].w[1];
+        CounterNode *lo7 = &counters[mid7+ctx_w[7].w[0]];
+        CounterNode *hi7 = &counters[ctx_w[7].w[2]+mid7];
         lo7[0].c[slot_f] += 6;
         lo7[0].total += 6;
         hi7[0].c[slot_f] += 6;
@@ -677,16 +667,16 @@ struct AltP1Block {
           ctx7 = ctx[0];
         }
       } else {
-        opp7 = &counters[ctx_w[7].w[2-sel7]+ctx6-ctx_w[7].w[sel7]];
+        CounterNode *opp7 = &counters[ctx_w[7].w[2-sel7]+ctx6-ctx_w[7].w[sel7]];
         opp7[0].c[slot_f] += 7;
         opp7[0].total += 7;
-        w17 = ctx_w[7].w[1];
-        x7 = w17+ctx[0]-ctx_w[7].w[ctx_w[7].sel];
-        alti7 = ctx_alt+w17-ctx_w[7].w[2-ctx_w[7].sel];
-        midn7 = &counters[x7];
+        uint32_t w17 = ctx_w[7].w[1];
+        uint32_t x7 = w17+ctx[0]-ctx_w[7].w[ctx_w[7].sel];
+        uint32_t alti7 = ctx_alt+w17-ctx_w[7].w[2-ctx_w[7].sel];
+        CounterNode *midn7 = &counters[x7];
         midn7[0].c[slot_f] += 6;
         midn7[0].total += 6;
-        altn7 = &counters[alti7];
+        CounterNode *altn7 = &counters[alti7];
         altn7[0].c[slot_r] += 4;
         altn7[0].total += 4;
         ctx7 = ctx[0];
@@ -705,10 +695,10 @@ struct AltP1Block {
           ctx7 = ctx[0];
         }
       }
-      sel8 = ctx_w[8].sel;
+      int32_t sel8 = ctx_w[8].sel;
       if( sel8==1 ) {
-        midn8 = ctx7-ctx_w[8].w[1];
-        altn8 = &counters[midn8+ctx_w[8].w[0]];
+        int32_t midn8 = ctx7-ctx_w[8].w[1];
+        CounterNode *altn8 = &counters[midn8+ctx_w[8].w[0]];
         node = &counters[ctx_w[8].w[2]+midn8];
         altn8[0].c[slot_f] += 6;
         altn8[0].total += 6;
@@ -729,12 +719,12 @@ struct AltP1Block {
           node[-1].total += 3;
         }
       } else {
-        opp8 = &counters[ctx_w[8].w[2-sel8]+ctx7-ctx_w[8].w[sel8]];
+        CounterNode *opp8 = &counters[ctx_w[8].w[2-sel8]+ctx7-ctx_w[8].w[sel8]];
         opp8[0].c[slot_f] += 7;
         opp8[0].total += 7;
-        w18 = ctx_w[8].w[1];
+        uint32_t w18 = ctx_w[8].w[1];
         node = &counters[w18+ctx[0]-ctx_w[8].w[ctx_w[8].sel]];
-        x8 = &counters[w18-ctx_w[8].w[2-ctx_w[8].sel]+ctx_alt];
+        CounterNode *x8 = &counters[w18-ctx_w[8].w[2-ctx_w[8].sel]+ctx_alt];
         node[0].c[slot_f] += 6;
         node[0].total += 6;
         x8[0].c[slot_r] += 4;
@@ -760,9 +750,8 @@ struct AltP1Block {
   }
 
   AltP1Block*alt_p1_alloc(int32_t img_w, int32_t img_h, int32_t plane) {
-    int32_t lvl, grp, k, lvl1, odd, grp1, slot, slot1, bump, wid, r, plane_hi;
-    uint32_t ctr, pair, row;
-    ctr = 0;
+    int32_t lvl, grp, slot, wid;
+    uint32_t ctr = 0;
     width = img_w;
     height = img_h;
     do
@@ -771,27 +760,27 @@ struct AltP1Block {
     pred = 0;
     lvl = 0;
     grp = 0;
-    k = 0;
-    plane_hi = plane<<8;
+    int32_t k = 0;
+    int32_t plane_hi = plane<<8;
     do {
       level_of[2*k] = lvl;
-      lvl1 = (2*k==p1_level_edges[lvl])+lvl;
+      int32_t lvl1 = (2*k==p1_level_edges[lvl])+lvl;
       group_of[2*k] = plane_hi|grp;
       level_of[2*k+1] = lvl1;
-      odd = 2*k+1;
-      grp1 = (2*k==p1_group_edges[grp])+grp;
+      int32_t odd = 2*k+1;
+      int32_t grp1 = (2*k==p1_group_edges[grp])+grp;
       lvl = (odd==p1_level_edges[lvl1])+lvl1;
       group_of[2*k+1] = grp1|plane_hi;
       grp = (odd==p1_group_edges[grp1])+grp1;
       ++k;
     } while( (uint32_t)k<0x100 );
-    pair = 0;
+    uint32_t pair = 0;
     slot = 0;
     do {
       slot_of[2*pair] = 8*slot;
-      slot1 = (2*pair==p1_slot_edges[slot])+slot;
+      int32_t slot1 = (2*pair==p1_slot_edges[slot])+slot;
       slot_of[2*pair+1] = 8*slot1;
-      bump = 2*pair+++1==p1_slot_edges[slot1];
+      int32_t bump = 2*pair+++1==p1_slot_edges[slot1];
       slot = bump+slot1;
     } while( pair<0x80 );
     ctx_w[0].w[1] = 32;
@@ -807,7 +796,7 @@ struct AltP1Block {
     ctx_w[1].w[0] = 0;
     ctx_w[1].w[2] = 192;
     ctx_w[0].w[0] = 0;
-    row = 0;
+    uint32_t row = 0;
     ctx_w[2].w[1] = 288;
     ctx_w[2].w[2] = 576;
     ctx_w[3].w[1] = 864;
@@ -828,7 +817,7 @@ struct AltP1Block {
     __alt_init_tables(fold, (int8_t*)unfold);
     wid = width;
     if( width>-10 ) {
-      r = 0;
+      int32_t r = 0;
       do {
         buf[4][r].sym = 72;
         buf[3][r].sym = 72;
