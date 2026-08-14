@@ -1,52 +1,161 @@
 // sym_reduce.inc -- drop the symbols an image does not use, and renumber what is left.
 
-void __reduce_alphabet(ModelBlock* blk, uint8_t* src) {
-  struct alignas(16) ReduceAlphabetFrame {
-    uint32_t zero_base[15];
-    void* tmp;
-    int32_t kids_i;
-    uint8_t buf[4];
-    uint32_t*sym_flag() {
-      return (uint32_t*)&kids_i;
-    }
+// The whole of `__reduce_alphabet`'s working set, at file scope so that its two
+// arms can be two functions.  `liftframe.py` has tried lifting this frame and
+// reverted it -- the lifted build aborts on DLRAW while compressing -- so the
+// struct stays exactly as it is; only its scope moves.
+struct alignas(16) ReduceAlphabetFrame {
+  uint32_t zero_base[15];
+  void* tmp;
+  int32_t kids_i;
+  uint8_t buf[4];
+  uint32_t*sym_flag() {
+    return (uint32_t*)&kids_i;
+  }
 
-    uint64_t kids[127];
-    int32_t y_spill;
-    int32_t at_spill;
-    int32_t bits_spill;
-    uint8_t _pad0[64504];
-    SymList lists[16];
-    union {
-      void* slot[19];
-      struct {
-        int32_t slot0;
-        BMF_SPILL_PAD(0);
-        void* slot1;
-        uint8_t* slot2;
-        uint32_t slot3;
-        BMF_SPILL_PAD(3);
-        uint32_t slot4;
-        BMF_SPILL_PAD(4);
-        void* slot5;
-        uint32_t slot6;
-        BMF_SPILL_PAD(6);
-        ModelBlock* slot7;
-        uint8_t* slot8;
-        uint32_t slot9;
-        BMF_SPILL_PAD(9);
-        void* slot10;
-        ModelBlock* slot11;
-        void* slot_tail[7];
-      };
+  uint64_t kids[127];
+  int32_t y_spill;
+  int32_t at_spill;
+  int32_t bits_spill;
+  uint8_t _pad0[64504];
+  SymList lists[16];
+  union {
+    void* slot[19];
+    struct {
+      int32_t slot0;
+      BMF_SPILL_PAD(0);
+      void* slot1;
+      uint8_t* slot2;
+      uint32_t slot3;
+      BMF_SPILL_PAD(3);
+      uint32_t slot4;
+      BMF_SPILL_PAD(4);
+      void* slot5;
+      uint32_t slot6;
+      BMF_SPILL_PAD(6);
+      ModelBlock* slot7;
+      uint8_t* slot8;
+      uint32_t slot9;
+      BMF_SPILL_PAD(9);
+      void* slot10;
+      ModelBlock* slot11;
+      void* slot_tail[7];
     };
-  } __frame;
+  };
+};
+
+// Eight bits or fewer, where a symbol is a byte (or a packed field of one) and
+// the whole alphabet fits in a 256-entry flag table.  Count the distinct
+// symbols, code the count, then code the gaps between the ones that occur and
+// renumber the image through the same table.
+//
+// The wide arm below does none of this -- it builds a binary search tree over
+// multi-byte symbols -- and the two shared nothing but a frame and 350 lines.
+static void reduce_narrow_alphabet(ReduceAlphabetFrame& f, ModelBlock* blk1, uint8_t* src) {
+  bool packed;
+  int32_t height, n_distinct, row_w, y, bits, shift, prev, s, s_next;
+  uint32_t n_syms, n_syms3;
+  memset(f.sym_flag(), 0, 256*sizeof(uint32_t));
+  packed = blk1->depth<8;
+  height = blk1->height;
+  blk1->alphabet = 0;
+  if( packed ) {
+    n_distinct = 0;
+    if( height ) {
+      row_w = blk1->width;
+      f.slot8 = src-1;
+      f.at_spill = 0;
+      y = 0;
+      do {
+        if( !row_w )
+          break;
+        f.y_spill = y;
+        uint32_t x = 0;
+        int32_t at = f.at_spill;
+        bits = 0;
+        do {
+          int32_t bpp = blk1->depth;
+          shift = bits-bpp;
+          if( shift<0 ) {
+            ++f.slot8;
+            shift = 8-bpp;
+          }
+          uint32_t sym = f.slot4&(*f.slot8>>(shift&31));
+          bool first = f.sym_flag()[sym]==0;
+          f.bits_spill = shift;
+          ++x;
+          f.sym_flag()[sym] = 1;
+          bits = f.bits_spill;
+          blk1->alphabet += first;
+          blk1->sym_word[at] = sym;
+          row_w = blk1->width;
+          ++at;
+        } while( x<(uint32_t)(*(int32_t*)&blk1->width) );
+        n_distinct = blk1->alphabet;
+        f.at_spill = at;
+        y = f.y_spill+1;
+      } while( (uint32_t)(f.y_spill+1)<(uint32_t)blk1->height );
+    }
+  } else if( height**(int32_t*)&blk1->width ) {
+    uint8_t *q = f.slot2;
+    uint32_t idx = 0;
+    do {
+      blk1->alphabet += f.sym_flag()[*q]==0;
+      int32_t sym2 = *q;
+      f.sym_flag()[sym2] = 1;
+      ++q;
+      blk1->sym_word[idx++] = sym2;
+    } while( idx<(uint32_t)(blk1->height**(int32_t*)&blk1->width) );
+    n_distinct = blk1->alphabet;
+  } else {
+    n_distinct = 0;
+  }
+  rc.encode(n_distinct-1, n_distinct, f.slot4+1);
+  n_syms = blk1->alphabet;
+  if( n_syms<=f.slot4 ) {
+    f.lists[0].init(f.slot4-n_syms+2, 1);
+    f.lists[0].rescale_at = 19*f.lists[0].n;
+    n_syms3 = blk1->alphabet;
+    if( n_syms3 ) {
+      prev = 0;
+      s = 0;
+      uint32_t next_id = 0;
+      do {
+        if( f.sym_flag()[s] ) {
+          f.lists[0].code_symbol(s-prev);
+          n_syms3 = blk1->alphabet;
+          f.sym_flag()[s] = next_id;
+          s_next = s+1;
+          prev = s+1;
+          ++next_id;
+        } else {
+          s_next = s+1;
+        }
+        s = s_next;
+      } while( next_id<n_syms3 );
+    }
+    if( blk1->height**(int32_t*)&blk1->width ) {
+      uint32_t m = 0;
+      do {
+        blk1->sym_word[m] = f.sym_flag()[blk1->sym_word[m]];
+        ++m;
+      } while( m<(uint32_t)(blk1->height**(int32_t*)&blk1->width) );
+    }
+    free_sym_entries(f.lists, 16);
+  } else {
+    free_sym_entries(f.lists, 16);
+  }
+}
+
+void __reduce_alphabet(ModelBlock* blk, uint8_t* src) {
+  ReduceAlphabetFrame __frame;
   ModelBlock* blk1, * blk4;
   uint32_t alpha_n, done, done2, off, slot_a, sym_bits;
-  bool more, packed;
+  bool more;
   uint8_t* half;
-  int32_t node, side, alpha_m, carry, img_w, img_h, n_moved, height, n_distinct, row_w, y, bits, shift, prev, s, s_next;
+  int32_t node, side, alpha_m, carry, img_w, img_h, n_moved;
   ModelBlock* blk3;
-  uint32_t n_kids, i, written, li, si, si_end, word, k, pairs, n_pairs, j, n_syms, n_syms3;
+  uint32_t n_kids, i, written, li, si, si_end, word, k, pairs, n_pairs, j;
   uint16_t* kidp;
   uint8_t *srcp, *p, *rp, *dst_a, *dst_b, *dst_c;
   uint32_t val;
@@ -64,96 +173,7 @@ void __reduce_alphabet(ModelBlock* blk, uint8_t* src) {
   }
   blk1 = __frame.slot7;
   if( sym_bits<=8 ) {
-    memset(__frame.sym_flag(), 0, 256*sizeof(uint32_t));
-    packed = blk1->depth<8;
-    height = blk1->height;
-    blk1->alphabet = 0;
-    if( packed ) {
-      n_distinct = 0;
-      if( height ) {
-        row_w = blk1->width;
-        __frame.slot8 = src-1;
-        __frame.at_spill = 0;
-        y = 0;
-        do {
-          if( !row_w )
-            break;
-          __frame.y_spill = y;
-          uint32_t x = 0;
-          int32_t at = __frame.at_spill;
-          bits = 0;
-          do {
-            int32_t bpp = blk1->depth;
-            shift = bits-bpp;
-            if( shift<0 ) {
-              ++__frame.slot8;
-              shift = 8-bpp;
-            }
-            uint32_t sym = __frame.slot4&(*__frame.slot8>>(shift&31));
-            bool first = __frame.sym_flag()[sym]==0;
-            __frame.bits_spill = shift;
-            ++x;
-            __frame.sym_flag()[sym] = 1;
-            bits = __frame.bits_spill;
-            blk1->alphabet += first;
-            blk1->sym_word[at] = sym;
-            row_w = blk1->width;
-            ++at;
-          } while( x<(uint32_t)(*(int32_t*)&blk1->width) );
-          n_distinct = blk1->alphabet;
-          __frame.at_spill = at;
-          y = __frame.y_spill+1;
-        } while( (uint32_t)(__frame.y_spill+1)<(uint32_t)blk1->height );
-      }
-    } else if( height**(int32_t*)&blk1->width ) {
-      uint8_t *q = __frame.slot2;
-      uint32_t idx = 0;
-      do {
-        blk1->alphabet += __frame.sym_flag()[*q]==0;
-        int32_t sym2 = *q;
-        __frame.sym_flag()[sym2] = 1;
-        ++q;
-        blk1->sym_word[idx++] = sym2;
-      } while( idx<(uint32_t)(blk1->height**(int32_t*)&blk1->width) );
-      n_distinct = blk1->alphabet;
-    } else {
-      n_distinct = 0;
-    }
-    rc.encode(n_distinct-1, n_distinct, __frame.slot4+1);
-    n_syms = blk1->alphabet;
-    if( n_syms<=__frame.slot4 ) {
-      __frame.lists[0].init(__frame.slot4-n_syms+2, 1);
-      __frame.lists[0].rescale_at = 19*__frame.lists[0].n;
-      n_syms3 = blk1->alphabet;
-      if( n_syms3 ) {
-        prev = 0;
-        s = 0;
-        uint32_t next_id = 0;
-        do {
-          if( __frame.sym_flag()[s] ) {
-            __frame.lists[0].code_symbol(s-prev);
-            n_syms3 = blk1->alphabet;
-            __frame.sym_flag()[s] = next_id;
-            s_next = s+1;
-            prev = s+1;
-            ++next_id;
-          } else {
-            s_next = s+1;
-          }
-          s = s_next;
-        } while( next_id<n_syms3 );
-      }
-      if( blk1->height**(int32_t*)&blk1->width ) {
-        uint32_t m = 0;
-        do {
-          blk1->sym_word[m] = __frame.sym_flag()[blk1->sym_word[m]];
-          ++m;
-        } while( m<(uint32_t)(blk1->height**(int32_t*)&blk1->width) );
-      }
-      free_sym_entries(__frame.lists, 16);
-    } else {
-      free_sym_entries(__frame.lists, 16);
-    }
+    reduce_narrow_alphabet(__frame, blk1, src);
   } else {
     memset(__frame.buf, 0, 0x10000);
     blk1->alphabet = 1;
