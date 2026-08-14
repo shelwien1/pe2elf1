@@ -107,27 +107,19 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
         plane_desc[__frame.dims[1]+1].flags = 0;
         __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl1, 0);
         int32_t bits_f0 = 8*(out_cursor-coded_buf);
-        best_cost = plane_desc[0].desc_word-packer_free_bits+bits_f0+32;
-        deep = 0;
         *(uint32_t*)packer_word = packer_acc;
-        if( !deep )
-          best_cost = bits_f0;
+        best_cost = bits_f0;
         flags_s = __frame.best_flags;
         packer_reset();
-        if( best_cost==0x7FFFFFFF )
-          best_cost = 0x7FFFFFFF;
-        else
+        if( best_cost!=0x7FFFFFFF )
           flags_s = 0;
         __frame.best_flags = flags_s;
       }
       plane_desc[__frame.plane_i+1].flags = 5;
       __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, __frame.dims[1], 0);
       bits_f5 = 8*(out_cursor-coded_buf);
-      cost_f5 = plane_desc[0].desc_word-packer_free_bits+bits_f5+32;
-      deep = 0;
       *(uint32_t*)packer_word = packer_acc;
-      if( !deep )
-        cost_f5 = bits_f5;
+      cost_f5 = bits_f5;
       packer_reset();
       f5 = __frame.best_flags;
       if( cost_f5<best_cost ) {
@@ -140,11 +132,8 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
         plane_desc[__frame.plane_i+1].flags = 6;
         __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl0, 0);
         bits_f6 = 8*(out_cursor-coded_buf);
-        cost_f6 = plane_desc[0].desc_word-packer_free_bits+bits_f6+32;
-        deep = 0;
         *(uint32_t*)packer_word = packer_acc;
-        if( !deep )
-          cost_f6 = bits_f6;
+        cost_f6 = bits_f6;
         f6 = __frame.best_flags;
         packer_reset();
         if( cost_f6<best_cost ) {
@@ -159,11 +148,8 @@ LABEL_191:
             plane_desc[__frame.plane_i+1].flags = 8;
             __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl2, 0);
             bits_f8 = 8*(out_cursor-coded_buf);
-            cost_f8 = plane_desc[0].desc_word-packer_free_bits+bits_f8+32;
-            deep = 0;
             *(uint32_t*)packer_word = packer_acc;
-            if( !deep )
-              cost_f8 = bits_f8;
+            cost_f8 = bits_f8;
             f8 = __frame.best_flags;
             packer_reset();
             if( cost_f8<best_cost ) {
@@ -176,11 +162,8 @@ LABEL_191:
           plane_desc[__frame.plane_i+1].flags = 13;
           __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl3, 0);
           bits_f13 = 8*(out_cursor-coded_buf);
-          cost_f13 = plane_desc[0].desc_word-packer_free_bits+bits_f13+32;
-          deep = 0;
           *(uint32_t*)packer_word = packer_acc;
-          if( !deep )
-            cost_f13 = bits_f13;
+          cost_f13 = bits_f13;
           __frame.rows[0] = cost_f13;
           f13 = __frame.best_flags;
           packer_reset();

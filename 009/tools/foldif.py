@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fold an `if` whose condition is now a known constant.
 
+    python3 foldif.py --scan [file...]        find conditions that are constant
     python3 foldif.py subs1.hpp <line> true|false ["note"]
 
 <line> is the 1-based line of the `if (...)`.  With `true` the then-branch is
@@ -11,7 +12,22 @@ single statements.
 The then-branch keeps its braces when it had them: Hex-Rays output is full of
 labels jumped to from inside these blocks, and a bare compound statement is
 always safe where an `if` block was.
+
+`--scan` is the half this file was missing.  Folding needs a line number and a
+verdict, which means somebody has to have *found* the `if` first -- so for as
+long as this tool only folded, its silence in `sweep.sh` meant "nobody asked",
+not "there is nothing".  `filter_search` had five `if( !deep )` whose `deep` was
+assigned `0` three lines above, each making the statement above it dead, and no
+tool here said so.
+
+The rule is deliberately narrow: the condition is a bare name or its negation,
+the name was assigned a decimal literal at the same brace depth earlier in the
+same body, and nothing between the two mentions the name.  Anything wider --
+a name assigned in one arm of an `if`, a condition that is an expression --
+needs reaching definitions, and a rule that guesses at that is worse than one
+that reports less.
 """
+import re
 import sys
 
 
@@ -35,7 +51,39 @@ def block_end(lines, i):
     return j
 
 
+def scan(path):
+    """[(line, name, value)] for `if( name )` whose name is a known constant."""
+    lines = open(path).read().split('\n')
+    out, const, depth = [], {}, {}
+    d = 0
+    for i, l in enumerate(lines):
+        code = l.split('//')[0]
+        m = re.match(r'^\s*(?:const\s+)?(?:\w+\s+)?([A-Za-z_]\w*) = (\d+);\s*$', code)
+        if m:
+            const[m.group(1)], depth[m.group(1)] = int(m.group(2)), d
+        else:
+            for n in re.findall(r'(?<![\w.>])([A-Za-z_]\w*)\s*(?:=[^=]|\+\+|--|[-+|&^]=)', code):
+                const.pop(n, None)
+        c = re.match(r'^\s*(?:\}\s*else\s+)?if\( (!?)([A-Za-z_]\w*) \)\s*\{?\s*$', code)
+        if c and c.group(2) in const and depth[c.group(2)] == d:
+            v = const[c.group(2)]
+            out.append((i + 1, c.group(2), v, bool(c.group(1)) != bool(v)))
+        d += code.count('{') - code.count('}')
+    return out
+
+
 def main():
+    if '--scan' in sys.argv:
+        import glob
+        paths = [a for a in sys.argv[1:] if not a.startswith('--')] or sorted(glob.glob('*.inc'))
+        n = 0
+        for p in paths:
+            for line, name, val, taken in scan(p):
+                n += 1
+                print('  %s:%d  `%s` is %d here, so this branch is always %s'
+                      % (p, line, name, val, 'taken' if taken else 'skipped'))
+        print('%d conditions on a name that is a known constant' % n)
+        return 0
     if len(sys.argv) < 4:
         sys.exit(__doc__.strip().split('\n\n')[1].strip())
     path, line, truth = sys.argv[1], int(sys.argv[2]), sys.argv[3]

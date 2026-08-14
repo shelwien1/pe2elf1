@@ -60,7 +60,7 @@ int32_t __choose_plane_coding(BmfImage* img, int32_t unused_h, int8_t unused_c) 
   } __frame;
   int32_t best0, best1, best2;
   uint8_t buf_3[2048], buf_4[2048], buf_2[2048];
-  alignas(16) int32_t x0[4], x1[4], x2[4], x3[4], x4[4], x5[4];
+  alignas(16) int32_t x0[4], x1[4], x3[4], x5[4];
   double d1, d2, d3;
   // One run of the original frame, and the body indexes across every boundary
   // in it, so the six are bound onto one buffer at the offsets they had:
@@ -84,19 +84,16 @@ int32_t __choose_plane_coding(BmfImage* img, int32_t unused_h, int8_t unused_c) 
   alignas(16) uint8_t scratch[256];
   int32_t(&acc0)[4] = *(int32_t(*)[4])&scratch[0];
   uint64_t(&acc1)[5] = *(uint64_t(*)[5])&scratch[16];
-  double&d4 = *(double*)&scratch[56];
   int32_t(&tbl16)[16] = *(int32_t(*)[16])&scratch[64];
   uint8_t(&tbl64a)[64] = *(uint8_t(*)[64])&scratch[128];
   uint8_t(&tbl64b)[64] = *(uint8_t(*)[64])&scratch[192];
-  int64_t q2;
-  double d5, d6;
   uint8_t* pp;
   uint32_t uu;
   int32_t wa_slot;
   bool keep0, cheaper, keep3, pick0;
   int8_t unread0, unread1, unread2, pos, pos3;
   uint8_t* hist;
-  double sum22, sum11, dv0, dv1, dv2, sum01, sum02, sum12, sum02_c, inv;
+  double dv0, dv1, dv2, inv;
   int16_t g1_lo;
   uint32_t n_quads, next_plane, row, slack;
   uint16_t g1w;
@@ -457,35 +454,29 @@ LABEL_19:
       result = pos2+1;
       plane_desc[__frame.plane_b+x3[2]+1].dc = result;
       if( n_planes>=4 ) {
-        __builtin_memset(x0, 0, 16);
-        __builtin_memset(x1, 0, 16);
-        __builtin_memset(x2, 0, 16);
-        __builtin_memset(x3, 0, 16);
-        __builtin_memset(x4, 0, 16);
-        __builtin_memset(x5, 0, 16);
+        // The alpha plane's weights, by least squares against the other three.
+        //
+        // `dv0`, `dv1` and `dv2` are the three colour planes' gradients at one
+        // pixel and `dv3` the alpha plane's; these are the nine covariances of
+        // that four-vector, `S<a><b> = sum over pixels of d<a>*d<b>`, with `w`
+        // for the alpha term.  The 3x3 system `S * weights = Sw` is solved by
+        // cofactors below.
+        //
+        // The original kept them in six SSE registers and spilled them to the
+        // stack, which arrived here as `int32_t x0[4]` .. `x5[4]` read through
+        // forty `*(double*)` casts, plus three more slots borrowed from the
+        // frame's unions -- `__frame.q0` and `q1` overlay `row_stride`,
+        // `plane_b`, `plane_a` and `nplanes_s`, and were safe only because
+        // those four are last read twenty lines above.  Nine named doubles say
+        // the same arithmetic and take the round trip out.
+        double Sxx = 0.0, Sxy = 0.0, Sxz = 0.0;
+        double Syy = 0.0, Syz = 0.0, Szz = 0.0;
+        double Sxw = 0.0, Syw = 0.0, Szw = 0.0;
         memset(__frame.buf, 0, 0x8000);
         pp = &((uint8_t*)img_a)[__frame.row_stride];
         n_quads = (data_end-17-pp)/4;
         end_px = &((uint8_t*)img_a)[__frame.row_stride+20];
-        if( data_end<=end_px ) {
-          sum01 = *(double*)&x0[2];
-          sum02 = *(double*)x1;
-          sum12 = *(double*)&x2[2];
-          __frame.q1 = *(int64_t*)&x0[2];
-          __frame.q0 = *(int64_t*)&x2[2];
-          d4 = *(double*)x0;
-          q2 = *(int64_t*)&x4[2];
-          sum02_c = *(double*)x1;
-        } else {
-          sum22 = *(double*)x4;
-          sum11 = *(double*)x2;
-          q2 = *(int64_t*)&x4[2];
-          d4 = *(double*)x0;
-          d5 = *(double*)&x0[2];
-          d2 = *(double*)x1;
-          d6 = *(double*)&x2[2];
-          d3 = *(double*)x5;
-          d1 = *(double*)&x5[2];
+        if( end_px<data_end ) {
           i4 = 0;
           uu = (data_end-17-pp)/4;
           do {
@@ -493,57 +484,39 @@ LABEL_19:
             dv1 = (double)(((uint8_t*)img_a)[4*i4+17]+pp[4*i4+21]-(((uint8_t*)img_a)[4*i4+21]+pp[4*i4+17]));
             dv2 = (double)(((uint8_t*)img_a)[4*i4+18]+pp[4*i4+22]-(((uint8_t*)img_a)[4*i4+22]+pp[4*i4+18]));
             dv3 = ((uint8_t*)img_a)[4*i4+19]+pp[4*i4+23]-(((uint8_t*)img_a)[4*i4+23]+pp[4*i4+19]);
-            d4 = d4+dv0*dv0;
+            Sxx += dv0*dv0;
             ++i4;
-            d5 = d5+dv0*dv1;
-            d2 = d2+dv0*dv2;
-            sum11 = sum11+dv1*dv1;
-            d6 = d6+dv1*dv2;
-            sum22 = sum22+dv2*dv2;
-            *(double*)&q2 = *(double*)&q2+dv0*(double)dv3;
-            d3 = d3+dv1*(double)dv3;
-            d1 = d1+dv2*(double)dv3;
+            Sxy += dv0*dv1;
+            Sxz += dv0*dv2;
+            Syy += dv1*dv1;
+            Syz += dv1*dv2;
+            Szz += dv2*dv2;
+            Sxw += dv0*(double)dv3;
+            Syw += dv1*(double)dv3;
+            Szw += dv2*(double)dv3;
           } while( i4<uu );
-          sum01 = d5;
-          sum02 = d2;
-          sum12 = d6;
           n_quads = uu;
-          *(double*)&x5[2] = d1;
-          *(double*)x5 = d3;
-          *(int64_t*)&x4[2] = q2;
-          *(double*)x4 = sum22;
-          *(double*)&x2[2] = d6;
-          *(double*)x2 = sum11;
-          *(double*)x1 = d2;
-          *(double*)&x0[2] = d5;
-          *(double*)x0 = d4;
-          sum02_c = d2;
-          *(double*)&__frame.q0 = d6;
-          *(double*)&__frame.q1 = d5;
         }
-        d5 = sum01;
-        d6 = sum12;
-        __frame.d0 = sum02_c;
-        *(double*)&x1[2] = sum01;
-        *(double*)x3 = sum02;
-        *(double*)&x3[2] = sum12;
-        d1 = d4**(double*)x4-sum02_c*sum02;
-        d2 = 0.0-d4*sum12+sum02**(double*)&__frame.q1;
-        d3 = sum02_c*sum12-*(double*)&__frame.q1**(double*)x4;
-        inv = 128.0/(*(double*)x2*d1+*(double*)&__frame.q0*d2+sum01*d3+0.1);
-        *(double*)acc0 = inv;
-        wa = (int32_t)(((sum02**(double*)&__frame.q0-sum01**(double*)x4)**(double*)x5+(0.0-sum02**(double*)x2+sum01*d6)**(double*)&x5[2]+(*(double*)x4**(double*)x2-d6**(double*)&__frame.q0)**(double*)&q2)*inv);
+        // The three cofactors of the first row of `S`, and one over its
+        // determinant -- scaled by 128 because the weights are eighths of a
+        // 128th and clamped to [-64, 191] below.  The `+0.1` keeps a singular
+        // system (a flat image, every gradient zero) from dividing by zero.
+        d1 = Sxx*Szz-Sxz*Sxz;
+        d2 = 0.0-Sxx*Syz+Sxz*Sxy;
+        d3 = Sxz*Syz-Sxy*Szz;
+        inv = 128.0/(Syy*d1+Syz*d2+Sxy*d3+0.1);
+        wa = (int32_t)(((Sxz*Syz-Sxy*Szz)*Syw+(0.0-Sxz*Syy+Sxy*Syz)*Szw+(Szz*Syy-Syz*Syz)*Sxw)*inv);
         if( wa>=191 )
           wa = 191;
         if( wa<-64 )
           wa = -64;
         wa_slot = wa;
-        wb = (int32_t)((d1**(double*)x5+d2**(double*)&x5[2]+d3**(double*)&q2)*inv);
+        wb = (int32_t)((d1*Syw+d2*Szw+d3*Sxw)*inv);
         if( wb>=191 )
           wb = 191;
         if( wb<-64 )
           wb = -64;
-        wc = (int32_t)(*(double*)acc0*((d4**(double*)&x5[2]-__frame.d0**(double*)&q2)**(double*)x2+(0.0-d4**(double*)x5+*(double*)&q2**(double*)&__frame.q1)**(double*)&__frame.q0+(__frame.d0**(double*)x5-*(double*)&__frame.q1**(double*)&x5[2])*d5));
+        wc = (int32_t)(inv*((Sxx*Szw-Sxz*Sxw)*Syy+(0.0-Sxx*Syw+Sxw*Sxy)*Syz+(Sxz*Syw-Sxy*Szw)*Sxy));
         if( wc>=191 )
           wc = 191;
         if( wc<-64 )
