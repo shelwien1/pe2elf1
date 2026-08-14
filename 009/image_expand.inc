@@ -1,5 +1,15 @@
 // image_expand.inc -- the image out of a `.bmf`.
 
+// Close the input and give up.  Ten sites wrote `fclose(arc->fp); arc->fp = 0;
+// return nullptr;` out, which is ten places a reader has to check that the file
+// was actually closed.  Returning it lets each site say `return
+// __expand_fail(arc);` and be one statement.
+static uint8_t*__expand_fail(BmfArc* arc) {
+  fclose(arc->fp);
+  arc->fp = nullptr;
+  return nullptr;
+}
+
 uint8_t*__expand_image(BmfArc* arc_in, void** p_coded_buf) {
   struct alignas(16) ExpandImageFrame {
     uint8_t* Block;
@@ -68,19 +78,14 @@ uint8_t*__expand_image(BmfArc* arc_in, void** p_coded_buf) {
     fp1 = arc->fp;
   }
   if( (uint16_t)magic!=0x8A81||(major_v = (uint8_t)(magic>>16), minor_v = (uint8_t)(magic>>24), plane_desc[0].weight0 = ((major_v<<8)-12288)|(minor_v-48), plane_desc[0].weight0!=512)||fread(__frame.hdr_words, 0x10u, 1u, arc->fp)!=1 ) {
-    fp = arc->fp;
-    fclose(fp);
-    arc->fp = 0;
-    return nullptr;
+    return __expand_fail(arc);
   }
   if( __frame.flags_b<0 ) {
     fread(__frame.hdr, 8u, 1u, arc->fp);
     if( p_coded_buf ) {
       int32_t hdr_word = *(int32_t*)&__frame.hdr[0];
       if( (*(uint32_t*)&__frame.hdr[4])>__bytes_left(arc->fp) ) {
-        fclose(arc->fp);
-        arc->fp = 0;
-        return nullptr;
+        return __expand_fail(arc);
       }
       uint32_t pad_len = ((*(uint32_t*)&__frame.hdr[4])+((*(uint32_t*)&__frame.hdr[4])==0)+3)&0xFFFFFFFC;
       uint32_t *blk = (uint32_t*)bmf_new(pad_len+8);
@@ -94,18 +99,14 @@ uint8_t*__expand_image(BmfArc* arc_in, void** p_coded_buf) {
     }
   }
   if( __frame.data_len>__bytes_left(arc->fp) ) {
-    fclose(arc->fp);
-    arc->fp = 0;
-    return nullptr;
+    return __expand_fail(arc);
   }
   pal_bytes = 3<<(__frame.depth_b&31);
   if( !(__frame.depth_b&0x80) )
     pal_bytes = __frame.depth_b&0x80;
   __frame.pal_len = pal_bytes;
   if( !__frame.hdr_words[0]||!__frame.hdr_words[1] ) {
-    fclose(arc->fp);
-    arc->fp = 0;
-    return nullptr;
+    return __expand_fail(arc);
   }
   img_at = (BmfImage*)((uint8_t*)__alloc_image(__frame.hdr_words[0], __frame.hdr_words[1], __frame.depth_b&0x3F, (uint8_t)(__frame.depth_b&0x80)>>7, 1));
   __frame.depth_f = __frame.depth_b;
@@ -115,21 +116,15 @@ uint8_t*__expand_image(BmfArc* arc_in, void** p_coded_buf) {
   img_at->flags |= __frame.flags_b&2|(has_coded<<7);
   plane_count = ((__frame.depth_f&0x3Fu)+7)>>3;
   if( plane_count<1||plane_count>4 ) {
-    fclose(arc->fp);
-    arc->fp = 0;
-    return nullptr;
+    return __expand_fail(arc);
   }
   if( !(hdr_flags&0x20) ) {
     if( __frame.data_len>img_at->data_size ) {
-      fclose(arc->fp);
-      arc->fp = 0;
-      return nullptr;
+      return __expand_fail(arc);
     }
     uint32_t want = __frame.data_len;
     if( fread(img_at->pixels, 1u, __frame.data_len, arc->fp)!=want ) {
-      fclose(arc->fp);
-      arc->fp = 0;
-      return nullptr;
+      return __expand_fail(arc);
     }
     goto LABEL_109;
   }
@@ -142,16 +137,10 @@ uint8_t*__expand_image(BmfArc* arc_in, void** p_coded_buf) {
   desc_slow_mode = 1;
   coded_size = __frame.data_len;
   coded_buf = (uint8_t*)bmf_new(__frame.data_len);
-  out_cursor = coded_buf;
-  packer_free_bits = 0;
-  packer_acc = 0;
-  packer_word = (uint32_t*)coded_buf;
-  hist_scratch = coded_buf+coded_size-4096;
+  packer_reset();
   want2 = __frame.data_len;
   if( fread(coded_buf, 1u, __frame.data_len, arc->fp)!=want2 ) {
-    fclose(arc->fp);
-    arc->fp = 0;
-    return nullptr;
+    return __expand_fail(arc);
   }
   bpp = img_at->depth;
   if( (bpp&0x3Fu)<=4||(__frame.flags_b&0x10)==0 ) {
@@ -291,9 +280,7 @@ LABEL_105:
   free(plane_buf);
 LABEL_106:
   if( coded_buf+__frame.data_len!=out_cursor ) {
-    fclose(arc->fp);
-    arc->fp = 0;
-    return nullptr;
+    return __expand_fail(arc);
   }
   free(coded_buf);
   __frame.depth_f = __frame.depth_b;
@@ -302,16 +289,12 @@ LABEL_109:
     pal_at = (img_at->depth&0x80) ? &((uint8_t*)img_at)[img_at->data_size+16] : nullptr;
     got = fread(pal_at, 1u, __frame.pal_len, arc->fp);
     if( got!=__frame.pal_len ) {
-      fclose(arc->fp);
-      arc->fp = 0;
-      return nullptr;
+      return __expand_fail(arc);
     }
   }
   if( img_at->flags&2 ) {
     if( (uint64_t)img_at->width*img_at->height*(uint32_t)plane_count>(uint64_t)img_at->data_size ) {
-      fclose(arc->fp);
-      arc->fp = 0;
-      return nullptr;
+      return __expand_fail(arc);
     }
     copy = (uint8_t*)bmf_new(img_at->data_size);
     n_planes = plane_count;

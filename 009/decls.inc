@@ -30,6 +30,7 @@ struct BmfImage;
 struct BmpHeader;
 
 static inline void free_sym_entries(SymList* list, uint32_t n);
+static void free_sym_lists(SymList* lists);
 static inline SymListBlock*sym_list_block(SymList* list);
 static inline uint32_t sym_list_count(const SymList* list);
 static inline FreqPair*bit_tree(uint16_t* freq, int32_t lvl);
@@ -37,6 +38,7 @@ static inline int32_t p2_pred(int32_t weighted, int32_t rate);
 static inline int16_t p2_bump(int32_t w2, int32_t err, int32_t shift);
 static inline void p2_update(P2Count* p, int32_t res, int32_t shift);
 static inline void p2_nudge(P2Count* p, int32_t res);
+static inline uint8_t med_predict(int32_t west, int32_t north, int32_t northwest);
 static inline void p2_rescale(P2Freq* r);
 static inline void p2_freq_add(P2Freq* r, int32_t slot, uint32_t num);
 BmfArc*__bmf_destroy_archive(BmfArc* arc, int8_t do_free);
@@ -88,6 +90,7 @@ void __model_planes(uint8_t* img, uint8_t* pixels, int32_t plane, int8_t unread_
 void __transform_planes(BmfImage* p_i, int8_t unread_flag);
 static uint32_t __bytes_left(FILE* fp);
 static uint32_t __packer_word();
+static void packer_reset();
 static void pack_bits(uint32_t word, int32_t n);
 static uint32_t unpack_bits(int32_t n);
 uint8_t*__expand_image(BmfArc* arc_in, void** p_coded_buf);

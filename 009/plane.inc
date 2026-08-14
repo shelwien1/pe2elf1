@@ -30,21 +30,14 @@ void __model_planes(uint8_t* img, uint8_t* pixels, int32_t plane, int8_t unread_
   plane_predictor = plane_desc[plane+1].flags&3;
   plane_alt_model = (uint8_t)(plane_desc[plane+1].flags&4)>>2;
   __colour_transform(img, pixels, plane, unread_flag);
-  uint8_t* scratch = hist_scratch;
-  uint8_t* aligned = (uint8_t*)((uintptr_t)(hist_scratch+15)&~(uintptr_t)15);
-  memset(scratch, 0, 15);
-  bmf_zero16(&scratch[1008]);
-  int32_t ofs = 1008;
-  do {
-    bmf_zero16((aligned+ofs-16));
-    bmf_zero16((aligned+ofs-32));
-    bmf_zero16((aligned+ofs-48));
-    bmf_zero16((aligned+ofs-64));
-    bmf_zero16((aligned+ofs-80));
-    bmf_zero16((aligned+ofs-96));
-    bmf_zero16((aligned+ofs-112));
-    ofs -= 112;
-  } while( ofs );
+  // 1,024 bytes.  The original zeroed them as a `memset` of the unaligned head,
+  // one aligned 16-byte store at the tail, and a loop of seven more stepping
+  // back by 112 -- SSE, unrolled sevenfold, over a buffer whose start it had to
+  // round up to 16 first.  The three ranges cover [0, 1023] whatever the
+  // rounding takes: the head covers everything below the aligned start (at most
+  // 15 bytes), the loop covers 1,008 from there, and the tail store covers what
+  // the loop's own offset pushed past the end.  This runs once per plane.
+  memset(hist_scratch, 0, 1024);
   {
     BmfImage hdr = *(BmfImage*)img;
     hdr.depth = 72;

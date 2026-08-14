@@ -1,3 +1,11 @@
+// memory.inc -- the allocator.
+//
+// Two of them.  The default is plain `malloc`/`free`; everything below the
+// `#if` is a bucketed free list over an `mmap`ed arena placed above 4 GB, built
+// with `-DBMF_HIGH_ARENA` and existing for one purpose -- to prove the program
+// does not care where its memory is.  A pointer stored through a 32-bit
+// integer would fault there and nowhere else, which is what `tools/x32.sh` and
+// the high-arena gate (92 of 93 checks) are between them checking.
 #if UINTPTR_MAX>0xFFFFFFFFu&&defined(BMF_HIGH_ARENA)
 #include <sys/mman.h>
 #define BMF_ARENA_BYTES ((size_t)768<<20)

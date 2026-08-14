@@ -57,11 +57,7 @@ int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* extra_blk) {
   if( (p_i->depth&0x3Fu)<=4 ) {
     coded_size = p_i->data_size+0x20000;
     coded_buf = (uint8_t*)bmf_new(coded_size);
-    packer_free_bits = 0;
-    packer_acc = 0;
-    out_cursor = coded_buf;
-    packer_word = (uint32_t*)coded_buf;
-    hist_scratch = coded_buf+coded_size-4096;
+    packer_reset();
     plane_predictor = 0;
     plane_alt_model = 0;
     alphabet_reduced = 0;
@@ -85,11 +81,7 @@ int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* extra_blk) {
   }
   coded_size = data_bytes+0x20000;
   coded_buf = (uint8_t*)bmf_new(data_bytes+0x20000);
-  out_cursor = coded_buf;
-  packer_free_bits = 0;
-  packer_acc = 0;
-  packer_word = (uint32_t*)coded_buf;
-  hist_scratch = coded_buf+coded_size-4096;
+  packer_reset();
   if( plane_count==1 ) {
     if( p_i->depth&0x40 ) {
 LABEL_22:

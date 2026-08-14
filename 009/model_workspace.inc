@@ -1,42 +1,25 @@
 // model_workspace.inc -- the main model's workspace: how it is laid out and how it is given
 // back.
 
+// One bank of symbol lists, and the block behind it.  Written out twice, once
+// for each of the two banks, ten lines apart.
+static void free_sym_lists(SymList* lists) {
+  if( !lists )
+    return;
+  uint32_t n = sym_list_count(lists);
+  for( SymList* p = &lists[n]; p>lists; )
+    free((--p)->ent);
+  free(sym_list_block(lists));
+}
+
 void**ModelBlock::free_workspace(int8_t do_free) {
-  uint32_t n, left;
   int32_t i;
-  SymList* lists, * p;
   free(sym_code);
   free(sym_word);
   free(run_bucket);
   free(*(void**)&alpha_map);
-  lists = sel1_list;
-  if( lists ) {
-    n = sym_list_count(lists);
-    if( n ) {
-      left = n;
-      p = &lists[n];
-      do {
-        --p;
-        free(p->ent);
-        --left;
-      } while( left );
-    }
-    free(sym_list_block(lists));
-  }
-  lists = sel0_list;
-  if( lists ) {
-    n = sym_list_count(lists);
-    if( n ) {
-      left = n;
-      p = &lists[n];
-      do {
-        --p;
-        free(p->ent);
-        --left;
-      } while( left );
-    }
-    free(sym_list_block(lists));
-  }
+  free_sym_lists(sel1_list);
+  free_sym_lists(sel0_list);
   for( i = 0; i<5; ++i )
     free(row_cur[i]);
   free(escape.ent);

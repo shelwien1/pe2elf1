@@ -1,4 +1,16 @@
-
+// rc.inc -- the arithmetic coder, and nothing else.  Its file ends are rc_io.inc.
+//
+// A carry-propagating range coder: `low` and `range` narrow as symbols arrive,
+// and a byte leaves whenever `range` falls below `kTop`.  The four constants
+// were four magic words in the decompilation -- 0x800000, 0x7F800000,
+// 0x80000000, 0x7FFFFFFF -- and the fifth, `kMarker = 0x97`, is the byte the
+// original seeds `cache` with, which is why a stream's first byte is not part
+// of the coding.
+//
+// The private section is private for a reason: `p()` and `set_p()` wrap
+// `out_cursor`, the one global this shares with the bit packer in rc_io.inc,
+// and `dec_get` is the only bounds check between a truncated file and a read
+// past the end of the buffer.
 struct RangeCoder {
   static const uint32_t kTop = 0x00800000;
   static const uint32_t kPend = 0x7F800000;

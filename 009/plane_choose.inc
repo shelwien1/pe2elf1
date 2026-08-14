@@ -110,14 +110,10 @@ int32_t __choose_plane_coding(BmfImage* img, int32_t unused_h, int8_t unused_c) 
   __frame.row_stride = (uint16_t)img->stride;
   const uint8_t* data_end = &img->pixels[data_size];
   memset(__frame.buf, 0, 0x8000);
-  result = 192;
-  do {
-    bmf_zero16(&scratch[result+48]);
-    bmf_zero16(&scratch[result+32]);
-    bmf_zero16(&scratch[result+16]);
-    bmf_zero16(&scratch[result]);
-    result -= 64;
-  } while( result );
+  // The three 64-byte tables, as one block: `scratch[64..255]`.  The first 64
+  // bytes are `acc0`, `acc1` and `d4` and are deliberately left alone -- the
+  // loop this replaces started at 192 and stopped before reaching them.
+  memset(&scratch[64], 0, 192);
   if( n_planes>0 ) {
     if( n_planes/2 ) {
       uint32_t pair = 0;

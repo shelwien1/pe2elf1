@@ -154,6 +154,20 @@ static uint32_t __packer_word() {
   return w;
 }
 
+// Rewind the packer to the start of the coded buffer.  `search_filter` encodes
+// the same tile once per candidate flag and measures the bytes each time, so it
+// does this between every trial; seven sites wrote all five lines out, and the
+// fifth -- `hist_scratch`, which is a *different* buffer's cursor that happens
+// to live at the far end of this one -- is the one a reader has to remember is
+// part of the reset.
+static void packer_reset() {
+  packer_free_bits = 0;
+  packer_acc = 0;
+  out_cursor = coded_buf;
+  packer_word = (uint32_t*)coded_buf;
+  hist_scratch = coded_buf+coded_size-4096;
+}
+
 // The header's bit stream: the per-plane descriptors, a few bits at a time,
 // through a 32-bit accumulator that spills to `packer_word` when it fills.
 //

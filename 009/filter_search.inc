@@ -61,12 +61,8 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
   __frame.tile_img = (BmfImage*)__alloc_image(tile_w, tile_h, img_c->depth&0x3F, 0, 0);
   coded_size = __frame.tile_img->data_size+0x20000;
   coded_buf = (uint8_t*)bmf_new(coded_size);
-  out_cursor = coded_buf;
-  packer_free_bits = 0;
-  packer_acc = 0;
-  packer_word = (uint32_t*)coded_buf;
+  packer_reset();
   __frame.dims[0] = tile_h*tile_w;
-  hist_scratch = coded_buf+coded_size-4096;
   __frame.tile_buf = bmf_new(tile_h*tile_w);
   nplanes = plane_count;
   y0 = (img_c->height-tile_h)>>1;
@@ -116,12 +112,8 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
         *(uint32_t*)packer_word = packer_acc;
         if( !deep )
           best_cost = bits_f0;
-        packer_free_bits = 0;
-        packer_acc = 0;
-        out_cursor = coded_buf;
-        packer_word = (uint32_t*)coded_buf;
         flags_s = __frame.best_flags;
-        hist_scratch = coded_buf+coded_size-4096;
+        packer_reset();
         if( best_cost==0x7FFFFFFF )
           best_cost = 0x7FFFFFFF;
         else
@@ -134,13 +126,9 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
       cost_f5 = plane_desc[0].desc_word-packer_free_bits+bits_f5+32;
       deep = 0;
       *(uint32_t*)packer_word = packer_acc;
-      out_cursor = coded_buf;
-      packer_word = (uint32_t*)coded_buf;
       if( !deep )
         cost_f5 = bits_f5;
-      packer_free_bits = 0;
-      packer_acc = 0;
-      hist_scratch = coded_buf+coded_size-4096;
+      packer_reset();
       f5 = __frame.best_flags;
       if( cost_f5<best_cost ) {
         best_cost = cost_f5;
@@ -155,14 +143,10 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
         cost_f6 = plane_desc[0].desc_word-packer_free_bits+bits_f6+32;
         deep = 0;
         *(uint32_t*)packer_word = packer_acc;
-        out_cursor = coded_buf;
-        packer_word = (uint32_t*)coded_buf;
         if( !deep )
           cost_f6 = bits_f6;
-        packer_free_bits = 0;
-        packer_acc = 0;
         f6 = __frame.best_flags;
-        hist_scratch = coded_buf+coded_size-4096;
+        packer_reset();
         if( cost_f6<best_cost ) {
           best_cost = cost_f6;
           f6 = 6;
@@ -178,14 +162,10 @@ LABEL_191:
             cost_f8 = plane_desc[0].desc_word-packer_free_bits+bits_f8+32;
             deep = 0;
             *(uint32_t*)packer_word = packer_acc;
-            out_cursor = coded_buf;
-            packer_word = (uint32_t*)coded_buf;
             if( !deep )
               cost_f8 = bits_f8;
-            packer_free_bits = 0;
-            packer_acc = 0;
             f8 = __frame.best_flags;
-            hist_scratch = coded_buf+coded_size-4096;
+            packer_reset();
             if( cost_f8<best_cost ) {
               best_cost = cost_f8;
               f8 = 8;
@@ -199,15 +179,11 @@ LABEL_191:
           cost_f13 = plane_desc[0].desc_word-packer_free_bits+bits_f13+32;
           deep = 0;
           *(uint32_t*)packer_word = packer_acc;
-          out_cursor = coded_buf;
-          packer_word = (uint32_t*)coded_buf;
           if( !deep )
             cost_f13 = bits_f13;
           __frame.rows[0] = cost_f13;
-          packer_free_bits = 0;
-          packer_acc = 0;
           f13 = __frame.best_flags;
-          hist_scratch = coded_buf+coded_size-4096;
+          packer_reset();
           if( cost_f13<best_cost ) {
             best_cost = (int32_t)cost_f13;
             f13 = 13;
@@ -224,11 +200,7 @@ LABEL_191:
             if( cost_f14<best_cost )
               best_cost = cost_f14;
             *(uint32_t*)packer_word = packer_acc;
-            packer_free_bits = 0;
-            packer_acc = 0;
-            out_cursor = coded_buf;
-            packer_word = (uint32_t*)coded_buf;
-            hist_scratch = coded_buf+coded_size-4096;
+            packer_reset();
             f14 = __frame.best_flags;
             if( deep2 )
               f14 = 14;
@@ -316,12 +288,8 @@ LABEL_43: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
         __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl_k, f4);
         bits = 8*(out_cursor-coded_buf);
         *(uint32_t*)packer_word = packer_acc;
-        packer_free_bits = 0;
         bits_d += bits;
-        packer_acc = 0;
-        out_cursor = coded_buf;
-        packer_word = (uint32_t*)coded_buf;
-        hist_scratch = coded_buf+coded_size-4096;
+        packer_reset();
         if( (uint32_t)(bits-(bits>>8))>__frame.costs[__frame.rows[0]] )
           break;
         if( ++pk>=plane_count ) {
@@ -432,11 +400,7 @@ LABEL_172:
       bits_e = 8*(out_cursor-coded_buf);
       deep2 = bits_e<=__frame.best_bits;
       *(uint32_t*)packer_word = packer_acc;
-      packer_free_bits = 0;
-      packer_acc = 0;
-      out_cursor = coded_buf;
-      packer_word = (uint32_t*)coded_buf;
-      hist_scratch = coded_buf+coded_size-4096;
+      packer_reset();
       if( deep2 ) {
         __frame.best_bits = bits_e;
         nplanes_b = plane_count;
@@ -473,11 +437,7 @@ LABEL_172:
         deep2 = bits_a<=__frame.best_bits;
         __frame.rows[0] = bits_a;
         *(uint32_t*)packer_word = packer_acc;
-        packer_free_bits = 0;
-        packer_acc = 0;
-        out_cursor = coded_buf;
-        packer_word = (uint32_t*)coded_buf;
-        hist_scratch = coded_buf+coded_size-4096;
+        packer_reset();
         if( deep2 ) {
           __frame.best_bits = bits_a;
           __frame.n_hard = bits_a;
@@ -498,11 +458,7 @@ LABEL_172:
             bits2 = 8*(out_cursor-coded_buf);
             deep2 = bits2<=__frame.rows[0];
             *(uint32_t*)packer_word = packer_acc;
-            out_cursor = coded_buf;
-            packer_word = (uint32_t*)coded_buf;
-            packer_free_bits = 0;
-            packer_acc = 0;
-            hist_scratch = coded_buf+coded_size-4096;
+            packer_reset();
             if( deep2 ) {
               cand = 0;
             } else {
@@ -538,11 +494,7 @@ LABEL_63:
     bits_b = 8*(out_cursor-coded_buf);
     __frame.rows[1] = bits_b;
     *(uint32_t*)packer_word = packer_acc;
-    packer_free_bits = 0;
-    packer_acc = 0;
-    out_cursor = coded_buf;
-    packer_word = (uint32_t*)coded_buf;
-    hist_scratch = coded_buf+coded_size-4096;
+    packer_reset();
     if( bits_b>__frame.best_bits ) {
       for( desc_k = 0; desc_k<4; ++desc_k )
         plane_desc[desc_k+1] = __frame.saved[desc_k];
@@ -564,11 +516,7 @@ LABEL_63:
       bits_c = 8*(out_cursor-coded_buf);
       deep2 = bits_c<=__frame.best_bits;
       *(uint32_t*)packer_word = packer_acc;
-      packer_free_bits = 0;
-      packer_acc = 0;
-      out_cursor = coded_buf;
-      packer_word = (uint32_t*)coded_buf;
-      hist_scratch = coded_buf+coded_size-4096;
+      packer_reset();
       if( deep2 ) {
         cand = 0;
       } else {

@@ -4,6 +4,30 @@
 void __expand_predictor_mode0(uint8_t* unread_src, int32_t i, int32_t unread_h) {
 }
 
+// The MED / LOCO-I predictor, which JPEG-LS calls the median edge detector:
+// pick `min(N,W)` at a rising edge, `max(N,W)` at a falling one, and the plane
+// `N + W - NW` in between.  Written out twice, once in each direction, in the
+// two nested comparisons the original compiled to -- which is the same rule
+// with the `min`/`max` inlined into the branch.
+//
+// A published predictor whose name appears nowhere is the worst kind of
+// duplication: two copies, and a reader who does not already recognise it has
+// to derive the rule from the branches, twice.
+static inline uint8_t med_predict(int32_t west, int32_t north, int32_t northwest) {
+  if( west<north ) {
+    if( northwest<west )
+      return (uint8_t)north;
+    if( northwest<=north )
+      return (uint8_t)(north+west-northwest);
+  } else {
+    if( northwest>west )
+      return (uint8_t)north;
+    if( northwest>=north )
+      return (uint8_t)(north+west-northwest);
+  }
+  return (uint8_t)west;
+}
+
 uint32_t __predict_med(uint8_t* pixels, int32_t width, int32_t height) {
   uint32_t done;
   uint8_t pred;
@@ -22,19 +46,8 @@ uint32_t __predict_med(uint8_t* pixels, int32_t width, int32_t height) {
       if( width!=1 ) {
         do {
           int32_t north = (uint8_t)*--up;
-          pred = (uint8_t)*(--p-1);
-          int32_t northwest = (uint8_t)p[-width-1];
-          if( pred<north ) {
-            if( northwest<pred )
-              pred = (uint8_t)north;
-            else if( northwest<=north )
-              pred = (uint8_t)(north+pred-northwest);
-          } else {
-            if( northwest>pred )
-              pred = (uint8_t)north;
-            else if( northwest>=north )
-              pred = (uint8_t)(north+pred-northwest);
-          }
+          --p;
+          pred = med_predict((uint8_t)p[-1], north, (uint8_t)p[-width-1]);
           int32_t code = (uint8_t)fold[(uint8_t)(*p-pred)];
           *p = code;
           ++*(uint32_t*)&hist_scratch[4*code];
@@ -277,20 +290,7 @@ uint8_t*__unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
           return p;
       }
       do {
-        pred = (uint8_t)*(p-1);
-        int32_t north = (uint8_t)*up;
-        int32_t northwest = (uint8_t)p[-width-1];
-        if( pred<north ) {
-          if( northwest<pred )
-            pred = (uint8_t)north;
-          else if( northwest<=north )
-            pred = (uint8_t)(north+pred-northwest);
-        } else {
-          if( northwest>pred )
-            pred = (uint8_t)north;
-          else if( northwest>=north )
-            pred = (uint8_t)(north+pred-northwest);
-        }
+        pred = med_predict((uint8_t)p[-1], (uint8_t)*up, (uint8_t)p[-width-1]);
         *p = pred+unfold[(uint8_t)*p];
         ++up;
         ++p;
