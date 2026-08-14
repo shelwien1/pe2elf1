@@ -11,6 +11,27 @@ struct BmfImage {
   uint8_t pixels[0];
 };
 
+// Transpose the header.  The loop at each call site has already moved the
+// pixels; this swaps the two dimensions that describe them, recomputes the
+// stride, and flips bit 1 of `flags`, which is the record that it happened.
+//
+// Open-coded at five sites, in two spellings that are not obviously the same
+// store: three wrote `*(uint16_t*)&img->stride`, which leaves the top half of
+// the 32-bit field alone, and two assigned the whole word.  What makes them
+// one function is that the *value* is sixteen bits wide at all five -- it goes
+// through a `uint16_t` or `int16_t` temporary before the store every time, and
+// the reads on these paths are `(uint16_t)img->stride` to match.  A stride
+// that did not fit in sixteen bits would already be wrong here in the
+// original; given that it fits, zeroing the top half and leaving it alone are
+// the same thing, and the whole-word store is the one that says so.
+static inline void transpose_image_in_place(BmfImage* img, int32_t planes) {
+  uint16_t w = img->width;
+  img->width = img->height;
+  img->height = w;
+  img->flags ^= 2u;
+  img->stride = (uint16_t)(img->width*planes);
+}
+
 // The allocation is one block: a sixteen-byte `BmfImage`, the pixels, and the
 // palette after them if there is one.
 //

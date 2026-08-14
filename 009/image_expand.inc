@@ -316,11 +316,7 @@ read_palette:
         ++y;
       } while( y<img_h );
     }
-    w16 = img_at->width;
-    img_at->width = img_h;
-    img_at->flags ^= 2u;
-    img_at->height = w16;
-    *(uint16_t*)&img_at->stride = img_h*n_planes;
+    transpose_image_in_place(img_at, n_planes);
     free(copy);
   }
   return (uint8_t*)img_at;

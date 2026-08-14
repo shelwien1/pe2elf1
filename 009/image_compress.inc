@@ -179,11 +179,7 @@ write_coded:
         ++row_y;
       } while( row_y<img_h );
     }
-    w16 = img->width;
-    img->width = img_h;
-    img->height = w16;
-    img->flags ^= 2u;
-    img->stride = img_h*plane_n;
+    transpose_image_in_place(img, plane_n);
     free(pix_copy);
   }
   // Both arms end here with `pixels` pointing at the same bytes: the transpose

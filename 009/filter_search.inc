@@ -240,13 +240,7 @@ keep_flag8: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
         ++y1;
       } while( y1<img_h1b );
     }
-    tile_b = (uint8_t*)__frame.tile_img;
-    w_a = (__frame.tile_img)->width;
-    w_b = img_h1b*(uint16_t)__frame.rows[1];
-    (__frame.tile_img)->width = img_h1b;
-    ((BmfImage*)tile_b)->height = w_a;
-    ((BmfImage*)tile_b)->flags ^= 2u;
-    *(uint16_t*)&((BmfImage*)tile_b)->stride = w_b;
+    transpose_image_in_place(__frame.tile_img, __frame.rows[1]);
     free(p2);
     bits_d = 0;
     if( plane_count>0 ) {
@@ -299,13 +293,7 @@ tile_restored:
           ++y2;
         } while( y2<img_h2 );
       }
-      tile_d = (uint8_t*)__frame.tile_img;
-      w_d = (__frame.tile_img)->width;
-      w_e = img_h2*(uint16_t)__frame.rows[1];
-      (__frame.tile_img)->width = img_h2;
-      ((BmfImage*)tile_d)->height = w_d;
-      ((BmfImage*)tile_d)->flags ^= 2u;
-      *(uint16_t*)&((BmfImage*)tile_d)->stride = w_e;
+      transpose_image_in_place(__frame.tile_img, __frame.rows[1]);
       free(base2);
     } else {
       __frame.best_bits = bits_d;
@@ -337,12 +325,7 @@ tile_restored:
           ++y3;
         } while( y3<img_h3b );
       }
-      w16 = img->width;
-      w_c = img_h3b*(uint16_t)__frame.rows[1];
-      img->width = img_h3b;
-      img->height = w16;
-      img->flags ^= 2u;
-      img->stride = w_c;
+      transpose_image_in_place(img, __frame.rows[1]);
       free(__frame.base);
     }
   }
