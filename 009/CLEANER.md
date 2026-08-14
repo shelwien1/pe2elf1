@@ -273,7 +273,7 @@ when the gate is being run for something else anyway.
 
 **Taken: two of the three.** The count's three names went with Phase 2. The
 `sym` lift is below and is done: 246 named reads became `sym[N]` and both
-unions collapsed, `model.inc` 1,961 -> 1,882 lines. The `xxxa`/`xxxb` sweep
+unions collapsed, `model.inc` 1,961 -> 1,895 lines (and to 1,882 after Phase 3). The `xxxa`/`xxxb` sweep
 is `tools/abpair.py` and **found nothing to do** -- 54 `a`/`b` families are
 left and every one is two genuinely different things. Two are assigned the
 same expression and are still two things: `__search_filter` measures
@@ -387,7 +387,7 @@ measured pair by pair in `bmf.cpp`'s header. Unchanged.
 | 2 — `pack_bits`, `unpack_bits` | 12 | ~116 lines | 118 lines | streams, `hdrscan.sh` 8,704 runs |
 | 3 — declare at first use | 865 | ~150 lines | 0 lines, 661 locals out of five walls | streams, ASan |
 | 4 — wrapping | 6 lines | 0 lines | 0 lines, 13 fewer over 200 chars | streams |
-| 5 — `sym[32]`, the count, the a/b sweep | 2 of 3 | ~70 lines | 79 lines | streams |
+| 5 — `sym[32]`, the count, the a/b sweep | 2 of 3 | ~70 lines | 66 lines | streams |
 
 **349 lines out of 12,136**, and — the point — three helpers where there were
 127 copies of them, plus a fourth for the 21 inline folds.
