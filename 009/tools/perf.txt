@@ -1,0 +1,22 @@
+# tools/perf.sh --record: image, encode us, decode us, stream bytes.
+# Minimum of 3 runs each, on whatever machine took them.  These
+# are the record, not the gate: the gate is a paired comparison
+# against tools/perf-baseline, because absolute numbers taken minutes
+# apart on this container disagree with themselves by several percent.
+DLRAW 169549 188602 225784
+altp1 200239 32437 192
+f05_200 69954 58797 21286
+med32 341898 10769 120
+noise24 462657 3046 49172
+rle4 8602 8657 148
+rle8 24206 7968 820
+t1 13011 12447 2622
+t24 1120906 45512 53924
+t32 1252788 54218 53996
+t8g 373054 142239 42896
+t8p 374053 140291 43664
+x_ai 740493 184835 148780
+x_ci 1632846 528962 633144
+x_ep 11506823 2596677 330656
+xform1 68359 12770 1256
+xform2 71665 15897 1552

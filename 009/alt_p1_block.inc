@@ -725,11 +725,16 @@ struct AltP1Block {
     return this;
   }
 
-  AltP1Block*alt_p1_free(int8_t do_free) {
+  // Returns nothing.  The original returned `this` -- a compiler's habit of
+  // leaving the object pointer in the return register, not a value anyone
+  // wanted -- and after the `free(this)` above it is a dangling pointer that
+  // g++ reports under `-Wuse-after-free`.  All three call sites discarded it;
+  // the one that did not, `__alt_model_p1_d8_decode`, only passed it on to
+  // another caller that did.
+  void alt_p1_free(int8_t do_free) {
     for( int32_t k = 0; k<5; ++k )
       free(buf[k]);
     if( do_free&1 )
       free(this);
-    return this;
   }
 };

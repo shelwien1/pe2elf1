@@ -22,12 +22,20 @@
 # `plane_choose.inc`.  Every other image picks colour transform 0; these
 # two are the only ones in the corpus that pick 1 and 2.
 #
-# Six legs, because "the streams match" is a much narrower statement than it
-# sounds and five kinds of defect live outside it:
+# Seven legs, because "the streams match" is a much narrower statement than it
+# sounds and six kinds of defect live outside it:
 #
 #   streams       compress each image, compare against its reference.
 #   round trip    expand it again, compare against the input.  A stream can
 #                 match while the decoder that has to read it does not.
+#   reference     expand the *reference* stream instead of the one this build
+#                 just wrote, and compare against the input.  The round trip
+#                 above feeds the decoder whatever the encoder produced, so a
+#                 change that moves both halves the same way passes it; this
+#                 leg's input is frozen, so it answers about the decoder alone.
+#                 It is the "orig-c -> new-d" direction, and the other one --
+#                 new-c fed to the old decoder -- is the streams leg: bytes
+#                 equal to the reference are bytes the old decoder already read.
 #   output        `bmf c` writes its output rather than growing it.
 #   malformed     five broken headers derived from the references.  The answer
 #                 here is an exit code, not a stream: 1..8 is the program's own
@@ -141,6 +149,31 @@ for n in $images; do
 done
 echo "$streams/$nimg streams match their reference"
 echo "$trips/$nimg round trips are byte-identical"
+
+# ---- the reference streams, decoded -----------------------------------------
+# Same comparison as the round trip, with the encoder taken out of it.  A
+# decoder change is localized here rather than reported as "differs" by a leg
+# that used the encoder to build its own input.
+refs=0 nref=0
+for n in $images; do
+  ref=testfiles/ref_$n.bmf
+  [ -f "$ref" ] || continue
+  nref=$((nref + 1)); ran=$((ran + 1))
+  rm -f "$tmp/ref_$n.bmp"
+  timeout "$T" "$BIN" d "$ref" "$tmp/ref_$n.bmp" >/dev/null 2>&1
+  rc=$?
+  if [ $rc != 0 ]; then
+    note "$n" "expanding the reference $(why $rc)"; continue
+  fi
+  want=testfiles/$n.bmp
+  [ -f "testfiles/out_$n.bmp" ] && want=testfiles/out_$n.bmp
+  if cmp -s "$tmp/ref_$n.bmp" "$want"; then
+    refs=$((refs + 1))
+  else
+    note "$n" "reference stream expands to something other than $(basename "$want")"
+  fi
+done
+echo "$refs/$nref reference streams expand to their image"
 
 # ---- the output file ------------------------------------------------------
 # `bmf c` writes its output: the same command twice is the same file, not a

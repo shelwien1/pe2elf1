@@ -88,7 +88,7 @@ void __alt_model_p1_d8_encode(uint8_t* src, int32_t i, int32_t height, uint8_t* 
     blk->alt_p1_free(1);
 }
 
-void**__alt_model_p1_d8_decode(int8_t unread_flag, uint8_t* out, int32_t i, int32_t height) {
+void __alt_model_p1_d8_decode(int8_t unread_flag, uint8_t* out, int32_t i, int32_t height) {
   AltP1Block *blk;
   AltP1Block *raw = (AltP1Block*)bmf_new(sizeof(AltP1Block));
   if( raw )
@@ -135,5 +135,5 @@ void**__alt_model_p1_d8_decode(int8_t unread_flag, uint8_t* out, int32_t i, int3
     } while( y<blk->height );
   }
   __rc_end_decode();
-  return (void**)blk->alt_p1_free(1);
+  blk->alt_p1_free(1);
 }

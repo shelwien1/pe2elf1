@@ -85,7 +85,7 @@ uint8_t*__colour_transform(uint8_t* img, uint8_t* dst, int32_t plane, int8_t unr
 void __rc_begin_decode(int8_t unread_flag);
 uint8_t*__unpredict_med(uint8_t* pixels, int32_t width, int32_t height);
 int32_t __estimate_cost(uint8_t* bins, int32_t n);
-void**__alt_model_p1_d8_decode(int8_t unread_flag, uint8_t* out, int32_t i, int32_t height);
+void __alt_model_p1_d8_decode(int8_t unread_flag, uint8_t* out, int32_t i, int32_t height);
 int32_t __alt_model_p1_decode(uint16_t* hdr, uint8_t* out);
 int32_t __alt_p2_filter(float (*_this)[4], float (*a2)[4], CtxWeights* w, int32_t mode);
 void __reduce_alphabet(ModelBlock* blk, int8_t unread_flag, uint8_t* src);
