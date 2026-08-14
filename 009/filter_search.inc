@@ -38,7 +38,7 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
   int32_t p3, p6, p7, p10, p11, p14;
   int16_t w_b, w_e;
   int32_t flags_s, desc_k;
-  int32_t tile_w, tile_h, nplanes, y0, dx, off_y, row_bytes, best_cost, bits_f5, cost_f5, f5, pred, c0, c1, c2, c3, cand, nplanes_c, pl_a, pi0, pl_b, pi1, bits2, plane, pi3, bits_e, nplanes_b, pl_c, pi4, pl_d, bits_c, img_h1, y1, off1, x1, bits_d, pk, pl_k, bits, img_h3, y3, off3, pl_i, rows_x_planes, y2, off2, x2, pl2, bits_f8, cost_f8, f8, pl3, bits_f13, f13, pl4, cost_f14, f14, pl0, bits_f6, cost_f6, f6;
+  int32_t tile_w, tile_h, nplanes, y0, dx, off_y, row_bytes, best_cost, bits_f5, cost_f5, f5, pred, c0, c1, c2, c3, cand, nplanes_c, pl_a, pi0, pl_b, pi1, bits2, plane, pi3, bits_e, nplanes_b, pl_c, pi4, pl_d, bits_c, img_h1, y1, off1, x1, bits_d, pk, pl_k, bits, img_h3, y3, off3, pl_i, rows_x_planes, y2, off2, x2, pl2, bits_f8, cost_f8, f8, pl3, bits_f13, f13, cost_f14, f14, pl0, bits_f6, cost_f6, f6;
   uint16_t img_h3b, img_h2, img_h1b;
   uint16_t w16, w_c;
   uint8_t* p8, * p9;
@@ -64,6 +64,22 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
   packer_reset();
   __frame.dims[0] = tile_h*tile_w;
   __frame.tile_buf = bmf_new(tile_h*tile_w);
+  // Encode one plane of the trial tile under `flags` and return what it cost,
+  // in bits.  Seven sites wrote this out: set the descriptor, call the model,
+  // measure the bytes written, flush the packer's last partial word.  Four take
+  // it as written; the other three differ in an argument or in what they do
+  // between the measurement and the flush.
+  //
+  // The measurement is real coded bytes and not an estimate, which is what
+  // makes comparing candidates worth anything -- and is also the whole cost of
+  // `-Q9`.
+  auto probe_plane = [&](int32_t pl, int32_t flags) {
+    plane_desc[pl+1].flags = flags;
+    __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl, 0);
+    int32_t cost = 8*(out_cursor-coded_buf);
+    *(uint32_t*)packer_word = packer_acc;
+    return cost;
+  };
   nplanes = plane_count;
   y0 = (img_c->height-tile_h)>>1;
   dx = img_c->width-tile_w;
@@ -103,22 +119,14 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
       if( hard ) {
         best_cost = 0x7FFFFFFF;
       } else {
-        int32_t pl1 = __frame.dims[1];
-        plane_desc[__frame.dims[1]+1].flags = 0;
-        __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl1, 0);
-        int32_t bits_f0 = 8*(out_cursor-coded_buf);
-        *(uint32_t*)packer_word = packer_acc;
-        best_cost = bits_f0;
+        best_cost = probe_plane(__frame.dims[1], 0);
         flags_s = __frame.best_flags;
         packer_reset();
         if( best_cost!=0x7FFFFFFF )
           flags_s = 0;
         __frame.best_flags = flags_s;
       }
-      plane_desc[__frame.plane_i+1].flags = 5;
-      __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, __frame.dims[1], 0);
-      bits_f5 = 8*(out_cursor-coded_buf);
-      *(uint32_t*)packer_word = packer_acc;
+      bits_f5 = probe_plane(__frame.dims[1], 5);
       cost_f5 = bits_f5;
       packer_reset();
       f5 = __frame.best_flags;
@@ -129,10 +137,7 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
       __frame.best_flags = f5;
       if( cost_f5<best_cost+(best_cost>>5)||hard ) {
         pl0 = __frame.dims[1];
-        plane_desc[__frame.plane_i+1].flags = 6;
-        __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl0, 0);
-        bits_f6 = 8*(out_cursor-coded_buf);
-        *(uint32_t*)packer_word = packer_acc;
+        bits_f6 = probe_plane(pl0, 6);
         cost_f6 = bits_f6;
         f6 = __frame.best_flags;
         packer_reset();
@@ -145,10 +150,7 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
           {
 try_flag8:
             pl2 = __frame.dims[1];
-            plane_desc[__frame.plane_i+1].flags = 8;
-            __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl2, 0);
-            bits_f8 = 8*(out_cursor-coded_buf);
-            *(uint32_t*)packer_word = packer_acc;
+            bits_f8 = probe_plane(pl2, 8);
             cost_f8 = bits_f8;
             f8 = __frame.best_flags;
             packer_reset();
@@ -159,10 +161,7 @@ try_flag8:
             __frame.best_flags = f8;
           }
           pl3 = __frame.dims[1];
-          plane_desc[__frame.plane_i+1].flags = 13;
-          __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl3, 0);
-          bits_f13 = 8*(out_cursor-coded_buf);
-          *(uint32_t*)packer_word = packer_acc;
+          bits_f13 = probe_plane(pl3, 13);
           cost_f13 = bits_f13;
           __frame.rows[0] = cost_f13;
           f13 = __frame.best_flags;
@@ -174,15 +173,13 @@ try_flag8:
           __frame.best_flags = f13;
           pred = f13&3;
           if( pred==2||best_cost+(best_cost>>5)>__frame.rows[0] ) {
-            pl4 = __frame.dims[1];
-            plane_desc[__frame.plane_i+1].flags = 14;
-            __model_planes((uint8_t*)__frame.tile_img, (uint8_t*)__frame.tile_buf, pl4, 0);
-            cost_f14 = plane_desc[0].desc_word-packer_free_bits+8*(out_cursor-coded_buf)+32;
-            cost_f14 = 8*(out_cursor-coded_buf);
+            // `dims[1]` and `plane_i` are the same plane -- both were set from
+            // `plane_desc[pi+1].src_plane` at the top of this loop -- and the
+            // first `cost_f14` was overwritten by the next line.
+            cost_f14 = probe_plane(__frame.plane_i, 14);
             deep2 = cost_f14<best_cost;
             if( cost_f14<best_cost )
               best_cost = cost_f14;
-            *(uint32_t*)packer_word = packer_acc;
             packer_reset();
             f14 = __frame.best_flags;
             if( deep2 )

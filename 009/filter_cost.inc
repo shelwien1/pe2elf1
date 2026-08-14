@@ -65,31 +65,31 @@ int32_t __cost_candidate(uint8_t* img, int32_t cand, uint8_t* desc, int8_t unrea
   __frame.desc_f[33] = (uint8_t)cand2;
   uint8_t *p = &base[cand2+row_b2+__frame.nplanes];
   if( p<__frame.img_end ) {
+    // Eight neighbour offsets, constant for the whole walk.  The decompiler
+    // kept them in frame slots and read them back through `__frame.` in the hot
+    // loop, which is what a register spill looks like once it has a struct
+    // around it; as `const` locals they say what they are -- the north, west and
+    // north-west of the two reference planes, and the step to the next pixel.
+    const int32_t planes = __frame.nplanes;
+    const int32_t d2 = __frame.d2_f;
+    const int32_t a_n = d1-row_b2,          a_w = d1-planes,     a_nw = d1-row_b2-planes;
+    const int32_t b_n = d2-row_b2,          b_w = d2-planes,     b_nw = d2-row_b2-planes;
+    const int32_t step = row_b2+planes;
     __frame.d1_f = d1;
     *(uint32_t*)__frame.buf_1 = row_b2;
-    __frame.off_a2 = d1-row_b2;
-    __frame.off_a1 = d1-row_b2-__frame.nplanes;
-    __frame.off_a0 = d1-__frame.nplanes;
-    __frame.off_b2 = __frame.d2_f-row_b2;
-    __frame.off_b1 = __frame.d2_f-row_b2-__frame.nplanes;
-    __frame.off_b0 = __frame.d2_f-__frame.nplanes;
-    __frame.step_d = row_b2+__frame.nplanes;
     do {
-      int32_t d2 = __frame.d2_f;
-      int32_t dx = p[__frame.off_a1]+p[__frame.d1_f]-(p[__frame.off_a2]+p[__frame.off_a0]);
-      int32_t o1 = __frame.off_b1;
+      int32_t dx = p[a_nw]+p[d1]-(p[a_n]+p[a_w]);
       ++*(uint32_t*)&__frame.buf[4*dx+2048];
-      int32_t dy = p[o1]+p[d2]-(p[__frame.off_b2]+p[__frame.off_b0]);
-      int32_t o2 = __frame.step_d;
+      int32_t dy = p[b_nw]+p[d2]-(p[b_n]+p[b_w]);
       sxx = sxx+(double)dx*(double)dx;
       ++__frame.hist_y[dy+512];
       syy = syy+(double)dy*(double)dy;
       sxy = sxy+(double)dx*(double)dy;
       ++__frame.hist_yx[((uint16_t)dy-(uint16_t)dx-512)&0x3FF];
-      int32_t diag = p[-o2]+*p;
-      int32_t west = p[-__frame.nplanes];
-      uint8_t *q = p-*(uint32_t*)__frame.buf_1;
-      p += __frame.nplanes;
+      int32_t diag = p[-step]+*p;
+      int32_t west = p[-planes];
+      uint8_t *q = p-row_b2;
+      p += planes;
       int32_t dz = diag-(*q+west);
       sxz = sxz+(double)dx*(double)dz;
       ++__frame.hist_zx[((uint16_t)dz-(uint16_t)dx-512)&0x3FF];
@@ -98,7 +98,6 @@ int32_t __cost_candidate(uint8_t* img, int32_t cand, uint8_t* desc, int8_t unrea
       int32_t bin = ((uint16_t)dz-(uint16_t)((uint32_t)(((dx+dy)<<6)+40)>>7)-512)&0x3FF;
       ++__frame.hist_zp[bin];
     } while( p<__frame.img_end );
-    d1 = __frame.d1_f;
   }
   double inv = 128.0/(0.1-sxy*sxy+sxx*syy);
   double w1f = (syy*sxz-sxy*syz)*inv;
