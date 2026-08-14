@@ -35,7 +35,7 @@ private:
 
   uint8_t dec_get(uint8_t*&q) {
     if( q>=coded_buf+coded_size )
-      __exit_402E40(4);
+      bmf_fatal(bmf_read_error);
     return *q++;
   }
 
@@ -119,7 +119,7 @@ public:
   void dec_init() {
     uint8_t* q = p();
     if( dec_get(q)!=kMarker )
-      __exit_402E40(4);
+      bmf_fatal(bmf_read_error);
     cache = dec_get(q);
     set_p(q);
     range = 128;

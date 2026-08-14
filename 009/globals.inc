@@ -7,13 +7,33 @@
 // with SSE, and the recovery keeps the alignment so that a build which still
 // does can.
 
-__attribute__((noreturn)) void __exit_402E40(int32_t Code, ...) {
+// The exit codes, which are also the indices into the message table below --
+// that table is what defines them, so there is nothing here to invent.  They
+// are the program's exit status as well, and `test.sh` reads them, so the
+// numbers are the interface and not just an ordering.
+//
+// `bmf_no_option` and `bmf_user_break` are in the table and never raised: the
+// original had an option parser and a keyboard-interrupt check, and this build
+// has neither.  They stay because removing them would renumber the five that
+// are raised.
+enum BmfExit {
+  bmf_no_file    = 1,
+  bmf_no_option  = 2,
+  bmf_bad_file   = 3,
+  bmf_read_error = 4,
+  bmf_write_error= 5,
+  bmf_no_open    = 6,
+  bmf_no_memory  = 7,
+  bmf_user_break = 8,
+};
+
+__attribute__((noreturn)) void bmf_fatal(int32_t Code, ...) {
   va_list ap;
   static const char*const message[] = {
     "", "File not found: %s", "Unknown option: %s", "%s: bad file!", "Read error!", "Write error for file %s", "Can't open file: %s", "Out of memory!", "User break!",
   };
   va_start(ap, Code);
-  vprintf(message[(uint32_t)Code<9 ? Code : 4], ap);
+  vprintf(message[(uint32_t)Code<9 ? Code : bmf_read_error], ap);
   va_end(ap);
   printf("\n");
   exit(Code);
@@ -105,11 +125,33 @@ static uint8_t* coded_buf;
 
 static uint8_t* hist_scratch;
 
-alignas(16) static uint8_t bss_exclusion[8192+544];
+// The exclusion mask: one byte per symbol, stamped with the current generation
+// once the symbol has been offered and rejected, so the next candidate that
+// names it can be skipped.  `exclusion_gen` is that generation, and bumping it
+// is how the whole mask is cleared without touching it.
+//
+// This was two references onto one 8736-byte blob -- `exclusion_mask[8192]`
+// and a `__byte_445440[544]` for the tail -- and the split was wrong twice
+// over.  Three things set the real size and none of them is 8192:
+//
+//   * the alphabet reaches 8193 symbols.  `__rc_decode_flat(8193)` returns
+//     0..8192 and the count is that plus one (`model.inc`), so a symbol index
+//     reaches 8192 -- one past the end of the array that was named for it.
+//   * a `SymPair` slot with no symbol yet holds 8192 (`model_workspace.inc`
+//     seeds every one of them to it), and `ModelBlock::pixel_context` rejects
+//     such a candidate by finding that byte stamped.  So the empty-slot
+//     sentinel and the largest possible symbol share slot 8192 on purpose, and
+//     `__byte_445440[0]` was that byte: the two writes to it sit in the middle
+//     of the four that exclude `mode_symbol[1..4]`.
+//   * the generation reset clears in sixteen-byte blocks, `(alphabet+15)>>4`
+//     of them (`model.inc`), which for 8193 symbols writes 8208 bytes.
+//
+// The last is the binding constraint, and it is why `blob-independence.txt`
+// records the tail as SHARED: something writes across the boundary, and the
+// something is that round-up.  One array, sized by the clear that is widest.
+static constexpr int32_t no_symbol = 8192;
 
-static int8_t(&exclusion_mask)[8192] = *(int8_t(*)[8192]) bss_exclusion;
-
-static uint8_t(&__byte_445440)[544] = *(uint8_t(*)[544])(bss_exclusion+8192);
+alignas(16) static int8_t exclusion_mask[(no_symbol+1+15)&~15];
 
 static uint16_t* model_tables;
 
@@ -127,7 +169,7 @@ static inline uint8_t*bmf_plane_desc(int32_t off) {
   return (uint8_t*)&plane_desc[1]+off;
 }
 
-__attribute__((noreturn)) void __exit_402E40(int32_t Code, ...);
+__attribute__((noreturn)) void bmf_fatal(int32_t Code, ...);
 
 t_new_handler __set_new_handler(t_new_handler __out_of_memory_handler) {
   t_new_handler __set_new_handler_pout_of_memory_handler = __pout_of_memory_handler;
@@ -145,5 +187,5 @@ static inline float bmf_hsum4(const float x[4]) {
 }
 
 void __out_of_memory_handler() {
-  __exit_402E40(7);
+  bmf_fatal(bmf_no_memory);
 }

@@ -94,7 +94,6 @@ void __model_plane(BmfImage* p_i, uint8_t* pixels, uint8_t* raw) {
           }
           int32_t has3 = w3!=0;
           int32_t has4 = w4!=0;
-          w2 = w2;
           if( w2 )
             w2 = 1;
           int32_t lvl = has4+has3+w2+2;

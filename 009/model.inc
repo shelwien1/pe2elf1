@@ -272,7 +272,7 @@ struct ModelBlock {
     }
     cap = mask+1;
     if( bits>8 )
-      cap = 8193;
+      cap = no_symbol+1;
     uint32_t n_1 = __rc_decode_flat(cap);
     alphabet = n_1+1;
     if( (int32_t)(n_1+1)<=0x2000 ) {
@@ -450,8 +450,8 @@ struct ModelBlock {
       int32_t gi = 0;
       SymPair* gctr = this_1->group_ctr[g0];
       do {
-        gctr[gi].last = 0x2000;
-        gctr[gi++].prev = 0x2000;
+        gctr[gi].last = no_symbol;
+        gctr[gi++].prev = no_symbol;
       } while( gi<0x10000 );
       g = g0+1;
     } while( g0+1<15 );
@@ -1157,7 +1157,7 @@ struct ModelBlock {
     exclusion_mask[msym3] = gen;
     exclusion_mask[msym2] = gen;
     exclusion_mask[msym1] = gen;
-    __byte_445440[0] = gen;
+    exclusion_mask[no_symbol] = gen;
     sel[0] = nullptr;
     // The 32 candidate symbols `pixel_context` walks, in slot order.  Slots 0
     // and 1 are the two most recent symbols at this exact context, 2..9 the
@@ -1217,7 +1217,7 @@ struct ModelBlock {
     sel[1] = &sel1[msym1b];
     while( 1 ) {
       if( sel_p>&escape_list )
-        __exit_402E40(4);
+        bmf_fatal(bmf_read_error);
       if( (*sel_p)->live ) {
         lsym = __decode_symbol_list(*sel_p);
         row_cur[5]->sym = lsym;
@@ -1702,7 +1702,7 @@ struct ModelBlock {
     exclusion_mask[excl_sym_a] = mode;
     exclusion_mask[excl_sym_b] = mode;
     cache = sym_cache;
-    __byte_445440[0] = mode;
+    exclusion_mask[no_symbol] = mode;
     runlen_s = runlen;
     sel[0] = nullptr;
     w6d = *wq;

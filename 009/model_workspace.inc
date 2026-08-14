@@ -90,13 +90,13 @@ ModelBlock*ModelBlock::layout_workspace(int32_t unread_flag, int32_t img_w, int3
   memset(ctx_id1, 255, sizeof ctx_id1);
   memset(ctx_id2, 255, sizeof ctx_id2);
   memset(ctx_id3, 255, sizeof ctx_id3);
-  memset(exclusion_mask, 0, 8193);
+  memset(exclusion_mask, 0, sizeof exclusion_mask);
   sel[0] = nullptr;
   sel[1] = nullptr;
   escape_list = nullptr;
   for( n = 0; n<0x40000; ++n ) {
-    sym_ctr[2*n] = 0x2000;
-    sym_ctr[2*n+1] = 0x2000;
+    sym_ctr[2*n] = no_symbol;
+    sym_ctr[2*n+1] = no_symbol;
   }
   uint32_t i8 = 0;
   do {

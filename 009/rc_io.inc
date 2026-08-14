@@ -140,7 +140,7 @@ void __rc_begin_decode(int8_t unread_flag) {
 
 static uint32_t __packer_word() {
   if( out_cursor+4>coded_buf+coded_size )
-    __exit_402E40(4);
+    bmf_fatal(bmf_read_error);
   uint32_t w = *(uint32_t*)out_cursor;
   out_cursor += 4;
   return w;

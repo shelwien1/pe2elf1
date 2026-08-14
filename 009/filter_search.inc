@@ -23,7 +23,6 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
     int32_t bits_total;
     int32_t n_flagged;
     int32_t best_bits;
-    BmfImage* p_i_2;
     BmfImage* tile_img;
     uint8_t _pad1[36];
   } __frame;
@@ -31,7 +30,6 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
   bool deep2;
   int8_t f4;
   uint16_t w_a, w_d;
-  BmfImage* img_c;
   uint8_t f0, f1, f2, f3;
   uint8_t *srcp, *p2, *tile_copy, *tile_a, *p4, *p5, *tile_b, *tile_c, *p12, *p13, *tile_d;
   int32_t hard, bits_a, bits_b, cost_f13;
@@ -42,7 +40,6 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
   uint16_t img_h3b, img_h2, img_h1b;
   uint16_t w16, w_c;
   uint8_t* p8, * p9;
-  img_c = (BmfImage*)(img);
   tile_w = img->width;
   tile_h = img->height;
   if( tile_w<4||tile_h<3 ) {
@@ -57,8 +54,8 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
     }
     return 0;
   }
-  __choose_plane_coding(img_c, tile_h, mode);
-  __frame.tile_img = (BmfImage*)__alloc_image(tile_w, tile_h, img_c->depth&0x3F, 0, 0);
+  __choose_plane_coding(img, tile_h, mode);
+  __frame.tile_img = (BmfImage*)__alloc_image(tile_w, tile_h, img->depth&0x3F, 0, 0);
   coded_size = __frame.tile_img->data_size+0x20000;
   coded_buf = (uint8_t*)bmf_new(coded_size);
   packer_reset();
@@ -81,26 +78,24 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
     return cost;
   };
   nplanes = plane_count;
-  y0 = (img_c->height-tile_h)>>1;
-  dx = img_c->width-tile_w;
-  off_y = y0*img_c->stride;
+  y0 = (img->height-tile_h)>>1;
+  dx = img->width-tile_w;
+  off_y = y0*img->stride;
   __frame.rows[1] = y0;
-  srcp = (uint8_t*)img_c+ plane_count*(dx>>1)+off_y+16;
+  srcp = (uint8_t*)img+ plane_count*(dx>>1)+off_y+16;
   __frame.tile_src = __frame.tile_img->pixels;
   if( y0<tile_h+y0 ) {
     row_bytes = (uint16_t)__frame.tile_img->stride;
     __frame.dims[1] = tile_h;
     int32_t y = __frame.rows[1];
-    __frame.p_i_2 = (BmfImage*)(img_c);
     uint8_t *dstp = __frame.tile_img->pixels;
     do {
       memcpy(dstp, srcp, row_bytes);
       row_bytes = (uint16_t)__frame.tile_img->stride;
       dstp += row_bytes;
-      srcp += __frame.p_i_2->stride;
+      srcp += img->stride;
       ++y;
-    } while( y<__frame.dims[1]+((__frame.p_i_2->height-__frame.dims[1])>>1) );
-    img_c = (BmfImage*)(__frame.p_i_2);
+    } while( y<__frame.dims[1]+((img->height-__frame.dims[1])>>1) );
     nplanes = plane_count;
   }
   __frame.n_hard = 0;
@@ -108,7 +103,6 @@ uint32_t __search_filter(BmfImage* img, int8_t mode) {
   __frame.n_flagged = 0;
   __frame.best_bits = 0;
   if( nplanes>0 ) {
-    __frame.p_i_2 = (BmfImage*)(img_c);
     hard = __frame.n_hard;
     __frame.best_flags = 0;
     __frame.pi = 0;
@@ -212,7 +206,6 @@ keep_flag8: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
       __frame.pi = c3+1;
       if( c3+1>=plane_count ) {
         __frame.n_hard = hard;
-        img_c = (BmfImage*)(__frame.p_i_2);
         break;
       }
     }
@@ -227,7 +220,6 @@ keep_flag8: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
     if( img_h1b ) {
       p5 = p2;
       p3 = __frame.rows[1];
-      __frame.p_i_2 = (BmfImage*)(img_c);
       y1 = 0;
       tile_a = (uint8_t*)__frame.tile_img;
       off1 = 0;
@@ -248,7 +240,6 @@ keep_flag8: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
         off1 += p3;
         ++y1;
       } while( y1<img_h1b );
-      img_c = (BmfImage*)(__frame.p_i_2);
     }
     tile_b = (uint8_t*)__frame.tile_img;
     w_a = (__frame.tile_img)->width;
@@ -260,7 +251,6 @@ keep_flag8: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
     free(p2);
     bits_d = 0;
     if( plane_count>0 ) {
-      __frame.p_i_2 = (BmfImage*)(img_c);
       pk = 0;
       while( 1 ) {
         pl_k = plane_desc[pk+1].src_plane;
@@ -273,11 +263,9 @@ keep_flag8: { __frame.flag8 = (uint8_t)__frame.best_flags&8; }
         if( (uint32_t)(bits-(bits>>8))>__frame.costs[__frame.rows[0]] )
           break;
         if( ++pk>=plane_count ) {
-          img_c = (BmfImage*)(__frame.p_i_2);
           goto tile_restored;
         }
       }
-      img_c = (BmfImage*)(__frame.p_i_2);
       bits_d += __frame.best_bits+1;
     }
 tile_restored:
@@ -290,7 +278,6 @@ tile_restored:
       if( img_h2 ) {
         __frame.costs[0] = rows_x_planes;
         p11 = __frame.rows[1];
-        __frame.p_i_2 = (BmfImage*)(img_c);
         y2 = 0;
         tile_c = (uint8_t*)__frame.tile_img;
         off2 = 0;
@@ -312,7 +299,6 @@ tile_restored:
           off2 += p11;
           ++y2;
         } while( y2<img_h2 );
-        img_c = (BmfImage*)(__frame.p_i_2);
       }
       tile_d = (uint8_t*)__frame.tile_img;
       w_d = (__frame.tile_img)->width;
@@ -324,21 +310,20 @@ tile_restored:
       free(base2);
     } else {
       __frame.best_bits = bits_d;
-      __frame.base = (uint8_t*)bmf_new(img_c->data_size);
-      img_h3 = img_c->height;
+      __frame.base = (uint8_t*)bmf_new(img->data_size);
+      img_h3 = img->height;
       __frame.rows[1] = plane_count;
       __frame.costs[0] = plane_count*(img_h3-1);
-      memcpy(__frame.base, img_c->pixels, img_c->data_size);
-      img_h3b = img_c->height;
+      memcpy(__frame.base, img->pixels, img->data_size);
+      img_h3b = img->height;
       if( img_h3b ) {
         p7 = __frame.rows[1];
         y3 = 0;
         off3 = 0;
         p9 = __frame.base;
         do {
-          pl_i = img_c->width;
-          p8 = img_c->pixels+off3;
-          __frame.p_i_2 = (BmfImage*)(img_c);
+          pl_i = img->width;
+          p8 = img->pixels+off3;
           do {
             p10 = p7;
             do {
@@ -348,18 +333,17 @@ tile_restored:
             p8 += __frame.costs[0];
             --pl_i;
           } while( pl_i );
-          img_c = (BmfImage*)(__frame.p_i_2);
-          img_h3b = __frame.p_i_2->height;
+          img_h3b = img->height;
           off3 += p7;
           ++y3;
         } while( y3<img_h3b );
       }
-      w16 = img_c->width;
+      w16 = img->width;
       w_c = img_h3b*(uint16_t)__frame.rows[1];
-      img_c->width = img_h3b;
-      img_c->height = w16;
-      img_c->flags ^= 2u;
-      img_c->stride = w_c;
+      img->width = img_h3b;
+      img->height = w16;
+      img->flags ^= 2u;
+      img->stride = w_c;
       free(__frame.base);
     }
   }

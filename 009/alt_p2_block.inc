@@ -208,7 +208,7 @@ struct AltP2Block {
       float (**cur)[4];
       float (**above)[4];
       int32_t bank_ctx[5];
-      int32_t _unused278696;
+      int32_t _pad0;
       uint16_t pred_prev;
       uint8_t _u0_0_12[2];
       uint32_t ctx;

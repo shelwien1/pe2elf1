@@ -105,11 +105,11 @@ void __bmf_compress(const char* InName, const char* OutName) {
   BmfFile* Arc;
   FILE* fp = fopen(InName, "rb");
   if( !fp )
-    __exit_402E40(6, InName);
+    bmf_fatal(bmf_no_open, InName);
   fclose(fp);
   int32_t *p_i = __read_bmp((char*)InName);
   if( !p_i )
-    __exit_402E40(4);
+    bmf_fatal(bmf_read_error);
   BmfImage*const p_i_img = (BmfImage*)p_i;
   printf("File %16s, image %dx%dx%d, size - %d:", InName, p_i_img->width, p_i_img->height, p_i_img->depth&0x3F, p_i_img->data_size);
   if( void* __nb = bmf_new(sizeof(BmfFile)) )
@@ -136,7 +136,7 @@ void __bmf_compress(const char* InName, const char* OutName) {
   }
   int32_t coded_len = __compress_image(Arc, (BmfImage*)p_i, (void*)coded_block);
   if( !coded_len )
-    __exit_402E40(5, OutName);
+    bmf_fatal(bmf_write_error, OutName);
   printf("%6.3f bpp\n", (double)coded_len*8.0/(double)(p_i_img->height*p_i_img->width));
   free(p_i);
 }
@@ -151,7 +151,7 @@ void __bmf_decompress(const char* InName, const char* OutName) {
   // One image in a file: nothing to parse is not the end of a list of members,
   // it is a file that is not one of ours.
   if( !p_i )
-    __exit_402E40(3, InName);
+    bmf_fatal(bmf_bad_file, InName);
   BmfImage*const p_i_img = (BmfImage*)p_i;
   printf("File %16s, image %dx%dx%d, size - %d\n", InName, p_i_img->width, p_i_img->height, p_i_img->depth&0x3F, p_i_img->data_size);
   int32_t Depth = p_i_img->depth&0x3F;
@@ -160,7 +160,7 @@ void __bmf_decompress(const char* InName, const char* OutName) {
     exit(5);
   }
   if( !__write_bmp((BmfImage*)p_i, (char*)OutName, 1) )
-    __exit_402E40(5, OutName);
+    bmf_fatal(bmf_write_error, OutName);
   free(coded_block);
   coded_block = nullptr;
   free(p_i);

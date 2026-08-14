@@ -53,6 +53,6 @@ BmfFile*__bmf_open_file(BmfFile* out, char* path, int32_t read_only) {
   // image in a file now, so writing never reads and reading never writes.
   out->fp = fopen(path, read_only ? "rb" : "wb");
   if( !out->fp )
-    __exit_402E40(6, path);
+    bmf_fatal(bmf_no_open, path);
   return out;
 }

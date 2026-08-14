@@ -133,8 +133,12 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
         }
       }
       if( !alphabet_reduced ) {
-        __builtin_prefetch(&mir_top, 0, 1);
+        // The decompilation had this as `prefetch(&mir_top)` *before* the
+        // assignment, which asks for the cache line holding a local the
+        // function is about to write anyway.  Every other prefetch below is of
+        // the counter the next few lines will read; this one is now too.
         mir_top = (uint16_t*)((uint8_t*)&p2_ctr[(ctxw^0x7FF0)]+bank_off);
+        __builtin_prefetch(mir_top, 0, 1);
         res2 = (nb_sum[2*bank+1])+res;
         int32_t lowbits = ctxw&3;
         if( (uint32_t)lowbits>=3||(w1 = node0[1].weighted, e1 = res2-p2_pred(w1, *(uint8_t*)&node0[1].rate), go = lowbits<=0, *(uint16_t*)&node0[1].weighted = w1+((32*((e1>deadzone_hi)-(uint32_t)(e1<deadzone_lo))+e1+1)>>1), !go) ) {
