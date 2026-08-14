@@ -442,6 +442,7 @@ them run.
 
 | script | what it is | in the sweep |
 | --- | --- | --- |
+| `abpair.py` | Two names for one value, told apart by a trailing `a`/`b` | yes |
 | `addrmap.py` | Recover which address in BMF.exe each named function came from | yes |
 | `arrayify.py` | Collapse a run of consecutive same-type members into the array it is | yes |
 | `asan.sh` | Run every test image under AddressSanitizer |  |
@@ -459,6 +460,7 @@ them run.
 | `dethread.py` | Delete the `const __m128 &` parameter thread | yes |
 | `explicitcmp.py` | Write out the conversion a signed/unsigned comparison already performs | yes |
 | `extents.py` | What each blob global is actually used as | yes |
+| `firstuse.py` | Declare a local where it is first assigned, not at the top of the body | yes |
 | `foldif.py` | Fold an `if` whose condition is now a known constant | yes |
 | `frame-sweep.sh` | Lift one frame, run the gate, keep it or put it back |  |
 | `fuzz.py` | Fuzz.py -- deterministic mutants of the test corpus | no |
@@ -478,6 +480,7 @@ them run.
 | `negindex.py` | Find `p[-u]` where `u` is unsigned — a subtraction that only i386 undoes | yes |
 | `objects.py` | Group the names that denote the same allocation, and describe each object | yes |
 | `outpath.py` | Refuse to write a generator's output over something that is not its output | no |
+| `p2update.py` | Fold `alt_p2_model`'s written-out counter updates into `p2_update` | yes |
 | `proven.sh` | Which tools' answers depend on the file at all? |  |
 | `prune_unreachable.py` | Delete the functions in subs1.hpp that nothing can reach any more | yes |
 | `ptrwidth.py` | Classify the pointers this file still puts through a 32-bit integer | yes |

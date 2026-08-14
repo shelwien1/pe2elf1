@@ -87,13 +87,13 @@
 #include "compress_image.inc"
 
 void __bmf_compress(const char* InName, const char* OutName) {
-  int32_t* p_i, Flags, Colours, Step, Grey, i;
+  int32_t i;
   BmfArc* Arc;
   FILE* fp = fopen(InName, "rb");
   if( !fp )
     __exit_402E40(6, InName);
   fclose(fp);
-  p_i = __read_bmp((char*)InName);
+  int32_t *p_i = __read_bmp((char*)InName);
   if( !p_i )
     __exit_402E40(4);
   BmfImage*const p_i_img = (BmfImage*)p_i;
@@ -102,15 +102,15 @@ void __bmf_compress(const char* InName, const char* OutName) {
     Arc = __bmf_open_archive((BmfArc*)__nb, (char*)OutName, 0);
   else
     Arc = nullptr;
-  Flags = p_i_img->depth;
+  int32_t Flags = p_i_img->depth;
   if( Flags&0x80 ) {
     if( Flags&0x40 ) {
       p_i_img->depth = Flags^0x80;
     } else {
-      Colours = 1<<(Flags&31);
-      Step = 0x100u>>(Flags&31);
+      int32_t Colours = 1<<(Flags&31);
+      int32_t Step = 0x100u>>(Flags&31);
       const uint8_t* Palette = (const uint8_t*)p_i+p_i_img->data_size+16;
-      Grey = 0;
+      int32_t Grey = 0;
       for( i = 0; i<Colours; ++i ) {
         if( Palette[3*i]!=Grey||Palette[3*i+1]!=Grey||Palette[3*i+2]!=Grey )
           break;

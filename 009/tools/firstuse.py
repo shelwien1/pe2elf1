@@ -204,8 +204,11 @@ def apply(lines, found):
 def main():
     paths = [a for a in sys.argv[1:] if not a.startswith('--')]
     if not paths:
+        # `bmf.cpp` too: it is the include list, but it also holds `main` and
+        # the entry points, and a default of `*.inc` left five candidates there
+        # -- which `sweep.sh` found by handing this a copy of it.
         import glob
-        paths = sorted(glob.glob('*.inc'))
+        paths = sorted(glob.glob('*.inc')) + ['bmf.cpp']
     total = {'same': 0, 'deep': 0}
     for p in paths:
         lines, found = scan(p)

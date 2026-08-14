@@ -1,30 +1,44 @@
 # Refactoring plan: the repeated blocks
 
+**Done.** All five phases are in, each gated on the seventeen reference streams
+at both pointer widths. The tree is **11,787 lines**, down from 12,136, with the
+same four warnings and no shadows; every counting tool in `tools/` reports zero.
+
 The first minimal-syntax round took out the prefixes — `this->`, `::`, `blk->`,
 923 + 181 + 562 of them — and everything else that was one token too many. That
-round is done and recorded in `MINIMAL-SYNTAX.md`, and the tree is 12,136 lines
-in 37 files with four warnings and no shadows.
+round is recorded in `MINIMAL-SYNTAX.md`.
 
-What is left is not spelling. It is **the same block written out again**, which
+What was left is not spelling. It is **the same block written out again**, which
 is what the decompiler does with a loop it has unrolled and a helper it has
-inlined. Saying the same thing with less of the language now means saying it
-*once*.
+inlined. Saying the same thing with less of the language means saying it *once*.
 
-Every number below was measured against the tree at the commit that adds this
-file, and each phase names the measurement so it can be re-taken.
+Every number below was measured, and each phase names the measurement so it can
+be re-taken. The `after` column is what the tree says now.
 
-| what | sites | lines it costs now | after |
+| what | sites | it cost | after |
 | --- | --- | --- | --- |
-| the counter update, `alt_p2_model.inc` | 115 of 117 | ~345 | 115 |
-| its temporaries, in one declaration | 230 of 268 | 3 lines of 2,443 chars | 38 names |
-| the bit packer, `compress_image.inc` | 6 | 67 | 6 |
-| the bit unpacker, `expand_image.inc` | 6 | 61 | 6 |
-| declaration walls over 100 locals | 7 bodies | 1,406 locals | — |
-| lines over 200 characters | 42 | — | — |
+| the counter update, `alt_p2_model.inc` | 115 of 117 | ~345 lines | 115 calls |
+| its temporaries, in one declaration | 230 of 268 | 3 lines of 2,443 chars | 39 names, 296 chars |
+| the inline fold, same file | 21 | 21 lines | `p2_nudge` |
+| the bit packer, `compress_image.inc` | 6 | 67 lines | 6 calls |
+| the bit unpacker, `expand_image.inc` | 6 | 61 lines | 6 calls |
+| `sym0`…`sym31`, both frames | 64 members | 74 lines of union | `sym[32]` |
+| declaration walls over 100 locals | 7 bodies | 1,406 locals | 5 bodies, 745 |
+| lines over 200 characters | 42 | — | 29 |
+
+Four new tools carry the rules so the next round can re-take them rather than
+re-derive them: `p2update.py`, `firstuse.py`, `abpair.py`, and `ctxidx.py
+--wrap`. Each is in `sweep.sh` and each now answers zero.
 
 ---
 
 ## Phase 1 — `p2_update`: one counter update, 115 times
+
+**Taken: 114 by `tools/p2update.py`, the 115th by hand.** 103 exact and 11
+after a hoist, checked per site; the twelfth interleaved block straddles a
+brace and was folded by hoisting the residual choice into `res_m0010`. 21
+more sites became `p2_nudge`. `alt_p2_model.inc` is 1,120 lines -> 895, and
+its declaration wall 268 names -> 39.
 
 **The finding.** `alt_p2_model.inc` is 1,120 lines, and 117 of them call
 `p2_bump`. **103 are exactly this**, twelve more are the same three statements
@@ -65,11 +79,12 @@ unchanged. Without that, Phase 1 would have to keep the pun at eight sites.
 **What it takes with it.** The two temporaries per block are named after the
 counter — `wd0800c`, `ed0800c` — and they are declared in one statement of 268
 names spread over three lines of 2,443 characters. **230 of those 268 (86%) are
-these temporaries**, and the declaration goes to 38 names. Measured: no member
-of the 230 is read outside the block that owns it.
+these temporaries**, and the declaration goes to 39 names -- 38, plus the one
+the braced fold below needs. Measured: no member of the 230 is read outside the
+block that owns it.
 
-One of the 230 is not named after its counter: the error temporary at line 427
-is called `nb_slot`, which is also a local of `alt_p2_context` meaning a slot
+One of the 230 is not named after its counter: one error temporary is called
+`nb_slot`, which is also a local of `alt_p2_context` meaning a slot
 index into `nb_id[]`. Two unrelated things under one name, in two files — a
 Phase 5 item that Phase 1 happens to delete.
 
@@ -78,8 +93,8 @@ what the code does: **44 counters — eleven banks of four** — each updated fr
 one of eleven residuals at a shift of 2 or 3.
 
 **What it must decline.** Two of the 117 subtract into the residual instead of
-into a temporary — `nres3 -= p2_pred(wm0400z, m0400->rate);` and its twin at
-562 — so the residual is *modified* and read again later. The helper takes the
+into a temporary — `nres3 -= p2_pred(wm0400z, m0400->rate);` and its twin on
+`nres1` — so the residual is *modified* and read again later. The helper takes the
 residual by value and would drop that write. They stay as they are, and the
 difference is worth a comment at each: this is a counter update that also
 consumes the residual.
@@ -105,8 +120,8 @@ scheduled into the middle (`res_c = res_s;`, `go = lowbits<3;`, `neg_c =
 residual), and moving a statement across a counter update is a change the gate
 has to check.
 
-The twelfth is not that, and it is worth doing last: at line 639 the two
-temporaries are assigned in **both arms of an `if`/`else`** — `em0010b =
+The twelfth is not that, and it is worth doing last: at the `m0010` counter the
+two temporaries are assigned in **both arms of an `if`/`else`** — `em0010b =
 neg_d-…` in one, `em0010b = nres4-…` in the other — and the bump sits after the
 join. Nothing can be moved out; the fold has to hoist the residual choice into
 a variable and call the helper past the brace. That is a control-flow edit, not
@@ -130,6 +145,12 @@ change to this file passes and something still feels unproven, those seven are
 the whole decoder-side evidence there is.
 
 ## Phase 2 — `pack_bits` and `unpack_bits`: the header's bit stream
+
+**Taken: all twelve.** `compress_image.inc` 272 -> 210 lines,
+`expand_image.inc` 408 -> 352. Phase 5's first item is done inside this one:
+the three names for the count are one global now, and nothing has to be kept
+in step. `hdrscan.sh` came back clean -- no report in 8,704 runs, both
+one-byte header fields at every value over 17 streams.
 
 `compress_image.inc` writes the per-plane descriptors a few bits at a time, and
 each write is this, six times over, 67 lines:
@@ -180,6 +201,12 @@ reads the two header bytes that script enumerates completely.
 
 ## Phase 3 — the declaration walls
 
+**Taken: 865, by `tools/firstuse.py`** -- 214 where the assignment is at the
+declaration's own depth and 651 one block in. Bodies declaring more than a
+hundred uninitialised locals: 7 -> 5, and 1,406 such locals -> 745. A second
+pass finds nothing. Four guards had to be added, each for a defect the pass
+produced and one of which the build accepted: see the tool.
+
 Seven bodies declare more than a hundred locals each — counting every name in
 every declaration statement of the body, comma lists included:
 
@@ -206,6 +233,10 @@ The measure is whether a name can be declared where it is first assigned, not
 whether the declaration is on its own line.
 
 ## Phase 4 — the lines that do not fit on a screen
+
+**Taken: the six context words, by `ctxidx.py --wrap`.** Lines over 200
+characters: 42 -> 29, over 400: 16 -> 6. The four `tables.inc` data rows and
+the 23 long expressions elsewhere were left, for the reasons below.
 
 42 lines are over 200 characters and 16 are over 400. They are four kinds, and
 only two of them are work:
@@ -239,6 +270,16 @@ This is formatting, so it is the cheapest phase in the plan and the one to do
 when the gate is being run for something else anyway.
 
 ## Phase 5 — one name per thing
+
+**Taken: two of the three.** The count's three names went with Phase 2. The
+`sym` lift is below and is done: 246 named reads became `sym[N]` and both
+unions collapsed, `model.inc` 1,961 -> 1,882 lines. The `xxxa`/`xxxb` sweep
+is `tools/abpair.py` and **found nothing to do** -- 54 `a`/`b` families are
+left and every one is two genuinely different things. Two are assigned the
+same expression and are still two things: `__search_filter` measures
+`8*(out_cursor-coded_buf)` into `bits_a` at one point and `bits_b` at
+another, and runs one plane loop with `pl_a` and a second with `pl_b`. The
+tool names both so the judgement is re-takeable instead of re-derived.
 
 Three specific ones, all measured:
 
@@ -338,41 +379,58 @@ measured pair by pair in `bmf.cpp`'s header. Unchanged.
 
 ---
 
-## Order, and what each phase costs
+## What each phase cost, and what it took
 
-| phase | sites | lines saved | risk | gate |
+| phase | sites | planned | taken | gate it passed |
 | --- | --- | --- | --- | --- |
-| 1 — `p2_update` | 115 | ~230 + 230 declarations | **medium** | streams, both widths |
-| 2 — `pack_bits` | 12 | ~116 | medium | streams, `hdrscan.sh` |
-| 3 — declare at first use | ~200? | ~150 | low | streams, ASan |
-| 4 — wrapping | 6 lines | 0 | none | streams |
-| 5 — one name per thing | 3 classes | ~70 | low | streams |
+| 1 — `p2_update`, `p2_nudge` | 136 | ~230 lines + 230 declarations | 225 lines, 229 declarations | streams, both widths |
+| 2 — `pack_bits`, `unpack_bits` | 12 | ~116 lines | 118 lines | streams, `hdrscan.sh` 8,704 runs |
+| 3 — declare at first use | 865 | ~150 lines | 0 lines, 661 locals out of five walls | streams, ASan |
+| 4 — wrapping | 6 lines | 0 lines | 0 lines, 13 fewer over 200 chars | streams |
+| 5 — `sym[32]`, the count, the a/b sweep | 2 of 3 | ~70 lines | 79 lines | streams |
 
-Phase 1 first: it is the largest by a factor of two, it is mechanical, and it
-makes Phase 3's measurement meaningful. Phase 4 can go at any time. Phase 2
-needs Phase 5's first item done inside it.
+**349 lines out of 12,136**, and — the point — three helpers where there were
+127 copies of them, plus a fourth for the 21 inline folds.
 
-Total: about 500 lines and 230 declarations out of 12,136, and — the point —
-three helpers where there are now **127 copies** of them: 115, and 6 each way
-across the header's bit stream.
+Phase 3 is the one whose planned number was most wrong, and in an instructive
+direction. The plan guessed "~200?" from what the previous round had declined;
+the rule as written takes **865**, because the previous round ran two narrow
+passes by hand and this one ran them everywhere. It saves no lines at all --
+each declaration moves rather than disappears -- and it is still the largest
+phase, because what it buys is that a name is introduced where it means
+something. Five walls shed 661 locals between them.
+
+The one thing that would have gone differently with hindsight: Phase 5's `sym`
+item should have been read before it was planned. The plan called it a naming
+problem and it was a lift, and the two-line union declaration that says so was
+sitting in the file the whole time.
 
 ## What "done" means
 
-Each phase ends with the fifteen — now seventeen — reference streams byte for
-byte:
+Each phase ended with the fifteen — now seventeen — reference streams byte for
+byte. Run against the finished tree:
 
 ```
-./build.sh && ./test.sh                  93 checks, both widths and clang
+./build.sh && ./test.sh                  93 checks, 17 images, both widths and clang
 ./build.sh -DBMF_HIGH_ARENA && ./test.sh 92 of 93
-./tools/x32.sh                           23 of 23
+./tools/x32.sh                           23 of 23, 0 pointers through a 32-bit integer
 ./tools/asan.sh                          nothing in 44 runs over 19 images
+./tools/hdrscan.sh                       nothing in 8,704 runs
 ./tools/fuzz.sh 400                      nothing
 ./tools/sweep.sh bmf.cpp                 every counting tool at zero
 BMF_WARN=1 ./build.sh                    4, and zero shadows
 ```
 
-And for Phase 1 specifically, the check that has caught two defects this
-session: the crops of `20000171A.bmp` that reach colour transforms 1 and 2,
-compared against a build of the first commit of the decompilation. A helper
-that is subtly not the block it replaced will move a stream there before it
-moves one in the corpus.
+Two of those earned their place during this round rather than before it.
+`BMF_WARN=1` caught Phase 3 moving four declarations past a label — a `goto`
+entering a scope past an initialiser, which g++ takes under `-fpermissive` with
+a warning, so `test.sh` stayed green while four locals became uninitialised on
+one path. And `hdrscan.sh` is Phase 2's gate for the reason the phase exists:
+it enumerates every value of the two header bytes `pack_bits` and `unpack_bits`
+write and read, which no sampling gate can claim.
+
+For Phase 1 there was one more check available and worth naming: the crops of
+`20000171A.bmp` that reach colour transforms 1 and 2, whose reference streams
+came from an independent build and are in `test.sh`'s seventeen. A helper that
+is subtly not the block it replaced moves a stream there before it moves one in
+the rest of the corpus.
