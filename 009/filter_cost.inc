@@ -38,7 +38,7 @@ int32_t __cost_candidate(uint8_t* img, int32_t cand, uint8_t* desc, int8_t unrea
   } __frame;
   int32_t cost;
   double syz, syy, sxz, sxy, sxx;
-  int32_t d1, w1, w2, left, pick, c2, lo1;
+  int32_t w1, w2, left, pick, c2, lo1;
   uint32_t lo2, lo3;
   uint8_t *r0, *r2;
   __frame.desc_f = desc;
@@ -49,7 +49,7 @@ int32_t __cost_candidate(uint8_t* img, int32_t cand, uint8_t* desc, int8_t unrea
   __frame.d1_f = (cand+1)%3-cand;
   __frame.d2_f = (cand+2)%3-cand;
   __frame.img_end = &__frame.img_f->pixels[__frame.img_f->data_size];
-  d1 = __frame.d1_f;
+  int32_t d1 = __frame.d1_f;
   *(uint32_t*)__frame.buf_1 = row_b;
   memset(__frame.buf, 0, 24576);
   uint32_t row_b2 = *(uint32_t*)__frame.buf_1;

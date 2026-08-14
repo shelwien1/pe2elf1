@@ -12,12 +12,12 @@ int32_t __compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
   bool fits;
   uint32_t data_bytes, row_bytes;
   uint8_t has_coded;
-  uint8_t* plane_buf, * row_at;
+  uint8_t *row_at;
   uint32_t hdr_pad8;
-  int32_t pl, pl2, ok_all, y, pl_i, countdown, data_size, row_y;
+  int32_t ok_all, y, pl_i, countdown, data_size, row_y;
   uint16_t img_h;
   BmfImage* img;
-  uint32_t pal_bytes, word_flags, word_dc, word_w4, word_w8, word_w12, n_pix, written;
+  uint32_t pal_bytes, written;
   uint8_t ok, * dst, ok_raw;
   BmfFile* arc = arc_in;
   if( !arc_in->fp )
@@ -91,20 +91,20 @@ int32_t __compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
   }
   alphabet_reduced = 0;
   if( plane_count>0 ) {
-    pl = 0;
+    int32_t pl = 0;
     do {
-      word_flags = (4*plane_desc[pl].flags)|plane_desc[pl].nrefs;
+      uint32_t word_flags = (4*plane_desc[pl].flags)|plane_desc[pl].nrefs;
       pack_bits(word_flags, 6);
       if( plane_desc[pl].flags&8 ) {
-        word_dc = plane_desc[pl].dc;
+        uint32_t word_dc = plane_desc[pl].dc;
         pack_bits(word_dc, 8);
         if( plane_desc[pl].nrefs>1u ) {
-          word_w4 = plane_desc[pl].weight0+64;
+          uint32_t word_w4 = plane_desc[pl].weight0+64;
           pack_bits(word_w4, 8);
-          word_w8 = plane_desc[pl].weight1+64;
+          uint32_t word_w8 = plane_desc[pl].weight1+64;
           pack_bits(word_w8, 8);
           if( plane_desc[pl].nrefs>2u ) {
-            word_w12 = plane_desc[pl].weight2+64;
+            uint32_t word_w12 = plane_desc[pl].weight2+64;
             pack_bits(word_w12, 8);
           }
         }
@@ -113,11 +113,11 @@ int32_t __compress_image(BmfFile* arc_in, BmfImage* p_i, void* extra_blk) {
     } while( pl<plane_count );
   }
   if( filtered ) {
-    n_pix = p_i->width*p_i->height;
+    uint32_t n_pix = p_i->width*p_i->height;
     hdr.flags |= 8u;
-    plane_buf = (uint8_t*)bmf_new(n_pix);
+    uint8_t *plane_buf = (uint8_t*)bmf_new(n_pix);
     if( plane_count>0 ) {
-      pl2 = 0;
+      int32_t pl2 = 0;
       do
         __model_planes((uint8_t*)p_i, plane_buf, plane_desc[pl2++].src_plane);
       while( pl2<plane_count );

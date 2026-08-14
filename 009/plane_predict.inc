@@ -34,7 +34,6 @@ static inline uint8_t med_predict(int32_t west, int32_t north, int32_t northwest
 
 uint32_t __predict_med(uint8_t* pixels, int32_t width, int32_t height) {
   uint32_t done;
-  uint8_t pred;
   uint32_t j, last;
   alignas(16) uint8_t fold[272];
   uint8_t *p = pixels+height*width;
@@ -51,7 +50,7 @@ uint32_t __predict_med(uint8_t* pixels, int32_t width, int32_t height) {
         do {
           int32_t north = (uint8_t)*--up;
           --p;
-          pred = med_predict((uint8_t)p[-1], north, (uint8_t)p[-width-1]);
+          uint8_t pred = med_predict((uint8_t)p[-1], north, (uint8_t)p[-width-1]);
           int32_t code = (uint8_t)fold[(uint8_t)(*p-pred)];
           *p = code;
           ++*(uint32_t*)&hist_scratch[4*code];
@@ -253,7 +252,6 @@ uint8_t*__colour_transform(uint8_t* img, uint8_t* dst, int32_t plane) {
 
 uint8_t*__unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
   uint32_t done;
-  uint8_t pred;
   int32_t rows_left;
   uint32_t j, row_rest, k, x_left;
   uint8_t *p;
@@ -306,7 +304,7 @@ uint8_t*__unpredict_med(uint8_t* pixels, int32_t width, int32_t height) {
           return p;
       }
       do {
-        pred = med_predict((uint8_t)p[-1], (uint8_t)*up, (uint8_t)p[-width-1]);
+        uint8_t pred = med_predict((uint8_t)p[-1], (uint8_t)*up, (uint8_t)p[-width-1]);
         *p = pred+unfold[(uint8_t)*p];
         ++up;
         ++p;

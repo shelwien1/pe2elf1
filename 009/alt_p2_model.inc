@@ -17,7 +17,7 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   float sample, d_bias2;
   uint8_t b_top3;
   P2Freq* frecg2, * frecg1, * frecg0, * frecg3, * gtop, * frec;
-  uint32_t off0, off1, off2, off3, off4, ctxw;
+  uint32_t off0, off1, off2, off3, off4;
   float (*wrow_cur)[4];
   float (*wrow_b)[4];
   bool go;
@@ -35,7 +35,17 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
   cursor[0]->val = 16*sample_in;
   cursor[0]->dval = cursor[0]->val-cursor[0]->dval;
   cursor[0][1].dval = 0;
-  cursor[0]->sign = (resid_in<=(int32_t)(((uint32_t)(6-ctx_lo)>>31)+((uint32_t)(4-ctx_lo)>>31)+2*((uint32_t)(9-ctx_lo)>>31)))+(resid_in<(int32_t)-(((uint32_t)(6-ctx_lo)>>31)+((uint32_t)(4-ctx_lo)>>31)+2*((uint32_t)(9-ctx_lo)>>31)));
+  // The deadzone half-width for this context, and where the residual falls
+  // against it.  `dead` climbs 0, 1, 2, 4 with the context's low nibble;
+  // `sign` is 2 below the band, 1 inside or below the top, 0 above -- a
+  // three-way split written as two comparisons summed.
+  //
+  // The decompilation had `dead` computed twice, both times as three sign
+  // shifts of `(K-ctx_lo)`, and negated the unsigned sum before casting it to
+  // `int32_t` -- which is `-dead` only because the conversion is
+  // implementation-defined in the way gcc happens to define it.
+  const int32_t dead = (ctx_lo>6)+(ctx_lo>4)+2*(ctx_lo>9);
+  cursor[0]->sign = (resid_in<=dead)+(resid_in< -dead);
   cursor[0]->mag = abs32(resid_in);
   cursor0 = cursor[0];
   sample = (float)sample16;
@@ -82,7 +92,7 @@ uint32_t AltP2Block::alt_p2_model(int32_t sample_in, uint8_t a4, int32_t resid_i
     if( countdown ) {
       w0b = w0+4*((res>deadzone_hi)-(res<deadzone_lo));
       node0->weighted = w0b;
-      ctxw = bctx;
+      uint32_t ctxw = bctx;
       if( (int32_t)abs32(res)<38 ) {
         if( (uint8_t)-- countdown ) {
           node0->b1 = countdown;

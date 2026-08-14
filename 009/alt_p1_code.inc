@@ -27,6 +27,33 @@
 // decoder held `blk->ctx[0]` in a local across the `ctx[2]` update, which
 // cannot change it -- they are different elements.
 
+// A plane's cross-plane prediction: the weighted sum, in 128ths, of the planes
+// already coded at this pixel.  `weight0` goes with plane 0, `weight1` with
+// plane 1, `weight2` with plane 2.
+//
+// Two of them because the original's two sites are not the same expression,
+// and the differences are load-bearing:
+//
+//   * the rounding bias is 40 for two planes and 64 for three.  64 is half of
+//     128 and rounds to nearest; 40 does not, and biases low by 24/128 of a
+//     level.  Both are what BMF.exe does.
+//   * the two-plane form's second term is cast to `uint32_t`, which makes the
+//     whole sum unsigned and the `>>7` a logical shift.  The three-plane form
+//     stays signed and shifts arithmetically.  With a negative weight the two
+//     give different answers, so they cannot be one function with a bias
+//     parameter, which is what the first attempt at this was.
+//
+// The three-plane form reads its operands as `p[-3]`, `p[-2]`, `p[-1]`: the
+// planes are interleaved, so the three bytes before this one are planes 0, 1
+// and 2 of the same pixel.
+static inline uint32_t plane_mix2(const PlaneDesc& d, const uint8_t* p0, const uint8_t* p1) {
+  return (d.weight0**p0+d.weight1*(uint32_t)*p1+40)>>7;
+}
+
+static inline int32_t plane_mix3(const PlaneDesc& d, const uint8_t* p) {
+  return (d.weight1*p[-2]+d.weight0*p[-3]+d.weight2*p[-1]+64)>>7;
+}
+
 template<int f_DEC>
 int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
   int32_t cur3;
@@ -95,7 +122,7 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
           AltP1Block* blk0 = plane[0];
           int32_t off0 = plane_desc[0].src_plane;
           if( !f_DEC ) {
-            int32_t want0 = *(buf+plane_desc[0].src_plane);
+            int32_t want0 = *(buf+off0);
             cur0 = want0;
           }
           plane[0]->ctx_of((AltP1Block*)nullptr, (AltP1Block*)0);
@@ -135,11 +162,11 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
           ++blk0->cursor[4];
           int32_t off1 = plane_desc[1].src_plane;
           if( f_DEC ) {
-            *(plane_desc[0].src_plane+buf) = cur0;
+            *(buf+off0) = cur0;
           } else {
-            want1 = *(buf+plane_desc[1].src_plane);
+            want1 = *(buf+off1);
             if( xf1 )
-              want1 = want1-dc1-*(plane_desc[0].src_plane+buf);
+              want1 = want1-dc1-*(buf+off0);
             cur1 = want1;
           }
           AltP1Block* blk1 = plane[1];
@@ -181,12 +208,12 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
           if( f_DEC ) {
             int32_t val1x = cur1;
             if( xf1 )
-              val1x += dc1+*(plane_desc[0].src_plane+buf);
-            *(buf+plane_desc[1].src_plane) = val1x;
+              val1x += dc1+*(buf+off0);
+            *(buf+off1) = val1x;
           } else {
-            want2 = *(plane_desc[2].src_plane+buf);
+            want2 = *(buf+off2);
             if( xf2 )
-              want2 = (uint8_t)(want2-dc2-((plane_desc[plane_desc[2].src_plane].weight0**(plane_desc[0].src_plane+buf)+plane_desc[plane_desc[2].src_plane].weight1*(uint32_t)*(plane_desc[1].src_plane+buf)+40)>>7));
+              want2 = (uint8_t)(want2-dc2-(plane_mix2(plane_desc[off2], buf+off0, buf+off1)));
           }
           AltP1Block* blk2 = plane[2];
           plane[2]->ctx_of(plane[1], plane[0]);
@@ -224,18 +251,18 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
           ++blk2->cursor[4];
           if( f_DEC ) {
             if( xf2 )
-              *(plane_desc[2].src_plane+buf) = ((plane_desc[plane_desc[2].src_plane].weight0**(plane_desc[0].src_plane+buf)+plane_desc[plane_desc[2].src_plane].weight1*(uint32_t)*(plane_desc[1].src_plane+buf)+40)>>7)+dc2+want2;
+              *(buf+off2) = (plane_mix2(plane_desc[off2], buf+off0, buf+off1))+dc2+want2;
             else
-              *(plane_desc[2].src_plane+buf) = want2;
+              *(buf+off2) = want2;
           }
           n_planes = plane_count;
           if( plane_count>=4 ) {
             int32_t off3 = plane_desc[3].src_plane;
             if( !f_DEC ) {
               if( xf3 )
-                want3 = *(plane_desc[3].src_plane+buf)-dc3-((plane_desc[plane_desc[3].src_plane].weight1**(plane_desc[3].src_plane+buf-2)+plane_desc[plane_desc[3].src_plane].weight0**(plane_desc[3].src_plane+buf-3)+plane_desc[plane_desc[3].src_plane].weight2**(plane_desc[3].src_plane+buf-1)+64)>>7);
+                want3 = *(buf+off3)-dc3-(plane_mix3(plane_desc[off3], buf+off3));
               else
-                want3 = *(plane_desc[3].src_plane+buf);
+                want3 = *(buf+off3);
               cur3 = want3;
             }
             AltP1Block* blk3 = plane[3];
@@ -274,8 +301,8 @@ int32_t __alt_model_p1(uint16_t* hdr, uint8_t* buf) {
             if( f_DEC ) {
               int32_t val3x = cur3;
               if( xf3 )
-                val3x += ((plane_desc[plane_desc[3].src_plane].weight1**(plane_desc[3].src_plane+buf-2)+plane_desc[plane_desc[3].src_plane].weight0**(plane_desc[3].src_plane+buf-3)+plane_desc[plane_desc[3].src_plane].weight2**(plane_desc[3].src_plane+buf-1)+64)>>7)+dc3;
-              *(plane_desc[3].src_plane+buf) = val3x;
+                val3x += (plane_mix3(plane_desc[off3], buf+off3))+dc3;
+              *(buf+off3) = val3x;
             }
             n_planes = plane_count;
           }

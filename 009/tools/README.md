@@ -452,6 +452,7 @@ them run.
 | `compact_locals.py` | Compact one decompiled function's block of local declarations | yes |
 | `ctxidx.py` | Turn a masked context word into a `CtxIdx` chain, one line at a time | yes |
 | `deadcheck.py` | Report code nothing can reach | yes |
+| `deadparam.py` | Drop the parameters nothing reads, and the arguments that fed them | yes |
 | `deblob.py` | Give every blob global its own definition, and see what breaks | yes |
 | `decast.py` | Delete the casts that cast a thing to the type it already has | yes |
 | `dedup.py` | Collapse recovered structs that are byte-for-byte the same declaration | yes |
@@ -483,6 +484,8 @@ them run.
 | `p1bump.py` | Fold `update_model`'s counter bumps into `CounterNode::bump` | yes |
 | `p2freq.py` | Fold `alt_p2_model`'s rescale-then-bump pairs into `p2_freq_add` | yes |
 | `p2update.py` | Fold `alt_p2_model`'s written-out counter updates into `p2_update` | yes |
+| `perf.sh` | Gate C: has this change made the program slower? |  |
+| `planedesc.py` | Take `plane_desc`'s header slot out, and re-index the four planes onto zero | yes |
 | `proven.sh` | Which tools' answers depend on the file at all? |  |
 | `prune_unreachable.py` | Delete the functions in subs1.hpp that nothing can reach any more | yes |
 | `ptrwidth.py` | Classify the pointers this file still puts through a 32-bit integer | yes |

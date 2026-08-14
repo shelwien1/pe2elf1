@@ -45,6 +45,15 @@ So the rewrite is recursive instead: for each subscript, fix its contents
 first, then decide what the subscript itself becomes from the fixed text.  A
 nested one is never visited twice, because scanning resumes past the closing
 bracket of the one just handled.
+
+**It only runs once, and it says so.**  This is not an idempotent rewrite: with
+the shift already applied, `plane_desc[1]` is a plane and running again would
+make it `plane_desc[0]`, silently, on every subscript in the file.  `sweep.sh`
+runs every counting tool and expects zero, so a one-shot tool that keeps
+finding work is indistinguishable from a tree that still has work in it.  The
+guard is the declaration: five descriptors means the header slot is still
+there and there is a shift to do; four means it is done.  Same fact the tool is
+about, read from the place that defines it.
 """
 import re
 import sys
@@ -125,7 +134,20 @@ def fix(text, unknown, path, base):
 ORIGINAL = {}
 
 
+def already_done():
+    """True once `plane_desc` holds planes only."""
+    for path in glob.glob('*.inc'):
+        m = re.search(r'\bPlaneDesc plane_desc\[(\d+)\]', open(path).read())
+        if m:
+            return int(m.group(1)) == 4
+    return False
+
+
 def main():
+    if already_done():
+        print('plane_desc holds four planes: the header slot is already out')
+        print('0 subscripts to re-index')
+        return 0
     unknown, changed, files, edits = [], 0, 0, {}
     for path in sorted(glob.glob('*.inc') + glob.glob('*.cpp')):
         s = open(path).read()

@@ -117,7 +117,7 @@ struct AltP1Block {
         ctx_w[7].sel = cross_grad(cur[-1].sym, guess, nb1);
         ctx_w[8].sel = nb_resid(nb1);
         ctx_w[3].sel = nb_resid(nb0);
-        quiet = (r1[-1].mag+(uint32_t)r0[-1].mag-16)>>31;
+        quiet = (r1[-1].mag+r0[-1].mag<16);
       } else {
         act_all = cursor1[3].mag+act+3*r0[-1].mag;
         ctx_w[5].sel = west_grad;
@@ -125,7 +125,7 @@ struct AltP1Block {
         ctx_w[7].sel = north_grad;
         ctx_w[8].sel = cross_grad(cur[-1].sym, guess, nb0);
         ctx_w[3].sel = nb_resid(nb0);
-        quiet = ((uint32_t)r0[-1].mag-8)>>31;
+        quiet = (r0[-1].mag<8);
       }
     } else {
       P1Ctx *cursor4 = cursor[4];
@@ -142,8 +142,12 @@ struct AltP1Block {
     int32_t step = p1_level_step[(uint32_t)act_lvl];
     ctx[0] = act_lvl;
     ctx[1] = group_of[act_q]+slot_of[(uint32_t)guess];
-    ctx_w[0].sel = ((216-(uint32_t)guess)>>31)+((22-(uint32_t)guess)>>31);
-    uint32_t s0 = ((216-(uint32_t)guess)>>31)+((22-(uint32_t)guess)>>31);
+    // The same expression twice in the decompilation, once into the slot and
+    // once into the index that reads it.  The other eight slots need both --
+    // `ctx_w[N].sel` is overwritten further down while `sN` keeps the index --
+    // but nothing overwrites slot 0's.
+    ctx_w[0].sel = (guess>216)+(guess>22);
+    uint32_t s0 = ctx_w[0].sel;
     int32_t s1 = (cursor1[-1].sym-cursor1->sym>=0)+(cursor1[-1].sym>(int32_t)cursor1->sym);
     ctx_w[1].sel = s1;
     int32_t s2 = (cursor1[-1].sym-cur[-1].sym>=0)+(cursor1[-1].sym>(int32_t)cur[-1].sym);
@@ -315,7 +319,7 @@ struct AltP1Block {
     const int32_t result = ctx[0];
     if( (result&7)!=7 ) {
       CounterNode *node_up = &counters[result];
-      uint32_t ctx_up = (((ctx[1]&7u)-7)>>31)+ctx[1];
+      uint32_t ctx_up = ((ctx[1]&7)<7)+ctx[1];
       node_up[1].bump(slot_f, 11);
       if( slot_f>=5 )
         __update_binary_pair(model_strip(128*(slot_f&1)+ctx_up+node_up[1].escape_bias(slot_f)), (int32_t)(code_f-5)>>1);

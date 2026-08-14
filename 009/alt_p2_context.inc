@@ -1,6 +1,23 @@
 // alt_p2_context.inc -- the predictor-2 model's context: which of its counters the next
 // sample is coded against.
 
+// The two low fields of every bank context: the running prediction quantised
+// against three thresholds into bits 13-14, and the activity sum against three
+// more into bits 11-12.  Six of these, and the thresholds are the model --
+// what is not the model is the shape around them, written out six times.
+//
+// Two of the six spelled the sum's three tests `(uint32_t)(K-sum)>>31`, which
+// is the sign bit of `K-sum`, which is `sum > K`.  The same predicate as the
+// other four, in the form MSVC left when it compiled a comparison one way here
+// and another way there.  The identity is exact for the values these take --
+// `sum_all` is a sum of magnitudes and `K` is at most 58, so `K-sum` cannot
+// overflow -- and it was checked against the other spelling before the two
+// were written as one.
+static inline int32_t ctx_quant(int32_t run, int32_t r0, int32_t r1, int32_t r2,
+                                int32_t sum, int32_t s0, int32_t s1, int32_t s2) {
+  return (((run>r0)+(run>r1)+(run>r2))<<13)|(((sum>s0)+(sum>s1)+(sum>s2))<<11);
+}
+
 int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
   CtxWeights weights;
   int32_t ctx15;
@@ -322,7 +339,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
          |d_up5&0x20000                                                  // bit 17
          |d_up&0x10000                                                   // bit 16
          |d_run0&0x8000                                                  // bit 15
-         |(((run0>2256)+(run0>1056)+(run0>144))<<13)|(((sum_all>55)+(sum_all>10)+(sum_all>24))<<11));
+         |ctx_quant(run0, 2256, 1056, 144, sum_all, 55, 10, 24));
   } else {
     int32_t d_run0b = run0-cx0[-3].val;
     ctx1 = (cx1[-5].val-cx1[-2].val+d_run0b)&0x1000000                   // bit 24
@@ -335,7 +352,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
          |(run0-cx4[2].val)&0x20000                                      // bit 17
          |(run0-cx4[-3].val)&0x10000                                     // bit 16
          | -d_run0&0x8000                                                // bit 15
-         |(((run0>2400)+(run0>1024)+(run0>240))<<13)|(((sum_all>39)+(sum_all>24)+(sum_all>11))<<11)|(nb4_4-cx3->val+run0-cx1[4].val)&0x2000000;   // bit 25
+         |ctx_quant(run0, 2400, 1024, 240, sum_all, 39, 24, 11)|(nb4_4-cx3->val+run0-cx1[4].val)&0x2000000;   // bit 25
   }
   int32_t bank1 = ctx1>>11;
   bank_ctx[1] = bank1;
@@ -365,7 +382,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
          |dtop2&0x20000                                                  // bit 17
          |dvsum2&0x10000                                                 // bit 16
          |(208-rb0->val)&0x8000                                          // bit 15
-         |(((run1>2576)+(run1>1280)+(run1>640))<<13)|((((uint32_t)(33-sum_all)>>31)+((uint32_t)(12-sum_all)>>31)+((uint32_t)(4-sum_all)>>31))<<11));
+         |ctx_quant(run1, 2576, 1280, 640, sum_all, 33, 12, 4));
   } else {
     ctx2 = (run1+3*(cx2_val0-cx1_val)-cx3->val)&0x2000000                // bit 25
          |(run1+cx4->val-(cx2[2].val+cx2[-2].val))&0x1000000             // bit 24
@@ -378,7 +395,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
          |(run1-cx4->val)&0x20000                                        // bit 17
          |(run1-cx3[-2].val)&0x10000                                     // bit 16
          | -dvsum2&0x8000                                                // bit 15
-         |(((run1>2464)+(run1>1216)+(run1>688))<<13)|((((uint32_t)(58-sum_all)>>31)+((uint32_t)(25-sum_all)>>31)+((uint32_t)(13-sum_all)>>31))<<11);
+         |ctx_quant(run1, 2464, 1216, 688, sum_all, 58, 25, 13);
   }
   int32_t bank2 = ctx2>>11;
   bank_ctx[2] = bank2;
@@ -403,7 +420,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
        |(2*run2-cx1->dval-(cx1->val+cx0[0].dval))&0x20000                // bit 17
        |(run2-cx0[-1].dval-cx0[0].dval)&0x10000                          // bit 16
        |(run2-cx0[-3].val)&0x8000                                        // bit 15
-       |(((run2>2896)+(run2>1568)+(run2>592))<<13)|(((sum_all>37)+(sum_all>19)+(sum_all>9))<<11))>>11;
+       |ctx_quant(run2, 2896, 1568, 592, sum_all, 37, 19, 9))>>11;
   bank_ctx[3] = bank3;
   int32_t w3c = p2_ctr[bank3+98304].weighted;
   int32_t pred3 = p2_pred(w3c, p2_ctr[bank3+98304].rate);
@@ -425,7 +442,7 @@ int32_t AltP2Block::alt_p2_context(AltP2Block* refa, AltP2Block* refb) {
        |(run_dv4-cx1[4].dval)&0x20000                                    // bit 17
        |(run_dv4-cx1[-2].dval)&0x10000                                   // bit 16
        |(((uint16_t)run3-(uint16_t)cx0[-4].dval-(uint16_t)dv_now4)&0x8000 // bit 15
-       )|((((run3>3056)+(run3>1952)+(run3>368))<<13)|(((sum_all>39)+(sum_all>21)+(sum_all>10))<<11)))>>11;
+       )|(ctx_quant(run3, 3056, 1952, 368, sum_all, 39, 21, 10)))>>11;
   bank_ctx[4] = bank4;
   int32_t pred4 = p2_pred(p2_ctr[bank4+131072].weighted, p2_ctr[bank4+131072].rate);
   uint8_t* cx2p = (uint8_t*)cx2;

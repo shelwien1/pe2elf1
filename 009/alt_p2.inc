@@ -94,7 +94,7 @@ void AltP2Block::alt_p2_d8_body(uint8_t* src, uint8_t* out,
       int32_t q2 = rec[-1].val>>4;
       ctx_pair[0] = ctx+ctx_delta[q2+4];
       ctx_pair[1] = ctx+ctx_delta[q2];
-      P2Freq&fr = freq[ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[((uint32_t)(q2-115)>>31)+((uint32_t)(q2-17)>>31)]+ctx_w[4].w[1]];
+      P2Freq&fr = freq[ctx+ctx_w[3].w[(rec[-1].val<=rec[-2].val)+(rec[-1].val<rec[-2].val)]+ctx_w[2].w[rec[-2].sign]+ctx_w[1].w[rec[-1].sign]+ctx_w[0].w[(q2<115)+(q2<17)]+ctx_w[4].w[1]];
       if( f_DEC ) {
         *out = (uint8_t)(((uint16_t)rec[-1].val>>4)+(uint8_t)unfold[fr.decode_symbol(ctx_pair)]);
       } else {

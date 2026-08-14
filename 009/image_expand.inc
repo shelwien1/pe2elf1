@@ -28,12 +28,12 @@ uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
     uint8_t _pad0[32];
   } __frame;
   BmfFile* arc;
-  FILE* fp1, * fp;
+  FILE *fp1;
   BmfImage* img_at;
-  uint8_t bpp, has_coded, dc_v;
-  uint32_t near_lossless, pred_s, w12_v, w4_v, w8_v;
+  uint8_t bpp, has_coded;
+  uint32_t pred_s;
   uint8_t* pal_at, * copy, * srcp, * dst;
-  int32_t pl, nrefs, plane_i, plane, pl2, plane2, pred, i, n_pix2, pix_at, nplanes_c, i2, n_planes, last_row, at, y, pl_i, left;
+  int32_t plane_i, plane, pl2, plane2, pred, i, n_pix2, pix_at, nplanes_c, i2, n_planes, last_row, at, y, pl_i, left;
   uint16_t img_h;
   uint8_t major_v, minor_v;
   // The archive version, as a plain local.  The decompilation parked it in
@@ -41,7 +41,7 @@ uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
   // header slot, not a plane, and its three weight words were free.
   int32_t version;
   int32_t n_pix;
-  uint32_t magic, pal_bytes, want2, desc, desc_flags, got;
+  uint32_t magic, pal_bytes, want2, got;
   uint8_t* plane_buf;
   arc = arc_in;
   if( p_coded_buf )
@@ -51,7 +51,7 @@ uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
     return nullptr;
   while( 1 ) {
     if( fread(&__frame.magic_word, 4u, 1u, fp1)!=1 ) {
-      fp = arc->fp;
+      FILE *fp = arc->fp;
       if( feof(fp) )
         return nullptr;
       {
@@ -147,7 +147,7 @@ uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
   // greyscale plane and for three or more, absent otherwise.  Two `goto`s
   // jumped over it; the condition is the encoder's, negated.
   if( plane_count==1 ? (bpp&0x40)!=0 : plane_count>2 ) {
-    near_lossless = unpack_bits(4);
+    uint32_t near_lossless = unpack_bits(4);
     if( near_lossless ) {
       printf("\nnear-lossless stream (E=%d); this build only decodes E=0\n", near_lossless);
       exit(3);
@@ -158,24 +158,24 @@ uint8_t*__expand_image(BmfFile* arc_in, void** p_coded_buf) {
     __frame.mask = 255;
     __frame.p_i_2 = img_at;
     __frame.arc_f = arc;
-    pl = 0;
+    int32_t pl = 0;
     do {
-      desc = unpack_bits(6);
-      desc_flags = desc>>2;
-      nrefs = desc&3;
+      uint32_t desc = unpack_bits(6);
+      uint32_t desc_flags = desc>>2;
+      int32_t nrefs = desc&3;
       plane_desc[pl].flags = desc_flags;
       plane_desc[pl].nrefs = nrefs;
       plane_desc[nrefs].src_plane = pl;
       if( plane_desc[pl].flags&8 ) {
-        dc_v = unpack_bits(8);
+        uint8_t dc_v = unpack_bits(8);
         plane_desc[pl].dc = dc_v;
         if( nrefs>1 ) {
-          w4_v = unpack_bits(8);
+          uint32_t w4_v = unpack_bits(8);
           plane_desc[pl].weight0 = w4_v-64;
-          w8_v = unpack_bits(8);
+          uint32_t w8_v = unpack_bits(8);
           plane_desc[pl].weight1 = w8_v-64;
           if( nrefs>2 ) {
-            w12_v = unpack_bits(8);
+            uint32_t w12_v = unpack_bits(8);
             plane_desc[pl].weight2 = w12_v-64;
           }
         }

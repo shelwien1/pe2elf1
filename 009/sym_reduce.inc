@@ -52,12 +52,11 @@ struct alignas(16) ReduceAlphabetFrame {
 // The wide arm below does none of this -- it builds a binary search tree over
 // multi-byte symbols -- and the two shared nothing but a frame and 350 lines.
 static void reduce_narrow_alphabet(ReduceAlphabetFrame& f, ModelBlock* blk1, uint8_t* src) {
-  bool packed;
-  int32_t height, n_distinct, row_w, y, bits, shift, prev, s, s_next;
-  uint32_t n_syms, n_syms3;
+  int32_t n_distinct, row_w, y, bits, shift, prev, s, s_next;
+  uint32_t n_syms3;
   memset(f.sym_flag(), 0, 256*sizeof(uint32_t));
-  packed = blk1->depth<8;
-  height = blk1->height;
+  bool packed = blk1->depth<8;
+  int32_t height = blk1->height;
   blk1->alphabet = 0;
   if( packed ) {
     n_distinct = 0;
@@ -111,7 +110,7 @@ static void reduce_narrow_alphabet(ReduceAlphabetFrame& f, ModelBlock* blk1, uin
     n_distinct = 0;
   }
   rc.encode(n_distinct-1, n_distinct, f.slot4+1);
-  n_syms = blk1->alphabet;
+  uint32_t n_syms = blk1->alphabet;
   if( n_syms<=f.slot4 ) {
     f.lists[0].init(f.slot4-n_syms+2, 1);
     f.lists[0].rescale_at = 19*f.lists[0].n;
