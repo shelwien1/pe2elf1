@@ -10,11 +10,11 @@ int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* extra_blk) {
   uint8_t* pix_copy;
   uint32_t coded_len;
   bool fits;
-  uint32_t acc, data_bytes, img_stride, row_bytes, shifted;
+  uint32_t data_bytes, img_stride, row_bytes;
   uint8_t has_coded;
   uint8_t* plane_buf, * row_at;
   uint32_t hdr_pad8, hdr_pad8b;
-  int32_t bits_left, pl, free_bits, pl2, ok_all, y, pl_i, countdown, data_size, row_y;
+  int32_t pl, pl2, ok_all, y, pl_i, countdown, data_size, row_y;
   uint16_t img_h;
   BmfImage* img;
   uint16_t w16;
@@ -94,90 +94,28 @@ int32_t __compress_image(BmfArc* arc_in, BmfImage* p_i, void* extra_blk) {
     if( p_i->depth&0x40 ) {
 LABEL_22:
       near_lossless_q = 0;
-      if( packer_free_bits<4 ) {
-        *(uint32_t*)packer_word = packer_acc;
-        packer_word = (uint32_t*)out_cursor;
-        packer_acc = 0;
-        packer_free_bits += 28;
-        out_cursor += 4;
-      } else {
-        packer_free_bits -= 4;
-      }
+      pack_bits(0, 4);
     }
   } else if( plane_count>2 ) {
     goto LABEL_22;
   }
   alphabet_reduced = 0;
   if( plane_count>0 ) {
-    bits_left = packer_free_bits;
     pl = 0;
     do {
       word_flags = (4*plane_desc[pl+1].flags)|plane_desc[pl+1].nrefs;
-      if( bits_left<6 ) {
-        *(uint32_t*)packer_word = packer_acc|(2*(word_flags<<((31-bits_left)&31)));
-        packer_word = (uint32_t*)out_cursor;
-        out_cursor += 4;
-        bits_left = packer_free_bits+26;
-        packer_acc = word_flags>>(packer_free_bits&31);
-      } else {
-        packer_acc |= word_flags<<(-bits_left&31);
-        bits_left = packer_free_bits-6;
-      }
-      packer_free_bits = bits_left;
+      pack_bits(word_flags, 6);
       if( plane_desc[pl+1].flags&8 ) {
         word_dc = plane_desc[pl+1].dc;
-        if( bits_left<8 ) {
-          *(uint32_t*)packer_word = packer_acc|(2*(word_dc<<((31-bits_left)&31)));
-          packer_word = (uint32_t*)out_cursor;
-          out_cursor += 4;
-          bits_left = packer_free_bits+24;
-          packer_acc = word_dc>>(packer_free_bits&31);
-        } else {
-          shifted = word_dc<<(-bits_left&31);
-          bits_left -= 8;
-          packer_acc |= shifted;
-        }
-        packer_free_bits = bits_left;
+        pack_bits(word_dc, 8);
         if( plane_desc[pl+1].nrefs>1u ) {
           word_w4 = plane_desc[pl+1].weight0+64;
-          if( bits_left<8 ) {
-            *(uint32_t*)packer_word = packer_acc|(2*(word_w4<<((31-bits_left)&31)));
-            packer_word = (uint32_t*)out_cursor;
-            out_cursor += 4;
-            free_bits = packer_free_bits+24;
-            packer_acc = word_w4>>(packer_free_bits&31);
-          } else {
-            packer_acc |= word_w4<<(-bits_left&31);
-            free_bits = packer_free_bits-8;
-          }
-          packer_free_bits = free_bits;
+          pack_bits(word_w4, 8);
           word_w8 = plane_desc[pl+1].weight1+64;
-          if( free_bits<8 ) {
-            *(uint32_t*)packer_word = packer_acc|(2*(word_w8<<((31-free_bits)&31)));
-            packer_word = (uint32_t*)out_cursor;
-            out_cursor += 4;
-            bits_left = packer_free_bits+24;
-            packer_acc = word_w8>>(packer_free_bits&31);
-          } else {
-            bits_left = free_bits-8;
-            packer_acc |= word_w8<<(-free_bits&31);
-          }
-          packer_free_bits = bits_left;
+          pack_bits(word_w8, 8);
           if( plane_desc[pl+1].nrefs>2u ) {
             word_w12 = plane_desc[pl+1].weight2+64;
-            if( bits_left<8 ) {
-              *(uint32_t*)packer_word = packer_acc|(2*(word_w12<<((31-bits_left)&31)));
-              packer_word = (uint32_t*)out_cursor;
-              out_cursor += 4;
-              acc = word_w12>>(packer_free_bits&31);
-              bits_left = packer_free_bits+24;
-              packer_free_bits += 24;
-              packer_acc = acc;
-            } else {
-              packer_acc |= word_w12<<(-bits_left&31);
-              bits_left = packer_free_bits-8;
-              packer_free_bits -= 8;
-            }
+            pack_bits(word_w12, 8);
           }
         }
       }

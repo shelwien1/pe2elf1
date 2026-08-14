@@ -86,6 +86,8 @@ void __model_planes(uint8_t* img, uint8_t* pixels, int32_t plane, int8_t unread_
 void __transform_planes(BmfImage* p_i, int8_t unread_flag);
 static uint32_t __bytes_left(FILE* fp);
 static uint32_t __packer_word();
+static void pack_bits(uint32_t word, int32_t n);
+static uint32_t unpack_bits(int32_t n);
 uint8_t*__expand_image(BmfArc* arc_in, void** p_coded_buf);
 uint32_t __search_filter(BmfImage* img, int8_t mode);
 BmfArc*__bmf_open_archive(BmfArc* out, char* path, int32_t read_only);

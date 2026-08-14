@@ -155,3 +155,47 @@ static uint32_t __packer_word() {
   out_cursor += 4;
   return w;
 }
+
+// The header's bit stream: the per-plane descriptors, a few bits at a time,
+// through a 32-bit accumulator that spills to `packer_word` when it fills.
+//
+// `compress_image` wrote this out six times and `expand_image` its mirror six
+// times, at widths 4, 6 and 8.  What made the six copies look unlike each other
+// was the count: it was kept in `bits_left`, `free_bits` or `packer_free_bits`
+// depending on the site, and every spill branch read the guard variable in one
+// place and `packer_free_bits` in another.  They agreed because the line before
+// each block assigned one from the other; here there is one name and nothing to
+// keep in step.
+//
+// The order below is the one thing to preserve when reading this against the
+// original: the spill branch's `packer_acc` is computed from the count *before*
+// the count moves on.  Writing the count first would shift the carry-out by the
+// width.
+static void pack_bits(uint32_t word, int32_t n) {
+  if( packer_free_bits<n ) {
+    *(uint32_t*)packer_word = packer_acc|(2*(word<<((31-packer_free_bits)&31)));
+    packer_word = (uint32_t*)out_cursor;
+    out_cursor += 4;
+    packer_acc = word>>(packer_free_bits&31);
+    packer_free_bits += 32-n;
+  } else {
+    packer_acc |= word<<(-packer_free_bits&31);
+    packer_free_bits -= n;
+  }
+}
+
+static uint32_t unpack_bits(int32_t n) {
+  const uint32_t mask = (1u<<n)-1;
+  uint32_t v;
+  packer_free_bits -= n;
+  if( packer_free_bits<0 ) {
+    const uint32_t w = __packer_word();
+    v = packer_acc|(w<<((packer_free_bits+n)&31))&mask;
+    packer_acc = w>>(-packer_free_bits&31);
+    packer_free_bits += 32;
+  } else {
+    v = packer_acc&mask;
+    packer_acc = packer_acc>>n;
+  }
+  return v;
+}

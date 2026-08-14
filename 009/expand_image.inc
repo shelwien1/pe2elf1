@@ -37,7 +37,7 @@ uint8_t*__expand_image(BmfArc* arc_in, void** p_coded_buf) {
   uint16_t img_h, w16;
   uint8_t major_v, minor_v;
   int32_t n_pix;
-  uint32_t magic, pad_len, * blk, pal_bytes, want2, desc, desc_flags, want, got, word12, word8, word4, worddc, word6, word4b;
+  uint32_t magic, pad_len, * blk, pal_bytes, want2, desc, desc_flags, want, got;
   uint8_t* plane_buf;
   arc = arc_in;
   if( p_coded_buf )
@@ -166,17 +166,7 @@ uint8_t*__expand_image(BmfArc* arc_in, void** p_coded_buf) {
   } else if( plane_count<=2 ) {
     goto LABEL_42;
   }
-  packer_free_bits -= 4;
-  if( packer_free_bits<0 ) {
-    word4b = __packer_word();
-    want2 = word4b>>(-packer_free_bits&31);
-    near_lossless = packer_acc|(word4b<<((packer_free_bits+4)&31))&0xF;
-    packer_acc = want2;
-    packer_free_bits += 32;
-  } else {
-    near_lossless = packer_acc&0xF;
-    packer_acc = packer_acc>>4;
-  }
+  near_lossless = unpack_bits(4);
   if( near_lossless ) {
     printf("\nnear-lossless stream (E=%d); this build only decodes E=0\n", near_lossless);
     exit(3);
@@ -189,67 +179,22 @@ LABEL_42:
     __frame.arc_f = arc;
     pl = 0;
     do {
-      packer_free_bits -= 6;
-      if( packer_free_bits<0 ) {
-        word6 = __packer_word();
-        desc = packer_acc|(word6<<((packer_free_bits+6)&31))&0x3F;
-        packer_acc = word6>>(-packer_free_bits&31);
-        packer_free_bits += 32;
-      } else {
-        desc = packer_acc&0x3F;
-        packer_acc = packer_acc>>6;
-      }
+      desc = unpack_bits(6);
       desc_flags = desc>>2;
       nrefs = desc&3;
       plane_desc[pl+1].flags = desc_flags;
       plane_desc[pl+1].nrefs = nrefs;
       plane_desc[nrefs+1].src_plane = pl;
       if( plane_desc[pl+1].flags&8 ) {
-        packer_free_bits -= 8;
-        if( packer_free_bits<0 ) {
-          worddc = __packer_word();
-          dc_v = packer_acc|__frame.mask&(worddc<<((packer_free_bits+8)&31));
-          packer_acc = worddc>>(-packer_free_bits&31);
-          packer_free_bits += 32;
-        } else {
-          dc_v = packer_acc&(uint8_t)__frame.mask;
-          packer_acc = packer_acc>>8;
-        }
+        dc_v = unpack_bits(8);
         plane_desc[pl+1].dc = dc_v;
         if( nrefs>1 ) {
-          packer_free_bits -= 8;
-          if( packer_free_bits<0 ) {
-            word4 = __packer_word();
-            w4_v = packer_acc|__frame.mask&(word4<<((packer_free_bits+8)&31));
-            packer_acc = word4>>(-packer_free_bits&31);
-            packer_free_bits += 32;
-          } else {
-            w4_v = packer_acc&__frame.mask;
-            packer_acc = packer_acc>>8;
-          }
+          w4_v = unpack_bits(8);
           plane_desc[pl+1].weight0 = w4_v-64;
-          packer_free_bits -= 8;
-          if( packer_free_bits<0 ) {
-            word8 = __packer_word();
-            w8_v = packer_acc|__frame.mask&(word8<<((packer_free_bits+8)&31));
-            packer_acc = word8>>(-packer_free_bits&31);
-            packer_free_bits += 32;
-          } else {
-            w8_v = packer_acc&__frame.mask;
-            packer_acc = packer_acc>>8;
-          }
+          w8_v = unpack_bits(8);
           plane_desc[pl+1].weight1 = w8_v-64;
           if( nrefs>2 ) {
-            packer_free_bits -= 8;
-            if( packer_free_bits<0 ) {
-              word12 = __packer_word();
-              w12_v = packer_acc|__frame.mask&(word12<<((packer_free_bits+8)&31));
-              packer_acc = word12>>(-packer_free_bits&31);
-              packer_free_bits += 32;
-            } else {
-              w12_v = packer_acc&__frame.mask;
-              packer_acc = packer_acc>>8;
-            }
+            w12_v = unpack_bits(8);
             plane_desc[pl+1].weight2 = w12_v-64;
           }
         }
